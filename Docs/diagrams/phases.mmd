@@ -1,0 +1,31 @@
+gantt
+    title 阶段并行示意（等宽阶段，非日期或工时承诺）
+    dateFormat YYYY-MM-DD
+    axisFormat 阶段%j
+    tickInterval 1day
+    todayMarker off
+
+    section 必须串行的门禁
+    平台与原作核对         :crit, p0, 2000-01-01, 1d
+    接口与共享坐标冻结     :crit, p1, after p0, 1d
+    一图两人集成           :crit, p3, 2000-01-04, 1d
+    四人性能与最终验收     :crit, p5, 2000-01-06, 1d
+    用户批准与发布候选     :crit, p6, after p5, 1d
+
+    section 可以并行的程序模块
+    输入运动与球体吸附     :motion, 2000-01-03, 1d
+    网络账本交分KO恢复     :network, 2000-01-03, 1d
+    大厅HUD与资产导入工具  :ui, 2000-01-03, 1d
+    凹凸与故障测试         :hardening, 2000-01-04, 2d
+
+    section 内容制作
+    候选资源与授权         :assets, 2000-01-01, 3d
+    第一图灰盒             :map0, 2000-01-03, 1d
+    两图成品与结果反馈     :maps, 2000-01-05, 1d
+    装扮与持久化           :cosmetic, 2000-01-03, 3d
+
+    section 非阻塞商业和宣传分支
+    商家准入与准备         :approval, 2000-01-02, 4d
+    商城Mock与正式权益     :store, 2000-01-05, 2d
+    构图文案预研           :marketing, 2000-01-01, 3d
+    实机录制与发布成品     :footage, 2000-01-06, 1d

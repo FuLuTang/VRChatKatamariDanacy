@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "designVersion": "0.3",
+  "status": "PROVISIONAL_NOT_TESTED",
+  "note": "从v0.3明确建议提取；不代表原作数值、冻结接口或Udon运行时可直接读取的配置。",
+  "match": {
+    "minimumPlayers": 2,
+    "maximumPlayers": 4,
+    "durationSeconds": 180,
+    "countdownSeconds": 8,
+    "finalWarningSeconds": 15,
+    "bankUnstoredAtRoundEnd": false
+  },
+  "pvp": {
+    "swallowDiameterRatio": 1.35,
+    "respawnDelaySeconds": 3,
+    "respawnProtectionSeconds": 2
+  },
+  "powerups": {
+    "slotCount": 1,
+    "activationInput": "InputJumpRisingEdge",
+    "magnetDurationSeconds": 4,
+    "rocketDurationSeconds": 2.5,
+    "rocketSpeedMultiplier": 1.5
+  },
+  "shape": {
+    "directionSamples": 32,
+    "maximumExtraExtremePoints": 4,
+    "affectsGameplayPhysics": false
+  },
+  "presentation": {
+    "avatarEyeHeightWorkRangeM": [0.2, 5.0],
+    "note": "表现工作范围，不是VRChat技术绝对上限；不能替代共享球半径。"
+  },
+  "commerce": {
+    "paidStoreEnabled": false
+  }
+}

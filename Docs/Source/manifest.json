@@ -1,0 +1,22 @@
+{
+  "importedAt": "2026-10-11",
+  "sources": [
+    {
+      "file": "ChatGPT-VRC块魂-20261011-0332.txt",
+      "sha256": "f4db0dc497909a97225c95373c272d59d8f47f0a0ccdf86aef0bf43a7c2a08ae",
+      "bytes": 96104,
+      "publicRepository": false,
+      "reason": "Private conversation export; excluded from public GitHub push by user choice."
+    },
+    {
+      "file": "VRC_Katamari_Design_and_Execution_v0.3.md",
+      "sha256": "ca2dc40d175964a10bdba12fc7fda017b90ae9d79821f276b968e5a2fc6e96c1",
+      "bytes": 96134
+    },
+    {
+      "file": "VRC_Katamari_Agent_Tasks_v0.3.json",
+      "sha256": "8f0b33231b3770633cd77a71b4dc30b2bf7d8bd7320ff9d44a56852fe85b4a0e",
+      "bytes": 49559
+    }
+  ]
+}

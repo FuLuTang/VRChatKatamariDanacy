@@ -107,3 +107,41 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Nested Unity project (repository layout v1)
+/UnityProject/[Ll]ibrary/
+/UnityProject/[Tt]emp/
+/UnityProject/[Oo]bj/
+/UnityProject/[Bb]uild/
+/UnityProject/[Bb]uilds/
+/UnityProject/[Ll]ogs/
+/UnityProject/[Uu]ser[Ss]ettings/
+/UnityProject/[Mm]emoryCaptures/
+/UnityProject/[Rr]ecordings/
+/UnityProject/.utmp/
+/UnityProject/ServerData/
+/UnityProject/UIElementsSchema/
+/UnityProject/[Aa]ssets/Plugins/Editor/JetBrains*
+/UnityProject/[Aa]ssets/StreamingAssets/aa*
+/UnityProject/[Aa]ssets/AddressableAssetsData/link.xml*
+/UnityProject/[Aa]ssets/AddressableAssetsData/*/*.bin*
+/UnityProject/[Aa]ssets/Addressables_Temp*
+/UnityProject/[Aa]ssets/Unity.VisualScripting.Generated/
+/UnityProject/[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+/UnityProject/[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Local tools, credentials and unreviewed downloads
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+/Docs/AssetIntake/Downloads/
+/Docs/AssetIntake/Quarantine/
+
+# Private source transcript; retained locally, never publish
+/Docs/Source/ChatGPT-VRC块魂-20261011-0332.txt
+/Docs/tools/dsh_local_rpc.py

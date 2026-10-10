@@ -1,0 +1,37 @@
+candidate_id,object_concept,size_tier,gameplay_or_scene_use,source_candidate,public_page_license_claim,package_file_presence,package_license_sha256,review_status,notes
+PIC-01,seed,s,early safe pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-02,nut,s,early safe pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-03,small fruit,s,early safe pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-04,apple,m,mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-05,pear,m,mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-06,banana,m,mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-07,orange,m,mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-08,strawberry,s,clusterable low-value pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-09,grapes,s,clusterable low-value pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-10,watermelon slice,m,recognizable mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-11,bread loaf,m,mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-12,croissant,m,mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-13,cookie,s,small snack pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-14,sandwich,m,mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-15,cheese wedge,s,small snack pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-16,juice carton,m,mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-17,drink can,m,mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Specific model/file unverified
+PIC-18,glass bottle,m,mid-tier pickup,Kenney Food Kit or Quaternius Ultimate Food Pack,CC0 page claim,unknown,unknown,web-prescreen,Check safe stylized silhouette and collider
+PIC-19,cup,m,mid-tier tableware pickup,Kenney Furniture Kit,CC0 page claim,unknown,unknown,web-prescreen,Actual cup presence unverified
+PIC-20,plate,m,mid-tier tableware pickup,Kenney Furniture Kit,CC0 page claim,unknown,unknown,web-prescreen,Actual plate presence unverified
+PIC-21,bowl,m,mid-tier tableware pickup,Kenney Furniture Kit,CC0 page claim,unknown,unknown,web-prescreen,Actual bowl presence unverified
+PIC-22,spoon,s,small utensil pickup,Kenney Furniture Kit,CC0 page claim,unknown,unknown,web-prescreen,Long thin collider/volume needs manual value tuning
+PIC-23,folded napkin,s,low-value visual pickup,Kenney Food Kit or custom,CC0 claim only if kit asset; custom TBD,unknown,unknown,web-prescreen,"If custom, author/license to be documented"
+PIC-24,jar,m,mid-tier picnic prop,Kenney Food Kit or custom,CC0 claim only if kit asset; custom TBD,unknown,unknown,web-prescreen,Do not imply exact object is present
+PIC-25,thermos flask,l,large growth threshold pickup,Kenney Furniture Kit or custom,CC0 claim only if kit asset; custom TBD,unknown,unknown,web-prescreen,Confirm asset and robust proxy collider
+PIC-26,picnic basket,l,high-value inner-ring objective,Kenney Furniture Kit or custom,CC0 claim only if kit asset; custom TBD,unknown,unknown,web-prescreen,Important gameplay object; exact file unverified
+PIC-27,flower pot,l,large growth threshold pickup,Kenney Nature Kit,CC0 page claim,unknown,unknown,web-prescreen,Pot presence unverified
+PIC-28,small potted plant,m,mid-tier pickup,Kenney Nature Kit,CC0 page claim,unknown,unknown,web-prescreen,Distinguish decor vs collectible
+PIC-29,fallen leaf,s,ambient non-colliding decor or low pickup,Kenney Nature Kit,CC0 page claim,unknown,unknown,web-prescreen,Keep decorative debris non-colliding if no gameplay value
+PIC-30,pebble,s,early pickup or non-colliding scatter,Kenney Nature Kit,CC0 page claim,unknown,unknown,web-prescreen,Check repeat density and readable silhouette
+PIC-31,small mushroom,s,early pickup,Kenney Nature Kit,CC0 page claim,unknown,unknown,web-prescreen,Model presence and rights not individually inspected
+PIC-32,flower,m,mid-tier pickup or scenery,Kenney Nature Kit,CC0 page claim,unknown,unknown,web-prescreen,Choose gameplay or decoration explicitly
+PIC-33,acorn,s,early pickup,Kenney Nature Kit,CC0 page claim,unknown,unknown,web-prescreen,Model presence unverified
+PIC-34,small watering can,m,mid-tier garden prop,Kenney Furniture Kit or custom,CC0 claim only if kit asset; custom TBD,unknown,unknown,web-prescreen,"If custom, create author/license record"
+PIC-35,folding stool,l,large pickup and route landmark,Kenney Furniture Kit,CC0 page claim,unknown,unknown,web-prescreen,Check not blocking narrow escape routes
+PIC-36,small side table,l,large pickup or fixed landmark,Kenney Furniture Kit,CC0 page claim,unknown,unknown,web-prescreen,Decide collectible vs fixed landmark; not both

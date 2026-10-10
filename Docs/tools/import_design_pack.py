@@ -18,8 +18,8 @@ DOC_NAMES = [
     '06_MONETIZATION_LAUNCH', '07_AGENT_OPERATING_RULES', '08_SOURCES_AND_OPEN_QUESTIONS',
 ]
 PATH_MAP = {
-    'Assets/': 'UnityProject/Assets/', 'Packages/': 'UnityProject/Packages/',
-    'ProjectSettings/': 'UnityProject/ProjectSettings/',
+    'Assets/': 'VRChatKatamariDanacyUnity/Assets/', 'Packages/': 'VRChatKatamariDanacyUnity/Packages/',
+    'ProjectSettings/': 'VRChatKatamariDanacyUnity/ProjectSettings/',
     **{prefix + '/': 'Docs/' + prefix + '/' for prefix in
        ['Research', 'AssetIntake', 'Contracts', 'Evidence', 'Commerce', 'Integration', 'Release', 'Art', 'Tests']},
 }
@@ -69,7 +69,7 @@ def main():
     for task in tasks['tasks']:
         task['write_scope'] = [next((new + scope[len(old):] for old, new in PATH_MAP.items() if scope.startswith(old)), scope) for scope in task['write_scope']]
     tasks['repositoryLayoutVersion'] = 1
-    tasks['repositoryLayoutNote'] = 'Unity工程在UnityProject/；研究、证据及工程辅助文件在Docs/；Marketing/保持原路径。原始任务包保留在Docs/Source/。未改变任务依赖或验收状态。'
+    tasks['repositoryLayoutNote'] = 'Unity工程在VRChatKatamariDanacyUnity/；研究、证据及工程辅助文件在Docs/；Marketing/保持原路径。原始任务包保留在Docs/Source/。未改变任务依赖或验收状态。'
     create('tasks.json', json.dumps(tasks, ensure_ascii=False, indent=2) + '\n')
     create('Docs/Source/manifest.json', json.dumps({'importedAt': '2026-10-11', 'sources': manifest}, ensure_ascii=False, indent=2) + '\n')
     print('Imported 2 public source attachments; private chat export excluded unless explicitly opted in.')

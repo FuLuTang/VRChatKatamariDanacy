@@ -16,7 +16,7 @@
 
 Linux工作区与Windows仓库通过Git按提交顺序交换；不要让两个编辑器同时写同一份共享工程。先同步文档/忽略规则，再提交工程文件；不覆盖Windows已创建的文件。此仓库是公开仓库，只提交必要工程数据，排除缓存、个人设置、私有凭据及未获准的第三方包源码。
 
-## 初始化后给主管的回执
+## Windows 工程回执（本轮检查）
 
 ```text
 Windows仓库绝对路径：`D:\VRChatKatamariDanacy`
@@ -30,7 +30,7 @@ Console编译错误：未检查（本轮未操作Unity Editor）
 Build & Test：NOT_RUN（本轮未操作Unity Editor）
 场景路径：`Assets/Scenes/VRCDefaultWorldScene.unity`
 构建日志/截图位置：未提供
-与Linux仓库的同步方式及提交：Git；本次提交号待记录
+与Linux仓库的同步方式及提交：Git；工程已推送至公开`origin/main`，提交`f211f9e`
 是否已有Unity MCP：未确认（本轮未尝试连接）
 Win DSH/Codex可用调用方式：未知 / 说明
 ```

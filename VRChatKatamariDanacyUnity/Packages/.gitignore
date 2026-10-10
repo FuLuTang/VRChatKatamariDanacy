@@ -1,0 +1,4 @@
+# VPM restores SDK package source from the committed project manifests.
+# Do not redistribute VPM package source from this directory.
+com.vrchat.*
+!com.vrchat.core.*

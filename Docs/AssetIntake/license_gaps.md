@@ -21,7 +21,7 @@ Status: **public-page prescreen only; no asset has passed intake or authorizatio
 | Per-file license exceptions, bundled third-party content, trademarks/likeness | unknown | Review package notices and individual assets; quarantine uncertain items |
 | Attribution requirement/text | unknown from package; do not infer a requirement from CC0 alone | Check package documentation and asset-specific notices; record exact rule/text |
 | Commercial use and redistribution of the exact files in this paid-world context | unaccepted | Review package license and applicable platform distribution format against intended use |
-| File format/mesh health/topology/texture/materials/collider suitability | unknown | Inspect selected files in isolated asset-review workflow; do not import into UnityProject |
+| File format/mesh health/topology/texture/materials/collider suitability | unknown | Inspect selected files in isolated asset-review workflow; do not import into `VRChatKatamariDanacyUnity/` |
 
 ## Decision
 

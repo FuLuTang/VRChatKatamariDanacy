@@ -130,6 +130,31 @@ InitTestScene*.unity*
 /UnityProject/[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
 /UnityProject/[Aa]ssets/[Ss]ceneDependencyCache*
 
+# Windows VCC project root: Unity caches and local settings
+/VRChatKatamariDanacyUnity/[Ll]ibrary/
+/VRChatKatamariDanacyUnity/[Tt]emp/
+/VRChatKatamariDanacyUnity/[Oo]bj/
+/VRChatKatamariDanacyUnity/[Bb]uild/
+/VRChatKatamariDanacyUnity/[Bb]uilds/
+/VRChatKatamariDanacyUnity/[Ll]ogs/
+/VRChatKatamariDanacyUnity/[Uu]ser[Ss]ettings/
+/VRChatKatamariDanacyUnity/[Mm]emoryCaptures/
+/VRChatKatamariDanacyUnity/[Rr]ecordings/
+/VRChatKatamariDanacyUnity/.utmp/
+/VRChatKatamariDanacyUnity/ServerData/
+/VRChatKatamariDanacyUnity/UIElementsSchema/
+# VPM restores licensed SDK package contents; keep only manifests and resolver tracked.
+/VRChatKatamariDanacyUnity/Packages/com.vrchat.*
+!/VRChatKatamariDanacyUnity/Packages/com.vrchat.core.*
+/VRChatKatamariDanacyUnity/Assets/Plugins/Editor/JetBrains*
+/VRChatKatamariDanacyUnity/Assets/StreamingAssets/aa*
+/VRChatKatamariDanacyUnity/Assets/AddressableAssetsData/link.xml*
+/VRChatKatamariDanacyUnity/Assets/AddressableAssetsData/*/*.bin*
+/VRChatKatamariDanacyUnity/Assets/Addressables_Temp*
+/VRChatKatamariDanacyUnity/Assets/Unity.VisualScripting.Generated/
+/VRChatKatamariDanacyUnity/Assets/InitTestScene*.unity*
+/VRChatKatamariDanacyUnity/Assets/SceneDependencyCache*
+
 # Local tools, credentials and unreviewed downloads
 __pycache__/
 *.py[cod]

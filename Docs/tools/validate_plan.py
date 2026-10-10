@@ -57,8 +57,10 @@ def validate_plan(data, profile='free_launch'):
                 path = PurePosixPath(scope)
                 if path.is_absolute() or '..' in path.parts or '\\' in scope or scope.startswith(('.git/', './')):
                     errors.append(f'{ident}: unsafe write scope {scope}')
-                if scope.startswith(('Assets/', 'Packages/', 'ProjectSettings/')):
-                    errors.append(f'{ident}: Unity scope missing UnityProject/ prefix')
+                if scope.startswith('UnityProject/'):
+                    errors.append(f'{ident}: stale Unity root; use VRChatKatamariDanacyUnity/')
+                elif scope.startswith(('Assets/', 'Packages/', 'ProjectSettings/')):
+                    errors.append(f'{ident}: Unity scope missing VRChatKatamariDanacyUnity/ prefix')
     edges = {}
     for ident, task in by_id.items():
         dependencies = task.get('dependencies', [])

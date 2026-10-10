@@ -30,16 +30,16 @@ T00仍需要确认实际工程和执行机器、精确Unity/SDK版本、编译�
 
 ## 4. 目录映射
 
-沿用用户截图的 Docs / Marketing / UnityProject 结构。
+初始计划沿用用户截图的 Docs / Marketing / UnityProject 结构；用户实际初始化后，执行映射调整为 `VRChatKatamariDanacyUnity/`，不移动或覆盖现有工程。
 
 | 原任务路径前缀 | 仓库路径前缀 |
 |---|---|
-| Assets、Packages、ProjectSettings | UnityProject/下对应目录 |
+| Assets、Packages、ProjectSettings | VRChatKatamariDanacyUnity/下对应目录 |
 | Research、AssetIntake、Contracts、Evidence | Docs/下对应目录 |
 | Commerce、Integration、Release、Art、Tests | Docs/下对应目录 |
 | Marketing | Marketing，保持不变 |
 
-路径是预留写入范围，不代表文件或工程已创建。设计包与任务JSON附件逐字归档；聊天原始导出仅本地留存。分章设计保留原文，不进行隐蔽重写。其历史路径须按本表解释；当前可执行路径以根任务表为准。设计包入口提到的工具、配置和模板并未随附件提供，本次新建的这些文件是仓库初始化产物，不是原ZIP解包结果。
+设计包与任务JSON附件逐字归档；聊天原始导出仅本地留存。分章设计保留原文，不进行隐蔽重写。其历史路径须按本表解释；当前可执行路径以根任务表为准。设计包入口提到的工具、配置和模板并未随附件提供，本次新建的这些文件是仓库初始化产物，不是原ZIP解包结果。
 
 ## 5. 解析发现的待处理问题
 
@@ -53,8 +53,14 @@ T00仍需要确认实际工程和执行机器、精确Unity/SDK版本、编译�
 
 ## 6. 初始化边界
 
-保留原Git历史、main和origin；没有重新初始化Git、提交、推送、上传世界、购买商品或下载模型。UnityProject仅有说明，不伪造SDK清单、Unity场景、包锁或.meta。
+保留原Git历史、main和origin；没有重新初始化Git或上传世界、购买商品、下载模型。仓库初始化时 `UnityProject/` 仅有说明；后续接入实际工程见本页第7节。
 
 本轮可验证：JSON结构、DAG、路径映射、免费/付费发布前置、原始文件哈希和校验工具单测。全部游戏门禁仍为NOT_RUN。
 
-后续用户已确认Unity在Windows PC运行，并自行初始化；Windows工程绝对路径及精确版本待回执。按 [Windows初始化清单](<10_WINDOWS_UNITY_SETUP.md>) 记录可复现证据。智能体首轮仅做T01/T02/T03前期工作，状态详见 [团队分工](<11_TEAM_KICKOFF.md>)。本页前面的“全部TODO”是仓库初次导入时的历史快照，不代表后续团队当前状态。
+后续用户已确认Unity在Windows PC运行，并自行初始化；最初的Unity工程路径及精确版本待回执状态，已由本页第7节更新。本页前面的“全部TODO”是仓库初次导入时的历史快照，不代表后续团队当前状态。首轮团队工作状态详见 [团队分工](<11_TEAM_KICKOFF.md>)。
+
+## 7. Windows Unity 工程接入（2026-10-11）
+
+用户提供并确认工程位于 `D:\VRChatKatamariDanacy\VRChatKatamariDanacyUnity`，仓库根为 `D:\VRChatKatamariDanacy`；Unity 工程保持原地，不移动或重建。已从工程元数据读取到 Unity `2022.3.22f1`、VRChat Worlds/Base VPM `3.10.5`；VCC 版本、UdonSharp 单独版本未确认。`Assets/Scenes/VRCDefaultWorldScene.unity` 存在。尚未检查 Unity Console，也未运行编译或 Build & Test，故 T00 仍待验收，相关游戏测试均为 NOT_RUN。
+
+公开仓库只纳入工程 Assets、ProjectSettings 与包清单/锁文件；Unity 缓存、个人 UserSettings，以及 `Packages/com.vrchat.*` SDK 源码不入库，后者由 VPM 在克隆/打开时恢复。执行路径、校验器和忽略规则现以 `VRChatKatamariDanacyUnity/` 为准。

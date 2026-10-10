@@ -70,7 +70,11 @@ class PlanTests(unittest.TestCase):
 
     def test_unmapped_unity_scope(self):
         self.plan['tasks'][0]['write_scope'] = ['Assets/Bad/']
-        self.check_error('missing UnityProject/')
+        self.check_error('missing VRChatKatamariDanacyUnity/')
+
+    def test_stale_unity_root(self):
+        self.plan['tasks'][0]['write_scope'] = ['UnityProject/Assets/Bad/']
+        self.check_error('stale Unity root; use VRChatKatamariDanacyUnity/')
 
     def test_done_requires_done_dependencies(self):
         self.plan['tasks'][4]['status'] = 'DONE'

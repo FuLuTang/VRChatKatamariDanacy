@@ -63,4 +63,4 @@ T00仍需要确认实际工程和执行机器、精确Unity/SDK版本、编译�
 
 用户提供并确认工程位于 `D:\VRChatKatamariDanacy\VRChatKatamariDanacyUnity`，仓库根为 `D:\VRChatKatamariDanacy`；Unity 工程保持原地，不移动或重建。已从工程元数据读取到 Unity `2022.3.22f1`、VRChat Worlds/Base VPM `3.10.5`；VCC 版本、UdonSharp 单独版本未确认。`Assets/Scenes/VRCDefaultWorldScene.unity` 存在。尚未检查 Unity Console，也未运行编译或 Build & Test，故 T00 仍待验收，相关游戏测试均为 NOT_RUN。
 
-公开仓库只纳入工程 Assets、ProjectSettings 与包清单/锁文件；Unity 缓存、个人 UserSettings，以及 `Packages/com.vrchat.*` SDK 源码不入库，后者由 VPM 在克隆/打开时恢复。执行路径、校验器和忽略规则现以 `VRChatKatamariDanacyUnity/` 为准。
+公开仓库只纳入工程 Assets、ProjectSettings 与包清单/锁文件；Unity 缓存、个人 UserSettings，以及 `Packages/com.vrchat.*` SDK 源码不入库，后者由 VPM 在克隆/打开时恢复。工程文件已随提交 `f211f9e` 推送至公开 `origin/main`。执行路径、校验器和忽略规则现以 `VRChatKatamariDanacyUnity/` 为准。

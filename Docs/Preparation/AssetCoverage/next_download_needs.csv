@@ -1,0 +1,18 @@
+candidate_id,concept,need_type,minimum_need,activation_gate,new_package_download_authorized
+PIC-01,seed,NEW_ASSET_NEED,Standalone seed-shaped candidate if still required,Retain concept and approve source search explicitly,NO
+PIC-02,nut,NEW_ASSET_NEED,Standalone nut-shaped candidate if still required,Retain concept and approve source search explicitly,NO
+PIC-03,small fruit,VARIETY_DECISION,Decide whether apple alone satisfies this generic category or additional fruit types are needed,Set desired variety before searching,NO
+PIC-10,watermelon slice,SHAPE_VARIANT,Slice-shaped watermelon or explicit concept revision,Confirm this form is needed and approve source search,NO
+PIC-11,bread loaf,SHAPE_VARIANT,Loaf-shaped bread or explicit concept revision,Confirm loaf form is needed and approve source search,NO
+PIC-15,cheese wedge,SHAPE_VARIANT,Wedge-shaped cheese or explicit concept revision,Confirm wedge form is needed and approve source search,NO
+PIC-23,folded napkin,NEW_ASSET_NEED,Standalone folded napkin candidate if still required,Retain concept and approve source search explicitly,NO
+PIC-24,jar,NEW_ASSET_NEED,Jar-shaped container candidate if still required,Retain concept and approve source search explicitly,NO
+PIC-25,thermos flask,NEW_ASSET_NEED,Thermos-shaped candidate if still required,Retain concept and approve source search explicitly,NO
+PIC-26,picnic basket,NEW_ASSET_NEED,Basket-shaped candidate if still required,Retain concept and approve source search explicitly,NO
+PIC-28,small potted plant,COMPOSITION_DECISION,Choose one atomic plant entity or separate pot and flower entities before selecting any composition,Approve pickup granularity and support behavior first,NO
+PIC-29,fallen leaf,SHAPE_VARIANT,Standalone fallen leaf rather than crop/grass foliage if needed,Review existing foliage metadata candidates before new source search,NO
+PIC-30,pebble,SHAPE_VARIANT,Review already inventoried small-rock variants; seek natural pebble only if all are unsuitable,Visually review existing candidates and explicitly approve a later source search,NO
+PIC-33,acorn,NEW_ASSET_NEED,Standalone acorn candidate if still required,Retain concept and approve source search explicitly,NO
+PIC-34,small watering can,NEW_ASSET_NEED,Small watering-can candidate if still required,Retain concept and approve source search explicitly,NO
+PIC-35,folding stool,NEW_ASSET_NEED,Folding stool candidate if still required,Retain concept and approve source search explicitly,NO
+PIC-36,small side table,NEW_ASSET_NEED,Small side-table candidate if still required,Retain concept and approve source search explicitly,NO

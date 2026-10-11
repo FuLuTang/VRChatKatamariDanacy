@@ -9,7 +9,7 @@
 
 ## 验证证据
 
-执行 `python3 -m unittest discover -s Docs/tests/prep_protocol -v`：34 tests，OK。只支持并恢复单分片完整快照；multipart一律明确拒绝，另有正向单分片恢复与负向multipart回归测试，证明非header状态不会被静默忽略。迁移时清理旧authority epoch的request-response cache，保留快照内业务幂等ID与物件账本，另有同session/request序号跨epoch更换操作的回归测试。全仓 `python3 -m unittest discover -s Docs/tests -v`：132项全部通过。曾有P22校验器的P13案例ID期待错误，offline-quality已修正自身检查器后全仓通过；P12文件未改动该外部范围。
+执行 `python3 -m unittest discover -s Docs/tests/prep_protocol -v`：34 tests，OK。只支持并恢复单分片完整快照；multipart一律明确拒绝，另有正向单分片恢复与负向multipart回归测试，证明非header状态不会被静默忽略。迁移时清理旧authority epoch的request-response cache，保留快照内业务幂等ID与物件账本，另有同session/request序号跨epoch更换操作的回归测试。全仓 `python3 -m unittest discover -s Docs/tests -v`：132项全部通过。P22校验器曾错误期待`V01-radius-diameter`；实际P13夹具ID是`V03-radius-diameter-distinct`，offline-quality修正了检查器预期，没有改P13夹具。
 
 可复现命令、模型假设、未冻结政策及不能推导的结论见 [README.md](README.md)。
 

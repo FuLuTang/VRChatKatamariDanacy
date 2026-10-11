@@ -14,6 +14,7 @@
     {
       "id": "T00",
       "title": "工程基线、版本锁定与最小测试场景",
+      "execution_note": "Windows工程已初始化并推送；用户本轮明确不运行Unity。仅开展独立离线前置，Console/Udon编译和Build & Test均NOT_RUN，不因文件存在判DONE。",
       "phase": "P0",
       "implementer": "SOL",
       "reviewer": "Sol",
@@ -86,8 +87,8 @@
       "implementer": "LUNA",
       "reviewer": "Independent Luna; escalate to Sol",
       "status": "REVIEW",
-      "execution_note": "仅36种物件概念/候选包网页预筛选；具体包文件、LICENSE、哈希、预览和授权验收未完成，不得导入正式工程。",
-      "evidence_paths": ["Docs/Research/AssetManifest/picnic_candidates.csv", "Docs/AssetIntake/license_gaps.md", "Docs/AssetIntake/handoff.md"],
+      "execution_note": "36种物件概念预筛选；P02已取得两个官方Kenney免费小包并保存包级CC0、哈希和库存。P19在用户Windows现有Blender独立后台进程预览12项，发现bread是面包片、cheese-cut是薄片、pot_small是空盆；导入包围尺寸和三角数仅Blender证据，不是世界米制或Unity性能/碰撞/逐项分发验收。未导入Unity。旧license_gaps/DirectDownload映射是先前快照，最新观察见Preview。",
+      "evidence_paths": ["Docs/Research/AssetManifest/picnic_candidates.csv", "Docs/AssetIntake/license_gaps.md", "Docs/AssetIntake/handoff.md", "Docs/AssetIntake/DirectDownload/manifest.json", "Docs/AssetIntake/DirectDownload/handoff.md", "Docs/AssetIntake/Preview/README.md", "Docs/AssetIntake/Preview/renders/render_report.json"],
       "priority": "P1",
       "dependencies": [],
       "write_scope": [

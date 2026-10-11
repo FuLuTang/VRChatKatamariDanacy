@@ -24,6 +24,9 @@ VRChat 原创滚球、吸附成长与交分 PVP 项目。内部名 VRC塊魂；�
 7. [设计包源材料与哈希清单](<Docs/Source/manifest.json>)（私人聊天导出不随公开仓库发布）
 8. [Windows Unity初始化清单](<Docs/10_WINDOWS_UNITY_SETUP.md>) / [首轮团队分工与模型门禁](<Docs/11_TEAM_KICKOFF.md>)
 9. [首轮交付与主管审查](<Docs/13_FIRST_WAVE_REVIEW.md>) / [队员Luna路由证据与回退](<Docs/12_TEAM_MODEL_ROUTING.md>)
+10. [不启动Unity的前置分工](<Docs/14_OFFLINE_PREPARATION_PLAN.md>) / [离线工作包排程](<Docs/config/offline_preparation.json>) / [需求查漏](<Docs/Planning/RequirementsAudit/gaps.md>) / [首批前置审查](<Docs/15_OFFLINE_PREPARATION_REVIEW.md>) / [第二批与队员Blender分工](<Docs/16_OFFLINE_SECOND_BATCH_REVIEW.md>) / [素材检查图](<Docs/AssetIntake/Preview/README.md>)
+
+11. [大规模离线分工与分阶段推送](<Docs/17_LARGE_SCALE_PREPARATION_PLAN.md>)：6个常驻Luna + 3个明确模型的独立任务，P09–P18进行中；不代表Unity门禁通过。
 
 ## 目录
 
@@ -41,6 +44,6 @@ python3 Docs/tools/validate_plan.py
 python3 -m unittest discover -s Docs/tests -v
 ```
 
-只验证计划结构、来源哈希和任务 DAG，不验证游戏实现或替代真人门禁。
+验证计划结构、来源哈希、任务 DAG，以及宿主离线ZIP库存工具和前置素材证据一致性；不验证游戏实现或替代Unity/真人门禁。
 
-下一步是评审 T00：核对当前 Unity/SDK 版本与官方支持状态，检查 Console 编译结果并执行可用的 Build & Test；完成 T04/T05 平台门禁后才能推进 T06 接口冻结。
+当前先按用户要求推进不启动Unity的前置工作。之后再评审T00：核对版本支持状态、Console和Build & Test；完成T04/T05后才能推进T06接口冻结。独立的需求、素材、文本和离线工具不被这条Unity门禁链阻塞。

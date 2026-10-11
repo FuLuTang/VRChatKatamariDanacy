@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "document": "P09 rule and project decision matrix",
+  "as_of_date": "2026-10-11",
+  "status": "decision-support draft; no new user decisions recorded",
+  "evidence_policy": "Separate official published text from unknown original-game rules, project direction, provisional parameters, and actual implementation evidence. No gameplay was run or measured for this document.",
+  "sources": [
+    {
+      "id": "S02",
+      "kind": "official_publisher_faq",
+      "url": "https://en.bandainamcoent.eu/katamari/news/what-do-you-need-know-about-once-upon-katamari",
+      "access_and_limit": "As recorded in T01 rules_matrix.md: full text fetched on 2026-10-10 UTC (2026-10-11 Asia/Shanghai). FAQ says KatamariBall is playable with friends, up to four per room, and lists Magnet/timer/rocket with platform activation controls. It does not establish detailed PVP interactions."
+    },
+    {
+      "id": "S03",
+      "kind": "official_publisher_announcement",
+      "url": "https://en.bandainamcoent.eu/katamari/news/once-upon-katamari-new-story-begins-24-october-year",
+      "access_and_limit": "As recorded in T01 rules_matrix.md: full text fetched on 2026-10-10 UTC (2026-10-11 Asia/Shanghai). Announcement describes KatamariBall as a four-player battle mode: grow the ball within a time limit, exchange it for points, highest score wins. It does not specify transaction, KO, respawn, or item-in-PVP rules."
+    },
+    {
+      "id": "PROJECT_SCOPE",
+      "kind": "repository_current_decisions",
+      "paths": ["Docs/00_SCOPE_DECISIONS.md", "Docs/01_GAME_DESIGN.md", "Docs/02_TECHNICAL_CONTRACTS.md", "Docs/09_REPOSITORY_BASELINE.md", "tasks.json"],
+      "limit": "Project direction/prototypes, not evidence of original-game rules or implementation."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "rules.match_format",
+      "domain": "original_game_and_project_scope",
+      "evidence_status": "official_text_confirmed_plus_project_scope",
+      "unit": "players_per_match; duration unknown seconds",
+      "official_confirmed": ["KatamariBall is described as a four-player battle mode.", "Players grow a Katamari within a time limit and exchange it for points; highest score wins."],
+      "unknown": ["Exact match duration, number of rounds/sets, tie handling, and whether the four-player mode uses any CPU fill in every online context."],
+      "project_decision_or_prototype": ["PCVR + Desktop first release; Quest excluded.", "Project scope suggests 2–4 human players and has a provisional 180-second single-round prototype; neither is an original-game measurement."],
+      "candidates": [
+        {"option": "Use adjustable single-round prototype", "description": "Start with the project provisional duration and expose it as test configuration.", "reject_basis_if_not_selected": "A fixed value is not justified as an original-game fact; playtest may show it is too short/long."},
+        {"option": "Choose another duration after playtest", "description": "Decide after observing pacing and scoring in the project.", "reject_basis_if_not_selected": "Requires more evidence and delays locking the loop; still does not reveal original duration."},
+        {"option": "Use multi-round structure", "description": "Only if a later explicit product decision supports it.", "reject_basis_if_not_selected": "Adds reset, progression, and fairness complexity not required by current scope."}
+      ],
+      "recommended_option": null,
+      "decision_owner": "user_and_lead; implementation parameters after relevant playtest",
+      "do_not_claim": "Do not state that 180 seconds or project 2–4 participation reproduces the original rules."
+    },
+    {
+      "id": "rules.score_and_exchange",
+      "domain": "original_game",
+      "evidence_status": "partial_official_text; detailed_rules_unknown",
+      "unit": "points and exchange operation unspecified",
+      "official_confirmed": ["The publisher says the Katamari is exchanged for points within the time limit and the highest score wins."],
+      "unknown": ["Exchange location, manual/automatic trigger, range, interruption, frequency, score formula, whether all growth is exchanged, ball reset, and deadline ordering."],
+      "project_decision_or_prototype": ["Project uses unbanked risk growth and confirmed banked score as distinct ledgers; score ranking uses confirmed banked points."],
+      "candidates": [
+        {"option": "Project explicit banking zone and transaction", "description": "Use the current project contract: request/confirmation, idempotency, reset only on confirmed transaction.", "reject_basis_if_not_selected": "It is a chosen project design direction, not proof of original exchange implementation."},
+        {"option": "Alternative exchange flow after project tests", "description": "Compare automatic, manual, or multiple exchange points only through a scoped project decision.", "reject_basis_if_not_selected": "Would change map, UI, transaction, and fairness requirements."}
+      ],
+      "recommended_option": null,
+      "decision_owner": "lead_for_project_contract; user_for_scope_changes",
+      "do_not_claim": "Do not claim the original uses a fixed/moving bank, particular ratio, reset, or interruption behavior."
+    },
+    {
+      "id": "rules.pvp_swallow_threshold",
+      "domain": "original_game",
+      "evidence_status": "unknown",
+      "unit": "collision/size ratio dimensionless; thresholds unknown",
+      "official_confirmed": [],
+      "unknown": ["Whether KatamariBall permits swallowing/KO; any size ratio, contact direction, protection, collision handling, or simultaneous-contact resolution."],
+      "project_decision_or_prototype": ["Project retains swallow/KO and respawn as a project direction. The 1.35 size ratio in game design is a project prototype assumption only."],
+      "candidates": [
+        {"option": "Keep threshold configurable and test", "description": "Use a parameter only after owner approval and deterministic authority tests.", "reject_basis_if_not_selected": "Leaves balance open and requires tuning evidence."},
+        {"option": "Use a different tested threshold", "description": "Select from multiplayer playtest data.", "reject_basis_if_not_selected": "No such data currently exists."},
+        {"option": "Defer swallow until combat test", "description": "Gate the feature off in a test build if required evidence is absent.", "reject_basis_if_not_selected": "Would reduce the planned PVP feature set and alter test goals."}
+      ],
+      "recommended_option": null,
+      "decision_owner": "lead_for_project_rules; user_for_scope; T27/T39 testers for evidence",
+      "do_not_claim": "1.35 is neither original-game data nor a measured project balance value."
+    },
+    {
+      "id": "rules.ko_respawn",
+      "domain": "original_game",
+      "evidence_status": "unknown",
+      "unit": "time in seconds / score-resource effects unspecified",
+      "official_confirmed": [],
+      "unknown": ["Whether KO and respawn exist; wait duration; spawn selection; protection; spectator behavior; carried item/power-up state; resource loss; catch-up supply."],
+      "project_decision_or_prototype": ["Project direction includes KO and respawn. Example values such as about 3 seconds wait and about 2 seconds protection are unvalidated project prototype numbers, not original rules."],
+      "candidates": [
+        {"option": "Configurable short KO and safe respawn", "description": "Preserve participant status, clear input, respawn at a safe point, test low-tier supply.", "reject_basis_if_not_selected": "Timing, safety, and resource availability remain unvalidated."},
+        {"option": "Alternative wait/protection settings", "description": "Select only after multiplayer and comfort/fairness tests.", "reject_basis_if_not_selected": "Long or short values may create farming, snowball, or downtime."},
+        {"option": "No respawn in a particular test mode", "description": "Use only as an explicitly scoped experiment, not silently as final design.", "reject_basis_if_not_selected": "Conflicts with current project direction and changes match dynamics."}
+      ],
+      "recommended_option": null,
+      "decision_owner": "lead_for_project_contract; T27/T39 human testers; user for scope",
+      "do_not_claim": "No original KO/respawn behavior or timing is established by available official sources."
+    },
+    {
+      "id": "rules.powerups_in_pvp",
+      "domain": "original_game",
+      "evidence_status": "items_officially_listed;_pvp_placement_unknown",
+      "unit": "items; duration/effect values not established for PVP",
+      "official_confirmed": ["Official FAQ lists Magnet, timer, and rocket in the game and describes platform controls; announcement describes broad item effects."],
+      "unknown": ["Whether any of these items are available in KatamariBall; PVP spawn, inventory, duration, target, cooldown, interaction with KO/banking, and balance."],
+      "project_decision_or_prototype": ["Project chose a single slot with Magnet and Rocket; Jump rising edge is the project input direction. This is not a claim of original PVP item rules."],
+      "candidates": [
+        {"option": "Project-selected Magnet + Rocket", "description": "Implement only after project-specific transaction and platform input gates.", "reject_basis_if_not_selected": "Selected subset; may require balancing and platform testing."},
+        {"option": "Add timer or another item", "description": "Requires a separate user-approved scope change and rules design.", "reject_basis_if_not_selected": "Not in current v0.3 project selection; would expand implementation and testing."},
+        {"option": "Disable items in test mode", "description": "Useful as a baseline comparison if a test needs isolating movement/fairness.", "reject_basis_if_not_selected": "Would not exercise selected power-up gameplay."}
+      ],
+      "recommended_option": null,
+      "decision_owner": "lead_for_project_rules; T04/T05 platform owners for input feasibility",
+      "do_not_claim": "Original platform key mappings are not a VRChat mapping."
+    },
+    {
+      "id": "project.map_count",
+      "domain": "project_scope",
+      "evidence_status": "explicit_target_with_open_release_choice",
+      "unit": "maps",
+      "official_confirmed": [],
+      "unknown": ["Whether one or two maps should be included in the first public release after playtests; this is a product choice, not an original-game rule."],
+      "project_decision_or_prototype": ["Current scope says first vertical slice one map/two players; launch target two maps (Picnic Lawn and Toyroom); Night Market is post-launch/optional.", "T39 explicitly allows human approval to ship two maps or reduce to one complete experience."],
+      "candidates": [
+        {"option": "Two-map release target", "description": "Complete Picnic and Toyroom, then validate differentiated routes and fairness.", "reject_basis_if_not_selected": "More content, licensing, performance, and test workload; cannot sacrifice core quality to meet count."},
+        {"option": "One-map release after explicit downgrade", "description": "Choose one fully validated map and defer the other; update task dependencies and acceptance first.", "reject_basis_if_not_selected": "Reduces launch variety; requires authorized scope decision and DAG change."}
+      ],
+      "recommended_option": null,
+      "decision_owner": "user_and_lead_after_T39_evidence",
+      "do_not_claim": "This draft does not decide one vs two maps and does not change tasks.json."
+    },
+    {
+      "id": "project.fairness_thresholds",
+      "domain": "project_acceptance",
+      "evidence_status": "unknown_thresholds",
+      "unit": "percent, meters, seconds, repeated trials; values unset",
+      "official_confirmed": [],
+      "unknown": ["Acceptable spawn-resource variance; route and bank-time deviation; minimum respawn resources; restock delay; repeat count and statistical method; soft-lock criteria."],
+      "project_decision_or_prototype": ["Map rubric proposes normalized comparisons and evidence collection but intentionally does not set pass thresholds."],
+      "candidates": [
+        {"option": "Set thresholds before human trials", "description": "User/lead select candidate acceptance criteria, then collect evidence against them.", "reject_basis_if_not_selected": "Precommits before observational data and may be over/under strict."},
+        {"option": "Pilot first, then set thresholds", "description": "Run explicitly exploratory rounds, publish results, then set acceptance values before formal validation.", "reject_basis_if_not_selected": "Exploratory sample cannot be retroactively labeled acceptance PASS."},
+        {"option": "Use qualitative review only", "description": "Human reviewers assess route fairness and soft-locks without numerical thresholds.", "reject_basis_if_not_selected": "Less reproducible and may hide spawn/resource asymmetry."}
+      ],
+      "recommended_option": null,
+      "decision_owner": "user_and_lead_before_T39_formal_trials",
+      "do_not_claim": "No fairness percentages, minimum resource counts, route margins, or replenishment limits are approved."
+    },
+    {
+      "id": "project.item_growth_and_collision",
+      "domain": "project_contract",
+      "evidence_status": "terminology_fixed_values_open",
+      "unit": "collisionRadiusWorldM in m; semanticDiameter separate; gainVolumeUnits/bankedScore separate",
+      "official_confirmed": [],
+      "unknown": ["Final maximum collision radius, growth bands, pickup thresholds, gain values, acceleration/physics limits and practical avatar/Station envelope."],
+      "project_decision_or_prototype": ["One shared world coordinate system; collision radius is distinct from semantic/UI size and visual mesh; confirmed ledger values drive score/PVP. 0.2–5 m is a user-selected presentation working range, not a technical maximum."],
+      "candidates": [
+        {"option": "Parameterize until T06 and real map tests", "description": "Do not bake provisional values into public contracts.", "reject_basis_if_not_selected": "Delays precise map geometry and growth balance until relevant evidence arrives."},
+        {"option": "Approve a measured envelope after T04/T27/T39", "description": "Choose from build/device and real map playtests, then version the rule.", "reject_basis_if_not_selected": "Requires implementation/test availability and human approval."}
+      ],
+      "recommended_option": null,
+      "decision_owner": "lead_for_contract_after_T01_and_T05; map/performance owners provide measurements",
+      "do_not_claim": "Presentation range is not a collision bound; visual mesh bounds do not establish gameplay size or gain."
+    },
+    {
+      "id": "project.commercial_sku",
+      "domain": "project_commercial_scope",
+      "evidence_status": "not_selected_and_gated",
+      "unit": "SKU / price / currency not chosen",
+      "official_confirmed": [],
+      "unknown": ["Creator Economy eligibility, product catalog, legal/authorization review, platform pricing, tax/currency display, entitlement/transaction restore implementation."],
+      "project_decision_or_prototype": ["Design direction is free complete gameplay and only optional pure cosmetics; commerce remains gated and cannot affect play."],
+      "candidates": [
+        {"option": "No paid SKU for first release", "description": "Keep store disabled or preview-only until all gates are approved.", "reject_basis_if_not_selected": "Defers monetization despite cosmetic-store direction."},
+        {"option": "Pure cosmetic SKU after gates", "description": "Requires human selection of catalog/price and platform entitlement, license, and purchase recovery tests.", "reject_basis_if_not_selected": "Requires account authorization, approved entitlement API, and purchase/recovery evidence."}
+      ],
+      "recommended_option": null,
+      "decision_owner": "user; T34-T37/T41 gates",
+      "do_not_claim": "No SKU, price, currency conversion, Creator Economy eligibility, or live purchase path is approved."
+    }
+  ],
+  "non_decisions": [
+    "No root task status or dependency has been changed.",
+    "No one-map release choice, fairness threshold, original rule, numerical prototype, commercial SKU, price, or public interface has been approved by this document.",
+    "No Unity, game, VR, multiplayer, commerce, or original-game playtest was performed."
+  ]
+}

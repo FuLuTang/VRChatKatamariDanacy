@@ -1,0 +1,31 @@
+{
+  "schema": "offline-math-cases-v1",
+  "status": "illustrative fixtures only; no source-asset axis/unit certification",
+  "vectors": [
+    {"id":"V01-zero-volume","operation":"sphere_radius","input":{"volume":0},"expected":0},
+    {"id":"V02-unit-radius-volume","operation":"sphere_volume","input":{"radius":1},"expected":4.1887902047863905},
+    {"id":"V03-radius-diameter-distinct","operation":"radius_diameter","input":{"radius":2},"expected":{"radius":2,"diameter":4}},
+    {"id":"V04-volume-cube-root","operation":"sphere_radius","input":{"volume":33.510321638291124},"expected":2},
+    {"id":"V05-sphere-scale","operation":"sphere_radius","input":{"volume":268.082573106329},"expected":4},
+    {"id":"V06-ledger-add","operation":"ledger_total","input":{"ledger":{"a":3,"b":5}},"expected":8},
+    {"id":"V07-ledger-remove","operation":"ledger_remove","input":{"ledger":{"rod":20,"fruit":2},"item_id":"rod"},"expected":{"fruit":2}},
+    {"id":"V08-long-rod-recomputed","operation":"support_distance","input":{"direction":[1,0,0],"points":[[0,0,0],[4,0,0]],"core_radius":1},"expected":4},
+    {"id":"V09-rod-removed-support","operation":"support_distance","input":{"direction":[1,0,0],"points":[[0,0,0]],"core_radius":1},"expected":1},
+    {"id":"V10-covered-rod-support","operation":"support_distance","input":{"direction":[1,0,0],"points":[[1.5,0,0]],"core_radius":2},"expected":2},
+    {"id":"V11-ledger-unchanged-visual-core","operation":"ledger_total","input":{"ledger":{"attached":7},"core_volume":11},"expected":18},
+    {"id":"V12-duplicate-attach-idempotent","operation":"duplicate_attach","input":{"initial":{"i-7":6},"item_id":"i-7","amount":6},"expected":{"i-7":6}},
+    {"id":"V13-normalize-axis","operation":"normalize","input":{"vector":[0,3,0]},"expected":[0,1,0]},
+    {"id":"V14-normalize-diagonal","operation":"normalize","input":{"vector":[1,1,1]},"expected":[0.5773502691896258,0.5773502691896258,0.5773502691896258]},
+    {"id":"V15-world-local-roundtrip","operation":"roundtrip","input":{"world_point":[8,5,0],"parent_translation":[10,0,0],"visual_rotation_z":1.5707963267948966},"expected":[8,5,0]},
+    {"id":"V16-parent-chain-roundtrip","operation":"parent_roundtrip","input":{"point":[1,2,3],"parent_translation":[4,-1,2],"parent_scale":[2,2,2],"local_translation":[0,3,0]},"expected":[1,2,3]},
+    {"id":"V17-attachment-unscaled-by-core-growth","operation":"local_attachment","input":{"local_attachment":[0.5,0,0],"root_scale":[1,1,1]},"expected":[0.5,0,0]},
+    {"id":"V18-rotation-z-direction","operation":"rotate_z","input":{"direction":[1,0,0],"radians":1.5707963267948966},"expected":[0,1,0]},
+    {"id":"V19-support-direction-normalized","operation":"support_distance","input":{"direction":[5,0,0],"points":[[2,0,0]],"core_radius":1},"expected":2},
+    {"id":"V20-negative-scale-rejected","operation":"invalid_scale","input":{"scale":[1,-1,1]},"expected":"ValueError"},
+    {"id":"V21-zero-scale-rejected","operation":"invalid_scale","input":{"scale":[1,0,1]},"expected":"ValueError"},
+    {"id":"V22-nan-rejected","operation":"invalid_finite","input":{"value":"NaN"},"expected":"ValueError"},
+    {"id":"V23-infinity-rejected","operation":"invalid_finite","input":{"value":"Infinity"},"expected":"ValueError"},
+    {"id":"V24-zero-direction-rejected","operation":"invalid_direction","input":{"vector":[0,0,0]},"expected":"ValueError"},
+    {"id":"V25-attachment-root-local-pose-contract","operation":"core_visual_only","input":{"attachment_local":[0,2,0],"attachment_root_local":[1,0,0],"parent_world_translation":[3,0,0],"core_radius_before":1,"core_radius_after":5},"expected":{"core_mesh_scale_changed":true,"attachment_world_before":[4,2,0],"attachment_world_after":[4,2,0]}}
+  ]
+}

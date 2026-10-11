@@ -1,0 +1,19 @@
+schemaVersion,caseId,area,setup,event,expected,actual,evidence,status
+1,CS-001,free-default,Store disabled,Start session,Free default is usable without store, , ,NOT_RUN
+1,CS-002,preview,No entitlement response,Preview optional appearance,Preview is presentation-only and does not grant ownership, , ,NOT_RUN
+1,CS-003,free-selection,Free appearance available,Select free appearance,Free appearance applies without entitlement query, , ,NOT_RUN
+1,CS-004,optional-loading,Entitlement unresolved,Request optional appearance,Free default remains rendered while authority lookup is pending, , ,NOT_RUN
+1,CS-005,optional-owned,Official authority confirms ownership,Resolve optional selection,Optional appearance may render; gameplay state unchanged, , ,NOT_RUN
+1,CS-006,optional-not-owned,Official authority denies ownership,Resolve optional selection,Free default renders; no paid asset equipped, , ,NOT_RUN
+1,CS-007,unknown-entitlement,Authority result unavailable,Open appearance UI,Unknown remains distinct from owned and definitive not-owned, , ,NOT_RUN
+1,CS-008,timeout,Lookup takes too long,Timeout occurs,Timeout retains free default and is not interpreted as revocation, , ,NOT_RUN
+1,CS-009,lookup-failure,Lookup returns error,Lookup fails,Free fallback remains; failure is non-blocking and is not ownership, , ,NOT_RUN
+1,CS-010,revocation,Previously confirmed optional entitlement is authoritatively revoked,Refresh entitlement,Optional rendering falls back to free default without gameplay-state changes, , ,NOT_RUN
+1,CS-011,reconnect,Authority/connection unavailable,Reconnect begins,Free default remains during recovery and no local cache grants paid status, , ,NOT_RUN
+1,CS-012,persist-restore,Preference restoration pending,Session starts,Do not persist defaults over prior data before restore completion, , ,NOT_RUN
+1,CS-013,persist-free,Restored preference selects free cosmetic,Apply preferences,Free selection restores independent of entitlement service, , ,NOT_RUN
+1,CS-014,persist-optional,Restored preference names optional cosmetic,Apply preferences,Value is candidate preference only and official authority is queried independently, , ,NOT_RUN
+1,CS-015,persist-failure,Preference recovery fails,Restore error,Use safe in-memory free default without asserting absence or overwriting old data, , ,NOT_RUN
+1,CS-016,gameplay-isolation,Any cosmetic or remote summary changes,Render/update remote cosmetic,Collision radius abilities queue priority and score remain independent, , ,NOT_RUN
+1,CS-017,paid-disabled,No human commerce gates confirmed,Open cosmetic/store surface,No purchase flow or live listing is enabled; previews remain mock/local, , ,NOT_RUN
+1,CS-018,playerdata-spoof,Local PlayerData claims optional owned,Load cosmetic state,PlayerData claim never overrides official entitlement authority, , ,NOT_RUN

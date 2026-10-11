@@ -1,0 +1,2 @@
+# Archival provenance files are hash-verified; keep them byte-exact on every platform.
+Docs/Source/** -text

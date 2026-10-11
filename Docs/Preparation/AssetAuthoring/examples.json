@@ -1,0 +1,337 @@
+{
+  "schemaVersion": "0.1-draft",
+  "status": "HOST_ONLY_NOT_RUNTIME",
+  "notice": "Conceptual authoring examples only. No Unity asset or frozen Udon/API contract is produced. Null scale/value fields are intentionally unresolved.",
+  "definitions": [
+    {
+      "definitionId": "picnic.food.apple",
+      "candidateRefs": ["PIC-04"],
+      "status": "PREVIEW_CANDIDATE",
+      "sourceRefs": [
+        {
+          "packageId": "KENNEY-FOOD-KIT-2.0",
+          "memberPath": "Models/GLB format/apple.glb",
+          "evidenceType": "VERIFIED_PREVIEW",
+          "sourceMemberSha256": "2a80ab65d5bc2cb4f2bca1e8176cbb591849a288596d4b2e76e411338761a526",
+          "previewDerivativeSha256": "0ac01021950c0ae51fafb234cf3d43dacabf99e94c773bdd91dc40e5b222f5fd",
+          "licenseEvidenceStatus": "PACKAGE_LEVEL_ONLY_PER_FILE_REVIEW_PENDING"
+        }
+      ],
+      "renderPolicy": {"localVisualLodRef": null, "remoteProxyVariant": null, "licenseEvidenceStatus": "PACKAGE_LEVEL_ONLY_PER_FILE_REVIEW_PENDING"},
+      "renderObservation": {
+        "evidenceType": "VERIFIED_PREVIEW",
+        "meshCount": 1,
+        "materialSlotCount": 1,
+        "triangleCount": 136,
+        "sourceUnitsStatus": "OPEN",
+        "sourceAxisStatus": "OPEN",
+        "pivotStatus": "OPEN",
+        "previewNormalizationGameplayScale": false,
+        "note": "Blender importer observation only; preview normalization is for layout and does not set world size or item count."
+      },
+      "gameplayValues": {
+        "interactionRole": "UNDECIDED",
+        "semanticTier": "m",
+        "gainVolumeUnits": null,
+        "pickupDiameterWorldM": null,
+        "collisionRadiusWorldM": null,
+        "scaleStatus": "OPEN",
+        "surfaceClass": null,
+        "surfaceClassStatus": "OPEN",
+        "canWakePhysics": null,
+        "canWakePhysicsStatus": "OPEN"
+      },
+      "geometryLayers": {
+        "renderMesh": {"sourceRefIndices": [0], "status": "PREVIEWED"},
+        "gameplayColliderProxy": {"status": "NOT_DESIGNED", "shape": "UNKNOWN", "dimensionsWorldM": null, "affectsSharedPvpCollision": false, "note": "Do not derive from render bounds."},
+        "shapeSupportProxy": {"status": "NOT_DESIGNED", "shape": "UNKNOWN", "pointUnitStatus": "OPEN", "supportPointsLocal": [], "affectsSharedPvpCollision": false, "note": "Separate support/extreme representation; not a gameplay collision contract."}
+      },
+      "compositionPolicy": "ONE_DEFINITION_ONE_INSTANCE_IF_APPROVED",
+      "supportPolicy": "NO_SUPPORT_PARENT",
+      "note": "Preview and package evidence do not grant per-file rights approval or gameplay acceptance."
+    },
+    {
+      "definitionId": "picnic.tableware.cup",
+      "candidateRefs": ["PIC-19"],
+      "status": "METADATA_CANDIDATE",
+      "sourceRefs": [
+        {
+          "packageId": "KENNEY-FOOD-KIT-2.0",
+          "memberPath": "Models/GLB format/cup.glb",
+          "evidenceType": "ZIP_METADATA_ONLY",
+          "sourceMemberSha256": null,
+          "previewDerivativeSha256": null,
+          "licenseEvidenceStatus": "PACKAGE_LEVEL_ONLY_PER_FILE_REVIEW_PENDING"
+        }
+      ],
+      "renderPolicy": {"localVisualLodRef": null, "remoteProxyVariant": null, "licenseEvidenceStatus": "PACKAGE_LEVEL_ONLY_PER_FILE_REVIEW_PENDING"},
+      "renderObservation": {
+        "evidenceType": "ZIP_METADATA_ONLY",
+        "meshCount": null,
+        "materialSlotCount": null,
+        "triangleCount": null,
+        "sourceUnitsStatus": "OPEN",
+        "sourceAxisStatus": "OPEN",
+        "pivotStatus": "OPEN",
+        "previewNormalizationGameplayScale": false,
+        "note": "Inventory filename candidate only; not extracted or visually checked in P21."
+      },
+      "gameplayValues": {
+        "interactionRole": "UNDECIDED",
+        "semanticTier": "m",
+        "gainVolumeUnits": null,
+        "pickupDiameterWorldM": null,
+        "collisionRadiusWorldM": null,
+        "scaleStatus": "OPEN",
+        "surfaceClass": null,
+        "surfaceClassStatus": "OPEN",
+        "canWakePhysics": null,
+        "canWakePhysicsStatus": "OPEN"
+      },
+      "geometryLayers": {
+        "renderMesh": {"sourceRefIndices": [0], "status": "CANDIDATE"},
+        "gameplayColliderProxy": {"status": "NOT_DESIGNED", "shape": "UNKNOWN", "dimensionsWorldM": null, "affectsSharedPvpCollision": false, "note": "Separate future gameplay collider review."},
+        "shapeSupportProxy": {"status": "NOT_DESIGNED", "shape": "UNKNOWN", "pointUnitStatus": "OPEN", "supportPointsLocal": [], "affectsSharedPvpCollision": false, "note": "Separate future shape/support review."}
+      },
+      "compositionPolicy": "UNDECIDED",
+      "supportPolicy": "UNDECIDED",
+      "note": "Definition identity follows the cup concept, not the source filename."
+    },
+    {
+      "definitionId": "picnic.tableware.cup_saucer_candidate",
+      "candidateRefs": ["PIC-19"],
+      "status": "METADATA_CANDIDATE",
+      "sourceRefs": [
+        {
+          "packageId": "KENNEY-FOOD-KIT-2.0",
+          "memberPath": "Models/GLB format/cup-saucer.glb",
+          "evidenceType": "ZIP_METADATA_ONLY",
+          "sourceMemberSha256": null,
+          "previewDerivativeSha256": null,
+          "licenseEvidenceStatus": "PACKAGE_LEVEL_ONLY_PER_FILE_REVIEW_PENDING"
+        }
+      ],
+      "renderPolicy": {"localVisualLodRef": null, "remoteProxyVariant": null, "licenseEvidenceStatus": "PACKAGE_LEVEL_ONLY_PER_FILE_REVIEW_PENDING"},
+      "renderObservation": {
+        "evidenceType": "ZIP_METADATA_ONLY",
+        "meshCount": null,
+        "materialSlotCount": null,
+        "triangleCount": null,
+        "sourceUnitsStatus": "OPEN",
+        "sourceAxisStatus": "OPEN",
+        "pivotStatus": "OPEN",
+        "previewNormalizationGameplayScale": false,
+        "note": "Filename suggests a combined candidate only; geometry and cup/saucer boundaries are not visually verified."
+      },
+      "gameplayValues": {
+        "interactionRole": "UNDECIDED",
+        "semanticTier": "m",
+        "gainVolumeUnits": null,
+        "pickupDiameterWorldM": null,
+        "collisionRadiusWorldM": null,
+        "scaleStatus": "OPEN",
+        "surfaceClass": null,
+        "surfaceClassStatus": "OPEN",
+        "canWakePhysics": null,
+        "canWakePhysicsStatus": "OPEN"
+      },
+      "geometryLayers": {
+        "renderMesh": {"sourceRefIndices": [0], "status": "CANDIDATE"},
+        "gameplayColliderProxy": {"status": "NOT_DESIGNED", "shape": "UNKNOWN", "dimensionsWorldM": null, "affectsSharedPvpCollision": false, "note": "No proxy is inferred from the asset filename."},
+        "shapeSupportProxy": {"status": "NOT_DESIGNED", "shape": "UNKNOWN", "pointUnitStatus": "OPEN", "supportPointsLocal": [], "affectsSharedPvpCollision": false, "note": "No support points have been measured or authored."}
+      },
+      "compositionPolicy": "UNDECIDED",
+      "supportPolicy": "UNDECIDED",
+      "note": "If a future review approves an atomic set, it can be one definition/instance regardless of mesh or material-slot count."
+    },
+    {
+      "definitionId": "picnic.tableware.plate",
+      "candidateRefs": ["PIC-20"],
+      "status": "METADATA_CANDIDATE",
+      "sourceRefs": [
+        {
+          "packageId": "KENNEY-FOOD-KIT-2.0",
+          "memberPath": "Models/GLB format/plate.glb",
+          "evidenceType": "ZIP_METADATA_ONLY",
+          "sourceMemberSha256": null,
+          "previewDerivativeSha256": null,
+          "licenseEvidenceStatus": "PACKAGE_LEVEL_ONLY_PER_FILE_REVIEW_PENDING"
+        }
+      ],
+      "renderPolicy": {"localVisualLodRef": null, "remoteProxyVariant": null, "licenseEvidenceStatus": "PACKAGE_LEVEL_ONLY_PER_FILE_REVIEW_PENDING"},
+      "renderObservation": {
+        "evidenceType": "ZIP_METADATA_ONLY",
+        "meshCount": null,
+        "materialSlotCount": null,
+        "triangleCount": null,
+        "sourceUnitsStatus": "OPEN",
+        "sourceAxisStatus": "OPEN",
+        "pivotStatus": "OPEN",
+        "previewNormalizationGameplayScale": false,
+        "note": "Exact filename candidate from frozen ZIP inventory; visual form remains unknown."
+      },
+      "gameplayValues": {
+        "interactionRole": "UNDECIDED",
+        "semanticTier": "m",
+        "gainVolumeUnits": null,
+        "pickupDiameterWorldM": null,
+        "collisionRadiusWorldM": null,
+        "scaleStatus": "OPEN",
+        "surfaceClass": null,
+        "surfaceClassStatus": "OPEN",
+        "canWakePhysics": null,
+        "canWakePhysicsStatus": "OPEN"
+      },
+      "geometryLayers": {
+        "renderMesh": {"sourceRefIndices": [0], "status": "CANDIDATE"},
+        "gameplayColliderProxy": {"status": "NOT_DESIGNED", "shape": "UNKNOWN", "dimensionsWorldM": null, "affectsSharedPvpCollision": false, "note": "Independent of presentation mesh."},
+        "shapeSupportProxy": {"status": "NOT_DESIGNED", "shape": "UNKNOWN", "pointUnitStatus": "OPEN", "supportPointsLocal": [], "affectsSharedPvpCollision": false, "note": "Independent of collision proxy."}
+      },
+      "compositionPolicy": "ONE_DEFINITION_ONE_INSTANCE_IF_APPROVED",
+      "supportPolicy": "UNDECIDED",
+      "note": "A plate mesh or material slots do not create additional collectible entities."
+    },
+    {
+      "definitionId": "picnic.furniture.side_table",
+      "candidateRefs": ["PIC-36"],
+      "status": "PLACEHOLDER_ONLY",
+      "sourceRefs": [],
+      "renderPolicy": {"localVisualLodRef": null, "remoteProxyVariant": null, "licenseEvidenceStatus": "NO_SOURCE_NOT_ASSESSED"},
+      "renderObservation": {
+        "evidenceType": "NO_SOURCE",
+        "meshCount": null,
+        "materialSlotCount": null,
+        "triangleCount": null,
+        "sourceUnitsStatus": "OPEN",
+        "sourceAxisStatus": "OPEN",
+        "pivotStatus": "OPEN",
+        "previewNormalizationGameplayScale": false,
+        "note": "Conceptual host-side example only; no source asset is claimed."
+      },
+      "gameplayValues": {
+        "interactionRole": "UNDECIDED",
+        "semanticTier": "l",
+        "gainVolumeUnits": null,
+        "pickupDiameterWorldM": null,
+        "collisionRadiusWorldM": null,
+        "scaleStatus": "OPEN",
+        "surfaceClass": null,
+        "surfaceClassStatus": "OPEN",
+        "canWakePhysics": null,
+        "canWakePhysicsStatus": "OPEN"
+      },
+      "geometryLayers": {
+        "renderMesh": {"sourceRefIndices": [], "status": "NOT_AUTHORED"},
+        "gameplayColliderProxy": {"status": "NOT_DESIGNED", "shape": "UNKNOWN", "dimensionsWorldM": null, "affectsSharedPvpCollision": false, "note": "Not a Unity collider or measured gameplay proxy."},
+        "shapeSupportProxy": {"status": "NOT_DESIGNED", "shape": "UNKNOWN", "pointUnitStatus": "OPEN", "supportPointsLocal": [], "affectsSharedPvpCollision": false, "note": "Placeholder only."}
+      },
+      "compositionPolicy": "UNDECIDED",
+      "supportPolicy": "UNDECIDED",
+      "note": "A future table could be a fixed landmark, a collectible, or a support parent; choose one policy explicitly."
+    }
+  ],
+  "instances": [
+    {
+      "spawnId": "picnic.map_a.table_support_01",
+      "definitionId": "picnic.furniture.side_table",
+      "spawnGeneration": 0,
+      "stateRevision": 0,
+      "state": "DRAFT_NOT_RUNTIME",
+      "initialPose": null,
+      "supportParentId": null,
+      "onSupportRemoval": "UNDECIDED",
+      "status": "HOST_ONLY_PROPOSAL",
+      "note": "Placeholder table instance only; no position or source is asserted."
+    },
+    {
+      "spawnId": "picnic.map_a.cup_01",
+      "definitionId": "picnic.tableware.cup",
+      "spawnGeneration": 0,
+      "stateRevision": 0,
+      "state": "DRAFT_NOT_RUNTIME",
+      "initialPose": null,
+      "supportParentId": "picnic.map_a.table_support_01",
+      "onSupportRemoval": "UNDECIDED",
+      "status": "HOST_ONLY_PROPOSAL",
+      "note": "Independent instance candidate on the table support; no pose is authored."
+    },
+    {
+      "spawnId": "picnic.map_a.plate_01",
+      "definitionId": "picnic.tableware.plate",
+      "spawnGeneration": 0,
+      "stateRevision": 0,
+      "state": "DRAFT_NOT_RUNTIME",
+      "initialPose": null,
+      "supportParentId": "picnic.map_a.table_support_01",
+      "onSupportRemoval": "UNDECIDED",
+      "status": "HOST_ONLY_PROPOSAL",
+      "note": "Separate item instance from the cup; a shared support does not merge their IDs."
+    },
+    {
+      "spawnId": "picnic.map_a.apple_01",
+      "definitionId": "picnic.food.apple",
+      "spawnGeneration": 0,
+      "stateRevision": 0,
+      "state": "DRAFT_NOT_RUNTIME",
+      "initialPose": null,
+      "supportParentId": null,
+      "onSupportRemoval": "UNDECIDED",
+      "status": "HOST_ONLY_PROPOSAL",
+      "note": "Example A; another apple would use a different spawnId but the same definitionId."
+    }
+  ],
+  "compositionCases": [
+    {
+      "caseId": "cup_saucer_atomic_or_split",
+      "decisionStatus": "UNDECIDED",
+      "definitionIds": ["picnic.tableware.cup_saucer_candidate", "picnic.tableware.cup", "picnic.tableware.plate"],
+      "entityCountRule": "UNDECIDED",
+      "note": "Alternative designs only: if the combined candidate is verified and approved as one pickup, use one definition and one instance; if split, create separate semantic definitions and spawnIds. Filename, mesh count, and material slots cannot decide this."
+    },
+    {
+      "caseId": "table_supports_independent_cup_plate",
+      "decisionStatus": "UNDECIDED",
+      "definitionIds": ["picnic.furniture.side_table", "picnic.tableware.cup", "picnic.tableware.plate"],
+      "entityCountRule": "ONE_INSTANCE_PER_DEFINITION",
+      "note": "The example has separate cup and plate instances attached to one support parent. If the table is collected, choose collect-eligible-children, authoritative fall, or remain fixed before implementation. A chair may likewise be fixed scenery, one definition/instance per chair, or an approved group; chairs are not included in the 36-source coverage."
+    }
+  ],
+  "lifecycleCases": [
+    {
+      "caseId": "support_placement_validation",
+      "precondition": "A child item declares supportParentId and a shared-world placement is proposed.",
+      "expectedInvariant": "Parent resolves to one stable spawnId; support graph has no cycles; placement is not authored until source/world unit mapping is verified.",
+      "numericBudgetStatus": "NOT_SET"
+    },
+    {
+      "caseId": "support_removed_or_collected",
+      "precondition": "A support parent is removed, collected, or disabled.",
+      "expectedInvariant": "An explicit policy selects eligible group collection, deterministic authoritative fall, detach, or remain fixed. If a fall changes a contested pickup, clients do not independently choose PhysX landing results.",
+      "numericBudgetStatus": "NOT_SET"
+    },
+    {
+      "caseId": "drop_and_ledger_conservation",
+      "precondition": "One item instance drops or is removed during a game transaction.",
+      "expectedInvariant": "The confirmed ledger applies the instance contribution once; child meshes/material slots never create duplicate value, and rejected prediction cannot grant value.",
+      "numericBudgetStatus": "NOT_SET"
+    },
+    {
+      "caseId": "respawn_generation",
+      "precondition": "A consumed or removed map item is made available again.",
+      "expectedInvariant": "Keep stable spawnId, increment spawnGeneration/state revision per approved lifecycle, and reject stale claims from the prior generation.",
+      "numericBudgetStatus": "NOT_SET"
+    },
+    {
+      "caseId": "zone_tier_restock",
+      "precondition": "A zone or size tier has depleted eligible items.",
+      "expectedInvariant": "Use an explicit finite zone/tier budget and avoid spawning inside a ball; values and cadence remain unsized pending map measurement and gameplay review.",
+      "numericBudgetStatus": "NOT_SET"
+    },
+    {
+      "caseId": "render_collider_shape_proxy_separation",
+      "precondition": "A render mesh has long, thin, concave, or support-relevant geometry.",
+      "expectedInvariant": "RenderMesh, gameplay collider proxy, and support/extreme-point proxy are authored and reviewed independently. Until a later gate, visual shape proxies do not replace shared sphere collision.",
+      "numericBudgetStatus": "NOT_SET"
+    }
+  ]
+}

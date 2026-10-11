@@ -18,7 +18,7 @@ python3 -m unittest discover -s Docs/tests/prep_protocol -v
 python3 -m unittest discover -s Docs/tests -v
 ```
 
-最后复跑：P12目标测试34项通过；全仓测试132项全部通过。第三批集成检查最初使用错误的数学案例ID，offline-quality已对齐实际夹具并修复检查器；该修复不在P12写入范围。上述Python结果均不代表Udon编译、VRChat网络、抗作弊、Unity或真人玩法PASS。JSON文件是人工编写的案例/预期，不是可自动执行的场景脚本。
+最后复跑：P12目标测试34项通过；全仓测试132项全部通过。P22检查器最初期待不存在的P13数学案例ID `V01-radius-diameter`；实际夹具ID为 `V03-radius-diameter-distinct`。offline-quality已修正自身检查器的预期ID（未改P13夹具），随后全仓通过。上述Python结果均不代表Udon编译、VRChat网络、抗作弊、Unity或真人玩法PASS。JSON文件是人工编写的案例/预期，不是可自动执行的场景脚本。
 
 ## 参考模型当前约定（仅测试假设）
 

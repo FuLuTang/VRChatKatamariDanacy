@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "templateStatus": "TEMPLATE_NOT_RUN",
+  "runId": null,
+  "testDateTime": null,
+  "timezone": "unknown",
+  "unity": {
+    "editorVersion": null,
+    "buildTarget": null,
+    "projectBuildId": null
+  },
+  "vrchat": {
+    "worldBuildId": null,
+    "worldSdkPackageVersion": null,
+    "baseSdkPackageVersion": null,
+    "udonSharpPackageVersion": null,
+    "clientBuilds": []
+  },
+  "network": {
+    "transportPathOrTestHarness": null,
+    "region": "unknown",
+    "accessType": "unknown",
+    "configuredLatencyMs": null,
+    "configuredJitterMs": null,
+    "configuredLossPercent": null,
+    "measuredConditionsMethod": null
+  },
+  "clients": [
+    {
+      "clientLabel": "client-1",
+      "roleDescription": null,
+      "hardware": {
+        "os": null,
+        "cpu": null,
+        "gpu": null,
+        "memoryGiB": null,
+        "displayModel": null,
+        "displayResolution": null,
+        "refreshRateHz": null,
+        "headsetModel": null,
+        "headsetRefreshRateHz": null
+      },
+      "avatarCondition": "unknown",
+      "clock": {
+        "source": "unknown",
+        "timebase": "unknown",
+        "offsetToReferenceMs": null,
+        "uncertaintyMs": null
+      },
+      "observedRoles": {
+        "matchAuthorityOwnerLabel": "unknown",
+        "playerObjectOwnerLabel": "unknown",
+        "vrchatMasterLabel": "unknown",
+        "instanceOwnerLabel": "unknown",
+        "observedAt": null
+      }
+    },
+    {"clientLabel": "client-2", "roleDescription": null, "hardware": {"os": null, "cpu": null, "gpu": null, "memoryGiB": null, "displayModel": null, "displayResolution": null, "refreshRateHz": null, "headsetModel": null, "headsetRefreshRateHz": null}, "avatarCondition": "unknown", "clock": {"source": "unknown", "timebase": "unknown", "offsetToReferenceMs": null, "uncertaintyMs": null}, "observedRoles": {"matchAuthorityOwnerLabel": "unknown", "playerObjectOwnerLabel": "unknown", "vrchatMasterLabel": "unknown", "instanceOwnerLabel": "unknown", "observedAt": null}},
+    {"clientLabel": "client-3", "roleDescription": null, "hardware": {"os": null, "cpu": null, "gpu": null, "memoryGiB": null, "displayModel": null, "displayResolution": null, "refreshRateHz": null, "headsetModel": null, "headsetRefreshRateHz": null}, "avatarCondition": "unknown", "clock": {"source": "unknown", "timebase": "unknown", "offsetToReferenceMs": null, "uncertaintyMs": null}, "observedRoles": {"matchAuthorityOwnerLabel": "unknown", "playerObjectOwnerLabel": "unknown", "vrchatMasterLabel": "unknown", "instanceOwnerLabel": "unknown", "observedAt": null}},
+    {"clientLabel": "client-4", "roleDescription": null, "hardware": {"os": null, "cpu": null, "gpu": null, "memoryGiB": null, "displayModel": null, "displayResolution": null, "refreshRateHz": null, "headsetModel": null, "headsetRefreshRateHz": null}, "avatarCondition": "unknown", "clock": {"source": "unknown", "timebase": "unknown", "offsetToReferenceMs": null, "uncertaintyMs": null}, "observedRoles": {"matchAuthorityOwnerLabel": "unknown", "playerObjectOwnerLabel": "unknown", "vrchatMasterLabel": "unknown", "instanceOwnerLabel": "unknown", "observedAt": null}}
+  ],
+  "authorityAndSnapshot": {
+    "authorityObjectIdentityPseudonym": null,
+    "initialEpoch": null,
+    "snapshotRevision": null,
+    "snapshotCompletenessEvidence": null,
+    "initialCommitSequence": null
+  },
+  "collection": {
+    "frameSampleMethod": null,
+    "networkSampleMethod": null,
+    "memoryMetricAndMethod": null,
+    "samplingIntervalMsPerClient": null,
+    "warmupPolicy": null,
+    "outlierPolicy": null,
+    "rawDataEvidencePath": null
+  },
+  "privacyReview": {
+    "pseudonymousClientLabelsUsed": true,
+    "personalIdentifiersExcluded": true,
+    "reviewedByUserBeforeExternalSharing": null
+  },
+  "notes": null
+}

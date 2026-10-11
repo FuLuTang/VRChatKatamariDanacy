@@ -1,0 +1,9 @@
+map_theme,region_label,resource_tier,definition_id,spawn_id,spawn_generation,pickup_threshold_diameter_world_m,visual_mesh_diameter_m,gain_volume_units,available_count,reachable_confirmed_gain_volume_units,depletion_or_trigger_time_s,restock_trigger,planned_restock_time_s,confirmed_spawn_time_s,warning_time_s,respawn_accessible_gain_volume_units,old_generation_request_rejected,duplicate_gain_check,run_id,build_id,ruleset_id,evidence_path,notes,status
+picnic_lawn,zone_A,low_tier,,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,zone_B,low_tier,,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,zone_C,low_tier,,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,zone_D,low_tier,,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,zone_A,low_tier,,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,zone_B,low_tier,,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,zone_C,low_tier,,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,zone_D,low_tier,,,,,,,,,,,,,,,,,,,,,,NOT_RUN

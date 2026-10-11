@@ -1,0 +1,7 @@
+# Preserve evidence bytes, including Windows line endings; never normalize raw receipts.
+Docs/AssetIntake/DirectDownload/*_License.txt -text -whitespace
+Docs/AssetIntake/DirectDownload/inventory.csv -text whitespace=cr-at-eol
+Docs/AssetIntake/Preview/**/render_report.json -text whitespace=cr-at-eol
+
+# This document intentionally uses Markdown's two-space hard line breaks.
+Docs/Preparation/Terminology/onboarding.md whitespace=-blank-at-eol

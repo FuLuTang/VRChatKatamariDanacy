@@ -1,0 +1,102 @@
+{
+  "schema": "offline-protocol-cases-v1",
+  "status": "ILLUSTRATIVE_NOT_RUNTIME_ACCEPTANCE",
+  "scope": "Host fixture examples only. Ticks, rewards, cutoffs and ordering are invented test inputs, not measured or approved gameplay rules.",
+  "cases": [
+    {
+      "id": "pickup-pending-not-celebration",
+      "setup": {"round_id": "round-1", "authority_epoch": 2, "spawn_id": "seed-A", "spawn_generation": 4, "gain": 3},
+      "request": {"actor_id": "p1", "session_generation": 7, "request_sequence": 10, "operation": "pickup"},
+      "expected_before_commit": {"status": "pending", "score_change": 0, "unbanked_change": 0, "ui_success_celebration": false},
+      "expected_after_host_commit": {"status": "committed", "item_available": false, "unbanked_change": 3}
+    },
+    {
+      "id": "same-spawn-two-claimants",
+      "setup": {"spawn_id": "seed-A", "spawn_generation": 4, "gain": 3},
+      "requests": [{"actor_id": "p1", "session_generation": 7, "request_sequence": 10}, {"actor_id": "p2", "session_generation": 2, "request_sequence": 1}],
+      "expected": {"committed_winners": 1, "rejected_or_unavailable_losers": 1, "total_award": 3},
+      "policy_note": "Arrival order is a reproducible fixture choice, not a fairness guarantee."
+    },
+    {
+      "id": "old-spawn-generation",
+      "setup": {"spawn_id": "fruit-B", "current_generation": 5},
+      "request": {"spawn_id": "fruit-B", "generation": 4},
+      "expected": {"status": "rejected", "reason": "stale_spawn_generation", "mutation": false}
+    },
+    {
+      "id": "partial-magnet-success",
+      "candidates": [
+        {"spawn_id": "seed-A", "generation": 4},
+        {"spawn_id": "fruit-B", "generation": 6},
+        {"spawn_id": "unknown-X", "generation": 1},
+        {"spawn_id": "seed-A", "generation": 4}
+      ],
+      "expected": {"accepted": ["seed-A"], "per_candidate_results": ["committed", "stale_spawn_generation", "unknown_spawn", "duplicate_candidate"], "all_or_nothing": false}
+    },
+    {
+      "id": "duplicate-bank-business-id",
+      "requests": [{"request_sequence": 2, "bank_id": "deposit-9"}, {"request_sequence": 8, "bank_id": "deposit-9"}],
+      "expected": {"one_bank_transaction": true, "second_reason": "duplicate_business_id", "double_score": false}
+    },
+    {
+      "id": "ko-keeps-banked-clears-unbanked",
+      "setup": {"victim_banked_score": 14, "victim_unbanked": 6, "attacker_reward": 2, "victim_powerup": "magnet"},
+      "expected": {"victim_banked_score": 14, "victim_unbanked": 0, "victim_life": "ko", "victim_powerup": null, "attacker_reward": 2, "value_created": false}
+    },
+    {
+      "id": "ko-reward-exceeds-unbanked",
+      "setup": {"victim_unbanked": 4, "attacker_reward": 5},
+      "expected": {"status": "rejected", "reason": "reward_exceeds_unbanked_loss", "mutation": false}
+    },
+    {
+      "id": "bank-vs-ko-same-fixture-tick",
+      "setup": {"same_received_tick": 30, "victim_banked": 10, "victim_unbanked": 5},
+      "alternatives": [
+        {"name": "bank_before_ko", "possible_result": "banked_safe_score_survives_later_KO"},
+        {"name": "ko_before_bank", "possible_result": "unbanked_growth_cleared_before_bank_request"}
+      ],
+      "decision": "OPEN_PROJECT_POLICY",
+      "warning": "Both are candidate schedules only. Do not treat either as frozen fairness or cutoff semantics."
+    },
+    {
+      "id": "cutoff-receive-time-boundary",
+      "setup": {"cutoff_tick": 40},
+      "alternatives": [
+        {"name": "strict_before", "rule": "received_tick < cutoff_tick"},
+        {"name": "inclusive", "rule": "received_tick <= cutoff_tick"}
+      ],
+      "model_default": "strict_before",
+      "decision": "OPEN_PROJECT_POLICY"
+    },
+    {
+      "id": "authority-epoch-old-packet",
+      "setup": {"current_epoch": 3},
+      "request": {"epoch": 2},
+      "expected": {"status": "rejected", "reason": "stale_epoch", "mutation": false}
+    },
+    {
+      "id": "request-sequence-reused-after-epoch-migration",
+      "setup": {"old_epoch": 2, "new_epoch": 3, "actor_id": "p1", "session_generation": 7, "request_sequence": 10},
+      "requests": [{"epoch": 2, "operation": "pickup", "payload": {"spawn_id": "seed-A", "generation": 4}}, {"epoch": 3, "operation": "bank", "payload": {"bank_id": "bank-new"}}],
+      "expected": {"new_epoch_request_not_mistaken_for_old_operation": true, "business_id_and_spawn_state_still_prevent_replay": true},
+      "policy_note": "The in-memory response cache is cleared/re-scoped at migration; durable item and business-operation IDs remain in the complete snapshot."
+    },
+    {
+      "id": "snapshot-complete-migrate",
+      "snapshot": {"snapshot_id": "s-4", "revision": 12, "epoch": 3, "parts": 1, "complete": true},
+      "expected": {"status": "recovered_fixture", "new_epoch": 4, "commit_sequence_preserved": true}
+    },
+    {
+      "id": "snapshot-missing-or-mixed-part-cancel",
+      "alternatives": ["incomplete_flag", "missing_part", "mixed_revision", "wrong_epoch", "duplicate_item_id", "unsupported_multipart"],
+      "expected": {"status": "cancelled", "winner_or_reward_invented": false},
+      "schema_note": "Current host fixture supports only a complete single part (total=1,index=0); multipart inputs reject rather than silently ignore non-header parts."
+    },
+    {
+      "id": "sender-metadata-fixture-mismatch",
+      "request": {"claimed_actor": "p1", "harness_observed_sender": "p2"},
+      "expected": {"status": "fixture_rejected", "reason": "sender_fixture_mismatch"},
+      "security_note": "The harness observation is an assumption in this host model. It does not implement or prove real network sender authentication or anti-cheat."
+    }
+  ]
+}

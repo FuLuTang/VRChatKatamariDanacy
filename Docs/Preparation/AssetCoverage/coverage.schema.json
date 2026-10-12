@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:vrc-katamari:asset-coverage-row",
+  "title": "P10 asset coverage CSV row",
+  "description": "Schema for a CSV row after parsing its cells to strings. It records package filename evidence separately from visual evidence; it is not asset or license approval.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "candidate_id",
+    "concept",
+    "size_tier",
+    "source_package_ids",
+    "source_member_candidates",
+    "file_metadata_status",
+    "visual_review_status",
+    "concept_fit_status",
+    "evidence_basis",
+    "render_observation",
+    "proposed_definition_id",
+    "next_need",
+    "per_file_rights_status"
+  ],
+  "properties": {
+    "candidate_id": {"type": "string", "pattern": "^PIC-[0-9]{2}$"},
+    "concept": {"type": "string", "minLength": 1},
+    "size_tier": {"type": "string", "enum": ["s", "m", "l"]},
+    "source_package_ids": {"type": "string", "description": "Package IDs separated by semicolons, or multiple/none/unknown."},
+    "source_member_candidates": {"type": "string", "description": "Exact inventory paths separated by semicolons; never inferred as visual confirmation."},
+    "file_metadata_status": {"type": "string", "enum": ["EXACT_NAME", "PARTIAL_NAME", "METADATA_CANDIDATE", "NOT_FOUND"]},
+    "visual_review_status": {"type": "string", "enum": ["RENDER_CONFIRMED", "PARTIAL", "RENDER_MISMATCH", "NOT_RENDERED"]},
+    "concept_fit_status": {"type": "string", "enum": ["MATCH", "PARTIAL", "MISMATCH", "UNKNOWN"]},
+    "evidence_basis": {"type": "string", "enum": ["ZIP_METADATA_ONLY", "METADATA_AND_RENDER"]},
+    "render_observation": {"type": "string", "minLength": 1},
+    "proposed_definition_id": {"type": "string", "pattern": "^picnic\\.[a-z0-9_]+(?:\\.[a-z0-9_]+)*$", "description": "Proposed semantic namespace; not a frozen runtime ID."},
+    "next_need": {"type": "string", "minLength": 1},
+    "per_file_rights_status": {"type": "string", "const": "PACKAGE_CC0_ONLY_PER_FILE_REVIEW_PENDING"}
+  }
+}

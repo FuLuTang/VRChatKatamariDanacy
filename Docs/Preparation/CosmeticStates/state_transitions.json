@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "artifactStatus": "proposal_not_frozen",
+  "paidStoreEnabled": false,
+  "authority": "official_platform_entitlement_only",
+  "freeDefault": {
+    "alwaysAvailable": true,
+    "selectedWhenNoUsableSelection": true,
+    "requiredDuringUnknownEntitlement": true
+  },
+  "invariants": [
+    "PlayerData and local preference/cache never establish paid ownership.",
+    "Entitlement unknown, loading, timeout, or failed restore is not owned and is not denial.",
+    "Loss of cosmetic access falls back to a free default without affecting collision, adjudication, or score.",
+    "Cosmetic rendering and remote cosmetic summaries never determine radius, abilities, queue priority, collision, or score.",
+    "Preference recovery must complete before defaults are persisted over prior user data.",
+    "No official API signature, product ID, or commerce callback contract is proposed here; defer to T34-T36."
+  ],
+  "states": [
+    {"id":"FREE_DEFAULT_AVAILABLE","kind":"free","meaning":"Usable free baseline cosmetic; always available."},
+    {"id":"PREVIEWING","kind":"presentation","meaning":"Temporary local preview; does not equip or grant ownership."},
+    {"id":"SELECTED_FREE","kind":"preference","meaning":"A free cosmetic is selected; no entitlement lookup required."},
+    {"id":"SELECTED_CONFIRMED_OPTIONAL","kind":"entitlement_confirmed","meaning":"Optional cosmetic may be selected only after official confirmation."},
+    {"id":"ENTITLEMENT_LOADING","kind":"pending","meaning":"Official lookup is in progress; render free default, preserve selection intent separately."},
+    {"id":"ENTITLEMENT_UNKNOWN","kind":"unknown","meaning":"No definitive authority result; keep free default and allow retry policy outside this proposal."},
+    {"id":"NOT_OWNED","kind":"definitive_negative","meaning":"Official authority says unavailable; use free default."},
+    {"id":"ENTITLEMENT_TIMEOUT","kind":"unknown","meaning":"Lookup timed out; do not treat timeout as ownership or revocation."},
+    {"id":"ENTITLEMENT_FAILED","kind":"error","meaning":"Lookup failed; keep free default and expose non-blocking status."},
+    {"id":"ENTITLEMENT_REVOKED","kind":"definitive_loss","meaning":"Official authority confirms access loss; immediately fall back to free default."},
+    {"id":"RECONNECTING","kind":"recovery","meaning":"Connection/authority recovery pending; keep free default."},
+    {"id":"PREFERENCE_RESTORE_PENDING","kind":"persistence_pending","meaning":"Awaiting local preference restore; do not overwrite prior data with defaults."},
+    {"id":"PREFERENCE_RESTORED","kind":"persistence_ready","meaning":"Preference data restored; validate schema and entitlement independently."},
+    {"id":"PREFERENCE_RECOVERY_FAILED","kind":"persistence_error","meaning":"Recovery failed; use safe defaults in memory; do not claim old data is absent or overwrite it automatically."}
+  ],
+  "transitionRules": [
+    {"from":"FREE_DEFAULT_AVAILABLE","event":"preview_free_or_optional","to":"PREVIEWING","guard":"Preview uses presentation-only local data; no entitlement implied."},
+    {"from":"PREVIEWING","event":"cancel_preview","to":"FREE_DEFAULT_AVAILABLE","guard":"Restore prior presentation selection."},
+    {"from":"PREVIEWING","event":"choose_free","to":"SELECTED_FREE","guard":"Free selection needs no store authority."},
+    {"from":"PREVIEWING","event":"choose_optional","to":"ENTITLEMENT_LOADING","guard":"Request official lookup; keep free default rendered until definitive confirmation."},
+    {"from":"ENTITLEMENT_LOADING","event":"official_owned","to":"SELECTED_CONFIRMED_OPTIONAL","guard":"Only authoritative positive result; no locally supplied boolean."},
+    {"from":"ENTITLEMENT_LOADING","event":"official_not_owned","to":"NOT_OWNED","guard":"Definitive authoritative negative."},
+    {"from":"ENTITLEMENT_LOADING","event":"timeout","to":"ENTITLEMENT_TIMEOUT","guard":"Unknown, not owned and not revoked."},
+    {"from":"ENTITLEMENT_LOADING","event":"lookup_error","to":"ENTITLEMENT_FAILED","guard":"Unknown, not owned and not revoked."},
+    {"from":"ENTITLEMENT_TIMEOUT","event":"retry_or_reconnect","to":"RECONNECTING","guard":"Use bounded policy defined in later commerce work; no API contract here."},
+    {"from":"ENTITLEMENT_FAILED","event":"retry_or_reconnect","to":"RECONNECTING","guard":"Keep free fallback available."},
+    {"from":"RECONNECTING","event":"authority_available","to":"ENTITLEMENT_LOADING","guard":"Refresh through future official adapter."},
+    {"from":"SELECTED_CONFIRMED_OPTIONAL","event":"official_revocation","to":"ENTITLEMENT_REVOKED","guard":"Authoritative loss only."},
+    {"from":"ENTITLEMENT_REVOKED","event":"fallback","to":"FREE_DEFAULT_AVAILABLE","guard":"Remove optional render and preserve preference as a non-authoritative choice if useful."},
+    {"from":"PREFERENCE_RESTORE_PENDING","event":"restore_success","to":"PREFERENCE_RESTORED","guard":"Validate schema; preference never grants entitlement."},
+    {"from":"PREFERENCE_RESTORE_PENDING","event":"restore_failure","to":"PREFERENCE_RECOVERY_FAILED","guard":"Do not overwrite unrecovered prior data automatically."},
+    {"from":"PREFERENCE_RESTORED","event":"selected_free_valid","to":"SELECTED_FREE","guard":"Apply free choice."},
+    {"from":"PREFERENCE_RESTORED","event":"selected_optional_candidate","to":"ENTITLEMENT_LOADING","guard":"Treat persisted value as candidate preference only; independently query official authority."},
+    {"from":"PREFERENCE_RECOVERY_FAILED","event":"safe_session_defaults","to":"FREE_DEFAULT_AVAILABLE","guard":"Session-only fallback; do not assert persistence or erase prior data."}
+  ],
+  "outOfScope": ["Runtime implementation", "Frozen state enum or public interface", "Official API signatures", "Product/listing identifiers", "Purchase execution", "Real entitlement validation"]
+}

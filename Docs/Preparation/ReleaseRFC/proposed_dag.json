@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "proposal": "P17 one-map vs two-map release dependency alternatives",
+  "date": "2026-10-11",
+  "status": "PROPOSAL_ONLY_NOT_APPLIED",
+  "root_task_file_modified": false,
+  "scope_authority": "User/lead must approve any scope or dependency changes. This file is not a replacement tasks.json.",
+  "current_baseline": {
+    "launch_target": ["picnic_lawn", "toyroom"],
+    "first_vertical_slice_map": "picnic_lawn",
+    "night_market": "optional_after_launch",
+    "tasks": {
+      "T21": {"dependencies": ["T06", "T20"], "purpose": "Picnic greybox and resources"},
+      "T26": {"dependencies": ["T07", "T08", "T09", "T11", "T12", "T13", "T14", "T16", "T17", "T18", "T19", "T21"], "purpose": "One-map/two-player vertical slice"},
+      "T27": {"dependencies": ["T26"], "purpose": "Human two-player core gate"},
+      "T30": {"dependencies": ["T20", "T21", "T27"], "purpose": "Picnic art completion"},
+      "T31": {"dependencies": ["T20", "T27"], "purpose": "Toyroom greybox and differentiated routes"},
+      "T32": {"dependencies": ["T31", "T20"], "purpose": "Toyroom art completion"},
+      "T37": {"dependencies": ["T02", "T30", "T32", "T23"], "purpose": "Final asset license/theme review"},
+      "T38": {"dependencies": ["T28", "T29", "T30", "T32", "T33", "T23", "T25"], "purpose": "Four-player performance/durability"},
+      "T39": {"dependencies": ["T38"], "purpose": "Human fairness/experience approval; criteria currently say choose two or downgrade to one"},
+      "T40": {"dependencies": ["T03", "T30", "T32", "T39"], "purpose": "Real release marketing content"}
+    },
+    "known_mismatch": "T39 allows one-map release, while T37/T38/T40 still hard-depend on T32. Do not skip or falsify T32 completion."
+  },
+  "alternatives": [
+    {
+      "id": "A_KEEP_TWO_MAPS",
+      "requires_user_scope_change": false,
+      "decision": "Keep current two-map target",
+      "graph_changes": [],
+      "release_map_set": ["picnic_lawn", "toyroom"],
+      "proposed_dependencies": {
+        "T37": ["T02", "T30", "T32", "T23"],
+        "T38": ["T28", "T29", "T30", "T32", "T33", "T23", "T25"],
+        "T39": ["T38"],
+        "T40": ["T03", "T30", "T32", "T39"]
+      },
+      "notes": ["Preserves current dependency graph and two-map product target.", "T39 should require evidence/acceptance for both maps before approving the two-map release.", "No task status is changed by this proposal."]
+    },
+    {
+      "id": "B_ONE_MAP_PICNIC_EXAMPLE",
+      "requires_user_scope_change": true,
+      "decision": "Reduce first release to one fully validated map; picnic shown as an example branch, not a selection",
+      "release_map_set": ["picnic_lawn"],
+      "deferred_work": ["T31", "T32 remain real future work with existing dependencies; do not mark DONE or delete them."],
+      "proposed_dependency_changes": {
+        "T37": {"remove": ["T32"], "keep_or_set": ["T02", "T30", "T23"]},
+        "T38": {"remove": ["T32"], "keep_or_set": ["T28", "T29", "T30", "T33", "T23", "T25"]},
+        "T39": {"add": ["T37"], "keep_or_set": ["T38"]},
+        "T40": {"remove": ["T32"], "keep_or_set": ["T03", "T30", "T39"], "optional_explicit_dependency": "T37 is transitively required if T39 depends on T37; may also be listed directly for clarity."}
+      },
+      "proposed_dependencies_after_approval": {
+        "T37": ["T02", "T30", "T23"],
+        "T38": ["T28", "T29", "T30", "T33", "T23", "T25"],
+        "T39": ["T38", "T37"],
+        "T40": ["T03", "T30", "T39"]
+      },
+      "acceptance_changes_required": [
+        "T39 must name the authorized selected map and require complete fairness/experience evidence for that map; the unselected map is not silently treated as passing.",
+        "T37 reviews only assets/theme actually selected for initial release, while any future Toyroom release still needs its own complete license/theme gate.",
+        "T38's performance test must explicitly cover the selected release map(s), while retaining all other four-player scenario requirements.",
+        "T40 must depict and describe only the selected, tested map; actual release remains subject to its independent user authorization."
+      ],
+      "notes": ["Picnic is shown because T21/T26 establish the first vertical slice there; the user/lead may instead choose another map, but that is not a drop-in substitution.", "If Toyroom alone is proposed, resolve how T26/T27 continue to depend on Picnic and whether Picnic remains a validated technical map before altering release dependencies.", "No task status or dependency is changed until approved and separately validated."]
+    }
+  ],
+  "approval_and_validation_gate": [
+    "User/lead selects a release-map alternative and names selected map(s).",
+    "Lead edits root task map and acceptance criteria only after approval.",
+    "Run python3 Docs/tools/validate_plan.py and python3 -m unittest discover -s Docs/tests -v after task/config changes.",
+    "Review no cycles, no bypassed dependencies, no false DONE/PASS, and evidence/gate preservation.",
+    "Update only affected work items and communicate deferred tasks; do not publish or upload."
+  ],
+  "not_decided_here": ["fairness thresholds", "release timing", "map selection", "SKU or pricing", "original-game numerical rules", "public interface freeze"]
+}

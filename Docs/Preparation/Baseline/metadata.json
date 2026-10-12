@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "asOfDate": "2026-10-11",
+  "repositoryRelativeRoot": "VRChatKatamariDanacyUnity/",
+  "sourceFiles": [
+    {
+      "path": "VRChatKatamariDanacyUnity/ProjectSettings/ProjectVersion.txt",
+      "bytes": 85,
+      "sha256": "0599d0a5e5f574ce3aaf02f6f98a477bd75b97ddd6a1cf9a9466c603c3d7b6ca",
+      "purpose": "Editor version and revision observation"
+    },
+    {
+      "path": "VRChatKatamariDanacyUnity/Packages/manifest.json",
+      "bytes": 1608,
+      "sha256": "97df847876109e53bd83c60f16355cb74f194db6934e203e8839bb664fc22e48",
+      "purpose": "Unity Package Manager direct dependency manifest"
+    },
+    {
+      "path": "VRChatKatamariDanacyUnity/Packages/vpm-manifest.json",
+      "bytes": 317,
+      "sha256": "cb11a76e25d63a46e28e992559c2280ec1eb42248028069b644d021747c0b0d1",
+      "purpose": "VPM declared and locked Worlds/Base dependency versions"
+    },
+    {
+      "path": "VRChatKatamariDanacyUnity/Packages/packages-lock.json",
+      "bytes": 13610,
+      "sha256": "627489d82f39582be07c2b5157455850d30ae8834e681b9ac4608bdb774c629f",
+      "purpose": "Repository UPM package lock metadata; not a restore/runtime result"
+    },
+    {
+      "path": "VRChatKatamariDanacyUnity/Packages/.gitignore",
+      "bytes": 166,
+      "sha256": "2b486fbeb517efc8ab6e9e767cc1126f6dc9296439c057e3ace10a5eb3bab0b2",
+      "purpose": "Repository package-source ignore and resolver exception rules"
+    },
+    {
+      "path": "VRChatKatamariDanacyUnity/Assets/Scenes/VRCDefaultWorldScene.unity",
+      "bytes": 29300,
+      "sha256": "13a9cb516b4c7576ad376bcdabbfe946d2d70aa0b956349ef286521f7e18b9a5",
+      "purpose": "Default-scene file presence/content identity only; not opened in Unity"
+    },
+    {
+      "path": "VRChatKatamariDanacyUnity/Assets/Scenes/VRCDefaultWorldScene.unity.meta",
+      "bytes": 155,
+      "sha256": "bb4aea01ab7c5e9f7a4d79c98722a85c0cde0edae5dcc3a94702366930609f92",
+      "purpose": "Default-scene GUID metadata presence/content identity only"
+    }
+  ],
+  "projectObservation": {
+    "observedEditor": {
+      "version": "2022.3.22f1",
+      "revision": "887be4894c44",
+      "sourcePath": "VRChatKatamariDanacyUnity/ProjectSettings/ProjectVersion.txt",
+      "meaning": "Repository project metadata observation only; does not establish Editor installation, Windows state, successful import, or compile."
+    },
+    "observedVpmDependencies": {
+      "com.vrchat.base": {
+        "declaredVersion": "3.10.5",
+        "lockedVersion": "3.10.5",
+        "sourcePath": "VRChatKatamariDanacyUnity/Packages/vpm-manifest.json"
+      },
+      "com.vrchat.worlds": {
+        "declaredVersion": "3.10.5",
+        "lockedVersion": "3.10.5",
+        "sourcePath": "VRChatKatamariDanacyUnity/Packages/vpm-manifest.json"
+      },
+      "meaning": "Manifest declarations, not independently verified installed or restored package versions."
+    },
+    "vccVersion": "unknown",
+    "udonSharp": {
+      "independentVersion": "unknown",
+      "installedOrBundledState": "unknown",
+      "note": "Do not infer a separate UdonSharp version from the Worlds SDK declaration or package IDs."
+    }
+  },
+  "official_support_evidence": [
+    {
+      "subject": "Unity Editor recommendation for VRChat content",
+      "url": "https://creators.vrchat.com/sdk/upgrade/current-unity-version/",
+      "checkedDate": "2026-10-11",
+      "publishedValue": "2022.3.22f1",
+      "observationRelation": "The official page value recorded in README.md matches the ProjectVersion.txt observation. This is published support/recommendation evidence, not evidence that the Editor is installed or that this project compiles.",
+      "evidenceBasis": "Official page was recorded as fetched successfully in the existing P16 notes; no new network access or Windows inspection was performed for this JSON."
+    },
+    {
+      "subject": "VRChat Worlds/Base SDK release support/currentness for 3.10.5",
+      "url": null,
+      "checkedDate": "2026-10-11",
+      "publishedValue": null,
+      "status": "unknown",
+      "observationRelation": "3.10.5 is only the repository manifest declaration; no official current-release/support claim is made here."
+    }
+  ],
+  "resolver_observation": {
+    "repositoryCheckout": {
+      "packageIgnoreRules": "Packages/.gitignore excludes com.vrchat.* and re-includes com.vrchat.core.* per observed file contents.",
+      "sdkSourceSearch": "No com.vrchat.* package source files or metadata.json were found by repository path glob in this checkout. Ignored SDK source is distinct from a VPM resolver exception; this does not establish Windows package installation state.",
+      "vpmResolverSourceOrExecution": "No resolver package directory was found in the repository glob used for this inspection; resolver execution/restoration was not performed (NOT_RUN)."
+    },
+    "windowsInstallation": "NOT_INSPECTED; no conclusion about Windows SDK files, VCC, or installed packages.",
+    "defaultScene": {
+      "path": "VRChatKatamariDanacyUnity/Assets/Scenes/VRCDefaultWorldScene.unity",
+      "fileObserved": true,
+      "metaObserved": true,
+      "openedOrValidatedInUnity": "NOT_RUN",
+      "licenseAndTemplateProvenance": "unknown/unverified; presence is not redistribution permission"
+    }
+  },
+  "runtimeChecks": {
+    "unityEditorLaunch": "NOT_RUN",
+    "vccInspectionOrRestore": "NOT_RUN",
+    "vpmResolverExecution": "NOT_RUN",
+    "packageRestore": "NOT_RUN",
+    "defaultSceneOpenOrValidation": "NOT_RUN",
+    "unityConsoleCompile": "NOT_RUN",
+    "udonSharpCompile": "NOT_RUN",
+    "clientSim": "NOT_RUN",
+    "buildAndTest": "NOT_RUN",
+    "vrComfortOrInput": "NOT_RUN",
+    "multiplayerOrNetwork": "NOT_RUN"
+  },
+  "environmentBoundary": {
+    "unityWindowsProjectPath": "D:\\VRChatKatamariDanacy\\VRChatKatamariDanacyUnity",
+    "editorOwner": "user",
+    "unityWasStarted": false,
+    "unityMcp": "unknown/unconfirmed",
+    "windowsHostAccess": "not used for this metadata capture"
+  }
+}

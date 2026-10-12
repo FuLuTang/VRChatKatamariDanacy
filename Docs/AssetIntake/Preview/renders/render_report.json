@@ -1,0 +1,804 @@
+{
+  "blender_version": "5.2.2 LTS",
+  "render_engine": "Cycles CPU 4 threads 16 samples",
+  "purpose": "Asset review; independently normalized. NOT GAMEPLAY. No Unity import.",
+  "assets": [
+    {
+      "name": "apple",
+      "filename": "food_apple.glb",
+      "group": "food",
+      "imported_meshes": [
+        {
+          "name": "apple",
+          "vertices": 252,
+          "triangles": 136,
+          "materials": 1,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.09814728051424026,
+        -0.09814728051424026,
+        0.0
+      ],
+      "import_bounds_max": [
+        0.09814728051424026,
+        0.09814728051424026,
+        0.19075341522693634
+      ],
+      "import_extent_blender_units": [
+        0.19629456102848053,
+        0.19629456102848053,
+        0.19075341522693634
+      ],
+      "texture_images": [
+        {
+          "name": "colormap",
+          "dimensions": [
+            512,
+            512
+          ]
+        }
+      ],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 8.405734684419505,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "banana",
+      "filename": "food_banana.glb",
+      "group": "food",
+      "imported_meshes": [
+        {
+          "name": "banana",
+          "vertices": 212,
+          "triangles": 104,
+          "materials": 1,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.06879999488592148,
+        -0.3149356245994568,
+        0.0
+      ],
+      "import_bounds_max": [
+        0.06879999488592148,
+        0.3149356245994568,
+        0.19580039381980896
+      ],
+      "import_extent_blender_units": [
+        0.13759998977184296,
+        0.6298712491989136,
+        0.19580039381980896
+      ],
+      "texture_images": [
+        {
+          "name": "colormap",
+          "dimensions": [
+            512,
+            512
+          ]
+        }
+      ],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 2.6195829736609064,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "strawberry",
+      "filename": "food_strawberry.glb",
+      "group": "food",
+      "imported_meshes": [
+        {
+          "name": "strawberry",
+          "vertices": 288,
+          "triangles": 156,
+          "materials": 1,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.05984000116586685,
+        -0.05984000116586685,
+        0.0
+      ],
+      "import_bounds_max": [
+        0.05984000116586685,
+        0.05984000116586685,
+        0.18199999630451202
+      ],
+      "import_extent_blender_units": [
+        0.1196800023317337,
+        0.1196800023317337,
+        0.18199999630451202
+      ],
+      "texture_images": [
+        {
+          "name": "colormap",
+          "dimensions": [
+            512,
+            512
+          ]
+        }
+      ],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 9.065934250016763,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "bread",
+      "filename": "food_bread.glb",
+      "group": "food",
+      "imported_meshes": [
+        {
+          "name": "bread",
+          "vertices": 154,
+          "triangles": 116,
+          "materials": 1,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.22116030752658844,
+        -0.18295200169086456,
+        0.0
+      ],
+      "import_bounds_max": [
+        0.22116030752658844,
+        0.18295200169086456,
+        0.03974400833249092
+      ],
+      "import_extent_blender_units": [
+        0.4423206150531769,
+        0.3659040033817291,
+        0.03974400833249092
+      ],
+      "texture_images": [
+        {
+          "name": "colormap",
+          "dimensions": [
+            512,
+            512
+          ]
+        }
+      ],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 3.730325795015529,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "croissant",
+      "filename": "food_croissant.glb",
+      "group": "food",
+      "imported_meshes": [
+        {
+          "name": "croissant",
+          "vertices": 250,
+          "triangles": 162,
+          "materials": 1,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.17304502427577972,
+        -0.2388283759355545,
+        0.0
+      ],
+      "import_bounds_max": [
+        0.17304502427577972,
+        0.2388283759355545,
+        0.19360864162445068
+      ],
+      "import_extent_blender_units": [
+        0.34609004855155945,
+        0.477656751871109,
+        0.19360864162445068
+      ],
+      "texture_images": [
+        {
+          "name": "colormap",
+          "dimensions": [
+            512,
+            512
+          ]
+        }
+      ],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 3.4543633970136702,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "cookie",
+      "filename": "food_cookie.glb",
+      "group": "food",
+      "imported_meshes": [
+        {
+          "name": "cookie",
+          "vertices": 114,
+          "triangles": 68,
+          "materials": 1,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.1098719984292984,
+        -0.09515194594860077,
+        0.0
+      ],
+      "import_bounds_max": [
+        0.1098719984292984,
+        0.09515194594860077,
+        0.04976999759674072
+      ],
+      "import_extent_blender_units": [
+        0.2197439968585968,
+        0.19030389189720154,
+        0.04976999759674072
+      ],
+      "texture_images": [
+        {
+          "name": "colormap",
+          "dimensions": [
+            512,
+            512
+          ]
+        }
+      ],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 7.508737547273063,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "cheese-cut",
+      "filename": "food_cheese-cut.glb",
+      "group": "food",
+      "imported_meshes": [
+        {
+          "name": "cheese-cut",
+          "vertices": 234,
+          "triangles": 160,
+          "materials": 1,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.19200000166893005,
+        -0.13199999928474426,
+        0.0
+      ],
+      "import_bounds_max": [
+        0.19200000166893005,
+        0.13199999928474426,
+        0.020479999482631683
+      ],
+      "import_extent_blender_units": [
+        0.3840000033378601,
+        0.2639999985694885,
+        0.020479999482631683
+      ],
+      "texture_images": [
+        {
+          "name": "colormap",
+          "dimensions": [
+            512,
+            512
+          ]
+        }
+      ],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 4.296874962650084,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "soda-can",
+      "filename": "food_soda-can.glb",
+      "group": "food",
+      "imported_meshes": [
+        {
+          "name": "soda-can",
+          "vertices": 284,
+          "triangles": 164,
+          "materials": 1,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.11231999844312668,
+        -0.11231999844312668,
+        0.0
+      ],
+      "import_bounds_max": [
+        0.11231999844312668,
+        0.11231999844312668,
+        0.35059699416160583
+      ],
+      "import_extent_blender_units": [
+        0.22463999688625336,
+        0.22463999688625336,
+        0.35059699416160583
+      ],
+      "texture_images": [
+        {
+          "name": "colormap",
+          "dimensions": [
+            512,
+            512
+          ]
+        }
+      ],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 4.7062582608436205,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "pot_small",
+      "filename": "nature_pot_small.glb",
+      "group": "nature",
+      "imported_meshes": [
+        {
+          "name": "pot_small",
+          "vertices": 120,
+          "triangles": 72,
+          "materials": 3,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              -0.05000000074505806
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.16172480583190918,
+        -0.1400577872991562,
+        -0.05000000074505806
+      ],
+      "import_bounds_max": [
+        0.16172480583190918,
+        0.1400577872991562,
+        0.21799997985363007
+      ],
+      "import_extent_blender_units": [
+        0.32344961166381836,
+        0.2801155745983124,
+        0.2679999768733978
+      ],
+      "texture_images": [],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 5.101258250125677,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "rock_smallA",
+      "filename": "nature_rock_smallA.glb",
+      "group": "nature",
+      "imported_meshes": [
+        {
+          "name": "rock_smallA",
+          "vertices": 30,
+          "triangles": 16,
+          "materials": 2,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              -0.05000000074505806
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.18039999902248383,
+        -0.18039999902248383,
+        -0.05000000074505806
+      ],
+      "import_bounds_max": [
+        0.18039999902248383,
+        0.18039999902248383,
+        0.14122401177883148
+      ],
+      "import_extent_blender_units": [
+        0.36079999804496765,
+        0.36079999804496765,
+        0.19122400879859924
+      ],
+      "texture_images": [],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 4.573170756487518,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "mushroom_red",
+      "filename": "nature_mushroom_red.glb",
+      "group": "nature",
+      "imported_meshes": [
+        {
+          "name": "mushroom_red",
+          "vertices": 122,
+          "triangles": 48,
+          "materials": 2,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              -0.05000000074505806
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.08607132732868195,
+        -0.10547135770320892,
+        -0.05000000074505806
+      ],
+      "import_bounds_max": [
+        0.08789588510990143,
+        0.09540864080190659,
+        0.15280000865459442
+      ],
+      "import_extent_blender_units": [
+        0.17396721243858337,
+        0.2008799910545349,
+        0.20280000567436218
+      ],
+      "texture_images": [],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 8.13609444690756,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    },
+    {
+      "name": "flower_redA",
+      "filename": "nature_flower_redA.glb",
+      "group": "nature",
+      "imported_meshes": [
+        {
+          "name": "flower_redA",
+          "vertices": 134,
+          "triangles": 76,
+          "materials": 2,
+          "matrix_world_before_preview": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              -0.05000000074505806
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "matrix_determinant": 1.0,
+          "uv_layers": 1
+        }
+      ],
+      "import_bounds_min": [
+        -0.10453449934720993,
+        -0.09052953124046326,
+        -0.05000000074505806
+      ],
+      "import_bounds_max": [
+        0.054563019424676895,
+        0.09052953124046326,
+        0.24249999225139618
+      ],
+      "import_extent_blender_units": [
+        0.15909752249717712,
+        0.1810590624809265,
+        0.29249998927116394
+      ],
+      "texture_images": [],
+      "coordinate_status": "OPEN: source pivot/axis semantics and Unity chain not verified",
+      "units_note": "Blender import units; not asserted real-world meters or pickup diameter",
+      "preview_uniform_scale": 5.641025847937236,
+      "preview_root_matrix_formula": "p_display = s*p_import + (-s*centerX,-s*centerY,-s*minZ)"
+    }
+  ],
+  "contact_sheet": "contact_sheet.png"
+}

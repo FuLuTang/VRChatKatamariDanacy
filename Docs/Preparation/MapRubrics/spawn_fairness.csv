@@ -1,0 +1,9 @@
+map_theme,spawn_zone_label,run_id,build_id,ruleset_id,player_count,spawn_ball_collision_diameter_world_m,visual_mesh_diameter_m,measurement_method,reachable_resource_scope,reachable_confirmed_gain_volume_units,route_to_first_resource_m,route_to_bank_anchor_m,route_to_exit_1_m,route_to_exit_2_m,seconds_to_next_growth_band,reachable_low_tier_gain_at_respawn,repeat_index,controller_mode,notes,evidence_path,status
+picnic_lawn,Zone A,,unknown,unknown,,,,,initial-size reachable resources; define radius/route,,,,,,,,,,,,NOT_RUN
+picnic_lawn,Zone B,,unknown,unknown,,,,,initial-size reachable resources; define radius/route,,,,,,,,,,,,NOT_RUN
+picnic_lawn,Zone C,,unknown,unknown,,,,,initial-size reachable resources; define radius/route,,,,,,,,,,,,NOT_RUN
+picnic_lawn,Zone D,,unknown,unknown,,,,,initial-size reachable resources; define radius/route,,,,,,,,,,,,NOT_RUN
+toyroom,Zone A,,unknown,unknown,,,,,initial-size reachable resources; define radius/route,,,,,,,,,,,,NOT_RUN
+toyroom,Zone B,,unknown,unknown,,,,,initial-size reachable resources; define radius/route,,,,,,,,,,,,NOT_RUN
+toyroom,Zone C,,unknown,unknown,,,,,initial-size reachable resources; define radius/route,,,,,,,,,,,,NOT_RUN
+toyroom,Zone D,,unknown,unknown,,,,,initial-size reachable resources; define radius/route,,,,,,,,,,,,NOT_RUN

@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:vrc-katamari:host-asset-authoring-draft",
+  "title": "Host-only asset authoring preproduction bundle",
+  "description": "Proposal schema only. It is not a Unity asset, Udon serialization/API contract, frozen runtime schema, or scale approval.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "definitions", "instances", "compositionCases", "lifecycleCases"],
+  "properties": {
+    "schemaVersion": {"type": "string", "const": "0.1-draft"},
+    "status": {"type": "string", "const": "HOST_ONLY_NOT_RUNTIME"},
+    "notice": {"type": "string"},
+    "definitions": {"type": "array", "items": {"$ref": "#/$defs/definition"}},
+    "instances": {"type": "array", "items": {"$ref": "#/$defs/instance"}},
+    "compositionCases": {"type": "array", "items": {"$ref": "#/$defs/compositionCase"}},
+    "lifecycleCases": {"type": "array", "items": {"$ref": "#/$defs/lifecycleCase"}}
+  },
+  "$defs": {
+    "nullableNonnegativeInteger": {"type": ["integer", "null"], "minimum": 0},
+    "nullableNonnegativeNumber": {"type": ["number", "null"], "minimum": 0},
+    "nullableSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "definitionId": {"type": "string", "pattern": "^picnic\\.[a-z0-9_]+(?:\\.[a-z0-9_]+)*$"},
+    "spawnId": {"type": "string", "pattern": "^picnic\\.[a-z0-9_]+(?:\\.[a-z0-9_]+)*$"},
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packageId", "memberPath", "evidenceType", "sourceMemberSha256", "previewDerivativeSha256", "licenseEvidenceStatus"],
+      "properties": {
+        "packageId": {"type": ["string", "null"], "enum": ["KENNEY-FOOD-KIT-2.0", "KENNEY-NATURE-KIT-2.1", null]},
+        "memberPath": {"type": ["string", "null"]},
+        "evidenceType": {"type": "string", "enum": ["ZIP_METADATA_ONLY", "VERIFIED_PREVIEW", "AUTHORING_PLACEHOLDER"]},
+        "sourceMemberSha256": {"$ref": "#/$defs/nullableSha256"},
+        "previewDerivativeSha256": {"$ref": "#/$defs/nullableSha256"},
+        "licenseEvidenceStatus": {"type": "string", "const": "PACKAGE_LEVEL_ONLY_PER_FILE_REVIEW_PENDING"}
+      }
+    },
+    "proxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "shape", "dimensionsWorldM", "affectsSharedPvpCollision"],
+      "properties": {
+        "status": {"type": "string", "enum": ["NOT_DESIGNED", "PROPOSED_ONLY", "MEASURED_NOT_APPROVED"]},
+        "shape": {"type": "string", "enum": ["UNKNOWN", "SPHERE", "BOX", "CAPSULE", "COMPOUND", "HAND_AUTHORED_POINTS"]},
+        "dimensionsWorldM": {"type": ["array", "null"], "items": {"type": "number", "minimum": 0}},
+        "affectsSharedPvpCollision": {"type": "boolean"},
+        "note": {"type": "string"}
+      }
+    },
+    "shapeSupportProxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "shape", "pointUnitStatus", "supportPointsLocal", "affectsSharedPvpCollision", "note"],
+      "properties": {
+        "status": {"type": "string", "enum": ["NOT_DESIGNED", "PROPOSED_ONLY", "MEASURED_NOT_APPROVED"]},
+        "shape": {"type": "string", "enum": ["UNKNOWN", "SPHERE", "BOX", "CAPSULE", "COMPOUND", "HAND_AUTHORED_POINTS"]},
+        "pointUnitStatus": {"type": "string", "const": "OPEN"},
+        "supportPointsLocal": {"type": "array", "items": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number"}}},
+        "affectsSharedPvpCollision": {"type": "boolean"},
+        "note": {"type": "string"}
+      }
+    },
+    "definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["definitionId", "candidateRefs", "status", "sourceRefs", "renderPolicy", "renderObservation", "gameplayValues", "geometryLayers", "compositionPolicy", "supportPolicy"],
+      "properties": {
+        "definitionId": {"$ref": "#/$defs/definitionId"},
+        "candidateRefs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^PIC-[0-9]{2}$"}},
+        "status": {"type": "string", "enum": ["PREVIEW_CANDIDATE", "METADATA_CANDIDATE", "PLACEHOLDER_ONLY"]},
+        "sourceRefs": {"type": "array", "items": {"$ref": "#/$defs/sourceRef"}},
+        "renderPolicy": {"type": "object", "additionalProperties": false, "required": ["localVisualLodRef", "remoteProxyVariant", "licenseEvidenceStatus"], "properties": {"localVisualLodRef": {"type": ["string", "null"]}, "remoteProxyVariant": {"type": ["string", "null"]}, "licenseEvidenceStatus": {"type": "string", "enum": ["PACKAGE_LEVEL_ONLY_PER_FILE_REVIEW_PENDING", "NO_SOURCE_NOT_ASSESSED"]}}},
+        "renderObservation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["evidenceType", "meshCount", "materialSlotCount", "triangleCount", "sourceUnitsStatus", "sourceAxisStatus", "pivotStatus", "previewNormalizationGameplayScale"],
+          "properties": {
+            "evidenceType": {"type": "string", "enum": ["VERIFIED_PREVIEW", "ZIP_METADATA_ONLY", "NO_SOURCE"]},
+            "meshCount": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+            "materialSlotCount": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+            "triangleCount": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+            "sourceUnitsStatus": {"type": "string", "const": "OPEN"},
+            "sourceAxisStatus": {"type": "string", "const": "OPEN"},
+            "pivotStatus": {"type": "string", "const": "OPEN"},
+            "previewNormalizationGameplayScale": {"type": "boolean", "const": false},
+            "note": {"type": "string"}
+          }
+        },
+        "gameplayValues": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["interactionRole", "semanticTier", "gainVolumeUnits", "pickupDiameterWorldM", "collisionRadiusWorldM", "scaleStatus", "surfaceClass", "surfaceClassStatus", "canWakePhysics", "canWakePhysicsStatus"],
+          "properties": {
+            "interactionRole": {"type": "string", "enum": ["UNDECIDED", "COLLECTIBLE", "DECORATION", "FIXED_LANDMARK"]},
+            "semanticTier": {"type": ["string", "null"], "enum": ["s", "m", "l", null]},
+            "gainVolumeUnits": {"$ref": "#/$defs/nullableNonnegativeNumber"},
+            "pickupDiameterWorldM": {"$ref": "#/$defs/nullableNonnegativeNumber"},
+            "collisionRadiusWorldM": {"$ref": "#/$defs/nullableNonnegativeNumber"},
+            "scaleStatus": {"type": "string", "const": "OPEN"},
+            "surfaceClass": {"type": ["string", "null"]},
+            "surfaceClassStatus": {"type": "string", "const": "OPEN"},
+            "canWakePhysics": {"type": ["boolean", "null"]},
+            "canWakePhysicsStatus": {"type": "string", "const": "OPEN"}
+          }
+        },
+        "geometryLayers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["renderMesh", "gameplayColliderProxy", "shapeSupportProxy"],
+          "properties": {
+            "renderMesh": {"type": "object", "additionalProperties": false, "required": ["sourceRefIndices", "status"], "properties": {"sourceRefIndices": {"type": "array", "items": {"type": "integer", "minimum": 0}}, "status": {"type": "string", "enum": ["PREVIEWED", "CANDIDATE", "NOT_AUTHORED"]}}},
+            "gameplayColliderProxy": {"$ref": "#/$defs/proxy"},
+            "shapeSupportProxy": {"$ref": "#/$defs/shapeSupportProxy"}
+          }
+        },
+        "compositionPolicy": {"type": "string", "enum": ["ONE_DEFINITION_ONE_INSTANCE_IF_APPROVED", "UNDECIDED", "MULTIPLE_INDEPENDENT_DEFINITIONS"]},
+        "supportPolicy": {"type": "string", "enum": ["NO_SUPPORT_PARENT", "FIXED_SUPPORT", "COLLECT_WITH_PARENT_IF_APPROVED", "AUTHORITATIVE_FALL_IF_APPROVED", "UNDECIDED"]},
+        "note": {"type": "string"}
+      }
+    },
+    "instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spawnId", "definitionId", "spawnGeneration", "stateRevision", "state", "initialPose", "supportParentId", "onSupportRemoval", "status"],
+      "properties": {
+        "spawnId": {"$ref": "#/$defs/spawnId"},
+        "definitionId": {"$ref": "#/$defs/definitionId"},
+        "spawnGeneration": {"type": "integer", "minimum": 0},
+        "stateRevision": {"type": "integer", "minimum": 0},
+        "state": {"type": "string", "const": "DRAFT_NOT_RUNTIME"},
+        "initialPose": {"type": ["object", "null"], "additionalProperties": false, "required": ["coordinateFrame", "position", "rotation", "unitStatus"], "properties": {"coordinateFrame": {"type": "string", "const": "SHARED_WORLD"}, "position": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number"}}, "rotation": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "number"}}, "unitStatus": {"type": "string", "const": "OPEN"}}},
+        "supportParentId": {"type": ["string", "null"], "pattern": "^picnic\\.[a-z0-9_]+(?:\\.[a-z0-9_]+)*$"},
+        "onSupportRemoval": {"type": "string", "enum": ["UNDECIDED", "REMOVE_WITH_PARENT_IF_ELIGIBLE", "AUTHORITATIVE_FALL", "REMAIN_FIXED", "DETACH"]},
+        "status": {"type": "string", "const": "HOST_ONLY_PROPOSAL"},
+        "note": {"type": "string"}
+      }
+    },
+    "compositionCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "decisionStatus", "definitionIds", "entityCountRule", "note"],
+      "properties": {
+        "caseId": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+        "decisionStatus": {"type": "string", "const": "UNDECIDED"},
+        "definitionIds": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/definitionId"}},
+        "entityCountRule": {"type": "string", "enum": ["ONE_INSTANCE_IF_COMPOSITE_APPROVED", "ONE_INSTANCE_PER_DEFINITION", "FIXED_DECORATION_NO_PICKUP", "UNDECIDED"]},
+        "note": {"type": "string"}
+      }
+    },
+    "lifecycleCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "precondition", "expectedInvariant", "numericBudgetStatus"],
+      "properties": {
+        "caseId": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+        "precondition": {"type": "string", "minLength": 1},
+        "expectedInvariant": {"type": "string", "minLength": 1},
+        "numericBudgetStatus": {"type": "string", "const": "NOT_SET"}
+      }
+    }
+  }
+}

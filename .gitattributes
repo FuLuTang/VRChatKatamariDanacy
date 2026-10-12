@@ -6,5 +6,6 @@ Docs/AssetIntake/DirectDownload/*_License.txt -text -whitespace
 Docs/AssetIntake/DirectDownload/inventory.csv -text whitespace=cr-at-eol
 Docs/AssetIntake/Preview/**/render_report.json -text whitespace=cr-at-eol
 
-# This document intentionally uses Markdown's two-space hard line breaks.
+# These documents intentionally use Markdown's two-space hard line breaks.
 Docs/Preparation/Terminology/onboarding.md whitespace=-blank-at-eol
+Docs/Reviews/T02_T03_acceptance.md whitespace=-blank-at-eol

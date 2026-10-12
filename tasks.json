@@ -14,11 +14,12 @@
     {
       "id": "T00",
       "title": "工程基线、版本锁定与最小测试场景",
-      "execution_note": "2026-10-12用户授权打开Unity：Windows Editor 2022.3.22f1以普通用户身份打开工程，Editor.log初次导入无编译错误，VRChat Base/Worlds 3.10.5本地包已加载。Lead已同步Linux/Windows/origin至dd13e3f。剩余：Bootstrap空测试场景与版本记录、SDK编译证据归档、Build & Test（会启动本机VRChat客户端，待用户单独授权）。由asset-acquisition作为唯一Unity操作人执行；不因文件存在判DONE。",
+      "execution_note": "2026-10-12 Lead验收DONE。(1)SDK编译PASS：Editor 2022.3.22f1、VPM Base/Worlds 3.10.5，UdonSharp编译8个脚本完成，全Editor.log无error CS/编译失败/异常。(2)Build & Test PASS：用户在普通用户Editor生成并Build & Test Assets/VRC_Katamari/Bootstrap/T00_Bootstrap.unity，SDK产出115.5 KB .vrcw，VRChat客户端日志Entering Room: Local Test → Finished entering world，用户确认正常进入。Editor.log另有一行Build Finished, Result: Failure（player-build阶段，未阻止bundle与加载），记为待解释观察项。未上传。Windows提交135014b；Unity自动改的ProjectSettings iOS项已还原。VR、Station、多人、性能未测，属T04以后。",
+      "evidence_paths": ["Docs/Evidence/T00/README.md", "Docs/Evidence/T00/compile_evidence.md", "Docs/Evidence/T00/build_and_test.md", "Docs/Evidence/T00/handoff.md", "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Bootstrap/T00_Bootstrap.unity"],
       "phase": "P0",
       "implementer": "SOL",
       "reviewer": "Sol",
-      "status": "RUNNING",
+      "status": "DONE",
       "priority": "P0",
       "dependencies": [],
       "write_scope": [
@@ -155,16 +156,18 @@
     {
       "id": "T04",
       "title": "Station、输入与缩放最小平台实验",
+      "execution_note": "2026-10-12 RUNNING：由明确指定Luna的Unity操作人workflow worker实现原型场景与PC侧Build & Test；VR侧步骤写成可复现清单交T05真人验证。原型不扩成正式模块。",
       "phase": "P0",
       "implementer": "SOL",
       "reviewer": "Sol",
-      "status": "TODO",
+      "status": "RUNNING",
       "priority": "P0",
       "dependencies": [
         "T00"
       ],
       "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/"
+        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/",
+        "Docs/Evidence/T04/"
       ],
       "exclusive_locks": [
         "unity-platform-lab"

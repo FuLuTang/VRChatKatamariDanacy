@@ -14,17 +14,18 @@
     {
       "id": "T00",
       "title": "工程基线、版本锁定与最小测试场景",
-      "execution_note": "Windows工程已初始化并推送；用户本轮明确不运行Unity。仅开展独立离线前置，Console/Udon编译和Build & Test均NOT_RUN，不因文件存在判DONE。",
+      "execution_note": "2026-10-12用户授权打开Unity：Windows Editor 2022.3.22f1以普通用户身份打开工程，Editor.log初次导入无编译错误，VRChat Base/Worlds 3.10.5本地包已加载。Lead已同步Linux/Windows/origin至dd13e3f。剩余：Bootstrap空测试场景与版本记录、SDK编译证据归档、Build & Test（会启动本机VRChat客户端，待用户单独授权）。由asset-acquisition作为唯一Unity操作人执行；不因文件存在判DONE。",
       "phase": "P0",
       "implementer": "SOL",
       "reviewer": "Sol",
-      "status": "TODO",
+      "status": "RUNNING",
       "priority": "P0",
       "dependencies": [],
       "write_scope": [
         "VRChatKatamariDanacyUnity/ProjectSettings/",
         "VRChatKatamariDanacyUnity/Packages/",
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Bootstrap/"
+        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Bootstrap/",
+        "Docs/Evidence/T00/"
       ],
       "exclusive_locks": [
         "unity-integration"
@@ -52,9 +53,9 @@
       "phase": "P0",
       "implementer": "LUNA",
       "reviewer": "Sol",
-      "status": "REVIEW",
-      "execution_note": "Luna首轮官方文字/未知/项目建议矩阵已提交；主管及交叉评审中，实机参考未运行，未冻结规则或接口。",
-      "evidence_paths": ["Docs/Research/ReferenceRules/rules_matrix.md", "Docs/Research/ReferenceRules/handoff.md"],
+      "status": "DONE",
+      "execution_note": "2026-10-12 Lead验收DONE（规划中的Sol评审角色未配置，由Lead承担评审）：rules_matrix三列分明；unknown_handling.md逐项给出全部原作unknown（U01–U43d）的项目处理办法并引用决策表与T任务。处理方式经Lead批准为当前项目临时方向；参数均为可配置原型，不是原作数值，也未冻结规则或接口（T06负责）。仍需用户在T39前决定：首发地图数、正式公平门槛、回合结构/时长——这些已有明确的决定时点，不阻塞T01。",
+      "evidence_paths": ["Docs/Research/ReferenceRules/rules_matrix.md", "Docs/Research/ReferenceRules/unknown_handling.md", "Docs/Research/ReferenceRules/handoff.md", "Docs/Preparation/RuleDecisions/decisions.json"],
       "priority": "P0",
       "dependencies": [],
       "write_scope": [
@@ -86,9 +87,9 @@
       "phase": "P0",
       "implementer": "LUNA",
       "reviewer": "Independent Luna; escalate to Sol",
-      "status": "REVIEW",
-      "execution_note": "36种物件概念预筛选；P02已取得两个官方Kenney免费小包并保存包级CC0、哈希和库存。P19在用户Windows现有Blender独立后台进程预览12项，发现bread是面包片、cheese-cut是薄片、pot_small是空盆；导入包围尺寸和三角数仅Blender证据，不是世界米制或Unity性能/碰撞/逐项分发验收。未导入Unity。旧license_gaps/DirectDownload映射是先前快照，最新观察见Preview。",
-      "evidence_paths": ["Docs/Research/AssetManifest/picnic_candidates.csv", "Docs/AssetIntake/license_gaps.md", "Docs/AssetIntake/handoff.md", "Docs/AssetIntake/DirectDownload/manifest.json", "Docs/AssetIntake/DirectDownload/handoff.md", "Docs/AssetIntake/Preview/README.md", "Docs/AssetIntake/Preview/renders/render_report.json"],
+      "status": "DONE",
+      "execution_note": "2026-10-12 独立Luna评审（requirements-audit）两条验收均PASS，Lead验收DONE：36概念有用途、26项有具体库存文件候选；无候选素材进入Unity或正式目录。DONE不代表逐文件授权、Unity导入、尺寸或形状批准——这些留给后续资产任务。原记录：36种物件概念预筛选；P02已取得两个官方Kenney免费小包并保存包级CC0、哈希和库存。P19在用户Windows现有Blender独立后台进程预览12项，发现bread是面包片、cheese-cut是薄片、pot_small是空盆；导入包围尺寸和三角数仅Blender证据，不是世界米制或Unity性能/碰撞/逐项分发验收。未导入Unity。旧license_gaps/DirectDownload映射是先前快照，最新观察见Preview。",
+      "evidence_paths": ["Docs/Reviews/T02_T03_acceptance.md", "Docs/Preparation/AssetCoverage/coverage.csv", "Docs/Research/AssetManifest/picnic_candidates.csv", "Docs/AssetIntake/license_gaps.md", "Docs/AssetIntake/handoff.md", "Docs/AssetIntake/DirectDownload/manifest.json", "Docs/AssetIntake/DirectDownload/handoff.md", "Docs/AssetIntake/Preview/README.md", "Docs/AssetIntake/Preview/renders/render_report.json"],
       "priority": "P1",
       "dependencies": [],
       "write_scope": [
@@ -126,9 +127,9 @@
       "phase": "P0",
       "implementer": "LUNA",
       "reviewer": "Independent Luna; escalate to Sol",
-      "status": "REVIEW",
-      "execution_note": "三语候选文案及四类文字分镜已提交；未检索名称、未选择视觉方向、未生成正式封面/视觉草图，未发布。",
-      "evidence_paths": ["Marketing/Preproduction/theme_copy.md", "Marketing/Preproduction/storyboard.md", "Marketing/Preproduction/handoff.md"],
+      "status": "DONE",
+      "execution_note": "2026-10-12 独立Luna评审两条验收均PASS，Lead验收DONE：三语候选文案及四类文字分镜可独立推进，均标为概念/待实机，无未实现功能承诺、无未授权品牌资产。名称候选查重见P14，未定名、未法律清权；未选视觉方向、未生成正式封面，未发布——这些不是T03验收条件。",
+      "evidence_paths": ["Docs/Reviews/T02_T03_acceptance.md", "Marketing/Preproduction/theme_copy.md", "Marketing/Preproduction/storyboard.md", "Marketing/Preproduction/handoff.md"],
       "priority": "P1",
       "dependencies": [],
       "write_scope": [

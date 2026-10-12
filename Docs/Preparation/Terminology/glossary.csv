@@ -1,0 +1,38 @@
+stable_id,zh,en,ja,context,note
+term.rolling_ball,滚球,Rolling Ball,転がすボール,对外教学默认通用玩法称谓,避免使用参考作品名称；品牌名仍未定且需另行审查
+term.katamari,仅限内部参考作品称谓,Katamari,カタマリ,internal_only,只用于内部指称参考作品；不得进入对外默认名称或教学文案
+term.ball,球,Ball,ボール,HUD/玩法,不要和玩家Avatar混称
+term.growth,成长量,Growth,成長量,HUD/已赚取但尚未交分,本地预测与裁决确认须分别标识
+term.unbanked_growth,未交存成长,Unbanked Growth,預け入れ前の成長量,HUD/持有风险,不是安全积分；KO时按规则可能损失
+term.banked_score,已交存积分,Banked Score,預け入れ済みスコア,HUD/比分,安全积分仅由已确认账本产生
+term.predicted_pickup,预测拾取,Predicted Pickup,予測取得,本地即时反馈,暂定状态；不参与交分/吞噬/胜负
+term.confirmed_pickup,已确认拾取,Confirmed Pickup,確定取得,裁决结果/账本,仅裁决确认后计入已确认成长
+term.bank,交存,Bank,預け入れ,将未交存成长兑换为安全积分,游戏术语；避免翻译成存档/save
+term.bank_zone,交分区,Banking Zone,預け入れエリア,地图目标,位置/移动周期仍以实际玩法实现为准
+term.bank_request,交存请求,Banking Request,預け入れリクエスト,异步状态/提示,请求中不代表事务已提交
+term.powerup,道具,Power-up,アイテム,比赛内单槽道具,项目设计已选磁铁/火箭；具体实现/参数未验证；不代表原作PVP规则
+term.magnet,磁铁,Magnet,マグネット,道具,项目设计已选择；具体实现/获取/持续参数未验证
+term.rocket,火箭,Rocket,ロケット,道具,项目设计已选择；具体实现/效果/持续参数未验证
+term.jump_action,跳跃键 / Jump,Jump button / Jump,ジャンプ操作,比赛内道具输入提示,仅建议映射为道具使用；Station兼容及按键事件待T04验证
+term.knockout,被吞出局,Knocked Out,KO（ノックアウト）,单次被吞后的短暂局内状态,不是退出比赛或永久淘汰；中文避免与自愿离开混淆
+term.respawn,重生,Respawn,リスポーン,被吞后再次进入当前回合,项目设计方向；时间/保护须实测
+term.protection,重生保护,Respawn Protection,リスポーン保護,重生后的临时状态,持续时间与限制为待验证项目参数
+term.leave_match,退出比赛,Leave Match,対戦を退出,玩家主动结束当前参赛身份,明确自愿动作；与KO/平台Respawn分开
+term.platform_respawn,VRChat重生,VRChat Respawn,VRChatでリスポーン,平台级Respawn事件,用于安全清理与恢复；不等于游戏内KO重生
+term.spectator,观战者,Spectator,観戦者,迟到/选择观战/临时观察,不在当前参赛名单内；UI需区分观战与KO暂时状态
+term.queue,下局排队,Queue for Next Round,次のラウンドに参加希望,回合锁名单后加入,表示申请下局，不代表已报名成功
+term.round,回合,Round,ラウンド,比赛状态/计时,使用回合而非局部动画周期
+term.lobby,大厅,Lobby,ロビー,正式对局以外空间/状态,回到大厅不等于世界退出
+term.countdown,倒计时,Countdown,カウントダウン,开始前报名锁定阶段,名单与开始条件由回合状态决定
+term.settling,结算中,Settling,集計中,回合结束处理已接收有效请求,期间不得暗示可继续获得新分
+term.recovery,恢复中,Recovery,復旧中,权威迁移/快照恢复阶段,失败时可能取消本局；不得承诺必定续赛
+term.pickup_pending,拾取确认中,Pickup Pending,取得確認中,本地已显示预测拾取,确认前不得显示为已得分
+term.pickup_rejected,拾取未确认,Pickup Not Confirmed,取得は確定しませんでした,裁决拒绝或物品已被他人取得,撤销预测收益；非网络故障时也可出现
+term.bank_unavailable,交分暂不可用,Banking Unavailable,預け入れできません,条件未满足/结算/请求拒绝,展示原因须来自状态，不臆测原因
+term.input_unavailable,输入暂不可用,Input Unavailable,入力を利用できません,菜单/追踪丢失/KO/状态锁定,说明检查对应模式或等待状态恢复
+term.round_full,本回合已满,Round Full,このラウンドは満員です,参赛名额已锁定/满员,可提示观战或排下局
+term.connection_recovering,连接恢复中,Reconnecting,接続を復旧中です,同步或权威恢复,不要要求重复交存/重复购买
+term.exit_confirm,确认退出比赛？,Leave this match?,対戦を終了しますか？,主动退出确认,退出后仍留在世界大厅；措辞勿与Respawn混淆
+term.teacher_mode_a,双手推杆（A）,Dual-hand handles (A),両手ハンドル（A）,VR输入模式名,模式命名待母语审校
+term.teacher_mode_b,追尾操作（B）,Follow controls (B),追従操作（B）,VR输入模式名,舒适性尚未经真人验证；避免宣称保证舒适
+term.teacher_mode_pc,桌面操作,Desktop controls,デスクトップ操作,PC输入模式名,使用实际键鼠/平台提示；不硬编码键名

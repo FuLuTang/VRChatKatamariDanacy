@@ -1,0 +1,25 @@
+map_theme,case_id,case_type,spawn_zone_label,route_variant,start_landmark_label,end_landmark_label,bank_anchor_id,ball_collision_diameter_world_m,visual_mesh_diameter_m,min_clear_width_m,clearance_margin_m,slope_percent,turn_or_sweep_notes,escape_path_available,requires_jump,blocked_or_stuck,attempt_duration_s,repeat_index,build_id,ruleset_id,evidence_path,notes,status
+picnic_lawn,spawn_A_exit_1,spawn_exit,Zone A,exit 1,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,spawn_A_exit_2,spawn_exit,Zone A,exit 2,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,spawn_B_exit_1,spawn_exit,Zone B,exit 1,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,spawn_B_exit_2,spawn_exit,Zone B,exit 2,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,spawn_C_exit_1,spawn_exit,Zone C,exit 1,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,spawn_C_exit_2,spawn_exit,Zone C,exit 2,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,spawn_D_exit_1,spawn_exit,Zone D,exit 1,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,spawn_D_exit_2,spawn_exit,Zone D,exit 2,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,max_ball_main_route,maximum_ball_main_route,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,bank_approach,bank_route,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,bank_escape,bank_route,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+picnic_lawn,growth_escape,growth_entrapment,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,spawn_A_exit_1,spawn_exit,Zone A,exit 1,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,spawn_A_exit_2,spawn_exit,Zone A,exit 2,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,spawn_B_exit_1,spawn_exit,Zone B,exit 1,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,spawn_B_exit_2,spawn_exit,Zone B,exit 2,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,spawn_C_exit_1,spawn_exit,Zone C,exit 1,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,spawn_C_exit_2,spawn_exit,Zone C,exit 2,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,spawn_D_exit_1,spawn_exit,Zone D,exit 1,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,spawn_D_exit_2,spawn_exit,Zone D,exit 2,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,max_ball_main_route,maximum_ball_main_route,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,bank_approach,bank_route,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,bank_escape,bank_route,,,,,,,,,,,,,,,,,,,,,NOT_RUN
+toyroom,growth_escape,growth_entrapment,,,,,,,,,,,,,,,,,,,,,NOT_RUN

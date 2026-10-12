@@ -33,6 +33,16 @@
 
 两个旧Sol握手队员reference-luna/rules-luna均未接正式任务、已中断、不再使用。当前工具不提供删除durable成员历史，可能仍出现在列表，不能宣称已物理删除会话文件。
 
+## 2026-10-11 大规模离线批次
+
+常驻队员上限8，两个旧Sol握手槽仍占名额；新建请求返回明确上限错误。未删除历史、未改DSH配置或上限。
+
+采用6个既有Luna队员（reference-rules、asset-scout、marketing-draft、requirements-audit、asset-acquisition、offline-quality）与3个独立workflow执行worker（P15/P16/P18）。本轮6队员及3worker共9个实际请求的`modelSelection.lastUsed`与`next`均再次核验为`openai-codex/gpt-6-luna`；不是仅靠prompt/工具列表标签，也不是把6人虚报为9常驻队员。
+
+独立编排明确指定provider/model，受管job `workflow-1`已完成并收集全部三个DELIVERED结果；实际会话投影也逐一匹配。角色总数不承诺九个请求持续同时运行。
+
+**额度中断（同日）**：多名队员随后在任务中途失败。会话日志显示上游返回HTTP 429，ChatGPT团队套餐用量上限，提示约245分钟后重试。这是外部额度限制，不是任务内容或DSH配置错误；队员路由仍记录为Luna。按规则不静默改用其他模型继续队员工作，主管模型也已不再是原来的Sol，只做管理、验收和Git交付。未完成修订（P10/P11、P12、P15、P16、P18、P22）等额度恢复后由原Luna作者或已记录的单写者接手。工作包完毕后的修订只在记录单写者移交后由既有Luna接手，不用Sol静默替代。Lead只管理/审查/公共排程与Git交付。
+
 ## 自检及回退
 
 [生成工具](<tools/create_luna_team_overlay.mjs>)是Host专用，不能放进Unity工程；必须使用Node的`--experimental-import-meta-resolve`以保留ESM依赖身份。生成使用独占创建，不覆盖旧覆盖。生成文件不等于启用。

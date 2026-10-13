@@ -156,7 +156,7 @@
     {
       "id": "T04",
       "title": "Station、输入与缩放最小平台实验",
-      "execution_note": "2026-10-12 RUNNING：由明确指定Luna的Unity操作人workflow worker实现原型场景与PC侧Build & Test；VR侧步骤写成可复现清单交T05真人验证。原型不扩成正式模块。",
+      "execution_note": "2026-10-13 RUNNING（未验收）：原型场景T04_PlatformLab已生成且曾Build & Test进入世界，实测：Station可进入、Jump上升沿去抖有效、GetJumpImpulse()初始与入座读值均为0（不能作保存基准，恢复改为显式默认值3，Disable Station Exit为防退座主机制）。未验证：新恢复策略三条退出路径回读、Respawn、退出按钮坐姿分支；最近一次改码后的编译与Build & Test未跑——Unity重启后SDK面板需用户重新验证登录。设计书已定Jump=使用道具、不跳不退座（01_GAME_DESIGN L52-L65），原型暂无道具与无道具轻提示，故用户感到按空格无反应；操作总览见Docs/Preparation/InputExperiments/controls_overview.md（8个OPEN待用户决定）。VR侧交T05。原型不扩成正式模块。",
       "phase": "P0",
       "implementer": "SOL",
       "reviewer": "Sol",

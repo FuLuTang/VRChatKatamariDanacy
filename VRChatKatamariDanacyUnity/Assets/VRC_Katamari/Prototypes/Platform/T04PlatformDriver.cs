@@ -24,6 +24,9 @@ public class T04PlatformDriver : UdonSharpBehaviour
     private Color visualRollOriginalColor;
     private float jumpCueEndTime;
     private bool jumpCueActive;
+    private float[] axisLastLogTime = new float[5];
+    private float[] axisPreviousValue = new float[5];
+    private bool[] axisHasPreviousValue = new bool[5];
 
     private void Start()
     {
@@ -137,6 +140,76 @@ public class T04PlatformDriver : UdonSharpBehaviour
             " count=" + jumpCount + " counted=" + counted + " seated=" + isLocalPlayerSeated);
     }
 
+    public override void InputLookHorizontal(float value, UdonInputEventArgs args)
+    {
+        if (!IsLocalInputPlayer()) return;
+        if (ShouldLogAxis(0, value))
+            LogAxisEvent("LookH", value, args);
+    }
+
+    public override void InputLookVertical(float value, UdonInputEventArgs args)
+    {
+        if (!IsLocalInputPlayer()) return;
+        if (ShouldLogAxis(1, value))
+            LogAxisEvent("LookV", value, args);
+    }
+
+    public override void InputMoveHorizontal(float value, UdonInputEventArgs args)
+    {
+        if (!IsLocalInputPlayer()) return;
+        if (ShouldLogAxis(2, value))
+            LogAxisEvent("MoveH", value, args);
+    }
+
+    public override void InputMoveVertical(float value, UdonInputEventArgs args)
+    {
+        if (!IsLocalInputPlayer()) return;
+        if (ShouldLogAxis(3, value))
+            LogAxisEvent("MoveV", value, args);
+    }
+
+    public override void InputGrab(bool value, UdonInputEventArgs args)
+    {
+        if (!IsLocalInputPlayer()) return;
+        float numericValue = value ? 1f : 0f;
+        if (ShouldLogAxis(4, numericValue))
+            Debug.Log("[T04] AXIS name=Grab value=" + value + " type=" + args.eventType +
+                " hand=" + args.handType + " seated=" + isLocalPlayerSeated + " frame=" + Time.frameCount);
+    }
+
+    private bool IsLocalInputPlayer()
+    {
+        VRCPlayerApi player = Networking.LocalPlayer;
+        return player != null && player.isLocal;
+    }
+
+    private bool ShouldLogAxis(int index, float value)
+    {
+        bool transition = !axisHasPreviousValue[index];
+        if (axisHasPreviousValue[index])
+        {
+            float previous = axisPreviousValue[index];
+            transition = (previous == 0f && value != 0f) ||
+                (previous != 0f && value == 0f) ||
+                (previous < 0f && value > 0f) ||
+                (previous > 0f && value < 0f);
+        }
+        axisPreviousValue[index] = value;
+        axisHasPreviousValue[index] = true;
+        if (transition || Time.time - axisLastLogTime[index] >= 0.25f)
+        {
+            axisLastLogTime[index] = Time.time;
+            return true;
+        }
+        return false;
+    }
+
+    private void LogAxisEvent(string axisName, float value, UdonInputEventArgs args)
+    {
+        Debug.Log("[T04] AXIS name=" + axisName + " value=" + value + " type=" + args.eventType +
+            " hand=" + args.handType + " seated=" + isLocalPlayerSeated + " frame=" + Time.frameCount);
+    }
+
     public void LeaveStation()
     {
         if (!isLocalPlayerSeated)
@@ -185,3 +258,4 @@ public class T04PlatformDriver : UdonSharpBehaviour
         jumpDown = false;
     }
 }
+

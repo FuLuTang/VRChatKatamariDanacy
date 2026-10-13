@@ -4,7 +4,7 @@
 
 **Station 在 PC 桌面层面可行，继续作为首选候选；不提前批准为正式主方案。** 两轮用户手动 Build & Test 均可进入 Local Test。坐姿 Jump 不退座；第一轮验证长按不重复及 JumpImpulse 离开恢复；第二轮验证最终代码编译与 D1 的入座/坐姿退出按钮 Interact 状态日志。正式主方案仍须由 T05 真人 VR 的舒适性、视野、控制器、Avatar 与安全退出门禁决定。
 
-D1 的代码路径日志已验证，用户视觉确认未完成：第二轮记录入座 `Interact disabled (seated)` 与坐姿退出按钮 `Interact enabled`，但没有用户确认准星对着载具时“坐下”提示确实消失。第二轮没有触发 Respawn 或自然 `OnStationExited` 退座，修复后这两条路径的 Interact 恢复为 NOT_RUN。
+D1 的代码路径日志已验证，且用户于 2026-10-14 在第二轮修复后 PC 手动测试中目视确认：“坐下后，准星继续对着载具，‘坐下’提示消失了”。因此 D1 为 **PASS（用户目视，PC 桌面，修复后版本）**。第二轮没有触发 Respawn 或自然 `OnStationExited` 退座，修复后这两条路径的 Interact 恢复仍为 NOT_RUN。T05 还需在真人 VR 中复核提示与交互行为。
 
 ## 两轮证据概述
 
@@ -36,8 +36,8 @@ Editor.log 行 1378 记录最终 Build & Test 同步编译 12 个脚本完成，
 
 ## D1 与其他待办
 
-- D1 修复后日志验证：入座禁用 Interact、坐姿退出按钮重新启用。用户视觉确认待完成；自然 `OnStationExited` 和 Respawn 两个修复后恢复路径尚未执行，均 NOT_RUN。代码修复说明见 [fix_seated_prompt.md](fix_seated_prompt.md)，此文件只读。
-- 修复前缺陷源自 `T04PlatformDriver.Interact` 调用 `UseStation`，不是 VRCStation 自带提示。建议的生命周期为入座 `DisableInteractive=true`，离开时恢复；当前视觉是否修复仍须用户确认。
+- D1 修复后日志验证：入座禁用 Interact、坐姿退出按钮重新启用；PC 桌面视觉确认 PASS（用户确认提示消失）。自然 `OnStationExited` 和 Respawn 两个修复后恢复路径尚未执行，均 NOT_RUN。真人 VR 中提示是否消失仍待 T05 复核。代码修复说明见 [fix_seated_prompt.md](fix_seated_prompt.md)，此文件只读。
+- 修复前缺陷源自 `T04PlatformDriver.Interact` 调用 `UseStation`，不是 VRCStation 自带提示。修复后 PC 桌面视觉已确认提示消失；VR 中仍待复核。建议的生命周期为入座 `DisableInteractive=true`，离开时恢复。
 - 无道具轻提示仍为 VisualRoll 变色替代；非坐姿退出按钮仅有日志，无可见反馈。
 - 桌面交互是用户实测的准星对准后鼠标左键；E 键无效。VR 控制器交互未测。
 

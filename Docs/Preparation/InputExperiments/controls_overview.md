@@ -56,7 +56,7 @@ T04的多次PC记录显示：世界加载/首次入座时 `GetJumpImpulse()` 读
 6. **KO期间设置保留策略**。选项：A. KO时立即恢复所有入场设置；B. 保留本局控制设置、仅清输入，待重生后继续；C. KO时只恢复Jump/移动的一部分。**建议：**KO是本局暂时状态而非退出，先清输入并保留入场时设置快照，待真正离赛/回合终止再恢复；如KO触发离座则另行按T05验证。([01_GAME_DESIGN.md:L25-L30,L56,L63](../../01_GAME_DESIGN.md#L25-L30), [states.md:L11-L12](../Terminology/states.md#L11-L12))
 7. **Respawn后的恢复范围与比赛名单**。选项：A. 还在本局，恢复正常行走/原身高后继续；B. 恢复玩家设置并退回大厅；C. 先安全重置，再让玩家明确选择重入/观战。**建议：**Respawn与主动退出分开处理，至少恢复G1明确要求的行走/原身高；名单/重入行为在T04/T05和用户决定前不推断。([01_GAME_DESIGN.md:L62-L65](../../01_GAME_DESIGN.md#L62-L65), [G1:L18-L19](../../05_ACCEPTANCE_TESTS.md#L18-L19), [states.md:L11-L12](../Terminology/states.md#L11-L12))
 8. **入场前JumpImpulse读值为0时的保存基线**。选项：A. 找到受支持的入场前设置快照来源；B. 明确以VRCWorld prefab默认3为回退基线；C. 无法可靠保存时阻止入场/退出并提示。**建议：**不把读值0冒充用户原值；优先确认可用快照，若只能恢复3则明确其为world基线、记录reread并让用户认可该回退。([01_GAME_DESIGN.md:L60-L64](../../01_GAME_DESIGN.md#L60-L64), [T04 PC结果:L14,L26-L28](../../Evidence/T04/pc_results.md#L14-L28))
-9. **Station入座后本地自写的Interact提示仍显示**（用户2026-10-14 T04观察：入座后“坐下”提示还在，VRChat自带椅子不显示）。选项：A. 入座时切换`DisableInteractive`，离座后恢复；B. 改用VRCStation自带交互提示，不另画本地提示；C. 保留本地提示，但根据 seated 状态隐藏/显示。**建议：**优先A并确认它不妨碍主动退出；若该开关影响入座/离座交互，则选B或C并经桌面复测。已记录的缺陷结论见[T04 PC结果:L23](../../Evidence/T04/pc_results.md#L23)。
+9. **Station入座后本地自写的Interact提示是否确实消失**（第一轮曾观察到“坐下”提示仍显示，VRChat自带椅子不显示；第二轮日志验证 seated 时禁用Interact、坐姿退出按钮后重新启用，但视觉消失仍待用户确认）。选项：A. 保留当前`DisableInteractive`入座/离座开关；B. 改用VRCStation自带交互提示，不另画本地提示；C. 保留本地提示，但根据 seated 状态隐藏/显示。**建议：**暂保留A；在用户目视确认前不要标记D1已修复，并补测Respawn及自然`OnStationExited`后重新启用。([T04 PC结果:L18,L30-L37](../../Evidence/T04/pc_results.md#L18-L37), [T04 README:L21-L24](../../Evidence/T04/README.md#L21-L24))
 
 **OPEN项数量：9。** 其中部分需用户选择，部分还要先有T04/T05证据；本页不代替决定或验收。
 
@@ -69,4 +69,4 @@ T04的多次PC记录显示：世界加载/首次入座时 `GetJumpImpulse()` 读
 
 ## 6. 验收与安全边界
 
-本页是操作草案，不是全平台运行结果。T04桌面手测所确认的Jump、Interact及座位/恢复观察仅限该PC测试；VR A/B与真人舒适性仍未测试，不能据此宣称VR兼容、舒适、稳定地平线或任何舒适性PASS。相关实测边界及已知D1提示缺陷见[2026-10-14 T04 PC结果:L15-L24](../../Evidence/T04/pc_results.md#L15-L24)；真人安全要求见[human_safety.md:L1-L3,L19-L32](human_safety.md#L1-L3)。
+本页是操作草案，不是全平台运行结果。T04桌面手测所确认的Jump、Interact及座位/恢复观察仅限该PC测试；VR A/B与真人舒适性仍未测试，不能据此宣称VR兼容、舒适、稳定地平线或任何舒适性PASS。相关实测边界见[T04 PC结果:L12-L18](../../Evidence/T04/pc_results.md#L12-L18)及[第二轮D1日志/视觉状态:L30-L39](../../Evidence/T04/pc_results.md#L30-L39)：D1代码路径日志已验证，视觉效果待用户确认；Respawn/自然退座后的D1恢复仍NOT_RUN。真人安全要求见[human_safety.md:L1-L3,L19-L32](human_safety.md#L1-L3)。

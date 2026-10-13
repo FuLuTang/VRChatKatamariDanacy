@@ -1718,6 +1718,296 @@
         "S05",
         "S06"
       ]
+    },
+    {
+      "id": "T49",
+      "title": "球层·地面接触与支持高度",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Lead + Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T46"
+      ],
+      "write_scope": [
+        "Docs/Design/BallLayers/GroundContact/",
+        "Docs/tests/ball_ground_contact/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线数学层）"
+      ],
+      "steps": [
+        "读取Docs/02_TECHNICAL_CONTRACTS.md第3.2、3.3节（接触近似公式与推进顺序）与Docs/Design/BallMotion/（T46基线）。",
+        "只实现本层：给定球芯半径、视觉旋转、可选径向代理点集与地面平面（法线与高度），求支持高度 h(-n)=max(r, max_i dot(-n, Q*p_i))、接触点、球芯离地高度。",
+        "实现单步抬升上限与速度扰动上限，保证长棍不会把球弹上天；无代理点时退化为纯球形接触。",
+        "写测试：球形退化为离地=半径；代理突出时支持高度正确抬升；突出量随核心半径增长而自然减小；抬升与扰动被上限截断；法线朝上/斜面/多候选极值的边界用例。",
+        "不要实现：运动积分（T46）、代理点生成与维持（T50）、墙面扫掠（T54）、体积转半径（T52）。文档写明本层只做接触近似，不是完整动力学。"
+      ],
+      "acceptance_criteria": [
+        "h(-n)=max(r,max_i dot(-n,Q*p_i)) 与文档公式一致，且有对拍测试。",
+        "单步抬升与速度扰动有上限且被测试覆盖（长棍不会把球弹飞）。",
+        "无代理点时的球形退化行为正确。",
+        "文档声明：接触近似不等于完整动力学，未做Unity或Udon验证。"
+      ],
+      "source_ids": [
+        "S05"
+      ]
+    },
+    {
+      "id": "T50",
+      "title": "球层·径向凹凸代理（小棍采样外壳）",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Lead + Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T46"
+      ],
+      "write_scope": [
+        "Docs/Design/BallLayers/RadialProxy/",
+        "Docs/tests/ball_radial_proxy/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线数学层）"
+      ],
+      "steps": [
+        "读取Docs/02_TECHNICAL_CONTRACTS.md第3.2节（N=32固定方向采样、最多4个长物件极值候选、吸附七步、掉落重算）与Docs/Design/BallMotion/。",
+        "只实现本层：维护N个固定方向的采样点与支持长度l_i，维护长物件极值候选（预烘焙端点，不实时扫描全部顶点），提供支持长度查询与突出量 max(0,l_i-r)。",
+        "实现吸附时的更新（把物体简化代理端点转到球局部坐标，只更新附近方向）、掉落时的移除与受影响方向重算（禁止只做持续max）、以及交分/KO大幅缩小时按新账本整体重建。",
+        "写测试：吸附后附近方向支持长度增加且远端方向不变；掉落后支持长度回落（长杆会缩短）；重建后与逐步更新结果一致（交分/KO场景）；候选数量与方向数有上限。",
+        "不要实现：接触判定与支持高度（T49 消费本层输出）、体积转半径（T52）、视觉回收与远端重建（T56）、吸附门槛（T47）。N=32与4个候选均为待性能验证的原型值，必须标注。"
+      ],
+      "acceptance_criteria": [
+        "N方向采样与最多4个极值候选的上限有测试覆盖，且参数标注为原型值。",
+        "掉落后支持长度确实回落（针对“只增不减”的经典错误有回归测试）。",
+        "大幅缩小（交分/KO）走整体重建路径，且与逐步更新结果一致。",
+        "文档声明本层为DRAFT，未做性能与Unity验证。"
+      ],
+      "source_ids": [
+        "S05"
+      ]
+    },
+    {
+      "id": "T51",
+      "title": "球层·物体粘贴与附着记录",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Lead + Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T47"
+      ],
+      "write_scope": [
+        "Docs/Design/BallLayers/Attachment/",
+        "Docs/tests/ball_attachment/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线数学层）"
+      ],
+      "steps": [
+        "读取Docs/02_TECHNICAL_CONTRACTS.md第3.4节（视觉吸附：世界位姿转局部位姿、Hash规则、保留策略）与Docs/01_GAME_DESIGN.md。",
+        "只实现本层：确认时把物体世界位姿转为球局部位姿并记录；分配attachSequence；生成稳定Hash=ballSeed+实例ID+世代+attachSequence用于远端去重。",
+        "实现附着集合查询与“最近显著物件”保留策略：超出保留预算时把埋藏物件合入球芯视觉，但不能无限保留每个Renderer。",
+        "写测试：局部位姿在球平移旋转后仍还原到正确世界位姿；大球增长不会放大已附着物件的局部尺寸；Hash在不同实例/世代/序列下不碰撞且同输入稳定；保留预算被截断且被合并的物件不丢失账本归属。",
+        "不要实现：吸附门槛与争抢裁决（T47/T48）、几何图形重建与回收预算（T56）、代理支持长度（T50）。"
+      ],
+      "acceptance_criteria": [
+        "世界位姿与局部位姿可逆转换有对拍测试。",
+        "大球增长不放大已附着物件（回归测试）。",
+        "Hash稳定且无碰撞；保留预算截断后账本归属不丢。",
+        "文档声明拾取Collider收走后退出地图判定，本地装饰不保留可争抢Collider。"
+      ],
+      "source_ids": [
+        "S05"
+      ]
+    },
+    {
+      "id": "T52",
+      "title": "球层·尺寸计算与三层半径分离",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Lead + Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T47"
+      ],
+      "write_scope": [
+        "Docs/Design/BallLayers/SizeModel/",
+        "Docs/tests/ball_size_model/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线数学层）"
+      ],
+      "steps": [
+        "读取Docs/02_TECHNICAL_CONTRACTS.md第1节命名区分与第3.2节第3步（r=cube_root(3V/4π)）。",
+        "只实现本层：由确认体积算 coreRadiusWorldM；区分 coreRadiusWorldM、collisionRadiusWorldM、semanticDiameter 三者并给出换算，禁止一个字段同时表示半径和直径。",
+        "实现首版生长上限、交分/KO后的重置与重建（按新账本而不是简单缩放），以及不从渲染Mesh反推账本的原则性断言。",
+        "写测试：体积翻8倍半径翻倍；半径与直径不被混用（类型或断言层面阻止）；上限截断；交分重置后半径回到基线；KG/Q增长到上限时下游参数仍合法。",
+        "不要实现：体积账本与计分事务（T48）、代理与凹凸（T50）、视觉滚动（T53）。"
+      ],
+      "acceptance_criteria": [
+        "coreRadiusWorldM/collisionRadiusWorldM/semanticDiameter三者分离且有换算测试。",
+        "体积与半径的立方关系、上限、交分重置均有测试。",
+        "存在防止半径与直径混用的显式手段（类型或断言）。",
+        "文档声明世界尺度仍OPEN，等T06冻结。"
+      ],
+      "source_ids": [
+        "S05"
+      ]
+    },
+    {
+      "id": "T53",
+      "title": "球层·可视滚动（自转与姿态解耦）",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Lead + Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T46"
+      ],
+      "write_scope": [
+        "Docs/Design/BallLayers/VisualRoll/",
+        "Docs/tests/ball_visual_roll/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线数学层）"
+      ],
+      "steps": [
+        "读取Docs/02_TECHNICAL_CONTRACTS.md第2节（BallVisualRollRoot只有可视滚动旋转、localScale保持1；BallPhysicsRoot负责位置与平面朝向）。",
+        "只实现本层：由球心位移与地面法线求可视滚动增量，累计为BallVisualRollRoot的局部旋转；localScale恒为1。",
+        "明确姿态与自转分离：玩法用的平面朝向与可视自转互不写入；镜头与HUD不读取自转。",
+        "写测试：位移距离与滚动角度匹配（滚动一周对应π×直径）；localScale恒为1；自转不改变平面朝向；斜面上滚动轴=位移×法线方向；零位移不产生滚动。",
+        "不要实现：运动积分与速度（T46）、跟随架（T55）、核心Mesh缩放（T52提供半径）。"
+      ],
+      "acceptance_criteria": [
+        "位移与滚动角度的对应关系有测试（含滚动一周的距离）。",
+        "自转与平面朝向严格解耦（互不影响的回归测试）。",
+        "localScale恒为1有断言。",
+        "文档声明未做Unity视觉验证。"
+      ],
+      "source_ids": [
+        "S07",
+        "S08"
+      ]
+    },
+    {
+      "id": "T54",
+      "title": "球层·墙面与环境扫掠",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Lead + Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T46"
+      ],
+      "write_scope": [
+        "Docs/Design/BallLayers/Sweep/",
+        "Docs/tests/ball_sweep/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线数学层）"
+      ],
+      "steps": [
+        "读取Docs/02_TECHNICAL_CONTRACTS.md第3.3节（首版推进顺序A：球形扫掠/碰撞）与Docs/Design/BallMotion/中的连续扫掠实现作为基线。",
+        "只实现本层：球体对平面/薄墙/盒/墙角的连续扫掠，输出首次接触时间、接触点、法线、剩余位移与滑动方向；支持一个步长内多接触顺序处理。",
+        "专门处理薄墙（厚度小于半径）、高速（单步位移远大于半径）、墙角与凹角、以及接触后沿墙滑动的退化情况。",
+        "写测试：单步位移远大于半径时不穿透；薄墙（厚度<半径）不穿透；墙角不卡死且能滑出；多接触按距离顺序求解；零速度与贴墙起始不产生抖动。",
+        "不要实现：地面支持高度（T49）、运动积分与驱动（T46）、代理凹凸对接触的影响（T50/T49）。"
+      ],
+      "acceptance_criteria": [
+        "穿透类用例覆盖高速、薄墙、墙角三类，且单步位移大于半径。",
+        "接触解算顺序稳定，重复运行结果一致（确定性）。",
+        "文档列出未解决的退化情形（例如极薄墙体与完全对称凹角）而不是隐去。"
+      ],
+      "source_ids": [
+        "S07"
+      ]
+    },
+    {
+      "id": "T55",
+      "title": "球层·跟随架 FollowRig",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Lead + Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T46"
+      ],
+      "write_scope": [
+        "Docs/Design/BallLayers/FollowRig/",
+        "Docs/tests/ball_follow_rig/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线数学层）"
+      ],
+      "steps": [
+        "读取Docs/02_TECHNICAL_CONTRACTS.md第2节（FollowRig绝不成为滚动Mesh的孩子）与Docs/01_GAME_DESIGN.md第4节（操作架跟水平参考朝向，不随抬头扭头转动）。",
+        "只实现本层：由球位置与朝向求参考架位置与偏航；高度与位置滤波、偏航滤波；roll与pitch严格恒为0。",
+        "结构性约束要在实现里体现：参考架的输入不包含球的自转，且提供“不随HMD抬头扭头转动”的朝向来源。",
+        "写测试：任意roll/pitch输入下参考架roll/pitch恒为0；偏航跟随且不超调；瞬移（例如重生）时有界不抖；原地快速自转不改变参考架朝向；参考架高度限制在可操作范围。",
+        "不要实现：相机与HUD内容（T19）、输入映射（T45）、球运动（T46）。"
+      ],
+      "acceptance_criteria": [
+        "roll/pitch恒为0在任意输入下成立（属性测试或穷举采样）。",
+        "瞬移与高速时参考架有界且不抖，有测试证明。",
+        "原地自转不改变参考架朝向。",
+        "文档声明未做VR舒适性验证，舒适阈值仍待真人门禁。"
+      ],
+      "source_ids": [
+        "S07",
+        "S08"
+      ]
+    },
+    {
+      "id": "T56",
+      "title": "球层·远端代理重建与视觉回收",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Lead + Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T47"
+      ],
+      "write_scope": [
+        "Docs/Design/BallLayers/RemoteProxy/",
+        "Docs/tests/ball_remote_proxy/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线算法层）",
+        "远端Hash规则与T51保持同一约定，由Lead在brief中固定，本层只消费不重定义"
+      ],
+      "steps": [
+        "读取Docs/02_TECHNICAL_CONTRACTS.md第2节（RemoteBallProxy）与第3.4节（Hash去重、保留策略、本地装饰不决定物理）；Hash规则固定为ballSeed+实例ID+世代+attachSequence（与T51同一约定，本层只消费不重定义）。",
+        "只实现本层：由远端确认状态（位置、尺寸、状态、少量外观摘要）重建渲染代理；用Hash去重避免重复模型重叠；按保留预算回收被球芯遮住的物件。",
+        "实现对“本地最近显著物件”的保留与埋藏物件合并的预算策略，保证Renderer数量有上限。",
+        "写测试：同一实例重复到达不产生重叠模型（去重有效）；不同世代/序列产生独立代理；回收后账本体积不变（视觉回收不影响账本）；预算上限被严格遵守；远端装饰不参与任何碰撞或计分判定的显式隔离。",
+        "不要实现：本地吸附判定（T47）、账本与计分（T48）、局部位姿记录（T51）。"
+      ],
+      "acceptance_criteria": [
+        "去重、世代独立、回收不丢账本体积、预算上限四类测试通过。",
+        "存在显式隔离证明远端装饰不参与碰撞或计分判定。",
+        "文档声明未做多人网络实测，网络同步参数仍待T13/T15/T28。"
+      ],
+      "source_ids": [
+        "S11",
+        "S13"
+      ]
     }
   ],
   "releaseProfiles": {

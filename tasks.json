@@ -15,7 +15,13 @@
       "id": "T00",
       "title": "工程基线、版本锁定与最小测试场景",
       "execution_note": "2026-10-12 Lead验收DONE。(1)SDK编译PASS：Editor 2022.3.22f1、VPM Base/Worlds 3.10.5，UdonSharp编译8个脚本完成，全Editor.log无error CS/编译失败/异常。(2)Build & Test PASS：用户在普通用户Editor生成并Build & Test Assets/VRC_Katamari/Bootstrap/T00_Bootstrap.unity，SDK产出115.5 KB .vrcw，VRChat客户端日志Entering Room: Local Test → Finished entering world，用户确认正常进入。Editor.log另有一行Build Finished, Result: Failure（player-build阶段，未阻止bundle与加载），记为待解释观察项。未上传。Windows提交135014b；Unity自动改的ProjectSettings iOS项已还原。VR、Station、多人、性能未测，属T04以后。",
-      "evidence_paths": ["Docs/Evidence/T00/README.md", "Docs/Evidence/T00/compile_evidence.md", "Docs/Evidence/T00/build_and_test.md", "Docs/Evidence/T00/handoff.md", "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Bootstrap/T00_Bootstrap.unity"],
+      "evidence_paths": [
+        "Docs/Evidence/T00/README.md",
+        "Docs/Evidence/T00/compile_evidence.md",
+        "Docs/Evidence/T00/build_and_test.md",
+        "Docs/Evidence/T00/handoff.md",
+        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Bootstrap/T00_Bootstrap.unity"
+      ],
       "phase": "P0",
       "implementer": "SOL",
       "reviewer": "Sol",
@@ -56,7 +62,12 @@
       "reviewer": "Sol",
       "status": "DONE",
       "execution_note": "2026-10-12 Lead验收DONE（规划中的Sol评审角色未配置，由Lead承担评审）：rules_matrix三列分明；unknown_handling.md逐项给出全部原作unknown（U01–U43d）的项目处理办法并引用决策表与T任务。处理方式经Lead批准为当前项目临时方向；参数均为可配置原型，不是原作数值，也未冻结规则或接口（T06负责）。仍需用户在T39前决定：首发地图数、正式公平门槛、回合结构/时长——这些已有明确的决定时点，不阻塞T01。",
-      "evidence_paths": ["Docs/Research/ReferenceRules/rules_matrix.md", "Docs/Research/ReferenceRules/unknown_handling.md", "Docs/Research/ReferenceRules/handoff.md", "Docs/Preparation/RuleDecisions/decisions.json"],
+      "evidence_paths": [
+        "Docs/Research/ReferenceRules/rules_matrix.md",
+        "Docs/Research/ReferenceRules/unknown_handling.md",
+        "Docs/Research/ReferenceRules/handoff.md",
+        "Docs/Preparation/RuleDecisions/decisions.json"
+      ],
       "priority": "P0",
       "dependencies": [],
       "write_scope": [
@@ -90,7 +101,17 @@
       "reviewer": "Independent Luna; escalate to Sol",
       "status": "DONE",
       "execution_note": "2026-10-12 独立Luna评审（requirements-audit）两条验收均PASS，Lead验收DONE：36概念有用途、26项有具体库存文件候选；无候选素材进入Unity或正式目录。DONE不代表逐文件授权、Unity导入、尺寸或形状批准——这些留给后续资产任务。原记录：36种物件概念预筛选；P02已取得两个官方Kenney免费小包并保存包级CC0、哈希和库存。P19在用户Windows现有Blender独立后台进程预览12项，发现bread是面包片、cheese-cut是薄片、pot_small是空盆；导入包围尺寸和三角数仅Blender证据，不是世界米制或Unity性能/碰撞/逐项分发验收。未导入Unity。旧license_gaps/DirectDownload映射是先前快照，最新观察见Preview。",
-      "evidence_paths": ["Docs/Reviews/T02_T03_acceptance.md", "Docs/Preparation/AssetCoverage/coverage.csv", "Docs/Research/AssetManifest/picnic_candidates.csv", "Docs/AssetIntake/license_gaps.md", "Docs/AssetIntake/handoff.md", "Docs/AssetIntake/DirectDownload/manifest.json", "Docs/AssetIntake/DirectDownload/handoff.md", "Docs/AssetIntake/Preview/README.md", "Docs/AssetIntake/Preview/renders/render_report.json"],
+      "evidence_paths": [
+        "Docs/Reviews/T02_T03_acceptance.md",
+        "Docs/Preparation/AssetCoverage/coverage.csv",
+        "Docs/Research/AssetManifest/picnic_candidates.csv",
+        "Docs/AssetIntake/license_gaps.md",
+        "Docs/AssetIntake/handoff.md",
+        "Docs/AssetIntake/DirectDownload/manifest.json",
+        "Docs/AssetIntake/DirectDownload/handoff.md",
+        "Docs/AssetIntake/Preview/README.md",
+        "Docs/AssetIntake/Preview/renders/render_report.json"
+      ],
       "priority": "P1",
       "dependencies": [],
       "write_scope": [
@@ -130,7 +151,12 @@
       "reviewer": "Independent Luna; escalate to Sol",
       "status": "DONE",
       "execution_note": "2026-10-12 独立Luna评审两条验收均PASS，Lead验收DONE：三语候选文案及四类文字分镜可独立推进，均标为概念/待实机，无未实现功能承诺、无未授权品牌资产。名称候选查重见P14，未定名、未法律清权；未选视觉方向、未生成正式封面，未发布——这些不是T03验收条件。",
-      "evidence_paths": ["Docs/Reviews/T02_T03_acceptance.md", "Marketing/Preproduction/theme_copy.md", "Marketing/Preproduction/storyboard.md", "Marketing/Preproduction/handoff.md"],
+      "evidence_paths": [
+        "Docs/Reviews/T02_T03_acceptance.md",
+        "Marketing/Preproduction/theme_copy.md",
+        "Marketing/Preproduction/storyboard.md",
+        "Marketing/Preproduction/handoff.md"
+      ],
       "priority": "P1",
       "dependencies": [],
       "write_scope": [
@@ -1547,6 +1573,147 @@
         "夜市存在路径差异和完整授权。"
       ],
       "source_ids": []
+    },
+    {
+      "id": "T45",
+      "title": "统一输入意图层（A双控制器/B原生/Desktop）离线契约与参考实现",
+      "phase": "P1",
+      "implementer": "LUNA",
+      "reviewer": "Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T01"
+      ],
+      "write_scope": [
+        "Docs/Design/ControlIntent/",
+        "Docs/tests/control_intent/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线；真机映射仍待T07/T08）"
+      ],
+      "steps": [
+        "读取Docs/01_GAME_DESIGN.md第4节、Docs/02_TECHNICAL_CONTRACTS.md、Docs/Research/ReferenceRules/，以及Docs/Evidence/T04/已记录的PC实测事实（交互为鼠标左键、E键无效；坐姿Jump不退座且只计一次、长按不重复；入座后本地交互提示关闭）。",
+        "定义唯一意图集合（Move2D/Look2D/UseItem或Jump/Interact/ExitStation/Respawn/ComfortTurn设置），为A双控制器、B原生VR、Desktop三种输入源各写映射表；运动层不得感知设备细节。",
+        "写host-only标准库Python参考实现，覆盖边沿触发、去抖、坐姿屏蔽与恢复、菜单打开时不产生游戏意图。",
+        "写Docs/tests/control_intent/单元测试（含__init__.py），断言三种输入源在同一段脚本化输入下产生完全一致的意图序列。",
+        "记录草案接口、未决项与必须由T07/T08真机确认的条目；标注DRAFT、不冻结接口。"
+      ],
+      "acceptance_criteria": [
+        "三种输入源在同一脚本输入下产生完全一致的意图序列，且有测试断言。",
+        "边沿、去抖、坐姿屏蔽、菜单态四类语义有测试覆盖，且与Docs/Evidence/T04/的PC实测事实一致。",
+        "文档分列已定/DRAFT/未决，不声称VR通过、不冻结公共接口、不声称Udon运行时验证。"
+      ],
+      "source_ids": [
+        "S07",
+        "S08"
+      ]
+    },
+    {
+      "id": "T46",
+      "title": "球形运动、追尾与眼高离线参考模型",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T00"
+      ],
+      "write_scope": [
+        "Docs/Design/BallMotion/",
+        "Docs/tests/ball_motion/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线数值模型；Unity内实际扫掠仍待T09）"
+      ],
+      "steps": [
+        "读取Docs/01_GAME_DESIGN.md、Docs/02_TECHNICAL_CONTRACTS.md的坐标与尺寸约定，以及Docs/Evidence/T04/中Station加独立FollowRig的现状（姿态与球体自转分离）。",
+        "host-only实现：球心位置与姿态、自转与运动解耦、加减速、转向与侧移、半径成长的尺寸耦合、与解析地面（含缓坡）的扫掠检测、FollowRig高度与方向过滤（忽略roll与pitch）、卡住与出界恢复。",
+        "写数值测试：高速下不穿透薄墙、镜头不继承roll与pitch、缓坡不弹跳不卡死、追尾延迟有界、半径变化后参数仍合法。",
+        "输出可调参数表（带单位量纲）与未决项（哪些参数必须等T06冻结或真机标定）。"
+      ],
+      "acceptance_criteria": [
+        "扫掠不穿透、相机无roll与pitch、缓坡通过、追尾延迟有界，四类均有可复现测试。",
+        "参数齐全且量纲一致；半径成长与运动参数的耦合关系有说明。",
+        "明确声明为参考实现，不等同于Udon运行时、Unity验收或设计冻结。"
+      ],
+      "source_ids": [
+        "S07",
+        "S08"
+      ]
+    },
+    {
+      "id": "T47",
+      "title": "拾取、吸附与成长判定离线参考模型",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T01"
+      ],
+      "write_scope": [
+        "Docs/Design/PickupAbsorb/",
+        "Docs/tests/pickup_absorb/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线算法与不变量；场景内真实物件注册仍待T11/T12）"
+      ],
+      "steps": [
+        "读取Docs/02_TECHNICAL_CONTRACTS.md第3、5节（成长、吸附、凹凸，以及一件物品两人抢的协议）与Docs/01_GAME_DESIGN.md。",
+        "host-only实现：静态物件注册表与空间网格、近邻查询、可吸附判定（半径、尺寸、类型、价值）、吸附的幂等计数、本地吸附与远端装饰重建的语义边界。",
+        "写测试：同一物件只计一次（幂等与重复包重放）、两球同时够到时由权威裁决且本地预测可回滚、吸附集合可从权威状态重建、半径成长单调且有上限。",
+        "记录未决项：吸附阈值与价值表仍是草案，等T06冻结；明确本地装饰不参与玩法判定。"
+      ],
+      "acceptance_criteria": [
+        "幂等单次计数、重放不重复计分、本地预测可回滚、吸附集合可重建，四类测试通过。",
+        "成长半径单调且上限明确；本地与远端职责边界写清（装饰不得决定碰撞与计分）。",
+        "声明为参考实现，不声称Unity或Udon验证。"
+      ],
+      "source_ids": [
+        "S05",
+        "S07"
+      ]
+    },
+    {
+      "id": "T48",
+      "title": "争抢账本、生命周期事务与回合状态机离线参考模型",
+      "phase": "P2",
+      "implementer": "LUNA",
+      "reviewer": "Sol",
+      "status": "READY",
+      "priority": "P1",
+      "dependencies": [
+        "T01"
+      ],
+      "write_scope": [
+        "Docs/Design/Ledger/",
+        "Docs/tests/ledger/"
+      ],
+      "exclusive_locks": [],
+      "external_requirements": [
+        "无（纯离线协议模型；网络实测仍待T13/T15/T28）"
+      ],
+      "steps": [
+        "读取Docs/02_TECHNICAL_CONTRACTS.md第4、5节（数据定义、一件物品两人抢）与Docs/01_GAME_DESIGN.md第3节（PVP、淘汰与重生）。",
+        "host-only实现：账本事务（幂等键、本地预测与权威确认、结算条件）、争抢裁决（先到与同帧并列）、KO与重生事务、迟到加入的快照与状态迁移、断线迁移、回合状态机（大厅到准备到进行到结算回大厅）。",
+        "写测试：重复包与重放不重复计分；迟到加入得到一致快照；KO后重生状态合法；非法状态迁移被拒绝；回合结束不依赖任何单客户端本地状态。",
+        "记录未决项：公平阈值、回合时长、结算细则仍属用户未决问题（见Docs/08_SOURCES_AND_OPEN_QUESTIONS.md），实现用可替换参数占位。"
+      ],
+      "acceptance_criteria": [
+        "幂等计分、重放一致、迟到加入快照一致、非法迁移被拒绝，四类测试通过。",
+        "仅确认账本数值影响分数、银行与PVP；未决的公平与结算参数以显式占位符标出，并链接到未决问题清单。",
+        "声明为参考实现，不声称网络实测或Unity验收。"
+      ],
+      "source_ids": [
+        "S05",
+        "S06"
+      ]
     }
   ],
   "releaseProfiles": {

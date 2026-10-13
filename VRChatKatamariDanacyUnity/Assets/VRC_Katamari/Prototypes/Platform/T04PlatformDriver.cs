@@ -20,6 +20,10 @@ public class T04PlatformDriver : UdonSharpBehaviour
     private float lastJumpDownTime = -1f;
     private Vector3 carrierBaseLocalPosition;
     private float phase;
+    private Renderer visualRollRenderer;
+    private Color visualRollOriginalColor;
+    private float jumpCueEndTime;
+    private bool jumpCueActive;
 
     private void Start()
     {
@@ -27,6 +31,12 @@ public class T04PlatformDriver : UdonSharpBehaviour
         if (carrier == null) carrier = transform;
         carrierBaseLocalPosition = carrier.localPosition;
         CacheJumpImpulse(localPlayer);
+        if (visualRoll != null)
+        {
+            visualRollRenderer = visualRoll.GetComponent<Renderer>();
+            if (visualRollRenderer != null)
+                visualRollOriginalColor = visualRollRenderer.material.color;
+        }
         Debug.Log("[T04] JumpImpulse initial=" + savedJumpImpulse + " canJump=" + (savedJumpImpulse > 0f));
         Debug.Log("[T04] Driver ready");
     }
@@ -46,6 +56,12 @@ public class T04PlatformDriver : UdonSharpBehaviour
         }
         if (visualRoll != null)
             visualRoll.Rotate(Vector3.forward, 45f * Time.deltaTime, Space.Self);
+        if (jumpCueActive && Time.time >= jumpCueEndTime)
+        {
+            if (visualRollRenderer != null)
+                visualRollRenderer.material.color = visualRollOriginalColor;
+            jumpCueActive = false;
+        }
     }
 
     public override void Interact()
@@ -60,6 +76,8 @@ public class T04PlatformDriver : UdonSharpBehaviour
         if (player == null || !player.isLocal) return;
         localPlayer = player;
         isLocalPlayerSeated = true;
+        DisableInteractive = true;
+        Debug.Log("[T04] Interact disabled (seated)");
         jumpDown = false;
         Debug.Log("[T04] StationEntered seated=true; JumpImpulse saved=" + savedJumpImpulse + " set=0");
         // Disable Station Exit is primary protection against Jump exiting; zero jump is secondary.
@@ -69,7 +87,13 @@ public class T04PlatformDriver : UdonSharpBehaviour
     public override void OnStationExited(VRCPlayerApi player)
     {
         if (player == null || !player.isLocal) return;
+        bool wasSeated = isLocalPlayerSeated;
         isLocalPlayerSeated = false;
+        DisableInteractive = false;
+        if (wasSeated)
+        {
+            Debug.Log("[T04] Interact enabled (left station) reason=station-exit");
+        }
         RestoreJumpImpulse(player, "station-exit");
     }
 
@@ -78,6 +102,8 @@ public class T04PlatformDriver : UdonSharpBehaviour
         if (player == null || !player.isLocal) return;
         bool exitStation = isLocalPlayerSeated && station != null;
         isLocalPlayerSeated = false;
+        DisableInteractive = false;
+        Debug.Log("[T04] Interact enabled (left station) reason=respawn");
         RestoreJumpImpulse(player, "respawn");
         if (exitStation)
             station.ExitStation(player);
@@ -99,6 +125,7 @@ public class T04PlatformDriver : UdonSharpBehaviour
                     lastJumpDownTime = Time.time;
                     jumpCount++;
                     counted = true;
+                    ShowJumpCue();
                 }
             }
             else if (!value)
@@ -120,9 +147,22 @@ public class T04PlatformDriver : UdonSharpBehaviour
         Debug.Log("[T04] ExitButton pressed seated=true exiting");
         bool exitStation = localPlayer != null && station != null;
         isLocalPlayerSeated = false;
+        DisableInteractive = false;
+        Debug.Log("[T04] Interact enabled (left station) reason=world-exit-button");
         RestoreJumpImpulse(localPlayer, "world-exit-button");
         if (exitStation)
             station.ExitStation(localPlayer);
+    }
+
+    private void ShowJumpCue()
+    {
+        if (visualRollRenderer != null)
+        {
+            visualRollRenderer.material.color = Color.yellow;
+            jumpCueEndTime = Time.time + 0.3f;
+            jumpCueActive = true;
+        }
+        Debug.Log("[T04] JumpCue shown (no item system in prototype)");
     }
 
     private void CacheJumpImpulse(VRCPlayerApi player)

@@ -1579,8 +1579,8 @@
       "title": "统一输入意图层（A双控制器/B原生/Desktop）离线契约与参考实现",
       "phase": "P1",
       "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "READY",
+      "reviewer": "Lead + Sol",
+      "status": "DONE",
       "priority": "P1",
       "dependencies": [
         "T01"
@@ -1598,7 +1598,8 @@
         "定义唯一意图集合（Move2D/Look2D/UseItem或Jump/Interact/ExitStation/Respawn/ComfortTurn设置），为A双控制器、B原生VR、Desktop三种输入源各写映射表；运动层不得感知设备细节。",
         "写host-only标准库Python参考实现，覆盖边沿触发、去抖、坐姿屏蔽与恢复、菜单打开时不产生游戏意图。",
         "写Docs/tests/control_intent/单元测试（含__init__.py），断言三种输入源在同一段脚本化输入下产生完全一致的意图序列。",
-        "记录草案接口、未决项与必须由T07/T08真机确认的条目；标注DRAFT、不冻结接口。"
+        "记录草案接口、未决项与必须由T07/T08真机确认的条目；标注DRAFT、不冻结接口。",
+        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Reviews/2026-10-14_offline_control_logic_review.md。"
       ],
       "acceptance_criteria": [
         "三种输入源在同一脚本输入下产生完全一致的意图序列，且有测试断言。",
@@ -1615,8 +1616,8 @@
       "title": "球形运动、追尾与眼高离线参考模型",
       "phase": "P2",
       "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "READY",
+      "reviewer": "Lead + Sol",
+      "status": "DONE",
       "priority": "P1",
       "dependencies": [
         "T00"
@@ -1633,7 +1634,8 @@
         "读取Docs/01_GAME_DESIGN.md、Docs/02_TECHNICAL_CONTRACTS.md的坐标与尺寸约定，以及Docs/Evidence/T04/中Station加独立FollowRig的现状（姿态与球体自转分离）。",
         "host-only实现：球心位置与姿态、自转与运动解耦、加减速、转向与侧移、半径成长的尺寸耦合、与解析地面（含缓坡）的扫掠检测、FollowRig高度与方向过滤（忽略roll与pitch）、卡住与出界恢复。",
         "写数值测试：高速下不穿透薄墙、镜头不继承roll与pitch、缓坡不弹跳不卡死、追尾延迟有界、半径变化后参数仍合法。",
-        "输出可调参数表（带单位量纲）与未决项（哪些参数必须等T06冻结或真机标定）。"
+        "输出可调参数表（带单位量纲）与未决项（哪些参数必须等T06冻结或真机标定）。",
+        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Reviews/2026-10-14_offline_control_logic_review.md。"
       ],
       "acceptance_criteria": [
         "扫掠不穿透、相机无roll与pitch、缓坡通过、追尾延迟有界，四类均有可复现测试。",
@@ -1650,8 +1652,8 @@
       "title": "拾取、吸附与成长判定离线参考模型",
       "phase": "P2",
       "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "READY",
+      "reviewer": "Lead + Sol",
+      "status": "DONE",
       "priority": "P1",
       "dependencies": [
         "T01"
@@ -1668,7 +1670,8 @@
         "读取Docs/02_TECHNICAL_CONTRACTS.md第3、5节（成长、吸附、凹凸，以及一件物品两人抢的协议）与Docs/01_GAME_DESIGN.md。",
         "host-only实现：静态物件注册表与空间网格、近邻查询、可吸附判定（半径、尺寸、类型、价值）、吸附的幂等计数、本地吸附与远端装饰重建的语义边界。",
         "写测试：同一物件只计一次（幂等与重复包重放）、两球同时够到时由权威裁决且本地预测可回滚、吸附集合可从权威状态重建、半径成长单调且有上限。",
-        "记录未决项：吸附阈值与价值表仍是草案，等T06冻结；明确本地装饰不参与玩法判定。"
+        "记录未决项：吸附阈值与价值表仍是草案，等T06冻结；明确本地装饰不参与玩法判定。",
+        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Reviews/2026-10-14_offline_control_logic_review.md。"
       ],
       "acceptance_criteria": [
         "幂等单次计数、重放不重复计分、本地预测可回滚、吸附集合可重建，四类测试通过。",
@@ -1685,8 +1688,8 @@
       "title": "争抢账本、生命周期事务与回合状态机离线参考模型",
       "phase": "P2",
       "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "READY",
+      "reviewer": "Lead + Sol",
+      "status": "DONE",
       "priority": "P1",
       "dependencies": [
         "T01"
@@ -1703,7 +1706,8 @@
         "读取Docs/02_TECHNICAL_CONTRACTS.md第4、5节（数据定义、一件物品两人抢）与Docs/01_GAME_DESIGN.md第3节（PVP、淘汰与重生）。",
         "host-only实现：账本事务（幂等键、本地预测与权威确认、结算条件）、争抢裁决（先到与同帧并列）、KO与重生事务、迟到加入的快照与状态迁移、断线迁移、回合状态机（大厅到准备到进行到结算回大厅）。",
         "写测试：重复包与重放不重复计分；迟到加入得到一致快照；KO后重生状态合法；非法状态迁移被拒绝；回合结束不依赖任何单客户端本地状态。",
-        "记录未决项：公平阈值、回合时长、结算细则仍属用户未决问题（见Docs/08_SOURCES_AND_OPEN_QUESTIONS.md），实现用可替换参数占位。"
+        "记录未决项：公平阈值、回合时长、结算细则仍属用户未决问题（见Docs/08_SOURCES_AND_OPEN_QUESTIONS.md），实现用可替换参数占位。",
+        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Reviews/2026-10-14_offline_control_logic_review.md。"
       ],
       "acceptance_criteria": [
         "幂等计分、重放一致、迟到加入快照一致、非法迁移被拒绝，四类测试通过。",

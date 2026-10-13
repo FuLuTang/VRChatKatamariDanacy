@@ -32,7 +32,7 @@
 | 坐姿退出按钮恢复 JumpImpulse | **PASS** | 同上，行 1600、1610、1630、1645、1659 | 每次记录 `JumpImpulse restored=3 reread=3 reason=world-exit-button baseline=default`。 |
 | 重新入座时读回 3 并再次置零 | **PASS（观测）** | 同上，行 1604、1615、1636、1650 | `saved=3 set=0`；与显式 `SetJumpImpulse(3)` 后 API 读回 3 相符。 |
 | 坐姿 Jump 计数与不退座 | **PASS** | 同上，行 1591–1654 | 共 7 次计入，全部 `seated=True`，每次对应一条 JumpCue。 |
-| D1 提示视觉消失 | **NOT_RUN（等待用户确认）** | 无视觉日志；用户确认尚未提供 | 日志证明 `DisableInteractive` 代码路径执行；不能替代用户目视确认准星对着载具时“坐下”提示确实消失。当前结论：**日志已验证，视觉待用户确认**。 |
+| D1 提示视觉消失 | **PASS（用户目视，PC 桌面，修复后版本；2026-10-14）** | 用户手动观察；无视觉日志/行号 | 用户确认原话：“坐下后，准星继续对着载具，‘坐下’提示消失了”。第二轮日志中的 `Interact disabled (seated)` / `Interact enabled ... reason=world-exit-button`（行 1586 等、1599 等）作为辅助代码路径证据；用户目视确认才是提示确实消失的证据。 |
 | D1：Respawn 后恢复 Interact | **NOT_RUN** | 第二轮未触发 Respawn | 第一轮行 1716/1718 的 Respawn 是修复前版本，只证明 JumpImpulse 恢复，不证明 D1 的 Interact 恢复。 |
 | D1：自然 OnStationExited 退座后恢复 Interact | **NOT_RUN** | 第二轮未自然退座 | 第二轮只验证退出按钮路径；不得把按钮日志外推为自然退座回调通过。 |
 | SDK player-build 最终消息 | **FAIL（仅 player-build 子阶段；整体进入门禁仍 PASS）** | `Editor.log`；行号未提供 | 原文仍为 `Build Finished, Result: Failure`，原因待解释。同一轮 bundle 仍生成且客户端成功进入。 |

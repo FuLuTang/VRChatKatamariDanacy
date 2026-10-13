@@ -1,0 +1,41 @@
+{
+  "name": "carrier_platform",
+  "vertices": 200,
+  "triangles": 388,
+  "materials": [
+    "Placeholder_Light",
+    "Placeholder_Matte_Teal",
+    "Placeholder_Warm"
+  ],
+  "bounds_world_m": {
+    "min": [
+      -0.6000000238418579,
+      -0.6000000238418579,
+      0.0
+    ],
+    "max": [
+      0.6000000238418579,
+      0.6000000238418579,
+      0.25999999046325684
+    ]
+  },
+  "pivot": "枢轴在平台底面中心；SeatAnchor 与 FollowRigAnchor 是空物体，后者位于平台上方后方",
+  "axes": "Blender Z-up, 1 BU = 1 m; FBX Forward=-Z, Up=Y, apply transform; Unity intended rotation (0,0,0), scale (1,1,1), upright, front +Z",
+  "labels": [
+    "原创",
+    "占位",
+    "非最终",
+    "尺度 OPEN；尺寸仅为现实参考"
+  ],
+  "generation_script": "generate.py",
+  "mesh_checks": {
+    "non_manifold_or_zero_area": [],
+    "normal_recalculation": "performed"
+  },
+  "export_settings": {
+    "axis_forward": "-Z",
+    "axis_up": "Y",
+    "bake_space_transform": true,
+    "apply_scale_options": "FBX_SCALE_UNITS"
+  }
+}

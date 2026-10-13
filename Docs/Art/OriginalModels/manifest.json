@@ -1,0 +1,20 @@
+{
+  "title": "Original basic placeholder models",
+  "status": "原创占位，非最终美术；未指定许可；尺度 OPEN（T06 前不冻结）",
+  "units": "1 Blender unit = 1 m provisional; Blender Z-up",
+  "fbx_export": {"forward": "-Z", "up": "Y", "apply_transform": true, "unity_intended_rotation": [0, 0, 0], "unity_intended_scale": [1, 1, 1], "unity_intended_upright": true, "unity_intended_front": "+Z", "unity_import_verified": false},
+  "models": [
+    {"name":"ball_core","vertices":162,"triangles":320,"bounds_world_m":{"min":[-0.49604,-0.5,-0.49913],"max":[0.50396,0.5,0.50087]},"pivot":"球心","mesh_checks":"无非流形边/零面积面；已重算法线"},
+    {"name":"carrier_platform","vertices":200,"triangles":388,"bounds_world_m":{"min":[-0.6,-0.6,0.0],"max":[0.6,0.6,0.26]},"pivot":"底面中心；包含 SeatAnchor、FollowRigAnchor 独立空物体" ,"mesh_checks":"无非流形边/零面积面；已重算法线"},
+    {"name":"exit_button","vertices":394,"triangles":776,"bounds_world_m":{"min":[-0.23,-0.23,0.0],"max":[0.23,0.23,0.74]},"pivot":"底座底面中心","mesh_checks":"无非流形边/零面积面；已重算法线"},
+    {"name":"ground_cloth_tile","vertices":608,"triangles":956,"bounds_world_m":{"min":[-2.0,-2.0,0.0],"max":[2.0,2.0,0.122]},"pivot":"底面中心；倒角缓坡包边","mesh_checks":"无非流形边/零面积面；已重算法线"},
+    {"name":"item_apple","vertices":230,"triangles":452,"bounds_world_m":{"min":[-0.04,-0.04,0.0],"max":[0.04,0.04,0.095]},"pivot":"底部中心；现实尺寸参考，世界尺度 OPEN","mesh_checks":"无非流形边/零面积面；已重算法线"},
+    {"name":"item_cup","vertices":96,"triangles":184,"bounds_world_m":{"min":[-0.038,-0.038,0.0],"max":[0.038,0.038,0.106]},"pivot":"底部中心；现实尺寸参考，世界尺度 OPEN","mesh_checks":"无非流形边/零面积面；已重算法线"},
+    {"name":"item_plate","vertices":128,"triangles":248,"bounds_world_m":{"min":[-0.07,-0.07,0.0],"max":[0.07,0.07,0.02]},"pivot":"底部中心；现实尺寸参考，世界尺度 OPEN","mesh_checks":"无非流形边/零面积面；已重算法线"},
+    {"name":"item_sugar_cube","vertices":8,"triangles":12,"bounds_world_m":{"min":[-0.01,-0.01,0.0],"max":[0.01,0.01,0.02]},"pivot":"底部中心；现实尺寸参考，世界尺度 OPEN","mesh_checks":"无非流形边/零面积面；已重算法线"},
+    {"name":"beetle_simple","vertices":444,"triangles":864,"bounds_world_m":{"min":[-0.15,-0.09,0.036],"max":[0.15,0.17,0.19]},"pivot":"约 0.3 m 长轴沿 Blender Y 轴","mesh_checks":"无非流形边/零面积面；已重算法线","optional":true}
+  ],
+  "per_model_manifest_suffix": ".manifest.json",
+  "deliverables": ["one .blend, .fbx and three-view preview PNG per model", "generate.py (pure bpy)", "SHA256SUMS"],
+  "limitations": ["非最终美术", "不是游戏截图", "未进行 Unity 导入验证", "尺寸仅供现实参考，尺度 OPEN", "无许可授予"]
+}

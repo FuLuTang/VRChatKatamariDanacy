@@ -1,0 +1,40 @@
+{
+  "name": "item_apple",
+  "vertices": 230,
+  "triangles": 452,
+  "materials": [
+    "Placeholder_Dark",
+    "Placeholder_Warm"
+  ],
+  "bounds_world_m": {
+    "min": [
+      -0.04000001773238182,
+      -0.040000010281801224,
+      0.0
+    ],
+    "max": [
+      0.04000000283122063,
+      0.03999999910593033,
+      0.0949999988079071
+    ]
+  },
+  "pivot": "枢轴在底部中心；世界尺度 OPEN，尺寸仅为现实参考",
+  "axes": "Blender Z-up, 1 BU = 1 m; FBX Forward=-Z, Up=Y, apply transform; Unity intended rotation (0,0,0), scale (1,1,1), upright, front +Z",
+  "labels": [
+    "原创",
+    "占位",
+    "非最终",
+    "尺度 OPEN；尺寸仅为现实参考"
+  ],
+  "generation_script": "generate.py",
+  "mesh_checks": {
+    "non_manifold_or_zero_area": [],
+    "normal_recalculation": "performed"
+  },
+  "export_settings": {
+    "axis_forward": "-Z",
+    "axis_up": "Y",
+    "bake_space_transform": true,
+    "apply_scale_options": "FBX_SCALE_UNITS"
+  }
+}

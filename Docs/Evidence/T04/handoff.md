@@ -1,96 +1,28 @@
-# T04 Windows 侧变更交接
+# T04 证据交接
 
-## 本轮操作范围与结果
+## 来源与操作边界
 
-- Unity 在用户 Windows PC；Unity Editor 所有者为用户，工程 `D:\VRChatKatamariDanacy\VRChatKatamariDanacyUnity`。授权写入范围仅 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/` 及 Linux `Docs/Evidence/T04/`。
-- 本轮只修改 `T04PlatformDriver.cs` 的 JumpImpulse 恢复策略：新增 `defaultJumpImpulse=3f` 与官方依据注释；恢复改用常量3，不回写读到的0；恢复日志增加 `baseline=default` 并继续记录 reread/reason；说明 Disable Station Exit 是 Jump 防退座主机制。Respawn/按钮先恢复并写各自原因，再请求Station退出，避免StationExited同步回调抢先消费恢复记录。`initial` / `saved` 诊断日志保留。载具摆动、去抖、按钮分支日志不变。
-- 未做任何 Git 写入；未关闭/重启 Unity、未关客户端；未输入验证码/密码；未上传/发布或操作账号其他功能。
-- 编译：`%LOCALAPPDATA%\Unity\Editor\Editor.log` 行4603为 `Scripting: domain reloads=0, domain reload time=0 ms, compile time=0 ms, other=0 ms`；行4516和4531有较早 UdonSharp 124 scripts 完成记录，但无法确认在本轮源码修改后。本轮最新代码编译**未确认**。最新日志段未见 `error CS`，但不可据此声称本轮编译PASS。
-- Build & Test：SDK面板截图 `/tmp/cua/shot.png` 正显示 Authentication 数值验证码提示，未触发Build & Test；未输入验证码；没有本轮新客户端。没有点 Upload/Publish。
-- T04客户端运行证据由Lead提供：`output_log_2026-10-12_17-12-57.txt` 行1002 `[T04] JumpImpulse initial=0 canJump=False`，行1131 `[T04] StationEntered seated=true; JumpImpulse saved=0 set=0`。此次读值不可作保存基准。完整结论见 [PC结果](pc_results.md)。
+本轮只更新证据文档，依据 Lead 已核对的两轮用户手动 PC 桌面测试、Editor.log 与用户观察。未 SSH、操作 Unity/MCP、触碰账号、执行 Git 写入或发布。用户机器上另有自己的 VRChat 客户端；本记录仅使用指定测试客户端文件 `output_log_2026-10-14_00-21-44.txt` 与 `output_log_2026-10-14_00-44-36.txt`，路径统一写 `%USERPROFILE%\AppData\LocalLow\VRChat\VRChat\`。两份文件名时间戳的时区未提供。没有记录用户名、私网 IP、主机名或账号信息。
 
-## Windows `git status --short --untracked-files=all`
+## 结果摘要
 
-本轮结束读取的原始完整输出（只读 Git 状态；未提交、暂存、清理或还原）：
+- 第一轮 PC 桌面 Build & Test 可进入 Local Test：PASS（客户端日志行 561、1018）。坐姿 Jump、长按及第一轮 JumpImpulse 恢复各有证据，详见 [PC 结果](pc_results.md)。
+- 第二轮修复后 PC 桌面 Build & Test 可进入 Local Test：PASS（`output_log_2026-10-14_00-44-36.txt` 行 614、1021）。最终代码编译 PASS：Editor.log 行 1378 `Compile of 12 scripts finished in 00:01.583`，无 `error CS`，Udon 程序资产时间戳更新。
+- 第二轮 7 次坐姿 Jump 均 `seated=True` 且有 JumpCue；入座 Interact disabled 与坐姿退出按钮 Interact enabled 均在日志中出现。坐下后提示是否确实从画面消失尚未由用户确认：**日志已验证，视觉待用户确认**。
+- 第二轮只测坐姿退出按钮 D1 恢复路径；Respawn 与自然 `OnStationExited` 后 Interact 恢复 **NOT_RUN**。第一轮 Respawn 的 `JumpImpulse` 恢复为 PASS，但该轮在 D1 修复前。
+- 两轮均记录 SDK player-build `Build Finished, Result: Failure`，行号未提供；属于待解释子阶段观察。bundle 仍生成，客户端成功进入。
+- Station 建议不变：PC 层面可行的首选候选；T05 真人 VR 批准前不能定为正式主方案。
 
-```text
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/17830d157f00b09408e9c38c2091a851.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/18a8a73823b22934e929c67357a4e2d7.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/1acedb947e4c9dc4d8f749557d611c1e.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/1f7e9fb643472ef4d83f2ad49fe34b18.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/3053cc98f03a13041a10e0650d9b6e24.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/33324f447d661da40b534c9fa93c0ec2.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/3d024fda64377514ab33fa3baefec378.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/4715e20276be3b141a6a216230cab4e9.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/49ba99e73d9ab4349871a10f182ee457.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/4d685674de27be844ad0f9920614fd2c.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/4eb7aa2be7d95324ea25c03bf1cab34f.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/5463afdb73b505649b857341d262468a.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/566cc00e27d5822449529a3785eae366.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/62d157ce28de1064b8095c8cd096e77c.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/6657daa4973ee1249aae293810e8bccd.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/667c46fd2864a124ea921d98d4914fe5.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/68d999abd6627d04999b5bebe2438687.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/699261d683532df468f1ed17ff8c8cf1.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/75f3b7bb830f4324a8b2f49814f3493a.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/8175c20f542fbaf40811f752bfbf8759.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/853a35cf0f51df6498d68490a1f662e3.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/8732b730b248f4344a2839981e1ff9f0.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/953e2e6278cc9314f9f2913d9bc25309.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/96ee11c7074d21e4f84e189ad35d45fc.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/980a7697571ae1540827c8b930f79790.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/9d916a2228b78c646aa46fe3ba85879d.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/a1125ad687f8d9f41b0da3667d153a30.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/a3b924aa5d416d94c86ddd019ccb8441.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/a7250c474046ad245ac64456f76800ca.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/acd8738ca64f5a9448dfb040d1f2e4d5.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/b35f97b1813cb064d852c92d1c5c1751.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/b42eae3a19d2e89448e47dd9c7f5d0e2.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/b5280742086799a4c8c0a14e90cd913d.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/b8e95bf9755820c4380659898968aaf5.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/ba069e3ec8479394a8a01259fbacbfe0.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/c8df303ceb45ae84f85a11591f741734.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/d78d0aa68ba85fb43bbfaa649e8e398c.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/da113172081f2ba40b9cc46674a846d0.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/dfcb9d6121fc4084e97b5303b0054618.asset
- M VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/fa52d8b703fd906459112715b1ef1f3a.asset
- M VRChatKatamariDanacyUnity/ProjectSettings/ProjectSettings.asset
-?? VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/5344e79a099715844af2c3872d362a72.asset
-?? VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/5344e79a099715844af2c3872d362a72.asset.meta
-?? VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/599405add3a9d2b45883b07e0c83ee53.asset
-?? VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/599405add3a9d2b45883ee53.asset.meta
-?? VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/8f4c09d18e339a245b89f974ad7eaa2e.asset
-?? VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/8f4c09d18e339a245b89f974ad7eaa2e.asset.meta
-?? VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/e1773a35b06d6894aa5b506fd0b1412d.asset
-?? VRChatKatamariDanacyUnity/Assets/SerializedUdonPrograms/e1773a35b06d6894aa5b506fd0b1412d.asset.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/Editor.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/Editor/Editor.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/Editor/T04PlatformLabBuilder.cs
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/Editor/T04PlatformLabBuilder.cs.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04FollowRig.asset
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04FollowRig.asset.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04FollowRig.cs
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04FollowRig.cs.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04PlatformDriver.asset
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04PlatformDriver.asset.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04StationControl.asset
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04StationControl.asset.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04StationControl.cs
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04StationControl.cs.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04VisualRoll.asset
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04VisualRoll.asset.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04VisualRoll.cs
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04VisualRoll.cs.meta
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04_PlatformLab.unity
-?? VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/T04_PlatformLab.unity.meta
-```
+## 编译中间态经验
 
-Unity 自动改动照实列出，不清理、不回滚、不归因到本轮 JumpImpulse 补丁。状态中的 `ProjectSettings.asset`、`SerializedUdonPrograms`、原型 `.meta`、场景与 ProgramAsset 均保留原状。
+Editor.log 行 1204–1207 的 `CS1012` 来自队员写文件时的中间版本；此前中途出现的若干 `Compile finished` 不能证明最终源文件已完成编译。最终 Build & Test 的同步编译在 Editor.log 行 1378 记录 12 个脚本完成，且无 `error CS`；程序资产时间戳也更新。以最终构建/同步编译与资产更新时间确认版本，不以写入期间的单行消息作最终证据。修复变更范围按只读记录为单文件 `T04PlatformDriver.cs`。修复说明 [fix_seated_prompt.md](fix_seated_prompt.md) 是 Build 前的只读记录，本次未改它；其中“未编译”状态现由本次行 1378 最终编译记录和第二轮 Build & Test 证据更新。
 
-## 后续交接
+## 待办与交接
 
-- 需用户在当前 SDK 登录状态可用后，于现有 Editor 先确认新代码 C# / UdonSharp 编译，再启动本地 Build & Test；不要上传/发布。
-- 新客户端重点核对 initial/saved 读值、Jump一次/长按不退座、退出后默认恢复3并 reread=3，以及 station-exit / respawn / world-exit-button 三条独立原因。
-- 不关闭现存 VRChat 客户端（本轮没有新开的客户端）；不要重启 Unity。T05真人头显项目按 [清单](vr_checklist_for_T05.md) 执行。
+1. 等用户目视确认：坐姿时准星持续对准载具，“坐下”提示是否消失；当前只标代码路径日志已验证。
+2. 在修复版本分别走 Respawn 与自然 Station-exit，检查 `Interact enabled` 是否恢复；当前均 NOT_RUN。
+3. 评估非坐姿退出按钮无用户可见反馈；无道具时 JumpCue 仍只是 VisualRoll 变色替代。
+4. T05 验证 VR-A/VR-B、舒适性、大/小 Avatar、多人同步，决定 Station 是否为主方案。
+5. Lead 后续负责提交相关 Windows/T04 变更；本交接不声明提交号，也未执行 Git 写入。
+
+逐项状态、原文与行号见 [PC 结果](pc_results.md)，测试辨识与步骤见 [T05 清单](vr_checklist_for_T05.md)，方案结论见 [Station 决策](station_decision.md)。

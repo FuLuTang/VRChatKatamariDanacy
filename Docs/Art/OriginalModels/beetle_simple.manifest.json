@@ -1,0 +1,40 @@
+{
+  "name": "beetle_simple",
+  "vertices": 444,
+  "triangles": 864,
+  "materials": [
+    "Placeholder_Dark",
+    "Placeholder_Matte_Teal"
+  ],
+  "bounds_world_m": {
+    "min": [
+      -0.1499999314546585,
+      -0.0899999737739563,
+      0.036000002175569534
+    ],
+    "max": [
+      0.1499999761581421,
+      0.17000000178813934,
+      0.1899999976158142
+    ]
+  },
+  "pivot": "枢轴在建模地面上的中心；约 0.3 m 长轴沿 Blender Y 轴",
+  "axes": "Blender Z-up, 1 BU = 1 m; FBX Forward=-Z, Up=Y, apply transform; Unity intended rotation (0,0,0), scale (1,1,1), upright, front +Z",
+  "labels": [
+    "原创",
+    "占位",
+    "非最终",
+    "尺度 OPEN；尺寸仅为现实参考"
+  ],
+  "generation_script": "generate.py",
+  "mesh_checks": {
+    "non_manifold_or_zero_area": [],
+    "normal_recalculation": "performed"
+  },
+  "export_settings": {
+    "axis_forward": "-Z",
+    "axis_up": "Y",
+    "bake_space_transform": true,
+    "apply_scale_options": "FBX_SCALE_UNITS"
+  }
+}

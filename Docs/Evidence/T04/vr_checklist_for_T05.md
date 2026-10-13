@@ -1,43 +1,47 @@
-# T05 真人 VR 与 PC 复测清单
+# T05 真人 VR 门禁与 PC 已验证项
 
-**本轮最终改码后未能完成 Unity 编译确认或 Build & Test；PC运行与全部VR真人体验均 NOT_RUN。** SDK窗口停在数值验证码提示，未输入验证码/操作账号。已观测到的前置客户端日志见 [PC 结果](pc_results.md)。
+**PC 桌面门禁已 PASS；真人 VR 项仍 NOT_RUN。** 下表保留 PC 证据与未完成的 D1 视觉确认；不能将 PC 结果外推为 VR 结论。
 
-## 已知修复/安全约束
+## PC 已验证结果
 
-- 当前恢复策略不再把 `GetJumpImpulse()` 的0作为玩家原设置恢复值，而是显式恢复至 `defaultJumpImpulse=3`（VRChat 官方说明 `VRCWorld` prefab 设置3；API本身默认0）。代码记录 restored/reread/reason/baseline=default。必须实测 reread；否则仅为设置调用，不算恢复成功。
-- `Disable Station Exit` 是防止 Jump 退座的**主机制**；`SetJumpImpulse(0)` 是附加措施，不能替代 Station 设置。
-- 新客户端观察：`output_log_2026-10-12_17-12-57.txt` 行1002 原文 `[T04] JumpImpulse initial=0 canJump=False`；行1131 原文 `[T04] StationEntered seated=true; JumpImpulse saved=0 set=0`。两次都为0，已证明不可作保存基准；并非有多时刻持续采样证明其永远为0。
-
-## 启动前
-
-1. 在用户现有 Unity Editor 前台等待导入/编译结束，查看最新 `Editor.log`，确认本轮 `T04PlatformDriver.cs` 修改确实进入最新 C# / UdonSharp 编译，且无 `error CS`。旧编译日志不能代替本轮。
-2. SDK Builder 可用后启动本地 **Build & Test**，不点 Upload/Publish；保持该次客户端开启。
-3. 记录启动前已有的 VRChat 客户端，仅测试新建的客户端；禁止关闭/重启 Unity 或其他程序。
-4. 确认 Station 的 **Disable Station Exit** 已启用，作为防退座主机制；不以 JumpImpulse 归零代替。
-5. 自愿参与、低速短测、有观察员与明确停测方式；任何不适即停。
-
-## PC 与 Station 用例
-
-| 用例 | 步骤与通过证据 | 状态 |
+| 项目 | 状态 | 依据 |
 |---|---|---|
-| P-00 本轮编译 / Build & Test | 最新源码编译完成，无 error CS；Build & Test 启动新客户端 | NOT_RUN；SDK Authentication 数值验证码提示阻塞，未输入验证码 |
-| P-01 初始 JumpImpulse | 核对 `[T04] JumpImpulse initial=<v> canJump=<bool>` | PASS（初值观测为0；`output_log_2026-10-12_17-12-57.txt` 行1002）；当前代码不得据此宣称用户原设置为0 |
-| P-02 入座保存/归零 | 核对 `StationEntered seated=true; JumpImpulse saved=<v> set=0` | PASS（观测 saved=0；同文件行1131；不可作为恢复基准） |
-| J-01 单击Jump | Station内按一次，InputJump count只增一次且仍 seated | NOT_RUN |
-| J-02 长按Jump | 长按不重复计数、不退座 | NOT_RUN |
-| J-03 释放再按 | 释放后再次按，只新增一次count；检查BUTTON/value/frame | NOT_RUN |
-| L-01 未坐下按退出 | 核对 `seated=false nothing-to-exit` | NOT_RUN |
-| L-02 坐姿按退出按钮 | 核对实际离座及 `restored=3 reread=3 reason=world-exit-button baseline=default` | NOT_RUN |
-| L-03 Station自然退出回调 | 核对 `restored=3 reread=3 reason=station-exit baseline=default` | NOT_RUN |
-| L-04 Respawn | Respawn后离座，核对 `restored=3 reread=3 reason=respawn baseline=default` | NOT_RUN |
-| M-01 桌面移动/镜头 | 离座后移动恢复、镜头不随VisualRoll滚转 | NOT_RUN |
-| VR-A | 控制器手部输入、平面投影、限位、握持、菜单/丢追踪恢复 | NOT_RUN（T05真人） |
-| VR-B | 摇杆及舒适转向对照、独立转头 | NOT_RUN（T05真人） |
-| VR-X | A/B切换、菜单/focus loss后回中 | NOT_RUN（T05真人） |
-| VR-C | 自愿短时体验，记录具体反馈 | NOT_RUN（T05真人） |
-| VR-H | 安全调整眼高，观察球与前路可见性 | NOT_RUN（T05真人） |
-| VR-Avatar | 不同自愿Avatar进出Station，观察头部/球位置 | NOT_RUN（T05真人） |
+| 两轮 Build & Test 可进入 Local Test | PASS | 第一轮 `output_log_2026-10-14_00-21-44.txt` 行 561/1018；第二轮 `output_log_2026-10-14_00-44-36.txt` 行 614/1021。 |
+| 最终修复版本编译 | PASS | Editor.log 行 1378：`Compile of 12 scripts finished in 00:01.583`；无 `error CS`，程序资产时间戳更新。 |
+| Station 可进入，坐姿 Jump 不退座 | PASS（PC） | 第二轮客户端行 1586–1654；7 次计入均 `seated=True`，每次有 JumpCue。 |
+| 第一轮长按不重复 | PASS（PC） | 第一轮客户端行 1658–1659、1672–1675。第二轮未将长按单独复测结论重复标记。 |
+| 坐姿退出按钮恢复 JumpImpulse | PASS（两轮） | 第一轮行 1677–1678；第二轮行 1600、1610、1630、1645、1659 均 `restored=3 reread=3 ... baseline=default`。 |
+| 修复后 D1 代码状态路径 | PASS（日志） | 第二轮行 1586、1603、1614、1635、1649 记录 disabled；行 1599、1609、1629、1644、1658 记录退出按钮路径 enabled。 |
+| 修复后提示是否视觉消失 | NOT_RUN（待用户确认） | 日志证明状态切换代码路径执行，不是视觉证据。 |
+| 修复后 Respawn / 自然 Station-exit 后 Interact 恢复 | NOT_RUN | 第二轮未触发这两条路径。第一轮行 1716/1718 的 JumpImpulse 恢复发生在修复前。 |
+| 桌面交互 | PASS（用户实测） | 对准载具后鼠标左键；E 键无效。VR 控制器方式未测。 |
 
-每条退出路径须分别看 `restored` 和 `reread`；其中 restored=3 且 reread=3 才能记该路径默认值恢复PASS。若 reread不是3，记录不匹配；不得用初值为0或写入 Set 调用声称恢复成功。Jump不退座主要由 `Disable Station Exit` 保证。
+## 场景视觉识别
 
-出现退座、无法退出、恢复失败、镜头/跟踪异常、晕动或疼痛即停止。证据使用匿名run_id，记录日期时区、版本、硬件/控制器、舒适设置、用例、日志文件名/行号与结果；不收集账号或个人身份信息。
+用户描述的三个物体是：
+
+1. **大长方体：载具 / Station**，入座交互目标。
+2. **一个圆：VisualRoll**，坐姿 JumpCue 变色对象。
+3. **小长方体：退出按钮**，坐姿时退出 Station。
+
+PC 桌面已实测对准载具后用**鼠标左键**交互；E 键无效。VR 控制器交互尚未验证。
+
+## T05 真人 VR 待测清单
+
+| 项目 | 操作与证据要求 | 状态 |
+|---|---|---|
+| VR-A 输入候选 | 头显中入座/离座、Jump 单击/长按，确认只触发一次且不退座 | NOT_RUN |
+| VR-B 输入/追尾候选 | 测另一输入与追尾方案并记录差异 | NOT_RUN |
+| D1 视觉确认 | 坐下后准星持续对着大长方体载具，确认“坐下”提示是否消失；离座后确认可重新交互。记录用户目视结论 | NOT_RUN（等用户确认） |
+| D1 退出路径 Interact 恢复 | 分别测 Respawn 与自然 `OnStationExited`；检查提示恢复，不引用第二轮按钮路径替代 | NOT_RUN |
+| 舒适转向/头部自由转动 | 记录头部是否独立转动、视觉滚动与舒适性；不适即停 | NOT_RUN |
+| 视野与安全 | 能识别载具、VisualRoll 与退出按钮并随时退出 | NOT_RUN |
+| 大/小 Avatar | 自愿选择不同体型，记录入座、视野、追踪及安全退出 | NOT_RUN |
+| 多人同步 | 多客户端比较 Station 状态、输入和提示 | NOT_RUN |
+
+## 注意事项
+
+- D1 修复改动说明见只读 [fix_seated_prompt.md](fix_seated_prompt.md)。当前准确状态为：**日志已验证，视觉待用户确认**。
+- JumpCue 是无道具阶段的 VisualRoll 变色替代，不是道具系统。正式世界需显式配置跳跃/移动参数；initial=0 不等于玩家原设置。
+- PC 和 VRChat 用户自用客户端日志必须区分；路径使用 `%USERPROFILE%`，避免记录个人身份信息。
+- Station 是否为正式主方案必须由 T05 真人 VR 与用户决定。

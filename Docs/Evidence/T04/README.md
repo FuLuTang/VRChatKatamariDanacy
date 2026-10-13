@@ -1,27 +1,30 @@
-# T04 Platform Lab — 本轮收口记录
+# T04 平台实验：PC 桌面门禁结果
 
-日期：2026-10-13。范围仅为 `T04PlatformDriver.cs` 的 JumpImpulse 恢复策略及 `Docs/Evidence/T04/` 证据；没有 Git 写入。
+## 当前结论
 
-## 修复与依据
+PC 桌面运行门禁 **PASS**。Station 可进入；Jump 不退座，第一轮长按不重复，第二轮再次观察 7 次坐姿计入；退出按钮恢复 `JumpImpulse=3` 并回读 3。D1 入座禁用/退出按钮恢复 Interact 的代码日志已验证；**坐下后准星对着载具时“坐下”提示是否视觉消失，待用户确认**。Station 仍是 PC 层面首选候选，不是已批准的正式主方案；批准必须等待 T05 真人 VR。
 
-- `[T04] JumpImpulse initial=...`、入座 `saved=...` 诊断日志保留。Lead 提供的新客户端日志 `output_log_2026-10-12_17-12-57.txt` 行1002 原文 `[T04] JumpImpulse initial=0 canJump=False`，行1131 原文 `[T04] StationEntered seated=true; JumpImpulse saved=0 set=0`。这与世界刚加载时尚未调用任何 `SetJumpImpulse` 的事实相符：本环境的 `GetJumpImpulse()` 读值为0，不能作为玩家原跳跃设置的可信保存/恢复基准。不能据 `saved=0` 声称已保存玩家设置。
-- 官方 [VRChat Player Forces 文档](https://creators.vrchat.com/worlds/udon/players/player-forces/) 对 `GetJumpImpulse / SetJumpImpulse` 明确写明 API 默认值为0，而默认 `VRCWorld` prefab 会将其设为3。故代码注释引用此行为，恢复常量 `defaultJumpImpulse=3f`。这表示恢复到 VRCWorld prefab 的默认配置，不表示读回值必然为3；每次恢复仍 reread 并记录。
-- 出站日志格式为 `[T04] JumpImpulse restored=<v> reread=<v> reason=station-exit|respawn|world-exit-button baseline=default`；`initial`/`saved` 诊断仍保留。读到的 `saved` 仅用于证据诊断，不再回写。Respawn 与退出按钮分支先记录并恢复各自原因、再调用 Station.ExitStation，避免同步的 StationExited 回调抢先消费恢复记录。
-- **`Disable Station Exit` 是阻止 Jump 退座的主机制**；代码将其作为注释说明。`SetJumpImpulse(0)` 仅是辅助防护，不能替代该 Station 设置。
-- 其他行为保持：载具摆动、Jump 去抖/边沿计数、退出按钮 seated 分支日志没有改动。
+## 两轮实测
 
-## 编译与运行结果
+### 第一轮（D1 修复前）
 
-- Windows Editor 已置前。最新可读 `Editor.log` 行4603 是 `Scripting: domain reloads=0, domain reload time=0 ms, compile time=0 ms, other=0 ms`；行4516/4531分别有 `[UdonSharp] Compile of 124 scripts finished in 00:27.753`、`[UdonSharp] Compile of 124 scripts finished in 00:07.552`。但日志没有本轮这次恢复策略修改后明确的 C# 编译完成记录；因此**本轮最终源码编译结果 NOT_RUN/未能确认**，不能据旧编译记录报 PASS。检索到的最新日志段未出现 `error CS`，但“没看到错误”不等价于确认本轮编译通过。
-- SDK 窗口当前为账号数值验证码提示（截图 `/tmp/cua/shot.png`），不是 Builder；没有输入验证码/操作账号。为避免误点，未触发 Build & Test。**本轮 Build & Test NOT_RUN**，无新客户端或新运行日志。
-- 可确认的本轮运行证据只有 Lead 提供的 `output_log_2026-10-12_17-12-57.txt` 行1002和1131：读值为0。Jump 入座后仅一次空格、保持坐姿、按钮退出恢复、自然退座、Respawn 均未在本轮重新验证。详见 [PC 结果](pc_results.md) 和 [T05 清单](vr_checklist_for_T05.md)。
+用户手动完成 PC 桌面 Build & Test，客户端日志为 `%USERPROFILE%\AppData\LocalLow\VRChat\VRChat\output_log_2026-10-14_00-21-44.txt`。行 561 进入 Local Test，行 1018 完成进入世界。该轮坐姿 Jump、长按、退出按钮恢复及 Respawn/`OnStationExited` 的 JumpImpulse 恢复通过；修复前观察到 D1 提示未关闭。逐项记录见 [PC 结果](pc_results.md)。
 
-## 结论
+### 第二轮（修复后）
 
-(a) `GetJumpImpulse()` 在这次新客户端世界加载初始读取与入座读取均为0；环境实测表明它不能作为保存基准。严格地说，已提供日志只有启动和入座两次观测，并非本轮多次采样证明每一时刻恒为0；后续回读亦须实测。 (b) Jump 不退座的主机制是 `Disable Station Exit`。恢复采用文档注明的 VRCWorld prefab 默认值3，但由于本轮没有 build/runtime，新策略尚未运行验收。
+用户手动完成第二轮 Build & Test，客户端日志为 `%USERPROFILE%\AppData\LocalLow\VRChat\VRChat\output_log_2026-10-14_00-44-36.txt`；文件名时间戳 2026-10-14 00:44:36，时区未提供。行 614 进入 Local Test，行 1021 完成进入世界。日志记录 12 个脚本在最终构建中编译完成（Editor.log 行 1378），且无 `error CS`。第二轮入座/坐姿退出按钮路径多次记录 Interact disabled/enabled 与恢复 JumpImpulse；视觉提示是否消失仍待用户目视确认。
 
-Station 仍是隔离实验候选，不批准为正式主方案；真人头显、A/B舒适性、不同Avatar等必须由T05真人确定。详见 [Station 初步结论](station_decision.md)。
+Editor.log 行 1204–1207 的 `CS1012` 来自文件写入过程中的一个中间版本。此前有 `Compile finished` 发生在最终文件状态确定之前，不能证明最终版本已编译。本轮 Build & Test 强制同步编译，最终 Compile 记录为行 1378 `Compile of 12 scripts finished in 00:01.583`；Udon 程序资产时间戳更新。教训：以最终构建/同步编译及程序资产更新时间为准，不用写入中间态的一条 Compile 完成记录作为最终证明。细节见 [PC 结果](pc_results.md)。
 
-## 边界与变更
+两轮 Editor.log 均有 SDK player-build 阶段 `Build Finished, Result: Failure` 观察项；行号未提供，原因待解释。两轮均生成 `scene-standalonewindows64-t04_platformlab-…vrcw` 且客户端成功进入。这条 SDK 子阶段消息保留，但不改变 PC 本地进入门禁 PASS。
 
-未关闭/重启 Unity，未输入验证码，未操作账号其他内容，未上传/发布，未关闭任何 VRChat 客户端，未运行 Git 写入。Windows 状态清单与 Unity 自动生成项见 [交接](handoff.md)。
+## D1 状态与解释边界
+
+- **D1：日志已验证，视觉待用户确认。** 第二轮入座日志证明 Interact 禁用，坐姿退出按钮日志证明 Interact 重新启用。第二轮未触发 Respawn 或自然 `OnStationExited` 退座，这两条路径上的 D1 Interact 恢复为 **NOT_RUN**。第一轮 Respawn 的 JumpImpulse 恢复发生在 D1 修复前，不能替代这两条修复后检查。
+- 修复前的缺陷是：坐下后若准星仍对准载具，仍显示“坐下”提示。来源是 `T04PlatformDriver.Interact` 调用 `UseStation`，不是 VRCStation 自带提示。修复变更说明见只读文件 [fix_seated_prompt.md](fix_seated_prompt.md)，本文件未改动该说明。
+- 测试场景没有显式配置玩家移动参数，和 `initial=0` 相符但不是已证实原因。官方默认 VRCWorld prefab 值为 3、API 默认值为 0；正式世界必须显式配置跳跃/移动参数，初始 getter 读值不能当作玩家原设置。
+- 无道具轻提示仍以 VisualRoll 变色替代；非坐姿退出按钮只记录日志、没有可见反馈。
+
+桌面交互已由用户实测：对准交互目标后**鼠标左键**，E 键无效。真人 VR（A/B）、舒适性、大/小 Avatar、多人同步均为 NOT_RUN，留给 T05。Station 保留 PC 层面首选候选，须由 T05 真人 VR 决定是否批准为主方案。
+
+详见 [PC 结果](pc_results.md)、[T05 清单](vr_checklist_for_T05.md)、[Station 决策](station_decision.md) 与 [handoff.md](handoff.md)。

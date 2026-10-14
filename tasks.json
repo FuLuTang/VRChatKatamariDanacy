@@ -2041,7 +2041,7 @@
       "phase": "P2",
       "implementer": "LUNA",
       "reviewer": "Lead + Sol",
-      "status": "READY",
+      "status": "RUNNING",
       "priority": "P1",
       "dependencies": [
         "T49",
@@ -2086,7 +2086,7 @@
         "S13"
       ],
       "workflow_suite": "D球层实验台",
-      "execution_note": "2026-10-14用户明确授权新增单一Luna Unity操作者。Windows仅写VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/BallLayers/；Linux证据仅Docs/Evidence/BallLayers/。不进入Play/Build & Test、不启动客户端、不上传。T49–T55离线里程碑已DONE；T56正式实现仍TODO。"
+      "execution_note": "2026-10-14用户明确授权新增单一Luna Unity操作者。Windows仅写VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/BallLayers/；Linux证据仅Docs/Evidence/BallLayers/。不进入Play/Build & Test、不启动客户端、不上传。首个执行器因Lead的未提交tasks.json状态更新而在Windows访问前停止；Lead已提交该更新、确认工作树清洁，此前无Windows/Unity副作用。T49–T55离线里程碑已DONE；T56正式实现仍TODO。"
     }
   ],
   "releaseProfiles": {

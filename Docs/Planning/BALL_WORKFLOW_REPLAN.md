@@ -46,7 +46,7 @@ Sweep 多接触测试从 `(2,2,0)` 移动 `(-3,-1,0)`，终点 y=1，根本到�
 
 ## 坐标移植检查点（Lead已核查官方资料）
 
-Unity2022.3官方手册明确其坐标系统为左手系（+X右/+Y上/+Z前）。A套初始接口中的“右手系”描述不能直接用作Unity合同。各套在C#移植前须读 [Lead坐标检查点](../Reviews/BALL_COORDINATE_REVIEW_CHECKPOINT.md)，使用独立方向探针与接触点无滑动判据验证旋转，不能只改手性标签或盲目取反四元数。此项未核验前不安排场景集成。
+Unity2022.3官方手册明确其坐标系统为左手系（+X右/+Y上/+Z前）。A套初始接口中的“右手系”描述不能直接用作Unity合同。各套在C#移植前须读 [Lead坐标检查点](../Reviews/BALL_COORDINATE_REVIEW_CHECKPOINT.md)，使用独立方向探针与接触点无滑动判据验证旋转，不能只改手性标签或盲目取反四元数。此项未核验前不安排场景集成。C#草稿与UdonSharp ProgramAsset链的验收边界见 [UdonSharp草稿门槛](../Reviews/BALL_UDONSHARP_DRAFT_GATE.md)；草稿不是编译通过的功能。
 
 ## 每套相对完整的交付门槛
 

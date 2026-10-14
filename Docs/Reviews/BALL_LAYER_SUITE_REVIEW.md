@@ -1,6 +1,6 @@
 # 球层套件 Lead 评审记录 / 2026-10-14
 
-状态：增量Lead评审。A/B/C全套离线交付已返回；Lead独立复跑全库 **247/247** 通过、计划校验通过。T49–T55离线草案/规格已DONE；T56正式远端接线仍TODO（生产ballSeed/快照接口未定）。T57前三次均在Unity访问前安全停止。用户允许保留Windows既存ProjectSettings改动，并授权一次Git-only fetch及条件式安全快进；Lead已将Windows分支快进到包含授权commit的`3cb5def`，只涉及Docs/tests/tasks路径。T57现READY，等待唯一操作员执行Editor/scene安全预检。所有C# RuntimeDraft、Unity/Udon编译、Prefab与VR场景仍未验收；实际原版游戏源码未取得。workflow-5/6/7均已结束。
+状态：增量Lead评审。A/B/C全套离线交付已返回；Lead独立复跑全库 **247/247** 通过、计划校验通过。T49–T55离线草案/规格已DONE；T56正式远端接线仍TODO（生产ballSeed/快照接口未定）。T57前三次因工作树、既存设置与Git授权提交门禁在Unity访问前安全停止；用户后续授权保留设置并允许一次fetch及安全快进，Lead已将Windows分支快进到包含授权commit的`3cb5def`（仅Docs/tests/tasks路径）。最新子代理因无法独立验证`openai-codex/gpt-6-luna`路由证据，在Windows访问前停止；T57当前BLOCKED。所有C# RuntimeDraft、Unity/Udon编译、Prefab与VR场景仍未验收；实际原版游戏源码未取得。workflow-5/6/7均已结束。
 
 ## B 套：成长与附着（T51/T52）
 
@@ -74,4 +74,4 @@ C套来源记录区分了历史专利与2025作品、没有原版源码或物理
 - Lead在A/B/C所有写入workflow完成后独立运行 `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Docs/tests -v`：**247 tests，247通过**，包含A 39项、B 16项、C 34项和既有其他离线测试。T55/RemoteProxy测试目录的`__init__.py`已补齐，递归发现覆盖已复核。
 - `python3 Docs/tools/validate_plan.py`：PASS，58 tasks、两个release DAG无环、source hashes通过；计划测试18项通过。
 - 当前任务状态：T49–T55已按离线原型范围验收DONE；T56正式接线为TODO，生产ballSeed/快照接口未定。没有任何Unity、UdonSharp、VR、网络、性能或游戏客户端测试通过声明。
-- 8个单层测试对象规格均存在；**实际Prefab/Scene仍未创建**。T57三次都在Unity访问前安全停止：先后为Linux任务表dirty、Windows ProjectSettings.asset既存dirty，以及Windows仓库缺少授权commit对象。用户已批准不读取/触碰并保留该ProjectSettings改动；Lead已按后续授权执行只涉及Docs/tests/tasks的安全快进，Windows HEAD现在包含授权commit。既存设置文件未被打开/读取/触碰；没有Unity/Editor交互。T57现READY，待唯一操作员再次执行Editor/scene安全预检；Play/Build & Test/客户端/上传仍禁止。
+- 8个单层测试对象规格均存在；**实际Prefab/Scene仍未创建**。T57三次都在Unity访问前安全停止：先后为Linux任务表dirty、Windows ProjectSettings.asset既存dirty，以及Windows仓库缺少授权commit对象。用户已批准不读取/触碰并保留该ProjectSettings改动；Lead已按后续授权执行只涉及Docs/tests/tasks的安全快进，Windows HEAD现在包含授权commit。既存设置文件未被打开/读取/触碰；没有Unity/Editor交互。下一名操作者加载技能后因缺少可独立检查的modelSelection.lastUsed/next路由证据而停止，未访问Windows/Unity。T57现BLOCKED；当前工具面未暴露AGENTS要求的`session/projections`，也未创建任何Prefab/Scene。Play/Build & Test/客户端/上传仍禁止。

@@ -1803,7 +1803,7 @@
       "phase": "P2",
       "implementer": "LUNA",
       "reviewer": "Lead + Sol",
-      "status": "RUNNING",
+      "status": "REVIEW",
       "priority": "P1",
       "dependencies": [
         "T47"
@@ -1817,7 +1817,7 @@
       "steps": [
         "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
         "读取Docs/02_TECHNICAL_CONTRACTS.md第3.4节（视觉吸附：世界位姿转局部位姿、Hash规则、保留策略）与Docs/01_GAME_DESIGN.md。",
-        "只实现本层：确认时把物体世界位姿转为球局部位姿并记录；分配attachSequence；生成稳定Hash=ballSeed+实例ID+世代+attachSequence用于远端去重。",
+        "只实现本层：消费确认事件提供的稳定身份与权威attachSequence，世界位姿转球局部并记录；不得本地补号。区分事件幂等键与契约规定远端Hash字段ballSeed+实例ID+世代+attachSequence，长度前缀编码且不得冒充认证。",
         "实现完整附着身份与位姿记录的查询、重复事件幂等、撤销、跨局清理和确认快照重建；renderer预算与视觉回收仅由T56负责。",
         "写测试：局部位姿在球平移旋转后仍还原到正确世界位姿；大球增长不会放大已附着物件的局部尺寸；Hash在不同实例/世代/序列下不碰撞且同输入稳定；保留预算被截断且被合并的物件不丢失账本归属。",
         "不要实现：吸附门槛与争抢裁决（T47/T48）、几何图形重建与回收预算（T56）、代理支持长度（T50）。",
@@ -1826,7 +1826,7 @@
       "acceptance_criteria": [
         "世界位姿与局部位姿可逆转换有对拍测试。",
         "大球增长不放大已附着物件（回归测试）。",
-        "权威确认身份与序号在重放、不同到达顺序下保持稳定；摘要不得承诺数学上绝对无碰撞；视觉预算变化不改确认记录。",
+        "权威身份在重放和不同到达顺序下稳定，Hash字段严格对照技术契约§3.4，长度前缀避免拼接歧义；摘要不得承诺绝对无碰撞。",
         "文档声明拾取Collider收走后退出地图判定，本地装饰不保留可争抢Collider。",
         "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
       ],
@@ -1834,7 +1834,7 @@
         "S05"
       ],
       "workflow_suite": "B成长与附着",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 独立Lead复测：T51 9/9、T52 7/7通过；但T51跨层模拟把mug身份与toy的gain=5错配，必须修正并重跑后才能DONE。另审查hash字段须与02_TECHNICAL_CONTRACTS.md:67核对；Unity/Udon未编译。 BLOCKER: Docs/tests/ball_attachment/test_growth_attachment_simulation.py 当前撤销mug(gain3)却扣toy(gain5)，断言叙事错配；修复身份-gain绑定。"
     },
     {
       "id": "T52",
@@ -1842,7 +1842,7 @@
       "phase": "P2",
       "implementer": "LUNA",
       "reviewer": "Lead + Sol",
-      "status": "RUNNING",
+      "status": "REVIEW",
       "priority": "P1",
       "dependencies": [
         "T47"
@@ -1873,7 +1873,7 @@
         "S05"
       ],
       "workflow_suite": "B成长与附着",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 独立Lead复测：T51 9/9、T52 7/7通过；但T51跨层模拟把mug身份与toy的gain=5错配，必须修正并重跑后才能DONE。另审查hash字段须与02_TECHNICAL_CONTRACTS.md:67核对；Unity/Udon未编译。"
     },
     {
       "id": "T53",

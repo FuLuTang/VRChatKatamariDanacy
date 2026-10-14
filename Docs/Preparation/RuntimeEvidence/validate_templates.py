@@ -18,17 +18,26 @@ WARMUP_POLICY_TEXT = {
 }
 
 
+def _validate_header(name, header):
+    normalized_header = [column.strip() for column in header]
+    if not header or any(not column for column in normalized_header) or len(normalized_header) != len(set(normalized_header)):
+        raise AssertionError(f"{name}: header contains an empty or duplicate column name")
+
+
 def read_csv(name):
     path = ROOT / name
-    with path.open("r", encoding="utf-8", newline="") as stream:
-        rows = list(csv.DictReader(stream))
     with path.open("r", encoding="utf-8", newline="") as stream:
         raw_rows = list(csv.reader(stream))
     if not raw_rows:
         raise AssertionError(f"{name}: empty CSV")
-    width = len(raw_rows[0])
+    header = raw_rows[0]
+    _validate_header(name, header)
+    width = len(header)
     if any(len(row) != width for row in raw_rows):
         raise AssertionError(f"{name}: inconsistent CSV row width")
+    # Construct DictReader only after validating names: duplicate keys would otherwise be silently overwritten.
+    with path.open("r", encoding="utf-8", newline="") as stream:
+        rows = list(csv.DictReader(stream))
     if any(row.get("schemaVersion") != "1" for row in rows):
         raise AssertionError(f"{name}: schemaVersion must be 1")
     return rows, width
@@ -117,8 +126,16 @@ def validate_metrics(metrics):
 
 
 def self_check_rejects_prefilled_data(env, metrics):
-    """Minimal negative probes: reject populated run observations and nonfinite JSON."""
+    """Minimal negative probes: reject malformed headers, filled observations, and nonfinite JSON."""
     import copy
+
+    for bad_header in ([], ["schemaVersion", ""], ["case_id", "case_id"], ["case_id", " case_id "]):
+        try:
+            _validate_header("self-check.csv", bad_header)
+        except AssertionError as exc:
+            assert "empty or duplicate column name" in str(exc)
+        else:
+            raise AssertionError(f"self-check failed to reject CSV header {bad_header!r}")
 
     for bad_json in ("{\"x\":NaN}", "{\"x\":Infinity}", "{\"x\":-Infinity}"):
         try:
@@ -193,7 +210,7 @@ def main():
     print(f"cases.csv: {len(cases)} rows, {case_columns} columns; all NOT_RUN and observations empty")
     print(f"metrics.csv: {len(metrics)} rows, {metric_columns} columns; observations blank and warm-up guidance unchanged")
     print("session/environment.json: schemaVersion=1, four client slots, unrun fields null/unknown")
-    print("negative self-checks: nonfinite JSON and populated NOT_RUN fields rejected")
+    print("negative self-checks: malformed headers, nonfinite JSON, and populated NOT_RUN fields rejected")
     print("P18 template integrity: PASS (host-only structure check; no runtime evidence)")
 
 

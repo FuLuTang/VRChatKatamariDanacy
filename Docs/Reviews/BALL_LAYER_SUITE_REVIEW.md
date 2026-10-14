@@ -1,6 +1,6 @@
 # 球层套件 Lead 评审记录 / 2026-10-14
 
-状态：增量Lead评审。A/B/C全套离线交付已返回；Lead独立复跑全库 **247/247** 通过、计划校验通过。T49–T55离线草案/规格已DONE；T56正式远端接线仍TODO（生产ballSeed/快照接口未定）。T57前三次因工作树、既存设置与Git授权提交门禁在Unity访问前安全停止；用户后续授权保留设置并允许一次fetch及安全快进，Lead已将Windows分支快进到包含授权commit的`3cb5def`（仅Docs/tests/tasks路径）。最新子代理在Windows访问前因无法查看路由投影而停止；用户随后明确免除该T57单次任务的投影核验，接受新subagent继承当前`gpt-6-luna`父会话；T57新操作者已通过只读预检，但随后在完成前失败；Lead只读快照显示现有T04_PlatformLab、旧SDK Build Succeeded弹窗及BallLayerLabTestRunner.cs CS1061错误。用户要求亲自操作Unity，T57现BLOCKED等待安全交接。所有C# RuntimeDraft、Unity/Udon编译、Prefab与VR场景仍未验收；实际原版游戏源码未取得。workflow-5/6/7均已结束。
+状态：增量Lead评审。A/B/C全套离线交付已返回；Lead独立复跑全库 **258/258** 通过、计划校验通过。T49–T55离线草案/规格已DONE；T56正式远端接线仍TODO（生产ballSeed/快照接口未定）。T57前三次因工作树、既存设置与Git授权提交门禁在Unity访问前安全停止；用户后续授权保留设置并允许一次fetch及安全快进，Lead已将Windows分支快进到包含授权commit的`3cb5def`（仅Docs/tests/tasks路径）。最新子代理在Windows访问前因无法查看路由投影而停止；用户随后明确免除该T57单次任务的投影核验，接受新subagent继承当前`gpt-6-luna`父会话；T57新操作者已通过只读预检，但随后在完成前失败；Lead只读快照显示现有T04_PlatformLab、旧SDK Build Succeeded弹窗及BallLayerLabTestRunner.cs CS1061错误。用户手动关闭旧SDK Build Succeeded弹窗；Lead新截图确认T04_PlatformLab仍打开、无dirty星、Play未激活，但CS1061仍在。T57现BLOCKED，等待用户选择手动修复或经路由核验的新操作者。所有C# RuntimeDraft、Unity/Udon编译、Prefab与VR场景仍未验收；实际原版游戏源码未取得。workflow-5/6/7均已结束。
 
 ## B 套：成长与附着（T51/T52）
 

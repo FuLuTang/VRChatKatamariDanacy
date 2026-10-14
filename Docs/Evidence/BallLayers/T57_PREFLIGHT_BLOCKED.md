@@ -1,6 +1,6 @@
 # T57 Windows preflight history
 
-Status: **The Git/authorization gate is now satisfied after the user-authorized fast-forward, but T57 is BLOCKED again because the latest child could not independently verify its actual model route. It stopped before any Windows/Unity access; no Unity project assets have been created.**
+Status: **The Git/authorization gate is satisfied after the user-authorized fast-forward. The user later authorized a new single T57 subagent and waived independent session/projections verification for this run, accepting the current gpt-6-luna parent-session inheritance. T57 is READY for a new preflight; no Unity project assets have been created.**
 
 ## Read-only checks
 
@@ -31,4 +31,4 @@ At this worker stop, no Unity window was focused or inspected; no project asset,
 ## Latest worker stop: model-route evidence
 
 - A subsequent fork loaded all four required skills and read the current task, then requested independently verifiable `openai-codex/gpt-6-luna` route evidence (`session/projections` / `modelSelection.lastUsed`). That tool is not exposed in this runtime, so the worker stopped before any Windows or Unity access.
-- No files, project assets, settings, Editor state, or Git state were changed by that worker. T57 is BLOCKED pending route evidence or a platform/user-approved safe routing method.
+- No files, project assets, settings, Editor state, or Git state were changed by that worker. The user subsequently chose a new subagent for T57 and explicitly waived independent route-projection verification for this one run, accepting current `gpt-6-luna` parent-session inheritance. T57 is READY for a fresh single-operator safety preflight; no Windows/Unity access has occurred.

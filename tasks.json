@@ -1881,7 +1881,7 @@
       "phase": "P2",
       "implementer": "LUNA",
       "reviewer": "Lead + Sol",
-      "status": "RUNNING",
+      "status": "REVIEW",
       "priority": "P1",
       "dependencies": [
         "T46"
@@ -1913,7 +1913,7 @@
         "S08"
       ],
       "workflow_suite": "C表现与跟随",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 C套实现已返回；Lead独立复跑测试：VisualRoll目录12项、FollowRig目录8项均通过，runtime draft与单层TEST_OBJECT_SPEC存在；Unity/Udon未编译，任务进入REVIEW待逐项审核。"
     },
     {
       "id": "T54",
@@ -1959,7 +1959,7 @@
       "phase": "P2",
       "implementer": "LUNA",
       "reviewer": "Lead + Sol",
-      "status": "RUNNING",
+      "status": "REVIEW",
       "priority": "P1",
       "dependencies": [
         "T46"
@@ -1991,7 +1991,7 @@
         "S08"
       ],
       "workflow_suite": "C表现与跟随",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 C套实现已返回；Lead独立复跑测试：VisualRoll目录12项、FollowRig目录8项均通过，runtime draft与单层TEST_OBJECT_SPEC存在；Unity/Udon未编译，任务进入REVIEW待逐项审核。"
     },
     {
       "id": "T56",
@@ -2030,7 +2030,7 @@
         "S13"
       ],
       "workflow_suite": "C表现与跟随",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 C套先行公开依据核查与合成摘要模拟；正式接线仍等T51。保留TODO，不宣称依赖已满足。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 C套先行公开依据核查与合成摘要模拟；正式接线仍等T51。保留TODO，不宣称依赖已满足。 C套仅完成合成摘要算法草稿（14项和跨层模拟），不代表真实T51接线；因依赖T51尚为REVIEW，保持TODO，等契约Hash语义解决后再接线。"
     }
   ],
   "releaseProfiles": {

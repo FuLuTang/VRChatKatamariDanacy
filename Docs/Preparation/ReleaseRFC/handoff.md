@@ -1,11 +1,12 @@
 # P09/P17 decision matrix and release RFC handoff
 
-**Prepared: 2026-10-11. Status: draft for read-only review; no scope decision made.**
+**Prepared: 2026-10-11. Status: offline read-only review completed; still a decision-support draft, with no scope decision made.** Review and author revisions are recorded in [the third-batch review](../../18_LARGE_SCALE_PREPARATION_REVIEW.md#L9-L16).
 
 ## Deliverables
 
 - [RuleDecisions/README.md](../RuleDecisions/README.md) — evidence boundaries and usage.
 - [RuleDecisions/decisions.json](../RuleDecisions/decisions.json) — official facts vs unknowns vs project choices/prototype values, candidate options, units, risks, and decision owners.
+- [Current user decision summary](../../Planning/RequirementsAudit/current_decisions_for_user.md) — unanswered scope/rule choices and their gate timing; does not select options.
 - [comparison.md](comparison.md) — two-map target vs authorized one-map-complete-experience downgrade.
 - [proposed_dag.json](proposed_dag.json) — current dependency snapshot and two alternatives, explicitly not applied to `tasks.json`.
 
@@ -21,4 +22,4 @@
 - JSON syntax and internal proposal consistency checked offline; no task-plan files changed. No original-game session, Unity, VR, multiplayer, commerce, SKU, or fairness experiment was run.
 - Unity runs on the user’s Windows PC at `D:\VRChatKatamariDanacy\VRChatKatamariDanacyUnity`; the user owns the Editor; it was not started. Unity MCP is unknown.
 - No SSH, Blender, Unity/MCP, asset downloads, account/payment, Git commit/push, publication, or Unity-project access.
-- Write scope was limited to `Docs/Preparation/RuleDecisions/` and `Docs/Preparation/ReleaseRFC/`. Awaiting `offline-quality` read-only review; author will handle any requested edits.
+- The original author write scope was limited to `Docs/Preparation/RuleDecisions/` and `Docs/Preparation/ReleaseRFC/`. `offline-quality`'s read-only review and author revisions are recorded as completed in the [third-batch review](../../18_LARGE_SCALE_PREPARATION_REVIEW.md#L9-L16). No user scope choice is recorded; the root task graph remains unchanged.

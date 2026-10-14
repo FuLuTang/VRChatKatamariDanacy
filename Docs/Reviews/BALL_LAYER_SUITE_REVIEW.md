@@ -1,6 +1,6 @@
 # 球层套件 Lead 评审记录 / 2026-10-14
 
-状态：增量Lead评审。A/B/C全套离线交付已返回；Lead独立复跑全库 **247/247** 通过、计划校验通过。T49–T55离线草案/规格已DONE；T56正式远端接线仍TODO（生产ballSeed/快照接口未定）。T57三次均在Unity访问前安全停止；用户允许保留Windows既存ProjectSettings改动，但第三次发现Windows仓库缺少T57授权commit对象，尚未获准fetch/sync，故任务BLOCKED。所有C# RuntimeDraft、Unity/Udon编译、Prefab与VR场景仍未验收；实际原版游戏源码未取得。workflow-5/6/7均已结束。
+状态：增量Lead评审。A/B/C全套离线交付已返回；Lead独立复跑全库 **247/247** 通过、计划校验通过。T49–T55离线草案/规格已DONE；T56正式远端接线仍TODO（生产ballSeed/快照接口未定）。T57三次均在Unity访问前安全停止；用户允许保留Windows既存ProjectSettings改动，并另授权一次Git-only fetch。fetch已完成，但Windows HEAD不以T57授权commit为祖先；没有checkout/merge/pull授权，任务仍BLOCKED。所有C# RuntimeDraft、Unity/Udon编译、Prefab与VR场景仍未验收；实际原版游戏源码未取得。workflow-5/6/7均已结束。
 
 ## B 套：成长与附着（T51/T52）
 
@@ -74,4 +74,4 @@ C套来源记录区分了历史专利与2025作品、没有原版源码或物理
 - Lead在A/B/C所有写入workflow完成后独立运行 `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Docs/tests -v`：**247 tests，247通过**，包含A 39项、B 16项、C 34项和既有其他离线测试。T55/RemoteProxy测试目录的`__init__.py`已补齐，递归发现覆盖已复核。
 - `python3 Docs/tools/validate_plan.py`：PASS，58 tasks、两个release DAG无环、source hashes通过；计划测试18项通过。
 - 当前任务状态：T49–T55已按离线原型范围验收DONE；T56正式接线为TODO，生产ballSeed/快照接口未定。没有任何Unity、UdonSharp、VR、网络、性能或游戏客户端测试通过声明。
-- 8个单层测试对象规格均存在；**实际Prefab/Scene仍未创建**。T57三次都在Unity访问前安全停止：先后为Linux任务表dirty、Windows ProjectSettings.asset既存dirty，以及Windows仓库缺少授权commit对象。用户已批准不读取/触碰并保留该ProjectSettings改动；第三次的授权提交门禁仍未满足，也尚未获准fetch/sync。只在得到该项授权后才可重启T57；Play/Build & Test/客户端/上传仍禁止。
+- 8个单层测试对象规格均存在；**实际Prefab/Scene仍未创建**。T57三次都在Unity访问前安全停止：先后为Linux任务表dirty、Windows ProjectSettings.asset既存dirty，以及Windows仓库缺少授权commit对象。用户已批准不读取/触碰并保留该ProjectSettings改动；Lead一次Git-only fetch已使授权commit对象可用，但当前Windows HEAD仍非其祖先。未做checkout/merge/pull，需用户决定手动同步或另行授权有限的分支更新；Play/Build & Test/客户端/上传仍禁止。

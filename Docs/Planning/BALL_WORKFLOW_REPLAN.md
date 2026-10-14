@@ -62,4 +62,6 @@ Python模型并不代表完成“球的Unity代码”。后续须有相应UdonSh
 - 每套增加独立的Research、Interfaces、Simulation、TestObjectSpec文件（在各套指定模块目录内）；禁止跨套改文件。
 - T51管理完整附着身份/位姿记录，T56独占renderer预算、可见性与回收策略；消除两层重复拥有视觉预算的边界冲突。
 - T56完整接线恢复真实依赖T51；不为让任务显示READY删除真实依赖。C的研究/合成输入模拟可先行，最终接线等待确认记录接口。
-- 本轮仅审查和重排；旧代码不删、不作为已验收提交，不启动新实现批次。
+- 重排时仅做审查，旧代码保留为未验收草稿。后续已启动 `ball-suite-continuation`（workflow-5）：三套流水线同时推进，各自“基础与来源 → 实现与模拟”，套与套之间无基础阶段全局屏障。
+- 本轮实现允许在各模块目录内准备 `RuntimeDraft/` C#源码及 `TEST_OBJECT_SPEC.md`；不写Windows Unity工程。C#尚未在Unity/Udon编译，不算运行交付。独立测试对象在Lead评审后由单一Windows集成操作者建立，用户手动体验；不操作游戏客户端。
+- T49–T55开始RUNNING；T56正式接线仍等待T51，其来源核查和合成摘要模拟可先做，不能提前标READY或DONE。

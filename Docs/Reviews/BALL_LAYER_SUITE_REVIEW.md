@@ -1,6 +1,6 @@
 # 球层套件 Lead 评审记录 / 2026-10-14
 
-状态：增量评审，B 套离线 Python 测试已独立复跑；C#、Unity/Udon 与场景均未验收。workflow-5 其他两套仍在运行。
+状态：增量Lead评审。B的离线Python测试独立复跑，发现两项验收问题；C的34项离线测试独立复跑全通过，T53/T55进入REVIEW，T56仍因T51身份/Hash接口未定而TODO；A原实现worker未执行，已另启动A全套整改。C#、Unity/Udon与测试场景均未验收。workflow-5已结束；当前整改workflow-6并行处理A与B。
 
 ## B 套：成长与附着（T51/T52）
 
@@ -32,4 +32,23 @@
 
 ### 交付判断
 
-代码/测试与独立测试对象规格已有实质进展，可复用；原版源码没有取得，公开专利仅为历史技术披露。先修正跨层测试值绑定，再由Lead独立复核完整测试和diff，之后才考虑创建Windows单层实验对象。当前未写Unity工程、未搭Prefab、未运行Build & Test。
+代码/测试与独立测试对象规格已有实质进展，可复用；原版源码没有取得，公开专利仅为历史技术披露。先修正跨层测试值绑定与Hash字段边界，再由Lead独立复核完整测试和diff，之后才考虑创建Windows单层实验对象。当前未写Unity工程、未搭Prefab、未运行Build & Test。
+
+## C 套：表现与跟随（T53/T55/T56）
+
+### 独立复测
+
+- `python3 -m unittest discover -s Docs/tests/ball_visual_roll -v`：12项通过，含接触点无滑动方向oracle及两项跨层模拟。
+- `python3 -m unittest discover -s Docs/tests/ball_follow_rig -v`：8项通过。
+- `python3 -m unittest discover -s Docs/tests/ball_remote_proxy -v`：14项通过。
+- C的VisualRoll、FollowRig、RemoteProxy Python实现与各自`TEST_OBJECT_SPEC.md`存在。以上只是本地宿主算法/合成摘要验证；原版源码没有取得，且不表示Udon或真实网络验证。
+
+### 独立模块审查与接线边界
+
+- VisualRoll明确将宿主参考代数标为右手，并用标量轴表达避免直接调用Unity `Vector3.Cross`；但Quaternion乘法/向量旋转的Unity适配还未由引擎箭头探针证明。虽Python和其独立无滑动测试一致，T53仍为REVIEW，禁止直接把C#草稿接入运行场景。
+- FollowRig输入只有位置/标量水平yaw、dt、显式眼高范围，结构边界避免读取HMD/自转；需Unity坐标/yaw正方向验证，实际VR舒适度不在当前验收内。候选模块无自身数学缺陷足以阻止离线review，任务为REVIEW。
+- RemoteProxy的Python只消费synthetic upstream摘要，identity来自输入；其C#RuntimeDraft不含原子快照重建（[测试规格说明](../Design/BallLayers/RemoteProxy/TEST_OBJECT_SPEC.md#L32-L34)）。该缺口已显式披露。T56依赖T51稳定确认身份，不能标READY/DONE，继续TODO，仅合成算法和隔离对象规格可作为草案保留。
+
+### C套边界判断
+
+C套来源记录区分了历史专利与2025作品、没有原版源码或物理/渲染算法证据。T53/T55可在离线review后推进各自独立Desktop实验台；真实Unity/Udon行为、Prefab/ProgramAsset序列化链和VR舒适性都仍NOT_RUN。T56实验台必须维持装饰无玩法Collider和无账本写入。

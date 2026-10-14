@@ -1,6 +1,6 @@
 # 球层套件 Lead 评审记录 / 2026-10-14
 
-状态：增量Lead评审。A/B/C全套离线交付已返回；Lead独立复跑全库 **247/247** 通过、计划校验通过。T49–T55离线草案/规格已DONE；T56正式远端接线仍TODO（生产ballSeed/快照接口未定）。用户批准T57一个单写者Unity实验台，尚待执行。所有C# RuntimeDraft、Unity/Udon编译、Prefab与VR场景仍未验收；实际原版游戏源码未取得。workflow-5/6/7均已结束。
+状态：增量Lead评审。A/B/C全套离线交付已返回；Lead独立复跑全库 **247/247** 通过、计划校验通过。T49–T55离线草案/规格已DONE；T56正式远端接线仍TODO（生产ballSeed/快照接口未定）。T57操作者曾两次在Unity访问前安全停止；用户已批准保留Windows既存ProjectSettings改动、在不读取/触碰该文件前提下继续，当前待Lead更新门禁后重新分派。所有C# RuntimeDraft、Unity/Udon编译、Prefab与VR场景仍未验收；实际原版游戏源码未取得。workflow-5/6/7均已结束。
 
 ## B 套：成长与附着（T51/T52）
 
@@ -72,6 +72,6 @@ C套来源记录区分了历史专利与2025作品、没有原版源码或物理
 ## 全库回归与当前总判断
 
 - Lead在A/B/C所有写入workflow完成后独立运行 `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Docs/tests -v`：**247 tests，247通过**，包含A 39项、B 16项、C 34项和既有其他离线测试。T55/RemoteProxy测试目录的`__init__.py`已补齐，递归发现覆盖已复核。
-- `python3 Docs/tools/validate_plan.py`：PASS，57 tasks、两个release DAG无环、source hashes通过；计划测试18项通过。
+- `python3 Docs/tools/validate_plan.py`：PASS，58 tasks、两个release DAG无环、source hashes通过；计划测试18项通过。
 - 当前任务状态：T49–T55已按离线原型范围验收DONE；T56正式接线为TODO，生产ballSeed/快照接口未定。没有任何Unity、UdonSharp、VR、网络、性能或游戏客户端测试通过声明。
-- 8个单层测试对象规格均存在；**实际Prefab/Scene仍未创建**。用户现已明确授权T57单一Luna Unity操作者，专用Assets与Docs证据范围、不得Play/Build & Test/启动客户端/上传条件已记入AGENTS.md、Windows交接页与任务T57；用户之后自行进入检查。
+- 8个单层测试对象规格均存在；**实际Prefab/Scene仍未创建**。T57单一Luna操作者此前两次都在Unity访问前安全停止（Linux任务表dirty、随后发现Windows ProjectSettings.asset既存dirty）。用户授权继续但须原样保留且完全不读取/触碰该文件；可只读确认授权commit并排除此文件检查其他dirty paths。Play/Build & Test/客户端/上传仍禁止；T57在更新门禁并重新启动后才继续。

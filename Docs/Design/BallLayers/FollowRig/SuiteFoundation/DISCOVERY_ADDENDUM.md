@@ -22,4 +22,4 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Docs/tests/ball_remote
 
 结果：**14 项通过，0 失败**（`Ran 14 tests ... OK`）。
 
-以上两次 targeted runs 合计 **22 项通过**。本次没有运行仓库级全套测试：并行 workflow-6 正在修改 A/B 范围，应由 Lead 在该修改完成后统一运行回归。不要把旧的 206 项报告描述为包含上述 22 项，也不要据本补充声称仓库全套通过或给出全套总数。
+以上两次 targeted runs 合计 **22 项通过**。随后workflow-6修改完成，Lead运行 `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Docs/tests -v`，发现并执行 **247项，247通过、0失败**，包括这22项；这是包标记后的完整递归全库结果。此前206项报告仍明确不包含两目录，不能复用作完整全库证据。

@@ -1,6 +1,6 @@
 # T57 Windows preflight history
 
-Status: **Initial preflight attempts were safely blocked before Unity/Editor interaction. Lead later performed the user-authorized, path-verified fast-forward; T57 is now READY for a fresh single-operator Editor/scene safety preflight. No Unity project assets have been created yet.**
+Status: **The Git/authorization gate is now satisfied after the user-authorized fast-forward, but T57 is BLOCKED again because the latest child could not independently verify its actual model route. It stopped before any Windows/Unity access; no Unity project assets have been created.**
 
 ## Read-only checks
 
@@ -27,3 +27,8 @@ At this worker stop, no Unity window was focused or inspected; no project asset,
 - The path-only diff from Windows HEAD `b5a298cf6c68a1e29c854eff3bdb6a6d1d81e20d` to `origin/main` `3cb5def209c2c96a1f1afbde8faaafb3a517b5ea` contained Docs/tests/tasks paths only; no Unity project, ProjectSettings, Packages, or formal scene paths.
 - The status query excluded the preserved ProjectSettings file and found no other dirty paths. Lead ran `git merge --ff-only origin/main`; Windows HEAD became `3cb5def209c2c96a1f1afbde8faaafb3a517b5ea`, and the authorization commit is now an ancestor.
 - No Editor/window was inspected or operated, and the preserved ProjectSettings file was never opened/read/touched. T57 may resume with a new single operator and repeat Editor/scene safety checks.
+
+## Latest worker stop: model-route evidence
+
+- A subsequent fork loaded all four required skills and read the current task, then requested independently verifiable `openai-codex/gpt-6-luna` route evidence (`session/projections` / `modelSelection.lastUsed`). That tool is not exposed in this runtime, so the worker stopped before any Windows or Unity access.
+- No files, project assets, settings, Editor state, or Git state were changed by that worker. T57 is BLOCKED pending route evidence or a platform/user-approved safe routing method.

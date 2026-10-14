@@ -58,6 +58,28 @@ class RuntimeEvidenceTemplateTests(unittest.TestCase):
             P18.main()
         self.assertIn("P18 template integrity: PASS", output.getvalue())
 
+    def test_rejects_csv_without_header_row(self):
+        path = self.p18_root / "cases.csv"
+        path.write_text("", encoding="utf-8")
+        with self.assertRaisesRegex(AssertionError, "empty CSV"):
+            P18.read_csv("cases.csv")
+
+    def test_rejects_empty_header_field_standalone(self):
+        path = self.p18_root / "cases.csv"
+        records = self.read_records(path)
+        records[0][records[0].index("category")] = ""
+        self.write_records(path, records)
+        with self.assertRaisesRegex(AssertionError, "empty or duplicate column name"):
+            P18.read_csv("cases.csv")
+
+    def test_rejects_duplicate_header_before_dict_reader_standalone(self):
+        path = self.p18_root / "cases.csv"
+        records = self.read_records(path)
+        records[0][records[0].index("category")] = "case_id"
+        self.write_records(path, records)
+        with self.assertRaisesRegex(AssertionError, "empty or duplicate column name"):
+            P18.read_csv("cases.csv")
+
     def test_rejects_ragged_csv_rows(self):
         path = self.p18_root / "cases.csv"
         records = self.read_records(path)

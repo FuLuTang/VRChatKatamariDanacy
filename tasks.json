@@ -1725,7 +1725,7 @@
       "phase": "P2",
       "implementer": "LUNA",
       "reviewer": "Lead + Sol",
-      "status": "RUNNING",
+      "status": "REVIEW",
       "priority": "P1",
       "dependencies": [
         "T46"
@@ -1739,15 +1739,15 @@
       "steps": [
         "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
         "读取Docs/02_TECHNICAL_CONTRACTS.md第3.2、3.3节（接触近似公式与推进顺序）与Docs/Design/BallMotion/（T46基线）。",
-        "只实现本层：给定球芯半径、视觉旋转、可选径向代理点集与地面平面（法线与高度），求支持高度 h(-n)=max(r, max_i dot(-n, Q*p_i))、接触点、球芯离地高度。",
+        "只实现本层：给定球芯半径、proper旋转矩阵、可选径向代理点集与地面平面，求支持距离h(-n)=max(r,max_i dot(-n,Q*p_i))、球芯法线坐标及有界纠正；输出`plane_anchor`仅为平面参考点，不冒充代理精确接触点。若后续动力学需要真实接触点，另立数据/几何接口任务。",
         "实现单步抬升上限与速度扰动上限，保证长棍不会把球弹上天；无代理点时退化为纯球形接触。",
         "写测试：球形退化为离地=半径；代理突出时支持高度正确抬升；突出量随核心半径增长而自然减小；抬升与扰动被上限截断；法线朝上/斜面/多候选极值的边界用例。",
         "不要实现：运动积分（T46）、代理点生成与维持（T50）、墙面扫掠（T54）、体积转半径（T52）。文档写明本层只做接触近似，不是完整动力学。",
         "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
       ],
       "acceptance_criteria": [
-        "h(-n)=max(r,max_i dot(-n,Q*p_i)) 与文档公式一致，且有对拍测试。",
-        "单步抬升与速度扰动有上限且被测试覆盖（长棍不会把球弹飞）。",
+        "h(-n)=max(r,max_i dot(-n,Q*p_i)) 与文档公式一致，且有对拍测试；法线坐标、平面offset配对归一化有测试。",
+        "单步抬升与速度扰动有上限且被测试覆盖（长棍不会把球弹飞）；`plane_anchor`明确不是物件接触点。",
         "无代理点时的球形退化行为正确。",
         "文档声明：接触近似不等于完整动力学，未做Unity或Udon验证。",
         "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
@@ -1756,7 +1756,7 @@
         "S05"
       ],
       "workflow_suite": "A接触与外壳",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。workflow-6 A套实现已完成；Lead独立复测T49目录15项通过、全库247/247通过。接触点范围明确为支持法线坐标/平面锚点，不声称精确代理接触点；任务状态REVIEW，Unity/Udon未编译。 workflow-6 A套完成。Lead独立复跑：T49 GroundContact 15项通过；全库247项通过。范围仅支持法线坐标与平面参考锚点，不提供/声称精确代理接触点。Unity/Udon未编译，进入REVIEW。"
     },
     {
       "id": "T50",
@@ -1764,7 +1764,7 @@
       "phase": "P2",
       "implementer": "LUNA",
       "reviewer": "Lead + Sol",
-      "status": "RUNNING",
+      "status": "REVIEW",
       "priority": "P1",
       "dependencies": [
         "T46"
@@ -1795,7 +1795,7 @@
         "S05"
       ],
       "workflow_suite": "A接触与外壳",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 workflow-6 A套完成。Lead独立复跑：T50 RadialProxy 10项通过；全库247项通过。Unity/Udon与设备性能未验证，进入REVIEW。"
     },
     {
       "id": "T51",
@@ -1834,7 +1834,7 @@
         "S05"
       ],
       "workflow_suite": "B成长与附着",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 独立Lead复测：T51 9/9、T52 7/7通过；但T51跨层模拟把mug身份与toy的gain=5错配，必须修正并重跑后才能DONE。另审查hash字段须与02_TECHNICAL_CONTRACTS.md:67核对；Unity/Udon未编译。 BLOCKER: Docs/tests/ball_attachment/test_growth_attachment_simulation.py 当前撤销mug(gain3)却扣toy(gain5)，断言叙事错配；修复身份-gain绑定。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 workflow-6 B套修复跨层实例→gain错配；新远端Hash与事件幂等摘要分离。Lead独立复跑T51 9项、T52 7项及全库247项均通过。ballSeed来源/类型语义仍OPEN，待上游/Lead决策；C#、Unity/Udon未验证，保持REVIEW。"
     },
     {
       "id": "T52",
@@ -1873,7 +1873,7 @@
         "S05"
       ],
       "workflow_suite": "B成长与附着",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 独立Lead复测：T51 9/9、T52 7/7通过；但T51跨层模拟把mug身份与toy的gain=5错配，必须修正并重跑后才能DONE。另审查hash字段须与02_TECHNICAL_CONTRACTS.md:67核对；Unity/Udon未编译。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 workflow-6 B套报告与模拟已更新。Lead独立复跑SizeModel 7项及全库247项通过；世界尺度仍OPEN等待T06，C#、Unity/Udon未验证，保持REVIEW。"
     },
     {
       "id": "T53",
@@ -1913,7 +1913,7 @@
         "S08"
       ],
       "workflow_suite": "C表现与跟随",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 C套实现已返回；Lead独立复跑测试：VisualRoll目录12项、FollowRig目录8项均通过，runtime draft与单层TEST_OBJECT_SPEC存在；Unity/Udon未编译，任务进入REVIEW待逐项审核。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 C套实现与规格已交。Lead独立复跑VisualRoll 12项通过；Unity Quaternion/Transform方向探针及Unity/Udon编译仍未做，保持REVIEW。"
     },
     {
       "id": "T54",
@@ -1921,7 +1921,7 @@
       "phase": "P2",
       "implementer": "LUNA",
       "reviewer": "Lead + Sol",
-      "status": "RUNNING",
+      "status": "REVIEW",
       "priority": "P1",
       "dependencies": [
         "T46"
@@ -1951,7 +1951,7 @@
         "S07"
       ],
       "workflow_suite": "A接触与外壳",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 workflow-6 A套完成。Lead独立复跑Sweep 14项通过；零位移初嵌、盒实际推出深度、几何有效多接触与blocked/stuck区分已覆盖；盒角仅保守AABB近似。Unity/Udon未验证，进入REVIEW。"
     },
     {
       "id": "T55",
@@ -1991,7 +1991,7 @@
         "S08"
       ],
       "workflow_suite": "C表现与跟随",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 C套实现已返回；Lead独立复跑测试：VisualRoll目录12项、FollowRig目录8项均通过，runtime draft与单层TEST_OBJECT_SPEC存在；Unity/Udon未编译，任务进入REVIEW待逐项审核。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 已启动workflow-5三套并行流水线；各套基础就绪立即进入实现/模拟，不等待其他套。新增交付为本模块内RuntimeDraft C#源码草稿与TEST_OBJECT_SPEC；不等于Unity/Udon编译或场景验收。 C套实现与规格已交。Lead独立复跑FollowRig 8项通过；无HMD/自转输入的接口边界存在；舒适度与Unity/Udon未验证，保持REVIEW。"
     },
     {
       "id": "T56",
@@ -2030,7 +2030,7 @@
         "S13"
       ],
       "workflow_suite": "C表现与跟随",
-      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 C套先行公开依据核查与合成摘要模拟；正式接线仍等T51。保留TODO，不宣称依赖已满足。 C套仅完成合成摘要算法草稿（14项和跨层模拟），不代表真实T51接线；因依赖T51尚为REVIEW，保持TODO，等契约Hash语义解决后再接线。"
+      "execution_note": "2026-10-14重排：旧批次停止，已有产物保留为未验收草稿；三套父级并行、套内按真实依赖启动子任务。先核查原版公开依据，再对照文档、实现、模拟、提交Lead；独立Unity测试对象另由单一集成操作者实现。详见Docs/Planning/BALL_WORKFLOW_REPLAN.md。 C套先行公开依据核查与合成摘要模拟；正式接线仍等T51。保留TODO，不宣称依赖已满足。 C套仅完成合成摘要算法草稿（14项和跨层模拟），不代表真实T51接线；因依赖T51尚为REVIEW，保持TODO，等契约Hash语义解决后再接线。 RemoteProxy合成算法14项通过，但测试只在synthetic upstream消费边界。T51未DONE且ballSeed语义待定；C#快照重建不完整、无Unity/Udon/网络验证。保持TODO，禁止宣称正式接线。"
     }
   ],
   "releaseProfiles": {

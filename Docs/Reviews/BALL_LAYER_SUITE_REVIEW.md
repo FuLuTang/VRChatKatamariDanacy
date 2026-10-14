@@ -1,6 +1,6 @@
 # 球层套件 Lead 评审记录 / 2026-10-14
 
-状态：增量Lead评审。B的离线Python测试独立复跑，发现两项验收问题；C的34项离线测试独立复跑全通过，T53/T55进入REVIEW，T56仍因T51身份/Hash接口未定而TODO；A原实现worker未执行，已另启动A全套整改。C#、Unity/Udon与测试场景均未验收。workflow-5已结束；当前整改workflow-6并行处理A与B。
+状态：增量Lead评审。A/B/C全套离线交付已返回；Lead独立复跑全库 **247/247** 通过、计划校验通过。T49–T55处于REVIEW，T56维持TODO（依赖T51/接口）。所有C# RuntimeDraft、Unity/Udon编译、Prefab与VR场景均未验收；实际原版游戏源码未取得。workflow-5/6/7均已结束。
 
 ## B 套：成长与附着（T51/T52）
 
@@ -11,18 +11,18 @@
 - SizeModel 的 log-domain 溢出保护、presented cap 与外部账本分离、尺寸语义类型分离有测试依据；Attachment 的稳定确认键、冲突、撤销墓碑、失败快照原子性、world/local 位姿与独立对象scale有测试依据。
 - 以上是宿主 Python 模拟；C# RuntimeDraft 尚未在项目Unity/Udon编译，Unity `Quaternion` 语义也未由场景探针验证。
 
-### 阻止本套整体验收的具体测试错配
+### 已修复的跨层测试身份错配
 
 [T51/T52跨层模拟](../tests/ball_attachment/test_growth_attachment_simulation.py#L22-L57)：
 
 - helper定义 `mug` 的 value/gain 为 3，`toy` 为 5（第27–28行）。`AttachmentLedger.records` 按完整身份排序，`"mug" < "toy"`；测试第46行取 `records[0]`，所以实际撤销的是 mug，但第48行却从确认量减去 toy 的 5。随后 toy 仍作为唯一附着记录，确认量却是3；银行断言3把这个不一致延续下去。
-- 这是测试序列与业务身份映射不一致，不表示生产账本正确/错误。修复应明确按 `instance_id` 选择掉落项并使用它绑定的 gain，断言留下的物件及确认余额相符；或者明确撤销 mug 并减3、银行余额与剩余 toy 身份独立核对。不能改生产算法来迁就错误样例。
-- 当前三个跨层用例通过，只证明给定断言成功，不证明该叙事对应的账本交易正确。本项修正并复跑前，B套状态最多 REVIEW，不得DONE。
+- 此问题已由 B 整改修复：用明确 `instance_id → gain` 映射，明确撤销 mug（3），剩余记录为 toy（5），并断言权威剩余量、尺寸和银行分值一致。Lead复跑T51目录9项通过，跨层共3项通过。
+- 这次修复消除样例叙事错配；仍需避免把跨层示例误当作交易账本本身，因为余额属于T48外部权威记录。T51/T52保持REVIEW，等待Lead接口审核及Udon边界核实。
 
-### 远端Hash与事件幂等身份尚未对齐
+### 远端Hash四字段已分离；seed语义仍OPEN
 
-- [技术契约§3.4](../02_TECHNICAL_CONTRACTS.md#L63-L69)规定远端Hash输入为 `ballSeed + 实例ID + 世代 + attachSequence`。当前 [attachment_hash](../Design/BallLayers/Attachment/attachment.py#L128-L148) 编码的是 `context_id + ball_id + instance_id + generation + attach_sequence + event_id`；`ConfirmedAttachmentEvent` 没有 `ballSeed` 字段。这可能仍是稳定摘要，但不是按当前契约输入生成的同一远端键，T56消费者可能不一致。
-- 应明确分离：event_id/context用于幂等、作用域与撤销；远端代理键按契约四字段计算。若要改契约，需Lead做项目接口决策，而不是由单层worker默默扩字段。此项加跨模块Hash对拍测试后再审核。
+- B整改已分离两个键：[event_identity_hash](../Design/BallLayers/Attachment/attachment.py#L140-L156)用于context/ball/instance/generation/sequence/event身份；新增 [remote_proxy_key_hash](../Design/BallLayers/Attachment/attachment.py#L159-L174)严格只编码契约§3.4的四字段，并有固定整数宽度、UTF-8长度前缀及边界测试。Lead独立复跑T51的9项测试包含这些用例。
+- **仍OPEN：**契约中的 `ballSeed` 的身份、类型、生成者和值域没有定义。函数目前只接受调用方传入的非空规范文本，不从`ball_id/context_id/event_id`推断。T51/T56只有在上游明确seed语义及接口后才能正式互接；SHA摘要不是认证或绝对无碰撞证明。
 
 ### C#草稿风险
 
@@ -32,7 +32,7 @@
 
 ### 交付判断
 
-代码/测试与独立测试对象规格已有实质进展，可复用；原版源码没有取得，公开专利仅为历史技术披露。先修正跨层测试值绑定与Hash字段边界，再由Lead独立复核完整测试和diff，之后才考虑创建Windows单层实验对象。当前未写Unity工程、未搭Prefab、未运行Build & Test。
+代码、测试与单独测试对象规格可保留进入Review；原版源码没有取得，公开专利仅是历史技术披露。跨层gain错配已修复、Hash字段已分离，但ballSeed语义尚未冻结，因此T51/T56不能接线完成。当前未写Unity工程、未搭Prefab、未运行Build & Test。
 
 ## C 套：表现与跟随（T53/T55/T56）
 
@@ -52,3 +52,26 @@
 ### C套边界判断
 
 C套来源记录区分了历史专利与2025作品、没有原版源码或物理/渲染算法证据。T53/T55可在离线review后推进各自独立Desktop实验台；真实Unity/Udon行为、Prefab/ProgramAsset序列化链和VR舒适性都仍NOT_RUN。T56实验台必须维持装饰无玩法Collider和无账本写入。
+
+## A 套：接触与外壳（T49/T50/T54）
+
+### 独立复测
+
+- `python3 -m unittest discover -s Docs/tests/ball_ground_contact -v`：15项通过（含1项A套跨层桥接）。
+- `python3 -m unittest discover -s Docs/tests/ball_radial_proxy -v`：10项通过。
+- `python3 -m unittest discover -s Docs/tests/ball_sweep -v`：14项通过。
+- Sweep已修复旧的零位移嵌入处理、真实扩张AABB最近面深度和`blocked`/`stuck`语义；多接触测试换为解析上确实可碰到两面的输入。盒角AABB只声明保守假阳性，不冒充精确球盒。
+
+### 接口和技术边界
+
+- GroundContact输出支持距离、中心法线坐标与有界纠正；Lead已修改T49任务，把旧“精确接触点”要求澄清为plane anchor（平面参考点），不代表代理接触点。代理/球芯变换矩阵、Hamilton四元数仅是Host数学候选。
+- RadialProxy和GroundContact仍假定同一局部到世界矩阵约定。Unity方向探针、`Quaternion`乘法和Transform的实际父子链需在Windows对象上对拍；未过探针不得接正式场景。
+- A套C#文件是普通RuntimeDraft，不是Unity/UdonSharp组件；RuntimeDraft、ProgramAsset、场景均未编译/运行。每层测试对象目前仅有SPEC。
+- 公开核查未取得原版源码。公开专利/产品页/Ruby实验只支持有限公开背景，不支持内部球物理算法主张。
+
+## 全库回归与当前总判断
+
+- Lead在A/B/C所有写入workflow完成后独立运行 `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Docs/tests -v`：**247 tests，247通过**，包含A 39项、B 16项、C 34项和既有其他离线测试。T55/RemoteProxy测试目录的`__init__.py`已补齐，递归发现覆盖已复核。
+- `python3 Docs/tools/validate_plan.py`：PASS，57 tasks、两个release DAG无环、source hashes通过；计划测试18项通过。
+- 当前任务状态：T49–T55均为REVIEW；T56为TODO，依赖T51及未冻结Hash语义。没有任何Unity、UdonSharp、VR、网络、性能或游戏客户端测试通过声明。
+- 8个单层测试对象规格均存在，但**没有实际创建Prefab/Scene**。Windows Unity是用户所有且运行；现行AGENTS将Unity写入限定给单一Unity operator（T00/T04 scope），并未明确分配本轮新模块的测试对象写权限。用户之前要求逐层建对象供其人工进入检查，但需在正式Windows写入前先把本轮唯一操作者和专用Assets目录/Docs证据范围明确加入任务/权限记录；同一Editor保持单写者，不自动Build & Test或操控游戏客户端。

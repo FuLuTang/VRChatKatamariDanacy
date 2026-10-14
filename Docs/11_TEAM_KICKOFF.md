@@ -39,3 +39,9 @@
 主管先审查每份草稿，交叉审查可在各写入工作完成后安排，并以只读审查为主避免重叠。T01/T02/T03默认停在REVIEW或TODO（部分工作），不会因有几份文档就批准依赖模块。
 
 T00 -> T04 -> 真人T05，与T01合流后才到T06。Unity准备期间不得让队员各自写BallState、正式Udon运动/账本/商城模块。首轮结果只帮助平台实验和首图准备。
+
+## T57 单一Unity操作者例外（2026-10-14）
+
+用户现已授权一名Luna操作代理执行T57：只在 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/BallLayers/` 写8个相互独立的层测试Prefab及单独实验场景，只在 `Docs/Evidence/BallLayers/` 写Linux侧证据。用户仍拥有Windows Editor；不能关闭/重启Editor，也不能并发操作。
+
+本任务仅创建对象、保存并编译现有/新增脚本；禁止Play、Build & Test、启动VRChat客户端、上传、编辑正式世界场景、Packages、ProjectSettings或scope外文件。T51/T56只用标记为synthetic的事件与seed。测试对象不是正式World集成或Unity/Udon/VR/网络验收；用户稍后自行打开检查。除T57外，此授权不改变其他Windows/Unity权限。

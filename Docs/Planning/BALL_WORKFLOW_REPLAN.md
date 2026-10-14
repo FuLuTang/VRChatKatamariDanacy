@@ -55,8 +55,8 @@ Unity2022.3官方手册明确其坐标系统为左手系（+X右/+Y上/+Z前）�
 3. **实现与修复**：复用现有代码，各层独立模块；统一边界而非复制公共工具。算法仍DRAFT，不冻结T06正式接口。
 4. **模拟验证**：正常、退化、撤销重建、输入非法及跨层序列；用独立oracle/几何不变量而非只复述公式。报告真实失败。
 5. **报告给Lead**：源码、来源、测试输入输出、未测项、Udon可移植性限制、每层独立测试对象规格。
-6. **Lead评审后安排单一Windows集成操作者**：生成独立测试场景/Prefab，保留meta，分别验证Editor/Udon编译、Build & Test；不混入正式场景，不触碰用户别的项目/客户端。
-7. **用户进入看**：先Desktop即可，不等待VR。每个测试对象单独验收；VR舒适性、多人一致性仍走原门禁。
+6. **Lead评审后安排单一Windows集成操作者**：生成独立测试场景/Prefab，保留meta，验证Editor脚本/本地Udon编译；不混入正式场景，不触碰用户别的项目。Build & Test须单独授权，不能由本轮对象搭建隐含触发。
+7. **用户进入看**：本轮T57由用户自行打开Prefab/实验场景检查；Play/Build & Test、VR舒适性、多人一致性仍走后续门禁。
 
 Python模型并不代表完成“球的Unity代码”。后续须有相应UdonSharp层和可进入的测试对象才可称可运行实验交付。
 
@@ -67,5 +67,6 @@ Python模型并不代表完成“球的Unity代码”。后续须有相应UdonSh
 - T51管理完整附着身份/位姿记录，T56独占renderer预算、可见性与回收策略；消除两层重复拥有视觉预算的边界冲突。
 - T56完整接线恢复真实依赖T51；不为让任务显示READY删除真实依赖。C的研究/合成输入模拟可先行，最终接线等待确认记录接口。
 - 重排时仅做审查，旧代码保留为未验收草稿。后续已启动 `ball-suite-continuation`（workflow-5）：三套流水线同时推进，各自“基础与来源 → 实现与模拟”，套与套之间无基础阶段全局屏障。
-- 本轮实现允许在各模块目录内准备 `RuntimeDraft/` C#源码及 `TEST_OBJECT_SPEC.md`；不写Windows Unity工程。C#尚未在Unity/Udon编译，不算运行交付。独立测试对象在Lead评审后由单一Windows集成操作者建立，用户手动体验；不操作游戏客户端。
-- T49–T55开始RUNNING；T56正式接线仍等待T51，其来源核查和合成摘要模拟可先做，不能提前标READY或DONE。
+- A/B/C离线工作流已完成，Lead独立复跑全库247/247通过。T49–T55标记DONE的范围只覆盖Python离线算法、C# RuntimeDraft及对象规格，不代表Unity/Udon编译或实际Prefab通过。
+- T56正式接线仍TODO：生产ballSeed语义未定、C#快照原子重建不完整；已登记为外部门禁，不能因T51离线草案DONE而直接接线。
+- 用户于2026-10-14授权单一Luna Unity操作者执行T57：8个独立Prefab与一个独立实验场景，只写 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/BallLayers/` 和 `Docs/Evidence/BallLayers/`；编译/保存后停止，不Play、不Build & Test、不启动VRChat、不上传。用户稍后自行打开检查。完整任务与权限见 `tasks.json`、`AGENTS.md` 和 `Docs/10_WINDOWS_UNITY_SETUP.md`。

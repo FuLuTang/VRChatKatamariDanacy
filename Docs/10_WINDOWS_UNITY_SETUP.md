@@ -1,6 +1,6 @@
 # Windows Unity 初始化与交接
 
-更新：2026-10-11。Unity 已由用户在 Windows PC 初始化；用户仍是 Unity Editor 唯一操作者。本页记录已知工程路径和版本元数据，以及尚未通过的基线门禁。
+更新：2026-10-14。Unity 已由用户在 Windows PC 初始化；用户仍拥有 Editor，通常由用户本人操作。用户另行批准T57仅由一名Luna操作者执行，scope记录见本页末尾及AGENTS.md。本页记录已知工程路径和版本元数据，以及尚未通过的基线门禁。
 
 ## 你现在做什么
 
@@ -44,3 +44,9 @@ Win DSH/Codex可用调用方式：未知 / 说明
 如果改成主管通过Tailscale远控Unity MCP：同样只允许一个持有`unity-editor`操作权的Agent调用；其他队员只交付独立文件，不能抢编辑器。每次任务说明都重复Windows主机、工程绝对路径、写入范围、MCP工具与连接方式；未配置就报告，不虚构工具。
 
 不要为了MCP把能执行任意代码的服务暴露到公网或整个局域网；优先本地绑定、SSH隧道或有访问控制的Tailscale链路。主管不擅自安装插件、开启监听、登录或操作桌面。
+
+## T57 球层实验台单写者授权（2026-10-14）
+
+用户授权一名当前模型为gpt-6-luna的Unity操作代理，仅为球层各层建立相互隔离的测试Prefab与独立实验场景，用户之后自行进入查看。Windows唯一可写目录：`D:\VRChatKatamariDanacy\VRChatKatamariDanacyUnity\Assets\VRC_Katamari\Prototypes\BallLayers\`；Linux仓库唯一证据目录：`Docs/Evidence/BallLayers/`。Unity MCP未确认；代理必须先核验实际工程/Editor版本、Packages与未保存状态，不关闭或重启用户Editor。
+
+允许的操作止于新对象/脚本写入、保存与Editor脚本/本地UdonSharp编译；不进入Play、不执行Build & Test、不启动VRChat客户端、不上传、不改正式世界场景、ProjectSettings、Packages或scope外文件。T51/T56只用显式synthetic seed和事件，不定义生产ballSeed、不连接正式网络/计分/碰撞。每项资源连同新`.meta`留在此scope并记录编译证据；遇到路径/版本/dirty-state冲突即停下报告，不拓展范围。此授权不影响其他项目或用户窗口，也不授权另一代理同时进入该Editor。

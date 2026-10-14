@@ -2041,7 +2041,7 @@
       "phase": "P2",
       "implementer": "LUNA",
       "reviewer": "Lead + Sol",
-      "status": "BLOCKED",
+      "status": "READY",
       "priority": "P1",
       "dependencies": [
         "T49",
@@ -2059,9 +2059,7 @@
       "exclusive_locks": [
         "unity-integration"
       ],
-      "external_requirements": [
-        "Windows HEAD must descend from T57 authorization commit b4b6cf0ee3cecd95aa43a14b5e7bef5f528f0644. User authorized and Lead completed one Git-only fetch; the commit exists locally but is not an ancestor of current HEAD. No checkout/merge/update is authorized."
-      ],
+      "external_requirements": [],
       "steps": [
         "读取七个离线层的TEST_OBJECT_SPEC与C# RuntimeDraft，检查Windows现有工程、Editor状态和Packages；不得关闭/重启用户Editor。Unity MCP未证实配置，不得假装已连接。",
         "2026-10-14 01:46 UTC预检已知例外：Windows上的`ProjectSettings/ProjectSettings.asset`有既存未提交改动，用户批准原样保留。不得打开、读取内容、diff、hash、暂存、修改、还原、清理或以其他方式触碰该文件。只读用Git元数据确认分支包含授权提交b4b6cf0ee3cecd95aa43a14b5e7bef5f528f0644，并以排除此路径的只读状态检查确认没有其他dirty文件；若不含授权提交、出现其他dirty路径或Unity状态/SDK与记录冲突，停止汇报。Unity Editor仍由用户拥有；仅一名显式Luna操作者可写任务的两个scope目录。",
@@ -2088,7 +2086,7 @@
         "S13"
       ],
       "workflow_suite": "D球层实验台",
-      "execution_note": "2026-10-14用户明确授权新增单一Luna Unity操作者。Windows仅写VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/BallLayers/；Linux证据仅Docs/Evidence/BallLayers/。不进入Play/Build & Test、不启动客户端、不上传。前两次执行器均在Unity访问前停止且无副作用：首次因Lead未提交tasks.json状态更新，第二次发现Windows既存ProjectSettings.asset改动。用户授权保留该改动并在不读取/触碰该文件的限域下继续；第三次预检因Windows HEAD b5a298cf6c68a1e29c854eff3bdb6a6d1d81e20d仓库没有授权提交b4b6cf0ee3cecd95aa43a14b5e7bef5f528f0644对象而停止，未fetch/同步/操作Unity；仅在批准的Docs Evidence路径写入预检记录。T57当前BLOCKED：用户已授权且Lead完成唯一一次`git fetch origin main`（仅.git元数据）；Windows HEAD b5a298cf6c68a1e29c854eff3bdb6a6d1d81e20d仍非授权提交祖先，origin/main已更新至3cb5def209c2c96a1f1afbde8faaafb3a517b5ea。无checkout/merge/pull或ProjectSettings访问；等待用户决定分支同步或放弃祖先门禁。T49–T55离线里程碑已DONE，T56正式实现仍TODO。"
+      "execution_note": "2026-10-14用户明确授权新增单一Luna Unity操作者。Windows仅写VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/BallLayers/；Linux证据仅Docs/Evidence/BallLayers/。不进入Play/Build & Test、不启动客户端、不上传。前两次执行器均在Unity访问前停止且无副作用：首次因Lead未提交tasks.json状态更新，第二次发现Windows既存ProjectSettings.asset改动。用户授权保留该改动并在不读取/触碰该文件的限域下继续；第三次预检因Windows HEAD b5a298cf6c68a1e29c854eff3bdb6a6d1d81e20d仓库没有授权提交b4b6cf0ee3cecd95aa43a14b5e7bef5f528f0644对象而停止，未fetch/同步/操作Unity；仅在批准的Docs Evidence路径写入预检记录。T57曾BLOCKED，等待期间用户授权受保护的快进同步；Lead只读确认待同步路径清单仅涉及Docs/tests/tasks，没有Unity项目/ProjectSettings/Packages/正式场景，随后`git merge --ff-only origin/main`成功。Windows HEAD现为3cb5def209c2c96a1f1afbde8faaafb3a517b5ea且包含授权提交；ProjectSettings未读取/触碰，状态检查排除此文件且无其他dirty路径。未操作Unity/Editor。T57现READY，待唯一Luna操作者重新执行Editor/场景安全预检。T49–T55离线里程碑已DONE，T56正式实现仍TODO。"
     }
   ],
   "releaseProfiles": {

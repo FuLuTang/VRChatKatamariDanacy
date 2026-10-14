@@ -17,7 +17,7 @@
 ## 全库与计划校验
 
 - `PYTHONDONTWRITEBYTECODE=1 python3 Docs/tools/validate_plan.py`：PASS，报告57 tasks、两种release DAG无环、source hashes通过。NOT_RUN项包括Unity/Udon、VR舒适度、多人、性能、commerce。
-- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Docs/tests -v` 当时报告**206 tests，203通过，3失败**，但Lead后续审查发现该次仓库级发现没有递归进入当时缺`__init__.py`的FollowRig/RemoteProxy目录，因此该结果不是完整全库测试。旧的206项明确不含这两目录共22项。新增包标记后的两组targeted复跑为8项和14项全通过；说明与后续全库复测状态见 [`FollowRig/SuiteFoundation/DISCOVERY_ADDENDUM.md`](../../FollowRig/SuiteFoundation/DISCOVERY_ADDENDUM.md)。三项已知失败均在Sweep；修改A/B的并行workflow结束后应由Lead统一重跑全库，不在本报告猜测其总数。
+- C worker早期 `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Docs/tests -v` 报告**206 tests，203通过，3失败**，但当时未递归发现缺`__init__.py`的FollowRig/RemoteProxy两目录，故该结果不是完整全库测试。两目录后补包标记，targeted复跑为8项和14项全通过。随后A/B/C工作流全部结束，Lead重新运行完整全库命令：**247 tests，247通过，0失败**，包含两新目录。发现修正及独立最终复跑见 [`FollowRig/SuiteFoundation/DISCOVERY_ADDENDUM.md`](../../FollowRig/SuiteFoundation/DISCOVERY_ADDENDUM.md)。
 
 ## 尚未测/草稿限制
 

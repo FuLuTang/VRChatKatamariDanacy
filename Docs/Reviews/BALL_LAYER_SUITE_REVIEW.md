@@ -19,6 +19,11 @@
 - 这是测试序列与业务身份映射不一致，不表示生产账本正确/错误。修复应明确按 `instance_id` 选择掉落项并使用它绑定的 gain，断言留下的物件及确认余额相符；或者明确撤销 mug 并减3、银行余额与剩余 toy 身份独立核对。不能改生产算法来迁就错误样例。
 - 当前三个跨层用例通过，只证明给定断言成功，不证明该叙事对应的账本交易正确。本项修正并复跑前，B套状态最多 REVIEW，不得DONE。
 
+### 远端Hash与事件幂等身份尚未对齐
+
+- [技术契约§3.4](../02_TECHNICAL_CONTRACTS.md#L63-L69)规定远端Hash输入为 `ballSeed + 实例ID + 世代 + attachSequence`。当前 [attachment_hash](../Design/BallLayers/Attachment/attachment.py#L128-L148) 编码的是 `context_id + ball_id + instance_id + generation + attach_sequence + event_id`；`ConfirmedAttachmentEvent` 没有 `ballSeed` 字段。这可能仍是稳定摘要，但不是按当前契约输入生成的同一远端键，T56消费者可能不一致。
+- 应明确分离：event_id/context用于幂等、作用域与撤销；远端代理键按契约四字段计算。若要改契约，需Lead做项目接口决策，而不是由单层worker默默扩字段。此项加跨模块Hash对拍测试后再审核。
+
 ### C#草稿风险
 
 - [AttachmentRecordsDraft.cs](../Design/BallLayers/Attachment/RuntimeDraft/AttachmentRecordsDraft.cs#L40-L45) 是普通辅助类而非 `UdonSharpBehaviour`，并在 `ReplaceSnapshot` 中运行期 `new AttachmentRecordsDraft()`（第139行）。这可作为算法移植草稿，但不是已证实可由项目UdonSharp编译/序列化的组件。它使用固定数组这一点符合通用文档提示，但精确目标版本与该类/委托/场景序列化链尚未核验。

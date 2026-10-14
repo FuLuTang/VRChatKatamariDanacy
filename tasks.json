@@ -2041,7 +2041,7 @@
       "phase": "P2",
       "implementer": "LUNA",
       "reviewer": "Lead + Sol",
-      "status": "RUNNING",
+      "status": "READY",
       "priority": "P1",
       "dependencies": [
         "T49",
@@ -2062,19 +2062,19 @@
       "external_requirements": [],
       "steps": [
         "读取七个离线层的TEST_OBJECT_SPEC与C# RuntimeDraft，检查Windows现有工程、Editor状态和Packages；不得关闭/重启用户Editor。Unity MCP未证实配置，不得假装已连接。",
-        "一名显式Luna Unity操作者作为单写者；仅写任务范围内两个目录。若工程根、Editor、现有资产状态或SDK依赖与记录不一致，先停止并汇报。",
+        "2026-10-14 01:46 UTC预检已知例外：Windows上的`ProjectSettings/ProjectSettings.asset`有既存未提交改动，用户批准原样保留。不得打开、读取内容、diff、hash、暂存、修改、还原、清理或以其他方式触碰该文件。只读用Git元数据确认分支包含授权提交b4b6cf0ee3cecd95aa43a14b5e7bef5f528f0644，并以排除此路径的只读状态检查确认没有其他dirty文件；若不含授权提交、出现其他dirty路径或Unity状态/SDK与记录冲突，停止汇报。Unity Editor仍由用户拥有；仅一名显式Luna操作者可写任务的两个scope目录。",
         "建立T49 GroundContact、T50 RadialProxy、T51 Attachment、T52 SizeModel、T53 VisualRoll、T54 Sweep、T55 FollowRig、T56 RemoteProxy八个互相独立Prefab，并建立单独BallLayerTestLab场景；禁止修改正式World场景或共享核心Prefab。",
         "对象分别展示当前层的输入、坐标/参数、输出、通过/失败读数和Reset；采用每份TEST_OBJECT_SPEC所列固定可重复案例。T49/T50/T53必须加入+X/+Y/+Z方向箭头并用完整父级链验证Unity旋转方向；T53另用接触点无滑动速度探针核对滚动轴符号。",
         "T51/T56仅使用显式合成的测试seed与合成上游事件；不从context/ball/event ID推导生产ballSeed，不声明T56正式接线或网络验证。",
         "无游戏玩法碰撞器、计分、PvP、网络同步、账号动作或外部资产；不得实例化进VRCDefaultWorldScene或其他正式场景。测试预制件只在BallLayerTestLab独立场景。",
-        "只等待Unity Editor脚本编译/UdonSharp本地编译（仅当现有依赖可用）；不安装/升级Packages，不进入Play，不运行Build & Test，不启动VRChat，不上传。保存新增/修改资产的.meta并提供打开场景/逐对象人工检查说明。",
+        "只等待Unity Editor脚本编译/UdonSharp本地编译（仅当现有依赖可用且不会写入ProjectSettings）；若Unity导入/编译要求读写或保存ProjectSettings，立即停止该编译路径。不安装/升级Packages，不进入Play，不运行Build & Test，不启动VRChat，不上传。保存新增/修改资产的.meta并提供打开场景/逐对象人工检查说明。",
         "交付精确文件清单、Unity/SDK版本、Console编译结果与截图/证据、未测项；失败时保留现场，不扩大scope或反复触发编译。"
       ],
       "acceptance_criteria": [
         "8个命名清晰、彼此隔离且可单独打开的测试Prefab存在；单独测试场景仅含这些测试对象，不引用正式World场景或核心Prefab。",
         "各层按规格包含固定可重复案例、读数与Reset；坐标方向探针明确区分Host数学与Unity实际方向。",
         "所有新C#/UdonSharp脚本在现有项目和依赖下编译无新增错误；若无法验证，任务留REVIEW/BLOCKED且不得声称PASS。",
-        "所有Unity资源及.meta留在批准scope内；无Package/ProjectSettings/正式场景更改、无Play/Build & Test/VRChat客户端/上传。",
+        "所有Unity资源及.meta留在批准scope内；T57不改Packages、ProjectSettings或正式场景，已知`ProjectSettings.asset`预存改动原样保留且不读取/触碰；无Play/Build & Test/VRChat客户端/上传。",
         "T51/T56的seed和上游事件明确标为synthetic；没有生产网络、账本或碰撞接线声明。",
         "报告可让用户自行打开BallLayerTestLab逐个检查，并清楚列出本任务没有运行的验收。"
       ],
@@ -2086,7 +2086,7 @@
         "S13"
       ],
       "workflow_suite": "D球层实验台",
-      "execution_note": "2026-10-14用户明确授权新增单一Luna Unity操作者。Windows仅写VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/BallLayers/；Linux证据仅Docs/Evidence/BallLayers/。不进入Play/Build & Test、不启动客户端、不上传。首个执行器因Lead的未提交tasks.json状态更新而在Windows访问前停止；Lead已提交该更新、确认工作树清洁，此前无Windows/Unity副作用。T49–T55离线里程碑已DONE；T56正式实现仍TODO。"
+      "execution_note": "2026-10-14用户明确授权新增单一Luna Unity操作者。Windows仅写VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/BallLayers/；Linux证据仅Docs/Evidence/BallLayers/。不进入Play/Build & Test、不启动客户端、不上传。前两次执行器均在Unity访问前停止且无副作用：首次因Lead未提交tasks.json状态更新，第二次发现Windows既存ProjectSettings.asset改动。用户随后授权保留该已知改动并在不读取/触碰该文件的限域下继续；必须确认分支包含授权提交，且无其他dirty路径。T49–T55离线里程碑已DONE；T56正式实现仍TODO。"
     }
   ],
   "releaseProfiles": {

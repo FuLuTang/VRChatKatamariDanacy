@@ -1,6 +1,6 @@
 # T57 Windows preflight history
 
-Status: **The Git/authorization gate is satisfied and the one-run route waiver was used. That subagent failed before completion; Lead made a bounded source fix at the user's request. The user focused the Editor and reported import/compile complete; a fresh Lead snapshot no longer shows CS1061, though older Udon debug-logging runtime entries remain. T57 is READY for the user's guarded menu action; no T57 Prefab/Scene has yet been accepted.**
+Status: **The Git/authorization gate is satisfied; the one-run route waiver was used and the subagent failed. Lead fixed the shadowed local, and the user confirmed import/compile with CS1061 gone. The user's single guarded-menu attempt failed after creating partial assets and leaving an empty Untitled scene loaded beside T04_PlatformLab. T57 is BLOCKED pending safe recovery; no Prefab or lab Scene was saved or accepted.**
 
 ## Read-only checks
 
@@ -41,4 +41,5 @@ At this worker stop, no Unity window was focused or inspected; no project asset,
 - The user asked to operate Unity manually and reported closing the old SDK result popup. A fresh Lead read-only screenshot verified the modal is gone, the active scene is still `T04_PlatformLab`, no dirty marker is visible, and Play is not active; CS1061 remained visible.
 - At the user's request, Lead made one bounded fast-source fix in the authorized T57 source: renamed local `float d` to `deltaYaw` and updated its references in `RunFollow`. Before copying, the Windows target file matched the evidence payload by SHA-256; after copying, the Windows target matched the updated payload SHA-256. No `.meta`, scene, or settings file was written.
 - Immediately after copying, the Editor still showed the old Console error. The user then focused Unity and reported normal import/compile complete with no new errors. A fresh Lead screenshot no longer shows CS1061; it shows prior `Unknown`/UdonBehaviour `--enable-udon-debug-logging` runtime entries, not a current compiler error. The old T04 scene remains clean and Play inactive.
-- T57 is READY for the user, now the sole Editor operator, to invoke the guarded `VRC Katamari/T57/Create Ball Layer Test Lab` menu once. No Play/Build & Test, no T04 save, and no ProjectSettings access.
+- The user's one menu invocation failed with `InvalidOperationException: Could not create isolated prefab-build scene; original scene remains loaded.` The live snapshot shows T04_PlatformLab and an empty Untitled scene loaded; the window title is Untitled. Read-only Windows status confirms seven `.mat` assets plus `.meta` files exist under Materials; Prefabs/Scenes directories exist but contain no prefab or `.unity` scene file.
+- Preserve these partial outputs. Do not save Untitled, retry the menu, or delete anything. Close only the empty Untitled scene without saving, keeping T04 loaded; then review and patch the builder's scene-switch and partial-output recovery logic before any new invocation.

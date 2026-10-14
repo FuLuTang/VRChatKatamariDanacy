@@ -1,6 +1,6 @@
 # T57 Windows preflight history
 
-Status: **The Git/authorization gate is satisfied after the user-authorized fast-forward. The user later authorized a new single T57 subagent and waived independent session/projections verification for this run, accepting the current gpt-6-luna parent-session inheritance. T57 is READY for a new preflight; no Unity project assets have been created.**
+Status: **The Git/authorization gate is satisfied and the user waived independent route-projection verification for one subagent. That subagent later failed before completion during first Unity import/compile. A Lead read-only snapshot now shows the existing T04_PlatformLab scene, an old SDK Build Succeeded modal, and a current CS1061 in the new T57 test runner. The user requested manual Unity operation; T57 is BLOCKED pending a safe handoff. No T57 Prefab/Scene has been accepted.**
 
 ## Read-only checks
 
@@ -31,4 +31,11 @@ At this worker stop, no Unity window was focused or inspected; no project asset,
 ## Latest worker stop: model-route evidence
 
 - A subsequent fork loaded all four required skills and read the current task, then requested independently verifiable `openai-codex/gpt-6-luna` route evidence (`session/projections` / `modelSelection.lastUsed`). That tool is not exposed in this runtime, so the worker stopped before any Windows or Unity access.
-- No files, project assets, settings, Editor state, or Git state were changed by that worker. The user subsequently chose a new subagent for T57 and explicitly waived independent route-projection verification for this one run, accepting current `gpt-6-luna` parent-session inheritance. T57 is READY for a fresh single-operator safety preflight; no Windows/Unity access has occurred.
+- No files, project assets, settings, Editor state, or Git state were changed by that worker. The user subsequently chose a new subagent for T57 and explicitly waived independent route-projection verification for this one run, accepting current `gpt-6-luna` parent-session inheritance. T57 was set READY for a fresh single-operator safety preflight.
+
+## Subsequent operator failure and manual handoff (2026-10-14)
+
+- The replacement subagent `436d99b5-827b-45a9-b654-e856e0f60f43` passed read-only Git/editor preflight, then reported first Unity import/compile and a CS0170 at `BallLayerLabTestRunner.cs(631,55)`. It planned one targeted repair/reimport but subsequently failed before completion without a closing report.
+- Lead's later read-only snapshot of Unity PID 42244 / HWND 1971566 showed `T04_PlatformLab`, no dirty marker, Play not active, the old SDK `Build Succeeded!` modal, and a visible Console error `CS1061` at `BallLayerLabTestRunner.cs(555,25)` (`float` has no `rollDecay` member). This is not evidence that the planned CS0170 repair succeeded; the two observations may reflect separate/current compiler findings.
+- Lead used no input, did not save or alter the scene, and did not read or touch `ProjectSettings.asset`. The old build modal is not a T57 result; no T57 compile PASS, accepted prefab, or accepted lab scene exists.
+- The user asked to operate Unity manually. T57 is BLOCKED until safe handoff and a user decision; no second operator is running.

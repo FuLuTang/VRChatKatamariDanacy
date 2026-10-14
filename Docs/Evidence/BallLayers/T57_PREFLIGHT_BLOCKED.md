@@ -1,6 +1,6 @@
 # T57 Windows preflight history
 
-Status: **The Git/authorization gate is satisfied and the user waived independent route-projection verification for one subagent. That subagent later failed before completion during first Unity import/compile. A Lead read-only snapshot now shows the existing T04_PlatformLab scene, an old SDK Build Succeeded modal, and a current CS1061 in the new T57 test runner. The user requested manual Unity operation; T57 is BLOCKED pending a safe handoff. No T57 Prefab/Scene has been accepted.**
+Status: **The Git/authorization gate is satisfied and the one-run route waiver was used. That subagent failed before completion; Lead made a bounded source fix at the user's request. The user focused the Editor and reported import/compile complete; a fresh Lead snapshot no longer shows CS1061, though older Udon debug-logging runtime entries remain. T57 is READY for the user's guarded menu action; no T57 Prefab/Scene has yet been accepted.**
 
 ## Read-only checks
 
@@ -40,4 +40,5 @@ At this worker stop, no Unity window was focused or inspected; no project asset,
 - Lead used no input, did not save or alter the scene, and did not read or touch `ProjectSettings.asset`. The old build modal is not a T57 result; no T57 compile PASS, accepted prefab, or accepted lab scene exists.
 - The user asked to operate Unity manually and reported closing the old SDK result popup. A fresh Lead read-only screenshot verified the modal is gone, the active scene is still `T04_PlatformLab`, no dirty marker is visible, and Play is not active; CS1061 remained visible.
 - At the user's request, Lead made one bounded fast-source fix in the authorized T57 source: renamed local `float d` to `deltaYaw` and updated its references in `RunFollow`. Before copying, the Windows target file matched the evidence payload by SHA-256; after copying, the Windows target matched the updated payload SHA-256. No `.meta`, scene, or settings file was written.
-- The Editor snapshot still showed the old Console error immediately after copying, so the new source has NOT been shown to reimport/compile successfully. User must focus the Editor and wait for normal import/compile, then report the refreshed Console state. T57 remains BLOCKED pending that evidence; no Play/Build & Test or accepted Prefab/Scene.
+- Immediately after copying, the Editor still showed the old Console error. The user then focused Unity and reported normal import/compile complete with no new errors. A fresh Lead screenshot no longer shows CS1061; it shows prior `Unknown`/UdonBehaviour `--enable-udon-debug-logging` runtime entries, not a current compiler error. The old T04 scene remains clean and Play inactive.
+- T57 is READY for the user, now the sole Editor operator, to invoke the guarded `VRC Katamari/T57/Create Ball Layer Test Lab` menu once. No Play/Build & Test, no T04 save, and no ProjectSettings access.

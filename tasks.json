@@ -2039,9 +2039,9 @@
       "id": "T57",
       "title": "球层·逐层独立Unity测试对象",
       "phase": "P2",
-      "implementer": "LUNA",
+      "implementer": "HUMAN",
       "reviewer": "Lead + Sol",
-      "status": "BLOCKED",
+      "status": "READY",
       "priority": "P1",
       "dependencies": [
         "T49",
@@ -2059,9 +2059,7 @@
       "exclusive_locks": [
         "unity-integration"
       ],
-      "external_requirements": [
-        "T57 subagent failed before completion. At the user's request, Lead renamed the shadowing local `float d` to `deltaYaw` and copied the exact source into the approved Windows T57 path. SHA-256 now matches the evidence payload. Unity has not yet confirmed reimport/compile; the user must focus the Editor and report the refreshed Console result."
-      ],
+      "external_requirements": [],
       "steps": [
         "读取七个离线层的TEST_OBJECT_SPEC与C# RuntimeDraft，检查Windows现有工程、Editor状态和Packages；不得关闭/重启用户Editor。Unity MCP未证实配置，不得假装已连接。",
         "2026-10-14 01:46 UTC预检已知例外：Windows上的`ProjectSettings/ProjectSettings.asset`有既存未提交改动，用户批准原样保留。不得打开、读取内容、diff、hash、暂存、修改、还原、清理或以其他方式触碰该文件。只读用Git元数据确认分支包含授权提交b4b6cf0ee3cecd95aa43a14b5e7bef5f528f0644，并以排除此路径的只读状态检查确认没有其他dirty文件；若不含授权提交、出现其他dirty路径或Unity状态/SDK与记录冲突，停止汇报。Unity Editor仍由用户拥有；仅一名显式Luna操作者可写任务的两个scope目录。",
@@ -2088,7 +2086,7 @@
         "S13"
       ],
       "workflow_suite": "D球层实验台",
-      "execution_note": "2026-10-14用户明确授权新增单一Luna Unity操作者。Windows仅写VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/BallLayers/；Linux证据仅Docs/Evidence/BallLayers/。不进入Play/Build & Test、不启动客户端、不上传。前两次执行器均在Unity访问前停止且无副作用：首次因Lead未提交tasks.json状态更新，第二次发现Windows既存ProjectSettings.asset改动。用户授权保留该改动并在不读取/触碰该文件的限域下继续；第三次预检因Windows HEAD b5a298cf6c68a1e29c854eff3bdb6a6d1d81e20d仓库没有授权提交b4b6cf0ee3cecd95aa43a14b5e7bef5f528f0644对象而停止，未fetch/同步/操作Unity；仅在批准的Docs Evidence路径写入预检记录。T57曾BLOCKED，等待期间用户授权受保护的快进同步；Lead只读确认待同步路径清单仅涉及Docs/tests/tasks，没有Unity项目/ProjectSettings/Packages/正式场景，随后`git merge --ff-only origin/main`成功。Windows HEAD现为3cb5def209c2c96a1f1afbde8faaafb3a517b5ea且包含授权提交；ProjectSettings未读取/触碰，状态检查排除此文件且无其他dirty路径。未操作Unity/Editor。第四次子代理已加载技能并读取任务，但因无法独立验证`openai-codex/gpt-6-luna`的session/projections路由证据，在任何Windows访问前停止；它明确表示未访问Windows/Unity。用户于2026-10-14明确选择使用新subagent，并免除该T57单次任务的session/projections独立路由投影核验，接受subagent_fork继承当前gpt-6-luna会话路由；该豁免仅适用于此T57操作者，不改变其他任务路由规则。用户路由豁免录入时，T57先设为READY且尚无Windows/Unity访问或资产创建；新操作者须先通过既定路径/工作树/编辑器/ProjectSettings安全门禁预检。T49–T55离线里程碑DONE，T56生产实现仍TODO。新subagent于2026-10-14完成只读安全预检：Linux HEAD dd6bb441e045a4eefdab05fe8187e985354e35ff且clean；Windows HEAD 3cb5def209c2c96a1f1afbde8faaafb3a517b5ea，授权commit为祖先；排除既存ProjectSettings.asset后的status RC=0且无其他dirty paths，该文件未触碰。工程Unity 2022.3.22f1、VPM Worlds 3.10.5。Editor PID 42244当前为T04_PlatformLab，无脏星/未进入Play；见到既有Build Succeeded弹窗与旧Udon debug-logging runtime提示，未把它们计为T57结果。2026-10-14子代理436d99b5-827b-45a9-b654-e856e0f60f43在完成前失败，无closing message；其报告首次导入/编译出现CS0170（BallLayerLabTestRunner.cs 631,55），计划修复。失败后Lead只读GUI快照仍显示T04_PlatformLab、无dirty星、Play未激活、旧SDK Build Succeeded弹窗；Console当前可见CS1061（BallLayerLabTestRunner.cs 555,25，float无rollDecoy成员）；Lead只读核对Windows源码发现`RunFollow(BallLayerLabDescriptor d,...)`内声明`float d`造成参数遮蔽。Lead未输入/保存/触碰ProjectSettings。用户于2026-10-14约15:04 UTC手动关闭旧SDK Build Succeeded弹窗；Lead用新截图确认弹窗消失、场景仍为T04_PlatformLab、无dirty星、Play未激活，但CS1061仍可见。用户请求Lead修复后，Lead仅在T57授权路径内把`RunFollow`局部`float d`改名为`deltaYaw`并同步更新其引用，Windows目标脚本SHA-256与证据副本相同。Unity尚未显示此次修改后的编译结果；用户需聚焦Editor等待普通自动导入/编译，再回报Console。T57仍BLOCKED，未完成Prefab/Scene验收；旧Build弹窗不算T57结果。"
+      "execution_note": "2026-10-14用户明确授权新增单一Luna Unity操作者。Windows仅写VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/BallLayers/；Linux证据仅Docs/Evidence/BallLayers/。不进入Play/Build & Test、不启动客户端、不上传。前两次执行器均在Unity访问前停止且无副作用：首次因Lead未提交tasks.json状态更新，第二次发现Windows既存ProjectSettings.asset改动。用户授权保留该改动并在不读取/触碰该文件的限域下继续；第三次预检因Windows HEAD b5a298cf6c68a1e29c854eff3bdb6a6d1d81e20d仓库没有授权提交b4b6cf0ee3cecd95aa43a14b5e7bef5f528f0644对象而停止，未fetch/同步/操作Unity；仅在批准的Docs Evidence路径写入预检记录。T57曾BLOCKED，等待期间用户授权受保护的快进同步；Lead只读确认待同步路径清单仅涉及Docs/tests/tasks，没有Unity项目/ProjectSettings/Packages/正式场景，随后`git merge --ff-only origin/main`成功。Windows HEAD现为3cb5def209c2c96a1f1afbde8faaafb3a517b5ea且包含授权提交；ProjectSettings未读取/触碰，状态检查排除此文件且无其他dirty路径。未操作Unity/Editor。第四次子代理已加载技能并读取任务，但因无法独立验证`openai-codex/gpt-6-luna`的session/projections路由证据，在任何Windows访问前停止；它明确表示未访问Windows/Unity。用户于2026-10-14明确选择使用新subagent，并免除该T57单次任务的session/projections独立路由投影核验，接受subagent_fork继承当前gpt-6-luna会话路由；该豁免仅适用于此T57操作者，不改变其他任务路由规则。用户路由豁免录入时，T57先设为READY且尚无Windows/Unity访问或资产创建；新操作者须先通过既定路径/工作树/编辑器/ProjectSettings安全门禁预检。T49–T55离线里程碑DONE，T56生产实现仍TODO。新subagent于2026-10-14完成只读安全预检：Linux HEAD dd6bb441e045a4eefdab05fe8187e985354e35ff且clean；Windows HEAD 3cb5def209c2c96a1f1afbde8faaafb3a517b5ea，授权commit为祖先；排除既存ProjectSettings.asset后的status RC=0且无其他dirty paths，该文件未触碰。工程Unity 2022.3.22f1、VPM Worlds 3.10.5。Editor PID 42244当前为T04_PlatformLab，无脏星/未进入Play；见到既有Build Succeeded弹窗与旧Udon debug-logging runtime提示，未把它们计为T57结果。2026-10-14子代理436d99b5-827b-45a9-b654-e856e0f60f43在完成前失败，无closing message；其报告首次导入/编译出现CS0170（BallLayerLabTestRunner.cs 631,55），计划修复。失败后Lead只读GUI快照仍显示T04_PlatformLab、无dirty星、Play未激活、旧SDK Build Succeeded弹窗；Console当前可见CS1061（BallLayerLabTestRunner.cs 555,25，float无rollDecoy成员）；Lead只读核对Windows源码发现`RunFollow(BallLayerLabDescriptor d,...)`内声明`float d`造成参数遮蔽。Lead未输入/保存/触碰ProjectSettings。用户于2026-10-14约15:04 UTC手动关闭旧SDK Build Succeeded弹窗；Lead用新截图确认弹窗消失、场景仍为T04_PlatformLab、无dirty星、Play未激活，但CS1061仍可见。用户请求Lead修复后，Lead仅在T57授权路径内把`RunFollow`局部`float d`改名为`deltaYaw`并同步更新其引用，Windows目标脚本SHA-256与证据副本相同。用户聚焦Editor并报告自动导入/编译完成、无新错误；Lead新截图确认CS1061不再显示，Console仍有既有Unknown/UdonBehaviour debug-logging运行时条目，不计作T57新编译错误。Lead未输入/保存/触碰ProjectSettings。T57现READY，由用户作为唯一Editor操作者待调用已校验的`VRC Katamari/T57/Create Ball Layer Test Lab`菜单一次；仍未有Prefab/Scene验收，不进入Play/Build & Test。"
     }
   ],
   "releaseProfiles": {

@@ -1,6 +1,6 @@
 # 球体每帧装配（BallMotor）接口契约
 
-**状态：`PROVISIONAL_NOT_TESTED`。** 本文只定义各层之间的**数据边界与调用顺序**，不定义任何调参值，也不是对原作行为的声明。世界尺度与公共接口仍未冻结（T06）。
+**状态：`PROVISIONAL_NOT_TESTED`。** 本文定义各层之间的**数据边界与调用顺序**，并记录装配层唯一自带的交分换算规则与固定容量信号；不定义调参值，也不是对原作行为的声明。世界尺度与公共接口仍未冻结（T06）。
 
 ## 为什么需要这一层
 
@@ -10,7 +10,7 @@
 - 持有全部可变状态（位置、旋转、速度、账本数组、代理点数组、远端槽位数组）；
 - 作为 UdonSharpBehaviour 存在于场景里，负责与 Unity 的 Transform、时间步和网络回调对接。
 
-规矩：**装配层只做搬运和顺序，不再实现任何数学。** 出现计算逻辑就说明它放错层了。
+规矩：**装配层只做搬运和顺序，不再实现任何数学。** 出现计算逻辑就说明它放错层了。唯一例外是交分缩小：它是本层自己的策略，没有任何球层拥有它，所以以独立的纯静态类 `BankShrinkMath` 存在（见下文），而不是写进 Behaviour 的方法体。
 
 ## 每帧顺序
 
@@ -141,12 +141,26 @@ StepBall:
 - `bankResidualFraction` 配成 NaN 时现在直接拒绝交分（旧实现会当成 0）。这是有意的“不应用非有限值”，但配置错误会表现为“交分没反应”，诊断时先看这里。
 - 缩小比例与最小门槛仍是项目暂定值，不是原作数据；改它们只需要改字段，不需要改本节的数学。
 
+### 固定容量与溢出信号
+
+注册类缓冲区是固定容量：`MaxPlaneCount = 8`、`MaxBoxCount = 8`、`PendingCandidateCapacity = 4`，加上扫掠每步最多 `ContactCapacity = 4` 个接触点。超出容量的条目**直接丢弃**，不排队、不扩容、不降级，所以：
+
+- 障碍超出会改变球实际能撞到什么；
+- 候选队列超出会静默丢掉一个本可吸收的物件。
+
+这两者都是**数据错误**（场景接错，或宿主每步塞了超过 4 个候选），不是玩法取舍。因此这里不设计“满了怎么办”的玩法规则，只留信号：
+
+- `AddPlane` / `AddBox` / `SubmitCandidate` 因容量被拒时调用 `SignalOverflow()`：`overflowCount` 自增、`firstOverflowReason` 只记第一次；`HasOverflowSignal()` / `GetOverflowCount()` / `GetFirstOverflowReason()` 供诊断读取。不写日志、不每帧输出。
+- `ContactCapacity` 的截断发生在 `SweepMath` 内部（它写到缓冲长度就停，不返回截断标志），本层只能记录“缓冲曾经满过”的 `WasContactBufferSaturated()`。**这是残留缺口**：真正的接触截断计数要在 `SweepMath` 补，本层修不了。
+
+读取时机是检查点（场景装载后、调参后），不是每帧轮询。
+
 ### 刻意不在这里
 
 - 网络、远端球代理、多客户端权威/抢单仲裁：本层只有**一个本地玩家行**的账本；远端提交应走 `GrowthLedgerMath.TryApplyCommit` 的快照/提交路径，由回合控制器拥有。
 - 回合状态机本体：`TryBeginPlaying` 只是把 Lobby→Ready→Preparing→Playing 三条合法边转发给账本，没有计时、轮换或结算。
 - HUD、尺寸读数、音效、粒子、道具生命周期、物品注册表、空间索引（候选由宿主/适配层收集后 `SubmitCandidate` 送入）。
-- 场景资产、prefab、`.meta`、新 asmdef：都没加；U# 程序集仍是 `VRCKatamari.Runtime`。
+- 场景资产、prefab、新 asmdef：都没加；U# 程序集仍是 `VRCKatamari.Runtime`（`BankShrinkMath.cs` 与其 `.meta` 是运行时代码文件，不新增程序集）。
 
 ### Unity 操作者还要接线
 
@@ -177,13 +191,14 @@ StepBall:
 
 ### 缺口（数学层没提供、本层没有自己编）
 
-1. **直径 → 体积的反向映射不存在（本层最实质的缺口）。** `SizeModelMath` 只做体积→三尺寸；参考模型 `units_for_diameter`（`Docs/Design/Gameplay/round_model.py`）在 C# 侧没有对应物。所以交分缩小按 (a) 的比例应用在**体积**（尺寸映射的输入）上，而不是需求写的直径上，缩得明显更轻：以 0.30 m 起始、在 1.49 m 交分为例，本实现留下约 **0.95 m**，直径空间公式要求约 **0.60 m**。要精确复刻 (a)，`SizeModelMath` 需要加反向映射（或在契约里加“残余体积”入参）；装配层不应自己写这个反函数的数学。
-2. **设备轴 → forward/turn/lateral 的映射没有归属层。** `ControlIntentMath` 只给设备轴对，`BallMotionMath` 只吃三个标量，中间这一步（含相机/rig yaw 基准）目前是适配层约定，本层用 y→forward、x→lateral 顶着。
-3. **墙面法向去速没有公开函数。** `SweepMath` 内部投影剩余位移（私有 `TryProject`）但只返回 `slideDirection`；速度的法向分量没人去掉。结果：球会顶住墙停住，不沿墙滑；卡住计时不会被触发（`blocked` 而非 `stuck`），但滑墙手感缺失。
-4. **吸收的“相对球径门槛”没有 C# 层。** `PickupAbsorbMath` 只比固定 `maxItemSizeWorldM`；Python 回合模型里的 `pickup_diameter <= ball_diameter * ratio` 没移植。本层因此传固定阈值，不拿球径乘系数（那是公式）。
-5. **`growthFraction` 没有 helper。** 设计文档把它指派给组合层（`BallMotion` README 的“唯一回灌量”），`BallMotionMath` 也明说不做半径映射，所以本层只有这一处 `(r-base)/(max-base)` 夹取；若要复用应下沉到 `SizeModelMath`。
-6. **账本提交存储是有容量的**（本地 256 条/回合）。满了以后 `TryResolveClaims` 拒绝、候选留在队列里不再增长；正式回合应由拥有账本的控制器扩容或换权威提交。
-7. **单球、单本地玩家行**：多球/多人要并行数组 + 多行账本，本版没有。
+旧缺口“直径 → 体积的反函数不存在”已由 `SizeModelMath.TryVolumeUnitsForSemanticDiameter` 补上，交分因此改在直径空间（见上一节）。下面是仍然存在的缺口。
+
+1. **设备轴 → forward/turn/lateral 的映射没有归属层。** `ControlIntentMath` 只给设备轴对，`BallMotionMath` 只吃三个标量，中间这一步（含相机/rig yaw 基准）目前是适配层约定，本层用 y→forward、x→lateral 顶着。
+2. **墙面法向去速没有公开函数。** `SweepMath` 内部投影剩余位移（私有 `TryProject`）但只返回 `slideDirection`；速度的法向分量没人去掉。结果：球会顶住墙停住，不沿墙滑；卡住计时不会被触发（`blocked` 而非 `stuck`），但滑墙手感缺失。
+3. **吸收的“相对球径门槛”没有 C# 层。** `PickupAbsorbMath` 只比固定 `maxItemSizeWorldM`；Python 回合模型里的 `pickup_diameter <= ball_diameter * ratio` 没移植。本层因此传固定阈值，不拿球径乘系数（那是公式）。
+4. **`growthFraction` 没有 helper。** 设计文档把它指派给组合层（`BallMotion` README 的“唯一回灌量”），`BallMotionMath` 也明说不做半径映射，所以本层只有这一处 `(r-base)/(max-base)` 夹取；若要复用应下沉到 `SizeModelMath`。
+5. **账本提交存储是有容量的**（本地 256 条/回合）。满了以后 `TryResolveClaims` 拒绝、候选留在队列里不再增长；正式回合应由拥有账本的控制器扩容或换权威提交。
+6. **单球、单本地玩家行**：多球/多人要并行数组 + 多行账本，本版没有。
 
 ## 未定项（等 T06 与试玩）
 
@@ -197,5 +212,5 @@ StepBall:
 装配层落地后必须给出：
 
 - Unity 编译通过、U# 全量编译 0 错误；
-- 全部 EditMode 测试通过（各层测试已存在，装配层本身只测顺序与失败保持语义）；
+- 全部 EditMode 测试通过（各层测试已存在；装配层本身不能在 EditMode 实例化，新增的只有 `BankShrinkMathTests` 这个纯规则测试，用来替代伪造行为测试）；
 - 一个可进 Play Mode 的实验场景，能滚、能吸、能交分、能看尺寸变化。

@@ -281,6 +281,20 @@ class MapData:
                                     if m["role"] == "absorbable")
         self.units_total = sum(m["count"] * m["value"] for m in self.catalog.values()
                                if m["role"] == "absorbable")
+        # The map's powerup points are the model's per-zone stations (magnet /
+        # rocket); the model supports one station type per zone.
+        self.powerups = {}
+        for point in layout.get("powerups", {}).get("points", []):
+            self.powerups.setdefault(point["zone_id"], point["type"])
+        # The bank anchors must be in ROTATION order (layout lists them by id).
+        anchors = {anchor["id"]: anchor for anchor in layout["bank"]["anchors"]}
+        order = list(layout["bank"].get("rotation", {}).get("order") or anchors)
+        missing = [anchor_id for anchor_id in order if anchor_id not in anchors]
+        if missing:
+            raise ValueError(f"bank rotation references unknown anchors: {missing}")
+        self.bank_anchors_m = tuple((anchors[anchor_id]["position"][0],
+                                     anchors[anchor_id]["position"][2])
+                                    for anchor_id in order)
         plans = layout.get("player_count_plans", {})
         self.spawn_plan = {int(key): tuple(value) for key, value in plans.items()
                            if str(key).isdigit() and isinstance(value, list)}
@@ -361,12 +375,11 @@ class MapData:
                                      float(it.value))
                            for it in self.items.get(zone_id, ()))
             zones.append(ZoneSpec(zone_id, position, stacks,
+                                  powerup=self.powerups.get(zone_id),
                                   is_bank=zone_id == self.layout["bank"]["zone_id"]))
-        anchors = tuple((a["position"][0], a["position"][2])
-                        for a in self.layout["bank"]["anchors"])
         return MapSpec(zones=tuple(zones),
                        spawn_zones=tuple(spawn_ids),
-                       bank_anchors_m=anchors,
+                       bank_anchors_m=self.bank_anchors_m,
                        bank_zone_id=self.layout["bank"]["zone_id"])
 
 

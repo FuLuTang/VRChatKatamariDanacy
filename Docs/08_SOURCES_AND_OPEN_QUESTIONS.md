@@ -1,8 +1,8 @@
 # 08 来源与未决问题
 
-研究日期：2026-10-10。以下均为实际检索到的网页；仅来源列表，不代表下载过素材或执行过测试。
+研究日期：2026-10-10（2026-11-14 增补第二轮 KatamariBall 研究）。以下均为实际检索到的网页；仅来源列表，不代表下载过素材或执行过测试。
 
-注：`Docs/Research/ReferenceRules/rules_matrix.md` 的第二轮 KatamariBall 来源使用研究子编号 `S-KB01`–`S-KB04`（4Gamer 制作人专访、note.com 玩家实机报告、Katamaripedia、CGMagazine 评测），与本表 S01–S03 及 S04 起的编号并存；本表不重编。
+注：`Docs/Research/ReferenceRules/rules_matrix.md` 的 KatamariBall 来源分两套编号——本表的全局注册表编号 S01–S04（矩阵直接引用；其中 Pocket Tactics 制作人访谈＝本表 S04），以及研究文件 `Docs/Research/KatamariBallRules/README.md` §5 的研究子编号 `S-KB01`–`S-KB04`（S-KB01=4Gamer 制作人专访、S-KB02=note.com 玩家实机报告、S-KB03=Katamaripedia、S-KB04=CGMagazine 评测）。两套前缀不同、并存不冲突；本表不重编。
 
 ## S01 · 新版官方产品页
 来源：https://www.bandainamcoent.com/games/once-upon-a-katamari
@@ -153,7 +153,7 @@
 未证实：2025版确切内部算法、完整音频分层、所有PVP数值；代码Agent不得写成原作事实。
 
 ## 优先未决问题
-Q1 原作新版PVP：道具在对局内的实际存在、吞噬阈值、复活方式、交分位置/动作和交分后保护？需实机/完整第一手资料。
+Q1 原作新版PVP仍未决的只有：单局时长、回合数、体积→积分的换算公式、原作的最小兑换体积数值、对战道具完整清单与数值、以及地图专属规则（图数/出生点/补给/宝箱刷新）。已被第二轮研究（[研究核查](Research/KatamariBallRules/README.md) C1–C22）解决、不再列为 unknown 的：对战道具在对局内确实存在（C13/C14，但清单不全）、交分位置与动作（C1/C3）、吞噬与复活方式（C6–C9，尺寸阈值数值仍未公开）。仍需要实机或更完整的第一手资料补齐前六项。
 Q2 当前SDK与手柄设置下，Station+原生Jump道具+原生Comfort Turning是否同时可用？需VR真机。
 Q3 代理凹凸要不要进入物理，还是仅表现？须用单长棍测试给结论。
 Q4 输入A与B在比赛中的到达时间、转弯、疲劳差异？需要玩家对照测试。

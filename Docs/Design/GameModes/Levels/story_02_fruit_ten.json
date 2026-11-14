@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "level_id": "story_02_fruit_ten",
+  "status": "PROVISIONAL_NOT_TESTED",
+  "mode": "story",
+  "order": 2,
+  "map_id": "picnic_lawn",
+  "ruleset_id": "prototype_defaults_v0_3",
+  "map_snapshot": {
+    "layout_sha256": "0b76c282a4dd154dbdd3f6ebb50a4602ec71033c7f3fb841a225ac8e9b8317e0",
+    "catalog_sha256": "01d01418b358fcc7bfaec9c9895c5efe76deada79a3b86509c97c8c02953acc7"
+  },
+  "quest": {
+    "type": "collect_category_count",
+    "text_zh": "朕今天要吃水果！\n听清楚了——是水果。不是草籽，不是饼干渣，更不是盘子。\n给朕卷十件回来：苹果、梨、橙子、香蕉、草莓、葡萄……两块野餐毯上多的是；\n要是你能摸到篮子区的大西瓜，朕就更高兴了。\n啊，对了。朕的胃口会越吃越大。二十件？三十件？你自己看着办。",
+    "text_ja": null,
+    "text_en": null,
+    "objective": {
+      "category_id": "fruit",
+      "count": 10
+    }
+  },
+  "time_limit_s": 120,
+  "spawn_id": "spawn_ne",
+  "player": {
+    "min": 1,
+    "max": 1
+  },
+  "bank": {
+    "enabled": false
+  },
+  "powerups": {
+    "enabled": false
+  },
+  "stars": [
+    {
+      "stars": 1,
+      "requires": {
+        "category_id": "fruit",
+        "count": 10
+      },
+      "comment_id": "s1_ok"
+    },
+    {
+      "stars": 2,
+      "requires": {
+        "category_id": "fruit",
+        "count": 20
+      },
+      "comment_id": "s2_ok"
+    },
+    {
+      "stars": 3,
+      "requires": {
+        "category_id": "fruit",
+        "count": 30
+      },
+      "comment_id": "s3_ok"
+    }
+  ],
+  "evaluation": {
+    "presenter_id": "quest_giver",
+    "partial_band": 0.9,
+    "retry": "unlimited",
+    "score_channel": "none",
+    "ledger_write": false
+  },
+  "map_expectations": {
+    "zones": [
+      "spawn_ne",
+      "fringe_east",
+      "blanket_east",
+      "basket_north",
+      "blanket_west"
+    ],
+    "absorbable_instances_total": 452,
+    "gain_units_total": 1284,
+    "size_gate_ids": [],
+    "notes_zh": "fruit = categories.json 的 7 个 definition_id，全图 50 件；本关这 5 个区里有 48 件（blanket_east 23 / blanket_west 23 / basket_north 2 西瓜）。出生角 spawn_ne 与 fringe_east 的 fruit 件数都是 0，所以第一站只能是野餐毯（单毯 23 件，★★★ 30 件必须换区）。★★★ 之外不用管本关不涉及的 basket_south（另有 2 件西瓜）。"
+  },
+  "notes_zh": "剧情关 2，委托类型 collect_category_count，第 2 关。只统计「确认吸附」的 fruit 件数（同一 spawnId 只计一次，撞掉不计不倒扣）。0 星=120 s 内不足 10 件；达成不提前结束。银行 / 道具 / 对手全部关闭，分数不进账本。出生点 spawn_ne 朝地图中心（yaw 225°）。类别不走 CSV 的 category 列，理由见 categories.json 的 note_zh。"
+}

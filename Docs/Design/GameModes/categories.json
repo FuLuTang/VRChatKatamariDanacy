@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "status": "PROVISIONAL_NOT_TESTED",
+  "map_id": "picnic_lawn",
+  "note_zh": "为什么不用 prop_catalog.csv 的 category 列：该列是「美术/来源分组」，不是委托人能说的类别。food 里混了草籽（seed，64 件，散在出生角和四条外环）与奶酪片、面包片，drink 与 food 的边界也和玩家直觉不一致；用 category 做「水果」只能靠减法（food 减 seed 减 tableware），而减法在地图改分类时会静默失效，委托就悄悄变了。所以委托类别一律在这里显式列 definition_ids：一个类别 = 一个写死的 id 集合，缺件立即在 validate_levels.py 报错，不做减法、不做通配。",
+  "categories": {
+    "fruit": {
+      "name_zh": "水果",
+      "definition_ids": [
+        "strawberry",
+        "grapes",
+        "apple",
+        "pear",
+        "orange",
+        "banana",
+        "watermelon"
+      ],
+      "exclude_definition_ids": [],
+      "notes_zh": "7 个定义 / 全图 50 件（草莓 8 / 葡萄 8 / 苹果 10 / 梨 6 / 橙子 8 / 香蕉 6 / 西瓜 4）。刻意不含草籽：草籽在 CSV 里是 category=food，但它既不是水果也不该被「给朕卷水果」计数，这正是本关要教的反例。西瓜只在 basket_north / basket_south（每区 2 件），是「不在毯子上」的那一个水果，用来勾玩家离开野餐毯。story_02_fruit_ten 使用本类别。",
+      "used_by_levels": [
+        "story_02_fruit_ten"
+      ]
+    },
+    "food_safe": {
+      "name_zh": "能吃的（不含草籽与餐具）",
+      "definition_ids": [
+        "strawberry",
+        "grapes",
+        "cookie",
+        "cheese_slice",
+        "apple",
+        "pear",
+        "orange",
+        "banana",
+        "croissant",
+        "bread_slice",
+        "sandwich",
+        "watermelon"
+      ],
+      "exclude_definition_ids": [],
+      "notes_zh": "12 个定义 / 全图 90 件。= CSV 里 category=food 去掉 seed（草籽 64 件，是地图上的填充物不是食物）。两种剧情关都没用到它：留下它是为了验证「同一份注册表能表达比 fruit 更宽的类别」，并且让以后做「收集 N 件食物」的关卡不必重新发明减法。若启用，注意它的 90 件里 46 件在两张野餐毯上，出生角与外环贡献 0 件（草籽不算）。",
+      "used_by_levels": []
+    }
+  },
+  "notes_zh": "只登记「玩法语义」类别。size_tier / category / role 这些地图属性仍然只有 prop_catalog.csv 一个真源，本文件不复制它们。"
+}

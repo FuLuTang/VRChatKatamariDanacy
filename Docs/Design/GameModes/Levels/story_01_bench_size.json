@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "level_id": "story_01_bench_size",
+  "status": "PROVISIONAL_NOT_TESTED",
+  "mode": "story",
+  "order": 1,
+  "map_id": "picnic_lawn",
+  "ruleset_id": "prototype_defaults_v0_3",
+  "map_snapshot": {
+    "layout_sha256": "0b76c282a4dd154dbdd3f6ebb50a4602ec71033c7f3fb841a225ac8e9b8317e0",
+    "catalog_sha256": "01d01418b358fcc7bfaec9c9895c5efe76deada79a3b86509c97c8c02953acc7"
+  },
+  "quest": {
+    "type": "reach_target_diameter",
+    "text_zh": "唔……朕的野餐会，好像少了点热闹。\n你瞧那张长凳——横在草坪的对角门上，谁也别想从那儿过。\n去，把那个土团滚起来，滚到一米二五那么肥！肥到能把那张长凳一口吞下去。\n办到了，朕就赏你星光；办不到……哼，朕就当没看见你。",
+    "text_ja": null,
+    "text_en": null,
+    "objective": {
+      "target_diameter_m": 1.25
+    }
+  },
+  "time_limit_s": 120,
+  "spawn_id": "spawn_nw",
+  "player": {
+    "min": 1,
+    "max": 1
+  },
+  "bank": {
+    "enabled": false
+  },
+  "powerups": {
+    "enabled": false
+  },
+  "stars": [
+    {
+      "stars": 1,
+      "requires": {
+        "target_diameter_m": 1.25
+      },
+      "comment_id": "s1_ok"
+    },
+    {
+      "stars": 2,
+      "requires": {
+        "target_diameter_m": 1.45
+      },
+      "comment_id": "s2_ok"
+    },
+    {
+      "stars": 3,
+      "requires": {
+        "target_diameter_m": 1.6
+      },
+      "comment_id": "s3_ok"
+    }
+  ],
+  "evaluation": {
+    "presenter_id": "quest_giver",
+    "partial_band": 0.9,
+    "retry": "unlimited",
+    "score_channel": "none",
+    "ledger_write": false
+  },
+  "map_expectations": {
+    "zones": [
+      "spawn_nw",
+      "fringe_west",
+      "tree_roots_nw",
+      "flower_bed_nw",
+      "blanket_west",
+      "core_lawn"
+    ],
+    "absorbable_instances_total": 452,
+    "gain_units_total": 1284,
+    "size_gate_ids": [
+      "gate_bench_nw",
+      "gate_bench_ne",
+      "gate_bench_sw",
+      "gate_bench_se"
+    ],
+    "notes_zh": "目标 1.25 m 取自 gate_bench_* 的 absorbable_at_ball_diameter_m（4 个门同一阈值）；blocking 尺寸 1.05 m。这 6 个区合计 416 占位单位，够 245.91 单位（1.25 m）的 1.69 倍；但 ★★★ 1.60 m 需要 519.50 单位，超出这 6 个区，必须再去 blanket_east / 篮子区。"
+  },
+  "notes_zh": "剧情关 1，委托类型 reach_target_diameter，第 1 关。0 星=120 s 内没到 1.25 m；达成不提前结束（继续滚到计时归零）。银行 / 道具 / 对手全部关闭，分数不进账本。出生点 spawn_nw 朝地图中心（yaw 135°）。此文件不含坐标、半径与逐定义件数：几何与数量只有 layout.json / prop_catalog.csv 一个真源，两个总量只是地图版本指纹。"
+}

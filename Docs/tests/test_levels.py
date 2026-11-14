@@ -11,12 +11,14 @@ import csv
 import hashlib
 import importlib.util
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GAMEMODES = ROOT / 'Docs/Design/GameModes'
+README = GAMEMODES / 'README.md'
 SPEC = importlib.util.spec_from_file_location('validate_levels', GAMEMODES / 'validate_levels.py')
 VALIDATOR = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VALIDATOR)
@@ -311,6 +313,68 @@ class LevelDataTests(unittest.TestCase):
         self.assert_error('只允许出现在第 3 星', lambda levels, cats:
                           levels['story_01_bench_size']['stars'][0].update(
                               {'design_note_zh': '第 1 星也写说明是无效的。'}))
+
+    # ---- README 里给人看的那份 hash 也必须现算，抄错了就变红 ----
+    def test_readme_declared_hashes_match_the_live_map(self):
+        # README §0.2 的规则是「hash 现算，永不手抄」，可那两处 hash 偏偏就是手抄的，
+        # 于是每改一次地图就自动过期一次（本文初稿已经过期两版）。这里把「现算」变成机器
+        # 可执行的约束：§0.2 缩写表 + §4.2 JSON 示例块里的 hash 必须等于磁盘文件此刻的 sha256。
+        #
+        # 匹配策略（故意不写成「全文扫一个正则」）：
+        #   1. §0.2 的缩写形如 `328d2d6f…fa69`，只认「同一行里既有地图文件路径、又有 hash」的行，
+        #      因为那行就是该文件的声明；前缀/后缀分别与现算值比对，容得下缩写这个人类格式。
+        #   2. §4.2 的示例块按 ```json 围栏解析成 JSON，只认带 map_snapshot 的那个块，
+        #      按 layout_sha256 / catalog_sha256 两个键取值——语义上就是 §0.2 的两个文件。
+        #   3. 兜底：全文任何 64 位 hex 都必须是这两个现算值之一，防止有人在别处再抄第三份。
+        live = {'layout.json': sha256(ROOT / 'Docs/Design/Maps/PicnicLawn/layout.json'),
+                'prop_catalog.csv': sha256(ROOT / 'Docs/Design/Maps/PicnicLawn/prop_catalog.csv')}
+        paths = {'layout.json': 'Docs/Design/Maps/PicnicLawn/layout.json',
+                 'prop_catalog.csv': 'Docs/Design/Maps/PicnicLawn/prop_catalog.csv'}
+        readme = README.read_text(encoding='utf-8')
+
+        abbrev = re.compile(r'(?<![0-9a-f])([0-9a-f]{8})(?:…|\.\.\.)([0-9a-f]{4})(?![0-9a-f])')
+        full = re.compile(r'(?<![0-9a-f])([0-9a-f]{64})(?![0-9a-f])')
+
+        declared_rows = {key: 0 for key in live}
+        for number, line in enumerate(readme.splitlines(), 1):
+            for key, rel in paths.items():
+                if rel not in line:
+                    continue
+                for prefix, suffix in abbrev.findall(line):
+                    declared_rows[key] += 1
+                    self.assertTrue(
+                        live[key].startswith(prefix) and live[key].endswith(suffix),
+                        f'{README.name}:{number} §0.2 声明 {key} 为 {prefix}…{suffix}，'
+                        f'磁盘现算是 {live[key]}；照 §0.2 的命令重算后重填，别手抄。')
+                for value in full.findall(line):
+                    declared_rows[key] += 1
+                    self.assertEqual(
+                        value, live[key],
+                        f'{README.name}:{number} §0.2 声明 {key} 为完整 hash {value}，'
+                        f'磁盘现算是 {live[key]}；照 §0.2 的命令重算后重填，别手抄。')
+        self.assertEqual(declared_rows, {key: 1 for key in live},
+                         f'§0.2 表格里每个地图文件应恰好有一行带 hash，实际 {declared_rows}；'
+                         f'表格结构变了就把本测试的匹配一起改，别关掉它。')
+
+        snapshots = []
+        for block in re.findall(r'```json\n(.*?)```', readme, re.S):
+            if '"map_snapshot"' not in block:
+                continue
+            try:
+                snapshots.append(json.loads(block)['map_snapshot'])
+            except (json.JSONDecodeError, KeyError) as error:
+                self.fail(f'§4.2 的关卡 JSON 示例块已不是合法 JSON：{error}')
+        self.assertEqual(len(snapshots), 1, f'§4.2 应恰好有一个带 map_snapshot 的 JSON 示例块，'
+                                           f'实际 {len(snapshots)} 个')
+        self.assertEqual(snapshots[0],
+                         {'layout_sha256': live['layout.json'],
+                          'catalog_sha256': live['prop_catalog.csv']},
+                         '§4.2 示例块的 map_snapshot 与磁盘现算值不符；'
+                         '照 §0.2 重算，别把整段 JSON 连同旧 hash 抄过去。')
+
+        self.assertLessEqual(set(full.findall(readme)), set(live.values()),
+                             'README 里还有第三个手抄的 64 位 hash，它不归这两个地图文件管；'
+                             '要么删掉，要么让本测试也认它。')
 
 
 if __name__ == '__main__':

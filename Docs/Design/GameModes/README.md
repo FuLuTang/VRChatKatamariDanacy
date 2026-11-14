@@ -25,8 +25,8 @@
 
 | 文件 | sha256（**现算，不手抄**） | 采样时间（UTC） |
 |---|---|---|
-| `Docs/Design/Maps/PicnicLawn/layout.json` | `5b08daf9…5e13` | 2026-11-14 05:45 UTC |
-| `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` | `01d01418…acc7` | 2026-11-14 03:55 UTC |
+| `Docs/Design/Maps/PicnicLawn/layout.json` | `328d2d6f…fa69` | 2026-11-14 06:12 UTC |
+| `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` | `6e9b0811…9b37` | 2026-11-14 06:15 UTC |
 
 **规则：hash 现算，永不手抄。** 上表只是给人看的缩写副本；被机器校验的是 `Levels/*.json` 的 `map_snapshot`（`validate_levels.py` 与 `Docs/tests/test_levels.py` 逐字节比对磁盘文件）。手抄一定会过期——本文初稿抄过两版，两版都旧了：地图负责人把树根土丘从 0.18 m 降到 0.14 m 之后 `layout.json` 的 sha256 就变了，正文里的缩写还停在前一版。要当前值就跑：
 
@@ -386,8 +386,8 @@ Docs/Design/GameModes/
   "map_id": "picnic_lawn",
   "ruleset_id": "prototype_defaults_v0_3",
   "map_snapshot": {
-    "layout_sha256": "5b08daf9353be681f9b8073596690b06f35cf4409a9a6dfaafcb421e422c5e13",
-    "catalog_sha256": "01d01418b358fcc7bfaec9c9895c5efe76deada79a3b86509c97c8c02953acc7"
+    "layout_sha256": "328d2d6f85bbddda9722434c127b18bb85d28b788266b4f87312b7c27619fa69",
+    "catalog_sha256": "6e9b0811c8fa0aab0e1412ebb83c4e44394bf96e93efd97e96ccad24503d9b37"
   },
   "quest": {
     "type": "reach_target_diameter",
@@ -425,7 +425,7 @@ Docs/Design/GameModes/
 }
 ```
 
-**块里两个 hash 是 2026-11-14 05:50 UTC 的现算值，只是示例**：写新关卡时照 §0.2 现算再填，别把整段 JSON 连同 hash 直接抄过去（关卡 1 的真实值见 `Levels/story_01_bench_size.json`）。
+**块里两个 hash 是 2026-11-14 06:24 UTC 的现算值，只是示例**：写新关卡时照 §0.2 现算再填，别把整段 JSON 连同 hash 直接抄过去（关卡 1 的真实值见 `Levels/story_01_bench_size.json`）。`Docs/tests/test_levels.py` 的 `test_readme_declared_hashes_match_the_live_map` 会解析本文这两处（§0.2 缩写表与本节示例块）并与磁盘文件现算值比对，手抄改了 hash 就会变红。
 
 `collect_category_count` 关只换 `quest.objective` 与 `stars[].requires`：
 

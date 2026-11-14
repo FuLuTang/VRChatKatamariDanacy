@@ -32,7 +32,7 @@ Current, effective rules only. The full authorization history up to 2026-11-14 i
 ## Delegation and Git
 
 - The Lead (main conversation) dispatches, reviews and integrates. Small tasks go to background subagents routed explicitly to `dsh-opencode-go/deepseek-v4.1-flash`. Every brief says: use the todo tool; exact write scope; the Unity facts above; whether this subagent is the Unity operator. No teammates unless the user asks.
-- Subagents never run Git writes. The Lead reviews every output for quality and abstraction before committing, and may commit/push reviewed work to `origin/main` on either checkout (Linux or Windows), keeping history fast-forward and never leaving both checkouts dirty in the same paths. Exclude credentials, raw downloads, Unity caches and SDK sources.
+- Subagents never run Git writes. The Lead reviews every output for quality and abstraction before committing, and may commit/push reviewed work to `origin/main` on either checkout (Linux or Windows), keeping history fast-forward and never leaving both checkouts dirty in the same paths. Exclude credentials, raw downloads, Unity caches and SDK sources. Windows can fetch but cannot push over SSH (no credential helper there): bring Windows commits to Linux with `git bundle` + `scp`, fast-forward, push from Linux, then `git pull --ff-only` on Windows.
 
 ## Task discipline
 

@@ -491,6 +491,58 @@ namespace VRCKatamari.Economy
         }
 
         /// <summary>
+        /// Awards points once per semantic key, and only once.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The key is a semantic label ("settle:first"), never a placement number: a
+        /// placement can recur (reconnect, scene reload, event replay) and a numeric key
+        /// would award the same bonus again. Duplicate suppression is therefore structural,
+        /// not the caller's discipline.
+        /// </para>
+        /// <para>
+        /// The awarded keys live in the caller-provided fixed arrays, which belong to the
+        /// ledger's owner (the motor). Nothing outside the ledger keeps a bonus table, so
+        /// there is one owner for the score.
+        /// </para>
+        /// <para>
+        /// failureCode: 0 ok / 1 duplicateKey / 2 nonPositivePoints / 3 invalidKey /
+        /// 4 capacityFull. (5 ledgerRefused belongs to the caller's row validation and is
+        /// produced there, not here.)
+        /// </para>
+        /// <para>
+        /// The new count is returned through <c>out</c>, not <c>ref</c>: only <c>out</c> has
+        /// been proven to work under UdonSharp in this project, and a ref semantic that
+        /// silently behaved differently in the Udon VM would corrupt the awarded-key table.
+        /// </para>
+        /// </remarks>
+        public static bool TryAwardOnce(string[] awardedKeys, int[] awardedPoints,
+            int awardedCount, string awardKey, int points, out int newCount,
+            out int failureCode)
+        {
+            newCount = awardedCount;
+            failureCode = 0;
+            if (awardKey == null || awardKey.Length == 0) { failureCode = 3; return false; }
+            if (points <= 0) { failureCode = 2; return false; }
+
+            for (int i = 0; i < awardedCount; i++)
+            {
+                if (awardedKeys[i] == null) continue;
+                if (awardedKeys[i] != awardKey) continue;
+                failureCode = 1;
+                return false;
+            }
+
+            if (awardedCount >= awardedKeys.Length) { failureCode = 4; return false; }
+
+            int slot = awardedCount;
+            awardedKeys[slot] = awardKey;
+            awardedPoints[slot] = points;
+            newCount = awardedCount + 1;
+            return true;
+        }
+
+        /// <summary>
         /// Resolves one event's claim batch into at most one authoritative commit.
         /// </summary>
         /// <remarks>

@@ -322,6 +322,14 @@ namespace VRCKatamari.BallMotor
         private float[] rejectEventDistances;
         private int rejectEventCount;
 
+        // ---- Settlement awards: keys are semantic, awarded once, held by the ledger ----
+        private const int AwardCapacity = 16;
+
+        private string[] awardedKeys;
+        private int[] awardedPoints;
+        private int awardedCount;
+        private int lastAwardFailure;
+
         // ---- One-shot capacity signal; see the remarks on RebuildObstacles ----
         private int overflowCount;
         private bool overflowLatched;
@@ -382,6 +390,10 @@ namespace VRCKatamari.BallMotor
             pendingAccepted = new bool[PendingCandidateCapacity];
             pendingSubmitTimes = new float[PendingCandidateCapacity];
             pendingCandidateCount = 0;
+
+            awardedKeys = new string[AwardCapacity];
+            awardedPoints = new int[AwardCapacity];
+            awardedCount = 0;
 
             absorbedEventItemIds = new string[AbsorbedEventCapacity];
             absorbedEventPositions = new Vector3[AbsorbedEventCapacity];
@@ -1674,6 +1686,58 @@ namespace VRCKatamari.BallMotor
             if (pendingValues == null) return -1f;
             if (index < 0 || index >= pendingCandidateCount) return -1f;
             return pendingValues[index];
+        }
+
+        /// <summary>
+        /// Awards settlement points once per semantic key.
+        /// </summary>
+        /// <remarks>
+        /// The rule lives in <see cref="GrowthLedgerMath.TryAwardOnce"/>; this method only
+        /// supplies this ball's ledger row and its awarded-key arrays, then adds the points
+        /// to the ledger's own banked score. A refused award leaves the score untouched.
+        /// </remarks>
+        public bool TryAwardScore(string awardKey, int points)
+        {
+            // Every check that can refuse WITHOUT consuming the key happens first. An
+            // earlier revision recorded the key and then discovered a bad row, which burned
+            // the key forever and made the bonus unrecoverable after a retry.
+            if (!hasLocalRow) { lastAwardFailure = 5; return false; }
+            if (bankedScores == null) { lastAwardFailure = 5; return false; }
+
+            int banked = bankedScores[localRow];
+            if (banked < 0) { lastAwardFailure = 5; return false; }
+            if (points > 0)
+            {
+                int projected = banked + points;
+                if (projected < banked) { lastAwardFailure = 5; return false; }
+            }
+
+            int newCount;
+            int failureCode;
+            if (!GrowthLedgerMath.TryAwardOnce(awardedKeys, awardedPoints, awardedCount,
+                awardKey, points, out newCount, out failureCode))
+            {
+                lastAwardFailure = failureCode;
+                return false;
+            }
+
+            awardedCount = newCount;
+            bankedScores[localRow] = banked + points;
+            bankedScoreUnits = bankedScores[localRow];
+            lastAwardFailure = 0;
+            return true;
+        }
+
+        /// <summary>How many distinct award keys this ball has been granted.</summary>
+        public int GetAwardedAwardCount()
+        {
+            return awardedCount;
+        }
+
+        /// <summary>Failure code of the most recent TryAwardScore, 0 after a success.</summary>
+        public int GetLastAwardFailure()
+        {
+            return lastAwardFailure;
         }
 
         /// <summary>

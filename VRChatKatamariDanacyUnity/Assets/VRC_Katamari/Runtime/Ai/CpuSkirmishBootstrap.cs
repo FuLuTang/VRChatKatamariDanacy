@@ -51,6 +51,7 @@ namespace VRCKatamari.Ai
         private float windowElapsed;
         private int windowIndex;
         private bool windowOpen;
+        private bool settlementDone;
         private int readinessFrames;
         private const int readinessLimit = 240;
         private float elapsed;
@@ -151,6 +152,67 @@ namespace VRCKatamari.Ai
         }
 
         /// <summary>
+        /// Awards the three settlement bonuses by score rank, once per semantic key.
+        /// </summary>
+        /// <remarks>
+        /// Ranking is read from each motor's banked score, the award is granted through
+        /// TryAwardScore (the ledger's own rule), and nothing here keeps a bonus table: the
+        /// ledger owns the score. Called twice on purpose - the second pass must be refused
+        /// as duplicateKey on every entry.
+        /// </remarks>
+        private void SettleRewards()
+        {
+            if (motors == null) return;
+
+            // Rank indices by banked score, descending. Four balls, so a simple selection.
+            int[] order = new int[motors.Length];
+            int count = 0;
+            for (int i = 0; i < motors.Length; i++)
+            {
+                if (motors[i] == null) continue;
+                order[count] = i;
+                count = count + 1;
+            }
+            for (int a = 0; a < count; a++)
+            {
+                for (int b = a + 1; b < count; b++)
+                {
+                    if (motors[order[b]].GetBankedScoreUnits() > motors[order[a]].GetBankedScoreUnits())
+                    {
+                        int swap = order[a];
+                        order[a] = order[b];
+                        order[b] = swap;
+                    }
+                }
+            }
+
+            string[] keys = new string[3];
+            keys[0] = "settle:first";
+            keys[1] = "settle:second";
+            keys[2] = "settle:third";
+
+            for (int r = 0; r < count && r < 3; r++)
+            {
+                KatamariBallMotor m = motors[order[r]];
+                int bankedBefore = m.GetBankedScoreUnits();
+                bool ok = m.TryAwardScore(keys[r], 50);
+                int total = m.GetBankedScoreUnits();
+                if (ok)
+                {
+                    Debug.Log("[settle] ball=" + order[r] + " banked=" + bankedBefore
+                        + " award=50 total=" + total + " rank=" + (r + 1)
+                        + " awardedCount=" + m.GetAwardedAwardCount());
+                }
+                else
+                {
+                    Debug.Log("[settle] duplicate key=" + keys[r] + " ball=" + order[r]
+                        + " failure=" + m.GetLastAwardFailure()
+                        + " total=" + total + " (unchanged)");
+                }
+            }
+        }
+
+        /// <summary>
         /// Rotates the conversion window and prints every transition.
         /// </summary>
         /// <remarks>
@@ -231,6 +293,11 @@ namespace VRCKatamari.Ai
                     roundPhase = 1;
                     roundElapsed = 0f;
                     Debug.Log("[round] phase=Settling after " + roundSeconds + "s");
+                    SettleRewards();
+                    // Deliberately run the settlement a second time, exactly as a reconnect
+                    // or event replay would. Every award must come back duplicateKey and no
+                    // score may move; that is what makes "once" structural.
+                    SettleRewards();
                 }
             }
             else if (roundPhase == 1)

@@ -29,7 +29,7 @@ VRChat 原创滚球、吸附成长与交分 PVP 项目。内部名 VRC塊魂；�
 ## 目录
 
 - `Docs/`：设计分章、原始材料、配置、模板、校验工具及后续研究/证据。
-- `Tools/`：开发工具，如 [unity-mcp](<Tools/unity-mcp/README.md>)（从 Linux 驱动 Windows 上的 Unity Editor）。
+- `Tools/`：开发工具，如 [mcp](<Tools/mcp/README.md>)（从 Linux 驱动 Windows 上的 Unity Editor 和用户 Chrome）。
 - `Marketing/`：概念与发布素材；概念图不可冒充实机画面。
 - `VRChatKatamariDanacyUnity/`：Windows VCC 创建的真实 Unity 工程根；VPM 包源码与本地缓存不入库。
 - `tasks.json`：当前执行任务表（状态以其为准）。

@@ -143,6 +143,7 @@ InitTestScene*.unity*
 /VRChatKatamariDanacyUnity/.utmp/
 /VRChatKatamariDanacyUnity/ServerData/
 /VRChatKatamariDanacyUnity/UIElementsSchema/
+/VRChatKatamariDanacyUnity/ClientSimStorage/
 # VPM restores licensed SDK package contents; keep only manifests and resolver tracked.
 /VRChatKatamariDanacyUnity/Packages/com.vrchat.*
 !/VRChatKatamariDanacyUnity/Packages/com.vrchat.core.*

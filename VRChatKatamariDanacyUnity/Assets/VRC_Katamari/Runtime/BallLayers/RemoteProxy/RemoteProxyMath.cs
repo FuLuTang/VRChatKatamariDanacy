@@ -95,7 +95,7 @@ namespace VRCKatamari.BallLayers
     /// 64-bit arithmetic, so TryComputeDigest is our own token: two independent
     /// 32-bit FNV-1a lanes over a fixed field stream, returned as a low/high int
     /// pair. It is deterministic and it changes when any field changes, but it
-    /// is NOT byte-compatible with the Python or draft digest and it is not
+    /// is NOT byte-compatible with the Python fixture digest and it is not
     /// authentication or a wire format. Like Python's summary_digest, it is an
     /// opaque upstream value that Apply stores and compares; Apply never derives
     /// identity from it and never recomputes it.
@@ -763,8 +763,8 @@ namespace VRCKatamari.BallLayers
         /// is not part of the stream.
         ///
         /// This is NOT the Python sha256 fixture digest and is not byte-compatible
-        /// with it or with the runtime draft; only determinism and the equality
-        /// semantics matter. It is a conflict-detection token, not authentication.
+        /// with it. Only determinism and the equality semantics matter. It is a
+        /// conflict-detection token, not authentication.
         /// False means a null text field; the out values are then the lane
         /// starting values and are not a usable token. Unlike the rest of this
         /// class, this call allocates (ToCharArray), so it belongs on the

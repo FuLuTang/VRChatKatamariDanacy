@@ -2066,7 +2066,7 @@
    "steps": [
     "按 Docs/Design/CODE_CONVENTIONS.md 建立 VRCKatamari.Runtime（含 U# Assembly Definition）与 VRCKatamari.Tests.EditMode 程序集。",
     "把 GroundContact、RadialProxy、Attachment、SizeModel、VisualRoll、Sweep、FollowRig、RemoteProxy 八层逻辑写成 Runtime/BallLayers/<Module>/ 下的 U# 兼容静态数学（必要时加 Behaviour），不保留并行草稿。",
-    "把各层 Python 测试的固定用例改写成 NUnit EditMode 测试；全部通过后把 Python 模型、RuntimeDraft 和对应 Docs/tests 移入归档。",
+    "把各层 Python 测试的固定用例改写成 NUnit EditMode 测试；全部通过后把 Python 模型和对应 Docs/tests 移入归档。",
     "建一个 Labs/BallLayers 实验场景，用真实运行时组件逐层可视化（含 +X/+Y/+Z 方向探针），供人工检查。",
     "RemoteProxy 只用合成 ballSeed；生产键语义等 T06。"
    ],
@@ -2160,7 +2160,7 @@
   {
    "implementer": "LUNA",
    "reviewer": "Lead + Sol",
-   "status": "TODO",
+   "status": "RUNNING",
    "priority": "P1",
    "exclusive_locks": [],
    "external_requirements": [
@@ -2191,7 +2191,8 @@
     "离线一局能跑完 180 s 并给出排名，兑换与奖励项结果可复现。",
     "CPU 不读任何未确认状态（不读玩家预测值、不读远端装饰）。",
     "文档明确：CPU 行为是项目自选实现，不是原作 AI 的还原。"
-   ]
+   ],
+   "execution_note": "里程碑 A 已达成：3 个 CPU 球用同一套公开马达 API 完成吸收与长大（commit e13c84e）。兑换规则已实测：最小直径 0.55 m 被拒绝并给出原因码 4；兑换后直径与 BankShrinkMath 值小数点后 4 位一致；60 s 轮换用 10 s 实验台加速验证（commit 453fd91）。结算奖励项按语义键幂等已验证（commit 6fd0bce，EditMode 185/185）。验收表述由 Lead 判定：「兑换与奖励项结果可复现」按规则可复现理解（同样输入得到同样的兑换直径与同样的奖励项，由测试与公式精确匹配证明），不是两整局逐位相同的回放——马达在 Update 里以 0.02 s 固定步长推进、累加器每帧最多 5 步，CpuBallPilot 用 Time.deltaTime，回放本就随帧率变化。未完成：一次不中断、真实参数跑满 180 s 并到达结算的回合（该次尝试在游戏时间 176.1 s 停止，Play Mode 已退出且无记录原因）；实验台引导 Runtime/Ai/CpuSkirmishBootstrap.cs 仍在 Runtime，须移到 Labs/CpuSkirmish/。2026-11-14 因用户优先级调整暂停：先做单人剧情模式，多人对战与 CPU 对战稍后再做。"
   }
  ],
  "releaseProfiles": {

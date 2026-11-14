@@ -234,3 +234,23 @@ StepBall:
 队列是"这件是否已入队"的**唯一所有者**，所以宿主**不保存自己的 `queued` 闩锁**。两份状态必然分叉：本项目实际出现过闩锁为真而队列里无该件，该件从此永不提交，表现为"球贴到 0.2 m 却什么都没发生"。
 
 宿主正确写法：激活半径内每 tick 直接调 `SubmitCandidate`（重复无害），离开释放半径调 `WithdrawCandidate`，不记录任何本地队列状态。
+
+## 兑换（bank）原因码表
+
+`KatamariBallMotor.TryBank(now, requestId)` 是唯一实现的转发入口；原因由 `TryBankWithReason(now, requestId, out int reason)` 给出。
+
+| 编号 | 名字 | 触发条件 |
+| --- | --- | --- |
+| 0 | `ok` | 兑换成功：已按直径规则缩水、分数已写入 |
+| 1 | `noLocalRow` | 台账没有本地行（`hasLocalRow == false`，即 `TryJoin` 未成功） |
+| 2 | `invalidRequestId` | `requestId` 为 null 或空串 |
+| 3 | `invalidInput` | `now` 或语义直径不是有限数 |
+| 4 | **`tooSmall`** | 语义直径 < `minConversionDiameterWorldM`（默认 0.55 m） |
+| 5 | `nothingToBank` | `unbankedVolumeUnits <= 0`（没有可兑换的已确认体积） |
+| 6 | `sizingRefused` | `SizeModelMath.TryDerive` 或 `BankShrinkMath` 的两步定价返回 false |
+| 7 | `ledgerRefused` | `GrowthLedgerMath.TryBank` 拒绝，或读回的 confirmed/banked 为负 |
+| 8 | `shrinkFailed` | 台账已提交，但缩水落地失败（`ApplyBankShrink` 返回 false；入参不再是有限数） |
+
+注意 7 与 8 的区别：7 是**没有提交**，8 是**已经提交但缩水没落地**——后者不会回滚台账（`(player, requestId)` 一次性，重试不会重复计分）。
+
+`noLocalRow`（1）在当前架构下不可构造：`Start()` 必定 `TryJoin` 一次且容量为 1，故 EditMode 测试**未覆盖**该分支，测试文件里有注释说明。

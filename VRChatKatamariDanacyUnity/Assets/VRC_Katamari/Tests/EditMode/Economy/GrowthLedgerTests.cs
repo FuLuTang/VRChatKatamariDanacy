@@ -15,6 +15,12 @@ namespace VRCKatamari.Tests
     /// victim's unbanked value and gives the attacker min(lost, share)). No assertion
     /// re-runs an implementation formula. Volumes are the model's integer volume units and
     /// times are seconds from the test's own clock.
+    /// <para>
+    /// Totals are 32-bit integers, so a NaN (or any fractional) total is not
+    /// representable; the only numeric hazard is wraparound, which every mutating call
+    /// checks before writing. The non-negativity assertions here therefore look for a
+    /// wrapped value, and every negative or overflowing input is refused.
+    /// </para>
     /// </remarks>
     public class GrowthLedgerTests
     {
@@ -398,7 +404,7 @@ namespace VRCKatamari.Tests
             // A claim from an unknown player, during the wrong phase, is refused.
             Assert.IsFalse(host.SubmitClaim("k", 0, "ghost", 0, 1));
             Assert.IsTrue(host.SubmitClaim("k", 0, "a", 0, 1));
-            Assert.IsTrue(host.Resolve("k", 0, 2));
+            Assert.AreNotEqual(GrowthLedgerMath.NoRow, host.Resolve("k", 0, 2));
             Assert.IsTrue(host.Transition(LedgerPhase.Settling, 20f));
             Assert.IsFalse(host.Bank("a", 1, "late"));
 

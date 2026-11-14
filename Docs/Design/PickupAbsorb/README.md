@@ -29,3 +29,11 @@
 从仓库根运行 `python3 -m unittest discover -s Docs/tests`。吸附判定采用球半径 + 显式接触余量 + AABB 包围球半径的宽松近似；这只是离线候选模型。它不含遮挡、速度合理性、物件状态机、回合结算、网络传输或反作弊。权威状态应只计确认后的吸附集合；客户端装饰可丢弃并从权威快照重建。**不声称 VR、舒适性、Udon runtime、Unity 或网络实测通过。**
 
 来源依据：[`Docs/02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md#L32-L110)、[`Docs/01_GAME_DESIGN.md`](../../01_GAME_DESIGN.md#L13-L20)、[`Docs/Archive/Handoffs/Research_ReferenceRules.md`](../../Archive/Handoffs/Research_ReferenceRules.md)。
+
+## Unity 实现
+
+- 运行时：`Assets/VRC_Katamari/Runtime/Pickup/PickupAbsorbMath.cs`（命名空间 `VRCKatamari.Pickup`）。EditMode 测试：`Assets/VRC_Katamari/Tests/EditMode/Pickup/PickupAbsorbTests.cs`。
+- 只做纯值判定：`EvaluateAbsorb` 按模型的门控顺序返回“可吸附”或首个拒绝原因（不可吸附、类型不在白名单、最大全长超尺寸上限、球已达成长上限、超出接触距离），接触判定为 `distance <= 碰撞半径 + 接触余量 + 包围球半径`。比较量是**碰撞半径**，本层没有语义直径参数，避免把直径当半径传入。
+- 另外两个纯函数：`TryComputeGrowthRadius` 按 `min(上限, 基础半径 + 每单位成长 × 确认值)` 求半径（只接受确认值）；`TryAbsorbValueToLedgerGain` 把物件的 float 价值转成账本的整数 gain，两个草案都没定义取整规则，因此非整数/越界值直接拒绝而不是四舍五入。
+- 未移植：`SpatialRegistry` 均匀网格广播结构（宿主侧容器，Udon 无 List/Dictionary）与 `Ball` 自己的 confirmed/predicted 字典（那会成为第二份账本；确认账本归 `GrowthLedgerMath`）。Python 的 5 个测试中 4 个已移植，网格那个未移植。
+- 未验证：本环境没有 Unity/Udon 编译与 EditMode 运行，因此**不声称** Udon 编译、EditMode 测试、VR 或网络实测通过。

@@ -130,12 +130,15 @@ namespace VRCKatamari.Tests
             int gain;
             Assert.IsTrue(PickupAbsorbMath.TryAbsorbValueToLedgerGain(2f, out gain));
             Assert.AreEqual(2, gain);
+
             // Neither model defines a rounding rule, so a fractional value is refused
-            // rather than rounded into a total.
-            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(2.5f, out gain));
-            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(-1f, out gain));
-            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(float.NaN, out gain));
-            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(2147483648f, out gain));
+            // rather than rounded into a total. A rejected call zeroes its out value.
+            int rejected;
+            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(2.5f, out rejected));
+            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(-1f, out rejected));
+            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(float.NaN, out rejected));
+            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(2147483648f, out rejected));
+            Assert.AreEqual(0, rejected);
 
             LedgerTestHost ledger = PlayingLedger();
             Assert.IsTrue(ledger.SubmitClaim("rock", 1, "p1", 0, 1));

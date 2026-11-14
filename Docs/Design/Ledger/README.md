@@ -31,3 +31,11 @@ KO 在一个模型事务中清空受害者未交存确认量、预测、抢占�
 ## 运行测试
 
 从仓库根执行：`python3 -m unittest discover -s Docs/tests`。本目录测试只验证这个纯 Python 草案模型；不代表 Udon、Unity、VR 舒适性或真实网络行为验证。
+
+## Unity 实现
+
+- 运行时：`Assets/VRC_Katamari/Runtime/Economy/GrowthLedgerMath.cs`（命名空间 `VRCKatamari.Economy`）。EditMode 测试：`Assets/VRC_Katamari/Tests/EditMode/Economy/GrowthLedgerTests.cs`，共享的测试宿主在 `LedgerTestHost.cs`。
+- 状态全部由调用方持有：回合状态/截止时间、玩家列（确认量、已银行分、生命、重生计时、代数）、commit、claim、prediction、bank 请求标记都是调用方预分配的并行数组，行数用 `ref int` 就地推进。静态类不保存任何状态、不分配、无属性/结构体/重载，符合 UdonSharp 约束。
+- 分离保持不变：只有 commit 后的确认值进入 `confirmed_volume`（未交存）与 `banked_score`（已交存），预测是独立存储、不可 bank、不进入任何总分。一次吸收事件按其幂等键（物品实例 + 回合 + 世代）只结算一次，重复解析返回原 commit；bank 按 `(player, requestId)` 去重并 1:1 移动确认量。
+- 与 Python 草案的差异：非法迁移/冲突重放/密钥错误等异常路径改为返回 `false`（项目约定不抛异常）；`item_winners` 与 commit 键集完全一致，改为从 commit 推导而不是再存一份；`same_frame_tie`、`round_duration_placeholder`、`protection_duration_placeholder` 在模型里只存不读，因此不产生参数；32 位整数溢出在写入前拒绝；`resolve_claims` 未检查负 gain 的漏洞在本实现中拒绝。
+- 未验证：本环境没有 Unity/Udon 编译与 EditMode 运行，因此**不声称** Udon 编译、EditMode 测试、VR 或网络实测通过。

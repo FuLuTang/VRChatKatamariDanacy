@@ -36,6 +36,21 @@ BANK = "bank"
 # Tier upper edges from the PicnicLawn scale table (t0/t1/t2/t3).
 TIER_EDGES_M = (0.55, 0.95, 1.45, 2.20)
 
+# End-of-match bonus categories. The original game awards +50 pt to the
+# first place of three categories (research README C11/C12); the exact
+# category list is a project choice, not an original value.
+BONUS_CATEGORIES = (
+    "swallowed_opponents",
+    "max_ball_size",
+    "distance_travelled",
+    "items_absorbed",
+)
+DEFAULT_BONUS_CATEGORIES = (
+    "swallowed_opponents",
+    "max_ball_size",
+    "items_absorbed",
+)
+
 TIME_SINKS = (
     "absorb",
     "bank_service",
@@ -88,8 +103,23 @@ class RoundParams:
     radius_exponent: float = 1.0 / 3.0      # sphere law r = cbrt(3V/4pi)
     absorb_size_ratio: float = 1.0          # item pickup gate <= ball diameter * ratio
 
-    bank_cycle_s: float = 45.0              # PicnicLawn rotation period (provisional)
+    bank_cycle_s: float = 60.0             # original: conversion area moves every 60 s
     bank_service_s: float = 0.5             # (model) dwell to complete one deposit
+    # Converting trades size for points: the ball shrinks, it is not reset.
+    # Diameter-space rule is OUR invention (the original formula is unknown):
+    #   post = start + (pre - start) * bank_residual_fraction
+    # The clamp is applied by post_bank_diameter(). 0.0 reproduces the old
+    # reset-to-start rule for comparison.
+    bank_residual_fraction: float = 0.25
+    # A ball smaller than this cannot convert at all; the visit is wasted.
+    # 0.55 m is the t1 band floor (project-provisional).
+    min_bank_diameter_m: float = 0.55
+
+    # End-of-match bonus layer (original: 3 categories, +50 pt to first place).
+    # Ties award nothing, so only a strict first place scores.
+    bonus_enabled: bool = True
+    bonus_points: float = 50.0
+    bonus_categories: tuple[str, ...] = DEFAULT_BONUS_CATEGORIES
 
     respawn_delay_s: float = 3.0            # prototype_defaults
     respawn_protection_s: float = 2.0       # prototype_defaults
@@ -279,6 +309,39 @@ def diameter_for_units(units: float, params: RoundParams) -> float:
     return min(diameter, params.max_diameter_m)
 
 
+def units_for_diameter(diameter_m: float, params: RoundParams) -> float:
+    """Inverse of diameter_for_units(), clamped to [start, max].
+
+    Used to price the already-scored residual volume that survives a
+    conversion, so that residual can never be scored twice.
+    """
+    clamped = min(max(diameter_m, params.start_diameter_m), params.max_diameter_m)
+    v0 = _sphere_volume_m3(params.start_diameter_m)
+    v_max = _sphere_volume_m3(params.max_diameter_m)
+    per_unit = (v_max - v0) / params.units_to_max_diameter
+    volume = v0 * (clamped / params.start_diameter_m) ** (1.0 / params.radius_exponent)
+    return max(0.0, (volume - v0) / per_unit)
+
+
+def post_bank_diameter(pre_bank_diameter_m: float, params: RoundParams) -> float:
+    """Ball diameter after a conversion: shrink by a fraction of its growth.
+
+    This exact diameter-space formula is a PROJECT INVENTION: the original
+    only confirms that converting makes the ball smaller (research README
+    C2), not by how much or in which space. 0.0 means "reset to start".
+    Clamped to at least start_diameter_m.
+    """
+    residual = (params.start_diameter_m
+                + (pre_bank_diameter_m - params.start_diameter_m)
+                * params.bank_residual_fraction)
+    return max(params.start_diameter_m, residual)
+
+
+def can_convert(diameter_m: float, params: RoundParams) -> bool:
+    """Whether a ball is big enough to convert at all (project rule)."""
+    return diameter_m + 1e-9 >= params.min_bank_diameter_m
+
+
 def can_absorb(pickup_diameter_m: float, ball_diameter_m: float,
                absorb_size_ratio: float) -> bool:
     """Prototype absorb gate: item pickup diameter <= ball diameter * ratio.
@@ -328,6 +391,7 @@ class PolicyContext:
     protected: bool
     powerup: str | None
     speed_mps: float
+    can_bank: bool
     zones: tuple[ZoneView, ...]
     threats: tuple[ThreatView, ...]
 
@@ -356,7 +420,7 @@ class EatEverything(Policy):
     bank_before_end_s: float = 30.0
 
     def wants_bank(self, ctx: PolicyContext) -> bool:
-        if ctx.unbanked_units <= 0:
+        if ctx.unbanked_units <= 0 or not ctx.can_bank:
             return False
         return (ctx.unbanked_units >= self.bank_at_units
                 or ctx.time_s >= ctx.duration_s - self.bank_before_end_s)
@@ -367,7 +431,7 @@ class EatEverything(Policy):
         if options:
             return max(options, key=lambda z: (z.absorbable_value_units / (z.travel_s + 1.0),
                                                z.zone_id)).zone_id
-        if ctx.unbanked_units > 0:
+        if ctx.unbanked_units > 0 and ctx.can_bank:
             return BANK
         # Nothing edible anywhere: walk to the nearest zone that still has
         # props, so the result shows the stranded/roaming time instead of
@@ -388,7 +452,7 @@ class AvoidThreats(Policy):
     bank_before_end_s: float = 25.0
 
     def wants_bank(self, ctx: PolicyContext) -> bool:
-        if ctx.unbanked_units <= 0:
+        if ctx.unbanked_units <= 0 or not ctx.can_bank:
             return False
         if ctx.time_s >= ctx.duration_s - self.bank_before_end_s:
             return True
@@ -424,7 +488,7 @@ class AvoidThreats(Policy):
                       and z.zone_id not in danger]
         if safe_stock:
             return min(safe_stock, key=lambda z: (z.distance_m, z.zone_id)).zone_id
-        if ctx.unbanked_units > 0:
+        if ctx.unbanked_units > 0 and ctx.can_bank:
             return BANK
         return None
 
@@ -439,7 +503,7 @@ class RushBank(Policy):
     proximity_weight: float = 2.0
 
     def wants_bank(self, ctx: PolicyContext) -> bool:
-        if ctx.unbanked_units <= 0:
+        if ctx.unbanked_units <= 0 or not ctx.can_bank:
             return False
         return (ctx.unbanked_units >= self.bank_at_units
                 or ctx.time_s >= ctx.duration_s - self.bank_before_end_s)
@@ -452,7 +516,7 @@ class RushBank(Policy):
             return max(options, key=lambda z: (
                 z.absorbable_value_units / (self.proximity_weight * z.travel_s + 1.0),
                 z.zone_id)).zone_id
-        if ctx.unbanked_units > 0:
+        if ctx.unbanked_units > 0 and ctx.can_bank:
             return BANK
         stocked = [z for z in ctx.zones
                    if z.remaining_items > 0 and z.zone_id != ctx.zone_id]
@@ -475,6 +539,10 @@ class PlayerState:
     zone_id: str
     units: float
     diameter_m: float
+    carried_units: float = 0.0
+    bonus_score: float = 0.0
+    bonus_wins: tuple[str, ...] = ()
+    distance_travelled_m: float = 0.0
     target: str | None = None
     travelling: bool = False
     leg_origin: str | None = None
@@ -541,6 +609,10 @@ class PlayerResult:
     policy: str
     spawn_zone: str
     score_units: float
+    bank_score_units: float
+    bonus_points: float
+    bonus_wins: tuple[str, ...]
+    distance_travelled_m: float
     absorbed_items: int
     absorbed_units: float
     deposits: int
@@ -574,6 +646,10 @@ class RoundResult:
     @property
     def total_score(self) -> float:
         return sum(p.score_units for p in self.players)
+
+    @property
+    def total_bonus(self) -> float:
+        return sum(p.bonus_points for p in self.players)
 
 
 # --------------------------------------------------------------------------
@@ -644,12 +720,17 @@ def simulate_round(params: RoundParams,
                 if p.diameter_m >= edge and edge not in p.reach_times_s:
                     p.reach_times_s[edge] = now + dt
 
+    _award_bonuses(world, players)
+
     results = []
     for p in players:
         sink = {k: p.time_sinks.get(k, 0.0) for k in TIME_SINKS}
         results.append(PlayerResult(
             index=p.index, name=p.profile.name, policy=p.policy.name,
             spawn_zone=p.spawn_zone, score_units=p.score,
+            bank_score_units=p.deposit_units,
+            bonus_points=p.bonus_score, bonus_wins=p.bonus_wins,
+            distance_travelled_m=p.distance_travelled_m,
             absorbed_items=p.absorbed_items, absorbed_units=p.absorbed_units,
             deposits=p.deposits, deposit_units=p.deposit_units,
             swallows=p.swallows, swallowed=p.swallowed,
@@ -714,7 +795,7 @@ def _step_player(world: _World, p: PlayerState, dt: float) -> None:
             _sink(p, "travel", dt)
             return
 
-    if p.policy.wants_bank(ctx) and p.units > 0.0:
+    if p.policy.wants_bank(ctx) and p.units > 0.0 and ctx.can_bank:
         if p.zone_id == world.map.bank_zone_id:
             if p.protected(now):
                 _sink(p, "bank_wait", dt)
@@ -768,7 +849,7 @@ def _absorb_step(world: _World, p: PlayerState, dt: float) -> bool:
         p.units += item.value_units
         p.absorbed_units += item.value_units
         p.absorbed_items += 1
-        p.diameter_m = diameter_for_units(p.units, params)
+        p.diameter_m = diameter_for_units(p.units + p.carried_units, params)
         taken += 1
 
     if taken or _zone_has_edible(world, p):
@@ -842,6 +923,7 @@ def _build_context(world: _World, p: PlayerState) -> PolicyContext:
         diameter_m=p.diameter_m, unbanked_units=p.units,
         banked_score=p.score, protected=p.protected(world.time_s),
         powerup=p.powerup, speed_mps=p.speed_mps(params, world.time_s),
+        can_bank=can_convert(p.diameter_m, params),
         zones=tuple(views), threats=threats,
     )
 
@@ -874,7 +956,7 @@ def _start_trip(world: _World, p: PlayerState, target: str) -> bool:
     p.leg_origin = p.zone_id
     p.banking = False
     p.bank_progress_s = 0.0
-    p.leg_anchor_index = _active_anchor_index(world.time_s, world.params)
+    p.leg_anchor_index = active_anchor_index(world.time_s, world.params)
     p.leg_length_m = _distance(world, p.zone_id, target)
     p.distance_left_m = p.leg_length_m
     if p.distance_left_m <= 1e-9:
@@ -885,7 +967,7 @@ def _start_trip(world: _World, p: PlayerState, target: str) -> bool:
 def _advance_travel(world: _World, p: PlayerState, dt: float) -> None:
     params = world.params
     if p.target == BANK:
-        index = _active_anchor_index(world.time_s, params)
+        index = active_anchor_index(world.time_s, params)
         if index != p.leg_anchor_index and p.leg_origin is not None:
             travelled = max(0.0, p.leg_length_m - p.distance_left_m)
             origin = world.positions[p.leg_origin]
@@ -896,6 +978,8 @@ def _advance_travel(world: _World, p: PlayerState, dt: float) -> None:
             p.distance_left_m = max(0.0, new_length - travelled)
 
     speed = p.speed_mps(params, world.time_s)
+    step_m = min(speed * dt, max(0.0, p.distance_left_m))
+    p.distance_travelled_m += step_m
     p.distance_left_m -= speed * dt
     _sink(p, "bank_travel" if p.target == BANK else "travel", dt)
     if p.distance_left_m <= 1e-9:
@@ -920,7 +1004,7 @@ def _distance(world: _World, from_zone: str, target: str) -> float:
     if target == BANK or target == world.map.bank_zone_id:
         if from_zone == world.map.bank_zone_id:
             return 0.0
-        index = _active_anchor_index(world.time_s, params)
+        index = active_anchor_index(world.time_s, params)
         return _euclid(origin, world.map.bank_anchors_m[index]) * params.path_detour_factor
     target_pos = world.positions[target]
     return _euclid(origin, target_pos) * params.path_detour_factor
@@ -930,7 +1014,8 @@ def _euclid(a: tuple[float, float], b: tuple[float, float]) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-def _active_anchor_index(now_s: float, params: RoundParams) -> int:
+def active_anchor_index(now_s: float, params: RoundParams) -> int:
+    """Which bank anchor is active at now_s (deterministic rotation)."""
     if params.bank_cycle_s <= 0:
         return 0
     return int(max(0.0, now_s) // params.bank_cycle_s) % 4
@@ -964,11 +1049,18 @@ def _deposit(p: PlayerState, world: _World) -> None:
         p.banking = False
         p.bank_progress_s = 0.0
         return
+    params = world.params
+    pre_bank_diameter = p.diameter_m
     p.score += amount
     p.deposit_units += amount
     p.deposits += 1
+    # The ball keeps a fraction of its growth as a "carried" residual. That
+    # residual is already scored, so it is NOT part of p.units and can never
+    # be converted again; only newly absorbed volume is.
+    p.carried_units = units_for_diameter(
+        post_bank_diameter(pre_bank_diameter, params), params)
     p.units = 0.0
-    p.diameter_m = world.params.start_diameter_m
+    p.diameter_m = post_bank_diameter(pre_bank_diameter, params)
     p.banking = False
     p.bank_progress_s = 0.0
     p.powerup = None
@@ -981,6 +1073,7 @@ def _deposit(p: PlayerState, world: _World) -> None:
 def _revive(p: PlayerState, world: _World) -> None:
     params = world.params
     p.units = 0.0
+    p.carried_units = 0.0
     p.diameter_m = params.start_diameter_m
     p.dead_until_s = 0.0
     p.zone_id = p.spawn_zone
@@ -1030,10 +1123,12 @@ def _swallow(world: _World, attacker: PlayerState, victim: PlayerState) -> None:
     stolen = math.floor(max(0.0, victim.units) * params.steal_fraction)
     attacker.units += stolen
     attacker.stolen_units += stolen
-    attacker.diameter_m = diameter_for_units(attacker.units, params)
+    attacker.diameter_m = diameter_for_units(attacker.units + attacker.carried_units,
+                                              params)
     attacker.swallows += 1
 
     victim.units = 0.0
+    victim.carried_units = 0.0
     victim.diameter_m = params.start_diameter_m
     victim.dead_until_s = world.time_s + params.respawn_delay_s
     victim.swallowed += 1
@@ -1068,6 +1163,45 @@ def _restock(world: _World) -> None:
             if add <= 0:
                 continue
             counts[definition_id] = min(target, count + add)
+
+
+def _bonus_metric(p: PlayerState, category: str) -> float:
+    """The single number that ranks a player in one bonus category."""
+    if category == "swallowed_opponents":
+        return float(p.swallows)
+    if category == "max_ball_size":
+        return p.peak_diameter_m
+    if category == "distance_travelled":
+        return p.distance_travelled_m
+    if category == "items_absorbed":
+        return float(p.absorbed_items)
+    raise ValueError(f"unknown bonus category: {category}")
+
+
+def _award_bonuses(world: _World, players: Sequence[PlayerState]) -> None:
+    """Award each enabled category's strict first place at match end.
+
+    Ties award nothing: the original gives +50 pt to the category's first
+    place, and "everyone tied at zero gets +50" would silently inflate every
+    score. Which tie rule the original uses is unknown, so this is a project
+    choice. A one-player round is a test artifact and never gets bonuses.
+    """
+    params = world.params
+    if not params.bonus_enabled or len(players) < 2:
+        return
+    for category in params.bonus_categories:
+        values = [_bonus_metric(p, category) for p in players]
+        best = max(values)
+        leaders = [i for i, value in enumerate(values)
+                   if value + 1e-9 >= best]
+        if len(leaders) != 1:
+            continue
+        winner = players[leaders[0]]
+        winner.score += params.bonus_points
+        winner.bonus_score += params.bonus_points
+        winner.bonus_wins = winner.bonus_wins + (category,)
+        world.events.append((round(params.duration_s, 3), "bonus",
+                             winner.index, category))
 
 
 def _zone(world: _World, zone_id: str) -> ZoneSpec | None:
@@ -1107,6 +1241,17 @@ def _validate_params(params: RoundParams) -> None:
         raise ValueError("units_to_max_diameter must be positive")
     if params.radius_exponent <= 0:
         raise ValueError("radius_exponent must be positive")
+    if not 0.0 <= params.bank_residual_fraction <= 1.0:
+        raise ValueError("bank_residual_fraction must be in [0, 1]")
+    if not 0.0 < params.min_bank_diameter_m <= params.max_diameter_m:
+        raise ValueError("min_bank_diameter_m must be positive and at most max_diameter_m")
+    if params.bonus_points < 0:
+        raise ValueError("bonus_points must be non-negative")
+    unknown = [c for c in params.bonus_categories if c not in BONUS_CATEGORIES]
+    if unknown:
+        raise ValueError(f"unknown bonus categories: {unknown}")
+    if len(set(params.bonus_categories)) != len(params.bonus_categories):
+        raise ValueError("bonus_categories must not repeat")
     for name in ("absorb_size_ratio", "swallow_diameter_ratio",
                  "magnet_absorb_multiplier", "rocket_speed_multiplier",
                  "base_speed_mps", "absorb_items_per_s", "path_detour_factor"):

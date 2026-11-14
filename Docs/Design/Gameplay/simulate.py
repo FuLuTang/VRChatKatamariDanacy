@@ -119,8 +119,14 @@ SENSITIVITY_PARAMETERS: tuple[tuple[str, str, float, str], ...] = (
      "pickup throughput"),
     ("base_speed_mps", "base_speed_mps", 3.0,
      "rolling speed"),
-    ("bank_cycle_s", "bank_cycle_s", 45.0,
-     "anchor rotation period"),
+    ("bank_cycle_s", "bank_cycle_s", 60.0,
+     "conversion-area rotation period (original: 60 s)"),
+    ("bank_residual_fraction", "bank_residual_fraction", 0.25,
+     "share of growth kept after converting (project formula)"),
+    ("min_bank_diameter_m", "min_bank_diameter_m", 0.55,
+     "smallest ball that can convert at all"),
+    ("bonus_points", "bonus_points", 50.0,
+     "end-of-match category bonus (original: +50 pt)"),
     ("bank_service_s", "bank_service_s", 0.5,
      "deposit dwell"),
     ("respawn_delay_s", "respawn_delay_s", 3.0,
@@ -152,8 +158,15 @@ def run(scenario: Scenario, seed: int) -> RoundResult:
 
 
 def totals(result: RoundResult) -> dict[str, float]:
+    finals = [p.final_diameter_m for p in result.players]
+    banked = [p.bank_score_units for p in result.players]
+    score = sum(p.score_units for p in result.players)
+    bonus = sum(p.bonus_points for p in result.players)
     return {
-        "score": sum(p.score_units for p in result.players),
+        "score": score,
+        "banked": sum(banked),
+        "bonus": bonus,
+        "bonus_share": (bonus / score * 100.0) if score else 0.0,
         "peak_m": max(p.peak_diameter_m for p in result.players),
         "absorbed_units": sum(p.absorbed_units for p in result.players),
         "items": sum(p.absorbed_items for p in result.players),
@@ -161,8 +174,18 @@ def totals(result: RoundResult) -> dict[str, float]:
         "swallows": sum(p.swallowed for p in result.players),
         "downtime_s": sum(p.respawn_downtime_s for p in result.players),
         "stolen_units": sum(p.stolen_units for p in result.players),
-        "gap": (max(p.score_units for p in result.players)
-                - min(p.score_units for p in result.players)),
+        "gap": max(p.score_units for p in result.players)
+               - min(p.score_units for p in result.players),
+        "gap_banked": max(banked) - min(banked),
+        "final_mean_m": sum(finals) / len(finals),
+        "final_min_m": min(finals),
+        "final_max_m": max(finals),
+        "end_ge_055": sum(1 for d in finals if d + 1e-9 >= 0.55),
+        "end_ge_032": sum(1 for d in finals if d + 1e-9 >= 0.32),
+        "peak_ge_145": sum(1 for p in result.players
+                           if p.peak_diameter_m + 1e-9 >= 1.45),
+        "peak_ge_220": sum(1 for p in result.players
+                           if p.peak_diameter_m + 1e-9 >= 2.20),
     }
 
 
@@ -212,9 +235,42 @@ def sweep(base: Scenario, seeds: list[int]) -> list[dict[str, object]]:
                 "deposits": mean["deposits"],
                 "swallows": mean["swallows"],
                 "downtime_s": mean["downtime_s"],
+                "banked": mean["banked"],
+                "bonus": mean["bonus"],
+                "final_mean_m": mean["final_mean_m"],
+                "end_ge_055": mean["end_ge_055"],
                 "gap": mean["gap"],
                 "note": why,
             })
+    return rows
+
+
+def bank_rule_comparison(base: Scenario, seeds: list[int]) -> list[dict[str, object]]:
+    """Compare the old reset-to-start rule with the new shrink rule.
+
+    "reset_old" is the pre-2026-11-14 model: bank_residual_fraction=0 and no
+    end-of-match bonus. The other two isolate the shrink rule and the bonus.
+    """
+    fraction = base.params.bank_residual_fraction
+    variants = (
+        ("reset_0.00_no_bonus", 0.0, False),
+        (f"shrink_{fraction:.2f}_no_bonus", fraction, False),
+        (f"shrink_{fraction:.2f}_plus_bonus", fraction, True),
+    )
+    rows: list[dict[str, object]] = []
+    for label, residual, bonus in variants:
+        params = replace(base.params, bank_residual_fraction=residual,
+                         bonus_enabled=bonus)
+        metrics = [totals(simulate_round(params, base.policies, seed=seed))
+                   for seed in seeds]
+        mean = _mean_metrics(metrics)
+        rows.append({
+            "variant": label,
+            "bank_residual_fraction": residual,
+            "bonus_enabled": bonus,
+            "seeds": len(seeds),
+            **mean,
+        })
     return rows
 
 
@@ -248,16 +304,19 @@ def _table(headers: list[str], rows: list[list[object]], align: str = ">") -> st
 def print_result(scenario: Scenario, result: RoundResult) -> None:
     print(f"\n=== {scenario.name} | seed={result.seed} | {STATUS} ===")
     print(scenario.note)
-    headers = ["player", "policy", "score", "peak_m", "items", "deposits",
-               "swallowed", "downtime_s", "final_m"]
+    headers = ["player", "policy", "score", "banked", "bonus", "peak_m",
+               "items", "deposits", "swallowed", "downtime_s", "final_m"]
     rows = []
     for p in result.players:
         rows.append([p.name, p.policy, f"{p.score_units:.0f}",
+                     f"{p.bank_score_units:.0f}", f"{p.bonus_points:.0f}",
                      f"{p.peak_diameter_m:.2f}", p.absorbed_items, p.deposits,
                      p.swallowed, f"{p.respawn_downtime_s:.1f}",
                      f"{p.final_diameter_m:.2f}"])
     print(_table(headers, rows))
-    print(f"winner: {result.winner}")
+    print(f"winner: {result.winner} | bonus total: {result.total_bonus:.0f} "
+          f"({result.total_bonus / result.total_score * 100.0:.1f}% of score)"
+          if result.total_score else f"winner: {result.winner}")
 
     print("\ntier reach times (s; '-' = never reached in this round)")
     reach_headers = ["player"] + [f">={edge:.2f}m" for edge, _ in result.players[0].reach_times_s]
@@ -317,6 +376,29 @@ def print_sweep(rows: list[dict[str, object]], base: Scenario) -> None:
           "winner-loser score spread (mean over seeds).")
 
 
+def print_bank_rule_comparison(rows: list[dict[str, object]]) -> None:
+    print("\n=== conversion rule: old reset vs new shrink vs +bonus "
+          "(four_mixed, 5-seed means) ===")
+    table_rows = []
+    for row in rows:
+        table_rows.append([
+            str(row["variant"]),
+            f"{float(row['score']):.0f}",
+            f"{float(row['banked']):.0f}",
+            f"{float(row['bonus']):.0f}",
+            f"{float(row['items']):.0f}",
+            f"{float(row['absorbed_units']):.0f}",
+            f"{float(row['peak_m']):.2f}",
+            f"{float(row['final_mean_m']):.2f}",
+            f"{int(row['end_ge_055'])}",
+            f"{float(row['gap']):.0f}",
+        ])
+    print(_table(["variant", "score", "banked", "bonus", "items", "absorbed",
+                  "peak", "final_mean", "end>=.55", "gap"], table_rows))
+    print("end>=.55 = players whose ball is still at/above the conversion "
+          "threshold when the round ends (mean count per round).")
+
+
 # --------------------------------------------------------------------------
 # File output
 # --------------------------------------------------------------------------
@@ -324,9 +406,10 @@ def print_sweep(rows: list[dict[str, object]], base: Scenario) -> None:
 
 def write_scenario_csv(rows: list[dict[str, object]], path: Path) -> None:
     fields = ["scenario", "seed", "player", "policy", "spawn_zone", "score",
-              "peak_m", "final_m", "items", "absorbed_units", "deposits",
-              "deposit_units", "swallows", "swallowed", "stolen_units",
-              "downtime_s"]
+              "bank_score", "bonus_points", "bonus_wins", "peak_m", "final_m",
+              "items", "absorbed_units", "deposits", "deposit_units",
+              "swallows", "swallowed", "stolen_units", "downtime_s",
+              "distance_m"]
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(fields)
@@ -361,12 +444,27 @@ def write_sensitivity_csv(rows: list[dict[str, object]], path: Path) -> None:
     fields = ["parameter", "variant", "value", "base_value", "seeds",
               "score_total", "score_min", "score_max", "score_delta_pct",
               "peak_m", "items", "absorbed_units", "deposits", "swallows",
-              "downtime_s", "gap", "note"]
+              "downtime_s", "banked", "bonus", "final_mean_m", "end_ge_055",
+              "gap", "note"]
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(fields)
         for row in rows:
             writer.writerow([row[field] for field in fields])
+
+
+def write_bank_rule_csv(rows: list[dict[str, object]], path: Path) -> None:
+    fields = ["variant", "bank_residual_fraction", "bonus_enabled", "seeds",
+              "score", "banked", "bonus", "bonus_share", "peak_m", "items",
+              "absorbed_units", "deposits", "swallows", "downtime_s", "gap",
+              "gap_banked", "final_mean_m", "final_min_m", "final_max_m",
+              "end_ge_055", "end_ge_032", "peak_ge_145", "peak_ge_220"]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(fields)
+        for row in rows:
+            writer.writerow([f"{row[field]:.4f}" if isinstance(row[field], float)
+                             else row[field] for field in fields])
 
 
 def _md_table(headers: list[str], rows: list[list[str]]) -> str:
@@ -380,7 +478,8 @@ def _md_table(headers: list[str], rows: list[list[str]]) -> str:
 def write_markdown(path: Path, command: str, seed: int,
                    scenario_rows: list[tuple[Scenario, RoundResult]],
                    scenario_seed_rows: list[dict[str, object]],
-                   sweep_rows: list[dict[str, object]]) -> None:
+                   sweep_rows: list[dict[str, object]],
+                   bank_rows: list[dict[str, object]]) -> None:
     lines = [
         "# 回合经济模拟报告（自动生成）",
         "",
@@ -400,14 +499,16 @@ def write_markdown(path: Path, command: str, seed: int,
             t2 = p.reach_times_s[1][1]
             summary_rows.append([
                 scenario.name, p.name, p.policy, f"{p.score_units:.0f}",
+                f"{p.bank_score_units:.0f}", f"{p.bonus_points:.0f}",
                 f"{p.peak_diameter_m:.2f}", str(p.absorbed_items),
                 str(p.deposits), str(p.swallowed),
                 f"{p.respawn_downtime_s:.1f}",
                 "-" if t2 is None else f"{t2:.1f}",
             ])
     lines.append(_md_table(
-        ["场景", "玩家", "策略", "分数", "峰值球径 m", "拾取件数", "交分次数",
-         "被吞次数", "复活停机 s", "≥0.95m 时刻 s"], summary_rows))
+        ["场景", "玩家", "策略", "总分", "交存分", "奖励分", "峰值球径 m",
+         "拾取件数", "交分次数", "被吞次数", "复活停机 s", "≥0.95m 时刻 s"],
+        summary_rows))
     lines += ["", "## 15 s 成长曲线（球径 m）", ""]
     for scenario, result in scenario_rows:
         headers = ["bucket"] + [p.name for p in result.players]
@@ -477,15 +578,45 @@ def write_markdown(path: Path, command: str, seed: int,
     lines.append(_md_table(
         ["参数", "原型值", "-20% 总分", "base 总分", "+20% 总分", "最大|Δ|",
          "分差 -/base/+", "含义"], sens_rows))
+    lines += ["", "## 交分规则对比（旧重置 vs 新缩小 vs +奖励）", ""]
+    if bank_rows:
+        rule_rows = []
+        for row in bank_rows:
+            rule_rows.append([
+                str(row["variant"]),
+                f"{float(row['score']):.0f}",
+                f"{float(row['banked']):.0f}",
+                f"{float(row['bonus']):.0f}",
+                f"{float(row['bonus_share']):.1f}%",
+                f"{float(row['peak_m']):.2f}",
+                f"{float(row['final_mean_m']):.2f}",
+                f"{int(row['end_ge_055'])}",
+                f"{float(row['gap']):.0f}",
+            ])
+        lines.append(_md_table(
+            ["变体", "总分", "交存分", "奖励分", "奖励占比", "峰值 m",
+             "末球径均值 m", "末球径≥0.55 人数", "分差"], rule_rows))
+        lines += [
+            "",
+            "`reset_0.00_no_bonus` 是 2026-11-14 之前的旧规则（交分回 0.30 m、无奖励）；"
+            "`shrink_*.25_no_bonus` 只换缩小规则；最后一行再加回合末奖励。"
+            "末球径≥0.55 是回合结束时仍达到最小交分门槛的人数（每局均值）。",
+        ]
+    else:
+        lines.append("（本次运行跳过了敏感性 sweep，因此没有对比表。）")
+
     lines += [
         "",
         "## 读法",
         "",
-        "- 总分 = 全场所有玩家已交存单位之和；不是单人成绩。",
+        "- 总分 = 交存分 + 回合末奖励分；不是单人成绩。",
         "- 被吞次数 = 被吞事件数（每名受害者计一次）。",
-        "- 曲线在某 15 s 桶突然掉回 0.30 m 表示一次交分或一次被吞后的重生。",
+        "- 交分不再重置：曲线掉到约 0.36–0.46 m 是一次交分后的缩小，"
+        "掉回 0.30 m 只可能是被吞后的重生。",
+        "- 球径 < `min_bank_diameter_m` 时交分被拒绝（本次运行不产生分数，"
+        "玩家必须先去长大）；子阈值访问不会改变球或分数。",
         "- 模型假设：玩家在区域内以固定吞吐拾取、按球径门槛过滤；区域库存共享；"
-        "被吞/交分后回到起始球径。详见 `README.md`。",
+        "被吞后回到起始球径。详见 `README.md`。",
         "",
         f"**{STATUS}**：任何数字都不得作为平衡 PASS 或实测证据。",
     ]
@@ -520,14 +651,18 @@ def print_multiseed(rows: list[dict[str, object]]) -> None:
             f"{sum(float(v['swallows']) for v in variants) / len(variants):.1f}",
             f"{sum(float(v['deposits']) for v in variants) / len(variants):.1f}",
             f"{sum(float(v['downtime_s']) for v in variants) / len(variants):.1f}",
+            f"{sum(float(v['bonus']) for v in variants) / len(variants):.0f}",
+            f"{sum(float(v['end_ge_055']) for v in variants) / len(variants):.1f}",
         ])
     print(_table(["scenario", "score mean", "score range", "items mean",
-                  "swallows mean", "deposits mean", "downtime mean s"], table_rows))
+                  "swallows mean", "deposits mean", "downtime mean s",
+                  "bonus mean", "end>=.55 mean"], table_rows))
 
 
 def write_multiseed_csv(rows: list[dict[str, object]], path: Path) -> None:
-    fields = ["scenario", "seed", "score", "peak_m", "absorbed_units", "items",
-              "deposits", "swallows", "downtime_s", "stolen_units"]
+    fields = ["scenario", "seed", "score", "banked", "bonus", "bonus_share",
+              "peak_m", "absorbed_units", "items", "deposits", "swallows",
+              "downtime_s", "stolen_units", "final_mean_m", "end_ge_055"]
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(fields)
@@ -581,6 +716,14 @@ def main(argv: list[str] | None = None) -> int:
         sweep_rows = sweep(base, _parse_seeds(args.sweep_seeds))
         print_sweep(sweep_rows, base)
 
+    bank_rows: list[dict[str, object]] = []
+    if not args.no_sweep:
+        base = SCENARIOS[SENSITIVITY_BASELINE]
+        if args.dt is not None:
+            base = replace(base, params=replace(base.params, dt_s=args.dt))
+        bank_rows = bank_rule_comparison(base, _parse_seeds(args.sweep_seeds))
+        print_bank_rule_comparison(bank_rows)
+
     scenario_seed_rows: list[dict[str, object]] = []
     for name in names:
         scenario = SCENARIOS[name]
@@ -594,12 +737,17 @@ def main(argv: list[str] | None = None) -> int:
     write_scenario_csv([{
         "scenario": scenario.name, "seed": result.seed, "player": p.name,
         "policy": p.policy, "spawn_zone": p.spawn_zone,
-        "score": f"{p.score_units:.1f}", "peak_m": f"{p.peak_diameter_m:.4f}",
+        "score": f"{p.score_units:.1f}",
+        "bank_score": f"{p.bank_score_units:.1f}",
+        "bonus_points": f"{p.bonus_points:.1f}",
+        "bonus_wins": ";".join(p.bonus_wins),
+        "peak_m": f"{p.peak_diameter_m:.4f}",
         "final_m": f"{p.final_diameter_m:.4f}", "items": p.absorbed_items,
         "absorbed_units": f"{p.absorbed_units:.1f}", "deposits": p.deposits,
         "deposit_units": f"{p.deposit_units:.1f}", "swallows": p.swallows,
         "swallowed": p.swallowed, "stolen_units": f"{p.stolen_units:.1f}",
         "downtime_s": f"{p.respawn_downtime_s:.2f}",
+        "distance_m": f"{p.distance_travelled_m:.1f}",
     } for scenario, result in scenario_rows for p in result.players],
         args.out / "scenario_summary.csv")
     write_growth_csv([(scenario.name, result) for scenario, result in scenario_rows],
@@ -608,11 +756,13 @@ def main(argv: list[str] | None = None) -> int:
                         args.out / "time_sinks.csv")
     if sweep_rows:
         write_sensitivity_csv(sweep_rows, args.out / "sensitivity.csv")
+    if bank_rows:
+        write_bank_rule_csv(bank_rows, args.out / "bank_rule_comparison.csv")
     write_multiseed_csv(scenario_seed_rows, args.out / "scenario_multiseed.csv")
     write_markdown(
         args.out / "round_report.md",
         " ".join([Path(sys.argv[0]).name] + (argv if argv is not None else sys.argv[1:])),
-        args.seed, scenario_rows, scenario_seed_rows, sweep_rows)
+        args.seed, scenario_rows, scenario_seed_rows, sweep_rows, bank_rows)
 
     print(f"\nwrote {args.out}/scenario_summary.csv")
     print(f"wrote {args.out}/growth_curves.csv")
@@ -620,6 +770,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {args.out}/scenario_multiseed.csv")
     if sweep_rows:
         print(f"wrote {args.out}/sensitivity.csv")
+    if bank_rows:
+        print(f"wrote {args.out}/bank_rule_comparison.csv")
     print(f"wrote {args.out}/round_report.md")
     return 0
 

@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-- 已选项目方向与待确认选项分开记录；`recommended_option`为空。官方资料只确认KatamariBall为限时滚大、交存换分、最高分获胜等宽泛描述，未给出具体PVP流程。([规则矩阵说明](Preparation/RuleDecisions/README.md#L3-L18)、[决策表:L5-L6](Preparation/RuleDecisions/decisions.json#L5-L6)、[原作规则范围:L29-L43](Preparation/RuleDecisions/decisions.json#L29-L43))
+- 已选项目方向与待确认选项分开记录；`recommended_option`为空。第二轮公开来源已确认原作交分为场景内兑换区（王子飞船正下方、约每分钟换位）、体积换分且球会变小、球太小不给分；被吞＝短暂冻结＋异地重生、不淘汰；对战有宝箱道具与加分Brother，结算另有3项第一名+50pt。仍未知的是单局时长、回合数、换算公式与最小兑换体积数值、道具完整清单、地图与出生点。([研究核查](Research/KatamariBallRules/README.md)、[规则矩阵](Research/ReferenceRules/rules_matrix.md)、[决策表:L1-L50](Preparation/RuleDecisions/decisions.json#L1-L50))
 - 当前项目基线仍为首发两图目标、第一纵切片一图两人、夜市后置；T39允许在完整证据后批准两图或降为一图。([范围决策:L15-L22](00_SCOPE_DECISIONS.md#L15-L22)、[发布RFC:L7-L10](Archive/Preparation/ReleaseRFC/comparison.md#L7-L10))
-- P09/P17没有记录新的用户决定；根任务/DAG未因本摘要改变。([P09/P17审查:L15-L16](Archive/Process/18_LARGE_SCALE_PREPARATION_REVIEW.md#L15-L16)、[决策表非决定:L178-L182](Preparation/RuleDecisions/decisions.json#L178-L182))
+- P09/P17没有记录新的用户决定；根任务/DAG未因本摘要改变。([P09/P17审查:L15-L16](Archive/Process/18_LARGE_SCALE_PREPARATION_REVIEW.md#L15-L16)、[决策表非决定:L208-L214](Preparation/RuleDecisions/decisions.json#L208-L214))
 
 ## 已由用户决定（2026-11-14）
 
@@ -20,16 +20,20 @@
 | 事项 | 当前基线与选项（均未选择） | 影响 | 决定时点 |
 |---|---|---|---|
 | **首发地图数与地图选择** | A. 保留野餐草坪+玩具房两图目标；B. 明确降为一张完整体验，并由用户指定是哪张。野餐是纵切片起点，不等于已选为唯一首发图。 | 一图仍须完整公平/可玩验证；若降一图，必须经授权修订T37/T38/T40依赖与验收，未选地图应保留为后续、延期或另作决定；不能跳过T32或伪标完成。 | 在T39正式终验前明确范围；T39再依据实际证据作最终体验批准。批准前维持当前两图目标和原DAG。([候选与影响](Archive/Preparation/ReleaseRFC/comparison.md#L14-L27)、[批准纪律](Archive/Preparation/ReleaseRFC/comparison.md#L29-L38)、[任务依赖](../tasks.json#L1290-L1414)) |
-| **正式公平门槛** | 可在正式试玩前先设数值阈值；也可先做明确标为“探索”的试跑，再设阈值；或选定定性评估方式。待定项目包括出生资源差、路线/交分时间差、重生最低资源、补货延迟、重复次数/统计方式及软锁标准。 | 若先探索，探索样本不能追认成PASS；若用定性评估，可复现性较低。T38四人性能测试条件与T39公平标准也不能靠该RFC自动确定。 | 用户/主管须在T39正式试验前明确标准；T39仍需真人证据。([公平阈值选项:L129-L143](Preparation/RuleDecisions/decisions.json#L129-L143)、[T38/T39门槛](../tasks.json#L1328-L1397)、[RFC未定阈值:L31-L34](Archive/Preparation/ReleaseRFC/comparison.md#L31-L34)) |
+| **正式公平门槛** | 可在正式试玩前先设数值阈值；也可先做明确标为“探索”的试跑，再设阈值；或选定定性评估方式。待定项目包括出生资源差、路线/交分时间差、重生最低资源、补货延迟、重复次数/统计方式及软锁标准。 | 若先探索，探索样本不能追认成PASS；若用定性评估，可复现性较低。T38四人性能测试条件与T39公平标准也不能靠该RFC自动确定。 | 用户/主管须在T39正式试验前明确标准；T39仍需真人证据。([公平阈值选项:L159-L175](Preparation/RuleDecisions/decisions.json#L159-L175)、[T38/T39门槛](../tasks.json#L1328-L1397)、[RFC未定阈值:L31-L34](Archive/Preparation/ReleaseRFC/comparison.md#L31-L34)) |
 
 ## 可暂缓至项目试玩/相应契约门禁
 
 | 事项 | 已知与未决边界 | 需要决定的阶段 / 暂缓条件 |
 |---|---|---|
-| **回合结构、时长与交存细则** | 官方只说明限时、交存换分、最高分胜出；确切时长、回合数、平分、交存地点/触发、计分公式与截止处理均未由官方资料确定。当前2–4人、约180秒单回合只是项目原型，不是原作数据。([决策表:L29-L59](Preparation/RuleDecisions/decisions.json#L29-L59)) | 可先保留为可调试配置，待相关节奏/计分试玩后选择；若要改变项目范围再由用户明确批准。不得将原作`unknown`补成事实。([项目基线与优先级](00_SCOPE_DECISIONS.md#L15-L22)、[交存事务边界](Preparation/RuleDecisions/decisions.json#L46-L59)) |
-| **KO、重生、PVP阈值与道具平衡** | 原作资料未确认是否吞噬/KO、尺寸比、保护、重生及道具在PVP中的投放。项目方向保留KO/重生，并选择单槽磁铁/火箭与Jump输入；1.35比例、约3秒等待、约2秒保护是未验证项目参数，不是原作规则。([决策表:L62-L110](Preparation/RuleDecisions/decisions.json#L62-L110)) | 相关参数须随T27/T39多人、公平与舒适证据调校；新增计时器等道具属于范围变更，不从官方“道具列表”自动推出PVP支持。([范围边界](00_SCOPE_DECISIONS.md#L25-L32)、[决策所有者:L74-L110](Preparation/RuleDecisions/decisions.json#L74-L110)) |
-| **生长/碰撞上限与世界尺度** | 语义显示尺寸、碰撞半径、拾取门槛与收益账本必须分开；0.2–5米只是表现工作区间，不是碰撞或技术上限。最终半径、成长段、速度/物理限值仍未定。([技术契约:L15-L21](02_TECHNICAL_CONTRACTS.md#L15-L21)、[决策表:L146-L159](Preparation/RuleDecisions/decisions.json#L146-L159)) | 先保持参数化；测量须由平台、地图和公平/性能证据支持，再由Lead在T01/T05后处理契约。T06未冻结前不得硬编码为公共接口。([T06依赖与范围](../tasks.json#L253-L279)、[契约冻结规则](02_TECHNICAL_CONTRACTS.md#L3-L13)) |
-| **付费外观SKU/价格** | 方向是免费完整玩法与可选纯外观；商品目录、价格、资格、授权和交易恢复均未批准。([决策表:L162-L175](Preparation/RuleDecisions/decisions.json#L162-L175)) | 可暂不决定并保持商店关闭；只有进入相应许可、权益和交易门禁后才需用户选SKU/价格。([发布配置](../tasks.json#L2094-L2105)、[范围排除](00_SCOPE_DECISIONS.md#L38-L42)) |
+| **回合结构、时长与交存细则** | 原作已确认必须把球物理送进场景内兑换区才得分，交分＝用体积换分、球会变小、球太小不给分；兑换区在王子飞船正下方、约每60秒换位（C1–C5；其中60秒换位属强暗示C3）。仍unknown：单局时长、回合数、换算公式与截止裁决。当前2–4人、约180秒单回合只是项目原型，不是原作数据。([研究核查](Research/KatamariBallRules/README.md)、[决策表:L72-L89](Preparation/RuleDecisions/decisions.json#L72-L89)) | 可先保留为可调试配置，待相关节奏/计分试玩后选择；若要改变项目范围再由用户明确批准。不得将原作`unknown`补成事实（尤其不得把180秒写成原作时长）。([项目基线与优先级](00_SCOPE_DECISIONS.md#L15-L22)、[交存事务边界](Preparation/RuleDecisions/decisions.json#L72-L89)) |
+| **KO、重生、PVP阈值与道具平衡** | 原作已确认：同尺寸弹开、可吞更小的对手；被更大的球吞掉＝短暂不能动＋异地重生，**没有淘汰**，也无扣分记录；对战有宝箱道具（把球变大／妨碍对手）与加分Brother，磁铁/火箭可用只是强暗示（C6–C15）。项目保留KO/重生但加重为约3秒出局＋约2秒保护＋未交存资源清理，1.35比例等均为未验证项目参数，不是原作规则。([决策表:L90-L142](Preparation/RuleDecisions/decisions.json#L90-L142)) | 相关参数须随T27/T39多人、公平与舒适证据调校；新增计时器等道具属于范围变更。若要贴近原作，可改为“保分、只冻结+重生”。([范围边界](00_SCOPE_DECISIONS.md#L25-L32)、[决策所有者](Preparation/RuleDecisions/decisions.json#L90-L142)) |
+| **生长/碰撞上限与世界尺度** | 语义显示尺寸、碰撞半径、拾取门槛与收益账本必须分开；0.2–5米只是表现工作区间，不是碰撞或技术上限。最终半径、成长段、速度/物理限值仍未定。([技术契约:L15-L21](02_TECHNICAL_CONTRACTS.md#L15-L21)、[决策表:L176-L191](Preparation/RuleDecisions/decisions.json#L176-L191)) | 先保持参数化；测量须由平台、地图和公平/性能证据支持，再由Lead在T01/T05后处理契约。T06未冻结前不得硬编码为公共接口。([T06依赖与范围](../tasks.json#L253-L279)、[契约冻结规则](02_TECHNICAL_CONTRACTS.md#L3-L13)) |
+| **（a）交分时球的缩小规则** | 证据：[研究核查](Research/KatamariBallRules/README.md) C2/C5/C20（Tier 1 制作人「変換エリアでは塊が小さくなるのと引き換えにポイントを獲得」＝在兑换区用球变小换积分）；原作用词只是「小さくなる」（变小），既没说清空回初始球，也没给缩小比例或算法（C20 判为 unconfirmed／与证据不符）。当前暂定值：交分后球回到初始体积（`[项目自选]`，比原作更狠，见[玩法:L20](01_GAME_DESIGN.md#L20)）。选项：A. 扣固定比例、保留残余体积（可调，需试玩定值）；B. 扣“本次交分体积”的固定比例并设下限；C. 维持回到初始体积，但明确公告为项目自选。 | 须在T01规则冻结前由主管选定并写入技术契约；A/B 的具体比例只能在节奏/公平试玩后取值，本轮不得填数。([决策表:L72-L89](Preparation/RuleDecisions/decisions.json#L72-L89)) |
+| **（b）最小兑换体积门槛** | 证据：C4（Tier 2 玩家实机「小さい塊の場合は、ポイントをゲット出来ません」＝球太小拿不到分）；原作存在门槛但数值未公开。当前暂定值：无门槛，任意体积都可交分。选项：A. 设绝对体积门槛（如初始球的倍数）；B. 设“本次未交存收益”门槛；C. 不设门槛，只靠交分缩小自然抑制刷分。 | 与（a）一起在T01规则冻结前选定；A/B 的数值同样需试玩证据，不得写成原作值。([决策表:L72-L89](Preparation/RuleDecisions/decisions.json#L72-L89)) |
+| **（c）兑换区轮换周期** | 证据：C3（Tier 2 实机＋Tier 3 wiki 一致：兑换区「1分毎に移動」＝每分钟移动，有导航图标；属`[原作强暗示]`，不是Tier 1原话）。当前暂定值：45秒轮换、提前8秒预告（地图/玩法文档暂定值，[野餐草坪:L211-L212](Design/Maps/PicnicLawn/README.md#L211-L212)）。选项：A. 对齐原作约60秒；B. 保留45秒以适配本项目180秒单局（正好3次轮换）；C. 按地图分别配置。 | 可暂缓到第一张图节奏试玩；改动只影响本项目，不得把45秒或60秒写成“原作确认值”。([玩法:L21](01_GAME_DESIGN.md#L21)) |
+| **（d）是否采用原作结算奖励层** | 证据：C11/C12（Tier 2 玩家实机：结算按3个项目各给第一名+50pt，「1位になっても、此処で順位が変動してしまう場合が…」＝拿了第一也可能在这里被翻盘）。当前暂定值：首版不启用，名次只由已交存积分决定（[玩法:L17](01_GAME_DESIGN.md#L17)）。选项：A. 不启用，保持名次可预测；B. 照抄“3项第一名各+50pt”并公开告知；C. 启用但压低权重/只作展示。 | 影响“稳定可预测”与“翻盘戏剧性”的取舍，须在T01规则冻结或首次多人试玩前由主管选定。([决策表:L53-L71](Preparation/RuleDecisions/decisions.json#L53-L71)) |
+| **付费外观SKU/价格** | 方向是免费完整玩法与可选纯外观；商品目录、价格、资格、授权和交易恢复均未批准。([决策表:L192-L207](Preparation/RuleDecisions/decisions.json#L192-L207)) | 可暂不决定并保持商店关闭；只有进入相应许可、权益和交易门禁后才需用户选SKU/价格。([发布配置](../tasks.json#L2094-L2105)、[范围排除](00_SCOPE_DECISIONS.md#L38-L42)) |
 
 ## 不因本摘要改变的门禁
 

@@ -29,9 +29,13 @@ from round_model import (  # noqa: E402
     RoundParams,
     RushBank,
     ZoneSpec,
+    active_anchor_index,
     can_absorb,
+    can_convert,
     diameter_for_units,
+    post_bank_diameter,
     simulate_round,
+    units_for_diameter,
 )
 
 
@@ -39,6 +43,15 @@ class _NoBank(Policy):
     """Stand still and never deposit; used to isolate absorption."""
 
     name = "no_bank"
+
+
+class _AlwaysBank(Policy):
+    """Deposit as soon as there is anything unbanked; used to isolate banking."""
+
+    name = "always_bank"
+
+    def wants_bank(self, ctx) -> bool:
+        return ctx.unbanked_units > 0
 
 
 def _map(zones: tuple[ZoneSpec, ...], bank_zone: str = "core") -> MapSpec:
@@ -84,6 +97,36 @@ class GrowthMathTests(unittest.TestCase):
                 self.assertGreaterEqual(diameter, params.start_diameter_m - 1e-12)
                 self.assertLessEqual(diameter, params.max_diameter_m + 1e-12)
 
+    def test_post_bank_shrink_formula_and_clamp(self):
+        params = RoundParams()
+        pre = 1.40
+        expected = params.start_diameter_m + (
+            pre - params.start_diameter_m) * params.bank_residual_fraction
+        self.assertAlmostEqual(post_bank_diameter(pre, params), expected, places=12)
+        # Never below the start diameter, even for a nonsensical pre-bank size.
+        self.assertAlmostEqual(
+            post_bank_diameter(0.10, params), params.start_diameter_m, places=12)
+        self.assertAlmostEqual(
+            post_bank_diameter(params.start_diameter_m, params),
+            params.start_diameter_m, places=12)
+        # 0.0 reproduces the old reset rule; 1.0 keeps the whole ball.
+        reset = RoundParams(bank_residual_fraction=0.0)
+        keep = RoundParams(bank_residual_fraction=1.0)
+        self.assertAlmostEqual(post_bank_diameter(pre, reset),
+                               params.start_diameter_m, places=12)
+        self.assertAlmostEqual(post_bank_diameter(pre, keep), pre, places=12)
+
+    def test_units_for_diameter_round_trips(self):
+        params = RoundParams()
+        for diameter in (0.30, 0.3625, 0.55, 0.95, 1.45, 2.20):
+            units = units_for_diameter(diameter, params)
+            self.assertAlmostEqual(
+                diameter_for_units(units, params), diameter, places=9)
+        # A shrunken ball still carries real volume above the free core.
+        self.assertGreater(units_for_diameter(0.3625, params), 0.0)
+        self.assertAlmostEqual(
+            units_for_diameter(0.20, params), 0.0, places=12)
+
     def test_absorb_threshold_is_inclusive_and_ratio_scaled(self):
         self.assertTrue(can_absorb(0.30, 0.30, 1.0))
         self.assertFalse(can_absorb(0.32, 0.30, 1.0))
@@ -120,7 +163,7 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(list(curve), sorted(curve))
         self.assertEqual(player.score_units, 0.0)
 
-    def test_deposit_moves_unbanked_into_score_and_resets_size(self):
+    def test_deposit_scores_unbanked_and_shrinks_by_fraction(self):
         zones = (
             ZoneSpec("spawn", (0.0, 0.0), ()),
             ZoneSpec("core", (2.0, 0.0), (), is_bank=True),
@@ -138,7 +181,13 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(player.deposits, 1)
         self.assertAlmostEqual(player.score_units, 100.0, places=9)
         self.assertAlmostEqual(player.deposit_units, 100.0, places=9)
-        self.assertAlmostEqual(player.final_diameter_m, params.start_diameter_m, places=9)
+        self.assertAlmostEqual(player.bank_score_units, 100.0, places=9)
+        # The ball now SHRINKS instead of resetting to the start diameter.
+        pre_bank = diameter_for_units(100.0, params)
+        expected = post_bank_diameter(pre_bank, params)
+        self.assertAlmostEqual(player.final_diameter_m, expected, places=9)
+        self.assertGreater(player.final_diameter_m, params.start_diameter_m)
+        self.assertLess(player.final_diameter_m, pre_bank)
         self.assertGreater(player.peak_diameter_m, params.start_diameter_m)
         bank_events = [e for e in hop.events if e[1] == "bank"]
         self.assertEqual(len(bank_events), 1)
@@ -230,6 +279,134 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(len(bank), 1)
         self.assertEqual(bank[0].zone_id, DEFAULT_MAP.bank_zone_id)
 
+
+class BankingRuleTests(unittest.TestCase):
+    """Conversion = shrink + minimum size, not a reset."""
+
+    @staticmethod
+    def _bank_spawn_map() -> MapSpec:
+        # The player spawns already standing on the conversion area.
+        return _map((ZoneSpec("core", (0.0, 0.0), (), is_bank=True),))
+
+    def test_sub_threshold_ball_cannot_convert(self):
+        params = RoundParams(
+            duration_s=8.0,
+            profiles=(PlayerProfile("solo", scenario_start_units=5.0),),
+        )
+        start_diameter = diameter_for_units(5.0, params)
+        self.assertFalse(can_convert(start_diameter, params))
+        result = simulate_round(params, _AlwaysBank(), self._bank_spawn_map())
+        player = result.players[0]
+        # The visit is wasted: no score, no deposit, no size or volume change.
+        self.assertEqual(player.deposits, 0)
+        self.assertEqual(player.score_units, 0.0)
+        self.assertEqual(player.absorbed_items, 0)
+        self.assertAlmostEqual(player.final_diameter_m, start_diameter, places=9)
+        self.assertAlmostEqual(player.peak_diameter_m, start_diameter, places=9)
+        self.assertFalse([e for e in result.events if e[1] == "bank"])
+        # The same ball one step above the threshold does convert.
+        allowed = RoundParams(
+            duration_s=8.0,
+            profiles=(PlayerProfile("solo", scenario_start_units=60.0),),
+        )
+        converted = simulate_round(allowed, _AlwaysBank(), self._bank_spawn_map())
+        self.assertEqual(converted.players[0].deposits, 1)
+        self.assertAlmostEqual(converted.players[0].score_units, 60.0, places=9)
+
+    def test_bank_rotation_schedule_is_60_seconds(self):
+        params = RoundParams()
+        self.assertEqual(params.bank_cycle_s, 60.0)
+        schedule = ((0.0, 0), (59.75, 0), (60.0, 1), (119.75, 1),
+                    (120.0, 2), (180.0, 3), (240.0, 0), (300.0, 1))
+        for now_s, expected in schedule:
+            self.assertEqual(active_anchor_index(now_s, params), expected)
+
+    def test_repeated_banking_cannot_farm_the_initial_core(self):
+        params = RoundParams(
+            duration_s=60.0,
+            profiles=(PlayerProfile("solo", scenario_start_units=100.0),),
+        )
+        result = simulate_round(params, _AlwaysBank(), self._bank_spawn_map())
+        player = result.players[0]
+        # 100 unbanked units are scored exactly once, in one deposit.
+        self.assertEqual(player.deposits, 1)
+        self.assertAlmostEqual(player.score_units, 100.0, places=9)
+        self.assertAlmostEqual(player.bank_score_units, 100.0, places=9)
+        # The residual is kept as ball size but is already scored: it never
+        # turns into units that a second conversion could pay for again.
+        self.assertGreater(player.final_diameter_m, params.start_diameter_m)
+        residual_units = units_for_diameter(player.final_diameter_m, params)
+        self.assertGreater(residual_units, 0.0)
+        self.assertLess(residual_units, 100.0)
+
+
+class BonusLayerTests(unittest.TestCase):
+    @staticmethod
+    def _two_zone_map() -> MapSpec:
+        zones = (
+            ZoneSpec("rich", (0.0, 0.0), (ItemStack("seed", 40, 0.08, 1),)),
+            ZoneSpec("empty", (10.0, 0.0), ()),
+            ZoneSpec("core", (20.0, 0.0), (), is_bank=True),
+        )
+        return MapSpec(
+            zones=zones,
+            spawn_zones=("rich", "empty", "empty", "empty"),
+            bank_anchors_m=((20.0, 0.0),) * 4,
+            bank_zone_id="core",
+        )
+
+    def test_bonus_is_deterministic_and_only_first_place_scores(self):
+        params = RoundParams(
+            duration_s=5.0,
+            profiles=(PlayerProfile("eater"), PlayerProfile("idler")),
+            bonus_enabled=True,
+            bonus_points=50.0,
+            bonus_categories=("items_absorbed",),
+        )
+        first = simulate_round(params, (_NoBank(), _NoBank()),
+                               self._two_zone_map(), seed=4)
+        second = simulate_round(params, (_NoBank(), _NoBank()),
+                                self._two_zone_map(), seed=4)
+        self.assertEqual(first, second)
+        eater, idler = first.players
+        self.assertGreater(eater.absorbed_items, 0)
+        self.assertEqual(eater.bonus_points, 50.0)
+        self.assertEqual(idler.bonus_points, 0.0)
+        self.assertEqual(eater.bonus_wins, ("items_absorbed",))
+        self.assertAlmostEqual(eater.score_units, 50.0, places=9)
+        self.assertAlmostEqual(idler.score_units, 0.0, places=9)
+        self.assertEqual(first.winners, (0,))
+        self.assertAlmostEqual(first.total_bonus, 50.0, places=9)
+
+    def test_bonus_tie_awards_nothing(self):
+        zones = (
+            ZoneSpec("arena", (0.0, 0.0), ()),
+            ZoneSpec("core", (5.0, 0.0), (), is_bank=True),
+        )
+        params = RoundParams(
+            duration_s=1.0,
+            profiles=(PlayerProfile("a"), PlayerProfile("b")),
+            bonus_points=50.0,
+            bonus_categories=("max_ball_size",),
+        )
+        result = simulate_round(params, (_NoBank(), _NoBank()), _map(zones))
+        self.assertAlmostEqual(result.total_bonus, 0.0, places=12)
+        self.assertEqual(result.players[0].score_units, 0.0)
+        self.assertEqual(result.players[1].score_units, 0.0)
+
+    def test_bonus_can_decide_the_ranking(self):
+        # Both banked scores are zero; only the bonus separates them.
+        params = RoundParams(
+            duration_s=5.0,
+            profiles=(PlayerProfile("eater"), PlayerProfile("idler")),
+            bonus_points=50.0,
+            bonus_categories=("items_absorbed",),
+        )
+        result = simulate_round(params, (_NoBank(), _NoBank()),
+                                self._two_zone_map(), seed=4)
+        self.assertAlmostEqual(result.players[0].bank_score_units, 0.0, places=9)
+        self.assertAlmostEqual(result.players[1].bank_score_units, 0.0, places=9)
+        self.assertEqual(result.winners, (0,))
 
 if __name__ == "__main__":
     unittest.main()

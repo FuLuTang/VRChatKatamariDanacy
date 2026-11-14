@@ -24,7 +24,7 @@ namespace VRCKatamari.Tests
 
         public readonly int[] RoundState = new int[GrowthLedgerMath.RoundStateCount];
         public readonly bool[] RoundFlags = new bool[GrowthLedgerMath.RoundFlagCount];
-        public readonly float[] RoundClock = new float[GrowthLedgerMath.RoundTimeCount];
+        public readonly float[] RoundClock = new float[GrowthLedgerMath.RoundClockCount];
 
         public readonly string[] PlayerIds = new string[PlayerCapacity];
         public readonly int[] ConfirmedVolumes = new int[PlayerCapacity];

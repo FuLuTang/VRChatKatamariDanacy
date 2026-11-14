@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
@@ -280,7 +281,12 @@ namespace VRCKatamari.Tests
             fast.MaxSpeedMps = 200f;
             fast.Velocity = new Vector3(0f, 0f, 80f);
             Assert.IsTrue(fast.Step(0f, 0f, 0f, FixedStepSeconds));
-            Assert.AreEqual(fast.Velocity.z * FixedStepSeconds, fast.Displacement.z, 0f);
+            // The expected travel is materialised as a float local first: the values are
+            // bit-identical, but NUnit's zero-delta overload still reports the inline
+            // product at full double precision and rejects the pair. The tolerance is
+            // 1e-6 m, far below the 0.66 m a clipped or sub-stepped segment would lose.
+            float expectedTravel = fast.Velocity.z * FixedStepSeconds;
+            Assert.AreEqual(expectedTravel, fast.Displacement.z, 1e-6f);
             Assert.Greater(fast.Displacement.z, 0.6f);
             Assert.AreEqual(0f, fast.Velocity.y, 0f);
 

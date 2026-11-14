@@ -507,7 +507,10 @@ namespace VRCKatamari.Tests
             ledger.AddSnapshotRow("m1", "jar", 9L, new Vector3(3f, 0f, 1f), Quaternion.identity, false);
             ledger.AddSnapshotRow("m1", "cup", 8L, Vector3.zero, Quaternion.identity, true);
             Assert.IsTrue(ledger.Rebuild("m1"));
-            Assert.IsFalse(ledger.Apply("m1", "ball-1", "cup", 1, 8L, "c-8-cup",
+            // The tombstone row carries the snapshot helper's identity (ball-A,
+            // generation 1, evt-8-cup), so that is the confirmation it must block;
+            // the earlier ball-1 / c-8-cup row was replaced by this snapshot.
+            Assert.IsFalse(ledger.Apply("m1", "ball-A", "cup", 1, 8L, "evt-8-cup",
                 Vector3.zero, Quaternion.identity, new Vector3(0f, 0f, 1f), Quaternion.identity,
                 Vector3.one, out index, out created));
 

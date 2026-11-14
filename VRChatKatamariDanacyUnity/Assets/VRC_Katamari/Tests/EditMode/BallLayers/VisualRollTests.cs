@@ -201,7 +201,7 @@ namespace VRCKatamari.Tests
             // (0,0,2,2)/|.| is a 90 degree rotation about +Z.
             Assert.IsTrue(VisualRollMath.TryNormalizeRotation(
                 new Quaternion(0f, 0f, 2f, 2f), out unit));
-            Assert.AreEqual(1f, unit.magnitude, Tolerance);
+            Assert.AreEqual(1f, QuaternionLength(unit), Tolerance);
             Assert.AreEqual(0f, unit.x, Tolerance);
             Assert.AreEqual(0f, unit.y, Tolerance);
             Assert.AreEqual(Mathf.Sqrt(0.5f), unit.z, Tolerance);
@@ -257,7 +257,7 @@ namespace VRCKatamari.Tests
                 pose = Advance(pose, new Vector3(0f, 0f, step), Vector3.up, radius);
                 Assert.IsFalse(float.IsNaN(pose.x) || float.IsNaN(pose.y) ||
                     float.IsNaN(pose.z) || float.IsNaN(pose.w), "non-finite rotation");
-                Assert.AreEqual(1f, pose.magnitude, Tolerance);
+                Assert.AreEqual(1f, QuaternionLength(pose), Tolerance);
             }
 
             float totalAngle = StepCount * step / radius;
@@ -374,6 +374,11 @@ namespace VRCKatamari.Tests
             Vector3 contactOffset = -radius * normal;
             Vector3 residual = tangentialVelocity + CrossOracle(omega, contactOffset);
             Assert.Less(residual.magnitude, 1e-6f, "the contact point must have zero velocity");
+        }
+
+        private static float QuaternionLength(Quaternion q)
+        {
+            return Mathf.Sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
         }
 
         private static float QuaternionDistance(Quaternion a, Quaternion b)

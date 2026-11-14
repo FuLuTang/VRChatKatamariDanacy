@@ -318,7 +318,11 @@ namespace VRCKatamari.Tests
         // the expected wrap direction.
         private static float ShortestDelta(float target, float current)
         {
-            return (target - current + 180f) % 360f - 180f;
+            // C# % keeps the sign of its left operand, so a target behind the
+            // current angle by more than 180 deg produced -358 deg instead of +1.2.
+            float delta = (target - current + 180f) % 360f;
+            if (delta < 0f) delta += 360f;
+            return delta - 180f;
         }
 
         private static void AssertVector(Vector3 expected, Vector3 actual)

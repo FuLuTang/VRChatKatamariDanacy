@@ -1,0 +1,3011 @@
+{
+  "schema_version": 1,
+  "map_id": "toy_room",
+  "status": "PROVISIONAL_NOT_TESTED",
+  "generated_by": "Docs/Design/Maps/ToyRoom/README.md §2 的暂定比例；无 Unity 实现、无实测",
+  "coordinate_system": {
+    "engine": "Unity 2022.3",
+    "handedness": "left",
+    "up": "+Y",
+    "forward": "+Z",
+    "units": "metre",
+    "origin": "地图中心，地面 y=0",
+    "yaw_convention": "角度制，绕 +Y 顺时针（0=+Z，90=+X）",
+    "ground_frame": "单一共享世界坐标系（02 §1），不做每客户端独立缩放"
+  },
+  "scale": {
+    "status": "PROVISIONAL_NOT_TESTED",
+    "note": "所有长度按米；世界尺度本身仍未定（OPEN_DECISIONS「生长/碰撞上限与世界尺度」）。整表可按 k 线性缩放：坐标/半径/宽度×k，面积×k²，时间/人数不变。",
+    "map_extent_x_m": 40.0,
+    "map_extent_z_m": 40.0,
+    "ball_start_collision_diameter_m": 0.3,
+    "ball_max_collision_diameter_m": 2.2,
+    "ball_bands": [
+      {
+        "id": "t0",
+        "name_zh": "碎屑",
+        "min_m": 0.3,
+        "max_m": 0.55
+      },
+      {
+        "id": "t1",
+        "name_zh": "积木",
+        "min_m": 0.55,
+        "max_m": 0.95
+      },
+      {
+        "id": "t2",
+        "name_zh": "玩偶",
+        "min_m": 0.95,
+        "max_m": 1.45
+      },
+      {
+        "id": "t3",
+        "name_zh": "家具",
+        "min_m": 1.45,
+        "max_m": 2.2
+      }
+    ],
+    "item_tier_pickup_diameter_m": {
+      "s": [
+        0.08,
+        0.3
+      ],
+      "m": [
+        0.32,
+        0.95
+      ],
+      "l": [
+        1.0,
+        1.95
+      ]
+    },
+    "max_traversable_slope_percent": 12.0,
+    "max_route_step_m": 0.05,
+    "boundary_hedge_height_m": 3.0,
+    "boundary_hedge_depth_m": 0.3,
+    "core_hedge_height_m": 1.25,
+    "core_hedge_depth_m": 0.4,
+    "core_entrance_clear_m": 5.0,
+    "core_door_clear_m": 3.6,
+    "route_width_main_m": 3.4,
+    "route_width_spur_m": 4.0,
+    "min_route_margin_over_max_ball_m": 1.2,
+    "bank_pad_radius_m": 1.3,
+    "bank_anchor_count": 4,
+    "bank_anchor_period_s": 60,
+    "bank_warning_s": 8,
+    "spawn_to_bank_target_m": 28.0,
+    "camera_eye_height_m_by_band": {
+      "t0": 0.9,
+      "t1": 1.1,
+      "t2": 1.4,
+      "t3": 1.8
+    }
+  },
+  "bounds": {
+    "min_x": -20.0,
+    "max_x": 20.0,
+    "min_z": -20.0,
+    "max_z": 20.0,
+    "ground_y_m": 0.0
+  },
+  "zones": [
+    {
+      "id": "toy_chest_core",
+      "name_zh": "中央玩具收纳筐",
+      "purpose": "四个交分锚点所在的筐底；四周是 1.25 m 高的筐沿，进出只走 4 个 5.0 m 中段入口和 4 个被巨偶堵住的 3.6 m 角门。",
+      "shape": {
+        "type": "rect",
+        "min_x": -6,
+        "max_x": 6,
+        "min_z": -6,
+        "max_z": 6
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t3"
+      ],
+      "area_m2": 144,
+      "surface": "carpet_play_round",
+      "notes": "筐底不放任何可卷资源，保证交分视线与地面判读；筐沿必须建成竖直、不可翻越的 Collider（无台阶辅助）。1.25 m/Ø2.20 m = 0.57，比野餐草坪 1.0 m 矮篱更安全，但仍列入 §16 风险表。"
+    },
+    {
+      "id": "bay_north",
+      "name_zh": "北侧家具带",
+      "purpose": "高价值家具堆：矮柜前的大件玩具与收纳箱，贴着筐沿，是交分通道上的收益区。",
+      "shape": {
+        "type": "rect",
+        "min_x": -6,
+        "max_x": 6,
+        "min_z": 7,
+        "max_z": 12
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t2",
+        "t3"
+      ],
+      "area_m2": 60,
+      "surface": "rug_weave",
+      "notes": "只放 m/l 档；区内最紧的摆放用量见 README §3.3（83%）。地面平，无高差。"
+    },
+    {
+      "id": "bay_east",
+      "name_zh": "东侧家具带",
+      "purpose": "高价值家具堆：矮柜前的大件玩具与收纳箱，贴着筐沿，是交分通道上的收益区。",
+      "shape": {
+        "type": "rect",
+        "min_x": 7,
+        "max_x": 12,
+        "min_z": -6,
+        "max_z": 6
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t2",
+        "t3"
+      ],
+      "area_m2": 60,
+      "surface": "rug_weave",
+      "notes": "只放 m/l 档；区内最紧的摆放用量见 README §3.3（83%）。地面平，无高差。"
+    },
+    {
+      "id": "bay_south",
+      "name_zh": "南侧家具带",
+      "purpose": "高价值家具堆：矮柜前的大件玩具与收纳箱，贴着筐沿，是交分通道上的收益区。",
+      "shape": {
+        "type": "rect",
+        "min_x": -6,
+        "max_x": 6,
+        "min_z": -12,
+        "max_z": -7
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t2",
+        "t3"
+      ],
+      "area_m2": 60,
+      "surface": "rug_weave",
+      "notes": "只放 m/l 档；区内最紧的摆放用量见 README §3.3（83%）。地面平，无高差。"
+    },
+    {
+      "id": "bay_west",
+      "name_zh": "西侧家具带",
+      "purpose": "高价值家具堆：矮柜前的大件玩具与收纳箱，贴着筐沿，是交分通道上的收益区。",
+      "shape": {
+        "type": "rect",
+        "min_x": -12,
+        "max_x": -7,
+        "min_z": -6,
+        "max_z": 6
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t2",
+        "t3"
+      ],
+      "area_m2": 60,
+      "surface": "rug_weave",
+      "notes": "只放 m/l 档；区内最紧的摆放用量见 README §3.3（83%）。地面平，无高差。"
+    },
+    {
+      "id": "playmat_ne",
+      "name_zh": "拼图地垫 NE",
+      "purpose": "抬高的拼图地垫（0.26 m）：抄近路的十字路口，小球上不去，t2 以后能翻上去扫货。",
+      "shape": {
+        "type": "rect",
+        "min_x": 6,
+        "max_x": 12,
+        "min_z": 6,
+        "max_z": 12
+      },
+      "ground_y_m": 0.26,
+      "tier_band": [
+        "t1",
+        "t2"
+      ],
+      "area_m2": 36,
+      "surface": "foam_puzzle_mat",
+      "notes": "整块地垫抬到 0.26 m，四周竖直边缘（无斜坡）；0.95 m 以下翻不上去、≥1.10 m 可翻越。地垫本身是尺寸门（climb），不是死胡同：四条边分别贴着 bay、blocks、以及筐角。"
+    },
+    {
+      "id": "playmat_nw",
+      "name_zh": "拼图地垫 NW",
+      "purpose": "抬高的拼图地垫（0.26 m）：抄近路的十字路口，小球上不去，t2 以后能翻上去扫货。",
+      "shape": {
+        "type": "rect",
+        "min_x": -12,
+        "max_x": -6,
+        "min_z": 6,
+        "max_z": 12
+      },
+      "ground_y_m": 0.26,
+      "tier_band": [
+        "t1",
+        "t2"
+      ],
+      "area_m2": 36,
+      "surface": "foam_puzzle_mat",
+      "notes": "整块地垫抬到 0.26 m，四周竖直边缘（无斜坡）；0.95 m 以下翻不上去、≥1.10 m 可翻越。地垫本身是尺寸门（climb），不是死胡同：四条边分别贴着 bay、blocks、以及筐角。"
+    },
+    {
+      "id": "playmat_sw",
+      "name_zh": "拼图地垫 SW",
+      "purpose": "抬高的拼图地垫（0.26 m）：抄近路的十字路口，小球上不去，t2 以后能翻上去扫货。",
+      "shape": {
+        "type": "rect",
+        "min_x": -12,
+        "max_x": -6,
+        "min_z": -12,
+        "max_z": -6
+      },
+      "ground_y_m": 0.26,
+      "tier_band": [
+        "t1",
+        "t2"
+      ],
+      "area_m2": 36,
+      "surface": "foam_puzzle_mat",
+      "notes": "整块地垫抬到 0.26 m，四周竖直边缘（无斜坡）；0.95 m 以下翻不上去、≥1.10 m 可翻越。地垫本身是尺寸门（climb），不是死胡同：四条边分别贴着 bay、blocks、以及筐角。"
+    },
+    {
+      "id": "playmat_se",
+      "name_zh": "拼图地垫 SE",
+      "purpose": "抬高的拼图地垫（0.26 m）：抄近路的十字路口，小球上不去，t2 以后能翻上去扫货。",
+      "shape": {
+        "type": "rect",
+        "min_x": 6,
+        "max_x": 12,
+        "min_z": -12,
+        "max_z": -6
+      },
+      "ground_y_m": 0.26,
+      "tier_band": [
+        "t1",
+        "t2"
+      ],
+      "area_m2": 36,
+      "surface": "foam_puzzle_mat",
+      "notes": "整块地垫抬到 0.26 m，四周竖直边缘（无斜坡）；0.95 m 以下翻不上去、≥1.10 m 可翻越。地垫本身是尺寸门（climb），不是死胡同：四条边分别贴着 bay、blocks、以及筐角。"
+    },
+    {
+      "id": "blocks_north",
+      "name_zh": "北墙木地板带",
+      "purpose": "外圈补给带：木地板上的积木与小球，安全环从中间穿过；柜子背后是 1.85 m 的柜后缝。",
+      "shape": {
+        "type": "rect",
+        "min_x": -12,
+        "max_x": 12,
+        "min_z": 12,
+        "max_z": 17.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 132.0,
+      "surface": "floor_wood_oak",
+      "notes": "散布是 s 档为主 + 少量小 m 档（≤0.55 m），间距 0.80 m。矮柜（1.15 m 高）沿墙摆放，柜后留 1.85 m 缝（不属于任何散布区，缝里没有可卷物）。"
+    },
+    {
+      "id": "blocks_south",
+      "name_zh": "南墙木地板带",
+      "purpose": "外圈补给带：木地板上的积木与小球，安全环从中间穿过；柜子背后是 1.85 m 的柜后缝。",
+      "shape": {
+        "type": "rect",
+        "min_x": -12,
+        "max_x": 12,
+        "min_z": -17.5,
+        "max_z": -12
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 132.0,
+      "surface": "floor_wood_oak",
+      "notes": "散布是 s 档为主 + 少量小 m 档（≤0.55 m），间距 0.80 m。矮柜（1.15 m 高）沿墙摆放，柜后留 1.85 m 缝（不属于任何散布区，缝里没有可卷物）。"
+    },
+    {
+      "id": "blocks_east",
+      "name_zh": "东墙木地板带",
+      "purpose": "外圈补给带：木地板上的积木与小球，安全环从中间穿过；柜子背后是 1.85 m 的柜后缝。",
+      "shape": {
+        "type": "rect",
+        "min_x": 12,
+        "max_x": 17.5,
+        "min_z": -12,
+        "max_z": 12
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 132.0,
+      "surface": "floor_wood_oak",
+      "notes": "散布是 s 档为主 + 少量小 m 档（≤0.55 m），间距 0.80 m。矮柜（1.15 m 高）沿墙摆放，柜后留 1.85 m 缝（不属于任何散布区，缝里没有可卷物）。"
+    },
+    {
+      "id": "blocks_west",
+      "name_zh": "西墙木地板带",
+      "purpose": "外圈补给带：木地板上的积木与小球，安全环从中间穿过；柜子背后是 1.85 m 的柜后缝。",
+      "shape": {
+        "type": "rect",
+        "min_x": -17.5,
+        "max_x": -12,
+        "min_z": -12,
+        "max_z": 12
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 132.0,
+      "surface": "floor_wood_oak",
+      "notes": "散布是 s 档为主 + 少量小 m 档（≤0.55 m），间距 0.80 m。矮柜（1.15 m 高）沿墙摆放，柜后留 1.85 m 缝（不属于任何散布区，缝里没有可卷物）。"
+    },
+    {
+      "id": "rug_ne",
+      "name_zh": "出生游戏垫 NE",
+      "purpose": "四块不同花纹的儿童地毯，各一个出生点；只放 s 档碎屑，保证四人开局一致。",
+      "shape": {
+        "type": "rect",
+        "min_x": 12,
+        "max_x": 18,
+        "min_z": 12,
+        "max_z": 18
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t0"
+      ],
+      "area_m2": 36,
+      "surface": "carpet_star_blue",
+      "notes": "出生点在垫子中心；垫面 0.02 m 厚，边缘 0.15 m 斜面（13%），不影响通行。安全环从垫子的内角穿过。"
+    },
+    {
+      "id": "rug_nw",
+      "name_zh": "出生游戏垫 NW",
+      "purpose": "四块不同花纹的儿童地毯，各一个出生点；只放 s 档碎屑，保证四人开局一致。",
+      "shape": {
+        "type": "rect",
+        "min_x": -18,
+        "max_x": -12,
+        "min_z": 12,
+        "max_z": 18
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t0"
+      ],
+      "area_m2": 36,
+      "surface": "carpet_check_red",
+      "notes": "出生点在垫子中心；垫面 0.02 m 厚，边缘 0.15 m 斜面（13%），不影响通行。安全环从垫子的内角穿过。"
+    },
+    {
+      "id": "rug_sw",
+      "name_zh": "出生游戏垫 SW",
+      "purpose": "四块不同花纹的儿童地毯，各一个出生点；只放 s 档碎屑，保证四人开局一致。",
+      "shape": {
+        "type": "rect",
+        "min_x": -18,
+        "max_x": -12,
+        "min_z": -18,
+        "max_z": -12
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t0"
+      ],
+      "area_m2": 36,
+      "surface": "carpet_dot_green",
+      "notes": "出生点在垫子中心；垫面 0.02 m 厚，边缘 0.15 m 斜面（13%），不影响通行。安全环从垫子的内角穿过。"
+    },
+    {
+      "id": "rug_se",
+      "name_zh": "出生游戏垫 SE",
+      "purpose": "四块不同花纹的儿童地毯，各一个出生点；只放 s 档碎屑，保证四人开局一致。",
+      "shape": {
+        "type": "rect",
+        "min_x": 12,
+        "max_x": 18,
+        "min_z": -18,
+        "max_z": -12
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t0"
+      ],
+      "area_m2": 36,
+      "surface": "carpet_plaid_yellow",
+      "notes": "出生点在垫子中心；垫面 0.02 m 厚，边缘 0.15 m 斜面（13%），不影响通行。安全环从垫子的内角穿过。"
+    }
+  ],
+  "structures": [
+    {
+      "definition_id": "floor_terrain",
+      "zone_id": null,
+      "kind": "merged_plane",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "size_m": [
+        40,
+        0.02,
+        40
+      ],
+      "yaw_deg": 0.0,
+      "notes": "40×40 m 木地板 + 四个角的地毯贴花 + 中央圆毯贴花，合并成 1 个 Mesh"
+    },
+    {
+      "definition_id": "room_wall",
+      "zone_id": null,
+      "kind": "merged_ring",
+      "position": [
+        0,
+        1.5,
+        0
+      ],
+      "size_m": [
+        40,
+        3.0,
+        0.3
+      ],
+      "yaw_deg": 0.0,
+      "notes": "四面墙合并成 1 个环形 Mesh，内表面在 ±19.35；3.0 m 高，最大球翻不过去"
+    },
+    {
+      "definition_id": "room_ceiling",
+      "zone_id": null,
+      "kind": "merged_plane",
+      "position": [
+        0,
+        4.0,
+        0
+      ],
+      "size_m": [
+        40,
+        0.05,
+        40
+      ],
+      "yaw_deg": 0.0,
+      "notes": "天花板 4.0 m，纯装饰（球到不了），用于关掉天空盒、压住房间感"
+    },
+    {
+      "definition_id": "toy_chest_rim",
+      "zone_id": "toy_chest_core",
+      "kind": "box",
+      "position": [
+        2.975,
+        0.625,
+        6
+      ],
+      "size_m": [
+        0.95,
+        1.25,
+        0.4
+      ],
+      "yaw_deg": 0,
+      "notes": "筐沿第 1 段；北边 2 段，5.0 m 中段入口两侧各 1 段"
+    },
+    {
+      "definition_id": "toy_chest_rim",
+      "zone_id": "toy_chest_core",
+      "kind": "box",
+      "position": [
+        -2.975,
+        0.625,
+        6
+      ],
+      "size_m": [
+        0.95,
+        1.25,
+        0.4
+      ],
+      "yaw_deg": 0,
+      "notes": "筐沿第 2 段"
+    },
+    {
+      "definition_id": "toy_chest_rim",
+      "zone_id": "toy_chest_core",
+      "kind": "box",
+      "position": [
+        6,
+        0.625,
+        -2.975
+      ],
+      "size_m": [
+        0.4,
+        1.25,
+        0.95
+      ],
+      "yaw_deg": 0,
+      "notes": "筐沿第 3 段"
+    },
+    {
+      "definition_id": "toy_chest_rim",
+      "zone_id": "toy_chest_core",
+      "kind": "box",
+      "position": [
+        6,
+        0.625,
+        2.975
+      ],
+      "size_m": [
+        0.4,
+        1.25,
+        0.95
+      ],
+      "yaw_deg": 0,
+      "notes": "筐沿第 4 段"
+    },
+    {
+      "definition_id": "toy_chest_rim",
+      "zone_id": "toy_chest_core",
+      "kind": "box",
+      "position": [
+        -2.975,
+        0.625,
+        -6
+      ],
+      "size_m": [
+        0.95,
+        1.25,
+        0.4
+      ],
+      "yaw_deg": 0,
+      "notes": "筐沿第 5 段"
+    },
+    {
+      "definition_id": "toy_chest_rim",
+      "zone_id": "toy_chest_core",
+      "kind": "box",
+      "position": [
+        2.975,
+        0.625,
+        -6
+      ],
+      "size_m": [
+        0.95,
+        1.25,
+        0.4
+      ],
+      "yaw_deg": 0,
+      "notes": "筐沿第 6 段"
+    },
+    {
+      "definition_id": "toy_chest_rim",
+      "zone_id": "toy_chest_core",
+      "kind": "box",
+      "position": [
+        -6,
+        0.625,
+        2.975
+      ],
+      "size_m": [
+        0.4,
+        1.25,
+        0.95
+      ],
+      "yaw_deg": 0,
+      "notes": "筐沿第 7 段"
+    },
+    {
+      "definition_id": "toy_chest_rim",
+      "zone_id": "toy_chest_core",
+      "kind": "box",
+      "position": [
+        -6,
+        0.625,
+        -2.975
+      ],
+      "size_m": [
+        0.4,
+        1.25,
+        0.95
+      ],
+      "yaw_deg": 0,
+      "notes": "筐沿第 8 段"
+    },
+    {
+      "definition_id": "cabinet",
+      "zone_id": "blocks_north",
+      "kind": "box",
+      "position": [
+        0,
+        0.575,
+        16.6
+      ],
+      "size_m": [
+        17,
+        1.15,
+        1.8
+      ],
+      "yaw_deg": 0,
+      "notes": "矮柜 17.0×1.8×1.15 m，靠墙 1.85 m 处；柜后 1.85 m 缝不属于任何散布区，缝内无可卷物"
+    },
+    {
+      "definition_id": "cabinet",
+      "zone_id": "blocks_east",
+      "kind": "box",
+      "position": [
+        16.6,
+        0.575,
+        0
+      ],
+      "size_m": [
+        17,
+        1.15,
+        1.8
+      ],
+      "yaw_deg": 90,
+      "notes": "矮柜 17.0×1.8×1.15 m，靠墙 1.85 m 处；柜后 1.85 m 缝不属于任何散布区，缝内无可卷物"
+    },
+    {
+      "definition_id": "cabinet",
+      "zone_id": "blocks_south",
+      "kind": "box",
+      "position": [
+        0,
+        0.575,
+        -16.6
+      ],
+      "size_m": [
+        17,
+        1.15,
+        1.8
+      ],
+      "yaw_deg": 0,
+      "notes": "矮柜 17.0×1.8×1.15 m，靠墙 1.85 m 处；柜后 1.85 m 缝不属于任何散布区，缝内无可卷物"
+    },
+    {
+      "definition_id": "cabinet",
+      "zone_id": "blocks_west",
+      "kind": "box",
+      "position": [
+        -16.6,
+        0.575,
+        0
+      ],
+      "size_m": [
+        17,
+        1.15,
+        1.8
+      ],
+      "yaw_deg": 90,
+      "notes": "矮柜 17.0×1.8×1.15 m，靠墙 1.85 m 处；柜后 1.85 m 缝不属于任何散布区，缝内无可卷物"
+    },
+    {
+      "definition_id": "playmat_platform",
+      "zone_id": "playmat_ne",
+      "kind": "box",
+      "position": [
+        9,
+        0.13,
+        9
+      ],
+      "size_m": [
+        6,
+        0.26,
+        6
+      ],
+      "yaw_deg": 0,
+      "notes": "6×6×0.26 m 抬高地垫台；四周竖直，无斜坡"
+    },
+    {
+      "definition_id": "playmat_platform",
+      "zone_id": "playmat_nw",
+      "kind": "box",
+      "position": [
+        -9,
+        0.13,
+        9
+      ],
+      "size_m": [
+        6,
+        0.26,
+        6
+      ],
+      "yaw_deg": 0,
+      "notes": "6×6×0.26 m 抬高地垫台；四周竖直，无斜坡"
+    },
+    {
+      "definition_id": "playmat_platform",
+      "zone_id": "playmat_sw",
+      "kind": "box",
+      "position": [
+        -9,
+        0.13,
+        -9
+      ],
+      "size_m": [
+        6,
+        0.26,
+        6
+      ],
+      "yaw_deg": 0,
+      "notes": "6×6×0.26 m 抬高地垫台；四周竖直，无斜坡"
+    },
+    {
+      "definition_id": "playmat_platform",
+      "zone_id": "playmat_se",
+      "kind": "box",
+      "position": [
+        9,
+        0.13,
+        -9
+      ],
+      "size_m": [
+        6,
+        0.26,
+        6
+      ],
+      "yaw_deg": 0,
+      "notes": "6×6×0.26 m 抬高地垫台；四周竖直，无斜坡"
+    },
+    {
+      "definition_id": "bank_pad",
+      "zone_id": "toy_chest_core",
+      "kind": "cylinder",
+      "position": [
+        4,
+        0.02,
+        4
+      ],
+      "size_m": [
+        2.6,
+        0.04,
+        2.6
+      ],
+      "yaw_deg": 0,
+      "notes": "Ø2.6 m 圆盘 + 自发光环（不用实时灯）"
+    },
+    {
+      "definition_id": "bank_beacon",
+      "zone_id": "toy_chest_core",
+      "kind": "cylinder",
+      "position": [
+        4,
+        1.6,
+        4
+      ],
+      "size_m": [
+        0.25,
+        3.0,
+        0.25
+      ],
+      "yaw_deg": 0,
+      "notes": "3.0 m 旗杆，激活时旗升起、环脉冲"
+    },
+    {
+      "definition_id": "bank_pad",
+      "zone_id": "toy_chest_core",
+      "kind": "cylinder",
+      "position": [
+        -4,
+        0.02,
+        4
+      ],
+      "size_m": [
+        2.6,
+        0.04,
+        2.6
+      ],
+      "yaw_deg": 0,
+      "notes": "Ø2.6 m 圆盘 + 自发光环（不用实时灯）"
+    },
+    {
+      "definition_id": "bank_beacon",
+      "zone_id": "toy_chest_core",
+      "kind": "cylinder",
+      "position": [
+        -4,
+        1.6,
+        4
+      ],
+      "size_m": [
+        0.25,
+        3.0,
+        0.25
+      ],
+      "yaw_deg": 0,
+      "notes": "3.0 m 旗杆，激活时旗升起、环脉冲"
+    },
+    {
+      "definition_id": "bank_pad",
+      "zone_id": "toy_chest_core",
+      "kind": "cylinder",
+      "position": [
+        -4,
+        0.02,
+        -4
+      ],
+      "size_m": [
+        2.6,
+        0.04,
+        2.6
+      ],
+      "yaw_deg": 0,
+      "notes": "Ø2.6 m 圆盘 + 自发光环（不用实时灯）"
+    },
+    {
+      "definition_id": "bank_beacon",
+      "zone_id": "toy_chest_core",
+      "kind": "cylinder",
+      "position": [
+        -4,
+        1.6,
+        -4
+      ],
+      "size_m": [
+        0.25,
+        3.0,
+        0.25
+      ],
+      "yaw_deg": 0,
+      "notes": "3.0 m 旗杆，激活时旗升起、环脉冲"
+    },
+    {
+      "definition_id": "bank_pad",
+      "zone_id": "toy_chest_core",
+      "kind": "cylinder",
+      "position": [
+        4,
+        0.02,
+        -4
+      ],
+      "size_m": [
+        2.6,
+        0.04,
+        2.6
+      ],
+      "yaw_deg": 0,
+      "notes": "Ø2.6 m 圆盘 + 自发光环（不用实时灯）"
+    },
+    {
+      "definition_id": "bank_beacon",
+      "zone_id": "toy_chest_core",
+      "kind": "cylinder",
+      "position": [
+        4,
+        1.6,
+        -4
+      ],
+      "size_m": [
+        0.25,
+        3.0,
+        0.25
+      ],
+      "yaw_deg": 0,
+      "notes": "3.0 m 旗杆，激活时旗升起、环脉冲"
+    },
+    {
+      "definition_id": "spawn_marker",
+      "zone_id": "rug_ne",
+      "kind": "cylinder",
+      "position": [
+        14.5,
+        0.01,
+        14.5
+      ],
+      "size_m": [
+        1.8,
+        0.02,
+        1.8
+      ],
+      "yaw_deg": 0,
+      "notes": "Ø1.8 m 圆环地贴"
+    },
+    {
+      "definition_id": "spawn_marker",
+      "zone_id": "rug_nw",
+      "kind": "cylinder",
+      "position": [
+        -14.5,
+        0.01,
+        14.5
+      ],
+      "size_m": [
+        1.8,
+        0.02,
+        1.8
+      ],
+      "yaw_deg": 0,
+      "notes": "Ø1.8 m 圆环地贴"
+    },
+    {
+      "definition_id": "spawn_marker",
+      "zone_id": "rug_sw",
+      "kind": "cylinder",
+      "position": [
+        -14.5,
+        0.01,
+        -14.5
+      ],
+      "size_m": [
+        1.8,
+        0.02,
+        1.8
+      ],
+      "yaw_deg": 0,
+      "notes": "Ø1.8 m 圆环地贴"
+    },
+    {
+      "definition_id": "spawn_marker",
+      "zone_id": "rug_se",
+      "kind": "cylinder",
+      "position": [
+        14.5,
+        0.01,
+        -14.5
+      ],
+      "size_m": [
+        1.8,
+        0.02,
+        1.8
+      ],
+      "yaw_deg": 0,
+      "notes": "Ø1.8 m 圆环地贴"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "bay_north",
+      "kind": "cylinder",
+      "position": [
+        0.0,
+        0.4,
+        9.5
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0,
+      "notes": "道具台 Ø0.8 m"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "bay_south",
+      "kind": "cylinder",
+      "position": [
+        0.0,
+        0.4,
+        -9.5
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0,
+      "notes": "道具台 Ø0.8 m"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "bay_east",
+      "kind": "cylinder",
+      "position": [
+        9.5,
+        0.4,
+        0.0
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0,
+      "notes": "道具台 Ø0.8 m"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "bay_west",
+      "kind": "cylinder",
+      "position": [
+        -9.5,
+        0.4,
+        0.0
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0,
+      "notes": "道具台 Ø0.8 m"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "blocks_north",
+      "kind": "cylinder",
+      "position": [
+        0.0,
+        0.4,
+        13.9
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0,
+      "notes": "道具台 Ø0.8 m"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "blocks_south",
+      "kind": "cylinder",
+      "position": [
+        0.0,
+        0.4,
+        -13.9
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0,
+      "notes": "道具台 Ø0.8 m"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "blocks_east",
+      "kind": "cylinder",
+      "position": [
+        13.9,
+        0.4,
+        0.0
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0,
+      "notes": "道具台 Ø0.8 m"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "blocks_west",
+      "kind": "cylinder",
+      "position": [
+        -13.9,
+        0.4,
+        0.0
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0,
+      "notes": "道具台 Ø0.8 m"
+    }
+  ],
+  "bank": {
+    "zone_id": "toy_chest_core",
+    "anchors": [
+      {
+        "id": "bank_a",
+        "name_zh": "东北台",
+        "position": [
+          4.0,
+          0.0,
+          4.0
+        ],
+        "radius_m": 1.3,
+        "entrances": [
+          "spur_core_north",
+          "shortcut_corner_ne"
+        ],
+        "approach_route_ids": [
+          "approach_bank_a"
+        ],
+        "notes": "旗帜/发光环表示当前激活台；不占位、可多人同时交分（01 §2）。"
+      },
+      {
+        "id": "bank_b",
+        "name_zh": "西北台",
+        "position": [
+          -4.0,
+          0.0,
+          4.0
+        ],
+        "radius_m": 1.3,
+        "entrances": [
+          "spur_core_west",
+          "shortcut_corner_nw"
+        ],
+        "approach_route_ids": [
+          "approach_bank_b"
+        ]
+      },
+      {
+        "id": "bank_c",
+        "name_zh": "西南台",
+        "position": [
+          -4.0,
+          0.0,
+          -4.0
+        ],
+        "radius_m": 1.3,
+        "entrances": [
+          "spur_core_south",
+          "shortcut_corner_sw"
+        ],
+        "approach_route_ids": [
+          "approach_bank_c"
+        ]
+      },
+      {
+        "id": "bank_d",
+        "name_zh": "东南台",
+        "position": [
+          4.0,
+          0.0,
+          -4.0
+        ],
+        "radius_m": 1.3,
+        "entrances": [
+          "spur_core_east",
+          "shortcut_corner_se"
+        ],
+        "approach_route_ids": [
+          "approach_bank_d"
+        ]
+      }
+    ],
+    "rotation": {
+      "mode": "single_active_anchor",
+      "order": [
+        "bank_a",
+        "bank_d",
+        "bank_c",
+        "bank_b"
+      ],
+      "period_s": 60,
+      "warning_s": 8,
+      "activate_at_s": [
+        0,
+        60,
+        120,
+        180
+      ],
+      "timeline_note": "180 s 一局内实际只有 3 个 60 s 窗口（0–60 / 60–120 / 120–180）；第 4 个台在终场哨（180 s）激活、本局不会被用到。为不让任何一个台永久闲置，下一局轮换起点按 +1 台偏移（按房间内已完成局数推进、单局内恒定）。60 s 对齐原作「约每分钟换位」（Docs/Research/KatamariBallRules §1 Q1，C3，strongly implied）；四台固定台是本项目对「移动兑换区」的等价实现。",
+      "status": "PROVISIONAL_NOT_TESTED"
+    },
+    "rules": {
+      "max_concurrent_bankers": 4,
+      "occupancy_lock": false,
+      "bank_resets_ball_to_start_size": false,
+      "bank_resets_ball_to_start_size_note": "仅为 payload 兼容保留（Unity 侧 DTO 仍声明这个 int 字段）。2026-11-14 已决定交分按比例缩小、不回初始体积；规则见 bank_size_rule / bank_residual_fraction / bank_min_conversion_diameter_m——字段名与野餐草坪 bank.rules 完全一致，便于两张图共用同一套读取代码。",
+      "bank_size_rule": "proportional_shrink",
+      "bank_size_rule_status": "PROVISIONAL",
+      "bank_residual_fraction": 0.25,
+      "bank_min_conversion_diameter_m": 0.55,
+      "bank_shrink_dimension": "collision_diameter",
+      "bank_shrink_formula": "post = max(start, start + (pre - start) * bank_residual_fraction)",
+      "bank_radius_counts": "球心进入圆盘即算到达；不要求停稳",
+      "leave_after_bank": "四个方向 6–7 m 内都能出筐（中段入口 5.0 m），无单向陷阱"
+    }
+  },
+  "spawns": [
+    {
+      "id": "spawn_nw",
+      "zone_id": "rug_nw",
+      "position": [
+        -14.5,
+        0.0,
+        14.5
+      ],
+      "yaw_deg": 135.0,
+      "facing": "toward_map_centre",
+      "notes": "朝地图中心；地贴 Ø1.8 m。"
+    },
+    {
+      "id": "spawn_ne",
+      "zone_id": "rug_ne",
+      "position": [
+        14.5,
+        0.0,
+        14.5
+      ],
+      "yaw_deg": 225.0,
+      "facing": "toward_map_centre",
+      "notes": "朝地图中心；地贴 Ø1.8 m。"
+    },
+    {
+      "id": "spawn_sw",
+      "zone_id": "rug_sw",
+      "position": [
+        -14.5,
+        0.0,
+        -14.5
+      ],
+      "yaw_deg": 45.0,
+      "facing": "toward_map_centre",
+      "notes": "朝地图中心；地贴 Ø1.8 m。"
+    },
+    {
+      "id": "spawn_se",
+      "zone_id": "rug_se",
+      "position": [
+        14.5,
+        0.0,
+        -14.5
+      ],
+      "yaw_deg": 315.0,
+      "facing": "toward_map_centre",
+      "notes": "朝地图中心；地贴 Ø1.8 m。"
+    }
+  ],
+  "size_gates": [
+    {
+      "id": "gate_teddy_ne",
+      "type": "absorb",
+      "definition_id": "giant_teddy",
+      "position": [
+        4.6,
+        0.0,
+        4.6
+      ],
+      "yaw_deg": 45.0,
+      "clear_width_m": 3.6,
+      "blocks_ball_diameter_below_m": 1.3,
+      "absorbable_at_ball_diameter_m": 1.45,
+      "opens_path": "shortcut_corner_ne",
+      "detour_m": 6.0,
+      "detour_route": "spur_core_north",
+      "notes": "巨型玩偶塞在筐沿的角门里：1.30 m 以下挡死，1.30–1.45 m 抖动但不让路，≥1.45 m 可吸走、角门全开（相当于多一个进筐口，省 6 m）。"
+    },
+    {
+      "id": "gate_teddy_nw",
+      "type": "absorb",
+      "definition_id": "giant_teddy",
+      "position": [
+        -4.6,
+        0.0,
+        4.6
+      ],
+      "yaw_deg": 135.0,
+      "clear_width_m": 3.6,
+      "blocks_ball_diameter_below_m": 1.3,
+      "absorbable_at_ball_diameter_m": 1.45,
+      "opens_path": "shortcut_corner_nw",
+      "detour_m": 6.0,
+      "detour_route": "spur_core_west",
+      "notes": "巨型玩偶塞在筐沿的角门里：1.30 m 以下挡死，1.30–1.45 m 抖动但不让路，≥1.45 m 可吸走、角门全开（相当于多一个进筐口，省 6 m）。"
+    },
+    {
+      "id": "gate_teddy_sw",
+      "type": "absorb",
+      "definition_id": "giant_teddy",
+      "position": [
+        -4.6,
+        0.0,
+        -4.6
+      ],
+      "yaw_deg": 45.0,
+      "clear_width_m": 3.6,
+      "blocks_ball_diameter_below_m": 1.3,
+      "absorbable_at_ball_diameter_m": 1.45,
+      "opens_path": "shortcut_corner_sw",
+      "detour_m": 6.0,
+      "detour_route": "spur_core_south",
+      "notes": "巨型玩偶塞在筐沿的角门里：1.30 m 以下挡死，1.30–1.45 m 抖动但不让路，≥1.45 m 可吸走、角门全开（相当于多一个进筐口，省 6 m）。"
+    },
+    {
+      "id": "gate_teddy_se",
+      "type": "absorb",
+      "definition_id": "giant_teddy",
+      "position": [
+        4.6,
+        0.0,
+        -4.6
+      ],
+      "yaw_deg": 135.0,
+      "clear_width_m": 3.6,
+      "blocks_ball_diameter_below_m": 1.3,
+      "absorbable_at_ball_diameter_m": 1.45,
+      "opens_path": "shortcut_corner_se",
+      "detour_m": 6.0,
+      "detour_route": "spur_core_east",
+      "notes": "巨型玩偶塞在筐沿的角门里：1.30 m 以下挡死，1.30–1.45 m 抖动但不让路，≥1.45 m 可吸走、角门全开（相当于多一个进筐口，省 6 m）。"
+    },
+    {
+      "id": "gate_mat_ne",
+      "type": "climb",
+      "definition_id": "playmat_platform",
+      "position": [
+        9,
+        0.26,
+        9
+      ],
+      "yaw_deg": 0.0,
+      "clear_width_m": 6.0,
+      "blocks_ball_diameter_below_m": 0.95,
+      "absorbable_at_ball_diameter_m": 1.1,
+      "opens_path": "playmat_ne",
+      "detour_m": 7.5,
+      "detour_route": "loop_outer",
+      "notes": "整块拼图地垫抬到 0.26 m（无斜坡）：0.95 m 以下翻不上去，只能绕；≥1.10 m 可翻越。地形门、不可吸收，垫上资源照常可吸。0.26 m 台面与野餐草坪花圃同高，所以沿用同一对门槛。"
+    },
+    {
+      "id": "gate_mat_nw",
+      "type": "climb",
+      "definition_id": "playmat_platform",
+      "position": [
+        -9,
+        0.26,
+        9
+      ],
+      "yaw_deg": 0.0,
+      "clear_width_m": 6.0,
+      "blocks_ball_diameter_below_m": 0.95,
+      "absorbable_at_ball_diameter_m": 1.1,
+      "opens_path": "playmat_nw",
+      "detour_m": 7.5,
+      "detour_route": "loop_outer",
+      "notes": "整块拼图地垫抬到 0.26 m（无斜坡）：0.95 m 以下翻不上去，只能绕；≥1.10 m 可翻越。地形门、不可吸收，垫上资源照常可吸。0.26 m 台面与野餐草坪花圃同高，所以沿用同一对门槛。"
+    },
+    {
+      "id": "gate_mat_sw",
+      "type": "climb",
+      "definition_id": "playmat_platform",
+      "position": [
+        -9,
+        0.26,
+        -9
+      ],
+      "yaw_deg": 0.0,
+      "clear_width_m": 6.0,
+      "blocks_ball_diameter_below_m": 0.95,
+      "absorbable_at_ball_diameter_m": 1.1,
+      "opens_path": "playmat_sw",
+      "detour_m": 7.5,
+      "detour_route": "loop_outer",
+      "notes": "整块拼图地垫抬到 0.26 m（无斜坡）：0.95 m 以下翻不上去，只能绕；≥1.10 m 可翻越。地形门、不可吸收，垫上资源照常可吸。0.26 m 台面与野餐草坪花圃同高，所以沿用同一对门槛。"
+    },
+    {
+      "id": "gate_mat_se",
+      "type": "climb",
+      "definition_id": "playmat_platform",
+      "position": [
+        9,
+        0.26,
+        -9
+      ],
+      "yaw_deg": 0.0,
+      "clear_width_m": 6.0,
+      "blocks_ball_diameter_below_m": 0.95,
+      "absorbable_at_ball_diameter_m": 1.1,
+      "opens_path": "playmat_se",
+      "detour_m": 7.5,
+      "detour_route": "loop_outer",
+      "notes": "整块拼图地垫抬到 0.26 m（无斜坡）：0.95 m 以下翻不上去，只能绕；≥1.10 m 可翻越。地形门、不可吸收，垫上资源照常可吸。0.26 m 台面与野餐草坪花圃同高，所以沿用同一对门槛。"
+    }
+  ],
+  "prop_scatter": [
+    {
+      "zone_id": "rug_ne",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "lint_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "button",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bead",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "sequin",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "dice",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "puzzle_piece",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "crayon_stub",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "marble",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "rug_nw",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "lint_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "button",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bead",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "sequin",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "dice",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "puzzle_piece",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "crayon_stub",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "marble",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "rug_sw",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "lint_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "button",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bead",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "sequin",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "dice",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "puzzle_piece",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "crayon_stub",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "marble",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "rug_se",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "lint_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "button",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bead",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "sequin",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "dice",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "puzzle_piece",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "crayon_stub",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "marble",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "blocks_north",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "toy_brick",
+          "count_min": 12,
+          "count_max": 12
+        },
+        {
+          "id": "puzzle_piece",
+          "count_min": 10,
+          "count_max": 10
+        },
+        {
+          "id": "marble",
+          "count_min": 9,
+          "count_max": 9
+        },
+        {
+          "id": "crayon_stub",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "dice",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "button",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "lint_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "wooden_block",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "letter_block",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "toy_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "toy_car",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "blocks_south",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "toy_brick",
+          "count_min": 12,
+          "count_max": 12
+        },
+        {
+          "id": "puzzle_piece",
+          "count_min": 10,
+          "count_max": 10
+        },
+        {
+          "id": "marble",
+          "count_min": 9,
+          "count_max": 9
+        },
+        {
+          "id": "crayon_stub",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "dice",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "button",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "lint_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "wooden_block",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "letter_block",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "toy_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "toy_car",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "blocks_east",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "toy_brick",
+          "count_min": 12,
+          "count_max": 12
+        },
+        {
+          "id": "puzzle_piece",
+          "count_min": 10,
+          "count_max": 10
+        },
+        {
+          "id": "marble",
+          "count_min": 9,
+          "count_max": 9
+        },
+        {
+          "id": "crayon_stub",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "dice",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "button",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "lint_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "wooden_block",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "letter_block",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "toy_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "toy_car",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "blocks_west",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "toy_brick",
+          "count_min": 12,
+          "count_max": 12
+        },
+        {
+          "id": "puzzle_piece",
+          "count_min": 10,
+          "count_max": 10
+        },
+        {
+          "id": "marble",
+          "count_min": 9,
+          "count_max": 9
+        },
+        {
+          "id": "crayon_stub",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "dice",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "button",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "lint_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "wooden_block",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "letter_block",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "toy_ball",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "toy_car",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "playmat_ne",
+      "tier_band": "t1",
+      "min_spacing_m": 0.75,
+      "definitions": [
+        {
+          "id": "picture_book",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "toy_car",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "pencil_case",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "spinning_top",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "plush_bear",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "toy_train",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "playmat_nw",
+      "tier_band": "t1",
+      "min_spacing_m": 0.75,
+      "definitions": [
+        {
+          "id": "picture_book",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "toy_car",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "pencil_case",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "spinning_top",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "plush_bear",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "toy_train",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "playmat_sw",
+      "tier_band": "t1",
+      "min_spacing_m": 0.75,
+      "definitions": [
+        {
+          "id": "picture_book",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "toy_car",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "pencil_case",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "spinning_top",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "plush_bear",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "toy_train",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "playmat_se",
+      "tier_band": "t1",
+      "min_spacing_m": 0.75,
+      "definitions": [
+        {
+          "id": "picture_book",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "toy_car",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "pencil_case",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "spinning_top",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "plush_bear",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "toy_train",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "bay_north",
+      "tier_band": "t2",
+      "min_spacing_m": 1.7,
+      "definitions": [
+        {
+          "id": "toy_bin",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "doll_house",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "plush_giant",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "laundry_basket",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "picture_book",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "plush_bear",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "board_game",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "doll",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "bay_south",
+      "tier_band": "t2",
+      "min_spacing_m": 1.7,
+      "definitions": [
+        {
+          "id": "toy_bin",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "doll_house",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "plush_giant",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "laundry_basket",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "picture_book",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "plush_bear",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "board_game",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "doll",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "bay_east",
+      "tier_band": "t2",
+      "min_spacing_m": 1.7,
+      "definitions": [
+        {
+          "id": "toy_bin",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "doll_house",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "plush_giant",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "laundry_basket",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "picture_book",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "plush_bear",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "board_game",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "doll",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "bay_west",
+      "tier_band": "t2",
+      "min_spacing_m": 1.7,
+      "definitions": [
+        {
+          "id": "toy_bin",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "doll_house",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "plush_giant",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "laundry_basket",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "picture_book",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "plush_bear",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "board_game",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "doll",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "id": "loop_outer",
+      "kind": "safe_loop",
+      "closed": true,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          0,
+          13.9
+        ],
+        [
+          12,
+          13.9
+        ],
+        [
+          13.9,
+          12
+        ],
+        [
+          13.9,
+          0
+        ],
+        [
+          13.9,
+          -12
+        ],
+        [
+          12,
+          -13.9
+        ],
+        [
+          0,
+          -13.9
+        ],
+        [
+          -12,
+          -13.9
+        ],
+        [
+          -13.9,
+          -12
+        ],
+        [
+          -13.9,
+          0
+        ],
+        [
+          -13.9,
+          12
+        ],
+        [
+          -12,
+          13.9
+        ]
+      ],
+      "length_m": 106.75,
+      "notes": "外圈安全环：3.4 m 宽，绕四边；四个角从出生垫的内角切过。"
+    },
+    {
+      "id": "spur_core_north",
+      "kind": "core_spur",
+      "closed": false,
+      "width_m": 4.0,
+      "min_clear_width_m": 4.0,
+      "waypoints": [
+        [
+          0,
+          13.9
+        ],
+        [
+          0,
+          10.0
+        ],
+        [
+          0,
+          6.0
+        ]
+      ],
+      "length_m": 7.9,
+      "notes": "外环→筐的 5.0 m 中段入口；横穿北侧家具带。"
+    },
+    {
+      "id": "spur_core_south",
+      "kind": "core_spur",
+      "closed": false,
+      "width_m": 4.0,
+      "min_clear_width_m": 4.0,
+      "waypoints": [
+        [
+          0,
+          -13.9
+        ],
+        [
+          0,
+          -10.0
+        ],
+        [
+          0,
+          -6.0
+        ]
+      ],
+      "length_m": 7.9,
+      "notes": "同上（南）。"
+    },
+    {
+      "id": "spur_core_east",
+      "kind": "core_spur",
+      "closed": false,
+      "width_m": 4.0,
+      "min_clear_width_m": 4.0,
+      "waypoints": [
+        [
+          13.9,
+          0
+        ],
+        [
+          10.0,
+          0
+        ],
+        [
+          6.0,
+          0
+        ]
+      ],
+      "length_m": 7.9,
+      "notes": "同上（东）。"
+    },
+    {
+      "id": "spur_core_west",
+      "kind": "core_spur",
+      "closed": false,
+      "width_m": 4.0,
+      "min_clear_width_m": 4.0,
+      "waypoints": [
+        [
+          -13.9,
+          0
+        ],
+        [
+          -10.0,
+          0
+        ],
+        [
+          -6.0,
+          0
+        ]
+      ],
+      "length_m": 7.9,
+      "notes": "同上（西）。"
+    },
+    {
+      "id": "spawn_nw_a",
+      "kind": "spawn_exit",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          -14.5,
+          14.5
+        ],
+        [
+          -13.9,
+          12
+        ],
+        [
+          -13.9,
+          0
+        ],
+        [
+          -6,
+          0
+        ]
+      ],
+      "length_m": 22.47,
+      "notes": "出生垫内角上车 → 外环（柜前）→ 侧向中段入口。",
+      "spawn_id": "spawn_nw"
+    },
+    {
+      "id": "spawn_nw_b",
+      "kind": "spawn_exit",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          -14.5,
+          14.5
+        ],
+        [
+          -12,
+          13.9
+        ],
+        [
+          0,
+          13.9
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "length_m": 22.47,
+      "notes": "出生垫内角上车 → 外环（另一侧）→ 纵向中段入口。",
+      "spawn_id": "spawn_nw"
+    },
+    {
+      "id": "spawn_ne_a",
+      "kind": "spawn_exit",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          14.5,
+          14.5
+        ],
+        [
+          13.9,
+          12
+        ],
+        [
+          13.9,
+          0
+        ],
+        [
+          6,
+          0
+        ]
+      ],
+      "length_m": 22.47,
+      "notes": "出生垫内角上车 → 外环（柜前）→ 侧向中段入口。",
+      "spawn_id": "spawn_ne"
+    },
+    {
+      "id": "spawn_ne_b",
+      "kind": "spawn_exit",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          14.5,
+          14.5
+        ],
+        [
+          12,
+          13.9
+        ],
+        [
+          0,
+          13.9
+        ],
+        [
+          0,
+          6
+        ]
+      ],
+      "length_m": 22.47,
+      "notes": "出生垫内角上车 → 外环（另一侧）→ 纵向中段入口。",
+      "spawn_id": "spawn_ne"
+    },
+    {
+      "id": "spawn_sw_a",
+      "kind": "spawn_exit",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          -14.5,
+          -14.5
+        ],
+        [
+          -13.9,
+          -12
+        ],
+        [
+          -13.9,
+          0
+        ],
+        [
+          -6,
+          0
+        ]
+      ],
+      "length_m": 22.47,
+      "notes": "出生垫内角上车 → 外环（柜前）→ 侧向中段入口。",
+      "spawn_id": "spawn_sw"
+    },
+    {
+      "id": "spawn_sw_b",
+      "kind": "spawn_exit",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          -14.5,
+          -14.5
+        ],
+        [
+          -12,
+          -13.9
+        ],
+        [
+          0,
+          -13.9
+        ],
+        [
+          0,
+          -6
+        ]
+      ],
+      "length_m": 22.47,
+      "notes": "出生垫内角上车 → 外环（另一侧）→ 纵向中段入口。",
+      "spawn_id": "spawn_sw"
+    },
+    {
+      "id": "spawn_se_a",
+      "kind": "spawn_exit",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          14.5,
+          -14.5
+        ],
+        [
+          13.9,
+          -12
+        ],
+        [
+          13.9,
+          0
+        ],
+        [
+          6,
+          0
+        ]
+      ],
+      "length_m": 22.47,
+      "notes": "出生垫内角上车 → 外环（柜前）→ 侧向中段入口。",
+      "spawn_id": "spawn_se"
+    },
+    {
+      "id": "spawn_se_b",
+      "kind": "spawn_exit",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          14.5,
+          -14.5
+        ],
+        [
+          12,
+          -13.9
+        ],
+        [
+          0,
+          -13.9
+        ],
+        [
+          0,
+          -6
+        ]
+      ],
+      "length_m": 22.47,
+      "notes": "出生垫内角上车 → 外环（另一侧）→ 纵向中段入口。",
+      "spawn_id": "spawn_se"
+    },
+    {
+      "id": "approach_bank_a",
+      "kind": "bank_approach",
+      "closed": false,
+      "width_m": 3.0,
+      "min_clear_width_m": 5.0,
+      "waypoints": [
+        [
+          0,
+          6
+        ],
+        [
+          1.5,
+          5.2
+        ],
+        [
+          4.0,
+          4.0
+        ]
+      ],
+      "length_m": 4.47,
+      "notes": "中段入口 → 台面；筐底开放，净宽按入口的 5.0 m 记。",
+      "bank_anchor_id": "bank_a"
+    },
+    {
+      "id": "approach_bank_b",
+      "kind": "bank_approach",
+      "closed": false,
+      "width_m": 3.0,
+      "min_clear_width_m": 5.0,
+      "waypoints": [
+        [
+          -6,
+          0
+        ],
+        [
+          -5.2,
+          1.5
+        ],
+        [
+          -4.0,
+          4.0
+        ]
+      ],
+      "length_m": 4.47,
+      "notes": "中段入口 → 台面；筐底开放，净宽按入口的 5.0 m 记。",
+      "bank_anchor_id": "bank_b"
+    },
+    {
+      "id": "approach_bank_c",
+      "kind": "bank_approach",
+      "closed": false,
+      "width_m": 3.0,
+      "min_clear_width_m": 5.0,
+      "waypoints": [
+        [
+          0,
+          -6
+        ],
+        [
+          -1.5,
+          -5.2
+        ],
+        [
+          -4.0,
+          -4.0
+        ]
+      ],
+      "length_m": 4.47,
+      "notes": "中段入口 → 台面；筐底开放，净宽按入口的 5.0 m 记。",
+      "bank_anchor_id": "bank_c"
+    },
+    {
+      "id": "approach_bank_d",
+      "kind": "bank_approach",
+      "closed": false,
+      "width_m": 3.0,
+      "min_clear_width_m": 5.0,
+      "waypoints": [
+        [
+          6,
+          0
+        ],
+        [
+          5.2,
+          -1.5
+        ],
+        [
+          4.0,
+          -4.0
+        ]
+      ],
+      "length_m": 4.47,
+      "notes": "中段入口 → 台面；筐底开放，净宽按入口的 5.0 m 记。",
+      "bank_anchor_id": "bank_d"
+    },
+    {
+      "id": "shortcut_corner_ne",
+      "kind": "gated_shortcut",
+      "closed": false,
+      "width_m": 3.6,
+      "min_clear_width_m": 3.6,
+      "waypoints": [
+        [
+          3.4,
+          3.4
+        ],
+        [
+          4.72,
+          4.72
+        ],
+        [
+          6.4,
+          6.4
+        ]
+      ],
+      "length_m": 4.24,
+      "notes": "筐角门：吸掉巨偶后从筐底直插拼图地垫内角，比绕中段入口省约 6 m。",
+      "gate_id": "gate_teddy_ne"
+    },
+    {
+      "id": "shortcut_corner_nw",
+      "kind": "gated_shortcut",
+      "closed": false,
+      "width_m": 3.6,
+      "min_clear_width_m": 3.6,
+      "waypoints": [
+        [
+          -3.4,
+          3.4
+        ],
+        [
+          -4.72,
+          4.72
+        ],
+        [
+          -6.4,
+          6.4
+        ]
+      ],
+      "length_m": 4.24,
+      "notes": "筐角门：吸掉巨偶后从筐底直插拼图地垫内角，比绕中段入口省约 6 m。",
+      "gate_id": "gate_teddy_nw"
+    },
+    {
+      "id": "shortcut_corner_sw",
+      "kind": "gated_shortcut",
+      "closed": false,
+      "width_m": 3.6,
+      "min_clear_width_m": 3.6,
+      "waypoints": [
+        [
+          -3.4,
+          -3.4
+        ],
+        [
+          -4.72,
+          -4.72
+        ],
+        [
+          -6.4,
+          -6.4
+        ]
+      ],
+      "length_m": 4.24,
+      "notes": "筐角门：吸掉巨偶后从筐底直插拼图地垫内角，比绕中段入口省约 6 m。",
+      "gate_id": "gate_teddy_sw"
+    },
+    {
+      "id": "shortcut_corner_se",
+      "kind": "gated_shortcut",
+      "closed": false,
+      "width_m": 3.6,
+      "min_clear_width_m": 3.6,
+      "waypoints": [
+        [
+          3.4,
+          -3.4
+        ],
+        [
+          4.72,
+          -4.72
+        ],
+        [
+          6.4,
+          -6.4
+        ]
+      ],
+      "length_m": 4.24,
+      "notes": "筐角门：吸掉巨偶后从筐底直插拼图地垫内角，比绕中段入口省约 6 m。",
+      "gate_id": "gate_teddy_se"
+    }
+  ],
+  "chokepoints": [
+    {
+      "id": "core_entrance_north",
+      "type": "core_entrance",
+      "position": [
+        0,
+        0,
+        6
+      ],
+      "clear_width_m": 5.0
+    },
+    {
+      "id": "core_entrance_south",
+      "type": "core_entrance",
+      "position": [
+        0,
+        0,
+        -6
+      ],
+      "clear_width_m": 5.0
+    },
+    {
+      "id": "core_entrance_east",
+      "type": "core_entrance",
+      "position": [
+        6,
+        0,
+        0
+      ],
+      "clear_width_m": 5.0
+    },
+    {
+      "id": "core_entrance_west",
+      "type": "core_entrance",
+      "position": [
+        -6,
+        0,
+        0
+      ],
+      "clear_width_m": 5.0
+    },
+    {
+      "id": "core_corner_door_ne",
+      "type": "core_corner_door",
+      "position": [
+        4.72,
+        0,
+        4.72
+      ],
+      "clear_width_m": 3.6,
+      "gate_id": "gate_teddy_ne"
+    },
+    {
+      "id": "core_corner_door_nw",
+      "type": "core_corner_door",
+      "position": [
+        -4.72,
+        0,
+        4.72
+      ],
+      "clear_width_m": 3.6,
+      "gate_id": "gate_teddy_nw"
+    },
+    {
+      "id": "core_corner_door_sw",
+      "type": "core_corner_door",
+      "position": [
+        -4.72,
+        0,
+        -4.72
+      ],
+      "clear_width_m": 3.6,
+      "gate_id": "gate_teddy_sw"
+    },
+    {
+      "id": "core_corner_door_se",
+      "type": "core_corner_door",
+      "position": [
+        4.72,
+        0,
+        -4.72
+      ],
+      "clear_width_m": 3.6,
+      "gate_id": "gate_teddy_se"
+    },
+    {
+      "id": "cabinet_gap_north",
+      "type": "cabinet_back_gap",
+      "position": [
+        0,
+        0,
+        18.425
+      ],
+      "clear_width_m": 1.85,
+      "narrow_small_ball_lane": true,
+      "notes": "矮柜背后 1.85 m 缝：两端开口的穿越道，缝内不属于任何散布区（没有可卷物），所以小球不会在里面长大卡住。"
+    },
+    {
+      "id": "cabinet_gap_south",
+      "type": "cabinet_back_gap",
+      "position": [
+        0,
+        0,
+        -18.425
+      ],
+      "clear_width_m": 1.85,
+      "narrow_small_ball_lane": true,
+      "notes": "矮柜背后 1.85 m 缝：两端开口的穿越道，缝内不属于任何散布区（没有可卷物），所以小球不会在里面长大卡住。"
+    },
+    {
+      "id": "cabinet_gap_east",
+      "type": "cabinet_back_gap",
+      "position": [
+        18.425,
+        0,
+        0
+      ],
+      "clear_width_m": 1.85,
+      "narrow_small_ball_lane": true,
+      "notes": "矮柜背后 1.85 m 缝：两端开口的穿越道，缝内不属于任何散布区（没有可卷物），所以小球不会在里面长大卡住。"
+    },
+    {
+      "id": "cabinet_gap_west",
+      "type": "cabinet_back_gap",
+      "position": [
+        -18.425,
+        0,
+        0
+      ],
+      "clear_width_m": 1.85,
+      "narrow_small_ball_lane": true,
+      "notes": "矮柜背后 1.85 m 缝：两端开口的穿越道，缝内不属于任何散布区（没有可卷物），所以小球不会在里面长大卡住。"
+    }
+  ],
+  "powerups": {
+    "points": [
+      {
+        "id": "magnet_north",
+        "type": "magnet",
+        "position": [
+          0.0,
+          0.4,
+          9.5
+        ],
+        "zone_id": "bay_north"
+      },
+      {
+        "id": "magnet_south",
+        "type": "magnet",
+        "position": [
+          0.0,
+          0.4,
+          -9.5
+        ],
+        "zone_id": "bay_south"
+      },
+      {
+        "id": "magnet_east",
+        "type": "magnet",
+        "position": [
+          9.5,
+          0.4,
+          0.0
+        ],
+        "zone_id": "bay_east"
+      },
+      {
+        "id": "magnet_west",
+        "type": "magnet",
+        "position": [
+          -9.5,
+          0.4,
+          0.0
+        ],
+        "zone_id": "bay_west"
+      },
+      {
+        "id": "rocket_north",
+        "type": "rocket",
+        "position": [
+          0.0,
+          0.4,
+          13.9
+        ],
+        "zone_id": "blocks_north"
+      },
+      {
+        "id": "rocket_south",
+        "type": "rocket",
+        "position": [
+          0.0,
+          0.4,
+          -13.9
+        ],
+        "zone_id": "blocks_south"
+      },
+      {
+        "id": "rocket_east",
+        "type": "rocket",
+        "position": [
+          13.9,
+          0.4,
+          0.0
+        ],
+        "zone_id": "blocks_east"
+      },
+      {
+        "id": "rocket_west",
+        "type": "rocket",
+        "position": [
+          -13.9,
+          0.4,
+          0.0
+        ],
+        "zone_id": "blocks_west"
+      }
+    ],
+    "notes": "磁铁放在两处家具带中心（全图资源最密、最容易被抢的地方）；火箭放在外环四个中段，给落后者脱身或抢交分用。刷新周期/世代由道具系统决定（01 §5），本图只定位置。"
+  },
+  "respawn": {
+    "candidate_spawn_ids": [
+      "spawn_nw",
+      "spawn_ne",
+      "spawn_sw",
+      "spawn_se"
+    ],
+    "min_distance_from_enemy_m": 12.0,
+    "respawn_delay_s": 3,
+    "protection_s": 2,
+    "low_tier_stock_required": true,
+    "fallback": "没有满足距离的角落时，先挑资源未被清空的角落，再延迟 1 s 重试；不放进交分台正上方。",
+    "status": "PROVISIONAL_NOT_TESTED"
+  },
+  "player_count_plans": {
+    "2": [
+      "spawn_nw",
+      "spawn_se"
+    ],
+    "3": [
+      "spawn_nw",
+      "spawn_se",
+      "spawn_ne"
+    ],
+    "4": [
+      "spawn_nw",
+      "spawn_ne",
+      "spawn_sw",
+      "spawn_se"
+    ],
+    "assignment": "按入局顺序轮转分配，不按技术或积分；每局整体轮转一格。",
+    "status": "PROVISIONAL_NOT_TESTED"
+  },
+  "performance_budget": {
+    "status": "PROVISIONAL_NOT_TESTED",
+    "absorbable_instances": 440,
+    "absorbable_definition_count": 25,
+    "structure_instances": 39,
+    "merged_static_meshes_target": 6,
+    "estimated_absorbable_triangles": 115200,
+    "estimated_total_triangles": 200200,
+    "draw_call_target": 300,
+    "realtime_lights": 0,
+    "reflection_probes": 0,
+    "notes": "按 s=140 / m=380 / l=900 三角面估算；静态装饰合并到 ≤6 个 Mesh。未在 Unity/VR 中测过，03 §5 与 02 §9 的 90 Hz 预算留给 T38。"
+  }
+}

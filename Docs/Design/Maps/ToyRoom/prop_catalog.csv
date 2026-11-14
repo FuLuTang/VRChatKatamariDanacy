@@ -1,0 +1,36 @@
+id,name_zh,category,size_tier,real_longest_dim_m,game_longest_dim_m,absorb_value_placeholder,count_in_map,zone_ids,sourcing_hint,priority,coverage_ref,role,notes
+lint_ball,毛絮团,debris,s,0.03,0.04,1,24,blocks_east;blocks_north;blocks_south;blocks_west;rug_ne;rug_nw;rug_se;rug_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：Ø0.04 m 不规则球，2 张 alpha 絮片,MVP,无（coverage 未列）,absorbable,
+button,纽扣,sewing,s,0.02,0.03,1,24,blocks_east;blocks_north;blocks_south;blocks_west;rug_ne;rug_nw;rug_se;rug_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：Ø0.03 m 圆盘 + 2 孔,MVP,无（coverage 未列）,absorbable,
+bead,珠子,craft,s,0.015,0.02,1,8,rug_ne;rug_nw;rug_se;rug_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：Ø0.02 m 球，6 色实例色,MVP,无（coverage 未列）,absorbable,
+sequin,亮片,craft,s,0.015,0.02,1,8,rug_ne;rug_nw;rug_se;rug_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：单面薄片，双面材质,MVP,无（coverage 未列）,absorbable,
+dice,骰子,toy,s,0.016,0.02,1,32,blocks_east;blocks_north;blocks_south;blocks_west;rug_ne;rug_nw;rug_se;rug_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.02 m 立方，六面点,MVP,无（coverage 未列）,absorbable,
+puzzle_piece,拼图片,puzzle,s,0.05,0.06,1,48,blocks_east;blocks_north;blocks_south;blocks_west;rug_ne;rug_nw;rug_se;rug_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.06 m 平片，凹凸边用贴图表现,MVP,无（coverage 未列）,absorbable,
+crayon_stub,蜡笔头,stationery,s,0.04,0.05,1,28,blocks_east;blocks_north;blocks_south;blocks_west;rug_ne;rug_nw;rug_se;rug_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：Ø0.012×0.05 m 圆柱，端面斜切,MVP,无（coverage 未列）,absorbable,
+marble,弹珠,toy,s,0.016,0.02,1,40,blocks_east;blocks_north;blocks_south;blocks_west;rug_ne;rug_nw;rug_se;rug_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：Ø0.02 m 球 + 内芯条纹（玻璃感靠材质，首版不做破碎）,MVP,无（coverage 未列）,absorbable,
+toy_brick,无品牌积木块,toy,s,0.032,0.04,1,48,blocks_east;blocks_north;blocks_south;blocks_west,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.04 m 凸点砖（**不使用任何真实积木品牌的凸点比例与 Logo**）,MVP,无（coverage 未列，对应 03 §3「无品牌积木」）,absorbable,
+wooden_block,木质积木,toy,m,0.06,0.35,4,24,blocks_east;blocks_north;blocks_south;blocks_west,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.35 m 立方 + 倒角，四个实例色,MVP,无（coverage 未列）,absorbable,
+letter_block,字母积木,toy,m,0.07,0.45,4,20,blocks_east;blocks_north;blocks_south;blocks_west,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.45 m 立方，六面字母贴图（自绘字形，不引用字体厂商）,MVP,无（coverage 未列）,absorbable,
+toy_ball,小皮球,toy,m,0.12,0.4,4,12,blocks_east;blocks_north;blocks_south;blocks_west,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：Ø0.40 m 低面数球 + 双色条纹,MVP,无（coverage 未列）,absorbable,
+toy_car,玩具小车,toy,m,0.15,0.55,4,24,blocks_east;blocks_north;blocks_south;blocks_west;playmat_ne;playmat_nw;playmat_se;playmat_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.55 m 车身 + 4 轮（单一可卷实体，不做 5 个 Mesh 分别计分）,MVP,无（coverage 未列，对应 03 §3「小车」）,absorbable,
+spinning_top,陀螺,toy,m,0.1,0.32,4,12,playmat_ne;playmat_nw;playmat_se;playmat_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.32 m 旋转体 + 顶柄,MVP,无（coverage 未列）,absorbable,
+pencil_case,文具盒,stationery,m,0.2,0.5,4,12,playmat_ne;playmat_nw;playmat_se;playmat_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.50 m 盒体 + 拉链压线（贴图）,MVP,无（coverage 未列，对应 03 §3「文具盒」）,absorbable,
+picture_book,绘本,book,m,0.28,0.6,5,24,bay_east;bay_north;bay_south;bay_west;playmat_ne;playmat_nw;playmat_se;playmat_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.60 m 厚板书，封面自绘（不引用任何出版封面）,MVP,无（coverage 未列，对应 03 §3「书本」）,absorbable,
+plush_bear,毛绒熊,plush,m,0.3,0.65,4,16,bay_east;bay_north;bay_south;bay_west;playmat_ne;playmat_nw;playmat_se;playmat_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.65 m 软体，2 个骨架面片；软物体积权重不按 AABB,MVP,无（coverage 未列，对应 03 §3「玩偶」）,absorbable,
+toy_train,小火车,toy,m,0.22,0.75,4,8,playmat_ne;playmat_nw;playmat_se;playmat_sw,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.75 m 车头 + 2 节车厢合并为一个可卷实体,MVP,无（coverage 未列）,absorbable,
+board_game,桌游盒,game,m,0.35,0.8,6,4,bay_east;bay_north;bay_south;bay_west,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.80×0.80×0.12 m 盒 + 盒盖缝,MVP,无（coverage 未列）,absorbable,
+doll,布娃娃,plush,m,0.28,0.65,4,4,bay_east;bay_north;bay_south;bay_west,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.65 m 布偶（无知名角色造型）,MVP,无（coverage 未列，对应 03 §3「玩偶」）,absorbable,
+toy_bin,玩具收纳箱,container,l,0.5,1.45,16,4,bay_east;bay_north;bay_south;bay_west,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：0.50 m 塑料箱放大到 1.70 m，带盖缝与把手,MVP,无（coverage 未列，对应 03 §3「玩具箱」）,absorbable,
+doll_house,娃娃屋,toy,l,0.6,1.7,20,4,bay_east;bay_north;bay_south;bay_west,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：1.90 m 开面娃娃屋（单层 + 屋顶），首版不做内部家具,later,无（coverage 未列，对应 03 §3「大档」）,absorbable,
+plush_giant,大玩偶,plush,l,0.8,1.6,20,4,bay_east;bay_north;bay_south;bay_west,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：1.75 m 大型软偶；软物体积权重按手调，不按包围盒,MVP,无（coverage 未列）,absorbable,
+laundry_basket,洗衣篮,container,l,0.45,1.15,16,4,bay_east;bay_north;bay_south;bay_west,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：Ø0.45×1.20 m 网篮（alpha 网格）,MVP,无（coverage 未列）,absorbable,
+giant_teddy,巨型玩偶,plush,l,1.1,1.7,16,4,toy_chest_core,model ourselves：低面数基础体 + 单张色板材质（无品牌、无 Logo）：1.75 m 巨型软偶，专用于筐角门,MVP,无（coverage 未列；collapsed_bench 的对应物）,absorbable,仅作角门阻挡件，4 个；吸掉后角门才通。门槛按最粗处（1.10 m）估，不按最长边——与 collapsed_bench 的长条例外同规则。
+floor_terrain,地面,terrain,l,40,40,0,1,,model ourselves：40×40 m 木地板 + 5 块地毯贴花合并为 1 个 Mesh,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+room_wall,房间墙,boundary,l,40,40,0,1,,model ourselves：四面墙 + 踢脚线合并成 1 个环形 Mesh，3.0 m 高、0.3 m 厚,MVP,无,fixed,不可卷；固定 Collider。schema 里这个字段叫 boundary_hedge_*，本图是墙
+room_ceiling,天花板,boundary,l,40,40,0,1,,model ourselves：4.0 m 高的平面 + 一盏吸顶灯（自发光，不用实时灯）,MVP,无,fixed,不可卷；纯装饰（球到不了）
+toy_chest_rim,玩具筐沿,boundary,l,1.25,1.25,0,8,toy_chest_core,model ourselves：8 段 0.95×0.40×1.25 m 塑料筐壁，围出 4 个 5.0 m 入口 + 4 个 3.6 m 角门,MVP,无,fixed,不可卷；固定 Collider（竖直、无台阶辅助）
+cabinet,矮柜,furniture,l,17,17,0,4,blocks_east;blocks_north;blocks_south;blocks_west,model ourselves：17.0×1.8×1.15 m 矮柜，柜门/把手用贴图，离墙 1.85 m,MVP,无,fixed,不可卷；固定 Collider。首版家具主体不可卷（03 §3）
+playmat_platform,拼图地垫台,terrain,l,6,6,0,4,playmat_ne;playmat_nw;playmat_se;playmat_sw,model ourselves：6×6×0.26 m 抬高地垫台 + 拼图接缝贴图，四周竖直,MVP,无,fixed,不可卷；固定 Collider（地形门，0.95 m 以下翻不上去）
+bank_pad,交分台,gameplay,l,2.6,2.6,0,4,toy_chest_core,model ourselves：Ø2.6 m 圆盘 + 发光环（自发光材质，不用实时灯）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+bank_beacon,交分旗杆,gameplay,l,3.0,3.0,0,4,toy_chest_core,model ourselves：Ø0.25 m 杆 + 2.5 m 高旗；激活时旗升起、环脉冲,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+spawn_marker,出生地贴,gameplay,l,1.8,1.8,0,4,rug_ne;rug_nw;rug_se;rug_sw,model ourselves：Ø1.8 m 圆环地贴,MVP,无,fixed,不可卷；纯装饰
+powerup_pedestal,道具台,gameplay,l,0.8,0.8,0,8,bay_east;bay_north;bay_south;bay_west;blocks_east;blocks_north;blocks_south;blocks_west,model ourselves：Ø0.8 m 台座 + 图标（吸力花冠 / 喷气芽荚）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰

@@ -56,7 +56,6 @@ namespace VRCKatamari.Labs.BallPlayground
         // is nearest right now.
         [SerializeField] private float releaseRadiusM = 1.0f;
 
-        private bool queued;
         private bool consumed;
         private bool started;
         private int seenEvents;
@@ -83,16 +82,17 @@ namespace VRCKatamari.Labs.BallPlayground
                 return;
             }
 
-            if (!queued && Time.time >= nextRetryTime)
+            // Submit on a timer while inside the activation radius. The motor
+            // de-duplicates by item id, so repeating this is harmless and the prop
+            // keeps no "I am queued" latch of its own: the queue is the only owner of
+            // that fact, so the two can never disagree.
+            if (Time.time >= nextRetryTime)
             {
                 nextRetryTime = Time.time + retrySeconds;
                 TryQueue();
             }
-            if (queued)
-            {
-                ReleaseIfLeftBehind();
-                ScanAbsorbedEvents();
-            }
+            ReleaseIfLeftBehind();
+            ScanAbsorbedEvents();
         }
 
         /// <summary>
@@ -114,7 +114,9 @@ namespace VRCKatamari.Labs.BallPlayground
             if (fromBall.magnitude > activationRadiusM) return;
 
             Vector3 bounds = new Vector3(semanticDiameterM, semanticDiameterM, semanticDiameterM);
-            queued = motor.SubmitCandidate(absorbable, kind, bounds, transform.position,
+            // Result ignored on purpose: capacity refusal is the motor's business and
+            // the next tick retries. Nothing here records queue membership.
+            motor.SubmitCandidate(absorbable, kind, bounds, transform.position,
                 valueUnits, itemId, 0);
         }
 
@@ -131,7 +133,7 @@ namespace VRCKatamari.Labs.BallPlayground
         {
             Vector3 fromBall = transform.position - motor.GetCenterWorld();
             if (fromBall.magnitude <= releaseRadiusM) return;
-            if (motor.WithdrawCandidate(itemId)) queued = false;
+            motor.WithdrawCandidate(itemId);
         }
 
         /// <summary>
@@ -171,11 +173,6 @@ namespace VRCKatamari.Labs.BallPlayground
         public bool IsConsumed()
         {
             return consumed;
-        }
-
-        public bool IsQueued()
-        {
-            return queued;
         }
 
         public string GetItemId()

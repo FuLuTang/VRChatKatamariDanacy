@@ -264,6 +264,9 @@ namespace VRCKatamari.BallMotor
         private string[] pendingItemIds;
         private int[] pendingGenerations;
         private bool[] pendingAccepted;
+        // Submission timestamp per slot: data only, so a reader can tell a stale
+        // snapshot from a fresh one. Feeds no decision.
+        private float[] pendingSubmitTimes;
         private int pendingCandidateCount;
 
         // ---- Absorbed-event ring: the only "which item was eaten" exit ----
@@ -377,6 +380,7 @@ namespace VRCKatamari.BallMotor
             pendingItemIds = new string[PendingCandidateCapacity];
             pendingGenerations = new int[PendingCandidateCapacity];
             pendingAccepted = new bool[PendingCandidateCapacity];
+            pendingSubmitTimes = new float[PendingCandidateCapacity];
             pendingCandidateCount = 0;
 
             absorbedEventItemIds = new string[AbsorbedEventCapacity];
@@ -769,6 +773,7 @@ namespace VRCKatamari.BallMotor
                     pendingItemIds[write] = pendingItemIds[read];
                     pendingGenerations[write] = pendingGenerations[read];
                     pendingAccepted[write] = pendingAccepted[read];
+                    pendingSubmitTimes[write] = pendingSubmitTimes[read];
                 }
                 write = write + 1;
             }
@@ -984,13 +989,22 @@ namespace VRCKatamari.BallMotor
         public bool SubmitCandidate(bool absorbable, string kind, Vector3 bounds,
             Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration)
         {
+            if (itemInstanceId == null || itemInstanceId.Length == 0) return false;
+            if (itemGeneration < 0) return false;
+
+            // Idempotent by item id: re-submitting something already queued is a no-op
+            // that returns true. The queue is the single owner of "is this queued", so a
+            // host needs no latch of its own and a latch can never disagree with it.
+            for (int i = 0; i < pendingCandidateCount; i++)
+            {
+                if (pendingItemIds[i] == itemInstanceId) return true;
+            }
+
             if (pendingCandidateCount >= PendingCandidateCapacity)
             {
                 SignalOverflow("pending candidate capacity 4 exceeded");
                 return false;
             }
-            if (itemInstanceId == null || itemInstanceId.Length == 0) return false;
-            if (itemGeneration < 0) return false;
             int index = pendingCandidateCount;
             pendingAbsorbable[index] = absorbable;
             pendingKinds[index] = kind;
@@ -1000,6 +1014,7 @@ namespace VRCKatamari.BallMotor
             pendingItemIds[index] = itemInstanceId;
             pendingGenerations[index] = itemGeneration;
             pendingAccepted[index] = false;
+            pendingSubmitTimes[index] = Time.time;
             pendingCandidateCount = pendingCandidateCount + 1;
             return true;
         }
@@ -1044,6 +1059,7 @@ namespace VRCKatamari.BallMotor
                     pendingItemIds[write] = pendingItemIds[read];
                     pendingGenerations[write] = pendingGenerations[read];
                     pendingAccepted[write] = pendingAccepted[read];
+                    pendingSubmitTimes[write] = pendingSubmitTimes[read];
                 }
                 write = write + 1;
             }
@@ -1386,6 +1402,18 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// The contact-radius input the pickup gate adds to reach, metres.
+        /// </summary>
+        /// <remarks>
+        /// Read-only, for diagnostics: a reader that shows "reach" without it would
+        /// report a smaller reach than the gate actually used.
+        /// </remarks>
+        public float GetContactRadiusWorldM()
+        {
+            return contactRadiusWorldM;
+        }
+
+        /// <summary>
         /// How many candidates the queue holds (4).
         /// </summary>
         /// <remarks>
@@ -1604,6 +1632,35 @@ namespace VRCKatamari.BallMotor
             string id = pendingItemIds[index];
             if (id == null) return "";
             return id;
+        }
+
+        /// <summary>
+        /// Value the motor holds for the candidate at a slot, or -1 when out of range.
+        /// </summary>
+        /// <remarks>
+        /// A prop's own serialized value is not proof of what the motor received: the
+        /// submission carries the value, and a wrong field at the call site would show up
+        /// only here. Read-only.
+        /// </remarks>
+        public float GetPendingCandidateValue(int index)
+        {
+            if (pendingValues == null) return -1f;
+            if (index < 0 || index >= pendingCandidateCount) return -1f;
+            return pendingValues[index];
+        }
+
+        /// <summary>
+        /// Seconds since the candidate at a slot was submitted, or -1 when out of range.
+        /// </summary>
+        /// <remarks>
+        /// A stale position snapshot and a fresh one look identical from the outside;
+        /// this is what distinguishes them. Data only, feeds no decision.
+        /// </remarks>
+        public float GetPendingCandidateAge(int index)
+        {
+            if (pendingSubmitTimes == null) return -1f;
+            if (index < 0 || index >= pendingCandidateCount) return -1f;
+            return Time.time - pendingSubmitTimes[index];
         }
 
         /// <summary>

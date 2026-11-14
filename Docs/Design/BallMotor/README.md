@@ -226,3 +226,11 @@ StepBall:
 - `BallPlaygroundBootstrap.Start()` 启动自检覆盖三种坏装配：`motor == null`、`motor.transform == transform`（同物体，即本节的反例）、`motor.GetSemanticDiameterWorldM() <= 0f`（该实例的 `Start()` 从未跑过，**不是**"球太小"）。任一命中即 `Debug.LogError` 并停止驱动。
 - Udon 没有 `FindObjectsOfType`，所以"场景里 motor 数量必须 = 1"在运行时无法内联检查；这条由编辑器侧审计保证：跑实验前用编辑器脚本断言 `FindObjectsOfType<KatamariBallMotor>().Length == 1`。
 - 重建球层级时，先删掉旧 motor 对象再新建 `MotorHost`，并同步重建 prefab（prefab 根上残留 motor 会让每次实例化都复活那个坏结构）。
+
+### 宿主提交契约：幂等 + 无闩锁（2026-11-14 起）
+
+`SubmitCandidate` **按 item id 幂等**：同 id 重复提交返回 `true` 且不新增槽位。`WithdrawCandidate` 对不在队列里的 id 返回 `false`，是**无害 no-op**。
+
+队列是"这件是否已入队"的**唯一所有者**，所以宿主**不保存自己的 `queued` 闩锁**。两份状态必然分叉：本项目实际出现过闩锁为真而队列里无该件，该件从此永不提交，表现为"球贴到 0.2 m 却什么都没发生"。
+
+宿主正确写法：激活半径内每 tick 直接调 `SubmitCandidate`（重复无害），离开释放半径调 `WithdrawCandidate`，不记录任何本地队列状态。

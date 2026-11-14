@@ -1,7 +1,7 @@
 using UdonSharp;
 using UnityEngine;
 
-public class T04VisualRoll : UdonSharpBehaviour
+public class StationLabVisualRoll : UdonSharpBehaviour
 {
     private void Update()
     {

@@ -3,7 +3,7 @@ using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon.Common;
 
-public class T04PlatformDriver : UdonSharpBehaviour
+public class StationLabDriver : UdonSharpBehaviour
 {
     public VRC.SDK3.Components.VRCStation station;
     public Transform carrier;
@@ -40,8 +40,8 @@ public class T04PlatformDriver : UdonSharpBehaviour
             if (visualRollRenderer != null)
                 visualRollOriginalColor = visualRollRenderer.material.color;
         }
-        Debug.Log("[T04] JumpImpulse initial=" + savedJumpImpulse + " canJump=" + (savedJumpImpulse > 0f));
-        Debug.Log("[T04] Driver ready");
+        Debug.Log("[StationLab] JumpImpulse initial=" + savedJumpImpulse + " canJump=" + (savedJumpImpulse > 0f));
+        Debug.Log("[StationLab] Driver ready");
     }
 
     private void Update()
@@ -80,9 +80,9 @@ public class T04PlatformDriver : UdonSharpBehaviour
         localPlayer = player;
         isLocalPlayerSeated = true;
         DisableInteractive = true;
-        Debug.Log("[T04] Interact disabled (seated)");
+        Debug.Log("[StationLab] Interact disabled (seated)");
         jumpDown = false;
-        Debug.Log("[T04] StationEntered seated=true; JumpImpulse saved=" + savedJumpImpulse + " set=0");
+        Debug.Log("[StationLab] StationEntered seated=true; JumpImpulse saved=" + savedJumpImpulse + " set=0");
         // Disable Station Exit is primary protection against Jump exiting; zero jump is secondary.
         player.SetJumpImpulse(0f);
     }
@@ -95,7 +95,7 @@ public class T04PlatformDriver : UdonSharpBehaviour
         DisableInteractive = false;
         if (wasSeated)
         {
-            Debug.Log("[T04] Interact enabled (left station) reason=station-exit");
+            Debug.Log("[StationLab] Interact enabled (left station) reason=station-exit");
         }
         RestoreJumpImpulse(player, "station-exit");
     }
@@ -106,11 +106,11 @@ public class T04PlatformDriver : UdonSharpBehaviour
         bool exitStation = isLocalPlayerSeated && station != null;
         isLocalPlayerSeated = false;
         DisableInteractive = false;
-        Debug.Log("[T04] Interact enabled (left station) reason=respawn");
+        Debug.Log("[StationLab] Interact enabled (left station) reason=respawn");
         RestoreJumpImpulse(player, "respawn");
         if (exitStation)
             station.ExitStation(player);
-        Debug.Log("[T04] Respawn requested station exit");
+        Debug.Log("[StationLab] Respawn requested station exit");
     }
 
     public override void InputJump(bool value, UdonInputEventArgs args)
@@ -136,7 +136,7 @@ public class T04PlatformDriver : UdonSharpBehaviour
                 jumpDown = false;
             }
         }
-        Debug.Log("[T04] InputJump value=" + value + " type=" + eventType + " frame=" + Time.frameCount +
+        Debug.Log("[StationLab] InputJump value=" + value + " type=" + eventType + " frame=" + Time.frameCount +
             " count=" + jumpCount + " counted=" + counted + " seated=" + isLocalPlayerSeated);
     }
 
@@ -173,7 +173,7 @@ public class T04PlatformDriver : UdonSharpBehaviour
         if (!IsLocalInputPlayer()) return;
         float numericValue = value ? 1f : 0f;
         if (ShouldLogAxis(4, numericValue))
-            Debug.Log("[T04] AXIS name=Grab value=" + value + " type=" + args.eventType +
+            Debug.Log("[StationLab] AXIS name=Grab value=" + value + " type=" + args.eventType +
                 " hand=" + args.handType + " seated=" + isLocalPlayerSeated + " frame=" + Time.frameCount);
     }
 
@@ -206,7 +206,7 @@ public class T04PlatformDriver : UdonSharpBehaviour
 
     private void LogAxisEvent(string axisName, float value, UdonInputEventArgs args)
     {
-        Debug.Log("[T04] AXIS name=" + axisName + " value=" + value + " type=" + args.eventType +
+        Debug.Log("[StationLab] AXIS name=" + axisName + " value=" + value + " type=" + args.eventType +
             " hand=" + args.handType + " seated=" + isLocalPlayerSeated + " frame=" + Time.frameCount);
     }
 
@@ -214,14 +214,14 @@ public class T04PlatformDriver : UdonSharpBehaviour
     {
         if (!isLocalPlayerSeated)
         {
-            Debug.Log("[T04] ExitButton pressed seated=false nothing-to-exit");
+            Debug.Log("[StationLab] ExitButton pressed seated=false nothing-to-exit");
             return;
         }
-        Debug.Log("[T04] ExitButton pressed seated=true exiting");
+        Debug.Log("[StationLab] ExitButton pressed seated=true exiting");
         bool exitStation = localPlayer != null && station != null;
         isLocalPlayerSeated = false;
         DisableInteractive = false;
-        Debug.Log("[T04] Interact enabled (left station) reason=world-exit-button");
+        Debug.Log("[StationLab] Interact enabled (left station) reason=world-exit-button");
         RestoreJumpImpulse(localPlayer, "world-exit-button");
         if (exitStation)
             station.ExitStation(localPlayer);
@@ -235,7 +235,7 @@ public class T04PlatformDriver : UdonSharpBehaviour
             jumpCueEndTime = Time.time + 0.3f;
             jumpCueActive = true;
         }
-        Debug.Log("[T04] JumpCue shown (no item system in prototype)");
+        Debug.Log("[StationLab] JumpCue shown (no item system in prototype)");
     }
 
     private void CacheJumpImpulse(VRCPlayerApi player)
@@ -252,7 +252,7 @@ public class T04PlatformDriver : UdonSharpBehaviour
             // Restore the documented VRCWorld default, not the untrustworthy getter snapshot.
             player.SetJumpImpulse(defaultJumpImpulse);
             float rereadJumpImpulse = player.GetJumpImpulse();
-            Debug.Log("[T04] JumpImpulse restored=" + defaultJumpImpulse + " reread=" + rereadJumpImpulse + " reason=" + reason + " baseline=default");
+            Debug.Log("[StationLab] JumpImpulse restored=" + defaultJumpImpulse + " reread=" + rereadJumpImpulse + " reason=" + reason + " baseline=default");
             haveSavedJumpImpulse = false;
         }
         jumpDown = false;

@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c333ccfdd0cbdbc4ca30cef2dd6e6b9b, type: 3}
-  m_Name: T04PlatformDriver
+  m_Name: StationLabDriver
   m_EditorClassIdentifier: 
   serializedUdonProgramAsset: {fileID: 11400000, guid: 470bb4e1e2053e5419aa08486ef2d8d6, type: 2}
   udonAssembly: 
@@ -20,7 +20,7 @@ MonoBehaviour:
   compiledVersion: 2
   behaviourSyncMode: 0
   hasInteractEvent: 1
-  scriptID: -1267143114874960334
+  scriptID: -5814136025082551487
   serializationData:
     SerializedFormat: 2
     SerializedBytes: 

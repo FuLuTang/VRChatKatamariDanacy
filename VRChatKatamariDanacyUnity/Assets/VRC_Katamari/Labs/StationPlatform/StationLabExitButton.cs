@@ -1,9 +1,9 @@
 using UdonSharp;
 using UnityEngine;
 
-public class T04StationControl : UdonSharpBehaviour
+public class StationLabExitButton : UdonSharpBehaviour
 {
-    public T04PlatformDriver driver;
+    public StationLabDriver driver;
 
     public override void Interact()
     {

@@ -25,6 +25,26 @@ namespace VRCKatamari.Tests
         private const float CollisionRatio = 0.8f;
         private const float SemanticRatio = 1.5f;
 
+        // Calibrated sizing for the inverse tests, matching
+        // KatamariBallMotor's serialized defaults (1 baseline unit, 0.0141
+        // m^3 per unit, 1.1 m display cap, 1.0 ratios): the baseline is a
+        // 0.29974 m semantic diameter and the cap is 2.20 m. The decided round
+        // runs 0.30 m -> 2.20 m, so this is the configuration the inverse has
+        // to round-trip.
+        private const float CalibratedBaseline = 1f;
+        private const float CalibratedCubicMetersPerUnit = 0.0141f;
+        private const float CalibratedMaxCoreRadius = 1.1f;
+        private const float CalibratedCollisionRatio = 1f;
+        private const float CalibratedSemanticRatio = 1f;
+
+        // Round-trip tolerance in metres. The inverse is algebraic, so only
+        // float rounding is left: the worst error measured over the ten
+        // round-trip diameters is 1.9e-7 m, about one unit in the last place at
+        // 2.2 m. 1e-5 m is ~50x that margin, to absorb a different libm's
+        // log/exp in the player build, and is still 0.01 mm - far below any
+        // gameplay meaning (the smallest decided band gap is 4 cm).
+        private const float RoundTripToleranceM = 1e-5f;
+
         [Test]
         public void SphereGeometryAndEightfoldVolumeRatioHold()
         {
@@ -227,6 +247,229 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(3f, core);
             Assert.AreEqual(2.4f, collision, 1e-5f);
             Assert.AreEqual(9f, semantic, 1e-5f);
+        }
+
+        // ---- Inverse map: volume units for a requested semantic diameter ----
+        // The reference oracle is round_model.py units_for_diameter (clamped to
+        // [start, max], 1/3 exponent). The diameters below are the decided
+        // round's ends and band edges, not values the mapping produced.
+
+        [Test]
+        public void InverseRoundTripsThroughTheForwardMapAtTenDiameters()
+        {
+            // 0.30 (start) and 2.20 (max), the tier band edges 0.55 / 0.95 /
+            // 1.45, and five interior points.
+            float[] diameters = new float[]
+            {
+                0.30f, 0.40f, 0.55f, 0.70f, 0.95f,
+                1.10f, 1.45f, 1.70f, 1.95f, 2.20f
+            };
+
+            float previousUnits = -1f;
+            for (int i = 0; i < diameters.Length; i++)
+            {
+                float requested = diameters[i];
+                float units;
+                Assert.IsTrue(TryUnits(requested, out units), "inverse rejected " + requested + " m");
+                Assert.GreaterOrEqual(units, 0f);
+
+                float core, collision, semantic, effective;
+                Assert.IsTrue(DeriveCalibrated(units, out core, out collision, out semantic,
+                    out effective));
+                AssertFinite(core, "core radius");
+                AssertFinite(semantic, "semantic diameter");
+
+                Assert.AreEqual(requested, semantic, RoundTripToleranceM,
+                    "forward(inverse(" + requested + " m))");
+                Assert.Greater(units, previousUnits, "units must grow with diameter at " + requested);
+                previousUnits = units;
+            }
+
+            // The 0.30 m end sits just above this configuration's own baseline
+            // (0.29974 m), so the lowest round-trip point is a small positive
+            // volume rather than the clamped zero. That 0.26 mm offset is why
+            // the caller's "start" and the model's baseline are not the same
+            // literal.
+            float baselineCore, baselineCollision, baselineSemantic, baselineEffective;
+            Assert.IsTrue(DeriveCalibrated(0f, out baselineCore, out baselineCollision,
+                out baselineSemantic, out baselineEffective));
+            Assert.Less(baselineSemantic, 0.30f);
+            Assert.Greater(baselineSemantic, 0.29f);
+
+            // Both ends clamp like the reference model: below the baseline the
+            // answer is zero confirmed units, above the cap it is the cap's
+            // volume and never more.
+            float belowBaseline;
+            Assert.IsTrue(TryUnits(0.20f, out belowBaseline));
+            Assert.AreEqual(0f, belowBaseline);
+            float atCap, aboveCap;
+            Assert.IsTrue(TryUnits(2.20f, out atCap));
+            Assert.IsTrue(TryUnits(2.60f, out aboveCap));
+            Assert.AreEqual(atCap, aboveCap);
+
+            // The largest finite diameter is the extreme-input guard: the log
+            // domain clamps it to the cap instead of overflowing, and the answer
+            // is finite.
+            float hugeUnits;
+            Assert.IsTrue(TryUnits(float.MaxValue, out hugeUnits));
+            Assert.AreEqual(atCap, hugeUnits);
+            AssertFinite(hugeUnits, "units for float.MaxValue m");
+
+            // The cap's volume is the sphere at the 1.1 m cap radius, 4/3*pi*r^3
+            // / 0.0141 m^3 per unit, minus the one baseline unit.
+            float expectedCapUnits = (4f * Mathf.PI / 3f) * 1.331f / CalibratedCubicMetersPerUnit
+                - CalibratedBaseline;
+            Assert.AreEqual(expectedCapUnits, atCap, 1e-3f);
+        }
+
+        [Test]
+        public void InverseIsStrictlyMonotonicAcrossTheMappedRange()
+        {
+            float startCore, startCollision, startSemantic, startEffective;
+            Assert.IsTrue(DeriveCalibrated(0f, out startCore, out startCollision, out startSemantic,
+                out startEffective));
+
+            // 0.01 m steps from the model's own baseline (0.29974 m) to the cap:
+            // a strict increase at every step means no two diameters share a
+            // volume, so a banked residual can never land on a plateau where
+            // "smaller" and "bigger" cost the same.
+            float previous = -1f;
+            int steps = 0;
+            for (int i = 0; i <= 190; i++)
+            {
+                float diameter = startSemantic + 0.01f * i;
+                float units;
+                Assert.IsTrue(TryUnits(diameter, out units), "inverse rejected " + diameter + " m");
+                Assert.Greater(units, previous, "units are not strictly increasing at " + diameter + " m");
+                previous = units;
+                steps++;
+            }
+            Assert.AreEqual(191, steps);
+            Assert.Less(startSemantic + 0.01f * 190, 2.20f);
+        }
+
+        [Test]
+        public void InverseRejectsZeroAndNegativeDiameter()
+        {
+            // A diameter of zero would be a zero-volume ball, which the forward
+            // map never reports, so the inverse must refuse it rather than
+            // answer with a negative volume.
+            float units;
+            Assert.IsFalse(TryUnits(0f, out units));
+            Assert.AreEqual(0f, units);
+            Assert.IsFalse(TryUnits(-1e-6f, out units));
+            Assert.AreEqual(0f, units);
+            Assert.IsFalse(TryUnits(-0.5f, out units));
+            Assert.AreEqual(0f, units);
+            Assert.IsFalse(TryUnits(-float.MaxValue, out units));
+            Assert.AreEqual(0f, units);
+        }
+
+        [Test]
+        public void InverseRejectsNonFiniteDiameterAndParameters()
+        {
+            float units;
+            Assert.IsFalse(TryUnits(float.NaN, out units));
+            Assert.AreEqual(0f, units);
+            Assert.IsFalse(TryUnits(float.PositiveInfinity, out units));
+            Assert.AreEqual(0f, units);
+            Assert.IsFalse(TryUnits(float.NegativeInfinity, out units));
+            Assert.AreEqual(0f, units);
+
+            // The four parameters get the same treatment as the forward map,
+            // including the cap-below-baseline conflict: a 0.01 m cap cannot
+            // hold the 0.1499 m baseline radius, so the pair is rejected.
+            Assert.IsFalse(InverseWith(1f, 0f, CalibratedCubicMetersPerUnit,
+                CalibratedMaxCoreRadius, CalibratedSemanticRatio, out units));
+            Assert.IsFalse(InverseWith(1f, -1f, CalibratedCubicMetersPerUnit,
+                CalibratedMaxCoreRadius, CalibratedSemanticRatio, out units));
+            Assert.IsFalse(InverseWith(1f, CalibratedBaseline, 0f,
+                CalibratedMaxCoreRadius, CalibratedSemanticRatio, out units));
+            Assert.IsFalse(InverseWith(1f, CalibratedBaseline, -0.0141f,
+                CalibratedMaxCoreRadius, CalibratedSemanticRatio, out units));
+            Assert.IsFalse(InverseWith(1f, CalibratedBaseline, CalibratedCubicMetersPerUnit,
+                0f, CalibratedSemanticRatio, out units));
+            Assert.IsFalse(InverseWith(1f, CalibratedBaseline, CalibratedCubicMetersPerUnit,
+                CalibratedMaxCoreRadius, 0f, out units));
+            Assert.IsFalse(InverseWith(1f, CalibratedBaseline, CalibratedCubicMetersPerUnit,
+                CalibratedMaxCoreRadius, -1f, out units));
+            Assert.IsFalse(InverseWith(1f, float.NaN, CalibratedCubicMetersPerUnit,
+                CalibratedMaxCoreRadius, CalibratedSemanticRatio, out units));
+            Assert.IsFalse(InverseWith(1f, CalibratedBaseline, float.PositiveInfinity,
+                CalibratedMaxCoreRadius, CalibratedSemanticRatio, out units));
+            Assert.IsFalse(InverseWith(1f, CalibratedBaseline, CalibratedCubicMetersPerUnit,
+                float.NaN, CalibratedSemanticRatio, out units));
+            Assert.IsFalse(InverseWith(1f, CalibratedBaseline, CalibratedCubicMetersPerUnit,
+                CalibratedMaxCoreRadius, float.NaN, out units));
+            Assert.IsFalse(InverseWith(1f, CalibratedBaseline, CalibratedCubicMetersPerUnit,
+                0.01f, CalibratedSemanticRatio, out units));
+            Assert.AreEqual(0f, units);
+        }
+
+        [Test]
+        public void BankingResidualAppliedInDiameterSpaceEndsNearSixtyCentimetres()
+        {
+            // Docs/OPEN_DECISIONS.md (a), the decided rule:
+            //   post = max(start, start + (pre - start) * residual), residual
+            //   = 0.25, start = 0.30 m.
+            // 1.49 m is the highest peak the round model reached in
+            // four-player runs (Gameplay README 4.3), so it is the case the
+            // rule has to get right.
+            const float startDiameter = 0.30f;
+            const float preBankDiameter = 1.49f;
+            const float residual = 0.25f;
+
+            float expected = startDiameter + (preBankDiameter - startDiameter) * residual;
+            Assert.AreEqual(0.5975f, expected, 1e-6f);
+
+            // The rule is in diameter space: price the post-bank diameter with
+            // the inverse, and the forward map must report it back.
+            float units;
+            Assert.IsTrue(TryUnits(expected, out units));
+            float core, collision, semantic, effective;
+            Assert.IsTrue(DeriveCalibrated(units, out core, out collision, out semantic, out effective));
+            Assert.AreEqual(expected, semantic, RoundTripToleranceM);
+
+            // ...which is the "about 0.60 m" the decision describes, not the
+            // 0.95 m a volume-space residual leaves.
+            Assert.AreEqual(0.60f, semantic, 0.01f);
+
+            // The volume-space residual, for contrast: 1.49 m is 121.84 units,
+            // and 1 + (121.84 - 1) * 0.25 = 31.21 units is still a 0.9537 m
+            // ball. That ≈0.36 m gap is what the missing inverse cost.
+            float preBankUnits;
+            Assert.IsTrue(TryUnits(preBankDiameter, out preBankUnits));
+            float volumeSpaceUnits = CalibratedBaseline + (preBankUnits - CalibratedBaseline) * residual;
+            float volumeSpaceCore, volumeSpaceCollision, volumeSpaceSemantic, volumeSpaceEffective;
+            Assert.IsTrue(DeriveCalibrated(volumeSpaceUnits, out volumeSpaceCore,
+                out volumeSpaceCollision, out volumeSpaceSemantic, out volumeSpaceEffective));
+            Assert.AreEqual(0.9537f, volumeSpaceSemantic, 1e-3f);
+            Assert.Greater(volumeSpaceSemantic, semantic + 0.3f);
+        }
+
+        private static bool TryUnits(float semanticDiameter, out float confirmedVolumeUnits)
+        {
+            return SizeModelMath.TryVolumeUnitsForSemanticDiameter(semanticDiameter,
+                CalibratedBaseline, CalibratedCubicMetersPerUnit, CalibratedMaxCoreRadius,
+                CalibratedSemanticRatio, out confirmedVolumeUnits);
+        }
+
+        private static bool InverseWith(float semanticDiameter, float baselineVolumeUnits,
+            float cubicMetersPerVolumeUnit, float maxCoreRadiusWorldM,
+            float semanticDiameterPerCoreDiameter, out float confirmedVolumeUnits)
+        {
+            return SizeModelMath.TryVolumeUnitsForSemanticDiameter(semanticDiameter,
+                baselineVolumeUnits, cubicMetersPerVolumeUnit, maxCoreRadiusWorldM,
+                semanticDiameterPerCoreDiameter, out confirmedVolumeUnits);
+        }
+
+        private static bool DeriveCalibrated(float confirmedVolumeUnits, out float coreRadiusWorldM,
+            out float collisionRadiusWorldM, out float semanticDiameter, out float effectiveVolumeUnits)
+        {
+            return SizeModelMath.TryDerive(confirmedVolumeUnits, CalibratedBaseline,
+                CalibratedCubicMetersPerUnit, CalibratedMaxCoreRadius, CalibratedCollisionRatio,
+                CalibratedSemanticRatio, out coreRadiusWorldM, out collisionRadiusWorldM,
+                out semanticDiameter, out effectiveVolumeUnits);
         }
 
         private static bool Derive(float confirmedVolumeUnits, out float coreRadiusWorldM,

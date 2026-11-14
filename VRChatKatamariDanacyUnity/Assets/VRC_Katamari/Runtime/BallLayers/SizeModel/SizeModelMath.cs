@@ -56,6 +56,17 @@ namespace VRCKatamari.BallLayers
     /// silently shrinking the baseline.
     /// </para>
     /// <para>
+    /// The map also runs backwards. <see cref="TryVolumeUnitsForSemanticDiameter"/>
+    /// recovers the confirmed volume units that produce a requested semantic
+    /// diameter, which is what a rule written in diameter space needs: a
+    /// banking residual applied to a diameter cannot be applied to the volume
+    /// units that happen to be in flight, because the map between them is a
+    /// cube, not a proportion. Both directions share the same constants and the
+    /// same log-domain radius expression, so the two cannot drift apart: the
+    /// forward map's numbers are not copied into the inverse, they are the
+    /// parameters of one equation solved for its other unknown.
+    /// </para>
+    /// <para>
     /// The call allocates nothing and keeps no state. On false every out value
     /// is zero and must not be applied.
     /// </para>
@@ -66,6 +77,12 @@ namespace VRCKatamari.BallLayers
         // radius mapping as a log offset, so the product/cube never materialize.
         private const float LnThreeOverFourPi = -1.4324119583f;
         private const float LnFourPiOverThree = 1.4324119583f;
+
+        // ln(2): the radius-to-diameter doubling the forward map applies as
+        // "2f * core". The inverse needs it inside the log domain so a huge
+        // semanticDiameterPerCoreDiameter cannot overflow an intermediate
+        // 2*ratio product. It is the same factor, not a second convention.
+        private const float LnTwo = 0.6931472f;
 
         // ln(float.MaxValue): a log-domain value at or above this would
         // exponentiate to infinity, so it saturates the diagnostic instead.
@@ -117,8 +134,7 @@ namespace VRCKatamari.BallLayers
 
             // Baseline and cap are compared in the log domain for the same
             // reason the mapping runs there: no baseline-volume cube.
-            float logBaselineRadius = (Mathf.Log(baselineVolumeUnits) + logScale +
-                LnThreeOverFourPi) / 3f;
+            float logBaselineRadius = LogCoreRadiusFromLogVolume(Mathf.Log(baselineVolumeUnits), logScale);
             float logCapRadius = Mathf.Log(maxCoreRadiusWorldM);
             if (!KatamariMath.IsFiniteFloat(logBaselineRadius)) return false;
             if (!KatamariMath.IsFiniteFloat(logCapRadius)) return false;
@@ -152,7 +168,7 @@ namespace VRCKatamari.BallLayers
             }
             else
             {
-                float logCoreRadius = (logEffectiveVolume + logScale + LnThreeOverFourPi) / 3f;
+                float logCoreRadius = LogCoreRadiusFromLogVolume(logEffectiveVolume, logScale);
                 if (!KatamariMath.IsFiniteFloat(logCoreRadius)) return false;
                 core = Mathf.Exp(logCoreRadius);
                 if (!IsPositiveFinite(core)) return false;
@@ -194,9 +210,129 @@ namespace VRCKatamari.BallLayers
             return true;
         }
 
+        /// <summary>
+        /// Recovers the confirmed volume units whose forward mapping reports
+        /// the requested semantic diameter.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the inverse of <see cref="TryDerive"/> restricted to the
+        /// quantity a diameter-space rule can name. It answers "how many units
+        /// is this narrative diameter worth", which is how a rule that shrinks
+        /// the ball by a fraction of a diameter (the banking residual) can
+        /// express its result as a ledger value.
+        /// </para>
+        /// <para>
+        /// Formula, and why it is exact rather than fitted. The forward map is
+        /// semanticDiameter = 2 * ratio * cbrt(3 * (baseline + units) * c / 4*pi).
+        /// Solving that equation for units is pure algebra - no series, no
+        /// approximation, no second curve: coreRadius = semanticDiameter /
+        /// (2 * ratio), total units = (4*pi/3) * coreRadius^3 / c, units = total
+        /// - baseline. The cube and the sphere constant are not new numbers
+        /// here: the same LnThreeOverFourPi / LnFourPiOverThree pair and the
+        /// same LogCoreRadiusFromLogVolume expression feed both directions, so
+        /// the two maps are one equation read in two directions. The only
+        /// inexactness is float rounding, roughly one unit in the last place of
+        /// the returned diameter (measured round trip over 0.30..2.20 m: worst
+        /// 1.9e-7 m).
+        /// </para>
+        /// <para>
+        /// Domain. The forward map cannot report a diameter below its baseline
+        /// (the ball at zero confirmed units is already that big) or above its
+        /// cap. Like the reference model's units_for_diameter, this method
+        /// clamps instead of failing there: a diameter at or below the baseline
+        /// returns zero confirmed units, a diameter above the cap returns the
+        /// cap's volume. Clamping is the honest answer for a residual - a
+        /// shrink that lands below the baseline means "no growth survived", not
+        /// "the parameters are wrong" - while the caller's own start clamp keeps
+        /// the range in practice. An unrepresentable volume (log total at or
+        /// beyond the float range) is rejected rather than saturated, because
+        /// no float input could then reproduce the diameter.
+        /// </para>
+        /// <para>
+        /// semanticDiameter must be positive and finite, and the four
+        /// parameters must be positive and finite with a cap radius at or above
+        /// the baseline radius, exactly as in the forward map.
+        /// collisionToCoreRadiusRatio is absent on purpose: the collision radius
+        /// is a sibling of the core, not an input to the semantic diameter, so
+        /// there is no value of it that changes this answer.
+        /// </para>
+        /// <para>
+        /// On false the out value is zero and must not be applied. The call
+        /// allocates nothing and keeps no state; it is a pure function of its
+        /// arguments, so re-deriving a size after a bank, a reset or a
+        /// post-collapse rebuild is simply another call.
+        /// </para>
+        /// </remarks>
+        public static bool TryVolumeUnitsForSemanticDiameter(
+            float semanticDiameter,
+            float baselineVolumeUnits,
+            float cubicMetersPerVolumeUnit,
+            float maxCoreRadiusWorldM,
+            float semanticDiameterPerCoreDiameter,
+            out float confirmedVolumeUnits)
+        {
+            confirmedVolumeUnits = 0f;
+
+            if (!IsPositiveFinite(semanticDiameter)) return false;
+            if (!IsPositiveFinite(baselineVolumeUnits)) return false;
+            if (!IsPositiveFinite(cubicMetersPerVolumeUnit)) return false;
+            if (!IsPositiveFinite(maxCoreRadiusWorldM)) return false;
+            if (!IsPositiveFinite(semanticDiameterPerCoreDiameter)) return false;
+
+            float logScale = Mathf.Log(cubicMetersPerVolumeUnit);
+            if (!KatamariMath.IsFiniteFloat(logScale)) return false;
+
+            // The same two radius bounds the forward map compares, built by the
+            // same helper, so an inverse answer can never sit outside the range
+            // the forward map can actually produce.
+            float logBaselineRadius = LogCoreRadiusFromLogVolume(Mathf.Log(baselineVolumeUnits), logScale);
+            float logCapRadius = Mathf.Log(maxCoreRadiusWorldM);
+            if (!KatamariMath.IsFiniteFloat(logBaselineRadius)) return false;
+            if (!KatamariMath.IsFiniteFloat(logCapRadius)) return false;
+            if (logCapRadius < logBaselineRadius) return false;
+
+            // Invert "semantic = 2 * core * ratio" without materializing
+            // 2 * ratio: a huge ratio would otherwise divide by infinity and
+            // quietly answer zero.
+            float logCoreRadius = Mathf.Log(semanticDiameter) -
+                Mathf.Log(semanticDiameterPerCoreDiameter) - LnTwo;
+            if (!KatamariMath.IsFiniteFloat(logCoreRadius)) return false;
+
+            // Below the baseline the forward map cannot go smaller: zero
+            // confirmed units is the whole of that branch, and 0f is a valid
+            // answer rather than a failure.
+            if (logCoreRadius <= logBaselineRadius) return true;
+            if (logCoreRadius > logCapRadius) logCoreRadius = logCapRadius;
+
+            // Total units, not confirmed units: the volume the whole mapping
+            // reads, before the baseline is subtracted below.
+            float logTotalUnits = LnFourPiOverThree + 3f * logCoreRadius - logScale;
+            if (!KatamariMath.IsFiniteFloat(logTotalUnits)) return false;
+            if (logTotalUnits >= LnFloatMax) return false;
+            float totalUnits = Mathf.Exp(logTotalUnits);
+            if (!IsPositiveFinite(totalUnits)) return false;
+
+            float confirmed = totalUnits - baselineVolumeUnits;
+            if (!KatamariMath.IsFiniteFloat(confirmed)) return false;
+            if (confirmed < 0f) confirmed = 0f;
+            confirmedVolumeUnits = confirmed;
+            return true;
+        }
+
         private static bool IsPositiveFinite(float value)
         {
             return KatamariMath.IsFiniteFloat(value) && value > 0f;
+        }
+
+        // log of the core radius a log-volume in volume units maps to under
+        // V = 4*pi*r^3/3 with a metres-per-unit scale. One expression, used by
+        // the forward map for the baseline and for the mapped core, and by the
+        // inverse for the bounds it must stay between, so the two directions
+        // cannot disagree about where a volume sits.
+        private static float LogCoreRadiusFromLogVolume(float logVolumeUnits, float logScale)
+        {
+            return (logVolumeUnits + logScale + LnThreeOverFourPi) / 3f;
         }
 
         // log(a + b) with a stable log-sum: the larger log leads, so the

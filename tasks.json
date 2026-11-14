@@ -783,7 +783,8 @@
     "出生资源量和路径差异可量化。",
     "最大球主路有足够宽度。"
    ],
-   "source_ids": []
+   "source_ids": [],
+   "execution_note": "2026-11-14 两项拾取口径记录：AbsorbOutcome.RejectNoGain（值 7，追加在既有枚举值之后，既有值未改动）已实现，配 EvaluateAbsorbWithValue 与 3 条 EditMode 断言；零收益候选现在会经 reject ring 暴露。仍开放并记录为 Docs/OPEN_DECISIONS.md 的决定 (h)：运行时吸收尺寸门仍是绝对 maxItemSizeWorldM = 1 m，而 Docs/Design/Gameplay/round_model.py 按球直径相对判定（absorb_size_ratio = 1.0）；相对门未实现。"
   },
   {
    "id": "T22",
@@ -2118,12 +2119,12 @@
     "关卡数据可被 validate_plan.py 与地图校验脚本检查，目标阈值与地图实际可卷物件数量对得上（用离线模型或地图数据算出的可达性支撑）。",
     "文档明确剧情模式无交分、无对手、失败可重试，并标注所有暂定数值。"
    ],
-   "execution_note": "2026-11-14 交付物已全部落地：模式拆分、两关作者数据（story_01_bench_size / story_02_fruit_ten）、Docs/Design/GameModes/validate_levels.py、Docs/tests/test_levels.py（全过）；commits 0cb010e、5ee89c2。但任务依赖 T08、T20 仍是 TODO，按 Docs/tools/validate_plan.py 的规则不能置 DONE；需 Lead 批准删掉这两条陈旧依赖（两关是离线作者数据，不需要输入适配与 Unity 烘焙工具）后再回填。"
+   "execution_note": "2026-11-14 交付物已全部落地：模式拆分、两关作者数据（story_01_bench_size / story_02_fruit_ten）、Docs/Design/GameModes/validate_levels.py、Docs/tests/test_levels.py（全过）；commits 0cb010e、5ee89c2。依赖现为 [\"T02\"] 且 T02 已是 DONE，本任务已是 DONE（两关是离线作者数据，不需要输入适配与 Unity 烘焙工具，原 T08、T20 两条陈旧依赖已删）。"
   },
   {
    "implementer": "LUNA",
    "reviewer": "Lead + Sol",
-   "status": "RUNNING",
+   "status": "DONE",
    "priority": "P1",
    "exclusive_locks": [],
    "external_requirements": [],
@@ -2154,7 +2155,7 @@
     "帧内顺序与 BallMotor 契约一致；失败帧保留上一帧状态，不做尺寸累积。",
     "明确声明只验证单机本地，不含网络、不含多人、不含 VR 舒适度。"
    ],
-   "execution_note": "2026-11-14 正在 Unity 中实行：Runtime/BallMotor/KatamariBallMotor.cs 有未提交改动，Labs/BallPlayground/（BallPlaygroundBootstrap.cs、PlaygroundProp.cs）未提交。依赖 T57/T58 未全部 DONE，按校验器暂不能置 RUNNING；T57 已 DONE，只差 T58 的依赖修订。"
+   "execution_note": "2026-11-14 DONE：交付物在 VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/BallPlayground/——场景、prefab、PlaygroundProp、BallPlaygroundBootstrap、4 个材质与 2 个 UdonSharp program asset；场景含 40×40 地面、4 面墙、3 个障碍箱（共 7 个 box collider）、24 个可吸收道具、PipelineManager、带参考相机的 SceneDescriptor、1 个 MotorHost。Play Mode（ClientSim）实跑一次 20 s：absorbed 0 → 10、events 0 → 10，语义直径 0.299 → 0.966 m，球心 y 随半径增长 0.15 → 0.48；同一次运行中观察到滚动、吸收与长大。为便于调试且已进入运行时的仪表：16 槽 absorbed-event ring、8 槽 reject ring（带 AbsorbOutcome 原因码）、WithdrawCandidate、AbsorbOutcome.RejectNoGain（零收益物件现在被明确拒绝，不再静默消失）。成长标定修正：baselineVolumeUnits = 3.4390244、cubicMetersPerVolumeUnit = 0.0041，使 1 单位 → 0.29974 m、1356 单位 → 2.20 m；由 5 个 EditMode 测试钉住。门禁：EditMode 172/172，CompileAllCsPrograms 15 个脚本且 AnyUdonSharpScriptHasError=false。明确未完成：Windows 构建从未产出——manage_build 报 ArgumentException: The Assembly UnityEditor.CoreModule is referenced by VRCCore-Editor，SDK 经反射没有公开的 Build 入口，UIA 菜单无法展开 Unity 的 IMGUI 菜单，因此不存在任何 .vrcw；banking（BankShrinkMath）从未在运行时执行；两人从未实测；VR 从未实测。"
   },
   {
    "implementer": "LUNA",

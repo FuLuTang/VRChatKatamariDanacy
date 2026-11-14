@@ -762,7 +762,11 @@ def validate(layout: dict, catalog: dict) -> Report:
                 rep.err(f"prop_scatter[{zid}]/{did}：count_max={cmax} 小于 count_min={cmin}")
             scatter_use[did] += cmin
             scatter_zones[did].add(zid)
-        info = greybox.scatter_feasibility(zones[zid], region, cap_props)
+        try:
+            info = greybox.scatter_feasibility(zones[zid], region, cap_props)
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            # 上面已经逐条报过字段错误，这里不叠第二条、也不让坏数据把报告打断
+            continue
         total_scatter += info["count"]
         label = f"prop_scatter[{zid}]"
         if info["biggest_dim_m"] + 0.1 > min(info["width_m"], info["depth_m"]):
@@ -1058,7 +1062,10 @@ def main(argv=None) -> int:
     for region in layout.get("prop_scatter") or []:
         zid = str(region.get("zone_id"))
         if zid in zones:
-            info = greybox.scatter_feasibility(zones[zid], region, cap_props)
+            try:
+                info = greybox.scatter_feasibility(zones[zid], region, cap_props)
+            except (KeyError, TypeError, ValueError, ZeroDivisionError):
+                continue
             rows.append((zid, info["area_m2"], info["spacing_m"], info["count"],
                          info["capacity_consumer"], info["capacity_optimal"],
                          info["usage"], info["footprint_floor_m"]))

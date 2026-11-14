@@ -1,5 +1,6 @@
 using UdonSharp;
 using UnityEngine;
+using VRCKatamari.BallLayers;
 using VRCKatamari.BallMotor;
 
 namespace VRCKatamari.Ai
@@ -33,7 +34,23 @@ namespace VRCKatamari.Ai
         [SerializeField] private string[] allowedKinds;
         [SerializeField] private float logIntervalSeconds = 1f;
 
+        [Header("Minimal round control (Lab only; not a game mode)")]
+        // Real parameter: a round is 180 s. The scene may carry a smaller value purely
+        // to accelerate a verification run; that is a Lab constant, never the default.
+        [SerializeField] private float roundSeconds = 180f;
+        [SerializeField] private float settlingSeconds = 3f;
+
+        [Header("Conversion window (Lab)")]
+        // Real parameter is 60 s. A scene may carry a smaller value purely to accelerate a
+        // verification run; the log line says so explicitly so nobody reads 10 s as the rule.
+        [SerializeField] private float rotationSeconds = 60f;
+
         private bool initialised;
+        private int roundPhase;
+        private float roundElapsed;
+        private float windowElapsed;
+        private int windowIndex;
+        private bool windowOpen;
         private int readinessFrames;
         private const int readinessLimit = 240;
         private float elapsed;
@@ -69,8 +86,18 @@ namespace VRCKatamari.Ai
             }
 
             elapsed = elapsed + Time.deltaTime;
+            AdvanceRound();
+            AdvanceWindow();
+
             if (elapsed < nextLogTime) return;
             nextLogTime = elapsed + logIntervalSeconds;
+
+            float remaining = roundSeconds - elapsed;
+            if (remaining < 0f) remaining = 0f;
+            ProbeBank();
+
+            Debug.Log("[round] t=" + (Mathf.Floor(remaining * 10f) / 10f)
+                + " phase=" + (roundPhase == 0 ? "Playing" : (roundPhase == 1 ? "Settling" : "Ended")));
 
             for (int i = 0; i < motors.Length; i++)
             {
@@ -107,6 +134,13 @@ namespace VRCKatamari.Ai
         private bool AllMotorsReady()
         {
             if (motors == null || motors.Length == 0) return false;
+            float remaining = roundSeconds - elapsed;
+            if (remaining < 0f) remaining = 0f;
+            ProbeBank();
+
+            Debug.Log("[round] t=" + (Mathf.Floor(remaining * 10f) / 10f)
+                + " phase=" + (roundPhase == 0 ? "Playing" : (roundPhase == 1 ? "Settling" : "Ended")));
+
             for (int i = 0; i < motors.Length; i++)
             {
                 KatamariBallMotor m = motors[i];
@@ -114,6 +148,100 @@ namespace VRCKatamari.Ai
                 if (m.GetSemanticDiameterWorldM() <= 0f) return false;
             }
             return true;
+        }
+
+        /// <summary>
+        /// Rotates the conversion window and prints every transition.
+        /// </summary>
+        /// <remarks>
+        /// The window is a Lab/round concept, not a motor one: TryBankWithReason only answers
+        /// "can this ball convert", so the host keeps its own window state and prints it
+        /// beside the motor's reason instead of folding the two into one number.
+        /// </remarks>
+        private void AdvanceWindow()
+        {
+            windowElapsed = windowElapsed + Time.deltaTime;
+            if (windowElapsed < rotationSeconds) return;
+            windowElapsed = 0f;
+            windowIndex = windowIndex + 1;
+            windowOpen = !windowOpen;
+            Debug.Log("[rotate] window " + (windowOpen ? "closed -> open" : "open -> closed")
+                + " at t=" + (Mathf.Floor(elapsed * 10f) / 10f)
+                + " index=" + windowIndex
+                + " (lab acceleration=" + rotationSeconds + "s; real 60 s)");
+        }
+
+        /// <summary>
+        /// One conversion attempt per ball per second while the window is open, with the
+        /// numbers needed to recompute the expected shrink independently.
+        /// </summary>
+        private void ProbeBank()
+        {
+            if (roundPhase != 0) return;
+            if (!windowOpen) { Debug.Log("[bank] window=closed skipped"); return; }
+
+            for (int i = 0; i < motors.Length; i++)
+            {
+                KatamariBallMotor m = motors[i];
+                if (m == null) continue;
+                float before = m.GetSemanticDiameterWorldM();
+                float volume = m.GetConfirmedVolumeUnits();
+                int residualPercent = 25;
+                float residual = 0.25f;
+
+                // Expected shrink, computed from the same public math the motor uses.
+                float startCore, startCollision, startDiameter, startEffective;
+                float expected = -1f;
+                bool sized = SizeModelMath.TryDerive(0f, 3.4390244f, 0.0041f, 1.1f, 1f, 1f,
+                    out startCore, out startCollision, out startDiameter, out startEffective);
+                if (sized && BankShrinkMath.TryPostBankDiameter(startDiameter, before, residual, out expected))
+                {
+                    // expected is the rule's answer; kept only for the log line
+                }
+
+                int reason;
+                bool ok = m.TryBankWithReason(Time.time, "lab-bank-" + i + "-" + (int)(elapsed * 10f), out reason);
+                float after = m.GetSemanticDiameterWorldM();
+                Debug.Log("[bank] ball=" + i
+                    + " before=" + (Mathf.Floor(before * 10000f) / 10000f)
+                    + " after=" + (Mathf.Floor(after * 10000f) / 10000f)
+                    + " expected=" + (expected < 0f ? "-" : (Mathf.Floor(expected * 10000f) / 10000f).ToString())
+                    + " volume=" + (Mathf.Floor(volume * 100f) / 100f)
+                    + " residual=" + residual
+                    + " reason=" + reason + (ok ? "(ok)" : ""));
+            }
+        }
+
+        /// <summary>
+        /// The smallest round state machine this Lab needs: Playing -> Settling -> Ended.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately here and not in Runtime: the real game mode is a later task, and a
+        /// second round implementation in Runtime would be the kind of duplicate this
+        /// project keeps paying for. It exists only so the conversion and settlement rules
+        /// can be exercised at all.
+        /// </remarks>
+        private void AdvanceRound()
+        {
+            roundElapsed = roundElapsed + Time.deltaTime;
+            if (roundPhase == 0)
+            {
+                if (roundElapsed >= roundSeconds)
+                {
+                    roundPhase = 1;
+                    roundElapsed = 0f;
+                    Debug.Log("[round] phase=Settling after " + roundSeconds + "s");
+                }
+            }
+            else if (roundPhase == 1)
+            {
+                if (roundElapsed >= settlingSeconds)
+                {
+                    roundPhase = 2;
+                    roundElapsed = 0f;
+                    Debug.Log("[round] phase=Ended");
+                }
+            }
         }
 
         /// <summary>
@@ -228,6 +356,13 @@ namespace VRCKatamari.Ai
             // handed to another behaviour is the exact shape that produced a
             // __SetProgramVariable__ null reference in the single-ball lab.
             int kindCount = allowedKinds == null ? 0 : allowedKinds.Length;
+
+            float remaining = roundSeconds - elapsed;
+            if (remaining < 0f) remaining = 0f;
+            ProbeBank();
+
+            Debug.Log("[round] t=" + (Mathf.Floor(remaining * 10f) / 10f)
+                + " phase=" + (roundPhase == 0 ? "Playing" : (roundPhase == 1 ? "Settling" : "Ended")));
 
             for (int i = 0; i < motors.Length; i++)
             {

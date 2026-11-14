@@ -4725,6 +4725,9 @@ MonoBehaviour:
   - medium
   - large
   logIntervalSeconds: 1
+  roundSeconds: 180
+  settlingSeconds: 3
+  rotationSeconds: 60
 --- !u!4 &1460606245
 Transform:
   m_ObjectHideFlags: 0

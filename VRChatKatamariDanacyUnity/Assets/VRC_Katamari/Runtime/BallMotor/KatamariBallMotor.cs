@@ -1204,12 +1204,34 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         public bool TryBank(float now, string requestId)
         {
-            if (!hasLocalRow) return false;
-            if (requestId == null || requestId.Length == 0) return false;
-            if (!KatamariMath.IsFiniteFloat(now)) return false;
-            if (!KatamariMath.IsFiniteFloat(semanticDiameterWorldM)) return false;
-            if (semanticDiameterWorldM < minConversionDiameterWorldM) return false;
-            if (unbankedVolumeUnits <= 0) return false;
+            int ignoredReason;
+            return TryBankWithReason(now, requestId, out ignoredReason);
+        }
+
+        /// <summary>
+        /// The single conversion (bank) implementation, reporting why it refused.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// reason = 0 means the conversion succeeded; 1..8 name the refusal. The table
+        /// (number, name, trigger) is documented in Docs/Design/BallMotor/README.md so a
+        /// reader does not have to decode numbers from this file.
+        /// </para>
+        /// <para>
+        /// There is exactly ONE implementation: TryBank forwards here. A second copy of
+        /// this decision would be the "two copies of one fact" failure this project has
+        /// already paid for twice (the pickup gain rule, the host queue latch).
+        /// </para>
+        /// </remarks>
+        public bool TryBankWithReason(float now, string requestId, out int reason)
+        {
+            reason = 0;
+            if (!hasLocalRow) { reason = 1; return false; }
+            if (requestId == null || requestId.Length == 0) { reason = 2; return false; }
+            if (!KatamariMath.IsFiniteFloat(now)) { reason = 3; return false; }
+            if (!KatamariMath.IsFiniteFloat(semanticDiameterWorldM)) { reason = 3; return false; }
+            if (semanticDiameterWorldM < minConversionDiameterWorldM) { reason = 4; return false; }
+            if (unbankedVolumeUnits <= 0) { reason = 5; return false; }
 
             // The zero-volume mapping is the start of the rule, so the start is
             // whatever the same forward map reports at zero confirmed units.
@@ -1222,6 +1244,7 @@ namespace VRCKatamari.BallMotor
                 semanticDiameterPerCoreDiameter, out startCoreRadius,
                 out startCollisionRadius, out startDiameter, out startEffectiveVolumeUnits))
             {
+                reason = 6;
                 return false;
             }
 
@@ -1229,6 +1252,7 @@ namespace VRCKatamari.BallMotor
             if (!BankShrinkMath.TryPostBankDiameter(startDiameter, semanticDiameterWorldM,
                 bankResidualFraction, out postBankDiameter))
             {
+                reason = 6;
                 return false;
             }
 
@@ -1237,6 +1261,7 @@ namespace VRCKatamari.BallMotor
                 cubicMetersPerVolumeUnit, maxCoreRadiusWorldM,
                 semanticDiameterPerCoreDiameter, out postBankVolumeUnits))
             {
+                reason = 6;
                 return false;
             }
 
@@ -1245,15 +1270,17 @@ namespace VRCKatamari.BallMotor
                 playerCount, bankRequestPlayerIds, bankRequestIds, ref bankRequestCount,
                 localPlayerId, unbankedVolumeUnits, requestId))
             {
+                reason = 7;
                 return false;
             }
 
             int confirmed = confirmedVolumes[localRow];
             int banked = bankedScores[localRow];
-            if (confirmed < 0 || banked < 0) return false;
+            if (confirmed < 0 || banked < 0) { reason = 7; return false; }
             unbankedVolumeUnits = confirmed;
             bankedScoreUnits = banked;
-            return ApplyBankShrink(postBankVolumeUnits);
+            if (!ApplyBankShrink(postBankVolumeUnits)) { reason = 8; return false; }
+            return true;
         }
 
         /// <summary>

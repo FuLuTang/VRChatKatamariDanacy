@@ -1,0 +1,11 @@
+# StoryLevel S1 Windows asset manifest (path-from-Assets | md5 | verified)
+VRC_Katamari/Labs/StoryLevel/StoryLevel.unity|c936326dbea447d8e7878e66797fa0b8|OK
+VRC_Katamari/Labs/StoryLevel/StoryLevel.unity.meta|9283438daadb700524af0adb44f8fcbd|OK
+VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.asset|b9f1dee140776b29c05d82e08a7d3978|OK
+VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.asset.meta|5af6f54a5b85b16550b390c5d9bfb84c|OK
+VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.cs|6a6c9a95794b52a8531b22551a890b55|OK
+VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.cs.meta|906690f725bc8c8dde0502212d5a959b|OK
+VRC_Katamari/Runtime/BallPresentation/BallView.asset|742a2ede238a2425989e311496f9786d|OK
+VRC_Katamari/Runtime/BallPresentation/BallView.asset.meta|e9d2f0e01bab3388152ae4fe2490b8dd|OK
+VRC_Katamari/Runtime/Input/DesktopMoveInput.asset|b8046c3fa44b6aeba42b7ba4185a1d02|OK
+VRC_Katamari/Runtime/Input/DesktopMoveInput.asset.meta|034f8105ddea2769396f3e9d88cf2a8e|OK

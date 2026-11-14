@@ -1,2103 +1,2103 @@
 {
-  "schemaVersion": 1,
-  "project": "VRC塊魂",
-  "designVersion": "0.3",
-  "researchDate": "2026-10-10",
-  "models": {
-    "LUNA": "gpt-6-luna",
-    "SOL": "gpt-6.1-sol",
-    "HUMAN": "用户/授权测试者"
+ "schemaVersion": 1,
+ "project": "VRC塊魂",
+ "designVersion": "0.3",
+ "researchDate": "2026-10-10",
+ "models": {
+  "LUNA": "gpt-6-luna",
+  "SOL": "gpt-6.1-sol",
+  "HUMAN": "用户/授权测试者"
+ },
+ "scope": "PCVR + Desktop; first one complete vertical slice, target two launch maps",
+ "schedulingNote": "阶段是依赖顺序，不是工期承诺。任务由实际证据和人工前置解锁。",
+ "tasks": [
+  {
+   "id": "T00",
+   "title": "工程基线、版本锁定与最小测试场景",
+   "execution_note": "2026-10-12 DONE：SDK编译PASS（Editor 2022.3.22f1、VPM 3.10.5），Build & Test进入 BootstrapLab 场景PASS（日志 Entering Room → Finished entering world），证据见 Docs/Evidence/Bootstrap/。Editor.log 的 Build Finished, Result: Failure 待解释，VR/Station/多人/性能未测（属T04以后）。",
+   "evidence_paths": [
+    "Docs/Evidence/Bootstrap/README.md",
+    "Docs/Evidence/Bootstrap/compile_evidence.md",
+    "Docs/Evidence/Bootstrap/build_and_test.md",
+    "Docs/Archive/Handoffs/Evidence_T00.md",
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/Bootstrap/BootstrapLab.unity"
+   ],
+   "phase": "P0",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "DONE",
+   "priority": "P0",
+   "dependencies": [],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/ProjectSettings/",
+    "VRChatKatamariDanacyUnity/Packages/",
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/Bootstrap/",
+    "Docs/Evidence/Bootstrap/"
+   ],
+   "exclusive_locks": [
+    "unity-integration"
+   ],
+   "external_requirements": [
+    "用户提供工程目录；本地Unity/VRChat可用"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "检查官方Unity/SDK版本，在用户指定目录创建或使用隔离工程。",
+    "锁定包版本与目录owner，创建空测试场景和版本记录。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "目标SDK编译成功。",
+    "Build & Test可进入空场景；若无法运行必须标BLOCKED。"
+   ],
+   "source_ids": [
+    "S17"
+   ]
   },
-  "scope": "PCVR + Desktop; first one complete vertical slice, target two launch maps",
-  "schedulingNote": "阶段是依赖顺序，不是工期承诺。任务由实际证据和人工前置解锁。",
-  "tasks": [
-    {
-      "id": "T00",
-      "title": "工程基线、版本锁定与最小测试场景",
-      "execution_note": "2026-10-12 DONE：SDK编译PASS（Editor 2022.3.22f1、VPM 3.10.5），Build & Test进入 BootstrapLab 场景PASS（日志 Entering Room → Finished entering world），证据见 Docs/Evidence/Bootstrap/。Editor.log 的 Build Finished, Result: Failure 待解释，VR/Station/多人/性能未测（属T04以后）。",
-      "evidence_paths": [
-        "Docs/Evidence/Bootstrap/README.md",
-        "Docs/Evidence/Bootstrap/compile_evidence.md",
-        "Docs/Evidence/Bootstrap/build_and_test.md",
-        "Docs/Archive/Handoffs/Evidence_T00.md",
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/Bootstrap/BootstrapLab.unity"
-      ],
-      "phase": "P0",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "DONE",
-      "priority": "P0",
-      "dependencies": [],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/ProjectSettings/",
-        "VRChatKatamariDanacyUnity/Packages/",
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/Bootstrap/",
-        "Docs/Evidence/Bootstrap/"
-      ],
-      "exclusive_locks": [
-        "unity-integration"
-      ],
-      "external_requirements": [
-        "用户提供工程目录；本地Unity/VRChat可用"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "检查官方Unity/SDK版本，在用户指定目录创建或使用隔离工程。",
-        "锁定包版本与目录owner，创建空测试场景和版本记录。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "目标SDK编译成功。",
-        "Build & Test可进入空场景；若无法运行必须标BLOCKED。"
-      ],
-      "source_ids": [
-        "S17"
-      ]
-    },
-    {
-      "id": "T01",
-      "title": "新版PVP参考规则与差异表",
-      "phase": "P0",
-      "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "DONE",
-      "execution_note": "2026-10-12 Lead验收DONE（规划中的Sol评审角色未配置，由Lead承担评审）：rules_matrix三列分明；unknown_handling.md逐项给出全部原作unknown（U01–U43d）的项目处理办法并引用决策表与T任务。处理方式经Lead批准为当前项目临时方向；参数均为可配置原型，不是原作数值，也未冻结规则或接口（T06负责）。仍需用户在T39前决定：首发地图数、正式公平门槛、回合结构/时长——这些已有明确的决定时点，不阻塞T01。",
-      "evidence_paths": [
-        "Docs/Research/ReferenceRules/rules_matrix.md",
-        "Docs/Research/ReferenceRules/unknown_handling.md",
-        "Docs/Archive/Handoffs/Research_ReferenceRules.md",
-        "Docs/Preparation/RuleDecisions/decisions.json"
-      ],
-      "priority": "P0",
-      "dependencies": [],
-      "write_scope": [
-        "Docs/Research/ReferenceRules/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "核对2025版正式玩法资料/获准实机记录。",
-        "分别记录交分、吞噬、复活、道具、结束结算；每项附来源/时间点。",
-        "未知项标unknown，建议规则另列，不补造原作数据。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "事实、未知、项目建议三列明确。",
-        "至少明确本项目如何处理所有unknown；由Sol批准。"
-      ],
-      "source_ids": [
-        "S01",
-        "S02",
-        "S03",
-        "S04"
-      ]
-    },
-    {
-      "id": "T02",
-      "title": "资产候选、授权与风格清单",
-      "phase": "P0",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "DONE",
-      "execution_note": "2026-10-12 DONE：36种物件概念有用途、26项有具体库存文件候选，无候选素材进入Unity或正式目录，覆盖见 Docs/Preparation/AssetCoverage/coverage.csv。逐文件授权、Unity导入、世界米制尺寸与碰撞性能尚未验收（Blender预览见 Docs/AssetIntake/Preview/README.md），留给后续资产任务。",
-      "evidence_paths": [
-        "Docs/Archive/Reviews/reference_rules_and_assets_acceptance.md",
-        "Docs/Preparation/AssetCoverage/coverage.csv",
-        "Docs/Research/AssetManifest/picnic_candidates.csv",
-        "Docs/AssetIntake/license_gaps.md",
-        "Docs/Archive/Handoffs/AssetIntake.md",
-        "Docs/AssetIntake/DirectDownload/manifest.json",
-        "Docs/Archive/Handoffs/AssetIntake_DirectDownload.md",
-        "Docs/AssetIntake/Preview/README.md",
-        "Docs/AssetIntake/Preview/renders/render_report.json"
-      ],
-      "priority": "P1",
-      "dependencies": [],
-      "write_scope": [
-        "Docs/AssetIntake/",
-        "Docs/Research/AssetManifest/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "下载仅使用获准账户与免费/已授权内容"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "从作者候选包按第一图需求筛选，不批量无差别导入。",
-        "保存页面和包内LICENSE、哈希及商业使用字段。",
-        "隔离带脚本/授权不明资源，生成样例预览。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "20–40种首图基础物件有候选和用途。",
-        "无授权不明资源进入正式目录。"
-      ],
-      "source_ids": [
-        "S24",
-        "S25",
-        "S26",
-        "S27",
-        "S28",
-        "S29",
-        "S30"
-      ]
-    },
-    {
-      "id": "T03",
-      "title": "主题风格与宣传前期分镜",
-      "phase": "P0",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "DONE",
-      "execution_note": "2026-10-12 独立Luna评审两条验收均PASS，Lead验收DONE：三语候选文案及四类文字分镜可独立推进，均标为概念/待实机，无未实现功能承诺、无未授权品牌资产。名称候选查重见P14，未定名、未法律清权；未选视觉方向、未生成正式封面，未发布——这些不是T03验收条件。",
-      "evidence_paths": [
-        "Docs/Archive/Reviews/reference_rules_and_assets_acceptance.md",
-        "Marketing/Preproduction/theme_copy.md",
-        "Marketing/Preproduction/storyboard.md",
-        "Docs/Archive/Handoffs/Marketing_Preproduction.md"
-      ],
-      "priority": "P1",
-      "dependencies": [],
-      "write_scope": [
-        "Marketing/Preproduction/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "拟独立滚球/甲虫主题与日英文案，不使用官方角色。",
-        "设计封面构图和双手推球、交分、追逐四类镜头草图。",
-        "标记哪些画面是概念图，哪些必须等待实机。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "可独立于程序推进。",
-        "没有未经实现的功能承诺或未授权品牌资产。"
-      ],
-      "source_ids": [
-        "S36"
-      ]
-    },
-    {
-      "id": "T04",
-      "title": "Station、输入与缩放最小平台实验",
-      "execution_note": "2026-10-14 RUNNING：PC桌面层面已过——Station入座、坐姿Jump不退座、单击/长按只计一次、三条离开路径恢复JumpImpulse到3、退出/Respawn、入座后本地Interact提示关闭，证据见 Docs/Evidence/StationPlatform/。未完成：步骤4（手追踪与原生舒适转向事件差异、眼高范围）须戴头显实测，修复后Respawn/自然离座恢复未测；GetJumpImpulse()四次会话初始读值均为0，正式世界需显式配置移动参数。",
-      "phase": "P0",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "RUNNING",
-      "priority": "P0",
-      "dependencies": [
-        "T00"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/StationPlatform/",
-        "Docs/Evidence/StationPlatform/"
-      ],
-      "exclusive_locks": [
-        "unity-platform-lab"
-      ],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "做移动Station+独立FollowRig，排除Mesh滚动旋转。",
-        "验证InputJump、Disable Station Exit、保存/恢复JumpImpulse及Respawn退出。",
-        "记录A手追踪与B原生舒适转向设置的事件差异，测试眼高工作范围。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "PC与VR实验步骤可复现。",
-        "能明确决定Station是否为主方案；未通过不扩正式模块。"
-      ],
-      "source_ids": [
-        "S06",
-        "S07",
-        "S08",
-        "S10"
-      ]
-    },
-    {
-      "id": "T05",
-      "title": "真人VR平台与安全退出门禁G1",
-      "phase": "P0",
-      "implementer": "HUMAN",
-      "reviewer": "Human + Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T04"
-      ],
-      "write_scope": [
-        "Docs/Evidence/G1/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "实际头显、控制器和用户参与"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "佩戴头显分别体验A/B候选，开关菜单和舒适转向。",
-        "测试大/小Avatar、松手、退出、VRChat Respawn。",
-        "批准方案或把失败退回T04，不把主观不适交给文本Agent判定。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "Jump不退座且只触发一次。",
-        "能随时退出；头部不随球滚转。",
-        "实际舒适性、疲劳、未测控制器列清楚。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T06",
-      "title": "公共接口、世界尺度与数据版本冻结",
-      "phase": "P1",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T01",
-        "T05"
-      ],
-      "write_scope": [
-        "Docs/Contracts/",
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Core/Contracts/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "冻结BallState、ItemDefinition/Instance、MatchState及资源价值单位。",
-        "定义稳定ID、世代、请求幂等、Owner矩阵及事件边界。",
-        "固定公共世界尺度，禁止私人独立地图缩放；发布contracts v1。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "所有跨模块字段有单位、写入者、读取者和默认值。",
-        "旧聊天矛盾在决策记录中被覆盖。"
-      ],
-      "source_ids": [
-        "S11",
-        "S12",
-        "S13",
-        "S14"
-      ]
-    },
-    {
-      "id": "T07",
-      "title": "VR A双控制器与校准",
-      "phase": "P2",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T06"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Input/DualHand/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现固定轮廓件、活动件、抓取偏移、平面投影、行程Clamp和回中。",
-        "将位置归一化为forward/strafe/yaw，处理菜单释放与失去追踪。",
-        "制作校准UI、输入诊断和专属测试Prefab。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "不依赖FBT/胸骨推断。",
-        "超出行程不增加速度；松手无残留驱动。",
-        "坐姿站姿都可手动调适而不分两套逻辑。"
-      ],
-      "source_ids": [
-        "S06",
-        "S10"
-      ]
-    },
-    {
-      "id": "T08",
-      "title": "VR B与Desktop输入适配",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T06"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Input/Standard/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现原生移动轴、观察参考和InputJump路由。",
-        "输出与A相同ControlIntent，不在本模块直接移动玩家。",
-        "提供模式切换和原生按键文字提示。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "PC无必需特殊字母键。",
-        "与A相同限幅/速度能力；Jump只使用道具。"
-      ],
-      "source_ids": [
-        "S06"
-      ]
-    },
-    {
-      "id": "T09",
-      "title": "球形运动、扫掠与追尾",
-      "phase": "P2",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T06"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Motion/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现共享运动模型、加减速、转向、侧移和环境扫掠。",
-        "实现独立FollowRig高度/方向过滤及卡住/出界恢复。",
-        "把玩家胶囊排除玩法碰撞，分离姿态与球体自转。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "高速不穿薄墙，坡道/墙角/大球不卡死。",
-        "A/B/Desktop输入进入同一运动代码。",
-        "镜头不继承球体roll/pitch。"
-      ],
-      "source_ids": [
-        "S07",
-        "S08"
-      ]
-    },
-    {
-      "id": "T10",
-      "title": "成长与径向凹凸代理实验",
-      "phase": "P2",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T09"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Shape/",
-        "Docs/Tests/Shape/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现有效体积到半径和稀疏方向/长杆极值更新。",
-        "测试同方向多物贡献、移除、核心吞没、交分重建。",
-        "先只驱动视觉/音效；实际影响物理另设flag并记录比较。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "杆可以随贡献移除/核心长大回落。",
-        "没有无限突出、NaN或旧物件被一并放大。",
-        "明确可视代理与共享碰撞边界。"
-      ],
-      "source_ids": [
-        "S05"
-      ]
-    },
-    {
-      "id": "T11",
-      "title": "静态物件注册与近邻拾取",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T06"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Collectibles/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现定义/实例数组、区域索引、尺寸门槛和确认/预测分离。",
-        "注册稳定spawnId与spawnGeneration。",
-        "仅查询附近候选，提供批量申请队列接口。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "无全图每帧扫描。",
-        "同定义不同实例不混淆。",
-        "待确认物品不产生可交分收益。"
-      ],
-      "source_ids": [
-        "S13",
-        "S16"
-      ]
-    },
-    {
-      "id": "T12",
-      "title": "本地吸附与远端装饰重建",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T09",
-        "T11"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Presentation/Ball/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现世界位姿到局部吸附、池化和埋藏回收。",
-        "远端按seed+实例/世代/序号生成少量装饰，不复制附着树。",
-        "保留明确球界和头部安全区局部渐隐。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "球芯增长不放大已附着杯子。",
-        "同种物件多次收集不重叠在相同伪随机位置。",
-        "装饰不参与PVP判定。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T13",
-      "title": "物件争抢与比赛权威账本",
-      "phase": "P2",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T06"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Networking/Ledger/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现Owner裁决、请求身份、批处理、幂等和唯一获胜者。",
-        "有效尺寸来自确认账本，验证合理位置/速度/状态。",
-        "持久确认写同步状态，事件只加速请求/展示。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "重复/乱序/竞争请求只确认一次。",
-        "旧世代请求不能抢新刷新物。",
-        "可输出可复现的裁决序列日志。"
-      ],
-      "source_ids": [
-        "S11",
-        "S12",
-        "S13",
-        "S14"
-      ]
-    },
-    {
-      "id": "T14",
-      "title": "球核心状态同步与插值",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T09",
-        "T13"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Networking/BallState/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "同步位置、速度、判定半径、生命/道具/外观摘要。",
-        "设计连续变换与手动业务状态分离，避免多写入者。",
-        "记录实际更新频率、插值与拥塞，不假定固定60Hz。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "远端球体位置和判定半径可追溯。",
-        "不高频转移小物件Ownership。",
-        "网络拥塞时队列受限。"
-      ],
-      "source_ids": [
-        "S12",
-        "S13",
-        "S14"
-      ]
-    },
-    {
-      "id": "T15",
-      "title": "快照、迟到加入与裁决迁移",
-      "phase": "P2",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T13"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Networking/Recovery/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "建立完整版本快照及物件分块、commitSequence。",
-        "实现新Owner接管epoch、未确认重试、迟到者加载。",
-        "快照不完整时安全取消回合，禁止猜测比分。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "不同分块版本不混拼。",
-        "Owner离场后恢复或明确取消。",
-        "迟到者不复活已被领取资源。"
-      ],
-      "source_ids": [
-        "S11",
-        "S12",
-        "S13",
-        "S14"
-      ]
-    },
-    {
-      "id": "T16",
-      "title": "磁铁与火箭单槽道具",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T09",
-        "T11",
-        "T13"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Powerups/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现单槽及激活事务、公共速度曲线和结束清理。",
-        "磁铁限定近邻/尺寸/遮挡并共用拾取裁决。",
-        "实现Jump路由、KO/退出取消及可配置视觉回调。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "不穿墙吸、不越级吸。",
-        "长按/重复事件不能重复用。",
-        "火箭不改变HMD视角或玩家FOV。"
-      ],
-      "source_ids": [
-        "S02",
-        "S03",
-        "S06"
-      ]
-    },
-    {
-      "id": "T17",
-      "title": "大厅加入区与回合状态机",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T06",
-        "T13"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/MatchFlow/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "Trigger本地检测+名单去重+周期区域核验。",
-        "实现倒计时终点、锁名单、迟到排队与人数不足处理。",
-        "实现准备/比赛/结算/重置/恢复阶段，清理Station与输入。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "进出传送不造成幽灵报名。",
-        "同一时刻只有一个正式局和一致名单。",
-        "退出/Resetting恢复所有玩家设置。"
-      ],
-      "source_ids": [
-        "S09",
-        "S10"
-      ]
-    },
-    {
-      "id": "T18",
-      "title": "交分、吞噬、KO及重生事务",
-      "phase": "P2",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T09",
-        "T13"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/PvP/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现交分价值守恒和免费球芯不可反复交分。",
-        "实现唯一吞噬裁决、受限收益、KO/保护与安全重生点。",
-        "处理交分/被吞同帧、截止时刻和双向命中顺序。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "积分/体积不凭空复制。",
-        "已交存积分不被吞掉。",
-        "双向竞争只产出一组合法事务。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T19",
-      "title": "HUD、设置及多语言",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T06"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/UI/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现比分/未交存资源/道具/倒计时/威胁状态。",
-        "提供A/B、校准、音量、舒适和退出UI。",
-        "建立日/英/简中键值表，不写死按键型号。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "HUD不遮球与前路。",
-        "含退出比赛入口。",
-        "威胁信息不只靠颜色。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T20",
-      "title": "资产导入与地图数据烘焙工具",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T02",
-        "T06"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/",
-        "Docs/Art/Processed/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "自动检查单位、材质、ID、支撑关系与授权。",
-        "生成Prefab、简化Collider、远端代理和定义数组。",
-        "分开可卷物与不可卷静态背景，保留.meta和来源索引。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "测试输入可重复产出相同ID映射。",
-        "过多材质、坏引用、support环可报错。",
-        "不把Editor API带入Udon。"
-      ],
-      "source_ids": [
-        "S16",
-        "S24",
-        "S25",
-        "S26",
-        "S27",
-        "S30"
-      ]
-    },
-    {
-      "id": "T21",
-      "title": "第一图野餐灰盒与资源布置",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T06",
-        "T20"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Maps/Picnic/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "搭四出生区、环路、交分锚点和侧路。",
-        "按尺寸带手工布置可达资源，计算初始可捡收益。",
-        "添加关键地标、边界、重生点和道具点。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "所有必经路线无需跳跃。",
-        "出生资源量和路径差异可量化。",
-        "最大球主路有足够宽度。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T22",
-      "title": "支撑坠落、资源补货与掉落碎团",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T11",
-        "T13",
-        "T21"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/WorldDynamics/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实现supportParent规则与共享坠落落点/开始时间。",
-        "低阶资源按区补货、生成预告和新世代。",
-        "PVP损失用受限碎团表示，记录价值守恒与过期。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "无错误悬浮或各客户端不同可抢落点。",
-        "复活玩家有低阶资源。",
-        "有限动态池不无限生成刚体。"
-      ],
-      "source_ids": [
-        "S13",
-        "S16"
-      ]
-    },
-    {
-      "id": "T23",
-      "title": "分层音效、特效和振动",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T06",
-        "T02"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Feedback/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "建立材质短音与优先级池，合并高频小拾取。",
-        "实现道具、成长、危险、交分和结果的事件反馈。",
-        "本地细节/远端摘要和低特效模式分开。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "危险提示不被付费或装饰覆盖。",
-        "4球连续拾取音量不叠爆。",
-        "无强制抖屏和全场喊话。"
-      ],
-      "source_ids": [
-        "S29",
-        "S31",
-        "S32"
-      ]
-    },
-    {
-      "id": "T24",
-      "title": "外观插槽、预览与免费切换",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T06",
-        "T20"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Cosmetics/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "定义skin/badge/podium等有限插槽。",
-        "实现免费切换、尺寸不同的预览和默认回退。",
-        "把威胁环/保护状态与外观材质隔离。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "切换不改玩法数据。",
-        "大球附着物遮挡后的效果如实可预览。",
-        "未接商城也可独立运行。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T25",
-      "title": "偏好和免费进度持久化",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T06",
-        "T19"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Persistence/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "等待恢复完成后加载校准/音量/外观偏好。",
-        "实现schemaVersion、默认值迁移和去抖保存。",
-        "本局奖励按matchId去重，不存假付费权限。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "重新进入偏好恢复。",
-        "恢复前不覆盖旧数据。",
-        "退款/未购买不被PlayerData绕过。"
-      ],
-      "source_ids": [
-        "S15"
-      ]
-    },
-    {
-      "id": "T26",
-      "title": "一图两人纵切片集成",
-      "phase": "P3",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T07",
-        "T08",
-        "T09",
-        "T11",
-        "T12",
-        "T13",
-        "T14",
-        "T16",
-        "T17",
-        "T18",
-        "T19",
-        "T21"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Scenes/PlayableSlice.unity",
-        "Docs/Integration/"
-      ],
-      "exclusive_locks": [
-        "unity-integration"
-      ],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "合并模块Prefab而非让模块Agent改同一主Scene。",
-        "跑通大厅-比赛-交分-KO-结算-返回大厅全链。",
-        "生成Build & Test版本及双客户端测试说明。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "一个完整回合无手工改变量救场。",
-        "无编译错误、重复Owner写入或缺失引用。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T27",
-      "title": "真人两人核心玩法门禁G3",
-      "phase": "P3",
-      "implementer": "HUMAN",
-      "reviewer": "Human + Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T26"
-      ],
-      "write_scope": [
-        "Docs/Evidence/G3-Core/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "至少两客户端/测试账号及用户授权"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "实际两客户端，一VR一PC及双VR条件记录。",
-        "争抢同物、交分、KO、重复按键和回合结束。",
-        "判断A/B控制公平感与是否有继续玩下一局的意愿。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "同物唯一收益、正确赢家与稳定退出。",
-        "不同输入均能完成比赛。",
-        "未测环境明确。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T28",
-      "title": "断线/延迟/补货集成强化",
-      "phase": "P3",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T15",
-        "T22",
-        "T27"
-      ],
-      "write_scope": [
-        "Docs/Integration/NetworkFaults/",
-        "Docs/Tests/Network/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "加入中途离场/恢复、延迟/重复/乱序与快照中断测试。",
-        "核对补货世代、掉落碎团与资源账本。",
-        "调限流、回滚和恢复回合取消逻辑。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "故障矩阵每项有真实日志。",
-        "不出现资源复制或幽灵物件。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T29",
-      "title": "凹凸代理是否参与物理的门禁",
-      "phase": "P3",
-      "implementer": "HUMAN",
-      "reviewer": "Human + Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T10",
-        "T27"
-      ],
-      "write_scope": [
-        "Docs/Evidence/ShapeDecision/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "真人VR及至少一个远端观察者"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "比较平滑球、单长杆和多长杆，记录体感与公平。",
-        "决定首发只保留视觉代理，或批准受限物理影响。",
-        "需要影响物理时追加共享外形摘要任务，不直接把装饰当碰撞。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "决定与依据明确。",
-        "不同客户端PVP判定不靠不同随机外观。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T30",
-      "title": "野餐图美术完成",
-      "phase": "P4",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T20",
-        "T21",
-        "T27"
-      ],
-      "write_scope": [
-        "Docs/Art/Maps/Picnic/",
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Maps/PicnicArt/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "用通过授权的资产替换灰盒，保持路径与ID。",
-        "统一材质色板、烘焙/简化灯光、布置音景。",
-        "检查每个可卷实体的Render/Collider/支撑关系。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "美术替换不破坏已测路线。",
-        "资源清单和代理完整。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T31",
-      "title": "玩具房灰盒与差异化路线",
-      "phase": "P4",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T20",
-        "T27"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Maps/Toyroom/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "设计地毯出生区、书本缓坡、中央交分和侧路。",
-        "复用代码但建立独立布局/资源量表。",
-        "用正式最大球检查门洞和成长后脱困。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "与野餐图路径不同。",
-        "不依赖复杂物理倒塌或跳跃。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T32",
-      "title": "玩具房美术完成",
-      "phase": "P4",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T31",
-        "T20"
-      ],
-      "write_scope": [
-        "Docs/Art/Maps/Toyroom/",
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Maps/ToyroomArt/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "批量制作无品牌积木/文具，导入获准玩具资产。",
-        "保持拾取颗粒度与视觉统一，制作地图预览。",
-        "完成碰撞/资源/支撑清单。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "无未授权品牌角色。",
-        "地图版本校验与注册ID一致。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T33",
-      "title": "结果板、领奖台和大厅成品",
-      "phase": "P4",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T17",
-        "T18",
-        "T24"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/LobbyPresentation/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "显示排名、并列、比分及球体缩略模型。",
-        "设置自愿合照位、侧边商店位和观战入口。",
-        "生成结果短特效并限制音量/粒子范围。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "不强制移动私人Avatar到领奖台。",
-        "领奖与加入区互不遮挡。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T34",
-      "title": "商家准入与商品规划人工前置",
-      "phase": "P1",
-      "implementer": "HUMAN",
-      "reviewer": "Human + Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T00"
-      ],
-      "write_scope": [
-        "Docs/Commerce/Approvals/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "用户账号操作"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "确认是否已经具备Creator Economy资格。",
-        "由用户提交/批准申请、付款资料及商品目录。",
-        "未获准时记录blocked，允许mock商城继续开发。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "资格状态可核实。",
-        "没有Agent自行提交敏感资料或消费。"
-      ],
-      "source_ids": [
-        "S18",
-        "S23"
-      ]
-    },
-    {
-      "id": "T35",
-      "title": "商城mock与官方权益适配",
-      "phase": "P4",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T24",
-        "T25"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Commerce/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "先用mock测未拥有/加载/拥有/失效/错误状态。",
-        "按SDK接口适配Store查询和购买回调。",
-        "封装Listing打开与商品描述，价格使用Credits。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "无真实商品也可测试UI。",
-        "PlayerData不能伪造付费权益。",
-        "重复回调不重复奖励。"
-      ],
-      "source_ids": [
-        "S19",
-        "S20",
-        "S21",
-        "S22"
-      ]
-    },
-    {
-      "id": "T36",
-      "title": "正式权益绑定与安全审查",
-      "phase": "P4",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T34",
-        "T35"
-      ],
-      "write_scope": [
-        "Docs/Commerce/LiveBindings/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "绑定用户批准的Product/Listing ID。",
-        "检查权益恢复、失效、退款回退与PC-only说明。",
-        "确认不付费仍享完整玩法，不引入付费战力。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "正式权益只来自官方查询。",
-        "无客户端自报拥有或无限重试。"
-      ],
-      "source_ids": [
-        "S20",
-        "S21",
-        "S22"
-      ]
-    },
-    {
-      "id": "T37",
-      "title": "最终资源授权与主题审核",
-      "phase": "P4",
-      "implementer": "HUMAN",
-      "reviewer": "Human + Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T02",
-        "T30",
-        "T32",
-        "T23"
-      ],
-      "write_scope": [
-        "Docs/Evidence/LicenseApproval/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "用户最终授权审核"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "审阅实际使用模型、音效、字体、音乐、宣传资产授权。",
-        "核对独立角色/名称、引用素材和署名。",
-        "不明确的素材替换，不以CC0候选页担保整个网络来源。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "每项发布资产有对应manifest。",
-        "未知许可不进入release。"
-      ],
-      "source_ids": [
-        "S22",
-        "S30",
-        "S36"
-      ]
-    },
-    {
-      "id": "T38",
-      "title": "四人性能与回合耐久测试",
-      "phase": "P5",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T28",
-        "T29",
-        "T30",
-        "T32",
-        "T33",
-        "T23",
-        "T25"
-      ],
-      "write_scope": [
-        "Docs/Evidence/Performance/",
-        "Docs/Integration/ReleaseCandidate/"
-      ],
-      "exclusive_locks": [
-        "unity-integration"
-      ],
-      "external_requirements": [
-        "四客户端真实条件或明确标注未测"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "建立四球高密度道具/掉落场景并记录P95/P99。",
-        "执行20回合清理测试，测Renderer/音源/刚体/网络队列。",
-        "按瓶颈优化，低特效不改变判定。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "无随回合累积的物件/Station/内存增长。",
-        "记录机器、头显和Avatar条件，不虚报FPS。"
-      ],
-      "source_ids": [
-        "S12",
-        "S16"
-      ]
-    },
-    {
-      "id": "T39",
-      "title": "四人地图公平与体验终验",
-      "phase": "P5",
-      "implementer": "HUMAN",
-      "reviewer": "Human + Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T38"
-      ],
-      "write_scope": [
-        "Docs/Evidence/FinalPlaytest/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "4名测试者或获准的等效测试条件"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "多局轮换出生点和A/B/PC，测试追逐、补货与交分。",
-        "检查重生无物可吃、永远领先、交分点堵塞等软锁。",
-        "批准首发两图或降为一图完整体验，不为数量强行上线。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "所有关键门禁有真人证据。",
-        "剩余缺陷分级，阻断级为零才放行。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T40",
-      "title": "真实宣传成品与多语言发布文案",
-      "phase": "P5",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T03",
-        "T30",
-        "T32",
-        "T39"
-      ],
-      "write_scope": [
-        "Marketing/Release/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "实际拍摄和素材授权"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "录获准实机素材，按前期分镜制作短片/截图。",
-        "Blender构图+可选AI润色仅用于标识清楚的插画。",
-        "核对功能、人数、PC-only与日英文案，人工排版文字。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "至少有真实游戏画面。",
-        "无将概念插画冒充实机。",
-        "参与录制者同意。"
-      ],
-      "source_ids": [
-        "S36"
-      ]
-    },
-    {
-      "id": "T41",
-      "title": "内购真实交易与恢复人工验收",
-      "phase": "P5",
-      "implementer": "HUMAN",
-      "reviewer": "Human + Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T36",
-        "T37"
-      ],
-      "write_scope": [
-        "Docs/Evidence/Commerce/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "获批商家资格与用户付款授权"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "由用户批准小额测试购买，不由Agent自行付款。",
-        "测试重进世界、跨回合、默认回退和重复回调。",
-        "记录商品ID和结果但不保存支付敏感信息。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "真实权益加载/恢复通过。",
-        "未测退款列清楚，不编造成功。"
-      ],
-      "source_ids": [
-        "S21",
-        "S22"
-      ]
-    },
-    {
-      "id": "T42",
-      "title": "发布候选集成、许可和回滚包",
-      "phase": "P6",
-      "implementer": "SOL",
-      "reviewer": "Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T39",
-        "T40",
-        "T37"
-      ],
-      "write_scope": [
-        "Docs/Release/"
-      ],
-      "exclusive_locks": [
-        "unity-integration"
-      ],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "固定提交和构建，生成已知问题、版本号及第三方清单。",
-        "若Creator Economy未获批，采用free_launch关闭正式商城；paid_launch必须额外完成T41。",
-        "复核首发范围、UI退出、商店、操作教学。",
-        "建立上一可用版本/关闭商店feature flag回滚方案。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "所有P0依赖DONE且证据完整。",
-        "无未授权自动发布动作。",
-        "未过真实购买门禁时release feature flag关闭收费，不影响免费游戏发布。"
-      ],
-      "source_ids": [],
-      "conditional_dependencies": {
-        "paid_launch": [
-          "T41"
-        ]
-      }
-    },
-    {
-      "id": "T43",
-      "title": "用户批准公开发布",
-      "phase": "P6",
-      "implementer": "HUMAN",
-      "reviewer": "Human + Sol",
-      "status": "TODO",
-      "priority": "P0",
-      "dependencies": [
-        "T42"
-      ],
-      "write_scope": [
-        "Docs/Release/Approval/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "用户发布批准"
-      ],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "审核正式世界页面、商品描述、宣传素材。",
-        "明确批准后才上传公开/发帖/启用正式Listing。",
-        "记录发布版本和实际平台信息。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "用户明确批准可追溯。",
-        "发布后入口、购买与退出可访问。"
-      ],
-      "source_ids": [
-        "S22",
-        "S36"
-      ]
-    },
-    {
-      "id": "T44",
-      "title": "第三主题夜市（非首发阻塞）",
-      "phase": "P7-OPTIONAL",
-      "implementer": "LUNA",
-      "reviewer": "Independent Luna; escalate to Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T39",
-        "T20"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Maps/NightMarket/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "读取本任务依赖的交付物与固定版本契约。",
-        "复用食物和箱筐，设计环路与穿摊通道。",
-        "建立夜间可读性与简化灯光预算。",
-        "重复地图/性能/授权门禁，不自动并入当前release。",
-        "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
-      ],
-      "acceptance_criteria": [
-        "两图首发不因本任务被阻塞。",
-        "夜市存在路径差异和完整授权。"
-      ],
-      "source_ids": []
-    },
-    {
-      "id": "T45",
-      "title": "统一输入意图层（A双控制器/B原生/Desktop）离线契约与参考实现",
-      "phase": "P1",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T01"
-      ],
-      "write_scope": [
-        "Docs/Design/ControlIntent/",
-        "Docs/tests/control_intent/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "无（纯离线；真机映射仍待T07/T08）"
-      ],
-      "steps": [
-        "读取Docs/01_GAME_DESIGN.md第4节、Docs/02_TECHNICAL_CONTRACTS.md、Docs/Research/ReferenceRules/，以及Docs/Evidence/StationPlatform/已记录的PC实测事实（交互为鼠标左键、E键无效；坐姿Jump不退座且只计一次、长按不重复；入座后本地交互提示关闭）。",
-        "定义唯一意图集合（Move2D/Look2D/UseItem或Jump/Interact/ExitStation/Respawn/ComfortTurn设置），为A双控制器、B原生VR、Desktop三种输入源各写映射表；运动层不得感知设备细节。",
-        "写host-only标准库Python参考实现，覆盖边沿触发、去抖、坐姿屏蔽与恢复、菜单打开时不产生游戏意图。",
-        "写Docs/tests/control_intent/单元测试（含__init__.py），断言三种输入源在同一段脚本化输入下产生完全一致的意图序列。",
-        "记录草案接口、未决项与必须由T07/T08真机确认的条目；标注DRAFT、不冻结接口。",
-        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
-      ],
-      "acceptance_criteria": [
-        "三种输入源在同一脚本输入下产生完全一致的意图序列，且有测试断言。",
-        "边沿、去抖、坐姿屏蔽、菜单态四类语义有测试覆盖，且与Docs/Evidence/StationPlatform/的PC实测事实一致。",
-        "文档分列已定/DRAFT/未决，不声称VR通过、不冻结公共接口、不声称Udon运行时验证。"
-      ],
-      "source_ids": [
-        "S07",
-        "S08"
-      ]
-    },
-    {
-      "id": "T46",
-      "title": "球形运动、追尾与眼高离线参考模型",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T00"
-      ],
-      "write_scope": [
-        "Docs/Design/BallMotion/",
-        "Docs/tests/ball_motion/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "无（纯离线数值模型；Unity内实际扫掠仍待T09）"
-      ],
-      "steps": [
-        "读取Docs/01_GAME_DESIGN.md、Docs/02_TECHNICAL_CONTRACTS.md的坐标与尺寸约定，以及Docs/Evidence/StationPlatform/中Station加独立FollowRig的现状（姿态与球体自转分离）。",
-        "host-only实现：球心位置与姿态、自转与运动解耦、加减速、转向与侧移、半径成长的尺寸耦合、与解析地面（含缓坡）的扫掠检测、FollowRig高度与方向过滤（忽略roll与pitch）、卡住与出界恢复。",
-        "写数值测试：高速下不穿透薄墙、镜头不继承roll与pitch、缓坡不弹跳不卡死、追尾延迟有界、半径变化后参数仍合法。",
-        "输出可调参数表（带单位量纲）与未决项（哪些参数必须等T06冻结或真机标定）。",
-        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
-      ],
-      "acceptance_criteria": [
-        "扫掠不穿透、相机无roll与pitch、缓坡通过、追尾延迟有界，四类均有可复现测试。",
-        "参数齐全且量纲一致；半径成长与运动参数的耦合关系有说明。",
-        "明确声明为参考实现，不等同于Udon运行时、Unity验收或设计冻结。"
-      ],
-      "source_ids": [
-        "S07",
-        "S08"
-      ]
-    },
-    {
-      "id": "T47",
-      "title": "拾取、吸附与成长判定离线参考模型",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T01"
-      ],
-      "write_scope": [
-        "Docs/Design/PickupAbsorb/",
-        "Docs/tests/pickup_absorb/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "无（纯离线算法与不变量；场景内真实物件注册仍待T11/T12）"
-      ],
-      "steps": [
-        "读取Docs/02_TECHNICAL_CONTRACTS.md第3、5节（成长、吸附、凹凸，以及一件物品两人抢的协议）与Docs/01_GAME_DESIGN.md。",
-        "host-only实现：静态物件注册表与空间网格、近邻查询、可吸附判定（半径、尺寸、类型、价值）、吸附的幂等计数、本地吸附与远端装饰重建的语义边界。",
-        "写测试：同一物件只计一次（幂等与重复包重放）、两球同时够到时由权威裁决且本地预测可回滚、吸附集合可从权威状态重建、半径成长单调且有上限。",
-        "记录未决项：吸附阈值与价值表仍是草案，等T06冻结；明确本地装饰不参与玩法判定。",
-        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
-      ],
-      "acceptance_criteria": [
-        "幂等单次计数、重放不重复计分、本地预测可回滚、吸附集合可重建，四类测试通过。",
-        "成长半径单调且上限明确；本地与远端职责边界写清（装饰不得决定碰撞与计分）。",
-        "声明为参考实现，不声称Unity或Udon验证。"
-      ],
-      "source_ids": [
-        "S05",
-        "S07"
-      ]
-    },
-    {
-      "id": "T48",
-      "title": "争抢账本、生命周期事务与回合状态机离线参考模型",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T01"
-      ],
-      "write_scope": [
-        "Docs/Design/Ledger/",
-        "Docs/tests/ledger/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "无（纯离线协议模型；网络实测仍待T13/T15/T28）"
-      ],
-      "steps": [
-        "读取Docs/02_TECHNICAL_CONTRACTS.md第4、5节（数据定义、一件物品两人抢）与Docs/01_GAME_DESIGN.md第3节（PVP、淘汰与重生）。",
-        "host-only实现：账本事务（幂等键、本地预测与权威确认、结算条件）、争抢裁决（先到与同帧并列）、KO与重生事务、迟到加入的快照与状态迁移、断线迁移、回合状态机（大厅到准备到进行到结算回大厅）。",
-        "写测试：重复包与重放不重复计分；迟到加入得到一致快照；KO后重生状态合法；非法状态迁移被拒绝；回合结束不依赖任何单客户端本地状态。",
-        "记录未决项：公平阈值、回合时长、结算细则仍属用户未决问题（见Docs/08_SOURCES_AND_OPEN_QUESTIONS.md），实现用可替换参数占位。",
-        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
-      ],
-      "acceptance_criteria": [
-        "幂等计分、重放一致、迟到加入快照一致、非法迁移被拒绝，四类测试通过。",
-        "仅确认账本数值影响分数、银行与PVP；未决的公平与结算参数以显式占位符标出，并链接到未决问题清单。",
-        "声明为参考实现，不声称网络实测或Unity验收。"
-      ],
-      "source_ids": [
-        "S05",
-        "S06"
-      ]
-    },
-    {
-      "id": "T49",
-      "title": "球层·地面接触与支持高度",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T46"
-      ],
-      "write_scope": [
-        "Docs/Design/BallLayers/GroundContact/",
-        "Docs/tests/ball_ground_contact/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
-        "读取Docs/02_TECHNICAL_CONTRACTS.md第3.2、3.3节（接触近似公式与推进顺序）与Docs/Design/BallMotion/（T46基线）。",
-        "只实现本层：给定球芯半径、proper旋转矩阵、可选径向代理点集与地面平面，求支持距离h(-n)=max(r,max_i dot(-n,Q*p_i))、球芯法线坐标及有界纠正；输出`plane_anchor`仅为平面参考点，不冒充代理精确接触点。若后续动力学需要真实接触点，另立数据/几何接口任务。",
-        "实现单步抬升上限与速度扰动上限，保证长棍不会把球弹上天；无代理点时退化为纯球形接触。",
-        "写测试：球形退化为离地=半径；代理突出时支持高度正确抬升；突出量随核心半径增长而自然减小；抬升与扰动被上限截断；法线朝上/斜面/多候选极值的边界用例。",
-        "不要实现：运动积分（T46）、代理点生成与维持（T50）、墙面扫掠（T54）、体积转半径（T52）。文档写明本层只做接触近似，不是完整动力学。",
-        "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
-      ],
-      "acceptance_criteria": [
-        "h(-n)=max(r,max_i dot(-n,Q*p_i)) 与文档公式一致，且有对拍测试；法线坐标、平面offset配对归一化有测试。",
-        "单步抬升与速度扰动有上限且被测试覆盖（长棍不会把球弹飞）；`plane_anchor`明确不是物件接触点。",
-        "无代理点时的球形退化行为正确。",
-        "文档声明：接触近似不等于完整动力学，未做Unity或Udon验证。",
-        "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
-      ],
-      "source_ids": [
-        "S05"
-      ],
-      "workflow_suite": "A接触与外壳",
-      "execution_note": "Lead审查并接受离线草案范围：15项单测及全库247/247通过。plane_anchor仅为参考平面点，不是精确物件接触点。Unity/Udon及对象仍由T57验证。"
-    },
-    {
-      "id": "T50",
-      "title": "球层·径向凹凸代理（小棍采样外壳）",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T46"
-      ],
-      "write_scope": [
-        "Docs/Design/BallLayers/RadialProxy/",
-        "Docs/tests/ball_radial_proxy/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
-        "读取Docs/02_TECHNICAL_CONTRACTS.md第3.2节（N=32固定方向采样、最多4个长物件极值候选、吸附七步、掉落重算）与Docs/Design/BallMotion/。",
-        "只实现本层：维护N个固定方向的采样点与支持长度l_i，维护长物件极值候选（预烘焙端点，不实时扫描全部顶点），提供支持长度查询与突出量 max(0,l_i-r)。",
-        "实现吸附时的更新（把物体简化代理端点转到球局部坐标，只更新附近方向）、掉落时的移除与受影响方向重算（禁止只做持续max）、以及交分/KO大幅缩小时按新账本整体重建。",
-        "写测试：吸附后附近方向支持长度增加且远端方向不变；掉落后支持长度回落（长杆会缩短）；重建后与逐步更新结果一致（交分/KO场景）；候选数量与方向数有上限。",
-        "不要实现：接触判定与支持高度（T49 消费本层输出）、体积转半径（T52）、视觉回收与远端重建（T56）、吸附门槛（T47）。N=32与4个候选均为待性能验证的原型值，必须标注。",
-        "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
-      ],
-      "acceptance_criteria": [
-        "N方向采样与最多4个极值候选的上限有测试覆盖，且参数标注为原型值。",
-        "掉落后支持长度确实回落（针对“只增不减”的经典错误有回归测试）。",
-        "大幅缩小（交分/KO）走整体重建路径，且与逐步更新结果一致。",
-        "文档声明本层为DRAFT，未做性能与Unity验证。",
-        "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
-      ],
-      "source_ids": [
-        "S05"
-      ],
-      "workflow_suite": "A接触与外壳",
-      "execution_note": "Lead审查并接受离线草案范围：10项单测及全库247/247通过。N=32/最多4候选为原型值，Unity/性能仍待T57/后续门禁。"
-    },
-    {
-      "id": "T51",
-      "title": "球层·物体粘贴与附着记录",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T47"
-      ],
-      "write_scope": [
-        "Docs/Design/BallLayers/Attachment/",
-        "Docs/tests/ball_attachment/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
-        "读取Docs/02_TECHNICAL_CONTRACTS.md第3.4节（视觉吸附：世界位姿转局部位姿、Hash规则、保留策略）与Docs/01_GAME_DESIGN.md。",
-        "只实现本层：消费确认事件提供的稳定身份与权威attachSequence，世界位姿转球局部并记录；不得本地补号。区分事件幂等键与契约规定远端Hash字段ballSeed+实例ID+世代+attachSequence，长度前缀编码且不得冒充认证。",
-        "实现完整附着身份与位姿记录的查询、重复事件幂等、撤销、跨局清理和确认快照重建；renderer预算与视觉回收仅由T56负责。",
-        "写测试：局部位姿在球平移旋转后仍还原到正确世界位姿；大球增长不会放大已附着物件的局部尺寸；Hash在不同实例/世代/序列下不碰撞且同输入稳定；保留预算被截断且被合并的物件不丢失账本归属。",
-        "不要实现：吸附门槛与争抢裁决（T47/T48）、几何图形重建与回收预算（T56）、代理支持长度（T50）。",
-        "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
-      ],
-      "acceptance_criteria": [
-        "世界位姿与局部位姿可逆转换有对拍测试。",
-        "大球增长不放大已附着物件（回归测试）。",
-        "权威身份在重放和不同到达顺序下稳定，Hash字段严格对照技术契约§3.4，长度前缀避免拼接歧义；摘要不得承诺绝对无碰撞。",
-        "文档声明拾取Collider收走后退出地图判定，本地装饰不保留可争抢Collider。",
-        "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
-      ],
-      "source_ids": [
-        "S05"
-      ],
-      "workflow_suite": "B成长与附着",
-      "execution_note": "Lead审查并接受离线草案范围：9项单测及全库247/247通过；事件Hash与四字段远端键已分离。ballSeed来源/类型语义仍OPEN；T57仅用显式合成seed，不表示生产互接。"
-    },
-    {
-      "id": "T52",
-      "title": "球层·尺寸计算与三层半径分离",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T47"
-      ],
-      "write_scope": [
-        "Docs/Design/BallLayers/SizeModel/",
-        "Docs/tests/ball_size_model/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
-        "读取Docs/02_TECHNICAL_CONTRACTS.md第1节命名区分与第3.2节第3步（r=cube_root(3V/4π)）。",
-        "只实现本层：由确认体积算 coreRadiusWorldM；区分 coreRadiusWorldM、collisionRadiusWorldM、semanticDiameter 三者并给出换算，禁止一个字段同时表示半径和直径。",
-        "实现首版生长上限、交分/KO后的重置与重建（按新账本而不是简单缩放），以及不从渲染Mesh反推账本的原则性断言。",
-        "写测试：体积翻8倍半径翻倍；半径与直径不被混用（类型或断言层面阻止）；上限截断；交分重置后半径回到基线；成长到上限时下游参数仍合法。",
-        "不要实现：体积账本与计分事务（T48）、代理与凹凸（T50）、视觉滚动（T53）。",
-        "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
-      ],
-      "acceptance_criteria": [
-        "coreRadiusWorldM/collisionRadiusWorldM/semanticDiameter三者分离且有换算测试。",
-        "体积与半径的立方关系、上限、交分重置均有测试。",
-        "存在防止半径与直径混用的显式手段（类型或断言）。",
-        "文档声明世界尺度仍OPEN，等T06冻结。",
-        "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
-      ],
-      "source_ids": [
-        "S05"
-      ],
-      "workflow_suite": "B成长与附着",
-      "execution_note": "Lead审查并接受离线草案范围：7项单测及全库247/247通过。世界尺度仍OPEN等待T06；T57仅展示当前显式参数。"
-    },
-    {
-      "id": "T53",
-      "title": "球层·可视滚动（自转与姿态解耦）",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T46"
-      ],
-      "write_scope": [
-        "Docs/Design/BallLayers/VisualRoll/",
-        "Docs/tests/ball_visual_roll/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
-        "读取Docs/02_TECHNICAL_CONTRACTS.md第2节（BallVisualRollRoot只有可视滚动旋转、localScale保持1；BallPhysicsRoot负责位置与平面朝向）。",
-        "只实现本层：由球心位移与地面法线求可视滚动增量，累计为BallVisualRollRoot的局部旋转；localScale恒为1。",
-        "明确姿态与自转分离：玩法用的平面朝向与可视自转互不写入；镜头与HUD不读取自转。",
-        "写测试：位移距离与滚动角度匹配（滚动一周对应π×直径）；localScale恒为1；自转不改变平面朝向；依据坐标/四元数约定，用接触点无滑动速度独立验证滚动轴方向，不能把旧叉积公式直接当oracle；零位移不产生滚动。",
-        "不要实现：运动积分与速度（T46）、跟随架（T55）、核心Mesh缩放（T52提供半径）。",
-        "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
-      ],
-      "acceptance_criteria": [
-        "位移与滚动角度的对应关系有测试（含滚动一周的距离）。",
-        "自转与平面朝向严格解耦（互不影响的回归测试）。",
-        "localScale恒为1有断言。",
-        "文档声明未做Unity视觉验证。",
-        "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
-      ],
-      "source_ids": [
-        "S07",
-        "S08"
-      ],
-      "workflow_suite": "C表现与跟随",
-      "execution_note": "Lead审查并接受离线草案范围：12项单测及全库247/247通过。Host方向公式有独立无滑动oracle；Unity Quaternion/Transform箭头探针由T57执行。"
-    },
-    {
-      "id": "T54",
-      "title": "球层·墙面与环境扫掠",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T46"
-      ],
-      "write_scope": [
-        "Docs/Design/BallLayers/Sweep/",
-        "Docs/tests/ball_sweep/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
-        "读取Docs/02_TECHNICAL_CONTRACTS.md第3.3节（首版推进顺序A：球形扫掠/碰撞）与Docs/Design/BallMotion/中的连续扫掠实现作为基线。",
-        "只实现本层：球体对平面/薄墙/盒/墙角的连续扫掠，输出首次接触时间、接触点、法线、剩余位移与滑动方向；支持一个步长内多接触顺序处理。",
-        "专门处理薄墙（厚度小于半径）、高速（单步位移远大于半径）、墙角与凹角、以及接触后沿墙滑动的退化情况。",
-        "写测试：单步位移远大于半径时不穿透；薄墙（厚度<半径）不穿透；墙角不卡死且能滑出；多接触按距离顺序求解；零速度与贴墙起始不产生抖动。",
-        "不要实现：地面支持高度（T49）、运动积分与驱动（T46）、代理凹凸对接触的影响（T50/T49）。",
-        "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
-      ],
-      "acceptance_criteria": [
-        "穿透类用例覆盖高速、薄墙、墙角三类，且单步位移大于半径。",
-        "接触解算顺序稳定，重复运行结果一致（确定性）。",
-        "文档列出未解决的退化情形（例如极薄墙体与完全对称凹角）而不是隐去。",
-        "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
-      ],
-      "source_ids": [
-        "S07"
-      ],
-      "workflow_suite": "A接触与外壳",
-      "execution_note": "Lead审查并接受离线草案范围：14项单测及全库247/247通过。扩张AABB角为保守近似；T57仅做隔离台，不进入正式判定。"
-    },
-    {
-      "id": "T55",
-      "title": "球层·跟随架 FollowRig",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "DONE",
-      "priority": "P1",
-      "dependencies": [
-        "T46"
-      ],
-      "write_scope": [
-        "Docs/Design/BallLayers/FollowRig/",
-        "Docs/tests/ball_follow_rig/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [],
-      "steps": [
-        "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
-        "读取Docs/02_TECHNICAL_CONTRACTS.md第2节（FollowRig绝不成为滚动Mesh的孩子）与Docs/01_GAME_DESIGN.md第4节（操作架跟水平参考朝向，不随抬头扭头转动）。",
-        "只实现本层：由球位置与朝向求参考架位置与偏航；高度与位置滤波、偏航滤波；roll与pitch严格恒为0。",
-        "结构性约束要在实现里体现：参考架的输入不包含球的自转，且提供“不随HMD抬头扭头转动”的朝向来源。",
-        "写测试：任意roll/pitch输入下参考架roll/pitch恒为0；偏航跟随且不超调；瞬移（例如重生）时有界不抖；原地快速自转不改变参考架朝向；参考架高度限制在可操作范围。",
-        "不要实现：相机与HUD内容（T19）、输入映射（T45）、球运动（T46）。",
-        "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
-      ],
-      "acceptance_criteria": [
-        "roll/pitch恒为0在任意输入下成立（属性测试或穷举采样）。",
-        "瞬移与高速时参考架有界且不抖，有测试证明。",
-        "原地自转不改变参考架朝向。",
-        "文档声明未做VR舒适性验证，舒适阈值仍待真人门禁。",
-        "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
-      ],
-      "source_ids": [
-        "S07",
-        "S08"
-      ],
-      "workflow_suite": "C表现与跟随",
-      "execution_note": "Lead审查并接受离线草案范围：8项单测及全库247/247通过。输入不含HMD/自转；真人舒适度与VR门禁不在T57范围。"
-    },
-    {
-      "id": "T56",
-      "title": "球层·远端代理重建与视觉回收",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "TODO",
-      "priority": "P1",
-      "dependencies": [
-        "T51"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/RemoteProxy/",
-        "Docs/Design/BallLayers/RemoteProxy/"
-      ],
-      "exclusive_locks": [],
-      "external_requirements": [
-        "生产ballSeed语义及类型由上游批准",
-        "补全远端快照原子重建实现并通过T51/T56键对拍"
-      ],
-      "steps": [
-        "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
-        "读取Docs/02_TECHNICAL_CONTRACTS.md第2节（RemoteBallProxy）与第3.4节（Hash去重、保留策略、本地装饰不决定物理）；Hash规则固定为ballSeed+实例ID+世代+attachSequence（与T51同一约定，本层只消费不重定义）。",
-        "只实现本层：由远端确认状态（位置、尺寸、状态、少量外观摘要）重建渲染代理；用Hash去重避免重复模型重叠；按保留预算回收被球芯遮住的物件。",
-        "实现对“本地最近显著物件”的保留与埋藏物件合并的预算策略，保证Renderer数量有上限。",
-        "写测试：同一实例重复到达不产生重叠模型（去重有效）；不同世代/序列产生独立代理；回收后账本体积不变（视觉回收不影响账本）；预算上限被严格遵守；远端装饰不参与任何碰撞或计分判定的显式隔离。",
-        "不要实现：本地吸附判定（T47）、账本与计分（T48）、局部位姿记录（T51）。",
-        "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
-      ],
-      "acceptance_criteria": [
-        "去重、世代独立、回收不丢账本体积、预算上限四类测试通过。",
-        "存在显式隔离证明远端装饰不参与碰撞或计分判定。",
-        "文档声明未做多人网络实测，网络同步参数仍待T13/T15/T28。",
-        "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
-      ],
-      "source_ids": [
-        "S11",
-        "S13"
-      ],
-      "workflow_suite": "C表现与跟随",
-      "execution_note": "RemoteProxy 离线草稿与14项测试已有；U#移植随T57进行。生产 ballSeed 语义与快照原子重建属 T06 契约，未定前不正式接线。"
-    },
-    {
-      "id": "T57",
-      "title": "球层迁入Unity运行时代码与EditMode测试",
-      "phase": "P2",
-      "implementer": "LUNA",
-      "reviewer": "Lead + Sol",
-      "status": "RUNNING",
-      "priority": "P1",
-      "dependencies": [
-        "T49",
-        "T50",
-        "T51",
-        "T52",
-        "T53",
-        "T54",
-        "T55"
-      ],
-      "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/",
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/",
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/BallLayers/",
-        "Docs/Design/BallLayers/"
-      ],
-      "exclusive_locks": [
-        "unity-integration"
-      ],
-      "external_requirements": [],
-      "steps": [
-        "按 Docs/Design/CODE_CONVENTIONS.md 建立 VRCKatamari.Runtime（含 U# Assembly Definition）与 VRCKatamari.Tests.EditMode 程序集。",
-        "把 GroundContact、RadialProxy、Attachment、SizeModel、VisualRoll、Sweep、FollowRig、RemoteProxy 八层逻辑写成 Runtime/BallLayers/<Module>/ 下的 U# 兼容静态数学（必要时加 Behaviour），不保留并行草稿。",
-        "把各层 Python 测试的固定用例改写成 NUnit EditMode 测试；全部通过后把 Python 模型、RuntimeDraft 和对应 Docs/tests 移入归档。",
-        "建一个 Labs/BallLayers 实验场景，用真实运行时组件逐层可视化（含 +X/+Y/+Z 方向探针），供人工检查。",
-        "RemoteProxy 只用合成 ballSeed；生产键语义等 T06。"
-      ],
-      "acceptance_criteria": [
-        "MCP run_tests（EditMode，VRCKatamari.Tests.EditMode）全部通过，UdonSharp 全量编译后 Console 无新增错误。",
-        "每层只有一份实现；Docs/Design/BallLayers 只保留接口/设计说明与研究依据。",
-        "BallLayers 实验场景可打开，各层读数与方向探针可人工核对；不改正式世界场景。"
-      ],
-      "source_ids": [
-        "S05",
-        "S07",
-        "S08",
-        "S11",
-        "S13"
-      ],
-      "workflow_suite": "D球层实验台",
-      "execution_note": "2026-11-14 重新定义：放弃旧的一次性 Builder + 自制测试运行器路线（失败产物已删除），改为运行时代码 + NUnit + MCP 直接搭场景。"
-    }
-  ],
-  "releaseProfiles": {
-    "free_launch": {
-      "target": "T43",
-      "paid_store_enabled": false
-    },
-    "paid_launch": {
-      "target": "T43",
-      "paid_store_enabled": true,
-      "additional_required": [
-        "T41"
-      ]
-    }
+  {
+   "id": "T01",
+   "title": "新版PVP参考规则与差异表",
+   "phase": "P0",
+   "implementer": "LUNA",
+   "reviewer": "Sol",
+   "status": "DONE",
+   "execution_note": "2026-10-12 Lead验收DONE（规划中的Sol评审角色未配置，由Lead承担评审）：rules_matrix三列分明；unknown_handling.md逐项给出全部原作unknown（U01–U43d）的项目处理办法并引用决策表与T任务。处理方式经Lead批准为当前项目临时方向；参数均为可配置原型，不是原作数值，也未冻结规则或接口（T06负责）。仍需用户在T39前决定：首发地图数、正式公平门槛、回合结构/时长——这些已有明确的决定时点，不阻塞T01。",
+   "evidence_paths": [
+    "Docs/Research/ReferenceRules/rules_matrix.md",
+    "Docs/Research/ReferenceRules/unknown_handling.md",
+    "Docs/Archive/Handoffs/Research_ReferenceRules.md",
+    "Docs/Preparation/RuleDecisions/decisions.json"
+   ],
+   "priority": "P0",
+   "dependencies": [],
+   "write_scope": [
+    "Docs/Research/ReferenceRules/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "核对2025版正式玩法资料/获准实机记录。",
+    "分别记录交分、吞噬、复活、道具、结束结算；每项附来源/时间点。",
+    "未知项标unknown，建议规则另列，不补造原作数据。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "事实、未知、项目建议三列明确。",
+    "至少明确本项目如何处理所有unknown；由Sol批准。"
+   ],
+   "source_ids": [
+    "S01",
+    "S02",
+    "S03",
+    "S04"
+   ]
   },
-  "repositoryLayoutVersion": 1,
-  "repositoryLayoutNote": "Unity工程位于VRChatKatamariDanacyUnity/；研究、证据及工程辅助文件位于Docs/；Marketing/保持原路径。原始任务包保留在Docs/Source/。T49–T55离线模块草案与规格已验收；T56正式远端接线仍TODO；新增用户授权T57单写者Unity实验台。"
+  {
+   "id": "T02",
+   "title": "资产候选、授权与风格清单",
+   "phase": "P0",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "DONE",
+   "execution_note": "2026-10-12 DONE：36种物件概念有用途、26项有具体库存文件候选，无候选素材进入Unity或正式目录，覆盖见 Docs/Preparation/AssetCoverage/coverage.csv。逐文件授权、Unity导入、世界米制尺寸与碰撞性能尚未验收（Blender预览见 Docs/AssetIntake/Preview/README.md），留给后续资产任务。",
+   "evidence_paths": [
+    "Docs/Archive/Reviews/reference_rules_and_assets_acceptance.md",
+    "Docs/Preparation/AssetCoverage/coverage.csv",
+    "Docs/Research/AssetManifest/picnic_candidates.csv",
+    "Docs/AssetIntake/license_gaps.md",
+    "Docs/Archive/Handoffs/AssetIntake.md",
+    "Docs/AssetIntake/DirectDownload/manifest.json",
+    "Docs/Archive/Handoffs/AssetIntake_DirectDownload.md",
+    "Docs/AssetIntake/Preview/README.md",
+    "Docs/AssetIntake/Preview/renders/render_report.json"
+   ],
+   "priority": "P1",
+   "dependencies": [],
+   "write_scope": [
+    "Docs/AssetIntake/",
+    "Docs/Research/AssetManifest/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "下载仅使用获准账户与免费/已授权内容"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "从作者候选包按第一图需求筛选，不批量无差别导入。",
+    "保存页面和包内LICENSE、哈希及商业使用字段。",
+    "隔离带脚本/授权不明资源，生成样例预览。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "20–40种首图基础物件有候选和用途。",
+    "无授权不明资源进入正式目录。"
+   ],
+   "source_ids": [
+    "S24",
+    "S25",
+    "S26",
+    "S27",
+    "S28",
+    "S29",
+    "S30"
+   ]
+  },
+  {
+   "id": "T03",
+   "title": "主题风格与宣传前期分镜",
+   "phase": "P0",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "DONE",
+   "execution_note": "2026-10-12 独立Luna评审两条验收均PASS，Lead验收DONE：三语候选文案及四类文字分镜可独立推进，均标为概念/待实机，无未实现功能承诺、无未授权品牌资产。名称候选查重见P14，未定名、未法律清权；未选视觉方向、未生成正式封面，未发布——这些不是T03验收条件。",
+   "evidence_paths": [
+    "Docs/Archive/Reviews/reference_rules_and_assets_acceptance.md",
+    "Marketing/Preproduction/theme_copy.md",
+    "Marketing/Preproduction/storyboard.md",
+    "Docs/Archive/Handoffs/Marketing_Preproduction.md"
+   ],
+   "priority": "P1",
+   "dependencies": [],
+   "write_scope": [
+    "Marketing/Preproduction/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "拟独立滚球/甲虫主题与日英文案，不使用官方角色。",
+    "设计封面构图和双手推球、交分、追逐四类镜头草图。",
+    "标记哪些画面是概念图，哪些必须等待实机。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "可独立于程序推进。",
+    "没有未经实现的功能承诺或未授权品牌资产。"
+   ],
+   "source_ids": [
+    "S36"
+   ]
+  },
+  {
+   "id": "T04",
+   "title": "Station、输入与缩放最小平台实验",
+   "execution_note": "2026-10-14 RUNNING：PC桌面层面已过——Station入座、坐姿Jump不退座、单击/长按只计一次、三条离开路径恢复JumpImpulse到3、退出/Respawn、入座后本地Interact提示关闭，证据见 Docs/Evidence/StationPlatform/。未完成：步骤4（手追踪与原生舒适转向事件差异、眼高范围）须戴头显实测，修复后Respawn/自然离座恢复未测；GetJumpImpulse()四次会话初始读值均为0，正式世界需显式配置移动参数。",
+   "phase": "P0",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "RUNNING",
+   "priority": "P0",
+   "dependencies": [
+    "T00"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/StationPlatform/",
+    "Docs/Evidence/StationPlatform/"
+   ],
+   "exclusive_locks": [
+    "unity-platform-lab"
+   ],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "做移动Station+独立FollowRig，排除Mesh滚动旋转。",
+    "验证InputJump、Disable Station Exit、保存/恢复JumpImpulse及Respawn退出。",
+    "记录A手追踪与B原生舒适转向设置的事件差异，测试眼高工作范围。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "PC与VR实验步骤可复现。",
+    "能明确决定Station是否为主方案；未通过不扩正式模块。"
+   ],
+   "source_ids": [
+    "S06",
+    "S07",
+    "S08",
+    "S10"
+   ]
+  },
+  {
+   "id": "T05",
+   "title": "真人VR平台与安全退出门禁G1",
+   "phase": "P0",
+   "implementer": "HUMAN",
+   "reviewer": "Human + Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T04"
+   ],
+   "write_scope": [
+    "Docs/Evidence/G1/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "实际头显、控制器和用户参与"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "佩戴头显分别体验A/B候选，开关菜单和舒适转向。",
+    "测试大/小Avatar、松手、退出、VRChat Respawn。",
+    "批准方案或把失败退回T04，不把主观不适交给文本Agent判定。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "Jump不退座且只触发一次。",
+    "能随时退出；头部不随球滚转。",
+    "实际舒适性、疲劳、未测控制器列清楚。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T06",
+   "title": "公共接口、世界尺度与数据版本冻结",
+   "phase": "P1",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T01",
+    "T05"
+   ],
+   "write_scope": [
+    "Docs/Contracts/",
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Core/Contracts/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "冻结BallState、ItemDefinition/Instance、MatchState及资源价值单位。",
+    "定义稳定ID、世代、请求幂等、Owner矩阵及事件边界。",
+    "固定公共世界尺度，禁止私人独立地图缩放；发布contracts v1。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "所有跨模块字段有单位、写入者、读取者和默认值。",
+    "旧聊天矛盾在决策记录中被覆盖。"
+   ],
+   "source_ids": [
+    "S11",
+    "S12",
+    "S13",
+    "S14"
+   ]
+  },
+  {
+   "id": "T07",
+   "title": "VR A双控制器与校准",
+   "phase": "P2",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T06"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Input/DualHand/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现固定轮廓件、活动件、抓取偏移、平面投影、行程Clamp和回中。",
+    "将位置归一化为forward/strafe/yaw，处理菜单释放与失去追踪。",
+    "制作校准UI、输入诊断和专属测试Prefab。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "不依赖FBT/胸骨推断。",
+    "超出行程不增加速度；松手无残留驱动。",
+    "坐姿站姿都可手动调适而不分两套逻辑。"
+   ],
+   "source_ids": [
+    "S06",
+    "S10"
+   ]
+  },
+  {
+   "id": "T08",
+   "title": "VR B与Desktop输入适配",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T06"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Input/Standard/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现原生移动轴、观察参考和InputJump路由。",
+    "输出与A相同ControlIntent，不在本模块直接移动玩家。",
+    "提供模式切换和原生按键文字提示。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "PC无必需特殊字母键。",
+    "与A相同限幅/速度能力；Jump只使用道具。"
+   ],
+   "source_ids": [
+    "S06"
+   ]
+  },
+  {
+   "id": "T09",
+   "title": "球形运动、扫掠与追尾",
+   "phase": "P2",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T06"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Motion/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现共享运动模型、加减速、转向、侧移和环境扫掠。",
+    "实现独立FollowRig高度/方向过滤及卡住/出界恢复。",
+    "把玩家胶囊排除玩法碰撞，分离姿态与球体自转。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "高速不穿薄墙，坡道/墙角/大球不卡死。",
+    "A/B/Desktop输入进入同一运动代码。",
+    "镜头不继承球体roll/pitch。"
+   ],
+   "source_ids": [
+    "S07",
+    "S08"
+   ]
+  },
+  {
+   "id": "T10",
+   "title": "成长与径向凹凸代理实验",
+   "phase": "P2",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T09"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Shape/",
+    "Docs/Tests/Shape/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现有效体积到半径和稀疏方向/长杆极值更新。",
+    "测试同方向多物贡献、移除、核心吞没、交分重建。",
+    "先只驱动视觉/音效；实际影响物理另设flag并记录比较。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "杆可以随贡献移除/核心长大回落。",
+    "没有无限突出、NaN或旧物件被一并放大。",
+    "明确可视代理与共享碰撞边界。"
+   ],
+   "source_ids": [
+    "S05"
+   ]
+  },
+  {
+   "id": "T11",
+   "title": "静态物件注册与近邻拾取",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T06"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Collectibles/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现定义/实例数组、区域索引、尺寸门槛和确认/预测分离。",
+    "注册稳定spawnId与spawnGeneration。",
+    "仅查询附近候选，提供批量申请队列接口。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "无全图每帧扫描。",
+    "同定义不同实例不混淆。",
+    "待确认物品不产生可交分收益。"
+   ],
+   "source_ids": [
+    "S13",
+    "S16"
+   ]
+  },
+  {
+   "id": "T12",
+   "title": "本地吸附与远端装饰重建",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T09",
+    "T11"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Presentation/Ball/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现世界位姿到局部吸附、池化和埋藏回收。",
+    "远端按seed+实例/世代/序号生成少量装饰，不复制附着树。",
+    "保留明确球界和头部安全区局部渐隐。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "球芯增长不放大已附着杯子。",
+    "同种物件多次收集不重叠在相同伪随机位置。",
+    "装饰不参与PVP判定。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T13",
+   "title": "物件争抢与比赛权威账本",
+   "phase": "P2",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T06"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Networking/Ledger/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现Owner裁决、请求身份、批处理、幂等和唯一获胜者。",
+    "有效尺寸来自确认账本，验证合理位置/速度/状态。",
+    "持久确认写同步状态，事件只加速请求/展示。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "重复/乱序/竞争请求只确认一次。",
+    "旧世代请求不能抢新刷新物。",
+    "可输出可复现的裁决序列日志。"
+   ],
+   "source_ids": [
+    "S11",
+    "S12",
+    "S13",
+    "S14"
+   ]
+  },
+  {
+   "id": "T14",
+   "title": "球核心状态同步与插值",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T09",
+    "T13"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Networking/BallState/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "同步位置、速度、判定半径、生命/道具/外观摘要。",
+    "设计连续变换与手动业务状态分离，避免多写入者。",
+    "记录实际更新频率、插值与拥塞，不假定固定60Hz。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "远端球体位置和判定半径可追溯。",
+    "不高频转移小物件Ownership。",
+    "网络拥塞时队列受限。"
+   ],
+   "source_ids": [
+    "S12",
+    "S13",
+    "S14"
+   ]
+  },
+  {
+   "id": "T15",
+   "title": "快照、迟到加入与裁决迁移",
+   "phase": "P2",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T13"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Networking/Recovery/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "建立完整版本快照及物件分块、commitSequence。",
+    "实现新Owner接管epoch、未确认重试、迟到者加载。",
+    "快照不完整时安全取消回合，禁止猜测比分。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "不同分块版本不混拼。",
+    "Owner离场后恢复或明确取消。",
+    "迟到者不复活已被领取资源。"
+   ],
+   "source_ids": [
+    "S11",
+    "S12",
+    "S13",
+    "S14"
+   ]
+  },
+  {
+   "id": "T16",
+   "title": "磁铁与火箭单槽道具",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T09",
+    "T11",
+    "T13"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Powerups/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现单槽及激活事务、公共速度曲线和结束清理。",
+    "磁铁限定近邻/尺寸/遮挡并共用拾取裁决。",
+    "实现Jump路由、KO/退出取消及可配置视觉回调。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "不穿墙吸、不越级吸。",
+    "长按/重复事件不能重复用。",
+    "火箭不改变HMD视角或玩家FOV。"
+   ],
+   "source_ids": [
+    "S02",
+    "S03",
+    "S06"
+   ]
+  },
+  {
+   "id": "T17",
+   "title": "大厅加入区与回合状态机",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T06",
+    "T13"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/MatchFlow/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "Trigger本地检测+名单去重+周期区域核验。",
+    "实现倒计时终点、锁名单、迟到排队与人数不足处理。",
+    "实现准备/比赛/结算/重置/恢复阶段，清理Station与输入。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "进出传送不造成幽灵报名。",
+    "同一时刻只有一个正式局和一致名单。",
+    "退出/Resetting恢复所有玩家设置。"
+   ],
+   "source_ids": [
+    "S09",
+    "S10"
+   ]
+  },
+  {
+   "id": "T18",
+   "title": "交分、吞噬、KO及重生事务",
+   "phase": "P2",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T09",
+    "T13"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/PvP/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现交分价值守恒和免费球芯不可反复交分。",
+    "实现唯一吞噬裁决、受限收益、KO/保护与安全重生点。",
+    "处理交分/被吞同帧、截止时刻和双向命中顺序。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "积分/体积不凭空复制。",
+    "已交存积分不被吞掉。",
+    "双向竞争只产出一组合法事务。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T19",
+   "title": "HUD、设置及多语言",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T06"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/UI/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现比分/未交存资源/道具/倒计时/威胁状态。",
+    "提供A/B、校准、音量、舒适和退出UI。",
+    "建立日/英/简中键值表，不写死按键型号。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "HUD不遮球与前路。",
+    "含退出比赛入口。",
+    "威胁信息不只靠颜色。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T20",
+   "title": "资产导入与地图数据烘焙工具",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T02",
+    "T06"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/",
+    "Docs/Art/Processed/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "自动检查单位、材质、ID、支撑关系与授权。",
+    "生成Prefab、简化Collider、远端代理和定义数组。",
+    "分开可卷物与不可卷静态背景，保留.meta和来源索引。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "测试输入可重复产出相同ID映射。",
+    "过多材质、坏引用、support环可报错。",
+    "不把Editor API带入Udon。"
+   ],
+   "source_ids": [
+    "S16",
+    "S24",
+    "S25",
+    "S26",
+    "S27",
+    "S30"
+   ]
+  },
+  {
+   "id": "T21",
+   "title": "第一图野餐灰盒与资源布置",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T06",
+    "T20"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Maps/Picnic/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "搭四出生区、环路、交分锚点和侧路。",
+    "按尺寸带手工布置可达资源，计算初始可捡收益。",
+    "添加关键地标、边界、重生点和道具点。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "所有必经路线无需跳跃。",
+    "出生资源量和路径差异可量化。",
+    "最大球主路有足够宽度。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T22",
+   "title": "支撑坠落、资源补货与掉落碎团",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T11",
+    "T13",
+    "T21"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/WorldDynamics/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实现supportParent规则与共享坠落落点/开始时间。",
+    "低阶资源按区补货、生成预告和新世代。",
+    "PVP损失用受限碎团表示，记录价值守恒与过期。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "无错误悬浮或各客户端不同可抢落点。",
+    "复活玩家有低阶资源。",
+    "有限动态池不无限生成刚体。"
+   ],
+   "source_ids": [
+    "S13",
+    "S16"
+   ]
+  },
+  {
+   "id": "T23",
+   "title": "分层音效、特效和振动",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T06",
+    "T02"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Feedback/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "建立材质短音与优先级池，合并高频小拾取。",
+    "实现道具、成长、危险、交分和结果的事件反馈。",
+    "本地细节/远端摘要和低特效模式分开。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "危险提示不被付费或装饰覆盖。",
+    "4球连续拾取音量不叠爆。",
+    "无强制抖屏和全场喊话。"
+   ],
+   "source_ids": [
+    "S29",
+    "S31",
+    "S32"
+   ]
+  },
+  {
+   "id": "T24",
+   "title": "外观插槽、预览与免费切换",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T06",
+    "T20"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Cosmetics/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "定义skin/badge/podium等有限插槽。",
+    "实现免费切换、尺寸不同的预览和默认回退。",
+    "把威胁环/保护状态与外观材质隔离。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "切换不改玩法数据。",
+    "大球附着物遮挡后的效果如实可预览。",
+    "未接商城也可独立运行。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T25",
+   "title": "偏好和免费进度持久化",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T06",
+    "T19"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Persistence/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "等待恢复完成后加载校准/音量/外观偏好。",
+    "实现schemaVersion、默认值迁移和去抖保存。",
+    "本局奖励按matchId去重，不存假付费权限。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "重新进入偏好恢复。",
+    "恢复前不覆盖旧数据。",
+    "退款/未购买不被PlayerData绕过。"
+   ],
+   "source_ids": [
+    "S15"
+   ]
+  },
+  {
+   "id": "T26",
+   "title": "一图两人纵切片集成",
+   "phase": "P3",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T07",
+    "T08",
+    "T09",
+    "T11",
+    "T12",
+    "T13",
+    "T14",
+    "T16",
+    "T17",
+    "T18",
+    "T19",
+    "T21"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Scenes/PlayableSlice.unity",
+    "Docs/Integration/"
+   ],
+   "exclusive_locks": [
+    "unity-integration"
+   ],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "合并模块Prefab而非让模块Agent改同一主Scene。",
+    "跑通大厅-比赛-交分-KO-结算-返回大厅全链。",
+    "生成Build & Test版本及双客户端测试说明。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "一个完整回合无手工改变量救场。",
+    "无编译错误、重复Owner写入或缺失引用。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T27",
+   "title": "真人两人核心玩法门禁G3",
+   "phase": "P3",
+   "implementer": "HUMAN",
+   "reviewer": "Human + Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T26"
+   ],
+   "write_scope": [
+    "Docs/Evidence/G3-Core/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "至少两客户端/测试账号及用户授权"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "实际两客户端，一VR一PC及双VR条件记录。",
+    "争抢同物、交分、KO、重复按键和回合结束。",
+    "判断A/B控制公平感与是否有继续玩下一局的意愿。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "同物唯一收益、正确赢家与稳定退出。",
+    "不同输入均能完成比赛。",
+    "未测环境明确。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T28",
+   "title": "断线/延迟/补货集成强化",
+   "phase": "P3",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T15",
+    "T22",
+    "T27"
+   ],
+   "write_scope": [
+    "Docs/Integration/NetworkFaults/",
+    "Docs/Tests/Network/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "加入中途离场/恢复、延迟/重复/乱序与快照中断测试。",
+    "核对补货世代、掉落碎团与资源账本。",
+    "调限流、回滚和恢复回合取消逻辑。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "故障矩阵每项有真实日志。",
+    "不出现资源复制或幽灵物件。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T29",
+   "title": "凹凸代理是否参与物理的门禁",
+   "phase": "P3",
+   "implementer": "HUMAN",
+   "reviewer": "Human + Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T10",
+    "T27"
+   ],
+   "write_scope": [
+    "Docs/Evidence/ShapeDecision/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "真人VR及至少一个远端观察者"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "比较平滑球、单长杆和多长杆，记录体感与公平。",
+    "决定首发只保留视觉代理，或批准受限物理影响。",
+    "需要影响物理时追加共享外形摘要任务，不直接把装饰当碰撞。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "决定与依据明确。",
+    "不同客户端PVP判定不靠不同随机外观。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T30",
+   "title": "野餐图美术完成",
+   "phase": "P4",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T20",
+    "T21",
+    "T27"
+   ],
+   "write_scope": [
+    "Docs/Art/Maps/Picnic/",
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Maps/PicnicArt/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "用通过授权的资产替换灰盒，保持路径与ID。",
+    "统一材质色板、烘焙/简化灯光、布置音景。",
+    "检查每个可卷实体的Render/Collider/支撑关系。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "美术替换不破坏已测路线。",
+    "资源清单和代理完整。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T31",
+   "title": "玩具房灰盒与差异化路线",
+   "phase": "P4",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T20",
+    "T27"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Maps/Toyroom/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "设计地毯出生区、书本缓坡、中央交分和侧路。",
+    "复用代码但建立独立布局/资源量表。",
+    "用正式最大球检查门洞和成长后脱困。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "与野餐图路径不同。",
+    "不依赖复杂物理倒塌或跳跃。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T32",
+   "title": "玩具房美术完成",
+   "phase": "P4",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T31",
+    "T20"
+   ],
+   "write_scope": [
+    "Docs/Art/Maps/Toyroom/",
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Maps/ToyroomArt/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "批量制作无品牌积木/文具，导入获准玩具资产。",
+    "保持拾取颗粒度与视觉统一，制作地图预览。",
+    "完成碰撞/资源/支撑清单。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "无未授权品牌角色。",
+    "地图版本校验与注册ID一致。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T33",
+   "title": "结果板、领奖台和大厅成品",
+   "phase": "P4",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T17",
+    "T18",
+    "T24"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/LobbyPresentation/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "显示排名、并列、比分及球体缩略模型。",
+    "设置自愿合照位、侧边商店位和观战入口。",
+    "生成结果短特效并限制音量/粒子范围。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "不强制移动私人Avatar到领奖台。",
+    "领奖与加入区互不遮挡。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T34",
+   "title": "商家准入与商品规划人工前置",
+   "phase": "P1",
+   "implementer": "HUMAN",
+   "reviewer": "Human + Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T00"
+   ],
+   "write_scope": [
+    "Docs/Commerce/Approvals/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "用户账号操作"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "确认是否已经具备Creator Economy资格。",
+    "由用户提交/批准申请、付款资料及商品目录。",
+    "未获准时记录blocked，允许mock商城继续开发。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "资格状态可核实。",
+    "没有Agent自行提交敏感资料或消费。"
+   ],
+   "source_ids": [
+    "S18",
+    "S23"
+   ]
+  },
+  {
+   "id": "T35",
+   "title": "商城mock与官方权益适配",
+   "phase": "P4",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T24",
+    "T25"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Commerce/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "先用mock测未拥有/加载/拥有/失效/错误状态。",
+    "按SDK接口适配Store查询和购买回调。",
+    "封装Listing打开与商品描述，价格使用Credits。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "无真实商品也可测试UI。",
+    "PlayerData不能伪造付费权益。",
+    "重复回调不重复奖励。"
+   ],
+   "source_ids": [
+    "S19",
+    "S20",
+    "S21",
+    "S22"
+   ]
+  },
+  {
+   "id": "T36",
+   "title": "正式权益绑定与安全审查",
+   "phase": "P4",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T34",
+    "T35"
+   ],
+   "write_scope": [
+    "Docs/Commerce/LiveBindings/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "绑定用户批准的Product/Listing ID。",
+    "检查权益恢复、失效、退款回退与PC-only说明。",
+    "确认不付费仍享完整玩法，不引入付费战力。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "正式权益只来自官方查询。",
+    "无客户端自报拥有或无限重试。"
+   ],
+   "source_ids": [
+    "S20",
+    "S21",
+    "S22"
+   ]
+  },
+  {
+   "id": "T37",
+   "title": "最终资源授权与主题审核",
+   "phase": "P4",
+   "implementer": "HUMAN",
+   "reviewer": "Human + Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T02",
+    "T30",
+    "T32",
+    "T23"
+   ],
+   "write_scope": [
+    "Docs/Evidence/LicenseApproval/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "用户最终授权审核"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "审阅实际使用模型、音效、字体、音乐、宣传资产授权。",
+    "核对独立角色/名称、引用素材和署名。",
+    "不明确的素材替换，不以CC0候选页担保整个网络来源。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "每项发布资产有对应manifest。",
+    "未知许可不进入release。"
+   ],
+   "source_ids": [
+    "S22",
+    "S30",
+    "S36"
+   ]
+  },
+  {
+   "id": "T38",
+   "title": "四人性能与回合耐久测试",
+   "phase": "P5",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T28",
+    "T29",
+    "T30",
+    "T32",
+    "T33",
+    "T23",
+    "T25"
+   ],
+   "write_scope": [
+    "Docs/Evidence/Performance/",
+    "Docs/Integration/ReleaseCandidate/"
+   ],
+   "exclusive_locks": [
+    "unity-integration"
+   ],
+   "external_requirements": [
+    "四客户端真实条件或明确标注未测"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "建立四球高密度道具/掉落场景并记录P95/P99。",
+    "执行20回合清理测试，测Renderer/音源/刚体/网络队列。",
+    "按瓶颈优化，低特效不改变判定。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "无随回合累积的物件/Station/内存增长。",
+    "记录机器、头显和Avatar条件，不虚报FPS。"
+   ],
+   "source_ids": [
+    "S12",
+    "S16"
+   ]
+  },
+  {
+   "id": "T39",
+   "title": "四人地图公平与体验终验",
+   "phase": "P5",
+   "implementer": "HUMAN",
+   "reviewer": "Human + Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T38"
+   ],
+   "write_scope": [
+    "Docs/Evidence/FinalPlaytest/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "4名测试者或获准的等效测试条件"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "多局轮换出生点和A/B/PC，测试追逐、补货与交分。",
+    "检查重生无物可吃、永远领先、交分点堵塞等软锁。",
+    "批准首发两图或降为一图完整体验，不为数量强行上线。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "所有关键门禁有真人证据。",
+    "剩余缺陷分级，阻断级为零才放行。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T40",
+   "title": "真实宣传成品与多语言发布文案",
+   "phase": "P5",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T03",
+    "T30",
+    "T32",
+    "T39"
+   ],
+   "write_scope": [
+    "Marketing/Release/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "实际拍摄和素材授权"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "录获准实机素材，按前期分镜制作短片/截图。",
+    "Blender构图+可选AI润色仅用于标识清楚的插画。",
+    "核对功能、人数、PC-only与日英文案，人工排版文字。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "至少有真实游戏画面。",
+    "无将概念插画冒充实机。",
+    "参与录制者同意。"
+   ],
+   "source_ids": [
+    "S36"
+   ]
+  },
+  {
+   "id": "T41",
+   "title": "内购真实交易与恢复人工验收",
+   "phase": "P5",
+   "implementer": "HUMAN",
+   "reviewer": "Human + Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T36",
+    "T37"
+   ],
+   "write_scope": [
+    "Docs/Evidence/Commerce/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "获批商家资格与用户付款授权"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "由用户批准小额测试购买，不由Agent自行付款。",
+    "测试重进世界、跨回合、默认回退和重复回调。",
+    "记录商品ID和结果但不保存支付敏感信息。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "真实权益加载/恢复通过。",
+    "未测退款列清楚，不编造成功。"
+   ],
+   "source_ids": [
+    "S21",
+    "S22"
+   ]
+  },
+  {
+   "id": "T42",
+   "title": "发布候选集成、许可和回滚包",
+   "phase": "P6",
+   "implementer": "SOL",
+   "reviewer": "Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T39",
+    "T40",
+    "T37"
+   ],
+   "write_scope": [
+    "Docs/Release/"
+   ],
+   "exclusive_locks": [
+    "unity-integration"
+   ],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "固定提交和构建，生成已知问题、版本号及第三方清单。",
+    "若Creator Economy未获批，采用free_launch关闭正式商城；paid_launch必须额外完成T41。",
+    "复核首发范围、UI退出、商店、操作教学。",
+    "建立上一可用版本/关闭商店feature flag回滚方案。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "所有P0依赖DONE且证据完整。",
+    "无未授权自动发布动作。",
+    "未过真实购买门禁时release feature flag关闭收费，不影响免费游戏发布。"
+   ],
+   "source_ids": [],
+   "conditional_dependencies": {
+    "paid_launch": [
+     "T41"
+    ]
+   }
+  },
+  {
+   "id": "T43",
+   "title": "用户批准公开发布",
+   "phase": "P6",
+   "implementer": "HUMAN",
+   "reviewer": "Human + Sol",
+   "status": "TODO",
+   "priority": "P0",
+   "dependencies": [
+    "T42"
+   ],
+   "write_scope": [
+    "Docs/Release/Approval/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "用户发布批准"
+   ],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "审核正式世界页面、商品描述、宣传素材。",
+    "明确批准后才上传公开/发帖/启用正式Listing。",
+    "记录发布版本和实际平台信息。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "用户明确批准可追溯。",
+    "发布后入口、购买与退出可访问。"
+   ],
+   "source_ids": [
+    "S22",
+    "S36"
+   ]
+  },
+  {
+   "id": "T44",
+   "title": "第三主题夜市（非首发阻塞）",
+   "phase": "P7-OPTIONAL",
+   "implementer": "LUNA",
+   "reviewer": "Independent Luna; escalate to Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T39",
+    "T20"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Maps/NightMarket/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "读取本任务依赖的交付物与固定版本契约。",
+    "复用食物和箱筐，设计环路与穿摊通道。",
+    "建立夜间可读性与简化灯光预算。",
+    "重复地图/性能/授权门禁，不自动并入当前release。",
+    "提交文件、实际测试证据及未测项，进入REVIEW；验收通过后才能DONE。"
+   ],
+   "acceptance_criteria": [
+    "两图首发不因本任务被阻塞。",
+    "夜市存在路径差异和完整授权。"
+   ],
+   "source_ids": []
+  },
+  {
+   "id": "T45",
+   "title": "统一输入意图层（A双控制器/B原生/Desktop）离线契约与参考实现",
+   "phase": "P1",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T01"
+   ],
+   "write_scope": [
+    "Docs/Design/ControlIntent/",
+    "Docs/tests/control_intent/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "无（纯离线；真机映射仍待T07/T08）"
+   ],
+   "steps": [
+    "读取Docs/01_GAME_DESIGN.md第4节、Docs/02_TECHNICAL_CONTRACTS.md、Docs/Research/ReferenceRules/，以及Docs/Evidence/StationPlatform/已记录的PC实测事实（交互为鼠标左键、E键无效；坐姿Jump不退座且只计一次、长按不重复；入座后本地交互提示关闭）。",
+    "定义唯一意图集合（Move2D/Look2D/UseItem或Jump/Interact/ExitStation/Respawn/ComfortTurn设置），为A双控制器、B原生VR、Desktop三种输入源各写映射表；运动层不得感知设备细节。",
+    "写host-only标准库Python参考实现，覆盖边沿触发、去抖、坐姿屏蔽与恢复、菜单打开时不产生游戏意图。",
+    "写Docs/tests/control_intent/单元测试（含__init__.py），断言三种输入源在同一段脚本化输入下产生完全一致的意图序列。",
+    "记录草案接口、未决项与必须由T07/T08真机确认的条目；标注DRAFT、不冻结接口。",
+    "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
+   ],
+   "acceptance_criteria": [
+    "三种输入源在同一脚本输入下产生完全一致的意图序列，且有测试断言。",
+    "边沿、去抖、坐姿屏蔽、菜单态四类语义有测试覆盖，且与Docs/Evidence/StationPlatform/的PC实测事实一致。",
+    "文档分列已定/DRAFT/未决，不声称VR通过、不冻结公共接口、不声称Udon运行时验证。"
+   ],
+   "source_ids": [
+    "S07",
+    "S08"
+   ]
+  },
+  {
+   "id": "T46",
+   "title": "球形运动、追尾与眼高离线参考模型",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T00"
+   ],
+   "write_scope": [
+    "Docs/Design/BallMotion/",
+    "Docs/tests/ball_motion/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "无（纯离线数值模型；Unity内实际扫掠仍待T09）"
+   ],
+   "steps": [
+    "读取Docs/01_GAME_DESIGN.md、Docs/02_TECHNICAL_CONTRACTS.md的坐标与尺寸约定，以及Docs/Evidence/StationPlatform/中Station加独立FollowRig的现状（姿态与球体自转分离）。",
+    "host-only实现：球心位置与姿态、自转与运动解耦、加减速、转向与侧移、半径成长的尺寸耦合、与解析地面（含缓坡）的扫掠检测、FollowRig高度与方向过滤（忽略roll与pitch）、卡住与出界恢复。",
+    "写数值测试：高速下不穿透薄墙、镜头不继承roll与pitch、缓坡不弹跳不卡死、追尾延迟有界、半径变化后参数仍合法。",
+    "输出可调参数表（带单位量纲）与未决项（哪些参数必须等T06冻结或真机标定）。",
+    "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
+   ],
+   "acceptance_criteria": [
+    "扫掠不穿透、相机无roll与pitch、缓坡通过、追尾延迟有界，四类均有可复现测试。",
+    "参数齐全且量纲一致；半径成长与运动参数的耦合关系有说明。",
+    "明确声明为参考实现，不等同于Udon运行时、Unity验收或设计冻结。"
+   ],
+   "source_ids": [
+    "S07",
+    "S08"
+   ]
+  },
+  {
+   "id": "T47",
+   "title": "拾取、吸附与成长判定离线参考模型",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T01"
+   ],
+   "write_scope": [
+    "Docs/Design/PickupAbsorb/",
+    "Docs/tests/pickup_absorb/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "无（纯离线算法与不变量；场景内真实物件注册仍待T11/T12）"
+   ],
+   "steps": [
+    "读取Docs/02_TECHNICAL_CONTRACTS.md第3、5节（成长、吸附、凹凸，以及一件物品两人抢的协议）与Docs/01_GAME_DESIGN.md。",
+    "host-only实现：静态物件注册表与空间网格、近邻查询、可吸附判定（半径、尺寸、类型、价值）、吸附的幂等计数、本地吸附与远端装饰重建的语义边界。",
+    "写测试：同一物件只计一次（幂等与重复包重放）、两球同时够到时由权威裁决且本地预测可回滚、吸附集合可从权威状态重建、半径成长单调且有上限。",
+    "记录未决项：吸附阈值与价值表仍是草案，等T06冻结；明确本地装饰不参与玩法判定。",
+    "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
+   ],
+   "acceptance_criteria": [
+    "幂等单次计数、重放不重复计分、本地预测可回滚、吸附集合可重建，四类测试通过。",
+    "成长半径单调且上限明确；本地与远端职责边界写清（装饰不得决定碰撞与计分）。",
+    "声明为参考实现，不声称Unity或Udon验证。"
+   ],
+   "source_ids": [
+    "S05",
+    "S07"
+   ]
+  },
+  {
+   "id": "T48",
+   "title": "争抢账本、生命周期事务与回合状态机离线参考模型",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T01"
+   ],
+   "write_scope": [
+    "Docs/Design/Ledger/",
+    "Docs/tests/ledger/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "无（纯离线协议模型；网络实测仍待T13/T15/T28）"
+   ],
+   "steps": [
+    "读取Docs/02_TECHNICAL_CONTRACTS.md第4、5节（数据定义、一件物品两人抢）与Docs/01_GAME_DESIGN.md第3节（PVP、淘汰与重生）。",
+    "host-only实现：账本事务（幂等键、本地预测与权威确认、结算条件）、争抢裁决（先到与同帧并列）、KO与重生事务、迟到加入的快照与状态迁移、断线迁移、回合状态机（大厅到准备到进行到结算回大厅）。",
+    "写测试：重复包与重放不重复计分；迟到加入得到一致快照；KO后重生状态合法；非法状态迁移被拒绝；回合结束不依赖任何单客户端本地状态。",
+    "记录未决项：公平阈值、回合时长、结算细则仍属用户未决问题（见Docs/08_SOURCES_AND_OPEN_QUESTIONS.md），实现用可替换参数占位。",
+    "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
+   ],
+   "acceptance_criteria": [
+    "幂等计分、重放一致、迟到加入快照一致、非法迁移被拒绝，四类测试通过。",
+    "仅确认账本数值影响分数、银行与PVP；未决的公平与结算参数以显式占位符标出，并链接到未决问题清单。",
+    "声明为参考实现，不声称网络实测或Unity验收。"
+   ],
+   "source_ids": [
+    "S05",
+    "S06"
+   ]
+  },
+  {
+   "id": "T49",
+   "title": "球层·地面接触与支持高度",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T46"
+   ],
+   "write_scope": [
+    "Docs/Design/BallLayers/GroundContact/",
+    "Docs/tests/ball_ground_contact/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
+    "读取Docs/02_TECHNICAL_CONTRACTS.md第3.2、3.3节（接触近似公式与推进顺序）与Docs/Design/BallMotion/（T46基线）。",
+    "只实现本层：给定球芯半径、proper旋转矩阵、可选径向代理点集与地面平面，求支持距离h(-n)=max(r,max_i dot(-n,Q*p_i))、球芯法线坐标及有界纠正；输出`plane_anchor`仅为平面参考点，不冒充代理精确接触点。若后续动力学需要真实接触点，另立数据/几何接口任务。",
+    "实现单步抬升上限与速度扰动上限，保证长棍不会把球弹上天；无代理点时退化为纯球形接触。",
+    "写测试：球形退化为离地=半径；代理突出时支持高度正确抬升；突出量随核心半径增长而自然减小；抬升与扰动被上限截断；法线朝上/斜面/多候选极值的边界用例。",
+    "不要实现：运动积分（T46）、代理点生成与维持（T50）、墙面扫掠（T54）、体积转半径（T52）。文档写明本层只做接触近似，不是完整动力学。",
+    "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
+   ],
+   "acceptance_criteria": [
+    "h(-n)=max(r,max_i dot(-n,Q*p_i)) 与文档公式一致，且有对拍测试；法线坐标、平面offset配对归一化有测试。",
+    "单步抬升与速度扰动有上限且被测试覆盖（长棍不会把球弹飞）；`plane_anchor`明确不是物件接触点。",
+    "无代理点时的球形退化行为正确。",
+    "文档声明：接触近似不等于完整动力学，未做Unity或Udon验证。",
+    "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
+   ],
+   "source_ids": [
+    "S05"
+   ],
+   "workflow_suite": "A接触与外壳",
+   "execution_note": "Lead审查并接受离线草案范围：15项单测及全库247/247通过。plane_anchor仅为参考平面点，不是精确物件接触点。Unity/Udon及对象仍由T57验证。"
+  },
+  {
+   "id": "T50",
+   "title": "球层·径向凹凸代理（小棍采样外壳）",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T46"
+   ],
+   "write_scope": [
+    "Docs/Design/BallLayers/RadialProxy/",
+    "Docs/tests/ball_radial_proxy/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
+    "读取Docs/02_TECHNICAL_CONTRACTS.md第3.2节（N=32固定方向采样、最多4个长物件极值候选、吸附七步、掉落重算）与Docs/Design/BallMotion/。",
+    "只实现本层：维护N个固定方向的采样点与支持长度l_i，维护长物件极值候选（预烘焙端点，不实时扫描全部顶点），提供支持长度查询与突出量 max(0,l_i-r)。",
+    "实现吸附时的更新（把物体简化代理端点转到球局部坐标，只更新附近方向）、掉落时的移除与受影响方向重算（禁止只做持续max）、以及交分/KO大幅缩小时按新账本整体重建。",
+    "写测试：吸附后附近方向支持长度增加且远端方向不变；掉落后支持长度回落（长杆会缩短）；重建后与逐步更新结果一致（交分/KO场景）；候选数量与方向数有上限。",
+    "不要实现：接触判定与支持高度（T49 消费本层输出）、体积转半径（T52）、视觉回收与远端重建（T56）、吸附门槛（T47）。N=32与4个候选均为待性能验证的原型值，必须标注。",
+    "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
+   ],
+   "acceptance_criteria": [
+    "N方向采样与最多4个极值候选的上限有测试覆盖，且参数标注为原型值。",
+    "掉落后支持长度确实回落（针对“只增不减”的经典错误有回归测试）。",
+    "大幅缩小（交分/KO）走整体重建路径，且与逐步更新结果一致。",
+    "文档声明本层为DRAFT，未做性能与Unity验证。",
+    "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
+   ],
+   "source_ids": [
+    "S05"
+   ],
+   "workflow_suite": "A接触与外壳",
+   "execution_note": "Lead审查并接受离线草案范围：10项单测及全库247/247通过。N=32/最多4候选为原型值，Unity/性能仍待T57/后续门禁。"
+  },
+  {
+   "id": "T51",
+   "title": "球层·物体粘贴与附着记录",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T47"
+   ],
+   "write_scope": [
+    "Docs/Design/BallLayers/Attachment/",
+    "Docs/tests/ball_attachment/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
+    "读取Docs/02_TECHNICAL_CONTRACTS.md第3.4节（视觉吸附：世界位姿转局部位姿、Hash规则、保留策略）与Docs/01_GAME_DESIGN.md。",
+    "只实现本层：消费确认事件提供的稳定身份与权威attachSequence，世界位姿转球局部并记录；不得本地补号。区分事件幂等键与契约规定远端Hash字段ballSeed+实例ID+世代+attachSequence，长度前缀编码且不得冒充认证。",
+    "实现完整附着身份与位姿记录的查询、重复事件幂等、撤销、跨局清理和确认快照重建；renderer预算与视觉回收仅由T56负责。",
+    "写测试：局部位姿在球平移旋转后仍还原到正确世界位姿；大球增长不会放大已附着物件的局部尺寸；Hash在不同实例/世代/序列下不碰撞且同输入稳定；保留预算被截断且被合并的物件不丢失账本归属。",
+    "不要实现：吸附门槛与争抢裁决（T47/T48）、几何图形重建与回收预算（T56）、代理支持长度（T50）。",
+    "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
+   ],
+   "acceptance_criteria": [
+    "世界位姿与局部位姿可逆转换有对拍测试。",
+    "大球增长不放大已附着物件（回归测试）。",
+    "权威身份在重放和不同到达顺序下稳定，Hash字段严格对照技术契约§3.4，长度前缀避免拼接歧义；摘要不得承诺绝对无碰撞。",
+    "文档声明拾取Collider收走后退出地图判定，本地装饰不保留可争抢Collider。",
+    "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
+   ],
+   "source_ids": [
+    "S05"
+   ],
+   "workflow_suite": "B成长与附着",
+   "execution_note": "Lead审查并接受离线草案范围：9项单测及全库247/247通过；事件Hash与四字段远端键已分离。ballSeed来源/类型语义仍OPEN；T57仅用显式合成seed，不表示生产互接。"
+  },
+  {
+   "id": "T52",
+   "title": "球层·尺寸计算与三层半径分离",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T47"
+   ],
+   "write_scope": [
+    "Docs/Design/BallLayers/SizeModel/",
+    "Docs/tests/ball_size_model/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
+    "读取Docs/02_TECHNICAL_CONTRACTS.md第1节命名区分与第3.2节第3步（r=cube_root(3V/4π)）。",
+    "只实现本层：由确认体积算 coreRadiusWorldM；区分 coreRadiusWorldM、collisionRadiusWorldM、semanticDiameter 三者并给出换算，禁止一个字段同时表示半径和直径。",
+    "实现首版生长上限、交分/KO后的重置与重建（按新账本而不是简单缩放），以及不从渲染Mesh反推账本的原则性断言。",
+    "写测试：体积翻8倍半径翻倍；半径与直径不被混用（类型或断言层面阻止）；上限截断；交分重置后半径回到基线；成长到上限时下游参数仍合法。",
+    "不要实现：体积账本与计分事务（T48）、代理与凹凸（T50）、视觉滚动（T53）。",
+    "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
+   ],
+   "acceptance_criteria": [
+    "coreRadiusWorldM/collisionRadiusWorldM/semanticDiameter三者分离且有换算测试。",
+    "体积与半径的立方关系、上限、交分重置均有测试。",
+    "存在防止半径与直径混用的显式手段（类型或断言）。",
+    "文档声明世界尺度仍OPEN，等T06冻结。",
+    "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
+   ],
+   "source_ids": [
+    "S05"
+   ],
+   "workflow_suite": "B成长与附着",
+   "execution_note": "Lead审查并接受离线草案范围：7项单测及全库247/247通过。世界尺度仍OPEN等待T06；T57仅展示当前显式参数。"
+  },
+  {
+   "id": "T53",
+   "title": "球层·可视滚动（自转与姿态解耦）",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T46"
+   ],
+   "write_scope": [
+    "Docs/Design/BallLayers/VisualRoll/",
+    "Docs/tests/ball_visual_roll/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
+    "读取Docs/02_TECHNICAL_CONTRACTS.md第2节（BallVisualRollRoot只有可视滚动旋转、localScale保持1；BallPhysicsRoot负责位置与平面朝向）。",
+    "只实现本层：由球心位移与地面法线求可视滚动增量，累计为BallVisualRollRoot的局部旋转；localScale恒为1。",
+    "明确姿态与自转分离：玩法用的平面朝向与可视自转互不写入；镜头与HUD不读取自转。",
+    "写测试：位移距离与滚动角度匹配（滚动一周对应π×直径）；localScale恒为1；自转不改变平面朝向；依据坐标/四元数约定，用接触点无滑动速度独立验证滚动轴方向，不能把旧叉积公式直接当oracle；零位移不产生滚动。",
+    "不要实现：运动积分与速度（T46）、跟随架（T55）、核心Mesh缩放（T52提供半径）。",
+    "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
+   ],
+   "acceptance_criteria": [
+    "位移与滚动角度的对应关系有测试（含滚动一周的距离）。",
+    "自转与平面朝向严格解耦（互不影响的回归测试）。",
+    "localScale恒为1有断言。",
+    "文档声明未做Unity视觉验证。",
+    "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
+   ],
+   "source_ids": [
+    "S07",
+    "S08"
+   ],
+   "workflow_suite": "C表现与跟随",
+   "execution_note": "Lead审查并接受离线草案范围：12项单测及全库247/247通过。Host方向公式有独立无滑动oracle；Unity Quaternion/Transform箭头探针由T57执行。"
+  },
+  {
+   "id": "T54",
+   "title": "球层·墙面与环境扫掠",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T46"
+   ],
+   "write_scope": [
+    "Docs/Design/BallLayers/Sweep/",
+    "Docs/tests/ball_sweep/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
+    "读取Docs/02_TECHNICAL_CONTRACTS.md第3.3节（首版推进顺序A：球形扫掠/碰撞）与Docs/Design/BallMotion/中的连续扫掠实现作为基线。",
+    "只实现本层：球体对平面/薄墙/盒/墙角的连续扫掠，输出首次接触时间、接触点、法线、剩余位移与滑动方向；支持一个步长内多接触顺序处理。",
+    "专门处理薄墙（厚度小于半径）、高速（单步位移远大于半径）、墙角与凹角、以及接触后沿墙滑动的退化情况。",
+    "写测试：单步位移远大于半径时不穿透；薄墙（厚度<半径）不穿透；墙角不卡死且能滑出；多接触按距离顺序求解；零速度与贴墙起始不产生抖动。",
+    "不要实现：地面支持高度（T49）、运动积分与驱动（T46）、代理凹凸对接触的影响（T50/T49）。",
+    "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
+   ],
+   "acceptance_criteria": [
+    "穿透类用例覆盖高速、薄墙、墙角三类，且单步位移大于半径。",
+    "接触解算顺序稳定，重复运行结果一致（确定性）。",
+    "文档列出未解决的退化情形（例如极薄墙体与完全对称凹角）而不是隐去。",
+    "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
+   ],
+   "source_ids": [
+    "S07"
+   ],
+   "workflow_suite": "A接触与外壳",
+   "execution_note": "Lead审查并接受离线草案范围：14项单测及全库247/247通过。扩张AABB角为保守近似；T57仅做隔离台，不进入正式判定。"
+  },
+  {
+   "id": "T55",
+   "title": "球层·跟随架 FollowRig",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "DONE",
+   "priority": "P1",
+   "dependencies": [
+    "T46"
+   ],
+   "write_scope": [
+    "Docs/Design/BallLayers/FollowRig/",
+    "Docs/tests/ball_follow_rig/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "steps": [
+    "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
+    "读取Docs/02_TECHNICAL_CONTRACTS.md第2节（FollowRig绝不成为滚动Mesh的孩子）与Docs/01_GAME_DESIGN.md第4节（操作架跟水平参考朝向，不随抬头扭头转动）。",
+    "只实现本层：由球位置与朝向求参考架位置与偏航；高度与位置滤波、偏航滤波；roll与pitch严格恒为0。",
+    "结构性约束要在实现里体现：参考架的输入不包含球的自转，且提供“不随HMD抬头扭头转动”的朝向来源。",
+    "写测试：任意roll/pitch输入下参考架roll/pitch恒为0；偏航跟随且不超调；瞬移（例如重生）时有界不抖；原地快速自转不改变参考架朝向；参考架高度限制在可操作范围。",
+    "不要实现：相机与HUD内容（T19）、输入映射（T45）、球运动（T46）。",
+    "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
+   ],
+   "acceptance_criteria": [
+    "roll/pitch恒为0在任意输入下成立（属性测试或穷举采样）。",
+    "瞬移与高速时参考架有界且不抖，有测试证明。",
+    "原地自转不改变参考架朝向。",
+    "文档声明未做VR舒适性验证，舒适阈值仍待真人门禁。",
+    "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
+   ],
+   "source_ids": [
+    "S07",
+    "S08"
+   ],
+   "workflow_suite": "C表现与跟随",
+   "execution_note": "Lead审查并接受离线草案范围：8项单测及全库247/247通过。输入不含HMD/自转；真人舒适度与VR门禁不在T57范围。"
+  },
+  {
+   "id": "T56",
+   "title": "球层·远端代理重建与视觉回收",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "dependencies": [
+    "T51"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/RemoteProxy/",
+    "Docs/Design/BallLayers/RemoteProxy/"
+   ],
+   "exclusive_locks": [],
+   "external_requirements": [
+    "生产ballSeed语义及类型由上游批准",
+    "补全远端快照原子重建实现并通过T51/T56键对拍"
+   ],
+   "steps": [
+    "先审阅保留产物与本轮缺陷清单，核查原版源码可用性及公开实现依据；区分源码/专利/观察/推测，不得把历史专利等同游戏实际源码。",
+    "读取Docs/02_TECHNICAL_CONTRACTS.md第2节（RemoteBallProxy）与第3.4节（Hash去重、保留策略、本地装饰不决定物理）；Hash规则固定为ballSeed+实例ID+世代+attachSequence（与T51同一约定，本层只消费不重定义）。",
+    "只实现本层：由远端确认状态（位置、尺寸、状态、少量外观摘要）重建渲染代理；用Hash去重避免重复模型重叠；按保留预算回收被球芯遮住的物件。",
+    "实现对“本地最近显著物件”的保留与埋藏物件合并的预算策略，保证Renderer数量有上限。",
+    "写测试：同一实例重复到达不产生重叠模型（去重有效）；不同世代/序列产生独立代理；回收后账本体积不变（视觉回收不影响账本）；预算上限被严格遵守；远端装饰不参与任何碰撞或计分判定的显式隔离。",
+    "不要实现：本地吸附判定（T47）、账本与计分（T48）、局部位姿记录（T51）。",
+    "提交研究证据、接口说明、完整模拟序列、未解决问题及独立Unity测试对象规格；Python通过不等于Unity/Udon功能完成。"
+   ],
+   "acceptance_criteria": [
+    "去重、世代独立、回收不丢账本体积、预算上限四类测试通过。",
+    "存在显式隔离证明远端装饰不参与碰撞或计分判定。",
+    "文档声明未做多人网络实测，网络同步参数仍待T13/T15/T28。",
+    "原版依据与项目自定义近似明确区分；提交本层独立可视测试对象规格，不声称该对象已经搭建。"
+   ],
+   "source_ids": [
+    "S11",
+    "S13"
+   ],
+   "workflow_suite": "C表现与跟随",
+   "execution_note": "RemoteProxy 离线草稿与14项测试已有；U#移植随T57进行。生产 ballSeed 语义与快照原子重建属 T06 契约，未定前不正式接线。"
+  },
+  {
+   "id": "T57",
+   "title": "球层迁入Unity运行时代码与EditMode测试",
+   "phase": "P2",
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "RUNNING",
+   "priority": "P1",
+   "dependencies": [
+    "T49",
+    "T50",
+    "T51",
+    "T52",
+    "T53",
+    "T54",
+    "T55"
+   ],
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/",
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/",
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/BallLayers/",
+    "Docs/Design/BallLayers/"
+   ],
+   "exclusive_locks": [
+    "unity-integration"
+   ],
+   "external_requirements": [],
+   "steps": [
+    "按 Docs/Design/CODE_CONVENTIONS.md 建立 VRCKatamari.Runtime（含 U# Assembly Definition）与 VRCKatamari.Tests.EditMode 程序集。",
+    "把 GroundContact、RadialProxy、Attachment、SizeModel、VisualRoll、Sweep、FollowRig、RemoteProxy 八层逻辑写成 Runtime/BallLayers/<Module>/ 下的 U# 兼容静态数学（必要时加 Behaviour），不保留并行草稿。",
+    "把各层 Python 测试的固定用例改写成 NUnit EditMode 测试；全部通过后把 Python 模型、RuntimeDraft 和对应 Docs/tests 移入归档。",
+    "建一个 Labs/BallLayers 实验场景，用真实运行时组件逐层可视化（含 +X/+Y/+Z 方向探针），供人工检查。",
+    "RemoteProxy 只用合成 ballSeed；生产键语义等 T06。"
+   ],
+   "acceptance_criteria": [
+    "MCP run_tests（EditMode，VRCKatamari.Tests.EditMode）全部通过，UdonSharp 全量编译后 Console 无新增错误。",
+    "每层只有一份实现；Docs/Design/BallLayers 只保留接口/设计说明与研究依据。",
+    "BallLayers 实验场景可打开，各层读数与方向探针可人工核对；不改正式世界场景。"
+   ],
+   "source_ids": [
+    "S05",
+    "S07",
+    "S08",
+    "S11",
+    "S13"
+   ],
+   "workflow_suite": "D球层实验台",
+   "execution_note": "2026-11-14 RUNNING：VRCKatamari.Runtime 已注册为 U# 程序集（VRCKatamari.Runtime.asset），U# 全量编译 0 错误，EditMode 20/20 通过（地面接触 14 + 数学工具 6）；MCP 门禁流程：refresh_unity → read_console → run_tests → get_test_job。其余七层移植与球层实验场景进行中。"
+  }
+ ],
+ "releaseProfiles": {
+  "free_launch": {
+   "target": "T43",
+   "paid_store_enabled": false
+  },
+  "paid_launch": {
+   "target": "T43",
+   "paid_store_enabled": true,
+   "additional_required": [
+    "T41"
+   ]
+  }
+ },
+ "repositoryLayoutVersion": 1,
+ "repositoryLayoutNote": "Unity工程位于VRChatKatamariDanacyUnity/；研究、证据及工程辅助文件位于Docs/；Marketing/保持原路径。原始任务包保留在Docs/Source/。T49–T55离线模块草案与规格已验收；T56正式远端接线仍TODO；新增用户授权T57单写者Unity实验台。"
 }

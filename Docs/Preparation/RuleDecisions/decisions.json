@@ -1,8 +1,12 @@
 {
   "schema_version": 1,
   "document": "P09 rule and project decision matrix",
-  "as_of_date": "2026-10-11",
-  "status": "decision-support draft; no new user decisions recorded",
+  "as_of_date": "2026-11-14",
+  "revision_history": [
+    {"date": "2026-10-11", "note": "Initial decision-support draft (original inventory date, kept for history)."},
+    {"date": "2026-11-14", "note": "Second research pass upgraded the exchange, swallow/respawn and PVP-item evidence to claims C1-C22; later the same day the user decided (a)-(d) (proportional shrink, minimum conversion size, 60 s rotation, result-bonus layer), recorded in Docs/OPEN_DECISIONS.md and backfilled here. The four second-pass research sources now use the research sub-ids S-KB01-S-KB04 (they previously carried global-registry-style ids that collided with Docs/08_SOURCES_AND_OPEN_QUESTIONS.md); this file therefore matches that registry and Docs/Research/ReferenceRules/rules_matrix.md."}
+  ],
+  "status": "decision-support draft; 2026-11-14 user decisions (a)-(d) backfilled; original-game unknowns remain unknown",
   "evidence_policy": "Separate official published text, producer-interview statements and hands-on player reports from unknown original-game rules, project direction, provisional parameters, and actual implementation evidence. No gameplay was run or measured for this document. 2026-11-14 update: exchange, swallow/respawn and PVP-item rows upgraded from unknown to confirmed on the second research pass recorded in Docs/Research/KatamariBallRules/README.md (claims C1-C22); no number became an original-game value that the research does not state.",
   "sources": [
     {
@@ -18,28 +22,28 @@
       "access_and_limit": "As recorded in T01 rules_matrix.md: full text fetched on 2026-10-10 UTC (2026-10-11 Asia/Shanghai). Announcement describes KatamariBall as a four-player battle mode: grow the ball within a time limit, exchange it for points, highest score wins. It does not specify transaction, KO, respawn, or item-in-PVP rules."
     },
     {
-      "id": "S04",
+      "id": "S-KB01",
       "kind": "tier1_producer_interview",
       "url": "https://www.4gamer.net/games/933/G093370/20250916021/",
-      "access_and_limit": "4Gamer interview with producer Ryo Ishida (Ishida Ryou), published 2025-09-20 after the 2025-09-05 media hands-on; quoted excerpts in Docs/Research/KatamariBallRules/sources/4gamer.net_producer-interview-2025-09-20.md (research id S-KB01). Establishes scoring requires placing the ball in the in-world conversion area, that exchange shrinks the ball, and that a swallowed player reappears elsewhere. It gives no match length, round count, conversion ratio, item list or map detail."
+      "access_and_limit": "4Gamer interview with producer Ryo Ishida (Ishida Ryou), published 2025-09-20 after the 2025-09-05 media hands-on; quoted excerpts in Docs/Research/KatamariBallRules/sources/4gamer.net_producer-interview-2025-09-20.md. Establishes scoring requires placing the ball in the in-world conversion area, that exchange shrinks the ball, and that a swallowed player reappears elsewhere. It gives no match length, round count, conversion ratio, item list or map detail."
     },
     {
-      "id": "S05",
+      "id": "S-KB02",
       "kind": "tier2_player_hands_on_report",
       "url": "https://note.com/utsukinoel/n/ne949f9141e99",
-      "access_and_limit": "Japanese player report published 2025-10-29 (five days after release, PS5); excerpts in Docs/Research/KatamariBallRules/sources/note.com_player-report-sports-katamari.md (research id S-KB02). Adds the conversion area's location under the prince ship, its roughly 60-second relocation with a navigation icon, the minimum-size rejection, the size-banded collision outcomes, treasure-chest items, Brother bonus, and the three-category +50 pt result bonus. It gives no match length, round count, conversion ratio or respawn protection."
+      "access_and_limit": "Japanese player report published 2025-10-29 (five days after release, PS5); excerpts in Docs/Research/KatamariBallRules/sources/note.com_player-report-sports-katamari.md. Adds the conversion area's location under the prince ship, its roughly 60-second relocation with a navigation icon, the minimum-size rejection, the size-banded collision outcomes, treasure-chest items, Brother bonus, and the three-category +50 pt result bonus. It gives no match length, round count, conversion ratio or respawn protection."
     },
     {
-      "id": "S06",
+      "id": "S-KB03",
       "kind": "tier3_fan_wiki",
       "url": "https://katamaripedia.miraheze.org/wiki/Versus_Mode",
-      "access_and_limit": "Katamaripedia versus-mode page last edited 2025-10-22; excerpt in Docs/Research/KatamariBallRules/sources/katamaripedia.miraheze.org_versus-mode.md (research id S-KB03). Cross-confirms deposit-at-S.S.-Prince, 60-second relocation, shrinking on deposit, respawn instead of elimination, and 'most points at the end of the match'. No footnotes; treated as Tier 3 corroboration only."
+      "access_and_limit": "Katamaripedia versus-mode page last edited 2025-10-22; excerpt in Docs/Research/KatamariBallRules/sources/katamaripedia.miraheze.org_versus-mode.md. Cross-confirms deposit-at-S.S.-Prince, 60-second relocation, shrinking on deposit, respawn instead of elimination, and 'most points at the end of the match'. No footnotes; treated as Tier 3 corroboration only."
     },
     {
-      "id": "S07",
+      "id": "S-KB04",
       "kind": "tier1_media_review",
       "url": "https://www.cgmagonline.com/review/game/once-upon-a-katamari-ps5-review/",
-      "access_and_limit": "CGMagazine review; excerpt in Docs/Research/KatamariBallRules/sources/cgmagonline.com_review.md (research id S-KB04). Media-side wording that objects attached to the Katamari must be dropped off at designated goals. It does not explain scoring formula, shrinking, respawn or bonus points."
+      "access_and_limit": "CGMagazine review; excerpt in Docs/Research/KatamariBallRules/sources/cgmagonline.com_review.md. Media-side wording that objects attached to the Katamari must be dropped off at designated goals. It does not explain scoring formula, shrinking, respawn or bonus points."
     },
     {
       "id": "PROJECT_SCOPE",
@@ -53,45 +57,46 @@
       "id": "rules.match_format",
       "domain": "original_game_and_project_scope",
       "evidence_status": "official_text_confirmed_plus_tier2_result_bonus_plus_project_scope",
-      "unit": "players_per_match; duration unknown seconds; result-bonus categories unknown",
-      "official_confirmed": ["KatamariBall is described as a four-player battle mode.", "Players grow a Katamari within a time limit and exchange it for points; highest score wins.", "Tier-2 player report: at the result screen three categories each award +50 pt to that category's first place, and this can still change the ranking (S05, claims C11-C12).", "Tier-3 wiki states the goal is 'the most points at the end of the match' (S06, claim C10, strongly implied only).", "Rank/段位 rises only with first place and unlocks ball colours; it is explicitly not skill-based matchmaking (S04, claim C17)."],
-      "unknown": ["Exact match duration (no source gives it; only a 'remaining 1 minute' countdown appears), number of rounds/sets, tie handling, and how a deposit that arrives exactly at the cutoff is decided.", "Which three of the five observed bonus categories are used per match, and whether they are fixed or rotating.", "Whether any online context fills the fourth slot with CPU."],
-      "project_decision_or_prototype": ["PCVR + Desktop first release; Quest excluded.", "Project scope suggests 2–4 human players and has a provisional 180-second single-round prototype; neither is an original-game measurement.", "Project v0.3 does not enable the result-bonus layer; adopting it is open decision (d) in Docs/OPEN_DECISIONS.md."],
+      "unit": "players_per_match; duration unknown seconds; original result-bonus categories unknown (project default categories are PROVISIONAL)",
+      "official_confirmed": ["KatamariBall is described as a four-player battle mode.", "Players grow a Katamari within a time limit and exchange it for points; highest score wins.", "Tier-2 player report: at the result screen three categories each award +50 pt to that category's first place, and this can still change the ranking (S-KB02, claims C11-C12).", "Tier-3 wiki states the goal is 'the most points at the end of the match' (S-KB03, claim C10, strongly implied only).", "Rank/段位 rises only with first place and unlocks ball colours; it is explicitly not skill-based matchmaking (S-KB01, claim C17)."],
+      "unknown": ["Exact match duration (no source gives it; only a 'remaining 1 minute' countdown appears), number of rounds/sets, tie handling, and how a deposit that arrives exactly at the cutoff is decided.", "Original: which three of the five observed bonus categories are used per match, and whether they are fixed or rotating; the project's default three categories are a PROVISIONAL project choice, not an original rule.", "Whether any online context fills the fourth slot with CPU."],
+      "project_decision_or_prototype": ["PCVR + Desktop first release; Quest excluded.", "Project scope suggests 2–4 human players and has a provisional 180-second single-round prototype; neither is an original-game measurement.", "Project adopts the original's second scoring layer on top of banked-score ranking: three categories each award +50 pt to that category's first place (Tier-2 evidence C11-C12; user decision 2026-11-14, Docs/OPEN_DECISIONS.md (d)). Banking remains the only primary scoring channel. The project default categories are swallowed opponents / max ball size / items absorbed, with ties awarding nothing; the category set and any weight are PROVISIONAL and must be announced to players."],
       "candidates": [
         {"option": "Use adjustable single-round prototype", "description": "Start with the project provisional duration and expose it as test configuration.", "reject_basis_if_not_selected": "A fixed value is not justified as an original-game fact; playtest may show it is too short/long."},
         {"option": "Choose another duration after playtest", "description": "Decide after observing pacing and scoring in the project.", "reject_basis_if_not_selected": "Requires more evidence and delays locking the loop; still does not reveal original duration."},
         {"option": "Use multi-round structure", "description": "Only if a later explicit product decision supports it.", "reject_basis_if_not_selected": "Adds reset, progression, and fairness complexity not required by current scope."},
-        {"option": "Adopt the original's end-of-match 3-category +50 pt bonus layer", "description": "Mirror the confirmed second scoring layer (S05, C11-C12) as an optional explicit project rule, published to players if enabled.", "reject_basis_if_not_selected": "Dilutes how decisive banking is and makes placement harder to predict; current project keeps ranking on banked score only."},
-        {"option": "Keep ranking on banked score only", "description": "Current project behaviour: no result-bonus layer, so the final ranking is exactly the confirmed banked score.", "reject_basis_if_not_selected": "Diverges from the original's drama layer and from part of the confirmed rule set."}
+        {"option": "SELECTED - adopt the original's end-of-match 3-category +50 pt bonus layer (2026-11-14 user decision)", "description": "Mirror the confirmed second scoring layer (S-KB02, C11-C12) on top of banked-score ranking; project default categories swallowed opponents / max ball size / items absorbed, ties award nothing, published to players.", "reject_basis_if_not_selected": "Dilutes how decisive banking is and makes placement harder to predict; accepted for fidelity to the confirmed original, with banking still the primary channel."},
+        {"option": "REJECTED - keep ranking on banked score only", "description": "No result-bonus layer, so the final ranking is exactly the confirmed banked score.", "reject_basis_if_not_selected": "Diverges from the original's drama layer and from part of the confirmed rule set."}
       ],
       "recommended_option": null,
       "decision_owner": "user_and_lead; implementation parameters after relevant playtest",
-      "do_not_claim": "Do not state that 180 seconds, the project's 2–4 participation, or the absence of a bonus layer reproduces the original rules. The original match length and round count are still unknown."
+      "do_not_claim": "Do not state that 180 seconds or the project's 2–4 participation reproduces the original rules, and do not present the project's bonus category set or weight as the original's. The original match length, round count and per-match bonus category set are still unknown."
     },
     {
       "id": "rules.score_and_exchange",
       "domain": "original_game",
       "evidence_status": "confirmed_tier1_and_tier2_in_world_manual_conversion_plus_project_flow",
-      "unit": "points; ball size traded for points; conversion ratio and minimum size unknown",
-      "official_confirmed": ["Scoring is not automatic and not continuous: the ball must be physically brought into an in-world conversion area, producer quote 'ポイントを得るには塊を「変換エリア」に入れなければいけません' (S04, claim C1).", "Exchange trades ball size for points and the ball shrinks: '変換エリアでは塊が小さくなるのと引き換えにポイントを獲得' (S04, claim C2). It is not reset to the initial ball.", "Shrinking has a real cost: with a smaller ball you can no longer roll up large objects (S04, claim C5).", "The conversion area sits directly under the prince ship (S.S. Prince) and relocates about every 60 seconds, shown by a navigation icon (S05 + S06, claim C3, strongly implied: Tier 2 plus Tier 3, not a Tier-1 statement).", "A ball that is too small scores nothing: '小さい塊の場合は、ポイントをゲット出来ません' (S05, claim C4).", "Media wording agrees that the ball must be delivered to designated goals (S07)."],
-      "unknown": ["Conversion formula/ratio, whether it is banded or capped, and the numeric minimum conversion size.", "Trigger radius, animation, service time, whether an exchange can be interrupted, and how long before a relocation it is announced.", "Ordering when a conversion request and the match cutoff land on the same tick."],
-      "project_decision_or_prototype": ["Project uses unbanked risk growth and confirmed banked score as distinct ledgers; score ranking uses confirmed banked points.", "Project keeps a rotating in-world banking anchor with a pre-announcement, which is structurally the same shape as the original (C3); the 45-second period is a project value, the original's is roughly 60 seconds.", "Project currently resets the ball to its initial size after banking. That is a project choice, harsher than the confirmed original (C2/C20), and is open decision (a); no shrink ratio is filled in."],
+      "unit": "points; ball size traded for points; original conversion ratio and minimum size unknown; project uses residual 0.25 and a minimum diameter of 0.55 m (PROVISIONAL)",
+      "official_confirmed": ["Scoring is not automatic and not continuous: the ball must be physically brought into an in-world conversion area, producer quote 'ポイントを得るには塊を「変換エリア」に入れなければいけません' (S-KB01, claim C1).", "Exchange trades ball size for points and the ball shrinks: '変換エリアでは塊が小さくなるのと引き換えにポイントを獲得' (S-KB01, claim C2). It is not reset to the initial ball.", "Shrinking has a real cost: with a smaller ball you can no longer roll up large objects (S-KB01, claim C5).", "The conversion area sits directly under the prince ship (S.S. Prince) and relocates about every 60 seconds, shown by a navigation icon (S-KB02 + S-KB03, claim C3, strongly implied: Tier 2 plus Tier 3, not a Tier-1 statement).", "A ball that is too small scores nothing: '小さい塊の場合は、ポイントをゲット出来ません' (S-KB02, claim C4).", "Media wording agrees that the ball must be delivered to designated goals (S-KB04)."],
+      "unknown": ["Original conversion formula/ratio, whether it is banded or capped, and the original's numeric minimum conversion size (the project's 0.25 residual and 0.55 m minimum are PROVISIONAL project values).", "Trigger radius, animation, service time, whether an exchange can be interrupted, and how long before a relocation it is announced.", "Ordering when a conversion request and the match cutoff land on the same tick."],
+      "project_decision_or_prototype": ["Project uses unbanked risk growth and confirmed banked score as distinct ledgers; score ranking uses confirmed banked points.", "Project keeps a rotating in-world banking anchor with a pre-announcement, which is structurally the same shape as the original (C3); the period is 60 s (aligned with the original's strongly implied ~60 s), with four fixed anchors activated at 0/60/120/180 s in the 180 s prototype, so only three 60 s windows are used and the fourth anchor activates at the final whistle; the next match starts one anchor later so no anchor stays idle (PROVISIONAL layout value; user decision 2026-11-14, Docs/OPEN_DECISIONS.md (c)).", "Project banking shrinks the ball instead of resetting it, in diameter space: post = max(start, start + (pre - start) * residual) with residual = 0.25, and a ball smaller than 0.55 m diameter cannot convert at all. Both numbers and the formula are PROJECT PROVISIONAL values (user decision 2026-11-14, Docs/OPEN_DECISIONS.md (a)/(b)); the original only confirms that exchange shrinks the ball (C2) and that a too-small ball scores nothing (C4), without publishing either value."],
       "candidates": [
-        {"option": "Project explicit banking zone and transaction", "description": "Use the current project contract: request/confirmation, idempotency, reset only on confirmed transaction. The manual, mid-match, repeatable in-world delivery is now corroborated by S04/S05.", "reject_basis_if_not_selected": "It is still a project contract (single arbiter, idempotency, reset behaviour) whose details go beyond what public sources state."},
+        {"option": "SELECTED - project explicit banking zone and transaction (with the 2026-11-14 shrink rule)", "description": "Use the current project contract: request/confirmation, idempotency, state change only on confirmed transaction, and a shrink instead of a reset. The manual, mid-match, repeatable in-world delivery is corroborated by S-KB01/S-KB02.", "reject_basis_if_not_selected": "It is still a project contract (single arbiter, idempotency, shrink formula) whose details go beyond what public sources state."},
+        {"option": "SELECTED - banking shrinks the ball by a residual fraction instead of resetting it, with a minimum conversion size (2026-11-14 user decision)", "description": "post = max(start, start + (pre - start) * residual) in diameter space with residual = 0.25; a ball below 0.55 m diameter is rejected. Both values and the formula are project PROVISIONAL values (Docs/OPEN_DECISIONS.md (a)/(b)); the original only confirms shrinking (C2) and a minimum-size rejection (C4).", "reject_basis_if_not_selected": "The ratio is a project invention, so pacing/fairness playtests must revisit it; 0.20 is closer to a reset and 0.30 makes the late game harder."},
         {"option": "EXCLUDED — round-end automatic scoring", "description": "Previously an open candidate; excluded as the main channel because the producer states points come only from physically entering the conversion area (C1).", "reject_basis_if_not_selected": "Recording it as available would contradict the Tier-1 evidence, so it is kept only as an explicitly excluded alternative."},
         {"option": "EXCLUDED — continuous/realtime accumulation", "description": "Previously an open candidate; excluded because points are produced only by the conversion act, not by rolling or by size alone (C1/C16).", "reject_basis_if_not_selected": "Recording it as available would contradict the Tier-1 evidence, so it is kept only as an explicitly excluded alternative."},
         {"option": "Alternative exchange flow after project tests", "description": "Compare multiple simultaneous exchange points or a different announce lead time only through a scoped project decision.", "reject_basis_if_not_selected": "Would change map, UI, transaction, and fairness requirements."}
       ],
       "recommended_option": null,
       "decision_owner": "lead_for_project_contract; user_for_scope_changes",
-      "do_not_claim": "Do not claim the original resets the ball to its initial size (C20 is unconfirmed/contradicted), gives a conversion ratio, or relocates the area exactly every 60 seconds as a Tier-1 fact. Do not present 45 seconds as the original period."
+      "do_not_claim": "Do not claim the original resets the ball to its initial size (C20 is unconfirmed/contradicted), gives a conversion ratio or minimum-size value, or relocates the area exactly every 60 seconds as a Tier-1 fact. Do not present the project's residual 0.25, 0.55 m minimum, 60 s period or four-anchor rotation as original-game values."
     },
     {
       "id": "rules.pvp_swallow_threshold",
       "domain": "original_game",
       "evidence_status": "confirmed_swallowing_exists_contact_outcomes_plus_project_threshold",
       "unit": "collision/size ratio dimensionless; threshold, contact radius and freeze duration unknown",
-      "official_confirmed": ["Swallowing exists: a larger opposing ball swallows yours on contact (S04 'ほかのプレイヤーの塊が大きければ，ぶつかったときに巻き込まれることになるでしょう', claims C6/C8).", "Same-size balls bounce off each other (S05, claim C9).", "Swallowing a smaller opponent interferes with that player; the smaller one is the victim (S05, claims C6/C8).", "A swallowed player is briefly immobilised and moved elsewhere; there is no elimination (S04, claim C6)."],
+      "official_confirmed": ["Swallowing exists: a larger opposing ball swallows yours on contact (S-KB01 'ほかのプレイヤーの塊が大きければ，ぶつかったときに巻き込まれることになるでしょう', claims C6/C8).", "Same-size balls bounce off each other (S-KB02, claim C9).", "Swallowing a smaller opponent interferes with that player; the smaller one is the victim (S-KB02, claims C6/C8).", "A swallowed player is briefly immobilised and moved elsewhere; there is no elimination (S-KB01, claim C6)."],
       "unknown": ["The size ratio or absolute size difference that permits a swallow, any absolute immunity for small balls, contact direction and effective radius, freeze duration, simultaneous-contact resolution, and whether the swallower gains resources."],
       "project_decision_or_prototype": ["Project retains swallow/KO and respawn as a project direction. The 1.35 size ratio in game design is a project prototype assumption only."],
       "candidates": [
@@ -108,7 +113,7 @@
       "domain": "original_game",
       "evidence_status": "confirmed_freeze_and_reappear_without_elimination_plus_project_penalty",
       "unit": "time in seconds unknown; documented score effect none",
-      "official_confirmed": ["Being swallowed is not elimination: '新たな場所に再出現するので大丈夫です' (the player reappears elsewhere), with a short period of not being able to move (S04, claim C6).", "No source states a score or resource loss for the swallowed player, so 'no loss of already-scored points' is strongly implied only (S04, claim C7).", "The review word 'battle royale' is a metaphor, not an official mode definition; elimination/ shrinking-zone readings are contradicted (claim C22)."],
+      "official_confirmed": ["Being swallowed is not elimination: '新たな場所に再出現するので大丈夫です' (the player reappears elsewhere), with a short period of not being able to move (S-KB01, claim C6).", "No source states a score or resource loss for the swallowed player, so 'no loss of already-scored points' is strongly implied only (S-KB01, claim C7).", "The review word 'battle royale' is a metaphor, not an official mode definition; elimination/ shrinking-zone readings are contradicted (claim C22)."],
       "unknown": ["Respawn wait duration (the source only says 'ちょっとのあいだ' — a very short while, no seconds), spawn selection, any spawn protection and its length, whether the victim spectates, and carried item/growth state after respawn."],
       "project_decision_or_prototype": ["Project direction includes KO and respawn. Example values such as about 3 seconds wait and about 2 seconds protection are unvalidated project prototype numbers, not original rules.", "Project adds elimination-time resource clearing and spawn protection that the original does not document; both are project choices, heavier than the confirmed original."],
       "candidates": [
@@ -126,13 +131,13 @@
       "domain": "original_game",
       "evidence_status": "confirmed_pvp_items_exist_list_incomplete_plus_project_subset",
       "unit": "items; count, duration and effect values not established",
-      "official_confirmed": ["KatamariBall does deploy items: a rainbow treasure chest ('王様トレジャー') grants ordinary support items from the solo stages plus mode-specific items (S05, claim C13).", "The effect space is only two kinds: make your own ball bigger, or hinder opponents (S05, claim C13).", "A 'Brother' ('ブラザー') orbits your ball with a scoring bonus and disappears if an opponent rolls it up (S05, claim C14).", "Magnet and rocket being usable in the mode is strongly implied only ('いつものステージで使うサポートアイテムの他', claim C15); no PVP parameters are confirmed."],
+      "official_confirmed": ["KatamariBall does deploy items: a rainbow treasure chest ('王様トレジャー') grants ordinary support items from the solo stages plus mode-specific items (S-KB02, claim C13).", "The effect space is only two kinds: make your own ball bigger, or hinder opponents (S-KB02, claim C13).", "A 'Brother' ('ブラザー') orbits your ball with a scoring bonus and disappears if an opponent rolls it up (S-KB02, claim C14).", "Magnet and rocket being usable in the mode is strongly implied only ('いつものステージで使うサポートアイテムの他', claim C15); no PVP parameters are confirmed."],
       "unknown": ["Full PVP item list and their values, spawn points, slot count, durations, whether items survive respawn or banking, chest refresh rules, and the exact mode-specific item roster."],
       "project_decision_or_prototype": ["Project chose a single slot with Magnet and Rocket; Jump rising edge is the project input direction. This is not a claim of original PVP item rules.", "Project does not implement the Brother bonus or the timer item."],
       "candidates": [
         {"option": "Project-selected Magnet + Rocket", "description": "Implement only after project-specific transaction and platform input gates. Direction is consistent with the confirmed existence of PVP support items.", "reject_basis_if_not_selected": "Selected subset; may require balancing and platform testing."},
         {"option": "Add timer or another item", "description": "Requires a separate user-approved scope change and rules design.", "reject_basis_if_not_selected": "Not in current v0.3 project selection; would expand implementation and testing."},
-        {"option": "Add a grow-or-hinder item pair closer to the confirmed original effect space", "description": "Follow the confirmed two-effect space (S05, C13) instead of only motion items.", "reject_basis_if_not_selected": "New content, balancing and UI work outside the current two-item scope."},
+        {"option": "Add a grow-or-hinder item pair closer to the confirmed original effect space", "description": "Follow the confirmed two-effect space (S-KB02, C13) instead of only motion items.", "reject_basis_if_not_selected": "New content, balancing and UI work outside the current two-item scope."},
         {"option": "Disable items in test mode", "description": "Useful as a baseline comparison if a test needs isolating movement/fairness.", "reject_basis_if_not_selected": "Would not exercise selected power-up gameplay."}
       ],
       "recommended_option": null,
@@ -207,8 +212,8 @@
   ],
   "non_decisions": [
     "No root task status or dependency has been changed.",
-    "No one-map release choice, fairness threshold, original rule, numerical prototype, commercial SKU, price, or public interface has been approved by this document.",
+    "No one-map release choice, fairness threshold, original rule, commercial SKU, price, or public interface has been approved by this document; the only 2026-11-14 approvals recorded are the four rule decisions summarized in Docs/OPEN_DECISIONS.md.",
     "No Unity, game, VR, multiplayer, commerce, or original-game playtest was performed.",
-    "The 2026-11-14 evidence upgrade changes only evidence_status/official_confirmed/unknown/candidate text; it selects no new user decision, invents no conversion ratio, and does not turn project values (180 s, 45 s, 1.35, 3 s, 2 s) into original-game values."
+    "On 2026-11-14 the user decided (a)-(d) - proportional shrink, minimum conversion size, 60 s rotation and the result-bonus layer - recorded in Docs/OPEN_DECISIONS.md and backfilled into this file the same day. Those four values are PROVISIONAL project values, not original-game values, and the remaining project values (180 s, 1.35, 3 s, 2 s) stay provisional too."
   ]
 }

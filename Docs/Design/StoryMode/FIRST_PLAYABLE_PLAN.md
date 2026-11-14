@@ -6,9 +6,9 @@
 
 ## 0. 先给结论
 
-1. **玩家球不动、点球没反应。** CpuSkirmish 的 4 个球里 0 号是玩家位，README 原话“未接输入，静止”（`Labs/CpuSkirmish/README.md:3`）；host 的注释也写明它只开回合、从不驱动（`Runtime/Ai/CpuSkirmishBootstrap.cs:16`）。全项目唯一的驱动接缝是 `SetMoveAxes`（`Runtime/BallMotor/KatamariBallMotor.cs:965-970`），除 CPU pilot（`Runtime/Ai/CpuBallPilot.cs:211-218`）和 BallPlayground 的脚本时间线（`Labs/BallPlayground/BallPlaygroundBootstrap.cs:270`）外没有设备适配器。CpuSkirmish 里没有 `VRCStation`（全场景检索该 GUID 为 0 命中；作为对照 `Labs/StationPlatform/StationPlatformLab.unity` 有 1 个），也没有 `Interact` 处理，所以点球不可能入座。
+1. **玩家球不动、点球没反应。** CpuSkirmish 的 4 个球里 0 号是玩家位，README 原话“未接输入，静止”（`Labs/CpuSkirmish/README.md:3`）；host 的注释也写明它只开回合、从不驱动（`Runtime/Ai/CpuSkirmishBootstrap.cs:16`）。全项目唯一的驱动接缝是 `SetMoveAxes`（`Runtime/BallMotor/KatamariBallMotor.cs:965-970`），除 CPU pilot（`Runtime/Ai/CpuBallPilot.cs:211-218`）、BallPlayground 的脚本时间线（`Labs/BallPlayground/BallPlaygroundBootstrap.cs:270`）和桌面适配器 `DesktopMoveInput`（S1，已在 `Labs/StoryLevel` 编译实跑，commit `e74ff8c`）外没有别的驱动来源。CpuSkirmish 里没有 `VRCStation`（全场景检索该 GUID 为 0 命中；作为对照 `Labs/StationPlatform/StationPlatformLab.unity` 有 1 个），也没有 `Interact` 处理，所以点球不可能入座。
 2. **半埋不是物理问题，是视觉没缩。** CpuSkirmish 的 `BallVisual` 用内置 1 m 球（mesh 10207，`Labs/CpuSkirmish/CpuSkirmish.unity:832`），`localScale` 恒为 1（`:778`）；motor 把球心放在 y≈0.15（`:449`），地面顶面在 y=0（Ground y=−0.2、scale y=0.4，`:579-580`）。于是 1 m 球有 0.35 m（半径的 70%）在地面以下。motor 从不写 scale（`KatamariBallMotor.cs:931-940` 只写 position/rotation），host 也“从不 resize 球”（`CpuSkirmishBootstrap.cs:16`）；BallPlayground 每帧把视觉球缩到语义直径（`Labs/BallPlayground/BallPlaygroundBootstrap.cs:148-152`），所以那边看着是对的。
-3. **方块不粘是没接，不是坏了。** 吸附后方块被 `SetActive(false)` 直接藏掉（`Labs/BallPlayground/PlaygroundProp.cs:164-169`）；motor 只提供 absorbed-event ring（`KatamariBallMotor.cs:280`、`:1523-1531`）；`AttachmentMath` 在运行时代码里没有任何调用者（全仓检索只命中 `Tests/EditMode/BallLayers/AttachmentTests.cs`）。
+3. **方块不粘是没接，不是坏了。** 吸附后方块被 `SetActive(false)` 直接藏掉（`Labs/BallPlayground/PlaygroundProp.cs:164-169`）；motor 只提供 absorbed-event ring（`KatamariBallMotor.cs:280`、`:1523-1531`）。宿主代码已经写了（`Runtime/Pickup/PickupFieldHost.cs`，用 `AttachmentMath` 把被吸物件挂到球的附着根），缺的只是场景接线：`AttachmentRoot` 与道具行还没有接（§3）。
 
 ## 1. 玩家控制与“骑球”
 
@@ -19,7 +19,7 @@
 - 输入接缝：`SetMoveAxes(forward, turn, lateral)` 落到 `debugForward/Turn/Lateral`（`KatamariBallMotor.cs:965-970`、`:140-144`），`StepInput` 用 `(lateral, forward)` 组 `Vector2` 走 ControlIntent（`:663-682`），turn 直接进 BallMotion，±1 = ±110°/s（`Runtime/Motion/BallMotionMath.cs:155-167`）。ControlIntent 层不读设备（`Docs/Design/ControlIntent/README.md:9`），设备读取属于适配器。
 
 **没接**
-- 没有任何 `InputMoveVertical/Horizontal` 的运行时适配器。轴回调只在 StationPlatform 实验里加过日志，而且那版源码**改了但从未编译/运行**（`Docs/Evidence/StationPlatform/axis_logging.md:3`、`:110-112`）。所以“坐姿时 VRChat 还发不发这些轴给 Udon”是**未验证**的。
+- 桌面适配器 `DesktopMoveInput` 已写，并在 `Labs/StoryLevel` 里编译实跑（commit `e74ff8c`），但那是**站着**的键盘实验。坐姿下轴回调是否还到达 Udon 仍未验证——StationPlatform 那次只加过日志，而且那版源码**改了但从未编译/运行**（`Docs/Evidence/StationPlatform/axis_logging.md:3`、`:110-112`）。
 - FollowRig 在场景里全是空引用：CpuSkirmish 四个 motor 的 `followRigRoot` 都是 0（`CpuSkirmish.unity:448`、`:2455`、`:4156`、`:5332`），BallPlayground 也是 0（`Labs/BallPlayground/BallPlayground.unity:4329`）。motor 算出的平滑跟随帧没有落点。
 - CpuSkirmish 没有 Station / Interact（见 §0 第 1 条），所以“点球跟上去”完全不存在。
 
@@ -28,7 +28,7 @@
 - 新 `Runtime/Riding/BallRideStation.cs`：`Interact` 未入座则 `station.UseStation(localPlayer)`；`OnStationEntered` 标记 seated 并可驱动；`OnStationExited` 复位。退出另用一个世界内按钮的 `Interact` → `station.ExitStation(localPlayer)`（与 `StationLabExitButton.cs` 同形，但作为产品行为重写，不引用 Labs 代码）。
 - 场景：`RideRoot` 接到 motor 的 `followRigRoot`（motor 每帧写它的 position/yaw，`KatamariBallMotor.cs:935-939`），Station 作为 `RideRoot` 子物体，朝向球的前进方向。注意别把两套高度叠起来：FollowRig 的 `eyeHeightMeters` 默认 1.6 m（`KatamariBallMotor.cs:118`）是给人形 rig 的，小球的 rig 根应贴球心（起始 0.25–0.5），把“球后上方”交给 Station 的局部偏移（起始约 (0, 0.8, −2.2)），最终在 Build & Test 里按玩家实际视点调。`followRigRoot` 必须真的接上，否则这段完全不生效。VRCStation 打开 Disable Station Exit（`Docs/01_GAME_DESIGN.md:63`），退出只走世界内按钮。
 - 为什么不用 FollowRig 直接带人：它只输出 position + yaw（`Runtime/BallLayers/FollowRig/FollowRigMath.cs:118`），没有能力移动玩家；能把玩家带走的只有 Station。文档也是这个分工（`Docs/Design/BallMotor/README.md:169`）。
-- 装配约束照旧：`KatamariBallMotor` 独占 `MotorHost`，不与任何其它 UdonSharpBehaviour 同挂一个 GameObject，否则那个 Behaviour 会被 UdonSharp 静默禁用（`Docs/Design/BallMotor/README.md:220-228`）。新增的输入/骑球/宿主/剧情 Behaviour 各自独占对象。
+- 装配约束按**项目惯例**：`KatamariBallMotor` 独占 `MotorHost`，新增的输入/骑球/宿主/剧情 Behaviour 也各自独占对象。理由是工程性的（职责边界清楚、自检一眼可验、重建层级不会留下旧副本），**不是**引擎限制——同物体挂多个 UdonSharpBehaviour 是官方支持的，旧说法（“同物体第二个脚本会被引擎关掉”）已撤回（`Docs/Design/BallMotor/README.md` 的「装配约束」）。真正的同物体硬约束是同步模式：多个 UdonBehaviour 会回落到其中最严格的那个，本项目行为都是 `BehaviourSyncMode.None`，所以别把需要 Manual/Continuous 的行为与它们同挂。例外：`BallRideStation` 必须与 VRCStation + 交互 Collider 同物体，因为 `Interact` 与 `OnStationEntered/Exited` 只送到那个物体（§1“骑球”段）。
 
 ## 2. 球贴地（不是半埋）与“碰撞”是什么意思
 
@@ -51,10 +51,10 @@
 **已有**
 - `AttachmentMath` 提供世界位姿→球局部位姿、身份幂等、十列记录、撤销/快照（`Runtime/BallLayers/Attachment/AttachmentMath.cs:90-113`、`:222`），并明确物件 scale 不随球芯放大（`:18-33`）。
 - motor 的 ring 每次成功 commit 记 id/位置/最大边长（`KatamariBallMotor.cs:773-775`、`:1523-1531`），读者用绝对下标当游标（`:1567-1588`），容量 16、满了覆盖最旧（`:1547-1561`）。
-- 目前唯一消费者是 `PlaygroundProp`：查到自己的 id 就 `SetActive(false)` + 关 collider（`PlaygroundProp.cs:144-169`）。这就是用户看到的“方块消失”。
+- 场景里目前的唯一消费者是 lab 的 `PlaygroundProp`：查到自己的 id 就 `SetActive(false)` + 关 collider（`PlaygroundProp.cs:144-169`）。这就是用户看到的“方块消失”。运行时的消费者是 `PickupFieldHost`（源码已写、未编译、未接线，见下）。
 
 **没接**
-- 没有代码把被吸物件 reparent 到球上；`AttachmentMath` 无运行时调用者；场景里没有 `AttachmentRoot`。
+- 吸附宿主源码已写（`Runtime/Pickup/PickupFieldHost.cs`），但**场景没接**：没有 `AttachmentRoot`、没有道具数组行，CpuSkirmish / BallPlayground 里放的仍是 lab 的 `PlaygroundProp`。宿主本身也**未编译**。
 - 事件位置是**提交时**快照（`SubmitCandidate` 的 `pendingPositions`，`KatamariBallMotor.cs:1024`），不是吸附瞬间的位置；快滚时可能差几十厘米，不能直接当最终位姿。
 
 **最小正确接线**
@@ -76,7 +76,7 @@
 - 没有“重试”接缝：motor 只有 `TryBeginPlaying`/`TeleportTo`/`TryBank`（`KatamariBallMotor.cs:950-970`、`:1335-1342`），没有重置本局状态/账本的公开 API；关卡却写无限重试（`story_01_bench_size.json:61`）。
 
 **最小正确接线**
-- 新 `Runtime/Story/StoryRoundController.cs`：状态 `Idle → Running → Presenting → Result`（int 即可）；`Time.time` 记起点；Running 每帧更新 HUD（目标/当前/剩余）；到点后 `input.SetEnabled(false)`、`propHost.SetCollecting(false)`、`motor.ClearCandidates()`（`KatamariBallMotor.cs:1082-1085`），按结算瞬间的**碰撞直径** `2 * motor.GetCollisionRadiusWorldM()` 查星（今天与语义直径相等，因为两个比例都是 1，`:108-109`），显示“呈给国王”+星数+直径+评语。**不调用** `TryBank`/`TryAwardScore`，不写 `bankedScore`。
+- 新 `Runtime/Story/StoryRoundController.cs`：状态 `Idle → Running → Presenting → Result`（int 即可）；`Time.time` 记起点；Running 每帧更新 HUD（目标/当前/剩余）；到点后 `input.SetRoundGate(false)`（输入是两个独立闸门，回合只关自己那个，见 [StoryMode README](<README.md>) 的“输入闸门”）、`propHost.SetCollecting(false)`、`motor.ClearCandidates()`（`KatamariBallMotor.cs:1082-1085`），按结算瞬间的**碰撞直径** `2 * motor.GetCollisionRadiusWorldM()` 查星（今天与语义直径相等，因为两个比例都是 1，`:108-109`），显示“呈给国王”+星数+直径+评语。**不调用** `TryBank`/`TryAwardScore`，不写 `bankedScore`。
 - HUD/结果用 uGUI `Text`（BallPlayground 已验证：`BallPlaygroundBootstrap.cs:33`）。King 的形象/动画没有美术，本阶段明确不做，只做结果面板；“呈球是纯表现事件”本身是设计允许的（`GameModes/README.md:131`）。
 - 第一关的 6 个数字（level_id、目标、两档星、限时、文本）先写成控制器的序列化字段，注释指向 JSON；**不要**为第一关造一次性导入器。第二关再做 `Editor/Story/` 烘焙器，且只烘规则字段，不烘地图坐标。
 - 第二关（类别计数）不在本计划：S3 的宿主已经按 definition 累计吸附件数，接第二关时只把过滤条件换成 `categories.json` 的显式 definition 集合（类别目标见 `Docs/Design/GameModes/Levels/story_02_fruit_ten.json:18-21`），不新增第二套计数实现。

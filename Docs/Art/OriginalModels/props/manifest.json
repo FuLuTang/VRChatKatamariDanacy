@@ -1,0 +1,873 @@
+{
+  "title": "原创占位小道具（第一批） / original placeholder tiny props",
+  "status": "原创占位，非最终美术；未指定许可；尺度按 prop_catalog.csv 的 game_longest_dim_m 暂定",
+  "units": "1 Blender unit = 1 m",
+  "axes": {
+    "blender": "+Z up, model front faces +Y",
+    "fbx_export": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true
+    },
+    "unity_intended": {
+      "up": "+Y",
+      "front": "+Z",
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "import_verified": false
+    },
+    "glb_export": {
+      "up": "+Y (export_yup=True)"
+    }
+  },
+  "conventions": [
+    "geometry baked in metres, object transforms identity",
+    "closed shells only, triangulated, no n-gons",
+    "flat Principled base colours only: no textures, UVs or vertex colours",
+    "deterministic scripts: fixed formulas and fixed seeds"
+  ],
+  "catalog_source": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+  "build_script": "scripts/build_all.py",
+  "blender_version": "3.6.21",
+  "props": [
+    {
+      "id": "seed",
+      "pivot": "center",
+      "target_longest_m": 0.04,
+      "dimensions_m": {
+        "x": 0.02240000106394291,
+        "y": 0.03999999910593033,
+        "z": 0.01600000075995922,
+        "longest": 0.03999999910593033
+      },
+      "bounds_m": {
+        "min": [
+          -0.011200000531971455,
+          -0.019999999552965164,
+          -0.00800000037997961
+        ],
+        "max": [
+          0.011200000531971455,
+          0.019999999552965164,
+          0.00800000037997961
+        ]
+      },
+      "vertices": 74,
+      "triangles": 144,
+      "materials": [
+        "Prop_seed_body"
+      ],
+      "material_base_colors": {
+        "Prop_seed_body": [
+          0.42,
+          0.3,
+          0.1
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "214875338e190336afdf3de4e504b710125fb740ea4fa43fd1c95c509126456b",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "草籽",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.02,
+        "game_longest_dim_m": 0.04,
+        "sourcing_hint": "model ourselves：Ø0.04 m 椭球 + 1 张 alpha 草卡",
+        "row_found": true
+      },
+      "dimension_check": {
+        "target_m": 0.04,
+        "built_longest_m": 0.03999999910593033,
+        "abs_error_m": 8.940696724635266e-10,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 2.0
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "body",
+          "name_zh": "麦秆黄",
+          "linear_rgb": [
+            0.42,
+            0.3,
+            0.1
+          ],
+          "roughness": 0.55
+        }
+      ],
+      "notes": "Hint asks for an ellipsoid plus one alpha grass card; the card would need a texture, so this batch keeps the solid grain only.",
+      "build_script": "models/seed.py",
+      "preview": "previews/seed_preview.png",
+      "files": {
+        "seed.fbx": 17868,
+        "seed.glb": 3744,
+        "seed.blend": 406588
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "3.6.21"
+      },
+      "preview_bytes": 147976
+    },
+    {
+      "id": "acorn",
+      "pivot": "base",
+      "target_longest_m": 0.05,
+      "dimensions_m": {
+        "x": 0.03999999910593033,
+        "y": 0.03804226219654083,
+        "z": 0.05000000074505806,
+        "longest": 0.05000000074505806
+      },
+      "bounds_m": {
+        "min": [
+          -0.019999999552965164,
+          -0.019021131098270416,
+          0.0
+        ],
+        "max": [
+          0.019999999552965164,
+          0.019021131098270416,
+          0.05000000074505806
+        ]
+      },
+      "vertices": 112,
+      "triangles": 220,
+      "materials": [
+        "Prop_acorn_nut",
+        "Prop_acorn_cap"
+      ],
+      "material_base_colors": {
+        "Prop_acorn_nut": [
+          0.36,
+          0.18,
+          0.06
+        ],
+        "Prop_acorn_cap": [
+          0.13,
+          0.06,
+          0.025
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "9b1896a61a56b22c3b01cddb741d0a8d6671b528088c450c7d97e344509cbaed",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "橡子",
+      "category": "nature",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.03,
+        "game_longest_dim_m": 0.05,
+        "sourcing_hint": "model ourselves：0.05 m 橡子（低面数旋转体）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "target_m": 0.05,
+        "built_longest_m": 0.05000000074505806,
+        "abs_error_m": 7.450580569168253e-10,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.667
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "nut",
+          "name_zh": "橡子果肉",
+          "linear_rgb": [
+            0.36,
+            0.18,
+            0.06
+          ],
+          "roughness": 0.6
+        },
+        {
+          "key": "cap",
+          "name_zh": "橡子壳斗",
+          "linear_rgb": [
+            0.13,
+            0.06,
+            0.025
+          ],
+          "roughness": 0.75
+        }
+      ],
+      "notes": "Cap colour is a second flat material assigned by height on the same closed lathe, so there is no separate shell and no hidden geometry.",
+      "build_script": "models/acorn.py",
+      "preview": "previews/acorn_preview.png",
+      "files": {
+        "acorn.fbx": 20252,
+        "acorn.glb": 6120,
+        "acorn.blend": 429892
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "3.6.21"
+      },
+      "preview_bytes": 190267
+    },
+    {
+      "id": "pebble",
+      "pivot": "base",
+      "target_longest_m": 0.06,
+      "dimensions_m": {
+        "x": 0.06000000052154064,
+        "y": 0.04398905299603939,
+        "z": 0.031932003796100616,
+        "longest": 0.06000000052154064
+      },
+      "bounds_m": {
+        "min": [
+          -0.030335459858179092,
+          -0.02288866601884365,
+          0.0
+        ],
+        "max": [
+          0.02966454066336155,
+          0.02110038697719574,
+          0.031932003796100616
+        ]
+      },
+      "vertices": 42,
+      "triangles": 80,
+      "materials": [
+        "Prop_pebble_stone"
+      ],
+      "material_base_colors": {
+        "Prop_pebble_stone": [
+          0.2,
+          0.2,
+          0.19
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "06585b4e5e064a97aa510123da228c72e8605eb24dc8d6c7952f7ea0ffef4d3a",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "小石子",
+      "category": "nature",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.04,
+        "game_longest_dim_m": 0.06,
+        "sourcing_hint": "Kenney Nature Kit rock_small*（渲染不符，需人工复核）或 model ourselves",
+        "row_found": true
+      },
+      "dimension_check": {
+        "target_m": 0.06,
+        "built_longest_m": 0.06000000052154064,
+        "abs_error_m": 5.21540644005114e-10,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.5
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "stone",
+          "name_zh": "灰石",
+          "linear_rgb": [
+            0.2,
+            0.2,
+            0.19
+          ],
+          "roughness": 0.85
+        }
+      ],
+      "notes": "Chose the \"model ourselves\" option.  Deterministic sine deformation, flat shaded, 80 triangles.",
+      "build_script": "models/pebble.py",
+      "preview": "previews/pebble_preview.png",
+      "files": {
+        "pebble.fbx": 16940,
+        "pebble.glb": 7336,
+        "pebble.blend": 402108
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "3.6.21"
+      },
+      "preview_bytes": 154113
+    },
+    {
+      "id": "bottle_cap",
+      "pivot": "base",
+      "target_longest_m": 0.05,
+      "dimensions_m": {
+        "x": 0.05000000074505806,
+        "y": 0.04755282402038574,
+        "z": 0.014499999582767487,
+        "longest": 0.05000000074505806
+      },
+      "bounds_m": {
+        "min": [
+          -0.02500000037252903,
+          -0.02377641201019287,
+          0.0
+        ],
+        "max": [
+          0.02500000037252903,
+          0.02377641201019287,
+          0.014499999582767487
+        ]
+      },
+      "vertices": 102,
+      "triangles": 200,
+      "materials": [
+        "Prop_bottle_cap_cap"
+      ],
+      "material_base_colors": {
+        "Prop_bottle_cap_cap": [
+          0.1,
+          0.14,
+          0.19
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "884e97f7dfd4299e454a6cf841766482fb2c0ed61c14dd728b9fa8be13cfb156",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "瓶盖",
+      "category": "debris",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.03,
+        "game_longest_dim_m": 0.05,
+        "sourcing_hint": "model ourselves：Ø0.05 m 圆盘 + 齿边",
+        "row_found": true
+      },
+      "dimension_check": {
+        "target_m": 0.05,
+        "built_longest_m": 0.05000000074505806,
+        "abs_error_m": 7.450580569168253e-10,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.667
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "cap",
+          "name_zh": "暗蓝灰金属漆",
+          "linear_rgb": [
+            0.1,
+            0.14,
+            0.19
+          ],
+          "roughness": 0.45
+        }
+      ],
+      "notes": "Crown profile plus alternating skirt radius reads as the crimped rim; the underside is a closed disc, so the cap is watertight.",
+      "build_script": "models/bottle_cap.py",
+      "preview": "previews/bottle_cap_preview.png",
+      "files": {
+        "bottle_cap.fbx": 18476,
+        "bottle_cap.glb": 14044,
+        "bottle_cap.blend": 410508
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "3.6.21"
+      },
+      "preview_bytes": 162673
+    },
+    {
+      "id": "paper_scrap",
+      "pivot": "base",
+      "target_longest_m": 0.1,
+      "dimensions_m": {
+        "x": 0.09999999776482582,
+        "y": 0.07412444055080414,
+        "z": 0.011834502220153809,
+        "longest": 0.09999999776482582
+      },
+      "bounds_m": {
+        "min": [
+          -0.04851318895816803,
+          -0.036373574286699295,
+          0.0
+        ],
+        "max": [
+          0.05148680880665779,
+          0.03775086626410484,
+          0.011834502220153809
+        ]
+      },
+      "vertices": 84,
+      "triangles": 164,
+      "materials": [
+        "Prop_paper_scrap_paper"
+      ],
+      "material_base_colors": {
+        "Prop_paper_scrap_paper": [
+          0.62,
+          0.6,
+          0.54
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "7a4c471b44836e0d84bf3c302546977913130ed2733cd7d771d655049b68d831",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "纸屑",
+      "category": "debris",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.1,
+        "game_longest_dim_m": 0.1,
+        "sourcing_hint": "model ourselves：单面薄片，双面材质",
+        "row_found": true
+      },
+      "dimension_check": {
+        "target_m": 0.1,
+        "built_longest_m": 0.09999999776482582,
+        "abs_error_m": 2.2351741846282636e-09,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "paper",
+          "name_zh": "旧纸白",
+          "linear_rgb": [
+            0.62,
+            0.6,
+            0.54
+          ],
+          "roughness": 0.8
+        }
+      ],
+      "notes": "No texture: the crumple is geometric.  0.10 x 0.07 m, 1.4 mm thick, closed slab with a curled edge and a torn outline instead of a two-sided plane.",
+      "build_script": "models/paper_scrap.py",
+      "preview": "previews/paper_scrap_preview.png",
+      "files": {
+        "paper_scrap.fbx": 18924,
+        "paper_scrap.glb": 12844,
+        "paper_scrap.blend": 407988
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "3.6.21"
+      },
+      "preview_bytes": 134132
+    },
+    {
+      "id": "toy_ball",
+      "pivot": "center",
+      "target_longest_m": 0.4,
+      "dimensions_m": {
+        "x": 0.3999999761581421,
+        "y": 0.3999999761581421,
+        "z": 0.4000000059604645,
+        "longest": 0.4000000059604645
+      },
+      "bounds_m": {
+        "min": [
+          -0.19999998807907104,
+          -0.19999998807907104,
+          -0.20000000298023224
+        ],
+        "max": [
+          0.19999998807907104,
+          0.19999998807907104,
+          0.20000000298023224
+        ]
+      },
+      "vertices": 146,
+      "triangles": 288,
+      "materials": [
+        "Prop_toy_ball_shell",
+        "Prop_toy_ball_band"
+      ],
+      "material_base_colors": {
+        "Prop_toy_ball_shell": [
+          0.7,
+          0.66,
+          0.58
+        ],
+        "Prop_toy_ball_band": [
+          0.34,
+          0.05,
+          0.045
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "daa1dd75dfc8d4dcb962c4f9ced48c49ebcda933b6bc109d5258acf3b1011649",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "小皮球",
+      "category": "toy",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.15,
+        "game_longest_dim_m": 0.4,
+        "sourcing_hint": "model ourselves：Ø0.40 m 低面数球 + 双色条纹",
+        "row_found": true
+      },
+      "dimension_check": {
+        "target_m": 0.4,
+        "built_longest_m": 0.4000000059604645,
+        "abs_error_m": 5.960464455334602e-09,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 2.667
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "shell",
+          "name_zh": "米白球面",
+          "linear_rgb": [
+            0.7,
+            0.66,
+            0.58
+          ],
+          "roughness": 0.55
+        },
+        {
+          "key": "band",
+          "name_zh": "暗红球带",
+          "linear_rgb": [
+            0.34,
+            0.05,
+            0.045
+          ],
+          "roughness": 0.55
+        }
+      ],
+      "notes": "Two flat materials on one sphere: the bands are assigned by face height, no stripe texture.  Pivot at the sphere centre so a rolling or spinning ball rotates cleanly.",
+      "build_script": "models/toy_ball.py",
+      "preview": "previews/toy_ball_preview.png",
+      "files": {
+        "toy_ball.fbx": 22396,
+        "toy_ball.glb": 8680,
+        "toy_ball.blend": 434652
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "3.6.21"
+      },
+      "preview_bytes": 209956
+    },
+    {
+      "id": "napkin",
+      "pivot": "base",
+      "target_longest_m": 0.3,
+      "dimensions_m": {
+        "x": 0.29999998211860657,
+        "y": 0.29999998211860657,
+        "z": 0.0279999990016222,
+        "longest": 0.29999998211860657
+      },
+      "bounds_m": {
+        "min": [
+          -0.14999999105930328,
+          -0.14999999105930328,
+          0.0
+        ],
+        "max": [
+          0.14999999105930328,
+          0.14999999105930328,
+          0.0279999990016222
+        ]
+      },
+      "vertices": 98,
+      "triangles": 192,
+      "materials": [
+        "Prop_napkin_cloth"
+      ],
+      "material_base_colors": {
+        "Prop_napkin_cloth": [
+          0.6,
+          0.56,
+          0.48
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "45470cbad0c11954607e2608037647f47f4ad34d7b4124206825e4cbc3d69171",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "餐巾",
+      "category": "tableware",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.15,
+        "game_longest_dim_m": 0.3,
+        "sourcing_hint": "model ourselves：折叠面片，0.30 m",
+        "row_found": true
+      },
+      "dimension_check": {
+        "target_m": 0.3,
+        "built_longest_m": 0.29999998211860657,
+        "abs_error_m": 1.7881393421514957e-08,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 2.0
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "cloth",
+          "name_zh": "亚麻米色",
+          "linear_rgb": [
+            0.6,
+            0.56,
+            0.48
+          ],
+          "roughness": 0.9
+        }
+      ],
+      "notes": "Fold is a smooth height field, not stacked sheets, so the mesh stays a single closed solid with no interior faces.",
+      "build_script": "models/napkin.py",
+      "preview": "previews/napkin_preview.png",
+      "files": {
+        "napkin.fbx": 16652,
+        "napkin.glb": 6276,
+        "napkin.blend": 409948
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "3.6.21"
+      },
+      "preview_bytes": 155360
+    },
+    {
+      "id": "watering_can",
+      "pivot": "base",
+      "target_longest_m": 0.58,
+      "dimensions_m": {
+        "x": 0.2602749466896057,
+        "y": 0.5800000131130219,
+        "z": 0.41543886065483093,
+        "longest": 0.5800000131130219
+      },
+      "bounds_m": {
+        "min": [
+          -0.13013747334480286,
+          -0.13013747334480286,
+          0.0
+        ],
+        "max": [
+          0.13013747334480286,
+          0.449862539768219,
+          0.41543886065483093
+        ]
+      },
+      "vertices": 173,
+      "triangles": 346,
+      "materials": [
+        "Prop_watering_can_enamel"
+      ],
+      "material_base_colors": {
+        "Prop_watering_can_enamel": [
+          0.1,
+          0.16,
+          0.1
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "568d116b9e468f035445eba69d127161b77f9c6fe938849478e6eab60699df24",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "洒水壶",
+      "category": "garden",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.25,
+        "game_longest_dim_m": 0.58,
+        "sourcing_hint": "model ourselves：壶身圆柱 + 壶嘴，0.58 m",
+        "row_found": true
+      },
+      "dimension_check": {
+        "target_m": 0.58,
+        "built_longest_m": 0.5800000131130219,
+        "abs_error_m": 1.3113021890553966e-08,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 2.32
+      },
+      "tri_budget": 600,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "enamel",
+          "name_zh": "灰绿搪瓷",
+          "linear_rgb": [
+            0.1,
+            0.16,
+            0.1
+          ],
+          "roughness": 0.55
+        }
+      ],
+      "notes": "The three parts are boolean-unioned (exact solver) so the seams are welded and no cap faces are buried inside the body.  Longest axis is the spout, which points +Y (Blender forward).",
+      "build_script": "models/watering_can.py",
+      "preview": "previews/watering_can_preview.png",
+      "files": {
+        "watering_can.fbx": 22172,
+        "watering_can.glb": 18572,
+        "watering_can.blend": 420664
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "3.6.21"
+      },
+      "preview_bytes": 165146
+    }
+  ],
+  "contact_sheet": "previews/contact_sheet.png",
+  "limitations": [
+    "占位美术，非最终风格",
+    "未在 Unity 中导入验证（本批次只做 Blender 端 FBX 回读验证）",
+    "FBX 不携带材质贴图；Unity 端需按材质名重建 base colour",
+    "无 LOD、无 UV、无碰撞体"
+  ]
+}

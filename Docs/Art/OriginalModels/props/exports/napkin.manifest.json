@@ -1,0 +1,99 @@
+{
+  "id": "napkin",
+  "pivot": "base",
+  "target_longest_m": 0.3,
+  "dimensions_m": {
+    "x": 0.29999998211860657,
+    "y": 0.29999998211860657,
+    "z": 0.0279999990016222,
+    "longest": 0.29999998211860657
+  },
+  "bounds_m": {
+    "min": [
+      -0.14999999105930328,
+      -0.14999999105930328,
+      0.0
+    ],
+    "max": [
+      0.14999999105930328,
+      0.14999999105930328,
+      0.0279999990016222
+    ]
+  },
+  "vertices": 98,
+  "triangles": 192,
+  "materials": [
+    "Prop_napkin_cloth"
+  ],
+  "material_base_colors": {
+    "Prop_napkin_cloth": [
+      0.6,
+      0.56,
+      0.48
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "45470cbad0c11954607e2608037647f47f4ad34d7b4124206825e4cbc3d69171",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "餐巾",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.15,
+    "game_longest_dim_m": 0.3,
+    "sourcing_hint": "model ourselves：折叠面片，0.30 m",
+    "row_found": true
+  },
+  "dimension_check": {
+    "target_m": 0.3,
+    "built_longest_m": 0.29999998211860657,
+    "abs_error_m": 1.7881393421514957e-08,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 2.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "cloth",
+      "name_zh": "亚麻米色",
+      "linear_rgb": [
+        0.6,
+        0.56,
+        0.48
+      ],
+      "roughness": 0.9
+    }
+  ],
+  "notes": "Fold is a smooth height field, not stacked sheets, so the mesh stays a single closed solid with no interior faces.",
+  "build_script": "models/napkin.py",
+  "preview": "previews/napkin_preview.png",
+  "files": {
+    "napkin.fbx": 16652,
+    "napkin.glb": 6276,
+    "napkin.blend": 409948
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "3.6.21"
+  },
+  "preview_bytes": 155360
+}

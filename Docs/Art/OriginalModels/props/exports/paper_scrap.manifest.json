@@ -1,0 +1,99 @@
+{
+  "id": "paper_scrap",
+  "pivot": "base",
+  "target_longest_m": 0.1,
+  "dimensions_m": {
+    "x": 0.09999999776482582,
+    "y": 0.07412444055080414,
+    "z": 0.011834502220153809,
+    "longest": 0.09999999776482582
+  },
+  "bounds_m": {
+    "min": [
+      -0.04851318895816803,
+      -0.036373574286699295,
+      0.0
+    ],
+    "max": [
+      0.05148680880665779,
+      0.03775086626410484,
+      0.011834502220153809
+    ]
+  },
+  "vertices": 84,
+  "triangles": 164,
+  "materials": [
+    "Prop_paper_scrap_paper"
+  ],
+  "material_base_colors": {
+    "Prop_paper_scrap_paper": [
+      0.62,
+      0.6,
+      0.54
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "7a4c471b44836e0d84bf3c302546977913130ed2733cd7d771d655049b68d831",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "纸屑",
+  "category": "debris",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.1,
+    "game_longest_dim_m": 0.1,
+    "sourcing_hint": "model ourselves：单面薄片，双面材质",
+    "row_found": true
+  },
+  "dimension_check": {
+    "target_m": 0.1,
+    "built_longest_m": 0.09999999776482582,
+    "abs_error_m": 2.2351741846282636e-09,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "paper",
+      "name_zh": "旧纸白",
+      "linear_rgb": [
+        0.62,
+        0.6,
+        0.54
+      ],
+      "roughness": 0.8
+    }
+  ],
+  "notes": "No texture: the crumple is geometric.  0.10 x 0.07 m, 1.4 mm thick, closed slab with a curled edge and a torn outline instead of a two-sided plane.",
+  "build_script": "models/paper_scrap.py",
+  "preview": "previews/paper_scrap_preview.png",
+  "files": {
+    "paper_scrap.fbx": 18924,
+    "paper_scrap.glb": 12844,
+    "paper_scrap.blend": 407988
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "3.6.21"
+  },
+  "preview_bytes": 134132
+}

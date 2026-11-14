@@ -1,0 +1,99 @@
+{
+  "id": "bottle_cap",
+  "pivot": "base",
+  "target_longest_m": 0.05,
+  "dimensions_m": {
+    "x": 0.05000000074505806,
+    "y": 0.04755282402038574,
+    "z": 0.014499999582767487,
+    "longest": 0.05000000074505806
+  },
+  "bounds_m": {
+    "min": [
+      -0.02500000037252903,
+      -0.02377641201019287,
+      0.0
+    ],
+    "max": [
+      0.02500000037252903,
+      0.02377641201019287,
+      0.014499999582767487
+    ]
+  },
+  "vertices": 102,
+  "triangles": 200,
+  "materials": [
+    "Prop_bottle_cap_cap"
+  ],
+  "material_base_colors": {
+    "Prop_bottle_cap_cap": [
+      0.1,
+      0.14,
+      0.19
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "884e97f7dfd4299e454a6cf841766482fb2c0ed61c14dd728b9fa8be13cfb156",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "瓶盖",
+  "category": "debris",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.03,
+    "game_longest_dim_m": 0.05,
+    "sourcing_hint": "model ourselves：Ø0.05 m 圆盘 + 齿边",
+    "row_found": true
+  },
+  "dimension_check": {
+    "target_m": 0.05,
+    "built_longest_m": 0.05000000074505806,
+    "abs_error_m": 7.450580569168253e-10,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.667
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "cap",
+      "name_zh": "暗蓝灰金属漆",
+      "linear_rgb": [
+        0.1,
+        0.14,
+        0.19
+      ],
+      "roughness": 0.45
+    }
+  ],
+  "notes": "Crown profile plus alternating skirt radius reads as the crimped rim; the underside is a closed disc, so the cap is watertight.",
+  "build_script": "models/bottle_cap.py",
+  "preview": "previews/bottle_cap_preview.png",
+  "files": {
+    "bottle_cap.fbx": 18476,
+    "bottle_cap.glb": 14044,
+    "bottle_cap.blend": 410508
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "3.6.21"
+  },
+  "preview_bytes": 162673
+}

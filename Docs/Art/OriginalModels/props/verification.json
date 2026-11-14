@@ -1,0 +1,1164 @@
+{
+  "note": "FBX/GLB were re-imported into fresh factory-empty Blender scenes; counts are from the imported datablocks, not from the export manifest.",
+  "tolerance_m": 0.0005,
+  "blender_version": "3.6.21",
+  "props": {
+    "seed": {
+      "fbx": {
+        "format": "fbx",
+        "file": "seed.fbx",
+        "file_bytes": 17868,
+        "expected": {
+          "vertices": 74,
+          "triangles": 144,
+          "dimensions_m": {
+            "x": 0.02240000106394291,
+            "y": 0.03999999910593033,
+            "z": 0.01600000075995922,
+            "longest": 0.03999999910593033
+          },
+          "pivot": "center"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 74,
+          "triangles": 144,
+          "world_min_m": [
+            -0.0112,
+            -0.02,
+            -0.008
+          ],
+          "world_max_m": [
+            0.0112,
+            0.02,
+            0.008
+          ],
+          "dimensions_m": {
+            "x": 0.0224,
+            "y": 0.04,
+            "z": 0.016,
+            "longest": 0.04
+          },
+          "materials": [
+            "Prop_seed_body"
+          ],
+          "transforms": [
+            {
+              "name": "seed",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "seed.glb",
+        "file_bytes": 3744,
+        "expected": {
+          "vertices": 74,
+          "triangles": 144,
+          "dimensions_m": {
+            "x": 0.02240000106394291,
+            "y": 0.03999999910593033,
+            "z": 0.01600000075995922,
+            "longest": 0.03999999910593033
+          },
+          "pivot": "center"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 74,
+          "triangles": 144,
+          "world_min_m": [
+            -0.0112,
+            -0.02,
+            -0.008
+          ],
+          "world_max_m": [
+            0.0112,
+            0.02,
+            0.008
+          ],
+          "dimensions_m": {
+            "x": 0.0224,
+            "y": 0.04,
+            "z": 0.016,
+            "longest": 0.04
+          },
+          "materials": [
+            "Prop_seed_body"
+          ],
+          "transforms": [
+            {
+              "name": "seed",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      }
+    },
+    "acorn": {
+      "fbx": {
+        "format": "fbx",
+        "file": "acorn.fbx",
+        "file_bytes": 20252,
+        "expected": {
+          "vertices": 112,
+          "triangles": 220,
+          "dimensions_m": {
+            "x": 0.03999999910593033,
+            "y": 0.03804226219654083,
+            "z": 0.05000000074505806,
+            "longest": 0.05000000074505806
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 112,
+          "triangles": 220,
+          "world_min_m": [
+            -0.02,
+            -0.019021,
+            0.0
+          ],
+          "world_max_m": [
+            0.02,
+            0.019021,
+            0.05
+          ],
+          "dimensions_m": {
+            "x": 0.04,
+            "y": 0.038042,
+            "z": 0.05,
+            "longest": 0.05
+          },
+          "materials": [
+            "Prop_acorn_cap",
+            "Prop_acorn_nut"
+          ],
+          "transforms": [
+            {
+              "name": "acorn",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "acorn.glb",
+        "file_bytes": 6120,
+        "expected": {
+          "vertices": 112,
+          "triangles": 220,
+          "dimensions_m": {
+            "x": 0.03999999910593033,
+            "y": 0.03804226219654083,
+            "z": 0.05000000074505806,
+            "longest": 0.05000000074505806
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 122,
+          "triangles": 220,
+          "world_min_m": [
+            -0.02,
+            -0.019021,
+            0.0
+          ],
+          "world_max_m": [
+            0.02,
+            0.019021,
+            0.05
+          ],
+          "dimensions_m": {
+            "x": 0.04,
+            "y": 0.038042,
+            "z": 0.05,
+            "longest": 0.05
+          },
+          "materials": [
+            "Prop_acorn_cap",
+            "Prop_acorn_nut"
+          ],
+          "transforms": [
+            {
+              "name": "acorn",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      }
+    },
+    "pebble": {
+      "fbx": {
+        "format": "fbx",
+        "file": "pebble.fbx",
+        "file_bytes": 16940,
+        "expected": {
+          "vertices": 42,
+          "triangles": 80,
+          "dimensions_m": {
+            "x": 0.06000000052154064,
+            "y": 0.04398905299603939,
+            "z": 0.031932003796100616,
+            "longest": 0.06000000052154064
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 42,
+          "triangles": 80,
+          "world_min_m": [
+            -0.030335,
+            -0.022889,
+            0.0
+          ],
+          "world_max_m": [
+            0.029665,
+            0.0211,
+            0.031932
+          ],
+          "dimensions_m": {
+            "x": 0.06,
+            "y": 0.043989,
+            "z": 0.031932,
+            "longest": 0.06
+          },
+          "materials": [
+            "Prop_pebble_stone"
+          ],
+          "transforms": [
+            {
+              "name": "pebble",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "pebble.glb",
+        "file_bytes": 7336,
+        "expected": {
+          "vertices": 42,
+          "triangles": 80,
+          "dimensions_m": {
+            "x": 0.06000000052154064,
+            "y": 0.04398905299603939,
+            "z": 0.031932003796100616,
+            "longest": 0.06000000052154064
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 240,
+          "triangles": 80,
+          "world_min_m": [
+            -0.030335,
+            -0.022889,
+            0.0
+          ],
+          "world_max_m": [
+            0.029665,
+            0.0211,
+            0.031932
+          ],
+          "dimensions_m": {
+            "x": 0.06,
+            "y": 0.043989,
+            "z": 0.031932,
+            "longest": 0.06
+          },
+          "materials": [
+            "Prop_pebble_stone"
+          ],
+          "transforms": [
+            {
+              "name": "pebble",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      }
+    },
+    "bottle_cap": {
+      "fbx": {
+        "format": "fbx",
+        "file": "bottle_cap.fbx",
+        "file_bytes": 18476,
+        "expected": {
+          "vertices": 102,
+          "triangles": 200,
+          "dimensions_m": {
+            "x": 0.05000000074505806,
+            "y": 0.04755282402038574,
+            "z": 0.014499999582767487,
+            "longest": 0.05000000074505806
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 102,
+          "triangles": 200,
+          "world_min_m": [
+            -0.025,
+            -0.023776,
+            -0.0
+          ],
+          "world_max_m": [
+            0.025,
+            0.023776,
+            0.0145
+          ],
+          "dimensions_m": {
+            "x": 0.05,
+            "y": 0.047553,
+            "z": 0.0145,
+            "longest": 0.05
+          },
+          "materials": [
+            "Prop_bottle_cap_cap"
+          ],
+          "transforms": [
+            {
+              "name": "bottle_cap",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "bottle_cap.glb",
+        "file_bytes": 14044,
+        "expected": {
+          "vertices": 102,
+          "triangles": 200,
+          "dimensions_m": {
+            "x": 0.05000000074505806,
+            "y": 0.04755282402038574,
+            "z": 0.014499999582767487,
+            "longest": 0.05000000074505806
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 489,
+          "triangles": 200,
+          "world_min_m": [
+            -0.025,
+            -0.023776,
+            0.0
+          ],
+          "world_max_m": [
+            0.025,
+            0.023776,
+            0.0145
+          ],
+          "dimensions_m": {
+            "x": 0.05,
+            "y": 0.047553,
+            "z": 0.0145,
+            "longest": 0.05
+          },
+          "materials": [
+            "Prop_bottle_cap_cap"
+          ],
+          "transforms": [
+            {
+              "name": "bottle_cap",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      }
+    },
+    "paper_scrap": {
+      "fbx": {
+        "format": "fbx",
+        "file": "paper_scrap.fbx",
+        "file_bytes": 18924,
+        "expected": {
+          "vertices": 84,
+          "triangles": 164,
+          "dimensions_m": {
+            "x": 0.09999999776482582,
+            "y": 0.07412444055080414,
+            "z": 0.011834502220153809,
+            "longest": 0.09999999776482582
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 84,
+          "triangles": 164,
+          "world_min_m": [
+            -0.048513,
+            -0.036374,
+            0.0
+          ],
+          "world_max_m": [
+            0.051487,
+            0.037751,
+            0.011835
+          ],
+          "dimensions_m": {
+            "x": 0.1,
+            "y": 0.074124,
+            "z": 0.011835,
+            "longest": 0.1
+          },
+          "materials": [
+            "Prop_paper_scrap_paper"
+          ],
+          "transforms": [
+            {
+              "name": "paper_scrap",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "paper_scrap.glb",
+        "file_bytes": 12844,
+        "expected": {
+          "vertices": 84,
+          "triangles": 164,
+          "dimensions_m": {
+            "x": 0.09999999776482582,
+            "y": 0.07412444055080414,
+            "z": 0.011834502220153809,
+            "longest": 0.09999999776482582
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 448,
+          "triangles": 164,
+          "world_min_m": [
+            -0.048513,
+            -0.036374,
+            0.0
+          ],
+          "world_max_m": [
+            0.051487,
+            0.037751,
+            0.011835
+          ],
+          "dimensions_m": {
+            "x": 0.1,
+            "y": 0.074124,
+            "z": 0.011835,
+            "longest": 0.1
+          },
+          "materials": [
+            "Prop_paper_scrap_paper"
+          ],
+          "transforms": [
+            {
+              "name": "paper_scrap",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      }
+    },
+    "toy_ball": {
+      "fbx": {
+        "format": "fbx",
+        "file": "toy_ball.fbx",
+        "file_bytes": 22396,
+        "expected": {
+          "vertices": 146,
+          "triangles": 288,
+          "dimensions_m": {
+            "x": 0.3999999761581421,
+            "y": 0.3999999761581421,
+            "z": 0.4000000059604645,
+            "longest": 0.4000000059604645
+          },
+          "pivot": "center"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 146,
+          "triangles": 288,
+          "world_min_m": [
+            -0.2,
+            -0.2,
+            -0.2
+          ],
+          "world_max_m": [
+            0.2,
+            0.2,
+            0.2
+          ],
+          "dimensions_m": {
+            "x": 0.4,
+            "y": 0.4,
+            "z": 0.4,
+            "longest": 0.4
+          },
+          "materials": [
+            "Prop_toy_ball_band",
+            "Prop_toy_ball_shell"
+          ],
+          "transforms": [
+            {
+              "name": "toy_ball",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "toy_ball.glb",
+        "file_bytes": 8680,
+        "expected": {
+          "vertices": 146,
+          "triangles": 288,
+          "dimensions_m": {
+            "x": 0.3999999761581421,
+            "y": 0.3999999761581421,
+            "z": 0.4000000059604645,
+            "longest": 0.4000000059604645
+          },
+          "pivot": "center"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 210,
+          "triangles": 288,
+          "world_min_m": [
+            -0.2,
+            -0.2,
+            -0.2
+          ],
+          "world_max_m": [
+            0.2,
+            0.2,
+            0.2
+          ],
+          "dimensions_m": {
+            "x": 0.4,
+            "y": 0.4,
+            "z": 0.4,
+            "longest": 0.4
+          },
+          "materials": [
+            "Prop_toy_ball_band",
+            "Prop_toy_ball_shell"
+          ],
+          "transforms": [
+            {
+              "name": "toy_ball",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      }
+    },
+    "napkin": {
+      "fbx": {
+        "format": "fbx",
+        "file": "napkin.fbx",
+        "file_bytes": 16652,
+        "expected": {
+          "vertices": 98,
+          "triangles": 192,
+          "dimensions_m": {
+            "x": 0.29999998211860657,
+            "y": 0.29999998211860657,
+            "z": 0.0279999990016222,
+            "longest": 0.29999998211860657
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 98,
+          "triangles": 192,
+          "world_min_m": [
+            -0.15,
+            -0.15,
+            -0.0
+          ],
+          "world_max_m": [
+            0.15,
+            0.15,
+            0.028
+          ],
+          "dimensions_m": {
+            "x": 0.3,
+            "y": 0.3,
+            "z": 0.028,
+            "longest": 0.3
+          },
+          "materials": [
+            "Prop_napkin_cloth"
+          ],
+          "transforms": [
+            {
+              "name": "napkin",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "napkin.glb",
+        "file_bytes": 6276,
+        "expected": {
+          "vertices": 98,
+          "triangles": 192,
+          "dimensions_m": {
+            "x": 0.29999998211860657,
+            "y": 0.29999998211860657,
+            "z": 0.0279999990016222,
+            "longest": 0.29999998211860657
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 168,
+          "triangles": 192,
+          "world_min_m": [
+            -0.15,
+            -0.15,
+            0.0
+          ],
+          "world_max_m": [
+            0.15,
+            0.15,
+            0.028
+          ],
+          "dimensions_m": {
+            "x": 0.3,
+            "y": 0.3,
+            "z": 0.028,
+            "longest": 0.3
+          },
+          "materials": [
+            "Prop_napkin_cloth"
+          ],
+          "transforms": [
+            {
+              "name": "napkin",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      }
+    },
+    "watering_can": {
+      "fbx": {
+        "format": "fbx",
+        "file": "watering_can.fbx",
+        "file_bytes": 22172,
+        "expected": {
+          "vertices": 173,
+          "triangles": 346,
+          "dimensions_m": {
+            "x": 0.2602749466896057,
+            "y": 0.5800000131130219,
+            "z": 0.41543886065483093,
+            "longest": 0.5800000131130219
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 173,
+          "triangles": 346,
+          "world_min_m": [
+            -0.130137,
+            -0.130137,
+            -0.0
+          ],
+          "world_max_m": [
+            0.130137,
+            0.449863,
+            0.415439
+          ],
+          "dimensions_m": {
+            "x": 0.260275,
+            "y": 0.58,
+            "z": 0.415439,
+            "longest": 0.58
+          },
+          "materials": [
+            "Prop_watering_can_enamel"
+          ],
+          "transforms": [
+            {
+              "name": "watering_can",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "watering_can.glb",
+        "file_bytes": 18572,
+        "expected": {
+          "vertices": 173,
+          "triangles": 346,
+          "dimensions_m": {
+            "x": 0.2602749466896057,
+            "y": 0.5800000131130219,
+            "z": 0.41543886065483093,
+            "longest": 0.5800000131130219
+          },
+          "pivot": "base"
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 641,
+          "triangles": 346,
+          "world_min_m": [
+            -0.130137,
+            -0.130137,
+            0.0
+          ],
+          "world_max_m": [
+            0.130137,
+            0.449863,
+            0.415439
+          ],
+          "dimensions_m": {
+            "x": 0.260275,
+            "y": 0.58,
+            "z": 0.415439,
+            "longest": 0.58
+          },
+          "materials": [
+            "Prop_watering_can_enamel"
+          ],
+          "transforms": [
+            {
+              "name": "watering_can",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      }
+    }
+  },
+  "all_ok": true
+}

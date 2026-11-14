@@ -1,0 +1,99 @@
+{
+  "id": "seed",
+  "pivot": "center",
+  "target_longest_m": 0.04,
+  "dimensions_m": {
+    "x": 0.02240000106394291,
+    "y": 0.03999999910593033,
+    "z": 0.01600000075995922,
+    "longest": 0.03999999910593033
+  },
+  "bounds_m": {
+    "min": [
+      -0.011200000531971455,
+      -0.019999999552965164,
+      -0.00800000037997961
+    ],
+    "max": [
+      0.011200000531971455,
+      0.019999999552965164,
+      0.00800000037997961
+    ]
+  },
+  "vertices": 74,
+  "triangles": 144,
+  "materials": [
+    "Prop_seed_body"
+  ],
+  "material_base_colors": {
+    "Prop_seed_body": [
+      0.42,
+      0.3,
+      0.1
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "214875338e190336afdf3de4e504b710125fb740ea4fa43fd1c95c509126456b",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "草籽",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.02,
+    "game_longest_dim_m": 0.04,
+    "sourcing_hint": "model ourselves：Ø0.04 m 椭球 + 1 张 alpha 草卡",
+    "row_found": true
+  },
+  "dimension_check": {
+    "target_m": 0.04,
+    "built_longest_m": 0.03999999910593033,
+    "abs_error_m": 8.940696724635266e-10,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 2.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "body",
+      "name_zh": "麦秆黄",
+      "linear_rgb": [
+        0.42,
+        0.3,
+        0.1
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "Hint asks for an ellipsoid plus one alpha grass card; the card would need a texture, so this batch keeps the solid grain only.",
+  "build_script": "models/seed.py",
+  "preview": "previews/seed_preview.png",
+  "files": {
+    "seed.fbx": 17868,
+    "seed.glb": 3744,
+    "seed.blend": 406588
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "3.6.21"
+  },
+  "preview_bytes": 147976
+}

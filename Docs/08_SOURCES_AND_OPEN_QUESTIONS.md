@@ -2,6 +2,8 @@
 
 研究日期：2026-10-10。以下均为实际检索到的网页；仅来源列表，不代表下载过素材或执行过测试。
 
+注：`Docs/Research/ReferenceRules/rules_matrix.md` 的第二轮 KatamariBall 来源使用研究子编号 `S-KB01`–`S-KB04`（4Gamer 制作人专访、note.com 玩家实机报告、Katamaripedia、CGMagazine 评测），与本表 S01–S03 及 S04 起的编号并存；本表不重编。
+
 ## S01 · 新版官方产品页
 来源：https://www.bandainamcoent.com/games/once-upon-a-katamari
 用途与限制：确认参考作品及KatamariBall；不包含完整竞技数值。

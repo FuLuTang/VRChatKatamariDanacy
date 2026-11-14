@@ -480,6 +480,7 @@ def write_markdown(path: Path, command: str, seed: int,
                    scenario_seed_rows: list[dict[str, object]],
                    sweep_rows: list[dict[str, object]],
                    bank_rows: list[dict[str, object]]) -> None:
+    rules = scenario_rows[0][0].params
     lines = [
         "# 回合经济模拟报告（自动生成）",
         "",
@@ -489,6 +490,11 @@ def write_markdown(path: Path, command: str, seed: int,
         f"- 命令：`{command}`",
         f"- seed：`{seed}`",
         f"- 模型：`Docs/Design/Gameplay/round_model.py`（地图快照 21 区 / 452 件 / 1356 价值单位）",
+        f"- 交分规则：缩小 `bank_residual_fraction={rules.bank_residual_fraction}`、"
+        f"最小兑换 `min_bank_diameter_m={rules.min_bank_diameter_m}` m、"
+        f"轮换 `bank_cycle_s={rules.bank_cycle_s}` s、"
+        f"奖励 {'开启' if rules.bonus_enabled else '关闭'} "
+        f"`{rules.bonus_points:g}×{len(rules.bonus_categories)}`",
         "",
         "## 场景总表",
         "",
@@ -611,7 +617,7 @@ def write_markdown(path: Path, command: str, seed: int,
         "",
         "- 总分 = 交存分 + 回合末奖励分；不是单人成绩。",
         "- 被吞次数 = 被吞事件数（每名受害者计一次）。",
-        "- 交分不再重置：曲线掉到约 0.36–0.46 m 是一次交分后的缩小，"
+        "- 交分不再重置：曲线掉到约 0.36–0.60 m 是一次交分后的缩小，"
         "掉回 0.30 m 只可能是被吞后的重生。",
         "- 球径 < `min_bank_diameter_m` 时交分被拒绝（本次运行不产生分数，"
         "玩家必须先去长大）；子阈值访问不会改变球或分数。",

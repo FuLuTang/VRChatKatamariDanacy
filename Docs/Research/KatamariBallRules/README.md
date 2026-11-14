@@ -151,4 +151,4 @@
 | S-KB07 | [note.com 塊魂日記 2026](sources/note.com_player-diary-kazura.md) | 2 | 「积分与大小共同决定名次」旁证 |
 | — | [_blocked-and-unusable.md](sources/_blocked-and-unusable.md) | — | 取不到正文的来源登记（不作为证据） |
 
-引用 URL 仅用于核查，不代表版权、品牌授权或对原作实现的背书。本轮未运行游戏、未录制实机、未测量数值；不修改 [T01 矩阵](../ReferenceRules/rules_matrix.md) 与 [P09 决策](../Preparation/RuleDecisions/README.md)，是否据此更新 `unknown` 状态由主管决定。
+引用 URL 仅用于核查，不代表版权、品牌授权或对原作实现的背书。本轮未运行游戏、未录制实机、未测量数值。主管已据此更新 [T01 矩阵](../ReferenceRules/rules_matrix.md) 与 [P09 决策](../Preparation/RuleDecisions/README.md)（含 `decisions.json`，提交 `b4cb62f`）：矩阵的「交分 / 兑换」「吞噬 / 对手交互」「KO 与重生」「道具」等行与决策表的对应项已按 C1–C22 改写；仍未解的问题见本文 §3。

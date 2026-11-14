@@ -21,3 +21,15 @@
 仓库根运行 `python3 -m unittest discover -s Docs/tests/ball_radial_proxy -v`。跨层测试在T49目录单独发现运行，见 [`GroundContact/SIMULATION_REPORT.md`](../GroundContact/SIMULATION_REPORT.md)。
 
 本层不实现接触高度(T49)、Sweep(T54)、价值/吸附裁决、Renderer、掉落轨迹、真实mesh碰撞或PVP外壳。稀疏端点/半球近邻可能漏掉中段或相邻采样峰值；性能及跨平台逐位一致性未测。
+
+## Unity 实现
+
+`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/RadialProxy/RadialProxyMath.cs`（`namespace VRCKatamari.BallLayers`，`public static class RadialProxyMath`）把本模型搬成 UdonSharp 可用的无状态静态数学：不分配、无静态字段、无重载/属性/struct，索引与结果都写进调用方预分配的数组。
+
+- 调用方持有壳表：32 个方向（`TryFillDirections` 一次生成）、32 个支持长度、扁平端点池、候选键槽位；本类不持有状态，也不读 Transform。
+- 端点：`TryDirectionLengthPoint`（p=d·l，单位方向、非负有限米值）、`TryWorldPointToLocal`、`TryTransformEndpointsToLocal`（整批先校验再写池，失败不动旧池）。球旋转按单位四元数校验，缩放/零/非有限四元数直接拒绝而不归一化（与 GroundContact 同一规则；Python host 里是归一化，这里换了立场）。
+- 支持：`TryCollectAffectedDirections`（dot>0 半球，升序），`TrySolveSupports`（只重算给定方向，max(core, dot(...))，先试算再写，失败不动支持表），`TryProtrusion`。
+- 候选：`TryInsertCandidateKey`/`TryRemoveCandidateKey`，序数有序、重复/空键/超额拒绝，满额绝不驱逐。
+- 整账本：`TryRebuild` 校验完整个调用方账本（键唯一、每项至少一个端点、候选不超容量）后才写支持与候选，等价于 Python 的原子 rebuild。
+
+`Tests/EditMode/BallLayers/RadialProxyTests.cs` 逐条覆盖 `Docs/tests/ball_radial_proxy/test_radial_proxy.py` 的 10 项测试；Python 的 `(1.0)` 非法下标在 C# 类型层面不存在，负数与 32 越界仍照测。尚未在 Unity 编译、未跑 `run_tests`，Udon 程序集编译与场景行为均未验证；32 方向/4 候选仍是未测原型值。

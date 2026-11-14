@@ -31,3 +31,12 @@
 ## 独立性与非目标
 
 不导入 T46 运动积分、T52 核心 Mesh 缩放、T55 FollowRig 或任何相邻层模块；不写玩法平面朝向、镜头、HUD、尺寸/碰撞或运动状态。调用方须独立保管玩法朝向，不从返回的自转四元数推导它。
+
+## Unity 实现
+
+- 纯逻辑：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/VisualRoll/VisualRollMath.cs`，入口 `VRCKatamari.BallLayers.VisualRollMath.TryAdvanceRotation`（当前旋转 + 位移 + 地面法线 + 半径 + 传送标志 + 可选跳变阈值 → `out Quaternion`）与 `TryNormalizeRotation`（姿态入口校验/归一化）。静态类、无 struct、无分配、无静态字段；失败返回 false 且 out 为 identity（不得应用）。
+- `VisualRollState` 这个不可变状态对象在 Udon 下不成立，改成“当前旋转进、新旋转出”：自转四元数由调用方存在 BallVisualRollRoot 或 Behaviour 字段上，每步传回。跳过步（传送、超阈值、切向低于阈值）返回 true 并保持归一化后的原姿态；非法输入返回 false。Python 的 `None` 阈值用 `useMaxDisplacement` + `maxDisplacement` 一对参数表达，不用可空类型。
+- 无滑动与轴向：`ρ=-r n`、`v+ω×ρ=0` ⇒ 轴 `n×t`、角 `|t|/r`。EditMode 用例在 Unity 自己的 `Quaternion`/向量上独立验证 +Z 平地→+X 轴、1/4 周=90°、整周复位、接触点速度残差与四元数左组合，补上了 `INTERFACES.md` 中“Unity 轴向/乘法顺序未对拍”的数学层缺口；场景、Udon 与 Transform 链仍未验证。
+- 语义不变：只吃切向距离，纯法向与零位移不滚；`1e-7 m` 切向阈值保持姿态；每步归一化后再左组合 `delta*current`；不读写玩法朝向、位置、scale 或账本，也不提供 reset 入口（reset 由调用方写 identity）。
+- 测试：`Tests/EditMode/BallLayers/VisualRollTests.cs` 把 `test_visual_roll.py` 的 10 个用例移植为 11 个（整周用例拆成“1/4 周 90°”和“整周复位”两个），并把 `test_presentation_cross_layer_simulation.py` 里属于本层的滚动片段（正常滚动、传送跳过、传送后续段、纯法向、NaN 拒绝）单列；容差按 float32 实测给出。程序集 `VRCKatamari.Tests.EditMode`。
+- 状态：Unity 编译、EditMode 测试与 U# 全量编译均 `NOT_RUN`。

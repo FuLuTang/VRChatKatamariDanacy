@@ -19,3 +19,14 @@
 原版源码未取得；历史专利不等同游戏实际源码，也不证明新版沿用。来源/访问边界见 [`Research/SOURCE_EVIDENCE.md`](Research/SOURCE_EVIDENCE.md)。
 
 运行：`python3 -m unittest discover -s Docs/tests/ball_attachment -v`。测试保留位姿往返、独立scale、稳定身份键等旧基线意图，并新增独立矩阵oracle、确认序号乱序/重放、冲突/撤销/局代清理/快照原子替换/非法输入，以及跨T52模拟。此层没有Unity、Udon、网络或VR运行证据。
+
+## Unity 实现
+
+`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/Attachment/AttachmentMath.cs`（`namespace VRCKatamari.BallLayers`，`public static class AttachmentMath`）是本模型的 UdonSharp 安全移植：纯静态、不分配、无静态字段、无 struct/属性/重载，账本与快照全部是调用方预分配的并行数组。
+
+- 位姿：`TryWorldPoseToLocal` / `TryLocalPoseToWorld`，位置为世界米、+Y 向上；局部位姿相对球刚体根（worldPos = ballPos + ballRot·localPos，worldRot = ballRot·localRot）。四元数先做防溢出归一化（缩放/零/非有限拒绝）；物件 scale 只校验不施加，球芯长大不得放大已附着物件。
+- 账本：十列等长并行数组（context/ball/instance/generation/attachSequence/eventId/localPosition/localRotation/objectScale/isRevoked），一列一个记录；`isRevoked` 行是墓碑。Python 的 records dict + revoked set 在这里是同一行集加标志位，行为不变：同身份同 payload 幂等、同身份异 payload 拒绝、墓碑阻止重放、`TryClearContext` 按局隔离、容量满拒绝而不驱逐。
+- 身份：`TryApplyConfirmedEvent`、`TryRevokeEvent`（缺席身份也落墓碑）、`TryClearContext`、`TryBuildActiveOrder`（records 按身份排序，到达顺序不可见）、`TryRebuildContextSnapshot`（整个快照校验通过才替换该局的行；Python 的「同身份不能同时 active 与 revoked」即同身份两次出现而标志不同）。
+- 两个哈希：`TryEventIdentityHash`（context/ball/instance/event 四个文本 + generation/attachSequence）与 `TryRemoteProxyKeyHash`（严格 ballSeed/实例ID/世代/attachSequence 四字段）。字段顺序与长度前缀分帧沿用模型，但 **摘要算法不是 SHA-256**：Udon 没有 hashlib、没有 UTF-8 编码器，这里用 32 位 FNV-1a，文本按 UTF-16 码元（低字节、高字节）加码元长度前缀。因此摘要值**与 Python 的 hexdigest 不同，也不可与离线结果互比**；两者都只是确定性键，不是认证、不是无碰撞证明。
+
+`Tests/EditMode/BallLayers/AttachmentTests.cs` 覆盖 `test_attachment.py` 的 6 项与 `test_growth_attachment_simulation.py` 中属于本层的 2 项；增长模拟里的 `derive_size`/体积累加/交分属于 SizeModel 与确认账本，`test_presentation_cap_does_not_truncate_authority_value` 完全不触及本层，这三处断言未在此移植。尚未在 Unity 编译、未跑 `run_tests`；`ballSeed` 的来源与文本规范、Udon 下的哈希与字符串行为均未验证。

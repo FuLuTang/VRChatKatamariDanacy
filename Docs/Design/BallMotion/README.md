@@ -43,3 +43,52 @@
 ## 运行与测试
 
 从仓库根运行：`python3 -m unittest discover -s Docs/tests`。该命令只验证主机侧参考代码性质，不是 Unity/Udon/VR 或网络验收。
+
+## Unity 实现
+
+平面运动这一层已移植为 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Motion/BallMotionMath.cs`（`VRCKatamari.Motion`，纯静态类），EditMode 测试在同项目 `Tests/EditMode/Motion/BallMotionTests.cs`。只覆盖 `_step` 的速度/位移部分，仍是 DRAFT：参数全部由调用方传入，模型默认值没有写成项目常量。
+
+接口只有一个入口、无重载：
+
+```
+bool BallMotionMath.TryStep(forward, turn, lateral, headingDegrees, velocity, deltaTime,
+    growthFraction, maxSpeedMps, accelerationMps2, brakingMps2, frictionPerSecond,
+    turnRateDegreesPerSecond, maxLateralMps, growthSpeedFactor, growthTurnFactor,
+    out nextHeadingDegrees, out nextVelocity, out displacement)
+```
+
+- 坐标系与单位：世界坐标，+Y 向上，米与秒；运动只在 XZ 平面。`headingDegrees` 是绕 +Y 的偏航、输出恒在 [0,360)，0 面向 +Z，forward=(sin h, 0, cos h)、横向（右）=(cos h, 0, -sin h)，与 Unity yaw 同向。速度 m/s，`displacement` 是本步的米数。
+- 每步顺序照抄模型：`growth` 夹到 [0,1] → 速度/转向上限按 `1-factor*growth` 降额 → 按 `turn` 转向并取模 → 沿**转向后**的朝向加速度 → 指数摩擦 `exp(-friction*dt)` → 横向夹到 `±maxLateral` → 平面速度按比例压到上限 → `|clamp(forward)|<1e-9` 时按 `braking*dt` 减速且不反向 → `p += v*dt`。
+- 垂直运动不在本层：`velocity.y` 不参与计算，`nextVelocity.y` 与 `displacement.y` 恒为 0。重力、坡面 `y>=floor(x)+r`、墙法向去速、卡住计时与越界复位都不在这里；持有垂直速度的调用方自行合并。
+- 不做子步进、不裁剪位移：快球穿薄墙由扫掠层负责（Python `test_fast_sweep...` 的语义），本层必须把整段 `v*dt` 交给它。
+- `growthFraction` 就是模型的 `size` 项，由调用方从自己持有的半径算出；本层不做体积↔半径映射（见 `SizeModelMath`）。
+- 与 Python 的差异：非法输入返回 `false` 且不写任何 out（模型抛异常或让 NaN 穿过夹取）；`dt<=0` 拒绝（`dt=0` 会让速度上限在没有时间流逝时夹一次）；`%` 用正模实现；算术由 double 变 float；有限输入但中间量溢出（加速度、阻尼指数、位移长度）同样拒绝而不夹取。
+
+Python 测试 → NUnit 对照：
+
+| Python | NUnit | 说明 |
+|---|---|---|
+| `test_fast_sweep_does_not_tunnel_thin_wall` | `StepTravelIsUnclampedAndReproducible`（部分） | 只验本层给出完整 `v*dt` 且不裁剪；扫掠本身归 `SweepMath`（已有 `SweepTests.cs`） |
+| `test_follow_rig_ignores_roll_pitch` | 未移植 | 属 `FollowRigMath`，已由 `Docs/tests/ball_follow_rig` + `FollowRigTests.cs` 覆盖 |
+| `test_slopes_5_to_15_degrees_stay_supported_and_stable` | 未移植 | 坡面支持是垂直方向的事（`y>=floor(x)+r`、`vy` 恒 0），本层没有 `vy` 通道，当前也未实现 |
+| `test_delay_and_fixed_step_are_bounded_and_reproducible` | `StepTravelIsUnclampedAndReproducible` | 定步长累积器归调用方时钟；C# 侧只承诺同一 `dt` 序列可复现 |
+| `test_follow_lag_is_bounded_and_does_not_overshoot` | 未移植 | 属 `FollowRigMath` |
+| `test_growth_clamps_and_parameters_remain_legal_at_max` | `InputsAndGrowthAreClampedToTheModelBounds` | 半径夹取归 `SizeModelMath`；本层验 `growth` 夹取与降额后上限仍非负 |
+| `test_out_of_bounds_recovers_to_origin` | 未移植 | 复位/边界属 `BallMotor` 与世界设置 |
+
+另外补了六条语义测试：终端速度等于降额上限、零输入单调减速到静止且不反向、加速在 `(velocity, forward)` 同时取反时严格反号、转向速率与「先转后加速」、`dt` 分块不可互换（模型只承诺定步长复现）、夹取与 NaN/溢出拒绝。
+
+本次只写源码：**没有**在 Unity 里运行 `run_tests`，也没有做 UdonSharp 全量编译（写作者不是 Unity 操作者）。这两项仍需 Unity 侧确认。
+
+### 未来 `BallMotor` 组合层（仅描述，不实现）
+
+`BallMotor` 自己持有每帧状态（heading、速度、球心、半径、growth、卡住计时、越界标记）与定步长累积器，各层保持无状态、只返回 `bool`。按下面的顺序串联，每个边界只传这些数据：
+
+- **ControlIntentMath → BallMotionMath**：本步 `dt`、Move2D 轴对（设备量，不是世界方向）、舒适转向边沿（化成 ±1）、当前 heading 与平面速度；朝向基准（相机/rig yaw）由适配层给。
+- **BallMotionMath → GroundContactMath**：新平面速度、本步平面位移、调用方累加后的球心、heading、`dt`、碰撞半径、地面法线与偏移。
+- **GroundContactMath → SweepMath**：修正后的球心、本步剩余位移、碰撞半径、平面/盒障碍数组、接触预算与分离 epsilon。
+- **SweepMath → PickupAbsorbMath**：实际落点、被消耗的位移、接触（点、法线、时刻、障碍索引、穿透深度）、`blocked`/`stuck`、去掉法向分量后的速度。
+- **PickupAbsorbMath → SizeModelMath**：本步确认的体积增量与当前确认体积（只传账本已确认值，不传远程装饰）。
+- **SizeModelMath → VisualRollMath**：滚动半径、支撑法线、本步确认位移、是否瞬移/不连续。
+- **VisualRollMath → FollowRigMath**：球心世界位置、水平 yaw、眼高目标；FollowRig 只回位置 + yaw，不回写玩法状态。
+- **SizeModelMath → BallMotionMath（下一帧）**：由新半径算出的 `growthFraction=(r-base)/(max-base)`（再夹到 [0,1]），是唯一回灌量，避免半径映射分叉。

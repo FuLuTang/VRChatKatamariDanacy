@@ -57,3 +57,13 @@ A 双控制器和 B 原生 VR 的映射不代表设备实测；A 的 Grip 术语
 - 同一脚本化规范输入分别标记 A、B、Desktop，断言产物完整相同。此测试验证转换器的一致性，不验证真实设备适配器。
 
 **明确不声称：** VR 舒适性、VRChat 真机输入兼容、Udon runtime、Unity 编译、网络一致性或任何性能/公平性实测通过。
+
+## Unity 实现
+
+- 纯逻辑：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Input/ControlIntentMath.cs`，入口 `VRCKatamari.Input.ControlIntentMath.TryProcess`——静态方法 + 调用方缓冲区 + `out` 计数，无 struct、无分配、无静态状态、无重载、不抛异常；边沿/去抖/舒适转向状态由调用方用 `ActionCount` 个 bool、`ActionCount` 个 float 和 2 个 bool 的数组持有，`TryReset` 对应 `reset()`。失败返回 false 且 `intentCount=0`，不写部分结果。
+- 行为严格取自 `intent.py`：轴限幅 [-1,1]、零向量不发事件；每帧顺序 Move2D→Look2D→ComfortTurn→UseItemOrJump→InteractOrSeat→ExitStation→Respawn；四个动作各自独立上升沿与独立去抖（默认 0.2 s 草案值）；菜单打开时不发意图，但锁存四个动作的按下态与舒适转向设置，关闭后必须先松开再按；`seated` 不入参（模型显式丢弃），只由 `IsPromptVisible(seated, menu_open)` 影响本地提示。时间戳为非负调用方时钟，每个意图沿用该帧时间戳。
+- 来源 A/B/Desktop 只做路由校验：`ControlIntentSource` 枚举（`VirtualHandles`/`NativeVr`/`Desktop`）+ `IsSupportedSource`，对应 `SOURCE_BINDINGS` 的三个键；设备绑定描述仍只留在本文档表格，不写进运行时。
+- 本层没有、也故意不补（模型未定义）：死区/滞回（本模型只有 [-1,1] 限幅；玩法设计 §4 的 A 模式“死区/灵敏度”是设备适配器设置，数值与语义未定）；世界坐标、前向、yaw 及头/手/摇杆的 yaw 授权（本层不产出 yaw；FollowRig 只接收调用方给的单一水平 yaw，Look2D 与原生舒适转向的优先级仍是未决项）；物理跳跃/下降请求（只有 `UseItemOrJump` 按键请求，没有 descend 意图）；磁铁/火箭选择、道具槽、单槽幂等（单槽由 `Docs/Design/Gameplay/round_model.py` 的 `_pickup_powerup` “已持有道具时拒绝拾取”与道具生命周期/账本负责，本层只产出按键请求）。这些不能从本实现推出契约。
+- 唯一有意偏离：Python 对 NaN 轴会原样输出，本移植按项目约定拒绝所有非有限输入（返回 false）；Python 轴元组长度错误在本移植中不可表达（`Vector2`）。
+- 测试：`Tests/EditMode/Input/ControlIntentTests.cs` 移植 `Docs/tests/control_intent/test_intent.py` 全部 6 个用例，并补充无输入、轴限幅/符号对称、逐动作去抖、去抖边界、重置、菜单锁存舒适转向、无效参数/缓冲区等不变量，共 20 个 NUnit 用例。注意 Python 测试在 t=0.5 的注释写“去抖窗口内”，实际 0.5−0.2=0.3 s 已超出 0.2 s，模型会发出第三次 `UseItemOrJump`；NUnit 按实际行为断言。
+- 状态：Unity 编译、EditMode 测试与 U# 全量编译均 `NOT_RUN`；`.meta` 留给 Unity 操作者生成，本仓库未手写。Python 仍是行为参考。

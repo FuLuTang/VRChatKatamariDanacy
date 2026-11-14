@@ -214,3 +214,15 @@ StepBall:
 - Unity 编译通过、U# 全量编译 0 错误；
 - 全部 EditMode 测试通过（各层测试已存在；装配层本身不能在 EditMode 实例化，新增的只有 `BankShrinkMathTests` 这个纯规则测试，用来替代伪造行为测试）；
 - 一个可进 Play Mode 的实验场景，能滚、能吸、能交分、能看尺寸变化。
+
+## 装配约束（assembly constraints）
+
+**`KatamariBallMotor` 必须独占一个 GameObject**（惯例命名 `MotorHost`），**永远不得与任何其它 UdonSharpBehaviour 同挂一个对象**。
+
+原因不是风格，是运行时行为：一个 GameObject 上叠两个 UdonSharpBehaviour 时，UdonSharp 会把其中之一的 `UdonBehaviour` 置为 `enabled = false`（实例化/编译期发生，无任何报错）。被禁用的那个**不会收到 `Start()`/`Update()`**，于是它的事件全是 null：`AddPlane` 空引用、`GetSemanticDiameterWorldM()` 返回 0、每个调用方都 NRE。表现出来像"球很小、吃不到东西"，而不像装配错误。
+
+判断与防复发：
+
+- `BallPlaygroundBootstrap.Start()` 启动自检覆盖三种坏装配：`motor == null`、`motor.transform == transform`（同物体，即本节的反例）、`motor.GetSemanticDiameterWorldM() <= 0f`（该实例的 `Start()` 从未跑过，**不是**"球太小"）。任一命中即 `Debug.LogError` 并停止驱动。
+- Udon 没有 `FindObjectsOfType`，所以"场景里 motor 数量必须 = 1"在运行时无法内联检查；这条由编辑器侧审计保证：跑实验前用编辑器脚本断言 `FindObjectsOfType<KatamariBallMotor>().Length == 1`。
+- 重建球层级时，先删掉旧 motor 对象再新建 `MotorHost`，并同步重建 prefab（prefab 根上残留 motor 会让每次实例化都复活那个坏结构）。

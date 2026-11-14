@@ -426,7 +426,7 @@ respawn / player_count_plans / performance_budget
 7. **没有文字指示牌**：01 §8 要求「文字+图形+颜色共同表达规则」，本图只做了图形（地毯花纹/家具轮廓）+ 地面材质，没有文字牌。若 T21 的可读性测试不过，补 4 块「筐口指示牌」（0.45×1.2 m，形状图标 + 一个词）即可，不改变任何几何。
 8. **动作层未验收**：02 §3.2 明说坡道/台阶/多接触未实现；本图 §8 的 0.26 m 台阶数字是设计意图，不是「已可通行」。
 9. **schema 的树篱字段名**：`boundary_hedge_*` / `core_hedge_*` 被借来表示墙和筐沿（§2）。这需要 Unity 侧 DTO 与 `build_greybox._scale_record()` 同时改名才能清理；改名前**不要**只改一张图的 JSON，否则两张图的载荷分叉。
-10. **`validate_layout.py` 应退役**：野餐草坪目录里那份 419 行的自检**只认 PicnicLawn**（硬编码路径、`OUTSIDE_OK` 白名单、单图常量）。本文新增的 `Tools/mapbuild/validate_map.py` 覆盖它全部检查项并多了 6 类（区域重叠豁免、出生→交分路程、窄道「缝里不长东西」、climb 门必须落在抬高地形、档位覆盖、长度自洽）。**本次没有删它**（不在写入范围），应由 Lead 在两张图都稳定后删除，并在 `Tools/mapbuild/README.md` 的「加一张新地图」流程里把第 1 步换成通用校验器。
+10. **野餐草坪的专用校验器已退役（2026-11-14）**：那份 419 行的单图自检只认 PicnicLawn（硬编码路径、边界外白名单、单图常量），**已删除**；`Tools/mapbuild/validate_map.py` 现在是唯一实现，覆盖它全部 59 条检查并多 12 类（区域重叠豁免（强制写理由）、`surface` 非空、出生→交分路程、窄道不得落在散布区内、`climb` 门必须落在抬高地形、门槛靠近档位边界、档位覆盖、`length_m` 自洽、拾取门槛 ≤ 最大球径、预算数字一致、重生/人数/`scale` 常量一致、区域档位包含）。逐条覆盖度对照与「加一张新地图」的新流程都写在 [`Tools/mapbuild/README.md`](../../../../Tools/mapbuild/README.md)；回归由 `Tools/mapbuild/tests/test_validate_map.py` 对**两张图参数化**跑。
 11. **`build_greybox.py` 的回归基线是野餐草坪**：`Tools/mapbuild/tests/` 里的 21/60/4/… 是 PicnicLawn 的基线，本图没有加测试模块。本次用 `--layout/--catalog/--out` 把玩具房载荷生成到 `/tmp` 验证过 schema 兼容（exit 0，载荷里 `zones` 17 / `structures` 39 / `scatter_regions` 16 / `routes` 21 / `chokepoints` 12 / `props` 35，与 `layout.json` 逐项一致），但**没有**把玩具房纳入 `--check`。要给玩具房加回归测试，得照 `Tools/mapbuild/README.md` 加一个测试模块（不在本次写入范围）。
 
 ## 17. 验证与下一步

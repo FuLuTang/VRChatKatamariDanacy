@@ -7,8 +7,9 @@
 | `README.md` | 本文：目标、比例、平面、分区、路线、交分、出生公平、垂直度、尺寸门、可读性、预算、未决项 |
 | `layout.json` | 机器可读灰盒规格：边界、21 个区域、结构、4 出生点、4 交分锚点、8 尺寸门、散布区、21 条路线、咽喉、道具点、重生规则 |
 | `prop_catalog.csv` | 54 个道具定义（37 可卷 + 17 固定），含真实/游戏尺寸、占位收益、数量、区域、来源提示、MVP/后续、`coverage.csv` 映射 |
-| `validate_layout.py` | 标准库自检：区域/面积/重叠、ID 引用、出生点、交分台不重叠、尺寸门阈值、目录数量与散布一致、路线净宽余量（**不含密度**：2-D 放置可行性由 `Tools/mapbuild/build_greybox.py` 强制，见 §3.3） |
 | `unity_greybox.json` | 生成物（`python3 Tools/mapbuild/build_greybox.py`）：Unity `JsonUtility` 直接读的扁平载荷，禁止手改 |
+
+> 本目录**不再有专用校验器**：原来那份单图自检已于 2026-11-14 退役并删除（逻辑重复实现、只认本图），改由通用校验器 `python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn` 承担；逐条覆盖度对照见 [`Tools/mapbuild/README.md`](../../../../Tools/mapbuild/README.md) §「为什么不再有每图一份的专用校验器」。§17 有命令。
 
 ## 0. 引用与约定
 
@@ -54,7 +55,7 @@ powerups.points[]  id, type("magnet"|"rocket"), position, zone_id
 respawn / player_count_plans / performance_budget
 ```
 
-`layout.json` 是坐标的唯一真源；`prop_catalog.csv` 的数量必须等于散布 + 尺寸门 + 结构的实例数，`validate_layout.py` 会强制这一点。
+`layout.json` 是坐标的唯一真源；`prop_catalog.csv` 的数量必须等于散布 + 尺寸门 + 结构的实例数，`python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn` 会强制这一点。
 
 ## 1. 设计目标与玩家幻想
 
@@ -70,7 +71,7 @@ respawn / player_count_plans / performance_budget
 
 ## 2. 比例与常量（唯一一张可整体缩放的表）
 
-> **缩放规则**：若 T06 定下不同的球径包线，取 `k = 新最大球径 / 2.20`，对本表「几何」类各行乘 k；面积乘 k²；尺寸门阈值乘 k；时间、人数、比例（%）不变。`layout.json` 的全部坐标/半径/净宽同步乘 k，然后跑 `validate_layout.py` 重算面积与净宽。
+> **缩放规则**：若 T06 定下不同的球径包线，取 `k = 新最大球径 / 2.20`，对本表「几何」类各行乘 k；面积乘 k²；尺寸门阈值乘 k；时间、人数、比例（%）不变。`layout.json` 的全部坐标/半径/净宽同步乘 k，然后跑 `python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn` 重算面积与净宽。
 
 | 常量 | 值 | 来源 | 缩放 |
 |---|---|---|---|
@@ -288,11 +289,11 @@ respawn / player_count_plans / performance_budget
 | `bank_c` 西南台 | (−4.2, 0, −4.2) | 1.60 m | 14.57 m（西南角） | 南 5 m 入口、西南对角门 |
 | `bank_d` 东南台 | (4.2, 0, −4.2) | 1.60 m | 14.57 m（东南角） | 东 5 m 入口、东南对角门 |
 
-- **不重叠**：相邻台圆心距 8.40 m > 2×1.60 m，`validate_layout.py` 强制检查。
+- **不重叠**：相邻台圆心距 8.40 m > 2×1.60 m，通用校验器（`Tools/mapbuild/validate_map.py`）强制检查。
 - **轮换（暂定）**：同时只有 1 个台激活，顺序 `bank_a → bank_d → bank_c → bank_b`（顺时针），周期 60 s，提前 8 s 预告（喇叭 + 旗杆降半 + 圆环闪烁）。激活时刻 0 / 60 / 120 / 180 s；180 s 一局内实际只有 3 个 60 s 窗口（0–60 / 60–120 / 120–180），**第 4 个台在终场哨（180 s）激活、本局内不会被用到**。为不让任何一个台永久闲置，下一局的轮换起点按 +1 台偏移（本局没用到的台成为下一局首位），偏移按房间内已完成局数推进、单局内恒定；规则写在 `layout.json` 的 `bank.rotation.timeline_note`。
 - **轮换与预告是决策（01 §2），8 s 与顺序是暂定**；原作兑换区约每 60 秒换位属 `[强暗示]`（研究核查 C3；证据＝Tier 2 玩家实机 + Tier 3 wiki），精确秒数未确认，不得写成原作确认值。本图原 45 s 周期作废，`layout.json` 已改为 60 s。
 - **可多人同时交分**（01 §2 原型规则）：圆盘不做占位锁；`max_concurrent_bankers = 4`。
-- **交分后按比例缩小（不是回初始体积）**：`post = max(start, start + (pre − start) × residual)`，全部按**碰撞直径**算，`start` = 0.30 m、`residual = 0.25`。例：2.20 m 交分后 = 0.30 + (2.20 − 0.30) × 0.25 = **0.775 m**；`max` 只兜底小球，保证不低于起始球径。**球径 < 0.55 m 不能交分**（`bank_min_conversion_diameter_m`），进台不计分。`residual = 0.25` 与 `0.55 m` 都是 `[项目自选]` **PROVISIONAL**（01 §2 / 研究核查 C2、C4 只确认「交分后球变小」「球太小不给分」，比例与阈值未公开），与 `Docs/Design/Gameplay/round_model.py` 的 `bank_residual_fraction` / `min_bank_diameter_m` 默认值相同。规则写在 `layout.json` 的 `bank.rules`：`bank_size_rule = "proportional_shrink"`、`bank_residual_fraction = 0.25`、`bank_min_conversion_diameter_m = 0.55`；旧的 `bank_resets_ball_to_start_size` 仅为 Unity payload 兼容保留、值已是 `false`。**Unity 侧还没跟上**：`GreyboxPayload.GreyboxBankRotation` 只声明了那个旧 int 字段，Builder 也不读它（§16 风险 14）。
+- **交分后按比例缩小（不是回初始体积）**：`post = max(start, start + (pre − start) × residual)`，全部按**碰撞直径**算，`start` = 0.30 m、`residual = 0.25`。例：2.20 m 交分后 = 0.30 + (2.20 − 0.30) × 0.25 = **0.775 m**；公式里的 `max` 是下限保护，任何 residual 下都不会把球缩到起始球径以下。**球径 < 0.55 m 不能交分**（`bank_min_conversion_diameter_m`），进台不计分。`residual = 0.25` 与 `0.55 m` 都是 `[项目自选]` **PROVISIONAL**（01 §2 / 研究核查 C2、C4 只确认「交分后球变小」「球太小不给分」，比例与阈值未公开），与 `Docs/Design/Gameplay/round_model.py` 的 `bank_residual_fraction` / `min_bank_diameter_m` 默认值相同。规则写在 `layout.json` 的 `bank.rules`：`bank_size_rule = "proportional_shrink"`、`bank_residual_fraction = 0.25`、`bank_min_conversion_diameter_m = 0.55`；旧的 `bank_resets_ball_to_start_size` 仅为 Unity payload 兼容保留、值已是 `false`。**这份数据还没有消费方**：运行时侧的同一条公式实现在 `Runtime/BallMotor/BankShrinkMath.cs`（`post = max(start, start + (pre − start) × residual)`，直径空间），它不读这份 JSON；灰盒 payload 的 `GreyboxPayload.GreyboxBankRotation` 也只声明了旧 int 字段、Builder 从不读规则（§16 风险 14）。
 - **交分后位置**：留在台上；最近出口 2.2 m（对角门，已开时）到 5.1 m（同侧 5 m 入口），四个方向都能走，不做单向陷阱。缩小后的球按正常球处理（不再有额外保护），是否会被门口卡住属 T21 实测项。
 - **读秒与可读性**：交分台只靠自发光环 + 3 m 旗（不用实时灯，02 §9 / 03 §5 的灯光成本）；在 VR 里从四个出生角都能越过 1.0 m 矮篱看到旗。
 
@@ -431,7 +432,7 @@ respawn / player_count_plans / performance_budget
 1. **`coverage.csv` 的大档物件全缺**：PIC-25 保温壶、PIC-26 野餐篮、PIC-35 折叠凳都是 `NOT_FOUND`，而 03 §2 把它们列为野餐图的「大档」。本设计的 t2 目标（篮子区）**依赖自建 3 个模型**；如果坚持只用已核资源，篮子区只能退化成「更多 m 档」，t2→t3 的成长节奏会断。
 2. **三处概念与已核资源不符**：`bread_loaf`→片、`cheese_wedge`→片、`watermelon_slice`→整颗（PIC-11/15 是 `MISMATCH`，PIC-10 未核）。本文已改成「资源实际是什么就用什么」，与 03 §2 的用词不同，属刻意偏差。
 3. **`spawn_fairness.csv` 只有 Zone A–D 四个标签**，而本图用 `spawn_nw/ne/sw/se`；填表时按 §7 的映射一一对应，不要把标签当对象 ID（MapRubrics §2 也这样要求）。
-4. **`route_checks.csv` 的 `max_ball_main_route` 需要一个「最大球碰撞直径」**，而 02 §1 与 `OPEN_DECISIONS` 都未定最大球径。本文用 2.20 m 暂定并给出 1.20 m 余量；一旦 T06 改值，所有净宽结论要重算（`validate_layout.py` 会直接报错）。
+4. **`route_checks.csv` 的 `max_ball_main_route` 需要一个「最大球碰撞直径」**，而 02 §1 与 `OPEN_DECISIONS` 都未定最大球径。本文用 2.20 m 暂定并给出 1.20 m 余量；一旦 T06 改值，所有净宽结论要重算（`Tools/mapbuild/validate_map.py` 会直接报错）。
 5. **中央草坪实际有 8 个开口**（4 个 5 m 入口 + 4 个 3.6 m 对角门），而 03 §2 写「四个入口」。本设计把对角门当作「被长凳锁住的近道」，主入口仍是 4 个；若美术/QA 按「只能有四个口」验收，需要删掉对角门与 4 张长凳（会同时删掉 §9 的一半成长兑现）。
 6. **巨型野餐桌的位置**：03 §2 说「超大桌子先作为不可卷地标」，本文把它放在**边界外**（z=+24）。若要求桌子在**场内**，四角对称会被破坏（除非放 4 张，视觉会很怪），需要 Lead 决定。
 7. **矮篱高度可能挡不住 t3 球**：1.0 m 矮篱 vs Ø2.20 m 球（半径 1.10 m）在几何上接近可翻越，见 §8 最后一条；若实测能翻，交分草坪的四个入口就形同虚设。
@@ -441,22 +442,22 @@ respawn / player_count_plans / performance_budget
 11. **价值目标被下调**：452 件保留，但价值从 1356 降到 1284（§3.3/§12）。若 T20/T21 认定 1284 不足以支撑 180 s 的成长曲线，补的是**每件价值**或**补货预算**（T22），不是把件数塞回篮子区——那会重新违反放置门槛。
 12. **树根丘坡度超过 12% 上限**：结构数据是 Ø2.5 m × 0.18 m（`tree_root_mound`），平均坡度 0.18 ÷ 1.25 = **14.4%**，高于 `scale.max_traversable_slope_percent = 12`。原先 README 与 `layout.json` 的 purpose 都写「11%」（算术不成立）。两种收口都要动设计：① 把丘高压到 ≤0.1375 m（坡度回到 11%），② 或承认 12% 只约束必经路线、把上限写成「装饰面除外」。本文只把算术改正，**不决定丘高**；`layout.json` 的 `structures` 尺寸未动，T21 实测翻越前不要声称「全部尺寸可翻」。
 13. **地图快照 sha256 不要手抄**：本目录不写死任何哈希，一律用 `sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 现算。`Docs/Design/GameModes/Levels/*.json` 的 `map_snapshot` 由 `Docs/Design/GameModes/validate_levels.py` 逐字节比对，地图一改就报「地图已变更，请复核」——**改完地图必须重跑它，而不是改 README**。仍有手抄残留：`Docs/Design/GameModes/README.md` §0.2 的 `catalog_sha256` 还是旧的 `eb1a1742…2b5c`（实际 `01d01418…`），不在本目录写权限内，需 GameModes 负责人改为命令生成。
-14. **Unity 侧还没读新的交分字段**：`GreyboxPayload.GreyboxBankRotation` 只声明了 `max_concurrent_bankers` / `occupancy_lock` / `bank_resets_ball_to_start_size`（int）三个字段，Builder 从头到尾没读过它们中的任何一个。`unity_greybox.json` 现在多了 `bank_size_rule` / `bank_residual_fraction` / `bank_min_conversion_diameter_m` / `bank_shrink_dimension` / `bank_shrink_formula`，`JsonUtility` 会安静地忽略它们——**在 Unity DTO 补字段之前，payload 里的缩小规则只是一份声明，不会被场景或运行时消费**。改 Unity 代码不在本次范围。
+14. **地图数据里的缩小规则没有 Unity 消费方**：`GreyboxPayload.GreyboxBankRotation` 只声明了 `max_concurrent_bankers` / `occupancy_lock` / `bank_resets_ball_to_start_size`（int）三个字段，`PicnicLawnGreyboxBuilder` 从头到尾没读过它们中的任何一个；它只读 `bank_rotation.order` 做锚点校验。`unity_greybox.json` 新增的 `bank_size_rule` / `bank_residual_fraction` / `bank_min_conversion_diameter_m` / `bank_shrink_dimension` / `bank_shrink_formula` 会被 `JsonUtility` 安静地忽略。运行时侧另有 `Runtime/BallMotor/BankShrinkMath.cs` 按同一条公式实现（不读这份 JSON），所以现在是「数据写一份、代码写一份、`round_model.py` 再一份」；要做到单一真源，得让 DTO 加字段并由运行时从 payload 读 `residual` / 最小兑换球径，或明确接受三处同步。改 Unity 代码不在本次范围。
 
 ## 17. 验证与下一步
 
 本目录自检（不碰 Unity、不联网）：
 
 ```bash
-cd Docs/Design/Maps/PicnicLawn
-python3 validate_layout.py                          # 期望：结论 OK（结构/引用/数量一致性）
-python3 validate_layout.py --json                   # 机器可读摘要
-cd - >/dev/null
+cd <repo root>
+python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn          # 期望：结论 OK（结构/引用/几何/容量）
+python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn --json   # 机器可读摘要
+python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn -v       # 逐区 2-D 放置容量表
 python3 Tools/mapbuild/build_greybox.py --check     # 期望：OK（生成物与作者数据一致）
 python3 Tools/mapbuild/build_greybox.py --feasibility            # 逐区 2-D 放置容量表
 python3 Tools/mapbuild/build_greybox.py --feasibility-markdown   # §3.3 的表（README 原样粘贴，只读）
 sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/prop_catalog.csv  # 指纹现算
-python3 -m unittest discover -s Tools/mapbuild/tests             # 含 README 表逐字比对
+python3 -m unittest discover -s Tools/mapbuild/tests             # 含 README 表逐字比对 + 两张图的通用校验回归
 ```
 
 当前结果：`OK` — 区域 21、出生点 4、交分台 4、尺寸门 8、散布区 20、可卷实例 452、固定实例 60、最小路线余量 1.20 m；区域面积 1087.4 m² 无重叠，交分台圆心距 8.40 m 无重叠，目录数量与散布完全一致。
@@ -467,7 +468,7 @@ T21 在 Unity 里要做的（灰盒）：
 
 1. 按 `layout.json` 的 `zones`/`structures` 摆地面、矮篱、毯子、花圃台、树根丘、4 张长凳、4 个交分台、8 块指示牌。
 2. 按 `prop_scatter` 手摆 452 件（`min_spacing_m` 是下限，不是网格；该值已按 §3.3 的容量模型验过，别再手工调高）；先只做 12 种 s 档就能起球。
-3. 重新读 `unity_greybox.json` 的 `scatter_regions`：`min_spacing_m`、`prop_ids`、`prop_counts_*`、`count_*_total` 都变了（篮子区 14 件/1.55 m、毯子 0.72 m、边带 27 件/1.20 m、树根 0.50 m）；此外 `bank_rotation` 多了交分缩小规则字段并把旧 flag 置 0（§6）。其余集合（zones/structures/spawns/routes/gates/chokepoints）逐字节未变。
+3. 重新读 `unity_greybox.json` 的 `scatter_regions`：`min_spacing_m`、`prop_ids`、`prop_counts_*`、`count_*_total` 都变了（篮子区 14 件/1.55 m、毯子 0.72 m、边带 27 件/1.20 m、树根 0.50 m）；此外 `bank_rotation` 多了交分缩小规则字段并把旧 flag 置 0（§6），`zones` 只有 4 个树根区的 `purpose` 文案按 §16 风险 12 改了坡度算术。其余集合（structures/spawns/routes/gates/chokepoints）逐字节未变。
 4. 用真实构建填 `MapRubrics/route_checks.csv`（8 条出生出口、最大球主路、2 条交分路线、成长脱困）与 `spawn_fairness.csv`（四角可达收益、到首资源/交分/出口的路程）。
 5. 验 §8 的 0.26 m 花圃台、1.20 m 主路余量、3.6 m 对角门在最大球下的实际通过性；不通就按 §8 降级。
 6. 只有拿到真实数据后，才能把本文件的状态从 `PROVISIONAL_NOT_TESTED` 改成实测结论；在那之前不得声称任何公平/性能/舒适 PASS。

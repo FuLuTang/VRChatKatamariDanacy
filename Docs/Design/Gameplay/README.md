@@ -4,9 +4,9 @@
 
 | 文件 | 内容 |
 |---|---|
-| [`round_model.py`](round_model.py) | 确定性回合模型：参数/状态/结果 dataclass、地图快照、`simulate_round(params, policy, map_spec, seed)`、三种策略 |
+| [`round_model.py`](round_model.py) | 确定性回合模型：参数/状态/结果 dataclass、活地图读取（`load_map` / `live_map_spec`，无内置快照）、`simulate_round(params, policy, map_spec, seed)`、三种策略 |
 | [`simulate.py`](simulate.py) | 场景 sweep + ±20% 敏感性 + 时间去向；写 `reports/` 的 CSV 与 Markdown |
-| [`tests/test_round_model.py`](tests/test_round_model.py) | 21 个 `unittest`：成长单调、交分缩小/最小门槛、轮换时刻、奖励层、被吞/重生、单槽、门槛、确定性、默认地图自洽 |
+| [`tests/test_round_model.py`](tests/test_round_model.py) | 24 个 `unittest`：成长单调、交分缩小/最小门槛、轮换时刻、奖励层、被吞/重生、单槽、门槛、确定性、默认地图=活地图 |
 | [`reports/`](reports/round_report.md) | 本次实际运行的完整报告（`round_report.md` + 6 个 CSV，含交分规则对比） |
 
 复现：
@@ -53,13 +53,13 @@ python3 Docs/Design/Gameplay/simulate.py --out Docs/Design/Gameplay/reports
 
 ### 2.2 体积 → 半径
 
-`r = cbrt(3V/4π)`（等价于 `d = d0·(V/V0)^(1/3)`），`V = V0 + units × c`，`c` 由 `units_to_max_diameter` 标定：**吃满整张图的 1356 价值单位，球正好从 0.30 m 长到 2.20 m**。于是 t1(0.55)/t2(0.95)/t3(1.45)/满径分别约 18 / 106 / 388 / 1356 单位。`radius_exponent` 只是形状探针，1/3 是文档给的球等效映射；改成别的值等于放弃体积守恒，只用于看“成长曲线形状”有多敏感。
+`r = cbrt(3V/4π)`（等价于 `d = d0·(V/V0)^(1/3)`），`V = V0 + units × c`，`c` 由 `units_to_max_diameter` 标定：原型取 **1356 价值单位 = 0.30→2.20 m 的一次满径成本**。于是 t1(0.55)/t2(0.95)/t3(1.45)/满径分别约 18 / 106 / 386 / 1356 单位。注意 1356 是**成长成本参数**，不是当前地图总量：活地图只有 **1284 单位**，所以把整张图吃光也只到 **2.16 m**；2.20 m 需要 1356 单位，比全图还多 72 单位（§4.3）。`radius_exponent` 只是形状探针，1/3 是文档给的球等效映射；改成别的值等于放弃体积守恒，只用于看“成长曲线形状”有多敏感。
 
 ### 2.3 移动、区域、交分、PvP、道具
 
 | 项 | 模型做法 | 依据/状态 |
 |---|---|---|
-| 地图 | 21 个区域，452 件可卷 / 1356 单位；每区库存共享；出生角按 `player_count_plans`（2 人 nw+se，3 人 +ne，4 人全用） | PicnicLawn `layout.json` / `prop_catalog.csv` |
+| 地图 | 21 个区域，452 件可卷 / 1284 单位；默认每次运行直接读 `layout.json` + `prop_catalog.csv`（无内置快照）；每区库存共享；出生角按 `player_count_plans`（2 人 nw+se，3 人 +ne，4 人 nw+ne+sw+se） | PicnicLawn `layout.json` / `prop_catalog.csv` |
 | 移动 | 区域中心直线距离 × `path_detour_factor=1.35` ÷ 速度；球越大越慢（满径 −15%） | 建模假设 |
 | 拾取 | 到区后按 `absorb_items_per_s=3` 件/s 取“当前球能吃且价值最高”的，磁铁 ×2 | 建模假设（无实测吞吐） |
 | 交分 | 目标为当前激活锚点（60 s 轮换 a→d→c→b）；到核心区停 `bank_service_s=0.5 s`，加分 = 本次新增未交存，球**按比例缩小**（不是重置）；球径 < `min_bank_diameter_m` 时拒绝兑换；保护期不能交分 | 原作证据见 §2.4；公式是本项目发明 |

@@ -18,7 +18,7 @@
 |---|---|---|
 | `Tools/mapbuild/build_greybox.py` | 生成前的**消费方契约**：字段形状、目录计数、2-D 放置可行性 | 生成 Unity 载荷的唯一门槛 |
 | `Tools/mapbuild/validate_map.py`（本文） | **作者层**一致性：几何、引用、路线余量、档位/包线、容量与"摆得下"的可读报告 | 改数据的人先跑这个 |
-| `Docs/Design/Maps/PicnicLawn/validate_layout.py` | 野餐草坪历史自检（PicnicLawn 专用） | **应退役**：它检查的每一项都被本文覆盖，见 README §17 |
+| 每图一份的历史专用自检 | 野餐草坪目录曾有一份 419 行、只认单图的实现 | **已退役并删除（2026-11-14）**：它检查的每一项都被本文覆盖，对照表见 `Tools/mapbuild/README.md` |
 
 本文**不重复实现** 2-D 放置容量模型：`min_spacing_m` 是否摆得下由
 `build_greybox.scatter_feasibility()` 判定（RSA 0.547 覆盖率、脚印下限、消费方上限），
@@ -337,6 +337,8 @@ def validate(layout: dict, catalog: dict) -> Report:
                     rep.err(f"{zid}：tier_band 顺序反了 {band_pair}")
         if not str(zone.get("name_zh") or "").strip():
             rep.err(f"{zid}：name_zh 不能为空")
+        if not str(zone.get("purpose") or "").strip():
+            rep.err(f"{zid}：purpose 不能为空（区域要说清它为什么存在）")
         if not str(zone.get("surface") or "").strip():
             rep.err(f"{zid}：surface 不能为空（区域靠地面材质判读）")
         zone["_rect"] = rect
@@ -447,11 +449,16 @@ def validate(layout: dict, catalog: dict) -> Report:
             rep.err(f"{label}：position 必须是数字")
             continue
         if not in_bounds(x, z):
-            # 无归属区域的结构 = 声明为全图/边界外装饰（地面、墙、天花板、远景）
+            # 无归属区域的结构 = 声明为全图/边界外装饰（地面、墙、天花板、远景地标）。
+            # 旧 validator 用一张 PicnicLawn 专用的 OUTSIDE_OK 白名单；通用校验器不能硬编码，
+            # 改成两条与地图无关的规则：可卷物件不许放在场外（永远吃不到），固定装饰放行并记账。
             if zid is not None:
                 rep.err(f"{label}：有归属区域却在边界外 ({x}, {z})")
+            elif props.get(defn, {}).get("role") == "absorbable":
+                rep.err(f"{label}：可卷物件在边界外 ({x:g}, {z:g})，玩家永远吃不到；"
+                        f"要么移进场内，要么把 role 改成 fixed")
             else:
-                rep.note(f"{label}：全局装饰在边界外 ({x:g}, {z:g})，zone_id 为空，允许")
+                rep.note(f"{label}：边界外固定装饰 ({x:g}, {z:g})，zone_id 为空，允许")
         elif zid is not None and str(zid) in zones and not contains(zones[str(zid)]["_rect"], x, z):
             rep.warn(f"{label}：position ({x:g}, {z:g}) 不在声明的区域 {zid} 内")
         if as_float(structure.get("yaw_deg")) is None:

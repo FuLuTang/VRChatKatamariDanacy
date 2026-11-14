@@ -361,7 +361,7 @@
     {
       "id": "tree_roots_ne",
       "name_zh": "东北树根区",
-      "purpose": "角树的气根土丘：0.18 m 高、平均 14% 坡（0.18 ÷ 1.25 m 半径，超出 12% 上限，见 README §16 风险 12），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
+      "purpose": "角树的气根土丘：0.14 m 高、平均 11.2% 坡（0.14 ÷ 1.25 m 半径，低于 12% 上限），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
       "shape_type": "rect",
       "min_x": 17.5,
       "max_x": 20.0,
@@ -372,12 +372,12 @@
       "tier_band_max": "t1",
       "area_m2": 6.25,
       "surface": "root_mound",
-      "notes": "土丘半径 1.25 m，最高 0.18 m；树干 Ø0.5 m 不可卷。"
+      "notes": "土丘半径 1.25 m，最高 0.14 m；树干 Ø0.5 m 不可卷。"
     },
     {
       "id": "tree_roots_nw",
       "name_zh": "西北树根区",
-      "purpose": "角树的气根土丘：0.18 m 高、平均 14% 坡（0.18 ÷ 1.25 m 半径，超出 12% 上限，见 README §16 风险 12），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
+      "purpose": "角树的气根土丘：0.14 m 高、平均 11.2% 坡（0.14 ÷ 1.25 m 半径，低于 12% 上限），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
       "shape_type": "rect",
       "min_x": -20.0,
       "max_x": -17.5,
@@ -388,12 +388,12 @@
       "tier_band_max": "t1",
       "area_m2": 6.25,
       "surface": "root_mound",
-      "notes": "土丘半径 1.25 m，最高 0.18 m；树干 Ø0.5 m 不可卷。"
+      "notes": "土丘半径 1.25 m，最高 0.14 m；树干 Ø0.5 m 不可卷。"
     },
     {
       "id": "tree_roots_se",
       "name_zh": "东南树根区",
-      "purpose": "角树的气根土丘：0.18 m 高、平均 14% 坡（0.18 ÷ 1.25 m 半径，超出 12% 上限，见 README §16 风险 12），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
+      "purpose": "角树的气根土丘：0.14 m 高、平均 11.2% 坡（0.14 ÷ 1.25 m 半径，低于 12% 上限），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
       "shape_type": "rect",
       "min_x": 17.5,
       "max_x": 20.0,
@@ -404,12 +404,12 @@
       "tier_band_max": "t1",
       "area_m2": 6.25,
       "surface": "root_mound",
-      "notes": "土丘半径 1.25 m，最高 0.18 m；树干 Ø0.5 m 不可卷。"
+      "notes": "土丘半径 1.25 m，最高 0.14 m；树干 Ø0.5 m 不可卷。"
     },
     {
       "id": "tree_roots_sw",
       "name_zh": "西南树根区",
-      "purpose": "角树的气根土丘：0.18 m 高、平均 14% 坡（0.18 ÷ 1.25 m 半径，超出 12% 上限，见 README §16 风险 12），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
+      "purpose": "角树的气根土丘：0.14 m 高、平均 11.2% 坡（0.14 ÷ 1.25 m 半径，低于 12% 上限），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
       "shape_type": "rect",
       "min_x": -20.0,
       "max_x": -17.5,
@@ -420,7 +420,7 @@
       "tier_band_max": "t1",
       "area_m2": 6.25,
       "surface": "root_mound",
-      "notes": "土丘半径 1.25 m，最高 0.18 m；树干 Ø0.5 m 不可卷。"
+      "notes": "土丘半径 1.25 m，最高 0.14 m；树干 Ø0.5 m 不可卷。"
     }
   ],
   "structures": [
@@ -1102,10 +1102,10 @@
       "zone_id": "tree_roots_ne",
       "kind": "mound",
       "position_x": 18.75,
-      "position_y": 0.09,
+      "position_y": 0.07,
       "position_z": 18.75,
       "size_x": 2.5,
-      "size_y": 0.18,
+      "size_y": 0.14,
       "size_z": 2.5,
       "yaw_deg": 0.0,
       "notes": ""
@@ -1116,10 +1116,10 @@
       "zone_id": "tree_roots_nw",
       "kind": "mound",
       "position_x": -18.75,
-      "position_y": 0.09,
+      "position_y": 0.07,
       "position_z": 18.75,
       "size_x": 2.5,
-      "size_y": 0.18,
+      "size_y": 0.14,
       "size_z": 2.5,
       "yaw_deg": 0.0,
       "notes": ""
@@ -1130,10 +1130,10 @@
       "zone_id": "tree_roots_se",
       "kind": "mound",
       "position_x": 18.75,
-      "position_y": 0.09,
+      "position_y": 0.07,
       "position_z": -18.75,
       "size_x": 2.5,
-      "size_y": 0.18,
+      "size_y": 0.14,
       "size_z": 2.5,
       "yaw_deg": 0.0,
       "notes": ""
@@ -1144,10 +1144,10 @@
       "zone_id": "tree_roots_sw",
       "kind": "mound",
       "position_x": -18.75,
-      "position_y": 0.09,
+      "position_y": 0.07,
       "position_z": -18.75,
       "size_x": 2.5,
-      "size_y": 0.18,
+      "size_y": 0.14,
       "size_z": 2.5,
       "yaw_deg": 0.0,
       "notes": ""

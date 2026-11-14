@@ -102,9 +102,8 @@ namespace VRCKatamari.BallLayers
     ///
     /// Narrowing: Python accepts generation/revision up to 2^32-1 and
     /// attach_sequence/variant_seed up to 2^64-1. This port accepts non-negative
-    /// signed 32-bit values only and rejects negatives as Invalid, the same
-    /// narrowing the RuntimeDraft already declares; the T51 summary contract is
-    /// not frozen, so the fields are not widened here.
+    /// signed 32-bit values only and rejects negatives as Invalid; because the
+    /// upstream summary contract is not frozen, the fields are not widened here.
     ///
     /// Every call allocates nothing (TryComputeDigest is the exception: it uses
     /// ToCharArray) and mutates only the caller's arrays. There are no static

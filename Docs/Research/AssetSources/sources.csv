@@ -1,0 +1,18 @@
+source,url,license,commercial_ok,attribution_required,bundle_redistribution_ok,nc_or_other_restriction,style_fit,verdict,evidence_url,checked_date
+Fab（Standard 许可，含限时免费）,https://www.fab.com/eula,Fab Standard License (Personal/Professional)；部分免费 listing 为 CC BY 4.0,是,否,是（作为 Project 的 included dependency）,EULA 全文未直接取得（§4c/§6 引文来自官方论坛摘录，UNVERIFIED）；禁止单独再分发；禁止终端用户抽取；禁止放入世界/关卡编辑工具或模板；部分旧 listing 仍为 legacy UE 许可；不得与 CC-BY-SA/GPL 混用（二手，UNVERIFIED）,中（多为 UE/写实、偏重）,谨慎,https://www.fab.com/eula,2026-11-14
+Fab（CC-BY listing）,https://www.fab.com/eula,CC BY 4.0,是,是,是,无 NC；逐 listing 核验许可,中,可用,https://www.fab.com/eula,2026-11-14
+Quixel Megascans（Fab）,https://quixel.com/news/update-megascans-are-going-free-again,2026-11-05 宣布免费（11-12 前陆续生效）；新下载按 Fab Standard；旧下载按当时 Quixel/Megascans 条款,是（新条款）,否,是（新条款）,旧下载可能 UE-Only/按 plan 限制；写实扫描体量大,低（与低多边形风格冲突）,谨慎,https://quixel.com/news/update-megascans-are-going-free-again,2026-11-14
+Kenney 3D,https://kenney.nl/support,CC0 1.0,是,否,是,无,高（统一低多边形、模块化）,首选,https://kenney.nl/support,2026-11-14
+Kenney Audio,https://kenney.nl/assets/impact-sounds,CC0 1.0,是,否,是,无,高（卡通冲击/UI/拾取）,首选,https://kenney.nl/assets/impact-sounds,2026-11-14
+Quaternius,https://quaternius.com/packs/ultimatefood.html,旧包页面标 CC0 1.0；站点新许可为 QAL v1.0（逐包核验）,是,否,是（不得把素材本身再分发）,许可 2026-08-28 变更；老包/新包适用范围 UNVERIFIED；以包内 LICENSE 为准,高（低多边形食物/家具）,可用,https://quaternius.com/packs/ultimatefood.html,2026-11-14
+Poly Pizza,https://poly.pizza/m/tr0LwyNnCt,逐模型：CC BY 3.0（是否 CC0 逐模型看）,是,是（CC-BY）,是,逐模型核验；可能含第三方 IP；CC0 比例 UNVERIFIED,高（低多边形、品类多）,可用,https://poly.pizza/m/tr0LwyNnCt,2026-11-14
+Poly Haven,https://polyhaven.com/license,CC0 1.0,是,否,是,无,中（HDRI/写实纹理；模型偏写实）,可用,https://polyhaven.com/license,2026-11-14
+ambientCG,https://docs.ambientcg.com/license/,CC0 1.0,是,否,是,无,中（PBR 写实纹理，需降分辨率/调色）,可用,https://docs.ambientcg.com/license/,2026-11-14
+Sketchfab,https://help.sketchfab.com/en/articles/16152215-crediting-users-for-3d-model-downloads,逐模型：CC0 / CC-BY（也有 NC/ND/SA）,视模型,CC-BY 需要,是（CC 模型）,必须过滤 NC/ND/SA；下载常需登录,中（质量参差，需逐模型审）,谨慎,https://help.sketchfab.com/en/articles/16152215-crediting-users-for-3d-model-downloads,2026-11-14
+OpenGameArt,https://opengameart.org/content/faq,混合：CC0/CC-BY/OGA-BY/CC-BY-SA/GPL,视许可,视许可,视许可,CC-BY-SA 传染；GPL 不清；预览图可能保留版权,中（2D/低模都有，风格杂）,谨慎,https://opengameart.org/content/faq,2026-11-14
+itch.io,https://itch.io/docs/legal/terms,逐 pack 自定义（平台无统一素材许可）,视 pack,视 pack,视 pack,常见 personal use only；必须读每个 pack 页,中（独立作者多，风格杂）,谨慎,https://itch.io/docs/legal/terms,2026-11-14
+Freesound,https://freesound.org/help/faq/,CC0 / CC-BY 4.0 / CC-BY-NC 4.0,CC0/CC-BY 是；NC 否,CC-BY 需要,是（CC0/CC-BY）,NC 不能进商业版本；逐音看许可,高（写实/拟音，需剪辑）,可用,https://freesound.org/help/faq/,2026-11-14
+Sonniss GDC,https://sonniss.com/gameaudiogdc,Sonniss #GameAudioGDC License v2.0（2026-08-27）,是,否,是（作为项目一部分；不得作为音效库再分发）,禁止 AI 训练；写实素材，卡通感需处理,中高（冲击/环境/拟音）,首选,https://sonniss.com/gdc-bundle-license/,2026-11-14
+Pixabay,https://pixabay.com/service/license-summary/,Pixabay Content License,是,否,是（不得单独分发）,不得 standalone；含可识别商标的内容不能商用,中（音效短小，质量参差）,可用,https://pixabay.com/service/license-summary/,2026-11-14
+Zapsplat,https://www.zapsplat.com/license-type/standard-license/,Zapsplat Standard License（免费/Premium）,是,免费用户需要；Premium 免,是（作为项目一部分；不得再分发）,"免费用户须显著署名 ""ZapSplat""",中高（UI/拟音/环境）,可用,https://www.zapsplat.com/license-type/standard-license/,2026-11-14
+BBC Sound Effects（RemArc）,https://sound-effects.bbcrewind.co.uk/licensing,RemArc Content Licence,否（需单独许可）,是,否,仅非商业/个人/研究/正规教育；商用需 BBC 许可并可能付费,高（历史/环境录音）,禁用,https://sound-effects.bbcrewind.co.uk/licensing,2026-11-14

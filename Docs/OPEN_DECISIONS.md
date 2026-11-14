@@ -50,6 +50,14 @@
 
 **（i）取代的旧说法：** `Design/PickupAbsorb/README.md` L77／L79／L222 与 `Design/BallMotor/README.md` L188 把 `maxItemSizeWorldM`／`contactRadiusWorldM` 一并称作“占位”的定性——`contactRadiusWorldM = 0` 自此是有意的项目决定，绝对上限的地位改由 (h) 定义；那三处措辞等各自 owner 下次触碰时改一句，本次没有动那两个文件。
 
+### 价值单位：账本只收整数，小数当场拒绝（2026-11-14 拍板）
+
+同 (a)–(i)：这条也是**运行时契约**层面的决定（decided），不是测量结果，也不改任务依赖。与前九条不同的是它的代码早已是这个行为——本条把“实现细节”升成决定，好让下一次“吸收不动”的排查不再先怀疑几何。**实现状态：代码已是该行为，无需改动**（`PickupAbsorbMath.cs:266-268`）。
+
+- **（j）账本 gain 是整数单位，这是有意的；小数道具价值是作者数据错误，以 `RejectNoGain` 大声拒绝，不静默截断、不四舍五入。** 代码路径只有一条：宿主提交候选时把 `valueUnits` 原样存进候选槽（`KatamariBallMotor.cs:1013`），判定时 `EvaluateAbsorbWithValue` 先过几何门、再用 `TryAbsorbValueToLedgerGain` 换 gain，换不出来就返回 `RejectNoGain`（`PickupAbsorbMath.cs:254`），换出来但 gain ≤ 0（即价值为 0）同样拒绝（`:255`），拒绝随即进电机拒绝环（`KatamariBallMotor.cs:711`）；换算本体先截断成 `int truncated = (int)itemValue`（`PickupAbsorbMath.cs:266`），再要求 `(float)truncated == itemValue` 逐位相等，不相等即 `false`（`:268`），负数、非有限值与 ≥2³¹ 的值同样先拒（`:262`、`:265`）。理由不是“整数好实现”：确认体积在账本里与 `banked_score`、每个事件 gain 共用同一个整数单位（`GrowthLedgerMath.cs:52-54`），账本只接受确定性权威提交（[Ledger README L7](Design/Ledger/README.md#L7)），而整套成长标定本身就是按整数单位写的——0 单位对应 0.29974 m 的起始语义直径（[BallMotor README L130](Design/BallMotor/README.md#L130)），1356 单位对应 2.20 m 满径（[Gameplay README L56](Design/Gameplay/README.md#L56)）。小数价值落在两个整数之间，在成长曲线上没有对应分数，也就没有一个可以被两台客户端都算成同一个数的总分。**对内容的后果：** 每件道具的 `valueUnits` 必须是 ≥ 1 的整数——填 0 或 0.5 让这件道具**永远不可吸收**，跟球贴得多准、reach 算得多对无关；实验室宿主把 `valueUnits` 暴露成一个可序列化 float（`PlaygroundProp.cs:45`），所以这种值在编辑器里没有任何阻拦，只会在运行时以 `noGain` 暴露。**调试教训（这条错花了三轮）：** 拒绝在外部只表现为 `noGain`，与“球根本没碰到道具”在读数上无法区分；必须打印**那件道具**被电机收到的价值（`pv`，`CpuSkirmishBootstrap.cs:208`，读的是候选槽里的原值 `KatamariBallMotor.cs:1645-1649`），而不是电机级“最后一次拒绝”的聚合（`CpuSkirmishBootstrap.cs:168-175` 的 `rej=`）——聚合会把上一件道具的拒绝盖到当前目标上，于是“道具自己写的 1.0125 旁边挂着 noGain”被读成了几何或接线问题（那批实验室道具的价值是按 `s³ × 300` 手算填的：边长 0.15 m → 1.0125、0.2 m → 2.4、0.25 m → 4.6875，逐个都过不了整数门）。**这不是以后要“修”的 bug：** 改成静默截断或四舍五入会把作者错误藏起来（道具看起来被吃了、分数却没动），并让两台客户端对同一份提交得出不同的总分；该放松的是数据（把价值表改成整数），不是这段判定。
+
+**（j）取代的旧说法：** `Design/PickupAbsorb/README.md` L181 与 L192 把这件事写成“两个草案都没定义取整规则，所以它不四舍五入”的**实现说明**，读起来像一条还没定策略的临时行为——自此它是项目决定：不取整就是口径，不是待补齐的规则。同一文件 L231 的“整数单位契约（有意为之，不是缺陷）”与本条一致，保留。另注：该文件 L181／L192 引的 `PickupAbsorbMath.cs:218-230` 是旧行号（今天该函数在 `:259-271`），等 PickupAbsorb 的 owner 下次触碰时改一行，本次没有动那个文件。
+
 ## 需要在正式发布范围/终验前回答
 
 | 事项 | 当前基线与选项（均未选择） | 影响 | 决定时点 |
@@ -71,5 +79,5 @@
 ## 不因本摘要改变的门禁
 
 - P17中的单图方案只是提案；修改任务依赖只能在用户/主管批准后进行，并须运行计划校验。([RFC执行纪律](Archive/Preparation/ReleaseRFC/comparison.md#L36-L38)、[候选DAG声明](Archive/Preparation/ReleaseRFC/proposed_dag.json#L5-L7))
-- (a)–(i) 的数值仍是 PROVISIONAL：决定记录的是“用这个暂定值往下做”，不是验证通过；T01 规则冻结、T21 地图验证与 T39 多人试玩后须复核，改动只需更新本文与相关配置，不动任务依赖。（(h)(i) 是运行时契约决定，(h) 的代码改动尚未落地，见该条“实现状态”。）
+- (a)–(j) 的数值仍是 PROVISIONAL：决定记录的是“用这个暂定值往下做”，不是验证通过；T01 规则冻结、T21 地图验证与 T39 多人试玩后须复核，改动只需更新本文与相关配置，不动任务依赖。（(h)(i)(j) 是运行时契约决定：(h) 的代码改动尚未落地，(j) 没有暂定数值、代码已是该行为，见该条“实现状态”。）
 - 本文不认证原作细节、不定正式公平阈值、不冻结公共接口、不改T任务状态；后续批准应另行明确记录。

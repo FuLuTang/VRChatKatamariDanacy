@@ -2083,6 +2083,113 @@
    ],
    "workflow_suite": "D球层实验台",
    "execution_note": "2026-11-14 RUNNING：VRCKatamari.Runtime 已注册为 U# 程序集（VRCKatamari.Runtime.asset），U# 全量编译 0 错误，EditMode 20/20 通过（地面接触 14 + 数学工具 6）；MCP 门禁流程：refresh_unity → read_console → run_tests → get_test_job。其余七层移植与球层实验场景进行中。"
+  },
+  {
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "source_ids": [
+    "S04",
+    "S05"
+   ],
+   "id": "T58",
+   "phase": "P3",
+   "title": "剧情模式（单人）：规则与两关设计",
+   "write_scope": [
+    "Docs/01_GAME_DESIGN.md",
+    "Docs/Design/GameModes/",
+    "Docs/Design/Maps/PicnicLawn/"
+   ],
+   "dependencies": [
+    "T08",
+    "T20"
+   ],
+   "steps": [
+    "先按 Docs/Research/KatamariBallRules/README.md 的判定表，把剧情模式与原作对战的边界写清楚：交分/兑换只属于 KatamariBall，剧情模式是「国王委托 + 限时 + 呈给国王结算」，不出现兑换区。",
+    "委托类型照原作三类确定：滚到指定大小、收集指定类别若干件、吞掉指定目标；先做前两类各一关。",
+    "两个关卡共用野餐草坪灰盒，只换目标、限时、初始位置与结算条件；关卡数据写成仓库内可校验的作者数据，不硬编码在 Udon 脚本里。",
+    "写关卡结算规则：达成即成功、差一点给部分评价、失败可重试；评价值全部标 PROVISIONAL_NOT_TESTED 并说明依据（原作未公开评分数值）。",
+    "明确写：剧情模式的分数不进 PvP 账本，不改变 01_GAME_DESIGN 里已确认的对战规则。"
+   ],
+   "acceptance_criteria": [
+    "两关的目标类型分别覆盖「到达指定大小」与「收集指定类别 N 件」，且一关只用一种委托类型。",
+    "关卡数据可被 validate_plan.py 与地图校验脚本检查，目标阈值与地图实际可卷物件数量对得上（用离线模型或地图数据算出的可达性支撑）。",
+    "文档明确剧情模式无交分、无对手、失败可重试，并标注所有暂定数值。"
+   ]
+  },
+  {
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "exclusive_locks": [],
+   "external_requirements": [],
+   "source_ids": [
+    "S04",
+    "S05"
+   ],
+   "id": "T59",
+   "phase": "P3",
+   "title": "首个可玩切片：ClientSim 单机滚球",
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/",
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/",
+    "Docs/Design/BallMotor/"
+   ],
+   "dependencies": [
+    "T57",
+    "T58"
+   ],
+   "steps": [
+    "实现 BallMotor 组合层：按 Docs/Design/BallMotor/README.md 的帧内顺序把 ControlIntent→BallMotion→Sweep→GroundContact→Pickup→Ledger→SizeModel→VisualRoll→FollowRig 接起来，状态由该 Behaviour 独占。",
+    "在 Labs 下用 ClientSim 可运行的本地玩家入口（Desktop 输入优先），不接网络、不做远端代理。",
+    "做最小 HUD：当前直径、目标进度、计时；只用 Udon 可用的 UI 或世界内 TextMesh，不引入编辑器 API。",
+    "在野餐草坪灰盒上跑通：能滚、能吸收、能长大、撞墙不穿模、地形高差能上；记录一次可复现的 Play Mode 结果。"
+   ],
+   "acceptance_criteria": [
+    "U# 全量编译通过，T57 的 EditMode 测试全绿，且 Play Mode 里能完成一次「从 0.30 m 滚到目标直径」的完整过程。",
+    "帧内顺序与 BallMotor 契约一致；失败帧保留上一帧状态，不做尺寸累积。",
+    "明确声明只验证单机本地，不含网络、不含多人、不含 VR 舒适度。"
+   ]
+  },
+  {
+   "implementer": "LUNA",
+   "reviewer": "Lead + Sol",
+   "status": "TODO",
+   "priority": "P1",
+   "exclusive_locks": [],
+   "external_requirements": [
+    "原作确认离线可用 CPU 补满 4 人（S02 FAQ）；CPU 行为细节未公开，属项目自选"
+   ],
+   "source_ids": [
+    "S04",
+    "S05"
+   ],
+   "id": "T60",
+   "phase": "P3",
+   "title": "单机对战 vs CPU 补位（离线 KatamariBall）",
+   "write_scope": [
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Ai/",
+    "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/",
+    "Docs/Design/Gameplay/"
+   ],
+   "dependencies": [
+    "T59"
+   ],
+   "steps": [
+    "照原作 S02 FAQ：4 人房少于 4 人由 CPU 补位；本任务只做离线 CPU，不碰网络同步。",
+    "CPU 行为只用公开语义：滚向最近的更大价值物件、球过大时去兑换区、避开更大的球；不发明原作未公开的行为。",
+    "用离线回合模型已确认的经济规则复现兑换：球太小不能兑换、兑换按比例缩小、兑换区 60 s 轮换、结算 3×+50pt 奖励项。",
+    "写测试与 Play Mode 记录：CPU 会完成吸收与兑换；换位预告可见；兑换后球按公式缩小；奖励项只在结算时结算一次。"
+   ],
+   "acceptance_criteria": [
+    "离线一局能跑完 180 s 并给出排名，兑换与奖励项结果可复现。",
+    "CPU 不读任何未确认状态（不读玩家预测值、不读远端装饰）。",
+    "文档明确：CPU 行为是项目自选实现，不是原作 AI 的还原。"
+   ]
   }
  ],
  "releaseProfiles": {

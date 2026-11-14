@@ -22,7 +22,7 @@ class PlanTests(unittest.TestCase):
         self.assertTrue(any(fragment in error for error in VALIDATOR.validate_plan(self.plan, profile)))
 
     def test_imported_plan_both_profiles(self):
-        self.assertEqual(len(self.plan["tasks"]), 58)
+        self.assertEqual(len(self.plan["tasks"]), 61)
         for profile in ('free_launch', 'paid_launch'):
             self.assertEqual(VALIDATOR.validate_plan(self.plan, profile), [])
 

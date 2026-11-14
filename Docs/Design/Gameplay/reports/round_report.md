@@ -5,7 +5,7 @@
 - 命令：`simulate.py --out Docs/Design/Gameplay/reports`
 - seed：`7`
 - 模型：`Docs/Design/Gameplay/round_model.py`（默认读活地图，无内置快照）
-- 地图：`picnic_lawn` — 21 区 / 452 件 / 1284 价值单位；布局 sha256 `8218881d…`、目录 sha256 `01d01418…`，出生按 `player_count_plans`
+- 地图：`picnic_lawn` — 21 区 / 452 件 / 1284 价值单位；布局 sha256 `5b08daf9…`、目录 sha256 `01d01418…`，出生按 `player_count_plans`
 - 交分规则：缩小 `bank_residual_fraction=0.25`、最小兑换 `min_bank_diameter_m=0.55` m、轮换 `bank_cycle_s=60.0` s、奖励 开启 `50×3`
 
 ## 场景总表

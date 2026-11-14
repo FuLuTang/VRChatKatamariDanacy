@@ -23,10 +23,18 @@
 
 ### 0.2 地图数据快照（本文全部算术的依据）
 
-| 文件 | sha256 | 采样时间（UTC） |
+| 文件 | sha256（**现算，不手抄**） | 采样时间（UTC） |
 |---|---|---|
-| `Docs/Design/Maps/PicnicLawn/layout.json` | `0b76c282…1e0` | 2026-11-14 03:40:45 |
-| `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` | `eb1a1742…2b5c` | 2026-11-14 03:40:45 |
+| `Docs/Design/Maps/PicnicLawn/layout.json` | `5b08daf9…5e13` | 2026-11-14 05:45 UTC |
+| `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` | `01d01418…acc7` | 2026-11-14 03:55 UTC |
+
+**规则：hash 现算，永不手抄。** 上表只是给人看的缩写副本；被机器校验的是 `Levels/*.json` 的 `map_snapshot`（`validate_levels.py` 与 `Docs/tests/test_levels.py` 逐字节比对磁盘文件）。手抄一定会过期——本文初稿抄过两版，两版都旧了：地图负责人把树根土丘从 0.18 m 降到 0.14 m 之后 `layout.json` 的 sha256 就变了，正文里的缩写还停在前一版。要当前值就跑：
+
+```bash
+sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/prop_catalog.csv
+```
+
+地图一改，重算这两个值、写进两个关卡文件，再跑 `python3 Docs/Design/GameModes/validate_levels.py`：它替你比对，不一致就报「地图已变更，请复核」，且**从不自动改数**。
 
 该快照的合计值（本文所有引用都以此为准）：
 
@@ -39,7 +47,7 @@
 | 区域 | 21（其中 20 个有散布） | `layout.json.zones` / `prop_scatter` |
 | 球径包线 | 起始 0.30 m / 上限 2.20 m | `layout.json.scale` |
 
-**地图正在被另一位负责人编辑。** 采样时这两个文件刚落盘（`layout.json` 03:40:01、`prop_catalog.csv` 03:40:12）；写作前 1 分钟内同一目录的内容还变过一次（篮子区件数、档位分布都改过）。本文的所有数字因此绑定上表两个 hash：地图一改，§3 的算术与 §4 的 `map_snapshot` 校验会立刻失配——这是设计意图，不是缺陷。
+**地图正在被另一位负责人编辑。** 表里的「采样时间」就是两文件当时的 mtime；写本文期间 `layout.json` 至少又改过两次（最近一次 2026-11-14 05:45，树根土丘 0.18 → 0.14 m），上一版快照就是这么过期的。本文的所有数字因此绑定 `Levels/*.json` 的 `map_snapshot` 两个 hash（上表是它们的缩写副本）：地图一改，§3 的算术与 §4 的 `map_snapshot` 校验会立刻失配——这是设计意图，不是缺陷。
 
 ### 0.3 本文的时间/体积算术怎么来的（可复现）
 
@@ -57,8 +65,8 @@
 | 20 s | 44 | 143 | 1.05 m |
 | 30 s | 74 | 260 | 1.27 m |
 | 60 s | 138 | 465 | 1.54 m |
-| 120 s | 219 | 973 | 1.97 m |
-| 180 s | 309 | 1105 | **2.055 m（单人上限）** |
+| 120 s | 229 | 933 | 1.94 m |
+| 180 s | 317 | 1068 | **2.03 m（单人上限）** |
 
 **这条曲线是乐观上界，不是玩家数据**：模型按「到区即清空该区」「直线距离 ×1.35 当走路」「拾取 3 件/s」近似（[Gameplay README](../Gameplay/README.md) §3 已自陈偏乐观）。真人会明显更慢，所以本文用它算出的「余量」是**乐观余量**，写进关卡时按 2× 打折看。
 
@@ -89,7 +97,7 @@
 
 三条推论，实现者必须知道：
 
-1. **剧情模式的球只增不减**（无交分、无对手），所以 452 件是一次性预算：120 s 内模型已吃掉 219 件（48%）。限时超过 ~150 s 就必须依赖补货（T22，未实现）。
+1. **剧情模式的球只增不减**（无交分、无对手），所以 452 件是一次性预算：120 s 内模型已吃掉 229 件（51%）。限时超过 ~150 s 就必须依赖补货（T22，未实现）。
 2. **剧情模式的分数不从体积换算**（`[C16]` 是**对战**的换算口径）。剧情模式用「是否达成委托 + 球径档位」评估，与单位价值无关——否则两条通道会互相污染。
 3. **「兑换只看体积、不看内容」是对战规则**，不能推广成「剧情模式也不看内容」：剧情模式的收集类委托恰恰只看内容（§3.2）。
 
@@ -174,6 +182,7 @@
 | 成功 | 任一时刻球径 ≥ 1.25 m（结算时记 `achieved_at_s`；结算球径必然也 ≥ 1.25） |
 | 失败 | 120 s 归零时球径 < 1.25 m |
 | 星级 | ★ 1.25 m / ★★ 1.45 m / ★★★ 1.60 m（`PROVISIONAL_NOT_TESTED`） |
+| ★★★ 说明 | 1.60 m 需要 519.5 单位，超过本关 6 区合计 416 单位（只走这些区最多 1.487 m）：★★★ 是**刻意的「离开路线」**目标，关卡数据里带 `design_note_zh` 并由校验器强制声明；★★ 及以内仍按 6 区教学路线可达成 |
 | 道具 | 无 |
 | 交分 | 关闭（`bank.enabled=false`） |
 
@@ -204,9 +213,9 @@
    - 1.45 m → **385.8 单位**
    - 1.60 m → **519.5 单位**
 2. **需要多少件。** 出生角 12 件（12 u）+ 外环 33 u + 树根 14 u + 花圃 27 u = 86 u 仍不够；再吃 `blanket_west` 的 266 u，累计 **352 u** ≥ 245.9 u ✅。按「s 档 1 u / m 档 4 u」的混合，约 **60–80 件**即可跨过目标；模型实测到点时为 **70 件 / 247 单位**。
-3. **要多久。** 同一模型单人（永不交分）在 **28.8 s** 到达 1.25 m；**53.5 s** 到 1.45 m（119 件 / 389 u）；**64.5 s** 到 1.60 m（152 件 / 520 u）。
-4. **余量。** 28.8 / 120 = **24%**；53.5 / 120 = 45%；64.5 / 120 = 54%。即「达标」只需用掉限时的四分之一，**4.2× 余量**；即使真人比模型慢一倍，也还有 2× 余量。
-5. **上限参照。** 单人 120 s 模型上限 1.97 m / 219 件 / 973 u；180 s 上限 2.055 m。所以 ★★★ 1.60 m（占上限的 78%）是「有效率地滚」而不是「必须完美」——但仍属挑战档，`PROVISIONAL_NOT_TESTED`。
+3. **要多久。** 同一模型单人（永不交分）在 **28.8 s** 到达 1.25 m（70 件 / 247 u）；**54.3 s** 到 1.45 m（121 件 / 397 u）；**65.0 s** 到 1.60 m（153 件 / 523 u）。
+4. **余量。** 28.8 / 120 = **24%**；54.3 / 120 = 45%；65.0 / 120 = 54%。即「达标」只需用掉限时的四分之一，**4.2× 余量**；即使真人比模型慢一倍，也还有 2× 余量。
+5. **上限参照。** 单人 120 s 模型上限 1.94 m / 229 件 / 933 u；180 s 上限 2.03 m。所以 ★★★ 1.60 m（占 120 s 上限的 **82%**）是「有效率地滚」而不是「必须完美」——但仍属挑战档，`PROVISIONAL_NOT_TESTED`。
 6. **1.25 m 一定吃得到长凳。** 门槛是「≥1.25 m 可吸走」，达成目标时球径恰好等于门槛，长凳可吞（`layout.json` 的 `blocks_ball_diameter_below_m = 1.05` / `absorbable_at_ball_diameter_m = 1.25`，含等号）。这一关的教学收尾就是「吃掉刚才挡路的东西」。
 
 #### 教学意图（为什么是这一关）
@@ -293,13 +302,13 @@ spawn_nw(12u) ──6.5s──> fringe_west(33u) ──> tree_roots_nw(14u) ─�
 
 1. **池子够不够。** 全图水果 **50 件**。★ 10 件 = 全图的 20% = 单块毯的 **43%**；★★ 20 件 = 单块毯的 87%；★★★ 30 件 = **单块毯（23）不够**，必须去第二块毯或篮子区 → 这就是「教路线」的机制来源，不是文案要求。
 2. **等级门槛够不够。** 草莓/葡萄门槛 0.08 m，0.30 m 球开局就能吃；苹果/梨/橙 0.32 m 需 **0.7 单位**；香蕉 0.45 m 需 **8.2 单位**；西瓜 0.72 m 需 **44.2 单位**。而模型在第 15 s 时已累计 79 单位 → 进毯子后 5–10 s 内全部水果都吃得到，**没有「看得到吃不到」的卡点**。
-3. **要多久（用模型实测的件数曲线，含走路）。** 同一模型（单玩家、永不交分）的累计件数：15 s→28 件、20 s→44 件、30 s→74 件、35 s→89 件、60 s→138 件、120 s→219 件。
+3. **要多久（用模型实测的件数曲线，含走路）。** 同一模型（单玩家、永不交分）的累计件数：15 s→28 件、20 s→44 件、30 s→74 件、35 s→89 件、60 s→138 件、120 s→229 件。
    - **★ 10 件的上界**：假设最坏顺序（10 件水果全排在毯子最后），必须清掉 80 件 → 模型 **≈32 s**（80 件落在 30 s 与 35 s 之间）。32 / 120 = **27%**，3.8× 余量。
    - **★★ 20 件的上界**：单块毯清掉 77 件（80 − 23 + 20）→ **≈31 s**（27%）。
-   - **★★★ 30 件的上界**：清空第一块毯（80 件 ≈ 32 s）+ 转场 9.2 s + 第二块毯吃到 7 件水果（最坏要清 64 件，按曲线里 ~2.5 件/s 的在区速率 ≈ 25 s）→ **≈66 s**（55%）。
+   - **★★★ 30 件的上界**：清空第一块毯（80 件 ≈ 32 s）+ 转场 9.2 s + 第二块毯吃到 7 件水果（最坏要清 64 件，按曲线里 ~2.5 件/s 的在区速率 ≈ 25 s）→ 保守上界 **≈66 s**；模型直接算「累计 144 件」是 **62.0 s（52%）**。
    - 路线腿长（模型口径：直线 ×1.35 ÷ 3 m/s）：`spawn_ne → blanket_east` 15.11 m → 20.40 m → **6.8 s**；`blanket_east → basket_north` **6.6 s**；`blanket_east → blanket_west` **9.2 s**。
 4. **余量结论。** 达标（★）最坏 32 s 用掉 27% 限时；★★★ 最坏 66 s 用掉 55%。**这一关的达标不是「只有完美操作」**：即使真人比模型慢一倍，10 件仍在 ~64 s 内完成。
-5. **上限参照。** 120 s 内模型可吸 219 件；★★★ 只需累计吸 ~144 件（80 + 64）。全图 50 件水果，吃到 30 件时还剩 20 件 → 不会「吃无可吃」。
+5. **上限参照。** 120 s 内模型可吸 229 件；★★★ 只需累计吸 ~144 件（80 + 64）。全图 50 件水果，吃到 30 件时还剩 20 件 → 不会「吃无可吃」。
 
 #### 教学意图（为什么是这一关）
 
@@ -332,7 +341,7 @@ spawn_nw(12u) ──6.5s──> fringe_west(33u) ──> tree_roots_nw(14u) ─�
 | 出生 | `spawn_nw`（yaw 135°） | `spawn_ne`（yaw 225°） |
 | 必须走到的区 | `blanket_west`（+ 可选 `basket_north`） | `blanket_east`，3 星再加 `blanket_west` |
 | 模型达标时刻 | 28.8 s（24% 限时） | ≤32 s（27% 限时） |
-| 模型 ★★★ 时刻 | 64.5 s（54%） | ≤66 s（55%） |
+| 模型 ★★★ 时刻 | 65.0 s（54%） | 62.0 s（52%；保守上界 ≤66 s） |
 | 交分 / 对手 / 道具 | 全部关闭 / 无 / 无 | 全部关闭 / 无 / 无 |
 
 ---
@@ -345,18 +354,18 @@ spawn_nw(12u) ──6.5s──> fringe_west(33u) ──> tree_roots_nw(14u) ─�
 - 风格对齐现有作者数据（`layout.json`、`unity_greybox.json`）：snake_case、`schema_version`、`status`、id 引用而不是坐标。
 - **关卡数据里不写任何坐标、半径、净宽，也不写逐 definition 的件数明细**——几何与数量只有一个真源 `layout.json` / `prop_catalog.csv`，关卡只写 `zone_id` / `definition_id` / 阈值。**唯一例外**是 `map_expectations` 里的两个总量（452 件 / 1284 单位）：它们不是玩法数值，而是「作者当时依据的地图版本」的指纹，用来发现地图漂移。
 - 运行时**不读磁盘 JSON**（AGENTS「No disk JSON in Udon runtime」、02 §4「构建时烘焙为 Udon 可用数组/引用」）：编辑器导入器把 JSON 烘焙成 `StoryLevelDefinition` 资产，Udon 只读烘焙结果。
-- 校验器：`Docs/Design/GameModes/validate_levels.py`（标准库、`--json`），模式照抄地图目录的 `validate_layout.py`。
+- 校验器：`Docs/Design/GameModes/validate_levels.py`（标准库、`--json`）。地图侧**不再有**每图一份的专用校验器：旧的 `Docs/Design/Maps/PicnicLawn/validate_layout.py` 已于 2026-11-14 退役删除，由通用校验器 [`Tools/mapbuild/validate_map.py`](../../../Tools/mapbuild/validate_map.py) 承担（`python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn`）；两者同一形态：**只读作者数据**、纯标准库、结尾打印 `OK`/`FAIL`、`--json` 出机器可读摘要。
 
-目录（除本文件外**尚未创建**，避免与地图负责人抢目录）：
+目录：
 
 ```
 Docs/Design/GameModes/
   README.md                        ← 本文
-  categories.json                  ← 类别注册表（待写，见 §4.4）
-  validate_levels.py               ← 本地校验器（待写，见 §4.5）
+  categories.json                  ← 类别注册表（§4.4）
+  validate_levels.py               ← 本地校验器（§4.5，已实现）
   Levels/
-    story_01_bench_size.json       ← 待写
-    story_02_fruit_ten.json        ← 待写
+    story_01_bench_size.json       ← 关卡 1
+    story_02_fruit_ten.json        ← 关卡 2
 ```
 
 烘焙后的运行时资产（实现阶段）：
@@ -377,8 +386,8 @@ Docs/Design/GameModes/
   "map_id": "picnic_lawn",
   "ruleset_id": "prototype_defaults_v0_3",
   "map_snapshot": {
-    "layout_sha256": "0b76c282a4dd154dbdd3f6ebb50a4602ec71033c7f3fb841a225ac8e9b8317e0",
-    "catalog_sha256": "eb1a174204e0ce6d00f78fde4205c827ded2b3f059eb1c7fad341b4a24b82b5c"
+    "layout_sha256": "5b08daf9353be681f9b8073596690b06f35cf4409a9a6dfaafcb421e422c5e13",
+    "catalog_sha256": "01d01418b358fcc7bfaec9c9895c5efe76deada79a3b86509c97c8c02953acc7"
   },
   "quest": {
     "type": "reach_target_diameter",
@@ -395,7 +404,8 @@ Docs/Design/GameModes/
   "stars": [
     { "stars": 1, "requires": { "target_diameter_m": 1.25 }, "comment_id": "s1_ok" },
     { "stars": 2, "requires": { "target_diameter_m": 1.45 }, "comment_id": "s2_ok" },
-    { "stars": 3, "requires": { "target_diameter_m": 1.60 }, "comment_id": "s3_ok" }
+    { "stars": 3, "requires": { "target_diameter_m": 1.60 }, "comment_id": "s3_ok",
+      "design_note_zh": "1.60 m 超过所列 6 区可达范围，是刻意的离路线目标。" }
   ],
   "evaluation": {
     "presenter_id": "quest_giver",
@@ -414,6 +424,8 @@ Docs/Design/GameModes/
   "notes_zh": "…"
 }
 ```
+
+**块里两个 hash 是 2026-11-14 05:50 UTC 的现算值，只是示例**：写新关卡时照 §0.2 现算再填，别把整段 JSON 连同 hash 直接抄过去（关卡 1 的真实值见 `Levels/story_01_bench_size.json`）。
 
 `collect_category_count` 关只换 `quest.objective` 与 `stars[].requires`：
 
@@ -493,9 +505,9 @@ Docs/Design/GameModes/
 
 规则：一个类别 = 显式 `definition_ids` 列表；**不要**用 `category` 字段做减法（`food` 减 `seed` 这种写法在地图改分类时会静默失效）。
 
-### 4.5 校验器规则（`validate_levels.py`，待写）
+### 4.5 校验器规则（`validate_levels.py`，已实现）
 
-照 `Docs/Design/Maps/PicnicLawn/validate_layout.py` 的形态：只读 JSON/CSV、标准库、结论 `OK`/`FAIL`、`--json` 出机器可读摘要。
+形态与通用地图校验器 [`Tools/mapbuild/validate_map.py`](../../../Tools/mapbuild/validate_map.py) 一致（每图一份的旧 `validate_layout.py` 已退役删除，别再找它）：**只读作者数据**——本目录 `Levels/*.json` + `categories.json`，加上作为参照的 `Docs/Design/Maps/PicnicLawn/layout.json` 与 `prop_catalog.csv`；不碰 Unity、不写任何文件、不生成载荷。纯标准库。最后一行打印结论 `OK`/`FAIL`（退出码 0 = 通过、1 = 有 ERROR），加 `--json` 额外输出机器可读摘要（`status` + `errors`/`warnings`/`notes`），`--no-model` 跳过时间估算。运行：`python3 Docs/Design/GameModes/validate_levels.py`。
 
 1. `schema_version == 1`；`level_id` 合法且 = 文件名；同目录内 `level_id` 唯一。
 2. `mode == "story"`；`player.min == player.max == 1`；`bank.enabled == false`；`evaluation.score_channel == "none"`；`evaluation.ledger_write == false`。
@@ -505,7 +517,7 @@ Docs/Design/GameModes/
 6. `reach_target_diameter`：`target_diameter_m` 在包线内；且 `units_for(target_diameter_m) ≤ 该关 map_expectations.zones 合计单位 × 0.7`（**可达性**：光走这些区就够，还留 30% 余量；关卡 1 是 245.9 ≤ 416×0.7=291 ✅）；且 `units_for(target_diameter_m) ≤ 全图可卷单位`（否则「整张图都吃光也不够」→ FAIL）。
 7. `collect_category_count`：类别所有 `definition_ids` 都是 `role=absorbable` 且属于 `map_id`；**全图该类件数 ≥ `2 × count`**（可达性下限；关卡 2 是 50 ≥ 20 ✅）；**第 3 星 `count` 必须 > 单区最大供给**（保证 3 星必须跑第二个区；关卡 2 是 30 > 23 ✅，否则 3 星可以一圈刷完，教不会路线）；**第 1 星 `count` 必须 > 出生角该类件数**（否则站着不动就完成；关卡 2 是 10 > 0 ✅）。
 8. 可行性：用 `round_model` 的成长曲线（或校验器内联同一公式）估算达标所需件数，要求 `time_limit_s ≥ 3 × 估算时刻`。
-9. `stars[]` 恰好 3 条、`stars` 递增、`requires` 严格递增且第 1 档 = `quest.objective`。
+9. `stars[]` 恰好 3 条、`stars` 递增、`requires` 严格递增且第 1 档 = `quest.objective`。`reach_target_diameter` 的第 3 星若高于 `map_expectations.zones` 的可达球径，必须带 `design_note_zh` 明确写成「刻意离开路线」的扩展目标（否则 WARN）；说明过时（目标已在所列区可达）则 FAIL。
 10. `partial_band ∈ [0.5, 1.0]`；`time_limit_s ∈ [30, 300]`。
 11. 所有 `*_id` 引用**只允许**来自 `layout.json` / `prop_catalog.csv` / `categories.json`，禁止自由文本 id。
 12. 文件里出现坐标、半径、净宽或逐 definition 的件数明细 → 直接 FAIL（防止绕过单一真源）；`map_expectations` 的两个总量是唯一豁免。
@@ -535,6 +547,7 @@ Docs/Design/GameModes/
 | `stars[0].requires` | `{"target_diameter_m":1.25}` | `{"category_id":"fruit","count":10}` |
 | `stars[1].requires` | `{"target_diameter_m":1.45}` | `{"category_id":"fruit","count":20}` |
 | `stars[2].requires` | `{"target_diameter_m":1.60}` | `{"category_id":"fruit","count":30}` |
+| `stars[2].design_note_zh` | §3.1 的离路线说明（超出 6 区 416 单位） | —（3 星在相关区可达） |
 | `evaluation.presenter_id` | `quest_giver` | `quest_giver` |
 | `evaluation.partial_band` | 0.90 | 0.90 |
 | `evaluation.retry` | `unlimited` | `unlimited` |
@@ -568,7 +581,7 @@ Docs/Design/GameModes/
 
 ## 6. 与地图数据的一致性核查（report-only，不改地图）
 
-### 6.1 数字对账：`PicnicLawn/README.md` §2/§3.1/§12 vs `layout.json`+`prop_catalog.csv` 快照
+### 6.1 数字对账：`PicnicLawn/README.md`（2026-11-14 03:40 版）vs 当前 `layout.json`+`prop_catalog.csv`
 
 | 项 | README 写的 | 快照实际 | 影响 |
 |---|---|---|---|
@@ -582,20 +595,20 @@ Docs/Design/GameModes/
 | 出生角 | 12 件 / 12 单位 ×4 | **12 / 12 ×4** ✅ | — |
 | 树根 / 花圃 | 14 / 12 件 | **14 / 12** ✅ | — |
 
-**顺带发现（不属本文范围，但会影响对战）：** `layout.json` 的 `bank.rules.bank_resets_ball_to_start_size = true` 与已确认的「交分按比例缩小、不是清零」（`C2`/`C20`，以及 Gameplay README §2.4 的 `bank_residual_fraction=0.25`）**互相矛盾**。地图文件仍写着「回到起始体积」。请地图负责人或主管修一处。
+**对账结果（2026-11-14）：** 地图负责人在 04:41 的 `18d7ae24` 与随后的工作树修改里已把价值总量改为 1284、边带 27/33、篮子区 14/172，并把 `bank_resets_ball_to_start_size` 改为 `false`、补上 `bank_size_rule=proportional_shrink`。上表保留为审计记录；当前 `PicnicLawn/README.md` 与地图数据一致，本文关卡的两个 sha256 也已同步。
 
 ### 6.2 会让「好委托」做不成的地图数据问题
 
 | # | 问题 | 后果 | 建议（report-only） |
 |---|---|---|---|
 | **B1** | `prop_catalog.csv` 的 `category=food` 包含草籽（64 件，散在出生角/外环） | 「收集 N 件食物」会被草籽刷满，委托瞬间失去意义；「水果」这种子类根本不存在 | 委托类别走 §4.4 的显式 `definition_ids` 注册表；别用 `category` 做减法 |
-| **B2** | 全图 1284 单位 < 1356 标定 | **「滚到最大 2.20 m」这类委托在这张图上不可能完成**（理论满清 2.16 m，模型实测 2.055 m） | 要么补 ~72 单位物件，要么把 `units_to_max_diameter` 下调（属 T20/T21 决策），要么剧情关不设「满径」目标 |
+| **B2** | 全图 1284 单位 < 1356 标定 | **「滚到最大 2.20 m」这类委托在这张图上不可能完成**（理论满清 2.16 m，模型 180 s 实测 2.03 m） | 要么补 ~72 单位物件，要么把 `units_to_max_diameter` 下调（属 T20/T21 决策），要么剧情关不设「满径」目标 |
 | **B3** | 出生角只有 s 档（12 件 / 12 单位），且草籽/石子/纸屑在全角落都有 | 任何 `collect_category_count` 若把类别定在角落可拾取物上，玩家不用动就能完成 | 关卡层保证：`count` 必须大于出生角该类件数（已写进校验器规则 7；关卡 2 是 10 > 0） |
 | **B4** | 中央草坪只有 4 张长凳（l 档，1.25 m 门槛） | 剧情模式里 `core_lawn` 几乎是空场：4 件 64 单位，且要 1.25 m 才吃得到 | 若以后要做「吞掉中央地标」类委托，需要地图加不可卷地标或别把草坪留空 |
 | **B5** | 花圃 12 件里 m 档是 0.55/0.58 m 门槛 | 早期进花圃（1.10 m 翻越门）之前就能吃到台内 m 档（0.55 m 球）→ 花圃的「看得到吃不到」其实只对小 m 档成立 | 若要做「花圃专类收集」委托，先复核花圃门槛与成长节奏 |
 | **B6** | 每个 `definition_id` 都有多个实例（苹果 10、长凳 4…），**没有唯一实例/唯一地标可卷** | 「吞掉指定目标」这类委托无法指定「那一个」，只能按 `definition_id + count` 退化 | 需要地图提供唯一 landmark（或 `spawnId` 级引用）才能做第三类委托 |
 | **B7** | 交分锚点/轮换写在 `layout.json` 里，且 `activate_at_s` 从 0 开始 | 剧情模式若直接复用这张图，旗杆/自发光环会按 60 s 轮换干扰「无交分」的叙事 | 运行时必须在剧情模式关掉 bank 轮换与旗杆脉冲（`bank.enabled=false` 要真的关表现，不只是关判定） |
-| **B8** | 无补货（`restock_period_s=0`，T22 未实现）且单人 120 s 已吃 219/452 件 | 限时 >150 s 的剧情关会「吃空」；延长关卡前必须先有补货 | 剧情关时长先压在 120 s 内 |
+| **B8** | 无补货（`restock_period_s=0`，T22 未实现）且单人 120 s 已吃 229/452 件 | 限时 >150 s 的剧情关会「吃空」；延长关卡前必须先有补货 | 剧情关时长先压在 120 s 内 |
 
 ---
 
@@ -638,7 +651,7 @@ Docs/Design/GameModes/
 
 ## 9. 下一步（谁来做什么）
 
-1. **地图负责人**：修 §6.1 的 1284 vs 1356、s/m 档分布、篮子区件数、以及 `bank_resets_ball_to_start_size` 的矛盾；决定是否补 72 单位让 2.20 m 可达。
+1. **地图负责人 / 主管**：§6.1 的数值与 `bank_resets_ball_to_start_size` 矛盾已修；仍需拍板是否补 ~72 单位（或降 `units_to_max_diameter`）让 2.20 m 可达；以及剧情模式要不要在 `core_lawn` 加不可卷地标（§6.2-B4）。
 2. **研究**：补一次剧情模式公开来源核查（G1–G4），规格照 `KatamariBallRules`。
 3. **实现**：§7 的 1–8；先做关卡 1（只需球径读取 + 查表），再做关卡 2（需要类别注册表与确认吸附计数）。
 4. **测试（T39 前）**：真人试玩钉住星级阈值（§5-2）与「差一点」的 band（§5-9）；把 120 s 的达标时刻分布回填本文。
@@ -646,4 +659,4 @@ Docs/Design/GameModes/
 
 ---
 
-**PROVISIONAL_NOT_TESTED。** 本文所有数值（1.25/1.45/1.60 m、10/20/30 件、120 s、星级阈值、28.8 s 等）都是离线推演，没有 Unity、Udon、VR、网络或真人证据；不得引用为平衡、公平、性能或舒适度 PASS。地图相关数字绑定 §0.2 的两个 sha256。
+**PROVISIONAL_NOT_TESTED。** 本文所有数值（1.25/1.45/1.60 m、10/20/30 件、120 s、星级阈值、28.8 s 等）都是离线推演，没有 Unity、Udon、VR、网络或真人证据；不得引用为平衡、公平、性能或舒适度 PASS。地图相关数字绑定 `Levels/*.json` 的 `map_snapshot` 两个 sha256（现算命令见 §0.2）。

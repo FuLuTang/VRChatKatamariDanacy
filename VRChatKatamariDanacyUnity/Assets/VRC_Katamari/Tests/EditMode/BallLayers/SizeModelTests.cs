@@ -26,13 +26,14 @@ namespace VRCKatamari.Tests
         private const float SemanticRatio = 1.5f;
 
         // Calibrated sizing for the inverse tests, matching
-        // KatamariBallMotor's serialized defaults (1 baseline unit, 0.0141
-        // m^3 per unit, 1.1 m display cap, 1.0 ratios): the baseline is a
-        // 0.29974 m semantic diameter and the cap is 2.20 m. The decided round
-        // runs 0.30 m -> 2.20 m, so this is the configuration the inverse has
-        // to round-trip.
-        private const float CalibratedBaseline = 1f;
-        private const float CalibratedCubicMetersPerUnit = 0.0141f;
+        // KatamariBallMotor's serialized defaults (3.4390244 baseline units,
+        // 0.0041 m^3 per unit, 1.1 m display cap, 1.0 ratios): the baseline is a
+        // 0.29974 m semantic diameter and the cap is 2.20 m, reached at 1356
+        // confirmed units. The decided round runs 0.30 m -> 2.20 m, so this is
+        // the configuration the inverse has to round-trip. Same calibration as
+        // Docs/Design/Gameplay/round_model.py.
+        private const float CalibratedBaseline = 3.4390244f;
+        private const float CalibratedCubicMetersPerUnit = 0.0041f;
         private const float CalibratedMaxCoreRadius = 1.1f;
         private const float CalibratedCollisionRatio = 1f;
         private const float CalibratedSemanticRatio = 1f;
@@ -316,7 +317,7 @@ namespace VRCKatamari.Tests
             AssertFinite(hugeUnits, "units for float.MaxValue m");
 
             // The cap's volume is the sphere at the 1.1 m cap radius, 4/3*pi*r^3
-            // / 0.0141 m^3 per unit, minus the one baseline unit.
+            // / 0.0041 m^3 per unit, minus the 3.4390244 baseline units.
             float expectedCapUnits = (4f * Mathf.PI / 3f) * 1.331f / CalibratedCubicMetersPerUnit
                 - CalibratedBaseline;
             Assert.AreEqual(expectedCapUnits, atCap, 1e-3f);

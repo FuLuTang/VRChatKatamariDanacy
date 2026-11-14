@@ -417,6 +417,9 @@ namespace VRCKatamari.Economy
         /// never appear in a total. Claim frames and request sequences are authority data
         /// and are not range-checked by the model, so they are not range-checked here.
         /// </remarks>
+        /// <summary>
+        /// Accepts one claim into the per-event batch (signature-compatible wrapper).
+        /// </summary>
         public static bool TrySubmitClaim(int[] roundState,
             string[] playerIds, int[] lifeStates, int playerCount,
             string[] commitItemIds, int[] commitGenerations, int commitCount,
@@ -425,21 +428,45 @@ namespace VRCKatamari.Economy
             string roundId, string eventRoundId, string itemInstanceId, int generation,
             string playerId, int frame, int requestSequence)
         {
-            if (!TryValidateRoundScalars(roundState)) return false;
-            if (!TryValidatePlayerIdentityAndLife(playerIds, lifeStates, playerCount)) return false;
-            if (!TryValidateCommitKeyColumns(commitItemIds, commitGenerations, commitCount)) return false;
+            int ignoredFailureCode;
+            return TrySubmitClaimWithFailure(roundState, playerIds, lifeStates, playerCount,
+                commitItemIds, commitGenerations, commitCount, claimItemIds, claimGenerations,
+                claimPlayerIds, claimFrames, claimRequestSequences, ref claimCount, roundId,
+                eventRoundId, itemInstanceId, generation, playerId, frame, requestSequence,
+                out ignoredFailureCode);
+        }
+
+        public static bool TrySubmitClaimWithFailure(int[] roundState,
+            string[] playerIds, int[] lifeStates, int playerCount,
+            string[] commitItemIds, int[] commitGenerations, int commitCount,
+            string[] claimItemIds, int[] claimGenerations, string[] claimPlayerIds,
+            int[] claimFrames, int[] claimRequestSequences, ref int claimCount,
+            string roundId, string eventRoundId, string itemInstanceId, int generation,
+            string playerId, int frame, int requestSequence, out int failureCode)
+        {
+            // 0 = accepted; 1..11 name the exact refusal, in source order, so a caller
+            // can say which gate refused without duplicating the validation here.
+            failureCode = 0;
+            if (!TryValidateRoundScalars(roundState)) { failureCode = 1; return false; }
+            if (!TryValidatePlayerIdentityAndLife(playerIds, lifeStates, playerCount)) { failureCode = 2; return false; }
+            if (!TryValidateCommitKeyColumns(commitItemIds, commitGenerations, commitCount)) { failureCode = 3; return false; }
             if (!TryValidateClaimColumns(claimItemIds, claimGenerations, claimPlayerIds,
-                claimFrames, claimRequestSequences, claimCount)) return false;
-            if (!IsValidEventKey(roundId, eventRoundId, itemInstanceId, generation)) return false;
-            if (playerId == null) return false;
-            if (roundState[RoundPhaseState] != (int)LedgerPhase.Playing) return false;
+                claimFrames, claimRequestSequences, claimCount))
+            {
+                failureCode = 4;
+                return false;
+            }
+            if (!IsValidEventKey(roundId, eventRoundId, itemInstanceId, generation)) { failureCode = 5; return false; }
+            if (playerId == null) { failureCode = 6; return false; }
+            if (roundState[RoundPhaseState] != (int)LedgerPhase.Playing) { failureCode = 7; return false; }
 
             int playerRow;
-            if (!TryFindPlayerRow(playerIds, playerCount, playerId, out playerRow)) return false;
-            if (lifeStates[playerRow] != (int)PlayerLifecycle.Active) return false;
+            if (!TryFindPlayerRow(playerIds, playerCount, playerId, out playerRow)) { failureCode = 8; return false; }
+            if (lifeStates[playerRow] != (int)PlayerLifecycle.Active) { failureCode = 9; return false; }
             if (HasCommitKey(commitItemIds, commitGenerations, commitCount, itemInstanceId,
                 generation))
             {
+                failureCode = 10;
                 return false;
             }
 
@@ -451,7 +478,7 @@ namespace VRCKatamari.Economy
                 if (claimRequestSequences[row] != requestSequence) continue;
                 return true;
             }
-            if (claimCount >= claimItemIds.Length) return false;
+            if (claimCount >= claimItemIds.Length) { failureCode = 11; return false; }
 
             int write = claimCount;
             claimItemIds[write] = itemInstanceId;

@@ -92,8 +92,18 @@ namespace VRCKatamari.BallMotor
         [SerializeField] private float separationEpsilon = 0.001f;
 
         // ---- SizeModelMath inputs (dimensionless volume scale, not a world scale decision) ----
-        [SerializeField] private float baselineVolumeUnits = 1f;
-        [SerializeField] private float cubicMetersPerVolumeUnit = 0.0141f;
+        // Calibration must match Docs/Design/Gameplay/round_model.py, which every
+        // level's star targets are built on: 1356 confirmed units take the ball from
+        // the 0.30 m start to the 2.20 m cap, and eating a whole 1284-unit map leaves
+        // it at 2.16 m. The previous 0.0141 m^3 per unit reached the cap at ~394 units,
+        // i.e. 30% of a map, so growth ran 3.44x too fast against the model.
+        //
+        // The unit got 3.44x larger, but the baseline is a VOLUME (0.0141 m^3 = the
+        // 0.30 m start ball) and must not change with it. Expressing that same volume
+        // in the new unit is 0.0141 / 0.0041 = 3.439 units; leaving it at 1 would drop
+        // the start diameter to 0.199 m and break the 0.30 m -> 2.20 m round.
+        [SerializeField] private float baselineVolumeUnits = 3.4390244f;
+        [SerializeField] private float cubicMetersPerVolumeUnit = 0.0041f;
         [SerializeField] private float maxCoreRadiusWorldM = 1.1f;
         [SerializeField] private float collisionToCoreRadiusRatio = 1f;
         [SerializeField] private float semanticDiameterPerCoreDiameter = 1f;
@@ -256,6 +266,59 @@ namespace VRCKatamari.BallMotor
         private bool[] pendingAccepted;
         private int pendingCandidateCount;
 
+        // ---- Absorbed-event ring: the only "which item was eaten" exit ----
+        // The pickup stage and the ledger know an item was consumed, but until this
+        // ring existed nothing outside the motor could learn WHICH item disappeared
+        // (GetAbsorbedCount is a total). A presentation or host layer needs the
+        // identity, the world position and the size to hide the prop that was just
+        // eaten, so the commit path appends one event per committed absorb.
+        // Purely additive: no stage of the pipeline reads the ring, and a full ring
+        // evicts the oldest event instead of failing (the absorb already committed).
+        private const int AbsorbedEventCapacity = 16;
+
+        private string[] absorbedEventItemIds;
+        private Vector3[] absorbedEventPositions;
+        private float[] absorbedEventDiameters;
+        private int absorbedEventCount;
+
+        // ---- Rejected-candidate ring: why the pickup gate said no ----
+        // A rejected candidate used to vanish without a trace: the item stayed in
+        // the queue, the ball rolled past, and nothing anywhere said whether the
+        // kind whitelist, the size gate, the growth cap or the reach test refused
+        // it. That silence is a design defect, not just a debugging inconvenience,
+        // because a mis-set whitelist looks exactly like "no props in range".
+        // Every non-Absorb outcome is recorded here with its distance, in the same
+        // absolute-index form as the absorbed ring so a reader keeps its own cursor.
+        private const int RejectEventCapacity = 8;
+
+        private const int rejectDiagnosticsLimit = 3;
+        private const int commitDiagnosticsLimit = 3;
+        private int commitDiagnosticsLogged;
+
+        // ---- Evaluation trace (observation only; changes no decision) ----
+        // The reject ring stores the LAST few refusals, so it can never show whether
+        // the item under the ball was evaluated while it was inside reach: a refusal
+        // at d > reach is self-fulfilling (outcome comes from the same comparison as
+        // d), so "minimum distance" proves approach, not a decision. This trace logs
+        // EVERY evaluation of one item, which is what answers the question.
+        // Diagnostics only, never a gameplay field: empty means the trace is off and
+        // costs one length check per candidate. A scene sets an item id to ask "was
+        // this item evaluated, and with what numbers"; nothing reads it for gameplay.
+        [SerializeField] private string debugTraceItemId = "";
+        private const int TraceLineLimit = 400;
+        private int traceLinesLogged;
+
+        private float traceLastDistance;
+        private float traceLastReach;
+        private float traceLastBallZ;
+        private int traceLastOutcome;
+        private int rejectDiagnosticsLogged;
+
+        private string[] rejectEventItemIds;
+        private int[] rejectEventReasons;
+        private float[] rejectEventDistances;
+        private int rejectEventCount;
+
         // ---- One-shot capacity signal; see the remarks on RebuildObstacles ----
         private int overflowCount;
         private bool overflowLatched;
@@ -270,6 +333,7 @@ namespace VRCKatamari.BallMotor
 
         private void Start()
         {
+            Debug.Log("[BallMotor] Start begin center=" + startCenterWorld);
             if (fixedStepSeconds <= 0f) fixedStepSeconds = 0.02f;
             if (maxStepsPerFrame < 1) maxStepsPerFrame = 1;
             if (stuckTimeoutSeconds <= 0f) stuckTimeoutSeconds = 1.5f;
@@ -300,6 +364,36 @@ namespace VRCKatamari.BallMotor
             predictedGains = new int[PredictionCapacity];
             bankRequestPlayerIds = new string[BankRequestCapacity];
             bankRequestIds = new string[BankRequestCapacity];
+
+            // The pending-candidate stores are the only arrays this type declared
+            // without allocating, so SubmitCandidate dereferenced null on its first
+            // call. Nothing exercised that seam before a scene drove it; the capacity
+            // (4) and the drop-on-full policy are unchanged.
+            pendingAbsorbable = new bool[PendingCandidateCapacity];
+            pendingKinds = new string[PendingCandidateCapacity];
+            pendingBounds = new Vector3[PendingCandidateCapacity];
+            pendingPositions = new Vector3[PendingCandidateCapacity];
+            pendingValues = new float[PendingCandidateCapacity];
+            pendingItemIds = new string[PendingCandidateCapacity];
+            pendingGenerations = new int[PendingCandidateCapacity];
+            pendingAccepted = new bool[PendingCandidateCapacity];
+            pendingCandidateCount = 0;
+
+            absorbedEventItemIds = new string[AbsorbedEventCapacity];
+            absorbedEventPositions = new Vector3[AbsorbedEventCapacity];
+            absorbedEventDiameters = new float[AbsorbedEventCapacity];
+            absorbedEventCount = 0;
+
+            traceLinesLogged = 0;
+            traceLastDistance = 0f;
+            traceLastReach = 0f;
+            traceLastBallZ = 0f;
+            traceLastOutcome = 0;
+
+            rejectEventItemIds = new string[RejectEventCapacity];
+            rejectEventReasons = new int[RejectEventCapacity];
+            rejectEventDistances = new float[RejectEventCapacity];
+            rejectEventCount = 0;
 
             previousDown = new bool[ControlIntentMath.ActionCount];
             lastActionTime = new float[ControlIntentMath.ActionCount];
@@ -369,6 +463,9 @@ namespace VRCKatamari.BallMotor
                 semanticDiameterWorldM = semanticDiameter;
             }
             RecomputeConfirmedAndSize();
+            Debug.Log("[BallMotor] Start ready diameter=" + semanticDiameterWorldM
+                + " collisionRadius=" + collisionRadiusWorldM
+                + " hasLocalRow=" + hasLocalRow);
         }
 
         private void Update()
@@ -574,11 +671,42 @@ namespace VRCKatamari.BallMotor
             for (int i = 0; i < pendingCandidateCount; i++)
             {
                 pendingAccepted[i] = false;
-                AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorb(
+                AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorbWithValue(
                     pendingAbsorbable[i], pendingKinds[i], allowedKinds, allowedKindCount,
                     pendingBounds[i], pendingPositions[i], center, collisionRadiusWorldM,
-                    contactRadiusWorldM, maxItemSizeWorldM, maxCollisionRadiusWorldM);
-                if (outcome == AbsorbOutcome.Absorb) pendingAccepted[i] = true;
+                    contactRadiusWorldM, maxItemSizeWorldM, maxCollisionRadiusWorldM,
+                    pendingValues[i]);
+                float evaluatedDistance = Vector3.Distance(pendingPositions[i], center);
+                Vector3 evaluatedBounds = pendingBounds[i];
+                float evaluatedHalfX = evaluatedBounds.x * 0.5f;
+                float evaluatedHalfY = evaluatedBounds.y * 0.5f;
+                float evaluatedHalfZ = evaluatedBounds.z * 0.5f;
+                float evaluatedItemRadius = Mathf.Sqrt(evaluatedHalfX * evaluatedHalfX
+                    + evaluatedHalfY * evaluatedHalfY + evaluatedHalfZ * evaluatedHalfZ);
+                float evaluatedReach = collisionRadiusWorldM + contactRadiusWorldM
+                    + evaluatedItemRadius;
+
+                if (debugTraceItemId != null && debugTraceItemId.Length > 0
+                    && pendingItemIds[i] == debugTraceItemId
+                    && traceLinesLogged < TraceLineLimit)
+                {
+                    // Data only. The host decides whether and how to print it.
+                    traceLinesLogged = traceLinesLogged + 1;
+                    traceLastDistance = evaluatedDistance;
+                    traceLastReach = evaluatedReach;
+                    traceLastBallZ = center.z;
+                    traceLastOutcome = (int)outcome;
+                }
+
+                if (outcome == AbsorbOutcome.Absorb)
+                {
+                    pendingAccepted[i] = true;
+                }
+                else
+                {
+                    RecordReject(pendingItemIds[i], (int)outcome, evaluatedDistance);
+                    LogRejectDiagnosticsOnce(i, outcome, center);
+                }
             }
         }
 
@@ -592,7 +720,13 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         private void CommitAcceptedAbsorbs()
         {
-            if (!hasLocalRow) return;
+            if (!hasLocalRow)
+            {
+                // Silent before: with no local ledger row every accepted candidate is
+                // dropped without a commit, a reject or an absorb event.
+                LogCommitFailureOnce("(none)", 0, 0, 0, -1);
+                return;
+            }
             int write = 0;
             for (int read = 0; read < pendingCandidateCount; read++)
             {
@@ -606,10 +740,23 @@ namespace VRCKatamari.BallMotor
                         absorbed = TryCommitAbsorb(pendingItemIds[read],
                             pendingGenerations[read], gain);
                     }
+                    else
+                    {
+                        // Also silent before: a value the gain mapping refuses leaves
+                        // the candidate accepted-but-uncommitted forever.
+                        LogCommitFailureOnce(pendingItemIds[read], 0, 0, 0, -1);
+                    }
                 }
                 if (absorbed)
                 {
                     absorbedCount = absorbedCount + 1;
+                    // Recorded only here, inside the branch where the ledger commit
+                    // returned true, so an event always corresponds to a total that
+                    // actually moved. The diameter is the candidate's largest bound
+                    // component, the same extent the pickup gate compared against.
+                    RecordAbsorbedEvent(pendingItemIds[read], pendingPositions[read],
+                        Mathf.Max(pendingBounds[read].x,
+                            Mathf.Max(pendingBounds[read].y, pendingBounds[read].z)));
                     continue;
                 }
                 if (write != read)
@@ -631,12 +778,14 @@ namespace VRCKatamari.BallMotor
         private bool TryCommitAbsorb(string itemInstanceId, int generation, int gain)
         {
             absorbRequestSequence = absorbRequestSequence + 1;
-            if (!GrowthLedgerMath.TrySubmitClaim(roundState, playerIds, lifeStates,
+            int claimFailure;
+            if (!GrowthLedgerMath.TrySubmitClaimWithFailure(roundState, playerIds, lifeStates,
                 playerCount, commitItemIds, commitGenerations, commitCount, claimItemIds,
                 claimGenerations, claimPlayerIds, claimFrames, claimRequestSequences,
                 ref claimCount, roundId, roundId, itemInstanceId, generation,
-                localPlayerId, authorityFrame, absorbRequestSequence))
+                localPlayerId, authorityFrame, absorbRequestSequence, out claimFailure))
             {
+                LogCommitFailureOnce(itemInstanceId, gain, claimFailure, 0, -1);
                 return false;
             }
 
@@ -650,9 +799,17 @@ namespace VRCKatamari.BallMotor
                 predictedGenerations, predictedGains, ref predictedCount, roundId, roundId,
                 itemInstanceId, generation, gain, out commitRow))
             {
+                LogCommitFailureOnce(itemInstanceId, gain, 0, 1, -1);
                 return false;
             }
-            if (commitRow == GrowthLedgerMath.NoRow) return false;
+            if (commitRow == GrowthLedgerMath.NoRow)
+            {
+                // TryResolveClaims reports success with NoRow when no claim matched the
+                // event. Treating that as a commit would be a silent non-absorb: no
+                // event, no reject, candidate stays queued. Logged as commitRow=-1.
+                LogCommitFailureOnce(itemInstanceId, gain, 0, 0, -1);
+                return false;
+            }
 
             int confirmed = confirmedVolumes[localRow];
             int banked = bankedScores[localRow];
@@ -845,6 +1002,53 @@ namespace VRCKatamari.BallMotor
             pendingAccepted[index] = false;
             pendingCandidateCount = pendingCandidateCount + 1;
             return true;
+        }
+
+        /// <summary>
+        /// Removes one queued candidate by item id, compacting the queue.
+        /// </summary>
+        /// <remarks>
+        /// Additive seam, and the missing half of SubmitCandidate. A queued candidate
+        /// is never removed except by a successful commit, so a host that queues on
+        /// proximity pins the four slots with an item the ball then rolls away from:
+        /// the item is refused out-of-reach on every step forever and no nearer prop
+        /// can ever take that slot. Withdrawing lets a host release what it can no
+        /// longer plausibly absorb and re-queue later.
+        /// <para>
+        /// Compaction mirrors CommitAcceptedAbsorbs so no list is allocated. Returns
+        /// true when at least one entry was removed; the ledger is untouched (a
+        /// candidate was never a claim).
+        /// </para>
+        /// </remarks>
+        public bool WithdrawCandidate(string itemInstanceId)
+        {
+            if (itemInstanceId == null || itemInstanceId.Length == 0) return false;
+            if (pendingCandidateCount <= 0) return false;
+
+            int write = 0;
+            bool removed = false;
+            for (int read = 0; read < pendingCandidateCount; read++)
+            {
+                if (pendingItemIds[read] == itemInstanceId)
+                {
+                    removed = true;
+                    continue;
+                }
+                if (write != read)
+                {
+                    pendingAbsorbable[write] = pendingAbsorbable[read];
+                    pendingKinds[write] = pendingKinds[read];
+                    pendingBounds[write] = pendingBounds[read];
+                    pendingPositions[write] = pendingPositions[read];
+                    pendingValues[write] = pendingValues[read];
+                    pendingItemIds[write] = pendingItemIds[read];
+                    pendingGenerations[write] = pendingGenerations[read];
+                    pendingAccepted[write] = pendingAccepted[read];
+                }
+                write = write + 1;
+            }
+            pendingCandidateCount = write;
+            return removed;
         }
 
         public void ClearCandidates()
@@ -1182,6 +1386,19 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// How many candidates the queue holds (4).
+        /// </summary>
+        /// <remarks>
+        /// Read by a host that polls for a free slot instead of submitting into a
+        /// full queue. Submitting anyway is legal but latches the overflow signal,
+        /// which exists for lost data, so a polling host checks this first.
+        /// </remarks>
+        public int GetPendingCandidateCapacity()
+        {
+            return PendingCandidateCapacity;
+        }
+
+        /// <summary>
         /// True once any fixed-capacity registration was refused, or once the
         /// sweep's contact buffer filled at least once.
         /// </summary>
@@ -1221,6 +1438,321 @@ namespace VRCKatamari.BallMotor
         public bool WasContactBufferSaturated()
         {
             return contactBufferSaturated;
+        }
+
+        // ------------------------------------------------------------------
+        // Absorbed-event ring (additive; nothing in the pipeline reads it)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Appends one committed absorb to the ring.
+        /// </summary>
+        /// <remarks>
+        /// Slot is the absolute event index modulo the capacity, so event #0 lands
+        /// in slot 0 and event #16 overwrites slot 0. Callers index by the ABSOLUTE
+        /// event number (0 = first absorb ever), which lets a reader keep its own
+        /// cursor across frames without knowing about wraparound.
+        /// </remarks>
+        private void RecordAbsorbedEvent(string itemId, Vector3 position, float diameter)
+        {
+            if (absorbedEventItemIds == null) return;
+            int slot = absorbedEventCount % AbsorbedEventCapacity;
+            absorbedEventItemIds[slot] = itemId;
+            absorbedEventPositions[slot] = position;
+            absorbedEventDiameters[slot] = diameter;
+            absorbedEventCount = absorbedEventCount + 1;
+        }
+
+        /// <summary>
+        /// The number of absorbed events recorded so far. Monotonic; it is a total,
+        /// not a ring occupancy, so a reader can use it as its own cursor.
+        /// </summary>
+        public int GetAbsorbedEventCount()
+        {
+            return absorbedEventCount;
+        }
+
+        public int GetAbsorbedEventCapacity()
+        {
+            return AbsorbedEventCapacity;
+        }
+
+        /// <summary>
+        /// Number of events the ring has already evicted (0 until it wraps).
+        /// </summary>
+        /// <remarks>
+        /// Deliberately NOT routed into <see cref="SignalOverflow"/>: eviction is
+        /// normal when a run absorbs more than 16 items, whereas the overflow latch
+        /// means a host lost a candidate and is read as a fault by the tests. This
+        /// getter keeps the same "a reader fell behind" information visible without
+        /// turning ordinary play into a latched error.
+        /// </remarks>
+        public int GetAbsorbedEventDroppedCount()
+        {
+            if (absorbedEventCount <= AbsorbedEventCapacity) return 0;
+            return absorbedEventCount - AbsorbedEventCapacity;
+        }
+
+        /// <summary>
+        /// Item id of the event at an absolute index, or "" once it was evicted or
+        /// when the index is out of range.
+        /// </summary>
+        public string GetAbsorbedEventItemId(int absoluteIndex)
+        {
+            int slot = AbsorbedEventSlot(absoluteIndex);
+            if (slot < 0) return "";
+            string id = absorbedEventItemIds[slot];
+            if (id == null) return "";
+            return id;
+        }
+
+        public Vector3 GetAbsorbedEventPosition(int absoluteIndex)
+        {
+            int slot = AbsorbedEventSlot(absoluteIndex);
+            if (slot < 0) return Vector3.zero;
+            return absorbedEventPositions[slot];
+        }
+
+        public float GetAbsorbedEventDiameter(int absoluteIndex)
+        {
+            int slot = AbsorbedEventSlot(absoluteIndex);
+            if (slot < 0) return 0f;
+            return absorbedEventDiameters[slot];
+        }
+
+        /// <summary>
+        /// Prints the full input set of the first few refusals, once each.
+        /// </summary>
+        /// <remarks>
+        /// The ring says which branch refused; this says with what numbers, so a
+        /// wrong reach or a wrong item radius is visible without reading coordinates
+        /// by hand. Capped at <c>rejectDiagnosticsLimit</c> lines for the whole run so
+        /// a persistent refusal cannot flood the console.
+        /// </remarks>
+        private void LogRejectDiagnosticsOnce(int index, AbsorbOutcome outcome, Vector3 center)
+        {
+            if (rejectDiagnosticsLogged >= rejectDiagnosticsLimit) return;
+            rejectDiagnosticsLogged = rejectDiagnosticsLogged + 1;
+
+            Vector3 bounds = pendingBounds[index];
+            float halfX = bounds.x * 0.5f;
+            float halfY = bounds.y * 0.5f;
+            float halfZ = bounds.z * 0.5f;
+            float itemRadius = Mathf.Sqrt(halfX * halfX + halfY * halfY + halfZ * halfZ);
+            float reach = collisionRadiusWorldM + contactRadiusWorldM + itemRadius;
+
+            Debug.Log("[BallMotor] reject#" + rejectDiagnosticsLogged
+                + " id=" + pendingItemIds[index]
+                + " kind=" + pendingKinds[index]
+                + " outcome=" + (int)outcome
+                + " d=" + Vector3.Distance(pendingPositions[index], center)
+                + " reach=" + reach
+                + " itemR=" + itemRadius
+                + " ballR=" + collisionRadiusWorldM
+                + " contactR=" + contactRadiusWorldM
+                + " allowedKinds=" + allowedKindCount
+                + " ballCenter=" + center
+                + " itemPos=" + pendingPositions[index]);
+        }
+
+        /// <summary>
+        /// Appends one refused candidate and the reason the gate gave.
+        /// </summary>
+        /// <remarks>
+        /// The reason is the <c>PickupAbsorbMath.AbsorbOutcome</c> value as an int so
+        /// the assembly layer stays free of a second enum, and the distance is the
+        /// centre-to-centre distance the reach test saw. Recorded only for a refused
+        /// candidate: an accepted one is silent here and appears in the absorbed ring
+        /// once its ledger commit succeeds.
+        /// </remarks>
+        /// <summary>How many evaluations of the traced item have been recorded.</summary>
+        public int GetTraceCount()
+        {
+            return traceLinesLogged;
+        }
+
+        public float GetTraceLastDistance()
+        {
+            return traceLastDistance;
+        }
+
+        public float GetTraceLastReach()
+        {
+            return traceLastReach;
+        }
+
+        public float GetTraceLastBallZ()
+        {
+            return traceLastBallZ;
+        }
+
+        public int GetTraceLastOutcome()
+        {
+            return traceLastOutcome;
+        }
+
+        public string GetDebugTraceItemId()
+        {
+            return debugTraceItemId;
+        }
+
+        /// <summary>Item id of the queued candidate at a slot, or "" when out of range.</summary>
+        public string GetPendingCandidateItemId(int index)
+        {
+            if (pendingItemIds == null) return "";
+            if (index < 0 || index >= pendingCandidateCount) return "";
+            string id = pendingItemIds[index];
+            if (id == null) return "";
+            return id;
+        }
+
+        /// <summary>
+        /// Centre distance of the queued candidate at a slot, or -1 when out of range.
+        /// </summary>
+        /// <remarks>
+        /// Data only: rounding and formatting belong to whoever presents it. This type
+        /// deliberately exposes no human-readable strings - a formatter here would be
+        /// called by the next presenter and slowly become a second layout to maintain.
+        /// </remarks>
+        public float GetPendingCandidateDistance(int index)
+        {
+            if (pendingPositions == null) return -1f;
+            if (index < 0 || index >= pendingCandidateCount) return -1f;
+            return Vector3.Distance(pendingPositions[index], ballCenterWorld);
+        }
+
+        /// <summary>
+        /// One-shot record of why a claim/commit was refused.
+        /// </summary>
+        /// <remarks>
+        /// A refused commit used to leave no trace at all: the candidate passed the
+        /// geometry gate (so no reject event), never produced an absorbed event, and
+        /// stayed queued until it was withdrawn. That is indistinguishable from "no
+        /// props in range". claimFailure is the failure code from
+        /// GrowthLedgerMath.TrySubmitClaimWithFailure (1..11, 0 when the claim was
+        /// accepted); resolveFailure is 1 when TryResolveClaims itself refused, and
+        /// commitRow -1 marks the "success but no commit row" case.
+        /// </remarks>
+        private void LogCommitFailureOnce(string itemId, int gain, int claimFailure,
+            int resolveFailure, int commitRow)
+        {
+            if (commitDiagnosticsLogged >= commitDiagnosticsLimit) return;
+            commitDiagnosticsLogged = commitDiagnosticsLogged + 1;
+
+            int phase = -1;
+            int life = -1;
+            if (roundState != null) phase = roundState[GrowthLedgerMath.RoundPhaseState];
+            if (hasLocalRow && lifeStates != null) life = lifeStates[localRow];
+
+            Debug.Log("[BallMotor] commit id=" + itemId
+                + " gain=" + gain
+                + " claim=" + (claimFailure == 0 ? "ok" : "FAIL(" + claimFailure + ")")
+                + " resolve=" + (resolveFailure == 0 ? "ok" : "FAIL(" + resolveFailure + ")")
+                + " commitRow=" + commitRow
+                + " phase=" + phase
+                + " life=" + life
+                + " claimCount=" + claimCount);
+        }
+
+        private void RecordReject(string itemId, int reason, float distance)
+        {
+            if (rejectEventItemIds == null) return;
+            int slot = rejectEventCount % RejectEventCapacity;
+            rejectEventItemIds[slot] = itemId;
+            rejectEventReasons[slot] = reason;
+            rejectEventDistances[slot] = distance;
+            rejectEventCount = rejectEventCount + 1;
+        }
+
+        /// <summary>Number of refused candidates recorded so far (monotonic).</summary>
+        public int GetRejectEventCount()
+        {
+            return rejectEventCount;
+        }
+
+        public int GetRejectEventCapacity()
+        {
+            return RejectEventCapacity;
+        }
+
+        /// <summary>Refusals the 8-slot ring has already evicted.</summary>
+        public int GetRejectEventDroppedCount()
+        {
+            if (rejectEventCount <= RejectEventCapacity) return 0;
+            return rejectEventCount - RejectEventCapacity;
+        }
+
+        /// <summary>Item id of the refusal at an absolute index, or "" once evicted.</summary>
+        public string GetRejectEventItemId(int absoluteIndex)
+        {
+            int slot = RejectEventSlot(absoluteIndex);
+            if (slot < 0) return "";
+            string id = rejectEventItemIds[slot];
+            if (id == null) return "";
+            return id;
+        }
+
+        /// <summary>
+        /// Reason of the refusal at an absolute index, as a
+        /// <c>PickupAbsorbMath.AbsorbOutcome</c> value; -1 when out of range.
+        /// </summary>
+        public int GetRejectEventReason(int absoluteIndex)
+        {
+            int slot = RejectEventSlot(absoluteIndex);
+            if (slot < 0) return -1;
+            return rejectEventReasons[slot];
+        }
+
+        /// <summary>Centre-to-centre distance the reach test saw, or -1 when invalid.</summary>
+        public float GetRejectEventDistance(int absoluteIndex)
+        {
+            int slot = RejectEventSlot(absoluteIndex);
+            if (slot < 0) return -1f;
+            return rejectEventDistances[slot];
+        }
+
+        private int RejectEventSlot(int absoluteIndex)
+        {
+            if (rejectEventItemIds == null) return -1;
+            if (absoluteIndex < 0) return -1;
+            if (absoluteIndex >= rejectEventCount) return -1;
+            int retained = rejectEventCount;
+            if (retained > RejectEventCapacity) retained = RejectEventCapacity;
+            int firstRetained = rejectEventCount - retained;
+            if (absoluteIndex < firstRetained) return -1;
+            return absoluteIndex % RejectEventCapacity;
+        }
+
+        /// <summary>
+        /// How many kind entries the pickup gate will accept.
+        /// </summary>
+        /// <remarks>
+        /// ZERO MEANS "DENY EVERY KIND", not "no filter": the gate's kind test walks
+        /// the allowed list and returns false when nothing matches, and Start()
+        /// initialises the count to 0. A host must therefore call SetAllowedKinds
+        /// before the first step, and should read this back to prove it landed;
+        /// otherwise every candidate is refused as kind-not-allowed and the run looks
+        /// silently empty.
+        /// </remarks>
+        public int GetAllowedKindCount()
+        {
+            return allowedKindCount;
+        }
+
+        /// <summary>
+        /// Maps an absolute index to its ring slot, or -1 when out of range or
+        /// already evicted.
+        /// </summary>
+        private int AbsorbedEventSlot(int absoluteIndex)
+        {
+            if (absorbedEventItemIds == null) return -1;
+            if (absoluteIndex < 0) return -1;
+            if (absoluteIndex >= absorbedEventCount) return -1;
+            int retained = absorbedEventCount;
+            if (retained > AbsorbedEventCapacity) retained = AbsorbedEventCapacity;
+            int firstRetained = absorbedEventCount - retained;
+            if (absoluteIndex < firstRetained) return -1;
+            return absoluteIndex % AbsorbedEventCapacity;
         }
     }
 }

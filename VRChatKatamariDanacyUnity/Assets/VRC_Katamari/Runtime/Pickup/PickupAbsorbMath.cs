@@ -23,7 +23,13 @@ namespace VRCKatamari.Pickup
         RejectItemTooLarge = 3,
         RejectBallAtGrowthCap = 4,
         RejectOutOfReach = 5,
-        RejectInvalidInput = 6
+        RejectInvalidInput = 6,
+        /// <summary>
+        /// The item is in reach and of an allowed kind, but its ledger gain truncates
+        /// to zero, so committing it would resolve to "no row" and the item would
+        /// vanish with no score, no size change and no event. Refused visibly instead.
+        /// </summary>
+        RejectNoGain = 7
     }
 
     /// <summary>
@@ -215,6 +221,41 @@ namespace VRCKatamari.Pickup
         /// <see cref="VRCKatamari.Economy.GrowthLedgerMath.TryApplyCommit"/> commits the
         /// matching event key.
         /// </remarks>
+        /// <summary>
+        /// <see cref="EvaluateAbsorb"/> plus the ledger's gain precondition.
+        /// </summary>
+        /// <remarks>
+        /// An absorb whose value truncates to zero units would pass the geometry gate,
+        /// take a claim, resolve to no commit row, and disappear without a trace: no
+        /// score, no size change, no reject, no event. The rule "an item is worth at
+        /// least one unit" belongs to the data, so a violation is reported as
+        /// <see cref="AbsorbOutcome.RejectNoGain"/> instead of being swallowed.
+        /// The geometry verdict is returned unchanged when it is already a refusal.
+        /// </remarks>
+        public static AbsorbOutcome EvaluateAbsorbWithValue(
+            bool itemAbsorbable,
+            string itemKind,
+            string[] allowedKinds,
+            int allowedKindCount,
+            Vector3 itemBounds,
+            Vector3 itemPosition,
+            Vector3 ballPosition,
+            float collisionRadiusWorldM,
+            float contactRadiusWorldM,
+            float maxItemSizeWorldM,
+            float maxGrowthRadiusWorldM,
+            float itemValue)
+        {
+            AbsorbOutcome geometry = EvaluateAbsorb(itemAbsorbable, itemKind, allowedKinds,
+                allowedKindCount, itemBounds, itemPosition, ballPosition, collisionRadiusWorldM,
+                contactRadiusWorldM, maxItemSizeWorldM, maxGrowthRadiusWorldM);
+            if (geometry != AbsorbOutcome.Absorb) return geometry;
+            int gain;
+            if (!TryAbsorbValueToLedgerGain(itemValue, out gain)) return AbsorbOutcome.RejectNoGain;
+            if (gain <= 0) return AbsorbOutcome.RejectNoGain;
+            return AbsorbOutcome.Absorb;
+        }
+
         public static bool TryAbsorbValueToLedgerGain(float itemValue, out int gain)
         {
             gain = 0;

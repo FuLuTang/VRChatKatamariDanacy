@@ -22,12 +22,14 @@ namespace VRCKatamari.Tests
     {
         private const float Tolerance = 1e-6f;
 
-        // Calibrated sizing, the same one KatamariBallMotor serializes: 1
-        // baseline unit, 0.0141 m^3 per unit, a 1.1 m core-radius display cap
-        // (2.20 m semantic diameter), and both ratios 1. The zero-confirmed
-        // diameter is 0.29974 m and the cap is 2.20 m.
-        private const float CalibratedBaseline = 1f;
-        private const float CalibratedCubicMetersPerUnit = 0.0141f;
+        // Calibrated sizing, the same one KatamariBallMotor serializes: a
+        // 3.4390244 unit baseline (the unchanged 0.0141 m^3 start volume), 0.0041
+        // m^3 per unit, a 1.1 m core-radius display cap (2.20 m semantic
+        // diameter), and both ratios 1. The zero-confirmed diameter is 0.29974 m
+        // and the cap is 2.20 m, reached at 1356 confirmed units - the
+        // Docs/Design/Gameplay/round_model.py calibration.
+        private const float CalibratedBaseline = 3.4390244f;
+        private const float CalibratedCubicMetersPerUnit = 0.0041f;
         private const float CalibratedMaxCoreRadius = 1.1f;
         private const float CalibratedCollisionRatio = 1f;
         private const float CalibratedSemanticRatio = 1f;
@@ -115,14 +117,15 @@ namespace VRCKatamari.Tests
         [Test]
         public void PostBankDiameterPricesBackIntoTheUnitsTheLedgerStores()
         {
-            // 0.5975 m at calibrated sizing is ~6.92 confirmed units. Hand
+            // 0.5975 m at calibrated sizing is ~23.80 confirmed units. Hand
             // check: r = 0.29875 m, V = 4/3*pi*r^3 = 0.1117 m^3,
-            // 0.1117 / 0.0141 = 7.921 total units, minus the 1 baseline unit.
+            // 0.1117 / 0.0041 = 27.249 total units, minus the 3.439 baseline
+            // units.
             float postBankVolumeUnits;
             Assert.IsTrue(BankShrinkMath.TryBankVolumeUnits(0.5975f, CalibratedBaseline,
                 CalibratedCubicMetersPerUnit, CalibratedMaxCoreRadius,
                 CalibratedSemanticRatio, out postBankVolumeUnits));
-            Assert.AreEqual(6.921f, postBankVolumeUnits, 1e-2f);
+            Assert.AreEqual(23.802f, postBankVolumeUnits, 1e-2f);
 
             // Round trip: the forward size map must report the same diameter,
             // which is what makes the shrink a diameter rule rather than a

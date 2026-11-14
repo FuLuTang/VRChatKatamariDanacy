@@ -1,6 +1,6 @@
 # T49 球层：地面接触与支持高度
 
-> **DRAFT / host-only reference.** Python 为标准库离线数学参考，C# 位于 `RuntimeDraft/` 且不是组件；未在 Unity/UdonSharp 编译、未搭场景或网络/VR测试。接口与世界尺度均未冻结。
+> **DRAFT / host-only reference.** Python 为标准库离线数学参考，C# 位于 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/GroundContact/GroundContactMath.cs` 且不是组件；未在 Unity/UdonSharp 编译、未搭场景或网络/VR测试。接口与世界尺度均未冻结。
 
 ## 项目要求对照
 
@@ -22,7 +22,7 @@
 
 ## 未验证
 
-Unity Quaternion / Transform方向适配、UdonSharp编译/ProgramAsset/组件链、Unity物理/斜面/边缘、性能、网络和VR均 `NOT_RUN`。生成的C#草稿不可称为 Udon可运行功能。
+Unity Quaternion / Transform方向适配、UdonSharp编译/ProgramAsset/组件链、Unity物理/斜面/边缘、性能、网络和VR均 `NOT_RUN`。尚未通过 UdonSharp 编译，移植不可称为 Udon可运行功能。
 
 ## Unity 实现
 

@@ -1,4 +1,4 @@
-"""T53 host-only standard-library reference math; not Unity/Udon code.
+"""Host-only standard-library reference math; not Unity/Udon code.
 
 The host convention here is an explicitly declared right-handed vector/quaternion
 algebra. The Unity adapter must pass the independent axis probe before use.

@@ -153,7 +153,7 @@ class RoundParams:
     base_speed_mps: float = 3.0             # (model) rolling speed
     size_speed_penalty: float = 0.15        # (model) speed lost at max diameter
     path_detour_factor: float = 1.35        # (model) straight-line -> walkable distance
-    restock_period_s: float = 0.0           # 0 = no restock (T22 still open)
+    restock_period_s: float = 0.0           # 0 = no restock (restock rule not yet defined)
     restock_fraction: float = 0.0           # refill this share of a zone's s-tier stock
 
     profiles: tuple[PlayerProfile, ...] = (

@@ -21,4 +21,4 @@
 
 ## 尚未测/草稿限制
 
-原版游戏源码未取得；来源边界见同目录`SOURCE_EVIDENCE.md`。C# `RuntimeDraft/VisualRollRuntimeDraft.cs`未导入目标工程、未编译C#/UdonSharp、未生成ProgramAsset/Prefab。Unity Cross官方左手规则与本模块host右手代数需在Windows用方向箭头及接触速度独立探针对拍；未通过前不可场景集成。Prefab没有创建；可进入对象仅有`TEST_OBJECT_SPEC.md`规格。没有验证C#四元数乘法顺序、浮点阈值映射、Udon性能、VR舒适性或视觉效果。
+原版游戏源码未取得；来源边界见同目录`SOURCE_EVIDENCE.md`。C# `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/VisualRoll/VisualRollMath.cs` 已随移植进入目标工程，但尚未编译C#/UdonSharp、未生成ProgramAsset/Prefab。Unity Cross官方左手规则与本模块host右手代数需在Windows用方向箭头及接触速度独立探针对拍；未通过前不可场景集成。Prefab没有创建；可进入对象仅有`TEST_OBJECT_SPEC.md`规格。没有验证C#四元数乘法顺序、浮点阈值映射、Udon性能、VR舒适性或视觉效果。

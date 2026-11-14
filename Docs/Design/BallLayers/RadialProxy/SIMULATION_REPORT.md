@@ -1,6 +1,6 @@
 # T50 RadialProxy 离线模拟报告
 
-状态：Python host-only验证；C# RuntimeDraft非组件且未编译；性能、Unity、UdonSharp、Unity对象与网络均未验证。
+状态：Python host-only验证；C# 移植（`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/RadialProxy/RadialProxyMath.cs`）非组件且未编译；性能、Unity、UdonSharp、Unity对象与网络均未验证。
 
 ## 研究 / 项目差异
 
@@ -24,4 +24,4 @@ python3 -m unittest discover -s Docs/tests/ball_radial_proxy -v
 - 32方向与最多4候选未测设备性能；候选满额策略“拒绝”仅为草案。
 - 输入key需要上游提供稳定身份和generation；本模块不确认吸附或账本。
 - host quaternion采用标准Hamilton algebra，没在Unity按+X/+Y/+Z箭头对拍；可能需要有证据的坐标适配。
-- C#的Unity Quaternion调用只留作RuntimeDraft；不代表Unity API/UdonSharp目标版本支持或行为已验证。
+- C#的Unity Quaternion调用现位于 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/RadialProxy/RadialProxyMath.cs`；不代表Unity API/UdonSharp目标版本支持或行为已验证。

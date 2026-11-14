@@ -68,7 +68,7 @@ SOURCE_BINDINGS: Mapping[str, Mapping[str, str]] = {
           "use": "user-configured Jump action", "interact": "VRChat Interact",
           "comfort": "native Comfort Turning (on/off interaction TBD)"},
     "Desktop": {"move": "WASD / configured 2D movement", "look": "mouse",
-                "use": "Space / Jump", "interact": "left mouse button (T04 verified)",
+                "use": "Space / Jump", "interact": "left mouse button (verified in the minimal platform experiment)",
                 "comfort": "not applicable"},
 }
 
@@ -77,7 +77,8 @@ class IntentAdapter:
     """Turn canonical frames into a deterministic ordered intent stream.
 
     Axes are emitted while non-zero. Edge actions are emitted once per rising edge;
-    debounce_seconds=0.2 is a T04-order-of-magnitude draft parameter, not a tuned value.
+    debounce_seconds=0.2 is an order-of-magnitude placeholder from the minimal platform
+    experiment, not a tuned value.
     """
     def __init__(self, debounce_seconds: float = 0.2):
         if debounce_seconds < 0:

@@ -1,6 +1,6 @@
 # T54 Sweep 离线模拟报告
 
-状态：纯Python几何参考；`SweepRuntimeDraft.cs`不是组件，未Unity/UdonSharp编译；SweepLab未搭建。
+状态：纯Python几何参考；`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/Sweep/SweepMath.cs`不是组件，未Unity/UdonSharp编译；SweepLab未搭建。
 
 ## 原作来源 / 项目近似
 

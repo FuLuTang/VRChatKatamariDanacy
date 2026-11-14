@@ -11,4 +11,4 @@
 - **失败指示**：重复事件增加记录、冲突事件覆盖旧记录、撤销后重放复活、不同generation/context合并、无效快照部分替换、局部尺度随球芯改变，任一即FAIL。测试可视化不得将Renderer数量或回收当T51指标。
 - **重置**：显式调用 `ClearContext(testContextId)`；另生成全新测试context作交叉验证。确认快照重建会替换该作用域而非累计。
 - **Prefab层级**：`AttachmentPoseAndIdentityLab` → `BallPhysicsRoot` → `AttachmentRoot` → `ConfirmedItem`；`CoreMesh` 与 `TestReadout` 是 `BallPhysicsRoot` 的兄弟节点。CoreMesh单独缩放；AttachmentRoot保持单位局部scale。无Rigidbody、Collider、玩法层或动态MeshCollider。
-- **编译边界**：`RuntimeDraft/AttachmentRecordsDraft.cs` 只用固定数组、字符串、`Vector3`、`Quaternion`及基础数值；不是UdonSharp脚本组件、未接SDK事件或序列化快照协议。真实Udon编译、Unity编译、变换API语义、网络多端及非均匀父缩放/shear仍须后续操作者验证。快照草稿只接收已组装完整快照，分块网络协议不在本层。
+- **编译边界**：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/Attachment/AttachmentMath.cs` 只用固定数组、字符串、`Vector3`、`Quaternion`及基础数值；不是UdonSharp脚本组件、未接SDK事件或序列化快照协议。真实Udon编译、Unity编译、变换API语义、网络多端及非均匀父缩放/shear仍须后续操作者验证。快照接口只接收已组装完整快照，分块网络协议不在本层。

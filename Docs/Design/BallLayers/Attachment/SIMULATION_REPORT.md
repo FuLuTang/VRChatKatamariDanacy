@@ -26,5 +26,5 @@
 ## 源码、测试与未验证项
 
 - 本轮源码：[`attachment.py`](attachment.py)、[`README.md`](README.md)、[`Research/SOURCE_EVIDENCE.md`](Research/SOURCE_EVIDENCE.md)、[`../SizeModel/SuiteFoundation/INTERFACES.md`](../SizeModel/SuiteFoundation/INTERFACES.md)。测试：[`test_attachment.py`](../../../tests/ball_attachment/test_attachment.py)、[`test_growth_attachment_simulation.py`](../../../tests/ball_attachment/test_growth_attachment_simulation.py)、[`test_size_model.py`](../../../tests/ball_size_model/test_size_model.py)。
-- `RuntimeDraft/AttachmentRecordsDraft.cs` 与 `../SizeModel/RuntimeDraft/SizeModelDraft.cs` 是普通C#草稿，**UNVERIFIED**；未在Unity/Udon编译。Unity Quaternion/场景方向、Prefab/ProgramAsset链、网络及VR行为均 **NOT_RUN**。
+- `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/Attachment/AttachmentMath.cs` 与 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/SizeModel/SizeModelMath.cs` 是本模型的 UdonSharp 安全移植，**UNVERIFIED**；未在Unity/Udon编译。Unity Quaternion/场景方向、Prefab/ProgramAsset链、网络及VR行为均 **NOT_RUN**。
 - T51/T52状态仍由Lead管理；当前仍为 **REVIEW**，待Lead复审本次整改。没有标记DONE或声称Unity/Udon通过。

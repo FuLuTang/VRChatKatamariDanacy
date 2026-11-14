@@ -12,7 +12,7 @@
 
 Host oracle明示使用四元数 `(x,y,z,w)` 与传统右手向量叉积语义。由刚体接触点速度 `v + ω×ρ = 0`、`ρ=-r n` 得轴方向 `n×t`；+Y支撑面、球心沿+Z移动时为+X。单测独立从接触点速度残差验证符号，不以被测 `_cross` 或旧测试公式构造期望值。
 
-此约定不能直接宣布等价Unity。Unity 2022.3官方Cross页面明确写“left hand rule”；Python→Unity的轴/四元数行为尚未对拍。RuntimeDraft用分量表达式而非 `Vector3.Cross`，但Unity `Quaternion` 对象作用、乘法顺序、局部帧仍须由后续独立方向箭头与接触速度对象核验。未核验前不接入工程。
+此约定不能直接宣布等价Unity。Unity 2022.3官方Cross页面明确写“left hand rule”；Python→Unity的轴/四元数行为尚未对拍。移植调用 `Vector3.Cross(normal, tangent)` 取滚动轴，因此这一处正是必须对拍的符号来源；Unity `Quaternion` 对象作用、乘法顺序、局部帧仍须由后续独立方向箭头与接触速度对象核验。未核验前不接入工程。
 
 ## 非目标
 

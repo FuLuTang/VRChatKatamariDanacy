@@ -1,6 +1,6 @@
 # T49 GroundContact 边界（DRAFT）
 
-状态：仅本机 Python 数学参考与 C# RuntimeDraft；未冻结接口。T06 世界尺度/统一接口仍 OPEN。
+状态：仅本机 Python 数学参考与 C# 移植（`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/GroundContact/GroundContactMath.cs`）；未冻结接口。T06 世界尺度/统一接口仍 OPEN。
 
 ## 输入与语义
 

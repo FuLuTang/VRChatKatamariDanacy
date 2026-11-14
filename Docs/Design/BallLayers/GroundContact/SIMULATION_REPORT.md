@@ -1,6 +1,6 @@
 # T49 GroundContact 离线模拟报告
 
-状态：host-only Python参考验证；`RuntimeDraft`未编译；测试对象未搭建；Unity/Udon未验证。
+状态：host-only Python参考验证；C# 移植（`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/GroundContact/GroundContactMath.cs`）未编译；测试对象未搭建；Unity/Udon未验证。
 
 ## 来源与项目对照
 
@@ -27,4 +27,4 @@ python3 -m unittest discover -s Docs/tests/ball_ground_contact -v
 - Python quaternion转换只验证了明示的主机Hamilton代数，不证明 Unity 2022.3 `Quaternion`/Transform同向；需对象上方+Y 90°箭头探针后才能接入。
 - 支持距离不是完整碰撞/动力学；坡缘、台阶、多个平面与时步大穿透另由Sweep/后续运动处理。
 - 单位、限幅和矩阵容差是草案；无物理手感/网络/性能证据。
-- C#草稿不是Unity组件；Unity C#、UdonSharp、ProgramAsset、场景调用链未编译/未运行。
+- C#移植不是Unity组件；Unity C#、UdonSharp、ProgramAsset、场景调用链未编译/未运行。

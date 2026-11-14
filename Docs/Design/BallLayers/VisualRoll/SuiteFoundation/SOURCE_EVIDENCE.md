@@ -54,6 +54,6 @@
 ## 2026-10-14离线复核补充
 
 - 原版源码仍**未取得**。本机HTTP客户端在`2026-10-14T00:37:59Z`访问GitHub REST repository-search元数据，查询`Katamari Damacy original source code`与`Once Upon A KATAMARI source code`均HTTP 200、`total_count=0`：[GitHub repo search](https://api.github.com/search/repositories)。这是有限元数据检索，不证明所有网站/私有库均无源码；没有下载仓库或运行代码。
-- 同次HTTP客户端读取Unity 2022.3官方页面，均HTTP 200：[Vector3.Cross](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Vector3.Cross.html)页面说明可用“left hand rule”确定结果方向；[Rotation and orientation in Unity](https://docs.unity3d.com/2022.3/Documentation/Manual/QuaternionAndEulerRotationsInUnity.html)写明“Unity uses a left-handed coordinate system”。因此本模块Python采用的传统右手主机代数不直接视作Unity已对拍，RuntimeDraft不调用`Vector3.Cross`，但Unity Quaternion行为仍待独立方向箭头及接触点速度验证。
+- 同次HTTP客户端读取Unity 2022.3官方页面，均HTTP 200：[Vector3.Cross](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Vector3.Cross.html)页面说明可用“left hand rule”确定结果方向；[Rotation and orientation in Unity](https://docs.unity3d.com/2022.3/Documentation/Manual/QuaternionAndEulerRotationsInUnity.html)写明“Unity uses a left-handed coordinate system”。因此本模块Python采用的传统右手主机代数不直接视作Unity已对拍，移植中取轴调用的是 `Vector3.Cross(normal, tangent)`，所以Unity的符号行为仍待独立方向箭头及接触点速度验证。
 - 同次读取[UdonSharp文档首页](https://udonsharp.docs.vrchat.com/) HTTP 200；页面自述其不完全符合任何C#语言规范且特性支持有限。这里只作为一般兼容风险，不代表核实了Windows项目安装的UdonSharp版本。
 - 没有引入“专利就是源码”或“新版沿用专利”的说法；该研究也没有下载、执行第三方代码。

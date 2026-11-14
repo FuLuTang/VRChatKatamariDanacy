@@ -10,9 +10,9 @@
 
 事务事件身份（context/ball/instance/generation/attachSequence/eventId）与远端代理键分开编码；`event_identity_hash`仅用于交易事件身份，`remote_proxy_key_hash(ball_seed, instance_id, generation, attach_sequence)`严格只接收技术契约§3.4的四字段。文本字段为UTF-8并带u32长度前缀，世代/序号分别为固定u32/u64；`ball_seed`必须由调用方显式传入；当前草稿签名要求规范的非空文本。其来源和值语义仍OPEN，若上游决定采用数值等非文本类型，须先批准canonical编码；不得从context、ball或event身份推导。两个SHA-256摘要均只是确定性键，不是认证或绝对无碰撞证明。快照方法消费一份完整已组装快照，不提供网络分块协议。刚体变换不处理非均匀父缩放或剪切；调用适配器需先规范化或拒绝。
 
-## C#草稿与Unity准备
+## C# 移植与测试对象
 
-`RuntimeDraft/AttachmentRecordsDraft.cs` 是固定数组/Vector3/Quaternion的算法草稿，不是UdonSharp组件，未编译。`TEST_OBJECT_SPEC.md`定义独立测试对象与几何、操作、读数、失败及重置。Renderer预算归T56，不在本层复刻旧兼容实现。
+`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/Attachment/AttachmentMath.cs` 是固定数组、字符串、`Vector3`、`Quaternion` 与基础数值上的纯静态数学移植，不是UdonSharp组件，尚未在Unity/Udon编译。`TEST_OBJECT_SPEC.md`定义独立测试对象与几何、操作、读数、失败及重置。Renderer预算归T56，不在本层复刻旧兼容实现。
 
 ## 证据与测试
 

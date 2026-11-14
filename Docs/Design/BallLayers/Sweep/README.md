@@ -1,6 +1,6 @@
 # T54 球层：墙面与环境扫掠
 
-> **DRAFT / host-only reference.** `sweep.py` 是仅标准库数值参考；`RuntimeDraft/`是普通C#草稿，不是MonoBehaviour，未在Unity/UdonSharp编译；接口仍未冻结。
+> **DRAFT / host-only reference.** `sweep.py` 是仅标准库数值参考；C# 移植 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/Sweep/SweepMath.cs` 是普通静态数学类，不是MonoBehaviour，未在Unity/UdonSharp编译；接口仍未冻结。
 
 ## 项目/公开证据边界
 

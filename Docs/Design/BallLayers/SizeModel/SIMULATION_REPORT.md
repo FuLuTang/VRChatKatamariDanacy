@@ -28,5 +28,5 @@
 ## 源码、测试与未验证项
 
 - 本轮复核源码：[`size_model.py`](size_model.py)、[`attachment.py`](../Attachment/attachment.py)；接口说明：[`INTERFACES.md`](SuiteFoundation/INTERFACES.md)。测试：[`test_size_model.py`](../../../tests/ball_size_model/test_size_model.py)、[`test_attachment.py`](../../../tests/ball_attachment/test_attachment.py)、[`test_growth_attachment_simulation.py`](../../../tests/ball_attachment/test_growth_attachment_simulation.py)。
-- `RuntimeDraft/SizeModelDraft.cs` 与 `../Attachment/RuntimeDraft/AttachmentRecordsDraft.cs` 均为普通C#草稿，**UNVERIFIED**；没有Unity/Udon编译、Prefab/ProgramAsset或场景行为证据。VR、网络、性能也未测（**NOT_RUN**）。
+- `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/SizeModel/SizeModelMath.cs` 与 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/Attachment/AttachmentMath.cs` 均为本模型的 UdonSharp 安全移植，**UNVERIFIED**；没有Unity/Udon编译、Prefab/ProgramAsset或场景行为证据。VR、网络、性能也未测（**NOT_RUN**）。
 - T52状态由Lead管理；当前仍为 **REVIEW**，待Lead复审整改，不标记DONE，不声称Unity/Udon通过。

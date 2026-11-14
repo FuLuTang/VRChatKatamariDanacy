@@ -31,4 +31,4 @@ T55_FollowRig_HeadingLab (root; no gameplay/network collider)
 
 ## 编译边界
 
-`RuntimeDraft/FollowRigRuntimeDraft.cs`只是含`Vector3`/标量yaw的普通C#算法草稿，不是`UdonSharpBehaviour`，没有Unity引用/场景调用、不含HMD API，**未在Unity编译或实机验证**。后续单一Windows操作者需测C#与UdonSharp、ProgramAsset/Prefab层级、`Mathf.Exp`和序列化/状态生命周期；VR舒适性与眼高范围另由用户实际头显测试，本规格不宣称通过。
+`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/FollowRig/FollowRigMath.cs`只是含`Vector3`/标量yaw的普通C#算法移植，不是`UdonSharpBehaviour`，没有场景调用/状态读取、不含HMD API，**未在Unity编译或实机验证**。后续单一Windows操作者需测C#与UdonSharp、ProgramAsset/Prefab层级、`Mathf.Exp`和序列化/状态生命周期；VR舒适性与眼高范围另由用户实际头显测试，本规格不宣称通过。

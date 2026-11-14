@@ -15,4 +15,4 @@
 
 根`tasks.json`读取时T51为RUNNING，T56为TODO且依赖T51；当前T51源码中的本地`_next_sequence`是草稿实现，不可当跨端稳定身份。本测试数据均自行合成并标明`synthetic`。正式摘要字段、确认事件/撤销语义和修订规则必须由T51产出并经接口评审后再适配；在此之前不能称T56完成、不能消费真实T51事件，也不能声称网络行为已测。
 
-RuntimeDraft仅为固定数组候选；它将稳定附着身份当opaque string，并把generation/revision/seed/priority限制在非负signed 32-bit值。Python host fixture容许更宽整数（包括64-bit序列/seed）；在T51字段冻结前不得把C#窄字段宣称与最终接口一致。C#草稿也未实现原子快照重建，需要目标Udon支持确认后以预分配双缓冲补齐或把该操作保留在host/上游恢复层。
+`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/RemoteProxy/RemoteProxyMath.cs` 将稳定附着身份当opaque string，并把generation/revision/seed/priority限制在非负signed 32-bit值。Python host fixture容许更宽整数（包括64-bit序列/seed）；在T51字段冻结前不得把C#窄字段宣称与最终接口一致。移植的 `RebuildContext` 先校验整份快照与重放峰值容量、通过后才替换该 context 的槽位，失败不留半套状态。

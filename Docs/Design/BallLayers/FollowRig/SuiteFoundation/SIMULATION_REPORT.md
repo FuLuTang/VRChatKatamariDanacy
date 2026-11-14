@@ -17,4 +17,4 @@
 
 ## 未测与对象准备
 
-原版源码未取得；有限GitHub metadata查询和T46本地来源见`SOURCE_EVIDENCE.md`。普通C#草稿 `RuntimeDraft/FollowRigRuntimeDraft.cs` 未在Unity/UdonSharp编译。T46源码没有被编辑。独立可进入测试Prefab尚未搭建；`TEST_OBJECT_SPEC.md`给出层级、操作、读数、失败指示与重置。没有真实Camera/HMD、VR舒适度、Udon调用/序列化或平台眼高范围验证。
+原版源码未取得；有限GitHub metadata查询和T46本地来源见`SOURCE_EVIDENCE.md`。普通C#移植 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/FollowRig/FollowRigMath.cs` 未在Unity/UdonSharp编译。T46源码没有被编辑。独立可进入测试Prefab尚未搭建；`TEST_OBJECT_SPEC.md`给出层级、操作、读数、失败指示与重置。没有真实Camera/HMD、VR舒适度、Udon调用/序列化或平台眼高范围验证。

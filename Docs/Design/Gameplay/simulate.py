@@ -102,7 +102,7 @@ SCENARIOS: dict[str, Scenario] = {
         name="four_restock",
         params=_FOUR_RESTOCK_PARAMS,
         policies=_FOUR_RESTOCK_POLICIES,
-        note="four_mixed plus 25% of each zone's s-tier stock every 30 s (T22 hook).",
+        note="four_mixed plus 25% of each zone's s-tier stock every 30 s (restock hook).",
     ),
 }
 

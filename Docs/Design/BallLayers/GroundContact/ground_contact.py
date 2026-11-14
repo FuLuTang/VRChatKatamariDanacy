@@ -1,4 +1,4 @@
-"""T49 ground-support approximation; standard-library host reference only.
+"""Ground-support approximation; standard-library host reference only.
 
 DRAFT: no Unity/Udon, dynamics, or world-scale claim.  The input rotation is an
 active local-to-world 3x3 matrix acting on column vectors; its convention must

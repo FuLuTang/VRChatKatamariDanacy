@@ -17,4 +17,4 @@ Digest由单测fixture以标准库SHA-256产生并作为不透明字段传入；
 
 ## 未测与草稿限制
 
-原版游戏源码未取得；无公开资料证明新版使用此方案，历史专利不等于游戏源码。正式T51确认摘要接口尚未完成，故本模拟不构成正式接线、T56完成或网络验证。普通C#草稿`RuntimeDraft/RemoteProxyRuntimeDraft.cs`使用固定数组但没有原子快照重建（需要目标Udon能力确认后用预分配双缓冲补齐/裁定host侧保留）；没有实例化Unity Renderer、Prefab未创建。未做Unity/Udon编译、同步、四客户端、容量性能或视觉验证；独立对象规格见`TEST_OBJECT_SPEC.md`。C#草稿身份为opaque string，计数/seed为signed 32-bit，不能映射所有Python 64-bit值；闭合context tombstone容量最多64，满时拒绝而不遗忘。
+原版游戏源码未取得；无公开资料证明新版使用此方案，历史专利不等于游戏源码。正式T51确认摘要接口尚未完成，故本模拟不构成正式接线、T56完成或网络验证。普通C#移植`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/RemoteProxy/RemoteProxyMath.cs`使用固定数组，`RebuildContext` 先校验整份快照与峰值容量再替换槽位；没有实例化Unity Renderer、Prefab未创建。未做Unity/Udon编译、同步、四客户端、容量性能或视觉验证；独立对象规格见`TEST_OBJECT_SPEC.md`。C#移植身份为opaque string，计数/seed为signed 32-bit，不能映射所有Python 64-bit值；闭合context tombstone容量最多64，满时拒绝而不遗忘。

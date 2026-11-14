@@ -1,4 +1,4 @@
-"""T55 independent FollowRig host reference; no HMD or ball-spin input."""
+"""Independent FollowRig host reference; no HMD or ball-spin input."""
 from dataclasses import dataclass
 import math
 from typing import Optional, Tuple
@@ -55,7 +55,7 @@ class FollowFrame:
 
 
 class FollowRig:
-    """A filtered horizontal reference frame extracted from the T46 baseline.
+    """A filtered horizontal reference frame extracted from the ball-motion baseline.
 
     Input is a world position and a scalar horizontal heading in degrees. The
     caller must not pass a ball quaternion, roll/pitch, HMD pose, or controller

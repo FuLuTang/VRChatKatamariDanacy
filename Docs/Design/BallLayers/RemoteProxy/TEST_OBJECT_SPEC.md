@@ -31,4 +31,4 @@ T56_RemoteProxy_SyntheticLab (root; no network sync / gameplay collider)
 
 ## 编译边界
 
-`RuntimeDraft/RemoteProxyRuntimeDraft.cs`是固定长度数组/摘要结构候选，不是UdonSharp运行时或真实Renderer池；C#草稿没有原子快照重建接口，需在目标支持矩阵确认后用预分配双缓冲补齐或明确保留Python宿主边界。**没有Unity/Udon编译、网络同步或画面验证**。该对象未来由Windows单一操作者创建；所有代理子物禁用玩法Collider，不加账本/分数写者。
+`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/RemoteProxy/RemoteProxyMath.cs`是固定长度数组/摘要结构的静态数学移植，不是UdonSharp运行时或真实Renderer池；`RebuildContext` 先校验整份快照与峰值容量再替换槽位，但目标Udon支持矩阵仍未确认。**没有Unity/Udon编译、网络同步或画面验证**。该对象未来由Windows单一操作者创建；所有代理子物禁用玩法Collider，不加账本/分数写者。

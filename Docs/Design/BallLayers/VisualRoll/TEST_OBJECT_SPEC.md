@@ -35,4 +35,4 @@ T53_VisualRoll_NoSlipLab (root; no Udon/network/collider)
 
 ## 重置与编译边界
 
-按钮/调试入口应恢复单位四元数、Scale `(1,1,1)`、初始球心与无传送状态；重新从方向箭头探针开始。`RuntimeDraft/VisualRollRuntimeDraft.cs`仅普通C#源码草稿，没导入Unity、没有UdonSharpBehaviour/ProgramAsset/场景引用，**未编译**。后续必须在Unity 2022.3.22f1目标工程由单一Windows操作者执行坐标方向对拍、基础C#与UdonSharp编译、ProgramAsset与Prefab调用链检查；目前均NOT_RUN。
+按钮/调试入口应恢复单位四元数、Scale `(1,1,1)`、初始球心与无传送状态；重新从方向箭头探针开始。`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/VisualRoll/VisualRollMath.cs` 是普通C#静态数学源码，没有UdonSharpBehaviour/ProgramAsset/场景引用，**未编译**。后续必须在Unity 2022.3.22f1目标工程由单一Windows操作者执行坐标方向对拍、基础C#与UdonSharp编译、ProgramAsset与Prefab调用链检查；目前均NOT_RUN。

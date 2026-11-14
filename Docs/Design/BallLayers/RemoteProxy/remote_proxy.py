@@ -1,6 +1,7 @@
-"""T56 offline consumer for synthetic confirmed-decoration summaries only.
+"""Offline consumer for synthetic confirmed-decoration summaries only.
 
-This is not wired to T51, a network transport, a gameplay ledger, or colliders.
+This is not wired to a confirmed-summary producer, a network transport, a
+gameplay ledger, or colliders.
 All identity/revision/sequence values are supplied by the synthetic upstream
 fixture; this module never allocates or increments them.
 """

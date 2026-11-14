@@ -23,9 +23,9 @@
 
   拥有数组的 Behaviour 与 Renderer 池留待后续，本层不建组件、不碰场景。
 - disposition 与 Python 一一对应：`Accepted / Duplicate / Updated / StaleGeneration / StaleRevision / RemovedTombstone / ClearedContext`；Python 的三个异常改为返回值 `Invalid / Conflict / Capacity`，另加 `Cleared / AlreadyCleared / Rebuilt`。墓碑只能由新的上游 attach sequence 替换；`clear_context` 永久关闭该 context，只能换新 id 开新回合。快照重建先校验输入/冲突、再按重放峰值做容量检查，之后才动槽位，失败不留半套状态。
-- 摘要改为自有实现：`TryComputeDigest` 用两条 32-bit FNV-1a lane 覆盖与 Python fixture 相同的字段序列，输出 low/high 两个 int。它**不是** Python/draft 的 sha256，字节不兼容，只保证确定性与“字段变则变”；对缓存而言仍是不透明上游值，不参与身份、不用于鉴权。
+- 摘要改为自有实现：`TryComputeDigest` 用两条 32-bit FNV-1a lane 覆盖与 Python fixture 相同的字段序列，输出 low/high 两个 int。它**不是** Python fixture 的 sha256，字节不兼容，只保证确定性与“字段变则变”；对缓存而言仍是不透明上游值，不参与身份、不用于鉴权。
 - 隔离：本层只决定装饰画什么、画在哪。API 没有任何碰撞、拾取、账本、分数或 PvP 输出；只有 disposition、调用方的视觉槽位表、渲染排序和池计数。远端数据永远不进入球的碰撞/计分路径。
 - 预算：`TrySelectRendered` 按 `presentation_priority` 降序、稳定身份升序、event id 升序取 `min(可渲染数, rendererBudget, 缓冲区长度)` 个槽位索引，严格不超预算；埋藏件只计入 `mergedBuriedCount`，不占 Renderer。
-- 与 Python 的差异：`generation / revision / attach_sequence / variant_seed` 收窄为非负 signed 32-bit（与 `RuntimeDraft` 已声明的收窄一致，T51 字段未冻结）；Python 单独维护的 generation high-water 表改为由槽位现算（两者不变式等价，省掉一张只会在槽位已满时才触发的容量表）；`TryComputeDigest` 只用于 host/fixture 侧；身份排序用 `string.CompareOrdinal`（按 UTF-16 code unit，只有含 astral 字符的 id 才会与 Python 的 code point 顺序不同）。
+- 与 Python 的差异：`generation / revision / attach_sequence / variant_seed` 收窄为非负 signed 32-bit（与移植本身声明的收窄一致，T51 字段未冻结）；Python 单独维护的 generation high-water 表改为由槽位现算（两者不变式等价，省掉一张只会在槽位已满时才触发的容量表）；`TryComputeDigest` 只用于 host/fixture 侧；身份排序用 `string.CompareOrdinal`（按 UTF-16 code unit，只有含 astral 字符的 id 才会与 Python 的 code point 顺序不同）。
 - 测试：`Tests/EditMode/BallLayers/RemoteProxyTests.cs` 移植 `Docs/tests/ball_remote_proxy/test_remote_proxy.py` 全部 14 个用例，另加预算严格性、回收不改容量、摘要确定性/不透明与“无碰撞计分面”检查（反射）；程序集 `VRCKatamari.Tests.EditMode`。
 - 状态：Unity 编译、EditMode 测试与 U# 全量编译均 `NOT_RUN`；上面只是移植结果，不是验证证据。Udon 侧字符串/`BitConverter` API 仅按 Udon class exposure tree 核对过（`CompareOrdinal`、`ToCharArray`、`SingleToInt32Bits`），未在 Editor 内编译验证。

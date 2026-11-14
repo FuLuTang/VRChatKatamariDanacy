@@ -1,6 +1,6 @@
 # T50 球层：径向凹凸代理（小棍采样外壳）
 
-> **DRAFT / host-only reference.** Python标准库参考不是Unity/Udon交付；C# RuntimeDraft是普通源码候选、未编译/未作为组件；N=32和4候选是性能未测原型参数，接口未冻结。
+> **DRAFT / host-only reference.** Python标准库参考不是Unity/Udon交付；C# 移植 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/RadialProxy/RadialProxyMath.cs` 是普通静态数学源码、未编译/未作为组件；N=32和4候选是性能未测原型参数，接口未冻结。
 
 ## 研究与项目规则边界
 

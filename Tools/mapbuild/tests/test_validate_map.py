@@ -265,6 +265,166 @@ class BadDataIsCaughtTests(unittest.TestCase):
         self.assert_caught("可卷物件在边界外", move_out)
 
 
+class TraversabilityTests(unittest.TestCase):
+    """立面分类（可走坡 / 爬升台阶 / 障碍）：三类各用各的判据，且都有负例。
+
+    背景：`scale.max_traversable_slope_percent = 12` 曾被读成「全图每个面都 ≤12%」，
+    于是花圃的 0.26 m 台阶（0.9 m 斜面 = 28.9%）被判成缺陷——可它的可行与否取决于
+    球径（0.95 m 挡、1.10 m 过），不是坡度。这三条规则就是把这个区别写进数据。
+    """
+
+    def setUp(self):
+        self.layout, self.catalog = load(MAPS_ROOT / "PicnicLawn")
+
+    def run_with(self, mutate):
+        layout = copy.deepcopy(self.layout)
+        catalog = copy.deepcopy(self.catalog)
+        mutate(layout, catalog)
+        return vm.validate(layout, catalog)
+
+    def assert_caught(self, fragment, mutate):
+        report = self.run_with(mutate)
+        self.assertTrue(any(fragment in error for error in report.errors),
+                        f"expected {fragment!r}, got {report.errors}")
+        return report
+
+    @staticmethod
+    def surface(layout, definition_id, index=0):
+        hits = [s for s in layout["structures"] if s["definition_id"] == definition_id]
+        assert hits, f"no structure with definition_id={definition_id}"
+        return hits[index]
+
+    # ---- 数据本身：分类齐全、报告能读出 28.9% ----
+    def test_picniclawn_declares_every_rise(self):
+        report = self.run_with(lambda layout, catalog: None)
+        self.assertEqual(report.errors, [])
+        self.assertEqual(report.warnings, [])
+        steps = [row for row in report.surfaces if row["class"] == "climb_step"]
+        self.assertEqual(len(steps), 4, "四个花圃台面都要标成爬升台阶")
+        for row in steps:
+            self.assertAlmostEqual(row["rise_m"], 0.26, places=3)
+            self.assertAlmostEqual(row["slope_percent"], 28.9, places=1,
+                                   msg="0.26 ÷ 0.9 = 28.9%，这个数字必须由数据算出来")
+        grades = {row["label"].split("#")[0]: row for row in report.surfaces
+                  if row["class"] == "drivable_grade"}
+        self.assertAlmostEqual(grades["picnic_blanket"]["slope_percent"], 7.5, places=2)
+        self.assertAlmostEqual(grades["tree_root_mound"]["slope_percent"], 11.2, places=2)
+        self.assertEqual(sum(report.obstacles.values()), 38)
+
+    # ---- 规则 (a)：可走坡必须由 rise ÷ run 算出来，且 ≤ 上限 ----
+    def test_rule_a_too_steep_grade_is_an_error(self):
+        def steepen(layout, catalog):
+            self.surface(layout, "picnic_blanket")["traversability"]["run_m"] = 0.30
+        report = self.assert_caught("超过 scale.max_traversable_slope_percent", steepen)
+        self.assertTrue(any("20.0%" in error for error in report.errors),
+                        f"0.06 ÷ 0.30 = 20.0%，要报出算出来的数：{report.errors}")
+
+    def test_rule_a_declared_slope_cannot_lie(self):
+        """声明一个好看的 slope_percent 不能替代几何：算出来 7.5% 就必须是 7.5%。"""
+        def lie(layout, catalog):
+            self.surface(layout, "tree_root_mound")["traversability"]["slope_percent"] = 5.0
+        self.assert_caught("与几何算出的", lie)
+
+    def test_rule_a_run_is_required(self):
+        def drop_run(layout, catalog):
+            del self.surface(layout, "picnic_blanket")["traversability"]["run_m"]
+        self.assert_caught("必须写 run_m", drop_run)
+
+    # ---- 规则 (b)：台阶高必须与尺寸门阈值相容 ----
+    def test_rule_b_step_taller_than_the_gate_is_an_error(self):
+        def too_tall(layout, catalog):
+            bed = self.surface(layout, "flower_bed_frame")
+            bed["size_m"][1] = 3.0          # 几何高 3 m：门说 1.10 m 能翻，纯属数据错误
+            bed["position"][1] = 1.5
+            bed["traversability"]["step_height_m"] = 3.0
+        report = self.assert_caught("高于", too_tall)
+        self.assertTrue(any("可翻越上限" in error and "几何却上不去" in error
+                            for error in report.errors), report.errors)
+
+    def test_rule_b_step_declared_height_must_match_geometry(self):
+        def inflate(layout, catalog):
+            self.surface(layout, "flower_bed_frame")["traversability"]["step_height_m"] = 0.40
+        self.assert_caught("与几何算出的立面高度", inflate)
+
+    def test_rule_b_lowered_platform_breaks_the_gate(self):
+        """Lead 已否决的「台面降到 0.18 m」降级方案：0.18 ≤ 0.25×0.95，门就挡不住了。
+
+        这条用例把那个决定锁进回归：谁再写「降到 0.18 m」，校验器直接报错。
+        """
+        def lower(layout, catalog):
+            for bed in layout["structures"]:
+                if bed["definition_id"] == "flower_bed_frame":
+                    bed["size_m"][1] = 0.18
+                    bed["position"][1] = 0.09
+                    bed["traversability"]["step_height_m"] = 0.18
+        report = self.assert_caught("挡不住", lower)
+        self.assertTrue(any("落在 0.95 m 球的可翻越上限" in error for error in report.errors),
+                        report.errors)
+
+    # ---- 规则 (c)：不许有未分类的高差 ----
+    def test_rule_c_unclassified_rise_is_an_error(self):
+        def unclassify(layout, catalog):
+            del self.surface(layout, "core_hedge")["traversability"]
+        self.assert_caught("没声明 traversability", unclassify)
+
+    def test_rule_c_low_decal_does_not_need_classification(self):
+        """出生地贴 0.015 m、交分盘 0.02 m：低于 max_route_step_m，不算立面。"""
+        def unclassify_pads(layout, catalog):
+            for structure in layout["structures"]:
+                if structure["definition_id"] in ("bank_pad", "spawn_marker",
+                                                  "ground_terrain", "path_mesh"):
+                    structure.pop("traversability", None)
+        report = self.run_with(unclassify_pads)
+        self.assertEqual(report.errors, [])
+        self.assertEqual(report.warnings, [])
+
+    # ---- 类别与门的矛盾 ----
+    def test_climb_gate_cannot_point_at_a_non_step(self):
+        def as_obstacle(layout, catalog):
+            self.surface(layout, "flower_bed_frame")["traversability"] = {"class": "obstacle"}
+        self.assert_caught("被标成 obstacle", as_obstacle)
+
+    def test_grade_must_be_fixed_terrain(self):
+        def absorbable_blanket(layout, catalog):
+            for row in catalog["rows"]:
+                if row["id"] == "picnic_blanket":
+                    row["role"] = "absorbable"
+        self.assert_caught("必须是固定地形", absorbable_blanket)
+
+    def test_obstacle_with_slope_numbers_is_contradictory(self):
+        def hedge_slope(layout, catalog):
+            self.surface(layout, "boundary_hedge")["traversability"] = {
+                "class": "obstacle", "run_m": 1.0}
+        self.assert_caught("不该声明 run_m", hedge_slope)
+
+    # ---- v1 平滑：旧图不被迫升级 ----
+    def test_v1_map_derives_steps_from_climb_gates(self):
+        layout, catalog = load(MAPS_ROOT / "ToyRoom")
+        report = vm.validate(layout, catalog)
+        self.assertEqual(layout["schema_version"], 1)
+        self.assertEqual(report.errors, [])
+        self.assertEqual(report.warnings, [])
+        steps = [row for row in report.surfaces if row["class"] == "climb_step"]
+        self.assertEqual(len(steps), 4, "ToyRoom 的 4 块拼图地垫由 climb 门推出")
+        for row in steps:
+            self.assertAlmostEqual(row["rise_m"], 0.26, places=3)
+            self.assertIn("台阶 0.95→1.1 m", row["verdict"])
+        self.assertTrue(any("schema_version=1" in note for note in report.notes))
+
+    # ---- 输出契约 ----
+    def test_cli_prints_the_slope_table_and_json_carries_it(self):
+        result = run_cli(MAPS_ROOT / "PicnicLawn")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("立面审计", result.stdout)
+        self.assertIn("28.9%", result.stdout)
+        summary = json.loads(run_cli(MAPS_ROOT / "PicnicLawn", "--json").stdout)
+        self.assertEqual(summary["status"], "OK")
+        steps = [row for row in summary["surfaces"] if row["class"] == "climb_step"]
+        self.assertEqual(len(steps), 4)
+        self.assertEqual(steps[0]["slope_percent"], 28.89)
+        self.assertEqual(summary["obstacles"]["core_hedge"], 8)
+
+
 class RetirementTests(unittest.TestCase):
     """退役本身也要有测试：不许再出现「每图一份」的分叉实现。"""
 

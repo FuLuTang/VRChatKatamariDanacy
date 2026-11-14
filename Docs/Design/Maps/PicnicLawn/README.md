@@ -31,11 +31,13 @@
 ```
 schema_version / map_id / status
 coordinate_system  引擎、轴向、手性、yaw 约定
-scale              暂定比例常量：球径包线、四档阈值、路宽、篱高、坡度上限、交分周期
+scale              暂定比例常量：球径包线、四档阈值、路宽、篱高、坡度上限、
+                   台阶可翻越上限（max_step_height_over_ball_diameter）、交分周期
 bounds             min_x/max_x/min_z/max_z（±20 m）、ground_y_m
 zones[]            id, name_zh, purpose, shape{type:"rect", min_x…max_z},
                    ground_y_m, tier_band[2], area_m2, surface, notes
-structures[]       definition_id, zone_id|null, kind, position[x,y,z], size_m, yaw_deg
+structures[]       definition_id, zone_id|null, kind, position[x,y,z], size_m, yaw_deg,
+                   traversability{class, run_m?, step_height_m?, slope_percent?}
 bank               zone_id, anchors[]{id,position,radius_m,entrances,approach_route_ids},
                    rotation{order,period_s,warning_s,activate_at_s},
                    rules（max_concurrent_bankers、occupancy_lock、bank_size_rule、
@@ -56,6 +58,21 @@ respawn / player_count_plans / performance_budget
 ```
 
 `layout.json` 是坐标的唯一真源；`prop_catalog.csv` 的数量必须等于散布 + 尺寸门 + 结构的实例数，`python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn` 会强制这一点。
+
+### 立面分类：可走坡 / 爬升台阶 / 障碍（`schema_version: 2`）
+
+`scale.max_traversable_slope_percent = 12` 的意思是「**能开上去的坡**不超过 12%」，不是「全图每个面都 ≤12%」。台阶（ledge）的可行与否由**球径**决定，不是坡度——原作也是按球大小判能不能翻。把两者混成一个上限，就只能二选一：砍掉台阶让尺寸门失效，或者偷偷超限。所以本图从 `schema_version: 2` 起给每个有高差的 `structures[]` 面加一个 `traversability` 块，三类各用各的判据：
+
+| `class` | 含义 | 必填字段 | 校验判据（`Tools/mapbuild/validate_map.py`） |
+|---|---|---|---|
+| `drivable_grade` | 可走坡（野餐毯边、树根丘） | `run_m`（斜坡水平长度） | 坡度 = rise ÷ run **现算**，必须 ≤ `scale.max_traversable_slope_percent`；可选的 `slope_percent` 只能用来交叉对照，与算出来的不符就报错 |
+| `climb_step` | 爬升台阶（花圃台面），能不能上去由球径门决定 | `step_height_m`（球要爬上的高差） | `step_height_m` 必须等于几何高度；且必须落在对应 `climb` 门的 **[0.25 × 阻挡球径, 0.25 × 开启球径]** 区间内（`scale.max_step_height_over_ball_diameter = 0.25`，即「球径 ≥ 4 × 台阶高」才翻得上去）。爬升面可带 `run_m`，其坡度**不计入 12% 上限**——判据是台阶高 ÷ 球径 |
+| `obstacle` | 不可走立面（树篱、树、道具、墙、边界外地标） | 无 | 不参与坡度判据；若还声明了 `run_m`/`step_height_m`/`slope_percent` 就是自相矛盾，报错 |
+
+- **rise 由几何现算**：`rise = position_y + size_m[1] / 2`（本目录的约定是「物体坐在 y=0 的地面上，`size_m[1]` 是整体高度」）。作者不能靠写一个好看的 `slope_percent` 把陡坡说成缓坡。
+- **什么必须分类**：rise > `scale.max_route_step_m`（0.05 m）的面都必须声明 `class`；低于它的贴地件（地面 0.01、小路 0.013、出生地贴 0.015、交分盘 0.02 m）算地贴，不要求。**有高差却没声明类别 = 错误**，不留「没人知道这面能不能走」的几何。
+- **本图的 50 个分类**：可走坡 8（野餐毯 ×4 用 `run_m: 0.8` → 7.5%；树根丘 ×4 用 `run_m: 1.25` → 11.2%）、爬升台阶 4（花圃木框 `step_height_m: 0.26`、`run_m: 0.9` → 28.9%，与 `gate_bed_*` 的 0.95→1.10 m 门槛互锁）、障碍 38。
+- 这三类只描述**能不能走**，替代不了 Unity 侧的运动实现：数值仍是设计意图，§8 的未验收项不变。
 
 ## 1. 设计目标与玩家幻想
 
@@ -92,6 +109,7 @@ respawn / player_count_plans / performance_budget
 | 出生→交分路程（目标 / 当前路线） | 28.0 m（`scale.spawn_to_bank_target_m`）；当前路线 23.16 + 5.15 = 28.31 m | 暂定 | ×k |
 | 边界树篱高 / 中央矮篱高 | 1.10 m / 1.00 m | 暂定 | ×k |
 | 最大可走坡度 / 最大台阶 | 12% / 0.05 m | 暂定（02 §3.2 明确「坡道、台阶…还需实现和测试」） | 坡度不变，台阶 ×k |
+| 台阶可翻越上限（占球径） | 0.25 × 球径（球径 ≥ 4 × 台阶高才翻得上去） | 本项目自选：原作按球的大小判能否爬上去，比例未公开 | 比例不变 |
 | 可卷实例 / 固定实例 | 452 / 60 | 由本设计派生 | 数量不变 |
 | 对局时长 / 人数 / 最后提醒 | 180 s / 2–4 / 15 s | 决策：01 §2、`prototype_defaults.json` | 不变 |
 | 吞噬比 / 重生 / 保护 | 1.35 / 3 s / 2 s | 决策：01 §3、defaults | 不变 |
@@ -134,7 +152,7 @@ respawn / player_count_plans / performance_budget
 | `blanket_east` | 东野餐毯 | t1–t3 | 7,13.5,−6,6 | 78.0 | 80 / 266 | 同上 |
 | `basket_north` | 北篮子区 | t2–t3 | −6,6,8,13 | 60.0 | 14 / 172 | 磨损草 y=0 |
 | `basket_south` | 南篮子区 | t2–t3 | −6,6,−13,−8 | 60.0 | 14 / 172 | 同上 |
-| `flower_bed_nw` | 西北花圃 | t0–t2 | −12,−8,6.1,11 | 19.6 | 12 / 27 | 高台 y=0.26，0.9 m 斜面 |
+| `flower_bed_nw` | 西北花圃 | t0–t2 | −12,−8,6.1,11 | 19.6 | 12 / 27 | 高台 y=0.26，0.9 m 斜面（28.9%，爬升台阶） |
 | `flower_bed_ne` | 东北花圃 | t0–t2 | 8,12,6.1,11 | 19.6 | 12 / 27 | 同上 |
 | `flower_bed_sw` | 西南花圃 | t0–t2 | −12,−8,−11,−6.1 | 19.6 | 12 / 27 | 同上 |
 | `flower_bed_se` | 东南花圃 | t0–t2 | 8,12,−11,−6.1 | 19.6 | 12 / 27 | 同上 |
@@ -146,7 +164,7 @@ respawn / player_count_plans / performance_budget
 | `fringe_south` | 南草坪边带 | t0–t1 | −11.5,11.5,−17.5,−13.5 | 92.0 | 27 / 33 | 同上 |
 | `fringe_east` | 东草坪边带 | t0–t1 | 13.5,17.5,−11.5,11.5 | 92.0 | 27 / 33 | 同上 |
 | `fringe_west` | 西草坪边带 | t0–t1 | −17.5,−13.5,−11.5,11.5 | 92.0 | 27 / 33 | 同上 |
-| `tree_roots_nw` | 西北树根区 | t0–t1 | −20,−17.5,17.5,20 | 6.25 | 14 / 14 | 树根丘 y≤0.18 |
+| `tree_roots_nw` | 西北树根区 | t0–t1 | −20,−17.5,17.5,20 | 6.25 | 14 / 14 | 树根丘 y≤0.14（11.2%） |
 | `tree_roots_ne` | 东北树根区 | t0–t1 | 17.5,20,17.5,20 | 6.25 | 14 / 14 | 同上 |
 | `tree_roots_sw` | 西南树根区 | t0–t1 | −20,−17.5,−20,−17.5 | 6.25 | 14 / 14 | 同上 |
 | `tree_roots_se` | 东南树根区 | t0–t1 | 17.5,20,−20,−17.5 | 6.25 | 14 / 14 | 同上 |
@@ -251,7 +269,7 @@ respawn / player_count_plans / performance_budget
 - **篮子区是交分走廊**：北/南篮子区（60 m²，14 件/172 单位）正对中央草坪的南北入口，任何从北/南进场的交分路线都要穿过它。这是 03 §2「高价值篮子区位于内圈相邻处」的直接兑现，也是「交分路线有风险」的实现（01 §2）。件数从 26 降到 14 是可行性所迫（§3.3）：1.6 m 保温箱 + 1.4 m 折叠凳把区间距顶到 1.50 m，60 m² 只能摆 17 件；留下的是 9 件 l 档 + 西瓜 + 盘子 + 果汁，单区价值仍是原设计的 78%。
 - **花圃是地形门**，不是装饰：0.26 m 台面挡小球（§9），台内 12 件/19.6 m²，是 t0–t1 的「看得到吃不到」目标；同时把四条斜线切成「绕行 or 翻越」。
 - **出生角只放 s 档**（12 件/12 单位），角内 3 m 内不放 m/l 档，保证四人开局踩不出差异；t1 目标（野餐毯 8.6 m、花圃 4.3 m）在出生角外第一个路口。
-- **树根区是角落的垂直度调味**：0.18 m 高、平均坡度 14.4%（0.18 ÷ 1.25 m 半径；超过 §2 的 12% 上限，见 §16 风险 12），所有尺寸可翻；14 件 s 档（橡子/石子/落叶/蘑菇）藏在丘后，0.50 m 间距（碎屑尺寸 0.05–0.12 m，凑到近前才看得清），给绕外环的玩家一个「多跑两步」的理由。
+- **树根区是角落的垂直度调味**：0.14 m 高、平均坡度 11.2%（0.14 ÷ 1.25 m 半径，低于 §2 的 12% 上限；`traversability.class = drivable_grade`，坡度由校验器按几何现算并卡上限），设计上所有尺寸可翻（未实测，见 §16 风险 12）；14 件 s 档（橡子/石子/落叶/蘑菇）藏在丘后，0.50 m 间距（碎屑尺寸 0.05–0.12 m，凑到近前才看得清），给绕外环的玩家一个「多跑两步」的理由。
 - **边带是补给带**：27 件 s 档分散在 92 m² 里（0.29 件/m²，间距 1.20 m），外环从中间穿过；被吞重生后就近能吃到东西（对应 01 §3 的「仍有小资源的点」），也接住了篮子区让出的 24 件低阶配额（§3.3）。
 
 ## 5. 路线与咽喉
@@ -317,13 +335,13 @@ respawn / player_count_plans / performance_budget
 | 元素 | 高度 | 过渡 | 坡度 | 谁能过 |
 |---|---|---|---|---|
 | 野餐毯 | 0.06 m | 0.8 m 斜坡 | 7.5% | 全部尺寸 |
-| 树根土丘 | 0.18 m | Ø2.5 m 丘（半径 1.25 m） | 平均 14.4%（0.18 ÷ 1.25） | 设计意图：全部尺寸（未实测，见 §16 风险 12） |
-| 花圃台面 | 0.26 m | 0.9 m 斜面 | 29% | ≥1.10 m（尺寸门，见 §9） |
+| 树根土丘 | 0.14 m | Ø2.5 m 丘（半径 1.25 m） | 平均 11.2%（0.14 ÷ 1.25） | 设计意图：全部尺寸（未实测，见 §16 风险 12） |
+| 花圃台面 | 0.26 m | 0.9 m 斜面（爬升台阶，不是坡） | 28.9%（0.26 ÷ 0.9，不计入 12% 上限） | ≥1.10 m（尺寸门，见 §9） |
 | 小路 / 草地 | 0 | — | 0% | 全部 |
 | 中央矮篱 / 边界树篱 | 1.00 / 1.10 m | 垂直 | — | 谁都不能翻，只能走 8 个开口 / 不能出界 |
 
-- 全图**没有需要跳跃的高差**：四条主路与两条出生出路都是 0% 平地，只有横穿野餐毯时走 7.5% 毯缘；树根丘 0.18 m / 1.25 m 半径 = 平均 14.4%，同样在角落可选项上（也超过 §2 的 12% 上限，见 §16 风险 12）。0.26 m 花圃台面（29%）是**最陡**的面，且只在可选近道上（03 §5 的「没有跳跃」针对必经路线，这里是可选路线上的地形门）。
-- **依赖未验收的运动层**：02 §3.2 明确「扫掠、坡道、台阶、多接触、滚动角速度还需实现和测试」；0.26 m 台 + 29% 斜面能否被 1.10 m 球（半径 0.55 m）稳定翻越**未验证**。T21 若测不通，降级方案：台面降到 0.18 m、斜面拉到 1.2 m（15%），代价是 t1 球也能进花圃（花圃退化为「慢速高产区」而不是门）。这一改动只动 `layout.json` 的 `flower_bed_*`、`gate_bed_*` 与结构高度。
+- 全图**没有需要跳跃的高差**：四条主路与两条出生出路都是 0% 平地，只有横穿野餐毯时走 7.5% 毯缘（`traversability.class = drivable_grade`，≤12%）；树根丘 0.14 m / 1.25 m 半径 = 平均 11.2%，同样在角落可选项上（`drivable_grade`，≤12%，见 §16 风险 12）。花圃台面 0.26 m 的斜面是 **28.9%**，但它是**爬升台阶**（`climb_step`）而不是可走坡：能不能上去由 `gate_bed_*` 的球径门（0.95→1.10 m）判，校验器按「台阶 ≤ 0.25 × 球径」检查（0.26 ≤ 0.275 m ✓，且 0.26 > 0.2375 m 才挡得住 0.95 m 的球）。所以它既不是超限的可走坡，也不是没人管的例外——它是本图唯一一处**声明过的**陡立面，且只在可选近道上（03 §5 的「没有跳跃」针对必经路线）。
+- **依赖未验收的运动层**：02 §3.2 明确「扫掠、坡道、台阶、多接触、滚动角速度还需实现和测试」；0.26 m 台 + 0.9 m 斜面能否被 1.10 m 球（半径 0.55 m）稳定翻越**未验证**。T21 若测不通，降级**不能只压低台面**：原先写的「台面降到 0.18 m、斜面拉到 1.2 m（15%）」两头都不成立——15% 若按可走坡算仍超过 12%；而 0.18 m ≤ 0.25 × 0.95 m = 0.2375 m，0.95 m 的球也翻得上去，`gate_bed_*` 就不再是门（校验器的台阶判据会直接报错）。合规的降级只有两条：① **台阶与门槛一起降**（例：台面 0.22 m + 门槛 0.80→0.95 m：0.20 < 0.22 ≤ 0.2375 m，代价是 t1 球开始能进花圃）；② **改成可走坡**，则 0.26 m 需要 ≥2.17 m 的斜面（0.26 ÷ 12%），会压掉 2.0 m 的 `bed_gap_*` 小球道。本图选 ①。改动只动 `layout.json` 的 `flower_bed_*`、`gate_bed_*` 与结构高度，改完必须重跑校验器（它会重算台阶与门槛的相容性）。
 - 地面接触按 02 §3.2 的支持高度公式（`h(−n)=max(r, max_i dot(−n, Q·p_i))`）估算球心离地；本文不假设任何具体求解器，也不把「球能爬」当成已实现能力。
 
 ## 9. 成长解锁（尺寸门）
@@ -440,8 +458,9 @@ respawn / player_count_plans / performance_budget
 9. **`AGENTS.md` 的 `Tools/` 路径刚改过**（`Tools/mcp/mcp_cli.py`），与本文件无关，但任何后续 Unity 操作说明要按新路径写。
 10. **消费方只有一个 per-region 标量间距**：payload 里没有「按件/按对间距」，所以大小件混放的区域必须按最大两件取 S，小件的密度余量被浪费。要让篮子区同时保留 26 件和 1.6 m 大件，只能给 `scatter_regions` 加 per-pair/per-definition 间距字段——那是 schema 变更，需要 Unity 侧同时改 `TryFindSpot` 与 DTO；本次为不打断灰盒重建**不做**。若以后要做，应先改 schema 再改数据（§3.3）。
 11. **价值目标被下调**：452 件保留，但价值从 1356 降到 1284（§3.3/§12）。若 T20/T21 认定 1284 不足以支撑 180 s 的成长曲线，补的是**每件价值**或**补货预算**（T22），不是把件数塞回篮子区——那会重新违反放置门槛。
-12. **树根丘坡度超过 12% 上限**：结构数据是 Ø2.5 m × 0.18 m（`tree_root_mound`），平均坡度 0.18 ÷ 1.25 = **14.4%**，高于 `scale.max_traversable_slope_percent = 12`。原先 README 与 `layout.json` 的 purpose 都写「11%」（算术不成立）。两种收口都要动设计：① 把丘高压到 ≤0.1375 m（坡度回到 11%），② 或承认 12% 只约束必经路线、把上限写成「装饰面除外」。本文只把算术改正，**不决定丘高**；`layout.json` 的 `structures` 尺寸未动，T21 实测翻越前不要声称「全部尺寸可翻」。
-13. **地图快照 sha256 不要手抄**：本目录不写死任何哈希，一律用 `sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 现算。`Docs/Design/GameModes/Levels/*.json` 的 `map_snapshot` 由 `Docs/Design/GameModes/validate_levels.py` 逐字节比对，地图一改就报「地图已变更，请复核」——**改完地图必须重跑它，而不是改 README**。仍有手抄残留：`Docs/Design/GameModes/README.md` §0.2 的 `catalog_sha256` 还是旧的 `eb1a1742…2b5c`（实际 `01d01418…`），不在本目录写权限内，需 GameModes 负责人改为命令生成。
+12. **树根丘坡度（已解决）**：结构数据曾是 Ø2.5 m × 0.18 m（`tree_root_mound`），平均坡度 0.18 ÷ 1.25 = **14.4%**，高于 `scale.max_traversable_slope_percent = 12`（当时 README 与 `layout.json` 的 purpose 还错写成「11%」，算术不成立）。现已把丘高压到 **0.14 m（0.14 ÷ 1.25 = 11.2%）**，并在 `layout.json` 里标成 `traversability.class = drivable_grade` + `run_m: 1.25`——坡度由校验器按几何现算并卡 ≤12%，不再有手写数字可以对不上。仍未实测：T21 翻越实测前不要声称「全部尺寸可翻」。
+    **同一类审阅还发现花圃的 28.9%**：`flower_bed_frame` 0.26 m 台 + 0.9 m 斜面若当「可走坡」看就是超限的面，但它的门槛语义是「球够不够大」（原作同样按球径判爬坡），属于**爬升台阶**而不是坡。现在它被显式声明为 `climb_step`（`step_height_m: 0.26`），由校验器按「台阶高 ≤ 0.25 × 球径」与 `gate_bed_*` 的 0.95→1.10 m 门槛互锁检查：0.26 ≤ 0.275 m（1.10 m 球能上）且 0.26 > 0.2375 m（0.95 m 球上不去）。**不许**用「压低台面」来消掉这个数字，那会同时毁掉门（见 §8 的合规降级方案）。
+13. **地图快照 sha256 不要手抄**：本目录不写死任何哈希，一律用 `sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 现算。`Docs/Design/GameModes/Levels/*.json` 的 `map_snapshot` 由 `Docs/Design/GameModes/validate_levels.py` 逐字节比对，地图一改就报「地图已变更，请复核」——**改完地图必须重跑它并重钉两个 hash，而不是改 README**。`Docs/Design/GameModes/README.md` §0.2 的 `catalog_sha256` 已不再是 `eb1a1742…`（现为 `01d01418…`，且该节写明「hash 现算，永不手抄」）——本节原先关于它的那句话已过期，已删。**§0.2 那张表只是缩写副本、不参与机器校验**（机器校验的是 `Levels/*.json`）。本次把 `layout.json` 升到 schema v2 之后，§0.2 里的 `layout_sha256` 缩写在它被重算之前会显示旧值；重算是 GameModes 负责人的动作，权威值以本次同步过的两个关卡文件为准。
 14. **地图数据里的缩小规则没有 Unity 消费方**：`GreyboxPayload.GreyboxBankRotation` 只声明了 `max_concurrent_bankers` / `occupancy_lock` / `bank_resets_ball_to_start_size`（int）三个字段，`PicnicLawnGreyboxBuilder` 从头到尾没读过它们中的任何一个；它只读 `bank_rotation.order` 做锚点校验。`unity_greybox.json` 新增的 `bank_size_rule` / `bank_residual_fraction` / `bank_min_conversion_diameter_m` / `bank_shrink_dimension` / `bank_shrink_formula` 会被 `JsonUtility` 安静地忽略。运行时侧另有 `Runtime/BallMotor/BankShrinkMath.cs` 按同一条公式实现（不读这份 JSON），所以现在是「数据写一份、代码写一份、`round_model.py` 再一份」；要做到单一真源，得让 DTO 加字段并由运行时从 payload 读 `residual` / 最小兑换球径，或明确接受三处同步。改 Unity 代码不在本次范围。
 
 ## 17. 验证与下一步
@@ -460,7 +479,7 @@ sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/pr
 python3 -m unittest discover -s Tools/mapbuild/tests             # 含 README 表逐字比对 + 两张图的通用校验回归
 ```
 
-当前结果：`OK` — 区域 21、出生点 4、交分台 4、尺寸门 8、散布区 20、可卷实例 452、固定实例 60、最小路线余量 1.20 m；区域面积 1087.4 m² 无重叠，交分台圆心距 8.40 m 无重叠，目录数量与散布完全一致。
+当前结果：`OK`（errors 0 / warnings 0）— 区域 21、出生点 4、交分台 4、尺寸门 8、散布区 20、可卷实例 452、固定实例 60、最小路线余量 1.20 m；区域面积 1087.4 m² 无重叠，交分台圆心距 8.40 m 无重叠，目录数量与散布完全一致。立面分类：可走坡 8（最陡 11.2%，上限 12%）、爬升台阶 4（花圃 0.26 m，爬升面 28.9%，按台阶判据）、障碍 38——校验器会把这张坡度表连同 rise ÷ run 的算式一起打印出来。
 
 **放置可行性（新增门槛）**：20 个散布区全部通过 2-D 容量校验，用量最高 82%（篮子区/树根），毯子 77%，其余 ≤75%；`build_greybox.py` 在作者件数超过「随机顺序摆放上限」时会**错误退出（exit 2）**，不再让 Unity 侧丢件或退回按定义间距。改坏数据的复现用例在 `Tools/mapbuild/tests/test_build_greybox.py`（把毯子改回 80 件 @ 0.9 m 必须被拒）。
 
@@ -468,7 +487,7 @@ T21 在 Unity 里要做的（灰盒）：
 
 1. 按 `layout.json` 的 `zones`/`structures` 摆地面、矮篱、毯子、花圃台、树根丘、4 张长凳、4 个交分台、8 块指示牌。
 2. 按 `prop_scatter` 手摆 452 件（`min_spacing_m` 是下限，不是网格；该值已按 §3.3 的容量模型验过，别再手工调高）；先只做 12 种 s 档就能起球。
-3. 重新读 `unity_greybox.json` 的 `scatter_regions`：`min_spacing_m`、`prop_ids`、`prop_counts_*`、`count_*_total` 都变了（篮子区 14 件/1.55 m、毯子 0.72 m、边带 27 件/1.20 m、树根 0.50 m）；此外 `bank_rotation` 多了交分缩小规则字段并把旧 flag 置 0（§6），`zones` 只有 4 个树根区的 `purpose` 文案按 §16 风险 12 改了坡度算术。其余集合（structures/spawns/routes/gates/chokepoints）逐字节未变。
+3. 重新读 `unity_greybox.json` 的 `scatter_regions`：`min_spacing_m`、`prop_ids`、`prop_counts_*`、`count_*_total` 都变了（篮子区 14 件/1.55 m、毯子 0.72 m、边带 27 件/1.20 m、树根 0.50 m）；此外 `bank_rotation` 多了交分缩小规则字段并把旧 flag 置 0（§6），`zones` 只有 4 个树根区的 `purpose` 文案按 §16 风险 12 改了坡度算术。**最近一次改动（立面分类）**：`layout.json` 升到 `schema_version: 2`，`structures[]` 多了 `traversability` 块（50 个结构：可走坡 8 / 爬升台阶 4 / 障碍 38），`scale` 多了 `max_step_height_over_ball_diameter: 0.25`。这些都是**作者层字段，生成器不读**，所以 `unity_greybox.json` 逐字节未变（已重新生成并 `--check` 通过）；变的是 `layout.json` 的 sha256，两个关卡文件的 `map_snapshot` 已由脚本重钉。
 4. 用真实构建填 `MapRubrics/route_checks.csv`（8 条出生出口、最大球主路、2 条交分路线、成长脱困）与 `spawn_fairness.csv`（四角可达收益、到首资源/交分/出口的路程）。
 5. 验 §8 的 0.26 m 花圃台、1.20 m 主路余量、3.6 m 对角门在最大球下的实际通过性；不通就按 §8 降级。
 6. 只有拿到真实数据后，才能把本文件的状态从 `PROVISIONAL_NOT_TESTED` 改成实测结论；在那之前不得声称任何公平/性能/舒适 PASS。

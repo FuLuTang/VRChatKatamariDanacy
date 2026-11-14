@@ -57,6 +57,18 @@
     都 ≤ 最大球径（否则永远吃不到）；每个档位至少被一条区域声明覆盖（提示级）。
 12. **道具 / 重生 / 人数 / 预算**：道具类型与区域、与出生点距离；重生候选与延迟；
     `player_count_plans` 的人数和 id；`performance_budget` 的数字与目录一致。
+13. **立面分类（可走坡 / 爬升台阶 / 障碍）**：`structures[].traversability.class`
+    逐面声明这个高差属于哪一类，三类各用各的判据——
+    - `drivable_grade`（可走坡）：`run_m` 必填，坡度 = rise ÷ run **现算**，必须
+      ≤ `scale.max_traversable_slope_percent`；声明的 `slope_percent` 只能用来交叉
+      对照，与算出来的不符就报错（不许手写一个坡度过关）。
+    - `climb_step`（爬升台阶）：`step_height_m` 必填且必须等于几何高度，并与对应的
+      `climb` 尺寸门阈值相容——可翻越上限 = `scale.max_step_height_over_ball_diameter`
+      × 球径。台阶的爬升面（`run_m`）**不受 12% 约束**：能不能上去由球径决定，
+      这正是原作 C3 的门槛语义。
+    - `obstacle`（障碍）：树篱、树、道具、墙。不可走，不参与坡度判据。
+    有高差却没声明类别 = 错误（layout `schema_version` ≥ 2 起强制）；v1 的图跳过这条，
+    爬升台阶只由 `climb` 门对应的结构几何推出。坡度表在报告里打印。
 
 所有数值都是**作者数据**，本工具不验证 Unity、可玩性、公平性或性能。
 """
@@ -83,6 +95,19 @@ ROLES = ("absorbable", "fixed")
 PRIORITIES = ("MVP", "later")
 POWERUP_TYPES = ("magnet", "rocket")
 
+# 立面分类（layout schema v2）。三类的区别见文件头第 13 条：
+#   drivable_grade — 可走坡，受 max_traversable_slope_percent 约束
+#   climb_step     — 爬升台阶，受「台阶高 ÷ 球径」约束（和尺寸门绑在一起）
+#   obstacle       — 障碍，不可走
+SURFACE_CLASSES = ("drivable_grade", "climb_step", "obstacle")
+TRAVERSABILITY_SCHEMA_VERSION = 2
+# 台阶可翻越上限占球径的比例：台阶 ≤ 0.25 × 球径（球径 ≥ 4 × 台阶高）。
+# 这是作者层常量，v1 的图没在 scale 里声明它时用这个默认值。
+DEFAULT_STEP_HEIGHT_OVER_DIAMETER = 0.25
+DEFAULT_MAX_ROUTE_STEP_M = 0.05
+SLOPE_TOLERANCE_PERCENT = 0.1   # 声明值 vs 现算值的容差（百分点）
+STEP_TOLERANCE_M = 0.01         # step_height_m vs 几何高度的容差
+
 REQUIRED_LAYOUT_KEYS = (
     "schema_version", "map_id", "status", "coordinate_system", "scale", "bounds",
     "zones", "structures", "bank", "spawns", "size_gates", "prop_scatter",
@@ -94,7 +119,7 @@ REQUIRED_CATALOG_COLUMNS = (
     "game_longest_dim_m", "absorb_value_placeholder", "count_in_map", "zone_ids",
     "sourcing_hint", "priority", "coverage_ref", "role", "notes",
 )
-SUPPORTED_SCHEMA_VERSIONS = (1,)
+SUPPORTED_SCHEMA_VERSIONS = (1, 2)
 EPS = 1e-6
 
 
@@ -108,6 +133,8 @@ class Report:
         self.errors: list[str] = []
         self.warnings: list[str] = []
         self.notes: list[str] = []
+        self.surfaces: list[dict] = []      # 立面审计表（只列可走的面：坡 + 台阶）
+        self.obstacles: Counter = Counter()  # 障碍按 definition_id 计数
 
     def err(self, message: str) -> None:
         self.errors.append(message)
@@ -218,6 +245,23 @@ def as_int(value, default=None):
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def structure_rise_m(structure) -> float | None:
+    """立面的高度 = 顶面 y − 地面 y=0。
+
+    `structures[]` 的既有约定是「物体坐在 y=0 的地面上，`size_m[1]` 是整体高度」，
+    所以顶面 = `position[1] + size_m[1] / 2`。这个高度**由几何现算**，作者不能靠写
+    一个数字把陡坡说成缓坡；字段缺失/非数字返回 None（第 4 段已经报过）。
+    """
+    position, size = structure.get("position"), structure.get("size_m")
+    if not (isinstance(position, list) and len(position) == 3
+            and isinstance(size, list) and len(size) == 3):
+        return None
+    y, height = as_float(position[1]), as_float(size[1])
+    if y is None or height is None:
+        return None
+    return y + height / 2.0
 
 
 # --------------------------------------------------------------------------- #
@@ -716,6 +760,181 @@ def validate(layout: dict, catalog: dict) -> Report:
         if ref and ref not in gates:
             rep.err(f"{route['id']}：gate_id 引用不存在的尺寸门 {ref!r}")
 
+    # ---------------- 13. 立面分类：可走坡 / 爬升台阶 / 障碍 ---------------- #
+    # 为什么单列一段：`max_traversable_slope_percent = 12` 的本意是「球能开上每一个
+    # 坡」，而花圃那种 0.26 m 台（0.9 m 斜面 = 28.9%）的可行与否由**球径**决定，
+    # 不是坡度——原作也是按球大小判能不能爬上去。把两者混成一个上限，就只能二选一：
+    # 要么砍掉台阶（门失效），要么偷偷超限。所以数据必须逐面声明 class，本段按类别
+    # 各用一条判据；坡度一律由几何现算（rise ÷ run），不读任何文字描述。
+    max_slope = as_float(scale.get("max_traversable_slope_percent"))
+    if max_slope is None:
+        rep.err("scale.max_traversable_slope_percent 缺失或不是数字（可走坡没有判据）")
+        max_slope = 0.0
+    step_ratio = as_float(scale.get("max_step_height_over_ball_diameter"),
+                          DEFAULT_STEP_HEIGHT_OVER_DIAMETER)
+    if step_ratio is None or not 0 < step_ratio < 1:
+        rep.err(f"scale.max_step_height_over_ball_diameter 必须在 (0, 1)，实际 {step_ratio!r}"
+                f"（默认 {DEFAULT_STEP_HEIGHT_OVER_DIAMETER}：可翻越台阶高 = 比例 × 球径）")
+        step_ratio = DEFAULT_STEP_HEIGHT_OVER_DIAMETER
+    bump = as_float(scale.get("max_route_step_m"), DEFAULT_MAX_ROUTE_STEP_M)
+    if bump is None or bump < 0:
+        bump = DEFAULT_MAX_ROUTE_STEP_M
+    schema_version = as_int(layout.get("schema_version"), 1) or 1
+    strict_surfaces = schema_version >= TRAVERSABILITY_SCHEMA_VERSION
+
+    def surface_label(index: int, structure) -> str:
+        defn = str(structure.get("definition_id") or "").strip() or "<空 definition_id>"
+        return f"{defn}#{index}"
+
+    surfaces: dict[int, dict] = {}
+    for index, structure in enumerate(layout["structures"]):
+        rise = structure_rise_m(structure)
+        if rise is None:
+            continue                      # 字段坏掉的在第 4 段已经报过
+        label = surface_label(index, structure)
+        defn = str(structure.get("definition_id") or "").strip()
+        trav = structure.get("traversability")
+        if trav is not None and not isinstance(trav, dict):
+            rep.err(f"{label}：traversability 必须是对象"
+                    f"（class / run_m / step_height_m / slope_percent）")
+            continue
+        klass = str(trav.get("class") or "") if isinstance(trav, dict) else ""
+        if trav is not None and klass not in SURFACE_CLASSES:
+            rep.err(f"{label}：traversability.class 必须是 {list(SURFACE_CLASSES)}，"
+                    f"实际 {klass!r}")
+            continue
+        if not klass:
+            if strict_surfaces and rise > bump + EPS:
+                rep.err(f"{label}：立面高 {rise:.2f} m（> scale.max_route_step_m={bump:g}）"
+                        f"但没声明 traversability——每个高差都必须说清是可走坡、爬升台阶"
+                        f"还是障碍（layout schema v{TRAVERSABILITY_SCHEMA_VERSION} 起强制；"
+                        f"v1 的图跳过这条）")
+            continue
+        if klass in ("drivable_grade", "climb_step") \
+                and props.get(defn, {}).get("role") != "fixed":
+            rep.err(f"{label}：{klass} 必须是固定地形（role=fixed，实际 "
+                    f"{props.get(defn, {}).get('role')!r}）：可卷物不是可走面")
+        row = {"label": label, "class": klass, "rise_m": rise, "run_m": None,
+               "slope_percent": None, "verdict": ""}
+        if klass == "obstacle":
+            for key in ("run_m", "step_height_m", "slope_percent"):
+                if key in trav:
+                    rep.err(f"{label}：obstacle 不该声明 {key}"
+                            f"（不可走立面没有坡度/台阶可言）")
+                    break
+            row["verdict"] = "不可走"
+        else:
+            run = as_float(trav.get("run_m"))
+            if run is not None and run <= 0:
+                rep.err(f"{label}：run_m 必须为正，实际 {trav.get('run_m')!r}")
+                run = None
+            if run is not None:
+                row["run_m"] = run
+                row["slope_percent"] = 100.0 * rise / run
+            if klass == "drivable_grade":
+                computed = row["slope_percent"]
+                if run is None:
+                    rep.err(f"{label}：drivable_grade 必须写 run_m（斜坡的水平长度）；"
+                            f"坡度只能由几何 rise ÷ run 算出，不接受手写数字")
+                declared = as_float(trav.get("slope_percent"))
+                if declared is not None and computed is not None \
+                        and abs(declared - computed) > SLOPE_TOLERANCE_PERCENT:
+                    rep.err(f"{label}：声明 slope_percent={declared:g}% 与几何算出的 "
+                            f"{computed:.1f}%（{rise:.3f} ÷ {run:g}）不符")
+                if computed is not None and computed > max_slope + EPS:
+                    rep.err(f"{label}：可走坡 {computed:.1f}% 超过 "
+                            f"scale.max_traversable_slope_percent={max_slope:g}%"
+                            f"（rise {rise:.3f} m ÷ run {run:g} m）；"
+                            f"要么把坡放缓，要么把它改成 climb_step 并配一个 climb 尺寸门")
+                if computed is not None:
+                    row["verdict"] = f"≤ {max_slope:g}% ✓"
+            else:                        # climb_step
+                step = as_float(trav.get("step_height_m"))
+                if step is None:
+                    rep.err(f"{label}：climb_step 必须写 step_height_m（球要爬上的高差）")
+                elif abs(step - rise) > STEP_TOLERANCE_M:
+                    rep.err(f"{label}：step_height_m={step:g} 与几何算出的立面高度 "
+                            f"{rise:.3f} m 不符（position_y + size_y/2）")
+        surfaces[index] = row
+
+    # 台阶 ↔ 尺寸门：门说「球够大就能上去」，几何说「台阶多高」。两边必须对得上。
+    for gid, gate in gates.items():
+        if str(gate.get("type")) != "climb":
+            continue
+        defn = str(gate.get("definition_id") or "")
+        opens = str(gate.get("opens_path") or "")
+        hosts = [i for i, structure in enumerate(layout["structures"])
+                 if str(structure.get("definition_id") or "").strip() == defn
+                 and str(structure.get("zone_id") or "") == opens]
+        if not hosts:
+            rep.err(f"{gid}：climb 门找不到对应的地形结构"
+                    f"（definition_id={defn!r} 且 zone_id={opens!r}）：门没有可翻的实体")
+            continue
+        if len(hosts) > 1:
+            rep.err(f"{gid}：climb 门匹配到 {len(hosts)} 块同定义地形"
+                    f"（{'、'.join(surface_label(i, layout['structures'][i]) for i in hosts)}），"
+                    f"无法判断门对应哪一块")
+            continue
+        index = hosts[0]
+        structure = layout["structures"][index]
+        rise = structure_rise_m(structure)
+        row = surfaces.get(index)
+        klass = row["class"] if row else ""
+        if klass and klass != "climb_step":
+            rep.err(f"{gid}：climb 门对应的 {surface_label(index, structure)} 被标成 "
+                    f"{klass}；能翻上去的台阶必须标 climb_step")
+            continue
+        if row is None:
+            # v1 的图没有逐面声明：台阶高度只能由几何算，台阶判据照样成立。
+            row = {"label": surface_label(index, structure), "class": "climb_step",
+                   "rise_m": rise, "run_m": None, "slope_percent": None, "verdict": ""}
+            surfaces[index] = row
+        blocked = as_float(gate.get("blocks_ball_diameter_below_m"))
+        opened = as_float(gate.get("absorbable_at_ball_diameter_m"))
+        if blocked is None or opened is None or rise is None:
+            continue                      # 阈值坏掉/缺几何：第 7 段已经报过
+        cap = step_ratio * opened
+        floor = step_ratio * blocked
+        if rise > cap + EPS:
+            rep.err(f"{gid}：台阶 {rise:.2f} m 高于 {opened:g} m 球的可翻越上限 "
+                    f"{cap:.3f} m（{step_ratio:g} × 球径）；门写着能开，几何却上不去")
+        if rise <= floor + EPS:
+            rep.err(f"{gid}：台阶 {rise:.2f} m 落在 {blocked:g} m 球的可翻越上限 "
+                    f"{floor:.3f} m 以内（{step_ratio:g} × 球径）；这个门挡不住它宣称要挡的球")
+        verdict = f"台阶 {blocked:g}→{opened:g} m，上限 {cap:.3f} m ✓"
+        if row.get("slope_percent") is not None:
+            verdict += (f"；爬升面 {row['slope_percent']:.1f}% 按台阶判据，"
+                        f"不计入 {max_slope:g}% 上限")
+        row["verdict"] = verdict
+
+    for row in surfaces.values():
+        if row["class"] == "climb_step" and not row["verdict"]:
+            row["verdict"] = "没有对应的 climb 尺寸门"
+            rep.warn(f"{row['label']}：爬升台阶没有对应的 climb 尺寸门——"
+                     f"小球的翻越判据无出可依")
+
+    grade_rows = sorted((r for r in surfaces.values() if r["class"] == "drivable_grade"),
+                        key=lambda r: (-(r["slope_percent"] or 0.0), r["label"]))
+    step_rows = sorted((r for r in surfaces.values() if r["class"] == "climb_step"),
+                       key=lambda r: r["label"])
+    rep.obstacles = Counter(
+        str(layout["structures"][index].get("definition_id") or "").strip() or "<空>"
+        for index, row in surfaces.items() if row["class"] == "obstacle")
+    rep.surfaces = grade_rows + step_rows
+    if not strict_surfaces:
+        rep.note(f"layout schema_version={schema_version}：不强制逐面 traversability"
+                 f"（v{TRAVERSABILITY_SCHEMA_VERSION} 起强制），未分类立面跳过这条检查；"
+                 f"爬升台阶的高度由 climb 门对应的结构几何推出")
+    if rep.surfaces or rep.obstacles:
+        parts = [f"可走坡 {len(grade_rows)}、爬升台阶 {len(step_rows)}、"
+                 f"障碍 {sum(rep.obstacles.values())}"]
+        if grade_rows and grade_rows[0]["slope_percent"] is not None:
+            parts.append(f"最陡可走坡 {grade_rows[0]['slope_percent']:.1f}%"
+                         f"（上限 {max_slope:g}%）")
+        if rep.surfaces:
+            parts.append(f"台阶判据 {step_ratio:g} × 球径")
+        rep.note("立面分类：" + "；".join(parts))
+
     # ---------------- 8. 散布与容量 -------------------------------------- #
     scatter_regions: dict[str, dict] = {}
     scatter_use = Counter()
@@ -1016,10 +1235,32 @@ def format_table(rows) -> str:
     return "\n".join(lines)
 
 
+def format_surface_table(rows) -> str:
+    """立面审计表：rise 与坡度都是现算的，`run`/`slope` 的「—」表示没有这个量。"""
+    lines = [f"{'surface':<36}{'class':<16}{'rise':>7}{'run':>7}{'slope':>8}  判定"]
+    for row in rows:
+        run = f"{row['run_m']:.2f}" if row.get("run_m") is not None else "—"
+        slope = (f"{row['slope_percent']:.1f}%" if row.get("slope_percent") is not None
+                 else "—")
+        lines.append(f"{row['label']:<36}{row['class']:<16}{row['rise_m']:>7.3f}"
+                     f"{run:>7}{slope:>8}  {row['verdict']}")
+    return "\n".join(lines)
+
+
 def report_text(rep: Report, layout_path: Path, catalog_path: Path, rows, verbose: bool) -> str:
     out = [f"layout : {layout_path}", f"catalog: {catalog_path}", ""]
     for note in rep.notes:
         out.append(f"  · {note}")
+    if rep.surfaces or rep.obstacles:
+        out += ["",
+                "立面审计（rise = position_y + size_y/2；坡度 = rise ÷ run，"
+                "全部由数据现算，不读文字描述）：",
+                format_surface_table(rep.surfaces)]
+        if rep.obstacles:
+            detail = "、".join(f"{name} ×{count}"
+                              for name, count in sorted(rep.obstacles.items()))
+            out.append(f"障碍 {sum(rep.obstacles.values())} 个（obstacle，不可走）：{detail}")
+        out.append("")
     if verbose and rows:
         out += ["", "散布区容量（2-D 随机顺序吸附上限，由 build_greybox 计算）：",
                 format_table(rows), ""]
@@ -1089,6 +1330,14 @@ def main(argv=None) -> int:
             "map_id": layout.get("map_id"),
             "errors": rep.errors, "warnings": rep.warnings, "notes": rep.notes,
             "scatter": dict_rows,
+            "surfaces": [{"label": row["label"], "class": row["class"],
+                          "rise_m": round(row["rise_m"], 3),
+                          "run_m": None if row.get("run_m") is None else round(row["run_m"], 3),
+                          "slope_percent": (None if row.get("slope_percent") is None
+                                            else round(row["slope_percent"], 2)),
+                          "verdict": row["verdict"]}
+                         for row in rep.surfaces],
+            "obstacles": dict(sorted(rep.obstacles.items())),
         }, ensure_ascii=False, indent=2))
     else:
         print(report_text(rep, layout_path, catalog_path, rows, args.verbose))

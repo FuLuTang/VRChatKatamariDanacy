@@ -96,9 +96,32 @@ python3 -m unittest discover -s Tools/mapbuild/tests                      # 两�
 
 它**不重复实现**容量模型：`min_spacing_m` 能否摆下由 `build_greybox.scatter_feasibility()`
 判定（RSA 0.547 覆盖率、脚印下限、消费方上限），`validate_map.py` 只调用它并把数字整理成表。
-检查项见该文件头注释的 12 组；额外规则两条值得单独记：**窄于最大球径的咽喉必须标
+检查项见该文件头注释的 13 组；额外规则三条值得单独记：**窄于最大球径的咽喉必须标
 `narrow_small_ball_lane` 且不能落在任何散布区内**（否则小球会在缝里吃到东西长大、把「能进的缝」
-变成「出不去」），**`climb` 门槛必须落在抬高地形上**（`ground_y_m > 0`）。
+变成「出不去」），**`climb` 门槛必须落在抬高地形上**（`ground_y_m > 0`），以及下面这条
+**立面分类**。
+
+### 立面分类：`drivable_grade` / `climb_step` / `obstacle`（layout `schema_version: 2`）
+
+`scale.max_traversable_slope_percent` 的本意是「球能开上每一个**坡**」。台阶（ledge）不是坡：
+能不能上去由**球径**决定（原作也按球的大小判爬坡）。两者混成一个上限，就只能砍掉台阶或者偷偷超限。
+所以每个 rise > `scale.max_route_step_m` 的 `structures[]` 面必须声明 `traversability`：
+
+| `class` | 判据（全部由数据现算，不读文字） | 负例（`tests/test_validate_map.py`） |
+|---|---|---|
+| `drivable_grade` | 坡度 = rise ÷ run ≤ `max_traversable_slope_percent`；声明的 `slope_percent` 与现算值不符即错误 | 把毯缘 `run_m` 改小 → 超 12% |
+| `climb_step` | `step_height_m` = 几何高度，且落在 [0.25 × 阻挡球径, 0.25 × 开启球径] 内 | 台面压到 0.18 m（Lead 已否决的降级）→ 门挡不住 |
+| `obstacle` | 不可走；不得再声明 `run_m`/`step_height_m`/`slope_percent` | 给树篱写坡度 → 自相矛盾 |
+
+- **rise 的算法**：`position_y + size_m[1] / 2`（本 schema 的约定是物体坐在 y=0 的地面上）。
+  作者不能靠写一个好看的 `slope_percent` 把陡坡说成缓坡。
+- **v1 的图不用改**：`schema_version < 2` 时跳过「未分类立面」这条，`climb` 台阶的高度由门对应的
+  结构几何推出（ToyRoom 就是这样被检查的，数值不变）。要升级时把 `schema_version` 改成 2 并逐面补
+  `traversability`——升版就是同意让校验器管这件事。
+- 报告里会打印**立面审计表**（surface / class / rise / run / slope / 判定）与障碍汇总；
+  `--json` 里对应 `surfaces` 与 `obstacles` 两个键。
+- 常量：`DEFAULT_STEP_HEIGHT_OVER_DIAMETER = 0.25`（图里没写 `scale.max_step_height_over_ball_diameter`
+  时用这个默认值）、`TRAVERSABILITY_SCHEMA_VERSION = 2`。改常量前先看 `TraversabilityTests`。
 
 ### 为什么不再有「每图一份的专用校验器」
 
@@ -110,28 +133,29 @@ python3 -m unittest discover -s Tools/mapbuild/tests                      # 两�
 
 | 旧专用校验器的检查 | 新 `validate_map.py` |
 |---|---|
-| 目录必填列、空 id / 重复 id、size_tier/priority/role 枚举、count/value 非负 | 377–406 |
-| `schema_version`、顶层键齐全 | 233–238 |
-| 区域：重复 id、只认 rect、矩形退化、面积与矩形一致、在边界内、`tier_band` 长度与档位、`name_zh`/`purpose` 非空 | 305–343 |
-| 区域：两两不重叠、面积和 ≤ 地图面积 | 362–371（重叠支持 `zone_overlap_exemptions` 显式豁免） |
-| 结构：目录 id、`zone_id`、边界内外（旧版是 `OUTSIDE_OK` 白名单） | 426–461（**换成地图无关的两条规则**：有归属区域必须在场内；无归属且 `role=absorbable` 在场外=错误；固定装饰放行并记账） |
-| 出生点：重复 id、未知区域、在场内、在自己区域内、`yaw`、`y` 与地面差 | 470–499（y 偏差 warning → **更强** error） |
-| 出生点：至少 2 条出路 | 957–960 |
-| 交分台：在场内/在区域内、半径>0、`approach_route_ids`/`entrances` 引用、圆盘不重叠、`rotation.order` 排列 | 508–553 |
-| 尺寸门：类型、目录 id、在场内、`block<open`、`open>max`、`climb→fixed`/`absorb→absorbable`、`opens_path` | 641–717（`open>max` 与 `climb→fixed` warning → **更强** error） |
-| 散布：未知区域/重复记录、`definitions` 非空、`min_spacing>0`、条目 id/role/count 关系 | 730–769 |
-| 目录数量 = 散布 + 可吸门 / 结构实例 | 804–814 |
-| 路线：≥2 点、点形状、点在边界内、宽>0、净宽 ≥ 最大球径、余量不足警告、`gate/bank/spawn` 引用、`closed` 末点重复警告 | 587–636 + 716–717 |
-| 咽喉：净宽 < 最大球径且未标 `narrow_small_ball_lane`、`gate_id` 引用 | 836–862 |
-| 道具：类型/区域/在场内/距出生点 8 m | 877–898 |
-| 目录：有实例却无人引用、count=0 却有引用、`zone_ids` 与实际落点一致 | 816–830 |
+| 目录必填列、空 id / 重复 id、size_tier/priority/role 枚举、count/value 非负 | 421–467 |
+| `schema_version`、顶层键齐全 | 276–284 |
+| 区域：重复 id、只认 rect、矩形退化、面积与矩形一致、在边界内、`tier_band` 长度与档位、`name_zh`/`purpose` 非空 | 346–396 |
+| 区域：两两不重叠、面积和 ≤ 地图面积 | 405–415（重叠支持 `zone_overlap_exemptions` 显式豁免） |
+| 结构：目录 id、`zone_id`、边界内外（旧版是 `OUTSIDE_OK` 白名单） | 473–509（**换成地图无关的两条规则**：有归属区域必须在场内；无归属且 `role=absorbable` 在场外=错误；固定装饰放行并记账） |
+| 出生点：重复 id、未知区域、在场内、在自己区域内、`yaw`、`y` 与地面差 | 514–543（y 偏差 warning → **更强** error） |
+| 出生点：至少 2 条出路 | 1176–1180 |
+| 交分台：在场内/在区域内、半径>0、`approach_route_ids`/`entrances` 引用、圆盘不重叠、`rotation.order` 排列 | 547–591 |
+| 尺寸门：类型、目录 id、在场内、`block<open`、`open>max`、`climb→fixed`/`absorb→absorbable`、`opens_path` | 685–762（`open>max` 与 `climb→fixed` warning → **更强** error） |
+| 散布：未知区域/重复记录、`definitions` 非空、`min_spacing>0`、条目 id/role/count 关系 | 941–980 |
+| 目录数量 = 散布 + 可吸门 / 结构实例 | 1025–1040 |
+| 路线：≥2 点、点形状、点在边界内、宽>0、净宽 ≥ 最大球径、余量不足警告、`gate/bank/spawn` 引用、`closed` 末点重复警告 | 630–680 + 758–761 |
+| 咽喉：净宽 < 最大球径且未标 `narrow_small_ball_lane`、`gate_id` 引用 | 1054–1080 |
+| 道具：类型/区域/在场内/距出生点 8 m | 1096–1119 |
+| 目录：有实例却无人引用、count=0 却有引用、`zone_ids` 与实际落点一致 | 1035–1049 |
 
-**新版多出来的 12 类**（旧版完全没有）：区域重叠豁免机制（强制写理由）；`surface` 非空；
+**新版多出来的 13 类**（旧版完全没有）：区域重叠豁免机制（强制写理由）；`surface` 非空；
 出生→交分设计路程（四角互差 >1 m 直接报错）；窄道不得落在散布区内；`climb` 门必须落在
 `ground_y_m > 0` 的区域；门槛必须靠近档位边界（±0.20 m）；每个档位至少被一条区域覆盖；
 `length_m` 与路点折线自洽（闭合环计入收尾段）；每件可卷物的拾取门槛 ≤ 最大球径；
 `performance_budget` 与目录数字一致；重生候选/人数方案/`scale` 常量一致；散布区
-`tier_band` 必须落在所属区域的档位范围内。
+`tier_band` 必须落在所属区域的档位范围内；**立面分类**（可走坡的坡度现算且 ≤ 上限、爬升台阶与
+`climb` 门阈值互锁、不许有未分类的高差）。
 
 退役时**只补不删**：对照过程中发现旧版检查、新版没查的两项，已补进 `validate_map.py`——
 (1) 区域 `purpose` 非空；(2) 「可卷物件不许放在场外」（旧版靠 `OUTSIDE_OK` 白名单挡，

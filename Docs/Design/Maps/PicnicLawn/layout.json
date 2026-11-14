@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "map_id": "picnic_lawn",
   "status": "PROVISIONAL_NOT_TESTED",
   "generated_by": "Docs/Design/Maps/PicnicLawn/README.md §2 的暂定比例；无 Unity 实现、无实测",
@@ -61,6 +61,7 @@
       ]
     },
     "max_traversable_slope_percent": 12.0,
+    "max_step_height_over_ball_diameter": 0.25,
     "max_route_step_m": 0.05,
     "boundary_hedge_height_m": 1.1,
     "boundary_hedge_depth_m": 0.8,
@@ -562,6 +563,9 @@
         0.8
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -579,6 +583,9 @@
         0.2
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -596,6 +603,9 @@
         0.2
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -613,6 +623,9 @@
         40
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -630,6 +643,9 @@
         40
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -647,6 +663,9 @@
         0.35
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -664,6 +683,9 @@
         1.95
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -681,6 +703,9 @@
         0.35
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -698,6 +723,9 @@
         1.95
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -715,6 +743,9 @@
         0.35
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -732,6 +763,9 @@
         1.95
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -749,6 +783,9 @@
         0.35
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -766,6 +803,9 @@
         1.95
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -783,6 +823,11 @@
         12.0
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "drivable_grade",
+        "run_m": 0.8,
+        "slope_percent": 7.5
+      },
       "notes": ""
     },
     {
@@ -800,6 +845,11 @@
         12.0
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "drivable_grade",
+        "run_m": 0.8,
+        "slope_percent": 7.5
+      },
       "notes": ""
     },
     {
@@ -817,6 +867,11 @@
         4.5
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "drivable_grade",
+        "run_m": 0.8,
+        "slope_percent": 7.5
+      },
       "notes": ""
     },
     {
@@ -834,6 +889,11 @@
         4.5
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "drivable_grade",
+        "run_m": 0.8,
+        "slope_percent": 7.5
+      },
       "notes": ""
     },
     {
@@ -851,6 +911,11 @@
         4.9
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "climb_step",
+        "step_height_m": 0.26,
+        "run_m": 0.9
+      },
       "notes": ""
     },
     {
@@ -868,6 +933,11 @@
         2.5
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "drivable_grade",
+        "run_m": 1.25,
+        "slope_percent": 11.2
+      },
       "notes": ""
     },
     {
@@ -885,6 +955,9 @@
         0.5
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -919,6 +992,11 @@
         4.9
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "climb_step",
+        "step_height_m": 0.26,
+        "run_m": 0.9
+      },
       "notes": ""
     },
     {
@@ -936,6 +1014,11 @@
         2.5
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "drivable_grade",
+        "run_m": 1.25,
+        "slope_percent": 11.2
+      },
       "notes": ""
     },
     {
@@ -953,6 +1036,9 @@
         0.5
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -987,6 +1073,11 @@
         4.9
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "climb_step",
+        "step_height_m": 0.26,
+        "run_m": 0.9
+      },
       "notes": ""
     },
     {
@@ -1004,6 +1095,11 @@
         2.5
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "drivable_grade",
+        "run_m": 1.25,
+        "slope_percent": 11.2
+      },
       "notes": ""
     },
     {
@@ -1021,6 +1117,9 @@
         0.5
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1055,6 +1154,11 @@
         4.9
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "climb_step",
+        "step_height_m": 0.26,
+        "run_m": 0.9
+      },
       "notes": ""
     },
     {
@@ -1072,6 +1176,11 @@
         2.5
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "drivable_grade",
+        "run_m": 1.25,
+        "slope_percent": 11.2
+      },
       "notes": ""
     },
     {
@@ -1089,6 +1198,9 @@
         0.5
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1140,6 +1252,9 @@
         0.25
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1174,6 +1289,9 @@
         0.25
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1208,6 +1326,9 @@
         0.25
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1242,6 +1363,9 @@
         0.25
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1259,6 +1383,9 @@
         0.8
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": "magnet"
     },
     {
@@ -1276,6 +1403,9 @@
         0.8
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": "magnet"
     },
     {
@@ -1293,6 +1423,9 @@
         0.8
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": "rocket"
     },
     {
@@ -1310,6 +1443,9 @@
         0.8
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": "rocket"
     },
     {
@@ -1327,6 +1463,9 @@
         0.8
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": "rocket"
     },
     {
@@ -1344,6 +1483,9 @@
         0.8
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": "rocket"
     },
     {
@@ -1361,6 +1503,9 @@
         0.12
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1378,6 +1523,9 @@
         0.12
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1395,6 +1543,9 @@
         0.12
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1412,6 +1563,9 @@
         0.12
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1429,6 +1583,9 @@
         0.12
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1446,6 +1603,9 @@
         0.12
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1463,6 +1623,9 @@
         0.12
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1480,6 +1643,9 @@
         0.12
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": ""
     },
     {
@@ -1497,6 +1663,9 @@
         3.2
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": "边界外，纯地标"
     },
     {
@@ -1514,6 +1683,9 @@
         2.0
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": "边界外，纯地标"
     },
     {
@@ -1531,6 +1703,9 @@
         50.0
       ],
       "yaw_deg": 0.0,
+      "traversability": {
+        "class": "obstacle"
+      },
       "notes": "边界外 3–6 m 环形树带"
     }
   ],

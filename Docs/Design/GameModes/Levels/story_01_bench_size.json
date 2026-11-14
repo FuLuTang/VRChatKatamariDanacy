@@ -7,8 +7,8 @@
   "map_id": "picnic_lawn",
   "ruleset_id": "prototype_defaults_v0_3",
   "map_snapshot": {
-    "layout_sha256": "5b08daf9353be681f9b8073596690b06f35cf4409a9a6dfaafcb421e422c5e13",
-    "catalog_sha256": "01d01418b358fcc7bfaec9c9895c5efe76deada79a3b86509c97c8c02953acc7"
+    "layout_sha256": "328d2d6f85bbddda9722434c127b18bb85d28b788266b4f87312b7c27619fa69",
+    "catalog_sha256": "6e9b0811c8fa0aab0e1412ebb83c4e44394bf96e93efd97e96ccad24503d9b37"
   },
   "quest": {
     "type": "reach_target_diameter",

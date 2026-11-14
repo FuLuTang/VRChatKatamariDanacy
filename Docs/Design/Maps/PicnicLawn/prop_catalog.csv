@@ -44,7 +44,7 @@ invisible_wall,不可见边界,boundary,l,40,40,0,4,,Unity BoxCollider ×4，不
 core_hedge,中央草坪矮篱,boundary,l,1.95,1.95,0,8,core_lawn,model ourselves：8 段 1.95×0.35×1.0 m 盒，围出 4 个 5 m 入口 + 4 个 3.6 m 对角门,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 picnic_blanket,野餐毯,terrain,l,12,12,0,4,basket_north;basket_south;blanket_east;blanket_west,model ourselves：平面 + 条纹材质；2 张 6.5×12 m + 2 张 5×4.5 m,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 flower_bed_frame,花圃木框,terrain,l,4.9,4.9,0,4,flower_bed_ne;flower_bed_nw;flower_bed_se;flower_bed_sw,model ourselves：4×4 m 木框 + 0.26 m 台面（斜面 0.9 m，29%）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
-tree_root_mound,树根土丘,terrain,l,2.5,2.5,0,4,tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,model ourselves：Ø2.5 m 缓丘，最高 0.18 m（11%）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+tree_root_mound,树根土丘,terrain,l,2.5,2.5,0,4,tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,model ourselves：Ø2.5 m 缓丘，最高 0.14 m（平均 11.2%）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 corner_tree,角落大树,landmark,l,9,9,0,4,tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,model ourselves：Ø0.5 m 树干 + 6–9 m 树冠，四角各 1 棵,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 bank_pad,交分台,gameplay,l,3.2,3.2,0,4,core_lawn,model ourselves：Ø3.2 m 圆盘 + 发光环（自发光材质，不用实时灯）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 bank_beacon,交分旗杆,gameplay,l,3,3,0,4,core_lawn,model ourselves：Ø0.25 m 杆 + 2.5 m 高旗；激活时旗升起、环脉冲,MVP,无,fixed,不可卷；固定 Collider 或纯装饰

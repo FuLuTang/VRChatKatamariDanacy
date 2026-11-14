@@ -261,3 +261,91 @@ StepBall:
 注意 7 与 8 的区别：7 是**没有提交**，8 是**已经提交但缩水没落地**——后者不会回滚台账（`(player, requestId)` 一次性，重试不会重复计分）。
 
 `noLocalRow`（1）在当前架构下不可构造：`Start()` 必定 `TryJoin` 一次且容量为 1，故 EditMode 测试**未覆盖**该分支，测试文件里有注释说明。
+
+## 重试（reset）：`TryResetForNewRound`
+
+来源：`Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md` §4「没有重试接缝」与 S6。第一关写 `retry: unlimited`（`story_01_bench_size.json:61`），而在此之前没有任何接缝能把球、账本和计时一起退回开局，只能重载场景。本节定义唯一的重试入口，**不改**场景、不碰道具生命周期。
+
+**状态：源码已写，未编译、未在 Unity 运行、未做 U# 全量编译、未测。** 与装配层其余部分同一状态。
+
+### 接缝
+
+```csharp
+bool TryResetForNewRound(string newRoundId, Vector3 startPosition,
+                         float startHeadingDegrees, out int reason);
+```
+
+一次调用完成：账本本地球行与全部回合级存储复位（纯规则 `GrowthLedgerMath.TryResetRowForNewRound`，有 EditMode 测试）→ 换 `roundId` → 清候选与两个事件环 → 速度/卡住计时清零 → 尺寸按零体积映射回到基线 → 传送到起点姿态 → 走和 `Start()` 相同的 Lobby→Ready→Preparing→Playing 三条边重进 Playing。`newRoundId` 必须与当前 `roundId` 不同（提交键 `(item, round, generation)` 在新回合必须是新键）；下一个回合 id 从 `GetRoundId()` 读当前值再构造，避免调用方另存一份。
+
+| 编号 | 名字 | 触发条件 |
+| --- | --- | --- |
+| 0 | `ok` | 复位成功，已在 Playing，球回到基线尺寸 |
+| 1 | `noLocalRow` | `hasLocalRow == false`（`TryJoin` 未成功），无行可复位 |
+| 2 | `invalidRoundId` | `newRoundId` 为 null 或空串 |
+| 3 | `invalidStartPose` | `startPosition` 或 `startHeadingDegrees` 不是有限数 |
+| 4 | `roundIdUnchanged` | `newRoundId` 与当前 `roundId` 相同（不是新回合） |
+| 5 | `sizeRefused` | 零体积映射 `SizeModelMath.TryDerive(0f, …)` 拒绝，无法保证回到基线尺寸；**此时什么都没动** |
+| 6 | `ledgerRefused` | 账本规则拒绝；`GetLastResetLedgerFailure()` 给出该规则的具体码（见下表），**此时什么都没动** |
+| 7 | `reenterFailed` | 行已复位到 Lobby，但走回 Playing 被拒（只有损坏的 round store 会这样）；球已复位但不在 Playing，可再调 `TryBeginPlaying(0f)` |
+
+`GetLastResetLedgerFailure()` 与 `GetLastAwardFailure()` 同一形态：`-1` 表示账本根本没被问到（1–5 号原因），`0` 表示接受，`1..11` 是账本规则自己的码。
+
+### 账本规则与失败码
+
+`GrowthLedgerMath.TryResetRowForNewRound(...)` 只动调用方数组，返回 `bool` + `out int failureCode`，先校验后写，拒绝时所有存储保持原样。
+
+| 编号 | 名字 | 触发条件 |
+| --- | --- | --- |
+| 0 | `ok` | 行已复位、回合级存储已清空 |
+| 1 | `invalidRoundStore` | `roundState`/`roundFlags`/`roundClock` 为空、过短、相位越界、序列或 revision 为负；也包括「该相位不允许复位」 |
+| 2 | `invalidPlayerColumns` | 玩家并列数组为空、长度不一致、计数越界或存有非法值 |
+| 3 | `invalidRoundId` | `newRoundId` 为 null 或空串 |
+| 4 | `invalidCommitColumns` | 提交存储形状/值非法 |
+| 5 | `invalidClaimColumns` | 认领存储形状/值非法 |
+| 6 | `invalidPredictionColumns` | 预测存储形状/值非法 |
+| 7 | `invalidBankRequestColumns` | 兑换请求存储形状/值非法 |
+| 8 | `invalidAwardColumns` | 奖励键表为空、两个数组长度不等或计数越界 |
+| 9 | `invalidPlayerId` | `playerId` 为 null |
+| 10 | `unknownPlayer` | `playerId` 不在名单里（含 `playerCount == 0`） |
+| 11 | `sharedRoundNotSupported` | `playerCount != 1`；见下面「为什么只允许单行」 |
+
+**清掉什么**：确认体积、已交存分数、玩家代数、生命状态（回 Active）、重生时间；提交存储（旧事件键不再算「已提交」）、认领、预测、兑换请求幂等标记、奖励键表（`settle:first` 这类键是**每回合**一次，新回合必须能重新发）。相位回 Lobby、deadline 清除、提交序列归零、revision +1。**保留什么**：`playerIds[row]`（同一个玩家）。
+
+### 相位规则
+
+| 相位 | 允许复位 | 理由 |
+| --- | --- | --- |
+| Lobby / Ready / Preparing | 是 | 回合还没真正跑，重新开始没有歧义 |
+| Playing | 是（中途重试） | 「再试一次」就是放弃当前这局；拒绝它只会逼调用方先伪造 Settling/Results 两条边。代价是该行未交存体积与已交存分数全部丢弃 |
+| Settling / Results | 是 | 结果面板点「再试一次」的正常路径 |
+| 未知值 | 否（码 1） | `IsResetAllowedInPhase` 的默认分支是 false，以后加相位必须回来重新决定，不会静默变成可复位 |
+
+判定写成 `public static bool IsResetAllowedInPhase(LedgerPhase)`，可单独测；规则体也调用它，所以决定只有一份。
+
+### 为什么只允许单行（`sharedRoundNotSupported`）
+
+规则清空的是**共享**提交存储。多行时，其它行的确认体积正是由这些提交支撑的；清掉提交却留着别人的体积，就会留下「没有提交支撑的分数」，破坏「只有确认值进分数、分数总额不超过提交增益」的不变量。多人回合重开要整局复位（所有行一起），是另一条规则，本次不猜。本层本来就只有一行（`PlayerCapacity = 1`），所以不会遇到。
+
+### 吸收事件环的绝对计数保持单调（刻意决定）
+
+`GetAbsorbedEventCount()` **不因复位回退**。宿主（`PickupFieldHost`）拿绝对下标当自己的游标，只在计数变小的时候重同步；所以：
+
+- 计数回退会让宿主重放一遍已经消失的旧事件；
+- 计数跳到容量边界之后会让宿主一直读不到东西直到下一次环绕；
+- 保持单调，则重试对任何读者都不需要特例：保留窗口直接变空（`GetAbsorbedEventDroppedCount()` 会报告这些被清掉的事件 = 原计数），新回合的事件从同一个绝对号继续。
+
+实现上把「绝对计数」与「环占用」拆开：`absorbedEventCount` 只增不减，新增的 `absorbedEventRingCount` 才是 0..16 的占用，`GetAbsorbedEventDroppedCount()` = 计数 − 占用。拒绝环（`rejectEventCount`，容量 8）是纯诊断，没有游标契约，复位时直接归零。
+
+### 刻意不复位的东西
+
+- 已注册的平面/盒子：场景几何不随回合变。
+- `localClockSeconds`、`authorityFrame`：时钟不倒流；`authorityFrame` 是权威帧号，复位会让外部把新帧当旧帧。
+- 诊断日志上限（`rejectDiagnosticsLogged`/`commitDiagnosticsLogged`/`traceLinesLogged`）：它们是为**整个会话**限流，重试若重置，无限重试就等于无限日志。
+- 溢出闩锁（`overflowCount`/`overflowLatched`/`contactBufferSaturated`）：接错场景不会因为重试就变好，信号必须留着。
+- 场景道具：复位的是球与账本，不是地图；道具「回来」属宿主（S3 的 `PickupFieldHost`）自己按自己的记录恢复，不由 motor 负责。
+
+### 还没做 / 未验证
+
+- 调用方：结果面板按钮 → `TryResetForNewRound(下一个回合 id, 出生点, 出生朝向, out reason)` → 计时/HUD 自己归零（`StoryRoundController`，S4/S6，不在本节）。
+- Unity 编译、U# 全量编译、EditMode 的 NUnit 运行都 **NOT_RUN**（本节作者不是 Unity 操作者）。
+- host 侧若要从「球上已粘的物件」也恢复，需要它自己的复位接缝；本层只保证事件环不会把旧事件重放给宿主。

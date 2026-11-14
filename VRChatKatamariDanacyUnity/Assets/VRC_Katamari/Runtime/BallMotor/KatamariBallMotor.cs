@@ -284,6 +284,16 @@ namespace VRCKatamari.BallMotor
         private float[] absorbedEventDiameters;
         private int absorbedEventCount;
 
+        // Occupancy of the ring, 0..AbsorbedEventCapacity. It is separate from
+        // absorbedEventCount because a round reset empties the ring WITHOUT rewinding
+        // the absolute count: PickupFieldHost keeps its own cursor at the absolute
+        // number and only resyncs when that number goes backwards, so a reset that
+        // rewound it would either replay dead events or (if it skipped forward) make a
+        // host miss everything until the next capacity boundary. Keeping the count
+        // monotonic means a retry needs no special case in any reader: it simply sees
+        // no retained events and then the new round's events, in order.
+        private int absorbedEventRingCount;
+
         // ---- Rejected-candidate ring: why the pickup gate said no ----
         // A rejected candidate used to vanish without a trace: the item stayed in
         // the queue, the ball rolled past, and nothing anywhere said whether the
@@ -329,6 +339,14 @@ namespace VRCKatamari.BallMotor
         private int[] awardedPoints;
         private int awardedCount;
         private int lastAwardFailure;
+
+        // Failure code of the most recent TryResetForNewRound, from the same pattern
+        // TryAwardScore uses for its award rule: -1 means the ledger was not consulted
+        // (an input this motor refused first), 0 means it accepted, 1..11 is the
+        // GrowthLedgerMath rule's own code. Kept apart from the motor's own reason so a
+        // caller can tell "this ball refused the call" from "the ledger refused the
+        // row" without the two tables sharing numbers.
+        private int lastResetLedgerFailure;
 
         // ---- One-shot capacity signal; see the remarks on RebuildObstacles ----
         private int overflowCount;
@@ -399,6 +417,7 @@ namespace VRCKatamari.BallMotor
             absorbedEventPositions = new Vector3[AbsorbedEventCapacity];
             absorbedEventDiameters = new float[AbsorbedEventCapacity];
             absorbedEventCount = 0;
+            absorbedEventRingCount = 0;
 
             traceLinesLogged = 0;
             traceLastDistance = 0f;
@@ -959,6 +978,162 @@ namespace VRCKatamari.BallMotor
                 LedgerPhase.Preparing, now, false, 0f)) return false;
             return GrowthLedgerMath.TryTransition(roundState, roundFlags, roundClock,
                 LedgerPhase.Playing, now, false, 0f);
+        }
+
+        /// <summary>
+        /// Restarts this ball's round in place: a fresh baseline-sized ball at the given
+        /// pose, an empty local ledger row, back in Playing, without reloading the scene.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// What is reset, in order: the ledger row and every round-scoped store
+        /// (<see cref="GrowthLedgerMath.TryResetRowForNewRound"/> - confirmed volume,
+        /// banked score, commits, claims, predictions, bank-request markers, award keys);
+        /// this motor's round id; the absorb request sequence; the queued candidates; the
+        /// absorbed-event ring's occupancy; the reject ring; the per-round volume
+        /// readings and the absorbed count; the planar velocity and stuck timer; the
+        /// input debounce latches; the heading; the three sizes, re-priced from zero
+        /// volume by the same mapping Start used (so the ball is its baseline diameter
+        /// again, not a hardcoded 0.30 m); and the world pose.
+        /// </para>
+        /// <para>
+        /// The absorbed-event ABSOLUTE count is deliberately NOT rewound. A host keeps
+        /// its own cursor at that number and only resyncs when it goes backwards, so a
+        /// reset that rewound it would replay dead events; a reset that skipped it
+        /// forward would make a host miss everything until the next wrap. Keeping it
+        /// monotonic means a retry needs no special case in any reader: the retained
+        /// window is simply empty (GetAbsorbedEventDroppedCount reports the cleared
+        /// events), and the new round's events continue at the same absolute numbers.
+        /// </para>
+        /// <para>
+        /// Deliberately untouched: the registered obstacles (a scene's geometry does not
+        /// change with a round), follow-rig tuning, localClockSeconds and authorityFrame
+        /// (clocks do not run backwards), the diagnostic log caps (they exist to bound
+        /// console output for the whole session, so a retry must not refill them), and
+        /// the overflow latch (a mis-wired scene does not heal by retrying). The scene's
+        /// props are the host's concern: this seam restarts the ball, not the map.
+        /// </para>
+        /// <para>
+        /// A new round id is required and must differ from the current one: commit keys
+        /// (item, round, generation) must be new for a new round, and an unchanged id
+        /// would make an external ledger or host treat the new absorbs as replays of the
+        /// old round's. Reasons: 0 ok / 1 noLocalRow / 2 invalidRoundId /
+        /// 3 invalidStartPose / 4 roundIdUnchanged / 5 sizeRefused / 6 ledgerRefused /
+        /// 7 reenterFailed. Reason 6 means the ledger rule refused before anything moved;
+        /// the rule's own code is then in <see cref="GetLastResetLedgerFailure"/>, and -1
+        /// there means the ledger was never consulted. Reason 7 means the row was reset
+        /// to Lobby but the walk back to Playing was refused, which only a corrupt round
+        /// store can cause; the ball is then reset but not playing, and a later
+        /// TryBeginPlaying(0f) can finish it.
+        /// </para>
+        /// </remarks>
+        public bool TryResetForNewRound(string newRoundId, Vector3 startPosition,
+            float startHeadingDegrees, out int reason)
+        {
+            reason = 0;
+            lastResetLedgerFailure = -1;
+            if (!hasLocalRow) { reason = 1; return false; }
+            if (newRoundId == null || newRoundId.Length == 0) { reason = 2; return false; }
+            if (!KatamariMath.IsFiniteVector(startPosition)) { reason = 3; return false; }
+            if (!KatamariMath.IsFiniteFloat(startHeadingDegrees)) { reason = 3; return false; }
+            if (string.CompareOrdinal(newRoundId, roundId) == 0) { reason = 4; return false; }
+
+            // The baseline size the new round starts at, priced by the same zero-volume
+            // mapping Start used. Checked before anything moves, so a refused derive
+            // leaves the whole round untouched instead of leaving a grown ball in a
+            // reset ledger.
+            float resetCoreRadius;
+            float resetCollisionRadius;
+            float resetSemanticDiameter;
+            float resetEffectiveVolumeUnits;
+            if (!SizeModelMath.TryDerive(0f, baselineVolumeUnits, cubicMetersPerVolumeUnit,
+                maxCoreRadiusWorldM, collisionToCoreRadiusRatio,
+                semanticDiameterPerCoreDiameter, out resetCoreRadius,
+                out resetCollisionRadius, out resetSemanticDiameter,
+                out resetEffectiveVolumeUnits))
+            {
+                reason = 5;
+                return false;
+            }
+
+            int ledgerFailure;
+            if (!GrowthLedgerMath.TryResetRowForNewRound(roundState, roundFlags, roundClock,
+                playerIds, confirmedVolumes, bankedScores, lifeStates, respawnAtSet,
+                respawnAt, playerGenerations, playerCount, commitItemIds,
+                commitGenerations, commitWinners, commitSequences, commitGains,
+                ref commitCount, claimItemIds, claimGenerations, claimPlayerIds,
+                claimFrames, claimRequestSequences, ref claimCount, predictedPlayerIds,
+                predictedItemIds, predictedGenerations, predictedGains, ref predictedCount,
+                bankRequestPlayerIds, bankRequestIds, ref bankRequestCount, awardedKeys,
+                awardedPoints, ref awardedCount, newRoundId, localPlayerId, out ledgerFailure))
+            {
+                lastResetLedgerFailure = ledgerFailure;
+                reason = 6;
+                return false;
+            }
+            lastResetLedgerFailure = 0;
+
+            // Everything below is an assignment with no failure path: the ledger already
+            // accepted, and every value written here is either a constant or an output
+            // of the derive checked above.
+            roundId = newRoundId;
+            absorbRequestSequence = 0;
+
+            ClearCandidates();
+            absorbedEventRingCount = 0;
+            rejectEventCount = 0;
+            absorbedCount = 0;
+            unbankedVolumeUnits = 0;
+            carriedVolumeUnits = 0f;
+            confirmedVolumeUnits = 0f;
+            bankedScoreUnits = 0;
+            lastAwardFailure = 0;
+            // awardedKeys / awardedPoints / awardedCount were cleared by the ledger rule.
+
+            coreRadiusWorldM = resetCoreRadius;
+            collisionRadiusWorldM = resetCollisionRadius;
+            semanticDiameterWorldM = resetSemanticDiameter;
+            DeriveGrowthFraction();
+
+            lastSweepBlocked = false;
+            lastSweepStuck = false;
+            inputForward = 0f;
+            inputTurn = 0f;
+            inputLateral = 0f;
+            ControlIntentMath.TryReset(previousDown, lastActionTime, comfortState);
+
+            TeleportTo(startPosition);
+            headingDegrees = startHeadingDegrees;
+
+            // Same walk as Start's autoStartPlaying: Lobby -> Ready -> Preparing ->
+            // Playing, through the ledger's own edges. Always entered, because this
+            // method's contract is "started again", and a Lobby row cannot absorb.
+            if (!TryBeginPlaying(0f))
+            {
+                reason = 7;
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// The ledger rule's failure code from the most recent
+        /// <see cref="TryResetForNewRound"/>: -1 when the ledger was not consulted
+        /// (an input this motor refused first), 0 after the rule accepted, 1..11 for the
+        /// rule's own refusal. Same pattern as <see cref="GetLastAwardFailure"/>.
+        /// </summary>
+        public int GetLastResetLedgerFailure()
+        {
+            return lastResetLedgerFailure;
+        }
+
+        /// <summary>
+        /// The round id this ball's ledger keys currently use. A retry owner reads it to
+        /// build the next id, so the id has one owner instead of a copy in the caller.
+        /// </summary>
+        public string GetRoundId()
+        {
+            return roundId;
         }
 
         /// <summary>Input seam for the future adapter; replaces the debug fields.</summary>
@@ -1528,11 +1703,16 @@ namespace VRCKatamari.BallMotor
             absorbedEventPositions[slot] = position;
             absorbedEventDiameters[slot] = diameter;
             absorbedEventCount = absorbedEventCount + 1;
+            if (absorbedEventRingCount < AbsorbedEventCapacity)
+            {
+                absorbedEventRingCount = absorbedEventRingCount + 1;
+            }
         }
 
         /// <summary>
-        /// The number of absorbed events recorded so far. Monotonic; it is a total,
-        /// not a ring occupancy, so a reader can use it as its own cursor.
+        /// The number of absorbed events recorded so far. Monotonic across rounds: it is
+        /// a total, not a ring occupancy, so a reader can use it as its own cursor and a
+        /// round reset never makes it go backwards.
         /// </summary>
         public int GetAbsorbedEventCount()
         {
@@ -1545,19 +1725,22 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Number of events the ring has already evicted (0 until it wraps).
+        /// Number of events the ring can no longer show: evicted by wraparound, or
+        /// dropped by a round reset.
         /// </summary>
         /// <remarks>
         /// Deliberately NOT routed into <see cref="SignalOverflow"/>: eviction is
         /// normal when a run absorbs more than 16 items, whereas the overflow latch
         /// means a host lost a candidate and is read as a fault by the tests. This
         /// getter keeps the same "a reader fell behind" information visible without
-        /// turning ordinary play into a latched error.
+        /// turning ordinary play into a latched error. It is
+        /// count - retained, so after a reset it equals the whole absolute count: those
+        /// events existed and can no longer be read, which is exactly what a reader
+        /// needs to know. Monotonic, like the count it is derived from.
         /// </remarks>
         public int GetAbsorbedEventDroppedCount()
         {
-            if (absorbedEventCount <= AbsorbedEventCapacity) return 0;
-            return absorbedEventCount - AbsorbedEventCapacity;
+            return absorbedEventCount - absorbedEventRingCount;
         }
 
         /// <summary>
@@ -1889,15 +2072,14 @@ namespace VRCKatamari.BallMotor
 
         /// <summary>
         /// Maps an absolute index to its ring slot, or -1 when out of range or
-        /// already evicted.
+        /// already evicted (including events a round reset emptied).
         /// </summary>
         private int AbsorbedEventSlot(int absoluteIndex)
         {
             if (absorbedEventItemIds == null) return -1;
             if (absoluteIndex < 0) return -1;
             if (absoluteIndex >= absorbedEventCount) return -1;
-            int retained = absorbedEventCount;
-            if (retained > AbsorbedEventCapacity) retained = AbsorbedEventCapacity;
+            int retained = absorbedEventRingCount;
             int firstRetained = absorbedEventCount - retained;
             if (absoluteIndex < firstRetained) return -1;
             return absoluteIndex % AbsorbedEventCapacity;

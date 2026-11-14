@@ -211,6 +211,36 @@ namespace VRCKatamari.Economy
         }
 
         /// <summary>
+        /// True when a round in this phase may be reset for a new round id.
+        /// </summary>
+        /// <remarks>
+        /// Every known phase is allowed, including <see cref="LedgerPhase.Playing"/>.
+        /// The decision is written as a switch with a false default rather than as
+        /// "not Lobby": a retry is a new round, and abandoning an in-flight round is
+        /// exactly what a retry does, so refusing it mid-round would force a caller to
+        /// fake Settling/Results edges first. The cost is that a mid-round reset throws
+        /// away the row's unbanked volume AND its banked score; that is a decision for
+        /// the round's owner (the motor's TryResetForNewRound), never for this math.
+        /// A phase value outside the enum is false, so adding a phase later must
+        /// revisit this function instead of silently becoming resettable.
+        /// </remarks>
+        public static bool IsResetAllowedInPhase(LedgerPhase phase)
+        {
+            switch (phase)
+            {
+                case LedgerPhase.Lobby:
+                case LedgerPhase.Ready:
+                case LedgerPhase.Preparing:
+                case LedgerPhase.Playing:
+                case LedgerPhase.Settling:
+                case LedgerPhase.Results:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         /// True when one event key belongs to this ledger: same round, non-empty item
         /// instance id and a non-negative item generation.
         /// </summary>
@@ -360,6 +390,156 @@ namespace VRCKatamari.Economy
             playerGenerations[row] = 0;
             playerCount = playerCount + 1;
             roundState[RoundRevisionState] = roundState[RoundRevisionState] + 1;
+            return true;
+        }
+
+        /// <summary>
+        /// Resets one player's row and the round-scoped stores back to the just-joined
+        /// state for a new round id.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the retry seam of the story round (the "no retry seam" gap of
+        /// Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md, step S6): a failed round starts
+        /// again without reloading the scene. The row keeps its player id and loses
+        /// everything a round gave it - confirmed volume, banked score, player
+        /// generation, life state (back to Active) and any respawn time - and every
+        /// store that carries a round's identity is emptied: commits (so an old event
+        /// key is no longer "already committed"), claims, predictions, bank-request
+        /// markers and the awarded-key table. The award table is round-scoped on
+        /// purpose: a key such as "settle:first" is granted once PER ROUND, so a new
+        /// round must be able to grant every key again.
+        /// </para>
+        /// <para>
+        /// The phase returns to <see cref="LedgerPhase.Lobby"/> and the deadline is
+        /// cleared, because that is where a just-joined row starts. This rule never
+        /// jumps to Playing: the caller walks the phase graph again
+        /// (Lobby -> Ready -> Preparing -> Playing), which is the same path the first
+        /// round took, so no state can be entered that the graph does not allow.
+        /// </para>
+        /// <para>
+        /// Phase rules: allowed in every known phase, including mid-round; see
+        /// <see cref="IsResetAllowedInPhase"/>. A mid-round reset therefore discards
+        /// the row's unbanked volume and its banked score. That is the meaning of
+        /// "start this round over" and is the round owner's decision.
+        /// </para>
+        /// <para>
+        /// Only a single-row ledger may be reset. With more than one row the commits
+        /// this rule clears would still be the source of the other rows' confirmed
+        /// volume, leaving value that no commit backs - an invariant break, not a
+        /// smaller reset. Restarting a shared round means resetting every row and is a
+        /// separate rule, deliberately not guessed here.
+        /// </para>
+        /// <para>
+        /// The round id is not stored per row (one ledger covers one round), so this
+        /// function cannot compare the new id with the previous one: it validates the
+        /// new id as non-empty and leaves "actually a new round" to the caller that
+        /// owns the id.
+        /// </para>
+        /// <para>
+        /// failureCode: 0 ok / 1 invalidRoundStore (including a phase that is not
+        /// reset-eligible) / 2 invalidPlayerColumns / 3 invalidRoundId /
+        /// 4 invalidCommitColumns / 5 invalidClaimColumns / 6 invalidPredictionColumns /
+        /// 7 invalidBankRequestColumns / 8 invalidAwardColumns / 9 invalidPlayerId /
+        /// 10 unknownPlayer / 11 sharedRoundNotSupported. Every check runs before the
+        /// first write, so a refused reset leaves every store exactly as it was.
+        /// </para>
+        /// </remarks>
+        public static bool TryResetRowForNewRound(int[] roundState, bool[] roundFlags,
+            float[] roundClock,
+            string[] playerIds, int[] confirmedVolumes, int[] bankedScores, int[] lifeStates,
+            bool[] respawnAtSet, float[] respawnAt, int[] playerGenerations, int playerCount,
+            string[] commitItemIds, int[] commitGenerations, string[] commitWinners,
+            int[] commitSequences, int[] commitGains, ref int commitCount,
+            string[] claimItemIds, int[] claimGenerations, string[] claimPlayerIds,
+            int[] claimFrames, int[] claimRequestSequences, ref int claimCount,
+            string[] predictedPlayerIds, string[] predictedItemIds, int[] predictedGenerations,
+            int[] predictedGains, ref int predictedCount,
+            string[] bankRequestPlayerIds, string[] bankRequestIds, ref int bankRequestCount,
+            string[] awardedKeys, int[] awardedPoints, ref int awardedCount,
+            string newRoundId, string playerId, out int failureCode)
+        {
+            // 0 = accepted; 1..11 name the exact refusal, in source order, so a caller
+            // can say which gate refused without duplicating the validation here.
+            failureCode = 0;
+            if (!TryValidateRoundStore(roundState, roundFlags, roundClock)) { failureCode = 1; return false; }
+            if (!IsResetAllowedInPhase((LedgerPhase)roundState[RoundPhaseState])) { failureCode = 1; return false; }
+            if (!TryValidatePlayerColumns(playerIds, confirmedVolumes, bankedScores, lifeStates,
+                respawnAtSet, respawnAt, playerGenerations, playerCount)) { failureCode = 2; return false; }
+            if (newRoundId == null || newRoundId.Length == 0) { failureCode = 3; return false; }
+            if (!TryValidateCommitColumns(commitItemIds, commitGenerations, commitWinners,
+                commitSequences, commitGains, commitCount)) { failureCode = 4; return false; }
+            if (!TryValidateClaimColumns(claimItemIds, claimGenerations, claimPlayerIds,
+                claimFrames, claimRequestSequences, claimCount)) { failureCode = 5; return false; }
+            if (!TryValidatePredictionColumns(predictedPlayerIds, predictedItemIds,
+                predictedGenerations, predictedGains, predictedCount)) { failureCode = 6; return false; }
+            if (!TryValidateBankRequestColumns(bankRequestPlayerIds, bankRequestIds,
+                bankRequestCount)) { failureCode = 7; return false; }
+            if (!TryValidateAwardColumns(awardedKeys, awardedPoints, awardedCount)) { failureCode = 8; return false; }
+            if (playerId == null) { failureCode = 9; return false; }
+
+            int playerRow;
+            if (!TryFindPlayerRow(playerIds, playerCount, playerId, out playerRow)) { failureCode = 10; return false; }
+            if (playerCount != 1) { failureCode = 11; return false; }
+
+            roundState[RoundPhaseState] = (int)LedgerPhase.Lobby;
+            roundState[RoundCommitSequenceState] = 0;
+            roundState[RoundRevisionState] = roundState[RoundRevisionState] + 1;
+            roundFlags[RoundDeadlineSetState] = false;
+            roundClock[RoundDeadlineAtClock] = 0f;
+
+            confirmedVolumes[playerRow] = 0;
+            bankedScores[playerRow] = 0;
+            lifeStates[playerRow] = (int)PlayerLifecycle.Active;
+            respawnAtSet[playerRow] = false;
+            respawnAt[playerRow] = 0f;
+            playerGenerations[playerRow] = 0;
+
+            // The stores are emptied rather than compacted: a new round has no rows,
+            // and the string slots are released so a stale item id cannot be read
+            // back from beyond the new count.
+            for (int row = 0; row < commitCount; row++)
+            {
+                commitItemIds[row] = null;
+                commitGenerations[row] = 0;
+                commitWinners[row] = null;
+                commitSequences[row] = 0;
+                commitGains[row] = 0;
+            }
+            commitCount = 0;
+
+            for (int row = 0; row < claimCount; row++)
+            {
+                claimItemIds[row] = null;
+                claimGenerations[row] = 0;
+                claimPlayerIds[row] = null;
+                claimFrames[row] = 0;
+                claimRequestSequences[row] = 0;
+            }
+            claimCount = 0;
+
+            for (int row = 0; row < predictedCount; row++)
+            {
+                predictedPlayerIds[row] = null;
+                predictedItemIds[row] = null;
+                predictedGenerations[row] = 0;
+                predictedGains[row] = 0;
+            }
+            predictedCount = 0;
+
+            for (int row = 0; row < bankRequestCount; row++)
+            {
+                bankRequestPlayerIds[row] = null;
+                bankRequestIds[row] = null;
+            }
+            bankRequestCount = 0;
+
+            for (int row = 0; row < awardedCount; row++)
+            {
+                awardedKeys[row] = null;
+                awardedPoints[row] = 0;
+            }
+            awardedCount = 0;
             return true;
         }
 
@@ -1155,6 +1335,18 @@ namespace VRCKatamari.Economy
             {
                 if (bankRequestPlayerIds[row] == null || bankRequestIds[row] == null) return false;
             }
+            return true;
+        }
+
+        private static bool TryValidateAwardColumns(string[] awardedKeys, int[] awardedPoints,
+            int awardedCount)
+        {
+            // The keys and points are the caller's award table, not a ledger store
+            // (TryAwardOnce owns its rule), so only shape and range are checked here:
+            // a round reset must clear the table, not judge its contents.
+            if (awardedKeys == null || awardedPoints == null) return false;
+            if (awardedKeys.Length != awardedPoints.Length) return false;
+            if (awardedCount < 0 || awardedCount > awardedKeys.Length) return false;
             return true;
         }
 

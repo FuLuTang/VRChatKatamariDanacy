@@ -1,0 +1,48 @@
+{
+    "map_id": "picnic_lawn",
+    "payload_schema_version": 1,
+    "payload_repo_relative_path": "Docs/Design/Maps/PicnicLawn/unity_greybox.json",
+    "payload_path": "D:\\VRChatKatamariDanacy\\Docs\\Design\\Maps\\PicnicLawn\\unity_greybox.json",
+    "scene_path": "Assets/VRC_Katamari/Labs/PicnicLawnGreybox/PicnicLawnGreybox.unity",
+    "preview_png_path": "Assets/VRC_Katamari/Labs/PicnicLawnGreybox/PicnicLawnGreybox_top.png",
+    "preview_written": true,
+    "validation_ok": true,
+    "build_seconds": 1.1163502931594849,
+    "material_count": 23,
+    "renderer_total": 895,
+    "gameobject_count": 996,
+    "counts": {
+        "zones": 21,
+        "structures_total": 60,
+        "structure_objects": 54,
+        "structures_skipped": 2,
+        "structure_colliders": 4,
+        "prop_zones": 20,
+        "props_requested": 448,
+        "props_placed": 448,
+        "props_dropped": 0,
+        "props_global_spacing": 386,
+        "props_per_definition_spacing_only": 62,
+        "spawns": 4,
+        "bank_anchors": 4,
+        "size_gates": 8,
+        "chokepoints": 16,
+        "route_waypoints": 92,
+        "route_segments": 72,
+        "labels": 16
+    },
+    "bounds": {
+        "min_x": -25.0,
+        "max_x": 25.0,
+        "min_y": -0.049999237060546878,
+        "max_y": 20.0,
+        "min_z": -30.0,
+        "max_z": 25.599998474121095
+    },
+    "warnings": [],
+    "notes": [
+        "structure ground_terrain#28 (merged_plane) rendered as footprint only: the ground slab and route ribbons stand in for it",
+        "structure path_mesh#33 (merged_plane) rendered as footprint only: the ground slab and route ribbons stand in for it"
+    ],
+    "errors": []
+}

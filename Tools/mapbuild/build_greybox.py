@@ -24,6 +24,7 @@ UTF-8 无 BOM。同一输入重复运行逐字节相同，因此可以提交进�
     python3 Tools/mapbuild/build_greybox.py            # 生成/覆盖输出
     python3 Tools/mapbuild/build_greybox.py --check    # 只检查，过期则退出码 1
     python3 Tools/mapbuild/build_greybox.py --summary  # 额外打印各集合记录数
+    python3 Tools/mapbuild/build_greybox.py --feasibility-markdown  # README §3.3 的表格体（只读）
 
 退出码：0 成功；1 `--check` 发现过期/缺失；2 输入数据校验失败（错误信息带记录 id）。
 """
@@ -400,6 +401,46 @@ def validate(layout: dict, catalog: dict) -> list:
     if len(activate_at) != len(order):
         errors.append(f"bank.rotation.activate_at_s 长度 {len(activate_at)} 与轮换顺序 {len(order)} 不一致")
 
+    # 交分后的球尺寸规则：2026-11-14 已决定「按比例缩小」，不是回初始体积。
+    # 旧字段 bank_resets_ball_to_start_size 只留作 payload 兼容（Unity 侧仍声明它），
+    # 这里把它当回归门：写成 true 就是又把矛盾写回数据。
+    rules = bank.get("rules") or {}
+    if rules.get("bank_resets_ball_to_start_size"):
+        errors.append(
+            "bank.rules: bank_resets_ball_to_start_size=true 与已确认的交分规则矛盾"
+            "（2026-11-14：按比例缩小，post = max(start, start + (pre - start) × residual)）。"
+            "改成 false，并用 bank_size_rule=proportional_shrink 表达")
+    if text(rules.get("bank_size_rule")) != "proportional_shrink":
+        errors.append("bank.rules: bank_size_rule 必须是 proportional_shrink"
+                      "（交分只缩小、不回初始体积）")
+    try:
+        residual = float(rules["bank_residual_fraction"])
+    except (KeyError, TypeError, ValueError):
+        errors.append("bank.rules: bank_residual_fraction 必须是数字")
+    else:
+        if not 0.0 < residual < 1.0:
+            errors.append(
+                f"bank.rules: bank_residual_fraction={residual:g} 必须在 (0, 1) 之间"
+                "（0 等于回初始体积，1 等于不缩小）")
+    try:
+        min_convert = float(rules["bank_min_conversion_diameter_m"])
+    except (KeyError, TypeError, ValueError):
+        errors.append("bank.rules: bank_min_conversion_diameter_m 必须是数字")
+    else:
+        try:
+            start_diameter = float(scale["ball_start_collision_diameter_m"])
+        except (KeyError, TypeError, ValueError):
+            start_diameter = 0.0
+        if min_convert <= 0:
+            errors.append("bank.rules: bank_min_conversion_diameter_m 必须为正")
+        elif start_diameter > 0 and min_convert < start_diameter:
+            errors.append(
+                f"bank.rules: 最小兑换球径 {min_convert:g} m 小于起始球径 "
+                f"{start_diameter:g} m，等于出生即不可交分")
+    if "max(" not in text(rules.get("bank_shrink_formula")):
+        errors.append("bank.rules: bank_shrink_formula 必须写出 max(start, …) 的下限，"
+                      "否则小球的 post 会低于起始球径")
+
     # ---- 尺寸门
     gates = {}
     for gate in layout["size_gates"]:
@@ -763,6 +804,13 @@ def _bank_records(layout: dict) -> tuple:
         "max_concurrent_bankers": number(rules.get("max_concurrent_bankers", 0)),
         "occupancy_lock": flag(rules.get("occupancy_lock")),
         "bank_resets_ball_to_start_size": flag(rules.get("bank_resets_ball_to_start_size")),
+        # 2026-11-14 的交分规则（按比例缩小）。Unity 的 GreyboxBankRotation 目前只声明了
+        # 上面那个 int（旧字段）；JsonUtility 会忽略这些新键，等 Unity 侧加字段后才读得到。
+        "bank_size_rule": text(rules.get("bank_size_rule")),
+        "bank_residual_fraction": number(rules.get("bank_residual_fraction", 0)),
+        "bank_min_conversion_diameter_m": number(rules.get("bank_min_conversion_diameter_m", 0)),
+        "bank_shrink_dimension": text(rules.get("bank_shrink_dimension")),
+        "bank_shrink_formula": text(rules.get("bank_shrink_formula")),
     }
     return anchors, rotation_record
 
@@ -987,6 +1035,38 @@ def print_feasibility(layout_path: Path = DEFAULT_LAYOUT,
     print(format_feasibility(feasibility_rows(layout, catalog)))
 
 
+def format_feasibility_markdown(rows) -> str:
+    """§3.3 的逐区表：README 里必须原样使用这段输出，禁止手抄。"""
+    lines = [
+        "| 区域 | 面积 m² | S m | 件数 | 密度 件/m² | 随机摆放上限 | 六方最密上限 | 用量 | 脚印下限 m |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for row in rows:
+        density = row["count"] / row["area_m2"] if row["area_m2"] else 0.0
+        lines.append(
+            f"| `{row['zone_id']}` | {row['area_m2']:.1f} | {row['spacing_m']:.2f} | "
+            f"{row['count']} | {density:.2f} | {row['capacity_consumer']} | "
+            f"{row['capacity_optimal']} | {row['usage']:.0%} | {row['footprint_floor_m']:.2f} |")
+    total_area = sum(row["area_m2"] for row in rows)
+    total_count = sum(row["count"] for row in rows)
+    lines.append(f"| **合计** | {total_area:.1f} | — | **{total_count}** | — | — | — | — | — |")
+    return "\n".join(lines)
+
+
+def print_feasibility_markdown(layout_path: Path = DEFAULT_LAYOUT,
+                               catalog_path: Path = DEFAULT_CATALOG) -> None:
+    """--feasibility-markdown：只打印 README §3.3 的表格体，不写载荷（只读）。"""
+    try:
+        layout = load_layout(Path(layout_path))
+        catalog = load_catalog(Path(catalog_path))
+    except BuildError as exc:
+        print(f"FAIL 读不到输入（{len(exc.errors)} 条）:", file=sys.stderr)
+        for error in exc.errors:
+            print(f"  x {error}", file=sys.stderr)
+        return
+    print(format_feasibility_markdown(feasibility_rows(layout, catalog)))
+
+
 
 # --------------------------------------------------------------------------- #
 # --check 的差异摘要
@@ -1050,7 +1130,13 @@ def main(argv=None) -> int:
                         help="成功后打印各集合记录数")
     parser.add_argument("--feasibility", action="store_true",
                         help="打印每个散布区的 2-D 放置容量表（校验前，便于设计迭代）")
+    parser.add_argument("--feasibility-markdown", action="store_true",
+                        help="只打印 README §3.3 的 Markdown 表格体（只读，不写载荷）")
     args = parser.parse_args(argv)
+
+    if args.feasibility_markdown:
+        print_feasibility_markdown(args.layout, args.catalog)
+        return 0
 
     if args.feasibility:
         print_feasibility(args.layout, args.catalog)

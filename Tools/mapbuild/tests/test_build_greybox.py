@@ -370,6 +370,95 @@ class FeasibilityTests(unittest.TestCase):
         self.assertEqual(bg.point_capacity(78.0, 0.0), (0, 0))
 
 
+class BankRuleTests(unittest.TestCase):
+    """交分后是「按比例缩小」，不是「回初始体积」（用户 2026-11-14 决定）。
+
+    旧字段 `bank_resets_ball_to_start_size` 必须留在 payload 里（Unity 侧仍声明它），
+    但只能是 false；规则本身用新增字段表达。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.layout = json.loads(LAYOUT.read_text(encoding="utf-8"))
+        cls.rules = cls.layout["bank"]["rules"]
+
+    def test_layout_expresses_proportional_shrink(self):
+        self.assertFalse(self.rules["bank_resets_ball_to_start_size"])
+        self.assertEqual(self.rules["bank_size_rule"], "proportional_shrink")
+        self.assertEqual(self.rules["bank_size_rule_status"], "PROVISIONAL")
+        self.assertEqual(self.rules["bank_residual_fraction"], 0.25)
+        self.assertEqual(self.rules["bank_min_conversion_diameter_m"], 0.55)
+        self.assertEqual(self.rules["bank_shrink_dimension"], "collision_diameter")
+        self.assertIn("max(start", self.rules["bank_shrink_formula"])
+
+    def test_payload_carries_the_shrink_rule(self):
+        rotation = load_payload()["bank_rotation"]
+        # 旧字段必须保留（Unity GreyboxPayload.GreyboxBankRotation 读它），值为 0。
+        self.assertIn("bank_resets_ball_to_start_size", rotation)
+        self.assertEqual(rotation["bank_resets_ball_to_start_size"], 0)
+        self.assertEqual(rotation["bank_size_rule"], "proportional_shrink")
+        self.assertEqual(rotation["bank_residual_fraction"], 0.25)
+        self.assertEqual(rotation["bank_min_conversion_diameter_m"], 0.55)
+        self.assertEqual(rotation["bank_shrink_dimension"], "collision_diameter")
+        self.assertIn("max(start", rotation["bank_shrink_formula"])
+
+    def test_formula_really_shrinks_towards_start_without_going_below_it(self):
+        # 与 Docs/Design/Gameplay/round_model.py 的 post_bank_diameter 同一条公式：
+        # post = max(start, start + (pre - start) * residual)，residual = 0.25。
+        start, residual = 0.30, self.rules["bank_residual_fraction"]
+
+        def post(pre):
+            return max(start, start + (pre - start) * residual)
+
+        self.assertAlmostEqual(post(2.20), 0.775)     # 0.30 + 1.90 × 0.25
+        self.assertAlmostEqual(post(0.55), 0.3625)    # 0.30 + 0.25 × 0.25
+        self.assertAlmostEqual(post(start), start)
+        for pre in (0.55, 0.95, 1.45, 2.20):
+            self.assertLess(post(pre), pre)
+            self.assertGreaterEqual(post(pre), start)
+
+
+class ReadmeFeasibilityTableTests(unittest.TestCase):
+    """README §3.3 的逐区表必须与 --feasibility-markdown 的输出逐字一致。
+
+    这张表的数字只有一个来源：`scatter_feasibility()`（validate()、
+    --feasibility、--feasibility-markdown 共用）。手改 README 会被这条测试打回。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.layout = json.loads(LAYOUT.read_text(encoding="utf-8"))
+        cls.catalog = bg.load_catalog(CATALOG)
+        cls.rows = bg.feasibility_rows(cls.layout, cls.catalog)
+        cls.table = bg.format_feasibility_markdown(cls.rows)
+        cls.readme = (MAP_DIR / "README.md").read_text(encoding="utf-8")
+
+    def test_readme_embeds_the_command_output_verbatim(self):
+        self.assertIn(self.table, self.readme,
+                      "README §3.3 的表与 --feasibility-markdown 不一致："
+                      "把命令输出整段粘回 README，不要手改数字")
+
+    def test_markdown_rows_match_the_capacity_model(self):
+        lines = self.table.splitlines()
+        self.assertEqual(len(lines), len(self.rows) + 3)  # 表头 + 分隔 + 行 + 合计
+        self.assertTrue(lines[0].startswith("| 区域 |"))
+        for row, line in zip(self.rows, lines[2:-1]):
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            self.assertEqual(cells[0], f"`{row['zone_id']}`")
+            self.assertEqual(cells[2], f"{row['spacing_m']:.2f}")
+            self.assertEqual(cells[3], str(row["count"]))
+            self.assertEqual(cells[5], str(row["capacity_consumer"]))
+            self.assertEqual(cells[6], str(row["capacity_optimal"]))
+            self.assertEqual(cells[7], f"{row['usage']:.0%}")
+        self.assertIn(f"| **合计** | {sum(r['area_m2'] for r in self.rows):.1f} |",
+                      lines[-1])
+        self.assertIn(f"**{sum(r['count'] for r in self.rows)}**", lines[-1])
+
+    def test_readme_states_where_the_table_comes_from(self):
+        self.assertIn("--feasibility-markdown", self.readme,
+                      "README 必须写明表来自哪条命令，否则读者会以为它是手写的")
+
+
 class RoundingTests(unittest.TestCase):
     def test_all_floats_are_rounded_to_three_decimals(self):
         payload = load_payload()
@@ -530,6 +619,48 @@ class CliTests(unittest.TestCase):
         self.assertIn("cap_rsa", result.stdout)
         self.assertIn("blanket_west", result.stdout)
         self.assertIn("basket_north", result.stdout)
+
+    def test_feasibility_markdown_flag_is_read_only(self):
+        result = run_tool("--layout", self.layout, "--catalog", self.catalog,
+                          "--out", self.out, "--feasibility-markdown")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith("| 区域 |"), result.stdout[:80])
+        self.assertIn("| `basket_north` | 60.0 | 1.55 | 14 | 0.23 |", result.stdout)
+        self.assertIn("| **合计** | 891.4 | — | **448** |", result.stdout)
+        self.assertFalse(self.out.exists(), "--feasibility-markdown 只读，不应写载荷")
+
+    def _rewrite_bank_rules(self, **changes):
+        layout = json.loads(self.layout.read_text(encoding="utf-8"))
+        layout["bank"]["rules"].update(changes)
+        self.layout.write_text(json.dumps(layout, ensure_ascii=False, indent=2) + "\n",
+                               encoding="utf-8")
+
+    def test_reset_bank_rule_is_rejected(self):
+        """把已废除的「回初始体积」写回数据必须报错（2026-11-14 决定按比例缩小）。"""
+        self._rewrite_bank_rules(bank_resets_ball_to_start_size=True)
+        result = run_tool("--layout", self.layout, "--catalog", self.catalog,
+                          "--out", self.out)
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("bank_resets_ball_to_start_size", result.stderr)
+        self.assertIn("按比例缩小", result.stderr)
+        self.assertFalse(self.out.exists())
+
+    def test_bank_residual_must_be_a_real_fraction(self):
+        for residual in (0.0, 1.0, 1.25):
+            with self.subTest(residual=residual):
+                self._rewrite_bank_rules(bank_residual_fraction=residual)
+                result = run_tool("--layout", self.layout, "--catalog", self.catalog,
+                                  "--out", self.out)
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn("bank_residual_fraction", result.stderr)
+
+    def test_bank_formula_must_clamp_to_start_diameter(self):
+        self._rewrite_bank_rules(bank_shrink_formula="post = start + (pre - start) * residual")
+        result = run_tool("--layout", self.layout, "--catalog", self.catalog,
+                          "--out", self.out)
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("bank_shrink_formula", result.stderr)
+        self.assertIn("max(start", result.stderr)
 
 
 if __name__ == "__main__":

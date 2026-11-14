@@ -434,7 +434,7 @@
     {
       "id": "tree_roots_nw",
       "name_zh": "西北树根区",
-      "purpose": "角树的气根土丘：0.18 m 高、11% 缓坡，所有尺寸可翻越；橡子、石子、落叶、蘑菇。",
+      "purpose": "角树的气根土丘：0.18 m 高、平均 14% 坡（0.18 ÷ 1.25 m 半径，超出 12% 上限，见 README §16 风险 12），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
       "shape": {
         "type": "rect",
         "min_x": -20.0,
@@ -454,7 +454,7 @@
     {
       "id": "tree_roots_ne",
       "name_zh": "东北树根区",
-      "purpose": "角树的气根土丘：0.18 m 高、11% 缓坡，所有尺寸可翻越；橡子、石子、落叶、蘑菇。",
+      "purpose": "角树的气根土丘：0.18 m 高、平均 14% 坡（0.18 ÷ 1.25 m 半径，超出 12% 上限，见 README §16 风险 12），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
       "shape": {
         "type": "rect",
         "min_x": 17.5,
@@ -474,7 +474,7 @@
     {
       "id": "tree_roots_sw",
       "name_zh": "西南树根区",
-      "purpose": "角树的气根土丘：0.18 m 高、11% 缓坡，所有尺寸可翻越；橡子、石子、落叶、蘑菇。",
+      "purpose": "角树的气根土丘：0.18 m 高、平均 14% 坡（0.18 ÷ 1.25 m 半径，超出 12% 上限，见 README §16 风险 12），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
       "shape": {
         "type": "rect",
         "min_x": -20.0,
@@ -494,7 +494,7 @@
     {
       "id": "tree_roots_se",
       "name_zh": "东南树根区",
-      "purpose": "角树的气根土丘：0.18 m 高、11% 缓坡，所有尺寸可翻越；橡子、石子、落叶、蘑菇。",
+      "purpose": "角树的气根土丘：0.18 m 高、平均 14% 坡（0.18 ÷ 1.25 m 半径，超出 12% 上限，见 README §16 风险 12），设计上所有尺寸可翻越但未实测；橡子、石子、落叶、蘑菇。",
       "shape": {
         "type": "rect",
         "min_x": 17.5,
@@ -1629,7 +1629,14 @@
     "rules": {
       "max_concurrent_bankers": 4,
       "occupancy_lock": false,
-      "bank_resets_ball_to_start_size": true,
+      "bank_resets_ball_to_start_size": false,
+      "bank_resets_ball_to_start_size_note": "仅为 payload 兼容保留（Unity GreyboxPayload.GreyboxBankRotation 仍声明这个 int 字段）。2026-11-14 已决定交分按比例缩小、不回初始体积；规则见 bank_size_rule / bank_residual_fraction / bank_min_conversion_diameter_m。",
+      "bank_size_rule": "proportional_shrink",
+      "bank_size_rule_status": "PROVISIONAL",
+      "bank_residual_fraction": 0.25,
+      "bank_min_conversion_diameter_m": 0.55,
+      "bank_shrink_dimension": "collision_diameter",
+      "bank_shrink_formula": "post = max(start, start + (pre - start) * bank_residual_fraction)",
       "bank_radius_counts": "球心进入圆盘即算到达；不要求停稳",
       "leave_after_bank": "四个方向 3–5 m 内都能出草坪，无单向陷阱"
     }

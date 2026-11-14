@@ -37,19 +37,19 @@ flower_pot_large,大花盆,garden,l,0.4,1,16,4,basket_north;basket_south,Kenney 
 cooler_box,保温箱,container,l,0.55,1.6,20,2,basket_north;basket_south,model ourselves：0.55 m 箱体放大到 1.60 m，带提手与盖缝,MVP,无（coverage 未列，03 §2「大档」补位）,absorbable,
 collapsed_bench,倒塌长凳,gate,l,1.6,3.6,16,4,core_lawn,model ourselves：3.6 m 长凳横躺（四条腿朝侧），专用于对角门,MVP,无（coverage 未列；03 §2「折叠凳」的变体）,absorbable,仅作对角门阻挡件，4 个；吸掉后门才通
 ground_terrain,地面,terrain,l,40,40,0,1,,model ourselves：40×40 m 草坪面 + 外环/支路薄片合并为 1 个 Mesh,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
-path_mesh,小路,terrain,l,40,3.4,0,1,,model ourselves：外环 + 4 支路合并为 1 个 Mesh，贴地 0.005 m,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
-boundary_hedge,边界树篱,boundary,l,40,1.1,0,1,,model ourselves：40×40 m 环形树篱合并 Mesh，高 1.1 m、厚 0.8 m,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
-distant_tree_line,远景树带,boundary,l,60,8,0,1,,Kenney Nature Kit 树模型合并，放在边界外 3–6 m，纯装饰,later,无,fixed,不可卷；固定 Collider 或纯装饰
-invisible_wall,不可见边界,boundary,l,40,3,0,4,,Unity BoxCollider ×4，不渲染；防止大球滚出边界,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
-core_hedge,中央草坪矮篱,boundary,l,2.38,1,0,8,core_lawn,model ourselves：8 段 2.38×0.35×1.0 m 盒，围出 4 个 5 m 入口 + 4 个 3.6 m 对角门,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+path_mesh,小路,terrain,l,40,40,0,1,,model ourselves：外环 + 4 支路合并为 1 个 Mesh，贴地 0.005 m,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+boundary_hedge,边界树篱,boundary,l,40,40,0,1,,model ourselves：40×40 m 环形树篱合并 Mesh，高 1.1 m、厚 0.8 m,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+distant_tree_line,远景树带,boundary,l,50,50,0,1,,Kenney Nature Kit 树模型合并，放在边界外 3–6 m，纯装饰,later,无,fixed,不可卷；固定 Collider 或纯装饰
+invisible_wall,不可见边界,boundary,l,40,40,0,4,,Unity BoxCollider ×4，不渲染；防止大球滚出边界,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+core_hedge,中央草坪矮篱,boundary,l,1.95,1.95,0,8,core_lawn,model ourselves：8 段 1.95×0.35×1.0 m 盒，围出 4 个 5 m 入口 + 4 个 3.6 m 对角门,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 picnic_blanket,野餐毯,terrain,l,12,12,0,4,basket_north;basket_south;blanket_east;blanket_west,model ourselves：平面 + 条纹材质；2 张 6.5×12 m + 2 张 5×4.5 m,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
-flower_bed_frame,花圃木框,terrain,l,4,4,0,4,flower_bed_ne;flower_bed_nw;flower_bed_se;flower_bed_sw,model ourselves：4×4 m 木框 + 0.26 m 台面（斜面 0.9 m，29%）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+flower_bed_frame,花圃木框,terrain,l,4.9,4.9,0,4,flower_bed_ne;flower_bed_nw;flower_bed_se;flower_bed_sw,model ourselves：4×4 m 木框 + 0.26 m 台面（斜面 0.9 m，29%）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 tree_root_mound,树根土丘,terrain,l,2.5,2.5,0,4,tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,model ourselves：Ø2.5 m 缓丘，最高 0.18 m（11%）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
-corner_tree,角落大树,landmark,l,0.5,9,0,4,tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,model ourselves：Ø0.5 m 树干 + 6–9 m 树冠，四角各 1 棵,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+corner_tree,角落大树,landmark,l,9,9,0,4,tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,model ourselves：Ø0.5 m 树干 + 6–9 m 树冠，四角各 1 棵,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 bank_pad,交分台,gameplay,l,3.2,3.2,0,4,core_lawn,model ourselves：Ø3.2 m 圆盘 + 发光环（自发光材质，不用实时灯）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
-bank_beacon,交分旗杆,gameplay,l,0.25,3,0,4,core_lawn,model ourselves：Ø0.25 m 杆 + 2.5 m 高旗；激活时旗升起、环脉冲,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+bank_beacon,交分旗杆,gameplay,l,3,3,0,4,core_lawn,model ourselves：Ø0.25 m 杆 + 2.5 m 高旗；激活时旗升起、环脉冲,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 spawn_marker,出生地贴,gameplay,l,1.8,1.8,0,4,spawn_ne;spawn_nw;spawn_se;spawn_sw,model ourselves：Ø1.8 m 圆环地贴,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 powerup_pedestal,道具台,gameplay,l,0.8,0.8,0,6,blanket_east;blanket_west;fringe_east;fringe_north;fringe_south;fringe_west,model ourselves：Ø0.8 m 台座 + 图标（磁铁花冠 / 喷气芽荚）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
-zone_signpost,区域指示牌,gameplay,l,0.45,1.2,0,8,,model ourselves：0.45×1.2 m 牌 + 形状图标（不靠纯文字）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+zone_signpost,区域指示牌,gameplay,l,1.2,1.2,0,8,,model ourselves：0.45×1.2 m 牌 + 形状图标（不靠纯文字）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
 giant_picnic_table,巨型野餐桌,landmark,l,8,8,0,1,,model ourselves：8×3.2 m 桌面高 1.9 m，放在边界外 z=+24，纯地标、不可卷,later,对应 03 §2「超大桌子先作为不可卷地标」,fixed,不可卷；固定 Collider 或纯装饰
-giant_oak,巨型橡树,landmark,l,16,16,0,1,,model ourselves：Ø2 m 树干 + Ø16 m 树冠，放在边界外 z=−26，纯地标,later,无,fixed,不可卷；固定 Collider 或纯装饰
+giant_oak,巨型橡树,landmark,l,20,20,0,1,,model ourselves：Ø2 m 树干 + Ø20 m 树冠，放在边界外 z=−26，纯地标,later,无,fixed,不可卷；固定 Collider 或纯装饰

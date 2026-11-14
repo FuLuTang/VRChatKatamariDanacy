@@ -25,8 +25,10 @@ namespace VRCKatamari.BallMotor
     /// gates, volume to size, rolling angle, camera lag) already lives there.
     /// The only arithmetic here is what the layers assign to this layer by their
     /// own contracts: the growth fraction fed back to the motion layer, and the
-    /// provisional conversion shrink in <see cref="TryBank"/>, which no math
-    /// layer exposes yet. Both are reported as gaps in
+    /// conversion shrink in <see cref="TryBank"/>. The shrink is the
+    /// diameter-space rule of Docs/OPEN_DECISIONS.md (a); its arithmetic lives
+    /// in <see cref="BankShrinkMath"/> because no ball layer owns a conversion
+    /// policy. The growth fraction is still reported as a gap in
     /// Docs/Design/BallMotor/README.md.
     /// </para>
     /// <para>
@@ -254,6 +256,12 @@ namespace VRCKatamari.BallMotor
         private bool[] pendingAccepted;
         private int pendingCandidateCount;
 
+        // ---- One-shot capacity signal; see the remarks on RebuildObstacles ----
+        private int overflowCount;
+        private bool overflowLatched;
+        private string firstOverflowReason;
+        private bool contactBufferSaturated;
+
         // ---- Sizes used once in Start; not part of the per-step state ----
         private Vector3[] localProxyPoints;
         private string[] allowedKinds;
@@ -360,8 +368,7 @@ namespace VRCKatamari.BallMotor
                 collisionRadiusWorldM = collisionRadius;
                 semanticDiameterWorldM = semanticDiameter;
             }
-            confirmedVolumeUnits = 0f;
-            DeriveSize();
+            RecomputeConfirmedAndSize();
         }
 
         private void Update()
@@ -439,6 +446,12 @@ namespace VRCKatamari.BallMotor
                 lastSweepBlocked = sweepBlocked;
                 lastSweepStuck = sweepStuck;
                 sweepAccepted = true;
+                // SweepMath stops writing contacts at ContactCapacity (4) and
+                // reports no truncation flag, so the motor can only record that
+                // the buffer filled at least once; any further contact in that
+                // step is dropped inside the sweep. See the capacity remarks on
+                // RebuildObstacles.
+                if (contactCount >= ContactCapacity) contactBufferSaturated = true;
             }
             // Deliberately no velocity change after a contact: removing the
             // normal component of the planar velocity is not exposed by any layer
@@ -499,9 +512,10 @@ namespace VRCKatamari.BallMotor
             CommitAcceptedAbsorbs();
 
             // 7. SizeModelMath: the three sizes are a function of the confirmed
-            //    volume, never an accumulation of it.
-            confirmedVolumeUnits = (float)unbankedVolumeUnits + carriedVolumeUnits;
-            DeriveSize();
+            //    volume, never an accumulation of it. The confirmed total is
+            //    recomputed by the one method that owns that identity, so the
+            //    per-step stage and a conversion cannot disagree about it.
+            RecomputeConfirmedAndSize();
 
             // 8. VisualRollMath: the actual centre move, with the discontinuity flag
             //    supplied so a teleport frame holds the pose.
@@ -676,6 +690,32 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// Recomputes the confirmed total from its two confirmed sources and
+        /// re-derives the three sizes.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the only place the volume identity
+        /// confirmed = unbanked + carried is written. Both the per-step size
+        /// stage and a successful conversion call it, so the identity has one
+        /// implementation: neither caller can add the carried residual twice,
+        /// skip it, or apply it in a different order.
+        /// </para>
+        /// <para>
+        /// unbankedVolumeUnits is the ledger's read-back (a committed value,
+        /// never a prediction) and carriedVolumeUnits is already-scored volume
+        /// that can never be banked again. Nothing here accumulates; a failed
+        /// size derive leaves the previous sizes in place, and the next call
+        /// retries with the same confirmed total.
+        /// </para>
+        /// </remarks>
+        private void RecomputeConfirmedAndSize()
+        {
+            confirmedVolumeUnits = (float)unbankedVolumeUnits + carriedVolumeUnits;
+            DeriveSize();
+        }
+
+        /// <summary>
         /// The one feedback value Docs/Design/BallMotion/README.md assigns to the
         /// assembly layer: the already-clamped growth fraction the motion layer
         /// derates its caps with. The mapping itself stays its own helper so the
@@ -775,11 +815,23 @@ namespace VRCKatamari.BallMotor
         /// Candidate collection is a host-side concern in the pickup layer's own
         /// contract (it owns no spatial registry), so the motor only carries the
         /// candidate to the gate and never scans the scene itself.
+        /// <para>
+        /// The queue holds PendingCandidateCapacity = 4 entries. A candidate
+        /// submitted while it is full is DROPPED (false) and latched into the
+        /// overflow signal: losing a candidate silently loses an absorbable
+        /// item, which is a data error in the host's batching, not a gameplay
+        /// choice. The latch is read by an adapter at a checkpoint; nothing is
+        /// logged per frame.
+        /// </para>
         /// </remarks>
         public bool SubmitCandidate(bool absorbable, string kind, Vector3 bounds,
             Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration)
         {
-            if (pendingCandidateCount >= PendingCandidateCapacity) return false;
+            if (pendingCandidateCount >= PendingCandidateCapacity)
+            {
+                SignalOverflow("pending candidate capacity 4 exceeded");
+                return false;
+            }
             if (itemInstanceId == null || itemInstanceId.Length == 0) return false;
             if (itemGeneration < 0) return false;
             int index = pendingCandidateCount;
@@ -802,7 +854,11 @@ namespace VRCKatamari.BallMotor
 
         public bool AddPlane(Vector3 normal, float offset)
         {
-            if (planeCount >= MaxPlaneCount) return false;
+            if (planeCount >= MaxPlaneCount)
+            {
+                SignalOverflow("plane capacity 8 exceeded");
+                return false;
+            }
             if (!KatamariMath.IsFiniteVector(normal)) return false;
             if (!KatamariMath.IsFiniteFloat(offset)) return false;
             planeNormalBuffer[planeCount] = normal;
@@ -814,7 +870,11 @@ namespace VRCKatamari.BallMotor
 
         public bool AddBox(Vector3 minimum, Vector3 maximum)
         {
-            if (boxCount >= MaxBoxCount) return false;
+            if (boxCount >= MaxBoxCount)
+            {
+                SignalOverflow("box capacity 8 exceeded");
+                return false;
+            }
             if (!KatamariMath.IsFiniteVector(minimum)) return false;
             if (!KatamariMath.IsFiniteVector(maximum)) return false;
             if (minimum.x > maximum.x || minimum.y > maximum.y ||
@@ -834,12 +894,48 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// Records one refused fixed-capacity registration in the latched
+        /// overflow signal.
+        /// </summary>
+        /// <remarks>
+        /// UdonSharp-safe by construction: an int counter, a bool latch and one
+        /// string field - no collection, no allocation on the refusal path, no
+        /// Debug.Log. The reason string is written once, so a caller that
+        /// submits candidates every step cannot grow it or spam the console;
+        /// diagnostics poll the getters instead.
+        /// </remarks>
+        private void SignalOverflow(string reason)
+        {
+            overflowCount = overflowCount + 1;
+            if (overflowLatched) return;
+            overflowLatched = true;
+            firstOverflowReason = reason;
+        }
+
+        /// <summary>
         /// Resizes the arrays the sweep reads so their lengths match the counts.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// The sweep treats the array length as the obstacle set, so the motor
         /// rebuilds exact-length arrays on registration instead of paying a copy
         /// on every step; registration is a scene-load event, not a per-step one.
+        /// </para>
+        /// <para>
+        /// Fixed capacities are MaxPlaneCount = 8, MaxBoxCount = 8,
+        /// PendingCandidateCapacity = 4 and ContactCapacity = 4. An entry beyond
+        /// a capacity is DROPPED, never queued, resized or degraded:
+        /// overflowing the obstacle set changes what the ball can collide with,
+        /// and overflowing the candidate queue silently loses an absorbable
+        /// item, so an overflow is a data error (a mis-wired scene, or a host
+        /// batching more than four candidates per step), not a gameplay choice.
+        /// AddPlane, AddBox and SubmitCandidate latch overflowCount and the
+        /// first reason string; the sweep's contact buffer is capped inside
+        /// SweepMath, which reports no truncation, so it only surfaces as
+        /// contactBufferSaturated. The signals are one-shot and read at a
+        /// checkpoint: nothing is logged per frame, and nothing here changes
+        /// gameplay.
+        /// </para>
         /// </remarks>
         private void RebuildObstacles()
         {
@@ -866,25 +962,24 @@ namespace VRCKatamari.BallMotor
         /// <remarks>
         /// <para>
         /// Refused when the ball is below the minimum conversion diameter
-        /// (Docs/OPEN_DECISIONS.md (b)) or when nothing unbanked is confirmed. The
-        /// ledger decides the rest: only a Playing round from an Active player may
-        /// bank, the amount may not exceed the confirmed total, and a repeated
-        /// (player, requestId) pair is refused, so a retried trigger cannot double
-        /// count. Nothing is mirrored into the motor's fields unless the transaction
-        /// succeeded.
+        /// (Docs/OPEN_DECISIONS.md (b)), when nothing unbanked is confirmed, or
+        /// when the shrink cannot be planned. The ledger decides the rest: only
+        /// a Playing round from an Active player may bank, the amount may not
+        /// exceed the confirmed total, and a repeated (player, requestId) pair
+        /// is refused, so a retried trigger cannot double count. Nothing is
+        /// mirrored into the motor's fields unless the transaction succeeded.
         /// </para>
         /// <para>
-        /// PROVISIONAL (Docs/OPEN_DECISIONS.md (a)): the post-conversion size is
-        /// start + (pre - start) * bankResidualFraction, clamped to at least start.
-        /// The reference model applies that formula to the ball's diameter and then
-        /// prices the residual back into volume units with its units_for_diameter
-        /// inverse (Docs/Design/Gameplay/round_model.py). No C# math layer exposes
-        /// that inverse, so this port applies the same residual to the volume the
-        /// size mapping consumes rather than re-deriving a volume-to-diameter
-        /// mapping in the assembly layer. The consequence is a visibly gentler
-        /// shrink - converting at 1.49 m leaves about 0.95 m here, where the
-        /// diameter-space rule asks for about 0.60 m. Reported as gap 1 in
-        /// Docs/Design/BallMotor/README.md; the fix belongs in SizeModelMath.
+        /// The shrink is the diameter-space rule of Docs/OPEN_DECISIONS.md (a):
+        /// post = max(start, start + (pre - start) * residual) with residual
+        /// clamped to [0, 1]. start is the forward size map's own diameter at
+        /// zero confirmed volume (derived by TryDerive, not a hardcoded 0.30),
+        /// pre is this ball's current semantic diameter, and post is priced back
+        /// into ledger units through the size model's inverse before the ledger
+        /// call. A failed plan leaves the ledger untouched and the previous size
+        /// in place, so a conversion can never bank points without also applying
+        /// its shrink; after the transaction only the carried residual is
+        /// written and the confirmed total is recomputed once.
         /// </para>
         /// </remarks>
         public bool TryBank(float now, string requestId)
@@ -896,7 +991,35 @@ namespace VRCKatamari.BallMotor
             if (semanticDiameterWorldM < minConversionDiameterWorldM) return false;
             if (unbankedVolumeUnits <= 0) return false;
 
-            float preBankVolumeUnits = (float)unbankedVolumeUnits + carriedVolumeUnits;
+            // The zero-volume mapping is the start of the rule, so the start is
+            // whatever the same forward map reports at zero confirmed units.
+            float startCoreRadius;
+            float startCollisionRadius;
+            float startDiameter;
+            float startEffectiveVolumeUnits;
+            if (!SizeModelMath.TryDerive(0f, baselineVolumeUnits, cubicMetersPerVolumeUnit,
+                maxCoreRadiusWorldM, collisionToCoreRadiusRatio,
+                semanticDiameterPerCoreDiameter, out startCoreRadius,
+                out startCollisionRadius, out startDiameter, out startEffectiveVolumeUnits))
+            {
+                return false;
+            }
+
+            float postBankDiameter;
+            if (!BankShrinkMath.TryPostBankDiameter(startDiameter, semanticDiameterWorldM,
+                bankResidualFraction, out postBankDiameter))
+            {
+                return false;
+            }
+
+            float postBankVolumeUnits;
+            if (!BankShrinkMath.TryBankVolumeUnits(postBankDiameter, baselineVolumeUnits,
+                cubicMetersPerVolumeUnit, maxCoreRadiusWorldM,
+                semanticDiameterPerCoreDiameter, out postBankVolumeUnits))
+            {
+                return false;
+            }
+
             if (!GrowthLedgerMath.TryBank(roundState, playerIds, confirmedVolumes,
                 bankedScores, lifeStates, respawnAtSet, respawnAt, playerGenerations,
                 playerCount, bankRequestPlayerIds, bankRequestIds, ref bankRequestCount,
@@ -910,30 +1033,40 @@ namespace VRCKatamari.BallMotor
             if (confirmed < 0 || banked < 0) return false;
             unbankedVolumeUnits = confirmed;
             bankedScoreUnits = banked;
-            ApplyBankShrink(preBankVolumeUnits);
-            return true;
+            return ApplyBankShrink(postBankVolumeUnits);
         }
 
-        private void ApplyBankShrink(float preBankVolumeUnits)
+        /// <summary>
+        /// Applies the already-planned conversion shrink and recomputes the
+        /// confirmed total once.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// postBankVolumeUnits is the ledger value the diameter-space rule
+        /// priced in <see cref="BankShrinkMath"/> before the ledger call. The
+        /// ledger has already moved the unbanked amount into the score, so the
+        /// carried residual is that value minus whatever is still unbanked
+        /// (normally zero), clamped to zero: already scored, never bankable
+        /// again.
+        /// </para>
+        /// <para>
+        /// Returns false, leaving the previous size in place, when the carried
+        /// subtraction is not finite. The ledger transaction is not undone by a
+        /// false here - its (player, requestId) pair is one-shot, so a retry
+        /// cannot double count.
+        /// </para>
+        /// </remarks>
+        private bool ApplyBankShrink(float postBankVolumeUnits)
         {
-            float residual = bankResidualFraction;
-            if (!KatamariMath.IsFiniteFloat(residual) || residual < 0f) residual = 0f;
-            if (residual > 1f) residual = 1f;
-
-            float startVolumeUnits = baselineVolumeUnits;
-            float postVolumeUnits = startVolumeUnits +
-                (preBankVolumeUnits - startVolumeUnits) * residual;
-            if (!KatamariMath.IsFiniteFloat(postVolumeUnits)) return;
-            if (postVolumeUnits < startVolumeUnits) postVolumeUnits = startVolumeUnits;
-
-            // The ledger has already moved the unbanked amount into the score, so
-            // what is left for the size mapping is the carried residual: already
-            // scored, never bankable again.
-            float carried = postVolumeUnits - (float)unbankedVolumeUnits;
-            if (!KatamariMath.IsFiniteFloat(carried) || carried < 0f) carried = 0f;
+            float carried;
+            if (!BankShrinkMath.TryCarriedVolumeUnits(postBankVolumeUnits,
+                (float)unbankedVolumeUnits, out carried))
+            {
+                return false;
+            }
             carriedVolumeUnits = carried;
-            confirmedVolumeUnits = (float)unbankedVolumeUnits + carriedVolumeUnits;
-            DeriveSize();
+            RecomputeConfirmedAndSize();
+            return true;
         }
 
         /// <summary>
@@ -1046,6 +1179,48 @@ namespace VRCKatamari.BallMotor
         public int GetPendingCandidateCount()
         {
             return pendingCandidateCount;
+        }
+
+        /// <summary>
+        /// True once any fixed-capacity registration was refused, or once the
+        /// sweep's contact buffer filled at least once.
+        /// </summary>
+        public bool HasOverflowSignal()
+        {
+            return overflowLatched || contactBufferSaturated;
+        }
+
+        /// <summary>
+        /// Number of refused plane, box and candidate registrations. The first
+        /// refusal also latches a reason; see <see cref="GetFirstOverflowReason"/>.
+        /// </summary>
+        public int GetOverflowCount()
+        {
+            return overflowCount;
+        }
+
+        /// <summary>
+        /// Reason of the first refused registration, or null before one happens
+        /// (and null when only the sweep contact buffer saturated).
+        /// </summary>
+        /// <remarks>
+        /// Written once, so it names a capacity rather than growing into a
+        /// running log; the sweep's contact saturation has its own getter.
+        /// </remarks>
+        public string GetFirstOverflowReason()
+        {
+            return firstOverflowReason;
+        }
+
+        /// <summary>
+        /// True if the sweep's contact buffer (ContactCapacity = 4) was full at
+        /// least once. SweepMath caps contacts there without a truncation flag,
+        /// so contacts beyond the buffer in such a step are dropped by the
+        /// sweep, not by this motor.
+        /// </summary>
+        public bool WasContactBufferSaturated()
+        {
+            return contactBufferSaturated;
         }
     }
 }

@@ -58,7 +58,7 @@
 
 ## 组合层实现说明
 
-**状态：源码已写，未编译、未在 Unity 运行、未做 U# 全量编译、未测。** 实现是一个 UdonSharp Behaviour：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/KatamariBallMotor.cs`（命名空间 `VRCKatamari.BallMotor`）。它只持有状态、按上表顺序调用、在失败时保持上一帧；没有自己的玩法公式。
+**状态：源码已写，未编译、未在 Unity 运行、未做 U# 全量编译、未测。** 实现是一个 UdonSharp Behaviour：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/KatamariBallMotor.cs`（命名空间 `VRCKatamari.BallMotor`）。它只持有状态、按上表顺序调用、在失败时保持上一帧。唯一的规则算术是交分缩小：没有任何球层拥有“交分换算”这一策略，所以它被放在同目录的纯静态类 `BankShrinkMath.cs`（同一命名空间、无状态、可单测），行为类只调用它并据结果决定是否动账本；除此之外本层不实现玩法公式。
 
 ### 它持有的状态
 
@@ -73,7 +73,8 @@
 | `growthFraction` | `(r-base)/(max-base)` 再夹到 [0,1]，由 `SizeModelMath` 的新半径算出；`BallMotionMath` 明说由调用方算 | 第 7 步成功时 |
 | `unbankedVolumeUnits` | 账本确认体积（可交分） | 账本提交/交分成功后的**读回值** |
 | `carriedVolumeUnits` | 交分后留下的、已计分的残余体积（只喂尺寸，永不再交分） | 只由交分成功时 |
-| `confirmedVolumeUnits` | 尺寸驱动量 = 未交存 + 残余；只由确认来源相加，不累积 | 每步第 7 步前 |
+| `confirmedVolumeUnits` | 尺寸驱动量 = 未交存 + 残余；只由确认来源相加，不累积 | 只由 `RecomputeConfirmedAndSize()` 写（第 7 步与交分成功时） |
+| `overflowCount` / `firstOverflowReason` / `contactBufferSaturated` | 固定容量溢出信号（见“固定容量与溢出信号”），不是玩法状态 | 注册被拒/接触缓冲满时写一次 |
 | `bankedScoreUnits` | 已交存分数 | 账本提交/交分成功后的读回值 |
 | `fixedStepAccumulator` / `localClockSeconds` | 定步长累积器 / 本地时钟 | `Update` |
 | `stuckSeconds` | 卡住计时 | 扫掠成功时按 `stuck` 累加或清零 |
@@ -112,24 +113,33 @@ StepBall:
   ★ 卡住计时/恢复（本层策略，扫掠层只报 `stuck`）
   5 PickupAbsorbMath.EvaluateAbsorb（对队列里每个候选，用最终位置）
   6 GrowthLedgerMath.TrySubmitClaim + TryResolveClaims（成功才读回体积）
-  7 SizeModelMath.TryDerive     → 三个尺寸 + growthFraction（成功才赋值）
+  7 RecomputeConfirmedAndSize   → 体积恒等式（未交存 + 残余）→ SizeModelMath.TryDerive
+                                → 三个尺寸 + growthFraction（成功才赋值）
   8 VisualRollMath.TryAdvanceRotation（实际位移 + 本步 discontinuous）
   9 FollowRigMath.TryUpdate（本步最终位姿，只回表现层）
   提交 ballCenterWorld，清 discontinuous
 ```
 
-失败即不应用：每个字段的赋值都写在对应 `Try*` 返回 true 的分支里；尺寸每步**重算**而不是累加，所以“失败不涨体积”是结构保证；吸收值只有在账本提交（claim → resolve）成功后才会进 `unbankedVolumeUnits`；传送/卡住恢复只置 `discontinuous`，不产生滚动。
+失败即不应用：每个字段的赋值都写在对应 `Try*` 返回 true 的分支里；尺寸每步**重算**而不是累加，所以“失败不涨体积”是结构保证；吸收值只有在账本提交（claim → resolve）成功后才会进 `unbankedVolumeUnits`；传送/卡住恢复只置 `discontinuous`，不产生滚动。体积恒等式 `confirmed = unbanked + carried` 只在 `RecomputeConfirmedAndSize()` 里写一次，第 7 步与交分成功都走它，所以两条路径不可能对“确认体积”各有一套加法。
 
-### 交分（临时规则，引用未定项 (a)/(b)）
+### 交分（已定规则 (a)/(b)，在直径空间实现）
 
-`TryBank(now, requestId)`：
+`TryBank(now, requestId)` 的顺序是**先算计划、再动账本**：一次失败的缩小不会留下“已加分但没缩小”的半状态。
 
-1. 球径低于 `minConversionDiameterWorldM`（默认 `0.55f`）→ 拒绝；(b) 的最小兑换门槛，数值是项目暂定。
-2. 未交存确认体积为 0 → 拒绝。
-3. 全额过 `GrowthLedgerMath.TryBank`（只有 Playing、Active、`amount <= confirmed`、`(player, requestId)` 未重放才成功）；失败时本层一个字段都不改。
-4. 成功后按 `start + (pre - start) * bankResidualFraction`（默认 `0.25f`）缩小，再夹到 `>= start`；(a) 的按比例缩小，公式是**项目发明**，原作的换算空间未知。
+1. 前置拒绝：无本地行、`requestId` 为空、`now` / 当前语义直径非有限、球径低于 `minConversionDiameterWorldM`（默认 `0.55f`，是 (b) 的项目暂定门槛）、未交存确认体积为 0。
+2. `startDiameter` 取 `SizeModelMath.TryDerive(0f, …)` 的语义直径，也就是**同一张前向映射在零确认体积时的输出**（默认参数下 **0.29974 m**），不写死 0.30。规则里的 `start` 必须和体积映射同源，否则改一次尺寸参数，缩小公式和球的真实起始尺寸就会对不上。
+3. 残差在**直径**上算：`post = max(start, start + (pre − start) × residual)`，`residual` 夹到 [0,1]；`pre` 是本球当前语义直径。残差 0 等价于旧的“缩回起始”，1 等价于不缩。
+4. `post` 经 `SizeModelMath.TryVolumeUnitsForSemanticDiameter` 换回确认体积单位；**反函数失败就拒绝交分**（此时账本还没动），绝不应用 NaN 或负数。
+5. 全额过 `GrowthLedgerMath.TryBank`（只有 Playing、Active、`amount <= confirmed`、`(player, requestId)` 未重放才成功）。
+6. 读回 `unbanked` / `banked`，`carried = max(0, postUnits − 读回未交存)`（通常读回未交存为 0），这部分体积已经计过分、永不再交分；最后 `RecomputeConfirmedAndSize()` 重算**一次**确认总量与尺寸。
 
-两个数都是 `[SerializeField]`，注释里写明 provisional 并引用 `Docs/OPEN_DECISIONS.md` (a)/(b)。
+数值（本层默认 1 基线单位 / 0.0141 m³ 每单位 / 2.20 m 上限）：1.49 m 约 121.84 确认单位，交分后 **0.5973 m**、约 6.9 单位；若按决定文档的 0.30 起始写则正好 0.5975 m。旧的体积空间写法在同一输入下留下 0.9537 m。**两个空间是立方关系，不是比例**，所以这个差别是结构性的，调比例救不回来。
+
+还会出错的地方：
+
+- `pre` 取当前语义直径，显示上限生效时它就是 2.20 m：从上限交分会按上限缩到约 0.78 m，而账本仍按未交存全额入分。这是“上限只作用于显示”的已知后果，等 2.20 m 真正可达时要复核。
+- `bankResidualFraction` 配成 NaN 时现在直接拒绝交分（旧实现会当成 0）。这是有意的“不应用非有限值”，但配置错误会表现为“交分没反应”，诊断时先看这里。
+- 缩小比例与最小门槛仍是项目暂定值，不是原作数据；改它们只需要改字段，不需要改本节的数学。
 
 ### 刻意不在这里
 

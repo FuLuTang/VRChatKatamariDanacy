@@ -446,7 +446,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 | `maxLiftPerStep` / `maxDropPerStep` | 0.1 / 0.1 m | motor L88-89 | 贴地容差；无实测依据 |
 | `separationEpsilon` | 0.001 | motor L92 | 数值容差 |
 | `maxRollDisplacementM` | 0.5 m | motor L113 | 视觉滚动钳位，不是玩法 |
-| `contactRadiusWorldM` | 0 | motor L102 | 占位；见 [`BallMotor/README.md`](../BallMotor/README.md) 缺口 4 |
+| `contactRadiusWorldM` | 0 | motor L102 | **项目决定，不是占位**：容差已由物件包围球代理提供，0＝球须实质接触、无额外手感窗口；reach vs 边长算例见 [`OPEN_DECISIONS.md`](../../OPEN_DECISIONS.md) (i) 与 [`PickupAbsorb/README.md`](../PickupAbsorb/README.md) §1–2 |
 | `collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` | 1 / 1 | motor L98-99 | 今天让三个尺寸重合，只为让现有场景跑起来；[`02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md) §1（L15-21）要求它们分开。**这是场景接线缺口，不是参数值问题**，不要在这里“调参”解决 |
 | `eyeHeightMinMeters` / `eyeHeightMaxMeters` | 0.25 / 3 m | motor L109-110 | 防越界夹取，不是舒适阈值（[`BallMotor/README.md`](../BallMotor/README.md) L187） |
 | `ControlIntentMath.DefaultDebounceSeconds` | 0.2 s | `ControlIntentMath.cs:130` | 输入去抖的实现常量；若以后变成体验旋钮，必须整条搬进规则集 |
@@ -461,7 +461,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 | 模型的 | 运行时的 | 为什么不能合并 |
 |---|---|---|
-| `absorb_size_ratio = 1.0`（球径 × 比例） | `maxItemSizeWorldM = 1f`（绝对米） | 这是 [`BallMotor/README.md`](../BallMotor/README.md) 缺口 3：相对门槛没移植。今天两者数值巧合，语义不同；合并会让“小球吸大物”规则悄悄改变 |
+| `absorb_size_ratio = 1.0`（球径 × 比例） | `maxItemSizeWorldM = 1f`（绝对米） | 这是 [`BallMotor/README.md`](../BallMotor/README.md) 缺口 3：相对门槛没移植。`OPEN_DECISIONS.md` (h) 已拍板吸收按球径相对判定、比例 1.0（PROVISIONAL），绝对上限只作安全上界——**但代码未改**（今天仍是 1 m 绝对门），所以这行仍是当前差异，不是历史遗留 |
 | `base_speed_mps = 3.0`（区域间走路速度） | `maxSpeedMps = 4f`（物理速度上限） | 模型用它算路程时间，运行时用它算速度上限。把它们当成同一个数，会同时改坏模型结论和手感 |
 | `units_to_max_diameter = 1356` | 体积标定 `0.0141 m³/单位` | §0.2 实例二：差 3.44 倍。**两边都标 PROVISIONAL，但没有任何一处说明它们必须一致** |
 

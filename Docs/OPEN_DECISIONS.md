@@ -32,6 +32,24 @@
 - **（f）2.20 m 是包线天花板，不是一张图里能滚到的直径。** 成长标定 `units_to_max_diameter = 1356` 价值单位 = 0.30→2.20 m 的一次满径成本（PROVISIONAL，见 [Gameplay 报告](Design/Gameplay/README.md)）；但野餐草坪活地图只有 **1284 单位**，把整张图吃光也只到 **2.16 m**。决定：**保留 1356 标定**（它是成长节奏参数，不是可达性承诺），把 2.20 m 写成**包线上限**；真要出现 2.20 m 的球，只能靠补货（T22）或加地图内容，且**现在没有任何一关需要它**——剧情两关的三星目标一关是 1.60 m、一关是 30 件（`Docs/Design/GameModes/Levels/*.json`），都不碰 2.20 m。设计文档里的包线一行统一写成“**0.30–2.20 m 包线；1284 单位的地图上实际 2.16 m**”，不要再出现“最大球 2.20 m”这种会被读成单图可达值的写法。若以后要 2.20 m 变成常规体验，动的是补货预算或地图内容，不是把 1356 改小去凑（那会同时把 t3 提前，等于换成长节奏）。
 - **（g）关卡数据用 sha256 钉住地图，校验器在指纹不符时直接报错，哈希绝不手抄。** 每份关卡 JSON 带 `map_snapshot.layout_sha256` / `catalog_sha256`；`Docs/Design/GameModes/validate_levels.py` 逐字节比对实际的 `layout.json` / `prop_catalog.csv`，不一致就报“地图已变更，请复核…”，并且**不自动改写**——改完地图必须复算目标／阈值再重钉，而不是让工具顺手把哈希刷新掉。依据：手写哈希今天已经漂了三次；就在本次地图 schema 2 落地后，`Docs/Design/GameModes/README.md` §0.2 的表项与 schema 示例块里那两个手抄值又和实际文件对不上了（以 `validate_levels.py --json` 的输出为准，不要回头去 README 抄数字），[野餐草坪 README](Design/Maps/PicnicLawn/README.md) 也已写明“禁止手抄”。重钉只认工具输出：`validate_levels.py --json` 摘要里的两个哈希，或直接对文件跑 `sha256sum`；**不得从别的文档复制**。这是 `[项目自选]` 的工程约束，不是原作规则。实现状态：机制已落地，`5ee89c2` 与今天 schema 2 落地后各用工具输出重钉过一次两关；`Docs/Design/GameModes/README.md` 里的手抄残留仍待 GameModes 负责人清零。任何地图改动都会让两关快照失效、必须重钉后才算改完——今天已经真实发生过一次。
 
+### 拾取层：吸收门槛与接触余量（2026-11-14 拍板）
+
+同 (a)–(g)：这两条是**运行时契约**层面的决定（decided），不是测量结果，也不改任务依赖。它们钉住的是“现场调试时两个 agent 各自把 reach／门槛算错”那类问题的口径；代码改没改另说。
+
+- **（h）可吸收性按球的尺寸相对判定，不按绝对 1 m。** 吸收比例 `absorb_size_ratio = 1.0`（PROVISIONAL）：直径 **D** 的球吸收 pickup 尺寸 ≤ **D × 1.0** 的物件；序列化的绝对上限 `maxItemSizeWorldM` 只保留为**安全上界**，不再是玩法规则。依据：回合模型的门槛是相对的，`Docs/Design/Gameplay/round_model.py:119` 写明 `absorb_size_ratio: float = 1.0          # item pickup gate <= ball diameter * ratio`，判定在 `round_model.py:493-502`：`pickup_diameter_m <= ball_diameter_m * absorb_size_ratio + 1e-9`（边界含等号；[Gameplay README L47-50](Design/Gameplay/README.md#L47-L50) 同一说法）。今天两侧不一致：运行时 `PickupAbsorbMath.cs:134-135` 拿 `largestExtent > maxItemSizeWorldM` 直接拒收，`KatamariBallMotor.cs:113` 的 `maxItemSizeWorldM = 1f` 是序列化默认（`KatamariBallMotor.cs:653` 原样传进判定），所以**2.20 m 的球仍吃不到最大全长 1.2 m 的道具**（1.2 > 1 拒），而模型给 `1.2 ≤ 2.2 × 1.0` 放行。口径后果：运行时必须**每步用当前语义直径（与碰撞半径同源）算上限**，不能再用固定 1 m；`maxItemSizeWorldM` 退化为上界时仍要显式写出来，别让它悄悄变成第二个玩法阈值。**两个量不要互换**：模型比的是 `pickup_diameter_m`（地图档位/道具声明的 pickup 尺寸，`round_model.py:174`、`:243`），运行时比的是 `bounds` 的最大全长（`PickupAbsorbMath.cs:134`）——把 AABB 全长当 `pickup_diameter` 等值代入，是同一类算错。PvP 那个 1.35 不是本条的吸收比例，别混用：`round_model.py:141` `swallow_diameter_ratio: float = 1.35    # prototype_defaults`、`round_model.py:499-500` 明确写下 `There is no "1.35x" style ratio for props -- that ratio is the PvP swallow rule.`（另见 [prototype_defaults.json L15](config/prototype_defaults.json#L15) 与 [Gameplay README L50](Design/Gameplay/README.md#L50)）；PvP 吞噬阈值本身仍按下方 PVP 行未验证，本条不替它定数。**实现状态：代码未改。** `KatamariBallMotor.cs:113` 今天仍是 1 m 绝对门，本条与代码不一致，直到相对上限落地（改动要连带 `PickupAbsorbMath.cs` 的尺寸门与其测试，本文不改代码）。
+- **（i）`contactRadiusWorldM` 保持 0，且这 0 是项目决定，不是占位。** reach 的容差已经全部由包围球代理提供（`PickupAbsorbMath.cs:155-157`：`reach = collisionRadius + contactRadius + itemRadius`，`itemRadius` 为包围球半径 √((x/2)²+(y/2)²+(z/2)²)），所以 0 的语义就是“球必须实质接触物件、没有额外手感窗口”，不是“这个功能还没接”。工作面算例（球在起始直径 0.30 m、碰撞半径 0.14987 m、`contactRadiusWorldM = 0`、物件为边长 s 的立方体，`bounds = (s,s,s)`）见下表。
+
+| s (m) | itemRadius = √3·s/2 | reach（contact = 0，今天的行为） | 面心真接触距离 = 球半径 + s/2 | 包围球多放行 |
+|---:|---:|---:|---:|---:|
+| 0.10 | 0.0866 | **0.236** | 0.200 | 0.037 |
+| 0.25 | 0.2165 | **0.366** | 0.275 | 0.092 |
+| 0.35 | 0.3031 | **0.453** | 0.325 | 0.128 |
+| 0.50 | 0.4330 | **0.583** | 0.400 | 0.183 |
+
+读法：多放行的量是 `(√3−1)/2·s ≈ 0.366·s`，**只跟物件边长有关、与球径无关**；所以“看着还差一点就已经吸到”是包围球代理的正常行为，反过来“视觉上贴住了却不吸”才是 reach 算错（位置快照过期，或宿主把 `bounds` 填得比画面小），不是场景要调。完整推导见 [PickupAbsorb README 第 1、2 节](Design/PickupAbsorb/README.md#L77-L115)，同一张表的展开版在其 L88-93。
+
+**（i）取代的旧说法：** `Design/PickupAbsorb/README.md` L77／L79／L222 与 `Design/BallMotor/README.md` L188 把 `maxItemSizeWorldM`／`contactRadiusWorldM` 一并称作“占位”的定性——`contactRadiusWorldM = 0` 自此是有意的项目决定，绝对上限的地位改由 (h) 定义；那三处措辞等各自 owner 下次触碰时改一句，本次没有动那两个文件。
+
 ## 需要在正式发布范围/终验前回答
 
 | 事项 | 当前基线与选项（均未选择） | 影响 | 决定时点 |
@@ -53,5 +71,5 @@
 ## 不因本摘要改变的门禁
 
 - P17中的单图方案只是提案；修改任务依赖只能在用户/主管批准后进行，并须运行计划校验。([RFC执行纪律](Archive/Preparation/ReleaseRFC/comparison.md#L36-L38)、[候选DAG声明](Archive/Preparation/ReleaseRFC/proposed_dag.json#L5-L7))
-- (a)–(g) 的数值仍是 PROVISIONAL：决定记录的是“用这个暂定值往下做”，不是验证通过；T01 规则冻结、T21 地图验证与 T39 多人试玩后须复核，改动只需更新本文与相关配置，不动任务依赖。
+- (a)–(i) 的数值仍是 PROVISIONAL：决定记录的是“用这个暂定值往下做”，不是验证通过；T01 规则冻结、T21 地图验证与 T39 多人试玩后须复核，改动只需更新本文与相关配置，不动任务依赖。（(h)(i) 是运行时契约决定，(h) 的代码改动尚未落地，见该条“实现状态”。）
 - 本文不认证原作细节、不定正式公平阈值、不冻结公共接口、不改T任务状态；后续批准应另行明确记录。

@@ -1,0 +1,3647 @@
+{
+  "schema_version": 1,
+  "map_id": "picnic_lawn",
+  "status": "PROVISIONAL_NOT_TESTED",
+  "generated_by": "Docs/Design/Maps/PicnicLawn/README.md §2 的暂定比例；无 Unity 实现、无实测",
+  "coordinate_system": {
+    "engine": "Unity 2022.3",
+    "handedness": "left",
+    "up": "+Y",
+    "forward": "+Z",
+    "units": "metre",
+    "origin": "地图中心，地面 y=0",
+    "yaw_convention": "角度制，绕 +Y 顺时针（0=+Z，90=+X）",
+    "ground_frame": "单一共享世界坐标系（02 §1），不做每客户端独立缩放"
+  },
+  "scale": {
+    "status": "PROVISIONAL_NOT_TESTED",
+    "note": "所有长度按米；世界尺度本身仍未定（OPEN_DECISIONS「生长/碰撞上限与世界尺度」）。整表可按 k 线性缩放：坐标/半径/宽度×k，面积×k²，时间/人数不变。",
+    "map_extent_x_m": 40.0,
+    "map_extent_z_m": 40.0,
+    "ball_start_collision_diameter_m": 0.3,
+    "ball_max_collision_diameter_m": 2.2,
+    "ball_bands": [
+      {
+        "id": "t0",
+        "name_zh": "碎屑",
+        "min_m": 0.3,
+        "max_m": 0.55
+      },
+      {
+        "id": "t1",
+        "name_zh": "果盘",
+        "min_m": 0.55,
+        "max_m": 0.95
+      },
+      {
+        "id": "t2",
+        "name_zh": "餐篮",
+        "min_m": 0.95,
+        "max_m": 1.45
+      },
+      {
+        "id": "t3",
+        "name_zh": "野餐",
+        "min_m": 1.45,
+        "max_m": 2.2
+      }
+    ],
+    "item_tier_pickup_diameter_m": {
+      "s": [
+        0.08,
+        0.3
+      ],
+      "m": [
+        0.32,
+        0.95
+      ],
+      "l": [
+        1.0,
+        1.95
+      ]
+    },
+    "max_traversable_slope_percent": 12.0,
+    "max_route_step_m": 0.05,
+    "boundary_hedge_height_m": 1.1,
+    "boundary_hedge_depth_m": 0.8,
+    "core_hedge_height_m": 1.0,
+    "core_hedge_depth_m": 0.35,
+    "core_entrance_clear_m": 5.0,
+    "core_door_clear_m": 3.6,
+    "route_width_main_m": 3.4,
+    "route_width_spur_m": 4.0,
+    "min_route_margin_over_max_ball_m": 1.2,
+    "bank_pad_radius_m": 1.6,
+    "bank_anchor_count": 4,
+    "bank_anchor_period_s": 45,
+    "bank_warning_s": 8,
+    "spawn_to_bank_target_m": 28.0,
+    "camera_eye_height_m_by_band": {
+      "t0": 0.9,
+      "t1": 1.1,
+      "t2": 1.4,
+      "t3": 1.8
+    }
+  },
+  "bounds": {
+    "min_x": -20.0,
+    "max_x": 20.0,
+    "min_z": -20.0,
+    "max_z": 20.0,
+    "ground_y_m": 0.0
+  },
+  "zones": [
+    {
+      "id": "core_lawn",
+      "name_zh": "中央交分草坪",
+      "purpose": "四个交分锚点所在的开阔草坪；进出只走 4 个 5 m 宽入口和 4 个被长凳封住的对角门。",
+      "shape": {
+        "type": "rect",
+        "min_x": -7,
+        "max_x": 7,
+        "min_z": -7,
+        "max_z": 7
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t3"
+      ],
+      "area_m2": 196,
+      "surface": "turf_short",
+      "notes": "区内不放可卷资源，保证交分视线与地面判读；边篱 1.0 m 高、8 段。"
+    },
+    {
+      "id": "blanket_west",
+      "name_zh": "西野餐毯",
+      "purpose": "中档餐盘群主区：盘子、杯、食物密集，穿越时降速，是西侧进场与交分的必经软障碍。",
+      "shape": {
+        "type": "rect",
+        "min_x": -13.5,
+        "max_x": -7.0,
+        "min_z": -6.0,
+        "max_z": 6.0
+      },
+      "ground_y_m": 0.06,
+      "tier_band": [
+        "t1",
+        "t3"
+      ],
+      "area_m2": 78.0,
+      "surface": "wool_blanket",
+      "notes": "毯面高 0.06 m，四周 0.8 m 斜坡（7.5%）。"
+    },
+    {
+      "id": "blanket_east",
+      "name_zh": "东野餐毯",
+      "purpose": "同西野餐毯，镜像布置。",
+      "shape": {
+        "type": "rect",
+        "min_x": 7.0,
+        "max_x": 13.5,
+        "min_z": -6.0,
+        "max_z": 6.0
+      },
+      "ground_y_m": 0.06,
+      "tier_band": [
+        "t1",
+        "t3"
+      ],
+      "area_m2": 78.0,
+      "surface": "wool_blanket",
+      "notes": "毯面高 0.06 m，四周 0.8 m 斜坡（7.5%）。"
+    },
+    {
+      "id": "basket_north",
+      "name_zh": "北篮子区",
+      "purpose": "高价值内圈目标：篮子、保温壶、折叠凳、西瓜；同时是北路交分入口前的资源密集走廊。",
+      "shape": {
+        "type": "rect",
+        "min_x": -6.0,
+        "max_x": 6.0,
+        "min_z": 8.0,
+        "max_z": 13.0
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t2",
+        "t3"
+      ],
+      "area_m2": 60.0,
+      "surface": "turf_worn",
+      "notes": "区内有 5×4.5 m 小毯与野餐篮群；南北各 2 个交分近道入口。"
+    },
+    {
+      "id": "basket_south",
+      "name_zh": "南篮子区",
+      "purpose": "同北篮子区，镜像布置。",
+      "shape": {
+        "type": "rect",
+        "min_x": -6.0,
+        "max_x": 6.0,
+        "min_z": -13.0,
+        "max_z": -8.0
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t2",
+        "t3"
+      ],
+      "area_m2": 60.0,
+      "surface": "turf_worn",
+      "notes": "区内有 5×4.5 m 小毯与野餐篮群。"
+    },
+    {
+      "id": "flower_bed_nw",
+      "name_zh": "西北花圃",
+      "purpose": "早期只有小球能绕行的高台花圃：0.26 m 台阶 + 0.9 m 斜面，直径 <0.95 m 的球上不去；球长大后可直接翻越，是四条斜向近道的中段地形门。",
+      "shape": {
+        "type": "rect",
+        "min_x": -12.0,
+        "max_x": -8.0,
+        "min_z": 6.1,
+        "max_z": 11.0
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t2"
+      ],
+      "area_m2": 19.6,
+      "surface": "raised_soil",
+      "notes": "台面高 0.26 m；木框 0.12 m 宽；含小花、蘑菇、小盆栽、洒水壶。"
+    },
+    {
+      "id": "flower_bed_ne",
+      "name_zh": "东北花圃",
+      "purpose": "早期只有小球能绕行的高台花圃：0.26 m 台阶 + 0.9 m 斜面，直径 <0.95 m 的球上不去；球长大后可直接翻越，是四条斜向近道的中段地形门。",
+      "shape": {
+        "type": "rect",
+        "min_x": 8.0,
+        "max_x": 12.0,
+        "min_z": 6.1,
+        "max_z": 11.0
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t2"
+      ],
+      "area_m2": 19.6,
+      "surface": "raised_soil",
+      "notes": "台面高 0.26 m；木框 0.12 m 宽；含小花、蘑菇、小盆栽、洒水壶。"
+    },
+    {
+      "id": "flower_bed_sw",
+      "name_zh": "西南花圃",
+      "purpose": "早期只有小球能绕行的高台花圃：0.26 m 台阶 + 0.9 m 斜面，直径 <0.95 m 的球上不去；球长大后可直接翻越，是四条斜向近道的中段地形门。",
+      "shape": {
+        "type": "rect",
+        "min_x": -12.0,
+        "max_x": -8.0,
+        "min_z": -11.0,
+        "max_z": -6.1
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t2"
+      ],
+      "area_m2": 19.6,
+      "surface": "raised_soil",
+      "notes": "台面高 0.26 m；木框 0.12 m 宽；含小花、蘑菇、小盆栽、洒水壶。"
+    },
+    {
+      "id": "flower_bed_se",
+      "name_zh": "东南花圃",
+      "purpose": "早期只有小球能绕行的高台花圃：0.26 m 台阶 + 0.9 m 斜面，直径 <0.95 m 的球上不去；球长大后可直接翻越，是四条斜向近道的中段地形门。",
+      "shape": {
+        "type": "rect",
+        "min_x": 8.0,
+        "max_x": 12.0,
+        "min_z": -11.0,
+        "max_z": -6.1
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t2"
+      ],
+      "area_m2": 19.6,
+      "surface": "raised_soil",
+      "notes": "台面高 0.26 m；木框 0.12 m 宽；含小花、蘑菇、小盆栽、洒水壶。"
+    },
+    {
+      "id": "spawn_nw",
+      "name_zh": "西北出生角",
+      "purpose": "四个等价出生角之一：只放 s 档、初始球即可吃的资源；两个出口（内圈捷径 / 外环安全环）。",
+      "shape": {
+        "type": "rect",
+        "min_x": -17.5,
+        "max_x": -11.5,
+        "min_z": 11.5,
+        "max_z": 17.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t0"
+      ],
+      "area_m2": 36.0,
+      "surface": "turf_patchy",
+      "notes": "出生点地贴直径 1.8 m；角部 3 m 内不放 m/l 档物件。"
+    },
+    {
+      "id": "spawn_ne",
+      "name_zh": "东北出生角",
+      "purpose": "四个等价出生角之一：只放 s 档、初始球即可吃的资源；两个出口（内圈捷径 / 外环安全环）。",
+      "shape": {
+        "type": "rect",
+        "min_x": 11.5,
+        "max_x": 17.5,
+        "min_z": 11.5,
+        "max_z": 17.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t0"
+      ],
+      "area_m2": 36.0,
+      "surface": "turf_patchy",
+      "notes": "出生点地贴直径 1.8 m；角部 3 m 内不放 m/l 档物件。"
+    },
+    {
+      "id": "spawn_sw",
+      "name_zh": "西南出生角",
+      "purpose": "四个等价出生角之一：只放 s 档、初始球即可吃的资源；两个出口（内圈捷径 / 外环安全环）。",
+      "shape": {
+        "type": "rect",
+        "min_x": -17.5,
+        "max_x": -11.5,
+        "min_z": -17.5,
+        "max_z": -11.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t0"
+      ],
+      "area_m2": 36.0,
+      "surface": "turf_patchy",
+      "notes": "出生点地贴直径 1.8 m；角部 3 m 内不放 m/l 档物件。"
+    },
+    {
+      "id": "spawn_se",
+      "name_zh": "东南出生角",
+      "purpose": "四个等价出生角之一：只放 s 档、初始球即可吃的资源；两个出口（内圈捷径 / 外环安全环）。",
+      "shape": {
+        "type": "rect",
+        "min_x": 11.5,
+        "max_x": 17.5,
+        "min_z": -17.5,
+        "max_z": -11.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t0"
+      ],
+      "area_m2": 36.0,
+      "surface": "turf_patchy",
+      "notes": "出生点地贴直径 1.8 m；角部 3 m 内不放 m/l 档物件。"
+    },
+    {
+      "id": "fringe_north",
+      "name_zh": "北草坪边带",
+      "purpose": "低阶补给带：草籽、瓶盖、纸屑、落叶，兼作外环与北侧交分入口之间的缓冲。",
+      "shape": {
+        "type": "rect",
+        "min_x": -11.5,
+        "max_x": 11.5,
+        "min_z": 13.5,
+        "max_z": 17.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 92.0,
+      "surface": "turf_long",
+      "notes": "中间穿 3.4 m 外环路。"
+    },
+    {
+      "id": "fringe_south",
+      "name_zh": "南草坪边带",
+      "purpose": "同北草坪边带，镜像布置。",
+      "shape": {
+        "type": "rect",
+        "min_x": -11.5,
+        "max_x": 11.5,
+        "min_z": -17.5,
+        "max_z": -13.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 92.0,
+      "surface": "turf_long",
+      "notes": "中间穿 3.4 m 外环路。"
+    },
+    {
+      "id": "fringe_east",
+      "name_zh": "东草坪边带",
+      "purpose": "低阶补给带与侧路，火箭道具点所在。",
+      "shape": {
+        "type": "rect",
+        "min_x": 13.5,
+        "max_x": 17.5,
+        "min_z": -11.5,
+        "max_z": 11.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 92.0,
+      "surface": "turf_long",
+      "notes": "外环路沿 x=15.5 通过。"
+    },
+    {
+      "id": "fringe_west",
+      "name_zh": "西草坪边带",
+      "purpose": "低阶补给带与侧路；西侧出生角的“内圈捷径”沿此 4 m 走廊南下。",
+      "shape": {
+        "type": "rect",
+        "min_x": -17.5,
+        "max_x": -13.5,
+        "min_z": -11.5,
+        "max_z": 11.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 92.0,
+      "surface": "turf_long",
+      "notes": "外环路沿 x=-15.5 通过。"
+    },
+    {
+      "id": "tree_roots_nw",
+      "name_zh": "西北树根区",
+      "purpose": "角树的气根土丘：0.18 m 高、11% 缓坡，所有尺寸可翻越；橡子、石子、落叶、蘑菇。",
+      "shape": {
+        "type": "rect",
+        "min_x": -20.0,
+        "max_x": -17.5,
+        "min_z": 17.5,
+        "max_z": 20.0
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 6.25,
+      "surface": "root_mound",
+      "notes": "土丘半径 1.25 m，最高 0.18 m；树干 Ø0.5 m 不可卷。"
+    },
+    {
+      "id": "tree_roots_ne",
+      "name_zh": "东北树根区",
+      "purpose": "角树的气根土丘：0.18 m 高、11% 缓坡，所有尺寸可翻越；橡子、石子、落叶、蘑菇。",
+      "shape": {
+        "type": "rect",
+        "min_x": 17.5,
+        "max_x": 20.0,
+        "min_z": 17.5,
+        "max_z": 20.0
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 6.25,
+      "surface": "root_mound",
+      "notes": "土丘半径 1.25 m，最高 0.18 m；树干 Ø0.5 m 不可卷。"
+    },
+    {
+      "id": "tree_roots_sw",
+      "name_zh": "西南树根区",
+      "purpose": "角树的气根土丘：0.18 m 高、11% 缓坡，所有尺寸可翻越；橡子、石子、落叶、蘑菇。",
+      "shape": {
+        "type": "rect",
+        "min_x": -20.0,
+        "max_x": -17.5,
+        "min_z": -20.0,
+        "max_z": -17.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 6.25,
+      "surface": "root_mound",
+      "notes": "土丘半径 1.25 m，最高 0.18 m；树干 Ø0.5 m 不可卷。"
+    },
+    {
+      "id": "tree_roots_se",
+      "name_zh": "东南树根区",
+      "purpose": "角树的气根土丘：0.18 m 高、11% 缓坡，所有尺寸可翻越；橡子、石子、落叶、蘑菇。",
+      "shape": {
+        "type": "rect",
+        "min_x": 17.5,
+        "max_x": 20.0,
+        "min_z": -20.0,
+        "max_z": -17.5
+      },
+      "ground_y_m": 0.0,
+      "tier_band": [
+        "t0",
+        "t1"
+      ],
+      "area_m2": 6.25,
+      "surface": "root_mound",
+      "notes": "土丘半径 1.25 m，最高 0.18 m；树干 Ø0.5 m 不可卷。"
+    }
+  ],
+  "structures": [
+    {
+      "definition_id": "ground_terrain",
+      "zone_id": null,
+      "kind": "merged_plane",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "size_m": [
+        40,
+        0.02,
+        40
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "path_mesh",
+      "zone_id": null,
+      "kind": "merged_plane",
+      "position": [
+        0,
+        0.01,
+        0
+      ],
+      "size_m": [
+        40,
+        0.006,
+        40
+      ],
+      "yaw_deg": 0.0,
+      "notes": "外环与 4 条支路合并，贴地 0.006 m"
+    },
+    {
+      "definition_id": "boundary_hedge",
+      "zone_id": null,
+      "kind": "merged_ring",
+      "position": [
+        0,
+        0.55,
+        0
+      ],
+      "size_m": [
+        40,
+        1.1,
+        0.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "invisible_wall",
+      "zone_id": null,
+      "kind": "box_collider",
+      "position": [
+        0,
+        1.5,
+        20
+      ],
+      "size_m": [
+        40,
+        3.0,
+        0.2
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "invisible_wall",
+      "zone_id": null,
+      "kind": "box_collider",
+      "position": [
+        0,
+        1.5,
+        -20
+      ],
+      "size_m": [
+        40,
+        3.0,
+        0.2
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "invisible_wall",
+      "zone_id": null,
+      "kind": "box_collider",
+      "position": [
+        20,
+        1.5,
+        0
+      ],
+      "size_m": [
+        0.2,
+        3.0,
+        40
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "invisible_wall",
+      "zone_id": null,
+      "kind": "box_collider",
+      "position": [
+        -20,
+        1.5,
+        0
+      ],
+      "size_m": [
+        0.2,
+        3.0,
+        40
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "core_hedge",
+      "zone_id": "core_lawn",
+      "kind": "box",
+      "position": [
+        -3.48,
+        0.5,
+        -7.0
+      ],
+      "size_m": [
+        1.95,
+        1.0,
+        0.35
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "core_hedge",
+      "zone_id": "core_lawn",
+      "kind": "box",
+      "position": [
+        -7.0,
+        0.5,
+        -3.48
+      ],
+      "size_m": [
+        0.35,
+        1.0,
+        1.95
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "core_hedge",
+      "zone_id": "core_lawn",
+      "kind": "box",
+      "position": [
+        -3.48,
+        0.5,
+        7.0
+      ],
+      "size_m": [
+        1.95,
+        1.0,
+        0.35
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "core_hedge",
+      "zone_id": "core_lawn",
+      "kind": "box",
+      "position": [
+        -7.0,
+        0.5,
+        3.48
+      ],
+      "size_m": [
+        0.35,
+        1.0,
+        1.95
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "core_hedge",
+      "zone_id": "core_lawn",
+      "kind": "box",
+      "position": [
+        3.48,
+        0.5,
+        -7.0
+      ],
+      "size_m": [
+        1.95,
+        1.0,
+        0.35
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "core_hedge",
+      "zone_id": "core_lawn",
+      "kind": "box",
+      "position": [
+        7.0,
+        0.5,
+        -3.48
+      ],
+      "size_m": [
+        0.35,
+        1.0,
+        1.95
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "core_hedge",
+      "zone_id": "core_lawn",
+      "kind": "box",
+      "position": [
+        3.48,
+        0.5,
+        7.0
+      ],
+      "size_m": [
+        1.95,
+        1.0,
+        0.35
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "core_hedge",
+      "zone_id": "core_lawn",
+      "kind": "box",
+      "position": [
+        7.0,
+        0.5,
+        3.48
+      ],
+      "size_m": [
+        0.35,
+        1.0,
+        1.95
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "picnic_blanket",
+      "zone_id": "blanket_west",
+      "kind": "plane_raised",
+      "position": [
+        -10.25,
+        0.03,
+        0
+      ],
+      "size_m": [
+        6.5,
+        0.06,
+        12.0
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "picnic_blanket",
+      "zone_id": "blanket_east",
+      "kind": "plane_raised",
+      "position": [
+        10.25,
+        0.03,
+        0
+      ],
+      "size_m": [
+        6.5,
+        0.06,
+        12.0
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "picnic_blanket",
+      "zone_id": "basket_north",
+      "kind": "plane_raised",
+      "position": [
+        0,
+        0.03,
+        10.5
+      ],
+      "size_m": [
+        5.0,
+        0.06,
+        4.5
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "picnic_blanket",
+      "zone_id": "basket_south",
+      "kind": "plane_raised",
+      "position": [
+        0,
+        0.03,
+        -10.5
+      ],
+      "size_m": [
+        5.0,
+        0.06,
+        4.5
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "flower_bed_frame",
+      "zone_id": "flower_bed_sw",
+      "kind": "raised_box",
+      "position": [
+        -10.0,
+        0.13,
+        -8.55
+      ],
+      "size_m": [
+        4.0,
+        0.26,
+        4.9
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "tree_root_mound",
+      "zone_id": "tree_roots_sw",
+      "kind": "mound",
+      "position": [
+        -18.75,
+        0.09,
+        -18.75
+      ],
+      "size_m": [
+        2.5,
+        0.18,
+        2.5
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "corner_tree",
+      "zone_id": "tree_roots_sw",
+      "kind": "tree",
+      "position": [
+        -18.75,
+        0.0,
+        -18.75
+      ],
+      "size_m": [
+        0.5,
+        9.0,
+        0.5
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "spawn_marker",
+      "zone_id": "spawn_sw",
+      "kind": "decal_ring",
+      "position": [
+        -14.5,
+        0.01,
+        -14.5
+      ],
+      "size_m": [
+        1.8,
+        0.01,
+        1.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "flower_bed_frame",
+      "zone_id": "flower_bed_nw",
+      "kind": "raised_box",
+      "position": [
+        -10.0,
+        0.13,
+        8.55
+      ],
+      "size_m": [
+        4.0,
+        0.26,
+        4.9
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "tree_root_mound",
+      "zone_id": "tree_roots_nw",
+      "kind": "mound",
+      "position": [
+        -18.75,
+        0.09,
+        18.75
+      ],
+      "size_m": [
+        2.5,
+        0.18,
+        2.5
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "corner_tree",
+      "zone_id": "tree_roots_nw",
+      "kind": "tree",
+      "position": [
+        -18.75,
+        0.0,
+        18.75
+      ],
+      "size_m": [
+        0.5,
+        9.0,
+        0.5
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "spawn_marker",
+      "zone_id": "spawn_nw",
+      "kind": "decal_ring",
+      "position": [
+        -14.5,
+        0.01,
+        14.5
+      ],
+      "size_m": [
+        1.8,
+        0.01,
+        1.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "flower_bed_frame",
+      "zone_id": "flower_bed_se",
+      "kind": "raised_box",
+      "position": [
+        10.0,
+        0.13,
+        -8.55
+      ],
+      "size_m": [
+        4.0,
+        0.26,
+        4.9
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "tree_root_mound",
+      "zone_id": "tree_roots_se",
+      "kind": "mound",
+      "position": [
+        18.75,
+        0.09,
+        -18.75
+      ],
+      "size_m": [
+        2.5,
+        0.18,
+        2.5
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "corner_tree",
+      "zone_id": "tree_roots_se",
+      "kind": "tree",
+      "position": [
+        18.75,
+        0.0,
+        -18.75
+      ],
+      "size_m": [
+        0.5,
+        9.0,
+        0.5
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "spawn_marker",
+      "zone_id": "spawn_se",
+      "kind": "decal_ring",
+      "position": [
+        14.5,
+        0.01,
+        -14.5
+      ],
+      "size_m": [
+        1.8,
+        0.01,
+        1.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "flower_bed_frame",
+      "zone_id": "flower_bed_ne",
+      "kind": "raised_box",
+      "position": [
+        10.0,
+        0.13,
+        8.55
+      ],
+      "size_m": [
+        4.0,
+        0.26,
+        4.9
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "tree_root_mound",
+      "zone_id": "tree_roots_ne",
+      "kind": "mound",
+      "position": [
+        18.75,
+        0.09,
+        18.75
+      ],
+      "size_m": [
+        2.5,
+        0.18,
+        2.5
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "corner_tree",
+      "zone_id": "tree_roots_ne",
+      "kind": "tree",
+      "position": [
+        18.75,
+        0.0,
+        18.75
+      ],
+      "size_m": [
+        0.5,
+        9.0,
+        0.5
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "spawn_marker",
+      "zone_id": "spawn_ne",
+      "kind": "decal_ring",
+      "position": [
+        14.5,
+        0.01,
+        14.5
+      ],
+      "size_m": [
+        1.8,
+        0.01,
+        1.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "bank_pad",
+      "zone_id": "core_lawn",
+      "kind": "disc",
+      "position": [
+        -4.2,
+        0.01,
+        -4.2
+      ],
+      "size_m": [
+        3.2,
+        0.02,
+        3.2
+      ],
+      "yaw_deg": 0.0,
+      "notes": "交分圆盘 Ø3.2 m"
+    },
+    {
+      "definition_id": "bank_beacon",
+      "zone_id": "core_lawn",
+      "kind": "pole_flag",
+      "position": [
+        -3.0,
+        0.0,
+        -3.0
+      ],
+      "size_m": [
+        0.25,
+        3.0,
+        0.25
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "bank_pad",
+      "zone_id": "core_lawn",
+      "kind": "disc",
+      "position": [
+        -4.2,
+        0.01,
+        4.2
+      ],
+      "size_m": [
+        3.2,
+        0.02,
+        3.2
+      ],
+      "yaw_deg": 0.0,
+      "notes": "交分圆盘 Ø3.2 m"
+    },
+    {
+      "definition_id": "bank_beacon",
+      "zone_id": "core_lawn",
+      "kind": "pole_flag",
+      "position": [
+        -3.0,
+        0.0,
+        3.0
+      ],
+      "size_m": [
+        0.25,
+        3.0,
+        0.25
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "bank_pad",
+      "zone_id": "core_lawn",
+      "kind": "disc",
+      "position": [
+        4.2,
+        0.01,
+        -4.2
+      ],
+      "size_m": [
+        3.2,
+        0.02,
+        3.2
+      ],
+      "yaw_deg": 0.0,
+      "notes": "交分圆盘 Ø3.2 m"
+    },
+    {
+      "definition_id": "bank_beacon",
+      "zone_id": "core_lawn",
+      "kind": "pole_flag",
+      "position": [
+        3.0,
+        0.0,
+        -3.0
+      ],
+      "size_m": [
+        0.25,
+        3.0,
+        0.25
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "bank_pad",
+      "zone_id": "core_lawn",
+      "kind": "disc",
+      "position": [
+        4.2,
+        0.01,
+        4.2
+      ],
+      "size_m": [
+        3.2,
+        0.02,
+        3.2
+      ],
+      "yaw_deg": 0.0,
+      "notes": "交分圆盘 Ø3.2 m"
+    },
+    {
+      "definition_id": "bank_beacon",
+      "zone_id": "core_lawn",
+      "kind": "pole_flag",
+      "position": [
+        3.0,
+        0.0,
+        3.0
+      ],
+      "size_m": [
+        0.25,
+        3.0,
+        0.25
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "blanket_west",
+      "kind": "pedestal",
+      "position": [
+        -10.25,
+        0.0,
+        0.0
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": "magnet"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "blanket_east",
+      "kind": "pedestal",
+      "position": [
+        10.25,
+        0.0,
+        0.0
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": "magnet"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "fringe_north",
+      "kind": "pedestal",
+      "position": [
+        0,
+        0.0,
+        15.5
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": "rocket"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "fringe_south",
+      "kind": "pedestal",
+      "position": [
+        0,
+        0.0,
+        -15.5
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": "rocket"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "fringe_east",
+      "kind": "pedestal",
+      "position": [
+        15.5,
+        0.0,
+        0
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": "rocket"
+    },
+    {
+      "definition_id": "powerup_pedestal",
+      "zone_id": "fringe_west",
+      "kind": "pedestal",
+      "position": [
+        -15.5,
+        0.0,
+        0
+      ],
+      "size_m": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "yaw_deg": 0.0,
+      "notes": "rocket"
+    },
+    {
+      "definition_id": "zone_signpost",
+      "zone_id": null,
+      "kind": "post",
+      "position": [
+        13.2,
+        0,
+        6.6
+      ],
+      "size_m": [
+        0.45,
+        1.2,
+        0.12
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "zone_signpost",
+      "zone_id": null,
+      "kind": "post",
+      "position": [
+        -13.2,
+        0,
+        6.6
+      ],
+      "size_m": [
+        0.45,
+        1.2,
+        0.12
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "zone_signpost",
+      "zone_id": null,
+      "kind": "post",
+      "position": [
+        13.2,
+        0,
+        -6.6
+      ],
+      "size_m": [
+        0.45,
+        1.2,
+        0.12
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "zone_signpost",
+      "zone_id": null,
+      "kind": "post",
+      "position": [
+        -13.2,
+        0,
+        -6.6
+      ],
+      "size_m": [
+        0.45,
+        1.2,
+        0.12
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "zone_signpost",
+      "zone_id": null,
+      "kind": "post",
+      "position": [
+        6.6,
+        0,
+        13.2
+      ],
+      "size_m": [
+        0.45,
+        1.2,
+        0.12
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "zone_signpost",
+      "zone_id": null,
+      "kind": "post",
+      "position": [
+        -6.6,
+        0,
+        13.2
+      ],
+      "size_m": [
+        0.45,
+        1.2,
+        0.12
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "zone_signpost",
+      "zone_id": null,
+      "kind": "post",
+      "position": [
+        6.6,
+        0,
+        -13.2
+      ],
+      "size_m": [
+        0.45,
+        1.2,
+        0.12
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "zone_signpost",
+      "zone_id": null,
+      "kind": "post",
+      "position": [
+        -6.6,
+        0,
+        -13.2
+      ],
+      "size_m": [
+        0.45,
+        1.2,
+        0.12
+      ],
+      "yaw_deg": 0.0,
+      "notes": ""
+    },
+    {
+      "definition_id": "giant_picnic_table",
+      "zone_id": null,
+      "kind": "merged_box",
+      "position": [
+        0,
+        0.95,
+        24.0
+      ],
+      "size_m": [
+        8.0,
+        1.9,
+        3.2
+      ],
+      "yaw_deg": 0.0,
+      "notes": "边界外，纯地标"
+    },
+    {
+      "definition_id": "giant_oak",
+      "zone_id": null,
+      "kind": "tree",
+      "position": [
+        0,
+        0.0,
+        -26.0
+      ],
+      "size_m": [
+        2.0,
+        20.0,
+        2.0
+      ],
+      "yaw_deg": 0.0,
+      "notes": "边界外，纯地标"
+    },
+    {
+      "definition_id": "distant_tree_line",
+      "zone_id": null,
+      "kind": "merged_ring",
+      "position": [
+        0,
+        4.0,
+        0
+      ],
+      "size_m": [
+        50.0,
+        8.0,
+        50.0
+      ],
+      "yaw_deg": 0.0,
+      "notes": "边界外 3–6 m 环形树带"
+    }
+  ],
+  "bank": {
+    "zone_id": "core_lawn",
+    "anchors": [
+      {
+        "id": "bank_a",
+        "name_zh": "东北台",
+        "position": [
+          4.2,
+          0.0,
+          4.2
+        ],
+        "radius_m": 1.6,
+        "entrances": [
+          "spur_core_north",
+          "shortcut_door_ne"
+        ],
+        "approach_route_ids": [
+          "approach_bank_a"
+        ],
+        "notes": "旗帜/发光环表示当前激活台；不占位、可多人同时交分（01 §2）。"
+      },
+      {
+        "id": "bank_b",
+        "name_zh": "西北台",
+        "position": [
+          -4.2,
+          0.0,
+          4.2
+        ],
+        "radius_m": 1.6,
+        "entrances": [
+          "spur_core_west",
+          "shortcut_door_nw"
+        ],
+        "approach_route_ids": [
+          "approach_bank_b"
+        ]
+      },
+      {
+        "id": "bank_c",
+        "name_zh": "西南台",
+        "position": [
+          -4.2,
+          0.0,
+          -4.2
+        ],
+        "radius_m": 1.6,
+        "entrances": [
+          "spur_core_south",
+          "shortcut_door_sw"
+        ],
+        "approach_route_ids": [
+          "approach_bank_c"
+        ]
+      },
+      {
+        "id": "bank_d",
+        "name_zh": "东南台",
+        "position": [
+          4.2,
+          0.0,
+          -4.2
+        ],
+        "radius_m": 1.6,
+        "entrances": [
+          "spur_core_east",
+          "shortcut_door_se"
+        ],
+        "approach_route_ids": [
+          "approach_bank_d"
+        ]
+      }
+    ],
+    "rotation": {
+      "mode": "single_active_anchor",
+      "order": [
+        "bank_a",
+        "bank_d",
+        "bank_c",
+        "bank_b"
+      ],
+      "period_s": 45,
+      "warning_s": 8,
+      "activate_at_s": [
+        0,
+        45,
+        90,
+        135
+      ],
+      "timeline_note": "180 s 内轮换 3 次；第 4 段（135–180 s）与最后 15 s 提醒重叠，最后一个台是终局目标。",
+      "status": "PROVISIONAL_NOT_TESTED"
+    },
+    "rules": {
+      "max_concurrent_bankers": 4,
+      "occupancy_lock": false,
+      "bank_resets_ball_to_start_size": true,
+      "bank_radius_counts": "球心进入圆盘即算到达；不要求停稳",
+      "leave_after_bank": "四个方向 3–5 m 内都能出草坪，无单向陷阱"
+    }
+  },
+  "spawns": [
+    {
+      "id": "spawn_nw",
+      "zone_id": "spawn_nw",
+      "position": [
+        -14.5,
+        0.0,
+        14.5
+      ],
+      "yaw_deg": 135.0,
+      "facing": "toward_map_centre",
+      "notes": "朝地图中心；地贴 Ø1.8 m。"
+    },
+    {
+      "id": "spawn_ne",
+      "zone_id": "spawn_ne",
+      "position": [
+        14.5,
+        0.0,
+        14.5
+      ],
+      "yaw_deg": 225.0,
+      "facing": "toward_map_centre",
+      "notes": "朝地图中心；地贴 Ø1.8 m。"
+    },
+    {
+      "id": "spawn_sw",
+      "zone_id": "spawn_sw",
+      "position": [
+        -14.5,
+        0.0,
+        -14.5
+      ],
+      "yaw_deg": 45.0,
+      "facing": "toward_map_centre",
+      "notes": "朝地图中心；地贴 Ø1.8 m。"
+    },
+    {
+      "id": "spawn_se",
+      "zone_id": "spawn_se",
+      "position": [
+        14.5,
+        0.0,
+        -14.5
+      ],
+      "yaw_deg": 315.0,
+      "facing": "toward_map_centre",
+      "notes": "朝地图中心；地贴 Ø1.8 m。"
+    }
+  ],
+  "size_gates": [
+    {
+      "id": "gate_bench_nw",
+      "type": "absorb",
+      "definition_id": "collapsed_bench",
+      "position": [
+        -5.72,
+        0.0,
+        5.72
+      ],
+      "yaw_deg": 45.0,
+      "clear_width_m": 3.6,
+      "blocks_ball_diameter_below_m": 1.05,
+      "absorbable_at_ball_diameter_m": 1.25,
+      "opens_path": "shortcut_door_nw",
+      "detour_m": 8.0,
+      "detour_route": "spur_core_north",
+      "notes": "长凳横躺在对角门；1.05 m 直径以下完全挡死，1.05–1.25 m 之间会抖动但不让路，≥1.25 m 可吸走。"
+    },
+    {
+      "id": "gate_bench_ne",
+      "type": "absorb",
+      "definition_id": "collapsed_bench",
+      "position": [
+        5.72,
+        0.0,
+        5.72
+      ],
+      "yaw_deg": 135.0,
+      "clear_width_m": 3.6,
+      "blocks_ball_diameter_below_m": 1.05,
+      "absorbable_at_ball_diameter_m": 1.25,
+      "opens_path": "shortcut_door_ne",
+      "detour_m": 8.0,
+      "detour_route": "spur_core_north",
+      "notes": "长凳横躺在对角门；1.05 m 直径以下完全挡死，1.05–1.25 m 之间会抖动但不让路，≥1.25 m 可吸走。"
+    },
+    {
+      "id": "gate_bench_sw",
+      "type": "absorb",
+      "definition_id": "collapsed_bench",
+      "position": [
+        -5.72,
+        0.0,
+        -5.72
+      ],
+      "yaw_deg": 45.0,
+      "clear_width_m": 3.6,
+      "blocks_ball_diameter_below_m": 1.05,
+      "absorbable_at_ball_diameter_m": 1.25,
+      "opens_path": "shortcut_door_sw",
+      "detour_m": 8.0,
+      "detour_route": "spur_core_south",
+      "notes": "长凳横躺在对角门；1.05 m 直径以下完全挡死，1.05–1.25 m 之间会抖动但不让路，≥1.25 m 可吸走。"
+    },
+    {
+      "id": "gate_bench_se",
+      "type": "absorb",
+      "definition_id": "collapsed_bench",
+      "position": [
+        5.72,
+        0.0,
+        -5.72
+      ],
+      "yaw_deg": 135.0,
+      "clear_width_m": 3.6,
+      "blocks_ball_diameter_below_m": 1.05,
+      "absorbable_at_ball_diameter_m": 1.25,
+      "opens_path": "shortcut_door_se",
+      "detour_m": 8.0,
+      "detour_route": "spur_core_south",
+      "notes": "长凳横躺在对角门；1.05 m 直径以下完全挡死，1.05–1.25 m 之间会抖动但不让路，≥1.25 m 可吸走。"
+    },
+    {
+      "id": "gate_bed_nw",
+      "type": "climb",
+      "definition_id": "flower_bed_frame",
+      "position": [
+        -10.0,
+        0.26,
+        8.55
+      ],
+      "yaw_deg": 0.0,
+      "clear_width_m": 4.0,
+      "blocks_ball_diameter_below_m": 0.95,
+      "absorbable_at_ball_diameter_m": 1.1,
+      "opens_path": "flower_bed_nw",
+      "detour_m": 5.5,
+      "detour_route": "loop_outer",
+      "notes": "高台花圃：0.26 m 台 + 0.9 m 斜面（29%）。小球上不去因而绕行；≥1.10 m 可翻越。这是地形门，不可吸收；花圃内资源照常可吸。"
+    },
+    {
+      "id": "gate_bed_ne",
+      "type": "climb",
+      "definition_id": "flower_bed_frame",
+      "position": [
+        10.0,
+        0.26,
+        8.55
+      ],
+      "yaw_deg": 0.0,
+      "clear_width_m": 4.0,
+      "blocks_ball_diameter_below_m": 0.95,
+      "absorbable_at_ball_diameter_m": 1.1,
+      "opens_path": "flower_bed_ne",
+      "detour_m": 5.5,
+      "detour_route": "loop_outer",
+      "notes": "高台花圃：0.26 m 台 + 0.9 m 斜面（29%）。小球上不去因而绕行；≥1.10 m 可翻越。这是地形门，不可吸收；花圃内资源照常可吸。"
+    },
+    {
+      "id": "gate_bed_sw",
+      "type": "climb",
+      "definition_id": "flower_bed_frame",
+      "position": [
+        -10.0,
+        0.26,
+        -8.55
+      ],
+      "yaw_deg": 0.0,
+      "clear_width_m": 4.0,
+      "blocks_ball_diameter_below_m": 0.95,
+      "absorbable_at_ball_diameter_m": 1.1,
+      "opens_path": "flower_bed_sw",
+      "detour_m": 5.5,
+      "detour_route": "loop_outer",
+      "notes": "高台花圃：0.26 m 台 + 0.9 m 斜面（29%）。小球上不去因而绕行；≥1.10 m 可翻越。这是地形门，不可吸收；花圃内资源照常可吸。"
+    },
+    {
+      "id": "gate_bed_se",
+      "type": "climb",
+      "definition_id": "flower_bed_frame",
+      "position": [
+        10.0,
+        0.26,
+        -8.55
+      ],
+      "yaw_deg": 0.0,
+      "clear_width_m": 4.0,
+      "blocks_ball_diameter_below_m": 0.95,
+      "absorbable_at_ball_diameter_m": 1.1,
+      "opens_path": "flower_bed_se",
+      "detour_m": 5.5,
+      "detour_route": "loop_outer",
+      "notes": "高台花圃：0.26 m 台 + 0.9 m 斜面（29%）。小球上不去因而绕行；≥1.10 m 可翻越。这是地形门，不可吸收；花圃内资源照常可吸。"
+    }
+  ],
+  "prop_scatter": [
+    {
+      "zone_id": "spawn_nw",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "seed",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "bottle_cap",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "paper_scrap",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "spawn_ne",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "seed",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "bottle_cap",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "paper_scrap",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "spawn_sw",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "seed",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "bottle_cap",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "paper_scrap",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "spawn_se",
+      "tier_band": "t0",
+      "min_spacing_m": 0.8,
+      "definitions": [
+        {
+          "id": "seed",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "bottle_cap",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "paper_scrap",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "fringe_north",
+      "tier_band": "t0",
+      "min_spacing_m": 1.4,
+      "definitions": [
+        {
+          "id": "seed",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "acorn",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bottle_cap",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "paper_scrap",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "soda_can",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "fringe_south",
+      "tier_band": "t0",
+      "min_spacing_m": 1.4,
+      "definitions": [
+        {
+          "id": "seed",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "acorn",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bottle_cap",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "paper_scrap",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "soda_can",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "fringe_east",
+      "tier_band": "t0",
+      "min_spacing_m": 1.4,
+      "definitions": [
+        {
+          "id": "seed",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "acorn",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bottle_cap",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "paper_scrap",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "soda_can",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "fringe_west",
+      "tier_band": "t0",
+      "min_spacing_m": 1.4,
+      "definitions": [
+        {
+          "id": "seed",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "acorn",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bottle_cap",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "paper_scrap",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "soda_can",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "tree_roots_nw",
+      "tier_band": "t0",
+      "min_spacing_m": 0.7,
+      "definitions": [
+        {
+          "id": "acorn",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "pebble",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "mushroom",
+          "count_min": 3,
+          "count_max": 3
+        }
+      ]
+    },
+    {
+      "zone_id": "tree_roots_ne",
+      "tier_band": "t0",
+      "min_spacing_m": 0.7,
+      "definitions": [
+        {
+          "id": "acorn",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "pebble",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "mushroom",
+          "count_min": 3,
+          "count_max": 3
+        }
+      ]
+    },
+    {
+      "zone_id": "tree_roots_sw",
+      "tier_band": "t0",
+      "min_spacing_m": 0.7,
+      "definitions": [
+        {
+          "id": "acorn",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "pebble",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "mushroom",
+          "count_min": 3,
+          "count_max": 3
+        }
+      ]
+    },
+    {
+      "zone_id": "tree_roots_se",
+      "tier_band": "t0",
+      "min_spacing_m": 0.7,
+      "definitions": [
+        {
+          "id": "acorn",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "pebble",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "fallen_leaf",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "mushroom",
+          "count_min": 3,
+          "count_max": 3
+        }
+      ]
+    },
+    {
+      "zone_id": "flower_bed_nw",
+      "tier_band": "t0",
+      "min_spacing_m": 0.9,
+      "definitions": [
+        {
+          "id": "flower",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "mushroom",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "small_potted_plant",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "watering_can",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "flower_bed_ne",
+      "tier_band": "t0",
+      "min_spacing_m": 0.9,
+      "definitions": [
+        {
+          "id": "flower",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "mushroom",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "small_potted_plant",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "watering_can",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "flower_bed_sw",
+      "tier_band": "t0",
+      "min_spacing_m": 0.9,
+      "definitions": [
+        {
+          "id": "flower",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "mushroom",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "small_potted_plant",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "watering_can",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "flower_bed_se",
+      "tier_band": "t0",
+      "min_spacing_m": 0.9,
+      "definitions": [
+        {
+          "id": "flower",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "mushroom",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "pebble",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "small_potted_plant",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "watering_can",
+          "count_min": 1,
+          "count_max": 1
+        }
+      ]
+    },
+    {
+      "zone_id": "blanket_west",
+      "tier_band": "t1",
+      "min_spacing_m": 0.9,
+      "definitions": [
+        {
+          "id": "plate",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "cup",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "bowl",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "spoon",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "apple",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "orange",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "croissant",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "bread_slice",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "sandwich",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "cookie",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "grapes",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "cheese_slice",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "strawberry",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "banana",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "pear",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "glass_bottle",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "juice_carton",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "soda_can",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "napkin",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "pebble",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "toy_ball",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "blanket_east",
+      "tier_band": "t1",
+      "min_spacing_m": 0.9,
+      "definitions": [
+        {
+          "id": "plate",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "cup",
+          "count_min": 6,
+          "count_max": 6
+        },
+        {
+          "id": "bowl",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "spoon",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "apple",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "orange",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "croissant",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "bread_slice",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "sandwich",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "cookie",
+          "count_min": 5,
+          "count_max": 5
+        },
+        {
+          "id": "grapes",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "cheese_slice",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "strawberry",
+          "count_min": 4,
+          "count_max": 4
+        },
+        {
+          "id": "banana",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "pear",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "glass_bottle",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "juice_carton",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "soda_can",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "napkin",
+          "count_min": 3,
+          "count_max": 3
+        },
+        {
+          "id": "pebble",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "toy_ball",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "basket_north",
+      "tier_band": "t2",
+      "min_spacing_m": 1.6,
+      "definitions": [
+        {
+          "id": "picnic_basket",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "thermos",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "watermelon",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "cooler_box",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "folding_stool",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "flower_pot_large",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "banana",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "apple",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bread_slice",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "sandwich",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "juice_carton",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "plate",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bowl",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "cup",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    },
+    {
+      "zone_id": "basket_south",
+      "tier_band": "t2",
+      "min_spacing_m": 1.6,
+      "definitions": [
+        {
+          "id": "picnic_basket",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "thermos",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "watermelon",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "cooler_box",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "folding_stool",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "flower_pot_large",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "banana",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "apple",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bread_slice",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "sandwich",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "juice_carton",
+          "count_min": 1,
+          "count_max": 1
+        },
+        {
+          "id": "plate",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "bowl",
+          "count_min": 2,
+          "count_max": 2
+        },
+        {
+          "id": "cup",
+          "count_min": 2,
+          "count_max": 2
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "id": "loop_outer",
+      "kind": "safe_loop",
+      "closed": true,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          0,
+          15.5
+        ],
+        [
+          9,
+          15.5
+        ],
+        [
+          13.1,
+          13.1
+        ],
+        [
+          15.5,
+          9
+        ],
+        [
+          15.5,
+          0
+        ],
+        [
+          15.5,
+          -9
+        ],
+        [
+          13.1,
+          -13.1
+        ],
+        [
+          9,
+          -15.5
+        ],
+        [
+          0,
+          -15.5
+        ],
+        [
+          -9,
+          -15.5
+        ],
+        [
+          -13.1,
+          -13.1
+        ],
+        [
+          -15.5,
+          -9
+        ],
+        [
+          -15.5,
+          0
+        ],
+        [
+          -15.5,
+          9
+        ],
+        [
+          -13.1,
+          13.1
+        ],
+        [
+          -9,
+          15.5
+        ]
+      ],
+      "length_m": 110.01,
+      "notes": "外圈安全环：宽 3.4 m，绕四边；四角切入出生角作为出生口。"
+    },
+    {
+      "id": "spur_core_north",
+      "kind": "core_spur",
+      "closed": false,
+      "width_m": 4.0,
+      "min_clear_width_m": 4.0,
+      "waypoints": [
+        [
+          0,
+          15.5
+        ],
+        [
+          0,
+          13.0
+        ],
+        [
+          0,
+          7.0
+        ]
+      ],
+      "length_m": 8.5,
+      "notes": "外环→中央草坪 5 m 宽入口；东/西支路横穿野餐毯。"
+    },
+    {
+      "id": "spur_core_south",
+      "kind": "core_spur",
+      "closed": false,
+      "width_m": 4.0,
+      "min_clear_width_m": 4.0,
+      "waypoints": [
+        [
+          0,
+          -15.5
+        ],
+        [
+          0,
+          -13.0
+        ],
+        [
+          0,
+          -7.0
+        ]
+      ],
+      "length_m": 8.5,
+      "notes": "外环→中央草坪 5 m 宽入口；东/西支路横穿野餐毯。"
+    },
+    {
+      "id": "spur_core_east",
+      "kind": "core_spur",
+      "closed": false,
+      "width_m": 4.0,
+      "min_clear_width_m": 4.0,
+      "waypoints": [
+        [
+          15.5,
+          0
+        ],
+        [
+          13.0,
+          0
+        ],
+        [
+          7.0,
+          0
+        ]
+      ],
+      "length_m": 8.5,
+      "notes": "外环→中央草坪 5 m 宽入口；东/西支路横穿野餐毯。"
+    },
+    {
+      "id": "spur_core_west",
+      "kind": "core_spur",
+      "closed": false,
+      "width_m": 4.0,
+      "min_clear_width_m": 4.0,
+      "waypoints": [
+        [
+          -15.5,
+          0
+        ],
+        [
+          -13.0,
+          0
+        ],
+        [
+          -7.0,
+          0
+        ]
+      ],
+      "length_m": 8.5,
+      "notes": "外环→中央草坪 5 m 宽入口；东/西支路横穿野餐毯。"
+    },
+    {
+      "id": "spawn_nw_a",
+      "kind": "spawn_exit",
+      "spawn_id": "spawn_nw",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          -14.5,
+          14.5
+        ],
+        [
+          -15.5,
+          11.5
+        ],
+        [
+          -15.5,
+          0.0
+        ],
+        [
+          -13.5,
+          0.0
+        ],
+        [
+          -7.0,
+          0.0
+        ]
+      ],
+      "length_m": 23.16,
+      "notes": "出生角内圈出口：沿 4 m 宽边带走廊到相邻的 5 m 宽草坪入口。"
+    },
+    {
+      "id": "spawn_nw_b",
+      "kind": "spawn_exit",
+      "spawn_id": "spawn_nw",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          -14.5,
+          14.5
+        ],
+        [
+          -13.0,
+          15.2
+        ],
+        [
+          -9.0,
+          15.5
+        ],
+        [
+          0,
+          15.5
+        ],
+        [
+          0,
+          13.0
+        ],
+        [
+          0,
+          7.0
+        ]
+      ],
+      "length_m": 23.17,
+      "notes": "出生角外环出口：并进 3.4 m 外环，绕到另一侧入口；不穿野餐毯。"
+    },
+    {
+      "id": "spawn_ne_a",
+      "kind": "spawn_exit",
+      "spawn_id": "spawn_ne",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          14.5,
+          14.5
+        ],
+        [
+          15.5,
+          11.5
+        ],
+        [
+          15.5,
+          0.0
+        ],
+        [
+          13.5,
+          0.0
+        ],
+        [
+          7.0,
+          0.0
+        ]
+      ],
+      "length_m": 23.16,
+      "notes": "出生角内圈出口：沿 4 m 宽边带走廊到相邻的 5 m 宽草坪入口。"
+    },
+    {
+      "id": "spawn_ne_b",
+      "kind": "spawn_exit",
+      "spawn_id": "spawn_ne",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          14.5,
+          14.5
+        ],
+        [
+          13.0,
+          15.2
+        ],
+        [
+          9.0,
+          15.5
+        ],
+        [
+          0,
+          15.5
+        ],
+        [
+          0,
+          13.0
+        ],
+        [
+          0,
+          7.0
+        ]
+      ],
+      "length_m": 23.17,
+      "notes": "出生角外环出口：并进 3.4 m 外环，绕到另一侧入口；不穿野餐毯。"
+    },
+    {
+      "id": "spawn_sw_a",
+      "kind": "spawn_exit",
+      "spawn_id": "spawn_sw",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          -14.5,
+          -14.5
+        ],
+        [
+          -15.5,
+          -11.5
+        ],
+        [
+          -15.5,
+          -0.0
+        ],
+        [
+          -13.5,
+          -0.0
+        ],
+        [
+          -7.0,
+          -0.0
+        ]
+      ],
+      "length_m": 23.16,
+      "notes": "出生角内圈出口：沿 4 m 宽边带走廊到相邻的 5 m 宽草坪入口。"
+    },
+    {
+      "id": "spawn_sw_b",
+      "kind": "spawn_exit",
+      "spawn_id": "spawn_sw",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          -14.5,
+          -14.5
+        ],
+        [
+          -13.0,
+          -15.2
+        ],
+        [
+          -9.0,
+          -15.5
+        ],
+        [
+          0,
+          -15.5
+        ],
+        [
+          0,
+          -13.0
+        ],
+        [
+          0,
+          -7.0
+        ]
+      ],
+      "length_m": 23.17,
+      "notes": "出生角外环出口：并进 3.4 m 外环，绕到另一侧入口；不穿野餐毯。"
+    },
+    {
+      "id": "spawn_se_a",
+      "kind": "spawn_exit",
+      "spawn_id": "spawn_se",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          14.5,
+          -14.5
+        ],
+        [
+          15.5,
+          -11.5
+        ],
+        [
+          15.5,
+          -0.0
+        ],
+        [
+          13.5,
+          -0.0
+        ],
+        [
+          7.0,
+          -0.0
+        ]
+      ],
+      "length_m": 23.16,
+      "notes": "出生角内圈出口：沿 4 m 宽边带走廊到相邻的 5 m 宽草坪入口。"
+    },
+    {
+      "id": "spawn_se_b",
+      "kind": "spawn_exit",
+      "spawn_id": "spawn_se",
+      "closed": false,
+      "width_m": 3.4,
+      "min_clear_width_m": 3.4,
+      "waypoints": [
+        [
+          14.5,
+          -14.5
+        ],
+        [
+          13.0,
+          -15.2
+        ],
+        [
+          9.0,
+          -15.5
+        ],
+        [
+          0,
+          -15.5
+        ],
+        [
+          0,
+          -13.0
+        ],
+        [
+          0,
+          -7.0
+        ]
+      ],
+      "length_m": 23.17,
+      "notes": "出生角外环出口：并进 3.4 m 外环，绕到另一侧入口；不穿野餐毯。"
+    },
+    {
+      "id": "approach_bank_a",
+      "kind": "bank_approach",
+      "bank_anchor_id": "bank_a",
+      "closed": false,
+      "width_m": 3.0,
+      "min_clear_width_m": 5.0,
+      "waypoints": [
+        [
+          0,
+          7.0
+        ],
+        [
+          2.4,
+          6.0
+        ],
+        [
+          4.2,
+          4.2
+        ]
+      ],
+      "length_m": 5.15,
+      "notes": "入口→本侧交分台；草坪内为开放地面，声明净宽取 5 m。"
+    },
+    {
+      "id": "approach_bank_d",
+      "kind": "bank_approach",
+      "bank_anchor_id": "bank_d",
+      "closed": false,
+      "width_m": 3.0,
+      "min_clear_width_m": 5.0,
+      "waypoints": [
+        [
+          7.0,
+          0
+        ],
+        [
+          6.0,
+          -2.4
+        ],
+        [
+          4.2,
+          -4.2
+        ]
+      ],
+      "length_m": 5.15,
+      "notes": "入口→本侧交分台；草坪内为开放地面，声明净宽取 5 m。"
+    },
+    {
+      "id": "approach_bank_c",
+      "kind": "bank_approach",
+      "bank_anchor_id": "bank_c",
+      "closed": false,
+      "width_m": 3.0,
+      "min_clear_width_m": 5.0,
+      "waypoints": [
+        [
+          0,
+          -7.0
+        ],
+        [
+          -2.4,
+          -6.0
+        ],
+        [
+          -4.2,
+          -4.2
+        ]
+      ],
+      "length_m": 5.15,
+      "notes": "入口→本侧交分台；草坪内为开放地面，声明净宽取 5 m。"
+    },
+    {
+      "id": "approach_bank_b",
+      "kind": "bank_approach",
+      "bank_anchor_id": "bank_b",
+      "closed": false,
+      "width_m": 3.0,
+      "min_clear_width_m": 5.0,
+      "waypoints": [
+        [
+          -7.0,
+          0
+        ],
+        [
+          -6.0,
+          2.4
+        ],
+        [
+          -4.2,
+          4.2
+        ]
+      ],
+      "length_m": 5.15,
+      "notes": "入口→本侧交分台；草坪内为开放地面，声明净宽取 5 m。"
+    },
+    {
+      "id": "shortcut_door_ne",
+      "kind": "gated_shortcut",
+      "gate_id": "gate_bench_ne",
+      "closed": false,
+      "width_m": 3.6,
+      "min_clear_width_m": 3.6,
+      "waypoints": [
+        [
+          5.725,
+          5.725
+        ],
+        [
+          4.2,
+          4.2
+        ]
+      ],
+      "length_m": 2.16,
+      "notes": "对角门被封时长凳堵住；吸掉长凳后是进草坪最短的一条。"
+    },
+    {
+      "id": "shortcut_door_nw",
+      "kind": "gated_shortcut",
+      "gate_id": "gate_bench_nw",
+      "closed": false,
+      "width_m": 3.6,
+      "min_clear_width_m": 3.6,
+      "waypoints": [
+        [
+          -5.725,
+          5.725
+        ],
+        [
+          -4.2,
+          4.2
+        ]
+      ],
+      "length_m": 2.16,
+      "notes": "对角门被封时长凳堵住；吸掉长凳后是进草坪最短的一条。"
+    },
+    {
+      "id": "shortcut_door_se",
+      "kind": "gated_shortcut",
+      "gate_id": "gate_bench_se",
+      "closed": false,
+      "width_m": 3.6,
+      "min_clear_width_m": 3.6,
+      "waypoints": [
+        [
+          5.725,
+          -5.725
+        ],
+        [
+          4.2,
+          -4.2
+        ]
+      ],
+      "length_m": 2.16,
+      "notes": "对角门被封时长凳堵住；吸掉长凳后是进草坪最短的一条。"
+    },
+    {
+      "id": "shortcut_door_sw",
+      "kind": "gated_shortcut",
+      "gate_id": "gate_bench_sw",
+      "closed": false,
+      "width_m": 3.6,
+      "min_clear_width_m": 3.6,
+      "waypoints": [
+        [
+          -5.725,
+          -5.725
+        ],
+        [
+          -4.2,
+          -4.2
+        ]
+      ],
+      "length_m": 2.16,
+      "notes": "对角门被封时长凳堵住；吸掉长凳后是进草坪最短的一条。"
+    }
+  ],
+  "chokepoints": [
+    {
+      "id": "core_entrance_north",
+      "type": "core_entrance",
+      "position": [
+        0,
+        0,
+        7
+      ],
+      "clear_width_m": 5.0
+    },
+    {
+      "id": "core_entrance_south",
+      "type": "core_entrance",
+      "position": [
+        0,
+        0,
+        -7
+      ],
+      "clear_width_m": 5.0
+    },
+    {
+      "id": "core_entrance_east",
+      "type": "core_entrance",
+      "position": [
+        7,
+        0,
+        0
+      ],
+      "clear_width_m": 5.0
+    },
+    {
+      "id": "core_entrance_west",
+      "type": "core_entrance",
+      "position": [
+        -7,
+        0,
+        0
+      ],
+      "clear_width_m": 5.0
+    },
+    {
+      "id": "core_door_ne",
+      "type": "gated_door",
+      "position": [
+        5.73,
+        0,
+        5.73
+      ],
+      "clear_width_m": 3.6,
+      "gate_id": "gate_bench_ne"
+    },
+    {
+      "id": "core_door_nw",
+      "type": "gated_door",
+      "position": [
+        -5.73,
+        0,
+        5.73
+      ],
+      "clear_width_m": 3.6,
+      "gate_id": "gate_bench_nw"
+    },
+    {
+      "id": "core_door_se",
+      "type": "gated_door",
+      "position": [
+        5.73,
+        0,
+        -5.73
+      ],
+      "clear_width_m": 3.6,
+      "gate_id": "gate_bench_se"
+    },
+    {
+      "id": "core_door_sw",
+      "type": "gated_door",
+      "position": [
+        -5.73,
+        0,
+        -5.73
+      ],
+      "clear_width_m": 3.6,
+      "gate_id": "gate_bench_sw"
+    },
+    {
+      "id": "fringe_lane_west",
+      "type": "lane",
+      "position": [
+        -15.5,
+        0,
+        0
+      ],
+      "clear_width_m": 4.0
+    },
+    {
+      "id": "fringe_lane_east",
+      "type": "lane",
+      "position": [
+        15.5,
+        0,
+        0
+      ],
+      "clear_width_m": 4.0
+    },
+    {
+      "id": "fringe_lane_north",
+      "type": "lane",
+      "position": [
+        0,
+        0,
+        15.5
+      ],
+      "clear_width_m": 4.0
+    },
+    {
+      "id": "fringe_lane_south",
+      "type": "lane",
+      "position": [
+        0,
+        0,
+        -15.5
+      ],
+      "clear_width_m": 4.0
+    },
+    {
+      "id": "bed_gap_ne",
+      "type": "bed_gap",
+      "position": [
+        7.0,
+        0,
+        8.55
+      ],
+      "clear_width_m": 2.0,
+      "narrow_small_ball_lane": true,
+      "notes": "篮子区与花圃之间 2 m 缝：只给 ≤1.8 m 球走的小球侧路；最大球走 4 m 支路或外环。"
+    },
+    {
+      "id": "bed_gap_nw",
+      "type": "bed_gap",
+      "position": [
+        -7.0,
+        0,
+        8.55
+      ],
+      "clear_width_m": 2.0,
+      "narrow_small_ball_lane": true,
+      "notes": "同东北侧 2 m 缝，镜像。"
+    },
+    {
+      "id": "bed_gap_se",
+      "type": "bed_gap",
+      "position": [
+        7.0,
+        0,
+        -8.55
+      ],
+      "clear_width_m": 2.0,
+      "narrow_small_ball_lane": true,
+      "notes": "同东北侧 2 m 缝，镜像。"
+    },
+    {
+      "id": "bed_gap_sw",
+      "type": "bed_gap",
+      "position": [
+        -7.0,
+        0,
+        -8.55
+      ],
+      "clear_width_m": 2.0,
+      "narrow_small_ball_lane": true,
+      "notes": "同东北侧 2 m 缝，镜像。"
+    }
+  ],
+  "powerups": {
+    "points": [
+      {
+        "id": "magnet_west",
+        "type": "magnet",
+        "position": [
+          -10.25,
+          0.8,
+          0
+        ],
+        "zone_id": "blanket_west"
+      },
+      {
+        "id": "magnet_east",
+        "type": "magnet",
+        "position": [
+          10.25,
+          0.8,
+          0
+        ],
+        "zone_id": "blanket_east"
+      },
+      {
+        "id": "rocket_north",
+        "type": "rocket",
+        "position": [
+          0,
+          0.8,
+          15.5
+        ],
+        "zone_id": "fringe_north"
+      },
+      {
+        "id": "rocket_south",
+        "type": "rocket",
+        "position": [
+          0,
+          0.8,
+          -15.5
+        ],
+        "zone_id": "fringe_south"
+      },
+      {
+        "id": "rocket_east",
+        "type": "rocket",
+        "position": [
+          15.5,
+          0.8,
+          0
+        ],
+        "zone_id": "fringe_east"
+      },
+      {
+        "id": "rocket_west",
+        "type": "rocket",
+        "position": [
+          -15.5,
+          0.8,
+          0
+        ],
+        "zone_id": "fringe_west"
+      }
+    ],
+    "notes": "磁铁放在资源最密、最容易被抢的野餐毯中心；火箭放在外环侧路。刷新周期/世代由道具系统决定（01 §5），本图只定位置。"
+  },
+  "respawn": {
+    "candidate_spawn_ids": [
+      "spawn_nw",
+      "spawn_ne",
+      "spawn_sw",
+      "spawn_se"
+    ],
+    "min_distance_from_enemy_m": 12.0,
+    "respawn_delay_s": 3,
+    "protection_s": 2,
+    "low_tier_stock_required": true,
+    "fallback": "没有满足距离的角落时，先挑资源未被清空的角落，再延迟 1 s 重试；不放进交分台正上方。",
+    "status": "PROVISIONAL_NOT_TESTED"
+  },
+  "player_count_plans": {
+    "2": [
+      "spawn_nw",
+      "spawn_se"
+    ],
+    "3": [
+      "spawn_nw",
+      "spawn_se",
+      "spawn_ne"
+    ],
+    "4": [
+      "spawn_nw",
+      "spawn_ne",
+      "spawn_sw",
+      "spawn_se"
+    ],
+    "assignment": "按入局顺序轮转分配，不按技术或积分；每局整体轮转一格。",
+    "status": "PROVISIONAL_NOT_TESTED"
+  },
+  "performance_budget": {
+    "status": "PROVISIONAL_NOT_TESTED",
+    "absorbable_instances": 452,
+    "absorbable_definition_count": 37,
+    "structure_instances": 60,
+    "merged_static_meshes_target": 6,
+    "estimated_absorbable_triangles": 122720,
+    "estimated_total_triangles": 212720,
+    "draw_call_target": 300,
+    "realtime_lights": 0,
+    "reflection_probes": 0,
+    "notes": "按 s=140 / m=380 / l=900 三角面估算；静态装饰合并到 ≤6 个 Mesh。未在 Unity/VR 中测过，03 §5 与 02 §9 的 90 Hz 预算留给 T38。"
+  }
+}

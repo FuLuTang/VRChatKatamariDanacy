@@ -20,8 +20,8 @@ Build & Test 期间 Editor.log 仍出现 `Build Finished, Result: Failure.`（�
 
 ## 场景与变更摘要
 
-- 场景：`Assets/VRC_Katamari/Bootstrap/T00_Bootstrap.unity`，GUID `022cd2218fedebb4a84f5d91f0b4022a`。
-- 生成器：`Assets/VRC_Katamari/Bootstrap/Editor/T00BootstrapBuilder.cs`，GUID `4fc37ce5061d8f746babefbc61a112a1`；用户从 `VRC Katamari → T00 → Create Bootstrap Scene` 菜单执行。
+- 场景：`Assets/VRC_Katamari/Labs/Bootstrap/BootstrapLab.unity`，GUID `022cd2218fedebb4a84f5d91f0b4022a`。
+- 生成器：`T00BootstrapBuilder.cs`（一次性生成器，2026-11-14 已删除），GUID `4fc37ce5061d8f746babefbc61a112a1`；用户从 `VRC Katamari → T00 → Create Bootstrap Scene` 菜单执行。
 - 场景包含 `VRCWorld` 与 `VRCSceneDescriptor`、Ground 平面、Spawn、Reference Camera；只用于 T00 空场景门禁，不代表玩法实现。
 - Windows 提交：`135014b`。包括场景、生成器及 `.meta`；SDK 构建填充的 40 个 `SerializedUdonProgram` 资产只修改了 `serializedSignature` 字段。`ProjectSettings.asset` 的 iOS `m_Automatic` 自动变化已还原，未提交。
 

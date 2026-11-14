@@ -37,7 +37,7 @@ Editor.log 行 1378 记录最终 Build & Test 同步编译 12 个脚本完成，
 ## D1 与其他待办
 
 - D1 修复后日志验证：入座禁用 Interact、坐姿退出按钮重新启用；PC 桌面视觉确认 PASS（用户确认提示消失）。自然 `OnStationExited` 和 Respawn 两个修复后恢复路径尚未执行，均 NOT_RUN。真人 VR 中提示是否消失仍待 T05 复核。代码修复说明见 [fix_seated_prompt.md](fix_seated_prompt.md)，此文件只读。
-- 修复前缺陷源自 `T04PlatformDriver.Interact` 调用 `UseStation`，不是 VRCStation 自带提示。修复后 PC 桌面视觉已确认提示消失；VR 中仍待复核。建议的生命周期为入座 `DisableInteractive=true`，离开时恢复。
+- 修复前缺陷源自 `StationLabDriver.Interact` 调用 `UseStation`，不是 VRCStation 自带提示。修复后 PC 桌面视觉已确认提示消失；VR 中仍待复核。建议的生命周期为入座 `DisableInteractive=true`，离开时恢复。
 - 无道具轻提示仍为 VisualRoll 变色替代；非坐姿退出按钮仅有日志，无可见反馈。
 - 桌面交互是用户实测的准星对准后鼠标左键；E 键无效。VR 控制器交互未测。
 

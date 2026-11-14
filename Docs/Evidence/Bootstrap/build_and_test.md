@@ -2,13 +2,13 @@
 
 ## 结论：可进入空场景 — PASS
 
-采样日期为 2026-10-12，Windows 本地时间约 15:47（具体时区未记录）。用户在 Unity Editor 中执行 `VRC Katamari → T00 → Create Bootstrap Scene`，生成项目相对路径 `Assets/VRC_Katamari/Bootstrap/T00_Bootstrap.unity`，GUID `022cd2218fedebb4a84f5d91f0b4022a`。生成器为 `Assets/VRC_Katamari/Bootstrap/Editor/T00BootstrapBuilder.cs`，GUID `4fc37ce5061d8f746babefbc61a112a1`。
+采样日期为 2026-10-12，Windows 本地时间约 15:47（具体时区未记录）。用户在 Unity Editor 中执行 `VRC Katamari → T00 → Create Bootstrap Scene`，生成项目相对路径 `Assets/VRC_Katamari/Labs/Bootstrap/BootstrapLab.unity`，GUID `022cd2218fedebb4a84f5d91f0b4022a`。生成器为 `T00BootstrapBuilder.cs`（一次性生成器，2026-11-14 已删除），GUID `4fc37ce5061d8f746babefbc61a112a1`。
 
 场景含 `VRCWorld`、`VRCSceneDescriptor`、Ground 平面、Spawn 与 Reference Camera。它是空的 T00 引导/验收场景，不是玩法场景。
 
 ## Editor.log 构建观察
 
-- 第 585/587 行：打开并加载 `T00_Bootstrap` 场景。
+- 第 585/587 行：打开并加载 `BootstrapLab` 场景。
 - 第 847 行：`Level 0` 大小 `115.4 KB compressed`。
 - 第 856 行：出现 `Build Finished, Result: Failure.`。
 - 第 879 行：生成 `scene-standalonewindows64-t00_bootstrap-<SDK-generated suffix>.vrcw`，大小 `115.5 KB`。

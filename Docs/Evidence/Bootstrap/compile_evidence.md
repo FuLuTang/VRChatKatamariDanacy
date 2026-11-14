@@ -23,4 +23,4 @@
 
 ### 关联生成物
 
-Bootstrap 菜单生成器 `Assets/VRC_Katamari/Bootstrap/Editor/T00BootstrapBuilder.cs`（GUID `4fc37ce5061d8f746babefbc61a112a1`）由当前 Editor 编译。本次生成的空场景 GUID 为 `022cd2218fedebb4a84f5d91f0b4022a`。本证据文档不复述任何用户目录、用户名、主机名或私网地址。
+Bootstrap 菜单生成器 `T00BootstrapBuilder.cs`（一次性生成器，2026-11-14 已删除）（GUID `4fc37ce5061d8f746babefbc61a112a1`）由当前 Editor 编译。本次生成的空场景 GUID 为 `022cd2218fedebb4a84f5d91f0b4022a`。本证据文档不复述任何用户目录、用户名、主机名或私网地址。

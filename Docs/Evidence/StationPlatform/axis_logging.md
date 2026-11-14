@@ -4,7 +4,7 @@ Status: source changed, not compiled. Compile and runtime verification are for t
 
 ## Scope
 
-Only added input-event logging to `T04PlatformDriver.cs`. The original source snapshot was saved before replacement at `/tmp/T04PlatformDriver.before_axis.cs`. The Windows replacement was staged under `%TEMP%` and moved over the target in one operation.
+Only added input-event logging to `StationLabDriver.cs`. The original source snapshot was saved before replacement at `/tmp/StationLabDriver.before_axis.cs`. The Windows replacement was staged under `%TEMP%` and moved over the target in one operation.
 
 ## SDK signature basis
 

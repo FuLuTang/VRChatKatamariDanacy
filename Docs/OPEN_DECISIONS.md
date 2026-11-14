@@ -8,6 +8,13 @@
 - 当前项目基线仍为首发两图目标、第一纵切片一图两人、夜市后置；T39允许在完整证据后批准两图或降为一图。([范围决策:L15-L22](00_SCOPE_DECISIONS.md#L15-L22)、[发布RFC:L7-L10](Archive/Preparation/ReleaseRFC/comparison.md#L7-L10))
 - P09/P17没有记录新的用户决定；根任务/DAG未因本摘要改变。([P09/P17审查:L15-L16](Archive/Process/18_LARGE_SCALE_PREPARATION_REVIEW.md#L15-L16)、[决策表非决定:L178-L182](Preparation/RuleDecisions/decisions.json#L178-L182))
 
+## 已由用户决定（2026-11-14）
+
+- **素材许可**：项目现阶段不商用、也不再分发原始素材，免费素材不按许可类型设限（Fab 标准许可、CC-BY、Quaternius QAL 等均可用）。仍在素材清单里逐项记录来源/作者/许可，需署名的放进世界内署名板。若以后重新启用付费外观，需按清单复查 NC 限制。
+- **仓库**：开发阶段所有素材照常提交进 GitHub 仓库（目前公开），正式版前由用户自行改为私有。
+- **Fab 自动化**：除用户 Chrome 里的 Playwright 外，可试用非官方 `@threenative/fab-mcp` 辅助搜索/下载；许可仍以 listing 页面为准。
+- 说明：“完全不商用”与下方“付费外观 SKU”方向冲突；商店维持关闭，是否彻底移除内购方向待用户以后确认。
+
 ## 需要在正式发布范围/终验前回答
 
 | 事项 | 当前基线与选项（均未选择） | 影响 | 决定时点 |

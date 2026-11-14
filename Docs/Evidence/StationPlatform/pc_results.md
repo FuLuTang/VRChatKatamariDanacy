@@ -15,7 +15,7 @@
 | Respawn 经 OnStationExited 恢复 JumpImpulse | **PASS（修复前，仅 JumpImpulse）** | 同上，行 1716、1718 | `restored=3 reread=3 reason=station-exit`；`Respawn requested station exit`。用户确认重生正常。该轮在 D1 修复前；不证明修复后的 Interact 在这条路径恢复。 |
 | 非坐姿退出按钮分支 | **PASS（安全无操作分支）** | 同上，行 1682 | `ExitButton pressed seated=false nothing-to-exit`。但没有用户可见反馈，仍是待办。 |
 | 离座后跳跃 | **PASS（用户观察）** | 无日志文件/行号；用户确认 | 用户确认“跳跃正常”；没有日志佐证。 |
-| D1：入座后提示仍出现 | **FAIL（修复前历史观察）** | 无专门日志行；用户观察 | 坐下后准星仍对着载具时显示“坐下”。来源为 `T04PlatformDriver.Interact` 调用 `UseStation`，不是 VRCStation 自带提示。后续代码修复见第二轮；此行仅记录修复前状态。 |
+| D1：入座后提示仍出现 | **FAIL（修复前历史观察）** | 无专门日志行；用户观察 | 坐下后准星仍对着载具时显示“坐下”。来源为 `StationLabDriver.Interact` 调用 `UseStation`，不是 VRCStation 自带提示。后续代码修复见第二轮；此行仅记录修复前状态。 |
 | 真人 VR / 舒适性 / Avatar / 多人 | **NOT_RUN** | 无本轮相关日志 | 留给 T05。 |
 
 ## 第二轮：D1 修复后

@@ -23,3 +23,11 @@
 ## 未验证
 
 Unity Quaternion / Transform方向适配、UdonSharp编译/ProgramAsset/组件链、Unity物理/斜面/边缘、性能、网络和VR均 `NOT_RUN`。生成的C#草稿不可称为 Udon可运行功能。
+
+## Unity 实现
+
+- 纯逻辑：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/GroundContact/GroundContactMath.cs`，入口 `VRCKatamari.BallLayers.GroundContactMath.TrySolve`——静态方法 + `out` 参数，无 struct、无分配、失败返回 false 且不写出部分结果；旋转输入改为单位 `Quaternion`（非单位/NaN 拒绝），矩阵形状/镜像/行列式检查随类型改变而消失。
+- 公共小工具：`Runtime/Core/KatamariMath.cs`（`IsFiniteFloat/IsFiniteVector/IsFiniteQuaternion/TryNormalize`，其中 `TryNormalize` 对超大/超小向量保持尺度稳健）。
+- 程序集：`Runtime/VRCKatamari.Runtime.asmdef` 引用 `UdonSharp.Runtime`、`VRC.Udon`；同名 U# Assembly Definition 资产仍需在 Unity 内创建，本仓库不手写。
+- 测试：`Tests/EditMode/BallLayers/GroundContactTests.cs` 移植 `test_ground_contact.py` 全部 14 个用例并补无效输入；`Tests/EditMode/Core/KatamariMathTests.cs` 覆盖公共小工具；程序集 `VRCKatamari.Tests.EditMode`。A 套合成桥接依赖未移植的 RadialProxy/Sweep，暂未包含。
+- 状态：Unity 编译、EditMode 测试与 U# 全量编译均 `NOT_RUN`；上面只是移植结果，不是验证证据。Python 仍是行为参考，Unity 方向语义由 EditMode 探针覆盖。

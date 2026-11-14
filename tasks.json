@@ -14,13 +14,13 @@
     {
       "id": "T00",
       "title": "工程基线、版本锁定与最小测试场景",
-      "execution_note": "2026-10-12 DONE：SDK编译PASS（Editor 2022.3.22f1、VPM 3.10.5），Build & Test进入 T00_Bootstrap 场景PASS（日志 Entering Room → Finished entering world），证据见 Docs/Evidence/Bootstrap/。Editor.log 的 Build Finished, Result: Failure 待解释，VR/Station/多人/性能未测（属T04以后）。",
+      "execution_note": "2026-10-12 DONE：SDK编译PASS（Editor 2022.3.22f1、VPM 3.10.5），Build & Test进入 BootstrapLab 场景PASS（日志 Entering Room → Finished entering world），证据见 Docs/Evidence/Bootstrap/。Editor.log 的 Build Finished, Result: Failure 待解释，VR/Station/多人/性能未测（属T04以后）。",
       "evidence_paths": [
         "Docs/Evidence/Bootstrap/README.md",
         "Docs/Evidence/Bootstrap/compile_evidence.md",
         "Docs/Evidence/Bootstrap/build_and_test.md",
         "Docs/Archive/Handoffs/Evidence_T00.md",
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Bootstrap/T00_Bootstrap.unity"
+        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/Bootstrap/BootstrapLab.unity"
       ],
       "phase": "P0",
       "implementer": "SOL",
@@ -31,7 +31,7 @@
       "write_scope": [
         "VRChatKatamariDanacyUnity/ProjectSettings/",
         "VRChatKatamariDanacyUnity/Packages/",
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Bootstrap/",
+        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/Bootstrap/",
         "Docs/Evidence/Bootstrap/"
       ],
       "exclusive_locks": [
@@ -192,7 +192,7 @@
         "T00"
       ],
       "write_scope": [
-        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/",
+        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/StationPlatform/",
         "Docs/Evidence/StationPlatform/"
       ],
       "exclusive_locks": [

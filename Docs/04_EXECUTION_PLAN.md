@@ -85,7 +85,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 ### T00 · 工程基线、版本锁定与最小测试场景
 阶段：P0；执行：SOL；评审：Sol；优先级：P0。
 依赖：无。
-允许写入：`ProjectSettings/`, `Packages/`, `Assets/VRC_Katamari/Bootstrap/`。
+允许写入：`ProjectSettings/`, `Packages/`, `Assets/VRC_Katamari/Labs/Bootstrap/`。
 步骤：
 1. 读取本任务依赖的交付物与固定版本契约。
 2. 检查官方Unity/SDK版本，在用户指定目录创建或使用隔离工程。
@@ -150,7 +150,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 ### T04 · Station、输入与缩放最小平台实验
 阶段：P0；执行：SOL；评审：Sol；优先级：P0。
 依赖：T00。
-允许写入：`Assets/VRC_Katamari/Prototypes/Platform/`。
+允许写入：`Assets/VRC_Katamari/Labs/StationPlatform/`。
 步骤：
 1. 读取本任务依赖的交付物与固定版本契约。
 2. 做移动Station+独立FollowRig，排除Mesh滚动旋转。

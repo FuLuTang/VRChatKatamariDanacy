@@ -21,7 +21,7 @@ Editor.log 行 1204–1207 的 `CS1012` 来自文件写入过程中的一个中�
 ## D1 状态与解释边界
 
 - **D1：PASS（用户目视，PC 桌面，修复后版本；2026-10-14）。** 用户确认坐下后准星继续对着载具时“坐下”提示消失。第二轮入座/坐姿退出按钮日志分别证明 Interact disabled/enabled；修复后 Respawn 或自然 `OnStationExited` 路径上的 Interact 恢复仍为 **NOT_RUN**。第一轮 Respawn 的 JumpImpulse 恢复发生在 D1 修复前，不能替代这两条修复后检查。
-- 修复前的缺陷是：坐下后若准星仍对准载具，仍显示“坐下”提示。来源是 `T04PlatformDriver.Interact` 调用 `UseStation`，不是 VRCStation 自带提示。修复变更说明见只读文件 [fix_seated_prompt.md](fix_seated_prompt.md)，本文件未改动该说明。
+- 修复前的缺陷是：坐下后若准星仍对准载具，仍显示“坐下”提示。来源是 `StationLabDriver.Interact` 调用 `UseStation`，不是 VRCStation 自带提示。修复变更说明见只读文件 [fix_seated_prompt.md](fix_seated_prompt.md)，本文件未改动该说明。
 - 测试场景没有显式配置玩家移动参数，和 `initial=0` 相符但不是已证实原因。官方默认 VRCWorld prefab 值为 3、API 默认值为 0；正式世界必须显式配置跳跃/移动参数，初始 getter 读值不能当作玩家原设置。
 - 无道具轻提示仍以 VisualRoll 变色替代；非坐姿退出按钮只记录日志、没有可见反馈。
 

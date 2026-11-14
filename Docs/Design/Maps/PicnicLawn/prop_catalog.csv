@@ -1,0 +1,55 @@
+id,name_zh,category,size_tier,real_longest_dim_m,game_longest_dim_m,absorb_value_placeholder,count_in_map,zone_ids,sourcing_hint,priority,coverage_ref,role,notes
+seed,草籽,food,s,0.02,0.04,1,40,fringe_east;fringe_north;fringe_south;fringe_west;spawn_ne;spawn_nw;spawn_se;spawn_sw,model ourselves：Ø0.04 m 椭球 + 1 张 alpha 草卡,MVP,PIC-01 / picnic.food.seed（NOT_FOUND→自建）,absorbable,
+acorn,橡子,nature,s,0.03,0.05,1,24,fringe_east;fringe_north;fringe_south;fringe_west;tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,model ourselves：0.05 m 橡子（低面数旋转体）,MVP,PIC-33 / picnic.nature.acorn（NOT_FOUND→自建）,absorbable,
+pebble,小石子,nature,s,0.04,0.06,1,42,blanket_east;blanket_west;flower_bed_ne;flower_bed_nw;flower_bed_se;flower_bed_sw;fringe_east;fringe_north;fringe_south;fringe_west;spawn_ne;spawn_nw;spawn_se;spawn_sw;tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,Kenney Nature Kit rock_small*（渲染不符，需人工复核）或 model ourselves,MVP,PIC-30 / picnic.nature.pebble（RENDER_MISMATCH）,absorbable,
+fallen_leaf,落叶,nature,s,0.09,0.1,1,32,fringe_east;fringe_north;fringe_south;fringe_west;spawn_ne;spawn_nw;spawn_se;spawn_sw;tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,Kenney Nature Kit 2.1 grass_leafs / grass_leafsLarge,MVP,PIC-29 / picnic.nature.fallen_leaf,absorbable,
+bottle_cap,瓶盖,debris,s,0.03,0.05,1,20,fringe_east;fringe_north;fringe_south;fringe_west;spawn_ne;spawn_nw;spawn_se;spawn_sw,model ourselves：Ø0.05 m 圆盘 + 齿边,MVP,无（coverage 未列）,absorbable,
+paper_scrap,纸屑,debris,s,0.1,0.1,1,20,fringe_east;fringe_north;fringe_south;fringe_west;spawn_ne;spawn_nw;spawn_se;spawn_sw,model ourselves：单面薄片，双面材质,MVP,无（coverage 未列）,absorbable,
+flower,小花,nature,s,0.12,0.18,1,20,flower_bed_ne;flower_bed_nw;flower_bed_se;flower_bed_sw,Kenney Nature Kit 2.1 Models/GLTF format/flower_redA.glb,MVP,PIC-32 / picnic.nature.flower（角色改为可卷）,absorbable,
+mushroom,小蘑菇,nature,s,0.1,0.12,1,20,flower_bed_ne;flower_bed_nw;flower_bed_se;flower_bed_sw;tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,Kenney Nature Kit 2.1 mushroom_red.glb,MVP,PIC-31 / picnic.nature.small_mushroom,absorbable,
+strawberry,草莓,food,s,0.04,0.06,1,8,blanket_east;blanket_west,Kenney Food Kit 2.0 Models/GLB format/strawberry.glb,MVP,PIC-08 / picnic.food.strawberry,absorbable,
+grapes,葡萄,food,s,0.06,0.08,1,8,blanket_east;blanket_west,Kenney Food Kit 2.0 grapes.glb,MVP,PIC-09 / picnic.food.grapes,absorbable,
+cookie,饼干,food,s,0.07,0.09,1,10,blanket_east;blanket_west,Kenney Food Kit 2.0 cookie.glb,MVP,PIC-13 / picnic.food.cookie,absorbable,
+cheese_slice,奶酪片,food,s,0.06,0.08,1,8,blanket_east;blanket_west,Kenney Food Kit 2.0 cheese-cut.glb（原概念“楔形”不成立，改片状）,MVP,PIC-15 / picnic.food.cheese_wedge（MISMATCH→改概念）,absorbable,
+apple,苹果,food,m,0.08,0.3,4,14,basket_north;basket_south;blanket_east;blanket_west,Kenney Food Kit 2.0 apple.glb,MVP,PIC-04 / picnic.food.apple,absorbable,
+pear,梨,food,m,0.09,0.32,4,6,blanket_east;blanket_west,Kenney Food Kit 2.0 pear.glb,MVP,PIC-05 / picnic.food.pear,absorbable,
+orange,橙子,food,m,0.08,0.3,4,8,blanket_east;blanket_west,Kenney Food Kit 2.0 orange.glb,MVP,PIC-07 / picnic.food.orange,absorbable,
+banana,香蕉,food,m,0.18,0.45,4,10,basket_north;basket_south;blanket_east;blanket_west,Kenney Food Kit 2.0 banana.glb；细长件需 2 端点极值代理,MVP,PIC-06 / picnic.food.banana,absorbable,
+croissant,牛角包,food,m,0.12,0.34,4,8,blanket_east;blanket_west,Kenney Food Kit 2.0 croissant.glb,MVP,PIC-12 / picnic.food.croissant,absorbable,
+bread_slice,面包片,food,m,0.1,0.3,4,12,basket_north;basket_south;blanket_east;blanket_west,Kenney Food Kit 2.0 bread.glb（原概念“整条面包”不成立，改片状）,MVP,PIC-11 / picnic.food.bread_loaf（MISMATCH→改概念）,absorbable,
+sandwich,三明治,food,m,0.12,0.38,4,10,basket_north;basket_south;blanket_east;blanket_west,Kenney Food Kit 2.0 sandwich.glb,MVP,PIC-14 / picnic.food.sandwich,absorbable,
+cup,杯子,tableware,m,0.09,0.26,4,16,basket_north;basket_south;blanket_east;blanket_west,Kenney Food Kit 2.0 cup.glb（先确认杯碟是否一体）,MVP,PIC-19 / picnic.tableware.cup,absorbable,
+plate,盘子,tableware,m,0.24,0.5,4,16,basket_north;basket_south;blanket_east;blanket_west,Kenney Food Kit 2.0 plate.glb,MVP,PIC-20 / picnic.tableware.plate,absorbable,
+bowl,碗,tableware,m,0.16,0.42,4,14,basket_north;basket_south;blanket_east;blanket_west,Kenney Food Kit 2.0 bowl.glb,MVP,PIC-21 / picnic.tableware.bowl,absorbable,
+spoon,勺子,tableware,m,0.18,0.34,4,10,blanket_east;blanket_west,Kenney Food Kit 2.0 utensil-spoon.glb；细长件独立体积调校,MVP,PIC-22 / picnic.tableware.spoon（coverage 记 s，这里按 m 处理）,absorbable,
+soda_can,易拉罐,drink,m,0.07,0.24,4,14,blanket_east;blanket_west;fringe_east;fringe_north;fringe_south;fringe_west,Kenney Food Kit 2.0 soda-can.glb,MVP,PIC-17 / picnic.drink.can,absorbable,
+juice_carton,果汁盒,drink,m,0.1,0.34,4,8,basket_north;basket_south;blanket_east;blanket_west,Kenney Food Kit 2.0 carton.glb,MVP,PIC-16 / picnic.food.juice_carton,absorbable,
+glass_bottle,玻璃瓶,drink,m,0.28,0.52,5,6,blanket_east;blanket_west,Kenney Food Kit 2.0 soda-bottle.glb；玻璃表面类，首版不做破碎,MVP,PIC-18 / picnic.drink.glass_bottle,absorbable,
+watermelon,西瓜,food,m,0.3,0.72,6,4,basket_north;basket_south,Kenney Food Kit 2.0 watermelon.glb（整颗，不做切片）,MVP,PIC-10 / picnic.food.watermelon_slice（改为整颗）,absorbable,
+small_potted_plant,小盆栽,garden,m,0.22,0.55,6,8,flower_bed_ne;flower_bed_nw;flower_bed_se;flower_bed_sw,Kenney Nature Kit pot_small + flower_redA 手工组合为一个可卷实体,MVP,PIC-28 / picnic.nature.small_potted_plant,absorbable,
+watering_can,洒水壶,garden,m,0.25,0.58,6,4,flower_bed_ne;flower_bed_nw;flower_bed_se;flower_bed_sw,model ourselves：壶身圆柱 + 壶嘴，0.58 m,later,PIC-34 / picnic.garden.watering_can（NOT_FOUND→自建）,absorbable,
+toy_ball,小皮球,toy,m,0.15,0.4,4,4,blanket_east;blanket_west,model ourselves：Ø0.40 m 低面数球 + 双色条纹,MVP,无（coverage 未列，对应 03 §2「小玩具」）,absorbable,
+napkin,餐巾,tableware,m,0.15,0.3,3,6,blanket_east;blanket_west,model ourselves：折叠面片，0.30 m,later,PIC-23 / picnic.tableware.folded_napkin（NOT_FOUND→自建）,absorbable,
+picnic_basket,野餐篮,container,l,0.45,1.2,16,4,basket_north;basket_south,model ourselves：0.45 m 篮体放大到 1.20 m 游戏尺寸（藤条用 alpha 卡）,MVP,PIC-26 / picnic.furniture.picnic_basket（NOT_FOUND→自建）,absorbable,
+thermos,保温壶,container,l,0.3,0.9,16,4,basket_north;basket_south,model ourselves：Ø0.35×0.90 m 旋转体 + 提手,MVP,PIC-25 / picnic.drink.thermos（NOT_FOUND→自建）,absorbable,
+folding_stool,折叠凳,furniture,l,0.4,1.4,16,4,basket_north;basket_south,model ourselves：0.40 m 布面凳放大到 1.40 m,MVP,PIC-35 / picnic.furniture.folding_stool（NOT_FOUND→自建）,absorbable,
+flower_pot_large,大花盆,garden,l,0.4,1,16,4,basket_north;basket_south,Kenney Nature Kit 2.1 pot_large.glb（先看图确认无花）,MVP,PIC-27 / picnic.nature.flower_pot,absorbable,
+cooler_box,保温箱,container,l,0.55,1.6,20,2,basket_north;basket_south,model ourselves：0.55 m 箱体放大到 1.60 m，带提手与盖缝,MVP,无（coverage 未列，03 §2「大档」补位）,absorbable,
+collapsed_bench,倒塌长凳,gate,l,1.6,3.6,16,4,core_lawn,model ourselves：3.6 m 长凳横躺（四条腿朝侧），专用于对角门,MVP,无（coverage 未列；03 §2「折叠凳」的变体）,absorbable,仅作对角门阻挡件，4 个；吸掉后门才通
+ground_terrain,地面,terrain,l,40,40,0,1,,model ourselves：40×40 m 草坪面 + 外环/支路薄片合并为 1 个 Mesh,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+path_mesh,小路,terrain,l,40,3.4,0,1,,model ourselves：外环 + 4 支路合并为 1 个 Mesh，贴地 0.005 m,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+boundary_hedge,边界树篱,boundary,l,40,1.1,0,1,,model ourselves：40×40 m 环形树篱合并 Mesh，高 1.1 m、厚 0.8 m,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+distant_tree_line,远景树带,boundary,l,60,8,0,1,,Kenney Nature Kit 树模型合并，放在边界外 3–6 m，纯装饰,later,无,fixed,不可卷；固定 Collider 或纯装饰
+invisible_wall,不可见边界,boundary,l,40,3,0,4,,Unity BoxCollider ×4，不渲染；防止大球滚出边界,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+core_hedge,中央草坪矮篱,boundary,l,2.38,1,0,8,core_lawn,model ourselves：8 段 2.38×0.35×1.0 m 盒，围出 4 个 5 m 入口 + 4 个 3.6 m 对角门,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+picnic_blanket,野餐毯,terrain,l,12,12,0,4,basket_north;basket_south;blanket_east;blanket_west,model ourselves：平面 + 条纹材质；2 张 6.5×12 m + 2 张 5×4.5 m,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+flower_bed_frame,花圃木框,terrain,l,4,4,0,4,flower_bed_ne;flower_bed_nw;flower_bed_se;flower_bed_sw,model ourselves：4×4 m 木框 + 0.26 m 台面（斜面 0.9 m，29%）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+tree_root_mound,树根土丘,terrain,l,2.5,2.5,0,4,tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,model ourselves：Ø2.5 m 缓丘，最高 0.18 m（11%）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+corner_tree,角落大树,landmark,l,0.5,9,0,4,tree_roots_ne;tree_roots_nw;tree_roots_se;tree_roots_sw,model ourselves：Ø0.5 m 树干 + 6–9 m 树冠，四角各 1 棵,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+bank_pad,交分台,gameplay,l,3.2,3.2,0,4,core_lawn,model ourselves：Ø3.2 m 圆盘 + 发光环（自发光材质，不用实时灯）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+bank_beacon,交分旗杆,gameplay,l,0.25,3,0,4,core_lawn,model ourselves：Ø0.25 m 杆 + 2.5 m 高旗；激活时旗升起、环脉冲,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+spawn_marker,出生地贴,gameplay,l,1.8,1.8,0,4,spawn_ne;spawn_nw;spawn_se;spawn_sw,model ourselves：Ø1.8 m 圆环地贴,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+powerup_pedestal,道具台,gameplay,l,0.8,0.8,0,6,blanket_east;blanket_west;fringe_east;fringe_north;fringe_south;fringe_west,model ourselves：Ø0.8 m 台座 + 图标（磁铁花冠 / 喷气芽荚）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+zone_signpost,区域指示牌,gameplay,l,0.45,1.2,0,8,,model ourselves：0.45×1.2 m 牌 + 形状图标（不靠纯文字）,MVP,无,fixed,不可卷；固定 Collider 或纯装饰
+giant_picnic_table,巨型野餐桌,landmark,l,8,8,0,1,,model ourselves：8×3.2 m 桌面高 1.9 m，放在边界外 z=+24，纯地标、不可卷,later,对应 03 §2「超大桌子先作为不可卷地标」,fixed,不可卷；固定 Collider 或纯装饰
+giant_oak,巨型橡树,landmark,l,16,16,0,1,,model ourselves：Ø2 m 树干 + Ø16 m 树冠，放在边界外 z=−26，纯地标,later,无,fixed,不可卷；固定 Collider 或纯装饰

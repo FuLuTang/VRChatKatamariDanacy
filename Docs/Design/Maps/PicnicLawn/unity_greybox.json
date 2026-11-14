@@ -1539,119 +1539,83 @@
     {
       "zone_id": "basket_north",
       "tier_band": "t2",
-      "min_spacing_m": 1.6,
-      "prop_definition_count": 14,
+      "min_spacing_m": 1.55,
+      "prop_definition_count": 8,
       "prop_ids": [
-        "apple",
-        "banana",
-        "bowl",
-        "bread_slice",
         "cooler_box",
-        "cup",
         "flower_pot_large",
         "folding_stool",
         "juice_carton",
         "picnic_basket",
         "plate",
-        "sandwich",
         "thermos",
         "watermelon"
       ],
       "prop_counts_min": [
-        2,
-        2,
-        2,
-        2,
         1,
         2,
         2,
-        2,
         1,
-        2,
         2,
         2,
         2,
         2
       ],
       "prop_counts_max": [
-        2,
-        2,
-        2,
-        2,
         1,
         2,
         2,
-        2,
         1,
-        2,
         2,
         2,
         2,
         2
       ],
-      "count_min_total": 26,
-      "count_max_total": 26
+      "count_min_total": 14,
+      "count_max_total": 14
     },
     {
       "zone_id": "basket_south",
       "tier_band": "t2",
-      "min_spacing_m": 1.6,
-      "prop_definition_count": 14,
+      "min_spacing_m": 1.55,
+      "prop_definition_count": 8,
       "prop_ids": [
-        "apple",
-        "banana",
-        "bowl",
-        "bread_slice",
         "cooler_box",
-        "cup",
         "flower_pot_large",
         "folding_stool",
         "juice_carton",
         "picnic_basket",
         "plate",
-        "sandwich",
         "thermos",
         "watermelon"
       ],
       "prop_counts_min": [
-        2,
-        2,
-        2,
-        2,
         1,
         2,
         2,
-        2,
         1,
-        2,
         2,
         2,
         2,
         2
       ],
       "prop_counts_max": [
-        2,
-        2,
-        2,
-        2,
         1,
         2,
         2,
-        2,
         1,
-        2,
         2,
         2,
         2,
         2
       ],
-      "count_min_total": 26,
-      "count_max_total": 26
+      "count_min_total": 14,
+      "count_max_total": 14
     },
     {
       "zone_id": "blanket_east",
       "tier_band": "t1",
-      "min_spacing_m": 0.9,
+      "min_spacing_m": 0.72,
       "prop_definition_count": 21,
       "prop_ids": [
         "apple",
@@ -1728,7 +1692,7 @@
     {
       "zone_id": "blanket_west",
       "tier_band": "t1",
-      "min_spacing_m": 0.9,
+      "min_spacing_m": 0.72,
       "prop_definition_count": 21,
       "prop_ids": [
         "apple",
@@ -1921,7 +1885,7 @@
     {
       "zone_id": "fringe_east",
       "tier_band": "t0",
-      "min_spacing_m": 1.4,
+      "min_spacing_m": 1.2,
       "prop_definition_count": 7,
       "prop_ids": [
         "acorn",
@@ -1938,7 +1902,7 @@
         3,
         3,
         2,
-        6,
+        12,
         2
       ],
       "prop_counts_max": [
@@ -1947,16 +1911,16 @@
         3,
         3,
         2,
-        6,
+        12,
         2
       ],
-      "count_min_total": 21,
-      "count_max_total": 21
+      "count_min_total": 27,
+      "count_max_total": 27
     },
     {
       "zone_id": "fringe_north",
       "tier_band": "t0",
-      "min_spacing_m": 1.4,
+      "min_spacing_m": 1.2,
       "prop_definition_count": 7,
       "prop_ids": [
         "acorn",
@@ -1973,7 +1937,7 @@
         3,
         3,
         2,
-        6,
+        12,
         2
       ],
       "prop_counts_max": [
@@ -1982,16 +1946,16 @@
         3,
         3,
         2,
-        6,
+        12,
         2
       ],
-      "count_min_total": 21,
-      "count_max_total": 21
+      "count_min_total": 27,
+      "count_max_total": 27
     },
     {
       "zone_id": "fringe_south",
       "tier_band": "t0",
-      "min_spacing_m": 1.4,
+      "min_spacing_m": 1.2,
       "prop_definition_count": 7,
       "prop_ids": [
         "acorn",
@@ -2008,7 +1972,7 @@
         3,
         3,
         2,
-        6,
+        12,
         2
       ],
       "prop_counts_max": [
@@ -2017,16 +1981,16 @@
         3,
         3,
         2,
-        6,
+        12,
         2
       ],
-      "count_min_total": 21,
-      "count_max_total": 21
+      "count_min_total": 27,
+      "count_max_total": 27
     },
     {
       "zone_id": "fringe_west",
       "tier_band": "t0",
-      "min_spacing_m": 1.4,
+      "min_spacing_m": 1.2,
       "prop_definition_count": 7,
       "prop_ids": [
         "acorn",
@@ -2043,7 +2007,7 @@
         3,
         3,
         2,
-        6,
+        12,
         2
       ],
       "prop_counts_max": [
@@ -2052,11 +2016,11 @@
         3,
         3,
         2,
-        6,
+        12,
         2
       ],
-      "count_min_total": 21,
-      "count_max_total": 21
+      "count_min_total": 27,
+      "count_max_total": 27
     },
     {
       "zone_id": "spawn_ne",
@@ -2177,7 +2141,7 @@
     {
       "zone_id": "tree_roots_ne",
       "tier_band": "t0",
-      "min_spacing_m": 0.7,
+      "min_spacing_m": 0.5,
       "prop_definition_count": 4,
       "prop_ids": [
         "acorn",
@@ -2203,7 +2167,7 @@
     {
       "zone_id": "tree_roots_nw",
       "tier_band": "t0",
-      "min_spacing_m": 0.7,
+      "min_spacing_m": 0.5,
       "prop_definition_count": 4,
       "prop_ids": [
         "acorn",
@@ -2229,7 +2193,7 @@
     {
       "zone_id": "tree_roots_se",
       "tier_band": "t0",
-      "min_spacing_m": 0.7,
+      "min_spacing_m": 0.5,
       "prop_definition_count": 4,
       "prop_ids": [
         "acorn",
@@ -2255,7 +2219,7 @@
     {
       "zone_id": "tree_roots_sw",
       "tier_band": "t0",
-      "min_spacing_m": 0.7,
+      "min_spacing_m": 0.5,
       "prop_definition_count": 4,
       "prop_ids": [
         "acorn",
@@ -3033,10 +2997,8 @@
       "real_longest_dim_m": 0.08,
       "game_longest_dim_m": 0.3,
       "absorb_value": 4,
-      "count": 14,
+      "count": 10,
       "zone_ids": [
-        "basket_north",
-        "basket_south",
         "blanket_east",
         "blanket_west"
       ]
@@ -3051,10 +3013,8 @@
       "real_longest_dim_m": 0.18,
       "game_longest_dim_m": 0.45,
       "absorb_value": 4,
-      "count": 10,
+      "count": 6,
       "zone_ids": [
-        "basket_north",
-        "basket_south",
         "blanket_east",
         "blanket_west"
       ]
@@ -3134,10 +3094,8 @@
       "real_longest_dim_m": 0.16,
       "game_longest_dim_m": 0.42,
       "absorb_value": 4,
-      "count": 14,
+      "count": 10,
       "zone_ids": [
-        "basket_north",
-        "basket_south",
         "blanket_east",
         "blanket_west"
       ]
@@ -3152,10 +3110,8 @@
       "real_longest_dim_m": 0.1,
       "game_longest_dim_m": 0.3,
       "absorb_value": 4,
-      "count": 12,
+      "count": 8,
       "zone_ids": [
-        "basket_north",
-        "basket_south",
         "blanket_east",
         "blanket_west"
       ]
@@ -3282,10 +3238,8 @@
       "real_longest_dim_m": 0.09,
       "game_longest_dim_m": 0.26,
       "absorb_value": 4,
-      "count": 16,
+      "count": 12,
       "zone_ids": [
-        "basket_north",
-        "basket_south",
         "blanket_east",
         "blanket_west"
       ]
@@ -3718,10 +3672,8 @@
       "real_longest_dim_m": 0.12,
       "game_longest_dim_m": 0.38,
       "absorb_value": 4,
-      "count": 10,
+      "count": 6,
       "zone_ids": [
-        "basket_north",
-        "basket_south",
         "blanket_east",
         "blanket_west"
       ]
@@ -3736,7 +3688,7 @@
       "real_longest_dim_m": 0.02,
       "game_longest_dim_m": 0.04,
       "absorb_value": 1,
-      "count": 40,
+      "count": 64,
       "zone_ids": [
         "fringe_east",
         "fringe_north",

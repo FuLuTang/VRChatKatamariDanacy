@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -49,6 +50,20 @@ TIERS = ("s", "m", "l")
 ROLES = ("absorbable", "fixed")
 PRIORITIES = ("MVP", "later")
 GATE_TYPES = ("absorb", "climb")
+
+# ---- 2-D 放置可行性 -------------------------------------------------------- #
+# 消费方（Unity 灰盒 Builder）的放置算法在 BuildProps/TryFindSpot 里：按 prop_ids
+# 顺序逐个放置；每个点均匀随机采样最多 256 次，与已放点中心距 < min_spacing_m 就重试；
+# 全局间距失败后只与同名定义比间距（per-definition），再失败才丢件。
+#
+# 这种「随机顺序吸附」（RSA）在 2-D 的圆盘覆盖率饱和值是 0.547（每个点自带半径
+# S/2 的禁区圆盘），而六方最密的几何上限是 π/(2√3) ≈ 0.9069。也就是说：同一块区域，
+# 随机采样只能摆到最密堆叠的 ~60%。作者数据必须按**消费者能摆到的**上限来写，否则
+# 消费方就得替数据发明策略（2026-11 灰盒就是这么丢件/降级的）。
+HEX_POINT_AREA = math.sqrt(3.0) / 2.0            # 六方最密：每个点占 (√3/2)·S²
+RSA_DISC_COVERAGE = 0.547                        # 随机顺序吸附的圆盘覆盖率饱和值
+RSA_SITE_AREA = math.pi / (4.0 * RSA_DISC_COVERAGE)  # 每个点平均占 ≈1.436·S²
+CAPACITY_USAGE_WARN = 0.85                       # 超过消费者上限的 85% 就警告「没余量」
 
 REQUIRED_LAYOUT_KEYS = (
     "map_id", "status", "bounds", "scale", "zones", "structures", "spawns",
@@ -160,11 +175,94 @@ def load_catalog(path: Path) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# 2-D 放置可行性的容量模型
+# --------------------------------------------------------------------------- #
+
+def rect_area(zone: dict) -> tuple:
+    """(宽, 深, 面积)，只认 rect；区域记录的 area_m2 由 validate() 另行核对。"""
+    shape = zone.get("shape") or {}
+    width = float(shape["max_x"]) - float(shape["min_x"])
+    depth = float(shape["max_z"]) - float(shape["min_z"])
+    return width, depth, width * depth
+
+
+def point_capacity(area_m2: float, spacing_m: float) -> tuple:
+    """返回 (六方最密上限, 消费者上限)。
+
+    两个值都是「这块区域、这个间距下最多能放几个点」，差别只在堆叠策略：
+
+      * 六方最密：每点占 (√3/2)·S²，任何摆放（包括离线最优解）都超不过；
+      * 消费者上限：消费方是 256 次均匀拒绝采样，等价的随机顺序吸附饱和覆盖率是
+        0.547，每点平均占 π/(4·0.547)·S² ≈ 1.436·S²，只有最密堆叠的 ~60%。
+
+    作者数据要按后者写：超过它，Unity 那边就会丢件或退回按定义间距。
+    """
+    if area_m2 <= 0 or spacing_m <= 0:
+        return 0, 0
+    s2 = spacing_m * spacing_m
+    optimal = int(math.floor(area_m2 / (HEX_POINT_AREA * s2)))
+    consumer = int(math.floor(area_m2 / (RSA_SITE_AREA * s2)))
+    return optimal, consumer
+
+
+def footprint_pair_floor(instances) -> tuple:
+    """(区内任意两件的脚印间距下限, 说明)。
+
+    `instances` 是 (id, 脚印长边 m) 的展开列表（每件一份）。两件 footprint 并排时
+    中心距至少要 (d_i + d_j) / 2，否则两块几何会互相穿模。消费方只有一个标量
+    min_spacing_m，所以作者必须把标量压在这个下限之上——这是「大件把区域撑爆」的
+    真正原因，而不是脚印面积总和。
+    """
+    dims = sorted(instances, key=lambda item: (-item[1], item[0]))
+    if len(dims) < 2:
+        return 0.0, ""
+    (id_a, d_a), (id_b, d_b) = dims[0], dims[1]
+    return (d_a + d_b) / 2.0, f"{id_a} {d_a:g} m + {id_b} {d_b:g} m"
+
+
+def scatter_feasibility(zone: dict, region: dict, props: dict) -> dict:
+    """把一条 prop_scatter 记录折算成可判定的数字（供校验、--feasibility、测试共用）。"""
+    width, depth, area = rect_area(zone)
+    spacing = float(region["min_spacing_m"])
+    instances = []
+    by_definition = []
+    for definition in region.get("definitions") or []:
+        prop_id = text(definition.get("id"))
+        if prop_id not in props:
+            continue
+        count = int(definition.get("count_max", 0))
+        by_definition.append((prop_id, count, props[prop_id]["dim"]))
+        instances.extend([(prop_id, props[prop_id]["dim"])] * max(0, count))
+    optimal, consumer = point_capacity(area, spacing)
+    floor_sep, floor_label = footprint_pair_floor(instances)
+    biggest = max(instances, key=lambda item: item[1], default=(None, 0.0))
+    total = len(instances)
+    return {
+        "zone_id": text(region.get("zone_id")),
+        "width_m": width,
+        "depth_m": depth,
+        "area_m2": area,
+        "spacing_m": spacing,
+        "count": total,
+        "capacity_optimal": optimal,
+        "capacity_consumer": consumer,
+        "usage": (total / consumer) if consumer else float("inf"),
+        "footprint_floor_m": floor_sep,
+        "footprint_label": floor_label,
+        "biggest_id": biggest[0],
+        "biggest_dim_m": biggest[1],
+        "definitions": by_definition,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # 校验（错误信息必须指向出错的记录 id）
 # --------------------------------------------------------------------------- #
 
-def validate(layout: dict, catalog: dict) -> None:
+def validate(layout: dict, catalog: dict) -> list:
+    """校验输入；返回不影响生成的 warning 列表（错误一律抛 BuildError）。"""
     errors = []
+    warnings = []
 
     for key in REQUIRED_LAYOUT_KEYS:
         if key not in layout:
@@ -376,6 +474,54 @@ def validate(layout: dict, catalog: dict) -> None:
             if count_max < count_min:
                 errors.append(f"{label}: count_max={count_max} 小于 count_min={count_min}")
 
+    # ---- 2-D 放置可行性：作者要求必须真的摆得下（这是 2026-11 灰盒丢件的那道缺口）
+    # 消费方只有一个 per-region 标量 min_spacing_m；它摆不下时只能丢件或退回
+    # per-definition 间距。所以这里按「同一个标量 + 随机顺序采样」算上限，超了就报错。
+    for zone_id in sorted(scatter):
+        region = scatter[zone_id]
+        try:
+            info = scatter_feasibility(zones[zone_id], region, props)
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            continue  # 上面已经报过字段错误，这里不叠第二条
+        label = f"prop_scatter[{zone_id}]"
+        spacing = info["spacing_m"]
+        total = info["count"]
+        consumer = info["capacity_consumer"]
+        optimal = info["capacity_optimal"]
+        if spacing <= 0 or total <= 0:
+            continue
+
+        if info["biggest_dim_m"] + 0.1 > min(info["width_m"], info["depth_m"]):
+            errors.append(
+                f"{label}: {info['biggest_id']} 的脚印 {info['biggest_dim_m']:g} m 放不进 "
+                f"{min(info['width_m'], info['depth_m']):.2f} m 宽的区域（左右各留 0.05 m）")
+
+        if info["footprint_floor_m"] > spacing + 1e-9:
+            errors.append(
+                f"{label}: min_spacing_m={spacing:g} 小于区内最大两件的脚印间距 "
+                f"{info['footprint_floor_m']:g} m（{info['footprint_label']}）："
+                f"这两件会被摆到互相穿模。把 min_spacing_m 提到 ≥"
+                f"{info['footprint_floor_m']:.2f} m，或减少/缩小大件")
+
+        if total > optimal:
+            errors.append(
+                f"{label}: {total} 件在 {spacing:g} m 间距下几何上不可能摆下——"
+                f"{info['area_m2']:.1f} m² 的六方最密上限是 {optimal} 件"
+                f"（每件占 {HEX_POINT_AREA * spacing * spacing:.2f} m²）。"
+                f"降件数、放宽 min_spacing_m 或改区域尺寸")
+        elif total > consumer:
+            errors.append(
+                f"{label}: {total} 件在 {spacing:g} m 间距下摆不下——"
+                f"{info['area_m2']:.1f} m² 的随机顺序摆放上限是 {consumer} 件"
+                f"（六方最密上限 {optimal} 件，消费方只能到最密的 ~60%）。"
+                f"Unity Builder 会为此丢件或退回 per-definition 间距，属于数据错误："
+                f"把件数降到 ≤{consumer}、把 min_spacing_m 放宽到 ≥"
+                f"{math.sqrt(info['area_m2'] / (RSA_SITE_AREA * total)):.2f} m，或改区域尺寸")
+        elif total > CAPACITY_USAGE_WARN * consumer:
+            warnings.append(
+                f"{label}: {total}/{consumer} 件（{total / consumer:.0%}）已接近随机摆放上限，"
+                f"只剩 {consumer - total} 件余量；建议 ≤{int(CAPACITY_USAGE_WARN * consumer)} 件")
+
     # ---- 路线
     routes = {}
     for route in layout["routes"]:
@@ -457,6 +603,7 @@ def validate(layout: dict, catalog: dict) -> None:
 
     if errors:
         raise BuildError(errors)
+    return warnings
 
 
 # --------------------------------------------------------------------------- #
@@ -776,6 +923,72 @@ def build(layout_path: Path = DEFAULT_LAYOUT, catalog_path: Path = DEFAULT_CATAL
 
 
 # --------------------------------------------------------------------------- #
+# --feasibility 的放置可行性表
+# --------------------------------------------------------------------------- #
+
+def feasibility_rows(layout: dict, catalog: dict) -> list:
+    """每个散布区的放置容量（与 validate() 同一套模型）。"""
+    props = {}
+    for prop_id, meta in catalog.items():
+        row = meta["row"]
+        try:
+            props[prop_id] = {"dim": float(row["game_longest_dim_m"])}
+        except (TypeError, ValueError):
+            continue
+    zones = {text(zone.get("id")): zone for zone in layout.get("zones") or []}
+    rows = []
+    for region in layout.get("prop_scatter") or []:
+        zone_id = text(region.get("zone_id"))
+        zone = zones.get(zone_id)
+        if zone is None:
+            continue
+        try:
+            rows.append(scatter_feasibility(zone, region, props))
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            continue
+    return sorted(rows, key=lambda row: row["zone_id"])
+
+
+def format_feasibility(rows) -> str:
+    header = (f"{'region':15s} {'area':>6s} {'spacing':>7s} {'count':>5s} "
+              f"{'cap_rsa':>7s} {'cap_hex':>7s} {'usage':>6s} {'foot':>5s}  status")
+    lines = [header, "-" * len(header)]
+    for row in rows:
+        usage = row["usage"]
+        if row["count"] > row["capacity_optimal"]:
+            status = f"FAIL(几何上限 {row['capacity_optimal']})"
+        elif row["count"] > row["capacity_consumer"]:
+            status = f"FAIL(随机摆放上限 {row['capacity_consumer']})"
+        elif usage > CAPACITY_USAGE_WARN:
+            status = "WARN(余量不足)"
+        else:
+            status = "ok"
+        lines.append(
+            f"{row['zone_id']:15s} {row['area_m2']:6.1f} {row['spacing_m']:7.2f} "
+            f"{row['count']:5d} {row['capacity_consumer']:7d} {row['capacity_optimal']:7d} "
+            f"{usage:6.0%} {row['footprint_floor_m']:5.2f}  {status}")
+    total = sum(row["count"] for row in rows)
+    lines.append(f"{'total':15s} {'':6s} {'':7s} {total:5d}"
+                 f"    # 摆放上限 = 随机顺序吸附(256 次拒绝采样) 的 0.547 覆盖率；六方最密上限仅作对照")
+    return "\n".join(lines)
+
+
+def print_feasibility(layout_path: Path = DEFAULT_LAYOUT,
+                      catalog_path: Path = DEFAULT_CATALOG) -> None:
+    """--feasibility：即使数据有错也要能打印表格（它是给设计迭代用的）。"""
+    try:
+        layout = load_layout(Path(layout_path))
+        catalog = load_catalog(Path(catalog_path))
+    except BuildError as exc:
+        print(f"FAIL 读不到输入（{len(exc.errors)} 条）:", file=sys.stderr)
+        for error in exc.errors:
+            print(f"  x {error}", file=sys.stderr)
+        return
+    print(format_feasibility(feasibility_rows(layout, catalog)))
+
+
+
+# --------------------------------------------------------------------------- #
 # --check 的差异摘要
 # --------------------------------------------------------------------------- #
 
@@ -835,7 +1048,12 @@ def main(argv=None) -> int:
                         help="只检查已提交文件是否过期（过期退出码 1，不写文件）")
     parser.add_argument("--summary", action="store_true",
                         help="成功后打印各集合记录数")
+    parser.add_argument("--feasibility", action="store_true",
+                        help="打印每个散布区的 2-D 放置容量表（校验前，便于设计迭代）")
     args = parser.parse_args(argv)
+
+    if args.feasibility:
+        print_feasibility(args.layout, args.catalog)
 
     try:
         generated = build(args.layout, args.catalog)

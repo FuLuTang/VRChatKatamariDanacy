@@ -306,6 +306,70 @@ class CountConsistencyTests(unittest.TestCase):
         self.assertEqual(len(self.payload["structures"]), 60)
 
 
+class FeasibilityTests(unittest.TestCase):
+    """作者数据必须真的摆得下：2-D 容量模型 + 已提交地图的余量。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.layout = json.loads(LAYOUT.read_text(encoding="utf-8"))
+        cls.catalog = bg.load_catalog(CATALOG)
+        cls.rows = bg.feasibility_rows(cls.layout, cls.catalog)
+
+    def test_committed_map_has_a_row_per_scatter_region(self):
+        self.assertEqual(len(self.rows), 20)
+        self.assertEqual(len({row["zone_id"] for row in self.rows}), 20)
+        self.assertEqual(sum(row["count"] for row in self.rows), 448)
+
+    def test_every_region_fits_the_consumer_capacity(self):
+        for row in self.rows:
+            label = row["zone_id"]
+            self.assertLessEqual(
+                row["count"], row["capacity_optimal"],
+                f"{label}: {row['count']} 件超过六方最密上限 {row['capacity_optimal']}")
+            self.assertLessEqual(
+                row["count"], row["capacity_consumer"],
+                f"{label}: {row['count']} 件超过随机顺序摆放上限 "
+                f"{row['capacity_consumer']}（{row['area_m2']:.1f} m² @ "
+                f"{row['spacing_m']} m），Unity Builder 会丢件")
+
+    def test_every_region_keeps_headroom(self):
+        for row in self.rows:
+            self.assertLessEqual(
+                row["usage"], bg.CAPACITY_USAGE_WARN,
+                f"{row['zone_id']}: 用量 {row['usage']:.0%} 已超过 "
+                f"{bg.CAPACITY_USAGE_WARN:.0%} 的余量线")
+
+    def test_spacing_never_below_footprint_floor(self):
+        for row in self.rows:
+            self.assertGreaterEqual(
+                row["spacing_m"], row["footprint_floor_m"],
+                f"{row['zone_id']}: min_spacing_m={row['spacing_m']} 小于脚印下限 "
+                f"{row['footprint_floor_m']:.2f} m（{row['footprint_label']}）")
+
+    def test_committed_data_validates_without_warnings(self):
+        # 已提交数据必须一次过：validate 只返回 warning（当前应为空）。
+        self.assertEqual(bg.validate(self.layout, self.catalog), [])
+
+    def test_capacity_model_matches_the_consumer_measurement(self):
+        # 消费方在 78 m² 的毯子上、0.9 m 间距时实测只能摆 67 件——
+        # 这是随机顺序吸附的 0.547 覆盖率，不是六方最密的 111 件。
+        optimal, consumer = bg.point_capacity(78.0, 0.9)
+        self.assertEqual(consumer, 67)
+        self.assertEqual(optimal, 111)
+        self.assertLess(consumer, optimal)
+
+    def test_capacity_scales_with_area_and_spacing(self):
+        # 容量 = 面积 / (每点占位 × S²)，两种模型各自的自洽性。
+        for spacing in (0.5, 0.9, 1.55):
+            s2 = spacing * spacing
+            self.assertEqual(
+                bg.point_capacity(20.5 * bg.RSA_SITE_AREA * s2, spacing)[1], 20)
+            self.assertEqual(
+                bg.point_capacity(3.5 * bg.HEX_POINT_AREA * s2, spacing)[0], 3)
+        self.assertEqual(bg.point_capacity(0.0, 0.9), (0, 0))
+        self.assertEqual(bg.point_capacity(78.0, 0.0), (0, 0))
+
+
 class RoundingTests(unittest.TestCase):
     def test_all_floats_are_rounded_to_three_decimals(self):
         payload = load_payload()
@@ -419,6 +483,53 @@ class CliTests(unittest.TestCase):
                           "--out", self.out, cwd=self.tmp)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.out.read_text(encoding="utf-8"), bg.build())
+
+    def _rewrite_region(self, zone_id, **changes):
+        layout = json.loads(self.layout.read_text(encoding="utf-8"))
+        region = next(r for r in layout["prop_scatter"] if r["zone_id"] == zone_id)
+        region.update(changes)
+        self.layout.write_text(json.dumps(layout, ensure_ascii=False, indent=2) + "\n",
+                               encoding="utf-8")
+        return region
+
+    def test_over_dense_region_is_rejected(self):
+        """故意超密必须报错退出：这正是 2026-11 灰盒丢件的那份数据（毯子 80 件 @ 0.9 m）。"""
+        self._rewrite_region("blanket_west", min_spacing_m=0.9)
+        result = run_tool("--layout", self.layout, "--catalog", self.catalog,
+                          "--out", self.out)
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("prop_scatter[blanket_west]", result.stderr)
+        self.assertIn("摆不下", result.stderr)
+        self.assertIn("上限", result.stderr)
+        self.assertEqual(result.stdout.count("FAIL"), 0, "不能只给警告")
+        self.assertFalse(self.out.exists(), "校验失败时不能写出半成品")
+
+    def test_geometrically_impossible_region_is_rejected(self):
+        """六方最密也放不下的数据（树根角 14 件 @ 1.2 m）必须报「几何上不可能」。"""
+        self._rewrite_region("tree_roots_nw", min_spacing_m=1.2)
+        result = run_tool("--layout", self.layout, "--catalog", self.catalog,
+                          "--out", self.out)
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("prop_scatter[tree_roots_nw]", result.stderr)
+        self.assertIn("几何上不可能", result.stderr)
+
+    def test_spacing_below_footprint_floor_is_rejected(self):
+        """间距压到大件脚印以下（篮子区 1.2 m < 1.6+1.4 的一半）会穿模，必须报错。"""
+        self._rewrite_region("basket_north", min_spacing_m=1.2)
+        result = run_tool("--layout", self.layout, "--catalog", self.catalog,
+                          "--out", self.out)
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("prop_scatter[basket_north]", result.stderr)
+        self.assertIn("穿模", result.stderr)
+        self.assertIn("cooler_box", result.stderr)
+
+    def test_feasibility_flag_prints_the_capacity_table(self):
+        result = run_tool("--layout", self.layout, "--catalog", self.catalog,
+                          "--out", self.out, "--feasibility")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("cap_rsa", result.stdout)
+        self.assertIn("blanket_west", result.stdout)
+        self.assertIn("basket_north", result.stdout)
 
 
 if __name__ == "__main__":

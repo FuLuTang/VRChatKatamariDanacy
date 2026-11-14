@@ -151,6 +151,8 @@ def main():
     if zone_area > bounds_area + 1e-6:
         errors.append(f"区域面积和 {zone_area:.1f} m² 超过地图面积 {bounds_area:.1f} m²")
     notes.append(f"区域 {len(zones)} 个，合计 {zone_area:.1f} m²（地图 {bounds_area:.0f} m²，占 {100 * zone_area / bounds_area:.0f}%）")
+    notes.append("散布密度 / 2-D 放置可行性不在这里判（见 README §3.3）："
+                 "跑 python3 Tools/mapbuild/build_greybox.py --feasibility")
 
     # ---- structures
     struct_count = Counter()

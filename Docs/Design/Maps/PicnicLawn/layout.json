@@ -1962,12 +1962,12 @@
     {
       "zone_id": "fringe_north",
       "tier_band": "t0",
-      "min_spacing_m": 1.4,
+      "min_spacing_m": 1.2,
       "definitions": [
         {
           "id": "seed",
-          "count_min": 6,
-          "count_max": 6
+          "count_min": 12,
+          "count_max": 12
         },
         {
           "id": "acorn",
@@ -2004,12 +2004,12 @@
     {
       "zone_id": "fringe_south",
       "tier_band": "t0",
-      "min_spacing_m": 1.4,
+      "min_spacing_m": 1.2,
       "definitions": [
         {
           "id": "seed",
-          "count_min": 6,
-          "count_max": 6
+          "count_min": 12,
+          "count_max": 12
         },
         {
           "id": "acorn",
@@ -2046,12 +2046,12 @@
     {
       "zone_id": "fringe_east",
       "tier_band": "t0",
-      "min_spacing_m": 1.4,
+      "min_spacing_m": 1.2,
       "definitions": [
         {
           "id": "seed",
-          "count_min": 6,
-          "count_max": 6
+          "count_min": 12,
+          "count_max": 12
         },
         {
           "id": "acorn",
@@ -2088,12 +2088,12 @@
     {
       "zone_id": "fringe_west",
       "tier_band": "t0",
-      "min_spacing_m": 1.4,
+      "min_spacing_m": 1.2,
       "definitions": [
         {
           "id": "seed",
-          "count_min": 6,
-          "count_max": 6
+          "count_min": 12,
+          "count_max": 12
         },
         {
           "id": "acorn",
@@ -2130,7 +2130,7 @@
     {
       "zone_id": "tree_roots_nw",
       "tier_band": "t0",
-      "min_spacing_m": 0.7,
+      "min_spacing_m": 0.5,
       "definitions": [
         {
           "id": "acorn",
@@ -2157,7 +2157,7 @@
     {
       "zone_id": "tree_roots_ne",
       "tier_band": "t0",
-      "min_spacing_m": 0.7,
+      "min_spacing_m": 0.5,
       "definitions": [
         {
           "id": "acorn",
@@ -2184,7 +2184,7 @@
     {
       "zone_id": "tree_roots_sw",
       "tier_band": "t0",
-      "min_spacing_m": 0.7,
+      "min_spacing_m": 0.5,
       "definitions": [
         {
           "id": "acorn",
@@ -2211,7 +2211,7 @@
     {
       "zone_id": "tree_roots_se",
       "tier_band": "t0",
-      "min_spacing_m": 0.7,
+      "min_spacing_m": 0.5,
       "definitions": [
         {
           "id": "acorn",
@@ -2366,7 +2366,7 @@
     {
       "zone_id": "blanket_west",
       "tier_band": "t1",
-      "min_spacing_m": 0.9,
+      "min_spacing_m": 0.72,
       "definitions": [
         {
           "id": "plate",
@@ -2478,7 +2478,7 @@
     {
       "zone_id": "blanket_east",
       "tier_band": "t1",
-      "min_spacing_m": 0.9,
+      "min_spacing_m": 0.72,
       "definitions": [
         {
           "id": "plate",
@@ -2590,7 +2590,7 @@
     {
       "zone_id": "basket_north",
       "tier_band": "t2",
-      "min_spacing_m": 1.6,
+      "min_spacing_m": 1.55,
       "definitions": [
         {
           "id": "picnic_basket",
@@ -2623,42 +2623,12 @@
           "count_max": 2
         },
         {
-          "id": "banana",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
-          "id": "apple",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
-          "id": "bread_slice",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
-          "id": "sandwich",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
           "id": "juice_carton",
           "count_min": 1,
           "count_max": 1
         },
         {
           "id": "plate",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
-          "id": "bowl",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
-          "id": "cup",
           "count_min": 2,
           "count_max": 2
         }
@@ -2667,7 +2637,7 @@
     {
       "zone_id": "basket_south",
       "tier_band": "t2",
-      "min_spacing_m": 1.6,
+      "min_spacing_m": 1.55,
       "definitions": [
         {
           "id": "picnic_basket",
@@ -2700,42 +2670,12 @@
           "count_max": 2
         },
         {
-          "id": "banana",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
-          "id": "apple",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
-          "id": "bread_slice",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
-          "id": "sandwich",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
           "id": "juice_carton",
           "count_min": 1,
           "count_max": 1
         },
         {
           "id": "plate",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
-          "id": "bowl",
-          "count_min": 2,
-          "count_max": 2
-        },
-        {
-          "id": "cup",
           "count_min": 2,
           "count_max": 2
         }

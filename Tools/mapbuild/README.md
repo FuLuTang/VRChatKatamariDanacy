@@ -39,6 +39,7 @@ prop_catalog.csv       （禁止手改，提交进仓库）          （[Seriali
 python3 Tools/mapbuild/build_greybox.py             # 生成/覆盖 Docs/Design/Maps/PicnicLawn/unity_greybox.json
 python3 Tools/mapbuild/build_greybox.py --check     # 过期退出 1（不写文件），打印差异摘要
 python3 Tools/mapbuild/build_greybox.py --summary   # 额外打印各集合记录数
+python3 Tools/mapbuild/build_greybox.py --feasibility   # 打印每个散布区的 2-D 放置容量表
 python3 Tools/mapbuild/build_greybox.py --layout a.json --catalog a.csv --out out.json
 python3 -m unittest discover -s Tools/mapbuild/tests
 ```
@@ -48,14 +49,37 @@ python3 -m unittest discover -s Tools/mapbuild/tests
 校验在生成前跑，错误信息带记录 id，例如 `structures[12] core_hedge: 未知区域 'x'`、
 `plate: 目录 count_in_map=16 与布局实例数 15 不符（散布 14 + 可吸门 0）`。
 检查项：区域矩形与面积、区域/路线/尺寸门/出生点/交分锚点的交叉引用、目录 id 与 `zone_ids`、
-尺寸门类型与物件 role、散布的 count_min ≤ count_max、以及**目录数量 = 散布 + 可吸门 / 结构实例**。
+尺寸门类型与物件 role、散布的 count_min ≤ count_max、**目录数量 = 散布 + 可吸门 / 结构实例**，
+以及 **2-D 放置可行性**（下面单独说）。
 Unity 消费方不需要再重复这些检查。
+
+## 2-D 放置可行性（作者数据的硬门槛）
+
+消费方（`PicnicLawnGreyboxBuilder.BuildProps`）只有一个 per-region 标量 `min_spacing_m`：按
+`prop_ids` 顺序逐件放置，每件均匀随机采样最多 256 次，与**区内任意已放件**中心距 < S 就重试；
+全局间距失败后只和同名定义比间距，再失败才丢件。数据比这更密时，丢件/降级就发生在 Unity 侧——
+2026-11 的灰盒就是这样（严格间距只摆下 383/448，作者却写了 448）。
+
+所以本工具在生成前自己判可行性，超了**报错退出（exit 2）**，不再只给警告：
+
+- **容量**取「消费者能摆到的」，不是「最密堆叠」：六方最密上限是 `A / ((√3/2)·S²)`（谁也超不过），
+  但 256 次均匀拒绝采样等价于随机顺序吸附（RSA），2-D 圆盘饱和覆盖率 0.547，即每点平均
+  `π/(4·0.547)·S² ≈ 1.436·S²`，只有最密的 ~60%。**校准**：78 m² @ 0.9 m 的毯子，公式给 67 件，
+  Unity 构建器实测也是 67 件。
+- **脚印**：每件按 `game_longest_dim_m` 当方形脚印，必须整块落在区域内（每边 0.05 m）；
+  `min_spacing_m` 还必须 ≥ 区内最大两件的 `(d₁+d₂)/2`，否则那两件会穿模。
+- **余量**：用量 > 100% 报错；85–100% 只警告（`--feasibility` 表里标 `WARN`）。已提交的 PicnicLawn
+  最高用量 82%。
+- 模型、假设与逐区表见 `Docs/Design/Maps/PicnicLawn/README.md` §3.3；常量在
+  `build_greybox.py` 顶部（`RSA_DISC_COVERAGE` 等），改常量前先看回归用例：
+  `Tools/mapbuild/tests/test_build_greybox.py::FeasibilityTests`。
 
 ## 加一张新地图
 
 1. 在 `Docs/Design/Maps/<MapName>/` 放 `layout.json` + `prop_catalog.csv`，先用该目录的
-   `validate_layout.py` 自检（本工具的校验是它的子集 + 拍平）。
-2. `python3 Tools/mapbuild/build_greybox.py --layout <…>/layout.json --catalog <…>/prop_catalog.csv --out <…>/unity_greybox.json`。
+   `validate_layout.py` 自检结构/引用/数量（本工具的校验是它的超集：多了 2-D 放置可行性）。
+2. `python3 Tools/mapbuild/build_greybox.py --feasibility --layout <…>/layout.json --catalog <…>/prop_catalog.csv --out <…>/unity_greybox.json`，
+   先看容量表再生成：凡是 `FAIL` 行都得先改件数或 `min_spacing_m`。
 3. 提交生成物，并在 CI/自检里跑 `--check`。
 4. 常量 `DEFAULT_*` 与 `Tools/mapbuild/tests/` 里的 21/60/4/… 是 PicnicLawn 的回归基线；
    新增地图时**不要**把这些数字改成别的图，应该给新图加一个测试模块（或把断言参数化）。

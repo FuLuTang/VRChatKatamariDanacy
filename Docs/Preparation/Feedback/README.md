@@ -7,7 +7,7 @@ This folder is a **text-only preproduction proposal** for T23 (layered sound/eff
 - [Game design](../../01_GAME_DESIGN.md): sections 2–8 describe deposit/KO/respawn, A/B/Desktop and Jump rules, magnet/rocket, lobby/round phases, audio priority, low-effects and comfort constraints.
 - [Technical contracts](../../02_TECHNICAL_CONTRACTS.md): confirmed ledger vs local prediction, idempotent claims/bank requests, world state and remote summaries, plus bounded pooling and no per-item Update.
 - [Acceptance evidence](../../05_ACCEPTANCE_TESTS.md): G1 requires no forced camera movement and configurable/off low effects; G3 requires one authoritative winner; G5 requires cosmetic effects not to alter gameplay or cover warnings; G6 still needs actual profiling.
-- [P07/T23/T24 planning](../../14_OFFLINE_PREPARATION_PLAN.md) and [task contracts](../../../tasks.json): only a preparation draft; T23/T24 remain gated by their dependencies.
+- [P07/T23/T24 planning](../../Archive/Process/14_OFFLINE_PREPARATION_PLAN.md) and [task contracts](../../../tasks.json): only a preparation draft; T23/T24 remain gated by their dependencies.
 
 ## Reading `events.csv`
 

@@ -7,7 +7,7 @@
 - `transaction_cases.json`：可审查的拾取、重复交存、KO、部分磁铁、超时/截止、同帧争用、epoch与迁移案例。每个不确定规则保留候选或OPEN。
 - `Docs/tools/prep_protocol/model.py`：只依赖Python标准库的纯宿主Fixture reducer。
 - `Docs/tests/prep_protocol/test_model.py`：34个离线单测，含恶意/无效输入和并发请求排列案例。
-- 本目录 `handoff.md`：范围、复现与交接信息。
+- 交接信息见归档 `Docs/Archive/Handoffs/Preparation_ProtocolExamples.md`。
 
 ## 运行
 

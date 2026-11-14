@@ -6,7 +6,7 @@
 
 | 来源 | 日期 / 版本 | 有限摘录或观察 | 可支持的结论 | 不可推导 |
 |---|---|---|---|---|
-| 本地契约 [`Docs/02_TECHNICAL_CONTRACTS.md`](../../../02_TECHNICAL_CONTRACTS.md) §§1–3、§§5–6 | v0.3 仓库契约；不是原作 | “球芯半径由确认体积更新”；附着物局部位姿记录；增长不能放大旧附着物；跨端外观摘要使用稳定实例身份/世代/序号。 | 当前项目的明确设计边界：账本、尺寸、附着位姿、视觉树分离。 | 不能作为原作实现证据，也不等于已冻结/已测试接口。 |
+| 本地契约 [`Docs/02_TECHNICAL_CONTRACTS.md`](../../../../02_TECHNICAL_CONTRACTS.md) §§1–3、§§5–6 | v0.3 仓库契约；不是原作 | “球芯半径由确认体积更新”；附着物局部位姿记录；增长不能放大旧附着物；跨端外观摘要使用稳定实例身份/世代/序号。 | 当前项目的明确设计边界：账本、尺寸、附着位姿、视觉树分离。 | 不能作为原作实现证据，也不等于已冻结/已测试接口。 |
 | 本地旧稿 [`Docs/Design/BallLayers/Attachment/README.md`](../../Attachment/README.md) 与 `attachment.py` | 历史离线草稿，当前文件可读取 | 代码调用端传入实例/世代，但由本地 `_next_sequence` 自增；仅内存 append；没有确认事件去重、撤销或跨局清理；renderer预算与记录状态耦合。 | 现状缺陷基线，说明需要身份及生命周期语义。 | 不能把旧草稿行为当成验收行为或网络协议。 |
 | 本地旧稿 [`Docs/Design/BallLayers/SizeModel/README.md`](../README.md) 与 `size_model.py` | 历史离线草稿 | 有体积立方根映射与半径/直径类型分离；部分有限极值下乘法、中间幂/容量计算可能溢出。`min(base + confirmed, cap)` 截断有效量而非账本。 | 保留公式与语义分离方向；需保护中间计算并明确上限仅作用呈现映射。 | 不代表模型已覆盖全部有限输入，也不提供正式尺寸参数。 |
 | Google Patents, US7402104B2, “Game performing method, game apparatus, storage medium, data signal and program” [专利页面](https://patents.google.com/patent/US7402104B2/en) | 申请提交日期 2004-09-20；授权公告 2008-07-22；描述的是历史游戏技术方案 | 权利要求/摘要摘录：“a plurality of first displacement points capable of displacing only in predetermined radial directions”；另述吸附物的突出特征可用有限数量第二位移点表示。说明书的滚动模型段落举例固定径向臂16、可选臂4。 | 历史专利文本描述了一种滚动/外形代理方案，并非仅以渲染网格计算滚动；有限径向点/突出点是可查证的文本内容。 | 专利不是可执行源码；不得称为原版游戏实际源代码或内部运行机制实证。它不证明2025版沿用，不提供本项目尺寸换算、确认事件身份或网络语义，也不构成许可意见。 |

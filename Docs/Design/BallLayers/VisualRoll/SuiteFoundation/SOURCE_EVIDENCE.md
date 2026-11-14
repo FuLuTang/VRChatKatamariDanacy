@@ -13,7 +13,7 @@
 | 来源 | 版本/日期 | 可核对内容 | 适用性与限制 |
 |---|---|---|---|
 | [`Docs/02_TECHNICAL_CONTRACTS.md`](../../../../02_TECHNICAL_CONTRACTS.md) §2、§3 | 项目 v0.3 契约，非正式冻结接口 | BallPhysicsRoot 拥有位置/平面朝向；BallVisualRollRoot 只拥有可视自转且 scale 恒 1；FollowRig 与镜头/HUD 分离；远端装饰近似，不影响玩法判定。 | 是本项目当前边界，不是原作实现证据；T06 尚未冻结接口。 |
-| [`Docs/Planning/BALL_WORKFLOW_REPLAN.md`](../../../../Planning/BALL_WORKFLOW_REPLAN.md) §C | 2026-10-14 | 明确 T53/T55/T56 的责任、VisualRoll 需要独立接触速度 oracle、FollowRig 从 T46 抽离、T56 接线等待 T51。 | 工作流要求，不证明代码或验收完成。 |
+| [`Docs/Archive/Planning/BALL_WORKFLOW_REPLAN.md`](../../../../Archive/Planning/BALL_WORKFLOW_REPLAN.md) §C | 2026-10-14 | 明确 T53/T55/T56 的责任、VisualRoll 需要独立接触速度 oracle、FollowRig 从 T46 抽离、T56 接线等待 T51。 | 工作流要求，不证明代码或验收完成。 |
 | [`Docs/Design/BallLayers/VisualRoll/visual_roll.py`](../visual_roll.py) 与 [`Docs/tests/ball_visual_roll/test_visual_roll.py`](../../../../tests/ball_visual_roll/test_visual_roll.py) | 本地旧草稿；当前源码 | 单位法线、正半径、位移距离生成轴角四元数并左乘累计；测试直接检查 `displacement × normal` 轴方向和整周角度等式。 | 轴测试只是复述实现公式，没独立验证接触点不滑动；含法向位移时角度取全位移而非切向分量；没有初始非法四元数/瞬移/长期误差覆盖。 |
 | [`Docs/Design/BallMotion/ball_motion.py`](../../../BallMotion/ball_motion.py) `FollowRig` 与 [`Docs/tests/ball_motion/test_ball_motion.py`](../../../../tests/ball_motion/test_ball_motion.py) | 旧 T46 合并式宿主草稿 | 高度与 yaw 指数滤波；roll/pitch 输出置零；测试检查过滤后跟随与忽略 roll/pitch。 | 它在 BallMotion 模块中，不是独立 T55；只可提取作基线，不得改动或把旧测试当作充分覆盖。未见瞬移重置/眼高范围约束测试。 |
 | [`Docs/Design/BallLayers/Attachment/attachment.py`](../../Attachment/attachment.py) | 本地 T51 草稿 | 附着记录里存在实例、世代及由本地 `_next_sequence` 递增的序号；`attachment_hash` 可确定性摘要。 | T56 可先消费合成“已确认摘要”离线模拟；T51 当前本地序号不是可跨端确认身份，不能当权威 attachSequence。 |

@@ -29,4 +29,4 @@ Build & Test 期间 Editor.log 仍出现 `Build Finished, Result: Failure.`（�
 
 没有进行真人 VR 体验、Station、多人/网络、性能测试；这些属于 T04/T05 及后续任务。未上传或发布世界。编译与本地进入证据仅满足 T00 两项验收，不冻结公共接口，不代表游戏玩法、平台行为或性能通过。
 
-详细日志依据见 [compile_evidence.md](compile_evidence.md) 与 [build_and_test.md](build_and_test.md)；交接记录见 [handoff.md](handoff.md)。
+详细日志依据见 [compile_evidence.md](compile_evidence.md) 与 [build_and_test.md](build_and_test.md)；交接记录见 [handoff](../../Archive/Handoffs/Evidence_T00.md)。

@@ -41,4 +41,4 @@ Editor.log 行 1378 记录最终 Build & Test 同步编译 12 个脚本完成，
 - 无道具轻提示仍为 VisualRoll 变色替代；非坐姿退出按钮仅有日志，无可见反馈。
 - 桌面交互是用户实测的准星对准后鼠标左键；E 键无效。VR 控制器交互未测。
 
-T05 真人 VR 必须体验 VR-A/VR-B、舒适性、头部独立转动、Avatar 适配、多人同步与退出安全，并由真人/用户决定是否批准 Station 为主方案。详细表见 [PC 结果](pc_results.md) 和 [T05 清单](vr_checklist_for_T05.md)。
+T05 真人 VR 必须体验 VR-A/VR-B、舒适性、头部独立转动、Avatar 适配、多人同步与退出安全，并由真人/用户决定是否批准 Station 为主方案。详细表见 [PC 结果](pc_results.md) 和 [T05 清单](vr_checklist.md)。

@@ -4,7 +4,7 @@
 
 ## 【已定】
 
-- 按 [技术契约 §2](../../02_TECHNICAL_CONTRACTS.md#L23-L30)，`BallPhysicsRoot` 拥有位置与玩法平面朝向；`BallVisualRollRoot` 只拥有可视滚动旋转且 `localScale=(1,1,1)`；`CoreMesh` 单独缩放。
+- 按 [技术契约 §2](../../../02_TECHNICAL_CONTRACTS.md#L23-L30)，`BallPhysicsRoot` 拥有位置与玩法平面朝向；`BallVisualRollRoot` 只拥有可视滚动旋转且 `localScale=(1,1,1)`；`CoreMesh` 单独缩放。
 - FollowRig、镜头和 HUD 不得成为滚动节点的子级，也不得读取可视自转作为玩法朝向/镜头/HUD 输入。
 - 本层只用球心位移和地面法线生成可视滚动增量；不改变位移、速度或平面朝向。
 
@@ -17,7 +17,7 @@
 - 将增量四元数左组合到本层局部滚动姿态；组合/引擎映射仍待Unity探针确认。该姿态不回写平面朝向。
 - `discontinuous=True`或调用方显式提供的位移阈值可跳过瞬移/重生步；调用方负责从新位置开始后续位移。
 
-占位参数：`ROLL_RADIUS_WORLD_M_FROM_CALLER`（调用方传入、建议来自球芯半径；本层不拥有尺寸来源）；世界尺度仍未定，见[来源与未决问题](../../08_SOURCES_AND_OPEN_QUESTIONS.md)。不为公平阈值、回合时长或性能原型值作决定。
+占位参数：`ROLL_RADIUS_WORLD_M_FROM_CALLER`（调用方传入、建议来自球芯半径；本层不拥有尺寸来源）；世界尺度仍未定，见[来源与未决问题](../../../08_SOURCES_AND_OPEN_QUESTIONS.md)。不为公平阈值、回合时长或性能原型值作决定。
 
 参考API `VisualRollState.advance(displacement, ground_normal, radius, *, discontinuous=False, max_displacement_m=None)` 接收同帧的位移、法线和半径，可显式跳过重定位步，返回独立状态对象；四元数顺序`(x,y,z,w)`。初始姿态入口拒绝零/非法/极小四元数，合法非单位姿态规范化；法线必须非零、半径正且有限。零切向位移保持姿态，但仍校验输入。每次调用表示已确认球心位移，不包含运动积分、速度或帧率假设。
 

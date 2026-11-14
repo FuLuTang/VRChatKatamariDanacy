@@ -5,7 +5,7 @@
 - [`names.csv`](names.csv)：5个原创名候选及中文/日文读音草案、查询字段、歧义与语言审校状态。
 - [`evidence.md`](evidence.md)：公开免费搜索记录、可重跑查询链接、被读取页面、检索边界与概念邻近风险。
 - [`promotion_rules.md`](promotion_rules.md)：概念图、素材/Blender技术图、Unity实机画面、多客户端/性能声明各自的证据级别与标注规则。
-- [`handoff.md`](handoff.md)：工作范围、未做项与后续门禁。
+- [`handoff.md`](../../Archive/Handoffs/Preparation_BrandResearch.md)：工作范围、未做项与后续门禁。
 
 ## 读者注意
 

@@ -53,11 +53,11 @@ T00仍需要确认实际工程和执行机器、精确Unity/SDK版本、编译�
 
 ## 6. 初始化边界
 
-保留原Git历史、main和origin；没有重新初始化Git或上传世界、购买商品、下载模型。仓库初始化时 `UnityProject/` 仅有说明；后续接入实际工程见本页第7节。
+保留原Git历史、main和origin；没有重新初始化Git或上传世界、购买商品、下载模型。仓库初始化时的 `UnityProject/` 占位说明已归档到 `Docs/Archive/UnityProjectPlaceholder/README.md`；后续接入实际工程见本页第7节。
 
 本轮可验证：JSON结构、DAG、路径映射、免费/付费发布前置、原始文件哈希和校验工具单测。全部游戏门禁仍为NOT_RUN。
 
-后续用户已确认Unity在Windows PC运行，并自行初始化；最初的Unity工程路径及精确版本待回执状态，已由本页第7节更新。本页前面的“全部TODO”是仓库初次导入时的历史快照，不代表后续团队当前状态。首轮团队工作状态详见 [团队分工](<11_TEAM_KICKOFF.md>)。
+后续用户已确认Unity在Windows PC运行，并自行初始化；最初的Unity工程路径及精确版本待回执状态，已由本页第7节更新。本页前面的“全部TODO”是仓库初次导入时的历史快照，不代表后续团队当前状态。首轮团队工作状态详见 [团队分工](<Archive/Process/11_TEAM_KICKOFF.md>)。
 
 ## 7. Windows Unity 工程接入（2026-10-11）
 

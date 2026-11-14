@@ -7,8 +7,8 @@
 ### 【已定】（仅限现有文档明确范围）
 
 - 移动层只接收规范化意图，不读取具体设备；VR A、VR B、Desktop 是输入适配器来源，而不是运动算法分支。[玩法设计第4节](../../01_GAME_DESIGN.md#L33-L65) [技术契约](../../02_TECHNICAL_CONTRACTS.md)
-- Jump 上升沿语义是请求使用当前道具；长按不重复，菜单/退出/KO应清理输入。Desktop Interact 使用鼠标左键，已由 T04 PC 手测；E 无效。[T04 VR/PC核对](../../Evidence/T04/vr_checklist_for_T05.md#L17-L27)
-- T04 PC 实测：坐姿 Jump 不退座，只计一次，长按不重复；坐姿时本地交互提示应关闭。此事实仅限记载的 PC 测试。[T04结果](../../Evidence/T04/pc_results.md#L12-L16) [提示记录](../../Evidence/T04/pc_results.md#L30-L37)
+- Jump 上升沿语义是请求使用当前道具；长按不重复，菜单/退出/KO应清理输入。Desktop Interact 使用鼠标左键，已由 T04 PC 手测；E 无效。[T04 VR/PC核对](../../Evidence/StationPlatform/vr_checklist.md#L17-L27)
+- T04 PC 实测：坐姿 Jump 不退座，只计一次，长按不重复；坐姿时本地交互提示应关闭。此事实仅限记载的 PC 测试。[T04结果](../../Evidence/StationPlatform/pc_results.md#L12-L16) [提示记录](../../Evidence/StationPlatform/pc_results.md#L30-L37)
 
 ### 【DRAFT 草案】
 

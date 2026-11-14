@@ -27,4 +27,4 @@ Editor.log 行 1204–1207 的 `CS1012` 来自文件写入过程中的一个中�
 
 桌面交互已由用户实测：对准交互目标后**鼠标左键**，E 键无效。真人 VR（A/B）、舒适性、大/小 Avatar、多人同步均为 NOT_RUN，留给 T05。Station 保留 PC 层面首选候选，须由 T05 真人 VR 决定是否批准为主方案。
 
-详见 [PC 结果](pc_results.md)、[T05 清单](vr_checklist_for_T05.md)、[Station 决策](station_decision.md) 与 [handoff.md](handoff.md)。
+详见 [PC 结果](pc_results.md)、[T05 清单](vr_checklist.md)、[Station 决策](station_decision.md) 与 [handoff](../../Archive/Handoffs/Evidence_T04.md)。

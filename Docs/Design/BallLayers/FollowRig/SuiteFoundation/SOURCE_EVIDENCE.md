@@ -12,7 +12,7 @@
 
 - `Docs/Design/BallMotion/ball_motion.py`旧T46草稿用位置+yaw指数滤波，采用`wrap_degrees`短差；旧接口仍以 `(roll,pitch,yaw)` 元组输入，FollowRig被嵌在T46中。
 - `Docs/tests/ball_motion/test_ball_motion.py`旧测试检查roll/pitch清零、有限lag与不超目标；没有验证0/360最短弧、重生/瞬移重置、眼高区间或坏输入原子性。
-- 项目契约 `Docs/02_TECHNICAL_CONTRACTS.md` §2规定FollowRig与BallVisualRollRoot分离；`Docs/Planning/BALL_WORKFLOW_REPLAN.md` §C要求只读水平朝向、不读取HMD或球自转、重生重置与眼高限制。
+- 项目契约 `Docs/02_TECHNICAL_CONTRACTS.md` §2规定FollowRig与BallVisualRollRoot分离；`Docs/Archive/Planning/BALL_WORKFLOW_REPLAN.md` §C要求只读水平朝向、不读取HMD或球自转、重生重置与眼高限制。
 - 本模块是项目自定义工程近似，继承旧滤波频率只作为可调起始值，不是原作摄像机方案、舒适性结果或产品参数。
 
 ## 公开来源

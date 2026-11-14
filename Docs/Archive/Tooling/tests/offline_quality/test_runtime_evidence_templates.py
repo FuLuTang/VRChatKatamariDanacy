@@ -20,7 +20,7 @@ _previous_bytecode_setting = sys.dont_write_bytecode
 sys.dont_write_bytecode = True
 try:
     _spec.loader.exec_module(P18)
-    from Docs.tools.third_batch.validate import _check_runtime_evidence
+    from Docs.Archive.Tooling.tools.third_batch.validate import _check_runtime_evidence  # P22 checker archived under Docs/Archive/Tooling/
 finally:
     sys.dont_write_bytecode = _previous_bytecode_setting
 

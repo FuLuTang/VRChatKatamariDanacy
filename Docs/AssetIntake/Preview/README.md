@@ -57,11 +57,11 @@ Windows后台渲染参数示例（只对本轮隔离输入）：
 blender.exe --background --factory-startup --disable-autoexec --python-exit-code 2 --python render_windows.py -- INPUT NEW_OUTPUT
 ```
 
-渲染输出也拒绝覆盖；原配置[命令行文档](https://docs.blender.org/manual/en/latest/advanced/command_line/arguments.html)不提供导入器漏洞绝对保证。没有Unity/Udon、运行时Collider、真人VR、多客户端、性能、成片、付费或正式分发测试；这些全部NOT_RUN。不修改原[第一批快照](<../../15_OFFLINE_PREPARATION_REVIEW.md>)，最新观察以本页为准。
+渲染输出也拒绝覆盖；原配置[命令行文档](https://docs.blender.org/manual/en/latest/advanced/command_line/arguments.html)不提供导入器漏洞绝对保证。没有Unity/Udon、运行时Collider、真人VR、多客户端、性能、成片、付费或正式分发测试；这些全部NOT_RUN。不修改原[第一批快照](<../../Archive/Process/15_OFFLINE_PREPARATION_REVIEW.md>)，最新观察以本页为准。
 
 ## P21受控复测：同一12项第二次运行（2026-10-11）
 
-首批渲染由主管实际操作；上方旧 `renders/` 与[首批快照](<../../15_OFFLINE_PREPARATION_REVIEW.md>)保留为历史，不覆盖。以下是P21由asset-acquisition执行的独立复测，不替代或改写首批记录：
+首批渲染由主管实际操作；上方旧 `renders/` 与[首批快照](<../../Archive/Process/15_OFFLINE_PREPARATION_REVIEW.md>)保留为历史，不覆盖。以下是P21由asset-acquisition执行的独立复测，不替代或改写首批记录：
 
 ![P21受控复测12项接触图](<verified_renders/contact_sheet.png>)
 

@@ -16,10 +16,10 @@
       "title": "工程基线、版本锁定与最小测试场景",
       "execution_note": "2026-10-12 Lead验收DONE。(1)SDK编译PASS：Editor 2022.3.22f1、VPM Base/Worlds 3.10.5，UdonSharp编译8个脚本完成，全Editor.log无error CS/编译失败/异常。(2)Build & Test PASS：用户在普通用户Editor生成并Build & Test Assets/VRC_Katamari/Bootstrap/T00_Bootstrap.unity，SDK产出115.5 KB .vrcw，VRChat客户端日志Entering Room: Local Test → Finished entering world，用户确认正常进入。Editor.log另有一行Build Finished, Result: Failure（player-build阶段，未阻止bundle与加载），记为待解释观察项。未上传。Windows提交135014b；Unity自动改的ProjectSettings iOS项已还原。VR、Station、多人、性能未测，属T04以后。",
       "evidence_paths": [
-        "Docs/Evidence/T00/README.md",
-        "Docs/Evidence/T00/compile_evidence.md",
-        "Docs/Evidence/T00/build_and_test.md",
-        "Docs/Evidence/T00/handoff.md",
+        "Docs/Evidence/Bootstrap/README.md",
+        "Docs/Evidence/Bootstrap/compile_evidence.md",
+        "Docs/Evidence/Bootstrap/build_and_test.md",
+        "Docs/Archive/Handoffs/Evidence_T00.md",
         "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Bootstrap/T00_Bootstrap.unity"
       ],
       "phase": "P0",
@@ -32,7 +32,7 @@
         "VRChatKatamariDanacyUnity/ProjectSettings/",
         "VRChatKatamariDanacyUnity/Packages/",
         "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Bootstrap/",
-        "Docs/Evidence/T00/"
+        "Docs/Evidence/Bootstrap/"
       ],
       "exclusive_locks": [
         "unity-integration"
@@ -65,7 +65,7 @@
       "evidence_paths": [
         "Docs/Research/ReferenceRules/rules_matrix.md",
         "Docs/Research/ReferenceRules/unknown_handling.md",
-        "Docs/Research/ReferenceRules/handoff.md",
+        "Docs/Archive/Handoffs/Research_ReferenceRules.md",
         "Docs/Preparation/RuleDecisions/decisions.json"
       ],
       "priority": "P0",
@@ -102,13 +102,13 @@
       "status": "DONE",
       "execution_note": "2026-10-12 独立Luna评审（requirements-audit）两条验收均PASS，Lead验收DONE：36概念有用途、26项有具体库存文件候选；无候选素材进入Unity或正式目录。DONE不代表逐文件授权、Unity导入、尺寸或形状批准——这些留给后续资产任务。原记录：36种物件概念预筛选；P02已取得两个官方Kenney免费小包并保存包级CC0、哈希和库存。P19在用户Windows现有Blender独立后台进程预览12项，发现bread是面包片、cheese-cut是薄片、pot_small是空盆；导入包围尺寸和三角数仅Blender证据，不是世界米制或Unity性能/碰撞/逐项分发验收。未导入Unity。旧license_gaps/DirectDownload映射是先前快照，最新观察见Preview。",
       "evidence_paths": [
-        "Docs/Reviews/T02_T03_acceptance.md",
+        "Docs/Archive/Reviews/reference_rules_and_assets_acceptance.md",
         "Docs/Preparation/AssetCoverage/coverage.csv",
         "Docs/Research/AssetManifest/picnic_candidates.csv",
         "Docs/AssetIntake/license_gaps.md",
-        "Docs/AssetIntake/handoff.md",
+        "Docs/Archive/Handoffs/AssetIntake.md",
         "Docs/AssetIntake/DirectDownload/manifest.json",
-        "Docs/AssetIntake/DirectDownload/handoff.md",
+        "Docs/Archive/Handoffs/AssetIntake_DirectDownload.md",
         "Docs/AssetIntake/Preview/README.md",
         "Docs/AssetIntake/Preview/renders/render_report.json"
       ],
@@ -152,10 +152,10 @@
       "status": "DONE",
       "execution_note": "2026-10-12 独立Luna评审两条验收均PASS，Lead验收DONE：三语候选文案及四类文字分镜可独立推进，均标为概念/待实机，无未实现功能承诺、无未授权品牌资产。名称候选查重见P14，未定名、未法律清权；未选视觉方向、未生成正式封面，未发布——这些不是T03验收条件。",
       "evidence_paths": [
-        "Docs/Reviews/T02_T03_acceptance.md",
+        "Docs/Archive/Reviews/reference_rules_and_assets_acceptance.md",
         "Marketing/Preproduction/theme_copy.md",
         "Marketing/Preproduction/storyboard.md",
-        "Marketing/Preproduction/handoff.md"
+        "Docs/Archive/Handoffs/Marketing_Preproduction.md"
       ],
       "priority": "P1",
       "dependencies": [],
@@ -182,7 +182,7 @@
     {
       "id": "T04",
       "title": "Station、输入与缩放最小平台实验",
-      "execution_note": "2026-10-14 RUNNING：PC桌面层面已有日志与用户目视证据（Station入座、坐姿Jump不退座、单击/长按只计一次、三条离开路径恢复JumpImpulse到3且回读3、退出按钮、Respawn、入座后本地Interact提示关闭——用户目视确认）；GetJumpImpulse()四次独立会话初始读值均为0，正式世界需显式配置移动参数，恢复值不能依赖读回。桌面交互为鼠标左键。未完成：步骤4（A手追踪/B原生舒适转向事件差异、眼高范围）必须戴头显，已加原生轴事件日志并编译、构建通过（Editor.log UdonSharp编译无错，新bundle已生成），尚未在头显实测；修复后Respawn/自然离座的Interact恢复未测；Build Finished Result: Failure观察项未解释。Station是否主方案由T05真人VR决定。证据见Docs/Evidence/T04/，操作总览见Docs/Preparation/InputExperiments/controls_overview.md。原型不扩成正式模块。",
+      "execution_note": "2026-10-14 RUNNING：PC桌面层面已有日志与用户目视证据（Station入座、坐姿Jump不退座、单击/长按只计一次、三条离开路径恢复JumpImpulse到3且回读3、退出按钮、Respawn、入座后本地Interact提示关闭——用户目视确认）；GetJumpImpulse()四次独立会话初始读值均为0，正式世界需显式配置移动参数，恢复值不能依赖读回。桌面交互为鼠标左键。未完成：步骤4（A手追踪/B原生舒适转向事件差异、眼高范围）必须戴头显，已加原生轴事件日志并编译、构建通过（Editor.log UdonSharp编译无错，新bundle已生成），尚未在头显实测；修复后Respawn/自然离座的Interact恢复未测；Build Finished Result: Failure观察项未解释。Station是否主方案由T05真人VR决定。证据见Docs/Evidence/StationPlatform/，操作总览见Docs/Preparation/InputExperiments/controls_overview.md。原型不扩成正式模块。",
       "phase": "P0",
       "implementer": "SOL",
       "reviewer": "Sol",
@@ -193,7 +193,7 @@
       ],
       "write_scope": [
         "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Prototypes/Platform/",
-        "Docs/Evidence/T04/"
+        "Docs/Evidence/StationPlatform/"
       ],
       "exclusive_locks": [
         "unity-platform-lab"
@@ -1594,16 +1594,16 @@
         "无（纯离线；真机映射仍待T07/T08）"
       ],
       "steps": [
-        "读取Docs/01_GAME_DESIGN.md第4节、Docs/02_TECHNICAL_CONTRACTS.md、Docs/Research/ReferenceRules/，以及Docs/Evidence/T04/已记录的PC实测事实（交互为鼠标左键、E键无效；坐姿Jump不退座且只计一次、长按不重复；入座后本地交互提示关闭）。",
+        "读取Docs/01_GAME_DESIGN.md第4节、Docs/02_TECHNICAL_CONTRACTS.md、Docs/Research/ReferenceRules/，以及Docs/Evidence/StationPlatform/已记录的PC实测事实（交互为鼠标左键、E键无效；坐姿Jump不退座且只计一次、长按不重复；入座后本地交互提示关闭）。",
         "定义唯一意图集合（Move2D/Look2D/UseItem或Jump/Interact/ExitStation/Respawn/ComfortTurn设置），为A双控制器、B原生VR、Desktop三种输入源各写映射表；运动层不得感知设备细节。",
         "写host-only标准库Python参考实现，覆盖边沿触发、去抖、坐姿屏蔽与恢复、菜单打开时不产生游戏意图。",
         "写Docs/tests/control_intent/单元测试（含__init__.py），断言三种输入源在同一段脚本化输入下产生完全一致的意图序列。",
         "记录草案接口、未决项与必须由T07/T08真机确认的条目；标注DRAFT、不冻结接口。",
-        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Reviews/2026-10-14_offline_control_logic_review.md。"
+        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
       ],
       "acceptance_criteria": [
         "三种输入源在同一脚本输入下产生完全一致的意图序列，且有测试断言。",
-        "边沿、去抖、坐姿屏蔽、菜单态四类语义有测试覆盖，且与Docs/Evidence/T04/的PC实测事实一致。",
+        "边沿、去抖、坐姿屏蔽、菜单态四类语义有测试覆盖，且与Docs/Evidence/StationPlatform/的PC实测事实一致。",
         "文档分列已定/DRAFT/未决，不声称VR通过、不冻结公共接口、不声称Udon运行时验证。"
       ],
       "source_ids": [
@@ -1631,11 +1631,11 @@
         "无（纯离线数值模型；Unity内实际扫掠仍待T09）"
       ],
       "steps": [
-        "读取Docs/01_GAME_DESIGN.md、Docs/02_TECHNICAL_CONTRACTS.md的坐标与尺寸约定，以及Docs/Evidence/T04/中Station加独立FollowRig的现状（姿态与球体自转分离）。",
+        "读取Docs/01_GAME_DESIGN.md、Docs/02_TECHNICAL_CONTRACTS.md的坐标与尺寸约定，以及Docs/Evidence/StationPlatform/中Station加独立FollowRig的现状（姿态与球体自转分离）。",
         "host-only实现：球心位置与姿态、自转与运动解耦、加减速、转向与侧移、半径成长的尺寸耦合、与解析地面（含缓坡）的扫掠检测、FollowRig高度与方向过滤（忽略roll与pitch）、卡住与出界恢复。",
         "写数值测试：高速下不穿透薄墙、镜头不继承roll与pitch、缓坡不弹跳不卡死、追尾延迟有界、半径变化后参数仍合法。",
         "输出可调参数表（带单位量纲）与未决项（哪些参数必须等T06冻结或真机标定）。",
-        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Reviews/2026-10-14_offline_control_logic_review.md。"
+        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
       ],
       "acceptance_criteria": [
         "扫掠不穿透、相机无roll与pitch、缓坡通过、追尾延迟有界，四类均有可复现测试。",
@@ -1671,7 +1671,7 @@
         "host-only实现：静态物件注册表与空间网格、近邻查询、可吸附判定（半径、尺寸、类型、价值）、吸附的幂等计数、本地吸附与远端装饰重建的语义边界。",
         "写测试：同一物件只计一次（幂等与重复包重放）、两球同时够到时由权威裁决且本地预测可回滚、吸附集合可从权威状态重建、半径成长单调且有上限。",
         "记录未决项：吸附阈值与价值表仍是草案，等T06冻结；明确本地装饰不参与玩法判定。",
-        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Reviews/2026-10-14_offline_control_logic_review.md。"
+        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
       ],
       "acceptance_criteria": [
         "幂等单次计数、重放不重复计分、本地预测可回滚、吸附集合可重建，四类测试通过。",
@@ -1707,7 +1707,7 @@
         "host-only实现：账本事务（幂等键、本地预测与权威确认、结算条件）、争抢裁决（先到与同帧并列）、KO与重生事务、迟到加入的快照与状态迁移、断线迁移、回合状态机（大厅到准备到进行到结算回大厅）。",
         "写测试：重复包与重放不重复计分；迟到加入得到一致快照；KO后重生状态合法；非法状态迁移被拒绝；回合结束不依赖任何单客户端本地状态。",
         "记录未决项：公平阈值、回合时长、结算细则仍属用户未决问题（见Docs/08_SOURCES_AND_OPEN_QUESTIONS.md），实现用可替换参数占位。",
-        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Reviews/2026-10-14_offline_control_logic_review.md。"
+        "Lead 审核通过：四份 DRAFT 交付与不变量测试齐备，全库 158 项测试通过；接口未冻结，等 T06 定稿。审核记录 Docs/Archive/Reviews/2026-10-14_offline_control_logic_review.md。"
       ],
       "acceptance_criteria": [
         "幂等计分、重放一致、迟到加入快照一致、非法迁移被拒绝，四类测试通过。",

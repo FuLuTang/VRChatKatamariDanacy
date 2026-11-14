@@ -7,7 +7,7 @@
 ### 【已定】
 - 共享地图坐标中的碰撞半径与 Avatar 眼高、表现尺寸分离；球碰撞使用统一语义半径，见 [`Docs/02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md) 第1–3节。
 - 本地对象分为 `BallPhysicsRoot`、`BallVisualRollRoot`、`CoreMesh`、`AttachmentRoot`、独立 `FollowRig`；视觉滚动不得作为玩法判定，FollowRig 不挂在滚动树下。
-- Station + 独立 FollowRig 是目前 PC 实验下的候选方案，不代表 VR 最终通过；姿态与球体自转分离，见 [`Docs/Evidence/T04/README.md`](../../Evidence/T04/README.md) 与 [`Docs/Evidence/T04/station_decision.md`](../../Evidence/T04/station_decision.md)。T04 记录真人 VR 与舒适性仍待 T05。
+- Station + 独立 FollowRig 是目前 PC 实验下的候选方案，不代表 VR 最终通过；姿态与球体自转分离，见 [`Docs/Evidence/StationPlatform/README.md`](../../Evidence/StationPlatform/README.md) 与 [`Docs/Evidence/StationPlatform/station_decision.md`](../../Evidence/StationPlatform/station_decision.md)。T04 记录真人 VR 与舒适性仍待 T05。
 
 ### 【DRAFT 草案】
 - 固定步长积分：`advance(elapsed_s, ...)` 累积经过时间，仅按 `fixed_dt_s` 更新。相同初始状态、输入序列及步长序列产生相同结果；Python 浮点实现不承诺跨平台逐位一致。

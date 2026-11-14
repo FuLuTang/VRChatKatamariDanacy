@@ -17,9 +17,9 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
+import round_model  # noqa: E402
 from round_model import (  # noqa: E402
     BANK,
-    DEFAULT_MAP,
     AvoidThreats,
     EatEverything,
     ItemStack,
@@ -33,6 +33,9 @@ from round_model import (  # noqa: E402
     can_absorb,
     can_convert,
     diameter_for_units,
+    live_map_spec,
+    load_map,
+    map_fingerprint,
     post_bank_diameter,
     simulate_round,
     units_for_diameter,
@@ -269,15 +272,51 @@ class SimulationTests(unittest.TestCase):
                 RoundParams(profiles=tuple(PlayerProfile(str(i)) for i in range(5))),
                 EatEverything())
 
-    def test_default_map_snapshot_is_consistent(self):
-        total_items = sum(s.count for z in DEFAULT_MAP.zones for s in z.stacks)
-        total_value = sum(s.count * s.value_units for z in DEFAULT_MAP.zones for s in z.stacks)
+    def test_default_map_is_the_live_map_not_a_snapshot(self):
+        # No constant to drift: the module has no snapshot and the default
+        # MapSpec must reproduce the files on disk exactly.
+        self.assertFalse(hasattr(round_model, "DEFAULT_MAP"))
+        data = load_map()
+        spec = live_map_spec(4)
+        total_items = sum(s.count for z in spec.zones for s in z.stacks)
+        total_value = sum(s.count * s.value_units for z in spec.zones for s in z.stacks)
+        self.assertEqual(total_items, data.absorbable_total)
         self.assertEqual(total_items, 452)
-        self.assertAlmostEqual(total_value, 1356.0, places=9)
-        self.assertEqual(len(DEFAULT_MAP.zones), 21)
-        bank = [z for z in DEFAULT_MAP.zones if z.is_bank]
+        self.assertAlmostEqual(total_value, float(data.units_total), places=9)
+        self.assertAlmostEqual(total_value, 1284.0, places=9)
+        self.assertEqual(len(spec.zones), len(data.zone_shape))
+        self.assertEqual(len(spec.zones), 21)
+        # 4 players use player_count_plans["4"], not an ad-hoc order.
+        self.assertEqual(spec.spawn_zones,
+                         ("spawn_nw", "spawn_ne", "spawn_sw", "spawn_se"))
+        self.assertEqual(live_map_spec(2).spawn_zones, ("spawn_nw", "spawn_se"))
+        bank = [z for z in spec.zones if z.is_bank]
         self.assertEqual(len(bank), 1)
-        self.assertEqual(bank[0].zone_id, DEFAULT_MAP.bank_zone_id)
+        self.assertEqual(bank[0].zone_id, spec.bank_zone_id)
+
+    def test_default_run_equals_an_explicit_live_map(self):
+        params = RoundParams(duration_s=60.0, profiles=(PlayerProfile("solo"),))
+        implicit = simulate_round(params, _NoBank(), seed=5)
+        explicit = simulate_round(params, _NoBank(), live_map_spec(1), seed=5)
+        self.assertEqual(
+            [(p.absorbed_items, round(p.absorbed_units, 6), p.final_diameter_m)
+             for p in implicit.players],
+            [(p.absorbed_items, round(p.absorbed_units, 6), p.final_diameter_m)
+             for p in explicit.players])
+        self.assertEqual(implicit.players[0].spawn_zone, "spawn_nw")
+
+    def test_map_fingerprint_reports_the_files(self):
+        info = map_fingerprint()
+        self.assertEqual(info["map_id"], "picnic_lawn")
+        self.assertEqual(info["zones"], 21)
+        self.assertEqual(info["absorbable_instances_total"], 452)
+        self.assertEqual(info["gain_units_total"], 1284)
+        self.assertRegex(info["layout_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(info["catalog_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_load_map_refuses_to_invent_a_map(self):
+        with self.assertRaises(FileNotFoundError):
+            load_map("/nonexistent/picnic_lawn")
 
 
 class BankingRuleTests(unittest.TestCase):

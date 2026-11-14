@@ -1,33 +1,46 @@
 """Deterministic offline round-economy model for the VRC塊魂 prototype.
 
-This is a *design* model: standard library only, no file/network I/O, no
-Unity, no physics. It answers "what does the 180 s economy look like under
-these parameters" and nothing else. Read README.md in this directory for
-what it does and does not claim, and for the parameter table.
+This is a *design* model: standard library only, no network, no Unity, no
+physics. It answers "what does the 180 s economy look like under these
+parameters" and nothing else. Read README.md in this directory for what it
+does and does not claim, and for the parameter table.
 
 Public API
 ----------
 RoundParams                     scenario + tuning inputs (frozen)
 PlayerProfile                   per-player speed/absorb skill, scenario handicap
-ItemStack, ZoneSpec, MapSpec    shared map resource snapshot
-DEFAULT_MAP                     PicnicLawn v0.1 snapshot (452 rollable props)
+ItemStack, ZoneSpec, MapSpec    the map resource snapshot handed to the sim
+MapData, load_map               live map source (layout.json + prop_catalog.csv)
+live_map_spec, map_fingerprint  live MapSpec + map identity for reports
 Policy                          decision hooks (model never names a policy)
 EatEverything / AvoidThreats / RushBank
-simulate_round(params, policy, map_spec=DEFAULT_MAP, seed=0) -> RoundResult
+simulate_round(params, policy, map_spec=None, seed=0) -> RoundResult
 
-The map constant below is a hand-derived snapshot of
-Docs/Design/Maps/PicnicLawn/{layout.json,prop_catalog.csv} at design v0.3:
-item counts and tier values follow the catalog, pickup diameters follow the
-layout's per-tier pickup gate with long/thin overrides (collapsed_bench is
-absorbable at ball diameter 1.25 m per PicnicLawn README section 9).
-Everything in it is PROVISIONAL_NOT_TESTED.
+There is NO default map snapshot. When map_spec is None the simulation reads
+Docs/Design/Maps/PicnicLawn/layout.json + prop_catalog.csv through
+load_map()/live_map_spec(), so the default answer tracks the map files: spawn
+order comes from player_count_plans, item counts/values from the catalog and
+scatter regions, pickup gates from the per-tier band plus the size-gate
+override (the collapsed bench is absorbable at 1.25 m). Callers that need a
+frozen experiment or a hand-built arena pass an explicit MapSpec; that is the
+only way to get anything other than the live map.
+
+Loading the map is the only file I/O in this module; every simulation given an
+explicit MapSpec is pure. units_to_max_diameter stays a design calibration
+constant (1356 units for the 0.30 -> 2.20 m span), not the map total: the live
+map is 1284 units, so clearing the whole map reaches ~2.16 m. Everything here
+is PROVISIONAL_NOT_TESTED.
 """
 
 from __future__ import annotations
 
+import csv
+import hashlib
+import json
 import math
 import random
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Sequence
 
 # A policy may ask for the bank instead of a map zone.
@@ -99,7 +112,9 @@ class RoundParams:
 
     start_diameter_m: float = 0.30          # PicnicLawn scale table
     max_diameter_m: float = 2.20            # PicnicLawn scale table
-    units_to_max_diameter: float = 1356.0   # (model) whole-map placeholder value
+    # (model) growth calibration: units that take the ball 0.30 -> 2.20 m.
+    # Deliberately a design knob, NOT the live map total (see module docstring).
+    units_to_max_diameter: float = 1356.0
     radius_exponent: float = 1.0 / 3.0      # sphere law r = cbrt(3V/4pi)
     absorb_size_ratio: float = 1.0          # item pickup gate <= ball diameter * ratio
 
@@ -177,111 +192,231 @@ class MapSpec:
     bank_zone_id: str
 
 
-_SPAWN_STACKS = (
-    ItemStack("seed", 4, 0.08, 1),
-    ItemStack("bottle_cap", 2, 0.08, 1),
-    ItemStack("paper_scrap", 2, 0.10, 1),
-    ItemStack("pebble", 2, 0.08, 1),
-    ItemStack("fallen_leaf", 2, 0.10, 1),
-)
+# --------------------------------------------------------------------------
+# Map source (the only file I/O in this module)
+# --------------------------------------------------------------------------
+#
+# There is deliberately no default map constant. A hand-copied snapshot rots
+# the moment the map changes, and every run that forgets to pass a map then
+# silently reports numbers for a map that no longer exists. load_map() parses
+# the same layout.json + prop_catalog.csv that the greybox generator and the
+# level validator use, so counts, values, pickup gates and spawn plans always
+# match the files on disk.
 
-_FRINGE_STACKS = (
-    ItemStack("seed", 6, 0.08, 1),
-    ItemStack("acorn", 2, 0.08, 1),
-    ItemStack("bottle_cap", 3, 0.08, 1),
-    ItemStack("paper_scrap", 3, 0.10, 1),
-    ItemStack("fallen_leaf", 3, 0.10, 1),
-    ItemStack("soda_can", 2, 0.32, 4),
-    ItemStack("pebble", 2, 0.08, 1),
-)
+MAP_DIR = Path(__file__).resolve().parents[3] / "Docs/Design/Maps/PicnicLawn"
+LAYOUT_NAME = "layout.json"
+CATALOG_NAME = "prop_catalog.csv"
 
-_ROOTS_STACKS = (
-    ItemStack("acorn", 4, 0.08, 1),
-    ItemStack("pebble", 4, 0.08, 1),
-    ItemStack("fallen_leaf", 3, 0.10, 1),
-    ItemStack("mushroom", 3, 0.12, 1),
-)
 
-_FLOWER_STACKS = (
-    ItemStack("flower", 5, 0.18, 1),
-    ItemStack("mushroom", 2, 0.12, 1),
-    ItemStack("pebble", 2, 0.08, 1),
-    ItemStack("small_potted_plant", 2, 0.55, 6),
-    ItemStack("watering_can", 1, 0.58, 6),
-)
+@dataclass(frozen=True)
+class MapItem:
+    """One item stack as the map data describes it (catalog value + pickup gate)."""
 
-_BLANKET_STACKS = (
-    ItemStack("plate", 6, 0.50, 4),
-    ItemStack("cup", 6, 0.32, 4),
-    ItemStack("bowl", 5, 0.42, 4),
-    ItemStack("spoon", 5, 0.34, 4),
-    ItemStack("apple", 5, 0.32, 4),
-    ItemStack("orange", 4, 0.32, 4),
-    ItemStack("croissant", 4, 0.34, 4),
-    ItemStack("bread_slice", 4, 0.32, 4),
-    ItemStack("sandwich", 3, 0.38, 4),
-    ItemStack("cookie", 5, 0.09, 1),
-    ItemStack("grapes", 4, 0.08, 1),
-    ItemStack("cheese_slice", 4, 0.08, 1),
-    ItemStack("strawberry", 4, 0.08, 1),
-    ItemStack("banana", 3, 0.45, 4),
-    ItemStack("pear", 3, 0.32, 4),
-    ItemStack("glass_bottle", 3, 0.52, 5),
-    ItemStack("juice_carton", 3, 0.34, 4),
-    ItemStack("soda_can", 3, 0.32, 4),
-    ItemStack("napkin", 3, 0.32, 3),
-    ItemStack("pebble", 1, 0.08, 1),
-    ItemStack("toy_ball", 2, 0.40, 4),
-)
+    definition_id: str
+    count: int
+    pickup_m: float
+    value: int
 
-_BASKET_STACKS = (
-    ItemStack("picnic_basket", 2, 1.20, 16),
-    ItemStack("thermos", 2, 1.00, 16),
-    ItemStack("watermelon", 2, 0.72, 6),
-    ItemStack("cooler_box", 1, 1.60, 20),
-    ItemStack("folding_stool", 2, 1.40, 16),
-    ItemStack("flower_pot_large", 2, 1.00, 16),
-    ItemStack("banana", 2, 0.45, 4),
-    ItemStack("apple", 2, 0.32, 4),
-    ItemStack("bread_slice", 2, 0.32, 4),
-    ItemStack("sandwich", 2, 0.38, 4),
-    ItemStack("juice_carton", 1, 0.34, 4),
-    ItemStack("plate", 2, 0.50, 4),
-    ItemStack("bowl", 2, 0.42, 4),
-    ItemStack("cup", 2, 0.32, 4),
-)
 
-_CORE_STACKS = (ItemStack("collapsed_bench", 4, 1.25, 16),)
+class MapData:
+    """A parsed map: zones, size gates, spawns, per-zone items and totals."""
 
-DEFAULT_MAP = MapSpec(
-    zones=(
-        ZoneSpec("spawn_nw", (-14.5, 14.5), _SPAWN_STACKS),
-        ZoneSpec("spawn_ne", (14.5, 14.5), _SPAWN_STACKS),
-        ZoneSpec("spawn_sw", (-14.5, -14.5), _SPAWN_STACKS),
-        ZoneSpec("spawn_se", (14.5, -14.5), _SPAWN_STACKS),
-        ZoneSpec("fringe_north", (0.0, 15.5), _FRINGE_STACKS, powerup="rocket"),
-        ZoneSpec("fringe_south", (0.0, -15.5), _FRINGE_STACKS, powerup="rocket"),
-        ZoneSpec("fringe_east", (15.5, 0.0), _FRINGE_STACKS, powerup="rocket"),
-        ZoneSpec("fringe_west", (-15.5, 0.0), _FRINGE_STACKS, powerup="rocket"),
-        ZoneSpec("tree_roots_nw", (-18.75, 18.75), _ROOTS_STACKS),
-        ZoneSpec("tree_roots_ne", (18.75, 18.75), _ROOTS_STACKS),
-        ZoneSpec("tree_roots_sw", (-18.75, -18.75), _ROOTS_STACKS),
-        ZoneSpec("tree_roots_se", (18.75, -18.75), _ROOTS_STACKS),
-        ZoneSpec("flower_bed_nw", (-10.0, 8.55), _FLOWER_STACKS),
-        ZoneSpec("flower_bed_ne", (10.0, 8.55), _FLOWER_STACKS),
-        ZoneSpec("flower_bed_sw", (-10.0, -8.55), _FLOWER_STACKS),
-        ZoneSpec("flower_bed_se", (10.0, -8.55), _FLOWER_STACKS),
-        ZoneSpec("blanket_west", (-10.25, 0.0), _BLANKET_STACKS, powerup="magnet"),
-        ZoneSpec("blanket_east", (10.25, 0.0), _BLANKET_STACKS, powerup="magnet"),
-        ZoneSpec("basket_north", (0.0, 10.5), _BASKET_STACKS),
-        ZoneSpec("basket_south", (0.0, -10.5), _BASKET_STACKS),
-        ZoneSpec("core", (0.0, 0.0), _CORE_STACKS, is_bank=True),
-    ),
-    spawn_zones=("spawn_nw", "spawn_se", "spawn_ne", "spawn_sw"),
-    # Rotation order bank_a -> bank_d -> bank_c -> bank_b (PicnicLawn README 6).
-    bank_anchors_m=((4.2, 4.2), (4.2, -4.2), (-4.2, -4.2), (-4.2, 4.2)),
-    bank_zone_id="core",
-)
+    def __init__(self, layout, catalog_rows, map_dir=None):
+        self.layout = layout
+        self.map_dir = None if map_dir is None else Path(map_dir)
+        self.map_id = layout["map_id"]
+        self.catalog = {}
+        for row in catalog_rows:
+            self.catalog[row["id"]] = {
+                "category": row["category"],
+                "size_tier": row["size_tier"],
+                "game_longest_dim_m": float(row["game_longest_dim_m"]),
+                "value": int(row["absorb_value_placeholder"]),
+                "count": int(row["count_in_map"]),
+                "role": row["role"],
+                "zone_ids": [z for z in row["zone_ids"].split(";") if z],
+            }
+        self.zone_shape = {z["id"]: z["shape"] for z in layout["zones"]}
+        self.spawns = {s["id"]: s for s in layout["spawns"]}
+        self.start_diameter_m = float(layout["scale"]["ball_start_collision_diameter_m"])
+        self.max_diameter_m = float(layout["scale"]["ball_max_collision_diameter_m"])
+        self.bands = layout["scale"]["item_tier_pickup_diameter_m"]
+        self.gates = {g["id"]: g for g in layout["size_gates"]}
+        self.absorb_gate = {
+            g["definition_id"]: float(g["absorbable_at_ball_diameter_m"])
+            for g in layout["size_gates"] if g["type"] == "absorb"
+        }
+        # A size gate is attached to the zone it opens: that zone's stock only
+        # counts as reachable once the ball is big enough for the gate.
+        self.zone_gate = {}
+        for gate in layout["size_gates"]:
+            zone = gate["opens_path"]
+            if zone in self.zone_shape:
+                self.zone_gate[zone] = max(
+                    self.zone_gate.get(zone, 0.0),
+                    float(gate["absorbable_at_ball_diameter_m"]))
+        self.items = {zone_id: [] for zone_id in self.zone_shape}
+        for region in layout["prop_scatter"]:
+            stacks = []
+            for entry in region["definitions"]:
+                stacks.append(MapItem(entry["id"], int(entry["count_min"]),
+                                      self.pickup_m(entry["id"]),
+                                      self.catalog[entry["id"]]["value"]))
+            self.items[region["zone_id"]] = stacks
+        # Absorbable gate objects (the collapsed benches) are not in
+        # prop_scatter; place them by their position on the map.
+        for gate in layout["size_gates"]:
+            if gate["type"] != "absorb":
+                continue
+            zone_id = self.zone_at(gate["position"][0], gate["position"][2])
+            if zone_id is None:
+                raise ValueError(f"size gate {gate['id']} is outside every zone")
+            self.items[zone_id].append(
+                MapItem(gate["definition_id"], 1, self.pickup_m(gate["definition_id"]),
+                        self.catalog[gate["definition_id"]]["value"]))
+        self.used_definitions = ({it.definition_id for stacks in self.items.values()
+                                  for it in stacks}
+                                 | {s["definition_id"] for s in layout["structures"]})
+        self.absorbable_total = sum(m["count"] for m in self.catalog.values()
+                                    if m["role"] == "absorbable")
+        self.units_total = sum(m["count"] * m["value"] for m in self.catalog.values()
+                               if m["role"] == "absorbable")
+        plans = layout.get("player_count_plans", {})
+        self.spawn_plan = {int(key): tuple(value) for key, value in plans.items()
+                           if str(key).isdigit() and isinstance(value, list)}
+        self.file_sha256 = {}
+
+    def zone_at(self, x, z):
+        for zone_id, shape in self.zone_shape.items():
+            if (shape["min_x"] <= x <= shape["max_x"]
+                    and shape["min_z"] <= z <= shape["max_z"]):
+                return zone_id
+        return None
+
+    def pickup_m(self, definition_id):
+        """Pickup gate: catalog game length clamped to its band; gates override."""
+        meta = self.catalog[definition_id]
+        low, high = self.bands[meta["size_tier"]]
+        clamped = min(max(meta["game_longest_dim_m"], low), high)
+        return self.absorb_gate.get(definition_id, clamped)
+
+    def zone_units(self, zone_ids):
+        return sum(it.count * it.value for z in zone_ids for it in self.items.get(z, ()))
+
+    def zone_items(self, zone_ids):
+        return sum(it.count for z in zone_ids for it in self.items.get(z, ()))
+
+    def category_counts(self, zone_ids, definition_ids):
+        wanted = set(definition_ids)
+        return {zone_id: sum(it.count for it in self.items.get(zone_id, ())
+                             if it.definition_id in wanted)
+                for zone_id in zone_ids}
+
+    def reach_field(self, zone_ids, start_m):
+        """How big the ball can get inside a zone set, using only edible stock.
+
+        Size gates apply: a zone whose gate threshold is above the current
+        diameter contributes nothing yet. Returns (diameter, units, ladder),
+        where each ladder step is (diameter, usable zones, units, items, next).
+        """
+        params = RoundParams(duration_s=120.0, profiles=(PlayerProfile("probe"),))
+        diameter = start_m
+        ladder = []
+        for _ in range(40):
+            usable = [z for z in zone_ids
+                      if self.zone_gate.get(z) is None
+                      or self.zone_gate[z] <= diameter + 1e-9]
+            units = 0
+            items = 0
+            for zone_id in usable:
+                for item in self.items.get(zone_id, ()):
+                    if item.pickup_m <= diameter + 1e-9:
+                        units += item.count * item.value
+                        items += item.count
+            grown = min(self.max_diameter_m,
+                        diameter_for_units(float(units), params))
+            ladder.append((diameter, len(usable), units, items, grown))
+            if grown <= diameter + 1e-9:
+                return diameter, units, ladder
+            diameter = grown
+        return diameter, units, ladder
+
+    def spawn_ids(self, player_count=None):
+        """Spawn order for a round: player_count_plans, else layout order."""
+        if player_count is not None and player_count in self.spawn_plan:
+            return self.spawn_plan[player_count]
+        return tuple(self.spawns)
+
+    def map_spec(self, spawn_ids=None):
+        """Build the simulation MapSpec; spawn_ids default to the layout order."""
+        if spawn_ids is None:
+            spawn_ids = tuple(self.spawns)
+        elif isinstance(spawn_ids, str):
+            spawn_ids = (spawn_ids,)
+        zones = []
+        for zone_id, shape in self.zone_shape.items():
+            position = ((shape["min_x"] + shape["max_x"]) / 2.0,
+                        (shape["min_z"] + shape["max_z"]) / 2.0)
+            stacks = tuple(ItemStack(it.definition_id, it.count, it.pickup_m,
+                                     float(it.value))
+                           for it in self.items.get(zone_id, ()))
+            zones.append(ZoneSpec(zone_id, position, stacks,
+                                  is_bank=zone_id == self.layout["bank"]["zone_id"]))
+        anchors = tuple((a["position"][0], a["position"][2])
+                        for a in self.layout["bank"]["anchors"])
+        return MapSpec(zones=tuple(zones),
+                       spawn_zones=tuple(spawn_ids),
+                       bank_anchors_m=anchors,
+                       bank_zone_id=self.layout["bank"]["zone_id"])
+
+
+def load_map(map_dir=None):
+    """Parse the live map (layout.json + prop_catalog.csv). No snapshot fallback."""
+    directory = Path(map_dir) if map_dir is not None else MAP_DIR
+    layout_path = directory / LAYOUT_NAME
+    catalog_path = directory / CATALOG_NAME
+    if not layout_path.is_file() or not catalog_path.is_file():
+        raise FileNotFoundError(
+            f"map files not found under {directory}: expected {LAYOUT_NAME} and "
+            f"{CATALOG_NAME}. round_model has no built-in snapshot; point map_dir "
+            "at a real map or pass an explicit MapSpec.")
+    layout = json.loads(layout_path.read_text(encoding="utf-8"))
+    with catalog_path.open(encoding="utf-8", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    data = MapData(layout, rows, map_dir=directory)
+    data.file_sha256 = {
+        "layout_sha256": hashlib.sha256(layout_path.read_bytes()).hexdigest(),
+        "catalog_sha256": hashlib.sha256(catalog_path.read_bytes()).hexdigest(),
+    }
+    return data
+
+
+_LIVE_MAP_CACHE = {}
+
+
+def live_map():
+    """The repository map, parsed once per process."""
+    if "data" not in _LIVE_MAP_CACHE:
+        _LIVE_MAP_CACHE["data"] = load_map()
+    return _LIVE_MAP_CACHE["data"]
+
+
+def live_map_spec(player_count=None, map_dir=None):
+    """MapSpec for the live map; spawn order follows player_count_plans."""
+    data = load_map(map_dir) if map_dir is not None else live_map()
+    return data.map_spec(data.spawn_ids(player_count))
+
+
+def map_fingerprint(map_data=None):
+    """Map identity + totals, for report headers and test assertions."""
+    data = live_map() if map_data is None else map_data
+    return {
+        "map_id": data.map_id,
+        "zones": len(data.zone_shape),
+        "absorbable_instances_total": data.absorbable_total,
+        "gain_units_total": data.units_total,
+        **data.file_sha256,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -667,8 +802,11 @@ def simulate_round(params: RoundParams,
     contested pickups in the same zone are resolved in a seeded shuffle order
     instead of by player index. No other randomness is used.
     """
-    map_spec = map_spec or DEFAULT_MAP
     _validate_params(params)
+    if map_spec is None:
+        map_spec = live_map_spec(len(params.profiles))
+    if len(map_spec.spawn_zones) < len(params.profiles):
+        raise ValueError("map has fewer spawn zones than player profiles")
     _validate_map(map_spec)
     policies = _broadcast_policies(policy, len(params.profiles))
     rng = random.Random(seed)

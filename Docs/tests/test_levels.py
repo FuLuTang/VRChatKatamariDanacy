@@ -11,6 +11,7 @@ import csv
 import hashlib
 import importlib.util
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -238,6 +239,78 @@ class LevelDataTests(unittest.TestCase):
                           lambda levels, cats:
                           levels['story_02_fruit_ten']['map_expectations'].update(
                               {'absorbable_instances_total': 448}))
+
+
+    # ---- 模型默认值必须跟着活地图走，而不是内置快照 ----
+    def test_model_has_no_snapshot_and_reads_the_live_map(self):
+        model = VALIDATOR._rm()
+        self.assertFalse(hasattr(model, 'DEFAULT_MAP'))
+        self.assertFalse(hasattr(model, 'DEFAULT_MAP_SPEC'))
+        with self.assertRaises(FileNotFoundError):
+            model.load_map('/nonexistent/picnic_lawn')
+        live = model.load_map()
+        info = model.map_fingerprint(live)
+        self.assertEqual(info['absorbable_instances_total'], 452)
+        self.assertEqual(info['gain_units_total'], 1284)
+        self.assertEqual(info['layout_sha256'],
+                         sha256(ROOT / 'Docs/Design/Maps/PicnicLawn/layout.json'))
+
+    def test_changing_the_map_changes_the_model_default(self):
+        # 在内存副本里把占位价值全部改成 1：模型默认答案必须跟着变。
+        # 如果它偷偷用内置快照，absorbed_units 不会变，这条断言就会红。
+        model = VALIDATOR._rm()
+        params = model.RoundParams(duration_s=120.0,
+                                   profiles=(model.PlayerProfile('P1'),))
+        policy = VALIDATOR._no_bank_policy()
+        default = model.simulate_round(params, policy, seed=7)
+        self.assertEqual(default.players[0].spawn_zone, 'spawn_nw')
+
+        map_dir = ROOT / 'Docs/Design/Maps/PicnicLawn'
+        layout = json.loads((map_dir / 'layout.json').read_text(encoding='utf-8'))
+        with (map_dir / 'prop_catalog.csv').open(encoding='utf-8', newline='') as stream:
+            reader = csv.DictReader(stream)
+            fields = reader.fieldnames
+            rows = list(reader)
+        for row in rows:
+            row['absorb_value_placeholder'] = '1'
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / 'layout.json').write_text(json.dumps(layout, ensure_ascii=False, indent=2),
+                                             encoding='utf-8')
+            with (tmp / 'prop_catalog.csv').open('w', encoding='utf-8', newline='') as stream:
+                writer = csv.DictWriter(stream, fieldnames=fields)
+                writer.writeheader()
+                writer.writerows(rows)
+            edited = model.load_map(tmp)
+            self.assertEqual(edited.units_total, edited.absorbable_total)
+            self.assertNotEqual(edited.units_total, model.load_map().units_total)
+            reduced = model.simulate_round(params, policy,
+                                           edited.map_spec(('spawn_nw',)), seed=7)
+        self.assertLess(reduced.players[0].absorbed_units,
+                        default.players[0].absorbed_units - 100.0)
+
+    # ---- 第 3 星的「离开路线」必须显式声明 ----
+    def test_three_star_above_the_route_requires_a_design_note(self):
+        report = VALIDATOR.validate()
+        self.assertEqual(report.warnings, [])
+        self.assertTrue(any('离路线目标' in note for note in report.notes))
+
+        without_note = self.run_with(lambda levels, cats:
+                                     levels['story_01_bench_size']['stars'][2].pop(
+                                         'design_note_zh'))
+        self.assertTrue(any('必须离开所列路线' in warning
+                            for warning in without_note.warnings))
+
+    def test_stale_three_star_design_note_is_rejected(self):
+        def mutate(levels, cats):
+            level = levels['story_01_bench_size']
+            level['stars'][2]['requires']['target_diameter_m'] = 1.46
+        self.assert_error('design_note_zh 已过时', mutate)
+
+    def test_design_note_is_not_accepted_below_the_third_star(self):
+        self.assert_error('只允许出现在第 3 星', lambda levels, cats:
+                          levels['story_01_bench_size']['stars'][0].update(
+                              {'design_note_zh': '第 1 星也写说明是无效的。'}))
 
 
 if __name__ == '__main__':

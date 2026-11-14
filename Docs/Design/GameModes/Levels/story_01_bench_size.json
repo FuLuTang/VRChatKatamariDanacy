@@ -7,7 +7,7 @@
   "map_id": "picnic_lawn",
   "ruleset_id": "prototype_defaults_v0_3",
   "map_snapshot": {
-    "layout_sha256": "0b76c282a4dd154dbdd3f6ebb50a4602ec71033c7f3fb841a225ac8e9b8317e0",
+    "layout_sha256": "8218881d8ff656246a063d88704116a23b66b61aa74b9602942bb6eac88f0067",
     "catalog_sha256": "01d01418b358fcc7bfaec9c9895c5efe76deada79a3b86509c97c8c02953acc7"
   },
   "quest": {
@@ -51,7 +51,8 @@
       "requires": {
         "target_diameter_m": 1.6
       },
-      "comment_id": "s3_ok"
+      "comment_id": "s3_ok",
+      "design_note_zh": "1.60 m 需要 519.5 单位，超过本关 6 区合计 416 单位：这是刻意的「离开路线」目标。吃掉 4 张长凳（1.25 m 门）后，经核心区向北/东出口去篮子区或另一块野餐毯；主路线不变。"
     }
   ],
   "evaluation": {

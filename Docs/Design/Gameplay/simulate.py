@@ -32,6 +32,7 @@ from round_model import (
     RoundResult,
     RushBank,
     TIME_SINKS,
+    map_fingerprint,
     simulate_round,
 )
 
@@ -154,6 +155,7 @@ SENSITIVITY_PARAMETERS: tuple[tuple[str, str, float, str], ...] = (
 
 
 def run(scenario: Scenario, seed: int) -> RoundResult:
+    """Run a scenario against the LIVE map (round_model's default, no snapshot)."""
     return simulate_round(scenario.params, scenario.policies, seed=seed)
 
 
@@ -481,6 +483,7 @@ def write_markdown(path: Path, command: str, seed: int,
                    sweep_rows: list[dict[str, object]],
                    bank_rows: list[dict[str, object]]) -> None:
     rules = scenario_rows[0][0].params
+    info = map_fingerprint()
     lines = [
         "# 回合经济模拟报告（自动生成）",
         "",
@@ -489,7 +492,11 @@ def write_markdown(path: Path, command: str, seed: int,
         "",
         f"- 命令：`{command}`",
         f"- seed：`{seed}`",
-        f"- 模型：`Docs/Design/Gameplay/round_model.py`（地图快照 21 区 / 452 件 / 1356 价值单位）",
+        f"- 模型：`Docs/Design/Gameplay/round_model.py`（默认读活地图，无内置快照）",
+        f"- 地图：`{info['map_id']}` — {info['zones']} 区 / "
+        f"{info['absorbable_instances_total']} 件 / {info['gain_units_total']} 价值单位；"
+        f"布局 sha256 `{info['layout_sha256'][:8]}…`、目录 sha256 "
+        f"`{info['catalog_sha256'][:8]}…`，出生按 `player_count_plans`",
         f"- 交分规则：缩小 `bank_residual_fraction={rules.bank_residual_fraction}`、"
         f"最小兑换 `min_bank_diameter_m={rules.min_bank_diameter_m}` m、"
         f"轮换 `bank_cycle_s={rules.bank_cycle_s}` s、"
@@ -702,6 +709,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{name:14s} {scenario.note}")
         return 0
 
+    info = map_fingerprint()
+    print(f"map {info['map_id']}: {info['zones']} zones / "
+          f"{info['absorbable_instances_total']} items / "
+          f"{info['gain_units_total']} gain units "
+          f"(layout {info['layout_sha256'][:8]}..., catalog {info['catalog_sha256'][:8]}...)")
     names = args.scenario or list(SCENARIOS)
     scenario_rows: list[tuple[Scenario, RoundResult]] = []
     for name in names:

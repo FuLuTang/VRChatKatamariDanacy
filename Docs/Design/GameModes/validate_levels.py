@@ -21,6 +21,8 @@ JSON/CSV，用标准库和 Docs/Design/Gameplay/round_model.py 的成长公式�
     门的 absorbable_at_ball_diameter_m（「达成那一刻正好能吞掉门后物件」是设计承诺）。
  7. collect_category_count：类别/定义都存在且可卷；全图该类件数 ≥ 2×count；
     第 1 星 > 出生角该类件数；第 3 星 > 单区最大供给；相关区该类件数 ≥ 第 3 星。
+    reach_target_diameter 的第 3 星若高于所列区的可达球径，必须带 design_note_zh
+    明确写成「刻意离开路线」的扩展目标，否则报警告；说明过时（已在可达范围内）则报错。
  8. 时间可行性：用 round_model 单人贪心曲线估算达标时刻，要求 time_limit_s ≥ 3×估算。
  9. stars 恰好 3 条、1→3、requires 严格递增、第 1 档 = quest.objective。
 10. partial_band ∈ [0.5,1.0]；time_limit_s ∈ [30,300]；>150 s 且无补货时报警。
@@ -28,12 +30,11 @@ JSON/CSV，用标准库和 Docs/Design/Gameplay/round_model.py 的成长公式�
 12. 关卡文件里出现坐标、半径、净宽或逐定义件数 → 直接 FAIL（两个总量是唯一豁免）。
 
 估算口径（检查 8）：完全复用 Docs/Design/Gameplay/round_model.py，不另写一套成长/移动
-公式。地图按当前的 layout.json + prop_catalog.csv 现算（不信 round_model 里的
-DEFAULT_MAP 常数——那是旧快照）。单玩家、永不交分、EatEverything 选路、seed=7、
+公式，也不复制一份地图读取器：round_model.load_map() 就是唯一解析器（它没有内置快照，
+默认就读 layout.json + prop_catalog.csv）。单玩家、永不交分、EatEverything 选路、seed=7、
 dt=0.25 s，然后对时长做二分，取「首次达标」的秒数。这条曲线是乐观上界，不是玩家数据。
 """
 import argparse
-import csv
 import hashlib
 import importlib.util
 import json
@@ -91,140 +92,8 @@ class Report:
 
 
 # --------------------------------------------------------------------------
-# 地图数据（唯一真源：layout.json + prop_catalog.csv）
+# 地图数据（唯一解析器在 round_model.load_map，本文件不复制一份）
 # --------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Item:
-    definition_id: str
-    count: int
-    pickup_m: float
-    value: int
-
-
-class MapData:
-    """当前地图快照：区域、尺寸门、出生点、每区可卷物。"""
-
-    def __init__(self, layout, catalog_rows):
-        self.layout = layout
-        self.map_id = layout["map_id"]
-        self.catalog = {}
-        for row in catalog_rows:
-            self.catalog[row["id"]] = {
-                "category": row["category"],
-                "size_tier": row["size_tier"],
-                "game_longest_dim_m": float(row["game_longest_dim_m"]),
-                "value": int(row["absorb_value_placeholder"]),
-                "count": int(row["count_in_map"]),
-                "role": row["role"],
-                "zone_ids": [z for z in row["zone_ids"].split(";") if z],
-            }
-        self.zone_shape = {z["id"]: z["shape"] for z in layout["zones"]}
-        self.spawns = {s["id"]: s for s in layout["spawns"]}
-        self.start_diameter_m = float(layout["scale"]["ball_start_collision_diameter_m"])
-        self.max_diameter_m = float(layout["scale"]["ball_max_collision_diameter_m"])
-        self.bands = layout["scale"]["item_tier_pickup_diameter_m"]
-        self.gates = {g["id"]: g for g in layout["size_gates"]}
-        self.absorb_gate = {
-            g["definition_id"]: float(g["absorbable_at_ball_diameter_m"])
-            for g in layout["size_gates"] if g["type"] == "absorb"
-        }
-        # 尺寸门按 opens_path 挂到区域上：进了那个区就要球够大（地形门）。
-        self.zone_gate = {}
-        for gate in layout["size_gates"]:
-            zone = gate["opens_path"]
-            if zone in self.zone_shape:
-                self.zone_gate[zone] = max(
-                    self.zone_gate.get(zone, 0.0),
-                    float(gate["absorbable_at_ball_diameter_m"]))
-        self.items = {zone_id: [] for zone_id in self.zone_shape}
-        for region in layout["prop_scatter"]:
-            stacks = []
-            for entry in region["definitions"]:
-                stacks.append(Item(entry["id"], int(entry["count_min"]),
-                                   self.pickup_m(entry["id"]),
-                                   self.catalog[entry["id"]]["value"]))
-            self.items[region["zone_id"]] = stacks
-        # absorb 型尺寸门的物件（倒塌长凳）不进 prop_scatter，按位置归区。
-        for gate in layout["size_gates"]:
-            if gate["type"] != "absorb":
-                continue
-            zone_id = self.zone_at(gate["position"][0], gate["position"][2])
-            if zone_id is None:
-                raise ValueError(f"尺寸门 {gate['id']} 的位置不在任何区域内")
-            self.items[zone_id].append(
-                Item(gate["definition_id"], 1, self.pickup_m(gate["definition_id"]),
-                     self.catalog[gate["definition_id"]]["value"]))
-        self.used_definitions = ({it.definition_id for stacks in self.items.values()
-                                  for it in stacks}
-                                 | {s["definition_id"] for s in layout["structures"]})
-        self.absorbable_total = sum(m["count"] for m in self.catalog.values()
-                                    if m["role"] == "absorbable")
-        self.units_total = sum(m["count"] * m["value"] for m in self.catalog.values()
-                               if m["role"] == "absorbable")
-
-    def zone_at(self, x, z):
-        for zone_id, shape in self.zone_shape.items():
-            if (shape["min_x"] <= x <= shape["max_x"]
-                    and shape["min_z"] <= z <= shape["max_z"]):
-                return zone_id
-        return None
-
-    def pickup_m(self, definition_id):
-        """拾取门槛：目录的游戏尺寸按档夹紧；尺寸门物件用门的阈值（长凳 1.25 m）。"""
-        meta = self.catalog[definition_id]
-        low, high = self.bands[meta["size_tier"]]
-        clamped = min(max(meta["game_longest_dim_m"], low), high)
-        return self.absorb_gate.get(definition_id, clamped)
-
-    def zone_units(self, zone_ids):
-        return sum(it.count * it.value for z in zone_ids for it in self.items.get(z, ()))
-
-    def zone_items(self, zone_ids):
-        return sum(it.count for z in zone_ids for it in self.items.get(z, ()))
-
-    def category_counts(self, zone_ids, definition_ids):
-        wanted = set(definition_ids)
-        per_zone = {}
-        for zone_id in zone_ids:
-            per_zone[zone_id] = sum(it.count for it in self.items.get(zone_id, ())
-                                    if it.definition_id in wanted)
-        return per_zone
-
-    def reach_field(self, zone_ids, start_m):
-        """在给定区域集合内，只靠「当前球径吃得动的件」能长到多大（尺寸门生效）。
-
-        返回 (final_diameter, units, ladder)；ladder 每一步是
-        (球径, 可用区数, 可用单位, 可用件数, 下一步球径)，用于打印预算。
-        """
-        diameter = start_m
-        ladder = []
-        for _ in range(40):
-            usable = [z for z in zone_ids
-                      if self.zone_gate.get(z) is None
-                      or self.zone_gate[z] <= diameter + 1e-9]
-            units = 0
-            items = 0
-            for zone_id in usable:
-                for item in self.items.get(zone_id, ()):
-                    if item.pickup_m <= diameter + 1e-9:
-                        units += item.count * item.value
-                        items += item.count
-            grown = min(self.max_diameter_m,
-                        _rm().diameter_for_units(float(units), _params()))
-            ladder.append((diameter, len(usable), units, items, grown))
-            if grown <= diameter + 1e-9:
-                return diameter, units, ladder
-            diameter = grown
-        return diameter, units, ladder
-
-
-def load_map(map_dir=MAP_DIR):
-    layout = json.loads((Path(map_dir) / "layout.json").read_text(encoding="utf-8"))
-    with (Path(map_dir) / "prop_catalog.csv").open(encoding="utf-8", newline="") as stream:
-        rows = list(csv.DictReader(stream))
-    return MapData(layout, rows)
 
 
 def file_sha256(path):
@@ -260,22 +129,13 @@ def _params(duration_s=120.0):
                              profiles=(_rm().PlayerProfile("P1"),))
 
 
+def load_map(map_dir=MAP_DIR):
+    """与 round_model 同一个解析器：地图改了，校验器和模型一起看到新数。"""
+    return _rm().load_map(map_dir)
+
+
 def model_spec(map_data, spawn_id):
-    rm = _rm()
-    zones = []
-    for zone_id, shape in map_data.zone_shape.items():
-        position = ((shape["min_x"] + shape["max_x"]) / 2.0,
-                    (shape["min_z"] + shape["max_z"]) / 2.0)
-        stacks = tuple(rm.ItemStack(it.definition_id, it.count, it.pickup_m,
-                                    float(it.value))
-                       for it in map_data.items.get(zone_id, ()))
-        zones.append(rm.ZoneSpec(zone_id, position, stacks))
-    anchors = tuple((a["position"][0], a["position"][2])
-                    for a in map_data.layout["bank"]["anchors"])
-    return rm.MapSpec(zones=tuple(zones),
-                      spawn_zones=(map_data.spawns[spawn_id]["zone_id"],),
-                      bank_anchors_m=anchors,
-                      bank_zone_id=map_data.layout["bank"]["zone_id"])
+    return map_data.map_spec((spawn_id,))
 
 
 def _no_bank_policy():
@@ -729,7 +589,8 @@ def _check_level(level, filename, map_data, categories, report, model=True):
         if not isinstance(star, dict):
             errors.append(f"{spot}: 必须是对象")
             continue
-        _require_keys_exact(star, {"stars", "requires", "comment_id"}, spot, errors)
+        _require_keys_exact(star, {"stars", "requires", "comment_id",
+                                   "design_note_zh"}, spot, errors)
         if star.get("stars") != index + 1:
             errors.append(f"{spot}: stars 必须依次为 1,2,3")
         requires = star.get("requires")
@@ -749,6 +610,13 @@ def _check_level(level, filename, map_data, categories, report, model=True):
         if not isinstance(value, (int, float)):
             errors.append(f"{spot}: requires 的目标值必须是数字")
             continue
+        note = star.get("design_note_zh")
+        if note is not None:
+            if not isinstance(note, str) or not 1 <= len(note) <= 200:
+                errors.append(f"{spot}: design_note_zh 必须是 1–200 字的说明")
+            elif index != 2:
+                errors.append(f"{spot}: design_note_zh 只允许出现在第 3 星"
+                              "（只有「离路线」目标需要说明）")
         thresholds.append(value)
         if quest_type == "reach_target_diameter" and not (
                 map_data.start_diameter_m <= value <= map_data.max_diameter_m + 1e-9):
@@ -767,11 +635,26 @@ def _check_level(level, filename, map_data, categories, report, model=True):
             if thresholds[-1] > map_diameter + 1e-9:
                 errors.append(f"{where}: 第 3 星 {thresholds[-1]} m 超过全图可达 "
                               f"{map_diameter:.3f} m：永远拿不到")
-            elif thresholds[-1] > reach_diameter + 1e-9:
-                warnings.append(
-                    f"{where}: 第 3 星 {thresholds[-1]} m 超出 map_expectations.zones 的 "
-                    f"可达球径 {reach_diameter:.3f} m——拿 3 星必须离开所列路线"
-                    f"（全图可达 {map_diameter:.3f} m）")
+            else:
+                note = stars[2].get("design_note_zh") if len(stars) == 3 else None
+                if thresholds[-1] > reach_diameter + 1e-9:
+                    if isinstance(note, str) and note.strip():
+                        notes.append(
+                            f"{where}: 第 3 星 {thresholds[-1]} m 超出所列区的可达球径 "
+                            f"{reach_diameter:.3f} m，已声明为刻意的离路线目标"
+                            f"（全图可达 {map_diameter:.3f} m）：{note}")
+                    else:
+                        warnings.append(
+                            f"{where}: 第 3 星 {thresholds[-1]} m 超出 "
+                            f"map_expectations.zones 的可达球径 {reach_diameter:.3f} m"
+                            "——拿 3 星必须离开所列路线。若这是刻意的，请在第 3 星加 "
+                            "design_note_zh 说明；否则加区或降目标"
+                            f"（全图可达 {map_diameter:.3f} m）")
+                elif isinstance(note, str) and note.strip():
+                    errors.append(
+                        f"{where}: 第 3 星 {thresholds[-1]} m 已在所列区的可达范围 "
+                        f"（{reach_diameter:.3f} m）内，design_note_zh 已过时："
+                        "删掉说明或复核目标")
         else:
             definition_ids = categories.get(objective.get("category_id"),
                                             {}).get("definition_ids", [])

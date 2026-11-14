@@ -217,15 +217,22 @@ StepBall:
 
 ## 装配约束（assembly constraints）
 
-**`KatamariBallMotor` 必须独占一个 GameObject**（惯例命名 `MotorHost`），**永远不得与任何其它 UdonSharpBehaviour 同挂一个对象**。
+**一个 GameObject 上挂多个 UdonSharpBehaviour 是官方支持的**：官方 FAQ 对 "Can I have more than one UdonSharp UdonBehavior on a GameObject?" 回答 "Yes."（[UdonSharp FAQ](https://creators.vrchat.com/worlds/udon/udonsharp/#can-i-have-more-than-one-udonsharp-udonbehavior-on-a-gameobject)）。引擎里**没有**"同物体第二个 U# 脚本会被静默禁用"这条规则——本节以前那样断言是错的，2026-11-15 撤回。
 
-原因不是风格，是运行时行为：一个 GameObject 上叠两个 UdonSharpBehaviour 时，UdonSharp 会把其中之一的 `UdonBehaviour` 置为 `enabled = false`（实例化/编译期发生，无任何报错）。被禁用的那个**不会收到 `Start()`/`Update()`**，于是它的事件全是 null：`AddPlane` 空引用、`GetSemanticDiameterWorldM()` 返回 0、每个调用方都 NRE。表现出来像"球很小、吃不到东西"，而不像装配错误。
+**项目惯例，不是引擎限制**：`KatamariBallMotor` 独占一个 GameObject（惯例命名 `MotorHost`），不与其它 UdonSharpBehaviour 同挂。理由都是工程性的：职责边界清楚；自检可读（"这个对象上就是球马达"一眼可验）；重建层级时不会留下旧 motor 副本继续跑。
+
+**真正的同物体硬约束是同步模式**：同物体上多个 UdonBehaviour 会回落到其中最严格的同步设置（Manual + Continuous → Manual，[Network details](https://creators.vrchat.com/worlds/udon/networking/network-details/#multiple-udonbehaviours)）。本项目的行为是 `BehaviourSyncMode.None`，所以**不要把需要 Manual/Continuous 同步的行为与它们同挂**；None 与 Manual 混挂还有 3.10.5 上的串扰报告（[feedback](https://feedback.vrchat.com/udon/p/novariablesync-can-switch-manual-synced-gameobjects-to-continuous)）。
 
 判断与防复发：
 
-- `BallPlaygroundBootstrap.Start()` 启动自检覆盖三种坏装配：`motor == null`、`motor.transform == transform`（同物体，即本节的反例）、`motor.GetSemanticDiameterWorldM() <= 0f`（该实例的 `Start()` 从未跑过，**不是**"球太小"）。任一命中即 `Debug.LogError` 并停止驱动。
-- Udon 没有 `FindObjectsOfType`，所以"场景里 motor 数量必须 = 1"在运行时无法内联检查；这条由编辑器侧审计保证：跑实验前用编辑器脚本断言 `FindObjectsOfType<KatamariBallMotor>().Length == 1`。
-- 重建球层级时，先删掉旧 motor 对象再新建 `MotorHost`，并同步重建 prefab（prefab 根上残留 motor 会让每次实例化都复活那个坏结构）。
+- **"组件在、什么都不跑"的真因是实例不对**：调用方持有的 motor 不是跑过 `Start()` 的那一个（场景里有重复根），那份实例的数组没分配，于是 `AddPlane` 抛错、`GetSemanticDiameterWorldM()` 读 0。lab 的自检注释记的就是这个（`BallPlaygroundBootstrap.cs` 66–93 行）。
+- 另一种可能是编辑器脚本用朴素 `AddComponent<T>()` 添加 U# 行为，背后没有 `UdonBehaviour` 和 program asset——**推断，未验证**；应由 UdonSharp 编辑器 API（`UdonSharpEditorUtility.AddUdonSharpComponent<T>()`）添加。
+- U# 代理组件显示 disabled 是正常的："Proxies are always disabled and should remain disabled."（[Editor scripting](https://creators.vrchat.com/worlds/udon/editorscripting/#proxies-are-always-disabled-and-should-remain-disabled)），这不是"被禁用"的证据。
+- "同物体只有第一个脚本运行"是 ClientSim 的旧 bug，SDK 3.7.6 已修（[3.7.6 release](https://creators.vrchat.com/releases/release-3-7-6/)）；本项目 SDK 3.10.5，不受影响。
+- 直径持续为 0 = **该实例的 `Start()` 从未跑过，或你持有的是别的实例**，不是"球太小"。`BallPlaygroundBootstrap.Start()` 自检 `motor == null`；`Update()` 等 120 帧仍读 0 才 `Debug.LogError` 并停驱动（首个 Update 可能早于 motor 的 `Start`，第一帧读 0 不算错）。
+- 该 lab 里用 `motor.transform == transform` 反"同物体"的自检**现在比规则更严**：同物体本身合法。应由下次动这个 lab 的人放宽或改写（例如改成"持有的实例是否为本场景唯一的 motor"），本次不改。
+- Udon 没有 `FindObjectsOfType`，"场景里 motor 数量必须 = 1"仍由编辑器侧审计保证：跑实验前断言 `FindObjectsOfType<KatamariBallMotor>().Length == 1`。
+- 重建球层级时先删旧 motor 对象再新建 `MotorHost`，并同步重建 prefab（prefab 根上残留 motor 会让每次实例化都复活旧结构）。
 
 ### 宿主提交契约：幂等 + 无闩锁（2026-11-14 起）
 

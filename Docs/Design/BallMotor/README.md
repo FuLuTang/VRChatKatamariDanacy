@@ -56,6 +56,125 @@
 6. **一帧一次**：每帧对每个模块只调用一次，避免同一状态被算两遍。
 7. **跳变跳过视觉**：传送/重生帧把 `discontinuous = true` 传进 `VisualRollMath`，只改位姿不加旋转。
 
+## 组合层实现说明
+
+**状态：源码已写，未编译、未在 Unity 运行、未做 U# 全量编译、未测。** 实现是一个 UdonSharp Behaviour：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/KatamariBallMotor.cs`（命名空间 `VRCKatamari.BallMotor`）。它只持有状态、按上表顺序调用、在失败时保持上一帧；没有自己的玩法公式。
+
+### 它持有的状态
+
+单球标量（不是并行数组）。本版**只支持一个本地球**：多球需要把下列标量改成同长度并行数组，并在 `StepBall` 外面套一层下标，本次没做。
+
+| 字段 | 用途 | 只由谁写 |
+|---|---|---|
+| `headingDegrees` | 平面朝向，喂 `BallMotionMath` 与 `FollowRigMath` | 第 2 步成功时 |
+| `planarVelocity` | XZ 速度（y 恒 0） | 第 2 步成功时 |
+| `ballCenterWorld` | 球心 | 每步末尾提交（各步只读） |
+| `coreRadiusWorldM` / `collisionRadiusWorldM` / `semanticDiameterWorldM` | 三个尺寸，分开存 | 第 7 步成功时 |
+| `growthFraction` | `(r-base)/(max-base)` 再夹到 [0,1]，由 `SizeModelMath` 的新半径算出；`BallMotionMath` 明说由调用方算 | 第 7 步成功时 |
+| `unbankedVolumeUnits` | 账本确认体积（可交分） | 账本提交/交分成功后的**读回值** |
+| `carriedVolumeUnits` | 交分后留下的、已计分的残余体积（只喂尺寸，永不再交分） | 只由交分成功时 |
+| `confirmedVolumeUnits` | 尺寸驱动量 = 未交存 + 残余；只由确认来源相加，不累积 | 每步第 7 步前 |
+| `bankedScoreUnits` | 已交存分数 | 账本提交/交分成功后的读回值 |
+| `fixedStepAccumulator` / `localClockSeconds` | 定步长累积器 / 本地时钟 | `Update` |
+| `stuckSeconds` | 卡住计时 | 扫掠成功时按 `stuck` 累加或清零 |
+| `discontinuous` | 传送/重生标记，喂 `VisualRollMath` 与 `FollowRigMath` | `TeleportTo`、卡住恢复；每步末尾消费后清零 |
+| `visualRollRotation` | 视觉滚动位姿 | 第 8 步成功时 |
+| `followRigWorldPosition` / `followRigYawDegrees` / `followRigEyeOffsetMeters` / `hasFollowRigFrame` | 跟随架上一帧滤波状态 | 第 9 步成功时 |
+
+另有账本列（单行、单回合）、输入意图缓冲、扫掠缓冲区、待处理吸收候选队列；都是预分配、复用、不 per-step 分配的字段，不是玩法状态。
+
+### 固定步长策略
+
+`Update` 把 `Time.deltaTime` 累积进 `fixedStepAccumulator`，每次消费 `fixedStepSeconds` 就调一次 `StepBall`；积压先夹到 `fixedStepSeconds * maxStepsPerFrame`，超出的时间**丢弃**，不让一次卡顿变成一串追赶步。所有玩法状态按步推进，Transform 每渲染帧写一次。
+
+- `fixedStepSeconds = 0.02f`（50 Hz）、`maxStepsPerFrame = 5`：**临时值，不是实测固定频率**，与上面“未定项”里固定步长具体值仍未决一致。Unity 侧最终应改用 `FixedUpdate` 或可配置频率。
+- 时钟由本地累积的 `Time.deltaTime` 提供，不读 `Time.time`，也不读网络时间；因此同一起始状态与同一 `deltaTime` 序列可复现，跨平台逐位一致不承诺。
+
+### 调试输入的决定
+
+**用的是 `[SerializeField]` 调试轴（`debugForward` / `debugTurn` / `debugLateral` / `debugMenuOpen`），不是 `VRCInput` / `InputManager`。** 理由：
+
+1. Linux 检出里 `Packages/` 只有 manifest 三件套，VPM 包源不在仓库（按仓库规则也不提交），所以**无法在本检出确认** Worlds SDK 3.10.5 是否提供 `VRCInput`；整个运行时代码也没有一处用过它。
+2. 输入层自己的契约就是“不读设备”：`ControlIntentMath` 只吃规范帧，不读 Unity 输入、不读 `VRCPlayerApi`。所以设备读取本来就该在适配层，不该在组合层。
+3. 因此本层保留 `debugForward/Turn/Lateral` 与 `SetMoveAxes(forward, turn, lateral)`、`SetMenuOpen(bool)` 作为适配层接缝；适配层写这三个值，本层仍照常跑第 1 步（`TryProcess` 负责钳位、菜单抑制、边沿去抖）。
+
+轴约定是**临时的适配约定**：设备 y → forward、x → lateral、单独的 turn 轴 → turn；菜单打开时全零（等于制动）。没有任何一层把设备轴映射成世界方向，所以“相机/rig yaw 基准 + 轴对 → forward/turn/lateral”这一步目前**没有归属层**，见下面的缺口。
+
+### 每步代码路径
+
+```
+Update: 累积 deltaTime → 夹积压 → while(够一步且未到 maxSteps) StepBall(fixedStepSeconds) → 写 Transform
+StepBall:
+  1 StepInput()                 ControlIntentMath.TryProcess → Move2D 的 y/x + turn 轴
+  2 BallMotionMath.TryStep      → heading、planarVelocity、requestedDisplacement（成功才赋值）
+  3 SweepMath.TrySweepSphere    → sweptCenter（成功才赋值；记录 blocked/stuck）
+  4 GroundContactMath.TrySolve  → groundedCenter（成功才赋值）
+  ★ 卡住计时/恢复（本层策略，扫掠层只报 `stuck`）
+  5 PickupAbsorbMath.EvaluateAbsorb（对队列里每个候选，用最终位置）
+  6 GrowthLedgerMath.TrySubmitClaim + TryResolveClaims（成功才读回体积）
+  7 SizeModelMath.TryDerive     → 三个尺寸 + growthFraction（成功才赋值）
+  8 VisualRollMath.TryAdvanceRotation（实际位移 + 本步 discontinuous）
+  9 FollowRigMath.TryUpdate（本步最终位姿，只回表现层）
+  提交 ballCenterWorld，清 discontinuous
+```
+
+失败即不应用：每个字段的赋值都写在对应 `Try*` 返回 true 的分支里；尺寸每步**重算**而不是累加，所以“失败不涨体积”是结构保证；吸收值只有在账本提交（claim → resolve）成功后才会进 `unbankedVolumeUnits`；传送/卡住恢复只置 `discontinuous`，不产生滚动。
+
+### 交分（临时规则，引用未定项 (a)/(b)）
+
+`TryBank(now, requestId)`：
+
+1. 球径低于 `minConversionDiameterWorldM`（默认 `0.55f`）→ 拒绝；(b) 的最小兑换门槛，数值是项目暂定。
+2. 未交存确认体积为 0 → 拒绝。
+3. 全额过 `GrowthLedgerMath.TryBank`（只有 Playing、Active、`amount <= confirmed`、`(player, requestId)` 未重放才成功）；失败时本层一个字段都不改。
+4. 成功后按 `start + (pre - start) * bankResidualFraction`（默认 `0.25f`）缩小，再夹到 `>= start`；(a) 的按比例缩小，公式是**项目发明**，原作的换算空间未知。
+
+两个数都是 `[SerializeField]`，注释里写明 provisional 并引用 `Docs/OPEN_DECISIONS.md` (a)/(b)。
+
+### 刻意不在这里
+
+- 网络、远端球代理、多客户端权威/抢单仲裁：本层只有**一个本地玩家行**的账本；远端提交应走 `GrowthLedgerMath.TryApplyCommit` 的快照/提交路径，由回合控制器拥有。
+- 回合状态机本体：`TryBeginPlaying` 只是把 Lobby→Ready→Preparing→Playing 三条合法边转发给账本，没有计时、轮换或结算。
+- HUD、尺寸读数、音效、粒子、道具生命周期、物品注册表、空间索引（候选由宿主/适配层收集后 `SubmitCandidate` 送入）。
+- 场景资产、prefab、`.meta`、新 asmdef：都没加；U# 程序集仍是 `VRCKatamari.Runtime`。
+
+### Unity 操作者还要接线
+
+1. 建 prefab：`BallPhysicsRoot`（本层只写 position）、其下的 `BallVisualRollRoot`（只写 rotation）、独立的 `FollowRig`，把三个 Transform 挂到 `ballPhysicsRoot` / `ballVisualRollRoot` / `followRigRoot`。
+2. 场景：`startCenterWorld`、地面平面法线/偏移、`AddPlane`/`AddBox` 喂障碍、`startCenterWorld` 同时是卡住恢复点。
+3. 玩家 rig：`FollowRig` 挂到 Station/玩家参考系；本层只给位置 + yaw，不碰 HMD 姿态。
+4. 输入：要么在 Inspector 拖 `debugForward/Turn/Lateral` 做桌面预览，要么由适配层每帧调 `SetMoveAxes` / `SetMenuOpen`；若要接 `VRCInput`，必须先确认 SDK 里确实有该 API（本检出无法确认）。
+5. 吸收：候选收集器（触发器/空间结构）填 `SubmitCandidate(...)`，并用 `SetAllowedKinds` 提供允许的种类；**默认空集合 = 全部拒绝**，这是有意的：种类是世界数据，不在本层编。
+6. 交分：兑换区触发器在停留满足后调 `TryBank(now, requestId)`，`requestId` 必须每次交分唯一（重放的 id 会被账本拒绝）。
+7. 关卡开始：`autoStartPlaying` 为真时 Start 已自动进 Playing；正式回合应由回合控制器调 `TryBeginPlaying`。
+8. Unity 侧验收：先 `refresh_unity` 让 U# 全量编译，再 `run_tests`；本条与“验收”一节同义，本文件写作者不是 Unity 操作者。
+
+### 临时数值（都需试玩/Unity 侧确认）
+
+| 字段 | 默认 | 来源 |
+|---|---:|---|
+| `fixedStepSeconds` / `maxStepsPerFrame` | 0.02 s / 5 | 本轮临时；上面“未定项”仍未决 |
+| `bankResidualFraction` | 0.25 | `Docs/Design/Gameplay/README.md` 的反推暂定值；`OPEN_DECISIONS.md` (a) |
+| `minConversionDiameterWorldM` | 0.55 | `Docs/Design/Gameplay/README.md` 的 t1 档下限；`OPEN_DECISIONS.md` (b) |
+| `maxSpeedMps` / `accelerationMps2` / `brakingMps2` | 4 / 5 / 8 | `Docs/Design/BallMotion/README.md` DRAFT 占位 |
+| `frictionPerSecond` / `turnRateDegreesPerSecond` / `maxLateralMps` | 1.2 / 110 / 1.2 | 同上 |
+| `growthSpeedFactor` / `growthTurnFactor` | 0.25 / 0.35 | 仅 `BallMotionTests` 里出现过，属测试值，不是产品值 |
+| `baselineVolumeUnits` / `cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` | 1 / 0.0141 / 1.1 | 只为让 0.30–2.20 m 档在 1 单位基线下成立，未测量 |
+| `eyeHeightMeters` / 滤波 Hz / 眼高上下限 | 1.6 / 5 / 8 / 0.25–3 | `BallMotion` DRAFT 占位 + 本层防越界的临时上下限 |
+| `maxItemSizeWorldM` / `contactRadiusWorldM` | 1 / 0 | 占位；见缺口 4 |
+| `maxLiftPerStep` / `maxDropPerStep` / `separationEpsilon` / `maxRollDisplacementM` | 0.1 / 0.1 / 0.001 / 0.5 | 本层临时，非实测容差 |
+| `stuckTimeoutSeconds` | 1.5 | 本层临时恢复策略 |
+
+### 缺口（数学层没提供、本层没有自己编）
+
+1. **直径 → 体积的反向映射不存在（本层最实质的缺口）。** `SizeModelMath` 只做体积→三尺寸；参考模型 `units_for_diameter`（`Docs/Design/Gameplay/round_model.py`）在 C# 侧没有对应物。所以交分缩小按 (a) 的比例应用在**体积**（尺寸映射的输入）上，而不是需求写的直径上，缩得明显更轻：以 0.30 m 起始、在 1.49 m 交分为例，本实现留下约 **0.95 m**，直径空间公式要求约 **0.60 m**。要精确复刻 (a)，`SizeModelMath` 需要加反向映射（或在契约里加“残余体积”入参）；装配层不应自己写这个反函数的数学。
+2. **设备轴 → forward/turn/lateral 的映射没有归属层。** `ControlIntentMath` 只给设备轴对，`BallMotionMath` 只吃三个标量，中间这一步（含相机/rig yaw 基准）目前是适配层约定，本层用 y→forward、x→lateral 顶着。
+3. **墙面法向去速没有公开函数。** `SweepMath` 内部投影剩余位移（私有 `TryProject`）但只返回 `slideDirection`；速度的法向分量没人去掉。结果：球会顶住墙停住，不沿墙滑；卡住计时不会被触发（`blocked` 而非 `stuck`），但滑墙手感缺失。
+4. **吸收的“相对球径门槛”没有 C# 层。** `PickupAbsorbMath` 只比固定 `maxItemSizeWorldM`；Python 回合模型里的 `pickup_diameter <= ball_diameter * ratio` 没移植。本层因此传固定阈值，不拿球径乘系数（那是公式）。
+5. **`growthFraction` 没有 helper。** 设计文档把它指派给组合层（`BallMotion` README 的“唯一回灌量”），`BallMotionMath` 也明说不做半径映射，所以本层只有这一处 `(r-base)/(max-base)` 夹取；若要复用应下沉到 `SizeModelMath`。
+6. **账本提交存储是有容量的**（本地 256 条/回合）。满了以后 `TryResolveClaims` 拒绝、候选留在队列里不再增长；正式回合应由拥有账本的控制器扩容或换权威提交。
+7. **单球、单本地玩家行**：多球/多人要并行数组 + 多行账本，本版没有。
+
 ## 未定项（等 T06 与试玩）
 
 - 固定步长具体值、每帧最多多少个吸收事件、代理点数组容量、远端槽位容量。

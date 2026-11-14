@@ -73,7 +73,7 @@
     "min_route_margin_over_max_ball_m": 1.2,
     "bank_pad_radius_m": 1.6,
     "bank_anchor_count": 4,
-    "bank_anchor_period_s": 45,
+    "bank_anchor_period_s": 60,
     "bank_warning_s": 8,
     "spawn_to_bank_target_m": 28.0,
     "camera_eye_height_m_by_band": {
@@ -1615,15 +1615,15 @@
         "bank_c",
         "bank_b"
       ],
-      "period_s": 45,
+      "period_s": 60,
       "warning_s": 8,
       "activate_at_s": [
         0,
-        45,
-        90,
-        135
+        60,
+        120,
+        180
       ],
-      "timeline_note": "180 s 内轮换 3 次；第 4 段（135–180 s）与最后 15 s 提醒重叠，最后一个台是终局目标。",
+      "timeline_note": "180 s 一局内实际只有 3 个 60 s 窗口（0–60 / 60–120 / 120–180）；第 4 个台在终场哨（180 s）激活，本局内不会被用到。为不让任何一个台永久闲置，下一局的轮换起点按 +1 台偏移（本局没用到的台成为下一局的首位）；偏移按房间内已完成的局数推进，单局内恒定。60 s 周期与原作一致（Docs/Research/KatamariBallRules §1 Q1），四台固定台是本项目对「移动兑换区」的等价实现。",
       "status": "PROVISIONAL_NOT_TESTED"
     },
     "rules": {

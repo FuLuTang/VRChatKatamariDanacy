@@ -97,7 +97,7 @@
   "files": {
     "juice_carton.fbx": 16284,
     "juice_carton.glb": 3568,
-    "juice_carton.blend": 89651
+    "juice_carton.blend": 437908
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 164346
+  "preview_bytes": 192162
 }

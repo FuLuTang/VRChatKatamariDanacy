@@ -1,0 +1,134 @@
+{
+  "id": "twig",
+  "pivot": "center",
+  "target_longest_m": 0.09,
+  "dimensions_m": {
+    "x": 0.09000000357627869,
+    "y": 0.006993971299380064,
+    "z": 0.007192392600700259,
+    "longest": 0.09000000357627869
+  },
+  "bounds_m": {
+    "min": [
+      -0.04500000178813934,
+      -0.003496985649690032,
+      -0.0035961961839348078
+    ],
+    "max": [
+      0.04500000178813934,
+      0.003496985649690032,
+      0.0035961964167654514
+    ]
+  },
+  "vertices": 46,
+  "triangles": 88,
+  "materials": [
+    "Prop_twig_wood_dark",
+    "Prop_twig_straw",
+    "Prop_twig_leaf_green"
+  ],
+  "material_base_colors": {
+    "Prop_twig_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ],
+    "Prop_twig_straw": [
+      0.47,
+      0.36,
+      0.14
+    ],
+    "Prop_twig_leaf_green": [
+      0.115,
+      0.24,
+      0.075
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "db9f00640780ad50d89627725e80aa9c1cfbc741970bf14fcbda7254cb83d091",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "小树枝",
+  "category": "nature",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.09,
+    "game_longest_dim_m": 0.09,
+    "sourcing_hint": "model ourselves：0.090 m 微弯小树枝，带芽点与侧芽、绿色新梢",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.09,
+    "built_longest_m": 0.09000000357627869,
+    "abs_error_m": 3.5762786898541066e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 140,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "wood_dark",
+      "name_zh": "深褐树皮",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    },
+    {
+      "key": "straw",
+      "name_zh": "浅色断面",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "leaf_green",
+      "name_zh": "新梢与芽环",
+      "linear_rgb": [
+        0.115,
+        0.24,
+        0.075
+      ],
+      "roughness": 0.85
+    }
+  ],
+  "notes": "Main sweep: 6 stations, 6 segments, radii 0.0024 -> 0.0036 (bud node at x = -0.017) -> 0.0014 tip, centreline y -1.0 -> +1.0 mm, axis at z = 3.4 mm so the butt rests on z = 0.  Nub: 5-segment 2-station sweep from inside the body to (0.004, 0.0020, 0.0054), welded by an exact union; it reaches y = 2.6 mm / z = 6.0 mm, inside the 8 x 7 mm row.  Materials by face centre after the union: cut faces (x <= -0.0449 / x >= 0.0449) are straw, the last 15 mm of the tip and an 11 mm collar at the bud are leaf_green, the rest is bark.  AABB 0.090 x 0.0078 x 0.0068 m.",
+  "build_script": "models/twig.py",
+  "preview": "previews/twig_preview.png",
+  "files": {
+    "twig.fbx": 19052,
+    "twig.glb": 5056,
+    "twig.blend": 462056
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 124982
+}

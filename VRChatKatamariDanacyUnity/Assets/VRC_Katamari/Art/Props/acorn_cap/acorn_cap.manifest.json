@@ -1,0 +1,134 @@
+{
+  "id": "acorn_cap",
+  "pivot": "center",
+  "target_longest_m": 0.028,
+  "dimensions_m": {
+    "x": 0.02800000086426735,
+    "y": 0.0279999990016222,
+    "z": 0.012000000104308128,
+    "longest": 0.02800000086426735
+  },
+  "bounds_m": {
+    "min": [
+      -0.014000000432133675,
+      -0.0139999995008111,
+      -0.006000000052154064
+    ],
+    "max": [
+      0.014000000432133675,
+      0.0139999995008111,
+      0.006000000052154064
+    ]
+  },
+  "vertices": 72,
+  "triangles": 140,
+  "materials": [
+    "Prop_acorn_cap_shell",
+    "Prop_acorn_cap_wood",
+    "Prop_acorn_cap_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_acorn_cap_shell": [
+      0.56,
+      0.47,
+      0.33
+    ],
+    "Prop_acorn_cap_wood": [
+      0.33,
+      0.205,
+      0.105
+    ],
+    "Prop_acorn_cap_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "4089524fbf8298a3fe27fb394c8fb581821a4711f905fd08355a5c6d9417a311",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "橡子壳斗",
+  "category": "nature",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.028,
+    "game_longest_dim_m": 0.028,
+    "sourcing_hint": "model ourselves：28 mm 壳斗碗 + 两排交错的鳞片凸台 + 暗色内腔",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.028,
+    "built_longest_m": 0.02800000086426735,
+    "abs_error_m": 8.64267348660297e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 140,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "shell",
+      "name_zh": "壳斗浅褐",
+      "linear_rgb": [
+        0.56,
+        0.47,
+        0.33
+      ],
+      "roughness": 0.42
+    },
+    {
+      "key": "wood",
+      "name_zh": "鳞片木褐",
+      "linear_rgb": [
+        0.33,
+        0.205,
+        0.105
+      ],
+      "roughness": 0.72
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "鳞缝与内腔暗褐",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "10-segment, 9-point lathe: 140 triangles (the budget), one closed shell, no boolean.  The profile is a bowl, not a dome: inner floor at z=5 mm, inner rim at 11.5 mm, outer wall from 15 mm radius down to the base ring.  Scales are column displacements on rings A/B/C (10% / 12% / 8% out, 40% of that in on the columns between) with the raised columns staggered per row: two rows of five plates.  Materials by face centre: the inner dish (z>4 mm, r<12.2 mm) is wood_dark, the rim (z>10 mm) and the base skirt are shell, and the two outer-wall rows alternate wood / wood_dark per column.  The base ring stays round so the cup sits flat.",
+  "build_script": "models/acorn_cap.py",
+  "preview": "previews/acorn_cap_preview.png",
+  "files": {
+    "acorn_cap.fbx": 20444,
+    "acorn_cap.glb": 12688,
+    "acorn_cap.blend": 465364
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 171349
+}

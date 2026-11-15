@@ -1,0 +1,134 @@
+{
+  "id": "pencil_stub",
+  "pivot": "center",
+  "target_longest_m": 0.12,
+  "dimensions_m": {
+    "x": 0.11999999731779099,
+    "y": 0.008299999870359898,
+    "z": 0.007188010727986693,
+    "longest": 0.11999999731779099
+  },
+  "bounds_m": {
+    "min": [
+      -0.05999999865889549,
+      -0.004149999935179949,
+      -0.0035940054804086685
+    ],
+    "max": [
+      0.05999999865889549,
+      0.004149999935179949,
+      0.003594005247578025
+    ]
+  },
+  "vertices": 38,
+  "triangles": 72,
+  "materials": [
+    "Prop_pencil_stub_plastic_yellow",
+    "Prop_pencil_stub_wood",
+    "Prop_pencil_stub_metal_dark"
+  ],
+  "material_base_colors": {
+    "Prop_pencil_stub_plastic_yellow": [
+      0.64,
+      0.45,
+      0.06
+    ],
+    "Prop_pencil_stub_wood": [
+      0.33,
+      0.205,
+      0.105
+    ],
+    "Prop_pencil_stub_metal_dark": [
+      0.09,
+      0.095,
+      0.105
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "d04141be3cc83f91e73169399cb6f11b49390767da8217e59af4e14bcc191a22",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "铅笔头",
+  "category": "stationery",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.12,
+    "game_longest_dim_m": 0.12,
+    "sourcing_hint": "model ourselves：0.120 m 六棱铅笔，削出木锥、漆口台阶与石墨尖",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.12,
+    "built_longest_m": 0.11999999731779099,
+    "abs_error_m": 2.682209010451686e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 192,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_yellow",
+      "name_zh": "漆面黄",
+      "linear_rgb": [
+        0.64,
+        0.45,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "wood",
+      "name_zh": "削出木面",
+      "linear_rgb": [
+        0.33,
+        0.205,
+        0.105
+      ],
+      "roughness": 0.72
+    },
+    {
+      "key": "metal_dark",
+      "name_zh": "石墨尖",
+      "linear_rgb": [
+        0.09,
+        0.095,
+        0.105
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "6-sided sweep, 6 stations (x = -0.060 / 0.0385 / 0.0392 / 0.0400 / 0.0540 / 0.0600, radii 0.00400 / 0.00400 / 0.00415 / 0.00400 / 0.00130 / 0.00012), section turned 30 deg about the sweep axis so the hexagon has a flat bottom; axis at z = 0.003464 m (0.866 x R) so the barrel rests on z = 0.  The 0.15 mm collar at the shoulder is the paint/wood step.  Materials by face centre x: plastic_yellow <= 0.0398, wood to 0.0535, metal_dark beyond.  84 triangles, one closed shell, no boolean.  AABB 0.120 x 0.0083 x 0.00719 m.",
+  "build_script": "models/pencil_stub.py",
+  "preview": "previews/pencil_stub_preview.png",
+  "files": {
+    "pencil_stub.fbx": 18348,
+    "pencil_stub.glb": 6400,
+    "pencil_stub.blend": 461352
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 123970
+}

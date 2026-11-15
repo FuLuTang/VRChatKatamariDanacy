@@ -1,0 +1,134 @@
+{
+  "id": "popsicle_stick",
+  "pivot": "center",
+  "target_longest_m": 0.11,
+  "dimensions_m": {
+    "x": 0.10999999940395355,
+    "y": 0.009999999776482582,
+    "z": 0.0020000000949949026,
+    "longest": 0.10999999940395355
+  },
+  "bounds_m": {
+    "min": [
+      -0.054999999701976776,
+      -0.004999999888241291,
+      -0.0010000000474974513
+    ],
+    "max": [
+      0.054999999701976776,
+      0.004999999888241291,
+      0.0010000000474974513
+    ]
+  },
+  "vertices": 48,
+  "triangles": 92,
+  "materials": [
+    "Prop_popsicle_stick_straw",
+    "Prop_popsicle_stick_wood_dark",
+    "Prop_popsicle_stick_ink"
+  ],
+  "material_base_colors": {
+    "Prop_popsicle_stick_straw": [
+      0.47,
+      0.36,
+      0.14
+    ],
+    "Prop_popsicle_stick_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ],
+    "Prop_popsicle_stick_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "ee2f6ab61cbec5d65911abf5064d501dc404b3bbc2ee9813344b0fc305621ed0",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "冰棍棒",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.11,
+    "game_longest_dim_m": 0.11,
+    "sourcing_hint": "model ourselves：0.110 m 圆角扁木棒，中段压印凹块",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.11,
+    "built_longest_m": 0.10999999940395355,
+    "abs_error_m": 5.960464483090178e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 192,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "straw",
+      "name_zh": "冰棍木",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "压印侧壁深木",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    },
+    {
+      "key": "ink",
+      "name_zh": "压印底墨",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "rounded_rect(0.110, 0.010, r=0.0048, 3 segments per corner) = 16-point outline, extruded 0.002 m in Z with prism.  Detail: a 0.030 x 0.0055 m rounded tool is subtracted 0.8 mm into the top face; the recess floor is ink, its walls wood_dark, the stick straw.  AABB 0.110 x 0.010 x 0.002 m, underside on z = 0.",
+  "build_script": "models/popsicle_stick.py",
+  "preview": "previews/popsicle_stick_preview.png",
+  "files": {
+    "popsicle_stick.fbx": 18460,
+    "popsicle_stick.glb": 6748,
+    "popsicle_stick.blend": 462532
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 122847
+}

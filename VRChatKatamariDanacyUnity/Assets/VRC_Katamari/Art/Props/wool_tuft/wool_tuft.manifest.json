@@ -1,0 +1,134 @@
+{
+  "id": "wool_tuft",
+  "pivot": "center",
+  "target_longest_m": 0.11,
+  "dimensions_m": {
+    "x": 0.10999999940395355,
+    "y": 0.0949999988079071,
+    "z": 0.08500000089406967,
+    "longest": 0.10999999940395355
+  },
+  "bounds_m": {
+    "min": [
+      -0.054999999701976776,
+      -0.04749999940395355,
+      -0.042500000447034836
+    ],
+    "max": [
+      0.054999999701976776,
+      0.04749999940395355,
+      0.042500000447034836
+    ]
+  },
+  "vertices": 100,
+  "triangles": 196,
+  "materials": [
+    "Prop_wool_tuft_wool",
+    "Prop_wool_tuft_straw",
+    "Prop_wool_tuft_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_wool_tuft_wool": [
+      0.7,
+      0.68,
+      0.63
+    ],
+    "Prop_wool_tuft_straw": [
+      0.47,
+      0.36,
+      0.14
+    ],
+    "Prop_wool_tuft_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "ad19b476c3f3e12a7c5bae4bc942e8e7add9aa46f5c262b9ece44c4532b3f95f",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "羊毛团",
+  "category": "nature",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.11,
+    "game_longest_dim_m": 0.11,
+    "sourcing_hint": "model ourselves：110 mm 不规则羊毛团（14x8 球面 + 正弦起伏 + 两道压痕 + 草屑）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.11,
+    "built_longest_m": 0.10999999940395355,
+    "abs_error_m": 5.960464483090178e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 260,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "wool",
+      "name_zh": "脏白羊毛",
+      "linear_rgb": [
+        0.7,
+        0.68,
+        0.63
+      ],
+      "roughness": 0.95
+    },
+    {
+      "key": "straw",
+      "name_zh": "毛间草屑",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "毛缝与贴地暗面",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "14-segment, 8-ring UV sphere: 196 triangles, one closed shell.  Three sine terms of amplitude 0.16 / 0.14 / 0.11 at spatial frequency ~3 radians per unit radius give about ten large lumps plus secondary ones.  Two creases pinch the radius 9% along fixed great circles (normal (0.82, 0.44, 0.37) and (-0.35, 0.86, 0.37)).  Underside flattened by 10% of the depth for a resting flat, then fit_bounds pins 110 x 95 x 85 mm.  Materials by face centre: the darkest creases (radius < 0.80) and the pressed underside are wood_dark, a fixed sine-patch pattern is straw (chaff), the rest wool.",
+  "build_script": "models/wool_tuft.py",
+  "preview": "previews/wool_tuft_preview.png",
+  "files": {
+    "wool_tuft.fbx": 23020,
+    "wool_tuft.glb": 17920,
+    "wool_tuft.blend": 468668
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 181318
+}

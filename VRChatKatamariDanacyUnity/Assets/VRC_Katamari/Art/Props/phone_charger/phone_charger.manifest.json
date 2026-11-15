@@ -1,0 +1,134 @@
+{
+  "id": "phone_charger",
+  "pivot": "center",
+  "target_longest_m": 0.12,
+  "dimensions_m": {
+    "x": 0.12000000476837158,
+    "y": 0.041682932525873184,
+    "z": 0.03291793912649155,
+    "longest": 0.12000000476837158
+  },
+  "bounds_m": {
+    "min": [
+      -0.06000000238418579,
+      -0.020841466262936592,
+      -0.016458969563245773
+    ],
+    "max": [
+      0.06000000238418579,
+      0.020841466262936592,
+      0.016458969563245773
+    ]
+  },
+  "vertices": 109,
+  "triangles": 214,
+  "materials": [
+    "Prop_phone_charger_plastic_grey",
+    "Prop_phone_charger_brass",
+    "Prop_phone_charger_rubber"
+  ],
+  "material_base_colors": {
+    "Prop_phone_charger_plastic_grey": [
+      0.23,
+      0.235,
+      0.24
+    ],
+    "Prop_phone_charger_brass": [
+      0.52,
+      0.38,
+      0.12
+    ],
+    "Prop_phone_charger_rubber": [
+      0.045,
+      0.045,
+      0.048
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "3518e17f95fc30875ccbb8ab82f4d79234fbcedfbfd40814c8e206cfd1ac3f66",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "充电线",
+  "category": "electronics_cables",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.12,
+    "game_longest_dim_m": 0.12,
+    "sourcing_hint": "model ourselves：盘线 + 插头，变半径 tube 布尔并集成单壳",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.12,
+    "built_longest_m": 0.12000000476837158,
+    "abs_error_m": 4.768371586472142e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 260,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_grey",
+      "name_zh": "插头灰塑料",
+      "linear_rgb": [
+        0.23,
+        0.235,
+        0.24
+      ],
+      "roughness": 0.5
+    },
+    {
+      "key": "rubber",
+      "name_zh": "线皮橡胶",
+      "linear_rgb": [
+        0.045,
+        0.045,
+        0.048
+      ],
+      "roughness": 0.88
+    },
+    {
+      "key": "brass",
+      "name_zh": "触点黄铜",
+      "linear_rgb": [
+        0.52,
+        0.38,
+        0.12
+      ],
+      "roughness": 0.3
+    }
+  ],
+  "notes": "Loose 1.15-turn elliptical coil (X semi-axis 0.046 -> 0.022 m, Y = 44% of X) as a 6-sided tube, cable radius 0.0026 m; wall plug 0.026 x 0.018 x 0.028 m at the outer end, connector 0.016 x 0.011 x 0.009 m resting in the middle.  Both cable ends are inside those solids and welded by Exact boolean union: one shell.  Three slots: grey plug shell, rubber cable jacket, brass contacts (the connector and the metal contact plate on the plug top, both assigned by face centre so neither costs a triangle).",
+  "build_script": "models/phone_charger.py",
+  "preview": "previews/phone_charger_preview.png",
+  "files": {
+    "phone_charger.fbx": 22620,
+    "phone_charger.glb": 15984,
+    "phone_charger.blend": 469732
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 139204
+}

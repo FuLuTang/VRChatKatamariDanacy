@@ -95,9 +95,9 @@
   "build_script": "models/soda_can.py",
   "preview": "previews/soda_can_preview.png",
   "files": {
-    "soda_can.fbx": 21292,
+    "soda_can.fbx": 21500,
     "soda_can.glb": 17716,
-    "soda_can.blend": 95107
+    "soda_can.blend": 454664
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 145311
+  "preview_bytes": 175529
 }

@@ -79,9 +79,9 @@
   "build_script": "models/croissant.py",
   "preview": "previews/croissant_preview.png",
   "files": {
-    "croissant.fbx": 22092,
+    "croissant.fbx": 23756,
     "croissant.glb": 7976,
-    "croissant.blend": 95685
+    "croissant.blend": 434548
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 119495
+  "preview_bytes": 162210
 }

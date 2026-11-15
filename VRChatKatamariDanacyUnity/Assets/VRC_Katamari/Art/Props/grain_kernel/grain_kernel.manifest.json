@@ -1,0 +1,134 @@
+{
+  "id": "grain_kernel",
+  "pivot": "center",
+  "target_longest_m": 0.02,
+  "dimensions_m": {
+    "x": 0.019999999552965164,
+    "y": 0.013000000268220901,
+    "z": 0.012000000104308128,
+    "longest": 0.019999999552965164
+  },
+  "bounds_m": {
+    "min": [
+      -0.009999999776482582,
+      -0.006500000134110451,
+      -0.006000000052154064
+    ],
+    "max": [
+      0.009999999776482582,
+      0.006500000134110451,
+      0.006000000052154064
+    ]
+  },
+  "vertices": 42,
+  "triangles": 80,
+  "materials": [
+    "Prop_grain_kernel_straw",
+    "Prop_grain_kernel_paper",
+    "Prop_grain_kernel_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_grain_kernel_straw": [
+      0.47,
+      0.36,
+      0.14
+    ],
+    "Prop_grain_kernel_paper": [
+      0.8,
+      0.775,
+      0.7
+    ],
+    "Prop_grain_kernel_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "74a630cbed2e2a0ce5104ed22514f13a56f50f5d684bb41f664036fcb53847d9",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "谷粒",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.02,
+    "game_longest_dim_m": 0.02,
+    "sourcing_hint": "model ourselves：20 mm 椭球谷粒，一头略尖、一侧深沟 + 胚芽暗凹 + 浅色腹棱",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.02,
+    "built_longest_m": 0.019999999552965164,
+    "abs_error_m": 4.470348362317633e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 80,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "straw",
+      "name_zh": "谷粒麦黄",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "paper",
+      "name_zh": "浅色胚乳棱",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "胚芽暗凹",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "10-segment, 6-point lathe: 80 triangles, one closed shell, three materials.  The profile is asymmetric in length: full width by 12% of the length, widest at 42%, then a 58%-long taper to the point.  Groove = the two vertex columns at 72/108 degrees pulled in 24%, not a cut; the column at 0-36 degrees is lifted 14% into a narrow pale starchy crest (paper slot).  The blunt pole is pushed 7.5% of the body length into the kernel, so the end fan becomes a concave germ dimple painted wood_dark, and a 180-degree turn about Y puts that germ and the crest on the side the shared camera sees.  The underside column is raised to 80% of the radius for a small resting flat.  fit_bounds pins 0.020/0.013/0.012 m, so finish() does not rescale.",
+  "build_script": "models/grain_kernel.py",
+  "preview": "previews/grain_kernel_preview.png",
+  "files": {
+    "grain_kernel.fbx": 18844,
+    "grain_kernel.glb": 7924,
+    "grain_kernel.blend": 461824
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 154255
+}

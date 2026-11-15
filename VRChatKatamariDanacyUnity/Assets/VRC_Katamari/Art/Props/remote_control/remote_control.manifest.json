@@ -1,0 +1,150 @@
+{
+  "id": "remote_control",
+  "pivot": "center",
+  "target_longest_m": 0.18,
+  "dimensions_m": {
+    "x": 0.17999999225139618,
+    "y": 0.04999999701976776,
+    "z": 0.019199999049305916,
+    "longest": 0.17999999225139618
+  },
+  "bounds_m": {
+    "min": [
+      -0.08999999612569809,
+      -0.02499999850988388,
+      -0.009599999524652958
+    ],
+    "max": [
+      0.08999999612569809,
+      0.02499999850988388,
+      0.009599999524652958
+    ]
+  },
+  "vertices": 148,
+  "triangles": 292,
+  "materials": [
+    "Prop_remote_control_plastic_grey",
+    "Prop_remote_control_plastic_yellow",
+    "Prop_remote_control_metal",
+    "Prop_remote_control_ink"
+  ],
+  "material_base_colors": {
+    "Prop_remote_control_plastic_grey": [
+      0.23,
+      0.235,
+      0.24
+    ],
+    "Prop_remote_control_plastic_yellow": [
+      0.64,
+      0.45,
+      0.06
+    ],
+    "Prop_remote_control_metal": [
+      0.43,
+      0.45,
+      0.47
+    ],
+    "Prop_remote_control_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "b5b451967ff41d9a342729c2919fa02459856f8ce18f0ae781bb8c40e2a9f703",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "遥控器",
+  "category": "electronics_cables",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.18,
+    "game_longest_dim_m": 0.18,
+    "sourcing_hint": "model ourselves：圆角长条 + 12 个 Ø5 圆键 + 十字方向键 + 深色窗袋",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.18,
+    "built_longest_m": 0.17999999225139618,
+    "abs_error_m": 7.748603814139443e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 320,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_grey",
+      "name_zh": "机身灰",
+      "linear_rgb": [
+        0.23,
+        0.235,
+        0.24
+      ],
+      "roughness": 0.5
+    },
+    {
+      "key": "plastic_yellow",
+      "name_zh": "按键黄",
+      "linear_rgb": [
+        0.64,
+        0.45,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "metal",
+      "name_zh": "方向键金属环",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    },
+    {
+      "key": "ink",
+      "name_zh": "感应窗墨色",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.35
+    }
+  ],
+  "notes": "8-gon rounded-rect body 0.180 x 0.050 x 0.018 m; twelve 5 x 5 mm keys raised 1.2 mm, a 38 x 38 mm plus-shaped direction cross, and a 20 x 22 mm sensor pocket 8 mm deep at the +X end.  Keys and cross are one merged tool -> one Exact union; the pocket is one difference.  The keys are square rather than round: 6-sided keys read the same at 512 px but push the mesh to 402 triangles, over the 320 budget.  Slots: grey body, yellow keys, metal direction cross, ink window (the pocket tool carries the ink material, so the cut faces are ink).",
+  "build_script": "models/remote_control.py",
+  "preview": "previews/remote_control_preview.png",
+  "files": {
+    "remote_control.fbx": 22348,
+    "remote_control.glb": 15884,
+    "remote_control.blend": 495652
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 137443
+}

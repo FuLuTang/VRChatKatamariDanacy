@@ -1,0 +1,134 @@
+{
+  "id": "pocket_notebook",
+  "pivot": "center",
+  "target_longest_m": 0.15,
+  "dimensions_m": {
+    "x": 0.14999999105930328,
+    "y": 0.09999999403953552,
+    "z": 0.011999999172985554,
+    "longest": 0.14999999105930328
+  },
+  "bounds_m": {
+    "min": [
+      -0.07499999552965164,
+      -0.04999999701976776,
+      -0.005999999586492777
+    ],
+    "max": [
+      0.07499999552965164,
+      0.04999999701976776,
+      0.005999999586492777
+    ]
+  },
+  "vertices": 40,
+  "triangles": 76,
+  "materials": [
+    "Prop_pocket_notebook_plastic_red",
+    "Prop_pocket_notebook_paper",
+    "Prop_pocket_notebook_ink"
+  ],
+  "material_base_colors": {
+    "Prop_pocket_notebook_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ],
+    "Prop_pocket_notebook_paper": [
+      0.8,
+      0.775,
+      0.7
+    ],
+    "Prop_pocket_notebook_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "29dac896462d2d68969d14a13d4c4d45fb889d9dcb31e99446e3c6fb332a4fb6",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "口袋本",
+  "category": "debris",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.15,
+    "game_longest_dim_m": 0.15,
+    "sourcing_hint": "model ourselves：150 x 100 x 12 mm 口袋本，封面大 2 mm，书脊在短边",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.15,
+    "built_longest_m": 0.14999999105930328,
+    "abs_error_m": 8.940696710757479e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 224,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_red",
+      "name_zh": "封面红卡",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "paper",
+      "name_zh": "内页米白",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "ink",
+      "name_zh": "封面印块",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Boards 0.150 x 0.100 m x 2.5 mm top and bottom; page block 0.146 x 0.096 m x 9 mm, inset 2 mm on three sides and 0.2 mm inside the spine edge (+X), overlapping each board by 1 mm so two exact unions weld the stack into one shell.  Detail: a 0.062 x 0.036 m blind pocket 0.4 mm deep is subtracted from the top cover and takes the ink slot.  Materials by centroid: ink inside the pocket, paper for the page band (0.0035 < z < 0.0085 m), cover elsewhere.  One closed shell.",
+  "build_script": "models/pocket_notebook.py",
+  "preview": "previews/pocket_notebook_preview.png",
+  "files": {
+    "pocket_notebook.fbx": 18060,
+    "pocket_notebook.glb": 6076,
+    "pocket_notebook.blend": 461588
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 150774
+}

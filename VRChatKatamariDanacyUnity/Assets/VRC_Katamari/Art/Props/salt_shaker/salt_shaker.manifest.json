@@ -1,0 +1,134 @@
+{
+  "id": "salt_shaker",
+  "pivot": "center",
+  "target_longest_m": 0.145,
+  "dimensions_m": {
+    "x": 0.04500000178813934,
+    "y": 0.04500000178813934,
+    "z": 0.14499999582767487,
+    "longest": 0.14499999582767487
+  },
+  "bounds_m": {
+    "min": [
+      -0.02250000089406967,
+      -0.02250000089406967,
+      -0.07249999791383743
+    ],
+    "max": [
+      0.02250000089406967,
+      0.02250000089406967,
+      0.07249999791383743
+    ]
+  },
+  "vertices": 143,
+  "triangles": 282,
+  "materials": [
+    "Prop_salt_shaker_glass_blue",
+    "Prop_salt_shaker_brass",
+    "Prop_salt_shaker_ink"
+  ],
+  "material_base_colors": {
+    "Prop_salt_shaker_glass_blue": [
+      0.18,
+      0.33,
+      0.36
+    ],
+    "Prop_salt_shaker_brass": [
+      0.52,
+      0.38,
+      0.12
+    ],
+    "Prop_salt_shaker_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "a7f4748181b618b5d01c55ba79f528780dce847e0cea3800cd55b44b47313df7",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "盐瓶",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.145,
+    "game_longest_dim_m": 0.145,
+    "sourcing_hint": "model ourselves：Ø0.045 x 0.145 m 玻璃瓶身 + 金属盖（盖面 3 个凹孔）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.145,
+    "built_longest_m": 0.14499999582767487,
+    "abs_error_m": 4.1723251242853365e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "glass_blue",
+      "name_zh": "瓶身青玻璃",
+      "linear_rgb": [
+        0.18,
+        0.33,
+        0.36
+      ],
+      "roughness": 0.22
+    },
+    {
+      "key": "brass",
+      "name_zh": "黄铜金属盖",
+      "linear_rgb": [
+        0.52,
+        0.38,
+        0.12
+      ],
+      "roughness": 0.3
+    },
+    {
+      "key": "ink",
+      "name_zh": "标签环带/孔内暗色",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "12 segments, 12 profile points, 11 bands = 264 triangles before the dents.  Diameter 0.0450 m at the cap skirt (the glass body is 0.0430 m so the cap reads as a separate part), height 0.1450 m.  Underside recessed 10 mm; glass body straight from 35 to 95 mm; ink label band 55-85 mm; cap skirt 112-139 mm with a 0.7 mm inward thread groove at 115-118 mm; shallow cap dome to the axis.  Brass covers every face above z = 107 mm.  Three 2.2 mm holes on a 12 mm ring are cones cut 2.2 mm into the dome and their bores take the ink slot.",
+  "build_script": "models/salt_shaker.py",
+  "preview": "previews/salt_shaker_preview.png",
+  "files": {
+    "salt_shaker.fbx": 23468,
+    "salt_shaker.glb": 9928,
+    "salt_shaker.blend": 473744
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 165844
+}

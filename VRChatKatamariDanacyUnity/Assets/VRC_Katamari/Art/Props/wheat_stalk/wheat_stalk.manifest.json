@@ -1,0 +1,134 @@
+{
+  "id": "wheat_stalk",
+  "pivot": "center",
+  "target_longest_m": 0.38,
+  "dimensions_m": {
+    "x": 0.3799999952316284,
+    "y": 0.021980080753564835,
+    "z": 0.023693902418017387,
+    "longest": 0.3799999952316284
+  },
+  "bounds_m": {
+    "min": [
+      -0.1899999976158142,
+      -0.010990040376782417,
+      -0.011846951209008694
+    ],
+    "max": [
+      0.1899999976158142,
+      0.010990040376782417,
+      0.011846951209008694
+    ]
+  },
+  "vertices": 206,
+  "triangles": 408,
+  "materials": [
+    "Prop_wheat_stalk_straw",
+    "Prop_wheat_stalk_ink",
+    "Prop_wheat_stalk_straw_dark"
+  ],
+  "material_base_colors": {
+    "Prop_wheat_stalk_straw": [
+      0.47,
+      0.36,
+      0.14
+    ],
+    "Prop_wheat_stalk_ink": [
+      0.03,
+      0.035,
+      0.045
+    ],
+    "Prop_wheat_stalk_straw_dark": [
+      0.23,
+      0.165,
+      0.06
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "67b16634f549304375b4bf759898928e41213b96591d4bf1c4621b967e2edb73",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "麦穗秆",
+  "category": "grass_plants",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.38,
+    "game_longest_dim_m": 0.38,
+    "sourcing_hint": "model ourselves：DungBeetleMeadow catalogue t4 0.380×0.030×0.025 m 麦秆（Z1 干草堆）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.38,
+    "built_longest_m": 0.3799999952316284,
+    "abs_error_m": 4.768371586472142e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 416,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "straw",
+      "name_zh": "麦秸浅黄",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "straw_dark",
+      "name_zh": "麦芒深褐",
+      "linear_rgb": [
+        0.23,
+        0.165,
+        0.06
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "ink",
+      "name_zh": "穗颈暗环",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "16 stations x 12-point sweep (14 spans = 336 triangles with both caps) plus five awn cones (6 triangles each = 30), welded by one Exact union: 390-420 triangles, one closed shell, no boolean seam left open.  Stem x -0.2015-0.073, diameter 8 mm, resting on the ground; collar x 0.0625-0.073 pinches to r = 0.0026 (ink); ear x 0.073-0.168 (0.095 m) with 24 mm crest diameter (3x the 8 mm stem), six cos(6a) ridges at 8.5 % amplitude and six grain-row radii (0.0096-0.0133, +-16 %), 4 % wider in Y (the ridges read as silhouette steps); five awns 11.8 mm long, 1.6 mm base radius, 32 deg splay, straw_dark, repainted after the union.  Whole prop 0.380 x 0.028 x 0.025 m.",
+  "build_script": "models/wheat_stalk.py",
+  "preview": "previews/wheat_stalk_preview.png",
+  "files": {
+    "wheat_stalk.fbx": 28812,
+    "wheat_stalk.glb": 31500,
+    "wheat_stalk.blend": 481176
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 121970
+}

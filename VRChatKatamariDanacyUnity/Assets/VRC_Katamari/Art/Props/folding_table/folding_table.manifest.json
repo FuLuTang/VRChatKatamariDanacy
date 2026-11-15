@@ -95,9 +95,9 @@
   "build_script": "models/folding_table.py",
   "preview": "previews/folding_table_preview.png",
   "files": {
-    "folding_table.fbx": 19132,
+    "folding_table.fbx": 19596,
     "folding_table.glb": 12384,
-    "folding_table.blend": 93356
+    "folding_table.blend": 449708
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 130257
+  "preview_bytes": 167112
 }

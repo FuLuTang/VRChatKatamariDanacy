@@ -1,0 +1,134 @@
+{
+  "id": "leather_strap",
+  "pivot": "center",
+  "target_longest_m": 0.2,
+  "dimensions_m": {
+    "x": 0.20000001788139343,
+    "y": 0.034025438129901886,
+    "z": 0.009006733074784279,
+    "longest": 0.20000001788139343
+  },
+  "bounds_m": {
+    "min": [
+      -0.10000000894069672,
+      -0.017012719064950943,
+      -0.0045033665373921394
+    ],
+    "max": [
+      0.10000000894069672,
+      0.017012719064950943,
+      0.0045033665373921394
+    ]
+  },
+  "vertices": 120,
+  "triangles": 240,
+  "materials": [
+    "Prop_leather_strap_wood",
+    "Prop_leather_strap_brass",
+    "Prop_leather_strap_metal_dark"
+  ],
+  "material_base_colors": {
+    "Prop_leather_strap_wood": [
+      0.33,
+      0.205,
+      0.105
+    ],
+    "Prop_leather_strap_brass": [
+      0.52,
+      0.38,
+      0.12
+    ],
+    "Prop_leather_strap_metal_dark": [
+      0.09,
+      0.095,
+      0.105
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "bb196bbb760e2654100bb4c51e08b51318b2388640d9f0c8d09405954a0eb8bf",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "皮带扣带",
+  "category": "animal_gear",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.2,
+    "game_longest_dim_m": 0.2,
+    "sourcing_hint": "model ourselves：DungBeetleMeadow catalogue t3 0.200×0.035×0.008 m 皮革带（Z3 牧场，断掉的挽具带）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.2,
+    "built_longest_m": 0.20000001788139343,
+    "abs_error_m": 1.7881393421514957e-08,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 288,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "wood",
+      "name_zh": "旧皮革棕",
+      "linear_rgb": [
+        0.33,
+        0.205,
+        0.105
+      ],
+      "roughness": 0.86
+    },
+    {
+      "key": "brass",
+      "name_zh": "黄铜扣框",
+      "linear_rgb": [
+        0.52,
+        0.38,
+        0.12
+      ],
+      "roughness": 0.3
+    },
+    {
+      "key": "metal_dark",
+      "name_zh": "暗铁扣针",
+      "linear_rgb": [
+        0.09,
+        0.095,
+        0.105
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "Strap: 10 stations x 8-point flat section (72 side quads + two 8-gon caps = 156 triangles), half-width 0.0170 m, half thickness 0.0022 m, folded 180 deg at x = -0.098 (outer face on z = 0) and returned to x = -0.050; buckle end at +0.100.  Buckle: square frame 22 x 22 mm outer, 4 mm bars (14 x 14 opening), z 0.0020-0.0069 (2.5 mm proud), 32 triangles; prong 17 mm tapered bar across the opening standing 0.7 mm above the frame, 12 triangles.  Frame and prong are welded to the strap by Exact unions (one closed shell) and repainted after the boolean, because the solver copies material index 0 onto tool faces.  Overall 0.200 x 0.034 x 0.0090 m.  Leather uses the palette wood tone at cloth/leather roughness 0.86.",
+  "build_script": "models/leather_strap.py",
+  "preview": "previews/leather_strap_preview.png",
+  "files": {
+    "leather_strap.fbx": 22220,
+    "leather_strap.glb": 16736,
+    "leather_strap.blend": 471208
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 126904
+}

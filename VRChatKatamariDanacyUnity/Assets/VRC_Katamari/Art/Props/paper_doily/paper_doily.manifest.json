@@ -1,0 +1,134 @@
+{
+  "id": "paper_doily",
+  "pivot": "center",
+  "target_longest_m": 0.12,
+  "dimensions_m": {
+    "x": 0.11999999731779099,
+    "y": 0.11999999731779099,
+    "z": 0.0020000000949949026,
+    "longest": 0.11999999731779099
+  },
+  "bounds_m": {
+    "min": [
+      -0.05999999865889549,
+      -0.05999999865889549,
+      -0.0010000000474974513
+    ],
+    "max": [
+      0.05999999865889549,
+      0.05999999865889549,
+      0.0010000000474974513
+    ]
+  },
+  "vertices": 98,
+  "triangles": 192,
+  "materials": [
+    "Prop_paper_doily_paper",
+    "Prop_paper_doily_paper_dark",
+    "Prop_paper_doily_ink"
+  ],
+  "material_base_colors": {
+    "Prop_paper_doily_paper": [
+      0.8,
+      0.775,
+      0.7
+    ],
+    "Prop_paper_doily_paper_dark": [
+      0.36,
+      0.32,
+      0.25
+    ],
+    "Prop_paper_doily_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "d20bb9895a1380a272d351b2af5b83e733ac6520cf3be8babb933b3c3b38e091",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "纸垫",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.12,
+    "game_longest_dim_m": 0.12,
+    "sourcing_hint": "model ourselves：Ø120 mm 波浪边纸垫，凹印内圈 + 中心凹坑",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.12,
+    "built_longest_m": 0.11999999731779099,
+    "abs_error_m": 2.682209010451686e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 192,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "paper",
+      "name_zh": "纸垫乳白",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "paper_dark",
+      "name_zh": "凹印内圈深纸色",
+      "linear_rgb": [
+        0.36,
+        0.32,
+        0.25
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "ink",
+      "name_zh": "中心墨点",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Thickness 2.0 mm instead of the catalogue 1.0 mm (flat-slab floor).  16 segments x 7 bands = 192 triangles.  Four-lobe rim wave, amplitude 7% of the radius, base radius 0.05607 m so the peaks are exactly 0.060 m and the doily is 0.120 x 0.120 m.  Detail: a 0.6 mm step at r = 0.0385 m separates the outer field (paper) from the inner field (paper_dark), and the centre dimple floor takes ink; the dimple is a blind dent, not a hole, so the shell stays closed.",
+  "build_script": "models/paper_doily.py",
+  "preview": "previews/paper_doily_preview.png",
+  "files": {
+    "paper_doily.fbx": 20188,
+    "paper_doily.glb": 11580,
+    "paper_doily.blend": 468432
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 134639
+}

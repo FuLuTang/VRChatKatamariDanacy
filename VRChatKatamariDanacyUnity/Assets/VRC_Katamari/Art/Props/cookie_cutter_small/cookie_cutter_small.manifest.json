@@ -1,0 +1,134 @@
+{
+  "id": "cookie_cutter_small",
+  "pivot": "center",
+  "target_longest_m": 0.1,
+  "dimensions_m": {
+    "x": 0.10000000149011612,
+    "y": 0.07999999821186066,
+    "z": 0.02500000037252903,
+    "longest": 0.10000000149011612
+  },
+  "bounds_m": {
+    "min": [
+      -0.05000000074505806,
+      -0.03999999910593033,
+      -0.012500000186264515
+    ],
+    "max": [
+      0.05000000074505806,
+      0.03999999910593033,
+      0.012500000186264515
+    ]
+  },
+  "vertices": 80,
+  "triangles": 160,
+  "materials": [
+    "Prop_cookie_cutter_small_metal",
+    "Prop_cookie_cutter_small_brass",
+    "Prop_cookie_cutter_small_metal_dark"
+  ],
+  "material_base_colors": {
+    "Prop_cookie_cutter_small_metal": [
+      0.43,
+      0.45,
+      0.47
+    ],
+    "Prop_cookie_cutter_small_brass": [
+      0.52,
+      0.38,
+      0.12
+    ],
+    "Prop_cookie_cutter_small_metal_dark": [
+      0.09,
+      0.095,
+      0.105
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "66b232f29284c3bbf186fd4f4af28a21c6509b62a8920e011c9eebc6a0ea38a4",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "小饼干模",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.1,
+    "game_longest_dim_m": 0.1,
+    "sourcing_hint": "model ourselves：0.100 x 0.080 x 0.025 m 椭圆薄壁模圈，顶部卷边",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.1,
+    "built_longest_m": 0.10000000149011612,
+    "abs_error_m": 1.4901161138336505e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 180,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "metal",
+      "name_zh": "不锈钢外壁",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    },
+    {
+      "key": "brass",
+      "name_zh": "黄铜卷边",
+      "linear_rgb": [
+        0.52,
+        0.38,
+        0.12
+      ],
+      "roughness": 0.3
+    },
+    {
+      "key": "metal_dark",
+      "name_zh": "内壁氧化",
+      "linear_rgb": [
+        0.09,
+        0.095,
+        0.105
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "16 segments x 5 bands = 160 triangles, one closed shell with a real through opening.  Outer ellipse 0.100 x 0.080 m (semi-axes 0.050 / 0.040), height 0.0250 m.  Wall 1.8 mm at the cutting edge, widening to 3.8 mm under the rolled bead; the bead is the 46.2 mm inner ring at 22.5 mm height that bulges into the opening, so the top edge reads as a roll instead of a knife edge.  The profile starts and ends at (0.0482, 0.0000) with no caps, so finish() welds the seam.  Slots: brass above z 22.8 mm (both bead bands), metal_dark where the face normal has a radial component below -0.3 (inner wall and bead inner flank), steel elsewhere.",
+  "build_script": "models/cookie_cutter_small.py",
+  "preview": "previews/cookie_cutter_small_preview.png",
+  "files": {
+    "cookie_cutter_small.fbx": 20476,
+    "cookie_cutter_small.glb": 6804,
+    "cookie_cutter_small.blend": 466176
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 166212
+}

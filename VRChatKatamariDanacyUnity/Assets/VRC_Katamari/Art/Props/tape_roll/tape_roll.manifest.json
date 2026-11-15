@@ -1,0 +1,134 @@
+{
+  "id": "tape_roll",
+  "pivot": "center",
+  "target_longest_m": 0.1,
+  "dimensions_m": {
+    "x": 0.10000000149011612,
+    "y": 0.10000000149011612,
+    "z": 0.019999999552965164,
+    "longest": 0.10000000149011612
+  },
+  "bounds_m": {
+    "min": [
+      -0.05000000074505806,
+      -0.05000000074505806,
+      -0.009999999776482582
+    ],
+    "max": [
+      0.05000000074505806,
+      0.05000000074505806,
+      0.009999999776482582
+    ]
+  },
+  "vertices": 72,
+  "triangles": 144,
+  "materials": [
+    "Prop_tape_roll_straw",
+    "Prop_tape_roll_paper",
+    "Prop_tape_roll_ink"
+  ],
+  "material_base_colors": {
+    "Prop_tape_roll_straw": [
+      0.47,
+      0.36,
+      0.14
+    ],
+    "Prop_tape_roll_paper": [
+      0.8,
+      0.775,
+      0.7
+    ],
+    "Prop_tape_roll_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "9b76b6ee6fe0bd3e635753d06a95186552a17c9de036850c1a8df609f532875f",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "胶带卷",
+  "category": "debris",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.1,
+    "game_longest_dim_m": 0.1,
+    "sourcing_hint": "model ourselves：Ø0.100 x 0.020 m 胶带卷，外圈胶带 + 内圈纸芯，真通孔",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.1,
+    "built_longest_m": 0.10000000149011612,
+    "abs_error_m": 1.4901161138336505e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 180,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "straw",
+      "name_zh": "琥珀胶带",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.5
+    },
+    {
+      "key": "paper",
+      "name_zh": "纸芯",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "ink",
+      "name_zh": "胶带端头暗标",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Revolved closed cross-section, 12 segments x 6 bands = 144 triangles.  Outer radius 50 mm, inner radius 30 mm, height 20 mm.  The profile starts and ends at (0.0300, 0.0000) with cap_start/cap_end off, so finish() welds the coincident seam rings and the hole stays open as one shell (a second cylinder would be a second shell).  Paper is every face whose centre is inside r = 31.6 mm, i.e. the inner wall and its two chamfers; the ink marker is the single 30-degree outer-wall segment starting at +X (r > 46 mm, 1-19 mm up; the polygon centre of an arc face sits at r cos(15 deg) = 48.3 mm).  Tape faces are the rest of the outer wall, top and bottom.",
+  "build_script": "models/tape_roll.py",
+  "preview": "previews/tape_roll_preview.png",
+  "files": {
+    "tape_roll.fbx": 19292,
+    "tape_roll.glb": 8720,
+    "tape_roll.blend": 465544
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 152138
+}

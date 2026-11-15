@@ -1,0 +1,134 @@
+{
+  "id": "dung_ball_small",
+  "pivot": "center",
+  "target_longest_m": 0.12,
+  "dimensions_m": {
+    "x": 0.12000000476837158,
+    "y": 0.11244572699069977,
+    "z": 0.10324666276574135,
+    "longest": 0.12000000476837158
+  },
+  "bounds_m": {
+    "min": [
+      -0.06000000238418579,
+      -0.056222863495349884,
+      -0.05162333324551582
+    ],
+    "max": [
+      0.06000000238418579,
+      0.056222863495349884,
+      0.051623329520225525
+    ]
+  },
+  "vertices": 187,
+  "triangles": 370,
+  "materials": [
+    "Prop_dung_ball_small_dung",
+    "Prop_dung_ball_small_straw",
+    "Prop_dung_ball_small_ink"
+  ],
+  "material_base_colors": {
+    "Prop_dung_ball_small_dung": [
+      0.18,
+      0.13,
+      0.075
+    ],
+    "Prop_dung_ball_small_straw": [
+      0.47,
+      0.36,
+      0.14
+    ],
+    "Prop_dung_ball_small_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "3a810032de34213f1bce8f96fda63bde8f9c240f4a3e86c5f5ecf2f308205ca1",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "小土球",
+  "category": "soil_dung",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.12,
+    "game_longest_dim_m": 0.12,
+    "sourcing_hint": "model ourselves：DungBeetleMeadow catalogue t1 0.120×0.118×0.115 m 小土球（招牌件）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.12,
+    "built_longest_m": 0.12000000476837158,
+    "abs_error_m": 4.768371586472142e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 400,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "dung",
+      "name_zh": "晒硬土棕",
+      "linear_rgb": [
+        0.18,
+        0.13,
+        0.075
+      ],
+      "roughness": 0.95
+    },
+    {
+      "key": "straw",
+      "name_zh": "草屑浅黄",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "ink",
+      "name_zh": "草屑凹缝",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "22 segments x 6 bands sphere grid (264 triangles, one closed shell, no loose grass geometry).  Radius sculpture 9.5 % 2-lobe / 5.5 % 3-lobe / 3 % 7-fold facet / 4.5 % belly / 5.5 % thumb dent, 4 % Y stretch and 8 % Z squash (a FLAT ball, unlike the tall medium one), bottom cut at 0.90 R and sunk 1.5 mm.  Seven straw slivers are Exact differences: 20-25 mm long, 6.5-8 mm wide, 1.1 mm deep pockets with a flat floor (straw) and 1 mm walls (ink); the tool is placed on the sampled surface normal and sunk by the chord sagitta so the ends still cut.  Wall faces are found after the boolean by their normal (radial = floor, tangential = wall) inside each pocket volume, because the Exact solver copies material index 0 onto tool faces.  AABB 0.120 x 0.118 x 0.111 m.",
+  "build_script": "models/dung_ball_small.py",
+  "preview": "previews/dung_ball_small_preview.png",
+  "files": {
+    "dung_ball_small.fbx": 27564,
+    "dung_ball_small.glb": 27872,
+    "dung_ball_small.blend": 478936
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 181083
+}

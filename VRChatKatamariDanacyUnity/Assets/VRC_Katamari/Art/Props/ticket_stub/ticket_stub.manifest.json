@@ -1,0 +1,134 @@
+{
+  "id": "ticket_stub",
+  "pivot": "center",
+  "target_longest_m": 0.11,
+  "dimensions_m": {
+    "x": 0.10999999940395355,
+    "y": 0.054999999701976776,
+    "z": 0.001500000013038516,
+    "longest": 0.10999999940395355
+  },
+  "bounds_m": {
+    "min": [
+      -0.054999999701976776,
+      -0.027499999850988388,
+      -0.000750000006519258
+    ],
+    "max": [
+      0.054999999701976776,
+      0.027499999850988388,
+      0.000750000006519258
+    ]
+  },
+  "vertices": 56,
+  "triangles": 108,
+  "materials": [
+    "Prop_ticket_stub_paper",
+    "Prop_ticket_stub_ink",
+    "Prop_ticket_stub_paper_dark"
+  ],
+  "material_base_colors": {
+    "Prop_ticket_stub_paper": [
+      0.8,
+      0.775,
+      0.7
+    ],
+    "Prop_ticket_stub_ink": [
+      0.03,
+      0.035,
+      0.045
+    ],
+    "Prop_ticket_stub_paper_dark": [
+      0.36,
+      0.32,
+      0.25
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "72fa170bb31287fe6a5f5f158c7bec601a1595c1b6febd01d24a10c8bb88ab9a",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "票根",
+  "category": "debris",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.11,
+    "game_longest_dim_m": 0.11,
+    "sourcing_hint": "model ourselves：110 x 55 mm 票根，撕口一端 + 印刷色带 + 压痕折线",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.11,
+    "built_longest_m": 0.10999999940395355,
+    "abs_error_m": 5.960464483090178e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 128,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "paper",
+      "name_zh": "票据纸米黄",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "ink",
+      "name_zh": "票根印刷墨块",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    },
+    {
+      "key": "paper_dark",
+      "name_zh": "折线深纸色",
+      "linear_rgb": [
+        0.36,
+        0.32,
+        0.25
+      ],
+      "roughness": 0.92
+    }
+  ],
+  "notes": "Thickness 1.5 mm instead of the catalogue 1.0 mm (flat-slab floor).  Sheet grid 6 x 3 = 108 triangles.  X columns are moved to XB so cell 4 is the 1.7 mm fold line (0.0183-0.0200 m, rows dropped 0.4 mm, paper_dark); cell 5 (0.0200-0.0550 m) is the ink stub band.  The torn end zigzags 5.5 mm in the three Y cells and keeps its corners at 0.055 m, so the 0.110 m target axis is unchanged.",
+  "build_script": "models/ticket_stub.py",
+  "preview": "previews/ticket_stub_preview.png",
+  "files": {
+    "ticket_stub.fbx": 18284,
+    "ticket_stub.glb": 6580,
+    "ticket_stub.blend": 463476
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 127159
+}

@@ -1,0 +1,118 @@
+{
+  "id": "coin",
+  "pivot": "center",
+  "target_longest_m": 0.024,
+  "dimensions_m": {
+    "x": 0.024000000208616257,
+    "y": 0.024000000208616257,
+    "z": 0.0020000000949949026,
+    "longest": 0.024000000208616257
+  },
+  "bounds_m": {
+    "min": [
+      -0.012000000104308128,
+      -0.012000000104308128,
+      -0.0010000000474974513
+    ],
+    "max": [
+      0.012000000104308128,
+      0.012000000104308128,
+      0.0010000000474974513
+    ]
+  },
+  "vertices": 86,
+  "triangles": 168,
+  "materials": [
+    "Prop_coin_brass",
+    "Prop_coin_metal_dark"
+  ],
+  "material_base_colors": {
+    "Prop_coin_brass": [
+      0.52,
+      0.38,
+      0.12
+    ],
+    "Prop_coin_metal_dark": [
+      0.09,
+      0.095,
+      0.105
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "4980a65bb0ffca299a2c1e39144a6705ddf2b30a6f66def6de0e75c9f9fbff82",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "硬币",
+  "category": "debris",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.024,
+    "game_longest_dim_m": 0.024,
+    "sourcing_hint": "model ourselves：Ø24 x 2 mm 12 边硬币，凸缘 + 凹刻浮雕环",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.024,
+    "built_longest_m": 0.024000000208616257,
+    "abs_error_m": 2.0861625621426683e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 192,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "brass",
+      "name_zh": "硬币黄铜",
+      "linear_rgb": [
+        0.52,
+        0.38,
+        0.12
+      ],
+      "roughness": 0.3
+    },
+    {
+      "key": "metal_dark",
+      "name_zh": "凹刻浮雕环暗金属",
+      "linear_rgb": [
+        0.09,
+        0.095,
+        0.105
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "12 segments, 8 profile points: one 12-triangle underside fan, five 24-triangle quad bands and the 12-triangle inner cap = 168 triangles.  Radius 0.012 m, underside flat at z=0, vertical edge to 0.0020 m, flange annulus from r=0.0100 down to the 0.0014 m field, a 0.4 mm recessed ring at r 0.0080-0.0094 m (metal_dark) and a 0.00145 m inner disc.  AABB 0.024 x 0.024 x 0.0020 m, one closed shell.",
+  "build_script": "models/coin.py",
+  "preview": "previews/coin_preview.png",
+  "files": {
+    "coin.fbx": 18412,
+    "coin.glb": 9292,
+    "coin.blend": 445696
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 149247
+}

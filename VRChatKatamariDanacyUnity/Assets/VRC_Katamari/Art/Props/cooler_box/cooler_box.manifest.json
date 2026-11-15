@@ -52,7 +52,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "4106759b6bc169a2a77f4eb43e2b7942bcac1e51a1b95aa26e8060372563f406",
+  "geometry_sha256": "41c8388750ec4e6f88803e6160290ea82b6db38afbc08d21f95c07b9f3142299",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "保温箱",
   "category": "container",
@@ -111,9 +111,9 @@
   "build_script": "models/cooler_box.py",
   "preview": "previews/cooler_box_preview.png",
   "files": {
-    "cooler_box.fbx": 18860,
+    "cooler_box.fbx": 18956,
     "cooler_box.glb": 8060,
-    "cooler_box.blend": 92446
+    "cooler_box.blend": 464420
   },
   "export_settings": {
     "fbx": {
@@ -128,7 +128,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 142919
+  "preview_bytes": 185522
 }

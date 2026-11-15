@@ -79,9 +79,9 @@
   "build_script": "models/bowl.py",
   "preview": "previews/bowl_preview.png",
   "files": {
-    "bowl.fbx": 20412,
+    "bowl.fbx": 23276,
     "bowl.glb": 8072,
-    "bowl.blend": 95411
+    "bowl.blend": 434872
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 134434
+  "preview_bytes": 171914
 }

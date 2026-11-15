@@ -1,0 +1,134 @@
+{
+  "id": "snail_shell",
+  "pivot": "center",
+  "target_longest_m": 0.06,
+  "dimensions_m": {
+    "x": 0.06000000238418579,
+    "y": 0.054999999701976776,
+    "z": 0.05000000074505806,
+    "longest": 0.06000000238418579
+  },
+  "bounds_m": {
+    "min": [
+      -0.030000001192092896,
+      -0.027499999850988388,
+      -0.02500000037252903
+    ],
+    "max": [
+      0.030000001192092896,
+      0.027499999850988388,
+      0.02500000037252903
+    ]
+  },
+  "vertices": 110,
+  "triangles": 216,
+  "materials": [
+    "Prop_snail_shell_shell",
+    "Prop_snail_shell_wool",
+    "Prop_snail_shell_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_snail_shell_shell": [
+      0.56,
+      0.47,
+      0.33
+    ],
+    "Prop_snail_shell_wool": [
+      0.7,
+      0.68,
+      0.63
+    ],
+    "Prop_snail_shell_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "cda4e21e9410b5fb88c08a51770336b23d8173868a73cd13d7de71176295e767",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "蜗牛壳",
+  "category": "nature",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.06,
+    "game_longest_dim_m": 0.06,
+    "sourcing_hint": "model ourselves：60 mm 蜗牛壳（螺塔 + 螺旋缝合线 + 壳口凹腔 + 浅色生长带）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.06,
+    "built_longest_m": 0.06000000238418579,
+    "abs_error_m": 2.384185793236071e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 260,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "shell",
+      "name_zh": "壳体土黄",
+      "linear_rgb": [
+        0.56,
+        0.47,
+        0.33
+      ],
+      "roughness": 0.42
+    },
+    {
+      "key": "wool",
+      "name_zh": "壳面浅色生长带",
+      "linear_rgb": [
+        0.7,
+        0.68,
+        0.63
+      ],
+      "roughness": 0.95
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "缝合线暗带与壳口内腔",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "12-segment, 11-point lathe (216 triangles), one closed shell, no boolean and no self-intersection.  Body whorl is the widest ring at 60 mm; the top is cut into two terraces that step up to a 46 mm apex.  A shear above the body whorl (0.55 x height) makes the spire lean 12 mm off centre so the terraces read as a coil.  Suture = one angular bulge per ring advancing 1.6 turns bottom to top (amplitude 7.5%).  Mouth = at rings 2-4 the 0-degree column is pulled 34% in while its +-1 column neighbours are pushed 26% out, giving a recessed mouth inside a raised lip.  Materials by face centre before the shear: the mouth pocket (+15 degrees, z 10-30 mm) and the suture line (|delta| < 0.32 rad) are wood_dark, the band beside the suture (0.36-1.00 rad) is wool, the rest shell.  fit_bounds pins 60 x 55 x 50 mm.",
+  "build_script": "models/snail_shell.py",
+  "preview": "previews/snail_shell_preview.png",
+  "files": {
+    "snail_shell.fbx": 22972,
+    "snail_shell.glb": 18220,
+    "snail_shell.blend": 469848
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 186633
+}

@@ -1,0 +1,134 @@
+{
+  "id": "smooth_pebble",
+  "pivot": "center",
+  "target_longest_m": 0.05,
+  "dimensions_m": {
+    "x": 0.05000000074505806,
+    "y": 0.041999999433755875,
+    "z": 0.03500000014901161,
+    "longest": 0.05000000074505806
+  },
+  "bounds_m": {
+    "min": [
+      -0.02500000037252903,
+      -0.020999999716877937,
+      -0.017500000074505806
+    ],
+    "max": [
+      0.02500000037252903,
+      0.020999999716877937,
+      0.017500000074505806
+    ]
+  },
+  "vertices": 42,
+  "triangles": 80,
+  "materials": [
+    "Prop_smooth_pebble_shell",
+    "Prop_smooth_pebble_flint",
+    "Prop_smooth_pebble_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_smooth_pebble_shell": [
+      0.56,
+      0.47,
+      0.33
+    ],
+    "Prop_smooth_pebble_flint": [
+      0.155,
+      0.16,
+      0.175
+    ],
+    "Prop_smooth_pebble_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "650d3e4079f704899d508136b7992ed472bd00b2683d1a80fca93a4c6d1d9b53",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "卵石",
+  "category": "nature",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.05,
+    "game_longest_dim_m": 0.05,
+    "sourcing_hint": "model ourselves：50 mm 磨圆砂岩卵石（磨平面 + 裂纹凹槽）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.05,
+    "built_longest_m": 0.05000000074505806,
+    "abs_error_m": 7.450580569168253e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 140,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "shell",
+      "name_zh": "暖砂岩卵石",
+      "linear_rgb": [
+        0.56,
+        0.47,
+        0.33
+      ],
+      "roughness": 0.42
+    },
+    {
+      "key": "flint",
+      "name_zh": "磨平断面",
+      "linear_rgb": [
+        0.155,
+        0.16,
+        0.175
+      ],
+      "roughness": 0.7
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "裂纹暗线",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Subdivided icosphere (80 triangles, 42 vertices) with a deterministic sine displacement of +-6%, underside flattened only at 93% of the radius so it still reads as a water-worn pebble; fit_bounds pins 50 x 42 x 35 mm.  One closed shell, no boolean, no extra triangles.  Chip: every face whose centre points within the CHIP_DIRECTION cap is collected and all of its vertices are clamped onto one plane 0.020 radii below the cap peak, so the cap becomes a single flat facet (flint slot).  Crack: every vertex within 0.20 of the CRACK_NORMAL plane is pulled inward by up to 9%, and the faces within 0.16 of it take the wood_dark slot.",
+  "build_script": "models/smooth_pebble.py",
+  "preview": "previews/smooth_pebble_preview.png",
+  "files": {
+    "smooth_pebble.fbx": 19356,
+    "smooth_pebble.glb": 8992,
+    "smooth_pebble.blend": 461824
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 173459
+}

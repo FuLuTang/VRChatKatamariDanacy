@@ -95,9 +95,9 @@
   "build_script": "models/orange.py",
   "preview": "previews/orange_preview.png",
   "files": {
-    "orange.fbx": 21196,
+    "orange.fbx": 23788,
     "orange.glb": 8920,
-    "orange.blend": 96203
+    "orange.blend": 456512
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 159093
+  "preview_bytes": 191791
 }

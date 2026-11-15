@@ -1,0 +1,134 @@
+{
+  "id": "clover_sprig",
+  "pivot": "center",
+  "target_longest_m": 0.06,
+  "dimensions_m": {
+    "x": 0.06000000238418579,
+    "y": 0.053842976689338684,
+    "z": 0.01142537035048008,
+    "longest": 0.06000000238418579
+  },
+  "bounds_m": {
+    "min": [
+      -0.030000001192092896,
+      -0.026921488344669342,
+      -0.00571268517524004
+    ],
+    "max": [
+      0.030000001192092896,
+      0.026921488344669342,
+      0.00571268517524004
+    ]
+  },
+  "vertices": 88,
+  "triangles": 172,
+  "materials": [
+    "Prop_clover_sprig_leaf_green",
+    "Prop_clover_sprig_leaf_dry",
+    "Prop_clover_sprig_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_clover_sprig_leaf_green": [
+      0.115,
+      0.24,
+      0.075
+    ],
+    "Prop_clover_sprig_leaf_dry": [
+      0.4,
+      0.27,
+      0.105
+    ],
+    "Prop_clover_sprig_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "b028304fa122da7f5e7725660f819ec918ab40adc5eb6d97098bc1a0497d2444",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "三叶草小枝",
+  "category": "grass_plants",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.06,
+    "game_longest_dim_m": 0.06,
+    "sourcing_hint": "model ourselves：DungBeetleMeadow catalogue t0 0.060×0.055×0.020 m 三叶草小枝（Z0 巢穴口植被）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.06,
+    "built_longest_m": 0.06000000238418579,
+    "abs_error_m": 2.384185793236071e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 192,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "leaf_green",
+      "name_zh": "三叶草绿",
+      "linear_rgb": [
+        0.115,
+        0.24,
+        0.075
+      ],
+      "roughness": 0.85
+    },
+    {
+      "key": "leaf_dry",
+      "name_zh": "发黄叶",
+      "linear_rgb": [
+        0.4,
+        0.27,
+        0.105
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "暗叶脉与叶柄",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Polar shell, 24 outline points, top with one mid ring (ring fraction 0.58), a bottom fan and a 24-quad rim: 144 triangles; plus a 2-station x 4-segment stalk tube (12 triangles) welded by one Exact union -> about 176 triangles, one closed shell.  Outline 0.36-1.00 x 0.026 m with lobes at 90/210/330 deg and 0.9 mm midrib grooves along each lobe; centre 0.0046 m, mid ring 0.0050 m, outline 0.0040 m in the notches and 0.0140 m at the tips; underside 3.4 mm below the top.  Stalk from r = 0.008 m to 0.046 m at 30 deg, radius 1.5 -> 1.1 mm, lying on the ground.  Materials: the 90 deg leaflet is leaf_dry, the other two leaf_green, the stalk (repainted after the union) and the leaf rim wood_dark; the three midribs are 0.9 mm grooves (shading, not a painted stripe).",
+  "build_script": "models/clover_sprig.py",
+  "preview": "previews/clover_sprig_preview.png",
+  "files": {
+    "clover_sprig.fbx": 21260,
+    "clover_sprig.glb": 13848,
+    "clover_sprig.blend": 467252
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 146731
+}

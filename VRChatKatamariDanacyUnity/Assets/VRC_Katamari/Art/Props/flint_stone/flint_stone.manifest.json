@@ -1,0 +1,134 @@
+{
+  "id": "flint_stone",
+  "pivot": "center",
+  "target_longest_m": 0.07,
+  "dimensions_m": {
+    "x": 0.06999999284744263,
+    "y": 0.054999999701976776,
+    "z": 0.04500000178813934,
+    "longest": 0.06999999284744263
+  },
+  "bounds_m": {
+    "min": [
+      -0.034999996423721313,
+      -0.027499999850988388,
+      -0.02250000089406967
+    ],
+    "max": [
+      0.034999996423721313,
+      0.027499999850988388,
+      0.02250000089406967
+    ]
+  },
+  "vertices": 50,
+  "triangles": 96,
+  "materials": [
+    "Prop_flint_stone_flint",
+    "Prop_flint_stone_stone",
+    "Prop_flint_stone_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_flint_stone_flint": [
+      0.155,
+      0.16,
+      0.175
+    ],
+    "Prop_flint_stone_stone": [
+      0.33,
+      0.33,
+      0.32
+    ],
+    "Prop_flint_stone_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "d13b3a61c1ccae3fa8f6f709c6b880978c4f86be2031cbc7cb7052f81e590cc5",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "燧石",
+  "category": "nature",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.07,
+    "game_longest_dim_m": 0.07,
+    "sourcing_hint": "model ourselves：70 mm 打制燧石楔块（打制疤痕棱面 + 皮层/断口分色）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.07,
+    "built_longest_m": 0.06999999284744263,
+    "abs_error_m": 7.152557379708213e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 180,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "flint",
+      "name_zh": "燧石新鲜断口",
+      "linear_rgb": [
+        0.155,
+        0.16,
+        0.175
+      ],
+      "roughness": 0.7
+    },
+    {
+      "key": "stone",
+      "name_zh": "风化皮层",
+      "linear_rgb": [
+        0.33,
+        0.33,
+        0.32
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "铁染裂隙",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Cube -> eight jittered corners -> wedge taper -> one-segment bevel (offset 8 mm) -> poke every face and lift its centre along the normal -> 1.5 mm sine displacement: 96 triangles, one closed shell, no boolean.  Taper narrows the point end to 60% in y and 46% in z and lifts it 4.5 mm.  Corner offsets are a fixed table (2-5 mm) so no two edges are parallel.  Materials follow the struck planes, not a height band: the top plane and the bevel facets that share its orientation (parent normal n.z > 0.35) keep the pale weathered cortex, the front/side struck planes are the fresh dark flint, and the point end (n.x > 0.85) plus the resting base (n.z < -0.85) are the dark iron-stained slot.  fit_bounds pins 70 x 55 x 45 mm.",
+  "build_script": "models/flint_stone.py",
+  "preview": "previews/flint_stone_preview.png",
+  "files": {
+    "flint_stone.fbx": 19852,
+    "flint_stone.glb": 10128,
+    "flint_stone.blend": 462768
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 174986
+}

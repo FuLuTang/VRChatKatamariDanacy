@@ -95,9 +95,9 @@
   "build_script": "models/apple.py",
   "preview": "previews/apple_preview.png",
   "files": {
-    "apple.fbx": 20188,
+    "apple.fbx": 21852,
     "apple.glb": 7324,
-    "apple.blend": 94562
+    "apple.blend": 451872
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 181048
+  "preview_bytes": 196820
 }

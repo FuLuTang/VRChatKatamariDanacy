@@ -95,9 +95,9 @@
   "build_script": "models/strawberry.py",
   "preview": "previews/strawberry_preview.png",
   "files": {
-    "strawberry.fbx": 19756,
+    "strawberry.fbx": 21228,
     "strawberry.glb": 7168,
-    "strawberry.blend": 93646
+    "strawberry.blend": 449552
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 177039
+  "preview_bytes": 196197
 }

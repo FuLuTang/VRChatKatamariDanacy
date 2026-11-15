@@ -1,0 +1,134 @@
+{
+  "id": "pen_ballpoint",
+  "pivot": "center",
+  "target_longest_m": 0.145,
+  "dimensions_m": {
+    "x": 0.14499999582767487,
+    "y": 0.010400000028312206,
+    "z": 0.012000000569969416,
+    "longest": 0.14499999582767487
+  },
+  "bounds_m": {
+    "min": [
+      -0.07249999791383743,
+      -0.005200000014156103,
+      -0.0060000005178153515
+    ],
+    "max": [
+      0.07249999791383743,
+      0.005200000014156103,
+      0.006000000052154064
+    ]
+  },
+  "vertices": 120,
+  "triangles": 236,
+  "materials": [
+    "Prop_pen_ballpoint_plastic_red",
+    "Prop_pen_ballpoint_metal",
+    "Prop_pen_ballpoint_metal_dark"
+  ],
+  "material_base_colors": {
+    "Prop_pen_ballpoint_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ],
+    "Prop_pen_ballpoint_metal": [
+      0.43,
+      0.45,
+      0.47
+    ],
+    "Prop_pen_ballpoint_metal_dark": [
+      0.09,
+      0.095,
+      0.105
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "a2535f7cf383f2a2a42a68b6c47f26147795b949a22e8f9e5453d1d263c2b003",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "圆珠笔",
+  "category": "stationery",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.145,
+    "game_longest_dim_m": 0.145,
+    "sourcing_hint": "model ourselves：0.145 m 圆珠笔，红笔杆 + 金属握环 + 笔夹 + 金属笔尖",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.145,
+    "built_longest_m": 0.14499999582767487,
+    "abs_error_m": 4.1723251242853365e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 288,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_red",
+      "name_zh": "红笔杆",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "metal",
+      "name_zh": "笔夹、笔尖与握环",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    },
+    {
+      "key": "metal_dark",
+      "name_zh": "墨珠与笔头",
+      "linear_rgb": [
+        0.09,
+        0.095,
+        0.105
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "8-sided sweep, 12 stations: butt x = -0.0725 r 0.0035, barrel r 0.005 with two 0.2 mm proud grip rings at x = -0.033 / -0.024 m, nose cone to r 0.0015 at x = 0.060, a 0.7 mm ball band from x = 0.0718 and the point at x = 0.0725 r 0.00035; axis at z = 0.005 m so the barrel rests on z = 0.  Clip: 6-point L prism 1.2 mm wide at y +/-0.0006, post buried to z = 0.0028, arm top at z = 0.0118, unioned.  Materials by face after the union (z > 0.0104 -> metal clip, ring x bands -> metal, x > 0.070 -> metal_dark ball, x > 0.045 -> metal nose, else plastic_red).  AABB 0.145 x 0.0104 x 0.0118 m.",
+  "build_script": "models/pen_ballpoint.py",
+  "preview": "previews/pen_ballpoint_preview.png",
+  "files": {
+    "pen_ballpoint.fbx": 22204,
+    "pen_ballpoint.glb": 8844,
+    "pen_ballpoint.blend": 471028
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 127726
+}

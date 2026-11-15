@@ -1,0 +1,182 @@
+{
+  "id": "game_controller",
+  "pivot": "center",
+  "target_longest_m": 0.15,
+  "dimensions_m": {
+    "x": 0.14999999105930328,
+    "y": 0.09799998998641968,
+    "z": 0.06088455393910408,
+    "longest": 0.14999999105930328
+  },
+  "bounds_m": {
+    "min": [
+      -0.07499999552965164,
+      -0.04899999499320984,
+      -0.03044227696955204
+    ],
+    "max": [
+      0.07499999552965164,
+      0.04899999499320984,
+      0.03044227696955204
+    ]
+  },
+  "vertices": 246,
+  "triangles": 488,
+  "materials": [
+    "Prop_game_controller_plastic_grey",
+    "Prop_game_controller_plastic_red",
+    "Prop_game_controller_plastic_blue",
+    "Prop_game_controller_plastic_green",
+    "Prop_game_controller_plastic_yellow",
+    "Prop_game_controller_rubber"
+  ],
+  "material_base_colors": {
+    "Prop_game_controller_plastic_grey": [
+      0.23,
+      0.235,
+      0.24
+    ],
+    "Prop_game_controller_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ],
+    "Prop_game_controller_plastic_blue": [
+      0.075,
+      0.145,
+      0.4
+    ],
+    "Prop_game_controller_plastic_green": [
+      0.09,
+      0.26,
+      0.13
+    ],
+    "Prop_game_controller_plastic_yellow": [
+      0.64,
+      0.45,
+      0.06
+    ],
+    "Prop_game_controller_rubber": [
+      0.045,
+      0.045,
+      0.048
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "9eb555c201f0a25f857cff350dca29c3585501ea3553bc0979188e8c279174db",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "游戏手柄",
+  "category": "electronics_cables",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.15,
+    "game_longest_dim_m": 0.15,
+    "sourcing_hint": "model ourselves：150 x 100 x 60 mm 双手柄手柄，按键并入单壳",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.15,
+    "built_longest_m": 0.14999999105930328,
+    "abs_error_m": 8.940696710757479e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 500,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_grey",
+      "name_zh": "石墨灰机身",
+      "linear_rgb": [
+        0.23,
+        0.235,
+        0.24
+      ],
+      "roughness": 0.5
+    },
+    {
+      "key": "plastic_red",
+      "name_zh": "红色按键 A",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "plastic_blue",
+      "name_zh": "蓝色按键 B",
+      "linear_rgb": [
+        0.075,
+        0.145,
+        0.4
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "plastic_green",
+      "name_zh": "绿色按键",
+      "linear_rgb": [
+        0.09,
+        0.26,
+        0.13
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "plastic_yellow",
+      "name_zh": "黄色按键",
+      "linear_rgb": [
+        0.64,
+        0.45,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "rubber",
+      "name_zh": "深色摇杆帽与屏幕条",
+      "linear_rgb": [
+        0.045,
+        0.045,
+        0.048
+      ],
+      "roughness": 0.88
+    }
+  ],
+  "notes": "Plan outline: 24 points, +/-0.075 across the grips and +/-0.049 at the lobes, 66 mm deep at the waist.  Dome: pole at 0.060 with rings at 0.62 and 0.88 of the outline, height 0.060 - 0.020*(|x|/0.075)^1.7 - 0.004*(|y|/0.048)^2, so the grips end at 0.038; 24-quad rim down to z=0 and one n-gon underside.  Slab 190 triangles; four 6-sided O 16 mm buttons on the local dome height at (+/-0.024, +/-0.020), 5.5 mm proud, 96 triangles; two 6-sided O 18.4 mm thumbstick collars with domed tops at (+/-0.048, -0.010), 36 triangles; one 28 x 18 mm screen pocket cut 2.5-4 mm into the crown between the button rows.  AABB 0.150 x 0.098 x 0.0609.  Six slots by face position after the unions.  One closed shell.",
+  "build_script": "models/game_controller.py",
+  "preview": "previews/game_controller_preview.png",
+  "files": {
+    "game_controller.fbx": 30460,
+    "game_controller.glb": 32216,
+    "game_controller.blend": 549860
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 163134
+}

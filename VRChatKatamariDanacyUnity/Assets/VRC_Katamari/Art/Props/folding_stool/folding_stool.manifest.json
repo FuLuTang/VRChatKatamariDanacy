@@ -46,7 +46,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "85bca0f0c069b87f0493bccae5acb63600344318cc66404eeda3ddc45b2a1d55",
+  "geometry_sha256": "a74a455e86465deaaae63e83e94b162387ea2421c8d77abd1b224bc2d46a446d",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "折叠凳",
   "category": "furniture",
@@ -95,9 +95,9 @@
   "build_script": "models/folding_stool.py",
   "preview": "previews/folding_stool_preview.png",
   "files": {
-    "folding_stool.fbx": 26892,
-    "folding_stool.glb": 14680,
-    "folding_stool.blend": 100188
+    "folding_stool.fbx": 28108,
+    "folding_stool.glb": 14608,
+    "folding_stool.blend": 468300
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 159820
+  "preview_bytes": 200227
 }

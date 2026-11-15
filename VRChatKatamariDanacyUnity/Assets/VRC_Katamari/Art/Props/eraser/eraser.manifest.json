@@ -1,0 +1,150 @@
+{
+  "id": "eraser",
+  "pivot": "center",
+  "target_longest_m": 0.05,
+  "dimensions_m": {
+    "x": 0.05000000074505806,
+    "y": 0.024000000208616257,
+    "z": 0.012000000104308128,
+    "longest": 0.05000000074505806
+  },
+  "bounds_m": {
+    "min": [
+      -0.02500000037252903,
+      -0.012000000104308128,
+      -0.006000000052154064
+    ],
+    "max": [
+      0.02500000037252903,
+      0.012000000104308128,
+      0.006000000052154064
+    ]
+  },
+  "vertices": 60,
+  "triangles": 116,
+  "materials": [
+    "Prop_eraser_paper",
+    "Prop_eraser_plastic_blue",
+    "Prop_eraser_plastic_red",
+    "Prop_eraser_ink"
+  ],
+  "material_base_colors": {
+    "Prop_eraser_paper": [
+      0.8,
+      0.775,
+      0.7
+    ],
+    "Prop_eraser_plastic_blue": [
+      0.075,
+      0.145,
+      0.4
+    ],
+    "Prop_eraser_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ],
+    "Prop_eraser_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "3f7b58a6b568b564533f0dcbe8b2e4729ba004f899d2a1b6a45c016964859794",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "橡皮",
+  "category": "stationery",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.05,
+    "game_longest_dim_m": 0.05,
+    "sourcing_hint": "model ourselves：50 x 24 x 12 mm 圆角橡皮 + 纸套",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.05,
+    "built_longest_m": 0.05000000074505806,
+    "abs_error_m": 7.450580569168253e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 160,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "paper",
+      "name_zh": "纸套米黄",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "plastic_blue",
+      "name_zh": "蓝橡皮端",
+      "linear_rgb": [
+        0.075,
+        0.145,
+        0.4
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "plastic_red",
+      "name_zh": "红橡皮端",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "ink",
+      "name_zh": "纸套暗标签",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Rubber core 50 x 22 x 10 mm (R 2 mm); paper sleeve outer 50 x 24 x 12 mm (R 2 mm) and 40 mm long, cavity 19 x 7 mm cut through so the sleeve is a closed ring, then unioned with the oversized core.  Exposed ends beyond |x| 20 mm are the rubber slots (blue at -X, red at +X); the sleeve is paper.  A 16 x 10 x 0.4 mm label recess is cut into the sleeve top and takes the ink slot, which is the dark print panel and keeps the overall height at 12 mm.",
+  "build_script": "models/eraser.py",
+  "preview": "previews/eraser_preview.png",
+  "files": {
+    "eraser.fbx": 19740,
+    "eraser.glb": 8432,
+    "eraser.blend": 485268
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 147102
+}

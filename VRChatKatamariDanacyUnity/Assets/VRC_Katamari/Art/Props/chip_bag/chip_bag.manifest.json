@@ -1,0 +1,150 @@
+{
+  "id": "chip_bag",
+  "pivot": "center",
+  "target_longest_m": 0.28,
+  "dimensions_m": {
+    "x": 0.2800000011920929,
+    "y": 0.19723361730575562,
+    "z": 0.07790727913379669,
+    "longest": 0.2800000011920929
+  },
+  "bounds_m": {
+    "min": [
+      -0.14000000059604645,
+      -0.09861680865287781,
+      -0.038953639566898346
+    ],
+    "max": [
+      0.14000000059604645,
+      0.09861680865287781,
+      0.038953639566898346
+    ]
+  },
+  "vertices": 188,
+  "triangles": 372,
+  "materials": [
+    "Prop_chip_bag_plastic_green",
+    "Prop_chip_bag_paper_dark",
+    "Prop_chip_bag_cotton_red",
+    "Prop_chip_bag_ink"
+  ],
+  "material_base_colors": {
+    "Prop_chip_bag_plastic_green": [
+      0.09,
+      0.26,
+      0.13
+    ],
+    "Prop_chip_bag_paper_dark": [
+      0.36,
+      0.32,
+      0.25
+    ],
+    "Prop_chip_bag_cotton_red": [
+      0.42,
+      0.09,
+      0.08
+    ],
+    "Prop_chip_bag_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "e28e156383f666c25412c162bef7d7b72c7352cdb88e776f91ada04d6a7fe6b3",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "薯片袋",
+  "category": "packaging",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.28,
+    "game_longest_dim_m": 0.28,
+    "sourcing_hint": "model ourselves：充气枕状袋 + 锯齿封口，单壳高度场",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.28,
+    "built_longest_m": 0.2800000011920929,
+    "abs_error_m": 1.19209286886246e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 416,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_green",
+      "name_zh": "袋膜绿",
+      "linear_rgb": [
+        0.09,
+        0.26,
+        0.13
+      ],
+      "roughness": 0.42
+    },
+    {
+      "key": "paper_dark",
+      "name_zh": "压边纸板色",
+      "linear_rgb": [
+        0.36,
+        0.32,
+        0.25
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "cotton_red",
+      "name_zh": "圆形标贴",
+      "linear_rgb": [
+        0.42,
+        0.09,
+        0.08
+      ],
+      "roughness": 0.6
+    },
+    {
+      "key": "ink",
+      "name_zh": "标贴内芯",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "Pillow height field: 4.5 mm at the seals, 79 mm at the middle, calm centre with a rounded shoulder over the outer 45%.  Serrated seals: 7 mm-pitch crimp ridge plus a 2.2 mm zig-zag on the end edges only.  Print is three nested top-face regions: paper_dark crimp seals at |x| > 100 mm, a cotton_red round badge and an ink core mark inside it.  12 x 10 grid, 0.280 x 0.198 x 0.079 m.",
+  "build_script": "models/chip_bag.py",
+  "preview": "previews/chip_bag_preview.png",
+  "files": {
+    "chip_bag.fbx": 25724,
+    "chip_bag.glb": 27112,
+    "chip_bag.blend": 500372
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 157899
+}

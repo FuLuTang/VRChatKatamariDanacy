@@ -79,9 +79,9 @@
   "build_script": "models/glass_bottle.py",
   "preview": "previews/glass_bottle_preview.png",
   "files": {
-    "glass_bottle.fbx": 20396,
+    "glass_bottle.fbx": 23196,
     "glass_bottle.glb": 8096,
-    "glass_bottle.blend": 95246
+    "glass_bottle.blend": 434872
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 108904
+  "preview_bytes": 153960
 }

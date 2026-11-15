@@ -1,0 +1,150 @@
+{
+  "id": "matchbox",
+  "pivot": "center",
+  "target_longest_m": 0.055,
+  "dimensions_m": {
+    "x": 0.054999999701976776,
+    "y": 0.035999998450279236,
+    "z": 0.014000000432133675,
+    "longest": 0.054999999701976776
+  },
+  "bounds_m": {
+    "min": [
+      -0.027499999850988388,
+      -0.017999999225139618,
+      -0.007000000216066837
+    ],
+    "max": [
+      0.027499999850988388,
+      0.017999999225139618,
+      0.007000000216066837
+    ]
+  },
+  "vertices": 52,
+  "triangles": 100,
+  "materials": [
+    "Prop_matchbox_paper_dark",
+    "Prop_matchbox_wood_dark",
+    "Prop_matchbox_paper",
+    "Prop_matchbox_ink"
+  ],
+  "material_base_colors": {
+    "Prop_matchbox_paper_dark": [
+      0.36,
+      0.32,
+      0.25
+    ],
+    "Prop_matchbox_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ],
+    "Prop_matchbox_paper": [
+      0.8,
+      0.775,
+      0.7
+    ],
+    "Prop_matchbox_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "6d05121bc0702261b976092c6fbca959b3fc0429d599f4f077aebe302f98960b",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "火柴盒",
+  "category": "stationery",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.055,
+    "game_longest_dim_m": 0.055,
+    "sourcing_hint": "model ourselves：55 x 36 x 14 mm 外盒 + 拉出内抽屉",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.055,
+    "built_longest_m": 0.054999999701976776,
+    "abs_error_m": 2.980232241545089e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 160,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "paper_dark",
+      "name_zh": "盒套深纸板",
+      "linear_rgb": [
+        0.36,
+        0.32,
+        0.25
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "内抽屉深木色",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    },
+    {
+      "key": "paper",
+      "name_zh": "抽屉正面浅纸",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "ink",
+      "name_zh": "擦火面",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.85
+    }
+  ],
+  "notes": "Sleeve outer 36 x 14 mm (R 3 mm) and 49 mm long, cavity 30 x 8 mm cut through; drawer 55 x 34 x 12 mm inserted so it protrudes at +X.  Drawer cross-section exceeds the cavity, so the union is one shell.  Slots: ink on every +Y sleeve face (striking strip), paper on the drawer front beyond x 24.8 mm, wood_dark on the drawer body, paper_dark on the sleeve.",
+  "build_script": "models/matchbox.py",
+  "preview": "previews/matchbox_preview.png",
+  "files": {
+    "matchbox.fbx": 19660,
+    "matchbox.glb": 9156,
+    "matchbox.blend": 484324
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 161083
+}

@@ -1,0 +1,150 @@
+{
+  "id": "toy_car_small",
+  "pivot": "center",
+  "target_longest_m": 0.15,
+  "dimensions_m": {
+    "x": 0.15000000596046448,
+    "y": 0.07999999821186066,
+    "z": 0.06000000238418579,
+    "longest": 0.15000000596046448
+  },
+  "bounds_m": {
+    "min": [
+      -0.07500000298023224,
+      -0.03999999910593033,
+      -0.030000001192092896
+    ],
+    "max": [
+      0.07500000298023224,
+      0.03999999910593033,
+      0.030000001192092896
+    ]
+  },
+  "vertices": 146,
+  "triangles": 288,
+  "materials": [
+    "Prop_toy_car_small_plastic_red",
+    "Prop_toy_car_small_metal_dark",
+    "Prop_toy_car_small_rubber",
+    "Prop_toy_car_small_metal"
+  ],
+  "material_base_colors": {
+    "Prop_toy_car_small_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ],
+    "Prop_toy_car_small_metal_dark": [
+      0.09,
+      0.095,
+      0.105
+    ],
+    "Prop_toy_car_small_rubber": [
+      0.045,
+      0.045,
+      0.048
+    ],
+    "Prop_toy_car_small_metal": [
+      0.43,
+      0.45,
+      0.47
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "77a48099a2aa9b532e3841dc8e26296e7f333724907e0d46ee6b28c830a3d1f6",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "小玩具车",
+  "category": "toy",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.15,
+    "game_longest_dim_m": 0.15,
+    "sourcing_hint": "model ourselves：150 x 80 x 60 mm 无品牌玩具车",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.15,
+    "built_longest_m": 0.15000000596046448,
+    "abs_error_m": 5.960464483090178e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_red",
+      "name_zh": "车漆红",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.4
+    },
+    {
+      "key": "metal_dark",
+      "name_zh": "深色车窗",
+      "linear_rgb": [
+        0.09,
+        0.095,
+        0.105
+      ],
+      "roughness": 0.35
+    },
+    {
+      "key": "rubber",
+      "name_zh": "轮胎黑胶",
+      "linear_rgb": [
+        0.045,
+        0.045,
+        0.048
+      ],
+      "roughness": 0.88
+    },
+    {
+      "key": "metal",
+      "name_zh": "镀铬保险杠",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    }
+  ],
+  "notes": "Chassis 150 x 76 x 22 mm (R 12 mm) at z 20-42 mm; cabin 72 x 70 x 20 mm (R 10 mm) at z 40-60 mm; four 8-gon wheels r 20 mm, 12 mm wide at x +/-48 mm, y +/-34 mm, z 20 mm; two 11 x 68 x 14 mm chrome bumper bars at x +/-75 mm, z 10-24 mm.  AABB 150 x 80 x 60 mm.  Rubber by distance < 21 mm to an axle centre and |y| > 26 mm; metal on the bumper volumes (|x| > 63.5 mm, z < 24.5 mm); window band on the cabin sides above z 44.5 mm.",
+  "build_script": "models/toy_car_small.py",
+  "preview": "previews/toy_car_small_preview.png",
+  "files": {
+    "toy_car_small.fbx": 23644,
+    "toy_car_small.glb": 13220,
+    "toy_car_small.blend": 495416
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 162491
+}

@@ -1,0 +1,150 @@
+{
+  "id": "sheep_bell",
+  "pivot": "center",
+  "target_longest_m": 0.09,
+  "dimensions_m": {
+    "x": 0.08999999612569809,
+    "y": 0.07000000029802322,
+    "z": 0.07000000029802322,
+    "longest": 0.08999999612569809
+  },
+  "bounds_m": {
+    "min": [
+      -0.044999998062849045,
+      -0.03500000014901161,
+      -0.03500000014901161
+    ],
+    "max": [
+      0.044999998062849045,
+      0.03500000014901161,
+      0.03500000014901161
+    ]
+  },
+  "vertices": 140,
+  "triangles": 280,
+  "materials": [
+    "Prop_sheep_bell_brass",
+    "Prop_sheep_bell_metal",
+    "Prop_sheep_bell_metal_dark",
+    "Prop_sheep_bell_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_sheep_bell_brass": [
+      0.52,
+      0.38,
+      0.12
+    ],
+    "Prop_sheep_bell_metal": [
+      0.43,
+      0.45,
+      0.47
+    ],
+    "Prop_sheep_bell_metal_dark": [
+      0.09,
+      0.095,
+      0.105
+    ],
+    "Prop_sheep_bell_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "f8d333adc42792c7aa4c89c11578e7d9b403fe5dc993eccaefccab75cdff9ed1",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "羊铃",
+  "category": "nature",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.09,
+    "game_longest_dim_m": 0.09,
+    "sourcing_hint": "model ourselves：90 mm 外张铃身（黄铜）+ 明色口沿 + 暗色铃腔 + 深色皮带",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.09,
+    "built_longest_m": 0.08999999612569809,
+    "abs_error_m": 3.8743019070697216e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "brass",
+      "name_zh": "黄铜铃身",
+      "linear_rgb": [
+        0.52,
+        0.38,
+        0.12
+      ],
+      "roughness": 0.3
+    },
+    {
+      "key": "metal",
+      "name_zh": "口沿亮金属",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    },
+    {
+      "key": "metal_dark",
+      "name_zh": "铃腔暗金属",
+      "linear_rgb": [
+        0.09,
+        0.095,
+        0.105
+      ],
+      "roughness": 0.55
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "皮带深褐",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "10-segment, 12-point lathe (200 triangles) plus a 6-station, 5-segment flat strap (60 triangles); 288 after the union, one closed shell.  Hollow cup: cavity ceiling at z=22.5 mm, inner rim at r=40 mm, 4.8 mm mouth annulus, outer lip at r=44.8 mm (the widest ring), then the wall narrows monotonically to the 52 mm crown.  Strap: 12 mm wide x 6.4 mm thick, legs at x=+-9.5 mm entering z=39.5 mm inside the crown, flat top at z=60.5 mm.  Materials are assigned after the union, in authoring space (inverse fit matrix): bail centreline distance < 8.5 mm = wood_dark, r<40.2 mm and z<23 mm = metal_dark (cavity), z<4.5 mm = metal (mouth rim and lip band), the rest brass.",
+  "build_script": "models/sheep_bell.py",
+  "preview": "previews/sheep_bell_preview.png",
+  "files": {
+    "sheep_bell.fbx": 24188,
+    "sheep_bell.glb": 18616,
+    "sheep_bell.blend": 494888
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 179792
+}

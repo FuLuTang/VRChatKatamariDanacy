@@ -1,0 +1,134 @@
+{
+  "id": "stamp",
+  "pivot": "center",
+  "target_longest_m": 0.026,
+  "dimensions_m": {
+    "x": 0.02199999988079071,
+    "y": 0.026000000536441803,
+    "z": 0.001500000013038516,
+    "longest": 0.026000000536441803
+  },
+  "bounds_m": {
+    "min": [
+      -0.010999999940395355,
+      -0.013000000268220901,
+      -0.000750000006519258
+    ],
+    "max": [
+      0.010999999940395355,
+      0.013000000268220901,
+      0.000750000006519258
+    ]
+  },
+  "vertices": 42,
+  "triangles": 80,
+  "materials": [
+    "Prop_stamp_paper",
+    "Prop_stamp_ink",
+    "Prop_stamp_paper_dark"
+  ],
+  "material_base_colors": {
+    "Prop_stamp_paper": [
+      0.8,
+      0.775,
+      0.7
+    ],
+    "Prop_stamp_ink": [
+      0.03,
+      0.035,
+      0.045
+    ],
+    "Prop_stamp_paper_dark": [
+      0.36,
+      0.32,
+      0.25
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "50a04cee2ed71b6655d556f98e5533ddc83f043a41b6e42c1b86aa4d4f3124c0",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "邮票",
+  "category": "debris",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.026,
+    "game_longest_dim_m": 0.026,
+    "sourcing_hint": "model ourselves：22 x 26 mm 齿孔边邮票，凹印面板 + 暗色切边，无贴图",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.026,
+    "built_longest_m": 0.026000000536441803,
+    "abs_error_m": 5.364418041720054e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 96,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "paper",
+      "name_zh": "邮票纸米白",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "ink",
+      "name_zh": "凹印墨块",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    },
+    {
+      "key": "paper_dark",
+      "name_zh": "纸切边与印坑侧壁",
+      "linear_rgb": [
+        0.36,
+        0.32,
+        0.25
+      ],
+      "roughness": 0.92
+    }
+  ],
+  "notes": "Thickness 1.5 mm instead of the catalogue 0.5 mm: a 0.5 mm wall is below the slab floor that still welds cleanly, and the X/Y axes are the ones that carry the stamp read.  16-point prism outline, notches 1.4 mm deep (no through holes).  Detail: a 0.013 x 0.017 m blind pocket 0.6 mm deep is subtracted from the top face and takes the ink slot; the cut edge (the prism side walls) takes paper_dark, so the perforation and the panel both read without a texture.  Pocket and edge stay inside the outline: AABB 0.022 x 0.026 x 0.0015 m.",
+  "build_script": "models/stamp.py",
+  "preview": "previews/stamp_preview.png",
+  "files": {
+    "stamp.fbx": 17980,
+    "stamp.glb": 6136,
+    "stamp.blend": 461824
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 142736
+}

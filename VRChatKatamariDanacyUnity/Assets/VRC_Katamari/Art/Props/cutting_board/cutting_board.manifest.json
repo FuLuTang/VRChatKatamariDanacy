@@ -1,0 +1,118 @@
+{
+  "id": "cutting_board",
+  "pivot": "center",
+  "target_longest_m": 0.28,
+  "dimensions_m": {
+    "x": 0.2800000011920929,
+    "y": 0.20000000298023224,
+    "z": 0.014999999664723873,
+    "longest": 0.2800000011920929
+  },
+  "bounds_m": {
+    "min": [
+      -0.14000000059604645,
+      -0.10000000149011612,
+      -0.007499999832361937
+    ],
+    "max": [
+      0.14000000059604645,
+      0.10000000149011612,
+      0.007499999832361937
+    ]
+  },
+  "vertices": 57,
+  "triangles": 114,
+  "materials": [
+    "Prop_cutting_board_straw",
+    "Prop_cutting_board_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_cutting_board_straw": [
+      0.47,
+      0.36,
+      0.14
+    ],
+    "Prop_cutting_board_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "96e5e4b4cca34f74f3586d5a137c4842760e285e267f44b73d60252831fa829c",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "小砧板",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.28,
+    "game_longest_dim_m": 0.28,
+    "sourcing_hint": "model ourselves：280 x 200 x 15 mm 圆角砧板 + 提手通孔 + 导油槽",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.28,
+    "built_longest_m": 0.2800000011920929,
+    "abs_error_m": 1.19209286886246e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 192,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "straw",
+      "name_zh": "砧板木面",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "导油槽与侧边深木",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "12-point rounded rectangle (0.280 x 0.200 m, corner radius 0.022 m, two segments per corner) extruded 0.015 m from z=0; a 12-sided, 0.017 m radius cylinder at x=0.100 m, y=0 is subtracted through the full thickness, leaving a real hole 0.023 m from the board end.  Detail: a 0.240 x 0.012 m groove is subtracted 7 mm into the board at y 0.068-0.080 m (the oil groove); its floor, its walls and every side face take wood_dark.  One closed shell after the two differences.",
+  "build_script": "models/cutting_board.py",
+  "preview": "previews/cutting_board_preview.png",
+  "files": {
+    "cutting_board.fbx": 17692,
+    "cutting_board.glb": 6700,
+    "cutting_board.blend": 442456
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 139101
+}

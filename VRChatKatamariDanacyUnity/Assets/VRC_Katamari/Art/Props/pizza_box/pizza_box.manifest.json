@@ -1,0 +1,150 @@
+{
+  "id": "pizza_box",
+  "pivot": "center",
+  "target_longest_m": 0.35,
+  "dimensions_m": {
+    "x": 0.34950071573257446,
+    "y": 0.3500000238418579,
+    "z": 0.04487258195877075,
+    "longest": 0.3500000238418579
+  },
+  "bounds_m": {
+    "min": [
+      -0.17475035786628723,
+      -0.17500001192092896,
+      -0.022436290979385376
+    ],
+    "max": [
+      0.17475035786628723,
+      0.17500001192092896,
+      0.022436290979385376
+    ]
+  },
+  "vertices": 82,
+  "triangles": 160,
+  "materials": [
+    "Prop_pizza_box_paper_dark",
+    "Prop_pizza_box_paper",
+    "Prop_pizza_box_ink",
+    "Prop_pizza_box_cotton_red"
+  ],
+  "material_base_colors": {
+    "Prop_pizza_box_paper_dark": [
+      0.36,
+      0.32,
+      0.25
+    ],
+    "Prop_pizza_box_paper": [
+      0.8,
+      0.775,
+      0.7
+    ],
+    "Prop_pizza_box_ink": [
+      0.03,
+      0.035,
+      0.045
+    ],
+    "Prop_pizza_box_cotton_red": [
+      0.42,
+      0.09,
+      0.08
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "9614609a47f03c52152030ebae28ad2ddd709196b80bcd329a40411fcea99c1c",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "披萨盒",
+  "category": "packaging",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.35,
+    "game_longest_dim_m": 0.35,
+    "sourcing_hint": "model ourselves：扁盒 + 盒盖分模槽 + 一角掀起，单壳阶梯实体",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.35,
+    "built_longest_m": 0.3500000238418579,
+    "abs_error_m": 2.384185793236071e-08,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 260,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "paper",
+      "name_zh": "盒盖纸面",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "paper_dark",
+      "name_zh": "盒身纸板芯",
+      "linear_rgb": [
+        0.36,
+        0.32,
+        0.25
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "ink",
+      "name_zh": "分模槽墨线",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.78
+    },
+    {
+      "key": "cotton_red",
+      "name_zh": "红色标签片",
+      "linear_rgb": [
+        0.42,
+        0.09,
+        0.08
+      ],
+      "roughness": 0.9
+    }
+  ],
+  "notes": "One 6-ring stack: 12-point outline (0.350 m square, R 28 mm corners), 1.5 mm-deep moulding groove at z 0.0245-0.0260 painted ink, lid top at 0.039 m.  Vertices above the groove rise up to 6 mm towards +X+Y, so the groove opens into a 6 mm gap at one corner and the lid corner stands clear of the base.  Slots: paper lid, paper_dark base + raw seam inside the lifted corner, ink seam, cotton_red label plate on the +Y wall (0.090 x 0.013 m, 0.5 mm proud, unioned in).  Total 0.350 x 0.350 x 0.045 m.",
+  "build_script": "models/pizza_box.py",
+  "preview": "previews/pizza_box_preview.png",
+  "files": {
+    "pizza_box.fbx": 20876,
+    "pizza_box.glb": 10928,
+    "pizza_box.blend": 487864
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 141711
+}

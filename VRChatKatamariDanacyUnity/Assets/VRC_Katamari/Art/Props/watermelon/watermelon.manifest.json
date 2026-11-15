@@ -95,9 +95,9 @@
   "build_script": "models/watermelon.py",
   "preview": "previews/watermelon_preview.png",
   "files": {
-    "watermelon.fbx": 24780,
+    "watermelon.fbx": 27996,
     "watermelon.glb": 14700,
-    "watermelon.blend": 99524
+    "watermelon.blend": 466256
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 157466
+  "preview_bytes": 182979
 }

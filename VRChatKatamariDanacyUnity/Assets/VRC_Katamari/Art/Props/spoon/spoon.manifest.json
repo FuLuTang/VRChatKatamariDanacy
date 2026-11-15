@@ -79,9 +79,9 @@
   "build_script": "models/spoon.py",
   "preview": "previews/spoon_preview.png",
   "files": {
-    "spoon.fbx": 20044,
+    "spoon.fbx": 21452,
     "spoon.glb": 6236,
-    "spoon.blend": 93629
+    "spoon.blend": 429364
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 73780
+  "preview_bytes": 123950
 }

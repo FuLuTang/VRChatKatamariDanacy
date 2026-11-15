@@ -79,9 +79,9 @@
   "build_script": "models/watering_can.py",
   "preview": "previews/watering_can_preview.png",
   "files": {
-    "watering_can.fbx": 22524,
+    "watering_can.fbx": 22604,
     "watering_can.glb": 18564,
-    "watering_can.blend": 94975
+    "watering_can.blend": 433288
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 116866
+  "preview_bytes": 157807
 }

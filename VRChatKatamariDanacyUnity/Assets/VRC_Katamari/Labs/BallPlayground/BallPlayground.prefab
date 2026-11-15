@@ -80,7 +80,8 @@ MonoBehaviour:
   collisionToCoreRadiusRatio: 1
   semanticDiameterPerCoreDiameter: 1
   contactRadiusWorldM: 0
-  maxItemSizeWorldM: 1
+  maxItemSizeWorldM: 8
+  absorbSizeRatio: 1
   heightFilterHz: 5
   yawFilterHz: 8
   eyeHeightMeters: 1.6
@@ -100,6 +101,7 @@ MonoBehaviour:
   debugTurn: 0
   debugLateral: 0
   debugMenuOpen: 0
+  debugTraceItemId: 
 --- !u!114 &3893912087451765070
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -126,6 +128,8 @@ MonoBehaviour:
   ballVisual: {fileID: 7550638478412948385}
   hudText: {fileID: 9123193832351360225}
   obstacleBoxes: []
+  allowedKinds: []
+  probeProp: {fileID: 0}
   propTotal: 24
   cameraFollow: {fileID: 4415959514640067052}
   cameraOffset: {x: 0, y: 7, z: -9}

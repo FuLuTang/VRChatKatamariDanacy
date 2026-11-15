@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.18028378, g: 0.22571412, b: 0.30692285, a: 1}
+  m_IndirectSpecularColor: {r: 0, g: 0, b: 0, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -431,7 +431,8 @@ MonoBehaviour:
   collisionToCoreRadiusRatio: 1
   semanticDiameterPerCoreDiameter: 1
   contactRadiusWorldM: 0
-  maxItemSizeWorldM: 1
+  maxItemSizeWorldM: 8
+  absorbSizeRatio: 1
   heightFilterHz: 5
   yawFilterHz: 8
   eyeHeightMeters: 1.6
@@ -2438,7 +2439,8 @@ MonoBehaviour:
   collisionToCoreRadiusRatio: 1
   semanticDiameterPerCoreDiameter: 1
   contactRadiusWorldM: 0
-  maxItemSizeWorldM: 1
+  maxItemSizeWorldM: 8
+  absorbSizeRatio: 1
   heightFilterHz: 5
   yawFilterHz: 8
   eyeHeightMeters: 1.6
@@ -4139,7 +4141,8 @@ MonoBehaviour:
   collisionToCoreRadiusRatio: 1
   semanticDiameterPerCoreDiameter: 1
   contactRadiusWorldM: 0
-  maxItemSizeWorldM: 1
+  maxItemSizeWorldM: 8
+  absorbSizeRatio: 1
   heightFilterHz: 5
   yawFilterHz: 8
   eyeHeightMeters: 1.6
@@ -5315,7 +5318,8 @@ MonoBehaviour:
   collisionToCoreRadiusRatio: 1
   semanticDiameterPerCoreDiameter: 1
   contactRadiusWorldM: 0
-  maxItemSizeWorldM: 1
+  maxItemSizeWorldM: 8
+  absorbSizeRatio: 1
   heightFilterHz: 5
   yawFilterHz: 8
   eyeHeightMeters: 1.6

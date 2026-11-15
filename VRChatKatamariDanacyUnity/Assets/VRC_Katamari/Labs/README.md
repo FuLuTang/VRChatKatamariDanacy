@@ -44,7 +44,8 @@
 2. **先编译，再拷贝**：`UdonSharpEditorUtility.CompileAllCsPrograms(true, false)` 必须在任何拷贝之前跑。否则报 `Cannot run serialization on U# behaviour … with outdated behaviour version`。
 3. **建 backing 组件**：同一个 GameObject 上 `AddComponent<UdonBehaviour>()`，再用 `SerializedObject` 写两个**字段**（不是属性）：`programSource` = 该 program asset；`serializedProgramAsset` = `programAsset.SerializedProgramAsset`。
 4. **先填引用，再回写**：proxy 上的 `[SerializeField]` 引用全部设好，再 `UdonSharpEditorUtility.CopyProxyToUdon(proxy)`。
-5. **从 Udon 侧读回验证**：读 backing `UdonBehaviour` 的 `publicVariables`，用 `TryGetVariableValue(string, out object)`。**按参数类型选重载**——只按名字反射会 `AmbiguousMatchException`。
+5. **改过字段就重开场景**：源脚本新增或改名序列化字段之后，`CopyProxyToUdon` **不会**给已经存在的实例补符号（实例变量表是建实例时的快照）。必须存盘、`EditorSceneManager.OpenScene(path)` 重载场景 —— U# 在场景加载时按当前 program 重建实例变量表 —— 再 `CopyProxyToUdon` 一次。完整顺序：**编译 → 存盘 → 重开场景 → `CopyProxyToUdon` → 读回验证**。
+6. **从 Udon 侧读回验证**：读 backing `UdonBehaviour` 的 `publicVariables`，用 `TryGetVariableValue(string, out object)`。**按参数类型选重载**——只按名字反射会 `AmbiguousMatchException`。
 
 > `UdonSharpEditorUtility.ConvertToUdonBehaviours(...)` 在本版本直接抛 `NotImplementedException`，不要用。
 
@@ -59,10 +60,34 @@
 | 编辑器 C# 调 proxy 的 public 方法（如 Play Mode 里 `motor.SetMoveAxes(...)`）对运行中的程序毫无影响 | Udon 状态不在 C# 侧。要驱动就走 Udon 事件，别从编辑器调 proxy 方法 |
 | `programSource = null`，行为静默不跑 | program asset 或 `Assets/SerializedUdonPrograms/` 里的产物没带回仓库 |
 | 视觉球停在作者高度、半个埋进地里 | motor 把**位置**写 `ballPhysicsRoot`、**旋转**写 `ballVisualRollRoot`；只接了 roll root 就没人写位置 |
+| 引用在 Inspector 里接好了，运行时却是 `null`；`CopyProxyToUdon` 有时只丢一句 `outdated behaviour version` | 该字段不在**实例变量表**里（建实例时的快照），`CopyProxyToUdon` 静默跳过它，见下面「两张表」 |
+| 坐下不开始回合（`BallRideStation.roundController` 缺失） | 同上：字段没进实例变量表；而且座位比回合控制器先建，这个引用从最初就没接过 |
+| 同一帧同一输入事件打两次日志，两次状态还不一样 | 同一对象上叠了两份 proxy + backing（给本来就有 backing 的对象又补了一个）；逐对象扫「同一个 program 上 >1 个 `UdonBehaviour`」 |
+| 重新导入/重编后字段还是缺 | 换哪个 API 都补不进已有实例，只能用「存盘 → 重开场景」重建实例表 |
+| 用备份恢复场景文件后，已删除的组件又回来了（如 30 个 `PlaygroundProp` 复活，与 `PickupFieldHost` 同时给球提交同一件） | 备份是更早的场景版本；恢复前先确认备份来源。恢复后读回关键不变量：每物体每 program 最多一个 backing、旧宿主组件数为 0、`motors=1` |
 
 ### 其余几条硬事实
 
-- **层级固定**：`BallPhysicsRoot` → `BallVisualRollRoot` → `CoreMesh` / `AttachmentRoot`。位置与旋转是两个不同的宿主，缺一个就是上面表格最后一行。
+- **两张表，缺字段必须两边都比**：程序侧用 `UdonSharpProgramAsset.SerializedProgramAsset.RetrieveProgram().SymbolTable.GetExportedSymbols()` 取 **program 符号表**（脚本导出了哪些字段）；实例侧用 `UdonBehaviour.publicVariables`（一个 non-public 字段）取**实例变量表**。只看一边会误判「脚本没问题」。导出字段一侧**必须用 `GetExportedSymbols()`**——`GetSymbols()` 会把私有字段和编译器生成的局部符号一起返回，拿来比对会得到满屏假缺失。
+- **实例变量表是快照**：实例建好之后再给脚本加序列化字段，符号不会自己进表。`CompileAllCsPrograms`、`RefreshProgram`、`AssetDatabase.ImportAsset(..., ImportAssetOptions.ForceUpdate)`、删掉重建 program asset（GUID 都不变）、`UpgradeSceneBehaviours` 全都补不进去。
+- **不是修法**：把 proxy 和 backing 删掉再重新加回来，表会变成空表并抛 `Value cannot be null. Parameter name: key`。要修只走「存盘 → 重开场景」。
+- **加新 link 之后要回头扫旧对象**：`BallRideStation.roundController` 一开始就没接，是因为建座位的时候回合控制器还不存在。新增一个引用之后，把所有「本该指向它」的既有对象重新检查一遍。
+
+健康检查三件事（任一不过，按上面的「存盘 → 重开场景」重来）：
+
+```csharp
+// 1) program exported fields
+var spo = (AbstractSerializedUdonProgramAsset)progAsset.GetType().GetProperty("SerializedProgramAsset").GetValue(progAsset);
+var symbols = spo.RetrieveProgram().SymbolTable.GetExportedSymbols();
+// 2) instance variable table
+var pv = typeof(UdonBehaviour).GetField("publicVariables", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(ub);
+// pv.TryGetVariableValue(name, out object v) == false  → instance table lacks the symbol
+// 3) every reference field value non-null; CopyProxyToUdon does not report "outdated"
+```
+
+第 1 步只能用 `GetExportedSymbols()`：`GetSymbols()` 会混进私有字段和编译器生成的局部符号，拿它和实例变量表比对会得到满屏假缺失。
+
+- **层级固定**：`BallPhysicsRoot` → `BallVisualRollRoot` → `CoreMesh` / `AttachmentRoot`。位置与旋转是两个不同的宿主，缺一个就是表格里「视觉球停在作者高度」那一行。
 - **uGUI Button → Udon**：`Button.onClick` 的 persistent listener 指向 `UdonBehaviour.SendCustomEvent`，参数是方法名字符串；编辑器里用 `UnityEventTools.AddStringPersistentListener`（或 `Delegate.CreateDelegate`）绑定，lambda 会被拒（`does not derive from UnityEngine.Object`）。
 - **回仓库清单**：每个 program asset（`.asset` + `.meta`），以及 `Assets/SerializedUdonPrograms/` 下每个新文件（+ `.meta`）。曾经 5 个 program asset 没提交，后来一次 merge 把它们静默抹掉，留下一批 `programSource = null` 的行为。
 - **验证规则**：看渲染结果（`CoreMesh` 的 scale 与 renderer bounds），不要只看 motor 报的数；真实按键输入必须由人试。

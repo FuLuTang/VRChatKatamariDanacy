@@ -130,16 +130,29 @@ namespace VRCKatamari.Tests
         public void RelativeLimitIsTheMinimumOfTheCeilingAndTheProduct()
         {
             float limit;
-            // The full ball (2.20 m) is under the motor's 512 m^3 ceiling, so growth is
-            // never clipped by the ceiling in normal play:
-            // (pi/6) * 2.20^3 / 10 = 5.5753 / 10 = 0.5575 m^3.
-            Assert.IsTrue(PickupAbsorbMath.TryComputeAbsorbVolumeLimit(2.20f, Ratio, 512f,
+            // The full 2.20 m ball's product is (pi/6) * 2.20^3 / 10 = 0.557528 m^3. The
+            // two ceilings below are picked from OPPOSITE sides of that product, so each
+            // assertion can only pass on the min() branch its comment names:
+            //   0.1 < 0.557528  -> the ceiling is the smaller term and must win
+            //   512 > 0.557528  -> the product is the smaller term and must win
+            // This choice is the fix for the earlier version of this case: it asserted
+            // "a ceiling below the product wins" against a 1 m^3 ceiling, but
+            // 1 > 0.557528, so min() returned the product and the assertion was silently
+            // testing the product branch. Nothing about 1 m^3 is wrong in the code - it
+            // simply never reached the branch the comment claimed, which is why picking
+            // the ceiling from the wrong side of the product is the mistake to avoid
+            // here, not a reason to change the implementation.
+            // A ceiling below the product wins. 0.1f comes back bit-for-bit (min() returns
+            // one of its two arguments, it applies no arithmetic to them), so 1e-6 is
+            // checking the branch, not float noise.
+            Assert.IsTrue(PickupAbsorbMath.TryComputeAbsorbVolumeLimit(2.20f, Ratio, 0.1f,
                 out limit));
-            Assert.AreEqual(0.5575f, limit, 1e-3f);
-            // A ceiling below the product wins.
-            Assert.IsTrue(PickupAbsorbMath.TryComputeAbsorbVolumeLimit(2.20f, Ratio, 1f,
-                out limit));
-            Assert.AreEqual(1f, limit, 1e-6f);
+            Assert.AreEqual(0.1f, limit, 1e-6f);
+            // The motor's 512 m^3 ceiling is above the product, so growth is never clipped
+            // by the ceiling in normal play: the answer is the product 0.557528, not 512.
+            Assert.IsTrue(PickupAbsorbMath.TryComputeAbsorbVolumeLimit(2.20f, Ratio,
+                MotorCeilingM3, out limit));
+            Assert.AreEqual(0.55753f, limit, 1e-3f);
             // The start ball (0.29974 m) gives (pi/6) * 0.026930 = 0.014100 m^3, over the
             // ratio 10 = 0.001410 m^3; the same number the growth model calls the start
             // ball's volume (3.4390244 * 0.0041).

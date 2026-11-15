@@ -14,10 +14,10 @@
 
 | # | 位置 | 形态 |
 |---|---|---|
-| 1 | [`layout.json`](../Maps/PicnicLawn/layout.json) `bank.rules.bank_residual_fraction`（L1636） | 作者数据 |
-| 2 | [`KatamariBallMotor.cs`](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/KatamariBallMotor.cs) L116 `bankResidualFraction = 0.25f` | 序列化字段默认值 |
-| 3 | [`round_model.py`](../Gameplay/round_model.py) L128 `bank_residual_fraction: float = 0.25` | 离线模型默认值 |
-| 4 | [`BallMotor/README.md`](../BallMotor/README.md) L181 的“临时数值”表 | 文档复述 |
+| 1 | [`layout.json`](../Maps/PicnicLawn/layout.json) `bank.rules.bank_residual_fraction` | 作者数据 |
+| 2 | [`KatamariBallMotor.cs`](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/KatamariBallMotor.cs) 的 `bankResidualFraction = 0.25f` | 序列化字段默认值 |
+| 3 | [`round_model.py`](../Gameplay/round_model.py) 的 `RoundParams.bank_residual_fraction: float = 0.25` | 离线模型默认值 |
+| 4 | [`BallMotor/README.md`](../BallMotor/README.md) 的“临时数值”表 | 文档复述 |
 | 5 | [`Gameplay/README.md`](../Gameplay/README.md) §2.4 / §7 的正文与参数表 | 文档复述 |
 
 改一处，另外四处**不会报错**，只会安静地变得不对。这不是假设：§0.2 有两个已经发生的实例。
@@ -28,7 +28,7 @@
 
 - [`Gameplay/README.md`](../Gameplay/README.md) §0.2 / §4 与 [`GameModes/README.md`](../GameModes/README.md) §0.2 都写着 `layout.json` = `8218881d…`、`prop_catalog.csv` = `901d0141…`；
 - 磁盘上现在是 `layout.json` = `5b08daf9…`、`prop_catalog.csv` = `01d01418…`；
-- 而关卡文件里的 `map_snapshot.layout_sha256` 是新的，[`validate_levels.py`](../GameModes/validate_levels.py) 第 435-446 行会比对它，所以**门禁是绿的**。
+- 而关卡文件里的 `map_snapshot.layout_sha256` 是新的，[`validate_levels.py`](../GameModes/validate_levels.py) 的 `map_snapshot` sha256 检查会比对它，所以**门禁是绿的**。
 
 结论：手工钉的哈希会烂，机器验的哈希不会。文档里的复述值必须改成“引用真源”，而不是“再抄一遍”。
 
@@ -36,8 +36,8 @@
 
 | 侧 | 公式 | 每确认单位的体积 | 到 2.20 m 需要的确认单位 |
 |---|---|---|---|
-| 离线模型 | `V = V(0.30) + units × ((V(2.20) − V(0.30)) / 1356)`（[`round_model.py`](../Gameplay/round_model.py) L444-458，`units_to_max_diameter` 见 L117） | 0.0041011 m³ | **1356** |
-| 运行时 | `V = baseline + units × cubicMetersPerVolumeUnit`，`baselineVolumeUnits = 1`、`cubicMetersPerVolumeUnit = 0.0141`（motor L95-96）、显示上限 `maxCoreRadiusWorldM = 1.1`（L97） | 0.0141 m³ | **≈394.4** |
+| 离线模型 | `V = V(0.30) + units × ((V(2.20) − V(0.30)) / 1356)`（[`round_model.py`](../Gameplay/round_model.py) 的 `diameter_for_units()`，`units_to_max_diameter` 见 `RoundParams.units_to_max_diameter`） | 0.0041011 m³ | **1356** |
+| 运行时 | `V = baseline + units × cubicMetersPerVolumeUnit`，`KatamariBallMotor.baselineVolumeUnits = 1`、`KatamariBallMotor.cubicMetersPerVolumeUnit = 0.0141`、显示上限 `KatamariBallMotor.maxCoreRadiusWorldM = 1.1` | 0.0141 m³ | **≈394.4** |
 
 于是：
 
@@ -48,8 +48,8 @@
 
 ### 0.3 约束：运行时读不到 JSON
 
-- UdonSharp 运行时**没有**磁盘 JSON、没有 `JsonUtility`（那是编辑器/构建期类）、没有 `List`/`Dictionary`/`LINQ`/`try`；[`CODE_CONVENTIONS.md`](../CODE_CONVENTIONS.md) 第 25-31 行把可用子集写死了，[`AGENTS.md`](../../../AGENTS.md) 也写着“No editor APIs or disk JSON in Udon runtime”。
-- [`02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md) 第 76 行已经给了方向：**“编辑器可使用 JSON/ScriptableObject，构建时烘焙为 Udon 可用数组/引用”**。
+- UdonSharp 运行时**没有**磁盘 JSON、没有 `JsonUtility`（那是编辑器/构建期类）、没有 `List`/`Dictionary`/`LINQ`/`try`；[`CODE_CONVENTIONS.md`](../CODE_CONVENTIONS.md) 的「纯逻辑怎么写」节把可用子集写死了，[`AGENTS.md`](../../../AGENTS.md) 也写着“No editor APIs or disk JSON in Udon runtime”。
+- [`02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md) §4「ItemDefinition」末段已经给了方向：**“编辑器可使用 JSON/ScriptableObject，构建时烘焙为 Udon 可用数组/引用”**。
 - 所以可选形态只有两种：把数**烘焙成序列化字段**（组件/prefab），或**生成 C# 常量**。两者的失效方式完全不同，见 §2。
 
 ### 0.4 本层在球层分工里的位置
@@ -76,8 +76,8 @@
 |---|---|---|---|
 | **地图** | `Docs/Design/Maps/<map_id>/layout.json` | 几何、球径包线 `scale.ball_*`、档位门槛 `item_tier_pickup_diameter_m`、`size_gates`、交分锚点与轮换 `bank.anchors` / `bank.rotation`、`bank.rules.*`（残差/最小兑换门槛——它们已经是该文件里的既有字段，见 §5 步骤 1 的取舍） | 对局时长、PvP 比例、道具时长、运动/跟随调参 |
 | **规则集** | `Docs/config/rulesets/<ruleset_id>.json`（新，见 §3.1） | 按 `ruleset_id` 共享的规则：交分周期、对局时长、PvP 吞噬/重生、道具时长与倍率、吸收比、成长标定、运动/跟随调参、形状常量 | 任何地图几何；任何每关开关 |
-| **关卡** | `Docs/Design/GameModes/Levels/*.json` | **开关与限时**：`time_limit_s`、`quest.objective`、`spawn_id`、`bank.enabled`、`powerups.enabled` | 规则数值——[`GameModes/README.md`](../GameModes/README.md) §4.3 字段表（L444）已经写明 `ruleset_id` 是“引用共享规则集，**关卡不复制这些数字**” |
-| **运行时派生** | 代码里算出来的量 | 起始球径（由体积基线算出 = **0.29974 m**，见 [`BallMotor/README.md`](../BallMotor/README.md) L130）、三尺寸、`growthFraction`、交分后直径、`carried`、确认体积 | 任何作者可调的数 |
+| **关卡** | `Docs/Design/GameModes/Levels/*.json` | **开关与限时**：`time_limit_s`、`quest.objective`、`spawn_id`、`bank.enabled`、`powerups.enabled` | 规则数值——[`GameModes/README.md`](../GameModes/README.md) §4.3 字段表已经写明 `ruleset_id` 是“引用共享规则集，**关卡不复制这些数字**” |
+| **运行时派生** | 代码里算出来的量 | 起始球径（由体积基线算出 = **0.29974 m**，见 [`BallMotor/README.md`](../BallMotor/README.md)「交分」节的「`start` 必须和体积映射同源」条）、三尺寸、`growthFraction`、交分后直径、`carried`、确认体积 | 任何作者可调的数 |
 | **运行时独有** | 代码里的 `const` / 缓冲容量 / 容差 | 结构容量、ε 容差、`fixedStepSeconds`、`stuckTimeoutSeconds` 一类**没有作者数据来源**的实现值 | 设计旋钮 |
 
 规则：**每个参数只属于一个域。** 跨域引用必须走“读那个域的文件”，不得复制值。
@@ -98,7 +98,7 @@
 **硬规矩两条：**
 
 1. 等级的**唯一携带者是真源那一行**（JSON 里的 `evidence` 字段）。文档复述不带等级，只引用；
-2. `[原作确认]`/`[原作强暗示]` 只能来自 Research README 的 C 编号。**没有 Cn 编号的一律降为 `[项目自选]` 或 `[PROVISIONAL]`。** 这一条防的是“文档写着原作确认、JSON 写着 PROVISIONAL”这种自相矛盾——它今天已经存在于 `bank_cycle_s = 60`（`OPEN_DECISIONS` 标“强暗示 C3”，而 `layout.json` L1627 标 `PROVISIONAL_NOT_TESTED`，两者都对，但没人说清哪个是等级）。
+2. `[原作确认]`/`[原作强暗示]` 只能来自 Research README 的 C 编号。**没有 Cn 编号的一律降为 `[项目自选]` 或 `[PROVISIONAL]`。** 这一条防的是“文档写着原作确认、JSON 写着 PROVISIONAL”这种自相矛盾——它今天已经存在于 `bank_cycle_s = 60`（`OPEN_DECISIONS` 标“强暗示 C3”，而 `layout.json` 的 `bank.rotation.status` 标 `PROVISIONAL_NOT_TESTED`，两者都对，但没人说清哪个是等级）。
 
 ### 1.4 参数登记表：一个参数一行
 
@@ -130,7 +130,7 @@
 
 `Tools/rulesbuild/build_rules.py` 读真源 → 写 `Runtime/Rules/KatamariRulesBaked.cs`，里面是 `public const float BankResidualFraction = 0.25f;`，运行时直接读常量。
 
-- **好处**：没有编辑器步骤；没有“字段被手改”这条路径；`const` 在 U# 里合法（`CODE_CONVENTIONS.md` L26 明确允许 `const`）。
+- **好处**：没有编辑器步骤；没有“字段被手改”这条路径；`const` 在 U# 里合法（`CODE_CONVENTIONS.md`「纯逻辑怎么写」的「可以用」行明确允许 `const`）。
 - **坏处（都是结构性的）**：
   1. **每关覆写无法表达**。`const` 是编译期的，一个场景覆盖不了。剧情关要 `bank.enabled=false`、对战关要 180 s，只能靠第二套机制，于是又回到多源；
   2. **改一个数的代价是“重编译 U#”**：Windows 上 `refresh_unity` + U# 全量编译 + `Assets/SerializedUdonPrograms/*.asset` 重写（仓库规则里这些是 tracked，签名噪声要成批提交）。设计者改一个 0.25 → 0.30，要等几分钟并且产生一堆与语义无关的 diff；
@@ -199,7 +199,7 @@
   Assets/VRC_Katamari/Rules/KatamariRules.prefab             ← 场景/球 prefab 引用它
 ```
 
-**为什么载荷放在 `Assets/` 而不是 `Docs/`**：`Docs/` 里的文件 Unity 不当资产，消费方只能 `File.ReadAllText` + 猜仓根（[`PicnicLawnGreyboxBuilder.cs`](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/MapGreybox/PicnicLawnGreyboxBuilder.cs) L1782-1804 就是这么干的）。烘焙器和 EditMode 测试都只要 `AssetDatabase.LoadAssetAtPath<TextAsset>` 就能拿到同一份字节，不需要任何路径算术，换检出目录也不会坏。**生成物进 `Assets/` 不是新事**：`Assets/SerializedUdonPrograms/*.asset` 一直是生成且提交的。
+**为什么载荷放在 `Assets/` 而不是 `Docs/`**：`Docs/` 里的文件 Unity 不当资产，消费方只能 `File.ReadAllText` + 猜仓根（[`PicnicLawnGreyboxBuilder.cs`](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/MapGreybox/PicnicLawnGreyboxBuilder.cs) 的 `ResolvePayloadPath()` 逐级上探仓根、再用 `File.ReadAllText` 读载荷，就是这么干的）。烘焙器和 EditMode 测试都只要 `AssetDatabase.LoadAssetAtPath<TextAsset>` 就能拿到同一份字节，不需要任何路径算术，换检出目录也不会坏。**生成物进 `Assets/` 不是新事**：`Assets/SerializedUdonPrograms/*.asset` 一直是生成且提交的。
 
 **为什么 DTO 放 Editor 程序集**：`GreyboxPayload.cs` 就是 Editor 程序集里的 `[Serializable]` 镜像，运行时看不见它。运行时只认 `KatamariRules` 的序列化字段——**载荷的形状永远不会泄漏进 U#**。
 
@@ -242,7 +242,7 @@
 ```
 
 - `baked` 只放运行时真的读的字段；
-- `derived` 是算出来的，**不手填**（`start_diameter_m` 必须与 `SizeModelMath` 的输出一致，否则 [`BallMotor/README.md`](../BallMotor/README.md) L130 那条“start 必须和体积映射同源”就破了）；
+- `derived` 是算出来的，**不手填**（`start_diameter_m` 必须与 `SizeModelMath` 的输出一致，否则 [`BallMotor/README.md`](../BallMotor/README.md)「交分」节那条「`start` 必须和体积映射同源」就破了）；
 - `known_divergences` 是**显式登记的分歧**，不是错误。它必须存在，因为把一个已知分歧藏起来比登记它危险得多（§6.5 与 §10）。
 
 ### 3.3 谁在什么时候跑什么
@@ -258,13 +258,13 @@
 
 ### 3.4 Python 模型读同一份数
 
-`round_model.py` **已经**直接读 `layout.json`（L386-404 `load_map()`，而且 L198-204 明确说“没有内置快照”）。需要新增的只有规则域：
+`round_model.py` **已经**直接读 `layout.json`（`load_map()`，而且模块顶部「There is deliberately no default map constant」那段注释明确说没有内置快照）。需要新增的只有规则域：
 
 ```python
 RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json + layout.json 的 scale/bank
 ```
 
-- 现状的 dataclass 默认值（L110-157）**保留**，但降级为“测试/场景用”；
+- 现状的 `RoundParams` dataclass 默认值**保留**，但降级为“测试/场景用”；
 - `from_ruleset()` 是唯一“与运行时同源”的构造路径；
 - 测试断言 `from_ruleset()` 与 `RoundParams()` 逐字段相等（除 `profiles`、`dt_s`），这样默认值不会偷偷变成第二真源。
 
@@ -287,11 +287,11 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
    - 载荷有、表里没有 → “生成器写了一个没人认领的字段”；
    - 表里有、载荷没有 → “登记了但没烘进去”。
 3. **`test_no_source_value_is_unbaked`** —— 遍历 `rulesets/*.json` 的**所有数值叶子**，凡是不在 `FIELD_TABLE` 也不在 `MODEL_ONLY` / `STRUCTURAL` 白名单里的，失败。**这条是真正的漂移守卫**：任何人往规则集里加一个数，必须当场决定它属于“烘焙 / 仅模型 / 结构常量”，不能含糊地放着。
-4. **`test_payload_pins_live_hashes`** —— `source_sha256` 必须等于磁盘上 `layout.json` 与规则集文件的实际 sha256。地图一改，这里立刻红（和 `validate_levels.py` 的 `map_snapshot` 同一招，见 [`validate_levels.py`](../GameModes/validate_levels.py) L435-446）。
+4. **`test_payload_pins_live_hashes`** —— `source_sha256` 必须等于磁盘上 `layout.json` 与规则集文件的实际 sha256。地图一改，这里立刻红（和 `validate_levels.py` 的 `map_snapshot` 同一招，见 [`validate_levels.py`](../GameModes/validate_levels.py) 的 `map_snapshot` sha256 检查）。
 
 再加一个**不需要 Unity 就能抓住 C# 常量**的断言（同文件）：
 
-5. **`test_structural_constants_match_runtime_source`** —— 用正则从源码里读出 `RadialProxyMath.cs:57` 的 `DirectionCount = 32` 与 `:60` 的 `MaxExtremeCandidates = 4`，与规则集 `shape.directionSamples` / `shape.maximumExtraExtremePoints` 比。这条专门钉住今天真实存在的一处“数据 ↔ 运行时”重复（§7 表 D 组），成本是两次 `re.search`。
+5. **`test_structural_constants_match_runtime_source`** —— 用正则从源码里读出 `RadialProxyMath.DirectionCount = 32` 与 `RadialProxyMath.MaxExtremeCandidates = 4`，与规则集 `shape.directionSamples` / `shape.maximumExtraExtremePoints` 比。这条专门钉住今天真实存在的一处“数据 ↔ 运行时”重复（§7 表 D 组），成本是两次 `re.search`。
 
 ### 4.2 第 2 层：载荷 → prefab 字段（C#，`Assets/VRC_Katamari/Tests/EditMode/`）
 
@@ -316,7 +316,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 ### 4.3 第 3 层：版本钉（跨文件，可选但推荐）
 
 - 载荷里 `source_sha256` 已覆盖“真源 → 载荷”；
-- 关卡侧建议在 `map_snapshot` 旁加 `ruleset_sha256`，让“这一关是按哪版规则设计的”也可验。**这需要改 `Docs/Design/GameModes/` 的 schema 与 `validate_levels.py`，属于 GameModes owner**，本文只登记需求，不代做。今天 `ruleset_id` 只过一条正则（[`validate_levels.py`](../GameModes/validate_levels.py) L357-358），**不解析到任何文件**——这是现存缺口。
+- 关卡侧建议在 `map_snapshot` 旁加 `ruleset_sha256`，让“这一关是按哪版规则设计的”也可验。**这需要改 `Docs/Design/GameModes/` 的 schema 与 `validate_levels.py`，属于 GameModes owner**，本文只登记需求，不代做。今天 `ruleset_id` 只过一条正则（[`validate_levels.py`](../GameModes/validate_levels.py) 的 `ID_TOKEN` 正则检查），**不解析到任何文件**——这是现存缺口。
 
 ### 4.4 为什么不用“跑一遍看数字对不对”
 
@@ -335,15 +335,15 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 ### 步骤 1 —— 建规则集镜像（零消费方）
 
 - 新增 `Docs/config/rulesets/prototype_defaults_v0_3.json`：把下列**现有值逐字搬入**（不改值，只搬家 + 补 `evidence` / `unit` / `runtime_field` / `consumer` 元数据）：
-  - [`prototype_defaults.json`](../../config/prototype_defaults.json) 的 `match.durationSeconds`(L9)、`pvp.*`(L15-17)、`powerups.*`(L20-24)、`shape.*`(L27-28)；
-  - `bank.residual_fraction` / `bank.min_conversion_diameter_m`：**只写引用条目**（`"source": "layout.bank.rules.bank_residual_fraction"`），不写值——它们留在 `layout.json`（L1636-1637），规则集不复制，见下方取舍；
-  - `growth.units_to_max_diameter` 1356、`absorb.size_ratio` 1.0（值取自 `round_model.py` L117-119）；
-  - `motion.*` 8 个（值取自 motor L76-83）、`follow_rig.*`（2 个滤波 L124-125 + 眼点系数与三条护栏 L137-143）。
+  - [`prototype_defaults.json`](../../config/prototype_defaults.json) 的 `match.durationSeconds`、`pvp.*`、`powerups.*`、`shape.*`；
+  - `bank.residual_fraction` / `bank.min_conversion_diameter_m`：**只写引用条目**（`"source": "layout.bank.rules.bank_residual_fraction"`），不写值——它们留在 `layout.json` 的 `bank.rules.bank_residual_fraction` / `bank_min_conversion_diameter_m`，规则集不复制，见下方取舍；
+  - `growth.units_to_max_diameter` 1356、`absorb.size_ratio` 1.0（值取自 `round_model.py` 的 `RoundParams.units_to_max_diameter` / `RoundParams.absorb_size_ratio`）；
+  - `motion.*` 8 个（值取自 `KatamariBallMotor` 的 8 个运动 `[SerializeField]`：`maxSpeedMps` … `growthTurnFactor`）、`follow_rig.*`（`heightFilterHz` / `yawFilterHz` 两个滤波 + 四个眼点系数与三条护栏）。
 - 新增 `Docs/tests/test_rules.py`，**只**跑一条断言：镜像值 == 现存副本值（正则读 motor/`ball_motion.py`，`json.load` 读另两个）。这条断言的作用是把“27 个参数现在写在哪”变成可执行的事实，而不是本文的一段回忆。
 - **仍然成立**：运行时、模型、地图、关卡一个字都没变；游戏行为 0 变化；Unity 不需要打开。
 - **验证**：`python3 -m unittest discover -s Docs/tests`。
 
-> **取舍（必须记下来）**：`bank.rules.bank_residual_fraction` / `bank_min_conversion_diameter_m` 现在是 `layout.json` 的字段，且被 `GreyboxPayload` 的 `GreyboxBankRotation` 消费（`layout.json` L1633 的 note 就是为此保留一个兼容字段）。**本次不把它们搬去规则集**——它们不是地图几何，但搬它们要改地图 schema、`validate_map.py`、`GreyboxPayload.cs`，而地图此刻正被另一位负责人编辑。规则集里对它们只**引用**（`"source": "layout.bank.rules"`），不复制值。等地图 owner 完成当前轮次后再评估是否合并（§10 未决 2）。
+> **取舍（必须记下来）**：`bank.rules.bank_residual_fraction` / `bank_min_conversion_diameter_m` 现在是 `layout.json` 的字段，且被 `GreyboxPayload` 的 `GreyboxBankRotation` 消费（`layout.json` 的 `bank.rules.bank_resets_ball_to_start_size_note` 就是为此保留一个兼容字段）。**本次不把它们搬去规则集**——它们不是地图几何，但搬它们要改地图 schema、`validate_map.py`、`GreyboxPayload.cs`，而地图此刻正被另一位负责人编辑。规则集里对它们只**引用**（`"source": "layout.bank.rules"`），不复制值。等地图 owner 完成当前轮次后再评估是否合并（§10 未决 2）。
 
 ### 步骤 2 —— 模型改成从规则集构造
 
@@ -373,7 +373,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 ### 步骤 5 —— 切换消费方（**唯一的风险步**）
 
 - 改 `KatamariBallMotor.cs`：
-  - 删调参字段：L76-83（8 个运动）、L124-125 与 L137-143（2 个滤波 + 7 个眼点/护栏）、L95-99（2 个尺寸输入 + 2 个比值）、L103（`maxItemSizeWorldM`）、L116-117（2 个交分）；
+  - 删调参字段：8 个运动（`maxSpeedMps` … `growthTurnFactor`）、2 个滤波（`heightFilterHz` / `yawFilterHz`）与 7 个眼点/护栏（`eyeBaseUpMeters` … `eyeMaxBackM`）、2 个尺寸输入（`baselineVolumeUnits` / `cubicMetersPerVolumeUnit`）与 2 个比值（`collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter`）、2 个交分（`bankResidualFraction` / `minConversionDiameterWorldM`）；注意 `maxItemSizeWorldM` 已不在 motor 上（吸收门改成体积门 `maxItemVolumeWorldM3` / `absorbVolumeRatio`）；
   - 加 `[SerializeField] private KatamariRules rules;`；
   - 在 `Start()` 里把这些值**拷进带前缀的私有字段**（`localMaxSpeedMps`、`localBankResidualFraction` …），之后每帧照旧用私有字段（跨 Behaviour 字段访问在 U# 里有分发开销，不进每帧路径）；**前缀是必须的**，否则 §4.2 测试 3 无法区分“从规则组件拷来的副本”和“重新长出来的第二真源”。
 - 同一次提交里加 §4.2 的测试 3。
@@ -384,8 +384,8 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 ### 步骤 6 —— 删除重复与搬迁原型配置（跨 owner）
 
-- 删除 `Docs/config/prototype_defaults.json`（规则集里用 `supersedes` 指回它），更新 6 处引用：
-  `Docs/00_PACKAGE_ENTRY.md:32`、`Docs/tests/test_validate_plan.py:104`、`Docs/Design/Maps/PicnicLawn/README.md:20`、`Docs/Design/Maps/ToyRoom/README.md:21`、`Docs/Design/Gameplay/round_model.py:104`、`Docs/Design/Gameplay/README.md:3`。
+- 删除 `Docs/config/prototype_defaults.json`（规则集里用 `supersedes` 指回它），更新 6 个文件里的引用（`grep -rn prototype_defaults` 复核）：
+  `Docs/00_PACKAGE_ENTRY.md`、`Docs/tests/test_validate_plan.py`、`Docs/Design/Maps/PicnicLawn/README.md`、`Docs/Design/Maps/ToyRoom/README.md`、`Docs/Design/Gameplay/round_model.py`、`Docs/Design/Gameplay/README.md`。
 - `Docs/Design/GameModes/`（**另一个 owner**）：`validate_levels.py` 让 `ruleset_id` 解析到 `Docs/config/rulesets/<id>.json`；可选加 `ruleset_sha256`（§4.3）。
 - 删除 `ball_motion.py` / `follow_rig.py` 里与规则集重复的默认值，改为从 `from_ruleset()` 拿。
 - **仍然成立**：`Docs/tests/test_levels.py` 的 hash 期望要同步更新；`test_validate_plan.py` 的 config 断言改读规则集。
@@ -395,10 +395,10 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 把 §0.1 里那类“文档复述”改成引用（**只改文字，不改数**）：
 
-- [`BallMotor/README.md`](../BallMotor/README.md) L176-190 的“临时数值”表；
-- [`BallMotion/README.md`](../BallMotion/README.md) L34-39；
+- [`BallMotor/README.md`](../BallMotor/README.md) 的「临时数值」表；
+- [`BallMotion/README.md`](../BallMotion/README.md) 的「参数单位表」；
 - [`Gameplay/README.md`](../Gameplay/README.md) §7 的参数表；
-- [`PicnicLawn/README.md`](../Maps/PicnicLawn/README.md) L79-81 的球径包线/档位表。
+- [`PicnicLawn/README.md`](../Maps/PicnicLawn/README.md) §2「比例与常量」的球径包线/档位表。
 
 写法固定为：`值见 <真源>.<路径>（本文不再复述）`。**这一步会让 §0.2 的过期哈希一起消失**，因为不再有第二个地方钉版本。
 
@@ -420,36 +420,36 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 ### 6.2 每玩家（运行时状态，永不烘焙）
 
-`PlayerProfile.speed_factor` / `absorb_factor` / `scenario_start_units`（`round_model.py` L85-97）、玩家数量、出生点分配、槽位、`protectedUntil` 一类计时。模型自己的注释（L88-91）已经写明 `scenario_start_units` “never a game parameter”。烘焙它们等于把测试夹具写进产品。
+`PlayerProfile.speed_factor` / `absorb_factor` / `scenario_start_units`（`round_model.py` 的 `PlayerProfile`）、玩家数量、出生点分配、槽位、`protectedUntil` 一类计时。`PlayerProfile` 的 docstring 已经写明 `scenario_start_units` “never a game parameter”。烘焙它们等于把测试夹具写进产品。
 
 ### 6.3 运行时派生（算出来，不烘焙）
 
-- **起始球径**：由 `baselineVolumeUnits` + `cubicMetersPerVolumeUnit` 算出 **0.29974 m**（`BallMotor/README.md` L130）。把 0.30 烘成一个字段会立刻产生第二个“起始尺寸”，而 L130 那条“`start` 必须和体积映射同源”就是防这个的；
-- 三个尺寸（`SizeModelMath.TryDerive` 输出）、`growthFraction`（motor L781）、`post` 交分直径与单位（`BankShrinkMath`）、`carried`（`TryCarriedVolumeUnits`）、`confirmed = unbanked + carried`（motor L757 `RecomputeConfirmedAndSize`）；
-- 当前激活的交分锚点下标：由 `(roundStartClock + t) / period` 算，`activate_at_s`（`layout.json` L1620）是它的**人类可读展开**，不是第二个真源；
+- **起始球径**：由 `baselineVolumeUnits` + `cubicMetersPerVolumeUnit` 算出 **0.29974 m**（`BallMotor/README.md`「交分」节）。把 0.30 烘成一个字段会立刻产生第二个“起始尺寸”，而那条「`start` 必须和体积映射同源」就是防这个的；
+- 三个尺寸（`SizeModelMath.TryDerive` 输出）、`growthFraction`（`KatamariBallMotor.DeriveGrowthFraction`）、`post` 交分直径与单位（`BankShrinkMath`）、`carried`（`TryCarriedVolumeUnits`）、`confirmed = unbanked + carried`（`KatamariBallMotor.RecomputeConfirmedAndSize`）；
+- 当前激活的交分锚点下标：由 `(roundStartClock + t) / period` 算，`activate_at_s`（`layout.json` 的 `bank.rotation.activate_at_s`）是它的**人类可读展开**，不是第二个真源；
 - `BallMotionMath` 的 `growthFraction` 降额结果。
 
 ### 6.4 结构容量、编译期常量与只属于运行时的标量（不进载荷）
 
-`MaxPlaneCount = 8` / `MaxBoxCount = 8` / `ContactCapacity = 4` / `PendingCandidateCapacity = 4`（motor L225-247）、`PlayerCapacity = 1` / `CommitCapacity = 256` / `ClaimCapacity = 8` / `BankRequestCapacity = 8`（L173-177）、`AbsorbedEventCapacity = 16`（L267）、`SweepMath.ProjectionPasses = 4`（L52）、`RadialProxyMath.DirectionCount = 32` / `MaxExtremeCandidates = 4`（L57/L60）。
+`KatamariBallMotor.MaxPlaneCount = 8` / `MaxBoxCount = 8` / `ContactCapacity = 4` / `PendingCandidateCapacity = 4`、`PlayerCapacity = 1` / `CommitCapacity = 256` / `ClaimCapacity = 8` / `BankRequestCapacity = 8`、`AbsorbedEventCapacity = 16`、`SweepMath.ProjectionPasses = 4`、`RadialProxyMath.DirectionCount = 32` / `MaxExtremeCandidates = 4`。
 
 理由：这些是**缓冲形状**，改一次要重编译并重建所有预分配数组，不是“调参”。把 `directionSamples` 做成运行时可改的字段，会给出“改了但没生效”的假象。
 
-**但其中两个与数据文件重复**：`prototype_defaults.json` L27-28 的 `shape.directionSamples / maximumExtraExtremePoints` 就是 `DirectionCount / MaxExtremeCandidates`。它们的正确处理是**等价测试**（§4.1 第 5 条），不是烘焙；数据文件里那两行保留为“结构常量的可读声明”。
+**但其中两个与数据文件重复**：`prototype_defaults.json` 的 `shape.directionSamples` / `maximumExtraExtremePoints` 就是 `DirectionCount / MaxExtremeCandidates`。它们的正确处理是**等价测试**（§4.1 第 5 条），不是烘焙；数据文件里那两行保留为“结构常量的可读声明”。
 
 **只属于运行时的标量**（没有作者数据来源，`[实现常量]`；改它们只需要改字段，不需要动规则集）：
 
 | 字段 | 当前值 | 位置 | 为什么不是设计值 |
 |---|---:|---|---|
-| `fixedStepSeconds` / `maxStepsPerFrame` | 0.02 s / 5 | motor L71-72 | 走 [`BallMotor/README.md`](../BallMotor/README.md) L91 的“临时值，不是实测固定频率”；最终应改 `FixedUpdate` 或可配置频率 |
-| `stuckTimeoutSeconds` | 1.5 s | motor L73 | 本层临时恢复策略，不是规则 |
-| `maxLiftPerStep` / `maxDropPerStep` | 0.1 / 0.1 m | motor L88-89 | 贴地容差；无实测依据 |
-| `separationEpsilon` | 0.001 | motor L92 | 数值容差 |
-| `maxRollDisplacementM` | 0.5 m | motor L113 | 视觉滚动钳位，不是玩法 |
-| `contactRadiusWorldM` | 0 | motor L102 | **项目决定，不是占位**：容差已由物件包围球代理提供，0＝球须实质接触、无额外手感窗口；reach vs 边长算例见 [`OPEN_DECISIONS.md`](../../OPEN_DECISIONS.md) (i) 与 [`PickupAbsorb/README.md`](../PickupAbsorb/README.md) §1–2 |
-| `collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` | 1 / 1 | motor L98-99 | 今天让三个尺寸重合，只为让现有场景跑起来；[`02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md) §1（L15-21）要求它们分开。**这是场景接线缺口，不是参数值问题**，不要在这里“调参”解决 |
-| `eyeUpMinMeters` / `eyeUpMaxMeters` / `eyeMaxBackM` | 0.1 / 8 / 8 m | motor L139-140、L143 | 护栏，不是舒适阈值：钳的是**离球心**的高度与后退量，随半径走（[`BallMotor/README.md`](../BallMotor/README.md) 的「跟随架」护栏段） |
-| `ControlIntentMath.DefaultDebounceSeconds` | 0.2 s | `ControlIntentMath.cs:130` | 输入去抖的实现常量；若以后变成体验旋钮，必须整条搬进规则集 |
+| `fixedStepSeconds` / `maxStepsPerFrame` | 0.02 s / 5 | `KatamariBallMotor` | 走 [`BallMotor/README.md`](../BallMotor/README.md) 里“临时值，不是实测固定频率”那句；最终应改 `FixedUpdate` 或可配置频率 |
+| `stuckTimeoutSeconds` | 1.5 s | `KatamariBallMotor` | 本层临时恢复策略，不是规则 |
+| `maxLiftPerStep` / `maxDropPerStep` | 0.1 / 0.1 m | `KatamariBallMotor` | 贴地容差；无实测依据 |
+| `separationEpsilon` | 0.001 | `KatamariBallMotor` | 数值容差 |
+| `maxRollDisplacementM` | 0.5 m | `KatamariBallMotor` | 视觉滚动钳位，不是玩法 |
+| `contactRadiusWorldM` | 0 | `KatamariBallMotor` | **项目决定，不是占位**：容差已由物件包围球代理提供，0＝球须实质接触、无额外手感窗口；reach vs 边长算例见 [`OPEN_DECISIONS.md`](../../OPEN_DECISIONS.md) (i) 与 [`PickupAbsorb/README.md`](../PickupAbsorb/README.md) §1–2 |
+| `collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` | 1 / 1 | `KatamariBallMotor` | 今天让三个尺寸重合，只为让现有场景跑起来；[`02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md) §1 要求它们分开。**这是场景接线缺口，不是参数值问题**，不要在这里“调参”解决 |
+| `eyeUpMinMeters` / `eyeUpMaxMeters` / `eyeMaxBackM` | 0.1 / 8 / 8 m | `KatamariBallMotor` | 护栏，不是舒适阈值：钳的是**离球心**的高度与后退量，随半径走（[`BallMotor/README.md`](../BallMotor/README.md) 的「跟随架」护栏段） |
+| `ControlIntentMath.DefaultDebounceSeconds` | 0.2 s | `ControlIntentMath` | 输入去抖的实现常量；若以后变成体验旋钮，必须整条搬进规则集 |
 
 这些值**不进载荷**，理由是它们没有“作者改一个数、游戏应该跟着变”的语义。（顺带核对过：本代码库**没有** lookahead / 前瞻类常量——`grep -rn lookahead` 在 `Runtime/` 与 `Docs/Design/` 下为零；语义上最接近的是 `maxRollDisplacementM` 与 `stuckTimeoutSeconds`，两者都已在表中。）反过来说：**只要某个运行时量开始有人想按关卡调，它就必须整条搬进规则集**，而不是在 Inspector 上就地改——那会重新打开第二个真源。
 
@@ -495,29 +495,29 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 | # | 参数 | 机器可读副本（file:line） | 份数 | 应交真源 |
 |---|---|---|---|---|
-| 1 | 起始球径 0.30 m | `layout.json:21`、`round_model.py:113`（运行时由 `motor:95-96` 派生为 0.29974） | 2 | layout |
-| 2 | 最大球径 2.20 m | `layout.json:22`、`round_model.py:114`、`motor:97`（`maxCoreRadiusWorldM=1.1`，半径制） | 3 | layout |
-| 3 | 交分残差 `bank_residual_fraction` | `layout.json:1636`、`motor:116`、`round_model.py:128` | 3 | layout |
-| 4 | 交分最小球径 0.55 m | `layout.json:1637`、`motor:117`、`round_model.py:131` | 3 | layout |
-| 5 | 交分轮换周期 60 s | `layout.json:76`、`layout.json:1618`、`round_model.py:121` | 3 | layout |
-| 6 | 交分预告 8 s | `layout.json:77`、`layout.json:1619` | 2 | layout |
-| 7 | 交分锚点数 4 | `layout.json:75`、`layout.json` `anchors` 长度（L1537 起，`activate_at_s` L1620 是其展开） | 2 | layout |
+| 1 | 起始球径 0.30 m | `layout.json` `scale.ball_start_collision_diameter_m`、`round_model.py` `RoundParams.start_diameter_m`（运行时由 `KatamariBallMotor.baselineVolumeUnits` / `cubicMetersPerVolumeUnit` 派生为 0.29974） | 2 | layout |
+| 2 | 最大球径 2.20 m | `layout.json` `scale.ball_max_collision_diameter_m`、`round_model.py` `RoundParams.max_diameter_m`、`KatamariBallMotor.maxCoreRadiusWorldM`（=1.1，半径制） | 3 | layout |
+| 3 | 交分残差 `bank_residual_fraction` | `layout.json` `bank.rules.bank_residual_fraction`、`KatamariBallMotor.bankResidualFraction`、`round_model.py` `RoundParams.bank_residual_fraction` | 3 | layout |
+| 4 | 交分最小球径 0.55 m | `layout.json` `bank.rules.bank_min_conversion_diameter_m`、`KatamariBallMotor.minConversionDiameterWorldM`、`round_model.py` `RoundParams.min_bank_diameter_m` | 3 | layout |
+| 5 | 交分轮换周期 60 s | `layout.json` `scale.bank_anchor_period_s`、`layout.json` `bank.rotation.period_s`、`round_model.py` `RoundParams.bank_cycle_s` | 3 | layout |
+| 6 | 交分预告 8 s | `layout.json` `scale.bank_warning_s`、`layout.json` `bank.rotation.warning_s` | 2 | layout |
+| 7 | 交分锚点数 4 | `layout.json` `scale.bank_anchor_count`、`layout.json` 的 `bank.anchors` 长度（`bank.rotation.activate_at_s` 是其展开） | 2 | layout |
 
 **B 组 运动与跟随**（表内 `README.md` = `Docs/Design/BallMotion/README.md`）
 
 | # | 参数 | 机器可读副本 | 份数 | 应交真源 |
 |---|---|---|---|---|
-| 8 | `max_speed_mps` 4.0 | `BallMotion/README.md:34`、`ball_motion.py:35`、`motor:76` | 3 | 规则集 |
-| 9 | `acceleration_mps2` 5.0 | `README.md:35`、`ball_motion.py:36`、`motor:77` | 3 | 规则集 |
-| 10 | `braking_mps2` 8.0 | `README.md:35`、`ball_motion.py:37`、`motor:78` | 3 | 规则集 |
-| 11 | `friction_per_s` 1.2 | `README.md:36`、`ball_motion.py:38`、`motor:79` | 3 | 规则集 |
-| 12 | `turn_rate_degps` 110 | `README.md:37`、`ball_motion.py:39`、`motor:80` | 3 | 规则集 |
-| 13 | `max_lateral_mps` 1.2 | `README.md:38`、`ball_motion.py:40`、`motor:81` | 3 | 规则集 |
-| 14 | `growth_speed_factor` 0.25 | `ball_motion.py:41`、`motor:82` | 2 | 规则集 |
-| 15 | `growth_turn_factor` 0.35 | `ball_motion.py:42`、`motor:83` | 2 | 规则集 |
-| 16 | 眼点几何 `eyeBaseUpMeters` 0.55 / `eyeUpPerRadius` 2.4 / `eyeBaseBackMeters` 0.75 / `eyeBackPerRadius` 2.2（2026-11-15 取代 `eye_height_m` 1.6） | `motor:137-138、141-142` | 1 | 规则集 |
-| 17 | `height_filter_hz` 5.0 | `follow_rig.py:212`、`motor:124` | 2 | 规则集 |
-| 18 | `yaw_filter_hz` 8.0 | `follow_rig.py:212`、`motor:125` | 2 | 规则集 |
+| 8 | `max_speed_mps` 4.0 | `BallMotion/README.md`「参数单位表」、`ball_motion.py` `MotionConfig.max_speed_mps`、`KatamariBallMotor.maxSpeedMps` | 3 | 规则集 |
+| 9 | `acceleration_mps2` 5.0 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.acceleration_mps2`、`KatamariBallMotor.accelerationMps2` | 3 | 规则集 |
+| 10 | `braking_mps2` 8.0 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.braking_mps2`、`KatamariBallMotor.brakingMps2` | 3 | 规则集 |
+| 11 | `friction_per_s` 1.2 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.friction_per_s`、`KatamariBallMotor.frictionPerSecond` | 3 | 规则集 |
+| 12 | `turn_rate_degps` 110 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.turn_rate_degps`、`KatamariBallMotor.turnRateDegreesPerSecond` | 3 | 规则集 |
+| 13 | `max_lateral_mps` 1.2 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.max_lateral_mps`、`KatamariBallMotor.maxLateralMps` | 3 | 规则集 |
+| 14 | `growth_speed_factor` 0.25 | `ball_motion.py` `MotionConfig.growth_speed_factor`、`KatamariBallMotor.growthSpeedFactor` | 2 | 规则集 |
+| 15 | `growth_turn_factor` 0.35 | `ball_motion.py` `MotionConfig.growth_turn_factor`、`KatamariBallMotor.growthTurnFactor` | 2 | 规则集 |
+| 16 | 眼点几何 `eyeBaseUpMeters` 0.55 / `eyeUpPerRadius` 2.4 / `eyeBaseBackMeters` 0.75 / `eyeBackPerRadius` 2.2（2026-11-15 取代 `eye_height_m` 1.6） | `KatamariBallMotor.eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeBaseBackMeters` / `eyeBackPerRadius` | 1 | 规则集 |
+| 17 | `height_filter_hz` 5.0 | `follow_rig.py` `FollowRig.height_filter_hz` 默认值、`KatamariBallMotor.heightFilterHz` | 2 | 规则集 |
+| 18 | `yaw_filter_hz` 8.0 | `follow_rig.py` `FollowRig.yaw_filter_hz` 默认值、`KatamariBallMotor.yawFilterHz` | 2 | 规则集 |
 
 第 16 行 2026-11-15 换了对象：眼点从「离球心常量眼高 `eye_height_m`」改成「球后上方、两项随半径线性」，运行时的唯一副本就是 motor 的 `eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeBaseBackMeters` / `eyeBackPerRadius`（三条护栏仍有各自副本，见 §6.4 表）。Python 孪生 `follow_rig.py` 现在把 7 个系数**当参数收**、不自带默认值，所以它不再是这组数的副本。T46 宿主草稿里的旧 `FollowRig` 类与 `eye_height_m = 1.6` 已于 2026-11-15 随 `BallMotion: delete the second follow-rig model` 一并删除；`Docs/Design/BallMotion/ball_motion.py` 现在只剩运动积分，不含眼高，因此第 17/18 行也少了「BallMotion 宿主草稿」那一份副本，`height_filter_hz` / `yaw_filter_hz` 只剩 `follow_rig.py`（5.0 / 8.0 的宿主默认值）与 motor 两处。
 
@@ -525,22 +525,22 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 | # | 参数 | 机器可读副本 | 份数 | 应交真源 |
 |---|---|---|---|---|
-| 19 | `durationSeconds` 180 | `prototype_defaults.json:9`、`round_model.py:110` | 2 | 规则集 |
-| 20 | `swallowDiameterRatio` 1.35 | `prototype_defaults.json:15`、`round_model.py:141` | 2 | 规则集 |
-| 21 | `respawnDelaySeconds` 3 | `prototype_defaults.json:16`、`round_model.py:139` | 2 | 规则集 |
-| 22 | `respawnProtectionSeconds` 2 | `prototype_defaults.json:17`、`round_model.py:140` | 2 | 规则集 |
-| 23 | `magnetDurationSeconds` 4 | `prototype_defaults.json:22`、`round_model.py:145` | 2 | 规则集 |
-| 24 | `rocketDurationSeconds` 2.5 | `prototype_defaults.json:23`、`round_model.py:147` | 2 | 规则集 |
-| 25 | `rocketSpeedMultiplier` 1.5 | `prototype_defaults.json:24`、`round_model.py:148` | 2 | 规则集 |
+| 19 | `durationSeconds` 180 | `prototype_defaults.json` `match.durationSeconds`、`round_model.py` `RoundParams.duration_s` | 2 | 规则集 |
+| 20 | `swallowDiameterRatio` 1.35 | `prototype_defaults.json` `pvp.swallowDiameterRatio`、`round_model.py` `RoundParams.swallow_diameter_ratio` | 2 | 规则集 |
+| 21 | `respawnDelaySeconds` 3 | `prototype_defaults.json` `pvp.respawnDelaySeconds`、`round_model.py` `RoundParams.respawn_delay_s` | 2 | 规则集 |
+| 22 | `respawnProtectionSeconds` 2 | `prototype_defaults.json` `pvp.respawnProtectionSeconds`、`round_model.py` `RoundParams.respawn_protection_s` | 2 | 规则集 |
+| 23 | `magnetDurationSeconds` 4 | `prototype_defaults.json` `powerups.magnetDurationSeconds`、`round_model.py` `RoundParams.magnet_duration_s` | 2 | 规则集 |
+| 24 | `rocketDurationSeconds` 2.5 | `prototype_defaults.json` `powerups.rocketDurationSeconds`、`round_model.py` `RoundParams.rocket_duration_s` | 2 | 规则集 |
+| 25 | `rocketSpeedMultiplier` 1.5 | `prototype_defaults.json` `powerups.rocketSpeedMultiplier`、`round_model.py` `RoundParams.rocket_speed_multiplier` | 2 | 规则集 |
 
 **D 组 形状常量**（数据 ↔ 运行时 `const`）
 
 | # | 参数 | 机器可读副本 | 份数 | 处理 |
 |---|---|---|---|---|
-| 26 | `directionSamples` 32 | `prototype_defaults.json:27`、`RadialProxyMath.cs:57` | 2 | 不烘焙，用 §4.1-5 等价测试钉住 |
-| 27 | `maximumExtraExtremePoints` 4 | `prototype_defaults.json:28`、`RadialProxyMath.cs:60` | 2 | 同上 |
+| 26 | `directionSamples` 32 | `prototype_defaults.json` `shape.directionSamples`、`RadialProxyMath.DirectionCount` | 2 | 不烘焙，用 §4.1-5 等价测试钉住 |
+| 27 | `maximumExtraExtremePoints` 4 | `prototype_defaults.json` `shape.maximumExtraExtremePoints`、`RadialProxyMath.MaxExtremeCandidates` | 2 | 同上 |
 
-合计：**10 个条目写满三处（30 份）+ 16 个写两处（32 份）+ 1 个只在运行时一处（1 份）= 63 份机器可读副本，27 个条目。** 另有 1 处派生（起始球径，`motor:95-96` → 0.29974 m）不计入：它不是字面量，而是 §6.3 那条“运行时派生不得烘焙”的实例。
+合计：**10 个条目写满三处（30 份）+ 16 个写两处（32 份）+ 1 个只在运行时一处（1 份）= 63 份机器可读副本，27 个条目。** 另有 1 处派生（起始球径，`KatamariBallMotor.baselineVolumeUnits` / `cubicMetersPerVolumeUnit` → 0.29974 m）不计入：它不是字面量，而是 §6.3 那条“运行时派生不得烘焙”的实例。
 
 ---
 

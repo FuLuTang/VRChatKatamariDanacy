@@ -46,7 +46,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "8e2a14ed51165ef7f27e3d0e92769b1f324487c0f94f6616c835c8cad7fa7300",
+  "geometry_sha256": "210c15a1982d080aa2df96724ab20e968550a5ea413d980758a9d561e5749d7d",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "野餐篮",
   "category": "container",
@@ -95,9 +95,9 @@
   "build_script": "models/picnic_basket.py",
   "preview": "previews/picnic_basket_preview.png",
   "files": {
-    "picnic_basket.fbx": 24780,
+    "picnic_basket.fbx": 25452,
     "picnic_basket.glb": 21088,
-    "picnic_basket.blend": 99711
+    "picnic_basket.blend": 468296
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 138878
+  "preview_bytes": 177196
 }

@@ -1,0 +1,134 @@
+{
+  "id": "dandelion_puff",
+  "pivot": "center",
+  "target_longest_m": 0.07,
+  "dimensions_m": {
+    "x": 0.07000000029802322,
+    "y": 0.07000000029802322,
+    "z": 0.0650000050663948,
+    "longest": 0.07000000029802322
+  },
+  "bounds_m": {
+    "min": [
+      -0.03500000014901161,
+      -0.03500000014901161,
+      -0.0325000025331974
+    ],
+    "max": [
+      0.03500000014901161,
+      0.03500000014901161,
+      0.0325000025331974
+    ]
+  },
+  "vertices": 110,
+  "triangles": 216,
+  "materials": [
+    "Prop_dandelion_puff_wool",
+    "Prop_dandelion_puff_chitin",
+    "Prop_dandelion_puff_straw"
+  ],
+  "material_base_colors": {
+    "Prop_dandelion_puff_wool": [
+      0.7,
+      0.68,
+      0.63
+    ],
+    "Prop_dandelion_puff_chitin": [
+      0.09,
+      0.075,
+      0.06
+    ],
+    "Prop_dandelion_puff_straw": [
+      0.47,
+      0.36,
+      0.14
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "15356139e36b599f941d7b5911f258f5bd207a3031a2af67a3036babe0e7536b",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "蒲公英绒球",
+  "category": "nature",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.07,
+    "game_longest_dim_m": 0.07,
+    "sourcing_hint": "model ourselves：70 mm 绒球，暗色花托 + 20 根细冠毛 + 干草色茎（同一闭合壳）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.07,
+    "built_longest_m": 0.07000000029802322,
+    "abs_error_m": 2.98023217215615e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 280,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "wool",
+      "name_zh": "冠毛米白",
+      "linear_rgb": [
+        0.7,
+        0.68,
+        0.63
+      ],
+      "roughness": 0.95
+    },
+    {
+      "key": "chitin",
+      "name_zh": "花托暗芯",
+      "linear_rgb": [
+        0.09,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.3
+    },
+    {
+      "key": "straw",
+      "name_zh": "干草色茎",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.9
+    }
+  ],
+  "notes": "Subdivision-2 icosphere (80 triangles) with 20 faces extruded into rays and the bottom face extruded twice into a stalk: 216 triangles, one closed shell, no boolean.  Ray tips are scaled to 0.20 and pushed 0.95 core radii outward, so the pappus reads as filaments.  Stalk: two extrude steps down (0.42 and 0.42 core radii, taper 0.55).  Materials by face centre: within 1.03 core radii of the centre = chitin (dark seed head), below -1.02 = straw (stalk), the rays = wool.  fit_bounds pins 70 x 70 x 65 mm.",
+  "build_script": "models/dandelion_puff.py",
+  "preview": "previews/dandelion_puff_preview.png",
+  "files": {
+    "dandelion_puff.fbx": 22188,
+    "dandelion_puff.glb": 16348,
+    "dandelion_puff.blend": 469848
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 178824
+}

@@ -127,9 +127,9 @@
   "build_script": "models/thermos.py",
   "preview": "previews/thermos_preview.png",
   "files": {
-    "thermos.fbx": 24588,
+    "thermos.fbx": 26940,
     "thermos.glb": 11728,
-    "thermos.blend": 98757
+    "thermos.blend": 500720
   },
   "export_settings": {
     "fbx": {
@@ -144,7 +144,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 129511
+  "preview_bytes": 171688
 }

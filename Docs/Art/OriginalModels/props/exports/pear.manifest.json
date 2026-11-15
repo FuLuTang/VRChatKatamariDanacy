@@ -95,9 +95,9 @@
   "build_script": "models/pear.py",
   "preview": "previews/pear_preview.png",
   "files": {
-    "pear.fbx": 20204,
+    "pear.fbx": 21980,
     "pear.glb": 7316,
-    "pear.blend": 94532
+    "pear.blend": 451872
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 135909
+  "preview_bytes": 166076
 }

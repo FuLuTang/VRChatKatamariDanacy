@@ -79,9 +79,9 @@
   "build_script": "models/serving_tray.py",
   "preview": "previews/serving_tray_preview.png",
   "files": {
-    "serving_tray.fbx": 16172,
+    "serving_tray.fbx": 16268,
     "serving_tray.glb": 5196,
-    "serving_tray.blend": 89591
+    "serving_tray.blend": 419484
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 101842
+  "preview_bytes": 146983
 }

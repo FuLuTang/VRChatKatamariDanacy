@@ -1,0 +1,278 @@
+# 滚球吞物游戏的内容体量：原作到底放了多少物件
+
+**调研日期：2026-11-15（项目时区 Asia/Shanghai）。** 本文只回答一件事：真实商业「滚球/滚洞吞物」游戏里，**不同物件类型数（distinct types）**、**物件实例数（instances）**、**尺寸跨度**各是什么量级，以及我们自己的关卡该按什么数量投放。
+**边界：** 本轮没有实机、没有拆包、没有读任何游戏内存。全部结论来自公开文字（wiki、攻略站、速通笔记、访谈、论坛）+ 我们的第一关审计；凡属换算/推断一律标 `[inference]`，凡属「查不到」一律写**未找到**，不填估计值冒充数据。
+
+证据等级定义：`[official]` 官方（开发商/发行商/游戏内界面）· `[data-mined]` 社区拆包或从游戏数据反推的可复核数据 · `[community]` 社区 wiki/攻略/论坛人工计数 · `[inference]` 本文推导。
+
+---
+
+## 0. 结论摘要
+
+1. **原作是「上千类型」的体量，单关只用其中一小块**（实例数没有公开数据，见 §1）。 《块魂》(KD) 收藏系统明确是 **1438 个不同类型**、**80 个分类**（[R3]、[R4]、[R6]）；而第一关 Make a Star 1 只用到所在区域 145 个类型里的 **30 个 = 21%**（[R2]）。**单关的类型子集约 30 个起，全作才是四位数。**
+2. **类型总量在 1400–4200 之间，代际不是单调递增：1438（KD）→ 2986（WLK）→ 4143（KF）→ 3752（OUAK）。** KD 1438、We ♥ Katamari 2986（[R5]，杂志口径约 3400，[R17]）、Katamari Forever 4143（[R12]、[R13]）、Once Upon a Katamari 3752（[R7]）。Beautiful Katamari 约 3409 但**只有论坛口径**（[R16]），列为弱证据。
+3. **尺寸跨度是 4–5 个数量级。** KD 里程碑物件从 **5.6 cm**（酱油包）到 **277.6 m**（Splashy Island）（[R8]、[R9]、[R10]）；We ♥ Katamari 从 **4.6 cm**（粉笔）到 **1408.8 m**（Secret Hideout）（[R17]，仅搜索摘要）。
+4. **单关内部是「等比尺寸梯子」，不是「一堆同尺寸垃圾」。** MAS8 的 22 个里程碑物件从 14 cm 到 1003.4 cm，21 步，**几何平均步长 1.22×**，跨度 71.7×（[R10]）。相邻关卡整体抬升约 3–5×。
+5. **我们第一关的 127 props / 44 defs 只够覆盖约 3 个球径档位。** 要跑满 0.30→2.6 m 的 8 档梯子，按 §4 推导需要 **约 320–400 个实例、约 70–90 个 unique defs**；2–3 分钟一关的现实做法是**一关只跨 3–4 档（120–200 实例 / 45–60 defs）**，而不是硬塞 8 档。
+
+---
+
+## 1. 证据表
+
+| 游戏 | 关卡 / 范围 | 不同物件类型数 | 实例数 | 尺寸跨度（最小→最大） | 来源（逐行 URL） | 证据等级 |
+|---|---|---|---|---|---|---|
+| Katamari Damacy (PS2) | 全作收藏「素敵コレクション」 | **1438**（80 分类；按 12 个尺寸档计 46/194/158/185/202/137/115/111/44/93/130/23） | 未找到（全作实例总数无公开数据） | 里程碑件 5.6 cm → 27763.9 cm（≈4958×，非全 1438 个的极值） | [seesaawiki 素敵コレクション（塊魂）](https://seesaawiki.jp/katamaridamacy/d/%c1%c7%c5%a8%a5%b3%a5%ec%a5%af%a5%b7%a5%e7%a5%f3%a1%ca%b2%f4%ba%b2%a1%cb) ；[Collection:Katamari Damacy](https://katamaripedia.miraheze.org/wiki/Collection:Katamari_Damacy) | [community] + [data-mined]（尺寸来自速通笔记的 dump 表） |
+| Katamari Damacy | 区域「居間 / Living Room」 | **145** | 未找到 | — | [Make a Star 1](https://katamaripedia.miraheze.org/wiki/Katamari_Damacy/Make_a_Star_1) | [community] |
+| Katamari Damacy | **Make a Star 1**（3–4 分钟关） | **30 = 区域的 21%** | 未找到（画面观测：14 cm 球附着 40–55 件，见 §5） | 里程碑件 5.6–6.9 cm | [Make a Star 1](https://katamaripedia.miraheze.org/wiki/Katamari_Damacy/Make_a_Star_1) ；[REROLL 速通笔记 MAS1](https://shookietea.github.io/reroll-notes/MAS1/) | [community] |
+| Katamari Damacy | MAS8（12 m 目标关） | 未找到 | 未找到 | **14 → 1003.4 cm（71.7×）** | [Important Object and Size Milestones](https://shookietea.github.io/reroll-notes/Important%20Object%20and%20Size%20Milestones/) | [community]（dump 尺寸） |
+| Katamari Damacy | MAS9（30 m 目标关） | 未找到 | 未找到 | **60.9 → 2985 cm（49×）** | 同上 | [community] |
+| Katamari Damacy | Make the Moon（300 m 目标关） | 未找到 | 未找到 | **115.6 → 27763.9 cm（240×）** | [REROLL 速通笔记 MOON](https://shookietea.github.io/reroll-notes/MOON/) | [community]（dump 尺寸） |
+| Katamari Damacy | 星座关（Cancer/Cygnus/Pisces/Corona/Virgo/Gemini） | 未找到（每关只认一类） | **目标实例数 10 蟹 / 30 天鹅 / 60 鱼 / 20 冠 / 80 少女 / 22 对双胞胎** | — | [REROLL Complete Collection Guide](https://steamah.com/katamari-damacy-reroll-complete-collection-guide/) | [community] |
+| Katamari Damacy | 31 个「スポット」（区域级） | **4–153**（居間 145、鳩1丁目 153、商店街 108、キャンプ場 6、屋根 4） | 未找到 | — | [seesaawiki 素敵コレクション（塊魂）](https://seesaawiki.jp/katamaridamacy/d/%c1%c7%c5%a8%a5%b3%a5%ec%a5%af%a5%b7%a5%e7%a5%f3%a1%ca%b2%f4%ba%b2%a1%cb) | [community] |
+| We ♥ Katamari / REROLL+ | 全作收藏 | **2986**（另有 16 个确认不登记的物件，实际 >2986） | 未找到 | 4.6 cm（粉笔）→ 1408.8 m（Secret Hideout） | [みんな大好き塊魂 素敵コレクション集めのコツ](https://gamelifeme.com/welovekatamari/post-1451/) ；[GameFAQs 攻略（尺寸）](https://gamefaqs.gamespot.com/ps2/921111-we-love-katamari/faqs/39171) 仅摘要 | [community] |
+| Katamari Forever | 全作 item list | **4143** | 未找到 | 未找到 | [TrueTrophies 评论](https://www.truetrophies.com/viewcomment.aspx?commentid=666) ；[GameFAQs Item List](https://gamefaqs.gamespot.com/ps3/959073-katamari-forever/faqs/58032)（页面 403，仅摘要） | [community]（两处独立口径一致） |
+| Beautiful Katamari | 全作 Collection | **3409**（弱） | 未找到；另有「单球最多约 5000 件」说法（弱） | 未找到 | [论坛帖](https://mail.norwichphotos.co.uk/index.php?/topic/154702-beautiful-katamari/page/10/#comment-4873604) ；[GRYOnline 条目](https://www.gry-online.pl/gry/beautiful-katamari/zf8d3)（正文截断，仅摘要） | [community]（弱，单一论坛口径） |
+| Once Upon a Katamari (2025) | 全作 / 47 关 | **3752 unique items**（69 cousins、47 关） | 未找到；其中「Only Fifty」关限滚 **50 件** | 未找到（分类页示例 4.8 cm–3.40 m） | [PowerPyx 奖杯攻略](https://www.powerpyx.com/once-upon-a-katamari-trophy-guide-roadmap/) ；[h1g 攻略wiki オト](https://h1g.jp/onceupona_katamaridamacy/index.php?title=%E3%82%AA%E3%83%88) 仅摘要 | [community] |
+| Donut County (2018) | 全作 18 个探索区 / 24 段 | **283 条区域条目 / 279 个去重名**（每区 8–25） | 未找到（另有大量无名小物件） | 未找到（无数值尺寸） | [gemelog Trashopedia index](https://gemelog.jp/en/games/donut-county/trashopedia/) | [community] |
+| Donut County | 关卡数口径 | — | — | — | [GameSpot 评测](https://www.gamespot.com/reviews/donut-county-review-pit-falls/1900-6416966/)（22 关，仅摘要） | [community] |
+| Hole.io / 其他 roll-and-grow 克隆 | — | **未找到** | **未找到** | **未找到** | 无可靠公开计数 | — |
+
+**两点必须说明的出入：**
+- KD 的 31 个区域计数相加 = **1434**，与总量 1438 差 4；差值是跨区域重复登记或未归类项，**不必强行凑平**。
+- We ♥ Katamari 的「2986」是收藏系统登记数，杂志口径「约 3400」[R17] 高 14%；两者不矛盾（不同统计对象：登记条目 vs 建模/描述条目），但**引用时必须写清是哪个口径**。
+
+---
+
+## 2. 系列级事实（开发者说法 / 总量）
+
+1. **1438 是硬数字，可三重交叉。** 日文数据库写「合計1438個」并给出 12 个尺寸档的完整分布（[R4]）；Katamaripedia 收藏页副标题写「1438 objects, 80 categories」（[R3]）；REROLL 世界纪录保持者的完整收藏指南写「there are 1438 unique objects in the game which need to be collected」（[R6]）；CyberScore 的 REROLL Collection 榜单满分也是 1,438（[R14]）。→ `[community]`，我认为可信度最高的一条。
+2. **尺寸档分布是「中段最胖、最大档最瘦」**：46 / 194 / 158 / 185 / 202 / 137 / 115 / 111 / 44 / 93 / 130 / 23（[R4]）。最大档只有 23 个类型（全作的 1.6%）。→ `[community]`（分类标签是定性的，档宽不等，不能直接当区间用）。
+3. **分类粒度到 80 类**，单类 5–60 个（センデン 60、ガッコウ 46、ダイシゼン 42、ジハンキ 5）（[R4]）。→ `[community]`。这说明原作用**分类标签**组织体量，而不是靠单一维度。
+4. **制作人明确说过「物件不够会寂寞」，即物件数量是被当作情绪设计指标的**。Keita Takahashi 在 GDC 上说：「I wanted to make more objects.」（[R18]，Eurogamer 报道，正文截断、引文取自搜索摘要）→ `[official]`（当事人发言）/ 转述可靠性中等。
+5. **类型总量阶梯上升后回稳**：KD 1438（2004）→ WLK 2986（2005，2.08×）→ KF 4143（2009，为 KD 的 2.88×）→ OUAK 3752（2025）。→ `[inference]`（基于上面各代计数）。
+6. **单球能粘多少件**：有二手说法称 KD/WLK 的球「最多约 1500 件」、Beautiful Katamari「最多约 5000 件」（[R19]，波兰语条目，正文截断，仅摘要）→ `[community]`，**弱**，不建议直接引用。
+7. **单关只吃一小部分类型**：MAS1 用 30 个类型，占所在区域 145 个的 21%（[R2]）；区域级上限 153（鳩1丁目）（[R4]）。→ `[community]`。**这是本文对我们最有用的一条：单关类型数不是全作类型数。**
+8. **开发者访谈里没有找到「模型总数」的确切数字。** 搜索到的访谈（GDC 报道、Eurogamer/Gamasutra 系列）只谈设计意图，未给建模数量。→ **未找到**。
+
+---
+
+## 3. 可从资料反推的规律
+
+### 3.1 类型数随球径档位怎么长
+
+- **全作层面：** 类型分布在尺寸中段达峰（202 个/档），向两端衰减；最大档 23 个（[R4]）。这意味着**「大物件」在原作里本身就是稀缺资源**，不是靠堆量。
+- **单关层面：** 单关尺寸带是连续的一段，不是离散几档。MAS8 覆盖 14–1003 cm（71.7×），MAS9 覆盖 60.9–2985 cm（49×），Moon 覆盖 115.6–27764 cm（240×）（[R10]、[R9]）。**每关的物件尺寸近似对数均匀分布**，MAS8 的 22 个里程碑件几何平均步长 **1.22×**（`ln(1003.4/14)/21 = 0.203 → e^0.203 = 1.225`，[inference] 由 [R10] 数据算出）。
+- **关卡之间：** 起始球径 5/5/10/5/10/50/50/10/50/100 cm（[R1]），目标 10 cm→300 m；**相邻关之间的物件带整体抬升约 3–5×**（MAS8 里程碑件最小 14 cm，MAS9 为 60.9 cm，约 4.4×），且相邻关**大量复用同一物件**（948.3 cm 的 Regular Tree、1469.3 cm 的 Smokestack、2255.2 cm 的 Sailboat、2785.1 cm 的 Bathhouse 同时出现在 MAS9 与 Moon）。→ `[inference]`。
+- **Donut County 是对照组：** 单区只有 8–25 个命名类型（[R11]），比 Katamari 单关 30–153 少 **4–6×**；它靠少量高辨识度物件 + 物理/剧情互动撑住，而不是靠垃圾密度。→ `[community]` + `[inference]`。
+
+### 3.2 每档实例密度
+
+原作**没有公开的实例数**，只能从两条侧证反推：
+
+- **附着饱和：** HUD 14 cm 时球上约 40–55 件（§5 给定事实）。球表面积 ∝ D²，若物件按 ≤0.35 D 缩放，则**每档维持 40–55 件附着所需的实例数基本恒定**，不随 D 增长。
+- **活动区随 D 变大：** 同样 40–55 件摊到更大的场地上，**面密度按 1/D² 下降**。取活动区直径 ≈ 20 D（`[inference]`，无公开依据，仅用于量级），0.35 m 档约 117 件/100 m²，2.6 m 档约 1.9 件/100 m²，差 **约 60×**。这正好对上原作「小球关在桌面/地板上密集捡垃圾，大球关在城镇里稀疏捡楼房」的观感。
+- **消耗 ≠ 投放：** 球径从 0.35 到 2.6 m 是体积 **410×**。按 10× 体积规则（见 [ABSORB_SIZE_RATIO.md](<../KatamariBallRules/ABSORB_SIZE_RATIO.md>)），若每件按当前球径的 0.35 倍吃，每件加 4.29% 体积，则需要 `ln(410)/ln(1.0429) ≈ 143` 件；按 0.30 倍吃需 `≈226` 件；按 0.50 倍吃只需 `≈51` 件（`[inference]`，纯复利算式）。**所以「投放 40–55 件/档」是可用量与手感下限，真正被吃掉的大约只有一半。**
+
+### 3.3 大小比例分布
+
+- 原作单关的物件尺寸是**连续谱**（1.22× 一步），不是「小/中/大三档」；玩家感知的「档」是球径跨过某个门槛时**一次性解锁一片**（如 MAS8 的里程碑件从 270.2 cm 直接跳到 603 cm，跨 2.2× 中间无里程碑项，[R10]）——**分布里有明显的空档和跃迁**。
+- 我们的审计（§5）显示 0.05–0.25 D 占多数，而原作附着件是 0.3–0.7 D。**两者不是矛盾，是两件事**：审计量的是 def 尺寸/球径，原作量的是**贴在球面上的可见件**（大件更显眼、被记住）。要把观感做对，必须有意识地把 0.25–0.55 D 的件做够，而不是全用 0.1 D 的小垃圾堆量。→ `[inference]`。
+
+---
+
+## 4. 对我们关卡的推导目标
+
+**推导链（全部可复核）：**
+1. §5 给定：每档至少约 **40 件**可吸物；多数 ≤ **0.35 D**；轮廓要有长条/扁平/圆形/块状四类。
+2. §5 给定：原作 14 cm 球附着 **40–55 件** → 每档投放 **40–55 件**（取 40 为地板、55 为舒适上限）。
+3. 类型:实例比：我们审计 127/44 = **2.9**；原作类型更密（80 分类、1438 类型）估 **3–5**（`[inference]`）→ 每档 defs ≈ 实例数 ÷ 3.2（四舍五入），再按四类轮廓各 ≥3 个校正。
+4. 每档物件主要尺寸带 = **0.10–0.35 D**（多数），少量 0.35–0.55 D 作「爽点」；活动区直径 ≈ 20 D（`[inference]`）。
+
+### 4.1 逐档目标表（8 档全开）
+
+| 球直径档 (m) | 档心 D | 本档主要可吸尺寸 | distinct defs | instances | 活动区直径 | 面密度（件/100 m²） |
+|---|---|---|---|---|---|---|
+| 0.30–0.40 | 0.35 | 3.5–12 cm | **14** | **45** | 7 m | 117 |
+| 0.40–0.55 | 0.48 | 5–17 cm | **15** | **50** | 9.6 m | 69 |
+| 0.55–0.75 | 0.65 | 6.5–23 cm | **15** | **50** | 13 m | 38 |
+| 0.75–1.0 | 0.88 | 9–31 cm | **15** | **50** | 17.5 m | 21 |
+| 1.0–1.25 | 1.13 | 11–40 cm | **14** | **45** | 22.5 m | 11 |
+| 1.25–1.6 | 1.43 | 14–50 cm | **14** | **45** | 28.5 m | 7.1 |
+| 1.6–2.2 | 1.90 | 19–66 cm | **12** | **40** | 38 m | 3.5 |
+| 2.2+ | 2.6 | 26–91 cm | **12** | **40** | 52 m | 1.9 |
+| **合计** | — | — | **111（含缩放复用后 unique ≈ 70–90）** | **365** | — | — |
+
+比例约束（每档都要满足）：**80% 的实例 ≤ 0.35 D**，中位 0.25 D，顶端 10% 到 0.55 D；四类轮廓（长条 / 扁平 / 圆形 / 块状）**各 ≥15%**，即 14 defs 的档每类至少 3 个。
+
+### 4.2 纯文本版（给 Lead 直接引用）
+
+```text
+档位(球直径 m)   defs   instances   主要可吸尺寸      活动区直径   件/100m²
+0.30-0.40         14       45        3.5-12 cm          7 m         117
+0.40-0.55         15       50        5-17 cm            9.6 m        69
+0.55-0.75         15       50        6.5-23 cm          13 m         38
+0.75-1.0          15       50        9-31 cm            17.5 m       21
+1.0-1.25          14       45        11-40 cm           22.5 m       11
+1.25-1.6          14       45        14-50 cm           28.5 m        7.1
+1.6-2.2           12       40        19-66 cm           38 m          3.5
+2.2+              12       40        26-91 cm           52 m          1.9
+合计             111      365        —                  —             —
+（若 25-35% 的 defs 允许等比缩放复用，unique defs 可压到 70-90）
+```
+
+> **⚠ 2026-11-15 修订**：本节 §4.1 / §4.2 / §4.3 的「每档 40–55 件、总数 365」是基于原版 HUD 附着件数的**低估计**（`[inference]`）。同日拿到的 **REROLL 数据挖掘实例表**（§4.4）显示原作单关 523–3955 实例、107–565 种，我们低估了约 5 倍。**以 §4.4 为准**，本节保留作为推演过程留档。
+
+### 4.3 但一关不要跑满 8 档
+
+- 8 档 = 球径 0.35→2.6 m = 体积 **410×**。按 10× 体积规则复利，即使每件都按 0.5 D 吃（已超出「多数 ≤0.35 D」），也要 **约 51 件**；按 0.35 D 吃要 **约 143 件**；按 0.30 D 吃要 **约 226 件**（`[inference]`）。2–3 分钟里做到「吃 143–226 件 + 每档还留 40 件没吃完」不具备可玩性。
+- **建议：一关跨 3–4 档。** 3 档 = 45+50+50 = **145 实例 / 44 defs**；4 档 = **195 实例 / 59 defs**（取上表前 4 行）。3 档的量级正好落在我们第一关审计 **127 props / 44 defs** 上——**说明现有审计不是「太少」，而是「只够 3 档」**；4 档要补到 ~195/59。
+- 若必须保留 8 档手感，就必须显式引入**体积增益倍率**（原作的数据挖掘文档说体积是按关卡分段线性放大的），否则 2–3 分钟内吃不满物理上需要的件数。这条与我们 [ABSORB_SIZE_RATIO.md](<../KatamariBallRules/ABSORB_SIZE_RATIO.md>) 的 10× 结论直接配套，不要在实现里两头都按严格 10× 算。
+
+---
+
+## 5. 已知事实与校准（直接引用，不改写）
+
+- 我们第一关审计：**127 个 props、44 个 defs**，大多数物件是球直径的 **0.05–0.25**。
+- 原作画面：HUD **14 cm** 时球上吸附约 **40–55 件**；物件/球直径比约 **0.3–0.7**。
+- 因此每档**至少约 40 件**可吸收物，且**多数 ≤ 球直径的 0.35**；轮廓要有**长条 / 扁平 / 圆形 / 块状**四类。
+
+---
+
+## 6. 测量 vs 推断
+
+| 数据 | 性质 | 说明 |
+|---|---|---|
+| KD 1438 类型 / 80 分类 | **实测（wiki 明确计数 + 三处交叉）** | 12 档尺寸分布 46…23 之和恰为 1438，可自查 |
+| KD 区域 145 / 153 / 4 / 6 | **实测（wiki 逐区计数）** | 31 区相加 1434，差 4 已在 §1 说明 |
+| MAS1 用 30 个类型（21%） | **实测（wiki 明确写）** | 唯一一条「单关类型数」的硬数据 |
+| KD 物件尺寸 5.6 cm…27763.9 cm | **实测（速通社区 dump 尺寸）** | 只覆盖「里程碑物件」，不是全 1438 个的极值 |
+| MAS8/MAS9/Moon 尺寸带与 1.22× 步长 | **实测数据 + 本文算式** | 步长是 `ln(max/min)/步数` 算出来的 |
+| WLK 2986 / KF 4143 / OUAK 3752 | **社区计数（多处一致或单处）** | KF 有两处独立口径；OUAK 为媒体攻略口径 |
+| BK 3409 | **弱社区（单一论坛帖）** | 不作决策依据 |
+| KD/WLK 单球 ~1500 件、BK ~5000 件 | **弱社区（页面截断，仅摘要）** | 只作量级参考 |
+| 每档 40–55 实例、defs = 实例/3.2 | **推断** | 由 §5 给定 + 审计比值 2.9 外推 |
+| 活动区直径 ≈ 20 D、面密度数字 | **推断** | 无公开依据，纯量级模型；只用于「密度随 D 下降」这一趋势 |
+| 消耗 143/226/51 件 | **推断（算式）** | `ln(410)/ln(1+r³)`，r = 0.35/0.30/0.50 |
+| Donut County 283/279/18 区 | **社区实测（第三方逐区索引）** | 作者自己声明「不等于游戏内百科总数」 |
+
+**没有测到的（不要假装有）：** 任何一关的**实际投放实例数**（原作全部关卡）；Beautiful Katamari / Katamari Forever / Once Upon a Katamari 的尺寸极值；Me & My Katamari (PSP) 与 Touch My Katamari (Vita) 的任何计数（**未找到**）；Hole.io 类游戏的所有数字（**未找到**）。
+
+---
+
+## 7. 来源清单（访问日期均为 2026-11-15）
+
+**已完整读取：**
+
+1. [R1] Katamaripedia — List of Katamari Damacy Stages（起始球径/目标/时限）https://katamaripedia.miraheze.org/wiki/List_of_Katamari_Damacy_Stages
+2. [R2] Katamaripedia — Katamari Damacy/Make a Star 1（「21% (30) of the total items (145)」+ 评分门槛）https://katamaripedia.miraheze.org/wiki/Katamari_Damacy/Make_a_Star_1
+3. [R3] Katamaripedia — Collection:Katamari Damacy（「1438 objects, 80 categories」）https://katamaripedia.miraheze.org/wiki/Collection:Katamari_Damacy
+4. [R4] 塊魂データベース — 素敵コレクション（塊魂）（1438 + 12 尺寸档 + 79 分类 + 31 区域计数）https://seesaawiki.jp/katamaridamacy/d/%c1%c7%c5%a8%a5%b3%a5%ec%a5%af%a5%b7%a5%e7%a5%f3%a1%ca%b2%f4%ba%b2%a1%cb
+5. [R5] みんな大好き塊魂 攻略 — 素敵コレクション集めのコツ（2986 種類 + 16 个不登记物件）https://gamelifeme.com/welovekatamari/post-1451/
+6. [R6] SteamAH — Katamari Damacy REROLL Complete Collection Guide（1438 + 星座目标实例数）https://steamah.com/katamari-damacy-reroll-complete-collection-guide/
+7. [R7] PowerPyx — Once Upon a Katamari Trophy Guide（3752 items / 47 stages / 69 Cousins）https://www.powerpyx.com/once-upon-a-katamari-trophy-guide-roadmap/
+8. [R8] shookietea — REROLL 速通笔记 MAS1（5.6/5.8/6.5/6.9 cm 尺寸表）https://shookietea.github.io/reroll-notes/MAS1/
+9. [R9] shookietea — REROLL 速通笔记 Make the Moon（115.6→27763.9 cm）https://shookietea.github.io/reroll-notes/MOON/
+10. [R10] shookietea — Important Object and Size Milestones（逐关尺寸带）https://shookietea.github.io/reroll-notes/Important%20Object%20and%20Size%20Milestones/
+11. [R11] gemelog — Donut County Trashopedia item-name index（283 条/279 名/18 区/24 段）https://gemelog.jp/en/games/donut-county/trashopedia/
+
+**仅取搜索摘要（页面 403/截断，已在正文标注）：**
+
+12. [R12] TrueTrophies 评论（Katamari Forever 4143 items）https://www.truetrophies.com/viewcomment.aspx?commentid=666
+13. [R13] GameFAQs — Katamari Forever Item List（403；摘要含「There are 4143 items in the game」）https://gamefaqs.gamespot.com/ps3/959073-katamari-forever/faqs/58032
+14. [R14] CyberScore — KD REROLL Collection 榜单（满分 1,438）https://cyberscore.me.uk/records?user_id=24975&games=2430&chartstatus=all_ranked&rec_status=3
+15. [R15] TrueAchievements — WLK「Roll up 2,000 types」成就页（评论称 over 2900 items）https://www.trueachievements.com/a394632/we-love-katamari-damacy-so-so-so-much-achievement
+16. [R16] 论坛帖 — Beautiful Katamari 3409 items https://mail.norwichphotos.co.uk/index.php?/topic/154702-beautiful-katamari/page/10/#comment-4873604
+17. [R17] GameFAQs — We Love Katamari 攻略（尺寸表：粉笔 4.6 cm … Secret Hideout 1408m76cm5mm；杂志页称「约 3400 objects」）https://gamefaqs.gamespot.com/ps2/921111-we-love-katamari/faqs/39171 与 https://www.yumpu.com/en/document/view/7094486/worth-importing-defunct-games/46
+18. [R18] Eurogamer — Katamari was comment on consumerism（Takahashi GDC 发言）https://www.eurogamer.net/katamari-was-comment-on-consumerism
+19. [R19] GRYOnline — Beautiful Katamari 条目（球体 ~1500 / ~5000 件说法，正文截断）https://www.gry-online.pl/gry/beautiful-katamari/zf8d3
+20. [R20] GameSpot — Donut County Review（22 关口径）https://www.gamespot.com/reviews/donut-county-review-pit-falls/1900-6416966/
+21. [R21] h1g.jp — ワンス・アポン・ア・塊魂 攻略Wiki「オト」（分类示例尺寸 4.8 cm–3.40 m）https://h1g.jp/onceupona_katamaridamacy/index.php?title=%E3%82%AA%E3%83%88
+22. [R22] PowerPyx — Once Upon A Katamari Collectible Guide（「only allowed to roll up 50 objects on this stage」）https://www.powerpyx.com/once-upon-a-katamari-collectible-guide-crowns-cousins-presents/
+
+**查过但没有可用数字：** Fandom 主站各作物件页（被 403/重定向挡下）；Speedrun.com 的「1438 objects category」帖（Cloudflare 403，只从搜索引擎摘要确认 1438 这一数字与 REROLL 一致）；Donut County 开发者访谈（只谈设计意图，无物件计数）。
+
+---
+
+## 8. 对下一步的建议（不是结论）
+
+1. **别按「1438」定资产预算。** 那是 KD 单作的**全量**（不是单关量，也不是系列累计），我们单关的参照是 MAS1 的 **30 个类型 / 区域 145**。
+2. **把 §4.1 前 3–4 行当第一关的验收线**：45+50+50 = 145 实例、44 defs，四类轮廓各 ≥15%，80% 实例 ≤0.35 D。
+3. **大物件要刻意做少而精**：原作最大尺寸档只有 23 个类型（1.6%），我们的 1.6 m 以上两档各给 12 defs 已经偏多，别再往上堆。
+4. **想要 8 档手感就必须写体积倍率**，否则物理上填不满；这与 `ABSORB_SIZE_RATIO.md` 的 10× 规则要在实现里成对出现。
+
+### 4.4 REROLL 数据挖掘修订（2026-11-15，以此为准）
+
+`[data-mined]` 来源：REROLL Dump 的「关卡表/实例表/类型表」（19 个任务、28,698 行实例），原始整理见 `/tmp/orig_physics/reroll_numbers.md` §2。**这是我们目前唯一一份逐关、逐件的真实投放数据**，比 HUD 附着件数可信得多。
+
+#### 4.4.1 原作实测（只列与我们同量级的部分）
+
+| 关卡 | 起始→目标 (cm) | 实例数 | 类型数 |
+|---|---|---|---|
+| Make a Star 3 | 10 → 50 | 1421 | 307 |
+| Make a Star 5 | 10 → 150 | 1431 | 313 |
+| Make a Star 8 | 10 → 1200 | **3132** | **565** |
+| Make a Star 9 | 50 → 3000 | 2811 | 465 |
+| Make Cancer | 22.2 → 80 | 523 | 148 |
+| Make Cygnus | 13.9 → 100 | 725 | 174 |
+
+**按球径 0.1 m 档切（单关，可吸件的 `D_req` 落在该档的实例数）**：
+
+| 关 | 0.30–0.40 | 0.40–0.50 | 0.50–0.60 | 0.60–0.80 | 0.80–1.00 | 1.00–1.25 | 1.25–1.60 |
+|---|---|---|---|---|---|---|---|
+| MAS3 | 111 | 63 | 45 | 98 | 12 | 13 | 18 |
+| MAS5 | 104 | 49 | 23 | 68 | 19 | 9 | 30 |
+| MAS8 | 177 | 172 | 99 | 150 | 109 | 117 | 241 |
+| MAS9 | 98 | 94 | 84 | 139 | 125 | 78 | 238 |
+| Cancer | 86 | 33 | 31 | 32 | 19 | 15 | 26 |
+| Cygnus | 20 | 28 | 23 | 81 | 31 | 16 | 17 |
+
+结论（可引用）：**单关每个 0.1 m 档约 20–180 实例，中位 ~90；覆盖 0.30→1.25 m 需要 600–900 个可吸实例。** 我们第一关审计只有 **127 件 / 44 种**，相当于原作一个「开局 10 cm 以下」的小段。
+
+#### 4.4.2 我们一关的目标（每球径档：种数 / 实例数分列）
+
+口径：球径 = 我们关卡的球直径（0.30 m 起步、2.20 m 上限）；「本档可吸尺寸」= 0.44 × 本档球径（我们的吸收门槛，`[measured]` 于 `ABSORB_SIZE_RATIO.md`）。**种数 = 建模/目录条目数；实例数 = 该档实际摆放件数（同一种可重复摆）**，两者分开算，建模成本只跟种数走。
+
+| 球径档 (m) | 本档可吸尺寸 (m) | 种数 | 实例数 | 复制率 |
+|---|---|---|---|---|
+| 0.30–0.40 | 0.13–0.18 | **16** | **120** | 7.5× |
+| 0.40–0.50 | 0.18–0.22 | **18** | **100** | 5.6× |
+| 0.50–0.60 | 0.22–0.26 | **20** | **85** | 4.3× |
+| 0.60–0.80 | 0.26–0.35 | **22** | **120** | 5.5× |
+| 0.80–1.00 | 0.35–0.44 | **24** | **80** | 3.3× |
+| 1.00–1.25 | 0.44–0.55 | **22** | **75** | 3.4× |
+| 1.25–1.60 | 0.55–0.70 | **18** | **70** | 3.9× |
+| 1.60–2.20 | 0.70–0.97 | **16** | **40** | 2.5× |
+| **合计** | — | **156** | **690** | 4.4× |
+
+- 690 实例落在原作的 **600–900** 区间内、偏向低端（我们是 2–3 分钟关、原作 7–20 分钟），**种数 156 ≥ 150** 与之匹配。
+- 复制率 2.9–8.6×：越早的档摆放越密（原作 MAS3 在 ≤0.5 m 内就有 860 件），这与「开局场地小、视觉密度高」一致。
+
+#### 4.4.3 换算到我们的「items 档」（t0–t7，按最长边）
+
+换算假设（必须写明）：球能吸的最大尺寸 = 0.44 × 球径 → **可吸球径 = 物件最长边 ÷ 0.44 ≈ 2.27 × 最长边**。因此：
+
+| items 档 | 最长边 (m) | 需要的最小球径 (m) | 种数 | 实例数 |
+|---|---|---|---|---|
+| t0 | 0.02–0.099 | ≤ 0.23（开局就有） | **10** | **30** |
+| t1 | 0.10–0.139 | 0.23–0.32 | **12** | **90** |
+| t2 | 0.14–0.199 | 0.32–0.45 | **20** | **100** |
+| t3 | 0.20–0.299 | 0.45–0.68 | **22** | **85** |
+| t4 | 0.30–0.449 | 0.68–1.02 | **32** | **200** |
+| t5 | 0.45–0.649 | 1.02–1.48 | **24** | **75** |
+| t6 | 0.65–0.999 | 1.48–2.27 | **20** | **110** |
+| t7 | ≥ 1.00 | > 2.27（本关吸不动） | **16** | **0**（= 地标/支架，非可吸） |
+| **合计** | — | — | **156** | **690** |
+
+- **t4 占 200 实例是刻意的**：它横跨 0.60–1.02 m 两档球径（原作两档合计 200–320 件），也是「球从灌木级长到家具级」最爽的一段。t0+t1 = 120 对应 0.30–0.40 m 档，t6 = 110 对应 1.25–2.20 m 两档，逐档加总与 §4.4.2 的 690 一致。
+- **t7 的 16 种不进 650**：它们在本关只作地标/可吞支架（吃了也只会发生在 2.27 m 以后），所以每主题目录里的 t7 行是**场景件**，不计入可吸实例。
+- 每个新主题（DungBeetleMeadow / MessyRoom）按 **156 种 / 690 实例** 规划；PicnicLawn 现有 143 种，差 **13 种**（见 `Docs/Design/Maps/PicnicLawn/CATALOGUE_GAP.md`）。
+
+#### 4.4.4 与原目标的关系
+
+| | 旧（§4.1） | 新（§4.4） | 倍数 |
+|---|---|---|---|
+| 种数 | 111 | **156** | 1.4× |
+| 实例数 | 365 | **690** | 1.9× |
+
+旧表没有错在「每档 40 件能玩」，而是**错在把它当成原作的标准**：原作单关比这密 5 倍。我们如果按 156 种 / 690 实例做，第一关的 127 件就要补到 690 件——这属于**摆放工作**，不需要 690 个模型。
+

@@ -79,9 +79,9 @@
   "build_script": "models/grapes.py",
   "preview": "previews/grapes_preview.png",
   "files": {
-    "grapes.fbx": 21116,
+    "grapes.fbx": 22540,
     "grapes.glb": 6256,
-    "grapes.blend": 94618
+    "grapes.blend": 429576
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 180698
+  "preview_bytes": 202277
 }

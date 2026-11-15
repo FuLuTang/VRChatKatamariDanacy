@@ -95,9 +95,9 @@
   "build_script": "models/bread_slice.py",
   "preview": "previews/bread_slice_preview.png",
   "files": {
-    "bread_slice.fbx": 19404,
+    "bread_slice.fbx": 19340,
     "bread_slice.glb": 12128,
-    "bread_slice.blend": 92008
+    "bread_slice.blend": 445224
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 117637
+  "preview_bytes": 154866
 }

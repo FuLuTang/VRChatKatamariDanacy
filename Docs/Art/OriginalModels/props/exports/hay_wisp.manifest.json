@@ -1,0 +1,134 @@
+{
+  "id": "hay_wisp",
+  "pivot": "center",
+  "target_longest_m": 0.085,
+  "dimensions_m": {
+    "x": 0.08500000089406967,
+    "y": 0.04510093107819557,
+    "z": 0.031253429129719734,
+    "longest": 0.08500000089406967
+  },
+  "bounds_m": {
+    "min": [
+      -0.042500000447034836,
+      -0.022550465539097786,
+      -0.01562671549618244
+    ],
+    "max": [
+      0.042500000447034836,
+      0.022550465539097786,
+      0.015626713633537292
+    ]
+  },
+  "vertices": 110,
+  "triangles": 216,
+  "materials": [
+    "Prop_hay_wisp_straw",
+    "Prop_hay_wisp_straw_dark",
+    "Prop_hay_wisp_ink"
+  ],
+  "material_base_colors": {
+    "Prop_hay_wisp_straw": [
+      0.47,
+      0.36,
+      0.14
+    ],
+    "Prop_hay_wisp_straw_dark": [
+      0.23,
+      0.165,
+      0.06
+    ],
+    "Prop_hay_wisp_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "981f51e2f7ef3bd5236c7763b8bf4084d60c37c0b5539f27de313392d4e5a613",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "一撮干草",
+  "category": "grass_plants",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.085,
+    "game_longest_dim_m": 0.085,
+    "sourcing_hint": "model ourselves：DungBeetleMeadow catalogue t0 0.085×0.045×0.030 m 干草絮（Z0 巢穴口散落物）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.085,
+    "built_longest_m": 0.08500000089406967,
+    "abs_error_m": 8.940696655246327e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 256,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "straw",
+      "name_zh": "干草土黄",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "straw_dark",
+      "name_zh": "草束阴影",
+      "linear_rgb": [
+        0.23,
+        0.165,
+        0.06
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "ink",
+      "name_zh": "捆绳暗带",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "9 stations x 12 segments swept elliptical section with six lobes (depth 42 % mid, 55 % at the tips, phase +0.35 rad per station): 192 side triangles + 24 cap = 216, one closed shell, no boolean.  Half-width 0.0163 m, half-height 0.0118 m at the fattest station; taper list 0.42/0.86/1.00/1.04/1.06/1.06/1.04/0.82/0.40.  Tie band x 0.0080-0.0195 with a 6 % radius swell: straw_dark shoulders and a 2.5 mm ink cord at x 0.0130-0.0155.  The shell is shifted so its lowest vertex sits 0.4 mm above z = 0.  Overall 0.0850 x 0.0455 x 0.0300 m.",
+  "build_script": "models/hay_wisp.py",
+  "preview": "previews/hay_wisp_preview.png",
+  "files": {
+    "hay_wisp.fbx": 22860,
+    "hay_wisp.glb": 18472,
+    "hay_wisp.blend": 469848
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 152198
+}

@@ -95,9 +95,9 @@
   "build_script": "models/toy_ball.py",
   "preview": "previews/toy_ball_preview.png",
   "files": {
-    "toy_ball.fbx": 20732,
+    "toy_ball.fbx": 22572,
     "toy_ball.glb": 8680,
-    "toy_ball.blend": 94759
+    "toy_ball.blend": 452336
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 163504
+  "preview_bytes": 196037
 }

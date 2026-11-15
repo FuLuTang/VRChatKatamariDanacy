@@ -1,0 +1,118 @@
+{
+  "id": "bottle_opener",
+  "pivot": "center",
+  "target_longest_m": 0.13,
+  "dimensions_m": {
+    "x": 0.12999999523162842,
+    "y": 0.03500000014901161,
+    "z": 0.00800000037997961,
+    "longest": 0.12999999523162842
+  },
+  "bounds_m": {
+    "min": [
+      -0.06499999761581421,
+      -0.017500000074505806,
+      -0.004000000189989805
+    ],
+    "max": [
+      0.06499999761581421,
+      0.017500000074505806,
+      0.004000000189989805
+    ]
+  },
+  "vertices": 72,
+  "triangles": 140,
+  "materials": [
+    "Prop_bottle_opener_metal",
+    "Prop_bottle_opener_metal_dark"
+  ],
+  "material_base_colors": {
+    "Prop_bottle_opener_metal": [
+      0.43,
+      0.45,
+      0.47
+    ],
+    "Prop_bottle_opener_metal_dark": [
+      0.09,
+      0.095,
+      0.105
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "27c3708eb2060278e01e1d4fef1d6e2854156d37d5484157c46ae5a8e3e332d5",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "开瓶器",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.13,
+    "game_longest_dim_m": 0.13,
+    "sourcing_hint": "model ourselves：0.130 m 扁平开瓶器，开口环 + 压印握位",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.13,
+    "built_longest_m": 0.12999999523162842,
+    "abs_error_m": 4.768371586472142e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 288,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "metal",
+      "name_zh": "拉丝钢",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    },
+    {
+      "key": "metal_dark",
+      "name_zh": "内孔与握位暗钢",
+      "linear_rgb": [
+        0.09,
+        0.095,
+        0.105
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "One 32-point polygon (handle + C-ring with a 64 deg front opening), extruded 0.008 m in Z with prism.  Ring outer r 0.0175, bore r 0.0105, wall 7 mm; front gap 18.5 mm at the outer radius.  Handle half-width 6.2 mm, butt at x = -0.07266 so the built X is exactly 0.130 m (the C front reaches 0.05734, not 0.060).  Detail: a 0.036 x 0.008 m rounded tool is subtracted 5.5 mm into the handle (the grip recess); the recess and the bore wall take metal_dark.  AABB 0.130 x 0.035 x 0.008 m, one closed shell.",
+  "build_script": "models/bottle_opener.py",
+  "preview": "previews/bottle_opener_preview.png",
+  "files": {
+    "bottle_opener.fbx": 18204,
+    "bottle_opener.glb": 7972,
+    "bottle_opener.blend": 444044
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 128385
+}

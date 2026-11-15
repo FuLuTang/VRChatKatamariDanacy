@@ -1,0 +1,134 @@
+{
+  "id": "fork",
+  "pivot": "center",
+  "target_longest_m": 0.19,
+  "dimensions_m": {
+    "x": 0.1899999976158142,
+    "y": 0.02500000037252903,
+    "z": 0.012000000104308128,
+    "longest": 0.1899999976158142
+  },
+  "bounds_m": {
+    "min": [
+      -0.0949999988079071,
+      -0.012500000186264515,
+      -0.006000000052154064
+    ],
+    "max": [
+      0.0949999988079071,
+      0.012500000186264515,
+      0.006000000052154064
+    ]
+  },
+  "vertices": 76,
+  "triangles": 148,
+  "materials": [
+    "Prop_fork_metal",
+    "Prop_fork_ceramic",
+    "Prop_fork_metal_dark"
+  ],
+  "material_base_colors": {
+    "Prop_fork_metal": [
+      0.43,
+      0.45,
+      0.47
+    ],
+    "Prop_fork_ceramic": [
+      0.76,
+      0.745,
+      0.7
+    ],
+    "Prop_fork_metal_dark": [
+      0.09,
+      0.095,
+      0.105
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "401a963c6b3e1f969cbb84e99f80ca8fae0b00d70e7ad04907705e35e26807d2",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "餐叉",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.19,
+    "game_longest_dim_m": 0.19,
+    "sourcing_hint": "model ourselves：0.190 m 四齿餐叉，齿根连成一块 + 柄部压槽",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.19,
+    "built_longest_m": 0.1899999976158142,
+    "abs_error_m": 2.384185793236071e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 352,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "metal",
+      "name_zh": "不锈钢",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    },
+    {
+      "key": "ceramic",
+      "name_zh": "抛光齿尖",
+      "linear_rgb": [
+        0.76,
+        0.745,
+        0.7
+      ],
+      "roughness": 0.35
+    },
+    {
+      "key": "metal_dark",
+      "name_zh": "压槽暗钢",
+      "linear_rgb": [
+        0.09,
+        0.095,
+        0.105
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "One 34-point comb polygon (handle, head, 4 tines, 3 through-slots) extruded 0.0025 m in Z, then a smoothstep lift of up to 0.0095 m applied to every vertex by x, so the head curves up and the tine tips land at z = 0.012 m while the handle stays flat on z = 0.  Slots are open from the tip back to the tine root: 2.4 mm wide at the root and 3.0 mm at the tip; tines taper 4.45 -> 4.0 mm; head 25 mm wide; each tine edge carries a midpoint at x = 0.062 so the polished tip owns real quads.  Detail: a 1.2 x 50 mm tool is subtracted 1.2 mm into the handle (stamped trough, metal_dark), and x > 0.060 takes the polished ceramic tine tips.  AABB 0.190 x 0.025 x 0.012 m, one closed shell.",
+  "build_script": "models/fork.py",
+  "preview": "previews/fork_preview.png",
+  "files": {
+    "fork.fbx": 19516,
+    "fork.glb": 10220,
+    "fork.blend": 465836
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 123715
+}

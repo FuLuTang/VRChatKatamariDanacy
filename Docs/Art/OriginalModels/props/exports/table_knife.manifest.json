@@ -1,0 +1,150 @@
+{
+  "id": "table_knife",
+  "pivot": "center",
+  "target_longest_m": 0.23,
+  "dimensions_m": {
+    "x": 0.23000000417232513,
+    "y": 0.019999999552965164,
+    "z": 0.00800000037997961,
+    "longest": 0.23000000417232513
+  },
+  "bounds_m": {
+    "min": [
+      -0.11500000208616257,
+      -0.009999999776482582,
+      -0.004000000189989805
+    ],
+    "max": [
+      0.11500000208616257,
+      0.009999999776482582,
+      0.004000000189989805
+    ]
+  },
+  "vertices": 90,
+  "triangles": 176,
+  "materials": [
+    "Prop_table_knife_metal",
+    "Prop_table_knife_ceramic",
+    "Prop_table_knife_brass",
+    "Prop_table_knife_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_table_knife_metal": [
+      0.43,
+      0.45,
+      0.47
+    ],
+    "Prop_table_knife_ceramic": [
+      0.76,
+      0.745,
+      0.7
+    ],
+    "Prop_table_knife_brass": [
+      0.52,
+      0.38,
+      0.12
+    ],
+    "Prop_table_knife_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "fe59c757bec8975e1dce190189fd38b3b76757e9fb0c52cafe08892b3fc17575",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "餐刀",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.23,
+    "game_longest_dim_m": 0.23,
+    "sourcing_hint": "model ourselves：230 x 20 x 8 mm 餐刀，抛光刀尖 + 黄铜箍 + 木柄",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.23,
+    "built_longest_m": 0.23000000417232513,
+    "abs_error_m": 4.1723251242853365e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 200,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "metal",
+      "name_zh": "刀身不锈钢",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    },
+    {
+      "key": "ceramic",
+      "name_zh": "抛光刀尖",
+      "linear_rgb": [
+        0.76,
+        0.745,
+        0.7
+      ],
+      "roughness": 0.35
+    },
+    {
+      "key": "brass",
+      "name_zh": "刀箍黄铜",
+      "linear_rgb": [
+        0.52,
+        0.38,
+        0.12
+      ],
+      "roughness": 0.3
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "深木柄",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Sheet grid 8 x 4 reshaped into the silhouette: blunt 3 mm tip from x=-0.115 opening to the 20 mm blade at x=-0.086, blade to x=0.0288, bolster taper to a 15 mm handle at x=0.0575, rounded butt at x=0.115.  Underside flat at z=0; top 0.0005 m at the cutting edge rising to 0.0022 m at the spine, handle 0.0080 m on a sin^0.75 section.  Detail: the X columns are non-uniform and the 1.2 mm cell at x 0.0300-0.0312 drops 1 mm, forming the brass collar (the metal/handle step).  Materials: ceramic tip (x < -0.0620), brass collar, wood_dark handle from x = 0.0575, metal elsewhere.  176 triangles, one closed shell.",
+  "build_script": "models/table_knife.py",
+  "preview": "previews/table_knife_preview.png",
+  "files": {
+    "table_knife.fbx": 21292,
+    "table_knife.glb": 11632,
+    "table_knife.blend": 488808
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 122852
+}

@@ -144,3 +144,99 @@
 - 规模：9 个包/模型，压缩包合计 26.8 MiB，解压后约 100 MiB。
 - 覆盖：`prop_catalog.csv` 54 项中 34 项有可用文件（食物/餐具/饮料 19 项来自 Kenney Food Kit，花、蘑菇、落叶、石、花盆、小盆栽来自 Nature Kit，凳/长凳来自 Furniture Kit，浇水壶/野餐篮/保温箱/保温壶/球来自 Poly Pizza）；20 项仍缺（`seed`、`acorn`、`bottle_cap`、`paper_scrap`、`napkin`、`picnic_blanket`、`ground_terrain`、`path_mesh`、`boundary_hedge`、`invisible_wall`、`core_hedge`、`flower_bed_frame`、`tree_root_mound`、`bank_pad`、`bank_beacon`、`spawn_marker`、`powerup_pedestal`、`zone_signpost`、`giant_picnic_table`、`giant_oak`），全部本来就是 catalog 里“model ourselves”的自建项或纯地形/玩法件。
 - 待办风险：① Poly Pizza 里有 3 个模型是 **CC BY 3.0**（Picnic Basket“Poly by Google”、Thermos“Poly by Google”、beach ball“the_ normalgamer”），世界内必须有 credits 板；浇水壶（Isa Lousberg）与 Cooler Box（MilkAndBanana）是 CC0；② Kenney 包同时带 GLB，Unity 2022 不原生导入 glTF，导入请用 `Models/FBX format`；③ `Marble Kit` 只含轨道段、没有球体，未映射任何 catalog id，仅作备用；④ `pebble` 用的 `rock_smallA` 仍带 RENDER_MISMATCH 标记，需人工看图确认；⑤ Quaternius Ultimate Food Pack 页面仍标 CC0，但下载入口是 Google Drive 目录（非单一 zip），本次未取，留待下一批。
+
+## 7. 三个新主题的来源方案（2026-11-15 追加）
+
+本节是**追加**，不改上面 §0–§6 与附录 A 的任何结论；许可矩阵、Fab EULA 摘要、已入库记录仍以上文为准。细节证据在两份同日调研：[CC0 候选包](candidate_packs_2026-11-15.md)、[Fab 免费候选](fab_candidates_2026-11-15.md)。**所有候选仍是 candidate，没有一件通过验收，也没有一件被授权进入正式场景。**
+
+### 7.1 分工原则
+
+| 类别 | 走哪条 | 理由 |
+|---|---|---|
+| 体块、容器、家具、地形 | 程序化（`prop_lib`） | 尺寸/枢轴/材质槽要精确到米；第三方包几乎都要改标定 |
+| 软、皱、细、毛（衣物、纸团、线材、毛絮、麦穗、粪球） | **必须程序化** | 没有任何 CC0 包覆盖；照片扫描件的写实度与低模冲突 |
+| 树、灌木、石、蔬果、餐具、玩具、办公家具 | CC0 包（Kenney / Quaternius / Poly Haven / ambientCG） | 许可最干净、风格统一、已有 4 包入库 |
+| 干草卷、稻草人、卡通昆虫、洗衣篮、书堆 | Fab 免费件（逐条核验） | 程序化性价比低；但 Standard 许可有限制，见 §7.4 |
+
+### 7.2 按主题×类别的来源分配
+
+| 主题 | 类别 | 首选来源 | 备选 | 必须自建 |
+|---|---|---|---|---|
+| 草甸 | 土/球 | — | — | 全部（粪球、土块、泥饼） |
+| 草甸 | 草/秸 | Kenney Nature Kit（草簇、落叶） | Quaternius Ultimate Crops（CC0 页面） | 麦穗、谷粒、散草 |
+| 草甸 | 石/矿 | Kenney Nature Kit、Poly Haven | Poly Pizza 单件（CC0） | 燧石、砂砾 |
+| 草甸 | 农具/畜具 | OGA hay-bale（CC0）、Quaternius Farm Animals（CC0 页面） | Fab 干草卷 | 钉耙齿、羊铃、皮绳 |
+| 草甸 | 容器/支架/结构 | Quaternius Farm Buildings（CC0 页面） | Fab 木栅栏 | 水槽、饲料槽、手推车、石墙 |
+| 房间 | 衣物/织物 | — | — | 全部（袜子、T恤、衣堆、褶皱） |
+| 房间 | 纸/文具/包装 | Kenney 现有包 | Poly Pizza CC0 单件 | 纸团、便利贴、快递箱 |
+| 房间 | 餐具/食物 | Kenney Food Kit（已入库） | Quaternius Ultimate Food（CC0） | 外卖盒、麦片碗 |
+| 房间 | 电子/线材 | — | — | 全部（线、耳机、手柄线） |
+| 房间 | 玩具 | Kenney Toy Car Kit（未入库） | Kenney Marble Kit（无球体） | 积木、拼图 |
+| 房间 | 家具 | Kenney Furniture Kit（已入库）、Quaternius Ultimate House Interior（CC0 页面） | Poly Haven `Shelf_01`（182 tri，CC0） | 暖气片、衣柜内部 |
+| 野餐 | 小件缺口（0.03–0.35 m） | Kenney Food/Nature/Furniture（已入库） | Poly Pizza CC0：硬币、火柴盒、石子、树枝 | 糖包、太阳镜、纸垫 |
+
+### 7.3 候选排序（每主题 Top 5，详细表见两份调研）
+
+| 主题 | # | 候选 | 许可（页面） | 量级 | 判断 |
+|---|---|---|---|---|---|
+| 草甸 | A1 | Kenney Nature Kit | CC0 | 330 件，10.5 MB | **已入库**，底座 |
+| 草甸 | A2 | Quaternius Ultimate Crops | CC0（页面） | 102 件，无贴图 | 菜园/果园，需开包核 LICENSE |
+| 草甸 | A3 | Quaternius Farm Buildings | CC0（页面） | 13 件 | 棚屋/谷仓，t7 地标备选 |
+| 草甸 | A4 | Quaternius Farm Animals | CC0（页面） | 7 件 | 羊毛/牧场，动物本体不进场景也可只取毛 |
+| 草甸 | A5 | OGA hay-bale（carlosjorgereis） | CC0 | 1 件，346 KB | 干草卷，最小代价补缺 |
+| 房间 | B1 | Quaternius Ultimate House Interior | CC0（页面） | 123 件，无贴图 | 家具底座，需逐件重定标 |
+| 房间 | B2 | Kenney Furniture Kit | CC0 | 140 件，5.1 MB | **已入库** |
+| 房间 | B3 | Poly Haven `Shelf_01` | CC0 | 1 件，182 tri | 书架，面数意外地低 |
+| 房间 | B4 | OGA lowpoly-survival-item-pack | CC0 | ~12 件 | 电池/桶/杯/手电 |
+| 房间 | B5 | Poly Pizza Tissue Box | CC0 | 1 件，102 tri | 纸巾盒 |
+| 野餐 | C1 | Kenney Food Kit | CC0 | 200 件，4.6 MB | **已入库** |
+| 野餐 | C2 | Quaternius Ultimate Food | CC0（页面） | 103 件 | 食物补充 |
+| 野餐 | C3 | Poly Pizza Coin | CC0 | 206 tri | t0 硬币 |
+| 野餐 | C4 | Poly Pizza Matchbox | CC0 | 396 tri | t0 火柴盒 |
+| 野餐 | C5 | Poly Pizza Pebble / Twig | CC0 | 136 / 64 tri | t0 石子、树枝 |
+
+### 7.4 Fab 免费件：页面复核结果（Lead 用 Playwright 读真实页面，2026-11-15）
+
+- 27 条候选里 **26 条的 "License terms" 行读到了**：**10 条 Standard License、16 条 Creative Commons (CC-BY)**；1 条（ithappy 的 "Food FREE"）页面无许可行，维持 UNVERIFIED。
+- 因此「Fab Standard 到底是哪一版」这个问题**在 listing 层面已能确认到 "Standard License"**；但 Standard 的具体限制（禁止终端用户抽取、分发物需 added value、禁止放进世界/关卡编辑工具）仍要读 [Fab EULA](https://www.fab.com/eula) 原文，§2.1 的二手摘录不能替代。
+- **标题与许可不一致的实例**：[CC0 - Kitchen Knife](https://www.fab.com/listings/b2ead203-d418-464f-b032-891550a03da3) 标题写 CC0，页面 "License terms" 写 **Creative Commons (CC-BY)**。结论：**只认页面/包内许可，不认标题**。
+- **价格不能从页面文字里猜**：listing 页同时渲染推荐位价格，¥ 金额会混进来。可靠的只有许可选择器里的 "From free to ¥X"（Personal 免费档）：Hay Bale、Rocks、Cardboard Box、Pen/Stapler 四条明确；`Cooler Box` 页面只见 ¥46.64、没有 "From free"，原调研表的 "$0/$0" **未成立**，降级为「价格未确认」。
+- 本轮**未登录、未领取、未下载、未加入购物车**；Fab 账号已登录这一事实来自页面头像与 "My Library"，没有改动任何设置。
+
+### 7.5 每件素材的许可记录：位置与模板
+
+**位置**（跟随既有 `DirectDownload` 的习惯，但把可提交的记录单独放）：
+
+```
+Docs/AssetIntake/Records/<source>_<pack>.md          # 可提交的记录（本模板）
+Docs/AssetIntake/Records/<source>_<pack>_LICENSE.txt # 包内 LICENSE 原文，逐字拷贝
+Docs/AssetIntake/Records/<source>_<pack>_files.csv   # 逐文件清单与哈希
+Docs/AssetIntake/Downloads/<source>/<pack>/          # 原始包与解压（.gitignore，不进 Git）
+```
+
+一份记录至少包含：
+
+| 字段 | 要求 |
+|---|---|
+| `asset_id` | 与 `catalogue.csv` 的 id 一致（或 `<pack>_<file>` 形式） |
+| `source` / `source_url` | 原始页面 URL，不是聚合站 |
+| `author` | 作者/工作室名，照页面 |
+| `license_name` + `license_version` | 例 `CC0 1.0` / `Fab Standard` / `CC-BY 4.0`；**逐字照页面** |
+| `license_url` | 许可正文链接 |
+| `evidence` | 许可页/包内 LICENSE 的文件名 + SHA-256 + 读取日期 |
+| `retrieval` | 下载日期、方式（页面下载 / 已入库复用）、压缩包 SHA-256 |
+| `files` | 每个用到的文件：名、SHA-256、三角面、包围盒（米） |
+| `modifications` | 改标定、换材质、减面、拆件的具体说明 |
+| `attribution_text` | 世界内 credits 要写的原文（CC-BY 必填，CC0 写「无需署名」） |
+| `review` | `candidate` / `accepted` / `rejected` + 审查人 + 日期 |
+
+规则：**没有 `review=accepted` 记录的文件，一行都不许进 `Assets/` 或任何正式场景**；`candidate` 只能待在 `Downloads/`。
+
+### 7.6 本主题新增的未验证项
+
+1. **Fab Standard 是否允许本项目的分发形态**（VRChat 世界包含可提取的网格）——未定，是所有者决定，不是本文能回答的。
+2. **Quaternius 包内 LICENSE**：站点 QAL v1.0（2026-08-28）与 82 个包页的 CC0 并存，**以包内 LICENSE 为准**；全部未开包。
+3. **Poly Pizza 直连 403**：调研经翻译代理读取，许可链接仍指 CC0/CC-BY 正文，但「代理页 = 原页」这一点未逐条交叉验证。
+4. **Kenney 三角面/包体积**：页面不标，只有已入库 4 包的数字；未入库的 Survival/Toy Car/Holiday 三包内容清单未知。
+5. **ambientCG / Poly Haven 的贴图**：本项目不用贴图，只可能用它们的模型；写实材质需替换为纯色。
+6. **同名冲突**：`Cooler Box` 在 Fab（Standard）与 Poly Pizza（CC0）各有一个，别混。

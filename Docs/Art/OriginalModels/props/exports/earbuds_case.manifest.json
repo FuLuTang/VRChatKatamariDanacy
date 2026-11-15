@@ -1,0 +1,134 @@
+{
+  "id": "earbuds_case",
+  "pivot": "center",
+  "target_longest_m": 0.07,
+  "dimensions_m": {
+    "x": 0.07000000029802322,
+    "y": 0.05000000074505806,
+    "z": 0.02500000037252903,
+    "longest": 0.07000000029802322
+  },
+  "bounds_m": {
+    "min": [
+      -0.03500000014901161,
+      -0.02500000037252903,
+      -0.012500000186264515
+    ],
+    "max": [
+      0.03500000014901161,
+      0.02500000037252903,
+      0.012500000186264515
+    ]
+  },
+  "vertices": 84,
+  "triangles": 164,
+  "materials": [
+    "Prop_earbuds_case_plastic_grey",
+    "Prop_earbuds_case_plastic_blue",
+    "Prop_earbuds_case_ink"
+  ],
+  "material_base_colors": {
+    "Prop_earbuds_case_plastic_grey": [
+      0.23,
+      0.235,
+      0.24
+    ],
+    "Prop_earbuds_case_plastic_blue": [
+      0.075,
+      0.145,
+      0.4
+    ],
+    "Prop_earbuds_case_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "f8c4ff3e5f55ffd8e222f774aee22088fc45bb7d72c1b78a579e8394b8a1fad8",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "耳机盒",
+  "category": "electronics_cables",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.07,
+    "game_longest_dim_m": 0.07,
+    "sourcing_hint": "model ourselves：70 x 50 x 25 mm 圆角盒 + 分模线浅槽，单壳",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.07,
+    "built_longest_m": 0.07000000029802322,
+    "abs_error_m": 2.98023217215615e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 288,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_grey",
+      "name_zh": "灰塑料机身",
+      "linear_rgb": [
+        0.23,
+        0.235,
+        0.24
+      ],
+      "roughness": 0.5
+    },
+    {
+      "key": "plastic_blue",
+      "name_zh": "蓝塑料盖",
+      "linear_rgb": [
+        0.075,
+        0.145,
+        0.4
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "ink",
+      "name_zh": "深色分模缝",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Seven-ring loft of a 12-point rounded rectangle (0.070 x 0.050, R 14 mm, 3 points per corner): 6 bands x 12 quads = 144 triangles plus two 12-gon caps = 164.  Rings (z, inset): 0.0000/0.0024 bottom chamfer, 0.0024/0, 0.0110/0 (parting line, body side), 0.0118/0.0014 (groove floor), 0.0126/0 (parting line, lid side), 0.0228/0, 0.0250/0.0026 top chamfer.  The lid half is 12.4 mm tall against the 11.0 mm body half.  Three material slots by face height: body below 0.0108 plastic_grey, groove band 0.0108-0.0128 ink, lid above plastic_blue.  One closed shell.",
+  "build_script": "models/earbuds_case.py",
+  "preview": "previews/earbuds_case_preview.png",
+  "files": {
+    "earbuds_case.fbx": 19980,
+    "earbuds_case.glb": 11208,
+    "earbuds_case.blend": 466780
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 169783
+}

@@ -95,9 +95,9 @@
   "build_script": "models/picnic_blanket.py",
   "preview": "previews/picnic_blanket_preview.png",
   "files": {
-    "picnic_blanket.fbx": 19244,
+    "picnic_blanket.fbx": 19964,
     "picnic_blanket.glb": 12452,
-    "picnic_blanket.blend": 95504
+    "picnic_blanket.blend": 457024
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 104649
+  "preview_bytes": 148021
 }

@@ -1,0 +1,118 @@
+{
+  "id": "dry_leaf_curl",
+  "pivot": "center",
+  "target_longest_m": 0.1,
+  "dimensions_m": {
+    "x": 0.10000000149011612,
+    "y": 0.07714147865772247,
+    "z": 0.030344833619892597,
+    "longest": 0.10000000149011612
+  },
+  "bounds_m": {
+    "min": [
+      -0.05000000074505806,
+      -0.03857073932886124,
+      -0.015172417275607586
+    ],
+    "max": [
+      0.05000000074505806,
+      0.03857073932886124,
+      0.015172416344285011
+    ]
+  },
+  "vertices": 108,
+  "triangles": 212,
+  "materials": [
+    "Prop_dry_leaf_curl_leaf_dry",
+    "Prop_dry_leaf_curl_wood_dark"
+  ],
+  "material_base_colors": {
+    "Prop_dry_leaf_curl_leaf_dry": [
+      0.4,
+      0.27,
+      0.105
+    ],
+    "Prop_dry_leaf_curl_wood_dark": [
+      0.135,
+      0.078,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "2bfb96ffd2c5c214f8c8c6c2c6cee7d9a6ba7ace2b24d7e2801c3bec0888f9ec",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "卷边枯叶",
+  "category": "grass_plants",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.1,
+    "game_longest_dim_m": 0.1,
+    "sourcing_hint": "model ourselves：DungBeetleMeadow catalogue t1 0.100×0.075×0.025 m 卷曲枯叶（Z1/Z4 落叶）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.1,
+    "built_longest_m": 0.10000000149011612,
+    "abs_error_m": 1.4901161138336505e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 224,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "leaf_dry",
+      "name_zh": "枯叶土黄",
+      "linear_rgb": [
+        0.4,
+        0.27,
+        0.105
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "wood_dark",
+      "name_zh": "枯叶暗边与叶柄",
+      "linear_rgb": [
+        0.135,
+        0.078,
+        0.038
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "5 x 8 grid slab (6 columns, 9 rows): 80 top+bottom quads + 26 rim quads = 212 triangles, one closed shell, no boolean.  Length 0.100 m along X, blade half-width 0.0350 m (Y 0.075 m) with a 4-tooth 12 % wavy margin, petiole 2.4 mm wide for the first 12 % of the length.  Top 0.0034 m at the midrib crease + 4.6 mm fold, +17 mm roll on the +u margin (starting at |u| = 0.40, so the inner blade is flat), +4 mm on the -u margin, +1.6 mm wave along the length; underside is the top minus 3.2 mm.  The outer columns, the rim and the petiole are wood_dark.  Overall 0.100 x 0.078 x 0.0255 m.",
+  "build_script": "models/dry_leaf_curl.py",
+  "preview": "previews/dry_leaf_curl_preview.png",
+  "files": {
+    "dry_leaf_curl.fbx": 21100,
+    "dry_leaf_curl.glb": 16176,
+    "dry_leaf_curl.blend": 448292
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 143011
+}

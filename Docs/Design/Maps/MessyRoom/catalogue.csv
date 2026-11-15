@@ -1,0 +1,159 @@
+id,display_name_zh,display_name_en,tier,size_x,size_y,size_z,shape_class,category,parent_support_id,materials,tri_budget,source_plan,status
+push_pin,图钉,thumbtack,t0,0.022,0.022,0.014,flat,paper_stationery,shelf_wall,metal|plastic,120,procedural-blender,planned
+paper_clip,回形针,paper clip,t0,0.033,0.010,0.005,long,paper_stationery,shelf_wall,metal,90,procedural-blender,planned
+rubber_eraser,橡皮,eraser,t0,0.045,0.020,0.010,blocky,paper_stationery,shelf_wall,rubber|paper,100,procedural-blender,planned
+pencil_stub,铅笔头,pencil stub,t1,0.120,0.008,0.007,long,paper_stationery,desk_drawer,wood|graphite,80,procedural-blender,planned
+candy_wrapper,糖果纸,candy wrapper,t0,0.070,0.050,0.002,flat,packaging,,plastic|ink,60,procedural-blender,planned
+marble,弹珠,glass marble,t0,0.016,0.016,0.016,round,toys_games,,glass,120,cc0-kenney,planned
+pom_pom_ball,毛绒球,pom-pom ball,t0,0.035,0.035,0.035,round,toys_games,bed_frame,fabric|wool,160,procedural-blender,planned
+yoyo,悠悠球,toy yo-yo,t0,0.060,0.060,0.030,round,toys_games,,plastic|metal,220,procedural-blender,planned
+dice_six,骰子,six-sided die,t0,0.020,0.020,0.020,blocky,toys_games,storage_bin,plastic|ink,60,cc0-kenney,planned
+toy_brick,积木,building brick,t0,0.032,0.016,0.010,blocky,toys_games,,plastic,160,cc0-kenney,pilot
+puzzle_piece,拼图块,jigsaw piece,t0,0.055,0.050,0.005,flat,toys_games,,cardboard|ink,70,procedural-blender,planned
+sd_card,内存卡,memory card,t0,0.032,0.024,0.002,flat,electronics_cables,dresser,plastic|metal,50,procedural-blender,planned
+usb_stick,U盘,usb flash drive,t0,0.060,0.020,0.010,blocky,electronics_cables,dresser,plastic|metal,90,procedural-blender,planned
+plug_adapter,插头,power plug,t0,0.045,0.040,0.030,blocky,electronics_cables,,plastic|metal,140,procedural-blender,planned
+battery_aa,五号电池,aa battery,t0,0.050,0.014,0.014,round,electronics_cables,dresser,metal|plastic,160,procedural-blender,pilot
+keycap,键帽,keycap,t0,0.020,0.020,0.010,blocky,electronics_cables,desk_drawer,plastic|ink,40,procedural-blender,planned
+cotton_swab,棉签,cotton swab,t0,0.075,0.005,0.005,long,hygiene_bathroom,shelf_wall,paper|cotton,40,procedural-blender,planned
+band_aid,创可贴,adhesive bandage,t0,0.072,0.019,0.002,flat,hygiene_bathroom,dresser,fabric|plastic,60,procedural-blender,planned
+pill_capsule,药片,pill capsule,t0,0.022,0.008,0.008,round,hygiene_bathroom,shelf_wall,plastic,40,procedural-blender,planned
+lens_cloth,眼镜布,lens cloth,t0,0.080,0.080,0.001,flat,hygiene_bathroom,dresser,fabric|microfiber,40,procedural-blender,planned
+screw_small,螺丝,small screw,t0,0.020,0.004,0.004,round,tools_hardware,,metal,50,procedural-blender,planned
+nut_hex,螺母,hex nut,t0,0.030,0.030,0.012,round,tools_hardware,,metal,60,procedural-blender,planned
+nail_small,钉子,small nail,t0,0.060,0.003,0.003,long,tools_hardware,,metal,40,procedural-blender,planned
+cookie_crumb,饼干屑,biscuit crumb,t0,0.030,0.025,0.015,round,tableware_food,,food,40,procedural-blender,planned
+apple_core,苹果核,apple core,t0,0.090,0.070,0.070,round,tableware_food,,food,80,procedural-blender,planned
+tea_bag,茶包,tea bag,t0,0.060,0.050,0.005,flat,tableware_food,desk_drawer,paper|food,40,procedural-blender,planned
+crumpled_paper,纸团,crumpled paper,t0,0.060,0.055,0.050,round,paper_stationery,radiator,paper,120,procedural-blender,pilot
+sticky_note,便利贴,sticky note,t0,0.076,0.076,0.007,flat,paper_stationery,desk_drawer,paper|ink,88,procedural-blender,pilot
+keychain,钥匙扣,keychain,t0,0.070,0.027,0.007,flat,tools_hardware,dresser,metal|plastic,150,procedural-blender,pilot
+playing_card,卡牌,playing card,t0,0.089,0.063,0.001,flat,toys_games,,paper|ink,30,cc0-kenney,planned
+earbuds_case,耳机盒,earbuds case,t0,0.070,0.050,0.025,blocky,electronics_cables,desk_drawer,plastic,180,procedural-blender,pilot
+paper_cup,纸杯,paper cup,t0,0.090,0.070,0.070,round,packaging,radiator,paper|ink,140,procedural-blender,planned
+phone_charger,充电线,phone charger,t1,0.120,0.042,0.033,long,electronics_cables,desk_drawer,plastic|metal,260,procedural-blender,pilot
+fork_metal,金属叉,metal fork,t1,0.130,0.020,0.010,long,tableware_food,,metal,180,procedural-blender,planned
+chopstick_single,单根筷子,single chopstick,t1,0.135,0.005,0.005,long,tableware_food,,wood,60,procedural-blender,planned
+screwdriver_small,小螺丝刀,small screwdriver,t1,0.120,0.015,0.015,long,tools_hardware,,metal|plastic,220,procedural-blender,planned
+pen_ballpoint,圆珠笔,ballpoint pen,t2,0.145,0.012,0.010,long,paper_stationery,desk_drawer,plastic|ink,236,procedural-blender,planned
+scissors_small,小剪刀,small scissors,t1,0.130,0.060,0.008,flat,paper_stationery,desk_drawer,metal|plastic,220,procedural-blender,planned
+hinge,铰链,door hinge,t1,0.100,0.080,0.004,flat,tools_hardware,,metal,140,procedural-blender,planned
+envelope,信封,envelope,t1,0.115,0.065,0.008,flat,paper_stationery,desk_drawer,paper|ink,60,procedural-blender,planned
+receipt,票据,paper receipt,t1,0.110,0.060,0.001,flat,paper_stationery,desk_drawer,paper|ink,30,procedural-blender,planned
+paper_scrap,纸片,paper scrap,t0,0.100,0.074,0.012,flat,paper_stationery,desk_drawer,paper,164,procedural-blender,existing
+ticket_stub,票根,ticket stub,t1,0.110,0.055,0.002,flat,paper_stationery,,paper|ink,108,procedural-blender,planned
+photo_print,照片打印件,photo print,t1,0.130,0.090,0.001,flat,paper_stationery,shelf_wall,paper|ink,40,procedural-blender,planned
+tape_roll,胶带,tape roll,t1,0.100,0.100,0.020,round,paper_stationery,desk_drawer,plastic,150,procedural-blender,planned
+ceramic_mug,马克杯,ceramic mug,t1,0.120,0.100,0.090,round,tableware_food,desk_drawer,ceramic,312,procedural-blender,pilot
+light_bulb,台灯灯泡,light bulb,t1,0.110,0.060,0.060,round,electronics_cables,floor_lamp,glass|metal,260,procedural-blender,planned
+contact_lens_case,隐形眼镜盒,contact lens case,t1,0.110,0.060,0.050,round,hygiene_bathroom,dresser,plastic,180,procedural-blender,planned
+soda_can,易拉罐,soda can,t1,0.120,0.066,0.066,round,packaging,radiator,metal|ink,320,procedural-blender,existing
+toilet_paper_roll,卷纸,toilet paper roll,t1,0.110,0.110,0.100,round,hygiene_bathroom,shelf_wall,paper,220,procedural-blender,planned
+deodorant_stick,除味棒,deodorant stick,t1,0.110,0.050,0.050,blocky,hygiene_bathroom,dresser,plastic,200,procedural-blender,planned
+key_door,钥匙,door key,t1,0.100,0.030,0.005,flat,tools_hardware,dresser,metal,100,procedural-blender,planned
+padlock,挂锁,padlock,t1,0.100,0.070,0.030,blocky,tools_hardware,dresser,metal,260,procedural-blender,planned
+tape_measure,卷尺,tape measure,t1,0.120,0.120,0.040,blocky,tools_hardware,desk_drawer,plastic|metal,300,procedural-blender,planned
+mouse_wired,有线鼠标,wired mouse,t1,0.110,0.060,0.040,blocky,electronics_cables,desk_drawer,plastic,240,procedural-blender,planned
+board_game_pawn,棋子,board game pawn,t1,0.100,0.030,0.030,blocky,toys_games,shelf_wall,plastic,80,cc0-kenney,planned
+model_car,模型车,toy model car,t1,0.120,0.060,0.050,blocky,toys_games,shelf_wall,plastic|metal,300,cc0-kenney,planned
+tape_dispenser,胶带座,tape dispenser,t1,0.120,0.060,0.050,blocky,paper_stationery,desk_drawer,plastic|metal,260,procedural-blender,planned
+remote_control,遥控器,tv remote,t2,0.180,0.050,0.019,long,electronics_cables,tv_stand,plastic,292,procedural-blender,pilot
+marker_pen,马克笔,marker pen,t2,0.150,0.015,0.015,long,paper_stationery,desk_drawer,plastic|ink,160,procedural-blender,planned
+toothbrush,牙刷,toothbrush,t2,0.180,0.015,0.012,long,hygiene_bathroom,shelf_wall,plastic|nylon,200,procedural-blender,planned
+hair_comb,梳子,hair comb,t2,0.190,0.030,0.010,long,hygiene_bathroom,dresser,plastic,180,procedural-blender,planned
+toothpaste_tube,牙膏,toothpaste tube,t2,0.170,0.040,0.030,long,hygiene_bathroom,shelf_wall,plastic|ink,200,procedural-blender,planned
+spoon,勺子,spoon,t2,0.180,0.035,0.015,long,tableware_food,,metal,282,procedural-blender,existing
+wrench_small,小扳手,small wrench,t2,0.180,0.040,0.020,long,tools_hardware,,metal,260,procedural-blender,planned
+book_paperback,平装书,paperback book,t2,0.180,0.110,0.025,flat,paper_stationery,bookcase_tall,paper|ink,240,procedural-blender,pilot
+postcard,明信片,postcard,t2,0.150,0.100,0.002,flat,paper_stationery,shelf_wall,paper|ink,92,procedural-blender,planned
+smartphone,手机,smartphone,t2,0.150,0.072,0.008,flat,electronics_cables,desk_drawer,glass|metal,400,procedural-blender,planned
+notebook_small,笔记本,pocket notebook,t2,0.148,0.105,0.010,flat,paper_stationery,desk_drawer,paper|ink,200,procedural-blender,planned
+sunglasses,太阳镜,sunglasses,t2,0.150,0.050,0.040,flat,hygiene_bathroom,dresser,plastic|glass,300,procedural-blender,pilot
+phone_case,手机壳,phone case,t2,0.160,0.080,0.012,flat,electronics_cables,desk_drawer,plastic,180,procedural-blender,planned
+boxer_briefs,内裤,boxer briefs,t2,0.190,0.130,0.040,flat,clothes_fabric,dresser,cotton|elastic,240,procedural-blender,planned
+cereal_bowl,麦片碗,cereal bowl,t2,0.180,0.180,0.070,round,tableware_food,desk_drawer,ceramic,300,procedural-blender,pilot
+bowl,碗,bowl,t2,0.160,0.160,0.060,round,tableware_food,,ceramic,384,procedural-blender,existing
+toy_ball,玩具球,toy ball,t2,0.150,0.150,0.150,round,toys_games,,plastic,300,procedural-blender,existing
+ball_of_yarn,毛线球,ball of yarn,t2,0.140,0.140,0.140,round,toys_games,bed_frame,wool,280,procedural-blender,planned
+empty_jar,空玻璃罐,empty jar,t2,0.140,0.090,0.090,round,tableware_food,bookcase_tall,glass|metal,300,procedural-blender,planned
+game_controller,手柄,game controller,t2,0.150,0.098,0.061,blocky,electronics_cables,tv_stand,plastic,488,procedural-blender,pilot
+board_game_box,桌游盒,board game box,t2,0.190,0.190,0.050,blocky,toys_games,bookcase_tall,cardboard|ink,260,procedural-blender,planned
+alarm_clock,闹钟,alarm clock,t2,0.150,0.100,0.080,blocky,electronics_cables,desk_drawer,plastic|glass,340,procedural-blender,planned
+shoe_box,鞋盒,shoe box,t2,0.190,0.190,0.100,blocky,packaging,wardrobe,cardboard|ink,200,procedural-blender,planned
+pencil_case,笔袋,pencil case,t2,0.190,0.080,0.060,blocky,paper_stationery,bookcase_tall,fabric|plastic,260,procedural-blender,planned
+sock_single,单只袜子,single sock,t3,0.250,0.112,0.030,long,clothes_fabric,laundry_basket,fabric|cotton,220,procedural-blender,pilot
+hairbrush,发刷,hairbrush,t3,0.220,0.044,0.026,long,hygiene_bathroom,dresser,plastic|nylon,324,procedural-blender,pilot
+knit_glove,针织手套,knit glove,t3,0.240,0.100,0.030,long,clothes_fabric,laundry_basket,wool,240,procedural-blender,planned
+chopsticks_takeout_pair,外卖筷子,takeout chopsticks,t3,0.220,0.015,0.010,long,tableware_food,,wood|paper,80,procedural-blender,planned
+power_strip,插线板,power strip,t3,0.290,0.060,0.040,long,electronics_cables,,plastic|metal,320,procedural-blender,planned
+slipper,拖鞋,slipper,t3,0.260,0.100,0.048,long,clothes_fabric,,fabric|foam,288,procedural-blender,pilot
+chip_bag,薯片袋,chip bag,t3,0.280,0.197,0.078,flat,packaging,desk_drawer,plastic|ink,372,procedural-blender,pilot
+towel_folded,折叠毛巾,folded towel,t3,0.280,0.200,0.040,flat,clothes_fabric,shelf_wall,cotton,200,procedural-blender,planned
+scarf,围巾,scarf,t3,0.280,0.200,0.100,flat,clothes_fabric,wardrobe,wool,240,procedural-blender,planned
+sandpaper_sheet,砂纸,sandpaper sheet,t3,0.280,0.230,0.005,flat,tools_hardware,,paper,60,procedural-blender,planned
+plate,盘子,plate,t3,0.240,0.240,0.025,round,tableware_food,,ceramic,384,procedural-blender,existing
+glass_bottle,玻璃瓶,glass bottle,t3,0.280,0.070,0.070,round,tableware_food,,glass|metal,384,procedural-blender,existing
+plastic_bottle,塑料瓶,plastic bottle,t3,0.280,0.070,0.070,round,packaging,,plastic,260,procedural-blender,planned
+beanie_hat,毛线帽,beanie hat,t3,0.220,0.220,0.120,round,clothes_fabric,wardrobe,wool,280,procedural-blender,planned
+stuffed_toy_small,小毛绒玩具,small plush toy,t3,0.240,0.160,0.120,round,toys_games,bed_frame,fabric|cotton,480,procedural-blender,planned
+tissue_box,纸巾盒,tissue box,t3,0.240,0.120,0.091,blocky,hygiene_bathroom,dresser,cardboard|paper,220,procedural-blender,pilot
+book_stack,书摞,book stack,t3,0.260,0.190,0.090,blocky,paper_stationery,crate_large,paper|ink,300,procedural-blender,existing
+sweater_folded,折叠毛衣,folded sweater,t3,0.290,0.240,0.090,blocky,clothes_fabric,dresser,wool,340,procedural-blender,planned
+takeout_box,外卖盒,takeout box,t3,0.220,0.160,0.060,blocky,packaging,desk_drawer,cardboard|plastic,240,procedural-blender,planned
+headphones,头戴耳机,headphones,t3,0.200,0.180,0.080,blocky,electronics_cables,chair_office,plastic|metal,420,procedural-blender,planned
+pizza_box,披萨盒,pizza box,t4,0.350,0.350,0.045,flat,packaging,desk_drawer,cardboard|ink,260,procedural-blender,pilot
+folding_stool,折叠凳,folding stool,t4,0.400,0.350,0.320,blocky,furniture_supports,,metal|fabric,556,procedural-blender,existing
+cling_film_roll,保鲜膜卷,cling film roll,t4,0.300,0.060,0.060,round,packaging,desk_drawer,plastic|cardboard,300,procedural-blender,planned
+hammer_small,小锤子,claw hammer,t4,0.300,0.130,0.030,long,tools_hardware,,metal|wood,420,procedural-blender,planned
+magazine_single,杂志,magazine,t4,0.300,0.230,0.010,flat,paper_stationery,shelf_wall,paper|ink,120,procedural-blender,planned
+laptop_closed,笔记本电脑,laptop computer,t4,0.350,0.240,0.020,flat,electronics_cables,desk_drawer,metal|glass,700,procedural-blender,planned
+keyboard_full,键盘,computer keyboard,t4,0.440,0.150,0.030,flat,electronics_cables,desk_drawer,plastic,780,procedural-blender,planned
+desk_lamp_small,小台灯,desk lamp,t4,0.400,0.200,0.350,blocky,electronics_cables,desk_drawer,metal|plastic,700,procedural-blender,planned
+backpack,背包,backpack,t4,0.420,0.300,0.180,blocky,clothes_fabric,,fabric|plastic,600,procedural-blender,planned
+pillow,抱枕,throw pillow,t4,0.440,0.300,0.120,round,clothes_fabric,bed_frame,fabric|cotton,500,procedural-blender,planned
+blanket_throw,薄毯,throw blanket,t4,0.440,0.350,0.080,flat,clothes_fabric,bed_frame,wool|cotton,520,procedural-blender,planned
+hoodie,连帽衫,hooded sweatshirt,t4,0.440,0.380,0.100,blocky,clothes_fabric,chair_office,cotton,640,procedural-blender,planned
+soda_bottle_large,大瓶汽水,large soda bottle,t4,0.330,0.090,0.090,round,packaging,,plastic|ink,340,procedural-blender,planned
+parcel_box,快递小箱,small parcel box,t4,0.400,0.300,0.250,blocky,packaging,,cardboard|ink,200,procedural-blender,planned
+dustbin_small,小垃圾桶,small trash bin,t4,0.420,0.300,0.300,round,hygiene_bathroom,,plastic|metal,340,procedural-blender,planned
+rug_small,小地毯,small rug,t4,0.440,0.440,0.010,flat,furniture_supports,,fabric|wool,220,procedural-blender,planned
+toolbox_small,小工具箱,small toolbox,t4,0.400,0.200,0.200,blocky,tools_hardware,,metal|plastic,480,procedural-blender,planned
+egg_carton,蛋盒,egg carton,t4,0.300,0.150,0.060,blocky,packaging,,cardboard,180,procedural-blender,planned
+storage_bin,收纳箱,storage bin,t5,0.550,0.400,0.350,blocky,furniture_supports,,plastic,600,procedural-blender,existing
+crate,板条箱,wooden crate,t5,0.600,0.400,0.400,blocky,furniture_supports,,wood,500,procedural-blender,existing
+laundry_basket,洗衣篮,laundry basket,t5,0.550,0.400,0.400,round,furniture_supports,,plastic|fabric,480,procedural-blender,planned
+laundry_bag,洗衣袋,laundry bag,t5,0.600,0.400,0.500,blocky,clothes_fabric,,fabric|plastic,420,procedural-blender,planned
+duvet_folded,折叠被子,folded duvet,t5,0.640,0.500,0.250,blocky,clothes_fabric,wardrobe,cotton,600,procedural-blender,planned
+stack_of_magazines,杂志堆,magazine stack,t5,0.560,0.400,0.120,flat,paper_stationery,bookcase_tall,paper|ink,320,procedural-blender,planned
+bubble_wrap_sheet,气泡膜,bubble wrap sheet,t5,0.640,0.480,0.020,flat,packaging,,plastic,240,procedural-blender,planned
+cardboard_box_medium,快递纸箱,medium cardboard box,t5,0.600,0.450,0.400,blocky,packaging,wardrobe,cardboard|ink,220,procedural-blender,planned
+recycling_bag,回收袋,recycling bag,t5,0.600,0.350,0.300,blocky,packaging,,plastic,200,procedural-blender,planned
+monitor_old,旧显示器,old monitor,t5,0.550,0.450,0.200,flat,electronics_cables,desk_drawer,plastic|glass,700,procedural-blender,planned
+fan_floor,落地风扇,floor fan,t5,0.500,0.350,0.450,round,electronics_cables,,plastic|metal,620,procedural-blender,planned
+suitcase_small,小行李箱,small suitcase,t5,0.620,0.400,0.240,blocky,clothes_fabric,wardrobe,fabric|plastic,560,procedural-blender,planned
+teddy_large,大毛绒熊,large plush bear,t5,0.600,0.400,0.450,blocky,toys_games,,fabric|cotton,900,procedural-blender,planned
+waste_bin_large,大垃圾桶,large waste bin,t5,0.450,0.450,0.600,round,hygiene_bathroom,,plastic|metal,380,procedural-blender,planned
+t_shirt,T恤,t-shirt,t6,0.700,0.500,0.020,flat,clothes_fabric,bed_frame,cotton,420,procedural-blender,pilot
+crate_large,大板条箱,large crate,t6,0.800,0.500,0.450,blocky,furniture_supports,,wood,700,procedural-blender,existing
+chair_dining,餐椅,dining chair,t6,0.900,0.480,0.450,blocky,furniture_supports,,wood|fabric,800,procedural-blender,planned
+coat_rack,衣帽架,coat rack,t6,0.900,0.400,0.400,round,furniture_supports,,metal|wood,620,procedural-blender,planned
+drying_rack,晾衣架,drying rack,t6,0.950,0.550,0.100,flat,furniture_supports,,metal|plastic,500,procedural-blender,planned
+ironing_board,熨衣板,ironing board,t6,0.900,0.350,0.150,flat,furniture_supports,,metal|fabric,480,procedural-blender,planned
+vacuum_cleaner,吸尘器,vacuum cleaner,t6,0.900,0.300,0.250,long,tools_hardware,,plastic|metal,900,procedural-blender,planned
+guitar_acoustic,木吉他,acoustic guitar,t6,0.990,0.380,0.100,long,toys_games,,wood|metal,1400,fab-free,planned
+rug_medium,中地毯,medium rug,t6,0.950,0.700,0.015,flat,furniture_supports,,fabric|wool,300,procedural-blender,planned
+mirror_floor,落地镜,floor mirror,t6,0.900,0.600,0.050,flat,furniture_supports,,glass|wood,400,procedural-blender,planned
+cardboard_box_large,大纸箱,large cardboard box,t6,0.900,0.600,0.600,blocky,packaging,,cardboard|ink,300,procedural-blender,planned
+beanbag,懒人沙发,beanbag chair,t6,0.850,0.850,0.700,round,furniture_supports,,fabric|foam,900,procedural-blender,planned
+wardrobe,衣柜,wardrobe,t7,1.200,0.600,2.000,blocky,furniture_supports,,wood|metal,2400,procedural-blender,planned
+bookcase_tall,高书架,tall bookcase,t7,0.900,0.350,1.800,blocky,furniture_supports,,wood,1800,procedural-blender,planned
+radiator,暖气片,radiator,t7,1.200,0.120,0.600,flat,furniture_supports,,metal,900,procedural-blender,planned
+desk_drawer,带抽屉书桌,desk with drawers,t7,1.200,0.600,0.750,blocky,furniture_supports,,wood|metal,2200,procedural-blender,planned
+bed_frame,床架,bed frame,t7,2.000,1.400,0.450,blocky,furniture_supports,,wood|fabric,2000,procedural-blender,planned
+tv_stand,电视柜,tv stand,t7,1.400,0.400,0.500,blocky,furniture_supports,,wood,1200,procedural-blender,planned
+floor_lamp,落地灯,floor lamp,t7,0.400,0.400,1.600,round,furniture_supports,,metal|fabric,900,procedural-blender,planned
+chair_office,办公椅,office chair,t7,0.650,0.650,1.100,blocky,furniture_supports,,plastic|fabric,1800,procedural-blender,planned
+dresser,抽屉柜,dresser,t7,1.000,0.450,0.800,blocky,furniture_supports,,wood|metal,1600,procedural-blender,planned
+shelf_wall,挂墙搁板,wall shelf,t7,1.000,0.250,0.040,flat,furniture_supports,,wood|metal,400,procedural-blender,planned
+door_frame,门框,door frame,t7,0.900,0.150,2.000,blocky,structures_landmarks,,wood|metal,600,skip,planned
+window_frame,窗框,window frame,t7,1.200,0.150,1.400,flat,structures_landmarks,,wood|glass,500,skip,planned

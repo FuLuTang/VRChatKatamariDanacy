@@ -1,0 +1,159 @@
+id,display_name_zh,display_name_en,tier,size_x,size_y,size_z,shape_class,category,parent_support_id,materials,tri_budget,source_plan,status
+seed,草籽,Seed,t0,0.020,0.011,0.008,round,grass_plants,,seed|plant,144,skip,existing
+acorn,橡子,Acorn,t0,0.030,0.024,0.023,round,grass_plants,,seed|wood,220,skip,existing
+pebble,小石子,Pebble,t0,0.040,0.029,0.021,round,stones_minerals,,stone,160,skip,existing
+bottle_cap,瓶盖,Bottle Cap,t0,0.030,0.029,0.009,flat,water_misc,,metal|paint,200,skip,existing
+cookie,饼干,Cookie,t0,0.070,0.069,0.009,flat,food_scraps,,dough|sugar,326,skip,existing
+fallen_leaf,落叶,Fallen Leaf,t0,0.090,0.060,0.001,flat,grass_plants,compost_heap,leaf|plant,192,skip,existing
+apple,苹果,Apple,t0,0.080,0.079,0.078,round,food_scraps,orchard_ladder,fruit|wax,280,skip,existing
+cheese_slice,奶酪片,Cheese Slice,t0,0.060,0.050,0.008,flat,food_scraps,handcart,cheese|paper,142,skip,existing
+beetle_figurine,甲虫小塑像,Beetle Figurine,t0,0.090,0.060,0.055,blocky,insects_shells,milestone,clay|paint,326,procedural-blender,pilot
+hay_wisp,干草絮,Hay Wisp,t0,0.085,0.045,0.031,long,grass_plants,bale_stack,straw,216,procedural-blender,pilot
+grain_kernel,谷粒,Grain Kernel,t0,0.020,0.013,0.012,round,grass_plants,hay_rack,grain,80,procedural-blender,pilot
+acorn_cap,橡子帽,Acorn Cap,t0,0.028,0.028,0.012,round,grass_plants,,wood|bark,140,procedural-blender,pilot
+snail_shell,蜗牛壳,Snail Shell,t0,0.060,0.055,0.050,round,insects_shells,,shell|chitin,260,procedural-blender,pilot
+farm_egg,农场鸡蛋,Farm Egg,t0,0.055,0.042,0.042,round,animal_gear,hay_rack,eggshell,200,procedural-blender,pilot
+sheep_bell,羊铃,Sheep Bell,t0,0.090,0.070,0.070,round,animal_gear,fence_post,metal|leather,300,procedural-blender,pilot
+flint_stone,燧石,Flint Stone,t0,0.070,0.055,0.045,blocky,stones_minerals,,flint|stone,180,procedural-blender,pilot
+smooth_pebble,光滑卵石,Smooth Pebble,t0,0.050,0.042,0.035,round,stones_minerals,water_trough,stone,140,procedural-blender,pilot
+clover_sprig,三叶草小枝,Clover Sprig,t0,0.060,0.054,0.011,flat,grass_plants,,leaf|plant,172,procedural-blender,pilot
+dandelion_puff,蒲公英绒球,Dandelion Puff,t0,0.070,0.070,0.065,round,grass_plants,,plant|seed,280,procedural-blender,pilot
+twig_stub,枯枝段,Twig Stub,t0,0.090,0.020,0.018,long,grass_plants,,wood|bark,120,procedural-blender,planned
+grass_blade,草叶,Grass Blade,t0,0.080,0.006,0.002,long,grass_plants,,leaf|plant,90,procedural-blender,planned
+bean_pod,豆荚,Bean Pod,t0,0.070,0.022,0.014,long,grass_plants,,plant|seed,140,procedural-blender,planned
+fruit_pit,果核,Fruit Pit,t0,0.035,0.030,0.028,round,food_scraps,,seed|wood,100,procedural-blender,planned
+mud_pellet,泥粒,Mud Pellet,t0,0.030,0.028,0.025,round,soil_dung,,soil|clay,100,procedural-blender,planned
+soil_crumb,土屑,Soil Crumb,t0,0.028,0.025,0.024,blocky,soil_dung,,soil,90,procedural-blender,planned
+clay_chip,泥片,Clay Chip,t0,0.060,0.050,0.008,flat,soil_dung,,clay,100,procedural-blender,planned
+grit_clump,砂粒团,Grit Clump,t0,0.040,0.035,0.030,round,stones_minerals,,sand|stone,90,procedural-blender,planned
+quartz_chip,石英碎片,Quartz Chip,t0,0.038,0.032,0.022,blocky,stones_minerals,dry_stone_wall,quartz|stone,140,procedural-blender,planned
+dung_fragment,干粪碎块,Dung Fragment,t0,0.055,0.048,0.040,round,soil_dung,,dung|straw,120,procedural-blender,planned
+beetle_wing_case,甲虫鞘翅,Beetle Wing Case,t0,0.048,0.040,0.008,flat,insects_shells,,chitin,100,procedural-blender,planned
+wool_fiber,羊毛纤维,Wool Fiber,t0,0.065,0.018,0.015,long,animal_gear,fence_post,wool,110,procedural-blender,planned
+dew_drop,露珠,Dew Drop,t0,0.022,0.020,0.018,round,water_misc,water_trough,water,80,procedural-blender,planned
+paper_scrap,纸屑,Paper Scrap,t0,0.100,0.074,0.012,flat,water_misc,garden_shed,paper,164,skip,existing
+juice_carton,果汁盒,Juice Carton,t1,0.100,0.060,0.060,blocky,water_misc,handcart,paper|foil,300,skip,existing
+straw_tuft,干草簇,Straw Tuft,t1,0.130,0.080,0.058,long,grass_plants,bale_stack,straw,308,procedural-blender,pilot
+feather,羽毛,Feather,t1,0.120,0.029,0.006,long,animal_gear,fence_post,feather,356,procedural-blender,pilot
+wool_tuft,羊毛簇,Wool Tuft,t1,0.110,0.095,0.085,round,animal_gear,wooden_gate,wool,260,procedural-blender,pilot
+dry_leaf_curl,卷曲枯叶,Dry Leaf Curl,t1,0.100,0.077,0.030,flat,grass_plants,compost_heap,leaf|plant,212,procedural-blender,pilot
+hay_strand,干草长茎,Hay Strand,t1,0.130,0.012,0.008,long,grass_plants,bale_stack,straw,160,procedural-blender,planned
+oat_stalk,燕麦秆,Oat Stalk,t1,0.135,0.016,0.012,long,grass_plants,hay_rack,oat|straw,180,procedural-blender,planned
+barley_ear,大麦穗,Barley Ear,t1,0.120,0.030,0.025,long,grass_plants,hay_rack,barley|grain,220,procedural-blender,planned
+small_twig,小树枝,Small Twig,t1,0.125,0.020,0.016,long,grass_plants,,wood|bark,180,procedural-blender,planned
+horseshoe_nail,马蹄钉,Horseshoe Nail,t1,0.100,0.012,0.010,long,farm_tools,,iron|metal,120,procedural-blender,planned
+cicada_husk,蝉蜕,Cicada Husk,t1,0.120,0.040,0.030,long,insects_shells,dry_stone_wall,chitin,320,procedural-blender,planned
+rope_end,麻绳头,Rope End,t1,0.130,0.032,0.030,long,farm_tools,fence_post,rope|fiber,200,procedural-blender,planned
+bread_crust,面包边,Bread Crust,t1,0.120,0.080,0.012,flat,food_scraps,handcart,bread,120,procedural-blender,planned
+leather_scrap,皮革边角,Leather Scrap,t1,0.120,0.080,0.006,flat,animal_gear,wooden_gate,leather,140,procedural-blender,planned
+snail_shell_shard,蜗牛壳碎片,Snail Shell Shard,t1,0.100,0.080,0.020,flat,insects_shells,,shell|chitin,160,procedural-blender,planned
+egg_shell_fragment,蛋壳片,Eggshell Fragment,t1,0.100,0.080,0.005,flat,animal_gear,,eggshell,120,procedural-blender,planned
+clay_tile_fragment,陶瓦碎片,Clay Tile Fragment,t1,0.120,0.100,0.015,flat,stones_minerals,,terracotta|clay,180,procedural-blender,planned
+leaf_skeleton,叶脉骨架,Leaf Skeleton,t1,0.110,0.090,0.004,flat,grass_plants,,leaf|plant,160,procedural-blender,planned
+straw_knot,干草结,Straw Knot,t1,0.100,0.090,0.080,round,grass_plants,bale_stack,straw|twine,240,procedural-blender,planned
+wool_lock,羊毛团,Wool Lock,t1,0.120,0.100,0.090,round,animal_gear,,wool,280,procedural-blender,planned
+dung_pebble,干粪粒,Dung Pebble,t1,0.120,0.105,0.090,round,soil_dung,,dung|straw,200,procedural-blender,planned
+twine_ball_small,小麻线球,Twine Ball,t1,0.110,0.100,0.100,round,farm_tools,garden_shed,twine|fiber,300,procedural-blender,planned
+apple_core,苹果核,Apple Core,t1,0.100,0.090,0.080,round,food_scraps,,fruit|seed,220,procedural-blender,planned
+flint_shard,燧石碎块,Flint Shard,t1,0.130,0.090,0.070,blocky,stones_minerals,,flint|stone,240,procedural-blender,planned
+salt_lick_chunk,盐砖碎块,Salt Lick Chunk,t1,0.120,0.100,0.090,blocky,animal_gear,,salt|stone,220,procedural-blender,planned
+napkin,餐巾,Napkin,t2,0.150,0.150,0.014,flat,water_misc,handcart,paper|cloth,192,skip,existing
+spoon,勺子,Spoon,t2,0.180,0.035,0.015,long,food_scraps,handcart,metal,300,skip,existing
+fence_peg,栅栏木钉,Fence Peg,t2,0.160,0.030,0.030,long,farm_tools,wooden_gate,wood,288,procedural-blender,pilot
+pitchfork_tine,干草叉齿,Pitchfork Tine,t2,0.180,0.020,0.015,long,farm_tools,hay_rack,metal,260,procedural-blender,planned
+sheep_collar,绵羊项圈,Sheep Collar,t2,0.190,0.185,0.040,round,animal_gear,fence_post,leather|metal,300,procedural-blender,planned
+dry_branch,干树枝,Dry Branch,t2,0.180,0.025,0.020,long,grass_plants,,wood|bark,220,procedural-blender,planned
+wheat_bundle_small,小束麦秆,Wheat Bundle,t2,0.190,0.060,0.050,long,grass_plants,hay_rack,wheat|straw,300,procedural-blender,planned
+rake_tooth,钉耙齿,Rake Tooth,t2,0.150,0.015,0.012,long,farm_tools,garden_shed,metal,180,procedural-blender,planned
+mud_cake,泥饼,Mud Cake,t2,0.190,0.170,0.030,flat,soil_dung,dry_stone_wall,soil|clay,260,procedural-blender,planned
+flat_stone,扁石,Flat Stone,t2,0.180,0.160,0.035,flat,stones_minerals,,stone,200,cc0-polyhaven,planned
+wood_shaving,木刨花,Wood Shaving,t2,0.150,0.120,0.004,flat,grass_plants,compost_heap,wood,140,procedural-blender,planned
+garden_label,菜园标签,Garden Label,t2,0.150,0.100,0.008,flat,farm_tools,garden_shed,wood|paint,160,procedural-blender,planned
+wax_flake,蜂蜡片,Wax Flake,t2,0.150,0.120,0.015,flat,food_scraps,beehive_box,wax,160,procedural-blender,planned
+wool_pom,羊毛球,Wool Pom,t2,0.170,0.160,0.150,round,animal_gear,,wool,320,procedural-blender,planned
+snail_shell_large,大蜗牛壳,Large Snail Shell,t2,0.190,0.170,0.150,round,insects_shells,water_trough,shell|chitin,380,procedural-blender,planned
+clay_marble,泥弹珠,Clay Marble,t2,0.150,0.150,0.140,round,stones_minerals,,clay,200,procedural-blender,planned
+dung_ball_tiny,微型粪球,Tiny Dung Ball,t2,0.160,0.155,0.150,round,soil_dung,,dung|straw,360,procedural-blender,planned
+crabapple,野苹果,Crabapple,t2,0.150,0.145,0.140,round,food_scraps,,fruit|wax,320,procedural-blender,planned
+beetle_shell_half,甲虫半壳,Beetle Shell Half,t2,0.150,0.130,0.050,round,insects_shells,,chitin,260,procedural-blender,planned
+onion_small,小洋葱,Small Onion,t2,0.160,0.150,0.140,round,food_scraps,,vegetable,300,procedural-blender,planned
+turf_clump,草皮块,Turf Clump,t2,0.190,0.160,0.080,blocky,grass_plants,compost_heap,soil|grass,320,procedural-blender,planned
+salt_lick_block,盐砖,Salt Lick Block,t2,0.180,0.150,0.120,blocky,animal_gear,,salt|stone,240,procedural-blender,planned
+brick_fragment,砖块碎片,Brick Fragment,t2,0.170,0.120,0.090,blocky,stones_minerals,,terracotta,260,procedural-blender,planned
+wood_block_small,小木块,Small Wood Block,t2,0.180,0.150,0.140,blocky,containers_supports,handcart,wood,240,procedural-blender,planned
+watering_can,洒水壶,Watering Can,t3,0.250,0.179,0.112,blocky,farm_tools,garden_shed,metal|paint,480,skip,existing
+small_potted_plant,小盆栽,Small Potted Plant,t3,0.220,0.140,0.136,round,grass_plants,garden_shed,terracotta|plant,489,skip,existing
+dung_ball_small,小粪球,Small Dung Ball,t1,0.120,0.112,0.103,round,soil_dung,,dung|straw,370,procedural-blender,pilot
+leather_strap,皮革带,Leather Strap,t3,0.200,0.034,0.009,flat,animal_gear,fence_post,leather|metal,240,procedural-blender,pilot
+sickle_handle,镰刀柄,Sickle Handle,t3,0.280,0.035,0.032,long,farm_tools,garden_shed,wood,220,procedural-blender,planned
+pitchfork_head,干草叉头,Pitchfork Head,t3,0.260,0.060,0.040,long,farm_tools,hay_rack,metal,320,fab-free,planned
+cow_brush,牛毛刷,Cow Brush,t3,0.240,0.090,0.060,long,animal_gear,fence_post,wood|fiber,360,procedural-blender,planned
+corn_cob,玉米芯,Corn Cob,t3,0.280,0.055,0.050,long,food_scraps,,corn|plant,380,procedural-blender,planned
+straw_bundle,小干草束,Straw Bundle,t3,0.260,0.110,0.100,long,grass_plants,hay_rack,straw|twine,320,procedural-blender,planned
+sickle_blade,镰刀刃,Sickle Blade,t3,0.240,0.120,0.010,flat,farm_tools,garden_shed,metal,260,fab-free,planned
+rake_head,钉耙头,Rake Head,t3,0.280,0.220,0.035,flat,farm_tools,garden_shed,metal|wood,380,fab-free,planned
+iron_horseshoe,马蹄铁,Iron Horseshoe,t3,0.210,0.200,0.020,flat,animal_gear,fence_post,iron|metal,240,fab-free,planned
+cabbage_leaf,菜叶,Cabbage Leaf,t3,0.260,0.200,0.010,flat,food_scraps,,leaf|vegetable,160,procedural-blender,planned
+mud_puddle_small,小泥水洼,Small Mud Puddle,t3,0.280,0.240,0.015,flat,water_misc,,water|soil,200,procedural-blender,planned
+cobble,鹅卵石,Cobble,t3,0.250,0.220,0.180,round,stones_minerals,,stone,280,cc0-polyhaven,planned
+walnut_shell,核桃壳,Walnut Shell,t3,0.220,0.210,0.200,round,food_scraps,,shell|wood,320,procedural-blender,planned
+rope_coil,麻绳圈,Rope Coil,t3,0.240,0.220,0.090,round,farm_tools,handcart,rope|fiber,340,procedural-blender,planned
+wire_hoop,铁丝圈,Wire Hoop,t3,0.240,0.230,0.030,round,farm_tools,wooden_gate,wire|metal,240,procedural-blender,planned
+mud_brick,泥砖,Mud Brick,t3,0.280,0.140,0.090,blocky,soil_dung,,soil|straw,260,procedural-blender,planned
+terracotta_shard,陶罐碎片,Terracotta Shard,t3,0.250,0.200,0.080,blocky,stones_minerals,garden_shed,terracotta|clay,220,procedural-blender,planned
+dung_ball_medium,中粪球,Medium Dung Ball,t3,0.250,0.244,0.244,round,soil_dung,,dung|straw,480,procedural-blender,pilot
+wheat_stalk,麦秆,Wheat Stalk,t4,0.380,0.024,0.022,long,grass_plants,hay_rack,wheat|straw,408,procedural-blender,pilot
+feed_scoop,饲料勺,Feed Scoop,t4,0.350,0.150,0.140,long,farm_tools,hay_rack,wood|metal,420,procedural-blender,planned
+hoe,锄头,Hoe,t4,0.420,0.180,0.060,long,farm_tools,garden_shed,metal|wood,520,fab-free,planned
+reed_bundle_large,大束芦苇,Reed Bundle,t4,0.440,0.120,0.110,long,grass_plants,,reed|straw,480,procedural-blender,planned
+fence_rail_short,短栅栏横木,Short Fence Rail,t4,0.440,0.090,0.070,long,structures_landmarks,,wood,380,procedural-blender,planned
+sickle,镰刀,Sickle,t4,0.360,0.140,0.030,flat,farm_tools,garden_shed,metal|wood,460,fab-free,planned
+leather_harness,皮革挽具,Leather Harness,t4,0.420,0.300,0.040,flat,animal_gear,wooden_gate,leather|metal,480,procedural-blender,planned
+mud_pie_large,大泥饼,Large Mud Pie,t4,0.400,0.360,0.050,flat,soil_dung,,soil|clay,320,procedural-blender,planned
+plank_short,短板,Short Plank,t4,0.420,0.140,0.030,flat,containers_supports,,wood,280,cc0-kenney,planned
+water_bucket,水桶,Water Bucket,t4,0.320,0.300,0.300,round,containers_supports,water_trough,wood|metal,520,cc0-kenney,planned
+clay_pot,陶罐,Clay Pot,t4,0.360,0.340,0.320,round,containers_supports,garden_shed,terracotta,480,procedural-blender,planned
+wool_bundle,羊毛捆,Wool Bundle,t4,0.400,0.350,0.320,round,animal_gear,,wool|twine,520,procedural-blender,planned
+fieldstone,田间石,Fieldstone,t4,0.440,0.380,0.300,round,stones_minerals,,stone,480,cc0-polyhaven,planned
+pumpkin_small,小南瓜,Small Pumpkin,t4,0.420,0.400,0.300,round,food_scraps,,vegetable,560,procedural-blender,planned
+hay_bale_mini,迷你干草捆,Mini Hay Bale,t4,0.420,0.300,0.280,blocky,grass_plants,bale_stack,straw|twine,620,procedural-blender,planned
+milk_can,牛奶罐,Milk Can,t4,0.340,0.220,0.220,blocky,containers_supports,handcart,metal,560,cc0-kenney,planned
+cowbell,牛铃,Cowbell,t4,0.340,0.220,0.200,blocky,animal_gear,wooden_gate,metal|leather,480,procedural-blender,planned
+sheep_shears,剪羊毛剪,Sheep Shears,t5,0.460,0.120,0.020,long,farm_tools,garden_shed,metal,420,fab-free,planned
+scythe,长柄镰刀,Scythe,t5,0.620,0.250,0.060,long,farm_tools,garden_shed,metal|wood,680,fab-free,planned
+pitchfork,干草叉,Pitchfork,t5,0.600,0.180,0.050,long,farm_tools,hay_rack,metal|wood,620,fab-free,planned
+log_short,短原木,Short Log,t5,0.620,0.220,0.200,long,grass_plants,,wood|bark,520,procedural-blender,planned
+straw_mat,干草垫,Straw Mat,t5,0.640,0.520,0.040,flat,grass_plants,,straw,380,procedural-blender,planned
+wheelbarrow_tray,独轮车斗,Wheelbarrow Tray,t5,0.640,0.480,0.220,flat,containers_supports,,wood|metal,560,cc0-kenney,planned
+mud_puddle,泥水洼,Mud Puddle,t5,0.620,0.520,0.020,flat,water_misc,,water|soil,300,procedural-blender,planned
+egg_basket,鸡蛋篮,Egg Basket,t5,0.480,0.420,0.300,round,containers_supports,handcart,wicker|straw,620,cc0-kenney,planned
+grain_sack,谷袋,Grain Sack,t5,0.580,0.450,0.400,round,containers_supports,handcart,cloth|grain,640,cc0-kenney,planned
+boulder_small,小巨石,Small Boulder,t5,0.600,0.520,0.450,round,stones_minerals,,stone,680,cc0-polyhaven,planned
+pumpkin,南瓜,Pumpkin,t5,0.550,0.520,0.400,round,food_scraps,,vegetable,720,procedural-blender,planned
+milk_churn,奶桶,Milk Churn,t5,0.550,0.380,0.380,blocky,containers_supports,handcart,metal|wood,680,cc0-kenney,planned
+hand_tool_box,手提工具箱,Hand Tool Box,t5,0.500,0.280,0.240,blocky,containers_supports,garden_shed,wood|metal,520,cc0-kenney,planned
+hay_bale_round,圆形草捆,Round Hay Bale,t5,0.640,0.600,0.580,blocky,grass_plants,bale_stack,straw|twine,780,procedural-blender,planned
+feed_trough_small,小饲料槽,Small Feed Trough,t6,0.950,0.400,0.350,long,containers_supports,,wood,900,cc0-kenney,planned
+wheelbarrow,独轮手推车,Wheelbarrow,t6,0.950,0.600,0.700,long,containers_supports,,wood|metal,1200,cc0-kenney,planned
+plank_stack_small,小板堆,Small Plank Stack,t6,0.900,0.350,0.250,long,containers_supports,,wood,800,cc0-kenney,planned
+hay_spread,摊开的干草,Hay Spread,t6,0.850,0.800,0.120,flat,grass_plants,,straw,620,procedural-blender,planned
+mud_wallow_small,小泥坑,Small Mud Wallow,t6,0.900,0.750,0.060,flat,water_misc,,water|soil,480,procedural-blender,planned
+dung_ball_large,大粪球,Large Dung Ball,t6,0.720,0.710,0.700,round,soil_dung,,dung|straw,1400,procedural-blender,planned
+wooden_barrel,木桶,Wooden Barrel,t6,0.800,0.700,0.750,round,containers_supports,,wood|metal,1100,cc0-kenney,planned
+water_barrel,雨水桶,Rain Barrel,t6,0.750,0.700,0.750,round,containers_supports,,wood|water,1000,cc0-kenney,planned
+stone_boulder,大石,Boulder,t6,0.850,0.800,0.700,round,stones_minerals,,stone,1200,cc0-polyhaven,planned
+hay_bale,干草捆,Hay Bale,t6,0.900,0.600,0.550,blocky,grass_plants,bale_stack,straw|twine,1000,procedural-blender,planned
+tree_stump,树桩,Tree Stump,t6,0.950,0.900,0.700,blocky,grass_plants,,wood|bark,1100,procedural-blender,planned
+beehive_small,小蜂箱,Small Beehive,t6,0.700,0.500,0.550,blocky,containers_supports,,wood|wax,900,cc0-kenney,planned
+dry_stone_wall,干砌石墙,Dry Stone Wall,t7,2.400,0.500,0.650,long,structures_landmarks,,stone|soil,3400,procedural-blender,planned
+fence_post,木栅栏柱,Fence Post,t7,1.200,0.120,0.120,long,structures_landmarks,,wood,900,cc0-kenney,planned
+hay_rack,干草架,Hay Rack,t7,1.600,0.900,1.100,blocky,containers_supports,,wood|metal,1800,procedural-blender,planned
+water_trough,饮水槽,Water Trough,t7,1.800,0.600,0.550,long,containers_supports,,wood|water,1500,procedural-blender,planned
+handcart,手推车,Handcart,t7,1.500,0.700,0.750,blocky,containers_supports,,wood|metal,2200,cc0-kenney,planned
+orchard_ladder,果园梯,Orchard Ladder,t7,2.200,0.500,0.100,long,containers_supports,,wood,1600,cc0-kenney,planned
+garden_shed,菜园棚屋,Garden Shed,t7,2.800,2.000,2.200,blocky,structures_landmarks,,wood|metal|paint,3500,procedural-blender,planned
+wooden_gate,木栅门,Wooden Gate,t7,1.300,1.000,0.100,flat,structures_landmarks,,wood|metal,1400,cc0-kenney,planned
+bale_stack,草堆,Bale Stack,t7,1.800,1.200,1.300,blocky,containers_supports,,straw|twine,2400,procedural-blender,planned
+compost_heap,堆肥堆,Compost Heap,t7,2.000,1.400,0.900,round,containers_supports,,soil|dung|straw,2000,procedural-blender,planned
+beehive_box,蜂箱,Beehive Box,t7,1.000,0.500,0.600,blocky,containers_supports,,wood|wax,1200,procedural-blender,planned
+milestone,界碑,Milestone,t7,1.100,0.350,0.300,long,structures_landmarks,,stone,900,procedural-blender,planned

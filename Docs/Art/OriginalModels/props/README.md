@@ -442,3 +442,60 @@ PROPS="book_stack,beer_crate,crate,storage_bin,crate_large,cooler_box_large,picn
 - 工程若从 Linear 切到 Gamma color space，`_Color` 需要做一次 sRGB 转换；工具当前按 Linear 直接写，切换前要先改这里。
 - 48 个 manifest 已随 FBX 进入 Assets；如果以后改建模颜色，改 `exports/<def>.manifest.json` 后要同步覆盖 Unity 侧同名 manifest，再跑菜单。两份不一致时工具只读 Unity 侧那份。
 - 自动同步走 `EditorApplication.delayCall`（避免在 AssetDatabase 导入状态里建资产触发限制警告）；批处理/CI 或 domain reload 打断时可能不会自动跑，此时显式调用 `PropArtMaterials.SyncAll()` 或跑菜单即可。编辑器启动时还有一次"缺材质才同步"的兜底检查。
+
+## 15. 第五批：两个新主题的 pilot 40 件 + 第一关 40 件 + 材质/细节返工（2026-11-15）
+
+### 15.1 规模
+
+| 项 | 值 |
+|---|---|
+| 仓库里的原创道具 | **128 件**（第四批结束时 48 件） |
+| 三角面合计 | 29307 |
+| 材质槽 | 1 槽 19 件 / 2 槽 29 件 / 3 槽 62 件 / ≥4 槽 18 件 |
+| 超出 `tri_budget` 的件 | 1（beetle_figurine） |
+| 档位分布 | t0 40 / t1 24 / t2 21 / t3 17 / t4 5 / t5 4 / t6 3 / t7 7 |
+
+### 15.2 本批新增（80 件）
+
+| 组 | 数量 | id |
+|---|---|---|
+| 第一关 扁平 | 10 | stamp, sugar_packet, coin, ticket_stub, paper_doily, butter_pat, postcard, pocket_notebook, cutting_board, table_knife |
+| 第一关 圆形 | 10 | button, marble, hazelnut, jar_lid, tape_roll, cookie_cutter_small, salt_shaker, jam_jar, candle, rolling_pin_small |
+| 第一关 细长 | 10 | toothpick, twig, grass_blade, straw_short, popsicle_stick, pencil_stub, bottle_opener, pen_ballpoint, fork, chopstick |
+| 第一关 块状 | 10 | die, eraser, matchbox, pill_box, candy_bar, toy_car_small, glasses_case, stapler, soap_bar, sauce_bottle |
+| 牛粪草甸 A/B | 20 | grain_kernel, acorn_cap, snail_shell, farm_egg, sheep_bell, smooth_pebble, flint_stone, dandelion_puff, wool_tuft, beetle_figurine, hay_wisp, straw_tuft, feather, leather_strap, clover_sprig, dry_leaf_curl, wheat_stalk, fence_peg, dung_ball_small, dung_ball_medium |
+| 凌乱房间 A/B | 20 | toy_brick, battery_aa, crumpled_paper, earbuds_case, ceramic_mug, game_controller, cereal_bowl, tissue_box, slipper, hairbrush, sticky_note, keychain, phone_charger, sunglasses, book_paperback, remote_control, chip_bag, sock_single, t_shirt, pizza_box |
+
+### 15.3 材质与细节（owner 反馈后的返工）
+
+owner 看过第一版 pilot 后指出「太简略、材质没用上」。诊断：第一版 80 件里 **32 件只有一个材质槽**、主体色普遍 >0.7 亮度，全部是「白/米白单色块」。返工按 [MATERIAL_AND_DETAIL_SPEC.md](MATERIAL_AND_DETAIL_SPEC.md) 执行（共享调色板、≥2 槽且必有暗色槽、主体亮度 0.30–0.65、槽间亮度差 ≥0.15 或色相 ≥60°、每类形状的加细节清单、面数上限 ×1.6）：
+
+- 80 件全部重做材质分区，**没有一件还是单槽**；多数件 3–4 槽（如 `game_controller` 6 槽、`battery_aa` 4 槽、`ceramic_mug` 4 槽）。
+- 细节是**真几何**不是画色块：盲槽印块、压痕折线、卷边、凹刻浮雕、台阶环、导油槽、凸点、橡胶握垫、镀铬保险杠、螺层、羽轴、纽扣唇边等。
+- 颜色**只来自调色板**，每件的槽位 key 与线性 RGB 写在各自 manifest 的 `materials_declared`；`previews/<id>_preview.png` 是用同一套材质渲的。
+
+### 15.4 `prop_lib.py` 的两处改动
+
+| 改动 | 原因 |
+|---|---|
+| `fit_bounds(bmeshes, size)` | 让一件道具的三轴**各自**缩放到目录里的真实尺寸（`finish()` 只按最长边等比缩），牛粪主题的 90×70 mm 羊铃、60×55 mm 蜗牛壳靠它才能精确到三轴；顺带把底面压到 z=0。 |
+| `_apply_boolean` 加 `mod.material_mode = 'TRANSFER'` | Blender 的 Exact 布尔默认按**材质索引**传递：工具件的颜色会被抄成目标件的 0 号槽，两色件并完变成单色（`leather_strap` 的金属扣、`keychain` 的钢圈都栽在这）。改成 TRANSFER 后，布尔结果保留工具件自己的材质。 |
+
+### 15.5 已知偏差
+
+- 调色板里 `wood`(0.224) 低于「主体 0.30–0.65」，`wood`↔`wood_dark` 亮度差 0.137 < 0.15：纯木件把主体放到 `straw`(0.367)、暗槽用 `wood_dark`；`cutting_board` 因此面用 `straw` 而非 `wood`（改一处常量即可回退）。
+- 深色主题件（皮革 0.045、土 0.137、深绿叶 0.115）主体亮度低于 0.30，是调色板只有这一档，不是漏改。
+- 少数「相邻色」槽对（`book_paperback` 蓝/墨、`sock_single` 灰/红、`remote_control` 黄/金属）亮度差 <0.15，靠色相或彩度区分，已在各自报告里逐件列出。
+- `straw_short` 的内壁是直筒穿过 12° 弯壳（升级前就有的形体缺陷，视觉不可见，未在本轮修）。
+- `beetle_figurine` 326 面超过目录原预算 300（`within_budget` 记 NO），按规范 ×1.6 = 480 仍在容许范围；`catalogue.csv` 的 `tri_budget` 已按实测提到 326，下次构建即达标。
+- **第四批的 19 件仍是单色**（`seed`、`pebble`、`bottle_cap`、`paper_scrap`、`napkin`、`watering_can`、`grapes`、`banana`、`cup`、`glass_bottle`、`plate`、`bowl`、`croissant`、`cheese_slice`、`fallen_leaf`、`spoon`、`flower_pot_large`、`wood_plank`、`serving_tray`）：本轮返工只覆盖第五批的 80 件（80/80 ≥2 槽），这 19 件留给下一轮。
+
+### 15.6 复现
+
+```bash
+source ~/tools/blender-env.sh
+cd Docs/Art/OriginalModels/props/scripts
+"$BLENDER" $BLENDER_FLAGS --background --python build_all.py -- --out ../../../../../../build/props
+"$BLENDER" $BLENDER_FLAGS --background --python ../scripts/render_contact_sheet.py   # 若存在
+python3 verify_import.py
+```

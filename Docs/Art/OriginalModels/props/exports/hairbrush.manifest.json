@@ -1,0 +1,150 @@
+{
+  "id": "hairbrush",
+  "pivot": "center",
+  "target_longest_m": 0.22,
+  "dimensions_m": {
+    "x": 0.2199999988079071,
+    "y": 0.04399999976158142,
+    "z": 0.026000000536441803,
+    "longest": 0.2199999988079071
+  },
+  "bounds_m": {
+    "min": [
+      -0.10999999940395355,
+      -0.02199999988079071,
+      -0.013000000268220901
+    ],
+    "max": [
+      0.10999999940395355,
+      0.02199999988079071,
+      0.013000000268220901
+    ]
+  },
+  "vertices": 164,
+  "triangles": 324,
+  "materials": [
+    "Prop_hairbrush_plastic_grey",
+    "Prop_hairbrush_nylon",
+    "Prop_hairbrush_rubber",
+    "Prop_hairbrush_plastic_red"
+  ],
+  "material_base_colors": {
+    "Prop_hairbrush_plastic_grey": [
+      0.23,
+      0.235,
+      0.24
+    ],
+    "Prop_hairbrush_nylon": [
+      0.72,
+      0.7,
+      0.66
+    ],
+    "Prop_hairbrush_rubber": [
+      0.045,
+      0.045,
+      0.048
+    ],
+    "Prop_hairbrush_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "cdd173c3d32f83b01c41610d660fe62523afb636760e1abbb5685ff9b1fb6a6b",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "发刷",
+  "category": "hygiene_bathroom",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.22,
+    "game_longest_dim_m": 0.22,
+    "sourcing_hint": "model ourselves：220 x 60 x 40 mm 板式发刷，24 个并入刷头板的刷毛凸柱",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.22,
+    "built_longest_m": 0.2199999988079071,
+    "abs_error_m": 1.1920928966180355e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 352,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_grey",
+      "name_zh": "灰塑料刷头板",
+      "linear_rgb": [
+        0.23,
+        0.235,
+        0.24
+      ],
+      "roughness": 0.5
+    },
+    {
+      "key": "nylon",
+      "name_zh": "亮白尼龙刷毛",
+      "linear_rgb": [
+        0.72,
+        0.7,
+        0.66
+      ],
+      "roughness": 0.5
+    },
+    {
+      "key": "rubber",
+      "name_zh": "深色刷毛底座",
+      "linear_rgb": [
+        0.045,
+        0.045,
+        0.048
+      ],
+      "roughness": 0.88
+    },
+    {
+      "key": "plastic_red",
+      "name_zh": "红塑料手柄",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.48
+    }
+  ],
+  "notes": "Head plate 0.078 x 0.044 m, plate top z=0.020, rim down to z=0, one n-gon underside.  Bristle field: 6 x 4 cells (13 x 11 mm pitch), each with a plateau 2 mm inside the cell edges and 6 mm above the plate, so the columns are 9 x 7 x 6 mm with 4 mm channels: 24 columns, 10 triangles each, 240.  Head total 240 + 40 rim + 18 underside = 298.  Handle: 4-sided prism 0.030 x 0.0195 m on z 0-0.0195, x -0.142 to 0.004, 12 triangles.  324 triangles measured after the union.  AABB 0.220 x 0.044 x 0.026.  Four slots by face height/position: column tops (z > 0.0257) nylon, column skirts (z > 0.0205) rubber, handle (x < -0.002 below the plate top) plastic_red, the rest plastic_grey.  One closed shell.",
+  "build_script": "models/hairbrush.py",
+  "preview": "previews/hairbrush_preview.png",
+  "files": {
+    "hairbrush.fbx": 22620,
+    "hairbrush.glb": 17608,
+    "hairbrush.blend": 497540
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 134829
+}

@@ -79,9 +79,9 @@
   "build_script": "models/cheese_slice.py",
   "preview": "previews/cheese_slice_preview.png",
   "files": {
-    "cheese_slice.fbx": 16780,
+    "cheese_slice.fbx": 17004,
     "cheese_slice.glb": 7000,
-    "cheese_slice.blend": 90506
+    "cheese_slice.blend": 422124
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 98496
+  "preview_bytes": 143792
 }

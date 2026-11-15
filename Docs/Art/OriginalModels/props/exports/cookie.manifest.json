@@ -95,9 +95,9 @@
   "build_script": "models/cookie.py",
   "preview": "previews/cookie_preview.png",
   "files": {
-    "cookie.fbx": 23628,
+    "cookie.fbx": 23852,
     "cookie.glb": 16840,
-    "cookie.blend": 95690
+    "cookie.blend": 455020
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 104929
+  "preview_bytes": 146134
 }

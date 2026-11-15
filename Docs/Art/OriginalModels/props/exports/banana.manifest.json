@@ -79,9 +79,9 @@
   "build_script": "models/banana.py",
   "preview": "previews/banana_preview.png",
   "files": {
-    "banana.fbx": 20956,
+    "banana.fbx": 22348,
     "banana.glb": 6564,
-    "banana.blend": 94325
+    "banana.blend": 430336
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 93116
+  "preview_bytes": 136021
 }

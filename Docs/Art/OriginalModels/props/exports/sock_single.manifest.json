@@ -1,0 +1,134 @@
+{
+  "id": "sock_single",
+  "pivot": "center",
+  "target_longest_m": 0.25,
+  "dimensions_m": {
+    "x": 0.25,
+    "y": 0.11232230067253113,
+    "z": 0.030074961483478546,
+    "longest": 0.25
+  },
+  "bounds_m": {
+    "min": [
+      -0.125,
+      -0.056161150336265564,
+      -0.015037480741739273
+    ],
+    "max": [
+      0.125,
+      0.056161150336265564,
+      0.015037480741739273
+    ]
+  },
+  "vertices": 95,
+  "triangles": 186,
+  "materials": [
+    "Prop_sock_single_fabric_grey",
+    "Prop_sock_single_cotton_red",
+    "Prop_sock_single_ink"
+  ],
+  "material_base_colors": {
+    "Prop_sock_single_fabric_grey": [
+      0.27,
+      0.255,
+      0.23
+    ],
+    "Prop_sock_single_cotton_red": [
+      0.42,
+      0.09,
+      0.08
+    ],
+    "Prop_sock_single_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "7d8836f3b1bd678b411962b0b890cee7b3c7b9e07e48b89e167f1b461b859dc7",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "单只袜子",
+  "category": "clothes_fabric",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.25,
+    "game_longest_dim_m": 0.25,
+    "sourcing_hint": "model ourselves：塌陷袜子沿中心线扫掠 + 翻边袜口内凹腔，单壳",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.25,
+    "built_longest_m": 0.25,
+    "abs_error_m": 0.0,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 220,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "fabric_grey",
+      "name_zh": "袜子灰布",
+      "linear_rgb": [
+        0.27,
+        0.255,
+        0.23
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "cotton_red",
+      "name_zh": "袜口红罗纹",
+      "linear_rgb": [
+        0.42,
+        0.09,
+        0.08
+      ],
+      "roughness": 0.94
+    },
+    {
+      "key": "ink",
+      "name_zh": "袜口内里",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.9
+    }
+  ],
+  "notes": "9-station ribbon, 5 across: rolled cuff facing +X (two stations 9 mm apart, half-width 0.031 and 24.5 mm high) over a 52 mm-wide leg, heel bulge at (0.024, 0.009, 20 mm high), then the foot widens to 62 mm and turns towards +Y, ending in a 32 mm toe stub at (-0.074, 0.050).  Cuff opening is a 42 x 19 x 8 mm blind pocket cut into the cuff face; its walls are the ink slot, the rolled cuff is cotton_red and the body fabric_grey.  Two stations are 1.5 mm lower than the first draft, which is the only change to the profile: two soft creases along the leg.",
+  "build_script": "models/sock_single.py",
+  "preview": "previews/sock_single_preview.png",
+  "files": {
+    "sock_single.fbx": 21628,
+    "sock_single.glb": 12944,
+    "sock_single.blend": 468080
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 132202
+}

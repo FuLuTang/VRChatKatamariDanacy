@@ -5,23 +5,23 @@
   "dimensions_m": {
     "x": 1.600000023841858,
     "y": 0.5499999523162842,
-    "z": 0.8100000023841858,
+    "z": 0.800000011920929,
     "longest": 1.600000023841858
   },
   "bounds_m": {
     "min": [
       -0.800000011920929,
       -0.2749999761581421,
-      -0.4050000011920929
+      -0.4000000059604645
     ],
     "max": [
       0.800000011920929,
       0.2749999761581421,
-      0.4050000011920929
+      0.4000000059604645
     ]
   },
-  "vertices": 248,
-  "triangles": 512,
+  "vertices": 255,
+  "triangles": 526,
   "materials": [
     "Prop_collapsed_bench_wood",
     "Prop_collapsed_bench_metal"
@@ -46,7 +46,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "5e8e98c45275d0380954cbcfae460b0e2938c478c152e6c8272c5bac1235382c",
+  "geometry_sha256": "d1d766acf6e1f8c0287d0a9541aef3430443b9066c5fec8f00b64d0c914cfaca",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "倒塌长凳",
   "category": "gate",
@@ -95,9 +95,9 @@
   "build_script": "models/collapsed_bench.py",
   "preview": "previews/collapsed_bench_preview.png",
   "files": {
-    "collapsed_bench.fbx": 21660,
-    "collapsed_bench.glb": 20504,
-    "collapsed_bench.blend": 98972
+    "collapsed_bench.fbx": 22812,
+    "collapsed_bench.glb": 20852,
+    "collapsed_bench.blend": 466540
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 128716
+  "preview_bytes": 162017
 }

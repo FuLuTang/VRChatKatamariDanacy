@@ -1,0 +1,144 @@
+id,display_name_zh,display_name_en,tier,size_x,size_y,size_z,shape_class,category,parent_support_id,materials,tri_budget,source_plan,status
+picnic_blanket,野餐毯,Picnic blanket,t7,5.000,4.500,0.012,flat,terrain,,cream|stripe,360,procedural-blender,existing
+folding_stool,折叠凳,Folding stool,t4,0.400,0.350,0.320,blocky,furniture,,canvas|frame,556,procedural-blender,existing
+small_potted_plant,小盆栽,Small potted plant,t3,0.220,0.140,0.136,blocky,garden,,pot|soil|leaf,489,procedural-blender,existing
+fallen_leaf,落叶,Fallen leaf,t0,0.090,0.060,0.001,flat,nature,,leaf,192,procedural-blender,existing
+pebble,小石子,Pebble,t0,0.040,0.029,0.021,round,nature,,stone,80,procedural-blender,existing
+cooler_box_large,大保温箱,Large cooler box,t6,0.700,0.450,0.400,blocky,container,,shell|lid|grip,204,procedural-blender,existing
+napkin,餐巾,Napkin,t2,0.150,0.150,0.014,flat,tableware,,cloth,192,procedural-blender,existing
+storage_bin,收纳箱,Storage bin,t5,0.550,0.400,0.350,blocky,container,,body|lid|label,310,procedural-blender,existing
+soda_can,易拉罐,Soda can,t1,0.120,0.066,0.066,round,drink,,metal|label,320,procedural-blender,existing
+glass_bottle,玻璃瓶,Glass bottle,t3,0.280,0.070,0.070,long,drink,,glass,384,procedural-blender,existing
+beer_crate,啤酒箱,Beer crate,t4,0.400,0.300,0.280,blocky,container,,shell|web|floor,182,procedural-blender,existing
+bread_slice,面包片,Bread slice,t1,0.100,0.100,0.014,flat,food,,crumb|crust,160,procedural-blender,existing
+thermos,保温壶,Thermos,t3,0.300,0.109,0.105,long,container,,body|handle|belt|cap,388,procedural-blender,existing
+cookie,饼干,Cookie,t0,0.070,0.069,0.009,flat,food,,dough|chip,326,procedural-blender,existing
+wood_plank,木板,Wood plank,t7,1.400,0.350,0.025,long,structure,,wood,44,procedural-blender,existing
+orange,橙子,Orange,t0,0.080,0.080,0.077,round,food,,rind|stem,360,procedural-blender,existing
+bottle_cap,瓶盖,Bottle cap,t0,0.030,0.029,0.009,round,debris,,cap,200,procedural-blender,existing
+croissant,牛角包,Croissant,t1,0.120,0.069,0.063,long,food,,crust,378,procedural-blender,existing
+grapes,葡萄,Grapes,t0,0.060,0.060,0.022,round,food,,skin,288,procedural-blender,existing
+toy_ball,小皮球,Toy ball,t2,0.150,0.150,0.150,round,toy,,shell|band,288,procedural-blender,existing
+picnic_basket,野餐篮,Picnic basket,t4,0.450,0.300,0.221,blocky,container,,wicker|handle,552,procedural-blender,existing
+paper_scrap,纸屑,Paper scrap,t0,0.100,0.074,0.012,flat,debris,,paper,164,procedural-blender,existing
+juice_carton,果汁盒,Juice carton,t1,0.100,0.060,0.060,blocky,drink,,card|panel,36,procedural-blender,existing
+watering_can,洒水壶,Watering can,t3,0.250,0.179,0.112,blocky,garden,,enamel,346,procedural-blender,existing
+flower_pot_large,大花盆,Large flower pot,t4,0.400,0.340,0.340,round,garden,,terracotta,256,procedural-blender,existing
+collapsed_bench,倒塌长凳,Collapsed bench,t7,1.600,0.800,0.550,long,gate,,wood|metal,526,procedural-blender,existing
+serving_tray,托盘,Serving tray,t5,0.550,0.350,0.040,flat,structure,,wood,94,procedural-blender,existing
+cup,纸杯,Paper cup,t0,0.090,0.075,0.075,round,tableware,,paper,280,procedural-blender,existing
+cheese_slice,奶酪片,Cheese slice,t0,0.060,0.050,0.008,flat,food,,cheese,142,procedural-blender,existing
+acorn,橡子,Acorn,t0,0.030,0.024,0.023,round,nature,,nut|cap,220,procedural-blender,existing
+apple,苹果,Apple,t0,0.080,0.079,0.078,round,food,,skin|stem,280,procedural-blender,existing
+crate_large,大木箱,Large crate,t6,0.800,0.500,0.450,blocky,container,,wood|trim,308,procedural-blender,existing
+spoon,勺子,Spoon,t2,0.180,0.035,0.015,long,tableware,,steel,282,procedural-blender,existing
+lounge_chair,折叠躺椅,Lounge chair,t7,1.600,0.600,0.350,long,furniture,,canvas|towel|frame,354,procedural-blender,existing
+seed,草籽,Grass seed,t0,0.020,0.011,0.008,round,food,,body,144,procedural-blender,existing
+plate,盘子,Plate,t3,0.240,0.240,0.025,flat,tableware,,ceramic,384,procedural-blender,existing
+watermelon,西瓜,Watermelon,t3,0.300,0.240,0.220,round,food,,rind|stripe,528,procedural-blender,existing
+crate,木箱,Wooden crate,t5,0.600,0.400,0.400,blocky,container,,wood|trim,272,procedural-blender,existing
+bowl,碗,Bowl,t2,0.160,0.160,0.060,round,tableware,,enamel,384,procedural-blender,existing
+sandwich,三明治,Sandwich,t1,0.120,0.090,0.040,blocky,food,,crust|crumb|ham|cheese,140,procedural-blender,existing
+picnic_bench,野餐长凳,Picnic bench,t7,1.200,0.450,0.400,long,furniture,,wood|metal,360,procedural-blender,existing
+pear,梨,Pear,t0,0.090,0.055,0.054,round,food,,skin|stem,280,procedural-blender,existing
+book_stack,书堆,Book stack,t3,0.260,0.190,0.090,blocky,furniture,,pages|cover_a|cover_b|cover_c,160,procedural-blender,existing
+stroller,婴儿车,Stroller,t7,1.000,1.000,0.550,blocky,furniture,,rubber|metal|basket|body|canopy,888,procedural-blender,existing
+strawberry,草莓,Strawberry,t0,0.040,0.036,0.036,round,food,,skin|calyx,240,procedural-blender,existing
+banana,香蕉,Banana,t2,0.180,0.068,0.032,long,food,,skin,300,procedural-blender,existing
+folding_table,折叠桌,Folding table,t7,1.000,0.700,0.600,flat,furniture,,top|frame,236,procedural-blender,existing
+cooler_box,保温箱,Cooler box,t5,0.550,0.350,0.300,blocky,container,,shell|lid|grip,124,procedural-blender,existing
+toothpick,牙签,Toothpick,t0,0.065,0.002,0.002,long,tableware,,wood,180,procedural-blender,pilot
+button,纽扣,Button,t0,0.012,0.012,0.003,round,clothes_fabric,,plastic,144,procedural-blender,pilot
+marble,玻璃弹珠,Glass marble,t0,0.016,0.016,0.016,round,toy,,glass,120,procedural-blender,pilot
+hazelnut,榛子,Hazelnut,t0,0.025,0.022,0.022,round,nature,,wood,180,procedural-blender,pilot
+coin,硬币,Coin,t0,0.024,0.024,0.002,flat,debris,,metal,168,procedural-blender,pilot
+die,骰子,Die,t0,0.016,0.016,0.016,blocky,toy,,plastic|ink,160,procedural-blender,pilot
+eraser,橡皮,Eraser,t0,0.050,0.024,0.012,blocky,tableware,,rubber|paper,160,procedural-blender,pilot
+grass_blade,草叶,Grass blade,t0,0.080,0.006,0.002,long,nature,,foliage,60,procedural-blender,pilot
+sugar_packet,糖包,Sugar packet,t0,0.075,0.045,0.008,flat,food,,paper,100,procedural-blender,pilot
+twig,小树枝,Twig,t0,0.090,0.007,0.007,long,nature,,wood|bark,140,procedural-blender,pilot
+matchbox,火柴盒,Matchbox,t0,0.055,0.036,0.014,blocky,container,,cardboard|paper,160,procedural-blender,pilot
+stamp,邮票,Postage stamp,t0,0.026,0.022,0.002,flat,paper_stationery,,paper,80,procedural-blender,pilot
+straw_short,短吸管,Short straw,t1,0.120,0.012,0.006,long,tableware,,plastic,120,procedural-blender,pilot
+popsicle_stick,冰棍棒,Popsicle stick,t1,0.110,0.010,0.002,long,toy,,wood,120,procedural-blender,pilot
+ticket_stub,票根,Ticket stub,t1,0.110,0.055,0.002,flat,paper_stationery,,paper|ink,108,procedural-blender,pilot
+paper_doily,纸垫,Paper doily,t1,0.120,0.120,0.002,flat,tableware,,paper,192,procedural-blender,pilot
+pill_box,药盒,Pill box,t1,0.120,0.055,0.020,blocky,container,,plastic|metal,180,procedural-blender,pilot
+pencil_stub,铅笔头,Pencil stub,t1,0.120,0.008,0.007,long,tableware,,wood|paint|graphite,160,procedural-blender,pilot
+candy_bar,小糖果条,Candy bar,t1,0.130,0.040,0.015,blocky,food,,wrapper|chocolate,160,procedural-blender,pilot
+bottle_opener,开瓶器,Bottle opener,t1,0.130,0.035,0.008,long,tableware,,metal,180,procedural-blender,pilot
+jar_lid,瓶盖圈,Jar lid,t1,0.100,0.100,0.012,round,container,,metal,140,procedural-blender,pilot
+tape_roll,胶带卷,Tape roll,t1,0.100,0.100,0.020,round,tools_hardware,,plastic|paper,180,procedural-blender,pilot
+butter_pat,黄油块,Butter pat,t1,0.100,0.060,0.012,blocky,food,,butter|paper,100,procedural-blender,pilot
+cookie_cutter_small,小饼干模,Small cookie cutter,t1,0.100,0.080,0.025,round,tableware,,metal,180,procedural-blender,pilot
+pen_ballpoint,圆珠笔,Ballpoint pen,t2,0.145,0.012,0.010,long,paper_stationery,,plastic|metal|ink,236,procedural-blender,pilot
+fork,餐叉,Fork,t2,0.190,0.025,0.012,long,tableware,,metal,220,procedural-blender,pilot
+postcard,明信片,Postcard,t2,0.150,0.100,0.002,flat,paper_stationery,,paper|ink,92,procedural-blender,pilot
+pocket_notebook,口袋本,Pocket notebook,t2,0.150,0.100,0.012,flat,paper_stationery,,paper|cardboard,140,procedural-blender,pilot
+toy_car_small,小玩具车,Small toy car,t2,0.150,0.080,0.060,blocky,toy,,paint|plastic|rubber,300,procedural-blender,pilot
+glasses_case,眼镜盒,Glasses case,t2,0.170,0.070,0.045,blocky,container,,fabric|metal,200,procedural-blender,pilot
+stapler,订书机,Stapler,t2,0.160,0.060,0.045,blocky,paper_stationery,,plastic|metal,260,procedural-blender,pilot
+salt_shaker,盐瓶,Salt shaker,t2,0.145,0.045,0.045,round,tableware,,glass|metal,282,procedural-blender,pilot
+jam_jar,果酱罐,Jam jar,t2,0.170,0.170,0.120,round,food,,glass|metal|jam,288,procedural-blender,pilot
+candle,小蜡烛,Small candle,t2,0.150,0.050,0.050,round,container,,wax|wick,216,procedural-blender,pilot
+chopstick,筷子,Chopstick,t3,0.220,0.006,0.006,long,tableware,,wood,120,procedural-blender,pilot
+table_knife,餐刀,Table knife,t3,0.230,0.020,0.008,long,tableware,,metal|wood,200,procedural-blender,pilot
+whisk,打蛋器,Whisk,t3,0.25,0.06,0.06,long,tableware,,metal,320,procedural-blender,planned
+rolling_pin_small,小擀面杖,Small rolling pin,t3,0.280,0.035,0.035,long,tableware,,wood,180,procedural-blender,pilot
+cutting_board,小砧板,Small cutting board,t3,0.280,0.200,0.015,flat,tableware,,wood,120,procedural-blender,pilot
+sauce_bottle,酱料瓶,Sauce bottle,t3,0.240,0.060,0.060,round,container,,plastic|paper,240,procedural-blender,pilot
+paperclip,回形针,Paperclip,t0,0.033,0.01,0.001,long,paper_stationery,,metal,80,procedural-blender,planned
+safety_pin,别针,Safety pin,t0,0.045,0.01,0.004,long,tools_hardware,,metal,100,procedural-blender,planned
+hairpin,发夹,Hairpin,t0,0.06,0.008,0.003,long,clothes_fabric,,metal,80,procedural-blender,planned
+bead,小珠子,Bead,t0,0.012,0.012,0.012,round,clothes_fabric,,glass,80,procedural-blender,planned
+gum_drop,软糖,Gum drop,t0,0.02,0.02,0.014,round,food,,sugar,100,procedural-blender,planned
+crumb,面包屑,Bread crumb,t0,0.025,0.02,0.015,blocky,food,,bread,80,procedural-blender,planned
+sticker,贴纸,Sticker,t0,0.03,0.03,0.0005,flat,paper_stationery,,paper|ink,60,procedural-blender,planned
+tea_leaf,茶叶,Tea leaf,t0,0.02,0.008,0.001,flat,food,,tea,60,procedural-blender,planned
+poppy_seed,罂粟籽,Poppy seed,t0,0.02,0.02,0.015,round,nature,,seed,60,procedural-blender,planned
+noodle_scrap,面条头,Noodle scrap,t0,0.04,0.004,0.004,long,food,,dough,60,procedural-blender,planned
+candy_wrapper,糖纸,Candy wrapper,t1,0.1,0.08,0.002,flat,packaging,,wrapper,60,procedural-blender,planned
+butter_knife,黄油刀,Butter knife,t1,0.13,0.018,0.008,long,tableware,,metal,160,procedural-blender,planned
+chopstick_rest,筷架,Chopstick rest,t1,0.1,0.02,0.015,long,tableware,,ceramic,120,procedural-blender,planned
+cocktail_pick,牙签签,Cocktail pick,t1,0.1,0.004,0.004,long,tableware,,wood,80,procedural-blender,planned
+cork_ring,软木垫,Cork coaster,t1,0.1,0.1,0.005,round,tableware,,cork,100,procedural-blender,planned
+matchbook,火柴夹,Matchbook,t1,0.1,0.05,0.008,flat,container,,cardboard,100,procedural-blender,planned
+soy_packet,酱油包,Soy sauce packet,t1,0.1,0.07,0.01,flat,food,,plastic,60,procedural-blender,planned
+jam_packet,果酱包,Jam packet,t1,0.1,0.07,0.01,flat,food,,plastic,60,procedural-blender,planned
+wallet,钱包,Wallet,t2,0.19,0.1,0.02,flat,clothes_fabric,,leather|fabric,200,procedural-blender,planned
+phone_case,手机壳,Phone case,t2,0.16,0.08,0.012,flat,electronics_cables,,plastic,160,procedural-blender,planned
+scissors_small,小剪刀,Small scissors,t2,0.16,0.06,0.012,long,paper_stationery,,metal|plastic,240,procedural-blender,planned
+glasses_case_slim,细眼镜盒,Slim glasses case,t2,0.16,0.06,0.03,blocky,container,,fabric,180,procedural-blender,planned
+small_jar,小罐子,Small jar,t2,0.16,0.08,0.08,round,container,,glass|metal,220,procedural-blender,planned
+pepper_mill_small,小胡椒磨,Small pepper mill,t2,0.19,0.05,0.05,long,tableware,,wood|metal,240,procedural-blender,planned
+spice_tin,香料罐,Spice tin,t2,0.16,0.16,0.05,round,container,,metal|label,180,procedural-blender,planned
+wooden_spoon_small,小木勺,Small wooden spoon,t2,0.18,0.04,0.015,long,tableware,,wood,180,procedural-blender,planned
+ladle,汤勺,Ladle,t3,0.28,0.08,0.07,long,tableware,,metal,280,procedural-blender,planned
+frying_pan_small,小平底锅,Small frying pan,t3,0.24,0.24,0.045,round,tableware,,metal|plastic,300,procedural-blender,planned
+cereal_box_small,小麦片盒,Small cereal box,t3,0.26,0.19,0.07,blocky,packaging,,cardboard|ink,120,cc0-quaternius,planned
+flower_vase,小花瓶,Flower vase,t3,0.26,0.14,0.14,round,container,,ceramic,260,procedural-blender,planned
+book_hardcover,精装书,Hardcover book,t3,0.24,0.16,0.035,flat,paper_stationery,,paper|cardboard,180,procedural-blender,planned
+beer_glass,啤酒杯,Beer glass,t3,0.2,0.09,0.09,round,drink,,glass,200,procedural-blender,planned
+kettle_small,小水壶,Small kettle,t3,0.28,0.2,0.2,round,tableware,,metal,320,procedural-blender,planned
+potted_herb,香草盆栽,Potted herb,t3,0.25,0.25,0.22,blocky,garden,,ceramic|foliage|soil,360,procedural-blender,planned
+picnic_hamper,野餐提篮,Picnic hamper,t4,0.35,0.28,0.25,blocky,container,,wicker|fabric,420,cc0-kenney,planned
+folded_parasol,收拢遮阳伞,Folded parasol,t4,0.4,0.08,0.08,long,garden,,fabric|metal,360,procedural-blender,planned
+potted_fern,蕨类盆栽,Potted fern,t4,0.38,0.38,0.35,blocky,garden,,ceramic|foliage|soil,480,procedural-blender,planned
+charcoal_bag,木炭袋,Charcoal bag,t4,0.42,0.28,0.15,blocky,container,,paper|charcoal,200,procedural-blender,planned
+garden_trowel,小铲子,Garden trowel,t4,0.32,0.09,0.04,long,garden,,metal|wood,240,procedural-blender,planned
+wooden_crate_small,小木条箱,Small wooden crate,t4,0.35,0.28,0.22,blocky,container,,wood,260,cc0-kenney,planned
+garden_stool,园凳,Garden stool,t5,0.45,0.45,0.4,round,furniture,,wood,360,procedural-blender,planned
+cooler_small,小保温箱,Small cooler,t5,0.5,0.32,0.3,blocky,container,,plastic,240,procedural-blender,planned
+rolled_blanket,卷起的毯子,Rolled blanket,t5,0.55,0.18,0.18,long,furniture,,fabric,260,procedural-blender,planned
+birdhouse,鸟屋,Birdhouse,t5,0.5,0.3,0.3,blocky,garden,,wood|paint,320,procedural-blender,planned
+watering_can_large,大洒水壶,Large watering can,t5,0.55,0.3,0.4,blocky,garden,,metal,420,procedural-blender,planned
+parasol_closed,收拢大伞,Closed patio parasol,t6,0.8,0.2,0.2,long,garden,,fabric|metal,420,procedural-blender,planned
+wheelbarrow,独轮车,Wheelbarrow,t6,0.9,0.6,0.55,blocky,garden,,metal|wood|rubber,700,procedural-blender,planned
+patio_chair,庭院椅,Patio chair,t6,0.75,0.7,0.9,blocky,furniture,,metal|fabric,600,procedural-blender,planned
+garden_bench,花园长凳,Garden bench,t6,0.95,0.55,0.85,long,furniture,,wood|metal,520,cc0-kenney,planned
+patio_table,庭院桌,Patio table,t7,1.2,1.2,0.75,round,furniture,,metal|wood,700,cc0-kenney,planned
+market_umbrella,市集伞,Market umbrella,t7,2,2,2.2,round,structure,,fabric|metal,600,procedural-blender,planned
+oak_stump,橡树桩,Oak stump,t7,1.5,1.5,1.1,round,structure,,bark|wood,900,procedural-blender,planned
+soap_bar,肥皂,Soap bar,t0,0.090,0.055,0.025,blocky,hygiene_bathroom,,soap|paper,200,procedural-blender,pilot
+folded_blanket,折叠毯,Folded Blanket,t4,0.420,0.340,0.090,flat,furniture,,fabric|fabric_dark,520,procedural-blender,planned
+flattened_cardboard,压扁纸箱,Flattened Cardboard,t4,0.440,0.350,0.060,flat,debris,,cardboard,300,procedural-blender,planned

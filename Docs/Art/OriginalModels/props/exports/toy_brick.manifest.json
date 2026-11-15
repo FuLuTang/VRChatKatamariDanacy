@@ -1,0 +1,118 @@
+{
+  "id": "toy_brick",
+  "pivot": "center",
+  "target_longest_m": 0.032,
+  "dimensions_m": {
+    "x": 0.03199999779462814,
+    "y": 0.01599999889731407,
+    "z": 0.009999998845160007,
+    "longest": 0.03199999779462814
+  },
+  "bounds_m": {
+    "min": [
+      -0.01599999889731407,
+      -0.007999999448657036,
+      -0.004999999422580004
+    ],
+    "max": [
+      0.01599999889731407,
+      0.007999999448657036,
+      0.004999999422580004
+    ]
+  },
+  "vertices": 70,
+  "triangles": 136,
+  "materials": [
+    "Prop_toy_brick_plastic_red",
+    "Prop_toy_brick_plastic_red_dark"
+  ],
+  "material_base_colors": {
+    "Prop_toy_brick_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ],
+    "Prop_toy_brick_plastic_red_dark": [
+      0.115,
+      0.018,
+      0.014
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "ddb26267d2d2c312f4d6ac2b8d7d4bfc9387366796c694434890e5aa6762790c",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "玩具积木",
+  "category": "toys_games",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.032,
+    "game_longest_dim_m": 0.032,
+    "sourcing_hint": "model ourselves：32 x 16 x 10 mm 塑料积木，顶面 4 个 Ø6 凸点",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.032,
+    "built_longest_m": 0.03199999779462814,
+    "abs_error_m": 2.205371857355587e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 256,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_red",
+      "name_zh": "亮红塑料（顶板与凸点）",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "plastic_red_dark",
+      "name_zh": "深红塑料（侧裙与底面）",
+      "linear_rgb": [
+        0.115,
+        0.018,
+        0.014
+      ],
+      "roughness": 0.48
+    }
+  ],
+  "notes": "0.0320 x 0.0160 x 0.0100 brick: a full-footprint 1.4 mm bright topplate (z 0.0062-0.0076) over a 0.8 mm-inset skirt (0.0304 x 0.0144, z 0-0.0068, welded 0.6 mm into the plate), plus four 6-sided O 6 mm studs at (+/-0.0075, +/-0.0040) buried 1.0 mm into the plate and rising to z=0.0100.  Stud pitch 15 mm across the length and 8 mm across the width.  Two material slots assigned by face height (c.z > 0.0058 -> bright plate/studs, else dark skirt), so the moulding step is visible from the preview camera.  One closed shell, no bevels, flat shading.",
+  "build_script": "models/toy_brick.py",
+  "preview": "previews/toy_brick_preview.png",
+  "files": {
+    "toy_brick.fbx": 17852,
+    "toy_brick.glb": 7568,
+    "toy_brick.blend": 443808
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 154910
+}

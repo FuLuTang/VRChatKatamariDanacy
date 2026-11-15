@@ -1,0 +1,150 @@
+{
+  "id": "pill_box",
+  "pivot": "center",
+  "target_longest_m": 0.12,
+  "dimensions_m": {
+    "x": 0.11999999731779099,
+    "y": 0.054999999701976776,
+    "z": 0.019999999552965164,
+    "longest": 0.11999999731779099
+  },
+  "bounds_m": {
+    "min": [
+      -0.05999999865889549,
+      -0.027499999850988388,
+      -0.009999999776482582
+    ],
+    "max": [
+      0.05999999865889549,
+      0.027499999850988388,
+      0.009999999776482582
+    ]
+  },
+  "vertices": 83,
+  "triangles": 162,
+  "materials": [
+    "Prop_pill_box_plastic_red",
+    "Prop_pill_box_plastic_yellow",
+    "Prop_pill_box_ink",
+    "Prop_pill_box_metal"
+  ],
+  "material_base_colors": {
+    "Prop_pill_box_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ],
+    "Prop_pill_box_plastic_yellow": [
+      0.64,
+      0.45,
+      0.06
+    ],
+    "Prop_pill_box_ink": [
+      0.03,
+      0.035,
+      0.045
+    ],
+    "Prop_pill_box_metal": [
+      0.43,
+      0.45,
+      0.47
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "cfead177d65e9836338e30118177a6197a814f337aaa904f8fa0def863962163",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "药盒",
+  "category": "container",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.12,
+    "game_longest_dim_m": 0.12,
+    "sourcing_hint": "model ourselves：120 x 55 x 20 mm 分格药盒，明显开盖缝",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.12,
+    "built_longest_m": 0.11999999731779099,
+    "abs_error_m": 2.682209010451686e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 180,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_red",
+      "name_zh": "盒身红塑料",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "plastic_yellow",
+      "name_zh": "盒盖黄塑料",
+      "linear_rgb": [
+        0.64,
+        0.45,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "ink",
+      "name_zh": "标签暗面",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    },
+    {
+      "key": "metal",
+      "name_zh": "铰链金属",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    }
+  ],
+  "notes": "Lower shell 120 x 55 x 12 mm (R 10 mm); inset lid 118 x 53 x 8 mm from z 11 to 19 mm, giving a 1 mm seam step at z 11; 1.4 x 1 mm divider groove at x 0; 30 x 18 x 1 mm ink label plate on the top at x -45..-15 mm; 40 mm x r 2.5 mm metal hinge at x 52 mm.  Height 20 mm.  Slots: metal hinge (z > 14.8 mm, x > 46 mm), ink label (z > 19.5 mm, x < -10 mm), yellow lid above the seam, red lower shell below it.",
+  "build_script": "models/pill_box.py",
+  "preview": "previews/pill_box_preview.png",
+  "files": {
+    "pill_box.fbx": 20860,
+    "pill_box.glb": 10460,
+    "pill_box.blend": 487984
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 150850
+}

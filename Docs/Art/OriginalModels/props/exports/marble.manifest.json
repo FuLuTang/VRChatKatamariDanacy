@@ -1,0 +1,134 @@
+{
+  "id": "marble",
+  "pivot": "center",
+  "target_longest_m": 0.016,
+  "dimensions_m": {
+    "x": 0.01599999889731407,
+    "y": 0.01599999889731407,
+    "z": 0.01599999889731407,
+    "longest": 0.01599999889731407
+  },
+  "bounds_m": {
+    "min": [
+      -0.007999999448657036,
+      -0.007999999448657036,
+      -0.007999999448657036
+    ],
+    "max": [
+      0.007999999448657036,
+      0.007999999448657036,
+      0.007999999448657036
+    ]
+  },
+  "vertices": 62,
+  "triangles": 120,
+  "materials": [
+    "Prop_marble_glass_blue",
+    "Prop_marble_shell",
+    "Prop_marble_chitin"
+  ],
+  "material_base_colors": {
+    "Prop_marble_glass_blue": [
+      0.18,
+      0.33,
+      0.36
+    ],
+    "Prop_marble_shell": [
+      0.56,
+      0.47,
+      0.33
+    ],
+    "Prop_marble_chitin": [
+      0.09,
+      0.075,
+      0.06
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "f6eaf04c2f011ae550bcad4188cc8954f3a060bc291d09344ad471a4a8235a14",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "玻璃弹珠",
+  "category": "toy",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.016,
+    "game_longest_dim_m": 0.016,
+    "sourcing_hint": "model ourselves：Ø0.016 m 低多边形球 + 表面螺旋彩带（材质分割）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.016,
+    "built_longest_m": 0.01599999889731407,
+    "abs_error_m": 1.1026859286777935e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 120,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "glass_blue",
+      "name_zh": "青玻璃芯",
+      "linear_rgb": [
+        0.18,
+        0.33,
+        0.36
+      ],
+      "roughness": 0.22
+    },
+    {
+      "key": "shell",
+      "name_zh": "螺旋浅色带",
+      "linear_rgb": [
+        0.56,
+        0.47,
+        0.33
+      ],
+      "roughness": 0.42
+    },
+    {
+      "key": "chitin",
+      "name_zh": "螺旋暗线",
+      "linear_rgb": [
+        0.09,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.3
+    }
+  ],
+  "notes": "12 segments, 7 profile points = 120 triangles, radius 8 mm, both poles on the Z axis, bottom pole on z = 0.  Three slots sampled from the face centre: phase = 1 turn of azimuth + 0.5 rises of height; the cream band is the first 0.22 of the phase and the dark thread the next 0.12, so the pair runs diagonally instead of breaking into patches (one azimuth step advances the phase by 1/12 and one ring by 1/12).  Two light slots plus one low-value slot; no transparency, no UVs.",
+  "build_script": "models/marble.py",
+  "preview": "previews/marble_preview.png",
+  "files": {
+    "marble.fbx": 19644,
+    "marble.glb": 5800,
+    "marble.blend": 463912
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 197367
+}

@@ -1,0 +1,134 @@
+{
+  "id": "feather",
+  "pivot": "center",
+  "target_longest_m": 0.12,
+  "dimensions_m": {
+    "x": 0.11999999731779099,
+    "y": 0.02916773036122322,
+    "z": 0.005900000222027302,
+    "longest": 0.11999999731779099
+  },
+  "bounds_m": {
+    "min": [
+      -0.05999999865889549,
+      -0.01458386518061161,
+      -0.002950000111013651
+    ],
+    "max": [
+      0.05999999865889549,
+      0.01458386518061161,
+      0.002950000111013651
+    ]
+  },
+  "vertices": 180,
+  "triangles": 356,
+  "materials": [
+    "Prop_feather_straw",
+    "Prop_feather_ink",
+    "Prop_feather_straw_dark"
+  ],
+  "material_base_colors": {
+    "Prop_feather_straw": [
+      0.47,
+      0.36,
+      0.14
+    ],
+    "Prop_feather_ink": [
+      0.03,
+      0.035,
+      0.045
+    ],
+    "Prop_feather_straw_dark": [
+      0.23,
+      0.165,
+      0.06
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "2f2f864a47d2ad23732a84fffb3786e467f0a5224c59cfe124923a483d6ef3f0",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "羽毛",
+  "category": "animal_gear",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.12,
+    "game_longest_dim_m": 0.12,
+    "sourcing_hint": "model ourselves：DungBeetleMeadow catalogue t1 0.120×0.030×0.008 m 羽毛（Z1 围栏根，掉落羽毛）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.12,
+    "built_longest_m": 0.11999999731779099,
+    "abs_error_m": 2.682209010451686e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 400,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "straw",
+      "name_zh": "干羽毛浅褐",
+      "linear_rgb": [
+        0.47,
+        0.36,
+        0.14
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "straw_dark",
+      "name_zh": "羽轴深褐",
+      "linear_rgb": [
+        0.23,
+        0.165,
+        0.06
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "ink",
+      "name_zh": "羽根暗色",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "9 columns x 8 rows grid slab (10 x 9 vertices): 288 top+bottom triangles + 68 rim = 356 triangles, one closed shell, no boolean.  Length 0.120 m along X; vane half-width 0.0158 m on the broad side and 72 % of that on the quill side; a 4-tooth triangle wave at 30 % amplitude sampled by 8 rows (alternating peak/valley) gives the sawtooth silhouette; two partings at v = 0.34 / 0.62.  Rachis: the two vertices beside the centre line lift 1.6 mm (3.2 mm flat rib) and are straw_dark; the first 10 % of the length is ink (quill).  Vane top 0.0040 m, flat underside 0.0006 m, so the slab is 3.4-5.2 mm thick.  Overall 0.120 x 0.030 x 0.0070 m.",
+  "build_script": "models/feather.py",
+  "preview": "previews/feather_preview.png",
+  "files": {
+    "feather.fbx": 23260,
+    "feather.glb": 16280,
+    "feather.blend": 478108
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 126447
+}

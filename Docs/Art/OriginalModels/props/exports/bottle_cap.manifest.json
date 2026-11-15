@@ -79,9 +79,9 @@
   "build_script": "models/bottle_cap.py",
   "preview": "previews/bottle_cap_preview.png",
   "files": {
-    "bottle_cap.fbx": 18636,
+    "bottle_cap.fbx": 18588,
     "bottle_cap.glb": 13876,
-    "bottle_cap.blend": 91742
+    "bottle_cap.blend": 425312
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 82754
+  "preview_bytes": 155398
 }

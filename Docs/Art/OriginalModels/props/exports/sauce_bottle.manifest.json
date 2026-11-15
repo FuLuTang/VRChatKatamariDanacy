@@ -1,0 +1,134 @@
+{
+  "id": "sauce_bottle",
+  "pivot": "center",
+  "target_longest_m": 0.24,
+  "dimensions_m": {
+    "x": 0.05999999865889549,
+    "y": 0.05999999865889549,
+    "z": 0.23999999463558197,
+    "longest": 0.23999999463558197
+  },
+  "bounds_m": {
+    "min": [
+      -0.029999999329447746,
+      -0.029999999329447746,
+      -0.11999999731779099
+    ],
+    "max": [
+      0.029999999329447746,
+      0.029999999329447746,
+      0.11999999731779099
+    ]
+  },
+  "vertices": 114,
+  "triangles": 224,
+  "materials": [
+    "Prop_sauce_bottle_ceramic",
+    "Prop_sauce_bottle_ink",
+    "Prop_sauce_bottle_plastic_red"
+  ],
+  "material_base_colors": {
+    "Prop_sauce_bottle_ceramic": [
+      0.76,
+      0.745,
+      0.7
+    ],
+    "Prop_sauce_bottle_ink": [
+      0.03,
+      0.035,
+      0.045
+    ],
+    "Prop_sauce_bottle_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "a106c38263de2b435ab438249a6841642bdf3a7795439eae09b51a8f5bbda08f",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "酱料瓶",
+  "category": "container",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.24,
+    "game_longest_dim_m": 0.24,
+    "sourcing_hint": "model ourselves：240 mm 高挤压酱料瓶，两道环筋",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.24,
+    "built_longest_m": 0.23999999463558197,
+    "abs_error_m": 5.364418020903372e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 240,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "ceramic",
+      "name_zh": "瓶身釉白",
+      "linear_rgb": [
+        0.76,
+        0.745,
+        0.7
+      ],
+      "roughness": 0.35
+    },
+    {
+      "key": "plastic_red",
+      "name_zh": "红塑料盖",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "ink",
+      "name_zh": "标签环暗色",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Lathe with 8 segments, profile: r 27 mm base at z 0, two 30 mm radius ribs at z 10-16 and z 153-159 mm, 26 mm body, conical shoulder to a 17 mm neck at z 205 mm, 20 mm cap to z 240 mm with a 0.8 mm inward thread groove at 216-220 mm.  AABB 60 x 60 x 240 mm.  The body span from z 22 to 148 mm is the ink label ring, the cap above 207.5 mm is red plastic and the rest is glazed white.",
+  "build_script": "models/sauce_bottle.py",
+  "preview": "previews/sauce_bottle_preview.png",
+  "files": {
+    "sauce_bottle.fbx": 21052,
+    "sauce_bottle.glb": 14504,
+    "sauce_bottle.blend": 470320
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 155154
+}

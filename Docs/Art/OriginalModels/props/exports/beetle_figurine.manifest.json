@@ -1,0 +1,134 @@
+{
+  "id": "beetle_figurine",
+  "pivot": "center",
+  "target_longest_m": 0.09,
+  "dimensions_m": {
+    "x": 0.08999999612569809,
+    "y": 0.05499999597668648,
+    "z": 0.05999999865889549,
+    "longest": 0.08999999612569809
+  },
+  "bounds_m": {
+    "min": [
+      -0.044999998062849045,
+      -0.02749999798834324,
+      -0.029999999329447746
+    ],
+    "max": [
+      0.044999998062849045,
+      0.02749999798834324,
+      0.029999999329447746
+    ]
+  },
+  "vertices": 165,
+  "triangles": 326,
+  "materials": [
+    "Prop_beetle_figurine_chitin",
+    "Prop_beetle_figurine_brass",
+    "Prop_beetle_figurine_rubber"
+  ],
+  "material_base_colors": {
+    "Prop_beetle_figurine_chitin": [
+      0.09,
+      0.075,
+      0.06
+    ],
+    "Prop_beetle_figurine_brass": [
+      0.52,
+      0.38,
+      0.12
+    ],
+    "Prop_beetle_figurine_rubber": [
+      0.045,
+      0.045,
+      0.048
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "216e822dbceb582c7533c62e598fead4cf8a2af329d1811ae703a82a4fe7a639",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "甲虫小塑像",
+  "category": "nature",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.09,
+    "game_longest_dim_m": 0.09,
+    "sourcing_hint": "model ourselves：90 mm 风格化圣甲虫塑像（暗鞘翅 + 黄铜背缝 + 暗腿头）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.09,
+    "built_longest_m": 0.08999999612569809,
+    "abs_error_m": 3.8743019070697216e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": false,
+  "materials_declared": [
+    {
+      "key": "chitin",
+      "name_zh": "鞘翅深褐",
+      "linear_rgb": [
+        0.09,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.3
+    },
+    {
+      "key": "brass",
+      "name_zh": "背中线亮缝",
+      "linear_rgb": [
+        0.52,
+        0.38,
+        0.12
+      ],
+      "roughness": 0.3
+    },
+    {
+      "key": "rubber",
+      "name_zh": "头与足暗色",
+      "linear_rgb": [
+        0.045,
+        0.045,
+        0.048
+      ],
+      "roughness": 0.88
+    }
+  ],
+  "notes": "12-segment, 7-point elliptical lathe (120 triangles) + one 20-triangle head + six legs: 212 before the seven exact unions, 326 after them (1.09x the 300 budget, inside the spec 1.6x allowance), one closed shell.  Body 64 x 47 mm in plan by design (the lathe radius is scaled per angle by BODY_ASPECT 0.735), dome top at 55.5 mm, underside at 9-10 mm.  Legs run from (x, +-17 mm, 22 mm) inside the shell to feet at (x-4 mm, +-27.5 mm, 4.2 mm), section 10 mm tapering to 8.4 mm.  Dorsal seam: the columns at 0 and 180 degrees are pulled 8% in on every ring, which pinches a groove along y=0.  Materials after the union: |y| < 6 mm and z > 32 mm = brass (the seam), z < 12 mm or within 1.15 head radii of the head centre = rubber, the rest chitin.  fit_bounds pins 90 x 55 x 60 mm.",
+  "build_script": "models/beetle_figurine.py",
+  "preview": "previews/beetle_figurine_preview.png",
+  "files": {
+    "beetle_figurine.fbx": 24220,
+    "beetle_figurine.glb": 18532,
+    "beetle_figurine.blend": 476340
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 163413
+}

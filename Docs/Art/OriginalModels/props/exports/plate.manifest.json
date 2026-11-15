@@ -79,9 +79,9 @@
   "build_script": "models/plate.py",
   "preview": "previews/plate_preview.png",
   "files": {
-    "plate.fbx": 20300,
+    "plate.fbx": 23100,
     "plate.glb": 8072,
-    "plate.blend": 95268
+    "plate.blend": 434872
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 97117
+  "preview_bytes": 140043
 }

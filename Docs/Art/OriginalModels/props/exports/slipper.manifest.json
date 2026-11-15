@@ -1,0 +1,134 @@
+{
+  "id": "slipper",
+  "pivot": "center",
+  "target_longest_m": 0.26,
+  "dimensions_m": {
+    "x": 0.25999999046325684,
+    "y": 0.10000000149011612,
+    "z": 0.04800000041723251,
+    "longest": 0.25999999046325684
+  },
+  "bounds_m": {
+    "min": [
+      -0.12999999523162842,
+      -0.05000000074505806,
+      -0.024000000208616257
+    ],
+    "max": [
+      0.12999999523162842,
+      0.05000000074505806,
+      0.024000000208616257
+    ]
+  },
+  "vertices": 144,
+  "triangles": 288,
+  "materials": [
+    "Prop_slipper_fabric_blue",
+    "Prop_slipper_cotton_red",
+    "Prop_slipper_rubber"
+  ],
+  "material_base_colors": {
+    "Prop_slipper_fabric_blue": [
+      0.12,
+      0.17,
+      0.29
+    ],
+    "Prop_slipper_cotton_red": [
+      0.42,
+      0.09,
+      0.08
+    ],
+    "Prop_slipper_rubber": [
+      0.045,
+      0.045,
+      0.048
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "18f16954e6bd4c1e3357ac64ad5c1a319488d20c05420dff12f57048143585ce",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "拖鞋",
+  "category": "clothes_fabric",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.26,
+    "game_longest_dim_m": 0.26,
+    "sourcing_hint": "model ourselves：260 x 100 x 50 mm 布面拖鞋，鞋面弧带焊进鞋底",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.26,
+    "built_longest_m": 0.25999999046325684,
+    "abs_error_m": 9.536743172944284e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 384,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "fabric_blue",
+      "name_zh": "蓝布鞋面",
+      "linear_rgb": [
+        0.12,
+        0.17,
+        0.29
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "cotton_red",
+      "name_zh": "红色内里与鞋垫",
+      "linear_rgb": [
+        0.42,
+        0.09,
+        0.08
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "rubber",
+      "name_zh": "橡胶鞋底",
+      "linear_rgb": [
+        0.045,
+        0.045,
+        0.048
+      ],
+      "roughness": 0.88
+    }
+  ],
+  "notes": "Sole: 12-point rounded rectangle 0.260 x 0.100 (R 32 mm) lofted through 8 rings - (z, inset) 0.0000/0.0018 bottom chamfer, 0.0018/0, 0.0060/0, 0.0066/0.0012, 0.0078/0.0012, 0.0084/0, 0.0150/0, 0.0130/0.0025 - so the side wall has two 1.2 mm grooves and the top a 2.5 mm footbed well; 188 triangles.  Upper: crescent between an outer 49 x 42 mm and an inner 41 x 34 mm ellipse centred at z=6 mm, 9 points per arc = 18-point polygon, swept 55 mm on X from x=-0.020 to 0.035.  Both crescent ends sit at z=6 mm, 9 mm inside the sole, so the union welds them; the arch top is z=0.048.  AABB 0.260 x 0.0998 x 0.0480.  One closed shell.  Three slots: above the sole top fabric_blue, except downward-facing tunnel roof below z=0.042 which is cotton_red; inside the footbed well (horizontal faces below the sole top) cotton_red insole; the rest of the sole is rubber.",
+  "build_script": "models/slipper.py",
+  "preview": "previews/slipper_preview.png",
+  "files": {
+    "slipper.fbx": 22812,
+    "slipper.glb": 15164,
+    "slipper.blend": 474040
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 143427
+}

@@ -95,9 +95,9 @@
   "build_script": "models/acorn.py",
   "preview": "previews/acorn_preview.png",
   "files": {
-    "acorn.fbx": 19244,
+    "acorn.fbx": 20604,
     "acorn.glb": 6140,
-    "acorn.blend": 93281
+    "acorn.blend": 448392
   },
   "export_settings": {
     "fbx": {
@@ -112,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 78349
+  "preview_bytes": 178694
 }

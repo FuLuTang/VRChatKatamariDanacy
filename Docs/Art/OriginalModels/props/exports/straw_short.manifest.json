@@ -1,0 +1,134 @@
+{
+  "id": "straw_short",
+  "pivot": "center",
+  "target_longest_m": 0.12,
+  "dimensions_m": {
+    "x": 0.11999999731779099,
+    "y": 0.005973112303763628,
+    "z": 0.011993478052318096,
+    "longest": 0.11999999731779099
+  },
+  "bounds_m": {
+    "min": [
+      -0.05999999865889549,
+      -0.002986556151881814,
+      -0.005996739026159048
+    ],
+    "max": [
+      0.05999999865889549,
+      0.002986556151881814,
+      0.005996739026159048
+    ]
+  },
+  "vertices": 60,
+  "triangles": 120,
+  "materials": [
+    "Prop_straw_short_plastic_red",
+    "Prop_straw_short_ceramic",
+    "Prop_straw_short_ink"
+  ],
+  "material_base_colors": {
+    "Prop_straw_short_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ],
+    "Prop_straw_short_ceramic": [
+      0.76,
+      0.745,
+      0.7
+    ],
+    "Prop_straw_short_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "7159f446078bae07148f7e670ce2b71ecc6ff3c975f0bda4f1ee4495130ec037",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "短吸管",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.12,
+    "game_longest_dim_m": 0.12,
+    "sourcing_hint": "model ourselves：0.120 m 空心短吸管，带手风琴褶弯头",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.12,
+    "built_longest_m": 0.11999999731779099,
+    "abs_error_m": 2.682209010451686e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 120,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_red",
+      "name_zh": "吸管红塑料",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "ink",
+      "name_zh": "管口暗环",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    },
+    {
+      "key": "ceramic",
+      "name_zh": "白色折痕环",
+      "linear_rgb": [
+        0.76,
+        0.745,
+        0.7
+      ],
+      "roughness": 0.42
+    }
+  ],
+  "notes": "Annulus loft along a 7-point polyline: straight body x -60..10 mm, three folds (r 3.0 / 2.0 mm) at 13.5 / 20.5 / 27.5 mm, then a 12 deg kink from x = 27.5 to 60 mm so the head lifts like a bent flex straw.  Inner wall r 1.6 mm (1.4 mm wall, 0.4 mm at the folds) plus a 6-quad ring at each opening, 6 segments, 120 triangles (budget ceiling), one closed genus-1 shell, no boolean.  Body axis at z = 0.0026 m (one apothem) so the flat underside rests on z = 0.  AABB 0.120 x 0.006 x ~0.012 m: the bend is what pushes Z past the row 0.006, and BEND_DEG = 0 restores the straight 6 mm version.  Materials (2026-11-15 upgrade): the barrel is plastic_red, the three accordion folds (x 0.010-0.0275 m) are the white ceramic slot, and the two mouth annuli are the dark ink slot, so the old near-white pair now reads as a red/white striped straw with shadowed openings.",
+  "build_script": "models/straw_short.py",
+  "preview": "previews/straw_short_preview.png",
+  "files": {
+    "straw_short.fbx": 19196,
+    "straw_short.glb": 9220,
+    "straw_short.blend": 464128
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 124754
+}

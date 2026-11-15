@@ -1,0 +1,134 @@
+{
+  "id": "tissue_box",
+  "pivot": "center",
+  "target_longest_m": 0.24,
+  "dimensions_m": {
+    "x": 0.23999999463558197,
+    "y": 0.11999999731779099,
+    "z": 0.091123066842556,
+    "longest": 0.23999999463558197
+  },
+  "bounds_m": {
+    "min": [
+      -0.11999999731779099,
+      -0.05999999865889549,
+      -0.045561533421278
+    ],
+    "max": [
+      0.11999999731779099,
+      0.05999999865889549,
+      0.045561533421278
+    ]
+  },
+  "vertices": 91,
+  "triangles": 178,
+  "materials": [
+    "Prop_tissue_box_paper_dark",
+    "Prop_tissue_box_ink",
+    "Prop_tissue_box_paper"
+  ],
+  "material_base_colors": {
+    "Prop_tissue_box_paper_dark": [
+      0.36,
+      0.32,
+      0.25
+    ],
+    "Prop_tissue_box_ink": [
+      0.03,
+      0.035,
+      0.045
+    ],
+    "Prop_tissue_box_paper": [
+      0.8,
+      0.775,
+      0.7
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "da27e57280ca1d2f6adbfe5b417390d44bb09a58c597eaba662c1361915cff37",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "纸巾盒",
+  "category": "hygiene_bathroom",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.24,
+    "game_longest_dim_m": 0.24,
+    "sourcing_hint": "model ourselves：240 x 120 x 80 mm 纸盒 + 顶面椭圆凹槽 + 抽出的纸巾",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.24,
+    "built_longest_m": 0.23999999463558197,
+    "abs_error_m": 5.364418020903372e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 352,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "paper_dark",
+      "name_zh": "纸板灰盒体",
+      "linear_rgb": [
+        0.36,
+        0.32,
+        0.25
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "ink",
+      "name_zh": "深色抽出口与开盖缝",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    },
+    {
+      "key": "paper",
+      "name_zh": "纸巾米白",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    }
+  ],
+  "notes": "Body 0.240 x 0.120 x 0.0620 (R 8 mm) from z=0; lid inset 1 mm in plan from z=0.0615 to 0.0800, welded 0.5 mm into the body.  Dish: 12-sided lathe tool, O 0.090 squashed to 33% on Y (90 x 30 mm), rounded bottom, subtracted so the dish floor sits at z=0.066 (14 mm deep, blind).  Pull: 26 mm wide, 3 mm thick, 42 mm long sheet leaning 30 degrees on X, base buried at z=0.054 below the dish floor, unioned; top reaches z=0.0904, so the AABB is 0.2400 x 0.1200 x 0.0904.  Three slots: paper for the pull, ink for the 1 mm lid seam ring (z 0.0612-0.0628) and the dish (0.0645 < z < 0.0792 inside the oval), paper_dark for the carton.  One closed shell.",
+  "build_script": "models/tissue_box.py",
+  "preview": "previews/tissue_box_preview.png",
+  "files": {
+    "tissue_box.fbx": 20444,
+    "tissue_box.glb": 11232,
+    "tissue_box.blend": 467608
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 165476
+}

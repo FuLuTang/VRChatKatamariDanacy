@@ -1,0 +1,134 @@
+{
+  "id": "stapler",
+  "pivot": "center",
+  "target_longest_m": 0.16,
+  "dimensions_m": {
+    "x": 0.1599999964237213,
+    "y": 0.04500000178813934,
+    "z": 0.05999999865889549,
+    "longest": 0.1599999964237213
+  },
+  "bounds_m": {
+    "min": [
+      -0.07999999821186066,
+      -0.02250000089406967,
+      -0.029999999329447746
+    ],
+    "max": [
+      0.07999999821186066,
+      0.02250000089406967,
+      0.029999999329447746
+    ]
+  },
+  "vertices": 109,
+  "triangles": 214,
+  "materials": [
+    "Prop_stapler_plastic_grey",
+    "Prop_stapler_metal",
+    "Prop_stapler_rubber"
+  ],
+  "material_base_colors": {
+    "Prop_stapler_plastic_grey": [
+      0.23,
+      0.235,
+      0.24
+    ],
+    "Prop_stapler_metal": [
+      0.43,
+      0.45,
+      0.47
+    ],
+    "Prop_stapler_rubber": [
+      0.045,
+      0.045,
+      0.048
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "d3da474292159639ace11609bcdc85767f025db33233cd01a76520a7a093bbc0",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "订书机",
+  "category": "stationery",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.16,
+    "game_longest_dim_m": 0.16,
+    "sourcing_hint": "model ourselves：160 x 45 x 60 mm 塑料订书机",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.16,
+    "built_longest_m": 0.1599999964237213,
+    "abs_error_m": 3.5762786898541066e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 260,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_grey",
+      "name_zh": "机身灰塑料",
+      "linear_rgb": [
+        0.23,
+        0.235,
+        0.24
+      ],
+      "roughness": 0.5
+    },
+    {
+      "key": "metal",
+      "name_zh": "铰链/砧板/钉槽金属",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    },
+    {
+      "key": "rubber",
+      "name_zh": "底部橡胶垫",
+      "linear_rgb": [
+        0.045,
+        0.045,
+        0.048
+      ],
+      "roughness": 0.88
+    }
+  ],
+  "notes": "Base 160 x 45 x 14 mm (R 4 mm) standing on a full-footprint 160 x 45 x 2.5 mm rubber sole, so the base plate runs z 2.5-14 mm and the sole z 0-2.5 mm (the dark 2.5 mm band shows all round the bottom edge); cover 140 x 42 x 18 mm at z 42-60 mm, rear riser 16 x 40 x 36 mm at x -78..-62 mm, front hinge barrel r 8 mm x 40 mm at x 62 mm, z 48 mm, a 30 x 30 x 3 mm metal anvil on the base front and a 95 x 24 x 1.5 mm staple-channel rail on the base top.  Mouth z 14-42 mm is open at +X and both sides.",
+  "build_script": "models/stapler.py",
+  "preview": "previews/stapler_preview.png",
+  "files": {
+    "stapler.fbx": 20876,
+    "stapler.glb": 11532,
+    "stapler.blend": 469732
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 162005
+}

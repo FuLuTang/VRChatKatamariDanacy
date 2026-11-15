@@ -453,6 +453,61 @@ def metaball_cluster(spheres, resolution, threshold=0.6, stiffness=2.0,
 
 
 # ---------------------------------------------------------------------------
+# fitting built parts to an exact three-axis size
+# ---------------------------------------------------------------------------
+
+def fit_bounds(bmeshes, size):
+    """Scale and place one prop's parts so their joint AABB is exactly ``size``.
+
+    ``bmeshes`` is every part of the prop still in its authoring space; the
+    parts must be fitted *before* they are handed to ``Builder.add`` (that call
+    bakes and frees the bmesh).  Each axis is scaled independently, which is
+    what lets a lathe design that is round in plan become the oval a real
+    object needs (a 90 x 70 mm sheep bell, a 60 x 55 mm snail shell), and the
+    parts are then centred on x/y with the underside dropped to z = 0.
+
+    Two reasons this exists instead of letting ``Builder.finish`` do the work:
+
+    * ``finish`` scales uniformly to the longest edge, so the two short axes
+      are whatever the design happened to produce.  The dung-meadow prop table
+      pins all three axes, and a 5-8% error on y/z is visible when the props
+      are placed next to each other.  After fitting, the longest axis is
+      already TARGET_LONGEST_M and ``finish``'s fallback scale is 1.0, so the
+      published proportions come from the geometry, not from the fallback.
+    * Authoring in metres with the underside on z = 0 keeps material
+      predicates ("this face is above the crown") readable, and the flat
+      underside stays flat and horizontal, so the prop sits on the ground
+      plane instead of hanging off a rounded point.
+
+    Returns the 4x4 matrix that was applied, so a module can map an anchor
+    point (an aperture centre, a strap path) into the fitted frame for its
+    material split.
+    """
+    if len(size) != 3 or min(size) <= 0:
+        raise ValueError('fit_bounds needs three positive sizes')
+    lo = [1e9, 1e9, 1e9]
+    hi = [-1e9, -1e9, -1e9]
+    for bm in bmeshes:
+        for v in bm.verts:
+            for i in range(3):
+                lo[i] = min(lo[i], v.co[i])
+                hi[i] = max(hi[i], v.co[i])
+    for i in range(3):
+        if hi[i] - lo[i] <= 1e-9:
+            raise ValueError('fit_bounds got a flat part on axis %d' % i)
+    m = (Matrix.Diagonal(Vector((size[0] / (hi[0] - lo[0]),
+                                 size[1] / (hi[1] - lo[1]),
+                                 size[2] / (hi[2] - lo[2]), 1.0)))
+         @ Matrix.Translation(Vector((-(lo[0] + hi[0]) * 0.5,
+                                      -(lo[1] + hi[1]) * 0.5,
+                                      -lo[2]))))
+    for bm in bmeshes:
+        for v in bm.verts:
+            v.co = m @ v.co
+    return m
+
+
+# ---------------------------------------------------------------------------
 # material / builder
 # ---------------------------------------------------------------------------
 
@@ -518,6 +573,15 @@ class Builder:
             mod = target.modifiers.new(prefix + tool.name, 'BOOLEAN')
             mod.operation = operation
             mod.solver = 'EXACT'
+            # Blender's Exact solver defaults to material mode INDEX: the faces
+            # the boolean creates keep the *index* of the tool's material, and
+            # anything the tool does not carry falls back to slot 0.  A tool cut
+            # out of a differently coloured part therefore comes back as the
+            # target's first slot and the two-tone prop collapses to one colour
+            # (leather_strap lost its metal buckle this way).  TRANSFER copies
+            # the tool's own material into the target, so a part keeps the
+            # colour it was modelled with.
+            mod.material_mode = 'TRANSFER'
             mod.object = tool
             bpy.ops.object.select_all(action='DESELECT')
             target.select_set(True)
@@ -812,6 +876,11 @@ def render_preview(ob, path, res=512, samples=32):
     cam_data = bpy.data.cameras.new('PropPreviewCam')
     cam_data.type = 'ORTHO'
     cam_data.ortho_scale = span * 1.45
+    # The camera sits at span * 3.0 from the centre, so the default 0.1 m near
+    # clip eats every prop under ~33 mm (tiny seeds, buttons, grains rendered
+    # blank).  Scale the clip range with the object instead of the default.
+    cam_data.clip_start = span * 0.01
+    cam_data.clip_end = span * 50.0
     cam = bpy.data.objects.new('PropPreviewCam', cam_data)
     bpy.context.collection.objects.link(cam)
     direction = Vector((1.70, 1.15, 0.80)).normalized()

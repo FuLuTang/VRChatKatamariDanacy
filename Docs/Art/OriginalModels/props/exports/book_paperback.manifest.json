@@ -1,0 +1,134 @@
+{
+  "id": "book_paperback",
+  "pivot": "center",
+  "target_longest_m": 0.18,
+  "dimensions_m": {
+    "x": 0.17999999225139618,
+    "y": 0.10999999195337296,
+    "z": 0.02539999783039093,
+    "longest": 0.17999999225139618
+  },
+  "bounds_m": {
+    "min": [
+      -0.08999999612569809,
+      -0.05499999597668648,
+      -0.012699998915195465
+    ],
+    "max": [
+      0.08999999612569809,
+      0.05499999597668648,
+      0.012699998915195465
+    ]
+  },
+  "vertices": 94,
+  "triangles": 184,
+  "materials": [
+    "Prop_book_paperback_plastic_blue",
+    "Prop_book_paperback_paper",
+    "Prop_book_paperback_ink"
+  ],
+  "material_base_colors": {
+    "Prop_book_paperback_plastic_blue": [
+      0.075,
+      0.145,
+      0.4
+    ],
+    "Prop_book_paperback_paper": [
+      0.8,
+      0.775,
+      0.7
+    ],
+    "Prop_book_paperback_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "3710bf02f441a57cfdf721567d7585c6e6e6802195777d05ec485b538bf1f5d0",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "平装书",
+  "category": "paper_stationery",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.18,
+    "game_longest_dim_m": 0.18,
+    "sourcing_hint": "model ourselves：封面 + 书脊 + 书页切口，单壳阶梯实体",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.18,
+    "built_longest_m": 0.17999999225139618,
+    "abs_error_m": 7.748603814139443e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 240,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_blue",
+      "name_zh": "封面蓝",
+      "linear_rgb": [
+        0.075,
+        0.145,
+        0.4
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "paper",
+      "name_zh": "书页米白",
+      "linear_rgb": [
+        0.8,
+        0.775,
+        0.7
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "ink",
+      "name_zh": "书脊/书名块",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.72
+    }
+  ],
+  "notes": "Six-ring stack: bottom cover 0-2.2 mm, page block inset 1.6 mm from 2.8 to 22.2 mm, top cover 22.8-25.0 mm.  Inset fades out on the spine side (-Y) so the spine stays solid.  plastic_blue = cover boards, paper = page band, ink = spine wall and the 110 x 11 x 0.4 mm raised title plate unioned onto the front cover.  0.180 x 0.110 x 0.025 m.",
+  "build_script": "models/book_paperback.py",
+  "preview": "previews/book_paperback_preview.png",
+  "files": {
+    "book_paperback.fbx": 20380,
+    "book_paperback.glb": 11972,
+    "book_paperback.blend": 467960
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 155534
+}

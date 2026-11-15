@@ -111,9 +111,9 @@
   "build_script": "models/small_potted_plant.py",
   "preview": "previews/small_potted_plant_preview.png",
   "files": {
-    "small_potted_plant.fbx": 28476,
-    "small_potted_plant.glb": 18596,
-    "small_potted_plant.blend": 100606
+    "small_potted_plant.fbx": 28876,
+    "small_potted_plant.glb": 18548,
+    "small_potted_plant.blend": 485976
   },
   "export_settings": {
     "fbx": {
@@ -128,7 +128,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 151397
+  "preview_bytes": 183178
 }

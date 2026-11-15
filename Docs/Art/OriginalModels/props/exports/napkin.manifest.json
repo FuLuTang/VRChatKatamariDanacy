@@ -79,9 +79,9 @@
   "build_script": "models/napkin.py",
   "preview": "previews/napkin_preview.png",
   "files": {
-    "napkin.fbx": 16604,
+    "napkin.fbx": 16860,
     "napkin.glb": 6296,
-    "napkin.blend": 91326
+    "napkin.blend": 424872
   },
   "export_settings": {
     "fbx": {
@@ -96,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "5.3.0"
+    "blender": "4.0.2"
   },
-  "preview_bytes": 109896
+  "preview_bytes": 149655
 }

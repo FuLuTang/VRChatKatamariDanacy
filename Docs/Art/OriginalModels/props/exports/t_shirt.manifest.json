@@ -1,0 +1,134 @@
+{
+  "id": "t_shirt",
+  "pivot": "center",
+  "target_longest_m": 0.7,
+  "dimensions_m": {
+    "x": 0.699999988079071,
+    "y": 0.5,
+    "z": 0.019999999552965164,
+    "longest": 0.699999988079071
+  },
+  "bounds_m": {
+    "min": [
+      -0.3499999940395355,
+      -0.25,
+      -0.009999999776482582
+    ],
+    "max": [
+      0.3499999940395355,
+      0.25,
+      0.009999999776482582
+    ]
+  },
+  "vertices": 197,
+  "triangles": 390,
+  "materials": [
+    "Prop_t_shirt_fabric_grey",
+    "Prop_t_shirt_fabric_blue",
+    "Prop_t_shirt_ink"
+  ],
+  "material_base_colors": {
+    "Prop_t_shirt_fabric_grey": [
+      0.27,
+      0.255,
+      0.23
+    ],
+    "Prop_t_shirt_fabric_blue": [
+      0.12,
+      0.17,
+      0.29
+    ],
+    "Prop_t_shirt_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "75a1d285a612032825e6c44746454651baa6d689288befd52db30a6c56295dcb",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "T恤",
+  "category": "clothes_fabric",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.7,
+    "game_longest_dim_m": 0.7,
+    "sourcing_hint": "model ourselves：平铺剪影 + 凸起领口圈，单壳",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.7,
+    "built_longest_m": 0.699999988079071,
+    "abs_error_m": 1.1920928910669204e-08,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 420,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "fabric_grey",
+      "name_zh": "棉布花灰",
+      "linear_rgb": [
+        0.27,
+        0.255,
+        0.23
+      ],
+      "roughness": 0.94
+    },
+    {
+      "key": "fabric_blue",
+      "name_zh": "领口/包边蓝",
+      "linear_rgb": [
+        0.12,
+        0.17,
+        0.29
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "ink",
+      "name_zh": "胸前印块",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.8
+    }
+  ],
+  "notes": "Strip-warped 9 x 10 grid: half-width 0.215 at the hem, 0.205 at the chest (y 0.10), underarm diagonal to 0.350 at the sleeve edge (y 0.13-0.20), shoulder slope to 0.090 at the top edge (y 0.25).  Cloth 14 mm thick with a 1 mm undulation; collar is a 10-segment annulus (R 36/55 mm) standing 6 mm proud, unioned in.  0.700 x 0.500 x 0.020 m, ~400 triangles.  Slots: grey cloth, blue collar + bounded sleeve/hem rim, ink chest print block (170 x 110 mm of top faces).",
+  "build_script": "models/t_shirt.py",
+  "preview": "previews/t_shirt_preview.png",
+  "files": {
+    "t_shirt.fbx": 25612,
+    "t_shirt.glb": 25264,
+    "t_shirt.blend": 480116
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 136551
+}

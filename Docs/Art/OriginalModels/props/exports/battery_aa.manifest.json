@@ -1,0 +1,150 @@
+{
+  "id": "battery_aa",
+  "pivot": "center",
+  "target_longest_m": 0.05,
+  "dimensions_m": {
+    "x": 0.05000000074505806,
+    "y": 0.013600108213722706,
+    "z": 0.014300000853836536,
+    "longest": 0.05000000074505806
+  },
+  "bounds_m": {
+    "min": [
+      -0.02500000037252903,
+      -0.006800054106861353,
+      -0.007150000426918268
+    ],
+    "max": [
+      0.02500000037252903,
+      0.006800054106861353,
+      0.007150000426918268
+    ]
+  },
+  "vertices": 82,
+  "triangles": 160,
+  "materials": [
+    "Prop_battery_aa_metal",
+    "Prop_battery_aa_plastic_yellow",
+    "Prop_battery_aa_brass",
+    "Prop_battery_aa_ink"
+  ],
+  "material_base_colors": {
+    "Prop_battery_aa_metal": [
+      0.43,
+      0.45,
+      0.47
+    ],
+    "Prop_battery_aa_plastic_yellow": [
+      0.64,
+      0.45,
+      0.06
+    ],
+    "Prop_battery_aa_brass": [
+      0.52,
+      0.38,
+      0.12
+    ],
+    "Prop_battery_aa_ink": [
+      0.03,
+      0.035,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "18e48cda56d947e0bdc3eee23bd0c1c2a9286fbb7d313c98d1e143a54f7e0c93",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "5号电池",
+  "category": "electronics_cables",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.05,
+    "game_longest_dim_m": 0.05,
+    "sourcing_hint": "model ourselves：Ø0.014 x 0.050 m 5 号电池，两端台阶单壳",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.05,
+    "built_longest_m": 0.05000000074505806,
+    "abs_error_m": 7.450580569168253e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 160,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "metal",
+      "name_zh": "电池钢壳",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    },
+    {
+      "key": "plastic_yellow",
+      "name_zh": "黄色标签套",
+      "linear_rgb": [
+        0.64,
+        0.45,
+        0.06
+      ],
+      "roughness": 0.48
+    },
+    {
+      "key": "brass",
+      "name_zh": "黄铜正极",
+      "linear_rgb": [
+        0.52,
+        0.38,
+        0.12
+      ],
+      "roughness": 0.3
+    },
+    {
+      "key": "ink",
+      "name_zh": "深色负极环",
+      "linear_rgb": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "10 segments, 10 profile points, 8 rings = 160 triangles: 0.0500 m long and O 0.0140 at the body.  Negative end: flat O 12 mm face 1 mm inside the body diameter, a 1.2 mm shoulder, then the collar up to z 0.0095.  Label sleeve: O 0.0143 from z 0.0095 to 0.0290, 0.15 mm proud of the body, closed by two flat annuli.  Positive end: steel to 0.0480, flat shoulder into the O 5.6 mm brass nub rising to 0.0500.  One closed shell, no separate cap.  The lathe is rotated so the cell lies on +X and lifted 7 mm to rest on z=0.  Materials by face centre x: ink below 0.0095, plastic_yellow to 0.0290, metal to 0.0480, brass above.",
+  "build_script": "models/battery_aa.py",
+  "preview": "previews/battery_aa_preview.png",
+  "files": {
+    "battery_aa.fbx": 21692,
+    "battery_aa.glb": 7228,
+    "battery_aa.blend": 487552
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 151531
+}

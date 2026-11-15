@@ -1,0 +1,150 @@
+{
+  "id": "jam_jar",
+  "pivot": "center",
+  "target_longest_m": 0.17,
+  "dimensions_m": {
+    "x": 0.17000000178813934,
+    "y": 0.17000000178813934,
+    "z": 0.11999999731779099,
+    "longest": 0.17000000178813934
+  },
+  "bounds_m": {
+    "min": [
+      -0.08500000089406967,
+      -0.08500000089406967,
+      -0.05999999865889549
+    ],
+    "max": [
+      0.08500000089406967,
+      0.08500000089406967,
+      0.05999999865889549
+    ]
+  },
+  "vertices": 146,
+  "triangles": 288,
+  "materials": [
+    "Prop_jam_jar_plastic_green",
+    "Prop_jam_jar_metal",
+    "Prop_jam_jar_metal_dark",
+    "Prop_jam_jar_plastic_red"
+  ],
+  "material_base_colors": {
+    "Prop_jam_jar_plastic_green": [
+      0.09,
+      0.26,
+      0.13
+    ],
+    "Prop_jam_jar_metal": [
+      0.43,
+      0.45,
+      0.47
+    ],
+    "Prop_jam_jar_metal_dark": [
+      0.09,
+      0.095,
+      0.105
+    ],
+    "Prop_jam_jar_plastic_red": [
+      0.48,
+      0.075,
+      0.06
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "b203fadf102faa27db94abb8ea89aea0d6c6ed323321834c9e56c510b88ed54e",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "果酱罐",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.17,
+    "game_longest_dim_m": 0.17,
+    "sourcing_hint": "model ourselves：Ø0.170 x 0.120 m 果酱罐，玻璃身 + 金属圈盖 + 罐口果酱面",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.17,
+    "built_longest_m": 0.17000000178813934,
+    "abs_error_m": 1.7881393310492655e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "plastic_green",
+      "name_zh": "罐身绿玻璃",
+      "linear_rgb": [
+        0.09,
+        0.26,
+        0.13
+      ],
+      "roughness": 0.28
+    },
+    {
+      "key": "metal",
+      "name_zh": "金属圈盖",
+      "linear_rgb": [
+        0.43,
+        0.45,
+        0.47
+      ],
+      "roughness": 0.32
+    },
+    {
+      "key": "metal_dark",
+      "name_zh": "罐口内壁暗部",
+      "linear_rgb": [
+        0.09,
+        0.095,
+        0.105
+      ],
+      "roughness": 0.55
+    },
+    {
+      "key": "plastic_red",
+      "name_zh": "深红果酱",
+      "linear_rgb": [
+        0.48,
+        0.075,
+        0.06
+      ],
+      "roughness": 0.42
+    }
+  ],
+  "notes": "16 segments, 12 profile points, 11 bands = 352 triangles.  Diameter 0.170 m at the body, height 0.120 m, mouth opening 0.094 m across.  The collar is the metal band at 105-119 mm with a 0.8 mm thread groove at 110-115 mm, flaring 1 mm proud of the glass neck; the flange turns inward to r = 47 mm so the jam surface 20 mm below the rim stays visible.  Slots by face centre: metal above z 103.5 mm, the mouth well (43-56 mm radius, 101-118.5 mm) metal_dark, the jam surface (z < 100.5 mm inside r 48 mm) red, glass elsewhere.",
+  "build_script": "models/jam_jar.py",
+  "preview": "previews/jam_jar_preview.png",
+  "files": {
+    "jam_jar.fbx": 24396,
+    "jam_jar.glb": 9908,
+    "jam_jar.blend": 494976
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 202001
+}

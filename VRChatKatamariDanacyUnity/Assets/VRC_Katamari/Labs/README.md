@@ -43,9 +43,10 @@
 1. **program asset 先就位**：`.cs` 旁边同名 `UdonSharpProgramAsset`（`.asset`），并和它的 `.meta` 一起提交。脚本写了、asset 没生成或没提交，后面全部白搭。
 2. **先编译，再拷贝**：`UdonSharpEditorUtility.CompileAllCsPrograms(true, false)` 必须在任何拷贝之前跑。否则报 `Cannot run serialization on U# behaviour … with outdated behaviour version`。
 3. **建 backing 组件**：同一个 GameObject 上 `AddComponent<UdonBehaviour>()`，再用 `SerializedObject` 写两个**字段**（不是属性）：`programSource` = 该 program asset；`serializedProgramAsset` = `programAsset.SerializedProgramAsset`。
-4. **先填引用，再回写**：proxy 上的 `[SerializeField]` 引用全部设好，再 `UdonSharpEditorUtility.CopyProxyToUdon(proxy)`。
-5. **改过字段就重开场景**：源脚本新增或改名序列化字段之后，`CopyProxyToUdon` **不会**给已经存在的实例补符号（实例变量表是建实例时的快照）。必须存盘、`EditorSceneManager.OpenScene(path)` 重载场景 —— U# 在场景加载时按当前 program 重建实例变量表 —— 再 `CopyProxyToUdon` 一次。完整顺序：**编译 → 存盘 → 重开场景 → `CopyProxyToUdon` → 读回验证**。
-6. **从 Udon 侧读回验证**：读 backing `UdonBehaviour` 的 `publicVariables`，用 `TryGetVariableValue(string, out object)`。**按参数类型选重载**——只按名字反射会 `AmbiguousMatchException`。
+4. **把 proxy 接到 backing 上（2026-11-15 实测）**：手工 `AddComponent<UdonBehaviour>()` 并设好 `programSource` / `serializedProgramAsset` 之后，U# 代理组件上的 `_udonSharpBackingUdonBehaviour` 仍是 0。U# 下次打开场景时会把这种代理当成未挂接，**再生成一套代理 + UdonBehaviour**，并用 `CopyUdonToProxy` 把代理上的引用清空（现象：同一物体上出现 2+2 甚至 5 个组件，引用全空）。修法：用 `SerializedObject` 把代理的 `_udonSharpBackingUdonBehaviour` 指向同物体的那个 `UdonBehaviour`，再调 `UdonSharpEditorUtility.SetBehaviourVersion(ub, UdonSharpBehaviourVersion.V1)`（否则加载时按 V0 升级又会清空变量表）；这之后再 `CopyProxyToUdon`，它会用 `TryAddVariable` 补上缺失的符号。
+5. **先填引用，再回写**：proxy 上的 `[SerializeField]` 引用全部设好，再 `UdonSharpEditorUtility.CopyProxyToUdon(proxy)`。
+6. **改过字段就重开场景**：源脚本新增或改名序列化字段之后，`CopyProxyToUdon` **不会**给已经存在的实例补符号（实例变量表是建实例时的快照）。必须存盘、`EditorSceneManager.OpenScene(path)` 重载场景 —— U# 在场景加载时按当前 program 重建实例变量表 —— 再 `CopyProxyToUdon` 一次。完整顺序：**编译 → 存盘 → 重开场景 → `CopyProxyToUdon` → 读回验证**。
+7. **从 Udon 侧读回验证**：读 backing `UdonBehaviour` 的 `publicVariables`，用 `TryGetVariableValue(string, out object)`。**按参数类型选重载**——只按名字反射会 `AmbiguousMatchException`。
 
 > `UdonSharpEditorUtility.ConvertToUdonBehaviours(...)` 在本版本直接抛 `NotImplementedException`，不要用。
 
@@ -64,6 +65,9 @@
 | 坐下不开始回合（`BallRideStation.roundController` 缺失） | 同上：字段没进实例变量表；而且座位比回合控制器先建，这个引用从最初就没接过 |
 | 同一帧同一输入事件打两次日志，两次状态还不一样 | 同一对象上叠了两份 proxy + backing（给本来就有 backing 的对象又补了一个）；逐对象扫「同一个 program 上 >1 个 `UdonBehaviour`」 |
 | 重新导入/重编后字段还是缺 | 换哪个 API 都补不进已有实例，只能用「存盘 → 重开场景」重建实例表 |
+| 用脚本改 prefab 的 U# 字段时进了 Prefab Mode | 舞台脏着切场景会弹「Prefab Has Been Modified」模态框并卡死主线程（`state`/`read_console`/`refresh_unity` 全部超时）。不要进 Prefab Mode：直接写 proxy 的序列化字段，再 `PrefabUtility.SaveAsPrefabAsset(root, path)`；必须退出舞台时，磁盘资产已验证就选 Discard 而不是 Save |
+| 一个物体上冒出两套 proxy + `UdonBehaviour`（甚至 2+2、5 个组件），代理上的引用全空 | 手工建的 `UdonBehaviour` 没被代理认领（`_udonSharpBackingUdonBehaviour` = 0），U# 打开场景时按「未挂接」又生成一套，并用 `CopyUdonToProxy` 清了引用。修法见必做序列第 4 步：`SerializedObject` 写 `_udonSharpBackingUdonBehaviour` → `SetBehaviourVersion(ub, UdonSharpBehaviourVersion.V1)` → `CopyProxyToUdon` |
+| 编辑器里或 Play Mode 里把 U# 代理组件 `enabled = false`，脚本照样运行 | 代理只是编辑态的影子，真正跑的是 `UdonBehaviour` 上的程序。要停一个 U# 行为，关它所在的 GameObject（`SetActive(false)`）或关那个 `UdonBehaviour` 组件 |
 | 用备份恢复场景文件后，已删除的组件又回来了（如 30 个 `PlaygroundProp` 复活，与 `PickupFieldHost` 同时给球提交同一件） | 备份是更早的场景版本；恢复前先确认备份来源。恢复后读回关键不变量：每物体每 program 最多一个 backing、旧宿主组件数为 0、`motors=1` |
 
 ### 其余几条硬事实

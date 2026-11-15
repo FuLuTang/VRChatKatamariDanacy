@@ -153,10 +153,19 @@ namespace VRCKatamari.Tests
         [Test]
         public void AnObbThatIsNotOrthonormalIsRefused()
         {
-            Assert.IsFalse(AddObb(new Vector3(0f, 0f, 0f), new Vector3(1f, 1f, 1f), 1),
-                "a sheared box must be refused rather than queried");
+            // The helper above passes the three world axes, so a half-extent triple is
+            // always a VALID box: the shear has to be put in the axes themselves, which
+            // is what a non-uniformly scaled parent times a rotation produces.
+            Assert.IsFalse((bool)Invoke("AddObb", new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 1f, 0f), new Vector3(0f, 1f, 0f), new Vector3(0f, 0f, 1f),
+                new Vector3(1f, 1f, 1f), 1, 0),
+                "a non-unit axis must be refused rather than queried");
+            Assert.IsFalse((bool)Invoke("AddObb", new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f), new Vector3(1f, 0f, 0f), new Vector3(0f, 0f, 1f),
+                new Vector3(1f, 1f, 1f), 1, 0),
+                "two parallel axes must be refused rather than queried");
             Assert.AreEqual(0, (int)Invoke("GetStaticObbCount"));
-            Assert.AreEqual(1, (int)Invoke("GetStaticObbRefusalCount"));
+            Assert.AreEqual(2, (int)Invoke("GetStaticObbRefusalCount"));
             Assert.AreNotEqual("", (string)Invoke("GetLastStaticObbRefusalReason"));
         }
 
@@ -237,10 +246,14 @@ namespace VRCKatamari.Tests
             EnableV2();
             float radius = Radius();
             AddObb(new Vector3(0f, 1.5f, 3.4f), new Vector3(2f, 1.5f, 0.4f), 1);
-            Invoke("TeleportTo", new Vector3(0f, radius, 1f));
-            // Half push: the target speed is 2 m/s, so v_gate = 1.0 is below the 90 deg
-            // requirement of 1.5 m/s and the climb channel must not open. The ball then
-            // stands against the wall and the recovery machine has to act.
+            // The run-up is deliberately short: the ball must reach the wall SLOWER than
+            // the climb gate. v_gate = max(|v_planar|, k_intent * v_drive) = max(v, 1.0)
+            // at half push, so a 2 m run-up arrives at ~2 m/s, passes v_req(90 deg) = 1.5,
+            // opens the climb channel and spends seconds climbing the 0.3 m cap before it
+            // can ever be "stuck". From rest 0.10 m out, contact speed is
+            // sqrt(2 * 5 m/s^2 * 0.10 m) = 1.0 m/s, the gate stays closed, and the ball is
+            // pressed against the wall with driveIntent 0.5 from the first contact on.
+            Invoke("TeleportTo", new Vector3(0f, radius, 3f - radius - 0.1f));
             Invoke("SetMoveAxes", 0.5f, 0f, 0f);
             Step(300);
             int recoveries = (int)Invoke("GetRecoveryCount");

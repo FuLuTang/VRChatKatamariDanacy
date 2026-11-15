@@ -208,6 +208,14 @@ namespace VRCKatamari.Editor.LevelBuild
         {
             public string id;
             public string kind;
+            /// <summary>
+            /// Optional Unity-relative <c>.fbx</c> path under <c>Assets/</c>, e.g.
+            /// <c>Assets/ExternalPack/Models/mug/mug.fbx</c>. When present it wins over the
+            /// repo prop at <c>Art/Props/&lt;def&gt;/&lt;def&gt;.fbx</c>, so a def is no longer
+            /// defined by its id (an external asset pack, or an id that collides with one of
+            /// ours).
+            /// </summary>
+            public string model;
             public int valueUnits;
         }
 
@@ -555,6 +563,26 @@ namespace VRCKatamari.Editor.LevelBuild
                     report.Error(prop.itemId + " has no valueUnits (neither props[].valueUnits nor " +
                                  "defs[].valueUnits for '" + prop.def + "')");
                     ok = false;
+                }
+            }
+
+            if (doc.defs != null)
+            {
+                for (int i = 0; i < doc.defs.Length; i++)
+                {
+                    DefEntry def = doc.defs[i];
+                    if (def == null || string.IsNullOrEmpty(def.model))
+                    {
+                        continue;
+                    }
+
+                    if (!IsValidModelPath(def.model))
+                    {
+                        report.Error("defs[" + i + "] def '" + def.id + "' [def_model]: model '" +
+                                     def.model + "' must be a Unity-relative .fbx path under " +
+                                     "Assets/ and must not contain '..'");
+                        ok = false;
+                    }
                 }
             }
 
@@ -953,6 +981,76 @@ namespace VRCKatamari.Editor.LevelBuild
             return null;
         }
 
+        /// <summary>The def's declared <c>model</c> (a Unity-relative .fbx path), or null.</summary>
+        /// <remarks>
+        /// <c>defs[].model</c> is what lets a def stop being defined by its id: a level built
+        /// from an external asset pack (or a def id that collides with one of our props) points
+        /// at its own FBX instead of <c>Art/Props/&lt;def&gt;/&lt;def&gt;.fbx</c>. The value is
+        /// validated by <see cref="IsValidModelPath"/> before any asset is loaded.
+        /// </remarks>
+        public static string DeclaredModelOf(PlacementDocument doc, string defId)
+        {
+            if (doc == null || doc.defs == null || string.IsNullOrEmpty(defId))
+            {
+                return null;
+            }
+
+            for (int i = 0; i < doc.defs.Length; i++)
+            {
+                DefEntry entry = doc.defs[i];
+                if (entry != null && string.Equals(entry.id, defId, StringComparison.Ordinal))
+                {
+                    return string.IsNullOrEmpty(entry.model) ? null : entry.model;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>The FBX this prop instantiates: a declared model wins, else the repo prop.</summary>
+        /// <remarks>
+        /// The fallback is the historic path and is unchanged. A declared model is <b>never</b>
+        /// silently replaced by the repo prop when its asset is missing: the import fails with
+        /// <c>[model_missing]</c> so a typo cannot quietly draw a different object.
+        /// </remarks>
+        public static string ResolvePropModelPath(string defId, string declaredModel)
+        {
+            if (!string.IsNullOrEmpty(declaredModel))
+            {
+                return declaredModel;
+            }
+
+            return PropsArtFolder + "/" + defId + "/" + defId + ".fbx";
+        }
+
+        /// <summary>A declared model path must be a Unity-relative .fbx under Assets/.</summary>
+        /// <remarks>
+        /// Same rule as <c>placement_core._check_defs</c>: starts with <c>Assets/</c>, ends in
+        /// <c>.fbx</c>, no <c>..</c> segment. The Python validator is the gate; this second
+        /// check exists so a hand-edited <c>placement.json</c> cannot point the importer at a
+        /// folder outside the project.
+        /// </remarks>
+        public static bool IsValidModelPath(string model)
+        {
+            if (string.IsNullOrEmpty(model) ||
+                !model.StartsWith("Assets/", StringComparison.Ordinal) ||
+                !model.EndsWith(".fbx", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string[] parts = model.Replace('\\', '/').Split('/');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (parts[i] == "..")
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         // -------------------------------------------------------------- props ---
 
         private static bool ApplyProps(PlacementDocument doc, Transform propsRoot, PlacementImportReport report)
@@ -978,10 +1076,12 @@ namespace VRCKatamari.Editor.LevelBuild
                 GameObject current;
                 existing.TryGetValue(prop.itemId, out current);
 
-                if (current != null && !string.Equals(DefOfInstance(current), prop.def, StringComparison.Ordinal))
+                if (current != null &&
+                    !InstanceMatchesDef(current, prop.def, DeclaredModelOf(doc, prop.def)))
                 {
-                    // A different def is a different mesh; keeping the object would leave the
-                    // old model with the new id (and the old size in propBounds).
+                    // A different def (or a different declared model) is a different mesh;
+                    // keeping the object would leave the old model with the new id (and the old
+                    // size in propBounds).
                     Undo.DestroyObjectImmediate(current);
                     existing.Remove(prop.itemId);
                     current = null;
@@ -990,7 +1090,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 Transform folder = EnsurePropFolder(propsRoot, kind, prop.zone, prop.group);
                 if (current == null)
                 {
-                    current = InstantiateProp(prop, folder, report);
+                    current = InstantiateProp(doc, prop, folder, report);
                     if (current == null)
                     {
                         report.PropErrors++;
@@ -1069,14 +1169,28 @@ namespace VRCKatamari.Editor.LevelBuild
             return folder;
         }
 
-        private static GameObject InstantiateProp(PropEntry prop, Transform folder, PlacementImportReport report)
+        private static GameObject InstantiateProp(PlacementDocument doc, PropEntry prop, Transform folder,
+                                                 PlacementImportReport report)
         {
-            string assetPath = PropsArtFolder + "/" + prop.def + "/" + prop.def + ".fbx";
+            string declaredModel = DeclaredModelOf(doc, prop.def);
+            string assetPath = ResolvePropModelPath(prop.def, declaredModel);
             GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
             if (asset == null)
             {
-                report.Error(prop.itemId + ": no model at " + assetPath + " (the prefab library is P2; " +
-                             "until then the importer uses the FBX)");
+                if (!string.IsNullOrEmpty(declaredModel))
+                {
+                    // The def names its own mesh, so the repo prop is a *different object*;
+                    // falling back would draw the wrong thing and hide the broken path.
+                    report.Error(prop.itemId + " [model_missing]: def '" + prop.def +
+                                 "' declares model '" + assetPath + "' but no asset is there; the " +
+                                 "repo prop at " + ResolvePropModelPath(prop.def, null) +
+                                 " is NOT used as a fallback");
+                }
+                else
+                {
+                    report.Error(prop.itemId + ": no model at " + assetPath + " (the prefab library is P2; " +
+                                 "until then the importer uses the FBX)");
+                }
                 return null;
             }
 
@@ -1158,15 +1272,28 @@ namespace VRCKatamari.Editor.LevelBuild
             }
         }
 
-        private static string DefOfInstance(GameObject instance)
+        /// <summary>
+        /// Is this instance already the mesh the document asks for (so it can be posed in
+        /// place)? A declared model is compared by asset path - a model file may be named
+        /// differently from its def id - while the historic no-model case keeps comparing the
+        /// asset name to the def id.
+        /// </summary>
+        private static bool InstanceMatchesDef(GameObject instance, string defId, string declaredModel)
         {
             GameObject source = PrefabUtility.GetCorrespondingObjectFromSource(instance);
             if (source == null)
             {
-                return null;
+                return false;
             }
 
-            return source.name;
+            if (!string.IsNullOrEmpty(declaredModel))
+            {
+                string sourcePath = AssetDatabase.GetAssetPath(source);
+                return !string.IsNullOrEmpty(sourcePath) &&
+                       string.Equals(sourcePath, declaredModel, StringComparison.Ordinal);
+            }
+
+            return string.Equals(source.name, defId, StringComparison.Ordinal);
         }
 
         // --------------------------------------------------------- structures ---
@@ -1458,8 +1585,17 @@ namespace VRCKatamari.Editor.LevelBuild
                 return false;
             }
 
+            // The same ceiling ValidateCurve enforces and the same one the Python validator
+            // calls curve_arc (placement_core.CURVE_MAX_ARC_DEG = 360): a full turn is the
+            // maximum, so an over-turn arc never reaches the tessellator even when a caller
+            // (a test, a future importer path) skips the document validation.
             if (!IsPositiveFinite(radiusM) || !IsPositiveFinite(arcDeg) ||
                 !IsPositiveFinite(widthM) || !IsPositiveFinite(thicknessM))
+            {
+                return false;
+            }
+
+            if (arcDeg > CurveMaxArcDeg)
             {
                 return false;
             }

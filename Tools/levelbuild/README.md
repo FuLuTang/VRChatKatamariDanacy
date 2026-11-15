@@ -296,3 +296,81 @@ python3 -m unittest Docs.tests.levelbuild.test_level_editor Docs.tests.levelbuil
 ```
 
 59 个用例，**不依赖 Blender**（场景用一个 fake）：操作 → 文档变更、导出逐字节、校验失败回滚、红文件可修不可坏、undo、batch 原子性、导出→重建→导出往返、HTTP/token/health/shutdown/过期端点。
+
+---
+
+## 10. 外部资产包：`model` / `overlapBudget` / `groupId` / `spawnClearanceM`（2026-11-15）
+
+> 本节是**新增能力**。不写这些字段的关卡，`check` 的规则与输出**逐字节不变**（默认的
+> 5 % 互穿规则、1.0 m 出生净空、repo manifest 要求都没有放宽）。
+
+### 10.1 `check --manifests DIR` 与 `check --level ID`
+
+```bash
+# 用关卡自己的 manifest 树校验（默认仍是 Docs/Art/OriginalModels/props/exports）
+python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/<id>/placement.json \
+    --manifests Docs/Design/Levels/<id>/manifests
+
+# 等价写法：用关卡 id 找 Docs/Design/Levels/<id>/placement.json
+python3 Tools/levelbuild/levelbuild.py check --level <id> --manifests Docs/Design/Levels/<id>/manifests
+```
+
+`--manifests DIR` 走的就是 `placement_core.load_manifests(DIR)`，目录不存在是用法错误（退出码 2）。
+只有 `check` 会调用 `validate`；`format` / `seat` / `from-layout` 不校验，所以没有这个选项。
+关卡 id 现在允许以下划线开头（`_probe` 这类本地探针目录），仍是单层路径或一格 `a/b`，不接受 `..`。
+
+### 10.2 `defs[].model`：一个 def 用自己的 `.fbx`
+
+```jsonc
+"defs": [
+  {"id": "mug", "kind": "tableware", "valueUnits": 4,
+   "model": "Assets/ThirdParty/Models/mug/mug.fbx"}   // Unity 相对路径，必须在 Assets/ 下、.fbx、无 ..
+]
+```
+
+* **校验**：`model` 必须是字符串、以 `Assets/` 开头、以 `.fbx` 结尾、不含 `..`；否则报
+  `[def_model]` 硬错误。写 `model` 后，def id **不再需要**在 repo 道具目录里有同名资产
+  （也不再因 id 与 repo 道具重名而被套上别人的 manifest）。
+* **manifest 从哪来**：显式 `--manifests DIR` 优先；否则找
+  `<modelDir>/../exports/<def>.manifest.json`（例如 `Assets/ThirdParty/Models/<def>/<def>.fbx`
+  → `Assets/ThirdParty/Models/exports/<def>.manifest.json`）。两处都没有时 **warning**：
+  `declares model … but no manifest was found`，`aabb` 不被核对，关卡仍可校验其它规则。
+* **模型不存在只在 Unity 侧判**：Python 不查文件系统（模型可能只在操作员的机器上/被 git 忽略）；
+  导入器找不到资产时报 `[model_missing]`，**不会**回退到 `Art/Props/<def>/<def>.fbx`
+  （那会画出另一个物体并掩盖坏路径）。
+* **幂等**：有 `model` 的 def 按**资产路径**判断「是不是同一个模型」；没有 `model` 的 def 仍按
+  资产名 = def id（原行为）。
+* Blender 侧仍用 `Art/Props` 的 GLB（`prop_glb` 未改）；`model` 只影响 Unity 实例化的 FBX 与
+  `prop_fbx` 的解析。
+
+### 10.3 `level.expected.overlapBudget` + `props[].groupId`
+
+```jsonc
+"expected": {"propCount": 648, "valueUnits": 1448, "overlapBudget": 400},
+"props": [
+  {"itemId": "cookie_a", "def": "cookie", "groupId": "biscuit_pile", ...},
+  {"itemId": "cookie_b", "def": "cookie", "groupId": "biscuit_pile", ...}
+]
+```
+
+* **不写 `overlapBudget`**：与以前完全一样——每一对相交体积 > 较小 AABB 5 % 的道具都是硬错误
+  （最多列 25 对 + 一行汇总）。
+* **写了 `overlapBudget: N`**：先数**对数**，`N` 以内只给一条 summary warning
+  （`… prop/prop overlap pair(s) (level.expected.overlapBudget N)`）；**只有对数超过 N** 才报一条
+  硬错误。这样一间真实密度的房间可以整关校验，而不是把规则从所有关卡上关掉。
+* **同一 `groupId` 的道具互穿豁免**（父/子物体，例如三块饼干）。这是**数据**：没写 `groupId`
+  的道具照旧判；不同 `groupId` 也照旧判。`groupId` 必须是非空字符串，只做豁免、不影响导入层级
+  （导入层级仍用 `group`）。
+* 预算与对数都只统计「>5 % 且无 `stackedOn` 关系」的配对。
+
+### 10.4 `level.spawnClearanceM`
+
+已支持，按关卡读（默认 1.0 m）：`"spawnClearanceM": 0.15` 只影响该文件的球起点净空判定；
+`playerSpawn` 的 1.0 m 规则不变。
+
+### 10.5 测试
+
+`Docs/tests/levelbuild/test_levelbuild_fields.py`（23 个用例，合成关卡，无参考关卡数据）覆盖：
+`--manifests` 的 0/1/2 退出码与默认输出一致、`model` 的逐字节往返与五类非法路径、def 无 repo
+资产但声明 model、`prop_fbx` 优先级、模型旁 manifest、`overlapBudget` 缺省/内/超/非法、
+`groupId` 同组豁免与异组不放行、`spawnClearanceM 0.15`。

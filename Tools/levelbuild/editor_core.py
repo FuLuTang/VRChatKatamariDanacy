@@ -37,7 +37,7 @@ from Tools.levelbuild import placement_core as core
 MISSING = object()
 
 #: Fields an op may set on a prop (``aabb``/``absorb*`` follow from ``def``).
-PROP_SETTABLE = ("def", "kind", "zone", "group", "position", "rotationQuat", "yaw",
+PROP_SETTABLE = ("def", "kind", "zone", "group", "groupId", "position", "rotationQuat", "yaw",
                  "support", "stackedOn", "valueUnits", "notes")
 
 #: Fields an op may set on a structure.
@@ -355,6 +355,9 @@ class Editor:
                  out_dir=None, levels_dir=None):
         self.scene = scene
         self.manifests = manifests if manifests is not None else core.load_manifests()
+        #: Pristine manifest tree; ``manifests`` is rebuilt from it on every open/reload
+        #: because a def's declared ``model`` can drop a repo entry (the id-collision case).
+        self.base_manifests = self.manifests
         self.auto_export = bool(auto_export)
         self.undo_limit = int(undo_limit)
         self.out_dir = Path(out_dir) if out_dir else None
@@ -692,6 +695,9 @@ class Editor:
         if level and level_id and str(level_id) != str(level):
             raise OpError("%s says level.id=%r, not %r" % (core.display_path(path),
                                                            level_id, level))
+        # A def that declares its own ``model`` may keep its manifest beside the model
+        # instead of in the repo's props/exports; the same merge the validator does.
+        self.manifests = core.manifests_with_models(doc, self.base_manifests)
         report = self._validate(doc)
         self.doc = doc
         self.path = path
@@ -714,6 +720,7 @@ class Editor:
         path = self._resolve(args["path"]) if args.get("path") else self.path
         previous = self.doc
         doc = core.load_doc(path)
+        self.manifests = core.manifests_with_models(doc, self.base_manifests)
         report = self._validate(doc)
         self.path = Path(path)
         self.doc = doc
@@ -839,7 +846,7 @@ class Editor:
     # ------------------------------------------------------------------ #
     def op_add_prop(self, args, defer=False):
         _known(args, ("itemId", "def", "position", "yaw", "rotationQuat", "kind", "zone",
-                      "group", "support", "stackedOn", "valueUnits", "notes", "seat",
+                      "group", "groupId", "support", "stackedOn", "valueUnits", "notes", "seat",
                       "updateExpected"))
         self._require_open()
         new_doc = _deepcopy(self.doc)
@@ -881,6 +888,8 @@ class Editor:
             prop["zone"] = _string(args, "zone")
         if "group" in args:
             prop["group"] = _string(args, "group")
+        if "groupId" in args:
+            prop["groupId"] = _string(args, "groupId")
         if "support" in args:
             prop["support"] = _string(args, "support")
         if "stackedOn" in args:
@@ -988,6 +997,11 @@ class Editor:
         for key in ("kind", "zone", "group", "notes"):
             if key in args:
                 prop[key] = _string(args, key)
+        if "groupId" in args:
+            if args["groupId"] is None:
+                prop.pop("groupId", None)
+            else:
+                prop["groupId"] = _string(args, "groupId")
         for key in ("support", "stackedOn"):
             if key not in args:
                 continue
@@ -1140,7 +1154,7 @@ class Editor:
                             defer=defer, extra=moved)
 
     def op_add_def(self, args, defer=False):
-        _known(args, ("id", "kind", "valueUnits", "notes"))
+        _known(args, ("id", "kind", "valueUnits", "model", "notes"))
         self._require_open()
         def_id = _string(args, "id")
         new_doc = _deepcopy(self.doc)
@@ -1153,6 +1167,11 @@ class Editor:
             entry["kind"] = _string(args, "kind")
         if "valueUnits" in args:
             entry["valueUnits"] = _integer(args, "valueUnits", minimum=1)
+        if "model" in args:
+            if args["model"] is None:
+                entry.pop("model", None)
+            else:
+                entry["model"] = _string(args, "model")
         if "notes" in args:
             entry["notes"] = _string(args, "notes")
         if "valueUnits" not in entry:
@@ -1162,7 +1181,7 @@ class Editor:
 
     def op_expected(self, args, defer=False):
         _known(args, ("propCount", "valueUnits", "structureCount", "staticObbs",
-                      "fromDocument"))
+                      "overlapBudget", "fromDocument"))
         self._require_open()
         new_doc = _deepcopy(self.doc)
         level = new_doc.setdefault("level", {})
@@ -1182,6 +1201,11 @@ class Editor:
             expected["structureCount"] = _integer(args, "structureCount", minimum=0)
         if "staticObbs" in args:
             expected["staticObbs"] = _integer(args, "staticObbs", minimum=0)
+        if "overlapBudget" in args:
+            if args["overlapBudget"] is None:
+                expected.pop("overlapBudget", None)
+            else:
+                expected["overlapBudget"] = _integer(args, "overlapBudget", minimum=0)
         level["expected"] = expected
         return self._mutate(new_doc, "expected %s" % json.dumps(expected, sort_keys=True),
                             defer=defer, extra={"expected": expected})

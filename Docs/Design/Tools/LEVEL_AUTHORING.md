@@ -980,3 +980,86 @@ curl -s -X POST "http://$(python3 -c "import json;d=json.load(open('/tmp/levelbu
 - **`add_prop` 不自动改 `level.expected`**：设计总量是闸，必须显式 `updateExpected` / `expected`（刻意的，见 §16.4）。
 - **场景 → 文档**只在 `export_placement.py` 里存在（人手改 `.blend` 的兜底）；服务本身不从场景反读。P1 如果做「面板拖完直接导出」，要决定是走增量函数（推荐）还是走一次性导出器（现状兜底）。
 - 端点目录在 `/tmp`：重启机器残留由 `start` 自动清理；多用户机器靠 uid 后缀 + 0600 隔离。
+
+---
+
+## 17. 外部资产包与新字段：`defs[].model` / `overlapBudget` / `groupId` / `spawnClearanceM`（2026-11-15）
+
+> 动机：一次引擎差分审计要重建一个**外部模型包**里的原始关卡（模型不在 `Art/Props`、def id
+> 会与我们的道具重名、房间密度也不符合手摆关卡的 5 % 互穿规则）。原先这套流水线把「def 的
+> 身份」等同于「repo 道具资产」，于是只能把外部模型伪装成 repo 道具。下面的四个改动是**通用**
+> 的：不写这些字段的关卡，规则与字节输出**完全不变**；改的是「身份」和「总闸的表达方式」，
+> 不是放宽某一关的校验。
+
+### 17.1 `check --manifests DIR` 与 `--level ID`
+
+`levelbuild.py check` 新增两个可选参数：
+
+```bash
+python3 Tools/levelbuild/levelbuild.py check --level <id> --manifests Docs/Design/Levels/<id>/manifests
+```
+
+* `--manifests DIR`：用现有 `placement_core.load_manifests(DIR)` 载入，再作为
+  `validate(..., manifests=...)` 传入。不给就是原来的 `props/exports`。
+* `--level ID`：解析 `Docs/Design/Levels/<ID>/placement.json`（位置参数仍然可用，二者只能给一个）。
+  `placement_core.is_valid_level_id` 现在允许首字符 `_`，这样 git-ignored 的本地探针目录
+  （`_probe`）也能按 id 打开；路径形状仍是单层（或一格 `a/b`），`..` 仍被拒绝。
+* 只有 `check` 调用 `validate`；`format` / `seat` / `from-layout` 不校验，因此没有该选项。
+  常驻编辑器（`Editor`）本来就在构造时接收 `manifests=`，这次只是在 `open`/`reload` 时额外合并
+  模型旁 manifest（§17.2），所以它的 `check`/`export` 自动享受同一份数据。
+
+### 17.2 `defs[].model`
+
+```jsonc
+"defs": [
+  {"id": "mug", "kind": "tableware", "valueUnits": 4,
+   "model": "Assets/ThirdParty/Models/mug/mug.fbx"}
+]
+```
+
+| 项 | 规则 |
+|---|---|
+| 形状 | 可选字符串；`Assets/` 开头、`.fbx` 结尾、不含 `..`。否则 `[def_model]` 硬错误 |
+| 语义 | 该 def 的 Unity 模型就是这条路径；`prop_fbx(def, model=…)` **优先**用它，导入器 `InstantiateProp` 也用它 |
+| 身份 | 有 `model` 时，def id **不再要求**在 `Docs/Art/OriginalModels/props/exports` 有同名 manifest，也不再被 repo 同名道具的 manifest 套住（解决 id 冲突） |
+| manifest | 显式 `--manifests` 优先；否则 `<modelDir>/../exports/<def>.manifest.json`（`Assets/<pack>/Models/<def>/<def>.fbx` → `Assets/<pack>/Models/exports/<def>.manifest.json`，与外部包的常规布局一致）。两处都没有：def/prop 各一条 warning，`aabb` 不核对，其余规则照跑 |
+| 缺失资产 | **Python 不查文件系统**（模型可能在操作员机器上、被 git 忽略）。Unity 导入器加载不到时报 `[model_missing]` 并拒绝该件，**不**回退到 `Art/Props/<def>/<def>.fbx` |
+| 幂等 | 有 `model` 的 def 比较**资产路径**（模型文件名不必等于 def id）；无 `model` 的 def 仍比较资产名 = def id（原行为） |
+| 确定性 | `DEF_KEYS` 增加 `model`，规范形/导出原样保留；`dump → load → dump` 逐字节相同 |
+
+`prop_glb`（Blender 侧）未改：外部模型仍要转成 `Docs/Art/OriginalModels/props/exports/<def>.glb`
+才能进 Blender 场景；`model` 只决定 Unity 实例化哪份 FBX。
+
+### 17.3 `level.expected.overlapBudget` 与 `props[].groupId`
+
+```jsonc
+"level": {"expected": {"propCount": 648, "valueUnits": 1448, "overlapBudget": 400}},
+"props": [
+  {"itemId": "cookie_a", "def": "cookie", "groupId": "biscuit_pile", …},
+  {"itemId": "cookie_b", "def": "cookie", "groupId": "biscuit_pile", …}
+]
+```
+
+* **缺省 = 现行规则**：每一对 `>5 %`（较小 AABB 占比）、且没有 `stackedOn` 关系的道具互穿都是
+  硬错误（最多列 25 对，再一行汇总）。这条路径的代码顺序与文案保持原样。
+* **声明 `overlapBudget: N` 后**：先数对数，`≤ N` 时只发一条 summary warning
+  （`N prop/prop overlap pair(s) (level.expected.overlapBudget N)`）；**仅当对数 > N** 报一条硬
+  错误。即闸门从「每一对」变成「总对数」，而不是关掉规则。
+* **同一非空 `groupId` 的两件道具互穿豁免**：表达父/子（三块饼干、一摞纸）。`groupId` 是
+  **数据**，只影响这条豁免；导入层级仍由 `group` 决定。不同 `groupId` 或没写 `groupId` 照旧判。
+* `overlapBudget` 必须是非负整数，否则 `_check_expected` 报硬错误（坏数据不会被当成缺省）。
+
+### 17.4 `level.spawnClearanceM`
+
+`placement_core._check_bounds_and_spawn` 一直按关卡读 `spawnClearanceM`（缺省 1.0 m），本轮只补了
+文档与测试：`"spawnClearanceM": 0.15` 只改变该文件的球起点净空；`playerSpawn` 的 1.0 m 不变。
+
+### 17.5 验证
+
+* `Docs/tests/levelbuild/test_levelbuild_fields.py`：23 个用例（合成关卡，不含参考关卡数据）——
+  CLI 的 0/1/2 退出码与「默认输出 == 显式 repo manifests 输出」、`model` 往返与五类非法路径、
+  无 repo 资产的 model def、`prop_fbx` 优先级、模型旁 manifest、`overlapBudget` 缺省/内/超/非法、
+  `groupId` 同组/异组、`spawnClearanceM 0.15`。
+* `Unity`：新增 `Tests/EditMode/LevelBuild/PlacementImporterModelPathTests.cs`（无场景：只测
+  `ResolvePropModelPath` / `IsValidModelPath`，反射调用）。资产存在性与 `+N ~0 -0` 幂等需要
+  操作员在编辑器里跑。

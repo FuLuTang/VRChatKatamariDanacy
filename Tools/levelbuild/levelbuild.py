@@ -69,7 +69,20 @@ def _report_text(report, doc):
 
 
 def cmd_check(args):
-    path = Path(args.placement)
+    if not args.level and not args.placement:
+        print("levelbuild: check needs a placement path or --level", file=sys.stderr)
+        return 2
+    if args.level and args.placement:
+        print("levelbuild: give either a placement path or --level, not both", file=sys.stderr)
+        return 2
+    if args.level:
+        try:
+            path = core.placement_path(args.level)
+        except ValueError as error:
+            print("levelbuild: %s" % error, file=sys.stderr)
+            return 2
+    else:
+        path = Path(args.placement)
     if not path.is_file():
         print("levelbuild: cannot read %s" % path, file=sys.stderr)
         return 2
@@ -79,7 +92,15 @@ def cmd_check(args):
         print("levelbuild: %s is not readable JSON: %s" % (path, error), file=sys.stderr)
         return 2
 
-    report = core.validate(doc, path=path)
+    manifests = None
+    if args.manifests:
+        directory = Path(args.manifests)
+        if not directory.is_dir():
+            print("levelbuild: --manifests %s is not a directory" % directory, file=sys.stderr)
+            return 2
+        manifests = core.load_manifests(directory)
+
+    report = core.validate(doc, path=path, manifests=manifests)
     if args.strict:
         report.errors.extend(report.warnings)
         report.warnings = []
@@ -612,7 +633,13 @@ def build_parser():
     sub = parser.add_subparsers(dest="command")
 
     check = sub.add_parser("check", help="validate one placement.json (exit 1 on a hard error)")
-    check.add_argument("placement")
+    check.add_argument("placement", nargs="?",
+                       help="the placement.json (or use --level to resolve it)")
+    check.add_argument("--level", default=None, metavar="LEVEL_ID",
+                       help="resolve Docs/Design/Levels/<LEVEL_ID>/placement.json")
+    check.add_argument("--manifests", default=None, metavar="DIR",
+                       help="load def manifests from DIR instead of "
+                            "Docs/Art/OriginalModels/props/exports")
     check.add_argument("--report", action="store_true",
                        help="print the zone / def / tier / three-state tables")
     check.add_argument("--json", action="store_true", help="print the report as JSON")

@@ -133,6 +133,9 @@ COLLISIONS = ("box", "none")
 CAMERA_TYPES = ("perspective", "ortho_top")
 
 ROOT = Path(__file__).resolve().parents[2]
+#: The Unity project root.  A def's ``model`` is a path **relative to this folder**
+#: (``Assets/...``), which is exactly what ``AssetDatabase.LoadAssetAtPath`` takes.
+UNITY_ROOT = ROOT / "VRChatKatamariDanacyUnity"
 #: The one curved-ramp tessellator: the design's Python reference (see
 #: :func:`curve_reference`).  The C# counterpart is ``Runtime/BallContact/CurveRampMath.cs``.
 CURVE_REFERENCE_PATH = ROOT / "Docs/Design/BallMotor/contact_v2/contact_v2.py"
@@ -141,14 +144,14 @@ PROPS_EXPORTS_DIR = PROPS_DIR / "exports"
 PROP_CATALOG = ROOT / "Docs/Design/Maps/PicnicLawn/prop_catalog.csv"
 LEVELS_DIR = ROOT / "Docs/Design/Levels"
 
-PROP_KEYS = ("itemId", "def", "kind", "zone", "group", "position", "rotationQuat",
+PROP_KEYS = ("itemId", "def", "kind", "zone", "group", "groupId", "position", "rotationQuat",
              "support", "stackedOn", "aabb", "absorbDiameterReq", "absorbable",
              "valueUnits", "notes")
 STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
                   "collision", "absorbable", "support", "meets", "material", "notes")
 CAMERA_KEYS = ("id", "type", "location", "target", "lens", "coverage_m")
 PRESET_KEYS = ("id", "camera", "engine", "res", "samples")
-DEF_KEYS = ("id", "kind", "valueUnits", "notes")
+DEF_KEYS = ("id", "kind", "model", "valueUnits", "notes")
 LEVEL_KEYS = ("id", "scene", "units", "convention", "ballStart", "playerSpawn",
               "ballDiameterStart", "ballDiameterMax", "groundY", "bounds",
               "spawnClearanceM", "budget", "expected", "zones", "arena")
@@ -826,6 +829,34 @@ def manifest_aabb(dimensions_m):
             clean_zero(round(dimensions_m["y"], SIZE_DECIMALS)))
 
 
+def _manifest_entry(document, source=None):
+    """One manifest document reduced to the facts the validator reads, or ``None``."""
+    dimensions = document.get("dimensions_m") or {}
+    try:
+        aabb = manifest_aabb(dimensions)
+    except (KeyError, TypeError):
+        return None
+    return {
+        "aabb": aabb,
+        "category": document.get("category") or "",
+        "longest_m": dimensions.get("longest"),
+        "manifest": document,
+        "source": str(source) if source is not None else None,
+    }
+
+
+def _is_repo_exports_manifest(entry):
+    """Did this entry come from the repo's own ``props/exports`` tree?"""
+    source = (entry or {}).get("source")
+    if not source:
+        return False
+    try:
+        Path(source).resolve().relative_to(PROPS_EXPORTS_DIR.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def load_manifests(exports_dir=None):
     """``{def: {"aabb": (x, y, z), "category": str, "manifest": dict}}``."""
     directory = Path(exports_dir or PROPS_EXPORTS_DIR)
@@ -835,18 +866,95 @@ def load_manifests(exports_dir=None):
     for path in sorted(directory.glob("*.manifest.json")):
         document = json.loads(path.read_text(encoding="utf-8"))
         def_id = document.get("id") or path.name[:-len(".manifest.json")]
-        dimensions = document.get("dimensions_m") or {}
-        try:
-            aabb = manifest_aabb(dimensions)
-        except KeyError:
-            continue
-        manifests[def_id] = {
-            "aabb": aabb,
-            "category": document.get("category") or "",
-            "longest_m": dimensions.get("longest"),
-            "manifest": document,
-        }
+        entry = _manifest_entry(document, path)
+        if entry is not None:
+            manifests[def_id] = entry
     return manifests
+
+
+def model_manifest_path(model):
+    """``<modelDir>/../exports/<def>.manifest.json`` for a def's declared ``model``.
+
+    A level built from an external asset pack keeps its manifests next to the models
+    (``Assets/<pack>/Models/<def>/<def>.fbx`` beside
+    ``Assets/<pack>/Models/exports/<def>.manifest.json``).  So the rule is one directory
+    up from the model's own folder, and ``--manifests DIR`` still wins when it carries
+    the def.
+    """
+    path = Path(model)
+    name = path.name
+    stem = name[:-len(".fbx")] if name.endswith(".fbx") else path.stem
+    return UNITY_ROOT / path.parent.parent / "exports" / (stem + ".manifest.json")
+
+
+def load_model_manifest(model):
+    """The manifest shipped next to a def's model, or ``None`` when there is none."""
+    path = model_manifest_path(model)
+    if not path.is_file():
+        return None
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return _manifest_entry(document, path)
+
+
+def manifests_with_models(doc, manifests=None):
+    """Reconcile a declared ``model`` with the manifest trees.
+
+    A def that names its own model is no longer defined by a repo asset
+    (``Docs/Art/OriginalModels/props/<def>``).  So the **repo's own** manifest for that id
+    must not be applied - it describes a different file (the ``cookie`` / ``strawberry`` /
+    ``watermelon`` id collisions).  The caller's manifest wins when it is not from the repo
+    exports tree (``--manifests DIR``, a level's own tree); otherwise the manifest next to
+    the model (:func:`model_manifest_path`) is used.  A def with neither is reported by
+    ``_check_defs``/``_check_props`` rather than silently skipped.
+    """
+    if manifests is None:
+        manifests = load_manifests()
+    merged = dict(manifests)
+    for entry in doc.get("defs") or []:
+        if not isinstance(entry, dict):
+            continue
+        def_id = entry.get("id")
+        model = entry.get("model")
+        if not isinstance(def_id, str) or not def_id:
+            continue
+        if not isinstance(model, str) or not model:
+            continue
+        if def_id in merged and not _is_repo_exports_manifest(merged[def_id]):
+            continue
+        merged.pop(def_id, None)
+        loaded = load_model_manifest(model)
+        if loaded is not None:
+            merged[def_id] = loaded
+    return merged
+
+
+def def_model(catalog, def_id):
+    """The def's declared ``model`` (a Unity-relative .fbx path), or ``None``."""
+    entry = catalog.get(def_id) or {}
+    model = entry.get("model")
+    if isinstance(model, str) and model.strip():
+        return model.strip()
+    return None
+
+
+def overlap_budget(doc):
+    """``level.expected.overlapBudget`` (a whole number >= 0) or ``None``.
+
+    Absent means the historic rule (every pair over 5 % is an error); a declared budget
+    turns the count into the gate, so one dense authentic room can be validated without
+    relaxing the rule for every level.  A malformed value is reported by
+    ``_check_expected`` and ignored here.
+    """
+    expected = (doc.get("level") or {}).get("expected")
+    if not isinstance(expected, dict):
+        return None
+    value = expected.get("overlapBudget")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
 
 
 # --------------------------------------------------------------------------- #
@@ -1209,8 +1317,29 @@ def _check_defs(doc, report, manifests, catalog):
         if def_id in seen:
             report.err("%s def %r is duplicated" % (label, def_id))
         seen.add(def_id)
+        model = entry.get("model")
         if manifests and def_id not in manifests:
-            report.warn("%s def %r has no manifest in props/exports (no model yet)" % (label, def_id))
+            if isinstance(model, str) and model.strip():
+                report.warn("%s def %r declares model %r but no manifest was found for it "
+                            "(aabb is not checked); put one in --manifests or in "
+                            "<modelDir>/../exports/" % (label, def_id, model))
+            else:
+                report.warn("%s def %r has no manifest in props/exports (no model yet)"
+                            % (label, def_id))
+        if model is not None:
+            if not isinstance(model, str) or not model.strip():
+                report.err("%s [def_model] model must be a non-empty string (a Unity-relative "
+                           ".fbx path under Assets/), got %r" % (label, model))
+            else:
+                if not model.startswith("Assets/"):
+                    report.err("%s [def_model] def %r model %r must start with 'Assets/' "
+                               "(a path relative to the Unity project)" % (label, def_id, model))
+                if not model.endswith(".fbx"):
+                    report.err("%s [def_model] def %r model %r must end with '.fbx'"
+                               % (label, def_id, model))
+                if ".." in model.replace("\\", "/").split("/"):
+                    report.err("%s [def_model] def %r model %r must not contain '..'"
+                               % (label, def_id, model))
         value = entry.get("valueUnits")
         if value is None:
             report.err("%s.valueUnits is required (it is what the def is worth)" % label)
@@ -1251,8 +1380,11 @@ def _check_props(doc, report, manifests, catalog):
         def_id = prop.get("def")
         if not isinstance(def_id, str) or not def_id:
             report.err("%s.def is required" % label)
-        elif def_id not in manifests:
-            report.err("%s def %r has no manifest in %s" % (label, def_id, "props/exports"))
+        elif def_id not in manifests and not def_model(catalog, def_id):
+            # A def whose id is not a repo prop is allowed **only** when it declares its
+            # own model; then the manifest comes from --manifests or from beside the model.
+            report.err("%s def %r has no manifest in props/exports and declares no model"
+                       % (label, def_id))
 
         kind = prop.get("kind")
         if kind is not None and (not isinstance(kind, str) or not kind.strip()):
@@ -1263,6 +1395,9 @@ def _check_props(doc, report, manifests, catalog):
         zone = prop.get("zone")
         if zone is not None and not isinstance(zone, str):
             report.err("%s.zone must be a string" % label)
+        group_id = prop.get("groupId")
+        if group_id is not None and (not isinstance(group_id, str) or not group_id.strip()):
+            report.err("%s.groupId must be a non-empty string when present" % label)
 
         aabb = as_vec3(prop.get("aabb"), "%s.aabb" % label, report)
         if aabb is not None:
@@ -1860,9 +1995,15 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
         if bottom < -SINK_TOLERANCE_M:
             report.err("%s reaches %.3f m below y=0" % (item_id, bottom))
 
-    # prop/prop interpenetration, ignoring a declared stack relationship
+    # prop/prop interpenetration, ignoring a declared stack relationship and members of
+    # one group (three biscuits in a pile are one authored object, not three accidents).
+    # ``level.expected.overlapBudget`` (optional) changes only the *gate*: with a budget the
+    # pair count is compared against it instead of every pair being an error.  Absent =
+    # the historic rule, byte-for-byte.
+    budget = overlap_budget(doc)
     ids = sorted(boxes)
     printed = 0
+    pairs = []
     for i, left_id in enumerate(ids):
         for right_id in ids[i + 1:]:
             left_box, right_box = boxes[left_id], boxes[right_id]
@@ -1879,12 +2020,27 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
             right = by_id.get(right_id) or {}
             if left.get("stackedOn") == right_id or right.get("stackedOn") == left_id:
                 continue
-            if printed < DETAIL_LIMIT:
-                report.err("%s and %s overlap %.0f%% of the smaller AABB"
-                           % (left_id, right_id, fraction * 100.0))
-            printed += 1
-    if printed > DETAIL_LIMIT:
-        report.err("... %d more prop/prop overlap(s)" % (printed - DETAIL_LIMIT))
+            group = left.get("groupId")
+            if isinstance(group, str) and group and group == right.get("groupId"):
+                continue
+            if budget is None:
+                if printed < DETAIL_LIMIT:
+                    report.err("%s and %s overlap %.0f%% of the smaller AABB"
+                               % (left_id, right_id, fraction * 100.0))
+                printed += 1
+            else:
+                pairs.append((left_id, right_id))
+    if budget is None:
+        if printed > DETAIL_LIMIT:
+            report.err("... %d more prop/prop overlap(s)" % (printed - DETAIL_LIMIT))
+    else:
+        examples = ", ".join("%s+%s" % pair for pair in pairs[:3])
+        report.warn("%d prop/prop overlap pair(s) (level.expected.overlapBudget %d)%s"
+                    % (len(pairs), budget, (": " + examples) if examples else ""))
+        if len(pairs) > budget:
+            report.err("prop/prop overlap pairs %d exceed level.expected.overlapBudget %d (%+d)%s"
+                       % (len(pairs), budget, len(pairs) - budget,
+                          ("; e.g. " + examples) if examples else ""))
 
     # props inside solid structures (design rule 8)
     printed = 0
@@ -1928,6 +2084,12 @@ def _check_expected(doc, report):
     if not isinstance(expected, dict):
         report.err("level.expected must be an object with propCount and valueUnits")
         return
+    overlap = expected.get("overlapBudget")
+    if overlap is not None:
+        if isinstance(overlap, bool) or not isinstance(overlap, int) or overlap < 0:
+            report.err("level.expected.overlapBudget must be a whole number >= 0 (got %r); "
+                       "it is the maximum number of prop/prop overlap pairs this level may "
+                       "have" % (overlap,))
     props = [prop for prop in doc.get("props") or [] if isinstance(prop, dict)]
     count = len(props)
     units = 0
@@ -2008,6 +2170,11 @@ def validate(doc, path=None, manifests=None):
         report.err("the document must be a JSON object")
         return report
 
+    # A def that declares its own ``model`` may keep its manifest beside the model; the
+    # caller's manifests win, and the merge happens after the shape check so a malformed
+    # document still gets the one clean error it always did.
+    manifests = manifests_with_models(doc, manifests)
+    report.manifests = manifests
     _check_schema(doc, report)
     catalog = def_catalog(doc)
     _check_defs(doc, report, manifests, catalog)
@@ -2224,7 +2391,10 @@ def format_report_tables(tables, expected=None):
 #: allowed so a field made of many small arenas can keep one document per cell
 #: (``physics_test_field/C14``) instead of one document per scene, which is what the
 #: motor's per-arena capacity forces (see ``_check_arena``).
-_LEVEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*(/[A-Za-z0-9][A-Za-z0-9_.-]*)?$")
+#: The first character may be ``_`` so a local (git-ignored) probe level such as
+#: ``_probe`` can be addressed by id; the shape is still one safe path component (or
+#: one nested field cell), never an escape.
+_LEVEL_ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9][A-Za-z0-9_.-]*)?$")
 
 
 def is_valid_level_id(level_id):
@@ -2233,8 +2403,8 @@ def is_valid_level_id(level_id):
 
 def level_folder(level_id, levels_dir=None):
     if not is_valid_level_id(level_id):
-        raise ValueError("bad level id %r (letters, digits, '_', '-', '.', and at most "
-                         "one '/' for a field cell)" % (level_id,))
+        raise ValueError("bad level id %r (letters, digits, '_', '-', '.', an optional "
+                         "leading '_', and at most one '/' for a field cell)" % (level_id,))
     return Path(levels_dir or LEVELS_DIR) / level_id
 
 
@@ -2242,9 +2412,16 @@ def placement_path(level_id, levels_dir=None):
     return level_folder(level_id, levels_dir) / "placement.json"
 
 
-def prop_fbx(def_id, props_dir=None):
-    """The Unity model asset this tool instantiates for a def."""
-    return Path(props_dir or ROOT / "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Art/Props") \
+def prop_fbx(def_id, props_dir=None, model=None):
+    """The Unity model asset this tool instantiates for a def.
+
+    A def-level ``model`` (a Unity-relative ``.fbx`` path) **wins**: it is what lets a
+    def stop being defined by its id, so an external asset pack does not have to
+    masquerade as a repo prop.  Without one the historic repo path is unchanged.
+    """
+    if model:
+        return UNITY_ROOT / model
+    return Path(props_dir or UNITY_ROOT / "Assets/VRC_Katamari/Art/Props") \
         / def_id / (def_id + ".fbx")
 
 

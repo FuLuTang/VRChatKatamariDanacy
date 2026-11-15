@@ -45,7 +45,7 @@
 
 ### 1.2 30 个 `Item_NN`：旧宿主残留
 
-- 全部内置 Cube、材质 `Mat_PlaygroundProp`（`Assets/VRC_Katamari/Labs/BallPlayground/Mat_PlaygroundProp.mat`）、无父物体、`m_IsActive: 1`。
+- 全部内置 Cube、材质 `Mat_PlaygroundProp`（`Assets/VRC_Katamari/Art/Materials/Mat_PlaygroundProp.mat`）、无父物体、`m_IsActive: 1`。
 - 尺寸：`Item_00..09` = 0.12 m、`Item_10..19` = 0.18 m、`Item_20..29` = 0.25 m —— 正是旧宿主 `propBounds` 的 0.12/0.18/0.25 三档、每档 10 件。
 - **不在 `PickupFieldHost` 的六个数组里**，所以不可吸、不计数，但仍在场上渲染。玩家看到的是 140 个方块；`LEVEL_CONTENT_PLAN.md` §0.1 记的"旧 `Item_00..Item_29` 只剩 30 个不再被宿主引用的方块"在这一点上仍然成立，本轮只是补上"它们还在显示"。
 

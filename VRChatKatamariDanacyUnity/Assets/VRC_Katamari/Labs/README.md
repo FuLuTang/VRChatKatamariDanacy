@@ -100,9 +100,7 @@ var pv = typeof(UdonBehaviour).GetField("publicVariables", BindingFlags.NonPubli
 
 `Labs/BallPlayground/`（`BallPlayground.unity`、`BallPlayground.prefab`、`BallPlaygroundBootstrap`、`PlaygroundProp`、4 个材质）与 `Labs/Bootstrap/`（`BootstrapLab.unity`）已于 2026-11-15 退役，由 `Labs/PhysicsTestField` 取代：场景、prefab、`BallPlaygroundBootstrap` 及其 UdonSharp program asset / serialized program 已删除。
 
-`Labs/BallPlayground/` 目录**仍然存在**，因为下面这些资产被在用的场景引用，不能删：
+`Labs/BallPlayground/` 目录**本身已删除**。只有下面这些资产被在用的场景引用，所以它们在退役时搬到了新位置（连 `.meta` 一起搬、GUID 不变），不能按旧路径去删：
 
-- `Mat_PlaygroundBall/Ground/Prop/Wall` 四个材质：`Labs/StoryLevel/StoryLevel.unity`（`Ground`、4 面墙、`CoreMesh`、`SceneDescriptor.DynamicMaterials`）与 `Labs/CpuSkirmish/CpuSkirmish.unity` 都在用。
-- `PlaygroundProp.cs` + `PlaygroundProp.asset`（+ `Assets/SerializedUdonPrograms/bb940408ec3999040829cf3d16ca2ec1.asset`）：`CpuSkirmish.unity` 的 24 个 `P0_0..P3_5` 道具挂的就是它。
-
-它们的去处（搬到 `Art/Materials/`、把 `PlaygroundProp` 归到 `Runtime/` 还是留在 CpuSkirmish）待 Lead 决定；搬动时必须连 `.meta` 一起搬、保持 GUID 不变。
+- `Mat_PlaygroundBall/Ground/Prop/Wall` 四个材质 → `Assets/VRC_Katamari/Art/Materials/`：`Labs/StoryLevel/StoryLevel.unity`（`Ground`、4 面墙、`CoreMesh`、`SceneDescriptor.DynamicMaterials`）与 `Labs/CpuSkirmish/CpuSkirmish.unity` 都在用。
+- `PlaygroundProp.cs` + `PlaygroundProp.asset`（+ `Assets/SerializedUdonPrograms/bb940408ec3999040829cf3d16ca2ec1.asset`）→ `Labs/CpuSkirmish/`：`CpuSkirmish.unity` 的 24 个 `P0_0..P3_5` 道具挂的就是它。

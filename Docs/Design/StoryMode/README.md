@@ -226,7 +226,7 @@ S4 的 `Runtime/Story/StoryRoundController.cs` 已经在按这些方法接线（
 | 事件只在提交成功分支写入；diameter = bounds 最大边 | `:766-776`、`:1523-1531` |
 | 环容量 16 | `:280` |
 | `AttachmentMath.TryWorldPoseToLocal(ballPosition, ballRotation, objectPosition, objectRotation, objectScale, out localPosition, out localRotation)` | `Runtime/BallLayers/Attachment/AttachmentMath.cs:90-113` |
-| 对照：lab 的每件道具宿主“查到自己的 id 就隐藏” | `Labs/BallPlayground/PlaygroundProp.cs:144-169` |
+| 对照：lab 的每件道具宿主“查到自己的 id 就隐藏” | `Labs/CpuSkirmish/PlaygroundProp.cs:144-169` |
 | 对照：lab 的激活/释放半径（1.6 / 1.0，释放更小） | `PlaygroundProp.cs:50`、`:57` |
 
 lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就撤回）。本宿主没有照抄：`releaseRadiusM` 必须大于 `activationRadiusM`，`Start` 里不满足就按 1.25 倍往上调，留出迟滞。
@@ -516,7 +516,7 @@ python3 -m unittest discover -s Docs/tests
 
 ### 未验证（不要当成已验证）
 
-1. **没有编译**：U# 全量编译、Console 无错都没发生。`GameObject.SetActive(bool)` 有 `Labs/BallPlayground/PlaygroundProp.cs:167`（BallPlayground 实跑过）的先例，序列化 `GameObject` 字段有同文件 `:38` 的 `visualRoot` 先例，但本文件这个组合没有编译记录。
+1. **没有编译**：U# 全量编译、Console 无错都没发生。`GameObject.SetActive(bool)` 有 `Labs/CpuSkirmish/PlaygroundProp.cs:167`（BallPlayground 实跑过）的先例，序列化 `GameObject` 字段有同文件 `:38` 的 `visualRoot` 先例，但本文件这个组合没有编译记录。
 2. **ClientSim / Play Mode / Build & Test 全部 NOT_RUN**：加载后按钮不可见、Presenting 时底板可见、Result 时底板+按钮都可见、重试后按钮消失，一条都没有运行时观察。
 3. **Idle 提示行的实际显示**：提示行现在是独立对象（`startPromptText`），由控制器在 Idle 打开、其余状态关掉；它在 Canvas 里与 `ResultCard` 的相对位置、以及 Play Mode 下是否真的可见，都没有观察。
 4. **`SetActive(false)` 期间按下按钮**：隐藏的对象上 uGUI 不会再派发 `OnClick`，这是本节依赖的机制，但“Result 之前按不到”没有实机记录。

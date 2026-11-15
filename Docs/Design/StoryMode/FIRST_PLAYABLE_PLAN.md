@@ -8,7 +8,7 @@
 
 1. **玩家球不动、点球没反应。** CpuSkirmish 的 4 个球里 0 号是玩家位，README 原话“未接输入，静止”（`Labs/CpuSkirmish/README.md:3`）；host 的注释也写明它只开回合、从不驱动（`Runtime/Ai/CpuSkirmishBootstrap.cs:16`）。全项目唯一的驱动接缝是 `SetMoveAxes`（`Runtime/BallMotor/KatamariBallMotor.cs:965-970`），除 CPU pilot（`Runtime/Ai/CpuBallPilot.cs:211-218`）、BallPlayground 的脚本时间线（`Labs/BallPlayground/BallPlaygroundBootstrap.cs:270`）和桌面适配器 `DesktopMoveInput`（S1，已在 `Labs/StoryLevel` 编译实跑，commit `e74ff8c`）外没有别的驱动来源。CpuSkirmish 里没有 `VRCStation`（全场景检索该 GUID 为 0 命中；作为对照 `Labs/StationPlatform/StationPlatformLab.unity` 有 1 个），也没有 `Interact` 处理，所以点球不可能入座。
 2. **半埋不是物理问题，是视觉没缩。** CpuSkirmish 的 `BallVisual` 用内置 1 m 球（mesh 10207，`Labs/CpuSkirmish/CpuSkirmish.unity:832`），`localScale` 恒为 1（`:778`）；motor 把球心放在 y≈0.15（`:449`），地面顶面在 y=0（Ground y=−0.2、scale y=0.4，`:579-580`）。于是 1 m 球有 0.35 m（半径的 70%）在地面以下。motor 从不写 scale（`KatamariBallMotor.cs:931-940` 只写 position/rotation），host 也“从不 resize 球”（`CpuSkirmishBootstrap.cs:16`）；BallPlayground 每帧把视觉球缩到语义直径（`Labs/BallPlayground/BallPlaygroundBootstrap.cs:148-152`），所以那边看着是对的。
-3. **方块不粘是没接，不是坏了。** 吸附后方块被 `SetActive(false)` 直接藏掉（`Labs/BallPlayground/PlaygroundProp.cs:164-169`）；motor 只提供 absorbed-event ring（`KatamariBallMotor.cs:280`、`:1523-1531`）。宿主代码已经写了（`Runtime/Pickup/PickupFieldHost.cs`，用 `AttachmentMath` 把被吸物件挂到球的附着根），缺的只是场景接线：`AttachmentRoot` 与道具行还没有接（§3）。
+3. **方块不粘是没接，不是坏了。** 吸附后方块被 `SetActive(false)` 直接藏掉（`Labs/CpuSkirmish/PlaygroundProp.cs:164-169`）；motor 只提供 absorbed-event ring（`KatamariBallMotor.cs:280`、`:1523-1531`）。宿主代码已经写了（`Runtime/Pickup/PickupFieldHost.cs`，用 `AttachmentMath` 把被吸物件挂到球的附着根），缺的只是场景接线：`AttachmentRoot` 与道具行还没有接（§3）。
 
 ## 1. 玩家控制与“骑球”
 

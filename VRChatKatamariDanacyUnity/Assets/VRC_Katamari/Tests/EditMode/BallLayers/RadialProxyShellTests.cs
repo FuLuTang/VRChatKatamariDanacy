@@ -121,9 +121,10 @@ namespace VRCKatamari.Tests
             // in that hemisphere (a remote direction must stay untouched). Rotating the
             // visual roll +90 deg about +X puts local +Z at world -Y, so the far tip
             // points at the floor and the raw support is 1.15 + 1.0 = 2.15 m.
+            Vector3 rodCenter = new Vector3(0f, 0f, 1.15f);
+            Vector3 rodExtents = new Vector3(0.05f, 0.05f, 2f);
             Shell shell = new Shell(0.15f);
-            Vector3[] corners = RodCornersAt(new Vector3(0f, 0f, 1.15f),
-                new Vector3(0.05f, 0.05f, 2f));
+            Vector3[] corners = RodCornersAt(rodCenter, rodExtents);
             Assert.IsTrue(shell.Attach("rod#1", corners, true));
             Assert.AreEqual(1, shell.ItemCount, "one item");
             Assert.AreEqual(8, shell.PoolCount, "eight corners");
@@ -136,7 +137,18 @@ namespace VRCKatamari.Tests
             float support;
             float correction;
             shell.Solve(down, new Vector3(0f, 0.15f, 0f), 0.04f, out support, out correction);
-            Assert.AreEqual(0.15f + cap, support, 1e-4f, "support = core + relative cap");
+            // The clamp is radial (README "夹紧是径向的"): an endpoint longer than core+cap
+            // is scaled along its own ray to that radius, so the along-axis support is the
+            // projection (core+cap) * tipZ / |tip|, not the bare core+cap. Here the cross
+            // section is thin, so the two differ by only ~2.7e-5 m, but the invariant is
+            // the projection.
+            float halfX = rodExtents.x * 0.5f;
+            float halfY = rodExtents.y * 0.5f;
+            float tipZ = rodCenter.z + rodExtents.z * 0.5f;
+            float tipLength = Mathf.Sqrt(halfX * halfX + halfY * halfY + tipZ * tipZ);
+            Assert.AreEqual((0.15f + cap) * (tipZ / tipLength), support, 1e-4f,
+                "support = (core + cap) projected along the tip direction");
+            Assert.LessOrEqual(support, 0.15f + cap, "never beyond the radial clamp");
             Assert.AreEqual(0.04f, correction, 1e-4f, "one-step lift is clamped");
             Assert.LessOrEqual(support - 0.15f, cap + Tolerance, "no protrusion beyond the cap");
 
@@ -195,29 +207,50 @@ namespace VRCKatamari.Tests
         public void SharedDirectionKeepsTheOtherRodsContribution()
         {
             // Two rods on local +Z, 0.60 m and 0.26 m long. The short one is deliberately
-            // shorter than the cap (0.10 + 0.035), so removing the long one must reveal
-            // 0.13 m rather than falling to the core or keeping 0.30 m.
-            Shell shell = new Shell(0.10f);
-            Assert.IsTrue(shell.Attach("long#1", RodCorners(new Vector3(0.03f, 0.03f, 0.6f)), true));
-            Assert.IsTrue(shell.Attach("short#1", RodCorners(new Vector3(0.03f, 0.03f, 0.26f)), true));
+            // shorter than the clamp radius (0.10 + 0.035), so removing the long one must
+            // reveal 0.13 m rather than falling to the core or keeping 0.30 m.
+            Vector3 longExtents = new Vector3(0.03f, 0.03f, 0.6f);
+            Vector3 shortExtents = new Vector3(0.03f, 0.03f, 0.26f);
+            float core = 0.10f;
+            float cap = core * 0.35f;
+            Shell shell = new Shell(core);
+            Assert.IsTrue(shell.Attach("long#1", RodCorners(longExtents), true));
+            Assert.IsTrue(shell.Attach("short#1", RodCorners(shortExtents), true));
             Quaternion down = Quaternion.AngleAxis(90f, Vector3.right);
-            Assert.IsTrue(shell.BuildContact(0.10f * 0.35f));
+            Assert.IsTrue(shell.BuildContact(cap));
             float support;
             float correction;
-            shell.Solve(down, new Vector3(0f, 0.10f, 0f), 10f, out support, out correction);
-            Assert.AreEqual(0.135f, support, 1e-4f, "long rod clamped to the cap");
+            shell.Solve(down, new Vector3(0f, core, 0f), 10f, out support, out correction);
+            // The clamp is radial (README "夹紧是径向的"): an endpoint longer than core+cap
+            // keeps its direction and is scaled to that radius, so a tip slightly off the
+            // axis contributes only the along-axis projection. The long rod's far corner
+            // is (0.015, 0.015, 0.30), so the expected support is
+            //   (core+cap) * hz / |corner| = 0.135 * 0.30 / sqrt(0.015^2+0.015^2+0.30^2)
+            //                               = 0.135 * cos(4.045 deg) = 0.134664 m,
+            // NOT the full clamp radius 0.135 m (that would be the support of a tip
+            // exactly on the axis).
+            float halfX = longExtents.x * 0.5f;
+            float halfY = longExtents.y * 0.5f;
+            float halfZ = longExtents.z * 0.5f;
+            float tipLength = Mathf.Sqrt(halfX * halfX + halfY * halfY + halfZ * halfZ);
+            float clampedSupport = (core + cap) * (halfZ / tipLength);
+            Assert.AreEqual(clampedSupport, support, 1e-4f,
+                "radial clamp keeps (core + cap) * cos(tip tilt) along the axis, not the bare cap");
+            Assert.Less(support, core + cap, "a tilted tip cannot reach the bare clamp radius");
 
             Assert.IsTrue(shell.Detach("long#1"));
             Assert.AreEqual(1, shell.ItemCount, "only the long rod left");
-            Assert.IsTrue(shell.BuildContact(0.10f * 0.35f));
-            shell.Solve(down, new Vector3(0f, 0.10f, 0f), 10f, out support, out correction);
-            Assert.AreEqual(0.13f, support, 1e-4f, "short rod's tip takes over");
-            Assert.Greater(support, 0.10f + Tolerance, "the surviving rod still lifts");
+            Assert.IsTrue(shell.BuildContact(cap));
+            shell.Solve(down, new Vector3(0f, core, 0f), 10f, out support, out correction);
+            // The short tip's corner diagonal (0.131719 m) is still inside the clamp
+            // radius, so it is not shortened at all and support is its bare hz = 0.13 m.
+            Assert.AreEqual(shortExtents.z * 0.5f, support, 1e-4f, "short rod's tip takes over");
+            Assert.Greater(support, core + Tolerance, "the surviving rod still lifts");
 
             Assert.IsTrue(shell.Detach("short#1"));
-            Assert.IsTrue(shell.BuildContact(0.10f * 0.35f));
-            shell.Solve(down, new Vector3(0f, 0.10f, 0f), 10f, out support, out correction);
-            Assert.AreEqual(0.10f, support, 1e-4f, "core sphere again");
+            Assert.IsTrue(shell.BuildContact(cap));
+            shell.Solve(down, new Vector3(0f, core, 0f), 10f, out support, out correction);
+            Assert.AreEqual(core, support, 1e-4f, "core sphere again");
         }
 
         [Test]

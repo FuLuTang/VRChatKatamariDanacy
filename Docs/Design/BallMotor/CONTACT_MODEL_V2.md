@@ -1302,7 +1302,7 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 | **S3（代码已写，未编译）** | 电机集成，**flag 默认 false** | `KatamariBallMotor.cs`：`contactModelV2Enabled`、`StepContactV2`/`FillNearWindow`/`WriteContactSupport`/`ApplyGrowthPushOut`/恢复状态机、`AddObb`/`ClearObbs`、新 getter；`StepPositionV1` 保留 v1 原语句；`RefreshStepMask`/`TrySweepSphere` 在 v2 分支跳过；`BallShapeMath.TryNeedleSegmentContact`（针尖段扫掠）+ `NeedleSegmentTests` + `ContactModelV2Tests`；接口与偏差见 §7.5 | **高**（最大的改动） | flag=false 时与今天**逐位相同**（同一场景同一 run 的 `[ptf]` 行对比；`StepPositionV1` 是原中段整体搬移，diff 已核对）；flag=true 时 C 矩阵 + W 格通过；`recovery == 0`。**本轮没有任何 Unity 编译/测试** | **flag 置 false**（v1 路径原样保留）；必要时 revert 一个 commit |
 | **S4** | 数据/导入器 | `LevelArenaHost.cs`（8 角点 OBB 烘、`AddObb`、ramp→slab、`ramps` 数组语义）、`PlacementImporter.cs`（`curve_ramp` 展开）、`placement_core.py`（45° error→warning + 弯坡校验）、`SupportSurfaceMath.cs`（降级为诊断） | 中：旧场景重烘 | 9 个小格的烘焙 OBB 表与旧 AABB **数值相同**（轴对齐）；`levelbuild check` 全绿；弯坡段数/矢高合规 | `LevelArenaHost.useObbBake=false`（回 AABB，v1/v2 都能跑）；弯坡条目 `expanded:false` 不展开 |
 | **S4a（已完成 b662b64）** | 关卡数据：`curve_ramp` 角色、45° 改为 warning、静态 OBB 总数预算 | `Tools/levelbuild/placement_core.py`、`Editor/LevelBuild/PlacementImporter.cs`（弧展开成 `<id>_00…` slab 子物体并逐段进 `rampBoxes`） | 中 | `python3 -m unittest discover -s Docs/tests` 全绿；`levelbuild check` 的 256 条与弦高预算；**Unity 未编译** | 弯坡条目 `expanded:false` 不展开 |
-| **S4b（代码已写，未编译）** | arena 与道具场接 v2：8 角点真 OBB 登记、§7.4 双烘自检、容量溢出原因码、道具 OBB 的宿主侧实现 | `Runtime/Story/LevelArenaHost.cs`、`Runtime/Pickup/PickupFieldHost.cs`、新增 `Runtime/BallContact/PropObbBakeMath.cs`、`Tests/EditMode/Story/LevelArenaHostObbTests.cs`、`Tests/EditMode/BallLayers/PropObbBakeTests.cs`、`Tests/EditMode/BallLayers/PickupFieldPropObbTests.cs`、本文 §7.6 | 中 | 三种模式的静态 OBB 条数 = box + ramp/弯坡段；轴对齐双烘一致；剪切回退带原因码；容量满可复现；**没有 Unity 编译/EditMode**；道具侧等电机动态 OBB API（§7.6 请求） | `LevelArenaHost.useObbBake=false`（回 AABB，AABB 与 v1/v2 都能跑）；道具侧只留 flag 关 |
+| **S4b（代码已写，未编译）** | arena 与道具场接 v2：8 角点真 OBB 登记、§7.4 双烘自检、容量溢出原因码、道具 OBB 接通电机 `SetPropObbs` | `Runtime/Story/LevelArenaHost.cs`、`Runtime/Pickup/PickupFieldHost.cs`、新增 `Runtime/BallContact/PropObbBakeMath.cs`、`Tests/EditMode/Story/LevelArenaHostObbTests.cs`、`Tests/EditMode/BallLayers/PropObbBakeTests.cs`、`Tests/EditMode/BallLayers/PickupFieldPropObbTests.cs`、本文 §7.6 | 中 | 三种模式的静态 OBB 条数 = box + ramp/弯坡段；轴对齐双烘一致；剪切回退带原因码；容量满可复现；道具块 `GetPropObbsCount()` 随扫描变化；**没有 Unity 编译/EditMode** | `LevelArenaHost.useObbBake=false`（回 AABB，AABB 与 v1/v2 都能跑）；道具侧 flag 关即回 v1（宿主会清空道具块） |
 | **S5** | 新测试格 + 沙盒 + 证据 | `Labs/PhysicsTestField`（W/R/S/X 格）、`Labs/PhysicsSandbox`（地图 0）、`physics_test_field.json`、`Docs/Evidence/...` | 中：数据/场景工作量大 | v2 验收表全绿；沙盒能手动滚 | 删格；沙盒场景独立，不影响主场景 |
 
 **依赖**：S1 → S2 → S3；S4 可与 S3 并行（S3 的 flag=true 需要 S4 的 OBB 烘，或先用 `AddBox` 的轴对齐 OBB 做 Unit 测试）；S5 依赖 S3+S4。
@@ -1470,7 +1470,7 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 6. **`contactIncomplete` 是锁存 + 一条日志，不冻结球**：§5.4 的原文就是“仍用 24 条，标记不完整，判据失败”。
 7. **没有 dash**（§3.8）、**没有 `GetFixedStepCount`**（§6.4 列的是 P4 请求，S3 未加）。
 8. **AddBox 容量仍是 8**：现有场景（≤8 盒 + ≤4 坡）可以直接开 flag；地图 0 的 118 条要等 S4 把宿主改成 `AddObb`。`AddRamp` 的 45° 作者门仍在（S4 改 warning），更陡的坡本轮只能用 `AddObb` 直接登记。
-9. **挡路道具 / 支撑道具：缺口已填（S4b 宿主 + 本轮 `SetPropObbs`）**。宿主在它的 20 Hz 扫描里把近邻道具作为真 OBB 交给 `SetPropObbs`（12 槽，surface id 100+i，role 2/3），它们与静态盒走**同一份**接触/分类/推挤，窗口里按距离与静态混排。**v1 的 `SetBlockingBoxes` / `SetSupportProps` 没有自动转换**（它们仍只喂 v1 的 sweep/支撑表，flag 关时行为逐字不变）；`TeleportTo`/`ClearObstacles` 清道具块，下一次宿主扫描重登记，与 v1 清挡路盒的策略一致。§7.6.5 里 S4b 记的「缺口没填」是它提交时的状态，电机侧本轮已按它请求的签名落地（见 §7.6.5 末尾的注）。
+9. **挡路道具 / 支撑道具：缺口已填（S4b 宿主 + 本轮 `SetPropObbs`）**。宿主在它的 20 Hz 扫描里把近邻道具作为真 OBB 交给 `SetPropObbs`（12 槽，surface id 100+i，role 2/3），它们与静态盒走**同一份**接触/分类/推挤，窗口里按距离与静态混排。**v1 的 `SetBlockingBoxes` / `SetSupportProps` 没有自动转换**（它们仍只喂 v1 的 sweep/支撑表，flag 关时行为逐字不变）；`TeleportTo`/`ClearObstacles` 清道具块，下一次宿主扫描重登记，与 v1 清挡路盒的策略一致。§7.6.5 记的宿主侧实现已按这个签名接通（S4b 后续提交）。
 10. **三形状拆分（§4A.5）未落到尺寸层**：`r_phys = collisionRadiusWorldM`，`collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` 语义未变；只提供 `GetPhysicalRadiusWorldM` / `GetVisualCoreRadiusWorldM` / `GetRollReachWorldM` / `GetPickupReachWorldM` 四个读数。
     **pickup 已按 §4A.4 接成 trigger**：`EvaluatePendingCandidates` 在 flag 开时把“球心→该候选”方向上的 `pickupReach(û)` 作为 `PickupAbsorbMath` 的球半径参数（reach = pickupReach + contactR + propBoundingRadius），**只影响“能不能粘”**，不进接触、不挡、不支撑；flag 关时该参数逐字仍是 `collisionRadiusWorldM`。`PickupAbsorbMath` 本身一行未改。隔墙吸（§4A.4 的选项①）行为不变。
 11. **针尖可能漏掉亚毫米的擦角**（`BallShapeMath.TryNeedleSegmentContact` 的 5 采样 + 12 次二分）：面/棱命中精确，角上极浅的擦过可能漏。
@@ -1519,24 +1519,22 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 
 静态容量就是 S3 的 256（`GetStaticObbCapacity()`）。`CheckObbCapacity()` 在登记前先数一遍（非空 `rampBoxes` + 非空且不在 `rampBoxes` 里的 `staticBoxes`），超了打**一条** `Debug.LogError`（带请求数与容量）；随后逐条 `AddObb` 的拒绝各自计数（`GetStaticObbOverflowCount()` 涨了就是容量拒绝 → 原因码 3，否则 4）。报告行给 `obbs=<成功>/<尝试> obbRefused=<n> obbOverflow=<n>`：**没有静默丢弃**，也没有「悄悄覆盖前一条」。`SuspendRegistration`/`ResumeRegistration`/`Reapply` 的「一次只登记一格」语义不变（`Reapply` 走的还是 `ClearObstacles → Setup`，`ClearObstacles` 现在连 v2 表一起清）。
 
-#### 7.6.5 道具：宿主侧已实现，缺一条电机 API
+#### 7.6.5 道具：已接通电机（2026-11-15 补，电机 6b83413）
 
-`PickupFieldHost` 在每次扫描后（同一批候选标记、同一个「太贵不能吸」判据、同一条 `SelectNearest` 选择规则）再选一份**最多 12 条**的道具集合（6 挡路 + 6 支撑合成一张表），用 `PropObbBakeMath.TryBakeProp` 把 `propLocalBounds` 按道具世界旋转**转一次**建成真 OBB（缺列时退回 `propBounds` 的轴对齐盒，与 v1 逐位相同，并计 `GetPropObbFallbackRows()`）。这就是「径向代理双重旋转」那个 bug 在道具挡路侧的对应修法。
+`PickupFieldHost` 在每次扫描后（同一批候选标记、同一个「太贵不能吸」判据、同一条 `SelectNearest` 选择规则）再选一份最多 12 条的道具集合（6 挡路 + 6 支撑合成一张表），用 `PropObbBakeMath.TryBakeProp` 把 `propLocalBounds` 按道具世界旋转**转一次**建成真 OBB（缺列时退回 `propBounds` 的轴对齐盒，与 v1 逐位相同，并计 `GetPropObbFallbackRows()`）。这就是「径向代理双重旋转」那个 bug 在道具挡路侧的对应修法。
 
-**缺口（必须在报告里向电机主人要的）**：S3 没有任何动态 OBB 表——`SetBlockingBoxes`/`SetSupportProps` 只写 v1 数组，v2 求解器读不到它们。宿主侧的集成点已经收在**一个方法**里（`ApplyPropObbSet`），落地时只加一行：
+**交接**：`ApplyPropObbSet` 直接调电机的整块替换接口：
 
 ```csharp
-// KatamariBallMotor（请求，最小面）
-bool SetPropObbs(Vector3[] centers, Vector3[] axisX, Vector3[] axisY, Vector3[] axisZ,
-                 Vector3[] halfExtents, int[] surfaceIds, int[] roles, int count);   // 容量 12
-void ClearPropObbs();
-int  GetPropObbsCount();  int GetPropObbsOverflowCount();  int GetPropObbsRefusalCount();
-string GetPropObbsRefusalReason();
+motor.SetPropObbs(propObbCenter, propObbAxisX, propObbAxisY, propObbAxisZ,
+    propObbHalfExtents, propObbSurfaceId, propObbRole, count);   // 容量 12，整批拒绝
 ```
 
-语义请求：与静态表同构；`FillNearWindow` 把两张表一起扫（同一 `R_in/R_out`、同一条 24 条上限，先静态后道具不行——应按距离混合）；`ClearObstacles` 清掉它；道具被吸收/移走由宿主每扫描期重发整批（宿主已经这样做了）。**在那之前**：v2 flag 打开且有道具障碍时，宿主打**一条** `[PickupFieldHost] contact v2 has no prop OBB table yet …` 警告，并保持 v1 两套表继续更新（回滚到 v1 时立刻自洽）。也就是说 §7.5.5 第 9 条的缺口**没有**被本轮填上，只是把它变成了「有读数、有警告、有一次性接入点」。
-
-> **S3 后续（2026-11-15）**：上面请求的电机 API 已落地，签名与本节一致（另加 `GetPropObbsCapacity()`），`FillNearWindow` 已把静态前缀与道具块放进**同一张数组、同一次 `TrySelectWindow`**（按距离混合，共享 24 上限）。本节「缺口没有被填上」描述的是 S4b 提交时的状态；宿主侧仍需在 `ApplyPropObbSet` 里把这一行接上（那行属于宿主文件，S3 不能改），接上之前 v2 仍看不到道具。
+- **只整块替换**：吸收、走远、变可吸都只是「下一批里没有它」，宿主不维护增删；集合变空时调一次 `motor.ClearPropObbs()`（换集合由整批写覆盖，不需要先清）。
+- **只在 `IsContactModelV2()` 时登记**（`ApplyPropObbSet` 里判断，`RefreshPropObbs` 也在 v1 直接返回）：flag 关时电机本来就忽略道具 OBB，每扫描做一次 12 槽校验+拷贝是纯开销。**清空不判断 flag**——一次集合变化只发一次，而且不这样的话 flag 关掉再打开时会把旧块复活。
+- **约定**：surface id `100 + 槽位`（100..111），role 2 = 可站（`ContactCodes.RoleProp`）、3 = 挡路（`ContactCodes.RoleBlocking`）；于是 `GetSupportKind()` 的 3（道具支撑）与 `GetContactRole()` 都能认出道具接触。注意 dot 文档里「role 2=挡路」的说法与 `ContactCodes` 相反，以代码为准（2=支撑道具，3=挡路/边界）。
+- **拒绝**：`SetPropObbs` 返回 false 时电机保留上一块（它的契约），宿主按 `GetPropObbsRefusalReason()` 打**一条** warning（`BlockingLogLimit` 封顶），不逐扫描刷。容量溢出由电机计数（`GetPropObbsOverflowCount()`），宿主自己的 `GetPropObbOverflowCount()` 仍记「候选数 > 12 的扫描次数」。
+- 因此 §7.5.5 第 9 条（道具不进 v2）**已关闭**：v2 的道具挡路/支撑不再需要「关 flag」这个前提。
 
 #### 7.6.6 本轮跑了什么 / 没跑什么
 
@@ -1545,9 +1543,9 @@ string GetPropObbsRefusalReason();
 | `python3 -m unittest discover -s Docs/tests` | 全绿（634 例；S4b 不改 Python 模型，所以没有新增 Python 例） |
 | `python3 Docs/tools/validate_plan.py` | PASS（61 tasks；两棵 DAG 无环；源哈希一致） |
 | 纯代码审查 + 括号/`out` 全路径人工核对（写它的机器没有 Unity） | 未编译 |
-| **没跑** | Unity 编译、U# 全量编译、EditMode、Play Mode、任何场景导入；道具侧因为没有电机 API，只能断言宿主自己的读数 |
+| **没跑** | Unity 编译、U# 全量编译、EditMode、Play Mode、任何场景导入 |
 
-操作者要跑的三组 EditMode：`VRCKatamari.Tests.LevelArenaHostObbTests`（电机级，6 例）、`VRCKatamari.Tests.PropObbBakeTests`（纯数学，5 例）、`VRCKatamari.Tests.PickupFieldPropObbTests`（宿主级，2 例）。三组都要在有 S4b 的 .meta 之后跑（新文件是 `PropObbBakeMath.cs`、`LevelArenaHostObbTests.cs`、`PropObbBakeTests.cs`、`PickupFieldPropObbTests.cs`）。
+操作者要跑的三组 EditMode：`VRCKatamari.Tests.LevelArenaHostObbTests`（电机级，6 例）、`VRCKatamari.Tests.PropObbBakeTests`（纯数学，5 例）、`VRCKatamari.Tests.PickupFieldPropObbTests`（宿主级，2 例，现在断言真实交接：`GetPropObbsCount()`、surface id 100+槽位、role 3）。三组都要在有 S4b 的 .meta 之后跑（新文件是 `PropObbBakeMath.cs`、`LevelArenaHostObbTests.cs`、`PropObbBakeTests.cs`、`PickupFieldPropObbTests.cs`）。
 
 ---
 

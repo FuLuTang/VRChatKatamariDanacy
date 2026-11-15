@@ -287,7 +287,10 @@ namespace VRCKatamari.Pickup
         private int propObbCandidateCount;
         private int propObbFallbackRows;
         private int propObbOverflowCount;
-        private bool loggedPropObbUnsupported;
+        // What the motor's prop block currently holds (its SetPropObbs is a whole-block
+        // replace; 0 means "cleared"), and the refusal-log counter.
+        private int propObbAppliedCount;
+        private int propObbLogCount;
 
         // Attached count by kind, grown in place; capacity is the prop count.
         private string[] kindTallyNames;
@@ -711,6 +714,8 @@ namespace VRCKatamari.Pickup
             propObbCandidateCount = 0;
             propObbFallbackRows = 0;
             propObbOverflowCount = 0;
+            propObbAppliedCount = 0;
+            propObbLogCount = 0;
             kindTallyNames = new string[propCount];
             kindTallyCounts = new int[propCount];
             kindTallyCount = 0;
@@ -1687,9 +1692,18 @@ namespace VRCKatamari.Pickup
             if (propObbCandidate == null) return;
             if (!motor.IsContactModelV2())
             {
+                // v1: the v1 tables are the whole world, and a block this host registered
+                // while the flag was on must not survive the flip.
                 ClearPropObbs();
                 return;
             }
+
+            // The block's capacity is the motor's; the host's buffer is sized for the same
+            // 12 slots, and a motor that ever offers fewer is honoured instead of being sent
+            // a batch it can only refuse.
+            int capacity = motor.GetPropObbsCapacity();
+            if (capacity > PropObbBakeMath.PropObbCapacity) capacity = PropObbBakeMath.PropObbCapacity;
+            if (capacity <= 0) { ClearPropObbs(); return; }
 
             int candidates = 0;
             for (int i = 0; i < propCount; i++)
@@ -1699,15 +1713,14 @@ namespace VRCKatamari.Pickup
                 if (candidate) candidates = candidates + 1;
             }
             propObbCandidateCount = candidates;
-            // More candidates than the table holds is the §5.4 failure mode: count it once per
+            // More candidates than the block holds is the §5.4 failure mode: count it once per
             // scan so it is visible, and let the nearest-first selection keep the nearest.
-            if (candidates > PropObbBakeMath.PropObbCapacity)
-                propObbOverflowCount = propObbOverflowCount + 1;
+            if (candidates > capacity) propObbOverflowCount = propObbOverflowCount + 1;
 
             int written = BlockingPropMath.SelectNearest(center, radiusM, propMinima, propMaxima,
                 propObbCandidate, propCount, propObbPreviousIndices, propObbPreviousCount,
                 blockingStickinessM, propObbSelectedIndices, propObbSelectedDistances,
-                PropObbBakeMath.PropObbCapacity);
+                capacity);
             if (written < 0)
             {
                 // A refused selection is a data error, not an empty world: keep the solids
@@ -1738,9 +1751,10 @@ namespace VRCKatamari.Pickup
                 propObbAxisY[baked] = axisY;
                 propObbAxisZ[baked] = axisZ;
                 propObbHalfExtents[baked] = halfExtents;
-                // The same surface-id space the v1 support table uses for props, so a test
-                // field probe naming id 100+i still names the same prop in both models.
-                propObbSurfaceId[baked] = SupportSurfaceMath.FirstPropSurfaceId + index;
+                // The motor's prop block convention: surface id 100 + SLOT in this block
+                // (100..111), role 2 = a support prop / 3 = a blocking prop (ContactCodes),
+                // so GetSupportKind()=3 and GetContactRole() read a prop contact as one.
+                propObbSurfaceId[baked] = SupportSurfaceMath.FirstPropSurfaceId + baked;
                 propObbRole[baked] = supportCandidate[index]
                     ? ContactCodes.RoleProp : ContactCodes.RoleBlocking;
                 baked = baked + 1;
@@ -1756,48 +1770,68 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
-        /// The ONE seam where this host's v2 prop solids reach the motor.
+        /// Hands this scan's v2 prop solids to the motor's prop block, and clears the block
+        /// when the scan has none.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The motor has no dynamic OBB table yet: <c>SetBlockingBoxes</c> and
-        /// <c>SetSupportProps</c> write the v1 sweep and support tables, and the v2 solver
-        /// reads neither (CONTACT_MODEL_V2 §7.5.5 item 9). With the flag on, therefore, these
-        /// solids are built and reported but not queried. The minimal motor-side request is
-        /// written up in §7.6; when it lands, its one call goes exactly here, with these
-        /// arrays and this count:
-        /// <code>
-        /// motor.SetPropObbs(propObbCenter, propObbAxisX, propObbAxisY, propObbAxisZ,
-        ///     propObbHalfExtents, propObbSurfaceId, propObbRole, count);
-        /// </code>
+        /// <c>SetPropObbs</c> is a WHOLE-BLOCK replace of 12 slots (100..111), so the host
+        /// sends exactly what this scan selected and never has to track removals itself: a
+        /// prop that was absorbed, moved out of range or stopped being absorb-proof simply
+        /// is not in the next batch.
         /// </para>
         /// <para>
-        /// The one-shot warning is the fail-visible half: until that call exists, a v2 cell
-        /// with prop obstacles must be run with the flag off, and this line says so once per
-        /// field instead of leaving "props stopped blocking" to be noticed in a play test.
+        /// Only called while <c>IsContactModelV2()</c> (the caller gates it): the motor
+        /// ignores prop OBBs with the flag off, so spending a 12-slot validate+copy per scan
+        /// on them would be pure cost. The CLEAR is deliberately not gated - it is one call
+        /// per set change and it is what stops a block left behind by an earlier flag-on
+        /// frame from coming back when the flag flips on again.
+        /// </para>
+        /// <para>
+        /// A refused call keeps the motor's previous block (its contract) and is counted by
+        /// the motor; this host logs the reason once per category, never per scan.
         /// </para>
         /// </remarks>
         private void ApplyPropObbSet(int count)
         {
             propObbCount = count;
-            if (count <= 0) return;
-            if (loggedPropObbUnsupported) return;
-            loggedPropObbUnsupported = true;
-            Debug.LogWarning("[PickupFieldHost] contact v2 has no prop OBB table yet: "
-                + count + " nearby prop solid(s) were built and are neither blocking nor"
-                + " supporting. Run v2 cells without prop obstacles until the motor request"
-                + " in CONTACT_MODEL_V2 §7.6 lands.");
+            if (motor == null) return;
+            if (count <= 0)
+            {
+                if (propObbAppliedCount == 0) return;
+                motor.ClearPropObbs();
+                propObbAppliedCount = 0;
+                return;
+            }
+            if (!motor.IsContactModelV2()) return;
+            if (motor.SetPropObbs(propObbCenter, propObbAxisX, propObbAxisY, propObbAxisZ,
+                propObbHalfExtents, propObbSurfaceId, propObbRole, count))
+            {
+                propObbAppliedCount = count;
+                return;
+            }
+            if (propObbLogCount >= BlockingLogLimit) return;
+            propObbLogCount = propObbLogCount + 1;
+            Debug.LogWarning("[PickupFieldHost] the motor refused the v2 prop solids ("
+                + motor.GetPropObbsRefusalReason() + "); keeping the previous set of "
+                + motor.GetPropObbsCount() + ".");
         }
 
-        /// <summary>Forgets the v2 prop solids (v1 mode, a field reset, a dead set).</summary>
+        /// <summary>Forgets the v2 prop solids and empties the motor's prop block.</summary>
         private void ClearPropObbs()
         {
+            if (propObbAppliedCount > 0 && motor != null)
+            {
+                // Unconditional: the motor ignores the call with the flag off, and a block
+                // left behind would be stale the moment the flag flips on.
+                motor.ClearPropObbs();
+                propObbAppliedCount = 0;
+            }
             if (propObbCount == 0 && propObbPreviousCount == 0) return;
             propObbCount = 0;
             propObbPreviousCount = 0;
             propObbCandidateCount = 0;
             propObbFallbackRows = 0;
-            ApplyPropObbSet(0);
         }
 
         // Drops both motor sets and this host's memory of them. Used where a set cannot be

@@ -17,10 +17,10 @@ namespace VRCKatamari.Tests
     /// broken gather that also empties the v1 tables would otherwise pass unnoticed.
     /// </para>
     /// <para>
-    /// The motor is stepped through reflection exactly like <c>ContactModelV2Tests</c>. The
-    /// prop solids are NOT registered with the motor yet (there is no dynamic OBB table - see
-    /// the §7.6 request), so what is asserted here is the host's own answer, which is the half
-    /// that exists today.
+    /// The motor is stepped through reflection exactly like <c>ContactModelV2Tests</c>. What
+    /// is asserted is the handover: the host's own build AND the motor's prop block (count,
+    /// surface id 100 + slot, role). The motor's block is read through its private arrays,
+    /// because the only public readers are count/capacity getters.
     /// </para>
     /// </remarks>
     public class PickupFieldPropObbTests
@@ -75,7 +75,7 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void V2BuildsOnePropSolidAndKeepsTheV1Sets()
+        public void V2SendsOnePropSolidToTheMotorAndKeepsTheV1Sets()
         {
             Invoke(motor, motorType, "SetContactModelV2Enabled", true);
             ScanOnce();
@@ -86,6 +86,18 @@ namespace VRCKatamari.Tests
                 "the candidate flag comes from the same classifier as the v1 sets");
             Assert.AreEqual(0, (int)Invoke(field, fieldType, "GetPropObbFallbackRows"),
                 "a valid propLocalBounds row is used, so no row falls back");
+            Assert.AreEqual(1, (int)Invoke(motor, motorType, "GetPropObbsCount"),
+                "the host actually handed the solid to the motor's prop block");
+            Assert.AreEqual(0, (int)Invoke(motor, motorType, "GetPropObbsRefusalCount"),
+                "the block was accepted");
+
+            // The handover convention: surface id 100 + slot, role 3 = blocking
+            // (ContactCodes.RoleBlocking; role 2 = a support prop).
+            int[] surfaceIds = GetArray<int>(motorType, "staticObbSurfaceId");
+            int[] roles = GetArray<int>(motorType, "staticObbRole");
+            Assert.AreEqual(100, surfaceIds[0], "prop surface id 100 + slot");
+            Assert.AreEqual(3, roles[0], "a blocking prop is role 3");
+
             Assert.AreEqual(1, (int)Invoke(field, fieldType, "GetBlockingPropCount"),
                 "the v1 blocking set is still registered (the rollback path)");
             Assert.AreEqual(1, (int)Invoke(motor, motorType, "GetBlockingBoxCount"),
@@ -106,6 +118,8 @@ namespace VRCKatamari.Tests
 
             Assert.AreEqual(0, (int)Invoke(field, fieldType, "GetPropObbCount"),
                 "a v1 motor clears the prop solids");
+            Assert.AreEqual(0, (int)Invoke(motor, motorType, "GetPropObbsCount"),
+                "and the motor's prop block is emptied, so a flag flip cannot resurrect it");
             Assert.AreEqual(1, (int)Invoke(field, fieldType, "GetBlockingPropCount"),
                 "and the v1 blocking set keeps blocking");
         }
@@ -114,6 +128,13 @@ namespace VRCKatamari.Tests
         {
             SetField(field, fieldType, "nextBlockingScanTime", 0f);
             Invoke(field, fieldType, "UpdatePropObstacles");
+        }
+
+        private T[] GetArray<T>(Type type, string fieldName)
+        {
+            FieldInfo fieldInfo = type.GetField(fieldName, Any);
+            Assert.IsNotNull(fieldInfo, fieldName + " field not found");
+            return (T[])fieldInfo.GetValue(motor);
         }
 
         private void SetField(Component target, Type type, string name, object value)

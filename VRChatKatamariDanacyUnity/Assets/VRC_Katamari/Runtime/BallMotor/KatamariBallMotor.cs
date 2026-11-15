@@ -341,6 +341,12 @@ namespace VRCKatamari.BallMotor
         // once (Docs/Design/PickupAbsorb/BLOCKING_PROPS_PLAN.md §9.2), not a measurement.
         private const int MaxBlockingBoxCount = 6;
 
+        // Support props get their own six slots, symmetric to the blocking slice and
+        // owned by SupportSurfaceMath (one capacity constant, one predicate). They are
+        // a separate pool on purpose: a stage's step must not lose its slot because
+        // six walls happen to be closer.
+        private const int MaxSupportPropCount = SupportSurfaceMath.MaxSupportPropCount;
+
         private Vector3[] planeNormalBuffer;
         private float[] planeOffsetBuffer;
         private int planeCount;
@@ -352,6 +358,24 @@ namespace VRCKatamari.BallMotor
         private Vector3[] blockingMinimumBuffer;
         private Vector3[] blockingMaximumBuffer;
         private int blockingBoxCount;
+
+        // ---- Support props (P2): absorb-proof props the ball may stand on ----
+        // A support prop is NOT a sweep obstacle: by construction its top is within
+        // one step of the ball, so the ball must be allowed to enter it (exactly the
+        // reason a steppable static box leaves the sweep). The host owns which props
+        // these are and re-sends the set every scan; the motor only carries it into
+        // the support table. Capacity and refusal semantics mirror the blocking
+        // slice, but the two are separate pools: a crowded blocking set must never
+        // evict the step the ball is climbing.
+        private Vector3[] supportPropMinimumBuffer;
+        private Vector3[] supportPropMaximumBuffer;
+        private int supportPropCount;
+        // Refusals are deliberately NOT part of the overflow signal, for the same
+        // reason the blocking refusals are not: "more nearby props than the ball can
+        // stand on" is a normal per-scan answer, not a mis-wired scene.
+        private int supportPropRefusalCount;
+        private string supportPropRefusalReason;
+
         private Vector3[] planeNormals;
         private float[] planeOffsets;
         private Vector3[] boxMinima;
@@ -649,11 +673,16 @@ namespace VRCKatamari.BallMotor
             boxMaximumBuffer = new Vector3[MaxBoxCount];
             blockingMinimumBuffer = new Vector3[MaxBlockingBoxCount];
             blockingMaximumBuffer = new Vector3[MaxBlockingBoxCount];
+            supportPropMinimumBuffer = new Vector3[MaxSupportPropCount];
+            supportPropMaximumBuffer = new Vector3[MaxSupportPropCount];
             planeCount = 0;
             boxCount = 0;
             blockingBoxCount = 0;
             blockingRefusalCount = 0;
             blockingRefusalReason = "";
+            supportPropCount = 0;
+            supportPropRefusalCount = 0;
+            supportPropRefusalReason = "";
             RebuildObstacles();
             contactCenters = new Vector3[ContactCapacity];
             contactPoints = new Vector3[ContactCapacity];
@@ -1303,9 +1332,14 @@ namespace VRCKatamari.BallMotor
             Vector3 normal;
             float height;
             int candidates;
+            // With terrain support off the prop table is not consulted at all, so the
+            // query is bit-for-bit the P1 query (an empty prop list) and a diagnostic
+            // read can never claim a prop is supporting a ball the feature ignores.
+            int activePropCount = terrainSupportEnabled ? supportPropCount : 0;
             if (SupportSurfaceMath.TryResolveSupport(center, bandReference, limit,
                 groundPlaneNormal, groundPlaneOffset, boxMinimumBuffer, boxMaximumBuffer,
-                boxCount, out id, out point, out normal, out height, out candidates))
+                boxCount, supportPropMinimumBuffer, supportPropMaximumBuffer,
+                activePropCount, out id, out point, out normal, out height, out candidates))
             {
                 supportSurfaceId = id;
                 supportSurfacePointWorld = point;
@@ -2183,11 +2217,168 @@ namespace VRCKatamari.BallMotor
             blockingRefusalReason = reason;
         }
 
+        /// <summary>
+        /// Replaces the whole support-prop set in one call: the tops of the absorb-proof
+        /// props the ball may stand on.
+        /// </summary>
+        /// <returns>
+        /// True when the set is now the one passed (including when it was already exactly
+        /// that set); false when the call was refused, in which case the previous set stays
+        /// registered.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// This is the P2 seam, and it is deliberately shaped exactly like
+        /// <see cref="SetBlockingBoxes"/>: batch replace, validate every box before writing
+        /// any, same float-for-float shortcut for an unchanged set, a refused call keeps the
+        /// previous set. The host owns which props are supports (it owns the prop table and
+        /// the absorb gate); the motor does not know what a prop is.
+        /// </para>
+        /// <para>
+        /// A support prop is never a sweep obstacle. It is registered because its top is
+        /// within one step of the ball, and a box the ball may climb must be enterable -
+        /// the same rule that removes a steppable static box from the sweep. The support
+        /// table reads these buffers directly every step, so a changed set needs no sweep
+        /// rebuild and costs no allocation; only the copy below is written.
+        /// </para>
+        /// <para>
+        /// Capacity is <see cref="SupportSurfaceMath.MaxSupportPropCount"/> and the check is
+        /// <see cref="SupportSurfaceMath.IsSupportPropCountAllowed"/> (one source, pinned by
+        /// a test). Refusals are counted separately from <see cref="SignalOverflow"/> for the
+        /// same reason blocking refusals are: more nearby props than six slots is a normal
+        /// per-scan answer, not a scene wiring error, so it must not latch the one-shot
+        /// overflow signal.
+        /// </para>
+        /// </remarks>
+        public bool SetSupportProps(Vector3[] minima, Vector3[] maxima, int count)
+        {
+            if (count < 0)
+            {
+                RefuseSupportProps("negative count");
+                return false;
+            }
+            if (!SupportSurfaceMath.IsSupportPropCountAllowed(count))
+            {
+                RefuseSupportProps("capacity 6 exceeded");
+                return false;
+            }
+            if (count > 0)
+            {
+                if (minima == null || maxima == null)
+                {
+                    RefuseSupportProps("null minima/maxima");
+                    return false;
+                }
+                if (count > minima.Length || count > maxima.Length)
+                {
+                    RefuseSupportProps("count exceeds a buffer length");
+                    return false;
+                }
+            }
+
+            // Every box is validated before the first one is written, so a refused call
+            // cannot leave half a set behind.
+            for (int i = 0; i < count; i++)
+            {
+                if (!KatamariMath.IsFiniteVector(minima[i]))
+                {
+                    RefuseSupportProps("non-finite minimum");
+                    return false;
+                }
+                if (!KatamariMath.IsFiniteVector(maxima[i]))
+                {
+                    RefuseSupportProps("non-finite maximum");
+                    return false;
+                }
+                if (minima[i].x > maxima[i].x || minima[i].y > maxima[i].y ||
+                    minima[i].z > maxima[i].z)
+                {
+                    RefuseSupportProps("inverted box");
+                    return false;
+                }
+            }
+
+            if (count == supportPropCount)
+            {
+                bool unchanged = true;
+                for (int i = 0; i < count; i++)
+                {
+                    if (minima[i].x != supportPropMinimumBuffer[i].x ||
+                        minima[i].y != supportPropMinimumBuffer[i].y ||
+                        minima[i].z != supportPropMinimumBuffer[i].z ||
+                        maxima[i].x != supportPropMaximumBuffer[i].x ||
+                        maxima[i].y != supportPropMaximumBuffer[i].y ||
+                        maxima[i].z != supportPropMaximumBuffer[i].z)
+                    {
+                        unchanged = false;
+                        break;
+                    }
+                }
+                if (unchanged) return true;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                supportPropMinimumBuffer[i] = minima[i];
+                supportPropMaximumBuffer[i] = maxima[i];
+            }
+            supportPropCount = count;
+            return true;
+        }
+
+        /// <summary>
+        /// Empties the support-prop set. Static boxes and planes stay registered.
+        /// </summary>
+        /// <remarks>
+        /// The set is a function of where the ball is, so it is cleared wherever the ball's
+        /// position is set outside a normal step (the host also clears it in its own field
+        /// reset). The next host scan re-registers whatever the ball can still stand on,
+        /// within one scan interval; a ball that was standing on a cleared prop simply
+        /// loses that support and falls under the P1 gravity rule.
+        /// </remarks>
+        public void ClearSupportProps()
+        {
+            if (supportPropCount == 0) return;
+            supportPropCount = 0;
+        }
+
+        /// <summary>Support props currently registered (0..6).</summary>
+        public int GetSupportPropCount()
+        {
+            return supportPropCount;
+        }
+
+        /// <summary>How many support props the ball can take at once (6).</summary>
+        public int GetSupportPropCapacity()
+        {
+            return MaxSupportPropCount;
+        }
+
+        /// <summary>Refused <see cref="SetSupportProps"/> calls so far (monotonic).</summary>
+        public int GetSupportPropRefusalCount()
+        {
+            return supportPropRefusalCount;
+        }
+
+        /// <summary>Why the last <see cref="SetSupportProps"/> was refused, or "".</summary>
+        public string GetSupportPropRefusalReason()
+        {
+            if (supportPropRefusalReason == null) return "";
+            return supportPropRefusalReason;
+        }
+
+        private void RefuseSupportProps(string reason)
+        {
+            supportPropRefusalCount = supportPropRefusalCount + 1;
+            supportPropRefusalReason = reason;
+        }
+
         public void ClearObstacles()
         {
             planeCount = 0;
             boxCount = 0;
             blockingBoxCount = 0;
+            supportPropCount = 0;
             // The step mask is indexed by boxing slot, so it must not outlive the boxes.
             ClearStepMask();
             RebuildObstacles();
@@ -2458,6 +2649,11 @@ namespace VRCKatamari.BallMotor
             fallSpeedMps = 0f;
             ClearStepMask();
             ClearBlockingBoxes();
+            // The support set was chosen for the old position too; a stale prop top cannot
+            // support a ball whose XZ is elsewhere, but clearing keeps the "set is a
+            // function of where the ball is" rule true for both prop pools. The next host
+            // scan re-registers within one scan interval.
+            ClearSupportProps();
             // The endpoints are ball-local, so a teleport cannot change them; the rebuild
             // is the contract's discontinuity path and proves the support table still
             // matches the ledger instead of carrying a value across the jump.
@@ -2730,6 +2926,10 @@ namespace VRCKatamari.BallMotor
                 RebuildObstacles();
                 isFalling = false;
                 fallSpeedMps = 0f;
+                // Re-resolve with an empty prop table so a diagnostic read never keeps
+                // reporting a prop surface the feature no longer honours. With buffers not
+                // allocated yet (before Start) the next step resolves it anyway.
+                if (boxMinimumBuffer != null) ResolveTerrainSupport(ballCenterWorld);
             }
             else
             {
@@ -2763,7 +2963,12 @@ namespace VRCKatamari.BallMotor
             return supportSurfaceNormalWorld;
         }
 
-        /// <summary>Which surface supports the ball: 0 = ground, 1+i = static box i.</summary>
+        /// <summary>
+        /// Which surface supports the ball: 0 = ground, 1+i = static box i,
+        /// 100+i = support-prop slot i (P2). The host registers its support rows in
+        /// ascending prop-index order, so a slot is stable while the prop stays
+        /// selected; it is a diagnostic key, not a durable prop identity.
+        /// </summary>
         public int GetSupportSurfaceId()
         {
             return supportSurfaceId;
@@ -2788,18 +2993,30 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// True when the selected support is a prop top (P2). False for the ground, a
+        /// static box, or no resolved surface. With terrain support off no prop is ever
+        /// resolved, so this stays false.
+        /// </summary>
+        public bool IsSupportingAProp()
+        {
+            return SupportSurfaceMath.IsPropSurfaceId(supportSurfaceId);
+        }
+
+        /// <summary>
         /// What kind of surface supports the ball: 0 = ground, 1 = static box top,
-        /// -1 = no surface resolved.
+        /// 3 = support prop top (P2), -1 = no surface resolved.
         /// </summary>
         /// <remarks>
-        /// 2 (ramp) and 3 (prop top) are reserved for P3/P2 and are never returned by this
-        /// revision. It is a kind, not an index: <see cref="GetSupportSurfaceId"/> names
-        /// WHICH box, this says WHAT it is, and a reader that only needs "can a prop sit
-        /// here" should read this one.
+        /// 2 (ramp) is reserved for P3 and is never returned by this revision. It is a
+        /// kind, not an index: <see cref="GetSupportSurfaceId"/> names WHICH box or prop,
+        /// this says WHAT it is, and a reader that only needs "can a prop sit here" should
+        /// read this one. Prop ids are <c>FirstPropSurfaceId + i</c>, so the range test is
+        /// the same one <see cref="IsSupportingAProp"/> uses.
         /// </remarks>
         public int GetSupportKind()
         {
             if (supportSurfaceId == SupportSurfaceMath.GroundSurfaceId) return 0;
+            if (SupportSurfaceMath.IsPropSurfaceId(supportSurfaceId)) return 3;
             if (supportSurfaceId > 0) return 1;
             return -1;
         }

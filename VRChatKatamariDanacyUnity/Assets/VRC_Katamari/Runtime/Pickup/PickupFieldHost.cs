@@ -57,25 +57,28 @@ namespace VRCKatamari.Pickup
     /// level's category goal will read.
     /// </para>
     /// <para>
-    /// Blocking props. A prop the ball cannot absorb yet must stop the ball instead of
+    /// Prop obstacles (P2). A prop the ball cannot absorb yet must stop the ball instead of
     /// letting it roll through, and the ball's only collision authority is the motor's
     /// sweep, so this host registers the nearby absorb-proof props as the motor's dynamic
-    /// blocking boxes. The predicate is the absorb gate's own volume limit
+    /// blocking boxes. A prop whose top is within the motor's step limit is instead a step
+    /// and a floor, and is registered through <c>SetSupportProps</c>; both roles come from
+    /// ONE classification of the same scan, so a prop is never a wall and a floor at once.
+    /// The predicate is the absorb gate's own volume limit
     /// (<see cref="PickupAbsorbMath.IsBeyondAbsorbVolumeLimit"/> with the motor's
     /// <c>GetAbsorbVolumeLimitWorldM3</c>), never a second threshold: the instant the ball
     /// grows past a prop's volume, the same function stops calling it "too big", the next
-    /// scan drops its box, and the prop becomes absorbable. Boxes come from the gameplay
-    /// volume <c>propBounds</c> around the prop's world position - not from a
+    /// scan drops it from both sets, and the prop becomes absorbable. Boxes come from the
+    /// gameplay volume <c>propBounds</c> around the prop's world position - not from a
     /// <c>BoxCollider</c> and not from the visual mesh - because the three layers are
     /// separate and most scene props are authored without a collider at all
     /// (Docs/Design/PickupAbsorb/BLOCKING_PROPS_PLAN.md). Absorbed props are never
-    /// candidates, and a field reset drops the set.
+    /// candidates, and a field reset drops both sets.
     /// </para>
     /// <para>
-    /// One owner. The blocking set is a single slot on the motor, so only ONE field host
-    /// may write it per motor; two hosts would overwrite each other's work (last writer
-    /// wins) and each would believe its own set was registered. There is no runtime
-    /// arbiter - a second writer is a scene wiring error, checked in the editor.
+    /// One owner. Each prop set is a single slot on the motor, so only ONE field host may
+    /// write it per motor; two hosts would overwrite each other's work (last writer wins)
+    /// and each would believe its own set was registered. There is no runtime arbiter - a
+    /// second writer is a scene wiring error, checked in the editor.
     /// </para>
     /// <para>
     /// Assembly: one UdonSharpBehaviour per GameObject, so this belongs on its own object,
@@ -123,22 +126,29 @@ namespace VRCKatamari.Pickup
         private const float DefaultActivationRadiusM = 1.6f;
         private const float DefaultReleaseRadiusM = 2.5f;
 
-        // The motor's blocking capacity is six boxes. This buffer is deliberately larger,
-        // same reason as SelectionCapacity: a bigger motor capacity then needs no change
-        // here, and an unexpected one is clamped with a single log.
+        // The motor's blocking capacity is six boxes and its support capacity is six
+        // tops. This buffer is deliberately larger, same reason as SelectionCapacity: a
+        // bigger motor capacity then needs no change here, and an unexpected one is
+        // clamped with a single log.
         private const int BlockingSelectionCapacity = 8;
 
-        // How far past the ball's collision radius a blocking prop may be and still be
-        // registered. It covers one scan interval of travel with slack - 4 m/s * 0.05 s
-        // = 0.2 m, so 0.8 m leaves room for a slower scan or a higher speed - and is not a
-        // gameplay threshold: a prop closer than this is a wall, a prop farther is simply
-        // not registered yet (BLOCKING_PROPS_PLAN.md §2 A).
+        // How far past the ball's collision radius a blocking or support prop may be and
+        // still be registered. It covers one scan interval of travel with slack - 4 m/s *
+        // 0.05 s = 0.2 m, so 0.8 m leaves room for a slower scan or a higher speed - and
+        // is not a gameplay threshold: a prop closer than this is a wall/step, a prop
+        // farther is simply not registered yet (BLOCKING_PROPS_PLAN.md §2 A). The support
+        // set reuses this one number on purpose: the design says the two margins are the
+        // same, and a second serialized knob could only drift.
         private const float DefaultBlockingMarginM = 0.8f;
 
         // A prop already in the set stays until it is clearly out of the margin, so a prop
         // hovering at the edge does not add and remove its box every scan. Purely a
         // hysteresis on the selection, not a second "is it blocking" rule.
         private const float DefaultBlockingStickinessM = 0.25f;
+
+        // Support uses its own, smaller hysteresis: keeping a surface the ball has already
+        // walked off reads worse than keeping a wall (design §6.3).
+        private const float DefaultSupportStickinessM = 0.10f;
 
         // Same ceiling pattern as HiddenLogLimit: one line per failure category, ever.
         private const int BlockingLogLimit = 3;
@@ -165,15 +175,20 @@ namespace VRCKatamari.Pickup
         [SerializeField] private float releaseRadiusM = DefaultReleaseRadiusM;
         [SerializeField] private float scanIntervalSeconds = DefaultScanIntervalSeconds;
 
-        [Header("Blocking props (absorb-proof props stop the ball)")]
+        [Header("Prop obstacles (absorb-proof props block or support the ball)")]
         // Named as the DISABLED flag on purpose: a field that is absent from an already
         // serialized scene comes in at the CLR default (false), and "false" must mean
-        // "blocking works". With `blockingEnabled = true` a stale serialization could
+        // "the props are solid". With `blockingEnabled = true` a stale serialization could
         // silently switch the whole feature off, and the symptom would be exactly the bug
         // this file exists to fix. Therefore this flag defaults to false = enabled.
+        // P2: this one switch governs BOTH roles - a disabled field registers neither a
+        // wall nor a support, so the ball's query is the pre-P2 empty table. Two flags
+        // would let a scene claim "props are steps but not walls", which is not a state
+        // the classifier produces.
         [SerializeField] private bool blockingDisabled = false;
         [SerializeField] private float blockingMarginM = DefaultBlockingMarginM;
         [SerializeField] private float blockingStickinessM = DefaultBlockingStickinessM;
+        [SerializeField] private float supportStickinessM = DefaultSupportStickinessM;
 
         // ---- Per-prop store (allocated in Start, never serialized) ----
         private int[] propStates;
@@ -194,17 +209,21 @@ namespace VRCKatamari.Pickup
         private int[] nearestIndices;
         private float[] nearestDistSq;
 
-        // ---- Blocking-prop store (allocated in Start, never serialized) ----
-        // One row per prop, indexed like every other parallel array. blockingUsable and
-        // blockingHalfDiagonal are fixed in Start (both depend only on propBounds, which
+        // ---- Prop-obstacle store (allocated in Start, never serialized) ----
+        // One row per prop, indexed like every other parallel array. propUsable and
+        // propHalfDiagonal are fixed in Start (both depend only on propBounds, which
         // does not change); the boxes are rebuilt per scan from the prop's current world
-        // position so a prop another system moved cannot leave a stale wall behind.
-        private bool[] blockingUsable;
-        private float[] blockingHalfDiagonal;
-        private Vector3[] blockingMinima;
-        private Vector3[] blockingMaxima;
+        // position so a prop another system moved cannot leave a stale wall behind. The
+        // SAME row feeds both roles: one classification gives a prop one role per scan,
+        // so the blocking and support selections read one box, never two.
+        private bool[] propUsable;
+        private float[] propHalfDiagonal;
+        private Vector3[] propMinima;
+        private Vector3[] propMaxima;
         // Per-scan candidate flags, written for every prop so a stale true cannot survive.
+        // The classifier sets at most one of them per prop.
         private bool[] blockingCandidate;
+        private bool[] supportCandidate;
         // Selection scratch: SelectNearest reads the previous batch while writing the
         // current one, so the two index arrays are swapped rather than copied.
         private int[] blockingPreviousIndices;
@@ -216,9 +235,23 @@ namespace VRCKatamari.Pickup
         private int blockingAppliedCount;
         private int blockingCandidateCount;
         private int blockingCapacity;
-        private int blockingUsableCount;
+        private int propUsableCount;
         private float nextBlockingScanTime;
         private int blockingLogCount;
+
+        // Support selection has its own previous batch, capacity reading and output rows;
+        // the two pools must not share stickiness or slots.
+        private int[] supportPreviousIndices;
+        private int[] supportSelectedIndices;
+        private float[] supportSelectedDistances;
+        private Vector3[] supportOutputMinima;
+        private Vector3[] supportOutputMaxima;
+        private int previousSupportCount;
+        private int supportAppliedCount;
+        private int supportCandidateCount;
+        private int supportCapacity;
+        private int supportLogCount;
+        private bool loggedSupportSet;
 
         // Attached count by kind, grown in place; capacity is the prop count.
         private string[] kindTallyNames;
@@ -254,23 +287,23 @@ namespace VRCKatamari.Pickup
             AllocatePropStore();
             RecordOriginalPoses();
             MarkSubmittable();
-            PrepareBlockingRows();
+            PreparePropRows();
             ReportPropDataProblems();
             seenEvents = 0;
             nextScanTime = 0f;
             nextBlockingScanTime = 0f;
             Debug.Log("[PickupFieldHost] ready props=" + propCount
                 + " submittable=" + submittableCount
-                + " blockingRows=" + blockingUsableCount
-                + " blocking=" + (blockingDisabled ? "off" : "on")
+                + " propRows=" + propUsableCount
+                + " propObstacles=" + (blockingDisabled ? "off" : "on")
                 + " activationR=" + activationRadiusM
                 + " releaseR=" + releaseRadiusM
                 + " scanInterval=" + scanIntervalSeconds);
         }
 
         /// <summary>
-        /// Reads the absorbed-event ring, refreshes the blocking set, and while collecting
-        /// offers nearby props.
+        /// Reads the absorbed-event ring, refreshes the prop-obstacle sets, and while
+        /// collecting offers nearby props.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -281,7 +314,7 @@ namespace VRCKatamari.Pickup
         /// picked up one frame late; the ring is monotonic, so that is a delay, not a loss.
         /// </para>
         /// <para>
-        /// The blocking set is refreshed BEFORE the collecting gate and before the
+        /// The prop-obstacle sets are refreshed BEFORE the collecting gate and before the
         /// attachment-root check, because both of those only govern absorption: a round
         /// that stopped collecting, or a field whose props can only be hidden, is still a
         /// solid world. Skipping the refresh there is what would let the ball roll through
@@ -298,7 +331,7 @@ namespace VRCKatamari.Pickup
             if (propCount <= 0) return;
 
             ConsumeAbsorbedEvents();
-            UpdateBlockingProps();
+            UpdatePropObstacles();
             if (!Collecting()) return;
             if (attachmentRoot == null)
             {
@@ -323,9 +356,10 @@ namespace VRCKatamari.Pickup
         /// prop again.
         /// </para>
         /// <para>
-        /// Blocking is deliberately NOT affected: a stopped round is still a solid world, so
-        /// this only withdraws candidates. The prop that stopped the ball keeps stopping it,
-        /// which is what makes a time-out feel like a frozen game rather than a ghost level.
+        /// Prop obstacles are deliberately NOT affected: a stopped round is still a solid
+        /// world, so this only withdraws candidates. The prop that stopped the ball keeps
+        /// stopping it and the prop the ball stands on keeps supporting it, which is what
+        /// makes a time-out feel like a frozen game rather than a ghost level.
         /// </para>
         /// </remarks>
         public void SetCollecting(bool collecting)
@@ -404,11 +438,12 @@ namespace VRCKatamari.Pickup
             // anywhere and the next scan starts from a clean "did I submit" filter.
             for (int i = 0; i < propCount; i++) lastSubmitTimes[i] = 0f;
 
-            // The blocking set is a function of where the ball is, so nothing about it
+            // Both prop sets are a function of where the ball is, so nothing about them
             // survives a reset; static planes and boxes stay in the motor (the map did not
             // move). Clearing here as well as in TeleportTo covers a reset that does not
             // teleport, and the next scan rebuilds from the restored field.
             if (motor != null) motor.ClearBlockingBoxes();
+            if (motor != null) motor.ClearSupportProps();
             // Every registered proxy item is one of the props just restored, so the shell
             // is emptied rather than edited. Clearing here as well as in the motor's own
             // round reset covers a field reset that does not restart the ball.
@@ -416,6 +451,9 @@ namespace VRCKatamari.Pickup
             blockingAppliedCount = 0;
             blockingCandidateCount = 0;
             previousBlockingCount = 0;
+            supportAppliedCount = 0;
+            supportCandidateCount = 0;
+            previousSupportCount = 0;
             nextBlockingScanTime = 0f;
 
             attachedCount = 0;
@@ -504,6 +542,8 @@ namespace VRCKatamari.Pickup
                 blockingMarginM = DefaultBlockingMarginM;
             if (!KatamariMath.IsFiniteFloat(blockingStickinessM) || blockingStickinessM < 0f)
                 blockingStickinessM = DefaultBlockingStickinessM;
+            if (!KatamariMath.IsFiniteFloat(supportStickinessM) || supportStickinessM < 0f)
+                supportStickinessM = DefaultSupportStickinessM;
         }
 
         /// <summary>
@@ -569,10 +609,10 @@ namespace VRCKatamari.Pickup
             submittable = new bool[propCount];
             nearestIndices = new int[SelectionCapacity];
             nearestDistSq = new float[SelectionCapacity];
-            blockingUsable = new bool[propCount];
-            blockingHalfDiagonal = new float[propCount];
-            blockingMinima = new Vector3[propCount];
-            blockingMaxima = new Vector3[propCount];
+            propUsable = new bool[propCount];
+            propHalfDiagonal = new float[propCount];
+            propMinima = new Vector3[propCount];
+            propMaxima = new Vector3[propCount];
             blockingCandidate = new bool[propCount];
             blockingPreviousIndices = new int[BlockingSelectionCapacity];
             blockingSelectedIndices = new int[BlockingSelectionCapacity];
@@ -583,8 +623,20 @@ namespace VRCKatamari.Pickup
             blockingAppliedCount = 0;
             blockingCandidateCount = 0;
             blockingCapacity = 0;
-            blockingUsableCount = 0;
+            propUsableCount = 0;
             blockingLogCount = 0;
+            supportCandidate = new bool[propCount];
+            supportPreviousIndices = new int[BlockingSelectionCapacity];
+            supportSelectedIndices = new int[BlockingSelectionCapacity];
+            supportSelectedDistances = new float[BlockingSelectionCapacity];
+            supportOutputMinima = new Vector3[BlockingSelectionCapacity];
+            supportOutputMaxima = new Vector3[BlockingSelectionCapacity];
+            previousSupportCount = 0;
+            supportAppliedCount = 0;
+            supportCandidateCount = 0;
+            supportCapacity = 0;
+            supportLogCount = 0;
+            loggedSupportSet = false;
             kindTallyNames = new string[propCount];
             kindTallyCounts = new int[propCount];
             kindTallyCount = 0;
@@ -648,8 +700,8 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
-        /// Fixes which rows can ever block (a transform, and a positive finite gameplay
-        /// volume) and how far each one's box can reach from its centre.
+        /// Fixes which rows can ever be a prop obstacle (a transform, and a positive
+        /// finite gameplay volume) and how far each one's box can reach from its centre.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -660,18 +712,18 @@ namespace VRCKatamari.Pickup
         /// </para>
         /// <para>
         /// The half diagonal is the fixed part of the pruning bound in
-        /// <see cref="UpdateBlockingProps"/>: for any point, the distance to an
+        /// <see cref="UpdatePropObstacles"/>: for any point, the distance to an
         /// axis-aligned box is at least the distance to its centre minus its half diagonal.
         /// It depends only on propBounds, so it is computed once here.
         /// </para>
         /// </remarks>
-        private void PrepareBlockingRows()
+        private void PreparePropRows()
         {
-            blockingUsableCount = 0;
+            propUsableCount = 0;
             for (int i = 0; i < propCount; i++)
             {
-                blockingUsable[i] = false;
-                blockingHalfDiagonal[i] = 0f;
+                propUsable[i] = false;
+                propHalfDiagonal[i] = 0f;
                 if (propTransforms[i] == null) continue;
                 Vector3 bounds = propBounds[i];
                 if (!KatamariMath.IsFiniteVector(bounds)) continue;
@@ -685,9 +737,9 @@ namespace VRCKatamari.Pickup
                 float halfZ = bounds.z * 0.5f;
                 float halfDiagonal = Mathf.Sqrt(halfX * halfX + halfY * halfY + halfZ * halfZ);
                 if (!KatamariMath.IsFiniteFloat(halfDiagonal)) continue;
-                blockingHalfDiagonal[i] = halfDiagonal;
-                blockingUsable[i] = true;
-                blockingUsableCount = blockingUsableCount + 1;
+                propHalfDiagonal[i] = halfDiagonal;
+                propUsable[i] = true;
+                propUsableCount = propUsableCount + 1;
             }
         }
 
@@ -870,6 +922,11 @@ namespace VRCKatamari.Pickup
 
             propStates[index] = StateAttached;
             lastSubmitTimes[index] = 0f;
+            // The prop may have been supporting the ball or blocking it a moment ago. The
+            // obstacle refresh runs later in this same Update, before the collecting gate,
+            // so pulling the next scan forward makes the absorbed prop lose both roles in
+            // the frame the event is consumed instead of up to one scan later.
+            nextBlockingScanTime = 0f;
             attachedCount = attachedCount + 1;
             TallyKind(kinds[index]);
             CheckAttachmentRootOnce(ballCenter);
@@ -898,6 +955,9 @@ namespace VRCKatamari.Pickup
         {
             propStates[index] = StateHidden;
             lastSubmitTimes[index] = 0f;
+            // Same reason as AttachProp: a hidden prop must lose its wall/floor role in
+            // the scan that follows this event, not one scan interval later.
+            nextBlockingScanTime = 0f;
             hiddenCount = hiddenCount + 1;
             lastHiddenReason = reason;
             lastHiddenItemId = itemIds[index];
@@ -1097,55 +1157,53 @@ namespace VRCKatamari.Pickup
         }
 
         // ------------------------------------------------------------------
-        // Blocking props: the nearby absorb-proof props become sweep obstacles.
+        // Prop obstacles: nearby absorb-proof props are walls or supports (P2).
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Rebuilds the motor's dynamic blocking set from the nearby props the ball cannot
-        /// absorb yet, once per scan interval.
+        /// Rebuilds the motor's blocking AND support prop sets from the nearby props the
+        /// ball cannot absorb yet, once per scan interval.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Cost per scan with N props: one transform read and one squared centre distance
-        /// per prop; then, only for the handful inside the pruning bound, one volume
-        /// comparison and (for the absorb-proof ones) one box plus one AABB distance. The
-        /// selection is <see cref="BlockingPropMath.SelectNearest"/>: one distance per
-        /// candidate plus at most capacity (6) passes over the candidates. Nothing is
-        /// allocated after <c>Start</c>, and the motor acknowledges an unchanged box set
-        /// without rebuilding its sweep arrays, so a stationary ball costs one no-op
-        /// compare per scan.
+        /// One scan, one classification, two selections. Per prop: one transform read, one
+        /// squared centre distance, one volume comparison; for the handful inside the
+        /// pruning bound, one box and one
+        /// <see cref="SupportSurfaceMath.TryClassifyProp"/>. The classifier gives the prop
+        /// exactly one role, so a prop can never be in both masks; the two sets are then
+        /// selected independently by <see cref="BlockingPropMath.SelectNearest"/> (same
+        /// function, separate previous batches, capacities and stickiness), which is what
+        /// stops a crowded wall set from evicting the step the ball is climbing.
         /// </para>
         /// <para>
         /// The predicate is the absorb gate's, not a copy of it: the limit comes from the
         /// motor (<c>GetAbsorbVolumeLimitWorldM3</c> - the same value the gate prices) and
-        /// the test is <see cref="PickupAbsorbMath.IsBeyondAbsorbVolumeLimit"/>, the same
-        /// volume comparison the gate makes. A prop therefore stops being a wall and starts
-        /// being absorbable at one instant, and no second threshold exists to drift.
+        /// the test is <see cref="PickupAbsorbMath.IsBeyondAbsorbVolumeLimit"/>. The
+        /// classification then splits only on <c>rise = topY - supportY</c> against the
+        /// motor's <c>GetStepHeightLimitWorldM()</c> - the same step limit the static-box
+        /// mask uses, so props and scene geometry cannot disagree about what a step is.
         /// </para>
         /// <para>
         /// Boxes come from the gameplay volume <c>propBounds</c> around the prop's current
         /// world position - never from a collider and never from the visual mesh. Rotation
         /// is not applied (an axis-aligned box around the authored volume), so a turned prop
-        /// can block slightly early; that is the documented AABB choice, not an oversight.
+        /// can register slightly early; that is the documented AABB choice, not an
+        /// oversight.
         /// </para>
         /// <para>
         /// Failures keep the registered set instead of clearing it: an empty set is exactly
-        /// the "ball rolls through the world" bug this method exists to remove. The set is
-        /// cleared only where it cannot be right any more - blocking disabled, the motor
-        /// refusing to price its own limit, or a field reset.
+        /// the "ball rolls through the world" bug this method exists to remove. The sets are
+        /// cleared only where they cannot be right any more - prop obstacles disabled, the
+        /// motor refusing to price its own limit/step, or a field reset.
         /// </para>
         /// </remarks>
-        private void UpdateBlockingProps()
+        private void UpdatePropObstacles()
         {
             if (blockingDisabled)
             {
-                if (blockingAppliedCount > 0)
-                {
-                    motor.ClearBlockingBoxes();
-                    blockingAppliedCount = 0;
-                    previousBlockingCount = 0;
-                    blockingCandidateCount = 0;
-                }
+                // One switch governs both roles: a field that declares its props
+                // non-obstacles must not leave a support table behind either.
+                ClearPropSets();
                 return;
             }
 
@@ -1153,19 +1211,47 @@ namespace VRCKatamari.Pickup
             if (now < nextBlockingScanTime) return;
             nextBlockingScanTime = now + scanIntervalSeconds;
 
-            int capacity = motor.GetBlockingBoxCapacity();
-            blockingCapacity = capacity;
-            if (capacity <= 0) return;
-            if (capacity > BlockingSelectionCapacity)
+            int blockingCapacityNow = motor.GetBlockingBoxCapacity();
+            int supportCapacityNow = motor.GetSupportPropCapacity();
+            // The motor ignores support props while terrain support is off (it passes an
+            // empty table). Registering nothing in that state keeps the host from carrying
+            // a set nothing reads and makes the switch answer identical on both sides.
+            bool supportRoleEnabled = motor.IsTerrainSupportEnabled();
+            if (!supportRoleEnabled)
+            {
+                supportCapacityNow = 0;
+                if (supportAppliedCount > 0 || previousSupportCount > 0)
+                {
+                    motor.ClearSupportProps();
+                    supportAppliedCount = 0;
+                    previousSupportCount = 0;
+                    supportCandidateCount = 0;
+                }
+            }
+            blockingCapacity = blockingCapacityNow;
+            supportCapacity = supportCapacityNow;
+            if (blockingCapacityNow <= 0 && supportCapacityNow <= 0) return;
+            if (blockingCapacityNow > BlockingSelectionCapacity)
             {
                 if (blockingLogCount < BlockingLogLimit)
                 {
-                    LogBlockingOnce("[PickupFieldHost] motor blocking capacity " + capacity
+                    LogBlockingOnce("[PickupFieldHost] motor blocking capacity " + blockingCapacityNow
                         + " exceeds this host's selection buffer " + BlockingSelectionCapacity
                         + "; only the nearest " + BlockingSelectionCapacity
                         + " are registered per scan.");
                 }
-                capacity = BlockingSelectionCapacity;
+                blockingCapacityNow = BlockingSelectionCapacity;
+            }
+            if (supportCapacityNow > BlockingSelectionCapacity)
+            {
+                if (supportLogCount < BlockingLogLimit)
+                {
+                    LogSupportOnce("[PickupFieldHost] motor support capacity " + supportCapacityNow
+                        + " exceeds this host's selection buffer " + BlockingSelectionCapacity
+                        + "; only the nearest " + BlockingSelectionCapacity
+                        + " are registered per scan.");
+                }
+                supportCapacityNow = BlockingSelectionCapacity;
             }
 
             float limit = motor.GetAbsorbVolumeLimitWorldM3();
@@ -1174,30 +1260,50 @@ namespace VRCKatamari.Pickup
                 // The motor could not price its own limit. Registering nothing matches what
                 // the gate does with a non-finite limit (it refuses every item), so the two
                 // answers stay identical; the motor already reports the refused derive.
-                ClearBlockingSet();
+                ClearPropSets();
                 return;
             }
 
             Vector3 center = motor.GetCenterWorld();
             if (!KatamariMath.IsFiniteVector(center)) return;
-            float radius = motor.GetCollisionRadiusWorldM() + blockingMarginM;
+            float collisionRadius = motor.GetCollisionRadiusWorldM();
+            float radius = collisionRadius + blockingMarginM;
             if (!KatamariMath.IsFiniteFloat(radius) || radius <= 0f) return;
-            // Wider than the selection radius, because SelectNearest keeps a previous entry
-            // out to radius + stickiness. Pruning must never see less than the selection
-            // can keep, or stickiness would silently degrade to "re-pick every scan".
-            float pruneRadius = radius + blockingStickinessM;
+            // The center comes from the same pose the support table was resolved at. Both
+            // numbers are SURFACE-level diagnostics (not the proxy-lifted ball bottom), so
+            // a prop is classified against the same height the motor uses for a static box.
+            float supportHeight = motor.GetSupportSurfaceHeightWorldM();
+            float stepLimit = motor.GetStepHeightLimitWorldM();
+            if (!KatamariMath.IsFiniteFloat(supportHeight) ||
+                !KatamariMath.IsFiniteFloat(stepLimit) || stepLimit < 0f)
+            {
+                // Without a priced step there is no geometric rule to apply; keep whatever
+                // was registered rather than guessing a role.
+                return;
+            }
+            float ballBottom = center.y - collisionRadius;
+            if (!KatamariMath.IsFiniteFloat(ballBottom)) return;
+
+            // Wider than either selection radius, because SelectNearest keeps a previous
+            // entry out to radius + that set's stickiness. Pruning must never see less
+            // than a selection can keep, or stickiness would silently degrade.
+            float pruneStickiness = blockingStickinessM;
+            if (supportStickinessM > pruneStickiness) pruneStickiness = supportStickinessM;
+            float pruneRadius = radius + pruneStickiness;
             if (!KatamariMath.IsFiniteFloat(pruneRadius)) return;
 
-            int candidateCount = 0;
+            int blockingCandidateCountNow = 0;
+            int supportCandidateCountNow = 0;
             for (int i = 0; i < propCount; i++)
             {
                 blockingCandidate[i] = false;
-                // Absorbed and hidden props are no longer walls. A row with no transform or
-                // no usable volume has no box to build, so it is skipped too (not because
-                // it is unsubmittable: a prop the motor would refuse as a candidate is
-                // still a solid object, and PrepareBlockingRows keeps it).
+                supportCandidate[i] = false;
+                // Absorbed and hidden props are no longer walls or floors. A row with no
+                // transform or no usable volume has no box to build, so it is skipped too
+                // (not because it is unsubmittable: a prop the motor would refuse as a
+                // candidate is still a solid object, and PreparePropRows keeps it).
                 if (propStates[i] != StateFree) continue;
-                if (!blockingUsable[i]) continue;
+                if (!propUsable[i]) continue;
 
                 Vector3 position = propTransforms[i].position;
                 float dx = position.x - center.x;
@@ -1209,7 +1315,7 @@ namespace VRCKatamari.Pickup
                 // Pruning only, never a decision: the distance to an axis-aligned box is at
                 // least the distance to its centre minus its half diagonal, so a prop past
                 // this bound cannot be selected at radius + stickiness.
-                float pruneLimit = pruneRadius + blockingHalfDiagonal[i];
+                float pruneLimit = pruneRadius + propHalfDiagonal[i];
                 if (distanceSq > pruneLimit * pruneLimit) continue;
 
                 if (!PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(propBounds[i], limit)) continue;
@@ -1218,15 +1324,129 @@ namespace VRCKatamari.Pickup
                 Vector3 maximum;
                 if (!BlockingPropMath.TryBoxFromCentreAndExtents(position, propBounds[i],
                     out minimum, out maximum)) continue;
-                blockingMinima[i] = minimum;
-                blockingMaxima[i] = maximum;
-                blockingCandidate[i] = true;
-                candidateCount = candidateCount + 1;
-            }
-            blockingCandidateCount = candidateCount;
+                propMinima[i] = minimum;
+                propMaxima[i] = maximum;
 
+                // Already above the top is the static box's rule 2: a ball descending onto
+                // this prop must not see its landing surface classified as a wall.
+                bool alreadyAbove = ballBottom >= maximum.y;
+                int role;
+                if (!SupportSurfaceMath.TryClassifyProp(true, maximum.y, supportHeight,
+                    stepLimit, alreadyAbove, out role)) continue;
+                if (role == SupportSurfaceMath.PropRoleSupport)
+                {
+                    if (supportRoleEnabled)
+                    {
+                        supportCandidate[i] = true;
+                        supportCandidateCountNow = supportCandidateCountNow + 1;
+                    }
+                    else
+                    {
+                        // Terrain support is off, so this prop cannot be a floor. The
+                        // pre-P2 world made every absorb-proof prop a wall; keeping that
+                        // fallback is what makes the switch bit-identical instead of
+                        // letting the ball roll through low props.
+                        blockingCandidate[i] = true;
+                        blockingCandidateCountNow = blockingCandidateCountNow + 1;
+                    }
+                }
+                else if (role == SupportSurfaceMath.PropRoleBlocking)
+                {
+                    blockingCandidate[i] = true;
+                    blockingCandidateCountNow = blockingCandidateCountNow + 1;
+                }
+            }
+            blockingCandidateCount = blockingCandidateCountNow;
+            supportCandidateCount = supportCandidateCountNow;
+
+            // Support first: it never rebuilds the sweep, and the ball's floor is the more
+            // important fact for this step. A refused selection keeps that set's previous
+            // batch and leaves the other set free to update, exactly as before P2.
+            UpdateSupportSelection(center, radius, supportCapacityNow);
+            UpdateBlockingSelection(center, radius, blockingCapacityNow, limit);
+        }
+
+        /// <summary>Builds, validates and registers the support selection of this scan.</summary>
+        private void UpdateSupportSelection(Vector3 center, float radius, int capacity)
+        {
+            if (capacity <= 0) return;
             int written = BlockingPropMath.SelectNearest(center, radius,
-                blockingMinima, blockingMaxima, blockingCandidate, propCount,
+                propMinima, propMaxima, supportCandidate, propCount,
+                supportPreviousIndices, previousSupportCount, supportStickinessM,
+                supportSelectedIndices, supportSelectedDistances, capacity);
+            if (written < 0)
+            {
+                LogSupportOnce("[PickupFieldHost] support selection refused its input;"
+                    + " keeping the previous support set.");
+                return;
+            }
+
+            for (int i = 0; i < written; i++)
+            {
+                int index = supportSelectedIndices[i];
+                supportOutputMinima[i] = propMinima[index];
+                supportOutputMaxima[i] = propMaxima[index];
+            }
+            // The motor reports a prop surface as 100 + slot, and SelectNearest's order is
+            // distance-driven (it renumbers when the ball moves). Sorting the selected rows
+            // by prop index makes a prop's surface id stable for as long as it stays
+            // selected, which keeps the motor's "did the surface change" test meaningful.
+            // Sorting does not change membership: the next scan keeps every previous entry
+            // inside its sticky radius regardless of order.
+            for (int i = 1; i < written; i++)
+            {
+                int index = supportSelectedIndices[i];
+                Vector3 minimum = supportOutputMinima[i];
+                Vector3 maximum = supportOutputMaxima[i];
+                float distance = supportSelectedDistances[i];
+                int j = i - 1;
+                while (j >= 0 && supportSelectedIndices[j] > index)
+                {
+                    supportSelectedIndices[j + 1] = supportSelectedIndices[j];
+                    supportOutputMinima[j + 1] = supportOutputMinima[j];
+                    supportOutputMaxima[j + 1] = supportOutputMaxima[j];
+                    supportSelectedDistances[j + 1] = supportSelectedDistances[j];
+                    j = j - 1;
+                }
+                supportSelectedIndices[j + 1] = index;
+                supportOutputMinima[j + 1] = minimum;
+                supportOutputMaxima[j + 1] = maximum;
+                supportSelectedDistances[j + 1] = distance;
+            }
+            if (!motor.SetSupportProps(supportOutputMinima, supportOutputMaxima, written))
+            {
+                if (supportLogCount < BlockingLogLimit)
+                {
+                    LogSupportOnce("[PickupFieldHost] motor refused the support set: "
+                        + motor.GetSupportPropRefusalReason());
+                }
+                return;
+            }
+
+            int[] swap = supportPreviousIndices;
+            supportPreviousIndices = supportSelectedIndices;
+            supportSelectedIndices = swap;
+            previousSupportCount = written;
+            supportAppliedCount = written;
+
+            if (written > 0 && !loggedSupportSet)
+            {
+                loggedSupportSet = true;
+                Debug.Log("[PickupFieldHost] support props=" + written
+                    + " candidates=" + supportCandidateCount
+                    + " supportY=" + motor.GetSupportSurfaceHeightWorldM()
+                    + " stepLimit=" + motor.GetStepHeightLimitWorldM()
+                    + " capacity=" + capacity);
+            }
+        }
+
+        /// <summary>Builds, validates and registers the blocking selection of this scan.</summary>
+        private void UpdateBlockingSelection(Vector3 center, float radius, int capacity,
+            float limit)
+        {
+            if (capacity <= 0) return;
+            int written = BlockingPropMath.SelectNearest(center, radius,
+                propMinima, propMaxima, blockingCandidate, propCount,
                 blockingPreviousIndices, previousBlockingCount, blockingStickinessM,
                 blockingSelectedIndices, blockingSelectedDistances, capacity);
             if (written < 0)
@@ -1239,8 +1459,8 @@ namespace VRCKatamari.Pickup
             for (int i = 0; i < written; i++)
             {
                 int index = blockingSelectedIndices[i];
-                blockingOutputMinima[i] = blockingMinima[index];
-                blockingOutputMaxima[i] = blockingMaxima[index];
+                blockingOutputMinima[i] = propMinima[index];
+                blockingOutputMaxima[i] = propMaxima[index];
             }
             if (!motor.SetBlockingBoxes(blockingOutputMinima, blockingOutputMaxima, written))
             {
@@ -1264,24 +1484,29 @@ namespace VRCKatamari.Pickup
             {
                 loggedBlockingSet = true;
                 Debug.Log("[PickupFieldHost] blocking boxes=" + written
-                    + " candidates=" + candidateCount
+                    + " candidates=" + blockingCandidateCount
                     + " limitM3=" + limit
                     + " radiusM=" + radius
                     + " capacity=" + capacity);
             }
         }
 
-        // Drops both the motor's set and this host's memory of it. Used where the set
-        // cannot be right any more, never as a failure response.
-        private void ClearBlockingSet()
+        // Drops both motor sets and this host's memory of them. Used where a set cannot be
+        // right any more, never as a failure response.
+        private void ClearPropSets()
         {
-            // The motor call is the only part worth skipping: its own clear is a no-op
+            // The motor calls are the only part worth skipping: each own clear is a no-op
             // when nothing is registered.
             if (blockingAppliedCount > 0 || previousBlockingCount > 0)
                 motor.ClearBlockingBoxes();
+            if (supportAppliedCount > 0 || previousSupportCount > 0)
+                motor.ClearSupportProps();
             blockingAppliedCount = 0;
             blockingCandidateCount = 0;
             previousBlockingCount = 0;
+            supportAppliedCount = 0;
+            supportCandidateCount = 0;
+            previousSupportCount = 0;
         }
 
         // One warning per category, ever: a field with a bad capacity must not flood the
@@ -1290,6 +1515,13 @@ namespace VRCKatamari.Pickup
         {
             if (blockingLogCount >= BlockingLogLimit) return;
             blockingLogCount = blockingLogCount + 1;
+            Debug.LogWarning(message);
+        }
+
+        private void LogSupportOnce(string message)
+        {
+            if (supportLogCount >= BlockingLogLimit) return;
+            supportLogCount = supportLogCount + 1;
             Debug.LogWarning(message);
         }
 
@@ -1303,7 +1535,7 @@ namespace VRCKatamari.Pickup
 
         /// <summary>
         /// Props that were blocking candidates in the last scan: free, usable volume,
-        /// inside the pruning bound, and beyond the absorb volume limit.
+        /// inside the pruning bound, absorb-proof, and above the step limit.
         /// </summary>
         public int GetBlockingCandidateCount()
         {
@@ -1316,11 +1548,33 @@ namespace VRCKatamari.Pickup
             return blockingCapacity;
         }
 
-        /// <summary>Whether this field registers blocking boxes at all.</summary>
+        /// <summary>Whether this field registers prop obstacles (walls and supports) at all.</summary>
         public bool IsBlockingEnabled()
         {
             return !blockingDisabled;
         }
+
+        /// <summary>Support tops registered with the motor by the last scan (0..capacity).</summary>
+        public int GetSupportPropCount()
+        {
+            return supportAppliedCount;
+        }
+
+        /// <summary>
+        /// Props that were support candidates in the last scan: free, usable volume,
+        /// inside the pruning bound, absorb-proof, and within the step limit.
+        /// </summary>
+        public int GetSupportPropCandidateCount()
+        {
+            return supportCandidateCount;
+        }
+
+        /// <summary>Support tops the motor can take at once, as read by the last scan.</summary>
+        public int GetSupportPropCapacity()
+        {
+            return supportCapacity;
+        }
+
 
         // ------------------------------------------------------------------
         // One-shot diagnostics.

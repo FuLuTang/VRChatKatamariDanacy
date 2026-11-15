@@ -30,6 +30,13 @@ namespace VRCKatamari.Tests
             return new Vector3[0];
         }
 
+        // P2: the prop table. Every P1 case passes an empty one, which is exactly
+        // the pre-P2 query (the motor does the same when terrain support is off).
+        private static Vector3[] NoProps()
+        {
+            return new Vector3[0];
+        }
+
         private static float StepLimit(float diameter)
         {
             float limit;
@@ -43,8 +50,8 @@ namespace VRCKatamari.Tests
             out int candidateCount)
         {
             return SupportSurfaceMath.TryResolveSupport(probe, referenceHeight, stepLimit, Up, 0f,
-                minima, maxima, boxCount, out surfaceId, out point, out normal, out height,
-                out candidateCount);
+                minima, maxima, boxCount, NoProps(), NoProps(), 0, out surfaceId, out point,
+                out normal, out height, out candidateCount);
         }
 
         // ---------------------------------------------------------------- 1 ----
@@ -60,8 +67,8 @@ namespace VRCKatamari.Tests
             Vector3[] maxima = NoBoxes();
 
             Assert.IsTrue(SupportSurfaceMath.TryResolveSupport(new Vector3(1f, 5f, 2f), 0f, 0.6f,
-                Up, 0.5f, minima, maxima, 0, out id, out point, out normal, out height,
-                out candidates));
+                Up, 0.5f, minima, maxima, 0, NoProps(), NoProps(), 0, out id, out point,
+                out normal, out height, out candidates));
 
             Assert.AreEqual(SupportSurfaceMath.GroundSurfaceId, id);
             Assert.AreEqual(0.5f, height, Tolerance);
@@ -268,8 +275,8 @@ namespace VRCKatamari.Tests
             int candidates = 99;
 
             Assert.IsFalse(SupportSurfaceMath.TryResolveSupport(new Vector3(float.NaN, 1f, 0f), 0f,
-                0.3f, Up, 0f, minima, maxima, 1, out id, out point, out normal, out height,
-                out candidates));
+                0.3f, Up, 0f, minima, maxima, 1, NoProps(), NoProps(), 0, out id, out point,
+                out normal, out height, out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
             Assert.AreEqual(Vector3.zero, point);
             Assert.AreEqual(Vector3.zero, normal);
@@ -281,23 +288,23 @@ namespace VRCKatamari.Tests
             id = 99;
             height = 99f;
             Assert.IsFalse(SupportSurfaceMath.TryResolveSupport(new Vector3(0f, 1f, 0f), 0f,
-                0.3f, Up, 0f, minima, invertedMaxima, 1, out id, out point, out normal,
-                out height, out candidates));
+                0.3f, Up, 0f, minima, invertedMaxima, 1, NoProps(), NoProps(), 0, out id,
+                out point, out normal, out height, out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
             Assert.AreEqual(0f, height, Tolerance);
 
             // A wall-like (horizontal) ground normal cannot answer a height query.
             id = 99;
             Assert.IsFalse(SupportSurfaceMath.TryResolveSupport(new Vector3(0f, 1f, 0f), 0f,
-                0.3f, new Vector3(1f, 0f, 0f), 0f, minima, maxima, 1, out id, out point,
-                out normal, out height, out candidates));
+                0.3f, new Vector3(1f, 0f, 0f), 0f, minima, maxima, 1, NoProps(), NoProps(),
+                0, out id, out point, out normal, out height, out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
 
             // A count larger than the buffers is refused instead of read past the end.
             id = 99;
             Assert.IsFalse(SupportSurfaceMath.TryResolveSupport(new Vector3(0f, 1f, 0f), 0f,
-                0.3f, Up, 0f, minima, maxima, 2, out id, out point, out normal, out height,
-                out candidates));
+                0.3f, Up, 0f, minima, maxima, 2, NoProps(), NoProps(), 0, out id, out point,
+                out normal, out height, out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
         }
 
@@ -402,8 +409,8 @@ namespace VRCKatamari.Tests
 
             // A ground offset is honoured, so the fallback is the real floor.
             Assert.IsTrue(SupportSurfaceMath.TryResolveSupport(new Vector3(0f, 1f, 0f), 0f, 0.3f,
-                Up, -0.05f, minima, maxima, 0, out id, out point, out normal, out height,
-                out candidates));
+                Up, -0.05f, minima, maxima, 0, NoProps(), NoProps(), 0, out id, out point,
+                out normal, out height, out candidates));
             Assert.AreEqual(-0.05f, height, Tolerance);
         }
 

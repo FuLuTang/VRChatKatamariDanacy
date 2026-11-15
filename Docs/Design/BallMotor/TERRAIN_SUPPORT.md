@@ -7,6 +7,7 @@
 > 引用约定：`Runtime/…`、`Labs/…`、`Tests/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；`Docs/…`、`Tools/…` 相对仓库根。
 >
 > **P1 已落地（2026-11-15，Linux 侧实现；Unity/U# 编译与 Play Mode 未跑）**：`SupportSurfaceMath`、motor 接线（支撑面/台阶/重力/诊断）、`LevelArenaHost`、NUnit 18 例 + Python 18 例。实现与本设计有**三处偏离**，逐条理由写在新加的 **§8.1**：①球有竖直重力、会从台面边缘掉下去（用户 2026-11-15 定，§5.4 的「没有重力」前提作废）；②支撑带（band）的参考高度改成 `max(上一步支撑面, 球心下方最低核心点)`，否则下落中的球会穿过脚下的盒顶；③`TryBakeRamp` 推迟到 P3（P1 没有斜面，不写未用代码）。§10.2 的默认值、§8 的 P1 表、§12 的校验状态都已按实现更新。
+> **P2 已落地（2026-11-15，Linux 侧实现；Unity/U# 编译与 Play Mode 未跑）**：`SupportSurfaceMath` 新增道具角色分类/容量/道具面 id 与支撑表道具段；`PickupFieldHost` 一遍扫描出「挡路 / 支撑」两个掩码（`UpdatePropObstacles`），经 `SetSupportProps` 单一接缝进 motor；NUnit 15 例 + Python 15 例。规则在 **§8 P2 的「定型规则」**，与原文的偏离（分类函数放 `SupportSurfaceMath` 而不是新 `PickupObstacleMath`、不新增 `supportMarginM`、`blockingDisabled` 同时管两个角色、道具查询段 `alreadyAbove`）逐条写在那里。
 
 ---
 
@@ -408,17 +409,23 @@ F9：`planarVelocity` 只有 XZ，`BallMotionMath` 不产出任何切向加速�
 ### 6.3 翻转时机（20 Hz 扫描，原子翻转）
 
 ```
-PickupFieldHost.Update（每 scanIntervalSeconds = 0.05 s）
+PickupFieldHost.UpdatePropObstacles（每 scanIntervalSeconds = 0.05 s，先于收集门）
   ConsumeAbsorbedEvents()
-  UpdatePropObstacles():            // 由 UpdateBlockingProps 改名/扩展
+  UpdatePropObstacles():
      limit  = motor.GetAbsorbVolumeLimitWorldM3()
-     supportY = motor.GetSupportSurfaceHeightWorldM()     // 新增 getter
-     stepLimit = motor.GetStepHeightLimitWorldM()          // 新增 getter（kStep × D）
+     supportY = motor.GetSupportSurfaceHeightWorldM()     // P1 getter
+     stepLimit = motor.GetStepHeightLimitWorldM()          // P1 getter（kStep × D）
+     ballBottom = motor.GetCenterWorld().y − motor.GetCollisionRadiusWorldM()
      对每件 Free 且可用的道具：
-         if (!IsBeyondAbsorbVolumeLimit(bounds, limit))      → 食物：两个掩码都 false
-         else if (topY − supportY ≤ stepLimit)              → 地形：supportCandidate=true
-         else                                               → 挡路：blockingCandidate=true
-     两次 SelectNearest（同一个纯函数，不同 candidate 掩码）→ SetBlockingBoxes / SetSupportProps
+         建盒一次（propBounds → min/max）
+         beyond = IsBeyondAbsorbVolumeLimit(bounds, limit)  // 与吸收门同一个谓词
+         alreadyAbove = ballBottom ≥ max.y
+         role = SupportSurfaceMath.TryClassifyProp(beyond, max.y, supportY, stepLimit, alreadyAbove)
+         role == None      → 两个掩码都 false（食物）
+         role == Support   → supportCandidate = true
+         role == Blocking  → blockingCandidate = true
+     两次 SelectNearest（同一个纯函数，不同 candidate 掩码与粘性）
+       → motor.SetSupportProps / motor.SetBlockingBoxes
 ```
 
 - **同一扫描里原子翻转**：一件道具不会「既不在挡路集、又不在支撑集」（那会有 ≤0.05 s 的「门漏了」窗口）。这是 §4.3「一次刷新两件事」在宿主侧的对应。
@@ -434,8 +441,8 @@ PickupFieldHost.Update（每 scanIntervalSeconds = 0.05 s）
 |---|---|
 | N | 球站在桌面（支撑 = 桌顶）。吸收门放开（`limit` 变大）→ 宿主下一次扫描把桌子从**挡路**移到**食物**；同时桌子**还在**支撑集里（扫描是原子的，但 `limit` 读的是电机当步的值） |
 | N+1 | 门通过 reach（球站在桌上时 `距离 ≈ r + h/2 ≤ r + 半径`，**够得着**）→ 提交 → 账本确认 → 桌子 `StateFree → Attached` |
-| N+1 … N+k | 宿主下一次扫描（≤0.05 s）把桌子从支撑集移除 → 支撑回落到地面 → `GroundContactMath` 以 `maxDropPerStep = 0.1` 下落 |
-| 视觉 | `discontinuous` **不置位**（这不是传送）；球「往下掉」但不额外滚（垂直位移对滚动没贡献）。位置本身以 `maxDropPerStep = 0.1` 下落：0.72 m 的桌面 ≈ 7 步（0.14 s）；镜头再把这条曲线过一遍 5 Hz 低通（约 46%/步），合计约 0.2 s —— 读作「顿一下」 |
+| N+1 … N+k | 宿主下一次扫描（≤0.05 s）把桌子从支撑集移除 → 支撑回落到地面 → P1 的竖直重力生效（`fallSpeed += 9.81·dt`；不是旧的 `maxDropPerStep = 0.1` 钳位） |
+| 视觉 | `discontinuous` **不置位**（这不是传送）；球「往下掉」但不额外滚（垂直位移对滚动没贡献）。0.72 m 的桌面按自由落体约 0.38 s 落地；镜头再把这条曲线过一遍 5 Hz 低通 —— 读作「顿一下」 |
 
 **不做特例**（不禁止「吸你正站着的东西」）。理由：① 加禁则要一个新的判据（而且是玩法判据，不是几何判据），与「一个阈值」原则冲突；② 「桌子塌了，你掉下来」是**正确**的读法，也是用户原则里「后期台球桌都能粘起来」的必然结果；③ 真要避免，最省的位置是**宿主不提交「正被支撑的那件」**（一行 `if (i == motor.GetSupportPropIndex()) continue;`），代价是「站在桌上永远吃不掉桌子」——这作为 §11 U2 的备选列出。
 
@@ -566,7 +573,8 @@ public Vector3 GetSupportNormalWorld();
 public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2 的备选要用）
 ```
 
-> **P1 实际实现（2026-11-15）**：`SetGroundPlane`、`SetTerrainSupportEnabled(bool)` / `IsTerrainSupportEnabled()`、`GetStepHeightLimitWorldM`、`GetSupportSurfaceHeightWorldM`、`GetSupportNormalWorld`、`GetSupportSurfaceCount`、`GetSupportSurfaceId`（诊断：0 = 地面，1+i = 第 i 个静态盒）、`GetSupportKind`（0 地面 / 1 盒 / -1 未解出；2 斜面、3 道具留给 P3/P2）、`GetStepMaskRebuildCount`（掩码翻转导致的扫掠数组重建次数，物理测试场的 P4 成本判据）、`IsFalling`。`LevelArenaHost` 侧有 `Reapply()`（清表后重注册，地图 0 的一格一注册靠它）。**未实现**：`SetSupportProps`/`ClearSupportProps`/`IsSupportingAProp`（P2）、`AddRamp`/`ClearRamps`/`GetRampCount`/`GetLastRampRefusalReason`（P3）、`SetStepHeightOverBallDiameter`（P1 用序列化字段 `stepHeightOverBallDiameter`；宿主不需要在运行期改它）。`GetSupportSurfaceCount` 报的是**本步 band 内的面数**（足迹未应用），不是注册数；注册数由 `LevelArenaHost.GetRegisteredSupportCount()` 报。
+> **P1 实际实现（2026-11-15）**：`SetGroundPlane`、`SetTerrainSupportEnabled(bool)` / `IsTerrainSupportEnabled()`、`GetStepHeightLimitWorldM`、`GetSupportSurfaceHeightWorldM`、`GetSupportNormalWorld`、`GetSupportSurfaceCount`、`GetSupportSurfaceId`（诊断：0 = 地面，1+i = 第 i 个静态盒，**P2 起 100+i = 第 i 个支撑槽位（宿主按道具下标排序，见 §8 P2 规则 2）**）、`GetSupportKind`（0 地面 / 1 盒 / **3 道具** / -1 未解出；2 斜面留给 P3）、`GetStepMaskRebuildCount`（掩码翻转导致的扫掠数组重建次数，物理测试场的 P4 成本判据）、`IsFalling`。`LevelArenaHost` 侧有 `Reapply()`（清表后重注册，地图 0 的一格一注册靠它）。
+> **P2 实际实现（2026-11-15）**：`SetSupportProps(Vector3[] minima, Vector3[] maxima, int count)` / `ClearSupportProps()`、`GetSupportPropCount()` / `GetSupportPropCapacity()`（= 6）/ `GetSupportPropRefusalCount()` / `GetSupportPropRefusalReason()`、`IsSupportingAProp()`。**未实现**：`AddRamp`/`ClearRamps`/`GetRampCount`/`GetLastRampRefusalReason`（P3）、`SetStepHeightOverBallDiameter`（P1 用序列化字段 `stepHeightOverBallDiameter`；宿主不需要在运行期改它）。`GetSupportSurfaceCount` 报的是**本步 band 内的面数**（足迹未应用，P2 起含道具顶面），不是注册数；静态注册数由 `LevelArenaHost.GetRegisteredSupportCount()` 报，道具注册数由 `GetSupportPropCount()` 报。
 
 `SetSupportProps` 的语义与 `SetBlockingBoxes` **完全对齐**（整批替换、逐盒先校验后写、同一批重复写入不重建、失败保留上一批、超容量计数不 latch）——**直接复用同一套校验代码路径**，不要写第二份（这是本仓库已经付过两次代价的「一份逻辑一个实现」）。
 
@@ -681,33 +689,74 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 
 **范围**：`PickupFieldHost` 把挡路扫描扩成「一遍分类、两次选择」，新增 `SetSupportProps`；不碰斜面。
 
+**P2 定型规则（2026-11-15，实现前补写；原文只有轮廓，这一节把接口与判据钉死）**
+
+1. **分类只有一个实现**：`SupportSurfaceMath.TryClassifyProp(beyondAbsorbVolumeLimit, topY, supportHeightM, stepLimitM, alreadyAbove, out role)`。顺序就是判据的顺序：
+   - 吸收门先答。`beyondAbsorbVolumeLimit == false`（吸得动）→ 角色 `None`（0）：两个集合都不进，它就是食物。
+   - 吸不动 → `rise = topY − supportHeightM`；`rise ≤ stepLimitM` → `Support`（1）；`rise > stepLimitM` → `Blocking`（2）。**等号是 Support**（有测试钉住；PICNIC 的「躺椅 0.35 → 折叠桌 0.70，D = 1.40」正好落在等号上）。
+   - `alreadyAbove`（球底 ≥ 道具顶）→ Support，无条件。这是静态盒 §4.5 规则 2 的同一条反抖规则：一个正在落到道具顶上的球，不能把着陆面当墙。
+   - 非法输入（非有限、负 stepLimit）→ 返回 false 且 role = None；宿主跳过该行。
+   - **`beyondAbsorbVolumeLimit` 由宿主传入**，函数自己不读道具：宿主仍然只调 `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit`，所以「挡路/支撑/食物」三个身份共享同一个吸收谓词，没有第二个阈值。
+2. **支撑面身份**：`surfaceId = 100 + 支撑槽位`（`SupportSurfaceMath.FirstPropSurfaceId = 100`）；宿主在注册前把选中的行按**道具下标升序**排好，所以一件道具只要还在支撑集里，它的槽位（因而 id）就稳定；集合成员变化时槽位可以移动。静态盒仍是 `1 + i`，地面 0。`GetSupportKind()`：0 地面 / 1 静态盒 / **3 道具** / -1 未解出（2 留给 P3 斜面）。`GetSupportSurfaceId()` 因此是 0、1…8、100…105。**它是诊断 + 「面是否换了」的键，不是跨扫描的道具身份**；需要身份的地方读 `IsSupportingAProp()`/`GetSupportKind()`。
+3. **支撑面选择**：`TryResolveSupport` 多接收 `(propMinima, propMaxima, propCount)`。道具顶面与静态盒顶面走**同一条** band（`reference + stepLimit`）+ 同一条足迹判据（含边界）+ 同一个「最高者胜，等高保留先读者」。道具在静态盒之后读，所以道具与盒等高时盒赢（注册顺序稳定）。道具没有第二个几何规则。
+4. **容量**：`SupportSurfaceMath.MaxSupportPropCount = 6` 是唯一来源，`IsSupportPropCountAllowed(count)` 是唯一判据；`SetSupportProps` 拒绝第 7 件。拒绝语义与 `SetBlockingBoxes` **完全对齐**：整批不写、保留上一批、独立拒绝计数 `GetSupportPropRefusalCount/Reason`、**不进 `overflowCount` latch**——「附近道具多于 6 件」是每次扫描的正常答案，不是场景接错（`BLOCKING_PROPS_PLAN` §121）。
+5. **数据流（单一接缝）**：`PickupFieldHost` 拥有道具表、`propBounds`、状态机与吸收门；motor 只接收盒（`SetSupportProps` / `SetBlockingBoxes`）。每 `scanIntervalSeconds` 一遍扫描：每个候选道具**建盒一次**、**分类一次**，得到两个掩码，然后 `BlockingPropMath.SelectNearest` 跑两遍（同一纯函数、独立粘性 `blockingStickinessM = 0.25` 与 `supportStickinessM = 0.10`），最后 `SetSupportProps` + `SetBlockingBoxes`。一件道具只有一个角色，两个集合天然不相交。
+6. **吸走即失去支撑**：`AttachProp`/`HideProp` 在把行标成 `StateAttached`/`StateHidden` 的同时把下一次扫描提前到本帧（`nextBlockingScanTime = 0`），所以吸收事件被消费的那一帧扫描就会把该行排除出两个候选；motor 的支撑面回落到地面或更低的面，`SupportDroppedAway → ResolveFallState` 进入 P1 的重力下落。**没有**「支撑道具被吸走」的专用路径，也没有第二个下落规则。
+7. **开关**：motor 的 `terrainSupportEnabled == false` 时 `ResolveTerrainSupport` 传 `propCount = 0`，查询与 P1 **逐位一致**（等价于空道具表）。宿主侧读同一个开关：地形支撑关掉时它**清空支撑集**，并把本该是支撑的吸不动件退回**挡路**（P1 之前的世界里它们全是墙）——这样关掉开关不会让球穿过矮件；`blockingDisabled`（历史字段名，语义定为「道具不参与动态障碍」）则清两个集合，球可以穿过全部道具（这是 lab 的显式选择）。两个开关各管一件事，都有「关掉后不会出现第三个状态」的测试/文档约束。
+8. **每步/每次扫描成本**：每步 `TryResolveSupport` 多 ≤6 次（band + 足迹 + 高度比较，约 60 flops，零分配）；每 0.05 s 扫描多一次分类（O(1)）与第二遍 `SelectNearest`（≤候选数 × 2）。所有数组在 `Start` 一次性分配。
+9. **P2 的可用窗口（由 1 的判据直接推出，作者必读）**：一件道具能当台阶的球径必须同时满足 `D ≥ 4·rise`（几何）与 `D < D_req`（仍吸不动），即 **`[4·rise, D_req)`**；区间为空的道具**永远不会**当台阶，它会先变成食物。本关数据：
+   - 躺椅（从台顶 rise 0.09，`D_req ≈ 1.86`）→ 窗口 **0.36–1.86**；
+   - 折叠桌（从躺椅 rise 0.35，`D_req ≈ 2.00`）→ 窗口 **1.40–2.00**（这就是「台顶 → 躺椅 → 折叠桌」链能成立的原因；从地面 rise 0.70 需要 `D ≥ 2.80 > D_req`，所以从地面直接上桌只能靠 P3 的斜板）；
+   - 保温箱（rise 0.30，`D_req ≈ 1.03`）→ `4×0.30 = 1.20 > 1.03`，**窗口为空**：它永远是挡路或食物，不会被爬上去；
+   - 平铺木板/餐盘（rise 0.025/0.04，`D_req ≈ 0.53`）→ 起手 0.30 就能碾过，0.53 之后变食物。
+   验收时按这张窗口表判断「该不该能上」，不要按「看起来多高」猜。
+
 | 文件 | 改什么 |
 |---|---|
-| `Runtime/Pickup/PickupFieldHost.cs` | `UpdateBlockingProps` → `UpdatePropObstacles`：一遍扫描出两个掩码（§6.3）；两套粘性；新增序列化 `supportStickinessM = 0.10f`、`supportMarginM = 0.8f`（与挡路同值）；`ResetField` 里 `motor.ClearSupportProps()`；`SetCollecting(false)` **不清**支撑集（世界仍然实心，与挡路一致） |
-| `Runtime/Pickup/PickupObstacleMath.cs`（新）或 `BlockingPropMath` 内新增 | **纯函数**：`ClassifyProp(topY, supportY, stepLimit, alreadyAbove)` → `enum`（UdonSharp 里用 `int` 常量，不要 enum 字段） |
-| `KatamariBallMotor.cs` | `SetSupportProps` / `ClearSupportProps`（复用 `SetBlockingBoxes` 的校验路径） |
-| `Docs/Design/PickupAbsorb/blocking_props.py` | 分类函数的参考模型 + 用例（与 C# 同步） |
-| `Tests/EditMode/Pickup/`（现有目录下新增） | 见下 |
+| `Runtime/BallLayers/TerrainSupport/SupportSurfaceMath.cs` | 分类（`TryClassifyProp`）、容量判据、道具面 id 编码、`TryResolveSupport` 的道具段（**唯一**判定实现；原计划放在 `Runtime/Pickup/PickupObstacleMath.cs`，按任务书「判定进 SupportSurfaceMath 或同模块」改放这里，避免第二份模块） |
+| `Runtime/Pickup/PickupFieldHost.cs` | `UpdateBlockingProps` → `UpdatePropObstacles`：一遍扫描出两个掩码（§6.3）；两套粘性；新增序列化 `supportStickinessM = 0.10f`；**不再新增** `supportMarginM`（与挡路同值，第二个旋钮只会漂）；`ResetField` 里 `motor.ClearSupportProps()`；`SetCollecting(false)` **不清**支撑集（世界仍然实心，与挡路一致） |
+| `KatamariBallMotor.cs` | `SetSupportProps` / `ClearSupportProps`（复用 `SetBlockingBoxes` 的校验路径）、支撑表接线、`GetSupportKind()==3`、`IsSupportingAProp()`、道具容量/拒绝 getter |
+| `Docs/Design/BallLayers/TerrainSupport/terrain_support.py` | 分类 + 道具面选择的参考模型（与 C# 同名同序；原计划的 `blocking_props.py` 不在本轮写范围内，分类与支撑选择同属地形支撑这一层） |
+| `Tests/EditMode/BallLayers/PropSupportTests.cs`（新） | 见下；`SupportSurfaceTests.cs` 的调用点补空道具表 |
+| `Docs/tests/ball_terrain_support/test_prop_support.py`（新） | 与 NUnit 同一组用例（CamelCase → snake_case） |
 
-**NUnit**
+**NUnit（`Tests/EditMode/BallLayers/PropSupportTests.cs`）**
 
-1. `AnAbsorbProofLowPropBecomesSupportNotAWall` — 餐巾 0.028、`D = 0.30` → support。
-2. `AnAbsorbProofTallPropStaysAWall` — 保温箱 0.30、`D = 0.30` → blocking。
-3. `TheSamePropFlipsToSupportWhenTheBallGrows` — 同一件在 `D = 1.20` → support（与 1 同一函数）。
-4. `AnAbsorbablePropIsNeitherAWallNorASupport` — 吸收门放开 → 两个掩码都 false。
-5. `TheTwoSetsNeverContainTheSameProp` — 原子性（这一条最容易在下一次重构被破坏）。
-6. `SelectionKeepsSixBlockingAndSixSupportWhenBothAreCrowded` — 两个容量独立，不互相挤占。
-7. `SupportStickinessIsSmallerThanBlockingStickiness`（契约钉）。
-8. `ResetFieldClearsBothSets`；`SetCollectingFalseKeepsBothSets`。
-9. `AnUnusableRowBuildsNeither`（`propBounds` 非有限/零体积）。
+1. `AnAbsorbProofLowPropIsASupportNotAWall` — 静态 0.028 m 薄板（C14 口径）、`D = 0.30`、支撑面 0 → Support（真餐巾 0.014 / `D_req ≈ 0.18` 是食物，不是这条用例的对象）。
+2. `AnAbsorbProofPropExactlyAtTheStepLimitIsASupport` — `rise == stepLimit` → Support（等号钉）。
+3. `OneMillimetreAboveTheLimitIsAWall` — 同一件高 1 mm → Blocking。
+4. `TheSamePropFlipsToSupportWhenTheBallGrows` — 0.30 m 高、**仍然吸不动**的件在 `D = 1.20`（`stepLimit = 0.30`）→ Support（同一函数；这是几何分支的契约测试，不代表保温箱真能被爬——它的窗口是空的，见规则 9）。
+5. `AnAbsorbablePropIsNeitherAWallNorASupport` — 吸收门放开 → None。
+6. `ABallAlreadyAboveTheTopNeverGetsAWall` — 下落中的球底在顶上 → Support。
+7. `APropTopEntersTheSupportTableWithAPropSurfaceId` — 面 id = 100、高度 = 顶、法线 +Y。
+8. `APropFootprintEdgeIsInclusive`（与静态盒同一条边界契约）。
+9. `APropOutsideItsFootprintFallsBackToTheGround`。
+10. `APropAboveTheStepBandIsNotACandidate`。
+11. `ABoxAndAPropAtTheSameHeightKeepTheBox`（等高时注册顺序稳定）。
+12. `SupportSelectionReadsExactlyTheReportedPropCount` — 7 件、count = 6，第 7 件永不读；`IsSupportPropCountAllowed(6)` 真、`(7)` 假。
+13. `AnAbsorbedSupportPropStartsTheGravityFall` — 选中道具顶 → 道具被吸走（表清空）→ `SupportDroppedAway` → 进入下落。
+14. `AnEmptyPropTableLeavesThePreP2Surface` — 同一查询在道具表为空时与 P1 结果逐字段相同（关开关/空表的逐位一致）。
+15. `NonFinitePropIsRefusedAndNothingIsWritten`。
+
+**P2 实现记录（2026-11-15，Linux 侧；Unity/U# 编译与 Play Mode 未跑）**
+
+| 项 | 状态 |
+|---|---|
+| 源码 | `SupportSurfaceMath`（分类/容量/道具面 id/道具支撑段）、`KatamariBallMotor`（接缝 + 表接线 + 诊断）、`PickupFieldHost`（一遍分类、两次选择、两套粘性、复位清两套） |
+| 与原文的偏离 | ①分类函数放 `SupportSurfaceMath`（原文给了 `Runtime/Pickup/PickupObstacleMath.cs` 或 `BlockingPropMath`；任务书写范围只到 `Runtime/Pickup/PickupFieldHost.cs` 与 `Runtime/BallLayers/TerrainSupport/`，放支撑层也符合「判定只有一份」）；②**不新增** `supportMarginM`（原文说「与挡路同值」，所以复用 `blockingMarginM`；第二个旋钮只会漂）；③`blockingDisabled` 一个开关管两个角色（原文只写挡路；两个开关会制造「是台阶但不是墙」这种分类器不产生的状态）；④分类多一个 `alreadyAbove` 参数（原文签名草稿里有，落地时保留，理由见定型规则 1）；⑤探索里的 `Docs/Design/PickupAbsorb/blocking_props.py` 不写（不在本轮写范围），Python 参照并入 `terrain_support.py` |
+| NUnit | **NOT_RUN**：新增 `PropSupportTests.cs` 15 例；`SupportSurfaceTests.cs` 的 8 个调用点补空道具表（18 例语义不变） |
+| Python | **PASS**：`ball_terrain_support` 33 例（18 P1 + 15 P2） |
+| 未做 | P3 斜面；Unity 编译 / `run_tests` / Play Mode S8–S12（本侧不是 Unity 操作者） |
+
+**关开关逐位一致**：motor 在 `terrainSupportEnabled == false` 时向查询传 `propCount = 0`，等价于 P1 的空道具表（`AnEmptyPropTableLeavesThePreP2Surface` 钉住）；宿主读同一个开关，关掉时清支撑集并把本该是支撑的吸不动件退回挡路（P1 之前它们全是墙），所以关掉后既不会站上道具，也不会穿过矮件。`blockingDisabled == true` 则清两个集合（lab 的显式「道具不参与」选择）。没有第三条路径能让一个道具在开关关掉后仍参与支撑。
 
 **Play Mode**
 
 | # | 步骤 | 判据 |
 |---|---|---|
-| S8 | `D = 0.30` 碾过平铺餐巾 | 不减速、不被挡；`GetSupportSurfaceHeightWorldM()` 短暂读到 0.028 |
-| S9 | `D = 0.30` 撞保温箱 | 停住；`D ≥ 1.20` 时能爬上去（`center.y = 0.30 + r`） |
-| S10 | 站上保温箱后长到能吃它 | 被吸走（`absorbed` 跳数）、球下落、**没有** teleport 闪断（`discontinuous` 未置位） |
+| S8 | `D = 0.30` 碾过平铺木板/餐盘（顶 0.025/0.04，`D_req ≈ 0.53`） | 不减速、不被挡；`GetSupportSurfaceHeightWorldM()` 短暂读到 0.025/0.04；`supportId ≥ 100`、`GetSupportKind() == 3`。**不要用真餐巾**：它 `D_req ≈ 0.18`，在 0.30 已经是食物（P2 定型规则 1 的吸收门先答） |
+| S9 | `D = 0.30` 撞保温箱 | 停住（挡路）。**它在 `D ≥ 1.03` 就变食物**，`4×0.30 = 1.20`，所以保温箱**永远不是台阶**（P2 规则 9 的空窗口）。「吸不动但能爬」请用第一关躺椅/折叠桌链或地图 0 的 crate@2.20 |
+| S10 | 站上折叠桌（0.70，`D_req ≈ 2.00`；经躺椅上去）后长到 `D ≥ 2.00` | 被吸走（`absorbed` 跳数）、球下落（`IsFalling` 至少一帧为真，`supportId` 回到 0/更低面）、**没有** teleport 闪断（`discontinuous` 未置位） |
 | S11 | 门堆（PICNIC §3.5.3）回归 | 0.30 m 球仍被 0.10 m 缝挡死（台阶规则不吃水平缝） |
 | S12 | 6 件挡路 + 6 件支撑同时存在 | 帧时间与 `P1` 同量级（记录到 `Docs/Evidence/`）；两个计数各自 ≤6 |
 
@@ -856,3 +905,26 @@ python3 -m unittest discover -s Docs/tests
 ```
 
 **下一轮（给实现者的最小启动包）**：§7.2/§7.5 的接口签名 + §8 P1 的 7 个文件 + 14 条 NUnit 用例名。**P1 落地前不要再动 `SweepMath`**——本设计一行都不需要改它（这正是选 A 但只做「选择与过滤」的收益）。
+
+### 12.1 P2 实现记录（2026-11-15，Linux 侧）
+
+| 项 | 状态 |
+|---|---|
+| 改动文件 | 改 `Runtime/BallLayers/TerrainSupport/SupportSurfaceMath.cs`；改 `Runtime/BallMotor/KatamariBallMotor.cs`；改 `Runtime/Pickup/PickupFieldHost.cs`；新 `Tests/EditMode/BallLayers/PropSupportTests.cs`（15 例）；改 `Tests/EditMode/BallLayers/SupportSurfaceTests.cs`（调用点补空道具表）；改 `Docs/Design/BallLayers/TerrainSupport/terrain_support.py`；新 `Docs/tests/ball_terrain_support/test_prop_support.py`（15 例）；本文。 |
+| 未改 | 场景 / prefab / `.asset` / `tasks.json` / `Labs/` / `Editor/` / `Runtime/Story/` / `Runtime/Pickup/PickupAbsorbMath.cs` / `BlockingPropMath.cs`。新 `.cs` **没有**造 `.meta`（本仓规矩）。 |
+| Unity / U# 编译 | **NOT_RUN**（本侧不是 Unity 操作者；Linux 检出没有 C# 编译器） |
+| NUnit（EditMode） | **NOT_RUN**：已写 15 例（P2），等 Unity 侧 `run_tests` |
+| Play Mode S8–S12 | **NOT_RUN**：操作清单见 §8 P2 |
+| Python 参考模型 | **PASS**：`python3 -m unittest discover -s Docs/tests` → `Ran 376 tests ... OK`（`ball_terrain_support` 33 例 = 18 P1 + 15 P2） |
+| 计划校验 | **PASS**：`PASS: 61 tasks; both release DAGs acyclic; source hashes verified.` |
+
+```text
+python3 Docs/tools/validate_plan.py
+  -> PASS: 61 tasks; both release DAGs acyclic; source hashes verified.
+     Dependency roots (external requirements NOT checked): T00, T01, T02, T03
+     NOT_RUN: Unity/Udon compilation, VR comfort, multiplayer, performance, commerce.
+
+python3 -m unittest discover -s Docs/tests
+  -> Ran 376 tests in 3.567s
+     OK
+```

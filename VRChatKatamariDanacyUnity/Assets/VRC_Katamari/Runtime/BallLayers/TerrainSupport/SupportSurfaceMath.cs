@@ -5,26 +5,28 @@ namespace VRCKatamari.BallLayers
 {
     /// <summary>
     /// Terrain-support selection for one ball: which local surface sits under the
-    /// ball centre this step, whether a static box is a step or a wall, and the
-    /// vertical fall mode once that surface drops away.
+    /// ball centre this step, whether a static box or an absorb-proof prop is a
+    /// step or a wall, and the vertical fall mode once that surface drops away.
     /// </summary>
     /// <remarks>
     /// <para>
     /// One implementation only. Docs/Design/BallMotor/TERRAIN_SUPPORT.md §3 puts
     /// the whole support decision here (selection, step band, step hysteresis,
-    /// gravity fall state) and the motor only orders calls and carries the
-    /// result. The absorb gate stays where it was
+    /// gravity fall state, and P2's prop role/support table) and the motor only
+    /// orders calls and carries the result. The absorb gate stays where it was
     /// (<see cref="VRCKatamari.Pickup.PickupAbsorbMath.IsBeyondAbsorbVolumeLimit"/>);
-    /// nothing here reads a prop.
+    /// nothing here reads a prop - the host passes the gate's answer in.
     /// </para>
     /// <para>
     /// Geometry. Lengths are metres in the project's single world space (+Y up).
     /// A candidate surface is a horizontal-ish plane with a finite footprint:
-    /// the analytic ground plane (unbounded) or the top face of an axis-aligned
-    /// static box. Box top y is <c>maximum.y</c> and its footprint is
-    /// <c>[minimum.x, maximum.x] x [minimum.z, maximum.z]</c>; the edges are
-    /// inclusive on purpose (a probe exactly on the rim still counts as on the
-    /// box) and a test pins that. Slopes/ramps are P3 and are absent here.
+    /// the analytic ground plane (unbounded), the top face of an axis-aligned
+    /// static box, or the top face of a support prop (P2; the same AABB shape,
+    /// from the host's gameplay volume). A box/prop top is <c>maximum.y</c> and
+    /// its footprint is <c>[minimum.x, maximum.x] x [minimum.z, maximum.z]</c>;
+    /// the edges are inclusive on purpose (a probe exactly on the rim still
+    /// counts as on the surface) and a test pins that. Slopes/ramps are P3 and
+    /// are absent here.
     /// </para>
     /// <para>
     /// Why the probe is the ball centre's XZ, not the lowest contact point's:
@@ -61,12 +63,39 @@ namespace VRCKatamari.BallLayers
         public const int GroundSurfaceId = 0;
 
         /// <summary>
+        /// The first surface id owned by a support prop: prop slot <c>i</c> is
+        /// <c>FirstPropSurfaceId + i</c>. The gap leaves the static box range
+        /// (<c>1 + i</c>, at most eight) unambiguous and lets a reader tell "a prop
+        /// supports me" from "a box supports me" by id alone. It is a diagnostic
+        /// and a switch key, not a stable prop identity: the host sorts its
+        /// selected rows by prop index, so the slot is stable while membership is,
+        /// but it can move when the set changes.
+        /// </summary>
+        public const int FirstPropSurfaceId = 100;
+
+        /// <summary>
+        /// How many support props one ball can have registered (6), the same
+        /// estimate as the blocking slice. This is the ONE capacity constant:
+        /// <see cref="IsSupportPropCountAllowed"/> is the ONE predicate the motor
+        /// uses to refuse a seventh box, so a second number cannot drift.
+        /// </summary>
+        public const int MaxSupportPropCount = 6;
+
+        /// <summary>A prop the ball can absorb: neither a wall nor a support.</summary>
+        public const int PropRoleNone = 0;
+
+        /// <summary>An absorb-proof prop within the step limit: a step and a floor.</summary>
+        public const int PropRoleSupport = 1;
+
+        /// <summary>An absorb-proof prop above the step limit: a wall.</summary>
+        public const int PropRoleBlocking = 2;
+
+        /// <summary>
         /// A ground plane whose normal is closer to horizontal than this cannot
         /// answer "what is the height under the probe", so it is refused instead
         /// of being read as a wall-like floor.
         /// </summary>
         private const float MinUpwardNormalY = 1e-3f;
-
         /// <summary>
         /// Step limit for one ball: <c>k * semanticDiameter</c>.
         /// </summary>
@@ -154,21 +183,111 @@ namespace VRCKatamari.BallLayers
         }
 
         /// <summary>
+        /// The whole "what is this absorb-proof prop to the ball" decision: a food
+        /// item (role none), a step/floor (support), or a wall (blocking).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the <b>only</b> place the prop role is computed, exactly as
+        /// <see cref="IsSteppable"/> is the only place the static-box comparison is
+        /// computed. <paramref name="beyondAbsorbVolumeLimit"/> is the absorb gate's
+        /// own answer (<c>PickupAbsorbMath.IsBeyondAbsorbVolumeLimit</c> with the
+        /// motor's limit), passed in so this layer never reads a prop and so the
+        /// three identities share one predicate with no second threshold.
+        /// </para>
+        /// <para>
+        /// Absorbable wins first: a prop the ball can eat is neither a wall nor a
+        /// floor, whatever its geometry. Absorb-proof then splits on
+        /// <c>rise = topY - supportHeightM</c> against the step limit, with the
+        /// boundary inclusive (<c>rise == stepLimit</c> is a support). That equality
+        /// is what the picnic corner's 0.35 m chair -> 0.70 m table chain needs at
+        /// <c>D = 1.40</c>.
+        /// </para>
+        /// <para>
+        /// <paramref name="alreadyAbove"/> (the ball's bottom is at or above the prop
+        /// top) makes the role support unconditionally. It is the same anti-jitter
+        /// rule the static-box mask uses (§4.5 rule 2): a ball descending onto a
+        /// prop top must not have its landing surface classified as a wall because
+        /// the previous support is far below.
+        /// </para>
+        /// <para>
+        /// Invalid input returns false with <paramref name="role"/> = none, so a
+        /// caller that ignores the result cannot build a box from a bad row.
+        /// </para>
+        /// </remarks>
+        public static bool TryClassifyProp(bool beyondAbsorbVolumeLimit, float topY,
+            float supportHeightM, float stepLimitM, bool alreadyAbove, out int role)
+        {
+            role = PropRoleNone;
+            if (!KatamariMath.IsFiniteFloat(topY)) return false;
+            if (!KatamariMath.IsFiniteFloat(supportHeightM)) return false;
+            if (!KatamariMath.IsFiniteFloat(stepLimitM) || stepLimitM < 0f) return false;
+            if (!beyondAbsorbVolumeLimit) return true;
+
+            float rise = topY - supportHeightM;
+            if (!KatamariMath.IsFiniteFloat(rise)) return false;
+            if (alreadyAbove)
+            {
+                role = PropRoleSupport;
+                return true;
+            }
+            role = rise <= stepLimitM ? PropRoleSupport : PropRoleBlocking;
+            return true;
+        }
+
+        /// <summary>
+        /// True when <paramref name="count"/> support props fit this ball's capacity.
+        /// </summary>
+        /// <remarks>
+        /// The motor's <c>SetSupportProps</c> calls exactly this before writing, and
+        /// a test pins 6 accepted / 7 refused, so the number lives in one place.
+        /// </remarks>
+        public static bool IsSupportPropCountAllowed(int count)
+        {
+            return count >= 0 && count <= MaxSupportPropCount;
+        }
+
+        /// <summary>True when <paramref name="surfaceId"/> names a prop top.</summary>
+        public static bool IsPropSurfaceId(int surfaceId)
+        {
+            return surfaceId >= FirstPropSurfaceId;
+        }
+
+        /// <summary>Prop index inside that surface id, or -1 when it is not one.</summary>
+        public static int PropSurfaceIndex(int surfaceId)
+        {
+            if (!IsPropSurfaceId(surfaceId)) return -1;
+            return surfaceId - FirstPropSurfaceId;
+        }
+
+        /// <summary>
         /// Picks the highest candidate surface under the probe's XZ and reports it
         /// as a plane (normal + point + world-Y height).
         /// </summary>
         /// <remarks>
         /// <para>
         /// Selection order is deterministic: the ground is the initial winner and
-        /// a box replaces it only when strictly higher, so ties keep the ground
-        /// and, among boxes, the earliest registration. Two identical calls
-        /// return identical values; a test pins that.
+        /// a box or prop replaces it only when strictly higher, so ties keep the
+        /// ground and, among equals, the earlier reader (boxes before props, then
+        /// registration order). Two identical calls return identical values; a test
+        /// pins that.
         /// </para>
         /// <para>
         /// <paramref name="referenceSupportHeightM"/> is the height of the surface
         /// the ball was on in the previous step (the caller's memory). It only
         /// builds the band; it never selects. <paramref name="stepLimitM"/> is
         /// <see cref="TryStepHeightLimit"/>'s result for this step's size.
+        /// </para>
+        /// <para>
+        /// <paramref name="propMinima"/>/<paramref name="propMaxima"/> are the
+        /// absorb-proof props the host registered as supports (a prop the ball can
+        /// absorb never arrives here; the host's <see cref="TryClassifyProp"/>
+        /// excluded it). They are read after the static boxes and obey the same
+        /// band and footprint rules, so a prop top is a surface exactly like a box
+        /// top. Prop <c>i</c> reports <c>FirstPropSurfaceId + i</c>. The caller owns
+        /// the capacity; this query reads exactly <paramref name="propCount"/>
+        /// entries (the motor can never register more than
+        /// <see cref="MaxSupportPropCount"/>).
         /// </para>
         /// <para>
         /// <paramref name="surfacePoint"/> is a point on the winning surface with
@@ -179,13 +298,14 @@ namespace VRCKatamari.BallLayers
         /// </para>
         /// <para>
         /// Returns false for non-finite input, a non-upward ground normal, or a
-        /// box with inverted/non-finite bounds, and writes nothing that could be
-        /// mistaken for a surface.
+        /// box/prop with inverted/non-finite bounds, and writes nothing that could
+        /// be mistaken for a surface.
         /// </para>
         /// </remarks>
         public static bool TryResolveSupport(Vector3 probePoint, float referenceSupportHeightM,
             float stepLimitM, Vector3 groundNormal, float groundOffset,
             Vector3[] boxMinima, Vector3[] boxMaxima, int boxCount,
+            Vector3[] propMinima, Vector3[] propMaxima, int propCount,
             out int surfaceId, out Vector3 surfacePoint, out Vector3 surfaceNormal,
             out float surfaceHeightM, out int candidateCount)
         {
@@ -200,8 +320,11 @@ namespace VRCKatamari.BallLayers
             if (!KatamariMath.IsFiniteFloat(stepLimitM) || stepLimitM < 0f) return false;
             if (!KatamariMath.IsFiniteFloat(groundOffset)) return false;
             if (boxMinima == null || boxMaxima == null) return false;
+            if (propMinima == null || propMaxima == null) return false;
             if (boxCount < 0) return false;
             if (boxCount > boxMinima.Length || boxCount > boxMaxima.Length) return false;
+            if (propCount < 0) return false;
+            if (propCount > propMinima.Length || propCount > propMaxima.Length) return false;
 
             Vector3 unitNormal;
             float rawLength;
@@ -210,9 +333,9 @@ namespace VRCKatamari.BallLayers
             float offset = groundOffset / rawLength;
             if (!KatamariMath.IsFiniteFloat(offset)) return false;
 
-            // Check every box before selecting, the same "validate first" shape the
-            // sweep uses: a bad registration anywhere refuses the query instead of
-            // being silently skipped.
+            // Check every box and prop before selecting, the same "validate first"
+            // shape the sweep uses: a bad registration anywhere refuses the query
+            // instead of being silently skipped.
             for (int i = 0; i < boxCount; i++)
             {
                 if (!KatamariMath.IsFiniteVector(boxMinima[i])) return false;
@@ -220,6 +343,14 @@ namespace VRCKatamari.BallLayers
                 if (boxMinima[i].x > boxMaxima[i].x ||
                     boxMinima[i].y > boxMaxima[i].y ||
                     boxMinima[i].z > boxMaxima[i].z) return false;
+            }
+            for (int i = 0; i < propCount; i++)
+            {
+                if (!KatamariMath.IsFiniteVector(propMinima[i])) return false;
+                if (!KatamariMath.IsFiniteVector(propMaxima[i])) return false;
+                if (propMinima[i].x > propMaxima[i].x ||
+                    propMinima[i].y > propMaxima[i].y ||
+                    propMinima[i].z > propMaxima[i].z) return false;
             }
 
             float bandHeight = referenceSupportHeightM + stepLimitM;
@@ -254,6 +385,23 @@ namespace VRCKatamari.BallLayers
                 if (probePoint.z < boxMinima[i].z || probePoint.z > boxMaxima[i].z) continue;
                 if (top <= selectedHeight) continue;
                 selectedId = 1 + i;
+                selectedHeight = top;
+                selectedPoint = new Vector3(probePoint.x, top, probePoint.z);
+                selectedNormal = new Vector3(0f, 1f, 0f);
+            }
+            // Prop tops: same band, same inclusive footprint, same "strictly higher
+            // wins" tie-break. Reading them after the boxes means a box wins a tie,
+            // which is the stable registration order (scene geometry before a
+            // per-scan prop set).
+            for (int i = 0; i < propCount; i++)
+            {
+                float top = propMaxima[i].y;
+                if (top > bandHeight) continue;
+                activeCount = activeCount + 1;
+                if (probePoint.x < propMinima[i].x || probePoint.x > propMaxima[i].x) continue;
+                if (probePoint.z < propMinima[i].z || probePoint.z > propMaxima[i].z) continue;
+                if (top <= selectedHeight) continue;
+                selectedId = FirstPropSurfaceId + i;
                 selectedHeight = top;
                 selectedPoint = new Vector3(probePoint.x, top, probePoint.z);
                 selectedNormal = new Vector3(0f, 1f, 0f);

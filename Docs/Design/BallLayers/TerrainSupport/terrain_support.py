@@ -3,10 +3,11 @@
 DRAFT: no Unity/Udon or world-scale claim.  This mirrors, name for name and in
 the same order, the C# in
 ``VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/TerrainSupport/SupportSurfaceMath.cs``
-(P1 of Docs/Design/BallMotor/TERRAIN_SUPPORT.md): which local surface is under
-the ball centre, whether a static box is a step or a wall, and the gravity fall
-state once that surface drops away.  Runs with ``python3 -m unittest discover -s
-Docs/tests``.
+(P1 + P2 of Docs/Design/BallMotor/TERRAIN_SUPPORT.md): which local surface is
+under the ball centre, whether a static box or an absorb-proof prop is a step or
+a wall, which absorb-proof prop tops enter the support table, and the gravity
+fall state once that surface drops away.  Runs with ``python3 -m unittest
+discover -s Docs/tests``.
 
 One implementation per language is the repository rule for ball layers; if the
 C# changes, this file and the tests change in the same commit.
@@ -19,6 +20,14 @@ Vec3 = Tuple[float, float, float]
 
 NO_SURFACE_ID = -1
 GROUND_SURFACE_ID = 0
+
+# P2: support props. One capacity constant and one predicate, mirrored by the C#.
+MAX_SUPPORT_PROPS = 6
+FIRST_PROP_SURFACE_ID = 100
+
+PROP_ROLE_NONE = 0
+PROP_ROLE_SUPPORT = 1
+PROP_ROLE_BLOCKING = 2
 
 _MIN_UPWARD_NORMAL_Y = 1e-3
 
@@ -113,14 +122,60 @@ def is_step_crossing(rise_m: float, min_step_height_m: float) -> bool:
     return rise > minimum
 
 
-def _validate_box(box: Sequence[Sequence[float]], index: int) -> Tuple[Vec3, Vec3]:
+def classify_prop(beyond_absorb_volume_limit: bool, top_y: float, support_height_m: float,
+                  step_limit_m: float, already_above: bool) -> int:
+    """The only place a prop's role is decided (P2, design §8 P2 rule 1).
+
+    An absorbable prop is food (``PROP_ROLE_NONE``) whatever its geometry. An
+    absorb-proof one is a support when ``top - support <= stepLimit`` (the boundary
+    is inclusive) or when the ball is already above its top (the static box's
+    anti-jitter rule 2), otherwise a wall. ``beyond_absorb_volume_limit`` is the
+    host's ``IsBeyondAbsorbVolumeLimit`` answer, passed in so this layer reads no
+    prop and the three identities share one predicate.
+    """
+    if not isinstance(beyond_absorb_volume_limit, bool) or not isinstance(already_above, bool):
+        raise ValueError("beyond_absorb_volume_limit/already_above must be bool")
+    top = _finite(top_y, "top_y")
+    support = _finite(support_height_m, "support_height_m")
+    limit = _finite(step_limit_m, "step_limit_m")
+    if limit < 0.0:
+        raise ValueError("step_limit_m must be nonnegative")
+    if not beyond_absorb_volume_limit:
+        return PROP_ROLE_NONE
+    rise = top - support
+    if not math.isfinite(rise):
+        raise ValueError("prop rise is non-finite")
+    if already_above:
+        return PROP_ROLE_SUPPORT
+    return PROP_ROLE_SUPPORT if rise <= limit else PROP_ROLE_BLOCKING
+
+
+def is_support_prop_count_allowed(count: int) -> bool:
+    """True when ``count`` support props fit one ball (0..MAX_SUPPORT_PROPS)."""
+    if not isinstance(count, int) or isinstance(count, bool):
+        raise ValueError("count must be an int")
+    return 0 <= count <= MAX_SUPPORT_PROPS
+
+
+def is_prop_surface_id(surface_id: int) -> bool:
+    return surface_id >= FIRST_PROP_SURFACE_ID
+
+
+def prop_surface_index(surface_id: int) -> int:
+    if not is_prop_surface_id(surface_id):
+        return -1
+    return surface_id - FIRST_PROP_SURFACE_ID
+
+
+def _validate_box(box: Sequence[Sequence[float]], index: int,
+                  label: str = "boxes") -> Tuple[Vec3, Vec3]:
     try:
-        minimum = _vec3(box[0], f"boxes[{index}].minimum")
-        maximum = _vec3(box[1], f"boxes[{index}].maximum")
+        minimum = _vec3(box[0], f"{label}[{index}].minimum")
+        maximum = _vec3(box[1], f"{label}[{index}].maximum")
     except (TypeError, IndexError) as exc:
-        raise ValueError(f"boxes[{index}] must be (minimum, maximum)") from exc
+        raise ValueError(f"{label}[{index}] must be (minimum, maximum)") from exc
     if minimum[0] > maximum[0] or minimum[1] > maximum[1] or minimum[2] > maximum[2]:
-        raise ValueError(f"boxes[{index}] has inverted bounds")
+        raise ValueError(f"{label}[{index}] has inverted bounds")
     return minimum, maximum
 
 
@@ -128,14 +183,18 @@ def try_resolve_support(probe_point: Sequence[float], reference_support_height_m
                         step_limit_m: float, ground_normal: Sequence[float],
                         ground_offset: float,
                         boxes: Sequence[Sequence[Sequence[float]]],
-                        box_count: Optional[int] = None) -> SupportSurface:
+                        box_count: Optional[int] = None,
+                        props: Sequence[Sequence[Sequence[float]]] = (),
+                        prop_count: Optional[int] = None) -> SupportSurface:
     """Highest candidate surface under the probe's XZ, with the ground as fallback.
 
-    Selection is deterministic: the ground starts as the winner and a box replaces
-    it only when strictly higher, so ties keep the ground and, among boxes, the
-    earliest registration.  ``boxes`` is a sequence of ``(minimum, maximum)``
-    pairs; only the first ``box_count`` entries are read (the motor's capacity is
-    enforced at registration, not here).
+    Selection is deterministic: the ground starts as the winner and a box or prop
+    replaces it only when strictly higher, so ties keep the ground and, among
+    equals, the earlier reader (boxes before props, then registration order).
+    ``boxes``/``props`` are sequences of ``(minimum, maximum)`` pairs; only the
+    first ``box_count``/``prop_count`` entries are read (capacity is enforced at
+    registration, not here).  A prop ``i`` reports ``FIRST_PROP_SURFACE_ID + i``;
+    the host only sends props its classifier called ``PROP_ROLE_SUPPORT``.
     """
     probe = _vec3(probe_point, "probe_point")
     reference = _finite(reference_support_height_m, "reference_support_height_m")
@@ -155,6 +214,13 @@ def try_resolve_support(probe_point: Sequence[float], reference_support_height_m
     if box_count < 0 or box_count > len(boxes):
         raise ValueError("box_count is outside the box list")
     validated = tuple(_validate_box(boxes[i], i) for i in range(box_count))
+
+    if prop_count is None:
+        prop_count = len(props)
+    if prop_count < 0 or prop_count > len(props):
+        raise ValueError("prop_count is outside the prop list")
+    validated_props = tuple(_validate_box(props[i], i, "props")
+                            for i in range(prop_count))
 
     band = reference + limit
     if not math.isfinite(band):
@@ -188,6 +254,22 @@ def try_resolve_support(probe_point: Sequence[float], reference_support_height_m
         if top <= selected_height:
             continue
         selected_id = 1 + index
+        selected_height = top
+        selected_point = (probe[0], top, probe[2])
+        selected_normal = (0.0, 1.0, 0.0)
+
+    for index, (minimum, maximum) in enumerate(validated_props):
+        top = maximum[1]
+        if top > band:
+            continue
+        active_count += 1
+        if probe[0] < minimum[0] or probe[0] > maximum[0]:
+            continue
+        if probe[2] < minimum[2] or probe[2] > maximum[2]:
+            continue
+        if top <= selected_height:
+            continue
+        selected_id = FIRST_PROP_SURFACE_ID + index
         selected_height = top
         selected_point = (probe[0], top, probe[2])
         selected_normal = (0.0, 1.0, 0.0)

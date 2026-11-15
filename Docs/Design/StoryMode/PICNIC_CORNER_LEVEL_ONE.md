@@ -495,7 +495,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 | # | 文件 | 改什么 | 为什么 / 验收 |
 |---|---|---|---|
-| **K1** | 新 `Runtime/Story/StoryBallDiagnostics.cs`（U#，`BehaviourSyncMode.None`）+ `.meta` + `.asset` | 只读诊断：每秒一行 `[story]`，字段与今天的 `[story-lab]` **同名同序**（`t / center / heading / diameter / bottom / gap / support / supportId / supportY / supports / stepLimit / falling / axes / absorbed / rejects`）；**只有** `motor` 一个引用；不要 drive、不要相机 | 正式场景不再挂 Lab 脚本（B），但 P1/P2 的 Play 验收**必须有** `gap / support / stepLimit / falling`（`TERRAIN_SUPPORT` §3.6-3、§9 R11）。验收：每秒一行、字段齐全；`StoryLevelLabBootstrap` 删除后 Console 无 `Missing Script` |
+| **K1**（**已实现** 2026-11-15：`Runtime/Story/StoryBallDiagnostics.cs`） | 新 `Runtime/Story/StoryBallDiagnostics.cs`（U#，`BehaviourSyncMode.None`，类 `StoryBallDiagnostics`）；`.cs.meta` 与 `.asset`、场景挂载与 `motor` 引用待 Unity 操作员 | 只读诊断：每 `logIntervalSeconds`（默认 1 s）一行 `[story]`，字段与今天的 `[story-lab]` **同名同序**（`t / center / heading / diameter / bottom / gap / support / supportId / supportY / supports / stepLimit / falling / axes / absorbed / rejects`）；**只有** `motor` 一个引用；`loggingEnabled` 可整体关闭；等 `GetSemanticDiameterWorldM() > 0` 才开始；不要 drive、不要相机 | 正式场景不再挂 Lab 脚本（B），但 P1/P2 的 Play 验收**必须有** `gap / support / stepLimit / falling`（`TERRAIN_SUPPORT` §3.6-3、§9 R11）。验收：每秒一行、字段齐全；`StoryLevelLabBootstrap` 删除后 Console 无 `Missing Script` |
 | **K2** | 删 `Labs/StoryLevel/StoryLevelLabBootstrap.cs / .cs.meta / .asset / .asset.meta` + `Assets/SerializedUdonPrograms/<hash>.asset(+meta)` | 整删 | K1 落地后它没有消费者（`AGENTS.md`：不要平行草稿 / 一次性 builder）。**顺序：先 K1 后 K2** |
 | **K3** | `Editor/LevelBuild/PlacementImporter.cs`（可选） | 给 `box` / `ramp` 的 primitive cube 赋一个**可配置材质**（序列化字段或 `Mat_PlaygroundProp` 常量）；给 `ground` / `boundary` 标记一个「此处需要视觉」的提示 | 现在 C6 全靠人手赋材质：重跑导入不会覆盖（导入器不碰 Renderer），但下一个人不知道。优先级**低**，不做也不阻塞本轮 |
 | **K4** | `Runtime/BallMotor/KatamariBallMotor.cs` + `Runtime/Story/LevelArenaHost.cs` | `AddRamp / ClearRamps / GetRampCount / GetLastRampRefusalReason` + `rampBoxes` 烘焙（P3） | 斜板今天对球**不存在**（E8）。列出来是为了防止有人把「球穿过斜板」当 bug 修成「把斜板塞进 `staticBoxes`」（那会造坡脚隐形墙）。**不属本轮** |
@@ -626,4 +626,4 @@ python3 -m unittest discover -s Docs/tests
 | 模型还没齐 | `Art/Props/` 只有 16 个 def 目录，`placement.json` 需要 44 个 → **缺 28 个**（§5.4 D0） |
 | 躺椅/折叠桌的足迹 | 由 `aabb × rotationQuat` 手算：躺椅 yaw 90° → `x∈[−12.6,−12.0]`、`z∈[−10.4,−8.8]`；折叠桌 → `x∈[−13.6,−12.6]`、`z∈[−9.5,−8.9]`；**只在 `x = −12.6` 相接** |
 
-**仍然 `NOT_RUN` 的**（这些只能由 Unity 操作员做，见 §5）：A（转正）、B（删 Lab 脚本）、C（清理与视觉）、D（导入与两次幂等）、E（Play 验收）、F（HUD 与按钮）、G（主房间）。`K1–K7` 是代码/文档改动，本轮**一行代码都没改**。
+**仍然 `NOT_RUN` 的**（这些只能由 Unity 操作员做，见 §5）：A（转正）、B（删 Lab 脚本）、C（清理与视觉）、D（导入与两次幂等）、E（Play 验收）、F（HUD 与按钮）、G（主房间）。`K1–K7` 是代码/文档改动；K1 已实现（`Runtime/Story/StoryBallDiagnostics.cs`，脚本与文档；UdonSharp 资产、场景挂载与 `motor` 引用仍待 Unity 操作员），K2–K7 本轮未改。

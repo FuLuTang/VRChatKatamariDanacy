@@ -1,0 +1,133 @@
+using UdonSharp;
+using UnityEngine;
+using VRCKatamari.BallMotor;
+
+namespace VRCKatamari.Story
+{
+    /// <summary>
+    /// Read-only story-mode ball readout: one <c>[story]</c> line every N seconds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the permanent replacement for the acceptance readout that used to live in
+    /// <c>Labs/StoryLevel/StoryLevelLabBootstrap.Report()</c>. The formal scene no longer
+    /// carries the lab script, but P1/P2 Play acceptance still has no other source for
+    /// <c>gap</c>, <c>support</c> / <c>supportId</c>, <c>stepLimit</c> and <c>falling</c>
+    /// (Docs/Design/StoryMode/PICNIC_CORNER_LEVEL_ONE.md section 5.8 K1;
+    /// Docs/Design/BallMotor/TERRAIN_SUPPORT.md section 3.6 item 3 and section 9 R11).
+    /// </para>
+    /// <para>
+    /// The field set, names, order and number truncation are the lab line's, unchanged:
+    /// <c>t / center / heading / diameter / bottom / gap / support / supportId / supportY /
+    /// supports / stepLimit / falling / axes / absorbed / rejects</c>. Only the prefix
+    /// differs (<c>[story]</c> instead of <c>[story-lab]</c>), because the scene tag says
+    /// which scene produced the line, not which script. Keeping the order fixed matters:
+    /// the acceptance notes quote these numbers field by field.
+    /// </para>
+    /// <para>
+    /// It reads and does nothing else: no drive, no camera, no motor registration, no
+    /// state. The only reference is the motor. A positive semantic diameter is the motor's
+    /// public "started" proof, so reporting waits for it in <c>Update</c> rather than
+    /// touching the motor in <c>Start</c>, where its stores may not exist yet.
+    /// </para>
+    /// <para>
+    /// There is deliberately no shared formatter with the lab script. That script is
+    /// scheduled for deletion once this component is attached (K2), so a static helper
+    /// would add permanent API for two callers that are about to become one, and every
+    /// shared-code change would need a Unity reimport of a component nobody will keep.
+    /// The duplicated part is one format string that lives here from now on.
+    /// </para>
+    /// </remarks>
+    [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
+    public class StoryBallDiagnostics : UdonSharpBehaviour
+    {
+        [SerializeField] private KatamariBallMotor motor;
+
+        [Header("Reporting")]
+        [SerializeField] private bool loggingEnabled = true;
+
+        [Tooltip("Seconds between readout lines. A non-positive value falls back to 1 s.")]
+        [SerializeField] private float logIntervalSeconds = 1f;
+
+        private bool ready;
+        private float elapsed;
+        private float nextLogTime;
+
+        public void Update()
+        {
+            if (!loggingEnabled) return;
+
+            if (!ready)
+            {
+                if (!MotorReady()) return;
+                ready = true;
+                elapsed = 0f;
+                nextLogTime = 0f;
+            }
+
+            elapsed = elapsed + Time.deltaTime;
+
+            // A scene author who types 0 must not turn this into a per-frame log; the
+            // on/off switch is loggingEnabled, not the interval.
+            float interval = logIntervalSeconds;
+            if (interval <= 0f) interval = 1f;
+
+            if (elapsed < nextLogTime) return;
+            nextLogTime = elapsed + interval;
+            Report();
+        }
+
+        /// <summary>True once the motor reports a started ball (diameter above zero).</summary>
+        private bool MotorReady()
+        {
+            if (motor == null) return false;
+            return motor.GetSemanticDiameterWorldM() > 0f;
+        }
+
+        /// <summary>
+        /// One line per interval: elapsed since the ball started, centre, heading, diameter,
+        /// the ball's bottom, the gap above the selected support, which surface that is,
+        /// and whether the ball is falling.
+        /// </summary>
+        /// <remarks>
+        /// <c>bottom</c> is the ball's lowest core point in world Y
+        /// (<c>centre.y - collision radius</c>); <c>gap</c> is that bottom above the selected
+        /// support surface. Both are reported because one proves the height and the other
+        /// proves the ball actually sits on the surface (0.000 +/-0.005) and goes positive
+        /// while it falls.
+        /// </remarks>
+        private void Report()
+        {
+            Vector3 center = motor.GetCenterWorld();
+            float diameter = motor.GetSemanticDiameterWorldM();
+            float supportHeight = motor.GetSupportSurfaceHeightWorldM();
+            float bottom = center.y - motor.GetCollisionRadiusWorldM();
+            float gap = bottom - supportHeight;
+            // The kind comes from the motor, not from a range test on the id: prop tops are
+            // 100+i, so "id > 0" would mislabel one as a box.
+            int supportId = motor.GetSupportSurfaceId();
+            int supportKind = motor.GetSupportKind();
+            string supportName = "none";
+            if (supportKind == 0) supportName = "ground";
+            else if (supportKind == 1) supportName = "box";
+            else if (supportKind == 2) supportName = "ramp";
+            else if (supportKind == 3) supportName = "prop";
+            Vector3 axes = motor.GetPlanarVelocity();
+            Debug.Log("[story] t=" + (Mathf.Floor(elapsed * 10f) / 10f)
+                + " center=" + center
+                + " heading=" + (Mathf.Floor(motor.GetHeadingDegrees() * 10f) / 10f)
+                + " diameter=" + (Mathf.Floor(diameter * 10000f) / 10000f)
+                + " bottom=" + (Mathf.Floor(bottom * 1000f) / 1000f)
+                + " gap=" + (Mathf.Floor(gap * 1000f) / 1000f)
+                + " support=" + supportName
+                + " supportId=" + supportId
+                + " supportY=" + (Mathf.Floor(supportHeight * 1000f) / 1000f)
+                + " supports=" + motor.GetSupportSurfaceCount()
+                + " stepLimit=" + (Mathf.Floor(motor.GetStepHeightLimitWorldM() * 1000f) / 1000f)
+                + " falling=" + motor.IsFalling()
+                + " axes=" + (Mathf.Floor(axes.x * 100f) / 100f) + "," + (Mathf.Floor(axes.z * 100f) / 100f)
+                + " absorbed=" + motor.GetAbsorbedCount()
+                + " rejects=" + motor.GetRejectEventCount());
+        }
+    }
+}

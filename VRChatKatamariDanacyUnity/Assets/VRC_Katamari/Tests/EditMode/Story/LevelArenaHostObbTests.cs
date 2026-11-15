@@ -301,6 +301,8 @@ namespace VRCKatamari.Tests
             // the registration tables.
             SetField(arena, "logSetupLine", false);
             SetField(arena, "autoBeginPlaying", false);
+            // Same reason as CreateBox: the arena reads Collider.bounds in Setup.
+            Physics.SyncTransforms();
         }
 
         /// <summary>Drops the motor's tables and attaches a fresh arena (Setup is once-only).</summary>
@@ -340,6 +342,10 @@ namespace VRCKatamari.Tests
                 go.transform.rotation = rotation;
             }
             go.transform.localScale = size;
+            // Collider.bounds comes from the physics scene, and Physics.autoSyncTransforms is
+            // off by default; without this an EditMode test reads the bounds the primitive had
+            // when it was created (scale 1), not the authored ones. Play Mode is unaffected.
+            Physics.SyncTransforms();
             BoxCollider collider = go.GetComponent<BoxCollider>();
             Assert.IsNotNull(collider, "the cube primitive carries a BoxCollider");
             return collider;
@@ -369,11 +375,23 @@ namespace VRCKatamari.Tests
             return (int)field.GetValue(motor);
         }
 
+        /// <summary>
+        /// The STATIC prefix of one of the motor's union OBB arrays.
+        /// </summary>
+        /// <remarks>
+        /// Since the prop block landed, <c>staticObb*</c> is one fixed 256+12 array with the
+        /// statics first and the props appended; reading the raw array would hand a 268-long
+        /// buffer to an assertion about three entries.
+        /// </remarks>
         private T[] GetArray<T>(string fieldName)
         {
             FieldInfo field = motorType.GetField(fieldName, Any);
             Assert.IsNotNull(field, fieldName + " field not found");
-            return (T[])field.GetValue(motor);
+            T[] all = (T[])field.GetValue(motor);
+            int staticCount = (int)Invoke(motor, motorType, "GetStaticObbCount");
+            T[] prefix = new T[staticCount];
+            for (int i = 0; i < staticCount; i++) prefix[i] = all[i];
+            return prefix;
         }
 
         private void SetField(Component target, string name, object value)

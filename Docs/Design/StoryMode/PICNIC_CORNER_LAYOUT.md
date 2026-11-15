@@ -355,7 +355,7 @@ confirmed = 1359.9 − 3.439 = 1356.4 u      ← 研究给的 1356 就是这个�
 
 ## 7. 完整摆放表（110 件小道具 + 4 门件）
 
-> **全部 110 件 `yaw = 0`**（`PICNIC` §4.3 的「110/110 identity」保持不变；45° 会让挡路盒胖 41%，见 `COLLIDER_LAYER` §4.2）。结构件里只有 `struct_lounge_chair_01` 是 `yaw = 90`，它的 `size` 已经是**旋转后**的世界 AABB（0.60×0.35×1.60），所以挡路盒不用再换算。`y = 支撑面顶 + 高/2`；`D_req = (60·a·b·c/π)^(1/3)`。
+> **全部 110 件 `yaw = 0`**（`PICNIC` §4.3 的「110/110 identity」保持不变；45° 会让挡路盒胖 41%，见 `COLLIDER_LAYER` §4.2）。结构件里只有 `struct_lounge_chair_01` 是 `yaw = 90`：`placement.json` 的 `aabb` 是**旋转前**的模型 AABB（1.60×0.35×0.60，与 manifest 一致），世界足迹 0.60×0.35×1.60 只由 `rotationQuat` 算一次——离线是 `world_aabb`，Unity 侧是导入器摆好实例后 `PickupFieldSync` 读的 `Renderer.bounds`（`propBounds` 的来源）；运行期 `UpdatePropObstacles` 只把 `propBounds` 当轴对齐盒、**不再乘旋转**，所以挡路盒不用换算。`y = 支撑面顶 + 高/2`；`D_req = (60·a·b·c/π)^(1/3)`。
 
 **起步口袋 `pocket` — 12 件 / 12 u**
 

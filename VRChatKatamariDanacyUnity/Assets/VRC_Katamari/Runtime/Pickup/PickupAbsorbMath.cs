@@ -287,6 +287,32 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
+        /// 物件是否"太大"到吸不进，也就是是否应当挡路。
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 这是 <see cref="EvaluateAbsorb"/> 尺寸门的同一个比较：取 bounds 的最大全长，
+        /// 只有严格更大才算超出，`extent == limit` 仍然可吸（门的 `&gt;` 与 round model
+        /// 的 `&lt;=` 是同一边界）。宿主用它筛挡路集，与门共用这一处定义、不会漂移。
+        /// </para>
+        /// <para>
+        /// 非有限 bounds、负尺寸和非有限 limit 一律返回 true。门上这些输入的结论是
+        /// <see cref="AbsorbOutcome.RejectInvalidInput"/> 而不是 Absorb，而 NaN 与任何数
+        /// 比较都是假：若在这里返回 false，坏数据的道具会既不挡也吸不动，正是挡路方案
+        /// 要修的那个症状。limit 为负是合法输入（直径 0 的球给 0，再小就是负数），
+        /// 此时任何非负尺寸都超出。
+        /// </para>
+        /// </remarks>
+        public static bool IsBeyondAbsorbLimit(Vector3 itemBounds, float limitWorldM)
+        {
+            if (!KatamariMath.IsFiniteVector(itemBounds)) return true;
+            if (!KatamariMath.IsFiniteFloat(limitWorldM)) return true;
+            if (itemBounds.x < 0f || itemBounds.y < 0f || itemBounds.z < 0f) return true;
+            float largestExtent = Mathf.Max(itemBounds.x, Mathf.Max(itemBounds.y, itemBounds.z));
+            return largestExtent > limitWorldM;
+        }
+
+        /// <summary>
         /// <see cref="EvaluateAbsorb"/> with the size limit resolved from the ball's own
         /// size (relative gate, Docs/OPEN_DECISIONS.md (h)).
         /// </summary>

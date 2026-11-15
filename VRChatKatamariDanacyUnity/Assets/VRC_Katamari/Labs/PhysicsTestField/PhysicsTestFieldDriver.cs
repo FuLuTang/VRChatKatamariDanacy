@@ -2,6 +2,7 @@ using UdonSharp;
 using UnityEngine;
 using VRCKatamari.BallMotor;
 using VRCKatamari.Pickup;
+using VRCKatamari.Story;
 
 namespace VRCKatamari.Labs.PhysicsTestField
 {

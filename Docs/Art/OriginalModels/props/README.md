@@ -57,7 +57,9 @@ CSV 的这几项游戏尺寸（尤其 toy_ball 0.40 m、napkin 0.30 m 对应现�
 - 材质只有 Principled BSDF 的 Base Color（+ Roughness），**无贴图、无 UV、无顶点色**；`acorn` 与 `toy_ball` 各用 2 个纯色材质（壳斗/籽粒、球面/条纹），其余 1 个材质。
 - 无 LOD、无碰撞体、无动画、无骨骼。
 
-确定性：脚本只用固定公式（无随机数、无时间戳）。`geometry_sha256` 是与顶点/面遍历顺序无关的几何签名（坐标与三角面角点排序后哈希），连续两次完整构建逐件一致（见 `manifest.json` 每件 `geometry_sha256`）。预览像素逐字节稳定，但 Blender 会往 PNG 里写 `Date`/`RenderTime` 文本块，所以预览文件的 SHA-256 每次构建会变；导出文件同样只保证几何等价，不保证文件字节一致。
+确定性：脚本只用固定公式（无随机数、无时间戳）。`geometry_sha256` 是与顶点/面遍历顺序无关的几何签名（坐标与三角面角点排序后哈希），连续两次完整构建逐件一致（见 `manifest.json` 每件 `geometry_sha256`）。
+
+字节层面只有一部分稳定（2026-11-15 实测）：`exports/<id>.manifest.json` 与 `previews/<id>_preview.png` 逐字节一致；`.blend` / `.fbx` 每次重跑字节都会变（内嵌时间戳与绝对路径），只保证几何等价。所以 `SHA256SUMS` 是**当前交付物的指纹**（用来核对文件有没有被改动），不是"重跑能对上"的复现校验门；要字节级复现须固定 Blender 3.6.21 并使用同一输出路径（现存产物即 3.6.21 生成）。完整实测结论见上级 [README 的复现小节](<../README.md>)。
 
 ## 4. 文件说明
 
@@ -66,7 +68,7 @@ props/
 ├─ README.md                 本文件
 ├─ manifest.json             总清单：每件尺寸/面数/材质/检查结果/目录字段/轴约定
 ├─ verification.json         FBX 与 GLB 回读验证结果（独立进程）
-├─ SHA256SUMS                所有交付文件校验和（sha256sum -c SHA256SUMS）
+├─ SHA256SUMS                当前交付物的指纹（sha256sum -c SHA256SUMS 只能证明文件没被改动，不等于可重跑复现）
 ├─ scripts/
 │  ├─ prop_lib.py            共用图元与构建/导出/渲染/拼图库（纯 bpy）
 │  ├─ build_all.py           全批构建 + 预览 + 拼图 + 清单 + 校验和
@@ -89,29 +91,42 @@ props/
 
 ## 5. 重新构建
 
-Windows（Blender 3.6，后台实例，不碰 GUI）：
+后台实例（不碰 GUI）。参数必须齐全：`--background` 独立进程、`--factory-startup` 不读也不写用户配置、`--disable-autoexec` 关掉自动执行、**`--python-exit-code 2`** 让脚本抛错时进程以非 0 退出（缺了它，Blender 可能带着 Python 报错返回 0）。输出一律先指到**仓库外的全新目录**：
 
 ```
-"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe" ^
-  --background --factory-startup --disable-autoexec ^
-  --python D:\VRChatKatamariDanacy\Docs\Art\OriginalModels\props\scripts\build_all.py
+set BLENDER=<...>\steamapps\common\Blender\blender.exe
+set OUT_DIR=%TEMP%\PropsRebuild
+
+"%BLENDER%" --background --factory-startup --disable-autoexec --python-exit-code 2 ^
+  --python Docs\Art\OriginalModels\props\scripts\build_all.py
 ```
 
-单件重建（例如草籽）：
+等价写法（`--` 之后的 `--out` 优先于 `OUT_DIR`）：
 
 ```
-"...\blender.exe" --background --factory-startup --disable-autoexec ^
-  --python D:\...\props\scripts\build_prop.py -- seed
+"%BLENDER%" --background --factory-startup --disable-autoexec --python-exit-code 2 ^
+  --python Docs\Art\OriginalModels\props\scripts\build_all.py -- --out %TEMP%\PropsRebuild
+```
+
+**警告**：不给 `OUT_DIR` / `--out` 时脚本保持历史行为，直接覆盖仓库里的 `exports/`、`previews/`、`manifest.json` 与 `SHA256SUMS`。只有确实要更新已提交的交付物时才这么跑，改完再单独提交产物。
+
+单件重建（例如草籽），同样建议给输出目录：
+
+```
+"%BLENDER%" --background --factory-startup --disable-autoexec --python-exit-code 2 ^
+  --python Docs\...\props\scripts\build_prop.py -- seed --out %TEMP%\PropsRebuild
 ```
 
 回读验证：
 
 ```
-"...\blender.exe" --background --factory-startup --disable-autoexec ^
-  --python D:\...\props\scripts\verify_import.py
+"%BLENDER%" --background --factory-startup --disable-autoexec --python-exit-code 2 ^
+  --python Docs\...\props\scripts\verify_import.py
 ```
 
-脚本按自身位置推路径：输出写到同级 `exports/`、`previews/`，清单写到 `props/` 根；也读取仓库内 `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 核对 `game_longest_dim_m`（找不到 CSV 时该核对字段为 `row_found: false`，构建仍可进行）。不需要安装任何 Blender 插件，也不访问网络。
+脚本按自身位置推路径：默认写同级 `exports/`、`previews/`，清单与 `SHA256SUMS` 写到 `props/` 根，`OUT_DIR` / `--out` 可整体重定向到仓库外。目录数据读仓库内 `Docs/Design/Maps/PicnicLawn/prop_catalog.csv`，逐件核对 `game_longest_dim_m`。**这份输入缺失或不可用是硬失败**：CSV 不存在、没有 `id` 列、某件道具不在 CSV 里、`game_longest_dim_m` 为空或非数字，都会抛 `BuildInputError`，打印 `BUILD_FAILED: ...` 并以退出码 2 结束（`_fail()` 里 `sys.exit(2)`），不会写出任何清单。为什么要硬失败：以前缺 CSV 会静默记 `row_found: false` 继续构建，产出的是一份"看起来完整"的坏清单——尺度核对恰是这批占位道具唯一的数值契约，静默降级等于让坏构建伪装成成功构建。构建与验证都不需要安装任何 Blender 插件，也不访问网络。
+
+版本：脚本自 Blender 3.6 起可用；`prop_lib.py` 按功能探测渲染引擎（3.6 / 4.0–4.1 / 5.0+ 为 `BLENDER_EEVEE`，4.2–4.5 为 `BLENDER_EEVEE_NEXT`），并对 EEVEE Next 移除的 `use_gtao` 做 `hasattr` 守卫。4.2+ 没有这个 AO 开关，预览会少一层接触阴影，**像素与 3.6 产物不同**（几何、清单与拼图布局不受影响）；已提交的产物仍是 3.6.21 生成的。
 
 ## 6. 验证记录
 
@@ -119,6 +134,7 @@ Windows（Blender 3.6，后台实例，不碰 GUI）：
 - 8 件 GLB 回读：三角面数同样逐一相同；顶点数偏高是 glTF 按法线拆分顶点所致，属正常现象（例如 `pebble` 42 → 240）。
 - FBX 回读时 Blender 导入器会给对象加 +90° X 轴的导入转换旋转（Y-up→Z-up），这是导入器行为；世界尺寸与 Z-up 朝向正确，Unity 端预期仍为 identity。**Unity 侧未验证。**
 - 预览均为 512×512 RGBA 透明 PNG，非空（134–210 KB），拼图 714,434 字节（约 698 KiB）；相机/光照/取景规则对所有道具一致。
+- 版本覆盖：上表数值与已提交产物全部出自 **Blender 3.6.21**。EEVEE Next 兼容修复（`prop_lib.py` 的引擎探测与 `use_gtao` 守卫）只做到代码层；在 Blender 5.3 上整批构建（8 件、58 个文件、`TOTAL tris=1634`）目前只在一次性临时副本里验证过，**尚未用本仓库当前脚本重跑复核**。
 
 逐件数值见 `verification.json`。
 

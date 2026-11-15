@@ -5,6 +5,7 @@
 > 两个语料 `parity_harness/corpus_star1.json` / `corpus_cancer.json` **不入库**（`.gitignore` 已排除）：它们是商业游戏数据挖掘的导出，只在本机由 `parity_harness/build_corpus.py` 从 `/home/fulutang/KatamariRef/meta` 重新生成。干净检出里没有它们，测试会自动 skip（见 §6.1）。
 > 口径：`Runtime/…`、`Editor/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；`Docs/…` 相对仓库根。符号名才是契约，行号会漂。
 > 本文的原作侧数字**全部**来自公开数据挖掘与公开源码（`/home/fulutang/KatamariRef/meta/`、`/tmp/orig_physics/`），不是实机测量；我方侧数字来自仓库里的参数与 `Docs/` 下的 Python 参考模型。凡两边都没有数的地方写 `UNKNOWN` 并留空，不编。
+> **体积表示决定（2026-11-16）：** 球与物件的体积改为定点 `long volumeMm3`（1 LSB = 1 mm³ = 1e-9 m³），迁移顺序 A（加宽 int→long，量子不变，黄金值不动）→ B（`valueUnits` → `long`，重导入场景）→ C（换量子 `volumeMm3`，删 `c` / `baselineVolumeUnits`）→ D（恢复原作数值形式）。见 [OPEN_DECISIONS (r)](../../OPEN_DECISIONS.md) 与 [定点体积影响审计](../../Research/ContentVolume/FIXED_POINT_VOLUME_IMPACT.md)；下表「体积口径」行与新增的五条体积分歧是它的落地清单。**未在 Unity 验证**：Udon `long[]`、`JsonUtility` / `SerializedProperty` 的 `long`、重导入后的场景 diff 大小。
 
 ---
 
@@ -16,21 +17,28 @@
 
 - **（a）** 一发现分歧就加一行，六列齐全：区域、原作行为（**带数据来源路径**）、我方、保留我方的理由（没有理由就写 `none -> restore`）、决定、owner。行是活的：决定改了改同一行，不另起一行。
 - **（b）** **默认决定是 `restore`**，除非写下理由，且只认四类：VRChat/Udon 限制、性能预算、授权、owner 的刻意设计选择。没写理由的一律标 `none -> restore`。
-- **（c）** 已知分歧已全部入表（下 14 行）。owner 已拍板的按拍板写；未拍板的写 `undecided`，**不要替 owner 定**。
+- **（c）** 已知分歧已全部入表（下 21 行）。owner 已拍板的按拍板写；未拍板的写 `undecided`，**不要替 owner 定**。
 - **（d）** **未授权的参考资产永不入库**：表里只许写结构、数字、id 和文件路径；不许贴原作资产、模型、贴图或语料（`corpus_*.json` 已在 `.gitignore`，见 §6.1）。
 
 | 区域 area | 原作行为（数据来源路径） | 我方 | 保留我方的理由（或 `none -> restore`） | 决定 | owner |
 |---|---|---|---|---|---|
 | 体积定义（`k` 系数） | `Volume = k · bbox`，默认 `k = 0.70`；薄片件 8–16、蓬松件 0.05–0.07、镂空家具 0.3–0.5；门与成长用同一个体积（`/home/fulutang/KatamariRef/meta/` 的 `raw_growth_mechanism.txt` §2、`solid_volume/README.md`、`DATAMODEL_NOTES.md` §3） | 直接用 `a·b·c`（`k=1`，`PickupAbsorbMath.TryComputeItemVolume`） | `none -> restore`（§5.3.2 已给 `pickupVolumeFactor`，默认 0.70） | restore | owner 2026-11-15 |
-| 体积口径 | 连续浮点体积；门槛按 mm 取整（`Req Pickup Size` 整 mm，同上来源） | 整数 units × 0.0041 m³（`baselineVolumeUnits` / `cubicMetersPerVolumeUnit`） | `none -> restore`（§5.2 推荐 1 mm³ `long` 定点） | restore | owner 2026-11-15（D5） |
+| 体积口径 | 连续浮点体积；门槛按 mm 取整（`Req Pickup Size` 整 mm，同上来源） | 整数 units × 0.0041 m³（`baselineVolumeUnits` / `cubicMetersPerVolumeUnit`） | `none -> restore`（§5.2 推荐 1 mm³ `long` 定点） | restore (owner confirmed 2026-11-16, scale 1 mm³) | owner 2026-11-15（D5；2026-11-16 确认） |
 | 单件回收比例 | `ΔV = penalty · V_item`，默认 `penalty = 0.8`（1198/1436 型），另有 0.01–1.0 逐件值（`collectible objects` 表、`raw_growth_mechanism.txt` §3） | `ΔV = V_item`（100%） | `none -> restore`（§5.1 `G06`） | restore | owner 2026-11-15（D2） |
+| 逐件回收惩罚（`pickupVolumePenalty`） | 逐件 penalty 0.01–1.0，默认 0.8（1198/1436 型）（`meta/collectible objects`、`meta/raw_growth_mechanism.txt` §3） | 没有逐件字段，一律 100%（`PickupAbsorbMath.TryAbsorbValueToLedgerGain`） | `none -> restore`（§10 R5：此前只被「单件回收比例」一行笼统覆盖，无独立行） | restore | owner |
 | 门槛取整 | 门槛直径向下取整到 mm（同上） | 浮点比较、不取整（`placement_core.absorb_diameter_req`） | `none -> restore`（§5.1 `G08`） | restore | owner 2026-11-15（D2） |
+| HUD 直径偏置 | 显示直径 = `(6V/π)^(1/3)` **再平加 +0.02 cm**（MAS1 的精确起始尺寸是 5.02 cm 而不是 5 cm）（`meta/raw_growth_mechanism.txt` Note to 1、`G05`/`G09`） | 直出语义直径，偏置 0（`SizeModelMath.TryDerive`） | `none -> restore`（§10 R8：指标表有 `G09`，分歧表此前没有行） | restore | owner |
 | 10 倍体积门 | `πD³/6 ≥ 10·V`（`raw_growth_mechanism.txt` §2、`DATAMODEL_NOTES.md` §3） | 同一条（`absorbVolumeRatio = 10`，`PickupAbsorbMath.cs:350`） | 已一致，无分歧（`G07`） | keep | — |
 | 定步频率 | 逻辑 30 Hz 定步 `DoTick(1/30f)`，画面另插值（`/tmp/orig_physics/reroll_datamodel.md` §0，KatamariMods FramerateUncap 的 IL） | 50 Hz（`fixedStepSeconds = 0.02`，`Docs/Design/BallMotor/README.md:295`） | 性能预算 + 现有接触/子步参数按 0.02 s 标定过；切换单独立项 | keep（owner 计划切到 30 Hz，先留 50 Hz） | owner 2026-11-16 |
 | 每关分段回收曲线 | 按尺寸分段线性，按关给：MAS1 5 cm .8 → 15 cm .4 → 20 cm .16（`raw_growth_mechanism.txt` §3 的关卡曲线表） | 全局常数 100% | `none -> restore`（§5.1） | restore | owner 2026-11-15（D2） |
+| 群组物件体积 | 拾取父件时**连带子件体积一起入账**（解释高侧离群点）（`meta/raw_growth_mechanism.txt` §4、`meta/DATAMODEL_NOTES.md`；38 件 `parentProp` 群组） | `group` / `groupId` 只存不读，没有价值聚合（`PickupFieldHost`、`placement_core` 的 `PROP_KEYS`） | `none -> restore`（§10 R9：「移动件/行为字段」行讲的是 `parentProp` 行为字段，不是体积规则） | restore | owner |
+| 交分缩径 | 增长侧数据只见增不减（`meta/raw_growth_mechanism.txt` §3）；兑换区的缩径在原作研究里只确认「球会变小」、比例与最小兑换体积未公开（C2/C4/C20） | `post = max(start, start + (pre − start) × residual)`，`residual = 0.25`；交分后残量 `carried` 记入且不再计分（`BankShrinkMath`、`round_model.post_bank_diameter`） | §10 R10 判「缺行 + 缺理由」；这里的理由是 owner 2026-11-14 的刻意设计（**not** a parity restore），`0.25` 与 carried 语义都是 PROVISIONAL | keep（PROVISIONAL，待 T21/T39 复核） | owner 2026-11-14（(a)/(b)） |
+| 每玩家账本 | 原作**单机**，没有 per-player 账本（§10 R13） | 每玩家 `confirmed` / `banked` + `(spawnId, generation)` 幂等键（`GrowthLedgerMath`、[Ledger README](../Ledger/README.md)） | 多人是本项目范围（VRChat 世界必须多端可重建账本）；原作单机没有这个需求，属**范围差异**而非行为偏离（§10 R13 的「需补行」） | keep | —（既有技术契约：02_TECHNICAL_CONTRACTS / Ledger README） |
 | 每关起始/目标球径 | 逐关不同：MAS1 5 → 10 cm、Cancer 22.2 → 80 cm、第三星 10 cm（`missions` 表、`/tmp/orig_physics/dump.csv`、`DATAMODEL_NOTES.md` §1） | 一套 0.30 → 1.25 m（`placement.json` / `story_01_bench_size.json`），运行时尚未从关卡 JSON 读（§5.3.2 步骤 1） | `none -> restore` | restore | owner 2026-11-15（D6） |
 | 球径上限（全局 vs 每关） | 上限也是每关参数（MAS1 30 cm，同上来源） | 单一全局上限 2.20 m（`maxCoreRadiusWorldM` 只填了一个值） | 设计：先留一个全局上限，便于按手感统一调 | keep（按玩测定） | owner 2026-11-16 |
 | 视觉核心 | 21 档 `core_01..core_21` 低模「杂物团」核心网格，按尺寸档换网格；显示体与碰撞/滚动体分开（`/home/fulutang/KatamariRef/` 的 core 资产清单、`DATAMODEL_NOTES.md`、`/tmp/orig_physics/report.md` §11 M1/M3） | 一颗光滑 Unity 内置 Sphere，只缩放 `CoreMesh`（`BallView.cs:61`） | 成本：21 档要美术排期；0.30–2.20 m 用 3–5 档够（`VISUAL_GROWTH_AUDIT.md` §5 建议 2） | undecided | owner |
+| 球核心视觉（生长弹簧） | 逻辑 30 Hz、画面另插值，没有公开的「生长弹簧」参数（`/tmp/orig_physics/reroll_datamodel.md` §0、`DATAMODEL_NOTES.md`）；核心按尺寸档换网格，不靠平滑长大 | 视觉半径 `0.95·r_phys` + **80 ms 临界阻尼追赶弹簧**（`BallView.smoothCoreGrowth` / `smoothTimeSeconds = 0.08`、`BallPresentationMath.TryStepCoreDiameter`） | 表现层平滑：把每件的「跳一下」变成「吹起来」；弹簧只读语义直径，**不得**喂吸收门 / HUD / 相机（`VISUAL_GROWTH_AUDIT.md` §6 P1） | keep（owner 未拍板） | undecided |
+| 骑手/座位尺度 | 小型王子骑在球后滚球，第三人称相机（`meta/DATAMODEL_NOTES.md` 的 `missions.CAMERA_FOV` / `initPos`；[研究核查](../../Research/KatamariBallRules/README.md) C3 王子シップ） | 玩家 avatar 经 `VRCStation` 就座，第一人称眼点在球后上方（`FollowRigMath`、`SeatEyeCompensation`）；avatar 眼高 0.2–5 m 由玩家自选（[RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md) §3） | VR 第一人称：Udon 不能缩放玩家 avatar，只能把座位写成「眼点 − 实测坐姿头高」，所以骑手是真人身高而不是王子比例（`OPEN_DECISIONS` (k) 的硬约束） | keep（proposed，owner 未拍板） | owner |
 | 吸附物位姿 | 吸附瞬间冻结，不缩放、不随球长大外移（专利 US7402104B2 `Mp`） | 同原作（`PickupFieldHost.cs:1064-1074`，`AttachmentMath` 不施加 objectScale） | 已一致，无分歧（`C06`） | keep | — |
 | 区域化尺寸分布 | 每区一套分布：第二区起不再放新小件、小件集中中央（MAS4 60→12→5.5→0%、Cancer ρ=+0.354；`zone_stats`、`/tmp/orig_physics/sheets/`、`reroll_numbers.md` §2） | 只有一个尺寸带、没有区（`C08`/`C10`/`C11`） | `none -> restore` | restore | owner |
 | 移动件/行为字段 | 每型带 `pathSpeedIndex`（5 种）、vault 点（52/107 型）、逐实例 `playAnimNo`、`parentProp`（38 件群组）（`name_props`、`object dump`、`DATAMODEL_NOTES.md`） | 数据无 behaviour 字段、运行时不读（`PROP_BEHAVIOURS.md` §0.5） | 性能预算：行为件按 15 Hz 分摊 ≤800 movers（`PROP_BEHAVIOURS.md` §7） | restore | owner |

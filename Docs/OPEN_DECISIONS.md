@@ -102,6 +102,14 @@
 - **U5 地形第三阶段（P3）之后 0.30 m 的球能沿 10.7° 斜板上花圃台面、提前吃掉水果簇 B——接受，作为原作式的小捷径保留。** 这与原作“前期从木板滚上去”同构，也是 (e)“尺寸门看球够不够大”的同一形状：通路本来就该随地形打开，而不是靠台阶门槛把人挡在外面。**代价照记**：台面作为中期地标会被提前扫掉（水果簇 B 的 56 u 提前被拿走）。**试玩后再看**：若 T21 灰盒或 T39 多人试玩显示台面因此失去地标意义，改的是斜板布置或台面条目，**不是**把 (e) 的台阶规则调回去。
 - **U6 壁龛净宽 2 m——确认。** `D > 1.9` 的球进不去，但门后 6 件的 `D_req` 全部 ≤ 0.30，开门的球（0.83）第一时间就能吃，不会变成“后期回不去的孤儿”；既不改几何，也不给壁龛加第二道门。**无待办。**
 
+### 体积表示：定点 `long volumeMm3`（2026-11-16 拍板）
+
+同 (a)–(q)：这条是**表示层**的决定（owner 2026-11-16 拍板，读完 [定点体积影响审计](Research/ContentVolume/FIXED_POINT_VOLUME_IMPACT.md) 后确认），不是测量结果，也不改任务依赖；它把 [parity 审计](Design/Parity/PARITY_AUDIT.md) 的 D5 从「建议」落成「表示已定」。
+
+- **（r）球与物件的体积一律用定点 `long volumeMm3` 表示：1 LSB = 1 mm³ = 1e-9 m³。** 量子取 mm³ 而不是我们自己的 `c = 0.0041 m³/unit`，因为原作的唯一量化点在**直径**上（`Req Pickup Size` 整 mm），体积侧按同一精度取样（D5 原话）；int32 装不下（2.147 m³ < 满径球 5.5737 m³），`long` 上限 ±9.22e9 m³；整数加法精确、可交换，账本重放幂等——这是 (j)「账本只收整数」在更细量子上的延续，不是推翻它。
+- **（r）迁移顺序 A → B → C → D，四步各自独立验收，不许合并。** **A** 只加宽类型、量子不变：`GrowthLedgerMath` 的 `int` 参数与数组、电机的 `unbankedVolumeUnits` / `bankedScoreUnits`、`PickupAbsorbMath.TryAbsorbValueToLedgerGain` 的 out 参数改 `long`，**全部黄金值一个不动、场景不重导入**；**B** `valueUnits` 由 `int[]` 加宽到 `long[]`（`PickupFieldHost` / `PickupFieldSync` / `PickupFieldAuthoringRules` / `PlacementImporter`），数据形状变、语义不变，**所有关卡场景与预制体同批重导入**；**C** 换量子：`valueUnits` → `volumeMm3`，删 `c`（`cubicMetersPerVolumeUnit`）与 `baselineVolumeUnits`（改每关 `startVolumeMm3`），黄金值换成 mm³（`1356` 单位 → `≈5.56e9 mm³`），验收是**直径逐帧一致（1e-6 m）**；**D** 恢复原作数值形式（`V = k·a·b·c`、`penalty` 默认 0.8、门槛向下取整 mm、HUD +0.02 cm、群组连带子件），即 parity 表已拍 `restore` 的那几行。**C 与 D 不许合成一步**：C 错的表现是直径漂移，D 错的表现是成长曲线变。
+- **（r）未验证项（要 Unity，不因本条变成已验证）：** UdonSharp 的 `long[]` 序列化字段（`long` 标量有先例，`long[]` 没有）、`JsonUtility` 与 `SerializedProperty` 对 `long` 的处理、重导入后的场景 YAML diff 大小。任一条不成立就退回「`int[]` 拆高低位」或「`int[]` + milli-unit」兼容档（[影响审计](Research/ContentVolume/FIXED_POINT_VOLUME_IMPACT.md) §4/§11）。本条只定表示与顺序，不改代码、场景或任务依赖；`c` / `valueUnits` 的退役发生在 C 步，**只做 A/B 不会让「unit 本身」这条分歧消失**。
+
 ## 需要在正式发布范围/终验前回答
 
 | 事项 | 当前基线与选项（均未选择） | 影响 | 决定时点 |
@@ -123,5 +131,5 @@
 ## 不因本摘要改变的门禁
 
 - P17中的单图方案只是提案；修改任务依赖只能在用户/主管批准后进行，并须运行计划校验。([RFC执行纪律](Archive/Preparation/ReleaseRFC/comparison.md#L36-L38)、[候选DAG声明](Archive/Preparation/ReleaseRFC/proposed_dag.json#L5-L7))
-- (a)–(q) 的数值仍是 PROVISIONAL：决定记录的是“用这个暂定值往下做”，不是验证通过；T01 规则冻结、T21 地图验证与 T39 多人试玩后须复核，改动只需更新本文与相关配置，不动任务依赖。（(h)(i)(j)(k)(l) 是运行时契约决定：(k) 与 (l) 已于 2026-11-15 落地、(k)(l) 的数值仍 PROVISIONAL，(j) 没有暂定数值、代码已是该行为，(h) 已被 (l) 取代，见各条“实现状态”。(m)–(p) 是产品口径与当前优先级：不含新的待验证数值，也不改任务依赖；(p) 明确现阶段不调数值。(q) 是野餐一角布局的内容量与通路取舍：U1 的 1500 u 与 U3 的四个设计尺寸仍是 PROVISIONAL，U4/U5 是保留代价的取舍（U5 待试玩复核），U2 已实现（同步工具只消费声明值/保留既有值，导入器单次写入并回读，见 U2 条）。）
+- (a)–(r) 的数值仍是 PROVISIONAL：决定记录的是“用这个暂定值往下做”，不是验证通过；T01 规则冻结、T21 地图验证与 T39 多人试玩后须复核，改动只需更新本文与相关配置，不动任务依赖。（(h)(i)(j)(k)(l) 是运行时契约决定：(k) 与 (l) 已于 2026-11-15 落地、(k)(l) 的数值仍 PROVISIONAL，(j) 没有暂定数值、代码已是该行为，(h) 已被 (l) 取代，见各条“实现状态”。(m)–(p) 是产品口径与当前优先级：不含新的待验证数值，也不改任务依赖；(p) 明确现阶段不调数值。(q) 是野餐一角布局的内容量与通路取舍：U1 的 1500 u 与 U3 的四个设计尺寸仍是 PROVISIONAL，U4/U5 是保留代价的取舍（U5 待试玩复核），U2 已实现（同步工具只消费声明值/保留既有值，导入器单次写入并回读，见 U2 条）。(r) 是体积表示与迁移顺序：四步顺序是决定，A/B 不改数值、C 起动黄金值；`long[]`、`JsonUtility`/`SerializedProperty` 的 `long`、重导入 diff 大小三条仍未在 Unity 验证。)
 - 本文不认证原作细节、不定正式公平阈值、不冻结公共接口、不改T任务状态；后续批准应另行明确记录。

@@ -14,12 +14,20 @@ namespace VRCKatamari.Story
     /// </summary>
     /// <remarks>
     /// <para>
-    /// States. Idle (before Start) to Running (the countdown) to Presenting (the ball
-    /// is offered to the quest giver) to Result (stars, the measured number and one
-    /// line of comment). The order is the plan's (Docs/Design/StoryMode/
-    /// FIRST_PLAYABLE_PLAN.md section 4, step S4) and the design's (GameModes
-    /// README section 2.3). The states are plain ints, not an enum, so a scene or a
-    /// lab can log them without depending on a type.
+    /// States. Idle (the scene has loaded and the player has not sat down yet) to
+    /// Running (the countdown) to Presenting (the ball is offered to the quest giver) to
+    /// Result (stars, the measured number and one line of comment). The order is the
+    /// plan's (Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md section 4, step S4) and the
+    /// design's (GameModes README section 2.3). The states are plain ints, not an enum,
+    /// so a scene or a lab can log them without depending on a type.
+    /// </para>
+    /// <para>
+    /// Where a round starts. Not in <c>Start</c>: a played level loads into Idle, shows
+    /// the target and one prompt line and keeps input and collection closed until the
+    /// local player sits in the ball's station, which the station reports through
+    /// <see cref="NotifyRiderSeated"/>. <c>startOnLoad</c> restores the old
+    /// "the clock starts with the scene" for a headless lab. The gate states per state
+    /// are in Docs/Design/StoryMode/README.md, "开始流程".
     /// </para>
     /// <para>
     /// What this behaviour is not. It never banks, never awards score and never
@@ -162,6 +170,17 @@ namespace VRCKatamari.Story
         // skips the beat instead of waiting forever.
         [SerializeField] private float presentingSeconds = 3f;
 
+        [Header("Start flow")]
+        // Off for a played level: the scene waits in Idle until the local player sits
+        // in the ball's station, which calls NotifyRiderSeated. On for a headless lab
+        // (no station, no player to sit down) that must start the clock at load, which
+        // is the pre-lobby behaviour.
+        [SerializeField] private bool startOnLoad = false;
+
+        // Shown on the result line while Idle: what the player has to do to begin.
+        // A level rewording it changes this string on its scene instance only.
+        [SerializeField] private string startPrompt = "点击球坐上去开始";
+
         // ---- Round state ----
         private int state = StateIdle;
         private float startTimeSeconds;
@@ -201,14 +220,111 @@ namespace VRCKatamari.Story
         private const int RetryRoundIdGuard = 8;
 
         /// <summary>
-        /// Starts the round immediately. The machine has no lobby: a story level is
-        /// single-player and the design starts the clock at spawn (GameModes README
-        /// section 2.3 item 1).
+        /// Starts the round at load, or waits in <see cref="StateIdle"/> for the player
+        /// to sit in the ball's station.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The played level has a start: the HUD shows the target and one prompt line,
+        /// input and collection are closed, and the clock does not run until the local
+        /// player sits down (<see cref="NotifyRiderSeated"/>, called by the station).
+        /// <c>startOnLoad</c> keeps the older "the clock starts with the scene" for a
+        /// headless lab that has no station and no player to sit down.
+        /// </para>
+        /// <para>
+        /// Closing the round gate here is what makes Idle mean "nothing drives yet": the
+        /// ride gate is closed by its own owner and the round gate by this one, so a
+        /// player standing next to the ball cannot move it before the start. Collection
+        /// is closed for the same reason - a ball that cannot move cannot absorb, and a
+        /// host that is still submitting would queue candidates from a stale position.
+        /// </para>
+        /// </remarks>
         public void Start()
         {
             CaptureRetryStartPoseIfReady();
-            BeginRound();
+            if (startOnLoad)
+            {
+                BeginRound();
+                return;
+            }
+            EnterIdle();
+        }
+
+        /// <summary>
+        /// Puts the round in Idle without starting the clock: target and start prompt on
+        /// the HUD, round gate and collection closed, first sit-down opens the round.
+        /// </summary>
+        private void EnterIdle()
+        {
+            state = StateIdle;
+            lastCurrentShown = -1;
+            lastRemainingShown = -1;
+
+            if (input != null) input.SetRoundGate(false);
+            if (pickupHost != null) pickupHost.SetCollecting(false);
+
+            WriteTargetText();
+            WriteCurrentHud();
+            if (resultText != null)
+            {
+                // The result line is the one the player already reads for "呈给国王" and
+                // for the card, so the start prompt appears where the outcome will.
+                resultText.text = startPrompt;
+                // A countdown that has not started must not sit on the HUD looking
+                // frozen; BeginRound writes the real one back (lastRemainingShown = -1).
+                if (remainingText != null) remainingText.text = "";
+            }
+            else if (remainingText != null)
+            {
+                // Fallback for a HUD with no result line: the prompt takes the line that
+                // would otherwise show a countdown that has not started.
+                remainingText.text = startPrompt;
+            }
+
+            Debug.Log("[StoryRoundController] idle: waiting for the local player to sit in"
+                + " the ball's station (startOnLoad=false); level=" + levelId);
+        }
+
+        /// <summary>
+        /// The local player sat down in the ball's station: begin the round if the level
+        /// is still waiting in Idle.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Called by <see cref="VRCKatamari.Riding.BallRideStation"/> right after it
+        /// opened its ride gate, so on that frame both gates are open and the seated
+        /// player's move axes start driving the ball. Order matters: this call opens the
+        /// round gate through <see cref="BeginRound"/>, and the ride gate is the other
+        /// half of the input condition.
+        /// </para>
+        /// <para>
+        /// In any other state it does nothing, on purpose. Running and Presenting are
+        /// already underway and a sit-down must not restart them. In Result the only way
+        /// back to a new round is the retry button: <c>BeginRound</c> alone does not reset
+        /// the ball, the ledger row, the round id or the props, so a sit-down that
+        /// restarted the countdown would be a "new round" played with the old ball - the
+        /// button (<see cref="RequestRetry"/>) does that reset first.
+        /// </para>
+        /// <para>
+        /// Leaving the seat mid-round calls nothing here: the round keeps running
+        /// (leaving is the player's choice, and pausing would turn the clock into a
+        /// resource the player can stop at will). Input is already closed by the ride
+        /// gate that the station closes on exit, so the ball brakes and the clock is the
+        /// only thing still moving; the result card appears on time whether the player is
+        /// seated or not.
+        /// </para>
+        /// </remarks>
+        public void NotifyRiderSeated()
+        {
+            if (state == StateIdle)
+            {
+                BeginRound();
+                Debug.Log("[StoryRoundController] the local player sat down: round started"
+                    + " level=" + levelId);
+                return;
+            }
+            Debug.Log("[StoryRoundController] sit-down ignored: the round is not idle"
+                + " (state=" + state + "); retry is the result card's button.");
         }
 
         /// <summary>

@@ -2,6 +2,7 @@ using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
 using VRCKatamari.Input;
+using VRCKatamari.Story;
 
 namespace VRCKatamari.Riding
 {
@@ -38,6 +39,18 @@ namespace VRCKatamari.Riding
     /// the round has ended.
     /// </para>
     /// <para>
+    /// The start of a round. Sitting down is the start signal: this behaviour is the
+    /// only place that knows the local player just took the controls, so it is the only
+    /// sensible caller of the round controller's <c>NotifyRiderSeated</c>. The order is
+    /// "open the ride gate, then notify", so the sit-down frame already has both gates
+    /// open and the player can drive at once; the controller itself decides what the
+    /// call means (it starts the round only from Idle and ignores it otherwise). The
+    /// link is optional and one-way - this behaviour never reads round state and works
+    /// with no controller at all, and leaving the seat tells the controller nothing
+    /// because a round keeps running when the player gets off (the round controller's
+    /// own notes say why).
+    /// </para>
+    /// <para>
     /// The prompt: <c>DisableInteractive = true</c> while seated is how the lab
     /// removed the "sit" outline while the crosshair still pointed at the vehicle
     /// (Docs/Evidence/StationPlatform/README.md, D1 PASS on PC; API basis in
@@ -59,6 +72,14 @@ namespace VRCKatamari.Riding
 
         // The local player's device-to-axis adapter, on its own object.
         [SerializeField] private DesktopMoveInput input;
+
+        // Optional. The story round this seat starts: the first local sit-down in Idle
+        // calls NotifyRiderSeated, which begins the clock. Left empty the station still
+        // seats, gates input and prompts exactly as before (the StationPlatform lab has
+        // no round controller). A scene that has a StoryRoundController must wire this:
+        // that controller waits in Idle with its own gate closed until a sit-down
+        // arrives, so an unwired station means a round that never starts.
+        [SerializeField] private StoryRoundController roundController;
 
         private bool seated;
 
@@ -83,6 +104,11 @@ namespace VRCKatamari.Riding
             seated = true;
             DisableInteractive = true;
             SetRideGate(true);
+            // After the ride gate: the round controller opens its own gate in BeginRound,
+            // and the input condition needs both open to be true on the sit-down frame.
+            // In any state but Idle the controller ignores the call, so sitting down
+            // after the round ended or mid-round cannot restart it.
+            if (roundController != null) roundController.NotifyRiderSeated();
             Debug.Log("[ride] seated entered");
         }
 

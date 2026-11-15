@@ -416,3 +416,55 @@ python3 -m unittest discover -s Docs/tests
 ### 没有改动的东西
 
 只改 `Runtime/Pickup/PickupFieldHost.cs`、`Runtime/Story/StoryRoundController.cs`，新增 `Runtime/Story/StoryRetryButton.cs` 与同名 `.meta`（GUID `cbba12c7e27849be891c64aadf04ba3b`，新生成、与仓内既有 307 个 GUID 无冲突）。没有改 motor、账本、`DesktopMoveInput`、Riding、Labs、asmdef、场景、`tasks.json` 或任何其他文件；`PickupFieldHost`/`StoryRoundController` 的既有序列化字段名与公开签名一个没动，只做了追加。
+
+## 开始流程：Idle → 入座 → Running
+
+> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-15。本节对应 ClientSim 实玩暴露的问题：场景一加载就开始计时，世界里没有“开始”，站着的玩家按 WASD 就在驱球。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test。
+
+### 问题与改法
+
+旧版 `StoryRoundController.Start()` 直接 `BeginRound()`：没有门厅、没有开始动作，进世界即计时；场景里没有 Station 时 `DesktopMoveInput` 的两把闸门都是默认开，所以站着的人也能开球。改法是把“开始”交给坐上球这一个动作：
+
+1. `Start()` 只在 `startOnLoad = true`（无 Station 的无头实验）时立刻开局；默认 `false` 时进入 **Idle**：HUD 写目标行与提示行，回合闸门关、收集关，计时不动。
+2. 玩家站到球边，准星对着球按**鼠标左键**（桌面交互是左键）→ `BallRideStation.Interact()` → `station.UseStation(localPlayer)`。
+3. `OnStationEntered`（本地球员）→ 先开骑乘闸门，再调 `roundController.NotifyRiderSeated()`（站上 `roundController` 字段有接线才调）。
+4. `NotifyRiderSeated()` 只在 `Idle` 接受：`BeginRound()` 开回合闸门与收集、记 `Time.time` 起点 → **Running**，这时两把闸门都开，WASD 才驱球。
+5. 到点 `SettleRound()`：先关回合闸门、再关收集、再清候选，读冻结值 → **Presenting**（“呈给国王”）→ **Result**（星/测量值/评语）。
+6. 结果卡上“再试一次”走 `RequestRetry()`（见上一节），世界内退出按钮是 `BallRideExitButton`（离座 → 骑乘闸门关）。
+
+### 每状态的闸门（生效输入 = 两把都开）
+
+| 回合状态 | 回合闸门 `SetRoundGate` | 骑乘闸门 `SetRideGate` | 收集 `SetCollecting` | 剩余行 / 结果行 |
+|---|---|---|---|---|
+| Idle | 关（`Start()`，`startOnLoad=false`） | 关（Station 的 `Start()`；本地球员入座时开） | 关（`Start()`） | 剩余行清空；结果行显示 `startPrompt`（默认「点击球坐上去开始」） |
+| Running | 开（`BeginRound()`） | 入座开、离座关 | 开（`BeginRound()`） | 「剩余 N s」；结果行空 |
+| Presenting | 关（`SettleRound()`） | 同上 | 关（`SettleRound()`） | 「剩余 0 s」；结果行 `presenterLine` |
+| Result | 关 | 同上 | 关 | 结果卡（星/测量值/评语） |
+
+所以：Idle 里谁都开不动球（回合闸门关，而且站着时骑乘闸门也关）；Running 里站着的人开不动球（只剩骑乘闸门把关）；到点后无论坐着还是站着都不会再吸收。
+
+上表补上了本文前面「输入闸门」小节里 `SetRoundGate` 的“关”只写了 `SettleRound()` 的遗漏：`Start()` 在 `startOnLoad=false` 时也会关它。那个小节的“每个闸门只有一个所有者、默认开、互不覆盖”不受影响。
+
+### 已决定的边界
+
+- **中途离座：回合照常跑。** 离开是玩家的选择，暂停会把计时变成玩家可随意停的资源。输入本来就被骑乘闸门关掉（适配器清零两轴、球刹车），所以离座后计时继续、球不走，到点照样出结果卡。再坐回去只是重新开骑乘闸门（`NotifyRiderSeated()` 在 Running 被忽略），不会重开回合。
+- **`NotifyRiderSeated()` 在 Result：什么也不做。** 重试只能按结果卡上的按钮：`BeginRound()` 单独跑不会复位球、账本行、回合 id 和道具，坐下就重开等于“新回合配旧球”；`RequestRetry()` 才是先 motor 复位、再道具复位、最后 `BeginRound()` 的那条路。Running/Presenting 同样忽略，否则坐下会静默重开计时。
+- **`startOnLoad = true`** 保留旧行为，给没有 Station、没有人可坐的无头/键盘实验；有 Station 的场景必须保持 `false`。
+- **站不接 `roundController` 时**照样能坐、能开关骑乘闸门、能显示提示（StationPlatform 实验就是这样）；但场景里有 `StoryRoundController` 就必须把站上的 `roundController` 指过去，否则控制器永远停在 Idle、回合闸门一直关，表现为“坐上去也开不动”。
+- 提示行落在**结果行**（结果卡将来出现的那一行）；结果行没接时退回**剩余行**，并把剩余行清空以免显示一条没开始的倒计时。
+
+### 场景怎么接（Unity 操作者）
+
+1. `BallRideStation.roundController` 指向场景里的 `StoryRoundController`；不接 = 见上一条。
+2. 有 Station 的可玩场景：`StoryRoundController.startOnLoad` 保持默认 `false`。无头实验勾上。
+3. HUD 照旧四行（目标/当前/剩余/结果）；`startPrompt` 想换文案就在场景实例上改这个字符串，不用改代码。
+4. 既有序列化字段名与公开签名一个没变（只追加 `startOnLoad`、`startPrompt` 与 `NotifyRiderSeated()`，站上只追加 `roundController`），旧场景实例里新字段取默认值（`false` / 默认文案）。
+
+### 未验证（不要当成已验证）
+
+1. **没有编译**：U# 全量编译、Console 无错都没发生；跨命名空间类型引用（`Riding` 里的站引用 `Story` 里的控制器）与新增的站序列化字段在 U# 下的编译没有记录。
+2. **ClientSim / Play Mode / Build & Test 全部 NOT_RUN**：本节描述的“加载后停在 Idle、左键上球才开始计时、坐着 WASD 才驱球、到点出结果卡、重试/退出可用”一条都还没有运行时数据。
+3. **`Interact` → `UseStation` → `OnStationEntered` 的同帧顺序**：代码按“先开骑乘闸门再通知”写，但“通知当帧球就能动”没有观察（桌面按住 W 时 VRChat 只在值变化发轴，可能要先松再按）。
+4. **Idle 的提示行实际显示**：四行 Text 的排版、清空剩余行的效果、`startPrompt` 在场景实例上的序列化，都没有 Play Mode 观察。
+5. **中途离座后的结果卡**：站着到点时结果卡是否仍可读、重试后是否必须先坐回去才动，未实测。
+6. **已经坐在站里进世界**（例如复活回座位）时没有人再按一次左键：站只在 `OnStationEntered` 通知，没有“加载时已在座”的路径，所以会停在 Idle 且骑乘闸门关着，要离座再坐一次才会开始。这是已知缺口，不是已实现的行为。

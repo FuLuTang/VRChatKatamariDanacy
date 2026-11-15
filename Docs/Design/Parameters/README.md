@@ -310,7 +310,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 ```
 
 - 测试 1 是**防静默丢弃**的机制：往载荷加一个参数而不加组件字段，立刻红；
-- 测试 3 是**防重复回来**的机制：`bankResidualFraction` 之类重新出现在 motor 上就红。没有它，§7 的 65 份副本会在半年内重新长出来。
+- 测试 3 是**防重复回来**的机制：`bankResidualFraction` 之类重新出现在 motor 上就红。没有它，§7 的 63 份副本会在半年内重新长出来。
 - 跑法：MCP `run_tests`（程序集 `VRCKatamari.Tests.EditMode`）。
 
 ### 4.3 第 3 层：版本钉（跨文件，可选但推荐）
@@ -487,7 +487,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 ---
 
-## 7. 现在的重复清单（27 个条目 / 65 处机器可读副本）
+## 7. 现在的重复清单（27 个条目 / 63 处机器可读副本）
 
 只统计**机器读取**的位置（`json` 数据、运行时字段、Python 默认值、可被正则扫到的 C# 常量）。文档复述（§0.1 第 4、5 行那类）不计入，但它们必须按步骤 7 改成引用。
 
@@ -516,10 +516,10 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 | 14 | `growth_speed_factor` 0.25 | `ball_motion.py:41`、`motor:82` | 2 | 规则集 |
 | 15 | `growth_turn_factor` 0.35 | `ball_motion.py:42`、`motor:83` | 2 | 规则集 |
 | 16 | 眼点几何 `eyeBaseUpMeters` 0.55 / `eyeUpPerRadius` 2.4 / `eyeBaseBackMeters` 0.75 / `eyeBackPerRadius` 2.2（2026-11-15 取代 `eye_height_m` 1.6） | `motor:137-138、141-142` | 1 | 规则集 |
-| 17 | `height_filter_hz` 5.0 | `ball_motion.py:180`、`follow_rig.py:206`、`motor:124` | 3 | 规则集 |
-| 18 | `yaw_filter_hz` 8.0 | `ball_motion.py:181`、`follow_rig.py:206`、`motor:125` | 3 | 规则集 |
+| 17 | `height_filter_hz` 5.0 | `follow_rig.py:212`、`motor:124` | 2 | 规则集 |
+| 18 | `yaw_filter_hz` 8.0 | `follow_rig.py:212`、`motor:125` | 2 | 规则集 |
 
-第 16 行 2026-11-15 换了对象：眼点从「离球心常量眼高 `eye_height_m`」改成「球后上方、两项随半径线性」，运行时的唯一副本就是 motor 的 `eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeBaseBackMeters` / `eyeBackPerRadius`（三条护栏仍有各自副本，见 §6.4 表）。Python 孪生 `follow_rig.py` 现在把 7 个系数**当参数收**、不自带默认值，所以它不再是这组数的副本；`ball_motion.py:179` 的 `eye_height_m = 1.6` 是 T46 宿主草稿自己的字段（那个文件里还有一份旧 `FollowRig` 类），不是运行时副本，等 BallMotion 的 owner 处理。
+第 16 行 2026-11-15 换了对象：眼点从「离球心常量眼高 `eye_height_m`」改成「球后上方、两项随半径线性」，运行时的唯一副本就是 motor 的 `eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeBaseBackMeters` / `eyeBackPerRadius`（三条护栏仍有各自副本，见 §6.4 表）。Python 孪生 `follow_rig.py` 现在把 7 个系数**当参数收**、不自带默认值，所以它不再是这组数的副本。T46 宿主草稿里的旧 `FollowRig` 类与 `eye_height_m = 1.6` 已于 2026-11-15 随 `BallMotion: delete the second follow-rig model` 一并删除；`Docs/Design/BallMotion/ball_motion.py` 现在只剩运动积分，不含眼高，因此第 17/18 行也少了「BallMotion 宿主草稿」那一份副本，`height_filter_hz` / `yaw_filter_hz` 只剩 `follow_rig.py`（5.0 / 8.0 的宿主默认值）与 motor 两处。
 
 **C 组 对局规则**（全部 `prototype_defaults.json` ↔ `round_model.py`，且运行时尚未实现，所以今天只有两份）
 
@@ -540,7 +540,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 | 26 | `directionSamples` 32 | `prototype_defaults.json:27`、`RadialProxyMath.cs:57` | 2 | 不烘焙，用 §4.1-5 等价测试钉住 |
 | 27 | `maximumExtraExtremePoints` 4 | `prototype_defaults.json:28`、`RadialProxyMath.cs:60` | 2 | 同上 |
 
-合计：**12 个条目写满三处（36 份）+ 14 个写两处（28 份）+ 1 个只在运行时一处（1 份）= 65 份机器可读副本，27 个条目。** 另有 1 处派生（起始球径，`motor:95-96` → 0.29974 m）不计入：它不是字面量，而是 §6.3 那条“运行时派生不得烘焙”的实例。
+合计：**10 个条目写满三处（30 份）+ 16 个写两处（32 份）+ 1 个只在运行时一处（1 份）= 63 份机器可读副本，27 个条目。** 另有 1 处派生（起始球径，`motor:95-96` → 0.29974 m）不计入：它不是字面量，而是 §6.3 那条“运行时派生不得烘焙”的实例。
 
 ---
 

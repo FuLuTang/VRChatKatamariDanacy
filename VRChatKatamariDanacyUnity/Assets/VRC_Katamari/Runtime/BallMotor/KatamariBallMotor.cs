@@ -163,8 +163,6 @@ namespace VRCKatamari.BallMotor
         private float fixedStepAccumulator;
         private float localClockSeconds;
         private float stuckSeconds;
-        private bool lastSweepBlocked;
-        private bool lastSweepStuck;
         private bool discontinuous;
         private Quaternion visualRollRotation;
         private Quaternion proxyRotation;
@@ -293,7 +291,6 @@ namespace VRCKatamari.BallMotor
 
         private string[] absorbedEventItemIds;
         private Vector3[] absorbedEventPositions;
-        private float[] absorbedEventDiameters;
         private int absorbedEventCount;
 
         // Occupancy of the ring, 0..AbsorbedEventCapacity. It is separate from
@@ -427,7 +424,6 @@ namespace VRCKatamari.BallMotor
 
             absorbedEventItemIds = new string[AbsorbedEventCapacity];
             absorbedEventPositions = new Vector3[AbsorbedEventCapacity];
-            absorbedEventDiameters = new float[AbsorbedEventCapacity];
             absorbedEventCount = 0;
             absorbedEventRingCount = 0;
 
@@ -574,6 +570,10 @@ namespace VRCKatamari.BallMotor
             Vector3 sweptCenter = ballCenterWorld;
             bool sweepAccepted = false;
             bool sweepStuck = false;
+            // The sweep also reports `blocked`, but this layer has no reader for it (a
+            // blocked step already shows up as an accepted sweep whose centre did not
+            // move, plus the stuck timer), so it is requested and dropped rather than
+            // stored in a field nothing reads.
             bool sweepBlocked = false;
             Vector3 finalPosition;
             Vector3 remainingDisplacement;
@@ -588,8 +588,6 @@ namespace VRCKatamari.BallMotor
                 out sweepBlocked))
             {
                 sweptCenter = finalPosition;
-                lastSweepBlocked = sweepBlocked;
-                lastSweepStuck = sweepStuck;
                 sweepAccepted = true;
                 // SweepMath stops writing contacts at ContactCapacity (4) and
                 // reports no truncation flag, so the motor can only record that
@@ -752,23 +750,29 @@ namespace VRCKatamari.BallMotor
                     contactRadiusWorldM, maxItemSizeWorldM, maxCollisionRadiusWorldM,
                     semanticDiameterWorldM, absorbSizeRatio, pendingValues[i]);
                 float evaluatedDistance = Vector3.Distance(pendingPositions[i], center);
-                Vector3 evaluatedBounds = pendingBounds[i];
-                float evaluatedHalfX = evaluatedBounds.x * 0.5f;
-                float evaluatedHalfY = evaluatedBounds.y * 0.5f;
-                float evaluatedHalfZ = evaluatedBounds.z * 0.5f;
-                float evaluatedItemRadius = Mathf.Sqrt(evaluatedHalfX * evaluatedHalfX
-                    + evaluatedHalfY * evaluatedHalfY + evaluatedHalfZ * evaluatedHalfZ);
-                float evaluatedReach = collisionRadiusWorldM + contactRadiusWorldM
-                    + evaluatedItemRadius;
 
                 if (debugTraceItemId != null && debugTraceItemId.Length > 0
                     && pendingItemIds[i] == debugTraceItemId
                     && traceLinesLogged < TraceLineLimit)
                 {
-                    // Data only. The host decides whether and how to print it.
+                    // Data only. The host decides whether and how to print it. The reach
+                    // is asked for from the pickup layer's own function - the same call
+                    // the gate decides with - and only for the traced item, so an
+                    // ordinary candidate pays nothing for a number nothing reads. The
+                    // gate refuses illegal bounds before it has a reach; -1 is this
+                    // file's invalid marker.
+                    float tracedItemRadius;
+                    float tracedReach;
+                    if (!PickupAbsorbMath.TryComputeReach(pendingBounds[i],
+                        collisionRadiusWorldM, contactRadiusWorldM, out tracedItemRadius,
+                        out tracedReach))
+                    {
+                        tracedItemRadius = -1f;
+                        tracedReach = -1f;
+                    }
                     traceLinesLogged = traceLinesLogged + 1;
                     traceLastDistance = evaluatedDistance;
-                    traceLastReach = evaluatedReach;
+                    traceLastReach = tracedReach;
                     traceLastBallZ = center.z;
                     traceLastOutcome = (int)outcome;
                 }
@@ -827,28 +831,41 @@ namespace VRCKatamari.BallMotor
                     absorbedCount = absorbedCount + 1;
                     // Recorded only here, inside the branch where the ledger commit
                     // returned true, so an event always corresponds to a total that
-                    // actually moved. The diameter is the candidate's largest bound
-                    // component, the same extent the pickup gate compared against.
-                    RecordAbsorbedEvent(pendingItemIds[read], pendingPositions[read],
-                        Mathf.Max(pendingBounds[read].x,
-                            Mathf.Max(pendingBounds[read].y, pendingBounds[read].z)));
+                    // actually moved.
+                    RecordAbsorbedEvent(pendingItemIds[read], pendingPositions[read]);
                     continue;
                 }
-                if (write != read)
-                {
-                    pendingAbsorbable[write] = pendingAbsorbable[read];
-                    pendingKinds[write] = pendingKinds[read];
-                    pendingBounds[write] = pendingBounds[read];
-                    pendingPositions[write] = pendingPositions[read];
-                    pendingValues[write] = pendingValues[read];
-                    pendingItemIds[write] = pendingItemIds[read];
-                    pendingGenerations[write] = pendingGenerations[read];
-                    pendingAccepted[write] = pendingAccepted[read];
-                    pendingSubmitTimes[write] = pendingSubmitTimes[read];
-                }
+                CompactPending(write, read);
                 write = write + 1;
             }
             pendingCandidateCount = write;
+        }
+
+        /// <summary>
+        /// Copies one pending-candidate slot onto an earlier slot of the same queue.
+        /// </summary>
+        /// <remarks>
+        /// The single implementation of in-place queue compaction. Both removers - the
+        /// commit path (drop what was absorbed) and <see cref="WithdrawCandidate"/> (drop
+        /// what the host released) - walk the queue with a read and a write cursor and
+        /// keep the surviving order, so the nine per-candidate fields are copied in one
+        /// place: two copies of this block would eventually disagree about one field
+        /// (pendingSubmitTimes is the one a copy forgets), and a candidate would then be
+        /// judged with another candidate's age or bounds. Same slot is a no-op, so a
+        /// converging walk costs no copies.
+        /// </remarks>
+        private void CompactPending(int write, int read)
+        {
+            if (write == read) return;
+            pendingAbsorbable[write] = pendingAbsorbable[read];
+            pendingKinds[write] = pendingKinds[read];
+            pendingBounds[write] = pendingBounds[read];
+            pendingPositions[write] = pendingPositions[read];
+            pendingValues[write] = pendingValues[read];
+            pendingItemIds[write] = pendingItemIds[read];
+            pendingGenerations[write] = pendingGenerations[read];
+            pendingAccepted[write] = pendingAccepted[read];
+            pendingSubmitTimes[write] = pendingSubmitTimes[read];
         }
 
         private bool TryCommitAbsorb(string itemInstanceId, int generation, int gain)
@@ -1135,8 +1152,6 @@ namespace VRCKatamari.BallMotor
             semanticDiameterWorldM = resetSemanticDiameter;
             DeriveGrowthFraction();
 
-            lastSweepBlocked = false;
-            lastSweepStuck = false;
             inputForward = 0f;
             inputTurn = 0f;
             inputLateral = 0f;
@@ -1257,7 +1272,8 @@ namespace VRCKatamari.BallMotor
         /// can ever take that slot. Withdrawing lets a host release what it can no
         /// longer plausibly absorb and re-queue later.
         /// <para>
-        /// Compaction mirrors CommitAcceptedAbsorbs so no list is allocated. Returns
+        /// Compaction is <see cref="CompactPending"/>, the same helper the commit path
+        /// uses, so no list is allocated and the two removers cannot drift. Returns
         /// true when at least one entry was removed; the ledger is untouched (a
         /// candidate was never a claim).
         /// </para>
@@ -1276,18 +1292,7 @@ namespace VRCKatamari.BallMotor
                     removed = true;
                     continue;
                 }
-                if (write != read)
-                {
-                    pendingAbsorbable[write] = pendingAbsorbable[read];
-                    pendingKinds[write] = pendingKinds[read];
-                    pendingBounds[write] = pendingBounds[read];
-                    pendingPositions[write] = pendingPositions[read];
-                    pendingValues[write] = pendingValues[read];
-                    pendingItemIds[write] = pendingItemIds[read];
-                    pendingGenerations[write] = pendingGenerations[read];
-                    pendingAccepted[write] = pendingAccepted[read];
-                    pendingSubmitTimes[write] = pendingSubmitTimes[read];
-                }
+                CompactPending(write, read);
                 write = write + 1;
             }
             pendingCandidateCount = write;
@@ -1575,11 +1580,6 @@ namespace VRCKatamari.BallMotor
             return planarVelocity;
         }
 
-        public float GetCoreRadiusWorldM()
-        {
-            return coreRadiusWorldM;
-        }
-
         public float GetCollisionRadiusWorldM()
         {
             return collisionRadiusWorldM;
@@ -1590,19 +1590,9 @@ namespace VRCKatamari.BallMotor
             return semanticDiameterWorldM;
         }
 
-        public float GetGrowthFraction()
-        {
-            return growthFraction;
-        }
-
         public float GetConfirmedVolumeUnits()
         {
             return confirmedVolumeUnits;
-        }
-
-        public int GetUnbankedVolumeUnits()
-        {
-            return unbankedVolumeUnits;
         }
 
         public int GetBankedScoreUnits()
@@ -1620,34 +1610,9 @@ namespace VRCKatamari.BallMotor
             return stuckSeconds;
         }
 
-        public bool LastSweepWasBlocked()
-        {
-            return lastSweepBlocked;
-        }
-
-        public bool LastSweepWasStuck()
-        {
-            return lastSweepStuck;
-        }
-
         public Quaternion GetVisualRollRotation()
         {
             return visualRollRotation;
-        }
-
-        public Vector3 GetFollowRigWorldPosition()
-        {
-            return followRigWorldPosition;
-        }
-
-        public float GetFollowRigYawDegrees()
-        {
-            return followRigYawDegrees;
-        }
-
-        public bool HasFollowRigFrame()
-        {
-            return hasFollowRigFrame;
         }
 
         public int GetPendingCandidateCount()
@@ -1754,14 +1719,19 @@ namespace VRCKatamari.BallMotor
         /// in slot 0 and event #16 overwrites slot 0. Callers index by the ABSOLUTE
         /// event number (0 = first absorb ever), which lets a reader keep its own
         /// cursor across frames without knowing about wraparound.
+        /// <para>
+        /// Only the item id and the submission-time position are kept. The size was
+        /// dropped together with its reader: a host that hides the eaten prop reads the
+        /// prop's own current scale, because a submission-time snapshot is stale by the
+        /// time the event is read (Docs/Design/StoryMode/README.md).
+        /// </para>
         /// </remarks>
-        private void RecordAbsorbedEvent(string itemId, Vector3 position, float diameter)
+        private void RecordAbsorbedEvent(string itemId, Vector3 position)
         {
             if (absorbedEventItemIds == null) return;
             int slot = absorbedEventCount % AbsorbedEventCapacity;
             absorbedEventItemIds[slot] = itemId;
             absorbedEventPositions[slot] = position;
-            absorbedEventDiameters[slot] = diameter;
             absorbedEventCount = absorbedEventCount + 1;
             if (absorbedEventRingCount < AbsorbedEventCapacity)
             {
@@ -1823,13 +1793,6 @@ namespace VRCKatamari.BallMotor
             return absorbedEventPositions[slot];
         }
 
-        public float GetAbsorbedEventDiameter(int absoluteIndex)
-        {
-            int slot = AbsorbedEventSlot(absoluteIndex);
-            if (slot < 0) return 0f;
-            return absorbedEventDiameters[slot];
-        }
-
         /// <summary>
         /// Prints the full input set of the first few refusals, once each.
         /// </summary>
@@ -1844,12 +1807,16 @@ namespace VRCKatamari.BallMotor
             if (rejectDiagnosticsLogged >= rejectDiagnosticsLimit) return;
             rejectDiagnosticsLogged = rejectDiagnosticsLogged + 1;
 
-            Vector3 bounds = pendingBounds[index];
-            float halfX = bounds.x * 0.5f;
-            float halfY = bounds.y * 0.5f;
-            float halfZ = bounds.z * 0.5f;
-            float itemRadius = Mathf.Sqrt(halfX * halfX + halfY * halfY + halfZ * halfZ);
-            float reach = collisionRadiusWorldM + contactRadiusWorldM + itemRadius;
+            float itemRadius;
+            float reach;
+            if (!PickupAbsorbMath.TryComputeReach(pendingBounds[index], collisionRadiusWorldM,
+                contactRadiusWorldM, out itemRadius, out reach))
+            {
+                // Illegal bounds: the gate refused them as invalid input before it had a
+                // reach, so there is no number to print. -1 is this file's invalid marker.
+                itemRadius = -1f;
+                reach = -1f;
+            }
 
             Debug.Log("[BallMotor] reject#" + rejectDiagnosticsLogged
                 + " id=" + pendingItemIds[index]
@@ -1865,16 +1832,6 @@ namespace VRCKatamari.BallMotor
                 + " itemPos=" + pendingPositions[index]);
         }
 
-        /// <summary>
-        /// Appends one refused candidate and the reason the gate gave.
-        /// </summary>
-        /// <remarks>
-        /// The reason is the <c>PickupAbsorbMath.AbsorbOutcome</c> value as an int so
-        /// the assembly layer stays free of a second enum, and the distance is the
-        /// centre-to-centre distance the reach test saw. Recorded only for a refused
-        /// candidate: an accepted one is silent here and appears in the absorbed ring
-        /// once its ledger commit succeeds.
-        /// </remarks>
         /// <summary>How many evaluations of the traced item have been recorded.</summary>
         public int GetTraceCount()
         {
@@ -2045,6 +2002,16 @@ namespace VRCKatamari.BallMotor
                 + " claimCount=" + claimCount);
         }
 
+        /// <summary>
+        /// Appends one refused candidate and the reason the gate gave.
+        /// </summary>
+        /// <remarks>
+        /// The reason is the <c>PickupAbsorbMath.AbsorbOutcome</c> value as an int so
+        /// the assembly layer stays free of a second enum, and the distance is the
+        /// centre-to-centre distance the reach test saw. Recorded only for a refused
+        /// candidate: an accepted one is silent here and appears in the absorbed ring
+        /// once its ledger commit succeeds.
+        /// </remarks>
         private void RecordReject(string itemId, int reason, float distance)
         {
             if (rejectEventItemIds == null) return;

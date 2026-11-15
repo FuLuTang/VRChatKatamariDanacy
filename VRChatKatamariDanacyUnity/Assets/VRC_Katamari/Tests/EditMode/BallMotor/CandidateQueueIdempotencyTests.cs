@@ -116,5 +116,41 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(1, Count(), "an absent withdraw must not touch the queue");
             Assert.AreEqual("present", ItemIdAt(0));
         }
+
+        [Test]
+        public void WithdrawingInTheMiddleKeepsTheOrderAndFreesTheSlot()
+        {
+            // The withdraw path and the commit path compact the queue with one shared
+            // helper, so this pins the order after a removal in the middle, then after
+            // the freed slot is reused, then after removing an entry that is already at
+            // its write position.
+            Assert.IsTrue(Submit("a"));
+            Assert.IsTrue(Submit("b"));
+            Assert.IsTrue(Submit("c"));
+            Assert.IsTrue(Submit("d"));
+            Assert.AreEqual(4, Count(), "the queue holds four");
+
+            Assert.IsTrue((bool)Call("WithdrawCandidate", "b"));
+            Assert.AreEqual(3, Count());
+            Assert.AreEqual("a", ItemIdAt(0));
+            Assert.AreEqual("c", ItemIdAt(1));
+            Assert.AreEqual("d", ItemIdAt(2));
+
+            Assert.IsTrue(Submit("e"), "the freed slot must be usable again");
+            Assert.AreEqual(4, Count());
+            Assert.AreEqual("e", ItemIdAt(3));
+
+            Assert.IsTrue((bool)Call("WithdrawCandidate", "c"));
+            Assert.AreEqual(3, Count());
+            Assert.AreEqual("a", ItemIdAt(0));
+            Assert.AreEqual("d", ItemIdAt(1));
+            Assert.AreEqual("e", ItemIdAt(2));
+
+            // Removing the last entry copies nothing at all.
+            Assert.IsTrue((bool)Call("WithdrawCandidate", "e"));
+            Assert.AreEqual(2, Count());
+            Assert.AreEqual("a", ItemIdAt(0));
+            Assert.AreEqual("d", ItemIdAt(1));
+        }
     }
 }

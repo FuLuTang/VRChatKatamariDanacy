@@ -108,7 +108,7 @@ Update: 累积 deltaTime → 夹积压 → while(够一步且未到 maxSteps) St
 StepBall:
   1 StepInput()                 ControlIntentMath.TryProcess → Move2D 的 y/x + turn 轴
   2 BallMotionMath.TryStep      → heading、planarVelocity、requestedDisplacement（成功才赋值）
-  3 SweepMath.TrySweepSphere    → sweptCenter（成功才赋值；记录 blocked/stuck）
+  3 SweepMath.TrySweepSphere    → sweptCenter（成功才赋值；stuck 交给卡住计时）
     SweepMath.TryCollectWallContactNormals + TryRemoveWallNormalVelocity
                                 → planarVelocity（只去墙面法向分量，切向保留）
   4 GroundContactMath.TrySolve  → groundedCenter（成功才赋值）
@@ -197,7 +197,7 @@ StepBall:
 
 1. **设备轴 → forward/turn/lateral 的映射没有归属层。** `ControlIntentMath` 只给设备轴对，`BallMotionMath` 只吃三个标量，中间这一步（含相机/rig yaw 基准）目前是适配层约定，本层用 y→forward、x→lateral 顶着。
 2. ~~**墙面法向去速没有公开函数。**~~ **已解决（2026-11-15）**：规则与实现见下面「墙面法向去速（已解决，PROVISIONAL）」。编号保留，`SPLIT_PROPOSAL.md` 等文档仍按“缺口 2”引用它。
-3. ~~**吸收的“相对球径门槛”没有 C# 层**~~ **已解决（2026-11-15，决定 (h)）**：`PickupAbsorbMath.TryComputeAbsorbSizeLimit` 把上限算成 `min(maxItemSizeWorldM, 语义直径 × absorbSizeRatio)`，本层每步把 `semanticDiameterWorldM` 与 `absorbSizeRatio` 一起传进 `EvaluateAbsorbWithValueAndBallSize`（判定调用在 `KatamariBallMotor.cs:749-753`），配方不在本层，所以这条不再算缺口。`maxItemSizeWorldM` 由 1 改成 `8f` 并降级为安全上界，`absorbSizeRatio = 1f` 是 PROVISIONAL；`GetAbsorbSizeLimitWorldM()`（`:1682`）供诊断读当步上限。口径与两个尺寸量的区别见 `Docs/Design/PickupAbsorb/README.md` 1.1 节。
+3. ~~**吸收的“相对球径门槛”没有 C# 层**~~ **已解决（2026-11-15，决定 (h)）**：`PickupAbsorbMath.TryComputeAbsorbSizeLimit` 把上限算成 `min(maxItemSizeWorldM, 语义直径 × absorbSizeRatio)`，本层每步把 `semanticDiameterWorldM` 与 `absorbSizeRatio` 一起传进 `EvaluateAbsorbWithValueAndBallSize`（判定调用在 `KatamariBallMotor.cs:747-751`），配方不在本层，所以这条不再算缺口。`maxItemSizeWorldM` 由 1 改成 `8f` 并降级为安全上界，`absorbSizeRatio = 1f` 是 PROVISIONAL；`GetAbsorbSizeLimitWorldM()`（`:1647`）供诊断读当步上限。口径与两个尺寸量的区别见 `Docs/Design/PickupAbsorb/README.md` 1.1 节。
 4. **`growthFraction` 没有 helper。** 设计文档把它指派给组合层（`BallMotion` README 的“唯一回灌量”），`BallMotionMath` 也明说不做半径映射，所以本层只有这一处 `(r-base)/(max-base)` 夹取；若要复用应下沉到 `SizeModelMath`。
 5. **账本提交存储是有容量的**（本地 256 条/回合）。满了以后 `TryResolveClaims` 拒绝、候选留在队列里不再增长；正式回合应由拥有账本的控制器扩容或换权威提交。
 6. **单球、单本地玩家行**：多球/多人要并行数组 + 多行账本，本版没有。
@@ -376,3 +376,16 @@ bool TryResetForNewRound(string newRoundId, Vector3 startPosition,
 - 调用方：结果面板按钮 → `TryResetForNewRound(下一个回合 id, 出生点, 出生朝向, out reason)` → 计时/HUD 自己归零（`StoryRoundController`，S4/S6，不在本节）。
 - Unity 编译、U# 全量编译、EditMode 的 NUnit 运行都 **NOT_RUN**（本节作者不是 Unity 操作者）。
 - host 侧若要从「球上已粘的物件」也恢复，需要它自己的复位接缝；本层只保证事件环不会把旧事件重放给宿主。
+
+## 代码整理（2026-11-15，`SPLIT_PROPOSAL.md` 的第一批）
+
+**状态：源码已改，未编译、未在 Unity 运行、未做 U# 全量编译、未跑 EditMode。** 只动了私有实现：44 个 `[SerializeField]` 的名字与顺序一个没变（改动前后都是 44 个），被测试/场景用到的 public 方法名也都没变（反射钉子 `Start`、`TryBeginPlaying`、`RecomputeConfirmedAndSize`、`TryBankWithReason`、`TryAwardScore`、`SubmitCandidate`/`WithdrawCandidate`/`GetPendingCandidate*` 与字段 `localRow`/`confirmedVolumes`/`bankedScores`/`unbankedVolumeUnits`/`semanticDiameterWorldM`/`cubicMetersPerVolumeUnit`/`baselineVolumeUnits` 全部仍在）。
+
+**这一批做了什么**（细节与证据在 `SPLIT_PROPOSAL.md` 的「落地状态」一节）：
+
+1. 删零读者代码：9 个取值器（`GetCoreRadiusWorldM`、`GetGrowthFraction`、`GetUnbankedVolumeUnits`、`LastSweepWasBlocked`、`LastSweepWasStuck`、`GetFollowRigWorldPosition`、`GetFollowRigYawDegrees`、`HasFollowRigFrame`、`GetAbsorbedEventDiameter`），以及它们的唯一读者一消失就变成只写状态的字段：`lastSweepBlocked`/`lastSweepStuck`（连同 `StepBall` 的两次赋值与 `TryResetForNewRound` 的两次清零）与 `absorbedEventDiameters`（连同分配与写入）。`GetAbsorbedEventPosition` **保留**：`Docs/Design/StoryMode/README.md` 按名字引用它（说明“不要用它，取道具当前位姿”），删它会留下悬空引用，故留给同时改那份文档的人。
+2. 修错位 XML 注释：`RecordReject` 的说明原本贴在 `GetTraceCount` 上方（隔约 170 行），已移回 `RecordReject`。
+3. 队列压缩只写一份：`CommitAcceptedAbsorbs` 与 `WithdrawCandidate` 里逐字相同的 9 字段复制收进私有 `CompactPending(int write, int read)`（同下标直接返回），顺序与内容不变。
+4. reach 公式只写一份：新增 `PickupAbsorbMath.TryComputeReach(itemBounds, collisionRadius, contactRadius, out itemRadius, out reach)`，判定本体与装配层的两处诊断（追踪快照、拒绝日志）改调它。装配层不再在**每个**候选的**每一步**都算一次半径与 reach——追踪关闭时（默认）根本不算，只在被追踪件或要打拒绝日志时算。非法 `bounds`（非有限、负分量、负半径）在判定里仍是 `RejectInvalidInput`，诊断里报 `-1`（本文件既有的“无效”记号），不再打印 NaN。
+
+**这一批刻意没做**（都还留在 `SPLIT_PROPOSAL.md`）：`SizeModelMath.TryGrowthFraction`（S2）、`RingBufferMath`（S4，风险最高的一步）、`StuckRecoveryMath`（S6）、`ControlIntentMath.TryReadMove2D`（S7）、`GrowthLedgerMath.TryProjectBankedScore`（S8）、`proxyRotation` 的处置（提案本身给了两个互斥选项，未定）、`PredictionCapacity = 0` 与四个零长预测数组（删它们要同步改账本调用签名，属高风险一步）、「回合所有者」边界（S3 的账本/交分/奖励/复位搬迁）。

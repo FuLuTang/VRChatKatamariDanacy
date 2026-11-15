@@ -127,6 +127,12 @@ namespace VRCKatamari.Pickup
         /// deliberately wants a fixed cap uses. Passing the resolved limit here keeps the
         /// gate itself in one place.
         /// </para>
+        /// <para>
+        /// The contact geometry (the item's bounding-sphere radius and the reach sum) is
+        /// <see cref="TryComputeReach"/>; this method only compares the centre distance
+        /// against it, so a caller that needs the number the gate used asks for the same
+        /// function instead of re-deriving it.
+        /// </para>
         /// </remarks>
         public static AbsorbOutcome EvaluateAbsorb(
             bool itemAbsorbable,
@@ -175,17 +181,60 @@ namespace VRCKatamari.Pickup
             if (!KatamariMath.IsFiniteFloat(distanceSquared)) return AbsorbOutcome.RejectInvalidInput;
             float distance = Mathf.Sqrt(distanceSquared);
 
+            float itemRadius;
+            float reach;
+            if (!TryComputeReach(itemBounds, collisionRadiusWorldM, contactRadiusWorldM,
+                out itemRadius, out reach))
+                return AbsorbOutcome.RejectInvalidInput;
+            return distance <= reach ? AbsorbOutcome.Absorb : AbsorbOutcome.RejectOutOfReach;
+        }
+
+        /// <summary>
+        /// The contact geometry both the gate and every report of the gate's threshold use:
+        /// the item's bounding-sphere radius and the ball's reach.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// `itemRadius = sqrt((x/2)^2 + (y/2)^2 + (z/2)^2)` over the item's FULL extents, and
+        /// `reach = collisionRadiusWorldM + contactRadiusWorldM + itemRadius`. Both are
+        /// metres and are only summed: no scaling, no falloff, no epsilon. This is the
+        /// deliberate bounds proxy described in the class remarks, and this method is the
+        /// only place it exists: <see cref="EvaluateAbsorb"/> decides with it, and a caller
+        /// that reports the threshold it refused with (the assembly layer's rejection
+        /// diagnostics) asks for the same number instead of re-deriving a second copy that
+        /// can drift.
+        /// </para>
+        /// <para>
+        /// False means the inputs are not a legal item geometry at all: a non-finite bounds
+        /// component, radius or contact margin, a negative extent, a negative collision
+        /// radius (all of which the gate reports as invalid input), or a non-representable
+        /// intermediate. Both out values are then zero. Which side of `reach` a candidate
+        /// falls on is NOT decided here; the comparison stays the gate's.
+        /// </para>
+        /// </remarks>
+        public static bool TryComputeReach(Vector3 itemBounds, float collisionRadiusWorldM,
+            float contactRadiusWorldM, out float itemRadiusM, out float reachM)
+        {
+            itemRadiusM = 0f;
+            reachM = 0f;
+            if (!KatamariMath.IsFiniteVector(itemBounds)) return false;
+            if (!KatamariMath.IsFiniteFloat(collisionRadiusWorldM)) return false;
+            if (!KatamariMath.IsFiniteFloat(contactRadiusWorldM)) return false;
+            if (itemBounds.x < 0f || itemBounds.y < 0f || itemBounds.z < 0f) return false;
+            if (collisionRadiusWorldM < 0f) return false;
+
             float halfX = itemBounds.x * 0.5f;
             float halfY = itemBounds.y * 0.5f;
             float halfZ = itemBounds.z * 0.5f;
             float itemRadiusSquared = halfX * halfX + halfY * halfY + halfZ * halfZ;
-            if (!KatamariMath.IsFiniteFloat(itemRadiusSquared))
-                return AbsorbOutcome.RejectInvalidInput;
+            if (!KatamariMath.IsFiniteFloat(itemRadiusSquared)) return false;
             float itemRadius = Mathf.Sqrt(itemRadiusSquared);
 
             float reach = collisionRadiusWorldM + contactRadiusWorldM + itemRadius;
-            if (!KatamariMath.IsFiniteFloat(reach)) return AbsorbOutcome.RejectInvalidInput;
-            return distance <= reach ? AbsorbOutcome.Absorb : AbsorbOutcome.RejectOutOfReach;
+            if (!KatamariMath.IsFiniteFloat(reach)) return false;
+            itemRadiusM = itemRadius;
+            reachM = reach;
+            return true;
         }
 
         /// <summary>

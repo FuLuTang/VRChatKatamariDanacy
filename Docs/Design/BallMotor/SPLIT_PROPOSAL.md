@@ -1,6 +1,23 @@
-# KatamariBallMotor 拆分提案（只读分析，未改代码）
+# KatamariBallMotor 拆分提案（分析；第一批改动已落地，见下）
 
 **状态：PROPOSAL。** 对象 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/KatamariBallMotor.cs`（2088 行，下称 motor），行号以本次工作区为准。依据 `Docs/Design/CODE_CONVENTIONS.md` 与 `Docs/Design/BallMotor/README.md`。
+
+## 落地状态（2026-11-15，第一批）
+
+**已落地三项，其余未动。未编译、未进 Unity、未跑 EditMode——与本文其余部分同一状态。** 改动只在私有实现内：44 个 `[SerializeField]` 的名字与顺序未动，被测试与场景引用的 public 方法名未动，§4 末尾列的反射钉子全部仍能解析。当前文件为 **2115 行**（改动前 2148 行；`+80 / −113`）。
+
+| 项 | 结果 |
+|---|---|
+| S1（部分） | 删 9 个零读者取值器与其只写字段/写入（见下面「删除证据」）；`RecordReject` 的错位注释（原 1868–1877）移回 `RecordReject` 上方（现 2005–2014）。`GetAbsorbedEventPosition` **未删**：`Docs/Design/StoryMode/README.md` 按名字引用它，删掉会留下悬空引用，留给同时改那份文档的人 |
+| S3（只做公式合一） | 新增 `PickupAbsorbMath.TryComputeReach`（`PickupAbsorbMath.cs:215`）；`EvaluateAbsorb` 的判定体（`PickupAbsorbMath.cs:184-189`）、motor 的追踪快照（`:752-777`）与拒绝日志（`:1810-1821`）全部改调它。顺带把「每个候选每步都算半径/reach」变成「只在该件被追踪或要打拒绝日志时算」。拒绝码与门序未变；非法 `bounds` 在诊断里报 `-1`（原本会打印 NaN） |
+| S5 | `CompactPending(int write, int read)`（motor `:857`），`CommitAcceptedAbsorbs`（`:800`）与 `WithdrawCandidate`（`:1281`）的两处 9 字段复制合一，同下标直接返回 |
+| 未动 | S2 `TryGrowthFraction`、S4 `RingBufferMath`（风险最高的一步）、S6 `StuckRecoveryMath`、S7 `TryReadMove2D`、S8 `TryProjectBankedScore`、§3 的「回合所有者」边界（账本/交分/奖励/`TryResetForNewRound` 搬迁）、`proxyRotation`（提案本身给了两个互斥选项，未定）、`PredictionCapacity = 0` 与四个零长预测数组（删字段要同步改 `GrowthLedgerMath` 调用签名） |
+
+**删除证据**（全仓 grep，代码/测试/Docs/`Assets` 下场景与 prefab YAML 均计，2026-11-15 02:00 UTC，排除 `.git`、`.codegraph`）：`GetCoreRadiusWorldM`、`GetGrowthFraction`、`GetUnbankedVolumeUnits`、`LastSweepWasBlocked`、`LastSweepWasStuck`、`GetFollowRigWorldPosition`、`GetFollowRigYawDegrees`、`HasFollowRigFrame`、`GetAbsorbedEventDiameter`、`absorbedEventDiameters`、`lastSweepBlocked`、`lastSweepStuck` 在 motor 之外只命中本文 §5 与 `KatamariBallMotor.asset` 的 Udon 符号表（U# 编译产物，`refresh_unity` 会重生成；私有字段不进场景序列化，故无存档值丢失）。`GetAbsorbedEventPosition` 命中 `Docs/Design/StoryMode/README.md:187`，因此保留。
+
+**改动后的行号锚点**（本文其余部分的行号仍是改动前的 2148 行版本，引用前请按下表或其上方符号名复核）：`StepBall :541`、`StepInput :715`、`EvaluatePendingCandidates :737`、`CommitAcceptedAbsorbs :800`、`CompactPending :857`、`TryCommitAbsorb :871`、`DeriveSize :922`、`RecomputeConfirmedAndSize :962`、`DeriveGrowthFraction :974`、`TryBeginPlaying :1026`、`TryResetForNewRound :1087`、`TryBankWithReason :1458`、`RecordAbsorbedEvent :1729`、`GetAbsorbedEventPosition :1789`、`RecordReject :2015`、`AbsorbedEventSlot :2104`。
+
+另：`Runtime/Ai/CpuSkirmishBootstrap.cs:351` 还有**第四份** reach 写法（诊断读数，用 `localScale.x` 当立方体边长）。它不在本批写入范围，未改；要合一应改调 `PickupAbsorbMath.TryComputeReach` 并传入 `GetPendingCandidate*` 那件道具的 bounds。
 
 ## 0. 结论
 

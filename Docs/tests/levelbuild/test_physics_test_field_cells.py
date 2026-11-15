@@ -29,7 +29,6 @@ drift is here:
 import json
 import math
 import re
-import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -41,6 +40,10 @@ if str(ROOT) not in sys.path:
 from Tools.levelbuild import placement_core as core  # noqa: E402
 
 FIELD_JSON = ROOT / "Docs/Design/BallMotor/physics_test_field.json"
+# The v1 rows frozen once, with every check's optional `v2` block stripped. A snapshot - not
+# `git show HEAD:` - because the v2 rows are themselves committed now, and because a clean
+# checkout with no history must still be able to prove "the v1 matrix did not move".
+V1_SNAPSHOT = ROOT / "Docs/tests/levelbuild/physics_test_field_v1_snapshot.json"
 LEVELS_DIR = ROOT / "Docs/Design/Levels/physics_test_field"
 DRIVER_CS = (ROOT / "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/PhysicsTestField/"
                     "PhysicsTestFieldDriver.cs")
@@ -449,6 +452,47 @@ V2_EXPECT_VALUES = ("pass", "fail", "n/a")
 DESIGN_ONLY_IDS = ("W1", "W2", "W3", "W4", "W5", "W6", "R1", "R2", "S1", "X1")
 
 
+def v1_view(doc):
+    """The criteria file with every check's optional `v2` block removed (cell order kept)."""
+    rows = []
+    for cell in doc["cells"]:
+        rows.append({
+            "cell": {key: value for key, value in cell.items() if key != "checks"},
+            "checks": [{key: value for key, value in check.items() if key != "v2"}
+                       for check in cell["checks"]],
+        })
+    return rows
+
+
+def write_v1_snapshot():
+    """Writes the frozen v1 rows. Run ONLY when the v1 criteria change on purpose."""
+    doc = load_field()
+    rows = v1_view(doc)
+    snapshot = {
+        "_meta": {
+            "what": "the v1 rows of Docs/Design/BallMotor/physics_test_field.json, with every "
+                    "check's optional `v2` block removed",
+            "why": "with contactModelV2Enabled=false the 36-run matrix must stay byte-identical to "
+                   "pass7. TestFieldCriteriaModels compares this file against the working tree; a "
+                   "snapshot instead of `git show HEAD:` keeps that proof in a clean checkout and "
+                   "after the v2 rows were themselves committed (a4c9f4a)",
+            "source_commit": "9a71727 (the commit before the v2 overrides; verified equal to the "
+                             "working tree's v1 view when the snapshot was written)",
+            "generated_by": "python3 Docs/tests/levelbuild/test_physics_test_field_cells.py "
+                            "--write-v1-snapshot",
+            "regenerate_when": "only when a v1 criterion is changed on purpose - which also "
+                               "invalidates criteria_models.v1_baseline_pass7",
+            "cells": len(rows),
+            "checks": sum(len(row["checks"]) for row in rows),
+        },
+        "cells": rows,
+    }
+    V1_SNAPSHOT.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n",
+                           encoding="utf-8")
+    print("wrote " + str(V1_SNAPSHOT) + ": cells=" + str(snapshot["_meta"]["cells"])
+          + " checks=" + str(snapshot["_meta"]["checks"]))
+
+
 def v2_rows(doc):
     """(cell, check, v2 block) for every wired criterion that carries an override."""
     for cell in doc["cells"]:
@@ -535,34 +579,39 @@ class CriteriaModels(unittest.TestCase):
                           "%s/%s names a v2 metric the driver cannot read" %
                           (cell["id"], check["id"]))
 
-    def test_v1_rows_are_byte_identical_to_git_head(self):
+    def test_v1_rows_match_the_frozen_snapshot(self):
         # The whole point of putting v2 in its own block: with the flag off the matrix must be
-        # exactly pass7. Compare against the committed file rather than a checked-in copy, so a
-        # later edit that "only touches v2" cannot move a v1 row.
-        try:
-            done = subprocess.run(
-                ["git", "-C", str(ROOT), "show",
-                 "HEAD:Docs/Design/BallMotor/physics_test_field.json"],
-                capture_output=True, text=True)
-        except OSError as error:                 # no git on this machine
-            self.skipTest("git unavailable: %s" % error)
-        if done.returncode != 0 or not done.stdout.strip():
-            self.skipTest("cannot read the file from git HEAD")
-        head = json.loads(done.stdout)
-        self.assertEqual([cell["id"] for cell in head["cells"]],
-                         [cell["id"] for cell in self.doc["cells"]])
-        for head_cell, cell in zip(head["cells"], self.doc["cells"]):
-            v1_cell = {key: value for key, value in cell.items() if key != "checks"}
-            head_v1 = {key: value for key, value in head_cell.items() if key != "checks"}
-            self.assertEqual(head_v1, v1_cell, cell["id"])
-            self.assertEqual([check["id"] for check in head_cell["checks"]],
-                             [check["id"] for check in cell["checks"]], cell["id"])
-            for head_check, check in zip(head_cell["checks"], cell["checks"]):
-                v1_check = {key: value for key, value in check.items() if key != "v2"}
-                self.assertEqual(head_check, v1_check, "%s/%s" % (cell["id"], check["id"]))
-        # The planned list only GREW (the v2-only design rows are appended at the end).
-        self.assertEqual(head["planned_cells"],
-                         self.doc["planned_cells"][:len(head["planned_cells"])])
+        # exactly pass7. The snapshot was generated once from 9a71727 (the commit before the v2
+        # rows), so this proves it without git history and keeps working now that the v2 rows are
+        # committed too.
+        self.assertTrue(V1_SNAPSHOT.is_file(), V1_SNAPSHOT)
+        snapshot = json.loads(V1_SNAPSHOT.read_text(encoding="utf-8"))
+        self.assertIn("9a71727", snapshot["_meta"]["source_commit"])
+        self.assertEqual(v1_view(self.doc), snapshot["cells"],
+                         "a v1 row changed; if that is intentional, regenerate the snapshot "
+                         "with --write-v1-snapshot and update the pass7 counts")
+        self.assertEqual(snapshot["_meta"]["checks"], 59)
+        self.assertEqual(snapshot["_meta"]["cells"], 9)
+
+    def test_v2_overrides_are_additive_only(self):
+        # Every override hangs off a criterion the snapshot already had, and the snapshot itself
+        # carries no v2 block at all - so "v2 was added" and "v1 was edited" cannot be confused.
+        snapshot = json.loads(V1_SNAPSHOT.read_text(encoding="utf-8"))
+        known = {}
+        for row in snapshot["cells"]:
+            known[row["cell"]["id"]] = [check["id"] for check in row["checks"]]
+            for check in row["checks"]:
+                self.assertNotIn("v2", check, "%s/%s" % (row["cell"]["id"], check["id"]))
+        for cell, check, _ in v2_rows(self.doc):
+            self.assertIn(cell["id"], known)
+            self.assertIn(check["id"], known[cell["id"]],
+                          "%s/%s carries a v2 block but no v1 criterion" %
+                          (cell["id"], check["id"]))
+        # and the v1 row list itself is unchanged, in order
+        for row in snapshot["cells"]:
+            working = self.cells[row["cell"]["id"]]
+            self.assertEqual([check["id"] for check in working["checks"]],
+                             known[row["cell"]["id"]], row["cell"]["id"])
 
     def test_the_v2_table_matches_the_design(self):
         # CONTACT_MODEL_V2 7.7.2 "保持 / 翻转 / 替换" plus 7.7.4 for C14, one row each.
@@ -1181,4 +1230,7 @@ class ArenaRules(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if "--write-v1-snapshot" in sys.argv:
+        write_v1_snapshot()
+    else:
+        unittest.main()

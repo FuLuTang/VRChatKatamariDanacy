@@ -1,5 +1,4 @@
-# Level 1 content: changed files pulled from Windows (path | md5 | verified)
-# 110 props / 412 units; mats = size tiers (small yellow, medium orange, large red)
+# StoryLevel level-1 content + allowedKinds fix (Windows -> Linux)
 VRC_Katamari/Labs/BallPlayground/BallPlayground.prefab|0d0b0c22e31387203d9943207f83aa91|OK
 VRC_Katamari/Labs/BallPlayground/BallPlayground.prefab.meta|548017ed717a301f0752ec314311e334|OK
 VRC_Katamari/Labs/BallPlayground/BallPlayground.unity|ef38e0f517f765d61230e794e733c6e8|OK
@@ -12,7 +11,7 @@ VRC_Katamari/Labs/CpuSkirmish/CpuSkirmish.unity|8b1eb4c12096c9a8cf6ecf5bb4f83207
 VRC_Katamari/Labs/CpuSkirmish/CpuSkirmish.unity.meta|b831198c04edc9c2b192c9fc9b4aac8b|OK
 VRC_Katamari/Labs/StationPlatform/SeatedAxisProbe.asset|3fbdc77bbd7b21aff50c14db7e879592|OK
 VRC_Katamari/Labs/StationPlatform/SeatedAxisProbe.asset.meta|8ae6592d9caf487687f52ad8ce95601b|OK
-VRC_Katamari/Labs/StoryLevel/StoryLevel.unity|a528ea126839384acd2cb627cfd5b29c|OK
+VRC_Katamari/Labs/StoryLevel/StoryLevel.unity|93a44fcc4139cbfebf4df685be31d5cb|OK
 VRC_Katamari/Labs/StoryLevel/StoryLevel.unity.meta|b188eae265fd3b7a035d67a428cb3f25|OK
 VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.asset|b9f1dee140776b29c05d82e08a7d3978|OK
 VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.asset.meta|0dd297b39aa0b66a01ca7853b11945e8|OK

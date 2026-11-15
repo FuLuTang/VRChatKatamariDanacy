@@ -110,15 +110,24 @@ namespace VRCKatamari.BallMotor
 
         // ---- PickupAbsorbMath inputs ----
         [SerializeField] private float contactRadiusWorldM = 0f;
-        // The size gate is relative to the ball (Docs/OPEN_DECISIONS.md (h)): an item
-        // is absorbable when its largest full extent is at most
-        // min(maxItemSizeWorldM, semanticDiameter * absorbSizeRatio). absorbSizeRatio
-        // is the gameplay number and 1.0 is PROVISIONAL; maxItemSizeWorldM is only a
-        // safety ceiling so a mis-set ratio cannot let a tiny ball eat a house. It used
-        // to be the gate itself (absolute 1 m), which made every item above 1 m
-        // permanently inedible no matter how big the ball grew.
-        [SerializeField] private float maxItemSizeWorldM = 8f;
-        [SerializeField] private float absorbSizeRatio = 1f;
+        // The size gate is a VOLUME gate relative to the ball (Docs/OPEN_DECISIONS.md
+        // (l)): an item is absorbable when its AABB volume a*b*c is at most
+        // min(maxItemVolumeWorldM3, (pi/6) * semanticDiameter^3 / absorbVolumeRatio).
+        // absorbVolumeRatio is the gameplay number: the ball's volume must be that many
+        // times the item's, and 10 is the original's ratio. maxItemVolumeWorldM3 is only
+        // a safety ceiling so a mis-set ratio cannot let a tiny ball eat a house; 512 m^3
+        // is an 8 m cube, the retired 8 m length ceiling read as a cube.
+        //
+        // The retired fields were `maxItemSizeWorldM` (8f, a LENGTH ceiling) and
+        // `absorbSizeRatio` (1f, item longest edge / ball diameter). They are deleted, not
+        // deprecated: a length ceiling next to a volume gate truncates at 8 m of longest
+        // edge, which is not a volume statement, and a linear ratio cannot express a
+        // quantity where edges differing 6x differ 216x in volume. A scene or prefab
+        // still serializing the old names just has its dead keys ignored and falls back to
+        // these defaults; deleting them is editor cleanup, not a behaviour prerequisite
+        // (see Docs/Design/PickupAbsorb/README.md 1.1).
+        [SerializeField] private float maxItemVolumeWorldM3 = 512f;
+        [SerializeField] private float absorbVolumeRatio = 10f;
 
         // ---- FollowRigMath inputs (PROVISIONAL) ----
         [SerializeField] private float heightFilterHz = 5f;
@@ -754,16 +763,16 @@ namespace VRCKatamari.BallMotor
             for (int i = 0; i < pendingCandidateCount; i++)
             {
                 pendingAccepted[i] = false;
-                // The size limit is resolved inside the pickup layer from this step's
-                // semantic diameter, so the gate grows with the ball; maxItemSizeWorldM
+                // The volume limit is resolved inside the pickup layer from this step's
+                // semantic diameter, so the gate grows with the ball; maxItemVolumeWorldM3
                 // is passed as the ceiling only. semanticDiameterWorldM is the same
                 // reading the size stage derives and GetSemanticDiameterWorldM reports,
                 // while reach keeps using collisionRadiusWorldM.
                 AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorbWithValueAndBallSize(
                     pendingAbsorbable[i], pendingKinds[i], allowedKinds, allowedKindCount,
                     pendingBounds[i], pendingPositions[i], center, collisionRadiusWorldM,
-                    contactRadiusWorldM, maxItemSizeWorldM, maxCollisionRadiusWorldM,
-                    semanticDiameterWorldM, absorbSizeRatio, pendingValues[i]);
+                    contactRadiusWorldM, maxItemVolumeWorldM3, maxCollisionRadiusWorldM,
+                    semanticDiameterWorldM, absorbVolumeRatio, pendingValues[i]);
                 float evaluatedDistance = Vector3.Distance(pendingPositions[i], center);
 
                 if (debugTraceItemId != null && debugTraceItemId.Length > 0
@@ -1650,22 +1659,23 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// The size limit the absorb gate compares an item's largest bound against: the
-        /// ball's current semantic diameter times <c>absorbSizeRatio</c>, capped by
-        /// <c>maxItemSizeWorldM</c>. Metres; -1 when the inputs are invalid.
+        /// The volume limit the absorb gate compares an item's AABB volume against: the
+        /// ball's current volume divided by <c>absorbVolumeRatio</c>, capped by
+        /// <c>maxItemVolumeWorldM3</c>. Cubic metres; -1 when the inputs are invalid.
         /// </summary>
         /// <remarks>
         /// Read-only, for diagnostics and for a host that decides whether an item is
         /// worth submitting. Reason 3 (RejectItemTooLarge) used to be a constant, so
         /// "the item is over the limit" could be answered from the serialized field
         /// alone; now the answer moves with the ball, and a reader should show this
-        /// number next to the item's largest bounds extent.
+        /// number next to the item's AABB volume (its three bounds multiplied), never
+        /// next to its longest edge.
         /// </remarks>
-        public float GetAbsorbSizeLimitWorldM()
+        public float GetAbsorbVolumeLimitWorldM3()
         {
             float limit;
-            if (!PickupAbsorbMath.TryComputeAbsorbSizeLimit(semanticDiameterWorldM,
-                absorbSizeRatio, maxItemSizeWorldM, out limit)) return -1f;
+            if (!PickupAbsorbMath.TryComputeAbsorbVolumeLimit(semanticDiameterWorldM,
+                absorbVolumeRatio, maxItemVolumeWorldM3, out limit)) return -1f;
             return limit;
         }
 

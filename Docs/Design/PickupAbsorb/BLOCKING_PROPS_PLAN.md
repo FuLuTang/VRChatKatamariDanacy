@@ -9,7 +9,7 @@
 
 1. **推荐 A：动态挡路槽。** 宿主每次扫描（0.05 s）选出「当前吸不动 + 离球最近」的少量道具，**整批覆写**电机里的挡路盒槽（不是增删）。不新增任何碰撞数学：`SweepMath` 本来就在按盒扫掠。
 2. **挡路容量与静态障碍预算分开**：新 `MaxBlockingBoxCount = 6`，`MaxPlaneCount = 8` / `MaxBoxCount = 8` 不动 → 地图数据、校验器、现有 lab 全部不改。
-3. **只有一条门槛**：`extent > min(maxItemSizeWorldM, 语义直径 × absorbSizeRatio)` 就挡，与吸收门**同一个函数**。开关时刻与吸收门重合，不存在「既不挡、又吸不动」的空窗。
+3. **只有一条门槛**：`a·b·c > min(maxItemVolumeWorldM3, (π/6)·D³ / absorbVolumeRatio)` 就挡，与吸收门**同一个函数**。开关时刻与吸收门重合，不存在「既不挡、又吸不动」的空窗。（2026-11-15 决定 (l) 把判定量从最长边换成 AABB 体积，本条的函数边界不变、量变了：挡路谓词是 `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bounds, limitVolumeM3)`。）
 4. **原作是弹开还是只停：证据不足（PROVISIONAL）。** 我们选「停 + 沿切面滑」，复用既有墙面响应（`Docs/Design/BallMotor/README.md:205-228`）。不做反弹，也**不做**「撞大件削球/缩小」——研究文档没有确认过这条。
 5. 只有「真的挡住、手感、低矮件变整面墙、帧时间、接触饱和」需要 Unity 才能验。
 
@@ -69,7 +69,7 @@ F9+F5 合起来就是症状：吸收门拒了它，扫掠却从来不知道它�
 
 ## 3. 门槛两侧：增长、缩小、重试
 
-- **球长大跨过某件的门槛**：吸收提交 → `DeriveSize()` 重算直径 → `GetAbsorbSizeLimitWorldM()`（`:1647-1651`）变大 → 下一次宿主 tick 该件不再满足 `IsBeyondAbsorbLimit` → 挡路集少一个 → 盒消失（≤1 帧）。此刻球正贴着它，reach 判定**含等号**（`PickupAbsorbMath.cs:169-170`、`:298-300` 的注释与 `:270-286` 的合成），所以同一帧或下一帧就被吃掉。观感是「顶住 → 吞进去」，不需要额外规则。
+- **球长大跨过某件的门槛**：吸收提交 → `DeriveSize()` 重算直径 → `GetAbsorbVolumeLimitWorldM3()` 变大 → 下一次宿主 tick 该件不再满足 `IsBeyondAbsorbVolumeLimit` → 挡路集少一个 → 盒消失（≤1 帧）。此刻球正贴着它，reach 判定**含等号**（`PickupAbsorbMath.cs:169-170`、`:298-300` 的注释与 `:270-286` 的合成），所以同一帧或下一帧就被吃掉。观感是「顶住 → 吞进去」，不需要额外规则。
 - **缩小（交分）反向**：`TryBank` 缩球（`Docs/Design/BallMotor/README.md:127-144`）→ 上限变小 → 该件回到候选 → 下一 tick 重新注册。风险：若球此刻与它的**真实 AABB** 重叠（薄长件，如 3.2 m 长凳），扫掠的初始穿透分支会把球推出（`Docs/Design/BallLayers/Sweep/README.md:13`），可能是一次 ~0.2 m 的位移。第一版接受并记录，试玩后再决定是否跳过「球心已在盒内」的件。
 - **重试 / 重生**：挡路集是**球径派生量**，不是场景几何，所以 `TryResetForNewRound`（`:1087`）必须清挡路槽——这与「已注册的平面/盒子刻意不复位」（`Docs/Design/BallMotor/README.md:366-372`）不冲突，静态几何照样保留。`TeleportTo`（`:1555`）同样清，否则会把球传进旧盒子里被推出。宿主 `ResetField()`（`PickupFieldHost.cs:276-319`）把自己的 `blockedCount` 归零。
 - **一帧误差**：宿主每帧消费吸收事件（`PickupFieldHost.cs:208`），但 Unity 不保证宿主 `Update` 早于电机 `Update`（同文件 `:192-198` 已注明）。两个方向都可能差一帧：吃掉后多挡 ≤1 帧（球刚好进不去，无观感），缩小后晚 ≤1 帧才挡（可能多走一步）。接受。
@@ -85,7 +85,7 @@ F9+F5 合起来就是症状：吸收门拒了它，扫掠却从来不知道它�
 
 ### 5.1 纯数学（新增，可离线测）
 
-1. `PickupAbsorbMath.IsBeyondAbsorbLimit(Vector3 itemBounds, float limitWorldM)`——把 `:169-170` 的比较抽成一个函数，吸收门改为调用它。**「太大」从此只有一份定义**，宿主用它做挡路筛选，不会和门漂移。
+1. `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(Vector3 itemBounds, float limitVolumeWorldM3)`——吸收门与它共用 `TryComputeItemVolume` + `IsVolumeBeyondLimit`，同一次比较。**「太大」从此只有一份定义**，宿主用它做挡路筛选，不会和门漂移。
 2. 新 `Runtime/Pickup/BlockingPropMath.cs`（`public static`，无状态、不分配，遵守 `Docs/Design/CODE_CONVENTIONS.md:24-31`）：
    - `TryBoxFromCentreAndExtents(Vector3 centre, Vector3 extents, out Vector3 min, out Vector3 max)`
    - `TryDistanceToBox(Vector3 point, Vector3 min, Vector3 max, out float distance)`（盒内 = 0）
@@ -113,7 +113,7 @@ public string GetBlockingBoxRefusalReason();
 
 - 新序列化：`blockingEnabled`、`blockingMarginM = 0.8`、`blockingStickinessM = 0.25`、`propBlockingBounds`（可选覆盖；空 = 自动）。
 - `Start()` 一次性算每件的挡路 AABB（此时还没 attach，collider 仍是作者状态，F8）：`propColliders[i].bounds` → 否则 `propBlockingBounds[i]` → 否则 `position ± propBounds/2`。启动打一行「多少件用 collider / 声明 / 回退」。
-- `ScanProps()` 后追加一遍：候选 = `StateFree && submittable && IsBeyondAbsorbLimit(propBounds[i], motor.GetAbsorbSizeLimitWorldM())`——**上限从电机读，宿主不自己乘比例**（`KatamariBallMotor.cs:1647-1651` 就是为「宿主判断值不值得提交」加的）；距离 = `TryDistanceToBox`；`N = motor.GetBlockingBoxCapacity()`；`BlockingPropMath.SelectNearest(...)`；`motor.SetBlockingBoxes(...)`。
+- `ScanProps()` 后追加一遍：候选 = `StateFree && submittable && IsBeyondAbsorbVolumeLimit(propBounds[i], motor.GetAbsorbVolumeLimitWorldM3())`——**上限从电机读，宿主不自己乘比例**（`GetAbsorbVolumeLimitWorldM3()` 就是为「宿主判断值不值得提交」加的）；距离 = `TryDistanceToBox`；`N = motor.GetBlockingBoxCapacity()`；`BlockingPropMath.SelectNearest(...)`；`motor.SetBlockingBoxes(...)`。
 - **挡路与 `SetCollecting(false)` 无关**：回合超时只是停止吸收，世界仍然实心（`PickupFieldHost.cs:231-237` 只该撤候选）。
 - 挡路段放在「`attachmentRoot == null` 就早退」之前（`:210-216`），否则根没接就整张图穿模。
 - **单一所有者**：一个电机只能有一个挡路写入者。多 field 宿主会互相覆写（最后写的赢），用编辑器侧审计保证（同 `Docs/Design/BallMotor/README.md:261` 的做法），运行期第二次写入只打一次警告。
@@ -141,7 +141,7 @@ public string GetBlockingBoxRefusalReason();
 |---|---|---|
 | S1 | 本方案（决定：A、独立容量、单门槛、不反弹不削球） | `python3 Docs/tools/validate_plan.py`、`python3 -m unittest discover -s Docs/tests` |
 | S2 | `Docs/Design/PickupAbsorb/blocking_props.py` 参考模型 + `Docs/tests/pickup_absorb/` 用例（§6 的 1–10） | 只跑 `python3 -m unittest discover -s Docs/tests`，不需要 Unity |
-| S3 | `PickupAbsorbMath.IsBeyondAbsorbLimit`，门改调它；NUnit 回归 | MCP `run_tests`：`AbsorbSizeGateTests` 等**一行不改**仍全绿 |
+| S3 | `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit`，门改调它；NUnit 回归 | MCP `run_tests`：`AbsorbSizeGateTests` 等**一行不改**仍全绿 |
 | S4 | `BlockingPropMath` C# 移植 + NUnit | `run_tests` 全绿；与 S2 同用例同结果 |
 | S5 | 电机：容量/缓冲/六个 API/合并重建/复位与传送清理 | EditMode：容量与拒绝计数、`count = 0` 时行为与今天**完全一致**（StoryLevel 仍是 1 平面 4 盒、无 overflow） |
 | S6 | 宿主：AABB 采集 + 第二遍选择 + 写入 + 与 collecting 解耦 | Play Mode：0.30 m 球撞 1.25 m 长凳停住；长大到 1.25 m 后吞掉并能过 |

@@ -295,78 +295,97 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void ExtentEqualToTheLimitIsAbsorbable()
+        public void VolumeEqualToTheLimitIsAbsorbable()
         {
-            // Equality is inclusive: extent == limit is absorbable and does not block;
-            // only a strictly larger extent does.
-            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(
-                new Vector3(0.5f, 0.05f, 0.05f), 0.5f));
-            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(
-                new Vector3(0.4999f, 0.05f, 0.05f), 0.5f));
-            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(
-                new Vector3(0.5001f, 0.05f, 0.05f), 0.5f));
+            // Equality is inclusive: item volume == limit is absorbable and does not
+            // block; only a strictly larger volume does. 1 * 0.5 * 1 = 0.5 m^3 is exact in
+            // binary, so the equality case is real and not 1 ulp away.
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
+                new Vector3(1f, 0.5f, 1f), 0.5f));
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
+                new Vector3(0.9999f, 0.5f, 1f), 0.5f));
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
+                new Vector3(1.0001f, 0.5f, 1f), 0.5f));
 
-            // The compared quantity is the largest full extent, not the first component.
-            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(
-                new Vector3(0.1f, 0.5f, 0.1f), 0.5f));
-            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(
-                new Vector3(0.1f, 0.5001f, 0.1f), 0.5f));
+            // The compared quantity is the AABB volume, not one axis and not the longest
+            // edge. A 0.85 m bat (0.02 x 0.02) is 0.00034 m^3, far inside a 0.5 m^3 limit
+            // even though its longest edge is longer than that limit would allow if the
+            // limit were a length; 0.9 x 0.9 x 0.6 = 0.486 m^3 is inside, and a 0.9 m cube
+            // (0.729 m^3) is beyond.
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
+                new Vector3(0.02f, 0.02f, 0.85f), 0.5f));
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
+                new Vector3(0.9f, 0.9f, 0.6f), 0.5f));
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
+                new Vector3(0.9f, 0.9f, 0.9f), 0.5f));
 
             // Bad data counts as beyond: a NaN comparison is never true, and letting it
             // through would leave the prop both unabsorbable and non-blocking.
-            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
                 new Vector3(float.NaN, 0f, 0f), 0.5f));
-            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
                 new Vector3(-1f, 0.05f, 0.05f), 0.5f));
-            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
                 new Vector3(0.5f, 0.05f, 0.05f), float.PositiveInfinity));
+            // A volume that overflows float is bad data too, not "infinitely big".
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
+                new Vector3(1e20f, 1e20f, 1e20f), 0.5f));
         }
 
         [Test]
         public void GrowthCrossingTheLimitFlipsTheSameFunction()
         {
+            // A 1.25 x 0.05 x 0.05 m plank is 0.003125 m^3.
             Vector3 bounds = new Vector3(1.25f, 0.05f, 0.05f);
             float limit;
 
-            // A 1.20 m ball resolves a 1.20 m limit, so the 1.25 m prop blocks and the
-            // gate refuses it as too large.
-            Assert.IsTrue(PickupAbsorbMath.TryComputeAbsorbSizeLimit(1.20f, 1f, 8f, out limit));
-            Assert.AreEqual(1.20f, limit, Tolerance);
-            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(bounds, limit));
+            // A 0.30 m ball resolves (pi/6) * 0.027 / 10 = 0.001414 m^3, so the plank
+            // blocks and the gate refuses it as too large.
+            Assert.IsTrue(PickupAbsorbMath.TryComputeAbsorbVolumeLimit(0.30f, 10f, 512f,
+                out limit));
+            Assert.AreEqual(0.001414f, limit, 1e-6f);
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bounds, limit));
             AbsorbOutcome smallBall = PickupAbsorbMath.EvaluateAbsorbWithBallSize(true,
                 "stone", Allowed, Allowed.Length, bounds, Vector3.zero, Vector3.zero,
-                1.20f * 0.5f, 0f, 8f, MaxGrowthRadiusM, 1.20f, 1f);
+                0.30f * 0.5f, 0f, 512f, MaxGrowthRadiusM, 0.30f, 10f);
             Assert.AreEqual(AbsorbOutcome.RejectItemTooLarge, smallBall);
 
-            // Growing to 1.25 m raises the limit to 1.25 m: the same prop becomes
-            // absorbable, and the host-side predicate agrees with the gate.
-            Assert.IsTrue(PickupAbsorbMath.TryComputeAbsorbSizeLimit(1.25f, 1f, 8f, out limit));
-            Assert.AreEqual(1.25f, limit, 0f);
-            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(bounds, limit));
+            // Growing to 0.50 m raises the limit to (pi/6) * 0.125 / 10 = 0.006545 m^3:
+            // the same plank becomes absorbable, and the host-side predicate agrees with
+            // the gate.
+            Assert.IsTrue(PickupAbsorbMath.TryComputeAbsorbVolumeLimit(0.50f, 10f, 512f,
+                out limit));
+            Assert.AreEqual(0.006545f, limit, 1e-6f);
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bounds, limit));
             AbsorbOutcome bigBall = PickupAbsorbMath.EvaluateAbsorbWithBallSize(true,
                 "stone", Allowed, Allowed.Length, bounds, Vector3.zero, Vector3.zero,
-                1.25f * 0.5f, 0f, 8f, MaxGrowthRadiusM, 1.25f, 1f);
+                0.50f * 0.5f, 0f, 512f, MaxGrowthRadiusM, 0.50f, 10f);
             Assert.AreEqual(AbsorbOutcome.Absorb, bigBall);
 
             Assert.AreEqual(smallBall == AbsorbOutcome.RejectItemTooLarge,
-                PickupAbsorbMath.IsBeyondAbsorbLimit(bounds, 1.20f));
+                PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bounds, 0.001414f));
             Assert.AreEqual(bigBall == AbsorbOutcome.RejectItemTooLarge,
-                PickupAbsorbMath.IsBeyondAbsorbLimit(bounds, 1.25f));
+                PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bounds, 0.006545f));
         }
 
         [Test]
         public void ShrinkingRecomputesWithNoResidualState()
         {
-            Vector3 bench = new Vector3(1.25f, 0.1f, 0.1f);
-            Vector3 pebble = new Vector3(0.3f, 0.1f, 0.1f);
+            // Both boxes are built from binary-exact fractions so the volumes are exact:
+            // 1.25 * 0.5 * 0.25 = 0.15625 m^3 and 0.5 * 0.25 * 0.125 = 0.015625 m^3.
+            // (A 0.1 m side would not do: 0.1f is inexact and a 1.25 * 0.1 * 0.1 product
+            // lands one ulp ABOVE 0.0125, which would make an "equality" case a lie.)
+            Vector3 bench = new Vector3(1.25f, 0.5f, 0.25f);
+            Vector3 pebble = new Vector3(0.5f, 0.25f, 0.125f);
 
             // Same inputs, different limits: the answer only depends on the arguments,
-            // because nothing is cached.
-            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(bench, 1.25f));
-            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(pebble, 1.25f));
-            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(bench, 1.20f));
-            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(pebble, 1.20f));
-            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(bench, 1.25f));
+            // because nothing is cached. A 0.15625 m^3 limit includes the bench at
+            // equality, a 0.15 m^3 limit does not, and the pebble passes both.
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bench, 0.15625f));
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(pebble, 0.15625f));
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bench, 0.15f));
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(pebble, 0.15f));
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bench, 0.15625f));
 
             Vector3[] minima = new Vector3[]
             {
@@ -381,8 +400,8 @@ namespace VRCKatamari.Tests
             bool[] grown = new bool[] { false, false };
             bool[] shrunk = new bool[]
             {
-                PickupAbsorbMath.IsBeyondAbsorbLimit(bench, 1.20f),
-                PickupAbsorbMath.IsBeyondAbsorbLimit(pebble, 1.20f)
+                PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bench, 0.15f),
+                PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(pebble, 0.15f)
             };
             int[] indices = new int[2];
             float[] distances = new float[2];

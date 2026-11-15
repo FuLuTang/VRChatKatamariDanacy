@@ -72,8 +72,23 @@ export class API {
   }
 
   async get(path) {
-    const response = await fetch(path, { headers: { Accept: "application/json" } });
-    return this._read(response);
+    if (!this.token) {
+      throw new ApiError(
+        "还没有写入令牌：请用服务器启动日志里打印的 ?token=… 链接打开本页（或重新打开那个链接）"
+      );
+    }
+    const response = await fetch(path, {
+      headers: { Accept: "application/json", "X-Editor-Token": this.token },
+    });
+    const data = await this._read(response);
+    if (data && data.ok === false && /token/i.test(data.error || "")) {
+      this.forgetToken();
+      throw new ApiError(
+        "令牌无效或已更换。请用服务器日志里最新的 ?token=… 链接重新打开本页。",
+        data.details || []
+      );
+    }
+    return data;
   }
 
   async post(payload) {
@@ -131,6 +146,34 @@ export class API {
     return this.get(`/api/hints?d=${encodeURIComponent(diameter.toFixed(3))}`);
   }
 
+  loadRegions() {
+    return this.get("/api/regions");
+  }
+
+  async saveRegions(regions) {
+    if (!this.token) {
+      throw new ApiError("还没有写入令牌");
+    }
+    const response = await fetch("/api/regions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Editor-Token": this.token,
+      },
+      body: JSON.stringify({ regions }),
+    });
+    return this._read(response);
+  }
+
+  stats(params) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null || value === "") continue;
+      query.set(key, Array.isArray(value) ? value.join(",") : String(value));
+    }
+    return this.get(`/api/stats?${query.toString()}`);
+  }
+
   /**
    * Follow saves from other tabs/agents.  EventSource reconnects by itself; the
    * caller refetches `/api/level` whenever the version moves.
@@ -139,7 +182,7 @@ export class API {
     if (!("EventSource" in window)) {
       return null;
     }
-    const source = new EventSource("/api/events");
+    const source = new EventSource(`/api/events?token=${encodeURIComponent(this.token)}`);
     source.addEventListener("change", (event) => {
       try {
         const data = JSON.parse(event.data);

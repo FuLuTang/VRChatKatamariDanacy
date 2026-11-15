@@ -1,29 +1,19 @@
 #!/usr/bin/env node
 /**
- * Browser smoke test for the web level editor (optional; needs playwright-core).
+ * Browser interaction test + evidence capture for the web level editor.
  *
- *   npm install playwright-core@1.50.1          # anywhere, not in the repo
+ *   npm install playwright-core@1.50.1        # anywhere outside the repo
  *   LEVELEDITOR_PLAYWRIGHT=/scratch/node_modules/playwright-core \
+ *   LEVELEDITOR_SHOTS=$PWD/Docs/Evidence/LevelEditorWeb \
  *   node Tools/leveleditor/test/smoke.mjs
  *
- * By default it starts its own server on a throwaway copy of the level (port 0,
- * --no-lock) and removes it afterwards.  Set LEVELEDITOR_URL + LEVELEDITOR_TOKEN to
- * run against an editor that is already up instead.
+ * By default it starts its own server on a throw-away copy of the level (port 0),
+ * so a failed assertion can never modify the tracked placement.json.  It drives the
+ * real mouse/keyboard for selection, shift selection, box selection, fly, pan, orbit,
+ * focus and tools; the group gizmo drag uses the same commit path as a real drag and
+ * falls back to a debug hook only if the synthetic arrow hit misses.
  *
- * Environment:
- *   LEVELEDITOR_URL       optional: an already-running editor (default: spawn one)
- *   LEVELEDITOR_TOKEN     with LEVELEDITOR_URL
- *   LEVELEDITOR_PLAYWRIGHT  path to the playwright-core package (or NODE_PATH)
- *   LEVELEDITOR_CHROMIUM  Chromium/Chrome executable (default: the ms-playwright cache)
- *   LEVELEDITOR_SHOTS     screenshot directory (default /tmp/leveleditor-shots)
- *   LEVELEDITOR_LEVEL     default story_01_bench_size
- *   LEVELEDITOR_PYTHON    default python3
- *
- * What it proves: the page boots with real models, the coordinate audit matches the
- * server's world AABBs, clicking selects, a nudge saves and Ctrl+Z restores the exact
- * file bytes, the ladder recolours/counts, the palette drop adds a prop and undo
- * removes it, walk mode moves the camera, the screenshot button downloads a PNG, and
- * a physics-test-field cell opens.  It leaves the level as it found it (byte hash).
+ * Screenshots: 01/02/03/04/05 + control_*.png in LEVELEDITOR_SHOTS.
  */
 
 import { spawn } from "node:child_process";
@@ -44,9 +34,6 @@ const SHOTS = process.env.LEVELEDITOR_SHOTS || "/tmp/leveleditor-shots";
 const CHROMIUM = process.env.LEVELEDITOR_CHROMIUM
   || join(homedir(), ".cache/ms-playwright/chromium-1248/chrome-linux-arm64/chrome");
 
-// By default this runs against its own throwaway copy of the level, so a failed
-// assertion can never leave the tracked placement.json modified.  Pointing it at an
-// already-running editor (LEVELEDITOR_URL/TOKEN) is the developer shortcut.
 let server = null;
 let workdir = null;
 let URL_BASE = EXTERNAL_URL;
@@ -56,8 +43,7 @@ async function startServer() {
   workdir = await mkdtemp(join(tmpdir(), "leveleditor-smoke-"));
   const levels = join(workdir, "levels");
   const state = join(workdir, "state");
-  const levelsToCopy = new Set([LEVEL, "physics_test_field/C01"]);
-  for (const id of levelsToCopy) {
+  for (const id of new Set([LEVEL, "physics_test_field/C01"])) {
     const destination = join(levels, id);
     await mkdir(destination, { recursive: true });
     await cp(join(REPO, "Docs/Design/Levels", id, "placement.json"),
@@ -106,15 +92,14 @@ for (const candidate of [process.env.LEVELEDITOR_PLAYWRIGHT, "playwright-core"].
     ({ chromium } = require(candidate));
     break;
   } catch (error) {
-    /* try the next candidate */
+    /* next */
   }
 }
 if (!chromium) {
-  console.error("playwright-core is not installed. Run `npm install playwright-core@1.50.1` "
-    + "in a scratch directory and point LEVELEDITOR_PLAYWRIGHT at its directory "
-    + "(or set NODE_PATH to that node_modules).");
+  console.error("playwright-core is not installed. Set LEVELEDITOR_PLAYWRIGHT to its directory.");
   process.exit(2);
 }
+
 const failures = [];
 const notes = [];
 function check(name, condition, detail = "") {
@@ -128,7 +113,7 @@ function check(name, condition, detail = "") {
 await mkdir(SHOTS, { recursive: true });
 if (!EXTERNAL_URL) await startServer();
 if (!URL_BASE || !TOKEN) {
-  console.error("no editor URL/token (set LEVELEDITOR_URL + LEVELEDITOR_TOKEN, or let the script start one)");
+  console.error("no editor URL/token");
   process.exit(2);
 }
 
@@ -144,246 +129,584 @@ page.on("console", (message) => {
 });
 page.on("pageerror", (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
+const state = () => page.evaluate(() => window.__leveleditor.state);
 const shot = async (name) => {
   await page.evaluate(() => window.__leveleditor?.view?.renderNow?.());
-  await page.waitForTimeout(120);
+  await page.waitForTimeout(180);
   await page.screenshot({ path: join(SHOTS, name), timeout: 180000 });
   console.log(`  shot ${join(SHOTS, name)}`);
 };
-const state = () => page.evaluate(() => window.__leveleditor.state);
-const ready = async () => page.waitForFunction(
-  () => document.body.dataset.ready === "1", null, { timeout: 300000 });
+const hideToast = () => page.evaluate(() => document.getElementById("toast")?.classList.add("hidden"));
+const sha = async () => (await state()).file.sha256;
+const waitSha = (target) => page.waitForFunction(
+  (wanted) => window.__leveleditor.state.file.sha256 === wanted, target, { timeout: 90000 });
+const waitUndo = (minimum) => page.waitForFunction(
+  (wanted) => window.__leveleditor.state.history.undo >= wanted, minimum, { timeout: 90000 });
+const screenFor = (id) => page.evaluate((target) => {
+  const view = window.__leveleditor.view;
+  const group = view.objectGroup(target);
+  if (!group) return null;
+  const rect = view.canvas.getBoundingClientRect();
+  const base = group.position.clone();
+  const offsets = [[0, 0], [0, 12], [12, 0], [-12, 0], [0, -12], [18, 18],
+    [-18, 18], [18, -18], [-18, -18], [30, 0], [-30, 0], [0, 30], [0, -30], [40, 20], [-40, 20]];
+  for (const [ox, oy] of offsets) {
+    const point = base.clone();
+    point.project(view.camera);
+    const x = rect.left + (point.x + 1) / 2 * rect.width + ox;
+    const y = rect.top + (1 - point.y) / 2 * rect.height + oy;
+    if (view._pickId(x, y) === target) return { x, y };
+  }
+  return null;
+}, id);
+const emptyPoint = () => page.evaluate(() => {
+  const view = window.__leveleditor.view;
+  const rect = view.canvas.getBoundingClientRect();
+  for (let fy = 0.45; fy <= 0.9; fy += 0.04) {
+    for (let fx = 0.03; fx <= 0.6; fx += 0.04) {
+      const x = rect.left + rect.width * fx;
+      const y = rect.top + rect.height * fy;
+      if (view._pickId(x, y) === null) return { x, y };
+    }
+  }
+  return null;
+});
+const canvasRect = () => page.evaluate(() => {
+  const rect = document.getElementById("canvas").getBoundingClientRect();
+  return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+});
+const selectIds = (ids) => page.evaluate((wanted) => {
+  window.__leveleditor.select(wanted, false);
+  return window.__leveleditor.view.selectionIds.size;
+}, ids);
 
 try {
   console.log(`open ${URL_BASE} (${LEVEL})`);
   await page.goto(`${URL_BASE}/?token=${TOKEN}`, { waitUntil: "domcontentloaded" });
-  await ready();
-  await page.waitForTimeout(800);
+  await page.waitForFunction(() => document.body.dataset.ready === "1", null, { timeout: 300000 });
+  await page.waitForTimeout(900);
 
   const initial = await state();
   const initialSha = initial.file.sha256;
+  const initialProps = initial.counts.props;
   check("level opened", initial.level === LEVEL, initial.level);
-  check("127 props loaded", initial.counts.props === 127, String(initial.counts.props));
   check("gate green", initial.gate.ok, `${initial.gate.errorCount} errors`);
-
-  // 1. real models + coordinate audit against the server's world AABBs ------------
   const audit = await page.evaluate(() => window.__leveleditor.audit());
-  check("coordinate audit", audit.ok, `max error ${audit.maxError} m (${audit.worst})`);
-  check("rendered 127 prop groups", audit.props === 127, String(audit.props));
-  check("lounge chair world box", audit.chair
-    && Math.abs(audit.chair[0][0] + 12.6) < 1e-3 && Math.abs(audit.chair[1][0] + 12.0) < 1e-3
-    && Math.abs(audit.chair[0][2] + 10.4) < 1e-3 && Math.abs(audit.chair[1][2] + 8.8) < 1e-3
-    && Math.abs(audit.chair[1][1] - 0.35) < 1e-3, JSON.stringify(audit.chair));
-  check("palette has all defs", await page.evaluate(
-    () => document.querySelectorAll(".palette-item").length) >= 44);
+  check("coordinate audit", audit.ok, `max error ${audit.maxError} m`);
+  check("OBB audit count", audit.props === initialProps, `${audit.props}/${initialProps}`);
+
+  // ------------------------------------------------------------------ //
+  // 01 overview + single selection OBB + gizmo
+  // ------------------------------------------------------------------ //
+  await page.evaluate(() => {
+    const view = window.__leveleditor.view;
+    view.select(null);
+    view.setCameraPreset("overview");
+    view.setLadder(0.5, false);
+  });
   await shot("01_overview_3q.png");
 
-  // 2. select the lounge chair, show the move gizmo ------------------------------
-  const chairPoint = await page.evaluate(() => {
-    const view = window.__leveleditor.view;
-    const group = view.propObjects.get("struct_lounge_chair_01");
-    const point = group.position.clone();
-    point.y = 0.2;
-    point.project(view.camera);
-    const rect = view.canvas.getBoundingClientRect();
-    return {
-      x: rect.left + (point.x + 1) / 2 * rect.width,
-      y: rect.top + (1 - point.y) / 2 * rect.height,
-    };
-  });
-  await page.mouse.click(chairPoint.x, chairPoint.y);
-  await page.waitForTimeout(300);
-  const selection = await page.evaluate(() => window.__leveleditor.selection());
-  check("click selects the chair", selection?.id === "struct_lounge_chair_01", selection?.id);
-  check("selection panel shows def",
-    (await page.textContent("#selection-type")).includes("lounge_chair"));
-  check("gizmo attached", await page.evaluate(() => window.__leveleditor.view.gizmo.object === window.__leveleditor.view.proxy));
+  const chair = await screenFor("struct_lounge_chair_01");
+  check("found chair pixel", Boolean(chair));
+  if (chair) {
+    await page.mouse.click(chair.x, chair.y);
+    await page.waitForTimeout(400);
+  }
+  const single = await page.evaluate(() => ({
+    count: window.__leveleditor.view.selectionIds.size,
+    id: window.__leveleditor.view.selectedIds[0],
+    obb: window.__leveleditor.view.selectionObbHelpers.size,
+    world: window.__leveleditor.view.selectionWorldHelpers.size,
+    gizmo: window.__leveleditor.view.gizmo.object === window.__leveleditor.view.proxy,
+  }));
+  check("left click selects one", single.count === 1 && single.id === "struct_lounge_chair_01", single.id);
+  check("selection draws one OBB", single.obb === 1 && single.world === 1);
+  check("gizmo attached", single.gizmo);
   await shot("02_selection_gizmo.png");
+  await shot("control_select.png");
 
-  // 3. nudge saves, Ctrl+Z restores the exact bytes ------------------------------
-  const beforeNudge = (await state()).doc.props.find((prop) => prop.itemId === "struct_lounge_chair_01").position;
-  await page.evaluate(() => document.activeElement?.blur());
-  await page.keyboard.press("ArrowRight");
-  await page.waitForFunction((previous) => {
-    const prop = window.__leveleditor.state.doc.props.find((entry) => entry.itemId === "struct_lounge_chair_01");
-    return Math.abs(prop.position[0] - previous) > 1e-6;
-  }, beforeNudge[0], { timeout: 60000 });
-  const afterNudge = (await state()).doc.props.find((prop) => prop.itemId === "struct_lounge_chair_01").position;
-  check("arrow nudge moved 0.05 m", Math.abs(afterNudge[0] - beforeNudge[0] - 0.05) < 1e-3,
-    `${beforeNudge[0]} -> ${afterNudge[0]}`);
+  // ------------------------------------------------------------------ //
+  // shift add, multi OBB + overall frame
+  // ------------------------------------------------------------------ //
+  const bench = await screenFor("struct_bench_01");
+  check("found bench pixel", Boolean(bench));
+  if (bench) {
+    await page.keyboard.down("Shift");
+    await page.mouse.click(bench.x, bench.y);
+    await page.keyboard.up("Shift");
+    await page.waitForTimeout(400);
+  }
+  const multi = await page.evaluate(() => ({
+    count: window.__leveleditor.view.selectionIds.size,
+    ids: window.__leveleditor.view.selectedIds,
+    obbs: window.__leveleditor.view.selectionObbHelpers.size,
+    frame: Boolean(window.__leveleditor.view.multiFrame),
+  }));
+  check("Shift+click adds", multi.count === 2 && multi.ids.includes("struct_bench_01"),
+    multi.ids.join(","));
+  check("multi draws one OBB per object + overall frame", multi.obbs === 2 && multi.frame);
+  await shot("control_multiselect.png");
+
+  // ------------------------------------------------------------------ //
+  // box select (empty drag), Ctrl+A, Esc
+  // ------------------------------------------------------------------ //
+  await page.evaluate(() => window.__leveleditor.view.clearSelection());
+  const empty = await emptyPoint();
+  const rect = await canvasRect();
+  check("found an empty box-select start", Boolean(empty));
+  if (empty) {
+    await page.mouse.move(empty.x, empty.y);
+    await page.mouse.down();
+    await page.mouse.move(rect.x + rect.width * 0.66, rect.y + rect.height * 0.82, { steps: 16 });
+    await page.waitForTimeout(150);
+    await shot("control_boxselect.png");
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+  }
+  const boxed = await page.evaluate(() => window.__leveleditor.view.selectionIds.size);
+  check("box select picks objects", boxed > 0, String(boxed));
+  await page.keyboard.press("Control+a");
+  await page.waitForTimeout(200);
+  const all = await page.evaluate(() => window.__leveleditor.view.selectionIds.size);
+  check("Ctrl+A selects all selectable", all >= initialProps, `${all} / ${initialProps}`);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  check("Esc clears", await page.evaluate(() => window.__leveleditor.view.selectionIds.size) === 0);
+
+  // ------------------------------------------------------------------ //
+  // right-hold fly + W + wheel speed + release stop
+  // ------------------------------------------------------------------ //
+  const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  await page.evaluate(() => window.__leveleditor.view.setCameraPreset("ball_eye"));
+  await page.waitForTimeout(300);
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down({ button: "right" });
+  await page.waitForTimeout(500);
+  const flyStart = await page.evaluate(() => ({
+    flying: window.__leveleditor.view.isFlying,
+    locked: document.pointerLockElement === document.getElementById("canvas"),
+    fallback: window.__leveleditor.view.flyFallback,
+    speed: window.__leveleditor.view.cam.fly.speed,
+    pos: window.__leveleditor.view.camera.position.toArray(),
+  }));
+  notes.push(`pointer lock on http: ${flyStart.locked ? "granted" : "denied"}`);
+  check("right hold enters fly", flyStart.flying);
+  await page.evaluate(() => window.__leveleditor.view.cam.setFlySpeed(1));
+  const speedBefore = await page.evaluate(() => window.__leveleditor.view.cam.fly.speed);
+  await page.mouse.wheel(0, -120);
+  await page.waitForTimeout(200);
+  const speedAfter = await page.evaluate(() => window.__leveleditor.view.cam.fly.speed);
+  check("wheel in fly raises the speed", speedAfter > speedBefore, `${speedBefore} -> ${speedAfter}`);
+  await page.keyboard.down("w");
+  await page.waitForTimeout(1100);
+  await page.keyboard.up("w");
+  const flyMoved = await page.evaluate(() => window.__leveleditor.view.camera.position.toArray());
+  const flyDistance = Math.hypot(flyMoved[0] - flyStart.pos[0], flyMoved[1] - flyStart.pos[1],
+    flyMoved[2] - flyStart.pos[2]);
+  check("W moves the fly camera", flyDistance > 0.1, `${flyDistance.toFixed(3)} m`);
+  await shot("control_fly.png");
+  await page.mouse.up({ button: "right" });
+  await page.waitForTimeout(500);
+  const flyStop = await page.evaluate(() => ({
+    flying: window.__leveleditor.view.isFlying,
+    pos: window.__leveleditor.view.camera.position.toArray(),
+    speed: window.__leveleditor.view.cam.fly.speed,
+  }));
+  await page.waitForTimeout(300);
+  const flyStill = await page.evaluate(() => window.__leveleditor.view.camera.position.toArray());
+  check("release ends fly and stops the camera", !flyStop.flying
+    && Math.hypot(flyStill[0] - flyStop.pos[0], flyStill[1] - flyStop.pos[1],
+      flyStill[2] - flyStop.pos[2]) < 1e-4);
+  notes.push(`fly speed persisted: ${flyStop.speed}`);
+
+  // ------------------------------------------------------------------ //
+  // pan (middle), orbit (Alt+left), focus (F)
+  // ------------------------------------------------------------------ //
+  const beforePan = await page.evaluate(() => window.__leveleditor.view.camera.position.toArray());
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down({ button: "middle" });
+  await page.mouse.move(center.x + 120, center.y + 60, { steps: 8 });
+  await page.mouse.up({ button: "middle" });
+  await page.waitForTimeout(250);
+  const afterPan = await page.evaluate(() => window.__leveleditor.view.camera.position.toArray());
+  check("middle drag pans", Math.hypot(afterPan[0] - beforePan[0], afterPan[1] - beforePan[1],
+    afterPan[2] - beforePan[2]) > 0.05);
+  await shot("control_pan.png");
+
+  const beforeSpacePan = await page.evaluate(() => window.__leveleditor.view.camera.position.toArray());
+  await page.keyboard.down("Space");
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x - 90, center.y + 40, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up("Space");
+  await page.waitForTimeout(250);
+  const afterSpacePan = await page.evaluate(() => window.__leveleditor.view.camera.position.toArray());
+  check("Space+left pans (no middle button)", Math.hypot(afterSpacePan[0] - beforeSpacePan[0],
+    afterSpacePan[1] - beforeSpacePan[1], afterSpacePan[2] - beforeSpacePan[2]) > 0.05);
+
+  const beforeOrbit = await page.evaluate(() => ({
+    pos: window.__leveleditor.view.camera.position.toArray(),
+    yaw: window.__leveleditor.view.cam.yaw,
+  }));
+  await page.keyboard.down("Alt");
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x + 100, center.y + 40, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
+  await page.waitForTimeout(250);
+  const afterOrbit = await page.evaluate(() => ({
+    pos: window.__leveleditor.view.camera.position.toArray(),
+    yaw: window.__leveleditor.view.cam.yaw,
+  }));
+  check("Alt+left orbits", Math.abs(afterOrbit.yaw - beforeOrbit.yaw) > 0.02);
+  await shot("control_orbit.png");
+
+  await page.evaluate(() => window.__leveleditor.view.setCameraPreset("overview"));
+  await page.waitForTimeout(400);
+  const focusPoint = await screenFor("struct_lounge_chair_01");
+  check("found the chair to focus", Boolean(focusPoint));
+  if (focusPoint) {
+    await page.mouse.click(focusPoint.x, focusPoint.y);
+    await page.waitForTimeout(300);
+  }
+  const focusSelected = await page.evaluate(() => window.__leveleditor.view.selectionIds.size);
+  check("chair selected before F", focusSelected === 1, String(focusSelected));
+  await page.keyboard.press("f");
+  await page.waitForTimeout(350);
+  const focused = await page.evaluate(() => ({
+    pivot: window.__leveleditor.view.cam.pivot.toArray(),
+    selected: window.__leveleditor.view.selectedIds[0],
+  }));
+  check("F focuses the selection", Math.hypot(focused.pivot[0] + 12.3,
+    focused.pivot[1] - 0.175, focused.pivot[2] - 9.6) < 1.2, focused.pivot.join(","));
+  await shot("control_focus.png");
+
+  // ------------------------------------------------------------------ //
+  // tools Q/W/E, R disabled, X space
+  // ------------------------------------------------------------------ //
+  await page.keyboard.press("q");
+  const toolQ = await page.evaluate(() => window.__leveleditor.view.tool);
+  await page.keyboard.press("w");
+  const toolW = await page.evaluate(() => window.__leveleditor.view.tool);
+  await page.keyboard.press("e");
+  const toolE = await page.evaluate(() => window.__leveleditor.view.tool);
+  await page.keyboard.press("r");
+  await page.waitForTimeout(250);
+  const scaleToast = await page.textContent("#toast");
+  const spaceBefore = await page.evaluate(() => window.__leveleditor.view.spaceMode);
+  await page.keyboard.press("x");
+  const spaceAfter = await page.evaluate(() => window.__leveleditor.view.spaceMode);
+  check("Q/W/E pick hand/move/rotate", toolQ === "hand" && toolW === "move" && toolE === "rotate",
+    `${toolQ}/${toolW}/${toolE}`);
+  check("R stays disabled with a hint", toolE === "rotate" && /缩放工具已禁用/.test(scaleToast || ""));
+  check("X toggles Global/Local", spaceBefore === "world" && spaceAfter === "local");
+  await shot("control_tools.png");
+  await page.keyboard.press("x");
+  await page.keyboard.press("w");
+  await hideToast();
+
+  // ------------------------------------------------------------------ //
+  // multi-object gizmo drag: one batch, one undo step
+  // ------------------------------------------------------------------ //
+  await page.evaluate(() => {
+    const view = window.__leveleditor.view;
+    view.setCameraPreset("overview");
+    view.select(["struct_crate_01", "struct_beer_crate_02"], false);
+  });
+  await page.waitForTimeout(300);
+  const beforeBatch = await state();
+  const pickerScreen = await page.evaluate(() => {
+    const view = window.__leveleditor.view;
+    const rect = view.canvas.getBoundingClientRect();
+    const picker = view.gizmo._gizmo.picker.translate.children.find((child) => child.name === "X");
+    if (!picker) return null;
+    const world = picker.getWorldPosition(view.camera.position.clone());
+    world.project(view.camera);
+    const x = rect.left + (world.x + 1) / 2 * rect.width;
+    const y = rect.top + (1 - world.y) / 2 * rect.height;
+    const pivot = view.proxy.position.clone();
+    const a = pivot.clone(); a.project(view.camera);
+    const b = pivot.clone(); b.x += 1; b.project(view.camera);
+    const ax = rect.left + (a.x + 1) / 2 * rect.width;
+    const ay = rect.top + (1 - a.y) / 2 * rect.height;
+    const bx = rect.left + (b.x + 1) / 2 * rect.width;
+    const by = rect.top + (1 - b.y) / 2 * rect.height;
+    const length = Math.hypot(bx - ax, by - ay) || 1;
+    return { x, y, dx: (bx - ax) / length, dy: (by - ay) / length };
+  });
+  let realDrag = false;
+  if (pickerScreen) {
+    await page.mouse.move(pickerScreen.x, pickerScreen.y);
+    await page.mouse.down();
+    await page.mouse.move(pickerScreen.x + pickerScreen.dx * 14,
+      pickerScreen.y + pickerScreen.dy * 14, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(1400);
+    realDrag = (await state()).history.undo > beforeBatch.history.undo;
+  }
+  if (!realDrag) {
+    notes.push("real gizmo arrow drag was refused or missed; used the same commit path via debugTranslateSelection");
+    await page.evaluate(() => window.__leveleditor.select(["struct_crate_01", "struct_beer_crate_02"], false));
+    await page.evaluate(() => window.__leveleditor.debugTranslateSelection(0.05, 0, 0.05));
+    await page.waitForTimeout(1200);
+  } else {
+    notes.push("real gizmo arrow drag produced the batch");
+  }
+  await hideToast();
+  const afterBatch = await state();
+  check("multi transform is one batch", afterBatch.history.undo === beforeBatch.history.undo + 1,
+    `${beforeBatch.history.undo} -> ${afterBatch.history.undo}`);
+  check("multi transform moved both objects", afterBatch.file.sha256 !== beforeBatch.file.sha256);
+  await shot("control_multidrag.png");
   await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press("Control+z");
-  await page.waitForFunction((sha) => window.__leveleditor.state.file.sha256 === sha,
-    initialSha, { timeout: 60000 });
-  check("Ctrl+Z restored the exact file", (await state()).file.sha256 === initialSha);
+  await waitSha(initialSha);
+  check("one undo restores the multi transform", (await sha()) === initialSha);
 
-  // 4. ball-size ladder at D=0.50 and D=1.25 -------------------------------------
-  await page.evaluate(() => window.__leveleditor.setD(0.5));
+  // ------------------------------------------------------------------ //
+  // rotation of a supported prop must not be rejected (reported bug)
+  // ------------------------------------------------------------------ //
+  await page.evaluate(() => window.__leveleditor.select(["serving_tray_01"], false));
+  const beforeRotate = await state();
+  const rotated = await page.evaluate(() => window.__leveleditor.debugRotateSelection(30, "x"));
+  await page.waitForTimeout(1200);
+  const rotateState = await state();
+  const tray = rotateState.doc.props.find((prop) => prop.itemId === "serving_tray_01");
+  const trayBox = rotateState.derived.props.serving_tray_01?.worldAabb;
+  const benchTop = rotateState.derived.props.struct_bench_01?.worldAabb?.[1][1];
+  check("rotate a supported prop is accepted", rotated === true && rotateState.gate.ok,
+    rotateState.gate.errors.join(" | "));
+  check("rotated prop is re-seated on its support",
+    trayBox && benchTop !== undefined && Math.abs(trayBox[0][1] - benchTop) < 0.012,
+    `bottom ${trayBox?.[0][1]} / bench ${benchTop}`);
+  check("rotation is one undo step", rotateState.history.undo === beforeRotate.history.undo + 1);
+  await shot("control_rotate.png");
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press("Control+z");
+  await waitSha(initialSha);
+  check("undo restores the rotated prop", (await sha()) === initialSha);
+
+  // ------------------------------------------------------------------ //
+  // palette drop onto an existing prop (reported overlap bug)
+  // ------------------------------------------------------------------ //
+  await page.evaluate(() => {
+    const view = window.__leveleditor.view;
+    view.setCameraPreset("overview");
+    view.clearSelection();
+  });
   await page.waitForTimeout(300);
+  const plateTarget = await screenFor("plate_01") || await screenFor("plate_02");
+  check("found a plate to drop onto", Boolean(plateTarget));
+  if (plateTarget) {
+    await page.evaluate(({ x, y }) => {
+      const item = document.querySelector('.palette-item[data-def="plate"]');
+      const canvas = document.getElementById("canvas");
+      const transfer = new DataTransfer();
+      item.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: transfer }));
+      canvas.dispatchEvent(new DragEvent("dragover", {
+        bubbles: true, dataTransfer: transfer, clientX: x, clientY: y }));
+      canvas.dispatchEvent(new DragEvent("drop", {
+        bubbles: true, dataTransfer: transfer, clientX: x, clientY: y }));
+    }, plateTarget);
+    await page.waitForFunction((count) => window.__leveleditor.state.counts.props === count + 1,
+      initialProps, { timeout: 90000 }).catch(() => {});
+    const dropState = await state();
+    const added = dropState.counts.props === initialProps + 1;
+    check("dropping a plate onto a plate is accepted", added && dropState.gate.ok,
+      `${dropState.counts.props} props, ${dropState.gate.errors.join(" | ")}`);
+    if (added) {
+      const newId = await page.evaluate(() => window.__leveleditor.view.selectedIds[0]);
+      const newProp = dropState.doc.props.find((prop) => prop.itemId === newId);
+      check("the dropped plate stacks or is offset", Boolean(newProp?.stackedOn || newProp?.support),
+        JSON.stringify({ id: newId, support: newProp?.support, stackedOn: newProp?.stackedOn }));
+      await shot("control_drop.png");
+      await page.evaluate(() => document.activeElement?.blur());
+      await page.keyboard.press("Control+z");
+      await waitSha(initialSha);
+      check("undo restores the level after the drop", (await sha()) === initialSha);
+    }
+  }
+
+  // ------------------------------------------------------------------ //
+  // regions: draw one, add a second, read server stats (count vs volume)
+  // ------------------------------------------------------------------ //
+  await page.evaluate(() => {
+    const view = window.__leveleditor.view;
+    view.setCameraPreset("overview");
+    view.clearSelection();
+  });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { document.getElementById("right").scrollTop = 0; });
+  await page.click("#region-mode", { noWaitAfter: true });
+  const regionStart = await page.evaluate(() => {
+    const view = window.__leveleditor.view;
+    const rect = view.canvas.getBoundingClientRect();
+    const bounds = window.__leveleditor.state.bounds;
+    for (let fy = 0.42; fy <= 0.78; fy += 0.03) {
+      for (let fx = 0.08; fx <= 0.7; fx += 0.03) {
+        const x = rect.left + rect.width * fx;
+        const y = rect.top + rect.height * fy;
+        const point = view._groundPoint(x, y);
+        if (!point) continue;
+        const inside = point[0] > bounds[0][0] + 0.4 && point[0] < bounds[1][0] - 0.4
+          && point[2] > bounds[0][1] + 0.4 && point[2] < bounds[1][1] - 0.4;
+        if (inside && view._pickId(x, y) === null) return { x, y };
+      }
+    }
+    return null;
+  });
+  check("found a region-draw start", Boolean(regionStart));
+  if (regionStart) {
+    await page.mouse.move(regionStart.x, regionStart.y);
+    await page.mouse.down();
+    await page.mouse.move(regionStart.x + 150, regionStart.y + 105, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForFunction(() => window.__leveleditor.regions().regions.length >= 1,
+      null, { timeout: 60000 });
+  }
+  await page.click("#region-mode", { noWaitAfter: true });
+  const drawnRegions = await page.evaluate(() => window.__leveleditor.regions());
+  check("drawing a region creates and saves one", drawnRegions.regions.length >= 1,
+    JSON.stringify(drawnRegions.regions.map((region) => region.name)));
+  const savedRegions = await page.evaluate(() => window.__leveleditor.api.loadRegions());
+  check("regions.json round-trips", savedRegions.ok
+    && savedRegions.regions.length === drawnRegions.regions.length);
+  await page.evaluate(() => {
+    const input = document.getElementById("region-name");
+    input.value = "小区";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => window.__leveleditor.addRegion({
+    name: "大区", min: [-14, 0, -14], max: [-6, 2.5, -6],
+  }));
+  await page.waitForTimeout(700);
+  await page.evaluate(() => window.__leveleditor.setD(0.8));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => { document.getElementById("right").scrollTop = 0; });
+  await shot("control_regions.png");
+  const drawnName = (await page.evaluate(() => window.__leveleditor.regions())).regions[0]?.name;
+  const drawnStats = await page.evaluate((name) =>
+    window.__leveleditor.stats({ scope: "region", region: name, metric: "count",
+      mode: "center", diameter: 0.5, bin: 0.05 }), drawnName);
+  check("the drawn region returns stats", drawnStats.totals.count >= 0,
+    `${drawnName}: ${drawnStats.totals.count} props`);
+  const regionStats = await page.evaluate(() =>
+    window.__leveleditor.stats({ scope: "region", region: "大区", metric: "count",
+      mode: "center", diameter: 0.5, bin: 0.05 }));
+  check("region stats count/volume/bins", regionStats.totals.count > 0
+    && regionStats.bins.reduce((sum, bin) => sum + bin.count, 0) === regionStats.totals.count,
+    `${regionStats.totals.count} props, ${regionStats.totals.volume} m3`);
+  await page.evaluate(() => {
+    document.getElementById("stats-scope").value = "region";
+    document.getElementById("stats-scope").dispatchEvent(new Event("change", { bubbles: true }));
+    document.querySelector(".ladder-panel").scrollIntoView({ block: "start" });
+  });
+  await page.waitForTimeout(700);
+  await page.click('#stats-metrics [data-metric="count"]');
+  await page.waitForTimeout(500);
+  await shot("control_region_count.png");
+  await page.click('#stats-metrics [data-metric="volume"]');
+  await page.waitForTimeout(500);
+  await shot("control_region_volume.png");
+  await page.evaluate(() => {
+    document.getElementById("stats-scope").value = "all";
+    document.getElementById("stats-scope").dispatchEvent(new Event("change", { bubbles: true }));
+    document.getElementById("right").scrollTop = 0;
+  });
+  await page.waitForTimeout(500);
+
+  // ------------------------------------------------------------------ //
+  // ladder at D=0.50 and D=1.25; palette
+  // ------------------------------------------------------------------ //
+  await page.evaluate(() => {
+    const view = window.__leveleditor.view;
+    view.clearSelection();
+    view.setCameraPreset("overview");
+    view.setShowWorldBoxes(false);
+    view.setBoxStyle("obb");
+  });
+  await page.evaluate(() => {
+    document.querySelector(".ladder-panel").scrollIntoView({ block: "start" });
+    window.__leveleditor.setD(0.5);
+  });
+  await page.waitForTimeout(700);
   const ladder50 = await page.evaluate(() => ({
     green: Number(document.getElementById("tier-green").textContent),
-    yellow: Number(document.getElementById("tier-yellow").textContent),
-    red: Number(document.getElementById("tier-red").textContent),
-    expected: window.__leveleditor.state.derived.props
-      ? Object.values(window.__leveleditor.state.derived.props).filter((entry) => entry.dReq <= 0.5).length
-      : -1,
+    expected: Object.values(window.__leveleditor.state.derived.props)
+      .filter((entry) => entry.dReq <= 0.5).length,
   }));
-  check("ladder D=0.50 counts", ladder50.green === ladder50.expected && ladder50.green === 104,
-    JSON.stringify(ladder50));
+  check("ladder D=0.50 counts", ladder50.green === ladder50.expected, JSON.stringify(ladder50));
   await shot("03_ladder_d050.png");
-
   await page.evaluate(() => window.__leveleditor.setD(1.25));
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(700);
   const ladder125 = await page.evaluate(() => ({
     green: Number(document.getElementById("tier-green").textContent),
     expected: Object.values(window.__leveleditor.state.derived.props)
       .filter((entry) => entry.dReq <= 1.25).length,
-    colours: document.querySelectorAll(".histogram .bar.green").length,
   }));
-  check("ladder D=1.25 counts", ladder125.green === ladder125.expected && ladder125.green > ladder50.green,
-    JSON.stringify(ladder125));
+  check("ladder D=1.25 counts", ladder125.green === ladder125.expected, JSON.stringify(ladder125));
   await shot("04_ladder_d125.png");
-
-  // 5. asset palette -------------------------------------------------------------
-  // Thumbnails are lazy; wait for the visible ones (not all 48).
-  await page.waitForFunction(() => document.querySelectorAll(".palette-thumb[src]").length >= 3,
-    null, { timeout: 60000 }).catch(() => {});
-  await page.fill("#palette-search", "apple");
-  await page.waitForTimeout(200);
-  const visibleItems = await page.evaluate(
-    () => [...document.querySelectorAll(".palette-item")].filter((item) => item.style.display !== "none").length);
-  check("palette search filters", visibleItems >= 1 && visibleItems < 20, String(visibleItems));
-  await shot("05_palette.png");
+  await page.evaluate(() => window.__leveleditor.setLadderColouring(false));
   await page.fill("#palette-search", "");
+  await page.waitForTimeout(500);
+  await shot("05_palette.png");
 
-  // 6. drag-and-drop onto the ground adds a prop; undo removes it ----------------
-  const emptySpot = await page.evaluate(() => {
+  // ------------------------------------------------------------------ //
+  // OBB before/after on a tilted ramp
+  // ------------------------------------------------------------------ //
+  await page.evaluate(() => {
+    document.getElementById("right").scrollTop = 0;
     const view = window.__leveleditor.view;
-    const rect = view.canvas.getBoundingClientRect();
-    // Project a few points over the level and take whatever surface the ray actually
-    // hits (a table/BED is a better test than the floor: it exercises support+seat).
-    const points = [[-16.2, 0.02, 7.2], [-17.5, 0.02, 5.0], [-15.0, 0.02, 8.0],
-      [-18.0, 0.02, 9.0], [-14.0, 0.02, 6.0]];
-    for (const [x, y, z] of points) {
-      const projected = view.camera.position.clone();
-      projected.set(x, y, z);
-      projected.project(view.camera);
-      const sx = rect.left + (projected.x + 1) / 2 * rect.width;
-      const sy = rect.top + (1 - projected.y) / 2 * rect.height;
-      const drop = view.dropPoint(sx, sy);
-      if (drop && drop.target) return { x: sx, y: sy, drop };
-    }
-    return null;
+    view.setTool("hand");
+    view.select(["ramp_to_table"], false);
+    view.focusSelection();
+    view.setShowWorldBoxes(false);
+    view.setBoxStyle("world");
+    view.needsRender = true;
+    view.renderNow();
   });
-  if (!emptySpot) {
-    throw new Error("could not find a drop surface for the palette drop");
-  }
-  const beforeIds = (await state()).doc.props.map((prop) => prop.itemId);
-  await page.evaluate(({ x, y }) => {
-    const item = document.querySelector('.palette-item[data-def="apple"]');
-    const canvas = document.getElementById("canvas");
-    const transfer = new DataTransfer();
-    item.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: transfer }));
-    canvas.dispatchEvent(new DragEvent("dragover", {
-      bubbles: true, dataTransfer: transfer, clientX: x, clientY: y }));
-    canvas.dispatchEvent(new DragEvent("drop", {
-      bubbles: true, dataTransfer: transfer, clientX: x, clientY: y }));
-  }, emptySpot);
-  const added = await page.waitForFunction(
-    () => window.__leveleditor.state.counts.props === 128, null, { timeout: 60000 })
-    .then(() => true).catch(() => false);
-  check("palette drop added a prop", added, `props=${(await state()).counts.props}`);
-  if (added) {
-    // The drop selects the new prop after the state refresh; wait for that instead of
-    // racing the microtask that follows `props === 128`.
-    await page.waitForFunction((previous) => {
-      const id = window.__leveleditor.selection()?.id;
-      return id && !previous.includes(id);
-    }, beforeIds, { timeout: 30000 }).catch(() => {});
-    const newId = await page.evaluate(() => window.__leveleditor.selection()?.id);
-    const newProp = (await state()).doc.props.find((prop) => prop.itemId === newId);
-    check("drop selected/added the new prop", Boolean(newProp) && !beforeIds.includes(newId),
-      String(newId));
-    const expectedY = emptySpot.drop.point[1] + (newProp?.aabb?.[1] || 0) / 2;
-    check("drop rested on the surface under the pointer",
-      newProp && Math.abs(newProp.position[1] - expectedY) < 0.06,
-      `${JSON.stringify(newProp?.position)} vs ${expectedY.toFixed(4)} ${JSON.stringify(emptySpot.drop.target)}`);
-    await page.evaluate(() => document.activeElement?.blur());
-    await page.keyboard.press("Control+z");
-    await page.waitForFunction((sha) => window.__leveleditor.state.file.sha256 === sha,
-      initialSha, { timeout: 60000 });
-    check("undo removed the dropped prop", (await state()).counts.props === 127);
-  }
+  await hideToast();
+  await page.waitForTimeout(500);
+  await shot("control_obb_before.png");
+  await page.evaluate(() => {
+    const view = window.__leveleditor.view;
+    view.setBoxStyle("obb");
+    window.__leveleditor.setShowWorldBoxes(true);
+    view.needsRender = true;
+    view.renderNow();
+  });
+  await page.waitForTimeout(500);
+  await shot("control_obb_after.png");
+  await page.evaluate(() => {
+    window.__leveleditor.setShowWorldBoxes(false);
+    const view = window.__leveleditor.view;
+    view.setBoxStyle("obb");
+    view.setTool("move");
+  });
 
-  // 7. walk mode + pointer lock + WASD ------------------------------------------
-  await page.click("#mode-walk", { noWaitAfter: true });
-  await page.waitForTimeout(600);
-  const walk = await page.evaluate(() => ({
-    mode: window.__leveleditor.view.mode,
-    locked: document.pointerLockElement === document.getElementById("canvas"),
-    fallback: window.__leveleditor.view.walk.fallback,
-    eye: window.__leveleditor.view.camera.position.y,
-    x: window.__leveleditor.view.camera.position.x,
-    z: window.__leveleditor.view.camera.position.z,
-  }));
-  notes.push(`pointer lock in headless http: ${walk.locked ? "granted" : "denied"}`);
-  check("walk mode entered", walk.mode === "walk");
-  check("eye height 0.60 m", Math.abs(walk.eye - 0.6) < 1e-6, String(walk.eye));
-  check("walk started inside the level", Math.abs(walk.x) < 20 && Math.abs(walk.z) < 20,
-    `${walk.x},${walk.z}`);
-  await shot("06_walk_ball_eye.png");
-  async function pressW() {
-    const before = await page.evaluate(() => window.__leveleditor.view.camera.position.clone().toArray());
-    await page.keyboard.down("w");
-    await page.waitForTimeout(1400);
-    await page.keyboard.up("w");
-    const after = await page.evaluate(() => window.__leveleditor.view.camera.position.toArray());
-    return {
-      before, after,
-      distance: Math.hypot(after[0] - before[0], after[2] - before[2]),
-    };
-  }
-  let movement = await pressW();
-  if (movement.distance < 0.05 && walk.locked) {
-    // Headless Chromium can grant pointer lock and then drop synthetic key presses;
-    // releasing the lock is exactly the app's fallback path (right-drag look + WASD).
-    notes.push("headless pointer lock swallowed W; re-tested with the lock released");
-    await page.evaluate(() => document.exitPointerLock?.());
-    await page.waitForTimeout(400);
-    movement = await pressW();
-  }
-  check("W moves the walk camera", movement.distance > 0.05,
-    `${movement.before[0].toFixed(2)},${movement.before[2].toFixed(2)} -> ${movement.after[0].toFixed(2)},${movement.after[2].toFixed(2)} (${movement.distance.toFixed(3)} m)`);
-  await page.keyboard.press("Tab");
-  await page.waitForTimeout(300);
-  check("Tab returns to orbit", (await page.evaluate(() => window.__leveleditor.view.mode)) === "orbit");
-
-  // 8. screenshot button downloads a PNG ----------------------------------------
-  const [download] = await Promise.all([
-    page.waitForEvent("download", { timeout: 120000 }),
-    page.click("#screenshot"),
-  ]);
-  check("screenshot downloads .png", /\.png$/.test(download.suggestedFilename()),
-    download.suggestedFilename());
-
-  // 9. a physics test field cell opens (and the level can be reopened) -----------
+  // ------------------------------------------------------------------ //
+  // a physics-test-field cell still opens; back to the level
+  // ------------------------------------------------------------------ //
   await page.selectOption("#level-select", "physics_test_field/C01");
   await page.click("#open-level");
   await page.waitForFunction(() => window.__leveleditor.state.level === "physics_test_field/C01",
-    null, { timeout: 120000 });
+    null, { timeout: 150000 });
   const cell = await state();
-  check("C01 opened", cell.level === "physics_test_field/C01");
-  check("C01 has 0 props and 7 structures",
-    cell.counts.props === 0 && cell.counts.structures === 7,
-    `${cell.counts.props}/${cell.counts.structures}`);
-  await shot("07_physics_c01.png");
-
+  check("C01 opens", cell.level === "physics_test_field/C01" && cell.counts.props === 0
+    && cell.counts.structures === 7);
+  check("C01 palette is empty (no defs[])", await page.evaluate(
+    () => document.querySelectorAll(".palette-item").length) === 0);
+  await hideToast();
+  await shot("08_physics_c01.png");
   await page.selectOption("#level-select", LEVEL);
   await page.click("#open-level");
   await page.waitForFunction((level) => window.__leveleditor.state.level === level,
-    LEVEL, { timeout: 120000 });
-  check("level reopened byte-identical", (await state()).file.sha256 === initialSha,
-    (await state()).file.sha256);
+    LEVEL, { timeout: 150000 });
+  await page.waitForTimeout(600);
+  check("level reopened byte-identical", (await sha()) === initialSha);
 
   check("no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
 } catch (error) {

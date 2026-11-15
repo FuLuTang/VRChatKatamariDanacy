@@ -1,6 +1,6 @@
 # `Tools/leveleditor` — 浏览器里的关卡编辑器（VRC塊魂）
 
-一个**本地 Web 关卡编辑器**：在浏览器里走图、从道具库拖入道具、用 gizmo 移动/旋转、按球径阶梯看「现在能吸什么」，每次编辑由 Python 后端校验并原子写回 `Docs/Design/Levels/<id>/placement.json`。
+一个**本地 Web 关卡编辑器**：交互按 Unity Scene 视图的习惯（左键点选/Shift 加选/空白框选、右键飞行、中键平移、Alt+左键轨道、Q/W/E 工具），从道具库拖入道具，用 gizmo 移动/旋转（支持多选与整体 pivot），按球径阶梯看「现在能吸什么」；每次编辑由 Python 后端校验并原子写回 `Docs/Design/Levels/<id>/placement.json`。
 
 - **真源不变**：`placement.json` 仍是唯一真源；Unity 导入器仍是单向的（本工具不碰 Unity）。
 - **校验/导出只有一份**：后端直接 `import Tools.levelbuild.editor_core` / `placement_core`，和 `levelbuild.py`、Blender 常驻编辑器、Unity 导入器读的是同一套规则与同一份规范字节。
@@ -35,7 +35,8 @@ stop:    Ctrl-C / SIGTERM (every edit is already exported)
   `desktop-114514aa` 是 `100.112.46.12`。**Windows 浏览器访问的是前者**，不是自己的地址。
 - 只监听 tailnet/局域网，**不要**做公网端口映射。本机没有启用 `ufw`；
   打不开时依次查：`tailscale ip -4`、`ss -ltn | grep 8777`、Windows 上 `tailscale status`。
-- token 只保护**写操作**；页面、JS、模型和只读 API 不需要 token。
+- token 保护**所有 `/api` 读写**（页面/JS/CSS/字体/`favicon` 等静态资源除外）；
+  唯一不需要 token 的探活端点是 `GET /healthz`（只回 pid/uptime，不含关卡内容）。
 - token 首次生成后保存在 `~/.local/state/vrc-katamari-leveleditor/token`（`0600`），**重启服务后不变**，所以收藏的带 token 的链接一直有效；要换就删掉这个文件（或传 `--token`）。
 - 页面首次带 `?token=` 打开后会把它存进 `localStorage` 并从地址栏去掉；写入被 403 时页面会提示用最新链接重新打开。
 
@@ -53,6 +54,7 @@ python3 Tools/leveleditor/server.py --level story_01_bench_size --port 8777
   token 和文件锁不受重启影响。
 - 端口被占时用 `--port 0` 让系统分配，或换一个端口；日志会打印实际端口。
 - 同一份关卡只允许一个 Web 编辑器写（`~/.local/state/.../locks/` 下的 `flock`）。**不要**同时用 `levelserve.py`（Blender 常驻编辑器）改同一份文件：Web 端每次写前会比较磁盘上的文档，发现被别人改过就拒绝并提示「按 Reload」。
+- 探活：`curl -s http://127.0.0.1:8777/healthz`（无 token）；`/api/health` 需要 token。
 - `--no-lock` 只用于测试（两个实例同时开同一关）。
 
 ---
@@ -81,22 +83,48 @@ python3 Tools/leveleditor/server.py --level story_01_bench_size --port 8777
 
 ---
 
-## 3. 键盘
+## 3. 操作（Unity Scene 视图）
 
-| 键 | 作用 |
+| 操作 | 键/鼠标 |
 |---|---|
-| `Tab` | 环绕 ⇄ 行走 |
-| `WASD` / `Shift` | 行走移动 / 跑；`Esc` 只释放鼠标，不退出行走 |
-| 行走下按住右键拖动 | 指针锁定被浏览器拒绝时的看方向方式 |
-| `G` / `R` | 移动 / 旋转 gizmo |
-| `F` | 落到下方支撑面（射线） |
-| `Delete` | 删除选中 |
-| `Ctrl+Z` / `Ctrl+Y` | 撤销 / 重做 |
-| `Ctrl+D` | 复制选中 |
-| 方向键 / Shift+方向键 | 按移动步长推 / 4 倍 |
-| `Esc`（环绕） | 取消选中 |
+| 点选 / 加选 / 减选 | 左键；Shift/Ctrl+左键切换单件 |
+| 框选 | 空白处左键拖拽（矩形，Shift/Ctrl 追加）；阈值 4 px |
+| 全选 / 取消 | `Ctrl+A` / `Esc` |
+| 移动 / 旋转 | `W` / `E`；gizmo 拖动；多选时整组绕 pivot |
+| 手形（平移） | `Q`，左键拖动（此时选择暂停） |
+| 缩放工具 | `R` 禁用（显示提示；道具是真实尺寸） |
+| 坐标 Local/Global | `X`（默认 Global） |
+| 吸附 | 按住 `Ctrl` 拖 gizmo = 按步长吸附（下拉里的 0.05/0.10 m、15/45/90°） |
+| 聚焦 | `F`（选中则聚焦；无选中适配整关） |
+| 落到下方表面 | `End`（原 F 落面） |
+| 微调 | 方向键（Shift ×4） |
+| 复制 / 删除 | `Ctrl+D` / `Delete` |
+| 撤销 / 重做 | `Ctrl+Z` / `Ctrl+Y` 或 `Ctrl+Shift+Z` |
+| 相机预设 | 顶部 `3/4`、`俯视`、`球眼 0.6`、`人眼 1.6` |
+| 飞行 | **按住右键**：鼠标转头，`W/S` 前后、`A/D` 左右、`Q/E` 下降/上升、`Shift ×3`；滚轮调飞行速度（HUD 显示） |
+| 平移 | 中键拖动；没有中键时 `Space+左键` 拖动；`Alt+中键` 同中键 |
+| 轨道旋转 | `Alt+左键` 拖动，绕选中物（无选中绕 pivot） |
+| 推拉 | 滚轮朝光标 dolly；`Alt+右键` 拖动缩放推拉 |
+| 显示轴对齐盒 | 顶部「显示轴对齐盒」复选框（默认关） |
 
----
+- **右键飞行**期间指针锁定；浏览器拒绝时自动退化为“按住右键拖动读 movementX”，WASD/QE 照常；飞行只动相机，不改选择。
+- 选中框是 **OBB**（`aabb`/`size` + `rotationQuat` + `position`，Unity BoxCollider 的形状），不是世界 AABB；世界 AABB 默认隐藏，可勾选显示为淡灰细线。多选时每件一个 OBB + 一个淡色整体框。
+- **旋转**会把被旋转的道具（以及坐在被旋转结构/道具上的物件）沿 Y 调整到声明的支撑面上，保持新朝向，因此一次旋转不会因为“离支撑面 0.135 m”被拒；批量仍是一次导出/一条撤销。
+- **拖放**会先做一次客户端落位：命中道具就 `stackedOn` 坐在它顶上；命中台面但和已有道具重叠时，优先叠放，否则在支撑面内做小范围偏移；最终仍由服务端校验/拒绝。
+
+### 3.1 区域统计
+
+- 顶部「区域」按钮 = 区域模式：左键在地面拖出轴对齐盒（Y 默认地面到 +2.5 m）；
+  右侧「区域」面板的 6 个 min/max 数字框或视口里的 6 个面把手可精调；可保存多个
+  命名区域（「小区」「大区」…），列表支持切换、改名、删除、隐藏。
+- 区域写 `Docs/Design/Levels/<id>/regions.json`（`schemaVersion: 1`），**不写
+  placement.json、不进 undo**；服务端原子写，带 token。
+- 阶梯面板的「统计范围」：全关卡 / 选中的区域 / 当前选中的道具；「区域包含」：
+  中心点在内（默认）/ 包围盒相交；「口径」：个数 / 体积 m³ / valueUnits。
+  直方图悬停看每格件数/体积/占比/条目，点击格子选中这些道具；对数纵轴可选。
+- tier 计数与体积、累计可吸曲线、所有区域并排对比表都来自同一个
+  `GET /api/stats`；前端不重算。CSV 导出与「统计截图 PNG」在面板底部。
+- 体积口径 = `aabb` 三边之积（m³）；百分比分母是该统计范围内的总体积。
 
 ## 4. 依赖与离线
 
@@ -122,7 +150,9 @@ node Tools/leveleditor/test/smoke.mjs
 
 冒烟脚本默认**自己起一个临时服务**（`--port 0`、`--no-lock`、临时关卡副本），
 结束后删掉副本，所以不会碰到仓库里的 `placement.json`；要对着已经开着的服务跑，
-再设 `LEVELEDITOR_URL` + `LEVELEDITOR_TOKEN`。
+再设 `LEVELEDITOR_URL` + `LEVELEDITOR_TOKEN`。它会用真实鼠标/键盘测试：左键点选、
+Shift 加选、框选、右键飞行+W+滚轮、中键/空格平移、Alt+左键轨道、F 聚焦、Q/W/E/R、
+多选 gizmo 拖动一次批量/一条撤销、支撑面旋转、拖放叠放，并截 `control_*.png`。
 
 冒烟脚本会：加载 127 件真实模型 → 跑坐标审计 → 点选椅子 → 方向键推 0.05 m → `Ctrl+Z` 恢复**逐字节相同** → 在 D=0.50/1.25 检查阶梯计数 → 拖一个苹果进场景再撤销 → 行走模式前后走 → 截图按钮下载 PNG → 打开 `physics_test_field/C01` 再切回第一关（并校验文件 sha 未变）。
 
@@ -133,8 +163,11 @@ node Tools/leveleditor/test/smoke.mjs
 ## 6. 已知限制（phase 1）
 
 - 只编辑一份关卡；同一时间一个写者（设计如此）。
-- 没有多选/框选；没有缩放（道具不应缩放）。
+- 没有缩放（道具不应缩放；结构尺寸用左侧数值面板）。
 - 「落到面上」按世界 AABB 的底面贴到射线命中点，不会把道具**转到斜面法线**；要按声明支撑精确坐正用「按支撑坐正」（`seat` op，和 CLI 同一实现）。
+- 多选/框选的命中按对象**中心**；特别大的物件中心在框外但身体在框内时不会入选。
+- 旋转后的支撑保持是“沿 Y 调整 + 声明支撑面”，不是真实物理落地；v1 校验仍用世界 AABB 粗筛（v2 才是 OBB）。
+- 顶部「俯视」是**透视**俯视，不是正交相机（Unity 的 ortho 开关没做）。
 - 校验器以服务端为准；前端只做即时颜色/计数（不算校验）。
 - 物理提示是只读预测（P2 规则），不写文件，也不是运行期碰撞。
 - `render` op 在 Web 端被拒绝（没有 Blender）；截图由浏览器完成。

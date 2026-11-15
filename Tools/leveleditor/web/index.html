@@ -34,19 +34,15 @@
     <div class="group" id="camera-buttons"></div>
 
     <div class="group">
-      <button id="mode-orbit" class="active" title="环绕相机">环绕</button>
-      <button id="mode-walk" title="行走模式（Tab）">行走</button>
-    </div>
-
-    <div class="group eye-group" title="行走模式的眼高（米）">
-      <label>眼高 <input id="eye-height" type="number" value="0.6" step="0.1" min="0.1" max="3.0"></label>
-      <button class="mini" data-eye="0.6">球 0.6</button>
-      <button class="mini" data-eye="1.6">人 1.6</button>
+      <button id="region-mode" title="区域模式：左键在地面拖出轴对齐盒；拖动 6 个面把手精调">区域</button>
+      <label class="toggle" title="选中后同时显示淡灰色世界轴对齐包围盒（旋转后的外包盒，仅 v1 粗筛/互穿校验用）">
+        <input id="show-aabb" type="checkbox"> 显示轴对齐盒
+      </label>
     </div>
 
     <div class="group">
       <button id="undo" title="撤销 (Ctrl+Z)">↶</button>
-      <button id="redo" title="重做 (Ctrl+Y)">↷</button>
+      <button id="redo" title="重做 (Ctrl+Y / Ctrl+Shift+Z)">↷</button>
       <button id="screenshot" title="保存 PNG">截图</button>
     </div>
 
@@ -85,7 +81,7 @@
           <label>yaw°<input id="struct-yaw" type="number" step="15" value="0"></label>
         </div>
         <button id="add-structure" class="wide">加入结构</button>
-        <p class="note">ramp 的行走面是局部 +Y；板体在行走面下方。boundary 的局部 +Y 指向场内。</p>
+        <p class="note">结构的尺寸/旋转在这里改；ramp 行走面是局部 +Y。道具不缩放。</p>
       </section>
 
       <section class="panel level-panel">
@@ -98,12 +94,25 @@
     </aside>
 
     <div id="viewport">
-      <canvas id="canvas"></canvas>
-      <div id="drop-hint" class="drop-hint hidden">松开以放置 <span id="drop-def"></span></div>
-      <div id="walk-hud" class="walk-hud hidden">
-        <div><strong>行走模式</strong> · WASD 移动 · Shift 跑 · Tab 退出</div>
-        <div id="walk-lock">点击画面锁定鼠标看方向</div>
+      <canvas id="canvas" tabindex="0"></canvas>
+      <div id="tool-hud" class="tool-hud">
+        <div class="tool-row">
+          <button data-tool="hand" title="手形：左键拖动平移（选择暂停）">Q 手形</button>
+          <button data-tool="move" class="active" title="移动工具">W 移动</button>
+          <button data-tool="rotate" title="旋转工具">E 旋转</button>
+          <button id="tool-scale" class="disabled" title="缩放道具已禁用（真实尺寸）">R 缩放</button>
+        </div>
+        <div class="tool-meta">
+          <span id="space-mode">Global</span> · <kbd>X</kbd> 切换坐标 ·
+          <span id="snap-mode">Ctrl 拖动吸附</span>
+        </div>
       </div>
+      <div id="selection-count" class="selection-count">选中 0 个</div>
+      <div id="fly-hud" class="fly-hud hidden">
+        右键飞行 · 速度 <b id="fly-speed">6.0</b> m/s · WASD/QE · Shift ×3 · 滚轮调速
+      </div>
+      <div id="box-select" class="box-select hidden"></div>
+      <div id="drop-hint" class="drop-hint hidden">松开以放置 <span id="drop-def"></span></div>
       <div id="loading" class="loading"><div class="spinner"></div><span id="loading-text">加载…</span></div>
       <div id="toast" class="toast hidden"></div>
       <div id="readonly-banner" class="readonly hidden">
@@ -117,15 +126,17 @@
           <h2>选中</h2>
           <span class="hint" id="selection-type"></span>
         </div>
-        <div id="selection-empty" class="empty">点击场景里的道具或结构</div>
+        <div id="selection-empty" class="empty">
+          左键点选 · Shift/Ctrl 加选或减选 · 空白处拖拽 = 框选 · Ctrl+A 全选 · Esc 取消
+        </div>
         <div id="selection-body" class="hidden">
           <div class="kv" id="selection-kv"></div>
           <div class="row-buttons">
-            <button id="gizmo-move" class="active mini">移动 G</button>
-            <button id="gizmo-rotate" class="mini">旋转 R</button>
+            <button id="gizmo-move" class="active mini">移动 W</button>
+            <button id="gizmo-rotate" class="mini">旋转 E</button>
           </div>
           <div class="row-buttons">
-            <button id="rest-surface" class="mini" title="射线落到底下的支撑面 (F)">落到面上 F</button>
+            <button id="rest-surface" class="mini" title="End：吸附到下方支撑面">落面 End</button>
             <button id="drop-ground" class="mini">贴地</button>
           </div>
           <div class="row-buttons">
@@ -137,7 +148,7 @@
       </section>
 
       <section class="panel">
-        <div class="panel-head"><h2>吸附</h2><span class="hint">G/R 切换</span></div>
+        <div class="panel-head"><h2>吸附</h2><span class="hint">Ctrl+拖动 gizmo</span></div>
         <div class="form-grid two">
           <label>移动步长
             <select id="snap-translate">
@@ -155,7 +166,33 @@
             </select>
           </label>
         </div>
-        <p class="note">方向键 = 按步长推；Shift+方向键 = 4 倍。</p>
+        <p class="note">Ctrl 按住拖动 gizmo = 按步长吸附；方向键 = 按移动步长推（Shift ×4）。</p>
+      </section>
+
+      <section class="panel region-panel">
+        <div class="panel-head">
+          <h2>区域</h2>
+          <span class="hint" id="region-hint">按钮「区域」后在地面画矩形</span>
+        </div>
+        <div id="region-list" class="region-list"></div>
+        <div id="region-editor" class="region-editor hidden">
+          <label>名称 <input id="region-name" type="text" maxlength="40"></label>
+          <div class="form-grid region-grid">
+            <label>min x<input id="region-min-x" type="number" step="0.05"></label>
+            <label>min y<input id="region-min-y" type="number" step="0.05"></label>
+            <label>min z<input id="region-min-z" type="number" step="0.05"></label>
+            <label>max x<input id="region-max-x" type="number" step="0.05"></label>
+            <label>max y<input id="region-max-y" type="number" step="0.05"></label>
+            <label>max z<input id="region-max-z" type="number" step="0.05"></label>
+          </div>
+          <div class="row-buttons">
+            <label class="toggle"><input id="region-visible" type="checkbox"> 显示</label>
+            <button id="region-delete" class="mini danger">删除区域</button>
+          </div>
+          <div class="hint" id="region-save-status"></div>
+        </div>
+        <p class="note">区域保存在 <code>Docs/Design/Levels/&lt;id&gt;/regions.json</code>（schemaVersion 1），
+          独立于 placement.json 与 undo。</p>
       </section>
 
       <section class="panel ladder-panel">
@@ -167,20 +204,47 @@
           <input id="ladder" type="range" min="0.3" max="2.2" step="0.01" value="0.5">
           <div class="ladder-value"><strong id="ladder-value">0.50</strong> m</div>
         </div>
+        <div class="stats-controls">
+          <label>统计范围
+            <select id="stats-scope">
+              <option value="all">全关卡</option>
+              <option value="region">选中的区域</option>
+              <option value="selection">当前选中的道具</option>
+            </select>
+          </label>
+          <label>区域包含
+            <select id="stats-mode">
+              <option value="center">中心点在内</option>
+              <option value="bbox">包围盒相交</option>
+            </select>
+          </label>
+        </div>
+        <div class="metric-row" id="stats-metrics">
+          <button data-metric="count" class="active">个数</button>
+          <button data-metric="volume">体积 m³</button>
+          <button data-metric="units">valueUnits</button>
+          <label class="toggle"><input id="stats-log" type="checkbox"> 对数轴</label>
+        </div>
         <div class="tier-counts">
-          <span class="tier green"><b id="tier-green">0</b> 现在可吸</span>
-          <span class="tier yellow"><b id="tier-yellow">0</b> 20% 内</span>
-          <span class="tier red"><b id="tier-red">0</b> 太大</span>
-          <span class="tier grey"><b id="tier-grey">0</b> 不可吸</span>
+          <span class="tier green"><b id="tier-green">0</b> 件 · <i id="tier-green-vol">0</i> m³</span>
+          <span class="tier yellow"><b id="tier-yellow">0</b> 件 · <i id="tier-yellow-vol">0</i> m³</span>
+          <span class="tier red"><b id="tier-red">0</b> 件 · <i id="tier-red-vol">0</i> m³</span>
+          <span class="tier grey"><b id="tier-grey">0</b> 件 · <i id="tier-grey-vol">0</i> m³</span>
         </div>
         <div id="histogram" class="histogram" title="D_req 直方图"></div>
         <div class="histogram-axis"><span>0.1</span><span>0.8</span><span>1.5</span><span>2.2 m</span></div>
         <div class="sum-row">
           <span>可吸 valueUnits <b id="sum-green">0</b></span>
-          <span>全关 <b id="sum-total">0</b></span>
+          <span>范围合计 <b id="sum-total">0</b></span>
         </div>
-        <div id="next-food" class="next-food"></div>
-        <p class="note">颜色 = 服务器算出的 <code>D_req</code> 与当前 D 的比较；灰 = 结构/不可吸布景。</p>
+        <div id="cumulative" class="cumulative"></div>
+        <div id="compare-table" class="compare-table"></div>
+        <div class="row-buttons">
+          <button id="stats-csv" class="mini">导出 CSV</button>
+          <button id="stats-png" class="mini">统计截图 PNG</button>
+        </div>
+        <p class="note">颜色 = 服务器算出的 <code>D_req</code> 与当前 D 的比较；灰 = 结构/不可吸布景。
+          体积 = aabb 三边之积（m³）；百分比的分母是该统计范围内的总体积。</p>
       </section>
 
       <section class="panel">
@@ -205,7 +269,7 @@
     <span id="status-save"></span>
     <span id="status-live" class="live">…</span>
     <span class="spacer"></span>
-    <span id="status-hint">左键选中 · G/R 变换 · F 落到面上 · Delete 删除 · Ctrl+Z/Y · Ctrl+D 复制</span>
+    <span id="status-hint">左键点选 · Shift/Ctrl 加选 · 空白拖拽框选 · 右键飞行 · 中键/空格+左键平移 · Alt+左键轨道 · Alt+右键/滚轮推拉 · Q/W/E 工具 · X 坐标 · F 聚焦 · End 落面 · Ctrl+Z/Y</span>
   </footer>
 </div>
 

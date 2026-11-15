@@ -166,17 +166,20 @@ rotation:  (x, y, z, w)   →  (-x, -y, z, w)
 
 ## 5. API
 
-所有路径同源（相对页面 URL）。读不需要 token；写需要。
+所有路径同源（相对页面 URL）。**所有 `/api` 读写都要 token**；静态资源（HTML/JS/CSS/
+字体/favicon）和 `GET /healthz` 例外。token 可放 `X-Editor-Token` 头、`?token=` 查询，
+模型 URL / SSE 用查询参数。
 
 | 方法/路径 | 作用 |
 |---|---|
-| `GET /api/health` | pid / level / props / gate / version / uptime（不需要 token） |
+| `GET /healthz` | 唯一无 token 探活（pid / service / uptime，不含关卡内容） |
+| `GET /api/health` | pid / level / props / gate / version / uptime（需要 token） |
 | `GET /api/meta` | 服务信息、关卡列表、本机所有可访问地址 |
 | `GET /api/levels` | `Docs/Design/Levels` 下所有 `placement.json` 的 id |
 | `GET /api/level` | **页面主数据**：`state = {doc, derived, manifests, check, counts, gate, file, history, levels, bounds, …}` |
 | `GET /api/check` | `check` op + 报告表（分区/def/分档/三态） |
 | `GET /api/hints?d=0.5` | 只读三态预测（§7） |
-| `GET /api/models/<def>.glb` | 道具 GLB（`exports` 目录，只读） |
+| `GET /api/models/<def>.glb` | 道具 GLB（`exports` 目录，只读；token 走查询参数） |
 | `GET /api/events` | SSE：`event: change`, `id: <version>` |
 | `POST /api/op` | `{"op": "...", "args": {...}}`（或 `{"ops":[...]}` 原子批量） |
 | `POST /api/open` | `{"level": "<id>"}` |
@@ -194,7 +197,7 @@ rotation:  (x, y, z, w)   →  (-x, -y, z, w)
 ```
 
 - 被拒绝也是 **HTTP 200 + `ok:false`**（`details` 里是规则原文），和
-  `levelctl.py` 的约定一致；token 错误是 403，坏 JSON 是 400。
+  `levelctl.py` 的约定一致；缺/错 token 是 403，坏 JSON 是 400。
 - 复用 op：`status/list/get/add_prop/add_structure/set/move/rotate/remove/seat/
   add_def/expected/camera/preset/check/export/undo`（undo 由 WebEditor 实现）/
   `batch`（原子）。
@@ -212,52 +215,54 @@ rotation:  (x, y, z, w)   →  (-x, -y, z, w)
 页面左下提供「加/删时同步更新 expected」（默认勾选），勾选后请求里带
 `updateExpected: true`，和 CLI 的显式语义一致。取消勾选就退化成严格的设计总数闸。
 
-## 6. 前端实现
+## 6. 前端实现（Unity Scene 视图）
 
 | 文件 | 职责 |
 |---|---|
-| `js/api.js` | token（`?token=` → localStorage）、op 调用、错误归一化、SSE |
-| `js/view.js` | three 场景、GLB 加载、材质、结构、相机、选择、gizmo、行走、吸附/落地、阶梯颜色、截图、审计 |
-| `js/main.js` | 面板与编排：关卡、道具库、结构表单、选中信息、校验、阶梯/直方图、物理提示、键盘、拖放 |
-| `css/app.css` | 三栏深色工作台 |
-| `web/vendor/three/` | three r186 + OrbitControls / TransformControls / GLTFLoader / BufferGeometryUtils / SkeletonUtils + LICENSE |
+| `js/api.js` | token（`?token=` → localStorage）、带 token 的 GET/POST、SSE（查询参数） |
+| `js/camera.js` | 统一 Scene 相机：yaw/pitch + pivot；轨道/平移/推拉/右键飞行 |
+| `js/view.js` | three 场景、GLB/材质、结构、选择（OBB）、多选 gizmo、拖放落位、阶梯、审计 |
+| `js/main.js` | 面板与编排：工具栏、道具库、校验、阶梯、键盘、批量 op |
+| `css/app.css` | 三栏工作台 + 视口 HUD |
+| `web/vendor/three/` | three r186 + TransformControls / GLTFLoader + LICENSE |
 
-要点：
+**相机（无“环绕/行走”二选一）**：
 
-1. **道具模型**：每个 def 只 `GLTFLoader.load` 一次，实例 `clone(true)`；材质颜色取
-   `manifest.material_base_colors`（线性 RGB，与 Unity 的 PropArt 同表），roughness 取
-   `materials_declared[].roughness`；有贴图就保留 GLB 原材质。没有 GLB 的 def 画品红盒子并提示。
-2. **结构**：`BoxGeometry(1,1,1)` + scale = `size`；plane role 的可见体按 §4 平移
-   `-size.y/2`；边界加向内箭头；地面加 `GridHelper` 和虚线 bounds。
-3. **选择**：射线拾取 prop/structure group（跳过 ground），`BoxHelper` 黄框 + 右侧信息。
-4. **gizmo**：`TransformControls`（r186 的 `getHelper()` 加进场景），只 translate/rotate；
-   拖动时实时改 group，`dragging-changed=false` 时把**位置 + 完整四元数**打包成
-   `{"ops":[move,set]}` 一次原子提交；失败回滚到拖动前。`translationSnap` /
-   `rotationSnap` 由「吸附」控制。
-5. **落地**：从选中对象世界 AABB 的底面中心向下打射线（排除自己），命中的最高面作为
-   支撑；`y = hit.y + 世界半高`。斜面不自动转正（见 §10 已知缺口），要精确坐正用
-   「按支撑坐正」→ `seat` op（和 CLI 同一实现）。
-6. **行走**：`Tab` 进入；若环绕相机不在关卡上空，从关卡自己的 `ball_eye` 相机位置
-   起步（否则从当前位置），眼高默认 0.6 m；WASD + Shift；固定高度、无碰撞。
-   指针锁定优先；`pointerlockerror` 时退化为**按住右键拖动看方向**（页面明确提示）。
-7. **阶梯**：滑条 D∈[0.30, 2.20]；每个 prop 的 `D_req` 来自服务器的
-   `derived.props[itemId].dReq`（`placement_core.absorb_diameter_req`），前端只做
-   `D_req <= D` / `<= 1.2·D` / 否则 三档比较，灰 = 结构或 `D_req > ballDiameterMax`。
-   计数、可吸 valueUnits 总和、D_req 直方图（0.05 m 一格）都是这个比较的派生显示。
-   不勾「按可吸性着色」时显示 manifest 原色；一拖滑条自动勾上。
-8. **道具库**：48 个 manifest 全部列出（含 4 个当前关未声明的 def，标灰并提示先
-   `add_def`）；缩略图用独立的 112×112 WebGL renderer 从同一个 GLB 渲染一次，
-   结果只存内存（每次页面加载重画，避免缓存过期）。HTML5 拖放 → 射线落点 →
-   `add_prop`；命中 box/ramp 时带 `support`，命中道具时带 `stackedOn`，并 `seat: true`。
-   **命中 ground / boundary 不设 support**（地面是地面，墙不是台面）。
-9. **截图**：`renderer.render` 后 canvas `toDataURL`，下载 `<level>_<camera>_<time>.png`；
-   同时 `window.__lastScreenshot` 便于自动化。
-10. **校验面板**：直接用 `/api/level` 的 `check.errors/warnings/notes`（服务器跑
-    `validate`）；点击条目在文本里找最长匹配的 id 并 `select(id, focus)`。
-11. **物理提示**：`/api/hints?d=` 由服务器用 §10.3 的规则算（食物/地形/挡路、
-    可上/挡路结构），页面只显示。只读，不参与校验。
-12. **状态推送**：SSE 版本变化 → 去抖 160 ms 后重拉 `/api/level`；拖动 gizmo 期间
-    不重拉；自己的保存也会触发一次重拉（幂等）。
+- 一个 `PerspectiveCamera` + `SceneCamera`（`yaw/pitch/pivot`）。左键不转相机；
+  `Alt+左键` 绕 pivot 轨道，中键/`Space+左键` 沿屏幕平面平移，滚轮朝光标 dolly
+  （速度按与目标距离缩放），`Alt+右键` 推拉。
+- **按住右键 = Unity Flythrough**：鼠标转头，`W/S/A/D` 前后左右、`Q/E` 下降上升、
+  `Shift ×3`、滚轮调速度（HUD 显示）；指针锁定优先，失败退化为按住右键读
+  `movementX/Y`。松开右键结束；相机位置/速度保留，不影响选择。窗口失焦释放所有按键。
+- 相机预设：`3/4`（适配地面 pad）、`俯视`（透视正上方；没做 Unity 的正交开关）、
+  `球眼 0.6`（`playerSpawn` 眼高 0.6，看向球起点）、`人眼 1.6`。预设后可直接右键飞行。
+
+**选择与工具（Q/W/E，R 禁用）**：
+
+- 左键点选；`Shift/Ctrl+左键` 切换加选/减选；空白处左键拖拽 = 矩形框选
+  （阈值 4 px；Shift/Ctrl 追加；拖动 gizmo 时不触发；只认画布，不认面板）。
+  `Ctrl+A` 全选（除 ground）、`Esc` 取消；点空白清空。
+- `Q` 手形（左键拖动平移，选择暂停）、`W` 移动、`E` 旋转、`R` 缩放禁用并提示；
+  `G/R` 旧切换键移除；`X` 切 Local/Global（默认 Global）；`F` 聚焦，`End` 落到
+  下方表面（原 `F`）；方向键按步长推；`Ctrl` 拖 gizmo = 按步长吸附。
+- 多选：每件一个 **OBB**（`aabb`/`size` + `rotationQuat` + `position`，与 Unity
+  BoxCollider 同形），外加一个淡色整体框；gizmo 在并集中心 pivot，拖动时整组
+  绕 pivot 移动/旋转，**一次 `batch`、一次导出、一条撤销**。道具不缩放；结构尺寸在
+  左侧数值面板改。
+- 旋转/移动后如果声明了 `support`/`stackedOn`，客户端会把该件（以及坐在被旋转
+  结构/道具上的物件）沿 Y 调到支撑面高度（保持新朝向），再作为同一批提交；因此
+  “随便转两下”不会以“离支撑面 0.135 m”被拒。这个调整是 v1 的声明支撑语义，
+  不是物理落地。
+- 拖放：命中道具 → `stackedOn` 坐其顶；命中台面但和已有道具重叠 → 优先叠放，
+  否则在支撑面内做小范围偏移；落点仍由服务端校验。`expected` 默认同步更新（可关）。
+- 选中框：OBB 线框（黄色）+ 可选淡灰世界 AABB（顶部「显示轴对齐盒」，默认关）；
+  「选中」面板列出 OBB 尺寸和世界轴对齐盒尺寸，并注明“v1 粗筛/互穿校验用，v2 OBB”。
+  校验面板条目悬停时高亮提示里涉及的两件物体的 OBB（同色临时线框）。
+
+**场景/内容**：道具 GLB 每个 def 只加载一次、实例 clone；材质颜色取 manifest 的
+线性 RGB（与 Unity PropArt 同表），roughness 取 `materials_declared`。结构用盒子 +
+`size` + `quat`；plane role 的可见体沿 authored −Y 平移半个厚度。球径阶梯/直方图/
+物理提示/截图按钮同前。缩略图按可见道具懒加载。
 
 ### 6.1 性能
 
@@ -284,10 +289,66 @@ rotation:  (x, y, z, w)   →  (-x, -y, z, w)
 （见 [PROP_SET_PLAN](../StoryMode/PROP_SET_PLAN.md) 与
 `/tmp/growth_audit/repricing_proposal.md` 的分析），滑条让「某一档只剩 3 件」一眼可见。
 
+## 7.1 区域统计（2026-11-15 追加）
+
+### 区域数据
+
+工具栏「区域」进入区域模式：左键在地面拖出轴对齐盒（Y 默认地面起 2.5 m），
+再用「区域」面板的 6 个 min/max 数字框或视口里的 6 个面把手精调；盒体显示为
+半透明填充 + 线框。可保存多个命名区域（如「小区」「大区」），列表支持切换、改名、
+删除、隐藏。区域**不进 placement.json**，写在旁文件：
+
+```json
+{
+  "schemaVersion": 1,
+  "regions": [
+    {"name": "小区", "min": [-19.4, 0.0, -19.4], "max": [-13.0, 2.5, -13.0],
+     "visible": true, "color": "#8fd4ff"}
+  ]
+}
+```
+
+路径 `Docs/Design/Levels/<id>/regions.json`（嵌套 id 如 `physics_test_field/C01`
+则在其目录下）。坐标是 Unity 世界坐标（米，Y 向上）。服务端原子写（tmp + `os.replace`），
+带 token；**独立于 undo**（撤销只回退 placement.json，不回退区域）。`schemaVersion 1`
+允许未来升格为关卡数据；min/max 每轴必须 `min < max`，名字唯一。
+
+### 统计口径
+
+- **范围**：全关卡 / 选中的区域 / 当前选中的道具集合（三选一）。
+- **包含判据**：「中心点在内」（默认，闭区间）或「包围盒与区域相交」
+  （世界 AABB 与区域盒只要接触就算，所以刚好贴在区域面上也计入）。
+- **口径**：个数 / **体积 m³** / valueUnits。体积 = `aabb` 三边之积
+  `a*b*c`（AABB 体积，不是网格实体体积），与吸收门的体积口径同一个量；
+  直方图每格百分比的分母是该统计范围内的**总体积**。
+- 直方图横轴 D_req，默认 0.05 m 一格（可选对数纵轴）；悬停显示该格件数、体积、
+  体积占比与最多 4 个条目 id；点击格子选中这些道具。
+- 阶梯联动：D 滑条仍控制绿/黄/红/灰；tier 计数与体积来自服务端统计；新增
+  **累计曲线**（从 `ballDiameterStart` 到当前 D 的可吸体积累计）和**区域对比表**
+  （所有已保存区域的件数/体积/可吸体积比例/D_req 中位数）。
+- 3D 视口把统计范围内的道具保持原样，范围外淡化（半透明灰）；区域盒始终可见。
+- 导出：CSV（区域、口径、每格 low/high/count/volume/units/volume_pct）和视图 PNG。
+
+### 接口
+
+`GET /api/stats?scope=all|region|ids|box&region=<name>&ids=a,b&mode=center|bbox&metric=count|volume|units&bin=0.05&diameter=0.5&compare=1`
+（token；`box=minx,miny,minz,maxx,maxy,maxz` 用于临时盒）。返回 `totals/tiers/bins/
+cumulative/dReqMedian/absorbable*Ratio/includedIds`；`compare=1` 返回所有区域的并排摘要。
+`GET/POST /api/regions`（token；POST body `{regions:[…]}`）读写旁文件，POST 校验后原子写。
+**统计只在服务端算**：前端只渲染服务端返回的 bins/tiers/cumulative，CSV 也只是把同一份
+结果格式化；没有第二套统计实现。
+
+### 测试
+
+- Python：区域包含（中心 vs 包围盒、刚好在面上）、空区域、两种口径合计/百分比、
+  tier、累计、compare、regions 校验/原子写/重复名/token。
+- 冒烟：区域模式下用鼠标画一个区域 → `/api/regions` 回读 → 读取 `/api/stats` →
+  切换个数/体积截图；另加「大区」做并排对比。
+
 ## 8. 测试与验证
 
 ```bash
-python3 -m unittest Docs.tests.leveleditor.test_web_server     # 22 tests
+python3 -m unittest Docs.tests.leveleditor.test_web_server     # 29 tests
 python3 -m unittest Docs.tests.leveleditor.test_coordinate_audit # 7 tests
 python3 -m unittest discover -s Docs/tests                      # 全仓
 python3 Docs/tools/validate_plan.py
@@ -297,16 +358,19 @@ python3 Docs/tools/validate_plan.py
   level 载荷、token 403、move 的规范字节与 diff、`expected` 门、batch 原子性、
   delete 的 expected、export→rebuild→export 同 sha、undo/redo 同字节、redo 清空、
   外部改写冲突、原子替换失败保留旧文件、同关第二实例被锁、token 文件 0600、
-  SSE 流/版本递增、hints 与校验器分档表一致、换关卡、外部改写后 undo 也拒绝。
+  SSE 流/版本递增、hints 与校验器分档表一致、换关卡、外部改写后 undo 也拒绝、
+  读 API 的 token（静态/`/healthz` 除外）、多对象 batch 一次导出/一条撤销。
 - `test_coordinate_audit.py`：椅子世界盒、花圃台上的苹果、地面过中心、30° 斜面
   行走面、边界向内、127 件/1500 u、C01 的 0 件/7 结构/5° 坡。
 - `Tools/leveleditor/test/smoke.mjs`（可选，需 playwright-core；默认自起临时服务 + 关卡副本，
-  跑完即删，不碰仓库文件）：真实 Chromium 加载
+  跑完即删，不碰仓库文件）：真实鼠标/键盘测试左键点选、Shift 加选、框选、右键飞行+W+
+  滚轮、中键/空格平移、Alt+左键轨道、F 聚焦、Q/W/E/R、多选 gizmo 一次批量/一条撤销、
+  支撑面旋转、拖放叠放；真实 Chromium 加载
   127 件模型 → `audit()` → 点选 → 方向键 → Ctrl+Z 逐字节恢复 → D=0.50/1.25 计数 →
   拖苹果+撤销 → 行走/前后移动 → 截图下载 → 打开 C01 → 切回第一关 sha 不变。
 - 截图证据：`Docs/Evidence/LevelEditorWeb/`（3/4 视角、行走球眼、选中 gizmo、
   D=0.50/D=1.25 阶梯、道具库、C01；图注见该目录的 `README.md`）。
-- **2026-11-15 实测**：全仓 `python3 -m unittest discover -s Docs/tests` **634 tests OK**；
+- **2026-11-15 实测**：全仓 `python3 -m unittest discover -s Docs/tests` **743 tests OK**；
   `validate_plan.py` **PASS**；冒烟 **PASS**。在非 localhost 的
   `http://100.113.66.61:8777`（`isSecureContext=false`）上 headless Chromium
   **授予了 pointer lock**，WASD 移动已验证；Windows 实机 Chrome 仍待主人确认。
@@ -314,7 +378,8 @@ python3 Docs/tools/validate_plan.py
 ## 9. 安全
 
 - 默认绑定 `0.0.0.0` 是为了 Windows PC 通过 Tailscale 访问；**不要**把端口映射到公网。
-- 写操作要 token；token 在 `~/.local/state/vrc-katamari-leveleditor/token`（0600），
+- **所有 `/api` 读写要 token**（静态资源与 `/healthz` 除外）；token 在
+  `~/.local/state/vrc-katamari-leveleditor/token`（0600），
   首次生成后稳定，重启不变；页面从 `?token=` 存 localStorage 并清掉地址栏参数。
 - 静态文件只从 `web/` 提供，路径解析后必须仍在 `web/` 内；模型只接受 manifest 里
   存在的 def。
@@ -341,11 +406,22 @@ python3 Docs/tools/validate_plan.py
 
 | # | 事项 | 现状 | 需要谁 |
 |---|---|---|---|
-| 1 | **加/删时是否默认更新 `level.expected`** | 页面默认勾选（编辑器的自然行为），可取消；取消后就是严格设计总量闸 | 主人：编辑阶段是否希望「加一件就自动改设计总量」 |
-| 2 | 落到斜面不自动转正 | `F` 只按世界 AABB 底面贴支撑点；精确坐正用「按支撑坐正」=`seat` | 可 phase 2 改成按命中面法线 reseat |
-| 3 | 指针锁定在非 localhost `http://` 可能被拒 | 已实现右键拖动回退；headless 实测见 §8/README | 主人在 Windows Chrome 里实际试一次 |
-| 4 | 没有多选、框选、缩放 | 刻意：道具不缩放；多选 phase 2 | — |
+| 1 | **加/删时是否默认更新 `level.expected`** | **默认勾选**（本轮决定，可取消）；取消后就是严格设计总量闸 | 已按推荐默认落地 |
+| 2 | 落到斜面不自动转正 | `End` 只按世界 AABB 底面贴支撑点；精确坐正用「按支撑坐正」=`seat`。旋转/移动后的支撑保持只调 Y，不改朝向 | 可 phase 2 改成按命中面法线 reseat |
+| 3 | 指针锁定在非 localhost `http://` 可能被拒 | 已实现右键拖动回退；headless 在 Tailscale HTTP 上实测授予 | 主人在 Windows Chrome 里实际试一次 |
+| 4 | 没有缩放 | 刻意：道具真实尺寸；结构尺寸用数值面板 | — |
 | 5 | 物理提示只读 | 只显示 P2 预测，不写文件、不参与门 | 若要做「挡路件预算」实时提示，再接到 `_check_budget` |
 | 6 | 只列已入库的 9 个 physics_test_field 格 | `Docs/Design/Levels/physics_test_field/<Cxx>/placement.json` | 其余 12 格是 `planned_cells[]`，没有几何 |
 | 7 | 截图只有视口，不含 UI | 设计如此（证据图用浏览器整页截图另存） | — |
-| 8 | 没有鉴权分级（读公开） | tailnet 内可读；写要 token | 若 tailnet 不可信，给 GET 也加 token |
+| 8 | ~~没有鉴权分级（读公开）~~ | 已按推荐默认：**所有 `/api` 读写都 token**，静态资源 + `/healthz` 例外 | 已落地 |
+| 9 | 区域统计 | AABB 区域 + 服务端统计；包围盒口径是 v1 粗筛 | 球/圆柱区域、区域升格为关卡数据是以后的事 |
+
+### 11.1 已按推荐默认落地（2026-11-15，不再询问）
+
+1. **`level.expected` 同步**：加/删时默认勾选同步更新，可取消；取消即严格设计总量闸。
+2. **未声明价值的 def**：暂不做 UI（道具库只列本关 `defs[]`/使用中的 def；C01 这类
+   没有 `defs[]` 的关卡道具库为空并提示先 `add_def`）。
+3. **飞行/眼高**：默认从 `playerSpawn` 0.6 m（球眼）/1.6 m（人眼）；右键随时飞行，
+   不设独立“进入飞行”状态；相机位置/速度在编辑期间保留。
+4. **只读 API**：在 tailnet 下也要求 token；页面/JS/CSS/字体与 `GET /healthz` 例外。
+5. **区域持久化**：`regions.json` schemaVersion 1，独立于 placement.json 与 undo。

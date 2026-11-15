@@ -1,30 +1,27 @@
 /**
- * The three.js side of the level editor.
+ * The three.js side of the level editor, with Unity scene-view interaction.
  *
- * Coordinates
- * -----------
- * placement.json is Unity world space: left-handed, Y up, quaternion ``(x, y, z, w)``.
- * three.js is right-handed with -Z forward.  The one conversion (and its inverse) is
- * at the top of this file:
+ * Coordinates (the one conversion, involutive):
+ *   Unity position  (x, y, z)     -> three (x, y, -z)
+ *   Unity quaternion(x, y, z, w)  -> three (-x, -y, z, w)
  *
- *     position:  (x, y, z)  ->  (x, y, -z)
- *     rotation:  (x, y, z, w) -> (-x, -y, z, w)          (both directions)
+ * Interaction:
+ *   left click / shift-click / box-drag   select, add/remove, rectangle select
+ *   right hold                            fly (pointer lock, WASD/QE, Shift x3, wheel = speed)
+ *   middle drag, Space+left, hand tool    pan
+ *   Alt+left drag                          orbit around the pivot
+ *   Alt+right drag / wheel (not flying)   dolly
+ *   Q/W/E                                  hand / move / rotate tool
  *
- * Negating z is a reflection, so the vector part of the quaternion flips x and y:
- * that keeps a Unity +30 deg yaw a +30 deg clockwise yaw from above, which is what
- * the Unity importer and the Blender exporter mean.  The inverse map is the same
- * map, so one pair of functions covers both directions.
- *
- * The prop GLBs are the Blender exports (``export_yup``), whose local axes already
- * match the JSON ``aabb`` (x width, y height, z depth).  The coordinate audit at the
- * bottom of this file compares each rendered Box3 against the server-computed world
- * AABB, so an axis mistake cannot hide.
+ * Multi-selection shares one gizmo at the union pivot.  A drag is applied live to
+ * every selected object and committed as ONE batch op (the server records one undo
+ * step and exports once).  Props and structures can be mixed; props are never scaled.
  */
 
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { SceneCamera } from "./camera.js";
 
 const TIER_COLORS = {
   green: 0x38d66b,
@@ -39,6 +36,9 @@ const ROLE_COLORS = {
   ramp: 0xd39a52,
   boundary: 0x79b6d6,
 };
+
+const SELECTION_COLOR = 0xffdf6a;
+const CLICK_THRESHOLD_PX = 4;
 
 export function toThreePosition(position) {
   return new THREE.Vector3(position[0], position[1], -position[2]);
@@ -82,7 +82,7 @@ function threeBoxToUnity(box) {
 export class EditorView {
   /**
    * @param {HTMLCanvasElement} canvas
-   * @param {{onSelect: Function, onTransform: Function, onStatus: Function,
+   * @param {{onSelect: Function, onBatch: Function, onStatus: Function,
    *          onError: Function, onProgress: Function}} callbacks
    */
   constructor(canvas, callbacks = {}) {
@@ -92,6 +92,7 @@ export class EditorView {
     this.doc = null;
     this.derived = { props: {}, structures: {} };
     this.manifests = {};
+    this.apiToken = "";
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -103,7 +104,6 @@ export class EditorView {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
-    this.noRender = window.location.search.includes("norender");
     this.renderer.shadowMap.enabled = !window.location.search.includes("noshadow");
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
@@ -111,72 +111,70 @@ export class EditorView {
     this.scene.background = new THREE.Color(0xc9dcec);
     this.scene.fog = new THREE.Fog(0xc9dcec, 55, 190);
 
-    this.persp = new THREE.PerspectiveCamera(45, 1, 0.03, 300);
-    this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.03, 300);
-    this.camera = this.persp;
+    this.cam = new SceneCamera(1);
+    this.cam.onChange = () => { this.needsRender = true; };
+    this.camera = this.cam.camera;
 
-    this.controls = new OrbitControls(this.persp, canvas);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.08;
-    this.controls.screenSpacePanning = true;
-    this.controls.minDistance = 0.35;
-    this.controls.maxDistance = 120;
-    this.controls.maxPolarAngle = Math.PI * 0.495;
-    this.controls.target.set(0, 0.3, 0);
-    this.controls.addEventListener("change", () => { this.needsRender = true; });
-
-    this.gizmo = new TransformControls(this.persp, canvas);
-    this.gizmo.setSize(0.7);
-    this.gizmo.translationSnap = 0.05;
-    this.gizmo.rotationSnap = THREE.MathUtils.degToRad(15);
-    this.gizmo.addEventListener("dragging-changed", (event) => {
-      this.controls.enabled = !event.value;
-      if (!event.value) this._commitTransform();
-    });
-    this.gizmo.addEventListener("objectChange", () => this._onGizmoMove());
+    this.gizmo = new TransformControls(this.camera, canvas);
+    this.gizmo.setSize(0.6);
+    this.gizmo.setSpace("world");
     this.gizmoHelper = this.gizmo.getHelper();
     this.scene.add(this.gizmoHelper);
+    this.gizmo.addEventListener("dragging-changed", (event) => {
+      if (event.value) this._startGroupTransform();
+      else this._commitGroupTransform();
+    });
+    this.gizmo.addEventListener("objectChange", () => this._onGizmoMove());
 
     this.proxy = new THREE.Object3D();
     this.scene.add(this.proxy);
 
-    this.selectionBox = new THREE.BoxHelper(new THREE.Object3D(), 0xffdf6a);
-    this.selectionBox.visible = false;
-    this.selectionBox.material.depthTest = false;
-    this.selectionBox.material.transparent = true;
-    this.scene.add(this.selectionBox);
-
     this.loader = new GLTFLoader();
     this.defPromises = new Map();
-    this.defMaterials = new Map();
-    this.thumbMaterials = new Map();
     this.propObjects = new Map();
     this.structureObjects = new Map();
     this.pickTargets = [];
-    this.selection = null;
-    this.translateSnap = 0.05;
-    this.rotateSnap = THREE.MathUtils.degToRad(15);
-    this.selectionMode = "translate";
-    this.ladder = { diameter: 0.5, enabled: true };
-    this.mode = "orbit";
-    this.eyeHeight = 0.6;
-    this.walk = {
-      yaw: 0,
-      pitch: 0,
-      keys: new Set(),
-      fallback: false,
-      looking: false,
-      last: performance.now(),
-    };
+    this.selectionIds = new Set();
+    this.selectionObbHelpers = new Map();
+    this.selectionWorldHelpers = new Map();
+    this.highlightHelpers = new Map();
+    this.multiFrame = null;
+    this.showWorldBoxes = false;
+    this.boxStyle = "obb";
+    this.selectionBox = new THREE.Box3();
+    this.groupStart = null;
+    this.tool = "move";
+    this.spaceMode = "world";
+    this.snap = { translate: 0.05, rotate: 15 };
+    this._ctrl = false;
+    this.panModifier = false;
+    this.pending = null;
+    this.navigation = null;
+    this.flyPointerId = null;
+    this.flyFallback = false;
+    this.boxElement = document.getElementById("box-select");
     this.loading = true;
     this.needsRender = true;
+    this.ladder = { diameter: 0.3, enabled: false };
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
-    this.dragStart = null;
-    this.lastScreenshot = null;
+    this.currentCamera = "overview";
+    this.regions = [];
+    this.activeRegion = null;
+    this.regionMode = false;
+    this.regionGroup = new THREE.Group();
+    this.scene.add(this.regionGroup);
+    this.regionHandles = [];
+    this.regionInteraction = null;
+    this.regionPreview = null;
+    this.statsScopeIds = null;
+    this.fadedMaterial = new THREE.MeshStandardMaterial({
+      color: 0x8f99a3, transparent: true, opacity: 0.12, depthWrite: false,
+      roughness: 1, metalness: 0,
+    });
 
     this._bindPointer();
-    this._bindWalkKeys();
+    this._bindKeyboard();
     this._resizeObserver = new ResizeObserver(() => this.resize());
     this._resizeObserver.observe(canvas.parentElement || canvas);
     this.resize();
@@ -184,130 +182,999 @@ export class EditorView {
     this._frame = requestAnimationFrame(this._animate);
   }
 
+  get isFlying() {
+    return this.cam.fly.active;
+  }
+
+  get selectedIds() {
+    return [...this.selectionIds];
+  }
+
   // ------------------------------------------------------------------ #
-  // setup helpers
+  // input
   // ------------------------------------------------------------------ #
   _bindPointer() {
-    this.canvas.addEventListener("contextmenu", (event) => {
-      if (this.mode === "walk") event.preventDefault();
-    });
-    this.canvas.addEventListener("pointerdown", (event) => {
-      if (this.mode === "walk") {
-        if (event.button === 2) {
-          this.walk.looking = true;
-          this.canvas.setPointerCapture(event.pointerId);
-          event.preventDefault();
-        }
-        return;
-      }
-      if (this.gizmo.dragging) return;
-      if (event.button !== 0) return;
-      this.dragStart = { x: event.clientX, y: event.clientY };
-    });
-    this.canvas.addEventListener("pointerup", (event) => {
-      if (this.mode === "walk") {
-        if (event.button === 2) {
-          this.walk.looking = false;
-          try {
-            this.canvas.releasePointerCapture(event.pointerId);
-          } catch (error) {
-            /* pointer capture may already be gone */
-          }
-        }
-        return;
-      }
-      if (this.gizmo.dragging) return;
-      if (event.button !== 0 || !this.dragStart) return;
-      const moved = Math.hypot(event.clientX - this.dragStart.x, event.clientY - this.dragStart.y);
-      this.dragStart = null;
-      if (moved > 5) return;
-      this._pickAt(event.clientX, event.clientY);
-    });
-    this.canvas.addEventListener("pointermove", (event) => {
-      if (this.mode === "walk") {
-        if (document.pointerLockElement === this.canvas) {
-          this._look(event.movementX, event.movementY);
-        } else if (this.walk.looking) {
-          this._look(event.movementX, event.movementY);
-        }
-      }
-    });
+    this.canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+    this.canvas.addEventListener("pointerdown", (event) => this._onPointerDown(event));
+    window.addEventListener("pointermove", (event) => this._onPointerMove(event));
+    window.addEventListener("pointerup", (event) => this._onPointerUp(event));
+    this.canvas.addEventListener("wheel", (event) => this._onWheel(event), { passive: false });
     document.addEventListener("pointerlockchange", () => {
-      const locked = document.pointerLockElement === this.canvas;
-      this.callbacks.onStatus?.(locked ? "pointer-locked" : "pointer-unlocked");
+      if (this.isFlying && document.pointerLockElement !== this.canvas) {
+        this.flyFallback = true;
+        this.callbacks.onStatus?.("pointer-fallback");
+      }
     });
     document.addEventListener("pointerlockerror", () => {
-      this.walk.fallback = true;
+      this.flyFallback = true;
       this.callbacks.onStatus?.("pointer-fallback");
-      this.callbacks.onError?.(
-        "浏览器拒绝了指针锁定（非 localhost 的 http 页面可能受限）。已退化为「按住右键拖动看方向 + WASD」，功能不受影响。"
-      );
     });
   }
 
-  _bindWalkKeys() {
+  _bindKeyboard() {
     window.addEventListener("keydown", (event) => {
-      if (this.mode !== "walk") return;
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        return;
+      if (event.code === "ControlLeft" || event.code === "ControlRight"
+          || event.code === "MetaLeft" || event.code === "MetaRight") {
+        this._ctrl = true;
+        if (this.gizmo.dragging) this._applyGizmoSnap();
       }
-      this.walk.keys.add(event.code);
-      if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) {
+      if (!this.isFlying) return;
+      if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE",
+        "ShiftLeft", "ShiftRight"].includes(event.code)) {
+        this.cam.keyDown(event.code);
         event.preventDefault();
       }
     });
     window.addEventListener("keyup", (event) => {
-      this.walk.keys.delete(event.code);
+      if (event.code === "ControlLeft" || event.code === "ControlRight"
+          || event.code === "MetaLeft" || event.code === "MetaRight") {
+        this._ctrl = false;
+        if (this.gizmo.dragging) this._applyGizmoSnap();
+      }
+      this.cam.keyUp(event.code);
     });
-    window.addEventListener("blur", () => this.walk.keys.clear());
+    window.addEventListener("blur", () => this._releaseEverything());
   }
 
-  _look(dx, dy) {
-    const sensitivity = 0.0022;
-    this.walk.yaw -= dx * sensitivity;
-    this.walk.pitch -= dy * sensitivity;
-    this.walk.pitch = THREE.MathUtils.clamp(this.walk.pitch, -1.45, 1.45);
-    this._applyWalkCamera();
+  _releaseEverything() {
+    this.navigation = null;
+    this.pending = null;
+    this.regionInteraction = null;
+    this.hideBoxSelection();
+    this.panModifier = false;
+    this._ctrl = false;
+    this.cam.clearKeys();
+    if (this.isFlying) this._endFly();
+    if (document.pointerLockElement === this.canvas) document.exitPointerLock();
   }
 
-  _applyWalkCamera() {
-    const ground = this.doc ? Number((this.doc.level || {}).groundY || 0) : 0;
-    this.camera.position.y = ground + this.eyeHeight;
-    this.camera.quaternion.setFromEuler(
-      new THREE.Euler(this.walk.pitch, this.walk.yaw, 0, "YXZ")
-    );
+  _onPointerDown(event) {
+    if (event.target !== this.canvas) return;
+    this.canvas.focus?.();
+    const button = event.button;
+    this.pending = null;
+    if (button === 2) {
+      event.preventDefault();
+      if (event.altKey) {
+        this.navigation = { mode: "zoom", lastY: event.clientY };
+        this.canvas.setPointerCapture?.(event.pointerId);
+        return;
+      }
+      this._beginFly(event);
+      return;
+    }
+    if (button === 1) {
+      event.preventDefault();
+      this.navigation = { mode: "pan", lastX: event.clientX, lastY: event.clientY };
+      this.canvas.setPointerCapture?.(event.pointerId);
+      return;
+    }
+    if (button !== 0 || this.isFlying) return;
+    if (this.regionMode && this._beginRegionInteraction(event)) return;
+    if (this.gizmo.dragging) return;
+    if (event.altKey) {
+      event.preventDefault();
+      this.navigation = { mode: "orbit", lastX: event.clientX, lastY: event.clientY };
+      this.canvas.setPointerCapture?.(event.pointerId);
+      return;
+    }
+    if (this.panModifier || this.tool === "hand") {
+      event.preventDefault();
+      this.navigation = { mode: "pan", lastX: event.clientX, lastY: event.clientY };
+      this.canvas.setPointerCapture?.(event.pointerId);
+      return;
+    }
+    const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+    this.pending = {
+      x: event.clientX,
+      y: event.clientY,
+      additive,
+      moved: false,
+      box: false,
+      empty: this._pickId(event.clientX, event.clientY) === null,
+      pointerId: event.pointerId,
+    };
+    this.canvas.setPointerCapture?.(event.pointerId);
   }
 
-  resize() {
-    const parent = this.canvas.parentElement;
-    if (!parent) return;
-    const width = Math.max(1, parent.clientWidth);
-    const height = Math.max(1, parent.clientHeight);
-    this.renderer.setSize(width, height, false);
+  _onPointerMove(event) {
+    if (this.regionInteraction) {
+      this._moveRegionInteraction(event);
+      return;
+    }
+    if (this.navigation?.mode === "fly") {
+      if (document.pointerLockElement === this.canvas || this.flyFallback) {
+        this.cam.look(event.movementX || 0, event.movementY || 0);
+        this.needsRender = true;
+      }
+      return;
+    }
+    if (this.navigation?.mode === "pan") {
+      const dx = event.clientX - this.navigation.lastX;
+      const dy = event.clientY - this.navigation.lastY;
+      this.navigation.lastX = event.clientX;
+      this.navigation.lastY = event.clientY;
+      this.cam.pan(dx, dy, this.canvas.clientHeight);
+      this.needsRender = true;
+      return;
+    }
+    if (this.navigation?.mode === "orbit") {
+      const dx = event.clientX - this.navigation.lastX;
+      const dy = event.clientY - this.navigation.lastY;
+      this.navigation.lastX = event.clientX;
+      this.navigation.lastY = event.clientY;
+      this.cam.orbit(dx, dy);
+      this.needsRender = true;
+      return;
+    }
+    if (this.navigation?.mode === "zoom") {
+      const dy = event.clientY - this.navigation.lastY;
+      this.navigation.lastY = event.clientY;
+      this.cam.dollyForward(-dy * Math.max(0.5, this.cam.position.distanceTo(this.cam.pivot)) * 0.008);
+      this.needsRender = true;
+      return;
+    }
+    if (!this.pending || this.isFlying) return;
+    const dx = event.clientX - this.pending.x;
+    const dy = event.clientY - this.pending.y;
+    if (!this.pending.moved && Math.hypot(dx, dy) <= CLICK_THRESHOLD_PX) return;
+    this.pending.moved = true;
+    if (this.pending.empty) {
+      this.pending.box = true;
+      this._showBoxSelection(this.pending.x, this.pending.y, event.clientX, event.clientY);
+    }
+  }
+
+  _onPointerUp(event) {
+    if (this.regionInteraction) {
+      this._endRegionInteraction(event);
+      return;
+    }
+    if (this.navigation?.mode === "fly") {
+      this._endFly();
+      return;
+    }
+    if (this.navigation) {
+      this.navigation = null;
+      try {
+        this.canvas.releasePointerCapture?.(event.pointerId);
+      } catch (error) {
+        /* already released */
+      }
+      return;
+    }
+    if (!this.pending) return;
+    const pending = this.pending;
+    this.pending = null;
+    this.hideBoxSelection();
+    try {
+      this.canvas.releasePointerCapture?.(pending.pointerId);
+    } catch (error) {
+      /* already released */
+    }
+    if (pending.box) {
+      const rect = this._boxRect(pending.x, pending.y, event.clientX, event.clientY);
+      const ids = this._idsInRect(rect);
+      if (ids.length || !pending.additive) {
+        this._setSelection(pending.additive ? [...this.selectionIds, ...ids] : ids);
+      }
+      return;
+    }
+    if (pending.moved) return;
+    const id = this._pickId(event.clientX, event.clientY);
+    if (id === null) {
+      if (!pending.additive) this.clearSelection();
+      return;
+    }
+    if (pending.additive) this.toggleSelection(id);
+    else this._setSelection([id]);
+  }
+
+  _onWheel(event) {
+    event.preventDefault();
+    if (this.isFlying) {
+      const speed = this.cam.setFlySpeed(Math.sign(event.deltaY));
+      this.callbacks.onStatus?.("fly-speed", speed);
+      return;
+    }
+    if (event.altKey) {
+      const distance = Math.max(0.5, this.cam.position.distanceTo(this.cam.pivot));
+      this.cam.dollyForward(-Math.sign(event.deltaY) * distance * 0.08);
+      this.needsRender = true;
+      return;
+    }
+    const point = this._cursorPoint(event.clientX, event.clientY);
+    const direction = Math.sign(event.deltaY) || 1;
+    if (point) this.cam.dollyToward(point, direction * 0.16);
+    else this.cam.dollyForward(-direction * Math.max(0.3, this.cam.position.distanceTo(this.cam.pivot)) * 0.08);
     this.needsRender = true;
-    const aspect = width / height;
-    this.persp.aspect = aspect;
-    this.persp.updateProjectionMatrix();
-    this.ortho.userData.aspect = aspect;
-    this._updateOrthoFrustum();
   }
 
-  _updateOrthoFrustum() {
-    const aspect = this.ortho.userData.aspect || 1;
-    const coverage = this.ortho.userData.coverage || 14;
-    let width = coverage;
-    let height = coverage;
-    if (aspect >= 1) width = coverage * aspect;
-    else height = coverage / aspect;
-    this.ortho.left = -width / 2;
-    this.ortho.right = width / 2;
-    this.ortho.top = height / 2;
-    this.ortho.bottom = -height / 2;
-    this.ortho.updateProjectionMatrix();
+  _beginFly() {
+    this.navigation = { mode: "fly" };
+    this.cam.beginFly();
+    this.flyFallback = false;
+    this.gizmoHelper.visible = false;
+    this.needsRender = true;
+    this.callbacks.onStatus?.("fly-start", this.cam.fly.speed);
+    try {
+      const request = this.canvas.requestPointerLock?.();
+      if (request && typeof request.catch === "function") {
+        request.catch(() => {
+          this.flyFallback = true;
+          this.callbacks.onStatus?.("pointer-fallback");
+        });
+      }
+    } catch (error) {
+      this.flyFallback = true;
+      this.callbacks.onStatus?.("pointer-fallback");
+    }
+  }
+
+  _endFly() {
+    if (!this.isFlying) {
+      this.navigation = null;
+      return;
+    }
+    this.navigation = null;
+    this.cam.endFly();
+    if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+    this.flyFallback = false;
+    this.gizmoHelper.visible = this.tool !== "hand" && this.selectionIds.size > 0;
+    this.needsRender = true;
+    this.callbacks.onStatus?.("fly-end", this.cam.fly.speed);
   }
 
   // ------------------------------------------------------------------ #
-  // loading a level
+  // selection
+  // ------------------------------------------------------------------ #
+  objectGroup(id) {
+    return this.propObjects.get(id) || this.structureObjects.get(id) || null;
+  }
+
+  _selectableGroups() {
+    const groups = [];
+    for (const group of this.propObjects.values()) groups.push(group);
+    for (const group of this.structureObjects.values()) {
+      if (group.userData.role !== "ground") groups.push(group);
+    }
+    return groups;
+  }
+
+  _pickId(clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hits = this.raycaster.intersectObjects(this._selectableGroups(), true);
+    for (const hit of hits) {
+      let object = hit.object;
+      while (object && !object.userData?.id) object = object.parent;
+      if (object) return object.userData.id;
+    }
+    return null;
+  }
+
+  dropPoint(clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const targets = [...this.propObjects.values(), ...this.structureObjects.values()];
+    const hits = this.raycaster.intersectObjects(targets, true);
+    if (!hits.length) return null;
+    const hit = hits[0];
+    let object = hit.object;
+    while (object && !object.userData?.type) object = object.parent;
+    return {
+      point: fromThreePosition(hit.point),
+      world: hit.point.clone(),
+      target: object ? {
+        type: object.userData.type,
+        id: object.userData.id,
+        role: object.userData.role,
+      } : null,
+    };
+  }
+
+  _idsInRect(rect) {
+    const ids = [];
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    const canvasRect = this.canvas.getBoundingClientRect();
+    for (const group of this._selectableGroups()) {
+      const point = group.position.clone().project(this.camera);
+      if (point.z < -1 || point.z > 1) continue;
+      const x = (point.x + 1) / 2 * width;
+      const y = (1 - point.y) / 2 * height;
+      void canvasRect;
+      if (x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) {
+        ids.push(group.userData.id);
+      }
+    }
+    return ids;
+  }
+
+  _setSelection(ids) {
+    const valid = [];
+    for (const id of ids || []) {
+      if (this.objectGroup(id) && !valid.includes(id)) valid.push(id);
+    }
+    this.selectionIds = new Set(valid);
+    this._rebuildSelection();
+  }
+
+  select(ids, options = {}) {
+    this._setSelection(Array.isArray(ids) ? ids : [ids]);
+    if (options.focus) this.focusSelection();
+  }
+
+  toggleSelection(id) {
+    if (!this.objectGroup(id)) return;
+    if (this.selectionIds.has(id)) this.selectionIds.delete(id);
+    else this.selectionIds.add(id);
+    this._rebuildSelection();
+  }
+
+  selectAll() {
+    this._setSelection(this._selectableGroups().map((group) => group.userData.id));
+  }
+
+  clearSelection() {
+    this._setSelection([]);
+  }
+
+  _disposeLine(object) {
+    this.scene.remove(object);
+    object.geometry?.dispose?.();
+    object.material?.dispose?.();
+  }
+
+  _clearSelectionVisuals() {
+    for (const helper of this.selectionObbHelpers.values()) this._disposeLine(helper);
+    for (const helper of this.selectionWorldHelpers.values()) this._disposeLine(helper);
+    this.selectionObbHelpers.clear();
+    this.selectionWorldHelpers.clear();
+    if (this.multiFrame) {
+      this._disposeLine(this.multiFrame);
+      this.multiFrame = null;
+    }
+  }
+
+  _obbGeometry(size) {
+    const hx = Math.max(1e-4, size[0] / 2);
+    const hy = Math.max(1e-4, size[1] / 2);
+    const hz = Math.max(1e-4, size[2] / 2);
+    const corners = [];
+    for (const x of [-hx, hx]) {
+      for (const y of [-hy, hy]) {
+        for (const z of [-hz, hz]) corners.push(new THREE.Vector3(x, y, z));
+      }
+    }
+    const edges = [[0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3], [2, 6],
+      [3, 7], [4, 5], [4, 6], [5, 7], [6, 7]];
+    const positions = [];
+    for (const [a, b] of edges) {
+      positions.push(corners[a].x, corners[a].y, corners[a].z);
+      positions.push(corners[b].x, corners[b].y, corners[b].z);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    return geometry;
+  }
+
+  _makeObb(group, color, dashed = false) {
+    const data = group.userData.data || {};
+    const size = data.aabb || data.size
+      || (() => {
+        const box = new THREE.Box3().setFromObject(group);
+        return box.getSize(new THREE.Vector3()).toArray();
+      })();
+    const material = new THREE.LineBasicMaterial({
+      color, transparent: true, opacity: 0.95, depthTest: false,
+    });
+    const object = new THREE.LineSegments(this._obbGeometry(size), material);
+    object.position.copy(group.position);
+    object.quaternion.copy(group.quaternion);
+    object.renderOrder = 20;
+    object.frustumCulled = false;
+    this.scene.add(object);
+    return object;
+  }
+
+  _makeWorldBoxHelper(box, color, opacity) {
+    const helper = new THREE.Box3Helper(box.clone(), color);
+    helper.material.transparent = true;
+    helper.material.opacity = opacity;
+    helper.material.depthTest = false;
+    helper.renderOrder = 10;
+    this.scene.add(helper);
+    return helper;
+  }
+
+  _rebuildSelection() {
+    this._clearSelectionVisuals();
+    const groups = [];
+    for (const id of this.selectionIds) {
+      const group = this.objectGroup(id);
+      if (!group) continue;
+      groups.push(group);
+      const obb = this._makeObb(group, SELECTION_COLOR);
+      this.selectionObbHelpers.set(id, obb);
+      const derived = group.userData.type === "prop"
+        ? this.derived.props[id] : this.derived.structures[id];
+      const box = new THREE.Box3().setFromObject(group);
+      if (derived?.worldAabb) {
+        box.copy(unityAabbToThree(derived.worldAabb));
+      }
+      const worldHelper = this._makeWorldBoxHelper(box, 0x9aa3ad, 0.55);
+      worldHelper.visible = this.showWorldBoxes;
+      this.selectionWorldHelpers.set(id, worldHelper);
+    }
+    if (!groups.length) {
+      this.selectionIds.clear();
+      this.selectionBox.makeEmpty();
+      this.gizmo.detach();
+      this.gizmoHelper.visible = false;
+      this.callbacks.onSelect?.(null);
+      this.callbacks.onStatus?.("selection", 0);
+      this.needsRender = true;
+      return;
+    }
+    this.selectionBox.makeEmpty();
+    for (const group of groups) this.selectionBox.expandByObject(group);
+    if (groups.length > 1) {
+      this.multiFrame = this._makeWorldBoxHelper(this.selectionBox, 0x9ec7e0, 0.40);
+    }
+    const pivot = this.selectionBox.getCenter(new THREE.Vector3());
+    this.proxy.position.copy(pivot);
+    if (groups.length === 1) this.proxy.quaternion.copy(groups[0].quaternion);
+    else this.proxy.quaternion.identity();
+    this.proxy.scale.set(1, 1, 1);
+    this._applyBoxStyle();
+    this._refreshGizmo();
+    this.callbacks.onSelect?.(this.selectionInfo());
+    this.callbacks.onStatus?.("selection", groups.length);
+    this.needsRender = true;
+  }
+
+  _applyBoxStyle() {
+    const showObb = this.boxStyle === "obb";
+    for (const helper of this.selectionObbHelpers.values()) helper.visible = showObb;
+    for (const [id, helper] of this.selectionWorldHelpers) {
+      helper.visible = this.boxStyle === "world" || this.showWorldBoxes;
+      helper.material.color.set(this.boxStyle === "world" ? SELECTION_COLOR : 0x9aa3ad);
+      helper.material.opacity = this.boxStyle === "world" ? 0.95 : 0.55;
+      void id;
+    }
+    if (this.multiFrame) this.multiFrame.visible = showObb;
+    this.needsRender = true;
+  }
+
+  _updateSelectionVisuals() {
+    if (!this.selectionIds.size) return;
+    const union = new THREE.Box3();
+    for (const id of this.selectionIds) {
+      const group = this.objectGroup(id);
+      if (!group) continue;
+      const obb = this.selectionObbHelpers.get(id);
+      if (obb) {
+        obb.position.copy(group.position);
+        obb.quaternion.copy(group.quaternion);
+      }
+      const worldHelper = this.selectionWorldHelpers.get(id);
+      if (worldHelper) {
+        worldHelper.box.setFromObject(group);
+        worldHelper.updateMatrixWorld(true);
+      }
+      union.expandByObject(group);
+    }
+    if (!union.isEmpty()) {
+      this.selectionBox.copy(union);
+      if (this.multiFrame) {
+        this.multiFrame.box.copy(union);
+        this.multiFrame.updateMatrixWorld(true);
+      }
+      if (!this.gizmo.dragging) {
+        this.proxy.position.copy(union.getCenter(new THREE.Vector3()));
+      }
+    }
+    this._applyBoxStyle();
+  }
+
+  setShowWorldBoxes(enabled) {
+    this.showWorldBoxes = Boolean(enabled);
+    this._applyBoxStyle();
+  }
+
+  setBoxStyle(style) {
+    this.boxStyle = style === "world" ? "world" : "obb";
+    this._applyBoxStyle();
+  }
+
+  highlightIds(ids) {
+    this.clearHighlights();
+    for (const id of ids || []) {
+      const group = this.objectGroup(id);
+      if (!group) continue;
+      const obb = this._makeObb(group, 0xff5a3c);
+      obb.renderOrder = 30;
+      this.highlightHelpers.set(id, obb);
+    }
+    this.needsRender = true;
+  }
+
+  clearHighlights() {
+    for (const helper of this.highlightHelpers.values()) this._disposeLine(helper);
+    this.highlightHelpers.clear();
+    this.needsRender = true;
+  }
+
+  _refreshGizmo() {
+    if (!this.selectionIds.size || this.tool === "hand" || this.isFlying || this.regionMode) {
+      this.gizmo.detach();
+      this.gizmoHelper.visible = false;
+      return;
+    }
+    this.gizmo.attach(this.proxy);
+    this.gizmo.setMode(this.tool === "rotate" ? "rotate" : "translate");
+    this.gizmo.setSpace(this.spaceMode);
+    this.gizmoHelper.visible = true;
+    this._applyGizmoSnap();
+  }
+
+  setTool(tool) {
+    if (!["hand", "move", "rotate"].includes(tool)) return false;
+    this.tool = tool;
+    this._refreshGizmo();
+    this.callbacks.onStatus?.("tool", tool);
+    this.needsRender = true;
+    return true;
+  }
+
+  toggleSpace() {
+    this.spaceMode = this.spaceMode === "world" ? "local" : "world";
+    this.gizmo.setSpace(this.spaceMode);
+    this.callbacks.onStatus?.("space", this.spaceMode);
+    this.needsRender = true;
+    return this.spaceMode;
+  }
+
+  setSelectionMode(mode) {
+    return this.setTool(mode === "rotate" ? "rotate" : "move");
+  }
+
+  setSnapping({ translate, rotate } = {}) {
+    if (translate !== undefined) this.snap.translate = Number(translate) || 0;
+    if (rotate !== undefined) this.snap.rotate = Number(rotate) || 0;
+    this._applyGizmoSnap();
+  }
+
+  _applyGizmoSnap() {
+    if (this.tool === "rotate") {
+      this.gizmo.rotationSnap = this._ctrl && this.snap.rotate
+        ? THREE.MathUtils.degToRad(this.snap.rotate) : null;
+      this.gizmo.translationSnap = null;
+    } else {
+      this.gizmo.translationSnap = this._ctrl && this.snap.translate ? this.snap.translate : null;
+      this.gizmo.rotationSnap = null;
+    }
+  }
+
+  selectionInfo() {
+    const ids = [...this.selectionIds];
+    if (!ids.length) return null;
+    const groups = ids.map((id) => this.objectGroup(id)).filter(Boolean);
+    if (!groups.length) return null;
+    const box = new THREE.Box3();
+    for (const group of groups) box.expandByObject(group);
+    const union = threeBoxToUnity(box);
+    const pivot = fromThreePosition(box.getCenter(new THREE.Vector3()));
+    if (ids.length === 1) {
+      const id = ids[0];
+      const group = groups[0];
+      const type = group.userData.type;
+      const data = group.userData.data;
+      const derived = type === "prop" ? this.derived.props[id] : this.derived.structures[id];
+      return {
+        count: 1,
+        ids,
+        type,
+        id,
+        def: data.def,
+        kind: derived?.kind || data.kind,
+        zone: data.zone,
+        support: data.support,
+        stackedOn: data.stackedOn,
+        valueUnits: derived?.valueUnits ?? data.valueUnits,
+        aabb: data.aabb,
+        size: data.size,
+        role: data.role,
+        dReq: derived?.dReq,
+        worldAabb: derived?.worldAabb || union,
+        position: pivot,
+        rotationQuat: fromThreeQuaternion(group.quaternion),
+      };
+    }
+    const propIds = ids.filter((id) => this.propObjects.has(id));
+    const structureIds = ids.filter((id) => this.structureObjects.has(id));
+    let valueUnits = 0;
+    for (const id of propIds) valueUnits += this.derived.props[id]?.valueUnits || 0;
+    return {
+      count: ids.length,
+      ids,
+      types: [...new Set(ids.map((id) => this.objectGroup(id)?.userData.type))],
+      props: propIds.length,
+      structures: structureIds.length,
+      valueUnits,
+      worldAabb: union,
+      position: pivot,
+    };
+  }
+
+  setSelectionWorldBox() {
+    return this.selectionBox.isEmpty() ? null : threeBoxToUnity(this.selectionBox);
+  }
+
+  focusSelection() {
+    if (!this.selectionIds.size) {
+      this.fitLevelView();
+      return;
+    }
+    this.cam.focus(this.selectionBox);
+    this.needsRender = true;
+    this.callbacks.onStatus?.("camera", "focus");
+  }
+
+  // ------------------------------------------------------------------ #
+  // group transform (one drag -> one batch op)
+  // ------------------------------------------------------------------ #
+  _startGroupTransform() {
+    const items = [];
+    for (const id of this.selectionIds) {
+      const group = this.objectGroup(id);
+      if (!group) continue;
+      items.push({
+        id,
+        type: group.userData.type,
+        group,
+        position: group.position.clone(),
+        quaternion: group.quaternion.clone(),
+      });
+    }
+    if (!items.length) return;
+    this.groupStart = {
+      pivot: this.proxy.position.clone(),
+      proxyQuaternion: this.proxy.quaternion.clone(),
+      items,
+    };
+    this._applyGizmoSnap();
+  }
+
+  _onGizmoMove() {
+    if (!this.groupStart) return;
+    const deltaPosition = this.proxy.position.clone().sub(this.groupStart.pivot);
+    const deltaQuaternion = this.proxy.quaternion.clone()
+      .multiply(this.groupStart.proxyQuaternion.clone().invert()).normalize();
+    for (const item of this.groupStart.items) {
+      const offset = item.position.clone().sub(this.groupStart.pivot);
+      item.group.position.copy(this.groupStart.pivot)
+        .add(deltaPosition).add(offset.applyQuaternion(deltaQuaternion));
+      item.group.quaternion.copy(deltaQuaternion.clone().multiply(item.quaternion)).normalize();
+    }
+    this._updateSelectionVisuals();
+    this.needsRender = true;
+  }
+
+  _supportHeight(propDoc, x, z) {
+    const ground = Number((this.doc.level || {}).groundY || 0);
+    if (propDoc.stackedOn) {
+      const other = this.objectGroup(propDoc.stackedOn);
+      if (other) return new THREE.Box3().setFromObject(other).max.y;
+      const info = this.derived.props[propDoc.stackedOn];
+      if (info?.worldAabb) return info.worldAabb[1][1];
+      return ground;
+    }
+    if (propDoc.support) {
+      const group = this.objectGroup(propDoc.support);
+      const structure = (this.doc.structures || []).find((entry) => entry.id === propDoc.support);
+      let normal = null;
+      let point = null;
+      if (group && ["box", "ramp"].includes(group.userData.role)) {
+        const size = group.userData.data.size;
+        normal = new THREE.Vector3(0, 1, 0).applyQuaternion(group.quaternion).normalize();
+        point = group.position.clone().addScaledVector(normal, size[1] / 2);
+      } else if (structure) {
+        const info = this.derived.structures[propDoc.support];
+        if (info?.topPlane) {
+          normal = new THREE.Vector3(...info.topPlane.normal);
+          point = new THREE.Vector3(...info.topPlane.point);
+        }
+      }
+      if (normal && point && Math.abs(normal.y) > 1e-6) {
+        return point.y - (normal.x * (x - point.x) + normal.z * (z - point.z)) / normal.y;
+      }
+      if (point) return point.y;
+    }
+    return ground;
+  }
+
+  /** Keep rotated/moved props on their declared support by adjusting only Y. */
+  _keepOnSupport(start, changedProps, changedStructures) {
+    const affected = new Set(changedProps);
+    for (const prop of this.doc.props || []) {
+      if (prop.support && changedStructures.has(prop.support)) affected.add(prop.itemId);
+    }
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const prop of this.doc.props || []) {
+        if (prop.stackedOn && affected.has(prop.stackedOn) && !affected.has(prop.itemId)) {
+          affected.add(prop.itemId);
+          grew = true;
+        }
+      }
+    }
+    let adjusted = false;
+    for (let pass = 0; pass < 4; pass += 1) {
+      for (const id of affected) {
+        const group = this.objectGroup(id);
+        const docProp = (this.doc.props || []).find((entry) => entry.itemId === id);
+        if (!group || !docProp) continue;
+        const top = this._supportHeight(docProp, group.position.x, group.position.z);
+        const bottom = new THREE.Box3().setFromObject(group).min.y;
+        const delta = top - bottom;
+        if (Math.abs(delta) > 0.0005) {
+          group.position.y += delta;
+          adjusted = true;
+          this.selectionObbHelpers.get(id)?.position.copy(group.position);
+          this.selectionWorldHelpers.get(id)?.box.setFromObject(group);
+          this.selectionWorldHelpers.get(id)?.updateMatrixWorld(true);
+        }
+      }
+    }
+    if (adjusted) this._updateSelectionVisuals();
+    return affected;
+  }
+
+  async _commitGroupTransform() {
+    const start = this.groupStart;
+    this.groupStart = null;
+    if (!start) return true;
+
+    const changedProps = new Set();
+    const changedStructures = new Set();
+    for (const item of start.items) {
+      const moved = Math.abs(item.group.position.x - item.position.x) > 1e-5
+        || Math.abs(item.group.position.y - item.position.y) > 1e-5
+        || Math.abs(item.group.position.z - item.position.z) > 1e-5;
+      const rotated = Math.abs(item.group.quaternion.dot(item.quaternion)) < 0.999999;
+      if (!moved && !rotated) continue;
+      if (item.type === "prop") changedProps.add(item.id);
+      else changedStructures.add(item.id);
+    }
+    // A rotation must not turn "rotate it a bit" into a gate rejection: adjust the
+    // rotated prop's Y (and everything sitting on a transformed support) so the
+    // world AABB still rests on the declared support.  The orientation is kept.
+    this._lastSupportAdjusted = new Set();
+    if (changedProps.size || changedStructures.size) {
+      this._lastSupportAdjusted = this._keepOnSupport(start, changedProps, changedStructures);
+    }
+
+    const operations = [];
+    for (const item of start.items) {
+      const position = fromThreePosition(item.group.position);
+      const quaternion = fromThreeQuaternion(item.group.quaternion);
+      const moved = Math.abs(item.group.position.x - item.position.x) > 1e-5
+        || Math.abs(item.group.position.y - item.position.y) > 1e-5
+        || Math.abs(item.group.position.z - item.position.z) > 1e-5;
+      const rotated = Math.abs(item.group.quaternion.dot(item.quaternion)) < 0.999999;
+      if (moved) operations.push({ op: "move", args: { id: item.id, to: position } });
+      if (rotated) {
+        operations.push({ op: "set", args: { id: item.id, rotationQuat: quaternion } });
+      }
+    }
+    // Unselected props that were lifted with a support need their own move op.
+    const selected = new Set(start.items.map((item) => item.id));
+    for (const id of this._lastSupportAdjusted || []) {
+      if (selected.has(id)) continue;
+      const group = this.objectGroup(id);
+      if (!group) continue;
+      const docProp = (this.doc.props || []).find((entry) => entry.itemId === id);
+      if (!docProp) continue;
+      if (Math.abs(group.position.y - docProp.position[1]) > 1e-5
+          || Math.abs(group.position.x - docProp.position[0]) > 1e-5
+          || Math.abs(group.position.z - docProp.position[2]) > 1e-5) {
+        operations.push({ op: "move", args: { id, to: fromThreePosition(group.position) } });
+      }
+    }
+    if (!operations.length) return true;
+    const ok = await this.callbacks.onBatch?.(operations, {
+      label: `transform ${start.items.length} object(s)`,
+    });
+    if (!ok) {
+      for (const item of start.items) {
+        item.group.position.copy(item.position);
+        item.group.quaternion.copy(item.quaternion);
+      }
+      for (const id of this._lastSupportAdjusted || []) {
+        const docProp = (this.doc.props || []).find((entry) => entry.itemId === id);
+        const group = this.objectGroup(id);
+        if (docProp && group && group.userData.type === "prop") {
+          group.position.copy(toThreePosition(docProp.position));
+          group.quaternion.copy(toThreeQuaternion(docProp.rotationQuat));
+        }
+      }
+      this.selectionBox.makeEmpty();
+      for (const item of start.items) this.selectionBox.expandByObject(item.group);
+      this._updateSelectionVisuals();
+      this.proxy.position.copy(start.pivot);
+      this.proxy.quaternion.copy(start.proxyQuaternion);
+      this.needsRender = true;
+      return false;
+    }
+    return true;
+  }
+
+  async debugRotateSelection(degrees = 30, axis = "y") {
+    if (!this.selectionIds.size) return false;
+    this._startGroupTransform();
+    if (!this.groupStart) return false;
+    const vector = axis === "x" ? new THREE.Vector3(1, 0, 0)
+      : axis === "z" ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+    const delta = new THREE.Quaternion().setFromAxisAngle(
+      vector, THREE.MathUtils.degToRad(Number(degrees) || 0)
+    );
+    this.proxy.position.copy(this.groupStart.pivot);
+    this.proxy.quaternion.copy(delta.multiply(this.groupStart.proxyQuaternion)).normalize();
+    this._onGizmoMove();
+    return this._commitGroupTransform();
+  }
+
+  async debugTranslateSelection(dx = 0.1, dy = 0, dz = 0.1) {
+    if (!this.selectionIds.size) return false;
+    this._startGroupTransform();
+    if (!this.groupStart) return false;
+    this.proxy.position.copy(this.groupStart.pivot).add(new THREE.Vector3(dx, dy, dz));
+    this.proxy.quaternion.copy(this.groupStart.proxyQuaternion);
+    this._onGizmoMove();
+    return this._commitGroupTransform();
+  }
+
+  async nudgeSelection(dx, dy, dz) {
+    const operations = [];
+    for (const id of this.selectionIds) {
+      const group = this.objectGroup(id);
+      if (!group) continue;
+      const position = fromThreePosition(group.position.clone().add(new THREE.Vector3(dx, dy, dz)));
+      operations.push({ op: "move", args: { id, to: position } });
+    }
+    if (!operations.length) return false;
+    return Boolean(await this.callbacks.onBatch?.(operations, {
+      label: `nudge ${operations.length} object(s)`,
+    }));
+  }
+
+  async restSelection() {
+    const operations = [];
+    for (const id of this.selectionIds) {
+      const group = this.objectGroup(id);
+      if (!group) continue;
+      const box = new THREE.Box3().setFromObject(group);
+      const halfHeight = (box.max.y - box.min.y) / 2;
+      const origin = new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y - 0.002,
+        (box.min.z + box.max.z) / 2);
+      const ray = new THREE.Raycaster(origin, new THREE.Vector3(0, -1, 0));
+      const targets = [];
+      for (const other of this.structureObjects.values()) {
+        if (other.userData.role !== "ground") targets.push(other);
+      }
+      for (const other of this.propObjects.values()) {
+        if (other !== group) targets.push(other);
+      }
+      const hits = ray.intersectObjects(targets, true);
+      const ground = Number((this.doc.level || {}).groundY || 0);
+      const surface = hits.length ? hits[0].point.y : ground;
+      const position = fromThreePosition(
+        new THREE.Vector3(group.position.x, surface + halfHeight, group.position.z)
+      );
+      operations.push({ op: "move", args: { id, to: position } });
+    }
+    if (!operations.length) return false;
+    return Boolean(await this.callbacks.onBatch?.(operations, {
+      label: `rest ${operations.length} object(s)`,
+    }));
+  }
+
+  async dropSelectionToGround() {
+    const ground = Number((this.doc.level || {}).groundY || 0);
+    const operations = [];
+    for (const id of this.selectionIds) {
+      const group = this.objectGroup(id);
+      if (!group) continue;
+      const box = new THREE.Box3().setFromObject(group);
+      const halfHeight = (box.max.y - box.min.y) / 2;
+      const position = fromThreePosition(
+        new THREE.Vector3(group.position.x, ground + halfHeight, group.position.z)
+      );
+      operations.push({ op: "move", args: { id, to: position } });
+    }
+    if (!operations.length) return false;
+    return Boolean(await this.callbacks.onBatch?.(operations, {
+      label: `snap ${operations.length} object(s) to ground`,
+    }));
+  }
+
+  // ------------------------------------------------------------------ #
+  // box-select overlay
+  // ------------------------------------------------------------------ #
+  _boxRect(x1, y1, x2, y2) {
+    const canvasRect = this.canvas.getBoundingClientRect();
+    return {
+      x: Math.min(x1, x2) - canvasRect.left,
+      y: Math.min(y1, y2) - canvasRect.top,
+      width: Math.abs(x2 - x1),
+      height: Math.abs(y2 - y1),
+    };
+  }
+
+  _showBoxSelection(x1, y1, x2, y2) {
+    if (!this.boxElement) return;
+    const rect = this._boxRect(x1, y1, x2, y2);
+    this.boxElement.style.left = `${rect.x}px`;
+    this.boxElement.style.top = `${rect.y}px`;
+    this.boxElement.style.width = `${rect.width}px`;
+    this.boxElement.style.height = `${rect.height}px`;
+    this.boxElement.classList.remove("hidden");
+  }
+
+  hideBoxSelection() {
+    this.boxElement?.classList.add("hidden");
+  }
+
+  // ------------------------------------------------------------------ #
+  // cursor world point for dolly
+  // ------------------------------------------------------------------ #
+  _cursorPoint(clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hits = this.raycaster.intersectObjects(this._selectableGroups(), true);
+    if (hits.length) return hits[0].point.clone();
+    const forward = this.cam.forward();
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(forward, this.cam.pivot);
+    return this.raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+  }
+
+  // ------------------------------------------------------------------ #
+  // scene construction
   // ------------------------------------------------------------------ #
   async load(state) {
     this.loading = true;
@@ -319,11 +1186,10 @@ export class EditorView {
     this._buildWorld();
     this._buildStructures();
     await this._buildProps();
-    this.selection = null;
-    this.selectionBox.visible = false;
-    this.gizmo.detach();
+    this.selectionIds.clear();
+    this._rebuildSelection();
     this._applyLadderToAll();
-    this._applyInitialCamera();
+    this.setCameraPreset("overview");
     this._updateBall();
     this.loading = false;
     this.needsRender = true;
@@ -351,7 +1217,6 @@ export class EditorView {
     );
   }
 
-  /** Unity-space ball start; a test-field cell falls back to its own pad centre. */
   _ballStart() {
     const level = this.doc?.level || {};
     if (Array.isArray(level.ballStart)) return level.ballStart;
@@ -360,6 +1225,27 @@ export class EditorView {
       return [ground.center[0], 0.15, ground.center[2]];
     }
     return [0, 0.15, 0];
+  }
+
+  _spawn() {
+    const level = this.doc?.level || {};
+    if (Array.isArray(level.playerSpawn)) return level.playerSpawn;
+    return this._ballStart();
+  }
+
+  _groundBox() {
+    const groundGroup = [...this.structureObjects.values()]
+      .find((group) => group.userData.role === "ground");
+    if (groundGroup) {
+      groundGroup.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(groundGroup);
+      if (!box.isEmpty()) return box;
+    }
+    const bounds = this.state?.bounds || [[-10, -10], [10, 10]];
+    return new THREE.Box3(
+      new THREE.Vector3(bounds[0][0], 0, -bounds[1][1]),
+      new THREE.Vector3(bounds[1][0], 0.1, -bounds[0][1])
+    );
   }
 
   _buildWorld() {
@@ -395,7 +1281,6 @@ export class EditorView {
     fill.position.copy(center).add(new THREE.Vector3(-8, 9, -6));
     group.add(fill);
 
-    // A wide lawn outside the authored ground so the level does not float in space.
     const lawn = new THREE.Mesh(
       new THREE.PlaneGeometry(240, 240),
       new THREE.MeshStandardMaterial({ color: 0x667c56, roughness: 1.0, metalness: 0 })
@@ -424,8 +1309,6 @@ export class EditorView {
     outline.computeLineDistances();
     group.add(outline);
 
-    // Ball start / player spawn markers. A test-field cell has no ballStart; its
-    // playable pad is the meaningful centre, not the world origin.
     const ballStart = toThreePosition(this._ballStart());
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.22, 0.3, 32),
@@ -464,9 +1347,6 @@ export class EditorView {
     mesh.scale.set(size[0], size[1], size[2]);
     mesh.position.set(0, 0, 0);
     if (role === "ground" || role === "boundary") {
-      // The Unity importer's visible body is the authored box shifted half a
-      // thickness along authored -Y, so the authored +Y face IS the plane.
-      // (PlacementImporter.TryComputePlaneBodyPose.)
       mesh.position.set(0, -size[1] / 2, 0);
     }
     mesh.castShadow = role === "box" || role === "ramp";
@@ -569,8 +1449,9 @@ export class EditorView {
 
   loadDef(def) {
     if (!this.defPromises.has(def)) {
+      const token = this.apiToken ? `?token=${encodeURIComponent(this.apiToken)}` : "";
       const promise = this.loader
-        .loadAsync(`/api/models/${encodeURIComponent(def)}.glb`)
+        .loadAsync(`/api/models/${encodeURIComponent(def)}.glb${token}`)
         .then((gltf) => {
           const scene = gltf.scene;
           const cache = new Map();
@@ -588,11 +1469,6 @@ export class EditorView {
     return this.defPromises.get(def);
   }
 
-  /**
-   * The Unity prefab's material colour is the manifest's linear RGB (PropArt reads
-   * the same table).  Using the manifest instead of the GLB material keeps the web
-   * view and Unity the same colour even if an exporter tweaks baseColorFactor.
-   */
   _propMaterial(def, glbMaterial, cache) {
     if (glbMaterial && glbMaterial.map) return glbMaterial;
     const manifest = this.manifests[def] || {};
@@ -614,454 +1490,312 @@ export class EditorView {
   }
 
   // ------------------------------------------------------------------ #
-  // camera presets and modes
+  // cameras
   // ------------------------------------------------------------------ #
-  _applyInitialCamera() {
-    // A fitted 3/4 view is the useful first look at a level; the level's own
-    // cameras are one click away (they are authored for Unity screenshots, and
-    // can be far away on purpose).
-    this.fitLevelView();
-  }
-
   fitLevelView() {
-    if (this.mode === "walk") this.exitWalk();
-    this._usePerspective();
-    const bounds = this.state?.bounds || [[-10, -10], [10, 10]];
-    let width = bounds[1][0] - bounds[0][0];
-    let depth = bounds[1][1] - bounds[0][1];
-    let center = this._levelCenter();
-    // Fit the playable pad, not the registration envelope: a physics-test-field cell
-    // sits in a 28 x 31 m field but is only 6 x 10 m.
-    const groundGroup = [...this.structureObjects.values()]
-      .find((group) => group.userData.role === "ground");
-    if (groundGroup) {
-      groundGroup.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(groundGroup);
-      const size = box.getSize(new THREE.Vector3());
-      if (size.x > 0.1 && size.z > 0.1) {
-        width = size.x;
-        depth = size.z;
-        center = box.getCenter(new THREE.Vector3());
-      }
-    }
-    center.y = 0.8;
-    const radius = 0.5 * Math.hypot(width, depth);
-    const fov = 40;
-    this.persp.fov = fov;
-    this.persp.updateProjectionMatrix();
-    const distance = (radius / Math.tan(THREE.MathUtils.degToRad(fov / 2))) * 0.9;
-    const direction = new THREE.Vector3(0.8, 0.62, 1.0).normalize();
-    this.controls.target.copy(center);
-    this.persp.position.copy(center).addScaledVector(direction, distance);
-    this.persp.up.set(0, 1, 0);
-    this.persp.lookAt(center);
-    this.controls.update();
-    this.currentCamera = "__fit";
+    this.cam.fit(this._groundBox());
+    this.currentCamera = "overview";
     this.needsRender = true;
-    this.callbacks.onStatus?.("camera:fit");
+    this.callbacks.onStatus?.("camera", "overview");
     this.renderNow();
-    return true;
-  }
-
-  _usePerspective() {
-    this.camera = this.persp;
-    this.gizmo.camera = this.persp;
-    this.controls.object = this.persp;
-    this.controls.enableRotate = true;
-  }
-
-  _useOrtho() {
-    this.camera = this.ortho;
-    this.gizmo.camera = this.ortho;
-    this.controls.object = this.ortho;
-    this.controls.enableRotate = false;
   }
 
   setCameraPreset(id) {
-    const camera = (this.doc.cameras || []).find((entry) => entry.id === id);
-    if (!camera) return false;
-    if (this.mode === "walk") this.exitWalk();
-    if (camera.type === "ortho_top") {
-      const aspect = this.persp.aspect || 1;
-      this.ortho.userData.coverage = Number(camera.coverage_m || 12) * 1.08;
-      this.ortho.userData.aspect = aspect;
-      this.ortho.up.set(0, 0, -1);
-      this._updateOrthoFrustum();
-      this._useOrtho();
-      this.ortho.position.copy(toThreePosition(camera.location));
-      const target = toThreePosition(camera.target || [
-        camera.location[0], 0, camera.location[2],
-      ]);
-      this.controls.target.copy(target);
-      this.ortho.lookAt(target);
-      this.ortho.zoom = 1;
-      this.ortho.updateProjectionMatrix();
-      this.controls.update();
+    if (this.isFlying) this._endFly();
+    const box = this._groundBox();
+    if (id === "overview") {
+      this.cam.fit(box);
+    } else if (id === "top") {
+      this.cam.setTop(box);
+    } else if (id === "ball_eye" || id === "human_eye") {
+      const spawn = this._spawn();
+      const base = toThreePosition([spawn[0], 0, spawn[2]]);
+      const target = toThreePosition(this._ballStart());
+      this.cam.setEye(base, id === "ball_eye" ? 0.6 : 1.6, target);
     } else {
-      this._usePerspective();
-      const aspect = this.persp.aspect || 1;
-      const lens = Number(camera.lens || 45);
-      const horizontal = 2 * Math.atan(18 / lens);
-      this.persp.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(horizontal / 2) / aspect));
-      this.persp.updateProjectionMatrix();
-      this.persp.position.copy(toThreePosition(camera.location));
-      this.persp.up.set(0, 1, 0);
-      const target = toThreePosition(camera.target || [0, 0, 0]);
-      this.controls.target.copy(target);
-      this.persp.lookAt(target);
-      this.controls.update();
+      return false;
     }
     this.currentCamera = id;
     this.needsRender = true;
-    this.callbacks.onStatus?.(`camera:${id}`);
+    this.callbacks.onStatus?.("camera", id);
     this.renderNow();
     return true;
   }
 
   cameraButtonNames() {
-    const labels = {
-      overview_3q: "3/4 视角",
-      top: "俯视",
-      ball_eye: "球眼视角",
-    };
-    return (this.doc?.cameras || []).map((camera) => ({
-      id: camera.id,
-      label: labels[camera.id] || camera.id,
-    }));
-  }
-
-  enterWalk(options = {}) {
-    if (this.mode === "walk") return;
-    this.orbitSave = {
-      position: this.camera.position.clone(),
-      target: this.controls.target.clone(),
-      quaternion: this.camera.quaternion.clone(),
-    };
-    const previousPosition = this.camera.position.clone();
-    const previousTarget = this.controls.target.clone();
-    this._usePerspective();
-    this.persp.position.copy(previousPosition);
-    this.persp.lookAt(previousTarget);
-    this.mode = "walk";
-    this.controls.enabled = false;
-    this.gizmo.enabled = false;
-    this.gizmoHelper.visible = false;
-    this.selectionBox.visible = false;
-    if (this.ballGhost) this.ballGhost.visible = false;
-    this.walk.fallback = false;
-    const direction = new THREE.Vector3();
-    this.camera.getWorldDirection(direction);
-    this.walk.pitch = Math.asin(THREE.MathUtils.clamp(direction.y, -1, 1));
-    this.walk.yaw = Math.atan2(-direction.x, -direction.z);
-
-    // Starting the walk from a far orbit camera would drop the player outside the
-    // arena at eye height.  If the camera is not over the level, start from the
-    // level's authored ball-eye camera (else the ball start) looking into the map.
-    const bounds = this.state?.bounds || [[-1e9, -1e9], [1e9, 1e9]];
-    const position = this.camera.position;
-    const inside = position.x > bounds[0][0] - 0.5 && position.x < bounds[1][0] + 0.5
-      && position.z > -bounds[1][1] - 0.5 && position.z < -bounds[0][1] + 0.5;
-    if (options.start || !inside) {
-      const level = this.doc.level || {};
-      // The player spawn is where a person actually starts in this level; the ball
-      // start is the fallback for a test-field cell that only has a pad.
-      const spawn = Array.isArray(level.playerSpawn) ? level.playerSpawn : null;
-      const ball = toThreePosition(this._ballStart());
-      const anchor = spawn ? toThreePosition(spawn)
-        : new THREE.Vector3(ball.x, 0, ball.z);
-      this.camera.position.set(anchor.x, 0, anchor.z);
-      const toward = new THREE.Vector3(ball.x - anchor.x, 0, ball.z - anchor.z);
-      if (toward.lengthSq() < 1e-6) {
-        const center = this._levelCenter();
-        toward.set(center.x - anchor.x, 0, center.z - anchor.z);
-      }
-      if (toward.lengthSq() > 1e-6) {
-        this.walk.yaw = Math.atan2(-toward.x, -toward.z);
-        this.walk.pitch = -0.1;
-      }
-    }
-    this._applyWalkCamera();
-    this.needsRender = true;
-    this.callbacks.onStatus?.("walk");
-    try {
-      const request = this.canvas.requestPointerLock?.();
-      if (request && typeof request.catch === "function") {
-        request.catch(() => {
-          this.walk.fallback = true;
-          this.callbacks.onStatus?.("pointer-fallback");
-        });
-      }
-    } catch (error) {
-      this.walk.fallback = true;
-      this.callbacks.onStatus?.("pointer-fallback");
-    }
-  }
-
-  exitWalk() {
-    if (this.mode !== "walk") return;
-    this.mode = "orbit";
-    if (document.pointerLockElement === this.canvas) document.exitPointerLock();
-    this.walk.keys.clear();
-    this.walk.looking = false;
-    this.controls.enabled = true;
-    if (this.orbitSave) {
-      this._usePerspective();
-      this.persp.position.copy(this.orbitSave.position);
-      this.persp.quaternion.copy(this.orbitSave.quaternion);
-      this.controls.target.copy(this.orbitSave.target);
-      this.controls.update();
-    }
-    if (this.selection) this.selectionBox.visible = true;
-    if (this.ballGhost) this.ballGhost.visible = true;
-    this.gizmo.enabled = true;
-    this.gizmoHelper.visible = Boolean(this.selection);
-    this.needsRender = true;
-    this.callbacks.onStatus?.("orbit");
-  }
-
-  setMode(mode) {
-    if (mode === "walk") this.enterWalk();
-    else this.exitWalk();
-  }
-
-  setEyeHeight(height) {
-    this.eyeHeight = Math.max(0.05, Number(height) || 0.6);
-    if (this.mode === "walk") this._applyWalkCamera();
+    return [
+      { id: "overview", label: "3/4" },
+      { id: "top", label: "俯视" },
+      { id: "ball_eye", label: "球眼 0.6" },
+      { id: "human_eye", label: "人眼 1.6" },
+    ];
   }
 
   // ------------------------------------------------------------------ #
-  // selection and gizmos
+  // regions (sidecar; independent of placement undo)
   // ------------------------------------------------------------------ #
-  _pickAt(clientX, clientY) {
+  _regionBox(region) {
+    const [ax, ay, az] = region.min;
+    const [bx, by, bz] = region.max;
+    return new THREE.Box3(
+      new THREE.Vector3(Math.min(ax, bx), Math.min(ay, by), -Math.max(az, bz)),
+      new THREE.Vector3(Math.max(ax, bx), Math.max(ay, by), -Math.min(az, bz))
+    );
+  }
+
+  _groundPoint(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.set(
       ((clientX - rect.left) / rect.width) * 2 - 1,
       -((clientY - rect.top) / rect.height) * 2 + 1
     );
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hits = this.raycaster.intersectObjects(this.pickTargets, true);
-    for (const hit of hits) {
-      let object = hit.object;
-      while (object && !object.userData?.type) object = object.parent;
-      if (!object) continue;
-      if (object.userData.type === "structure" && object.userData.role === "ground") continue;
-      this.select(object.userData.id);
-      return;
-    }
-    this.select(null);
+    const ground = Number((this.doc?.level || {}).groundY || 0);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -ground);
+    const hit = this.raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+    return hit ? fromThreePosition(hit) : null;
   }
 
-  objectGroup(id) {
-    return this.propObjects.get(id) || this.structureObjects.get(id) || null;
+  setRegions(regions, activeName = null) {
+    this.regions = Array.isArray(regions) ? regions : [];
+    this.activeRegion = activeName
+      || (this.activeRegion && this.regions.some((entry) => entry.name === this.activeRegion)
+        ? this.activeRegion : (this.regions[0]?.name || null));
+    this._rebuildRegionVisuals();
   }
 
-  /**
-   * Where a palette drop would land: the first surface under the pointer, the
-   * owning object (for `support`/`stackedOn`) and the Unity-space point.
-   */
-  dropPoint(clientX, clientY) {
-    const rect = this.canvas.getBoundingClientRect();
-    this.pointer.set(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1
-    );
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-    const targets = [...this.propObjects.values(), ...this.structureObjects.values()];
-    const hits = this.raycaster.intersectObjects(targets, true);
-    if (!hits.length) return null;
-    const hit = hits[0];
-    let object = hit.object;
-    while (object && !object.userData?.type) object = object.parent;
-    return {
-      point: fromThreePosition(hit.point),
-      world: hit.point.clone(),
-      target: object ? { type: object.userData.type, id: object.userData.id,
-                         role: object.userData.role } : null,
-    };
-  }
-
-  select(id, options = {}) {
-    const group = id ? this.objectGroup(id) : null;
-    if (!group) {
-      this.selection = null;
-      this.selectionBox.visible = false;
-      this.gizmo.detach();
-      this.callbacks.onSelect?.(null);
-      return null;
-    }
-    const type = group.userData.type;
-    this.selection = {
-      type,
-      id,
-      group,
-      base: {
-        position: group.position.clone(),
-        quaternion: group.quaternion.clone(),
-      },
-    };
-    this.proxy.position.copy(group.position);
-    this.proxy.quaternion.copy(group.quaternion);
-    this.proxy.scale.set(1, 1, 1);
-    this.gizmo.attach(this.proxy);
-    this.gizmoHelper.visible = this.mode !== "walk";
-    this.gizmo.setMode(this.selectionMode);
-    this.selectionBox.setFromObject(group);
-    this.selectionBox.visible = this.mode !== "walk";
-    this.callbacks.onSelect?.(this.selectionInfo());
-    if (options.focus) this.focusObject(id);
-    this.renderNow();
-    return this.selection;
-  }
-
-  selectionInfo() {
-    if (!this.selection) return null;
-    const { type, id, group } = this.selection;
-    const data = group.userData.data;
-    const derived = type === "prop"
-      ? this.derived.props[id]
-      : this.derived.structures[id];
-    return {
-      type,
-      id,
-      def: data.def,
-      kind: derived?.kind || data.kind,
-      zone: data.zone,
-      support: data.support,
-      stackedOn: data.stackedOn,
-      valueUnits: derived?.valueUnits ?? data.valueUnits,
-      aabb: data.aabb,
-      size: data.size,
-      center: data.center,
-      role: data.role,
-      dReq: derived?.dReq,
-      worldAabb: derived?.worldAabb,
-      position: [Number(group.position.x.toFixed(4)), Number(group.position.y.toFixed(4)), Number(-group.position.z.toFixed(4))],
-      rotationQuat: fromThreeQuaternion(group.quaternion),
-    };
-  }
-
-  focusObject(id) {
-    const group = this.objectGroup(id);
-    if (!group) return;
+  setRegionMode(enabled) {
+    this.regionMode = Boolean(enabled);
+    this._rebuildRegionVisuals();
+    this._refreshGizmo();
+    this.callbacks.onStatus?.("region-mode", this.regionMode);
     this.needsRender = true;
-    if (this.mode === "walk") this.exitWalk();
-    const box = new THREE.Box3().setFromObject(group);
+  }
+
+  setActiveRegion(name) {
+    this.activeRegion = name || null;
+    this._rebuildRegionVisuals();
+    this.needsRender = true;
+  }
+
+  _rebuildRegionVisuals() {
+    for (const child of [...this.regionGroup.children]) {
+      this.regionGroup.remove(child);
+      child.geometry?.dispose?.();
+      child.material?.dispose?.();
+    }
+    this.regionHandles = [];
+    for (const region of this.regions) {
+      if (region.visible === false) continue;
+      const box = this._regionBox(region);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const active = region.name === this.activeRegion;
+      const color = new THREE.Color(region.color || (active ? 0x8fd4ff : 0x6aa5c8));
+      const fill = new THREE.Mesh(
+        new THREE.BoxGeometry(Math.max(0.01, size.x), Math.max(0.01, size.y), Math.max(0.01, size.z)),
+        new THREE.MeshBasicMaterial({ color, transparent: true,
+          opacity: active ? 0.10 : 0.05, depthWrite: false, side: THREE.DoubleSide })
+      );
+      fill.position.copy(center);
+      fill.renderOrder = 4;
+      this.regionGroup.add(fill);
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(Math.max(0.01, size.x),
+          Math.max(0.01, size.y), Math.max(0.01, size.z))),
+        new THREE.LineBasicMaterial({ color, transparent: true,
+          opacity: active ? 0.95 : 0.5, depthTest: false })
+      );
+      edges.position.copy(center);
+      edges.renderOrder = 6;
+      this.regionGroup.add(edges);
+    }
+    if (this.regionMode && this.activeRegion) {
+      const region = this.regions.find((entry) => entry.name === this.activeRegion);
+      if (region) this._buildRegionHandles(region);
+    }
+    this.needsRender = true;
+  }
+
+  _buildRegionHandles(region) {
+    const box = this._regionBox(region);
     const center = box.getCenter(new THREE.Vector3());
-    const size = Math.max(0.25, box.getSize(new THREE.Vector3()).length());
-    const direction = this.camera.position.clone().sub(this.controls.target).normalize();
-    if (direction.lengthSq() < 1e-6) direction.set(1, 1, 1).normalize();
-    if (this.camera === this.ortho) {
-      this.controls.target.copy(center);
-      this.ortho.position.copy(center).add(new THREE.Vector3(0, 8, 0));
-      this.controls.update();
-    } else {
-      this.controls.target.copy(center);
-      this.persp.position.copy(center).add(direction.multiplyScalar(size * 2.1));
-      this.controls.update();
+    const size = box.getSize(new THREE.Vector3());
+    const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    const colors = [0xff5a4a, 0x5ad46a, 0x4a8cff];
+    for (let axis = 0; axis < 3; axis += 1) {
+      for (const side of ["min", "max"]) {
+        const position = center.clone();
+        const sign = side === "min" ? -1 : 1;
+        position.addScaledVector(new THREE.Vector3(...axes[axis]), sign * size.getComponent(axis) / 2);
+        const handle = new THREE.Mesh(
+          new THREE.BoxGeometry(0.09, 0.09, 0.09),
+          new THREE.MeshBasicMaterial({ color: colors[axis], depthTest: false })
+        );
+        handle.position.copy(position);
+        handle.renderOrder = 30;
+        handle.userData = { regionHandle: true, axis, side, regionName: region.name };
+        this.regionGroup.add(handle);
+        this.regionHandles.push(handle);
+      }
     }
   }
 
-  setSelectionMode(mode) {
-    this.selectionMode = mode === "rotate" ? "rotate" : "translate";
-    this.gizmo.setMode(this.selectionMode);
+  _beginRegionInteraction(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.set(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const handleHits = this.raycaster.intersectObjects(this.regionHandles, false);
+    if (handleHits.length) {
+      const handle = handleHits[0].object;
+      const region = this.regions.find((entry) => entry.name === handle.userData.regionName);
+      if (region) {
+        const axis = handle.userData.axis;
+        const side = handle.userData.side;
+        const world = handle.getWorldPosition(this.camera.position.clone());
+        const axisPoint = world.clone();
+        axisPoint.setComponent(axis, axisPoint.getComponent(axis) + 1);
+        this.regionInteraction = {
+          type: "handle",
+          region,
+          axis,
+          side,
+          startValue: region[side][axis],
+          startX: event.clientX,
+          startY: event.clientY,
+          screen: this._axisScreen(handle.getWorldPosition(new THREE.Vector3()), axis),
+        };
+        this.canvas.setPointerCapture?.(event.pointerId);
+        return true;
+      }
+    }
+    const point = this._groundPoint(event.clientX, event.clientY);
+    if (point) {
+      this.regionInteraction = {
+        type: "draw",
+        start: point,
+        current: point,
+        pointerId: event.pointerId,
+      };
+      this.canvas.setPointerCapture?.(event.pointerId);
+      return true;
+    }
+    return false;
   }
 
-  setSnapping({ translate, rotate } = {}) {
-    if (translate !== undefined) this.translateSnap = Number(translate) || 0;
-    if (rotate !== undefined) this.rotateSnap = THREE.MathUtils.degToRad(Number(rotate) || 0);
-    this.gizmo.translationSnap = this.translateSnap || null;
-    this.gizmo.rotationSnap = this.rotateSnap || null;
+  _axisScreen(world, axis) {
+    const rect = this.canvas.getBoundingClientRect();
+    const a = world.clone();
+    const b = world.clone();
+    b.setComponent(axis, b.getComponent(axis) + 1);
+    a.project(this.camera);
+    b.project(this.camera);
+    const ax = rect.left + (a.x + 1) / 2 * rect.width;
+    const ay = rect.top + (1 - a.y) / 2 * rect.height;
+    const bx = rect.left + (b.x + 1) / 2 * rect.width;
+    const by = rect.top + (1 - b.y) / 2 * rect.height;
+    return { ax, ay, bx, by, length: Math.hypot(bx - ax, by - ay) || 1 };
   }
 
-  _onGizmoMove() {
-    if (!this.selection) return;
-    this.needsRender = true;
-    const { group } = this.selection;
-    group.position.copy(this.proxy.position);
-    group.quaternion.copy(this.proxy.quaternion);
-    this.selectionBox.setFromObject(group);
-  }
-
-  async _commitTransform() {
-    if (!this.selection) return;
-    const { group, base } = this.selection;
-    const position = fromThreePosition(group.position);
-    const quaternion = fromThreeQuaternion(group.quaternion);
-    const moved = group.position.distanceTo(base.position) > 1e-6;
-    const rotated = Math.abs(group.quaternion.dot(base.quaternion)) < 0.999999;
-    if (!moved && !rotated) {
-      this.selectionBox.setFromObject(group);
+  _moveRegionInteraction(event) {
+    const interaction = this.regionInteraction;
+    if (!interaction) return;
+    if (interaction.type === "handle") {
+      const region = interaction.region;
+      const screen = interaction.screen;
+      const dx = event.clientX - interaction.startX;
+      const dy = event.clientY - interaction.startY;
+      const along = (dx * (screen.bx - screen.ax) + dy * (screen.by - screen.ay)) / screen.length;
+      const worldDelta = along / screen.length;
+      let value = interaction.startValue + (interaction.side === "min" ? worldDelta : worldDelta);
+      const other = interaction.side === "min" ? region.max[interaction.axis] : region.min[interaction.axis];
+      value = interaction.side === "min"
+        ? Math.min(value, other - 0.05)
+        : Math.max(value, other + 0.05);
+      region[interaction.side][interaction.axis] = round(value, 4);
+      this._rebuildRegionVisuals();
+      this.callbacks.onRegionChange?.(region);
+      this.needsRender = true;
       return;
     }
-    const info = this.selectionInfo();
-    const ok = await this.callbacks.onTransform?.(info, position, quaternion);
-    if (ok) {
-      this.selection.base = {
-        position: group.position.clone(),
-        quaternion: group.quaternion.clone(),
-      };
-    } else {
-      group.position.copy(base.position);
-      group.quaternion.copy(base.quaternion);
-      this.proxy.position.copy(base.position);
-      this.proxy.quaternion.copy(base.quaternion);
-      this.selectionBox.setFromObject(group);
-    }
+    const point = this._groundPoint(event.clientX, event.clientY);
+    if (!point) return;
+    interaction.current = point;
+    this._drawRegionPreview(interaction.start, point);
   }
 
-  /** Drop the selection onto the highest surface below its current bottom. */
-  restOnSurface() {
-    if (!this.selection) return null;
+  _drawRegionPreview(start, current) {
+    if (this.regionPreview) {
+      this.regionGroup.remove(this.regionPreview);
+      this.regionPreview.geometry?.dispose?.();
+      this.regionPreview.material?.dispose?.();
+      this.regionPreview = null;
+    }
+    const ground = Number((this.doc?.level || {}).groundY || 0);
+    const low = [Math.min(start[0], current[0]), ground, Math.min(start[2], current[2])];
+    const high = [Math.max(start[0], current[0]), ground + 2.5, Math.max(start[2], current[2])];
+    const box = new THREE.Box3(
+      new THREE.Vector3(low[0], low[1], -high[2]),
+      new THREE.Vector3(high[0], high[1], -low[2])
+    );
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const preview = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(Math.max(0.01, size.x),
+        Math.max(0.01, size.y), Math.max(0.01, size.z))),
+      new THREE.LineBasicMaterial({ color: 0xa8e6ff, transparent: true, opacity: 1,
+        depthTest: false })
+    );
+    preview.position.copy(center);
+    preview.renderOrder = 31;
+    this.regionGroup.add(preview);
+    this.regionPreview = preview;
     this.needsRender = true;
-    const { group } = this.selection;
-    const box = new THREE.Box3().setFromObject(group);
-    const halfHeight = (box.max.y - box.min.y) / 2;
-    const centerY = (box.max.y + box.min.y) / 2;
-    const origin = new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y - 0.002,
-      (box.min.z + box.max.z) / 2);
-    const ray = new THREE.Raycaster(origin, new THREE.Vector3(0, -1, 0));
-    const targets = [];
-    for (const structure of this.structureObjects.values()) {
-      if (structure.userData.role !== "ground") targets.push(structure);
-    }
-    for (const prop of this.propObjects.values()) {
-      if (prop !== group) targets.push(prop);
-    }
-    const hits = ray.intersectObjects(targets, true);
-    const ground = Number((this.doc.level || {}).groundY || 0);
-    const surface = hits.length ? hits[0].point.y : ground;
-    group.position.y = surface + halfHeight;
-    this.proxy.position.copy(group.position);
-    this.selectionBox.setFromObject(group);
-    this._commitTransform();
-    return { surface, y: group.position.y };
   }
 
-  dropToGround() {
-    if (!this.selection) return;
-    const { group } = this.selection;
-    const box = new THREE.Box3().setFromObject(group);
-    const halfHeight = (box.max.y - box.min.y) / 2;
-    const ground = Number((this.doc.level || {}).groundY || 0);
-    group.position.y = ground + halfHeight;
-    this.proxy.position.copy(group.position);
-    this.selectionBox.setFromObject(group);
-    this._commitTransform();
+  _endRegionInteraction(event) {
+    const interaction = this.regionInteraction;
+    this.regionInteraction = null;
+    try {
+      this.canvas.releasePointerCapture?.(interaction?.pointerId || event.pointerId);
+    } catch (error) {
+      /* released */
+    }
+    if (!interaction) return;
+    if (interaction.type === "handle") {
+      this.callbacks.onRegionChange?.(interaction.region);
+      return;
+    }
+    if (this.regionPreview) {
+      this.regionGroup.remove(this.regionPreview);
+      this.regionPreview.geometry?.dispose?.();
+      this.regionPreview.material?.dispose?.();
+      this.regionPreview = null;
+    }
+    const start = interaction.start;
+    const end = interaction.current;
+    const ground = Number((this.doc?.level || {}).groundY || 0);
+    let low = [Math.min(start[0], end[0]), ground, Math.min(start[2], end[2])];
+    let high = [Math.max(start[0], end[0]), ground + 2.5, Math.max(start[2], end[2])];
+    if (high[0] - low[0] < 0.1 || high[2] - low[2] < 0.1) return;
+    this.callbacks.onRegionCreated?.({
+      name: `区域 ${this.regions.length + 1}`,
+      min: low.map((value) => round(value, 4)),
+      max: high.map((value) => round(value, 4)),
+      visible: true,
+    });
   }
 
-  nudge(dx, dy, dz) {
-    if (!this.selection) return;
-    const { group } = this.selection;
-    group.position.x += dx;
-    group.position.y += dy;
-    group.position.z += dz;
-    this.proxy.position.copy(group.position);
-    this.selectionBox.setFromObject(group);
-    this._commitTransform();
+  setStatsScope(ids, active) {
+    this.statsScopeIds = active ? new Set(ids || []) : null;
+    this._applyPropAppearance();
   }
 
   // ------------------------------------------------------------------ #
-  // ladder colouring
+  // ladder
   // ------------------------------------------------------------------ #
   setLadder(diameter, enabled = true) {
     this.ladder = { diameter, enabled };
@@ -1091,20 +1825,28 @@ export class EditorView {
     return this.tierMaterials.get(tier);
   }
 
-  _applyLadderToAll() {
+  _applyPropAppearance() {
     for (const [id, group] of this.propObjects) {
       const derived = this.derived.props[id];
       const tier = derived ? this._tierFor(derived.dReq) : "grey";
       group.userData.tier = tier;
+      const faded = this.statsScopeIds && !this.statsScopeIds.has(id);
       group.traverse((object) => {
         if (!object.isMesh) return;
-        if (this.ladder.enabled) {
+        if (faded) {
+          object.material = this.fadedMaterial;
+        } else if (this.ladder.enabled) {
           object.material = this._tierMaterial(tier);
         } else if (object.userData.baseMaterial) {
           object.material = object.userData.baseMaterial;
         }
       });
     }
+    this._updateSelectionVisuals();
+  }
+
+  _applyLadderToAll() {
+    this._applyPropAppearance();
   }
 
   _updateBall() {
@@ -1117,7 +1859,7 @@ export class EditorView {
   }
 
   // ------------------------------------------------------------------ #
-  // state refresh (after saves, undo, another tab)
+  // state refresh
   // ------------------------------------------------------------------ #
   async applyState(state) {
     const oldLevel = this.doc?.level?.id;
@@ -1179,27 +1921,15 @@ export class EditorView {
       this.pickTargets = this.pickTargets.filter((entry) => entry !== group);
     }
 
+    const surviving = [...this.selectionIds].filter((id) => this.objectGroup(id));
+    this._setSelection(surviving);
     this._applyLadderToAll();
     this._updateBall();
     this.needsRender = true;
-    if (this.selection && !this.objectGroup(this.selection.id)) {
-      this.select(null);
-    } else if (this.selection) {
-      const group = this.objectGroup(this.selection.id);
-      this.selection.group = group;
-      this.selection.base = {
-        position: group.position.clone(),
-        quaternion: group.quaternion.clone(),
-      };
-      this.proxy.position.copy(group.position);
-      this.proxy.quaternion.copy(group.quaternion);
-      this.selectionBox.setFromObject(group);
-      this.callbacks.onSelect?.(this.selectionInfo());
-    }
   }
 
   // ------------------------------------------------------------------ #
-  // thumbnails
+  // thumbnails / screenshot / render loop
   // ------------------------------------------------------------------ #
   async renderThumbnail(def, size = 112) {
     if (!this.thumbnailRenderer) {
@@ -1236,11 +1966,8 @@ export class EditorView {
     return url;
   }
 
-  // ------------------------------------------------------------------ #
-  // screenshot and run loop
-  // ------------------------------------------------------------------ #
   renderNow() {
-    if (this.loading || this.noRender) return;
+    if (this.loading || window.location.search.includes("norender")) return;
     this.renderer.render(this.scene, this.camera);
     this.needsRender = false;
   }
@@ -1249,7 +1976,7 @@ export class EditorView {
     this.renderer.render(this.scene, this.camera);
     const level = this.doc?.level?.id || "level";
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const name = `${level}_${this.currentCamera || this.mode}_${stamp}.png`;
+    const name = `${level}_${this.currentCamera || "view"}_${stamp}.png`;
     const dataUrl = this.canvas.toDataURL("image/png");
     this.lastScreenshot = dataUrl;
     const link = document.createElement("a");
@@ -1261,41 +1988,30 @@ export class EditorView {
     return { name, dataUrl };
   }
 
+  resize() {
+    const parent = this.canvas.parentElement;
+    if (!parent) return;
+    const width = Math.max(1, parent.clientWidth);
+    const height = Math.max(1, parent.clientHeight);
+    this.renderer.setSize(width, height, false);
+    this.cam.resize(width / height);
+    this.needsRender = true;
+  }
+
   _animate(now) {
     this._frame = requestAnimationFrame(this._animate);
-    const delta = Math.min(0.05, (now - (this.walk.last || now)) / 1000);
-    this.walk.last = now;
-    if (this.mode === "walk") {
-      const speed = this.walk.keys.has("ShiftLeft") || this.walk.keys.has("ShiftRight") ? 5.5 : 1.7;
-      let forward = 0;
-      let right = 0;
-      if (this.walk.keys.has("KeyW")) forward += 1;
-      if (this.walk.keys.has("KeyS")) forward -= 1;
-      if (this.walk.keys.has("KeyD")) right += 1;
-      if (this.walk.keys.has("KeyA")) right -= 1;
-      if (forward || right) {
-        const length = Math.hypot(forward, right) || 1;
-        const yaw = this.walk.yaw;
-        const dx = (-Math.sin(yaw) * forward + Math.cos(yaw) * right) / length;
-        const dz = (-Math.cos(yaw) * forward - Math.sin(yaw) * right) / length;
-        this.camera.position.x += dx * speed * delta;
-        this.camera.position.z += dz * speed * delta;
-      }
-      this._applyWalkCamera();
-    } else {
-      if (this.controls.update()) this.needsRender = true;
-    }
-    if (!this.loading && !this.noRender && (this.needsRender || this.mode === "walk")) {
+    const delta = Math.min(0.1, (now - (this._last || now)) / 1000);
+    this._last = now;
+    if (this.cam.update(delta)) this.needsRender = true;
+    if (!this.loading && (this.needsRender || this.isFlying)) {
       this.renderer.render(this.scene, this.camera);
       this.needsRender = false;
     }
   }
 
-  /**
-   * Coordinate audit: every rendered prop Box3 against the server's world AABB
-   * (computed by placement_core.world_aabb, the same function the validator uses).
-   * The discrepancy is in metres; anything over `tolerance` is listed.
-   */
+  // ------------------------------------------------------------------ #
+  // coordinate audit
+  // ------------------------------------------------------------------ #
   audit(tolerance = 0.01) {
     const problems = [];
     let worst = { id: null, error: 0 };
@@ -1310,15 +2026,17 @@ export class EditorView {
         Math.abs(box.max.y - target.max.y), Math.abs(box.max.z - target.max.z)
       );
       if (error > worst.error) worst = { id, error };
-      if (error > tolerance) problems.push({ id, error: Number(error.toFixed(4)),
-        rendered: threeBoxToUnity(box), expected });
+      if (error > tolerance) {
+        problems.push({ id, error: Number(error.toFixed(4)),
+          rendered: threeBoxToUnity(box), expected });
+      }
     };
     for (const [id, group] of this.propObjects) {
       check(id, group, this.derived.props[id]?.worldAabb);
     }
     for (const [id, group] of this.structureObjects) {
       const role = group.userData.role;
-      if (role === "ground" || role === "boundary") continue; // the visible body is offset by design
+      if (role === "ground" || role === "boundary") continue;
       check(id, group, this.derived.structures[id]?.worldAabb);
     }
     const chair = this.propObjects.get("struct_lounge_chair_01");
@@ -1340,9 +2058,7 @@ export class EditorView {
   }
 
   selectionWorldBox() {
-    if (!this.selection) return null;
-    this.selection.group.updateMatrixWorld(true);
-    return threeBoxToUnity(new THREE.Box3().setFromObject(this.selection.group));
+    return this.selectionBox.isEmpty() ? null : threeBoxToUnity(this.selectionBox);
   }
 
   dispose() {

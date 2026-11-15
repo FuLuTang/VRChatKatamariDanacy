@@ -29,6 +29,7 @@ See ``Docs/Design/Tools/LEVEL_EDITOR_WEB.md`` for the design and
 import argparse
 import hashlib
 import json
+import math
 import mimetypes
 import os
 import secrets
@@ -128,6 +129,47 @@ class WebScene:
         return {"backend": "web (no Blender)", "objects": {
             "props": self.props, "structures": self.structures,
             "cameras": self.cameras}, "syncs": self.syncs}
+
+
+# --------------------------------------------------------------------------- #
+# regions.json schema (v1; a sidecar so placement.json is untouched)
+# --------------------------------------------------------------------------- #
+def validate_regions(payload):
+    if not isinstance(payload, dict):
+        raise editor_core.OpError("regions.json must be a JSON object")
+    if payload.get("schemaVersion") != 1:
+        raise editor_core.OpError("regions.json schemaVersion must be 1")
+    regions = payload.get("regions")
+    if not isinstance(regions, list):
+        raise editor_core.OpError("regions.json needs a regions list")
+    seen = set()
+    for index, region in enumerate(regions):
+        if not isinstance(region, dict):
+            raise editor_core.OpError("region %d must be an object" % index)
+        name = region.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise editor_core.OpError("region %d needs a non-empty name" % index)
+        if name in seen:
+            raise editor_core.OpError("duplicate region name %r" % name)
+        seen.add(name)
+        for key in ("min", "max"):
+            values = region.get(key)
+            if not isinstance(values, list) or len(values) != 3:
+                raise editor_core.OpError("region %r %s must be [x,y,z]" % (name, key))
+            for value in values:
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise editor_core.OpError("region %r %s must be numbers" % (name, key))
+                if not math.isfinite(float(value)):
+                    raise editor_core.OpError("region %r %s must be finite" % (name, key))
+        for axis in range(3):
+            if float(region["min"][axis]) >= float(region["max"][axis]):
+                raise editor_core.OpError("region %r has min >= max on axis %d"
+                                          % (name, axis))
+        if "visible" in region and not isinstance(region["visible"], bool):
+            raise editor_core.OpError("region %r visible must be a boolean" % name)
+        if "color" in region and not isinstance(region["color"], str):
+            raise editor_core.OpError("region %r color must be a string" % name)
+    return payload
 
 
 # --------------------------------------------------------------------------- #
@@ -584,6 +626,247 @@ class WebEditor:
             }
         return out
 
+    # ------------------------------------------------------------------ #
+    # regions.json (independent sidecar; not part of placement validation)
+    # ------------------------------------------------------------------ #
+    def regions_path(self):
+        if self.editor.path is None:
+            raise editor_core.OpError("no level is open")
+        return Path(self.editor.path).parent / "regions.json"
+
+    def load_regions(self):
+        path = self.regions_path()
+        if not path.is_file():
+            return {"schemaVersion": 1, "regions": []}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise editor_core.OpError("cannot read %s: %s"
+                                      % (core.display_path(path), error))
+        validate_regions(payload)
+        return payload
+
+    def save_regions(self, payload):
+        validate_regions(payload)
+        path = self.regions_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+        temporary = path.with_name("%s.tmp-%d" % (path.name, os.getpid()))
+        temporary.write_text(text, encoding="utf-8", newline="\n")
+        os.replace(temporary, path)
+        return {"path": core.display_path(path), "bytes": len(text.encode("utf-8")),
+                "regions": len(payload.get("regions") or []),
+                "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()}
+
+    # ------------------------------------------------------------------ #
+    # region statistics (the one implementation; the UI only renders it)
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _region_contains(low, high, center, region, mode):
+        if mode == "center":
+            return all(region["min"][axis] <= center[axis] <= region["max"][axis]
+                       for axis in range(3))
+        return all(high[axis] >= region["min"][axis]
+                   and low[axis] <= region["max"][axis] for axis in range(3))
+
+    def stats(self, params):
+        doc = self.editor.doc
+        if doc is None:
+            raise editor_core.OpError("no level is open")
+        level = doc.get("level") or {}
+        scope = str(params.get("scope") or "all")
+        mode = str(params.get("mode") or "center")
+        if mode not in ("center", "bbox"):
+            raise editor_core.OpError("mode must be center or bbox")
+        metric = str(params.get("metric") or "count")
+        if metric not in ("count", "volume", "units"):
+            raise editor_core.OpError("metric must be count, volume or units")
+        try:
+            bin_width = float(params.get("bin") or 0.05)
+            diameter = float(params.get("diameter") if params.get("diameter") is not None
+                             else level.get("ballDiameterStart", 0.3))
+        except (TypeError, ValueError):
+            raise editor_core.OpError("bin and diameter must be numbers")
+        if not (0.005 <= bin_width <= 2.0):
+            raise editor_core.OpError("bin must be between 0.005 and 2.0 m")
+        max_diameter = float(level.get("ballDiameterMax") or 2.2)
+        start_diameter = float(level.get("ballDiameterStart") or 0.3)
+        diameter = max(0.01, min(diameter, max_diameter))
+
+        region = None
+        region_name = str(params.get("region") or "")
+        ids = None
+        if scope == "region":
+            if not region_name:
+                raise editor_core.OpError("scope=region needs region=<name>")
+            payload = self.load_regions()
+            region = next((entry for entry in payload.get("regions") or []
+                           if entry.get("name") == region_name), None)
+            if region is None:
+                raise editor_core.OpError("region %r is not saved in regions.json"
+                                          % region_name)
+        elif scope == "box":
+            raw = params.get("box")
+            try:
+                values = [float(value) for value in (raw or "").split(",")]
+            except (TypeError, ValueError):
+                values = []
+            if len(values) != 6:
+                raise editor_core.OpError("box must be minx,miny,minz,maxx,maxy,maxz")
+            region = {"name": "(box)", "min": values[:3], "max": values[3:]}
+        elif scope == "ids":
+            raw = params.get("ids") or ""
+            ids = {item for item in str(raw).split(",") if item}
+        elif scope != "all":
+            raise editor_core.OpError("scope must be all, region, box or ids")
+
+        catalog = core.def_catalog(doc)
+        included = []
+        for prop in doc.get("props") or []:
+            if not isinstance(prop, dict):
+                continue
+            item_id = prop.get("itemId")
+            if ids is not None and item_id not in ids:
+                continue
+            try:
+                position = tuple(float(value) for value in prop["position"])
+                size = tuple(float(value) for value in prop["aabb"])
+                quat = tuple(float(value) for value in prop["rotationQuat"])
+                low, high = core.world_aabb(position, size, quat)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if region is not None:
+                try:
+                    region_box = {"min": [float(v) for v in region["min"]],
+                                  "max": [float(v) for v in region["max"]]}
+                except (KeyError, TypeError, ValueError):
+                    raise editor_core.OpError("the region has no usable min/max")
+                if not self._region_contains(low, high, position, region_box, mode):
+                    continue
+            volume = size[0] * size[1] * size[2]
+            included.append({
+                "id": item_id,
+                "def": prop.get("def"),
+                "dReq": core.absorb_diameter_req(size),
+                "volume": volume,
+                "units": core.effective_value_units(prop, catalog) or 0,
+                "low": low,
+                "high": high,
+            })
+
+        total_volume = sum(entry["volume"] for entry in included)
+        total_units = sum(entry["units"] for entry in included)
+
+        def tier_for(entry):
+            if entry["dReq"] > max_diameter + 1e-9:
+                return "grey"
+            if entry["dReq"] <= diameter + 1e-9:
+                return "green"
+            if entry["dReq"] <= diameter * 1.2 + 1e-9:
+                return "yellow"
+            return "red"
+
+        tiers = {name: {"count": 0, "volume": 0.0, "units": 0}
+                 for name in ("green", "yellow", "red", "grey")}
+        for entry in included:
+            bucket = tiers[tier_for(entry)]
+            bucket["count"] += 1
+            bucket["volume"] += entry["volume"]
+            bucket["units"] += entry["units"]
+        for bucket in tiers.values():
+            bucket["volume"] = round(bucket["volume"], 6)
+
+        upper = max(max_diameter, max((entry["dReq"] for entry in included), default=0.0))
+        bin_count = max(1, int((upper + bin_width - 1e-9) // bin_width))
+        bins = []
+        for index in range(bin_count):
+            low = round(index * bin_width, 6)
+            high = round(low + bin_width, 6)
+            entries = [entry for entry in included
+                       if entry["dReq"] >= low - 1e-9
+                       and (entry["dReq"] < high - 1e-9 or index == bin_count - 1)]
+            volume = sum(entry["volume"] for entry in entries)
+            units = sum(entry["units"] for entry in entries)
+            bins.append({
+                "low": low,
+                "high": high,
+                "count": len(entries),
+                "volume": round(volume, 6),
+                "units": units,
+                "volumePct": round(volume / total_volume * 100.0, 3) if total_volume else 0.0,
+                "countPct": round(len(entries) / len(included) * 100.0, 3) if included else 0.0,
+                "ids": [entry["id"] for entry in entries],
+                "items": [{"id": entry["id"], "def": entry["def"],
+                           "dReq": round(entry["dReq"], 3),
+                           "volume": round(entry["volume"], 6),
+                           "units": entry["units"]} for entry in entries],
+            })
+
+        cumulative = []
+        step = max(bin_width, 0.01)
+        point = max(0.0, min(start_diameter, diameter))
+        guard = 0
+        while point <= diameter + 1e-9 and guard < 1000:
+            absorbable = [entry for entry in included if entry["dReq"] <= point + 1e-9]
+            cumulative.append({
+                "diameter": round(point, 3),
+                "count": len(absorbable),
+                "volume": round(sum(entry["volume"] for entry in absorbable), 6),
+                "units": sum(entry["units"] for entry in absorbable),
+            })
+            point += step
+            guard += 1
+
+        dreqs = sorted(entry["dReq"] for entry in included)
+        if dreqs:
+            middle = len(dreqs) // 2
+            median = (dreqs[middle] if len(dreqs) % 2
+                      else (dreqs[middle - 1] + dreqs[middle]) / 2.0)
+        else:
+            median = None
+
+        return {
+            "scope": scope,
+            "region": region.get("name") if region else None,
+            "regionBox": ({"min": region["min"], "max": region["max"]}
+                          if region else None),
+            "mode": mode,
+            "metric": metric,
+            "bin": bin_width,
+            "diameter": round(diameter, 3),
+            "ballDiameterStart": round(start_diameter, 3),
+            "ballDiameterMax": round(max_diameter, 3),
+            "totals": {"count": len(included), "volume": round(total_volume, 6),
+                       "units": total_units},
+            "tiers": tiers,
+            "bins": bins,
+            "cumulative": cumulative,
+            "dReqMedian": round(median, 4) if median is not None else None,
+            "absorbableCountRatio": round(tiers["green"]["count"] / len(included), 6)
+                                    if included else 0.0,
+            "absorbableVolumeRatio": round(tiers["green"]["volume"] / total_volume, 6)
+                                     if total_volume else 0.0,
+            "includedIds": [entry["id"] for entry in included],
+        }
+
+    def compare_regions(self, params):
+        payload = self.load_regions()
+        rows = []
+        for entry in payload.get("regions") or []:
+            stats = self.stats(dict(params, scope="region", region=entry["name"]))
+            rows.append({
+                "name": entry["name"],
+                "visible": bool(entry.get("visible", True)),
+                "count": stats["totals"]["count"],
+                "volume": stats["totals"]["volume"],
+                "units": stats["totals"]["units"],
+                "absorbableRatio": stats["absorbableVolumeRatio"],
+                "dReqMedian": stats["dReqMedian"],
+                "tiers": stats["tiers"],
+            })
+        return {"regions": rows, "metric": params.get("metric") or "count",
+                "diameter": float(params.get("diameter") or 0.3)}
+
     def state(self):
         with self.mu:
             doc = self.editor.doc
@@ -813,6 +1096,16 @@ class Handler(BaseHTTPRequestHandler):
         path = self._route()
         app = self.server.app
         try:
+            if path == "/healthz":
+                # The one unauthenticated probe: liveness only, no level content.
+                self._json(200, {"ok": True, "service": SERVICE,
+                                 "protocol": PROTOCOL, "pid": os.getpid(),
+                                 "uptimeSeconds": round(time.time() - app.started, 1)})
+                return
+            if path.startswith("/api/") and not self._token_ok():
+                self._error(403, "bad or missing token; open the URL printed by the server "
+                                 "(it carries ?token=…) or send X-Editor-Token")
+                return
             if path == "/api/health":
                 state = app.state_summary()
                 self._json(200, {
@@ -838,6 +1131,32 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/level":
                 self._json(200, {"ok": True, "state": app.state()})
+                return
+            if path == "/api/regions":
+                try:
+                    with app.mu:
+                        payload = app.load_regions()
+                except editor_core.OpError as refusal:
+                    self._json(200, {"ok": False, "error": str(refusal),
+                                     "details": refusal.details})
+                    return
+                self._json(200, {"ok": True, "path": core.display_path(app.regions_path()),
+                                 **payload})
+                return
+            if path == "/api/stats":
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                params = {key: values[-1] for key, values in query.items()}
+                try:
+                    with app.mu:
+                        if params.get("compare"):
+                            result = app.compare_regions(params)
+                        else:
+                            result = app.stats(params)
+                except editor_core.OpError as refusal:
+                    self._json(200, {"ok": False, "error": str(refusal),
+                                     "details": refusal.details})
+                    return
+                self._json(200, {"ok": True, "stats": result})
                 return
             if path == "/api/check":
                 with app.mu:
@@ -951,7 +1270,7 @@ class Handler(BaseHTTPRequestHandler):
     # -- POST ----------------------------------------------------------- #
     def do_POST(self):                                       # noqa: N802 - stdlib hook
         path = self._route()
-        if path not in ("/api/op", "/api/open"):
+        if path not in ("/api/op", "/api/open", "/api/regions"):
             self._error(404, "no such endpoint: %s" % path)
             return
         payload, problem = self._body()
@@ -978,6 +1297,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/open":
             payload.setdefault("op", "open")
             payload["args"] = {"level": payload.pop("level", None)}
+        if path == "/api/regions":
+            try:
+                with app.mu:
+                    result = app.save_regions({
+                        "schemaVersion": 1,
+                        "regions": payload.get("regions") or [],
+                    })
+                self._json(200, {"ok": True, "saved": result})
+            except editor_core.OpError as refusal:
+                self._error(400, str(refusal), refusal.details)
+            return
         response = app.handle(payload)
         self._json(200, response)
 
@@ -1057,8 +1387,9 @@ def main(argv=None):
     level_path = core.display_path(Path(app.editor.path))
     print("%s %d" % (SERVICE, PROTOCOL), flush=True)
     print("level:   %s  (%s)" % (app.editor.level, level_path), flush=True)
-    print("writes:  token required (header %s: … or ?token=…); reads are open"
-          % TOKEN_HEADER, flush=True)
+    print("auth:   every /api read and write requires the token (header %s: … or "
+          "?token=…); static files and GET /healthz are open" % TOKEN_HEADER,
+          flush=True)
     print("token:   %s" % token, flush=True)
     print("token file: %s" % (state_dir / "token"), flush=True)
     for label, url in _urls(args.host, port, token):

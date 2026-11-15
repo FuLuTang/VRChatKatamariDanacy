@@ -111,8 +111,22 @@ class WebServerCase(unittest.TestCase):
 
 
 class SurfaceTests(WebServerCase):
-    def test_health_needs_no_token(self):
+    def test_read_apis_require_the_token_and_healthz_is_the_liveness_probe(self):
         status, payload = self.call("/api/health", token=None)
+        self.assertEqual(status, 403)
+        status, payload = self.call("/api/level", token=None)
+        self.assertEqual(status, 403)
+        status, payload = self.call("/api/levels")
+        self.assertEqual(status, 200)
+        self.assertEqual([level["id"] for level in payload["levels"]], [self.level])
+        status, payload = self.call("/api/hints?d=0.5")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["hints"]["diameter"], 0.5)
+        status, payload = self.call("/healthz", token=None)
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertNotIn("level", payload)
+        status, payload = self.call("/api/health")
         self.assertEqual(status, 200)
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["level"], self.level)
@@ -127,6 +141,11 @@ class SurfaceTests(WebServerCase):
         self.assertEqual(status, 200)
         self.assertIn(b"EditorView", body)
         status, body = self.call("/api/models/acorn.glb", token=None)
+        self.assertEqual(status, 403)
+        status, body = self.call("/api/models/acorn.glb")
+        self.assertEqual(status, 200)
+        self.assertTrue(body.startswith(b"glTF"))
+        status, body = self.call("/api/models/acorn.glb?token=%s" % TOKEN, token=None)
         self.assertEqual(status, 200)
         self.assertTrue(body.startswith(b"glTF"))
         status, body = self.call("/favicon.svg", token=None)
@@ -149,7 +168,7 @@ class SurfaceTests(WebServerCase):
         self.assertEqual(state["check"]["tables"]["tiers"][1]["diameter"], 0.5)
 
     def test_every_level_is_listed(self):
-        status, payload = self.call("/api/levels", token=None)
+        status, payload = self.call("/api/levels")
         self.assertEqual(status, 200)
         self.assertEqual([level["id"] for level in payload["levels"]], [self.level])
 
@@ -328,8 +347,8 @@ class PushTests(WebServerCase):
         connection = socket.create_connection((host, port), timeout=5)
         try:
             connection.sendall(
-                b"GET /api/events HTTP/1.1\r\nHost: localhost\r\n"
-                b"Accept: text/event-stream\r\n\r\n")
+                ("GET /api/events?token=%s HTTP/1.1\r\nHost: localhost\r\n"
+                 "Accept: text/event-stream\r\n\r\n" % TOKEN).encode("ascii"))
             received = b""
             deadline = time.time() + 5
             while b"\n\n" not in received and time.time() < deadline:
@@ -344,6 +363,29 @@ class PushTests(WebServerCase):
         finally:
             connection.close()
 
+    def test_a_multi_object_batch_is_one_export_and_one_undo_step(self):
+        original = sha(self.placement)
+        ids = ["prop_acorn_000", "prop_apple_000"]
+        positions = {prop["itemId"]: prop["position"] for prop in self.state()["doc"]["props"]}
+        operations = [
+            {"op": "move", "args": {"id": item_id,
+                                     "to": [positions[item_id][0] + 0.01,
+                                            positions[item_id][1],
+                                            positions[item_id][2]]}}
+            for item_id in ids
+        ]
+        status, payload = self.call("/api/op", {"ops": operations})
+        self.assertTrue(payload["ok"], payload["error"])
+        self.assertEqual(payload["saved"]["diff"]["counts"]["props"]["updated"], 2)
+        moved = sha(self.placement)
+        self.assertNotEqual(moved, original)
+        self.assertEqual(self.state()["history"]["undo"], 1)
+        status, payload = self.op("undo")
+        self.assertTrue(payload["ok"], payload["error"])
+        self.assertEqual(sha(self.placement), original)
+        for item_id in ids:
+            self.assertEqual(self.prop(item_id)["position"], positions[item_id])
+
     def test_an_edit_publishes_a_new_version(self):
         before = self.app.version
         self.op("move", id="prop_acorn_000", to=[1.3, 0.015, 2.1])
@@ -355,7 +397,7 @@ class HintsTests(WebServerCase):
         state = self.state()
         tier = next(row for row in state["check"]["tables"]["tiers"]
                     if row["diameter"] == 0.5)
-        status, payload = self.call("/api/hints?d=0.5", token=None)
+        status, payload = self.call("/api/hints?d=0.5")
         self.assertEqual(status, 200)
         hints = payload["hints"]
         self.assertEqual(hints["counts"]["food"], tier["food"])
@@ -387,3 +429,120 @@ class OpenTests(WebServerCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegionStatsTests(WebServerCase):
+    def region(self, name, low, high, **extra):
+        entry = {"name": name, "min": list(low), "max": list(high), "visible": True}
+        entry.update(extra)
+        return entry
+
+    def save_regions(self, regions, token=TOKEN):
+        return self.call("/api/regions", {"regions": regions}, token=token)
+
+    def stats(self, **query):
+        from urllib.parse import urlencode
+        return self.call("/api/stats?" + urlencode(query))
+
+    def test_regions_start_empty_and_round_trip_atomically(self):
+        status, payload = self.call("/api/regions")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["schemaVersion"], 1)
+        self.assertEqual(payload["regions"], [])
+        region = self.region("small", [0, 0, 0], [1, 1, 1])
+        status, payload = self.save_regions([region])
+        self.assertEqual(status, 200, payload)
+        self.assertTrue(payload["ok"])
+        path = self.tmp / "levels" / self.level / "regions.json"
+        self.assertTrue(path.is_file())
+        self.assertFalse(list(path.parent.glob("*.tmp-*")))
+        status, payload = self.call("/api/regions")
+        self.assertEqual(payload["regions"], [region])
+        self.assertEqual(payload["path"], core.display_path(path))
+
+    def test_regions_validate_names_and_boxes(self):
+        status, payload = self.save_regions([self.region("x", [0, 0, 0], [0, 1, 1])])
+        self.assertEqual(status, 400)
+        self.assertIn("min >= max", payload["error"])
+        status, payload = self.save_regions([
+            self.region("x", [0, 0, 0], [1, 1, 1]),
+            self.region("x", [0, 0, 0], [1, 1, 1])])
+        self.assertEqual(status, 400)
+        self.assertIn("duplicate", payload["error"])
+        status, payload = self.save_regions([self.region("", [0, 0, 0], [1, 1, 1])])
+        self.assertEqual(status, 400)
+        status, payload = self.save_regions([self.region("x", [0, 0, 0], [1, 1, 1])],
+                                            token=None)
+        self.assertEqual(status, 403)
+
+    def test_stats_all_count_volume_units_and_bins(self):
+        status, payload = self.stats(scope="all", metric="volume", bin=0.05, diameter=0.5)
+        self.assertEqual(status, 200, payload)
+        stats = payload["stats"]
+        document = self.state()["doc"]
+        self.assertEqual(stats["totals"]["count"], len(document["props"]))
+        volumes = [prop["aabb"][0] * prop["aabb"][1] * prop["aabb"][2]
+                   for prop in document["props"]]
+        self.assertAlmostEqual(stats["totals"]["volume"], sum(volumes), places=6)
+        self.assertEqual(stats["totals"]["units"], core.value_units_total(document))
+        self.assertEqual(sum(bin_["count"] for bin_ in stats["bins"]),
+                         stats["totals"]["count"])
+        self.assertAlmostEqual(sum(bin_["volume"] for bin_ in stats["bins"]),
+                               stats["totals"]["volume"], places=5)
+        self.assertAlmostEqual(sum(bin_["volumePct"] for bin_ in stats["bins"]), 100.0,
+                               places=1)
+        self.assertEqual(len(stats["includedIds"]), len(document["props"]))
+        self.assertTrue(stats["cumulative"])
+        self.assertIsNotNone(stats["dReqMedian"])
+
+    def test_stats_center_vs_bbox_and_boundaries(self):
+        prop = self.prop("prop_acorn_000")
+        position = prop["position"]
+        aabb = prop["aabb"]
+        center_box = self.region("center", [position[0] - 0.001, 0, position[2] - 0.001],
+                                 [position[0] + 0.001, 0.1, position[2] + 0.001])
+        self.save_regions([center_box])
+        status, payload = self.stats(scope="region", region="center", mode="center")
+        self.assertEqual(payload["stats"]["totals"]["count"], 1)
+        self.assertEqual(payload["stats"]["includedIds"], ["prop_acorn_000"])
+
+        edge = position[0] + aabb[0] / 2
+        touch = self.region("touch", [edge, 0, position[2] - 0.01],
+                            [edge + 0.5, 0.1, position[2] + 0.01])
+        self.save_regions([touch])
+        status, payload = self.stats(scope="region", region="touch", mode="center")
+        self.assertEqual(payload["stats"]["totals"]["count"], 0,
+                         "center mode excludes a box that only touches the face")
+        status, payload = self.stats(scope="region", region="touch", mode="bbox")
+        self.assertEqual(payload["stats"]["totals"]["count"], 1,
+                         "bbox mode counts a touching face")
+
+    def test_empty_region_and_ids_scope(self):
+        empty = self.region("empty", [100, 100, 100], [101, 101, 101])
+        self.save_regions([empty])
+        status, payload = self.stats(scope="region", region="empty", mode="center")
+        stats = payload["stats"]
+        self.assertEqual(stats["totals"], {"count": 0, "volume": 0.0, "units": 0})
+        self.assertEqual(stats["dReqMedian"], None)
+        self.assertTrue(all(bin_["count"] == 0 for bin_ in stats["bins"]))
+        ids = ["prop_acorn_000", "prop_plate_000"]
+        status, payload = self.stats(scope="ids", ids=",".join(ids))
+        self.assertEqual(sorted(payload["stats"]["includedIds"]), sorted(ids))
+
+    def test_tiers_and_compare(self):
+        prop = self.prop("prop_acorn_000")
+        region = self.region("pocket", [0, 0, 0], [4.5, 1, 4.5])
+        self.save_regions([region])
+        status, payload = self.stats(scope="region", region="pocket", mode="center",
+                                     diameter=0.5)
+        tiers = payload["stats"]["tiers"]
+        self.assertEqual(tiers["green"]["count"] + tiers["yellow"]["count"]
+                         + tiers["red"]["count"] + tiers["grey"]["count"],
+                         payload["stats"]["totals"]["count"])
+        status, payload = self.stats(compare=1, diameter=0.5)
+        self.assertEqual(len(payload["stats"]["regions"]), 1)
+        row = payload["stats"]["regions"][0]
+        self.assertEqual(row["name"], "pocket")
+        self.assertEqual(row["count"], payload["stats"]["regions"][0]["count"])
+        self.assertIn("absorbableRatio", row)
+        self.assertTrue(prop)

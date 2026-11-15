@@ -252,6 +252,10 @@ namespace VRCKatamari.BallMotor
         private float[] contactTimes;
         private int[] contactObstacleIndices;
         private float[] contactPenetrationDepths;
+        // Outward wall normals for this step's contact response, a second view of
+        // the contact log (boxes may report an inner-face normal; see the stage 3
+        // remarks). Reused, never reallocated per step.
+        private Vector3[] wallContactNormals;
 
         // ---- Pending absorb candidates; candidate collection is host-side ----
         private const int PendingCandidateCapacity = 4;
@@ -452,6 +456,7 @@ namespace VRCKatamari.BallMotor
             contactTimes = new float[ContactCapacity];
             contactObstacleIndices = new int[ContactCapacity];
             contactPenetrationDepths = new float[ContactCapacity];
+            wallContactNormals = new Vector3[ContactCapacity];
 
             // RadialProxy is its own layer; until it feeds the motor the support
             // height degenerates to the core sphere, which is the documented
@@ -585,12 +590,34 @@ namespace VRCKatamari.BallMotor
                 // RebuildObstacles.
                 if (contactCount >= ContactCapacity) contactBufferSaturated = true;
             }
-            // Deliberately no velocity change after a contact: removing the
-            // normal component of the planar velocity is not exposed by any layer
-            // (SweepMath projects the residual internally and returns only the
-            // slide direction). The ball therefore stalls against a wall instead
-            // of sliding along it; reported as a gap in the README rather than
-            // re-derived here.
+            // Wall response: the sweep only stops the POSITION at the wall. Without
+            // this the planar velocity keeps its full speed into the wall, so the
+            // ball sticks instead of sliding and carries a stale velocity after it
+            // turns away. The sweep reports the contacts, the sweep layer orients
+            // them outward, and the sweep layer removes the inward part; this layer
+            // only orders the calls. Tangential velocity is untouched by design.
+            //
+            // Only side walls and boxes are in the sweep: the ground plane is
+            // GroundContactMath's analytic plane, never a sweep obstacle, so ground
+            // contact can neither brake nor steer the ball here. A failed or empty
+            // contact list leaves the velocity alone. Only contacts recorded before
+            // the contact buffer filled are corrected, so a saturated buffer
+            // (contactBufferSaturated) removes less than it should.
+            if (sweepAccepted && contactCount > 0)
+            {
+                int wallNormalCount;
+                if (SweepMath.TryCollectWallContactNormals(contactCenters, contactNormals,
+                    contactObstacleIndices, contactCount, planeNormals, planeOffsets,
+                    boxMinima, boxMaxima, wallContactNormals, out wallNormalCount))
+                {
+                    Vector3 correctedVelocity;
+                    if (SweepMath.TryRemoveWallNormalVelocity(planarVelocity,
+                        wallContactNormals, wallNormalCount, out correctedVelocity))
+                    {
+                        planarVelocity = correctedVelocity;
+                    }
+                }
+            }
 
             // 4. GroundContactMath: support height and the normal-only correction.
             Vector3 groundedCenter = sweptCenter;

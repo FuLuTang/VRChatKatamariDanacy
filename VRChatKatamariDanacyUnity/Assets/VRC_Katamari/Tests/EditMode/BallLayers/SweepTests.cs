@@ -11,6 +11,11 @@ namespace VRCKatamari.Tests
     /// The Python cases used doubles and a 1e-8 default separation epsilon; the
     /// port pins separationEpsilon to 1e-5 m so a real push is visible above
     /// float resolution, and widens position comparisons to 1e-4 m.
+    ///
+    /// The wall-response cases (contact normals turned outward, then the inward
+    /// planar velocity removed) reuse this file's sweep so the normals under test
+    /// are the ones the motor actually consumes, including the box normal that
+    /// the sweep reports with the reference's inner-face sign.
     /// </summary>
     public class SweepTests
     {
@@ -38,6 +43,9 @@ namespace VRCKatamari.Tests
             public Vector3 Remaining;
             public Vector3 Slide;
             public ContactRecord[] Contacts;
+            public Vector3[] ContactCenters;
+            public Vector3[] ContactNormals;
+            public int[] ContactObstacleIndices;
             public bool Stuck;
             public bool Blocked;
         }
@@ -304,6 +312,209 @@ namespace VRCKatamari.Tests
             Assert.IsFalse(result.Blocked);
         }
 
+        [Test]
+        public void HeadOnWallContactRemovesTheWholeNormalSpeed()
+        {
+            // The wall is the half-space x >= 0, so its outward normal is +X. A
+            // 3.95 m/s drive straight into it loses that speed completely and
+            // keeps nothing tangential.
+            Vector3[] normals = { new Vector3(1f, 0f, 0f) };
+            float[] offsets = { 0f };
+            SweepResult sweep = Sweep(new Vector3(2f, 0f, 0f), new Vector3(-3f, 0f, 0f),
+                0.5f, normals, offsets);
+            Assert.IsTrue(sweep.Blocked);
+            Assert.AreEqual(0.5f, sweep.Position.x, Tolerance);
+
+            Vector3[] wallNormals = new Vector3[4];
+            int wallNormalCount;
+            Assert.IsTrue(CollectWallNormals(sweep, normals, offsets, null, null,
+                wallNormals, out wallNormalCount));
+            Assert.AreEqual(1, wallNormalCount);
+            AssertVector(new Vector3(1f, 0f, 0f), wallNormals[0]);
+
+            Vector3 corrected;
+            Assert.IsTrue(SweepMath.TryRemoveWallNormalVelocity(
+                new Vector3(-3.95f, 0f, 0f), wallNormals, wallNormalCount, out corrected));
+            AssertVector(Vector3.zero, corrected);
+        }
+
+        [Test]
+        public void GlancingHitKeepsTheTangentialSpeed()
+        {
+            // A 45 degree approach: 2 m/s into the wall and 2 m/s along it. Only
+            // the inward X part is removed, so the ball ends up sliding along -Z
+            // at the full 2 m/s instead of stopping at the wall.
+            Vector3[] normals = { new Vector3(1f, 0f, 0f) };
+            float[] offsets = { 0f };
+            SweepResult sweep = Sweep(new Vector3(2f, 0f, 0f), new Vector3(-3f, 0f, -3f),
+                0.5f, normals, offsets);
+            Assert.AreEqual(0.5f, sweep.Position.x, Tolerance);
+            Assert.AreEqual(-3f, sweep.Position.z, Tolerance);
+            Assert.AreEqual(1, sweep.Contacts.Length);
+            Assert.AreEqual(1f, sweep.Contacts[0].Normal.x, 0f);
+
+            Vector3[] wallNormals = new Vector3[4];
+            int wallNormalCount;
+            Assert.IsTrue(CollectWallNormals(sweep, normals, offsets, null, null,
+                wallNormals, out wallNormalCount));
+            Assert.AreEqual(1, wallNormalCount);
+
+            Vector3 corrected;
+            Assert.IsTrue(SweepMath.TryRemoveWallNormalVelocity(
+                new Vector3(-2f, 0f, -2f), wallNormals, wallNormalCount, out corrected));
+            Assert.AreEqual(0f, corrected.x, Tolerance);
+            Assert.AreEqual(0f, corrected.y, 0f);
+            Assert.AreEqual(-2f, corrected.z, Tolerance);
+        }
+
+        [Test]
+        public void MovingAwayFromAWallLeavesVelocityUnchanged()
+        {
+            // Driving away from the wall records no contact at all, and a wall
+            // normal with a positive dot product is a no-op even if one is
+            // supplied: the rule only ever removes inward motion.
+            Vector3[] normals = { new Vector3(1f, 0f, 0f) };
+            float[] offsets = { 0f };
+            SweepResult sweep = Sweep(new Vector3(2f, 0f, 0f), new Vector3(3f, 0f, 0f),
+                0.5f, normals, offsets);
+            Assert.AreEqual(0, sweep.Contacts.Length);
+
+            Vector3[] wallNormals = new Vector3[4];
+            int wallNormalCount;
+            Assert.IsTrue(CollectWallNormals(sweep, normals, offsets, null, null,
+                wallNormals, out wallNormalCount));
+            Assert.AreEqual(0, wallNormalCount);
+
+            Vector3 corrected;
+            Assert.IsTrue(SweepMath.TryRemoveWallNormalVelocity(
+                new Vector3(3f, 0f, 0f), wallNormals, wallNormalCount, out corrected));
+            AssertVector(new Vector3(3f, 0f, 0f), corrected);
+
+            Vector3[] outward = { new Vector3(1f, 0f, 0f) };
+            Assert.IsTrue(SweepMath.TryRemoveWallNormalVelocity(
+                new Vector3(2f, 0f, 0f), outward, 1, out corrected));
+            AssertVector(new Vector3(2f, 0f, 0f), corrected);
+
+            // Parallel motion is tangential: untouched by the same normal.
+            Assert.IsTrue(SweepMath.TryRemoveWallNormalVelocity(
+                new Vector3(0f, 0f, 3f), outward, 1, out corrected));
+            AssertVector(new Vector3(0f, 0f, 3f), corrected);
+        }
+
+        [Test]
+        public void CornerSweepRemovesBothNormalComponents()
+        {
+            // Two half-spaces x >= 0 and z >= 0 are hit at the same time; the two
+            // inward components are removed in contact order, leaving nothing.
+            Vector3[] normals = { new Vector3(1f, 0f, 0f), new Vector3(0f, 0f, 1f) };
+            float[] offsets = { 0f, 0f };
+            SweepResult sweep = Sweep(new Vector3(2f, 0f, 2f), new Vector3(-4f, 0f, -4f),
+                0.5f, normals, offsets);
+            Assert.AreEqual(2, sweep.Contacts.Length);
+
+            Vector3[] wallNormals = new Vector3[4];
+            int wallNormalCount;
+            Assert.IsTrue(CollectWallNormals(sweep, normals, offsets, null, null,
+                wallNormals, out wallNormalCount));
+            Assert.AreEqual(2, wallNormalCount);
+            // Both normals point out of their obstacle (the set is +X and +Z).
+            Assert.AreEqual(1f, wallNormals[0].x + wallNormals[1].x, 0f);
+            Assert.AreEqual(1f, wallNormals[0].z + wallNormals[1].z, 0f);
+
+            Vector3 corrected;
+            Assert.IsTrue(SweepMath.TryRemoveWallNormalVelocity(
+                new Vector3(-3f, 0f, -3f), wallNormals, wallNormalCount, out corrected));
+            AssertVector(Vector3.zero, corrected);
+
+            // Moving out of one wall while sliding into the other removes only
+            // the component that points in.
+            Assert.IsTrue(SweepMath.TryRemoveWallNormalVelocity(
+                new Vector3(-3f, 0f, 4f), wallNormals, wallNormalCount, out corrected));
+            Assert.AreEqual(0f, corrected.x, Tolerance);
+            Assert.AreEqual(4f, corrected.z, Tolerance);
+        }
+
+        [Test]
+        public void NonFiniteOrDegenerateNormalsAreRefused()
+        {
+            Vector3 velocity = new Vector3(-1f, 0f, 0f);
+            Vector3 corrected;
+            Assert.IsFalse(SweepMath.TryRemoveWallNormalVelocity(
+                velocity, new[] { Vector3.zero }, 1, out corrected));
+            AssertVector(Vector3.zero, corrected);
+            Assert.IsFalse(SweepMath.TryRemoveWallNormalVelocity(
+                velocity, new[] { new Vector3(float.NaN, 0f, 1f) }, 1, out corrected));
+            Assert.IsFalse(SweepMath.TryRemoveWallNormalVelocity(
+                velocity, new[] { new Vector3(float.PositiveInfinity, 0f, 0f) }, 1, out corrected));
+            Assert.IsFalse(SweepMath.TryRemoveWallNormalVelocity(
+                new Vector3(float.NaN, 0f, 0f), new[] { Vector3.right }, 1, out corrected));
+            Assert.IsFalse(SweepMath.TryRemoveWallNormalVelocity(
+                velocity, null, 0, out corrected));
+            Assert.IsFalse(SweepMath.TryRemoveWallNormalVelocity(
+                velocity, new[] { Vector3.right }, -1, out corrected));
+            Assert.IsFalse(SweepMath.TryRemoveWallNormalVelocity(
+                velocity, new[] { Vector3.right }, 2, out corrected));
+
+            // A valid but purely vertical normal is a floor/support contact: it is
+            // ignored, not refused, because a planar velocity has no such part.
+            Assert.IsTrue(SweepMath.TryRemoveWallNormalVelocity(
+                velocity, new[] { new Vector3(0f, 1f, 0f) }, 1, out corrected));
+            AssertVector(velocity, corrected);
+
+            // The collector refuses corrupt or mismatched contact data instead of
+            // writing a normal derived from it.
+            int wallNormalCount;
+            Vector3[] wallNormals = new Vector3[1];
+            Assert.IsFalse(SweepMath.TryCollectWallContactNormals(
+                new[] { Vector3.zero }, new[] { Vector3.forward }, new[] { 0 },
+                1, new[] { Vector3.zero }, new[] { 0f }, new Vector3[0], new Vector3[0],
+                wallNormals, out wallNormalCount));
+            Assert.AreEqual(0, wallNormalCount);
+            Assert.IsFalse(SweepMath.TryCollectWallContactNormals(
+                new[] { Vector3.zero }, new[] { Vector3.forward }, new[] { 1 },
+                1, new[] { Vector3.right }, new[] { 0f }, new Vector3[0], new Vector3[0],
+                wallNormals, out wallNormalCount));
+            Assert.IsFalse(SweepMath.TryCollectWallContactNormals(
+                new[] { Vector3.zero }, new[] { Vector3.forward }, new[] { 0 },
+                2, new[] { Vector3.right }, new[] { 0f }, new Vector3[0], new Vector3[0],
+                new Vector3[2], out wallNormalCount));
+            Assert.AreEqual(0, wallNormalCount);
+        }
+
+        [Test]
+        public void BoxEnteredAlongItsNegativeFaceIsOrientedOutward()
+        {
+            // Moving in -X into box [-2,-1] reports the inner face normal -X,
+            // because the sweep keeps the reference's slab sign rule for value
+            // parity. The collector must re-orient it to +X, otherwise the
+            // velocity rule would ignore the hit and the ball would keep its
+            // full speed into the wall (the reported bug).
+            Vector3[] minima = { new Vector3(-2f, -1f, -1f) };
+            Vector3[] maxima = { new Vector3(-1f, 1f, 1f) };
+            SweepResult sweep = Sweep(new Vector3(0f, 0f, 0f), new Vector3(-2f, 0f, 0f),
+                0.5f, null, null, minima, maxima);
+            Assert.AreEqual(-0.5f, sweep.Position.x, Tolerance);
+            Assert.GreaterOrEqual(sweep.Contacts.Length, 1);
+            Assert.AreEqual(-1f, sweep.Contacts[0].Normal.x, 0f);
+
+            Vector3[] wallNormals = new Vector3[4];
+            int wallNormalCount;
+            Assert.IsTrue(CollectWallNormals(sweep, null, null, minima, maxima,
+                wallNormals, out wallNormalCount));
+            Assert.AreEqual(sweep.Contacts.Length, wallNormalCount);
+            for (int i = 0; i < wallNormalCount; i++)
+            {
+                Assert.AreEqual(1f, wallNormals[i].x, 0f);
+                Assert.AreEqual(0f, wallNormals[i].y, 0f);
+                Assert.AreEqual(0f, wallNormals[i].z, 0f);
+            }
+
+            Vector3 corrected;
+            Assert.IsTrue(SweepMath.TryRemoveWallNormalVelocity(
+                new Vector3(-3.95f, 0f, 0f), wallNormals, wallNormalCount, out corrected));
+            AssertVector(Vector3.zero, corrected);
+        }
+
         // Runs one TrySweepSphere call with test-owned buffers and copies the
         // recorded contacts out so each case reads like the Python result object.
         private static SweepResult Sweep(
@@ -346,6 +557,9 @@ namespace VRCKatamari.Tests
                 out result.Stuck, out result.Blocked);
 
             result.Contacts = new ContactRecord[count];
+            result.ContactCenters = new Vector3[count];
+            result.ContactNormals = new Vector3[count];
+            result.ContactObstacleIndices = new int[count];
             for (int i = 0; i < count; i++)
             {
                 ContactRecord contact = new ContactRecord();
@@ -356,8 +570,39 @@ namespace VRCKatamari.Tests
                 contact.ObstacleIndex = indices[i];
                 contact.PenetrationDepth = depths[i];
                 result.Contacts[i] = contact;
+                result.ContactCenters[i] = centers[i];
+                result.ContactNormals[i] = normals[i];
+                result.ContactObstacleIndices[i] = indices[i];
             }
             return result;
+        }
+
+        // Turns a sweep result's recorded contacts into outward wall normals the
+        // way the motor does, with test-owned buffers and the null-obstacle
+        // convention of Sweep's optional arguments.
+        private static bool CollectWallNormals(
+            SweepResult result,
+            Vector3[] planeNormals,
+            float[] planeOffsets,
+            Vector3[] boxMinima,
+            Vector3[] boxMaxima,
+            Vector3[] wallNormals,
+            out int wallNormalCount)
+        {
+            if (planeNormals == null)
+            {
+                planeNormals = new Vector3[0];
+                planeOffsets = new float[0];
+            }
+            if (boxMinima == null)
+            {
+                boxMinima = new Vector3[0];
+                boxMaxima = new Vector3[0];
+            }
+            return SweepMath.TryCollectWallContactNormals(
+                result.ContactCenters, result.ContactNormals, result.ContactObstacleIndices,
+                result.Contacts.Length, planeNormals, planeOffsets, boxMinima, boxMaxima,
+                wallNormals, out wallNormalCount);
         }
 
         private static void AssertSameResult(SweepResult expected, SweepResult actual)

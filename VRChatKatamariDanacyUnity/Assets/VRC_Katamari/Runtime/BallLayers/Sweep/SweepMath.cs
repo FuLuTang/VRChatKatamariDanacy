@@ -51,6 +51,10 @@ namespace VRCKatamari.BallLayers
         // Deterministic projection passes over the active contact normals.
         private const int ProjectionPasses = 4;
 
+        // A wall normal with at most this much horizontal part cannot remove any
+        // planar velocity, so it is treated as a floor/ceiling contact.
+        private const float PlanarNormalEpsilon = 1e-6f;
+
         /// <summary>
         /// Sweeps the sphere from start along displacement and reports where it
         /// stops, what displacement is left, and the contacts found.
@@ -286,6 +290,223 @@ namespace VRCKatamari.BallLayers
             remainingDisplacement = remaining;
             stuck = unresolved;
             blocked = blockedByContact && !unresolved;
+            return true;
+        }
+
+        /// <summary>
+        /// Turns this step's recorded contacts into wall normals that point out
+        /// of the obstacle, for a velocity response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The sweep records what it hit, not what a velocity rule needs. Plane
+        /// contacts already carry the free-space normal, but a box entered along
+        /// a negative axis reports the inner face normal, because the slab sign
+        /// rule is kept bit-identical to the Python reference (see
+        /// Docs/Design/BallLayers/Sweep/README.md). A velocity cannot be
+        /// projected with that inward sign, so this function re-orients each box
+        /// normal to the side of the unexpanded box the contact centre is on:
+        /// the recorded centre is the sphere centre after separation, which sits
+        /// on the outer side of the face the sphere approached (within the
+        /// separation epsilon), so the side test is unambiguous except within
+        /// Epsilon of the box's mid-plane on that axis, where the reported sign
+        /// is kept.
+        /// </para>
+        /// <para>
+        /// It re-runs no sweep and moves nothing; the contact arrays and the
+        /// obstacle arrays are the ones passed to TrySweepSphere. wallNormals is
+        /// caller-owned and reused, so the call allocates nothing. The write is
+        /// bounded by the shorter of contactCount and wallNormals.Length, and
+        /// wallNormalCount is how many entries were written (a short buffer
+        /// truncates the list, like the contact log itself). Duplicate normals
+        /// are kept rather than de-duplicated: the velocity projection is
+        /// idempotent for a repeated normal.
+        /// </para>
+        /// <para>
+        /// Returns false for a null or too-short array, a negative or too-large
+        /// contactCount, an invalid plane or box, an obstacle index outside the
+        /// plane-then-box range, or a non-finite contact value. Every out value
+        /// is then zero and nothing is written. The sweep is called with walls
+        /// and boxes only (the analytic ground plane is fed to
+        /// GroundContactMath, not to the sweep), so a floor-like normal can
+        /// appear here only if the caller registered the floor as an obstacle.
+        /// </para>
+        /// </remarks>
+        public static bool TryCollectWallContactNormals(
+            Vector3[] contactCenters,
+            Vector3[] contactNormals,
+            int[] contactObstacleIndices,
+            int contactCount,
+            Vector3[] planeNormals,
+            float[] planeOffsets,
+            Vector3[] boxMinima,
+            Vector3[] boxMaxima,
+            Vector3[] wallNormals,
+            out int wallNormalCount)
+        {
+            wallNormalCount = 0;
+            if (contactCenters == null || contactNormals == null) return false;
+            if (contactObstacleIndices == null || wallNormals == null) return false;
+            if (contactCount < 0) return false;
+            if (contactCount > contactCenters.Length) return false;
+            if (contactCount > contactNormals.Length) return false;
+            if (contactCount > contactObstacleIndices.Length) return false;
+            if (planeNormals == null || planeOffsets == null) return false;
+            if (planeNormals.Length != planeOffsets.Length) return false;
+            if (boxMinima == null || boxMaxima == null) return false;
+            if (boxMinima.Length != boxMaxima.Length) return false;
+
+            int planeCount = planeNormals.Length;
+            int obstacleCount = planeCount + boxMinima.Length;
+            int limit = Mathf.Min(contactCount, wallNormals.Length);
+            for (int i = 0; i < limit; i++)
+            {
+                Vector3 center = contactCenters[i];
+                Vector3 rawNormal = contactNormals[i];
+                int obstacleIndex = contactObstacleIndices[i];
+                if (!KatamariMath.IsFiniteVector(center)) return false;
+                if (!KatamariMath.IsFiniteVector(rawNormal)) return false;
+                if (obstacleIndex < 0 || obstacleIndex >= obstacleCount) return false;
+
+                Vector3 outward;
+                if (!TryOrientWallNormal(center, obstacleIndex, rawNormal,
+                    planeNormals, planeOffsets, boxMinima, boxMaxima, out outward)) return false;
+                wallNormals[i] = outward;
+            }
+            wallNormalCount = limit;
+            return true;
+        }
+
+        /// <summary>
+        /// Removes the part of a planar velocity that points into each wall
+        /// normal, in the given order, keeping the tangential part.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the wall response the sweep's contact data exists for:
+        /// v' = v - min(0, v . n) n per normal n pointing out of the obstacle,
+        /// applied in array order (the sweep's contact order, which is stable:
+        /// time of impact, then obstacle index). Removing only the inward part
+        /// leaves the tangential velocity untouched, which is what makes a ball
+        /// slide along a wall instead of stopping dead against it. For a corner
+        /// the second normal is applied to the already-corrected velocity, so
+        /// both inward components are removed; a repeated normal is idempotent.
+        /// </para>
+        /// <para>
+        /// The result is planar: only the XZ components are changed and
+        /// correctedVelocity.y is always 0. The normal is normalised and then
+        /// projected onto XZ, so a wall that is not perfectly vertical still
+        /// leaves no horizontal motion into it. A normal with no meaningful
+        /// horizontal part (a box top or a ceiling contact, |n_xz| &lt;= 1e-6)
+        /// is ignored: a planar velocity has no component along it, and ground
+        /// support is the layer that owns vertical contact. A non-finite
+        /// velocity, a non-finite normal, a zero-length (degenerate) normal, a
+        /// null array or a count outside the array is refused, and every out
+        /// value is then zero.
+        /// </para>
+        /// <para>
+        /// Deliberately no friction and no restitution: the original game's wall
+        /// response is not confirmed, and removing the inward component is the
+        /// simplest rule that stops the ball sticking to a wall. The choice is
+        /// marked PROVISIONAL in Docs/Design/BallMotor/README.md and is expected
+        /// to be revisited with play-test evidence.
+        /// </para>
+        /// </remarks>
+        public static bool TryRemoveWallNormalVelocity(
+            Vector3 velocity,
+            Vector3[] wallNormals,
+            int wallNormalCount,
+            out Vector3 correctedVelocity)
+        {
+            correctedVelocity = Vector3.zero;
+            if (!KatamariMath.IsFiniteVector(velocity)) return false;
+            if (wallNormals == null) return false;
+            if (wallNormalCount < 0 || wallNormalCount > wallNormals.Length) return false;
+
+            float velocityX = velocity.x;
+            float velocityZ = velocity.z;
+            for (int i = 0; i < wallNormalCount; i++)
+            {
+                Vector3 unitNormal;
+                float length;
+                if (!KatamariMath.TryNormalize(wallNormals[i], out unitNormal, out length)) return false;
+
+                // A vertical normal (box top, ceiling) cannot remove planar
+                // motion; skipping it is not a refusal, because the contact is
+                // real and the ground/support path owns that direction.
+                float horizontalLength = Mathf.Sqrt(
+                    unitNormal.x * unitNormal.x + unitNormal.z * unitNormal.z);
+                if (horizontalLength <= PlanarNormalEpsilon) continue;
+
+                float normalX = unitNormal.x / horizontalLength;
+                float normalZ = unitNormal.z / horizontalLength;
+                float inward = velocityX * normalX + velocityZ * normalZ;
+                if (inward >= 0f) continue;
+
+                velocityX = velocityX - inward * normalX;
+                velocityZ = velocityZ - inward * normalZ;
+                if (!KatamariMath.IsFiniteFloat(velocityX)) return false;
+                if (!KatamariMath.IsFiniteFloat(velocityZ)) return false;
+            }
+
+            correctedVelocity = new Vector3(velocityX, 0f, velocityZ);
+            return true;
+        }
+
+        private static bool TryOrientWallNormal(
+            Vector3 contactCenter,
+            int obstacleIndex,
+            Vector3 reportedNormal,
+            Vector3[] planeNormals,
+            float[] planeOffsets,
+            Vector3[] boxMinima,
+            Vector3[] boxMaxima,
+            out Vector3 outwardNormal)
+        {
+            outwardNormal = Vector3.zero;
+            int planeCount = planeNormals.Length;
+            if (obstacleIndex < planeCount)
+            {
+                Vector3 unitNormal;
+                float offset;
+                if (!TryValidatePlane(planeNormals[obstacleIndex], planeOffsets[obstacleIndex],
+                    out unitNormal, out offset)) return false;
+                outwardNormal = unitNormal;
+                return true;
+            }
+
+            int boxIndex = obstacleIndex - planeCount;
+            if (boxIndex < 0 || boxIndex >= boxMinima.Length) return false;
+            Vector3 minimum = boxMinima[boxIndex];
+            Vector3 maximum = boxMaxima[boxIndex];
+            if (!KatamariMath.IsFiniteVector(minimum)) return false;
+            if (!KatamariMath.IsFiniteVector(maximum)) return false;
+            if (minimum.x > maximum.x || minimum.y > maximum.y || minimum.z > maximum.z) return false;
+
+            float absoluteX = Mathf.Abs(reportedNormal.x);
+            float absoluteY = Mathf.Abs(reportedNormal.y);
+            float absoluteZ = Mathf.Abs(reportedNormal.z);
+            int axis = 0;
+            float best = absoluteX;
+            if (absoluteY > best)
+            {
+                axis = 1;
+                best = absoluteY;
+            }
+            if (absoluteZ > best)
+            {
+                axis = 2;
+                best = absoluteZ;
+            }
+            if (best <= Epsilon) return false;
+
+            float reportedSign = Component(reportedNormal, axis) > 0f ? 1f : -1f;
+            float centerCoordinate = Component(contactCenter, axis);
+            float boxCenter = (Component(minimum, axis) + Component(maximum, axis)) * 0.5f;
+            float sign = reportedSign;
+            if (centerCoordinate > boxCenter + Epsilon) sign = 1f;
+            else if (centerCoordinate < boxCenter - Epsilon) sign = -1f;
+            outwardNormal = AxisNormal(axis, sign);
             return true;
         }
 

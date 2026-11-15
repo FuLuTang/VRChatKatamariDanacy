@@ -20,7 +20,7 @@
 |---|---|---|---|---|
 | 1 | `ControlIntentMath` | 原始输入 + 上帧边沿状态 | 意图序列 | 一切的下游来源；去抖/菜单抑制只在这里发生 |
 | 2 | `BallMotionMath` | 意图里的 `Move2D` + 当前速度 | 新速度、请求位移 | 位移决定后面所有几何 |
-| 3 | `SweepMath` | 请求位移 + 障碍数组 | 实际位移、是否卡住 | **先扫掠再落地面**：被挡住时不能把球放进障碍里；只有实际位移可以用于视觉滚动 |
+| 3 | `SweepMath` | 请求位移 + 障碍数组 | 实际位移、是否卡住、墙面接触法线（去速用） | **先扫掠再落地面**：被挡住时不能把球放进障碍里；只有实际位移可以用于视觉滚动。去速必须在扫掠之后，否则位移用的还是撞墙的请求 |
 | 4 | `GroundContactMath` | 扫掠后中心 + 地面平面 + 代理点 | 贴地后的中心、支持高度、法线修正 | 支持高度依赖最终位置，先移动再贴地 |
 | 5 | `PickupAbsorbMath` | 碰撞半径 + 候选物件尺寸/位置 | 吸收/拒绝 + 每件体积 | 必须在位置上定稿之后判，否则会隔空吸到 |
 | 6 | `GrowthLedgerMath` | 已确认的吸收事件 | 已确认体积、交分事务 | 只有确认值能进分数；拾取结算在位置定稿后 |
@@ -109,6 +109,8 @@ StepBall:
   1 StepInput()                 ControlIntentMath.TryProcess → Move2D 的 y/x + turn 轴
   2 BallMotionMath.TryStep      → heading、planarVelocity、requestedDisplacement（成功才赋值）
   3 SweepMath.TrySweepSphere    → sweptCenter（成功才赋值；记录 blocked/stuck）
+    SweepMath.TryCollectWallContactNormals + TryRemoveWallNormalVelocity
+                                → planarVelocity（只去墙面法向分量，切向保留）
   4 GroundContactMath.TrySolve  → groundedCenter（成功才赋值）
   ★ 卡住计时/恢复（本层策略，扫掠层只报 `stuck`）
   5 PickupAbsorbMath.EvaluateAbsorb（对队列里每个候选，用最终位置）
@@ -191,14 +193,39 @@ StepBall:
 
 ### 缺口（数学层没提供、本层没有自己编）
 
-旧缺口“直径 → 体积的反函数不存在”已由 `SizeModelMath.TryVolumeUnitsForSemanticDiameter` 补上，交分因此改在直径空间（见上一节）。下面是仍然存在的缺口。
+旧缺口“直径 → 体积的反函数不存在”已由 `SizeModelMath.TryVolumeUnitsForSemanticDiameter` 补上，交分因此改在直径空间（见上一节）。下面是仍然存在的缺口；**第 2 条已于 2026-11-15 解决**，编号保留以便其它文档继续按“缺口 2”引用它，规则见本节之后的「墙面法向去速」。
 
 1. **设备轴 → forward/turn/lateral 的映射没有归属层。** `ControlIntentMath` 只给设备轴对，`BallMotionMath` 只吃三个标量，中间这一步（含相机/rig yaw 基准）目前是适配层约定，本层用 y→forward、x→lateral 顶着。
-2. **墙面法向去速没有公开函数。** `SweepMath` 内部投影剩余位移（私有 `TryProject`）但只返回 `slideDirection`；速度的法向分量没人去掉。结果：球会顶住墙停住，不沿墙滑；卡住计时不会被触发（`blocked` 而非 `stuck`），但滑墙手感缺失。
+2. ~~**墙面法向去速没有公开函数。**~~ **已解决（2026-11-15）**：规则与实现见下面「墙面法向去速（已解决，PROVISIONAL）」。编号保留，`SPLIT_PROPOSAL.md` 等文档仍按“缺口 2”引用它。
 3. **吸收的“相对球径门槛”没有 C# 层。** `PickupAbsorbMath` 只比固定 `maxItemSizeWorldM`；Python 回合模型里的 `pickup_diameter <= ball_diameter * ratio` 没移植。本层因此传固定阈值，不拿球径乘系数（那是公式）。
 4. **`growthFraction` 没有 helper。** 设计文档把它指派给组合层（`BallMotion` README 的“唯一回灌量”），`BallMotionMath` 也明说不做半径映射，所以本层只有这一处 `(r-base)/(max-base)` 夹取；若要复用应下沉到 `SizeModelMath`。
 5. **账本提交存储是有容量的**（本地 256 条/回合）。满了以后 `TryResolveClaims` 拒绝、候选留在队列里不再增长；正式回合应由拥有账本的控制器扩容或换权威提交。
 6. **单球、单本地玩家行**：多球/多人要并行数组 + 多行账本，本版没有。
+
+### 墙面法向去速（已解决，2026-11-15；PROVISIONAL）
+
+**症状**：球撞墙时扫掠只把位置停在墙前，`planarVelocity` 仍带着整份撞墙速度（实测日志里 3.95 m/s 持续数秒），于是不沿墙滑、斜撞会“黏”在墙上、转身后还留着过期速度，快速撞墙还有抖动风险。
+
+**规则**：第 3 步成功且本步记录到接触时，对每条墙面法线 `n`（指向障碍外侧）按接触顺序稳定地执行
+
+```
+v' = v - min(0, v·n) n
+```
+
+只去掉“指向墙里”的分量，切向分量原样保留——滑墙就是切向保留的直接结果。凹角的两条墙依次作用：第二条法线作用在已修正的速度上，所以两个法向分量都会被去掉；重复法线幂等。`planarVelocity` 是 XZ 平面速度，所以法线先归一化再投到水平面，结果的 y 恒 0；水平分量可忽略的法线（盒顶、天花板）不参与，非有限或零长法线整次拒绝。
+
+**实现（都在 `SweepMath`，纯静态、无分配、UdonSharp 安全）**：
+
+- `TryCollectWallContactNormals(contactCenters, contactNormals, contactObstacleIndices, contactCount, planeNormals, planeOffsets, boxMinima, boxMaxima, wallNormals, out int wallNormalCount)`：把本步记录的接触转成指向障碍外侧的法线。平面直接取校验后的单位法线；盒子按接触中心落在未扩张盒的哪一侧重定向——扫掠为对齐 `sweep.py` 保留了 slab 符号规则，负方向进入盒子时记录的是**内侧面**法线（见 [`../BallLayers/Sweep/README.md`](../BallLayers/Sweep/README.md)），拿它去速会把“离开墙”的速度删掉、把“撞进去”的速度留下，所以必须在这里翻正。写入受调用方缓冲区长度限制，返回写入条数。
+- `TryRemoveWallNormalVelocity(velocity, wallNormals, wallNormalCount, out Vector3 correctedVelocity)`：按上面的公式逐条去速。
+
+装配层只在第 3 步之后调用这两个函数（`KatamariBallMotor.StepBall`），不自己重算几何，仍符合“装配层只搬运和顺序”。
+
+**为什么只有侧面/盒子接触**：地面平面从来不是扫掠障碍，它由 `GroundContactMath` 的解析平面单独处理；所以地面接触既不会在这里刹车，也不会改方向。只有调用方把地面也注册成扫掠障碍时才会出现近似垂直的接触法线，而那种法线在水平投影里会被忽略。
+
+**刻意不做摩擦、不做反弹**：原作墙面响应没有可靠证据，只去掉法向分量是“不粘墙”的最小规则。**PROVISIONAL**，试玩或拿到原作证据后应重新决定是否加切向摩擦或回弹。
+
+**限制**：只有被记录下来的接触参与（`ContactCapacity = 4`，缓冲饱和时去速不完整，`contactBufferSaturated` 是信号）；一步内只做一次去速，不迭代二次响应；**未在 Unity 编译、未跑 EditMode/NUnit、未做 U# 全量编译**（本文件作者不是 Unity 操作者）。测试见 `Tests/EditMode/BallLayers/SweepTests.cs` 的 `HeadOnWallContactRemovesTheWholeNormalSpeed`、`GlancingHitKeepsTheTangentialSpeed`、`MovingAwayFromAWallLeavesVelocityUnchanged`、`CornerSweepRemovesBothNormalComponents`、`NonFiniteOrDegenerateNormalsAreRefused`、`BoxEnteredAlongItsNegativeFaceIsOrientedOutward`。
 
 ## 未定项（等 T06 与试玩）
 

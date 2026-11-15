@@ -52,7 +52,10 @@ namespace VRCKatamari.Story
     /// <para>
     /// Result card objects. <c>resultCardRoot</c> (the panel behind the result text) is
     /// shown from Presenting on and <c>retryButtonRoot</c> (the "再试一次" button) only in
-    /// Result; both are hidden in the other states. They are optional scene links, and
+    /// Result; both are hidden in the other states. The start prompt is the opposite case:
+    /// an instruction, not an outcome, so it has a Text of its own
+    /// (<c>startPromptText</c>) shown in Idle only - a prompt riding a field the card hides
+    /// is a prompt the player never sees. The links are optional scene links, and
     /// <c>ApplyStateVisibility</c> is the single place that writes their active state, so
     /// a scene that ships the button active, or a press from a stale button, is corrected
     /// on the next state change instead of showing a button before the first round.
@@ -120,6 +123,15 @@ namespace VRCKatamari.Story
         [SerializeField] private Text remainingText;
         [SerializeField] private Text resultText;
 
+        // The start prompt's own line: what the player has to do to begin
+        // ("点击球坐上去开始" by default). It is a separate Text from resultText because
+        // the two carry different things in different states - an instruction read in
+        // Idle, an outcome the card shows from Presenting on - and the result card hides
+        // its own contents in Idle, which used to hide the prompt with them. Shown in
+        // Idle only, by ApplyStateVisibility. It must be a dedicated object: this Text
+        // alone, outside resultCardRoot's subtree. A null link is skipped, never thrown.
+        [SerializeField] private Text startPromptText;
+
         // ---- Result card objects (optional; a null link is skipped) ----
         // The uGUI Button object (or a world-space button object) that presses "再试一次":
         // visible only in Result, hidden in Idle, Running and Presenting. RequestRetry is
@@ -129,8 +141,8 @@ namespace VRCKatamari.Story
 
         // The panel behind the result text: visible from Presenting on, because the
         // presenting beat ("呈给国王") is the card's first half. It is a background, not the
-        // owner of the text: Idle reuses the same result Text for the start prompt, so the
-        // Text itself stays outside this object.
+        // owner of any text: the start prompt has its own line outside this object,
+        // because Idle hides the whole card and a prompt inside it would go with it.
         [SerializeField] private GameObject resultCardRoot;
 
         // ---- Level data (one file under Docs/Design/GameModes/Levels/) ----
@@ -198,7 +210,7 @@ namespace VRCKatamari.Story
         // is the pre-lobby behaviour.
         [SerializeField] private bool startOnLoad = false;
 
-        // Shown on the result line while Idle: what the player has to do to begin.
+        // Shown on startPromptText while Idle: what the player has to do to begin.
         // A level rewording it changes this string on its scene instance only.
         [SerializeField] private string startPrompt = "点击球坐上去开始";
 
@@ -286,19 +298,24 @@ namespace VRCKatamari.Story
 
             WriteTargetText();
             WriteCurrentHud();
-            if (resultText != null)
+            // The result line belongs to the card, which Idle hides. Clearing it keeps a
+            // scene whose result Text sits outside the card from showing a stale outcome
+            // (or its authored placeholder) before the first round.
+            if (resultText != null) resultText.text = "";
+            if (startPromptText != null)
             {
-                // The result line is the one the player already reads for "呈给国王" and
-                // for the card, so the start prompt appears where the outcome will.
-                resultText.text = startPrompt;
+                // The prompt has a line of its own. It must not go on the result line:
+                // that Text lives in the result card, which is hidden in Idle, so the
+                // prompt written there was hidden too.
+                startPromptText.text = startPrompt;
                 // A countdown that has not started must not sit on the HUD looking
                 // frozen; BeginRound writes the real one back (lastRemainingShown = -1).
                 if (remainingText != null) remainingText.text = "";
             }
             else if (remainingText != null)
             {
-                // Fallback for a HUD with no result line: the prompt takes the line that
-                // would otherwise show a countdown that has not started.
+                // Fallback for a HUD with no prompt line yet: the prompt takes the line
+                // that would otherwise show a countdown that has not started.
                 remainingText.text = startPrompt;
             }
 
@@ -717,7 +734,8 @@ namespace VRCKatamari.Story
         }
 
         /// <summary>
-        /// Writes the two result-card objects' active state for the current state.
+        /// Writes the start prompt's and the two result-card objects' active state for the
+        /// current state.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -730,7 +748,14 @@ namespace VRCKatamari.Story
         /// so the scene cannot present a retry button before any round exists.
         /// </para>
         /// <para>
-        /// One method, called from every state change, is what keeps the two objects
+        /// The start prompt (<c>startPromptText</c>) is the third object and the only one
+        /// owned by Idle. It says what to do to begin, so it has to be readable before
+        /// the round exists, and it has to be gone once the countdown owns the HUD. Being
+        /// a Text of its own is what makes that possible: the card can stay hidden in
+        /// Idle while the prompt stays visible.
+        /// </para>
+        /// <para>
+        /// One method, called from every state change, is what keeps the three objects
         /// from disagreeing with the state. A null link is skipped, so the headless lab
         /// and any scene without a result card behave exactly as before.
         /// </para>
@@ -739,8 +764,13 @@ namespace VRCKatamari.Story
         {
             bool showCard = state == StatePresenting || state == StateResult;
             bool showRetry = state == StateResult;
+            // The prompt is the mirror image of the card: an instruction belongs to the
+            // one state where the player has not started yet, and must be gone once the
+            // countdown takes over the HUD.
+            bool showStartPrompt = state == StateIdle;
             if (resultCardRoot != null) resultCardRoot.SetActive(showCard);
             if (retryButtonRoot != null) retryButtonRoot.SetActive(showRetry);
+            if (startPromptText != null) startPromptText.gameObject.SetActive(showStartPrompt);
         }
 
         private void WriteTargetText()

@@ -57,7 +57,9 @@ python3 Tools/levelbuild/levelbuild.py check Tools/levelbuild/examples/placement
 | `seat <placement.json> [--write] [--item ID]` | 按**支撑面法线**重新坐好（默认 dry-run） | 0 |
 | `from-layout <layout.json> --out <placement.json> [--expected COUNT,UNITS]` | 把 `Docs/Design/StoryMode/picnic_corner_layout.json` 转成本格式（见 §5） | 0 / 2 |
 
-`check` 的硬规则（设计 §8 的 1–12、14 条）：schema/必填/未知 def/重复 `itemId`、`aabb` 与模型 manifest 一致、`absorbDiameterReq`/`absorbable` 不自相矛盾、越界、出生净空、**穿地**、**悬空**、叠放、道具互穿、穿入实体、预算（`planes/boxes/ramps/ground/blocking`）、斜面几何（坡度/坡脚/顶边）、`box` 与 `ramp` 同 id、总量与 `level.expected` 一致；另外“文件不是规范形”是 **warning**（不是错）。
+`check` 的硬规则（设计 §8 的 1–12、14 条）：schema/必填/未知 def/重复 `itemId`、`aabb` 与模型 manifest 一致、`absorbDiameterReq`/`absorbable` 不自相矛盾、越界、出生净空、**穿地**、**悬空**、叠放、道具互穿、穿入实体、预算（`planes/boxes/ramps/ground/blocking`）、斜面几何（坡度/坡脚/顶边）、`box` 与 `ramp` 同 id、总量与 `level.expected` 一致、**弯坡**（`curve_ramp` 的半径/弧角/宽厚/段数/弦高/重叠）；另外“文件不是规范形”是 **warning**（不是错）。
+
+> **坡度 > 45° 现在只是 warning**（2026-11-15，S4）：v2 能慢爬陡坡（`CONTACT_MODEL_V2` 3.10）。硬错误只剩物理上不可能的值——板面朝下（inverted）、90°（侧立就是墙）、零厚度、NaN。`--strict` 仍可把 warning 当错。
 
 ### 常用片段
 
@@ -100,7 +102,14 @@ python3 Tools/levelbuild/levelbuild.py seat level.json --write
        "rotationQuat": [0,0,0,1], "collision": "none", "absorbable": false, "support": true},
       {"id": "wall_west", "role": "boundary", "shape": "plane", ...},
       {"id": "flower_bed", "role": "box", "shape": "box", ...},
-      {"id": "ramp_to_bed", "role": "ramp", "shape": "box", ..., "meets": "flower_bed"}
+      {"id": "ramp_to_bed", "role": "ramp", "shape": "box", ..., "meets": "flower_bed"},
+      {"id": "curve_up_a", "role": "curve_ramp", "shape": "box", "collision": "box",
+       "center": [8.0, 0.0, 12.0],                    // 弧起点（第一段 slab 中心）
+       "rotationQuat": [0,0,0,1],                     // 起始帧：本地 +Z 前进、+Y 法线
+       "size": [4.0, 0.25, 0.0],                      // 派生 = [width_m, thickness_m, 0]
+       "absorbable": false, "support": true,
+       "curve": {"radius_m": 4.0, "arc_deg": 30.0, "bend": "up",
+                 "width_m": 4.0, "thickness_m": 0.25}}  // segments 省略 = 自动
   ],
   "cameras": [ {"id": "top", "type": "ortho_top", "location": [0,12,0], "target": [0,0,0], "coverage_m": 14.1} ],
   "renderPresets": [ {"id": "plan", "camera": "top", "engine": "WORKBENCH", "res": [1280,720]} ]
@@ -182,6 +191,7 @@ python3 Tools/levelbuild/levelbuild.py check <out>     # PASS: propCount 127 / v
 * **只碰 `LevelContent`**：`LevelContent/Props/<kind>/[<zone>/][<group>/]<itemId>`（第一层必须是 kind，`PickupFieldSync` 从它读 kind）与 `LevelContent/Structures/<id>`。别处一律不动。
 * **道具**：实例化 `Assets/VRC_Katamari/Art/Props/<def>/<def>.fbx`（预制体库是 P2），按 `itemId` 增/改/删；同名同 def 只改位姿（`1e-3 m` / `|dot| ≥ 0.99999`），def 变了才重建。
 * **结构**：`role=box` → 真 cube + 真 `BoxCollider`；`role=ground/boundary` → 只有 Transform 的标记物体（`LevelArenaHost` 只读 `groundNormal/groundOffset` 与每面墙的**局部 +Z**，不看几何）；`role=ramp` → 真 cube + `BoxCollider`，导入器填进 `LevelArenaHost.rampBoxes`（P3，d31dc9b），由 `RegisterRamp` 烘成支撑面，**不进 `staticBoxes`**。
+* **弯坡**：`role=curve_ramp` 的父物体 `<id>` 是纯标记（无 Renderer/Collider），导入器在它下面建 `<id>_00 … <id>_NN` 的 cube + `BoxCollider`（段数由 `curve.segments` 或弦高预算决定），**逐段**填进 `rampBoxes`（和直线坡同一个数组，host API 不变）。第二遍导入仍是 `+0 ~0 -0`（段位姿/碰撞体逐项比较）；段数变少会删掉多出来的子物体；摘要里单列 `curves: 1 ramp(s), 5 slab segment(s): +5 ~0 -0`。
 * **arena 接线**：填 `LevelArenaHost.groundNormal/groundOffset`、`boundaryWalls`（每面墙一个 Transform，局部 +Z 指向场内、原点在碰撞面上）、`staticBoxes`、`rampBoxes`（P3）、`allowedKinds`（本关 kind 去重排序），然后 `CopyProxyToUdon`。
 * **`PickupFieldSync`**：以 `LevelContent/Props` 为 field root 调 `SyncFromChildren`，再写声明值 `valueUnits` 并回读（§3）。
 * **不 `SaveScene`**：导入后场景是 dirty 的，由人决定何时保存。
@@ -196,7 +206,7 @@ python3 -m unittest discover -s Docs/tests -p 'test_*.py'   # 全仓
 python3 Docs/tools/validate_plan.py
 ```
 
-`Docs/tests/levelbuild/` 覆盖：常驻编辑器的 48 + 11 个用例（§9.5 另外列）；坐标/四元数往返、旋转后 AABB、`D_req` 数值（含体积门等价）、斜面上坐正（含“半埋”反例）、确定性（排序/取整/`-0.0`/逐字节）、`defs[]` 价值回退、**5 个负向用例**（穿地/悬空/越界/预算超/总量不符）以及未知 def、重复 id、互穿、`box`+`ramp` 同 id、缺地面、过期 `absorbDiameterReq`；CLI 的 0/1/2 退出码与 `format`/`seat` 的行为。
+`Docs/tests/levelbuild/` 覆盖：常驻编辑器的 48 + 11 个用例（§9.5 另外列）；坐标/四元数往返、旋转后 AABB、`D_req` 数值（含体积门等价）、斜面上坐正（含“半埋”反例）、确定性（排序/取整/`-0.0`/逐字节）、`defs[]` 价值回退、**5 个负向用例**（穿地/悬空/越界/预算超/总量不符）以及未知 def、重复 id、互穿、`box`+`ramp` 同 id、缺地面、过期 `absorbDiameterReq`；CLI 的 0/1/2 退出码与 `format`/`seat` 的行为。`test_curve_ramp.py` 另覆盖弯坡：schema 的 18 个原因码、段数与设计表一致（§5.7 的 2→10 / 3→12 / 5→15 / 10→21 / 20→29）、弦高预算、法线连续、`down` 是 `up` 的镜像、`dump-load-dump` 逐字节、总量口径（一条=1 ramp / N 段=staticObbs）、以及 45° 门：50°/89° 只 warning、90°/inverted/零厚度/NaN 仍红。
 
 ---
 
@@ -208,6 +218,7 @@ python3 Docs/tools/validate_plan.py
 4. **旋转道具的 `propBounds` 是世界 AABB**（同步工具用 `Renderer.bounds`），不是模型 AABB：对 45° 摆的薄件会偏大。这是 `PickupFieldSync` 的既有行为，导入器不修，只在报告里保留依据。
 5. **`expected` 在 `from-layout` 里是「转出来多少」**，不是设计表的 127/1500（差额 = 缺模型的 def，见 §5）。补模型后重跑，数字会自动对上。
 6. **PNG 不进仓库**：本工具只往 `--out-dir` 写图，验收图由人决定是否放 `Docs/Evidence/`。
+7. **弯坡还不能从 `levelctl.py` 新建**：`add-structure` 只认 `center/size/rotationQuat`（带 `curve` 块的条目目前手写 JSON；改已有弯坡的 `center` 或参数走 `set`/`move` 是安全的，`curve` 块原样保留）。渲染侧把它画成每段一个 box 的 mesh，`curve` 参数存在物体的 `curve_json` 属性里，导出时原样带回。
 
 ---
 

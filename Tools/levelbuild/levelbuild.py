@@ -41,10 +41,17 @@ def _summary(doc):
                   if isinstance(structure, dict)]
     absorbable = sum(1 for prop in props if prop.get("absorbable") is True)
     kinds = sorted({prop.get("def") for prop in props if prop.get("def")})
+    # A curve_ramp is one logical ramp; its slab segments are what the motor bakes, so both
+    # numbers are printed (one ramp, N segments - CONTACT_MODEL_V2 5.7).
+    curves = [structure for structure in structures if structure.get("role") == "curve_ramp"]
+    curve_radius = core.curve_ball_radius_m(level)
+    curve_segments = sum(core.curve_segment_count(structure, curve_radius)
+                         for structure in curves)
     return ("props=%d units=%d absorbable=%d defIds=%d defs[]=%d structures=%d "
-            "ballDiameterMax=%s"
+            "curves=%d/%d ballDiameterMax=%s"
             % (len(props), core.value_units_total(doc), absorbable, len(kinds),
-               len(doc.get("defs") or []), len(structures), level.get("ballDiameterMax")))
+               len(doc.get("defs") or []), len(structures), len(curves), curve_segments,
+               level.get("ballDiameterMax")))
 
 
 def _report_text(report, doc):

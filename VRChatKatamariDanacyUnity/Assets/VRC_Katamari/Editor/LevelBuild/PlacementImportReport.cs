@@ -45,6 +45,16 @@ namespace VRCKatamari.Editor.LevelBuild
         public int StructuresUpdated;
         public int StructuresDeleted;
 
+        /// <summary>Logical curved ramps imported (one entry each, however many segments).</summary>
+        public int CurveRamps;
+
+        /// <summary>Slab segments every curve expanded into (the sum over the ramps).</summary>
+        public int CurveSegments;
+
+        public int CurveSegmentsCreated;
+        public int CurveSegmentsUpdated;
+        public int CurveSegmentsDeleted;
+
         public int SyncPropCount;
         public int SyncRejected;
         public bool SyncRan;
@@ -134,6 +144,16 @@ namespace VRCKatamari.Editor.LevelBuild
             text.Append("  structures: +").Append(StructuresCreated).Append(" ~")
                 .Append(StructuresUpdated).Append(" -").Append(StructuresDeleted);
             text.AppendLine();
+            if (CurveRamps > 0)
+            {
+                // One logical ramp, N slab children (CONTACT_MODEL_V2 5.7): the parent is
+                // counted in the structures line, its segments here.
+                text.Append("  curves: ").Append(CurveRamps).Append(" ramp(s), ")
+                    .Append(CurveSegments).Append(" slab segment(s): +")
+                    .Append(CurveSegmentsCreated).Append(" ~").Append(CurveSegmentsUpdated)
+                    .Append(" -").Append(CurveSegmentsDeleted);
+                text.AppendLine();
+            }
             text.Append("  pickup sync: ").Append(SyncRan ? "ran" : "not run")
                 .Append(", rows=").Append(SyncPropCount)
                 .Append(", rejected=").Append(SyncRejected)

@@ -21,6 +21,7 @@ AABB agrees with the scene.
 already seated, so a JSON -> scene -> JSON round trip stays byte-identical.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -95,6 +96,27 @@ def _prop_entries(doc_base, exports_dir):
     return entries, problems
 
 
+def _curve_entry(obj, base):
+    """The authored ``curve`` block of a ``role=curve_ramp`` object, else ``None``.
+
+    The arc parameters cannot be read back out of the preview mesh (it is one box per
+    segment), so they travel as the object's ``curve_json`` property
+    (``blender_common.CURVE_TAG``), with the base file as the fallback.  That is what makes
+    ``export -> rebuild -> export`` stable for a curve.
+    """
+    if str(obj.get("role")) != "curve_ramp":
+        return None
+    raw = obj.get(common.CURVE_TAG)
+    if raw:
+        try:
+            return json.loads(str(raw))
+        except ValueError:
+            print("WARN %s: curve_json is not JSON; using the base file's curve block"
+                  % obj.name)
+    curve = base.get("curve")
+    return curve if isinstance(curve, dict) else None
+
+
 def _structure_entries(doc_base):
     base_structures = {structure["id"]: structure for structure in
                        (doc_base or {}).get("structures") or []}
@@ -110,6 +132,14 @@ def _structure_entries(doc_base):
         entry["shape"] = str(obj["shape"]) if "shape" in obj.keys() else base.get("shape", "box")
         entry["center"] = list(core.rounded(v, core.POSITION_DECIMALS) for v in center)
         entry["size"] = list(core.rounded(v, core.SIZE_DECIMALS) for v in size)
+        curve = _curve_entry(obj, base)
+        if curve is not None:
+            # A curve's `size` is derived from the arc, not the preview mesh's bounding box
+            # (the validator and `canonical_doc` derive it the same way).
+            entry["curve"] = curve
+            entry["size"] = [core.rounded(curve.get("width_m", 0.0), core.SIZE_DECIMALS),
+                             core.rounded(curve.get("thickness_m", 0.0), core.SIZE_DECIMALS),
+                             0.0]
         entry["rotationQuat"] = list(core.rounded(v, core.QUAT_DECIMALS) for v in quat)
         entry["collision"] = (str(obj["struct_collision"]) if "struct_collision" in obj.keys()
                               else base.get("collision", "box"))

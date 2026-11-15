@@ -17,9 +17,10 @@ drift is here:
 * ``nominal_m`` must equal the cell's deck height, because every deck/step criterion is
   written against it;
 * a ramp cell must declare ``role=ramp`` (the motor must accept it) and a 50-degree
-  adversarial cell must declare a ``kind=ramp_probe`` box instead, because the authoring
-  gate refuses over-45 ramps (it asks for a box) and the motor's refusal getter can only
-  be exercised through a probe;
+  adversarial cell must declare a ``kind=ramp_probe`` box instead, because C06 is the
+  *motor's* over-45 refusal probe (``AddRamp`` still refuses there until v2 lands) - the
+  authoring gate would now only warn about a 50-degree ramp (``CONTACT_MODEL_V2`` 1.5/S4),
+  so the probe is a deliberate data choice, not a gate workaround;
 * every metric a wired check names must be one the driver can actually read
   (``TryReadMetric``), which is checked by reading the C# source rather than keeping a
   second list of metric names in Python.
@@ -178,10 +179,10 @@ class CellPlacements(unittest.TestCase):
             report = core.validate(core.load_doc(path), path=path)
             self.assertTrue(report.ok, "%s: %s" % (path, report.errors))
             if cell["id"] == "C06":
-                # C06 is the adversarial cell: its 50-degree board must be a BOX (the
-                # authoring gate refuses role=ramp over 45 degrees and says "make it a
-                # box"), so the validator's tilted-box warning is expected and is the only
-                # warning allowed anywhere in the field.
+                # C06 is the adversarial cell: its 50-degree board is authored as a BOX on
+                # purpose (the motor's AddRamp refusal probe), so the validator's tilted-box
+                # warning is expected and is the only warning allowed anywhere in the field.
+                # A role=ramp at 50 degrees would only warn since CONTACT_MODEL_V2 1.5/S4.
                 self.assertEqual(len(report.warnings), 1, "%s: %s" % (path, report.warnings))
                 self.assertIn("tilted box", report.warnings[0])
                 continue
@@ -273,9 +274,11 @@ class CellPlacements(unittest.TestCase):
             self.assertLessEqual(slope, core.RAMP_MAX_SLOPE_DEG + 0.01, cell["id"])
 
     def test_c06_is_an_over_limit_box_probe_not_a_ramp(self):
-        # The authoring gate refuses role=ramp over 45 degrees, so the 50-degree board must be
-        # a box. Its world AABB is the design's fallback wall, and the criteria importer bakes
-        # its +Y face so the driver can ask motor.AddRamp and read the refusal.
+        # C06 is the motor's over-45 refusal probe, so the 50-degree board is a box by
+        # design (the authoring gate would only warn about a 50-degree ramp since
+        # CONTACT_MODEL_V2 1.5/S4). Its world AABB is the design's fallback wall, and the
+        # criteria importer bakes its +Y face so the driver can ask motor.AddRamp and read
+        # the refusal.
         doc = load_cell("physics_test_field/C06/placement.json")
         self.assertEqual([s for s in doc["structures"] if s["role"] == "ramp"], [])
         probes = [s for s in doc["structures"] if s.get("kind") == "ramp_probe"]

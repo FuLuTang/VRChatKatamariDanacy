@@ -12,6 +12,13 @@ runs in three places:
     ``import Tools.levelbuild.placement_core``),
   * ``Docs/tests/levelbuild/``           - the tests.
 
+The one **non-standard-library** import is deliberate and lazy: the curved-ramp
+expansion calls the design's reference model in
+``Docs/Design/BallMotor/contact_v2/contact_v2.py`` (:func:`curve_reference` loads
+it by path), because a second tessellator would be a second answer to the same
+question (``CONTACT_MODEL_V2`` 7.2).  It is not a ``bpy`` import and it is not a
+repo-root import, so the three consumers above are unaffected.
+
 The one interface between the three authors (two Blender versions, one Unity) is
 ``placement.json``; see ``Docs/Design/Tools/LEVEL_AUTHORING.md``.
 
@@ -34,10 +41,12 @@ Conventions (each of these errors silently, hence written once here):
     surface at height ``h`` has ``position.y == h + aabb.y / 2``.
 """
 
+import importlib.util
 import json
 import math
 import os
 import re
+import sys
 from pathlib import Path
 
 # --------------------------------------------------------------------------- #
@@ -92,15 +101,41 @@ RAMP_THICKNESS_M = 0.04
 #: corner is legitimately ``thickness * cos(slope)`` below ``y = ground`` - that is not a
 #: sunk ramp, the ball still meets the top face at the design height.
 RAMP_UNDERSIDE_ALLOWANCE_M = RAMP_THICKNESS_M + SINK_TOLERANCE_M
+
+#: A curved ramp (``role=curve_ramp``) is authored as ONE arc and expanded into a chain of
+#: slab segments (``CONTACT_MODEL_V2`` 5.7a).  ``curve_ramp`` is a *logical* structure: it
+#: counts once against ``level.budget.ramps`` but its segments are static OBBs to the motor.
+CURVE_CHORD_ERROR_PER_RADIUS = 0.05
+#: The design's ``r_min``, the 0.30 m starter ball's radius (5.7's error budget base).  Used
+#: when the level does not declare ``ballDiameterStart``.
+CURVE_MIN_BALL_RADIUS_M = 0.15
+#: The reference tessellator expands a **vertical** arc and nothing else.  ``left``/``right``
+#: and ``helix`` are named in the design's JSON sketch but have no implementation, so they are
+#: refused with a reason code instead of being silently bent the wrong way.
+CURVE_BENDS = ("up", "down")
+CURVE_UNSUPPORTED_BENDS = ("left", "right", "helix")
+CURVE_MAX_ARC_DEG = 360.0
+#: ``CONTACT_MODEL_V2`` 5.4/7.1: the motor's static OBB table holds this many solids.
+STATIC_OBB_CAPACITY = 256
+#: A segment's chord is stretched by ``1 + 2*s/L`` so the convex side has no crack; the
+#: design caps that overlap at a quarter of the chord (5.7's "overlap > 0 and < 25 %").
+CURVE_MAX_OVERLAP_FRACTION = 0.25
+#: Curve numbers are stored like sizes (4 decimals); angles are degrees.
+CURVE_DECIMALS = 4
+#: The whole ``curve`` block.  ``segments: 0`` (or absent) means "auto by the chord budget".
+CURVE_KEYS = ("radius_m", "arc_deg", "segments", "bend", "width_m", "thickness_m")
 #: Cap on per-check detail lines so one broken file cannot flood the console.
 DETAIL_LIMIT = 25
 
-PROP_ROLES = ("ground", "boundary", "box", "ramp")
+PROP_ROLES = ("ground", "boundary", "box", "ramp", "curve_ramp")
 SHAPES = ("box", "plane")
 COLLISIONS = ("box", "none")
 CAMERA_TYPES = ("perspective", "ortho_top")
 
 ROOT = Path(__file__).resolve().parents[2]
+#: The one curved-ramp tessellator: the design's Python reference (see
+#: :func:`curve_reference`).  The C# counterpart is ``Runtime/BallContact/CurveRampMath.cs``.
+CURVE_REFERENCE_PATH = ROOT / "Docs/Design/BallMotor/contact_v2/contact_v2.py"
 PROPS_DIR = ROOT / "Docs/Art/OriginalModels/props"
 PROPS_EXPORTS_DIR = PROPS_DIR / "exports"
 PROP_CATALOG = ROOT / "Docs/Design/Maps/PicnicLawn/prop_catalog.csv"
@@ -109,7 +144,7 @@ LEVELS_DIR = ROOT / "Docs/Design/Levels"
 PROP_KEYS = ("itemId", "def", "kind", "zone", "group", "position", "rotationQuat",
              "support", "stackedOn", "aabb", "absorbDiameterReq", "absorbable",
              "valueUnits", "notes")
-STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "rotationQuat",
+STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
                   "collision", "absorbable", "support", "meets", "material", "notes")
 CAMERA_KEYS = ("id", "type", "location", "target", "lens", "coverage_m")
 PRESET_KEYS = ("id", "camera", "engine", "res", "samples")
@@ -327,6 +362,33 @@ def quat_between(from_vector, to_vector):
     return canonical_quat((axis[0], axis[1], axis[2], 1.0 + d))
 
 
+def quat_from_axes(axis_x, axis_y, axis_z):
+    """Quaternion (xyzw) of the right-handed rotation with these local axes as columns.
+
+    ``axis_x``/``axis_y``/``axis_z`` are the world directions of the box's local axes, so
+    ``quat_rotate(quat, (1,0,0)) == axis_x`` - the exact inverse of :func:`quat_to_matrix`,
+    which is what a curve segment's frame needs (its axes are built from the arc, not from
+    an angle about one axis).
+    """
+    m00, m10, m20 = axis_x
+    m01, m11, m21 = axis_y
+    m02, m12, m22 = axis_z
+    trace = m00 + m11 + m22
+    if trace > 0.0:
+        s = math.sqrt(trace + 1.0) * 2.0
+        w, x, y, z = 0.25 * s, (m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s
+    elif m00 > m11 and m00 > m22:
+        s = math.sqrt(1.0 + m00 - m11 - m22) * 2.0
+        w, x, y, z = (m21 - m12) / s, 0.25 * s, (m01 + m10) / s, (m02 + m20) / s
+    elif m11 > m22:
+        s = math.sqrt(1.0 + m11 - m00 - m22) * 2.0
+        w, x, y, z = (m02 - m20) / s, (m01 + m10) / s, 0.25 * s, (m12 + m21) / s
+    else:
+        s = math.sqrt(1.0 + m22 - m00 - m11) * 2.0
+        w, x, y, z = (m10 - m01) / s, (m02 + m20) / s, (m12 + m21) / s, 0.25 * s
+    return canonical_quat((x, y, z, w))
+
+
 def align_up_to(normal, yaw_rad=0.0):
     """Quaternion that puts a model's local +Y on ``normal``, yawed about it.
 
@@ -428,7 +490,13 @@ def structure_top_plane(structure):
     ``RAMP_THICKNESS_M``).  Props with ``support=<ramp id>`` are seated on this plane, and
     P3's ``AddRamp(center, n, right, halfWidth, halfRun)`` has to take ``center`` from it
     rather than from the box centre.
+
+    A ``role=curve_ramp`` has no single top face (its surface bends), so it raises: a prop
+    cannot be seated on a curve, and the validator refuses that declaration first.
     """
+    if structure.get("role") == "curve_ramp":
+        raise ValueError("structure %r is a curve_ramp: it has no single top plane"
+                         % structure.get("id"))
     normal = structure_up(structure)
     point = add(structure["center"], scale(normal, structure["size"][1] * 0.5))
     return normal, point
@@ -442,19 +510,30 @@ def plane_height_at(normal, point, x, z):
 
 
 def structure_slope_deg(structure):
-    """Tilt of the structure's +Y face away from world up."""
+    """Tilt of the structure's +Y face away from world up.
+
+    A curve is reported by its **steepest** point, ``arc_deg`` (the surface starts flat at
+    the start frame and is ``arc_deg`` off it at the far end).
+    """
+    if structure.get("role") == "curve_ramp":
+        try:
+            return abs(float(structure["curve"]["arc_deg"]))
+        except (KeyError, TypeError, ValueError):
+            return 0.0
     up = structure_up(structure)
     cosine = max(-1.0, min(1.0, abs(up[1])))
     return math.degrees(math.acos(cosine))
 
 
-def structure_world_aabb(structure):
+def structure_world_aabb(structure, ball_radius_m=None):
+    if structure.get("role") == "curve_ramp":
+        return curve_world_aabb(structure, ball_radius_m)
     return world_aabb(structure["center"], structure["size"], structure["rotationQuat"])
 
 
-def structure_top_height(structure):
+def structure_top_height(structure, ball_radius_m=None):
     """Highest world Y of the structure (top of its world AABB)."""
-    return structure_world_aabb(structure)[1][1]
+    return structure_world_aabb(structure, ball_radius_m)[1][1]
 
 
 def to_local(point, center, quat_xyzw):
@@ -479,6 +558,197 @@ def structure_contains_point(point, structure, margin=0.0):
             structure["size"][1] * 0.5 + margin,
             structure["size"][2] * 0.5 + margin)
     return all(abs(local[i]) <= half[i] for i in range(3))
+
+
+# --------------------------------------------------------------------------- #
+# curved ramps: one arc in the data, a chain of slab segments to the motor
+# --------------------------------------------------------------------------- #
+def curve_reference():
+    """The design's curved-ramp reference module (``contact_v2``), loaded from its file.
+
+    This is the **one** tessellator: ``AGENTS.md`` forbids a second copy of a piece of
+    logic, and ``CONTACT_MODEL_V2`` 7.2 keeps the Python model and the C#
+    (``Runtime/BallContact/CurveRampMath.cs``) numerically identical.  The module is not
+    importable as a package when the CLI runs from outside the repo root, so it is loaded
+    by path once and cached in :data:`sys.modules`; it is standard-library only, so this
+    also works inside Blender.
+    """
+    name = "katamari_contact_v2_reference"
+    module = sys.modules.get(name)
+    if module is not None:
+        return module
+    if not CURVE_REFERENCE_PATH.is_file():
+        raise FileNotFoundError("the curved-ramp reference is missing: %s"
+                                % CURVE_REFERENCE_PATH)
+    spec = importlib.util.spec_from_file_location(name, str(CURVE_REFERENCE_PATH))
+    if spec is None or spec.loader is None:
+        raise ImportError("cannot load %s" % CURVE_REFERENCE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sys.modules[name] = module
+    return module
+
+
+def curve_ball_radius_m(level):
+    """``r_min``: half the level's starter ball, never below the design's 0.15 m.
+
+    The chord budget is stated per ball radius, and the *smallest* ball a level plays with
+    is the one that must not feel the chord bump (``CONTACT_MODEL_V2`` 5.7).
+    """
+    diameter = None
+    if isinstance(level, dict):
+        diameter = as_float(level.get("ballDiameterStart"), "level.ballDiameterStart")
+    if diameter is None or diameter <= 0.0:
+        return CURVE_MIN_BALL_RADIUS_M
+    return max(diameter * 0.5, CURVE_MIN_BALL_RADIUS_M)
+
+
+def auto_curve_segments(radius_m, arc_deg, ball_radius_m):
+    """Smallest segment count whose sagitta fits the 5 %-of-``r_min`` budget (5.7's table).
+
+    The predicate is the reference's :func:`curve_chord_budget`, so the Python side and the
+    C# ``CurveRampMath.IsCurveWithinChordBudget`` loop answer the same count.
+    """
+    budget = curve_reference().curve_chord_budget
+    for count in range(1, STATIC_OBB_CAPACITY + 1):
+        if budget(radius_m, count, arc_deg, ball_radius_m, CURVE_CHORD_ERROR_PER_RADIUS):
+            return count
+    return STATIC_OBB_CAPACITY
+
+
+def curve_segment_count(structure, ball_radius_m=None):
+    """Resolved segment count of one curve (0 when the entry cannot be read).
+
+    A count outside ``1..STATIC_OBB_CAPACITY`` is 0 here: the entry is invalid (the
+    validator reports it with ``[curve_segments]``), and expanding it would cost the
+    capacity check a huge allocation for a document that is already red.
+    """
+    try:
+        curve = structure["curve"]
+        declared = curve.get("segments", 0) or 0
+        declared = int(declared)
+        if declared < 0 or declared > STATIC_OBB_CAPACITY:
+            return 0
+        if declared > 0:
+            return declared
+        return auto_curve_segments(float(curve["radius_m"]), float(curve["arc_deg"]),
+                                   CURVE_MIN_BALL_RADIUS_M if ball_radius_m is None
+                                   else ball_radius_m)
+    except (KeyError, TypeError, ValueError):
+        return 0
+
+
+def expand_curve_ramp(structure, ball_radius_m=None):
+    """One ``role=curve_ramp`` entry as its deterministic chain of slab segments.
+
+    Returns ``(segments, metrics)``.  Each segment is a dict with the frame the Unity
+    importer builds (``center``, ``rotationQuat``, ``size``, ``normal``, ``tangent``,
+    ``axisX``, ``index``, ``id``); ``metrics`` is the reference model's own read-out
+    (``segments``, ``delta_deg``, ``sagitta_m``, ``normal_jump_deg``, ``segment_length_m``,
+    ``overlap``).
+
+    The arc maths is ``contact_v2.tessellate_vertical_curve`` - not a second copy.  Two
+    conventions sit on top of it:
+
+    * ``structure.center`` is the arc's start point on the **slab centrelines** (the first
+      segment's centre), exactly like a straight ramp's ``center`` is its box centre; the
+      walking surface is half a thickness along the local +Y at that point.
+    * ``structure.rotationQuat`` is the start frame: local +Z is ``forward`` (the direction
+      the arc leaves in, horizontal), local +Y is the start surface normal.
+
+    ``bend: "down"`` is the same up-arc tessellated in a mirrored frame (``up`` negated) and
+    then un-mirrored: the centres and tangents are already the descending arc's, and the
+    surface normal is the negated one.  ``CurveRampMath.cs`` does exactly that, so neither
+    side needs a second arc formula (the C# is not this file's to extend).
+    """
+    curve = structure["curve"]
+    center = tuple(float(v) for v in structure["center"])
+    quat = tuple(float(v) for v in structure["rotationQuat"])
+    radius = float(curve["radius_m"])
+    arc = float(curve["arc_deg"])
+    width = float(curve["width_m"])
+    thickness = float(curve["thickness_m"])
+    bend = curve.get("bend") or "up"
+    if bend not in CURVE_BENDS:
+        raise ValueError("bend %r is not one of %s" % (bend, list(CURVE_BENDS)))
+    segments = curve_segment_count(structure, ball_radius_m)
+    if segments < 1 or segments > STATIC_OBB_CAPACITY:
+        raise ValueError("segments %d is outside 1..%d" % (segments, STATIC_OBB_CAPACITY))
+    forward = quat_rotate(quat, (0.0, 0.0, 1.0))
+    up = quat_rotate(quat, (0.0, 1.0, 0.0))
+    mirrored = bend == "down"
+    obbs, metrics = curve_reference().tessellate_vertical_curve(
+        center, forward, (-up[0], -up[1], -up[2]) if mirrored else up,
+        radius, arc, segments, width, thickness)
+    metrics = dict(metrics)
+    metrics["segments"] = segments
+    metrics["bend"] = bend
+    chain = []
+    for index, obb in enumerate(obbs):
+        normal = obb.axis_y
+        if mirrored:
+            normal = (-normal[0], -normal[1], -normal[2])
+        tangent = obb.axis_z
+        axis_x = cross(normal, tangent)
+        chain.append({
+            "index": index,
+            "id": "%s_%02d" % (structure.get("id"), index),
+            "center": obb.center,
+            "rotationQuat": quat_from_axes(axis_x, normal, tangent),
+            "size": (width, thickness, metrics["segment_length_m"] * metrics["overlap"]),
+            "normal": normal,
+            "tangent": tangent,
+            "axisX": axis_x,
+        })
+    return chain, metrics
+
+
+def curve_world_aabb(structure, ball_radius_m=None):
+    """Union of a curve's segment AABBs (a curve has no single authored box)."""
+    try:
+        chain, _ = expand_curve_ramp(structure, ball_radius_m)
+    except (KeyError, TypeError, ValueError, FileNotFoundError):
+        try:
+            center = tuple(float(v) for v in structure["center"])
+        except (KeyError, TypeError, ValueError):
+            center = (0.0, 0.0, 0.0)
+        return (center, center)
+    low = chain[0]["center"]
+    high = chain[0]["center"]
+    for segment in chain:
+        box = world_aabb(segment["center"], segment["size"], segment["rotationQuat"])
+        low = tuple(min(low[i], box[0][i]) for i in range(3))
+        high = tuple(max(high[i], box[1][i]) for i in range(3))
+    return (low, high)
+
+
+def structure_solid_boxes(structure, ball_radius_m=None):
+    """The oriented boxes a structure is *solid* of, as ``(center, size, quat)`` dicts.
+
+    A box/ramp is one; a curve is its whole slab chain, so a prop buried in a curve is
+    caught by the same penetration rule as a prop buried in a box.
+    """
+    if structure.get("role") == "curve_ramp":
+        chain, _ = expand_curve_ramp(structure, ball_radius_m)
+        return [{"center": segment["center"], "size": segment["size"],
+                 "rotationQuat": segment["rotationQuat"]} for segment in chain]
+    return [structure]
+
+
+def static_obb_count(doc, ball_radius_m=None):
+    """Static OBBs the motor will bake: boxes, straight ramp slabs and curve segments."""
+    radius = ball_radius_m if ball_radius_m is not None \
+        else curve_ball_radius_m(doc.get("level"))
+    total = 0
+    for structure in doc.get("structures") or []:
+        if not isinstance(structure, dict):
+            continue
+        role = structure.get("role")
+        if role in ("box", "ramp"):
+            total += 1
+        elif role == "curve_ramp":
+            total += curve_segment_count(structure, radius)
+    return total
 
 
 # --------------------------------------------------------------------------- #
@@ -590,6 +860,27 @@ def _sort_key(item_id):
     return (str(item_id))
 
 
+def _canonical_curve(curve):
+    """A ``curve`` block in canonical form.
+
+    ``segments`` is kept only when the author declared it (absent or 0 = auto by the chord
+    budget), because writing the resolved count back would turn a later radius edit into a
+    stale "segments_coarse" error instead of an automatic re-tessellation.
+    """
+    out = {}
+    for key in CURVE_KEYS:
+        if key not in curve:
+            continue
+        value = curve[key]
+        if key == "segments":
+            out[key] = int(value)
+        elif key == "bend":
+            out[key] = str(value)
+        else:
+            out[key] = rounded(value, CURVE_DECIMALS)
+    return out
+
+
 def canonical_doc(doc, manifests=None):
     """The document in canonical form: sorted, rounded, ``-0.0`` cleaned.
 
@@ -657,9 +948,19 @@ def canonical_doc(doc, manifests=None):
                 value = rounded_seq(value, POSITION_DECIMALS)
             elif key == "size":
                 value = rounded_seq(value, SIZE_DECIMALS)
+            elif key == "curve":
+                value = _canonical_curve(value)
             elif key == "rotationQuat":
                 value = rounded_seq(canonical_quat(tuple(float(v) for v in value)), QUAT_DECIMALS)
             out[key] = value
+        curve = structure.get("curve")
+        if structure.get("role") == "curve_ramp" and isinstance(curve, dict):
+            # `size` is derived for a curve (there is no authored box): [width, thickness, 0].
+            try:
+                out["size"] = [rounded(curve["width_m"], SIZE_DECIMALS),
+                               rounded(curve["thickness_m"], SIZE_DECIMALS), 0.0]
+            except KeyError:
+                pass
         structures_out.append(_ordered(out, STRUCTURE_KEYS))
 
     cameras_out = []
@@ -850,7 +1151,9 @@ def _prop_world_aabb(prop, report):
     return world_aabb(position, size, quat)
 
 
-def _structure_world_aabb(structure, report):
+def _structure_world_aabb(structure, report, ball_radius_m=None):
+    if structure.get("role") == "curve_ramp":
+        return curve_world_aabb(structure, ball_radius_m)
     center = as_vec3(structure.get("center"), "structures[%s].center" % structure.get("id"), report)
     size = as_vec3(structure.get("size"), "structures[%s].size" % structure.get("id"), report)
     quat = as_quat_xyzw(structure.get("rotationQuat"),
@@ -1008,6 +1311,153 @@ def _check_props(doc, report, manifests, catalog):
     return boxes
 
 
+def _curve_error(report, label, structure_id, code, message):
+    """One curve problem, with its reason code in brackets (the stable part)."""
+    report.err("%s curve_ramp %r [%s]: %s" % (label, structure_id, code, message))
+
+
+def _check_curve(structure, label, report, ball_radius_m):
+    """Validate one ``role=curve_ramp`` entry; ``(segments, metrics)`` or ``None``.
+
+    Reason codes: ``curve_missing``, ``curve_unknown_field``, ``curve_radius``,
+    ``curve_arc``, ``curve_width``, ``curve_thickness``, ``curve_bend``,
+    ``curve_bend_unsupported``, ``curve_segments``, ``curve_segments_coarse``,
+    ``curve_overlap``, ``curve_size``, ``curve_shape``, ``curve_collision``,
+    ``curve_meets``, ``curve_expand``.
+
+    The bounds are the design's (``CONTACT_MODEL_V2`` 5.7): ``radius_m > 0``,
+    ``0 < arc_deg <= 360``, ``width_m > 0``, ``thickness_m > 0``, ``segments`` a whole number
+    in ``0..256`` (0 or absent = auto), and the resolved chain's sagitta at most 5 % of the
+    smallest ball radius.
+    """
+    structure_id = structure.get("id")
+    ok = True
+    curve = structure.get("curve")
+    if not isinstance(curve, dict):
+        _curve_error(report, label, structure_id, "curve_missing",
+                     '"curve" must be an object with radius_m, arc_deg, width_m, thickness_m '
+                     "(and optionally segments / bend)")
+        return None
+
+    unknown = sorted(set(curve) - set(CURVE_KEYS))
+    if unknown:
+        _curve_error(report, label, structure_id, "curve_unknown_field",
+                     "unknown curve field(s) %s; allowed: %s (pitch_m / bank_deg / axis belong "
+                     "to the helix extension, which the reference tessellator does not "
+                     "implement - see CONTACT_MODEL_V2 5.7b)"
+                     % (", ".join(unknown), ", ".join(CURVE_KEYS)))
+        ok = False
+
+    numbers = {}
+    for key, code in (("radius_m", "curve_radius"), ("arc_deg", "curve_arc"),
+                      ("width_m", "curve_width"), ("thickness_m", "curve_thickness")):
+        value = curve.get(key)
+        number = None
+        if isinstance(value, (int, float)) and not isinstance(value, bool) \
+                and math.isfinite(float(value)):
+            number = float(value)
+        if number is None or number <= 0.0:
+            _curve_error(report, label, structure_id, code,
+                         "%s must be a finite number > 0 (got %r)" % (key, value))
+            ok = False
+        else:
+            numbers[key] = number
+
+    arc = numbers.get("arc_deg")
+    if arc is not None and arc > CURVE_MAX_ARC_DEG:
+        _curve_error(report, label, structure_id, "curve_arc",
+                     "arc_deg %.3f is over %.0f deg (a full turn is the maximum)"
+                     % (arc, CURVE_MAX_ARC_DEG))
+        ok = False
+
+    bend = curve.get("bend", "up")
+    if not isinstance(bend, str) or bend not in CURVE_BENDS:
+        if isinstance(bend, str) and bend in CURVE_UNSUPPORTED_BENDS:
+            _curve_error(report, label, structure_id, "curve_bend_unsupported",
+                         "bend %r is drawn in the design sketch but has no tessellator: the "
+                         'reference expands a vertical arc only (bend "up" or "down"). A '
+                         "horizontal S-bend or a helix needs the analytic patch that 5.7(b) "
+                         "rules out" % (bend,))
+        else:
+            _curve_error(report, label, structure_id, "curve_bend",
+                         'bend %r must be "up" or "down"' % (bend,))
+        ok = False
+
+    declared = curve.get("segments", 0)
+    if declared is None:
+        declared = 0
+    if isinstance(declared, bool) or not isinstance(declared, int):
+        _curve_error(report, label, structure_id, "curve_segments",
+                     "segments must be a whole number (0 or absent = auto by the chord "
+                     "budget), got %r" % (declared,))
+        ok = False
+    elif declared < 0 or declared > STATIC_OBB_CAPACITY:
+        _curve_error(report, label, structure_id, "curve_segments",
+                     "segments %d is outside 0..%d (0 = auto)"
+                     % (declared, STATIC_OBB_CAPACITY))
+        ok = False
+
+    if structure.get("shape", "box") != "box":
+        _curve_error(report, label, structure_id, "curve_shape",
+                     "a curve_ramp must be shape=box (its segments are boxes); got %r"
+                     % (structure.get("shape"),))
+        ok = False
+    if structure.get("collision", "box") != "box":
+        _curve_error(report, label, structure_id, "curve_collision",
+                     "a curve_ramp must be collision=box: the motor needs the segment colliders "
+                     "the importer bakes; got %r" % (structure.get("collision"),))
+        ok = False
+    if "meets" in structure:
+        _curve_error(report, label, structure_id, "curve_meets",
+                     "a curved ramp has no straight top edge, so the step rule cannot check "
+                     "'meets'; drop it and let the arc's end pose be the reference")
+        ok = False
+
+    if "size" in structure:
+        declared_size = None
+        if isinstance(structure["size"], (list, tuple)) and len(structure["size"]) == 3:
+            try:
+                declared_size = tuple(float(v) for v in structure["size"])
+            except (TypeError, ValueError):
+                declared_size = None
+        wanted = (numbers.get("width_m"), numbers.get("thickness_m"), 0.0)
+        if declared_size is None or any(abs(declared_size[i] - wanted[i]) > 1e-3
+                                        for i in range(3)):
+            _curve_error(report, label, structure_id, "curve_size",
+                         "size is derived as [width_m, thickness_m, 0] = %r; %r disagrees"
+                         % (list(wanted), structure.get("size")))
+            ok = False
+
+    if not ok:
+        return None
+
+    try:
+        chain, metrics = expand_curve_ramp(structure, ball_radius_m)
+    except (KeyError, TypeError, ValueError, FileNotFoundError) as error:
+        _curve_error(report, label, structure_id, "curve_expand", str(error))
+        return None
+
+    budget = CURVE_CHORD_ERROR_PER_RADIUS * ball_radius_m
+    if metrics["sagitta_m"] > budget + 1e-9:
+        needed = auto_curve_segments(numbers["radius_m"], numbers["arc_deg"], ball_radius_m)
+        _curve_error(report, label, structure_id, "curve_segments_coarse",
+                     "segments=%d gives a %.2f mm sagitta, over the %.2f mm budget (%.0f %% of "
+                     "the %.3f m smallest ball radius); use at least %d"
+                     % (metrics["segments"], metrics["sagitta_m"] * 1000.0, budget * 1000.0,
+                        CURVE_CHORD_ERROR_PER_RADIUS * 100.0, ball_radius_m, needed))
+        ok = False
+
+    overlap = metrics["overlap"] - 1.0
+    if not 0.0 < overlap < CURVE_MAX_OVERLAP_FRACTION:
+        _curve_error(report, label, structure_id, "curve_overlap",
+                     "the segment overlap is %.3f of a chord; it must be > 0 and < %.2f so the "
+                     "chain neither cracks on the convex side nor doubles back"
+                     % (overlap, CURVE_MAX_OVERLAP_FRACTION))
+        ok = False
+
+    return (metrics["segments"], metrics) if ok else None
+
+
 def _check_structures(doc, report):
     """Structure field validity, the ramp/box identity rule and the ramp geometry."""
     structures = doc.get("structures")
@@ -1016,6 +1466,8 @@ def _check_structures(doc, report):
         return {}
     seen = {}
     ground = []
+    curve_rows = []
+    ball_radius_m = curve_ball_radius_m(doc.get("level"))
     for index, structure in enumerate(structures):
         label = "structures[%d]" % index
         if not isinstance(structure, dict):
@@ -1053,15 +1505,21 @@ def _check_structures(doc, report):
         collision = structure.get("collision", "box")
         if collision not in COLLISIONS:
             report.err("%s.collision %r must be one of %s" % (label, collision, list(COLLISIONS)))
-        for key in ("center", "size", "rotationQuat"):
+        # A curve has no single authored box: its `size` is derived from the arc and may be
+        # omitted, so only the pose is required here.
+        required = ("center", "rotationQuat") if role == "curve_ramp" \
+            else ("center", "size", "rotationQuat")
+        for key in required:
             if key not in structure:
                 report.err("%s.%s is required" % (label, key))
-        size = as_vec3(structure.get("size"), "%s.size" % label, report)
-        if size is not None and any(v <= 0.0 for v in size):
-            report.err("%s.size must be positive on every axis, got %r" % (label, size))
+        size = None
+        if role != "curve_ramp":
+            size = as_vec3(structure.get("size"), "%s.size" % label, report)
+            if size is not None and any(v <= 0.0 for v in size):
+                report.err("%s.size must be positive on every axis, got %r" % (label, size))
         center = as_vec3(structure.get("center"), "%s.center" % label, report)
         quat = as_quat_xyzw(structure.get("rotationQuat"), "%s.rotationQuat" % label, report)
-        if center is None or size is None or quat is None:
+        if center is None or quat is None or (role != "curve_ramp" and size is None):
             continue
 
         if role == "boundary":
@@ -1071,9 +1529,35 @@ def _check_structures(doc, report):
                            "normal); this one is tilted" % label)
 
         slope = structure_slope_deg(structure)
+        if role == "curve_ramp":
+            resolved = _check_curve(structure, label, report, ball_radius_m)
+            if resolved is not None:
+                segments, metrics = resolved
+                curve_rows.append({
+                    "id": structure_id, "segments": segments,
+                    "deltaDeg": round(metrics["delta_deg"], 2),
+                    "sagittaM": round(metrics["sagitta_m"], 5),
+                    "normalJumpDeg": round(metrics["normal_jump_deg"], 2),
+                    "overlap": round(metrics["overlap"] - 1.0, 4),
+                    "bend": metrics["bend"], "arcDeg": round(slope, 2),
+                    "radiusM": round(float(structure["curve"]["radius_m"]), 3)})
+            continue
         if role == "ramp":
-            if slope > RAMP_MAX_SLOPE_DEG + 0.01:
-                report.err("%s ramp %r is %.1f deg, over the %.0f deg ceiling; make it a box"
+            # Hard errors are only for values a solid board cannot have: a walking face that
+            # points down (inverted) or a board standing on edge (90 deg is a wall). The old
+            # 45 deg *ceiling* is a warning now (S4 of CONTACT_MODEL_V2 1.5/3.10: v2 climbs a
+            # steep slope slowly instead of refusing it).
+            if structure_up(structure)[1] < -1e-6:
+                report.err("%s ramp %r is inverted: its local +Y (the walking face) points "
+                           "down. A board the ball can ride must face up; flip its "
+                           "rotationQuat" % (label, structure_id))
+            elif slope >= 90.0 - 0.01:
+                report.err("%s ramp %r is vertical (%.1f deg); a slab on edge is a wall, not a "
+                           "ramp - author it as role=box" % (label, structure_id, slope))
+            elif slope > RAMP_MAX_SLOPE_DEG + 0.01:
+                report.warn("%s ramp %r is %.1f deg, steeper than the %.0f deg guideline; the v2 "
+                           "motor climbs it slowly instead of rolling it (CONTACT_MODEL_V2 3.10). "
+                           "Keep it a ramp, or make it a box if it must block"
                            % (label, structure_id, slope, RAMP_MAX_SLOPE_DEG))
             corners = box_corners(center, size, quat)
             foot = min(corner[1] for corner in corners)
@@ -1112,22 +1596,35 @@ def _check_structures(doc, report):
     if len(ground) != 1:
         report.err("structures must contain exactly one role=ground (found %d: %s)"
                    % (len(ground), ground if ground else "none"))
+    # One row per logical curve ramp, its expanded segment count beside it (the "one logical
+    # ramp, N segments" report the operator reads in `check --report`).
+    report.tables["curves"] = curve_rows
+    report.tables["curveSummary"] = {
+        "ramps": len(curve_rows),
+        "segments": sum(row["segments"] for row in curve_rows),
+        "sagittaMaxM": max([row["sagittaM"] for row in curve_rows] or [0.0]),
+        "ballRadiusM": round(ball_radius_m, 4),
+    }
     return seen
 
 
-_BUDGET_ROLE = {"planes": "boundary", "boxes": "box", "ramps": "ramp"}
+_LIMIT_KEY_OF_ROLE = {"boundary": "planes", "box": "boxes", "ramp": "ramps",
+                      "curve_ramp": "ramps"}
 
 
 def _check_budget(doc, report, structures_by_id):
     level = doc.get("level") or {}
     budget = level.get("budget") or {}
-    roles = {"boundary": [], "box": [], "ramp": []}
+    roles = {"boundary": [], "box": [], "ramp": [], "curve_ramp": []}
     for structure in structures_by_id.values():
         role = structure.get("role")
         if role in roles:
             roles[role].append(structure.get("id"))
+    # A curve_ramp is ONE logical ramp: one authoring entry, one structure object, one line in
+    # the design table.  Its expanded slab segments are static OBBs and are counted by
+    # `staticObbs` below instead ("one logical ramp, N segments reported").
     counts = {"planes": len(roles["boundary"]), "boxes": len(roles["box"]),
-              "ramps": len(roles["ramp"])}
+              "ramps": len(roles["ramp"]) + len(roles["curve_ramp"])}
     for key, count in counts.items():
         limit = budget.get(key)
         if limit is None:
@@ -1138,10 +1635,25 @@ def _check_budget(doc, report, structures_by_id):
             report.err("level.budget.%s must be an integer (got %r)" % (key, budget.get(key)))
             continue
         if count > limit:
+            ids = sorted(structure_id
+                         for role, structure_ids in roles.items()
+                         if _LIMIT_KEY_OF_ROLE[role] == key
+                         for structure_id in structure_ids)
             report.err("%s=%d over the budget of %d: %s"
-                       % (key, count, limit, ", ".join(roles[_BUDGET_ROLE[key]])))
+                       % (key, count, limit, ", ".join(ids)))
+    curve_summary = report.tables.get("curveSummary") or {"segments": 0}
+    curve_segments = int(curve_summary.get("segments", 0))
+    static_obbs = counts["boxes"] + len(roles["ramp"]) + curve_segments
+    if static_obbs > STATIC_OBB_CAPACITY:
+        report.err("static OBBs=%d over the motor's %d-solid capacity (boxes + ramp slabs + "
+                   "curve segments; CONTACT_MODEL_V2 5.4/7.1): %s"
+                   % (static_obbs, STATIC_OBB_CAPACITY,
+                      ", ".join(sorted(roles["box"] + roles["ramp"] + roles["curve_ramp"]))))
     report.tables["budget"] = {"counts": counts,
-                              "limits": {k: budget.get(k) for k in BUDGET_KEYS}}
+                               "curveRamps": len(roles["curve_ramp"]),
+                               "curveSegments": curve_segments,
+                               "staticObbs": static_obbs,
+                               "limits": {k: budget.get(k) for k in BUDGET_KEYS}}
 
 
 def _check_arena(doc, report, structures_by_id, path=None):
@@ -1190,10 +1702,11 @@ def _check_arena(doc, report, structures_by_id, path=None):
         return      # _check_bounds_and_spawn already reports this
     low = (float(bounds[0][0]), float(bounds[0][1]))
     high = (float(bounds[1][0]), float(bounds[1][1]))
+    ball_radius_m = curve_ball_radius_m(level)
     for structure_id, structure in sorted(structures_by_id.items()):
-        if structure.get("role") not in ("box", "ramp"):
+        if structure.get("role") not in ("box", "ramp", "curve_ramp"):
             continue
-        box = _structure_world_aabb(structure, report)
+        box = _structure_world_aabb(structure, report, ball_radius_m)
         if box is None:
             continue
         over = 0.0
@@ -1280,6 +1793,11 @@ def _support_surface(doc, prop, structures_by_id, report):
         structure = structures_by_id.get(support)
         if structure is None:
             report.err("%s.support %r is not a structure id" % (prop.get("itemId"), support))
+            return (None, None)
+        if structure.get("role") == "curve_ramp":
+            report.err("%s.support %r is a curve_ramp; it has no single top plane to seat a "
+                       "prop on - support it on a box, or drop the prop"
+                       % (prop.get("itemId"), support))
             return (None, None)
         return ("plane", structure_top_plane(structure))
     return ("floor", ground_level(doc))
@@ -1381,13 +1899,20 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
         except (KeyError, TypeError, ValueError):
             continue
         corners = box_corners(position, aabb, quat)
+        ball_radius_m = curve_ball_radius_m(doc.get("level"))
         for structure_id, structure in sorted(structures_by_id.items()):
             if structure.get("collision") == "none":
                 continue
             try:
-                worst = max(obb_penetration(corner, structure) for corner in corners)
-            except (KeyError, TypeError, ValueError):
+                solids = structure_solid_boxes(structure, ball_radius_m)
+            except (KeyError, TypeError, ValueError, FileNotFoundError):
                 continue
+            worst = 0.0
+            for solid in solids:
+                try:
+                    worst = max(worst, max(obb_penetration(corner, solid) for corner in corners))
+                except (KeyError, TypeError, ValueError):
+                    continue
             if worst > STRUCTURE_PENETRATION_M:
                 if printed < DETAIL_LIMIT:
                     report.err("%s penetrates structure %r by %.3f m"
@@ -1424,6 +1949,39 @@ def _check_expected(doc, report):
     if wanted_units is not None and not missing and units != int(wanted_units):
         report.err("valueUnits %d does not match level.expected.valueUnits %d (%+d)"
                    % (units, int(wanted_units), units - int(wanted_units)))
+
+    # Optional design totals for the structure side. They exist because a curve_ramp makes
+    # "how many structures" ambiguous: it is ONE logical ramp but N static OBBs. So the two
+    # counters are separate and a curve counts once in `structureCount` and N times in
+    # `staticObbs` (CONTACT_MODEL_V2 5.7's "one logical ramp, N segments").
+    structures = [structure for structure in doc.get("structures") or []
+                  if isinstance(structure, dict)]
+    wanted_structures = expected.get("structureCount")
+    if wanted_structures is not None:
+        try:
+            wanted_structures = int(wanted_structures)
+        except (TypeError, ValueError):
+            report.err("level.expected.structureCount must be a whole number (got %r)"
+                       % (expected.get("structureCount"),))
+        else:
+            if len(structures) != wanted_structures:
+                report.err("structureCount %d does not match level.expected.structureCount %d "
+                           "(%+d); a curve_ramp counts once however many segments it expands to"
+                           % (len(structures), wanted_structures,
+                              len(structures) - wanted_structures))
+    wanted_obbs = expected.get("staticObbs")
+    if wanted_obbs is not None:
+        try:
+            wanted_obbs = int(wanted_obbs)
+        except (TypeError, ValueError):
+            report.err("level.expected.staticObbs must be a whole number (got %r)"
+                       % (expected.get("staticObbs"),))
+        else:
+            obbs = static_obb_count(doc)
+            if obbs != wanted_obbs:
+                report.err("staticObbs %d does not match level.expected.staticObbs %d (%+d); it "
+                           "counts boxes + ramp slabs + curve segments"
+                           % (obbs, wanted_obbs, obbs - wanted_obbs))
 
 
 def _check_determinism(path, doc, report):
@@ -1560,10 +2118,11 @@ def population_tables(doc, manifests=None):
                 seen_absorbable.add(prop.get("itemId"))
 
     structure_rows = []
+    ball_radius_m = curve_ball_radius_m(level)
     for structure_id in sorted(structures_by_id):
         structure = structures_by_id[structure_id]
         try:
-            top = structure_top_height(structure)
+            top = structure_top_height(structure, ball_radius_m)
         except (KeyError, TypeError, ValueError):
             continue
         if structure.get("role") in ("boundary", "ground"):
@@ -1631,6 +2190,27 @@ def format_report_tables(tables, expected=None):
         lines.append("%-16s %-9s %6.3f %s %10s %6.1f"
                      % (row["id"], row["role"], row["top"], rise_text, terrain_text,
                         row["slopeDeg"]))
+    curves = tables.get("curves") or []
+    if curves:
+        lines.append("")
+        lines.append("%-16s %-5s %6s %5s %5s %9s %7s %6s"
+                     % ("curve", "bend", "R", "arc", "segs", "sagitta", "overlap", "jump"))
+        for row in curves:
+            lines.append("%-16s %-5s %6.2f %5.1f %5d %8.1fmm %7.3f %5.1f"
+                         % (row["id"], row["bend"], row["radiusM"], row["arcDeg"],
+                            row["segments"], row["sagittaM"] * 1000.0, row["overlap"],
+                            row["normalJumpDeg"]))
+        summary = tables.get("curveSummary") or {}
+        lines.append("curve ramps: %d logical / %d slab segment(s); smallest ball r=%.3f m"
+                     % (summary.get("ramps", 0), summary.get("segments", 0),
+                        summary.get("ballRadiusM", CURVE_MIN_BALL_RADIUS_M)))
+    budget = tables.get("budget") or {}
+    if budget:
+        lines.append("static OBBs: %s/%d (boxes %s + ramp slabs %s + curve segments %s)"
+                     % (budget.get("staticObbs"), STATIC_OBB_CAPACITY,
+                        budget.get("counts", {}).get("boxes"),
+                        budget.get("counts", {}).get("ramps", 0) - budget.get("curveRamps", 0),
+                        budget.get("curveSegments", 0)))
     if expected:
         lines.append("")
         lines.append("expected: %s" % json.dumps(expected, ensure_ascii=False, sort_keys=True))
@@ -1694,6 +2274,24 @@ def value_units_total(doc):
         if value is not None:
             total += value
     return total
+
+
+def expected_totals(doc):
+    """The counters ``level.expected`` may declare, derived from the document.
+
+    ``propCount``/``valueUnits`` are the content totals; ``structureCount`` counts
+    ``structures[]`` entries (a curve_ramp is ONE) and ``staticObbs`` counts the solids the
+    motor bakes (a curve contributes its N segments).  Keeping the pair separate is what
+    lets a level say "4 ramps, 3 of them curves with 12 segments each" without the curve
+    inflating the structure count.
+    """
+    return {
+        "propCount": len([prop for prop in doc.get("props") or [] if isinstance(prop, dict)]),
+        "valueUnits": value_units_total(doc),
+        "structureCount": len([structure for structure in doc.get("structures") or []
+                               if isinstance(structure, dict)]),
+        "staticObbs": static_obb_count(doc),
+    }
 
 
 def display_path(path):

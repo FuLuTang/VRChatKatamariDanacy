@@ -243,9 +243,53 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 | `ground` | `LevelArenaHost` → `motor.SetGroundPlane(normal, offset)` | 1 张地面 | **恰好 1 条**；`shape` 只能是 `plane` |
 | `boundary` | `LevelArenaHost` → `motor.AddPlane(normal, offset)` | ≤8 平面 | **用平面、不用盒**（否则墙顶变成可站的窄条，还吃掉盒预算） |
 | `box` | `LevelArenaHost.staticBoxes[]`（`BoxCollider` → `Setup` 烘焙 min/max → `motor.AddBox`） | ≤8 盒 | **一次登记两用**：扫掠是墙、顶面是支撑 |
-| `ramp` | `LevelArenaHost.rampBoxes[]` → `motor.AddRamp(...)` | ≤4 斜面 | **绝不能同时是 `box`**（否则坡底出现「隐形墙」）；坡度 > 45° 时拒绝并要求改成 `box`；**板的本地 +Y 面是行走面**（`support` 落座读这一面；`AddRamp` 中心也必须取这一面，不是盒中心），4 cm 板体在它下面 |
+| `ramp` | `LevelArenaHost.rampBoxes[]` → `motor.AddRamp(...)` | ≤4 斜面 | **绝不能同时是 `box`**（否则坡底出现「隐形墙」）；**板的本地 +Y 面是行走面**（`support` 落座读这一面；`AddRamp` 中心也必须取这一面，不是盒中心），4 cm 板体在它下面；坡度 > 45° 只是 **warning**（v2 慢爬，见 §4.3.1 / `CONTACT_MODEL_V2` 3.10），板面朝下（inverted）或 90°（侧立的墙）仍是硬错误 |
+| `curve_ramp` | `LevelArenaHost.rampBoxes[]`（导入期展开成 N 段 slab） | ≤4 斜面（**一条算一条**） | 一条弧 = 一个 `structures[]` 条目 + 一个 `curve` 块；导入器把它展开成 `<id>_00…` 的 N 个 cube 子物体（各带 `BoxCollider`），逐段进 `rampBoxes`。段数默认由「弦高 ≤ 5%·最小球半径」自动定（§4.3.1） |
 
 `collision` 字段只管**玩家胶囊**（三层里的第二层）：`box` = 生成 `BoxCollider`（玩家能撞到），`none` = 纯视觉。`absorbable=false` 的结构**永远**不参与吸收门——吸收门只看道具的 `propBounds`，不读结构的盘口。
+
+### 4.3.1 弯坡：`role=curve_ramp`（2026-11-15，S4）
+
+一条弧写一次，导入期展开成一串互相重叠的薄 slab（`CONTACT_MODEL_V2` 5.7a）。运行期只看见 OBB，所以烘焙/容量/窗口/求解器都不用改；场景里每一段都能单独选中排查。
+
+```jsonc
+{
+  "id": "curve_up_a",
+  "role": "curve_ramp",
+  "shape": "box",
+  "collision": "box",
+  "center": [8.0, 0.0, 12.0],          // 弧起点（第一段 slab 的中心）；行走面在本地 +Y 方向半个厚度上
+  "rotationQuat": [0, 0, 0, 1],        // 起始帧：本地 +Z = 前进方向（水平），本地 +Y = 起始处法线
+  "size": [4.0, 0.25, 0.0],            // 派生值 = [width_m, thickness_m, 0]；可省略，写错就报 [curve_size]
+  "absorbable": false, "support": true,
+  "curve": {
+    "radius_m": 4.0,                   // > 0
+    "arc_deg": 30.0,                   // (0, 360]
+    "segments": 8,                     // 省略或 0 = 自动（最小满足弦高预算的段数）
+    "bend": "up",                      // "up" / "down"；left/right/helix 没有实现，会报 [curve_bend_unsupported]
+    "width_m": 4.0,
+    "thickness_m": 0.25
+  }
+}
+```
+
+| 规则 | 判据 | 失败长什么样 |
+|---|---|---|
+| 半径/弧角/宽度/厚度 | 有限且 > 0；`arc_deg ≤ 360` | `structures[3] curve_ramp 'curve_up_a' [curve_radius]: radius_m must be a finite number > 0 (got 0.0)` |
+| 弯曲方向 | 只有竖直面内的 `up` / `down`：参考实现（`Docs/Design/BallMotor/contact_v2`）就只展开这一种弧 | `[curve_bend_unsupported]`（`left`/`right`/`helix`：设计草图里有名字，但没有 tessellator，半管/螺旋要等 5.7b 的解析 patch，那条路已被排除） |
+| 段数 | 省略/0 → 自动；显式值时 `s = R(1−cos(Δ/2)) ≤ 5%·r_min`，`r_min = max(0.15, ballDiameterStart/2)` | `[curve_segments_coarse]: segments=1 gives a 26.29 mm sagitta, over the 7.50 mm budget …; use at least 3` |
+| 重叠 | 每段按 `1 + 2s/L` 拉长，`0 < 2s/L < 25%` | `[curve_overlap]` |
+| 未实现字段 | `pitch_m` / `bank_deg` / `axis` 不在 schema 里 | `[curve_unknown_field]` |
+| 其他角色规则 | `shape=box`、`collision=box`、不能有 `meets`、道具不能 `support` 到它 | `[curve_shape]` / `[curve_collision]` / `[curve_meets]` |
+| 总静态 OBB | `boxes + 直线坡 + 弯坡段数 ≤ 256` | `static OBBs=271 over the motor's 256-solid capacity` |
+
+**段数与精度**（设计表，`r_min = 0.15`，90° 弧；`K` 由 `s ≤ 0.05·r_min` 反解）：R=2 → 10 段（Δ=9°、s=6.2 mm），R=3 → 12，R=5 → 15，R=10 → 21，R=20 → 29。`Tools/levelbuild` 与导入器用**同一个**判定（Python 是 `contact_v2.curve_chord_budget`，C# 是 `CurveRampMath.IsCurveWithinChordBudget`），所以两侧算出的 `K` 一样。
+
+**一条逻辑坡、N 段几何**：`level.budget.ramps` 里一条 `curve_ramp` 算 **1**；`check --report` 另打 `curve ramps: 1 logical / 5 slab segment(s)` 与 `static OBBs: 8/256`。`level.expected` 还可选声明 `structureCount`（`structures[]` 条目数，弯坡算 1）与 `staticObbs`（盒 + 直线坡 + 弯坡段数）——没写的关卡不受影响。
+
+**导入器**（`PlacementImporter.cs`）：父物体 `<id>` 是纯标记（无 Renderer、无 Collider），子物体 `<id>_00 … <id>_NN` 是真 cube + 真 `BoxCollider`，**全部进 `LevelArenaHost.rampBoxes`**（和直线坡同一个数组，arena API 不变）。第二遍导入仍是 `+0 ~0 -0`；段数变少时多出来的子物体会被删掉。段数变化计入 `report.CurveSegments*` 并在摘要里单列 `curves: 1 ramp(s), 5 slab segment(s): +5 ~0 -0`。
+
+**方向约定**：`up` 从起始帧出发向上弯（`center.y` 是起点，弧顶在 `+R(1−cos arc)`）；`down` 是同一段弧的镜像（`center.y − R(1−cos arc)`），行走面法线仍朝上、只把倾斜方向翻到行进侧。两者用同一份 tessellator，没有第二套公式。
 
 ### 4.4 `cameras[]` / `renderPresets[]`
 
@@ -451,6 +495,8 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_s
 
 ```
 planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）
+ramps 计数里一条 curve_ramp 算 1（不管展开成几段）
+boxes + 直线坡 + 弯坡段数 ≤ 256（motor 的静态 OBB 表，CONTACT_MODEL_V2 5.4）
 ```
 
 超了 → **拒绝导入**并打印「哪个 zone 多放了什么」。校验器（§8）也会挡一次，两道门都要有：校验器管「数据错」，导入器管「数据对但场景里别人也放了盒」。
@@ -463,6 +509,7 @@ planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）
 | `structures[role=boundary]` | `boundaryWalls[]`（`Transform`） | `LevelArenaHost` 读每面墙的**局部 +Z** 当法线、`dot(n, position)` 当 offset，所以导入器生成「空物体墙」**标记**：原点在碰撞面上、+Z 指向场内（不是 `planeNormals/planeOffsets` 数组）；每个标记下另有子物体 `Visual`（可见墙 + 玩家 `BoxCollider`），内表面就贴在这张平面上、向场外延伸一个厚度 |
 | `structures[role=box]` | `staticBoxes[]`（`BoxCollider`） | `Setup` 烘焙 min/max → `AddBox`，一次两用 |
 | `structures[role=ramp]` | `rampBoxes[]`（`BoxCollider`） | 导入器把 `role=ramp` 接进 `rampBoxes`；`Setup` 按盒的 +Y 面烘成行走面 → `motor.AddRamp`（坡度 ≤45° 含等号，超过带原因码拒绝）；**绝不进 `staticBoxes`**，斜面也不进扫掠（`TERRAIN_SUPPORT` §7.7 审计第 1 条） |
+| `structures[role=curve_ramp]` | `rampBoxes[]`（N 个 `BoxCollider`） | 父物体 `<id>` 只是标记（无 Renderer/无 Collider）；子物体 `<id>_00…` 每段一个 cube + `BoxCollider`，**逐段**进 `rampBoxes`（和直线坡同一个数组，host API 不变）。父物体**不进** `staticBoxes`，否则弯坡底下出一排隐形墙 |
 | `props[]` 中 `absorbable=false` | **不进 arena**：`PickupFieldHost` 按 `rise vs stepLimit` 自己分成「地形/挡路」 | `LevelArenaHost` **不得**引用道具（§7.4 硬规则） |
 
 **`ground` / `boundary` 的可见体（2026-11-15 起由导入器生成）**：这两个角色以前只产标记，于是新场景「压根没放地板」——画面一片虚无，ClientSim 玩家站不住、掉下去、反复重生。现在标记保持原样（供 `LevelArenaHost` 读），标记下多一个 `Visual` 子物体：
@@ -506,13 +553,14 @@ planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）
 | 7 | **道具互穿** | AABB 两两相交体积 > 较小者 5% 且无 `stackedOn/support` 关系 | `apple 与 bowl 交叠 38%` |
 | 8 | **结构互穿** | 道具 AABB 不得穿入 `role=box` 的实体（桌面除外：桌面之下的件必须显式 `support`） | `thermos 穿进 crate 0.08 m` |
 | 9 | **预算** | `planes ≤8 / boxes ≤8 / ramps ≤4 / ground =1`；`props` 里「不可吸且挡路」的件数 ≤ `blocking` 6 | `boxes=11 超 3（zone=table 多放了 2 个台面）` |
-| 10 | 斜面几何 | 坡度 ≤45°；**行走面底边** = 地面（可低至 `地面 − 0.01 − 板厚`，坡脚板底入地不算穿地）且 ≤ 地面 `min(0.05, stepLimit)`；**行走面顶边**对齐台面（δ ≤ stepLimit） | `plank 板底 −0.06（穿地）` |
+| 10 | 斜面几何 | **坡度 > 45° = warning**（v2 慢爬，`CONTACT_MODEL_V2` 3.10；以前是硬错误，S4 起降级）；**行走面底边** = 地面（可低至 `地面 − 0.01 − 板厚`，坡脚板底入地不算穿地）且 ≤ 地面 `min(0.05, stepLimit)`；**行走面顶边**对齐台面（δ ≤ stepLimit）。硬错误只剩「物理上不可能」：板面朝下（inverted）、90°（侧立＝墙，改用 `box`）、零厚度、NaN | `plank 板面朝下（inverted）` / `plank 90° 侧立：author it as role=box` / `plank 不是 45° 就能过：只 warning` |
 | 11 | 斜面身份 | 同一 `id` 不得同时出现在 `box` 与 `ramp` | 直接硬错误（对应本文 §7.7 第一行「坡底隐形墙」） |
 | 12 | 可吸性 | `D_req = 2.673·(abc)^(1/3) ≤ ballDiameterMax` 才允许 `absorbable=true`；`absorbable=true` 但 `D_req` 超过 = 数据自相矛盾 | `thermos D_req=2.41 > 2.20` |
 | 13 | **分档人口** | 按球径档（0.30/0.50/0.80/1.10/1.50/2.20）统计「能吸的件数/单位」，与关卡设计表对照；**打印成表** | `t2 档只有 3 件，设计表要 12 件` |
-| 14 | 总量 | `propCount` / `valueUnits` 与 `level.expected` 相等 | `110 件/412 u 期望，实得 109/404` |
+| 14 | 总量 | `propCount` / `valueUnits` 与 `level.expected` 相等；**可选** `structureCount`（`structures[]` 条目数，一条弯坡算 1）与 `staticObbs`（盒 + 直线坡 + 弯坡段数）也按同一口径核对 | `110 件/412 u 期望，实得 109/404`；`staticObbs 13 does not match level.expected.staticObbs 8 (+5)` |
 | 15 | 可达性（**P2 再开**） | 从球起点到每件的通路：台阶高 ≤ `0.25·D`、缝宽 vs 球径；依赖 §10 的三态规则 | 先只打印可疑项，不判死 |
 | 16 | 确定性 | 重新导出逐字节相同；`--stale` 与 `.blend` 指纹比对 | `placement.json 与 .blend 不一致（未导出）` |
+| 17 | 弯坡（§4.3.1） | `curve` 块必填/未知字段/半径/弧角/宽厚/`bend`/段数与弦高预算/重叠/派生 `size`/`meets`/`collision`；`check --report` 打每条的 `R / arc / segs / sagitta / overlap / jump` 与总静态 OBB 数 | `[curve_segments_coarse]: … use at least 15`、`[curve_bend_unsupported]: bend 'helix' …` |
 
 第 13/14 条是**第一关的保险**：110 件、412 u、9 kind 是已经拍过板的量（`PICNIC_CORNER_LEVEL_ONE` §3.4），重排时最容易悄悄丢件。校验器把它变成硬门，比人眼数靠谱。
 
@@ -571,6 +619,8 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 ### 10.4 斜面的作者陷阱（必须写进面板提示）
 
 同一块板既是 `ramp` 又是 `box` → 坡底一堵位置完全不合理的隐形墙（`TERRAIN_SUPPORT` §5.5）。对策：面板上 `ramp` 与 `box` 是**互斥的两个按钮**；校验器第 11 条直接拒绝；导入器自检同一 `BoxCollider` 出现在两个数组时报错。
+
+弯坡同理，而且更隐蔽：`curve_ramp` 的父物体**不能**有 `BoxCollider`（否则一条弧下面多出一个 AABB 墙），段子物体才进 `rampBoxes`；道具也不能 `support` 到弯坡上（它没有单一顶面，校验器报错）。
 
 ---
 
@@ -707,6 +757,12 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 6. **导入器没有 `LevelItem` 标记组件**（§7.2 曾设想）：Editor 程序集里的 MonoBehaviour 无法序列化进场景，而 `Runtime/` 不在本工具写范围。`itemId` 就是物体名，正好也是 `PickupFieldSync` 的行 id——一个键、两个消费方。
 7. **俯视图的 `coverage_m` 是「短边保证入画」**，渲染时按分辨率比例放大 `ortho_scale`；否则 16:9 会把方形场地上下裁掉（实测 13.4 m 场地只看到 7.9 m）。
 8. **没有 `--stale`**（§8 第 16 条的一半）：它要 `.blend` 指纹，而 `.blend` 不进仓库；现在用「重新导出逐字节相同」代替，`export_placement.py` 自带往返自检。
+
+### 15.2.1 2026-11-15 追加：弯坡与 45° 门（S4，`CONTACT_MODEL_V2` 1.5 / 5.7）
+
+1. **`role=curve_ramp` 已落地**（§4.3.1）：`placement_core.py` 里是 schema + 校验 + 展开，展开**调用**设计参考 `Docs/Design/BallMotor/contact_v2/contact_v2.py` 的 `tessellate_vertical_curve` / `curve_chord_budget`（按文件路径 import，`sys.modules` 缓存），没有第二份 tessellator；C# 侧同一份数学在 `Runtime/BallContact/CurveRampMath.cs`，导入器调它。Python 与 C# 的自动段数用同一个判定循环，所以两侧算出同一个 `K`。
+2. **45° 从硬错误降为 warning**（§8 第 10 条）：v2 能慢爬陡坡（`CONTACT_MODEL_V2` 3.10），所以 50°–89° 的 `role=ramp` 只警告；硬错误只剩 inverted（板面朝下）、90°（侧立＝墙）、零厚度、NaN 这类物理上不可能的值。`physics_test_field/C06` 的 50° 板**仍然是 box**，因为它是 motor 的 over-45 拒绝探针，不是被校验器逼的（数据没改）。
+3. **弯坡的 Blender 侧**：`blender_common` 把一条弧建成一个 mesh（每段一个 box，按起始帧摆），`curve_json` 自定义属性保存作者参数；`export_placement` 原样带回 `curve` 块，所以「导出→重建→导出」对弯坡也是逐字节稳定。
 
 ### 15.3 用设计者布局转出来的第一关（**产物在 `/tmp`，未入库**）
 

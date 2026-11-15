@@ -24,6 +24,7 @@ of being re-implemented here.
 """
 
 import importlib.util
+import json
 import math
 import sys
 import time
@@ -282,6 +283,11 @@ STRUCTURE_TAGS = (("kind", "struct_kind"), ("collision", "struct_collision"),
                   ("meets", "struct_meets"), ("material", "struct_material"),
                   ("notes", "struct_notes"))
 
+#: The ``curve`` block of a ``role=curve_ramp`` structure, kept as canonical JSON on the
+#: object so the exporter hands the authored arc back instead of re-deriving it from the
+#: preview mesh (which is one box per segment and has no arc parameters of its own).
+CURVE_TAG = "curve_json"
+
 
 def tag_prop(obj, prop):
     """Mirror the JSON's non-geometric fields onto the object (export reads them)."""
@@ -304,6 +310,11 @@ def tag_structure(obj, structure):
             del obj[target]
     obj["absorbable"] = bool(structure.get("absorbable", False))
     obj["support"] = bool(structure.get("support", False))
+    curve = structure.get("curve")
+    if structure.get("role") == "curve_ramp" and isinstance(curve, dict):
+        obj[CURVE_TAG] = curve_signature(curve)
+    elif CURVE_TAG in obj.keys():
+        del obj[CURVE_TAG]
 
 
 def new_prop_object(prop, library):
@@ -334,7 +345,75 @@ def _structure_color(structure):
             or ROLE_COLORS.get(structure.get("role"), (0.5, 0.5, 0.5, 1.0)))
 
 
+def curve_signature(curve):
+    """The authored ``curve`` block as one string (the object's change detector)."""
+    return json.dumps(curve, sort_keys=True)
+
+
+def _curve_mesh(name, structure):
+    """Every slab segment of the arc as one mesh, in the *authored* frame.
+
+    The object's pose is the arc's start pose, so the segments are built relative to it:
+    the mesh is in the same Unity-axis space ``_box_verts`` uses, and ``place_box`` applies
+    the authored centre/rotation once.  The chain itself comes from
+    ``placement_core.expand_curve_ramp`` (which calls the design's reference tessellator) -
+    nothing about the arc is re-derived here.
+    """
+    chain = core.expand_curve_ramp(structure)[0]
+    center = tuple(float(v) for v in structure["center"])
+    quat = tuple(float(v) for v in structure["rotationQuat"])
+    inverse = (quat[0], quat[1], quat[2], -quat[3])
+    verts = []
+    faces = []
+    for segment in chain:
+        local_center = core.quat_rotate(inverse, core.sub(tuple(segment["center"]), center))
+        local = core.quat_mul(inverse, tuple(segment["rotationQuat"]))
+        rotation = Quaternion((local[3], local[0], local[1], local[2])).to_matrix()
+        offset = len(verts)
+        for vertex in _box_verts(tuple(segment["size"])):
+            point = rotation @ Vector(vertex) + Vector(local_center)
+            verts.append((point.x, point.y, point.z))
+        faces.extend(tuple(index + offset for index in face) for face in BOX_FACES)
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    return mesh
+
+
+def _ensure_material_color(obj, rgba):
+    """Give the object's first material the role colour (create it when there is none)."""
+    if len(obj.data.materials) == 0:
+        obj.data.materials.append(_material(obj.name, rgba))
+    elif max(abs(float(obj.data.materials[0].diffuse_color[i]) - rgba[i])
+             for i in range(4)) > 1e-6:
+        _set_material_color(obj.data.materials[0], rgba)
+
+
+def new_curve_object(structure):
+    """One ``role=curve_ramp`` object: the whole slab chain as a mesh, posed at the arc start."""
+    obj = bpy.data.objects.new(structure["id"], _curve_mesh(structure["id"], structure))
+    bpy.context.scene.collection.objects.link(obj)
+    place_box(obj, tuple(structure["center"]), tuple(structure["rotationQuat"]))
+    obj.data.materials.append(_material(structure["id"], _structure_color(structure)))
+    tag_structure(obj, structure)
+    return obj
+
+
+def update_curve_object(obj, structure):
+    """Re-pose a curve, rebuilding the mesh only when the arc parameters changed."""
+    if str(obj.get(CURVE_TAG) or "") != curve_signature(structure["curve"]):
+        old = obj.data
+        obj.data = _curve_mesh(old.name, structure)
+        if old.users == 0:
+            bpy.data.meshes.remove(old)
+    place_box(obj, tuple(structure["center"]), tuple(structure["rotationQuat"]))
+    _ensure_material_color(obj, _structure_color(structure))
+    tag_structure(obj, structure)
+
+
 def new_structure_object(structure):
+    if structure.get("role") == "curve_ramp":
+        return new_curve_object(structure)
     obj = new_box(structure["id"], tuple(structure["center"]), tuple(structure["size"]),
                   tuple(structure["rotationQuat"]), _structure_color(structure))
     tag_structure(obj, structure)
@@ -342,6 +421,9 @@ def new_structure_object(structure):
 
 
 def update_structure_object(obj, structure):
+    if structure.get("role") == "curve_ramp":
+        update_curve_object(obj, structure)
+        return
     update_box(obj, tuple(structure["center"]), tuple(structure["size"]),
                tuple(structure["rotationQuat"]), _structure_color(structure))
     tag_structure(obj, structure)

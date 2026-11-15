@@ -8,6 +8,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UdonSharp;
 using UdonSharpEditor;
+using VRCKatamari.BallContact;
 using VRCKatamari.Editor.Pickup;
 using VRCKatamari.Pickup;
 using VRCKatamari.Story;
@@ -71,6 +72,17 @@ namespace VRCKatamari.Editor.LevelBuild
     /// <see cref="ApplyStructureVisuals"/>.
     /// </para>
     /// <para>
+    /// Curved ramps (CONTACT_MODEL_V2 5.7). A <c>role=curve_ramp</c> entry is ONE structure with a
+    /// <c>curve</c> block (radius, arc, width, thickness) and no authored box: it is expanded at
+    /// import time into <c>segments</c> slab cubes named <c>&lt;id&gt;_&lt;nn&gt;</c> under a
+    /// collider-less parent, each with a <see cref="BoxCollider"/>, and every segment collider is
+    /// wired into <c>LevelArenaHost.rampBoxes</c> exactly like a straight ramp. The runtime
+    /// therefore sees only OBBs (its window, capacity and solver are untouched), the operator can
+    /// select and inspect each segment, and the JSON keeps the one authored arc. The expansion
+    /// maths is <see cref="CurveRampMath"/> - the same tessellator as the Python reference - so
+    /// the importer never re-derives an arc.
+    /// </para>
+    /// <para>
     /// Assembly placement: <c>Editor/</c> compiles into the predefined
     /// <c>Assembly-CSharp-Editor</c> (see the remark in <c>PickupFieldSync.cs</c>), which is
     /// why the UdonSharp editor usings below resolve without an asmdef.
@@ -92,6 +104,16 @@ namespace VRCKatamari.Editor.LevelBuild
         private const string UndoLabel = "Import Level Placement";
         private const float PositionToleranceM = 0.001f;
         private const float RotationDotTolerance = 0.99999f;
+
+        // A curve_ramp expands into `segments` slab cubes named "<id>_<nn>" under its own
+        // parent, so one authored arc is one structure object plus N colliders
+        // (CONTACT_MODEL_V2 5.7). CurveMinBallRadiusM is the design's r_min (the 0.30 m
+        // starter ball), used when the level does not declare ballDiameterStart.
+        private const float CurveMinBallRadiusM = 0.15f;
+        private const float CurveMaxArcDeg = 360f;
+        private const string CurveSegmentSeparator = "_";
+        /// <summary>CONTACT_MODEL_V2 5.4/7.1: the motor's static OBB table holds this many.</summary>
+        private const int StaticObbCapacity = 256;
 
         private const string PropsArtFolder = "Assets/VRC_Katamari/Art/Props";
 
@@ -144,6 +166,12 @@ namespace VRCKatamari.Editor.LevelBuild
             public string id;
             public string scene;
             public float ballDiameterMax = 2.2f;
+            /// <summary>
+            /// The smallest ball the level plays with. A curved ramp's chord budget is a
+            /// fraction of its radius (CONTACT_MODEL_V2 5.7), so the auto segment count
+            /// depends on it; missing means the 0.30 m starter ball.
+            /// </summary>
+            public float ballDiameterStart = 0.3f;
             public BudgetBlock budget;
             public ArenaBlock arena;
         }
@@ -209,10 +237,44 @@ namespace VRCKatamari.Editor.LevelBuild
             public string shape;
             public float[] center;
             public float[] size;
+            /// <summary>Present only on <c>role=curve_ramp</c> (a straight box has no curve).</summary>
+            public CurveEntry curve;
             public float[] rotationQuat;
             public string collision;
             public bool support;
             public string meets;
+        }
+
+        /// <summary>
+        /// The <c>curve</c> block: one vertical arc, expanded at import time into slabs.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <c>CONTACT_MODEL_V2</c> 5.7: a curved ramp is authored once - radius, arc angle,
+        /// width, thickness - and the importer expands it into <c>segments</c> slab cubes
+        /// under a named parent, so the runtime sees only OBBs. The maths is
+        /// <see cref="CurveRampMath.TryTessellateVerticalCurve"/>, the same tessellator as
+        /// the Python reference (<c>Docs/Design/BallMotor/contact_v2</c>); this class only
+        /// carries the six authored numbers.
+        /// </para>
+        /// <para>
+        /// <c>center</c>/<c>rotationQuat</c> on the structure are the arc's <b>start pose</b>:
+        /// the centre of the first slab, with local +Z the direction the arc leaves in and
+        /// local +Y the start surface normal (half a thickness under the walking surface,
+        /// exactly like a straight ramp's box centre).
+        /// </para>
+        /// </remarks>
+        [Serializable]
+        public class CurveEntry
+        {
+            public float radius_m;
+            public float arc_deg;
+            /// <summary>0 (or absent) = auto: the smallest count that fits the chord budget.</summary>
+            public int segments;
+            /// <summary>"up" (default) or "down".</summary>
+            public string bend;
+            public float width_m;
+            public float thickness_m;
         }
 
         // ------------------------------------------------------------------ menu ---
@@ -501,6 +563,8 @@ namespace VRCKatamari.Editor.LevelBuild
             int boxes = 0;
             int ramps = 0;
             int grounds = 0;
+            int curves = 0;
+            int curveSegments = 0;
             if (doc.structures != null)
             {
                 for (int i = 0; i < doc.structures.Length; i++)
@@ -520,11 +584,15 @@ namespace VRCKatamari.Editor.LevelBuild
                         ok = false;
                     }
 
-                    if (!IsVector(structure.center, 3) || !IsVector(structure.size, 3) ||
-                        !IsVector(structure.rotationQuat, 4))
+                    // A curve_ramp has no authored box (`size` is derived from the arc), so only
+                    // its pose is required here; ValidateCurve checks the curve block itself.
+                    bool curve = IsCurveRole(structure);
+                    if (!IsVector(structure.center, 3) || !IsVector(structure.rotationQuat, 4) ||
+                        (!curve && !IsVector(structure.size, 3)))
                     {
                         report.Error("structure '" + structure.id + "' needs center[3], size[3] and " +
-                                     "rotationQuat[4]");
+                                     "rotationQuat[4]" +
+                                     (curve ? " (a curve_ramp's size is derived from its arc)" : ""));
                         ok = false;
                         continue;
                     }
@@ -543,9 +611,24 @@ namespace VRCKatamari.Editor.LevelBuild
                         case "ramp":
                             ramps++;
                             break;
+                        case "curve_ramp":
+                        {
+                            int segmentCount;
+                            if (!ValidateCurve(structure, BallRadiusOf(doc), report, out segmentCount))
+                            {
+                                ok = false;
+                            }
+                            else
+                            {
+                                curveSegments += segmentCount;
+                            }
+
+                            curves++;
+                            break;
+                        }
                         default:
                             report.Error("structure '" + structure.id + "' has role '" + structure.role +
-                                         "' (expected ground/boundary/box/ramp)");
+                                         "' (expected ground/boundary/box/ramp/curve_ramp)");
                             ok = false;
                             break;
                     }
@@ -574,13 +657,199 @@ namespace VRCKatamari.Editor.LevelBuild
                 ok = false;
             }
 
-            if (ramps > budget.ramps)
+            // A curve_ramp is ONE logical ramp against the budget; its segments are static OBBs
+            // and are checked against the motor's 256-solid table below instead.
+            if (ramps + curves > budget.ramps)
             {
-                report.Error("ramps=" + ramps + " over the level budget of " + budget.ramps);
+                report.Error("ramps=" + (ramps + curves) + " over the level budget of " +
+                             budget.ramps + " (" + ramps + " straight + " + curves +
+                             " curve_ramp; a curve counts once)");
+                ok = false;
+            }
+
+            int staticObbs = boxes + ramps + curveSegments;
+            if (staticObbs > StaticObbCapacity)
+            {
+                report.Error("static OBBs=" + staticObbs + " over the motor's " + StaticObbCapacity +
+                             " (boxes + ramp slabs + curve segments; CONTACT_MODEL_V2 5.4)");
                 ok = false;
             }
 
             return ok;
+        }
+
+        /// <summary>The smallest ball radius this level plays with (5.7's <c>r_min</c>).</summary>
+        private static float BallRadiusOf(PlacementDocument doc)
+        {
+            float diameter = (doc != null && doc.level != null) ? doc.level.ballDiameterStart : 0.3f;
+            if (!IsPositiveFinite(diameter))
+            {
+                diameter = 0.3f;
+            }
+
+            return Mathf.Max(CurveMinBallRadiusM, diameter * 0.5f);
+        }
+
+        private static bool IsCurveRole(StructureEntry structure)
+        {
+            return structure != null && string.Equals(structure.role, "curve_ramp",
+                StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Checks one <c>role=curve_ramp</c> entry and resolves its segment count.
+        /// </summary>
+        /// <remarks>
+        /// The bracketed codes are the same ones <c>Tools/levelbuild/placement_core.py</c>
+        /// prints, so the CLI and the importer name a broken arc the same way. Only values a
+        /// solid arc cannot have are refused (a non-positive or non-finite radius/width/
+        /// thickness, an arc outside 0..360, an unknown bend); a chain that is too coarse for
+        /// the chord budget is refused too, because the ball would feel the bump.
+        /// </remarks>
+        private static bool ValidateCurve(StructureEntry structure, float ballRadiusM,
+            PlacementImportReport report, out int segments)
+        {
+            segments = 0;
+            CurveEntry curve = structure.curve;
+            if (curve == null)
+            {
+                report.Error("structure '" + structure.id + "' [curve_missing]: a role=curve_ramp " +
+                             "needs a curve block (radius_m, arc_deg, width_m, thickness_m)");
+                return false;
+            }
+
+            bool ok = true;
+            string prefix = "structure '" + structure.id + "' ";
+            if (!IsPositiveFinite(curve.radius_m))
+            {
+                report.Error(prefix + "[curve_radius]: radius_m must be finite and > 0 (got " +
+                             curve.radius_m + ")");
+                ok = false;
+            }
+
+            if (!IsPositiveFinite(curve.arc_deg) || curve.arc_deg > CurveMaxArcDeg)
+            {
+                report.Error(prefix + "[curve_arc]: arc_deg must be finite, > 0 and <= " +
+                             CurveMaxArcDeg + " (got " + curve.arc_deg + ")");
+                ok = false;
+            }
+
+            if (!IsPositiveFinite(curve.width_m))
+            {
+                report.Error(prefix + "[curve_width]: width_m must be finite and > 0 (got " +
+                             curve.width_m + ")");
+                ok = false;
+            }
+
+            if (!IsPositiveFinite(curve.thickness_m))
+            {
+                report.Error(prefix + "[curve_thickness]: thickness_m must be finite and > 0 (got " +
+                             curve.thickness_m + ")");
+                ok = false;
+            }
+
+            string bend = string.IsNullOrEmpty(curve.bend) ? "up" : curve.bend;
+            if (!string.Equals(bend, "up", StringComparison.Ordinal) &&
+                !string.Equals(bend, "down", StringComparison.Ordinal))
+            {
+                bool named = string.Equals(bend, "left", StringComparison.Ordinal) ||
+                             string.Equals(bend, "right", StringComparison.Ordinal) ||
+                             string.Equals(bend, "helix", StringComparison.Ordinal);
+                report.Error(prefix + (named ? "[curve_bend_unsupported]" : "[curve_bend]") + ": bend '" +
+                             bend + "' cannot be expanded; the tessellator handles a vertical arc " +
+                             "only (\"up\" or \"down\")");
+                ok = false;
+            }
+
+            if (curve.segments < 0 || curve.segments > StaticObbCapacity)
+            {
+                report.Error(prefix + "[curve_segments]: segments " + curve.segments +
+                             " is outside 0.." + StaticObbCapacity + " (0 = auto by the chord budget)");
+                ok = false;
+            }
+
+            // The same role constraints the CLI enforces (placement_core._check_curve): a
+            // curve is a box role, and it has no straight top edge for the step rule to check.
+            if (!string.IsNullOrEmpty(structure.shape) &&
+                !string.Equals(structure.shape, "box", StringComparison.Ordinal))
+            {
+                report.Error(prefix + "[curve_shape]: a curve_ramp must be shape=box (got '" +
+                             structure.shape + "')");
+                ok = false;
+            }
+
+            if (!string.IsNullOrEmpty(structure.collision) &&
+                !string.Equals(structure.collision, "box", StringComparison.Ordinal))
+            {
+                report.Error(prefix + "[curve_collision]: a curve_ramp must be collision=box (got '" +
+                             structure.collision + "')");
+                ok = false;
+            }
+
+            if (!string.IsNullOrEmpty(structure.meets))
+            {
+                report.Error(prefix + "[curve_meets]: a curved ramp has no straight top edge, so " +
+                             "'meets' cannot be checked; drop it");
+                ok = false;
+            }
+
+            if (structure.size != null && structure.size.Length == 3)
+            {
+                bool derived = Mathf.Abs(structure.size[0] - curve.width_m) <= 0.001f &&
+                               Mathf.Abs(structure.size[1] - curve.thickness_m) <= 0.001f &&
+                               Mathf.Abs(structure.size[2]) <= 0.001f;
+                if (!derived)
+                {
+                    report.Error(prefix + "[curve_size]: size is derived as [width_m, thickness_m, 0]");
+                    ok = false;
+                }
+            }
+
+            if (!ok)
+            {
+                return false;
+            }
+
+            segments = ResolveCurveSegments(curve.radius_m, curve.arc_deg, curve.segments,
+                ballRadiusM * 2f);
+            if (!CurveRampMath.IsCurveWithinChordBudget(curve.radius_m, segments, curve.arc_deg,
+                    ballRadiusM))
+            {
+                int needed = ResolveCurveSegments(curve.radius_m, curve.arc_deg, 0, ballRadiusM * 2f);
+                report.Error(prefix + "[curve_segments_coarse]: segments=" + segments +
+                             " puts the chord error over 5% of the " +
+                             ballRadiusM.ToString("0.###", CultureInfo.InvariantCulture) +
+                             " m smallest ball radius; use at least " + needed);
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// The segment count of an arc: the authored one, else the smallest that fits the
+        /// chord budget. The predicate is <see cref="CurveRampMath.IsCurveWithinChordBudget"/>,
+        /// the same test <c>placement_core.auto_curve_segments</c> loops over, so both sides
+        /// answer the same number.
+        /// </summary>
+        private static int ResolveCurveSegments(float radiusM, float arcDeg, int declared,
+            float ballDiameterStart)
+        {
+            if (declared > 0)
+            {
+                return declared;
+            }
+
+            float ballRadius = Mathf.Max(CurveMinBallRadiusM, ballDiameterStart * 0.5f);
+            for (int count = 1; count < StaticObbCapacity; count++)
+            {
+                if (CurveRampMath.IsCurveWithinChordBudget(radiusM, count, arcDeg, ballRadius))
+                {
+                    return count;
+                }
+            }
+
+            return StaticObbCapacity;
         }
 
         private static int DeclaredValueUnits(PlacementDocument doc, PropEntry prop)
@@ -955,6 +1224,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
                     report.StructuresCreated++;
                     ApplyStructure(structure, current, report);
+                    ApplyCurveSegments(structure, current.transform, doc, report);
                     continue;
                 }
 
@@ -972,6 +1242,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
                     report.StructuresUpdated++;
                     ApplyStructure(structure, current, report);
+                    ApplyCurveSegments(structure, current.transform, doc, report);
                     continue;
                 }
 
@@ -979,6 +1250,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 {
                     report.StructuresUpdated++;
                 }
+
+                ApplyCurveSegments(structure, current.transform, doc, report);
             }
 
             List<string> stale = new List<string>();
@@ -1028,8 +1301,9 @@ namespace VRCKatamari.Editor.LevelBuild
 
         private static bool WantsBoxCollider(StructureEntry structure)
         {
-            if (IsMarkerRole(structure))
+            if (IsMarkerRole(structure) || IsCurveRole(structure))
             {
+                // A curve's colliders are its segment children, never the parent.
                 return false;
             }
 
@@ -1039,7 +1313,7 @@ namespace VRCKatamari.Editor.LevelBuild
         private static GameObject CreateStructureObject(StructureEntry structure, Transform structuresRoot)
         {
             GameObject created;
-            if (IsMarkerRole(structure))
+            if (IsMarkerRole(structure) || IsCurveRole(structure))
             {
                 created = new GameObject(structure.id);
                 Undo.RegisterCreatedObjectUndo(created, UndoLabel);
@@ -1060,7 +1334,7 @@ namespace VRCKatamari.Editor.LevelBuild
         private static bool KindMatches(GameObject instance, StructureEntry structure)
         {
             bool isMarker = instance.GetComponent<Renderer>() == null;
-            return isMarker == IsMarkerRole(structure);
+            return isMarker == (IsMarkerRole(structure) || IsCurveRole(structure));
         }
 
         /// <summary>
@@ -1073,7 +1347,12 @@ namespace VRCKatamari.Editor.LevelBuild
             float[] size = structure.size;
             Quaternion authored = ToQuaternion(structure.rotationQuat);
             Vector3 targetPosition = ToVector(structure.center);
-            Vector3 targetScale = new Vector3(size[0], size[1], size[2]);
+            // A curve_ramp's parent is a marker for its segment children: no authored box, so
+            // scale stays 1 (a size of [width, thickness, 0] would flatten it) and the pose is
+            // the arc's start frame.
+            Vector3 targetScale = IsCurveRole(structure)
+                ? Vector3.one
+                : new Vector3(size[0], size[1], size[2]);
             Quaternion targetRotation = authored;
 
             if (string.Equals(structure.role, "boundary", StringComparison.Ordinal))
@@ -1141,6 +1420,245 @@ namespace VRCKatamari.Editor.LevelBuild
             return true;
         }
 
+        // ------------------------------------------------------ curved ramps ---
+
+        /// <summary>
+        /// One vertical arc as its slab segment frames - the deterministic expansion.
+        /// </summary>
+        /// <param name="bend">"up" or "down"; anything else is refused (the tessellator is vertical).</param>
+        /// <param name="ballDiameterStart">The level's smallest ball; its radius is the chord-budget base.</param>
+        /// <remarks>
+        /// <para>
+        /// The arc maths is <see cref="CurveRampMath.TryTessellateVerticalCurve"/> - the same
+        /// tessellator as the Python reference (<c>Docs/Design/BallMotor/contact_v2</c>), so
+        /// there is no second copy here. Local +Y is the walking-surface normal and local +Z
+        /// runs up the slope, which is what <c>Quaternion.LookRotation(tangent, normal)</c>
+        /// builds (and what a straight ramp's box already means).
+        /// </para>
+        /// <para>
+        /// A <b>down</b> arc is the up arc in a mirrored frame: the tessellator is called with
+        /// <c>up</c> negated, which already yields the descending centres and tangents, and
+        /// the surface normal is negated back. The C# API has no bend parameter and is not
+        /// this file's to extend, so the two sides share the trick (documented in
+        /// <c>placement_core.expand_curve_ramp</c>).
+        /// </para>
+        /// </remarks>
+        public static bool TryExpandCurveRamp(float radiusM, float arcDeg, int segments,
+            float widthM, float thicknessM, string bend, Vector3 origin, Quaternion rotation,
+            float ballDiameterStart, out Vector3[] centers, out Quaternion[] rotations,
+            out Vector3[] sizes)
+        {
+            centers = new Vector3[0];
+            rotations = new Quaternion[0];
+            sizes = new Vector3[0];
+
+            bool down = string.Equals(bend, "down", StringComparison.Ordinal);
+            if (!string.Equals(bend, "up", StringComparison.Ordinal) && !down)
+            {
+                return false;
+            }
+
+            if (!IsPositiveFinite(radiusM) || !IsPositiveFinite(arcDeg) ||
+                !IsPositiveFinite(widthM) || !IsPositiveFinite(thicknessM))
+            {
+                return false;
+            }
+
+            int count = ResolveCurveSegments(radiusM, arcDeg, segments, ballDiameterStart);
+            if (count < 1)
+            {
+                return false;
+            }
+
+            var bufferCenters = new Vector3[count];
+            var axisX = new Vector3[count];
+            var axisY = new Vector3[count];
+            var axisZ = new Vector3[count];
+            var halfExtents = new Vector3[count];
+            var surfaceIds = new int[count];
+            var roles = new int[count];
+            Vector3 forward = rotation * Vector3.forward;
+            Vector3 up = rotation * Vector3.up;
+            if (down)
+            {
+                up = -up;
+            }
+
+            float deltaDeg;
+            float sagittaM;
+            float normalJumpDeg;
+            float segmentLengthM;
+            float overlap;
+            if (!CurveRampMath.TryTessellateVerticalCurve(origin, forward, up, radiusM, arcDeg,
+                    count, widthM, thicknessM, bufferCenters, axisX, axisY, axisZ, halfExtents,
+                    surfaceIds, roles, out deltaDeg, out sagittaM, out normalJumpDeg,
+                    out segmentLengthM, out overlap))
+            {
+                return false;
+            }
+
+            centers = new Vector3[count];
+            rotations = new Quaternion[count];
+            sizes = new Vector3[count];
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 normal = down ? -axisY[i] : axisY[i];
+                centers[i] = bufferCenters[i];
+                rotations[i] = Quaternion.LookRotation(axisZ[i], normal);
+                sizes[i] = new Vector3(halfExtents[i].x * 2f, halfExtents[i].y * 2f,
+                    halfExtents[i].z * 2f);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Creates, updates and deletes the slab children of one curved ramp.
+        /// </summary>
+        /// <remarks>
+        /// The parent is the authored structure object (a marker with no collider); each
+        /// <c>&lt;id&gt;_&lt;nn&gt;</c> child is a cube with a <see cref="BoxCollider"/>, which is
+        /// exactly what a straight ramp is. Writes are per value (pose, collider, material),
+        /// so a second import reports <c>+0 ~0 -0</c>; a shorter arc deletes the extra
+        /// children, and the segment counts are reported separately from the structure count
+        /// (one logical ramp, N segments - <c>CONTACT_MODEL_V2</c> 5.7).
+        /// </remarks>
+        private static bool ApplyCurveSegments(StructureEntry structure, Transform parent,
+            PlacementDocument doc, PlacementImportReport report)
+        {
+            if (!IsCurveRole(structure))
+            {
+                return true;
+            }
+
+            CurveEntry curve = structure.curve;
+            string bend = curve == null || string.IsNullOrEmpty(curve.bend) ? "up" : curve.bend;
+            Vector3[] centers;
+            Quaternion[] rotations;
+            Vector3[] sizes;
+            if (curve == null || !TryExpandCurveRamp(curve.radius_m, curve.arc_deg, curve.segments,
+                    curve.width_m, curve.thickness_m, bend, ToVector(structure.center),
+                    ToQuaternion(structure.rotationQuat),
+                    doc != null && doc.level != null ? doc.level.ballDiameterStart : 0.3f,
+                    out centers, out rotations, out sizes))
+            {
+                report.Error("structure '" + structure.id + "' [curve_expand]: the arc could not be " +
+                             "expanded (check radius_m, arc_deg, width_m, thickness_m, bend)");
+                return false;
+            }
+
+            var materials = new Dictionary<string, Material>(StringComparer.Ordinal);
+            var wanted = new HashSet<string>(StringComparer.Ordinal);
+            int created = 0;
+            int updated = 0;
+            for (int i = 0; i < centers.Length; i++)
+            {
+                string name = CurveSegmentName(structure.id, i);
+                wanted.Add(name);
+                Transform found = FindChild(parent, name);
+                GameObject segment = found != null ? found.gameObject : null;
+                bool isNew = segment == null;
+                if (isNew)
+                {
+                    segment = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    segment.name = name;
+                    Undo.RegisterCreatedObjectUndo(segment, UndoLabel);
+                    Undo.SetTransformParent(segment.transform, parent, UndoLabel);
+                }
+
+                bool changed = isNew ||
+                               !PoseMatches(segment.transform, centers[i], rotations[i], sizes[i]);
+                if (changed)
+                {
+                    Undo.RecordObject(segment.transform, UndoLabel);
+                    segment.transform.position = centers[i];
+                    segment.transform.rotation = rotations[i];
+                    segment.transform.localScale = sizes[i];
+                }
+
+                BoxCollider collider = segment.GetComponent<BoxCollider>();
+                if (collider == null)
+                {
+                    collider = Undo.AddComponent<BoxCollider>(segment);
+                    changed = true;
+                }
+
+                if (collider.center != Vector3.zero || collider.size != Vector3.one)
+                {
+                    Undo.RecordObject(collider, UndoLabel);
+                    collider.center = Vector3.zero;
+                    collider.size = Vector3.one;
+                    changed = true;
+                }
+
+                // Same placeholder the box/ramp bodies get: only a built-in default material is
+                // replaced, hand art is left alone.
+                if (EnsureStructureMaterial(segment.GetComponent<Renderer>(), PropMaterialPath,
+                        materials, report))
+                {
+                    changed = true;
+                }
+
+                if (isNew)
+                {
+                    created++;
+                }
+                else if (changed)
+                {
+                    updated++;
+                }
+            }
+
+            int deleted = 0;
+            string prefix = structure.id + CurveSegmentSeparator;
+            for (int i = parent.childCount - 1; i >= 0; i--)
+            {
+                Transform child = parent.GetChild(i);
+                if (!child.name.StartsWith(prefix, StringComparison.Ordinal) ||
+                    wanted.Contains(child.name))
+                {
+                    continue;
+                }
+
+                Undo.DestroyObjectImmediate(child.gameObject);
+                deleted++;
+            }
+
+            report.CurveRamps++;
+            report.CurveSegments += centers.Length;
+            report.CurveSegmentsCreated += created;
+            report.CurveSegmentsUpdated += updated;
+            report.CurveSegmentsDeleted += deleted;
+            // Part of the structures' change count so the idempotency gate ("other=0" on a
+            // settled scene) stays honest about the segment objects too.
+            report.StructuresCreated += created;
+            report.StructuresUpdated += updated;
+            report.StructuresDeleted += deleted;
+            if (created > 0 || updated > 0 || deleted > 0)
+            {
+                report.Note("curve '" + structure.id + "': " + centers.Length + " slab segments (+" +
+                            created + " ~" + updated + " -" + deleted + ")");
+            }
+
+            return true;
+        }
+
+        /// <summary>The child name of one curve segment: <c>&lt;id&gt;_00</c>, <c>_01</c>, ...</summary>
+        private static string CurveSegmentName(string structureId, int index)
+        {
+            return structureId + CurveSegmentSeparator +
+                   index.ToString("00", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>True when a segment's world pose is already the wanted one.</summary>
+        private static bool PoseMatches(Transform instance, Vector3 position, Quaternion rotation,
+            Vector3 scale)
+        {
+            return Vector3.Distance(instance.position, position) <= PositionToleranceM &&
+                   Mathf.Abs(Quaternion.Dot(instance.rotation, rotation)) >= RotationDotTolerance &&
+                   Vector3.Distance(instance.localScale, scale) <= PositionToleranceM;
+        }
+
         // ------------------------------------------------- structure bodies ---
 
         /// <summary>
@@ -1199,6 +1717,11 @@ namespace VRCKatamari.Editor.LevelBuild
                 if (instance == null)
                 {
                     continue;   // the loop above either built it or refused the run
+                }
+
+                if (IsCurveRole(structure))
+                {
+                    continue;   // a curve's visible bodies are its segment children
                 }
 
                 bool preexisting = existedBefore != null && existedBefore.Contains(structure.id);
@@ -1794,6 +2317,31 @@ namespace VRCKatamari.Editor.LevelBuild
                         floorNormal = normal;
                         floorOffset = Vector3.Dot(normal, ToVector(structure.center));
                         hasGround = true;
+                        continue;
+                    }
+
+                    if (IsCurveRole(structure))
+                    {
+                        // A curve_ramp is a chain of slabs: every segment collider goes where a
+                        // straight ramp's collider goes (rampBoxes), so the arena bakes each one
+                        // as a ramp/slab OBB and the host API stays as it is. The parent has no
+                        // collider of its own.
+                        for (int child = 0; child < found.childCount; child++)
+                        {
+                            Transform segment = found.GetChild(child);
+                            if (!segment.name.StartsWith(structure.id + CurveSegmentSeparator,
+                                    StringComparison.Ordinal))
+                            {
+                                continue;
+                            }
+
+                            BoxCollider segmentCollider = segment.GetComponent<BoxCollider>();
+                            if (segmentCollider != null)
+                            {
+                                rampList.Add(segmentCollider);
+                            }
+                        }
+
                         continue;
                     }
 

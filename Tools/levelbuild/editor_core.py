@@ -237,8 +237,14 @@ def refresh_expected(doc):
     """
     level = doc.setdefault("level", {})
     expected = dict(level.get("expected") or {})
-    expected["propCount"] = len(_props(doc))
-    expected["valueUnits"] = core.value_units_total(doc)
+    totals = core.expected_totals(doc)
+    expected["propCount"] = totals["propCount"]
+    expected["valueUnits"] = totals["valueUnits"]
+    # The structure side is optional; refresh it only where the level declares it (a curve
+    # ramp counts once in structureCount and by its segments in staticObbs).
+    for key in ("structureCount", "staticObbs"):
+        if key in expected:
+            expected[key] = totals[key]
     level["expected"] = expected
     return expected
 
@@ -1155,18 +1161,27 @@ class Editor:
                             extra={"def": entry})
 
     def op_expected(self, args, defer=False):
-        _known(args, ("propCount", "valueUnits", "fromDocument"))
+        _known(args, ("propCount", "valueUnits", "structureCount", "staticObbs",
+                      "fromDocument"))
         self._require_open()
         new_doc = _deepcopy(self.doc)
         level = new_doc.setdefault("level", {})
         expected = dict(level.get("expected") or {})
         if args.get("fromDocument", True):
-            expected["propCount"] = len(_props(new_doc))
-            expected["valueUnits"] = core.value_units_total(new_doc)
+            totals = core.expected_totals(new_doc)
+            expected["propCount"] = totals["propCount"]
+            expected["valueUnits"] = totals["valueUnits"]
+            for key in ("structureCount", "staticObbs"):
+                if key in expected:
+                    expected[key] = totals[key]
         if "propCount" in args:
             expected["propCount"] = _integer(args, "propCount", minimum=0)
         if "valueUnits" in args:
             expected["valueUnits"] = _integer(args, "valueUnits", minimum=0)
+        if "structureCount" in args:
+            expected["structureCount"] = _integer(args, "structureCount", minimum=0)
+        if "staticObbs" in args:
+            expected["staticObbs"] = _integer(args, "staticObbs", minimum=0)
         level["expected"] = expected
         return self._mutate(new_doc, "expected %s" % json.dumps(expected, sort_keys=True),
                             defer=defer, extra={"expected": expected})

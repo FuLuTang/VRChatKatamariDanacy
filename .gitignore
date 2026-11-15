@@ -174,3 +174,14 @@ Thumbs.db
 
 # CodeGraph local code index (rebuilt per machine)
 /.codegraph/
+
+# Web level editor: local caches/temp files (the editor itself is tracked)
+/Tools/leveleditor/node_modules/
+/Tools/leveleditor/web/vendor/**/*.map
+/Docs/Design/Levels/**/*.tmp-*
+
+# Reference-only study material: extracted third-party game assets are NEVER committed.
+# See /home/fulutang/KatamariRef/PROVENANCE.md (outside this repo) for provenance.
+/KatamariRef/
+/VRChatKatamariDanacyUnity/Assets/_RefUnlicensed/
+/Docs/Design/Levels/_ref_*/

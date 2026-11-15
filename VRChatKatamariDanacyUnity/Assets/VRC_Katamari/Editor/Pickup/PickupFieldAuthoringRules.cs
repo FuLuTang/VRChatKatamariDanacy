@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace VRCKatamari.Editor.Pickup
 {
     /// <summary>
     /// The pure half of the pickup-field authoring path: size tier from bounds, value-unit
-    /// lookup by kind and tier, duplicate-id detection and deterministic path ordering.
+    /// lookup by kind and tier, duplicate-id detection, the optional
+    /// <c>@size=&lt;metres&gt;</c> name suffix and deterministic path ordering.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -43,6 +45,28 @@ namespace VRCKatamari.Editor.Pickup
     /// records the lower one and the level author who needs the other value adds a row for
     /// their own kind or tier here, instead of hand-editing the six arrays.
     /// </para>
+    /// <para>
+    /// Two rows are not catalog rows: <c>fruit s 1</c> and <c>fruit m 4</c> are the story
+    /// level-2 (fruit counting) values of
+    /// <c>Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md</c> section 3.1, also PROVISIONAL.
+    /// They are added here because the plan's fruit kinds cannot be counted by the host
+    /// unless the row exists: an undeclared (kind, tier) pair is a rejected row, so level 2
+    /// would see 0 fruit. <c>fruit l</c> is deliberately absent - the plan's largest fruit
+    /// (watermelon, 0.72 m) is medium tier, and a larger fruit must get its own declared row
+    /// rather than a silent default.
+    /// </para>
+    /// <para>
+    /// An explicit absorb size for a prop whose visual is much longer than its pickup size
+    /// (a gate bench, a fallen log) is a suffix on the GameObject name:
+    /// <c>prop_bench_01@size=1.25</c>. <see cref="TryParseDeclaredSize"/> is the only reader
+    /// of that convention, it strips the suffix from the item id, and the sync turns the
+    /// declared edge into a cube for <c>propBounds</c> and the tier. Why a name suffix and
+    /// not a marker child or a component: the name travels with the object through a rename
+    /// or a prefab move, it needs no scene object and no runtime type, and stripping keeps
+    /// the item id equal to the level plan's <c>prop_&lt;definitionId&gt;_&lt;NN&gt;</c>
+    /// naming. A malformed suffix is a rejected row with the reason in the report, never a
+    /// silent fallback to the AABB.
+    /// </para>
     /// </remarks>
     public static class PickupFieldAuthoringRules
     {
@@ -64,10 +88,16 @@ namespace VRCKatamari.Editor.Pickup
         public const string TierMedium = "m";
         public const string TierLarge = "l";
 
+        // The one spelling of the declared-size suffix ("prop_bench_01@size=1.25"). Exact,
+        // lowercase: a case variant is reported instead of being ignored, because a marker
+        // that does nothing is the failure mode this convention exists to prevent.
+        public const string DeclaredSizeMarker = "@size=";
+
         // Explicitly declared (kind, tier) -> value units. Rows come from the PicnicLawn
         // catalog for the categories that are absorbable props; categories whose catalog
         // value is 0 (boundary, gameplay, landmark, terrain) deliberately have no row and
-        // are refused by the sync instead of shipping an unabsorbable prop.
+        // are refused by the sync instead of shipping an unabsorbable prop. The fruit rows
+        // are the story level-2 values (Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md 3.1).
         private sealed class ValueRow
         {
             public ValueRow(string kind, string tier, int units)
@@ -86,9 +116,11 @@ namespace VRCKatamari.Editor.Pickup
         {
             new ValueRow("debris", TierSmall, 1),
             new ValueRow("food", TierSmall, 1),
+            new ValueRow("fruit", TierSmall, 1),
             new ValueRow("nature", TierSmall, 1),
             new ValueRow("drink", TierMedium, 4),
             new ValueRow("food", TierMedium, 4),
+            new ValueRow("fruit", TierMedium, 4),
             new ValueRow("garden", TierMedium, 6),
             new ValueRow("tableware", TierMedium, 4),
             new ValueRow("toy", TierMedium, 4),
@@ -139,6 +171,148 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             return TierLarge;
+        }
+
+        /// <summary>
+        /// Reads the optional <c>@size=&lt;metres&gt;</c> suffix off a prop GameObject name.
+        /// </summary>
+        /// <param name="name">The prop GameObject's name, as authored in the scene.</param>
+        /// <param name="itemId">
+        /// The row id: <paramref name="name"/> with the suffix removed when one is present,
+        /// otherwise <paramref name="name"/> unchanged. On a refusal it is
+        /// <paramref name="name"/> unchanged, because the sync rejects the row anyway.
+        /// </param>
+        /// <param name="declaredEdgeM">
+        /// The declared absorb size as the edge of a cube, in metres; 0 when the name
+        /// declares none.
+        /// </param>
+        /// <param name="error">
+        /// The refusal reason, or <c>null</c> when the name is fine. A present-but-broken
+        /// marker is always refused here instead of falling back to the renderer AABB: an
+        /// author who writes a size and silently gets the AABB instead has no way to notice
+        /// that the gate prop is recorded at 3.2 m.
+        /// </param>
+        /// <returns>
+        /// True when the name carries no marker or one well-formed marker; false when the
+        /// marker is malformed (wrong case, repeated, no number, not the trailing token,
+        /// an empty id, a non-finite / non-positive / sub-millimetre size). A null or
+        /// empty name is not a marker problem and is left for
+        /// <see cref="IsValidItemId"/> to refuse.
+        /// </returns>
+        /// <remarks>
+        /// The number is parsed with <see cref="CultureInfo.InvariantCulture"/> and a fixed
+        /// style (leading sign and decimal point only): the scene asset is authored on
+        /// whichever machine the editor runs on, so <c>1,25</c> must not become 1.25 on a
+        /// German machine and must not become 125 anywhere. Exponents are refused for the
+        /// same reason - a prop size is a plain metre value, and "1e40" is not one.
+        /// </remarks>
+        public static bool TryParseDeclaredSize(string name, out string itemId, out float declaredEdgeM,
+            out string error)
+        {
+            itemId = name;
+            declaredEdgeM = 0f;
+            error = null;
+
+            if (string.IsNullOrEmpty(name))
+            {
+                return true;
+            }
+
+            int exactMarkers = CountOccurrences(name, DeclaredSizeMarker, StringComparison.Ordinal);
+            int looseMarkers = CountOccurrences(name, DeclaredSizeMarker, StringComparison.OrdinalIgnoreCase);
+
+            if (looseMarkers == 0)
+            {
+                return true;
+            }
+
+            if (exactMarkers != looseMarkers)
+            {
+                error = "the size marker must be written exactly as '" + DeclaredSizeMarker +
+                        "' (lower case) in '" + name + "'; it is refused rather than ignored";
+                return false;
+            }
+
+            if (looseMarkers > 1)
+            {
+                error = "'" + name + "' has " + looseMarkers + " '" + DeclaredSizeMarker +
+                        "' markers; declare the absorb size once";
+                return false;
+            }
+
+            int markerIndex = name.IndexOf(DeclaredSizeMarker, StringComparison.Ordinal);
+            string numberText = name.Substring(markerIndex + DeclaredSizeMarker.Length);
+            if (numberText.Length == 0)
+            {
+                error = "'" + name + "' ends with '" + DeclaredSizeMarker + "' and no number";
+                return false;
+            }
+
+            float parsed;
+            const NumberStyles styles = NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint;
+            if (!float.TryParse(numberText, styles, CultureInfo.InvariantCulture, out parsed))
+            {
+                error = "'" + numberText + "' after '" + DeclaredSizeMarker +
+                        "' is not a plain invariant-culture decimal number (example: " +
+                        DeclaredSizeMarker + "1.25); it must be the last token of the name";
+                return false;
+            }
+
+            if (!IsUsableDeclaredSize(parsed))
+            {
+                error = "'" + numberText + "' after '" + DeclaredSizeMarker +
+                        "' is not a usable absorb size: it must be finite, positive and at least " +
+                        FormatMetres(MinBoundsExtentM) + " m";
+                return false;
+            }
+
+            string stripped = name.Substring(0, markerIndex);
+            if (stripped.Trim().Length == 0)
+            {
+                error = "'" + name + "' leaves an empty item id once the '" + DeclaredSizeMarker +
+                        "' suffix is removed";
+                return false;
+            }
+
+            itemId = stripped;
+            declaredEdgeM = parsed;
+            return true;
+        }
+
+        /// <summary>
+        /// True when <paramref name="edgeM"/> can be a declared absorb size: finite, positive
+        /// and at least <see cref="MinBoundsExtentM"/>.
+        /// </summary>
+        /// <remarks>
+        /// Separate from <see cref="TryParseDeclaredSize"/> so the numeric rule is testable
+        /// without a string: a name cannot spell every <c>float</c>, and NaN/Infinity must be
+        /// refused by the rule itself rather than by a parser's incidental behaviour.
+        /// </remarks>
+        public static bool IsUsableDeclaredSize(float edgeM)
+        {
+            return IsFiniteNonNegative(edgeM) && edgeM >= MinBoundsExtentM;
+        }
+
+        private static int CountOccurrences(string text, string value, StringComparison comparison)
+        {
+            int count = 0;
+            int index = 0;
+            while (true)
+            {
+                int found = text.IndexOf(value, index, comparison);
+                if (found < 0)
+                {
+                    return count;
+                }
+
+                count++;
+                index = found + value.Length;
+            }
+        }
+
+        private static string FormatMetres(float metres)
+        {
+            return metres.ToString("0.####", CultureInfo.InvariantCulture);
         }
 
         /// <summary>

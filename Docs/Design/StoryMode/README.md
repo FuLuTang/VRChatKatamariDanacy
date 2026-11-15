@@ -574,3 +574,49 @@ python3 -m unittest discover -s Docs/tests
 ### 未验证（不要当成已验证）
 
 没有 Unity 编译、没有 Play Mode、没有 Build & Test、没有 `run_tests`。`CompileAllCsPrograms` 与 `CopyProxyToUdon` 的时序只是按 `VRC_Katamari/Labs/README.md` 的“先编译再拷贝”排列：若拷贝仍报 `outdated behaviour version`，说明 U# 编译还没跑完，等它结束再运行一次同步（报告里就是这么写的）。`propBounds` 取 Renderer AABB、`propColliders` 只接一个，这两条都还没有运行时观察。
+
+## 显式拾取尺寸：名字后缀 `@size=`（补 G13）
+
+> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-15。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 `run_tests`，也没有改任何场景。本节是 `@size=` 的唯一最新口径；上面的「作者要遵守的约定」表里 **itemId / propBounds 两行按本节扩展**（其余行不变）。
+
+### 为什么需要它
+
+同步工具按 Renderer 世界 AABB 取 `propBounds`，而门件恰恰是「长而细」：G3 的长凳 3.2 m 长、G2 倒木 3.0 m、G1 擀面杖 1.6 m（`Docs/Design/Maps/REGION_MAP_PLAN.md` §2.4）。不补这条通道，长凳会被记成 3.2 m，1.25 m 的门永远打不开（同文件 §4 的 G13）。这不是「AABB 算错」：外形尺寸和拾取尺寸本来就是两回事（决定 (h) 提醒过，`Docs/OPEN_DECISIONS.md:39`）。
+
+### 作者怎么写
+
+把拾取尺寸写在道具 GameObject 名字的末尾：
+
+```
+prop_bench_01@size=1.25
+```
+
+- 只认名字**最后**那一段 `@size=<数字>`；`@size=` 必须小写、整名只能出现一次。
+- 数字按 invariant culture 解析：小数点 `.`，不认千分位、空白和指数。所以 `1,25` 在德语机器上也一律拒绝，而不是悄悄变成 1.25 或 125。
+- 合法范围：有限、>0、≥0.0001 m（与既有的 `MinBoundsExtentM` 同一门槛）。`0`、`-1.25`、`0.00005`、`NaN`、`Infinity`、`1e40` 全部拒。
+- `@size=` 必须收尾：`prop_bench_01@size=1.25#02`、`prop_bench_01@size= 1.25` 都拒（后者带空格）。
+- 后缀**从 itemId 里剥掉**：`prop_bench_01@size=1.25` 的 itemId 是 `prop_bench_01`。这样 itemId 仍是关卡计划 §4.2 的 `prop_<definitionId>_<NN>`，日志/账本里不会出现工具语法。代价是同一件道具的「带后缀」与「不带后缀」两种写法会撞 id → 重复 itemId 全拒（不会写出两行同键）。
+- 写了但读不出来 = **该行被拒 + 原因进报告**，绝不静默回退到 AABB。理由：作者写了尺寸却拿到 3.2 m 的 AABB，是这条约定最该防的失败。
+
+### 工具怎么用它
+
+- 声明尺寸按**立方体**写进 `propBounds`（`1.25` → `(1.25, 1.25, 1.25)`），尺寸档也按这个边长判；`valueUnits` 仍走 (kind, tier) 表。所以门件的 kind 必须有对应档位的行：长凳在 `furniture` 下、l 档 = 16（`Editor/Pickup/PickupFieldAuthoringRules.cs` 的价值表）。
+- **AABB 仍然必须先存在且为正**：没有 Renderer、或 AABB 退化的道具，即便写了 `@size=` 也照拒。声明的是拾取尺寸，不是「这个物体不用渲染」。
+- 报告：每个采用声明尺寸的行加一条 `note`（路径、原名、声明边长、原 AABB、档位变化，例如 `s -> l`）。被拒行照旧进 `rejected` 列表。
+- 纯函数在 `Editor/Pickup/PickupFieldAuthoringRules.cs`：`DeclaredSizeMarker`（`"@size="`）、`TryParseDeclaredSize(name, out itemId, out declaredEdgeM, out error)`、`IsUsableDeclaredSize(edgeM)`。同步侧只在 `Editor/Pickup/PickupFieldSync.cs` 里调用它们，没有第二套解析。既有公开名字一个没改。
+
+### 为什么用名字后缀，而不是子物体或组件
+
+名字跟对象一起走：改名、拖进 prefab 变体、复制道具，后缀都在；不需要多一个场景物体（子物体标记会被「根必须自己带 Renderer、整个子树算同一件道具」的规则当成外形的一部分），也不需要运行时类型（组件方案正是 §「为什么从道具本身推导（方案 a）」否掉的那条路）。剥掉后缀后 itemId 仍与关卡计划一致。
+
+### 关卡 2 的 `fruit` 价值行
+
+价值表新增两行：`fruit s = 1`、`fruit m = 4`（`Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md` §3.1 的水果表：草莓/葡萄 s、苹果/梨/橙/香蕉/西瓜 m）。不加这两行，所有水果都以「未声明的 (kind, tier)」被拒，关卡 2 的水果数就是 0。**故意不加 `fruit l`**：计划里最大的水果是 0.72 m 西瓜（m 档），>0.76 m 的水果必须自己加一行，而不是拿默认值。这些数字与表内其余行一样是 PROVISIONAL。
+
+### 测试与未验证
+
+- 测试新增在 `Tests/EditMode/Pickup/PickupFieldAuthoringRulesTests.cs`：解析并剥名、非法数字、多个标记、非正/过小、非有限与指数、locale 独立（在 `de-DE` 下 `1.25` 通过、`1,25` 被拒）、档位与值表联动（`1.25` 立方 → l，`furniture l = 16`；`0.72` → m，`fruit m = 4`），并把 `fruit s/m` 与 `fruit l` 缺失补进原有表测试。
+- **没有跑 Unity 编译、没有 `run_tests`**：`PickupFieldAuthoringRulesTests` 的结果是 NOT_RUN，不是 PASS。
+- 没有改场景：没有任何道具被改名，`PickupFieldHost` 的六个数组没有被写过一次，`propBounds` 的真实取值还没有运行时观察。
+- 文档侧的旧口径仍在（不在本 agent 写范围）：`Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md:174` 仍写「工具把 GameObject 名直接当 itemId」，`Docs/Design/Maps/REGION_MAP_PLAN.md:123` 仍把 G13 标成「挡」。整合时由 Lead 决定是改这两处，还是在它们上面加一句「见本节」。
+

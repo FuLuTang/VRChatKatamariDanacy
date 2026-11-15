@@ -32,7 +32,11 @@ namespace VRCKatamari.Editor.Pickup
     /// <item><description>kind = the name of the prop's parent folder, one folder per kind
     /// directly under the field root;</description></item>
     /// <item><description>bounds = the full-size world AABB of every Renderer in the prop's
-    /// subtree (metres, not half size);</description></item>
+    /// subtree (metres, not half size), unless the GameObject name ends with
+    /// <c>@size=&lt;metres&gt;</c>: that declared absorb size becomes a cube of that edge and
+    /// the suffix is stripped from the item id (a gate bench 3.2 m long but 1.25 m thick is
+    /// recorded as 1.25 m, not 3.2 m - see
+    /// <see cref="PickupFieldAuthoringRules.TryParseDeclaredSize"/>);</description></item>
     /// <item><description>collider = the prop's own Collider when it has one, else the first
     /// child Collider in ordinal path order (the host disables at most one per
     /// prop);</description></item>
@@ -221,6 +225,9 @@ namespace VRCKatamari.Editor.Pickup
             public string Kind;
             public string Path;
             public string ItemId;
+            public string SourceName;
+            public float DeclaredSizeM;
+            public string DeclaredSizeError;
             public bool HasRenderer;
             public Vector3 BoundsSize;
             public Collider PrimaryCollider;
@@ -295,7 +302,8 @@ namespace VRCKatamari.Editor.Pickup
             candidate.Root = root;
             candidate.Kind = kind;
             candidate.Path = RelativePath(fieldRoot, root);
-            candidate.ItemId = root.name;
+            candidate.SourceName = root.name;
+            ReadDeclaredSize(candidate);
             candidate.HasRenderer = true;
 
             Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
@@ -336,9 +344,26 @@ namespace VRCKatamari.Editor.Pickup
             candidate.Root = root;
             candidate.Kind = kind;
             candidate.Path = RelativePath(fieldRoot, root);
-            candidate.ItemId = root.name;
+            candidate.SourceName = root.name;
+            ReadDeclaredSize(candidate);
             candidate.Rejection = reason;
             return candidate;
+        }
+
+        /// <summary>
+        /// Reads the <c>@size=</c> suffix into the candidate: the stripped item id, the
+        /// declared edge, and the reason when the marker is malformed.
+        /// </summary>
+        private static void ReadDeclaredSize(PropCandidate candidate)
+        {
+            string itemId;
+            float declaredSizeM;
+            string error;
+            PickupFieldAuthoringRules.TryParseDeclaredSize(candidate.SourceName, out itemId,
+                out declaredSizeM, out error);
+            candidate.ItemId = itemId;
+            candidate.DeclaredSizeM = declaredSizeM;
+            candidate.DeclaredSizeError = error;
         }
 
         // -------------------------------------------------------------- validation ---
@@ -372,6 +397,15 @@ namespace VRCKatamari.Editor.Pickup
                     continue;
                 }
 
+                if (candidate.DeclaredSizeError != null)
+                {
+                    // A declared size that cannot be read is reported, never replaced by the
+                    // AABB: the author asked for a specific pickup size and must learn that
+                    // the request was refused.
+                    report.Reject(candidate.Path, candidate.ItemId, candidate.DeclaredSizeError);
+                    continue;
+                }
+
                 if (!PickupFieldAuthoringRules.IsValidItemId(candidate.ItemId))
                 {
                     report.Reject(candidate.Path, candidate.ItemId,
@@ -393,14 +427,31 @@ namespace VRCKatamari.Editor.Pickup
                     continue;
                 }
 
-                string tier = PickupFieldAuthoringRules.ClassifySizeTier(candidate.BoundsSize.x,
+                string aabbTier = PickupFieldAuthoringRules.ClassifySizeTier(candidate.BoundsSize.x,
                     candidate.BoundsSize.y, candidate.BoundsSize.z);
-                if (tier.Length == 0)
+                if (aabbTier.Length == 0)
                 {
                     report.Reject(candidate.Path, candidate.ItemId,
                         "zero or non-finite bounds " + FormatVector(candidate.BoundsSize) +
                         "; a prop needs a positive renderer AABB");
                     continue;
+                }
+
+                // A declared size replaces the AABB-derived size with a cube of that edge. The
+                // AABB is still required above: a renderer whose AABB is degenerate is a data
+                // error even when the pickup size is spelled out in the name.
+                Vector3 pickSize = candidate.BoundsSize;
+                string tier = aabbTier;
+                string declaredSizeNote = null;
+                if (candidate.DeclaredSizeM > 0f)
+                {
+                    pickSize = new Vector3(candidate.DeclaredSizeM, candidate.DeclaredSizeM,
+                        candidate.DeclaredSizeM);
+                    tier = PickupFieldAuthoringRules.ClassifySizeTier(pickSize.x, pickSize.y, pickSize.z);
+                    declaredSizeNote = "'" + candidate.Path + "' declares " + candidate.SourceName +
+                                       ": propBounds is a " + FormatMetres(candidate.DeclaredSizeM) +
+                                       " m cube instead of the " + FormatVector(candidate.BoundsSize) +
+                                       " m renderer AABB (size tier " + aabbTier + " -> " + tier + ")";
                 }
 
                 int declared = PickupFieldAuthoringRules.LookupValueUnits(candidate.Kind, tier);
@@ -409,7 +460,7 @@ namespace VRCKatamari.Editor.Pickup
                 {
                     report.Reject(candidate.Path, candidate.ItemId,
                         "no value-table row for kind '" + candidate.Kind + "' + size tier '" + tier +
-                        "' (bounds " + FormatVector(candidate.BoundsSize) + ")");
+                        "' (bounds " + FormatVector(pickSize) + ")");
                     continue;
                 }
 
@@ -424,13 +475,18 @@ namespace VRCKatamari.Editor.Pickup
                 row.Root = candidate.Root;
                 row.Kind = candidate.Kind;
                 row.ItemId = candidate.ItemId;
-                row.BoundsSize = candidate.BoundsSize;
+                row.BoundsSize = pickSize;
                 row.ValueUnits = valueUnits;
                 row.PrimaryCollider = candidate.PrimaryCollider;
                 rows.Add(row);
 
                 report.CountRow(row.Kind, row.ValueUnits);
                 report.TotalValueUnits += row.ValueUnits;
+
+                if (declaredSizeNote != null)
+                {
+                    report.Notes.Add(declaredSizeNote);
+                }
 
                 if (candidate.ColliderCount > 1 && candidate.PrimaryCollider != null)
                 {
@@ -695,6 +751,11 @@ namespace VRCKatamari.Editor.Pickup
             return "(" + value.x.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + ", " +
                    value.y.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + ", " +
                    value.z.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + ")";
+        }
+
+        private static string FormatMetres(float metres)
+        {
+            return metres.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
         }
     }
 }

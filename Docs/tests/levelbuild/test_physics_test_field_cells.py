@@ -29,6 +29,7 @@ drift is here:
 import json
 import math
 import re
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -127,7 +128,13 @@ class FieldJsonShape(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual(len(planned), len(set(planned)))
         self.assertFalse(set(ids) & set(planned), "a cell is both wired and planned")
-        self.assertEqual(len(ids) + len(planned), 21)
+        # 9 wired + 12 planned C-cells = the 21-cell field. The v2-only design rows (W1-W6,
+        # R1/R2, S1, X1) describe scenes that do not exist yet, so they are not part of that
+        # count - they are inert data until someone authors their placement.
+        design_only = [cell for cell in self.doc["planned_cells"]
+                       if cell.get("status") == "pending_scene"]
+        self.assertEqual(len(design_only), 10)
+        self.assertEqual(len(ids) + len(planned) - len(design_only), 21)
 
     def test_planned_cells_carry_no_geometry(self):
         for cell in self.doc["planned_cells"]:
@@ -434,6 +441,256 @@ class CellCriteria(unittest.TestCase):
         no_ramp = [check for check in c06["checks"] if check["id"] == "no_ramp_registered"][0]
         self.assertEqual(no_ramp["op"], "==")
         self.assertEqual(no_ramp["limit"], 0)
+
+
+V2_KEYS = {"expect", "metric", "op", "limit", "threshold", "not_applicable", "note"}
+V2_THRESHOLDS = ("climb_cap_bound",)
+V2_EXPECT_VALUES = ("pass", "fail", "n/a")
+DESIGN_ONLY_IDS = ("W1", "W2", "W3", "W4", "W5", "W6", "R1", "R2", "S1", "X1")
+
+
+def v2_rows(doc):
+    """(cell, check, v2 block) for every wired criterion that carries an override."""
+    for cell in doc["cells"]:
+        if not cell.get("wired"):
+            continue
+        for check in cell["checks"]:
+            if "v2" in check:
+                yield cell, check, check["v2"]
+
+
+def v2_row(doc, cell_id, check_id):
+    for cell, check, v2 in v2_rows(doc):
+        if cell["id"] == cell_id and check["id"] == check_id:
+            return v2
+    raise AssertionError("no v2 override on %s/%s" % (cell_id, check_id))
+
+
+class CriteriaModels(unittest.TestCase):
+    """The criteria file's model dimension (design PHYSICS_TEST_FIELD section 5.6).
+
+    The same 36-run matrix has to be meaningful for both motor models: v1 (the flag off) is the
+    pass7 baseline, v2 (the flag on) is CONTACT_MODEL_V2 6.1/7.7.2/7.7.4. One criteria file, one
+    optional ``v2`` block per criterion - so these tests pin three things: the blocks are a closed
+    vocabulary, every name they introduce is readable, and the v1 rows are byte-identical to git
+    HEAD (the matrix must not move when the flag is off).
+    """
+
+    def setUp(self):
+        self.doc = load_field()
+        self.cells = {cell["id"]: cell for cell in self.doc["cells"] if cell.get("wired")}
+        self.metrics = driver_metrics()
+
+    def test_v2_blocks_use_a_closed_vocabulary(self):
+        seen = 0
+        for cell, check, v2 in v2_rows(self.doc):
+            seen += 1
+            where = "%s/%s" % (cell["id"], check["id"])
+            self.assertTrue(set(v2) <= V2_KEYS, "%s: %s" % (where, set(v2) - V2_KEYS))
+            if "op" in v2:
+                self.assertIn(v2["op"], OPS, where)
+                # An op override carries its own limit, or names a threshold instead. Anything
+                # else would silently compare against 0.
+                self.assertNotEqual(("limit" in v2), ("threshold" in v2), where)
+            if "threshold" in v2:
+                self.assertIn(v2["threshold"], V2_THRESHOLDS, where)
+            if "expect" in v2:
+                self.assertEqual(len(v2["expect"]), 4, where)
+                for value in v2["expect"]:
+                    self.assertIn(value, V2_EXPECT_VALUES, where)
+            if v2.get("not_applicable"):
+                # "n/a at every diameter" and a pass/fail row are contradictory answers.
+                self.assertNotIn("pass", v2.get("expect", []), where)
+                self.assertNotIn("fail", v2.get("expect", []), where)
+            if "note" in v2:
+                self.assertTrue(v2["note"].strip(), where)
+        self.assertEqual(seen, 11, "the v2 table shrank or grew; update this test with it")
+
+    def test_v2_overrides_only_exist_on_wired_criteria(self):
+        # An override on a cell the driver never runs would be dead data, and a v2 row that names a
+        # criterion the v1 rows do not carry has nothing to override.
+        for cell in self.doc["cells"]:
+            self.assertTrue(cell.get("wired"), "cells[] only holds wired cells: " + cell["id"])
+            self.assertTrue(cell["checks"], cell["id"])
+            for check in cell["checks"]:
+                if "v2" not in check:
+                    continue
+                self.assertIn("expect", check, "%s/%s: the v1 row is the thing being overridden"
+                              % (cell["id"], check["id"]))
+                self.assertTrue(check["note"].strip(), "%s/%s" % (cell["id"], check["id"]))
+        # The pending design rows are v2-only and carry design_checks, never a v1 `checks` array.
+        for cell in self.doc["planned_cells"]:
+            if cell.get("status") != "pending_scene":
+                continue
+            self.assertNotIn("checks", cell, cell["id"])
+            for check in cell["design_checks"]:
+                self.assertNotIn("v2", check, "%s/%s" % (cell["id"], check["id"]))
+
+    def test_every_v2_metric_is_readable_by_the_driver(self):
+        self.assertTrue(self.metrics, "no metrics parsed from the driver")
+        for cell, check, v2 in v2_rows(self.doc):
+            if "metric" not in v2:
+                continue
+            self.assertIn(v2["metric"], self.metrics,
+                          "%s/%s names a v2 metric the driver cannot read" %
+                          (cell["id"], check["id"]))
+
+    def test_v1_rows_are_byte_identical_to_git_head(self):
+        # The whole point of putting v2 in its own block: with the flag off the matrix must be
+        # exactly pass7. Compare against the committed file rather than a checked-in copy, so a
+        # later edit that "only touches v2" cannot move a v1 row.
+        try:
+            done = subprocess.run(
+                ["git", "-C", str(ROOT), "show",
+                 "HEAD:Docs/Design/BallMotor/physics_test_field.json"],
+                capture_output=True, text=True)
+        except OSError as error:                 # no git on this machine
+            self.skipTest("git unavailable: %s" % error)
+        if done.returncode != 0 or not done.stdout.strip():
+            self.skipTest("cannot read the file from git HEAD")
+        head = json.loads(done.stdout)
+        self.assertEqual([cell["id"] for cell in head["cells"]],
+                         [cell["id"] for cell in self.doc["cells"]])
+        for head_cell, cell in zip(head["cells"], self.doc["cells"]):
+            v1_cell = {key: value for key, value in cell.items() if key != "checks"}
+            head_v1 = {key: value for key, value in head_cell.items() if key != "checks"}
+            self.assertEqual(head_v1, v1_cell, cell["id"])
+            self.assertEqual([check["id"] for check in head_cell["checks"]],
+                             [check["id"] for check in cell["checks"]], cell["id"])
+            for head_check, check in zip(head_cell["checks"], cell["checks"]):
+                v1_check = {key: value for key, value in check.items() if key != "v2"}
+                self.assertEqual(head_check, v1_check, "%s/%s" % (cell["id"], check["id"]))
+        # The planned list only GREW (the v2-only design rows are appended at the end).
+        self.assertEqual(head["planned_cells"],
+                         self.doc["planned_cells"][:len(head["planned_cells"])])
+
+    def test_the_v2_table_matches_the_design(self):
+        # CONTACT_MODEL_V2 7.7.2 "保持 / 翻转 / 替换" plus 7.7.4 for C14, one row each.
+        for cell_id in ("C01", "C03", "C05", "C13"):
+            v2 = v2_row(self.doc, cell_id, "ramp_registered")
+            self.assertEqual(v2["metric"], "static_obb_count", cell_id)
+            self.assertEqual((v2["op"], v2["limit"]), (">=", 1), cell_id)
+            self.assertEqual(v2["expect"], ["pass"] * 4, cell_id)
+        self.assertTrue(v2_row(self.doc, "C06", "no_ramp_registered")["not_applicable"])
+        no_climb = v2_row(self.doc, "C06", "no_climb")
+        self.assertEqual(no_climb["op"], "<=")
+        self.assertEqual(no_climb["threshold"], "climb_cap_bound")
+        self.assertEqual(no_climb["expect"], ["pass"] * 4)
+        stopped = v2_row(self.doc, "C06", "stopped_by_wall")
+        self.assertEqual((stopped["op"], stopped["limit"]), ("<=", 0.0))
+        self.assertEqual(stopped["expect"], ["pass"] * 4)
+        for cell_id in ("C09", "C10"):
+            on_step = v2_row(self.doc, cell_id, "on_step")
+            self.assertEqual(on_step["expect"], ["pass"] * 4, cell_id)
+            self.assertNotIn("metric", on_step)
+        blocked = v2_row(self.doc, "C10", "blocked_gap")
+        self.assertEqual((blocked["op"], blocked["limit"]), ("<=", 0.0))
+        self.assertEqual(blocked["expect"], ["pass"] * 4)
+        lift = v2_row(self.doc, "C14", "lift_bounded")
+        self.assertEqual(lift["metric"], "lift_over_nominal_in_deck_m")
+        self.assertEqual((lift["op"], lift["limit"]), ("<=", 0.01))
+        self.assertEqual(lift["expect"], ["pass"] * 4)
+        self.assertAlmostEqual(self.cells["C14"]["nominal_m"], 0.028, places=6)
+
+    def test_the_ramp_refusal_rows_deliberately_keep_the_v1_expectation(self):
+        # 7.7.2 predicted "v2 refuses no ramp", but the probe goes through motor.AddRamp, whose
+        # 45-degree support guard is v1-side and independent of the flag: pass6 and pass8 both
+        # recorded reason=..., slope=50.00, ramp_refused=36 chars. The evidence wins over the
+        # prediction, so these two rows keep one criterion for both models.
+        for check_id in ("ramp_refused", "refusal_slope"):
+            for check in self.cells["C06"]["checks"]:
+                if check["id"] == check_id:
+                    self.assertNotIn("v2", check, check_id)
+
+    def test_rest_and_seam_keep_one_definition(self):
+        # "保持" rows: rest_gap already passes under both models (pass8 cleared it), and the v1
+        # definitions of the seam/landing rows stay the criterion.
+        for cell_id, check_id in (("C09", "rest_gap"), ("C08", "rest_gap"),
+                                  ("C10", "rest_gap"), ("C13", "seam_no_step"),
+                                  ("C13", "climbed"), ("C05", "climbed")):
+            for check in self.cells[cell_id]["checks"]:
+                if check["id"] == check_id:
+                    self.assertNotIn("v2", check, "%s/%s" % (cell_id, check_id))
+
+    def test_the_expected_counts_are_recorded_for_both_models(self):
+        # The numbers an operator compares a matrix against. v1 is pass7 verbatim; v2 is computed
+        # from the pass8 raw values (59 checks per run in both models).
+        models = self.doc["criteria_models"]
+        self.assertEqual(models["flag"], "KatamariBallMotor.IsContactModelV2()")
+        v1 = models["v1_baseline_pass7"]["per_run"]
+        self.assertEqual(v1, {
+            "0.300": "58 pass / 0 skip / 1 unexpected",
+            "0.600": "57 / 1 / 1",
+            "1.100": "56 / 2 / 1",
+            "2.200": "52 / 5 / 2",
+        })
+        v2 = models["v2_expected"]["per_run"]
+        self.assertEqual(v2, {
+            "0.300": "58 pass / 1 skip / 0 unexpected",
+            "0.600": "58 / 1 / 0",
+            "1.100": "57 / 2 / 0",
+            "2.200": "54 / 5 / 0",
+        })
+        # 59 checks per run: 9 wired cells' rows at one diameter.
+        per_run = sum(len(cell["checks"]) for cell in self.doc["cells"] if cell.get("wired"))
+        self.assertEqual(per_run, 59)
+
+    def test_the_pending_scene_cells_are_design_rows_only(self):
+        design = [cell for cell in self.doc["planned_cells"]
+                  if cell.get("status") == "pending_scene"]
+        self.assertEqual(tuple(cell["id"] for cell in design), DESIGN_ONLY_IDS)
+        for cell in design:
+            self.assertFalse(cell.get("wired"), cell["id"])
+            self.assertIsNone(cell.get("placement"), cell["id"])
+            self.assertTrue(cell.get("v2_only"), cell["id"])
+            self.assertTrue(cell.get("design_source", "").startswith("CONTACT_MODEL_V2.md"),
+                            cell["id"])
+            self.assertTrue(cell["design_checks"], cell["id"])
+            for check in cell["design_checks"]:
+                where = "%s/%s" % (cell["id"], check["id"])
+                self.assertIn(check["op"], OPS, where)
+                self.assertEqual(len(check["expect"]), 4, where)
+                for value in check["expect"]:
+                    self.assertIn(value, V2_EXPECT_VALUES, where)
+                self.assertTrue(check["unit"], where)
+            # Every new cell says which reading it still needs; an empty list would mean the
+            # design row is already measurable, i.e. the cell could be wired today.
+            self.assertIsInstance(cell.get("metrics_pending"), list, cell["id"])
+
+    def test_the_driver_selects_the_row_from_the_motor_flag(self):
+        driver = DRIVER_CS.read_text(encoding="utf-8")
+        self.assertIn('DriverRevision = "2026-11-15e"', driver)
+        self.assertIn("modelIsV2 = motor.IsContactModelV2()", driver)
+        self.assertIn("cell.HasCheckV2(i)", driver)
+        self.assertIn("GetCheckV2Expect", driver)
+        self.assertIn("GetCheckV2Threshold", driver)
+        self.assertIn('" model=" + ModelText()', driver)
+        # the v2 threshold is derived from the motor's own constants, not from a metre value
+        self.assertIn("ContactTuning.KHeight", driver)
+        self.assertIn("ContactTuning.ClimbCapMarginM", driver)
+        self.assertIn("V2CapFloatMargin", driver)
+        # ... and the plate gate is data + radius, not a constant
+        self.assertIn("cell.IsInDeckGate(center.x, center.z, radius)", driver)
+        self.assertIn('Same(metric, "lift_over_nominal_in_deck_m")', driver)
+        self.assertIn('Same(metric, "static_obb_count")', driver)
+        # the v1 derivations must not run for a v2 row
+        self.assertIn("if (!v2Row && Same(metric, \"deck_gap_m\")", driver)
+        self.assertIn("if (!v2Row && Same(metric, \"ramp_entry_progress_m\")", driver)
+
+    def test_the_cell_and_importer_carry_the_v2_row(self):
+        cell = CELL_CS.read_text(encoding="utf-8")
+        for field in ("checkHasV2", "checkV2Metrics", "checkV2Ops", "checkV2Limits",
+                      "checkV2ExpectMasks", "checkV2Thresholds", "deckCenterXZ",
+                      "deckHalfSizeM"):
+            self.assertIn(field, cell)
+        self.assertIn('CellRevision = "2026-11-15e"', cell)
+        importer = CRITERIA_CS.read_text(encoding="utf-8")
+        for symbol in ("V2ExpectMask", "V2OpCode", "V2ThresholdCode", "climb_cap_bound",
+                       "checkV2ExpectMasks", "checkV2Thresholds", "V2Rows"):
+            self.assertIn(symbol, importer)
+        # the importer must bake the deck footprint from the arena, not from the criteria file
+        self.assertIn('FindProperty("staticBoxes")', importer)
+        self.assertIn("deckCenterXZ", importer)
 
 
 def method_body(source, signature):

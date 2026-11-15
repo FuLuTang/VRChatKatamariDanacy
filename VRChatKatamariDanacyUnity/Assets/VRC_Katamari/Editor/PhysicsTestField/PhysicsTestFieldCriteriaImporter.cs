@@ -126,6 +126,30 @@ namespace VRCKatamari.Editor.PhysicsTestField
             public string gate;
             public string[] expect;
             public bool[] applies_d;
+            public V2Entry v2;
+        }
+
+        /// <summary>
+        /// One criterion's v2 override (design PHYSICS_TEST_FIELD section 5.6). Absent means the
+        /// v1 row above is the criterion for BOTH motor models.
+        /// </summary>
+        /// <remarks>
+        /// Only the fields that actually differ are carried. <c>op</c> always carries <c>limit</c>
+        /// (one decision); <c>threshold</c> is the symbolic alternative to a baked limit and is
+        /// derived by the driver at run time from ContactTuning. <c>not_applicable</c> is the
+        /// shorthand for "n/a at every diameter" and is written as an all-zero expect mask, which
+        /// the driver already reports as SKIPPED_N_A.
+        /// </remarks>
+        [Serializable]
+        public class V2Entry
+        {
+            public string[] expect;
+            public string metric;
+            public string op;
+            public float limit;
+            public string threshold;
+            public bool not_applicable;
+            public string note;
         }
 
         /// <summary>Only the placement keys this tool reads; JsonUtility ignores the rest.</summary>
@@ -162,10 +186,16 @@ namespace VRCKatamari.Editor.PhysicsTestField
 
         // ---- report ------------------------------------------------------------
 
-        private sealed class Report
+        /// <summary>
+        /// What one import did. Public because it is the tool's structured answer (the importer
+        /// also returns the text) and because the EditMode tests drive the encoders directly -
+        /// an editor tool has no other seam without a scene.
+        /// </summary>
+        public sealed class Report
         {
             public int CellsWritten;
             public int ChecksWritten;
+            public int V2Rows;
             public int CellsMissing;
             public int ArenasMissing;
             public int DriverFields;
@@ -192,6 +222,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
                 var text = new StringBuilder();
                 text.Append("[ptf] criteria: cells=").Append(CellsWritten)
                     .Append(" checks=").Append(ChecksWritten)
+                    .Append(" v2Rows=").Append(V2Rows)
                     .Append(" missingCells=").Append(CellsMissing)
                     .Append(" missingArenas=").Append(ArenasMissing)
                     .Append(" driverFields=").Append(DriverFields)
@@ -292,9 +323,12 @@ namespace VRCKatamari.Editor.PhysicsTestField
                                 "object, then import again");
                 }
 
-                float approach = ComputeApproach(arena, cell);
+                Vector2 deckCenter;
+                Vector2 deckHalf;
+                float approach = ComputeApproach(arena, cell, out deckCenter, out deckHalf);
                 CellGeometry geometry = ReadCellGeometry(path, arena, cell, report);
-                int checks = WriteCell(component, cell, arena, approach, geometry, report);
+                int checks = WriteCell(component, cell, arena, approach, deckCenter, deckHalf,
+                    geometry, report);
                 if (checks >= 0)
                 {
                     report.CellsWritten++;
@@ -307,6 +341,15 @@ namespace VRCKatamari.Editor.PhysicsTestField
             {
                 report.DriverFields = WriteDriver(driver, doc, written, report);
             }
+
+            if (report.V2Rows > 0)
+            {
+                report.Note("v2 rows: " + report.V2Rows + " criteria carry a v2 override; the driver "
+                    + "applies one only when the motor reports IsContactModelV2(), so this same scene "
+                    + "runs the v1 baseline with the flag off (design section 5.6)");
+            }
+
+            NoteContactModel(driver, report);
 
             LabBallSizeSetter setter = Object.FindObjectOfType<LabBallSizeSetter>();
             if (setter != null)
@@ -335,7 +378,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
         // ---- cell writing -------------------------------------------------------
 
         private static int WriteCell(PhysicsTestCell component, CellEntry cell, LevelArenaHost arena,
-            float approachM, CellGeometry geometry, Report report)
+            float approachM, Vector2 deckCenter, Vector2 deckHalf, CellGeometry geometry, Report report)
         {
             var serialized = new SerializedObject(component);
             int checkCount = cell.checks == null ? 0 : cell.checks.Length;
@@ -352,6 +395,8 @@ namespace VRCKatamari.Editor.PhysicsTestField
                 ToVector2(cell.footprint == null ? null : cell.footprint.size, Vector2.zero), report);
             SetFloat(serialized, "nominalM", cell.nominal_m, report);
             SetFloat(serialized, "approachM", approachM, report);
+            SetVector2(serialized, "deckCenterXZ", deckCenter, report);
+            SetVector2(serialized, "deckHalfSizeM", deckHalf, report);
             SetBool(serialized, "rampClimb", geometry != null && geometry.HasRamp, report);
             SetFloat(serialized, "rampFootM", geometry == null ? 0f : geometry.RampFootM, report);
             SetBool(serialized, "rampProbe", geometry != null && geometry.HasProbe, report);
@@ -403,8 +448,16 @@ namespace VRCKatamari.Editor.PhysicsTestField
             SerializedProperty gates = RequireProperty(serialized, "checkGateStages", report);
             SerializedProperty masks = RequireProperty(serialized, "checkExpectMasks", report);
             SerializedProperty applies = RequireProperty(serialized, "checkAppliesMasks", report);
+            SerializedProperty hasV2 = RequireProperty(serialized, "checkHasV2", report);
+            SerializedProperty v2Metrics = RequireProperty(serialized, "checkV2Metrics", report);
+            SerializedProperty v2Ops = RequireProperty(serialized, "checkV2Ops", report);
+            SerializedProperty v2Limits = RequireProperty(serialized, "checkV2Limits", report);
+            SerializedProperty v2Expects = RequireProperty(serialized, "checkV2ExpectMasks", report);
+            SerializedProperty v2Thresholds = RequireProperty(serialized, "checkV2Thresholds", report);
             if (ids == null || metrics == null || ops == null || limits == null || readouts == null ||
-                gates == null || masks == null || applies == null)
+                gates == null || masks == null || applies == null || hasV2 == null ||
+                v2Metrics == null || v2Ops == null || v2Limits == null || v2Expects == null ||
+                v2Thresholds == null)
             {
                 return false;
             }
@@ -418,6 +471,12 @@ namespace VRCKatamari.Editor.PhysicsTestField
             gates.arraySize = count;
             masks.arraySize = count;
             applies.arraySize = count;
+            hasV2.arraySize = count;
+            v2Metrics.arraySize = count;
+            v2Ops.arraySize = count;
+            v2Limits.arraySize = count;
+            v2Expects.arraySize = count;
+            v2Thresholds.arraySize = count;
 
             for (int i = 0; i < count; i++)
             {
@@ -436,6 +495,22 @@ namespace VRCKatamari.Editor.PhysicsTestField
                 gates.GetArrayElementAtIndex(i).intValue = GateCode(check.gate);
                 masks.GetArrayElementAtIndex(i).intValue = ExpectMask(cell, check, report);
                 applies.GetArrayElementAtIndex(i).intValue = AppliesMask(cell, check, report);
+
+                // The v2 row (design section 5.6). Its sentinels are chosen so "no override" and
+                // "an override whose value happens to be 0" stay different: "" / -1 inherit, and a
+                // 0 expect mask is a real answer (n/a at every diameter).
+                bool hasOverride = check.v2 != null;
+                hasV2.GetArrayElementAtIndex(i).intValue = hasOverride ? 1 : 0;
+                v2Metrics.GetArrayElementAtIndex(i).stringValue =
+                    hasOverride && check.v2.metric != null ? check.v2.metric : "";
+                v2Ops.GetArrayElementAtIndex(i).intValue =
+                    hasOverride ? V2OpCode(cell, check, report) : -1;
+                v2Limits.GetArrayElementAtIndex(i).floatValue = hasOverride ? check.v2.limit : 0f;
+                v2Expects.GetArrayElementAtIndex(i).intValue =
+                    hasOverride ? V2ExpectMask(cell, check, report) : -1;
+                v2Thresholds.GetArrayElementAtIndex(i).intValue =
+                    hasOverride ? V2ThresholdCode(cell, check, report) : 0;
+                if (hasOverride) report.V2Rows++;
             }
 
             return true;
@@ -596,6 +671,28 @@ namespace VRCKatamari.Editor.PhysicsTestField
             return property.objectReferenceValue as KatamariBallMotor;
         }
 
+        /// <summary>
+        /// Says which contact model the next Play will run. The flag is the motor's serialized
+        /// <c>contactModelV2Enabled</c>, and both models are legitimate - but a reviewer must not
+        /// have to infer it from the expected counts.
+        /// </summary>
+        private static void NoteContactModel(PhysicsTestFieldDriver driver, Report report)
+        {
+            KatamariBallMotor motor = ReadMotorLink(driver);
+            if (motor == null) return;
+            SerializedProperty flag = new SerializedObject(motor).FindProperty("contactModelV2Enabled");
+            if (flag == null)
+            {
+                report.Note("the scene motor has no serialized contactModelV2Enabled; the criteria " +
+                            "file's v2 rows would be inert");
+                return;
+            }
+
+            report.Note("contact model in the scene: " + (flag.boolValue ? "v2" : "v1") +
+                        " (contactModelV2Enabled=" + (flag.boolValue ? "true" : "false") + "); the " +
+                        "driver stamps model=v1|v2 on every [ptf] header line");
+        }
+
         private static bool CopyProxies(List<PhysicsTestCell> cells, PhysicsTestFieldDriver driver,
             Report report)
         {
@@ -680,11 +777,20 @@ namespace VRCKatamari.Editor.PhysicsTestField
 
         /// <summary>
         /// Distance from the start, along the authored heading, to the first static box the ball
-        /// would meet. Read from the ARENA's own <c>staticBoxes</c> (what the motor bakes), not from
-        /// the JSON, so this number describes the geometry that will actually be solid.
+        /// would meet, plus that box's world XZ footprint (its centre and half extents).
         /// </summary>
-        private static float ComputeApproach(LevelArenaHost arena, CellEntry cell)
+        /// <remarks>
+        /// Read from the ARENA's own <c>staticBoxes</c> (what the motor bakes), not from the JSON,
+        /// so these numbers describe the geometry that will actually be solid. The footprint is the
+        /// deck the v2 lift criterion needs (design CONTACT_MODEL_V2 7.7.4): the sampling gate is
+        /// this rect grown by one collision radius, so neither the plate's position nor its size is
+        /// retyped in the criteria file or the driver.
+        /// </remarks>
+        private static float ComputeApproach(LevelArenaHost arena, CellEntry cell,
+            out Vector2 deckCenter, out Vector2 deckHalf)
         {
+            deckCenter = Vector2.zero;
+            deckHalf = Vector2.zero;
             if (arena == null || cell.start_pose == null) return 0f;
             float[] start = cell.start_pose.center;
             if (start == null || start.Length < 3) return 0f;
@@ -700,6 +806,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
             if (boxes == null || !boxes.isArray) return 0f;
 
             float best = -1f;
+            Bounds deck = new Bounds();
             for (int i = 0; i < boxes.arraySize; i++)
             {
                 BoxCollider box = boxes.GetArrayElementAtIndex(i).objectReferenceValue as BoxCollider;
@@ -712,10 +819,20 @@ namespace VRCKatamari.Editor.PhysicsTestField
                     continue;
                 }
 
-                if (best < 0f || distance < best) best = distance;
+                if (best < 0f || distance < best)
+                {
+                    best = distance;
+                    deck = bounds;
+                }
             }
 
             if (best < 0f) return 0f;
+
+            // The deck rect is the box's world AABB in XZ. Its top is what nominal_m already is.
+            deckCenter = new Vector2((deck.min.x + deck.max.x) * 0.5f,
+                (deck.min.z + deck.max.z) * 0.5f);
+            deckHalf = new Vector2((deck.max.x - deck.min.x) * 0.5f,
+                (deck.max.z - deck.min.z) * 0.5f);
             return best;
         }
 
@@ -1012,6 +1129,99 @@ namespace VRCKatamari.Editor.PhysicsTestField
             }
 
             return mask;
+        }
+
+        // ---- the v2 override row (design PHYSICS_TEST_FIELD section 5.6) ---------
+
+        /// <summary>
+        /// The v2 expect mask, or -1 for "inherit the v1 row".
+        /// </summary>
+        /// <remarks>
+        /// A <c>not_applicable</c> override becomes 0 - every 2-bit field is 0, i.e. n/a at all
+        /// four diameters - which is exactly what the driver already reports as
+        /// <c>SKIPPED_N_A</c>. It must not also carry a pass/fail expectation: the two would
+        /// disagree and whichever the encoder saw last would silently win.
+        /// </remarks>
+        public static int V2ExpectMask(CellEntry cell, CheckEntry check, Report report)
+        {
+            if (check == null || check.v2 == null) return -1;
+            string where = Where(cell, check) + " v2";
+            if (check.v2.not_applicable)
+            {
+                if (check.v2.expect != null)
+                {
+                    for (int i = 0; i < check.v2.expect.Length; i++)
+                    {
+                        if (check.v2.expect[i] == "pass" || check.v2.expect[i] == "fail")
+                        {
+                            report.Error(where + ".not_applicable is set but expect[" + i +
+                                         "]=" + check.v2.expect[i] + "; keep one of the two");
+                            break;
+                        }
+                    }
+                }
+
+                return 0;
+            }
+
+            if (check.v2.expect == null || check.v2.expect.Length == 0) return -1;
+            if (check.v2.expect.Length != 4)
+            {
+                report.Note(where + " has " + check.v2.expect.Length +
+                            " expect entries; the field has 4 preset diameters");
+            }
+
+            int mask = 0;
+            for (int i = 0; i < check.v2.expect.Length && i < 15; i++)
+            {
+                int bits = 0;
+                if (check.v2.expect[i] == "pass") bits = 1;
+                else if (check.v2.expect[i] == "fail") bits = 2;
+                else if (check.v2.expect[i] != "n/a")
+                {
+                    report.Error(where + ".expect[" + i + "]='" + check.v2.expect[i] +
+                                 "' is not pass / fail / n/a");
+                }
+
+                mask |= bits << (i * 2);
+            }
+
+            return mask;
+        }
+
+        /// <summary>The v2 op code, or -1 for "inherit the v1 op AND its limit".</summary>
+        public static int V2OpCode(CellEntry cell, CheckEntry check, Report report)
+        {
+            if (check == null || check.v2 == null || string.IsNullOrEmpty(check.v2.op)) return -1;
+            if (check.v2.op == "abs<=") return 0;
+            if (check.v2.op == "<=") return 1;
+            if (check.v2.op == ">=") return 2;
+            if (check.v2.op == "==") return 3;
+            if (check.v2.op == "abs>=") return 4;
+            report.Error(Where(cell, check) + " v2.op='" + check.v2.op +
+                         "' is not one of abs<= / <= / >= / == / abs>=");
+            return -1;
+        }
+
+        /// <summary>
+        /// The v2 threshold code: 0 = the baked limit, 1 = <c>climb_cap_bound</c> (derived by the
+        /// driver from ContactTuning at run time), -1 = a name this build does not know.
+        /// </summary>
+        public static int V2ThresholdCode(CellEntry cell, CheckEntry check, Report report)
+        {
+            if (check == null || check.v2 == null) return 0;
+            if (string.IsNullOrEmpty(check.v2.threshold)) return 0;
+            if (check.v2.threshold == "climb_cap_bound") return 1;
+            report.Error(Where(cell, check) + " v2.threshold='" + check.v2.threshold +
+                         "' is not a known symbolic threshold (climb_cap_bound)");
+            return -1;
+        }
+
+        private static string Where(CellEntry cell, CheckEntry check)
+        {
+            string cellId = cell == null || cell.id == null ? "?" : cell.id;
+            string checkId = check == null || check.id == null ? "?" : check.id;
+            return cellId + " check '" + checkId + "'";
         }
 
         private static Vector3 ToVector3(float[] values, Vector3 fallback)

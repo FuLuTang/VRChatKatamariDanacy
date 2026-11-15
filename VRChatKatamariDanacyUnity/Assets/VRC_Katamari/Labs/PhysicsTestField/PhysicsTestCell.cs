@@ -36,6 +36,11 @@ namespace VRCKatamari.Labs.PhysicsTestField
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class PhysicsTestCell : UdonSharpBehaviour
     {
+        // Stamped into the driver's first log line so "which compiled test-field code is
+        // running" is checkable. This component gained the deck footprint and the six
+        // per-check v2 arrays, and a scene baked by an older program would not have them at all.
+        private const string CellRevision = "2026-11-15e";
+
         // ---- identity and arena ------------------------------------------------
 
         [Header("Identity")]
@@ -65,6 +70,14 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [Tooltip("How far the ball must travel along its heading before it reaches the " +
                  "primary box's near face, metres. blocked_gap_m = approach - progress - radius.")]
         [SerializeField] private float approachM;
+
+        [Header("Deck footprint (from the placement's primary box, baked by the importer)")]
+        [Tooltip("World XZ centre of the deck the cell measures against (the first box the " +
+                 "ball's heading meets). The v2 lift criterion is sampled only here.")]
+        [SerializeField] private Vector2 deckCenterXZ;
+        [Tooltip("Half extents of that deck in XZ, metres. The v2 lift gate is this rect " +
+                 "grown by one collision radius - no constant is typed in the driver.")]
+        [SerializeField] private Vector2 deckHalfSizeM;
 
         // ---- ramp geometry (derived by the criteria importer) -------------------
 
@@ -115,6 +128,31 @@ namespace VRCKatamari.Labs.PhysicsTestField
                  "never a silent pass). Missing or short array = applicable everywhere.")]
         [SerializeField] private int[] checkAppliesMasks;
 
+        // ---- the v2 override rows (one row per check, empty = "same as v1") ----
+        //
+        // The SAME 36-run matrix must be meaningful for both motor models (design section 5.6).
+        // A check may carry a v2 override that the driver applies only when the motor reports
+        // IsContactModelV2(); without one the v1 row above is the criterion for both models.
+        // The arrays are as long as checkIds but hold a sentinel per row, so "no override" and
+        // "an override that changes nothing" stay distinguishable: "" / -1 mean "inherit", and a
+        // 0 expect mask is a real value (n/a at every diameter).
+
+        [Header("v2 rows: one row per check, sentinel = inherit the v1 row")]
+        [Tooltip("1 = this check has a v2 override; 0 = the v1 row is the criterion for both models.")]
+        [SerializeField] private int[] checkHasV2;
+        [Tooltip("Replacement metric name, or empty to keep the v1 metric.")]
+        [SerializeField] private string[] checkV2Metrics;
+        [Tooltip("Replacement op code (0..4), or -1 to keep the v1 op AND the v1 limit. An op " +
+                 "override always carries its own limit.")]
+        [SerializeField] private int[] checkV2Ops;
+        [SerializeField] private float[] checkV2Limits;
+        [Tooltip("Two bits per preset diameter, in preset order: 0 n/a, 1 pass, 2 fail. " +
+                 "-1 = inherit the v1 expect row.")]
+        [SerializeField] private int[] checkV2ExpectMasks;
+        [Tooltip("0 = use checkV2Limits, 1 = climb_cap_bound (the driver derives " +
+                 "1.02 * H_cap + cap_margin from ContactTuning at run time).")]
+        [SerializeField] private int[] checkV2Thresholds;
+
         // ---- operator seams ----------------------------------------------------
 
         /// <summary>
@@ -160,6 +198,12 @@ namespace VRCKatamari.Labs.PhysicsTestField
         {
             if (cellId == null) return "";
             return cellId;
+        }
+
+        /// <summary>Build stamp of this component, for the driver's first log line.</summary>
+        public string GetCellRevision()
+        {
+            return CellRevision;
         }
 
         public LevelArenaHost GetArena()
@@ -246,6 +290,33 @@ namespace VRCKatamari.Labs.PhysicsTestField
             return footprintSize;
         }
 
+        /// <summary>The deck's XZ centre (the primary box the ball's heading meets).</summary>
+        public Vector2 GetDeckCenterXZ()
+        {
+            return deckCenterXZ;
+        }
+
+        /// <summary>The deck's XZ half extents, metres.</summary>
+        public Vector2 GetDeckHalfSizeM()
+        {
+            return deckHalfSizeM;
+        }
+
+        /// <summary>
+        /// True when (x, z) is inside the DECK's rect grown by <paramref name="marginM"/>.
+        /// </summary>
+        /// <remarks>
+        /// This is the v2 lift criterion's spatial gate (CONTACT_MODEL_V2 section 7.7.4): the
+        /// measured lift is only the plate's, so it is sampled while the ball is over the plate,
+        /// not while it climbs the far boundary wall. Both numbers are data - the deck footprint
+        /// baked by the criteria importer from the arena collider, and the caller's margin (one
+        /// collision radius) - so no distance is typed in the driver.
+        /// </remarks>
+        public bool IsInDeckGate(float x, float z, float marginM)
+        {
+            return ContainsRect(deckCenterXZ, deckHalfSizeM, x, z, marginM);
+        }
+
         /// <summary>
         /// True when (x, z) is inside the cell's rect grown by <paramref name="marginM"/>.
         /// </summary>
@@ -257,10 +328,19 @@ namespace VRCKatamari.Labs.PhysicsTestField
         /// </remarks>
         public bool ContainsPoint(float x, float z, float marginM)
         {
-            float halfX = footprintSize.x * 0.5f + marginM;
-            float halfZ = footprintSize.y * 0.5f + marginM;
-            return x >= footprintCenter.x - halfX && x <= footprintCenter.x + halfX &&
-                   z >= footprintCenter.y - halfZ && z <= footprintCenter.y + halfZ;
+            return ContainsRect(footprintCenter, footprintSize, x, z, marginM);
+        }
+
+        /// <summary>
+        /// Inside (centre, size) grown by marginM, where size is the FULL extent. One
+        /// implementation for the activation rect and the deck gate.
+        /// </summary>
+        private bool ContainsRect(Vector2 center, Vector2 size, float x, float z, float marginM)
+        {
+            float halfX = size.x * 0.5f + marginM;
+            float halfZ = size.y * 0.5f + marginM;
+            return x >= center.x - halfX && x <= center.x + halfX &&
+                   z >= center.y - halfZ && z <= center.y + halfZ;
         }
 
         /// <summary>Distance from (x, z) to the rect, 0 inside. Sorting key for "nearest cell".</summary>
@@ -406,6 +486,60 @@ namespace VRCKatamari.Labs.PhysicsTestField
             int mask = checkAppliesMasks[index];
             if (mask == 0) return true;
             return ((mask >> diameterIndex) & 1) == 1;
+        }
+
+        // ---- v2 override rows --------------------------------------------------
+
+        /// <summary>True when this criterion carries a v2 override (design section 5.6).</summary>
+        /// <remarks>
+        /// A false answer means the v1 row above is the criterion for BOTH models - that is the
+        /// normal case. The driver reads the model once per run
+        /// (<c>KatamariBallMotor.IsContactModelV2()</c>) and only then consults these getters.
+        /// </remarks>
+        public bool HasCheckV2(int index)
+        {
+            if (index < 0 || index >= GetCheckCount()) return false;
+            if (checkHasV2 == null || index >= checkHasV2.Length) return false;
+            return checkHasV2[index] != 0;
+        }
+
+        /// <summary>Replacement metric name, or "" to keep the v1 metric.</summary>
+        public string GetCheckV2Metric(int index)
+        {
+            if (checkV2Metrics == null || index < 0 || index >= checkV2Metrics.Length) return "";
+            return checkV2Metrics[index];
+        }
+
+        /// <summary>Replacement op code (0..4), or -1 to keep the v1 op and limit.</summary>
+        public int GetCheckV2Op(int index)
+        {
+            if (checkV2Ops == null || index < 0 || index >= checkV2Ops.Length) return -1;
+            return checkV2Ops[index];
+        }
+
+        /// <summary>The v2 op's own limit (only read when <see cref="GetCheckV2Op"/> is not -1).</summary>
+        public float GetCheckV2Limit(int index)
+        {
+            if (checkV2Limits == null || index < 0 || index >= checkV2Limits.Length) return 0f;
+            return checkV2Limits[index];
+        }
+
+        /// <summary>v2 expectation for one preset index: 0 n/a, 1 pass, 2 fail, -1 inherit.</summary>
+        public int GetCheckV2Expect(int index, int diameterIndex)
+        {
+            if (checkV2ExpectMasks == null || index < 0 || index >= checkV2ExpectMasks.Length) return -1;
+            int mask = checkV2ExpectMasks[index];
+            if (mask < 0) return -1;
+            int shift = diameterIndex * 2;
+            if (shift < 0 || shift > 30) return -1;
+            return (mask >> shift) & 3;
+        }
+
+        /// <summary>0 = the v2 limit above, 1 = climb_cap_bound (derived by the driver).</summary>
+        public int GetCheckV2Threshold(int index)
+        {
+            if (checkV2Thresholds == null || index < 0 || index >= checkV2Thresholds.Length) return 0;
+            return checkV2Thresholds[index];
         }
     }
 }

@@ -230,6 +230,18 @@
             "pass",
             "pass"
           ],
+          "v2": {
+            "metric": "lift_over_nominal_in_deck_m",
+            "op": "<=",
+            "limit": 0.01,
+            "expect": [
+              "pass",
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "note": "v2 §7.7.4：nominal 仍是板顶 0.028（不是 D 的函数），但 lift 只在球 XZ 落在板的足印 ±1r 内累计（门由导入器烘的板足印 + 碰撞半径给，无魔法数）。门内四档应 ≤0.01（参考模型 −0.0002…0；pass8 的 rest_gap +0.0021 就是门内抬升）。全程最大值 +0.0189…+0.2133 出现在远端边界平面的合法爬升，是 v1 判据的语义问题，不是电机缺陷"
+          },
           "note": "整段里 (球心 − 碰撞半径) − 板厚 的最大值 <= 1 cm：抬升只能来自 2.8 cm 的板，爬到别的东西上（隐形台阶）就会超"
         },
         {
@@ -376,6 +388,15 @@
             "pass",
             "pass"
           ],
+          "v2": {
+            "expect": [
+              "pass",
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "note": "v2 §2.5：h < r 就滚过去，与 stepLimit 无关。0.075 < r(0.30)=0.1499，所以四档都该上；v1 的 expect 记的是 0.25·D 台阶规则下 0.30 档是墙。v2 行完全显式，驱动不再对 v2 行做 stepLimit 推导"
+          },
           "note": "整段里 |(球心 − 碰撞半径) − 台阶高| 的最小值：0 = 真的站上过台阶顶；= 台阶高 = 从没上去（在台阶前的地面上）。名义上 0.075 == stepLimit(0.30)，但 0.30 预设被体积单位量化成 D = 0.2997369 m，实际 stepLimit = 0.074934 m < 0.075，所以 0.30 档应被挡（expect=fail），0.60 起可上。驱动按运行时实际 stepLimit 推导该期望（rise ≤ 实际 stepLimit → pass，否则 → fail），这一行只是 0.30 档的名义答案，见 PHYSICS_TEST_FIELD.md §8.3.1"
         },
         {
@@ -668,6 +689,15 @@
             "pass",
             "pass"
           ],
+          "v2": {
+            "expect": [
+              "pass",
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "note": "v2 §2.5：h < r 就滚过去，与 stepLimit 无关。0.100 < r(0.30)=0.1499，所以四档都该上；v1 的 expect 记的是 0.25·D 台阶规则下 0.30 档是墙。v2 行完全显式，驱动不再对 v2 行做 stepLimit 推导"
+          },
           "note": "整段里 |(球心 − 碰撞半径) − 台阶高| 的最小值：0 = 真的站上过台阶顶；= 台阶高 = 从没上去（在台阶前的地面上）。0.100 > stepLimit(0.30)，所以 0.30 应被挡住并停在立面上；0.60 起可上"
         },
         {
@@ -702,6 +732,17 @@
             "n/a",
             "n/a"
           ],
+          "v2": {
+            "op": "<=",
+            "limit": 0.0,
+            "expect": [
+              "pass",
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "note": "v2 下 0.10 m 挡板不是墙（h < r），球应越过板面：blocked_gap_m <= 0 = 球心至少推进到板面（pass8 0.30 档 −4.3338）。v1 的 abs<=0.01 量的是「停在板前」，两回事"
+          },
           "note": "被挡时球心到台阶立面的距离（由拖入器读 arena 的 staticBoxes 算出的 approach_m 推出）：0 = 停在立面上；大数是「提前停住」，也就是隐形墙"
         },
         {
@@ -879,6 +920,18 @@
             "pass",
             "pass"
           ],
+          "v2": {
+            "metric": "static_obb_count",
+            "op": ">=",
+            "limit": 1,
+            "expect": [
+              "pass",
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0，ramp_count 只对 v1 有意义；v2 换成 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
+          },
           "note": "arena 的 role=ramp 被 motor 接受：GetRampCount()==1（45 含等号）"
         },
         {
@@ -1057,6 +1110,18 @@
             "pass",
             "pass"
           ],
+          "v2": {
+            "metric": "static_obb_count",
+            "op": ">=",
+            "limit": 1,
+            "expect": [
+              "pass",
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0，ramp_count 只对 v1 有意义；v2 换成 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
+          },
           "note": "arena 的 role=ramp 被 motor 接受：GetRampCount()==1（45 含等号）"
         },
         {
@@ -1251,6 +1316,18 @@
             "pass",
             "pass"
           ],
+          "v2": {
+            "metric": "static_obb_count",
+            "op": ">=",
+            "limit": 1,
+            "expect": [
+              "pass",
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0，ramp_count 只对 v1 有意义；v2 换成 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
+          },
           "note": "arena 的 role=ramp 被 motor 接受：GetRampCount()==1（45 含等号）"
         },
         {
@@ -1416,6 +1493,10 @@
             "pass",
             "pass"
           ],
+          "v2": {
+            "not_applicable": true,
+            "note": "v1 语义是「50° 板必须没有被注册成斜面」；v2 把坡烘成 OBB，ramp_count 恒为 0，这条不测任何东西（§7.7.2 标 n/a）"
+          },
           "note": "被拒的斜面不能留下注册项：GetRampCount()==0（ramps=0/1 的 0）"
         },
         {
@@ -1433,6 +1514,17 @@
             "pass",
             "pass"
           ],
+          "v2": {
+            "op": "<=",
+            "threshold": "climb_cap_bound",
+            "expect": [
+              "pass",
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "note": "v2：50° 在爬升带（θ_ride=45），是慢爬而不是「不许爬」。阈值不写常数：驱动算 1.02·H_cap + cap_margin，H_cap = ContactTuning.KHeight · D（= 2r，裸球无线尖）；1.02 是 §6.3 的 fade 浮点余量、cap_margin 取 ContactTuning.ClimbCapMarginM。四档：D0.30/0.60 到 cap 后滑回（pass8 +0.3068/+0.5999），D1.10 爬完 0.6 的板顶（+0.6000），D2.20 直接滚过去。只落了区间上界：下界（真的爬了 ≥0.5·H_cap）要第二条判据行，会改变 v1 的 59 条计数，所以现在由 stopped_by_wall 的 v2 行（越过板面）与轨迹作旁证，等 W2 建好再补"
+          },
           "note": "球底最高只比地面高 5 cm：没有把被拒的坡当成支撑偷偷抬上去"
         },
         {
@@ -1450,6 +1542,17 @@
             "pass",
             "pass"
           ],
+          "v2": {
+            "op": "<=",
+            "limit": 0.0,
+            "expect": [
+              "pass",
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "note": "v2：这块板不再是墙，球越过板面继续走（pass8 −0.0817 / −0.9843 / −2.1042 / −2.9522）。blocked_gap_m <= 0 表示球心至少推进到板面；v1 的 abs<=0.03 量的是「停在板前 r 处」"
+          },
           "note": "球停在 50° 板世界 AABB 的正面（z=−2.0）= 兜底墙生效；大数表示提前停住（隐形墙）"
         },
         {
@@ -1596,6 +1699,18 @@
             "pass",
             "pass"
           ],
+          "v2": {
+            "metric": "static_obb_count",
+            "op": ">=",
+            "limit": 1,
+            "expect": [
+              "pass",
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0，ramp_count 只对 v1 有意义；v2 换成 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
+          },
           "note": "arena 的 11.31° 斜面被接受（GetRampCount()==1）"
         },
         {
@@ -1942,6 +2057,666 @@
         "p3": "PASS"
       },
       "note": "geometry not migrated yet: author it as Docs/Design/Levels/physics_test_field/C20/placement.json, then flip wired and copy the checks; the design numbers are in PHYSICS_TEST_FIELD.md section 4"
+    },
+    {
+      "id": "W1",
+      "slug": "wall_low_90",
+      "name_zh": "90° 低墙 0.15 m（0.5·D @0.30）",
+      "kind": "wall",
+      "stage": "S6",
+      "wired": false,
+      "placement": null,
+      "status": "pending_scene",
+      "v2_only": true,
+      "design_source": "CONTACT_MODEL_V2.md §6.2 W1",
+      "geometry": "墙高 0.15、长 4、厚 0.4；墙后是地面",
+      "start_and_drive": "起点墙前 1.0 m，朝向 +Z；t=0..3 s 全推，3..4 s 松手",
+      "design_checks": [
+        {
+          "id": "wall_rise",
+          "metric": "max_bottom_rise_m",
+          "op": ">=",
+          "limit": 0.14,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "note": "0.5·D − 1 cm @D=0.30：h < r ⇒ 球心被墙顶抬到 0.15，球底至少到 0.14"
+        },
+        {
+          "id": "passed_over",
+          "metric": "blocked_gap_m",
+          "op": "<=",
+          "limit": -0.4,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "note": "越过墙背：blocked_gap_m ≤ −(墙厚 0.4) 表示球心推进到墙背之后。§6.2 原话是 z > 墙背 + r，同一件事，用已有指标表达"
+        },
+        {
+          "id": "ride_contact",
+          "metric": "contact_class_ride_frames",
+          "op": ">=",
+          "limit": 1,
+          "unit": "count",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "§6.2 的 support_kind==4 是 v2 的接触类 CLASS_RIDE（GetContactClass），不是 GetSupportKind 的 0/1/2/3；驱动要逐接触读（§6.4）"
+        }
+      ],
+      "metrics_pending": [
+        "contact_class_ride_frames（GetContactClass 已有，驱动缺 reader）"
+      ],
+      "note": "fall_frames 不判（§6.2 原文）"
+    },
+    {
+      "id": "W2",
+      "slug": "wall_high_90",
+      "name_zh": "90° 高墙 3.0 m（≫ H_cap）",
+      "kind": "wall",
+      "stage": "S6",
+      "wired": false,
+      "placement": null,
+      "status": "pending_scene",
+      "v2_only": true,
+      "design_source": "CONTACT_MODEL_V2.md §6.2 W2",
+      "geometry": "墙高 3.0、长 4、厚 0.4",
+      "start_and_drive": "起点墙前 1.0 m，t=0..8 s 全推（必须覆盖 4.5 s 爬升 + 回滑）",
+      "design_checks": [
+        {
+          "id": "climb_rise_max",
+          "metric": "max_bottom_rise_m",
+          "op": "<=",
+          "threshold": "climb_cap_bound",
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "note": "1.02·H_cap + cap_margin（D=0.60 时 0.632）：爬升不许超过模型的 cap。阈值是符号的，与 C06 no_climb 的 v2 行同一条推导"
+        },
+        {
+          "id": "climb_rise_min",
+          "metric": "max_bottom_rise_m",
+          "op": ">=",
+          "limit": 0.3,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "note": "确实爬了：≥ 0.5·H_cap（D=0.60 时 0.30）。与上一条同一读数的下界，合成一个区间"
+        },
+        {
+          "id": "final_rise",
+          "metric": "final_bottom_rise_m",
+          "op": "<=",
+          "limit": 0.1,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "松手后要滑回地面，不是挂在墙上（驱动缺 final_bottom_rise_m）"
+        },
+        {
+          "id": "no_reclimb",
+          "metric": "reclimb_count",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "§2.8：不允许静默的爬-滑-爬循环"
+        },
+        {
+          "id": "no_recovery",
+          "metric": "recovery_delta",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "这一格不该触发硬恢复（§2.8 的 recovery latch）"
+        }
+      ],
+      "metrics_pending": [
+        "final_bottom_rise_m",
+        "reclimb_count",
+        "recovery_delta"
+      ],
+      "note": "W2 是 W4 的基线，也是 C06 的慢爬语义在 90° 上的对照"
+    },
+    {
+      "id": "W3",
+      "slug": "ramp_70",
+      "name_zh": "70° 坡升 0.24 + 0.24 台面",
+      "kind": "ramp",
+      "stage": "S6",
+      "wired": false,
+      "placement": null,
+      "status": "pending_scene",
+      "v2_only": true,
+      "design_source": "CONTACT_MODEL_V2.md §6.2 W3",
+      "geometry": "坡升 0.24（< H_cap 0.30 @0.30）、宽 3，坡顶接 0.24 台面",
+      "start_and_drive": "起点坡脚前 0.8 m；t=0..4 s 全推",
+      "design_checks": [
+        {
+          "id": "deck_gap",
+          "metric": "deck_gap_m",
+          "op": "abs<=",
+          "limit": 0.01,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "note": "上到 0.24 台面；70° 在爬升带（θ_ride=45），不是墙"
+        },
+        {
+          "id": "climb_time",
+          "metric": "climb_time_s",
+          "op": "<=",
+          "limit": 2.0,
+          "unit": "s",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "0.24 m / 0.369 m/s = 0.65 s，给 3× 余量（起速 + 进接触）"
+        },
+        {
+          "id": "ride_contact",
+          "metric": "contact_class_ride_frames",
+          "op": ">=",
+          "limit": 1,
+          "unit": "count",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "坡顶那一段应是 RIDE 接触（§6.4 的逐接触读数）"
+        }
+      ],
+      "metrics_pending": [
+        "climb_time_s",
+        "contact_class_ride_frames（GetContactClass 已有）"
+      ],
+      "note": "no_slip_back 不适用：爬升带允许回滑"
+    },
+    {
+      "id": "W4",
+      "slug": "wall_high_with_rod",
+      "name_zh": "W2 的墙 + 凸出长杆",
+      "kind": "prop",
+      "stage": "S6",
+      "wired": false,
+      "placement": null,
+      "status": "pending_scene",
+      "v2_only": true,
+      "design_source": "CONTACT_MODEL_V2.md §6.2 W4",
+      "geometry": "W2 的 3.0 m 墙 + 球先吸一根 1.5×0.06×0.06 杆（ptf_rod_1500），杆朝墙",
+      "start_and_drive": "同 W2",
+      "design_checks": [
+        {
+          "id": "rod_gain_error",
+          "metric": "rod_gain_error_m",
+          "op": "abs<=",
+          "limit": 0.02,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "h_max(W4) − h_max(W2) = λ·L_eff（D=0.60 时 0.105）± 0.02；L_eff 由端点云算出，无拟合"
+        },
+        {
+          "id": "cap_with_rod",
+          "metric": "max_bottom_rise_m",
+          "op": "<=",
+          "limit": 0.72,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "note": "1.2·H_cap（D=0.60 时 0.72）：杆只加 λ·L_eff，不许把 cap 抬穿"
+        }
+      ],
+      "metrics_pending": [
+        "rod_gain_error_m（W4 − W2 两次子运行之差）"
+      ],
+      "note": "针尖接触的三格（W7/W8/P1）在 §4A.7，与本表同一协议但未列入本批"
+    },
+    {
+      "id": "W5",
+      "slug": "dash_step",
+      "name_zh": "dash 上台阶（0.8·H_cap）",
+      "kind": "step",
+      "stage": "S6",
+      "wired": false,
+      "placement": null,
+      "status": "pending_scene",
+      "v2_only": true,
+      "design_source": "CONTACT_MODEL_V2.md §6.2 W5",
+      "geometry": "台阶高 0.8·H_cap（D=0.30：0.24；D=0.60：0.48），宽 4",
+      "start_and_drive": "两次子运行：① 不 dash；② 起跑同时 dash",
+      "design_checks": [
+        {
+          "id": "dash_ratio",
+          "metric": "dash_time_ratio",
+          "op": "<=",
+          "limit": 0.7,
+          "unit": "ratio",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "t_to_deck(dash) ≤ 0.7·t(nodash)：0.7 = 1/1.4，dash 的 rate 上限 1.5/速度 1.6 取保守比"
+        },
+        {
+          "id": "deck_gap",
+          "metric": "deck_gap_m",
+          "op": "abs<=",
+          "limit": 0.01,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "note": "两次都上得去；dash 只改速度不改 H_cap"
+        }
+      ],
+      "metrics_pending": [
+        "dash_time_ratio（需要两次子运行）"
+      ],
+      "note": "dash 本身是 §3.8 的机制，S4 未实现前 W5 建不了"
+    },
+    {
+      "id": "W6",
+      "slug": "fall_out_of_world",
+      "name_zh": "掉出世界（硬恢复）",
+      "kind": "fall",
+      "stage": "S6",
+      "wired": false,
+      "placement": null,
+      "status": "pending_scene",
+      "v2_only": true,
+      "design_source": "CONTACT_MODEL_V2.md §6.2 W6",
+      "geometry": "平台边缘外无地面（地面平面移到 −20，或平台外 3 m 无支撑）",
+      "start_and_drive": "起点平台边内 1 m；t=0..2 s 全推冲出去",
+      "design_checks": [
+        {
+          "id": "fall_seen",
+          "metric": "fall_frames",
+          "op": ">=",
+          "limit": 1,
+          "unit": "count",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "note": "先掉下去：IsFalling 至少一帧"
+        },
+        {
+          "id": "recovery_delta",
+          "metric": "recovery_delta",
+          "op": "==",
+          "limit": 1,
+          "unit": "count",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "再硬恢复一次（§2.8）"
+        },
+        {
+          "id": "recovery_state",
+          "metric": "recovery_state",
+          "op": "==",
+          "limit": 2,
+          "unit": "state",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "回到 lastStableCenter（不是烘死的旧起点）；不允许 state==3"
+        }
+      ],
+      "metrics_pending": [
+        "recovery_delta",
+        "recovery_state（GetRecoveryCount/State 已有，驱动缺 reader）"
+      ],
+      "note": "这一格钉的是 §2.8：卡死/掉出世界不许静默循环"
+    },
+    {
+      "id": "R1",
+      "slug": "ramp_side",
+      "name_zh": "坡从侧面撞（实体板）",
+      "kind": "ramp",
+      "stage": "S6",
+      "wired": false,
+      "placement": null,
+      "status": "pending_scene",
+      "v2_only": true,
+      "design_source": "CONTACT_MODEL_V2.md §6.2 R1",
+      "geometry": "C05 的 45° 板，但用 0.3 m 厚的坡体（≥ r，撞的是侧面不是底面）",
+      "start_and_drive": "起点 (x = 2 + r + 0.5, y = r, z = 7.9)，朝向 −x；t=0..2 s 全推",
+      "design_checks": [
+        {
+          "id": "slab_penetration",
+          "metric": "slab_penetration_m",
+          "op": "<=",
+          "limit": 0.002,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "min_distance_to_slab ≥ r − 2 mm ⇔ 穿透 ≤ 2 mm（推挤收敛 slop 0.5 mm + 子步离散 1.5 mm）"
+        },
+        {
+          "id": "passed_through",
+          "metric": "passed_through",
+          "op": "==",
+          "limit": 0,
+          "unit": "bool",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "球心不许出现在板宽之内"
+        }
+      ],
+      "metrics_pending": [
+        "slab_penetration_m",
+        "passed_through"
+      ],
+      "note": "R1/R2 是 §8 拍板 1（坡要不要从侧面/下面挡）的执行判据"
+    },
+    {
+      "id": "R2",
+      "slug": "ramp_below",
+      "name_zh": "坡从下面（底面）",
+      "kind": "ramp",
+      "stage": "S6",
+      "wired": false,
+      "placement": null,
+      "status": "pending_scene",
+      "v2_only": true,
+      "design_source": "CONTACT_MODEL_V2.md §6.2 R2",
+      "geometry": "C05 的板抬高 1.0 m（底面 y≈1.27），球在下面",
+      "start_and_drive": "起点 (0, 0.5, 7.9)；驱动没有竖直速度接口，改用「从高处落到板底面」的等价场景",
+      "design_checks": [
+        {
+          "id": "slab_penetration",
+          "metric": "slab_penetration_m",
+          "op": "<=",
+          "limit": 0.002,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "同 R1 的 2 mm 预算"
+        },
+        {
+          "id": "through_top",
+          "metric": "passed_through",
+          "op": "==",
+          "limit": 0,
+          "unit": "bool",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "球心不出现_在板顶面之上，且不许穿过去"
+        }
+      ],
+      "metrics_pending": [
+        "slab_penetration_m",
+        "passed_through",
+        "驱动缺竖直初速度（§6.2 备注：用等价场景）"
+      ],
+      "note": "等价场景要单独授权：它改的是起点高度，不改判据"
+    },
+    {
+      "id": "S1",
+      "slug": "big_ball_low_deck",
+      "name_zh": "2.20 球 + 0.6 台面（滚过 + 落地）",
+      "kind": "plateau",
+      "stage": "S6",
+      "wired": false,
+      "placement": null,
+      "status": "pending_scene",
+      "v2_only": true,
+      "design_source": "CONTACT_MODEL_V2.md §6.2 S1",
+      "geometry": "C13 的台面（0.6 高）+ 北缘落差",
+      "start_and_drive": "C13 的 entry=ramp 时间线，D=2.20",
+      "design_checks": [
+        {
+          "id": "climbed",
+          "metric": "deck_gap_m",
+          "op": "abs<=",
+          "limit": 0.01,
+          "unit": "m",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "pass"
+          ],
+          "note": "2.20 球滚过 0.6 台面（v1 在这一档进不去，v2 的 h<r 让它直接滚上）"
+        },
+        {
+          "id": "seam_no_step",
+          "metric": "grounded_frame_dy_m",
+          "op": "<=",
+          "limit": 0.05,
+          "unit": "m",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "pass"
+          ],
+          "note": "v1 的 0.95 m 单帧跳变在这里应消失（pass8 已 +0.0184）"
+        },
+        {
+          "id": "landing_gap",
+          "metric": "landing_gap_m",
+          "op": "abs<=",
+          "limit": 0.01,
+          "unit": "m",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "pass"
+          ],
+          "note": "真落回地面：abs(center.y − r) ≤ 0.01（C13 的 2.20 档现被 R3 判 n/a）"
+        },
+        {
+          "id": "frame_drop",
+          "metric": "frame_dy_m",
+          "op": "<=",
+          "limit": 0.5,
+          "unit": "m",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "pass"
+          ],
+          "note": "是下落不是瞬移：单帧竖直位移 ≤ 0.5（真下落约 0.1–0.2/帧）"
+        }
+      ],
+      "metrics_pending": [],
+      "note": "S1 只跑 2.20 一档：它是 C13 2.20 的专门复核格，前提是 C13 的 2.20 仍然 n/a"
+    },
+    {
+      "id": "X1",
+      "slug": "curve_ramp",
+      "name_zh": "弯坡（薄片 OBB 链）",
+      "kind": "ramp",
+      "stage": "S6",
+      "wired": false,
+      "placement": null,
+      "status": "pending_scene",
+      "v2_only": true,
+      "design_source": "CONTACT_MODEL_V2.md §6.2 X1（表示见 §5.7a）",
+      "geometry": "B1 上弯 R4 / 30° / 8 段 / 宽 4，末端接平台",
+      "start_and_drive": "起点弧前 1 m，t=0..3 s 全推",
+      "design_checks": [
+        {
+          "id": "normal_jump",
+          "metric": "normal_jump_max_deg",
+          "op": "<=",
+          "limit": 6.75,
+          "unit": "deg",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "Δ/2 + 3°：段间法线跳变上限（Δ=7.5°/段，asin(s/r)=2.4° 取 3°）"
+        },
+        {
+          "id": "y_jitter",
+          "metric": "center_y_jitter_m",
+          "op": "<=",
+          "limit": 0.0084,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "s + 2 mm：sagitta 6.4 mm + 2 mm 噪声预算"
+        },
+        {
+          "id": "arch_rise",
+          "metric": "rise_m",
+          "op": "abs<=",
+          "limit": 0.005,
+          "unit": "m",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "R(1−cos30) = 0.536：弯坡总升程"
+        },
+        {
+          "id": "no_fall",
+          "metric": "fall_frames",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "note": "弯坡链不许出现「支撑消失一帧」"
+        },
+        {
+          "id": "segment_monotonic",
+          "metric": "segment_index_monotonic",
+          "op": "==",
+          "limit": 1,
+          "unit": "bool",
+          "expect": [
+            "pass",
+            "pass",
+            "n/a",
+            "n/a"
+          ],
+          "metric_available": false,
+          "note": "段索引单调：球从第 0 段走到第 7 段，不回头"
+        }
+      ],
+      "metrics_pending": [
+        "normal_jump_max_deg",
+        "center_y_jitter_m",
+        "rise_m",
+        "segment_index_monotonic"
+      ],
+      "note": "X1 是 §5.7(a)「一串薄片 OBB」表示的唯一验收格"
     }
   ],
   "cameras": [
@@ -2227,7 +3002,8 @@
     "writes": [
       "PhysicsTestCell: cellId, arena, startCenter, startHeadingDegrees, footprint, nominalM, approachM, rampClimb, rampFootM, rampProbe plane, check arrays, drive timeline",
       "PhysicsTestFieldDriver: cells[], presetDiametersM[], kindWhitelist",
-      "LabBallSizeSetter: presetDiametersM[], presetLabels[] (same diameters[], same file), and sizeModelBaselineVolumeUnits read from the scene motor's serialized baselineVolumeUnits"
+      "LabBallSizeSetter: presetDiametersM[], presetLabels[] (same diameters[], same file), and sizeModelBaselineVolumeUnits read from the scene motor's serialized baselineVolumeUnits",
+      "PhysicsTestCell v2 rows: checkHasV2[], checkV2Metrics[], checkV2Ops[], checkV2Limits[], checkV2ExpectMasks[], checkV2Thresholds[] (one row per check; -1/\"\" = inherit the v1 row) and deckCenterXZ/deckHalfSizeM (the plate footprint the v2 lift gate uses)"
     ],
     "rule": "the JSON is the only authoring copy; nothing here is typed twice"
   },
@@ -2242,5 +3018,44 @@
       "summary.json"
     ],
     "screenshot_rule": "每格每球径至少 2 张：cam_top + 该格主相机；起伏类再补 cam_chase 连拍"
+  },
+  "criteria_models": {
+    "why": "同一张 36 跑矩阵必须对两个电机模型都有意义：v1（contactModelV2Enabled=false）就是 pass7 的基线，v2 是 CONTACT_MODEL_V2.md §6.1/§7.7.2/§7.7.4 的期望。搬一套判据（而不是复制一份矩阵），两种模型才不会各说各话；v1 的每一行必须与 pass7 逐字相同",
+    "flag": "KatamariBallMotor.IsContactModelV2()",
+    "rule": "每条 criterion 可带一个可选的 v2 覆盖块；驱动只在 IsContactModelV2() 为 true 时用它，否则用 v1 行。没有 v2 块 = 同一条判据对两个模型都成立（例如 rest_gap、crossed、size_accuracy、seam_no_step）",
+    "override_keys": {
+      "expect": "4 项 pass/fail/n/a，替换 v1 的 expect（按 diameters[] 顺序）",
+      "metric": "替换读取的指标名；必须是驱动 TryReadMetric 能回答的名字",
+      "op": "替换比较符；op 一定连带 limit（数据里两者必须同时出现），或配 threshold",
+      "limit": "替换 op 的常数限",
+      "threshold": "符号阈值，驱动在运行期按电机常数算，此时不写 limit。目前只有一个值：climb_cap_bound = 1.02·H_cap + ContactTuning.ClimbCapMarginM，H_cap = ContactTuning.KHeight · D",
+      "not_applicable": "true = 四档全 n/a（等价于 expect 全 n/a），驱动报 SKIPPED_N_A 并计入 skipped",
+      "note": "人读的说明，不参与编码；但它与 v1 的 note 分开，v1 的解释不会被 v2 的语义污染"
+    },
+    "driver_rules": [
+      "v2 行在数据上完全显式：deck_gap 的 stepLimit 推导和 ramp_entry 的 stepLimit 推导都只对 v1 行生效",
+      "v1 行与 v2 行各有自己的 expect 掩码、metric、op、limit，互不覆盖",
+      "build stamp 2026-11-15e；[ptf] build= / run= / summary= / field= 四行都带 model=v1|v2，判据行不带（它由同一 run 的 model 决定）"
+    ],
+    "v1_baseline_pass7": {
+      "source": "Docs/Evidence/PhysicsTestField/2026-11-15_pass7_v1_regression/",
+      "per_run": {
+        "0.300": "58 pass / 0 skip / 1 unexpected",
+        "0.600": "57 / 1 / 1",
+        "1.100": "56 / 2 / 1",
+        "2.200": "52 / 5 / 2"
+      },
+      "known_reds": "C05 climbed ×4（45° 接缝死锁）+ C13 2.20 seam_no_step（0.95 m 单帧跳变）"
+    },
+    "v2_expected": {
+      "source": "CONTACT_MODEL_V2.md §6.1/§7.7.2/§7.7.4 + pass8 原样数值 （Docs/Evidence/PhysicsTestField/2026-11-15_pass8_contact_v2_fixes/）",
+      "per_run": {
+        "0.300": "58 pass / 1 skip / 0 unexpected",
+        "0.600": "58 / 1 / 0",
+        "1.100": "57 / 2 / 0",
+        "2.200": "54 / 5 / 0"
+      },
+      "caveat": "C10 blocked_gap 的 0.60/1.10/2.20 档和 C14 的门内 lift 在 pass8 里没有读数（前者被 n/a 跳过、后者是新增的门内指标），所以那两个 0 是模型预测：跑成红就是真发现，不是判据写错"
+    }
   }
 }

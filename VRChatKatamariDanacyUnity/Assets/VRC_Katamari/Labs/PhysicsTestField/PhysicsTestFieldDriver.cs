@@ -1,5 +1,6 @@
 using UdonSharp;
 using UnityEngine;
+using VRCKatamari.BallContact;
 using VRCKatamari.BallMotor;
 using VRCKatamari.Pickup;
 using VRCKatamari.Story;
@@ -85,7 +86,20 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // Stamped into the first log line so "which U# program is running" is checkable. The
         // 2026-11-15 matrix ran a pre-P3 driver against post-P3 data and nobody could tell from
         // the log; the build line and the reason= vocabulary make that impossible to repeat.
-        private const string DriverRevision = "2026-11-15d";
+        // 2026-11-15e: the criteria became model-aware (v2 override rows, design section 5.6) and
+        // every [ptf] header line now names the model the run actually used.
+        private const string DriverRevision = "2026-11-15e";
+
+        // Contact v2 thresholds (CONTACT_MODEL_V2 6.1/6.3/7.7.2). The slow-climb cap is
+        // H_cap = ContactTuning.KHeight * (2r + lambda * L_eff); a cell of this field carries no
+        // protruding prop where the cap is judged, so L_eff = 0 and H_cap = k_h * D. The bound
+        // adds the design's 2% float-fade allowance and ContactTuning's cap_margin (the band below
+        // H_cap where a climb counts as done), so no per-diameter threshold is typed into the data.
+        private const float V2CapFloatMargin = 1.02f;
+
+        // Symbolic threshold codes, shared with the criteria importer (checkV2Thresholds).
+        private const int ThresholdLimit = 0;
+        private const int ThresholdClimbCapBound = 1;
 
         // ---- state -------------------------------------------------------------
 
@@ -105,6 +119,9 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private float runSeconds;
         private float driveEndSeconds;
         private float nextTrajectoryTime;
+        // The model this RUN is judged under, read once in Switch from the motor. Cached because
+        // EvaluateChecks asks per check and the flag is the motor's (it may be toggled in Play).
+        private bool modelIsV2;
 
         // Why a metric could not be read. 0 is "read it"; every other code names a REAL metric
         // this run cannot answer, and only MetricUnknown means the NAME is wrong. The driver
@@ -117,6 +134,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private const int MetricNoSetter = 4;
         private const int MetricSizeModelMissing = 5;
         private const int MetricQuantumUnavailable = 6;
+        private const int MetricNoGateSample = 7;
 
         private bool pendingBegin;
         private int pendingCellIndex;
@@ -141,6 +159,11 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private int maxBlocking;
         private float maxLiftOverNominal;
         private bool hasLiftSample;
+        // The same lift, accumulated only while the ball is over the cell's deck (design
+        // CONTACT_MODEL_V2 7.7.4). A separate latch, not a second metric definition: v1 keeps
+        // reading the whole-run maximum, v2's override row names this one.
+        private float maxLiftInDeckOverNominal;
+        private bool hasLiftInDeckSample;
         private float minDeckGap;
         private bool hasDeckSample;
         private float peakSpeedEarly;
@@ -176,11 +199,17 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
         public void Start()
         {
-            // Nothing here touches the motor: its Start may not have run yet, and its stores are
-            // allocated there. The first Update waits for a positive diameter instead of racing.
+            // Nothing here touches the motor's STATE: its Start may not have run yet, and its stores
+            // are allocated there. The first Update waits for a positive diameter instead of racing.
+            // The only two reads below are safe before that: IsContactModelV2() returns a serialized
+            // bool (set at deserialization) and the cell's revision is a compile-time constant.
             int cellCount = cells == null ? 0 : cells.Length;
+            // model= is the first thing a log reader needs from now on: the same 36-run matrix is
+            // meaningful for v1 and v2, and the two have different expected rows (design 5.6).
             Debug.Log("[ptf] build=" + DriverRevision + " cells=" + cellCount.ToString()
-                + " presets=" + (presetDiametersM == null ? 0 : presetDiametersM.Length).ToString());
+                + " presets=" + (presetDiametersM == null ? 0 : presetDiametersM.Length).ToString()
+                + " model=" + ModelText()
+                + " cellRev=" + CellRevisionText());
             if (cells != null)
             {
                 for (int i = 0; i < cells.Length; i++)
@@ -449,6 +478,10 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return;
             }
 
+            // The model this run is judged under. Read once per run: the flag belongs to the motor
+            // and can be toggled in Play, and every row of one run must describe one model.
+            modelIsV2 = motor.IsContactModelV2();
+
             // Exactly one arena may be REGISTERED; all of them stay visible. ReleaseArena now
             // means "suspend self-registration", not "hide", so this loop is safe to run on
             // every switch and on Start without turning the field into a set of empty pads.
@@ -542,6 +575,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 "[ptf] run=" + runIndex
                 + " cell=" + cell.GetCellId()
                 + " D=" + Fixed(presetDiametersM[diameterIndex], 3)
+                + " model=" + ModelText()
                 + " start=(" + Fixed(startCenterWorld.x, 3) + "," + Fixed(startCenterWorld.y, 3)
                 + "," + Fixed(startCenterWorld.z, 3) + ")"
                 + " hdg=" + Fixed(heading, 1)
@@ -805,6 +839,21 @@ namespace VRCKatamari.Labs.PhysicsTestField
             if (!hasLiftSample || lift > maxLiftOverNominal) maxLiftOverNominal = lift;
             hasLiftSample = true;
 
+            // The v2 plate criterion (CONTACT_MODEL_V2 7.7.4): a thin plate must not lift the ball,
+            // but a run that keeps pushing at the far boundary wall legitimately climbs it. So the
+            // gated latch only takes samples while the ball's XZ is over THIS cell's deck, grown by
+            // one collision radius. Both numbers are data: the deck footprint the criteria importer
+            // baked from the arena collider, and the ball's own radius.
+            if (cell.IsInDeckGate(center.x, center.z, radius))
+            {
+                if (!hasLiftInDeckSample || lift > maxLiftInDeckOverNominal)
+                {
+                    maxLiftInDeckOverNominal = lift;
+                }
+
+                hasLiftInDeckSample = true;
+            }
+
             if (center.y > maxCenterY) maxCenterY = center.y;
 
             Vector3 velocity = motor.GetPlanarVelocity();
@@ -911,20 +960,46 @@ namespace VRCKatamari.Labs.PhysicsTestField
             for (int i = 0; i < total; i++)
             {
                 string checkId = cell.GetCheckId(i);
-                string metric = cell.GetCheckMetric(i);
                 int op = cell.GetCheckOp(i);
                 float limit = cell.GetCheckLimit(i);
                 int readout = cell.GetCheckReadout(i);
                 int gateStage = cell.GetCheckGateStage(i);
+                string metric = cell.GetCheckMetric(i);
                 int expect = cell.GetCheckExpect(i, diameterIndex);
+                int threshold = ThresholdLimit;
+
+                // Model-aware rows (design section 5.6). When the motor runs the v2 contact solver
+                // and this criterion carries a v2 override, judge the override; otherwise the v1 row
+                // is the criterion, for BOTH models. The override is data, not a second rule: it may
+                // replace the metric, the op with its own limit, or name a threshold the driver
+                // derives, plus the per-diameter expectation. It is judged exactly as written - the
+                // two v1 derivations below never touch a v2 row.
+                bool v2Row = modelIsV2 && cell.HasCheckV2(i);
+                if (v2Row)
+                {
+                    string v2Metric = cell.GetCheckV2Metric(i);
+                    if (v2Metric != null && v2Metric.Length > 0) metric = v2Metric;
+                    int v2Op = cell.GetCheckV2Op(i);
+                    if (v2Op >= 0)
+                    {
+                        // An op override carries its own limit: the pair is one decision.
+                        op = v2Op;
+                        limit = cell.GetCheckV2Limit(i);
+                    }
+
+                    int v2Expect = cell.GetCheckV2Expect(i, diameterIndex);
+                    if (v2Expect >= 0) expect = v2Expect;
+                    threshold = cell.GetCheckV2Threshold(i);
+                }
 
                 // A deck check asks "did the ball get onto the deck"; whether it SHOULD is the
                 // runtime step limit, not the preset label. The presets are quantized (the
                 // 0.30 preset is 0.2997369 m, so its limit is 0.074934 m) and C09's deck is
                 // 0.075 m: a baked "pass" would demand a climb the step rule forbids (design
                 // section 8.3.1). Only the deck metric is derived here; every other check
-                // keeps its baked row, so no other criterion's meaning moves.
-                if (Same(metric, "deck_gap_m") && !cell.IsRampClimb())
+                // keeps its baked row, so no other criterion's meaning moves. A v2 row states its
+                // own answer (design 5.6), so this v1 rule does not apply to one.
+                if (!v2Row && Same(metric, "deck_gap_m") && !cell.IsRampClimb())
                 {
                     float deckRise = cell.GetNominalM();
                     float runStepLimit = motor.GetStepHeightLimitWorldM();
@@ -943,7 +1018,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 // ball that has advanced that far horizontally onto the ramp has provably crossed
                 // the foot (an invisible wall would hold it at ~0). The old 0.30 m sat 0.4 mm
                 // above the 45-degree ramp's geometric maximum at D=0.60, so it could never pass.
-                if (Same(metric, "ramp_entry_progress_m"))
+                if (!v2Row && Same(metric, "ramp_entry_progress_m"))
                 {
                     float entryMin = motor.GetStepHeightLimitWorldM();
                     if (entryMin > 0f)
@@ -953,6 +1028,19 @@ namespace VRCKatamari.Labs.PhysicsTestField
                             + " step_limit=" + Fixed(entryMin, 6)
                             + " min_progress=" + Fixed(entryMin, 6));
                     }
+                }
+
+                // v2's symbolic thresholds (CONTACT_MODEL_V2 6.3/7.7.2). The 50-degree board must
+                // SLOW CLIMB, so the bound is the model's own cap rather than a baked metre value
+                // that would only be right at one diameter.
+                if (v2Row && threshold == ThresholdClimbCapBound)
+                {
+                    limit = ClimbCapBoundM();
+                    Log("[ptf] derived cell=" + cell.GetCellId() + " check=" + checkId
+                        + " metric=" + metric
+                        + " h_cap=" + Fixed(ClimbCapM(), 4)
+                        + " cap_bound=" + Fixed(limit, 4)
+                        + " model=v2");
                 }
 
                 string expectText = ExpectText(expect);
@@ -1075,6 +1163,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 + " pass=" + checkPass.ToString()
                 + " unexpected=" + checkUnexpected.ToString()
                 + " skipped=" + checkSkipped.ToString()
+                + " model=" + ModelText()
                 + " verdict=" + verdictText
                 + " elapsed=" + Fixed(driveClock, 2) + "s";
             Debug.Log(lastSummaryLine);
@@ -1135,6 +1224,30 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 }
 
                 value = maxLiftOverNominal;
+                return MetricOk;
+            }
+
+            if (Same(metric, "lift_over_nominal_in_deck_m"))
+            {
+                // The v2 plate criterion (CONTACT_MODEL_V2 7.7.4): the same lift, but only while
+                // the ball was over the deck. No sample means the ball never got there, which is a
+                // setup/geometry answer, not a physics verdict.
+                if (!hasLiftInDeckSample)
+                {
+                    return MetricNoGateSample;
+                }
+
+                value = maxLiftInDeckOverNominal;
+                return MetricOk;
+            }
+
+            if (Same(metric, "static_obb_count"))
+            {
+                // The v2 substitute for ramp_count (design 7.7.2): a v2 arena bakes a role=ramp
+                // into a static OBB, so "the ramp is registered" is "the static table is not
+                // empty". Read the motor's getter directly; a diagnostic reader must copy the
+                // Udon heap first, the driver already runs inside it.
+                value = (float)motor.GetStaticObbCount();
                 return MetricOk;
             }
 
@@ -1387,6 +1500,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 case MetricNoSetter: return "noSetter";
                 case MetricSizeModelMissing: return "sizeModelMissing";
                 case MetricQuantumUnavailable: return "quantumUnavailable";
+                case MetricNoGateSample: return "noGateSample";
                 default: return "unavailable";
             }
         }
@@ -1435,6 +1549,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
             float elapsed = Time.time - passStartTime;
             Debug.Log("[ptf] field cells=" + cells.Length.ToString()
                 + " runs=" + passRuns.ToString()
+                + " model=" + ModelText()
                 + " verdict=" + verdict
                 + " unexpected=" + passUnexpected.ToString()
                 + " skipped=" + passSkipped.ToString()
@@ -1451,11 +1566,59 @@ namespace VRCKatamari.Labs.PhysicsTestField
             if (cell == null) return "none";
             LevelArenaHost arena = cell.GetArena();
             if (arena == null) return "none";
+            // obbs= is the v2 evidence the ramp cells now rest on (design 7.7.2): a v2 arena bakes
+            // its ramp into a static OBB, so the motor's ramp table is legitimately 0.
             return "planes=" + arena.GetRegisteredPlaneCount().ToString()
                 + "/boxes=" + arena.GetRegisteredBoxCount().ToString()
                 + "/supports=" + arena.GetRegisteredSupportCount().ToString()
                 + "/ramps=" + motor.GetRampCount().ToString()
+                + "/obbs=" + motor.GetStaticObbCount().ToString()
                 + "/rampCell=" + (cell.IsRampClimb() ? "1" : "0");
+        }
+
+        /// <summary>
+        /// "v1" or "v2": the contact model this run is judged under, for every [ptf] header line.
+        /// </summary>
+        private string ModelText()
+        {
+            if (motor == null) return "none";
+            if (motor.IsContactModelV2()) return "v2";
+            return "v1";
+        }
+
+        /// <summary>
+        /// The compiled test-field revision the scene's cells report, so a stale cell program is
+        /// visible in the first line ("" = a cell predates the v2 rows and would silently inherit
+        /// them as "no override").
+        /// </summary>
+        private string CellRevisionText()
+        {
+            if (cells == null) return "none";
+            for (int i = 0; i < cells.Length; i++)
+            {
+                if (cells[i] == null) continue;
+                return cells[i].GetCellRevision();
+            }
+
+            return "none";
+        }
+
+        /// <summary>H_cap for the ball in play: k_h * D (a cell's balls carry no protruding prop).</summary>
+        private float ClimbCapM()
+        {
+            float diameter = motor.GetSemanticDiameterWorldM();
+            if (diameter < 0f) diameter = 0f;
+            return ContactTuning.KHeight * diameter;
+        }
+
+        /// <summary>
+        /// The v2 climb bound 1.02 * H_cap + cap_margin (CONTACT_MODEL_V2 6.1 C06 / 6.3): the
+        /// design's "at most 1.02*H_cap + 0.02", with the 2% as a named float-fade allowance and
+        /// the 2 cm as ContactTuning's cap margin. Derived per run, never typed per diameter.
+        /// </summary>
+        private float ClimbCapBoundM()
+        {
+            return V2CapFloatMargin * ClimbCapM() + ContactTuning.ClimbCapMarginM;
         }
 
         private string GateSummary(PhysicsTestCell cell)
@@ -1491,6 +1654,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
             maxBlocking = 0;
             maxLiftOverNominal = 0f;
             hasLiftSample = false;
+            maxLiftInDeckOverNominal = 0f;
+            hasLiftInDeckSample = false;
             minDeckGap = 0f;
             hasDeckSample = false;
             peakSpeedEarly = 0f;

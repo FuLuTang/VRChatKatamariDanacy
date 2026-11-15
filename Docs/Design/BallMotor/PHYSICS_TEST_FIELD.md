@@ -574,6 +574,65 @@ gap = (center.y − GetSupportSurfaceHeightWorldM()) * GetSupportNormalWorld().y
 
 本设计**全部按含等号**写（`≤`）。TERRAIN_SUPPORT §4.1 与 `PickupAbsorbMath` 的现状也都是 `≤`（吸收门是「严格大于才拒绝」）。**若实现改成严格小于，这三处会同时翻**，请一次改完三处并更新 JSON 的 `expect`，不要只改一处。
 
+### 5.6 判据的模型维度：v2 覆盖块（2026-11-15e，pass7/pass8 之后）
+
+**问题**：同一张 36 跑矩阵要同时服务两个电机模型——v1（`contactModelV2Enabled=false`，矩阵必须**逐字**等于 pass7：58/0/1、57/1/1、56/2/1、52/5/2）与 v2（flag 开，期望见 CONTACT_MODEL_V2 §6.1/§7.7.2/§7.7.4）。**复制一份矩阵是最坏的做法**：两份 `expect` 会各自漂移，而且「v1 还是 v2」就再也不是一个可验证的问题。
+
+**机制（一个，不是两套）**：每条 criterion 可以带一个可选的 `v2` 块。驱动在每个 run 的 `Switch` 阶段读一次 `motor.IsContactModelV2()`，**只有为 true 且该行有 `v2` 块时**才用覆盖行；否则 v1 行就是这条判据，对两个模型都成立。**没有 `v2` 块 = 同一条判据**（`rest_gap`、`crossed`、`size_accuracy`、`seam_no_step`、`climbed` 都在这一类）。
+
+| `v2` 块允许的键 | 编码 | 说明 |
+|---|---|---|
+| `expect` | 4 项 `pass/fail/n/a` 的两 bit 掩码 | 按 `diameters[]` 顺序，替换 v1 的 `expect` |
+| `metric` | 指标名字符串 | 替换读数来源；必须是驱动 `TryReadMetric` 能回答的名字 |
+| `op` + `limit` | op 码 + float | **op 一定连带 limit**（一个决定），驱动不会拿 v1 的 limit 配 v2 的 op |
+| `threshold` | `climb_cap_bound` | 符号阈值：驱动在运行期算 `1.02·H_cap + cap_margin`，此时不写 `limit` |
+| `not_applicable` | `true` | 四档全 n/a（写成全 0 掩码），驱动报 `SKIPPED_N_A` 并计入 skipped |
+| `note` | 文本 | 只给人读。**与 v1 的 `note` 分开**，v1 的解释不会被 v2 的语义污染 |
+
+**「v2 行完全显式」**：v1 的两处运行期推导（`deck_gap` 用 `stepLimit`、`ramp_entry` 用 `stepLimit`）**只对 v1 行生效**。v2 行要么写死 op+limit，要么点名一个由电机常数推出的 `threshold`；驱动不会在它背后套 v1 的规则（否则 C09/C10 的 0.30 档会继续被 0.25·D 判成墙，见 §4.2）。
+
+#### 5.6.1 覆盖表（v1 行 vs v2 行，逐条）
+
+| 格 / 判据 | v1（pass7 基线） | v2（CONTACT_MODEL_V2） | 为什么 |
+|---|---|---|---|
+| C01/C03/C05/C13 `ramp_registered` | `ramp_count == 1`，四档 pass | **指标换成 `static_obb_count >= 1`**，四档 pass | v2 把 `role=ramp` 烘成静态 OBB（`[arena] obbBake=obb`），`GetRampCount()` 天然 0；坡仍然存在，只是换了表 |
+| C06 `no_ramp_registered` | `ramp_count == 0`，四档 pass | **`not_applicable`**（四档 skip） | 同一件事的 v1 措辞；v2 下 `ramp_count` 恒 0，这条不再测任何东西 |
+| C06 `ramp_refused` / `refusal_slope` | 拒绝 + 坡度 ≥ 49°，四档 pass | **不变（不加 v2 块）** | §7.7.2 预测「v2 不拒绝任何坡」，但**探针走的是 `motor.AddRamp`，45° 护栏是 v1 侧、与 flag 无关**：pass6/pass8 都记到 `refused=1 slope=50.00 reason=36 chars`。**证据压过预测**，两档保持同一条判据 |
+| C06 `no_climb` | `max_bottom_rise_m <= 0.05`（「不许爬」） | **`<=` 符号阈值 `climb_cap_bound`**，四档 pass | 50° 在爬升带（`θ_ride=45`），v2 的正确答案是**慢爬**：D0.30/0.60 爬到 cap 后滑回（pass8 +0.3068/+0.5999）、D1.10 爬完 0.6 板顶（+0.6000）、D2.20 直接滚过去 |
+| C06 `stopped_by_wall` | `abs(blocked_gap_m) <= 0.03`（停在板前） | **`blocked_gap_m <= 0`**，四档 pass | v2 下这块板不是墙，球越过板面继续走（pass8 −0.0817/−0.9843/−2.1042/−2.9522） |
+| C09/C10 `on_step` | 0.30 档 `fail`（`stepLimit` 台阶规则） | **`expect` 四档全 pass** | v2 §2.5：`h < r` 就滚过去，与 `stepLimit` 无关（0.075/0.100 都 < r(0.30)=0.1499） |
+| C10 `blocked_gap` | `abs <= 0.01`，0.30 pass、其余 n/a | **`<= 0` + 四档 pass** | 0.10 挡板在 v2 下不是墙；`<= 0` = 球心至少推进到板面（pass8 −4.3338） |
+| C14 `lift_bounded` | `lift_over_nominal_m <= 0.01`（全程最大值） | **指标换成 `lift_over_nominal_in_deck_m <= 0.01`**，四档 pass | §7.7.4：`nominal` 仍是板顶 0.028，但 lift **只在球 XZ 落在板的足印 ±1r 内**累计。门内参考模型 −0.0002…0（pass8 的 `rest_gap +0.0021` 就是门内抬升）；全程最大值 +0.0189…+0.2133 来自远端边界平面的**合法爬升**，是 v1 判据的语义问题，不是电机缺陷 |
+
+**C06 `no_climb` 只落了区间的上界**（§7.7.2 写的是 `max_bottom_rise ∈ [0.5·H_cap, 1.02·H_cap+0.02]`）：下界需要**第二条判据行**，而那会改变 v1 的 59 条计数、也就会让 v1 矩阵不再等于 pass7。现在下界由 `stopped_by_wall` 的 v2 行（越过板面）与轨迹作旁证；等 W2 建好、允许动计数时再补成正式一行。
+
+**门与阈值的数从哪来（没有魔法数）**：
+
+- `climb_cap_bound = 1.02 · H_cap + ContactTuning.ClimbCapMarginM`，`H_cap = ContactTuning.KHeight · D`（`KHeight = 1.0`，本场的球不带凸出长杆 ⇒ `λ·L_eff = 0`，所以 `H_cap = 2r = D`）。`1.02` 是 CONTACT_MODEL_V2 §6.3 的 fade 浮点余量（`V2CapFloatMargin`），`cap_margin = 0.02 m` 直接取电机常数。**每档的 0.326 / 0.632 / 1.142 / 2.264 都是驱动算出来的，不写进 JSON**。
+- `lift_over_nominal_in_deck_m` 的门：导入器从 **arena 的 `staticBoxes`** 沿 heading 找到第一个盒（就是 `approach_m` 用的那一个），把它在世界里的 XZ 矩形烘进 `PhysicsTestCell.deckCenterXZ / deckHalfSizeM`；驱动用 `cell.IsInDeckGate(center.x, center.z, radius)` 判门。**足印来自场景碰撞体、外扩量来自球自己的碰撞半径**，判据文件里一个数都没有。
+- `static_obb_count` 读 `motor.GetStaticObbCount()`。Play 内用诊断脚本读它之前要先 `UdonSharpEditorUtility.CopyUdonToProxy`（pass6 的「读 0」就是这个测量错误）；驱动本身在 Udon 里跑，直接读 getter。
+
+#### 5.6.2 两套期望计数（59 条/run）
+
+| D | v1（pass7，实测） | v2（按 §6.1/§7.7.2/§7.7.4 + pass8 原样数值推算） |
+|---|---|---|
+| 0.300 | 58 pass / 0 skip / 1 unexpected | **58 / 1 / 0** |
+| 0.600 | 57 / 1 / 1 | **58 / 1 / 0** |
+| 1.100 | 56 / 2 / 1 | **57 / 2 / 0** |
+| 2.200 | 52 / 5 / 2 | **54 / 5 / 0** |
+
+- v1 的五个已知红灯：C05 `climbed` ×4（45° 接缝死锁，§4.1.3）+ C13 2.20 `seam_no_step`（§4.1.5 的 0.95 m 单帧跳变）。
+- v2 多出来的那 1 个 skip 是 C06 `no_ramp_registered`（v2 下 n/a）；C10 `blocked_gap` 在 0.60/1.10/2.20 由 n/a 变成**可测**，所以 skip 总数仍是 0/1/2/5。
+- **v2 的 0 条 unexpected 里有两条是预测**：C10 `blocked_gap` 的 0.60/1.10/2.20 与 C14 的**门内** lift 在 pass8 里没有读数（前者当时被 n/a 跳过，后者是新增的门内指标）。跑出来红就是真发现，不是判据写错。
+
+#### 5.6.3 新格位的判据先落数据（`status: pending_scene`，不建场景）
+
+CONTACT_MODEL_V2 §6.2 的十个格（W1–W6、R1/R2、S1、X1）已经以**设计行**进 `physics_test_field.json` 的 `planned_cells`：`status: pending_scene`、`v2_only: true`、`wired: false`、`placement: null`，每条判据带 `metric / op / limit / unit / expect(4) / note`，还缺的读数集中在 `metrics_pending`。**导入器只遍历 `cells[]` 且只写 `wired` 的格**，所以这些行在有人建出 `placement.json`、把 `wired` 翻成 true 之前是**惰性的数据**——不会进场景、不会进驱动、也不会改变上面任何计数。要做某格时：写 placement → `levelbuild check` → 把判据从 `design_checks` 搬成 `checks`（补 `readout/gate/window/applies_d`）→ 删 `status`。
+
+其中有几条**故意标了 `metric_available: false`**：§6.2 的读数（`contact_class_ride_frames`、`climb_time_s`、`recovery_delta`、`normal_jump_max_deg`、`slab_penetration_m`、`segment_index_monotonic` …）现在没有驱动 reader。这与 §5.1 的「C 通道：测不到就说测不到」是同一条纪律：**先写判据、再写 reader，不拿近似值假装测过**。另注意 §6.2 里的 `support_kind==4` 是 v2 的**接触类** `CLASS_RIDE`（`GetContactClass`），不是 `GetSupportKind` 的 0/1/2/3——设计行里已按 `contact_class_ride_frames` 写清。
+
+**操作员要做的三件事**（本批**没有**编译、没有跑 Unity）：① 重编 U#（驱动与格的指纹升到 **`2026-11-15e`**；设定器仍是 `2026-11-15d`——它这一批没改，按它自己的指纹判断新旧）；② **重导判据**（新字段 `checkHasV2[] / checkV2*[] / deckCenterXZ / deckHalfSizeM` 必须先被写入，否则驱动读到空数组会**静默退回 v1 行**——这也是 `[ptf] build=… cellRev=…` 两枚指纹存在的理由）；③ 跑同一套 36 跑**两次**：flag 关（对照 v1 表）与 flag 开（对照 v2 表），两次日志都必须出现 `model=v1` / `model=v2`。
+
 ---
 
 ## 6. 观测与记录

@@ -1,0 +1,386 @@
+{
+  "schema": "katamari.placement/0",
+  "level": {
+    "id": "hub",
+    "scene": "StoryMode",
+    "units": "m",
+    "convention": "unity-y-up-left-handed-quat-xyzw",
+    "playerSpawn": [
+      1200.0,
+      0.1,
+      -2.8
+    ],
+    "ballDiameterStart": 0.2997,
+    "ballDiameterMax": 0.3,
+    "groundY": 0.0,
+    "bounds": [
+      [
+        1195.9,
+        -4.1
+      ],
+      [
+        1204.1,
+        4.1
+      ]
+    ],
+    "spawnClearanceM": 1.0,
+    "budget": {
+      "planes": 8,
+      "boxes": 8,
+      "ramps": 4,
+      "propSupports": 6,
+      "blocking": 6
+    },
+    "expected": {
+      "propCount": 5,
+      "valueUnits": 212,
+      "structureCount": 7
+    },
+    "zones": [
+      {
+        "id": "hub_floor"
+      }
+    ],
+    "arena": {
+      "id": "hub"
+    }
+  },
+  "defs": [
+    {
+      "id": "book_stack",
+      "kind": "furniture",
+      "valueUnits": 8
+    },
+    {
+      "id": "picnic_basket",
+      "kind": "container",
+      "valueUnits": 16
+    },
+    {
+      "id": "picnic_bench",
+      "kind": "furniture",
+      "valueUnits": 130
+    },
+    {
+      "id": "storage_bin",
+      "kind": "container",
+      "valueUnits": 52
+    },
+    {
+      "id": "watering_can",
+      "kind": "garden",
+      "valueUnits": 6
+    }
+  ],
+  "props": [
+    {
+      "itemId": "basket_hub_01",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "hub_floor",
+      "position": [
+        1203.1,
+        0.1106,
+        -2.9
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.829,
+      "absorbable": false,
+      "valueUnits": 16
+    },
+    {
+      "itemId": "bench_hub_01",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "hub_floor",
+      "position": [
+        1196.9,
+        0.225,
+        0.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.0,
+        0.707107
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.604,
+      "absorbable": false,
+      "valueUnits": 130
+    },
+    {
+      "itemId": "bin_hub_01",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "hub_floor",
+      "position": [
+        1196.9,
+        0.2,
+        -2.9
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.137,
+      "absorbable": false,
+      "valueUnits": 52
+    },
+    {
+      "itemId": "books_hub_01",
+      "def": "book_stack",
+      "kind": "furniture",
+      "zone": "hub_floor",
+      "position": [
+        1203.2,
+        0.045,
+        3.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.26,
+        0.09,
+        0.19
+      ],
+      "absorbDiameterReq": 0.44,
+      "absorbable": false,
+      "valueUnits": 8
+    },
+    {
+      "itemId": "can_hub_01",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "hub_floor",
+      "position": [
+        1196.9,
+        0.0895,
+        3.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.458,
+      "absorbable": false,
+      "valueUnits": 6
+    }
+  ],
+  "structures": [
+    {
+      "id": "boundary_x0",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        1196.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        3.0,
+        0.04,
+        8.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        -0.707107,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "west wall; 3 m tall so a jumping player cannot leave the room"
+    },
+    {
+      "id": "boundary_x1",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        1204.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        3.0,
+        0.04,
+        8.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.707107,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "east wall (behind the result board)"
+    },
+    {
+      "id": "boundary_z0",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        1200.0,
+        1.5,
+        -4.0
+      ],
+      "size": [
+        8.0,
+        0.04,
+        3.0
+      ],
+      "rotationQuat": [
+        0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "south wall (behind the spawn point)"
+    },
+    {
+      "id": "boundary_z1",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        1200.0,
+        1.5,
+        4.0
+      ],
+      "size": [
+        8.0,
+        0.04,
+        3.0
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "north wall; the result board hangs on its inner face"
+    },
+    {
+      "id": "hub_floor",
+      "kind": "room",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        1200.0,
+        0.0,
+        0.0
+      ],
+      "size": [
+        8.0,
+        0.04,
+        8.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "8 x 8 m room floor; top face at y = 0"
+    },
+    {
+      "id": "result_board",
+      "kind": "board",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        1200.0,
+        1.45,
+        3.95
+      ],
+      "size": [
+        2.6,
+        1.5,
+        0.06
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": false,
+      "notes": "the previous run's result card (StoryResultPresenter's panel) hangs in front of this board; the room does not print the numbers twice"
+    },
+    {
+      "id": "select_picnic_corner",
+      "kind": "select",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        1200.0,
+        0.01,
+        1.2
+      ],
+      "size": [
+        2.8,
+        0.02,
+        2.8
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "level-select pad for the picnic corner; collision none so walking onto it cannot block; the host's circle is centred on this object"
+    }
+  ]
+}

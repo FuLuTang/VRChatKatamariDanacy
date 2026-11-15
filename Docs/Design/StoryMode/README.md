@@ -694,3 +694,13 @@ AABB 取 **3.6 × 0.55 × 0.80 = 1.584 m³**（`Docs/Design/Maps/PicnicLawn/prop
 - **第二大风险：`@size=` 是按立方体写 `propBounds` 的**（本文件「显式拾取尺寸」节）。在体积门下，`@size=1.25` 的体积是 1.953 m³，比 3.6×0.55×0.80 的 1.584 m³ **更大**——它不能把长凳变"小"，反而更贵；`@size=1.25` 需要 `D=3.341`、`U=4,760`，比真实 AABB 的 `D=3.116`、`U=3,860` 还多，连 3.20 的上限都不够。长度门时代的 `@size` 口径必须按体积重设计，不能直接沿用。
 - **第三大风险：PicnicLawn 的 3.6 m 长凳在 1,284 u 下不可吸**；3.20 的上限只解决"直径够不够"，不解决"单位够不够"。要么把 PicnicLawn 的内容/价值提到 ~4,181 u，要么把长凳的拾取 AABB 压到 ≤0.526 m³（横截面 ~0.38×0.38），要么把它改成可绕过的装饰而不是门。
 
+## 主房间闭环（HUB_ROOM，2026-11-15 追加）
+
+> 状态：`SOURCE_WRITTEN_NOT_COMPILED`；数据侧 `levelbuild check --level hub` **PASS**；Unity 编译/Play Mode/Build & Test 全部 `NOT_RUN`。设计、房间布局、操作员步骤、未验证项见 [HUB_ROOM](<HUB_ROOM.md>)。
+
+- **开始不再只靠“坐上球”**：主房间里走进选关圈 0.35 s 自动开始；读 `GetPosition()`，ClientSim 与真机同一条路径，不需要 VRC_Station，也不选“按 E”（`InputUse` 是全局事件，没有“看着某物体按 E”）。圈有 re-arm 与 dwell，出生点在圈外。
+- **结算后自动回房**：`HubLevelLauncher` 在 `Presenting` 先退座、再传送回房；`StoryResultPresenter` 的结果卡搬到房间北墙，就是“上一局结果板”（星/直径/评语），房间侧不打印第二份。
+- **没有第二套状态机**：`StoryRoundController` **未改**，回合/计时/冻结/重试仍归它；新代码只拥有房间相位与提示。输入仍是 `DesktopMoveInput` 的骑乘/回合两把闸门，没有第三把。
+- **单场景方案 b**：房间岛 `(1200,0,0)` + 关卡岛原点，玩家传送，不做整块 `LevelContent` 启用/禁用（导入器单受管根 + `PickupFieldHost` 的 `Start` 捕获会挡住，理由见 HUB_ROOM §7）。
+- 新增 `Runtime/Story/Hub/{HubRoomMath,HubRoomHost}.cs`、`Editor/Story/*` 两个编辑器工具、`Tests/EditMode/Story/HubRoomMathTests.cs`（26 条，`NOT_RUN`）、`Docs/Design/Levels/hub/placement.json`。`Docs/tests` 的 1 条 C14 失败是先前就存在的，与本次文件无关（HUB_ROOM §12 有证据）。
+

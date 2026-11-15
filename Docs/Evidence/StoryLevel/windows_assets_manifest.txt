@@ -1,11 +1,21 @@
-# StoryLevel S1 Windows asset manifest (path-from-Assets | md5 | verified)
-VRC_Katamari/Labs/StoryLevel/StoryLevel.unity|c936326dbea447d8e7878e66797fa0b8|OK
-VRC_Katamari/Labs/StoryLevel/StoryLevel.unity.meta|9283438daadb700524af0adb44f8fcbd|OK
+# StoryLevel ride + round assets (Windows -> Linux), path | md5 | verified
+VRC_Katamari/Labs/StoryLevel/StoryLevel.unity|325b90a983b1ba6351a8db74ac959e18|OK
+VRC_Katamari/Labs/StoryLevel/StoryLevel.unity.meta|b188eae265fd3b7a035d67a428cb3f25|OK
 VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.asset|b9f1dee140776b29c05d82e08a7d3978|OK
-VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.asset.meta|5af6f54a5b85b16550b390c5d9bfb84c|OK
-VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.cs|6a6c9a95794b52a8531b22551a890b55|OK
-VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.cs.meta|906690f725bc8c8dde0502212d5a959b|OK
+VRC_Katamari/Labs/StoryLevel/StoryLevelLabBootstrap.asset.meta|0dd297b39aa0b66a01ca7853b11945e8|OK
+VRC_Katamari/Runtime/Pickup/PickupFieldHost.asset|81011197a72cfff58db15bd00415279c|OK
+VRC_Katamari/Runtime/Pickup/PickupFieldHost.asset.meta|552d46f61ecb3f82a1160223ae6f0ba8|OK
+VRC_Katamari/Runtime/Story/StoryRoundController.asset|617293d7ed35e4429563a064b3800f34|OK
+VRC_Katamari/Runtime/Story/StoryRoundController.asset.meta|5ca59f20b7122ffa6087e28b60c6395f|OK
+VRC_Katamari/Runtime/Story/StoryRetryButton.asset|7b87db0d36874ab0dca7fc7653cb21fe|OK
+VRC_Katamari/Runtime/Story/StoryRetryButton.asset.meta|6d2b3941e8be563cc2a53b3485f373e0|OK
+VRC_Katamari/Runtime/Riding/BallRideStation.asset|82a95bb043d5fd296df84366670c585b|OK
+VRC_Katamari/Runtime/Riding/BallRideStation.asset.meta|f558a13a877b0964f1a74146c312269d|OK
+VRC_Katamari/Runtime/Riding/BallRideExitButton.asset|df1d2167fe705c3315b2a594d378cccd|OK
+VRC_Katamari/Runtime/Riding/BallRideExitButton.asset.meta|3a8008adaf08f0ffce93770706524e2a|OK
+VRC_Katamari/Labs/StationPlatform/SeatedAxisProbe.asset|3fbdc77bbd7b21aff50c14db7e879592|OK
+VRC_Katamari/Labs/StationPlatform/SeatedAxisProbe.asset.meta|948b6c795b0c322056fb88045cd3c68b|OK
 VRC_Katamari/Runtime/BallPresentation/BallView.asset|742a2ede238a2425989e311496f9786d|OK
-VRC_Katamari/Runtime/BallPresentation/BallView.asset.meta|e9d2f0e01bab3388152ae4fe2490b8dd|OK
-VRC_Katamari/Runtime/Input/DesktopMoveInput.asset|b8046c3fa44b6aeba42b7ba4185a1d02|OK
-VRC_Katamari/Runtime/Input/DesktopMoveInput.asset.meta|034f8105ddea2769396f3e9d88cf2a8e|OK
+VRC_Katamari/Runtime/BallPresentation/BallView.asset.meta|3ee9736969b73f375a8c3d2b26d5f1d0|OK
+VRC_Katamari/Runtime/Input/DesktopMoveInput.asset|d6c0fb01b57bcce5a5223488a1454fda|OK
+VRC_Katamari/Runtime/Input/DesktopMoveInput.asset.meta|c088d839953ef1f59260302ca0215acd|OK

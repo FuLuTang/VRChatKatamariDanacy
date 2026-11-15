@@ -1,6 +1,6 @@
 # 主房间与关卡的闭环：选关 → 开始 → 关卡 → 回房看结果
 
-> 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15。本文只做查证与设计，不改任何代码、场景、`tasks.json` 或既有文档；作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test。
+> 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15（当日据实现更新）。查证与设计部分写于运行时代码之前；**§12 记录实际写出来的代码**，§4、§5、§6、§8 已按代码与“评分已拆出”的现状改正。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test。
 > 范围：把现在“进场景就在关卡里、结算后结果卡还钉在关卡里”的形态，改成“大王房间选关 → 开始 → 关卡 → 回房在面板上看结果 → 再选关”。
 > 非目标：第二关之后的内容、联机、国王美术/动画、存档与跨世界数据。
 > 本文取代的是 [第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §7「重试」与 StoryMode [README](<README.md>)「开始流程」「结果卡显隐」两节里**关于起点与卡面位置的部分**；回合规则、冻结顺序、评语、闸门分工全部沿用，不重写。
@@ -10,9 +10,9 @@
 1. **运行时不能换场景，也不能用脚本把玩家送到另一个世界**（§1）。所以“主房间 → 关卡”只能是同一场景内的位移/启用，方案必须按这个约束写。
 2. **选 A**：一个世界场景里同时存在“房间岛”和“关卡岛”，玩家在房间面板前按开始，被传送到关卡岛；结算后传送回房间，房间面板显示结果（§2、§3）。
 3. **只有一套回合状态机**：`StoryRoundController` 的 `Idle / Running / Presenting / Result` 一个都不加。房间不是状态，只是 `Idle` 与 `Presenting/Result` 时玩家恰好所在的地方；“选关”是房间里的界面，不是第五个状态（§4）。
-4. **一局的结果仍然归 `StoryRoundController`**，在 `SettleRound()` 里冻结成字段。房间面板是这份数据的**显示目标**，不是第二份数据；面板绝不能去读 motor/宿主“现在”的值（§6）。
+4. **一局的结果仍然归 `StoryRoundController`**，在 `SettleRound()` 里冻结成字段（`GetResultDiameterM()` / `GetResultCount()` 等只读 getter）。房间面板是这份数据的**显示目标**，不是第二份数据；面板绝不能去读 motor/宿主“现在”的值（§6）。**评分已拆出**：星级与评语在可选组件 `StoryResultPresenter`，控制器没有 `GetResultStars()`。
 5. **场景只有一张**：把 `Labs/StoryLevel/StoryLevel.unity` 整体提升为正式场景（同一文件、同一 GUID、`.meta` 一起搬），房间直接加进它。不新建第二张、不复制关卡（§7）。
-6. **第一步不是房间美术，是传送探针**：两个空 Transform + 一个按钮，先回答“ClientSim/真机里 `TeleportTo` 到底动不动”（§9）。
+6. **第一步不是房间美术，是传送探针**：两个空 Transform + 一个按钮，先回答“ClientSim/真机里 `TeleportTo` 到底动不动”（§9）。探针脚本已写好（`Labs/HubLoop/PlayerTeleportProbe.cs`）、**尚未在 Unity 里跑过**；`Runtime/Hub/` 的协调代码同样已写好，未编译、未跑（§12）。
 
 ## 1. 技术前提：运行时能不能换场景、能不能脚本送玩家去别的世界
 
@@ -43,12 +43,12 @@
 
 ### A（选它）：一个场景，两块地方
 
-大王房间与关卡区域在同一个场景里，中间隔着足够远、互相看不见的距离。房间面板上的“开始”做三件事：把本地玩家传送到关卡入口、开回合（`BeginRound()`）、把 HUD 打开。结算时把玩家传送回房间，房间里的同一块面板显示结果。
+大王房间与关卡区域在同一个场景里，中间隔着足够远、互相看不见的距离。房间面板上的“开始”做三件事：把本地玩家传送到关卡入口、**量过确认人真的到了**、再开回合（Idle → `BeginRound()`；Result → `RequestRetry()`，它是“复位 + 开局”那一份现成实现）。HUD 显隐仍归控制器。结算后由协调组件先把人从座位上弄下来、再传送回房间，房间里的同一块面板与结果卡显示结果。这三件事的实际入口是 `Runtime/Hub/HubLevelLauncher`，不是控制器（§12）。
 
 代价（照实写）：
 
 - 一个场景同时装两块内容：内存、渲染、音频都在同一个 bundle 里；“离开关卡”不等于卸载关卡。
-- 关卡在玩家回房后仍然活着（Udon `Update` 照跑），所以**必须靠状态机保证 `Running` 时玩家一定在关卡里**，不能靠“看不见”。
+- 关卡在玩家回房后仍然活着（Udon `Update` 照跑），所以**必须保证 `Running` 时玩家一定在关卡里**，不能靠“看不见”。落地方式（§12）：开局前测距确认到达才开回合；`Running` 中玩家被量到在关卡岛外（例如菜单 respawn 回房）就拉回入口，最多 3 次；`Running` 中的“回房”一律拒绝，因为控制器没有公开的“结束本局”接口。
 - 每加一关，场景更大（一张场景装 N 个岛），没有场景流式加载可用。
 - 传送是瞬移：VR 舒适度风险，且没有淡入淡出（见 §10）。
 
@@ -79,7 +79,7 @@
 | 面板位置 | 房间内墙，中心高 1.5 m，宽 2.4 m | 站立/坐姿都能读；PROVISIONAL |
 | 面板朝向 | 面向房间中央 | 出生点正对 |
 | 关卡 HUD | 沿用现有三行 Text（目标/当前/剩余） | 场景里唯一的 Canvas 是 `m_RenderMode: 0`（Screen Space - Overlay）；它在 VR 里是否合规未验证，见 §10 |
-| 结果区 | 房间面板上的卡面（底板 + 结果文本 + “再来一次”按钮） | 复用现有 `resultCardRoot` / `resultText` / `retryButtonRoot` 三个字段，对象搬到房间（§8） |
+| 结果区 | 房间面板上的卡面（底板 + 结果文本 + “再来一次”按钮） | 复用现有三个对象：`resultCardRoot` / `resultText` 现在是 `StoryResultPresenter` 的字段，`retryButtonRoot` 仍在控制器上；把这三个对象搬到房间即可（§8） |
 | 音效 | 关卡 BGM 只放在关卡岛、用空间化 + 有限半径；房间自己的环境声独立 | `VRCSceneDescriptor` 的 `autoSpatializeAudioSources` 现在是 0；不处理会出现“在房间里听关卡的声音” |
 
 ### 3.1 按钮形态：先世界内 `Interact`，不要先上 uGUI
@@ -90,60 +90,74 @@
 
 ## 4. 状态机：一套，位置随状态走
 
-`StoryRoundController.state` 是唯一的状态机（`Runtime/Story/StoryRoundController.cs`，行号按 `a6058ca` 读、该文件到 `83a5e75` 未再改动）。**不新增状态、不新增并行状态机**；“选关”不是状态，是 `Idle` 与 `Result` 下面板显示的内容。
+`StoryRoundController.state` 是唯一的状态机（`Runtime/Story/StoryRoundController.cs`）。**不新增状态、不新增并行状态机**；“选关”不是状态，是 `Idle` 与 `Result` 下面板显示的内容。行号已过时：评分拆出那次提交（`ac2e880 Story: the round runs without knowing it will be graded`）之后，`EnterIdle()` 在 `:278`、`BeginRound()` 在 `:364`、`SettleRound()` 在 `:671`、`Update()` 里 `Presenting → Result` 在 `:400`–`:405`，并且 `SettleRound()` **不再退座、不再传送**——那两步现在归 hub。
 
 | 状态 | 玩家在哪 | 谁推进它 | 回合闸门 `SetRoundGate` | 骑乘闸门 `SetRideGate` | 收集 `SetCollecting` | 房间面板 | 关卡 HUD | 结果数据 |
 |---|---|---|---|---|---|---|---|---|
 | `Idle`（`EnterIdle()`，`:278`） | **房间** | 只有 `Start()`（`startOnLoad=false`）；第一局之后不再回到这里 | 关 | 关（站的人不能开球；`BallRideStation.Start` 关自己的门） | 关 | 关卡信息 + “开始” | 不显示（或显示目标） | 无 |
-| `Running`（`BeginRound()`，`:364`） | **关卡**（开始当帧传送） | 房间“开始”按钮 → `RequestStart()` | 开 | 入座开、离座关 | 开 | 隐藏 | 显示目标/当前/剩余 | 还在累计（不读） |
-| `Presenting`（`SettleRound()`，`:621`） | **房间**（冻结后立刻传送） | 倒计时归零 | 关 | 关（已退座） | 关 | 卡面 + “呈给国王”一行 | 隐藏 | **已冻结** |
-| `Result`（`ShowResult()`，`:703`） | **房间** | `presentingSeconds` 到点 | 关 | 关 | 关 | 卡面 + 星/直径或件数/台词 + “再来一次” | 隐藏 | 只读冻结值 |
+| `Running`（`BeginRound()`，`:364`） | **关卡**（到达确认之后才开回合） | 房间“开始” → `HubLevelLauncher.PressStart()` → 到达校验 → `BeginRound()` | 开 | 入座开、离座关 | 开 | 隐藏 | 显示目标/当前/剩余 | 还在累计（不读） |
+| `Presenting`（`SettleRound()`，`:671`） | **房间**（hub 在 0–1 帧后退座 + 传送） | 倒计时归零，传送由 hub 做 | 关 | 关（hub 先 `ExitStation`，等座位报空再移动） | 关 | 卡面 + “呈给国王”一行 | 隐藏 | **已冻结** |
+| `Result`（`Update()`，`:400`） | **房间** | `presentingSeconds` 到点 | 关 | 关 | 关 | 卡面（`StoryResultPresenter`：星/直径或件数/台词）+ “再来一次” | 隐藏 | 只读冻结值 |
 
 三处要写死：
 
-1. **`Idle` 只发生在房间。** 这是与现在最大的差别：现在 `Idle` 是“玩家站在关卡里、还没坐上球”；新形态下这一刻不存在——按“开始”的同一次调用里就 `BeginRound()` 并传送，所以 `Running` 一开始玩家就在关卡入口。
-2. **`Presenting` 与 `Result` 只发生在房间。** “呈给国王”本来就是回房那一拍；`resultCardRoot` 因此搬到房间（§8），而不是在关卡里显示完再消失。
+1. **`Idle` 只发生在房间。** 有房间时“玩家站在关卡里、还没坐上球”这一刻不存在——按“开始”会先传送、量到人真的在入口，然后才 `BeginRound()`。与本文初稿的差别：**不是同一次调用**，因为“传送成功没”必须先量过才敢开时钟（§12）。
+2. **`Presenting` 与 `Result` 只发生在房间。** “呈给国王”本来就是回房那一拍；`resultCardRoot` 因此搬到房间（§8），而不是在关卡里显示完再消失。控制器只负责进入 `Presenting`，**回房那一步是 hub 的**：它轮询到状态变化后先退座、再传送。
 3. **选关不是状态。** 一个关卡时面板只有一行字 + 一个开始按钮；多关卡时是同一个面板上的多行，行选谁由按钮自己带 `levelIndex`，`state` 不变。
 
 与 `Docs/01_GAME_DESIGN.md` §6 的 `Lobby → Countdown → … → Lobby` 的关系：那是**多人竞速局**的大厅状态机，今天没有实现；剧情模式不接它、也不复制它。将来房间若同时承载竞速大厅，房间本身仍然不是状态机——两套玩法各自拥有自己的回合状态，“一份逻辑一个实现”说的是同一个玩法里不能有两份。
 
 ## 5. 一局的完整时序
 
-1. 进世界 → 出生在房间 → `StoryRoundController.Start()` → `EnterIdle()`：两把闸门关、收集关、面板显示“故事 1 / 目标 1.25 m / 开始”。
-2. 玩家对准“开始”按鼠标左键 → `StoryRoomButton.Interact()` → `controller.RequestStart()`。
-3. `RequestStart()`：`state` 只能是 `Idle`（首次）或 `Result`（再来一次）；`Running`/`Presenting` 一律拒绝并打一行日志（与 `RequestRetry()` 的状态闸门同形）。
-   - `Result` 时先复位：`motor.TryResetForNewRound(...)` → `pickupHost.ResetField()`（与 `RequestRetry()` 同一份复位实现，§8）。
-   - `localPlayer.TeleportTo(levelEntry.position, levelEntry.rotation)`。
-   - `BeginRound()`：`Time.time` 记起点、`SetRoundGate(true)`、`SetCollecting(true)`、HUD 打开。
-4. 玩家出现在关卡入口，球在 2 m 外。**计时已经开始**（这是“点击开始”的直接后果，见 §10 的风险 4）。
-5. 玩家点球 → `BallRideStation.Interact()` → `station.UseStation(localPlayer)` → `OnStationEntered` 开骑乘闸门。`NotifyRiderSeated()` 在 `Running` 被忽略（`:340`），所以不会重开计时。
-6. 滚到时间归零 → `SettleRound()`（`:621`）：
-   1. 关回合闸门 → 关收集 → `motor.ClearCandidates()`（顺序不变）；
-   2. `EvaluateSettledRound()` 冻结星/直径/件数；
-   3. `station.ExitStation(localPlayer)`（**先退座**）；
-   4. `localPlayer.TeleportTo(roomSpawn.position, roomSpawn.rotation)`；
-   5. `state = Presenting`，`presentingStartTimeSeconds = Time.time`，卡面显示 `presenterLine`。
-7. `presentingSeconds`（默认 3 s）后 → `ShowResult()` → `Result` → 卡面显示星/直径或件数/评语 + “再来一次”。
-8. 玩家按“再来一次” → 回到第 2 步的 `RequestStart()`（`state=Result` 分支先复位再传送）。
+下面按 `Runtime/Hub/` 的实现写（本节即 §12 那三个文件的行为）；“本文初稿”的说法在括号里标出。
 
-**顺序上的硬约束**（写错就出怪现象）：
+1. 进世界 → 出生在房间 → `StoryRoundController.Start()` → `EnterIdle()`：两把闸门关、收集关；`HubLevelLauncher.Start()` 打一行 `[hub] ready levels=… state=…`，房间状态行（`statusText`）显示“按开始进入：<关卡名>”。
+2. 玩家对准“开始”按鼠标左键 → `HubStartButton.Interact()` → `HubLevelLauncher.PressStart(levelIndex)`。
+3. `PressStart` → `TryStartLevel`：`HubLoopMath.TryDecideStart` 判定——`state` 必须是 `Idle`/`Result`、没有传送在飞、过了冷却、`levelIndex` 有入口数组里的一项；然后算 `entry.position + arrivalLiftMeters`（默认 0.1 m，与探针同约定）。
+   - 玩家已经在入口的容差内（默认 1 m）→ 跳过传送，当帧开回合。
+   - 否则 `TeleportTo(lifted, entry.rotation, AlignPlayerWithSpawnPoint, false)`——**全项目唯一的玩家传送点**，一行 `[hub] teleport cause=enter-level levelIndex=… name=… mode=… state=…`，记 `startPending`。
+4. 之后每帧（`arrivalCheckFrames` 默认 2 帧起）读 `GetPosition()` 与入口比对：
+   - **到了** → 按 `HubLoopMath.TryStartMode` 调**控制器已有的公开方法**开回合：`Idle` → `BeginRound()`；`Result` → `RequestRetry()`（复位球到捕获位姿 + `ResetField()` + 开局，一份现成实现，hub 不复制）。打 `[hub] round started cause=arrived … distanceFromEntry=… framesWaited=…`。
+   - `arrivalTimeoutFrames`（默认 30 帧 ≈ 0.5 s）还没到 → `[hub] start refused reason=10 (the player did not reach the level entry) …`，**不开回合**，`state` 留在 `Idle`/`Result`，玩家可以再按。
+   - 期间 `state` 自己变了（例如有人坐下触发 `NotifyRiderSeated`）→ `[hub] start refused reason=11`。
+5. 玩家出现在关卡入口，球在 2 m 外。**计时从第 4 步开回合那一刻起**（比初稿晚 1–2 帧，见 §10）。
+6. 玩家点球 → `BallRideStation.Interact()` → `station.UseStation(localPlayer)` → `OnStationEntered` 开骑乘闸门 + `NotifyRiderSeated()`（`Running` 里被忽略，`:339`），不会重开计时。这一段没有改动。
+7. 滚到时间归零 → 控制器 `SettleRound()`（`:671`）：关回合闸门 → 关收集 → `motor.ClearCandidates()` → `MeasureSettledRound()` 冻结事实 → `state = Presenting` → `ApplyStateVisibility()`。**控制器不再退座、不再传送**（与初稿不同：它只把状态推到 `Presenting`）。
+8. hub 的 `Update` 在 0–1 帧后看到 `Presenting`，打 `[hub] round state=2 …` 并 `BeginReturn("round-settled")`：
+   1. 若在座位上（`BallRideStation.IsLocalPlayerSeated()`）→ `rideStation.ExitStation(player)`，打 `[hub] return exit-station … seated=true seatKnown=true`；
+   2. 等座位报空（最多 `exitStationTimeoutFrames` 默认 10 帧），**确认后再空出一帧**才移动——三个分支各有日志：`left the station after N frames` / `still seated N frames after ExitStation; moving anyway (unverified…)` / `station exit requested, seat state unknown; moving after N frames`；
+   3. `TeleportTo(roomSpawn.position + lift, roomSpawn.rotation, …)`，`[hub] teleport cause=return-to-room …`；
+   4. 2 帧后测距：`[hub] return arrived frames=… distance=…`；没到则 `[hub] return teleport did not reach the room point distance=… arrived=false; …`（**不自动重试**，见下面的退化表）。
+9. `presentingSeconds`（默认 3 s）后控制器把自己推到 `Result`（`:400`–`:405`），卡面由 `StoryResultPresenter` 写（星/测量值/评语）；hub 的房间状态行只写“上一局已结算：<关卡>，按开始再来一局”，**不重复测量值与星级**（§6.1）。（兜底：若 `presentingSeconds` 被设成 0，hub 两帧之间会错过 `Presenting`；这时进入 `Result` 若人还不在房间，hub 补一次回房，`cause=result-outside-room`，人已在房间则什么都不做、也不打日志。）
+10. 玩家按“开始”/“再来一次” → 回到第 2 步，`Result` 分支走 `RequestRetry()`。
 
-- **先 `ExitStation` 再 `TeleportTo`**：坐着被传送，Station 可能每帧把人拉回座位，表现为“传送没生效”或“人在房间里坐着”。
-- **先冻结再传送**：传送后球还在关卡里、还能被别的途径碰；结算值必须是铃响那一刻的快照，不能等回房再读。
-- **先关闸门再读值**：沿用现有顺序，否则最后一帧的候选会算进去。
+**顺序上的硬约束**（与初稿相同，实现位置变了）：
 
-**失败时的退化**（“传送探针”与“回房与结果面板”两步里各试一次）：
+- **先 `ExitStation` 再 `TeleportTo`**：坐着被传送，Station 可能每帧把人拉回座位，表现为“传送没生效”或“人在房间里坐着”。现在由 hub 做，并且等 exit 回调落地、再空一帧才移动——因为“离座后同一帧能不能传送”仍未验证（§10）。
+- **先冻结再传送**：传送后球还在关卡里、还能被别的途径碰；结算值必须是铃响那一刻的快照。冻结在 `SettleRound()` 里完成，hub 之后才移动，这条自然成立。
+- **先关闸门再读值**：控制器内部顺序没变。
 
-- `TeleportTo` 不生效（ClientSim 或 VR 的某个组合）：玩家还在房间，但 `Running` 已经开始 → 计时白跑一局，到点仍能回房出结果。可接受，但要在 Console 里有一条自己的日志（`[story] enter-level teleport did not move the player`），不能静默。
-- 回房传送不生效：玩家留在关卡，卡面在房间 → 看不见结果。兜底不是“再摆一份卡面”，而是 **VRChat 的 Respawn**：世界出生点就是房间，玩家从菜单 respawn 一次就回房，冻结值仍在控制器里，`Result` 照常显示。第一次验收时要试这一条。
-- 玩家在关卡里 respawn（掉出世界/主动 respawn）：回到房间，回合**继续跑**（`Running`），到点 `SettleRound()` 的传送是 no-op（人已在房间），结果正常。这条不需要额外代码，但要知道它会这样。
-- 玩家中途离座：沿用现有决定（计时继续、球不走），`Running` 里人仍在关卡，不涉及传送。
+**失败时的退化**（每条都有 `[hub]` 日志，不静默）：
+
+| 情况 | 现在的行为 |
+|---|---|
+| 入场传送不生效 | 到达校验超时 → `reason=10` + 一行 warning，**回合不开**（比初稿的“计时白跑一局”更严），人还在房间，可以再按。 |
+| 回房传送不生效 | `[hub] return teleport did not reach the room point …`；玩家按“回房”按钮再试，或从菜单 respawn——世界出生点就是房间，冻结值仍在控制器里，`Result` 照常显示。 |
+| `Running` 中 respawn / 掉出世界 | hub 每帧量“是否还在关卡岛内”（半径默认 200 m），不在就拉回关卡入口，最多 3 次，之后放弃并 warning（阶段一改掉了初稿“容忍继续跑”的做法，理由见 §2 的那条不变式）。 |
+| `Running` 中按“回房” | **拒绝**，`reason=5 (a round is still running)`。控制器没有公开的“结束本局”接口，硬传送会把运行中的回合留在没有玩家的关卡里；时钟总会结束回合，`Presenting`/`Result` 里同一颗按钮就能用。 |
+| 玩家中途离座 | 沿用现有决定（计时继续、球不走），`Running` 里人仍在关卡，不涉及传送。 |
+| `Result` 下开局被控制器拒绝（复位失败） | `reason=12`，人已经被送到关卡入口，hub 顺手把人送回房间（`cause=start-rolled-back`），避免“回合在 Result、人却在关卡”。 |
 
 ## 6. 结果数据的归属与“交接”
 
 ### 6.1 归谁
 
-`StoryRoundController` 的四个私有字段：`resultStars`、`resultInsidePartialBand`、`resultDiameterM`、`resultCount`，在 `SettleRound()` 里写一次，之后**只读**（`:621`、`:644`）。房间面板通过控制器已有的 getter（`GetResultStars()`、`GetResultDiameterM()`、`GetResultCount()`、`GetState()`）或直接由控制器写 Text 来显示——**不存在“数据交接”这一步**，因为房间与关卡在同一个场景、同一个控制器实例里。
+`StoryRoundController` 现在只冻结**测量事实**：`resultDiameterM`、`resultCount`，在 `SettleRound()` 里写一次（`:671`；计算在 `MeasureSettledRound()`，`:701`），之后**只读**，通过 `GetResultDiameterM()` / `GetResultCount()` 读出。星级、`partial_band` 与评语在可选组件 `StoryResultPresenter` 的私有字段里（它读控制器的 getter，控制器不认识它）。**控制器没有 `GetResultStars()`**——初稿写这四个字段都在控制器里，那是评分拆出之前的事。
+
+房间一侧的读法因此分两种：
+
+- **只读控制器的事实**（状态、目标、冻结的直径/件数、关卡 id、次数）：`HubLevelLauncher` 与 `StoryResultPresenter` 都这么做。**不存在“数据交接”这一步**，因为房间与关卡在同一个场景、同一个控制器实例里。
+- **星级与评语**：只有 `StoryResultPresenter` 有，而且它**没有公开 getter**（字段私有，只写自己的卡面 Text）。所以 hub 的房间状态行不显示星级、也不重复测量数值——同一事实印两遍就是本节禁止的第二份数据。要显示星级，就让 presenter 的卡面显示（卡面对象搬到房间即可）；要把它显示在别处，需要 presenter 增加只读 getter，那是 `Runtime/Story/` 的改动，不在本次写范围（§12 的缺失接口）。
 
 ### 6.2 为什么不能“回房再读”
 
@@ -199,9 +213,9 @@
 |---|---|---|
 | `resultCardRoot` | 房间结果卡的底板（Presenting/Result 可见，语义不变） | **保留字段，对象搬到房间**；不改代码 |
 | `resultText` | 房间卡面上的结果文本 | **保留**；它从 Presenting 起才有内容，和卡面同显同隐，放进 `resultCardRoot` 子树正好（旧版“别放进去”的警告来自提示复用结果行，那个耦合已经拆开） |
-| `retryButtonRoot` | 房间卡面上的“再来一次”（Result 可见，语义不变） | **保留字段，对象搬到房间**；它的 `Interact`/`OnClick` 改成调 `RequestStart()`（或 `StoryRetryButton` 加一个 `StartMode`），不再调 `RequestRetry()` |
-| `StoryRetryButton` | 正式形态里没有位置 | **保留为调试入口**（无房间的 lab、快速回归）；正式场景不摆这颗按钮 |
-| `RequestRetry()` | 原地重开（复位 + `BeginRound()`，不传送） | **保留，降级为调试路径**；把“复位”抽成私有 `TryResetForNextAttempt()`，`RequestRetry()` 与新的 `RequestStart()` 都调它——**一份复位实现，两个入口** |
+| `retryButtonRoot` | 房间卡面上的“再来一次”（Result 可见，语义不变） | **保留字段，对象搬到房间**；`Interact` 改挂 `HubStartButton`（`levelIndex` 指向本关）→ `HubLevelLauncher.PressStart()`，由 hub 决定要不要 `RequestRetry()`。**不要同时挂 `StoryRetryButton`**：它直连 `RequestRetry()`、不传送，两颗按钮会变成两条不同的开局路径 |
+| `StoryRetryButton` | 正式形态里没有位置 | **保留为调试入口**（无房间的 lab、快速回归）；正式场景不摆这颗按钮（它不经过 hub、也不传送） |
+| `RequestRetry()` | 原地重开（复位 + `BeginRound()`，不传送） | **保留，并升为 hub 在 `Result` 下的正式开局**：hub 先把人送到入口并确认到达，再调它。不需要抽 `TryResetForNextAttempt()`，也就不存在第二份复位实现——控制器不改 |
 | `Start()` / `EnterIdle()` 的提示行（`startPromptText`，独立 Text，只在 Idle 显示） | 房间的“开始”提示 | 现在 `startPrompt` 默认“点击球坐上去开始”；房间场景该改成“选好关卡，按开始进入”（场景实例上改字符串即可）。提示行对象随面板搬到房间，但**必须留在卡片外面**：控制器在非 Idle 会把它整个关掉 |
 | `NotifyRiderSeated()` | 无房间场景的旧起点 / 有房间场景里 `Running` 中忽略 | 保留；有房间时它是无害的 no-op |
 
@@ -209,32 +223,36 @@
 
 ## 9. 实施顺序（每步独立可验收，按功能命名）
 
-### 传送探针（先回答“传送动不动”）
+代码与场景是两条腿：`Runtime/Hub/` 已经写好（**未编译、未跑**，§12），场景内容仍要 Unity 操作者建。每步都写成“场景里建什么 → 连什么 → 看哪几行日志 → 量什么”。
 
-- 内容：在现有 `Labs/StoryLevel` 里加两个空 Transform（`RoomSpawn`、`LevelEntry`，相距 1200 m）和一个临时行为（或直接给控制器加两个 public 方法）做 `localPlayer.TeleportTo(...)`；再摆两个世界内按钮：一个“去房间”、一个“去关卡”。
+### 第一步：传送探针（先回答“传送动不动”）
+
+- 场景：在现有 `StoryLevel` 里加两个空 Transform（`RoomSpawn`、`LevelEntry`，相距 1200 m）和两个世界内按钮（各带 Collider + `PlayerTeleportProbe`，`interactTargetIndex` 分别指向两个点）。
+- 代码：`Labs/HubLoop/PlayerTeleportProbe.cs`（**已写，未跑**）。
+- 验收（Play Mode）：进场景后 `localPlayer.GetPosition()` 与 `RoomSpawn` 距离 < 0.5 m；按“去关卡”后 `[hub-teleport] immediate` 与 `[hub-teleport] settled` 两行的 `distanceToArrival` 都 < 0.5、`arrived=True`；按“去房间”回来；Console 无异常。**两行读数的差**才是“传送成功但被人推走”的诊断。
 - 不碰：回合、计时、球、面板。
-- 验收（Play Mode）：进场景后 `localPlayer.GetPosition()` 与 `RoomSpawn` 距离 < 0.5 m；按“去关卡”后与 `LevelEntry` 的距离 < 0.5 m；按“去房间”回来；Console 无异常。若 ClientSim 里不动，先解决这一个再往下走——后面的每一步都建在它上面。
-- 大小：S。
 
-### 房间与开始
+### 第二步：房间、开始与回房（接线，不写新逻辑）
 
-- 内容：灰盒房间（12×12×4，灰盒地面 + 一面墙 + 面板底板）、面板三行 Text（关卡名 / 目标 / 提示，全部 PROVISIONAL 文案）、“开始”按钮；`StoryRoomButton`（`Interact` → `controller.RequestStart()`）；`RequestStart()` 做“（Result 时）复位 → 传送 → `BeginRound()`”；`spawns` 改到房间。
-- 验收：进 Play Mode 在房间；面板读到“目标 1.25 m”；按开始 → 人在 `LevelEntry`、HUD 开始倒计时、Console 有 `[story] enter-level teleport` 一行。**这一条只验“开始 → 在关卡里跑起来”**；坐姿驱动（Station）在 ClientSim 里本仓没有验证过，若 Play Mode 里坐不上去，把它留给 Build & Test，不要在这一步纠结。
+- 场景：灰盒房间（12×12×4）、面板底板 + 一行 Text（连 `statusText`）、`LevelEntry`、`RoomSpawn`、一个“开始”按钮（Collider + `HubStartButton`）、一个“回房”按钮（Collider + `HubReturnButton`，摆在关卡里、球旁边）、`VRCSceneDescriptor.spawns` 改到房间。
+- 组件：`HubLevelLauncher` 挂在**房间与关卡都不包含的根对象**上并永不被 `SetActive(false)`；连 `controller`、`levelEntries[0] = LevelEntry`、`levelNames[0]`、`roomSpawn`、`rideStation`、`rideSeat`、`statusText`。
+- 验收：进 Play Mode 看到 `[hub] ready levels=1 …`；按开始 → `[hub] teleport cause=enter-level …` → 1–2 帧后 `[hub] round started cause=arrived …`；人在入口、HUD 开始倒计时。**这一条只验“开始 → 在关卡里跑起来”**；坐姿驱动在 ClientSim 里本仓没有验证过，坐不上去就留给 Build & Test，不要在这一步纠结。
+- 预期：`statusText` 在 Idle 显示“按开始进入：<关卡名>”。
+
+### 第三步：回房与结果卡
+
+- 场景：`resultCardRoot` / `resultText` / `retryButtonRoot` 三个对象搬到房间；`StoryResultPresenter` 挂自己的对象、连 `controller` / `resultCardRoot` / `resultText`；`retryButtonRoot` 上的 `StoryRetryButton` 换成 `HubStartButton`（`levelIndex = 0`）。
+- 验收：把 `timeLimitSeconds` 临时改成 15 s、三档直径临时改成 0.35 / 0.40 / 0.45 m（只改场景实例上的序列化值，不改代码、不改关卡 JSON），跑出 0/1/2/3 星各一次：到点先 `[hub] round state=2 …`，坐着时依次是 `[hub] return exit-station …`、`[hub] return: left the station after N frames`、`[hub] teleport cause=return-to-room …`、`[hub] return arrived frames=… distance=…`；人必须在房间，卡面先“呈给国王”、3 s 后星 + 直径 + 评语。**坐着的那条链要单独看**：要出现 `left the station after N frames`，不是 `still seated … moving anyway`。再把值改回真实档位跑一次完整长度。
 - 大小：M。
 
-### 回房与结果面板
+### 第四步：再来一次与“Running 时在关卡里”
 
-- 内容：`SettleRound()` 里按 §5 的顺序加“退座 → 传送回房”；卡面三个对象搬到房间；`ShowResult()` 改成先拼字符串再写非空目标（否则卡面 Text 一换对象就断）；`ApplyStateVisibility()`（`:738`）加上房间开始区/结果区的显隐。
-- 验收：把 `timeLimitSeconds` 临时改成 15 s、三档直径临时改成 0.35 / 0.40 / 0.45 m（只改场景实例上的序列化值，不改代码、不改关卡 JSON），跑出 0/1/2/3 星各一次：到点后 `localPlayer.GetPosition()` 在房间；卡面先“呈给国王”、3 s 后显示星 + 直径 + 评语；面板数值与 `GetResultStars()`/`GetResultDiameterM()` 完全一致；`GetBankedScoreUnits() == 0`。再把值改回真实档位跑一次完整长度。**“回房后不在关卡”要单独确认**：把玩家位置与 `LevelEntry` 的距离打出来。
-- 大小：M。
-
-### 再来一次
-
-- 内容：“再来一次”按钮改调 `RequestStart()`（Result 分支复位 + 传送 + 开局）；`RequestRetry()` 抽公共复位。
-- 验收：失败 → 按再来一次 → 人在 `LevelEntry`、球回 0.30 m、道具全回来、卡面消失、倒计时重新开始、目标行出现“第 N 次重试”；连按 3 次不炸（回合 id 不重复）。
+- 验收（再来一次）：Result 里按“再来一次” → `[hub] teleport cause=enter-level … mode=2` → `[hub] round started cause=arrived … mode=2`（走的是 `RequestRetry()`）；球回 0.30 m、道具全回来、卡面消失、倒计时重开、目标行出现“第 N 次重试”；连按 3 次不炸（回合 id 不重复）。
+- 验收（不变式）：`Running` 中从菜单 respawn → 回房 → 应看到最多 3 次 `[hub] teleport cause=hold-in-level …`，人被送回关卡入口，第 3 次后有 `hold-in-level gave up …`。再把 `holdPlayerInLevel` 关掉对照一次，确认是它拉的。
+- 验收（拒绝）：`Running` 中按“回房” → `[hub] return refused reason=5 (a round is still running)`，人不动。
 - 大小：S。
 
-### 场景转正
+### 第五步：场景转正
 
 - 内容：§7 的三件事（搬家 + 宿主转生产 + 补 `ReferenceCamera`/`spawns`）；删 `Labs/StoryLevel` 目录。
 - 验收：用户点 Build & Test 进世界；出生在房间、按开始、坐球、计时、到点自动回房看结果；“Reference camera is not set”警告消失。**Build & Test 只能由用户点**（`tasks.json` 记录的构建入口问题），本步骤的验收一定是用户动作。
@@ -242,22 +260,72 @@
 
 ## 10. 未验证与风险（按影响排序）
 
-1. **`TeleportTo` 的实际行为**：ClientSim 是否真的位移、VR 里是否生效、坐着时是否被 Station 拉回——全部未验证，传送探针就是为它准备的。知识库只写了“`player.TeleportTo(Vector3, Quaternion)` 暴露、只能对本地玩家调用”（`entities/api/player-api.md`）。
-2. **`ExitStation` → `TeleportTo` 的顺序**：顺序是从“坐着不能传”这个机制推出来的，没有任何实测；第一次测回房时就盯“人是不是还在座位上”。
-3. **世界空间 uGUI 交互**：本仓没有先例（场景无 `EventSystem`）；本文建议先用世界内 `Interact` 按钮绕开它。
-4. **点“开始”到能开球之间的时间算进 120 s**：传送 + 找球 + 坐下大概 2–5 s。若实测超过 5 s，再考虑“开始即自动入座”（`station.UseStation(localPlayer)`）或把 `LevelEntry` 贴到座位旁；本文不预先实现自动入座（它把传送和 Station 两个未验证项绑在一起）。
-5. **两块内容同场景的开销**：110 件道具 + 房间，渲染/内存/音频串扰都没有量过；距离 1200 m 只是“看不见”的暂定值，不是性能解。
-6. **VR 舒适度**：瞬移没有淡入淡出；进/出各一次，频率低，但已知敏感玩家会不适。
-7. **关卡 HUD 的 Canvas 形态**：现在是 Screen Space - Overlay（`m_RenderMode: 0`），VR 下是否可见/合规未验证；若不可用，关卡 HUD 要改成跟随球的世界空间 Canvas，这是独立的一条工作。
-8. **后加入/联机**：见 §6.4，今天明确不支持。
-9. **所有布局、坐标、尺寸、文案都是 PROVISIONAL**，只在 Build & Test 里按玩家实际视点调。
+1. **`TeleportTo` 的实际行为**：ClientSim 是否真的位移、VR 里是否生效、坐着时是否被 Station 拉回——全部未验证，传送探针就是为它准备的。知识库写了“签名 `TeleportTo(Vector3, Quaternion, …)`、只能对本地玩家调用、**Stations 可以阻止 Udon 传送玩家**”（本地库 `entities/world/udon/players/player-positions.md` §传送 API），`TeleportTo` / `UseStation` / `ExitStation` 在 SDK 3.10.3 的暴露清单里（`entities/api/exposed-types.md`）；官方页（2026-08-31 更新，2026-11-15 抓取）原文是 “Send the local player to a new position and specified rotation, **unless a Station does not allow it**” 与 “Stations can prevent Udon from teleporting players”。所以“先离座”不是猜测，是必需步骤；标为未验证的只是“离座要等多久”。
+2. **`ExitStation` → `TeleportTo` 的时序**：顺序是从“坐着不能传”推出来的，没有实测。**代码按“未验证”写**：请求 `ExitStation` 后等 `IsLocalPlayerSeated()` 变 false（最多 `exitStationTimeoutFrames` = 10 帧），确认后再空出一帧才 `TeleportTo`；超时也照传，但日志改成 `still seated … moving anyway (unverified …)`。所以第一次测回房时，看日志里走的是哪条分支，就知道这条假设成不成立。
+3. **`ExitStation` 与 `Disable Station Exit`**：这一条已由官方页说清，但仍未在本仓实测。官方 `vrc_station` 页（2026-10-30 更新，2026-11-15 抓取）对 Disable Station Exit 的原文是 “Prevents the player from exiting the station by moving or jumping. **Use the `ExitStation` node to remove the player from the station.**” 也就是说 `ExitStation` 就是关掉常规出口后的正规出路（知识库 `entities/world/scene-components/vrc-station.md` 也这么整理）。仍未验证的是 SDK 3.10.5 在**这个**球站上的实际时序：`ExitStation` 之后 `OnStationExited` 是当帧还是下一帧、`IsLocalPlayerSeated()` 什么时候变 false。hub 的 `exitStationTimeoutFrames` 分支与三条日志就是为回答这个准备的；兜底是球上的 `BallRideExitButton`。
+4. **退座会先移动玩家一次**：官方参数表写明 “Station Exit Player Location: The player is moved to the position of this Transform when they exit the station.”，所以“退座 → 回房传送”之间人已经先被挪到出口点一次；hub 的回房测距在这之后做，不影响结果，但第一帧的观感是两次位移，验收时要知道。
+5. **世界空间 uGUI 交互**：本仓没有先例（场景无 `EventSystem`）；本文建议先用世界内 `Interact` 按钮绕开它。
+6. **点“开始”到能开球之间的时间算进 120 s**：传送 + 到达校验（1–2 帧）+ 找球 + 坐下大概 2–5 s。若实测超过 5 s，再考虑“开始即自动入座”（`station.UseStation(localPlayer)`）或把 `LevelEntry` 贴到座位旁；本文不预先实现自动入座（它把传送和 Station 两个未验证项绑在一起）。
+7. **两块内容同场景的开销**：110 件道具 + 房间，渲染/内存/音频串扰都没有量过；距离 1200 m 只是“看不见”的暂定值，不是性能解。
+8. **VR 舒适度**：瞬移没有淡入淡出；进/出各一次，频率低，但已知敏感玩家会不适。
+9. **关卡 HUD 的 Canvas 形态**：现在是 Screen Space - Overlay（`m_RenderMode: 0`），VR 下是否可见/合规未验证；若不可用，关卡 HUD 要改成跟随球的世界空间 Canvas，这是独立的一条工作。
+10. **后加入/联机**：见 §6.4，今天明确不支持。
+11. **轮询带来的一帧延迟**：hub 和 presenter 一样靠 `GetState()` 轮询，两个 `Update` 的先后未定义，所以“回房”可能比 `SettleRound()` 晚一帧。冻结在 `SettleRound()` 内部完成，所以这一帧不会读到半份结果。
+12. **所有布局、坐标、尺寸、文案都是 PROVISIONAL**，只在 Build & Test 里按玩家实际视点调。
 
 ## 11. 验证命令与本次结果
 
-本文只新增一份设计文档，没有改代码、场景、`tasks.json` 或配置，所以规划校验与 Unity 侧都没有跑：
+- `python3 Docs/tools/validate_plan.py`：**PASS** — “61 tasks; both release DAGs acyclic; source hashes verified.”（`tasks.json` 未改，所以这条与改动前一致；脚本自己声明 Unity/Udon 编译、VR、联机、性能、commerce 为 `NOT_RUN`。）
+- `python3 -m unittest discover -s Docs/tests`：**OK** — 279 tests。
+- Unity 编译、Play Mode、Build & Test：**NOT_RUN**（本 agent 不是 Unity 操作者，也没有 Unity 环境）。
+- 新增代码的 EditMode 测试（`Tests/EditMode/Hub/HubLoopMathTests.cs`）：**NOT_RUN**（要 Unity 跑；上面那条是 `Docs/` 的 Python 测试，不是 NUnit）。
 
-- `python3 Docs/tools/validate_plan.py`：**NOT_RUN**（`tasks.json` 未改）。
-- `python3 -m unittest discover -s Docs/tests`：**NOT_RUN**（同上）。
-- Unity 编译、Play Mode、Build & Test：**NOT_RUN**（本 agent 不是 Unity 操作者）。
+工作区状态：HEAD `6efb176`；§4、§5 里 `StoryRoundController.cs` 的行号按该文件的当前内容读（评分拆出：`ac2e880`）。
 
-工作区状态：HEAD `83a5e75`；本文引用的 `StoryRoundController.cs` 与 `StoryLevel.unity` 自 `a6058ca` 起没有改动（`git diff a6058ca..HEAD -- <这两个文件>` 为空），所以行号可对。
+## 12. 运行时代码现状（写好，未编译、未跑）
+
+### 12.1 文件
+
+| 文件 | 职责 |
+|---|---|
+| `Runtime/Hub/HubLevelLauncher.cs` | 唯一的协调组件：开始按钮 → 传送 + 到达校验 + 开回合；`Presenting` → 退座 + 传送回房；`Running` 中把人留在关卡；房间状态行。 |
+| `Runtime/Hub/HubStartButton.cs` | 房间“开始”按钮：`Interact` → `launcher.PressStart(levelIndex)`。按钮自带 `levelIndex`，多关卡就是多一颗按钮 + 多一项 `levelEntries`。 |
+| `Runtime/Hub/HubReturnButton.cs` | “回房”按钮：`Interact` → `launcher.PressReturnToRoom()`。 |
+| `Runtime/Hub/HubLoopMath.cs` | 纯规则：能不能开 / 能不能回、开回合该调哪个现成方法、去重与冷却、到达容差、`Running` 期间该不该拉回。 |
+| `Tests/EditMode/Hub/HubLoopMathTests.cs` | 上表的 NUnit EditMode 测试（规则类不碰场景，所以能纯逻辑测）。 |
+
+### 12.2 数据流
+
+```
+按钮 Interact
+   └─ HubLevelLauncher.PressStart(index) / PressReturnToRoom()
+        └─ HubLoopMath.TryDecideStart / TryDecideReturn    （规则 + reason code）
+             └─ TeleportTo(dest + lift, dest.rotation, AlignPlayerWithSpawnPoint, false)
+                  └─ Update 轮询：量 GetPosition() → 到了才 BeginRound() / RequestRetry()
+        ↑
+StoryRoundController.GetState()  （唯一状态机；hub 只读，不复制）
+```
+
+- **只读控制器的公开事实**：`GetState()` / `GetLevelId()` / `GetAttemptNumber()`；结果数值与星级一律不碰（星级在 `StoryResultPresenter`，且它没有公开 getter）。
+- **只调用控制器已有的公开方法**：`BeginRound()`（Idle）与 `RequestRetry()`（Result）。没有新增、没有改 `Runtime/Story/`。
+- **“Running 时玩家必在关卡”** 由三件事一起保证：① 开局前量到达，没到就不开回合；② `Running` 中每帧量是否还在关卡岛内（默认半径 200 m），不在就拉回入口，最多 3 次；③ `Running` 中“回房”一律拒绝（`reason=5`），因为控制器没有公开的“结束本局”接口。
+
+### 12.3 新增公开方法（给场景与其他行为用）
+
+| 类型 | 成员 | 用途 |
+|---|---|---|
+| `HubLevelLauncher` | `PressStart(int levelIndex)` | 世界内按钮 / uGUI `SendCustomEvent` 的入口，拒绝时打一行 reason。 |
+| `HubLevelLauncher` | `bool TryStartLevel(int levelIndex, out int reason)` | 同上的可判定版本（项目惯例 `Try*` + `out reason`）。 |
+| `HubLevelLauncher` | `PressReturnToRoom()` / `bool TryReturnToRoom(out int reason)` | 回房。 |
+| `HubStartButton` | `Interact()` / `Press()` | 世界内按下 / uGUI 字符串事件。 |
+| `HubReturnButton` | `Interact()` / `Press()` | 同上。 |
+| `HubLoopMath` | `TryStartMode`、`TryDecideStart`、`TryDecideReturn`、`IsCoolingDown`、`TryLiftedPoint`、`IsWithin`、`ShouldHoldInLevel`、`IsRoundState`、`DescribeReason` | 纯规则，全部有 EditMode 测试。 |
+
+reason code（0 = 成功）：1 传送在飞、2 冷却中、3 关卡索引越界、4 状态不是 Idle/Result、5 回合仍在跑、6 状态值不可用、7 无本地玩家、8 落点非有限值、9 关卡入口槽为空、10 没到达入口、11 传送途中状态自己变了、12 回合拒绝复位重开、13 没连控制器、14 没连房间落点。
+
+### 12.4 缺的接口（没有加，留给 Lead 协调）
+
+1. **`StoryRoundController` 没有公开的“结束/立即结算本局”**（例如 `AbortRound()` 或 `SettleNow()`）。缺它，“`Running` 中途回房”就只能拒绝（§12.2 ③）；要做成“放弃本局回房”，需要那个方法，且它必须自己保证冻结与闸门顺序。
+2. **`StoryResultPresenter` 没有公开只读 getter**（星级 / 评语 / 是否在 partial band）。所以房间状态行不显示星级；要在别处显示，需要 presenter 加 getter（`Runtime/Story/` 的改动，不在本次写范围）。
+3. **`BallRideStation` 没有“请求本地玩家离座”的公开方法**，只有 `IsLocalPlayerSeated()` 这个读口；hub 因此自己持一个 `VRCStation` 引用调 `ExitStation`。若 `Runtime/Riding/` 之后要收口“离座”这件事，hub 应该改调它，而不是直接摸 `VRCStation`。
+4. **场景侧还没有**：房间几何、按钮 Collider、`LevelEntry` / `RoomSpawn`、`spawns`、卡面搬家、`StoryResultPresenter` 的接线。这些是 Unity 操作者的活（§9）。

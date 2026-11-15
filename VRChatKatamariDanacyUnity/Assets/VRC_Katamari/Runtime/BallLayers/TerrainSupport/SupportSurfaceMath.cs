@@ -11,9 +11,9 @@ namespace VRCKatamari.BallLayers
     /// <remarks>
     /// <para>
     /// One implementation only. Docs/Design/BallMotor/TERRAIN_SUPPORT.md §3 puts
-    /// the whole support decision here (selection, step band, step hysteresis,
-    /// gravity fall state, and P2's prop role/support table) and the motor only
-    /// orders calls and carries the result. The absorb gate stays where it was
+    /// the whole support decision here (selection, the step decision, gravity fall
+    /// state, and P2's prop role/support table) and the motor only orders calls and
+    /// carries the result. The absorb gate stays where it was
     /// (<see cref="VRCKatamari.Pickup.PickupAbsorbMath.IsBeyondAbsorbVolumeLimit"/>);
     /// nothing here reads a prop - the host passes the gate's answer in.
     /// </para>
@@ -40,12 +40,13 @@ namespace VRCKatamari.BallLayers
     /// §3.3 of the design.
     /// </para>
     /// <para>
-    /// The step band. A surface is a candidate only when its height is at most
-    /// <c>referenceSupportHeight + stepLimit</c>. That single upper bound is
-    /// what stops a wall's top face from acting as a floor: a 2 m wall is not in
-    /// the band of a ball standing on the ground, so the ball keeps the ground.
-    /// The ground is always the fallback even when it is outside the band, so a
-    /// query never reports "no support".
+    /// The step decision. A surface is a candidate only when
+    /// <see cref="IsStepWithinLimit"/> accepts it, which is one subtraction against the
+    /// caller's reference (<c>SupportReferenceHeight</c>) and an inclusive step limit.
+    /// That single comparison is also what the motor's sweep mask calls, so a box the
+    /// sweep drops is always a box this query can select: there is no "removed from the
+    /// sweep but unsupportable" state. The ground is always the fallback even when it is
+    /// outside the band, so a query never reports "no support".
     /// </para>
     /// <para>
     /// UdonSharp: static methods, caller-owned arrays, no allocation, no
@@ -123,45 +124,73 @@ namespace VRCKatamari.BallLayers
         }
 
         /// <summary>
-        /// Three-state step test for one static box: may the ball enter it (step)
-        /// or does it stay a wall?
+        /// The support reference height for one step: the higher of the surface the
+        /// ball was on and the ball's own bottom.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// This is the <b>only</b> place the "rise vs step limit" comparison
-        /// exists. The motor calls it once per static box for the sweep mask and
-        /// uses the same answer for the support table, so the sweep and the
-        /// support table cannot disagree about a box.
+        /// This is the ONE reference the sweep mask and the support table both compare
+        /// a box top against. The band form "top &lt;= reference + limit" alone would
+        /// exclude a surface the ball is falling ONTO (above the old support but below
+        /// the ball), so the ball's bottom joins in; and because the mask reads the same
+        /// expression, "the ball is already above the top" needs no separate
+        /// unconditional rule: the reference is then the ball's own bottom, so the rise
+        /// is zero or negative.
         /// </para>
         /// <para>
-        /// Three anti-jitter rules from the design (§4.5):
-        /// <list type="number">
-        /// <item>one-way hysteresis: a box already classified as a step stays a
-        /// step until its rise exceeds <c>stepLimit + hysteresis</c>;</item>
-        /// <item>already above the top wins unconditionally, so a ball standing
-        /// on the box is never re-classified into a wall while its centre is
-        /// inside the expanded box (that would make the sweep push it out);</item>
-        /// <item>the minimum-step rule does not live here: it only decides
-        /// whether a crossing grants the large step lift
-        /// (<see cref="IsStepCrossing"/>), because a 4 mm lip is still something
-        /// the ball must be allowed to enter.</item>
-        /// </list>
-        /// </para>
-        /// <para>
-        /// Invalid input returns false (the conservative "wall") instead of
-        /// throwing or guessing.
+        /// A non-finite <paramref name="ballBottomM"/> is ignored rather than poisoning
+        /// the step: the surface height is the conservative answer.
         /// </para>
         /// </remarks>
-        public static bool IsSteppable(float riseM, float stepLimitM, bool alreadyAbove,
-            bool wasSteppable, float hysteresisM)
+        public static float SupportReferenceHeight(float supportHeightM, float ballBottomM)
         {
-            if (!KatamariMath.IsFiniteFloat(riseM)) return false;
+            if (!KatamariMath.IsFiniteFloat(supportHeightM)) return supportHeightM;
+            if (!KatamariMath.IsFiniteFloat(ballBottomM)) return supportHeightM;
+            return ballBottomM > supportHeightM ? ballBottomM : supportHeightM;
+        }
+
+        /// <summary>
+        /// The ONE static-box step decision: is this box top within the ball's step
+        /// limit? False means the box stays a wall and stays in the sweep.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Both sides call THIS function with the same reference
+        /// (<see cref="SupportReferenceHeight"/>): the motor's sweep mask calls it per
+        /// box to decide exclusion, and <see cref="TryResolveSupport"/> calls it per box
+        /// to decide candidacy. The comparison is one subtraction and one inclusive
+        /// bound (<c>top - reference &lt;= stepLimit</c>). A band written as
+        /// <c>top &lt;= reference + stepLimit</c> is not bit-identical to it, and that
+        /// second form was half of the 2026-11-15 C09 divergence.
+        /// </para>
+        /// <para>
+        /// There is deliberately no one-way hysteresis here. A latch can only widen the
+        /// exclusion beyond the support rule, and every box the sweep drops MUST be a box
+        /// the support table can select: a box removed from the sweep that cannot support
+        /// is the "ghost step" that let the 0.30 m ball drive through C09's 0.075 m deck
+        /// (the mask latched while the ball was airborne at spawn, then never released).
+        /// The mask's own refresh gate (5 mm of support movement, 2 mm of diameter) is the
+        /// de-noise, and it is symmetric because both sides read this one function.
+        /// </para>
+        /// <para>
+        /// The minimum-step rule does not live here: it only decides whether a crossing
+        /// grants the large step lift (<see cref="IsStepCrossing"/>), because a 4 mm lip is
+        /// still something the ball must be allowed to enter.
+        /// </para>
+        /// <para>
+        /// Invalid input returns false (the conservative "wall") instead of throwing or
+        /// guessing.
+        /// </para>
+        /// </remarks>
+        public static bool IsStepWithinLimit(float topY, float referenceSupportHeightM,
+            float stepLimitM)
+        {
+            if (!KatamariMath.IsFiniteFloat(topY)) return false;
+            if (!KatamariMath.IsFiniteFloat(referenceSupportHeightM)) return false;
             if (!KatamariMath.IsFiniteFloat(stepLimitM) || stepLimitM < 0f) return false;
-            if (!KatamariMath.IsFiniteFloat(hysteresisM) || hysteresisM < 0f) return false;
-            if (alreadyAbove) return true;
-            if (riseM <= stepLimitM) return true;
-            if (wasSteppable && riseM <= stepLimitM + hysteresisM) return true;
-            return false;
+            float rise = topY - referenceSupportHeightM;
+            if (!KatamariMath.IsFiniteFloat(rise)) return false;
+            return rise <= stepLimitM;
         }
 
         /// <summary>
@@ -188,9 +217,9 @@ namespace VRCKatamari.BallLayers
         /// </summary>
         /// <remarks>
         /// <para>
-        /// This is the <b>only</b> place the prop role is computed, exactly as
-        /// <see cref="IsSteppable"/> is the only place the static-box comparison is
-        /// computed. <paramref name="beyondAbsorbVolumeLimit"/> is the absorb gate's
+        /// This is the <b>only</b> place the prop role is computed, and it uses the same
+        /// <see cref="IsStepWithinLimit"/> comparison the static-box mask uses.
+        /// <paramref name="beyondAbsorbVolumeLimit"/> is the absorb gate's
         /// own answer (<c>PickupAbsorbMath.IsBeyondAbsorbVolumeLimit</c> with the
         /// motor's limit), passed in so this layer never reads a prop and so the
         /// three identities share one predicate with no second threshold.
@@ -205,10 +234,12 @@ namespace VRCKatamari.BallLayers
         /// </para>
         /// <para>
         /// <paramref name="alreadyAbove"/> (the ball's bottom is at or above the prop
-        /// top) makes the role support unconditionally. It is the same anti-jitter
-        /// rule the static-box mask uses (§4.5 rule 2): a ball descending onto a
-        /// prop top must not have its landing surface classified as a wall because
-        /// the previous support is far below.
+        /// top) makes the role support unconditionally. That branch cannot disagree with
+        /// the support table: the motor's reference is
+        /// <see cref="SupportReferenceHeight"/>, so when the ball's bottom is at or above
+        /// the top the reference is at least the top and the table's rise is at most zero.
+        /// It is kept as an explicit branch because this layer is given the host's
+        /// already-above answer rather than the ball's bottom.
         /// </para>
         /// <para>
         /// Invalid input returns false with <paramref name="role"/> = none, so a
@@ -224,14 +255,13 @@ namespace VRCKatamari.BallLayers
             if (!KatamariMath.IsFiniteFloat(stepLimitM) || stepLimitM < 0f) return false;
             if (!beyondAbsorbVolumeLimit) return true;
 
-            float rise = topY - supportHeightM;
-            if (!KatamariMath.IsFiniteFloat(rise)) return false;
             if (alreadyAbove)
             {
                 role = PropRoleSupport;
                 return true;
             }
-            role = rise <= stepLimitM ? PropRoleSupport : PropRoleBlocking;
+            role = IsStepWithinLimit(topY, supportHeightM, stepLimitM)
+                ? PropRoleSupport : PropRoleBlocking;
             return true;
         }
 
@@ -273,10 +303,11 @@ namespace VRCKatamari.BallLayers
         /// pins that.
         /// </para>
         /// <para>
-        /// <paramref name="referenceSupportHeightM"/> is the height of the surface
-        /// the ball was on in the previous step (the caller's memory). It only
-        /// builds the band; it never selects. <paramref name="stepLimitM"/> is
-        /// <see cref="TryStepHeightLimit"/>'s result for this step's size.
+        /// <paramref name="referenceSupportHeightM"/> is the height the caller compares
+        /// against: <see cref="SupportReferenceHeight"/> of the previous support and the
+        /// ball's own bottom. It only builds the step decision; it never selects.
+        /// <paramref name="stepLimitM"/> is <see cref="TryStepHeightLimit"/>'s result for
+        /// this step's size.
         /// </para>
         /// <para>
         /// <paramref name="propMinima"/>/<paramref name="propMaxima"/> are the
@@ -353,9 +384,6 @@ namespace VRCKatamari.BallLayers
                     propMinima[i].z > propMaxima[i].z) return false;
             }
 
-            float bandHeight = referenceSupportHeightM + stepLimitM;
-            if (!KatamariMath.IsFiniteFloat(bandHeight)) return false;
-
             // Ground plane height under the probe: y = (offset - nx*px - nz*pz) / ny.
             float groundHeight = (offset - unitNormal.x * probePoint.x -
                 unitNormal.z * probePoint.z) / unitNormal.y;
@@ -375,11 +403,16 @@ namespace VRCKatamari.BallLayers
             Vector3 selectedPoint = groundPoint;
             Vector3 selectedNormal = unitNormal;
 
-            int activeCount = groundHeight <= bandHeight ? 1 : 0;
+            // The step decision is the SAME call the motor's sweep mask makes per box
+            // (IsStepWithinLimit). Writing the band as `top <= reference + limit` here
+            // instead was the second half of the C09 ghost-step bug: a box the mask
+            // excluded from the sweep could still fail this comparison and never support.
+            int activeCount = IsStepWithinLimit(groundHeight, referenceSupportHeightM,
+                stepLimitM) ? 1 : 0;
             for (int i = 0; i < boxCount; i++)
             {
                 float top = boxMaxima[i].y;
-                if (top > bandHeight) continue;
+                if (!IsStepWithinLimit(top, referenceSupportHeightM, stepLimitM)) continue;
                 activeCount = activeCount + 1;
                 if (probePoint.x < boxMinima[i].x || probePoint.x > boxMaxima[i].x) continue;
                 if (probePoint.z < boxMinima[i].z || probePoint.z > boxMaxima[i].z) continue;
@@ -389,14 +422,14 @@ namespace VRCKatamari.BallLayers
                 selectedPoint = new Vector3(probePoint.x, top, probePoint.z);
                 selectedNormal = new Vector3(0f, 1f, 0f);
             }
-            // Prop tops: same band, same inclusive footprint, same "strictly higher
-            // wins" tie-break. Reading them after the boxes means a box wins a tie,
+            // Prop tops: same step decision, same inclusive footprint, same "strictly
+            // higher wins" tie-break. Reading them after the boxes means a box wins a tie,
             // which is the stable registration order (scene geometry before a
             // per-scan prop set).
             for (int i = 0; i < propCount; i++)
             {
                 float top = propMaxima[i].y;
-                if (top > bandHeight) continue;
+                if (!IsStepWithinLimit(top, referenceSupportHeightM, stepLimitM)) continue;
                 activeCount = activeCount + 1;
                 if (probePoint.x < propMinima[i].x || probePoint.x > propMaxima[i].x) continue;
                 if (probePoint.z < propMinima[i].z || probePoint.z > propMaxima[i].z) continue;

@@ -111,13 +111,13 @@ namespace VRCKatamari.BallMotor
         // Rail on one step-up lift, so a mis-set ratio cannot teleport the ball. 0.6 is
         // above 0.25 * 2.20 = 0.55, so a correct configuration never touches it.
         [SerializeField] private float maxStepUpLiftWorldM = 0.6f;
-        // A box already classified as a step stays one until its rise exceeds
-        // stepLimit + this. Stops the sweep mask from flipping on rim noise.
-        [SerializeField] private float stepHysteresisM = 0.02f;
-        // "The ball is already above this box's top" margin. Without it, a ball standing
-        // on a step box can be re-classified into a wall while its centre is inside the
-        // expanded box, and the sweep's penetration branch pushes it off.
-        [SerializeField] private float stepStickMarginM = 0.01f;
+        // There is deliberately NO step hysteresis / stick-margin field. The one-way latch
+        // that used to live here could only widen the sweep exclusion beyond the support
+        // rule, and a box removed from the sweep that cannot support is a ghost step: on
+        // 2026-11-15 the mask latched while the ball was airborne at spawn and the 0.30 m
+        // ball drove through C09's 0.075 m deck. The mask's refresh gate (2 mm of
+        // diameter, 5 mm of support movement) is the de-noise, and both sides now read
+        // SupportSurfaceMath.IsStepWithinLimit with the same reference.
         // Below this rise a crossing grants no large lift: numeric de-noise, NOT the
         // map's 0.05 m ground-decal/facade classification threshold.
         [SerializeField] private float minStepHeightM = 0.005f;

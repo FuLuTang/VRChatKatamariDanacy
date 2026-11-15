@@ -543,6 +543,40 @@ boxes + 直线坡 + 弯坡段数 ≤ 256（motor 的静态 OBB 表，CONTACT_MOD
 | 第二遍导入还显示 `+110` | 幂等键不是 `itemId`（例如按名字/按顺序） | 报告计数 |
 | 道具吸到球上后还剩一个悬空碰撞盒 | `propColliders[i]` 是 `null` 槽位（静默通过） | 同步后的槽位核对（§7.4） |
 | 新场景「没地板」：画面一片虚无，玩家一直下落、每 0.25 s 被传送回出生点 | 旧场景只有 `ground` / `boundary` 标记，没有 `Visual` 子物体（2026-11-15 之前导入的） | 该结构节点下没有 `Visual` 子物体；重跑一次导入，报告里 `other` / `structures: +0 ~N -0` 就是补上的体块数 |
+| 导入 648 件，同步只有 640 行，逐条报 `declared itemId has no host row` | 组名等于另一件道具的 `itemId`，子件被挂进了那件道具（容器按名字解析） | 重跑导入；层次里看 `.../Groups/<group>/<itemId>`（§7.8） |
+| 第二遍导入 `+8` 而不是 `+0` | 被吞掉的子件连导入器自己的遍历也看不见（同一条「最上层 Renderer」规则） | 报告 `PropsCreated`；同上，重跑一次即修复 |
+
+### 7.8 容器命名空间与身份规则（F2/F3，2026-11-15）
+
+层次从 `Props/<kind>/[<zone>/][<group>/]<itemId>` 改成：
+
+```
+LevelContent/Props/<kind>/[<zone>/][Groups/<group>/]<itemId>
+```
+
+两条规则，缺一条就会重演 F2/F3：
+
+1. **容器和道具是两个命名空间。** 组容器一律在 `Groups/` 下（`PlacementImporter.GroupsFolderName`），这个父节点里永远不会出现道具，所以「组名 = 另一件的 itemId」不再是冲突。`EnsureFolder` 也**不再把带 Renderer 的子物体当容器**：命名冲突直接报错并跳过那件道具（宁可导入失败，也不静默改父级）。旧的 `[<group>/]` 位置会让 `_ref_mas1` 少 8 件（648 → 640 行）并在每次重导时再造 8 个重复实例。
+2. **身份 = 受管根下的 `itemId`**（不是路径、不是名字前缀）。最上层仍然「带 Renderer 即道具」（这样文档里删掉的道具还能被 `-N` 删掉），但**道具内部**只认「声明里出现的 id + 预制体实例根」：那正是修复前场景的形态（道具挂在道具里，Unity 记成嵌套预制体），找到后按「父级不符」把它移到正确文件夹并算一次 `~`，于是**修一次之后的第二遍导入是 `+0 ~0 -0`**。模型自己的网格节点不是实例根，所以永远不会被当成道具。
+
+导入器在同步之前还会做一次**行数判定**（`VerifyPropRows`）：按同步工具「最上层 Renderer 即一行」的规则数一遍，声明里有、行里没有的 id 逐条报错。这样「少一行」在导入报告里就失败，而不是等到 Play 里 `valueUnits read-back` 才发现。
+
+对既有场景的影响：带 group 的道具第一次重导会被移动到 `Groups/` 下，报告 `~N`（属预期的一次性修正），之后再导是 `+0 ~0 -0`。`Props/<kind>/...` 的 kind 仍然取自 kind 文件夹名（`PickupFieldSync` 的唯一约定），`Groups`/`<zone>` 只是可读性容器。
+
+**仍然存在的暴露面**：`PickupFieldSync.CollectPropsUnder` 仍是「最上层 Renderer 即一行、不再往下」。导入器现在不会造出「道具当容器」的层次，也会修既有场景，所以它看到的内容是干净的；但若有人在场景里手工把一件道具拖进另一件里面，同步工具本身仍然会少一行（它只读取，不修复）。要么重导一次（导入器会移出来），要么另开一条改动去改 `CollectPropsUnder`——本轮不改它。
+
+### 7.9 起始球径怎么落到引擎（F4，2026-11-15）
+
+`level.ballDiameterStart` 是**每关的起始球径**（原作 MAS1 5 cm、Cancer 22.2 cm；owner 决定 D6）。数据侧一直都在，但引擎侧过去只拿它算弯坡弦预算：球的实际起始尺寸来自 motor 的 `baselineVolumeUnits × cubicMetersPerVolumeUnit`（0.0141 m³ → 0.2997 m），所以 5 cm 关也会 0.30 m 起步。
+
+接线两句话：
+
+1. 关卡场景里把 `KatamariBallMotor.startDiameterWorldM` 设成该关的 `ballDiameterStart`（米）。
+2. 不动它就保持 0：0 = 「未设」，起始尺寸仍由既有基线决定（0.2997 m），因此既有三关不需要改。
+
+导入器**不写球**（边界见 §7.1：它只碰 `Props`/`Structures` 和 arena 数组），只在报告里打一行 `note: level.ballDiameterStart=… m: set KatamariBallMotor.startDiameterWorldM …`，把 JSON 与场景的对应关系摆在操作者眼前。推导只有一处（`ApplyStartDiameterWorldM`，见 `Docs/Design/BallMotor/README.md`「起始球径是每关参数」），单位仍是整数账本单位（连续体积未批准）。
+
+弯坡的弦预算仍用 `max(0.15, ballDiameterStart/2)`（`CurveMinBallRadiusM`）：那是**采样精度**的下限，不是球的尺寸；5 cm 关会按 0.15 m 半径算，也就是比严格需要更细，不会更糙。
 
 ---
 

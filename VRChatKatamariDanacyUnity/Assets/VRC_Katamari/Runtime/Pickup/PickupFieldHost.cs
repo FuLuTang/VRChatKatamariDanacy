@@ -374,6 +374,17 @@ namespace VRCKatamari.Pickup
             }
             if (propCount <= 0) return;
 
+            // A positive semantic diameter is this motor's colour of readiness: it is what its
+            // Start derives, and LevelArenaHost gates its registration on the same test.
+            // Until then the motor's tables describe a zero-diameter ball at the world origin
+            // - the volume limit is 0 ("every prop is too big"), nothing can be a support - so
+            // a set built here would describe a ball that does not exist. Waiting is the
+            // host's half of the readiness contract; that alone is NOT what fixes F1 (there
+            // the motor had derived a size in its own step while its Start had never run, so
+            // the set still had to arrive): the motor's entry points allocate on first use,
+            // so the two halves cannot disagree.
+            if (motor.GetSemanticDiameterWorldM() <= 0f) return;
+
             ConsumeAbsorbedEvents();
             UpdatePropObstacles();
             if (!Collecting()) return;

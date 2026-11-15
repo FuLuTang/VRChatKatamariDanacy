@@ -40,11 +40,37 @@ namespace VRCKatamari.Editor.LevelBuild
     /// consumers, no second convention to keep in sync.
     /// </para>
     /// <para>
-    /// Hierarchy: <c>LevelContent/Props/&lt;kind&gt;/[&lt;zone&gt;/][&lt;group&gt;/]&lt;itemId&gt;</c>.
+    /// Hierarchy: <c>LevelContent/Props/&lt;kind&gt;/[&lt;zone&gt;/][Groups/&lt;group&gt;/]&lt;itemId&gt;</c>.
     /// The first level <b>must</b> be the kind folder: <see cref="PickupFieldSync"/> reads the
     /// kind from the folder directly under the field root it is given, and the importer gives
     /// it <c>LevelContent/Props</c>. Everything below the kind folder is for human
     /// readability only; poses are world-space.
+    /// </para>
+    /// <para>
+    /// Containers are a separate namespace from props, and that is a correctness rule, not
+    /// tidiness. A <c>groupId</c> may equal another prop's <c>itemId</c> (the reference level
+    /// has eight such cases), and the previous layout resolved a container with
+    /// "the child called <c>&lt;group&gt;</c>", which found that PROP and parented the group's
+    /// children inside it. The pickup sync's rule is "the topmost object with a Renderer is
+    /// one prop and its subtree is that prop's visual", so the swallowed children never
+    /// became rows (648 props imported, 640 rows), the declared value total did not read
+    /// back, and every re-import re-created them because they were invisible to the
+    /// importer's own walk too (<c>+8</c> each run). Two rules remove the class:
+    /// <list type="number">
+    /// <item><description>a group container is <c>Groups/&lt;group&gt;</c>, so its name is
+    /// resolved under a folder no prop is ever a child of;</description></item>
+    /// <item><description><see cref="EnsureFolder"/> never returns a child that carries a
+    /// <see cref="Renderer"/> (that child is a prop, not a container): a name collision is
+    /// reported as an error instead of silently re-parenting into a prop, and the props of
+    /// that collision are left alone for the operator to fix.</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Identity: one stable key per instance, the <c>itemId</c> under the level content
+    /// root. That is why the walk (<see cref="IndexProps"/>) looks for wanted ids even
+    /// inside an object that carries a Renderer: a scene imported before the fix has props
+    /// nested in a prop, and those are found, moved to their owning folder and counted as
+    /// updates instead of being duplicated (<c>+0</c> on the run after one repair).
     /// </para>
     /// <para>
     /// value units are the level's data, not a pricing rule. The Lead's decision of
@@ -95,6 +121,10 @@ namespace VRCKatamari.Editor.LevelBuild
         public const string ManagedRootName = "LevelContent";
         public const string PropsFolderName = "Props";
         public const string StructuresFolderName = "Structures";
+        // The reserved parent of every group container (see the class remarks). A prop is
+        // never a child of this folder, so a group id can never resolve to a prop, even when
+        // the id equals another prop's itemId.
+        public const string GroupsFolderName = "Groups";
 
         // Repo-relative, like the greybox builder's payload: the JSON lives next to the
         // Unity project, not inside Assets/, so it can be diffed and validated by the CLI.
@@ -478,16 +508,36 @@ namespace VRCKatamari.Editor.LevelBuild
             string arenaId = ArenaIdOf(doc);
             if (!string.IsNullOrEmpty(arenaId))
             {
-                levelRoot = EnsureFolder(managedRoot, arenaId);
+                levelRoot = EnsureFolder(managedRoot, arenaId, report);
+                if (levelRoot == null)
+                {
+                    report.Fail("the cell folder '" + arenaId + "' collides with an object that is " +
+                                "not a folder; rename the cell in the level data");
+                    return false;
+                }
+
                 report.ArenaId = arenaId;
             }
 
             report.ManagedRootPath = HierarchyPath(levelRoot);
 
-            Transform propsRoot = EnsureFolder(levelRoot, PropsFolderName);
-            Transform structuresRoot = EnsureFolder(levelRoot, StructuresFolderName);
+            Transform propsRoot = EnsureFolder(levelRoot, PropsFolderName, report);
+            Transform structuresRoot = EnsureFolder(levelRoot, StructuresFolderName, report);
+            if (propsRoot == null || structuresRoot == null)
+            {
+                report.Fail("the managed props/structures folder collides with an object that is " +
+                            "not a folder; the managed subtree was not imported");
+                return false;
+            }
 
             bool propsOk = ApplyProps(doc, propsRoot, report);
+            if (propsOk)
+            {
+                // The sync's row rule is "topmost Renderer wins", so a prop that owns another
+                // prop is a lost row. The importer must never report a run that loses one; the
+                // check names the ids instead of letting 640-of-648 reach the sync.
+                propsOk = VerifyPropRows(doc, propsRoot, report);
+            }
             bool structuresOk = ApplyStructures(doc, structuresRoot, report);
 
             // Only the prop tree owns empty folders (kind/zone/group). A structure child is a
@@ -508,8 +558,38 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             BindArenaHost(doc, levelRoot, structuresRoot, report);
+            ReportStartSize(doc, report);
 
             return propsOk && structuresOk;
+        }
+
+        /// <summary>
+        /// Tells the operator what START BALL the level asks for, because this tool does not
+        /// write the ball.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The start diameter is a per-level parameter (parity D6: 5 cm for MAS1, 22.2 cm for
+        /// Cancer, 30 cm for our first level) and the runtime field that carries it is
+        /// <c>KatamariBallMotor.startDiameterWorldM</c>. The importer owns the props and the
+        /// arena arrays, not the motor's wiring, so it prints the value the JSON declares and
+        /// leaves the component alone. 0 on the motor means "use the calibration baseline",
+        /// which is the 0.2997 m start ball every level authored before the field existed
+        /// keeps, so nothing moves until an operator sets the field.
+        /// </para>
+        /// <para>
+        /// This is a note, never an error: a level without in-scene wiring is a normal state
+        /// for a document that a lab imports into a scratch scene.
+        /// </para>
+        /// </remarks>
+        private static void ReportStartSize(PlacementDocument doc, PlacementImportReport report)
+        {
+            float diameter = doc.level != null ? doc.level.ballDiameterStart : 0f;
+            if (diameter <= 0f) return;
+            report.Note("level.ballDiameterStart=" +
+                        diameter.ToString("0.####", CultureInfo.InvariantCulture) +
+                        " m: set KatamariBallMotor.startDiameterWorldM to that value to start the" +
+                        " ball at this level's size (leave it at 0 for the calibration's 0.2997 m)");
         }
 
         // ---------------------------------------------------------- document ---
@@ -1056,13 +1136,25 @@ namespace VRCKatamari.Editor.LevelBuild
         private static bool ApplyProps(PlacementDocument doc, Transform propsRoot, PlacementImportReport report)
         {
             bool ok = true;
-            Dictionary<string, GameObject> existing = IndexProps(propsRoot);
 
+            // The declaration set is built first: it is both the reconcile's wanted list and
+            // the walk's filter, so the walk can look for a wanted id inside an object that
+            // carries a Renderer (a pre-fix scene's nested props) without ever taking a
+            // model's internal node for a prop.
             var wanted = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < doc.props.Length; i++)
             {
+                if (doc.props[i] != null && !string.IsNullOrEmpty(doc.props[i].itemId))
+                {
+                    wanted.Add(doc.props[i].itemId);
+                }
+            }
+
+            Dictionary<string, GameObject> existing = IndexProps(propsRoot, wanted);
+
+            for (int i = 0; i < doc.props.Length; i++)
+            {
                 PropEntry prop = doc.props[i];
-                wanted.Add(prop.itemId);
 
                 string kind = DeclaredKind(doc, prop);
                 if (string.IsNullOrEmpty(kind))
@@ -1087,7 +1179,15 @@ namespace VRCKatamari.Editor.LevelBuild
                     current = null;
                 }
 
-                Transform folder = EnsurePropFolder(propsRoot, kind, prop.zone, prop.group);
+                Transform folder = EnsurePropFolder(propsRoot, kind, prop.zone, prop.group, report);
+                if (folder == null)
+                {
+                    // EnsurePropFolder already named the colliding container. Nothing is
+                    // created or moved for this prop, so the run fails instead of losing it.
+                    report.PropErrors++;
+                    ok = false;
+                    continue;
+                }
                 if (current == null)
                 {
                     current = InstantiateProp(doc, prop, folder, report);
@@ -1153,17 +1253,34 @@ namespace VRCKatamari.Editor.LevelBuild
             return ok;
         }
 
-        private static Transform EnsurePropFolder(Transform propsRoot, string kind, string zone, string group)
+        /// <summary>
+        /// Returns the folder a prop with this kind/zone/group belongs in, creating the
+        /// containers it needs, or null when a container name is already taken by a prop.
+        /// </summary>
+        /// <remarks>
+        /// The group goes under <see cref="GroupsFolderName"/>, which is the whole point: a
+        /// group id may equal another prop's item id, and under a reserved parent the lookup
+        /// can never find that prop. Zones stay directly under the kind folder (they were
+        /// never read by anything but a human), so an import of an existing level only moves
+        /// the grouped props once.
+        /// </remarks>
+        private static Transform EnsurePropFolder(Transform propsRoot, string kind, string zone,
+                                                 string group, PlacementImportReport report)
         {
-            Transform folder = EnsureFolder(propsRoot, kind);
+            Transform folder = EnsureFolder(propsRoot, kind, report);
+            if (folder == null) return null;
             if (!string.IsNullOrEmpty(zone))
             {
-                folder = EnsureFolder(folder, zone);
+                folder = EnsureFolder(folder, zone, report);
+                if (folder == null) return null;
             }
 
             if (!string.IsNullOrEmpty(group))
             {
-                folder = EnsureFolder(folder, group);
+                folder = EnsureFolder(folder, GroupsFolderName, report);
+                if (folder == null) return null;
+                folder = EnsureFolder(folder, group, report);
+                if (folder == null) return null;
             }
 
             return folder;
@@ -1236,39 +1353,141 @@ namespace VRCKatamari.Editor.LevelBuild
                    Mathf.Abs(Quaternion.Dot(transform.rotation, rotation)) >= RotationDotTolerance;
         }
 
-        private static Dictionary<string, GameObject> IndexProps(Transform propsRoot)
+        /// <summary>
+        /// The importer's identity index: item id to the one instance under the managed props
+        /// root. The id is parsed from the object's name (the <c>@size=</c> suffix is
+        /// stripped), i.e. the same key <see cref="PickupFieldSync"/> uses for a row, so an
+        /// imported object and a synced row cannot disagree about which prop they are.
+        /// </summary>
+        private static Dictionary<string, GameObject> IndexProps(Transform propsRoot,
+                                                                HashSet<string> wanted)
         {
             var index = new Dictionary<string, GameObject>(StringComparer.Ordinal);
-            CollectProps(propsRoot, index);
+            CollectProps(propsRoot, index, wanted, false);
             return index;
         }
 
-        private static void CollectProps(Transform parent, Dictionary<string, GameObject> index)
+        /// <summary>
+        /// Collects the manageable props under <paramref name="parent"/>.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The walk descends INTO a renderer-bearing object, which the sync's rule
+        /// deliberately does not. That is the immunity F2 asks for: a scene imported before
+        /// the group-container fix has real props parented inside a prop, and only a walk that
+        /// looks past the first Renderer can find them, move them to their own folder and stop
+        /// re-creating them on every import.
+        /// </para>
+        /// <para>
+        /// Two filters keep that safe, and they are different at the two depths. At the top
+        /// level every renderer-bearing object is a prop exactly as before - the stale sweep
+        /// must still find an object the document no longer declares, or removal would stop
+        /// working. Inside a prop only another prop counts: a prefab instance root whose id
+        /// the level declares (the F2 nesting is a nested prefab, so it is one). The nodes of
+        /// a prop's own model are not instance roots, so they can never become props.
+        /// </para>
+        /// </remarks>
+        private static void CollectProps(Transform parent, Dictionary<string, GameObject> index,
+                                        HashSet<string> wanted, bool insideProp)
         {
             for (int i = 0; i < parent.childCount; i++)
             {
                 Transform child = parent.GetChild(i);
                 if (child.GetComponent<Renderer>() != null)
                 {
-                    string itemId;
-                    float declaredSize;
-                    string error;
-                    PickupFieldAuthoringRules.TryParseDeclaredSize(child.name, out itemId,
-                        out declaredSize, out error);
-                    if (!string.IsNullOrEmpty(error))
-                    {
-                        itemId = child.name;
-                    }
-
-                    if (!index.ContainsKey(itemId))
+                    string itemId = PropIdOf(child.name);
+                    bool isProp = !insideProp ||
+                                  (IsPrefabInstanceRoot(child) &&
+                                   (wanted == null || wanted.Contains(itemId)));
+                    if (isProp && !index.ContainsKey(itemId))
                     {
                         index.Add(itemId, child.gameObject);
+                    }
+
+                    if (child.childCount > 0 && IsPrefabInstanceRoot(child))
+                    {
+                        CollectProps(child, index, wanted, true);
                     }
 
                     continue;
                 }
 
-                CollectProps(child, index);
+                CollectProps(child, index, wanted, insideProp);
+            }
+        }
+
+        /// <summary>
+        /// The item id a GameObject name carries: the registered name-parsing rule
+        /// (<see cref="PickupFieldAuthoringRules.TryParseDeclaredSize"/>) with the name itself
+        /// as the fallback when the optional <c>@size=</c> suffix is malformed. One spelling,
+        /// used by both walks.
+        /// </summary>
+        private static string PropIdOf(string objectName)
+        {
+            string itemId;
+            float declaredSize;
+            string error;
+            if (!PickupFieldAuthoringRules.TryParseDeclaredSize(objectName, out itemId,
+                    out declaredSize, out error) || !string.IsNullOrEmpty(error))
+            {
+                return objectName;
+            }
+
+            return itemId;
+        }
+
+        /// <summary>
+        /// True when this transform is the root of a prefab instance (a plain one, a nested
+        /// one or a variant): every imported prop is one, while the nodes inside a prop's
+        /// model are not. It is how <see cref="CollectProps"/> tells "a prop was parented
+        /// into this prop" (the F2 state, which Unity models as a nested prefab) from the
+        /// prop's own model internals.
+        /// </summary>
+        private static bool IsPrefabInstanceRoot(Transform candidate)
+        {
+            return PrefabUtility.IsAnyPrefabInstanceRoot(candidate.gameObject);
+        }
+
+        /// <summary>
+        /// The property the pickup sync depends on: every declared itemId is the TOPMOST
+        /// renderer-bearing object under Props, i.e. one row. A prop that owns another prop is
+        /// not a row for the one inside it, so a run that leaves one nested must fail here
+        /// with the ids named rather than reach the sync as "640 of 648".
+        /// </summary>
+        private static bool VerifyPropRows(PlacementDocument doc, Transform propsRoot,
+                                          PlacementImportReport report)
+        {
+            var rows = new HashSet<string>(StringComparer.Ordinal);
+            CollectTopmostRows(propsRoot, rows);
+
+            bool ok = true;
+            for (int i = 0; i < doc.props.Length; i++)
+            {
+                PropEntry prop = doc.props[i];
+                if (prop == null || string.IsNullOrEmpty(prop.itemId)) continue;
+                if (rows.Contains(prop.itemId)) continue;
+                report.Error(prop.itemId + ": the props tree has no topmost renderer for it, so the " +
+                             "pickup sync would not make a row (a prop object is owning it as a " +
+                             "container); move it out of that object or rename the container");
+                ok = false;
+            }
+
+            return ok;
+        }
+
+        /// <summary>The pickup sync's collection rule, used only to predict its row set.</summary>
+        private static void CollectTopmostRows(Transform parent, HashSet<string> rows)
+        {
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform child = parent.GetChild(i);
+                if (child.GetComponent<Renderer>() != null)
+                {
+                    rows.Add(PropIdOf(child.name));
+                    continue;
+                }
+
+                CollectTopmostRows(child, rows);
             }
         }
 
@@ -2793,12 +3012,41 @@ namespace VRCKatamari.Editor.LevelBuild
             return true;
         }
 
-        private static Transform EnsureFolder(Transform parent, string name)
+        /// <summary>
+        /// Returns the container called <paramref name="name"/> under
+        /// <paramref name="parent"/>, creating it when absent, or null when that name is
+        /// already used by something that is not a container.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A Renderer means "this object is a prop": <see cref="PickupFieldSync"/> stops its
+        /// walk there and calls the object a row, so anything parented under it would be
+        /// invisible to both the sync and this importer's walk. The old version returned the
+        /// first same-named child unconditionally, and a group id that equalled another prop's
+        /// item id therefore re-parented the group's children into that prop (8 props lost,
+        /// re-created on every import).
+        /// </para>
+        /// <para>
+        /// A collision is an ERROR, not a silently numbered second folder: a duplicate name
+        /// makes the next lookup ambiguous, and an ambiguous lookup is exactly how an import
+        /// stops being idempotent. The level data has to name its containers differently.
+        /// </para>
+        /// </remarks>
+        private static Transform EnsureFolder(Transform parent, string name,
+                                             PlacementImportReport report)
         {
             Transform existing = FindChild(parent, name);
             if (existing != null)
             {
-                return existing;
+                if (existing.GetComponent<Renderer>() == null)
+                {
+                    return existing;
+                }
+
+                report.Error("the container '" + name + "' under " + HierarchyPath(parent) +
+                             " is a prop (it carries a Renderer), so it cannot own other objects;" +
+                             " rename that container in the level data");
+                return null;
             }
 
             var folder = new GameObject(name);

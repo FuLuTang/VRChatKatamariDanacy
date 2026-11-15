@@ -197,6 +197,21 @@ namespace VRCKatamari.BallMotor
         [SerializeField] private float collisionToCoreRadiusRatio = 1f;
         [SerializeField] private float semanticDiameterPerCoreDiameter = 1f;
 
+        // ---- Start size: the level-level parameter (parity D6) ----
+        // The original's start diameter is a per-level value: 5 cm for MAS1, 22.2 cm for
+        // Cancer, 30 cm for our first level (Docs/Design/Parity/PARITY_AUDIT.md, D6 and
+        // §5.4 A/B). Before this field, the only start-size input was
+        // baselineVolumeUnits, so "the level wants a 5 cm ball" could not be expressed and
+        // every level started at the calibration's 0.2997 m.
+        //
+        // 0 means NOT SET: the level keeps baselineVolumeUnits as authored, which is every
+        // scene written before this field existed, so existing levels do not move. A
+        // positive value is authoritative: ApplyStartDiameterWorldM rewrites the baseline
+        // volume from it in Start, once, and from then on every consumer reads one
+        // baseline. The diameter is the SEMANTIC diameter (the narrative size a player
+        // reads, see SizeModelMath.TryDerive), not the collision diameter.
+        [SerializeField] private float startDiameterWorldM = 0f;
+
         // ---- PickupAbsorbMath inputs ----
         [SerializeField] private float contactRadiusWorldM = 0f;
         // The size gate is a VOLUME gate relative to the ball (Docs/OPEN_DECISIONS.md
@@ -369,6 +384,35 @@ namespace VRCKatamari.BallMotor
         // six walls happen to be closer.
         private const int MaxSupportPropCount = SupportSurfaceMath.MaxSupportPropCount;
 
+        // ---- Cross-behaviour set buffers: ownership (why Start is not the only allocator) ----
+        // Every buffer below holds a SET that another behaviour writes through a public
+        // entry point: the pickup field pushes its blocking and support sets from its own
+        // Update (PickupFieldHost.UpdatePropObstacles) and queues candidates, and the arena
+        // host registers planes/boxes/ramps. Unity does not order Start across GameObjects,
+        // and this project has already met both orders (F1: a blocking set arrived before
+        // this component's Start, the destination was still null, the write threw a null
+        // reference and Udon halted the motor for the rest of the session - the ball never
+        // started). The rule is one rule, the same one the v2 contact tables follow:
+        //   1. The first writer allocates. Every entry point calls an Ensure... method, so
+        //      no set depends on Start having run.
+        //   2. Start calls the SAME ensure instead of allocating a second copy, so a set
+        //      registered before Start is kept rather than wiped by a re-allocation.
+        //   3. A null or undersized buffer is a refused call, never a null reference:
+        //      blocking/support record "set buffers unavailable", a ramp records its refusal
+        //      code, the candidate queue logs once and answers false, and AddPlane/AddBox -
+        //      which have no reason channel - answer false for the arena's existing report.
+        //      Nothing is written by a refused call.
+        // The sets covered here are the pickup field's two role sets (blocking, support),
+        // the scene geometry (planes, boxes, ramps) and the candidate queue. The v2 contact
+        // tables have their own ensure for the same reason (EnsureContactV2Buffers); the
+        // radial proxy shell is written only from this component's absorbed-event ring,
+        // which cannot exist before a step, so it stays a Start allocation.
+        private bool registrationBuffersReady;
+        private bool candidateBuffersReady;
+        // One line if the queue cannot be allocated: a missing buffer is an internal
+        // invariant failure, not a gameplay answer, so it must not repeat per submit.
+        private bool loggedCandidateBuffersMissing;
+
         private Vector3[] planeNormalBuffer;
         private float[] planeOffsetBuffer;
         private int planeCount;
@@ -417,6 +461,10 @@ namespace VRCKatamari.BallMotor
         private int rampRefusalCount;
         private int rampRefusalCode;
         private float rampRefusalSlopeDegrees;
+        // A ramp refused because the set buffers could not be allocated. It is NOT a
+        // SupportSurfaceMath code (that table is about geometry); this motor translates it
+        // in GetLastRampRefusalReason so the reason is still a literal and still code-visible.
+        private const int RampRefusalNoBuffers = 7;
 
         private Vector3[] planeNormals;
         private float[] planeOffsets;
@@ -847,17 +895,11 @@ namespace VRCKatamari.BallMotor
             // The pending-candidate stores are the only arrays this type declared
             // without allocating, so SubmitCandidate dereferenced null on its first
             // call. Nothing exercised that seam before a scene drove it; the capacity
-            // (4) and the drop-on-full policy are unchanged.
-            pendingAbsorbable = new bool[PendingCandidateCapacity];
-            pendingKinds = new string[PendingCandidateCapacity];
-            pendingBounds = new Vector3[PendingCandidateCapacity];
-            pendingPositions = new Vector3[PendingCandidateCapacity];
-            pendingValues = new float[PendingCandidateCapacity];
-            pendingItemIds = new string[PendingCandidateCapacity];
-            pendingGenerations = new int[PendingCandidateCapacity];
-            pendingAccepted = new bool[PendingCandidateCapacity];
-            pendingSubmitTimes = new float[PendingCandidateCapacity];
-            pendingCandidateCount = 0;
+            // (4) and the drop-on-full policy are unchanged. The host can reach the
+            // submit path before this Start runs, so the queue allocates on first use
+            // and Start only calls the same ensure (see the ownership note above the
+            // set buffers).
+            EnsureCandidateBuffers();
 
             awardedKeys = new string[AwardCapacity];
             awardedPoints = new int[AwardCapacity];
@@ -888,32 +930,11 @@ namespace VRCKatamari.BallMotor
             intentValueBuffer = new bool[ControlIntentMath.MaxIntentsPerFrame];
             ControlIntentMath.TryReset(previousDown, lastActionTime, comfortState);
 
-            planeNormalBuffer = new Vector3[MaxPlaneCount];
-            planeOffsetBuffer = new float[MaxPlaneCount];
-            boxMinimumBuffer = new Vector3[MaxBoxCount];
-            boxMaximumBuffer = new Vector3[MaxBoxCount];
-            blockingMinimumBuffer = new Vector3[MaxBlockingBoxCount];
-            blockingMaximumBuffer = new Vector3[MaxBlockingBoxCount];
-            supportPropMinimumBuffer = new Vector3[MaxSupportPropCount];
-            supportPropMaximumBuffer = new Vector3[MaxSupportPropCount];
-            rampCenterBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
-            rampNormalBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
-            rampRightBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
-            rampHalfWidthBuffer = new float[SupportSurfaceMath.MaxRampCount];
-            rampHalfRunBuffer = new float[SupportSurfaceMath.MaxRampCount];
-            planeCount = 0;
-            boxCount = 0;
-            blockingBoxCount = 0;
-            blockingRefusalCount = 0;
-            blockingRefusalReason = "";
-            supportPropCount = 0;
-            supportPropRefusalCount = 0;
-            supportPropRefusalReason = "";
-            rampCount = 0;
-            rampRefusalCount = 0;
-            rampRefusalCode = SupportSurfaceMath.RampRefusalNone;
-            rampRefusalSlopeDegrees = 0f;
-            RebuildObstacles();
+            // The set buffers are allocated on first use (see the ownership note above the
+            // fields): the pickup field can push a blocking or support set before this Start
+            // runs, so Start only makes sure they exist. Re-allocating here would wipe a set
+            // that is already registered and being read by this step loop.
+            EnsureRegistrationBuffers();
             contactCenters = new Vector3[ContactCapacity];
             contactPoints = new Vector3[ContactCapacity];
             contactNormals = new Vector3[ContactCapacity];
@@ -1010,6 +1031,14 @@ namespace VRCKatamari.BallMotor
             }
             if (autoStartPlaying) TryBeginPlaying(0f);
 
+            // Parity D6: the start diameter is a per-level parameter. A level that sets
+            // startDiameterWorldM rewrites the baseline VOLUME from it here, before any
+            // consumer reads the baseline; a level that does not keeps the serialized
+            // baselineVolumeUnits (every scene authored before the field existed, i.e. the
+            // 0.2997 m start ball). Continuous volume is NOT approved (PARITY_AUDIT 5.3),
+            // so the ledger unit stays integer and only the baseline changes.
+            ApplyStartDiameterWorldM();
+
             // The zero-volume mapping is the ball's start size: it is the baseline
             // for the growth fraction the motion layer consumes, and the floor the
             // conversion shrink clamps to.
@@ -1042,8 +1071,185 @@ namespace VRCKatamari.BallMotor
 
             Debug.Log("[BallMotor] Start ready diameter=" + semanticDiameterWorldM
                 + " collisionRadius=" + collisionRadiusWorldM
+                + " baselineUnits=" + baselineVolumeUnits
+                + " startSize=" + (startDiameterWorldM > 0f ? "level" : "calibration")
                 + " hasLocalRow=" + hasLocalRow
                 + " terrainSupport=" + terrainSupportEnabled);
+        }
+
+        /// <summary>
+        /// Makes the level's start diameter the ball's baseline, or keeps the serialized
+        /// baseline volume when the level does not set one.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Parity D6: the original's start diameter is a per-level value (5 cm for MAS1,
+        /// 22.2 cm for Cancer, 30 cm for our first level), not a global constant, while the
+        /// growth calibration is expressed against a baseline VOLUME. This method is the
+        /// single conversion between the two: <c>baselineVolumeUnits</c> is rewritten to the
+        /// volume of the requested start sphere and every consumer (the zero-volume mapping
+        /// in Start, the growth mapping, the round reset and the bank shrink) then reads
+        /// one baseline.
+        /// </para>
+        /// <para>
+        /// The inverse has to agree with <see cref="SizeModelMath.TryDerive"/>: the core
+        /// radius is the sphere radius of baseline * cubicMetersPerVolumeUnit, and the
+        /// semantic diameter is that radius doubled times
+        /// semanticDiameterPerCoreDiameter. 0 means unset, so a scene written before the
+        /// field existed keeps its authored baseline (3.4390244 units = the 0.2997 m start
+        /// ball). A start diameter the core cap cannot hold is refused and the authored
+        /// baseline is kept: writing a baseline above the cap would make every derivation
+        /// fail and the ball would silently stay at 0 diameter.
+        /// </para>
+        /// </remarks>
+        private void ApplyStartDiameterWorldM()
+        {
+            if (!KatamariMath.IsFiniteFloat(startDiameterWorldM) || startDiameterWorldM <= 0f)
+            {
+                return;
+            }
+
+            float startCoreRadius = startDiameterWorldM * 0.5f / semanticDiameterPerCoreDiameter;
+            // V = 4/3 * pi * r^3 with r the CORE radius (the semantic diameter is
+            // 2 * core * semanticDiameterPerCoreDiameter), and one volume unit is
+            // cubicMetersPerVolumeUnit. This is the zero-volume branch of
+            // SizeModelMath.TryDerive solved for the baseline; it cannot call that method
+            // because the baseline is its input, and it is not
+            // TryVolumeUnitsForSemanticDiameter because that answers "confirmed units ABOVE a
+            // baseline", not the baseline itself.
+            float unitVolumeWorldM3 = (4f / 3f) * Mathf.PI * startCoreRadius
+                * startCoreRadius * startCoreRadius;
+            float units = unitVolumeWorldM3 / cubicMetersPerVolumeUnit;
+            if (!KatamariMath.IsFiniteFloat(startCoreRadius) || startCoreRadius <= 0f ||
+                !KatamariMath.IsFiniteFloat(units) || units <= 0f)
+            {
+                Debug.LogWarning("[BallMotor] startDiameterWorldM=" + startDiameterWorldM
+                    + " is not usable; keeping baselineVolumeUnits=" + baselineVolumeUnits);
+                return;
+            }
+
+            // Verified through the forward map instead of assumed: the candidate baseline must
+            // map back to the requested diameter. A start ball the core cap cannot hold (or a
+            // ratio that makes the round trip disagree) keeps the authored baseline, because
+            // an out-of-range baseline would make every later derivation fail and the ball
+            // would silently stay at 0 m.
+            float coreRadius;
+            float collisionRadius;
+            float semanticDiameter;
+            float effectiveVolumeUnits;
+            if (!SizeModelMath.TryDerive(0f, units, cubicMetersPerVolumeUnit,
+                maxCoreRadiusWorldM, collisionToCoreRadiusRatio,
+                semanticDiameterPerCoreDiameter, out coreRadius, out collisionRadius,
+                out semanticDiameter, out effectiveVolumeUnits))
+            {
+                Debug.LogWarning("[BallMotor] startDiameterWorldM=" + startDiameterWorldM
+                    + " cannot be a baseline (the core cap is " + maxCoreRadiusWorldM
+                    + "); keeping baselineVolumeUnits=" + baselineVolumeUnits);
+                return;
+            }
+            if (Mathf.Abs(semanticDiameter - startDiameterWorldM) > startDiameterWorldM * 0.001f)
+            {
+                Debug.LogWarning("[BallMotor] startDiameterWorldM=" + startDiameterWorldM
+                    + " does not round-trip through the size model (" + semanticDiameter
+                    + "); keeping baselineVolumeUnits=" + baselineVolumeUnits);
+                return;
+            }
+            baselineVolumeUnits = units;
+        }
+
+        /// <summary>
+        /// Allocates the set buffers the first time any behaviour writes one, and reports
+        /// whether they are usable.
+        /// </summary>
+        /// <remarks>
+        /// See the ownership note above the field declarations. Called by Start and by every
+        /// entry point that writes a scene set, so the component works in either Start
+        /// order. The length checks are not paranoia: a caller (or a future refactor) that
+        /// hands over a shorter array is refused at the entry point instead of throwing a
+        /// null reference or an index-out-of-range inside the step loop.
+        /// </remarks>
+        private bool EnsureRegistrationBuffers()
+        {
+            if (!registrationBuffersReady) AllocateRegistrationBuffers();
+            if (planeNormalBuffer == null || planeOffsetBuffer == null) return false;
+            if (boxMinimumBuffer == null || boxMaximumBuffer == null) return false;
+            if (blockingMinimumBuffer == null || blockingMaximumBuffer == null) return false;
+            if (supportPropMinimumBuffer == null || supportPropMaximumBuffer == null) return false;
+            if (rampCenterBuffer == null || rampNormalBuffer == null ||
+                rampRightBuffer == null) return false;
+            if (rampHalfWidthBuffer == null || rampHalfRunBuffer == null) return false;
+            if (planeNormalBuffer.Length < MaxPlaneCount) return false;
+            if (blockingMinimumBuffer.Length < MaxBlockingBoxCount) return false;
+            if (supportPropMinimumBuffer.Length < MaxSupportPropCount) return false;
+            if (rampCenterBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Allocates the scene-set buffers once. Kept apart from Start so the "first writer
+        /// allocates, Start only ensures" rule has exactly one allocation site.
+        /// </summary>
+        private void AllocateRegistrationBuffers()
+        {
+            planeNormalBuffer = new Vector3[MaxPlaneCount];
+            planeOffsetBuffer = new float[MaxPlaneCount];
+            boxMinimumBuffer = new Vector3[MaxBoxCount];
+            boxMaximumBuffer = new Vector3[MaxBoxCount];
+            blockingMinimumBuffer = new Vector3[MaxBlockingBoxCount];
+            blockingMaximumBuffer = new Vector3[MaxBlockingBoxCount];
+            supportPropMinimumBuffer = new Vector3[MaxSupportPropCount];
+            supportPropMaximumBuffer = new Vector3[MaxSupportPropCount];
+            rampCenterBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
+            rampNormalBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
+            rampRightBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
+            rampHalfWidthBuffer = new float[SupportSurfaceMath.MaxRampCount];
+            rampHalfRunBuffer = new float[SupportSurfaceMath.MaxRampCount];
+            planeCount = 0;
+            boxCount = 0;
+            blockingBoxCount = 0;
+            blockingRefusalCount = 0;
+            blockingRefusalReason = "";
+            supportPropCount = 0;
+            supportPropRefusalCount = 0;
+            supportPropRefusalReason = "";
+            rampCount = 0;
+            rampRefusalCount = 0;
+            rampRefusalCode = SupportSurfaceMath.RampRefusalNone;
+            rampRefusalSlopeDegrees = 0f;
+            // The sweep arrays are derived from the counts above (and are re-created by
+            // every rebuild), so the empty rebuild belongs to the same first-time step.
+            RebuildObstacles();
+            registrationBuffersReady = true;
+        }
+
+        /// <summary>
+        /// Allocates the candidate queue the first time the host submits one, and reports
+        /// whether it is usable. Same ownership rule as the scene sets: the pickup field's
+        /// scan can reach SubmitCandidate before this component's Start.
+        /// </summary>
+        private bool EnsureCandidateBuffers()
+        {
+            if (!candidateBuffersReady)
+            {
+                pendingAbsorbable = new bool[PendingCandidateCapacity];
+                pendingKinds = new string[PendingCandidateCapacity];
+                pendingBounds = new Vector3[PendingCandidateCapacity];
+                pendingPositions = new Vector3[PendingCandidateCapacity];
+                pendingValues = new float[PendingCandidateCapacity];
+                pendingItemIds = new string[PendingCandidateCapacity];
+                pendingGenerations = new int[PendingCandidateCapacity];
+                pendingAccepted = new bool[PendingCandidateCapacity];
+                pendingSubmitTimes = new float[PendingCandidateCapacity];
+                pendingCandidateCount = 0;
+                candidateBuffersReady = true;
+            }
+            if (pendingAbsorbable == null || pendingKinds == null) return false;
+            if (pendingBounds == null || pendingPositions == null) return false;
+            if (pendingValues == null || pendingItemIds == null) return false;
+            if (pendingGenerations == null || pendingAccepted == null) return false;
+            if (pendingSubmitTimes == null) return false;
+            if (pendingItemIds.Length < PendingCandidateCapacity) return false;
+            return true;
         }
 
         private void Update()
@@ -3443,6 +3649,18 @@ namespace VRCKatamari.BallMotor
         public bool SubmitCandidate(bool absorbable, string kind, Vector3 bounds,
             Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration)
         {
+            // Same ownership rule as the scene sets: the queue allocates on first use, so
+            // a submit that arrives before Start is queued instead of throwing.
+            if (!EnsureCandidateBuffers())
+            {
+                if (!loggedCandidateBuffersMissing)
+                {
+                    loggedCandidateBuffersMissing = true;
+                    Debug.LogError("[BallMotor] candidate queue could not be allocated;"
+                        + " submits are refused (reason=no-buffers)");
+                }
+                return false;
+            }
             if (itemInstanceId == null || itemInstanceId.Length == 0) return false;
             if (itemGeneration < 0) return false;
 
@@ -3552,6 +3770,9 @@ namespace VRCKatamari.BallMotor
 
         public bool AddPlane(Vector3 normal, float offset)
         {
+            // First writer allocates: the arena host registers in its own Update, and a
+            // false here is its existing "this plane was refused" answer.
+            if (!EnsureRegistrationBuffers()) return false;
             if (planeCount >= MaxPlaneCount)
             {
                 SignalOverflow("plane capacity 8 exceeded");
@@ -3568,6 +3789,8 @@ namespace VRCKatamari.BallMotor
 
         public bool AddBox(Vector3 minimum, Vector3 maximum)
         {
+            // Same rule as AddPlane: the writer ensures the destination.
+            if (!EnsureRegistrationBuffers()) return false;
             if (boxCount >= MaxBoxCount)
             {
                 SignalOverflow("box capacity 8 exceeded");
@@ -3633,6 +3856,14 @@ namespace VRCKatamari.BallMotor
         public bool AddRamp(Vector3 center, Vector3 normal, Vector3 right,
             float halfWidth, float halfRun)
         {
+            if (!EnsureRegistrationBuffers())
+            {
+                // A ramp has a reason channel, so the refusal is code-visible, not just a
+                // false: 0 slope is honest (nothing was measured) and capacity is not the
+                // cause, so the code names the buffer instead.
+                RefuseRamp(RampRefusalNoBuffers, 0f);
+                return false;
+            }
             if (!SupportSurfaceMath.IsRampCountAllowed(rampCount))
             {
                 RefuseRamp(SupportSurfaceMath.RampRefusalCapacity, 0f);
@@ -3704,6 +3935,7 @@ namespace VRCKatamari.BallMotor
         /// <summary>The last <see cref="AddRamp"/> refusal as a literal, or "".</summary>
         public string GetLastRampRefusalReason()
         {
+            if (rampRefusalCode == RampRefusalNoBuffers) return "set buffers unavailable";
             return SupportSurfaceMath.RampRefusalReason(rampRefusalCode);
         }
 
@@ -3766,6 +3998,14 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         public bool SetBlockingBoxes(Vector3[] minima, Vector3[] maxima, int count)
         {
+            // First writer allocates (ownership note above the set buffers): the pickup
+            // field's Update can reach this before Start has run, and a set that arrives
+            // then must be kept, not thrown away.
+            if (!EnsureRegistrationBuffers())
+            {
+                RefuseBlockingBoxes("set buffers unavailable");
+                return false;
+            }
             if (count < 0)
             {
                 RefuseBlockingBoxes("negative count");
@@ -3929,6 +4169,12 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         public bool SetSupportProps(Vector3[] minima, Vector3[] maxima, int count)
         {
+            // Same ownership rule as SetBlockingBoxes: the writer ensures its destination.
+            if (!EnsureRegistrationBuffers())
+            {
+                RefuseSupportProps("set buffers unavailable");
+                return false;
+            }
             if (count < 0)
             {
                 RefuseSupportProps("negative count");

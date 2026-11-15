@@ -357,6 +357,33 @@ v' = v - min(0, v·n) n
 - 交分事务的触发方式（靠近/输入/自动）——由回合状态机决定，不在本层。
 - 舒适转向与移动权威（头/手/摇杆）如何合成 yaw——`FollowRigMath` 只吃一个标量 yaw，谁产它未定。
 
+## 起始球径是每关参数（2026-11-15，F4）
+
+| 字段 | 默认 | 含义 |
+|---|---:|---|
+| `startDiameterWorldM` | 0 | 0 = **未设**：起始尺寸仍由 `baselineVolumeUnits` 决定（既有场景，0.2997 m）。>0 = 该关的**语义**起始直径（米），基线体积由它反推 |
+
+- **为什么有这个字段**：`level.ballDiameterStart` 过去只到导入器的弯坡弦预算，引擎侧没有任何「起始直径」入口，于是 5 cm 关也从 0.30 m 起步（原作 MAS1 是 5 cm、Cancer 22.2 cm；owner 决定 D6：起始/目标/上限都是每关参数）。
+- **推导只有一处**：`ApplyStartDiameterWorldM()`，在 `Start` 里把 `baselineVolumeUnits` 改写成 `(4/3)πr³ / cubicMetersPerVolumeUnit`（`r = 起始直径/2/semanticDiameterPerCoreDiameter`），随后立刻用 `SizeModelMath.TryDerive(0, …)` 反查校验；反查失败（超过 `maxCoreRadiusWorldM`）或往返不一致就**保留原基线**并打一条 warning——不会留下「0 m 的球」。
+- **只有基线变，单位不变**：连续体积未批准（PARITY_AUDIT §5.3），账本仍是整数单位；成长、重试、兑换、体积门都读同一个基线，所以 0.05 m 关的整条「确认单位 → 直径」曲线整体缩放。`1356 单位到 2.20 m` 那条标定只对 0.2997 m 基线成立，换起始球径的关卡需要自己的目标/上限（同一份 `level{}` 数据）。
+- **接线**：关卡场景把该值设成 `placement.json level.ballDiameterStart`；导入器不写球，只在报告里提醒（`Docs/Design/Tools/LEVEL_AUTHORING.md` §7.9）。旧的 `Start ready` 日志行现在多两个读数：`baselineUnits=` 与 `startSize=level|calibration`。
+
+## 跨 Behaviour 写入的集合缓冲：所有权（2026-11-15，F1）
+
+**问题形态**：`PickupFieldHost` 在自己的 `Update` 里把 blocking / support 集合推给 motor，而 motor 的 `Start` 不是先跑的。Unity 不保证跨 GameObject 的 `Start` 顺序，UdonSharp 下更实际的情形是「motor 的自有步进已经算出了尺寸，但它的 `Start` 事件还没来」；那一刻 motor 的缓冲还是 `null`，写入抛 `Object reference not set`，该 UdonBehaviour 被 halt，球再没动过（参考关卡 `_ref_mas1` 首跑即属此列）。
+
+**规则**（与 v2 接触表的 `EnsureContactV2Buffers` 是同一条）：
+
+1. **谁写谁分配**。每个写入入口先调 `EnsureRegistrationBuffers()` / `EnsureCandidateBuffers()`，不依赖 `Start` 是否跑过。
+2. **`Start` 只 ensure，不重分配**。`Start` 调同一个函数，因此在它之前登记的集合**被保留**而不是被重新 new 掉（否则等于把球所在世界的墙静默清空）。
+3. **`null` / 长度不足 = 带原因码的拒绝**，绝不空引用。blocking/support 记 `"set buffers unavailable"`（`GetBlockingBoxRefusalReason` / `GetSupportPropRefusalReason`），ramp 记 refusal code 7（`GetLastRampRefusalReason` 返回 `"set buffers unavailable"`），候选队列打一条一次性错误并返回 false。
+
+**覆盖的缓冲**：planes / boxes / blocking / support / ramps（`EnsureRegistrationBuffers`）与候选队列（`EnsureCandidateBuffers`）。v2 静态/道具 OBB 表早就是这条规则；径向代理壳只由本组件的吸收事件环写入（事件环存在就意味着已经走过一步），因此仍是 `Start` 分配。
+
+**宿主侧的一半**：`PickupFieldHost.Update` 在 `GetSemanticDiameterWorldM() <= 0` 时直接返回——尺寸还没推导出来时，任何集合描述的都是「世界原点上一个 0 直径的球」。这一条只是就绪约定，**不是** F1 的修复：F1 里 motor 已经有尺寸（它自己的步进算出来的），集合仍然必须能写进去。
+
+**诊断**：`GetBlockingBoxRefusalCount` / `GetSupportPropRefusalCount` 会把这类拒绝各记一次；它们不影响 `SignalOverflow`（「附近道具比槽位多」是正常的每帧答案，不是接线错误）。
+
 ## 验收
 
 装配层落地后必须给出：

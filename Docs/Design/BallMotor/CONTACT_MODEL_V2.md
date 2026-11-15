@@ -1572,7 +1572,7 @@ motor.SetPropObbs(propObbCenter, propObbAxisX, propObbAxisY, propObbAxisZ,
 | `climbed` | `deck_gap_m` | C05 四档 +0.0000（v1 全红 +0.0887…+0.6000） | **保持 pass** | 保持（§6.1 的 C05 翻转已实现） |
 | `seam_no_step` | `grounded_frame_dy_m` | C13 2.20 +0.0231（v1 +0.9499） | 保持 pass（≤0.05） | 保持 |
 | `rest_gap` | `support_gap_m` | C08/C09/C10 全档 −r（红） | 保持 pass（|gap| ≤ 0.005），修后应回到 +0.000x | 保持判据，**重跑** |
-| `lift_bounded` | `lift_over_nominal_m` | C14 全档 +0.0198/+0.0729/+0.1554/+0.2547（红） | 保持 pass（≤0.01），修后应 ≤0（球贴地） | 保持判据，**重跑** |
+| `lift_bounded` | `lift_over_nominal_m` | pass8：+0.0189/+0.0721/+0.1346/+0.2133（仍红） | **保持 ≤0.01，但指标要加空间门**：只在球位于板的 XZ 足印 ± 1r 内取样（§7.7.4 已证明板本身抬升 ≈0，剩余全部来自远端边界平面的合法爬升） | 判据加门；`nominal` 不变 |
 | `on_step` | `deck_gap_m` | C09 0.30 / C10 0.30 = +0.0000 但 `expect=fail`（UNEXPECTED_PASS） | **翻转成 expect=pass**：0.075/0.10 < r(0.30)=0.15，§2.5 的 `h<r` 就该滚过去 | 改 `expect` |
 | `blocked_gap` | `blocked_gap_m` | C10 0.30 −4.3338 | **翻转**：0.10 高的挡板在 v2 下不是墙（同上 `h<r`） | 该格改判 `passed_over` 或 expect=pass |
 | `ramp_registered` | `ramp_count` | C01/C03/C05/C13 全档 0（16 次红） | **替换**：v2 把坡烘成 OBB，`ramp_count` 天然为 0 | 改读 `GetStaticObbCount() > 0` 或解析 `[arena] obbs=`；`ramp_count` 只给 v1 |
@@ -1588,6 +1588,22 @@ motor.SetPropObbs(propObbCenter, propObbAxisX, propObbAxisY, propObbAxisZ,
 #### 7.7.3 这一轮**没有**改的
 
 `physics_test_field.json`、`PhysicsTestFieldCriteriaImporter.cs`、`PhysicsTestFieldDriver.cs`、`LevelArenaHost.cs`、`PickupFieldHost.cs`、`Editor/*`：一行未动。上面“翻转/替换”的落地属于判据维护者；本节的表就是交接单。
+
+#### 7.7.4 C14 `lift_over_nominal` 剩余红的定性与处置（2026-11-15 第二轮）
+
+pass8 把 rest_gap 全清、悬停消失，但 C14 的 `lift_bounded` 仍红：+0.0189/+0.0721/+0.1346/+0.2133（≈0.06–0.12·D）。轨迹（`pass8_console.log`）把来源钉死：
+
+| 时刻 | D=0.30 | D=1.10 | D=2.20 | 说明 |
+|---|---|---|---|---|
+| t≈1.0–1.5 s（在板上） | y=0.18, `sup=0.028` | y=0.58, `sup=0.028` | y=1.13, `sup=0.028` | 球底 = 板顶（lift ≈ +0.002，即 rest_gap 的 +0.0021） |
+| t≈3.0 s（球停在 z≈−6.0…−6.6，`sup`>0） | y=0.19, `sup=0.045` | y=0.70, `sup=0.153` | y=1.32, `sup=0.217` | **在场地远端边界平面上爬升**（驱动到 3.0 s 才松手） |
+| t≈3.5 s 后 | y=0.15 | y=0.55 | y=1.10 | 松手 → 门关 → 滑回地面（本轮修复生效） |
+
+- **理论值**：球滚过高度 h 的板，球底最高只能到 h（棱接触的切平面永远把球心放在 `corner + r·n`，`n.y ≤ 1` ⇒ `bottom ≤ h`）。参考模型复现（`test_plate_lift.py`，D=0.30/0.60/1.10/2.20，4 m/s）：**板内抬升 = −0.0002…0.0000**；同一驱动继续撞到 z=+6 的边界平面后，未加门的总抬升变成 +0.253/+0.558/+1.058/+2.159（≈0.84·H_cap，爬升率 `v_up0 ∝ H_cap ∝ D`）。
+- **结论：判据语义问题，不是实现缺陷。** `lift_over_nominal` 取全程最大值，而 C14 的驱动一直推到远端边界平面；v2 的“重推就能爬”是设计行为（§3.2），v1 读 0 只是因为它根本不会爬。
+- **处置（给判据维护者）**：`nominal` 保持 0.028（板顶，不是 D 的函数）；给采样加**空间门**——只在球的 XZ 位于板的足印 ± 1r 内累计 lift，门内 `lift ≤ 0.01` 在四档都成立（模型与 EditMode 各一条测试）。或者把 C14 的时间线在到墙前收住（改数据，不改判据）。若坚持全程最大值，则应把期望改成 `≤ max(0.01, k·D)` 并把该指标的语义改名为“全程最高抬升”，但那会失去“板不是坡”的判据意义。
+- 同批测试：`Docs/tests/ball_contact_v2/test_plate_lift.py`（3 例：板内 ≤0.01、确实滚过去并落回地面、未加门时抬升 ∝ D 的 characterization）；EditMode `ARollingBallIsNotLiftedAboveAThinPlate`（门内 ≤0.01 + 滚过 + 落回 + support kind 0）。
+
 
 ---
 ## 8. 需要拍板

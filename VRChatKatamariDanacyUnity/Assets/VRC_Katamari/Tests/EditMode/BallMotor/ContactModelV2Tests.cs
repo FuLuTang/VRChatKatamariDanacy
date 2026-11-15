@@ -534,6 +534,45 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void ARollingBallIsNotLiftedAboveAThinPlate()
+        {
+            // C14's remaining red (pass8): lift_over_nominal read 0.019..0.213, i.e.
+            // 0.06-0.12 x D. The trajectory shows the lift happens at the FAR end of the
+            // cell, where the ball reaches the arena's boundary plane at full push and
+            // climbs it for the last 0.2-0.3 s of the drive; the climb rate scales with
+            // H_cap, i.e. with D. Over the plate itself the bottom never rises above the
+            // plate top: rolling over a step of height h can lift the bottom to h and no
+            // further, at any diameter.
+            //
+            // This test measures the lift the way a gated criterion should: only while
+            // the ball is over the plate (its footprint plus one radius).
+            EnableV2();
+            float radius = Radius();
+            const float top = 0.028f;
+            AddObb(new Vector3(0f, top * 0.5f, 0f), new Vector3(2f, top * 0.5f, 1f), 1);
+            Invoke("TeleportTo", new Vector3(0f, radius, -3f));
+            Invoke("SetMoveAxes", 1f, 0f, 0f);
+            float maxLift = -1f;
+            bool crossed = false;
+            for (int i = 0; i < 150; i++)
+            {
+                Invoke("StepBall", 0.02f);
+                Vector3 center = GetCenter();
+                if (center.z > 1f + radius) crossed = true;
+                if (center.z < -1f - radius || center.z > 1f + radius) continue;
+                float lift = (center.y - radius) - top;
+                if (lift > maxLift) maxLift = lift;
+            }
+            Assert.IsTrue(crossed, "the ball must actually roll over the plate");
+            Assert.LessOrEqual(maxLift, 0.01f,
+                "over the plate the bottom may not rise above the plate top by more than a centimetre");
+            // And it is back on the ground on the far side (the plate is not a ramp).
+            Assert.AreEqual(radius, GetCenter().y, 0.01f,
+                "the ball rolls off the plate and back onto the ground");
+            Assert.AreEqual(0, (int)Invoke("GetSupportKind"));
+        }
+
+        [Test]
         public void ABallRestingOnTheGroundReportsAZeroGap()
         {
             EnableV2();

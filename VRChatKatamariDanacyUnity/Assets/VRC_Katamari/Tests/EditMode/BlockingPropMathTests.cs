@@ -6,7 +6,10 @@ namespace VRCKatamari.Tests
 {
     /// <summary>
     /// EditMode port of Docs/tests/pickup_absorb/test_blocking_props.py, the same ten
-    /// cases as BLOCKING_PROPS_PLAN.md §6 (1-6, 9, 10 plus the 7/8 limit-edge cases).
+    /// cases as BLOCKING_PROPS_PLAN.md §6 (1-6, 9, 10 plus the 7/8 limit-edge cases),
+    /// followed by the four wiring-contract cases (11-12 in §6): a prop with no collider
+    /// blocks from its gameplay bounds, growth past the limit removes the box in the same
+    /// call, an absorbed prop is not a candidate, and only the nearest capacity blocks.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -449,6 +452,168 @@ namespace VRCKatamari.Tests
                 indices, distances, 1));
             Assert.AreEqual(0, indices[0]);
             Assert.AreEqual(0.9999f, distances[0], Tolerance);
+        }
+
+        // ------------------------------------------------------------------
+        // The wiring's contract: gameplay bounds (no collider), the volume gate as the
+        // only predicate, absorbed props excluded, nearest-capacity selection.
+        // ------------------------------------------------------------------
+
+        [Test]
+        public void APropWithoutAColliderBlocksFromItsGameplayBounds()
+        {
+            // This build path has no collider parameter at all: the box is the gameplay
+            // volume around the prop's world position (Docs/02_TECHNICAL_CONTRACTS.md's
+            // three-layer split; the picnic lawn authors props with no collider at all).
+            Vector3 propPosition = new Vector3(0f, 0f, 2f);
+            Vector3 propBounds = new Vector3(0.9f, 0.9f, 0.9f);
+
+            Vector3 minimum;
+            Vector3 maximum;
+            Assert.IsTrue(BlockingPropMath.TryBoxFromCentreAndExtents(propPosition, propBounds,
+                out minimum, out maximum));
+            Assert.AreEqual(-0.45f, minimum.x, Tolerance);
+            Assert.AreEqual(-0.45f, minimum.y, Tolerance);
+            Assert.AreEqual(1.55f, minimum.z, Tolerance);
+            Assert.AreEqual(0.45f, maximum.x, Tolerance);
+            Assert.AreEqual(0.45f, maximum.y, Tolerance);
+            Assert.AreEqual(2.45f, maximum.z, Tolerance);
+
+            float distance;
+            Assert.IsTrue(BlockingPropMath.TryDistanceToBox(Vector3.zero, minimum, maximum,
+                out distance));
+            Assert.AreEqual(1.55f, distance, Tolerance);
+
+            int[] indices = new int[1];
+            float[] distances = new float[1];
+            Assert.AreEqual(1, Select(Vector3.zero, 2f, new Vector3[] { minimum },
+                new Vector3[] { maximum }, new bool[] { true }, 1, null, 0, 0f,
+                indices, distances, 1));
+            Assert.AreEqual(0, indices[0]);
+            Assert.AreEqual(1.55f, distances[0], Tolerance);
+        }
+
+        [Test]
+        public void GrowingPastTheVolumeLimitRemovesTheBoxInTheSameCall()
+        {
+            // A 1.25 x 0.05 x 0.05 m plank is 0.003125 m^3. The candidate flag is the
+            // absorb gate's predicate (IsBeyondAbsorbVolumeLimit) against the motor's own
+            // limit (TryComputeAbsorbVolumeLimit), so this is the exact pair the host calls
+            // - no second threshold anywhere in the test.
+            Vector3 plank = new Vector3(1.25f, 0.05f, 0.05f);
+            Vector3 minimum;
+            Vector3 maximum;
+            Assert.IsTrue(BlockingPropMath.TryBoxFromCentreAndExtents(
+                new Vector3(0f, 0f, 1f), plank, out minimum, out maximum));
+            Vector3[] minima = new Vector3[] { minimum };
+            Vector3[] maxima = new Vector3[] { maximum };
+            int[] indices = new int[1];
+            float[] distances = new float[1];
+
+            float smallLimit;
+            Assert.IsTrue(PickupAbsorbMath.TryComputeAbsorbVolumeLimit(0.30f, 10f, 512f,
+                out smallLimit));
+            bool blocksForASmallBall = PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(plank,
+                smallLimit);
+            Assert.IsTrue(blocksForASmallBall);
+            Assert.AreEqual(1, Select(Vector3.zero, 2f, minima, maxima,
+                new bool[] { blocksForASmallBall }, 1, null, 0, 0f, indices, distances, 1));
+            Assert.AreEqual(0, indices[0]);
+
+            float largeLimit;
+            Assert.IsTrue(PickupAbsorbMath.TryComputeAbsorbVolumeLimit(0.50f, 10f, 512f,
+                out largeLimit));
+            bool blocksForAGrownBall = PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(plank,
+                largeLimit);
+            Assert.IsFalse(blocksForAGrownBall);
+            // The same call with the same arrays now reports no box: "the box disappears"
+            // is the selection's answer, not a separate removal path.
+            Assert.AreEqual(0, Select(Vector3.zero, 2f, minima, maxima,
+                new bool[] { blocksForAGrownBall }, 1, null, 0, 0f, indices, distances, 1));
+
+            // And the gate agrees on both sides of the same limit, so the two systems
+            // cannot disagree about "too big" at any diameter.
+            Assert.AreEqual(AbsorbOutcome.RejectItemTooLarge,
+                PickupAbsorbMath.EvaluateAbsorbWithBallSize(true, "stone", Allowed,
+                    Allowed.Length, plank, Vector3.zero, Vector3.zero, 0.15f, 0f, 512f,
+                    MaxGrowthRadiusM, 0.30f, 10f));
+            Assert.AreEqual(AbsorbOutcome.Absorb,
+                PickupAbsorbMath.EvaluateAbsorbWithBallSize(true, "stone", Allowed,
+                    Allowed.Length, plank, Vector3.zero, Vector3.zero, 0.25f, 0f, 512f,
+                    MaxGrowthRadiusM, 0.50f, 10f));
+
+            // A zero-volume row can never exceed any limit, so it never blocks: this is why
+            // the host requires strictly positive gameplay bounds.
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(
+                new Vector3(0.5f, 0f, 0.5f), smallLimit));
+        }
+
+        [Test]
+        public void AnAbsorbedPropIsNotABlockingCandidate()
+        {
+            // Two props, both beyond the limit and both near the ball. The host marks a
+            // prop's candidate flag false once it is attached or hidden, so one flag is
+            // the whole removal path - there is no "unregister this prop" call.
+            Vector3 leftMin = new Vector3(-2f, -0.5f, -0.5f);
+            Vector3 leftMax = new Vector3(-1f, 0.5f, 0.5f);
+            Vector3 rightMin = new Vector3(1f, -0.5f, -0.5f);
+            Vector3 rightMax = new Vector3(2f, 0.5f, 0.5f);
+            Vector3[] minima = new Vector3[] { leftMin, rightMin };
+            Vector3[] maxima = new Vector3[] { leftMax, rightMax };
+            int[] indices = new int[2];
+            float[] distances = new float[2];
+
+            // Prop 0 was absorbed (candidate false); only prop 1 may block.
+            Assert.AreEqual(1, Select(Vector3.zero, 3f, minima, maxima,
+                new bool[] { false, true }, 2, null, 0, 0f, indices, distances, 2));
+            Assert.AreEqual(1, indices[0]);
+            Assert.AreEqual(1f, distances[0], 0f);
+
+            // Both absorbed: the motor is told "no blocking boxes", which is what makes an
+            // eaten prop stop being a wall on the next scan.
+            Assert.AreEqual(0, Select(Vector3.zero, 3f, minima, maxima,
+                new bool[] { false, false }, 2, null, 0, 0f, indices, distances, 2));
+        }
+
+        [Test]
+        public void OnlyTheNearestCapacityPropsBlock()
+        {
+            // Eight props in a line at z = 1..8 m, each a 0.2 m cube, so the near faces are
+            // at 0.9, 1.9, ... 7.9 m. The motor's blocking capacity is six: the two
+            // farthest must not become walls even though they are inside this radius.
+            Vector3[] minima = new Vector3[8];
+            Vector3[] maxima = new Vector3[8];
+            bool[] candidate = new bool[8];
+            for (int i = 0; i < 8; i++)
+            {
+                float centreZ = (float)(i + 1);
+                minima[i] = new Vector3(-0.1f, -0.1f, centreZ - 0.1f);
+                maxima[i] = new Vector3(0.1f, 0.1f, centreZ + 0.1f);
+                candidate[i] = true;
+            }
+
+            int[] indices = new int[6];
+            float[] distances = new float[6];
+            Assert.AreEqual(6, Select(Vector3.zero, 10f, minima, maxima, candidate, 8,
+                null, 0, 0f, indices, distances, 6));
+            for (int i = 0; i < 6; i++)
+            {
+                Assert.AreEqual(i, indices[i]);
+                Assert.AreEqual(0.9f + (float)i, distances[i], Tolerance);
+            }
+            // The two farthest (near faces at 6.9 and 7.9 m) are the ones left out.
+            for (int i = 0; i < 6; i++)
+            {
+                Assert.AreNotEqual(6, indices[i]);
+                Assert.AreNotEqual(7, indices[i]);
+            }
+
+            // Shrinking the walking margin to the ball's own radius drops the far props:
+            // at 1 m only the first near face (0.9 m) is inside.
+            Assert.AreEqual(1, Select(Vector3.zero, 1f, minima, maxima, candidate, 8,
+                null, 0, 0f, indices, distances, 6));
+            Assert.AreEqual(0, indices[0]);
+            Assert.AreEqual(0.9f, distances[0], Tolerance);
         }
     }
 }

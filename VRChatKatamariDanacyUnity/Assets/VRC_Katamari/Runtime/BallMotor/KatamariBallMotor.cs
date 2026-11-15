@@ -266,12 +266,26 @@ namespace VRCKatamari.BallMotor
         private const int MaxBoxCount = 8;
         private const int ContactCapacity = 4;
 
+        // Dynamic blocking boxes get their own capacity instead of borrowing the static
+        // box budget. A map's 8 static boxes are an authoring contract the map validator
+        // mirrors (8/8), while "which nearby props are too big to absorb" is re-decided
+        // every scan; sharing one budget would make a lab's walls compete with props for
+        // slots and would change every map's data when the prop count needs a bigger
+        // window. Six is a provisional estimate of how many props a ball can touch at
+        // once (Docs/Design/PickupAbsorb/BLOCKING_PROPS_PLAN.md §9.2), not a measurement.
+        private const int MaxBlockingBoxCount = 6;
+
         private Vector3[] planeNormalBuffer;
         private float[] planeOffsetBuffer;
         private int planeCount;
         private Vector3[] boxMinimumBuffer;
         private Vector3[] boxMaximumBuffer;
         private int boxCount;
+        // The blocking slice as last accepted by SetBlockingBoxes, in the host's order.
+        // The sweep reads the appended copy RebuildObstacles builds, never these buffers.
+        private Vector3[] blockingMinimumBuffer;
+        private Vector3[] blockingMaximumBuffer;
+        private int blockingBoxCount;
         private Vector3[] planeNormals;
         private float[] planeOffsets;
         private Vector3[] boxMinima;
@@ -387,6 +401,16 @@ namespace VRCKatamari.BallMotor
         private string firstOverflowReason;
         private bool contactBufferSaturated;
 
+        // ---- Blocking-box refusals, deliberately NOT part of the overflow signal ----
+        // "The box capacity was exceeded" and "a mis-wired scene dropped an obstacle" are
+        // different failures: the first is a normal per-scan answer from a host that found
+        // more nearby props than this ball can touch, the second means the scene is wrong.
+        // Counting them together would make a crowded picnic table look like a broken
+        // scene forever. Same shape as the overflow signal (a count and one reason string,
+        // no per-frame logging); the previous box set stays registered on a refusal.
+        private int blockingRefusalCount;
+        private string blockingRefusalReason;
+
         // ---- Sizes used once in Start; not part of the per-step state ----
         private Vector3[] localProxyPoints;
         private string[] allowedKinds;
@@ -475,8 +499,13 @@ namespace VRCKatamari.BallMotor
             planeOffsetBuffer = new float[MaxPlaneCount];
             boxMinimumBuffer = new Vector3[MaxBoxCount];
             boxMaximumBuffer = new Vector3[MaxBoxCount];
+            blockingMinimumBuffer = new Vector3[MaxBlockingBoxCount];
+            blockingMaximumBuffer = new Vector3[MaxBlockingBoxCount];
             planeCount = 0;
             boxCount = 0;
+            blockingBoxCount = 0;
+            blockingRefusalCount = 0;
+            blockingRefusalReason = "";
             RebuildObstacles();
             contactCenters = new Vector3[ContactCapacity];
             contactPoints = new Vector3[ContactCapacity];
@@ -1364,10 +1393,179 @@ namespace VRCKatamari.BallMotor
             return true;
         }
 
+        /// <summary>
+        /// Replaces the whole dynamic blocking-box set in one call: the boxes of the nearby
+        /// props this ball cannot absorb yet.
+        /// </summary>
+        /// <returns>
+        /// True when the set is now the one passed (including when it was already exactly
+        /// that set); false when the call was refused, in which case the previous set stays
+        /// registered.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// Batch replace rather than add/remove (BLOCKING_PROPS_PLAN.md §2 A): the caller
+        /// re-selects the set from scratch on every scan, and the motor deliberately has no
+        /// per-box removal. A refused call is not applied, the same rule AddBox follows, so
+        /// one bad scan cannot open a hole in the world.
+        /// </para>
+        /// <para>
+        /// This is a SEAM, not a rule: the motor does not know what a prop is, which props
+        /// exist, or when one becomes absorbable. The pickup host owns that question and
+        /// answers it with the same volume limit the absorb gate uses, so a prop stops
+        /// being a wall on the same threshold that makes it absorbable.
+        /// </para>
+        /// <para>
+        /// Ordering. A blocking box is appended after every static box, so obstacle indices
+        /// remain planes, then static boxes, then blocking boxes. SweepMath separates planes
+        /// from boxes by array length alone and orients box contact normals the same way it
+        /// orients wall normals, so a blocking box is blocked and slid against by exactly
+        /// the wall path.
+        /// </para>
+        /// <para>
+        /// Refusals are counted separately from <see cref="SignalOverflow"/> (see the
+        /// blocking-refusal remarks on the fields): a neighbour count above this ball's
+        /// capacity is a normal gameplay answer, not a scene wiring error. Nothing logs per
+        /// call; diagnostics poll <see cref="GetBlockingBoxRefusalCount"/>. Re-sending the
+        /// set already registered returns true without rebuilding the sweep arrays, which
+        /// is what keeps a 20 Hz host scan allocation-free in the steady state.
+        /// </para>
+        /// </remarks>
+        public bool SetBlockingBoxes(Vector3[] minima, Vector3[] maxima, int count)
+        {
+            if (count < 0)
+            {
+                RefuseBlockingBoxes("negative count");
+                return false;
+            }
+            if (count > MaxBlockingBoxCount)
+            {
+                RefuseBlockingBoxes("capacity 6 exceeded");
+                return false;
+            }
+            if (count > 0)
+            {
+                if (minima == null || maxima == null)
+                {
+                    RefuseBlockingBoxes("null minima/maxima");
+                    return false;
+                }
+                if (count > minima.Length || count > maxima.Length)
+                {
+                    RefuseBlockingBoxes("count exceeds a buffer length");
+                    return false;
+                }
+            }
+
+            // Every box is validated before the first one is written, so a refused call
+            // cannot leave half a set behind.
+            for (int i = 0; i < count; i++)
+            {
+                if (!KatamariMath.IsFiniteVector(minima[i]))
+                {
+                    RefuseBlockingBoxes("non-finite minimum");
+                    return false;
+                }
+                if (!KatamariMath.IsFiniteVector(maxima[i]))
+                {
+                    RefuseBlockingBoxes("non-finite maximum");
+                    return false;
+                }
+                if (minima[i].x > maxima[i].x || minima[i].y > maxima[i].y ||
+                    minima[i].z > maxima[i].z)
+                {
+                    RefuseBlockingBoxes("inverted box");
+                    return false;
+                }
+            }
+
+            // The caller caches the boxes it built, so the steady state re-sends exactly
+            // the same floats. Only bit-for-bit equality skips the rebuild: anything else
+            // takes the ordinary path, which is the only way a moved prop stays correct.
+            if (count == blockingBoxCount)
+            {
+                bool unchanged = true;
+                for (int i = 0; i < count; i++)
+                {
+                    if (minima[i].x != blockingMinimumBuffer[i].x ||
+                        minima[i].y != blockingMinimumBuffer[i].y ||
+                        minima[i].z != blockingMinimumBuffer[i].z ||
+                        maxima[i].x != blockingMaximumBuffer[i].x ||
+                        maxima[i].y != blockingMaximumBuffer[i].y ||
+                        maxima[i].z != blockingMaximumBuffer[i].z)
+                    {
+                        unchanged = false;
+                        break;
+                    }
+                }
+                if (unchanged) return true;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                blockingMinimumBuffer[i] = minima[i];
+                blockingMaximumBuffer[i] = maxima[i];
+            }
+            blockingBoxCount = count;
+            RebuildObstacles();
+            return true;
+        }
+
+        /// <summary>
+        /// Empties the dynamic blocking set, leaving planes and static boxes registered.
+        /// </summary>
+        /// <remarks>
+        /// The blocking set is a function of where the ball is, not of the scene, so it is
+        /// cleared wherever the ball's position is set outside a normal step (a round reset
+        /// teleports it) and wherever the whole obstacle set is cleared. Static geometry is
+        /// deliberately NOT reset by a retry: the map is the same map. The next host scan
+        /// re-registers whatever still blocks, within one scan interval.
+        /// </remarks>
+        public void ClearBlockingBoxes()
+        {
+            if (blockingBoxCount == 0) return;
+            blockingBoxCount = 0;
+            RebuildObstacles();
+        }
+
+        /// <summary>Blocking boxes currently registered with the sweep (0..6).</summary>
+        public int GetBlockingBoxCount()
+        {
+            return blockingBoxCount;
+        }
+
+        /// <summary>How many blocking boxes the sweep can take at once (6).</summary>
+        public int GetBlockingBoxCapacity()
+        {
+            return MaxBlockingBoxCount;
+        }
+
+        /// <summary>Refused <see cref="SetBlockingBoxes"/> calls so far (monotonic).</summary>
+        public int GetBlockingBoxRefusalCount()
+        {
+            return blockingRefusalCount;
+        }
+
+        /// <summary>Why the last <see cref="SetBlockingBoxes"/> was refused, or "".</summary>
+        public string GetBlockingBoxRefusalReason()
+        {
+            if (blockingRefusalReason == null) return "";
+            return blockingRefusalReason;
+        }
+
+        // One refusal: a counter plus the latest reason. Every reason is a literal, so a
+        // refusal costs no allocation and no console output even at the scan cadence.
+        private void RefuseBlockingBoxes(string reason)
+        {
+            blockingRefusalCount = blockingRefusalCount + 1;
+            blockingRefusalReason = reason;
+        }
+
         public void ClearObstacles()
         {
             planeCount = 0;
             boxCount = 0;
+            blockingBoxCount = 0;
             RebuildObstacles();
         }
 
@@ -1395,20 +1593,25 @@ namespace VRCKatamari.BallMotor
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The sweep treats the array length as the obstacle set, so the motor
-        /// rebuilds exact-length arrays on registration instead of paying a copy
-        /// on every step; registration is a scene-load event, not a per-step one.
+        /// The sweep treats the array length as the obstacle set (a padded slot would be a
+        /// ghost box at the origin), so the arrays must hold exactly the registered
+        /// entries. The arrays are reused when the total box count is unchanged and only
+        /// reallocated when it moves: static registration is a scene-load event and the
+        /// blocking slice changes at the host's scan cadence, so "same length, overwrite in
+        /// place" is what keeps a 20 Hz scan from allocating a pair of arrays per tick.
         /// </para>
         /// <para>
         /// Fixed capacities are MaxPlaneCount = 8, MaxBoxCount = 8,
-        /// PendingCandidateCapacity = 4 and ContactCapacity = 4. An entry beyond
-        /// a capacity is DROPPED, never queued, resized or degraded:
+        /// MaxBlockingBoxCount = 6, PendingCandidateCapacity = 4 and ContactCapacity = 4.
+        /// An entry beyond a capacity is DROPPED, never queued, resized or degraded:
         /// overflowing the obstacle set changes what the ball can collide with,
         /// and overflowing the candidate queue silently loses an absorbable
         /// item, so an overflow is a data error (a mis-wired scene, or a host
         /// batching more than four candidates per step), not a gameplay choice.
         /// AddPlane, AddBox and SubmitCandidate latch overflowCount and the
-        /// first reason string; the sweep's contact buffer is capped inside
+        /// first reason string; a blocking set above its own capacity is counted
+        /// separately (see the blocking-refusal fields) because it is a per-scan answer
+        /// rather than a wiring error. The sweep's contact buffer is capped inside
         /// SweepMath, which reports no truncation, so it only surfaces as
         /// contactBufferSaturated. The signals are one-shot and read at a
         /// checkpoint: nothing is logged per frame, and nothing here changes
@@ -1424,12 +1627,24 @@ namespace VRCKatamari.BallMotor
                 planeNormals[i] = planeNormalBuffer[i];
                 planeOffsets[i] = planeOffsetBuffer[i];
             }
-            boxMinima = new Vector3[boxCount];
-            boxMaxima = new Vector3[boxCount];
+
+            int totalBoxCount = boxCount + blockingBoxCount;
+            if (boxMinima == null || boxMaxima == null ||
+                boxMinima.Length != totalBoxCount || boxMaxima.Length != totalBoxCount)
+            {
+                boxMinima = new Vector3[totalBoxCount];
+                boxMaxima = new Vector3[totalBoxCount];
+            }
             for (int i = 0; i < boxCount; i++)
             {
                 boxMinima[i] = boxMinimumBuffer[i];
                 boxMaxima[i] = boxMaximumBuffer[i];
+            }
+            for (int i = 0; i < blockingBoxCount; i++)
+            {
+                int slot = boxCount + i;
+                boxMinima[slot] = blockingMinimumBuffer[i];
+                boxMaxima[slot] = blockingMaximumBuffer[i];
             }
         }
 
@@ -1578,6 +1793,13 @@ namespace VRCKatamari.BallMotor
         /// Moves the ball without rolling it. The discontinuity is consumed by the
         /// next step's visual roll and follow-rig calls.
         /// </summary>
+        /// <remarks>
+        /// The dynamic blocking set is dropped: it was chosen for where the ball used to
+        /// be, and a box the ball has just been teleported into would be resolved by the
+        /// sweep's initial-penetration branch as a push. The next host scan re-registers
+        /// whatever blocks at the new position, within one scan interval. Static planes and
+        /// boxes stay: the map did not move.
+        /// </remarks>
         public void TeleportTo(Vector3 center)
         {
             if (!KatamariMath.IsFiniteVector(center)) return;
@@ -1585,6 +1807,7 @@ namespace VRCKatamari.BallMotor
             planarVelocity = Vector3.zero;
             stuckSeconds = 0f;
             discontinuous = true;
+            ClearBlockingBoxes();
         }
 
         // ------------------------------------------------------------------

@@ -243,7 +243,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 | `ground` | `LevelArenaHost` → `motor.SetGroundPlane(normal, offset)` | 1 张地面 | **恰好 1 条**；`shape` 只能是 `plane` |
 | `boundary` | `LevelArenaHost` → `motor.AddPlane(normal, offset)` | ≤8 平面 | **用平面、不用盒**（否则墙顶变成可站的窄条，还吃掉盒预算） |
 | `box` | `LevelArenaHost.staticBoxes[]`（`BoxCollider` → `Setup` 烘焙 min/max → `motor.AddBox`） | ≤8 盒 | **一次登记两用**：扫掠是墙、顶面是支撑 |
-| `ramp` | `LevelArenaHost.rampBoxes[]` → `motor.AddRamp(...)` | ≤4 斜面 | **绝不能同时是 `box`**（否则坡底出现「隐形墙」）；坡度 > 45° 时拒绝并要求改成 `box`；**板的本地 +Y 面是行走面**（`support` 落座读这一面；P3 的 `AddRamp` 中心也必须取这一面，不是盒中心），4 cm 板体在它下面 |
+| `ramp` | `LevelArenaHost.rampBoxes[]` → `motor.AddRamp(...)` | ≤4 斜面 | **绝不能同时是 `box`**（否则坡底出现「隐形墙」）；坡度 > 45° 时拒绝并要求改成 `box`；**板的本地 +Y 面是行走面**（`support` 落座读这一面；`AddRamp` 中心也必须取这一面，不是盒中心），4 cm 板体在它下面 |
 
 `collision` 字段只管**玩家胶囊**（三层里的第二层）：`box` = 生成 `BoxCollider`（玩家能撞到），`none` = 纯视觉。`absorbable=false` 的结构**永远**不参与吸收门——吸收门只看道具的 `propBounds`，不读结构的盘口。
 
@@ -462,7 +462,7 @@ planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）
 | `structures[role=ground]` | `groundNormal` / `groundOffset`（`SetGroundPlane`） | 恰好 1 条；**平面过 `center`**（`offset = dot(normal, center)`）；导入器另在该标记下生成子物体 `Visual`（地面板 + `BoxCollider`），顶面就是这张平面 |
 | `structures[role=boundary]` | `boundaryWalls[]`（`Transform`） | `LevelArenaHost` 读每面墙的**局部 +Z** 当法线、`dot(n, position)` 当 offset，所以导入器生成「空物体墙」**标记**：原点在碰撞面上、+Z 指向场内（不是 `planeNormals/planeOffsets` 数组）；每个标记下另有子物体 `Visual`（可见墙 + 玩家 `BoxCollider`），内表面就贴在这张平面上、向场外延伸一个厚度 |
 | `structures[role=box]` | `staticBoxes[]`（`BoxCollider`） | `Setup` 烘焙 min/max → `AddBox`，一次两用 |
-| `structures[role=ramp]` | **P1 无槽位**（P3 的 `rampBoxes`） | 导入器给 `BoxCollider` 但**不登记**，也**绝不进 `staticBoxes`**（`TERRAIN_SUPPORT` §7.7 审计第 1 条） |
+| `structures[role=ramp]` | `rampBoxes[]`（`BoxCollider`） | 导入器把 `role=ramp` 接进 `rampBoxes`；`Setup` 按盒的 +Y 面烘成行走面 → `motor.AddRamp`（坡度 ≤45° 含等号，超过带原因码拒绝）；**绝不进 `staticBoxes`**，斜面也不进扫掠（`TERRAIN_SUPPORT` §7.7 审计第 1 条） |
 | `props[]` 中 `absorbable=false` | **不进 arena**：`PickupFieldHost` 按 `rise vs stepLimit` 自己分成「地形/挡路」 | `LevelArenaHost` **不得**引用道具（§7.4 硬规则） |
 
 **`ground` / `boundary` 的可见体（2026-11-15 起由导入器生成）**：这两个角色以前只产标记，于是新场景「压根没放地板」——画面一片虚无，ClientSim 玩家站不住、掉下去、反复重生。现在标记保持原样（供 `LevelArenaHost` 读），标记下多一个 `Visual` 子物体：
@@ -703,7 +703,7 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 2. **四元数写规范符号**（`w<0` 取反）：否则同一姿态可以写成 `q` 或 `-q`，「重新导出逐字节相同」就不成立。
 3. **`ground` 与 `boundary` 是「过 `center` 的平面」**，不是盒子的顶面；否则 `groundOffset` 会和场景里的地面差半个厚度，所有贴地件一起报「穿地 0.02 m」。
 4. **`defs[]` 与按 def 的价值**（§4.2、§7.4 已改）：Lead 2026-11-15 拍板，`valueUnits` 由关卡数据按 def 声明；导入器把声明值传给 `PickupFieldSync` 一次写入并回读（U2 已实现）。**缺值表行不再丢件**：同步工具已删除 (kind, tier) 值表，`container m` 这类没有旧表行的组合照常成行，价值来自声明。
-5. **`boundary` 在 Unity 里是空物体墙标记 + `Visual` 子物体**（§7.6 已改）：以 `LevelArenaHost` 的真实字段 `boundaryWalls` 为准（局部 +Z 指向场内、原点在碰撞面上），不是 `planeNormals/planeOffsets`；可见体与玩家碰撞盒挂在子物体上（2026-11-15 加，见 §7.6 后的「可见体」表）。`rampBoxes` P1 没有，斜面有 collider 但不登记。
+5. **`boundary` 在 Unity 里是空物体墙标记 + `Visual` 子物体**（§7.6 已改）：以 `LevelArenaHost` 的真实字段 `boundaryWalls` 为准（局部 +Z 指向场内、原点在碰撞面上），不是 `planeNormals/planeOffsets`；可见体与玩家碰撞盒挂在子物体上（2026-11-15 加，见 §7.6 后的「可见体」表）。`rampBoxes` 已接（P3）：导入器把 `role=ramp` 接进去，`Setup` 烘成行走面，斜面从不进 `staticBoxes`。
 6. **导入器没有 `LevelItem` 标记组件**（§7.2 曾设想）：Editor 程序集里的 MonoBehaviour 无法序列化进场景，而 `Runtime/` 不在本工具写范围。`itemId` 就是物体名，正好也是 `PickupFieldSync` 的行 id——一个键、两个消费方。
 7. **俯视图的 `coverage_m` 是「短边保证入画」**，渲染时按分辨率比例放大 `ortho_scale`；否则 16:9 会把方形场地上下裁掉（实测 13.4 m 场地只看到 7.9 m）。
 8. **没有 `--stale`**（§8 第 16 条的一半）：它要 `.blend` 指纹，而 `.blend` 不进仓库；现在用「重新导出逐字节相同」代替，`export_placement.py` 自带往返自检。
@@ -727,7 +727,6 @@ python3 Tools/levelbuild/levelbuild.py check <该文件> --report     # 0 错
 | Unity 侧任何验证（编译、导入、`+0 ~0 -0`、`valueUnits` 回读、`[arena] planes=… boxes=…`） | 本轮不碰编辑器；需要 Unity 操作员按 §11.2 的六条验收 |
 | `Art/Props/<def>/<def>.prefab` 预制体库（P2） | 导入器现在直接实例化 `.fbx` |
 | 值表的 `container m` 行 | 已随 U2 解除：值表删除后缺行不再丢件，价值由 `defs[].valueUnits` 声明 |
-| `LevelArenaHost.rampBoxes`（P3） | 现在斜面只有 collider，不登记 |
 | 9 个 def 的模型 | 第一关的 11 件 / 782 u |
 | `physics_test_field.json` 迁到本格式 | Lead 说之后再做；本 schema 是「一格一份 placement」（`level.id` + 目录），没有假设一场景一份 |
 

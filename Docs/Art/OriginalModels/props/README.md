@@ -420,14 +420,14 @@ PROPS="book_stack,beer_crate,crate,storage_bin,crate_large,cooler_box_large,picn
 4. 幂等：路径只由 def + 槽名决定；颜色在容差 1e-4 内不重写；导入设置和 remap 都没变就不 reimport。重复导入/重复跑菜单不会多出文件，也不会碰已正确的材质。
 5. 拒绝而不是猜：manifest 缺失、id 与目录不一致、颜色键缺失/多余、槽位在 FBX 与 manifest 之间对不上、材质着色器没有颜色属性，都会在 Console 以 `[prop-art]` 报出具体原因，并且不创建半套材质。
 
-菜单：**`VRC Katamari/Prop Art/重新同步全部道具材质`**。改了 manifest、手工换过 shader 或导入设置后跑一次即可。
+菜单：**`VRC Katamari/Prop Art/Resync All Prop Materials`**。改了 manifest、手工换过 shader 或导入设置后跑一次即可。
 
 槽位名映射（写在工具注释里）：`scripts/prop_lib.py` 的 `Builder.material()` 固定用 `Prop_<def>_<key>`，`Builder.finish()` 把同样的字符串写进 `materials` 和 `material_base_colors`；FBX 里也是这些字符串（48 个导出逐一核对过），Unity 导入材质沿用 FBX 名。所以正常情况是**恒等映射**。工具另外容忍大小写差异、Blender 的 `.001` 重名后缀和裸 key，但遇到歧义（两个声明名都能匹配）直接拒绝。
 
 ### 14.3 操作员验收步骤
 
 1. 用 Unity 2022.3.22f1 打开工程，等首次导入和脚本编译结束。Console 过滤 `[prop-art]`：不应有错误；材质尚不存在时首次同步应看到一条汇总（created 数 > 0）。新增的 32 个目录会由 Unity 生成 `.meta`。
-2. 跑一次 `VRC Katamari/Prop Art/重新同步全部道具材质`，再跑第二次。第二次汇总应为 `materials created 0, updated 0 ... models reimported 0`——这是幂等验收。
+2. 跑一次 `VRC Katamari/Prop Art/Resync All Prop Materials`，再跑第二次。第二次汇总应为 `materials created 0, updated 0 ... models reimported 0`——这是幂等验收。
 3. 抽查 FBX 的 Materials 标签页：`acorn`（2 槽）、`book_stack`（4 槽）、`stroller`（5 槽）的 Remapped Materials 都应指向同目录 `Materials/Prop_<def>_<slot>.mat`，不能是 `None`、不能指向 FBX 内嵌材质。
 4. 抽查 `.mat`：用文本编辑器看 `.mat` 的 YAML（或 Inspector 的 Debug 模式）时，`_Color` 应与 `exports/<def>.manifest.json` 的 `material_base_colors` 数值一致（线性值，不做 sRGB 换算；普通颜色选择器显示的是 sRGB，不要用它核对数值）；与 `previews/<def>_preview.png` 的色相/明度对照不应有明显偏差。
 5. 尺寸与轴向：把 FBX 拖进空场景，位置归零、Rotation `(0,0,0)`、Scale `(1,1,1)`。Unity 的包围盒是 Y-up，对应关系是 **Unity (X, Y, Z) = manifest `dimensions_m` 的 (X, Z, Y)**（Blender 的 Z 高度变成 Unity 的 Y）；三轴误差应 < 1 mm（Unity 的 Bounds 显示或临时 BoxCollider 都可读）。模型应直立（+Y 向上）、正面朝 +Z。特例：`stroller` 的行驶方向是 +X（§13.2），`watering_can` 的壶嘴朝 +Z（对应 manifest 的 Y=0.58 长边）。

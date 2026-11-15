@@ -64,7 +64,7 @@ namespace VRCKatamari.Editor.PropArt
         public const string PropsRoot = "Assets/VRC_Katamari/Art/Props";
         public const string MaterialsFolderName = "Materials";
         public const string StandardShaderName = "Standard";
-        public const string MenuPath = "VRC Katamari/Prop Art/重新同步全部道具材质";
+        public const string MenuPath = "VRC Katamari/Prop Art/Resync All Prop Materials";
 
         /// <summary>Console prefix shared by the menu and the import postprocessor.</summary>
         public const string LogPrefix = "[prop-art]";

@@ -110,7 +110,15 @@ namespace VRCKatamari.BallMotor
 
         // ---- PickupAbsorbMath inputs ----
         [SerializeField] private float contactRadiusWorldM = 0f;
-        [SerializeField] private float maxItemSizeWorldM = 1f;
+        // The size gate is relative to the ball (Docs/OPEN_DECISIONS.md (h)): an item
+        // is absorbable when its largest full extent is at most
+        // min(maxItemSizeWorldM, semanticDiameter * absorbSizeRatio). absorbSizeRatio
+        // is the gameplay number and 1.0 is PROVISIONAL; maxItemSizeWorldM is only a
+        // safety ceiling so a mis-set ratio cannot let a tiny ball eat a house. It used
+        // to be the gate itself (absolute 1 m), which made every item above 1 m
+        // permanently inedible no matter how big the ball grew.
+        [SerializeField] private float maxItemSizeWorldM = 8f;
+        [SerializeField] private float absorbSizeRatio = 1f;
 
         // ---- FollowRigMath inputs ----
         [SerializeField] private float heightFilterHz = 5f;
@@ -733,11 +741,16 @@ namespace VRCKatamari.BallMotor
             for (int i = 0; i < pendingCandidateCount; i++)
             {
                 pendingAccepted[i] = false;
-                AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorbWithValue(
+                // The size limit is resolved inside the pickup layer from this step's
+                // semantic diameter, so the gate grows with the ball; maxItemSizeWorldM
+                // is passed as the ceiling only. semanticDiameterWorldM is the same
+                // reading the size stage derives and GetSemanticDiameterWorldM reports,
+                // while reach keeps using collisionRadiusWorldM.
+                AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorbWithValueAndBallSize(
                     pendingAbsorbable[i], pendingKinds[i], allowedKinds, allowedKindCount,
                     pendingBounds[i], pendingPositions[i], center, collisionRadiusWorldM,
                     contactRadiusWorldM, maxItemSizeWorldM, maxCollisionRadiusWorldM,
-                    pendingValues[i]);
+                    semanticDiameterWorldM, absorbSizeRatio, pendingValues[i]);
                 float evaluatedDistance = Vector3.Distance(pendingPositions[i], center);
                 Vector3 evaluatedBounds = pendingBounds[i];
                 float evaluatedHalfX = evaluatedBounds.x * 0.5f;
@@ -1652,6 +1665,26 @@ namespace VRCKatamari.BallMotor
         public float GetContactRadiusWorldM()
         {
             return contactRadiusWorldM;
+        }
+
+        /// <summary>
+        /// The size limit the absorb gate compares an item's largest bound against: the
+        /// ball's current semantic diameter times <c>absorbSizeRatio</c>, capped by
+        /// <c>maxItemSizeWorldM</c>. Metres; -1 when the inputs are invalid.
+        /// </summary>
+        /// <remarks>
+        /// Read-only, for diagnostics and for a host that decides whether an item is
+        /// worth submitting. Reason 3 (RejectItemTooLarge) used to be a constant, so
+        /// "the item is over the limit" could be answered from the serialized field
+        /// alone; now the answer moves with the ball, and a reader should show this
+        /// number next to the item's largest bounds extent.
+        /// </remarks>
+        public float GetAbsorbSizeLimitWorldM()
+        {
+            float limit;
+            if (!PickupAbsorbMath.TryComputeAbsorbSizeLimit(semanticDiameterWorldM,
+                absorbSizeRatio, maxItemSizeWorldM, out limit)) return -1f;
+            return limit;
         }
 
         /// <summary>

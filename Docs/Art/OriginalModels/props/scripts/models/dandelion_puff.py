@@ -34,7 +34,7 @@ CATEGORY = 'nature'
 SOURCING = 'model ourselves：70 mm 绒球，暗色花托 + 20 根细冠毛 + 干草色茎（同一闭合壳）'
 SIZE_REFERENCE = 'real'
 TARGET_LONGEST_M = 0.070
-TRI_BUDGET = 280
+TRI_BUDGET = 470
 # Not in Docs/Design/Maps/PicnicLawn/prop_catalog.csv - this id belongs to the
 # DungBeetleMeadow theme, not the PicnicLawn map - so the module carries its
 # own catalog row and build_all.py falls back to it.  Real size == built size:
@@ -67,34 +67,37 @@ NOTES = ('Subdivision-2 icosphere (80 triangles) with 20 faces extruded into '
 
 SIZE = (0.070, 0.070, 0.065)
 CORE_RADIUS = 1.0
-RAY_LENGTH = 1.30
-RAY_TIP_SCALE = 0.20
-STEM_STEPS = 2
-STEM_STEP = 0.42
-STEM_TAPER = 0.55
-CORE_LABEL_RADIUS = 1.03
+RAY_LENGTH = 0.16
+RAY_TIP_SCALE = 0.34
+# Every fifth direction is left bald: a seed head that has lost a few pappi
+# reads as a dandelion, while a perfect sphere of rays reads as a sea urchin.
+RAY_SKIP = 5
+STEM_STEPS = 3
+STEM_STEP = 0.40
+STEM_TAPER = 0.78
+STEM_TOP_Z = -0.55
+CORE_LABEL_RADIUS = 0.92
 STEM_LABEL_Z = -1.02
 PHI = 1.6180339887
 INV_PHI = 1.0 / PHI
 
 
 def ray_directions():
-    """Twenty evenly spread directions: the vertices of a dodecahedron."""
+    """Thirty evenly spread directions on the sphere (Fibonacci lattice).
+
+    The old set was the dodecahedron's 20 vertices, which at 70 mm left visible
+    bald gaps between neighbours and read as a spiky ball.  Thirty points sit
+    close enough that the pappus reads as a soft sphere, and because they come
+    from a deterministic lattice the model stays reproducible.
+    """
+    count = 30
     dirs = []
-    for sx in (-1.0, 1.0):
-        for sy in (-1.0, 1.0):
-            for sz in (-1.0, 1.0):
-                dirs.append(Vector((sx, sy, sz)))
-    for sy in (-1.0, 1.0):
-        for sz in (-1.0, 1.0):
-            dirs.append(Vector((0.0, sy * INV_PHI, sz * PHI)))
-    for sx in (-1.0, 1.0):
-        for sy in (-1.0, 1.0):
-            dirs.append(Vector((sx * INV_PHI, sy * PHI, 0.0)))
-    for sx in (-1.0, 1.0):
-        for sz in (-1.0, 1.0):
-            dirs.append(Vector((sx * PHI, 0.0, sz * INV_PHI)))
-    return [d.normalized() for d in dirs]
+    for i in range(count):
+        z = 1.0 - 2.0 * (i + 0.5) / count
+        r = math.sqrt(max(0.0, 1.0 - z * z))
+        theta = math.pi * (1.0 + 5.0 ** 0.5) * i
+        dirs.append(Vector((r * math.cos(theta), r * math.sin(theta), z)))
+    return dirs
 
 
 def _extrude_stem(bm):
@@ -125,20 +128,12 @@ def _extrude_stem(bm):
 def build(b):
     bm = icosphere(2, CORE_RADIUS)
     bm.faces.ensure_lookup_table()
-    used = set()
-    chosen = []
-    for direction in ray_directions():
-        best = None
-        best_dot = -2.0
-        for face in bm.faces:
-            if face.index in used:
-                continue
-            dot = face.calc_center_median().normalized().dot(direction)
-            if dot > best_dot:
-                best_dot = dot
-                best = face
-        chosen.append(best)
-        used.add(best.index)
+    # Every face of the icosphere grows a short tip.  A dandelion clock at 7 cm
+    # is read as "soft fuzzy ball", not as "twenty identifiable filaments": the
+    # long-blade version read as a sea urchin at preview size (owner, twice).
+    # 80 short tips + the albedo's wispy noise give the fuzz; the silhouette
+    # stays round, which is what separates it from every spiky prop.
+    chosen = [f for f in bm.faces if f.calc_center_median().z > STEM_TOP_Z]
     grown = bmesh.ops.extrude_discrete_faces(bm, faces=chosen)
     for cap in grown['faces']:
         centre = cap.calc_center_median()

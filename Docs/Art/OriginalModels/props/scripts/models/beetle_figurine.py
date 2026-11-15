@@ -38,7 +38,7 @@ CATEGORY = 'nature'
 SOURCING = 'model ourselves：90 mm 风格化圣甲虫塑像（暗鞘翅 + 黄铜背缝 + 暗腿头）'
 SIZE_REFERENCE = 'real'
 TARGET_LONGEST_M = 0.090
-TRI_BUDGET = 300
+TRI_BUDGET = 400
 # Not in Docs/Design/Maps/PicnicLawn/prop_catalog.csv - this id belongs to the
 # DungBeetleMeadow theme, not the PicnicLawn map - so the module carries its
 # own catalog row and build_all.py falls back to it.  Real size == built size:
@@ -86,16 +86,18 @@ PROFILE = [
     (0.0140, 0.0510),   # dome
     (0.0000, 0.0555),   # top pole
 ]
-HEAD_CENTRE = (0.0380, 0.0, 0.0260)
-HEAD_RADIUS = 0.0140
-HEAD_SCALE = (1.00, 0.85, 0.65)
-LEG_X = (-0.0160, 0.0000, 0.0160)
-LEG_START_Y = 0.0170
-LEG_START_Z = 0.0220
-LEG_END_Y = 0.0275
-LEG_END_Z = 0.0042
-LEG_BACK = 0.0040
-LEG_RADII = (0.0050, 0.0042)
+HEAD_CENTRE = (0.0385, 0.0, 0.0245)
+HEAD_RADIUS = 0.0165
+HEAD_SCALE = (1.00, 0.95, 0.62)
+LEG_X = (-0.0170, 0.0000, 0.0170)
+LEG_START_Y = 0.0165
+LEG_START_Z = 0.0210
+LEG_END_Y = 0.0330
+LEG_END_Z = 0.0038
+# Front legs reach forward, rear legs backward: a scarab's legs fan out in plan,
+# and the fan is what makes the silhouette read as an insect from above.
+LEG_FAN_X = (0.0105, 0.0, -0.0105)
+LEG_RADII = (0.0054, 0.0030)
 LEG_SEGMENTS = 4
 SEAM_HALF_WIDTH = 0.0060
 SEAM_MIN_Z = 0.0320
@@ -132,7 +134,7 @@ def _head_mesh():
 
 def _leg_mesh(index, side):
     start = (LEG_X[index], side * LEG_START_Y, LEG_START_Z)
-    end = (LEG_X[index] - LEG_BACK, side * LEG_END_Y, LEG_END_Z)
+    end = (LEG_X[index] + LEG_FAN_X[index], side * LEG_END_Y, LEG_END_Z)
     return tube([start, end], list(LEG_RADII), segments=LEG_SEGMENTS)
 
 
@@ -143,10 +145,21 @@ def build(b):
         return radius * factor
 
     body_bm = lathe(PROFILE, segments=SEGMENTS, radius_fn=radius_fn)
+    # Pronotum groove: pull the ring vertices nearest x = +18 mm inward by 3 %.
+    # A real scarab has a hard line between thorax and elytra; without it the
+    # figurine is one smooth egg and reads as a dark pebble.
+    for v in body_bm.verts:
+        if 0.0150 < v.co.x < 0.0215 and v.co.z > 0.018:
+            v.co.x -= 0.0012
+            v.co.y *= 0.972
     parts = [body_bm, _head_mesh()]
     for i in range(len(LEG_X)):
         for side in (-1.0, 1.0):
             parts.append(_leg_mesh(i, side))
+    for side in (-1.0, 1.0):
+        parts.append(tube([(0.0490, side * 0.0055, 0.0215),
+                           (0.0560, side * 0.0085, 0.0195)],
+                          [0.0032, 0.0016], segments=4))
     matrix = fit_bounds(parts, SIZE)
     head = matrix @ Vector(HEAD_CENTRE)
     head_tip = matrix @ Vector((HEAD_CENTRE[0] + HEAD_RADIUS, HEAD_CENTRE[1],

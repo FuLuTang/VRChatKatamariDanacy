@@ -1,0 +1,8 @@
+zone_id,zone_name_zh,ball_band_lo,ball_band_hi,area_m2,target_types,target_instances,min_item_m,eat_now_pct,eat_1_5x_pct,need_3x_pct,small_1_10cm_share_pct,small_instances,status,basis
+Z0,巢穴口,0.30,0.40,16.0,7,121,0.083,26,55,25,26,31,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z1,干草堆与围栏根,0.35,0.55,48.0,22,363,0.097,26,55,25,12,44,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z2,菜园小径,0.45,0.75,48.0,22,363,0.125,26,55,25,5,18,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z3,牧场与水槽,0.60,1.00,96.0,44,727,0.166,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z4,果园边缘,0.85,1.25,64.0,29,485,0.235,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z5,农具棚前,1.10,1.60,36.0,16,273,0.305,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z6,石墙与界碑,1.50,2.20,36.0,16,273,0.416,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional

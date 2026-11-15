@@ -1,0 +1,9 @@
+zone_id,zone_name_zh,ball_band_lo,ball_band_hi,area_m2,target_types,target_instances,min_item_m,eat_now_pct,eat_1_5x_pct,need_3x_pct,small_1_10cm_share_pct,small_instances,status,basis
+Z0,门后玄关,0.30,0.40,4.0,7,91,0.083,26,55,25,26,24,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z1,床边地板,0.35,0.55,15.0,26,341,0.097,26,55,25,12,41,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z2,书桌下,0.45,0.75,12.0,21,273,0.125,26,55,25,5,14,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z3,衣柜前与衣堆,0.60,0.95,12.0,21,273,0.166,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z4,厨房角,0.75,1.10,9.0,15,205,0.208,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z5,沙发与电视柜,0.95,1.30,18.0,31,409,0.263,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z6,书架与暖气片,1.10,1.60,5.0,9,114,0.305,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+Z7,家具区（终局）,1.50,2.20,16.0,27,364,0.416,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional

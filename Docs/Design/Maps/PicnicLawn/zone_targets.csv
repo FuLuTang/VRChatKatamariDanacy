@@ -1,0 +1,22 @@
+zone_id,zone_name_zh,ball_band_lo,ball_band_hi,area_m2,target_types,target_instances,min_item_m,eat_now_pct,eat_1_5x_pct,need_3x_pct,small_1_10cm_share_pct,small_instances,status,basis
+core_lawn,中央交分草坪,t0,t3,196.0,28,543,,26,55,25,26,141,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+blanket_west,西野餐毯,t1,t3,78.0,11,216,,26,55,25,12,26,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+blanket_east,东野餐毯,t1,t3,78.0,11,216,,26,55,25,5,11,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+basket_north,北篮子区,t2,t3,60.0,9,166,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+basket_south,南篮子区,t2,t3,60.0,9,166,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+flower_bed_nw,西北花圃,t0,t2,19.6,3,54,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+flower_bed_ne,东北花圃,t0,t2,19.6,3,54,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+flower_bed_sw,西南花圃,t0,t2,19.6,3,54,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+flower_bed_se,东南花圃,t0,t2,19.6,3,54,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+spawn_nw,西北出生角,t0,t0,36.0,5,100,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+spawn_ne,东北出生角,t0,t0,36.0,5,100,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+spawn_sw,西南出生角,t0,t0,36.0,5,100,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+spawn_se,东南出生角,t0,t0,36.0,5,100,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+fringe_north,北草坪边带,t0,t1,92.0,13,255,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+fringe_south,南草坪边带,t0,t1,92.0,13,255,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+fringe_east,东草坪边带,t0,t1,92.0,13,255,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+fringe_west,西草坪边带,t0,t1,92.0,13,255,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+tree_roots_nw,西北树根区,t0,t1,6.2,3,17,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+tree_roots_ne,东北树根区,t0,t1,6.2,3,17,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+tree_roots_sw,西南树根区,t0,t1,6.2,3,17,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional
+tree_roots_se,东南树根区,t0,t1,6.2,3,17,,26,55,25,0,0,FILLED_FROM_ZONE_PROFILE,min/eat/median/shape: [数据挖掘] zone_profile/README.md; instances: [推断] area-proportional

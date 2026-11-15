@@ -1,0 +1,1586 @@
+{
+  "front": "+Y",
+  "generated_by": "build_textured.py",
+  "props": [
+    {
+      "bounds_m": {
+        "max": [
+          0.006000000052154064,
+          0.006000000052154064,
+          0.001500000013038516
+        ],
+        "min": [
+          -0.006000000052154064,
+          -0.006000000052154064,
+          -0.001500000013038516
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.012000000104308128,
+        "x": 0.012000000104308128,
+        "y": 0.012000000104308128,
+        "z": 0.003000000026077032
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "button.blend": 474265,
+        "button.fbx": 24060,
+        "button.glb": 163836
+      },
+      "geometry_sha256": "8a59a566f7e538235e9ed3307b847b9b914d576cfe68d52668ca7b58791eeab5",
+      "id": "button",
+      "material_base_colors": {
+        "Prop_button_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_button_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/button_preview.png",
+      "target_longest_m": 0.012,
+      "textures": {
+        "albedo": "textures/button_albedo.png",
+        "bake_seconds": 2.3,
+        "bytes_with_mips": 262144,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/button_mra.png",
+        "normal": "textures/button_normal.png",
+        "resolution": 256,
+        "single_material": "Prop_button_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.074,
+              0.142,
+              0.393
+            ],
+            "declared_linear": [
+              0.075,
+              0.145,
+              0.4
+            ],
+            "max_channel_delta": 0.007,
+            "slot": "plastic_blue",
+            "texels": 156228
+          },
+          {
+            "albedo_mean_linear": [
+              0.023,
+              0.027,
+              0.035
+            ],
+            "declared_linear": [
+              0.03,
+              0.035,
+              0.045
+            ],
+            "max_channel_delta": 0.01,
+            "slot": "ink",
+            "texels": 105916
+          }
+        ],
+        "slots_baked": [
+          "plastic_blue",
+          "ink"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9444,
+            0.9966
+          ],
+          "uv_min": [
+            0.0034,
+            0.0034
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 144,
+      "vertices": 74
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.005600000265985727,
+          0.009999999776482582,
+          0.004000000189989805
+        ],
+        "min": [
+          -0.005600000265985727,
+          -0.009999999776482582,
+          -0.004000000189989805
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.019999999552965164,
+        "x": 0.011200000531971455,
+        "y": 0.019999999552965164,
+        "z": 0.00800000037997961
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "seed.blend": 452665,
+        "seed.fbx": 24188,
+        "seed.glb": 156940
+      },
+      "geometry_sha256": "d75c95cd605b4c9c45186700f2bb9397381aa42678277b65f248e7c4f0067e8d",
+      "id": "seed",
+      "material_base_colors": {
+        "Prop_seed_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_seed_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/seed_preview.png",
+      "target_longest_m": 0.02,
+      "textures": {
+        "albedo": "textures/seed_albedo.png",
+        "bake_seconds": 1.8,
+        "bytes_with_mips": 262144,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/seed_mra.png",
+        "normal": "textures/seed_normal.png",
+        "resolution": 256,
+        "single_material": "Prop_seed_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.363,
+              0.26,
+              0.087
+            ],
+            "declared_linear": [
+              0.42,
+              0.3,
+              0.1
+            ],
+            "max_channel_delta": 0.057,
+            "slot": "body",
+            "texels": 262144
+          }
+        ],
+        "slots_baked": [
+          "body"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9971,
+            0.8649
+          ],
+          "uv_min": [
+            0.0029,
+            0.0029
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 144,
+      "vertices": 74
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.014999999664723873,
+          0.014265846461057663,
+          0.004349999595433474
+        ],
+        "min": [
+          -0.014999999664723873,
+          -0.014265846461057663,
+          -0.004349999595433474
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.029999999329447746,
+        "x": 0.029999999329447746,
+        "y": 0.028531692922115326,
+        "z": 0.008699999190866947
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "bottle_cap.blend": 458113,
+        "bottle_cap.fbx": 25324,
+        "bottle_cap.glb": 174204
+      },
+      "geometry_sha256": "5b1a6e1ac47c3a42cbd316cfc2bb8f74bbf806fa9c48333897fe478f59d34458",
+      "id": "bottle_cap",
+      "material_base_colors": {
+        "Prop_bottle_cap_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_bottle_cap_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/bottle_cap_preview.png",
+      "target_longest_m": 0.03,
+      "textures": {
+        "albedo": "textures/bottle_cap_albedo.png",
+        "bake_seconds": 2.1,
+        "bytes_with_mips": 262144,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/bottle_cap_mra.png",
+        "normal": "textures/bottle_cap_normal.png",
+        "resolution": 256,
+        "single_material": "Prop_bottle_cap_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.089,
+              0.125,
+              0.17
+            ],
+            "declared_linear": [
+              0.1,
+              0.14,
+              0.19
+            ],
+            "max_channel_delta": 0.02,
+            "slot": "cap",
+            "texels": 262144
+          }
+        ],
+        "slots_baked": [
+          "cap"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9966,
+            0.8581
+          ],
+          "uv_min": [
+            0.0034,
+            0.0034
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 200,
+      "vertices": 102
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.012000000104308128,
+          0.012000000104308128,
+          0.0010000000474974513
+        ],
+        "min": [
+          -0.012000000104308128,
+          -0.012000000104308128,
+          -0.0010000000474974513
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.024000000208616257,
+        "x": 0.024000000208616257,
+        "y": 0.024000000208616257,
+        "z": 0.0020000000949949026
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "coin.blend": 455169,
+        "coin.fbx": 23564,
+        "coin.glb": 181448
+      },
+      "geometry_sha256": "4980a65bb0ffca299a2c1e39144a6705ddf2b30a6f66def6de0e75c9f9fbff82",
+      "id": "coin",
+      "material_base_colors": {
+        "Prop_coin_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_coin_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/coin_preview.png",
+      "target_longest_m": 0.024,
+      "textures": {
+        "albedo": "textures/coin_albedo.png",
+        "bake_seconds": 2.3,
+        "bytes_with_mips": 262144,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/coin_mra.png",
+        "normal": "textures/coin_normal.png",
+        "resolution": 256,
+        "single_material": "Prop_coin_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.502,
+              0.367,
+              0.116
+            ],
+            "declared_linear": [
+              0.52,
+              0.38,
+              0.12
+            ],
+            "max_channel_delta": 0.018,
+            "slot": "brass",
+            "texels": 132402
+          },
+          {
+            "albedo_mean_linear": [
+              0.07,
+              0.074,
+              0.082
+            ],
+            "declared_linear": [
+              0.09,
+              0.095,
+              0.105
+            ],
+            "max_channel_delta": 0.023,
+            "slot": "metal_dark",
+            "texels": 129742
+          }
+        ],
+        "slots_baked": [
+          "brass",
+          "metal_dark"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9963,
+            0.9608
+          ],
+          "uv_min": [
+            0.0037,
+            0.0037
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 168,
+      "vertices": 86
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.11999999731779099,
+          0.11999999731779099,
+          0.012500000186264515
+        ],
+        "min": [
+          -0.11999999731779099,
+          -0.11999999731779099,
+          -0.012500000186264515
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.23999999463558197,
+        "x": 0.23999999463558197,
+        "y": 0.23999999463558197,
+        "z": 0.02500000037252903
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "plate.blend": 474505,
+        "plate.fbx": 30588,
+        "plate.glb": 182712
+      },
+      "geometry_sha256": "3ee18e5512047aff399b2cee8b1691c03cb501d4ac7e6baa190b6dd9ed5c0755",
+      "id": "plate",
+      "material_base_colors": {
+        "Prop_plate_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_plate_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/plate_preview.png",
+      "target_longest_m": 0.24,
+      "textures": {
+        "albedo": "textures/plate_albedo.png",
+        "bake_seconds": 2.6,
+        "bytes_with_mips": 262144,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/plate_mra.png",
+        "normal": "textures/plate_normal.png",
+        "resolution": 256,
+        "single_material": "Prop_plate_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.641,
+              0.619,
+              0.573
+            ],
+            "declared_linear": [
+              0.76,
+              0.735,
+              0.68
+            ],
+            "max_channel_delta": 0.119,
+            "slot": "ceramic",
+            "texels": 262144
+          }
+        ],
+        "slots_baked": [
+          "ceramic"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9985,
+            0.5012
+          ],
+          "uv_min": [
+            0.0015,
+            0.0015
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 384,
+      "vertices": 194
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.05999999865889549,
+          0.04492512345314026,
+          0.04991680383682251
+        ],
+        "min": [
+          -0.05999999865889549,
+          -0.04492512345314026,
+          -0.04991680383682251
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.11999999731779099,
+        "x": 0.11999999731779099,
+        "y": 0.08985024690628052,
+        "z": 0.09983360767364502
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "ceramic_mug.blend": 489661,
+        "ceramic_mug.fbx": 31148,
+        "ceramic_mug.glb": 202316
+      },
+      "geometry_sha256": "a78080c844c12fb811b9896d155668c94b92c0e8905ba324c8b01dd77005613b",
+      "id": "ceramic_mug",
+      "material_base_colors": {
+        "Prop_ceramic_mug_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_ceramic_mug_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/ceramic_mug_preview.png",
+      "target_longest_m": 0.12,
+      "textures": {
+        "albedo": "textures/ceramic_mug_albedo.png",
+        "bake_seconds": 2.3,
+        "bytes_with_mips": 262144,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/ceramic_mug_mra.png",
+        "normal": "textures/ceramic_mug_normal.png",
+        "resolution": 256,
+        "single_material": "Prop_ceramic_mug_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.74,
+              0.725,
+              0.682
+            ],
+            "declared_linear": [
+              0.76,
+              0.745,
+              0.7
+            ],
+            "max_channel_delta": 0.02,
+            "slot": "ceramic",
+            "texels": 61715
+          },
+          {
+            "albedo_mean_linear": [
+              0.17,
+              0.218,
+              0.284
+            ],
+            "declared_linear": [
+              0.18,
+              0.23,
+              0.3
+            ],
+            "max_channel_delta": 0.016,
+            "slot": "ceramic_dark",
+            "texels": 88731
+          },
+          {
+            "albedo_mean_linear": [
+              0.456,
+              0.071,
+              0.057
+            ],
+            "declared_linear": [
+              0.48,
+              0.075,
+              0.06
+            ],
+            "max_channel_delta": 0.024,
+            "slot": "plastic_red",
+            "texels": 11999
+          },
+          {
+            "albedo_mean_linear": [
+              0.023,
+              0.027,
+              0.035
+            ],
+            "declared_linear": [
+              0.03,
+              0.035,
+              0.045
+            ],
+            "max_channel_delta": 0.01,
+            "slot": "ink",
+            "texels": 99699
+          }
+        ],
+        "slots_baked": [
+          "ceramic",
+          "ceramic_dark",
+          "plastic_red",
+          "ink"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9955,
+            0.8425
+          ],
+          "uv_min": [
+            0.0045,
+            0.0045
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 312,
+      "vertices": 156
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.03500000014901161,
+          0.03500000014901161,
+          0.0325000025331974
+        ],
+        "min": [
+          -0.03500000014901161,
+          -0.03500000014901161,
+          -0.0325000025331974
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.07000000029802322,
+        "x": 0.07000000029802322,
+        "y": 0.07000000029802322,
+        "z": 0.0650000050663948
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "dandelion_puff.blend": 481857,
+        "dandelion_puff.fbx": 38908,
+        "dandelion_puff.glb": 269828
+      },
+      "geometry_sha256": "028c7850622ce1c1d3cb2a67da37e17b208ea94a29506ecf0cdabbd2272dfa6e",
+      "id": "dandelion_puff",
+      "material_base_colors": {
+        "Prop_dandelion_puff_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_dandelion_puff_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/dandelion_puff_preview.png",
+      "target_longest_m": 0.07,
+      "textures": {
+        "albedo": "textures/dandelion_puff_albedo.png",
+        "bake_seconds": 2.5,
+        "bytes_with_mips": 262144,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/dandelion_puff_mra.png",
+        "normal": "textures/dandelion_puff_normal.png",
+        "resolution": 256,
+        "single_material": "Prop_dandelion_puff_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.615,
+              0.598,
+              0.554
+            ],
+            "declared_linear": [
+              0.7,
+              0.68,
+              0.63
+            ],
+            "max_channel_delta": 0.085,
+            "slot": "wool",
+            "texels": 189433
+          },
+          {
+            "albedo_mean_linear": [
+              0.069,
+              0.057,
+              0.046
+            ],
+            "declared_linear": [
+              0.09,
+              0.075,
+              0.06
+            ],
+            "max_channel_delta": 0.021,
+            "slot": "chitin",
+            "texels": 61543
+          },
+          {
+            "albedo_mean_linear": [
+              0.416,
+              0.319,
+              0.124
+            ],
+            "declared_linear": [
+              0.47,
+              0.36,
+              0.14
+            ],
+            "max_channel_delta": 0.054,
+            "slot": "straw",
+            "texels": 11168
+          }
+        ],
+        "slots_baked": [
+          "wool",
+          "chitin",
+          "straw"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9885,
+            0.9751
+          ],
+          "uv_min": [
+            0.0115,
+            0.0115
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 458,
+      "vertices": 231
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.04500000178813934,
+          0.027499999850988388,
+          0.030000001192092896
+        ],
+        "min": [
+          -0.04500000178813934,
+          -0.027499999850988388,
+          -0.030000001192092896
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.09000000357627869,
+        "x": 0.09000000357627869,
+        "y": 0.054999999701976776,
+        "z": 0.06000000238418579
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "beetle_figurine.blend": 496909,
+        "beetle_figurine.fbx": 33484,
+        "beetle_figurine.glb": 221580
+      },
+      "geometry_sha256": "46a1a41607da1fa1f3ed9f00afaa2850a499b6b95ab1dcd638d547b0c38d6fbe",
+      "id": "beetle_figurine",
+      "material_base_colors": {
+        "Prop_beetle_figurine_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_beetle_figurine_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/beetle_figurine_preview.png",
+      "target_longest_m": 0.09,
+      "textures": {
+        "albedo": "textures/beetle_figurine_albedo.png",
+        "bake_seconds": 2.4,
+        "bytes_with_mips": 262144,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/beetle_figurine_mra.png",
+        "normal": "textures/beetle_figurine_normal.png",
+        "resolution": 256,
+        "single_material": "Prop_beetle_figurine_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.084,
+              0.07,
+              0.056
+            ],
+            "declared_linear": [
+              0.09,
+              0.075,
+              0.06
+            ],
+            "max_channel_delta": 0.006,
+            "slot": "chitin",
+            "texels": 105309
+          },
+          {
+            "albedo_mean_linear": [
+              0.495,
+              0.362,
+              0.114
+            ],
+            "declared_linear": [
+              0.52,
+              0.38,
+              0.12
+            ],
+            "max_channel_delta": 0.025,
+            "slot": "brass",
+            "texels": 21713
+          },
+          {
+            "albedo_mean_linear": [
+              0.039,
+              0.039,
+              0.041
+            ],
+            "declared_linear": [
+              0.045,
+              0.045,
+              0.048
+            ],
+            "max_channel_delta": 0.007,
+            "slot": "rubber",
+            "texels": 135122
+          }
+        ],
+        "slots_baked": [
+          "chitin",
+          "brass",
+          "rubber"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9892,
+            0.9929
+          ],
+          "uv_min": [
+            0.0071,
+            0.0071
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 390,
+      "vertices": 197
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.30000001192092896,
+          0.20000001788139343,
+          0.20000001788139343
+        ],
+        "min": [
+          -0.30000001192092896,
+          -0.20000001788139343,
+          -0.20000001788139343
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.6000000238418579,
+        "x": 0.6000000238418579,
+        "y": 0.40000003576278687,
+        "z": 0.40000003576278687
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "crate.blend": 486041,
+        "crate.fbx": 26204,
+        "crate.glb": 727844
+      },
+      "geometry_sha256": "c9bfd6c92bb34147734fd4195ccfbff1f7980c1d62086c3d45377566e0507be3",
+      "id": "crate",
+      "material_base_colors": {
+        "Prop_crate_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_crate_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/crate_preview.png",
+      "target_longest_m": 0.6,
+      "textures": {
+        "albedo": "textures/crate_albedo.png",
+        "bake_seconds": 9.0,
+        "bytes_with_mips": 1048576,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/crate_mra.png",
+        "normal": "textures/crate_normal.png",
+        "resolution": 512,
+        "single_material": "Prop_crate_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.316,
+              0.206,
+              0.105
+            ],
+            "declared_linear": [
+              0.33,
+              0.215,
+              0.11
+            ],
+            "max_channel_delta": 0.014,
+            "slot": "wood",
+            "texels": 382713
+          },
+          {
+            "albedo_mean_linear": [
+              0.167,
+              0.097,
+              0.045
+            ],
+            "declared_linear": [
+              0.185,
+              0.108,
+              0.05
+            ],
+            "max_channel_delta": 0.018,
+            "slot": "trim",
+            "texels": 665863
+          }
+        ],
+        "slots_baked": [
+          "wood",
+          "trim"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9927,
+            0.9735
+          ],
+          "uv_min": [
+            0.0073,
+            0.0073
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 272,
+      "vertices": 138
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.2750000059604645,
+          0.17499999701976776,
+          0.20000000298023224
+        ],
+        "min": [
+          -0.2750000059604645,
+          -0.17499999701976776,
+          -0.20000000298023224
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.550000011920929,
+        "x": 0.550000011920929,
+        "y": 0.3499999940395355,
+        "z": 0.4000000059604645
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "storage_bin.blend": 532157,
+        "storage_bin.fbx": 27724,
+        "storage_bin.glb": 581972
+      },
+      "geometry_sha256": "6887123b1a26ad802d89cb1bb3f073d6b0e3ad1481f4e4e4c3f4fdadaa972853",
+      "id": "storage_bin",
+      "material_base_colors": {
+        "Prop_storage_bin_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_storage_bin_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/storage_bin_preview.png",
+      "target_longest_m": 0.55,
+      "textures": {
+        "albedo": "textures/storage_bin_albedo.png",
+        "bake_seconds": 6.4,
+        "bytes_with_mips": 1048576,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/storage_bin_mra.png",
+        "normal": "textures/storage_bin_normal.png",
+        "resolution": 512,
+        "single_material": "Prop_storage_bin_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.385,
+              0.38,
+              0.351
+            ],
+            "declared_linear": [
+              0.4,
+              0.395,
+              0.365
+            ],
+            "max_channel_delta": 0.015,
+            "slot": "body",
+            "texels": 468055
+          },
+          {
+            "albedo_mean_linear": [
+              0.045,
+              0.073,
+              0.11
+            ],
+            "declared_linear": [
+              0.055,
+              0.09,
+              0.135
+            ],
+            "max_channel_delta": 0.025,
+            "slot": "lid",
+            "texels": 570794
+          },
+          {
+            "albedo_mean_linear": [
+              0.549,
+              0.517,
+              0.421
+            ],
+            "declared_linear": [
+              0.6,
+              0.565,
+              0.46
+            ],
+            "max_channel_delta": 0.051,
+            "slot": "label",
+            "texels": 9727
+          }
+        ],
+        "slots_baked": [
+          "body",
+          "lid",
+          "label"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9803,
+            0.9937
+          ],
+          "uv_min": [
+            0.0063,
+            0.0063
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 310,
+      "vertices": 157
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.07499999552965164,
+          0.04999999701976776,
+          0.0007999999215826392
+        ],
+        "min": [
+          -0.07499999552965164,
+          -0.04999999701976776,
+          -0.0007999999215826392
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.14999999105930328,
+        "x": 0.14999999105930328,
+        "y": 0.09999999403953552,
+        "z": 0.0015999998431652784
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "postcard.blend": 448177,
+        "postcard.fbx": 21404,
+        "postcard.glb": 144964
+      },
+      "geometry_sha256": "aa907d6bc2d49161a2b7f309a177889e408a4483d408d52af1f8957d3555bbef",
+      "id": "postcard",
+      "material_base_colors": {
+        "Prop_postcard_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_postcard_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/postcard_preview.png",
+      "target_longest_m": 0.15,
+      "textures": {
+        "albedo": "textures/postcard_albedo.png",
+        "bake_seconds": 2.4,
+        "bytes_with_mips": 262144,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/postcard_mra.png",
+        "normal": "textures/postcard_normal.png",
+        "resolution": 256,
+        "single_material": "Prop_postcard_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.794,
+              0.769,
+              0.695
+            ],
+            "declared_linear": [
+              0.8,
+              0.775,
+              0.7
+            ],
+            "max_channel_delta": 0.006,
+            "slot": "paper",
+            "texels": 154212
+          },
+          {
+            "albedo_mean_linear": [
+              0.026,
+              0.03,
+              0.038
+            ],
+            "declared_linear": [
+              0.03,
+              0.035,
+              0.045
+            ],
+            "max_channel_delta": 0.007,
+            "slot": "ink",
+            "texels": 106682
+          },
+          {
+            "albedo_mean_linear": [
+              0.352,
+              0.312,
+              0.244
+            ],
+            "declared_linear": [
+              0.36,
+              0.32,
+              0.25
+            ],
+            "max_channel_delta": 0.008,
+            "slot": "paper_dark",
+            "texels": 1250
+          }
+        ],
+        "slots_baked": [
+          "paper",
+          "ink",
+          "paper_dark"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.9978,
+            0.962
+          ],
+          "uv_min": [
+            0.0022,
+            0.0022
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 92,
+      "vertices": 48
+    },
+    {
+      "bounds_m": {
+        "max": [
+          0.03999999910593033,
+          0.003000000026077032,
+          0.000750000006519258
+        ],
+        "min": [
+          -0.03999999910593033,
+          -0.003000000026077032,
+          -0.000750000006519258
+        ]
+      },
+      "dimensions_m": {
+        "longest": 0.07999999821186066,
+        "x": 0.07999999821186066,
+        "y": 0.006000000052154064,
+        "z": 0.001500000013038516
+      },
+      "export_settings": {
+        "blender": "4.0.2",
+        "fbx": {
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "export_apply": true,
+          "export_yup": true,
+          "format": "GLB"
+        }
+      },
+      "files": {
+        "grass_blade.blend": 444497,
+        "grass_blade.fbx": 20940,
+        "grass_blade.glb": 407424
+      },
+      "geometry_sha256": "ae81761fee5ee5fb2c50083cc2e28ec4b5075db3610b4ad600ab8cc202f24c0d",
+      "id": "grass_blade",
+      "material_base_colors": {
+        "Prop_grass_blade_tex": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "materials": [
+        "Prop_grass_blade_tex"
+      ],
+      "mesh_checks": {
+        "closed_shells": 1,
+        "duplicate_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0
+      },
+      "mesh_material_slots": 1,
+      "pivot": "center",
+      "preview": "previews/grass_blade_preview.png",
+      "target_longest_m": 0.08,
+      "textures": {
+        "albedo": "textures/grass_blade_albedo.png",
+        "bake_seconds": 5.2,
+        "bytes_with_mips": 1048576,
+        "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
+        "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
+        "dims_drift_m": 0.0,
+        "mra": "textures/grass_blade_mra.png",
+        "normal": "textures/grass_blade_normal.png",
+        "resolution": 512,
+        "single_material": "Prop_grass_blade_tex",
+        "slot_colour_check": [
+          {
+            "albedo_mean_linear": [
+              0.114,
+              0.238,
+              0.074
+            ],
+            "declared_linear": [
+              0.115,
+              0.24,
+              0.075
+            ],
+            "max_channel_delta": 0.002,
+            "slot": "leaf_green",
+            "texels": 71070
+          },
+          {
+            "albedo_mean_linear": [
+              0.388,
+              0.262,
+              0.102
+            ],
+            "declared_linear": [
+              0.4,
+              0.27,
+              0.105
+            ],
+            "max_channel_delta": 0.012,
+            "slot": "leaf_dry",
+            "texels": 59971
+          },
+          {
+            "albedo_mean_linear": [
+              0.104,
+              0.06,
+              0.03
+            ],
+            "declared_linear": [
+              0.135,
+              0.078,
+              0.038
+            ],
+            "max_channel_delta": 0.031,
+            "slot": "wood_dark",
+            "texels": 917535
+          }
+        ],
+        "slots_baked": [
+          "leaf_green",
+          "leaf_dry",
+          "wood_dark"
+        ],
+        "uv": {
+          "uv_layers": 1,
+          "uv_max": [
+            0.1997,
+            0.9988
+          ],
+          "uv_min": [
+            0.0012,
+            0.0012
+          ]
+        }
+      },
+      "transforms": "identity (applied; geometry in metres)",
+      "triangles": 52,
+      "vertices": 28
+    }
+  ],
+  "texture_policy": "one texture set + one material per prop",
+  "title": "Original placeholder props - textured pilot",
+  "unit": "metre",
+  "up": "+Z"
+}

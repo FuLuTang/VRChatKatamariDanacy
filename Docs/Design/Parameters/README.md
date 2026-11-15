@@ -32,19 +32,19 @@
 
 结论：手工钉的哈希会烂，机器验的哈希不会。文档里的复述值必须改成“引用真源”，而不是“再抄一遍”。
 
-**实例二（运行时与模型对“长到 2.20 m 要多少单位”差 3.44 倍）。** 两边都声明自己把 `0.30 m → 2.20 m` 标定好了，但标定方式不同：
+**实例二（曾经差 3.44 倍，2026-11-15 运行时重新标定后消除）。** 两边都声明自己把 `0.30 m → 2.20 m` 标定好了。2026-11-15 之前，运行时是 `baselineVolumeUnits = 1` / `cubicMetersPerVolumeUnit = 0.0141`，模型是 1356 单位摊掉 `V(2.20) − V(0.30)`，两者差 3.439 倍（`0.0141 / 0.0041`）。**运行时为了对齐模型重新标定过**：同一个起始体积（0.0141 m³，约 0.30 m 球）按新单位重算成 `3.4390244`，每单位改成 `0.0041 m³`，单位放大了 3.439 倍，分歧随之消失。
 
 | 侧 | 公式 | 每确认单位的体积 | 到 2.20 m 需要的确认单位 |
 |---|---|---|---|
 | 离线模型 | `V = V(0.30) + units × ((V(2.20) − V(0.30)) / 1356)`（[`round_model.py`](../Gameplay/round_model.py) 的 `diameter_for_units()`，`units_to_max_diameter` 见 `RoundParams.units_to_max_diameter`） | 0.0041011 m³ | **1356** |
-| 运行时 | `V = baseline + units × cubicMetersPerVolumeUnit`，`KatamariBallMotor.baselineVolumeUnits = 1`、`KatamariBallMotor.cubicMetersPerVolumeUnit = 0.0141`、显示上限 `KatamariBallMotor.maxCoreRadiusWorldM = 1.1` | 0.0141 m³ | **≈394.4** |
+| 运行时（重标定后） | `V = (baseline + units) × cubicMetersPerVolumeUnit`，`KatamariBallMotor.baselineVolumeUnits = 3.4390244`、`KatamariBallMotor.cubicMetersPerVolumeUnit = 0.0041`、显示上限 `KatamariBallMotor.maxCoreRadiusWorldM = 1.1` | 0.0041 m³ | **≈1356.4** |
 
-于是：
+重算（用代码里的常数，不引用任何旧文档）：起始体积 `3.4390244 × 0.0041 = 0.0141 m³` → 起始直径 `0.29974 m`；满径体积 `(π/6) × 2.20³ = 5.57528 m³`；确认单位 `5.57528 / 0.0041 − 3.4390244 = 1356.39`（float32 下 1356.4 就饱和到 2.20 m）。于是：
 
-- 模型说“把整张图（1284 单位）吃光只到 2.16 m，2.20 m 结构性不可达”（[Gameplay README](../Gameplay/README.md) §4.3 / §6）——这句话只对**模型的标定**成立；
-- 运行时在 **394 确认单位**（全图 1284 单位的 30.7%）就已经顶到 2.20 m 显示上限。对当前实现来说，“2.20 m 不可达”是**假的**。
+- 两侧现在同源：整张图 `1284` 单位在模型和运行时都只到 **2.16 m**，所以模型那句“2.20 m 结构性不可达”（[Gameplay README](../Gameplay/README.md) §4.3 / §6）**对运行时同样成立**；标定侧的调参结论（到 2.20 m 要多少单位、整图能滚多大）可以用于游戏。
+- 旧标定下运行时在 **394.41 确认单位**（全图 1284 的 30.7%）就顶到 2.20 m；重标定后是 **1356.4**（1284 的 105.6%），比值正是 3.44 倍。
 
-**这条比 0.25 严重得多**：它不是某个比例偏了一点点，而是两套标定各自成立、谁也没读对方。任何用模型数字做的调参决定（Gameplay README §5 的敏感性、§6 的结论）都不能直接搬到游戏里。它也是本文 §8 风险 3 那条“迁移不是纯重构”的来源。
+**这条比 0.25 严重得多**：它不是某个比例偏了一点点，而是两套标定各自成立、谁也没读对方——在被发现之前，用模型数字做的调参决定都不能直接搬到游戏里。现在两侧同源，这个障碍消失了；剩下的历史记录留在 §3.2 的 `known_divergences`（`status: resolved`）与 §8 风险 3，用来防止有人按旧文档把 `0.0141` 写回去。吸收口径仍与模型不同（决定 (l)：运行时是 AABB 体积门，模型仍是线性 `absorb_size_ratio`），不要把标定同源误读成模型整体可以直接替换运行时。
 
 ### 0.3 约束：运行时读不到 JSON
 
@@ -219,23 +219,26 @@
     "bank_residual_fraction": 0.25,
     "bank_min_conversion_diameter_m": 0.55,
     "ball_max_collision_diameter_m": 2.2,
-    "baseline_volume_units": 1.0,
-    "cubic_meters_per_volume_unit": 0.0141,
+    "baseline_volume_units": 3.4390244,
+    "cubic_meters_per_volume_unit": 0.0041,
     "max_core_radius_world_m": 1.1,
     "max_speed_mps": 4.0,
     "…": "每个 runtime_field 一项"
   },
   "derived": {
     "start_diameter_m": 0.29974,
-    "units_to_max_diameter_effective": 394.41
+    "units_to_max_diameter_effective": 1356.39
   },
   "known_divergences": [
     {
       "id": "size_model_calibration",
+      "status": "resolved",
       "model_value": 1356,
-      "runtime_value": 394.41,
-      "owner": "T21 / T39",
-      "note": "见 README §0.2 实例二"
+      "runtime_value_before_recalibration": 394.41,
+      "runtime_value": 1356.39,
+      "resolved_at": "2026-11-15",
+      "evidence": "KatamariBallMotor.cs 标定注释；EditMode 455 条 454 过（唯一红为 VRChat SDK 包内网络 URL 测试）；AbsorbSizeGateTests 8/8",
+      "note": "曾见 README §0.2 实例二；运行时重新标定为 3.4390244 / 0.0041 后两侧同源（1356.39 与 1356 的 0.03% 是舍入差）"
     }
   ]
 }
@@ -243,7 +246,7 @@
 
 - `baked` 只放运行时真的读的字段；
 - `derived` 是算出来的，**不手填**（`start_diameter_m` 必须与 `SizeModelMath` 的输出一致，否则 [`BallMotor/README.md`](../BallMotor/README.md)「交分」节那条「`start` 必须和体积映射同源」就破了）；
-- `known_divergences` 是**显式登记的分歧**，不是错误。它必须存在，因为把一个已知分歧藏起来比登记它危险得多（§6.5 与 §10）。
+- `known_divergences` 是**显式登记的分歧**，不是错误。把一个已知分歧藏起来，或在它消失后还留一条假分歧，都比登记危险得多，所以已消除的条目保留 `status: resolved` 与证据（重算值、测试）；其余仍然存在的分歧（例如离线模型仍是线性吸收口径，见 `OPEN_DECISIONS.md` (l)）照旧逐条登记。
 
 ### 3.3 谁在什么时候跑什么
 
@@ -461,7 +464,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 | 模型的 | 运行时的 | 为什么不能合并 |
 |---|---|---|
-| `absorb_size_ratio = 1.0`（球径 × 比例） | `maxItemSizeWorldM = 1f`（绝对米） | 这是 [`BallMotor/README.md`](../BallMotor/README.md) 缺口 3：相对门槛没移植。`OPEN_DECISIONS.md` (h) 已拍板吸收按球径相对判定、比例 1.0（PROVISIONAL），绝对上限只作安全上界——**但代码未改**（今天仍是 1 m 绝对门），所以这行仍是当前差异，不是历史遗留 |
+| `absorb_size_ratio = 1.0`（线性：pickup 尺寸 ≤ 球直径 × 1.0） | `absorbVolumeRatio = 10f` + `maxItemVolumeWorldM3 = 512f`（体积：AABB 体积 ≤ `min(512, (π/6)·D³/10)`） | 决定 (l) 把判定量从“最长边”换成“AABB 体积”，旧的 `maxItemSizeWorldM` / `absorbSizeRatio` 两个线性字段已删除，不是没移植。长度比与体积比量纲不同，不能当成同一个数互相换算；口径与测试见 `OPEN_DECISIONS.md` (l) 与 [`PickupAbsorb/README.md`](../PickupAbsorb/README.md) 1.1 节 |
 | `base_speed_mps = 3.0`（区域间走路速度） | `maxSpeedMps = 4f`（物理速度上限） | 模型用它算路程时间，运行时用它算速度上限。把它们当成同一个数，会同时改坏模型结论和手感 |
 | `units_to_max_diameter = 1356` | 体积标定 `0.0141 m³/单位` | §0.2 实例二：差 3.44 倍。**两边都标 PROVISIONAL，但没有任何一处说明它们必须一致** |
 
@@ -560,15 +563,13 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 **缓解**：`source_sha256` 让“这批字节来自哪里”可查；流程上规定“只在自己的真源变更后、且输入 owner 说完成时”重新生成；`--check` 红的时候，**先问是哪一侧变了**，不要顺手重烘。这条比任何代码都重要，因为它是流程问题被工具放大了。
 
-### 风险 3 —— “先把重复统一”其实是一次平衡改动，不是重构
+### 风险 3 —— 标定分歧已消除，现在的风险是把它改回去
 
-这是最容易被忽略的一条。步骤 5 的**承诺**是“行为不变”，它成立的前提是载荷烘的是**当前运行时的标定**（`0.0141 m³/单位`、cap 1.1 → 394.41 单位满径）。但同一份载荷里还写着模型侧的 `units_to_max_diameter = 1356`（§0.2 实例二）。一旦有人“顺手把它统一了”：
+这是最容易被忽略的一条，因为它的前提在 2026-11-15 变了。**曾经**：步骤 5 的承诺是“行为不变”，而运行时标定（`baselineVolumeUnits = 1` / `cubicMetersPerVolumeUnit = 0.0141` / cap 1.1）让 2.20 m 在 **394.41 确认单位**就到达，模型却按 **1356** 单位标定（§0.2 实例二），相差 3.44 倍；任何“顺手统一”都会把运行时满径从 394.41 改成 1356，并作废所有基于旧标定的到档时刻。**现在**：运行时已经为了对齐模型重新标定成 `3.4390244` / `0.0041`（起始体积仍是 0.0141 m³ ≈ 0.30 m 球），满径 **1356.4** 确认单位，两侧同源，**没有待做的平衡任务**（§10 未决 5 已关闭）。
 
-- 运行时满径从 **394.41 单位**变成 **1356 单位**，即难 **3.44 倍**；
-- 模型 §6 的结论（“2.20 m 结构性不可达，要改 `units_to_max_diameter` 或上限”）才第一次**适用于游戏**；
-- 而今天所有的到档时刻（12.8 s 到 0.55 m 等，`Gameplay/README.md` §4.3）全部作废。
+因此迁移仍是**只搬家**，但方向反转了：步骤 5 必须烘**当前**标定（`3.4390244` / `0.0041` / cap 1.1），不能按旧文档写回 `1` / `0.0141`——那会让满径再次在约 394 单位到达、成长快 3.44 倍，并让模型标定侧的到档时刻重新作废。
 
-**缓解**：迁移**只做搬家**（保留 394.41 的运行时标定），把“统一到 1356”登记成独立的平衡任务，由 T21/T39 的证据决定，并且必须重跑 `simulate.py` + 重新采样 `reports/`。`known_divergences`（§3.2）存在的意义就是把这件事写进产品数据里，让下一个人无法“顺手统一”。
+**缓解**：`known_divergences`（§3.2）保留 `status: resolved` 与重算证据作为回归钉子。重算：`3.4390244 × 0.0041 = 0.0141 m³`、`(π/6)·2.20³ = 5.57528 m³`、`5.57528 / 0.0041 − 3.4390244 = 1356.39`。证据：`KatamariBallMotor.cs` 的标定注释；EditMode 455 条 454 过（唯一红为 VRChat SDK 包内网络 URL 测试）；`AbsorbSizeGateTests` 8/8。改这两个字段时，`round_model.py` 的 `units_to_max_diameter` 必须同步复核，并重跑 `simulate.py` + 重新采样 `reports/`。
 
 ---
 
@@ -592,7 +593,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 | 2 | `bank.rules.*` 是否从 `layout.json` 搬进规则集（§5 步骤 1 的取舍） | 地图 owner + Lead |
 | 3 | 关卡 schema 是否加 `ruleset_sha256`（§4.3、§5 步骤 6） | GameModes owner |
 | 4 | `KatamariRules` 放在球 prefab 上还是独立 prefab（今天 motor 还没进任何场景，所以两者都可行） | Unity 操作者 |
-| 5 | 体积标定统一到哪一侧（§8 风险 3）：保留 394.41 还是改到 1356 | 用户 + T21/T39 证据 |
+| 5 | **已关闭（2026-11-15）**：体积标定曾要在 394.41 与 1356 之间选一侧（§8 风险 3）；运行时已重新标定为 `3.4390244` / `0.0041`，满径 **1356.4** 确认单位，与模型同源 | 已关闭（Lead 记录） |
 | 6 | 本文件的 Docs 索引登记位置 | Lead |
 
 ---

@@ -229,10 +229,10 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 | `maxSpeedMps` / `accelerationMps2` / `brakingMps2` | 4 / 5 / 8 | `Docs/Design/BallMotion/README.md` DRAFT 占位 |
 | `frictionPerSecond` / `turnRateDegreesPerSecond` / `maxLateralMps` | 1.2 / 110 / 1.2 | 同上 |
 | `growthSpeedFactor` / `growthTurnFactor` | 0.25 / 0.35 | 仅 `BallMotionTests` 里出现过，属测试值，不是产品值 |
-| `baselineVolumeUnits` / `cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` | 1 / 0.0141 / 1.1 | 只为让 0.30–2.20 m 档在 1 单位基线下成立，未测量 |
+| `baselineVolumeUnits` / `cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` | 3.4390244 / 0.0041 / 1.1 | 2026-11-15 为对齐 `round_model.py` 重新标定过：起始体积 `3.4390244 × 0.0041 = 0.0141 m³`（0.29974 m），满径 2.20 m 需约 1356.4 确认单位；未测量 |
 | `eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeUpMinMeters` / `eyeUpMaxMeters` | 0.55 m / 2.4 / 0.1 m / 8 m | **PROVISIONAL，2026-11-15 定稿语义**：眼点 = 球心 +（常量 + 半径×系数），上下限是离球心的护栏；见下「跟随架」 |
 | `eyeBaseBackMeters` / `eyeBackPerRadius` / `eyeMaxBackM` | 0.75 m / 2.2 / 8 m | 同上：球心后方（常量 + 半径×系数），上限是护栏 |
-| `maxItemSizeWorldM` / `absorbSizeRatio` / `contactRadiusWorldM` | 8 / 1 / 0 | 安全上界 / PROVISIONAL（决定 (h)）/ 决定 (i)；见缺口 3 |
+| `maxItemVolumeWorldM3` / `absorbVolumeRatio` / `contactRadiusWorldM` | 512 / 10 / 0 | 体积门（决定 (l)）：上限 = `min(512, 球体积/10)`；旧的 `maxItemSizeWorldM` / `absorbSizeRatio` 已删除。`contactRadiusWorldM = 0` 是决定 (i) |
 | `maxLiftPerStep` / `maxDropPerStep` / `separationEpsilon` / `maxRollDisplacementM` | 0.1 / 0.1 / 0.001 / 0.5 | 本层临时，非实测容差 |
 | `stuckTimeoutSeconds` | 1.5 | 本层临时恢复策略 |
 

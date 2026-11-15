@@ -11,7 +11,7 @@
 |---|---|
 | `PhysicsTestCell.cs` | 一格：本格的 `LevelArenaHost`、起点、激活矩形、`nominal_m`、`approach_m`、驱动时间线、判据并行数组。字段**全部**由判据导入器烘进去，不手填 |
 | `PhysicsTestFieldDriver.cs` | 唯一的驱动器：切格 → 设球径 → 静置 → 按时间线驱动 → 判据 → 一行一判据的日志。`BeginCell` / `BeginCellAtDiameter` / `BeginFromIndex` / `BeginAll` / `Abort` |
-| `LabBallSizeSetter.cs` | 用现有 `SubmitCandidate` 喂整数体积单位，把球的直径闭环到目标径；斜率是**测出来的**，不是 0.0043、也不是硬编码 0.0041 |
+| `LabBallSizeSetter.cs` | 用现有 `SubmitCandidate` 喂整数体积单位，把球的直径闭环到目标径；斜率/量子是**解析的**（`D³/total` 与 `D/(3·total)`），不是 0.0043、不是硬编码 0.0041，也不是「喂一次再测」 |
 
 编辑器侧（不在本目录）：`Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs`（菜单
 `VRC Katamari/Level/Import Physics Test Field Criteria`）读
@@ -26,8 +26,10 @@
 2. **切格 = 开本格 → `Reapply()`。** `ClearObstacles` 会把上一个 arena 的地面与 4 面墙一起清掉，因此每格
    的 placement 都自带它们（设计 §3.4），而不是共享一份 base。
 3. **球径只能长大。** 回 0.30 是 `TryResetForNewRound`（驱动负责，它知道格起点）；设定器只负责喂体积。
-   一个体积单位 = 0.0041 m³，所以直径的分辨率在 D=0.60 时约 7 mm、0.30 时约 58 mm——「±2 mm」在 1.10 以下
-   做不到，判据用 `diameter_error_quanta ≤ 1` 表达这件事（设计 §8.3）。
+   一个体积单位 = 0.0041 m³，所以直径的分辨率在 D=0.60 时约 7.25 mm、0.30 时约 29 mm——「±2 mm」在 1.10 以下
+   做不到，判据用 `diameter_error_quanta ≤ 1` 表达这件事（设计 §8.3）。量子由 `D/(3·(baseline + confirmed))`
+   解析给出，**0.30 档也有**；`baselineVolumeUnits` 由判据导入器从场景 motor 烘进 `sizeModelBaselineVolumeUnits`
+   （电机没有这个 getter），所以**改了电机的定价字段要重新导入判据**，否则 `size_accuracy` 报 `reason=sizeModelMissing`。
 
 ## 怎么跑（操作员）
 

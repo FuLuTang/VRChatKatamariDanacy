@@ -7,7 +7,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// <summary>
     /// Sets a running ball to a target diameter through the existing pickup seam: feed whole
     /// volume units with <see cref="KatamariBallMotor.SubmitCandidate"/>, read the diameter back,
-    /// and use the measured slope to compute the next feed. No runtime code changes.
+    /// and use the analytic size-model slope to compute the next feed. No runtime code changes.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -16,18 +16,37 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// motor's own pickup stage, which is why nothing in <c>Runtime/</c> changes.
     /// </para>
     /// <para>
-    /// <b>The slope is measured, not hard-coded.</b> <c>D^3</c> is linear in the confirmed volume
-    /// units (<c>cubicMetersPerVolumeUnit</c> and <c>baselineVolumeUnits</c> are private, and a
-    /// hard-coded 0.0041 would go stale the day the pricing changes), so one probe feed gives
-    /// <c>slope = d(D^3)/d(units)</c> and the next feeds are exact:
-    /// <c>units = (target^3 - D^3) / slope</c>.
+    /// <b>The slope is analytic, not measured and not hard-coded.</b> The core radius is
+    /// <c>cbrt(3 * cubicMetersPerVolumeUnit * (baseline + confirmed) / 4pi)</c> and the semantic
+    /// diameter is proportional to the core radius, so <c>D^3</c> is exactly linear in the TOTAL
+    /// volume units. That makes <c>slope = d(D^3)/d(unit) = D^3 / (baseline + confirmed)</c> at the
+    /// current size, so the feeds are exact: <c>units = (target^3 - D^3) / slope</c>. Both
+    /// <c>cubicMetersPerVolumeUnit</c> and the semantic/core ratio cancel out of that expression,
+    /// which is why the formula needs exactly one motor number - <c>baselineVolumeUnits</c> - and
+    /// not the pricing constant. That number has no getter, so the criteria importer mirrors it
+    /// from the scene motor into <see cref="sizeModelBaselineVolumeUnits"/>.
+    /// </para>
+    /// <para>
+    /// <b>Why not a measured slope (the previous design).</b> Measuring <c>d(D^3)/dV</c> needs two
+    /// settled samples with different volume, i.e. it needs at least one feed. At the 0.30 tier the
+    /// ball is already at the target after the round reset, so <see cref="Feed"/> converged on the
+    /// first frame, never fed, and the measured slope - and therefore the quantum the criterion
+    /// divides by - stayed zero. The quantum is a property of the size model, not of a run, so it
+    /// is derived, and there is exactly one derivation.
     /// </para>
     /// <para>
     /// <b>The resolution floor is one volume unit, and it is a real limit.</b> One unit is
-    /// <c>0.0041 m^3</c>, so the diameter grid is ~7 mm at D = 0.60 and ~0.5 mm at D = 2.20.
-    /// "Within 2 mm" is therefore NOT reachable at the small presets - the loop stops when the
-    /// next whole unit would move the diameter further away, and reports the error in quanta
-    /// (<see cref="GetLastErrorM"/> / <see cref="GetQuantumM"/>) so the criterion can be honest.
+    /// <c>0.0041 m^3</c>, so the diameter grid is ~29 mm at D = 0.30, ~7.3 mm at 0.60, ~2.2 mm at
+    /// 1.10 and ~0.54 mm at 2.20. "Within 2 mm" is therefore NOT reachable at the small presets -
+    /// the loop stops when the next whole unit would move the diameter further away, and reports
+    /// the error in quanta (<see cref="GetLastErrorM"/> / <see cref="GetQuantumM"/>) so the
+    /// criterion can be honest.
+    /// </para>
+    /// <para>
+    /// <b>If the size model was not baked</b> (the importer had no motor link to read), the quantum
+    /// reads 0 and a request beyond the current size fails with <c>noSizeModel</c> instead of
+    /// crawling one unit at a time: the driver then reports the size stage as blocked and
+    /// <c>size_accuracy</c> as unavailable-with-a-reason, never as a pass.
     /// </para>
     /// <para>
     /// <b>One candidate in flight.</b> The candidate queue holds four entries and a fifth submit
@@ -60,6 +79,13 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private float[] presetDiametersM;
         [SerializeField] private string[] presetLabels;
 
+        [Header("Size model (filled by the criteria importer from the scene motor)")]
+        [Tooltip("KatamariBallMotor.baselineVolumeUnits, in volume units. The analytic quantum " +
+                 "needs this one number: D^3 is linear in (baseline + confirmed) and the pricing " +
+                 "constant cancels. 0 = not baked, so the quantum reads 0 and the driver reports " +
+                 "the metric as unavailable instead of guessing.")]
+        [SerializeField] private float sizeModelBaselineVolumeUnits;
+
         [Header("Feeder candidate")]
         [Tooltip("Kind the motor's whitelist must contain, or the absorb gate refuses the feed.")]
         [SerializeField] private string feederKind = "lab-feeder";
@@ -81,15 +107,10 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private float nextFeedTime;
         private string lastFailure = "";
 
-        // ---- measured slope ----
-        private bool hasSample;
-        private float lastVolumeUnits;
-        private float lastCubedDiameter;
+        // ---- analytic size model ----
         private float slopeCubedPerUnit;
         private float lastErrorM;
         private float lastQuantumM;
-
-        private const float MinimumSlope = 1e-9f;
 
         public void Update()
         {
@@ -117,9 +138,6 @@ namespace VRCKatamari.Labs.PhysicsTestField
             lastErrorM = 0f;
             lastQuantumM = 0f;
             nextFeedTime = 0f;
-            // The slope belongs to the motor's pricing, not to one request, so it survives across
-            // requests. The sample pair must not: the round reset moves the ball without a commit.
-            hasSample = false;
         }
 
         /// <summary>HUD button target: 0..presetDiametersM.Length-1.</summary>
@@ -200,14 +218,15 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
         /// <summary>
         /// One volume unit expressed as a diameter change at the last measurement, metres.
-        /// Zero until the slope has been measured.
+        /// Derived from the size model, so it is available before the first feed. Zero when the
+        /// model was not baked.
         /// </summary>
         public float GetQuantumM()
         {
             return lastQuantumM;
         }
 
-        /// <summary>d(D^3)/d(volume unit) as measured this request; 0 before the first probe.</summary>
+        /// <summary>d(D^3)/d(volume unit) at the current size; 0 when the model was not baked.</summary>
         public float GetCubedSlope()
         {
             return slopeCubedPerUnit;
@@ -215,7 +234,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
         public bool IsCalibrated()
         {
-            return slopeCubedPerUnit > MinimumSlope;
+            return sizeModelBaselineVolumeUnits > 0f;
         }
 
         // ---- the loop ----------------------------------------------------------
@@ -232,29 +251,30 @@ namespace VRCKatamari.Labs.PhysicsTestField
             float volumeUnits = motor.GetConfirmedVolumeUnits();
             float diameter = motor.GetSemanticDiameterWorldM();
             float cubed = diameter * diameter * diameter;
+            float totalUnits = sizeModelBaselineVolumeUnits + volumeUnits;
 
-            // Measure the slope from consecutive settled samples (the probe is one of them).
-            if (hasSample && volumeUnits > lastVolumeUnits && cubed > lastCubedDiameter)
+            // The mapping is exact, so the slope is derived rather than measured: D^3 is linear
+            // in the TOTAL volume units (core radius = cbrt(3 * cubic * total / 4pi), semantic
+            // diameter proportional to core), so C = D^3 / total is d(D^3)/d(unit) at this size
+            // and one unit moves the diameter by C / (3 D^2) = D / (3 total). The pricing
+            // constant and the semantic/core ratio both cancel, so the baseline (the one number
+            // with no getter, mirrored by the criteria importer) is all the model needs.
+            float quantum = 0f;
+            if (sizeModelBaselineVolumeUnits > 0f && totalUnits > 0f && cubed > 0f && diameter > 0f)
             {
-                float measured = (cubed - lastCubedDiameter) / (volumeUnits - lastVolumeUnits);
-                if (measured > MinimumSlope) slopeCubedPerUnit = measured;
+                slopeCubedPerUnit = cubed / totalUnits;
+                quantum = diameter / (3f * totalUnits);
+            }
+            else
+            {
+                slopeCubedPerUnit = 0f;
             }
 
-            hasSample = true;
-            lastVolumeUnits = volumeUnits;
-            lastCubedDiameter = cubed;
+            lastQuantumM = quantum;
 
             float error = diameter - targetM;
             lastErrorM = error;
             if (error < 0f) error = -error;
-
-            float quantum = 0f;
-            if (slopeCubedPerUnit > MinimumSlope && cubed > 0f && diameter > 0f)
-            {
-                // dD = d(D^3) / (3 D^2), and 3 D^2 == 3 * cubed / D, so no root is needed.
-                quantum = slopeCubedPerUnit * diameter / (3f * cubed);
-            }
-            lastQuantumM = quantum;
 
             float allowed = toleranceM;
             if (quantum > allowed) allowed = quantum;
@@ -273,6 +293,14 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return;
             }
 
+            if (slopeCubedPerUnit <= 0f)
+            {
+                // No size model: a one-unit-at-a-time crawl would spend the whole absorb budget
+                // and still miss the target, so name the missing input instead of trying.
+                Fail("noSizeModel");
+                return;
+            }
+
             if (absorbsThisRequest >= maxAbsorbsPerRequest)
             {
                 Fail("capExceeded");
@@ -282,34 +310,30 @@ namespace VRCKatamari.Labs.PhysicsTestField
             if (Time.time < nextFeedTime) return;
 
             float targetCubed = targetM * targetM * targetM;
-            int units = 1;
-            if (slopeCubedPerUnit > MinimumSlope)
+            float remaining = targetCubed - cubed;
+            float wanted = remaining / slopeCubedPerUnit;
+            int units = (int)(wanted + 0.5f);
+            if (units < 1)
             {
-                float remaining = targetCubed - cubed;
-                float wanted = remaining / slopeCubedPerUnit;
-                units = (int)(wanted + 0.5f);
-                if (units < 1)
-                {
-                    // The next whole unit lands further from the target than the current size:
-                    // this is the resolution floor, not a failure.
-                    converged = true;
-                    lastFailure = "";
-                    return;
-                }
+                // The next whole unit lands further from the target than the current size:
+                // this is the resolution floor, not a failure.
+                converged = true;
+                lastFailure = "";
+                return;
+            }
 
-                // Refuse a feed that would move away from the target even though it is "one
-                // unit": cbrt is compared in the cube domain to avoid a root.
-                float afterCubed = cubed + (float)units * slopeCubedPerUnit;
-                float beforeGap = targetCubed - cubed;
-                float afterGap = targetCubed - afterCubed;
-                if (beforeGap < 0f) beforeGap = -beforeGap;
-                if (afterGap < 0f) afterGap = -afterGap;
-                if (afterGap >= beforeGap)
-                {
-                    converged = true;
-                    lastFailure = "";
-                    return;
-                }
+            // Refuse a feed that would move away from the target even though it is "one
+            // unit": cbrt is compared in the cube domain to avoid a root.
+            float afterCubed = cubed + (float)units * slopeCubedPerUnit;
+            float beforeGap = targetCubed - cubed;
+            float afterGap = targetCubed - afterCubed;
+            if (beforeGap < 0f) beforeGap = -beforeGap;
+            if (afterGap < 0f) afterGap = -afterGap;
+            if (afterGap >= beforeGap)
+            {
+                converged = true;
+                lastFailure = "";
+                return;
             }
 
             generationSequence = generationSequence + 1;

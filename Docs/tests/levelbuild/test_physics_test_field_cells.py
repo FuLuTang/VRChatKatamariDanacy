@@ -26,6 +26,7 @@ drift is here:
 """
 
 import json
+import math
 import re
 import sys
 import unittest
@@ -47,6 +48,8 @@ SETTER_CS = (ROOT / "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/PhysicsT
                     "LabBallSizeSetter.cs")
 CRITERIA_CS = (ROOT / "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/PhysicsTestField/"
                       "PhysicsTestFieldCriteriaImporter.cs")
+MOTOR_CS = (ROOT / "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/"
+                   "KatamariBallMotor.cs")
 
 OPS = ("abs<=", "<=", ">=", "==", "abs>=")
 GATES = (None, "P1", "P2", "P3")
@@ -428,6 +431,76 @@ class CellCriteria(unittest.TestCase):
         no_ramp = [check for check in c06["checks"] if check["id"] == "no_ramp_registered"][0]
         self.assertEqual(no_ramp["op"], "==")
         self.assertEqual(no_ramp["limit"], 0)
+
+
+class SizeAccuracyAndRampLimit(unittest.TestCase):
+    """The two defects the first 9-cell run at D=0.30 exposed (2026-11-15).
+
+    Neither is a data bug, so neither is checked through the criteria file: one is the
+    size setter's quantum (it used to be measured, and at 0.30 nothing is ever fed, so
+    it stayed 0 and the driver reported ``unknownMetric``), the other is the 45-degree
+    ramp/deck seam (the motor deadlocks there, at every diameter). These tests pin the
+    code shape and the numbers the design doc promises, because both are the kind of
+    thing that silently drifts back.
+    """
+
+    def test_the_quantum_is_analytic_and_has_one_implementation(self):
+        setter = SETTER_CS.read_text(encoding="utf-8")
+        importer = CRITERIA_CS.read_text(encoding="utf-8")
+        # The one input the motor has no getter for is mirrored by the criteria importer.
+        self.assertIn("sizeModelBaselineVolumeUnits", setter)
+        self.assertIn("sizeModelBaselineVolumeUnits", importer)
+        self.assertIn('FindProperty("baselineVolumeUnits")', importer)
+        self.assertIn("GetConfirmedVolumeUnits()", setter)
+        # ... and the old measured path must be gone, not kept as a second source.
+        for removed in ("lastCubedDiameter", "lastVolumeUnits", "hasSample"):
+            self.assertNotIn(removed, setter)
+
+    def test_the_size_accuracy_expectation_matches_the_analytic_quantum(self):
+        # quantum = D / (3 * (baseline + confirmed)); at the 0.30 tier the ball is at the
+        # baseline after the reset, so the driver's value is this error in quanta. The
+        # design doc's expected console line has to be that number, not 0.
+        motor = MOTOR_CS.read_text(encoding="utf-8")
+        baseline = float(re.search(r"baselineVolumeUnits = ([0-9.]+)f", motor).group(1))
+        cubic = float(re.search(r"cubicMetersPerVolumeUnit = ([0-9.]+)f", motor).group(1))
+        diameter = (6.0 * baseline * cubic / math.pi) ** (1.0 / 3.0)
+        quantum = diameter / (3.0 * baseline)
+        value = abs(diameter - 0.30) / quantum
+        # The driver prints with Fixed(): value * 10000 + 0.5 truncated.
+        printed = int(value * 10000.0 + 0.5) / 10000.0
+        self.assertAlmostEqual(printed, 0.0091, places=6)
+        doc = (ROOT / "Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md").read_text(encoding="utf-8")
+        self.assertIn("value=+0.0091 op=<=1.0000", doc)
+        # The old, wrong claim: one unit is 58 mm at D=0.30. It is 29.0 mm. (The doc may
+        # mention the old number as a correction, but must never present it as the value.)
+        self.assertNotIn("D=0.30 时 58 mm", doc)
+        self.assertIn("29.0 mm", doc)
+
+    def test_the_driver_separates_a_wrong_metric_name_from_an_unavailable_one(self):
+        driver = DRIVER_CS.read_text(encoding="utf-8")
+        self.assertIn("private int TryReadMetric(string metric, out float value)", driver)
+        self.assertIn("return MetricUnknown;", driver)
+        self.assertIn("return MetricSizeModelMissing;", driver)
+        self.assertIn("return MetricNoSetter;", driver)
+        self.assertIn('" reason=" + MetricReason(metricStatus)', driver)
+        # The ALERT must not print the old catch-all that made a missing sample look like a typo.
+        self.assertNotIn('error=unknownMetric', driver)
+
+    def test_the_c05_limit_is_documented_as_a_physics_finding(self):
+        # C05 (45 deg) fails `climbed` at every diameter. That is the motor's seam
+        # deadlock, not a timeline: the design doc carries the derivation and the angle
+        # limit (asin(0.6) = 36.87 deg), and the data stays untouched.
+        doc = (ROOT / "Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md").read_text(encoding="utf-8")
+        self.assertIn("### 4.1.3", doc)
+        self.assertIn("asin(0.6) = 36.87", doc)
+        self.assertIn("0.0878", doc)
+        field = load_field()
+        c05 = [cell for cell in field["cells"] if cell["id"] == "C05"][0]
+        climbed = [check for check in c05["checks"] if check["id"] == "climbed"][0]
+        # The criterion is NOT relaxed to paper over the limit.
+        self.assertEqual(climbed["limit"], 0.01)
+        self.assertIn("pass", climbed["expect"])
+        self.assertEqual(c05["drive"][-1]["t"], 2.5)
 
 
 class ArenaRules(unittest.TestCase):

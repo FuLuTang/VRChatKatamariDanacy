@@ -2151,7 +2151,8 @@
     "blocked_notes": [
       "readout=trace checks are read from the console by a human, so the driver reports them as BLOCKED_UNTIL_manual and counts them as skipped, never as failures",
       "readout=counter checks need the P4 step-cost counters and report BLOCKED_UNTIL_P4",
-      "gate=P2 checks are measured when a PickupFieldHost is wired with prop obstacles enabled (its SetSupportProps is the only path for prop tops; a disabled host clears both sets). P3 is in the tree since d31dc9b, so a gate=P3 check is MEASURED: the driver no longer reports BLOCKED_UNTIL_P3"
+      "gate=P2 checks are measured when a PickupFieldHost is wired with prop obstacles enabled (its SetSupportProps is the only path for prop tops; a disabled host clears both sets). P3 is in the tree since d31dc9b, so a gate=P3 check is MEASURED: the driver no longer reports BLOCKED_UNTIL_P3",
+      "a metric the driver cannot read now says WHY: reason=unknownMetric means the criterion names a metric with no driver branch (a data typo), while reason=noDeckSample/noLiftSample/noSetter/sizeModelMissing/quantumUnavailable means the metric is real but this run cannot answer it (design 8.3.2)"
     ]
   },
   "ball_size": {
@@ -2167,6 +2168,10 @@
     "mode": "closed_loop_volume_feed",
     "tolerance_m": 0.002,
     "max_absorbs_per_request": 6,
+    "quantum_formula": "D / (3 * (baselineVolumeUnits + confirmed)); d(D^3)/dV = D^3 / (baselineVolumeUnits + confirmed). The pricing constant (cubicMetersPerVolumeUnit) and the semantic/core ratio cancel, so the baseline is the only motor number the model needs",
+    "size_model_input": "sizeModelBaselineVolumeUnits, written by the criteria importer from the SCENE motor's serialized baselineVolumeUnits; the motor exposes no getter for it (nor for cubicMetersPerVolumeUnit / semanticDiameterPerCoreDiameter / maxCoreRadiusWorldM)",
+    "why_analytic": "the previous measured slope needed two settled samples with different volume, and at the 0.30 tier the ball is already at the target after the round reset: Feed converged on the first frame, never fed, the slope stayed 0, GetQuantumM() returned 0 and diameter_error_quanta was reported unknownMetric/skipped (2026-11-15 run of 5835517). The quantum is a property of the size model, not of one run",
+    "failures": ["cannotShrink", "noSizeModel", "capExceeded", "submitRefused"],
     "reset_primitive": "motor.TryResetForNewRound(newRoundId, startCenter, heading, out reason)",
     "feed_primitive": "motor.SubmitCandidate(true, feederKind, feederBounds, ballCenter, units, feederId, gen)",
     "why_no_runtime_change": "the diameter is a pure function of the confirmed volume, and SubmitCandidate already exists as the host-side seam, so the setter feeds integer volume units and reads the diameter back. Integer because the absorb gate refuses a fractional value (TryAbsorbValueToLedgerGain)",
@@ -2184,7 +2189,7 @@
     "writes": [
       "PhysicsTestCell: cellId, arena, startCenter, startHeadingDegrees, footprint, nominalM, approachM, rampClimb, rampFootM, rampProbe plane, check arrays, drive timeline",
       "PhysicsTestFieldDriver: cells[], presetDiametersM[], kindWhitelist",
-      "LabBallSizeSetter: presetDiametersM[], presetLabels[] (same diameters[], same file)"
+      "LabBallSizeSetter: presetDiametersM[], presetLabels[] (same diameters[], same file), and sizeModelBaselineVolumeUnits read from the scene motor's serialized baselineVolumeUnits"
     ],
     "rule": "the JSON is the only authoring copy; nothing here is typed twice"
   },

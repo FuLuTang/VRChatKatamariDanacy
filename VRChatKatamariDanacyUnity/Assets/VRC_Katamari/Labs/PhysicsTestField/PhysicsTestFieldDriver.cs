@@ -96,6 +96,18 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private float driveEndSeconds;
         private float nextTrajectoryTime;
 
+        // Why a metric could not be read. 0 is "read it"; every other code names a REAL metric
+        // this run cannot answer, and only MetricUnknown means the NAME is wrong. The driver
+        // reports the code's name in the ALERT so a setup gap never looks like a data typo
+        // (design section 8.3.2).
+        private const int MetricOk = 0;
+        private const int MetricUnknown = 1;
+        private const int MetricNoDeckSample = 2;
+        private const int MetricNoLiftSample = 3;
+        private const int MetricNoSetter = 4;
+        private const int MetricSizeModelMissing = 5;
+        private const int MetricQuantumUnavailable = 6;
+
         private bool pendingBegin;
         private int pendingCellIndex;
         private int pendingDiameterIndex;
@@ -913,11 +925,19 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 }
 
                 float value = 0f;
-                bool known = TryReadMetric(metric, out value);
-                if (!known)
+                int metricStatus = TryReadMetric(metric, out value);
+                if (metricStatus != MetricOk)
                 {
-                    Debug.Log("[ptf] ALERT check=" + checkId + " metric=" + metric
-                        + " error=unknownMetric verdict=SKIPPED");
+                    // Two different things, and the ALERT has to say which: "the driver has no
+                    // branch for this name" (reason=unknownMetric, a data typo) versus "the name
+                    // is real but this run cannot answer it yet" (reason names the missing
+                    // sample, link or baked model). The first is a defect in the criteria file,
+                    // the second is a setup gap, and collapsing them into one token made the
+                    // 0.30 size_accuracy skip look like a typo.
+                    Debug.Log("[ptf] ALERT cell=" + cell.GetCellId()
+                        + " D=" + Fixed(presetDiametersM[diameterIndex], 3)
+                        + " check=" + checkId + " metric=" + metric
+                        + " reason=" + MetricReason(metricStatus) + " value=n/a verdict=SKIPPED");
                     checkSkipped = checkSkipped + 1;
                     continue;
                 }
@@ -960,11 +980,16 @@ namespace VRCKatamari.Labs.PhysicsTestField
             Debug.Log(lastSummaryLine);
         }
 
-        /// <summary>Reads one metric from the motor. False = this build has no such reading.</summary>
-        private bool TryReadMetric(string metric, out float value)
+        /// <summary>
+        /// Reads one metric from the motor. Returns <see cref="MetricOk"/> or the reason it could
+        /// not: <see cref="MetricUnknown"/> means the criterion names a metric the driver has no
+        /// branch for (a criteria-file typo); every other code means the metric is real but this
+        /// run cannot answer it yet.
+        /// </summary>
+        private int TryReadMetric(string metric, out float value)
         {
             value = 0f;
-            if (metric == null) return false;
+            if (metric == null) return MetricUnknown;
 
             float radius = motor.GetCollisionRadiusWorldM();
             Vector3 center = motor.GetCenterWorld();
@@ -972,7 +997,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
             if (Same(metric, "support_gap_m"))
             {
                 value = (center.y - radius) - motor.GetSupportSurfaceHeightWorldM();
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "support_kind"))
@@ -981,41 +1006,49 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 // 3 support prop top. A prop top has surface id 100+i, so a check on the
                 // kind must read this getter rather than test the id's sign.
                 value = (float)motor.GetSupportKind();
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "support_prop_count"))
             {
                 // Prop tops the motor actually holds (0..6), not the host's candidate count.
                 value = (float)motor.GetSupportPropCount();
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "deck_gap_m"))
             {
-                if (!hasDeckSample) return false;
+                if (!hasDeckSample)
+                {
+                    return MetricNoDeckSample;
+                }
+
                 value = minDeckGap;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "lift_over_nominal_m"))
             {
-                if (!hasLiftSample) return false;
+                if (!hasLiftSample)
+                {
+                    return MetricNoLiftSample;
+                }
+
                 value = maxLiftOverNominal;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "progress_m"))
             {
                 value = ProgressMeters();
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "blocked_gap_m"))
             {
                 PhysicsTestCell cell = cells[cellIndex];
                 value = cell.GetApproachM() - ProgressMeters() - radius;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "speed_ratio"))
@@ -1023,17 +1056,17 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 if (peakSpeedEarly <= 0.0001f)
                 {
                     value = 0f;
-                    return true;
+                    return MetricOk;
                 }
 
                 value = peakSpeedLate / peakSpeedEarly;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "blocking_max"))
             {
                 value = (float)maxBlocking;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "saturated_delta"))
@@ -1042,23 +1075,23 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 if (now && !baseSaturated)
                 {
                     value = 1f;
-                    return true;
+                    return MetricOk;
                 }
 
                 value = 0f;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "overflow_delta"))
             {
                 value = (float)(motor.GetOverflowCount() - baseOverflow);
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "absorbed_delta"))
             {
                 value = (float)(motor.GetAbsorbedCount() - baseAbsorbed);
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "attached_delta"))
@@ -1066,106 +1099,126 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 int attached = 0;
                 if (pickupHost != null) attached = pickupHost.GetAttachedCount();
                 value = (float)(attached - baseAttached);
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "diameter_error_m"))
             {
                 value = motor.GetSemanticDiameterWorldM() - presetDiametersM[diameterIndex];
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "diameter_error_quanta"))
             {
-                if (ballSize == null) return false;
+                if (ballSize == null)
+                {
+                    return MetricNoSetter;
+                }
+
+                // The quantum is a property of the motor's size model, and the setter derives it
+                // analytically from the baseline the criteria importer mirrored onto it. Zero
+                // means that mirror is missing (or the model is degenerate), not that this run
+                // was too short - so the ALERT names the missing input instead of pretending
+                // the metric does not exist.
+                if (!ballSize.IsCalibrated())
+                {
+                    return MetricSizeModelMissing;
+                }
+
                 float quantum = ballSize.GetQuantumM();
-                if (quantum <= 0.0000001f) return false;
+                if (quantum <= 0.0000001f)
+                {
+                    return MetricQuantumUnavailable;
+                }
+
                 float error = motor.GetSemanticDiameterWorldM() - presetDiametersM[diameterIndex];
                 if (error < 0f) error = -error;
                 value = error / quantum;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "max_center_y_m"))
             {
                 value = maxCenterY;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "grounded_frame_dy_m"))
             {
                 value = maxGroundedFrameDy;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "ramp_support_seen"))
             {
                 value = (float)sawRampSupport;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "ramp_entry_progress_m"))
             {
                 PhysicsTestCell cell = cells[cellIndex];
                 value = ProgressMeters() - cell.GetRampFootM();
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "slip_back_m"))
             {
                 value = slipBack;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "landing_gap_m"))
             {
                 value = Mathf.Abs(center.y - radius);
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "fall_frames"))
             {
                 value = (float)fallFrameCount;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "max_bottom_rise_m"))
             {
                 value = maxCenterY - radius;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "ramp_count"))
             {
                 value = (float)rampCountAtSwitch;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "ramp_refusal_reason_len"))
             {
                 value = (float)rampProbeReasonLength;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "ramp_refusal_slope_deg"))
             {
                 value = rampProbeSlopeDegrees;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "frame_dy_m"))
             {
                 value = maxFrameDy;
-                return true;
+                return MetricOk;
             }
 
             if (Same(metric, "stuck_seconds"))
             {
                 value = motor.GetStuckSeconds();
-                return true;
+                return MetricOk;
             }
 
-            return false;
+            // No branch matched: this is the NAME being wrong, not this run being unable to
+            // answer. Every "cannot answer" branch above returned its own code.
+            return MetricUnknown;
         }
 
         /// <summary>
@@ -1213,6 +1266,26 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 case 3: return "==";
                 case 4: return "abs>=";
                 default: return "?";
+            }
+        }
+
+        /// <summary>
+        /// Name of a <c>TryReadMetric</c> status, for the ALERT line.
+        /// The vocabulary is design section 8.3.2: one code per missed sample / link / baked input,
+        /// so "the criteria file names a metric that does not exist" stays distinguishable from
+        /// "the metric exists but this run cannot answer it".
+        /// </summary>
+        private string MetricReason(int status)
+        {
+            switch (status)
+            {
+                case MetricUnknown: return "unknownMetric";
+                case MetricNoDeckSample: return "noDeckSample";
+                case MetricNoLiftSample: return "noLiftSample";
+                case MetricNoSetter: return "noSetter";
+                case MetricSizeModelMissing: return "sizeModelMissing";
+                case MetricQuantumUnavailable: return "quantumUnavailable";
+                default: return "unavailable";
             }
         }
 

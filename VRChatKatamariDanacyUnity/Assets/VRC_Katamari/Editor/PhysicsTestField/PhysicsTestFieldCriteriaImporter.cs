@@ -7,6 +7,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using VRCKatamari.BallLayers;
+using VRCKatamari.BallMotor;
 using VRCKatamari.Labs.PhysicsTestField;
 using VRCKatamari.Story;
 using UdonSharp;
@@ -310,6 +311,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
             if (setter != null)
             {
                 report.DriverFields += WriteBallSize(setter, doc, report);
+                report.DriverFields += WriteSizeModel(setter, driver, report);
             }
             else if (written.Count > 0)
             {
@@ -530,6 +532,64 @@ namespace VRCKatamari.Editor.PhysicsTestField
             }
 
             return written;
+        }
+
+        /// <summary>
+        /// Mirrors the one motor number the setter's analytic diameter quantum needs.
+        /// </summary>
+        /// <remarks>
+        /// The quantum is <c>D / (3 * (baseline + confirmed))</c>: <c>D^3</c> is linear in the total
+        /// volume units, so the pricing constant and the semantic/core ratio cancel and
+        /// <c>baselineVolumeUnits</c> is the only input left. The motor has no getter for it, so it
+        /// is read from the SCENE motor's serialized field here - not typed as a literal - which
+        /// keeps one copy and makes "change the motor, re-import" the whole maintenance story. When
+        /// the driver has no motor link, the setter is left at 0 and the driver reports
+        /// <c>size_accuracy</c> as unavailable with <c>reason=sizeModelMissing</c> instead of
+        /// dividing by a guess.
+        /// </remarks>
+        private static int WriteSizeModel(LabBallSizeSetter setter, PhysicsTestFieldDriver driver,
+            Report report)
+        {
+            // The driver and the setter both link the motor; either is a fine source, and the
+            // driver's is preferred because that is the one the run reads.
+            KatamariBallMotor motor = ReadMotorLink(driver);
+            if (motor == null) motor = ReadMotorLink(setter);
+            if (motor == null)
+            {
+                report.Note("neither the driver nor the size console links a motor: the size model " +
+                            "was not baked, so size_accuracy reports reason=sizeModelMissing");
+                return 0;
+            }
+
+            SerializedProperty baseline = new SerializedObject(motor).FindProperty("baselineVolumeUnits");
+            if (baseline == null || baseline.floatValue <= 0f)
+            {
+                report.Note("cannot read a positive baselineVolumeUnits from '" + motor.name +
+                            "': the size model was not baked, so size_accuracy reports " +
+                            "reason=sizeModelMissing");
+                return 0;
+            }
+
+            var serialized = new SerializedObject(setter);
+            SerializedProperty target = RequireProperty(serialized, "sizeModelBaselineVolumeUnits",
+                report);
+            if (target == null) return 0;
+            target.floatValue = baseline.floatValue;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(setter);
+            report.Note("size model: baselineVolumeUnits=" + baseline.floatValue.ToString("0.####") +
+                        " read from the scene motor; re-import after changing the motor's size " +
+                        "fields (baselineVolumeUnits / cubicMetersPerVolumeUnit)");
+            return 1;
+        }
+
+        /// <summary>The component's serialized <c>motor</c> link, or null when it has none.</summary>
+        private static KatamariBallMotor ReadMotorLink(Object component)
+        {
+            if (component == null) return null;
+            SerializedProperty property = new SerializedObject(component).FindProperty("motor");
+            if (property == null) return null;
+            return property.objectReferenceValue as KatamariBallMotor;
         }
 
         private static bool CopyProxies(List<PhysicsTestCell> cells, PhysicsTestFieldDriver driver,

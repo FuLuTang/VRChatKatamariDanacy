@@ -90,10 +90,15 @@ namespace VRCKatamari.Tests
         [Test]
         public void TheWallIsTheContactTheDrivePushesIntoMost()
         {
+            // Normals point from the solid towards the ball centre (design section 9.1), so a
+            // wall the drive pushes INTO has n = -drive: driving -z meets the wall whose
+            // normal is +z, driving +x meets the wall whose normal is -x. Written the other
+            // way round every push-in is zero and the model's tie-break returns index 0
+            // (verified against contact_v2._climb_contact: pushes [0, 0] for both drives).
             Vector3[] normals =
             {
-                new Vector3(0f, 0f, -1f),   // wall straight ahead
-                new Vector3(1f, 0f, 0f),    // wall to the side
+                new Vector3(0f, 0f, 1f),    // wall ahead when driving -z
+                new Vector3(-1f, 0f, 0f),   // wall ahead when driving +x
                 new Vector3(0f, 1f, 0f)     // floor
             };
             int[] classes =

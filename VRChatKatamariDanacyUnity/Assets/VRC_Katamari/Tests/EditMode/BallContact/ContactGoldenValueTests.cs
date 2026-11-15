@@ -227,9 +227,16 @@ namespace VRCKatamari.Tests
                 Assert.IsTrue(smallBall.Step(slope50, new Vector3(0f, 0f, 1f), 4f, 0.02f, 5f));
                 if (smallBall.Center.y > smallHighest) smallHighest = smallBall.Center.y;
             }
-            // Python: highest y = 0.448744607, final y = 0.157237968, climb locked.
+            // Python: highest y = 0.448744607, climb locked. At step 250 the settled centre
+            // is NOT an equilibrium: it is a slide/settle limit cycle (y alternates
+            // 0.15298 .. 0.15724 with v_y 0 / -0.392), and a 1e-6 change of the start moves
+            // the step-250 y by 6.5e-4 (650x amplification), a 1e-9 change by 9.8e-4. The
+            // model's own case therefore asserts a band (rise < 0.05 m), not this value; the
+            // float run's 0.15571 lies inside the model's cycle band, which is the real
+            // cross-check.
             Assert.AreEqual(0.448744607f, smallHighest, TrajectoryTolerance);
-            Assert.AreEqual(0.157237968f, smallBall.Center.y, IntegratorTolerance);
+            Assert.Less(smallBall.Center.y - 0.15f, 0.05f);  // slid back down (model's claim)
+            Assert.Less(smallBall.Center.z, 7f);             // back outside the foot at z = 7
             Assert.IsTrue(smallBall.ClimbLocked);
 
             ContactWorld lowWall = ContactScenes.LowWallWorld();

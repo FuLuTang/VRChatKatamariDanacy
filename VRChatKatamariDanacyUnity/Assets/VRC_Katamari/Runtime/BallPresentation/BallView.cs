@@ -29,9 +29,11 @@ namespace VRCKatamari.BallPresentation
     /// matter here.
     /// </para>
     /// <para>
-    /// Assembly: needs its own GameObject (two UdonSharpBehaviours on one object
-    /// means UdonSharp silently disables one of them), and <c>coreMesh</c> must be a
-    /// child of <c>BallVisualRollRoot</c> whose own scale nothing else writes.
+    /// Assembly: sits on its own GameObject by project convention, for clear ownership
+    /// and a readable one-line self-check. Sharing a GameObject with another
+    /// UdonSharpBehaviour is legal; the real hard constraint there is the sync mode
+    /// (co-located behaviours fall back to the strictest one). <c>coreMesh</c> must be
+    /// a child of <c>BallVisualRollRoot</c> whose own scale nothing else writes.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]

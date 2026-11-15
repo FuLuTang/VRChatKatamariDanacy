@@ -26,7 +26,7 @@
 ## 这个场景教过的两件事
 
 1. **`RejectNoGain`**：价值 < 1 单位的道具以前会「闸门接受 → claim → `commitRow=-1` → 静默消失」。现在它会以 `noGain` 出现在每秒的 `reject` 里。看到 `noGain` 就是**场景数据错了**（`valueUnits` 没写进去或 <1），不是判定错。
-2. **装配约束**：motor 与其它 UdonSharpBehaviour 同挂一个对象时，UdonSharp 会静默禁用其中一个，表现为「球很小、什么都吃不到」。`BallPlaygroundBootstrap.Start()` 有启动自检专门喊这一条。
+2. **装配约束（项目惯例，不是引擎限制）**：motor 独占一个 GameObject，理由是职责边界清楚、自检可读；同挂是**合法**的（官方 FAQ 答 "Yes."），真正同物体的硬约束是同步模式 —— 见 `Docs/Design/BallMotor/README.md` 的装配约束。这里以前写成「同挂会让其中一个跑不起来」，2026-11-15 撤回。`BallPlaygroundBootstrap.Start()` 的自检是用来抓「组件在、却什么都不跑」，跟同挂无关。
 
 ## 前置条件
 

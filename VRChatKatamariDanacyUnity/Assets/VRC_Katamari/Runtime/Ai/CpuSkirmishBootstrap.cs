@@ -10,9 +10,11 @@ namespace VRCKatamari.Ai
     /// </summary>
     /// <remarks>
     /// Each ball owns its own <see cref="KatamariBallMotor"/> on its own MotorHost
-    /// object (the assembly constraint in Docs/Design/BallMotor/README.md: a motor
-    /// must never share a GameObject with another UdonSharpBehaviour, or UdonSharp
-    /// silently disables it). This host only opens each round and reports what each
+    /// object. That one-GameObject-per-motor rule is a project convention for clear
+    /// ownership and a readable self-check, not an engine limit (see the assembly
+    /// constraints in Docs/Design/BallMotor/README.md): sharing a GameObject with
+    /// another UdonSharpBehaviour is legal, and the real hard constraint is the sync
+    /// mode. This host only opens each round and reports what each
     /// ball's public getters say, once per second; it never drives or resizes a ball.
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]

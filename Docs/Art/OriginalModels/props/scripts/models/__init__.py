@@ -20,6 +20,19 @@ ORDER = [
     'pear',
     'banana',
     'watermelon',
+    # tableware / container set, real-world sizes (2026-11-15 plan).
+    # The plan asked for a baguette, but prop_catalog.csv has no baguette row
+    # (its bread entry is bread_slice, and the CSV note records that the whole
+    # loaf was dropped); croissant is the catalog's whole baked good with a
+    # real three-axis size, so it fills that slot.
+    'cup',
+    'soda_can',
+    'juice_carton',
+    'glass_bottle',
+    'plate',
+    'bowl',
+    'thermos',
+    'croissant',
 ]
 
 

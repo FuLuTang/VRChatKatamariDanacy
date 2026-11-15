@@ -1,0 +1,118 @@
+{
+  "id": "thermos",
+  "pivot": "center",
+  "target_longest_m": 0.3,
+  "dimensions_m": {
+    "x": 0.12124750763177872,
+    "y": 0.10582362115383148,
+    "z": 0.29999998211860657,
+    "longest": 0.29999998211860657
+  },
+  "bounds_m": {
+    "min": [
+      -0.06062375381588936,
+      -0.05291181057691574,
+      -0.14999999105930328
+    ],
+    "max": [
+      0.06062375381588936,
+      0.05291181057691574,
+      0.14999999105930328
+    ]
+  },
+  "vertices": 187,
+  "triangles": 374,
+  "materials": [
+    "Prop_thermos_body",
+    "Prop_thermos_cap"
+  ],
+  "material_base_colors": {
+    "Prop_thermos_body": [
+      0.42,
+      0.05,
+      0.035
+    ],
+    "Prop_thermos_cap": [
+      0.64,
+      0.58,
+      0.44
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "8bfd2fad4334a5b48004aca846cc964138ef8eb301a3713fd722b75762dd36c5",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "保温壶",
+  "category": "container",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.3,
+    "game_longest_dim_m": 0.9,
+    "sourcing_hint": "model ourselves：Ø0.106 x 0.30 m 旋转体 + 杯盖 + 提手",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.3,
+    "built_longest_m": 0.29999998211860657,
+    "abs_error_m": 1.7881393421514957e-08,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 400,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "body",
+      "name_zh": "保温壶红",
+      "linear_rgb": [
+        0.42,
+        0.05,
+        0.035
+      ],
+      "roughness": 0.4
+    },
+    {
+      "key": "cap",
+      "name_zh": "杯盖米白",
+      "linear_rgb": [
+        0.64,
+        0.58,
+        0.44
+      ],
+      "roughness": 0.5
+    }
+  ],
+  "notes": "16-segment body, 11 profile points, plus a 5-segment handle tube; about 368 triangles before the exact union and one shell after it.  Body 0.106 m diameter from z=0.018 to 0.210, shoulder to 0.266, neck 0.062, cup lid 0.070 wide and 0.020 tall, total 0.300 m.  Handle centre-line at x=0.064, tube radius 5.5 mm, entering the body at z=0.055 and 0.205; it leaves a 5.5 mm finger gap.  Measured X is the 0.106 m body plus the handle on one side, so it is ~0.122 m, not the catalog 0.12 m: the catalog value is the body diameter and cannot also include a usable handle.",
+  "build_script": "models/thermos.py",
+  "preview": "previews/thermos_preview.png",
+  "files": {
+    "thermos.fbx": 22028,
+    "thermos.glb": 9012,
+    "thermos.blend": 96440
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 123467
+}

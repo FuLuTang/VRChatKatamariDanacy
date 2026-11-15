@@ -1,0 +1,102 @@
+{
+  "id": "glass_bottle",
+  "pivot": "center",
+  "target_longest_m": 0.28,
+  "dimensions_m": {
+    "x": 0.07000000029802322,
+    "y": 0.07000000029802322,
+    "z": 0.2800000011920929,
+    "longest": 0.2800000011920929
+  },
+  "bounds_m": {
+    "min": [
+      -0.03500000014901161,
+      -0.03500000014901161,
+      -0.14000000059604645
+    ],
+    "max": [
+      0.03500000014901161,
+      0.03500000014901161,
+      0.14000000059604645
+    ]
+  },
+  "vertices": 194,
+  "triangles": 384,
+  "materials": [
+    "Prop_glass_bottle_glass"
+  ],
+  "material_base_colors": {
+    "Prop_glass_bottle_glass": [
+      0.025,
+      0.085,
+      0.035
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "d1486e0384e31550601c677fa01cf446473be562a429eb1432668ad461dd41e6",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "玻璃瓶",
+  "category": "drink",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.28,
+    "game_longest_dim_m": 0.52,
+    "sourcing_hint": "model ourselves：Ø0.07 x 0.28 m 玻璃瓶，空心 + 开口",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.28,
+    "built_longest_m": 0.2800000011920929,
+    "abs_error_m": 1.19209286886246e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 400,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "glass",
+      "name_zh": "深绿玻璃",
+      "linear_rgb": [
+        0.025,
+        0.085,
+        0.035
+      ],
+      "roughness": 0.18
+    }
+  ],
+  "notes": "12 segments, 18 profile points = 384 triangles.  Outside: foot 0.052 m, body 0.070 m from z=0.070 to 0.160, shoulder 0.205, neck 0.025, mouth 0.029 at 0.280.  Wall 3 mm through the body, 2.5 mm at the neck, rim 3.5 mm; inner floor 4 mm above the punt.  One closed shell with an open mouth, no separate cap or label.  Glass is a flat Principled base colour at roughness 0.18 - no transmission, since the batch is plain-colour by decision.",
+  "build_script": "models/glass_bottle.py",
+  "preview": "previews/glass_bottle_preview.png",
+  "files": {
+    "glass_bottle.fbx": 20396,
+    "glass_bottle.glb": 8096,
+    "glass_bottle.blend": 95246
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 108904
+}

@@ -1,5 +1,7 @@
 # 原创占位小道具（第一批）
 
+> 2026-11-15 更新：第 10 节新增第二批（`cookie`/`orange` 重做 + 8 件餐具/容器）；第 1–9 节仍描述第一批 8 件。第二批产物只在 Windows staging，未复制回本仓库 `exports/` / `previews/`。
+
 本目录是 PicnicLawn 地图第一批"可卷"小道具的原创、中性、可替换低多边形占位模型。全部几何由本目录的 Python 脚本在 Blender 3.6 里从 bmesh 图元程序化生成：没有第三方网格、没有贴图、没有品牌/角色/音乐/IP 元素，也没有引用任何现有游戏素材。**这些是占位美术，不是最终美术；未指定授权许可（no licence assigned），不得据此推断正式美术方向。**
 
 ## 1. 本批道具与来源
@@ -158,3 +160,63 @@ Unity 端导入、材质赋值、碰撞与 prefab 组装由 Unity operator 复�
 ## 9. 美术档位决定（2026-11-14）
 
 用户确认：**布局冻结前保持纯色、无贴图**。理由是这个阶段的判断对象是尺寸、轮廓和在球面上的可读性，贴图既帮不上忙又会掩盖比例问题；等 PicnicLawn 灰盒布局定稿后，再统一按材质族（纸/木/塑料/金属/织物）做一次贴图图集与 UV 的美术升级，避免按未定布局做两遍。
+
+## 10. 第二批：水果重做 + 餐具/容器（2026-11-15）
+
+> 第 1–9 节仍描述第一批 8 件（seed … watering_can）。本节是 2026-11-15 新增的第二批：重做 `cookie`、`orange`，并新增 8 件真实尺寸的餐具/容器。第二批的产物只写到 Windows staging `D:\VRChatKatamariPreview\PropModels\tableware-v1\`，**没有**复制回本仓库的 `exports/` / `previews/`；仓库里现有的水果 FBX/GLB/预览仍是旧版，等 Lead 统一合入时再替换。
+
+与第 1 批不同，这批使用 `SIZE_REFERENCE = 'real'`：最长边对齐 CSV 的 `real_longest_dim_m`（不是第 1 批的 `game_longest_dim_m` 放大比例）。8 件的目录 id 为 `cup`、`soda_can`、`juice_carton`、`glass_bottle`、`plate`、`bowl`、`thermos`、`croissant`；其中 `juice_box` 在目录里的真实 id 是 `juice_carton`，`baguette` 在 CSV 里没有行、也没有真实尺寸，故没有凭空造 0.65 m，改用同属烘焙类的 `croissant`（目录真实三轴 0.12 × 0.07 × 0.06 m）。
+
+| 道具 | 中文名 | 规格（设计/CSV，m） | 实测 X×Y×Z（m） | 面数 / 预算 | 壳 | 材质 | 肉眼判断 |
+|---|---|---|---|---|---|---|---|
+| `cookie` | 饼干 | Ø0.07 × 0.009 厚 | 0.0700 × 0.0689 × 0.0094 | 326 / 340 | 1 | 面团 + 巧克力豆 | 一眼是饼干；5 颗凸起巧克力豆，边缘轻微波浪 |
+| `orange` | 橙子 | Ø0.08，微扁 | 0.0800 × 0.0800 × 0.0774 | 360 / 360 | 1 | 橙皮 + 绿梗 | 一眼是橙子；光滑无瓣线，小绿梗在顶 |
+| `cup` | 杯子 | 0.075 × 0.075 × 0.09 | 0.0750 × 0.0750 × 0.0900 | 280 / 300 | 1 | 纸杯米白 | 一眼是纸杯；空心、上大下小，平直着色有 20 面棱 |
+| `soda_can` | 易拉罐 | 0.066 × 0.066 × 0.12（CSV 0.07 是罐径） | 0.0661 × 0.0661 × 0.1200 | 320 / 340 | 1 | 铝银 + 红标 | 一眼是易拉罐；平顶、凹盖、红标，罐身 16 面棱 |
+| `juice_carton` | 果汁盒 | 0.06 × 0.06 × 0.10 | 0.0600 × 0.0600 × 0.1000 | 36 / 200 | 1 | 卡纸 + 橙色面板 | 一眼是屋脊顶果汁/牛奶盒；顶部有封口鳍 |
+| `glass_bottle` | 玻璃瓶 | 0.07 × 0.07 × 0.28 | 0.0700 × 0.0700 × 0.2800 | 384 / 400 | 1 | 深绿玻璃 | 一眼是深绿酒瓶/油瓶；颈细、口沿可见，颜色偏深 |
+| `plate` | 盘子 | 0.24 × 0.24 × 0.025 | 0.2400 × 0.2400 × 0.0250 | 384 / 400 | 1 | 陶瓷米白 | 一眼是薄盘；24 段圆边，盘心凹 |
+| `bowl` | 碗 | 0.16 × 0.16 × 0.06 | 0.1600 × 0.1600 × 0.0600 | 384 / 400 | 1 | 蓝灰搪瓷 | 一眼是碗；口沿略厚，16 面棱可见 |
+| `thermos` | 保温壶 | 0.12 × 0.12 × 0.30 | 0.1212 × 0.1058 × 0.3000 | 374 / 400 | 1 | 红身 + 米色杯盖 | 一眼是保温壶；红身+杯盖，提手缝隙在这个角度不明显 |
+| `croissant` | 牛角包 | 0.12 × 0.07 × 0.06 | 0.0688 × 0.1200 × 0.0626 | 378 / 400 | 1 | 金棕 crust | 俯视是月牙；3/4 视角偏团块，像烤鸡/红薯，最弱的一件 |
+
+尺寸说明：
+
+- `cookie` 与 `orange` 重做后保持旧 `manifest.json` 的三轴尺寸、AABB 中心枢轴和文件名：`cookie` 的 0.070000 × 0.068856 × 0.009372 与旧值在 1e-9 m 内一致；`orange` 的 0.080000 × 0.080000 × 0.077417 与旧值只差 1.2e-7 m（浮点舍入）。两者仍分别是 1 个闭合壳。
+- `soda_can`：CSV 的 `real_longest_dim_m = 0.07` 与 `PROP_SET_PLAN.md` 的“疑为罐径”一致；设计三轴 0.066 × 0.066 × 0.12 来自 `PROP_CATALOG.md`。`build_all` 因此会打一条预期内的 WARN（0.12 ≠ 0.07），不是尺寸错误。
+- `thermos`：壶身是 Ø0.106 m 的圆筒，提手只向 +X 伸出，所以 X=0.1212 m（含提手）、Y=0.1058 m（壶身）；设计 0.12 × 0.12 是含提手的方形包络，Y 方向没有提手，不能强行撑到 0.12。
+- `croissant`：月牙的开口朝 +X，长边放在 Y，所以实测 X=0.0688 m 是进深、Y=0.1200 m 是长度；三轴数值仍是设计里的 0.12 / 0.07 / 0.06 量级。这是为了在固定预览相机下能看见月牙开口和两个角；如果改成开口朝 +Y，3/4 视角会只看见凸背，更像团块。
+
+拓扑/材质：10 件全部 1 个闭合壳，0 非流形边、0 零面积面、0 n-gon；纯色 Principled Base Color + Roughness，无贴图、无 UV、无顶点色。`cookie` 是平直面片 + 5 个平滑小圆顶（布尔并集），`orange` 是平滑 lathe，`cup`/`soda_can` 平直着色以保住口沿，`glass_bottle`/`plate`/`bowl`/`thermos`/`croissant` 平滑着色。
+
+### 10.1 第二批复现
+
+脚本在 `scripts/` 下；Windows staging 需要把 `Docs/Art/OriginalModels/props/scripts` 和 `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 按仓库相对路径镜像到 `_stage/Docs/...`，因为 `build_all.py` 按 `prop_lib.ROOT` 找 CSV。构建 + 回读验证（cmd.exe 里 `--props` 的逗号列表必须整体加引号，否则只取到第一件）：
+
+```
+set BLENDER=D:\SteamLibrary\steamapps\common\Blender\blender.exe
+set ROOT=D:\VRChatKatamariPreview\PropModels\tableware-v1
+set STAGE=%ROOT%\_stage\Docs\Art\OriginalModels\props\scripts
+
+"%BLENDER%" --background --factory-startup --disable-autoexec --python-exit-code 2 ^
+  --python "%STAGE%\build_all.py" -- --out "%ROOT%" --props "cookie,orange,cup,soda_can,juice_carton,glass_bottle,plate,bowl,thermos,croissant"
+
+"%BLENDER%" --background --factory-startup --disable-autoexec --python-exit-code 2 ^
+  --python "%STAGE%\verify_import.py" -- --out "%ROOT%" --props "cookie,orange,cup,soda_can,juice_carton,glass_bottle,plate,bowl,thermos,croissant"
+```
+
+产物：`exports/<id>.fbx|.glb|.blend|.manifest.json`、`previews/<id>_preview.png`、`previews/contact_sheet.png`、根 `manifest.json`、`verification.json`。最终一次构建是 **10 件 / 3226 tris / 57 个文件**。
+
+### 10.2 `prop_lib.py` 的第二批改动
+
+1. 新增 `prism(points, length, axis='z', start=0.0)`：把一组二维点沿指定轴挤出成闭合棱柱（两个环 + 侧面四边形 + 两端 n-gon，`recalc_face_normals`，`finish()` 里再三角化端面）。果汁盒的“房子 + 屋脊 + 封口鳍”十点截面就是用它挤出的；之前 `sheet`/`tube`/`lathe` 都做不了这种带尖顶的直棱柱。
+2. 预览相机的 `ortho_scale` 从 `span * 1.30` 放宽到 `span * 1.45`：第一版牛角包在 1.30 下右侧被画幅裁掉，放宽后四边都有余量，代价是所有预览里的模型略小一点。
+
+### 10.3 这批的已知偏差
+
+1. `baguette` 被 `croissant` 替代：CSV 没有 baguette 行/尺寸；`bread_slice` 的 note 明确记录整条面包被砍掉。没有为了凑数编 0.65 m。`croissant` 的 0.12 × 0.07 × 0.06 有目录来源。
+2. `cookie`：旧版四个凹坑在 3/4 视角像切了四块的派；新版去掉凹坑，改成 5 个凸起小圆顶 + 保留原来的六瓣轻微波浪边。尺寸/枢轴/文件名不变，但三角面从 192 增至 326（预算 340）。
+3. `orange`：旧版八条经线凹槽在平直着色下像南瓜的纬度环；新版去掉凹槽、改平滑着色、加小绿梗，保持微扁球（0.08 × 0.08 × 0.0774）。梗和果体是同一个 lathe 的连续轮廓，不是第二个物体。
+4. `croissant` 仍是 10 件里最弱的一件：3/4 视角的近距离角被肥大的中段挡住，看起来像烤鸡/红薯；俯视能清楚看到月牙。要彻底解决得改预览相机或把月牙做成竖立的拱形，前者影响整批取景，后者不符合“平放桌上”的真实姿态，故保留现状并如实标注。
+5. `soda_can` 没有做拉环：预算 320/340，再加一个拉环会超；平顶 + 凹盖 + 红标已经能读成易拉罐，但它也可能被读成小铁罐。`thermos` 的提手缝隙在这个固定相机角度被提手本身挡住，侧视/俯视才明显。`glass_bottle` 的深绿在暗背景下偏黑。`cup` 为了消掉内壁的平滑法线锯齿改成平直着色，外壁能看见 20 条竖棱。
+6. 未做：UV、贴图、LOD、碰撞体、动画、Unity 导入/材质重建。FBX 不保存 Principled base colour，Unity 侧仍要按 `manifest.json` 的 `material_base_colors` 重建，或改用 GLB（内含 baseColorFactor）。

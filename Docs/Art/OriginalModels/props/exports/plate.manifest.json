@@ -1,0 +1,102 @@
+{
+  "id": "plate",
+  "pivot": "center",
+  "target_longest_m": 0.24,
+  "dimensions_m": {
+    "x": 0.23999999463558197,
+    "y": 0.23999999463558197,
+    "z": 0.02500000037252903,
+    "longest": 0.23999999463558197
+  },
+  "bounds_m": {
+    "min": [
+      -0.11999999731779099,
+      -0.11999999731779099,
+      -0.012500000186264515
+    ],
+    "max": [
+      0.11999999731779099,
+      0.11999999731779099,
+      0.012500000186264515
+    ]
+  },
+  "vertices": 194,
+  "triangles": 384,
+  "materials": [
+    "Prop_plate_ceramic"
+  ],
+  "material_base_colors": {
+    "Prop_plate_ceramic": [
+      0.76,
+      0.735,
+      0.68
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "3ee18e5512047aff399b2cee8b1691c03cb501d4ac7e6baa190b6dd9ed5c0755",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "盘子",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.24,
+    "game_longest_dim_m": 0.5,
+    "sourcing_hint": "model ourselves：Ø0.24 x 0.025 m 餐盘，圈足 + 浅盘心",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.24,
+    "built_longest_m": 0.23999999463558197,
+    "abs_error_m": 5.364418020903372e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 400,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "ceramic",
+      "name_zh": "陶瓷米白",
+      "linear_rgb": [
+        0.76,
+        0.735,
+        0.68
+      ],
+      "roughness": 0.32
+    }
+  ],
+  "notes": "24 segments, 10 profile points = 384 triangles.  Diameter 0.240 m, height 0.025 m exactly.  Foot ring 0.060-0.072 m at z=0; the underside rises from 0.0035 m at the centre to the 0.025 m rim; the top well drops from the rim to 0.006 m at the centre, leaving a 2.5 mm centre and 3 mm rim.  One closed shell, no separate foot.",
+  "build_script": "models/plate.py",
+  "preview": "previews/plate_preview.png",
+  "files": {
+    "plate.fbx": 20300,
+    "plate.glb": 8072,
+    "plate.blend": 95268
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 97117
+}

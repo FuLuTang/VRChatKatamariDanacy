@@ -340,6 +340,45 @@ def disc_grid(segments, ring_fractions, top_fn, bottom_z, radius=1.0,
     return bm
 
 
+def prism(points, length, axis='z', start=0.0):
+    """Extrude a closed 2-D polygon into a closed prism.
+
+    ``points`` are (u, v) in the plane perpendicular to ``axis``, in polygon
+    order; the mapping is axis='z' -> (x, y), axis='y' -> (x, z), axis='x' ->
+    (y, z).  The polygon is swept from ``start`` to ``start + length`` and both
+    ends are capped with an n-gon, so the result is one watertight shell (the
+    builder triangulates the caps before export).  This is what a carton or a
+    box-shaped prop needs; the lathe and tube primitives only cover surfaces of
+    revolution and circular sweeps.
+    """
+    if len(points) < 3:
+        raise ValueError('prism needs a polygon of at least three points')
+    if length <= 0:
+        raise ValueError('prism length must be positive')
+
+    def place(u, v, w):
+        if axis == 'x':
+            return (w, u, v)
+        if axis == 'y':
+            return (u, w, v)
+        if axis == 'z':
+            return (u, v, w)
+        raise ValueError("prism axis must be 'x', 'y' or 'z'")
+
+    bm = bmesh.new()
+    lower = [bm.verts.new(place(u, v, start)) for (u, v) in points]
+    upper = [bm.verts.new(place(u, v, start + length)) for (u, v) in points]
+    n = len(points)
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new((lower[i], lower[j], upper[j], upper[i]))
+    bm.faces.new(list(reversed(lower)))
+    bm.faces.new(upper)
+
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    return bm
+
+
 def metaball_cluster(spheres, resolution, threshold=0.6, stiffness=2.0,
                      target_tris=None):
     """Fuse overlapping spheres into one closed shell through a metaball.
@@ -726,7 +765,7 @@ def render_preview(ob, path, res=512, samples=32):
 
     cam_data = bpy.data.cameras.new('PropPreviewCam')
     cam_data.type = 'ORTHO'
-    cam_data.ortho_scale = span * 1.30
+    cam_data.ortho_scale = span * 1.45
     cam = bpy.data.objects.new('PropPreviewCam', cam_data)
     bpy.context.collection.objects.link(cam)
     direction = Vector((1.70, 1.15, 0.80)).normalized()

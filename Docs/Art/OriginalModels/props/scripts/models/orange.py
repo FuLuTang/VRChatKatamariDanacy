@@ -1,63 +1,74 @@
-"""Orange - slightly oblate sphere with eight segment grooves.
+"""Orange - smooth oblate 8 cm orange with a small green stem.
 
-The plan asks for an 8 cm sphere with eight shallow segment grooves, carved only
-as dents (no displacement map).  The grooves come from ``lathe``'s per-segment
-radius modulation: a cosine with eight periods around the axis sinks every
-meridian smoothly, so 24 segments produce eight broad creases with no hard
-single-vertex notch.  The first version dipped one meridian column at a time;
-smooth shading averaged that notch away and the preview read as a plain ball.
+The previous orange had eight cosine grooves carved into the radius and was
+flat-shaded to keep them visible.  The result read as a pumpkin: the horizontal
+latitude rings of the lathe caught the light as bands, and the eight meridians
+made it look segmented.  This version removes the grooves entirely, uses smooth
+normals and lets the silhouette do the work: a 0.080 m wide, 0.0774 m tall
+oblate spheroid with a 4.6 mm stem rising out of a small navel.
 
-The dip is 9 % of the radius at the groove minima (about 3.5 mm at this size).
-The mesh is flat-shaded: with smooth vertex normals the shallow dents vanished at
-preview size, while flat facets keep the eight creases readable.  The trade-off
-is a faceted, low-poly orange, which matches the rest of this placeholder set.
+The stem is not a second object.  The lathe profile climbs the body, pulls in to
+a 3.6 mm neck at z=0.0728 and continues up the stem to a 2.6 mm top at
+z=0.077417, so the whole orange is one closed shell and the height is exactly
+the old 0.077417 m.  A face predicate paints the stem green above z=0.0728;
+the body keeps the rind colour.
+
+The old final size came from a 0.072 m raw body scaled up by a 1.075 finish
+factor (the grooves had cut the raw X extent).  The new raw body is 0.080 m wide
+and the stem brings the height to 0.077417 m, so finish sees a 0.080 m longest
+edge and leaves the dimensions unchanged: same 0.080000 x 0.080000 x 0.077417 m,
+same AABB-centre pivot, same filenames.
 """
 
-import math
-
-from prop_lib import TAU, lathe
+from prop_lib import lathe
 
 ID = 'orange'
 NAME_ZH = '橙子'
 CATEGORY = 'food'
 CSV_REAL_LONGEST_M = 0.08
 CSV_GAME_LONGEST_M = 0.30
-SOURCING = 'model ourselves：Ø8 cm 球，表面 8 条浅瓣线'
+SOURCING = 'model ourselves：Ø8 cm 微扁球 + 小绿梗'
 SIZE_REFERENCE = 'real'
 TARGET_LONGEST_M = 0.08
-TRI_BUDGET = 300
+TRI_BUDGET = 360
 MATERIALS = [
     {'key': 'rind', 'name_zh': '橙皮', 'linear_rgb': [0.520, 0.160, 0.020],
      'roughness': 0.70},
+    {'key': 'stem', 'name_zh': '绿梗', 'linear_rgb': [0.110, 0.230, 0.060],
+     'roughness': 0.60},
 ]
-NOTES = ('A 0.08 m sphere squashed to 0.072 m tall, so the longest edge is the '
-         'diameter.  Eight cosine grooves on 24 meridians keep the triangle '
-         'count at 288 within the 300 budget; the dip is 9 % of the radius '
-         '(about 3 mm), applied at every sampled height so the crease follows '
-         'the meridian instead of pinching one ring.')
+NOTES = ('20 segments, 11 profile points = 360 triangles, smooth-shaded.  Raw '
+         'diameter 0.080 m, raw height 0.077417 m, so finish() scales by 1.0 and '
+         'the exported size stays exactly 0.080000 x 0.080000 x 0.077417 m.  The '
+         'body is an oblate spheroid with its widest ring at z=0.036; the navel '
+         'pulls in to r=0.0036 at z=0.0728, then the stem rises to a 0.0026 m '
+         'flat top at 0.077417.  Green material above z=0.0728 and inside '
+         'r=0.0050.  One closed shell, no grooves, no separate stem.')
 
-SEGMENTS = 24
-GROOVES = 8
-GROOVE_DEPTH = 0.09
+SEGMENTS = 20
+STEM_Z = 0.0728
+STEM_R = 0.0050
+
+PROFILE = [
+    (0.0000, 0.0000),   # bottom pole
+    (0.0220, 0.0025),
+    (0.0340, 0.0100),
+    (0.0400, 0.0360),   # widest ring
+    (0.0375, 0.0500),
+    (0.0300, 0.0620),
+    (0.0180, 0.0695),
+    (0.0060, 0.0725),   # navel shoulder
+    (0.0036, 0.0728),   # stem base
+    (0.0026, 0.077417),  # stem top rim
+    (0.0000, 0.077417),  # stem top centre
+]
 
 
-def groove(point_index, segment_index, radius):
-    angle = TAU * segment_index / SEGMENTS
-    return radius * (1.0 - GROOVE_DEPTH * 0.5 * (1.0 + math.cos(GROOVES * angle)))
+def on_stem(c):
+    return c.z > STEM_Z and (c.x * c.x + c.y * c.y) < STEM_R * STEM_R
 
 
 def build(b):
-    # sphere of radius 0.040 squashed vertically to +/-0.036, sampled at six
-    # heights; both ends are poles so the shell closes without caps
-    profile = [
-        (0.0000, 0.0000),
-        (0.0212, 0.0055),
-        (0.0332, 0.0160),
-        (0.0394, 0.0300),
-        (0.0392, 0.0430),
-        (0.0332, 0.0560),
-        (0.0212, 0.0665),
-        (0.0000, 0.0720),
-    ]
-    bm = lathe(profile, segments=SEGMENTS, radius_fn=groove)
-    b.add(bm, 'rind', (0.520, 0.160, 0.020), 0.70, smooth=False)
+    bm = lathe(PROFILE, segments=SEGMENTS)
+    b.add(bm, 'rind', (0.520, 0.160, 0.020), 0.70, smooth=True,
+          extras=[('stem', (0.110, 0.230, 0.060), 0.60, on_stem)])

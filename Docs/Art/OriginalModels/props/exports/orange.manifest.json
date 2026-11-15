@@ -5,31 +5,37 @@
   "dimensions_m": {
     "x": 0.07999999821186066,
     "y": 0.07999999821186066,
-    "z": 0.07741688191890717,
+    "z": 0.07741700112819672,
     "longest": 0.07999999821186066
   },
   "bounds_m": {
     "min": [
       -0.03999999910593033,
       -0.03999999910593033,
-      -0.03870844095945358
+      -0.03870850056409836
     ],
     "max": [
       0.03999999910593033,
       0.03999999910593033,
-      0.03870844095945358
+      0.03870850056409836
     ]
   },
-  "vertices": 146,
-  "triangles": 288,
+  "vertices": 182,
+  "triangles": 360,
   "materials": [
-    "Prop_orange_rind"
+    "Prop_orange_rind",
+    "Prop_orange_stem"
   ],
   "material_base_colors": {
     "Prop_orange_rind": [
       0.52,
       0.16,
       0.02
+    ],
+    "Prop_orange_stem": [
+      0.11,
+      0.23,
+      0.06
     ]
   },
   "mesh_checks": {
@@ -40,7 +46,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "9a270d5547158aad154e038312facdeeda62b4f4655bd14d8009a9f19313f288",
+  "geometry_sha256": "ce3fc0dbd923ff7d0da2c181b384ecff6290b80532ec4aa192a697a59569f1d3",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "橙子",
   "category": "food",
@@ -48,7 +54,7 @@
     "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
     "real_longest_dim_m": 0.08,
     "game_longest_dim_m": 0.3,
-    "sourcing_hint": "model ourselves：Ø8 cm 球，表面 8 条浅瓣线",
+    "sourcing_hint": "model ourselves：Ø8 cm 微扁球 + 小绿梗",
     "row_found": true
   },
   "dimension_check": {
@@ -61,7 +67,7 @@
     "csv_game_longest_matches": false,
     "scale_vs_real_m": 1.0
   },
-  "tri_budget": 300,
+  "tri_budget": 360,
   "within_budget": true,
   "materials_declared": [
     {
@@ -73,15 +79,25 @@
         0.02
       ],
       "roughness": 0.7
+    },
+    {
+      "key": "stem",
+      "name_zh": "绿梗",
+      "linear_rgb": [
+        0.11,
+        0.23,
+        0.06
+      ],
+      "roughness": 0.6
     }
   ],
-  "notes": "A 0.08 m sphere squashed to 0.072 m tall, so the longest edge is the diameter.  Eight cosine grooves on 24 meridians keep the triangle count at 288 within the 300 budget; the dip is 9 % of the radius (about 3 mm), applied at every sampled height so the crease follows the meridian instead of pinching one ring.",
+  "notes": "20 segments, 11 profile points = 360 triangles, smooth-shaded.  Raw diameter 0.080 m, raw height 0.077417 m, so finish() scales by 1.0 and the exported size stays exactly 0.080000 x 0.080000 x 0.077417 m.  The body is an oblate spheroid with its widest ring at z=0.036; the navel pulls in to r=0.0036 at z=0.0728, then the stem rises to a 0.0026 m flat top at 0.077417.  Green material above z=0.0728 and inside r=0.0050.  One closed shell, no grooves, no separate stem.",
   "build_script": "models/orange.py",
   "preview": "previews/orange_preview.png",
   "files": {
-    "orange.fbx": 20268,
-    "orange.glb": 18200,
-    "orange.blend": 93273
+    "orange.fbx": 21196,
+    "orange.glb": 8920,
+    "orange.blend": 96203
   },
   "export_settings": {
     "fbx": {
@@ -98,5 +114,5 @@
     },
     "blender": "5.3.0"
   },
-  "preview_bytes": 180154
+  "preview_bytes": 159093
 }

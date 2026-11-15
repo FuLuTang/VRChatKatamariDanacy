@@ -1,0 +1,118 @@
+{
+  "id": "soda_can",
+  "pivot": "center",
+  "target_longest_m": 0.12,
+  "dimensions_m": {
+    "x": 0.06610169261693954,
+    "y": 0.06610169261693954,
+    "z": 0.12000000476837158,
+    "longest": 0.12000000476837158
+  },
+  "bounds_m": {
+    "min": [
+      -0.03305084630846977,
+      -0.03305084630846977,
+      -0.06000000238418579
+    ],
+    "max": [
+      0.03305084630846977,
+      0.03305084630846977,
+      0.06000000238418579
+    ]
+  },
+  "vertices": 162,
+  "triangles": 320,
+  "materials": [
+    "Prop_soda_can_metal",
+    "Prop_soda_can_label"
+  ],
+  "material_base_colors": {
+    "Prop_soda_can_metal": [
+      0.38,
+      0.4,
+      0.43
+    ],
+    "Prop_soda_can_label": [
+      0.48,
+      0.03,
+      0.02
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "5501ca4d5d05474314491d0798acdc53d7106a867744dac9e9c697009e405dd7",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "易拉罐",
+  "category": "drink",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.07,
+    "game_longest_dim_m": 0.24,
+    "sourcing_hint": "model ourselves：Ø0.066 x 0.12 m 罐体 + 收口 + 凹盖（CSV 的 0.07 疑为罐径）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.12,
+    "built_longest_m": 0.12000000476837158,
+    "abs_error_m": 4.768371586472142e-09,
+    "csv_target_matches": false,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.714
+  },
+  "tri_budget": 340,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "metal",
+      "name_zh": "铝罐银",
+      "linear_rgb": [
+        0.38,
+        0.4,
+        0.43
+      ],
+      "roughness": 0.35
+    },
+    {
+      "key": "label",
+      "name_zh": "罐身红",
+      "linear_rgb": [
+        0.48,
+        0.03,
+        0.02
+      ],
+      "roughness": 0.4
+    }
+  ],
+  "notes": "16 segments, 12 profile points = 320 triangles.  Raw 0.0650 m wide and 0.1180 m tall, scaled once by finish() to the 0.12 m design height, which gives 0.0661 x 0.0661 x 0.1200 m (the design asks 0.066 x 0.066 x 0.12).  Flat-shaded so the rim and lid stay crisp.  Bottom chamfer 5.5 mm; body straight to 0.108 m; neck-in to 0.116 m; flat rim annulus at 0.118 m; flat lid 2 mm below the rim.  The red label is the face band from 0.012 to 0.104 m, leaving thin silver bands at the foot and the shoulder.  One closed shell.  build_all prints a WARN because TARGET (0.12) deliberately differs from the CSV 0.07 cell.",
+  "build_script": "models/soda_can.py",
+  "preview": "previews/soda_can_preview.png",
+  "files": {
+    "soda_can.fbx": 21292,
+    "soda_can.glb": 17716,
+    "soda_can.blend": 95107
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 145311
+}

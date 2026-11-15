@@ -20,8 +20,8 @@
       0.004686129279434681
     ]
   },
-  "vertices": 98,
-  "triangles": 192,
+  "vertices": 165,
+  "triangles": 326,
   "materials": [
     "Prop_cookie_dough",
     "Prop_cookie_chip"
@@ -46,7 +46,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "f136468eded739651eaa92b79b9e93d0c3639db850ca21308876571d2e535aac",
+  "geometry_sha256": "487045e3692a1266a8b5bd4c68e065db0e948497f97fb577becc52828a25a650",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "饼干",
   "category": "food",
@@ -54,7 +54,7 @@
     "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
     "real_longest_dim_m": 0.07,
     "game_longest_dim_m": 0.09,
-    "sourcing_hint": "model ourselves：Ø7 cm、厚 0.9 cm 圆饼，4 个 Ø0.6 cm 凹坑",
+    "sourcing_hint": "model ourselves：Ø7 cm、厚 0.9 cm 圆饼，5 颗凸起巧克力豆",
     "row_found": true
   },
   "dimension_check": {
@@ -67,7 +67,7 @@
     "csv_game_longest_matches": false,
     "scale_vs_real_m": 1.0
   },
-  "tri_budget": 200,
+  "tri_budget": 340,
   "within_budget": true,
   "materials_declared": [
     {
@@ -91,13 +91,13 @@
       "roughness": 0.6
     }
   ],
-  "notes": "192 triangles: 24 segments, three rings (0.45 / 0.78 / 1.0).  The four dents sit exactly on the 0.78 ring at 0/90/180/270 degrees, 3 mm deep, so each one is a sampled minimum of the height field; the face-material split paints the four faces around each dent as chocolate.  The outline carries six shallow scallops (3.5 % of the radius) so the rim reads as crumbled rather than machined.",
+  "notes": "24 segments, two top rings (0.62 / 1.0), flat underside: 144 base triangles.  Five chip domes, each 6-sided with a 3.4 mm base and a 3.7 mm rise, are unioned into the base; the visible result is about 326 triangles after the exact solver.  Chips sit at (0.003, 0.001) and on a 0.0205 m ring at 35/125/215/305 degrees, well inside the outline.  The six-scallop 3.5% outline is unchanged from the old cookie; with the same 24 sampled angles the raw AABB and the finish scale are unchanged, so the exported size and pivot match exactly.",
   "build_script": "models/cookie.py",
   "preview": "previews/cookie_preview.png",
   "files": {
-    "cookie.fbx": 20124,
-    "cookie.glb": 14836,
-    "cookie.blend": 92628
+    "cookie.fbx": 23628,
+    "cookie.glb": 16840,
+    "cookie.blend": 95690
   },
   "export_settings": {
     "fbx": {
@@ -114,5 +114,5 @@
     },
     "blender": "5.3.0"
   },
-  "preview_bytes": 118527
+  "preview_bytes": 104929
 }

@@ -1,23 +1,23 @@
 {
   "id": "napkin",
   "pivot": "center",
-  "target_longest_m": 0.3,
+  "target_longest_m": 0.15,
   "dimensions_m": {
-    "x": 0.29999998211860657,
-    "y": 0.29999998211860657,
-    "z": 0.0279999990016222,
-    "longest": 0.29999998211860657
+    "x": 0.14999999105930328,
+    "y": 0.14999999105930328,
+    "z": 0.0139999995008111,
+    "longest": 0.14999999105930328
   },
   "bounds_m": {
     "min": [
-      -0.14999999105930328,
-      -0.14999999105930328,
-      -0.0139999995008111
+      -0.07499999552965164,
+      -0.07499999552965164,
+      -0.00699999975040555
     ],
     "max": [
-      0.14999999105930328,
-      0.14999999105930328,
-      0.0139999995008111
+      0.07499999552965164,
+      0.07499999552965164,
+      0.00699999975040555
     ]
   },
   "vertices": 98,
@@ -40,7 +40,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "f0e916b6760d540b569678f419043207c1207700d89b9a7a3d4b38db1179a444",
+  "geometry_sha256": "77b51a25d0de1971345e675031206bc0eea441fd50d89c4d05f85433d6ef40e5",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "餐巾",
   "category": "tableware",
@@ -52,14 +52,14 @@
     "row_found": true
   },
   "dimension_check": {
-    "size_reference": "game",
-    "checked_against": "game_longest_dim_m",
-    "target_m": 0.3,
-    "built_longest_m": 0.29999998211860657,
-    "abs_error_m": 1.7881393421514957e-08,
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.15,
+    "built_longest_m": 0.14999999105930328,
+    "abs_error_m": 8.940696710757479e-09,
     "csv_target_matches": true,
-    "csv_game_longest_matches": true,
-    "scale_vs_real_m": 2.0
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
   },
   "tri_budget": 300,
   "within_budget": true,
@@ -81,7 +81,7 @@
   "files": {
     "napkin.fbx": 16604,
     "napkin.glb": 6296,
-    "napkin.blend": 91316
+    "napkin.blend": 91326
   },
   "export_settings": {
     "fbx": {
@@ -98,5 +98,5 @@
     },
     "blender": "5.3.0"
   },
-  "preview_bytes": 115964
+  "preview_bytes": 109896
 }

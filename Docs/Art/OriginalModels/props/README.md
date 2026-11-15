@@ -263,3 +263,67 @@ StoryMode 里出现过、但 `exports/` 里还没有模型的道具只有 6 个 
 5. `spoon`：三个轴里只有长度 0.18 m 有 CSV 依据（`real_longest_dim_m`），X 0.035、Z 0.015 来自 `PROP_SET_PLAN.md` §3.4 的“头部 3.5×5 cm 浅凹”和柄宽 1.2 cm，不是测量值。
 6. `sandwich` 仍然可能被读成“夹心蛋糕切块”：三角楔 + 分层是它的真实形态，没有贴图时无法再给出更多信息。这一批做了三件事把它推向三明治——侧面是“棕边 / 米白面包瓤 / 火腿 / 奶酪 / 米白面包瓤 / 棕边”的夹层剖面、顶面是米白瓤 + 一圈细棕边（跟 `bread_slice` 同色）、面包色与 `bread_slice` 完全一致。
 7. 未做：UV、贴图、LOD、碰撞体、动画、Unity 导入/材质重建（同前几批）。
+
+## 12. 第五批：野餐一角结构件（按 `LEVEL_CONSTRUCTION.md` §3.2 / §4 重选）
+
+`Docs/Research/KatamariMaps/LEVEL_CONSTRUCTION.md` 的 11 件结构型可吸物入库后，本批按那份清单重选 6 件：**`wood_plank` / `serving_tray` / `folding_table`（三件"薄、长、有平面"的斜搭与台面主力）+ `picnic_basket` / `folding_stool` / `cooler_box`（原有三件，尺寸改为该文档的 AABB）**。第一批里已做完的 `picnic_blanket` / `flower_pot_large` / `collapsed_bench` 仍留在 `models/`（各自有 CSV 行），但不属于这份骨架清单，本节不表。
+
+### 12.1 尺寸、面数、可吸球径
+
+| 道具 | 真实尺寸（来源） | 实测 X×Y×Z | 面数/预算 | 壳 | AABB 中心 | D（m） | 场景角色 |
+|---|---|---|---|---|---|---|---|
+| `wood_plank` | 1.40×0.35×0.025（§4 P0；无 CSV 行） | 1.400×0.350×0.025 | 44/250 | 1 | 0,0,0 | 0.616 | 薄长坡道（今天 2.5 cm 薄墙） |
+| `serving_tray` | 0.55×0.35×0.04（§4 P2） | 0.550×0.350×0.040 | 94/250 | 1 | 0,0,0 | 0.528 | 斜搭板 / 浅盘 |
+| `folding_table` | 1.00×0.60×0.70（§4 P0） | 1.000×0.600×0.700 | 236/900 | 1 | 0,0,0 | 2.002 | 0.70 m 平顶台面（"台球桌"） |
+| `picnic_basket` | 0.45×0.30×0.22（§3.2 / `PICNIC_CORNER` §3.5.2） | 0.450×0.300×0.2213 | 552/800 | 1 | 0,0,0 | 0.830 | 门件 / 容器 |
+| `folding_stool` | 0.40×0.35×0.32（§3.2 / §4 P1） | 0.400×0.350×0.320 | 556/700 | 1 | 0,0,0 | 0.950 | 0.32 m 挡路椅 / 台阶 |
+| `cooler_box` | 0.55×0.35×0.30（§3.2 / §4 P1） | 0.550×0.350×0.300 | 124/800 | 1 | 0,0,0 | 1.033 | 门件 + 唯一可当台面的矮箱 |
+
+`D = (60·a·b·c/π)^(1/3)`；D ≤ 2.20 m，六件都进第一关可吸梯子（最晚 2.00 m 的折叠桌），没有 `D > 2.20` 的纯布景件。FBX + GLB 回读 12 次全 `ok`，`VERIFY_ALL_OK`。
+
+### 12.2 建模取舍（读图后改过的地方）
+
+1. **`wood_plank` 尺寸源冲突**：同一文档 §3.2 写 1.20×0.25×0.02（D 0.486），§4 P0 写 1.40×0.35×0.025（D 0.616）。用 §4（带 id、面数预算的落地表）；交付里注明这一档从 0.49 变成 0.62。
+2. **`serving_tray` 是"有边的板"**：0.55×0.35×0.04 的外壳挖掉 0.50×0.30、深 28 mm 的内腔，留 12 mm 底板 + 25 mm 边。边顶（z=0.040）和底板（z=0.012）都是平面；没有边就只是第二块木板。
+3. **`folding_table` 平顶**：`PROP_SET_PLAN.md` 原话"桌面微拱"被否掉——本批合同是台面必须平（桌上一簇小物），顶面 z=0.700 整块平面。X 形交叉腿试过一版：4 根斜撑里 2 根并进腿、2 根仍单独成壳（3 shells），于是改成 4 条 40 mm 方腿（1 shell，236 tris）。"折叠"的机构细节在这个尺寸读不出来，平顶和 0.70 m 高度是它在这张图里的全部作用。
+4. **篮子压到 0.22 m**：body 137.5 mm + 提手拱 83 mm，实测 0.2213 m（提手 6 边形管外缘多 1.3 mm，允许）。提手加粗到 Ø20 mm、颜色提亮，第一版 Ø16 mm 读成铁丝。
+5. **冷藏箱 0.35 深 × 0.30 高**：握槽从长边改到两个短端（docstring 一直写的是"short sides"，第一版代码写错到 ±Y 长边），深 25 mm，槽内给一块深灰"橡胶"材质——10–20 mm 的同色浅槽在预览里完全看不见。
+6. **凳子改成 0.40×0.35×0.32**：座面 0.35×0.25 不变，脚口外撇到 ±0.1685（+管半径 = 0.175），座面顶 0.32；腿间净空 0.308 m，小球能钻过去，符合"有腿有缝的开口凳"。
+
+### 12.3 `build_all.py` 的一处改动
+
+`LEVEL_CONSTRUCTION.md` 的 `wood_plank` / `serving_tray` / `folding_table` 在 `prop_catalog.csv` 里没有行。`build_one()` 现在允许模型模块自带 `DOC_ROW`（id / name_zh / category / real_longest_dim_m / game_longest_dim_m）来补这一行；CSV 有行的道具仍以 CSV 为准，CSV 没有又没 `DOC_ROW` 的 id 仍硬失败。**没有改 CSV**。
+
+### 12.4 第一批 8 件的真实尺寸重标（同一批顺手修）
+
+第一批的 `seed/acorn/pebble/bottle_cap/paper_scrap/toy_ball/napkin/watering_can` 当初按 `game_longest_dim_m` 建的（`SIZE_REFERENCE` 未设 = `'game'`），违反"真实尺寸"约定。现在全部改成 `SIZE_REFERENCE='real'`、`TARGET_LONGEST_M = CSV real_longest_dim_m`，**只改尺寸约定、不改形状**（`finish()` 均匀缩放，文件名/枢轴规则不变），重新出到 `legacy-real/`：
+
+| 道具 | 旧（game） | 新（real，实测） | 缩放 |
+|---|---|---|---|
+| `seed` | 0.0224×0.0400×0.0160 | 0.0112×0.0200×0.0080 | ×0.50 |
+| `acorn` | 0.0480×0.0456×0.0600 | 0.0240×0.0228×0.0300 | ×0.50 |
+| `pebble` | 0.0800×0.0586×0.0426 | 0.0400×0.0293×0.0213 | ×0.50 |
+| `bottle_cap` | 0.0600×0.0570×0.0174 | 0.0300×0.0285×0.0087 | ×0.50 |
+| `paper_scrap` | 0.1000×0.0741×0.0118 | 同左（CSV 真实值本来就是 0.10） | ×1.00 |
+| `toy_ball` | 0.3000×0.3000×0.3000 | 0.1500×0.1500×0.1500 | ×0.50 |
+| `napkin` | 0.3000×0.3000×0.0280 | 0.1500×0.1500×0.0140 | ×0.50 |
+| `watering_can` | 0.2603×0.5800×0.4155 | 0.1122×0.2500×0.1791 | ×0.4310 |
+
+旧列 = 实测新值 ÷ 缩放系数（均匀缩放，形状逐点不变）；`napkin` 的 15×15×1.5 cm 设计厚度在游戏尺度下是 1.5 cm，真实缩放后是 1.4 cm，与 `PROP_SET_PLAN` 的 1.5 cm 差 1 mm，属于同一比例约定带来的结果。8 件 FBX+GLB 回读全 `ok`，`VERIFY_ALL_OK`。
+
+### 12.5 复现
+
+```bat
+set S=D:\VRChatKatamariPreview\PropModels\batch5-v1\_stage\Docs\Art\OriginalModels\props\scripts
+set B=D:\SteamLibrary\steamapps\common\Blender\blender.exe
+"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\build_all.py -- --out D:\VRChatKatamariPreview\PropModels\batch5-v1 --props "wood_plank,serving_tray,picnic_basket,folding_stool,cooler_box,folding_table"
+"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\verify_import.py -- --out D:\VRChatKatamariPreview\PropModels\batch5-v1 --props "wood_plank,serving_tray,picnic_basket,folding_stool,cooler_box,folding_table"
+"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\build_all.py -- --out D:\VRChatKatamariPreview\PropModels\batch5-v1\legacy-real --props "seed,acorn,pebble,bottle_cap,paper_scrap,toy_ball,napkin,watering_can"
+"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\verify_import.py -- --out D:\VRChatKatamariPreview\PropModels\batch5-v1\legacy-real --props "seed,acorn,pebble,bottle_cap,paper_scrap,toy_ball,napkin,watering_can"
+```
+
+### 12.6 未做与边界
+
+- 本批 6 件**没有碰撞体**；建议的分箱见交付正文（`wood_plank` 1 box、`serving_tray` 1 box、`folding_table` 桌面 1 + 4 腿各 1、`picnic_basket` 1、`folding_stool` 座面 1 + 两框各 1、`cooler_box` 1）。
+- 骨架清单里本批未做的：`crate` / `book_stack` / `beer_crate` / `lounge_chair` / `stroller` / `picnic_table`（按 6 件配额截断，主次按 Lead 的三件"薄长平面"优先）。
+- 当前 motor 只有一个解析地面、没有竖直支撑，所以这 6 件**实际上都不能爬**；平顶与 2.5 cm 板是给将来的坡面/支撑补丁留的形状，今天它们只是"挡路 ↔ 可吸"两态。

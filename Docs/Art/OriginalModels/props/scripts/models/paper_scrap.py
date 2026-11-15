@@ -14,8 +14,9 @@ NAME_ZH = '纸屑'
 CATEGORY = 'debris'
 CSV_REAL_LONGEST_M = 0.10
 CSV_GAME_LONGEST_M = 0.10
+SIZE_REFERENCE = 'real'
 SOURCING = 'model ourselves：单面薄片，双面材质'
-TARGET_LONGEST_M = 0.10
+TARGET_LONGEST_M = 0.1
 TRI_BUDGET = 300
 MATERIALS = [
     {'key': 'paper', 'name_zh': '旧纸白', 'linear_rgb': [0.62, 0.60, 0.54],

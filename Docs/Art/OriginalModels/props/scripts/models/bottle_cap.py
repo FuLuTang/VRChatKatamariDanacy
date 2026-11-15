@@ -7,8 +7,9 @@ NAME_ZH = '瓶盖'
 CATEGORY = 'debris'
 CSV_REAL_LONGEST_M = 0.03
 CSV_GAME_LONGEST_M = 0.05
+SIZE_REFERENCE = 'real'
 SOURCING = 'model ourselves：Ø0.05 m 圆盘 + 齿边'
-TARGET_LONGEST_M = 0.05
+TARGET_LONGEST_M = 0.03
 TRI_BUDGET = 300
 MATERIALS = [
     {'key': 'cap', 'name_zh': '暗蓝灰金属漆', 'linear_rgb': [0.10, 0.14, 0.19],

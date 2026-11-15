@@ -1,23 +1,23 @@
 {
   "id": "watering_can",
   "pivot": "center",
-  "target_longest_m": 0.58,
+  "target_longest_m": 0.25,
   "dimensions_m": {
-    "x": 0.2602749466896057,
-    "y": 0.5800000429153442,
-    "z": 0.41543886065483093,
-    "longest": 0.5800000429153442
+    "x": 0.1121874749660492,
+    "y": 0.25,
+    "z": 0.17906847596168518,
+    "longest": 0.25
   },
   "bounds_m": {
     "min": [
-      -0.13013747334480286,
-      -0.2900000214576721,
-      -0.20771943032741547
+      -0.0560937374830246,
+      -0.125,
+      -0.08953423798084259
     ],
     "max": [
-      0.13013747334480286,
-      0.2900000214576721,
-      0.20771943032741547
+      0.0560937374830246,
+      0.125,
+      0.08953423798084259
     ]
   },
   "vertices": 173,
@@ -40,7 +40,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "423b89879f7383d862bd42e798a6ed576a70ba2a5de212afb0de31b3b03ecd00",
+  "geometry_sha256": "a717f40dc98bcf3d69da86829c549399a9ca3b91cb8a42e3c3d9ab09cd8505c3",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "洒水壶",
   "category": "garden",
@@ -52,14 +52,14 @@
     "row_found": true
   },
   "dimension_check": {
-    "size_reference": "game",
-    "checked_against": "game_longest_dim_m",
-    "target_m": 0.58,
-    "built_longest_m": 0.5800000429153442,
-    "abs_error_m": 4.291534427824928e-08,
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.25,
+    "built_longest_m": 0.25,
+    "abs_error_m": 0.0,
     "csv_target_matches": true,
-    "csv_game_longest_matches": true,
-    "scale_vs_real_m": 2.32
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
   },
   "tri_budget": 600,
   "within_budget": true,
@@ -79,9 +79,9 @@
   "build_script": "models/watering_can.py",
   "preview": "previews/watering_can_preview.png",
   "files": {
-    "watering_can.fbx": 22652,
-    "watering_can.glb": 18592,
-    "watering_can.blend": 95006
+    "watering_can.fbx": 22524,
+    "watering_can.glb": 18564,
+    "watering_can.blend": 94975
   },
   "export_settings": {
     "fbx": {
@@ -98,5 +98,5 @@
     },
     "blender": "5.3.0"
   },
-  "preview_bytes": 126177
+  "preview_bytes": 116866
 }

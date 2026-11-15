@@ -1,23 +1,23 @@
 {
   "id": "pebble",
   "pivot": "center",
-  "target_longest_m": 0.06,
+  "target_longest_m": 0.04,
   "dimensions_m": {
-    "x": 0.06000000238418579,
-    "y": 0.04398905485868454,
-    "z": 0.031932003796100616,
-    "longest": 0.06000000238418579
+    "x": 0.03999999910593033,
+    "y": 0.02932603657245636,
+    "z": 0.021288003772497177,
+    "longest": 0.03999999910593033
   },
   "bounds_m": {
     "min": [
-      -0.030000001192092896,
-      -0.02199452742934227,
-      -0.015966001898050308
+      -0.019999999552965164,
+      -0.01466301828622818,
+      -0.010644001886248589
     ],
     "max": [
-      0.030000001192092896,
-      0.02199452742934227,
-      0.015966001898050308
+      0.019999999552965164,
+      0.01466301828622818,
+      0.010644001886248589
     ]
   },
   "vertices": 42,
@@ -40,7 +40,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "6f2a95650a80497df572da4e1392f96a043a5c47f640e2e4c69a7a203cdd6210",
+  "geometry_sha256": "f44df56ad3bda8d0cf396888096bf715a9aac3c467e279ef7b17d234121beccc",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "小石子",
   "category": "nature",
@@ -52,14 +52,14 @@
     "row_found": true
   },
   "dimension_check": {
-    "size_reference": "game",
-    "checked_against": "game_longest_dim_m",
-    "target_m": 0.06,
-    "built_longest_m": 0.06000000238418579,
-    "abs_error_m": 2.384185793236071e-09,
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.04,
+    "built_longest_m": 0.03999999910593033,
+    "abs_error_m": 8.940696724635266e-10,
     "csv_target_matches": true,
-    "csv_game_longest_matches": true,
-    "scale_vs_real_m": 1.5
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
   },
   "tri_budget": 300,
   "within_budget": true,
@@ -81,7 +81,7 @@
   "files": {
     "pebble.fbx": 17132,
     "pebble.glb": 7356,
-    "pebble.blend": 89595
+    "pebble.blend": 89600
   },
   "export_settings": {
     "fbx": {
@@ -98,5 +98,5 @@
     },
     "blender": "5.3.0"
   },
-  "preview_bytes": 113126
+  "preview_bytes": 104513
 }

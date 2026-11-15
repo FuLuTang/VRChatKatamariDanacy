@@ -379,6 +379,32 @@ def prism(points, length, axis='z', start=0.0):
     return bm
 
 
+def rounded_rect(width, depth, radius, corner_segments=2):
+    """Closed CCW outline of a rounded rectangle centred on the origin.
+
+    ``corner_segments`` is the number of straight sub-segments per rounded
+    corner (>= 1).  The outline touches ``+/- width/2`` and ``+/- depth/2``
+    exactly, so a prism built from it has exactly the requested width and depth.
+    Pairs with ``prism`` for tubs, coolers, crates and stool seats; keep
+    ``radius`` strictly between 0 and half the short side (a zero radius would
+    repeat the corner point and make duplicate vertices).
+    """
+    if width <= 0 or depth <= 0:
+        raise ValueError('rounded_rect needs positive width and depth')
+    r = min(radius, width * 0.5 - 1e-6, depth * 0.5 - 1e-6)
+    if r < 1e-5:
+        raise ValueError('rounded_rect needs a positive corner radius')
+    cx = width * 0.5 - r
+    cy = depth * 0.5 - r
+    points = []
+    for ox, oy, a0 in ((cx, cy, 0.0), (-cx, cy, math.pi * 0.5),
+                       (-cx, -cy, math.pi), (cx, -cy, math.pi * 1.5)):
+        for i in range(corner_segments + 1):
+            a = a0 + (math.pi * 0.5) * i / corner_segments
+            points.append((ox + r * math.cos(a), oy + r * math.sin(a)))
+    return points
+
+
 def metaball_cluster(spheres, resolution, threshold=0.6, stiffness=2.0,
                      target_tris=None):
     """Fuse overlapping spheres into one closed shell through a metaball.

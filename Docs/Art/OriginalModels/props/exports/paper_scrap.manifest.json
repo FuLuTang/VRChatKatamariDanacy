@@ -52,8 +52,8 @@
     "row_found": true
   },
   "dimension_check": {
-    "size_reference": "game",
-    "checked_against": "game_longest_dim_m",
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
     "target_m": 0.1,
     "built_longest_m": 0.09999999403953552,
     "abs_error_m": 5.960464483090178e-09,
@@ -98,5 +98,5 @@
     },
     "blender": "5.3.0"
   },
-  "preview_bytes": 93098
+  "preview_bytes": 88064
 }

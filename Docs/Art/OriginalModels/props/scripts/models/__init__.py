@@ -43,6 +43,21 @@ ORDER = [
     'sandwich',
     'spoon',
     'small_potted_plant',
+    # Structural pieces for the PicnicLawn corner map (2026-11-15 fifth batch).
+    # Only ids that exist in prop_catalog.csv with a real three-axis are here:
+    # picnic_blanket, picnic_basket, cooler_box, folding_stool, flower_pot_large
+    # and collapsed_bench.  The plan's storage_crate / folding_table / tray /
+    # plank have no catalog row (or no real three-axis), so they are not
+    # invented.
+    'picnic_blanket',
+    'picnic_basket',
+    'cooler_box',
+    'folding_stool',
+    'flower_pot_large',
+    'collapsed_bench',
+    'wood_plank',
+    'serving_tray',
+    'folding_table',
 ]
 
 

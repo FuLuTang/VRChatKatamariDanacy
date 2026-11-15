@@ -7,8 +7,9 @@ NAME_ZH = '小皮球'
 CATEGORY = 'toy'
 CSV_REAL_LONGEST_M = 0.15
 CSV_GAME_LONGEST_M = 0.40
+SIZE_REFERENCE = 'real'
 SOURCING = 'model ourselves：Ø0.40 m 低面数球 + 双色条纹'
-TARGET_LONGEST_M = 0.40
+TARGET_LONGEST_M = 0.15
 TRI_BUDGET = 300
 MATERIALS = [
     {'key': 'shell', 'name_zh': '米白球面', 'linear_rgb': [0.70, 0.66, 0.58],

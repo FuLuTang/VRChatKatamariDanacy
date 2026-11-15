@@ -7,8 +7,9 @@ NAME_ZH = '餐巾'
 CATEGORY = 'tableware'
 CSV_REAL_LONGEST_M = 0.15
 CSV_GAME_LONGEST_M = 0.30
+SIZE_REFERENCE = 'real'
 SOURCING = 'model ourselves：折叠面片，0.30 m'
-TARGET_LONGEST_M = 0.30
+TARGET_LONGEST_M = 0.15
 TRI_BUDGET = 300
 MATERIALS = [
     {'key': 'cloth', 'name_zh': '亚麻米色', 'linear_rgb': [0.60, 0.56, 0.48],

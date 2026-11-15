@@ -1,23 +1,23 @@
 {
   "id": "bottle_cap",
   "pivot": "center",
-  "target_longest_m": 0.05,
+  "target_longest_m": 0.03,
   "dimensions_m": {
-    "x": 0.05000000074505806,
-    "y": 0.04755282402038574,
-    "z": 0.014499999582767487,
-    "longest": 0.05000000074505806
+    "x": 0.029999999329447746,
+    "y": 0.028531692922115326,
+    "z": 0.008699999190866947,
+    "longest": 0.029999999329447746
   },
   "bounds_m": {
     "min": [
-      -0.02500000037252903,
-      -0.02377641201019287,
-      -0.007249999791383743
+      -0.014999999664723873,
+      -0.014265846461057663,
+      -0.004349999595433474
     ],
     "max": [
-      0.02500000037252903,
-      0.02377641201019287,
-      0.007249999791383743
+      0.014999999664723873,
+      0.014265846461057663,
+      0.004349999595433474
     ]
   },
   "vertices": 102,
@@ -40,7 +40,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "01a8f3c33f13db91afff09de07021b3420c99e5fb23938570558aee59583a4ca",
+  "geometry_sha256": "5b1a6e1ac47c3a42cbd316cfc2bb8f74bbf806fa9c48333897fe478f59d34458",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "瓶盖",
   "category": "debris",
@@ -52,14 +52,14 @@
     "row_found": true
   },
   "dimension_check": {
-    "size_reference": "game",
-    "checked_against": "game_longest_dim_m",
-    "target_m": 0.05,
-    "built_longest_m": 0.05000000074505806,
-    "abs_error_m": 7.450580569168253e-10,
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.03,
+    "built_longest_m": 0.029999999329447746,
+    "abs_error_m": 6.705522526129215e-10,
     "csv_target_matches": true,
-    "csv_game_longest_matches": true,
-    "scale_vs_real_m": 1.667
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
   },
   "tri_budget": 300,
   "within_budget": true,
@@ -79,9 +79,9 @@
   "build_script": "models/bottle_cap.py",
   "preview": "previews/bottle_cap_preview.png",
   "files": {
-    "bottle_cap.fbx": 18652,
-    "bottle_cap.glb": 14064,
-    "bottle_cap.blend": 91762
+    "bottle_cap.fbx": 18636,
+    "bottle_cap.glb": 13876,
+    "bottle_cap.blend": 91742
   },
   "export_settings": {
     "fbx": {
@@ -98,5 +98,5 @@
     },
     "blender": "5.3.0"
   },
-  "preview_bytes": 125090
+  "preview_bytes": 82754
 }

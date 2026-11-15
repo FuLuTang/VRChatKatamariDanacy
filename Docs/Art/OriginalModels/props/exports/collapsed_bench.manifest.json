@@ -1,0 +1,118 @@
+{
+  "id": "collapsed_bench",
+  "pivot": "center",
+  "target_longest_m": 1.6,
+  "dimensions_m": {
+    "x": 1.600000023841858,
+    "y": 0.5499999523162842,
+    "z": 0.8100000023841858,
+    "longest": 1.600000023841858
+  },
+  "bounds_m": {
+    "min": [
+      -0.800000011920929,
+      -0.2749999761581421,
+      -0.4050000011920929
+    ],
+    "max": [
+      0.800000011920929,
+      0.2749999761581421,
+      0.4050000011920929
+    ]
+  },
+  "vertices": 248,
+  "triangles": 512,
+  "materials": [
+    "Prop_collapsed_bench_wood",
+    "Prop_collapsed_bench_metal"
+  ],
+  "material_base_colors": {
+    "Prop_collapsed_bench_wood": [
+      0.3,
+      0.19,
+      0.095
+    ],
+    "Prop_collapsed_bench_metal": [
+      0.14,
+      0.15,
+      0.16
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "5e8e98c45275d0380954cbcfae460b0e2938c478c152e6c8272c5bac1235382c",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "倒塌长凳",
+  "category": "gate",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 1.6,
+    "game_longest_dim_m": 3.6,
+    "sourcing_hint": "model ourselves：3.6 m 长凳横躺（四条腿朝侧），专用于对角门",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 1.6,
+    "built_longest_m": 1.600000023841858,
+    "abs_error_m": 2.3841857821338408e-08,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 600,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "wood",
+      "name_zh": "旧木条",
+      "linear_rgb": [
+        0.3,
+        0.19,
+        0.095
+      ],
+      "roughness": 0.82
+    },
+    {
+      "key": "metal",
+      "name_zh": "凳腿深铁灰",
+      "linear_rgb": [
+        0.14,
+        0.15,
+        0.16
+      ],
+      "roughness": 0.5
+    }
+  ],
+  "notes": "Upright slatted bench, real metres: four seat slats 1.600 x 0.115 x 0.030 at z 0.420-0.450 (20 mm gaps, centres +/-0.0675 / +/-0.2025), two side rails 0.060 x 0.520 x 0.050 at x +/-0.680, four 0.055 square legs at y +/-0.200 up to z 0.440, two back posts 0.050 x 0.050 at y 0.240-0.290 up to z 0.800, two back slats 1.600 x 0.030 x 0.100 at z 0.560-0.660 and 0.710-0.800.  AABB 1.600 x 0.550 x 0.800 (back at -Y, seat front +Y).  The seat gaps are through-holes.  Materials split at z 0.395: metal legs below, wood above.  This replaces the catalog note \"lying on its side\" with the upright bench its three-axis describes.",
+  "build_script": "models/collapsed_bench.py",
+  "preview": "previews/collapsed_bench_preview.png",
+  "files": {
+    "collapsed_bench.fbx": 21660,
+    "collapsed_bench.glb": 20504,
+    "collapsed_bench.blend": 98972
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 128716
+}

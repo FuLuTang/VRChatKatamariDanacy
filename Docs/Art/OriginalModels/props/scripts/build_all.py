@@ -132,17 +132,22 @@ def csv_size(row, column, pid):
 
 
 def build_one(pid, rows=None):
+    mod = propmodels.load(pid)
     if rows is None:
         rows = catalog_rows()
     row = rows.get(pid)
     if row is None:
+        # A prop that exists only in the level-construction model list carries
+        # its catalog row in the module (DOC_ROW), so the map CSV stays the
+        # single source for map props and the research list for its own items.
+        row = getattr(mod, 'DOC_ROW', None)
+    if row is None:
         raise BuildInputError(
-            'prop %r is listed in models.ORDER but not in %s (catalog ids: %s); '
-            'add the row or drop the prop from models.ORDER'
-            % (pid, CSV_PATH, ', '.join(sorted(rows))))
+            'prop %r is listed in models.ORDER but not in %s and declares no '
+            'DOC_ROW (catalog ids: %s); add the row or drop the prop from '
+            'models.ORDER' % (pid, CSV_PATH, ', '.join(sorted(rows))))
     csv_real = csv_size(row, 'real_longest_dim_m', pid)
     csv_game = csv_size(row, 'game_longest_dim_m', pid)
-    mod = propmodels.load(pid)
     # Which catalog column is the size contract for this prop: the 2026-11-15
     # plan moved the prop set to real-world sizes, so a model may declare
     # SIZE_REFERENCE = 'real'.  Models that keep the older game-scale contract

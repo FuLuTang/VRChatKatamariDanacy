@@ -1,0 +1,118 @@
+{
+  "id": "picnic_basket",
+  "pivot": "center",
+  "target_longest_m": 0.45,
+  "dimensions_m": {
+    "x": 0.44999998807907104,
+    "y": 0.30000001192092896,
+    "z": 0.22130000591278076,
+    "longest": 0.44999998807907104
+  },
+  "bounds_m": {
+    "min": [
+      -0.22499999403953552,
+      -0.15000000596046448,
+      -0.11065000295639038
+    ],
+    "max": [
+      0.22499999403953552,
+      0.15000000596046448,
+      0.11065000295639038
+    ]
+  },
+  "vertices": 276,
+  "triangles": 552,
+  "materials": [
+    "Prop_picnic_basket_wicker",
+    "Prop_picnic_basket_handle"
+  ],
+  "material_base_colors": {
+    "Prop_picnic_basket_wicker": [
+      0.34,
+      0.21,
+      0.1
+    ],
+    "Prop_picnic_basket_handle": [
+      0.25,
+      0.15,
+      0.07
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "8e2a14ed51165ef7f27e3d0e92769b1f324487c0f94f6616c835c8cad7fa7300",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "野餐篮",
+  "category": "container",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.45,
+    "game_longest_dim_m": 1.2,
+    "sourcing_hint": "model ourselves：0.45 m 篮体放大到 1.20 m 游戏尺寸（藤条用 alpha 卡）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.45,
+    "built_longest_m": 0.44999998807907104,
+    "abs_error_m": 1.1920928966180355e-08,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 800,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "wicker",
+      "name_zh": "藤条浅棕",
+      "linear_rgb": [
+        0.34,
+        0.21,
+        0.1
+      ],
+      "roughness": 0.85
+    },
+    {
+      "key": "handle",
+      "name_zh": "提手深棕",
+      "linear_rgb": [
+        0.25,
+        0.15,
+        0.07
+      ],
+      "roughness": 0.8
+    }
+  ],
+  "notes": "Rounded-rect tub: body 0.446 x 0.296 to z 0.150, rim lip and three weave bands 0.450 x 0.300 both 2 mm proud, wall 14-16 mm, floor 12 mm, open top by boolean difference; handle is a 9-station, 6-segment tube (r 10 mm) from y = +/-0.142, z = 0.140 to z = 0.230, so the AABB is exactly 0.450 x 0.300 x 0.240.  Materials by face-centre z: handle above 0.152, wicker below.",
+  "build_script": "models/picnic_basket.py",
+  "preview": "previews/picnic_basket_preview.png",
+  "files": {
+    "picnic_basket.fbx": 24780,
+    "picnic_basket.glb": 21088,
+    "picnic_basket.blend": 99711
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 138878
+}

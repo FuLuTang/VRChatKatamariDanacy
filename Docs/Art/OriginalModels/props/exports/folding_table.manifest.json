@@ -1,0 +1,118 @@
+{
+  "id": "folding_table",
+  "pivot": "center",
+  "target_longest_m": 1.0,
+  "dimensions_m": {
+    "x": 1.0,
+    "y": 0.6000000238418579,
+    "z": 0.699999988079071,
+    "longest": 1.0
+  },
+  "bounds_m": {
+    "min": [
+      -0.5,
+      -0.30000001192092896,
+      -0.3499999940395355
+    ],
+    "max": [
+      0.5,
+      0.30000001192092896,
+      0.3499999940395355
+    ]
+  },
+  "vertices": 120,
+  "triangles": 236,
+  "materials": [
+    "Prop_folding_table_top",
+    "Prop_folding_table_frame"
+  ],
+  "material_base_colors": {
+    "Prop_folding_table_top": [
+      0.56,
+      0.43,
+      0.27
+    ],
+    "Prop_folding_table_frame": [
+      0.17,
+      0.18,
+      0.19
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "1a8bc7ebe292a5b6ece2a366d0ae1940fbad4175ab45ba06dcbac6ed2f61951b",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "折叠桌",
+  "category": "furniture",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 1.0,
+    "game_longest_dim_m": 1.0,
+    "sourcing_hint": "model ourselves：LEVEL_CONSTRUCTION.md 4 P0（真实三轴，无 CSV 行）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 1.0,
+    "built_longest_m": 1.0,
+    "abs_error_m": 0.0,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 900,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "top",
+      "name_zh": "桌面浅木",
+      "linear_rgb": [
+        0.56,
+        0.43,
+        0.27
+      ],
+      "roughness": 0.68
+    },
+    {
+      "key": "frame",
+      "name_zh": "桌腿深灰",
+      "linear_rgb": [
+        0.17,
+        0.18,
+        0.19
+      ],
+      "roughness": 0.4
+    }
+  ],
+  "notes": "Top 1.000 x 0.600 x 0.030 with its upper plane at z = 0.700; four 0.040 square legs at x +/-0.420, y +/-0.240; AABB 1.000 x 0.600 x 0.700, flat top. Size from LEVEL_CONSTRUCTION.md section 4 P0 (no CSV row).",
+  "build_script": "models/folding_table.py",
+  "preview": "previews/folding_table_preview.png",
+  "files": {
+    "folding_table.fbx": 19132,
+    "folding_table.glb": 12384,
+    "folding_table.blend": 93356
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 130257
+}

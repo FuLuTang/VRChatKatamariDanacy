@@ -10,8 +10,9 @@ NAME_ZH = '草籽'
 CATEGORY = 'food'
 CSV_REAL_LONGEST_M = 0.02
 CSV_GAME_LONGEST_M = 0.04
+SIZE_REFERENCE = 'real'
 SOURCING = 'model ourselves：Ø0.04 m 椭球 + 1 张 alpha 草卡'
-TARGET_LONGEST_M = 0.04
+TARGET_LONGEST_M = 0.02
 TRI_BUDGET = 300
 MATERIALS = [
     {'key': 'body', 'name_zh': '麦秆黄', 'linear_rgb': [0.42, 0.30, 0.10],

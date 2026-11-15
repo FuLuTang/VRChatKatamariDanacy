@@ -1,0 +1,134 @@
+{
+  "id": "cooler_box",
+  "pivot": "center",
+  "target_longest_m": 0.55,
+  "dimensions_m": {
+    "x": 0.550000011920929,
+    "y": 0.3499999940395355,
+    "z": 0.30000001192092896,
+    "longest": 0.550000011920929
+  },
+  "bounds_m": {
+    "min": [
+      -0.2750000059604645,
+      -0.17499999701976776,
+      -0.15000000596046448
+    ],
+    "max": [
+      0.2750000059604645,
+      0.17499999701976776,
+      0.15000000596046448
+    ]
+  },
+  "vertices": 64,
+  "triangles": 124,
+  "materials": [
+    "Prop_cooler_box_shell",
+    "Prop_cooler_box_lid",
+    "Prop_cooler_box_grip"
+  ],
+  "material_base_colors": {
+    "Prop_cooler_box_shell": [
+      0.05,
+      0.15,
+      0.185
+    ],
+    "Prop_cooler_box_lid": [
+      0.6,
+      0.62,
+      0.59
+    ],
+    "Prop_cooler_box_grip": [
+      0.03,
+      0.033,
+      0.035
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "4106759b6bc169a2a77f4eb43e2b7942bcac1e51a1b95aa26e8060372563f406",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "保温箱",
+  "category": "container",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.55,
+    "game_longest_dim_m": 1.6,
+    "sourcing_hint": "model ourselves：0.55 m 箱体放大到 1.60 m，带提手与盖缝",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.55,
+    "built_longest_m": 0.550000011920929,
+    "abs_error_m": 1.1920928910669204e-08,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 800,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "shell",
+      "name_zh": "箱体青蓝",
+      "linear_rgb": [
+        0.05,
+        0.15,
+        0.185
+      ],
+      "roughness": 0.55
+    },
+    {
+      "key": "lid",
+      "name_zh": "盖面浅灰",
+      "linear_rgb": [
+        0.6,
+        0.62,
+        0.59
+      ],
+      "roughness": 0.6
+    },
+    {
+      "key": "grip",
+      "name_zh": "握槽深灰",
+      "linear_rgb": [
+        0.03,
+        0.033,
+        0.035
+      ],
+      "roughness": 0.72
+    }
+  ],
+  "notes": "Rounded-rect body 0.544 x 0.344 x 0.292 (R 28 mm) unioned with a lid 0.550 x 0.350 x 0.018 starting at z = 0.282 (R 32 mm, 3 mm overhang and a 10 mm step), then two 0.120 x 0.050 x 0.025 grip recesses cut into the +/-X ends at z 0.190-0.240.  AABB 0.550 x 0.320 x 0.320, top is one flat plane.  Materials: lid above z 0.3017, dark grip inside |x| 0.240-0.272 and |y| < 0.062 at z 0.182-0.248, shell elsewhere.",
+  "build_script": "models/cooler_box.py",
+  "preview": "previews/cooler_box_preview.png",
+  "files": {
+    "cooler_box.fbx": 18860,
+    "cooler_box.glb": 8060,
+    "cooler_box.blend": 92446
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 142919
+}

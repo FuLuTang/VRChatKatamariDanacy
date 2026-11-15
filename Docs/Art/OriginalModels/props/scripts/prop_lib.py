@@ -20,8 +20,15 @@ from mathutils import Matrix, Vector
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(SCRIPT_DIR)
-EXPORT_DIR = os.path.join(ROOT, 'exports')
-PREVIEW_DIR = os.path.join(ROOT, 'previews')
+# Deliverables (exports/, previews/, per-prop and aggregate manifests,
+# SHA256SUMS) land under OUTPUT_ROOT, which defaults to the props directory in
+# the repository.  set_output_root() redirects it so a rebuild can go to a fresh
+# directory outside the repository without touching committed deliverables.
+# ROOT itself never moves: it anchors repo-relative inputs (the map prop
+# catalog) and the repo-relative paths recorded in the manifests.
+OUTPUT_ROOT = ROOT
+EXPORT_DIR = os.path.join(OUTPUT_ROOT, 'exports')
+PREVIEW_DIR = os.path.join(OUTPUT_ROOT, 'previews')
 
 TAU = math.pi * 2.0
 
@@ -33,6 +40,20 @@ TAU = math.pi * 2.0
 def ensure_dirs():
     for d in (EXPORT_DIR, PREVIEW_DIR):
         os.makedirs(d, exist_ok=True)
+
+
+def set_output_root(root):
+    """Point exports/ and previews/ at ``root``; returns the absolute root.
+
+    Call before the first build step.  Inputs and recorded relative paths keep
+    resolving through ROOT, so this only changes where files are written.
+    """
+    global OUTPUT_ROOT, EXPORT_DIR, PREVIEW_DIR
+    OUTPUT_ROOT = os.path.normpath(os.path.abspath(root))
+    EXPORT_DIR = os.path.join(OUTPUT_ROOT, 'exports')
+    PREVIEW_DIR = os.path.join(OUTPUT_ROOT, 'previews')
+    ensure_dirs()
+    return OUTPUT_ROOT
 
 
 def reset_scene():
@@ -490,13 +511,46 @@ def _look_at(obj, target):
     obj.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
 
 
+def select_eevee_engine(scene):
+    """Select this Blender's EEVEE engine and return its identifier.
+
+    The engine id is not stable across versions: 3.6.x, 4.0-4.1 and 5.0+ use
+    'BLENDER_EEVEE', while 4.2-4.5 name the rewritten engine
+    'BLENDER_EEVEE_NEXT'.  Assigning an unknown id raises TypeError, so probe
+    both names instead of pinning one - the committed previews were rendered on
+    3.6.21 and the current target is 5.3.
+    """
+    for engine in ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'):
+        try:
+            scene.render.engine = engine
+        except TypeError:
+            continue
+        return engine
+    raise RuntimeError(
+        'no EEVEE engine available in Blender %s' % bpy.app.version_string)
+
+
+def _enable_ambient_occlusion(scene):
+    """Turn on EEVEE's screen-space AO where that toggle still exists.
+
+    3.6-4.1 expose ``eevee.use_gtao``; the EEVEE Next rewrite in 4.2 removed it
+    (4.2+ moved AO under Raytracing > Fast GI Approximation, which has no single
+    equivalent boolean), and Blender 5.3 raises AttributeError on it.  Guard on
+    the attribute so one script renders on every version; previews are a shape
+    and proportion reference, so losing a little contact shading is acceptable
+    where the toggle is gone.
+    """
+    if hasattr(scene.eevee, 'use_gtao'):
+        scene.eevee.use_gtao = True
+
+
 def render_preview(ob, path, res=512, samples=32):
     sc = bpy.context.scene
     for o in list(bpy.data.objects):
         if o.type in {'CAMERA', 'LIGHT'}:
             bpy.data.objects.remove(o, do_unlink=True)
 
-    sc.render.engine = 'BLENDER_EEVEE'
+    select_eevee_engine(sc)
     sc.render.resolution_x = res
     sc.render.resolution_y = res
     sc.render.resolution_percentage = 100
@@ -506,7 +560,7 @@ def render_preview(ob, path, res=512, samples=32):
     sc.render.image_settings.color_depth = '8'
     sc.render.image_settings.compression = 15
     sc.eevee.taa_render_samples = samples
-    sc.eevee.use_gtao = True
+    _enable_ambient_occlusion(sc)
     sc.view_settings.view_transform = 'Standard'
     sc.view_settings.look = 'None'
 
@@ -599,7 +653,7 @@ def _text_layer(specs, width, height, path):
     world.node_tree.nodes['Background'].inputs['Strength'].default_value = 0.0
     sc.world = world
 
-    sc.render.engine = 'BLENDER_EEVEE'
+    select_eevee_engine(sc)
     sc.render.resolution_x = width
     sc.render.resolution_y = height
     sc.render.resolution_percentage = 100
@@ -638,7 +692,8 @@ def contact_sheet(entries, path, res=512, cols=4, gap=20, label_h=36,
 
         preview = entry['preview']
         if not os.path.isabs(preview):
-            preview = os.path.join(ROOT, preview)
+            # Resolve against the root this build wrote to, not the repo copy.
+            preview = os.path.join(OUTPUT_ROOT, preview)
         img = bpy.data.images.load(preview, check_existing=False)
         w, h = img.size
         if (w, h) != (res, res):

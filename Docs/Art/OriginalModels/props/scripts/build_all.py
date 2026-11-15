@@ -1,12 +1,28 @@
 """Build the whole first batch of original tiny props.
 
-Run inside headless Blender:
-  blender --background --factory-startup --disable-autoexec --python build_all.py
+Run inside headless Blender (``--python-exit-code`` is what turns a raised error
+into a non-zero process exit):
+
+  blender --background --factory-startup --disable-autoexec --python-exit-code 2 \\
+      --python build_all.py
 
 For every prop in models.ORDER this builds the mesh from scratch, exports
-FBX + GLB + .blend into ../exports, writes a per-prop manifest, renders a
-transparent 512x512 preview into ../previews, then builds a contact sheet and
-a top-level manifest.json / SHA256SUMS.
+FBX + GLB + .blend into <output root>/exports, writes a per-prop manifest,
+renders a transparent 512x512 preview into <output root>/previews, then builds a
+contact sheet and a top-level manifest.json / SHA256SUMS.
+
+The output root defaults to this props directory - the committed deliverables.
+``--out DIR`` (after Blender's ``--`` separator) or the OUT_DIR environment
+variable, the same knob generate.py uses, redirects every deliverable, so a
+rebuild can run into a fresh directory outside the repository without
+overwriting the committed exports/, previews/ or SHA256SUMS:
+
+  blender ... --python build_all.py -- --out <fresh dir outside the repo>
+  OUT_DIR=<fresh dir outside the repo> blender ... --python build_all.py
+
+A missing Docs/Design/Maps/PicnicLawn/prop_catalog.csv is a hard error, not a
+warning: the catalog carries each prop's CSV columns, and building without it
+would emit manifests that look complete while recording nothing.
 """
 
 import bpy
@@ -25,24 +41,91 @@ if HERE not in sys.path:
 import prop_lib as lib          # noqa: E402
 import models as propmodels     # noqa: E402
 
+# Repo-relative on purpose: this is an input, not a deliverable, so it stays
+# anchored at lib.ROOT even when the output root is redirected.
 CSV_PATH = os.path.normpath(os.path.join(
     lib.ROOT, '..', '..', '..', 'Design', 'Maps', 'PicnicLawn',
     'prop_catalog.csv'))
 
 
+class BuildInputError(RuntimeError):
+    """A required input is missing or inconsistent; the build must stop."""
+
+
 def catalog_rows():
-    rows = {}
-    if not os.path.exists(CSV_PATH):
-        return rows
+    """Load the map prop catalog keyed by prop id.  Missing input is fatal."""
+    if not os.path.isfile(CSV_PATH):
+        raise BuildInputError(
+            'prop catalog not found: %s\n'
+            'build_all.py cross-checks every prop against the map catalog, so it '
+            'refuses to build without it. Run it from a full repository checkout, '
+            'or restore the file.' % CSV_PATH)
     with open(CSV_PATH, 'r', encoding='utf-8-sig', newline='') as fh:
-        for row in csv.DictReader(fh):
-            rows[row['id']] = row
+        reader = csv.DictReader(fh)
+        if not reader.fieldnames or 'id' not in reader.fieldnames:
+            raise BuildInputError(
+                'prop catalog %s has no "id" column' % CSV_PATH)
+        rows = {}
+        for row in reader:
+            pid = (row.get('id') or '').strip()
+            if pid:
+                rows[pid] = row
+    if not rows:
+        raise BuildInputError('prop catalog %s lists no props' % CSV_PATH)
     return rows
+
+
+def requested_output(argv=None):
+    """Deliverable root asked for by ``--out DIR`` or ``OUT_DIR``; else None.
+
+    Blender passes its own arguments, so only what follows ``--`` is read.
+    ``--out DIR`` / ``--out=DIR`` wins over the OUT_DIR environment variable
+    (the name generate.py already uses); None keeps the historical default.
+    """
+    argv = sys.argv if argv is None else list(argv)
+    if '--' in argv:
+        argv = argv[argv.index('--') + 1:]
+    else:
+        argv = []
+    for index, arg in enumerate(argv):
+        if arg == '--out':
+            if index + 1 >= len(argv):
+                raise BuildInputError('--out needs a directory argument')
+            return argv[index + 1]
+        if arg.startswith('--out='):
+            return arg.split('=', 1)[1]
+    return os.environ.get('OUT_DIR') or None
+
+
+def configure_output(argv=None):
+    """Apply the requested output root and return it; no request means the repo.
+
+    Always writes the resolved root back through prop_lib, so the default is a
+    real reset rather than "whatever the last call left behind".
+    """
+    lib.set_output_root(requested_output(argv) or lib.ROOT)
+    return lib.OUTPUT_ROOT
 
 
 def build_one(pid, rows=None):
     if rows is None:
         rows = catalog_rows()
+    row = rows.get(pid)
+    if row is None:
+        raise BuildInputError(
+            'prop %r is listed in models.ORDER but not in %s (catalog ids: %s); '
+            'add the row or drop the prop from models.ORDER'
+            % (pid, CSV_PATH, ', '.join(sorted(rows))))
+    csv_game_text = (row.get('game_longest_dim_m') or '').strip()
+    if not csv_game_text:
+        raise BuildInputError(
+            'prop %r has no game_longest_dim_m in %s' % (pid, CSV_PATH))
+    try:
+        csv_game = float(csv_game_text)
+    except ValueError:
+        raise BuildInputError(
+            'prop %r has a non-numeric game_longest_dim_m %r in %s'
+            % (pid, csv_game_text, CSV_PATH))
     lib.reset_scene()
     mod = propmodels.load(pid)
     b = lib.Builder(pid)
@@ -50,10 +133,6 @@ def build_one(pid, rows=None):
     info = b.finish(mod.TARGET_LONGEST_M, mod.PIVOT)
     ob = b.object
 
-    row = rows.get(pid, {})
-    csv_game = None
-    if row.get('game_longest_dim_m'):
-        csv_game = float(row['game_longest_dim_m'])
     info.update({
         'name_zh': mod.NAME_ZH,
         'category': mod.CATEGORY,
@@ -95,6 +174,13 @@ def build_one(pid, rows=None):
         pid, info['triangles'], info['vertices'],
         info['dimensions_m']['longest'],
         info['mesh_checks']['closed_shells']), flush=True)
+    if not info['dimension_check']['csv_game_longest_matches']:
+        # A mismatch is not fatal, but it must not vanish into the JSON either:
+        # the mesh was scaled to models/<id>.py TARGET_LONGEST_M, so one of the
+        # two numbers is wrong.
+        print('WARN %-13s built longest %.4f m != CSV game_longest_dim_m %r'
+              % (pid, info['dimensions_m']['longest'], csv_game_text),
+              flush=True)
     return info
 
 
@@ -106,32 +192,52 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def write_sums():
+def write_sums(root=None):
+    """Fingerprint every deliverable under ``root`` into SHA256SUMS.
+
+    ``root`` defaults to the output root this invocation asks for (``--out`` /
+    ``OUT_DIR``), which is what sign.py relies on.  scripts/ and README.md are
+    only included when they live under that root, so a redirected build
+    fingerprints its own tree and never lists repo files it did not write.
+    """
+    root = root or configure_output()
     entries = []
     for base in ('exports', 'previews', 'scripts'):
-        root = os.path.join(lib.ROOT, base)
-        for dirpath, dirnames, filenames in os.walk(root):
+        tree = os.path.join(root, base)
+        for dirpath, dirnames, filenames in os.walk(tree):
             dirnames.sort()
             for name in sorted(filenames):
                 if (name.endswith('.pyc') or name.endswith('.blend1')
                         or name == '_labels.png'):
                     continue
                 full = os.path.join(dirpath, name)
-                rel = os.path.relpath(full, lib.ROOT).replace(os.sep, '/')
+                rel = os.path.relpath(full, root).replace(os.sep, '/')
                 entries.append((sha256_file(full), rel))
     for extra in ('manifest.json', 'verification.json', 'README.md'):
-        full = os.path.join(lib.ROOT, extra)
+        full = os.path.join(root, extra)
         if os.path.exists(full):
             entries.append((sha256_file(full), extra))
+    if not entries:
+        raise BuildInputError(
+            'nothing to fingerprint under %s (no exports/, previews/ or '
+            'manifest.json); build first, then regenerate SHA256SUMS' % root)
     entries.sort(key=lambda e: e[1])
-    with open(os.path.join(lib.ROOT, 'SHA256SUMS'), 'w',
+    with open(os.path.join(root, 'SHA256SUMS'), 'w',
               encoding='utf-8', newline='\n') as fh:
         for digest, rel in entries:
             fh.write('%s  %s\n' % (digest, rel))
     return entries
 
 
+def _fail(exc):
+    """Report an input problem and exit non-zero without a bare traceback."""
+    sys.stderr.write('BUILD_FAILED: %s\n' % exc)
+    sys.exit(2)
+
+
 def main():
+    root = configure_output()
+    print('OUTPUT_ROOT %s' % root, flush=True)
     t0 = time.time()
     rows = catalog_rows()
     entries = []
@@ -177,10 +283,10 @@ def main():
             '无 LOD、无 UV、无碰撞体',
         ],
     }
-    with open(os.path.join(lib.ROOT, 'manifest.json'), 'w',
+    with open(os.path.join(root, 'manifest.json'), 'w',
               encoding='utf-8') as fh:
         json.dump(doc, fh, ensure_ascii=False, indent=2)
-    sums = write_sums()
+    sums = write_sums(root)
 
     print('', flush=True)
     print('%-13s %6s %6s %6s %8s %8s %s' % (
@@ -198,10 +304,18 @@ def main():
 
 
 def run_single(pid):
-    info = build_one(pid)
+    configure_output()
+    try:
+        info = build_one(pid)
+    except BuildInputError as exc:
+        _fail(exc)
+        return
     print(json.dumps(info, ensure_ascii=False, indent=2))
     print('BUILD_PROP_OK', flush=True)
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except BuildInputError as exc:
+        _fail(exc)

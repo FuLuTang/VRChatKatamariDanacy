@@ -20,4 +20,43 @@
 
 ## 复现
 
-在安装 Blender 的环境中运行独立后台进程，参数 `MODEL_NAME` 选一个清单模型，`OUT_DIR` 指向隔离输出目录，然后执行 `blender --background --factory-startup --disable-autoexec --python generate.py`。Windows 原始构建目录使用 `%USERPROFILE%` 等环境占位的约定；本目录不记录设备用户名、主机名、私网 IP 或账号信息。
+### 实测环境（2026-11-15）
+
+- Steam 版 Blender **5.3.0**（内置 Python 3.13.13）的 `--background` 可用、无 Steam DRM；应直接调用 `steamapps\common\Blender\blender.exe`，不要走 `blender-launcher.exe`（只是包装器）。与用户的 Blender GUI 并存实测安全：加 `--factory-startup` 后不写任何 `%APPDATA%` 配置。
+- 老管线 `generate.py` 在 5.3 上跑通：9 件模型，几何与既有产物逐位一致。
+- 新管线 `props/scripts/build_all.py` 曾因 EEVEE Next 移除 `SceneEEVEE.use_gtao` 而在 5.3 上崩溃；`prop_lib.py` 现已改为按功能探测（`hasattr` 守卫 + 渲染引擎 id 探测），覆盖 3.6、4.2–4.5（`BLENDER_EEVEE_NEXT`）与 5.x（`BLENDER_EEVEE`）。在 5.3 上仅用 `hasattr` 守卫临时修过的副本可产出 8 件道具、`TOTAL tris=1634` 的全部文件；**本仓库提交的改法尚未在 Blender 里重跑验证**。
+- 提交的产物是 **Blender 3.6.21** 生成的（FBX 头里写着导出器版本）。
+
+### 可复现性到什么程度（实测）
+
+- `.blend` / `.fbx` **每次重跑字节都会变**（内嵌时间戳与绝对路径），它们的 SHA-256 因此不具备"重跑能对上"的意义。
+- `*.manifest.json` 与 `*_preview.png` 逐字节稳定；`*_view*.png` 像素一致，但 PNG 元数据有 14 字节差异（`Date` / `RenderTime` 文本块）。
+- 所以 `SHA256SUMS` 是**当前交付物的指纹**（用来核对文件有没有被改动），不是可重复构建的校验门。
+- 真要字节级复现，须固定到 **Blender 3.6.21** 并使用同一输出路径。换版本通常仍能得到同样的几何，但字节不会一致。
+
+### 无头跑法
+
+`--python-exit-code 2` 让脚本抛错时进程以非 0 退出；缺了它，Python 报错后 Blender 仍可能返回 0。先把 Blender 路径放进 `BLENDER`，`OUT_DIR` 指向**仓库外的全新目录**：
+
+```
+set BLENDER=<...>\steamapps\common\Blender\blender.exe
+
+set MODEL_NAME=ball_core
+set OUT_DIR=%TEMP%\OriginalModels-rebuild
+"%BLENDER%" --background --factory-startup --disable-autoexec --python-exit-code 2 ^
+  --python Docs\Art\OriginalModels\generate.py
+```
+
+```
+set OUT_DIR=%TEMP%\PropsRebuild
+"%BLENDER%" --background --factory-startup --disable-autoexec --python-exit-code 2 ^
+  --python Docs\Art\OriginalModels\props\scripts\build_all.py
+```
+
+- 输出目录：`generate.py` 只认环境变量 `OUT_DIR`（不设时用它脚本里写死的仓库外预览目录）；`build_all.py` 读 `OUT_DIR`，也接受命令行 `-- --out <目录>`（命令行优先）。等价写法：`... --python ...build_all.py -- --out %TEMP%\PropsRebuild`。
+- 不给 `OUT_DIR` / `--out` 时，`build_all.py` 保持历史行为，写仓库里的 `props/exports/`、`props/previews/`、`props/manifest.json` 与 `props/SHA256SUMS`——那是"发布交付物"的动作，只在确实要更新仓库产物时使用。
+- 纪律：探索性重跑一律输出到仓库外的新目录，**不要覆盖** `exports/`、`previews/`、`SHA256SUMS`；`SHA256SUMS` 只由有意更新交付物后的整批重建或 `props/scripts/sign.py` 刷新。
+- `prop_catalog.csv` 缺失（或某件道具不在其中、`game_longest_dim_m` 缺失/非数字）现在是**硬错误**：打印 `BUILD_FAILED: ...` 并退出码 2，不再静默记 `row_found: false`。
+- 脚本不访问网络、不装 Blender 插件、不写 `%APPDATA%`。
+
+Windows 原始构建目录使用 `%USERPROFILE%` 等环境占位的约定；本目录不记录设备用户名、主机名、私网 IP 或账号信息。

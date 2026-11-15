@@ -37,9 +37,9 @@
         }
       },
       "files": {
-        "button.blend": 474265,
-        "button.fbx": 24060,
-        "button.glb": 163836
+        "button.blend": 466853,
+        "button.fbx": 23196,
+        "button.glb": 42444
       },
       "geometry_sha256": "8a59a566f7e538235e9ed3307b847b9b914d576cfe68d52668ca7b58791eeab5",
       "id": "button",
@@ -67,13 +67,14 @@
       "target_longest_m": 0.012,
       "textures": {
         "albedo": "textures/button_albedo.png",
-        "bake_seconds": 2.3,
+        "bake_seconds": 3.0,
         "bytes_with_mips": 262144,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/button_mra.png",
-        "normal": "textures/button_normal.png",
+        "normal": null,
+        "normal_kinds": [],
         "resolution": 256,
         "single_material": "Prop_button_tex",
         "slot_colour_check": [
@@ -90,11 +91,11 @@
             ],
             "max_channel_delta": 0.007,
             "slot": "plastic_blue",
-            "texels": 156228
+            "texels": 173804
           },
           {
             "albedo_mean_linear": [
-              0.023,
+              0.024,
               0.027,
               0.035
             ],
@@ -105,7 +106,7 @@
             ],
             "max_channel_delta": 0.01,
             "slot": "ink",
-            "texels": 105916
+            "texels": 88340
           }
         ],
         "slots_baked": [
@@ -115,14 +116,25 @@
         "uv": {
           "uv_layers": 1,
           "uv_max": [
-            0.9444,
-            0.9966
+            0.9965,
+            0.9511
           ],
           "uv_min": [
-            0.0034,
-            0.0034
+            0.0039,
+            0.0038
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 57.0,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.574,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/button_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 144,
@@ -163,9 +175,9 @@
         }
       },
       "files": {
-        "seed.blend": 452665,
-        "seed.fbx": 24188,
-        "seed.glb": 156940
+        "seed.blend": 445253,
+        "seed.fbx": 23276,
+        "seed.glb": 36308
       },
       "geometry_sha256": "d75c95cd605b4c9c45186700f2bb9397381aa42678277b65f248e7c4f0067e8d",
       "id": "seed",
@@ -193,28 +205,29 @@
       "target_longest_m": 0.02,
       "textures": {
         "albedo": "textures/seed_albedo.png",
-        "bake_seconds": 1.8,
+        "bake_seconds": 2.7,
         "bytes_with_mips": 262144,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/seed_mra.png",
-        "normal": "textures/seed_normal.png",
+        "normal": null,
+        "normal_kinds": [],
         "resolution": 256,
         "single_material": "Prop_seed_tex",
         "slot_colour_check": [
           {
             "albedo_mean_linear": [
-              0.363,
-              0.26,
-              0.087
+              0.376,
+              0.268,
+              0.089
             ],
             "declared_linear": [
               0.42,
               0.3,
               0.1
             ],
-            "max_channel_delta": 0.057,
+            "max_channel_delta": 0.044,
             "slot": "body",
             "texels": 262144
           }
@@ -225,14 +238,25 @@
         "uv": {
           "uv_layers": 1,
           "uv_max": [
-            0.9971,
-            0.8649
+            0.9967,
+            0.9678
           ],
           "uv_min": [
-            0.0029,
-            0.0029
+            0.0036,
+            0.0039
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 53.9,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.5426,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/seed_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 144,
@@ -273,9 +297,9 @@
         }
       },
       "files": {
-        "bottle_cap.blend": 458113,
-        "bottle_cap.fbx": 25324,
-        "bottle_cap.glb": 174204
+        "bottle_cap.blend": 450701,
+        "bottle_cap.fbx": 24380,
+        "bottle_cap.glb": 51556
       },
       "geometry_sha256": "5b1a6e1ac47c3a42cbd316cfc2bb8f74bbf806fa9c48333897fe478f59d34458",
       "id": "bottle_cap",
@@ -303,28 +327,29 @@
       "target_longest_m": 0.03,
       "textures": {
         "albedo": "textures/bottle_cap_albedo.png",
-        "bake_seconds": 2.1,
+        "bake_seconds": 3.1,
         "bytes_with_mips": 262144,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/bottle_cap_mra.png",
-        "normal": "textures/bottle_cap_normal.png",
+        "normal": null,
+        "normal_kinds": [],
         "resolution": 256,
         "single_material": "Prop_bottle_cap_tex",
         "slot_colour_check": [
           {
             "albedo_mean_linear": [
-              0.089,
-              0.125,
-              0.17
+              0.094,
+              0.132,
+              0.179
             ],
             "declared_linear": [
               0.1,
               0.14,
               0.19
             ],
-            "max_channel_delta": 0.02,
+            "max_channel_delta": 0.011,
             "slot": "cap",
             "texels": 262144
           }
@@ -335,14 +360,25 @@
         "uv": {
           "uv_layers": 1,
           "uv_max": [
-            0.9966,
-            0.8581
+            0.9961,
+            0.9961
           ],
           "uv_min": [
-            0.0034,
-            0.0034
+            0.0046,
+            0.0049
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 68.99,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.6955,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/bottle_cap_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 200,
@@ -383,9 +419,9 @@
         }
       },
       "files": {
-        "coin.blend": 455169,
-        "coin.fbx": 23564,
-        "coin.glb": 181448
+        "coin.blend": 447757,
+        "coin.fbx": 22684,
+        "coin.glb": 52256
       },
       "geometry_sha256": "4980a65bb0ffca299a2c1e39144a6705ddf2b30a6f66def6de0e75c9f9fbff82",
       "id": "coin",
@@ -413,45 +449,46 @@
       "target_longest_m": 0.024,
       "textures": {
         "albedo": "textures/coin_albedo.png",
-        "bake_seconds": 2.3,
+        "bake_seconds": 2.7,
         "bytes_with_mips": 262144,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/coin_mra.png",
-        "normal": "textures/coin_normal.png",
+        "normal": null,
+        "normal_kinds": [],
         "resolution": 256,
         "single_material": "Prop_coin_tex",
         "slot_colour_check": [
           {
             "albedo_mean_linear": [
-              0.502,
-              0.367,
-              0.116
+              0.499,
+              0.365,
+              0.115
             ],
             "declared_linear": [
               0.52,
               0.38,
               0.12
             ],
-            "max_channel_delta": 0.018,
+            "max_channel_delta": 0.021,
             "slot": "brass",
-            "texels": 132402
+            "texels": 149451
           },
           {
             "albedo_mean_linear": [
-              0.07,
-              0.074,
-              0.082
+              0.071,
+              0.075,
+              0.083
             ],
             "declared_linear": [
               0.09,
               0.095,
               0.105
             ],
-            "max_channel_delta": 0.023,
+            "max_channel_delta": 0.022,
             "slot": "metal_dark",
-            "texels": 129742
+            "texels": 112693
           }
         ],
         "slots_baked": [
@@ -461,14 +498,25 @@
         "uv": {
           "uv_layers": 1,
           "uv_max": [
-            0.9963,
-            0.9608
+            0.9961,
+            0.8768
           ],
           "uv_min": [
-            0.0037,
-            0.0037
+            0.0047,
+            0.0043
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 47.6,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.4807,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/coin_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 168,
@@ -509,9 +557,9 @@
         }
       },
       "files": {
-        "plate.blend": 474505,
-        "plate.fbx": 30588,
-        "plate.glb": 182712
+        "plate.blend": 467093,
+        "plate.fbx": 29660,
+        "plate.glb": 61664
       },
       "geometry_sha256": "3ee18e5512047aff399b2cee8b1691c03cb501d4ac7e6baa190b6dd9ed5c0755",
       "id": "plate",
@@ -539,28 +587,29 @@
       "target_longest_m": 0.24,
       "textures": {
         "albedo": "textures/plate_albedo.png",
-        "bake_seconds": 2.6,
+        "bake_seconds": 3.2,
         "bytes_with_mips": 262144,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/plate_mra.png",
-        "normal": "textures/plate_normal.png",
+        "normal": null,
+        "normal_kinds": [],
         "resolution": 256,
         "single_material": "Prop_plate_tex",
         "slot_colour_check": [
           {
             "albedo_mean_linear": [
-              0.641,
-              0.619,
-              0.573
+              0.668,
+              0.646,
+              0.598
             ],
             "declared_linear": [
               0.76,
               0.735,
               0.68
             ],
-            "max_channel_delta": 0.119,
+            "max_channel_delta": 0.092,
             "slot": "ceramic",
             "texels": 262144
           }
@@ -571,14 +620,25 @@
         "uv": {
           "uv_layers": 1,
           "uv_max": [
-            0.9985,
-            0.5012
+            0.9983,
+            0.9983
           ],
           "uv_min": [
-            0.0015,
-            0.0015
+            0.0024,
+            0.0022
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 53.1,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.5341,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/plate_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 384,
@@ -619,9 +679,9 @@
         }
       },
       "files": {
-        "ceramic_mug.blend": 489661,
-        "ceramic_mug.fbx": 31148,
-        "ceramic_mug.glb": 202316
+        "ceramic_mug.blend": 482249,
+        "ceramic_mug.fbx": 30156,
+        "ceramic_mug.glb": 72732
       },
       "geometry_sha256": "a78080c844c12fb811b9896d155668c94b92c0e8905ba324c8b01dd77005613b",
       "id": "ceramic_mug",
@@ -649,49 +709,50 @@
       "target_longest_m": 0.12,
       "textures": {
         "albedo": "textures/ceramic_mug_albedo.png",
-        "bake_seconds": 2.3,
+        "bake_seconds": 6.7,
         "bytes_with_mips": 262144,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/ceramic_mug_mra.png",
-        "normal": "textures/ceramic_mug_normal.png",
+        "normal": null,
+        "normal_kinds": [],
         "resolution": 256,
         "single_material": "Prop_ceramic_mug_tex",
         "slot_colour_check": [
           {
             "albedo_mean_linear": [
-              0.74,
-              0.725,
-              0.682
+              0.736,
+              0.721,
+              0.678
             ],
             "declared_linear": [
               0.76,
               0.745,
               0.7
             ],
-            "max_channel_delta": 0.02,
+            "max_channel_delta": 0.024,
             "slot": "ceramic",
-            "texels": 61715
+            "texels": 83580
           },
           {
             "albedo_mean_linear": [
               0.17,
-              0.218,
-              0.284
+              0.217,
+              0.283
             ],
             "declared_linear": [
               0.18,
               0.23,
               0.3
             ],
-            "max_channel_delta": 0.016,
+            "max_channel_delta": 0.017,
             "slot": "ceramic_dark",
-            "texels": 88731
+            "texels": 118895
           },
           {
             "albedo_mean_linear": [
-              0.456,
+              0.457,
               0.071,
               0.057
             ],
@@ -700,9 +761,9 @@
               0.075,
               0.06
             ],
-            "max_channel_delta": 0.024,
+            "max_channel_delta": 0.023,
             "slot": "plastic_red",
-            "texels": 11999
+            "texels": 15980
           },
           {
             "albedo_mean_linear": [
@@ -717,7 +778,7 @@
             ],
             "max_channel_delta": 0.01,
             "slot": "ink",
-            "texels": 99699
+            "texels": 43689
           }
         ],
         "slots_baked": [
@@ -729,14 +790,25 @@
         "uv": {
           "uv_layers": 1,
           "uv_max": [
-            0.9955,
-            0.8425
+            0.9948,
+            0.9908
           ],
           "uv_min": [
-            0.0045,
-            0.0045
+            0.0052,
+            0.0052
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 65.24,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.6574,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/ceramic_mug_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 312,
@@ -778,8 +850,8 @@
       },
       "files": {
         "dandelion_puff.blend": 481857,
-        "dandelion_puff.fbx": 38908,
-        "dandelion_puff.glb": 269828
+        "dandelion_puff.fbx": 39276,
+        "dandelion_puff.glb": 222868
       },
       "geometry_sha256": "028c7850622ce1c1d3cb2a67da37e17b208ea94a29506ecf0cdabbd2272dfa6e",
       "id": "dandelion_puff",
@@ -807,30 +879,34 @@
       "target_longest_m": 0.07,
       "textures": {
         "albedo": "textures/dandelion_puff_albedo.png",
-        "bake_seconds": 2.5,
+        "bake_seconds": 2.8,
         "bytes_with_mips": 262144,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/dandelion_puff_mra.png",
         "normal": "textures/dandelion_puff_normal.png",
+        "normal_kinds": [
+          "weave",
+          "fibre"
+        ],
         "resolution": 256,
         "single_material": "Prop_dandelion_puff_tex",
         "slot_colour_check": [
           {
             "albedo_mean_linear": [
-              0.615,
-              0.598,
-              0.554
+              0.614,
+              0.596,
+              0.552
             ],
             "declared_linear": [
               0.7,
               0.68,
               0.63
             ],
-            "max_channel_delta": 0.085,
+            "max_channel_delta": 0.086,
             "slot": "wool",
-            "texels": 189433
+            "texels": 200661
           },
           {
             "albedo_mean_linear": [
@@ -845,7 +921,7 @@
             ],
             "max_channel_delta": 0.021,
             "slot": "chitin",
-            "texels": 61543
+            "texels": 50263
           },
           {
             "albedo_mean_linear": [
@@ -860,7 +936,7 @@
             ],
             "max_channel_delta": 0.054,
             "slot": "straw",
-            "texels": 11168
+            "texels": 11220
           }
         ],
         "slots_baked": [
@@ -871,14 +947,25 @@
         "uv": {
           "uv_layers": 1,
           "uv_max": [
-            0.9885,
-            0.9751
+            0.9841,
+            0.9883
           ],
           "uv_min": [
-            0.0115,
-            0.0115
+            0.0117,
+            0.0117
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 25.27,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.2537,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/dandelion_puff_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 458,
@@ -919,9 +1006,9 @@
         }
       },
       "files": {
-        "beetle_figurine.blend": 496909,
-        "beetle_figurine.fbx": 33484,
-        "beetle_figurine.glb": 221580
+        "beetle_figurine.blend": 489497,
+        "beetle_figurine.fbx": 33436,
+        "beetle_figurine.glb": 78852
       },
       "geometry_sha256": "46a1a41607da1fa1f3ed9f00afaa2850a499b6b95ab1dcd638d547b0c38d6fbe",
       "id": "beetle_figurine",
@@ -949,60 +1036,61 @@
       "target_longest_m": 0.09,
       "textures": {
         "albedo": "textures/beetle_figurine_albedo.png",
-        "bake_seconds": 2.4,
+        "bake_seconds": 8.2,
         "bytes_with_mips": 262144,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/beetle_figurine_mra.png",
-        "normal": "textures/beetle_figurine_normal.png",
+        "normal": null,
+        "normal_kinds": [],
         "resolution": 256,
         "single_material": "Prop_beetle_figurine_tex",
         "slot_colour_check": [
           {
             "albedo_mean_linear": [
-              0.084,
-              0.07,
-              0.056
+              0.082,
+              0.069,
+              0.055
             ],
             "declared_linear": [
               0.09,
               0.075,
               0.06
             ],
-            "max_channel_delta": 0.006,
+            "max_channel_delta": 0.008,
             "slot": "chitin",
-            "texels": 105309
+            "texels": 110353
           },
           {
             "albedo_mean_linear": [
-              0.495,
-              0.362,
-              0.114
+              0.48,
+              0.351,
+              0.111
             ],
             "declared_linear": [
               0.52,
               0.38,
               0.12
             ],
-            "max_channel_delta": 0.025,
+            "max_channel_delta": 0.04,
             "slot": "brass",
-            "texels": 21713
+            "texels": 27214
           },
           {
             "albedo_mean_linear": [
               0.039,
               0.039,
-              0.041
+              0.042
             ],
             "declared_linear": [
               0.045,
               0.045,
               0.048
             ],
-            "max_channel_delta": 0.007,
+            "max_channel_delta": 0.006,
             "slot": "rubber",
-            "texels": 135122
+            "texels": 124577
           }
         ],
         "slots_baked": [
@@ -1013,14 +1101,25 @@
         "uv": {
           "uv_layers": 1,
           "uv_max": [
-            0.9892,
-            0.9929
+            0.9902,
+            0.983
           ],
           "uv_min": [
-            0.0071,
-            0.0071
+            0.0099,
+            0.0098
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 30.0,
+          "coverage_pct": 43.31,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.4361,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/beetle_figurine_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 390,
@@ -1062,8 +1161,8 @@
       },
       "files": {
         "crate.blend": 486041,
-        "crate.fbx": 26204,
-        "crate.glb": 727844
+        "crate.fbx": 26188,
+        "crate.glb": 203716
       },
       "geometry_sha256": "c9bfd6c92bb34147734fd4195ccfbff1f7980c1d62086c3d45377566e0507be3",
       "id": "crate",
@@ -1091,13 +1190,16 @@
       "target_longest_m": 0.6,
       "textures": {
         "albedo": "textures/crate_albedo.png",
-        "bake_seconds": 9.0,
+        "bake_seconds": 24.2,
         "bytes_with_mips": 1048576,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/crate_mra.png",
         "normal": "textures/crate_normal.png",
+        "normal_kinds": [
+          "grain"
+        ],
         "resolution": 512,
         "single_material": "Prop_crate_tex",
         "slot_colour_check": [
@@ -1114,22 +1216,22 @@
             ],
             "max_channel_delta": 0.014,
             "slot": "wood",
-            "texels": 382713
+            "texels": 339062
           },
           {
             "albedo_mean_linear": [
-              0.167,
-              0.097,
-              0.045
+              0.163,
+              0.095,
+              0.044
             ],
             "declared_linear": [
               0.185,
               0.108,
               0.05
             ],
-            "max_channel_delta": 0.018,
+            "max_channel_delta": 0.022,
             "slot": "trim",
-            "texels": 665863
+            "texels": 709514
           }
         ],
         "slots_baked": [
@@ -1139,14 +1241,25 @@
         "uv": {
           "uv_layers": 1,
           "uv_max": [
-            0.9927,
-            0.9735
+            0.9932,
+            0.9446
           ],
           "uv_min": [
-            0.0073,
-            0.0073
+            0.0068,
+            0.0068
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 51.7,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.5199,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/crate_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 272,
@@ -1187,9 +1300,9 @@
         }
       },
       "files": {
-        "storage_bin.blend": 532157,
-        "storage_bin.fbx": 27724,
-        "storage_bin.glb": 581972
+        "storage_bin.blend": 524745,
+        "storage_bin.fbx": 26748,
+        "storage_bin.glb": 127612
       },
       "geometry_sha256": "6887123b1a26ad802d89cb1bb3f073d6b0e3ad1481f4e4e4c3f4fdadaa972853",
       "id": "storage_bin",
@@ -1217,20 +1330,21 @@
       "target_longest_m": 0.55,
       "textures": {
         "albedo": "textures/storage_bin_albedo.png",
-        "bake_seconds": 6.4,
+        "bake_seconds": 9.8,
         "bytes_with_mips": 1048576,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/storage_bin_mra.png",
-        "normal": "textures/storage_bin_normal.png",
+        "normal": null,
+        "normal_kinds": [],
         "resolution": 512,
         "single_material": "Prop_storage_bin_tex",
         "slot_colour_check": [
           {
             "albedo_mean_linear": [
-              0.385,
-              0.38,
+              0.384,
+              0.379,
               0.351
             ],
             "declared_linear": [
@@ -1238,9 +1352,9 @@
               0.395,
               0.365
             ],
-            "max_channel_delta": 0.015,
+            "max_channel_delta": 0.016,
             "slot": "body",
-            "texels": 468055
+            "texels": 452181
           },
           {
             "albedo_mean_linear": [
@@ -1255,22 +1369,22 @@
             ],
             "max_channel_delta": 0.025,
             "slot": "lid",
-            "texels": 570794
+            "texels": 587499
           },
           {
             "albedo_mean_linear": [
-              0.549,
-              0.517,
-              0.421
+              0.551,
+              0.519,
+              0.422
             ],
             "declared_linear": [
               0.6,
               0.565,
               0.46
             ],
-            "max_channel_delta": 0.051,
+            "max_channel_delta": 0.049,
             "slot": "label",
-            "texels": 9727
+            "texels": 8896
           }
         ],
         "slots_baked": [
@@ -1281,14 +1395,25 @@
         "uv": {
           "uv_layers": 1,
           "uv_max": [
-            0.9803,
-            0.9937
+            0.974,
+            0.9938
           ],
           "uv_min": [
-            0.0063,
-            0.0063
+            0.0062,
+            0.0062
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 37.96,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.3807,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/storage_bin_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 310,
@@ -1330,8 +1455,8 @@
       },
       "files": {
         "postcard.blend": 448177,
-        "postcard.fbx": 21404,
-        "postcard.glb": 144964
+        "postcard.fbx": 21356,
+        "postcard.glb": 106292
       },
       "geometry_sha256": "aa907d6bc2d49161a2b7f309a177889e408a4483d408d52af1f8957d3555bbef",
       "id": "postcard",
@@ -1359,13 +1484,17 @@
       "target_longest_m": 0.15,
       "textures": {
         "albedo": "textures/postcard_albedo.png",
-        "bake_seconds": 2.4,
+        "bake_seconds": 2.7,
         "bytes_with_mips": 262144,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/postcard_mra.png",
         "normal": "textures/postcard_normal.png",
+        "normal_kinds": [
+          "fibre",
+          "fibre"
+        ],
         "resolution": 256,
         "single_material": "Prop_postcard_tex",
         "slot_colour_check": [
@@ -1430,7 +1559,18 @@
             0.0022,
             0.0022
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 70.05,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.7028,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/postcard_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 92,
@@ -1472,8 +1612,8 @@
       },
       "files": {
         "grass_blade.blend": 444497,
-        "grass_blade.fbx": 20940,
-        "grass_blade.glb": 407424
+        "grass_blade.fbx": 20908,
+        "grass_blade.glb": 166392
       },
       "geometry_sha256": "ae81761fee5ee5fb2c50083cc2e28ec4b5075db3610b4ad600ab8cc202f24c0d",
       "id": "grass_blade",
@@ -1501,13 +1641,18 @@
       "target_longest_m": 0.08,
       "textures": {
         "albedo": "textures/grass_blade_albedo.png",
-        "bake_seconds": 5.2,
+        "bake_seconds": 4.1,
         "bytes_with_mips": 1048576,
         "channels": "albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)",
         "compression": "BC7 albedo / BC5 normal / BC7 ORM (Unity)",
         "dims_drift_m": 0.0,
         "mra": "textures/grass_blade_mra.png",
         "normal": "textures/grass_blade_normal.png",
+        "normal_kinds": [
+          "fibre",
+          "fibre",
+          "grain"
+        ],
         "resolution": 512,
         "single_material": "Prop_grass_blade_tex",
         "slot_colour_check": [
@@ -1572,7 +1717,18 @@
             0.0012,
             0.0012
           ]
-        }
+        },
+        "uv_check": {
+          "angle_limit_deg": 66.0,
+          "coverage_pct": 12.39,
+          "max_texel_stack": 1,
+          "overlap_pct_of_used": 0.0,
+          "overlap_texels": 0,
+          "raster_res": 512,
+          "uv_area_fraction": 0.1257,
+          "zero_area_uv_triangles": 0
+        },
+        "uv_check_preview": "previews/grass_blade_uvcheck.png"
       },
       "transforms": "identity (applied; geometry in metres)",
       "triangles": 52,

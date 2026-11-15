@@ -61,6 +61,12 @@ def unwrap(ob, margin=0.015, angle_deg=66.0):
         area_weight=0.0,
         correct_aspect=True,
         scale_to_bounds=False)
+    # Smart Project can leave two islands overlapping (measured on
+    # beetle_figurine: 314 texels at 512, 0.24 % of the used area).  Packing
+    # afterwards with the same margin guarantees separation for disconnected
+    # islands; rotate=False keeps the layout reproducible.
+    bpy.ops.uv.select_all(action='SELECT')
+    bpy.ops.uv.pack_islands(rotate=False, scale=True, margin=margin)
     bpy.ops.object.mode_set(mode='OBJECT')
     return _uv_stats(ob)
 
@@ -234,6 +240,95 @@ def _fbm(res, seed, base_cells=6, octaves=4, gain=0.5):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Normal maps: which materials get relief, and where it comes from
+# ---------------------------------------------------------------------------
+
+# Hard / glaze / metal / plastic surfaces are smooth.  A normal map on them is
+# a lie: at 10-50 cm the eye expects the highlight to break only at an edge or a
+# seam, which is *geometry*, not noise.  These get no normal map at all.
+SMOOTH_CLASS = ('ceramic', 'porcelain', 'glass', 'glaze', 'enamel', 'metal',
+                'brass', 'steel', 'chrome', 'silver', 'copper', 'tin',
+                'bronze', 'aluminium', 'aluminum', 'plastic', 'resin', 'ink',
+                'paint', 'chitin', 'shell', 'eye', 'lens')
+
+# Rough materials that genuinely carry micro-relief, and the physical height
+# model used for each.  The gradient of that height is the normal map - no
+# other normal source is allowed (spec section 12).
+RELIEF_CLASS = {
+    'wood': 'grain', 'bark': 'grain', 'plank': 'grain', 'bamboo': 'grain',
+    'cardboard': 'fibre', 'paper': 'fibre', 'fabric': 'weave',
+    'cloth': 'weave', 'wool': 'weave', 'cotton': 'weave', 'rope': 'weave',
+    'jute': 'weave', 'straw': 'fibre', 'bread': 'crumb', 'cracker': 'crumb',
+    'biscuit': 'crumb', 'rice': 'crumb', 'grain': 'crumb', 'seed': 'crumb',
+    'leaf': 'fibre', 'grass': 'fibre', 'soil': 'granular',
+    'stone': 'granular', 'pebble': 'granular', 'rock': 'granular',
+    'concrete': 'granular', 'rust': 'granular',
+}
+
+RELIEF_STRENGTH = {
+    'grain': 0.50,      # wood: long directional grooves
+    'weave': 0.40,      # fabric: crossed threads
+    'fibre': 0.30,      # paper / leaf / straw: fine fibres
+    'crumb': 0.35,      # bread / seed: small lumps
+    'granular': 0.45,   # stone / soil: grains and pits
+}
+
+
+def relief_kind(slot_key):
+    """'grain' / 'weave' / 'fibre' / 'crumb' / 'granular' / None (smooth)."""
+    key = (slot_key or '').lower()
+    for token, kind in RELIEF_CLASS.items():
+        if token in key:
+            return kind
+    for token in SMOOTH_CLASS:
+        if token in key:
+            return None
+    return None
+
+
+def normal_strength(slot_key):
+    kind = relief_kind(slot_key)
+    return 0.0 if kind is None else RELIEF_STRENGTH[kind]
+
+
+def _height_field(kind, res, seed):
+    """Physical height model per material class, 0..1 (0.5 = neutral)."""
+    if kind == 'grain':
+        # Long streaks along U: the noise lattice is stretched, not random.
+        rng = np.random.default_rng(seed)
+        grid = rng.random((6, 64)).astype(np.float32)
+        gy = np.linspace(0, 5, res, endpoint=False)
+        gx = np.linspace(0, 63, res, endpoint=False)
+        iy, fx = np.floor(gy).astype(int), gx - np.floor(gx)
+        ix = np.floor(gx).astype(int)
+        fy = gy - np.floor(gy)
+        iy1 = np.minimum(iy + 1, 5)
+        ix1 = np.minimum(ix + 1, 63)
+        a = grid[iy][:, ix]
+        b = grid[iy][:, ix1]
+        c = grid[iy1][:, ix]
+        d = grid[iy1][:, ix1]
+        fx = fx[None, :]
+        fy = fy[:, None]
+        top = a * (1 - fx) + b * fx
+        bot = c * (1 - fx) + d * fx
+        grain = top * (1 - fy) + bot * fy
+        return 0.5 + (grain - 0.5) * 0.9
+    if kind == 'weave':
+        u = np.linspace(0, np.pi * 2 * 90, res, dtype=np.float32)
+        w = (np.sin(u)[None, :] * 0.5 + np.sin(u)[:, None] * 0.5) * 0.5
+        fine = _value_noise(res, 96, np.random.default_rng(seed)) - 0.5
+        return 0.5 + w * 0.55 + fine * 0.25
+    if kind == 'fibre':
+        return 0.5 + (_value_noise(res, 110, np.random.default_rng(seed)) - 0.5) * 0.7
+    if kind == 'crumb':
+        return 0.5 + (_fbm(res, seed, base_cells=18, octaves=3) - 0.5) * 0.9
+    if kind == 'granular':
+        return 0.5 + (_fbm(res, seed, base_cells=26, octaves=4) - 0.5) * 1.0
+    return np.full((res, res), 0.5, dtype=np.float32)
+
+
 def _slot_table(slots):
     """[(rgb, roughness, metallic)] from the prop's MATERIALS declaration."""
     table = []
@@ -294,19 +389,38 @@ def build_maps(colour, ao, slots, res, seed, strength=1.0):
     mra[..., 2] = 0.0
     mra[..., 3] = 1.0 - np.clip(rough * (0.96 + 0.08 * fine), 0.04, 1.0)
 
-    # Height field -> tangent-space normal.  Cavity counts as negative height,
-    # which gives the recesses a rounded lip instead of a flat dark patch.
-    height = 0.65 * fine + 0.35 * (1.0 - a)
-    gy, gx = np.gradient(height)
-    scale = res * 0.02
-    nx, ny, nz = -gx * scale, -gy * scale, np.ones_like(gx)
-    ln = np.sqrt(nx * nx + ny * ny + nz * nz)
-    normal = np.stack([nx / ln, ny / ln, nz / ln], axis=-1) * 0.5 + 0.5
+    # Normal map = gradient of a *per-material height model* (grain / weave /
+    # fibre / crumb / granular), never raw noise, and flat for smooth classes.
+    kinds = [relief_kind(s.get('key', '')) for s in slots]
+    strengths = np.float32([RELIEF_STRENGTH.get(k, 0.0) if k else 0.0
+                            for k in kinds])[idx]
+    fields = {}
+    for s_i, kind in enumerate(kinds):
+        if kind and kind not in fields:
+            fields[kind] = _height_field(kind, res, seed + 17 * s_i)
+    height = np.full((res, res), 0.5, dtype=np.float32)
+    for s_i, kind in enumerate(kinds):
+        if kind:
+            height = np.where(idx == s_i, fields[kind], height)
+    if strengths.max() > 0:
+        # Scale the world-space slope by the material's strength so a wood
+        # grain is visible and a paper fibre is barely there.
+        scale = res * 0.010 * float(strengths.max())
+        gy, gx = np.gradient(height)
+        nx, ny, nz = -gx * scale, -gy * scale, np.ones_like(gx)
+        ln = np.sqrt(nx * nx + ny * ny + nz * nz)
+        normal = np.stack([nx / ln, ny / ln, nz / ln], axis=-1) * 0.5 + 0.5
+        flat = np.array([0.5, 0.5, 1.0], dtype=np.float32)
+        normal = np.where((strengths > 0)[..., None], normal, flat)
+    else:
+        normal = np.ones((res, res, 3), dtype=np.float32) * 0.5
+        normal[..., 2] = 1.0
 
     return {
         'albedo': _linear_to_srgb_rgba(albedo_l),
         'mra': mra,
         'normal': np.dstack([normal, np.ones((res, res), np.float32)]),
+        'normal_kinds': kinds,
         'slot_index': idx,
     }
 
@@ -337,6 +451,7 @@ def downscale_maps(maps, res):
     si = maps['slot_index']
     f2 = si.shape[0] // res
     out['slot_index'] = si[::f2, ::f2][:res, :res] if f2 >= 2 else si
+    out['normal_kinds'] = maps.get('normal_kinds', [])
     return out
 
 
@@ -425,6 +540,13 @@ def apply_textured(ob, albedo_path, orm_path, normal_path, slot_name):
     nt.links.new(mra.outputs['Alpha'], inv.inputs[1])
     nt.links.new(inv.outputs['Value'], bsdf.inputs['Roughness'])
 
+    if normal_path is None:
+        me.materials.clear()
+        me.materials.append(mat)
+        for poly in me.polygons:
+            poly.material_index = 0
+        return mat
+
     nrm = nt.nodes.new('ShaderNodeTexImage')
     nrm.location = (-700, -300)
     nrm.image = bpy.data.images.load(normal_path, check_existing=True)
@@ -437,6 +559,122 @@ def apply_textured(ob, albedo_path, orm_path, normal_path, slot_name):
     me.materials.clear()
     me.materials.append(mat)
     for poly in me.polygons:
+        poly.material_index = 0
+    return mat
+
+
+
+
+# ---------------------------------------------------------------------------
+# UV verification
+# ---------------------------------------------------------------------------
+
+
+def uv_check(ob, res=512):
+    """Rasterise every UV triangle and report coverage, overlap and degeneracy.
+
+    This is the hard evidence the spec asks for: a UV set is "correct" only if
+    (a) no texel is claimed by two different faces, (b) the islands together
+    cover a sane share of 0..1, and (c) no face has a zero-area UV triangle.
+    """
+    me = ob.data
+    uv = me.uv_layers.active.data if me.uv_layers else None
+    if uv is None:
+        return {'error': 'no uv layer'}
+    cover = np.zeros((res, res), dtype=np.int32)
+    zero_area = 0
+    total_area = 0.0
+    area_sum = 0.0
+    for poly in me.polygons:
+        loops = list(poly.loop_indices)
+        pts = [uv[i].uv for i in loops]
+        if len(pts) < 3:
+            continue
+        for k in range(1, len(pts) - 1):
+            tri = (pts[0], pts[k], pts[k + 1])
+            a = _tri_area(tri)
+            area_sum += a
+            total_area += a
+            if a <= 1e-12:
+                zero_area += 1
+                continue
+            _raster_tri(cover, tri, res)
+    used = int((cover > 0).sum())
+    over = int((cover > 1).sum())
+    return {
+        'uv_area_fraction': round(float(area_sum), 4),
+        'coverage_pct': round(100.0 * used / (res * res), 2),
+        'overlap_texels': over,
+        'overlap_pct_of_used': round(100.0 * over / max(1, used), 3),
+        'zero_area_uv_triangles': zero_area,
+        'max_texel_stack': int(cover.max()),
+        'raster_res': res,
+    }
+
+
+def _tri_area(tri):
+    (x0, y0), (x1, y1), (x2, y2) = tri
+    return abs((x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)) * 0.5
+
+
+def _raster_tri(cover, tri, res):
+    xs = [t[0] * res for t in tri]
+    ys = [t[1] * res for t in tri]
+    x0, x1 = int(np.floor(min(xs))), int(np.ceil(max(xs)))
+    y0, y1 = int(np.floor(min(ys))), int(np.ceil(max(ys)))
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(res - 1, x1), min(res - 1, y1)
+    if x1 < x0 or y1 < y0:
+        return
+    (ax, ay), (bx, by), (cx, cy) = tri
+    gy, gx = np.mgrid[y0:y1 + 1, x0:x1 + 1]
+    px = (gx + 0.5) / res
+    py = (gy + 0.5) / res
+    d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+    if abs(d) < 1e-12:
+        return
+    w0 = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / d
+    w1 = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / d
+    w2 = 1.0 - w0 - w1
+    # Strict interior: a texel centre lying exactly on the shared edge of two
+    # triangles belongs to both, which would report a phantom overlap.
+    inside = (w0 > 1e-3) & (w1 > 1e-3) & (w2 > 1e-3)
+    cover[y0:y1 + 1, x0:x1 + 1] += inside.astype(np.int32)
+
+
+def checker_image(path, res=512, squares=32):
+    """A UV checkerboard with axis marks: the only real proof of a UV unwrap.
+
+    Squares are 16 px at 512, so a stretched island shows up as rectangles, a
+    flipped island as a mirrored run, and a seam as a discontinuity.  The red
+    band runs along u = 0 and the green band along v = 0, which fixes the
+    orientation at a glance.
+    """
+    step = res // squares
+    idx = (np.arange(res) // step) % 2
+    board = (idx[None, :] ^ idx[:, None]).astype(np.float32)
+    rgb = np.stack([board, board, board], axis=-1) * 0.9 + 0.02
+    y, x = np.mgrid[0:res, 0:res]
+    rgb[..., 0] = np.where(x < 2, 0.9, rgb[..., 0])
+    rgb[..., 1] = np.where(y < 2, 0.9, rgb[..., 1])
+    arr = np.dstack([rgb, np.ones((res, res), np.float32)])
+    save_png(arr, path, 'uv_checker')
+    return path
+
+
+def apply_checker(ob, checker_path, name):
+    """Swap the prop to an unlit-ish checker material, keep the UV layout."""
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    bsdf = nt.nodes['Principled BSDF']
+    tex = nt.nodes.new('ShaderNodeTexImage')
+    tex.image = bpy.data.images.load(checker_path, check_existing=True)
+    nt.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])
+    bsdf.inputs['Roughness'].default_value = 1.0
+    ob.data.materials.clear()
+    ob.data.materials.append(mat)
+    for poly in ob.data.polygons:
         poly.material_index = 0
     return mat
 

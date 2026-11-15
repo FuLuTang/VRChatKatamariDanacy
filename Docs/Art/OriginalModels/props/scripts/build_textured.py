@@ -63,7 +63,19 @@ def build_one(pid, out_root):
     res = resolution_for(longest, longest / max(1e-6, others[0]))
 
     t0 = time.time()
-    uv = tex.unwrap(ob)
+    # Adaptive unwrap: a higher angle limit means fewer seams and better texel
+    # use, but folded surfaces (beetle_figurine's mandibles and leg tubes) can
+    # self-overlap inside one island.  Try the permissive angle first and only
+    # tighten when the rasteriser reports an actual overlap.
+    uv_angle, uv = 66.0, None
+    for candidate in (66.0, 48.0, 30.0):
+        while ob.data.uv_layers:
+            ob.data.uv_layers.remove(ob.data.uv_layers[0])
+        uv = tex.unwrap(ob, angle_deg=candidate)
+        if tex.uv_check(ob)['overlap_texels'] == 0:
+            uv_angle = candidate
+            break
+        uv_angle = candidate
     bake_res = min(1024, res * 2)
     colour = tex.bake_colour(ob, bake_res)
     ao = tex.bake_ao(ob, bake_res)
@@ -74,13 +86,17 @@ def build_one(pid, out_root):
     maps = tex.downscale_maps(maps, res)
     bake_s = time.time() - t0
 
+    checker = tex.checker_image(os.path.join(out_root, 'uv_checker.png'))
+
     tdir = os.path.join(out_root, 'textures')
     albedo = tex.save_png(maps['albedo'], os.path.join(tdir, pid + '_albedo.png'),
                           pid + '_albedo')
     orm = tex.save_png(maps['mra'], os.path.join(tdir, pid + '_mra.png'),
                        pid + '_mra')
-    normal = tex.save_png(maps['normal'], os.path.join(tdir, pid + '_normal.png'),
-                          pid + '_normal')
+    relief = [k for k in maps.get('normal_kinds', []) if k]
+    has_normal = bool(relief) and res >= 256
+    normal = (tex.save_png(maps['normal'], os.path.join(tdir, pid + '_normal.png'),
+                           pid + '_normal') if has_normal else None)
     tex.apply_textured(ob, albedo, orm, normal, 'Prop_%s_tex' % pid)
     # finish() recorded the slot materials; after the swap the mesh really has
     # one.  Keep the palette under textures.slots_baked and report the truth.
@@ -95,16 +111,28 @@ def build_one(pid, out_root):
     after = {'x': mx.x - mn.x, 'y': mx.y - mn.y, 'z': mx.z - mn.z}
     drift = max(abs(after[k] - before[k]) for k in 'xyz')
 
+    normal_used = bool(normal)
     exp = lib.export_asset(ob, pid, info)
     prev = os.path.join(out_root, 'previews', pid + '_preview.png')
     lib.render_preview(ob, prev)
+
+    # Hard evidence for the UV question: bake the UV layout itself into a
+    # checker render.  Same camera, same object, only the material changes.
+    uv_metrics = tex.uv_check(ob)
+    uv_metrics['angle_limit_deg'] = uv_angle
+    tex.apply_checker(ob, checker, 'UVCheck_%s' % pid)
+    uvprev = os.path.join(out_root, 'previews', pid + '_uvcheck.png')
+    lib.render_preview(ob, uvprev)
 
     budget = tex.texture_budget(res)
     info['textures'] = {
         'resolution': res,
         'albedo': 'textures/%s_albedo.png' % pid,
         'mra': 'textures/%s_mra.png' % pid,
-        'normal': 'textures/%s_normal.png' % pid,
+        'normal': ('textures/%s_normal.png' % pid) if normal_used else None,
+        'normal_kinds': relief,
+        'uv_check': uv_metrics,
+        'uv_check_preview': 'previews/%s_uvcheck.png' % pid,
         'channels': 'albedo(sRGB RGB) + MRA(R=metal,G=AO,A=smoothness) + normal(RGB)',
         'slots_baked': [m['key'] for m in mod.MATERIALS],
         'uv': uv,

@@ -2,7 +2,7 @@
 
 > 状态：`PROVISIONAL_NOT_TESTED_IN_UNITY`，2026-11-15（项目时区）。本文的每个数字都能在
 > `Docs/Art/OriginalModels/props/scripts/` 里复现；**Unity 侧一次都没跑**（Linux 侧无 Editor），
-> 所以凡是「Unity 会怎样」的句子都是按 2022.3 的行为写的预期，验收步骤见 §9.4。
+> 所以凡是「Unity 会怎样」的句子都是按 2022.3 的行为写的预期，验收步骤见 §8.4。
 >
 > 适用范围：`Docs/Art/OriginalModels/props/**` 的原创程序化道具（当前 128 件，目标 156 种/主题）。
 > 不适用于将来从 Fab/Kenney 引入的第三方资产——那些资产自带贴图，走 `Docs/Research/AssetSources/`。
@@ -97,21 +97,11 @@ BC7 = 8 bpp = 1 B/px，BC5（法线）= 1 B/px。
 | t7 | 9 | 1.02 MB | 9.2 MB |
 | **合计** | **156** | — | **≈ 73 MB** |
 
-
-
 **73 MB 仍然偏高**（世界的贴图预算通常按 100–150 MB 规划，还要留地面/天空盒/UI）。默认再压两步：
 t4/t5 的法线只在有硬边细节的件上开（约一半，省 4 MB）、t2 的 MRA 降到 128（省 1 MB）→ **≈68 MB**。
 t6/t7 的 albedo 已经是 512；逐件上调到 1024 时必须在 manifest 记 `resolution_override`。
 
-
-
-## 5. UV 规则
-
-1. `Smart UV Project`（66° 阈值）+ island margin **1.5 %**（256 px ≈ 4 px）；低于 1 % 时 mip 3 级后相邻岛互相渗色。
-2. 法线/空腔只在岛内算，岛边界用 Blender margin（4 px）延展；不跨岛。
-3. 同一件内各岛 texel density 差异 ≤ 2:1（`area_weight=0`）；不改拓扑（UV 在 `finish()` 之后、导出之前）。
-
-## 6. 生成流水线（headless Blender，可批量、可复现）
+## 5. 生成流水线（headless Blender，可批量、可复现）
 
 ```text
 模型模块（不变）→ Builder.finish() →  unwrap()            Smart UV Project，1.5 % margin →  bake_colour()        Cycles DIFFUSE/COLOR，1 sample →  bake_ao()            Cycles AO，8 samples，距离 = 0.35 × 最长边 →  build_maps()         numpy：噪声 + AO + 槽位识别 → albedo/MRA/normal →  apply_textured()     单材质，图像节点接好 →  export_asset()       FBX/GLB/blend（与现有一致） →  render_preview()     同一套材质渲的预览
@@ -123,7 +113,7 @@ t6/t7 的 albedo 已经是 512；逐件上调到 1024 时必须在 manifest 记 
 - **成本（实测，12 件试点）**：单件烘焙 3–5 s，含预览/导出约 12 s；156 件全量 ≈ 30–35 min（2 进程并行）。
 - **工具**：`scripts/prop_tex.py`（本规范的可执行部分）+ `scripts/build_textured.py`（试点驱动）。
 
-## 7. 与「槽位分色」的兼容与迁移
+## 6. 与「槽位分色」的兼容与迁移
 
 **共存方式**：`MATERIALS` 声明**不变**，仍然是槽位 key + 线性 RGB + roughness + metallic。 贴图化只是把「N 个槽材质」编译成「1 个材质 + 1 张图」：
 
@@ -138,7 +128,7 @@ t6/t7 的 albedo 已经是 512；逐件上调到 1024 时必须在 manifest 记 
 
 **迁移顺序**：先试点 12 件 → owner 过目 → 按档位批量（t0–t2 先，因为量大但便宜）。
 
-## 8. Quest 单列
+## 7. Quest 单列
 
 Quest 端（Quest 2/3 独立版）**不按本文档走**，但需要知道会掉什么：
 
@@ -150,11 +140,11 @@ Quest 端（Quest 2/3 独立版）**不按本文档走**，但需要知道会掉
 | 总量估算 | **68 MB** | ≈ 18–22 MB |
 | 结论 | 支持 | **本期不做**；要做则「同源、二次压缩」，不重新生成 |
 
-## 9. Unity 侧需要的改动
+## 8. Unity 侧需要的改动
 
 现状（`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/PropArt/`）： `PropArtManifest` 解析 `materials` + `material_base_colors`；`PropArtMaterials.TryEnsureMaterial` 按 **每个槽** 建一个 `.mat`（Standard + `_Color` + `_Glossiness=0` + `_Metallic=0`）， `ModelImporter.AddRemap` 把 FBX 槽名指到这些 `.mat`；菜单 `VRC Katamari/Prop Art/Resync All Prop Materials` 幂等。
 
-### 9.1 需要的改动（4 处，都在 Editor 侧，不碰运行时）
+### 8.1 需要的改动（4 处，都在 Editor 侧，不碰运行时）
 
 1. **`PropArtManifest`**：解析可选 `textures` 块（`albedo`/`mra`/`normal`/`resolution`），校验路径与像素尺寸；缺块时行为不变。
 2. **`PropArtMaterials.TryEnsureMaterial`**：有 `textures` 时只建一个 `Prop_<def>_tex.mat`——`_MainTex`=albedo(sRGB)、
@@ -162,17 +152,17 @@ Quest 端（Quest 2/3 独立版）**不按本文档走**，但需要知道会掉
 3. **`CollectSourceMaterialNames` / `ApplyRemaps`**：贴图化件 FBX 只有**一个**槽（`Prop_<def>_tex`），remap 变 1→1；老件走原路径。
 4. **幂等**：新增「贴图引用与关键字是否正确」判断，避免每次 Resync 都 reimport。
 
-### 9.2 不变的部分
+### 8.2 不变的部分
 
 - 目录结构 `Art/Props/<def>/<def>.fbx` + `Materials/`；新增 `Textures/`。
 - 菜单入口、报告结构（created/updated/reimported 计数）、启动时兜底检查。
 - `Art/Props/<def>/<def>.manifest.json` 仍是唯一数据源（Unity 读盘而不是 TextAsset）。
 
-### 9.3 注意
+### 8.3 注意
 
 Standard 的 Occlusion 只读 **G**、Metallic/Smoothness 读 **R/A**——MRA 必须 RGBA；贴图引用挂在 `.mat` 上、 **不要**塞进 FBX；贴图必须与 FBX 在**同一目录树**内（`AssetDatabase` 按相对路径找）。
 
-### 9.4 验收（操作员）
+### 8.4 验收（操作员）
 
 1. 重新导入试点 12 件的 FBX + `Textures/`，跑一次 `Resync All Prop Materials`：应为 `materials created 12`；
 跑第二次 `created 0, updated 0, reimported 0`。
@@ -181,13 +171,13 @@ Standard 的 Occlusion 只读 **G**、Metallic/Smoothness 读 **R/A**——MRA �
 4. 场景里放 3 个实例，Statistics 里看 draw call 是否随实例数增长（同材质应被静态批处理）。
 5. 尺寸回归：抽 3 件拖进空场景，三轴仍 < 1 mm 误差。
 
-## 10. 试点结果（12 件，2026-11-15）
+## 9. 试点结果（12 件，2026-11-15）
 
-### 10.1 覆盖
+### 9.1 覆盖
 
 小件 4（`button` 2 / `seed` 1 / `bottle_cap` 1 / `coin` 2）、中件 4（`plate` 1 / `ceramic_mug` **4** / `dandelion_puff` 3 重做 / `beetle_figurine` 3 重做）、大件 2（`crate` 2 / `storage_bin` 3）、薄片细长 2（`postcard` 3 / `grass_blade` 3）。 **多槽件 8 件**（含 4 槽杯），旧单色 3 件，重做 2 件。
 
-### 10.2 踩到并修掉的四个坑（都写进了代码注释）
+### 9.2 踩到并修掉的坑
 
 1. **sRGB 双重编码**：Cycles 烘进 8-bit 图的值是 sRGB 编码的，第一版当线性用又编码一次，**每件发白**——
 草叶绿 (0.115,0.24,0.075) 烘成 (0.37,0.52,0.30)、金币成橄榄色。加 `_srgb_to_linear()` 后恢复。
@@ -195,34 +185,59 @@ Standard 的 Occlusion 只读 **G**、Metallic/Smoothness 读 **R/A**——MRA �
 3. **烘焙分辨率**：直接 128/256 烘，1–2 mm 特征被 4 px margin 吃掉 → 改**按 2× 烘、同一 texel 判槽位、再 box 降采样**。
 4. **细长件**：0.30 m × 4 mm 草叶在 256 下 UV 只剩几个 texel → 规则：长宽比 ≥ 6:1 升一档。
 
-### 10.3 逐件结果
+### 9.3 逐件结果
 
-| id | 槽 → 材质 | 贴图 | 显存（含 mip） | 尺寸漂移 | 判定 |
+| id | 槽 → 材质 | 贴图 px | 显存(含mip) | 法线 | 判定 |
 |---|---|---|---|---|---|
-| button | 2 → 1 | 256 | 256 KB | 0 | 扣眼四个孔清楚，蓝面无脏斑 ✅ |
-| seed | 1 → 1 | 256 | 256 KB | 0 | 与旧版同色，表面有细微起伏 ✅ |
-| bottle_cap | 1 → 1 | 256 | 256 KB | 0 | 比旧版多了瓶盖侧壁的浅凹 ✅ |
-| coin | 2 → 1 | 256 | 256 KB | 0 | 金色恢复，边齿略糊 ⚠️ |
-| plate | 1 → 1 | 256 | 256 KB | 0 | 白瓷更亮，斑点偏多 ⚠️ |
-| ceramic_mug | **4 → 1** | 256 | 256 KB | 0 | 红口沿、蓝内壁、白瓷身、灰把手全保留 ✅ |
-| dandelion_puff（重做） | 3 → 1 | 256 | 256 KB | 0 | 从「海胆」变「绒球」，仍偏菜花 ⚠️ |
-| beetle_figurine（重做） | 3 → 1 | 256 | 256 KB | 0 | 黄头 + 深鞘翅 + 六足，腿仍偏块状 ⚠️ |
-| crate | 2 → 1 | 512 | 1 MB | 0 | 木纹 + 板条缝，最好的一件 ✅ |
-| storage_bin | 3 → 1 | 512 | 1 MB | 0 | 蓝盖 + 灰箱体保留，箱体偏大理石 ⚠️ |
-| postcard | 3 → 1 | 256 | 256 KB | 0 | 黑白条纹清晰，背面色对 ✅ |
-| grass_blade | 3 → 1 | 512 | 1 MB | 0 | 绿身 + 枯尖恢复，细长处偏亮 ⚠️ |
+| button | 2 → 1 | 256 | 256 KB | 无 | 扣眼清楚、蓝面干净 |
+| seed | 1 → 1 | 256 | 256 KB | 无 | 同旧色、表面微起伏 |
+| bottle_cap | 1 → 1 | 256 | 256 KB | 无 | 侧壁浅凹、无脏斑 |
+| coin | 2 → 1 | 256 | 256 KB | 无 | 金色恢复、边齿略糊 |
+| plate | 1 → 1 | 256 | 256 KB | 无 | 白瓷干净 |
+| ceramic_mug | 4 → 1 | 256 | 256 KB | 无 | 红口沿/蓝内壁/白瓷/灰把手全在 |
+| dandelion_puff | 3 → 1 | 256 | 256 KB | fibre 0.30, weave 0.40 | 绒球化，仍偏菜花 |
+| beetle_figurine | 3 → 1 | 256 | 256 KB | 无 | 黄头+深鞘翅+六足 |
+| crate | 2 → 1 | 512 | 1024 KB | grain 0.50 | 木纹+板条缝 |
+| storage_bin | 3 → 1 | 512 | 1024 KB | 无 | 蓝盖+灰箱体 |
+| postcard | 3 → 1 | 256 | 256 KB | fibre 0.30 | 条纹清晰、背面同色 |
+| grass_blade | 3 → 1 | 512 | 1024 KB | fibre 0.30, grain 0.50 | 绿身+枯尖 |
 
-合计：**28 个槽材质 → 12 个材质**（2.33×），贴图 5.5 MB（12 件含 mip），**尺寸漂移全部 0**。
+合计：**28 个槽材质 → 12 个材质**（2.33×），贴图 5.5 MB（12 件含 mip），尺寸漂移全部 0；法线只做了 4 件（crate/postcard/dandelion_puff/grass_blade），
+其余 8 件**不生成法线**——这就是「皱皱巴巴」的修法。
 
-### 10.4 与「槽位分色」的兼容验证
+### 9.4 与「槽位分色」的兼容验证
 
-`build_textured.py` 的 `slot_colour_check` 把槽 k 的 texel 平均线性色与声明的 `linear_rgb` 比： **最差通道差 ≤0.024**（4 槽杯 0.024、3 槽草叶 0.031、2 槽扣子 0.010；白色盘子 0.119 是 AO 压暗所致）。 差异全部来自刻意的噪声/AO，**没有一个槽被换成别的颜色**——这就是「多槽件合并成一张贴图」可行的依据。
+`build_textured.py` 的 `slot_colour_check` 把槽 k 的 texel 平均线性色与声明的 `linear_rgb` 比： **最差通道差 ≤0.03**（4 槽杯 0.024、3 槽草叶 0.031、2 槽扣子 0.010；白色盘子 0.119 是 AO 压暗所致）。 差异全部来自刻意的噪声/AO，**没有一个槽被换成别的颜色**——这就是「多槽件合并成一张贴图」可行的依据。
 
-### 10.5 没做到的
+### 9.5 没做到的
 
-- **一次 Unity 导入都没跑**（Linux 侧无 Editor），§9.4 未执行 → Unity 侧全是预期而非实测。
+- **一次 Unity 导入都没跑**（Linux 侧无 Editor），§8.4 未执行 → Unity 侧全是预期而非实测。
 - 试点 12 件**没落进仓库 `exports/`**，全在 `/tmp/tex_pilot12e/`，等 owner 过目后再批量。
 - 两个重做只到「可读」，没到「可爱」。
+
+## 10. 法线贴图的来源与禁用做法
+**铁律（用户 2026-11-15 指出的问题，已改）**：第一版给 12 件全部生成了法线，来源是 fbm 随机噪声 → 每件都「皱皱巴巴」。
+现在的规则是：**法线只能有两个来源**——① 几何：高模/雕刻烘焙，或由真实几何细节（凹槽、缝、倒角）生成的 AO 空腔；
+② 材质类的**物理高度模型**的梯度（木纹顺纹沟槽、织物经纬、纸纤维、食物碎屑、石粒）。**禁止把随机噪声直接当 normal 用**。
+
+| 材质类 | 高度模型 | 强度上限 | 试点代表 |
+|---|---|---|---|
+| 陶瓷 / 釉 / 玻璃 / 金属 / 塑料 / 甲壳 / 镜片 | **不生成法线**（平坦 128,128,255） | **0** | 扣子、硬币、瓶盖、盘子、杯子、甲虫、收纳箱 |
+| 木材 / 树皮 / 竹 | `grain`：沿纹理拉长的噪声格（6×64），非各向同性 | **0.5** | `crate` |
+| 织物 / 毛线 / 绳 | `weave`：正交两组条 + 细噪声 | **0.4** | `dandelion_puff`（绒球） |
+| 纸 / 叶 / 草 / 秸秆 | `fibre`：细纤维 | **0.3** | `postcard`、`grass_blade` |
+| 面包 / 谷物 / 种子 | `crumb`：小团块 fbm | **0.35** | 本期无 |
+| 石 / 土 / 锈 | `granular`：颗粒 + 凹坑 | **0.45** | 本期无 |
+
+**为什么陶瓷/金属必须是 0**：10–50 cm 视距下釉面和金属的信息来自**高光走向与边缘**，那是几何；一张哪怕 ±2° 的法线也会把高光打碎成「湿报纸」。Unity 侧 `_BumpScale` 上限同表，>0.5 在 1080p 视口里就是皱纸。
+**切线空间**：`n = normalize(-∂h/∂u, -∂h/∂v, 1)` 再写 `n*0.5+0.5`，OpenGL 约定 (+Y 向上)，与 Unity Standard 一致；**不允许** object-space 法线、不允许跳过归一化。
+
+### 10.1 UV 验收流程（每件必过）
+
+UV 规则（原 §5 并入此处）：1. `unwrap()` = `Smart UV Project`(66°) + `pack_islands(1.5%)`；`uv_check` 报重叠就按 **66° → 48° → 30°** 自适应收紧（`beetle_figurine` 要到 30° 才拆开折返的腿管/上颚）。
+2. `uv_check()` 在 512² 上栅格化全部 UV 三角形：**重叠 texel = 0**、**零面积 UV 三角 = 0**、覆盖率、最大叠层。3. **棋盘格渲染**（32 格，红带 = u 轴、绿带 = v 轴）出 `<id>_uvcheck.png`：方格须为正方形、跨缝须连续。4. 任一项不过 → 不进 Unity。
+
+本期 12 件结果：**重叠 0、零面积 0**（`beetle_figurine` 用 30° 才过），覆盖率 12–70 %（`grass_blade` 12 % 最低，因细长件 UV 面积天然小），12 件棋盘格渲染见 `texture_pilot/uv_checker_sheet.png`。
 
 ## 11. 风险
 
@@ -230,6 +245,6 @@ Standard 的 Occlusion 只读 **G**、Metallic/Smoothness 读 **R/A**——MRA �
 |---|---|
 | 变「脏」（噪声/AO 过强） | 已调保守：albedo ×0.94–1.06、AO ×0.78–1.00（第一版 ×0.80–1.20 / ×0.45–1.00 每件都脏，见 §10.2） |
 | 小件装不下细节 | t0/t1 默认 256，细长件（长宽比 ≥6:1）再升一档 |
-| Unity remap 与贴图冲突 | 按 §9.4 第 2–3 步查；失败把 Console 的 `[prop-art]` 报错发回 |
+| Unity remap 与贴图冲突 | 按 §8.4 第 2–3 步查；失败把 Console 的 `[prop-art]` 报错发回 |
 | 显存超预算（>100 MB/主题） | §4.3 三条降档，优先砍 t6/t7 albedo |
 | Quest | BC 会被解成 RGBA32（×4）；本期不做 |

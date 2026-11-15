@@ -322,6 +322,63 @@ def ours_starvation(level: "OursLevel"):
     return _runway(pairs, level.start_d, level.max_d)
 
 
+def _ranks(values: Sequence[float]) -> List[float]:
+    """Average ranks (1-based), ties share the mean rank."""
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    ranks = [0.0] * len(values)
+    index = 0
+    while index < len(order):
+        end = index
+        while end + 1 < len(order) and values[order[end + 1]] == values[order[index]]:
+            end += 1
+        average = (index + end) / 2.0 + 1.0
+        for position in range(index, end + 1):
+            ranks[order[position]] = average
+        index = end + 1
+    return ranks
+
+
+def spearman(pairs: Sequence[Tuple[float, float]]) -> Optional[float]:
+    """Rank correlation without scipy; ``None`` when it is undefined."""
+    if len(pairs) < 3:
+        return None
+    xs = _ranks([p[0] for p in pairs])
+    ys = _ranks([p[1] for p in pairs])
+    n = float(len(pairs))
+    mean_x = sum(xs) / n
+    mean_y = sum(ys) / n
+    cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    var_x = sum((x - mean_x) ** 2 for x in xs)
+    var_y = sum((y - mean_y) ** 2 for y in ys)
+    if var_x <= 0.0 or var_y <= 0.0:
+        return None
+    return cov / math.sqrt(var_x * var_y)
+
+
+def ours_zone_stats(level: "OursLevel") -> Dict[str, Any]:
+    """The four zone numbers, computed from our own level data."""
+    start_d = level.start_d
+    ball_start = (level.data.get("level") or {}).get("ballStart")
+    if ball_start and len(ball_start) == 3:
+        cx, cz = float(ball_start[0]), float(ball_start[2])
+    else:
+        cx = sum(float(p.get("position", [0, 0, 0])[0]) for p in level.props) / max(1, len(level.props))
+        cz = sum(float(p.get("position", [0, 0, 0])[2]) for p in level.props) / max(1, len(level.props))
+    pairs = []
+    for prop, item in zip(level.props, level.items):
+        position = prop.get("position") or [0.0, 0.0, 0.0]
+        radius = math.hypot(float(position[0]) - cx, float(position[2]) - cz)
+        pairs.append((item["d_req_m"], radius))
+    small = sum(1 for item in level.items if 0.01 <= item["d_req_m"] < 0.10)
+    edible = len(level.absorbable_at(start_d))
+    return {
+        "min_ratio": min((item["d_req_m"] for item in level.items), default=0.0) / start_d,
+        "eat_now": edible / max(1, level.count),
+        "small_share": small / max(1, level.count),
+        "spearman": spearman(pairs),
+    }
+
+
 def load_ours_level(path: Path) -> OursLevel:
     return OursLevel(json.loads(Path(path).read_text(encoding="utf-8")), Path(path))
 
@@ -407,10 +464,12 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
     # "PARAM" is a statement about *what kind* of comparison it is, not a
     # verdict that skips the comparison.
     def _settle(row: Row) -> None:
-        if row.klass != PARAM:
+        if row.klass not in (PARAM, MISSING):
             return
         if row.original is None:
-            row.klass = UNKNOWN if row.ours is not None else NO_MODEL
+            # The missing input is the original's, so the gap is unjudgeable —
+            # even when our own side also has nothing to put in the cell.
+            row.klass = UNKNOWN
         elif row.ours is None:
             row.klass = UNITY_ONLY
         elif row.ratio is not None and abs(row.ratio - 1.0) <= 1e-2:
@@ -561,7 +620,7 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
         _v("absorb_volume_ratio"), CONSISTENT,
         "missions 类型表自洽：πD³/6≈10V（1,449/1,450 行 1 mm 内）；raw_growth §2",
         "PickupAbsorbMath.cs:350 / KatamariBallMotor.cs:218（absorbVolumeRatio=10）",
-        "唯一一条完全对上的硬规则：门 = 10 倍体积，两边同形同值")
+        "唯一一条完全对上的硬规则：门 = 10 倍体积，两边同形同值；但**体积的定义**差一个 k（见 G13）")
 
     add("G08", "门槛取整", "m", float(params["gate_floor_m"]),
         float(_v("gate_floor_m")), MISSING,
@@ -570,6 +629,22 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
         "我们用浮点比体积；原作按 mm 取整后比较。差不到 1 mm，"
         "但在 %.4g m 的球上 1 mm 就是 %.1f%% 的直径"
         % (start_d, 0.1 / start_d))
+
+    vf = corpus.data.get("volume_factor") or {}
+    stage_k = [e.get("volume_factor") for e in corpus.catalogue.values()
+               if e.get("volume_factor")]
+    median_k = (sorted(stage_k)[len(stage_k) // 2] if stage_k
+                else vf.get("median_k") or vf.get("default_k"))
+    add("G13", "体积系数 k（Volume = k·bbox）", "×bbox",
+        None if median_k is None else round(float(median_k), 4), 1.0, MISSING,
+        "corpus.volume_factor / catalogue[].volume_factor ← meta/solid_volume/"
+        "fill_factors.csv（默认 0.70；薄片抬到 8–16、蓬松压到 0.05–0.07、镂空家具 0.3–0.5）",
+        "placement_core.absorb_diameter_req 直接用 a·b·c（k=1）",
+        "原作者手调的系数，不是任何几何体积：默认 k=0.70 让我们在长度当量上偏严 "
+        "(1/0.70)^(1/3)=1.126（与 gateRatio 中位 1.13 吻合）。加了 k 之后门与成长都要乘它，"
+        "我方供给比再 ×%.2f" % (float(median_k) if median_k else 0.7),
+        note="原作类型里 %.1f%% 恰好等于 k=0.70（README 报的是 70.7%%；本文用本语料能连上的 %d 型算中位）"
+             % (100.0 * (vf.get("exact_default_share") or 0.0), len(stage_k)))
 
     add("G09", "HUD 直径偏置", "m", float(params["hud_diameter_offset_m"]),
         _v("hud_offset_m"), MISSING,
@@ -647,7 +722,7 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
         % (ours.max_d, ours.volume_absorbable_at(ours.max_d),
            ours.ball_volume(ours.max_d)),
         "原作可吸内容体积是满径球的 %.2f 倍，我们只有 %.2f 倍。"
-        "按物理体积重算，我们整关内容不够走到上限（repricing_proposal.md §0）"
+        "即使按 k·bbox 口径重算，我们整关内容也不够走到上限（repricing_proposal.md §0）"
         % (orig_ratio, ours_ratio))
 
     paths = sorted({str(e.get("path_speed_index")) for e in corpus.catalogue.values()
@@ -681,6 +756,39 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
         "ball_audit §E：无 burial 代码；CONTACT_MODEL_V2 §4.3 只是设计",
         "我们球长大后旧物被吞进去却还在画，原作会 cull。"
         "这是‘秃球/穿插’观感差异的来源之一")
+
+    zones = (corpus.data.get("zone_profile") or {}).get("areas") or []
+    area0 = next((z for z in zones if z.get("area") == 0), zones[0] if zones else {})
+    ours_zone = ours_zone_stats(ours)
+    zone_source = "corpus.zone_profile.areas[0]（meta/zone_profile/，仅 5/19 关能拆区）"
+    add("C08", "区域最小件 / 入场球径", "×",
+        area0.get("min_ratio_to_ball"), round(ours_zone["min_ratio"], 3), PARAM,
+        zone_source, "placement.json：min(d_req)/起始球径",
+        "入场时看到的最小件相对球有多大。原作 0.28（32 个区域中位），"
+        "我们 %.2f——越小越'有东西可吃'，越大越像'开局就只剩大件'"
+        % ours_zone["min_ratio"])
+
+    add("C09", "入场可吃占比", "—", area0.get("eat_now"),
+        round(ours_zone["eat_now"], 3), PARAM,
+        zone_source, "placement.json：可吸件数/总件数（起始球径）",
+        "一进场就有多少比例能吃。原作 12–76%%、典型 ~26%%；我们 %.0f%%"
+        % (100.0 * ours_zone["eat_now"]))
+
+    add("C10", "1–10 cm 类占比", "—", area0.get("small_1_10cm_share"),
+        round(ours_zone["small_share"], 3), PARAM,
+        zone_source + "；跨区衰减：MAS4 60%→12%→5.5%→0、MAS8 16.6%→0（size_class_mix）",
+        "placement.json：0.01 ≤ d_req < 0.10 的件数占比",
+        "小球尺寸类的占比。原作按区衰减到 0（第二区起不再放新小件）；"
+        "我们 %.0f%%，且没有'区'的概念所以永远不会衰减" % (100.0 * ours_zone["small_share"]))
+
+    add("C11", "尺寸-半径空间分布（Spearman）", "ρ",
+        area0.get("spearman_size_radius"),
+        None if ours_zone["spearman"] is None else round(ours_zone["spearman"], 3),
+        PARAM,
+        "corpus.zone_profile（spatial_summary.json）；Cancer +0.354、MAS1 +0.219",
+        "run_parity.spearman(d_req, 到起始点的水平距离)",
+        "正相关 = 小件在中央、大件在外围稀疏。原作两个可测关都是正；"
+        "我们的布局按区域撒点，相关系数说明'中央是否真的是饭碗'")
 
     # ------------------------------------------------------------------ L --
     gates = params["zone_gates_m"]

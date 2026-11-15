@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 
 from Docs.Design.Parity.parity_harness import run_parity
-from Docs.Design.Parity.parity_harness.corpus_schema import Corpus
+from Docs.Design.Parity.parity_harness.corpus_schema import Corpus, validate_corpus
 from Docs.tests.parity.support import (
     AUDIT_DOC,
     CANCER_CORPUS,
@@ -70,7 +70,7 @@ class DeterminismTest(unittest.TestCase):
         _, rows = render_synthetic()
         ids = [row.id for row in rows]
         self.assertEqual(len(ids), len(set(ids)))
-        self.assertEqual(42, len(rows))
+        self.assertEqual(47, len(rows))
         # Rows are grouped by layer in the documented order, and each layer is
         # contiguous (the report reads layer by layer).
         prefixes = [row.id[0] for row in rows]
@@ -210,7 +210,7 @@ class RefusalTest(unittest.TestCase):
             self.assertEqual(0, rc)
             text = out_path.read_text(encoding="utf-8")
         self.assertIn("差分 gap 表", text)
-        self.assertIn("合计 42 条指标", text)
+        self.assertIn("合计 47 条指标", text)
         self.assertNotIn("654", text, "the build must use the synthetic corpus")
 
     def test_missing_corpus_prints_the_build_recipe(self):
@@ -279,6 +279,68 @@ class RefLevelComparisonTest(unittest.TestCase):
         self.assertIn("供给比：两关我方数据", text)
         self.assertIn("_ref_mas1", text)
         self.assertIn("story_01_bench_size", text)
+
+
+class VolumeFactorTest(unittest.TestCase):
+    """G13: the original's volume is k x bbox — we ship k = 1."""
+
+    def test_factor_is_unknown_without_the_block(self):
+        _, rows = render_synthetic()
+        row = [r for r in rows if r.id == "G13"][0]
+        self.assertIsNone(row.original)
+        self.assertEqual(run_parity.UNKNOWN, row.klass)
+
+    def test_factor_is_read_from_the_catalogue(self):
+        corpus = synthetic_corpus()
+        for entry in corpus["catalogue"].values():
+            entry["volume_factor"] = 0.7
+        corpus["evidence"]["catalogue.*.volume_factor"] = {
+            "source": "fixture", "level": "数据挖掘"}
+        validate_corpus(corpus)
+        _, rows = render_synthetic(corpus)
+        row = [r for r in rows if r.id == "G13"][0]
+        self.assertAlmostEqual(0.7, row.original)
+        self.assertEqual(run_parity.MISSING, row.klass)
+        self.assertAlmostEqual(1.4286, row.ratio, places=3)
+
+
+class ZoneProfileTest(unittest.TestCase):
+    """C08–C11 read the zone profile optionally: absent means 'unknown', not 0."""
+
+    def test_zone_metrics_are_unknown_without_the_block(self):
+        text, rows = render_synthetic()
+        for metric_id in ("C08", "C09", "C10", "C11"):
+            row = [r for r in rows if r.id == metric_id][0]
+            self.assertIsNone(row.original, metric_id)
+            self.assertEqual(run_parity.UNKNOWN, row.klass, metric_id)
+
+    def test_zone_metrics_read_the_block_when_present(self):
+        corpus = synthetic_corpus()
+        corpus["zone_profile"] = {
+            "source": "fixture",
+            "areas": [{"area": 0, "instances": 3, "has_growth_bands": False,
+                       "min_mm": 30.0, "eat_now": 0.5,
+                       "min_ratio_to_ball": 0.25,
+                       "small_1_10cm_share": 0.75,
+                       "spearman_size_radius": 0.4}],
+        }
+        # A pattern that covers nothing is itself an error, so the fixture adds
+        # the citation together with the block it cites.
+        corpus["evidence"]["zone_profile.*"] = {"source": "fixture",
+                                                "level": "数据挖掘"}
+        validate_corpus(corpus)
+        _, rows = render_synthetic(corpus)
+        c08 = [r for r in rows if r.id == "C08"][0]
+        c11 = [r for r in rows if r.id == "C11"][0]
+        self.assertAlmostEqual(0.25, c08.original)
+        self.assertAlmostEqual(0.4, c11.original)
+
+    def test_spearman_is_signed_and_bounded(self):
+        rising = [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0)]
+        falling = [(1.0, 3.0), (2.0, 2.0), (3.0, 1.0)]
+        self.assertAlmostEqual(1.0, run_parity.spearman(rising))
+        self.assertAlmostEqual(-1.0, run_parity.spearman(falling))
+        self.assertIsNone(run_parity.spearman([(1.0, 1.0)]))
 
 
 class DecisionsTest(unittest.TestCase):

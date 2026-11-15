@@ -183,6 +183,7 @@ _CATALOGUE_ENTRY = obj(
         "vault_points": num(nullable=True, minimum=0),
         "hit_lod": num(nullable=True, minimum=0),
         "penalty": num(nullable=True, minimum=0.0, maximum=1.0),
+        "volume_factor": num(nullable=True, positive=True),
     },
     required=("name", "req_pickup_mm", "volume_m3"),
 )
@@ -199,6 +200,24 @@ _INSTANCE = obj(
         "loading_area": num(nullable=True, minimum=0),
     },
     required=("mono_idx", "placed"),
+)
+
+_ZONE = obj(
+    {
+        "area": num(minimum=0),
+        "instances": num(minimum=0),
+        "has_growth_bands": boolean(),
+        "min_mm": num(positive=True),
+        "p50_mm": num(positive=True),
+        "clear_cm": num(positive=True),
+        "eat_now": num(minimum=0.0, maximum=1.0),
+        "min_ratio_to_ball": num(minimum=0.0),
+        "p50_ratio_to_ball": num(minimum=0.0),
+        "never_eatable_scenery": num(minimum=0.0, maximum=1.0),
+        "small_1_10cm_share": num(minimum=0.0, maximum=1.0),
+        "spearman_size_radius": num(minimum=-1.0, maximum=1.0),
+    },
+    required=("area",),
 )
 
 _EVIDENCE_ENTRY = obj(
@@ -221,6 +240,25 @@ TOP = obj(
         "instances": seq(_INSTANCE, min_items=1),
         "evidence": mapof(_EVIDENCE_ENTRY),
         "unresolved": seq(text()),
+        "volume_factor": obj(
+            {
+                "source": text(),
+                "default_k": num(positive=True),
+                "measured_types": num(minimum=0),
+                "exact_default_share": num(minimum=0.0, maximum=1.0),
+                "median_k": num(positive=True),
+            },
+            required=("source", "default_k"),
+            nullable=True,
+        ),
+        "zone_profile": obj(
+            {
+                "source": text(),
+                "areas": seq(_ZONE),
+            },
+            required=("source", "areas"),
+            nullable=True,
+        ),
     },
     required=("schema", "stage", "units", "timebase", "parameters",
               "catalogue", "instances", "evidence", "unresolved"),

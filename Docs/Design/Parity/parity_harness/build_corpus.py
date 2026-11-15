@@ -119,7 +119,8 @@ def _one(rows: List[Dict[str, str]], key: str, value: str, what: str):
     raise BuildError("%s: no row with %s == %r" % (what, key, value))
 
 
-def build_stage(key: str, spec: Dict[str, Any], tables: Dict[str, List[Dict[str, str]]]):
+def build_stage(key: str, spec: Dict[str, Any], tables: Dict[str, List[Dict[str, str]]],
+               meta: Optional[Path] = None):
     mission = _one(tables["missions"], "Note", spec["label"], "missions")
     sim = _one(tables["sim_missions"], "", spec["label"], "sim_missions")
     english = {r["Internal name"]: r["English name"] for r in tables["all_objects"]}
@@ -299,6 +300,12 @@ def build_stage(key: str, spec: Dict[str, Any], tables: Dict[str, List[Dict[str,
             "catalogue.*.vault_points": {"source": "name_props.'num vault pts'", "level": "数据挖掘"},
             "catalogue.*.hit_lod": {"source": "object dump.u8HitLod", "level": "数据挖掘"},
             "catalogue.*.penalty": {"source": "collectible objects.Pickup Volume Penalty", "level": "数据挖掘"},
+            "catalogue.*.volume_factor": {"source": "meta/solid_volume/fill_factors.csv（k = Volume / bbox）",
+                                          "level": "数据挖掘"},
+            "volume_factor.*": {"source": "meta/solid_volume/README.md + fill_factors.csv", "level": "数据挖掘"},
+            "zone_profile.source": {"source": "meta/zone_profile/README.md", "level": "数据挖掘"},
+            "zone_profile.areas[].*": {"source": "meta/zone_profile/zone_stats.csv / size_class_mix.csv / "
+                                                 "spatial_summary.json", "level": "数据挖掘"},
             "instances[].mono_idx": {"source": "object dump.u16MonoNameIdx", "level": "数据挖掘"},
             "instances[].position[]": {"source": "object dump.position（米，area 局部；0,0,0 表示随机位置组）",
                                        "level": "数据挖掘"},
@@ -308,6 +315,8 @@ def build_stage(key: str, spec: Dict[str, Any], tables: Dict[str, List[Dict[str,
             "instances[].shake_off": {"source": "object dump.u8MonoShakeOffFlag", "level": "数据挖掘"},
             "instances[].loading_area": {"source": "object dump.loading area", "level": "数据挖掘"},
         },
+        "volume_factor": (volume_factors(meta, catalogue) if meta is not None else None),
+        "zone_profile": (zone_profile(meta, spec["label"]) if meta is not None else None),
         "unresolved": [
             "parameters.timer_unit=null 且 parameters.timer_seconds=null：timer_raw=%s 的单位未证实"
             "（若按分钟则 240 s）；未在实机确认前不给 timer_seconds" % mission["GAME_TIME"],
@@ -334,6 +343,93 @@ def _drop_unused_evidence(corpus: Dict[str, Any]) -> None:
         corpus["evidence"]["instances[].position"] = {
             "source": "未放置实例（position 为 0,0,0 或随机位置组）",
             "level": "数据挖掘"}
+
+
+def volume_factors(meta: Path, catalogue: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Per-type ``Volume / bbox`` factor ``k`` (the original's hand-set coefficient).
+
+    ``Volume = k x bounding box``; k defaults to 0.70 and is hand-raised for flat
+    things / cut for airy ones (``meta/solid_volume/README.md``).  Optional: the
+    export may not carry it, in which case the metric reads 原作未知.
+    """
+    path = meta / "solid_volume" / "fill_factors.csv"
+    if not path.is_file():
+        return None
+    by_internal = {}
+    for row in _open_rows(path):
+        k = _num(row.get("k_fill"))
+        if k is not None and k > 0:
+            by_internal[row["internal"]] = k
+    hits = 0
+    for entry in catalogue.values():
+        k = by_internal.get(entry.get("internal_name") or "")
+        if k is not None:
+            entry["volume_factor"] = round(k, 6)
+            hits += 1
+    values = sorted(by_internal.values())
+    if not values:
+        return None
+    exact = sum(1 for v in values if abs(v - 0.70) < 1e-6)
+    median = values[len(values) // 2]
+    return {
+        "source": "meta/solid_volume/fill_factors.csv；Volume = k×bbox（默认 0.70）",
+        "default_k": 0.70,
+        "measured_types": len(values),
+        "exact_default_share": round(exact / len(values), 4),
+        "median_k": round(median, 4),
+    }
+
+
+def zone_profile(meta: Path, label: str) -> Optional[Dict[str, Any]]:
+    """Per-area size profile, if the export carries it (``zone_profile/``).
+
+    Optional on purpose: the five-band breakdown only exists for 5 of 19
+    missions, and the folder may be absent on another machine.  When it is
+    absent the metrics that read it report ``原作未知`` instead of guessing.
+    """
+    folder = meta / "zone_profile"
+    stats_path = folder / "zone_stats.csv"
+    mix_path = folder / "size_class_mix.csv"
+    if not stats_path.is_file():
+        return None
+    mix = {}
+    if mix_path.is_file():
+        for row in _open_rows(mix_path):
+            key = (row["mission"], row["area"])
+            total = _num(row.get("total")) or 0.0
+            small = _num(row.get("1-10cm")) or 0.0
+            mix[key] = (small / total) if total else 0.0
+    spearman = {}
+    spatial = folder / "spatial_summary.json"
+    if spatial.is_file():
+        for entry in json.loads(spatial.read_text(encoding="utf-8")):
+            spearman[entry["mission"]] = entry.get("spearman_size_vs_radius")
+    areas = []
+    for row in _open_rows(stats_path):
+        if row.get("mission") != label:
+            continue
+        area = int(_num(row.get("area"), 0) or 0)
+        areas.append({
+            "area": area,
+            "instances": int(_num(row.get("instances"), 0) or 0),
+            "has_growth_bands": (row.get("has_growth_bands") or "").strip() == "yes",
+            "min_mm": _num(row.get("min_mm")),
+            "p50_mm": _num(row.get("p50_mm")),
+            "clear_cm": _num(row.get("clear_cm")),
+            "eat_now": _num(row.get("eat_now")),
+            "min_ratio_to_ball": _num(row.get("min_ratio_to_ball")),
+            "p50_ratio_to_ball": _num(row.get("p50_ratio_to_ball")),
+            "never_eatable_scenery": _num(row.get("never_eatable_scenery")),
+            "small_1_10cm_share": mix.get((label, str(area))),
+            "spearman_size_radius": spearman.get(label) if area == 0 else None,
+        })
+    if not areas:
+        return None
+    return {
+        "source": "meta/zone_profile/（zone_stats.csv + size_class_mix.csv + "
+                  "spatial_summary.json）；只有 5/19 关有可用成长带",
+        "areas": areas,
+    }
 
 
 def load_tables(meta: Path) -> Dict[str, List[Dict[str, str]]]:
@@ -375,7 +471,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     keys = sorted(STAGES) if args.stage == "all" else [args.stage]
     for key in keys:
         try:
-            corpus = build_stage(key, STAGES[key], tables)
+            corpus = build_stage(key, STAGES[key], tables, meta)
         except BuildError as error:
             print("build_corpus: %s" % error, file=sys.stderr)
             return 2

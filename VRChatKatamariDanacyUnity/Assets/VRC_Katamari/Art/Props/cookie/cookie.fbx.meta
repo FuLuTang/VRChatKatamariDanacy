@@ -3,7 +3,17 @@ guid: b83fa285b6061314892d82850c3eb100
 ModelImporter:
   serializedVersion: 22200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Prop_cookie_chip
+    second: {fileID: 2100000, guid: 4f11e79cfc2a8ca45aa06402b6ba73c2, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Prop_cookie_dough
+    second: {fileID: 2100000, guid: e3e2a0f0bdd9e2740bddc87788fdf6d5, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
@@ -67,7 +77,7 @@ ModelImporter:
     secondaryUVMinLightmapResolution: 40
     secondaryUVMinObjectScale: 1
     secondaryUVPackMargin: 4
-    useFileScale: 1
+    useFileScale: 0
     strictVertexDataChecks: 0
   tangentSpace:
     normalSmoothAngle: 60

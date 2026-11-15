@@ -3,12 +3,22 @@ guid: 558dc4505aa037d4e92c92596fbb8761
 ModelImporter:
   serializedVersion: 22200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Prop_toy_ball_band
+    second: {fileID: 2100000, guid: 2ab20ceef97164d4eb803458aa5b3030, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Prop_toy_ball_shell
+    second: {fileID: 2100000, guid: 38885e49e609dd54999ac6d516996df8, type: 2}
   materials:
-    materialImportMode: 1
+    materialImportMode: 2
     materialName: 0
     materialSearch: 1
-    materialLocation: 0
+    materialLocation: 1
   animations:
     legacyGenerateAnimations: 4
     bakeSimulation: 0

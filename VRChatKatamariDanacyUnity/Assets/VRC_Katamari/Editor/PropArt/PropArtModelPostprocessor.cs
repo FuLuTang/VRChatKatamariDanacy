@@ -61,7 +61,7 @@ namespace VRCKatamari.Editor.PropArt
             PropArtMaterials.AddRemapsForExistingMaterials(importer, manifest);
         }
 
-        public override Material OnAssignMaterialModel(Material material, Renderer renderer)
+        public Material OnAssignMaterialModel(Material material, Renderer renderer)
         {
             if (material == null)
             {

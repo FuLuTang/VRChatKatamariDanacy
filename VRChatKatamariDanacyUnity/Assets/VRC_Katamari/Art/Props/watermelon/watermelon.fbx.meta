@@ -3,7 +3,17 @@ guid: ee811784baf6c2a4bb1fed84fb9489a4
 ModelImporter:
   serializedVersion: 22200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Prop_watermelon_rind
+    second: {fileID: 2100000, guid: d1907437c8c69f048a8ec1bd9b20f4e1, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Prop_watermelon_stripe
+    second: {fileID: 2100000, guid: d39380b7ac67acb43b1be5a10ed1cb25, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
@@ -67,7 +77,7 @@ ModelImporter:
     secondaryUVMinLightmapResolution: 40
     secondaryUVMinObjectScale: 1
     secondaryUVPackMargin: 4
-    useFileScale: 1
+    useFileScale: 0
     strictVertexDataChecks: 0
   tangentSpace:
     normalSmoothAngle: 60

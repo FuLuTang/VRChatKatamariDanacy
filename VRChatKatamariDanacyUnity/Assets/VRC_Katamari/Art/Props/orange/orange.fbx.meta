@@ -3,7 +3,17 @@ guid: da8b86ed409ad2f4e915e6e00efb2f8f
 ModelImporter:
   serializedVersion: 22200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Prop_orange_rind
+    second: {fileID: 2100000, guid: 290b81c5960392145be520611f3b248c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Prop_orange_stem
+    second: {fileID: 2100000, guid: 86ba6e0fc98886344a349f562353f5e8, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
@@ -67,7 +77,7 @@ ModelImporter:
     secondaryUVMinLightmapResolution: 40
     secondaryUVMinObjectScale: 1
     secondaryUVPackMargin: 4
-    useFileScale: 1
+    useFileScale: 0
     strictVertexDataChecks: 0
   tangentSpace:
     normalSmoothAngle: 60

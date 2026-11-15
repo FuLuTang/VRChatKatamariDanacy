@@ -84,6 +84,11 @@ namespace VRCKatamari.Ai
                     }
                     return;
                 }
+                // One line for the one state change this wait can have. The poll above
+                // stays silent: the copy of the [round] block that used to sit in
+                // AllMotorsReady repeated itself on every frame of the wait, and its
+                // ProbeBank call ran before the motors had their stores.
+                Debug.Log("[skirmish] motors ready after " + readinessFrames + " frames");
                 Setup();
                 if (!initialised) return;
             }
@@ -133,16 +138,17 @@ namespace VRCKatamari.Ai
             }
         }
 
-        /// <summary>True once every wired motor reports a started ball.</summary>
+        /// <summary>
+        /// True once every wired motor reports a started ball.
+        /// </summary>
+        /// <remarks>
+        /// A pure predicate: Update calls it once per frame while the host waits for the
+        /// motors' Start methods, so it must not log and must not probe. Readiness is
+        /// reported once, by the caller, on the frame it first becomes true.
+        /// </remarks>
         private bool AllMotorsReady()
         {
             if (motors == null || motors.Length == 0) return false;
-            float remaining = roundSeconds - elapsed;
-            if (remaining < 0f) remaining = 0f;
-            ProbeBank();
-
-            Debug.Log("[round] t=" + (Mathf.Floor(remaining * 10f) / 10f)
-                + " phase=" + (roundPhase == 0 ? "Playing" : (roundPhase == 1 ? "Settling" : "Ended")));
 
             for (int i = 0; i < motors.Length; i++)
             {
@@ -239,8 +245,17 @@ namespace VRCKatamari.Ai
         /// One conversion attempt per ball per second while the window is open, with the
         /// numbers needed to recompute the expected shrink independently.
         /// </summary>
+        /// <remarks>
+        /// One call site, in Update's throttled block, which is only reachable after Setup
+        /// has set <see cref="initialised"/>. The guard below makes that a precondition
+        /// instead of a coincidence: the old copies of this call sat in AllMotorsReady and
+        /// Setup, i.e. before the motors had their stores, and were harmless only because
+        /// windowOpen happened to still be false. A probe must not owe its safety to a
+        /// different flag.
+        /// </remarks>
         private void ProbeBank()
         {
+            if (!initialised) return;
             if (roundPhase != 0) return;
             if (!windowOpen) { Debug.Log("[bank] window=closed skipped"); return; }
 
@@ -250,7 +265,16 @@ namespace VRCKatamari.Ai
                 if (m == null) continue;
                 float before = m.GetSemanticDiameterWorldM();
                 float volume = m.GetConfirmedVolumeUnits();
-                int residualPercent = 25;
+
+                // These six numbers are hand-copied copies of KatamariBallMotor's
+                // serialized defaults (baselineVolumeUnits 3.4390244,
+                // cubicMetersPerVolumeUnit 0.0041, maxCoreRadiusWorldM 1.1,
+                // collisionToCoreRadiusRatio 1, semanticDiameterPerCoreDiameter 1,
+                // bankResidualFraction 0.25), not readings from the motor: the motor
+                // publishes radii, never its own sizing inputs. They agree today, so
+                // expected= is the rule's answer; a scene that tunes the motor turns it
+                // into a number with no rule behind it, and nothing fails. Merging the
+                // copy needs a motor-side seam, so it is left documented here instead.
                 float residual = 0.25f;
 
                 // Expected shrink, computed from the same public math the motor uses.
@@ -319,8 +343,17 @@ namespace VRCKatamari.Ai
         /// <remarks>
         /// Facts, not verdicts: a boolean "is my target queued" is wrong forever when the
         /// comparison is wrong, which cost this project two rounds. d3d is the motor's
-        /// stored 3-D distance; reach is recomputed here only for display, from the
-        /// motor's published radii and the target's scale.
+        /// stored 3-D distance; reach is recomputed here only for display.
+        /// <para>
+        /// TWO RULERS, on purpose and not merged yet. The absorb gate measures the item's
+        /// real AABB half-diagonal (PickupAbsorbMath.TryComputeReach, fed the propBounds
+        /// that PickupFieldSync wrote); this line can only see the pilot's target
+        /// Transform, so it prints a CUBE approximation, sqrt(3) * localScale.x / 2. The
+        /// two agree only for a unit cube with no scaled parent. A 1.2 x 0.4 x 0.5 m
+        /// bench reads ~1.04 m here against the gate's ~0.68 m, so do not read this reach
+        /// as the threshold. Merging them needs the queued candidate's bounds exposed by
+        /// the motor, which is a separate change (cleanup audit D3).
+        /// </para>
         /// </remarks>
         private string QueueFacts(KatamariBallMotor m, CpuBallPilot pilot)
         {
@@ -346,6 +379,8 @@ namespace VRCKatamari.Ai
             if (slot < 0) return text + " d3d=-1 reach=-1";
 
             UnityEngine.Transform target = pilot.GetTargetTransform();
+            // Cube approximation, not the gate's AABB half-diagonal: see the two-rulers
+            // note above. Deliberately unchanged, so this printed number cannot move.
             float size = target == null ? 0f : target.localScale.x;
             float itemRadius = Mathf.Sqrt(3f) * size * 0.5f;
             float reach = m.GetCollisionRadiusWorldM() + m.GetContactRadiusWorldM() + itemRadius;
@@ -425,13 +460,6 @@ namespace VRCKatamari.Ai
             // handed to another behaviour is the exact shape that produced a
             // __SetProgramVariable__ null reference in the single-ball lab.
             int kindCount = allowedKinds == null ? 0 : allowedKinds.Length;
-
-            float remaining = roundSeconds - elapsed;
-            if (remaining < 0f) remaining = 0f;
-            ProbeBank();
-
-            Debug.Log("[round] t=" + (Mathf.Floor(remaining * 10f) / 10f)
-                + " phase=" + (roundPhase == 0 ? "Playing" : (roundPhase == 1 ? "Settling" : "Ended")));
 
             for (int i = 0; i < motors.Length; i++)
             {

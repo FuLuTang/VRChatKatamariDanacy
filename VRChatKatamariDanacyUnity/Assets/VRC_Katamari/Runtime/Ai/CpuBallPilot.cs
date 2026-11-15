@@ -48,8 +48,6 @@ namespace VRCKatamari.Ai
         [SerializeField] private float adjustForward = 0.1f;
         [SerializeField] private float turnFullScaleDegrees = 45f;
         [SerializeField] private float turnDeadbandDegrees = 8f;
-        [SerializeField] private float turnaroundDegrees = 90f;
-        [SerializeField] private float chargeForward = 0.6f;
 
         [Header("Target stickiness")]
         [SerializeField] private float stallSeconds = 3f;

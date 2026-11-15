@@ -120,12 +120,27 @@ namespace VRCKatamari.BallMotor
         [SerializeField] private float maxItemSizeWorldM = 8f;
         [SerializeField] private float absorbSizeRatio = 1f;
 
-        // ---- FollowRigMath inputs ----
+        // ---- FollowRigMath inputs (PROVISIONAL) ----
         [SerializeField] private float heightFilterHz = 5f;
         [SerializeField] private float yawFilterHz = 8f;
-        [SerializeField] private float eyeHeightMeters = 1.6f;
-        [SerializeField] private float eyeHeightMinMeters = 0.25f;
-        [SerializeField] private float eyeHeightMaxMeters = 3f;
+        // The frame is behind the ball and above it, and both distances grow with the ball:
+        // height = baseUp + radius * upPerRadius, back = baseBack + radius * backPerRadius.
+        // The frame is also where the rider sits, so these numbers ARE the player's view.
+        //
+        // Why a station and not a camera: VRChat has no API that moves an avatar continuously.
+        // The only mechanisms are VRCStation and teleporting, so "a person pushing the ball" is
+        // built as a station behind the ball. First person reads as pushing; third person shows
+        // a seated avatar, which is the engine's limit, not a choice made here.
+        //
+        // The bounds below are rails, not tuning: they must not force a 0.10 m ball up to a
+        // standing person's eye height, and must not pin a large ball.
+        [SerializeField] private float eyeBaseUpMeters = 0.55f;
+        [SerializeField] private float eyeUpPerRadius = 2.4f;
+        [SerializeField] private float eyeUpMinMeters = 0.1f;
+        [SerializeField] private float eyeUpMaxMeters = 8f;
+        [SerializeField] private float eyeBaseBackMeters = 0.75f;
+        [SerializeField] private float eyeBackPerRadius = 2.2f;
+        [SerializeField] private float eyeMaxBackM = 8f;
 
         // ---- VisualRollMath inputs ----
         [SerializeField] private float maxRollDisplacementM = 0.5f;
@@ -177,7 +192,7 @@ namespace VRCKatamari.BallMotor
         // ---- FollowRig filter state ----
         private Vector3 followRigWorldPosition;
         private float followRigYawDegrees;
-        private float followRigEyeOffsetMeters;
+        private float followRigHeightMeters;
         private bool hasFollowRigFrame;
 
         // ---- Input stage state (the intent layer owns the debounce latches) ----
@@ -990,17 +1005,19 @@ namespace VRCKatamari.BallMotor
         {
             Vector3 rigPosition;
             float rigYaw;
-            float eyeOffset;
-            if (!FollowRigMath.TryUpdate(heightFilterHz, yawFilterHz, center, headingDegrees,
-                dt, eyeHeightMeters, eyeHeightMinMeters, eyeHeightMaxMeters, discontinuous,
+            float height;
+            if (!FollowRigMath.TryUpdate(heightFilterHz, yawFilterHz, center,
+                semanticDiameterWorldM * 0.5f, headingDegrees,
+                dt, eyeBaseUpMeters, eyeUpPerRadius, eyeUpMinMeters, eyeUpMaxMeters,
+                eyeBaseBackMeters, eyeBackPerRadius, eyeMaxBackM, discontinuous,
                 hasFollowRigFrame, followRigWorldPosition, followRigYawDegrees,
-                followRigEyeOffsetMeters, out rigPosition, out rigYaw, out eyeOffset))
+                followRigHeightMeters, out rigPosition, out rigYaw, out height))
             {
                 return;
             }
             followRigWorldPosition = rigPosition;
             followRigYawDegrees = rigYaw;
-            followRigEyeOffsetMeters = eyeOffset;
+            followRigHeightMeters = height;
             hasFollowRigFrame = true;
         }
 

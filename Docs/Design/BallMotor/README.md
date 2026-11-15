@@ -80,7 +80,7 @@
 | `stuckSeconds` | 卡住计时 | 扫掠成功时按 `stuck` 累加或清零 |
 | `discontinuous` | 传送/重生标记，喂 `VisualRollMath` 与 `FollowRigMath` | `TeleportTo`、卡住恢复；每步末尾消费后清零 |
 | `visualRollRotation` | 视觉滚动位姿 | 第 8 步成功时 |
-| `followRigWorldPosition` / `followRigYawDegrees` / `followRigEyeOffsetMeters` / `hasFollowRigFrame` | 跟随架上一帧滤波状态 | 第 9 步成功时 |
+| `followRigWorldPosition` / `followRigYawDegrees` / `followRigHeightMeters` / `hasFollowRigFrame` | 跟随架上一帧滤波状态（`followRigHeightMeters` 是相对球心的竖向偏移，不是眼高常量） | 第 9 步成功时 |
 
 另有账本列（单行、单回合）、输入意图缓冲、扫掠缓冲区、待处理吸收候选队列；都是预分配、复用、不 per-step 分配的字段，不是玩法状态。
 
@@ -157,6 +157,50 @@ StepBall:
 
 读取时机是检查点（场景装载后、调参后），不是每帧轮询。
 
+### 跟随架（2026-11-15 定稿语义，PROVISIONAL 数值）
+
+跟随架是**表现层**，也是玩家坐姿的落点：`VRCStation` 挂在 `followRigRoot` 下面，它指向哪里，玩家就在哪里。它只读球的位置、朝向与半径，不写回任何玩法状态。
+
+**为什么是「球后方的 station」而不是摄像机**（这条必须留着，别让后来的人以为方案选错了）：VRChat **没有任何 API 能连续移动玩家 avatar**，唯一手段是 `VRCStation`（或传送）。所以「人推球」在这台引擎上只能实现成**摆在球后方的一个 station**：第一人称下玩家看到的正是「球在身前、视角在球后上方」，与推球一致；但第三人称会看到 avatar 是坐姿——这是引擎限制，不是设计取舍。球的**位置**仍然只由 motor 决定，座位只是它的观察点。
+
+取景模型（v0.3 用户拍板，还原《块魂》：球一开始就很小，视角在球**后面**，球越大视角越高）：
+
+```
+eye = ballCenter − headingForward * (eyeBaseBackMeters + radius * eyeBackPerRadius)
+                + up             * (eyeBaseUpMeters   + radius * eyeUpPerRadius)
+```
+
+即**后方 + 上方，两项都随半径线性放大**，不再有「球心正上方 + 常量眼高」，也不再有「离球顶」的中间量。旧语义 `y = 球心 + 1.6` 的净空是 `1.6 − r`（线性下滑：0.30 m 球 1.45 m、1.43 m 球 0.885 m），而吸收物站在球面上、约一个物件深（门槛是「物件最大边 ≤ 球半径」），球越大越往里挤——这就是 1.43 m 时画面被糊满的几何原因。
+
+| 直径 | 半径 | 上方（离**球心**） | 后退 | 到球心 | 到**球面** | 到地面（球落地时） | 球角半径 | 平视时「球+壳」上沿 |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.10 m | 0.050 | 0.670 m | 0.860 m | 1.09 m | 1.04 m | 0.72 m | 2.6° | 视轴下 32.7° |
+| 0.30 m | 0.150 | 0.910 m | 1.080 m | 1.41 m | 1.26 m | 1.06 m | 6.1° | 27.9° |
+| 0.72 m | 0.360 | 1.414 m | 1.542 m | 2.09 m | 1.73 m | 1.77 m | 9.9° | 22.4° |
+| 1.43 m | 0.715 | 2.266 m | 2.323 m | 3.25 m | 2.53 m | 2.98 m | 12.7° | 20.4° |
+
+净空（上方 − 半径）随球**变大**：0.62 / 0.76 / 1.05 / 1.55 m。
+
+**为什么水平视角（pitch 由玩家鼠标控制）能看见前方地面**：上表最后一列是「球+吸附壳」上沿在视轴下方的角度。壳 = 半径 + min(0.6 m, 半径)：吸收门槛允许吃掉和球一样大的物件（最深可到半径），0.6 m 是场景最大道具尺度的上界估计。四个尺寸的上沿都在 **20.4°–32.7°**，所以平视时球和吸附物只占画面下缘（60° 垂直 FOV 的下半屏），上半屏和地平线以上是空的，前方地面从球的两侧一直可见。球本身也始终在画内：球心在视轴下 37.9° / 40.1° / 42.5° / 44.3°，比上沿更深。球径小的时候视角也低（0.10 m 球时眼点离地 0.72 m），**没有把下限写死在人性尺度上**；同时眼点始终在球顶之上（0.62 m 起），不会贴地/穿地。
+
+护栏（不是调参）：`eyeUpMinMeters = 0.1` / `eyeUpMaxMeters = 8` 钳的是**离球心**的高度，`eyeMaxBackM = 8` 钳后退。默认值永远碰不到它们——2.2 m 的球（半径 1.1）也只有 3.19 m，旧方案里那个绝对值 3 m 的天花板会把它削平，所以上下限必须跟着半径走。
+
+滤波不变：x/z 与高度用 `heightFilterHz`（5 Hz）、yaw 用 `yawFilterHz`（8 Hz），alpha = `1 − exp(−2π·hz·dt)`；传送/卡住恢复靠 `discontinuous` 一次吸附。后退偏移沿**滤波后的 yaw**取，所以偏移方向和写进 transform 的朝向不会打架。代价照旧要说清：后退偏移也是转向时座位横移的半径——110°/s 满转在 2.3 m 后退下约 4.4 m/s；觉得像「侧滑」就降 `eyeBackPerRadius`。
+
+新增的序列化字段（改名/新增都要 Unity 侧重接，见 `Labs/README.md` 的实例变量表说明）：
+
+| 字段 | 类型 | 默认 | 语义 |
+|---|---|---:|---|
+| `eyeBaseUpMeters` | float | 0.55 m | 眼点高于球心的常量项 |
+| `eyeUpPerRadius` | float | 2.4 | 每米半径再抬高多少米 |
+| `eyeUpMinMeters` | float | 0.1 m | 护栏：离球心高度的下限 |
+| `eyeUpMaxMeters` | float | 8 m | 护栏：离球心高度的上限 |
+| `eyeBaseBackMeters` | float | 0.75 m | 球心后方多少米（常量） |
+| `eyeBackPerRadius` | float | 2.2 | 每米半径再后退多少米 |
+| `eyeMaxBackM` | float | 8 m | 护栏：后退上限 |
+
+删除的字段：`eyeHeightMeters`、`eyeHeightMinMeters`、`eyeHeightMaxMeters`（旧「离球心常量眼高」语义）。**模型侧还没同步**：`Docs/Design/BallLayers/FollowRig/follow_rig.py` 与 `Docs/tests/ball_follow_rig/`（8 例）、`Docs/tests/ball_visual_roll/test_presentation_cross_layer_simulation.py`（4 处旧调用）仍是旧语义，等授权后一起改，否则两边会长期不一致。
+
 ### 刻意不在这里
 
 - 网络、远端球代理、多客户端权威/抢单仲裁：本层只有**一个本地玩家行**的账本；远端提交应走 `GrowthLedgerMath.TryApplyCommit` 的快照/提交路径，由回合控制器拥有。
@@ -186,7 +230,8 @@ StepBall:
 | `frictionPerSecond` / `turnRateDegreesPerSecond` / `maxLateralMps` | 1.2 / 110 / 1.2 | 同上 |
 | `growthSpeedFactor` / `growthTurnFactor` | 0.25 / 0.35 | 仅 `BallMotionTests` 里出现过，属测试值，不是产品值 |
 | `baselineVolumeUnits` / `cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` | 1 / 0.0141 / 1.1 | 只为让 0.30–2.20 m 档在 1 单位基线下成立，未测量 |
-| `eyeHeightMeters` / 滤波 Hz / 眼高上下限 | 1.6 / 5 / 8 / 0.25–3 | `BallMotion` DRAFT 占位 + 本层防越界的临时上下限 |
+| `eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeUpMinMeters` / `eyeUpMaxMeters` | 0.55 m / 2.4 / 0.1 m / 8 m | **PROVISIONAL，2026-11-15 定稿语义**：眼点 = 球心 +（常量 + 半径×系数），上下限是离球心的护栏；见下「跟随架」 |
+| `eyeBaseBackMeters` / `eyeBackPerRadius` / `eyeMaxBackM` | 0.75 m / 2.2 / 8 m | 同上：球心后方（常量 + 半径×系数），上限是护栏 |
 | `maxItemSizeWorldM` / `absorbSizeRatio` / `contactRadiusWorldM` | 8 / 1 / 0 | 安全上界 / PROVISIONAL（决定 (h)）/ 决定 (i)；见缺口 3 |
 | `maxLiftPerStep` / `maxDropPerStep` / `separationEpsilon` / `maxRollDisplacementM` | 0.1 / 0.1 / 0.001 / 0.5 | 本层临时，非实测容差 |
 | `stuckTimeoutSeconds` | 1.5 | 本层临时恢复策略 |

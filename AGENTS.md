@@ -2,6 +2,10 @@
 
 Current, effective rules only. The full authorization history up to 2026-11-14 is archived in [AGENTS_until_2026-11-14](<Docs/Archive/Process/AGENTS_until_2026-11-14.md>); [Docs/Archive/](<Docs/Archive/README.md>) is process history, not current status.
 
+## Original-first principle
+
+Some data structures and behaviours take priority for restoration to the original game. When our version lacks an object kind or behaviour that the extracted original clearly handles a certain way, read that as a signal our design may be wrong — consider restoring the original's structure and handling instead of patching around it. Every known divergence gets a row (original evidence, ours, reason, decision, owner) in the [parity audit's Divergences table](<Docs/Design/Parity/PARITY_AUDIT.md>); the default decision is restore unless a reason is recorded.
+
 ## Read first
 
 [Scope](<Docs/00_SCOPE_DECISIONS.md>), [game design](<Docs/01_GAME_DESIGN.md>), [technical design](<Docs/02_TECHNICAL_CONTRACTS.md>), [open decisions](<Docs/OPEN_DECISIONS.md>) and [tasks.json](<tasks.json>). The v0.3 explicit decisions supersede historical chat. Design parameters are provisional, not measured original-game values. Public interfaces are not frozen until T06.

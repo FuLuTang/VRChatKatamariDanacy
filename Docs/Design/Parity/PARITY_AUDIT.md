@@ -8,6 +8,38 @@
 
 ---
 
+## 原作优先原则（Original-first principle）
+
+**原则**：有些数据结构和行为，应当**优先**还原成原作的样子。当我们发现自己的版本不支持某类物件/行为，而解包出来的原作明确是以某种方式做的，就把这当作「**我们的设计可能错了**」的信号——考虑还原原作的结构与处理方式，而不是绕过它打补丁。
+
+**流程**：
+
+- **（a）** 一发现分歧就加一行，六列齐全：区域、原作行为（**带数据来源路径**）、我方、保留我方的理由（没有理由就写 `none -> restore`）、决定、owner。行是活的：决定改了改同一行，不另起一行。
+- **（b）** **默认决定是 `restore`**，除非写下理由，且只认四类：VRChat/Udon 限制、性能预算、授权、owner 的刻意设计选择。没写理由的一律标 `none -> restore`。
+- **（c）** 已知分歧已全部入表（下 14 行）。owner 已拍板的按拍板写；未拍板的写 `undecided`，**不要替 owner 定**。
+- **（d）** **未授权的参考资产永不入库**：表里只许写结构、数字、id 和文件路径；不许贴原作资产、模型、贴图或语料（`corpus_*.json` 已在 `.gitignore`，见 §6.1）。
+
+| 区域 area | 原作行为（数据来源路径） | 我方 | 保留我方的理由（或 `none -> restore`） | 决定 | owner |
+|---|---|---|---|---|---|
+| 体积定义（`k` 系数） | `Volume = k · bbox`，默认 `k = 0.70`；薄片件 8–16、蓬松件 0.05–0.07、镂空家具 0.3–0.5；门与成长用同一个体积（`/home/fulutang/KatamariRef/meta/` 的 `raw_growth_mechanism.txt` §2、`solid_volume/README.md`、`DATAMODEL_NOTES.md` §3） | 直接用 `a·b·c`（`k=1`，`PickupAbsorbMath.TryComputeItemVolume`） | `none -> restore`（§5.3.2 已给 `pickupVolumeFactor`，默认 0.70） | restore | owner 2026-11-15 |
+| 体积口径 | 连续浮点体积；门槛按 mm 取整（`Req Pickup Size` 整 mm，同上来源） | 整数 units × 0.0041 m³（`baselineVolumeUnits` / `cubicMetersPerVolumeUnit`） | `none -> restore`（§5.2 推荐 1 mm³ `long` 定点） | restore | owner 2026-11-15（D5） |
+| 单件回收比例 | `ΔV = penalty · V_item`，默认 `penalty = 0.8`（1198/1436 型），另有 0.01–1.0 逐件值（`collectible objects` 表、`raw_growth_mechanism.txt` §3） | `ΔV = V_item`（100%） | `none -> restore`（§5.1 `G06`） | restore | owner 2026-11-15（D2） |
+| 门槛取整 | 门槛直径向下取整到 mm（同上） | 浮点比较、不取整（`placement_core.absorb_diameter_req`） | `none -> restore`（§5.1 `G08`） | restore | owner 2026-11-15（D2） |
+| 10 倍体积门 | `πD³/6 ≥ 10·V`（`raw_growth_mechanism.txt` §2、`DATAMODEL_NOTES.md` §3） | 同一条（`absorbVolumeRatio = 10`，`PickupAbsorbMath.cs:350`） | 已一致，无分歧（`G07`） | keep | — |
+| 定步频率 | 逻辑 30 Hz 定步 `DoTick(1/30f)`，画面另插值（`/tmp/orig_physics/reroll_datamodel.md` §0，KatamariMods FramerateUncap 的 IL） | 50 Hz（`fixedStepSeconds = 0.02`，`Docs/Design/BallMotor/README.md:295`） | 性能预算 + 现有接触/子步参数按 0.02 s 标定过；切换单独立项 | keep（owner 计划切到 30 Hz，先留 50 Hz） | owner 2026-11-16 |
+| 每关分段回收曲线 | 按尺寸分段线性，按关给：MAS1 5 cm .8 → 15 cm .4 → 20 cm .16（`raw_growth_mechanism.txt` §3 的关卡曲线表） | 全局常数 100% | `none -> restore`（§5.1） | restore | owner 2026-11-15（D2） |
+| 每关起始/目标球径 | 逐关不同：MAS1 5 → 10 cm、Cancer 22.2 → 80 cm、第三星 10 cm（`missions` 表、`/tmp/orig_physics/dump.csv`、`DATAMODEL_NOTES.md` §1） | 一套 0.30 → 1.25 m（`placement.json` / `story_01_bench_size.json`），运行时尚未从关卡 JSON 读（§5.3.2 步骤 1） | `none -> restore` | restore | owner 2026-11-15（D6） |
+| 球径上限（全局 vs 每关） | 上限也是每关参数（MAS1 30 cm，同上来源） | 单一全局上限 2.20 m（`maxCoreRadiusWorldM` 只填了一个值） | 设计：先留一个全局上限，便于按手感统一调 | keep（按玩测定） | owner 2026-11-16 |
+| 视觉核心 | 21 档 `core_01..core_21` 低模「杂物团」核心网格，按尺寸档换网格；显示体与碰撞/滚动体分开（`/home/fulutang/KatamariRef/` 的 core 资产清单、`DATAMODEL_NOTES.md`、`/tmp/orig_physics/report.md` §11 M1/M3） | 一颗光滑 Unity 内置 Sphere，只缩放 `CoreMesh`（`BallView.cs:61`） | 成本：21 档要美术排期；0.30–2.20 m 用 3–5 档够（`VISUAL_GROWTH_AUDIT.md` §5 建议 2） | undecided | owner |
+| 吸附物位姿 | 吸附瞬间冻结，不缩放、不随球长大外移（专利 US7402104B2 `Mp`） | 同原作（`PickupFieldHost.cs:1064-1074`，`AttachmentMath` 不施加 objectScale） | 已一致，无分歧（`C06`） | keep | — |
+| 区域化尺寸分布 | 每区一套分布：第二区起不再放新小件、小件集中中央（MAS4 60→12→5.5→0%、Cancer ρ=+0.354；`zone_stats`、`/tmp/orig_physics/sheets/`、`reroll_numbers.md` §2） | 只有一个尺寸带、没有区（`C08`/`C10`/`C11`） | `none -> restore` | restore | owner |
+| 移动件/行为字段 | 每型带 `pathSpeedIndex`（5 种）、vault 点（52/107 型）、逐实例 `playAnimNo`、`parentProp`（38 件群组）（`name_props`、`object dump`、`DATAMODEL_NOTES.md`） | 数据无 behaviour 字段、运行时不读（`PROP_BEHAVIOURS.md` §0.5） | 性能预算：行为件按 15 Hz 分摊 ≤800 movers（`PROP_BEHAVIOURS.md` §7） | restore | owner |
+| 支撑图（`rests_on`） | **无公开证据**：专利也不讲堆叠，官方图鉴只有反证（`PROP_BEHAVIOURS.md` §5.1） | `support`/`stackedOn` 只喂校验器；Python 有 CSR 图（`support_graph.py`），运行时没有（`C05`） | 原作未知 → 只能按我方设计补运行时支撑检查 | undecided | owner |
+
+> 细节不在这里重复：`k` 系数与三处同源见 §5.3.2；D1/D2 落地后哪几行会变见 §5.1；连续体积的 7 个受影响点见 §5.2；21 档核心的观感论证见 `VISUAL_GROWTH_AUDIT.md` §3b/§5；行为与支撑见 `PROP_BEHAVIOURS.md`。本表只负责「承认分歧 + 定方向」。
+
+---
+
 ## 0. 一页结论
 
 1. **可做的是「参数 / 内容 / 规则」的差分审计，不是「手感」审计。** 原作的运动常数（速度、加速度、坡度、爬升、碰撞形状）不在任何公开源码里，它们在 `PS2KatamariSimulation.dll` 的机器码里；能一比一搬的是**关卡参数、物件位置、物件尺寸/体积、区域归属、类别**。

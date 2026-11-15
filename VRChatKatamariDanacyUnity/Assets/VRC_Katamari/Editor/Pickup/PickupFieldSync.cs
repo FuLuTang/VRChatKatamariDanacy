@@ -45,8 +45,14 @@ namespace VRCKatamari.Editor.Pickup
     /// contains the root rotation), so it must NOT receive the world AABB - that would turn a
     /// yaw-90 prop's box twice. The declared <c>@size=</c> edge is applied here too;</description></item>
     /// <item><description>collider = the prop's own Collider when it has one, else the first
-    /// child Collider in ordinal path order (the host disables at most one per
-    /// prop);</description></item>
+    /// child Collider in ordinal path order (the host disables at most one per prop). The
+    /// array is index-aligned with <c>propTransforms</c>: one slot per row, and a null slot
+    /// means that prop stays collidable when it is absorbed. When the caller opts in with
+    /// <c>createMissingColliders</c> (the level importer does), a prop with no Collider
+    /// anywhere in its subtree gets a <see cref="BoxCollider"/> on its own root, sized and
+    /// centred from its visual local AABB, and that box becomes the row's slot. The created
+    /// box is deliberately measured from the visual mesh, not from the declared pickup size:
+    /// <c>@size=</c> changes the gameplay volume, never the physical shape;</description></item>
     /// <item><description>value units = the caller's declaration for that item id (the level
     /// importer passes <c>placement.json</c>'s <c>defs[].valueUnits</c>/<c>props[].valueUnits</c>),
     /// else the value already serialized on the host for that id, else 0 with a report note.
@@ -104,6 +110,11 @@ namespace VRCKatamari.Editor.Pickup
         private const string PropLocalBoundsField = "propLocalBounds";
         private const string ValueUnitsField = "valueUnits";
         private const string PropCollidersField = "propColliders";
+
+        // A BoxCollider with a zero side never collides. A visual can legitimately have a
+        // zero-thickness side (paper), so the created box is given a 1 mm floor instead of
+        // being silently left out of the wiring.
+        private const float MinCreatedColliderExtentM = 0.001f;
 
         // ------------------------------------------------------------------ menu ---
 
@@ -181,6 +192,26 @@ namespace VRCKatamari.Editor.Pickup
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
             IDictionary<string, int> declaredValueUnits)
         {
+            return SyncFromChildren(host, fieldRoot, declaredValueUnits, false);
+        }
+
+        /// <summary>
+        /// Same as the three-argument overload, and additionally creates a
+        /// <see cref="BoxCollider"/> on every prop row that has no Collider at all when
+        /// <paramref name="createMissingColliders"/> is true.
+        /// </summary>
+        /// <remarks>
+        /// The menu path leaves the flag false so an existing scene is never edited beyond
+        /// the host's arrays. The level importer passes true for a whole-level document,
+        /// because its props are fresh FBX instances and the FBX import has
+        /// <c>addColliders: 0</c>: without this step every imported prop would leave a null
+        /// <c>propColliders</c> slot, the host would warn, and an absorbed prop would keep
+        /// whatever collider it had. Cell documents keep the old behaviour; their props are
+        /// hand-authored scenery and the importer must not add physics to them.
+        /// </remarks>
+        public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
+            IDictionary<string, int> declaredValueUnits, bool createMissingColliders)
+        {
             var report = new PickupFieldSyncReport();
             report.ValueUnitsRequested = declaredValueUnits != null && declaredValueUnits.Count > 0;
 
@@ -223,7 +254,7 @@ namespace VRCKatamari.Editor.Pickup
 
             List<PropCandidate> candidates = CollectCandidates(fieldRoot);
             List<PropRow> rows = ValidateCandidates(candidates, declaredValueUnits, existingValueUnits,
-                report);
+                createMissingColliders, report);
 
             if (rows.Count == 0 && report.Rejected.Count > 0)
             {
@@ -245,13 +276,13 @@ namespace VRCKatamari.Editor.Pickup
 
             MarkDirty(host);
             CopyProxy(host, report);
-            report.ReadBackVerified = VerifyReadBack(host, rows.Count);
+            report.ReadBackVerified = VerifyReadBack(host, rows.Count, createMissingColliders);
             if (!report.ReadBackVerified)
             {
                 if (string.IsNullOrEmpty(report.Failure))
                 {
                     report.Fail("the seven arrays did not read back at the expected length (" + rows.Count +
-                                "); the write did not persist");
+                                ") or a propColliders slot was empty; the write did not persist");
                 }
             }
             else
@@ -286,6 +317,7 @@ namespace VRCKatamari.Editor.Pickup
             public bool HasRenderer;
             public Vector3 BoundsSize;
             public Vector3 LocalBoundsSize;
+            public Vector3 LocalBoundsCenter;
             public Collider PrimaryCollider;
             public int ColliderCount;
             public string Rejection;
@@ -378,7 +410,8 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             candidate.BoundsSize = bounds.size;
-            candidate.LocalBoundsSize = MeasureLocalBounds(root, renderers);
+            candidate.LocalBoundsSize = MeasureLocalBoundsAndCenter(root, renderers,
+                out candidate.LocalBoundsCenter);
 
             var colliders = new List<Collider>(root.GetComponentsInChildren<Collider>(true));
             colliders.Sort((left, right) => string.CompareOrdinal(RelativePath(root, left.transform),
@@ -421,6 +454,19 @@ namespace VRCKatamari.Editor.Pickup
         /// </remarks>
         private static Vector3 MeasureLocalBounds(Transform root, Renderer[] renderers)
         {
+            Vector3 localCenter;
+            return MeasureLocalBoundsAndCenter(root, renderers, out localCenter);
+        }
+
+        /// <summary>
+        /// Measures the same local extents and, in addition, the centre of the local AABB in
+        /// root-local units. The centre is what a created <see cref="BoxCollider"/> needs;
+        /// the extents are still returned in world metres for <c>propLocalBounds</c>.
+        /// </summary>
+        private static Vector3 MeasureLocalBoundsAndCenter(Transform root, Renderer[] renderers,
+            out Vector3 localCenter)
+        {
+            localCenter = Vector3.zero;
             if (root == null || renderers == null || renderers.Length == 0)
             {
                 return Vector3.zero;
@@ -456,11 +502,130 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             Vector3 localSize = maximum - minimum;
+            localCenter = (minimum + maximum) * 0.5f;
             Matrix4x4 localToWorld = root.localToWorldMatrix;
             float axisX = localToWorld.MultiplyVector(Vector3.right).magnitude;
             float axisY = localToWorld.MultiplyVector(Vector3.up).magnitude;
             float axisZ = localToWorld.MultiplyVector(Vector3.forward).magnitude;
             return new Vector3(localSize.x * axisX, localSize.y * axisY, localSize.z * axisZ);
+        }
+
+        /// <summary>
+        /// Returns the prop's wireable Collider, adding one on the prop root when the whole
+        /// subtree has none.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// One collider per prop is the host's contract (<c>propColliders</c> is index-aligned
+        /// with <c>propTransforms</c> and the host disables exactly one collider on attach or
+        /// hide). The own-component rule and the ordinal child order match
+        /// <see cref="Candidate"/>, so a prop that already had a collider is never given a
+        /// second one.
+        /// </para>
+        /// <para>
+        /// The created <see cref="BoxCollider"/> sits on the prop root, which the importer
+        /// keeps at scale 1 with its origin at the model centre; the centre and size are
+        /// still measured rather than assumed, so a child whose mesh is offset still gets a
+        /// box around the real visual. Being an added component on a prefab instance, it is
+        /// scene data: the next sync finds it and reuses it, which is what makes a second
+        /// import report <c>+0 ~0 -0</c>.
+        /// </para>
+        /// </remarks>
+        public static Collider EnsurePropCollider(Transform root, Vector3 fallbackSize)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            Collider existing = PrimaryColliderOf(root);
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            // Never edit a prefab asset from a scene sync. The importer instantiates
+            // prefab instances, so this guard only protects a mistaken direct call.
+            if (PrefabUtility.IsPartOfPrefabAsset(root))
+            {
+                return null;
+            }
+
+            Vector3 localCenter = Vector3.zero;
+            Vector3 localSize = fallbackSize;
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            Vector3 measured = MeasureLocalBoundsAndCenter(root, renderers, out localCenter);
+            if (PickupFieldAuthoringRules.HasUsableBounds(measured.x, measured.y, measured.z))
+            {
+                localSize = measured;
+            }
+            else
+            {
+                localCenter = Vector3.zero;
+            }
+
+            if (!PickupFieldAuthoringRules.HasUsableBounds(localSize.x, localSize.y, localSize.z))
+            {
+                return null;
+            }
+
+            // MeasureLocalBoundsAndCenter returns world metres; BoxCollider.size is in the
+            // root's local units. An imported prop is scale 1, but a prefab with a scale
+            // override still gets a correct box instead of one scaled twice.
+            Vector3 axis = AxisLengths(root);
+            localSize = new Vector3(DivideByAxis(localSize.x, axis.x),
+                DivideByAxis(localSize.y, axis.y), DivideByAxis(localSize.z, axis.z));
+
+            var box = Undo.AddComponent<BoxCollider>(root.gameObject);
+            box.center = localCenter;
+            box.size = new Vector3(
+                Mathf.Max(localSize.x, MinCreatedColliderExtentM),
+                Mathf.Max(localSize.y, MinCreatedColliderExtentM),
+                Mathf.Max(localSize.z, MinCreatedColliderExtentM));
+            return box;
+        }
+
+        private static Vector3 AxisLengths(Transform root)
+        {
+            Matrix4x4 localToWorld = root.localToWorldMatrix;
+            return new Vector3(localToWorld.MultiplyVector(Vector3.right).magnitude,
+                localToWorld.MultiplyVector(Vector3.up).magnitude,
+                localToWorld.MultiplyVector(Vector3.forward).magnitude);
+        }
+
+        private static float DivideByAxis(float value, float axisLength)
+        {
+            if (axisLength <= 1e-6f || !IsFinite(axisLength))
+            {
+                return value;
+            }
+
+            return value / axisLength;
+        }
+
+        /// <summary>The prop's own Collider, else the first child Collider in path order.</summary>
+        private static Collider PrimaryColliderOf(Transform root)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            Collider own = root.GetComponent<Collider>();
+            if (own != null)
+            {
+                return own;
+            }
+
+            var colliders = new List<Collider>(root.GetComponentsInChildren<Collider>(true));
+            if (colliders.Count == 0)
+            {
+                return null;
+            }
+
+            colliders.Sort((left, right) => string.CompareOrdinal(RelativePath(root, left.transform),
+                RelativePath(root, right.transform)));
+            return colliders[0];
         }
 
         private static void IncludeBoundsCorners(Transform root, Transform source, Bounds bounds,
@@ -555,7 +720,7 @@ namespace VRCKatamari.Editor.Pickup
 
         private static List<PropRow> ValidateCandidates(List<PropCandidate> candidates,
             IDictionary<string, int> declaredValueUnits, Dictionary<string, int> existingValueUnits,
-            PickupFieldSyncReport report)
+            bool createMissingColliders, PickupFieldSyncReport report)
         {
             var ids = new List<string>();
             for (int i = 0; i < candidates.Count; i++)
@@ -574,6 +739,7 @@ namespace VRCKatamari.Editor.Pickup
             var rows = new List<PropRow>();
             int multiColliderProps = 0;
             int localBoundsFallbacks = 0;
+            int collidersCreated = 0;
             for (int i = 0; i < candidates.Count; i++)
             {
                 PropCandidate candidate = candidates[i];
@@ -688,6 +854,31 @@ namespace VRCKatamari.Editor.Pickup
                 row.LocalBoundsSize = pickLocalSize;
                 row.ValueUnits = valueUnits;
                 row.PrimaryCollider = candidate.PrimaryCollider;
+                if (createMissingColliders && row.PrimaryCollider == null)
+                {
+                    // The visual local size is the physical shape. A row whose local
+                    // measurement failed falls back to the gameplay size, which is still
+                    // better than a null slot the host silently leaves collidable.
+                    Vector3 colliderFallback = pickLocalSize;
+                    if (!PickupFieldAuthoringRules.HasUsableBounds(colliderFallback.x,
+                            colliderFallback.y, colliderFallback.z))
+                    {
+                        colliderFallback = pickSize;
+                    }
+
+                    row.PrimaryCollider = EnsurePropCollider(candidate.Root, colliderFallback);
+                    if (row.PrimaryCollider != null)
+                    {
+                        collidersCreated++;
+                    }
+                    else
+                    {
+                        report.Note("'" + candidate.Path + "' has no Collider and none could be " +
+                                    "created; its propColliders slot stays empty and the prop will stay " +
+                                    "collidable after it is absorbed");
+                    }
+                }
+
                 rows.Add(row);
 
                 if (string.Equals(valueSource, PickupFieldAuthoringRules.ValueSourceDeclared,
@@ -723,6 +914,14 @@ namespace VRCKatamari.Editor.Pickup
             {
                 report.Notes.Add(multiColliderProps + " prop(s) have more than one collider; propColliders wires " +
                                  "only one per prop (the host disables one collider on attach)");
+            }
+
+            if (collidersCreated > 0)
+            {
+                report.CollidersCreated = collidersCreated;
+                report.Notes.Add(collidersCreated + " prop(s) had no Collider; a BoxCollider was added on the " +
+                                 "prop root from its visual local AABB and wired into propColliders " +
+                                 "(idempotent: a later sync reuses it)");
             }
 
             if (localBoundsFallbacks > 0)
@@ -899,7 +1098,8 @@ namespace VRCKatamari.Editor.Pickup
             }
         }
 
-        private static bool VerifyReadBack(PickupFieldHost host, int expectedRows)
+        private static bool VerifyReadBack(PickupFieldHost host, int expectedRows,
+            bool requireEveryCollider)
         {
             var serialized = new SerializedObject(host);
             string[] fields =
@@ -924,8 +1124,33 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             // propColliders is allowed to be empty (no prop has a collider) but never longer
-            // than the other rows.
-            return colliders.arraySize == 0 || colliders.arraySize == expectedRows;
+            // than the other rows. A run that asked for every prop to be wired additionally
+            // proves that no slot came back null, so the host's length-only warning can
+            // never be the sole evidence for a half-wired field.
+            if (colliders.arraySize == 0)
+            {
+                return !requireEveryCollider || expectedRows == 0;
+            }
+
+            if (colliders.arraySize != expectedRows)
+            {
+                return false;
+            }
+
+            if (!requireEveryCollider)
+            {
+                return true;
+            }
+
+            for (int i = 0; i < colliders.arraySize; i++)
+            {
+                if (colliders.GetArrayElementAtIndex(i).objectReferenceValue == null)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>

@@ -630,7 +630,7 @@ def build_parser():
     convert.add_argument("layout")
     convert.add_argument("--out", required=True)
     convert.add_argument("--level-id", default=None)
-    convert.add_argument("--scene", default="StoryLevel")
+    convert.add_argument("--scene", default="StoryMode")
     convert.add_argument("--no-seat", action="store_true",
                          help="keep the layout's y values instead of seating on the support")
     convert.add_argument("--expected", default=None, metavar="COUNT,UNITS",

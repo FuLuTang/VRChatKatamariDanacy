@@ -2,7 +2,7 @@
   "schema": "katamari.placement/0",
   "level": {
     "id": "story_01_bench_size",
-    "scene": "StoryLevel",
+    "scene": "StoryMode",
     "units": "m",
     "convention": "unity-y-up-left-handed-quat-xyzw",
     "ballStart": [

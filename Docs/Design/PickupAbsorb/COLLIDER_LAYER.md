@@ -263,13 +263,13 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 1. **同步工具要加两段新逻辑**：manifest 读取（含 `collision` 缺失时的默认 `none`）与碰撞盒生成（幂等、可 Undo、不乱改 prefab 实例）。这不是小改，`PickupFieldSync.cs` 已有 700+ 行且承担 U# 程序资产拷贝顺序。
 2. **manifest 位置要定**：`Docs/Art/OriginalModels/props/exports/` 不在 `Assets/` 里，Unity 的 `AssetDatabase` 看不到。要么同步工具用项目相对路径直接 `File.ReadAllText`（可跑但绕开资产库，路径随仓库布局变化就会静默失效），要么由流水线把同一份清单写进 `Assets/`（例如 `Assets/VRC_Katamari/Art/Props/prop_collision.json`）——**这一条仍是执行时要定的小项，不再是「选哪个方案」的未决**。
-3. **需要测试**：EditMode 用例至少覆盖 ① 全 0/无 `collision` 时 `BoxCollider` 与 `propColliders` **逐位不变**（等价于今天的行为）；② 幂等（连跑两次结果相同）；③ identity 旋转下 `BoxCollider.size` == `boxes[0]` 尺寸、盒 ⊆ `propBounds`；④ `source: none` 时不留 collider。
+3. **需要测试**：EditMode 用例至少覆盖 ① 无 `collision` 时按**视觉局部 AABB** 建 1 个盒并接进 `propColliders`（整关导入，2026-11-15 已实现），已有 Collider 的件不重复建（旧场景只接不建的行为不变）；② 幂等（连跑两次结果相同，第二次 `created=0`）；③ 将来有 `boxes[0]` 时 `BoxCollider.size` == `boxes[0]` 尺寸、盒 ⊆ `propBounds`；④ `source: none` 时不留 collider。
 4. **`valueUnits` 的写入口径**见上表第三行：U2 落地后同步工具不再定价，声明值由调用方传入并一次写入、回读校验，未声明时保留既有值。因此扩展碰撞盒时**不需要**再加「拒绝变更」守卫，但必须保持「先写声明值、再回读」的顺序，且不能绕过 `SyncFromChildren` 直接改数组。
 
 - 挂在哪：道具物体本身（scale≈1、rotation=identity、原点=AABB 中心），`BoxCollider.center` = 盒中心、`size` = 盒尺寸，**不需要子物体**。
-- 接进 `propColliders[i]`。**不要**把 `"not fully wired"` 不出现当成验收：那条警告只在数组长度不足时生效，而场景里长度已经是 110。真实验收是**逐件核对槽位非空**，再抽一件吸掉、看原来位置有没有留下悬空实体。
+- 接进 `propColliders[i]`。**不要**把 `"not fully wired"` 不出现当成验收：那条警告只在数组长度不足时生效，长度够而槽位是 `null` 时宿主静默通过。真实验收是**逐件核对槽位非空**（整关导入的报告 `propColliders: created=N` 与回读已验证这一点），再抽一件吸掉、看原来位置有没有留下悬空实体。
 - 被吸附/隐藏时宿主自动关掉它；复位时自动开回来。**不要**自己写脚本管这件事。
-- **首次运行的现实预期**：24 个 `exports/*.manifest.json` **今天一个都没有 `collision` 键**，所以扩展后的第一次同步相当于「全 `none`」的空跑——它应当只报告、不建盒、不改 `propColliders`。真正的 9 个盒要等流水线先写出 `collision.boxes`（§9）。
+- **首次运行的现实预期（2026-11-15 起）**：24 个 `exports/*.manifest.json` 仍没有 `collision` 键，所以同步走 §5.4 的视觉 AABB 回退——整关导入给每件没有 Collider 的道具根建一个 `BoxCollider` 并接进 `propColliders`（第一次 `created=127`，第二次 `created=0`）。真正的 9 个盒（多盒细化）仍要等流水线写出 `collision.boxes`（§9）；在那之前保证的是「每件一个按视觉形状的盒子」，不是多盒精度。
 
 **为什么不做手挂（记下被否的方案）**：手挂只有 9 个盒、看起来更便宜，但模型一改盒就静默过期，而「盒过期」正是上一轮回滚的那个 bug 的同一类；项目已有同步工具、已有「重跑即对齐」的路径，再开一条手挂路径等于让同一份数据有两个来源。**也不新写 `PropColliderBuilder`**：那会与 `PickupFieldSync` 争「谁写 `propColliders`」，两份实现迟早不一致。
 
@@ -325,7 +325,7 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 | 步 | 做什么 | 行为变化 | 验收 |
 |---|---|---|---|
 | **S0** | 本文 + 目录列 | 无 | `validate_plan.py` + `Docs/tests` |
-| **S1** | 扩展 `PickupFieldSync`：加 manifest 读取、`collision` 缺失按 `none`、按 `boxes[0]` 幂等生成 `BoxCollider` 并接 `propColliders`，同时保持 `valueUnits` 的声明值写入/回读校验（无声明时保留既有值）；带 4 条 EditMode 测试（§5.3） | 无（首次全 `none`，空跑） | 测试全绿；连跑两次场景逐位不变；`valueUnits` 与声明一致（无声明时一位不变） |
+| **S1** | 扩展 `PickupFieldSync`：加 manifest 读取、`collision` 缺失按 `none`、按 `boxes[0]` 幂等生成 `BoxCollider` 并接 `propColliders`，同时保持 `valueUnits` 的声明值写入/回读校验（无声明时保留既有值）；带 4 条 EditMode 测试（§5.3） | 整关首次导入按视觉局部 AABB 建 127 个盒（2026-11-15 已实现）；manifest `collision` 盒细化仍未做 | 测试全绿；连跑两次场景逐位不变（第二次 `created=0`）；`valueUnits` 与声明一致（无声明时一位不变） |
 | **S2** | manifest 增 `collision`：`watering_can` 一条 `authored`，`toy_ball`/`watermelon` 两条 `aabb_fallback`，其余 13 件按「没有 `_COL_` 对象」自动判 `none`；重跑 S1 的同步工具落地 3 个 def / 9 件 = 9 个盒 | 玩家不再穿过 0.4 m 球/西瓜/洒水壶；球行为**不变** | `SHA256SUMS` 更新、`verify_import` 仍 1 个 mesh、场景里每个 `BoxCollider` 与 manifest 对应盒逐个相等、吸掉一件后原地无悬空实体 |
 | **S3** | 宿主加 `propBoxCounts` 等三数组（全 0）+ `TryWorldBoxFromLocal` | 无（逐位不变） | `BlockingPropMathTests` 全绿；Play Mode 球感不变 |
 | **S4** | 家具建模时填 `counts ≥ 1`，先只填 1 盒/件 | 桌下可通行 | 0.3 m 球从桌下过、1.0 m 球被桌面挡 |

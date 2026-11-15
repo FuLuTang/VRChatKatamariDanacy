@@ -98,7 +98,7 @@
 |---|---|---|
 | 平面 | 8 | `MaxPlaneCount`（现状） |
 | 静态盒 | 8 | `MaxBoxCount`（现状；地图数据契约，`validate_map.py` 也抄成 8） |
-| 斜面 | 4 | `MaxRampCount`（P3 计划） |
+| 斜面 | 4 | `MaxRampCount`（P3 已进树：`AddRamp` / `LevelArenaHost.rampBoxes`） |
 | 挡路盒 | 6 | `MaxBlockingBoxCount`（现状） |
 | 道具支撑 | 6 | `MaxSupportPropCount`（P2 已实现） |
 | 每步接触 | 4 | `ContactCapacity`（现状） |

@@ -18,7 +18,7 @@ namespace VRCKatamari.Editor.Pickup
     /// <see cref="PickupFieldSync"/>; this type only answers questions about values.
     /// </para>
     /// <para>
-    /// Why these rules exist at all. <c>Runtime/Pickup/PickupFieldHost.cs</c> holds six
+    /// Why these rules exist at all. <c>Runtime/Pickup/PickupFieldHost.cs</c> holds seven
     /// index-aligned serialized arrays, and the host is the only runtime owner of that data.
     /// An editor-only MonoBehaviour cannot carry the authoring data instead: a component
     /// whose script lives in an Editor assembly has no runtime type, so Unity cannot

@@ -76,7 +76,7 @@ python3 Tools/levelbuild/levelbuild.py seat level.json --write
 {
   "schema": "katamari.placement/0",
   "level": {
-    "id": "story_01_bench_size", "scene": "StoryLevel", "units": "m",
+    "id": "story_01_bench_size", "scene": "StoryMode", "units": "m",
     "convention": "unity-y-up-left-handed-quat-xyzw",
     "ballStart": [-12.5, 0.15, -12.5], "playerSpawn": [-14.5, 0.5, -14.5],
     "ballDiameterStart": 0.30, "ballDiameterMax": 2.20,
@@ -181,8 +181,8 @@ python3 Tools/levelbuild/levelbuild.py check <out>     # PASS: propCount 127 / v
 
 * **只碰 `LevelContent`**：`LevelContent/Props/<kind>/[<zone>/][<group>/]<itemId>`（第一层必须是 kind，`PickupFieldSync` 从它读 kind）与 `LevelContent/Structures/<id>`。别处一律不动。
 * **道具**：实例化 `Assets/VRC_Katamari/Art/Props/<def>/<def>.fbx`（预制体库是 P2），按 `itemId` 增/改/删；同名同 def 只改位姿（`1e-3 m` / `|dot| ≥ 0.99999`），def 变了才重建。
-* **结构**：`role=box` → 真 cube + 真 `BoxCollider`；`role=ground/boundary` → 只有 Transform 的标记物体（`LevelArenaHost` 只读 `groundNormal/groundOffset` 与每面墙的**局部 +Z**，不看几何）；`role=ramp` → 有 `BoxCollider` 但 P1 不登记（`LevelArenaHost` 还没有 `rampBoxes`）。
-* **arena 接线**：填 `LevelArenaHost.groundNormal/groundOffset`、`boundaryWalls`（每面墙一个 Transform，局部 +Z 指向场内、原点在碰撞面上）、`staticBoxes`、`allowedKinds`（本关 kind 去重排序），然后 `CopyProxyToUdon`。
+* **结构**：`role=box` → 真 cube + 真 `BoxCollider`；`role=ground/boundary` → 只有 Transform 的标记物体（`LevelArenaHost` 只读 `groundNormal/groundOffset` 与每面墙的**局部 +Z**，不看几何）；`role=ramp` → 真 cube + `BoxCollider`，导入器填进 `LevelArenaHost.rampBoxes`（P3，d31dc9b），由 `RegisterRamp` 烘成支撑面，**不进 `staticBoxes`**。
+* **arena 接线**：填 `LevelArenaHost.groundNormal/groundOffset`、`boundaryWalls`（每面墙一个 Transform，局部 +Z 指向场内、原点在碰撞面上）、`staticBoxes`、`rampBoxes`（P3）、`allowedKinds`（本关 kind 去重排序），然后 `CopyProxyToUdon`。
 * **`PickupFieldSync`**：以 `LevelContent/Props` 为 field root 调 `SyncFromChildren`，再写声明值 `valueUnits` 并回读（§3）。
 * **不 `SaveScene`**：导入后场景是 dirty 的，由人决定何时保存。
 * **幂等**：第二次导入日志必须是 `[level] +0 ~0 -0 props=N`。不同就说明幂等键被破坏了（按名字/顺序而不是 `itemId`）。
@@ -204,7 +204,7 @@ python3 Docs/tools/validate_plan.py
 
 1. **`PickupFieldSync` 值表缺 `container m`**：`container` 只有 `l=16`，而野餐篮 0.45 m 落在 `m` 档 → 那一行会被同步工具丢掉。导入器会报「sync dropped it」，需要给值表加一行（不在本工具写范围）。
 2. **道具模型的根必须有 Renderer**（现在是 FBX 直实例化）。根是空节点时同步工具会把子节点名当 `itemId`，导入器拒绝并指名该 def。P2 预制体库解决。
-3. **`LevelArenaHost` 没有 `rampBoxes`**：斜面在场景里有 `BoxCollider` 但不进 `staticBoxes`（否则坡底出现隐形墙），P3 再登记。
+3. **斜面只进 `rampBoxes`**：`LevelArenaHost.rampBoxes` 已接（P3，d31dc9b），斜面由此烘成支撑面；**不要**把它同时放进 `staticBoxes`（坡底会出隐形墙，`LevelArenaHost.Setup` 会报 `[arena] ... in both ...` 并跳过盒登记）。
 4. **旋转道具的 `propBounds` 是世界 AABB**（同步工具用 `Renderer.bounds`），不是模型 AABB：对 45° 摆的薄件会偏大。这是 `PickupFieldSync` 的既有行为，导入器不修，只在报告里保留依据。
 5. **`expected` 在 `from-layout` 里是「转出来多少」**，不是设计表的 127/1500（差额 = 缺模型的 def，见 §5）。补模型后重跑，数字会自动对上。
 6. **PNG 不进仓库**：本工具只往 `--out-dir` 写图，验收图由人决定是否放 `Docs/Evidence/`。

@@ -43,6 +43,13 @@ namespace VRCKatamari.Editor.Pickup
         /// <summary>True when every declared value read back from the host exactly.</summary>
         public bool ValueUnitsVerified;
 
+        /// <summary>
+        /// Rows that had no Collider and were given a <c>BoxCollider</c> on the prop root by
+        /// this run (the importer's <c>createMissingColliders</c> path). Zero on a repeated
+        /// sync, because the created boxes are reused.
+        /// </summary>
+        public int CollidersCreated;
+
         /// <summary>Declared values that did not land, and declared ids with no row.</summary>
         public readonly List<string> ValueUnitMismatches = new List<string>();
 
@@ -106,6 +113,13 @@ namespace VRCKatamari.Editor.Pickup
             text.Append(PropCount).Append(" prop(s), ").Append(Kinds.Count).Append(" kind(s), ")
                 .Append(TotalValueUnits).Append(" value unit(s), ").Append(Rejected.Count)
                 .Append(" rejected");
+
+            if (CollidersCreated > 0)
+            {
+                text.AppendLine();
+                text.Append("  propColliders: created=").Append(CollidersCreated)
+                    .Append(" (from each prop's visual local AABB)");
+            }
 
             text.AppendLine();
             text.Append("  valueUnits: declared=").Append(ValueUnitsDeclared)

@@ -210,6 +210,72 @@ namespace VRCKatamari.Tests
             }
         }
 
+        [Test]
+        public void MissingColliderGetsOneBoxOnThePropRootAndIsReused()
+        {
+            // The level importer creates its props from FBX models whose import settings
+            // have addColliders: 0. Without this step propColliders would be empty, the host
+            // would warn, and an absorbed prop would keep its (here: missing) collider.
+            GameObject root = null;
+            try
+            {
+                root = CreateProp(new Vector3(1.6f, 0.35f, 0.6f),
+                    Quaternion.AngleAxis(90f, Vector3.up));
+                Assert.IsNull(root.GetComponentInChildren<Collider>(true),
+                    "the fixture starts with no collider, like an imported FBX prop");
+
+                Collider first = EnsureCollider(root);
+                Assert.IsNotNull(first, "a prop with no collider must get one");
+                Assert.IsTrue(first is BoxCollider, "the created collider is a BoxCollider");
+                Assert.AreSame(root, first.gameObject, "the box lives on the prop root");
+
+                var box = (BoxCollider)first;
+                AssertVector(new Vector3(1.6f, 0.35f, 0.6f), box.size,
+                    "the box follows the prop's own axes, not the world AABB");
+                AssertVector(Vector3.zero, box.center, "the fixture's mesh is centred on the root");
+
+                Collider second = EnsureCollider(root);
+                Assert.AreSame(first, second, "a second sync must reuse the created collider");
+                Assert.AreEqual(1, root.GetComponentsInChildren<Collider>(true).Length,
+                    "one collider per prop is the host's contract");
+            }
+            finally
+            {
+                if (root != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(root);
+                }
+            }
+        }
+
+        [Test]
+        public void ExistingChildColliderIsWiredInsteadOfDuplicated()
+        {
+            // A hand-wired prop (the old scenes) keeps its authored collider; the importer's
+            // create-missing path must not add a second one to the root.
+            GameObject root = null;
+            try
+            {
+                root = CreateProp(new Vector3(0.8f, 0.4f, 0.6f), Quaternion.identity);
+                Collider authored = root.transform.GetChild(0).gameObject.AddComponent<BoxCollider>();
+
+                Collider wired = EnsureCollider(root);
+
+                Assert.AreSame(authored, wired, "the existing child collider is the row's slot");
+                Assert.IsNull(root.GetComponent<Collider>(),
+                    "no second collider is added when one already exists");
+                Assert.AreEqual(1, root.GetComponentsInChildren<Collider>(true).Length,
+                    "still one collider per prop");
+            }
+            finally
+            {
+                if (root != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(root);
+                }
+            }
+        }
+
         // ------------------------------------------------------------- fixtures ---
 
         private static GameObject CreateProp(Vector3 localSize, Quaternion rootRotation)
@@ -238,6 +304,18 @@ namespace VRCKatamari.Tests
                 BindingFlags.NonPublic | BindingFlags.Static);
             Assert.IsNotNull(method, SyncTypeName + ".MeasureLocalBounds is missing");
             return (Vector3)method.Invoke(null, new object[] { root, renderers });
+        }
+
+        private static Collider EnsureCollider(GameObject root)
+        {
+            MethodInfo method = SyncType().GetMethod("EnsurePropCollider",
+                BindingFlags.Public | BindingFlags.Static);
+            Assert.IsNotNull(method, SyncTypeName + ".EnsurePropCollider is missing");
+            return (Collider)method.Invoke(null, new object[]
+            {
+                root.transform,
+                new Vector3(0.1f, 0.1f, 0.1f),
+            });
         }
 
         private static Type SyncType()

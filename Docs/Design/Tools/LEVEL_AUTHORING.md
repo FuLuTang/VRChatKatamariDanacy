@@ -269,7 +269,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 ```json
 "level": {
   "id": "story_01_bench_size",
-  "scene": "StoryLevel",
+  "scene": "StoryMode",
   "units": "m",
   "convention": "unity-y-up-left-handed-quat-xyzw",
   "ballStart": [-12.5, 0.15, -12.5],
@@ -429,7 +429,7 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_s
 |---|---|---|
 | `MeshFilter/MeshRenderer` | `Art/Props/<def>/<def>.fbx` | 材质按 `manifest.material_base_colors` 建（FBX 不保存 Principled 颜色，`props/README.md` §7.8 已记录） |
 | `propBounds`（玩法体积）= 模型 AABB | `manifest.bounds_m`（**真值**，不是目录的 `game_longest_dim_m`） | `localScale = 1`；这消灭了「0.9 m 立方体暖壶」那类把体积放大几十倍的错 |
-| `BoxCollider`（玩家层） | `manifest.collision.boxes`（**尚未实现**，[COLLIDER_LAYER](../PickupAbsorb/COLLIDER_LAYER.md) 只定了接口） | 没有 `collision` 块时**不生成碰撞体**（不是「回退成大盒」——回退会把 2.8 cm 的餐巾变成空气墙） |
+| `BoxCollider`（玩家层） | 模型视觉 AABB（`PickupFieldSync.EnsurePropCollider`，2026-11-15 起）；`manifest.collision.boxes` **尚未实现**（[COLLIDER_LAYER](../PickupAbsorb/COLLIDER_LAYER.md) 只定了接口） | 整关导入时给没有 Collider 的道具根加一个 `BoxCollider`，尺寸/中心取**视觉局部 AABB**（不是 `propBounds`、不是 `@size=` 的拾取立方体），并接进 `propColliders`；旧场景/单格导入不建、只接已有 Collider |
 | 价值 | 关卡数据 `defs[].valueUnits` / `props[].valueUnits` | 导入器只把声明值传给同步工具，**不重算**；预制体不带价值 |
 
 预制体是**资产**（`.prefab` + `.meta`，GUID 稳定，进仓库）。导入器只 `PrefabUtility.InstantiatePrefab`，不自己拼 mesh——这样「长什么样」只有一处定义。
@@ -443,7 +443,7 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_s
 | 价值来自哪里 | 体积门是**体积**的；`napkin` 0.30×0.30×0.028 最长边 0.30，按最长边定价会与体积门脱节 | **JSON 里 `valueUnits` 与 `absorbDiameterReq` 两个字段并存**（两个消费者，两个数）。导入器把 `valueUnits` 当作**声明值**传给 `SyncFromChildren`，同步工具一次写入并回读：任何一件与 JSON 不符、或声明的 itemId 没有成行 → 报错并列出，不静默接受，也不自己重算 |
 | 会写宿主的平行数组 | 数组是「场景接线」，导入器一碰就可能重排别人的引用 | 只允许通过 `SyncFromChildren(host, fieldRoot, declaredValueUnits)` 这一个入口写；**不直接改数组元素**。同步前先断言 `host` 属于本关卡的受管根 |
 
-`propColliders` 的坑（[COLLIDER_LAYER](../PickupAbsorb/COLLIDER_LAYER.md) §2.2 已查实）：数组长度够、槽位是 `null` 时**静默通过**，所以「没报警 ≠ 接对了」。导入器在同步后逐件核对槽位（`null` 且该 def 有碰撞体 → 报错），并把 `propColliders` 的长度与 `props.Length` 一起打进报告。
+`propColliders` 的坑（[COLLIDER_LAYER](../PickupAbsorb/COLLIDER_LAYER.md) §2.2 已查实）：数组长度够、槽位是 `null` 时宿主**静默通过**，所以「没报警 ≠ 接对了」。整关导入时同步工具用 `createMissingColliders` 逐件补齐并回读（`propColliders` 长度 = 行数且无空槽，否则本次导入判失败），报告打 `propColliders: created=N`：第一次是 127，第二次必须是 0（复用了第一次建的 BoxCollider）。菜单/单格路径仍只接已有 Collider，空数组回退行为不变。
 
 ### 7.5 预算守卫（在 Unity 侧再挡一次）
 
@@ -527,7 +527,7 @@ planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）
 | `Tools/mapbuild/build_greybox.py` + `unity_greybox.json` | 数据 → 扁平载荷 → 灰盒 Builder | **保留 `--check`**（守住「生成物 = 作者数据」）；**不再用它建关卡** |
 | `Editor/MapGreybox/PicnicLawnGreyboxBuilder.cs` | 「整图 · 从零重建 · 会 `SaveScene`」，重跑必然抹掉手工接线 | **退役为「地图预览生成器」**：只用于整图俯瞰数据核对，**禁止**在正式场景上跑。它的 `ExpectedZones/ExpectedStructures/...` 硬计数保留（那是数据的回归门） |
 | `Editor/Pickup/PickupFieldSync.cs` | 从子物体扫 `propBounds` 等数组；`valueUnits` 自 U2 起消费声明值，无声明时保留既有值 | **保留且成为唯一写入口**，导入器调用它（§7.4），声明值一次写入并回读 |
-| 场景里 110 件的平行数组（`propBounds`/`propColliders`/`valueUnits`） | 只活在 `StoryLevel.unity` | **第一次导入后仍然存在**（`PickupFieldSync` 的产物），但**真源变成 `placement.json`**；「只活在场景里」的回归风险由此消除 |
+| 场景里 110 件的平行数组（`propBounds`/`propColliders`/`valueUnits`） | 只活在 `StoryMode.unity` | **第一次导入后仍然存在**（`PickupFieldSync` 的产物），但**真源变成 `placement.json`**；「只活在场景里」的回归风险由此消除 |
 | `Editor/MapGreybox/GreyboxPayload.cs` | `[Serializable]` DTO + `JsonUtility` 载荷 | **保留**（地图预览用）；`placement.json` 走自己的 DTO，**不复用**——两者层级不同（一个整图，一个关卡实例），硬合并会让两边都变难改 |
 | 新：`Tools/levelbuild/`（校验器 + Blender 脚本桥） | — | **新增**（P0） |
 | 新：`Editor/LevelContent/`（导入器 + `LevelItem` 标记 + 预制体生成） | — | **新增**（P1/P2） |

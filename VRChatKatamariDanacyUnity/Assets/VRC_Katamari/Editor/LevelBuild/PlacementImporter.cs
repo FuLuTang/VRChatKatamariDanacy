@@ -1651,8 +1651,13 @@ namespace VRCKatamari.Editor.LevelBuild
                             "assumes (LEVEL_AUTHORING 7.4)");
             }
 
+            // A whole-level document owns fresh FBX instances (the model import has
+            // addColliders: 0), so the sync must create the one collider per prop that the
+            // host disables on absorb. A cell document is hand-authored scenery: it keeps
+            // the old "wire what is already there" behaviour.
+            bool createMissingColliders = string.IsNullOrEmpty(arenaId);
             PickupFieldSyncReport sync = PickupFieldSync.SyncFromChildren(host, propsRoot,
-                declaredValueUnits);
+                declaredValueUnits, createMissingColliders);
             report.SyncRan = true;
             report.SyncPropCount = sync.PropCount;
             report.SyncRejected = sync.Rejected.Count;
@@ -1660,6 +1665,7 @@ namespace VRCKatamari.Editor.LevelBuild
             report.ValueUnitsPreserved = sync.ValueUnitsPreserved;
             report.ValueUnitsUndeclared = sync.ValueUnitsUndeclared;
             report.ValueUnitsVerified = sync.ValueUnitsVerified;
+            report.SyncCollidersCreated = sync.CollidersCreated;
 
             for (int i = 0; i < sync.ValueUnitMismatches.Count && i < 20; i++)
             {
@@ -1670,6 +1676,13 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 report.Error("PickupFieldSync failed: " + sync.Failure);
                 return false;
+            }
+
+            if (sync.CollidersCreated > 0)
+            {
+                report.Note("pickup sync added " + sync.CollidersCreated +
+                            " BoxCollider(s) on props that had none, from each prop's visual local " +
+                            "AABB; propColliders is now wired for every row");
             }
 
             for (int i = 0; i < sync.Rejected.Count && i < 10; i++)

@@ -50,6 +50,12 @@ namespace VRCKatamari.Editor.LevelBuild
         public bool SyncRan;
         public bool UdonCopyIssued;
 
+        /// <summary>
+        /// Prop colliders the pickup sync created on this run (zero when every prop already
+        /// had one, and on the idempotent second import).
+        /// </summary>
+        public int SyncCollidersCreated;
+
         public int ValueUnitsDeclared;
         public int ValueUnitsPreserved;
         public int ValueUnitsUndeclared;
@@ -132,6 +138,9 @@ namespace VRCKatamari.Editor.LevelBuild
                 .Append(", rows=").Append(SyncPropCount)
                 .Append(", rejected=").Append(SyncRejected)
                 .Append("; udon copy: ").Append(UdonCopyIssued ? "issued" : "not issued");
+            text.AppendLine();
+            text.Append("  propColliders: created=").Append(SyncCollidersCreated)
+                .Append(SyncCollidersCreated > 0 ? " (from each prop's visual local AABB)" : "");
             text.AppendLine();
             text.Append("  valueUnits: declared=").Append(ValueUnitsDeclared)
                 .Append(", preserved=").Append(ValueUnitsPreserved)

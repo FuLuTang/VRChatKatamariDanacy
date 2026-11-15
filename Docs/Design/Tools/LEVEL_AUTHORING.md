@@ -1,7 +1,8 @@
 # 关卡搭图工具（Level Authoring）：Blender 当编辑器，Unity 只做一次单向导入
 
 > 状态：`PROVISIONAL_MEASURED_ON_LINUX`，2026-11-15。
-> 本文是**设计 + 一次本机可行性实测**。**没有写正式工具代码、没有碰 Unity 编辑器、没有跑 git 写命令**；Unity 侧全部是设计，不是已验证的实现。
+> 本文是**设计 + 一次本机可行性实测**。**没有碰 Unity 编辑器、没有跑 git 写命令**；Unity 侧全部是设计，不是已验证的实现。
+> §15 与 §16 记录已经落地的实现：§15 是 P0 + P1 的 Linux 部分（一次性脚本 + 校验器），§16 是**常驻编辑器服务**（2026-11-15 追加，含「导出是一等操作」的口径）。
 > 实测只证明两件事：**本机（Linux aarch64、2 核、无 GPU）能跑 Blender 并出图**，以及**「Blender 摆位 → placement.json → 从 JSON 重建场景 → 出图」这条回路在无头环境下成立**。实测产物在 `~/tools/level_authoring_probe/`，不进仓库。
 > 触发：用户 2026-11-15 的要求原话「最主要是顺手，且最好能在你本机跑……方便搭场景，在不同位置出渲染图。最主要是能导入 vrchat sdk 的 unity」；以及 [PICNIC_CORNER_LEVEL_ONE](../StoryMode/PICNIC_CORNER_LEVEL_ONE.md) §2.4 查实的缺口——**第一关 110 件的摆放没有任何数据文件，只活在场景里**（最大回归风险）。
 > 引用约定：`Runtime/…`、`Editor/…`、`Labs/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；`Docs/…`、`Tools/…` 相对仓库根。**按符号名引用，不写行号**（这几个文件本轮都在被并行修改）。
@@ -18,6 +19,7 @@
 | 4 | 最关键的取舍 | **人是编辑器、代理是脚本、机器是渲染农场**：Windows 上的 Blender 5.3.0 给人用（真 3D 拖拽），本机 Blender 4.0.2 headless 给代理用（摆位/校验/出图），两边跑**同一套脚本**（§5） |
 | 5 | 最大的技术风险 | **不是渲染，是坐标与预算**：Unity `(x,y,z,w)` 四元数 vs mathutils `(w,x,y,z)`、`matrix_world` 不刷新、以及 motor 的「≤8 平面 + ≤8 盒 + ≤4 斜面」硬容量——三者都会**静默**出错。对策是「单一转换点 + 校验器把预算当硬错误」（§4.6、§8） |
 | 6 | 第一阶段交付 | 第一关一角的 `placement.json`（110 件/412 u）+ 负向校验器 + 一张俯视图一张 3/4 图 + 一次受管导入；验收判据在 §11.2 |
+| 7 | **现在怎么改地图** | **常驻编辑器（P0 已实现，§16）**：无头 Blender 建一次场景，之后用本地 JSON 操作增量改（move/rotate/add/seat/render/check/undo…），**每个成功操作末尾立即导出**规范形 `placement.json`。一次性脚本保留，供 CI、交接、没有服务时用；两条路共用同一批增量函数与同一个导出 |
 
 **一句话推荐**：`placement.json` 是唯一真源；Blender 是它的**编辑器**（人手动、代理脚本），Unity 是它的**消费者**（单向、幂等、只碰 `LevelContent` 根）。三者之间只有 JSON 一个接口，所以每一份逻辑只有一份实现。
 
@@ -323,16 +325,31 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 
 ### 5.2 代理（本机，headless）
 
+**日常回路是一个常驻进程 + 一条条操作**（§16）：
+
+```bash
+python3 Tools/levelbuild/levelserve.py start --level story_01_bench_size   # 建一次场景，1.4 s
+python3 Tools/levelbuild/levelctl.py list --zone table_top --limit 5
+python3 Tools/levelbuild/levelctl.py move apple_01 --delta=0,0.02,0
+python3 Tools/levelbuild/levelctl.py check
+python3 Tools/levelbuild/levelctl.py render --preset plan                  # 3.2 s，PNG 路径回来
+python3 Tools/levelbuild/levelctl.py undo
+python3 Tools/levelbuild/levelserve.py stop                                # 脏则先导出
+```
+
+一次性路径仍然保留（CI、交接、没有服务时）：
+
 ```bash
 source ~/tools/blender-env.sh
-"$BLENDER" $BLENDER_FLAGS --python Tools/levelbuild/blender/level_author.py -- \
-    --level story_01_bench_size --from-json        # 可选：先把 JSON 铺成场景
-"$BLENDER" $BLENDER_FLAGS --python Tools/levelbuild/blender/level_render.py -- \
-    --level story_01_bench_size --preset plan,overview,ball_eye
+"$BLENDER" $BLENDER_FLAGS --python Tools/levelbuild/blender/build_scene.py -- \
+    --placement Docs/Design/Levels/story_01_bench_size/placement.json
+"$BLENDER" $BLENDER_FLAGS --python Tools/levelbuild/blender/render_views.py -- \
+    --placement Docs/Design/Levels/story_01_bench_size/placement.json --preset plan,overview
 python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_size/placement.json
 ```
 
 代理的典型动作（都是「改 JSON 的某一个子集」）：批量平移一个 zone、按 AABB 重新贴地、把某件从 `stackedOn` 改成地面、把 5 件聚成一个环、**出图给人看**。**代理不需要 GUI，也不占 Unity。**
+> 实现在 `blender/build_scene.py` / `blender/render_views.py`（本节早先写的 `level_author.py` / `level_render.py` 是计划名，没有按那个名字落地；§15.1 是实际文件名）。
 
 ### 5.3 三个操作词（对应用户说的「叠放、斜搭、成组」）
 
@@ -563,8 +580,7 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 
 - `Tools/levelbuild/placement_core.py`：坐标转换、世界 AABB、`D_req`、支撑判定（**唯一实现**）。
 - `Tools/levelbuild/levelbuild.py`：`check` / `--stale` / `--report`，实现 §8 第 1–12、14、16 条。
-- `Tools/levelbuild/blender/level_author.py`：库导入、按 JSON 铺场景、摆位辅助（seat/stack/lean/array）、导出 + 自检。
-- `Tools/levelbuild/blender/level_render.py`：相机预设 → PNG（三个引擎）。
+- `Tools/levelbuild/blender/{blender_common,build_scene,render_views,export_placement}.py`：库导入、按 JSON 铺场景（`LevelScene.sync`）、相机预设 → PNG（三个引擎）、场景 → JSON（自检 + 往返）。
 - **验收**：拿实测那 44 件的 JSON 跑通 `check`（0 错）+ 出三张图；再故意造 5 个坏数据（穿地/悬空/越界/预算超/价值对不上），**每个都必须红**。
 
 ### P1 — 第一关一角搭出来并导入（**本阶段的交付物如下**）
@@ -585,6 +601,15 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 4. `valueUnits` 总和 412，逐件与 JSON 一致；
 5. 球起点 1.0 m 内无道具；球能上花圃台（`0.26 ≤ 0.25·D` → D ≥ 1.04）；
 6. `plan` 图上 7 个区的人眼密度与设计表差距可解释（谁的差、为什么）。
+
+### P1 追加 — Blender 插件面板（同一套增量函数 + 同一个导出）
+
+用户 2026-11-15 的口径：「只需要做一个不错的导出功能，不就可以重建了」。所以 P1 的人机界面是**一个面板，不是一个新格式**：
+
+- Windows Blender 5.3 GUI 里 `bpy.types.Panel`（3D 视图侧栏）+ operator：`Open level` / `Export placement.json` / `Check` / `Seat selection` / `Snap to ground`。
+- 面板按钮调用**和代理完全相同**的函数：`blender_common.LevelScene.sync` 做增量、`editor_core.Editor._export`（或 `placement_core.write_doc` + 自检）做导出。两条路产出的字节必须一致（同一条往返用例）。
+- 人在 GUI 里直接拖过、没走面板的对象，导出前跑 `export_placement.py` 的同一套自检（`view_layer.update()`、JSON→矩阵对比 1e-4、库集合未 link、aabb 与 manifest 一致）。
+- 面板上写死一句话：「未导出的改动不会被导入」——导出是交付动作，不是保存动作。
 
 ### P2 — 预制体 + 碰撞体 + 分档观感
 
@@ -666,6 +691,7 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 | `Tools/levelbuild/placement_core.py` | **唯一实现**：schema、规范形（排序/取整/`-0.0`/规范四元数符号）、Blender↔Unity 坐标、世界 AABB、`D_req = (60abc/π)^(1/3)`、支撑/落位（含斜面法线摆正）、预算与人口/三态表、`defs[]` 价值回退 |
 | `Tools/levelbuild/levelbuild.py` | `check`（§8 的 1–12、14 条 + 规范性 warning）、`format`、`seat`、`from-layout` |
 | `Tools/levelbuild/blender/{blender_common,build_scene,export_placement,render_views}.py` | 库导入（每 def 一个**不 link 进场景**的集合）、按 JSON 铺场景、场景→JSON（自检 + 逐字节往返）、相机预设→PNG（三引擎） |
+| `Tools/levelbuild/{editor_core,editor_http,levelctl,levelserve}.py` + `blender/editor_server.py` | **常驻编辑器服务**（§16）：增量操作、导出、undo、batch、本地 HTTP、启停/健康检查 |
 | `Tools/levelbuild/examples/placement.json` | 16 件 / 8 结构 / 4 区的小样例，`check` 0 错，JSON→场景→JSON **逐字节一致** |
 | `Tools/levelbuild/README.md` | 人/代理/Unity 三边的用法 |
 | `Docs/tests/levelbuild/` | 35 个测试：坐标、四元数、AABB、`D_req`、坐正、确定性、5 个负向用例、CLI 退出码 |
@@ -704,3 +730,188 @@ python3 Tools/levelbuild/levelbuild.py check <该文件> --report     # 0 错
 | `LevelArenaHost.rampBoxes`（P3） | 现在斜面只有 collider，不登记 |
 | 9 个 def 的模型 | 第一关的 11 件 / 782 u |
 | `physics_test_field.json` 迁到本格式 | Lead 说之后再做；本 schema 是「一格一份 placement」（`level.id` + 目录），没有假设一场景一份 |
+
+---
+
+## 16. 常驻编辑器服务（2026-11-15 追加，P0 已实现）
+
+> 用户原话驱动本节：「关于编辑器，我认为不需要做成'每次都脚本重建'。完全可以是一个持续状态的软件，然后它通过接口一点点调整地图。」以及随后补充的口径：「只需要做一个不错的导出功能，不就可以重建了」。
+> 因此下面把**常驻状态**当工作状态、把**导出**当一等操作；不是「每一步都去改 JSON」，而是「改完就导出，因为导出很便宜」。
+
+### 16.1 形状
+
+```
+python3 Tools/levelbuild/levelserve.py start --level story_01_bench_size     # 一个无头 Blender，建一次
+        │  Blender 4.0.2 进程（--background）：
+        │    placement_core  ← 校验/几何（唯一实现）
+        │    LevelScene.sync  ← 文档 → 场景（差量增删改）
+        │    editor_core.Editor ← 操作 → 文档 → 校验 → 导出
+        │    editor_http.Server ← 127.0.0.1 上的 JSON
+        ▼
+python3 Tools/levelbuild/levelctl.py move apple_01 --delta=0,0.02,0    # 代理用 Bash 一条条调
+python3 Tools/levelbuild/levelctl.py render --preset plan              # PNG 路径回来
+python3 Tools/levelbuild/levelserve.py stop                            # 脏则先导出
+```
+
+一次性脚本（`build_scene.py` / `render_views.py` / `export_placement.py`）**没有消失，也没有第二份实现**：它们和服务共用 `blender_common.LevelScene.sync`（整场构建 = `sync(doc, None)`）、`render_frame`、`seat_props`、`placement_core`。差别只是「谁来驱动、场景活多久」。
+
+### 16.2 真源关系：常驻状态 vs `placement.json`
+
+| 状态 | 是什么 | 谁读 |
+|---|---|---|
+| **resident** | 文档（dict）+ 由它投影出来的 Blender 场景 | 编辑器自己（改、看、出图） |
+| **exported** | 磁盘上的 `placement.json`，**规范形字节** | Unity 导入器、一次性脚本、`git`、人 |
+
+三条规则：
+
+1. **场景是文档的投影，文档不从场景反读。** `LevelScene.sync(new_doc, previous_doc)` 按差量做增/改/删；一次 `move` 只碰一个对象（实测 `scene.props.updated = 1`）。从场景反读只有一条路：`export_placement.py`（人在 GUI 里手改 `.blend` 之后的兜底）。
+2. **每个成功操作的最后一步是导出**（默认开，`--no-auto-export` 可关）。顺序是**先校验 → 再写盘（tmp + rename 原子替换）→ 再改场景**：文件永远不会落后于场景；如果场景那一步失败（例如新 def 没有 GLB），把旧文档写回去再报错，两边不会分叉。崩在最坏情况 = 丢在途的那一条操作，之前全在盘上（实测 `kill -9`：改动已在文件里）。
+3. **拒绝规则是「不许变坏」，不是「必须完美」。** 操作后允许存在**本会话一打开就有的**硬错误（`known_errors`，每次成功提交后更新），但**不许引入新的**。于是：
+   - 绿文件：任何新错误 → 拒绝，文件不动，`details` 里是规则原文；
+   - 红文件：可以打开、可以修、可以出图（`open` 报 `gate: red`），修好一条错误集合就小一条；这正是一个坏掉的关卡需要的修复回路。
+   - 想强行写一个已知红的半成品：`export --force`（默认不给）。
+
+`status` 里有两个不同的标志，别混：`dirty` = **磁盘和内存不一致**（人手在编辑器外面改了文件也会这样）；`unexported` = **内存里有已提交但没写盘的改动**（只有 `--no-auto-export` 或导出被拒才会出现）。`open` / `reload` 换文档之前会把 `unexported` 的改动先写盘，所以换关卡不会静默丢东西；而人手改文件 + `reload` 时磁盘赢（那种情况 `unexported` 是假的，不会被覆盖）。
+
+为什么不让场景当真源：场景里有 JSON 装不下的东西（材质、灯、临时相机、选择状态），而且 `float32` 存储噪声会让「再导出一次」不可复现。为什么仍然每一步都导出：**0.06 s**（§16.9），换来的是崩溃零损失，比任何写盘策略都简单。
+
+### 16.3 接口
+
+| 项 | 决定 |
+|---|---|
+| 传输 | `POST http://127.0.0.1:<port>/op`，body `{"op": "...", "args": {...}}`；批量 `{"ops": [...]}` |
+| 响应 | `{"ok", "op", "result", "error", "details", "state", "seconds", "gate"?}`；拒绝也是 HTTP 200 + `ok:false`（`details` 给规则原文） |
+| 端点 | `/tmp/levelbuild-editor-<uid>/editor.json`（**0600**，目录 0700）；含 host/port/**token**/pid/level/path/log/blender/protocol |
+| 鉴权 | 每个请求带 `token`（`levelctl` 自动从端点文件读；`curl` 也一样）。只监听回环，token 挡的是同机别的账号/脚本 |
+| 健康检查 | `GET /health` **不需要 token**，只回 pid/level/props/uptime（启动脚本等它） |
+| 客户端 | `levelctl.py`：所有操作 + `ops`（帮助）+ `raw`（原样 JSON）+ `batch`（原子批量）；退出码 `0` 成功 / `1` 被拒 / `2` 没服务 |
+| 为什么不是 Unix socket | Bash 里 `curl` 一行就能调；Windows 上同一套代码（P1 的 5.3 GUI 也要用），不用为 Windows 重写 `AF_UNIX` 与分帧 |
+
+```bash
+# curl 直调（token 从端点文件里取；levelctl 不需要你管这些）
+curl -s -X POST "http://$(python3 -c "import json;d=json.load(open('/tmp/levelbuild-editor-'$(id -u)'/editor.json'));print('%s:%d'%(d['host'],d['port']))")/op" \
+  -d "{\"token\":\"$(python3 -c "import json;print(json.load(open('/tmp/levelbuild-editor-'$(id -u)'/editor.json'))['token'])")\",\"op\":\"status\"}"
+```
+
+### 16.4 操作集
+
+| op | 作用 | 例 |
+|---|---|---|
+| `status` | 关卡、计数、gate、dirty、undo 深度、场景事实（Blender 版本、对象数） | `levelctl.py status` |
+| `open` | 打开一份关卡并建场景（`level=<id>` 或 `path=...`） | `levelctl.py open story_01_bench_size` |
+| `reload` | 从磁盘重读并重新同步（人手改过 JSON 之后） | `levelctl.py reload` |
+| `list` | 过滤道具：`zone/def/kind/support/stackedOn/text/near+radius/limit` | `levelctl.py list --near=-13,-9 --radius=1.5` |
+| `get` | 一件道具/结构/相机/预设 | `levelctl.py get apple_01` |
+| `add_prop` | 加一件：`def` + 可选 `itemId/position/yaw/kind/zone/support/stackedOn/valueUnits/seat/updateExpected` | `levelctl.py add-prop --def apple --pos=3.2,0,3.2 --seat --update-expected` |
+| `set` | 改字段（`position/rotationQuat/yaw/zone/kind/support/stackedOn/valueUnits/notes` 或结构字段） | `levelctl.py set apple_01 --zone table_top` |
+| `move` | `to=[x,y,z]` 或 `delta=[dx,dy,dz]`（道具与结构都行） | `levelctl.py move apple_01 --delta=0,0.02,0` |
+| `rotate` | `yaw=<度>` / `quat=[x,y,z,w]` / `axis` + `degrees` | `levelctl.py rotate acorn_01 --yaw 90` |
+| `remove` | 按 id（或 `ids=[...]`）删道具/结构；`updateExpected` 可选 | `levelctl.py remove acorn_01 --update-expected` |
+| `seat` | 按声明支撑重新坐好（`id`/`ids`，或全部）——**和 `levelbuild.py seat` 同一个实现** | `levelctl.py seat` |
+| `add_structure` | 加结构：`role` + `center` + `size` + `rotationQuat/yaw` (+`kind/shape/collision/support/meets`) | `levelctl.py add-structure --role box --center=3.5,0.25,-3.5 --size=0.3,0.5,0.3` |
+| `add_def` | 增改 `defs[]`（`valueUnits` 必填） | `levelctl.py add-def --id apple --value 9` |
+| `expected` | 设 `level.expected`（默认按当前文档重算） | 与 `remove` 同批：`batch` |
+| `camera` | 相机增改/删/列 | `levelctl.py camera --id side --location=0,2,-6 --target=0,0.3,0 --lens 50` |
+| `preset` | 出图预设增改/删/列 | `levelctl.py preset --id side_view --camera side --engine WORKBENCH --res 640x480` |
+| `check` | 校验常驻文档（`--report` 加分区/分档表，`--strict`） | `levelctl.py check --report` |
+| `export` | **一等操作**：校验 + 写规范形（`--to` 写副本，`--force` 半成品） | `levelctl.py export --to /tmp/handoff.json` |
+| `render` | `preset=<id>` 或 `camera={…}` 临时相机；`engine/res/samples/out/name` → PNG 路径 | `levelctl.py render --preset plan` |
+| `undo` | 撤销最近 N 个已提交操作（`steps`），文档与场景一起回退 | `levelctl.py undo --steps 2` |
+| `batch` | `ops=[...]`：**全有或全无**，一次校验、一次导出、一次场景差量 | `levelctl.py batch ops.json` |
+| `shutdown` | 脏则导出并停服务 | `levelctl.py shutdown` |
+
+点子上：**`add_prop` / `remove` / 改 `valueUnits` 会动设计总量**，所以 `level.expected` 是硬门——被拒时消息会直说「the design total is the only rule broken - pass updateExpected=true, or batch an `expected` op」。设计总量是闸，不能被编辑器悄悄改掉。
+
+### 16.5 并发
+
+- **单进程、单线程**：`serve` 循环一个一个处理请求。`bpy` 不是线程安全的，多线程只会换来随机崩溃；一台 2 核机器也只养得起一个 Blender。
+- **一份服务一份打开的关卡**（`open` 另一份 = `reset` + 全量 sync，实测 0.117 s）。要同时看两关就开两个服务——但本机不建议（2 核）。
+- **多个代理同时发请求**：在 socket 上排队、先到先服务；每个操作（包括 `batch`）是原子的，不会有人看到半截状态。
+- **一个 `render` 会占住队列**（Workbench 3–4 s，EEVEE 45 s）。约定：出图放在一批编辑的最后；客户端超时默认 120 s、`render` 自动放宽到 900 s。
+- 不做文件锁：写盘只有服务一个写者，客户端从不直接写 `placement.json`。
+
+### 16.6 生命周期
+
+| 命令 | 行为 |
+|---|---|
+| `levelserve.py start --level <id>` | 读 `~/tools/blender-env.sh`（**解析 `export` 行，不 source shell**）→ detach 启动 Blender → 等到 `/health` 应答（实测 **1.4 s**）→ 打印 pid/端口/端点/日志 |
+| `levelserve.py status` | `/health` + `status` op（计数、gate、dirty、undo、场景对象数） |
+| `levelserve.py logs -n 40` | 尾日志（默认 `/tmp/levelbuild-editor-<uid>/editor.log`） |
+| `levelserve.py stop` | `shutdown` op：脏则导出 → 关 socket → 删端点 → 等**进程**退出（不是只等 socket） |
+| `levelserve.py health` | 只要 `/health`（给脚本用，无 token） |
+
+- SIGTERM / SIGINT 走同一条收尾路径：先导出再退出（`editor_server.py` 的 `finally`）。
+- 崩溃（`kill -9`、Blender 自己挂）：端点文件还在但没人应答 → 客户端明说 `endpoint ... is stale`，退出码 2；`start` 自动清掉残文件，从 JSON 重载。
+- 端口 `0` = 系统分配，不写死；端点文件是唯一发现机制。
+
+### 16.7 导出的四条硬要求
+
+| # | 要求 | 怎么保证 |
+|---|---|---|
+| 1 | **完整** | `canonical_doc` 的键集合：`schema / level / defs / props / structures / cameras / renderPresets`；道具带 `valueUnits`（逐件或 `defs[]`）、结构带 `role/support/collision/meets`、`level` 带 `expected/budget/bounds` |
+| 2 | **确定性** | 规范形：按 id 排序、坐标 4 位/四元数 6 位、`w<0` 取反、`-0.0→0.0`、2 空格、末尾换行、UTF-8 无 BOM；同一文档永远同样字节 |
+| 3 | **导出前校验** | `export` 自己再跑一次 `placement_core.validate`；红则**不写**（`force=true` 例外，明确标注是半成品） |
+| 4 | **往返无损** | 导出 → 用 `open --path` 从导出重建场景 → 再导出：**逐字节相同**（实测 127 件 sha `601ab8034bc8b494…`）。单测 `test_level_editor.py::test_round_trip_export_open_export_is_lossless`，端到端见 §16.9 |
+
+**本轮顺手修掉的导出器缺陷**（都是实测出来的，四个都会让「导出不完整 / 不可复现」）：
+
+| 症状 | 原因 | 修法 |
+|---|---|---|
+| 场景 → JSON 之后 `defs[]` 全没了（第一关 44 条价值声明消失，而文件仍能过门，因为每件都带自己的 `valueUnits`；下一次靠 def 取值的件就会红） | `export_placement.py` 的 doc 字典里根本没有 `defs` 键 | 从 `--base` 带过来（和 `level` / `renderPresets` 一样） |
+| `top` 相机的高度从 14 m 变成 12 m | `new_camera` 的 ortho 分支只用 `height_m`（默认 12），忽略 JSON 里的 `location` | 优先用 `location`，把 `cam_height_m` 标在对象上 |
+| `--seat` 对**没有 `support` 的地面件**完全不修（实测把橡子抬高 5 cm，`--seat` 报 0 件） | 场景侧只处理「声明了结构支撑」的件，JSON 侧才回落到地面 | 场景侧用 `role=ground` 的**过中心平面**（`boundary_plane`，与 `ground_level` 同义）兜底 |
+| 已经坐好的件每次 `--seat` 都被改写 0.1 mm（第一关 5 件：花圃台上的 `bread_slice` / `grapes`，`top + h/2 = 0.26715` 正好压在 4 位小数的舍入边界上） | 场景是 `float32`（0.26 读回来 0.26000002），再舍入就翻到另一边 | 先把所有输入按文件精度量化，再做坐正数学（于是和读 JSON 的 `seat_props` 同解） |
+
+修完的验收：`build_scene.py` → `export_placement.py`（**加不加 `--seat` 都一样**）→ 与源文件**逐字节相同**（第一关 127 件，sha `601ab8034bc8b494…`）；把一件地面道具抬高 5 cm 后 `--seat` 能把它修回原值。
+
+### 16.8 一次性脚本与常驻服务的分工
+
+| 场景 | 用哪个 |
+|---|---|
+| 代理迭代（改一件、看一张、再改） | **常驻**：改 0.1 s，图 3–45 s，没有重建 |
+| CI / 校验 / 无 Blender 的机器 | `levelbuild.py check`（纯 Python） |
+| 从 JSON 生成一张定妆图、或给别人一个 `.blend` | 一次性 `render_views.py` / `build_scene.py` |
+| 人在 GUI 里手改过 `.blend` | 一次性 `export_placement.py`（自检 + 往返） |
+| P1 人机面板（Windows 5.3） | 面板调**同一批函数**（`LevelScene.sync` + 导出），见 §11「P1 追加」 |
+
+### 16.9 实测（本机：aarch64、2 核、llvmpipe、无 GPU；story_01 = 127 件 / 11 结构 / 44 def / 1500 u）
+
+| 动作 | 耗时 | 备注 |
+|---|---:|---|
+| 一次性 `build_scene.py`（进程启动 + 44 个 GLB + 127 实例 + 11 盒） | **1.17 s**（RSS 238 MB） | 整场构建就是 `sync(doc, None)` |
+| 一次性 `render_views.py --preset plan`（同上 + Workbench 1280×720） | **4.70 s** | 其中渲染 3.5 s |
+| 常驻 `levelserve start`（到 `/health`） | **1.4 s** | 建完之后一直是热的 |
+| `status` | 0.063–0.076 s | 含一次完整 `validate` |
+| `check` | 0.068 s | 同上 |
+| `export` | 0.056–0.058 s | 66 772 字节，sha256 返回 |
+| `list` / `get` | 0.007 s | 纯内存 |
+| `move`（校验 + 导出 + 单对象 sync） | 0.116–0.118 s | 场景计数 `props.updated = 1` |
+| `undo` | 0.116 s | 文档 + 场景一起回退 |
+| `open --path`（换一份：reset + 全量 sync） | 0.117 s | 44 def 的库已经加载过 |
+| 常驻 `render --preset plan`（Workbench 1280×720） | **3.19 s**（首张 4.30 s） | 一次性同图 4.70 s |
+| 常驻 `render --preset overview`（EEVEE 1280×720） | **45.02 s** | 一次性约 45.0 + 1.2 s |
+| `kill -9` 之后 | 改动**已在** `placement.json` 里 | 下一个请求报 `endpoint is stale`（退出码 2） |
+
+读出来的结论（和用户的原话不完全一致，写清楚）：
+
+- **构建不是大头**。整场 127 件只要 1.17 s（其中 Blender 启动约 0.35 s，44 个 GLB 导入 + 摆位约 0.8 s）。EEVEE 的 45 s **就是渲染本身**；Workbench 的 3.5 s 也是渲染。
+- 常驻服务真正省的是：**每次编辑不再重启 + 重建**（1.2 s → 0.1 s），以及把「改一个数」的粒度从「起一个 Python/Blender 进程」降到「一条 JSON 请求」。
+- 另外两个不是时间能买的收益：`render` 之后场景还是热的（连出三张图不重复构建）；`check/list/get` 在没有 Blender 的机器上根本不用起服务（纯 Python）。
+- Windows 5.3 + GPU 上比值会变（渲染更快、Blender 启动更慢），**结构不变**：构建一次、导出即真源。
+
+**冒烟（真实服务、真实 Blender）**：`open story_01` → `move acorn_01 +0.05 x` → `check`（PASS、`inSync`）→ `render --preset plan`（Workbench 俯视，看过图：草坪、花圃台、折叠桌、两块斜板、四道边界、树根丘半出场外）→ `render --preset overview`（EEVEE，看过图：道具都立在支撑面上，没有半埋）→ `undo` → `placement.json` 与 git HEAD **逐字节相同**（sha `601ab8034bc8b494…`）。图在 `/tmp/lb-smoke/live/`（PNG 不进仓库，按 §12 U6）。
+
+### 16.10 P1（建议，尚未做）
+
+1. **Blender 插件面板**（§11「P1 追加」）：Windows 5.3 GUI 里人手动摆、点按钮导出；面板与代理共用 `LevelScene.sync` + 导出函数，所以两边产出必须逐字节一致。
+2. **MCP 封装**：`levelctl.py ops` 的表就是工具表（`status/list/move/seat/render/export/undo/batch`），包成一个 MCP server 让别的代理直接调，不必走 Bash。
+3. **Windows 上的常驻服务**：`levelserve.py` 的 detach 用的是 `start_new_session`（POSIX）；Windows 需要 `CREATE_NEW_PROCESS_GROUP` + 一个 `.bat`/快捷方式，端点文件路径也要从 `/tmp` 换成 `%TEMP%`（`editor_http.runtime_dir()` 已经用 `tempfile.gettempdir()`，只剩 detach 这一处）。
+4. **增量导出到 Unity**：现在导出的粒度是整份 JSON；Unity 导入器已经按 `itemId` 做增量（`+0 ~0 -0`），所以服务端不需要拆，但可以在导出里带一份 `changed: [itemId…]` 让人知道该导哪几件。
+
+### 16.11 不确定 / 明确没做
+
+- **没有冲突合并**：一个服务一份关卡、串行处理；两个代理同时改同一件，后到的赢（每次都基于最新文档）。这是设计要求，不是缺口。
+- **渲染期间不能编辑**（串行）。真需要并发时，P1 可以拆一个只读的渲染进程，但本机 2 核不建议。
+- **`add_prop` 不自动改 `level.expected`**：设计总量是闸，必须显式 `updateExpected` / `expected`（刻意的，见 §16.4）。
+- **场景 → 文档**只在 `export_placement.py` 里存在（人手改 `.blend` 的兜底）；服务本身不从场景反读。P1 如果做「面板拖完直接导出」，要决定是走增量函数（推荐）还是走一次性导出器（现状兜底）。
+- 端点目录在 `/tmp`：重启机器残留由 `start` 自动清理；多用户机器靠 uid 后缀 + 0600 隔离。

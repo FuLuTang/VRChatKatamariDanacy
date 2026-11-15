@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from Tools.levelbuild import editor_core  # noqa: E402
 from Tools.levelbuild import placement_core as core  # noqa: E402
 
 
@@ -139,80 +140,34 @@ def cmd_format(args):
     return 0
 
 
-def _same_at_file_precision(position, quat, new_position, new_quat):
-    return (
-        all(core.rounded(a, core.POSITION_DECIMALS) == core.rounded(b, core.POSITION_DECIMALS)
-            for a, b in zip(position, new_position))
-        and all(core.rounded(a, core.QUAT_DECIMALS) == core.rounded(b, core.QUAT_DECIMALS)
-                for a, b in zip(quat, new_quat)))
-
-
 def cmd_seat(args):
+    """``seat``: one implementation, shared with the resident editor's ``seat`` op."""
     path = Path(args.placement)
     if not path.is_file():
         print("levelbuild: cannot read %s" % path, file=sys.stderr)
         return 2
     doc = core.load_doc(path)
-    structures = core._index_structures(doc)
-    props = [prop for prop in doc.get("props") or [] if isinstance(prop, dict)]
-    by_id = {prop.get("itemId"): prop for prop in props}
-    floor = core.ground_level(doc)
+    result = editor_core.seat_props(doc, set(args.item) if args.item else None)
 
-    moved = 0
-    skipped = 0
-    for prop in props:
-        item_id = prop.get("itemId")
-        if args.item and item_id not in args.item:
-            continue
-        try:
-            position = tuple(float(v) for v in prop["position"])
-            size = tuple(float(v) for v in prop["aabb"])
-            quat = tuple(float(v) for v in prop["rotationQuat"])
-        except (KeyError, TypeError, ValueError):
-            skipped += 1
-            continue
-
-        if prop.get("stackedOn"):
-            other = by_id.get(prop["stackedOn"])
-            if other is None:
-                skipped += 1
-                continue
-            try:
-                other_top = core.world_aabb(tuple(float(v) for v in other["position"]),
-                                            tuple(float(v) for v in other["aabb"]),
-                                            tuple(float(v) for v in other["rotationQuat"]))[1][1]
-            except (KeyError, TypeError, ValueError):
-                skipped += 1
-                continue
-            normal, point = (0.0, 1.0, 0.0), (0.0, other_top, 0.0)
-        elif prop.get("support") in structures:
-            normal, point = core.structure_top_plane(structures[prop["support"]])
-        else:
-            normal, point = (0.0, 1.0, 0.0), (0.0, floor, 0.0)
-
-        new_position, new_quat = core.reseat(position, size, quat, normal, point)
-        # Compare at the precision the file stores: a 4-decimal position is 5e-5 off an
-        # exact seat, and calling that "moved" would make every re-run rewrite the file.
-        if _same_at_file_precision(position, quat, new_position, new_quat):
-            continue
-        moved += 1
+    for detail in result["details"]:
         print("%-24s pos %s -> %s  quat %s -> %s"
-              % (item_id,
-                 ["%.4f" % v for v in position], ["%.4f" % v for v in new_position],
-                 ["%.5f" % v for v in quat], ["%.5f" % v for v in new_quat]))
-        prop["position"] = [core.rounded(v, core.POSITION_DECIMALS) for v in new_position]
-        prop["rotationQuat"] = [core.rounded(v, core.QUAT_DECIMALS) for v in new_quat]
+              % (detail["itemId"],
+                 ["%.4f" % v for v in detail["previous"]],
+                 ["%.4f" % v for v in detail["position"]],
+                 ["%.5f" % v for v in detail["previousQuat"]],
+                 ["%.5f" % v for v in detail["rotationQuat"]]))
 
+    moved = len(result["moved"])
+    skipped = len(result["skipped"])
     print("")
     print("%d prop(s) re-seated, %d skipped, %d untouched"
-          % (moved, skipped, len(props) - moved - skipped))
+          % (moved, skipped, result["props"] - moved - skipped))
     if moved and args.write:
         core.write_doc(doc, path)
         print("wrote %s" % core.display_path(path))
     elif moved:
         print("dry run; pass --write to apply")
     return 0
-
 
 
 # --------------------------------------------------------------------------- #

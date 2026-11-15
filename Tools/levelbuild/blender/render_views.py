@@ -11,12 +11,16 @@ so the same data renders the same picture on 4.0.2 (Linux, headless, llvmpipe)
 and 5.3.0 (Windows, GPU).  ``--engine`` is an author convenience for a quick
 plan view; it does not change the file.
 
+This is the **one-shot** path: process start, whole-scene build, render, exit.  While
+iterating, keep the resident editor open instead (``levelserve.py start``) and ask it
+for one frame - the build is paid once, not per render.  Both paths share
+``blender_common.render_frame``, so the picture is identical.
+
 Measured on the 2-core Linux box: WORKBENCH 5-10 s, EEVEE 35-49 s,
 CYCLES CPU 48 spp ~104 s per 1280x720 frame.
 """
 
 import sys
-import time
 from pathlib import Path
 
 import bpy
@@ -25,22 +29,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import blender_common as common  # noqa: E402
 from Tools.levelbuild import placement_core as core  # noqa: E402
-
-
-def fit_ortho_to_frame(camera, res):
-    """Make ``coverage_m`` the extent guaranteed to be in frame on the *shorter* side.
-
-    Blender's ``ortho_scale`` is the extent along the sensor's longer side, so a 16:9 plan
-    view of a square arena would silently crop the top and bottom (measured: a 13.4 m
-    arena showed only 7.9 m of depth).  The camera data keeps the authored coverage; the
-    per-preset resolution decides the scale.
-    """
-    data = camera.data
-    if data.type != "ORTHO":
-        return
-    authored = float(camera.get("cam_coverage_m", data.ortho_scale))
-    aspect = float(res[0]) / float(res[1]) if res[1] else 1.0
-    data.ortho_scale = authored * max(1.0, aspect)
 
 
 def main():
@@ -61,7 +49,7 @@ def main():
     common.reset_scene()
     scene = bpy.context.scene
     exports = common.option("--exports")
-    common.build_from_doc(doc, common.resolve(exports) if exports else None)
+    built = common.build_from_doc(doc, common.resolve(exports) if exports else None)
 
     written = []
     for preset in presets:
@@ -69,21 +57,10 @@ def main():
         res = res_override.split("x") if res_override else preset.get("res") or [1280, 720]
         res = [int(res[0]), int(res[1])]
 
-        engine_id = common.select_engine(scene, engine)
-        common.configure_shading(scene, engine, samples or int(preset.get("samples") or 0))
-        common.configure_output(scene, res)
-
         camera = common.camera_for(doc, preset["camera"])
-        scene.camera = camera
-        fit_ortho_to_frame(camera, res)
-
         target = out_dir / ("%s_%s_%s.png" % (level_id, preset["id"], engine.lower()))
-        scene.render.filepath = str(target)
-        started = time.time()
-        bpy.ops.render.render(write_still=True)
-        elapsed = time.time() - started
-        if not target.is_file() or target.stat().st_size == 0:
-            raise SystemExit("render_views: %s was not written" % target)
+        engine_id, elapsed = common.render_frame(
+            scene, camera, target, engine, res, samples or int(preset.get("samples") or 0))
         written.append((preset["id"], engine_id, target, elapsed))
         print("rendered %-10s %-18s %dx%d %.1fs -> %s"
               % (preset["id"], engine_id, res[0], res[1], elapsed, target))

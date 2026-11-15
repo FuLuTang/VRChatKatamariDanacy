@@ -5,7 +5,7 @@
 | 谁 | 干什么 | 入口 |
 |---|---|---|
 | 人（Windows，Blender 5.3 GUI） | 真 3D 拖拽摆位、出图 | 本目录 `blender/*.py`（同一个脚本，两个版本） |
-| 代理（Linux，Blender 4.0.2 headless） | 批量改 JSON、校验、出图 | `levelbuild.py` + `blender/*.py` |
+| 代理（Linux，Blender 4.0.2 headless） | 一条条改地图、校验、出图 | **`levelserve.py` + `levelctl.py`**（常驻，§9）；批量/CI 用 `levelbuild.py` + `blender/*.py` |
 | Unity（Windows，编辑器导入器） | 单向导入到受管根 `LevelContent` | `Editor/LevelBuild/PlacementImporter.cs` |
 
 设计见 [LEVEL_AUTHORING](../../Docs/Design/Tools/LEVEL_AUTHORING.md)（§11 是实现分阶段和验收）。**几何/AABB/可吸球径/支撑判定只有一份实现**：`placement_core.py`；CLI 与三个 Blender 脚本都 `import` 它，校验器和渲染不会各算一套。
@@ -17,32 +17,34 @@
 ```bash
 cd <仓库根>
 
-# 1) 校验（关卡的门：硬错误 → 退出码 1）
-python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_size/placement.json
-python3 Tools/levelbuild/levelbuild.py check ... --report     # 加分区/分档/三态表
+# A) 常驻编辑器（推荐：场景建一次，之后一条条改；每次成功的改动都自动导出）
+python3 Tools/levelbuild/levelserve.py start --level story_01_bench_size
+python3 Tools/levelbuild/levelctl.py status
+python3 Tools/levelbuild/levelctl.py list --zone table_top --limit 5
+python3 Tools/levelbuild/levelctl.py move apple_01 --delta=0,0.02,0
+python3 Tools/levelbuild/levelctl.py check --report
+python3 Tools/levelbuild/levelctl.py render --preset plan --out-dir /tmp/levelbuild   # 打印 PNG 路径
+python3 Tools/levelbuild/levelctl.py undo
+python3 Tools/levelbuild/levelctl.py export --to /tmp/handoff.json                    # 可选：交一份副本
+python3 Tools/levelbuild/levelserve.py stop                                           # 脏则先导出
 
-# 2) 出图（Workbench 俯视 3–5 s；EEVEE 3/4 视 30–50 s）
+# B) 一次性（CI / 交接 / 没有服务时；和 A 共用同一批函数）
+python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_size/placement.json --report
 source ~/tools/blender-env.sh
 "$BLENDER" $BLENDER_FLAGS --python Tools/levelbuild/blender/render_views.py -- \
-    --placement Docs/Design/Levels/story_01_bench_size/placement.json \
-    --preset plan --out-dir /tmp/levelbuild
-
-# 3) 从 JSON 搭场景（可选存 .blend 给人）
+    --placement Docs/Design/Levels/story_01_bench_size/placement.json --preset plan --out-dir /tmp/levelbuild
 "$BLENDER" $BLENDER_FLAGS --python Tools/levelbuild/blender/build_scene.py -- \
     --placement .../placement.json --save-blend /tmp/level.blend
-
-# 4) 场景 → JSON（人改过 .blend 之后必须走这步；`--base` 提供非几何字段）
 "$BLENDER" $BLENDER_FLAGS --python Tools/levelbuild/blender/export_placement.py -- \
     --out .../placement.json --base .../placement.json --seat
-```
 
-样例（16 件、8 结构、能过门、能往返逐字节一致）：
-
-```bash
+# C) 样例（16 件、8 结构、能过门、能往返逐字节一致）
 python3 Tools/levelbuild/levelbuild.py check Tools/levelbuild/examples/placement.json --report
-"$BLENDER" $BLENDER_FLAGS --python Tools/levelbuild/blender/render_views.py -- \
-    --placement Tools/levelbuild/examples/placement.json --preset plan --out-dir /tmp/levelbuild
 ```
+
+实测：`build_scene.py` → `export_placement.py --seat` → 与源文件**逐字节相同**（第一关 127 件；`defs[]`、相机、道具、结构全保留）。`--seat` 对已坐好的数据是 no-op，对抬高 5 cm 的地面件会修回去。
+
+全部操作：`python3 Tools/levelbuild/levelctl.py ops`；服务本身：`levelserve.py status|logs|health`。
 
 ---
 
@@ -194,7 +196,7 @@ python3 -m unittest discover -s Docs/tests -p 'test_*.py'   # 全仓
 python3 Docs/tools/validate_plan.py
 ```
 
-`Docs/tests/levelbuild/` 覆盖：坐标/四元数往返、旋转后 AABB、`D_req` 数值（含体积门等价）、斜面上坐正（含“半埋”反例）、确定性（排序/取整/`-0.0`/逐字节）、`defs[]` 价值回退、**5 个负向用例**（穿地/悬空/越界/预算超/总量不符）以及未知 def、重复 id、互穿、`box`+`ramp` 同 id、缺地面、过期 `absorbDiameterReq`；CLI 的 0/1/2 退出码与 `format`/`seat` 的行为。
+`Docs/tests/levelbuild/` 覆盖：常驻编辑器的 48 + 11 个用例（§9.5 另外列）；坐标/四元数往返、旋转后 AABB、`D_req` 数值（含体积门等价）、斜面上坐正（含“半埋”反例）、确定性（排序/取整/`-0.0`/逐字节）、`defs[]` 价值回退、**5 个负向用例**（穿地/悬空/越界/预算超/总量不符）以及未知 def、重复 id、互穿、`box`+`ramp` 同 id、缺地面、过期 `absorbDiameterReq`；CLI 的 0/1/2 退出码与 `format`/`seat` 的行为。
 
 ---
 
@@ -206,3 +208,80 @@ python3 Docs/tools/validate_plan.py
 4. **旋转道具的 `propBounds` 是世界 AABB**（同步工具用 `Renderer.bounds`），不是模型 AABB：对 45° 摆的薄件会偏大。这是 `PickupFieldSync` 的既有行为，导入器不修，只在报告里保留依据。
 5. **`expected` 在 `from-layout` 里是「转出来多少」**，不是设计表的 127/1500（差额 = 缺模型的 def，见 §5）。补模型后重跑，数字会自动对上。
 6. **PNG 不进仓库**：本工具只往 `--out-dir` 写图，验收图由人决定是否放 `Docs/Evidence/`。
+
+---
+
+## 9. 常驻编辑器服务（`levelserve.py` / `levelctl.py`）
+
+### 9.1 为什么
+
+一次性脚本每次都是一条完整流水线：启动 Blender（约 0.35 s）→ 导入 44 个 GLB、铺 127 件（约 0.8 s）→ 渲染 → 退出。改一个数、看一张图都要重付一次。常驻服务把「建场景」付一次，之后每次操作只动**差量**：
+
+| 动作 | 一次性 | 常驻 |
+|---|---:|---:|
+| 改一件道具（含校验 + 导出） | 1.2 s + | **0.12 s** |
+| 校验 `check` | 1.2 s + | **0.07 s**（纯 Python 0.05 s） |
+| Workbench 1280×720 一张 | 4.70 s（其中渲染 3.5 s） | **3.19 s** |
+| EEVEE 1280×720 一张 | ~46.2 s | **45.0 s** |
+
+构建不是瓶颈（127 件只要 1.17 s），瓶颈一直是渲染；常驻省的是**每次编辑的重建与启动**，以及把改动的粒度从「起一个进程」降到「发一条 JSON」。
+
+### 9.2 结构
+
+```
+levelserve.py start ──► Blender --background editor_server.py
+                          ├─ placement_core        校验/几何（唯一实现）
+                          ├─ LevelScene.sync       文档 → 场景（差量增删改）
+                          ├─ editor_core.Editor    操作 → 文档 → 校验 → 导出
+                          └─ editor_http.Server    127.0.0.1 上的 JSON + token
+levelctl.py ──► POST {"op":…,"args":…} ──► 上面那个进程
+```
+
+**真源关系**：常驻的文档 + 场景是**工作状态**；`placement.json` 是**导出结果**，也是 Unity/一次性脚本/git 读的那份。每个成功操作的最后一步就是导出（规范形、原子替换、返回 sha256），所以崩了最多丢在途的一条。操作若会**引入本会话没见过的硬错误** → 拒绝、文件不动、响应给规则原文；打开时就红的文件仍可编辑可修（错误集合不扩大即可）。设计见 [LEVEL_AUTHORING §16](../../Docs/Design/Tools/LEVEL_AUTHORING.md)。
+
+### 9.3 常用命令
+
+```bash
+levelserve.py start --level <id> [--out-dir /tmp/render] [--port 0] [--no-auto-export]
+levelserve.py status | logs -n 40 | health | stop
+
+levelctl.py status
+levelctl.py list --zone table_top --def apple --near=-13,-9 --radius=1.5 --limit 5
+levelctl.py get apple_01
+levelctl.py add-prop --def apple --pos=3.2,0,3.2 --seat --update-expected
+levelctl.py add-structure --role box --center=3.5,0.25,-3.5 --size=0.3,0.5,0.3 --support
+levelctl.py set apple_01 --zone table_top --value 4
+levelctl.py move apple_01 --to=-7.9,0.05,-17.3        # 或 --delta=0,0.02,0
+levelctl.py rotate acorn_01 --yaw 90                  # 或 --quat=x,y,z,w
+levelctl.py remove acorn_01 --update-expected
+levelctl.py seat [id …]
+levelctl.py check --report
+levelctl.py export [--to /tmp/handoff.json] [--force]
+levelctl.py render --preset plan [--engine WORKBENCH] [--res 1280x720] [--out DIR] [--name x]
+levelctl.py camera --id side --location=0,2,-6 --target=0,0.3,0 --lens 50
+levelctl.py preset --id side_view --camera side --engine WORKBENCH --res 640x480
+levelctl.py undo [--steps N]
+levelctl.py raw '{"op":"status"}'
+levelctl.py batch ops.json                             # 原子批量，一次导出
+levelctl.py shutdown
+```
+
+退出码：`0` 成功 / `1` 被拒（看 `error` + `details`）/ `2` 没服务或端点过期。
+
+**注意**：`add-prop` / `remove` / 改 `valueUnits` 会改变设计总量 `level.expected`，所以要么带 `--update-expected`，要么在一个 `batch` 里跟一条 `{"op":"expected"}`——设计总量是闸，不会静默变化。
+
+### 9.4 并发与生命周期
+
+- 单进程、**串行**处理（`bpy` 不是线程安全的）；一份服务一份打开的关卡；多个代理排队，每个操作原子。
+- 一次 `render` 会占住队列（Workbench 3 s / EEVEE 45 s）：出图放在一批编辑的最后。
+- SIGTERM / SIGINT / `stop` / `shutdown` 都会先导出再退出，并删掉端点文件（`/tmp/levelbuild-editor-<uid>/editor.json`，0600，带 token）。
+- `status` 的两个标志：`dirty` = 磁盘和内存不一致（人在外面改了文件也会这样）；`unexported` = 内存里有没写盘的已提交改动（只有 `--no-auto-export` 才会）。`open` / `reload` 换文档前会先把 `unexported` 的改动写盘。
+- 进程被杀：端点文件成为「过期」，`levelctl` 直说 `endpoint … is stale`（退出码 2），`levelserve start` 会清掉重起并从 JSON 重载。
+
+### 9.5 测试
+
+```bash
+python3 -m unittest Docs.tests.levelbuild.test_level_editor Docs.tests.levelbuild.test_level_editor_http
+```
+
+59 个用例，**不依赖 Blender**（场景用一个 fake）：操作 → 文档变更、导出逐字节、校验失败回滚、红文件可修不可坏、undo、batch 原子性、导出→重建→导出往返、HTTP/token/health/shutdown/过期端点。

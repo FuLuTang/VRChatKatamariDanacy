@@ -235,6 +235,13 @@ def main():
         "cameras": _camera_entries(doc_base),
         "renderPresets": list((doc_base or {}).get("renderPresets") or []),
     }
+    # ``defs[]`` is level-level data (what each def is worth), not scene geometry, so it
+    # comes from the base like ``level`` and the presets.  It used to be dropped, which
+    # lost every declared value on a scene -> JSON round trip (measured on story_01:
+    # 44 defs vanished while the file still passed the gate, because each prop carried
+    # its own valueUnits; a later prop relying on the def's value would have been red).
+    if doc_base is not None and "defs" in doc_base:
+        doc["defs"] = list(doc_base.get("defs") or [])
     if not doc["level"]:
         print("WARN no --base: level{} is empty and `levelbuild.py check` will reject the file")
 

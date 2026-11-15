@@ -9,6 +9,10 @@ The JSON is the truth: this script never re-seats, re-orders or re-derives a
 pose.  Use ``levelbuild.py seat --write`` to fix a pose in the data, then rebuild.
 Run ``render_views.py`` instead when the only goal is a picture - it builds the
 same scene through ``blender_common`` and skips saving.
+
+One-shot by design.  The resident editor (``editor_server.py``) builds the same scene
+through the same ``blender_common.LevelScene.sync`` and then keeps it, so an edit costs
+one object, not one process.
 """
 
 import sys
@@ -40,6 +44,7 @@ def main():
     print("built props=%d structures=%d cameras=%d defs=%d"
           % (len(built["props"]), len(built["structures"]), len(built["cameras"]),
              len(built["library"])))
+    print("sync %s" % built["counts"])
 
     for structure_id, collection in built["library"].items():
         if common.library_is_linked(collection):

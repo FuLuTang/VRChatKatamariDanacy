@@ -1,22 +1,32 @@
-"""Shared material for the three level-authoring Blender scripts.
+"""Shared material for the level-authoring Blender scripts *and* the resident editor.
 
-Imported by ``build_scene.py``, ``export_placement.py`` and ``render_views.py``
-(never run on its own).  It owns exactly the bpy-facing glue; every geometric
-rule - axes, quaternions, AABB, seating, the absorb gate - comes from
-``Tools/levelbuild/placement_core.py`` so the render, the validator and the
-Unity import cannot disagree.
+Imported by ``build_scene.py``, ``export_placement.py``, ``render_views.py`` and
+``editor_server.py`` (never run on its own).  It owns exactly the bpy-facing glue; every
+geometric rule - axes, quaternions, AABB, seating, the absorb gate - comes from
+``Tools/levelbuild/placement_core.py`` so the render, the validator and the Unity import
+cannot disagree.
 
-One script must run on both Blender builds the project uses: 4.0.2 (Ubuntu
-arm64, headless, no GPU) and 5.3.0 (Windows, the user's GUI copy).  Version
-differences are concentrated in :func:`select_engine` and
-:func:`configure_eevee`; the EEVEE engine id itself is resolved by the prop
-pipeline's own probe (``Docs/Art/OriginalModels/props/scripts/prop_lib.py``,
-``select_eevee_engine``) instead of being re-implemented here.
+Two layers, on purpose:
+
+* the **primitives** (:func:`new_prop_object`, :func:`update_prop_object`,
+  :func:`new_structure_object`, :func:`update_structure_object`, :func:`remove_object`,
+  :func:`ensure_library`) build or change **one object**;
+* :class:`LevelScene` drives them from a document, **diffing against the previous
+  document** - so the one-shot scripts and the resident editor share one implementation
+  of "make the scene match the JSON", and an edit touches only the objects it changed.
+
+One script must run on both Blender builds the project uses: 4.0.2 (Ubuntu arm64,
+headless, no GPU) and 5.3.0 (Windows, the user's GUI copy).  Version differences are
+concentrated in :func:`select_engine` and :func:`configure_shading`; the EEVEE engine id
+itself is resolved by the prop pipeline's own probe
+(``Docs/Art/OriginalModels/props/scripts/prop_lib.py``, ``select_eevee_engine``) instead
+of being re-implemented here.
 """
 
 import importlib.util
 import math
 import sys
+import time
 from pathlib import Path
 
 import bpy
@@ -136,6 +146,116 @@ def library_is_linked(collection):
 
 
 # --------------------------------------------------------------------------- #
+# one object: create / update / remove
+# --------------------------------------------------------------------------- #
+def _material(name, rgba):
+    # Workbench uses material.diffuse_color, EEVEE/Cycles use the Principled node;
+    # a material that only sets the node renders grey in the plan view (measured).
+    material = bpy.data.materials.new("MAT_" + name)
+    material.use_nodes = True
+    _set_material_color(material, rgba)
+    return material
+
+
+def _set_material_color(material, rgba):
+    material.diffuse_color = rgba
+    if not material.use_nodes or material.node_tree is None:
+        return
+    principled = next((node for node in material.node_tree.nodes
+                       if node.type == "BSDF_PRINCIPLED"), None)
+    if principled is not None:
+        principled.inputs["Base Color"].default_value = rgba
+        if "Roughness" in principled.inputs:
+            principled.inputs["Roughness"].default_value = 0.85
+
+
+def axis_matrix():
+    """``M``: Blender (x, y, z) -> Unity (x, z, y) as a 4x4."""
+    return Matrix(((1.0, 0.0, 0.0, 0.0),
+                   (0.0, 0.0, 1.0, 0.0),
+                   (0.0, 1.0, 0.0, 0.0),
+                   (0.0, 0.0, 0.0, 1.0)))
+
+
+#: (0, 3, 2, 1) is the bottom face of the vertex list below - the winding is what
+#: makes the box render from outside instead of inside.
+BOX_FACES = ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
+             (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7))
+
+
+def _box_verts(size_u):
+    sx, sy, sz = size_u[0] * 0.5, size_u[2] * 0.5, size_u[1] * 0.5
+    return [(-sx, -sy, -sz), (sx, -sy, -sz), (sx, sy, -sz), (-sx, sy, -sz),
+            (-sx, -sy, sz), (sx, -sy, sz), (sx, sy, sz), (-sx, sy, sz)]
+
+
+def _box_mesh(name, size_u):
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(_box_verts(size_u), [], list(BOX_FACES))
+    mesh.update()
+    return mesh
+
+
+def _box_matrix(center_u, quat_u):
+    # The quaternion goes in with its JSON component order (w, x, y, z) and *not*
+    # through unity_to_blender_quat: the mesh above is already built in Unity axis
+    # order, so the M^-1 ... M conjugation performs the axis change itself.  Adding
+    # the sign flip here too would apply it twice (measured: the crate ended up
+    # rotated about the wrong axis, `LEVEL_AUTHORING` 1.5).
+    raw = Quaternion((quat_u[3], quat_u[0], quat_u[1], quat_u[2]))
+    m = axis_matrix()
+    return (m.inverted()
+            @ Matrix.Translation(Vector(center_u))
+            @ raw.to_matrix().to_4x4()
+            @ m)
+
+
+def place_box(obj, center_u, quat_u):
+    obj.matrix_world = _box_matrix(center_u, quat_u)
+
+
+def new_box(name, center_u, size_u, quat_u, rgba):
+    """A unit-cube-style box built in Unity axis order and posed in Blender space."""
+    obj = bpy.data.objects.new(name, _box_mesh(name, size_u))
+    bpy.context.scene.collection.objects.link(obj)
+    place_box(obj, center_u, quat_u)
+    obj["box_size"] = list(size_u)
+    obj.data.materials.append(_material(name, rgba))
+    return obj
+
+
+def update_box(obj, center_u, size_u, quat_u, rgba):
+    """Re-pose, rebuild the mesh only when the size changed (keeps the material)."""
+    previous = tuple(obj.get("box_size") or ())
+    if len(previous) != 3 or max(abs(previous[i] - size_u[i]) for i in range(3)) > 1e-6:
+        old = obj.data
+        obj.data = _box_mesh(old.name, size_u)
+        if old.users == 0:
+            bpy.data.meshes.remove(old)
+        obj["box_size"] = list(size_u)
+    place_box(obj, center_u, quat_u)
+    if len(obj.data.materials) == 0:
+        obj.data.materials.append(_material(obj.name, rgba))
+    elif max(abs(float(obj.data.materials[0].diffuse_color[i]) - rgba[i])
+             for i in range(4)) > 1e-6:
+        _set_material_color(obj.data.materials[0], rgba)
+
+
+def remove_object(obj):
+    """Delete one object (and its mesh/camera data when nothing else uses it)."""
+    data = obj.data
+    identity = obj.name
+    bpy.data.objects.remove(obj, do_unlink=True)
+    if data is None or data.users != 0:
+        return identity
+    if isinstance(data, bpy.types.Mesh):
+        bpy.data.meshes.remove(data)
+    elif isinstance(data, bpy.types.Camera):
+        bpy.data.cameras.remove(data)
+    return identity
+
+
+# --------------------------------------------------------------------------- #
 # scene content
 # --------------------------------------------------------------------------- #
 def new_prop_instance(item_id, collection, position, quat_xyzw):
@@ -152,106 +272,79 @@ def new_prop_instance(item_id, collection, position, quat_xyzw):
     return obj
 
 
-def _material(name, rgba):
-    # Workbench uses material.diffuse_color, EEVEE/Cycles use the Principled node;
-    # a material that only sets the node renders grey in the plan view (measured).
-    material = bpy.data.materials.new("MAT_" + name)
-    material.use_nodes = True
-    principled = next((node for node in material.node_tree.nodes
-                       if node.type == "BSDF_PRINCIPLED"), None)
-    if principled is not None:
-        principled.inputs["Base Color"].default_value = rgba
-        if "Roughness" in principled.inputs:
-            principled.inputs["Roughness"].default_value = 0.85
-    material.diffuse_color = rgba
-    return material
+#: prop JSON field -> Blender custom property (the exporter reads them back).
+PROP_TAGS = (("zone", "zone"), ("kind", "kind"), ("support", "support"),
+             ("stackedOn", "stacked_on"), ("valueUnits", "value_units"),
+             ("group", "group"), ("notes", "notes"))
+
+#: structure JSON field -> Blender custom property.
+STRUCTURE_TAGS = (("kind", "struct_kind"), ("collision", "struct_collision"),
+                  ("meets", "struct_meets"), ("material", "struct_material"),
+                  ("notes", "struct_notes"))
 
 
-def new_box(name, center_u, size_u, quat_u, rgba):
-    """A unit-cube-style box built in Unity axis order and posed in Blender space."""
-    sx, sy, sz = size_u[0] * 0.5, size_u[2] * 0.5, size_u[1] * 0.5
-    verts = [(-sx, -sy, -sz), (sx, -sy, -sz), (sx, sy, -sz), (-sx, sy, -sz),
-             (-sx, -sy, sz), (sx, -sy, sz), (sx, sy, sz), (-sx, sy, sz)]
-    faces = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
-             (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
-    mesh = bpy.data.meshes.new(name)
-    mesh.from_pydata(verts, [], faces)
-    mesh.update()
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-    m = axis_matrix()
-    # The quaternion goes in with its JSON component order (w, x, y, z) and *not*
-    # through unity_to_blender_quat: the mesh above is already built in Unity axis
-    # order, so the M^-1 ... M conjugation performs the axis change itself.  Adding
-    # the sign flip here too would apply it twice (measured: the crate ended up
-    # rotated about the wrong axis, `LEVEL_AUTHORING` 1.5).
-    raw = Quaternion((quat_u[3], quat_u[0], quat_u[1], quat_u[2]))
-    obj.matrix_world = (m.inverted()
-                        @ Matrix.Translation(Vector(center_u))
-                        @ raw.to_matrix().to_4x4()
-                        @ m)
-    mesh.materials.append(_material(name, rgba))
+def tag_prop(obj, prop):
+    """Mirror the JSON's non-geometric fields onto the object (export reads them)."""
+    obj["item_def"] = prop["def"]
+    for key, target in PROP_TAGS:
+        if key in prop:
+            obj[target] = prop[key]
+        elif target in obj.keys():
+            del obj[target]
+
+
+def tag_structure(obj, structure):
+    obj["role"] = structure.get("role")
+    obj["shape"] = structure.get("shape", "box")
+    obj["structure_id"] = structure["id"]
+    for key, target in STRUCTURE_TAGS:
+        if key in structure:
+            obj[target] = structure[key]
+        elif target in obj.keys():
+            del obj[target]
+    obj["absorbable"] = bool(structure.get("absorbable", False))
+    obj["support"] = bool(structure.get("support", False))
+
+
+def new_prop_object(prop, library):
+    """One prop object (library instance + tags) from its JSON entry."""
+    collection = library.get(prop["def"])
+    if collection is None:
+        raise RuntimeError("prop %s uses def %r which is not in the library"
+                           % (prop.get("itemId"), prop.get("def")))
+    obj = new_prop_instance(prop["itemId"], collection, tuple(prop["position"]),
+                            tuple(prop["rotationQuat"]))
+    tag_prop(obj, prop)
     return obj
 
 
-def axis_matrix():
-    """``M``: Blender (x, y, z) -> Unity (x, z, y) as a 4x4."""
-    return Matrix(((1.0, 0.0, 0.0, 0.0),
-                   (0.0, 0.0, 1.0, 0.0),
-                   (0.0, 1.0, 0.0, 0.0),
-                   (0.0, 0.0, 0.0, 1.0)))
+def update_prop_object(obj, prop, library):
+    """Re-pose an existing prop and re-tag it (the mesh is the library's)."""
+    collection = library.get(prop["def"])
+    if collection is not None:
+        obj.instance_collection = collection
+    obj.location = Vector(core.unity_to_blender_position(tuple(prop["position"])))
+    q = core.unity_to_blender_quat(tuple(prop["rotationQuat"]))
+    obj.rotation_quaternion = Quaternion((q[0], q[1], q[2], q[3]))
+    tag_prop(obj, prop)
 
 
-def build_structures(doc):
-    """Boxes for every structure; returns ``{id: object}``."""
-    objects = {}
-    for structure in doc.get("structures") or []:
-        role = structure.get("role")
-        rgba = KIND_COLORS.get(structure.get("kind")) or ROLE_COLORS.get(role, (0.5, 0.5, 0.5, 1.0))
-        obj = new_box(structure["id"], tuple(structure["center"]), tuple(structure["size"]),
-                      tuple(structure["rotationQuat"]), rgba)
-        obj["role"] = role
-        obj["shape"] = structure.get("shape", "box")
-        obj["structure_id"] = structure["id"]
-        for key in ("kind", "collision", "meets", "material", "notes"):
-            if key in structure:
-                obj["struct_" + key] = structure[key]
-        obj["absorbable"] = bool(structure.get("absorbable", False))
-        obj["support"] = bool(structure.get("support", False))
-        objects[structure["id"]] = obj
-    return objects
+def _structure_color(structure):
+    return (KIND_COLORS.get(structure.get("kind"))
+            or ROLE_COLORS.get(structure.get("role"), (0.5, 0.5, 0.5, 1.0)))
 
 
-def build_props(doc, library, exports_dir=None):
-    """Instance every prop; returns ``{itemId: object}``.
+def new_structure_object(structure):
+    obj = new_box(structure["id"], tuple(structure["center"]), tuple(structure["size"]),
+                  tuple(structure["rotationQuat"]), _structure_color(structure))
+    tag_structure(obj, structure)
+    return obj
 
-    ``aabb`` is checked against the def's manifest: a hand-edited size that no
-    longer matches the model would make the validator and the render disagree.
-    """
-    manifests = core.load_manifests(exports_dir)
-    objects = {}
-    for prop in doc.get("props") or []:
-        item_id = prop["itemId"]
-        def_id = prop["def"]
-        if def_id not in library:
-            raise SystemExit("prop %s uses def %r which is not in the library" % (item_id, def_id))
-        obj = new_prop_instance(item_id, library[def_id], tuple(prop["position"]),
-                                tuple(prop["rotationQuat"]))
-        obj["item_def"] = def_id
-        for key, target in (("zone", "zone"), ("kind", "kind"), ("support", "support"),
-                            ("stackedOn", "stacked_on"), ("valueUnits", "value_units")):
-            if key in prop:
-                obj[target] = prop[key]
-        if "notes" in prop:
-            obj["notes"] = prop["notes"]
-        if def_id in manifests:
-            expected = manifests[def_id]["aabb"]
-            declared = tuple(float(v) for v in prop["aabb"])
-            if max(abs(declared[i] - expected[i]) for i in range(3)) > 0.001:
-                print("WARN aabb %s: json %s vs manifest %s"
-                      % (item_id, declared, expected))
-        objects[item_id] = obj
-    return objects
+
+def update_structure_object(obj, structure):
+    update_box(obj, tuple(structure["center"]), tuple(structure["size"]),
+               tuple(structure["rotationQuat"]), _structure_color(structure))
+    tag_structure(obj, structure)
 
 
 def add_lights():
@@ -275,43 +368,241 @@ def add_lights():
     bpy.context.scene.world = world
 
 
-def new_camera(camera_doc):
+def new_camera(camera_doc, name=None):
     """A camera posed from ``cameras[]``; ``ortho_top`` is derived from target + 12 m."""
-    data = bpy.data.cameras.new("CAM_" + camera_doc["id"])
-    obj = bpy.data.objects.new("CAM_" + camera_doc["id"], data)
+    name = name or ("CAM_" + camera_doc["id"])
+    data = bpy.data.cameras.new(name)
+    obj = bpy.data.objects.new(name, data)
     bpy.context.scene.collection.objects.link(obj)
+    update_camera_object(obj, camera_doc)
+    return obj
+
+
+def update_camera_object(obj, camera_doc):
+    """Apply one ``cameras[]`` entry to an existing camera object (type may change)."""
+    data = obj.data
     if camera_doc.get("type") == "ortho_top":
         data.type = "ORTHO"
         data.ortho_scale = float(camera_doc.get("coverage_m", 10.0))
         target = camera_doc["target"]
-        obj.location = Vector(core.unity_to_blender_position(
-            (target[0], float(camera_doc.get("height_m", 12.0)), target[2])))
+        # The authored ``location`` is the pose; ``height_m`` is only the fallback for a
+        # camera dict that has none.  The old code always used height (default 12 m),
+        # which made a JSON -> scene -> JSON round trip rewrite story_01's top camera
+        # from y=14 to y=12 (measured; the picture is identical because an ortho camera
+        # frames by ``ortho_scale``, but the data was silently lost).
+        location = camera_doc.get("location")
+        height = float(location[1]) if location else float(camera_doc.get("height_m", 12.0))
+        x = float(location[0]) if location else float(target[0])
+        z = float(location[2]) if location else float(target[2])
+        obj.location = Vector(core.unity_to_blender_position((x, height, z)))
         obj.rotation_euler = (0.0, 0.0, 0.0)
         obj["cam_type"] = "ortho_top"
         obj["cam_coverage_m"] = float(camera_doc.get("coverage_m", 10.0))
-    else:
-        location = Vector(core.unity_to_blender_position(tuple(camera_doc["location"])))
-        target = Vector(core.unity_to_blender_position(tuple(camera_doc["target"])))
-        data.lens = float(camera_doc.get("lens", 45.0))
-        obj.location = location
-        obj.rotation_euler = (target - location).to_track_quat("-Z", "Y").to_euler()
-        obj["cam_type"] = "perspective"
-        obj["cam_lens"] = float(camera_doc.get("lens", 45.0))
-        obj["cam_target"] = list(camera_doc["target"])
-    return obj
+        obj["cam_height_m"] = height
+        if "cam_target" in obj.keys():
+            del obj["cam_target"]
+        if "cam_lens" in obj.keys():
+            del obj["cam_lens"]
+        return
+    data.type = "PERSP"
+    location = Vector(core.unity_to_blender_position(tuple(camera_doc["location"])))
+    target = Vector(core.unity_to_blender_position(tuple(camera_doc["target"])))
+    data.lens = float(camera_doc.get("lens", 45.0))
+    obj.location = location
+    obj.rotation_euler = (target - location).to_track_quat("-Z", "Y").to_euler()
+    obj["cam_type"] = "perspective"
+    obj["cam_lens"] = float(camera_doc.get("lens", 45.0))
+    obj["cam_target"] = list(camera_doc["target"])
+    if "cam_coverage_m" in obj.keys():
+        del obj["cam_coverage_m"]
+
+
+# --------------------------------------------------------------------------- #
+# the scene as a projection of the document
+# --------------------------------------------------------------------------- #
+class LevelScene:
+    """The level's objects in the current Blender scene, keyed like the JSON.
+
+    ``sync(doc, previous)`` is the whole of "make the scene match the document": it
+    diffs the two documents and creates, updates or deletes the objects that differ.
+    A first build passes ``previous=None`` (everything is new); the resident editor
+    passes the document before the edit, so moving one prop touches one object.
+    """
+
+    def __init__(self, exports_dir=None, with_lights=True):
+        self.exports_dir = Path(exports_dir) if exports_dir else Path(core.PROPS_EXPORTS_DIR)
+        self.manifests = core.load_manifests(self.exports_dir)
+        self.library = {}
+        self.props = {}
+        self.structures = {}
+        self.cameras = {}
+        self.with_lights = with_lights
+        self.lights_added = False
+
+    # -- library -------------------------------------------------------- #
+    def ensure_library(self, def_ids):
+        """Import only the defs that are not loaded yet; returns the library map."""
+        missing = sorted(set(def_ids) - set(self.library))
+        if missing:
+            try:
+                self.library.update(load_library(missing, self.exports_dir))
+            except SystemExit as error:                  # load_library's own refusal
+                raise RuntimeError(str(error))
+        return self.library
+
+    # -- lifecycle ------------------------------------------------------ #
+    def reset(self):
+        """Remove every object this scene owns; the library and lights stay."""
+        for table in (self.props, self.structures, self.cameras):
+            for obj in list(table.values()):
+                if obj is not None:
+                    try:
+                        remove_object(obj)
+                    except ReferenceError:
+                        pass
+            table.clear()
+
+    def _object_count(self):
+        return {"props": len(self.props), "structures": len(self.structures),
+                "cameras": len(self.cameras), "library": len(self.library)}
+
+    # -- the diff ------------------------------------------------------- #
+    def sync(self, doc, previous=None):
+        previous = previous or {}
+        counts = {kind: {"added": 0, "updated": 0, "removed": 0}
+                  for kind in ("props", "structures", "cameras")}
+        desired_props = {prop["itemId"]: prop for prop in doc.get("props") or []
+                         if isinstance(prop, dict) and prop.get("itemId")}
+        before_props = {prop.get("itemId"): prop for prop in previous.get("props") or []
+                        if isinstance(prop, dict)}
+        self.ensure_library(prop["def"] for prop in desired_props.values()
+                            if prop.get("def"))
+
+        for item_id in sorted(set(self.props) - set(desired_props)):
+            remove_object(self.props.pop(item_id))
+            counts["props"]["removed"] += 1
+        for item_id, prop in desired_props.items():
+            obj = self.props.get(item_id)
+            old = before_props.get(item_id)
+            if obj is not None and old is not None and old.get("def") != prop.get("def"):
+                remove_object(obj)
+                self.props.pop(item_id)
+                obj = None
+            if obj is None:
+                self.props[item_id] = new_prop_object(prop, self.library)
+                self._warn_aabb(prop)
+                counts["props"]["added"] += 1
+            elif old != prop:
+                update_prop_object(obj, prop, self.library)
+                counts["props"]["updated"] += 1
+
+        desired_structures = {structure["id"]: structure
+                              for structure in doc.get("structures") or []
+                              if isinstance(structure, dict) and structure.get("id")}
+        before_structures = {structure.get("id"): structure
+                             for structure in previous.get("structures") or []
+                             if isinstance(structure, dict)}
+        for structure_id in sorted(set(self.structures) - set(desired_structures)):
+            remove_object(self.structures.pop(structure_id))
+            counts["structures"]["removed"] += 1
+        for structure_id, structure in desired_structures.items():
+            obj = self.structures.get(structure_id)
+            if obj is None:
+                self.structures[structure_id] = new_structure_object(structure)
+                counts["structures"]["added"] += 1
+            elif before_structures.get(structure_id) != structure:
+                update_structure_object(obj, structure)
+                counts["structures"]["updated"] += 1
+
+        desired_cameras = {camera["id"]: camera for camera in doc.get("cameras") or []
+                           if isinstance(camera, dict) and camera.get("id")}
+        before_cameras = {camera.get("id"): camera
+                          for camera in previous.get("cameras") or []
+                          if isinstance(camera, dict)}
+        for camera_id in sorted(set(self.cameras) - set(desired_cameras)):
+            remove_object(self.cameras.pop(camera_id))
+            counts["cameras"]["removed"] += 1
+        for camera_id, camera in desired_cameras.items():
+            obj = self.cameras.get(camera_id)
+            wanted_type = camera.get("type", "perspective")
+            if obj is not None and obj.get("cam_type") != wanted_type:
+                remove_object(obj)
+                self.cameras.pop(camera_id)
+                obj = None
+            if obj is None:
+                self.cameras[camera_id] = new_camera(camera)
+                counts["cameras"]["added"] += 1
+            elif before_cameras.get(camera_id) != camera:
+                update_camera_object(obj, camera)
+                counts["cameras"]["updated"] += 1
+
+        if self.with_lights and not self.lights_added:
+            add_lights()
+            self.lights_added = True
+        bpy.context.view_layer.update()
+        return counts
+
+    def _warn_aabb(self, prop):
+        """The old one-shot builder warned here; keep that second pair of eyes."""
+        manifest = self.manifests.get(prop.get("def"))
+        if not manifest:
+            return
+        try:
+            declared = tuple(float(v) for v in prop.get("aabb") or ())
+        except (TypeError, ValueError):
+            return
+        if len(declared) != 3:
+            return
+        if max(abs(declared[i] - manifest["aabb"][i]) for i in range(3)) > 0.001:
+            print("WARN aabb %s: json %s vs manifest %s"
+                  % (prop.get("itemId"), declared, manifest["aabb"]), flush=True)
+
+    # -- render --------------------------------------------------------- #
+    def render(self, spec, doc):
+        """Render one frame; an inline (non-preset) camera is temporary."""
+        res = [int(v) for v in (spec.get("res") or [1280, 720])]
+        camera_doc = spec["camera"]
+        temporary = None
+        if spec.get("preset") is None:
+            temporary = new_camera(camera_doc, name="CAM_adhoc")
+            camera = temporary
+        else:
+            camera = self.cameras.get(camera_doc.get("id"))
+            if camera is None:
+                camera = new_camera(camera_doc)
+                temporary = camera
+        try:
+            engine_id, seconds = render_frame(
+                bpy.context.scene, camera, spec["path"],
+                spec.get("engine") or "WORKBENCH", res, int(spec.get("samples") or 0))
+        finally:
+            if temporary is not None:
+                remove_object(temporary)
+        return {"path": str(spec["path"]), "engine_id": engine_id,
+                "seconds": seconds, "res": res}
+
+    # -- facts for `status` --------------------------------------------- #
+    def status(self):
+        engines = []
+        for logical in core.ENGINES:
+            engines.append(logical)
+        return {
+            "blender": bpy.app.version_string,
+            "scene": bpy.context.scene.name,
+            "objects": self._object_count(),
+            "renderEngine": bpy.context.scene.render.engine,
+            "engines": engines,
+            "manifests": len(self.manifests),
+        }
 
 
 def build_from_doc(doc, exports_dir=None, with_lights=True):
-    """Structures + props (+ cameras, lights) for a document; the whole scene build."""
-    defs = [prop["def"] for prop in doc.get("props") or []]
-    library = load_library(defs, exports_dir) if defs else {}
-    structures = build_structures(doc)
-    props = build_props(doc, library, exports_dir)
-    cameras = {camera["id"]: new_camera(camera) for camera in doc.get("cameras") or []}
-    if with_lights:
-        add_lights()
+    """Build the whole scene for a document (the one-shot scripts' entry point)."""
+    scene = LevelScene(exports_dir, with_lights=with_lights)
+    counts = scene.sync(doc)
     bpy.context.view_layer.update()
-    return {"library": library, "structures": structures, "props": props, "cameras": cameras}
+    return {"library": scene.library, "structures": scene.structures,
+            "props": scene.props, "cameras": scene.cameras, "counts": counts}
 
 
 # --------------------------------------------------------------------------- #
@@ -347,7 +638,7 @@ def scene_props(library_collections=None):
 
 
 def scene_structures():
-    """Objects tagged with a structure role (``build_structures`` sets ``role``)."""
+    """Objects tagged with a structure role (``tag_structure`` sets ``role``)."""
     found = [obj for obj in bpy.data.objects
              if obj.type == "MESH" and obj.get("role") in core.PROP_ROLES]
     return sorted(found, key=lambda obj: obj.name)
@@ -376,16 +667,40 @@ def seat_scene_props(structure_objects):
     props are seated in a second pass, on the top of the prop they name.
     Returns the list of itemIds it moved.
     """
+    # Quantise every input to the precision the JSON stores before doing the maths.
+    # The scene holds float32, so a structure top of 0.26 comes back as 0.26000002;
+    # a prop whose exact seat lands on a 4-decimal rounding boundary (story_01's
+    # bread_slice and grapes on the flower bed: top + h/2 = 0.26715) then rounds the
+    # other way and every ``--seat`` run would rewrite the file by 0.1 mm (measured).
+    # Feeding the maths the same numbers the file holds makes seating idempotent and
+    # agrees with ``editor_core.seat_props``, which reads the JSON.
+    def quantise(values, digits):
+        return tuple(core.rounded(value, digits) for value in values)
+
     poses = {}
     for structure_id, obj in structure_objects.items():
         position, quat = pose_of(obj)
-        poses[structure_id] = {"id": structure_id, "center": position,
-                               "size": structure_size_u(obj), "rotationQuat": quat}
+        poses[structure_id] = {
+            "id": structure_id,
+            "center": quantise(position, core.POSITION_DECIMALS),
+            "size": quantise(structure_size_u(obj), core.SIZE_DECIMALS),
+            "rotationQuat": quantise(quat, core.QUAT_DECIMALS)}
 
     def apply(obj, position, quat):
         obj.location = Vector(core.unity_to_blender_position(position))
         q = core.unity_to_blender_quat(quat)
         obj.rotation_quaternion = Quaternion((q[0], q[1], q[2], q[3]))
+
+    # The ground plane is a structure like any other (role=ground).  The JSON path
+    # (``editor_core.seat_props`` / ``levelbuild.py seat``) seats an unsupported prop on
+    # ``level.groundY``; the scene path used to skip those props entirely, so a displaced
+    # ground prop was never repaired by ``export_placement.py --seat`` (measured: an
+    # acorn 5 cm up came back unchanged).  Use the scene's own ground so both agree.
+    ground = None
+    for structure_id, obj in structure_objects.items():
+        if obj.get("role") == "ground":
+            ground = poses.get(structure_id)
+            break
 
     moved = []
     props = scene_props()
@@ -394,18 +709,29 @@ def seat_scene_props(structure_objects):
         position, quat = pose_of(obj)
         size = prop_size_u(obj)
         if size is not None:
-            boxes[obj.name] = core.world_aabb(position, size, quat)
+            boxes[obj.name] = core.world_aabb(
+                quantise(position, core.POSITION_DECIMALS),
+                quantise(size, core.SIZE_DECIMALS),
+                quantise(quat, core.QUAT_DECIMALS))
     for obj in props:
         if "stacked_on" in obj.keys():
             continue
         support = obj.get("support")
-        if not support or support not in poses:
+        if support and support in poses:
+            normal, point = core.structure_top_plane(poses[support])
+        elif ground is not None:
+            # role=ground is a plane *through the centre* (a solid slab would eat the box
+            # budget), exactly what placement_core.ground_plane / ground_level use.
+            normal, point = core.boundary_plane(ground)
+        else:
             continue
         position, quat = pose_of(obj)
+        position = quantise(position, core.POSITION_DECIMALS)
+        quat = quantise(quat, core.QUAT_DECIMALS)
         size = prop_size_u(obj)
         if size is None:
             continue
-        normal, point = core.structure_top_plane(poses[support])
+        size = quantise(size, core.SIZE_DECIMALS)
         new_position, new_quat = core.reseat(position, size, quat, normal, point)
         if _same_pose(position, quat, new_position, new_quat):
             continue
@@ -418,9 +744,12 @@ def seat_scene_props(structure_objects):
         if not other or other not in boxes:
             continue
         position, quat = pose_of(obj)
+        position = quantise(position, core.POSITION_DECIMALS)
+        quat = quantise(quat, core.QUAT_DECIMALS)
         size = prop_size_u(obj)
         if size is None:
             continue
+        size = quantise(size, core.SIZE_DECIMALS)
         top = boxes[other][1][1]
         normal, point = (0.0, 1.0, 0.0), (0.0, top, 0.0)
         new_position, new_quat = core.reseat(position, size, quat, normal, point)
@@ -527,6 +856,47 @@ def configure_output(scene, res):
         scene.view_settings.view_transform = "Standard"
     except TypeError:
         pass
+
+
+def render_frame(scene, camera, out_path, engine, res, samples=0):
+    """Configure the scene for one engine/resolution and render one frame.
+
+    Shared by ``render_views.py`` (one-shot, whole level) and the resident editor's
+    ``render`` op, so "how a preset becomes a PNG" exists once.  Returns
+    ``(engine_id, seconds)``.
+    """
+    engine_id = select_engine(scene, engine)
+    configure_shading(scene, engine, samples)
+    configure_output(scene, res)
+    scene.camera = camera
+    fit_ortho_to_frame(camera, res)
+    target = Path(out_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    scene.render.filepath = str(target)
+    started = time.time()
+    bpy.ops.render.render(write_still=True)
+    elapsed = time.time() - started
+    if not target.is_file() or target.stat().st_size == 0:
+        raise RuntimeError("the render wrote no image to %s" % target)
+    return engine_id, round(elapsed, 2)
+
+
+def fit_ortho_to_frame(camera, res):
+    """Make ``coverage_m`` the extent guaranteed to be in frame on the *shorter* side.
+
+    Blender's ``ortho_scale`` is the extent along the sensor's longer side, so a 16:9
+    plan view of a square arena would silently crop the top and bottom (measured: a
+    13.4 m arena showed only 7.9 m of depth).  The camera data keeps the authored
+    coverage; the per-preset resolution decides the scale.  Reads the authored value
+    from the custom property, so rendering the same camera at two resolutions is
+    stable and not cumulative.
+    """
+    data = camera.data
+    if data.type != "ORTHO":
+        return
+    authored = float(camera.get("cam_coverage_m", data.ortho_scale))
+    aspect = float(res[0]) / float(res[1]) if res[1] else 1.0
+    data.ortho_scale = authored * max(1.0, aspect)
 
 
 def camera_for(doc, camera_id):

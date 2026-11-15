@@ -1,5 +1,6 @@
 using UdonSharp;
 using UnityEngine;
+using VRCKatamari.BallContact;
 using VRCKatamari.BallLayers;
 using VRCKatamari.BallMotor;
 using VRCKatamari.Core;
@@ -263,6 +264,31 @@ namespace VRCKatamari.Pickup
         private int supportLogCount;
         private bool loggedSupportSet;
 
+        // ---- Contact v2 prop solids (CONTACT_MODEL_V2 §4A.4/§5.2, stage S4b) ----
+        // One TRUE OBB per selected prop for the v2 contact solver. Built from
+        // propLocalBounds + the prop's world rotation, never from the double-rotated world
+        // AABB (RadialProxyLocalBoundsTests pins that bug). The set is refreshed on the same
+        // scan as the v1 blocking/support sets and from the SAME candidate flags, so a prop
+        // is a wall or a floor in both models and never two things at once. Unlike the v1
+        // sets it has its own stickiness memory and its own 12-slot capacity (6 + 6).
+        private bool[] propObbCandidate;
+        private int[] propObbPreviousIndices;
+        private int[] propObbSelectedIndices;
+        private float[] propObbSelectedDistances;
+        private Vector3[] propObbCenter;
+        private Vector3[] propObbAxisX;
+        private Vector3[] propObbAxisY;
+        private Vector3[] propObbAxisZ;
+        private Vector3[] propObbHalfExtents;
+        private int[] propObbSurfaceId;
+        private int[] propObbRole;
+        private int propObbCount;
+        private int propObbPreviousCount;
+        private int propObbCandidateCount;
+        private int propObbFallbackRows;
+        private int propObbOverflowCount;
+        private bool loggedPropObbUnsupported;
+
         // Attached count by kind, grown in place; capacity is the prop count.
         private string[] kindTallyNames;
         private int[] kindTallyCounts;
@@ -469,6 +495,7 @@ namespace VRCKatamari.Pickup
             supportAppliedCount = 0;
             supportCandidateCount = 0;
             previousSupportCount = 0;
+            ClearPropObbs();
             nextBlockingScanTime = 0f;
 
             attachedCount = 0;
@@ -668,6 +695,22 @@ namespace VRCKatamari.Pickup
             supportCapacity = 0;
             supportLogCount = 0;
             loggedSupportSet = false;
+            propObbCandidate = new bool[propCount];
+            propObbPreviousIndices = new int[PropObbBakeMath.PropObbCapacity];
+            propObbSelectedIndices = new int[PropObbBakeMath.PropObbCapacity];
+            propObbSelectedDistances = new float[PropObbBakeMath.PropObbCapacity];
+            propObbCenter = new Vector3[PropObbBakeMath.PropObbCapacity];
+            propObbAxisX = new Vector3[PropObbBakeMath.PropObbCapacity];
+            propObbAxisY = new Vector3[PropObbBakeMath.PropObbCapacity];
+            propObbAxisZ = new Vector3[PropObbBakeMath.PropObbCapacity];
+            propObbHalfExtents = new Vector3[PropObbBakeMath.PropObbCapacity];
+            propObbSurfaceId = new int[PropObbBakeMath.PropObbCapacity];
+            propObbRole = new int[PropObbBakeMath.PropObbCapacity];
+            propObbCount = 0;
+            propObbPreviousCount = 0;
+            propObbCandidateCount = 0;
+            propObbFallbackRows = 0;
+            propObbOverflowCount = 0;
             kindTallyNames = new string[propCount];
             kindTallyCounts = new int[propCount];
             kindTallyCount = 0;
@@ -1322,6 +1365,12 @@ namespace VRCKatamari.Pickup
             // empty table). Registering nothing in that state keeps the host from carrying
             // a set nothing reads and makes the switch answer identical on both sides.
             bool supportRoleEnabled = motor.IsTerrainSupportEnabled();
+            // v2 has no step mask and derives support from the contact itself (§7.5.4), so a
+            // prop floor must keep its support role there even when the v1 terrain switch is
+            // off. The v1 sets are still filled exactly as before (the switch only demotes
+            // the role for THEM, and this host keeps them for a rollback to v1).
+            bool v2Solids = motor.IsContactModelV2();
+            bool propsCanBeFloors = supportRoleEnabled || v2Solids;
             if (!supportRoleEnabled)
             {
                 supportCapacityNow = 0;
@@ -1440,7 +1489,7 @@ namespace VRCKatamari.Pickup
                     stepLimit, alreadyAbove, out role)) continue;
                 if (role == SupportSurfaceMath.PropRoleSupport)
                 {
-                    if (supportRoleEnabled)
+                    if (propsCanBeFloors)
                     {
                         supportCandidate[i] = true;
                         supportCandidateCountNow = supportCandidateCountNow + 1;
@@ -1469,6 +1518,10 @@ namespace VRCKatamari.Pickup
             // batch and leaves the other set free to update, exactly as before P2.
             UpdateSupportSelection(center, radius, supportCapacityNow);
             UpdateBlockingSelection(center, radius, blockingCapacityNow, limit);
+            // The v2 solids are refreshed from the same scan, the same classifier and the
+            // same candidate flags: one predicate decides all four sets (v1 blocking, v1
+            // support, v2 blocking, v2 support), which is the property the design asks for.
+            RefreshPropObbs(center, radius);
         }
 
         /// <summary>Builds, validates and registers the support selection of this scan.</summary>
@@ -1596,6 +1649,157 @@ namespace VRCKatamari.Pickup
             }
         }
 
+        // ------------------------------------------------------------------
+        // Contact v2 prop solids (CONTACT_MODEL_V2 §4A.4/§5.2, S4b).
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Rebuilds the v2 prop solids from this scan's candidates: at most
+        /// <see cref="PropObbBakeMath.PropObbCapacity"/> true OBBs, nearest first.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// One predicate, four sets. The candidate flags are the ones
+        /// <see cref="UpdatePropObstacles"/> already computed with the absorb gate's own
+        /// volume limit (<see cref="PickupAbsorbMath.IsBeyondAbsorbVolumeLimit"/>) and the
+        /// motor's step limit, so a prop cannot be a wall in one model and a floor in the
+        /// other. The selection reuses <see cref="BlockingPropMath.SelectNearest"/> - the
+        /// same nearest-first plus stickiness rule the v1 sets use - over the merged
+        /// candidates, with its own 12-slot capacity (6 blocking + 6 support, one table,
+        /// because a prop is exactly one of the two per scan).
+        /// </para>
+        /// <para>
+        /// The box is the prop's own: <c>propLocalBounds</c> rotated once by the prop's world
+        /// rotation (<see cref="PropObbBakeMath.TryBakeProp"/>), not the world AABB rotated
+        /// again. A row without a usable local column falls back to the world AABB as an
+        /// axis-aligned box - bit-for-bit the v1 shape - and is counted so the fallback is
+        /// visible instead of silent.
+        /// </para>
+        /// <para>
+        /// While the motor reports v1 this does nothing and clears what it had: the v1 sets
+        /// are the whole story then, and a stale v2 set would be wrong the moment the flag
+        /// flips back.
+        /// </para>
+        /// </remarks>
+        private void RefreshPropObbs(Vector3 center, float radiusM)
+        {
+            if (motor == null) return;
+            if (propObbCandidate == null) return;
+            if (!motor.IsContactModelV2())
+            {
+                ClearPropObbs();
+                return;
+            }
+
+            int candidates = 0;
+            for (int i = 0; i < propCount; i++)
+            {
+                bool candidate = blockingCandidate[i] || supportCandidate[i];
+                propObbCandidate[i] = candidate;
+                if (candidate) candidates = candidates + 1;
+            }
+            propObbCandidateCount = candidates;
+            // More candidates than the table holds is the §5.4 failure mode: count it once per
+            // scan so it is visible, and let the nearest-first selection keep the nearest.
+            if (candidates > PropObbBakeMath.PropObbCapacity)
+                propObbOverflowCount = propObbOverflowCount + 1;
+
+            int written = BlockingPropMath.SelectNearest(center, radiusM, propMinima, propMaxima,
+                propObbCandidate, propCount, propObbPreviousIndices, propObbPreviousCount,
+                blockingStickinessM, propObbSelectedIndices, propObbSelectedDistances,
+                PropObbBakeMath.PropObbCapacity);
+            if (written < 0)
+            {
+                // A refused selection is a data error, not an empty world: keep the solids
+                // that are registered and say nothing per scan (the v1 selection does the same).
+                return;
+            }
+
+            int baked = 0;
+            int fallenBack = 0;
+            for (int i = 0; i < written; i++)
+            {
+                int index = propObbSelectedIndices[i];
+                if (index < 0 || index >= propCount) continue;
+                Transform prop = propTransforms[index];
+                if (prop == null) continue;
+                bool hasLocalRow = propLocalBounds != null && index < propLocalBounds.Length;
+                Vector3 localRow = hasLocalRow ? propLocalBounds[index] : Vector3.zero;
+                Vector3 axisX;
+                Vector3 axisY;
+                Vector3 axisZ;
+                Vector3 halfExtents;
+                int source = PropObbBakeMath.TryBakeProp(prop.position, prop.rotation, hasLocalRow,
+                    localRow, propBounds[index], out axisX, out axisY, out axisZ, out halfExtents);
+                if (source == PropObbBakeMath.SourceNone) continue;
+                if (source == PropObbBakeMath.SourceWorldAabb) fallenBack = fallenBack + 1;
+                propObbCenter[baked] = prop.position;
+                propObbAxisX[baked] = axisX;
+                propObbAxisY[baked] = axisY;
+                propObbAxisZ[baked] = axisZ;
+                propObbHalfExtents[baked] = halfExtents;
+                // The same surface-id space the v1 support table uses for props, so a test
+                // field probe naming id 100+i still names the same prop in both models.
+                propObbSurfaceId[baked] = SupportSurfaceMath.FirstPropSurfaceId + index;
+                propObbRole[baked] = supportCandidate[index]
+                    ? ContactCodes.RoleProp : ContactCodes.RoleBlocking;
+                baked = baked + 1;
+            }
+            propObbFallbackRows = fallenBack;
+            ApplyPropObbSet(baked);
+
+            // Swap rather than copy: SelectNearest needs last scan's order for stickiness.
+            int[] swap = propObbPreviousIndices;
+            propObbPreviousIndices = propObbSelectedIndices;
+            propObbSelectedIndices = swap;
+            propObbPreviousCount = written;
+        }
+
+        /// <summary>
+        /// The ONE seam where this host's v2 prop solids reach the motor.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The motor has no dynamic OBB table yet: <c>SetBlockingBoxes</c> and
+        /// <c>SetSupportProps</c> write the v1 sweep and support tables, and the v2 solver
+        /// reads neither (CONTACT_MODEL_V2 §7.5.5 item 9). With the flag on, therefore, these
+        /// solids are built and reported but not queried. The minimal motor-side request is
+        /// written up in §7.6; when it lands, its one call goes exactly here, with these
+        /// arrays and this count:
+        /// <code>
+        /// motor.SetPropObbs(propObbCenter, propObbAxisX, propObbAxisY, propObbAxisZ,
+        ///     propObbHalfExtents, propObbSurfaceId, propObbRole, count);
+        /// </code>
+        /// </para>
+        /// <para>
+        /// The one-shot warning is the fail-visible half: until that call exists, a v2 cell
+        /// with prop obstacles must be run with the flag off, and this line says so once per
+        /// field instead of leaving "props stopped blocking" to be noticed in a play test.
+        /// </para>
+        /// </remarks>
+        private void ApplyPropObbSet(int count)
+        {
+            propObbCount = count;
+            if (count <= 0) return;
+            if (loggedPropObbUnsupported) return;
+            loggedPropObbUnsupported = true;
+            Debug.LogWarning("[PickupFieldHost] contact v2 has no prop OBB table yet: "
+                + count + " nearby prop solid(s) were built and are neither blocking nor"
+                + " supporting. Run v2 cells without prop obstacles until the motor request"
+                + " in CONTACT_MODEL_V2 §7.6 lands.");
+        }
+
+        /// <summary>Forgets the v2 prop solids (v1 mode, a field reset, a dead set).</summary>
+        private void ClearPropObbs()
+        {
+            if (propObbCount == 0 && propObbPreviousCount == 0) return;
+            propObbCount = 0;
+            propObbPreviousCount = 0;
+            propObbCandidateCount = 0;
+            propObbFallbackRows = 0;
+            ApplyPropObbSet(0);
+        }
+
         // Drops both motor sets and this host's memory of them. Used where a set cannot be
         // right any more, never as a failure response.
         private void ClearPropSets()
@@ -1612,6 +1816,7 @@ namespace VRCKatamari.Pickup
             supportAppliedCount = 0;
             supportCandidateCount = 0;
             previousSupportCount = 0;
+            ClearPropObbs();
         }
 
         // One warning per category, ever: a field with a bad capacity must not flood the
@@ -1657,6 +1862,34 @@ namespace VRCKatamari.Pickup
         public bool IsBlockingEnabled()
         {
             return !blockingDisabled;
+        }
+
+        /// <summary>
+        /// v2 prop solids this host built for the last scan (0..12). Populated only while the
+        /// motor reports contact v2; they are NOT registered yet - see
+        /// <see cref="ApplyPropObbSet"/> for the pending motor API.
+        /// </summary>
+        public int GetPropObbCount()
+        {
+            return propObbCount;
+        }
+
+        /// <summary>Props that were blocking or support candidates in the last scan (v2 view).</summary>
+        public int GetPropObbCandidateCount()
+        {
+            return propObbCandidateCount;
+        }
+
+        /// <summary>Built solids that had to use the world AABB instead of the local column.</summary>
+        public int GetPropObbFallbackRows()
+        {
+            return propObbFallbackRows;
+        }
+
+        /// <summary>Scans whose candidate set exceeded the 12-slot v2 table (visible, not dropped silently).</summary>
+        public int GetPropObbOverflowCount()
+        {
+            return propObbOverflowCount;
         }
 
         /// <summary>Support tops registered with the motor by the last scan (0..capacity).</summary>

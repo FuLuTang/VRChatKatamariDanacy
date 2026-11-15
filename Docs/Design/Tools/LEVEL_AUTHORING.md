@@ -507,10 +507,20 @@ boxes + 直线坡 + 弯坡段数 ≤ 256（motor 的静态 OBB 表，CONTACT_MOD
 |---|---|---|
 | `structures[role=ground]` | `groundNormal` / `groundOffset`（`SetGroundPlane`） | 恰好 1 条；**平面过 `center`**（`offset = dot(normal, center)`）；导入器另在该标记下生成子物体 `Visual`（地面板 + `BoxCollider`），顶面就是这张平面 |
 | `structures[role=boundary]` | `boundaryWalls[]`（`Transform`） | `LevelArenaHost` 读每面墙的**局部 +Z** 当法线、`dot(n, position)` 当 offset，所以导入器生成「空物体墙」**标记**：原点在碰撞面上、+Z 指向场内（不是 `planeNormals/planeOffsets` 数组）；每个标记下另有子物体 `Visual`（可见墙 + 玩家 `BoxCollider`），内表面就贴在这张平面上、向场外延伸一个厚度 |
-| `structures[role=box]` | `staticBoxes[]`（`BoxCollider`） | `Setup` 烘焙 min/max → `AddBox`，一次两用 |
-| `structures[role=ramp]` | `rampBoxes[]`（`BoxCollider`） | 导入器把 `role=ramp` 接进 `rampBoxes`；`Setup` 按盒的 +Y 面烘成行走面 → `motor.AddRamp`（坡度 ≤45° 含等号，超过带原因码拒绝）；**绝不进 `staticBoxes`**，斜面也不进扫掠（`TERRAIN_SUPPORT` §7.7 审计第 1 条） |
-| `structures[role=curve_ramp]` | `rampBoxes[]`（N 个 `BoxCollider`） | 父物体 `<id>` 只是标记（无 Renderer/无 Collider）；子物体 `<id>_00…` 每段一个 cube + `BoxCollider`，**逐段**进 `rampBoxes`（和直线坡同一个数组，host API 不变）。父物体**不进** `staticBoxes`，否则弯坡底下出一排隐形墙 |
+| `structures[role=box]` | `staticBoxes[]`（`BoxCollider`） | v1：`Setup` 烘焙 min/max → `AddBox`，一次两用。v2（电机 `IsContactModelV2()` 且 `useObbBake=true`）：8 角点烘成真 OBB → `AddObb`（表面 id 仍是 `1+i`），**不再**调 `AddBox`，同一条几何只登记一次（见下段） |
+| `structures[role=ramp]` | `rampBoxes[]`（`BoxCollider`） | 导入器把 `role=ramp` 接进 `rampBoxes`；v1：`Setup` 按盒的 +Y 面烘成行走面 → `motor.AddRamp`（坡度 ≤45° 含等号，超过带原因码拒绝）；v2：板本身就是一个 slab OBB（`axisY` = 行走面法线，表面 id `10+i`，role=1），**没有坡度门**（θ 连续处理，弯坡末段接近垂直也能登记）；**绝不进 `staticBoxes`**，斜面也不进扫掠（`TERRAIN_SUPPORT` §7.7 审计第 1 条） |
+| `structures[role=curve_ramp]` | `rampBoxes[]`（N 个 `BoxCollider`） | 父物体 `<id>` 只是标记（无 Renderer/无 Collider）；子物体 `<id>_00…` 每段一个 cube + `BoxCollider`，**逐段**进 `rampBoxes`（和直线坡同一个数组，host API 不变）。父物体**不进** `staticBoxes`，否则弯坡底下出一排隐形墙。v2 下每段同样走「ramp → slab OBB」，所以一条 8 段弧 = 8 个静态 OBB、8 个相邻表面 id（`10..17`），`ramps=` 这一项报的就是**段数** |
 | `props[]` 中 `absorbable=false` | **不进 arena**：`PickupFieldHost` 按 `rise vs stepLimit` 自己分成「地形/挡路」 | `LevelArenaHost` **不得**引用道具（§7.4 硬规则） |
+
+**arena 登记的三种模式（2026-11-15，S4b）**：`useObbBake`（默认 true）与电机的 `contactModelV2Enabled` 决定走哪条路，**一格几何只走一条**：
+
+| 模式 | arena 做的 | 电机 v2 表里是谁 |
+|---|---|---|
+| v2 + `useObbBake=true` | 每个 box/ramp/弯坡段：8 个世界角点 → `ObbBakeMath.TryBakeFromCorners` → `AddObb`（box `1+i`、slab `10+i`） | arena 自己登记的真 OBB |
+| v2 + `useObbBake=false` | 与 v1 完全相同：`AddBox`/`AddRamp`（**回滚路径**，§7.1） | 电机把这些镜像成轴对齐 OBB（S3） |
+| v1（电机 flag 关） | 与 v1 完全相同：`AddBox`/`AddRamp` | 电机镜像（v1 不读） |
+
+所以「静态 OBB 条数 = box 数 + ramp/弯坡段数」在三种模式下都成立，不会出现一条几何登记两次。v2 模式的 `[arena]` 行在原有字段**后面**追加 `obbs=成功/尝试 obbRefused=… obbOverflow=… obbBake=obb|mirror doubleBake=检查数/不一致数 [refusal=<码>:<文字>]`；前缀 `[arena] planes=… boxes=… ramps=…` 不变，仍是工具与文档引用的那个字符串。拒绝码：1 剪切（回退 bounds AABB）、2 退化、3 静态表 256 满、4 电机判非正交/非单位、5/6 坡烘焙或电机拒绝、7 同一条几何同时在两个数组、8 §7.4 双烘不一致（轴对齐几何，`Debug.LogError` 一次并用 AABB）。**容量满不是静默丢弃**：`CheckObbCapacity` 先报一条 error，逐条 `AddObb` 的拒绝再各自计数，`obbs=256/300` 这种读数就是证据。
 
 **`ground` / `boundary` 的可见体（2026-11-15 起由导入器生成）**：这两个角色以前只产标记，于是新场景「压根没放地板」——画面一片虚无，ClientSim 玩家站不住、掉下去、反复重生。现在标记保持原样（供 `LevelArenaHost` 读），标记下多一个 `Visual` 子物体：
 

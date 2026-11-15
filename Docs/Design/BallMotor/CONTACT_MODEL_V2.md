@@ -1301,6 +1301,8 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 | **S2（代码已写，未编译）** | C# 纯数学库 + EditMode | 实际落点（2026-11-15）：`Runtime/BallContact/` 的 `ContactTuning.cs`、`ContactCodes.cs`、`ObbContactMath.cs`、`ObbBakeMath.cs`、`ContactClassificationMath.cs`、`ClimbMath.cs`、`BallShapeMath.cs`、`ContactWindowMath.cs`、`ContactSolveMath.cs`、`CurveRampMath.cs`；`Tests/EditMode/BallContact/` 的 8 个测试类 | 中：数值与模型不一致 | 同一组 fixture 与 Python **逐位/1e-6 一致**；面/棱/角/内部、窗口、弯坡段几何。**代码已写但未编译、EditMode 未跑**（写它的机器没有 Unity） | 删文件（还没人调用） |
 | **S3（代码已写，未编译）** | 电机集成，**flag 默认 false** | `KatamariBallMotor.cs`：`contactModelV2Enabled`、`StepContactV2`/`FillNearWindow`/`WriteContactSupport`/`ApplyGrowthPushOut`/恢复状态机、`AddObb`/`ClearObbs`、新 getter；`StepPositionV1` 保留 v1 原语句；`RefreshStepMask`/`TrySweepSphere` 在 v2 分支跳过；`BallShapeMath.TryNeedleSegmentContact`（针尖段扫掠）+ `NeedleSegmentTests` + `ContactModelV2Tests`；接口与偏差见 §7.5 | **高**（最大的改动） | flag=false 时与今天**逐位相同**（同一场景同一 run 的 `[ptf]` 行对比；`StepPositionV1` 是原中段整体搬移，diff 已核对）；flag=true 时 C 矩阵 + W 格通过；`recovery == 0`。**本轮没有任何 Unity 编译/测试** | **flag 置 false**（v1 路径原样保留）；必要时 revert 一个 commit |
 | **S4** | 数据/导入器 | `LevelArenaHost.cs`（8 角点 OBB 烘、`AddObb`、ramp→slab、`ramps` 数组语义）、`PlacementImporter.cs`（`curve_ramp` 展开）、`placement_core.py`（45° error→warning + 弯坡校验）、`SupportSurfaceMath.cs`（降级为诊断） | 中：旧场景重烘 | 9 个小格的烘焙 OBB 表与旧 AABB **数值相同**（轴对齐）；`levelbuild check` 全绿；弯坡段数/矢高合规 | `LevelArenaHost.useObbBake=false`（回 AABB，v1/v2 都能跑）；弯坡条目 `expanded:false` 不展开 |
+| **S4a（已完成 b662b64）** | 关卡数据：`curve_ramp` 角色、45° 改为 warning、静态 OBB 总数预算 | `Tools/levelbuild/placement_core.py`、`Editor/LevelBuild/PlacementImporter.cs`（弧展开成 `<id>_00…` slab 子物体并逐段进 `rampBoxes`） | 中 | `python3 -m unittest discover -s Docs/tests` 全绿；`levelbuild check` 的 256 条与弦高预算；**Unity 未编译** | 弯坡条目 `expanded:false` 不展开 |
+| **S4b（代码已写，未编译）** | arena 与道具场接 v2：8 角点真 OBB 登记、§7.4 双烘自检、容量溢出原因码、道具 OBB 的宿主侧实现 | `Runtime/Story/LevelArenaHost.cs`、`Runtime/Pickup/PickupFieldHost.cs`、新增 `Runtime/BallContact/PropObbBakeMath.cs`、`Tests/EditMode/Story/LevelArenaHostObbTests.cs`、`Tests/EditMode/BallLayers/PropObbBakeTests.cs`、`Tests/EditMode/BallLayers/PickupFieldPropObbTests.cs`、本文 §7.6 | 中 | 三种模式的静态 OBB 条数 = box + ramp/弯坡段；轴对齐双烘一致；剪切回退带原因码；容量满可复现；**没有 Unity 编译/EditMode**；道具侧等电机动态 OBB API（§7.6 请求） | `LevelArenaHost.useObbBake=false`（回 AABB，AABB 与 v1/v2 都能跑）；道具侧只留 flag 关 |
 | **S5** | 新测试格 + 沙盒 + 证据 | `Labs/PhysicsTestField`（W/R/S/X 格）、`Labs/PhysicsSandbox`（地图 0）、`physics_test_field.json`、`Docs/Evidence/...` | 中：数据/场景工作量大 | v2 验收表全绿；沙盒能手动滚 | 删格；沙盒场景独立，不影响主场景 |
 
 **依赖**：S1 → S2 → S3；S4 可与 S3 并行（S3 的 flag=true 需要 S4 的 OBB 烘，或先用 `AddBox` 的轴对齐 OBB 做 Unit 测试）；S5 依赖 S3+S4。
@@ -1471,6 +1473,68 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 | **没跑** | Unity 编译、U# 全量编译、EditMode、Play Mode、profiler、任何手感/帧时间；**S3 的 C# 一行都没编译过** |
 
 操作者要跑的两组 EditMode：`VRCKatamari.Tests.NeedleSegmentTests`（纯数学，12 例）与 `VRCKatamari.Tests.ContactModelV2Tests`（电机级，10 例）；后者是设计期望值，若红，先看 `GetContactCount/GetSupportKind/GetRecoveryState` 三组读数再判是代码还是期望。
+
+### 7.6 S4b 实现与接口（2026-11-15）
+
+**状态：`代码已写，未编译`。** 本轮只碰了 S4b 的五处：`LevelArenaHost.cs`、`PickupFieldHost.cs`（只到「挡路/支撑道具」这一段）、新增的 `Runtime/BallContact/PropObbBakeMath.cs`、两个新 EditMode 测试类，以及 `LEVEL_AUTHORING.md` §7.6 的 arena 接线段。**没有**碰 `KatamariBallMotor.cs`、`Editor/LevelBuild/*`、`Tools/levelbuild/*`、测试场场景/数据。
+
+#### 7.6.1 一条几何只登记一次：三种模式
+
+`LevelArenaHost` 新增 `[SerializeField] private bool useObbBake = true;`，但**走哪条路**由电机的 flag 决定，按模式二选一（不是两条都跑）：
+
+| 模式 | arena 的登记 | 电机 v2 静态表里是谁 | 静态 OBB 条数 |
+|---|---|---|---|
+| v2（`IsContactModelV2()`）且 `useObbBake` | 每个 box/ramp/弯坡段：8 世界角点 → `ObbBakeMath.TryBakeFromCorners` → `AddObb`（box `1+i`、slab `10+i`，role 0/1） | arena 登记的真 OBB | box + ramp/段 |
+| v2 且 `!useObbBake` | 与 v1 相同：`AddBox`/`AddRamp`（§7.1 的回滚路径） | 电机镜像的轴对齐 OBB（S3 §7.5.3） | box + ramp/段 |
+| v1 | 与 v1 相同：`AddBox`/`AddRamp` | 电机镜像（v1 不读） | box + ramp/段 |
+
+**为什么不两种都调**：`AddBox`/`AddRamp` 自己就会 `RegisterBoxObb`/`RegisterRampSlab`（§7.5.3 第 3 条），所以在 v2 里再调一次 `AddObb` 会把同一条几何登记两遍（球会看到两层壳）。上面的三条路每一条都只写一次，EditMode 直接断言 `GetStaticObbCount() == 盒子数 + 坡/段数`。`useObbBake` 单独为 true 但电机仍是 v1 时**不**走 `AddObb`（那会让 v1 的扫掠表空掉、球掉下去），报告行写 `obbBake=mirror`。
+
+#### 7.6.2 8 角点、§7.4 双烘自检、剪切
+
+- **角点怎么算**：`position + M·(localCorner)`，`M` 由**逐层 `localRotation × localScale` 累乘**得到（`AccumulateWorldBasis`），不是 `rotation`/`lossyScale`。原因就是 §1.4 的那条：`lossyScale` **表达不了剪切**，用它等于把「父级旋转 + 非均匀缩放」悄悄吞掉，然后用一个作者没画过的盒子登记。累乘之后，剪切会自己冒出来——三个边向量不再正交，`TryBakeFromCorners` 按 §1.4 拒绝。也**没有**用 `Transform.TransformPoint`：本项目 Runtime 里没有任何一处用它，Udon 的绑定没验证过；累乘只用 `localRotation`/`localScale`/`parent`。
+- **§7.4 双烘自检**：只对**轴对齐**的盒子做（旋转盒的 bounds AABB 本来就比 OBB 大，比了会把每条斜板都判成错）。判据是「OBB 的世界 AABB」对 `Collider.bounds`，容差 `max(1e-6, 1e-6·(中心+半长之和))`（30 m 外的盒子 float ulp ≈ 2e-6，1e-6 的绝对容差会误报）。不一致：`Debug.LogError` **一次** + 用 bounds AABB，计 `doubleBake=<检查数>/<不一致数>`，原因码 8。这个自检按 §7.4 的原话「S4 验收后可以删」，现在留着，且成本只在 Setup 一次。
+- **剪切**：回退 bounds AABB + **一条** `Debug.LogWarning`（`[arena] shear …`），原因码 1；退化（零边/非有限）原因码 2。两者都不是静默：`refusal=<码>:<文字>` 在报告行末尾，`GetLastRefusalCode()` 给测试场读。
+
+#### 7.6.3 弯坡：段就是坡
+
+导入器（S4a）把一条弧展开成 `<id>_00…` 的 slab 子物体，**逐段进 `rampBoxes`**；arena 对 `rampBoxes` 的每一段走**同一条** ramp→slab 路径，所以：
+
+- 表面 id 是 `10 + 已登记段序号`（一条 8 段弧 = 10..17）。`SupportSurfaceMath.IsRampSurfaceId` 的上界仍是旧 `MaxRampCount=4` 的 `10..13`，v2 的弯坡会超出——那是**诊断读者**的旧假设，不是登记约束，留给 S5 一起改。
+- v2 **不套 45° 门**：θ 是连续处理的，弧末段接近垂直也能登记（这也是 `AddRamp` 在 v2 不被调用的原因之一：`AddRamp` 的坡度门和 4 条上限都不适用）。v1 照旧拒绝 >45° 的段。
+- `[arena] … ramps=<成功>/<数组长度>` 统计的是**段数**（`rampBoxes` 的条目数），所以一条弧在报告里就是它的段数；`obbs=` 再给一次总数。
+
+#### 7.6.4 容量与溢出
+
+静态容量就是 S3 的 256（`GetStaticObbCapacity()`）。`CheckObbCapacity()` 在登记前先数一遍（非空 `rampBoxes` + 非空且不在 `rampBoxes` 里的 `staticBoxes`），超了打**一条** `Debug.LogError`（带请求数与容量）；随后逐条 `AddObb` 的拒绝各自计数（`GetStaticObbOverflowCount()` 涨了就是容量拒绝 → 原因码 3，否则 4）。报告行给 `obbs=<成功>/<尝试> obbRefused=<n> obbOverflow=<n>`：**没有静默丢弃**，也没有「悄悄覆盖前一条」。`SuspendRegistration`/`ResumeRegistration`/`Reapply` 的「一次只登记一格」语义不变（`Reapply` 走的还是 `ClearObstacles → Setup`，`ClearObstacles` 现在连 v2 表一起清）。
+
+#### 7.6.5 道具：宿主侧已实现，缺一条电机 API
+
+`PickupFieldHost` 在每次扫描后（同一批候选标记、同一个「太贵不能吸」判据、同一条 `SelectNearest` 选择规则）再选一份**最多 12 条**的道具集合（6 挡路 + 6 支撑合成一张表），用 `PropObbBakeMath.TryBakeProp` 把 `propLocalBounds` 按道具世界旋转**转一次**建成真 OBB（缺列时退回 `propBounds` 的轴对齐盒，与 v1 逐位相同，并计 `GetPropObbFallbackRows()`）。这就是「径向代理双重旋转」那个 bug 在道具挡路侧的对应修法。
+
+**缺口（必须在报告里向电机主人要的）**：S3 没有任何动态 OBB 表——`SetBlockingBoxes`/`SetSupportProps` 只写 v1 数组，v2 求解器读不到它们。宿主侧的集成点已经收在**一个方法**里（`ApplyPropObbSet`），落地时只加一行：
+
+```csharp
+// KatamariBallMotor（请求，最小面）
+bool SetPropObbs(Vector3[] centers, Vector3[] axisX, Vector3[] axisY, Vector3[] axisZ,
+                 Vector3[] halfExtents, int[] surfaceIds, int[] roles, int count);   // 容量 12
+void ClearPropObbs();
+int  GetPropObbsCount();  int GetPropObbsOverflowCount();  int GetPropObbsRefusalCount();
+string GetPropObbsRefusalReason();
+```
+
+语义请求：与静态表同构；`FillNearWindow` 把两张表一起扫（同一 `R_in/R_out`、同一条 24 条上限，先静态后道具不行——应按距离混合）；`ClearObstacles` 清掉它；道具被吸收/移走由宿主每扫描期重发整批（宿主已经这样做了）。**在那之前**：v2 flag 打开且有道具障碍时，宿主打**一条** `[PickupFieldHost] contact v2 has no prop OBB table yet …` 警告，并保持 v1 两套表继续更新（回滚到 v1 时立刻自洽）。也就是说 §7.5.5 第 9 条的缺口**没有**被本轮填上，只是把它变成了「有读数、有警告、有一次性接入点」。
+
+#### 7.6.6 本轮跑了什么 / 没跑什么
+
+| 跑了 | 结果 |
+|---|---|
+| `python3 -m unittest discover -s Docs/tests` | 全绿（634 例；S4b 不改 Python 模型，所以没有新增 Python 例） |
+| `python3 Docs/tools/validate_plan.py` | PASS（61 tasks；两棵 DAG 无环；源哈希一致） |
+| 纯代码审查 + 括号/`out` 全路径人工核对（写它的机器没有 Unity） | 未编译 |
+| **没跑** | Unity 编译、U# 全量编译、EditMode、Play Mode、任何场景导入；道具侧因为没有电机 API，只能断言宿主自己的读数 |
+
+操作者要跑的三组 EditMode：`VRCKatamari.Tests.LevelArenaHostObbTests`（电机级，6 例）、`VRCKatamari.Tests.PropObbBakeTests`（纯数学，5 例）、`VRCKatamari.Tests.PickupFieldPropObbTests`（宿主级，2 例）。三组都要在有 S4b 的 .meta 之后跑（新文件是 `PropObbBakeMath.cs`、`LevelArenaHostObbTests.cs`、`PropObbBakeTests.cs`、`PickupFieldPropObbTests.cs`）。
 
 ---
 

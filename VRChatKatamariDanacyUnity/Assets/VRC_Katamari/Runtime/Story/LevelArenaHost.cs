@@ -1,5 +1,6 @@
 using UdonSharp;
 using UnityEngine;
+using VRCKatamari.BallContact;
 using VRCKatamari.BallLayers;
 using VRCKatamari.BallMotor;
 
@@ -56,6 +57,42 @@ namespace VRCKatamari.Story
     /// never calls <c>SetBlockingBoxes</c>; it only knows static scene geometry.
     /// </para>
     /// <para>
+    /// Contact model v2 (CONTACT_MODEL_V2 §1.4/§5.7/§7.4, stage S4b). When the motor
+    /// reports <c>IsContactModelV2()</c> and <see cref="useObbBake"/> is on, every static
+    /// box, straight ramp and curved-ramp slab segment is baked the same way: its eight
+    /// world corners are fitted into a true OBB (<see cref="ObbBakeMath.TryBakeFromCorners"/>)
+    /// and registered through <c>AddObb</c>. That is the ONLY registration that happens in
+    /// this mode - <c>AddBox</c>/<c>AddRamp</c> are not called for the same collider,
+    /// because the motor mirrors both of them into the same OBB table (S3 §7.5.3), and a
+    /// scene must never register one solid twice. In every other mode the pre-S4 calls are
+    /// used unchanged, and the motor's mirror is what puts the geometry in the v2 table.
+    /// </para>
+    /// <para>
+    /// Three modes, one path each (S4b decision):
+    /// <list type="bullet">
+    /// <item><description><b>v2 + useObbBake</b>: eight-corner OBB per collider, through
+    /// <c>AddObb</c>. Surface ids stay in the v1 space (box <c>1+i</c>, ramp
+    /// <c>10+i</c>), so a diagnostic reading an id still knows what it points at.</description></item>
+    /// <item><description><b>v2 + !useObbBake</b>: the rollback path - <c>AddBox</c>/<c>AddRamp</c>
+    /// only, and the motor's mirror supplies axis-aligned OBBs (§7.1).</description></item>
+    /// <item><description><b>v1</b>: <c>AddBox</c>/<c>AddRamp</c> only, exactly as before
+    /// S4b. The corner bake still runs when <see cref="useObbBake"/> is on, but only as the
+    /// §7.4 self-check; nothing is registered through it.</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// The bake is reached through the collider's transform (position, rotation, lossy
+    /// scale) rather than <c>Transform.TransformPoint</c>, which no runtime file in this
+    /// project uses and whose Udon binding is unverified: the corner is
+    /// <c>position + rotation * (localCorner * lossyScale)</c>, the same expression
+    /// <see cref="RegisterRamp"/> already uses for the box centre. The corner SET is the
+    /// design's; only the last multiply is spelled out. A parent that is rotated and
+    /// non-uniformly scaled makes that reconstruction differ from the true matrix, and the
+    /// difference is caught by comparing the OBB's world AABB with <c>Collider.bounds</c>
+    /// (a clean rotated box matches it exactly), which is the shear test: a sheared box is
+    /// refused with a reason code and the bounds AABB is registered instead (§1.4).
+    /// </para>
+    /// <para>
     /// Setup is deferred to the first <see cref="Update"/> with a positive semantic
     /// diameter: Unity does not promise that this component's Start runs after the
     /// motor's, and the motor allocates its stores in Start. A positive diameter is the
@@ -91,6 +128,42 @@ namespace VRCKatamari.Story
         [SerializeField] private bool autoBeginPlaying = true;
         [SerializeField] private bool logSetupLine = true;
 
+        [Header("Contact model v2 (true OBB bake)")]
+        // On (default): each static box/ramp/slab is baked from its eight world corners and
+        // registered through AddObb, but ONLY while the motor reports IsContactModelV2().
+        // Off: the pre-S4 calls (AddBox/AddRamp) are the registration in every mode, and the
+        // motor mirrors them into its axis-aligned OBB table - the design's rollback (§7.1).
+        // Switching it off never changes what a v1 motor sees, so the flag is safe to keep
+        // on in every committed scene.
+        [SerializeField] private bool useObbBake = true;
+
+        // ---- Arena refusal codes (reported as "refusal=<code>:<text>", one per setup) ----
+        // 0 is "accepted", so a caller that never sees a refusal reads 0.
+        private const int RefusalNone = 0;
+        // The eight corners exist but do not form an orthogonal box: a rotated,
+        // non-uniformly scaled parent sheared it. The bounds AABB is registered instead (§1.4).
+        private const int RefusalShear = 1;
+        // The corner fit or the bounds fallback was unusable (non-finite, degenerate).
+        private const int RefusalDegenerate = 2;
+        // The motor's v2 static table (256) is full: refused, counted, never silently dropped.
+        private const int RefusalObbCapacity = 3;
+        // The motor refused the box as not finite/unit/orthogonal.
+        private const int RefusalObbInvalid = 4;
+        // SupportSurfaceMath refused the ramp (the v1 path's gate).
+        private const int RefusalRampBake = 5;
+        // The motor refused the ramp (capacity 4 or the slope guard) on the v1 path.
+        private const int RefusalRampRefused = 6;
+        // The collider is listed in BOTH staticBoxes and rampBoxes: the box registration is
+        // skipped so the ramp foot has no invisible wall (§5.5).
+        private const int RefusalDoubleListed = 7;
+        // The eight-corner OBB and the bounds AABB disagree for axis-aligned geometry
+        // (§7.4): the AABB is used and this is logged once as an error.
+        private const int RefusalDoubleBake = 8;
+
+        // §7.4's agreement tolerance for axis-aligned geometry, plus a scale term so a box
+        // 30 m from the origin (float ulp ~2e-6) is not called a mismatch.
+        private const float DoubleBakeToleranceM = 1e-6f;
+
         private bool ready;
         private bool registrationSuspended;
         private bool beganPlaying;
@@ -101,6 +174,22 @@ namespace VRCKatamari.Story
         private int refusedCount;
         private string lastRampRefusal = "";
         private string setupReport = "";
+
+        // ---- Contact v2 bake state (reset on every Setup, reported once) ----
+        // Eight world corners of the collider being baked; allocated once, reused.
+        private Vector3[] bakeCorners;
+        private bool obbPathActive;
+        private int obbAttemptCount;
+        private int registeredObbCount;
+        private int obbRefusedCount;
+        private int obbOverflowCount;
+        private int lastRefusalCode;
+        private string lastRefusalReason = "";
+        private int doubleBakeCheckedCount;
+        private int doubleBakeMismatchCount;
+        private bool loggedDoubleBakeError;
+        private bool loggedShear;
+        private bool loggedObbCapacity;
 
         public void Update()
         {
@@ -139,6 +228,21 @@ namespace VRCKatamari.Story
             registeredRampCount = 0;
             refusedCount = 0;
             lastRampRefusal = "";
+            obbAttemptCount = 0;
+            registeredObbCount = 0;
+            obbRefusedCount = 0;
+            obbOverflowCount = 0;
+            lastRefusalCode = RefusalNone;
+            lastRefusalReason = "";
+            doubleBakeCheckedCount = 0;
+            doubleBakeMismatchCount = 0;
+            if (bakeCorners == null) bakeCorners = new Vector3[ObbBakeMath.CornerCount];
+            // One path per mode: the true-OBB bake is chosen only when the motor's v2 solver
+            // owns the position (the OBB table is the geometry it reads). With a v1 motor the
+            // v1 calls are the registration, because AddObb alone would leave the sweep empty
+            // and the ball would fall through the floor.
+            obbPathActive = useObbBake && motor.IsContactModelV2();
+            if (obbPathActive) CheckObbCapacity();
 
             groundRegistered = motor.SetGroundPlane(groundNormal, groundOffset);
             if (!groundRegistered) refusedCount = refusedCount + 1;
@@ -187,12 +291,20 @@ namespace VRCKatamari.Story
                         Debug.LogError("[arena] '" + box.gameObject.name + "' is in both staticBoxes and "
                             + "rampBoxes; the box registration is skipped so the ramp foot has "
                             + "no invisible wall (keep it out of staticBoxes)");
+                        NoteRefusal(RefusalDoubleListed, box.gameObject.name + " in both arrays");
                         refusedCount = refusedCount + 1;
+                        continue;
+                    }
+                    if (obbPathActive)
+                    {
+                        if (RegisterBoxObb(box)) registeredBoxCount = registeredBoxCount + 1;
+                        else refusedCount = refusedCount + 1;
                         continue;
                     }
                     // The only Collider read in this component's lifetime. A rotated box
                     // bakes to its enclosing world AABB (a documented P1 limitation); the
-                    // motor only ever sees min/max.
+                    // motor only ever sees min/max. With the v2 flag on, the motor mirrors
+                    // this box into its OBB table, so the two paths never both register it.
                     Bounds bounds = box.bounds;
                     if (motor.AddBox(bounds.min, bounds.max)) registeredBoxCount = registeredBoxCount + 1;
                     else refusedCount = refusedCount + 1;
@@ -219,6 +331,19 @@ namespace VRCKatamari.Story
                 + " refused=" + refusedCount
                 + " kinds=" + kindCount;
             if (lastRampRefusal.Length > 0) setupReport = setupReport + " rampRefusal=" + lastRampRefusal;
+            // Appended AFTER the fields the tools and docs already parse, so every existing
+            // "[arena] planes=… boxes=… ramps=…" prefix stays a valid substring.
+            setupReport = setupReport
+                + " obbs=" + registeredObbCount + "/" + obbAttemptCount
+                + " obbRefused=" + obbRefusedCount
+                + " obbOverflow=" + obbOverflowCount
+                + " obbBake=" + (obbPathActive ? "obb" : "mirror")
+                + " doubleBake=" + doubleBakeCheckedCount + "/" + doubleBakeMismatchCount;
+            if (lastRefusalCode != RefusalNone)
+            {
+                setupReport = setupReport + " refusal=" + lastRefusalCode + ":"
+                    + lastRefusalReason;
+            }
 
             if (!logSetupLine) return;
             if (refusedCount > 0) Debug.LogError(setupReport);
@@ -317,6 +442,69 @@ namespace VRCKatamari.Story
         }
 
         /// <summary>
+        /// True when this setup registered true OBBs through <c>AddObb</c> (v2 motor + the
+        /// serialized <c>useObbBake</c>). False means the motor's own mirror of
+        /// <c>AddBox</c>/<c>AddRamp</c> is what populated its v2 table.
+        /// </summary>
+        public bool IsObbBakeActive()
+        {
+            return obbPathActive;
+        }
+
+        /// <summary>Static OBBs the motor accepted this setup (0 outside the v2 OBB path).</summary>
+        public int GetRegisteredObbCount()
+        {
+            return registeredObbCount;
+        }
+
+        /// <summary>Static OBBs this setup tried to register (0 outside the v2 OBB path).</summary>
+        public int GetObbAttemptCount()
+        {
+            return obbAttemptCount;
+        }
+
+        /// <summary>Static OBB registrations the motor refused this setup.</summary>
+        public int GetObbRefusalCount()
+        {
+            return obbRefusedCount;
+        }
+
+        /// <summary>Refusals caused by the motor's 256-solid capacity this setup.</summary>
+        public int GetObbOverflowCount()
+        {
+            return obbOverflowCount;
+        }
+
+        /// <summary>
+        /// The last refusal code of this setup (0 = none): 1 shear, 2 degenerate, 3 OBB
+        /// capacity, 4 OBB refused, 5 ramp bake, 6 ramp refused, 7 listed twice, 8 double-bake
+        /// mismatch.
+        /// </summary>
+        public int GetLastRefusalCode()
+        {
+            return lastRefusalCode;
+        }
+
+        /// <summary>The last refusal as a literal (the object name plus what was wrong).</summary>
+        public string GetLastRefusalReason()
+        {
+            if (lastRefusalReason == null) return "";
+            return lastRefusalReason;
+        }
+
+        /// <summary>Axis-aligned colliders the §7.4 double-bake check compared this setup.</summary>
+        public int GetDoubleBakeCheckCount()
+        {
+            return doubleBakeCheckedCount;
+        }
+
+        /// <summary>Comparisons the §7.4 check failed (0 is the only healthy value).</summary>
+        public int GetDoubleBakeMismatchCount()
+        {
+            return doubleBakeMismatchCount;
+        }
+
+        /// <summary>
         /// Bakes one ramp collider through <see cref="SupportSurfaceMath.TryBakeRamp"/>
         /// and registers it with the motor.
         /// </summary>
@@ -332,6 +520,11 @@ namespace VRCKatamari.Story
         /// </remarks>
         private bool RegisterRamp(BoxCollider box)
         {
+            // v2: the slab is the collider's own eight-corner OBB, registered with the ramp
+            // surface id. The v1 slope guard is NOT applied here (design §1.5: v2 classifies
+            // a normal continuously, and a curved ramp's last segment is nearly vertical).
+            if (obbPathActive) return RegisterRampObb(box);
+
             Transform owner = box.transform;
             Vector3 normal = owner.rotation * new Vector3(0f, 1f, 0f);
             Vector3 right = owner.rotation * new Vector3(1f, 0f, 0f);
@@ -357,14 +550,450 @@ namespace VRCKatamari.Story
                 lastRampRefusal = box.gameObject.name + ": "
                     + SupportSurfaceMath.RampRefusalReason(refusalCode)
                     + " (slope " + slopeDegrees + " deg)";
+                NoteRefusal(RefusalRampBake, box.gameObject.name + ": "
+                    + SupportSurfaceMath.RampRefusalReason(refusalCode));
                 return false;
             }
             if (!motor.AddRamp(walkingCenter, rampNormal, rampRight, halfWidth, halfRun))
             {
                 lastRampRefusal = box.gameObject.name + ": " + motor.GetLastRampRefusalReason();
+                NoteRefusal(RefusalRampRefused, box.gameObject.name + ": "
+                    + motor.GetLastRampRefusalReason());
                 return false;
             }
             return true;
+        }
+
+        // ------------------------------------------------------------------
+        // Contact v2 static OBB bake (design §1.4/§1.5/§5.7/§7.4).
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Registers one static box as a true OBB under the v1 box surface id (<c>1 + i</c>).
+        /// </summary>
+        private bool RegisterBoxObb(BoxCollider box)
+        {
+            Vector3 center;
+            Vector3 axisX;
+            Vector3 axisY;
+            Vector3 axisZ;
+            Vector3 halfExtents;
+            int refusalCode;
+            bool usable = TryBakeSolidObb(box, out center, out axisX, out axisY, out axisZ,
+                out halfExtents, out refusalCode);
+            // A bake refusal can still produce a usable box (the shear/mismatch fallback), so
+            // the code is recorded before the early return: the report must name the fallback
+            // even when the geometry did register.
+            if (refusalCode != RefusalNone)
+            {
+                NoteRefusal(refusalCode, box.gameObject.name + " " + DescribeBake(refusalCode));
+            }
+            if (!usable) return false;
+            // The surface id is the v1 support-table id of the same box (boxCount order),
+            // so a diagnostic that prints an id still names the same geometry in both models.
+            return AddSolidObb(center, axisX, axisY, axisZ, halfExtents,
+                1 + registeredBoxCount, ContactCodes.RoleBox, box.gameObject.name);
+        }
+
+        /// <summary>
+        /// Registers one ramp (or one curved-ramp slab segment) as a solid slab OBB under the
+        /// v1 ramp surface id (<c>10 + i</c>).
+        /// </summary>
+        /// <remarks>
+        /// The collider IS the board: its local +Y is the walking-face normal and its top
+        /// face lies on the authored walking line (the importer builds both a straight ramp
+        /// and every curve segment that way), so the eight-corner fit yields exactly the slab
+        /// the motor's own <c>RegisterRampSlab</c> would, without needing the motor's
+        /// serialized board thickness. A curve's segments arrive here as ordinary
+        /// <see cref="rampBoxes"/> entries - one logical ramp, N slabs (§5.7) - so nothing in
+        /// this component needs to know that arcs exist.
+        /// </remarks>
+        private bool RegisterRampObb(BoxCollider box)
+        {
+            Vector3 center;
+            Vector3 axisX;
+            Vector3 axisY;
+            Vector3 axisZ;
+            Vector3 halfExtents;
+            int refusalCode;
+            bool usable = TryBakeSolidObb(box, out center, out axisX, out axisY, out axisZ,
+                out halfExtents, out refusalCode);
+            if (refusalCode != RefusalNone)
+            {
+                NoteRefusal(refusalCode, box.gameObject.name + " " + DescribeBake(refusalCode));
+                // The ramp report keeps its own slot so an operator looking at a curved ramp
+                // sees which segment fell back (the box path has no equivalent line).
+                lastRampRefusal = box.gameObject.name + ": " + DescribeBake(refusalCode);
+            }
+            if (!usable) return false;
+            return AddSolidObb(center, axisX, axisY, axisZ, halfExtents,
+                SupportSurfaceMath.FirstRampSurfaceId + registeredRampCount,
+                ContactCodes.RoleSlab, box.gameObject.name);
+        }
+
+        /// <summary>
+        /// Bakes a collider's eight world corners into an OBB, with the §7.4 double-bake
+        /// check and the §1.4 shear refusal.
+        /// </summary>
+        /// <returns>
+        /// True with an orthogonal box (the fit, or the bounds AABB after a refusal);
+        /// false only when neither the corners nor the bounds give a usable box.
+        /// </returns>
+        /// <remarks>
+        /// The corner set is the design's: the collider's local centre plus/minus half its
+        /// size, mapped through the collider's full world matrix. That matrix is accumulated
+        /// from every level's <c>localRotation * localScale</c> instead of being read from
+        /// <c>lossyScale</c> and <c>rotation</c>, because those two properties CANNOT express
+        /// a sheared parent (a rotated parent with a non-uniform scale) - they would silently
+        /// return an orthogonal box the author never drew. With the product, shear shows up
+        /// exactly where §1.4 says it does: the three edge vectors are no longer orthogonal,
+        /// and <see cref="ObbBakeMath.TryBakeFromCorners"/> refuses the box.
+        /// </remarks>
+        private bool TryBakeSolidObb(BoxCollider box, out Vector3 center, out Vector3 axisX,
+            out Vector3 axisY, out Vector3 axisZ, out Vector3 halfExtents, out int refusalCode)
+        {
+            center = Vector3.zero;
+            axisX = Vector3.zero;
+            axisY = Vector3.zero;
+            axisZ = Vector3.zero;
+            halfExtents = Vector3.zero;
+            refusalCode = RefusalNone;
+            if (bakeCorners == null) bakeCorners = new Vector3[ObbBakeMath.CornerCount];
+
+            FillCorners(box);
+            if (!ObbBakeMath.TryBakeFromCorners(bakeCorners, out center, out axisX, out axisY,
+                out axisZ, out halfExtents))
+            {
+                refusalCode = ClassifyBakeFailure();
+                if (refusalCode == RefusalShear && !loggedShear)
+                {
+                    loggedShear = true;
+                    Debug.LogWarning("[arena] shear on '" + box.gameObject.name
+                        + "': its eight corners are not an orthogonal box (a rotated parent "
+                        + "with a non-uniform scale?); registering the bounds AABB "
+                        + "(design §1.4)");
+                }
+                Bounds shearBounds = box.bounds;
+                return TryBakeBoundsFallback(shearBounds.center, shearBounds.size, out center,
+                    out axisX, out axisY, out axisZ, out halfExtents);
+            }
+
+            // Only axis-aligned geometry gets the §7.4 comparison: a rotated box's world AABB
+            // is legitimately larger than its OBB, so comparing them would call every tilted
+            // board a mismatch.
+            if (!IsWorldAxisAligned(axisX, axisY, axisZ)) return true;
+            doubleBakeCheckedCount = doubleBakeCheckedCount + 1;
+            Bounds bounds = box.bounds;
+            if (ObbWorldAabbAgrees(center, axisX, axisY, axisZ, halfExtents, bounds.center,
+                bounds.extents, DoubleBakeTolerance(center, halfExtents))) return true;
+
+            // §7.4: for axis-aligned geometry the two bakes must agree. A disagreement is a
+            // defect in one of them, so it is an error, logged once, and the AABB wins (it is
+            // the shape the v1 scenes were validated against).
+            doubleBakeMismatchCount = doubleBakeMismatchCount + 1;
+            refusalCode = RefusalDoubleBake;
+            if (!loggedDoubleBakeError)
+            {
+                loggedDoubleBakeError = true;
+                Debug.LogError("[arena] double bake mismatch on '" + box.gameObject.name
+                    + "': the eight-corner OBB and the bounds AABB disagree; registering the "
+                    + "bounds AABB (design §7.4)");
+            }
+            return TryBakeBoundsFallback(bounds.center, bounds.size, out center, out axisX,
+                out axisY, out axisZ, out halfExtents);
+        }
+
+        /// <summary>
+        /// Writes the collider's eight world corners in the bit order
+        /// <see cref="ObbBakeMath.TryBakeFromCorners"/> documents: bit 0 is +local X, bit 1
+        /// +local Y, bit 2 +local Z.
+        /// </summary>
+        /// <remarks>
+        /// The basis is accumulated bottom-up (<c>L_parent * L_child * ...</c>) so every
+        /// level's rotation and scale is applied, including the shear a rotated parent with a
+        /// non-uniform scale introduces. See <see cref="TryBakeSolidObb"/> for why
+        /// <c>lossyScale</c> is not used.
+        /// </remarks>
+        private void FillCorners(BoxCollider box)
+        {
+            Transform owner = box.transform;
+            Vector3 position = owner.position;
+            Vector3 localCenter = box.center;
+            Vector3 localSize = box.size;
+            float halfX = localSize.x * 0.5f;
+            float halfY = localSize.y * 0.5f;
+            float halfZ = localSize.z * 0.5f;
+
+            Vector3 basisX;
+            Vector3 basisY;
+            Vector3 basisZ;
+            AccumulateWorldBasis(owner, out basisX, out basisY, out basisZ);
+
+            for (int i = 0; i < ObbBakeMath.CornerCount; i++)
+            {
+                float signX = (i & 1) == 0 ? -1f : 1f;
+                float signY = (i & 2) == 0 ? -1f : 1f;
+                float signZ = (i & 4) == 0 ? -1f : 1f;
+                Vector3 local = new Vector3(localCenter.x + signX * halfX,
+                    localCenter.y + signY * halfY, localCenter.z + signZ * halfZ);
+                Vector3 offset = ApplyBasis(basisX, basisY, basisZ, local);
+                bakeCorners[i] = new Vector3(position.x + offset.x, position.y + offset.y,
+                    position.z + offset.z);
+            }
+        }
+
+        /// <summary>
+        /// The collider transform's world basis (three columns), with every ancestor's
+        /// rotation and scale applied in order.
+        /// </summary>
+        private void AccumulateWorldBasis(Transform owner, out Vector3 basisX,
+            out Vector3 basisY, out Vector3 basisZ)
+        {
+            Vector3 scale = owner.localScale;
+            Quaternion rotation = owner.localRotation;
+            basisX = rotation * new Vector3(scale.x, 0f, 0f);
+            basisY = rotation * new Vector3(0f, scale.y, 0f);
+            basisZ = rotation * new Vector3(0f, 0f, scale.z);
+
+            Transform node = owner.parent;
+            while (node != null)
+            {
+                Vector3 parentScale = node.localScale;
+                Quaternion parentRotation = node.localRotation;
+                Vector3 columnX = parentRotation * new Vector3(parentScale.x, 0f, 0f);
+                Vector3 columnY = parentRotation * new Vector3(0f, parentScale.y, 0f);
+                Vector3 columnZ = parentRotation * new Vector3(0f, 0f, parentScale.z);
+                Vector3 nextX = ApplyBasis(columnX, columnY, columnZ, basisX);
+                Vector3 nextY = ApplyBasis(columnX, columnY, columnZ, basisY);
+                Vector3 nextZ = ApplyBasis(columnX, columnY, columnZ, basisZ);
+                basisX = nextX;
+                basisY = nextY;
+                basisZ = nextZ;
+                node = node.parent;
+            }
+        }
+
+        /// <summary><c>basis * value</c> for a basis given as three columns.</summary>
+        private Vector3 ApplyBasis(Vector3 basisX, Vector3 basisY, Vector3 basisZ, Vector3 value)
+        {
+            return new Vector3(
+                basisX.x * value.x + basisY.x * value.y + basisZ.x * value.z,
+                basisX.y * value.x + basisY.y * value.y + basisZ.y * value.z,
+                basisX.z * value.x + basisY.z * value.y + basisZ.z * value.z);
+        }
+
+        /// <summary>
+        /// Names why the eight-corner fit failed: a degenerate edge or a sheared corner set.
+        /// </summary>
+        /// <remarks>
+        /// The DECISION not to use the box is <see cref="ObbBakeMath.TryBakeFromCorners"/>'s;
+        /// this only labels the refusal so the arena line can say "shear" instead of "invalid"
+        /// (the design wants the shear case to be visible, §1.4).
+        /// </remarks>
+        private int ClassifyBakeFailure()
+        {
+            Vector3 edgeX = new Vector3(bakeCorners[1].x - bakeCorners[0].x,
+                bakeCorners[1].y - bakeCorners[0].y, bakeCorners[1].z - bakeCorners[0].z);
+            Vector3 edgeY = new Vector3(bakeCorners[2].x - bakeCorners[0].x,
+                bakeCorners[2].y - bakeCorners[0].y, bakeCorners[2].z - bakeCorners[0].z);
+            Vector3 edgeZ = new Vector3(bakeCorners[4].x - bakeCorners[0].x,
+                bakeCorners[4].y - bakeCorners[0].y, bakeCorners[4].z - bakeCorners[0].z);
+            float lengthX = Length3(edgeX);
+            float lengthY = Length3(edgeY);
+            float lengthZ = Length3(edgeZ);
+            if (lengthX <= 1e-6f || lengthY <= 1e-6f || lengthZ <= 1e-6f) return RefusalDegenerate;
+            float dotXY = Dot3(edgeX, edgeY) / (lengthX * lengthY);
+            float dotXZ = Dot3(edgeX, edgeZ) / (lengthX * lengthZ);
+            float dotYZ = Dot3(edgeY, edgeZ) / (lengthY * lengthZ);
+            if (Mathf.Abs(dotXY) > ContactTuning.BakeShearTolerance) return RefusalShear;
+            if (Mathf.Abs(dotXZ) > ContactTuning.BakeShearTolerance) return RefusalShear;
+            if (Mathf.Abs(dotYZ) > ContactTuning.BakeShearTolerance) return RefusalShear;
+            return RefusalDegenerate;
+        }
+
+        private float Length3(Vector3 value)
+        {
+            return Mathf.Sqrt(value.x * value.x + value.y * value.y + value.z * value.z);
+        }
+
+        private float Dot3(Vector3 left, Vector3 right)
+        {
+            return left.x * right.x + left.y * right.y + left.z * right.z;
+        }
+
+        /// <summary>The §1.4 fallback: a world-axis box from the collider's bounds.</summary>
+        /// <remarks>
+        /// The centre and size travel as two Vector3s rather than a <c>Bounds</c>: the
+        /// fallback is also the bake that a v1 scene already validated, and every value it
+        /// reads is the plain <c>Collider.bounds</c> pair the old code passed to
+        /// <c>AddBox</c>, so the two cannot drift.
+        /// </remarks>
+        private bool TryBakeBoundsFallback(Vector3 boundsCenter, Vector3 boundsSize,
+            out Vector3 center, out Vector3 axisX, out Vector3 axisY, out Vector3 axisZ,
+            out Vector3 halfExtents)
+        {
+            center = Vector3.zero;
+            axisX = Vector3.zero;
+            axisY = Vector3.zero;
+            axisZ = Vector3.zero;
+            halfExtents = Vector3.zero;
+            if (ObbBakeMath.TryBakeFromBounds(boundsCenter, boundsSize, out axisX, out axisY,
+                out axisZ, out halfExtents))
+            {
+                center = boundsCenter;
+                return true;
+            }
+            center = Vector3.zero;
+            return false;
+        }
+
+        /// <summary>
+        /// True when every axis is a world basis direction to within a 1e-4 m/m slack.
+        /// </summary>
+        /// <remarks>
+        /// Only axis-aligned geometry gets the §7.4 tolerance: a rotated box's world AABB is
+        /// legitimately larger than its OBB, so comparing them would call every tilted board
+        /// a mismatch.
+        /// </remarks>
+        private bool IsWorldAxisAligned(Vector3 axisX, Vector3 axisY, Vector3 axisZ)
+        {
+            return IsAxisAligned(axisX) && IsAxisAligned(axisY) && IsAxisAligned(axisZ);
+        }
+
+        private bool IsAxisAligned(Vector3 axis)
+        {
+            float ax = Mathf.Abs(axis.x);
+            float ay = Mathf.Abs(axis.y);
+            float az = Mathf.Abs(axis.z);
+            if (ax > 0.9999f && ay < 0.0001f && az < 0.0001f) return true;
+            if (ay > 0.9999f && ax < 0.0001f && az < 0.0001f) return true;
+            if (az > 0.9999f && ax < 0.0001f && ay < 0.0001f) return true;
+            return false;
+        }
+
+        /// <summary>§7.4's tolerance: 1e-6 m plus one part per million of the box's reach.</summary>
+        private float DoubleBakeTolerance(Vector3 center, Vector3 halfExtents)
+        {
+            float reach = Mathf.Abs(center.x) + Mathf.Abs(center.y) + Mathf.Abs(center.z)
+                + halfExtents.x + halfExtents.y + halfExtents.z;
+            float scale = reach * 1e-6f;
+            if (scale > DoubleBakeToleranceM) return scale;
+            return DoubleBakeToleranceM;
+        }
+
+        /// <summary>
+        /// Compares the OBB's world AABB with the collider's bounds within
+        /// <paramref name="toleranceM"/> per component.
+        /// </summary>
+        private bool ObbWorldAabbAgrees(Vector3 center, Vector3 axisX, Vector3 axisY,
+            Vector3 axisZ, Vector3 halfExtents, Vector3 boundsCenter, Vector3 boundsExtents,
+            float toleranceM)
+        {
+            float extentX = Mathf.Abs(axisX.x) * halfExtents.x + Mathf.Abs(axisY.x) * halfExtents.y
+                + Mathf.Abs(axisZ.x) * halfExtents.z;
+            float extentY = Mathf.Abs(axisX.y) * halfExtents.x + Mathf.Abs(axisY.y) * halfExtents.y
+                + Mathf.Abs(axisZ.y) * halfExtents.z;
+            float extentZ = Mathf.Abs(axisX.z) * halfExtents.x + Mathf.Abs(axisY.z) * halfExtents.y
+                + Mathf.Abs(axisZ.z) * halfExtents.z;
+            if (Mathf.Abs(center.x - boundsCenter.x) > toleranceM) return false;
+            if (Mathf.Abs(center.y - boundsCenter.y) > toleranceM) return false;
+            if (Mathf.Abs(center.z - boundsCenter.z) > toleranceM) return false;
+            if (Mathf.Abs(extentX - boundsExtents.x) > toleranceM) return false;
+            if (Mathf.Abs(extentY - boundsExtents.y) > toleranceM) return false;
+            if (Mathf.Abs(extentZ - boundsExtents.z) > toleranceM) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Calls <c>AddObb</c> once and turns a refusal into a counted, reason-coded answer.
+        /// </summary>
+        /// <remarks>
+        /// Overflow and a bad box are told apart by the motor's own overflow counter: a
+        /// refusal that did not move it was a geometry refusal. Both are reported, neither is
+        /// dropped (§5.4): the scene keeps the other solids and the arena's one line names the
+        /// count and the last reason.
+        /// </remarks>
+        private bool AddSolidObb(Vector3 center, Vector3 axisX, Vector3 axisY, Vector3 axisZ,
+            Vector3 halfExtents, int surfaceId, int role, string objectName)
+        {
+            obbAttemptCount = obbAttemptCount + 1;
+            int overflowBefore = motor.GetStaticObbOverflowCount();
+            if (motor.AddObb(center, axisX, axisY, axisZ, halfExtents, surfaceId, role))
+            {
+                registeredObbCount = registeredObbCount + 1;
+                return true;
+            }
+            obbRefusedCount = obbRefusedCount + 1;
+            if (motor.GetStaticObbOverflowCount() > overflowBefore)
+            {
+                obbOverflowCount = obbOverflowCount + 1;
+                NoteRefusal(RefusalObbCapacity, objectName + ": obb capacity "
+                    + motor.GetStaticObbCapacity() + " exceeded");
+            }
+            else
+            {
+                NoteRefusal(RefusalObbInvalid, objectName + ": "
+                    + motor.GetLastStaticObbRefusalReason());
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Refuses the whole registration up front when the scene asks for more solids than the
+        /// motor's table holds, so the overflow is one error line and not 100 silent drops.
+        /// </summary>
+        /// <remarks>
+        /// The per-entry refusal is still counted by <see cref="AddSolidObb"/> (the motor
+        /// refuses each one), so a partial table is visible in both the error and the report
+        /// line. The count matches what the loops below will attempt: non-null ramps plus
+        /// non-null boxes that are not also listed as ramps.
+        /// </remarks>
+        private void CheckObbCapacity()
+        {
+            int requested = 0;
+            if (rampBoxes != null)
+            {
+                for (int i = 0; i < rampBoxes.Length; i++)
+                {
+                    if (rampBoxes[i] != null) requested = requested + 1;
+                }
+            }
+            if (staticBoxes != null)
+            {
+                for (int i = 0; i < staticBoxes.Length; i++)
+                {
+                    if (staticBoxes[i] == null) continue;
+                    if (IsRampCollider(staticBoxes[i])) continue;
+                    requested = requested + 1;
+                }
+            }
+            int capacity = motor.GetStaticObbCapacity();
+            if (requested <= capacity) return;
+            NoteRefusal(RefusalObbCapacity, "scene asks for " + requested + " static OBBs, capacity "
+                + capacity);
+            if (loggedObbCapacity) return;
+            loggedObbCapacity = true;
+            Debug.LogError("[arena] " + requested + " static solids (boxes + ramp slabs + curve "
+                + "segments) exceed the motor's " + capacity + " OBB table; the ones past "
+                + capacity + " are refused and counted, never dropped silently (design §5.4)");
+        }
+
+        private void NoteRefusal(int code, string reason)
+        {
+            if (code == RefusalNone) return;
+            lastRefusalCode = code;
+            lastRefusalReason = reason;
+        }
+
+        /// <summary>The one English phrase per bake refusal code, for the report line.</summary>
+        private string DescribeBake(int code)
+        {
+            if (code == RefusalShear) return "shear";
+            if (code == RefusalDegenerate) return "degenerate";
+            if (code == RefusalDoubleBake) return "double bake mismatch";
+            if (code == RefusalObbCapacity) return "obb capacity";
+            if (code == RefusalObbInvalid) return "obb refused";
+            return "none";
         }
 
         /// <summary>True when the same collider is listed in <see cref="rampBoxes"/>.</summary>

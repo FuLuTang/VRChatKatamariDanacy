@@ -185,3 +185,6 @@ Thumbs.db
 /KatamariRef/
 /VRChatKatamariDanacyUnity/Assets/_RefUnlicensed/
 /Docs/Design/Levels/_ref_*/
+
+# Parity corpora are exports of unlicensed data mines of a commercial game: local only.
+/Docs/Design/Parity/parity_harness/corpus_*.json

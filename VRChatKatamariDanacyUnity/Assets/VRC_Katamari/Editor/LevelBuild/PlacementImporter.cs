@@ -755,7 +755,7 @@ namespace VRCKatamari.Editor.LevelBuild
                     }
 
                     report.StructuresCreated++;
-                    ApplyStructure(current, structure, report);
+                    ApplyStructure(structure, current, report);
                     continue;
                 }
 
@@ -772,11 +772,11 @@ namespace VRCKatamari.Editor.LevelBuild
                     }
 
                     report.StructuresUpdated++;
-                    ApplyStructure(current, structure, report);
+                    ApplyStructure(structure, current, report);
                     continue;
                 }
 
-                if (ApplyStructure(current, structure, report))
+                if (ApplyStructure(structure, current, report))
                 {
                     report.StructuresUpdated++;
                 }

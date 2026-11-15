@@ -124,7 +124,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // Stamped into the first log line. A whole 4 x 9 matrix was invalid because the scene ran
         // the previous U# program while its data came from the new importer; this makes "which
         // program am I running" a one-line check instead of a forensic exercise.
-        private const string SetterRevision = "2026-11-15c";
+        private const string SetterRevision = "2026-11-15d";
 
         public void Start()
         {

@@ -12,6 +12,7 @@
 > ② **真缺陷（已修）**：`SetDiameterM` 的幂等短路 + 粘住的 `converged` + 缓存的 `lastQuantumM`，让**每档只有第一格真的长到目标径**，其余八格停在 0.30（同档除首格外 `size_accuracy` 是常数 +41.2674 / +371.6536 / +3523.0036）。修法：量子按需实时算（§8.3）+ 驱动收敛后校验收敛是否属实 + 两行 build 指纹（§8.3.3 / §8.3.4）。
 > ③ **没改**：C05 的 `climbed` 仍是已知极限（§4.1.3，仅这一条 UNEXPECTED_FAIL）；数据、几何、判据一处未动。
 > **2026-11-15 第三轮（pass-2，7f27ab3）后的复查**：上一轮的修法自己引入了死锁。规则被写成「收敛后再调用 `SetDiameterM` = 新请求」，但驱动 `TickSize` **每帧**都调 `SetDiameterM(target)`：`Feed` 刚把 `converged=true`，下一帧 `TickSize` 又把它清回 `false`，`IsConverged()` 永远读不到 `true` → `reason=timeout`（球本来就在 0.300）。**最终规则（只保留一种实现）**：`Switch` 里在复位之后调**一次** `SetDiameterM(target)`，`TickSize` 只观察 `IsConverged`/`HasFailed`，不再发请求、也不清任何状态；`BeginRequest` 删除（请求与清状态合并成 `SetDiameterM` 一件事）。状态机、字段写者表与四条路径见 §8.3.4，Python 用状态机模拟复现旧死锁并证明新设计收敛。
+> **2026-11-15 第四轮（pass2 矩阵 `2026-11-15_pass2` 之后）**：矩阵首次**有效**（`size_accuracy` 四档全中，C14/C08/C09/C10/C03/C06 全档通过）。偏离全部在坡道格，已按 A/B/C 分类并处理（§4.1.4）：**A**（场景在该档无物理意义）用 `applies_d` + 驱动 `SKIPPED_NOT_APPLICABLE` 显式跳过（C05@1.10 的 `ramp_entered`、C05@2.20 的 `ramp_support`+`ramp_entered`、C13@2.20 的两条落地）；**B**（阈值/时间线/度量定义）改 `ramp_entered` 为整段最大值 + 阈值取 `stepLimit`(=0.25·D)、C01@2.20 的窗口补到 8.75 s；**C**（疑似电机缺陷）C13@2.20 的 0.9499 m 单帧跳变写成缺陷单 §4.1.5，`seam_no_step` 保持红灯。另外 §4.1.6 判读「球穿过斜坡」：0.30–1.10 是法向支撑偏移（≤5 mm 与公式一致，相切），2.20 是尺度（球比坡/台面大，且 C05@2.20 从未上坡），**没有物理穿模**。指纹升到 `2026-11-15d`（需重编 U# + 重导判据）。
 
 ---
 
@@ -259,6 +260,91 @@
 - **(a) 数据**：把 C05 的 `climbed` 改成「记录 45° 极限」的判据（`expect` 全档 `fail`、`limit` 记 0.088 作基线），或给台面南缘加 0.05 m 过渡台阶/倒角，把 45° 拆成两段 ≤ 0.075 的上升。**改判据语义或几何，需 Lead 批。**
 - **(b) 运行时代码**：把 `SweepMath` 的盒子接触从「膨胀 AABB」改成真正的球-盒（圆角）测试。精确相切时球底 = 0.558、差 0.042 ≤ 0.0749，step mask 会剔掉台面、球能上去；顺带修掉所有陡坡接缝。改动在 `Runtime/BallLayers/Sweep`，**不在本批写范围，需 Lead 批。**
 
+### 4.1.4 坡道格的分档适用性、阈值推导与实测偏离分类（2026-11-15 pass2 之后）
+
+pass2 的 36 次运行里，**所有非 C05 的格在 0.30–1.10 都按期望通过**；偏离全部落在坡道格。逐条分类（证据 = `Docs/Evidence/PhysicsTestField/2026-11-15_pass2/traj_ramps.md` 的逐点采样 + 几何算术）：
+
+| # | 偏离（格/档/判据） | 实测 | 分类 | 依据与确定性 |
+|---|---|---|---|---|
+| 1 | C05 @0.60 `ramp_entered` | +0.2996（限 0.30） | **B 阈值** | 0.2996 = 45° 死锁点 `ramp_run − r = 0.60 − 0.30`；旧阈值 0.30 比这个**几何上限高 0.4 mm**，任何正确电机都过不了。**确定**（数值逐位对得上） |
+| 2 | C05 @1.10 `ramp_entered` | +0.0485 | **A 场景** | 可达上限 = `0.60 − 0.55 = 0.05`；球半径几乎等于整条坡的水平长，球只能蹭到坡 5 cm。**确定** |
+| 3 | C05 @2.20 `ramp_support` / `ramp_entered` | 0 / −0.5009 | **A 场景** | −0.5009 = `ramp_run − r = 0.60 − 1.10`：台面盒被半径膨胀后的南面在 z=7.10，**在坡脚 z=7.60 之前**，球永远到不了坡面（所以 `support_kind` 从没变成 2）。**确定** |
+| 4 | C05 各档 `climbed` | 0.0887 / 0.1763 / 0.3234 / 0.6000 | **已知极限（保留红灯）** | 45° 接缝死锁，`r(tanθ+1−secθ) = 0.5858·r`：0.15→0.088、0.30→0.176、0.55→0.322、1.10→0.644（2.20 档球根本没上坡，差 0.6）。见 §4.1.3 |
+| 5 | C01 @2.20 `climbed` | +0.0134 | **B 时间线** | 采样 8.01→8.51 的位移只有 0.40 m（2.96 → 0.8 m/s），正是驱动在 t=8.0 结束后的刹车；球当时离台面边还差 0.22 m。2.20 档速度被 `growthSpeedFactor = 0.25` 降到 **3.0 m/s**，6.86 m 坡需要 ~2.3 s，而 6→8 s 的窗口只给 2.0 s。**确定**（速度、距离、刹车率三者一致） |
+| 6 | C13 @2.20 `ramp_entered` | +0.1005 | **B 度量定义** | 旧实现读的是**结束时刻**的位置：球掉下台面后停在坡脚附近，所以读到 0.10；而它确实爬完了 3 m 坡。判据问的是「有没有上过坡」，应取**整段最大值**。**确定** |
+| 7 | C13 @2.20 `landing_gap` / `landed_on_ground` | +0.0419 / kind=2 | **A 场景** | 台面高 0.60 < 球半径 1.10：球心在台上时仍在台面盒**膨胀 AABB** 内（顶 = 0.60+1.10 = 1.70 = 球心高度），落地场景退化。**确定** |
+| 8 | C13 @2.20 `seam_no_step` | **0.9499** | **C 疑似电机缺陷** | 0.9499 = `min(stepLimit 0.55, maxStepUpLift 0.6) + 4 × maxLiftPerStep 0.1`（一帧 5 个固定步）。触发链见 §4.1.5；**这是缺陷单，判据保持红灯** |
+
+**为什么把 1/6 归 B 而不是「放松」**：判据的含义没有变——「球确实越过了坡脚」和「球确实爬上了坡」仍然要量到；变的只是**量的位置**（最终位置 → 整段最大值）和**阈值来源**（绝对 0.30 → 电机自己的 stepLimit）。旧阈值 0.30 在 0.60/45° 档恰好比几何上限高 0.4 mm，这不是「电机没做到」，是阈值本身不可达。
+
+#### A 类的适用条件（写进数据、驱动显式 skip）
+
+三条规则全部从几何 + 电机自己的数推出来，`applies_d` 写在 `physics_test_field.json` 的 check 行上，导入器编码成 `PhysicsTestCell.checkAppliesMasks`，驱动报 `SKIPPED_NOT_APPLICABLE`（计入 skipped，并打一行 `[ptf] notApplicable ...`），**不是静默通过**：
+
+| 规则 | 条件 | 含义 |
+|---|---|---|
+| R1 `ramp_support` | `ramp_horizontal_run − r > 0` | 台面盒膨胀后的南面必须在坡脚**之后**，球才可能站上坡面 |
+| R2 `ramp_entered` | 可达前进 ≥ `stepLimit`（=0.25·D） | 可达前进 = 死锁时 `ramp_run − r`，否则整条 `ramp_run`；死锁判据：`H − (ramp_run−r)·tanθ − r(secθ−1) > 0.5r`（台面在球被挡处仍不可踏） |
+| R3 `landing_gap` / `landed_on_ground` | `nominal_m ≥ r` | 台面至少要有球半径那么高，球掉下去才可能干净落地（否则球心在台面盒膨胀 AABB 内） |
+
+per-tier 结果（`r` = D/2，`stepLimit` = 0.25·D）：
+
+| 格 | 坡（水平长 / 沿坡 / 角度 / 台面） | 0.30 | 0.60 | 1.10 | 2.20 |
+|---|---|---|---|---|---|
+| C01 | 6.858 / 6.884 / 5° / 0.60 | 全部适用 | 全部适用 | 全部适用 | 全部适用（时间线补到 8.75 s） |
+| C03 | 1.287 / 1.422 / 25° / 0.60 | 全部适用 | 全部适用 | 全部适用 | 全部适用（台面在球被挡处已可踏：0.363r ≤ 0.5r） |
+| C05 | 0.600 / 0.849 / 45° / 0.60 | 全部适用 | `ramp_entered` 适用（可达 0.30 ≥ 0.15） | `ramp_entered` **不适用**（可达 0.05 < 0.275） | `ramp_support`、`ramp_entered` **不适用**（可达 −0.50） |
+| C13 | 3.000 / 3.059 / 11.31° / 0.60 | 全部适用 | 全部适用 | 全部适用 | `landing_gap`、`landed_on_ground` **不适用**（0.60 < r=1.10） |
+
+`applies_d` 的默认值不写 = 四档全适用；写 `[T,T,F,F]` 这类行的地方，**必须**在 check 的 `note` 里写清 R 规则与数字（已写）。Python 守卫会用 placement 几何重算 R1/R2/R3 并与 JSON 对照，防止「判据悄悄变成永远不适用」。
+
+#### B 类的两处数据/度量改动
+
+1. **`ramp_entry_progress_m` 取整段最大值**（`PhysicsTestFieldDriver.Sample` 里锁存 `maxRampEntryM`）：判据原意是「球有没有上过坡」，旧实现读结束时刻的位置，run 结束在坡后方（C13@2.20 甚至停回坡脚）就会误判。
+2. **`ramp_entered` 的阈值改为每次 run 推导**：`min_progress = motor.GetStepHeightLimitWorldM()`（= 0.25·D），日志打 `[ptf] derived ... step_limit=... min_progress=...`，与 `deck_gap` 的台阶推导同一套做法。数据里的 `limit: 0.3` 保留为**名义值**（记录表），实际判定用推导值。
+3. **C01 的 2.20 档时间线**：第二段前进窗口 8.0 → **8.75 s**（run 10 → 10.75 s），理由是 `growthSpeedFactor = 0.25` ⇒ 2.20 档上限 3.0 m/s，6.86 m 坡比 4 m/s 的假设多需 ~0.75 s；0.30–1.10 档球更早到台面，多出的 0.75 s 只让它多顶 0.7–0.95 s 墙（< `stuckTimeoutSeconds` 1.5，不会触发卡死瞬移）。
+
+### 4.1.5 缺陷单（给 Lead；电机只读、未修）：大球在矮盒旁触发卡死恢复，瞬移回起点并单帧抬升 ~0.95 m
+
+**现象**（C13 @D=2.20，pass2 run 36）：
+- `seam_no_step grounded_frame_dy_m = +0.9499`（阈值 0.05）：两个「不处于下落」的采样帧之间，球心竖直位移 0.95 m；
+- 随后 `landing_gap = +0.0419`、`landed_on_ground support_kind = 2`（支撑变成坡面而不是地面）；
+- 轨迹（`traj_ramps.md` §D=2.20 C13）：t=1.5–2.5 球在 0.60 台面上（球心 1.70）；t=3.0 球心 1.34（掉下北缘）；t=3.5–4.5 球心 1.10、`stuck` 0.42→1.42；t=5.0 球心 1.14、`sup=0.02`（回到坡脚附近）。
+
+**触发条件（推断，两段叠加）**：
+1. **短盒的膨胀 AABB 把球「包」进去**：`SweepMath` 的盒子按半径膨胀成 AABB（`SweepMath.cs:623 TryExpandBox`：min−r、max+r）。台面高 0.60 < r=1.10 时，球心在台上正好是 `0.60+1.10 = 1.70` = 膨胀盒顶；球掉下台面、球心降到 1.10 时，球心**落在膨胀盒内**（y 范围 −1.10..1.70、z 范围 8.9..15.1），扫掠把它当初始穿透（`SweepMath.cs:200-213` 的 push + `:262-275` 的「推完仍在另一个盒里」检查），推不干净 → `sweepStuck` → `stuckSeconds` 累积。
+2. **卡死恢复瞬移回 `startCenterWorld`**：`KatamariBallMotor.cs:1209-1216`：`stuckSeconds > stuckTimeoutSeconds(1.5)` 时 `groundedCenter = startCenterWorld; planarVelocity = 0`。而 `startCenterWorld` 是**序列化字段**（`KatamariBallMotor.cs:258`，默认 `(0, 0.15, 0)`），运行时**从不被赋值**——`TryResetForNewRound` 只 `TeleportTo(startPosition)`（第 1931 行附近），不写回该字段。所以瞬移目标是场景里烘死的起点（y=0.15，即 0.30 球的半径），不是本 run 的起点、也不随球径修正。
+3. 瞬移后球心在 y≈0.15、半径 1.10 → 球底在 −0.95（地面以下）；地面接触把球往上推，且因为「支撑面变了」拿到了**一步抬升允许 = min(stepLimit, maxStepUpLiftWorldM) = min(0.55, 0.60) = 0.55**（`KatamariBallMotor.cs:1103-1106`），之后每步 `maxLiftPerStep = 0.1`（`:91`）；一帧最多 5 个固定步（`fixedStepSeconds = 0.02`）⇒ **0.55 + 4×0.10 = 0.95 m/帧**，与实测 0.9499 逐位吻合。
+
+**最小复现**：任一 D ≥ 1.2 m 的球（r ≥ 0.6）在高度 0.60 m 的静态盒（台面）上行走并掉下其边缘 → 球心进入该盒的膨胀 AABB → 1.5 s 内 `stuckSeconds` 超时 → 球被瞬移回场景起点并在约一帧内抬升 ~0.95 m。同一机制在 C05 @2.20 也在发生（`stuck` 在 0.46–1.50 之间周期复位，正是「瞬移回起点→再撞→再卡」的循环）。
+
+**涉及代码（只读）**：`Runtime/BallMotor/KatamariBallMotor.cs:258`（startCenterWorld 序列化）、`:1209-1216`（卡死瞬移）、`:1103-1106`（一步抬升允许）、`:91`/`:113`（maxLiftPerStep 0.1 / maxStepUpLiftWorldM 0.6）；`Runtime/BallLayers/Sweep/SweepMath.cs:623-644`（膨胀 AABB）、`:194-215`、`:262-275`（初始穿透、推不干净 → unresolved）。
+
+**猜测（明确标注）**：
+- 猜测 A：修法之一是卡死恢复目标改用「当前 run 的起点 + 当前半径」（或干脆不做位置瞬移，只清速度/接触），这样至少不会把球塞进地面；**这是设计决策，不是本批能定的**。
+- 猜测 B：另一个修法是盒子接触用真正的球-盒（圆角）测试，而不是膨胀 AABB；这与 §4.1.3 的 45° 接缝死锁是同一个根因（膨胀 AABB 把盒角当方角）。若 Lead 只批一处改动，这一处同时修两个现象。
+
+**判据状态**：`seam_no_step` 在 2.20 档**保持 applicable、保持红灯**（它是这张缺陷单的现成证据）；C13 的 `landing_gap` / `landed_on_ground` 在 2.20 档按 R3 记为不适用（场景退化），但这不改变上面这条红灯。
+
+### 4.1.6 「球穿过斜坡」的判读：是法向支撑偏移与尺度，不是穿模
+
+电机把球心放在支撑平面的**法向距离 r** 上（`GroundContactMath.TrySolve`：`dot(n, center) = offset + r`），所以在斜面上「球底 − 支撑高度」= `r(1/cosθ − 1)`，**不是 0**。用 traj 的 `球底 y` 与 `sup` 逐点对照：
+
+| 采样 | 球底 − sup（实测） | `r(1/cosθ − 1)`（几何） | 结论 |
+|---|---|---|---|
+| C01 @0.30 t=7.0（5°） | 0.260 − 0.261 = −0.001 | 0.0006 | 贴合 |
+| C05 @0.30 t=1.5（45°） | 0.510 − 0.449 = 0.061 | 0.062 | 贴合 |
+| C05 @0.60 t=1.5 | 0.420 − 0.300 = 0.120 | 0.124 | 贴合 |
+| C05 @1.10 t=1.5 | 0.280 − 0.049 = 0.231 | 0.228 | 贴合 |
+| C13 @1.10 t=1.5（11.31°） | 0.550 − 0.544 = 0.006 | 0.011 | 贴合（≤5 mm） |
+| C13 @2.20 t=1.0 | 0.380 − 0.357 = 0.023 | 0.022 | 贴合 |
+
+**0.30–1.10 档：正常贴着坡面走。** 每个坡面采样帧都满足法向距离 = r（差 ≤ 5 mm），球是**相切**的，没有穿模。看起来像「陷进坡里」的两个原因：① 竖直的「球底」本来就应该比坡面在球心处的高度**高** `r(1/cosθ−1)`（45° 且 r=0.55 时高达 0.23 m，视觉上球心偏低）；② 坡是 4 cm 厚的板，平面取的是板顶面，板的其余部分在球下方。
+
+**2.20 档：不是穿模，是尺度。** C05 @2.20 的球**从未上过坡**（`ramp_support_seen = 0`，`ramp_entered = −0.5009 = ramp_run − r`）——它停在台面盒膨胀后的南面前 0.5 m、坡脚之前，站在地面上；球的直径 2.2 m 比坡的水平长 0.6 m、比台面高 0.6 m 都大，所以从任何相机看，坡与台面的轮廓都落在球的**外形之内**，像是「球把坡吞了」。物理上没有穿透：坡从来不是扫掠障碍（`SupportSurfaceMath` 的注释与实现：ramps/props 只参与支撑查询），球只被地面支撑；这也是 C05 @2.20 判为 A 的原因（场景对这颗球没有意义）。
+
+**保留的不确定性**：traj 是 0.5 s 采样，抓不到固定步内的瞬时重叠；上表的结论依赖电机自己报的 `sup`（每采样帧读一次）与法向偏移公式的一致，而不是渲染网格。用户看到的那一帧如果落在两次采样之间，本表不能证伪；要彻底排除需要逐固定步的 `p.y/sup` 日志（现在没有）。
+
 ### 4.2 台阶组 C07–C12：六个 rise × 四个球径的完整矩阵
 
 <!-- table:steps -->
@@ -419,7 +505,7 @@
 | `ramp_support_seen` | 整段里是否至少一帧 `GetSupportKind() == 2`（0/1） | 球真的被斜面撑着；终点在台面时 `support_kind` 已经是 box，所以需要这个逐帧锁存 | A | `== 1` |
 | `grounded_frame_dy_m` | 非下落帧里相邻两帧 `abs(Δcenter.y)` 的最大值 | 坡顶接缝不顿、不弹（S14）；自由落体帧被排除，否则 0.6 m 掉落会冒充「接缝跳变」 | A | `≤ 0.05` |
 | `ramp_refusal_slope_deg` | `GetLastRampRefusalSlopeDegrees()`（切格后 probe 的读数） | 拒绝的是不是那块 50° 板 | A | `≥ 49` |
-| `ramp_entry_progress_m` | 球心进入坡足迹后沿坡向上的位移 | 坡底没有隐形墙（§5.5 陷阱） | A | `≥ 0.30` |
+| `ramp_entry_progress_m` | 整段里 `max(progress − rampFootM)`（**锁存最大值**，不是结束时刻的位置） | 坡底没有隐形墙（§5.5 陷阱）。结束在坡后方的 run 会误读结束位置，C13@2.20 就因此读到 0.10 | A | `≥ stepLimit`（=0.25·D，驱动每次 run 推导；数据里的 0.30 是名义值） |
 | `slip_back_m` | 停坡 5 s 内沿坡向下的位移 | 「无切向重力」是否成立（§5.4 U3） | A | `abs ≤ 0.020` |
 | `recover_speed_mps` | 倒车 1.5 s 内的最大速度 | 离开墙后能动 | A | `≥ 0.20` |
 | `elapsed_s` | 一次 run 的墙钟时长 | 没有隐性卡死 | A | `≤ 20` |
@@ -452,6 +538,8 @@ gap = (center.y − GetSupportSurfaceHeightWorldM()) * GetSupportNormalWorld().y
 | `UNEXPECTED_PASS` | `expect=fail` 但实测通过 | 要么实现提前好了，要么判据写松了 —— **必须人看** |
 | `UNEXPECTED_FAIL` | `expect=pass` 但实测失败 | 回归/缺陷 |
 | `BLOCKED_UNTIL_<gate>` | 该阶段不存在 / 该读数这个版本拿不到，跳过 | 不是失败，是「还测不了」 |
+| `SKIPPED_N_A` | `expect = n/a`（该档没有名义答案） | 跳过，不是失败 |
+| `SKIPPED_NOT_APPLICABLE` | `applies_d[档] = false`：该档的**场景在物理上不存在**（§4.1.4 的 R1/R2/R3） | 跳过，不是失败；报告里另有一行 `[ptf] notApplicable cell=… D=… checks=…` 点名。**它不能用来退休一条真实红灯**：只有几何规则能触发，规则由 Python 守卫重算校验 |
 
 `BLOCKED_UNTIL` 的五种来源，驱动各打一种 token（都计入 `skipped`，不计入 `unexpected`）：
 
@@ -856,8 +944,8 @@ ALERT 行因此变成：
 而场景数据是新的（`sizeModelBaselineVolumeUnits=3.4390244` 已烘进去）。为让这件事下次一眼可见，两个组件在 `Start` 各打一行指纹：
 
 ```
-[ptf] build=2026-11-15c cells=9 presets=4
-[ptf] setter build=2026-11-15c baselineVolumeUnits=3.4390244
+[ptf] build=2026-11-15d cells=9 presets=4
+[ptf] setter build=2026-11-15d baselineVolumeUnits=3.4390244
 ```
 
 **看到第一行之后才可信**：没有 `build=` 行 = U# 程序没重编；`baselineVolumeUnits=0` = 判据没重导。两条都不满足时不要读矩阵。
@@ -1065,8 +1153,8 @@ ALERT 行因此变成：
 - **先看两行指纹**（§8.3.3），没有它们就不要读后面的矩阵：
 
 ```
-[ptf] build=2026-11-15c cells=9 presets=4
-[ptf] setter build=2026-11-15c baselineVolumeUnits=3.4390244
+[ptf] build=2026-11-15d cells=9 presets=4
+[ptf] setter build=2026-11-15d baselineVolumeUnits=3.4390244
 ```
 
 - 用 MCP（`executeMethod`/UnityEvent）或临时 HUD 调 `driver.BeginCellAtDiameter("C14", 0.30f)`；
@@ -1092,21 +1180,30 @@ ALERT 行因此变成：
 |---|---|---|---|---|
 | `diameter_error_quanta` | **+0.0091** | **+0.1454** | **+0.4614** | **+0.3854** |
 
-**各格 summary 的期望（pass / skipped / unexpected，checks 固定）**：
+**各格 summary 的期望（pass / skipped / unexpected，checks 固定）**——2026-11-15d 起（§4.1.4 的适用性与推导阈值、§4.1.5 的缺陷单）：
 
-| 格 | checks | 0.30 | 0.60 / 1.10 / 2.20 | 备注 |
-|---|---|---|---|---|
-| C14 | 7 | 7 / 0 / 0 | 7 / 0 / 0 | 薄板必须碾过 |
-| C09 | 5 | 5 / 0 / 0 | 5 / 0 / 0 | 0.30 的 `on_step` 是 **EXPECTED FAIL**（仍计入 pass）；0.60 起真上台阶 |
-| C08 | 5 | 5 / 0 / 0 | 5 / 0 / 0 | 可上的正面基线 |
-| C10 | 6 | 6 / 0 / 0 | **5 / 1 / 0** | 0.30 `on_step` EXPECTED FAIL + `blocked_gap ≈ 0`；0.60 起可上，`blocked_gap` 行是 `n/a` → skipped 1 |
-| C01 | 6 | 6 / 0 / 0 | 6 / 0 / 0 | 5°，`ramps=1/rampCell=1`；`climbed≈0` |
-| C03 | 7 | 7 / 0 / 0 | 7 / 0 / 0 | 25°，含 `no_slip_back`（切向重力 0） |
-| C05 | 6 | **5 / 0 / 1** | **5 / 0 / 1** | 只有 `climbed` 是 UNEXPECTED_FAIL（§4.1.3 的 45° 极限，**已知、不改**） |
-| C06 | 7 | 7 / 0 / 0 | 7 / 0 / 0 | 先有 `[ptf] rampProbe cell=C06 refused=1 slope=50.00 reason=…` |
-| C13 | 10 | 10 / 0 / 0 | 10 / 0 / 0 | 上坡→接缝→台面→掉 0.6 m；末帧 `support_kind=0` |
+| 格 | checks | 0.30 | 0.60 | 1.10 | 2.20 | 说明 |
+|---|---|---|---|---|---|---|
+| C14 | 7 | 7/0/0 | 7/0/0 | 7/0/0 | 7/0/0 | 薄板必须碾过 |
+| C09 | 5 | 5/0/0 | 5/0/0 | 5/0/0 | 5/0/0 | 0.30 的 `on_step` 是 EXPECTED FAIL（计 pass） |
+| C08 | 5 | 5/0/0 | 5/0/0 | 5/0/0 | 5/0/0 | 可上的正面基线 |
+| C10 | 6 | 6/0/0 | 5/1/0 | 5/1/0 | 5/1/0 | 0.60 起可上台阶，`blocked_gap` 行 = n/a → skip 1 |
+| C01 | 6 | 6/0/0 | 6/0/0 | 6/0/0 | 6/0/0 | 2.20 档时间线补到 8.75 s（B，§4.1.4） |
+| C03 | 7 | 7/0/0 | 7/0/0 | 7/0/0 | 7/0/0 | 25°；2.20 档台面在球被挡处已可踏（R2 非死锁） |
+| C05 | 6 | 5/0/1 | 5/0/1 | 4/1/1 | 3/2/1 | 只有 `climbed` 是红灯（45° 极限）；1.10 `ramp_entered` A、2.20 `ramp_support`+`ramp_entered` A |
+| C06 | 7 | 7/0/0 | 7/0/0 | 7/0/0 | 7/0/0 | 先有 `[ptf] rampProbe cell=C06 refused=1 slope=50.00 reason=…` |
+| C13 | 10 | 10/0/0 | 10/0/0 | 10/0/0 | 7/2/1 | 2.20：`landing_gap`/`landed_on_ground` A（R3）、`seam_no_step` **红灯（缺陷单 §4.1.5）** |
 
-合计：0.30 档 **58 pass + 1 unexpected**；其余三档 **57 pass + 1 skip + 1 unexpected**（共 59 条）。0.60 以上的坡道格首次真正可测，上表是按几何/`stepLimit` 推的**期望**，不是实测。
+| 档 | pass | skipped | unexpected | 合计 | 组成 |
+|---|---|---|---|---|---|
+| 0.30 | 58 | 0 | 1 | 59 | 仅 C05 `climbed` |
+| 0.60 | 57 | 1 | 1 | 59 | C10 `blocked_gap` n/a + C05 `climbed` |
+| 1.10 | 56 | 2 | 1 | 59 | +C05 `ramp_entered` 不适用（R2） |
+| 2.20 | 52 | 5 | 2 | 59 | +C05 `ramp_support`（R1）、C13 两条落地（R3）、C13 `seam_no_step`（缺陷单） |
+
+**新增的两类日志行**：
+- `[ptf] derived cell=<id> check=ramp_entered step_limit=0.074934 min_progress=0.074934` —— 每个坡道格每档一行（B 类阈值推导）。
+- `[ptf] notApplicable cell=<id> D=<p> checks=<ids> reason=scene_has_no_scenario_at_this_diameter` —— 只有出现 A 类档时才有（C05@1.10/2.20、C13@2.20）。
 
 **6. 四个球径**
 
@@ -1296,7 +1393,20 @@ OK
 | `levelbuild check`（9 格） | **9/9 PASS**（C06 仍 0 error + 1 条预期 warning） |
 | `python3 Docs/tools/validate_plan.py` | **PASS** |
 | `python3 -m unittest discover -s Docs/tests` | **OK（496 tests）**；`test_physics_test_field_cells` 45 tests OK |
-| 操作员下一步 | **先确认 U# 真的重编了**（`[ptf] build=2026-11-15c` / `[ptf] setter build=2026-11-15c` 两行），再按 §9.5 的四档期望表跑；`reason=timeout` 说明驱动还在每帧发请求（旧程序），`+41/+372/+3523` 说明球没长大（pass-1 缺陷） |
+| 操作员下一步 | **先确认 U# 真的重编了**（`[ptf] build=2026-11-15d` / `[ptf] setter build=2026-11-15d` 两行），再按 §9.5 的四档期望表跑；`reason=timeout` 说明驱动还在每帧发请求（旧程序），`+41/+372/+3523` 说明球没长大（pass-1 缺陷） |
+
+### 13.3 2026-11-15 第四轮（pass2 矩阵之后：分类 + A/B 修复 + C 缺陷单）
+
+| 项 | 状态 |
+|---|---|
+| 改（数据） | `physics_test_field.json`：C05 `ramp_support` `applies_d=[T,T,T,F]`、C05 `ramp_entered` `[T,T,F,F]`、C13 `landing_gap`/`landed_on_ground` `[T,T,T,F]`（每处 note 写清 R 规则与数字）；C01 第二段前进窗口 8.0 → **8.75 s**；driver/ball_size 说明字段与 `build_stamp=2026-11-15d` |
+| 改（Labs） | `PhysicsTestCell.cs`：`checkAppliesMasks` + `CheckApplies(index, diameterIndex)`（缺省全适用）；`PhysicsTestFieldDriver.cs`：`Sample` 锁存 `maxRampEntryM`（`ramp_entry_progress_m` 改为整段最大值）、`ramp_entered` 阈值每次 run 取 `GetStepHeightLimitWorldM()` 并打 `derived ... min_progress=`、适用性先于所有其它 skip 并打 `notApplicable` 行、指纹 `2026-11-15d`；`LabBallSizeSetter.cs` 指纹 `2026-11-15d`；`Editor/.../PhysicsTestFieldCriteriaImporter.cs`：`applies_d` → `checkAppliesMasks`（四档之外或全 0 报错） |
+| 未改（按写范围） | `Runtime/` 全部（含 `KatamariBallMotor` / `SweepMath`；§4.1.5 只写缺陷单）、任何 `.unity` / `.prefab` / `.asset` / `.meta`、`tasks.json`、`Tools/levelbuild/`、C05 的 `climbed` 判据（保持红灯）、C13 的 `seam_no_step`（保持红灯） |
+| Unity 编译 / U# 编译 / Play Mode | **NOT_RUN**（本 agent 不是 Unity 操作者） |
+| `levelbuild check`（9 格） | **9/9 PASS**（C06 仍 0 error + 1 条预期 warning） |
+| `python3 Docs/tools/validate_plan.py` | **PASS** |
+| `python3 -m unittest discover -s Docs/tests` | **OK（502 tests）**；`test_physics_test_field_cells` 51 tests OK |
+| 操作员下一步 | 重编 U# + **重导判据**（`driverFields=6`；新字段 `checkAppliesMasks`），确认 `[ptf] build=2026-11-15d` / `setter build=2026-11-15d`；按 §9.5 的新表读 0.30/0.60/1.10/2.20（见 §9.5 的两张表） |
 
 **下一步（按顺序，都是操作员/下一批的事）**：
 1. §9.5 的接线清单：场景 → 导入九格几何 → 加 9 个 `LevelArenaHost` → 加 3 个组件的实例 → 烘判据 → Play Mode 跑 `BeginCellAtDiameter("C14", 0.30f)`；

@@ -85,7 +85,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // Stamped into the first log line so "which U# program is running" is checkable. The
         // 2026-11-15 matrix ran a pre-P3 driver against post-P3 data and nobody could tell from
         // the log; the build line and the reason= vocabulary make that impossible to repeat.
-        private const string DriverRevision = "2026-11-15c";
+        private const string DriverRevision = "2026-11-15d";
 
         // ---- state -------------------------------------------------------------
 
@@ -151,6 +151,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private float maxFrameDy;
         private float maxGroundedFrameDy;
         private float maxCenterY;
+        // Latched, not final: ramp_entry_progress_m asks whether the ball EVER got onto the ramp.
+        private float maxRampEntryM;
         private int sawRampSupport;
         private int fallFrameCount;
         private float lastForwardIntent;
@@ -847,6 +849,11 @@ namespace VRCKatamari.Labs.PhysicsTestField
             // instantaneous, and a run that climbs and then stops on the top landing would
             // otherwise report "box" and look like the ramp never engaged.
             if (motor.GetSupportKind() == 2) sawRampSupport = 1;
+            if (cell.IsRampClimb())
+            {
+                float rampEntry = ProgressMeters() - cell.GetRampFootM();
+                if (rampEntry > maxRampEntryM) maxRampEntryM = rampEntry;
+            }
             if (falling) fallFrameCount = fallFrameCount + 1;
 
             // Slip on a ramp, measured in EVERY released window (the drive plan deliberately
@@ -898,6 +905,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
             checkPass = 0;
             checkUnexpected = 0;
             checkSkipped = 0;
+            string notApplicableList = "";
 
             int total = cell.GetCheckCount();
             for (int i = 0; i < total; i++)
@@ -930,7 +938,36 @@ namespace VRCKatamari.Labs.PhysicsTestField
                     }
                 }
 
+                // The ramp-entry threshold is one STEP-LIMIT of travel, not an absolute 0.30 m
+                // (design section 4.1.4): the motor's own rule makes stepLimit = 0.25 * D, and a
+                // ball that has advanced that far horizontally onto the ramp has provably crossed
+                // the foot (an invisible wall would hold it at ~0). The old 0.30 m sat 0.4 mm
+                // above the 45-degree ramp's geometric maximum at D=0.60, so it could never pass.
+                if (Same(metric, "ramp_entry_progress_m"))
+                {
+                    float entryMin = motor.GetStepHeightLimitWorldM();
+                    if (entryMin > 0f)
+                    {
+                        limit = entryMin;
+                        Log("[ptf] derived cell=" + cell.GetCellId() + " check=" + checkId
+                            + " step_limit=" + Fixed(entryMin, 6)
+                            + " min_progress=" + Fixed(entryMin, 6));
+                    }
+                }
+
                 string expectText = ExpectText(expect);
+
+                // Applicability comes before every other skip: if the SCENE cannot produce this
+                // criterion's scenario at this diameter (design section 4.1.4), saying so is more
+                // honest than a measurement that cannot exist. Counted as skipped, never as a pass.
+                if (!cell.CheckApplies(i, diameterIndex))
+                {
+                    LogSkipped(checkId, metric, op, limit, expectText, "SKIPPED_NOT_APPLICABLE");
+                    checkSkipped = checkSkipped + 1;
+                    if (notApplicableList.Length > 0) notApplicableList = notApplicableList + ",";
+                    notApplicableList = notApplicableList + checkId;
+                    continue;
+                }
 
                 if (gateStage == 1 && !motor.IsTerrainSupportEnabled())
                 {
@@ -1021,6 +1058,14 @@ namespace VRCKatamari.Labs.PhysicsTestField
                         + " value=" + Signed(value, 4)
                         + " expect=" + expectText + " verdict=" + verdict);
                 }
+            }
+
+            if (notApplicableList.Length > 0)
+            {
+                Log("[ptf] notApplicable cell=" + cell.GetCellId()
+                    + " D=" + Fixed(presetDiametersM[diameterIndex], 3)
+                    + " checks=" + notApplicableList
+                    + " reason=scene_has_no_scenario_at_this_diameter");
             }
 
             string verdictText = checkUnexpected == 0 ? "EXPECTED" : "UNEXPECTED";
@@ -1212,8 +1257,10 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
             if (Same(metric, "ramp_entry_progress_m"))
             {
-                PhysicsTestCell cell = cells[cellIndex];
-                value = ProgressMeters() - cell.GetRampFootM();
+                // The LATCHED maximum, not the final position: a run can end far past the ramp
+                // legitimately, and at D=2.2 on C13 it ends away from it after the fall, which made
+                // the old final-position reading report the resting spot instead of the climb.
+                value = maxRampEntryM;
                 return MetricOk;
             }
 
@@ -1454,6 +1501,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
             maxFrameDy = 0f;
             maxGroundedFrameDy = 0f;
             maxCenterY = 0f;
+            maxRampEntryM = -1000f;
             sawRampSupport = 0;
             fallFrameCount = 0;
             lastForwardIntent = 0f;

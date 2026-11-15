@@ -125,6 +125,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
             public string readout;
             public string gate;
             public string[] expect;
+            public bool[] applies_d;
         }
 
         /// <summary>Only the placement keys this tool reads; JsonUtility ignores the rest.</summary>
@@ -401,8 +402,9 @@ namespace VRCKatamari.Editor.PhysicsTestField
             SerializedProperty readouts = RequireProperty(serialized, "checkReadouts", report);
             SerializedProperty gates = RequireProperty(serialized, "checkGateStages", report);
             SerializedProperty masks = RequireProperty(serialized, "checkExpectMasks", report);
+            SerializedProperty applies = RequireProperty(serialized, "checkAppliesMasks", report);
             if (ids == null || metrics == null || ops == null || limits == null || readouts == null ||
-                gates == null || masks == null)
+                gates == null || masks == null || applies == null)
             {
                 return false;
             }
@@ -415,6 +417,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
             readouts.arraySize = count;
             gates.arraySize = count;
             masks.arraySize = count;
+            applies.arraySize = count;
 
             for (int i = 0; i < count; i++)
             {
@@ -432,6 +435,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
                 readouts.GetArrayElementAtIndex(i).intValue = ReadoutCode(check.readout);
                 gates.GetArrayElementAtIndex(i).intValue = GateCode(check.gate);
                 masks.GetArrayElementAtIndex(i).intValue = ExpectMask(cell, check, report);
+                applies.GetArrayElementAtIndex(i).intValue = AppliesMask(cell, check, report);
             }
 
             return true;
@@ -954,6 +958,41 @@ namespace VRCKatamari.Editor.PhysicsTestField
         }
 
         /// <summary>Two bits per preset diameter, in <c>diameters[]</c> order: 0 n/a, 1 pass, 2 fail.</summary>
+        /// <summary>
+        /// One bit per preset diameter: does this criterion's scenario exist at that diameter?
+        /// </summary>
+        /// <remarks>
+        /// The data carries an explicit <c>applies_d</c> row (design section 4.1.4) so the rule and
+        /// its numbers are reviewable in one place; this tool only encodes it. Missing = applicable
+        /// everywhere (bit set), which keeps old data from turning checks into silent skips.
+        /// </remarks>
+        private static int AppliesMask(CellEntry cell, CheckEntry check, Report report)
+        {
+            int all = 15;
+            if (check.applies_d == null || check.applies_d.Length == 0) return all;
+            if (check.applies_d.Length != 4)
+            {
+                report.Note(cell.id + " check '" + check.id + "' has " + check.applies_d.Length +
+                            " applies_d entries; the field has 4 preset diameters");
+            }
+
+            int mask = 0;
+            for (int i = 0; i < check.applies_d.Length && i < 4; i++)
+            {
+                if (check.applies_d[i]) mask |= 1 << i;
+            }
+
+            // A row that excludes every diameter would silently retire the criterion; that is a
+            // data mistake, not a decision this tool takes.
+            if (mask == 0)
+            {
+                report.Error(cell.id + " check '" + check.id + "' is not applicable at any " +
+                             "diameter; remove the check instead of excluding all four");
+            }
+
+            return mask;
+        }
+
         private static int ExpectMask(CellEntry cell, CheckEntry check, Report report)
         {
             if (check.expect == null || check.expect.Length == 0) return 0;

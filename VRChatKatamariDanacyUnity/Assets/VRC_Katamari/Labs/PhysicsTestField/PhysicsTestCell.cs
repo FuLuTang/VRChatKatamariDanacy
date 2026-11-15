@@ -110,6 +110,10 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private int[] checkGateStages;
         [Tooltip("Two bits per preset diameter, in preset order: 0 n/a, 1 pass, 2 fail")]
         [SerializeField] private int[] checkExpectMasks;
+        [Tooltip("One bit per preset diameter: 1 = this criterion is measurable at that " +
+                 "diameter, 0 = the scene has no such scenario (explicit SKIPPED_NOT_APPLICABLE, " +
+                 "never a silent pass). Missing or short array = applicable everywhere.")]
+        [SerializeField] private int[] checkAppliesMasks;
 
         // ---- operator seams ----------------------------------------------------
 
@@ -374,6 +378,34 @@ namespace VRCKatamari.Labs.PhysicsTestField
             int shift = diameterIndex * 2;
             if (shift < 0 || shift > 30) return 0;
             return (mask >> shift) & 3;
+        }
+
+        public int GetCheckAppliesMask(int index)
+        {
+            if (checkAppliesMasks == null || index < 0 || index >= checkAppliesMasks.Length) return 0;
+            return checkAppliesMasks[index];
+        }
+
+        /// <summary>
+        /// Whether this criterion's SCENARIO exists at one preset diameter. A missing mask (older
+        /// scene data) means "applicable everywhere", so an import that predates this field cannot
+        /// silently turn every check into a skip.
+        /// </summary>
+        /// <remarks>
+        /// 0 means the cell's geometry makes the scenario impossible at that diameter - e.g. a
+        /// 45-degree ramp whose run is shorter than the ball's radius, or a landing whose deck is
+        /// lower than the ball's centre. The driver reports those as
+        /// <c>SKIPPED_NOT_APPLICABLE</c> and counts them as skipped; the rule and the numbers are
+        /// design section 4.1.4. It is NOT a way to retire a red criterion: a check that stays
+        /// applicable keeps failing honestly.
+        /// </remarks>
+        public bool CheckApplies(int index, int diameterIndex)
+        {
+            if (checkAppliesMasks == null || index < 0 || index >= checkAppliesMasks.Length) return true;
+            if (diameterIndex < 0 || diameterIndex > 30) return true;
+            int mask = checkAppliesMasks[index];
+            if (mask == 0) return true;
+            return ((mask >> diameterIndex) & 1) == 1;
         }
     }
 }

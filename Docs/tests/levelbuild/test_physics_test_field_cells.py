@@ -737,6 +737,143 @@ class SizeAccuracyAndRampLimit(unittest.TestCase):
         self.assertEqual(c05["drive"][-1]["t"], 2.5)
 
 
+
+def rotate_quat(quat, vector):
+    """Rotate a vector by a quaternion (xyzw), for reading ramp axes out of a placement."""
+    x, y, z, w = quat
+    vx, vy, vz = vector
+    # t = 2 * cross(q.xyz, v)
+    tx = 2.0 * (y * vz - z * vy)
+    ty = 2.0 * (z * vx - x * vz)
+    tz = 2.0 * (x * vy - y * vx)
+    return (vx + w * tx + (y * tz - z * ty),
+            vy + w * ty + (z * tx - x * tz),
+            vz + w * tz + (x * ty - y * tx))
+
+
+def ramp_geometry(placement):
+    """(horizontal run, slope in degrees) of the placement's ramp, from its box + quaternion."""
+    ramp = [s for s in placement["structures"] if s.get("role") == "ramp"][0]
+    axis_y = rotate_quat(ramp["rotationQuat"], (0.0, 1.0, 0.0))
+    slope = math.degrees(math.acos(max(-1.0, min(1.0, axis_y[1]))))
+    run = ramp["size"][2] * math.cos(math.radians(slope))
+    return run, slope
+
+
+def ramp_applies(check_id, diameter, nominal, run, slope):
+    """Design 4.1.4: R1 ramp_support, R2 ramp_entered, R3 landing checks."""
+    r = diameter / 2.0
+    theta = math.radians(slope)
+    if check_id == "ramp_support":
+        return run - r > 0.0
+    if check_id == "ramp_entered":
+        # Deadlock when the deck is still not steppable where the expanded deck face stops the
+        # ball; then the reachable travel past the foot is run - r, else the whole run.
+        deadlock = nominal - (run - r) * math.tan(theta) - r * (1.0 / math.cos(theta) - 1.0) > 0.5 * r
+        reachable = (run - r) if deadlock else run
+        return reachable >= 0.25 * diameter
+    if check_id in ("landing_gap", "landed_on_ground"):
+        return nominal >= r
+    return True
+
+
+class RampApplicability(unittest.TestCase):
+    """The A-class tiers: rules R1/R2/R3 recomputed from geometry, not trusted from the file.
+
+    Design 4.1.4 says a ramp-climb criterion is not applicable when the ball cannot use the
+    ramp. The rule lives in one place (this test) and the JSON row must agree, so a future
+    edit cannot quietly turn a red criterion into "not applicable".
+    """
+
+    def setUp(self):
+        self.field = load_field()
+        self.diameters = [d["diameter_m"] for d in self.field["diameters"]]
+        self.cells = {c["id"]: c for c in self.field["cells"] if c.get("wired")}
+
+    def test_applies_d_rows_are_four_booleans(self):
+        for cell in self.cells.values():
+            for check in cell["checks"]:
+                if "applies_d" not in check:
+                    continue
+                self.assertEqual(len(check["applies_d"]), 4, (cell["id"], check["id"]))
+                self.assertTrue(all(isinstance(v, bool) for v in check["applies_d"]),
+                                (cell["id"], check["id"]))
+                self.assertTrue(any(check["applies_d"]),
+                                "%s/%s excludes every diameter; remove the check instead"
+                                % (cell["id"], check["id"]))
+
+    def test_ramp_rows_match_the_geometry(self):
+        applicable_checks = ("ramp_support", "ramp_entered")
+        seen = 0
+        for cell in self.cells.values():
+            placement = load_cell(cell["placement"])
+            if placement is None:
+                continue
+            if not any(s.get("role") == "ramp" for s in placement["structures"]):
+                continue
+            run, slope = ramp_geometry(placement)
+            for check in cell["checks"]:
+                if check["id"] not in applicable_checks:
+                    continue
+                seen += 1
+                expected = [ramp_applies(check["id"], d, cell["nominal_m"], run, slope)
+                            for d in self.diameters]
+                actual = check.get("applies_d", [True, True, True, True])
+                self.assertEqual(actual, expected,
+                                 "%s/%s: geometry says %s, data says %s (run=%.3f slope=%.2f)"
+                                 % (cell["id"], check["id"], expected, actual, run, slope))
+        self.assertGreaterEqual(seen, 8, "ramp cells' support/entry rows must both be checked")
+
+    def test_landing_rows_match_the_deck_height(self):
+        seen = 0
+        for cell in self.cells.values():
+            for check in cell["checks"]:
+                if check["id"] not in ("landing_gap", "landed_on_ground"):
+                    continue
+                seen += 1
+                expected = [cell["nominal_m"] >= d / 2.0 for d in self.diameters]
+                actual = check.get("applies_d", [True, True, True, True])
+                self.assertEqual(actual, expected, (cell["id"], check["id"]))
+        self.assertGreaterEqual(seen, 2)
+
+    def test_the_real_reds_stay_applicable(self):
+        # C05's climbed is the 45-degree limit probe and C13's seam_no_step is the defect-note
+        # evidence: neither may be retired by an applies_d row.
+        c05 = self.cells["C05"]
+        climbed = [c for c in c05["checks"] if c["id"] == "climbed"][0]
+        self.assertEqual(climbed.get("applies_d", [True] * 4), [True] * 4)
+        self.assertEqual(climbed["limit"], 0.01)
+        c13 = self.cells["C13"]
+        seam = [c for c in c13["checks"] if c["id"] == "seam_no_step"][0]
+        self.assertEqual(seam.get("applies_d", [True] * 4), [True] * 4)
+        self.assertEqual(seam["limit"], 0.05)
+
+    def test_the_ramp_entry_threshold_is_derived_not_absolute(self):
+        # B-class fix (design 4.1.4): the driver derives one step-limit of travel instead of the
+        # old absolute 0.30, which sat 0.4 mm above the 45-degree ramp's geometric maximum.
+        driver = DRIVER_CS.read_text(encoding="utf-8")
+        self.assertIn('Same(metric, "ramp_entry_progress_m")', driver)
+        self.assertIn("min_progress=", driver)
+        self.assertIn("maxRampEntryM", driver)          # latched maximum, not the final position
+        self.assertIn("SKIPPED_NOT_APPLICABLE", driver)  # explicit skip, never a silent pass
+        self.assertIn("CheckApplies(", driver)
+        self.assertIn("notApplicable cell=", driver)
+        doc = (ROOT / "Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md").read_text(encoding="utf-8")
+        for needle in ("### 4.1.4", "### 4.1.5", "### 4.1.6", "SKIPPED_NOT_APPLICABLE"):
+            self.assertIn(needle, doc)
+
+    def test_the_c01_timeline_covers_the_growth_derated_speed(self):
+        # B-class fix: at D=2.2 growthSpeedFactor=0.25 caps the ball at 3.0 m/s, so the 6.86 m
+        # ramp needs ~0.75 s more than the 4 m/s assumption allowed.
+        c01 = self.cells["C01"]
+        drive = c01["drive"]
+        # The last row releases the second forward window; the row before it starts that window.
+        self.assertGreaterEqual(drive[-1]["t"], 8.75)
+        self.assertGreater(drive[-2]["forward"], 0.5)
+        motor = MOTOR_CS.read_text(encoding="utf-8")
+        self.assertIn("growthSpeedFactor = 0.25f", motor)
+
+
 class ArenaRules(unittest.TestCase):
     """The new placement rules a cell document has to satisfy."""
 

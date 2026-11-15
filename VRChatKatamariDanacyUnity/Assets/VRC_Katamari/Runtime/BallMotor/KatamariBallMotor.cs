@@ -394,14 +394,18 @@ namespace VRCKatamari.BallMotor
         // reference and Udon halted the motor for the rest of the session - the ball never
         // started). The rule is one rule, the same one the v2 contact tables follow:
         //   1. The first writer allocates. Every entry point calls an Ensure... method, so
-        //      no set depends on Start having run.
+        //      no set depends on Start having run. That first allocation is the only moment
+        //      a null or truncated destination can be GROWN, and it grows the whole set at
+        //      once (every destination at its own capacity).
         //   2. Start calls the SAME ensure instead of allocating a second copy, so a set
         //      registered before Start is kept rather than wiped by a re-allocation.
-        //   3. A null or undersized buffer is a refused call, never a null reference:
-        //      blocking/support record "set buffers unavailable", a ramp records its refusal
-        //      code, the candidate queue logs once and answers false, and AddPlane/AddBox -
-        //      which have no reason channel - answer false for the arena's existing report.
-        //      Nothing is written by a refused call.
+        //   3. A null or undersized buffer after that is a refused call, never a null
+        //      reference and never a partial write: blocking/support record "set buffers
+        //      unavailable", a ramp records its refusal code, the candidate queue logs once
+        //      and answers false, and AddPlane/AddBox - which have no reason channel - answer
+        //      false for the arena's existing report. It cannot be grown at that point: the
+        //      accepted set and its readers hold these exact arrays, so replacing them would
+        //      silently empty the ball's world. Nothing is written by a refused call.
         // The sets covered here are the pickup field's two role sets (blocking, support),
         // the scene geometry (planes, boxes, ramps) and the candidate queue. The v2 contact
         // tables have their own ensure for the same reason (EnsureContactV2Buffers); the
@@ -1162,15 +1166,50 @@ namespace VRCKatamari.BallMotor
         /// whether they are usable.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// See the ownership note above the field declarations. Called by Start and by every
-        /// entry point that writes a scene set, so the component works in either Start
-        /// order. The length checks are not paranoia: a caller (or a future refactor) that
-        /// hands over a shorter array is refused at the entry point instead of throwing a
-        /// null reference or an index-out-of-range inside the step loop.
+        /// entry point that writes a scene set, so the component works in either Start order.
+        /// The first writer allocates the WHOLE set, every destination at its own capacity,
+        /// which is also what makes a null or truncated destination harmless before Start.
+        /// </para>
+        /// <para>
+        /// After that first allocation the set is never replaced: the registered entries and
+        /// every reader of them (the sweep copy RebuildObstacles builds, the support query)
+        /// hold these exact arrays, so re-allocating would silently empty the ball's world.
+        /// A destination that is then null or shorter than its capacity therefore cannot be
+        /// grown here; it is a refused call with a reason instead - "set buffers unavailable"
+        /// for the blocking and support sets, the ramp's <see cref="RampRefusalNoBuffers"/>,
+        /// and a plain false for AddPlane/AddBox, which have no reason channel. A refused call
+        /// writes nothing (rule 3 of the ownership note; the F1 null reference cannot come
+        /// back through this door).
+        /// </para>
         /// </remarks>
         private bool EnsureRegistrationBuffers()
         {
             if (!registrationBuffersReady) AllocateRegistrationBuffers();
+            return RegistrationBuffersAtCapacity();
+        }
+
+        /// <summary>
+        /// True when every scene-set destination exists and can hold a full set.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Both halves of every pair are checked, not one representative: a full minima array
+        /// next to a short maxima array is exactly the state that writes past the end of the
+        /// shorter one, and it is what the ownership test's undersized case exercises.
+        /// </para>
+        /// <para>
+        /// The capacities are this component's own constants
+        /// (<see cref="MaxPlaneCount"/>, <see cref="MaxBoxCount"/>,
+        /// <see cref="MaxBlockingBoxCount"/>, <see cref="MaxSupportPropCount"/>,
+        /// <see cref="SupportSurfaceMath.MaxRampCount"/>), so "a full set" is decided in one
+        /// place. Lengths are compared with <c>&lt;</c> rather than equality, so a longer
+        /// array stays usable; nothing writes past a capacity.
+        /// </para>
+        /// </remarks>
+        private bool RegistrationBuffersAtCapacity()
+        {
             if (planeNormalBuffer == null || planeOffsetBuffer == null) return false;
             if (boxMinimumBuffer == null || boxMaximumBuffer == null) return false;
             if (blockingMinimumBuffer == null || blockingMaximumBuffer == null) return false;
@@ -1179,9 +1218,18 @@ namespace VRCKatamari.BallMotor
                 rampRightBuffer == null) return false;
             if (rampHalfWidthBuffer == null || rampHalfRunBuffer == null) return false;
             if (planeNormalBuffer.Length < MaxPlaneCount) return false;
+            if (planeOffsetBuffer.Length < MaxPlaneCount) return false;
+            if (boxMinimumBuffer.Length < MaxBoxCount) return false;
+            if (boxMaximumBuffer.Length < MaxBoxCount) return false;
             if (blockingMinimumBuffer.Length < MaxBlockingBoxCount) return false;
+            if (blockingMaximumBuffer.Length < MaxBlockingBoxCount) return false;
             if (supportPropMinimumBuffer.Length < MaxSupportPropCount) return false;
+            if (supportPropMaximumBuffer.Length < MaxSupportPropCount) return false;
             if (rampCenterBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
+            if (rampNormalBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
+            if (rampRightBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
+            if (rampHalfWidthBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
+            if (rampHalfRunBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
             return true;
         }
 
@@ -1224,9 +1272,15 @@ namespace VRCKatamari.BallMotor
 
         /// <summary>
         /// Allocates the candidate queue the first time the host submits one, and reports
-        /// whether it is usable. Same ownership rule as the scene sets: the pickup field's
-        /// scan can reach SubmitCandidate before this component's Start.
+        /// whether it is usable.
         /// </summary>
+        /// <remarks>
+        /// Same ownership rule as the scene sets: the pickup field's scan can reach
+        /// SubmitCandidate before this component's Start, so the first submit allocates the
+        /// whole queue (every destination at <see cref="PendingCandidateCapacity"/>). After
+        /// that the queue is never replaced - it holds the accepted entries - so a missing or
+        /// short destination is answered false and logged once, never written into.
+        /// </remarks>
         private bool EnsureCandidateBuffers()
         {
             if (!candidateBuffersReady)
@@ -1243,12 +1297,33 @@ namespace VRCKatamari.BallMotor
                 pendingCandidateCount = 0;
                 candidateBuffersReady = true;
             }
+            return CandidateBuffersAtCapacity();
+        }
+
+        /// <summary>
+        /// True when every queue destination exists and can hold a full queue.
+        /// </summary>
+        /// <remarks>
+        /// Every array is checked, for the same reason the scene-set pairs are: the queue is
+        /// written by index up to <see cref="PendingCandidateCapacity"/>, so one short array
+        /// is an out-of-range write waiting for the first submit.
+        /// </remarks>
+        private bool CandidateBuffersAtCapacity()
+        {
             if (pendingAbsorbable == null || pendingKinds == null) return false;
             if (pendingBounds == null || pendingPositions == null) return false;
             if (pendingValues == null || pendingItemIds == null) return false;
             if (pendingGenerations == null || pendingAccepted == null) return false;
             if (pendingSubmitTimes == null) return false;
+            if (pendingAbsorbable.Length < PendingCandidateCapacity) return false;
+            if (pendingKinds.Length < PendingCandidateCapacity) return false;
+            if (pendingBounds.Length < PendingCandidateCapacity) return false;
+            if (pendingPositions.Length < PendingCandidateCapacity) return false;
+            if (pendingValues.Length < PendingCandidateCapacity) return false;
             if (pendingItemIds.Length < PendingCandidateCapacity) return false;
+            if (pendingGenerations.Length < PendingCandidateCapacity) return false;
+            if (pendingAccepted.Length < PendingCandidateCapacity) return false;
+            if (pendingSubmitTimes.Length < PendingCandidateCapacity) return false;
             return true;
         }
 

@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using VRCKatamari.Pickup;
 
 namespace VRCKatamari.Tests
 {
@@ -31,6 +32,11 @@ namespace VRCKatamari.Tests
     {
         private const BindingFlags Any = BindingFlags.Instance | BindingFlags.NonPublic |
             BindingFlags.Public;
+
+        // The fixture prop's gameplay volume (metres). A prop is a WALL only while it is
+        // beyond the ball's absorb volume limit; below the limit it is food and the host is
+        // right to register nothing for it. See BuildFieldWithOneBlockingProp.
+        private static readonly Vector3 FixturePropBounds = new Vector3(0.3f, 0.3f, 0.3f);
 
         private Type motorType;
         private Type fieldType;
@@ -161,6 +167,7 @@ namespace VRCKatamari.Tests
             // field pushes here used to throw inside SetBlockingBoxes and halt the motor.
             SetField(motorType, motor, "semanticDiameterWorldM", 0.2997f);
             BuildFieldWithOneBlockingProp();
+            AssertFixturePropIsAWall();
 
             Invoke(field, fieldType, "Update");
 
@@ -192,6 +199,7 @@ namespace VRCKatamari.Tests
 
             // Waiting, not skipping for ever: once the size exists the same scan registers.
             Invoke(motor, motorType, "Start");
+            AssertFixturePropIsAWall();
             SetField(fieldType, field, "nextBlockingScanTime", 0f);
             Invoke(field, fieldType, "Update");
             Assert.Greater(
@@ -204,9 +212,19 @@ namespace VRCKatamari.Tests
 
         private void BuildFieldWithOneBlockingProp()
         {
-            // One absorbable prop above the ball's bottom and within the scan margin. Its
-            // bounds are small enough to pass the volume gate and its top is above the step
-            // limit, which is exactly the blocking classification.
+            // One prop above the ball's bottom and within the scan margin that the motor
+            // cannot absorb yet: a wall, not food. Both of the design's predicates are
+            // satisfied by size alone (TERRAIN_SUPPORT table 4: beyond the absorb volume
+            // limit AND rise > stepLimit):
+            //   - volume: 0.30^3 = 0.027 m3 against a limit of (pi/6)*0.2997^3/10 =
+            //     0.00141 m3, ~19x over, so its own D_abs is ~0.80 m and a 0.30 m ball never
+            //     eats it. A 0.1 m cube (0.001 m3) would be BELOW that limit - absorbable,
+            //     i.e. food - and the host would correctly register no obstacle for it;
+            //   - rise: the top is 0.05 + 0.15 = 0.20 m above the ball's bottom, past every
+            //     step limit this ball derives (0.25 * 0.2997 = 0.075), so it is blocking
+            //     rather than a support prop.
+            // AssertFixturePropIsAWall re-checks the volume half against the motor's own
+            // limit in each test, so this fixture cannot quietly turn back into food.
             propObject = new GameObject("blocking_prop");
             propObject.transform.position = new Vector3(0.1f, 0.05f, 0f);
             propObject.AddComponent<MeshRenderer>();
@@ -217,10 +235,23 @@ namespace VRCKatamari.Tests
             SetField(fieldType, field, "propTransforms", new[] { propObject.transform });
             SetField(fieldType, field, "itemIds", new[] { "blocking_prop" });
             SetField(fieldType, field, "kinds", new[] { "furniture" });
-            SetField(fieldType, field, "propBounds", new[] { new Vector3(0.1f, 0.1f, 0.1f) });
-            SetField(fieldType, field, "propLocalBounds", new[] { new Vector3(0.1f, 0.1f, 0.1f) });
+            SetField(fieldType, field, "propBounds", new[] { FixturePropBounds });
+            SetField(fieldType, field, "propLocalBounds", new[] { FixturePropBounds });
             SetField(fieldType, field, "valueUnits", new[] { 1 });
             Invoke(field, fieldType, "Start");
+        }
+
+        /// <summary>
+        /// Asserts the fixture prop really is a wall under the gate's own definition, using the
+        /// motor's own limit. Only callable once the motor has a size (its limit is 0 before).
+        /// </summary>
+        private void AssertFixturePropIsAWall()
+        {
+            float limit = (float)Call(motorType, motor, "GetAbsorbVolumeLimitWorldM3");
+            Assert.Greater(limit, 0f, "the motor must have a size, so its absorb limit is priced");
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(FixturePropBounds, limit),
+                "the fixture prop must be beyond the ball's absorb volume limit; an absorbable "
+                + "prop is food, and the host is right to register nothing for it");
         }
 
         private static Type FindType(string fullName)

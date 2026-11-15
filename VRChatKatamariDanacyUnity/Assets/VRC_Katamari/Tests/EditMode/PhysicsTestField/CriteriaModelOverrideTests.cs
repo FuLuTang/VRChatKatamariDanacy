@@ -1,14 +1,17 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins the criteria importer's v2 override encoding and the cell fields it writes into.
+    /// Pins the criteria importer's v2 override encoding, the cell fields it writes into, and
+    /// the bake that must tag exactly the file's 11 v2 rows (never all 59).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -25,8 +28,8 @@ namespace VRCKatamari.Tests
     /// These calls go through reflection on purpose, exactly like
     /// <see cref="PlacementImporterCurveRampTests"/>: the importer lives in
     /// <c>Assets/VRC_Katamari/Editor/PhysicsTestField/</c> and this assembly references only
-    /// <c>VRCKatamari.Runtime</c>, so it cannot name editor types. No scene is created and
-    /// nothing is saved.
+    /// <c>VRCKatamari.Runtime</c>, so it cannot name editor types. No scene file is created
+    /// and nothing is saved; the bake test adds one transient cell object and destroys it.
     /// </para>
     /// <para>
     /// Mask arithmetic (the cell's encoding): two bits per preset diameter in preset order,
@@ -106,7 +109,7 @@ namespace VRCKatamari.Tests
                 {
                     object check = checks.GetValue(c);
                     object v2 = Field(check.GetType(), check, "v2");
-                    if (v2 == null) continue;
+                    if (!IsV2Override(v2)) continue;
                     rows++;
                     string checkId = (string)Field(check.GetType(), check, "id");
                     string where = cellId + "/" + checkId;
@@ -134,8 +137,129 @@ namespace VRCKatamari.Tests
                 }
             }
 
-            // 4 ramp_registered rows + C06 x3 + C09/C10 on_step + C10 blocked_gap + C14 lift.
-            Assert.AreEqual(11, rows, "the v2 table changed; update this test with it");
+            // The file's own count is assertable now that the SAME predicate the importer bakes
+            // with is what this test counts (see IsV2Override). It is the number the JSON guard
+            // pins too: Docs/tests/levelbuild/test_physics_test_field_cells.py counts the 11
+            // real "v2" keys in the file. If the importer ever regresses to `v2 != null` again,
+            // TheImporterBakesExactlyTheFilesElevenV2Rows fails before this one does.
+            const int DesignV2RowCount = 11;
+            Assert.AreEqual(DesignV2RowCount, rows,
+                "the criteria file lost a v2 row CONTACT_MODEL_V2 7.7.2/7.7.4 requires: four "
+                + "ramp_registered rows (C01/C03/C05/C13) + C06's three + C09/C10 on_step + "
+                + "C10 blocked_gap + C14 lift_bounded. The exact count is pinned by "
+                + "Docs/tests/levelbuild/test_physics_test_field_cells.py");
+        }
+
+        /// <summary>
+        /// The bake path itself, not just the predicate: the pass10 defect was at the call site
+        /// (<c>bool hasOverride = check.v2 != null;</c>), so counting what the importer writes
+        /// into <c>checkHasV2[]</c> is the only assertion that can see it.
+        /// </summary>
+        /// <remarks>
+        /// A transient physics cell is added by <see cref="Type"/> only to give <c>WriteChecks</c>
+        /// a <see cref="SerializedObject"/>; the arrays are read back from that unapplied copy,
+        /// the host is destroyed again and nothing is saved.
+        /// </remarks>
+        [Test]
+        public void TheImporterBakesExactlyTheFilesElevenV2Rows()
+        {
+            object doc = LoadFieldDocument();
+            Array cells = (Array)Field(doc.GetType(), doc, "cells");
+            Assert.AreEqual(9, cells.Length, "the field has 9 wired cells");
+
+            var baked = new Dictionary<string, int>();
+            int total = 0;
+            int v2Rows = 0;
+            var host = new GameObject("CriteriaV2RowProbe");
+            try
+            {
+                Component component = host.AddComponent(CellType());
+                Assert.IsNotNull(component, "AddComponent(" + CellTypeName + ") returned null");
+
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    object cell = cells.GetValue(i);
+                    if (cell == null) continue;
+                    // Mirror Import(): only a wired cell is baked, so only it is counted.
+                    if (!(bool)Field(cell.GetType(), cell, "wired")) continue;
+                    string cellId = (string)Field(cell.GetType(), cell, "id");
+                    Array checks = (Array)Field(cell.GetType(), cell, "checks");
+                    if (checks == null) continue;
+
+                    var serialized = new SerializedObject(component);
+                    object report = NewReport();
+                    Assert.IsTrue((bool)InvokePrivate("WriteChecks", serialized, cell, report),
+                        cellId + ": the importer refused to encode its checks");
+                    Assert.AreEqual(0, Errors(report).Count, cellId + ": " + Errors(report));
+                    SerializedProperty hasV2 = serialized.FindProperty("checkHasV2");
+                    Assert.IsNotNull(hasV2, CellTypeName + ".checkHasV2 is missing");
+                    Assert.AreEqual(checks.Length, hasV2.arraySize,
+                        cellId + ": checkHasV2 must be one row per check");
+
+                    for (int c = 0; c < checks.Length; c++)
+                    {
+                        object check = checks.GetValue(c);
+                        string where = cellId + "/" + (string)Field(check.GetType(), check, "id");
+                        int flag = hasV2.GetArrayElementAtIndex(c).intValue;
+                        bool expected = IsV2Override(Field(check.GetType(), check, "v2"));
+                        Assert.AreEqual(expected ? 1 : 0, flag, where +
+                            ": the baked v2 flag must come from HasV2Override, not v2 != null " +
+                            "(Unity invents a default V2Entry for every check)");
+                        baked[where] = flag;
+                        total++;
+                        if (flag != 0) v2Rows++;
+                    }
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(host);
+            }
+
+            Assert.AreEqual(59, total,
+                "the criteria file's wired check count moved; update this test");
+            Assert.AreEqual(11, v2Rows, "the importer must bake the file's 11 v2 rows; 59 means " +
+                "every default V2Entry was tagged (the pass10 regression)");
+            Assert.Less(v2Rows, total, "v2 rows sit on top of v1 rows: all rows tagged is the bug");
+
+            // The defect's nine victims: these rows have NO v2 block, so the driver must keep
+            // judging them with v1 and derive their step limit (deck_gap_m for the climbed rows,
+            // ramp_entry_progress_m for ramp_entered; design PHYSICS_TEST_FIELD section 5.6).
+            string[] v1Rows =
+            {
+                "C08/on_step",
+                "C01/climbed", "C01/ramp_entered",
+                "C03/climbed", "C03/ramp_entered",
+                "C05/climbed", "C05/ramp_entered",
+                "C13/climbed", "C13/ramp_entered",
+            };
+            for (int i = 0; i < v1Rows.Length; i++)
+            {
+                Assert.IsTrue(baked.ContainsKey(v1Rows[i]), v1Rows[i] + " is not in the file");
+                Assert.AreEqual(0, baked[v1Rows[i]], v1Rows[i] + " must stay a v1 row or the " +
+                    "driver skips its step-limit derivation (design section 5.6)");
+            }
+
+            // The other side of the same bug: the on_step rows that DO carry an override stay v2.
+            Assert.AreEqual(1, baked["C09/on_step"], "C09/on_step has an explicit expect flip");
+            Assert.AreEqual(1, baked["C10/on_step"], "C10/on_step has an explicit expect flip");
+        }
+
+        /// <summary>
+        /// Delegates to the importer's one presence test; never reimplement it here.
+        /// </summary>
+        /// <remarks>
+        /// <c>v2 != null</c> is NOT the test. JsonUtility deserializes a nested serializable
+        /// class into an instance even when the JSON key is absent (Unity's serializer has no
+        /// null for a class field without <c>[SerializeReference]</c>), so every check reads
+        /// back with a non-null all-default <c>V2Entry</c>: the round-M run counted 59 "rows"
+        /// where the file has 11 blocks. The importer's <c>HasV2Override</c> is the content
+        /// test (expect / metric / op / threshold / not_applicable); this wrapper is only the
+        /// reflection plumbing that keeps this file honest about calling it.
+        /// </remarks>
+        private static bool IsV2Override(object v2)
+        {
+            return (bool)Invoke("HasV2Override", v2);
         }
 
         [Test]
@@ -257,7 +381,9 @@ namespace VRCKatamari.Tests
             object cell = FindCell(cellId);
             object check = FindCheck(cellId, checkId);
             object report = NewReport();
-            Assert.IsNotNull(Field(check.GetType(), check, "v2"),
+            // Not just "v2 != null": JsonUtility hands out a default entry for every check
+            // (see IsV2Override), so the row must be proved to carry the override itself.
+            Assert.IsTrue(IsV2Override(Field(check.GetType(), check, "v2")),
                 cellId + "/" + checkId + " has no v2 override");
             Assert.AreEqual(expectMask, (int)Invoke("V2ExpectMask", cell, check, report),
                 cellId + "/" + checkId + " expect mask");
@@ -423,6 +549,19 @@ namespace VRCKatamari.Tests
         {
             MethodInfo method = ImporterType().GetMethod(methodName,
                 BindingFlags.Public | BindingFlags.Static);
+            Assert.IsNotNull(method, ImporterTypeName + "." + methodName + " is missing");
+            return method.Invoke(null, arguments);
+        }
+
+        /// <summary>
+        /// The bake entry point: <c>WriteChecks</c> is private because only <c>Import</c> calls
+        /// it, but it is the function that decides <c>checkHasV2[]</c>, so the test drives it
+        /// directly instead of copying its body.
+        /// </summary>
+        private static object InvokePrivate(string methodName, params object[] arguments)
+        {
+            MethodInfo method = ImporterType().GetMethod(methodName,
+                BindingFlags.NonPublic | BindingFlags.Static);
             Assert.IsNotNull(method, ImporterTypeName + "." + methodName + " is missing");
             return method.Invoke(null, arguments);
         }

@@ -134,11 +134,16 @@ namespace VRCKatamari.Editor.PhysicsTestField
         /// v1 row above is the criterion for BOTH motor models.
         /// </summary>
         /// <remarks>
+        /// JsonUtility cannot represent absence for this field: a check whose JSON has no
+        /// <c>v2</c> key still deserializes to an all-default instance. Presence is therefore a
+        /// content question - use <see cref="HasV2Override"/>, never <c>v2 != null</c>.
+        /// <para>
         /// Only the fields that actually differ are carried. <c>op</c> always carries <c>limit</c>
         /// (one decision); <c>threshold</c> is the symbolic alternative to a baked limit and is
         /// derived by the driver at run time from ContactTuning. <c>not_applicable</c> is the
         /// shorthand for "n/a at every diameter" and is written as an all-zero expect mask, which
         /// the driver already reports as SKIPPED_N_A.
+        /// </para>
         /// </remarks>
         [Serializable]
         public class V2Entry
@@ -498,8 +503,10 @@ namespace VRCKatamari.Editor.PhysicsTestField
 
                 // The v2 row (design section 5.6). Its sentinels are chosen so "no override" and
                 // "an override whose value happens to be 0" stay different: "" / -1 inherit, and a
-                // 0 expect mask is a real answer (n/a at every diameter).
-                bool hasOverride = check.v2 != null;
+                // 0 expect mask is a real answer (n/a at every diameter). HasV2Override, not
+                // "check.v2 != null", because JsonUtility materialises a default V2Entry for
+                // every check (see its remarks: the pass10 defect tagged all 59 rows).
+                bool hasOverride = HasV2Override(check.v2);
                 hasV2.GetArrayElementAtIndex(i).intValue = hasOverride ? 1 : 0;
                 v2Metrics.GetArrayElementAtIndex(i).stringValue =
                     hasOverride && check.v2.metric != null ? check.v2.metric : "";
@@ -1132,6 +1139,41 @@ namespace VRCKatamari.Editor.PhysicsTestField
         }
 
         // ---- the v2 override row (design PHYSICS_TEST_FIELD section 5.6) ---------
+
+        /// <summary>
+        /// True when a deserialized <c>v2</c> entry actually carries an override; false for the
+        /// all-default entry Unity invents for a check whose JSON has no <c>v2</c> key.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <c>v2 != null</c> is NOT the presence test, and using it as one is the pass10 defect
+        /// (2026-11-15): JsonUtility fills a nested <c>[Serializable]</c> class field with a
+        /// default instance even when the key is absent (a plain class field has no null), so
+        /// every check read back non-null and the bake tagged all 59 checks as v2 rows when the
+        /// file has 11 blocks. The null test is indistinguishable from "the file has no v2 row"
+        /// by construction, so the presence test must be content: a real block always sets at
+        /// least one of the documented <c>criteria_models.override_keys</c> - <c>expect</c>,
+        /// <c>metric</c>, <c>op</c>, <c>threshold</c> or <c>not_applicable</c>.
+        /// </para>
+        /// <para>
+        /// A block that carries only <c>note</c> (or only <c>limit</c> without <c>op</c>, which
+        /// the encoder would drop anyway) means "inherit the v1 row", exactly like no block, so
+        /// it is not an override and must not be counted. This is the ONE implementation of the
+        /// test: <c>WriteChecks</c> bakes <c>checkHasV2[]</c> with it and
+        /// <c>CriteriaModelOverrideTests</c> calls it for the real file. The JSON guard
+        /// (<c>Docs/tests/levelbuild/test_physics_test_field_cells.py</c>) owns the file's
+        /// vocabulary and its closed 11-block count.
+        /// </para>
+        /// </remarks>
+        public static bool HasV2Override(V2Entry v2)
+        {
+            if (v2 == null) return false;
+            if (v2.not_applicable) return true;
+            if (!string.IsNullOrEmpty(v2.metric)) return true;
+            if (!string.IsNullOrEmpty(v2.op)) return true;
+            if (!string.IsNullOrEmpty(v2.threshold)) return true;
+            return v2.expect != null && v2.expect.Length > 0;
+        }
 
         /// <summary>
         /// The v2 expect mask, or -1 for "inherit the v1 row".

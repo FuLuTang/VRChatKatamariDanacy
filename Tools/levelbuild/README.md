@@ -162,13 +162,13 @@ source ~/tools/blender-env.sh
 
 1. **用真实尺寸重新坐好**：布局的 `y` 是 `support_top + 它自己的高度/2`，而高度表和模型 manifest 不是一个口径；转换后按 manifest AABB 重坐（`--no-seat` 关掉）。
 2. **`support` 标签变成 id**：`bed → flower_bed`，`folding_table → 那件折叠桌的 itemId`（走 `stackedOn`）；无法唯一确定的标签会列出来，交给 `check` 的「悬空」规则判。
-3. **没有模型的 def 默认丢掉**（`--keep-missing` 保留，此时 `check` 会红）。本仓现在缺 9 个 def 的模型（`beer_crate`、`book_stack`、`cooler_box_large`、`crate`、`crate_large`、`lounge_chair`、`picnic_bench`、`storage_bin`、`stroller`），所以 127 件 / 1500 u 的源表转出来是 116 件 / 718 u——**差额全部是这 9 个 def**，补齐模型后重跑即可。
+3. **没有模型的 def 默认丢掉**（`--keep-missing` 保留，此时 `check` 会红）。本仓的模型现已齐备：127 件 / 1500 u 的源表转出来就是 **127 件 / 1500 u**，`check --report` 0 错；`--expected 127,1500` 仍作为设计总量的闸保留。
 
 要给「设计总量」上闸（推荐：这样缺件是红的，而不是悄悄变成新的期望值）：
 
 ```bash
 python3 Tools/levelbuild/levelbuild.py from-layout ... --out ... --expected 127,1500
-python3 Tools/levelbuild/levelbuild.py check <out>     # FAIL: propCount -11 / valueUnits -782，正好是缺的那几件
+python3 Tools/levelbuild/levelbuild.py check <out>     # PASS: propCount 127 / valueUnits 1500
 ```
 
 ---

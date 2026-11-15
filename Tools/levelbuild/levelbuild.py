@@ -241,6 +241,52 @@ def _yaw_quat(yaw_deg):
     return core.quat_axis_angle((0.0, 1.0, 0.0), math.radians(float(yaw_deg or 0.0)))
 
 
+#: A boundary is drawn as a 1.2 m high, 4 cm thick wall along the arena edge.
+BOUNDARY_HEIGHT_M = 1.2
+BOUNDARY_THICKNESS_M = 0.04
+
+
+def _boundary_size(inward, length):
+    """The wall's local size for an inward normal, keeping local +Y on ``inward``.
+
+    ``align_up_to`` only pins local +Y; the two in-plane axes are whatever the
+    shortest-arc rotation produces, and they differ between the four sides.  For an
+    inward normal of +-X it sends local +X onto -+Y (so local +X *is* the height) and
+    leaves local +Z along the wall; for +-Z it is local +Z that turns vertical and
+    local +X that stays along the wall.  Handing every wall ``[length, thickness,
+    height]`` therefore made the x walls ``length`` metres tall - 13.4 m grey pillars
+    in the overview render - while the z walls looked right.
+
+    So the desired *world* dimensions are mapped back onto whichever local axis
+    carries them instead of assuming one fixed order.  A normal that is not aligned
+    with a world axis has no such frame under ``align_up_to`` (both in-plane axes end
+    up oblique), so it raises rather than silently drawing a slanted, wrong-sized box;
+    the layout format only has the four side walls.
+    """
+    quat = core.align_up_to(inward)
+    wanted = {"y": BOUNDARY_HEIGHT_M}
+    if abs(inward[0]) >= abs(inward[2]):
+        wanted["x"] = BOUNDARY_THICKNESS_M     # normal along X: the thickness is world X
+        wanted["z"] = length                   # the wall runs along world Z
+    else:
+        wanted["z"] = BOUNDARY_THICKNESS_M
+        wanted["x"] = length
+
+    size = []
+    for local_axis, local in enumerate(((1.0, 0.0, 0.0), (0.0, 1.0, 0.0),
+                                        (0.0, 0.0, 1.0))):
+        turned = core.quat_rotate(quat, local)
+        world_axis = max(range(3), key=lambda index: abs(turned[index]))
+        if abs(turned[world_axis]) < 0.999:
+            raise ValueError(
+                "boundary inward normal %r is not axis-aligned: local axis %d lands on "
+                "no world axis (%.4f), so a 1.2 m high wall cannot be drawn without "
+                "changing the orientation" % (tuple(inward), local_axis,
+                                              abs(turned[world_axis])))
+        size.append(wanted["xyz"[world_axis]])
+    return size
+
+
 def _structure_from_shell(shell, bounds):
     structures = []
     x0, x1 = float(bounds["x0"]), float(bounds["x1"])
@@ -260,19 +306,21 @@ def _structure_from_shell(shell, bounds):
         })
 
     walls = {
-        "boundary_x0": ((1.0, 0.0, 0.0), (x0, centre_z)),
-        "boundary_x1": ((-1.0, 0.0, 0.0), (x1, centre_z)),
-        "boundary_z0": ((0.0, 0.0, 1.0), (centre_x, z0)),
-        "boundary_z1": ((0.0, 0.0, -1.0), (centre_x, z1)),
+        "boundary_x0": ((1.0, 0.0, 0.0), (x0, centre_z), depth),
+        "boundary_x1": ((-1.0, 0.0, 0.0), (x1, centre_z), depth),
+        "boundary_z0": ((0.0, 0.0, 1.0), (centre_x, z0), width),
+        "boundary_z1": ((0.0, 0.0, -1.0), (centre_x, z1), width),
     }
-    for wall_id, (inward, (cx, cz)) in walls.items():
+    for wall_id, (inward, (cx, cz), length) in walls.items():
         if wall_id not in by_id:
             continue
-        # The JSON states a wall as a plane whose local +Y is the inward normal.
+        # The JSON states a wall as a plane whose local +Y is the inward normal.  Its
+        # local size is chosen per normal so the *world* box is always side x 1.2 x 0.04.
         quat = core.align_up_to(inward)
         structures.append({
             "id": wall_id, "kind": "boundary", "role": "boundary", "shape": "plane",
-            "center": [cx, floor + 0.6, cz], "size": [max(width, depth), 0.04, 1.2],
+            "center": [cx, floor + BOUNDARY_HEIGHT_M / 2.0, cz],
+            "size": [round(v, 4) for v in _boundary_size(inward, length)],
             "rotationQuat": list(core.rounded_seq(quat, core.QUAT_DECIMALS)),
             "collision": "none", "absorbable": False, "support": False,
         })

@@ -678,7 +678,7 @@ python3 Tools/levelbuild/levelbuild.py from-layout Docs/Design/StoryMode/picnic_
 python3 Tools/levelbuild/levelbuild.py check <该文件> --report     # 0 错
 ```
 
-读数：**116 件 / 718 u / 35 def / 结构 1 ground + 4 boundary + 4 box + 2 ramp**（带 `--expected 127,1500` 时 `check` 会红成 `-11 件 / -782 u`，正好等于缺的那几件——这才是该有的闸）。设计表是 127 件 / 1500 u，差额 **11 件 / 782 u** 全部来自 **9 个还没有模型的 def**（`beer_crate`、`book_stack`、`cooler_box_large`、`crate`、`crate_large`、`lounge_chair`、`picnic_bench`、`storage_bin`、`stroller`）——模型到位后重跑 `from-layout` 就会对上。转换做了三件事：按**真实尺寸**重坐（布局的 `y` 用的是它自己的高度表）、`support` 标签→id（`bed→flower_bed`、`folding_table→那件折叠桌的 itemId` 走 `stackedOn`）、两块的斜板从**坡脚点**重建、且把**作者给的底/顶线当成行走面**（中心 = 坡脚 + 半坡长 − 半板厚·法线；板体向地面/坡内延伸，所以坡脚板底比地面低约 3.5 cm，这是设计意图，校验器按「一个板厚」放行）。直接把 `center` 抄进盒会错两层：坡脚浮 0.245 m，行走面又高出设计线一个板厚（实测 `ramp_to_table` 0.746 vs 台面 0.70）。
+读数：**127 件 / 1500 u / 44 def / 结构 1 ground + 4 boundary + 4 box + 2 ramp**（`--expected 127,1500`，`check --report` **0 错 0 警告**）。9 个原先缺模型的 def 现已齐备，生成物与设计表一致。转换做了三件事：按**真实尺寸**重坐（布局的 `y` 用的是它自己的高度表）、`support` 标签→id（`bed→flower_bed`、`folding_table→那件折叠桌的 itemId` 走 `stackedOn`）、两块的斜板从**坡脚点**重建、且把**作者给的底/顶线当成行走面**（中心 = 坡脚 + 半坡长 − 半板厚·法线；板体向地面/坡内延伸，所以坡脚板底比地面低约 3.5 cm，这是设计意图，校验器按「一个板厚」放行）。直接把 `center` 抄进盒会错两层：坡脚浮 0.245 m，行走面又高出设计线一个板厚（实测 `ramp_to_table` 0.746 vs 台面 0.70）。
 
 另有一条源数据观察：`shell_tree_mound`（2.5×2.5，在 `(-18.75,-18.75)`）会越过 `x0/z0` 两道边界平面约 0.65 m——结构不参与越界规则，所以不是错误，但角树有一半在场外。
 

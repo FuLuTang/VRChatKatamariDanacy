@@ -873,7 +873,7 @@ namespace VRCKatamari.Editor.Pickup
                     }
                     else
                     {
-                        report.Note("'" + candidate.Path + "' has no Collider and none could be " +
+                        report.Notes.Add("'" + candidate.Path + "' has no Collider and none could be " +
                                     "created; its propColliders slot stays empty and the prop will stay " +
                                     "collidable after it is absorbed");
                     }

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VRC塊魂 · 关卡编辑器</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <header id="toolbar">
+    <div class="brand">
+      <span class="logo">塊</span>
+      <div>
+        <strong>VRC塊魂 · 关卡编辑器</strong>
+        <div class="sub"><span id="level-id">…</span><span id="level-path"></span></div>
+      </div>
+    </div>
+
+    <div class="group level-group">
+      <select id="level-select" title="关卡"></select>
+      <button id="open-level" class="primary">打开</button>
+    </div>
+
+    <div class="group" id="camera-buttons"></div>
+
+    <div class="group">
+      <button id="mode-orbit" class="active" title="环绕相机">环绕</button>
+      <button id="mode-walk" title="行走模式（Tab）">行走</button>
+    </div>
+
+    <div class="group eye-group" title="行走模式的眼高（米）">
+      <label>眼高 <input id="eye-height" type="number" value="0.6" step="0.1" min="0.1" max="3.0"></label>
+      <button class="mini" data-eye="0.6">球 0.6</button>
+      <button class="mini" data-eye="1.6">人 1.6</button>
+    </div>
+
+    <div class="group">
+      <button id="undo" title="撤销 (Ctrl+Z)">↶</button>
+      <button id="redo" title="重做 (Ctrl+Y)">↷</button>
+      <button id="screenshot" title="保存 PNG">截图</button>
+    </div>
+
+    <div id="save-status" class="save-status"><span class="dot"></span><span id="save-text">连接中…</span></div>
+  </header>
+
+  <main>
+    <aside id="left">
+      <section class="panel palette-panel">
+        <div class="panel-head">
+          <h2>道具库 <span class="badge" id="palette-count">0</span></h2>
+          <span class="hint">拖到场景 = 放置</span>
+        </div>
+        <input id="palette-search" type="search" placeholder="搜索 def / 中文名 / 类别…" autocomplete="off">
+        <div class="filter-row" id="palette-filters"></div>
+        <div id="palette-list" class="palette-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>加结构</h2><span class="hint">box / ramp / boundary</span></div>
+        <div class="form-grid">
+          <label>role
+            <select id="struct-role">
+              <option value="box">box（台面/箱子）</option>
+              <option value="ramp">ramp（斜面，行走面=局部+Y）</option>
+              <option value="boundary">boundary（边界平面）</option>
+            </select>
+          </label>
+          <label>id<input id="struct-id" placeholder="自动"></label>
+          <label>中心 x<input id="struct-x" type="number" step="0.05" value="0"></label>
+          <label>y<input id="struct-y" type="number" step="0.05" value="0.25"></label>
+          <label>z<input id="struct-z" type="number" step="0.05" value="0"></label>
+          <label>尺寸 x<input id="struct-sx" type="number" step="0.05" value="1"></label>
+          <label>y<input id="struct-sy" type="number" step="0.05" value="0.5"></label>
+          <label>z<input id="struct-sz" type="number" step="0.05" value="1"></label>
+          <label>yaw°<input id="struct-yaw" type="number" step="15" value="0"></label>
+        </div>
+        <button id="add-structure" class="wide">加入结构</button>
+        <p class="note">ramp 的行走面是局部 +Y；板体在行走面下方。boundary 的局部 +Y 指向场内。</p>
+      </section>
+
+      <section class="panel level-panel">
+        <div class="panel-head"><h2>关卡</h2></div>
+        <div id="level-facts" class="facts"></div>
+        <label class="toggle expected-toggle"><input id="auto-expected" type="checkbox" checked> 加/删时同步更新 <code>level.expected</code></label>
+        <button id="reload-level" class="wide ghost">从磁盘重载</button>
+        <p class="note">真源始终是 <code>Docs/Design/Levels/&lt;id&gt;/placement.json</code>；每次编辑都会校验并原子导出。</p>
+      </section>
+    </aside>
+
+    <div id="viewport">
+      <canvas id="canvas"></canvas>
+      <div id="drop-hint" class="drop-hint hidden">松开以放置 <span id="drop-def"></span></div>
+      <div id="walk-hud" class="walk-hud hidden">
+        <div><strong>行走模式</strong> · WASD 移动 · Shift 跑 · Tab 退出</div>
+        <div id="walk-lock">点击画面锁定鼠标看方向</div>
+      </div>
+      <div id="loading" class="loading"><div class="spinner"></div><span id="loading-text">加载…</span></div>
+      <div id="toast" class="toast hidden"></div>
+      <div id="readonly-banner" class="readonly hidden">
+        只读：没有写入令牌。用服务器日志里的 <code>?token=…</code> 链接打开才能编辑。
+      </div>
+    </div>
+
+    <aside id="right">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>选中</h2>
+          <span class="hint" id="selection-type"></span>
+        </div>
+        <div id="selection-empty" class="empty">点击场景里的道具或结构</div>
+        <div id="selection-body" class="hidden">
+          <div class="kv" id="selection-kv"></div>
+          <div class="row-buttons">
+            <button id="gizmo-move" class="active mini">移动 G</button>
+            <button id="gizmo-rotate" class="mini">旋转 R</button>
+          </div>
+          <div class="row-buttons">
+            <button id="rest-surface" class="mini" title="射线落到底下的支撑面 (F)">落到面上 F</button>
+            <button id="drop-ground" class="mini">贴地</button>
+          </div>
+          <div class="row-buttons">
+            <button id="duplicate" class="mini" title="Ctrl+D">复制</button>
+            <button id="delete" class="mini danger" title="Delete">删除</button>
+            <button id="seat" class="mini" title="按声明的 support/stackedOn 精确坐好">按支撑坐正</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>吸附</h2><span class="hint">G/R 切换</span></div>
+        <div class="form-grid two">
+          <label>移动步长
+            <select id="snap-translate">
+              <option value="0.05">0.05 m</option>
+              <option value="0.1">0.10 m</option>
+              <option value="0">不吸附</option>
+            </select>
+          </label>
+          <label>旋转步长
+            <select id="snap-rotate">
+              <option value="15">15°</option>
+              <option value="45">45°</option>
+              <option value="90">90°</option>
+              <option value="0">不吸附</option>
+            </select>
+          </label>
+        </div>
+        <p class="note">方向键 = 按步长推；Shift+方向键 = 4 倍。</p>
+      </section>
+
+      <section class="panel ladder-panel">
+        <div class="panel-head">
+          <h2>球径阶梯</h2>
+          <label class="toggle"><input id="ladder-on" type="checkbox"> 按可吸性着色</label>
+        </div>
+        <div class="ladder-control">
+          <input id="ladder" type="range" min="0.3" max="2.2" step="0.01" value="0.5">
+          <div class="ladder-value"><strong id="ladder-value">0.50</strong> m</div>
+        </div>
+        <div class="tier-counts">
+          <span class="tier green"><b id="tier-green">0</b> 现在可吸</span>
+          <span class="tier yellow"><b id="tier-yellow">0</b> 20% 内</span>
+          <span class="tier red"><b id="tier-red">0</b> 太大</span>
+          <span class="tier grey"><b id="tier-grey">0</b> 不可吸</span>
+        </div>
+        <div id="histogram" class="histogram" title="D_req 直方图"></div>
+        <div class="histogram-axis"><span>0.1</span><span>0.8</span><span>1.5</span><span>2.2 m</span></div>
+        <div class="sum-row">
+          <span>可吸 valueUnits <b id="sum-green">0</b></span>
+          <span>全关 <b id="sum-total">0</b></span>
+        </div>
+        <div id="next-food" class="next-food"></div>
+        <p class="note">颜色 = 服务器算出的 <code>D_req</code> 与当前 D 的比较；灰 = 结构/不可吸布景。</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>校验</h2>
+          <button id="recheck" class="mini ghost">重新校验</button>
+        </div>
+        <div id="gate-line" class="gate-line">…</div>
+        <ul id="validation" class="validation"></ul>
+      </section>
+
+      <section class="panel hints-panel">
+        <div class="panel-head"><h2>物理提示</h2><span class="hint">只读 · P2 规则</span></div>
+        <div id="physics-hints" class="facts">…</div>
+      </section>
+    </aside>
+  </main>
+
+  <footer id="statusbar">
+    <span id="status-level">—</span>
+    <span id="status-counts"></span>
+    <span id="status-save"></span>
+    <span id="status-live" class="live">…</span>
+    <span class="spacer"></span>
+    <span id="status-hint">左键选中 · G/R 变换 · F 落到面上 · Delete 删除 · Ctrl+Z/Y · Ctrl+D 复制</span>
+  </footer>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

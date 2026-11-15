@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><title>pointer lock probe</title></head>
+<body style="margin:0;background:#123;color:#eee;font:16px sans-serif">
+<button id="b" style="margin:40px;font-size:24px;padding:16px 32px">request pointer lock</button>
+<canvas id="c" width="400" height="200" style="display:block;margin:40px;background:#345"></canvas>
+<script>
+const canvas = document.getElementById('c');
+document.getElementById('b').onclick = () => {
+  try {
+    const p = canvas.requestPointerLock();
+    if (p && p.catch) p.catch((e) => { window.__lockError = String(e); });
+  } catch (e) { window.__lockError = String(e); }
+};
+document.addEventListener('pointerlockchange', () => {
+  window.__locked = document.pointerLockElement === canvas;
+});
+document.addEventListener('pointerlockerror', () => { window.__lockError = 'pointerlockerror'; });
+window.__secure = window.isSecureContext;
+</script></body></html>

@@ -1,0 +1,8 @@
+id,name_zh,category,size_tier,real_longest_dim_m,game_longest_dim_m,absorb_value_placeholder,count_in_map,zone_ids,sourcing_hint,priority,coverage_ref,role,notes,pickup_dim_m
+ground_slab,地面,terrain,l,24.0,24.0,0,1,,fixture,MVP,,fixed,,
+boundary_wall,边界墙,boundary,l,24.0,24.0,0,4,,fixture,MVP,,fixed,,
+picnic_basket,野餐篮,furniture,l,2.0,2.0,0,1,lawn,fixture,MVP,,fixed,,
+grass_seed,草籽,debris,s,0.22,0.22,1,12,lawn,fixture,MVP,,absorbable,,
+apple,苹果,food,m,0.5,0.5,4,6,lawn,fixture,MVP,,absorbable,,
+melon,西瓜,food,l,1.1,1.1,16,2,lawn,fixture,MVP,,absorbable,,
+gate_log_prop,倒木,gate,l,3.0,3.0,16,1,lawn,fixture,MVP,,absorbable,长 3 m 挡路、拾取按 1.6 m 声明,1.6

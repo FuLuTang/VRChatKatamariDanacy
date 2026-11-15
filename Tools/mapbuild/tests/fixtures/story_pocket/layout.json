@@ -1,0 +1,172 @@
+{
+  "schema_version": 2,
+  "mode": "story",
+  "map_id": "story_fixture_pocket",
+  "status": "PROVISIONAL_NOT_TESTED",
+  "generated_by": "Tools/mapbuild/tests/fixtures/story_pocket：只给校验器测试用的单人图，不是可玩地图，不是 DESIGN 数据",
+  "coordinate_system": {
+    "engine": "Unity 2022.3",
+    "handedness": "left",
+    "up": "+Y",
+    "forward": "+Z",
+    "units": "metre",
+    "origin": "地图中心，地面 y=0",
+    "yaw_convention": "角度制，绕 +Y 顺时针（0=+Z，90=+X）"
+  },
+  "scale": {
+    "status": "PROVISIONAL_NOT_TESTED",
+    "ball_start_collision_diameter_m": 0.3,
+    "ball_max_collision_diameter_m": 2.2,
+    "ball_bands": [
+      {"id": "t0", "name_zh": "碎屑", "min_m": 0.3, "max_m": 0.55},
+      {"id": "t1", "name_zh": "果盘", "min_m": 0.55, "max_m": 0.95},
+      {"id": "t2", "name_zh": "餐篮", "min_m": 0.95, "max_m": 1.45},
+      {"id": "t3", "name_zh": "营地", "min_m": 1.45, "max_m": 2.2}
+    ],
+    "item_tier_pickup_diameter_m": {
+      "s": [0.10, 0.26],
+      "m": [0.28, 0.58],
+      "l": [0.60, 2.0]
+    },
+    "max_traversable_slope_percent": 12.0,
+    "max_step_height_over_ball_diameter": 0.25,
+    "max_route_step_m": 0.05,
+    "min_route_margin_over_max_ball_m": 0.8,
+    "spawn_pocket_clear_radius_m": 1.0,
+    "max_pickup_diameter_m": 1.6
+  },
+  "bounds": {"min_x": -12.0, "max_x": 12.0, "min_z": -12.0, "max_z": 12.0},
+  "zones": [
+    {
+      "id": "pocket",
+      "name_zh": "起步口袋",
+      "purpose": "单人图的起手口袋：出生点周围 1 m 净空，只有贴地标记",
+      "surface": "草地",
+      "shape": {"type": "rect", "min_x": -12.0, "max_x": -6.0, "min_z": -12.0, "max_z": -6.0},
+      "area_m2": 36.0,
+      "ground_y_m": 0.0,
+      "tier_band": ["t0", "t0"]
+    },
+    {
+      "id": "lawn",
+      "name_zh": "外圈草地",
+      "purpose": "口袋外的主场地：t1–t3 的资源带与两个门的落点",
+      "surface": "草地",
+      "shape": {"type": "rect", "min_x": -6.0, "max_x": 12.0, "min_z": -12.0, "max_z": 12.0},
+      "area_m2": 432.0,
+      "ground_y_m": 0.0,
+      "tier_band": ["t1", "t3"]
+    }
+  ],
+  "structures": [
+    {
+      "definition_id": "ground_slab",
+      "position": [0.0, -0.05, 0.0],
+      "size_m": [24.0, 0.1, 24.0],
+      "yaw_deg": 0.0,
+      "collision": "plane",
+      "notes": "地面：电机地面接触是解析平面，这里只为预算账本数 1 个平面"
+    },
+    {
+      "definition_id": "boundary_wall",
+      "position": [12.0, 1.0, 0.0],
+      "size_m": [0.2, 2.0, 24.0],
+      "yaw_deg": 0.0,
+      "collision": "plane",
+      "traversability": {"class": "obstacle"}
+    },
+    {
+      "definition_id": "boundary_wall",
+      "position": [-12.0, 1.0, 0.0],
+      "size_m": [0.2, 2.0, 24.0],
+      "yaw_deg": 0.0,
+      "collision": "plane",
+      "traversability": {"class": "obstacle"}
+    },
+    {
+      "definition_id": "boundary_wall",
+      "position": [0.0, 1.0, 12.0],
+      "size_m": [24.0, 2.0, 0.2],
+      "yaw_deg": 0.0,
+      "collision": "plane",
+      "traversability": {"class": "obstacle"}
+    },
+    {
+      "definition_id": "boundary_wall",
+      "position": [0.0, 1.0, -12.0],
+      "size_m": [24.0, 2.0, 0.2],
+      "yaw_deg": 0.0,
+      "collision": "plane",
+      "traversability": {"class": "obstacle"}
+    },
+    {
+      "definition_id": "picnic_basket",
+      "zone_id": "lawn",
+      "position": [6.0, 0.6, 6.0],
+      "size_m": [2.0, 1.2, 1.6],
+      "yaw_deg": 20.0,
+      "collision": "box",
+      "traversability": {"class": "obstacle"}
+    }
+  ],
+  "spawns": [
+    {
+      "id": "spawn_start",
+      "zone_id": "pocket",
+      "position": [-10.0, 0.0, -10.0],
+      "yaw_deg": 45.0
+    }
+  ],
+  "size_gates": [
+    {
+      "id": "gate_log",
+      "type": "absorb",
+      "definition_id": "gate_log_prop",
+      "position": [-5.5, 0.4, 0.0],
+      "collision": "box",
+      "blocks_ball_diameter_below_m": 0.55,
+      "absorbable_at_ball_diameter_m": 0.95,
+      "clear_width_m": 2.0,
+      "opens_path": "lawn",
+      "detour_m": 4.0,
+      "detour_route": "exit_a"
+    }
+  ],
+  "prop_scatter": [
+    {
+      "zone_id": "lawn",
+      "tier_band": "t2",
+      "min_spacing_m": 1.2,
+      "definitions": [
+        {"id": "grass_seed", "count_min": 12, "count_max": 12},
+        {"id": "apple", "count_min": 6, "count_max": 6},
+        {"id": "melon", "count_min": 2, "count_max": 2}
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "id": "exit_a",
+      "spawn_id": "spawn_start",
+      "waypoints": [[-10.0, -10.0], [-6.0, -10.0]],
+      "width_m": 3.0,
+      "min_clear_width_m": 3.0,
+      "length_m": 4.0
+    },
+    {
+      "id": "exit_b",
+      "spawn_id": "spawn_start",
+      "waypoints": [[-10.0, -10.0], [-10.0, -6.0]],
+      "width_m": 3.0,
+      "min_clear_width_m": 3.0,
+      "length_m": 4.0
+    }
+  ],
+  "chokepoints": [],
+  "performance_budget": {
+    "status": "PROVISIONAL_NOT_TESTED",
+    "absorbable_instances": 21,
+    "absorbable_definition_count": 4,
+    "structure_instances": 6
+  }
+}

@@ -145,3 +145,53 @@ C 不是 FIRST_PLAYABLE 的 20×20 m 切片（`FIRST_PLAYABLE_PLAN.md:94`），�
 - 原作没有公开每 m² 密度、关卡文件格式或具体门槛米数（调研 §7）；本文所有数字都是本项目暂定。
 - 多人、交分、道具、CPU 对手、坡/台阶（P8）、原作式的弹开削球、地图分块宿主都不在第一版。
 - 本文没有改任何代码、数据或任务；§4 的每条修法都要各自走任务与评审。
+
+## 7. 校验器已支持（2026-11-15，R1）
+
+> 本节只记录 `Tools/mapbuild/validate_map.py` 的**现状**，不改本文前面的计划；G10 的
+> 落地形态以此处为准（字段名、默认值、哪些段会跳过）。作者数据仍是 `PROVISIONAL_NOT_TESTED`。
+
+**模式字段。** `layout.json` 加可选键 `mode`，取值 `"pvp"`（缺省）或 `"story"`；**不写 `mode`
+就是 `pvp`**，所以 PicnicLawn / ToyRoom 的结果不变（下面有证据）。G10 里草拟的
+`map_kind: "story_region"` **没有实现**，也没有留别名：R2 请直接写 `"mode": "story"`。
+`schema_version` 仍是 1/2，新增字段全部可选，旧图不需要升级。
+
+**story 图（`mode: "story"`）跳过什么、换成什么。** 跳过：`bank`（交分台/转盘/台面接近路线）、
+`respawn`、`player_count_plans`、出生→交分的等距路程与偏差、多出生点公平性；这四个顶层键
+在 story 图里可以整段不写。**没有**另写一套 PvP 校验：交分台检查被抽成 `check_bank()`，
+PvP 图必跑，story 图只有在真的写了 `bank` 时才跑（写了就照查，坏数据不放过）。换成三条
+单人检查：①**正好 1 个出生点**；②出生点 `scale.spawn_pocket_clear_radius_m`（≥1.0 m，缺省
+1.0）内**不许有可卷物或高于 `max_route_step_m` 的固定立面**——0.015 m 的贴地出生标记/毯面
+照旧允许，判据与 PicnicLawn 的贴地件一致；③散布区边界压进净空盘时给 warning——散布点由
+生成器随机摆放，**逐件坐标校验器查不了**，这条只能提醒生成器别往口袋里撒。**保留**每个出生点
+≥2 条独立出路（门只挡近道）。
+
+**第 14 组：运行时预算（两种模式都跑）。** 碰撞上限抄自电机常量
+`Runtime/BallMotor/KatamariBallMotor.cs:243-244`（`MaxPlaneCount = 8`、`MaxBoxCount = 8`；
+超出的 `AddPlane`/`AddBox` 静默丢弃并 latch overflow）。数据侧用 `structures[].collision` /
+absorb 门的 `collision` 声明 `"plane"` / `"box"`，未声明 = 不进碰撞集。story 图超过 8 报
+**error**；PvP 图旧数据没有声明，一旦声明且超标只报 warning（迁移期口径，不悄悄改旧图结论）。
+同时检查：`scale.max_pickup_diameter_m`（story 必填）与目录可选列 `pickup_dim_m`——可卷物
+游戏尺寸超过最大拾取尺寸时必须自己声明拾取尺寸（长凳那类「挡路 3.2 m、拾取 1.6 m」的门件），
+这就是 G13 需要的作者侧通道；每件**可卷**物价值必须是 ≥1 的**整数**（决定 (j)，`int()` 不再
+截断 2.5）；目录 id 与同一散布区里的定义 id 不得重复。报告里打印碰撞平面/盒用量、道具总数、
+可卷/固定件数与可卷比例、可卷占位价值（`--json` 的 `runtime_budget` 里也有同样数字）。
+
+**代码结构。** 一份实现：`validate()` 顶部只读一次 `mode`，顶层必填键按模式取并集
+（`PVP_ONLY_LAYOUT_KEYS` 只在 story 放宽），随后每个 PvP 段各有一个 `if mode == "pvp"` 开关，
+交分台整体是一个函数。没有 story 专用副本、没有每图一份校验器；fixture 在
+`Tools/mapbuild/tests/fixtures/story_pocket/`，只给测试用，不放进 `Docs/Design/Maps/`。
+
+**证据（2026-11-15）。** `python3 -m unittest discover -s Tools/mapbuild/tests`：120 tests OK
+（新增 `test_story_mode.py` 29 个）；`python3 -m unittest discover -s Docs/tests`：270 tests OK；
+`python3 Docs/tools/validate_plan.py` PASS。用改动前的 `validate_map.py`（`git show HEAD:`）
+与改动后逐张对比 PicnicLawn / ToyRoom 的 `--json`：`status`、`errors`、`warnings`、
+`surfaces`、`obstacles` **完全相同**，只多一条运行时预算 note。
+`python3 Tools/mapbuild/validate_map.py Tools/mapbuild/tests/fixtures/story_pocket` 0 error /
+0 warning。
+
+**校验器仍然查不了的（R8 及运行时修复项的证据缺口，不要当 PASS）：** 电机是否真的注册了
+这些平面/盒、overflow 是否发生（G3/G4 没落地）；程序生成的逐件坐标、种子稳定性与件数是否
+真的摊到（G11）；被拒大件穿模/弹开手感（G6）、激活半径（G8）、扫描帧时间（G7）；视线（P4）；
+可吸收性相对球径的运行时行为（决定 (h) 已落地但场景资产仍有 1 m 覆盖）；地形结构声明与
+Unity prefab 实际包围盒是否一致；以及所有可玩性/公平性/性能判断。

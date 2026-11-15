@@ -57,6 +57,9 @@
     都 ≤ 最大球径（否则永远吃不到）；每个档位至少被一条区域声明覆盖（提示级）。
 12. **道具 / 重生 / 人数 / 预算**：道具类型与区域、与出生点距离；重生候选与延迟；
     `player_count_plans` 的人数和 id；`performance_budget` 的数字与目录一致。
+    **这一段是 PvP 专用**：`layout.json` 的 `mode` 为 `"story"` 时整段跳过（单人剧情图
+    没有重生/人数计划），改用第 15 条的 story 检查；`mode` 缺省是 `"pvp"`，两张首发图
+    因此走原来那条路径，结果一字不变。
 13. **立面分类（可走坡 / 爬升台阶 / 障碍）**：`structures[].traversability.class`
     逐面声明这个高差属于哪一类，三类各用各的判据——
     - `drivable_grade`（可走坡）：`run_m` 必填，坡度 = rise ÷ run **现算**，必须
@@ -70,7 +73,22 @@
     有高差却没声明类别 = 错误（layout `schema_version` ≥ 2 起强制）；v1 的图跳过这条，
     爬升台阶只由 `climb` 门对应的结构几何推出。坡度表在报告里打印。
 
-所有数值都是**作者数据**，本工具不验证 Unity、可玩性、公平性或性能。
+14. **运行时预算（便宜、但对真引擎是硬约束）**：电机只保留 8 个碰撞平面 + 8 个碰撞盒
+    （`Runtime/BallMotor/KatamariBallMotor.cs:243-244` 的 `MaxPlaneCount` / `MaxBoxCount`；
+    超出的 `AddPlane`/`AddBox` 静默丢弃并 latch overflow），所以 `structures[]` 用
+    `"collision": "plane"` / `"box"` 声明谁真的进碰撞集，本工具数它们并对照上限。
+    同时报告道具总数、可卷/固定件数、可卷比例与可卷占位价值；每件**可卷**物的价值必须是
+    ≥1 的整数（决定 (j)：账本只收整数，小数/0 在运行时表现为 `noGain`）；可卷物尺寸超过
+    `scale.max_pickup_diameter_m` 时必须自己有 `pickup_dim_m`（长凳那类「块头大、拾取细」
+    的门件）；目录 id 与散布定义 id 不得重复。
+15. **story 模式**：`mode: "story"` 的单人区域图（计划中的 PicnicCorner）只允许**一个**
+    出生点，且出生点 `scale.spawn_pocket_clear_radius_m`（缺省 1.0 m）内不许有可卷物或
+    高于 `max_route_step_m` 的固定立面；逐出生点 ≥2 条出路照旧（门只挡近道）。交分台、
+    重生、人数计划、多出生点等距这些 PvP 段整段跳过。两张首发图没有 `mode` 字段，
+    所以仍然是 PvP 语义。
+
+所有数值都是**作者数据**，本工具不验证 Unity、可玩性、公平性或性能；第 14 条只数
+**声明出来的**碰撞物与作者价值，不证明电机真的注册了这些平面/盒，也不测量帧时间。
 """
 
 from __future__ import annotations
@@ -114,6 +132,25 @@ REQUIRED_LAYOUT_KEYS = (
     "routes", "chokepoints", "powerups", "respawn", "player_count_plans",
     "performance_budget",
 )
+# `mode`：地图语义，缺省 pvp（两张首发图没有这个字段，因此结果不变）。
+#   pvp   — 多人对称图：交分台、重生、人数计划、多出生点公平性全都查。
+#   story — 单人剧情区域图：一个出生点、出生口袋净空；PvP 段整段跳过。
+MAP_MODE_PVP = "pvp"
+MAP_MODE_STORY = "story"
+MAP_MODES = (MAP_MODE_PVP, MAP_MODE_STORY)
+# 只有 PvP 图才必填的顶层键；story 图可以整段不写。
+PVP_ONLY_LAYOUT_KEYS = ("bank", "respawn", "player_count_plans", "powerups")
+
+# 电机的硬容量（Runtime/BallMotor/KatamariBallMotor.cs:243-244：
+#   private const int MaxPlaneCount = 8;
+#   private const int MaxBoxCount = 8;
+# 超出容量的 AddPlane/AddBox 会被静默丢弃并 latch overflow（同文件 :1372-1393），
+# 所以这是数据上限而不是建议值。
+MOTOR_MAX_COLLISION_PLANES = 8
+MOTOR_MAX_COLLISION_BOXES = 8
+COLLISION_SHAPES = ("plane", "box")
+# story 图出生点周围必须净空的半径（题面口径 1 m）；scale 只能声明更大，不能更小。
+DEFAULT_SPAWN_POCKET_CLEAR_RADIUS_M = 1.0
 REQUIRED_CATALOG_COLUMNS = (
     "id", "name_zh", "category", "size_tier", "real_longest_dim_m",
     "game_longest_dim_m", "absorb_value_placeholder", "count_in_map", "zone_ids",
@@ -135,6 +172,7 @@ class Report:
         self.notes: list[str] = []
         self.surfaces: list[dict] = []      # 立面审计表（只列可走的面：坡 + 台阶）
         self.obstacles: Counter = Counter()  # 障碍按 definition_id 计数
+        self.budget: dict = {}              # 运行时预算摘要（第 14 条），供 --json 输出
 
     def err(self, message: str) -> None:
         self.errors.append(message)
@@ -247,6 +285,25 @@ def as_int(value, default=None):
         return default
 
 
+def as_int_exact(value, default=None):
+    """只接受**整数值**：不接受 1.5 被 int() 悄悄截成 1（决定 (j) 的整数契约）。"""
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    number = as_float(value)
+    if number is None or not math.isfinite(number) or number != int(number):
+        return default
+    return int(number)
+
+
+def rect_distance_m(rect: dict, x: float, z: float) -> float:
+    """点到矩形的最短水平距离；点在矩形内为 0。"""
+    dx = max(rect["min_x"] - x, 0.0, x - rect["max_x"])
+    dz = max(rect["min_z"] - z, 0.0, z - rect["max_z"])
+    return math.hypot(dx, dz)
+
+
 def structure_rise_m(structure) -> float | None:
     """立面的高度 = 顶面 y − 地面 y=0。
 
@@ -265,6 +322,98 @@ def structure_rise_m(structure) -> float | None:
 
 
 # --------------------------------------------------------------------------- #
+# 交分台（PvP 专用段）
+# --------------------------------------------------------------------------- #
+def check_bank(rep: Report, bank: dict, zones: dict, scale: dict, in_bounds) -> dict:
+    """交分台：区域、圆盘、转盘与周期；返回 anchors。
+
+    这是唯一一份实现：PvP 图必跑；story 图只有在真的写了 `bank` 时才跑（写了就照样
+    查，不因为模式不同而放过坏数据），没写就整段跳过。story 图不另写一套交分逻辑。
+    """
+    bank_zone = str(bank.get("zone_id") or "")
+    if bank_zone not in zones:
+        rep.err(f"bank.zone_id：未知区域 {bank_zone!r}")
+    anchors: dict[str, dict] = {}
+    for anchor in bank.get("anchors") or []:
+        aid = str(anchor.get("id") or "").strip()
+        if not aid:
+            rep.err("bank.anchors：有空 id 的锚点")
+            continue
+        if aid in anchors:
+            rep.err(f"{aid}：交分锚点 id 重复")
+            continue
+        anchors[aid] = anchor
+        pos = anchor.get("position")
+        if not (isinstance(pos, list) and len(pos) == 3):
+            rep.err(f"{aid}：position 必须是 [x, y, z]")
+            continue
+        x, y, z = (as_float(v) for v in pos)
+        if None in (x, y, z):
+            rep.err(f"{aid}：position 必须是数字")
+            continue
+        radius = as_float(anchor.get("radius_m"))
+        if radius is None or radius <= 0:
+            rep.err(f"{aid}：radius_m 必须为正")
+        if not in_bounds(x, z):
+            rep.err(f"{aid}：交分台在地图外")
+        if bank_zone in zones and not contains(zones[bank_zone]["_rect"], x, z):
+            rep.err(f"{aid}：交分台不在 bank.zone_id（{bank_zone}）内")
+        r = radius or 0.0
+        if bank_zone in zones and r > 0:
+            rect = zones[bank_zone]["_rect"]
+            margin = min(x - rect["min_x"], rect["max_x"] - x,
+                         z - rect["min_z"], rect["max_z"] - z)
+            if margin < r - EPS:
+                rep.err(f"{aid}：圆盘半径 {r} m 超出 {bank_zone} 的边（余量 {margin:.2f} m）")
+    alist = list(anchors)
+    for i, a in enumerate(alist):
+        for b in alist[i + 1:]:
+            pa, pb = anchors[a]["position"], anchors[b]["position"]
+            d = math.dist((pa[0], pa[2]), (pb[0], pb[2]))
+            sum_r = (as_float(anchors[a].get("radius_m"), 0) or 0) + \
+                    (as_float(anchors[b].get("radius_m"), 0) or 0)
+            if d <= sum_r + EPS:
+                rep.err(f"交分台重叠 {a} × {b}：圆心距 {d:.2f} m ≤ 半径和 {sum_r:.2f} m")
+            elif d < sum_r + 1.0:
+                rep.warn(f"交分台 {a} × {b}：圆心距 {d:.2f} m，只比半径和多 {d - sum_r:.2f} m")
+
+    rotation = bank.get("rotation") or {}
+    order = [str(v) for v in rotation.get("order") or []]
+    if sorted(order) != sorted(alist) or len(set(order)) != len(order):
+        rep.err(f"bank.rotation.order 不是锚点集合的排列：{order} vs {sorted(alist)}")
+    period = as_int(rotation.get("period_s"))
+    warning = as_int(rotation.get("warning_s"))
+    activate = rotation.get("activate_at_s") or []
+    if period is None or period <= 0:
+        rep.err(f"bank.rotation.period_s 必须是正整数，实际 {rotation.get('period_s')!r}")
+    if warning is None or warning < 0:
+        rep.err(f"bank.rotation.warning_s 必须是 ≥0 的整数，实际 {rotation.get('warning_s')!r}")
+    elif period and warning >= period:
+        rep.err(f"bank.rotation.warning_s={warning} 必须小于 period_s={period}")
+    if period:
+        expected = [i * period for i in range(len(order))]
+        if [as_int(v) for v in activate] != expected:
+            rep.err(f"bank.rotation.activate_at_s={activate} 与 period_s={period} 不符"
+                    f"（应为 {expected}）")
+        rounds = as_float(scale.get("bank_anchor_period_s"))
+        if rounds is not None and abs(rounds - period) > 1e-9:
+            rep.err(f"bank.rotation.period_s={period} 与 scale.bank_anchor_period_s={rounds} 不一致")
+    for key, table in (("bank_anchor_count", len(anchors)),):
+        declared = as_int(scale.get(key))
+        if declared is not None and declared != table:
+            rep.err(f"scale.{key}={declared} 与实际锚点数 {table} 不一致")
+    declared_warning = as_int(scale.get("bank_warning_s"))
+    if declared_warning is not None and warning is not None and declared_warning != warning:
+        rep.err(f"scale.bank_warning_s={declared_warning} 与 bank.rotation.warning_s={warning} 不一致")
+    pad_radius = as_float(scale.get("bank_pad_radius_m"))
+    for aid, anchor in anchors.items():
+        r = as_float(anchor.get("radius_m"))
+        if pad_radius is not None and r is not None and abs(pad_radius - r) > 1e-9:
+            rep.warn(f"{aid}：radius_m={r} 与 scale.bank_pad_radius_m={pad_radius} 不一致")
+    return anchors
+
+
+# --------------------------------------------------------------------------- #
 # 主校验（纯函数，便于将来加单测）
 # --------------------------------------------------------------------------- #
 def validate(layout: dict, catalog: dict) -> Report:
@@ -273,8 +422,18 @@ def validate(layout: dict, catalog: dict) -> Report:
     bands_meta = {b.get("id"): b for b in (scale.get("ball_bands") or [])}
     pickup = scale.get("item_tier_pickup_diameter_m") or {}
 
+    # ---------------- 0. 地图模式 ---------------------------------------- #
+    # 缺省 pvp：两张首发图没有这个字段，走的还是原来那条路径（结果不变）。
+    mode = str(layout.get("mode") or MAP_MODE_PVP)
+    if mode not in MAP_MODES:
+        rep.err(f"layout.json：mode 必须是 {list(MAP_MODES)}，实际 {mode!r}（缺省 pvp）")
+        return rep
+
     # ---------------- 1. 顶层结构 ---------------------------------------- #
-    for key in REQUIRED_LAYOUT_KEYS:
+    required_keys = (REQUIRED_LAYOUT_KEYS if mode == MAP_MODE_PVP
+                     else tuple(k for k in REQUIRED_LAYOUT_KEYS
+                                if k not in PVP_ONLY_LAYOUT_KEYS))
+    for key in required_keys:
         if key not in layout:
             rep.err(f"layout.json：缺顶层键 {key}")
     if layout.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
@@ -282,6 +441,9 @@ def validate(layout: dict, catalog: dict) -> Report:
                 f"实际 {layout.get('schema_version')!r}")
     if not rep.ok:
         return rep  # 结构缺失时后面的检查没有意义
+    if mode == MAP_MODE_STORY:
+        rep.note("地图模式 story：单人剧情区域图——跳过交分台/重生/人数计划，"
+                 "改用单出生点与出生口袋净空检查")
 
     max_ball = as_float(scale.get("ball_max_collision_diameter_m"))
     min_ball = as_float(scale.get("ball_start_collision_diameter_m"))
@@ -441,13 +603,25 @@ def validate(layout: dict, catalog: dict) -> Report:
         if priority and priority not in PRIORITIES:
             rep.err(f"{pid}：priority 必须是 {list(PRIORITIES)}，实际 {priority!r}")
         count = as_int(row.get("count_in_map"))
-        value = as_int(row.get("absorb_value_placeholder"))
+        value = as_int_exact(row.get("absorb_value_placeholder"))
         dim = as_float(row.get("game_longest_dim_m"))
         if count is None or value is None or dim is None:
-            rep.err(f"{pid}：count_in_map/absorb_value_placeholder/game_longest_dim_m 必须是数字")
+            rep.err(f"{pid}：count_in_map/absorb_value_placeholder/game_longest_dim_m 必须是数字，"
+                    f"且价值必须是整数（决定 (j)：账本只收整数单位）")
             continue
         if count < 0 or value < 0 or dim <= 0:
             rep.err(f"{pid}：count/value 不能为负，game_longest_dim_m 必须为正")
+        if role == "absorbable" and value < 1:
+            rep.err(f"{pid}：可卷物的价值必须是 ≥1 的整数，实际 {row.get('absorb_value_placeholder')!r}"
+                    f"（决定 (j)：0 或小数在运行时表现为 noGain，这件道具永远吸不到）")
+        # 拾取尺寸 ≠ 外形：长凳那类门件用显式 pickup_dim_m 声明「挡路 3.2 m、拾取 1.6 m」。
+        pickup_raw = row.get("pickup_dim_m")
+        pickup_dim = None
+        if str(pickup_raw or "").strip():
+            pickup_dim = as_float(pickup_raw)
+            if pickup_dim is None or pickup_dim <= 0:
+                rep.err(f"{pid}：pickup_dim_m 必须是正数，实际 {pickup_raw!r}")
+                pickup_dim = None
         zone_ids = [p.strip() for p in str(row.get("zone_ids") or "").split(";") if p.strip()]
         for zid in zone_ids:
             if zid.lower() in ("all", "none"):
@@ -464,7 +638,8 @@ def validate(layout: dict, catalog: dict) -> Report:
                 rep.warn(f"{pid}：拾取门槛 {threshold:.2f} m 贴着最大球径 {max_ball} m，"
                          f"只有接近满径的球才吃得到")
         props[pid] = {"row": row, "count": count, "value": value, "tier": tier,
-                      "role": role, "dim": dim, "zone_ids": zone_ids, "line": line_no}
+                      "role": role, "dim": dim, "zone_ids": zone_ids, "line": line_no,
+                      "pickup_dim": pickup_dim}
 
     # ---------------- 4. 结构 -------------------------------------------- #
     struct_count = Counter()
@@ -542,88 +717,72 @@ def validate(layout: dict, catalog: dict) -> Report:
         if yaw is None or not 0 <= yaw <= 360:
             rep.err(f"{sid}：yaw_deg 缺失或越界")
 
-    # ---------------- 6. 交分台 ------------------------------------------ #
-    bank = layout["bank"]
-    bank_zone = str(bank.get("zone_id") or "")
-    if bank_zone not in zones:
-        rep.err(f"bank.zone_id：未知区域 {bank_zone!r}")
-    anchors: dict[str, dict] = {}
-    for anchor in bank.get("anchors") or []:
-        aid = str(anchor.get("id") or "").strip()
-        if not aid:
-            rep.err("bank.anchors：有空 id 的锚点")
-            continue
-        if aid in anchors:
-            rep.err(f"{aid}：交分锚点 id 重复")
-            continue
-        anchors[aid] = anchor
-        pos = anchor.get("position")
-        if not (isinstance(pos, list) and len(pos) == 3):
-            rep.err(f"{aid}：position 必须是 [x, y, z]")
-            continue
-        x, y, z = (as_float(v) for v in pos)
-        if None in (x, y, z):
-            rep.err(f"{aid}：position 必须是数字")
-            continue
-        radius = as_float(anchor.get("radius_m"))
-        if radius is None or radius <= 0:
-            rep.err(f"{aid}：radius_m 必须为正")
-        if not in_bounds(x, z):
-            rep.err(f"{aid}：交分台在地图外")
-        if bank_zone in zones and not contains(zones[bank_zone]["_rect"], x, z):
-            rep.err(f"{aid}：交分台不在 bank.zone_id（{bank_zone}）内")
-        r = radius or 0.0
-        if bank_zone in zones and r > 0:
-            rect = zones[bank_zone]["_rect"]
-            margin = min(x - rect["min_x"], rect["max_x"] - x,
-                         z - rect["min_z"], rect["max_z"] - z)
-            if margin < r - EPS:
-                rep.err(f"{aid}：圆盘半径 {r} m 超出 {bank_zone} 的边（余量 {margin:.2f} m）")
-    alist = list(anchors)
-    for i, a in enumerate(alist):
-        for b in alist[i + 1:]:
-            pa, pb = anchors[a]["position"], anchors[b]["position"]
-            d = math.dist((pa[0], pa[2]), (pb[0], pb[2]))
-            sum_r = (as_float(anchors[a].get("radius_m"), 0) or 0) + \
-                    (as_float(anchors[b].get("radius_m"), 0) or 0)
-            if d <= sum_r + EPS:
-                rep.err(f"交分台重叠 {a} × {b}：圆心距 {d:.2f} m ≤ 半径和 {sum_r:.2f} m")
-            elif d < sum_r + 1.0:
-                rep.warn(f"交分台 {a} × {b}：圆心距 {d:.2f} m，只比半径和多 {d - sum_r:.2f} m")
+    # ---------------- 5c. story：单出生点与出生口袋 ----------------------- #
+    # 单人图没有「四个出生点等距」这类公平性，取而代之的是「起步口袋是干净的」：
+    # 球在出生点不该立刻吃到/撞上东西，否则第一口资源读不出来。
+    if mode == MAP_MODE_STORY:
+        pocket = as_float(scale.get("spawn_pocket_clear_radius_m"),
+                          DEFAULT_SPAWN_POCKET_CLEAR_RADIUS_M)
+        if pocket is None or pocket < DEFAULT_SPAWN_POCKET_CLEAR_RADIUS_M - EPS:
+            rep.err(f"scale.spawn_pocket_clear_radius_m 必须 ≥ "
+                    f"{DEFAULT_SPAWN_POCKET_CLEAR_RADIUS_M:g} m（题面口径），实际 {pocket!r}")
+            pocket = DEFAULT_SPAWN_POCKET_CLEAR_RADIUS_M
+        if len(spawns) != 1:
+            rep.err(f"story 图必须正好 1 个出生点，实际 {len(spawns)} 个（{sorted(spawns)}）；"
+                    f"单人图没有多出生点分配")
+        bump = as_float(scale.get("max_route_step_m"), DEFAULT_MAX_ROUTE_STEP_M)
+        if bump is None or bump < 0:
+            bump = DEFAULT_MAX_ROUTE_STEP_M
+        for sid, spawn in spawns.items():
+            pos = spawn.get("position")
+            if not (isinstance(pos, list) and len(pos) == 3):
+                continue
+            sx, sz = as_float(pos[0]), as_float(pos[2])
+            if sx is None or sz is None:
+                continue
+            blocked = []
+            for index, structure in enumerate(layout["structures"]):
+                spos = structure.get("position")
+                if not (isinstance(spos, list) and len(spos) == 3):
+                    continue
+                x, z = as_float(spos[0]), as_float(spos[2])
+                if x is None or z is None:
+                    continue
+                distance = math.hypot(x - sx, z - sz)
+                if distance >= pocket - EPS:
+                    continue
+                defn = str(structure.get("definition_id") or "").strip()
+                meta = props.get(defn) or {}
+                rise = structure_rise_m(structure) or 0.0
+                if meta.get("role") == "absorbable":
+                    blocked.append(f"{defn or '?'}#{index} 可卷物 {distance:.2f} m")
+                elif rise > bump + EPS:
+                    blocked.append(f"{defn or '?'}#{index} 固定立面 {rise:.2f} m {distance:.2f} m")
+            if blocked:
+                rep.err(f"{sid}：出生口袋 {pocket:g} m 内有 {len(blocked)} 件道具："
+                        + "；".join(blocked)
+                        + "（球一出生就会吃/撞，起手资源读不出来）")
+            # 散布点由生成器随机放置：校验器只能检查散布区边界有没有压进净空盘，
+            # 逐件坐标要等生成器（build_greybox 的容量模型）真正摆完才有。
+            for region in layout["prop_scatter"]:
+                zid = str(region.get("zone_id") or "")
+                rect = (zones.get(zid) or {}).get("_rect")
+                if rect is None:
+                    continue
+                distance = rect_distance_m(rect, sx, sz)
+                if distance < pocket - EPS:
+                    rep.warn(f"{sid}：散布区 {zid} 距出生点 {distance:.2f} m，压进 "
+                             f"{pocket:g} m 出生口袋；逐件位置由生成器保证不落进口袋"
+                             f"（校验器只能检查区域边界）")
+        rep.note(f"story：出生点 {len(spawns)} 个，口袋净空 {pocket:g} m")
 
-    rotation = bank.get("rotation") or {}
-    order = [str(v) for v in rotation.get("order") or []]
-    if sorted(order) != sorted(alist) or len(set(order)) != len(order):
-        rep.err(f"bank.rotation.order 不是锚点集合的排列：{order} vs {sorted(alist)}")
-    period = as_int(rotation.get("period_s"))
-    warning = as_int(rotation.get("warning_s"))
-    activate = rotation.get("activate_at_s") or []
-    if period is None or period <= 0:
-        rep.err(f"bank.rotation.period_s 必须是正整数，实际 {rotation.get('period_s')!r}")
-    if warning is None or warning < 0:
-        rep.err(f"bank.rotation.warning_s 必须是 ≥0 的整数，实际 {rotation.get('warning_s')!r}")
-    elif period and warning >= period:
-        rep.err(f"bank.rotation.warning_s={warning} 必须小于 period_s={period}")
-    if period:
-        expected = [i * period for i in range(len(order))]
-        if [as_int(v) for v in activate] != expected:
-            rep.err(f"bank.rotation.activate_at_s={activate} 与 period_s={period} 不符"
-                    f"（应为 {expected}）")
-        rounds = as_float(scale.get("bank_anchor_period_s"))
-        if rounds is not None and abs(rounds - period) > 1e-9:
-            rep.err(f"bank.rotation.period_s={period} 与 scale.bank_anchor_period_s={rounds} 不一致")
-    for key, table in (("bank_anchor_count", len(anchors)),):
-        declared = as_int(scale.get(key))
-        if declared is not None and declared != table:
-            rep.err(f"scale.{key}={declared} 与实际锚点数 {table} 不一致")
-    declared_warning = as_int(scale.get("bank_warning_s"))
-    if declared_warning is not None and warning is not None and declared_warning != warning:
-        rep.err(f"scale.bank_warning_s={declared_warning} 与 bank.rotation.warning_s={warning} 不一致")
-    pad_radius = as_float(scale.get("bank_pad_radius_m"))
-    for aid, anchor in anchors.items():
-        r = as_float(anchor.get("radius_m"))
-        if pad_radius is not None and r is not None and abs(pad_radius - r) > 1e-9:
-            rep.warn(f"{aid}：radius_m={r} 与 scale.bank_pad_radius_m={pad_radius} 不一致")
+    # ---------------- 6. 交分台（PvP 专用段） ----------------------------- #
+    bank = layout.get("bank") or {}
+    if mode == MAP_MODE_PVP or bank:
+        anchors = check_bank(rep, bank, zones, scale, in_bounds)
+    else:
+        anchors = {}
+        rep.note("story 图：没有交分台（bank），跳过交分圆盘/转盘/接近路线检查")
 
     # ---------------- 9. 路线 -------------------------------------------- #
     routes: dict[str, dict] = {}
@@ -971,8 +1130,14 @@ def validate(layout: dict, catalog: dict) -> Report:
         if not defs:
             rep.err(f"prop_scatter[{zid}]：definitions 为空")
             continue
+        seen_defs: set[str] = set()
         for definition in defs:
             did = str(definition.get("id") or "")
+            if did in seen_defs:
+                rep.err(f"prop_scatter[{zid}]：同一区域里 {did} 出现两次"
+                        f"（会重复计数，实例 id 也不唯一）")
+                continue
+            seen_defs.add(did)
             if did not in props:
                 rep.err(f"prop_scatter[{zid}]/{did or '<空 id>'}：未知目录 id")
                 continue
@@ -1091,7 +1256,7 @@ def validate(layout: dict, catalog: dict) -> Report:
             rep.warn(f"{cid}：净宽 {clear} m 对最大球只剩 {clear - max_ball:.2f} m 余量")
 
     # ---------------- 12. 道具 / 重生 / 人数 / 预算 ----------------------- #
-    for point in (layout["powerups"] or {}).get("points") or []:
+    for point in (layout.get("powerups") or {}).get("points") or []:
         pid = str(point.get("id") or "")
         ptype = str(point.get("type") or "")
         if ptype not in POWERUP_TYPES:
@@ -1116,31 +1281,34 @@ def validate(layout: dict, catalog: dict) -> Report:
             if len(sp) == 3 and math.dist((x, z), (as_float(sp[0]), as_float(sp[2]))) < 8.0:
                 rep.warn(f"{pid}：距 {sid} 不足 8 m，可能被出生点直接吃走")
 
-    respawn = layout["respawn"]
-    for sid in respawn.get("candidate_spawn_ids") or []:
-        if str(sid) not in spawns:
-            rep.err(f"respawn.candidate_spawn_ids：未知出生点 {sid!r}")
-    for key in ("min_distance_from_enemy_m", "respawn_delay_s", "protection_s"):
-        if as_float(respawn.get(key)) is None:
-            rep.err(f"respawn.{key} 缺失或不是数字")
-    if (as_float(respawn.get("min_distance_from_enemy_m")) or 0) <= 0:
-        rep.err("respawn.min_distance_from_enemy_m 必须为正")
-
-    plans = layout["player_count_plans"]
-    for key, value in plans.items():
-        if not key.isdigit():
-            continue
-        count = int(key)
-        if not isinstance(value, list) or len(value) != count:
-            rep.err(f"player_count_plans[{key}]：需要正好 {count} 个出生点，实际 {value!r}")
-            continue
-        if len(set(value)) != len(value):
-            rep.err(f"player_count_plans[{key}]：出生点重复 {value!r}")
-        for sid in value:
+    if mode == MAP_MODE_PVP:
+        respawn = layout["respawn"]
+        for sid in respawn.get("candidate_spawn_ids") or []:
             if str(sid) not in spawns:
-                rep.err(f"player_count_plans[{key}]：未知出生点 {sid!r}")
-        if count > len(spawns):
-            rep.err(f"player_count_plans[{key}]：{count} 人超过出生点总数 {len(spawns)}")
+                rep.err(f"respawn.candidate_spawn_ids：未知出生点 {sid!r}")
+        for key in ("min_distance_from_enemy_m", "respawn_delay_s", "protection_s"):
+            if as_float(respawn.get(key)) is None:
+                rep.err(f"respawn.{key} 缺失或不是数字")
+        if (as_float(respawn.get("min_distance_from_enemy_m")) or 0) <= 0:
+            rep.err("respawn.min_distance_from_enemy_m 必须为正")
+
+        plans = layout["player_count_plans"]
+        for key, value in plans.items():
+            if not key.isdigit():
+                continue
+            count = int(key)
+            if not isinstance(value, list) or len(value) != count:
+                rep.err(f"player_count_plans[{key}]：需要正好 {count} 个出生点，实际 {value!r}")
+                continue
+            if len(set(value)) != len(value):
+                rep.err(f"player_count_plans[{key}]：出生点重复 {value!r}")
+            for sid in value:
+                if str(sid) not in spawns:
+                    rep.err(f"player_count_plans[{key}]：未知出生点 {sid!r}")
+            if count > len(spawns):
+                rep.err(f"player_count_plans[{key}]：{count} 人超过出生点总数 {len(spawns)}")
+    elif layout.get("respawn") or layout.get("player_count_plans"):
+        rep.note("story 图：respawn / player_count_plans 是 PvP 专用段，已跳过")
 
     budget = layout["performance_budget"]
     absorbable_instances = sum(m["count"] for m in props.values() if m["role"] == "absorbable")
@@ -1167,45 +1335,132 @@ def validate(layout: dict, catalog: dict) -> Report:
     if fixed_instances and as_int(budget.get("structure_instances")) is None:
         rep.warn("performance_budget.structure_instances 缺失")
 
-    # ---------------- 5b. 出生 → 交分设计路程 ---------------------------- #
+    # ---- 14. 运行时预算：电机碰撞容量 / 最大拾取尺寸 / 道具账 ----------- #
+    # 只数**声明出来的**碰撞物：`structures[]` 与 absorb 门的 `"collision": "plane"|"box"`。
+    # 未声明 = 不进碰撞集（装饰、贴片、贴地件），不会被电机扫到。
+    collision = Counter()
+    for index, structure in enumerate(layout["structures"]):
+        kind = structure.get("collision")
+        if kind is None:
+            continue
+        label = f"structures[{index}] {structure.get('definition_id') or '<空>'}"
+        if kind not in COLLISION_SHAPES:
+            rep.err(f"{label}：collision 必须是 {list(COLLISION_SHAPES)}，实际 {kind!r}")
+            continue
+        collision[kind] += 1
+    for gid, gate in gates.items():
+        kind = gate.get("collision")
+        if kind is None:
+            continue
+        if str(gate.get("type")) != "absorb":
+            rep.err(f"{gid}：只有 absorb 门的挡路盒会随吞下撤掉（G4），才能声明 collision；"
+                    f"climb 门的碰撞体是地形结构，不在门记录上数")
+            continue
+        if kind not in COLLISION_SHAPES:
+            rep.err(f"{gid}：collision 必须是 {list(COLLISION_SHAPES)}，实际 {kind!r}")
+            continue
+        collision[kind] += 1
+    for label, count, constant, limit in (
+            ("碰撞平面", collision["plane"], "MaxPlaneCount", MOTOR_MAX_COLLISION_PLANES),
+            ("碰撞盒", collision["box"], "MaxBoxCount", MOTOR_MAX_COLLISION_BOXES)):
+        if count <= limit:
+            continue
+        message = (f"运行时预算：{label} {count} 个超过电机容量 {limit} 个"
+                   f"（Runtime/BallMotor/KatamariBallMotor.cs:243-244 的 {constant}；"
+                   f"超出的会静默丢弃并 latch overflow）。先拿掉/合并碰撞物，不要扩上限")
+        if mode == MAP_MODE_STORY:
+            rep.err(message)
+        else:
+            rep.warn(message + "；PvP 图暂按 warning（旧图没有 collision 声明）")
+    for key, count in (("collision_planes", collision["plane"]),
+                       ("collision_boxes", collision["box"])):
+        declared = as_int(budget.get(key))
+        if declared is not None and declared != count:
+            rep.err(f"performance_budget.{key}={declared} 与 collision 声明的 {count} 个不一致")
+
+    # 最大拾取尺寸：块头大的门件必须自己声明「拾取尺寸」，否则球永远吃不到它。
+    max_pickup = as_float(scale.get("max_pickup_diameter_m"))
+    if mode == MAP_MODE_STORY and (max_pickup is None or max_pickup <= 0):
+        rep.err("story 图必须在 scale.max_pickup_diameter_m 声明最大拾取尺寸（米）："
+                "超过它的大件必须自己写 pickup_dim_m")
+    if max_pickup is not None and max_pickup > 0:
+        for pid, meta in props.items():
+            if meta["role"] != "absorbable":
+                continue
+            if meta["pickup_dim"] is not None:
+                if meta["pickup_dim"] > max_pickup + EPS:
+                    rep.err(f"{pid}：pickup_dim_m={meta['pickup_dim']:g} 超过声明的最大拾取尺寸 "
+                            f"{max_pickup:g} m，球永远吃不到它")
+            elif meta["dim"] > max_pickup + EPS:
+                rep.err(f"{pid}：可卷物游戏尺寸 {meta['dim']:g} m 超过声明的最大拾取尺寸 "
+                        f"{max_pickup:g} m，却没有声明 pickup_dim_m"
+                        f"（门件要把「挡路尺寸」和「拾取尺寸」分开写）")
+
+    total_props = absorbable_instances + fixed_instances
+    absorbable_ratio = absorbable_instances / total_props if total_props else 0.0
+    rep.note(f"运行时预算：碰撞平面 {collision['plane']}/{MOTOR_MAX_COLLISION_PLANES}"
+             f"、碰撞盒 {collision['box']}/{MOTOR_MAX_COLLISION_BOXES}（电机常量）；"
+             f"道具 {total_props} 件：可卷 {absorbable_instances}、固定 {fixed_instances}"
+             f"（可卷 {absorbable_ratio:.0%}），可卷占位价值 {total_value} 单位")
+    rep.budget = {
+        "mode": mode,
+        "collision_planes": collision["plane"],
+        "collision_planes_limit": MOTOR_MAX_COLLISION_PLANES,
+        "collision_boxes": collision["box"],
+        "collision_boxes_limit": MOTOR_MAX_COLLISION_BOXES,
+        "prop_total": total_props,
+        "absorbable_instances": absorbable_instances,
+        "fixed_instances": fixed_instances,
+        "absorbable_ratio": round(absorbable_ratio, 4),
+        "absorbable_value_units": total_value,
+        "max_pickup_diameter_m": max_pickup,
+    }
+
+    # ---------------- 5b. 出生 → 交分设计路程（PvP） ---------------------- #
+    # 「至少 2 条出路」两种模式都保留（门只挡近道，不能把出生点堵成死路）；
+    # 到交分的等距路程与偏差只对 PvP 有意义（story 图没有交分台、只有 1 个出生点）。
     approaches = [r for r in routes.values() if r.get("bank_anchor_id")]
     exits: dict[str, list[dict]] = defaultdict(list)
     for route in routes.values():
         if route.get("spawn_id"):
             exits[str(route["spawn_id"])].append(route)
-    design_values = []
     for sid in spawns:
         if len(exits[sid]) < 2:
             rep.err(f"{sid}：只有 {len(exits[sid])} 条出路，至少要 2 条独立出路")
-        best = None
-        for exit_route in exits[sid]:
-            end = (exit_route.get("waypoints") or [[]])[-1]
-            if len(end) != 2:
-                continue
-            for approach in approaches:
-                start = (approach.get("waypoints") or [[]])[0]
-                if len(start) != 2:
+    if mode == MAP_MODE_PVP:
+        design_values = []
+        for sid in spawns:
+            best = None
+            for exit_route in exits[sid]:
+                end = (exit_route.get("waypoints") or [[]])[-1]
+                if len(end) != 2:
                     continue
-                if math.dist(end, start) <= 0.6:
-                    total = (as_float(exit_route.get("length_m"), 0) or 0) + \
-                            (as_float(approach.get("length_m"), 0) or 0)
-                    if best is None or total < best:
-                        best = total
-        if best is None:
-            rep.warn(f"{sid}：没有任何「出路 + 台面接近」的接续，算不出到交分的路程")
-            continue
-        design_values.append((sid, best))
-    target = as_float(scale.get("spawn_to_bank_target_m"))
-    if design_values:
-        values = [v for _, v in design_values]
-        rep.note(f"出生→交分设计路程 {min(values):.1f}–{max(values):.1f} m"
-                 f"（目标 {target} m）")
-        if max(values) - min(values) > 1.0:
-            rep.err(f"四个出生点到交分的路程最大差 {max(values) - min(values):.2f} m > 1.0 m")
-        if target is not None:
-            for sid, value in design_values:
-                if abs(value - target) > 0.25 * target:
-                    rep.warn(f"{sid}：到交分 {value:.1f} m 与设计目标 {target} m 偏差 >25%")
+                for approach in approaches:
+                    start = (approach.get("waypoints") or [[]])[0]
+                    if len(start) != 2:
+                        continue
+                    if math.dist(end, start) <= 0.6:
+                        total = (as_float(exit_route.get("length_m"), 0) or 0) + \
+                                (as_float(approach.get("length_m"), 0) or 0)
+                        if best is None or total < best:
+                            best = total
+            if best is None:
+                rep.warn(f"{sid}：没有任何「出路 + 台面接近」的接续，算不出到交分的路程")
+                continue
+            design_values.append((sid, best))
+        target = as_float(scale.get("spawn_to_bank_target_m"))
+        if design_values:
+            values = [v for _, v in design_values]
+            rep.note(f"出生→交分设计路程 {min(values):.1f}–{max(values):.1f} m"
+                     f"（目标 {target} m）")
+            if max(values) - min(values) > 1.0:
+                rep.err(f"四个出生点到交分的路程最大差 {max(values) - min(values):.2f} m > 1.0 m")
+            if target is not None:
+                for sid, value in design_values:
+                    if abs(value - target) > 0.25 * target:
+                        rep.warn(f"{sid}：到交分 {value:.1f} m 与设计目标 {target} m 偏差 >25%")
+    else:
+        rep.note("story 图：不做出生→交分路程与多出生点等距检查（没有交分台、只有 1 个出生点）")
 
     # ---------------- 11b. 每档是否被覆盖 -------------------------------- #
     order = [b.get("id") for b in bands]
@@ -1338,6 +1593,7 @@ def main(argv=None) -> int:
                           "verdict": row["verdict"]}
                          for row in rep.surfaces],
             "obstacles": dict(sorted(rep.obstacles.items())),
+            "runtime_budget": rep.budget,
         }, ensure_ascii=False, indent=2))
     else:
         print(report_text(rep, layout_path, catalog_path, rows, args.verbose))

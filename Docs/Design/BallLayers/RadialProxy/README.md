@@ -1,6 +1,6 @@
 # T50 球层：径向凹凸代理（小棍采样外壳）
 
-> **状态：B 阶段已接线，`PROVISIONAL_NOT_TESTED`。** C# 组合层 `RadialProxyShellMath` 已接进 `KatamariBallMotor` 的第 4 步（接地高度）与 `PickupFieldHost` 的吸附确认；纯逻辑 EditMode 测试已写，但**没有在 Unity 编译、没有跑 `run_tests`、没有 Play Mode**。方向数已定为 16（理由见“为什么是 16”，此前的 32 是 provisional 选择）；4 个长物件候选、三个上限仍是未测原型值，不是实测预算或原作数值。
+> **状态：B 阶段已接线，`PROVISIONAL_NOT_TESTED`。** C# 组合层 `RadialProxyShellMath` 已接进 `KatamariBallMotor` 的第 4 步（接地高度）与 `PickupFieldHost` 的吸附确认；纯逻辑 EditMode 测试已写，并已在 2026-11-15 的 pass3 全量里跑过（EditMode 603 条：602 过、1 条红是 SDK 链接检查；`RadialProxyShellTests` 9/9，见 `Docs/Evidence/PhysicsTestField/2026-11-15_pass3/tests.md`），但**没有 Play Mode、没有 VR 实测**。方向数已定为 16（理由见“为什么是 16”，此前的 32 是 provisional 选择）；4 个长物件候选、三个上限仍是未测原型值，不是实测预算或原作数值。
 
 ## 研究与项目规则边界
 

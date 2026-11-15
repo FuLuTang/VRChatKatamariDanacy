@@ -260,3 +260,5 @@ itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
 8. **`WithdrawCandidate` 用 `==` 比较字符串**（`KatamariBallMotor.cs:962`）。C# 语义是按值比较，UdonSharp 下是否同样按值**未验证**；若不按值，撤回会静默失效，退化成第 5 节的冻结。
 
 **整数单位契约（有意为之，不是缺陷）**：`TryAbsorbValueToLedgerGain` 只接受整数单位（`(float)(int)v != v` 即返回 `false`）。小数值视为作者数据错误，由 `RejectNoGain` 大声拒绝并进入拒绝环/日志，**不要去"修"成四舍五入**——取舍是"数据必须整数"，让错误可见。
+
+> 观感对照（吸附之后球长什么样：我们的红色球芯 vs 原版两帧的物件覆盖）：[`Docs/Evidence/BallPresentation/2026-11-15_attached_props_vs_original/`](../../Evidence/BallPresentation/2026-11-15_attached_props_vs_original/README.md)。

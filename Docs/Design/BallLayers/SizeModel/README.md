@@ -21,8 +21,10 @@
 ## Unity 实现
 
 - 纯逻辑：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/SizeModel/SizeModelMath.cs`，入口 `VRCKatamari.BallLayers.SizeModelMath.TryDerive`（6 个标量入参、4 个 `out float`）与 `TryCoreDiameter`。静态方法、无 struct、无分配、无静态字段；失败返回 false，四个 out 全为 0，不写部分结果。
-- 三个量仍是互不相同的 out，且各自只有一个用途：`coreRadiusWorldM` 是视觉球芯半径（`V=4πr³/3` 等效几何，驱动 CoreMesh 缩放）；`collisionRadiusWorldM` 是唯一碰撞量（PVP 与环境简化判定半径）；`semanticDiameter` 是 UI 叙事直径与尺寸档位比较（可与物理米不同，绝不进入碰撞或玩法门槛——拾取门槛跟确认体积走）。Python 侧的 `CoreRadiusWorldM`/`CollisionRadiusWorldM`/`SemanticDiameter` 包装结构体在 Udon 下不能存在，C# 移植改成函数形状隔离：映射只吃体积，`TryCoreDiameter` 只吃核心半径，四个结果各占一个 out。
+- 三个量仍是互不相同的 out，彼此关系由两个比值决定（`collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter`，序列化默认都是 1，`KatamariBallMotor.cs:196`–`197`），各自的消费者是：`coreRadiusWorldM` 是核心半径（`V=4πr³/3` 等效几何；接地高度、视觉滚转角速度、径向代理突出上限）；`collisionRadiusWorldM` 是**唯一**碰撞量（水平扫掠、挡路盒、吸附 reach、PVP 与环境简化判定半径）；`semanticDiameter` 是球对外的直径读数（`CoreMesh` 的 `localScale` 由它驱动，`BallView.cs:56`–`61`），也是台阶判据 `stepLimit = 0.25 × 语义直径` 与吸收体积门 `(π/6)·D³ / absorbVolumeRatio` 的输入。默认比值 1 时 `collision = core`、`semantic = 2 × core`，所以**视觉球、碰撞球、吸附 reach 球今天完全重合**；把任一比值改成 ≠1 会立刻让视觉球和物理球分家。Python 侧的 `CoreRadiusWorldM`/`CollisionRadiusWorldM`/`SemanticDiameter` 包装结构体在 Udon 下不能存在，C# 移植改成函数形状隔离：映射只吃体积，`TryCoreDiameter` 只吃核心半径，四个结果各占一个 out。
 - 数值：`Mathf` 对数域避免有限输入的乘积、立方与求和溢出；封顶到达后直接取 `maxCoreRadiusWorldM`，饱和精确，两次不同的大额确认给出同一显示尺寸；碰撞半径与语义直径的最终乘法逐项检查，超出 float 可表示范围明确拒绝。float 取代参考模型的 double，接受域相应改为“全部有限 float”。
 - 封顶只作用于呈现：确认体积按值传入，没有可被截断或归零的账本；`effectiveVolumeUnits` 是有限呈现诊断量（体积单位，不是 m³）。本类无状态，reset 或交分重建=用新确认值再调一次。
 - 测试：`Tests/EditMode/BallLayers/SizeModelTests.cs` 对应 `test_size_model.py` 全部 7 个用例（球体几何独立 oracle、8 倍体积 2 倍半径、半径/直径/碰撞/语义四值不等、封顶精确且与确认额无关、reset 只读新值、float 极值饱和与溢出拒绝、非法输入与 cap<baseline）；程序集 `VRCKatamari.Tests.EditMode`。
 - 状态：Unity 编译、EditMode 测试与 U# 全量编译均 `NOT_RUN`；Python 仍是行为参考。
+
+> 观感对照（红色球芯成片可见 vs 原版两帧的物件覆盖）：[`Docs/Evidence/BallPresentation/2026-11-15_attached_props_vs_original/`](../../../Evidence/BallPresentation/2026-11-15_attached_props_vs_original/README.md)。

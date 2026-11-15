@@ -130,6 +130,8 @@
 
 > 结论：**专利能证明"凹凸滚动 = 针模型 + 独立碰撞盒"这套方案是原作的**，但**不能**证明"原作怎么上台阶"。谁要说"原作台阶是 X"，必须有别的证据。
 
+> 观感对照（吸附物把球芯盖住 vs 我们的红球露芯；含原版两帧与我们的截图）：[`Docs/Evidence/BallPresentation/2026-11-15_attached_props_vs_original/`](../../Evidence/BallPresentation/2026-11-15_attached_props_vs_original/README.md)。
+
 ### 2.2 原作行为的社区观察（能对上的现象）
 
 | 来源 | 说了什么（自己的话） | 可信度 | 对我们的启示 |

@@ -141,7 +141,7 @@ StepBall:
 5. 全额过 `GrowthLedgerMath.TryBank`（只有 Playing、Active、`amount <= confirmed`、`(player, requestId)` 未重放才成功）。
 6. 读回 `unbanked` / `banked`，`carried = max(0, postUnits − 读回未交存)`（通常读回未交存为 0），这部分体积已经计过分、永不再交分；最后 `RecomputeConfirmedAndSize()` 重算**一次**确认总量与尺寸。
 
-数值（本层默认 1 基线单位 / 0.0141 m³ 每单位 / 2.20 m 上限）：1.49 m 约 121.84 确认单位，交分后 **0.5973 m**、约 6.9 单位；若按决定文档的 0.30 起始写则正好 0.5975 m。旧的体积空间写法在同一输入下留下 0.9537 m。**两个空间是立方关系，不是比例**，所以这个差别是结构性的，调比例救不回来。
+数值（当前标定 3.4390244 基线单位 / 0.0041 m³ 每单位 / 2.20 m 上限）：1.49 m 约 419 确认单位，交分后 **0.5973 m**、约 23.8 单位；若按决定文档的 0.30 起始写则正好 0.5975 m。旧的体积空间写法在同一输入下留下 0.9537 m。**两个空间是立方关系，不是比例**，所以这个差别是结构性的，调比例救不回来。
 
 还会出错的地方：
 
@@ -320,7 +320,7 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 
 1. **设备轴 → forward/turn/lateral 的映射没有归属层。** `ControlIntentMath` 只给设备轴对，`BallMotionMath` 只吃三个标量，中间这一步（含相机/rig yaw 基准）目前是适配层约定，本层用 y→forward、x→lateral 顶着。
 2. ~~**墙面法向去速没有公开函数。**~~ **已解决（2026-11-15）**：规则与实现见下面「墙面法向去速（已解决，PROVISIONAL）」。编号保留，`SPLIT_PROPOSAL.md` 等文档仍按“缺口 2”引用它。
-3. ~~**吸收的“相对球径门槛”没有 C# 层**~~ **已解决（2026-11-15，决定 (h)）**：`PickupAbsorbMath.TryComputeAbsorbSizeLimit` 把上限算成 `min(maxItemSizeWorldM, 语义直径 × absorbSizeRatio)`，本层每步把 `semanticDiameterWorldM` 与 `absorbSizeRatio` 一起传进 `EvaluateAbsorbWithValueAndBallSize`（判定调用在 `KatamariBallMotor.cs:747-751`），配方不在本层，所以这条不再算缺口。`maxItemSizeWorldM` 由 1 改成 `8f` 并降级为安全上界，`absorbSizeRatio = 1f` 是 PROVISIONAL；`GetAbsorbSizeLimitWorldM()`（`:1647`）供诊断读当步上限。口径与两个尺寸量的区别见 `Docs/Design/PickupAbsorb/README.md` 1.1 节。
+3. ~~**吸收的“相对球径门槛”没有 C# 层**~~ **已解决（2026-11-15，决定 (h)；下面这些函数名与字段已随决定 (l) 的 AABB 体积门删除，这里保留当时的写法）**：`PickupAbsorbMath.TryComputeAbsorbSizeLimit` 把上限算成 `min(maxItemSizeWorldM, 语义直径 × absorbSizeRatio)`，本层每步把 `semanticDiameterWorldM` 与当时的 `absorbSizeRatio` 一起传进 `EvaluateAbsorbWithValueAndBallSize`（判定调用在 `KatamariBallMotor.cs:747-751`），配方不在本层，所以这条不再算缺口。`maxItemSizeWorldM` 由 1 改成 `8f` 并降级为安全上界，`absorbSizeRatio = 1f` 是 PROVISIONAL；`GetAbsorbSizeLimitWorldM()`（`:1647`）供诊断读当步上限。口径与两个尺寸量的区别见 `Docs/Design/PickupAbsorb/README.md` 1.1 节。
 4. **`growthFraction` 没有 helper。** 设计文档把它指派给组合层（`BallMotion` README 的“唯一回灌量”），`BallMotionMath` 也明说不做半径映射，所以本层只有这一处 `(r-base)/(max-base)` 夹取；若要复用应下沉到 `SizeModelMath`。
 5. **账本提交存储是有容量的**（本地 256 条/回合）。满了以后 `TryResolveClaims` 拒绝、候选留在队列里不再增长；正式回合应由拥有账本的控制器扩容或换权威提交。
 6. **单球、单本地玩家行**：多球/多人要并行数组 + 多行账本，本版没有。

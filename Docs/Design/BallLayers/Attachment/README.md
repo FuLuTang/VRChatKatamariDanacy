@@ -30,3 +30,5 @@
 - 两个哈希：`TryEventIdentityHash`（context/ball/instance/event 四个文本 + generation/attachSequence）与 `TryRemoteProxyKeyHash`（严格 ballSeed/实例ID/世代/attachSequence 四字段）。字段顺序与长度前缀分帧沿用模型，但 **摘要算法不是 SHA-256**：Udon 没有 hashlib、没有 UTF-8 编码器，这里用 32 位 FNV-1a，文本按 UTF-16 码元（低字节、高字节）加码元长度前缀。因此摘要值**与 Python 的 hexdigest 不同，也不可与离线结果互比**；两者都只是确定性键，不是认证、不是无碰撞证明。
 
 `Tests/EditMode/BallLayers/AttachmentTests.cs` 覆盖 `test_attachment.py` 的 6 项与 `test_growth_attachment_simulation.py` 中属于本层的 2 项；增长模拟里的 `derive_size`/体积累加/交分属于 SizeModel 与确认账本，`test_presentation_cap_does_not_truncate_authority_value` 完全不触及本层，这三处断言未在此移植。尚未在 Unity 编译、未跑 `run_tests`；`ballSeed` 的来源与文本规范、Udon 下的哈希与字符串行为均未验证。
+
+> 观感对照（附着物保持吸附瞬间位姿、不随球芯长大缩放或外推，与原版两帧的实拍差异）：[`Docs/Evidence/BallPresentation/2026-11-15_attached_props_vs_original/`](../../../Evidence/BallPresentation/2026-11-15_attached_props_vs_original/README.md)。

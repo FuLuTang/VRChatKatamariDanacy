@@ -1,0 +1,118 @@
+{
+  "id": "picnic_bench",
+  "pivot": "center",
+  "target_longest_m": 1.2,
+  "dimensions_m": {
+    "x": 1.2000000476837158,
+    "y": 0.40000003576278687,
+    "z": 0.45000001788139343,
+    "longest": 1.2000000476837158
+  },
+  "bounds_m": {
+    "min": [
+      -0.6000000238418579,
+      -0.20000001788139343,
+      -0.22500000894069672
+    ],
+    "max": [
+      0.6000000238418579,
+      0.20000001788139343,
+      0.22500000894069672
+    ]
+  },
+  "vertices": 174,
+  "triangles": 360,
+  "materials": [
+    "Prop_picnic_bench_wood",
+    "Prop_picnic_bench_metal"
+  ],
+  "material_base_colors": {
+    "Prop_picnic_bench_wood": [
+      0.23,
+      0.16,
+      0.1
+    ],
+    "Prop_picnic_bench_metal": [
+      0.13,
+      0.14,
+      0.15
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "c5ee92b8ae3609218ae72ba7796076e534abe62d610d853ee409a6679dd9c3b6",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "野餐长凳",
+  "category": "furniture",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 1.2,
+    "game_longest_dim_m": 1.2,
+    "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / U3（真实三轴，无 CSV 行）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 1.2,
+    "built_longest_m": 1.2000000476837158,
+    "abs_error_m": 4.768371586472142e-08,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 700,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "wood",
+      "name_zh": "凳面旧木",
+      "linear_rgb": [
+        0.23,
+        0.16,
+        0.1
+      ],
+      "roughness": 0.84
+    },
+    {
+      "key": "metal",
+      "name_zh": "凳腿深铁灰",
+      "linear_rgb": [
+        0.13,
+        0.14,
+        0.15
+      ],
+      "roughness": 0.5
+    }
+  ],
+  "notes": "Three seat slats 1.200 x 0.116 x 0.035 (R 6 mm) with their tops at z 0.450, centres at y -0.142 / 0 / +0.142 (26 mm through-gaps, outer edges at y +/-0.200); two end rails 0.060 x 0.370 x 0.050 at x +/-0.520, z 0.365-0.415; four 0.050 square legs at (+/-0.520, +/-0.160); two stretchers 1.020 x 0.050 x 0.045 at y +/-0.160, z 0.140-0.185.  AABB 1.200 x 0.400 x 0.450, seat plane flat at z 0.450.  Materials by face extent: metal below z 0.210 (legs and stretcher), wood above.",
+  "build_script": "models/picnic_bench.py",
+  "preview": "previews/picnic_bench_preview.png",
+  "files": {
+    "picnic_bench.fbx": 20684,
+    "picnic_bench.glb": 15408,
+    "picnic_bench.blend": 456800
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 155971
+}

@@ -1,0 +1,102 @@
+{
+  "id": "bowl",
+  "pivot": "center",
+  "target_longest_m": 0.16,
+  "dimensions_m": {
+    "x": 0.1599999964237213,
+    "y": 0.1599999964237213,
+    "z": 0.05999999865889549,
+    "longest": 0.1599999964237213
+  },
+  "bounds_m": {
+    "min": [
+      -0.07999999821186066,
+      -0.07999999821186066,
+      -0.029999999329447746
+    ],
+    "max": [
+      0.07999999821186066,
+      0.07999999821186066,
+      0.029999999329447746
+    ]
+  },
+  "vertices": 194,
+  "triangles": 384,
+  "materials": [
+    "Prop_bowl_enamel"
+  ],
+  "material_base_colors": {
+    "Prop_bowl_enamel": [
+      0.15,
+      0.28,
+      0.3
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "86ae3b05db98a63664faa661bcf285748c233a8f5408a3990cbc849a489fc875",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "碗",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.16,
+    "game_longest_dim_m": 0.42,
+    "sourcing_hint": "model ourselves：Ø0.16 x 0.06 m 搪瓷碗，空心 + 圈足",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.16,
+    "built_longest_m": 0.1599999964237213,
+    "abs_error_m": 3.5762786898541066e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 400,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "enamel",
+      "name_zh": "蓝灰搪瓷",
+      "linear_rgb": [
+        0.15,
+        0.28,
+        0.3
+      ],
+      "roughness": 0.35
+    }
+  ],
+  "notes": "16 segments, 14 profile points = 384 triangles.  Diameter 0.160 m at the lip, height 0.060 m.  Foot ring 0.045-0.055 m at z=0; outside flares from 0.060 m at z=0.006 to 0.080 m at the lip; inside runs from 0.075 m at the rim to a 0.0065 m floor.  Wall 4.5-5 mm, base 6.5 mm.  One closed shell, no separate foot, no cap inside.",
+  "build_script": "models/bowl.py",
+  "preview": "previews/bowl_preview.png",
+  "files": {
+    "bowl.fbx": 20412,
+    "bowl.glb": 8072,
+    "bowl.blend": 95411
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 134434
+}

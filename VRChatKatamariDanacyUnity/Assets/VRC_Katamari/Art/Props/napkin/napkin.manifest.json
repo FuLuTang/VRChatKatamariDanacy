@@ -1,0 +1,102 @@
+{
+  "id": "napkin",
+  "pivot": "center",
+  "target_longest_m": 0.15,
+  "dimensions_m": {
+    "x": 0.14999999105930328,
+    "y": 0.14999999105930328,
+    "z": 0.0139999995008111,
+    "longest": 0.14999999105930328
+  },
+  "bounds_m": {
+    "min": [
+      -0.07499999552965164,
+      -0.07499999552965164,
+      -0.00699999975040555
+    ],
+    "max": [
+      0.07499999552965164,
+      0.07499999552965164,
+      0.00699999975040555
+    ]
+  },
+  "vertices": 98,
+  "triangles": 192,
+  "materials": [
+    "Prop_napkin_cloth"
+  ],
+  "material_base_colors": {
+    "Prop_napkin_cloth": [
+      0.6,
+      0.56,
+      0.48
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "77b51a25d0de1971345e675031206bc0eea441fd50d89c4d05f85433d6ef40e5",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "餐巾",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.15,
+    "game_longest_dim_m": 0.3,
+    "sourcing_hint": "model ourselves：折叠面片，0.30 m",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.15,
+    "built_longest_m": 0.14999999105930328,
+    "abs_error_m": 8.940696710757479e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "cloth",
+      "name_zh": "亚麻米色",
+      "linear_rgb": [
+        0.6,
+        0.56,
+        0.48
+      ],
+      "roughness": 0.9
+    }
+  ],
+  "notes": "Fold is a smooth height field, not stacked sheets, so the mesh stays a single closed solid with no interior faces.",
+  "build_script": "models/napkin.py",
+  "preview": "previews/napkin_preview.png",
+  "files": {
+    "napkin.fbx": 16604,
+    "napkin.glb": 6296,
+    "napkin.blend": 91326
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 109896
+}

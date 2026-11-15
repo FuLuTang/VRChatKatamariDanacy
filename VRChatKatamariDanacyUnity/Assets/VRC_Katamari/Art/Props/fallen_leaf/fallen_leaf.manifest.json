@@ -1,0 +1,102 @@
+{
+  "id": "fallen_leaf",
+  "pivot": "center",
+  "target_longest_m": 0.09,
+  "dimensions_m": {
+    "x": 0.06000048667192459,
+    "y": 0.08999999612569809,
+    "z": 0.0010876336600631475,
+    "longest": 0.08999999612569809
+  },
+  "bounds_m": {
+    "min": [
+      -0.030000243335962296,
+      -0.044999998062849045,
+      -0.0005438168300315738
+    ],
+    "max": [
+      0.030000243335962296,
+      0.044999998062849045,
+      0.0005438168300315738
+    ]
+  },
+  "vertices": 98,
+  "triangles": 192,
+  "materials": [
+    "Prop_fallen_leaf_leaf"
+  ],
+  "material_base_colors": {
+    "Prop_fallen_leaf_leaf": [
+      0.15,
+      0.22,
+      0.055
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "0c05bb0f27d43159bdbfe7a41b74925f239d70e445369f5c7ba186de85a5c818",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "落叶",
+  "category": "nature",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.09,
+    "game_longest_dim_m": 0.1,
+    "sourcing_hint": "model ourselves：9×6×0.1 cm 薄片，边缘微卷（CSV 提示 Kenney 叶片）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.09,
+    "built_longest_m": 0.08999999612569809,
+    "abs_error_m": 3.8743019070697216e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 200,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "leaf",
+      "name_zh": "落叶橄榄绿",
+      "linear_rgb": [
+        0.15,
+        0.22,
+        0.055
+      ],
+      "roughness": 0.72
+    }
+  ],
+  "notes": "6 x 6 grid slab: 72 top + 72 bottom + 48 rim = 192 triangles.  Length 0.090 m along Y, blade width 0.057 m (plus a 3 mm bend, so X is about 0.060 m), thickness 0.45-0.70 mm, overall Z about 0.9 mm.  The petiole is part of the same outline (a 1.6 mm wide tail), so there is no second object and no boolean.  Three edge curls (up at v=0.30 and 0.58, down at 0.86) and a raised midrib are modelled; the other four of the five planned veins are omitted because they are sub-pixel at this thickness.",
+  "build_script": "models/fallen_leaf.py",
+  "preview": "previews/fallen_leaf_preview.png",
+  "files": {
+    "fallen_leaf.fbx": 19484,
+    "fallen_leaf.glb": 14388,
+    "fallen_leaf.blend": 91857
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 80156
+}

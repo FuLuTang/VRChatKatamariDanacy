@@ -1,0 +1,102 @@
+{
+  "id": "grapes",
+  "pivot": "center",
+  "target_longest_m": 0.06,
+  "dimensions_m": {
+    "x": 0.06000000238418579,
+    "y": 0.021983623504638672,
+    "z": 0.059741185978055,
+    "longest": 0.06000000238418579
+  },
+  "bounds_m": {
+    "min": [
+      -0.030000001192092896,
+      -0.010991811752319336,
+      -0.029870592057704926
+    ],
+    "max": [
+      0.030000001192092896,
+      0.010991811752319336,
+      0.029870593920350075
+    ]
+  },
+  "vertices": 142,
+  "triangles": 288,
+  "materials": [
+    "Prop_grapes_skin"
+  ],
+  "material_base_colors": {
+    "Prop_grapes_skin": [
+      0.13,
+      0.045,
+      0.22
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "96b34fa4635d6dfa0d2c5bf098aab06263f027c47576ed87d6a70df0305ef7be",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "葡萄",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.06,
+    "game_longest_dim_m": 0.08,
+    "sourcing_hint": "model ourselves：6 cm 宽一串，7–9 颗 Ø1.8 cm 球用短梗连成一个闭合壳",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.06,
+    "built_longest_m": 0.06000000238418579,
+    "abs_error_m": 2.384185793236071e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "skin",
+      "name_zh": "葡萄紫",
+      "linear_rgb": [
+        0.13,
+        0.045,
+        0.22
+      ],
+      "roughness": 0.35
+    }
+  ],
+  "notes": "Berries are listed as visible radii and converted to metaball field radii for threshold 0.6 / stiffness 2.0 (surface sits at ~0.575 of the field radius).  Seven berries in a 2-3-2 bunch, every neighbour about 0.34 design units away; the bunch is almost square (0.98 x 0.96) so the 6 cm target lands on the width.  Four small field balls at the row gaps act as short stems and keep the bunch one closed shell; they are field elements, not separate stem meshes.",
+  "build_script": "models/grapes.py",
+  "preview": "previews/grapes_preview.png",
+  "files": {
+    "grapes.fbx": 21116,
+    "grapes.glb": 6256,
+    "grapes.blend": 94618
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 180698
+}

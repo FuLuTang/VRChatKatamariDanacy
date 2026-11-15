@@ -1,0 +1,102 @@
+{
+  "id": "croissant",
+  "pivot": "center",
+  "target_longest_m": 0.12,
+  "dimensions_m": {
+    "x": 0.06875023990869522,
+    "y": 0.11999999731779099,
+    "z": 0.0626286193728447,
+    "longest": 0.11999999731779099
+  },
+  "bounds_m": {
+    "min": [
+      -0.03437511995434761,
+      -0.05999999865889549,
+      -0.03131430968642235
+    ],
+    "max": [
+      0.03437511995434761,
+      0.05999999865889549,
+      0.03131430968642235
+    ]
+  },
+  "vertices": 191,
+  "triangles": 378,
+  "materials": [
+    "Prop_croissant_crust"
+  ],
+  "material_base_colors": {
+    "Prop_croissant_crust": [
+      0.52,
+      0.255,
+      0.055
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "859af47292fb08361abd9531cbfb3145a6935f01de2f5af714bfaea0a451e8e0",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "牛角包",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.12,
+    "game_longest_dim_m": 0.34,
+    "sourcing_hint": "model ourselves：0.12 x 0.07 x 0.06 m 牛角包（替代无目录的 baguette）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.12,
+    "built_longest_m": 0.11999999731779099,
+    "abs_error_m": 2.682209010451686e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 400,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "crust",
+      "name_zh": "牛角包金棕",
+      "linear_rgb": [
+        0.52,
+        0.255,
+        0.055
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "21 path stations, 9 segments = 378 triangles.  Quadratic Bezier with tips at (0.020, +/-0.056) and the control at (-0.060, 0), all at z=0.030; the curve bows back to x=-0.020 and opens toward +X, so the 0.12 m length is Y and the 0.07 m depth is X.  Section is an ellipse 30 mm tall x 24 mm wide at the middle, tapered to 1.6 mm at the horns, with a six-lobe +/-15% radius wave.  Raw Y is about 0.118 m, so finish() scales by ~1.017: measured 0.069 x 0.120 x 0.0605 m.  One closed shell, no separate crumbs or scoring.",
+  "build_script": "models/croissant.py",
+  "preview": "previews/croissant_preview.png",
+  "files": {
+    "croissant.fbx": 22092,
+    "croissant.glb": 7976,
+    "croissant.blend": 95685
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 119495
+}

@@ -1,0 +1,118 @@
+{
+  "id": "folding_stool",
+  "pivot": "center",
+  "target_longest_m": 0.4,
+  "dimensions_m": {
+    "x": 0.4000000059604645,
+    "y": 0.3499903976917267,
+    "z": 0.3199999928474426,
+    "longest": 0.4000000059604645
+  },
+  "bounds_m": {
+    "min": [
+      -0.20000000298023224,
+      -0.17499519884586334,
+      -0.1599999964237213
+    ],
+    "max": [
+      0.20000000298023224,
+      0.17499519884586334,
+      0.1599999964237213
+    ]
+  },
+  "vertices": 270,
+  "triangles": 556,
+  "materials": [
+    "Prop_folding_stool_canvas",
+    "Prop_folding_stool_frame"
+  ],
+  "material_base_colors": {
+    "Prop_folding_stool_canvas": [
+      0.085,
+      0.17,
+      0.095
+    ],
+    "Prop_folding_stool_frame": [
+      0.55,
+      0.57,
+      0.58
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 1,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "85bca0f0c069b87f0493bccae5acb63600344318cc66404eeda3ddc45b2a1d55",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "折叠凳",
+  "category": "furniture",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.4,
+    "game_longest_dim_m": 1.4,
+    "sourcing_hint": "model ourselves：0.40 m 布面凳放大到 1.40 m",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.4,
+    "built_longest_m": 0.4000000059604645,
+    "abs_error_m": 5.960464455334602e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 700,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "canvas",
+      "name_zh": "座面帆布墨绿",
+      "linear_rgb": [
+        0.085,
+        0.17,
+        0.095
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "frame",
+      "name_zh": "铝腿银灰",
+      "linear_rgb": [
+        0.55,
+        0.57,
+        0.58
+      ],
+      "roughness": 0.35
+    }
+  ],
+  "notes": "Seat slab 0.350 x 0.250 x 0.012 (R 20 mm) with its top at 0.320; two planar trapezoid frames of 1.5 cm tubes (r 0.0075): top bar 0.336 long at y = -/+0.1175, z = 0.308, bottom bar 0.400 long at y = +/-0.1685, z = 0.0075, rails ending 7.5 mm inside each bar.  AABB 0.400 x 0.350 x 0.320, feet on z = 0.  The two frames cross at mid-height, so the union is one shell.  Materials by face centre: canvas above z 0.3075 inside the seat outline, frame elsewhere.",
+  "build_script": "models/folding_stool.py",
+  "preview": "previews/folding_stool_preview.png",
+  "files": {
+    "folding_stool.fbx": 26892,
+    "folding_stool.glb": 14680,
+    "folding_stool.blend": 100188
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 159820
+}

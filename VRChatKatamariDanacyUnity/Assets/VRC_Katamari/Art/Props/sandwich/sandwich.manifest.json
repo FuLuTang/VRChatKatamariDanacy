@@ -1,0 +1,150 @@
+{
+  "id": "sandwich",
+  "pivot": "center",
+  "target_longest_m": 0.12,
+  "dimensions_m": {
+    "x": 0.12000000476837158,
+    "y": 0.090023934841156,
+    "z": 0.039992477744817734,
+    "longest": 0.12000000476837158
+  },
+  "bounds_m": {
+    "min": [
+      -0.06000000238418579,
+      -0.045011967420578,
+      -0.019996238872408867
+    ],
+    "max": [
+      0.06000000238418579,
+      0.045011967420578,
+      0.019996238872408867
+    ]
+  },
+  "vertices": 72,
+  "triangles": 140,
+  "materials": [
+    "Prop_sandwich_crust",
+    "Prop_sandwich_crumb",
+    "Prop_sandwich_ham",
+    "Prop_sandwich_cheese"
+  ],
+  "material_base_colors": {
+    "Prop_sandwich_crust": [
+      0.23,
+      0.095,
+      0.035
+    ],
+    "Prop_sandwich_crumb": [
+      0.64,
+      0.47,
+      0.25
+    ],
+    "Prop_sandwich_ham": [
+      0.48,
+      0.145,
+      0.135
+    ],
+    "Prop_sandwich_cheese": [
+      0.78,
+      0.56,
+      0.15
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "19893a5c8b3d6be5e2de9f6d8a000b10e1248d66caab5f8ce4b3e9459ca6ae31",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "三明治",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.12,
+    "game_longest_dim_m": 0.38,
+    "sourcing_hint": "model ourselves：12×9×4 cm 三角柱，两层夹心三色（CSV 提示 Kenney sandwich.glb）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.12,
+    "built_longest_m": 0.12000000476837158,
+    "abs_error_m": 4.768371586472142e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 400,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "crust",
+      "name_zh": "面包皮棕",
+      "linear_rgb": [
+        0.23,
+        0.095,
+        0.035
+      ],
+      "roughness": 0.6
+    },
+    {
+      "key": "crumb",
+      "name_zh": "面包瓤米白",
+      "linear_rgb": [
+        0.64,
+        0.47,
+        0.25
+      ],
+      "roughness": 0.85
+    },
+    {
+      "key": "ham",
+      "name_zh": "火腿粉",
+      "linear_rgb": [
+        0.48,
+        0.145,
+        0.135
+      ],
+      "roughness": 0.55
+    },
+    {
+      "key": "cheese",
+      "name_zh": "夹心奶酪黄",
+      "linear_rgb": [
+        0.78,
+        0.56,
+        0.15
+      ],
+      "roughness": 0.5
+    }
+  ],
+  "notes": "Nine-point rounded-triangle section (12 cm long cut face at y=+0.045, apex at y=-0.045, 12 mm corner chamfers) extruded through seven z rings at 0 / 3 / 12 / 20 / 28 / 37 / 40 mm, plus an inset top ring at 92% for the crumb: 6 x 9 side quads + 9 top ring quads + two 9-gon caps + the crumb cap = 140 triangles.  Side bands by face-centre z: 3 mm crust, 9 mm crumb, 8 mm ham, 8 mm cheese, 9 mm crumb, 3 mm crust, so both cut faces read as brown edge / pale crumb / ham / cheese / pale crumb / brown edge.  The bottom cap is crust; the top is a thin crust border with a pale crumb centre.  Footprint 0.120 x 0.090 m, height 0.040 m, one closed shell.",
+  "build_script": "models/sandwich.py",
+  "preview": "previews/sandwich_preview.png",
+  "files": {
+    "sandwich.fbx": 20108,
+    "sandwich.glb": 10088,
+    "sandwich.blend": 93792
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 129795
+}

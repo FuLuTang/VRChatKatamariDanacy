@@ -1,0 +1,118 @@
+{
+  "id": "cookie",
+  "pivot": "center",
+  "target_longest_m": 0.07,
+  "dimensions_m": {
+    "x": 0.07000000029802322,
+    "y": 0.06885603070259094,
+    "z": 0.009372258558869362,
+    "longest": 0.07000000029802322
+  },
+  "bounds_m": {
+    "min": [
+      -0.03500000014901161,
+      -0.03442801535129547,
+      -0.004686129279434681
+    ],
+    "max": [
+      0.03500000014901161,
+      0.03442801535129547,
+      0.004686129279434681
+    ]
+  },
+  "vertices": 165,
+  "triangles": 326,
+  "materials": [
+    "Prop_cookie_dough",
+    "Prop_cookie_chip"
+  ],
+  "material_base_colors": {
+    "Prop_cookie_dough": [
+      0.42,
+      0.24,
+      0.1
+    ],
+    "Prop_cookie_chip": [
+      0.055,
+      0.03,
+      0.02
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "487045e3692a1266a8b5bd4c68e065db0e948497f97fb577becc52828a25a650",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "饼干",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.07,
+    "game_longest_dim_m": 0.09,
+    "sourcing_hint": "model ourselves：Ø7 cm、厚 0.9 cm 圆饼，5 颗凸起巧克力豆",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.07,
+    "built_longest_m": 0.07000000029802322,
+    "abs_error_m": 2.98023217215615e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 340,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "dough",
+      "name_zh": "饼干面团",
+      "linear_rgb": [
+        0.42,
+        0.24,
+        0.1
+      ],
+      "roughness": 0.8
+    },
+    {
+      "key": "chip",
+      "name_zh": "巧克力豆",
+      "linear_rgb": [
+        0.055,
+        0.03,
+        0.02
+      ],
+      "roughness": 0.6
+    }
+  ],
+  "notes": "24 segments, two top rings (0.62 / 1.0), flat underside: 144 base triangles.  Five chip domes, each 6-sided with a 3.4 mm base and a 3.7 mm rise, are unioned into the base; the visible result is about 326 triangles after the exact solver.  Chips sit at (0.003, 0.001) and on a 0.0205 m ring at 35/125/215/305 degrees, well inside the outline.  The six-scallop 3.5% outline is unchanged from the old cookie; with the same 24 sampled angles the raw AABB and the finish scale are unchanged, so the exported size and pivot match exactly.",
+  "build_script": "models/cookie.py",
+  "preview": "previews/cookie_preview.png",
+  "files": {
+    "cookie.fbx": 23628,
+    "cookie.glb": 16840,
+    "cookie.blend": 95690
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 104929
+}

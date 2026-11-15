@@ -1,0 +1,102 @@
+{
+  "id": "watering_can",
+  "pivot": "center",
+  "target_longest_m": 0.25,
+  "dimensions_m": {
+    "x": 0.1121874749660492,
+    "y": 0.25,
+    "z": 0.17906847596168518,
+    "longest": 0.25
+  },
+  "bounds_m": {
+    "min": [
+      -0.0560937374830246,
+      -0.125,
+      -0.08953423798084259
+    ],
+    "max": [
+      0.0560937374830246,
+      0.125,
+      0.08953423798084259
+    ]
+  },
+  "vertices": 173,
+  "triangles": 346,
+  "materials": [
+    "Prop_watering_can_enamel"
+  ],
+  "material_base_colors": {
+    "Prop_watering_can_enamel": [
+      0.1,
+      0.16,
+      0.1
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "a717f40dc98bcf3d69da86829c549399a9ca3b91cb8a42e3c3d9ab09cd8505c3",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "洒水壶",
+  "category": "garden",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.25,
+    "game_longest_dim_m": 0.58,
+    "sourcing_hint": "model ourselves：壶身圆柱 + 壶嘴，0.58 m",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.25,
+    "built_longest_m": 0.25,
+    "abs_error_m": 0.0,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 600,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "enamel",
+      "name_zh": "灰绿搪瓷",
+      "linear_rgb": [
+        0.1,
+        0.16,
+        0.1
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "The three parts are boolean-unioned (exact solver) so the seams are welded and no cap faces are buried inside the body.  Longest axis is the spout, which points +Y (Blender forward).",
+  "build_script": "models/watering_can.py",
+  "preview": "previews/watering_can_preview.png",
+  "files": {
+    "watering_can.fbx": 22524,
+    "watering_can.glb": 18564,
+    "watering_can.blend": 94975
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 116866
+}

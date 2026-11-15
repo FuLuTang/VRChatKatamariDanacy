@@ -1,0 +1,118 @@
+{
+  "id": "juice_carton",
+  "pivot": "center",
+  "target_longest_m": 0.1,
+  "dimensions_m": {
+    "x": 0.05999999865889549,
+    "y": 0.05999999865889549,
+    "z": 0.10000000149011612,
+    "longest": 0.10000000149011612
+  },
+  "bounds_m": {
+    "min": [
+      -0.029999999329447746,
+      -0.029999999329447746,
+      -0.05000000074505806
+    ],
+    "max": [
+      0.029999999329447746,
+      0.029999999329447746,
+      0.05000000074505806
+    ]
+  },
+  "vertices": 20,
+  "triangles": 36,
+  "materials": [
+    "Prop_juice_carton_card",
+    "Prop_juice_carton_panel"
+  ],
+  "material_base_colors": {
+    "Prop_juice_carton_card": [
+      0.7,
+      0.64,
+      0.5
+    ],
+    "Prop_juice_carton_panel": [
+      0.56,
+      0.19,
+      0.02
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "0949dbcc005fc7fbe1ef9d235d25a1515471d2f63c28736391c800f9c0751dc5",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "果汁盒",
+  "category": "drink",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.1,
+    "game_longest_dim_m": 0.34,
+    "sourcing_hint": "model ourselves：0.06 x 0.06 x 0.10 m 山墙顶纸盒",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.1,
+    "built_longest_m": 0.10000000149011612,
+    "abs_error_m": 1.4901161138336505e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 200,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "card",
+      "name_zh": "纸盒米白",
+      "linear_rgb": [
+        0.7,
+        0.64,
+        0.5
+      ],
+      "roughness": 0.7
+    },
+    {
+      "key": "panel",
+      "name_zh": "正面橙汁色",
+      "linear_rgb": [
+        0.56,
+        0.19,
+        0.02
+      ],
+      "roughness": 0.6
+    }
+  ],
+  "notes": "Ten-point section in the XZ plane: 0.060 m wide, square body to 0.080 m, gable to 0.094 m, then a 4 mm wide, 6 mm tall fin seal up to the 0.100 m target; extruded 0.060 m along Y.  The front cap (y=+0.030) is the orange printed panel, the sides and the back are cream.  The fin is what separates the silhouette from a house roof.  36 triangles, one closed shell.  No straw or screw cap: either would push an axis past the 0.06 x 0.06 x 0.10 design box.",
+  "build_script": "models/juice_carton.py",
+  "preview": "previews/juice_carton_preview.png",
+  "files": {
+    "juice_carton.fbx": 16284,
+    "juice_carton.glb": 3568,
+    "juice_carton.blend": 89651
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 164346
+}

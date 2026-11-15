@@ -1,0 +1,150 @@
+{
+  "id": "book_stack",
+  "pivot": "center",
+  "target_longest_m": 0.26,
+  "dimensions_m": {
+    "x": 0.25999999046325684,
+    "y": 0.1899999976158142,
+    "z": 0.09000000357627869,
+    "longest": 0.25999999046325684
+  },
+  "bounds_m": {
+    "min": [
+      -0.12999999523162842,
+      -0.0949999988079071,
+      -0.04500000178813934
+    ],
+    "max": [
+      0.12999999523162842,
+      0.0949999988079071,
+      0.04500000178813934
+    ]
+  },
+  "vertices": 82,
+  "triangles": 160,
+  "materials": [
+    "Prop_book_stack_pages",
+    "Prop_book_stack_cover_a",
+    "Prop_book_stack_cover_b",
+    "Prop_book_stack_cover_c"
+  ],
+  "material_base_colors": {
+    "Prop_book_stack_pages": [
+      0.62,
+      0.575,
+      0.465
+    ],
+    "Prop_book_stack_cover_a": [
+      0.175,
+      0.045,
+      0.035
+    ],
+    "Prop_book_stack_cover_b": [
+      0.04,
+      0.075,
+      0.13
+    ],
+    "Prop_book_stack_cover_c": [
+      0.105,
+      0.105,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "37f4e68870c055f9f794d06f088bd3a51d75e76c4b00e1a8e9cfd77ed2eef3c8",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "书堆",
+  "category": "furniture",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.26,
+    "game_longest_dim_m": 0.26,
+    "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / LEVEL_CONSTRUCTION.md 4 P2（真实三轴，无 CSV 行）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.26,
+    "built_longest_m": 0.25999999046325684,
+    "abs_error_m": 9.536743172944284e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "pages",
+      "name_zh": "书页米白",
+      "linear_rgb": [
+        0.62,
+        0.575,
+        0.465
+      ],
+      "roughness": 0.88
+    },
+    {
+      "key": "cover_a",
+      "name_zh": "封面砖红",
+      "linear_rgb": [
+        0.175,
+        0.045,
+        0.035
+      ],
+      "roughness": 0.72
+    },
+    {
+      "key": "cover_b",
+      "name_zh": "封面深蓝",
+      "linear_rgb": [
+        0.04,
+        0.075,
+        0.13
+      ],
+      "roughness": 0.72
+    },
+    {
+      "key": "cover_c",
+      "name_zh": "封面橄榄",
+      "linear_rgb": [
+        0.105,
+        0.105,
+        0.045
+      ],
+      "roughness": 0.72
+    }
+  ],
+  "notes": "Three hardbacks.  Bottom 0.260 x 0.190 x 0.032, axis aligned (it owns the AABB).  Middle 0.220 x 0.150 turned +8 deg at (0.004, 0.000), z 0.031-0.062 - 0.150 deep, not 0.160: at +8 deg a 0.160 deep book reaches y -0.0965 and pushes the AABB 0.001 past the design depth.  Top 0.240 x 0.150 turned -7 deg at (0.000, 0.003), z 0.061-0.090.  Each book: page block inset 4 mm from three sides and flush at the +x spine, plus a 5 mm full-footprint cover slab on top.  AABB 0.260 x 0.190 x 0.090, flat top at z = 0.090.  Materials by face centre: cover slabs (z >= book top - 5 mm), the +x spine face and everything outside the page footprint are the book colour; the other three page-block sides are pages.",
+  "build_script": "models/book_stack.py",
+  "preview": "previews/book_stack_preview.png",
+  "files": {
+    "book_stack.fbx": 21164,
+    "book_stack.glb": 10536,
+    "book_stack.blend": 487864
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 176739
+}

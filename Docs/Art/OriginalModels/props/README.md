@@ -388,3 +388,57 @@ PROPS="book_stack,beer_crate,crate,storage_bin,crate_large,cooler_box_large,picn
 - 预览图的像素来自 **Blender 4.0.2 的 EEVEE**，和本目录里 3.6.21 / 5.3.0 生成的旧预览不是同一渲染器；几何、清单与拼图布局不受影响。
 - 9 件**没有碰撞体**。建议分箱：`book_stack` 1、`beer_crate` 1、`crate` 1、`storage_bin` 1、`crate_large` 1、`cooler_box_large` 1、`picnic_bench` 座面 1 + 两条腿框各 1、`lounge_chair` 躺面 1 + 四条腿各 1、`stroller` 车体 1 + 车架 1。
 - 当前 motor 没有竖直支撑（同 §12.6），所以这批的平顶现在仍然只是"挡路 ↔ 可吸"两态的形状准备。
+
+## 14. 进 Unity（2026-11-15）
+
+本节是 48 件道具从 `exports/` 进入 Unity 工程的交接说明：拷贝位置、材质工具、操作员验收。模型源仍以 `exports/` 为准；Unity 侧只保存一份拷贝、每件一个 `<def>.manifest.json` 和生成的 `.mat`。
+
+### 14.1 拷贝位置与当前状态
+
+- 每件：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Art/Props/<def>/<def>.fbx`，同目录再放 `<def>.manifest.json`。manifest 是编辑器数据，只给材质工具读，不进 `Runtime/`。
+- 48 件全部已拷入（含第一关用不到的 `collapsed_bench`、`flower_pot_large`、`picnic_blanket`、`thermos`）。第一关 `placement.json` 用到 44 件，缺的 28 件由此补齐。
+- 新增 32 个目录：`beer_crate`、`book_stack`、`bowl`、`bread_slice`、`cheese_slice`、`collapsed_bench`、`cooler_box`、`cooler_box_large`、`crate`、`crate_large`、`croissant`、`cup`、`fallen_leaf`、`flower_pot_large`、`folding_stool`、`folding_table`、`glass_bottle`、`juice_carton`、`lounge_chair`、`picnic_basket`、`picnic_bench`、`picnic_blanket`、`plate`、`sandwich`、`serving_tray`、`small_potted_plant`、`soda_can`、`spoon`、`storage_bin`、`stroller`、`thermos`、`wood_plank`。
+- 覆盖 10 件的旧 FBX：`acorn`、`bottle_cap`、`cookie`、`napkin`、`orange`、`paper_scrap`、`pebble`、`seed`、`toy_ball`、`watering_can`（其中 `cookie` / `orange` 是第二批重做后的真实尺寸版本，旧文件明显更小）。覆盖时**保留原 `<def>.fbx.meta`**，GUID 不变，场景/预制体引用不受影响。
+- 未变 6 件：`apple`、`banana`、`grapes`、`pear`、`strawberry`、`watermelon`。
+- 新增目录和文件没有手工 `.meta`；Unity 首次导入时生成。导入后应把 Unity 生成的 `.meta` 与资产一起提交，**不要**手工改已有 16 个 FBX 的 GUID。
+
+### 14.2 材质工具（长期流水线，不是一次性 Builder）
+
+代码在 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/PropArt/`：
+
+| 文件 | 作用 |
+|---|---|
+| `PropArtManifest.cs` | 解析 manifest 的 `id` / `materials` / `material_base_colors`；纯函数，可单测 |
+| `PropArtMaterials.cs` | 建/更新 `.mat`、写 ModelImporter 外部对象重映射、菜单、幂等判断 |
+| `PropArtModelPostprocessor.cs` | 导入 FBX/ manifest 时自动跑同步；预导入阶段只做设置和已有材质的绑定 |
+
+行为：
+
+1. 读 `Art/Props/<def>/<def>.manifest.json` 的 `material_base_colors`（线性 RGB）。读盘而不是走 TextAsset，保证 import 过程中也能读。
+2. 每个槽位写 `Art/Props/<def>/Materials/<slot>.mat`，`<slot>` 就是 manifest 里的完整材质名 `Prop_<def>_<key>`。新建材质用内置 `Standard` 着色器，`_Color` 直接写 manifest 的线性值（工程是 Linear color space，现有手工材质也是这么存的），并设 `_Glossiness = 0`、`_Metallic = 0` 与现有纯色观感一致；已存在的材质只更新颜色，不换着色器、不改其他属性。
+3. 用 `ModelImporter.AddRemap`（`AssetImporter.SourceAssetIdentifier(typeof(Material), <FBX 材质名>)`）把槽位指到 `.mat`，并把 `materialImportMode` 设为 `ImportViaMaterialDescription`、`materialLocation` 设为 `InPrefab`（"Use Embedded Materials" + Remapped Materials 的模式）。不用 `SearchAndRemapMaterials` 按命名搜索：本项目的 `.mat` 名与 FBX 槽名一一对应，显式 remap 更可控。这会把 16 个已有 FBX 的 Material Creation Mode 统一成 `ImportViaMaterialDescription` / `InPrefab`（其中 8 个原本是 Standard / External），但只改导入设置，不改 `.fbx.meta` 的 GUID。
+4. 幂等：路径只由 def + 槽名决定；颜色在容差 1e-4 内不重写；导入设置和 remap 都没变就不 reimport。重复导入/重复跑菜单不会多出文件，也不会碰已正确的材质。
+5. 拒绝而不是猜：manifest 缺失、id 与目录不一致、颜色键缺失/多余、槽位在 FBX 与 manifest 之间对不上、材质着色器没有颜色属性，都会在 Console 以 `[prop-art]` 报出具体原因，并且不创建半套材质。
+
+菜单：**`VRC Katamari/Prop Art/重新同步全部道具材质`**。改了 manifest、手工换过 shader 或导入设置后跑一次即可。
+
+槽位名映射（写在工具注释里）：`scripts/prop_lib.py` 的 `Builder.material()` 固定用 `Prop_<def>_<key>`，`Builder.finish()` 把同样的字符串写进 `materials` 和 `material_base_colors`；FBX 里也是这些字符串（48 个导出逐一核对过），Unity 导入材质沿用 FBX 名。所以正常情况是**恒等映射**。工具另外容忍大小写差异、Blender 的 `.001` 重名后缀和裸 key，但遇到歧义（两个声明名都能匹配）直接拒绝。
+
+### 14.3 操作员验收步骤
+
+1. 用 Unity 2022.3.22f1 打开工程，等首次导入和脚本编译结束。Console 过滤 `[prop-art]`：不应有错误；材质尚不存在时首次同步应看到一条汇总（created 数 > 0）。新增的 32 个目录会由 Unity 生成 `.meta`。
+2. 跑一次 `VRC Katamari/Prop Art/重新同步全部道具材质`，再跑第二次。第二次汇总应为 `materials created 0, updated 0 ... models reimported 0`——这是幂等验收。
+3. 抽查 FBX 的 Materials 标签页：`acorn`（2 槽）、`book_stack`（4 槽）、`stroller`（5 槽）的 Remapped Materials 都应指向同目录 `Materials/Prop_<def>_<slot>.mat`，不能是 `None`、不能指向 FBX 内嵌材质。
+4. 抽查 `.mat`：用文本编辑器看 `.mat` 的 YAML（或 Inspector 的 Debug 模式）时，`_Color` 应与 `exports/<def>.manifest.json` 的 `material_base_colors` 数值一致（线性值，不做 sRGB 换算；普通颜色选择器显示的是 sRGB，不要用它核对数值）；与 `previews/<def>_preview.png` 的色相/明度对照不应有明显偏差。
+5. 尺寸与轴向：把 FBX 拖进空场景，位置归零、Rotation `(0,0,0)`、Scale `(1,1,1)`。Unity 的包围盒是 Y-up，对应关系是 **Unity (X, Y, Z) = manifest `dimensions_m` 的 (X, Z, Y)**（Blender 的 Z 高度变成 Unity 的 Y）；三轴误差应 < 1 mm（Unity 的 Bounds 显示或临时 BoxCollider 都可读）。模型应直立（+Y 向上）、正面朝 +Z。特例：`stroller` 的行驶方向是 +X（§13.2），`watering_can` 的壶嘴朝 +Z（对应 manifest 的 Y=0.58 长边）。
+6. 跑一次 `VRC Katamari/Level/Import Placement (LevelContent)`：127 件道具全部实例化，报告里不应有 `no model at ...`；随机抽几件看颜色，不应再出现 Unity 默认灰/青材质。
+7. 确认没有把 manifest 拖进运行时引用：它只是 TextAsset，`Runtime/` 不读它。
+
+### 14.4 未决与边界
+
+- 本次 Linux 侧只做了拷贝、工具代码和纯函数单测；**没有在 Unity 里实际导入/编译/跑测试**。材质 remap 的最终证据以操作员第 2–3 步的 Console 与 Materials 标签页为准。
+- `ImportViaMaterialDescription` + `InPrefab` 是依据 Unity 2022.3 的 Materials 标签页行为选的（只有 `materialLocation != External` 时 Inspector 才显示 Remapped Materials 列表，底层就是 external object map）。如果 2022.3 上 remap 不生效，Console 的 `[prop-art]` 会报 "still uses the embedded material"，此时不要手工猜，把报告发回。
+- 粗糙度暂不写入材质：manifest 有 `materials_declared[].roughness`，但现有手工材质统一 `_Glossiness = 0`，本阶段（§9 纯色档位）保持同一观感；等贴图/材质族升级时再统一接。
+- 工程若从 Linear 切到 Gamma color space，`_Color` 需要做一次 sRGB 转换；工具当前按 Linear 直接写，切换前要先改这里。
+- 48 个 manifest 已随 FBX 进入 Assets；如果以后改建模颜色，改 `exports/<def>.manifest.json` 后要同步覆盖 Unity 侧同名 manifest，再跑菜单。两份不一致时工具只读 Unity 侧那份。
+- 自动同步走 `EditorApplication.delayCall`（避免在 AssetDatabase 导入状态里建资产触发限制警告）；批处理/CI 或 domain reload 打断时可能不会自动跑，此时显式调用 `PropArtMaterials.SyncAll()` 或跑菜单即可。编辑器启动时还有一次"缺材质才同步"的兜底检查。

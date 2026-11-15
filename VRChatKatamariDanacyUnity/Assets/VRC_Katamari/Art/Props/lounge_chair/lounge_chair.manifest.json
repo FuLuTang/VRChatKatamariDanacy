@@ -1,0 +1,134 @@
+{
+  "id": "lounge_chair",
+  "pivot": "center",
+  "target_longest_m": 1.6,
+  "dimensions_m": {
+    "x": 1.600000023841858,
+    "y": 0.6000000238418579,
+    "z": 0.3499999940395355,
+    "longest": 1.600000023841858
+  },
+  "bounds_m": {
+    "min": [
+      -0.800000011920929,
+      -0.30000001192092896,
+      -0.17499999701976776
+    ],
+    "max": [
+      0.800000011920929,
+      0.30000001192092896,
+      0.17499999701976776
+    ]
+  },
+  "vertices": 175,
+  "triangles": 354,
+  "materials": [
+    "Prop_lounge_chair_canvas",
+    "Prop_lounge_chair_towel",
+    "Prop_lounge_chair_frame"
+  ],
+  "material_base_colors": {
+    "Prop_lounge_chair_canvas": [
+      0.3,
+      0.115,
+      0.06
+    ],
+    "Prop_lounge_chair_towel": [
+      0.62,
+      0.575,
+      0.47
+    ],
+    "Prop_lounge_chair_frame": [
+      0.55,
+      0.57,
+      0.58
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "19b82d31f89212288d5d3605f52dfbecfa2776220d4172446d54840f12d241e5",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "折叠躺椅",
+  "category": "furniture",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 1.6,
+    "game_longest_dim_m": 1.6,
+    "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / LEVEL_CONSTRUCTION.md 4 P1（真实三轴，无 CSV 行，布局里 yaw=90）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 1.6,
+    "built_longest_m": 1.600000023841858,
+    "abs_error_m": 2.3841857821338408e-08,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 900,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "canvas",
+      "name_zh": "躺面赭布",
+      "linear_rgb": [
+        0.3,
+        0.115,
+        0.06
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "towel",
+      "name_zh": "头端米色布",
+      "linear_rgb": [
+        0.62,
+        0.575,
+        0.47
+      ],
+      "roughness": 0.92
+    },
+    {
+      "key": "frame",
+      "name_zh": "铝架银灰",
+      "linear_rgb": [
+        0.55,
+        0.57,
+        0.58
+      ],
+      "roughness": 0.35
+    }
+  ],
+  "notes": "Deck 1.600 x 0.600 x 0.040 (R 100 mm, 16-gon) from z 0.310 to 0.350, one flat plane on top.  Frame: two 28 mm rails along X at y +/-0.286, z 0.300, x +/-0.760; four 28 mm legs at (+/-0.660, +/-0.240) from z 0 to 0.322 (12 mm inside the deck); two 24 mm cross braces at x +/-0.660, z 0.220.  AABB 1.600 x 0.600 x 0.350 (the deck corners reach +/-0.800 / +/-0.300).  Materials by face extent: frame below z 0.308, pale towel colour for the 1 mm head-end plate (x -0.780..-0.550, y +/-0.260, top also z 0.350), canvas elsewhere.",
+  "build_script": "models/lounge_chair.py",
+  "preview": "previews/lounge_chair_preview.png",
+  "files": {
+    "lounge_chair.fbx": 23916,
+    "lounge_chair.glb": 12240,
+    "lounge_chair.blend": 477880
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 140699
+}

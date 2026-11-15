@@ -1,0 +1,102 @@
+{
+  "id": "paper_scrap",
+  "pivot": "center",
+  "target_longest_m": 0.1,
+  "dimensions_m": {
+    "x": 0.09999999403953552,
+    "y": 0.07412444055080414,
+    "z": 0.011834502220153809,
+    "longest": 0.09999999403953552
+  },
+  "bounds_m": {
+    "min": [
+      -0.04999999701976776,
+      -0.03706222027540207,
+      -0.005917251110076904
+    ],
+    "max": [
+      0.04999999701976776,
+      0.03706222027540207,
+      0.005917251110076904
+    ]
+  },
+  "vertices": 84,
+  "triangles": 164,
+  "materials": [
+    "Prop_paper_scrap_paper"
+  ],
+  "material_base_colors": {
+    "Prop_paper_scrap_paper": [
+      0.62,
+      0.6,
+      0.54
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "c4055c825b2a4746831e54852ee1c47f763a1859c120ea6d0d8c6a41c45ac59b",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "纸屑",
+  "category": "debris",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.1,
+    "game_longest_dim_m": 0.1,
+    "sourcing_hint": "model ourselves：单面薄片，双面材质",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.1,
+    "built_longest_m": 0.09999999403953552,
+    "abs_error_m": 5.960464483090178e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "paper",
+      "name_zh": "旧纸白",
+      "linear_rgb": [
+        0.62,
+        0.6,
+        0.54
+      ],
+      "roughness": 0.8
+    }
+  ],
+  "notes": "No texture: the crumple is geometric.  0.10 x 0.07 m, 1.4 mm thick, closed slab with a curled edge and a torn outline instead of a two-sided plane.",
+  "build_script": "models/paper_scrap.py",
+  "preview": "previews/paper_scrap_preview.png",
+  "files": {
+    "paper_scrap.fbx": 19052,
+    "paper_scrap.glb": 12864,
+    "paper_scrap.blend": 91284
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 88064
+}

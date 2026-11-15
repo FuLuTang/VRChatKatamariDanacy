@@ -1,0 +1,102 @@
+{
+  "id": "flower_pot_large",
+  "pivot": "center",
+  "target_longest_m": 0.4,
+  "dimensions_m": {
+    "x": 0.3400000035762787,
+    "y": 0.3400000035762787,
+    "z": 0.4000000059604645,
+    "longest": 0.4000000059604645
+  },
+  "bounds_m": {
+    "min": [
+      -0.17000000178813934,
+      -0.17000000178813934,
+      -0.20000000298023224
+    ],
+    "max": [
+      0.17000000178813934,
+      0.17000000178813934,
+      0.20000000298023224
+    ]
+  },
+  "vertices": 130,
+  "triangles": 256,
+  "materials": [
+    "Prop_flower_pot_large_terracotta"
+  ],
+  "material_base_colors": {
+    "Prop_flower_pot_large_terracotta": [
+      0.4,
+      0.155,
+      0.075
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "0ff1359c743e6b4ec537d51830eab16b760b9ae0a4deab956c35fba9cd00afcc",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "大花盆",
+  "category": "garden",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.4,
+    "game_longest_dim_m": 1.0,
+    "sourcing_hint": "Kenney Nature Kit 2.1 pot_large.glb（先看图确认无花）→ 空盆重画",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.4,
+    "built_longest_m": 0.4000000059604645,
+    "abs_error_m": 5.960464455334602e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 400,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "terracotta",
+      "name_zh": "陶土砖红",
+      "linear_rgb": [
+        0.4,
+        0.155,
+        0.075
+      ],
+      "roughness": 0.88
+    }
+  ],
+  "notes": "Ten-point lathe profile, 16 segments: base 0 -> 0.118, fillet to 0.123 at z 0.010, outer wall to 0.170 at z 0.398, flat 2 cm lip at z 0.400 (outer 0.170, inner 0.152), inner wall down to 0.115 at z 0.022, flat floor to the axis.  Wall 8-18 mm, floor 22 mm.  AABB 0.340 x 0.340 x 0.400, foot ring on z = 0, no plant and no drainage hole.",
+  "build_script": "models/flower_pot_large.py",
+  "preview": "previews/flower_pot_large_preview.png",
+  "files": {
+    "flower_pot_large.fbx": 19260,
+    "flower_pot_large.glb": 13484,
+    "flower_pot_large.blend": 92879
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 168104
+}

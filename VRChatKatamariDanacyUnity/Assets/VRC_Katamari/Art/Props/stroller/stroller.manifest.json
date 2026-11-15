@@ -1,0 +1,166 @@
+{
+  "id": "stroller",
+  "pivot": "center",
+  "target_longest_m": 1.0,
+  "dimensions_m": {
+    "x": 1.0,
+    "y": 0.550000011920929,
+    "z": 1.0,
+    "longest": 1.0
+  },
+  "bounds_m": {
+    "min": [
+      -0.5,
+      -0.2750000059604645,
+      -0.5
+    ],
+    "max": [
+      0.5,
+      0.2750000059604645,
+      0.5
+    ]
+  },
+  "vertices": 438,
+  "triangles": 888,
+  "materials": [
+    "Prop_stroller_rubber",
+    "Prop_stroller_metal",
+    "Prop_stroller_basket",
+    "Prop_stroller_body",
+    "Prop_stroller_canopy"
+  ],
+  "material_base_colors": {
+    "Prop_stroller_rubber": [
+      0.028,
+      0.03,
+      0.032
+    ],
+    "Prop_stroller_metal": [
+      0.52,
+      0.545,
+      0.56
+    ],
+    "Prop_stroller_basket": [
+      0.055,
+      0.062,
+      0.07
+    ],
+    "Prop_stroller_body": [
+      0.56,
+      0.545,
+      0.49
+    ],
+    "Prop_stroller_canopy": [
+      0.115,
+      0.15,
+      0.12
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "8bde7f85b06089d4fbc66b0fb59500fc20ca3c8783d34cbeddad840e3b9f51b0",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "婴儿车",
+  "category": "furniture",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 1.0,
+    "game_longest_dim_m": 1.0,
+    "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / LEVEL_CONSTRUCTION.md 4 P1（真实三轴，无 CSV 行）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 1.0,
+    "built_longest_m": 1.0,
+    "abs_error_m": 0.0,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 900,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "rubber",
+      "name_zh": "轮胎深灰",
+      "linear_rgb": [
+        0.028,
+        0.03,
+        0.032
+      ],
+      "roughness": 0.88
+    },
+    {
+      "key": "metal",
+      "name_zh": "车架银灰",
+      "linear_rgb": [
+        0.52,
+        0.545,
+        0.56
+      ],
+      "roughness": 0.38
+    },
+    {
+      "key": "basket",
+      "name_zh": "底篮深布",
+      "linear_rgb": [
+        0.055,
+        0.062,
+        0.07
+      ],
+      "roughness": 0.9
+    },
+    {
+      "key": "body",
+      "name_zh": "睡篮米白",
+      "linear_rgb": [
+        0.56,
+        0.545,
+        0.49
+      ],
+      "roughness": 0.85
+    },
+    {
+      "key": "canopy",
+      "name_zh": "顶篷灰绿",
+      "linear_rgb": [
+        0.115,
+        0.15,
+        0.12
+      ],
+      "roughness": 0.88
+    }
+  ],
+  "notes": "Wheels O 0.180 x 0.040 at (+/-0.410, +/-0.255, 0.090) - the four extremes give x +/-0.500, y +/-0.275, z 0.  Axles O 24 mm at x +/-0.410, z 0.090.  Chassis rails O 28 mm at y +/-0.190, z 0.190; four O 24 mm fork struts from (+/-0.410, +/-0.190, 0.190) to (+/-0.410, +/-0.245, 0.090).  Under-basket 0.520 x 0.400 x 0.165 at z 0.135-0.300 (solid dark block; its top is welded into the tub floor, and the rails run through its side walls).  Bassinet 0.620 x 0.420 (R 100 mm) at z 0.295-0.440 with a 0.560 x 0.360 cavity from z 0.345.  Canopy: half-cylinder R 200 mm, centre (-0.075, 0.430), 0.420 wide, top z 0.630.  Push bar: 32 mm tube from the rails (-0.400, +/-0.190, 0.190) up to (-0.460, +/-0.150, 0.980), plus a 0.300 m cross bar (O 32 mm 8-sided cylinder on Y) at z 0.984 whose 90-degree vertex puts the crown at exactly z = 1.000.  AABB 1.000 x 0.550 x 1.000.  Materials by face extent: rubber within 0.098 of a wheel axis while the face centre is outside |y| 0.230, metal below z 0.135 or beyond x -0.305 above z 0.430 (push bar), basket 0.135-0.300, canopy above z 0.4405, body between.",
+  "build_script": "models/stroller.py",
+  "preview": "previews/stroller_preview.png",
+  "files": {
+    "stroller.fbx": 39756,
+    "stroller.glb": 31320,
+    "stroller.blend": 551916
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 197885
+}

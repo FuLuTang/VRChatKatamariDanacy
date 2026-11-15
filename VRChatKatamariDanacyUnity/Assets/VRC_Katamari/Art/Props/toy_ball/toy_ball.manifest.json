@@ -1,0 +1,118 @@
+{
+  "id": "toy_ball",
+  "pivot": "center",
+  "target_longest_m": 0.15,
+  "dimensions_m": {
+    "x": 0.15000000596046448,
+    "y": 0.15000000596046448,
+    "z": 0.15000000596046448,
+    "longest": 0.15000000596046448
+  },
+  "bounds_m": {
+    "min": [
+      -0.07500000298023224,
+      -0.07500000298023224,
+      -0.07500000298023224
+    ],
+    "max": [
+      0.07500000298023224,
+      0.07500000298023224,
+      0.07500000298023224
+    ]
+  },
+  "vertices": 146,
+  "triangles": 288,
+  "materials": [
+    "Prop_toy_ball_shell",
+    "Prop_toy_ball_band"
+  ],
+  "material_base_colors": {
+    "Prop_toy_ball_shell": [
+      0.7,
+      0.66,
+      0.58
+    ],
+    "Prop_toy_ball_band": [
+      0.34,
+      0.05,
+      0.045
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "80e3b41d5ba24f2852d57af4ff8b213949b9a46c6675d21b2cdff1496d78960a",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "小皮球",
+  "category": "toy",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.15,
+    "game_longest_dim_m": 0.4,
+    "sourcing_hint": "model ourselves：Ø0.40 m 低面数球 + 双色条纹",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.15,
+    "built_longest_m": 0.15000000596046448,
+    "abs_error_m": 5.960464483090178e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "shell",
+      "name_zh": "米白球面",
+      "linear_rgb": [
+        0.7,
+        0.66,
+        0.58
+      ],
+      "roughness": 0.55
+    },
+    {
+      "key": "band",
+      "name_zh": "暗红球带",
+      "linear_rgb": [
+        0.34,
+        0.05,
+        0.045
+      ],
+      "roughness": 0.55
+    }
+  ],
+  "notes": "Two flat materials on one sphere: the bands are assigned by face height, no stripe texture.  Pivot at the sphere centre so a rolling or spinning ball rotates cleanly.",
+  "build_script": "models/toy_ball.py",
+  "preview": "previews/toy_ball_preview.png",
+  "files": {
+    "toy_ball.fbx": 20732,
+    "toy_ball.glb": 8680,
+    "toy_ball.blend": 94759
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 163504
+}

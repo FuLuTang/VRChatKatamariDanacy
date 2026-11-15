@@ -49,6 +49,8 @@ import re
 import sys
 from pathlib import Path
 
+from Tools.levelbuild import collider_proxy
+
 # --------------------------------------------------------------------------- #
 # schema constants
 # --------------------------------------------------------------------------- #
@@ -151,7 +153,7 @@ STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rot
                   "collision", "absorbable", "support", "meets", "material", "notes")
 CAMERA_KEYS = ("id", "type", "location", "target", "lens", "coverage_m")
 PRESET_KEYS = ("id", "camera", "engine", "res", "samples")
-DEF_KEYS = ("id", "kind", "model", "valueUnits", "notes")
+DEF_KEYS = ("id", "kind", "model", "valueUnits", "collider", "notes")
 LEVEL_KEYS = ("id", "scene", "units", "convention", "ballStart", "playerSpawn",
               "ballDiameterStart", "ballDiameterMax", "groundY", "bounds",
               "spawnClearanceM", "budget", "expected", "zones", "arena")
@@ -1111,6 +1113,8 @@ def canonical_doc(doc, manifests=None):
             value = entry[key]
             if key == "valueUnits":
                 value = int(value)
+            elif key == "collider" and isinstance(value, dict):
+                value = collider_proxy.canonical_collider(value)
             out[key] = value
         defs_out.append(_ordered(out, DEF_KEYS))
 
@@ -1348,6 +1352,38 @@ def _check_defs(doc, report, manifests, catalog):
         kind = entry.get("kind")
         if kind is not None and (not isinstance(kind, str) or not kind.strip()):
             report.err("%s.kind must be a non-empty string when present" % label)
+        _check_collider(entry, label, def_id, manifests, report)
+
+
+def _check_collider(entry, label, def_id, manifests, report):
+    """``defs[].collider``: schema, then "inside the visual AABB" (COLLIDER_LAYER 4.1).
+
+    The collider block is optional.  A prop whose def has none keeps the visual
+    AABB as its collision shape, exactly as before this field existed; that is the
+    compatibility promise, and ``canonical_doc`` only touches the field when it is
+    present.
+    """
+    block = entry.get("collider")
+    if block is None:
+        return
+    for message in collider_proxy.collider_schema_errors(block):
+        report.err("%s [collider] def %r: %s" % (label, def_id, message))
+    if not isinstance(block, dict) or def_id not in manifests:
+        return
+    bounds = collider_proxy.collider_bounds(block)
+    if bounds is None:
+        return
+    half = [0.5 * value for value in manifests[def_id]["aabb"]]
+    low, high = bounds
+    for axis, name in enumerate("xyz"):
+        if low[axis] < -half[axis] - MANIFEST_AABB_TOLERANCE_M:
+            report.err("%s [collider] def %r: collider reaches %.4f m on -%s, outside the "
+                       "visual AABB (half extent %.4f m)" % (label, def_id, low[axis],
+                                                             name, half[axis]))
+        if high[axis] > half[axis] + MANIFEST_AABB_TOLERANCE_M:
+            report.err("%s [collider] def %r: collider reaches %.4f m on +%s, outside the "
+                       "visual AABB (half extent %.4f m)" % (label, def_id, high[axis],
+                                                             name, half[axis]))
 
 
 def _check_props(doc, report, manifests, catalog):

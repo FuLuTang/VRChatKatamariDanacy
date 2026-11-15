@@ -127,6 +127,12 @@ namespace VRCKatamari.Pickup
         // ---- Per-prop store (allocated in Start, never serialized) ----
         private int[] propStates;
         private float[] lastSubmitTimes;
+        // Where each prop started, recorded once in Start before anything can attach:
+        // parent, local pose and active flag. ResetField is the only reader.
+        private Transform[] originalParents;
+        private Vector3[] originalLocalPositions;
+        private Quaternion[] originalLocalRotations;
+        private bool[] originalActiveStates;
         // Rows the motor could only refuse forever. Queued once, such a row would sit in one
         // of the four slots and be re-refused on every step (the motor never drops a refused
         // candidate), starving the props the ball is actually touching. Fixed at start-up so
@@ -168,6 +174,7 @@ namespace VRCKatamari.Pickup
             ClampSettings();
             ResolvePropCount();
             AllocatePropStore();
+            RecordOriginalPoses();
             MarkSubmittable();
             ReportPropDataProblems();
             seenEvents = 0;
@@ -227,6 +234,88 @@ namespace VRCKatamari.Pickup
             collectingInitialised = true;
             if (collecting) return;
             WithdrawSubmitted();
+        }
+
+        /// <summary>
+        /// Puts the field back the way it was at Start: every prop this host attached or
+        /// hid returns to its recorded parent, local pose and active flag, becomes free
+        /// again and can be absorbed in the new round.
+        /// </summary>
+        /// <returns>
+        /// True when the field is reset (an empty field counts as reset); false only
+        /// before <c>Start</c> has allocated the rows, in which case nothing was touched.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// Called by the story round's retry, after the motor has accepted
+        /// <c>TryResetForNewRound</c> and before the countdown starts again. The
+        /// absorbed-event cursor (<c>seenEvents</c>) is deliberately NOT rewound: the
+        /// motor's absolute absorbed count is monotonic across resets
+        /// (Docs/Design/BallMotor/README.md, "吸收事件环的绝对计数保持单调"), so keeping
+        /// the cursor means the new round's events continue at the same absolute numbers
+        /// and no dead event is replayed.
+        /// </para>
+        /// <para>
+        /// What is recorded is parent, local position, local rotation and active flag, in
+        /// <c>Start</c>. Local scale is not recorded because attach never writes it:
+        /// <c>SetParent</c> preserves world scale by adjusting local scale, so returning
+        /// to the original parent restores the authored look. Wired colliders are
+        /// re-enabled unconditionally (attach and hide only ever disable them), so a
+        /// collider authored disabled would come back enabled; that is the trade for not
+        /// keeping a second per-prop flag.
+        /// </para>
+        /// <para>
+        /// Only attached or hidden props are moved. A prop that stayed free was never
+        /// touched by this host, so a move another system made to it is not undone here.
+        /// Session diagnostic latches (<c>loggedLostEvents</c>, <c>hiddenLogCount</c>)
+        /// are kept, for the same reason the motor keeps its log caps: unlimited retries
+        /// must not refill the console. The collecting gate is not touched either; the
+        /// round controller reopens it in <c>BeginRound</c>.
+        /// </para>
+        /// </remarks>
+        public bool ResetField()
+        {
+            if (propStates == null || propTransforms == null) return false;
+
+            // Withdraw first: the attached/hidden rows no longer hold a submit time, so
+            // this only covers rows that were queued and left free.
+            WithdrawSubmitted();
+
+            int restored = 0;
+            for (int i = 0; i < propCount; i++)
+            {
+                if (propStates[i] == StateFree) continue;
+                Transform prop = propTransforms[i];
+                if (prop != null)
+                {
+                    // Same order as attach: parent, then write the local pose.
+                    prop.SetParent(originalParents[i]);
+                    prop.localPosition = originalLocalPositions[i];
+                    prop.localRotation = originalLocalRotations[i];
+                    prop.gameObject.SetActive(originalActiveStates[i]);
+                }
+                if (propColliders != null && i < propColliders.Length && propColliders[i] != null)
+                    propColliders[i].enabled = true;
+                propStates[i] = StateFree;
+                restored = restored + 1;
+            }
+            // Every submit stamp goes, not just the moved rows: the caller has already had
+            // the motor clear its candidate queue, so no id this host stamped is queued
+            // anywhere and the next scan starts from a clean "did I submit" filter.
+            for (int i = 0; i < propCount; i++) lastSubmitTimes[i] = 0f;
+
+            attachedCount = 0;
+            hiddenCount = 0;
+            lastHiddenReason = HiddenReasonNone;
+            lastHiddenItemId = "";
+            // Tallies are counted by walking kindTallyNames up to kindTallyCount, so a
+            // zero count hides every previous entry without clearing the array.
+            kindTallyCount = 0;
+            // The next Update scans at once instead of waiting out the old cadence.
+            nextScanTime = 0f;
+            Debug.Log("[PickupFieldHost] field reset restored=" + restored
+                + " props=" + propCount);
+            return true;
         }
 
         /// <summary>Total props attached to the ball by this host.</summary>
@@ -355,6 +444,10 @@ namespace VRCKatamari.Pickup
         {
             propStates = new int[propCount];
             lastSubmitTimes = new float[propCount];
+            originalParents = new Transform[propCount];
+            originalLocalPositions = new Vector3[propCount];
+            originalLocalRotations = new Quaternion[propCount];
+            originalActiveStates = new bool[propCount];
             submittable = new bool[propCount];
             nearestIndices = new int[SelectionCapacity];
             nearestDistSq = new float[SelectionCapacity];
@@ -365,6 +458,28 @@ namespace VRCKatamari.Pickup
             hiddenCount = 0;
             lastHiddenReason = HiddenReasonNone;
             lastHiddenItemId = "";
+        }
+
+        /// <summary>
+        /// Records where each prop starts - parent, local pose, active flag - once, in
+        /// Start, before any prop can be attached. ResetField is the only reader.
+        /// </summary>
+        /// <remarks>
+        /// A null parent is recorded as null and passed back to <c>SetParent</c>, which
+        /// Unity treats as "make it a scene root": props authored at the root come back
+        /// to the root rather than under whatever object happened to own them before.
+        /// </remarks>
+        private void RecordOriginalPoses()
+        {
+            for (int i = 0; i < propCount; i++)
+            {
+                Transform prop = propTransforms[i];
+                if (prop == null) continue;
+                originalParents[i] = prop.parent;
+                originalLocalPositions[i] = prop.localPosition;
+                originalLocalRotations[i] = prop.localRotation;
+                originalActiveStates[i] = prop.gameObject.activeSelf;
+            }
         }
 
         /// <summary>

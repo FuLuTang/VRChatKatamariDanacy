@@ -303,3 +303,116 @@ S3 只新增 `Runtime/Pickup/PickupFieldHost.cs` 与同名 `.meta`（GUID 新生
 2. **五句评语是序列化字符串**：默认值是否随场景实例正确序列化、改值后是否只出现在结果卡，未观察。
 3. **冻结顺序的运行时效果**：宿主与控制器 `Update` 顺序没有保证，事件可能晚一帧；到点后“不再吸收”只在代码顺序上成立，没有实测。
 4. 计划 §7 S4 的验收（0/1/2/3 星各触发一次、到点后不再吸收、`GetBankedScoreUnits()==0`）一条都还没有数据。
+
+## 再试一次（S6 剩余的一半：结果卡重试）
+
+> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-14。本节作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test。对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §4「没有重试接缝」与 §7 S6 的后半段；motor 的重置接缝（`TryResetForNewRound`）已在 [BallMotor README](../BallMotor/README.md) 的「重试（reset）」一节，本节只接调用方与道具复位。
+
+S4 表格里「不重试（S6）」一句已被本节取代：控制器现在只在结果卡上接受一次重试。
+
+### 三个文件
+
+| 文件 | 职责 | 明确不做 |
+|---|---|---|
+| `Runtime/Story/StoryRoundController.cs`（改） | `RequestRetry()`：状态闸门 → motor 复位 → 道具复位 → `BeginRound()`；重试次数写进 HUD 目标行 | 不交分/不奖励（不调 `TryBank`/`TryAwardScore`）、不写账本规则、不改球径与位姿（全交给 motor 的接缝）、不自己搬道具（交给宿主） |
+| `Runtime/Pickup/PickupFieldHost.cs`（改） | `Start` 记录每件道具的父物体/局部位姿/激活态；`ResetField()` 把它们放回去、重新可收集 | 不重置 motor、不碰回合闸门、不回退事件游标、不恢复道具 `localScale` |
+| `Runtime/Story/StoryRetryButton.cs`（新） | 世界内按钮的 `Interact()` 与 uGUI 入口 `OnRetryPressed()`，两者都只调 `controller.RequestRetry()` | 不持有回合状态、不判断能不能重试、不隐藏/显示自己 |
+
+三个都是 `UdonSharpBehaviour`，同步模式 `BehaviourSyncMode.None`，没有 static 字段、属性、struct、泛型、List/LINQ、try/catch、`??`、字符串插值或方法重载。
+
+### 状态闸门：只在结果卡上允许
+
+`RequestRetry()` 只在 `StateResult` 接受，其他状态一律拒绝并打一行 warning（`retry ignored: no result card is showing (state=...)`），结果卡与回合都不动。
+
+- `Presenting` **刻意拒绝**：那时结果卡还不存在，按钮也无从谈起；若允许，重置会静默跳过“呈给国王”的停留，玩家看到的还是呈递文本。
+- `Idle` / `Running` 拒绝：没有结果可重试。
+- 拒绝不改状态、不写 HUD：`state` 保持 `StateResult`，`resultText` 保持原样，所以“按钮没反应”只会出现在控制台日志里，不会出现半张卡。
+
+按钮 GameObject 是否只在结果时显示，是场景自己的选择；本脚本不做显隐，`RequestRetry()` 的状态闸门已经能挡住误按。
+
+### 顺序与失败处理
+
+1. `motor.TryResetForNewRound(newRoundId, startPosition, startHeadingDegrees, out reason)`。这是唯一有失败码的一步：账本行、`roundId`、候选、事件环、速度、朝向、三档尺寸、位姿全由它复位（[BallMotor README](../BallMotor/README.md) 的「重试（reset）」）。
+2. 若 motor 拒绝（1..7，例如 `noLocalRow`）：`Debug.LogWarning` 打出 `reason` 与 `GetLastResetLedgerFailure()`，**保留结果卡**并返回 false。此时道具与计时都没动。
+3. `pickupHost.ResetField()`。返回 false 只表示“宿主还没 `Start` 或没有道具”，不阻止重开；打一行普通日志后继续。
+4. `BeginRound()`：`Time.time` 重新记起点、状态回 Running、结果卡清空、`SetRoundGate(true)`、`SetCollecting(true)`、目标/当前/剩余三行重写。
+
+“先 motor、再道具、最后计时”是有意的：任何一步失败都不该让玩家看到一个“新回合”的 HUD 配上一颗旧球。
+
+### 回合 id 与重试次数
+
+`newRoundId = levelId + ":" + 次数`，次数从 1 开始，每次成功重试加一（`retryAttempt` 字段；首局为 0）。构造前先读 `motor.GetRoundId()`（`Runtime/BallMotor/KatamariBallMotor.cs:1134`），如果碰巧相同就继续加，最多 8 次（`RetryRoundIdGuard`）；motor 对相同 id 返回 `roundIdUnchanged`（4），这一步是防呆而不是常规路径。
+
+次数只在实际重开后写入；被 motor 拒绝的那一次不消耗编号。第 N 次重试的 HUD 目标行是 `目标 1.25 m（第 N 次重试）`（件数关卡同样加在末尾），`GetAttemptNumber()` 也可读。选择写在目标行而不是结果卡：`BeginRound()` 会清空结果卡，而目标行每局都会重写，是唯一在重开后仍然显示的地方。
+
+### 起点姿态：用 motor 的 getter，不在场景里另存
+
+- 球心：`KatamariBallMotor.GetCenterWorld()`（`Runtime/BallMotor/KatamariBallMotor.cs:1523`）。
+- 朝向：`KatamariBallMotor.GetHeadingDegrees()`（`:1528`）——**存在**，所以没有退回“序列化开始朝向”。
+
+捕获**一次**：`Start` 里读一次，存进 `retryStartPosition` / `retryStartHeadingDegrees`，之后重试都复用，不随球移动更新。
+
+**Start 顺序的坑**：两个不同物体上的 `Start` 顺序 Unity 不保证。如果控制器的 `Start` 先跑、motor 的 `Start` 还没跑，`GetCenterWorld()` 读到的就是 `(0,0,0)`（有限值，看起来像合法姿态），重试会把球送回世界原点。所以捕获用 motor 的基线直径做就绪判据：直径 ≤ 0 时（BallMotor README 用它判断“`Start` 未跑”）不在 `Start` 里落盘，而是在第一个 `Update` 里、motor 已有基线直径时再捕获。第一帧玩家还没推轴，球实际上没动；最坏误差是“控制器 `Start` 晚于球被移动”的异常装配，不在本切片。
+
+### PickupFieldHost：记录与复位
+
+`Start` 在 `AllocatePropStore()` 之后、任何附着之前调 `RecordOriginalPoses()`，按道具索引记录四个并行数组：`parent`、`localPosition`、`localRotation`、`gameObject.activeSelf`。空 Transform 的行跳过，数组保持默认值。
+
+`ResetField()` 的语义：
+
+- 先把本宿主提交过、还在队列里的 id 撤回（`WithdrawSubmitted()`）；调用约定是 motor 重置已接受、motor 自己已清空候选，所以这里多为无害的 no-op。
+- 只动状态为 `1`（已附着）或 `2`（已隐藏）的道具：`SetParent(original)` → 写 `localPosition`/`localRotation`（与 attach 同一顺序）→ `SetActive(原始激活态)`。隐藏的道具因此重新出现；原本激活的道具保持激活。
+- 接了 collider 的行无条件 `enabled = true`。attach/hide 只关不开，所以复位必须开；代价是“authoring 时就关着的 collider”会被复位打开，没有为它再存一个标志。
+- 状态回 `0`（自由），所有 `lastSubmitTimes` 清零（motor 已清队列，提交记录没有意义）。
+- `attachedCount`、`hiddenCount`、`lastHiddenReason`、`lastHiddenItemId`、`kindTallyCount` 归零；`nextScanTime = 0` 让下一帧立刻重新扫描。
+- **不回退** `seenEvents`：motor 的绝对吸收计数跨重置单调（`absorbedEventCount` 只增不减，[BallMotor README](../BallMotor/README.md) 的「吸收事件环的绝对计数保持单调」），保留游标就不会重放旧事件，新回合的事件从同一绝对号继续。重置后 `absorbedEventRingCount = 0`，旧绝对下标一律返回 `""`，宿主跳过即可。
+- 保留 `loggedLostEvents`、`hiddenLogCount` 这类整会话诊断闩锁，理由与 motor 保留日志上限相同：无限重试不能把控制台刷爆。
+- 返回 `bool`：`propStates == null`（`Start` 未跑）时 false 且什么都没碰；空场地也算成功（true）。
+- 不记录、不恢复 `localScale`：attach 从不写 scale，`SetParent` 以“保持世界缩放”方式改 `localScale`，回到原父物体即恢复原外观。
+- 不碰 `SetCollecting` 闸门：`BeginRound()` 负责重新打开。
+
+### StoryRetryButton：两种按法，一个入口
+
+**世界内按钮**：独立 GameObject + 一个 Collider + 本行为，`controller` 指向场景里的 `StoryRoundController`。准星对着它按鼠标左键（桌面交互是左键），`Interact()` → `RequestRetry()`。
+
+**uGUI 按钮**：同一个行为也能从 Canvas `Button` 触发。官方 UI 事件白名单把 `UdonBehaviour` 的 `SendCustomEvent` 与 `Interact` 都列为可调用目标（<https://creators.vrchat.com/worlds/udon/ui-events/>，2026-11-14 抓取，页面最后更新 2026-10-07），所以接线不需要额外组件：
+
+1. `Button` 的 `OnClick()` 加一项。
+2. 对象槽拖入挂 `StoryRetryButton` 的那个 GameObject（Inspector 里选 `UdonBehaviour` 组件）。
+3. 函数选 `UdonBehaviour.SendCustomEvent`。
+4. 参数字符串填 `OnRetryPressed`（大小写一致，没有别的参数）。
+
+`SendCustomEvent` 是按字符串分发到这个行为上的公开方法，所以入口是 `public void OnRetryPressed()` 而不是属性或带参方法。**在本仓未验证**：`Docs/` 里没有 UI 事件白名单的本地副本，本节只引官方文档；这个仓库也还没在 Unity 里连过 Canvas 按钮、没按过。世界内 `Interact` 的路径与 `BallRideExitButton` 同形，但那个脚本本身也还没编译。
+
+### 场景怎么接（Unity 操作者）
+
+1. 结果卡所在 Canvas（或世界空间面板）加一个 `Button`；世界内按钮则新建独立 GameObject + Collider + `StoryRetryButton`，放在可点到的地方。
+2. `controller` 拖场景里的 `StoryRoundController`。
+3. uGUI 按上一节的四步接 `SendCustomEvent("OnRetryPressed")`；世界内按钮不用再接线。
+4. 不需要改 `StoryRoundController` 的既有字段：`motor`、`input`、`pickupHost`、四个 Text、关卡数据与评语全部保持原名（本次只加私有字段与方法，没有加序列化字段）。
+5. 道具行照旧：`propTransforms` 等并行数组就是复位用的原始来源，宿主自己抓，不需要额外数组。
+
+### 未验证（不要当成已验证）
+
+1. **没有编译**：U# 全量编译、Console 无错都没发生；`Transform.parent`、`Transform.SetParent(null)`、`new Transform[n]` / `new Quaternion[n]` 的运行时分配、`GameObject.activeSelf` 在 Udon 的可用性只是按暴露表推断（`Transform.parent`/`SetParent` 在暴露表内，`SetParent(null)` 与这两种数组的运行时 `new` 没有先例）。
+2. **`SetParent(null)`**：道具如果 authoring 在世界根（`parent == null`），复位会 `SetParent(null)`。Unity 语义是“变成根物体”，但 Udon 的 extern 是否接受 null 没有验证。
+3. **uGUI 接线**：`Button OnClick → UdonBehaviour.SendCustomEvent("OnRetryPressed")` 的依据是官方文档白名单；本仓没有本地副本，也没有实机按过。`SendCustomEvent` 是否出现在 Button 函数下拉里、参数是否必须非空，都要第一次接线时确认。
+4. **Start 顺序与捕获时机**：`GetSemanticDiameterWorldM() > 0` 作为“motor 已 `Start`”的判据来自 BallMotor README 的观察，不是 Unity 的保证；延迟到第一帧捕获的路径没有运行时记录。
+5. **motor 拒绝时的日志**：`reason`/`ledgerFailure` 只在代码里组合，没有实际触发过（正常单机路径 `reason=0`）。
+6. **道具复位后的视觉**：collider 无条件开启、`localScale` 不写、隐藏道具重新激活，这三条都没有 Play Mode 观察；`SetParent` 回原父物体后局部位姿是否精确回到原位也没有数据。
+7. **计数从 0 开始**：`GetAttachedCountForKind` 归零后 HUD 应显示 0；但宿主与控制器 `Update` 顺序、以及重置当帧是否还会消费一条迟到事件，没有实测（按环形契约，旧事件已清成 `""`，应被跳过）。
+8. **多人/同步**：`BehaviourSyncMode.None`，整个切片是单机；重试不广播。
+9. **Build & Test**：计划 §7 S6 的验收（失败→重试→球回 0.30 m、计时归零、道具全回来、计数从 0）一条都还没有数据。
+
+### 验证命令与本次结果
+
+```bash
+python3 Docs/tools/validate_plan.py
+python3 -m unittest discover -s Docs/tests
+```
+
+2026-11-14 本次：第一条 `PASS: 61 tasks; both release DAGs acyclic; source hashes verified.`；第二条 `Ran 270 tests ... OK`。Unity 侧编译、Play Mode、Build & Test 均 **NOT_RUN**（本 agent 不是 Unity 操作者）。
+
+### 没有改动的东西
+
+只改 `Runtime/Pickup/PickupFieldHost.cs`、`Runtime/Story/StoryRoundController.cs`，新增 `Runtime/Story/StoryRetryButton.cs` 与同名 `.meta`（GUID `cbba12c7e27849be891c64aadf04ba3b`，新生成、与仓内既有 307 个 GUID 无冲突）。没有改 motor、账本、`DesktopMoveInput`、Riding、Labs、asmdef、场景、`tasks.json` 或任何其他文件；`PickupFieldHost`/`StoryRoundController` 的既有序列化字段名与公开签名一个没动，只做了追加。

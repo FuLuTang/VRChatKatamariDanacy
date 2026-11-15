@@ -2,6 +2,7 @@ using UdonSharp;
 using UnityEngine;
 using UnityEngine.UI;
 using VRCKatamari.BallMotor;
+using VRCKatamari.Core;
 using VRCKatamari.Input;
 using VRCKatamari.Pickup;
 
@@ -25,11 +26,20 @@ namespace VRCKatamari.Story
     /// writes a ledger field: the story mode has no conversion area and no score
     /// channel at all (GameModes README section 1, "must be written in stone"), and
     /// the level data says so explicitly (bank.enabled=false, score_channel=none,
-    /// ledger_write=false). It also does not open or close the motor's ledger phase:
-    /// the motor's own single-player bootstrap does that today (its
-    /// autoStartPlaying field, documented there as the seam a round controller
-    /// replaces), and a retry reset that would also clear the ledger is step S6 and
-    /// deliberately out of this file's scope.
+    /// ledger_write=false). The ledger and the ball are reset by the motor's own
+    /// <c>TryResetForNewRound</c> seam (plan step S6); this behaviour only asks for
+    /// that reset from <see cref="RequestRetry"/> and owns none of its rules.
+    /// </para>
+    /// <para>
+    /// Retry. "再试一次" on the result card is the only caller of
+    /// <see cref="RequestRetry"/>. It is accepted only in
+    /// <see cref="StateResult"/>: before the card exists there is no button to press,
+    /// and a retry during <see cref="StatePresenting"/> would silently skip the
+    /// presentation beat that the result card is built from. The motor resets first
+    /// (a refusal leaves the card and the round exactly as they were), then the prop
+    /// field returns to its recorded start poses, then <see cref="BeginRound"/>
+    /// restarts the countdown and HUD with the next attempt number. A retry never
+    /// calls <c>TryBank</c> or <c>TryAwardScore</c>.
     /// </para>
     /// <para>
     /// Measuring. The design evaluates the settled ball diameter and the settled
@@ -170,6 +180,26 @@ namespace VRCKatamari.Story
         private int lastCurrentShown = -1;
         private int lastRemainingShown = -1;
 
+        // ---- Retry state (S6) ----
+        // The pose the ball is put back to, captured once from the motor's own getters
+        // before the first round can move the ball: in Start when the motor has already
+        // produced its baseline size, otherwise on the first frame it has. Start order
+        // between two behaviours on different objects is not defined, and a motor whose
+        // Start has not run reads a zero centre, which would put the ball at the world
+        // origin on retry.
+        private Vector3 retryStartPosition;
+        private float retryStartHeadingDegrees;
+        private bool retryStartPoseCaptured;
+
+        // 1-based number of the retry in progress; 0 is the first round. It is both the
+        // round-id suffix (levelId + ":" + retryAttempt) and the number on the HUD.
+        private int retryAttempt;
+
+        // Upper bound on the "skip round ids already in use" walk. The motor refuses an
+        // unchanged id, and a level whose serialized roundId happens to collide must not
+        // spin here.
+        private const int RetryRoundIdGuard = 8;
+
         /// <summary>
         /// Starts the round immediately. The machine has no lobby: a story level is
         /// single-player and the design starts the clock at spawn (GameModes README
@@ -177,6 +207,7 @@ namespace VRCKatamari.Story
         /// </summary>
         public void Start()
         {
+            CaptureRetryStartPoseIfReady();
             BeginRound();
         }
 
@@ -184,11 +215,12 @@ namespace VRCKatamari.Story
         /// Starts or restarts the countdown and re-enables input and collection.
         /// </summary>
         /// <remarks>
-        /// This is the seam a lab uses to run a short test level, and the seam a later
-        /// retry uses. It resets this behaviour's own state and the two things the
-        /// timeout closes - its round gate and the pickup host's collecting flag; it
-        /// does not reset the ball, the ledger or the props, which is the separate reset
-        /// seam of plan step S6.
+        /// This is the seam a lab uses to run a short test level, and the last step of
+        /// <see cref="RequestRetry"/>. It resets this behaviour's own state and the two
+        /// things the timeout closes - its round gate and the pickup host's collecting
+        /// flag; it does not reset the ball, the ledger or the props. Those are the
+        /// motor's and the pickup host's reset seams, and <see cref="RequestRetry"/>
+        /// calls them before this.
         /// </remarks>
         public void BeginRound()
         {
@@ -218,6 +250,11 @@ namespace VRCKatamari.Story
 
         public void Update()
         {
+            // See the retry field block: a Start-order race can leave the first capture
+            // without a started motor. Capturing on the first frame that has one is still
+            // "before the ball moved", because no axis is pushed until the player moves.
+            if (!retryStartPoseCaptured) CaptureRetryStartPoseIfReady();
+
             if (state == StateRunning)
             {
                 UpdateRunning();
@@ -260,6 +297,151 @@ namespace VRCKatamari.Story
         public int GetResultCount()
         {
             return resultCount;
+        }
+
+        /// <summary>0 for the first round, 1 for the first retry, 2 for the next, and so on.</summary>
+        public int GetAttemptNumber()
+        {
+            return retryAttempt;
+        }
+
+        /// <summary>
+        /// "再试一次": restarts the round from its start pose with a baseline ball, the
+        /// props back in the field, and the clock and HUD at zero.
+        /// </summary>
+        /// <returns>
+        /// True when the round restarted. False when the state or the motor refused it,
+        /// in which case nothing changed and the result card stays on screen.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// State. Accepted only in <see cref="StateResult"/>, the state whose card holds
+        /// the button. Presenting is refused on purpose: the card does not exist yet, and
+        /// a reset there would cut the presentation beat short without telling the player.
+        /// Idle and Running are refused because there is no result to retry.
+        /// </para>
+        /// <para>
+        /// Order. The motor's <c>TryResetForNewRound</c> runs first, because it is the
+        /// only step with failure reasons that matter: it resets the ledger row, round id,
+        /// candidates, rings, velocity, heading and sizes, and returns the ball to the
+        /// start pose. A refusal (any reason 1..7, e.g. <c>noLocalRow</c>) leaves the
+        /// result card untouched and is logged with the reason code. Only after it
+        /// accepts does the prop field reset, and only after that does the countdown
+        /// start; a partially reset world is never presented as a new round.
+        /// </para>
+        /// <para>
+        /// Round id. The next id is <c>levelId + ":" + attempt</c>, with the attempt
+        /// number taken from this behaviour's own counter and then advanced past any id
+        /// the motor already reports through <c>GetRoundId()</c> (the motor refuses an
+        /// unchanged id). The attempt number is shown on the HUD's target line.
+        /// </para>
+        /// <para>
+        /// Never banks and never awards: the story mode has no score channel, so this path
+        /// does not call <c>TryBank</c> or <c>TryAwardScore</c>.
+        /// </para>
+        /// </remarks>
+        public bool RequestRetry()
+        {
+            if (state != StateResult)
+            {
+                Debug.LogWarning("[StoryRoundController] retry ignored: no result card is showing"
+                    + " (state=" + state + ").");
+                return false;
+            }
+            if (motor == null)
+            {
+                Debug.LogWarning("[StoryRoundController] retry refused: no motor is wired;"
+                    + " the result card stays.");
+                return false;
+            }
+            if (!retryStartPoseCaptured) CaptureRetryStartPoseIfReady();
+            if (!retryStartPoseCaptured)
+            {
+                Debug.LogWarning("[StoryRoundController] retry refused: the start pose is not"
+                    + " captured yet (the motor has not produced a baseline size); the result"
+                    + " card stays.");
+                return false;
+            }
+
+            int nextAttempt = retryAttempt + 1;
+            string newRoundId = ComposeRoundId(nextAttempt);
+            string currentRoundId = motor.GetRoundId();
+            if (currentRoundId == null) currentRoundId = "";
+            int guard = 0;
+            while (currentRoundId == newRoundId && guard < RetryRoundIdGuard)
+            {
+                nextAttempt = nextAttempt + 1;
+                newRoundId = ComposeRoundId(nextAttempt);
+                guard = guard + 1;
+            }
+
+            int reason;
+            if (!motor.TryResetForNewRound(newRoundId, retryStartPosition,
+                retryStartHeadingDegrees, out reason))
+            {
+                Debug.LogWarning("[StoryRoundController] retry refused by the motor: reason="
+                    + reason + " round=" + newRoundId
+                    + " ledgerFailure=" + motor.GetLastResetLedgerFailure()
+                    + " (reason codes: Docs/Design/BallMotor/README.md, retry section)."
+                    + " The result card stays.");
+                return false;
+            }
+
+            retryAttempt = nextAttempt;
+            if (pickupHost != null)
+            {
+                if (!pickupHost.ResetField())
+                {
+                    Debug.Log("[StoryRoundController] retry: the pickup field reported nothing"
+                        + " to restore (it has not started or has no props); the round still"
+                        + " restarts.");
+                }
+            }
+
+            BeginRound();
+            Debug.Log("[StoryRoundController] retry started round=" + newRoundId
+                + " attempt=" + retryAttempt);
+            return true;
+        }
+
+        /// <summary>
+        /// The round id of attempt <paramref name="attempt"/>. The motor's own id is read
+        /// through <c>GetRoundId()</c> rather than copied here.
+        /// </summary>
+        private string ComposeRoundId(int attempt)
+        {
+            return levelId + ":" + attempt;
+        }
+
+        /// <summary>
+        /// Captures the pose the ball is put back to, once, from
+        /// <c>KatamariBallMotor.GetCenterWorld()</c> and <c>GetHeadingDegrees()</c>.
+        /// </summary>
+        /// <remarks>
+        /// A motor that has not run its own <c>Start</c> reads a zero diameter and a zero
+        /// centre, which is finite and therefore indistinguishable from a real pose by
+        /// value alone. The baseline diameter is the readiness signal (the BallMotor
+        /// README uses the same one for "Start has not run"), so the capture waits for a
+        /// positive one. On the normal path the motor's Start has already run and the
+        /// capture happens in this behaviour's Start; otherwise it happens on the first
+        /// Update, before any input can have moved the ball.
+        /// </remarks>
+        private void CaptureRetryStartPoseIfReady()
+        {
+            if (retryStartPoseCaptured) return;
+            if (motor == null) return;
+            float diameter = motor.GetSemanticDiameterWorldM();
+            if (!KatamariMath.IsFiniteFloat(diameter)) return;
+            if (diameter <= 0f) return;
+            Vector3 center = motor.GetCenterWorld();
+            float heading = motor.GetHeadingDegrees();
+            if (!KatamariMath.IsFiniteVector(center)) return;
+            if (!KatamariMath.IsFiniteFloat(heading)) return;
+            retryStartPosition = center;
+            retryStartHeadingDegrees = heading;
+            retryStartPoseCaptured = true;
+            Debug.Log("[StoryRoundController] retry start pose captured position="
+                + retryStartPosition + " heading=" + retryStartHeadingDegrees);
         }
 
         private void UpdateRunning()
@@ -386,12 +568,14 @@ namespace VRCKatamari.Story
         private void WriteTargetText()
         {
             if (targetText == null) return;
+            string attemptSuffix = "";
+            if (retryAttempt > 0) attemptSuffix = "（第 " + retryAttempt + " 次重试）";
             if (goalType == StoryGoalType.CollectCategoryCount)
             {
-                targetText.text = "目标 " + targetCount + " 件（" + countGoalKind + "）";
+                targetText.text = "目标 " + targetCount + " 件（" + countGoalKind + "）" + attemptSuffix;
                 return;
             }
-            targetText.text = "目标 " + targetDiameterM + " m";
+            targetText.text = "目标 " + targetDiameterM + " m" + attemptSuffix;
         }
 
         /// <summary>

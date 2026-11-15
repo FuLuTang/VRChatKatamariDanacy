@@ -1443,7 +1443,7 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 |---|---|---|
 | `GetSupportSurfaceId` | 0 / 1+i / 10+i / 100+i | 同上（地面 0、盒 1+i、坡 10+i；`AddObb` 用调用方给的 id） |
 | `GetSupportKind` | 0/1/2/3/−1 | 同上 **+ 4 = 爬升接触**、**5 = 只有针尖撑着** |
-| `GetSupportSurfaceHeightWorldM` | 选中面在球心 XZ 的高度 | 同一公式；针尖支撑时给出针尖处的切平面高度（§2.5） |
+| `GetSupportSurfaceHeightWorldM` | 选中面在球心 XZ 的高度 | 同一公式；针尖支撑时给出针尖处的切平面高度（§2.5）；**爬升时没有地板可报**，返回球的底部（`center.y − r`），使 `support_gap` 读 0（首跑把墙接触点的 y 当高度，读成 `−r`，见 §7.7） |
 | `GetSupportNormalWorld` | 选中面法线 | 支撑法线；爬升时为爬升接触法线；无支撑时保留上一次 |
 | `GetStepHeightLimitWorldM` | 0.25·D，参与物理 | 仍返回 0.25·D，**只作诊断**（每步刷新） |
 | `IsFalling` | 丢失支撑后进入重力 | = 无支撑接触且不在爬升 |
@@ -1474,6 +1474,8 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 10. **三形状拆分（§4A.5）未落到尺寸层**：`r_phys = collisionRadiusWorldM`，`collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` 语义未变；只提供 `GetPhysicalRadiusWorldM` / `GetVisualCoreRadiusWorldM` / `GetRollReachWorldM` / `GetPickupReachWorldM` 四个读数。
     **pickup 已按 §4A.4 接成 trigger**：`EvaluatePendingCandidates` 在 flag 开时把“球心→该候选”方向上的 `pickupReach(û)` 作为 `PickupAbsorbMath` 的球半径参数（reach = pickupReach + contactR + propBoundingRadius），**只影响“能不能粘”**，不进接触、不挡、不支撑；flag 关时该参数逐字仍是 `collisionRadiusWorldM`。`PickupAbsorbMath` 本身一行未改。隔墙吸（§4A.4 的选项①）行为不变。
 11. **针尖可能漏掉亚毫米的擦角**（`BallShapeMath.TryNeedleSegmentContact` 的 5 采样 + 12 次二分）：面/棱命中精确，角上极浅的擦过可能漏。
+12. **爬升门的“持续条件”在电机里，而不是在 `TryStep`/参考模型里**（首跑修复）：§3.2 的 `v_gate ≥ v_req(θ)` 被当作**持续**条件，`RefreshClimbGate` 在每步求解前检查；`p < p_min`、到达上限、以及“门已关闭”三者任一成立就离开爬升通道并给 0.35 s 冷却。`ContactSolveMath.TryStep` 与 `contact_v2.py` 只实现“到达上限 / `p < p_min`”两种退出，参考模型的夹具全是全推时间线，所以这一条留在电机层，`step()` 的两份实现仍然一致。
+13. **v2 表在需要时惰性分配**：`AddObb`/`SetPropObbs` 会先 `EnsureContactV2Buffers()`，`Start` 只在表不存在时分配。Unity 跨 GameObject 的 `Start` 顺序是任意的，宿主可能先登记；首跑读到 `GetStaticObbCount == 0` 而 `[arena]` 报 `obbs=1/1` 就是这一类时序窗口（登记被拒/被 Start 覆盖），现在两条路径都不会丢几何。
 
 #### 7.5.6 本轮跑了什么 / 没跑什么
 
@@ -1549,6 +1551,45 @@ motor.SetPropObbs(propObbCenter, propObbAxisX, propObbAxisY, propObbAxisZ,
 
 ---
 
+### 7.7 首跑对账（2026-11-15）
+
+依据 `Docs/Evidence/PhysicsTestField/2026-11-15_pass6_contact_v2_first_run/`（commit `18f9f3e`，36 跑，判据一行未改）。这一节只写**v2 下每个检查应有的期望**与“保持/翻转/替换”，**不改** `physics_test_field.json` 与 criteria importer（另有人做）。
+
+#### 7.7.1 本轮据此修掉的电机侧缺陷
+
+| 现象（pass6） | 根因 | 修复 |
+|---|---|---|
+| `rest_gap` 在 C08/C09/C10 全档读 `−r`（只在爬上台阶/箱顶后） | 不是支撑高度公式，也不是“棱 vs 顶面”：球在**边界平面**上进入了爬升通道，时间线松手后 `v_gate→0`，`ClimbSpeed` 返回 0，于是**悬在墙上**（chunk 高出地面 2–25 cm）。爬升分支又把墙接触点的 y 当“地板高度”，而竖墙的最近点正好在球心高度 ⇒ `support_height = center.y` ⇒ gap = −r | ①`RefreshClimbGate`：爬升门的**持续**条件（§3.2）——门关了/推入没了就退出爬升 + 冷却，球按 `v_slide_max` 滑回；②爬升分支的高度改为**球的底部**（`center.y − r`），没有地板就不假装有 |
+| `lift_bounded` C14 全档 +1.9…25.5 cm | 同一根因：C14 的球滚到北边界平面后开始爬升并悬停，悬停高度进了 `bottom − nominal` | 同上（唯一改动）；修后球滑回地面，`lift = −nominal ≤ 0.01` |
+| `GetStaticObbCount` 读 0 而 `[arena]` 报 `obbs=1/1` | 跨 GameObject 的 `Start` 顺序任意：宿主先登记时 motor 表还不存在（被拒），或登记后 `Start` 再分配把表覆盖 | `EnsureContactV2Buffers()` 惰性分配 + `Start` 只在表不存在时分配；`AddObb`/`SetPropObbs` 都走它（Python 侧另有 `test_support_height.py` 与 EditMode 三个新例） |
+
+#### 7.7.2 v2 期望表（给判据维护者）
+
+“保持”= 判据与期望都不动；“翻转”= 同一指标、期望值反了；“替换”= 该检查在 v2 下应换指标或标 n/a。
+
+| 检查 | 指标 | pass6 v2 实测 | v2 应有期望 | 处置 |
+|---|---|---|---|---|
+| `climbed` | `deck_gap_m` | C05 四档 +0.0000（v1 全红 +0.0887…+0.6000） | **保持 pass** | 保持（§6.1 的 C05 翻转已实现） |
+| `seam_no_step` | `grounded_frame_dy_m` | C13 2.20 +0.0231（v1 +0.9499） | 保持 pass（≤0.05） | 保持 |
+| `rest_gap` | `support_gap_m` | C08/C09/C10 全档 −r（红） | 保持 pass（|gap| ≤ 0.005），修后应回到 +0.000x | 保持判据，**重跑** |
+| `lift_bounded` | `lift_over_nominal_m` | C14 全档 +0.0198/+0.0729/+0.1554/+0.2547（红） | 保持 pass（≤0.01），修后应 ≤0（球贴地） | 保持判据，**重跑** |
+| `on_step` | `deck_gap_m` | C09 0.30 / C10 0.30 = +0.0000 但 `expect=fail`（UNEXPECTED_PASS） | **翻转成 expect=pass**：0.075/0.10 < r(0.30)=0.15，§2.5 的 `h<r` 就该滚过去 | 改 `expect` |
+| `blocked_gap` | `blocked_gap_m` | C10 0.30 −4.3338 | **翻转**：0.10 高的挡板在 v2 下不是墙（同上 `h<r`） | 该格改判 `passed_over` 或 expect=pass |
+| `ramp_registered` | `ramp_count` | C01/C03/C05/C13 全档 0（16 次红） | **替换**：v2 把坡烘成 OBB，`ramp_count` 天然为 0 | 改读 `GetStaticObbCount() > 0` 或解析 `[arena] obbs=`；`ramp_count` 只给 v1 |
+| `no_ramp_registered` | `ramp_count` | — | **n/a**（与上一行互斥的 v1 语义） | 标 n/a |
+| `ramp_support` | `ramp_support_seen` | 全 PASS | 保持 | 保持（坡顶仍是 RIDE 接触） |
+| `ramp_entered` | `ramp_entry_progress_m` | 7.3–8.3 m PASS | 保持 | 保持 |
+| `ramp_refused` / `refusal_slope` | `ramp_refusal_reason_len` / `ramp_refusal_slope_deg` | C06 四档无拒绝 | **翻转**：v2 不拒绝任何坡（§1.5、§8 拍板 9） | 改成 warning 或 n/a（S4 已在 levelbuild 改成 warning） |
+| `no_climb` | `max_bottom_rise_m` | C06 四档 +0.3068/+0.5999/+0.6000/… | **替换**：50° 在 v2 必须**慢爬**，不是“不许爬” | 新判据：`max_bottom_rise ∈ [0.5·H_cap, 1.02·H_cap+0.02]` 且 `slide_back ≥ 0.2`（D=0.30/0.60）；D=1.10 判 `climbed`；D=2.20 判 `passed_over`（§6.1 C06 行） |
+| `stopped_by_wall` | `blocked_gap_m` | C06 四档 −0.0809/−1.0264/−2.1663/−2.8897 | **替换**：v2 越过挡板继续走 | 改判 `blocked_gap > 0`（越过了）或换 `passed_over` |
+| `crossed` / `no_speed_loss` / `not_blocking` / `no_overflow` / `no_saturation` / `size_accuracy` | 各自 | 全 PASS（C14 的 speed_ratio 1.62/1.61/1.48/1.24） | 保持 | 保持 |
+| `fall_frames` / `landed_on_ground` / `landing_gap` / `no_slip_back` | 各自 | C13 2.20 由 n/a 恢复为 applicable（球真落回地面） | 保持；2.20 的 `landed_on_ground`（读 `support_kind`）在取值域扩到 4/5 后仍成立（落地是 0，不是 4/5） | 保持，注意 `support_kind` 现在可能是 4/5 |
+
+#### 7.7.3 这一轮**没有**改的
+
+`physics_test_field.json`、`PhysicsTestFieldCriteriaImporter.cs`、`PhysicsTestFieldDriver.cs`、`LevelArenaHost.cs`、`PickupFieldHost.cs`、`Editor/*`：一行未动。上面“翻转/替换”的落地属于判据维护者；本节的表就是交接单。
+
+---
 ## 8. 需要拍板
 
 | # | 决定 | 选项 | 我的推荐 | 影响 |

@@ -100,6 +100,19 @@ namespace VRCKatamari.Tests
             return (float)Invoke("GetCollisionRadiusWorldM");
         }
 
+        /// <summary>
+        /// Replaces the motor under test with a fresh one. A test that needs several
+        /// independent spheres (one per step height) uses this instead of re-entering
+        /// SetUp/TearDown, so every case starts from a clean table and nothing leaks.
+        /// </summary>
+        private void RecreateMotor()
+        {
+            if (host != null) UnityEngine.Object.DestroyImmediate(host);
+            host = new GameObject("ContactModelV2Tests");
+            motor = host.AddComponent(motorType);
+            Invoke("Start");
+        }
+
         private void EnableV2()
         {
             Invoke("SetContactModelV2Enabled", true);
@@ -486,6 +499,117 @@ namespace VRCKatamari.Tests
                 "the v1 path must keep using SetBlockingBoxes/SetSupportProps only");
             Assert.AreEqual(0, (int)Invoke("GetNearObbCount"));
             Assert.AreEqual(0, (int)Invoke("GetContactCount"));
+        }
+
+        [Test]
+        public void ABallRestingOnABoxTopReportsTheTopAsTheSupportHeight()
+        {
+            // The pass6 field run failed the test field's rest_gap check on exactly the
+            // cells where the ball had climbed onto a step: support_gap_m read -radius,
+            // i.e. the support height was the CENTRE height. A resting ball must report
+            // the surface it rests on, at every shipped diameter and step height.
+            float[] tops = { 0.05f, 0.075f, 0.1f };
+            for (int i = 0; i < tops.Length; i++)
+            {
+                float top = tops[i];
+                RecreateMotor();
+                EnableV2();
+                float radius = Radius();
+                AddObb(new Vector3(0f, top * 0.5f, 0f),
+                    new Vector3(2f, top * 0.5f, 2f), 1);
+                Invoke("TeleportTo", new Vector3(0f, top + radius + 0.3f, 0f));
+                Step(60);
+                Vector3 center = GetCenter();
+                float height = (float)Invoke("GetSupportSurfaceHeightWorldM");
+                Assert.AreEqual(top + radius, center.y, 0.01f,
+                    "the ball must rest one radius above the top, top=" + top);
+                Assert.AreEqual(top, height, 0.005f,
+                    "the support height must be the top, not the centre, top=" + top);
+                float gap = (center.y - radius) - height;
+                Assert.AreEqual(0f, gap, 0.005f,
+                    "support_gap must read 0 for a resting ball, top=" + top);
+                Assert.AreEqual(1, (int)Invoke("GetSupportKind"),
+                    "a box top is kind 1, top=" + top);
+            }
+        }
+
+        [Test]
+        public void ABallRestingOnTheGroundReportsAZeroGap()
+        {
+            EnableV2();
+            float radius = Radius();
+            Step(40);
+            Vector3 center = GetCenter();
+            Assert.AreEqual(radius, center.y, 0.005f);
+            float height = (float)Invoke("GetSupportSurfaceHeightWorldM");
+            Assert.AreEqual(0f, height, 0.002f, "the ground plane is at y = 0");
+            Assert.AreEqual(0f, (center.y - radius) - height, 0.002f);
+            Assert.AreEqual(0, (int)Invoke("GetSupportKind"));
+        }
+
+        [Test]
+        public void ReleasingThePushEndsTheClimbInsteadOfHoveringOnTheWall()
+        {
+            // pass6 C09/C14: the ball reached a boundary plane at full speed, started to
+            // climb it, the drive timeline released the input, and the ball then HUNG on
+            // the wall 2-25 cm above the ground. Design §3.2/§3.3: the gate is a standing
+            // condition, so releasing the push must leave the climb and let the ball slide
+            // back down (v_slide_max), not freeze it mid-air.
+            EnableV2();
+            float radius = Radius();
+            AddObb(new Vector3(0f, 1.5f, 2.5f), new Vector3(2f, 1.5f, 0.5f), 1);
+            Invoke("TeleportTo", new Vector3(0f, radius, 0f));
+            Invoke("SetMoveAxes", 1f, 0f, 0f);
+            Step(80);
+            Assert.AreEqual(1, (int)Invoke("GetClimbState"),
+                "a full push into a wall must be climbing by now");
+            Assert.Greater(GetCenter().y, radius + 0.01f,
+                "the climb must have lifted the ball");
+            // Release the push; the facing direction stays into the wall.
+            Invoke("SetMoveAxes", 0f, 0f, 0f);
+            Step(100);
+            Vector3 center = GetCenter();
+            Assert.IsFalse((bool)Invoke("IsClimbing"),
+                "a closed gate must end the climb");
+            Assert.AreNotEqual(1, (int)Invoke("GetClimbState"));
+            Assert.AreEqual(radius, center.y, 0.02f,
+                "the ball must slide back down to the ground instead of hovering");
+            Assert.AreEqual(0, (int)Invoke("GetSupportKind"),
+                "on the ground the support is the ground (kind 0)");
+            float height = (float)Invoke("GetSupportSurfaceHeightWorldM");
+            Assert.AreEqual(0f, height, 0.01f,
+                "and the support height is the ground, not the wall point");
+        }
+
+        [Test]
+        public void AnObbRegisteredBeforeStartSurvivesStart()
+        {
+            // Unity's Start order across GameObjects is arbitrary: a host that registers
+            // its scene before this component's Start ran must not lose the geometry, and
+            // Start must not re-allocate the table over it (pass6 read
+            // GetStaticObbCount == 0 while [arena] reported obbs=1/1).
+            GameObject earlyHost = new GameObject("ContactModelV2TestsPreStart");
+            Component early = earlyHost.AddComponent(motorType);
+            MethodInfo addObb = motorType.GetMethod("AddObb", Any);
+            Assert.IsNotNull(addObb, "AddObb not found");
+            bool accepted = (bool)addObb.Invoke(early, new object[]
+            {
+                new Vector3(0f, 0.25f, 0f), new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f), new Vector3(0f, 0f, 1f),
+                new Vector3(1f, 0.25f, 1f), 1, ContactCodes.RoleBox,
+            });
+            int countBeforeStart = (int)motorType.GetField("staticObbCount", Any)
+                .GetValue(early);
+            MethodInfo start = motorType.GetMethod("Start", Any);
+            Assert.IsNotNull(start, "Start not found");
+            start.Invoke(early, null);
+            int countAfterStart = (int)motorType.GetField("staticObbCount", Any)
+                .GetValue(early);
+            UnityEngine.Object.DestroyImmediate(earlyHost);
+            Assert.IsTrue(accepted, "registration before Start must be accepted");
+            Assert.AreEqual(1, countBeforeStart, "the table exists as soon as it is needed");
+            Assert.AreEqual(1, countAfterStart,
+                "Start must not wipe a table that already holds the scene's geometry");
         }
 
         [Test]

@@ -759,6 +759,11 @@ namespace VRCKatamari.BallMotor
         private float climbAlongSpeed;
         private float climbHeightWorldM;
         private float climbSpeedWorldMps;
+        // The wall the climb channel is holding on to. TryStep reports the climb through
+        // the state refs but not the wall normal, so WriteContactSupport records it (and
+        // its theta) for the standing-gate check of the next step.
+        private Vector3 climbWallNormalWorld;
+        private float climbContactAngleDeg;
 
         // The vertical velocity v2 owns (the v1 path only ever has fallSpeedMps).
         private float contactVerticalVelocity;
@@ -979,7 +984,10 @@ namespace VRCKatamari.BallMotor
 
             // Ball contact v2 (flag off by default): the tables are allocated here, not
             // behind the flag, so a runtime flip finds the scene's registered geometry.
-            AllocateContactV2Buffers();
+            // Only when they do not exist yet: a host that registered before this Start
+            // ran (component order between GameObjects is arbitrary) has already forced
+            // the allocation, and re-allocating would wipe its scene geometry.
+            if (staticObbCenter == null) AllocateContactV2Buffers();
 
             allowedKinds = new string[0];
             allowedKindCount = 0;
@@ -1577,6 +1585,8 @@ namespace VRCKatamari.BallMotor
             climbAlongSpeed = 0f;
             climbHeightWorldM = 0f;
             climbSpeedWorldMps = 0f;
+            climbWallNormalWorld = new Vector3(0f, 0f, 1f);
+            climbContactAngleDeg = 90f;
             contactVerticalVelocity = 0f;
 
             contactStableCenter = ballCenterWorld;
@@ -1667,6 +1677,11 @@ namespace VRCKatamari.BallMotor
             // speed and would otherwise never start a climb (design §3.2).
             float driveSpeed;
             ComputeDrive(out contactDriveDirection, out driveSpeed);
+
+            // A climb whose gate has closed (input released, or the push turned away)
+            // leaves the channel here, so the ball slides back instead of hovering
+            // (design §3.2/§3.3; pass6 C09/C14).
+            RefreshClimbGate(driveSpeed);
 
             // The climb cap's protrusion term: how far a pin reaches towards the wall we
             // are pushing into (design §3.7, §4A.3).
@@ -2296,6 +2311,18 @@ namespace VRCKatamari.BallMotor
             supportFromClimb = false;
             supportCandidateCount = v2ContactCount;
 
+            // Record the wall the drive pushes into, whether or not a floor still holds
+            // the ball: the normal start of a climb is "supported by the ground while
+            // pushing a wall" (§3.4), and RefreshClimbGate needs that wall's normal and
+            // theta for the NEXT step's standing-gate check.
+            int climbWall = ContactClassificationMath.SelectClimbContact(contactNormalsV2,
+                contactClassesV2, v2ContactCount, contactDriveDirection);
+            if (climbWall >= 0)
+            {
+                climbWallNormalWorld = contactNormalsV2[climbWall];
+                climbContactAngleDeg = contactAnglesV2[climbWall];
+            }
+
             if (support >= 0)
             {
                 Vector3 normal = contactNormalsV2[support];
@@ -2327,24 +2354,25 @@ namespace VRCKatamari.BallMotor
             if (climbActive)
             {
                 // A climbing contact is a support kind of its own (4): there is a surface
-                // to report but no floor height to report.
+                // to report, but no FLOOR under the ball. The height therefore reports the
+                // ball's own bottom (so the test field's support_gap reads 0) instead of
+                // the wall contact point's y: a vertical wall's closest point sits at
+                // whatever height the ball is at, and reporting it made support_gap read
+                // exactly -r (pass6 C08/C09/C10).
                 supportFromClimb = true;
                 supportSurfaceId = climbSurfaceId;
-                int wall = ContactClassificationMath.SelectClimbContact(contactNormalsV2,
-                    contactClassesV2, v2ContactCount, contactDriveDirection);
-                if (wall >= 0)
+                if (climbWall >= 0)
                 {
-                    supportSurfaceNormalWorld = contactNormalsV2[wall];
-                    supportSurfacePointWorld = contactPointsV2[wall];
-                    supportNormal = contactNormalsV2[wall];
-                    supportSurfaceHeightWorldM = contactPointsV2[wall].y;
+                    supportSurfaceNormalWorld = contactNormalsV2[climbWall];
+                    supportSurfacePointWorld = contactPointsV2[climbWall];
+                    supportNormal = contactNormalsV2[climbWall];
                 }
                 else
                 {
-                    supportSurfaceNormalWorld = contactReportNormal;
-                    supportNormal = contactReportNormal;
-                    supportSurfaceHeightWorldM = center.y - collisionRadiusWorldM;
+                    supportSurfaceNormalWorld = climbWallNormalWorld;
+                    supportNormal = climbWallNormalWorld;
                 }
+                supportSurfaceHeightWorldM = center.y - collisionRadiusWorldM;
                 lastSupportHeightWorldM = supportSurfaceHeightWorldM;
                 isFalling = false;
                 fallSpeedMps = 0f;
@@ -2356,6 +2384,52 @@ namespace VRCKatamari.BallMotor
             supportSurfaceId = SupportSurfaceMath.NoSurfaceId;
             isFalling = contactAirborne;
             fallSpeedMps = contactVerticalVelocity < 0f ? -contactVerticalVelocity : 0f;
+        }
+
+        /// <summary>
+        /// The climb gate of design §3.2 is a STANDING condition, not only an entry test:
+        /// a climb whose push-in or gate speed has fallen below the requirement leaves the
+        /// channel and lets the ball slide back.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Why this is needed on top of <see cref="ContactSolveMath.TryStep"/>. The solver
+        /// only LEAVES a climb on reaching the cap or on <c>pushIn &lt; p_min</c>, and
+        /// <c>ClimbMath.ClimbSpeed</c> returns zero when the gate speed is zero. Releasing
+        /// the forward input while still facing a wall therefore gives p = 1, gate = 0,
+        /// climb speed 0: the ball hangs on the wall at whatever height it had reached.
+        /// The pass6 first run showed exactly that (C09/C14 ended 2-25 cm above the
+        /// ground, welded to a boundary plane), and because a vertical wall's contact point
+        /// is at the ball's own height it also made <c>support_gap</c> read -r.
+        /// </para>
+        /// <para>
+        /// The reference model has the same gap: its scenarios only ever run all-push
+        /// timelines, so this release-while-climbing case is not one of its fixtures. The
+        /// rule stays here, in the motor's climb state, so the port and the reference model
+        /// keep agreeing on <c>step()</c>; the design text (§3.3 "松开 → 回滑") is what it
+        /// implements.
+        /// </para>
+        /// </remarks>
+        private void RefreshClimbGate(float driveSpeed)
+        {
+            if (!climbActive) return;
+            float normalX = climbWallNormalWorld.x;
+            float normalZ = climbWallNormalWorld.z;
+            float horizontal = Mathf.Sqrt(normalX * normalX + normalZ * normalZ);
+            if (horizontal <= 0f) return;
+            float inverse = 1f / horizontal;
+            float pushIn = Mathf.Max(0f, -(contactDriveDirection.x * normalX * inverse
+                + contactDriveDirection.z * normalZ * inverse));
+            float planarSpeed = Mathf.Sqrt(planarVelocity.x * planarVelocity.x
+                + planarVelocity.z * planarVelocity.z);
+            float vGate = Mathf.Max(planarSpeed, ContactTuning.KIntent * driveSpeed);
+            if (pushIn >= ContactTuning.PMin &&
+                vGate >= ClimbMath.RequiredSpeed(climbContactAngleDeg)) return;
+            climbActive = false;
+            climbCooldown = ContactTuning.ClimbCooldownS;
+            climbAlongSpeed = 0f;
+            climbHeightWorldM = 0f;
+            climbSpeedWorldMps = 0f;
         }
 
         /// <summary>
@@ -2476,6 +2550,8 @@ namespace VRCKatamari.BallMotor
             climbAlongSpeed = 0f;
             climbHeightWorldM = 0f;
             climbSpeedWorldMps = 0f;
+            climbWallNormalWorld = new Vector3(0f, 0f, 1f);
+            climbContactAngleDeg = 90f;
         }
 
         /// <summary>
@@ -4023,6 +4099,19 @@ namespace VRCKatamari.BallMotor
         // ------------------------------------------------------------------
 
         /// <summary>
+        /// Allocates the v2 tables if they do not exist yet, and reports whether they are
+        /// usable. Registration may arrive before this component's Start (Unity's Start
+        /// order between GameObjects is arbitrary), and a table that does not exist must
+        /// not be a reason to lose the scene's geometry.
+        /// </summary>
+        private bool EnsureContactV2Buffers()
+        {
+            if (staticObbCenter != null) return true;
+            AllocateContactV2Buffers();
+            return staticObbCenter != null;
+        }
+
+        /// <summary>
         /// Registers one oriented box in the v2 static table: a centre, three orthonormal
         /// unit axes, three nonnegative half extents in metres, a surface id and a role.
         /// </summary>
@@ -4052,9 +4141,9 @@ namespace VRCKatamari.BallMotor
         public bool AddObb(Vector3 center, Vector3 axisX, Vector3 axisY, Vector3 axisZ,
             Vector3 halfExtents, int surfaceId, int role)
         {
-            if (staticObbCenter == null)
+            if (!EnsureContactV2Buffers())
             {
-                RefuseStaticObb("contact v2 buffers not allocated yet");
+                RefuseStaticObb("contact v2 buffers could not be allocated");
                 return false;
             }
             if (surfaceId < 0)
@@ -4145,9 +4234,9 @@ namespace VRCKatamari.BallMotor
         public bool SetPropObbs(Vector3[] centers, Vector3[] axisX, Vector3[] axisY,
             Vector3[] axisZ, Vector3[] halfExtents, int[] surfaceIds, int[] roles, int count)
         {
-            if (staticObbCenter == null)
+            if (!EnsureContactV2Buffers())
             {
-                RefusePropObbs("contact v2 buffers not allocated yet");
+                RefusePropObbs("contact v2 buffers could not be allocated");
                 return false;
             }
             if (count < 0)

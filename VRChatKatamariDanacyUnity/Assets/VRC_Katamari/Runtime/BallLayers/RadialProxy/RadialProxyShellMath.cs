@@ -134,7 +134,7 @@ namespace VRCKatamari.BallLayers
         /// <remarks>
         /// Two provisional shape rules, both needed: the longest edge must be at
         /// least <paramref name="minLongestEdgePerCoreDiameter"/> ball diameters
-        /// (a prop much shorter than the ball cannot dominate the 32-direction
+        /// (a prop much shorter than the ball cannot dominate the 16-direction
         /// shell), and the longest edge must be at least
         /// <paramref name="minElongation"/> times the SECOND-longest edge (one axis
         /// dominates the other two: a rod or plank, not a cup and not a square

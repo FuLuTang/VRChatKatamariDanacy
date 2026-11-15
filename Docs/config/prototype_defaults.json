@@ -24,7 +24,7 @@
     "rocketSpeedMultiplier": 1.5
   },
   "shape": {
-    "directionSamples": 32,
+    "directionSamples": 16,
     "maximumExtraExtremePoints": 4,
     "affectsGameplayPhysics": false
   },

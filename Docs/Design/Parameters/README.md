@@ -294,7 +294,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 再加一个**不需要 Unity 就能抓住 C# 常量**的断言（同文件）：
 
-5. **`test_structural_constants_match_runtime_source`** —— 用正则从源码里读出 `RadialProxyMath.DirectionCount = 32` 与 `RadialProxyMath.MaxExtremeCandidates = 4`，与规则集 `shape.directionSamples` / `shape.maximumExtraExtremePoints` 比。这条专门钉住今天真实存在的一处“数据 ↔ 运行时”重复（§7 表 D 组），成本是两次 `re.search`。
+5. **`test_structural_constants_match_runtime_source`** —— 用正则从源码里读出 `RadialProxyMath.DirectionCount = 16` 与 `RadialProxyMath.MaxExtremeCandidates = 4`，与规则集 `shape.directionSamples` / `shape.maximumExtraExtremePoints` 比。这条专门钉住今天真实存在的一处“数据 ↔ 运行时”重复（§7 表 D 组），成本是两次 `re.search`。
 
 ### 4.2 第 2 层：载荷 → prefab 字段（C#，`Assets/VRC_Katamari/Tests/EditMode/`）
 
@@ -434,7 +434,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 ### 6.4 结构容量、编译期常量与只属于运行时的标量（不进载荷）
 
-`KatamariBallMotor.MaxPlaneCount = 8` / `MaxBoxCount = 8` / `ContactCapacity = 4` / `PendingCandidateCapacity = 4`、`PlayerCapacity = 1` / `CommitCapacity = 256` / `ClaimCapacity = 8` / `BankRequestCapacity = 8`、`AbsorbedEventCapacity = 16`、`SweepMath.ProjectionPasses = 4`、`RadialProxyMath.DirectionCount = 32` / `MaxExtremeCandidates = 4`。
+`KatamariBallMotor.MaxPlaneCount = 8` / `MaxBoxCount = 8` / `ContactCapacity = 4` / `PendingCandidateCapacity = 4`、`PlayerCapacity = 1` / `CommitCapacity = 256` / `ClaimCapacity = 8` / `BankRequestCapacity = 8`、`AbsorbedEventCapacity = 16`、`SweepMath.ProjectionPasses = 4`、`RadialProxyMath.DirectionCount = 16` / `MaxExtremeCandidates = 4`。
 
 理由：这些是**缓冲形状**，改一次要重编译并重建所有预分配数组，不是“调参”。把 `directionSamples` 做成运行时可改的字段，会给出“改了但没生效”的假象。
 
@@ -540,7 +540,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 | # | 参数 | 机器可读副本 | 份数 | 处理 |
 |---|---|---|---|---|
-| 26 | `directionSamples` 32 | `prototype_defaults.json` `shape.directionSamples`、`RadialProxyMath.DirectionCount` | 2 | 不烘焙，用 §4.1-5 等价测试钉住 |
+| 26 | `directionSamples` 16 | `prototype_defaults.json` `shape.directionSamples`、`RadialProxyMath.DirectionCount` | 2 | 不烘焙，用 §4.1-5 等价测试钉住 |
 | 27 | `maximumExtraExtremePoints` 4 | `prototype_defaults.json` `shape.maximumExtraExtremePoints`、`RadialProxyMath.MaxExtremeCandidates` | 2 | 同上 |
 
 合计：**10 个条目写满三处（30 份）+ 16 个写两处（32 份）+ 1 个只在运行时一处（1 份）= 63 份机器可读副本，27 个条目。** 另有 1 处派生（起始球径，`KatamariBallMotor.baselineVolumeUnits` / `cubicMetersPerVolumeUnit` → 0.29974 m）不计入：它不是字面量，而是 §6.3 那条“运行时派生不得烘焙”的实例。

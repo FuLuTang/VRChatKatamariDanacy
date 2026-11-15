@@ -22,7 +22,7 @@
 
 ## 本地项目材料核对与工程边界
 
-- [`Docs/02_TECHNICAL_CONTRACTS.md`](../../../../02_TECHNICAL_CONTRACTS.md) §3.2–3.3 是项目自己的近似：有限径向代理点、支持距离 `h=max(r,max_i dot(-n,Q*p_i))`、`N=32`与最多4个长物件候选是原型值；首版物理球形扫掠先于凹凸物理。它不是原作算法证据。
+- [`Docs/02_TECHNICAL_CONTRACTS.md`](../../../../02_TECHNICAL_CONTRACTS.md) §3.2–3.3 是项目自己的近似：有限径向代理点、支持距离 `h=max(r,max_i dot(-n,Q*p_i))`、`N=16`（已定；此前 32 为 provisional）与最多4个长物件候选（仍为原型值）；首版物理球形扫掠先于凹凸物理。它不是原作算法证据；16 与原作滚动模型的 16 固定针同量级（专利 US7402104B2，证据等级 patent），但本项目仍用自己的采样与端点云。
 - [`Docs/Archive/Planning/BALL_WORKFLOW_REPLAN.md`](../../../../Archive/Planning/BALL_WORKFLOW_REPLAN.md) 与 A 套 [`HANDOFF.md`](HANDOFF.md) 明确保留的缺陷：T49 旧历史 max 不让球落下；T50 需要多贡献移除/重建/候选排序与长度适配；T54 零速嵌入、盒推出深度、stuck 含义及旧双接触的错误几何输入。
 - [`INTERFACES.md`](INTERFACES.md) 曾建议右手世界系。重新对照 Unity 官方资料后已将其改成“轴标签与手性/旋转语义分开”的草案，必须由 Unity 2022.3 方向箭头探针对拍；Python 算例不等于 Unity quaternion 验证。
 - [`Docs/Archive/Reviews/BALL_COORDINATE_REVIEW_CHECKPOINT.md`](../../../../Archive/Reviews/BALL_COORDINATE_REVIEW_CHECKPOINT.md) 记录官方 Unity 2022.3：左手坐标系，`Vector3.Cross`按 left-hand rule；本轮两条官方页面均HTTP 200（[坐标旋转手册](https://docs.unity3d.com/2022.3/Documentation/Manual/QuaternionAndEulerRotationsInUnity.html)、[Cross API](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Vector3.Cross.html)）。本轮页面抽取显示手册标题与API说明页；手性句子的具体摘录在本地Lead检查点中已逐字记录。本工作没有Unity Editor，因此本套 `Quaternion`/Transform 实测仍 `NOT_RUN`。

@@ -12,11 +12,17 @@ Vec3 = Tuple[float, float, float]
 Quaternion = Tuple[float, float, float, float]  # x, y, z, w
 _DOT_EPSILON = 1e-12
 
+# The one direction-count constant of this reference model (no second literal).
+# It is a sampling summary of the ball + long-object envelope, not a physics
+# driver: per-step ground height uses the endpoint cloud. See README "为什么是 16".
+DIRECTION_COUNT = 16
+
 
 @dataclass(frozen=True)
 class RadialConfig:
-    # Both are provisional prototypes pending performance validation.
-    direction_count: int = 32
+    # The direction count is fixed (see DIRECTION_COUNT). The candidate limit is
+    # still a provisional prototype setting.
+    direction_count: int = DIRECTION_COUNT
     max_extreme_candidates: int = 4
 
 
@@ -121,7 +127,7 @@ def world_to_ball_local(point_world: Sequence[float], ball_position_world: Seque
 
 
 def _fixed_directions(count: int) -> Tuple[Vec3, ...]:
-    # Deterministic Fibonacci sphere; count is a provisional prototype setting.
+    # Deterministic Fibonacci sphere; count is the fixed 16-direction summary.
     golden_angle = math.pi * (3.0 - math.sqrt(5.0))
     result = []
     for i in range(count):
@@ -144,8 +150,10 @@ class RadialProxy:
         radius = _finite(core_radius, "core_radius")
         if radius < 0.0:
             raise ValueError("core_radius must be nonnegative")
-        if isinstance(config.direction_count, bool) or config.direction_count != 32:
-            raise ValueError("direction_count is fixed at provisional value 32")
+        if isinstance(config.direction_count, bool) or config.direction_count != DIRECTION_COUNT:
+            raise ValueError(
+                f"direction_count is fixed at {DIRECTION_COUNT}, a sampling summary"
+                " (not a tuning knob)")
         if (isinstance(config.max_extreme_candidates, bool)
                 or not isinstance(config.max_extreme_candidates, int)
                 or not 0 <= config.max_extreme_candidates <= 4):

@@ -75,7 +75,7 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 1. 扫掠半径是 `collisionRadiusWorldM`（球芯的碰撞半径），**不含**吸附物（`SweepMath.TrySweepSphere(..., collisionRadiusWorldM, ...)`）。
 2. 接地支撑走 `GroundContactMath.TrySolve(coreRadiusWorldM, proxyRotation, localProxyPoints, ...)`，而 `localProxyPoints` 在 `Start` 里被写成 `new Vector3[0]`，注释是「until it feeds the motor the support height degenerates to the core sphere」。
-3. `RadialProxyMath`（32 方向支持壳）**没有任何运行期调用者**：全仓只有 `Tests/EditMode/BallLayers/RadialProxyTests.cs` 调它；`Docs/Design/BallLayers/RadialProxy/README.md` 自己也写「未编译/未作为组件」「只作视觉表示、不参与判定」。
+3. `RadialProxyMath`（16 方向支持壳；方向数已定，此前 32 为 provisional）**没有任何运行期调用者**：全仓只有 `Tests/EditMode/BallLayers/RadialProxyTests.cs` 调它；`Docs/Design/BallLayers/RadialProxy/README.md` 自己也写「未编译/未作为组件」「只作视觉表示、不参与判定」。
 
 所以「吸附物改变球的滚动轮廓」是**原作观感 + 项目尚未实现的目标**，不是现状，更不是靠「给道具加碰撞体」能实现的：吸附物挂在 `attachmentRoot` 下、跟着球走，它们的 Unity collider 在吸附瞬间被宿主**主动关掉**（`propColliders[i].enabled = false`），所以连玩家都撞不到。要让它们参与，改的是**球层**（RadialProxy 接进 `GroundContactMath`，以及/或者把外壳接进扫掠），那是另一条线，且属于「吸附物代理」，**不是道具自身的碰撞体**（§10-5）。
 

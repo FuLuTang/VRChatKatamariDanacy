@@ -591,7 +591,7 @@ namespace VRCKatamari.BallMotor
         // ---- Radial proxy shell (one owner; the layers stay stateless) ----
         // The shell lives on the motor because the motor already owns the ball pose and
         // is the only place that feeds GroundContactMath. The arrays are allocated once
-        // in Start and reused: 32 directions, 32 endpoint-only supports, a 32-slot pool
+        // in Start and reused: 16 directions, 16 endpoint-only supports, a 32-slot pool
         // (4 long items x 8 AABB corners), the per-item slices and the 4 candidate keys.
         private const int ProxyItemCapacity = RadialProxyMath.MaxExtremeCandidates;
         private const int ProxyEndpointCapacity = ProxyItemCapacity * RadialProxyShellMath.AabbCornerCount;
@@ -772,7 +772,7 @@ namespace VRCKatamari.BallMotor
             isFalling = false;
             fallSpeedMps = 0f;
 
-            // The radial proxy shell is the ball's sparse support shell: 32 fixed
+            // The radial proxy shell is the ball's sparse support shell: 16 fixed
             // directions plus the endpoints of at most four long objects. State is
             // owned here; the attach/detach/rebuild protocol is RadialProxyShellMath
             // and the pure support math stays in RadialProxyMath. An empty shell is
@@ -3105,7 +3105,7 @@ namespace VRCKatamari.BallMotor
             return proxyCandidateCount;
         }
 
-        /// <summary>Fixed direction count of the shell (32).</summary>
+        /// <summary>Fixed direction count of the shell (16).</summary>
         public int GetProxyDirectionCount()
         {
             return RadialProxyMath.DirectionCount;

@@ -4,7 +4,7 @@ using VRCKatamari.Core;
 namespace VRCKatamari.BallLayers
 {
     /// <summary>
-    /// Sparse radial shell for the ball: 32 fixed directions with one support
+    /// Sparse radial shell for the ball: 16 fixed directions with one support
     /// length each, plus the at-most-four long-object extreme candidate keys.
     /// </summary>
     /// <remarks>
@@ -19,8 +19,8 @@ namespace VRCKatamari.BallLayers
     /// </para>
     /// <para>
     /// The class is stateless math over a caller-owned shell table. The caller
-    /// owns the 32 directions (built once by <see cref="TryFillDirections"/>), the
-    /// 32 support lengths, the flattened endpoint pool and the candidate-key
+    /// owns the 16 directions (built once by <see cref="TryFillDirections"/>), the
+    /// 16 support lengths, the flattened endpoint pool and the candidate-key
     /// slots. Nothing allocates, nothing is cached in a static field, and no call
     /// reads time, a transform or a scene object.
     /// </para>
@@ -38,11 +38,13 @@ namespace VRCKatamari.BallLayers
     /// change a max whose floor is the non-negative core radius.
     /// </para>
     /// <para>
-    /// The 32 directions and the 4-candidate limit are the model's provisional
-    /// prototype values, not measured budgets. A directions array of any other
-    /// length is rejected rather than sampled differently, and a candidate-key
-    /// array longer than the limit is rejected as a configuration error. A full
-    /// candidate list rejects the new key; it never evicts a surviving one.
+    /// The 16 directions are a decided sampling summary (see the
+    /// <see cref="DirectionCount"/> remarks); the 4-candidate limit is still a
+    /// provisional prototype value, not a measured budget. A directions array of
+    /// any other length is rejected rather than sampled differently, and a
+    /// candidate-key array longer than the limit is rejected as a configuration
+    /// error. A full candidate list rejects the new key; it never evicts a
+    /// surviving one.
     /// </para>
     /// <para>
     /// Failure is a false return, never an exception. Inputs are checked before
@@ -54,7 +56,16 @@ namespace VRCKatamari.BallLayers
     public static class RadialProxyMath
     {
         /// <summary>Fixed direction count of the model; any other length is rejected.</summary>
-        public const int DirectionCount = 32;
+        /// <remarks>
+        /// Sixteen, not thirty-two (the earlier provisional value). This table is only a
+        /// sampling summary of the ball + long-object envelope for diagnostics and the
+        /// future collision summary: the per-step ground solve consumes the endpoint
+        /// cloud itself, never this table. Sixteen matches the original game's rolling
+        /// model (16 fixed pins plus 4 optional, patent US7402104B2), and the worst-case
+        /// angular gap grows only from about 27.4 to 38.9 degrees. The endpoint pool is
+        /// unrelated: 4 long items x 8 AABB corners = 32 endpoints stays as it is.
+        /// </remarks>
+        public const int DirectionCount = 16;
 
         /// <summary>Maximum length of the extreme-candidate key list (0..4 are valid).</summary>
         public const int MaxExtremeCandidates = 4;
@@ -68,10 +79,10 @@ namespace VRCKatamari.BallLayers
         private const float RotationTolerance = 1e-4f;
 
         /// <summary>
-        /// Fills a 32-slot array with the model's deterministic Fibonacci sphere.
+        /// Fills a 16-slot array with the model's deterministic Fibonacci sphere.
         /// </summary>
         /// <remarks>
-        /// y_i = 1 - 2*(i+0.5)/32 and the azimuth advances by the golden angle, so
+        /// y_i = 1 - 2*(i+0.5)/16 and the azimuth advances by the golden angle, so
         /// the set is spread without a seam and is deterministic; platform trig
         /// differences stay well inside the unit tolerance. The result is unit
         /// length to float precision, not exactly 1.

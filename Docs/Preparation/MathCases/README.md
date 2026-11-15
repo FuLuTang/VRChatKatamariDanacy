@@ -22,5 +22,5 @@ Status: **host-side reference experiment only**. This is not production physics,
 
 - A fixture's known frame is not evidence that any Kenney/Quaternius file uses that axis order, handedness, forward/up, unit, origin, or pivot. Source asset version and import chain remain OPEN. Do not add a guessed 90-degree correction. A real conversion requires source geometry basis probes and full export/import/parent transform evidence.
 - Long-rod/flat-slice sampled proxies do **not** certify dynamics, collisions, support stability, pickup behavior, network agreement, Unity behavior, or performance.
-- `N=32` directions plus up to four extreme candidates is a provisional proposal from the design contract only; it is not frozen, benchmarked, or endorsed here.
+- `N=16` fixed directions (decided; the earlier `N=32` was a provisional proposal) plus up to four extreme candidates is a design-contract summary. The direction table is a sampling summary only — per-step ground height uses the endpoint cloud — so it is not benchmarked or endorsed as a physics parameter here.
 - Finite matrix and transform round trips establish algebraic invertibility for the provided fixtures only; a successful roundtrip cannot prove a source-to-target axis mapping is correct.

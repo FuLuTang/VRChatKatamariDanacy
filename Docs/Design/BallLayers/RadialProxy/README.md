@@ -1,6 +1,6 @@
 # T50 球层：径向凹凸代理（小棍采样外壳）
 
-> **状态：B 阶段已接线，`PROVISIONAL_NOT_TESTED`。** C# 组合层 `RadialProxyShellMath` 已接进 `KatamariBallMotor` 的第 4 步（接地高度）与 `PickupFieldHost` 的吸附确认；纯逻辑 EditMode 测试已写，但**没有在 Unity 编译、没有跑 `run_tests`、没有 Play Mode**。N=32、4 个长物件候选、三个上限都是未测原型值，不是实测预算或原作数值。
+> **状态：B 阶段已接线，`PROVISIONAL_NOT_TESTED`。** C# 组合层 `RadialProxyShellMath` 已接进 `KatamariBallMotor` 的第 4 步（接地高度）与 `PickupFieldHost` 的吸附确认；纯逻辑 EditMode 测试已写，但**没有在 Unity 编译、没有跑 `run_tests`、没有 Play Mode**。方向数已定为 16（理由见“为什么是 16”，此前的 32 是 provisional 选择）；4 个长物件候选、三个上限仍是未测原型值，不是实测预算或原作数值。
 
 ## 研究与项目规则边界
 
@@ -10,13 +10,23 @@
 
 ## 模块行为
 
-- 32 个确定性 Fibonacci 方向；原型值，尚未做设备性能验证。每个方向存一个**端点支持长度**（不是历史 max）：表里只存端点最大值，读取时再与当前核心取 max。
+- 16 个确定性 Fibonacci 方向（已定；此前 32 是 provisional 选择）。每个方向存一个**端点支持长度**（不是历史 max）：表里只存端点最大值，读取时再与当前核心取 max。帧时间仍未做设备验证。
 - 端点在球局部系里是静态的（随 `BallVisualRollRoot` 旋转），世界端点只在吸附那一刻转换一次。
-- **32 方向表与端点池的关系**：方向表是合同要求的稀疏外壳视图（`supports[d] = max dot(p_i, d)`），用于重建、候选记账、诊断和以后 C 阶段的外形摘要；**接地高度按合同公式直接取端点 `p_i`**（`h(-n)=max(r, max_i dot(-n, Q·p_i))`），不先投影到 32 方向再插值——`GroundContactMath` 的接口本来就是点数组，端点云是同一外壳的精确来源，先采样再插值只会多一次近似。两者不会漂移：每次吸附/删除只用同一批角点更新受影响方向，重建时两者同源。
+- **16 方向表与端点池的关系**：方向表是合同要求的稀疏外壳视图（`supports[d] = max dot(p_i, d)`），用于重建、候选记账、诊断和以后 C 阶段的外形摘要；**接地高度按合同公式直接取端点 `p_i`**（`h(-n)=max(r, max_i dot(-n, Q·p_i))`），不先投影到 16 方向再插值——`GroundContactMath` 的接口本来就是点数组，端点云是同一外壳的精确来源，先采样再插值只会多一次近似。两者不会漂移：每次吸附/删除只用同一批角点更新受影响方向，重建时两者同源。
 - 长物件候选最多 4 个；输入是稳定实例键（`itemId`，重试/世代由宿主保证不重复）和它的 8 个 AABB 角点。吸附时只重算端点外半球方向；移除时按**幸存端点**重算同一批方向，所以两根棍共享方向时去掉一根不会误删另一根。
 - 极值候选最多 4 个（原型值）；满额**明确拒绝**，不驱逐。移除候选后槽位恢复；对外 ID 按字符串稳定排序。
 - `TryRebuild` 先在临时逻辑里校验整个账本，全部成功后才替换支持表与候选表；失败保留旧壳。
 - 本层不实现接触高度（`GroundContactMath`）、Sweep、价值/吸附裁决、Renderer、掉落轨迹、真实 mesh 碰撞或 PVP 外壳。稀疏方向/半球近邻可能漏掉中段或相邻采样峰值；性能及跨平台逐位一致性未测。
+
+### 为什么是 16（决定与证据）
+
+**方向表只是摘要，不是物理参数。** 每步真正喂给 `GroundContactMath` 的是端点云本身（`RadialProxyShellMath.TryBuildContactPoints` → `GroundContactMath.TrySolve` 对每个端点取 `max(−dot(n, Q·p_i))`）；16 个方向的支持表只服务重建、候选记账、诊断和以后 C 阶段的外形摘要。所以 32→16 **物理行为零变化**，改变的只是这张摘要表的分辨率，以及每次吸附/删除/重建的点积次数。
+
+**证据等级 `patent`（研究证据，不引用原文）：** 原作滚动模型被记载为 16 根固定针 + 4 根可选针，针尖即接地点，吸附物把附近的针伸长（Namco 专利 US7402104B2，2003-09-25 优先权；见 `Docs/Research/KatamariBallRules/`）。这支持“16 是原作使用的量级”，但**不证明**新版实现或本项目必须逐位相同；本项目仍用自己的 Fibonacci 采样与端点云。
+
+**分辨率代价（可复算）：** 把 16/32 两套 Fibonacci 方向分别与球面网格比，2° 经纬网格采样测得最坏角隙 **27.38°（32 向）→ 38.88°（16 向）**（加密到 20 万点复核为 27.63°/39.04°，量级与结论不变）。平均最近邻从 34.12° 增到 47.45°。若细长尖刺正好落在两个方向中间，摘要表会低估 `cos(38.9°) ≈ 0.78` 倍；这只影响表值，不影响端点云的接地高度。
+
+**此前的 32 是 provisional 选择**，不是原作值，也没有设备实测支撑；改成 16 后方向数不再作为调参项。真源是 `RadialProxyMath.DirectionCount` 这**一处 C# const**；Python 参考模型是同一文件里的一处 `DIRECTION_COUNT`（默认值与硬校验都引用它），`prototype_defaults.json` 的 `shape.directionSamples` 是可读副本，靠等价测试/人工核对保持一致。**另一个 32 不动**：端点池是 4 个长物件 × 8 个 AABB 角点 = 32 个端点，与方向数无关。
 
 ### 尺寸口径：`propBounds`（世界 AABB）与 `propLocalBounds`（道具局部轴）
 
@@ -41,7 +51,7 @@
 
 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/RadialProxy/RadialProxyMath.cs`（`namespace VRCKatamari.BallLayers`，`public static class RadialProxyMath`）把模型搬成 UdonSharp 可用的无状态静态数学：不分配、无静态字段、无重载/属性/struct，索引与结果都写进调用方预分配的数组。
 
-- 调用方持有壳表：32 个方向（`TryFillDirections` 一次生成）、32 个支持长度、扁平端点池、候选键槽位；本类不持有状态，也不读 Transform。
+- 调用方持有壳表：16 个方向（`TryFillDirections` 一次生成）、16 个支持长度、扁平端点池、候选键槽位；本类不持有状态，也不读 Transform。
 - 端点：`TryDirectionLengthPoint`（p=d·l）、`TryWorldPointToLocal`、`TryTransformEndpointsToLocal`。
 - 支持：`TryCollectAffectedDirections`（dot>0 半球，升序）、`TrySolveSupports`（只重算给定方向）、`TryProtrusion`。
 - 候选：`TryInsertCandidateKey` / `TryRemoveCandidateKey`，序数有序、重复/空键/超额拒绝，满额绝不驱逐。
@@ -67,11 +77,11 @@
 
 外壳状态在 `KatamariBallMotor`：它已经持有球位姿，并且是唯一调用 `GroundContactMath` 的地方。数组在 `Start` 一次分配，运行期不分配：
 
-- `proxyDirections[32]`、`proxySupports[32]`
+- `proxyDirections[16]`、`proxySupports[16]`
 - `proxyEndpointPool[32]`（= 4 个候选 × 8 角点）、`proxyEndpointCount`
 - `proxyItemStarts/Lengths/Keys/IsCandidate[4]`、`proxyItemCount`
 - `proxyCandidateKeys[4]`、`proxyCandidateCount`
-- 每步复用的 `localProxyPoints[32]`、`proxyAffectedIndices[32]`、`proxySolveScratch[32]`、`proxyCorners[8]`、`proxyRemovedCorners[8]`、`proxyEmptyPoints[0]`
+- 每步复用的 `localProxyPoints[32]`、`proxyAffectedIndices[16]`、`proxySolveScratch[16]`、`proxyCorners[8]`、`proxyRemovedCorners[8]`、`proxyEmptyPoints[0]`
 
 **没有另起一个 BallLayer 组件**：`RadialProxyMath` 是纯静态的，状态必须由某个 Behaviour 持有；motor 已经持有 `localProxyPoints` 并每步喂 `GroundContactMath`，再把壳状态放到第二个组件会多一次跨组件查找、多一份生命周期同步，而没有任何所有权收益。吸附事件从 `PickupFieldHost` 进入 motor 的公开 seam，宿主不持有代理状态。
 
@@ -107,7 +117,7 @@
 2. 壳用的 `propLocalBounds` 与吸收体积门/挡路盒用的 `propBounds` 是**同一件道具的两种口径**：前者是局部轴全长（供壳旋转一次），后者是世界 AABB（供轴对齐世界盒）。两列由同一次同步写出，`@size=` 对两者都生效；壳不再直接读 `propBounds`。旧场景未重跑同步时宿主回退到 `propBounds`，那会复现旋转两次的问题（见“尺寸口径”一节）。
 3. 成本有界：4 个候选 × 8 = 32 个端点，正好是每步扫描的常数上限；两个端点虽然更省，但会让“长杆必须能被表示为突出”依赖于杆恰好沿某轴放。
 
-**为什么只登记长物件**：合同给的是“32 个固定方向 + 最多 4 个长物件极值候选”，不是“每件吸附物都进壳”。小道具的角点最多比核心高几厘米，把它们全部塞进端点池会让池随吸附数量增长（PicnicLawn 一场可吸附数百件），每步扫描和吸附重算都会爆；长物件才是能真正顶起球、且 32 方向容易漏掉尖端的形状。准入用两条暂定规则（长 ≥ 0.5 球直径、长 ≥ 2.5 × 第二长边），所以杯子/方块/方片不占候选，勺/香蕉/棍/长凳会占。
+**为什么只登记长物件**：合同给的是“16 个固定方向 + 最多 4 个长物件极值候选”，不是“每件吸附物都进壳”。小道具的角点最多比核心高几厘米，把它们全部塞进端点池会让池随吸附数量增长（PicnicLawn 一场可吸附数百件），每步扫描和吸附重算都会爆；长物件才是能真正顶起球、且 16 方向容易漏掉尖端的形状。准入用两条暂定规则（长 ≥ 0.5 球直径、长 ≥ 2.5 × 第二长边），所以杯子/方块/方片不占候选，勺/香蕉/棍/长凳会占。
 
 ### 上限与准入（硬性，序列化，PROVISIONAL）
 
@@ -131,9 +141,9 @@
 
 ### 每步成本
 
-- 每固定步（50 Hz）：夹紧 ≤32 个端点（≤32 次 sqrt + 缩放）、代理接地 ≤32 次点积、核心球心一次空数组调用（约 10 次运算）。与已吸附物件总数无关。
-- 吸附一次：8 角点 + 受影响方向扫描（最坏 32×8 点积）+ 受影响方向支持重算（最坏 32 方向 × 32 端点）≈ 1k 次点积；移除同理。
-- 整账本重建（32×32 点积）只在交分、传送、重试时发生。
+- 每固定步（50 Hz）：夹紧 ≤32 个端点（≤32 次 sqrt + 缩放）、代理接地 ≤32 次点积（端点池不变；方向数不影响这两个数）、核心球心一次空数组调用（约 10 次运算）。与已吸附物件总数无关。
+- 吸附一次：8 角点 + 受影响方向扫描（最坏 16×8 点积）+ 受影响方向支持重算（最坏 16 方向 × 32 端点）≈ 0.6k 次点积；移除同理。
+- 整账本重建（16×32 点积）只在交分、传送、重试时发生。
 - 运行期零分配（所有数组 `Start` 一次分配）。
 
 ## 测试
@@ -198,4 +208,4 @@
 - **两列 AABB 都是保守近似**：局部列把子 mesh 的旋转/缩放烘成根局部 AABB，斜放扁板的角点可能比真实网格高；吸收门/挡路盒继续用世界 AABB，径向壳用局部列，两个消费者对“这件道具多大”不再共用同一个数——口径不同是有意的，见“尺寸口径”。`@size=` 声明尺寸对两列都生效，所以勺 `0.34³`、保温杯 `0.9³` 这类声明件仍然是立方体、仍过不了伸长准入；未声明且 yaw 0 的道具，世界 AABB 与局部列本来就相同。**旧场景未重跑同步时壳回退世界 AABB，旋转道具的双转问题仍在**；`banana_01–04` 这类 yaw 0 的现有长件不受回退影响。更长的门挡长凳等整张 PicnicLawn 进场景后才会出现。
 - **没有掉落路径**：吸附物是终态，所以“掉落”只有整场复位；接掉落时必须调 `DetachRadialProxy`，不能只移动 Transform。
 - **C 阶段未做**：代理不参与 `SweepMath`、挡路盒、PVP 外形摘要，远端球也不广播它；水平碰撞仍用球形半径。
-- **未测**：Unity 编译、U# 全量编译、EditMode/NUnit、Play Mode、帧率、VR 舒适度。32 方向/4 候选/三个上限/两条准入规则都是原型值。
+- **未测**：Unity 编译、U# 全量编译、EditMode/NUnit、Play Mode、帧率、VR 舒适度。16 方向是已定值（理由见“为什么是 16”）；4 候选/三个上限/两条准入规则仍是原型值。

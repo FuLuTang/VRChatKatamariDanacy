@@ -17,8 +17,8 @@ namespace VRCKatamari.Tests
         private const float Tolerance = 1e-5f;
 
         /// <summary>
-        /// Test-only driver that owns the arrays a behaviour will own: the 32
-        /// directions, the 32 supports, a flattened ball-local endpoint pool, the
+        /// Test-only driver that owns the arrays a behaviour will own: the 16
+        /// directions, the 16 supports, a flattened ball-local endpoint pool, the
         /// per-item slices and the candidate slots. Every decision is a call into
         /// RadialProxyMath; the driver exists because the layer is deliberately
         /// stateless, so attach/detach composition needs a caller.
@@ -258,17 +258,17 @@ namespace VRCKatamari.Tests
         [Test]
         public void CandidateIdsAreSortedAndLimitsRejectWithoutEviction()
         {
-            // The model fixes the direction count at 32 and the candidate list at 0..4.
-            Assert.IsFalse(RadialProxyMath.TryFillDirections(new Vector3[31]));
-            Assert.IsFalse(RadialProxyMath.TryFillDirections(new Vector3[33]));
+            // The model fixes the direction count at 16 and the candidate list at 0..4.
+            Assert.IsFalse(RadialProxyMath.TryFillDirections(new Vector3[15]));
+            Assert.IsFalse(RadialProxyMath.TryFillDirections(new Vector3[17]));
             Assert.IsFalse(RadialProxyMath.TryFillDirections(null));
 
             int count = 0;
             Assert.IsFalse(RadialProxyMath.TryInsertCandidateKey(new string[5], ref count, "x#1"));
             Assert.AreEqual(0, count);
 
-            // A solve also refuses a direction set that is not the fixed 32.
-            Assert.IsFalse(RadialProxyMath.TrySolveSupports(1f, new Vector3[0], 0, new Vector3[31],
+            // A solve also refuses a direction set that is not the fixed 16.
+            Assert.IsFalse(RadialProxyMath.TrySolveSupports(1f, new Vector3[0], 0, new Vector3[15],
                 new int[0], 0, new float[RadialProxyMath.DirectionCount]));
 
             Vector3[] directions = new Vector3[RadialProxyMath.DirectionCount];

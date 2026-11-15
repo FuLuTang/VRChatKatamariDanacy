@@ -81,7 +81,7 @@
 | `discontinuous` | 传送/重生标记，喂 `VisualRollMath` 与 `FollowRigMath` | `TeleportTo`、卡住恢复；每步末尾消费后清零 |
 | `visualRollRotation` | 视觉滚动位姿 | 第 8 步成功时 |
 | `followRigWorldPosition` / `followRigYawDegrees` / `followRigHeightMeters` / `hasFollowRigFrame` | 跟随架上一帧滤波状态（`followRigHeightMeters` 是相对球心的竖向偏移，不是眼高常量） | 第 9 步成功时 |
-| `proxyDirections` / `proxySupports` / `proxyEndpointPool` / `proxyItem*` / `proxyCandidateKeys` | 径向代理外壳：32 个固定方向、32 个端点支持长度、最多 4 个长物件 × 8 个 AABB 角点、极值候选键 | `Start` 一次分配；`AttachRadialProxy` / `DetachRadialProxy` / `ClearRadialProxies` / `RebuildRadialProxies`；第 4 步只读 |
+| `proxyDirections` / `proxySupports` / `proxyEndpointPool` / `proxyItem*` / `proxyCandidateKeys` | 径向代理外壳：16 个固定方向、16 个端点支持长度、最多 4 个长物件 × 8 个 AABB 角点（32 端点）、极值候选键 | `Start` 一次分配；`AttachRadialProxy` / `DetachRadialProxy` / `ClearRadialProxies` / `RebuildRadialProxies`；第 4 步只读 |
 
 另有账本列（单行、单回合）、输入意图缓冲、扫掠缓冲区、待处理吸收候选队列；都是预分配、复用、不 per-step 分配的字段，不是玩法状态。
 
@@ -165,9 +165,9 @@ StepBall:
 
 ### 径向凹凸代理接线（B 阶段；PROVISIONAL）
 
-合同 §3.3 的 B：径向代理驱动**接地高度**，球芯随长物件起伏，镜头不跟着颠。C（代理进入水平碰撞/PVP）**没做**：墙面、挡路盒和 PVP 仍只用球形碰撞半径。
+合同 §3.3 的 B：径向代理驱动**接地高度**，球芯随长物件起伏，镜头不跟着颠。C（代理进入水平碰撞/PVP）**没做**：墙面、挡路盒和 PVP 仍只用球形碰撞半径。**方向数 16 已定**（采样摘要；此前 32 是 provisional 选择，理由与专利证据见 `Docs/Design/BallLayers/RadialProxy/README.md`“为什么是 16”）；4 候选与三个上限仍是原型值。
 
-**归属。** 外壳状态在 motor 里——它本来就持有球位姿，并且是唯一调用 `GroundContactMath` 的地方；32 方向、32 支持长度、32 端点池（4 个长物件 × 8 个 AABB 角点）、4 个候选键都在 `Start` 一次分配、复用。吸附/删除/重建/角点/夹紧的**组合协议**放在新文件 `Runtime/BallLayers/RadialProxy/RadialProxyShellMath.cs`；方向生成、世界点转局部、受影响方向、支持求解、候选键和整账本重建仍然只调用 `RadialProxyMath`，没有第二份数学。`PickupFieldHost` 在视觉吸附成功后调 `motor.AttachRadialProxy(itemId, propBounds, localPosition, localRotation)`（作为参数的 `localPosition/localRotation` 就是刚写进 prop 的球局部位姿），整场 `ResetField` 调 `motor.ClearRadialProxies()`；宿主不持有任何代理状态。
+**归属。** 外壳状态在 motor 里——它本来就持有球位姿，并且是唯一调用 `GroundContactMath` 的地方；16 方向、16 支持长度、32 端点池（4 个长物件 × 8 个 AABB 角点）、4 个候选键都在 `Start` 一次分配、复用。吸附/删除/重建/角点/夹紧的**组合协议**放在新文件 `Runtime/BallLayers/RadialProxy/RadialProxyShellMath.cs`；方向生成、世界点转局部、受影响方向、支持求解、候选键和整账本重建仍然只调用 `RadialProxyMath`，没有第二份数学。`PickupFieldHost` 在视觉吸附成功后调 `motor.AttachRadialProxy(itemId, propBounds, localPosition, localRotation)`（作为参数的 `localPosition/localRotation` 就是刚写进 prop 的球局部位姿），整场 `ResetField` 调 `motor.ClearRadialProxies()`；宿主不持有任何代理状态。
 
 **数据流。** 吸收确认（账本 commit）→ 宿主 `AttachProp` 写球局部位姿 → `AttachRadialProxy` → 8 个角点进端点池、只重算受影响方向、登记候选键 → 每步 `RadialProxyShellMath.TryBuildContactPoints` 按突出上限夹紧 → `GroundContactMath.TrySolve` → `ballCenterWorld` 的高度随凹凸变化。**移除**：`DetachRadialProxy` 按幸存端点重算受影响方向（不是历史 max）；`ResetField` / `TryResetForNewRound` 清空外壳；`TryBank` 缩小时与 `TeleportTo` 走整账本 `RebuildRadialProxies`。本版**没有掉落路径**（吸附物是终态），所以没有"单件掉落"的调用点；接掉落时必须调 `DetachRadialProxy`，不能只从视觉上拿走。
 
@@ -185,7 +185,7 @@ StepBall:
 
 **镜头不跟着颠。** 第 4 步对同一个平面调用两次 `GroundContactMath.TrySolve`：一次喂夹紧后的代理点，结果决定球的位置；一次喂空数组（核心球心），只把中心交给 `FollowRigMath`。第二次调用的单步升降夹紧故意放到 10 m——它不是玩法移动，锚点必须正好是核心球心，而不是每步最多 0.1 m 追赶出来的近似，所以眼点不会随凹凸上下抖；表现层自己的 5 Hz 低通与传送吸附仍在，但低通不再独自承担防颠。跟随架的 `ballRadiusM` 仍是语义直径的一半（核心），突出量不会被当成球变大。
 
-**每步成本（常数，与已吸附物件总数无关）**：夹紧 32 个端点（≤32 次 sqrt + 缩放）、代理接地 ≤32 次点积、核心球心一次空数组调用（约 10 次运算）。吸附一次：8 角点 + 受影响方向扫描（最坏 32×8 点积）+ 受影响支持重算（最坏 32 方向 × 32 端点），约 1k 次点积；删除同理。整账本重建（32×32 点积）只在交分、传送、重试时发生。
+**每步成本（常数，与已吸附物件总数无关）**：夹紧 32 个端点（≤32 次 sqrt + 缩放）、代理接地 ≤32 次点积（两者都由端点池决定，方向数不影响）、核心球心一次空数组调用（约 10 次运算）。吸附一次：8 角点 + 受影响方向扫描（最坏 16×8 点积）+ 受影响支持重算（最坏 16 方向 × 32 端点），约 0.6k 次点积；删除同理。整账本重建（16×32 点积）只在交分、传送、重试时发生。
 
 **验证。** 纯逻辑测试在 `Tests/EditMode/BallLayers/RadialProxyShellTests.cs`：单根长棍抬升且不超过突出/单步上限、移除后回落、两件共享方向去掉一件不误删另一件、核心长大后原始突出收回、增量与整账本重建等价、容量满时拒绝且不改旧壳、角点夹紧与未用槽清零。**Unity 编译与 `run_tests` 没有在本检出运行**（Linux 侧不碰 Unity）。
 

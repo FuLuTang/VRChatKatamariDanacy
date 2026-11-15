@@ -75,13 +75,16 @@ class RadialProxyTests(unittest.TestCase):
 
     def test_candidate_ids_are_sorted_and_limits_reject_without_eviction(self):
         with self.assertRaises(ValueError):
-            RadialProxy(1.0, RadialConfig(direction_count=31))
+            RadialProxy(1.0, RadialConfig(direction_count=15))
         with self.assertRaises(ValueError):
-            RadialProxy(1.0, RadialConfig(direction_count=33))
+            RadialProxy(1.0, RadialConfig(direction_count=17))
         with self.assertRaises(ValueError):
             RadialProxy(1.0, RadialConfig(max_extreme_candidates=5))
         proxy = RadialProxy(1.0)
-        self.assertEqual(len(proxy.directions), 32)
+        self.assertEqual(len(proxy.directions), 16)
+        # Geometric invariant of the fixed set: every direction is a unit vector.
+        for direction in proxy.directions:
+            self.assertAlmostEqual(math.hypot(*direction), 1.0)
         proxy.attach(AttachmentProxy("zeta#1", ((2.0, 0.0, 0.0),), True),
                      ORIGIN, IDENTITY)
         proxy.attach(AttachmentProxy("alpha#1", ((0.0, 2.0, 0.0),), True),
@@ -150,7 +153,7 @@ class RadialProxyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             world_to_ball_local((0.0, 0.0, 1.0), ORIGIN, (0.0, 0.0, 0.0, 0.0))
         proxy = RadialProxy(1.0)
-        for index in (-1, 32, 1.0):
+        for index in (-1, 16, 1.0):
             with self.subTest(index=index), self.assertRaises(IndexError):
                 proxy.support_length(index)
 

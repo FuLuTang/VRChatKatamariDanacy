@@ -532,3 +532,45 @@ python3 -m unittest discover -s Docs/tests
 ### 没有改动的东西
 
 只改 `Runtime/Story/StoryRoundController.cs`（追加两个序列化字段、`ApplyStateVisibility()`、五个调用点与类注释一段）与本节（追加在本文件末尾）。没有改 `StoryRetryButton.cs`、`PickupFieldHost.cs`、motor、Riding、Labs、asmdef、场景、`tasks.json` 或任何其他文件。
+
+## 道具字段的编辑器同步（PickupFieldSync）
+
+> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-15。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test、没有 `run_tests`。本节只描述源码与约定。
+
+### 为什么从道具本身推导（方案 a）
+
+`PickupFieldHost` 的六个并行数组是运行时唯一的数据所有者，作者数据必须落到它们身上。**编辑器程序集里的 MonoBehaviour 没有运行时类型，Unity 无法把它序列化进要构建的场景**，所以“挂一个 EditorOnly 的作者组件”不成立；方案 (b) 要新增一个运行时组件再加构建期剔除，只为了作者数据。做法改成：场景里的道具已经是数据（名字、层级、Renderer AABB、Collider），编辑器工具把它们算成六个数组、写进 proxy、再 `CopyProxyToUdon`。运行时一行代码没加。
+
+### 作者要遵守的约定
+
+| 数据 | 来源 | 规则 |
+|---|---|---|
+| itemId | 道具 GameObject 的名字 | 全字段唯一；同名行**全部**拒（id 是候选/账本键）；灰盒的 `id#NN` 天然满足 |
+| kind | 道具的父文件夹名，即 field root 的直接子物体 | 小写类别名（`food`、`nature`…）；必须在价值表里有一行 |
+| propBounds | 道具子树里所有 Renderer 的世界 AABB 的 `size` | **全尺寸**（米，不是半尺寸）；最长边 < 0.1 mm 判为零尺寸 |
+| 尺寸档 | AABB 最长边 | `s` ≤ 0.21 m、`m` ≤ 0.76 m、其余 `l`（取自 PicnicLawn 目录 0.18/0.24 与 0.72/0.80 两处空档，PROVISIONAL） |
+| valueUnits | 价值表的 (kind, tier) 行 | 整数 ≥1（`Docs/OPEN_DECISIONS.md` (j)）；未声明的组合**直接拒，不给默认值**；加 kind = 在表里加一行 |
+| propColliders | 道具自己的 Collider，否则子树里按路径序第一个 | 一行最多一个（宿主只关一个）；多 Collider 会在报告里提示 |
+
+目录形状：`<field root>/<kind>/<prop>`。道具的**根必须自己带 Renderer**（子树里的 mesh 算同一件道具）；没有 Renderer 的叶子是数据错误，会被拒并报出原因。
+
+### 入口与顺序
+
+- 菜单 `VRC Katamari/Pickup/Sync Prop Arrays From Children`：选中 host（或它下面的道具），field root 取 host 自身。
+- 组件右键 `Sync Prop Arrays From Children`。
+- 代码入口 `PickupFieldSync.SyncFromChildren(host, fieldRoot)`，返回 `PickupFieldSyncReport`：件数、按 kind 的计数、总价值单位、全部被拒行与原因、U# 拷贝是否发出、读回长度是否对。
+
+顺序：按 field-root 相对路径 ordinal 排序 → 校验 → 用 `SerializedObject` 写 proxy 六个字段 → `UdonSharpProgramAsset.CompileAllCsPrograms(false, false)`（只编 dirty 的，避免每次重编全工程）→ `UdonSharpEditorUtility.CopyProxyToUdon(host)` → 标脏 + 标脏场景 → 读回长度。重复运行幂等：同一层级算出同样的数组。全部候选被拒时**不动**既有数组；field root 下一个候选都没有时清空并提示。本工具不建组件、不建 program asset、不保存场景。
+
+### 被拒原因（都进报告，不静默修）
+
+重复 itemId（同 id 全拒）、缺 Renderer、零/非有限 bounds、kind 名带首尾空白、未声明的 (kind, tier)、value <1 或非整数、kind 文件夹自己带 Renderer。
+
+### 程序集与测试
+
+- `Editor/Pickup/` **不在**现有 `VRCKatamari.Editor.asmdef` 的覆盖范围内（该 asmdef 在 `Editor/MapGreybox/`），按任务要求没有新建 asmdef：三个文件编进预定义的 `Assembly-CSharp-Editor`（仅编辑器；U# 的 `UdonSharp.Runtime` 与 `UdonSharp.Editor` 都是 `autoReferenced: true`，所以能直接用 `UdonSharpEditorUtility`）。若 Lead 要归入 `VRCKatamari.Editor`：把 asmdef 上移到 `Editor/`，references 加 `UdonSharp.Runtime`、`UdonSharp.Editor`；代码不用改。
+- 纯规则在 `Editor/Pickup/PickupFieldAuthoringRules.cs`（尺寸档、价值表、重复 id、ordinal 排序），测试 `Tests/EditMode/Pickup/PickupFieldAuthoringRulesTests.cs` 用反射调用，因为 `VRCKatamari.Tests.EditMode` 只引用 `VRCKatamari.Runtime`（与 `BankReasonTests` 的既有做法同因）；给测试 asmdef 加一行引用即可改成直接调用。
+
+### 未验证（不要当成已验证）
+
+没有 Unity 编译、没有 Play Mode、没有 Build & Test、没有 `run_tests`。`CompileAllCsPrograms` 与 `CopyProxyToUdon` 的时序只是按 `VRC_Katamari/Labs/README.md` 的“先编译再拷贝”排列：若拷贝仍报 `outdated behaviour version`，说明 U# 编译还没跑完，等它结束再运行一次同步（报告里就是这么写的）。`propBounds` 取 Renderer AABB、`propColliders` 只接一个，这两条都还没有运行时观察。

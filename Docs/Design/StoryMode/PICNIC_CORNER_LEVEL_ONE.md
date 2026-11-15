@@ -71,7 +71,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | `game_longest_dim_m`（目录列） | `prop_catalog.csv` | 「游戏尺寸」（比真实尺寸放大，例：`apple` 0.08→0.30） | 真实尺寸建模、`localScale = 1`、`propBounds` = 模型 AABB | **不动** | 同一列同时喂校验器与生成器的脚印/间距模型；改它会让 `build_greybox --check` 与 README §3.3 的可行性表一起失效（那张表被 `ReadmeFeasibilityTableTests` 逐字比对） |
 | `real_longest_dim_m`（目录列） | `prop_catalog.csv` | 真实最长边，只有一列、没有三轴 | 需要三轴或 `volume_m3` | **不动** | 缺第三轴，任何 `a_eq` 都是估的；按「不手抄推导数字」的规矩不写 |
 | `@size=<米>` 立方体写法 | 场景道具命名（`Editor/Pickup/PickupFieldAuthoringRules.TryParseDeclaredSize`） | 「挡路 3.6 m、拾取 1.25 m」→ 把 `propBounds` 记成 1.25³ = 1.95 m³ | 体积门下 1.95 m³ 需要 **2.60 m** 球，比 2.20 上限还大 —— 这个通道**已经把门件写成死件**（(l) 原文点名） | **不动（列为实现者改动 C6）** | 正确做法是「`propBounds` 说真话（模型 AABB）+ 挡路盒另立」（挡路接线那条线在做）；改 `PickupFieldAuthoringRules` 属代码，不在写范围 |
-| `maxItemSizeWorldM` / `absorbSizeRatio` | `Labs/BallPlayground/BallPlayground.unity`、`BallPlayground.prefab`、`Labs/CpuSkirmish/CpuSkirmish.unity`（**`StoryLevel.unity` 已 0 命中**，本轮 grep 实测） | 死键，Unity 忽略、回落 512 / 10 | 已删字段 | **不动** | 在场景/prefab 里，属编辑器产物；删死键是 Unity 侧顺手活（(l) 已列为"仍待做：7 处场景序列化覆盖"），且不属于本关场地 |
+| `maxItemSizeWorldM` / `absorbSizeRatio` | `Labs/CpuSkirmish/CpuSkirmish.unity`（**`StoryLevel.unity` 已 0 命中**，本轮 grep 实测；`Labs/BallPlayground` 的 `.unity`/`.prefab` 已于 2026-11-15 随该 lab 退役删除） | 死键，Unity 忽略、回落 512 / 10 | 已删字段 | **不动** | 在场景/prefab 里，属编辑器产物；删死键是 Unity 侧顺手活（(l) 已列为"仍待做：7 处场景序列化覆盖"），且不属于本关场地 |
 | `maxItemVolumeWorldM3` / `absorbVolumeRatio` | 同上（场景 `512` / `10`） | 已是新口径 | 同左 | **不改** | 值就是契约默认值，不需要覆盖 |
 | `pickup_dim_m`（可选列） | 目录 schema | 故事图专用「声明拾取尺寸 ≠ 外形」通道 | 体积门不需要它；需要的是真实 AABB + 挡路盒 | **不动** | PicnicLawn 目录里没有这一列；它有在故事图 fixture 里，与本次无关 |
 | 障碍/平面的 `collision` 声明 | `layout.json` 结构 | 无（0/8、0/8） | 第 14 条运行时预算 | **不动** | PicnicLawn 是全图 PvP 图，不是这一关的关卡数据；这一关的边界账在本文 §4 |
@@ -382,7 +382,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | **S11** | **门/挡路**：本关没有 `absorb` 尺寸门，但**有 4 个结构门件**（§3.5）；确认 `PickupFieldHost` 的 `blockingDisabled = false`。起点时 `D_req > 0.29974` 的件（西瓜 3、篮子 3、保温箱 1、皮球 4、洒水壶 2、盆栽 2、餐盘 4、碗 4、餐巾 5…）都会进这套，宿主每帧只登记**最近的 ≤6 件**，所以同一时刻最多 6 个动态挡路盒 | Play Mode：① 起手撞门堆被挡住（截图 + `rej=` 一行 `TOO_LARGE`）；② 长到 0.83 m 后吃掉篮子、能进壁龛（截图 + `absorbed=` 跳数）；③ 西瓜/皮球同理被挡到解锁 |
 | **S12** | **首轮 Play Mode（不调数值）**：跑满 120 s，记录到达各直径的时刻、结束直径、件数、`GetBankedScoreUnits()==0` | 截图：HUD 三行；Console：`[story-lab] t=… diameter=… absorbed=…` 每秒一行；结束直径写进本轮报告（`Docs/Evidence/`；预期 ~1.4–1.48 m，见 §6 U4） |
 | **S13** | **角度/视线**：从出生点、花圃西侧、2 m 缝入口各截一张图；确认花圃台把东北方向切开、角树在视野内可定向 | 三张截图存档；"门内看得见吃不到的大件"（3.6 m 长凳）在东北角外可见 |
-| **S14** | **回读死键**：`grep -n "maxItemSizeWorldM\|absorbSizeRatio" StoryMode.unity` 应为 **0 命中**（现状已 0，转正后必须还是 0）；`maxItemVolumeWorldM3: 512` / `absorbVolumeRatio: 10` 仍在 | 0 命中；两个新字段在位；死键清理只涉及 `BallPlayground`/`CpuSkirmish`（别处，不属本关） |
+| **S14** | **回读死键**：`grep -n "maxItemSizeWorldM\|absorbSizeRatio" StoryMode.unity` 应为 **0 命中**（现状已 0，转正后必须还是 0）；`maxItemVolumeWorldM3: 512` / `absorbVolumeRatio: 10` 仍在 | 0 命中；两个新字段在位；死键只剩 `CpuSkirmish` 一处（`BallPlayground` 已 2026-11-15 退役删除；别处，不属本关） |
 | **S15** | **`ReferenceCamera`**：`SceneDescriptor.ReferenceCamera` 指向场景主相机（`Labs/README.md` 的两件必备组件之一） | Play Mode 不再出现 `Reference camera is not set` |
 | **S16** | **Build & Test**（只能用户点） | 出生在西南角、点球入座、滚到 1.25 m、到点冻结出结果卡；结果记 `Docs/Evidence/` |
 

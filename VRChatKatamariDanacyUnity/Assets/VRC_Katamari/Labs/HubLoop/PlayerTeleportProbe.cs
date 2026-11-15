@@ -238,7 +238,7 @@ namespace VRCKatamari.Labs.HubLoop
 
             VRCPlayerApi player = Networking.LocalPlayer;
             // String concatenation rather than Vector3.ToString(): the repo already logs positions
-            // that way (BallPlaygroundBootstrap), and only float.ToString is a proven extern here.
+            // that way (StoryLevelLabBootstrap.Report), and only float.ToString is a proven extern here.
             string startPosition = "unavailable";
             if (player != null) startPosition = "" + player.GetPosition();
             Debug.Log(LogPrefix + " ready targets=" + targets.Length

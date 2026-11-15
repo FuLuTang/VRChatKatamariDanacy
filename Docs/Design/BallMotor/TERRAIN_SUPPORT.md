@@ -562,7 +562,7 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 3. **边界墙用平面，不要用盒**（盒会用掉 8 个支撑槽，而且墙的顶面变成可站的"窄条"，观感荒诞）。
 4. **`allowedKinds` 为空 = 全部拒绝**（电机契约）；忘了填会表现为「什么都吸不到」。
 5. **一个电机只有一个挡路写入者**（`BLOCKING_PROPS_PLAN` R5）；`LevelArenaHost` 不许碰 `SetBlockingBoxes`。
-6. **台阶/支撑相关的坑位检查**：`stepUpEnabled` 打开后，旧 lab（`BallPlayground`/`CpuSkirmish`）的行为会变——它们各自的 bootstrap 要显式 `motor.SetTerrainSupportEnabled(false)`，或者接受变化（§8.1）。
+6. **台阶/支撑相关的坑位检查**：`stepUpEnabled` 打开后，旧 lab（`BallPlayground`/`CpuSkirmish`）的行为会变——它们各自的 bootstrap 要显式 `motor.SetTerrainSupportEnabled(false)`，或者接受变化（§8.1）。`Labs/BallPlayground` 已于 2026-11-15 退役（由 `Labs/PhysicsTestField` 取代），所以这条现在只剩 `CpuSkirmish` 还适用。
 
 ---
 
@@ -611,7 +611,7 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 | S4 | 从台顶开出去 | 落到地面；**没有**被推一下；`support=ground` 在 3 步内 |
 | S5 | 站在台顶不推摇杆 5 s | 球不动、不下沉（`bottom` 恒 0.26） |
 | S6 | 容量：临时加第 9 个盒 | 日志报 `box capacity 8 exceeded`；前 8 个照旧；`overflowCount == 1` |
-| S7 | 旧 lab 回归 | `BallPlayground`/`CpuSkirmish` 在 `terrainSupportEnabled = false` 下**帧行为与今天一致** |
+| S7 | 旧 lab 回归 | `CpuSkirmish` 在 `terrainSupportEnabled = false` 下**帧行为与今天一致**（原并联的 `BallPlayground` 已于 2026-11-15 退役、场景已删，无法再回归） |
 
 ### P2 — 可吸结构：挡路 / 支撑拆分
 

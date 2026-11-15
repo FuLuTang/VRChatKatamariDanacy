@@ -31,7 +31,7 @@
 | F7 | 宿主每 0.05 s 全表扫一遍，按距离取最近若干件提交 | `PickupFieldHost.ScanProps` / `InsertNearest` |
 | F8 | 宿主持有每件的 pickup 尺寸（`propBounds`）与可选的 collider 数组；**挡路只用 `propBounds`，collider 数组与挡路无关** | `PickupFieldHost` 的序列化平行数组 |
 | F9 | 球是**纯 kinematic**：全仓 C# 无 `Rigidbody`/`CharacterController`，位置只由扫掠写 | `KatamariBallMotor.StepBall` |
-| F10 | 现有 lab 的静态盒占用：StoryLevel 4 盒、CpuSkirmish 4 盒、BallPlayground **7 盒**。挡路盒有自己的 6 格，所以这些数字不受影响 | 三个 lab 的 `.unity` 里 `obstacleBoxes` |
+| F10 | 现有 lab 的静态盒占用：StoryLevel 4 盒、CpuSkirmish 4 盒、BallPlayground **7 盒**（BallPlayground 已于 2026-11-15 退役、场景已删）。挡路盒有自己的 6 格，所以这些数字不受影响 | 三个 lab 的 `.unity` 里 `obstacleBoxes` |
 | F11 | 一件道具一行：两关共用场 110 件 / 412 单位；区域图 175 件 | `Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md`、`REGION_MAP_PLAN.md` |
 
 F9+F5 合起来就是原来的症状：吸收门拒了它，扫掠却从来不知道它存在。现在宿主把「体积门说吸不动」的那些件塞进挡路切片，症状消失。
@@ -49,13 +49,13 @@ F9+F5 合起来就是原来的症状：吸收门拒了它，扫掠却从来不�
 - 新增代码只有「选择」这一件事；碰撞响应、分离、面法线定向、去速全部复用现有的。
 - **粘性**（`blockingStickinessM = 0.25`）：上一批仍在 `半径 + 粘性` 内的件优先保留，避免球停在边缘时盒子每 0.05 s 增删一次。它只是选择上的迟滞，不是第二个门槛。
 - **剪枝界**（实现新增）：宿主先用「中心距 ≤ 半径 + 粘性 + 半对角线」跳过远处的件再建盒。这是保守的**剪枝**，不是判定：点到 AABB 的距离 ≥ 中心距 − 半对角线，所以被剪掉的件 `SelectNearest` 本来也不会保留，结果逐位相同。它的作用是让 110 件里每次只对近处几件做建盒和 AABB 距离。
-- **不用静态盒的「剩余槽」**（StoryLevel 余 4、BallPlayground 余 1，F10）：那条路必须靠 `ClearObstacles()` 再重注册才能换掉某几格，会连带把 lab 的墙一起清掉（F3），而且挡路容量会随地图的静态盒预算浮动。独立容量让地图数据完全不动。
+- **不用静态盒的「剩余槽」**（StoryLevel 余 4；BallPlayground 的「余 1」随该 lab 于 2026-11-15 退役删除，F10）：那条路必须靠 `ClearObstacles()` 再重注册才能换掉某几格，会连带把 lab 的墙一起清掉（F3），而且挡路容量会随地图的静态盒预算浮动。独立容量让地图数据完全不动。
 
 ### B. 抬高电机容量（只改常量）
 
 成本可以算：扫掠对障碍数**线性**——校验全表 `SweepMath.cs:120-140`，`TryFindEarliestHit` 全表 `:555-575`，接触投影 `ProjectionPasses = 4` × 全表 `:52`、`:187-198`，外层最多 `maxContacts` 次（= `ContactCapacity` 4）。每固定步一次、50 Hz（`KatamariBallMotor.cs:71-72`、`:520-532`）。从 16 个障碍抬到 22 个约 +37% 最坏情况、实际场（1 平面 + 4 墙 + 6 挡路 = 11）翻倍，而扫掠数组本身只有 4 × 22 个元素——**CPU 不是瓶颈**（Udon 解释器开销未测，见 `REGION_MAP_PLAN.md:117`）。
 
-真正的否决理由有两条：① **容量不是答案**——110–175 件（F11）不可能全注册，无论抬到多少都要「选哪些」，所以 B 仍然需要 A 的选择规则；② 8/8 是**地图作者的数据契约**（`REGION_MAP_PLAN.md:67`，校验器把同一常量抄成 `MOTOR_MAX_COLLISION_BOXES = 8`，`Tools/mapbuild/validate_map.py:149-150`），改常量要连带改校验器与两张图的盒预算，换来的只是「窗口大一点」。而且 BallPlayground 已经 7/8（F10），抬静态容量等于让 lab 之间的预算重新分配。
+真正的否决理由有两条：① **容量不是答案**——110–175 件（F11）不可能全注册，无论抬到多少都要「选哪些」，所以 B 仍然需要 A 的选择规则；② 8/8 是**地图作者的数据契约**（`REGION_MAP_PLAN.md:67`，校验器把同一常量抄成 `MOTOR_MAX_COLLISION_BOXES = 8`，`Tools/mapbuild/validate_map.py:149-150`），改常量要连带改校验器与两张图的盒预算，换来的只是「窗口大一点」。而且 BallPlayground 曾经 7/8（F10，该 lab 已于 2026-11-15 退役删除），抬静态容量等于让 lab 之间的预算重新分配。
 
 ### C. 宿主/另一行为里自带一套轻量「道具挡板」扫掠
 

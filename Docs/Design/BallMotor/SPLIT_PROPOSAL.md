@@ -123,7 +123,7 @@ Unity 侧每步的验收门是 `refresh_unity`（U# 全量编译 0 错误）+ `r
 | `proxyRotation` 162 | 只在 `Start` 写一次（467/469），之后没有任何层更新，却作为 `GroundContactMath.TrySolve` 的旋转入参（605）——「看着是活的，其实是常量」 | 要么由 RadialProxy 层真正喂它，要么删字段传 `Quaternion.identity` |
 | `PredictionCapacity = 0` 186 + 4 个零长数组（212–216、390–393） | 每次提交/复位都把空预测列交给账本（834、1065），账本还会**校验**它们（GrowthLedgerMath.cs:474）；预测路径在本层永不可达 | 加注释说明本层不预测，或删 4 字段（账本调用签名同步改） |
 | `contactCenters…contactPenetrationDepths` 249–254 | 只写不读（571–573），唯一用途是 `contactCount >= ContactCapacity`（586） | 保留：README:197 缺口 2（墙面去速）要读 `contactNormals` |
-| 追踪机制 320–333、724–734、1819–1847 | 唯一读者是 `Labs/BallPlayground/BallPlaygroundBootstrap.cs:330–335`；每次评估都白算距离与触达 | 保留到 lab 退役，退役时整块删（约 80 行） |
+| 追踪机制 320–333、724–734、1819–1847 | 唯一读者是 `Labs/BallPlayground/BallPlaygroundBootstrap.cs:330–335`；每次评估都白算距离与触达 | `Labs/BallPlayground` 已于 2026-11-15 退役、该文件已删，这块（约 80 行）现在**没有读者**，可整块删 |
 | `LogRejectDiagnosticsOnce` 1782 / `LogCommitFailureOnce` 1967 | 纯 `Debug.Log` 副作用，各限 3 行 | 保留；不是逻辑，别当死代码 |
 | `absorbedCount` 169 vs `absorbedEventCount` 285 | 两个「吸收总数」：前者复位清零（1085），后者单调（README:329） | 保留但别再引入第三个 |
 

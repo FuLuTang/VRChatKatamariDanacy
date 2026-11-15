@@ -285,8 +285,8 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 - 表达相同：不可吸的地形/墙/大树/当布景的桌子，同样是「0..K 个轴对齐盒」，主盒规则一样。
 - 预算不同：布景走 `KatamariBallMotor.AddPlane` / `AddBox`，容量是 **8 平面 + 8 盒**，而且是**地图作者的数据契约**——`Tools/mapbuild/validate_map.py` 的 `MOTOR_MAX_COLLISION_BOXES = 8` 把它抄成了常量，`layout.json` 里每个 `structures[i]` 只能声明**一个** `collision` 值（`"box"`/`"plane"`），校验器按「1 structure = 1 盒」计数。
-- 所以布景要拆盒，必须动三处之一：**① 加 `collision_parts` 数组**（校验器改成数 parts，预算仍是 8）；**② 抬 `MaxBoxCount`**（同时改校验器常量、全部 lab 的场景预算、`StoryLevel` 现在 4 盒 / `BallPlayground` 现在 7 盒）；**③ 不拆**，布景靠人挑「主盒」，靠 `AddPlane` 补大面积面。
-- 现状读数：`Docs/Design/Maps/PicnicLawn/layout.json` 的 60 个 structure **一个 collision 都没声明**（0/8），而新增的 `size_gates` 里也没有；真正在用的是 lab 场景（StoryLevel 4 盒、BallPlayground 7 盒）。也就是说 **8 格预算目前基本是空的**，这是好消息：布景拆盒有空间，缺的是**声明方式**，不是容量。
+- 所以布景要拆盒，必须动三处之一：**① 加 `collision_parts` 数组**（校验器改成数 parts，预算仍是 8）；**② 抬 `MaxBoxCount`**（同时改校验器常量、全部 lab 的场景预算、`StoryLevel` 现在 4 盒 / `BallPlayground` 现在 7 盒——后者随该 lab 于 2026-11-15 退役删除）；**③ 不拆**，布景靠人挑「主盒」，靠 `AddPlane` 补大面积面。
+- 现状读数：`Docs/Design/Maps/PicnicLawn/layout.json` 的 60 个 structure **一个 collision 都没声明**（0/8），而新增的 `size_gates` 里也没有；真正在用的是 lab 场景（StoryLevel 4 盒；BallPlayground 7 盒已于 2026-11-15 随该 lab 退役）。也就是说 **8 格预算目前基本是空的**，这是好消息：布景拆盒有空间，缺的是**声明方式**，不是容量。
 
 **已定（2026-11-15，Lead）：选 A ——布景只挑主盒，不拆。** 每件只挂一个盒，靠 `AddPlane` 补大面积面；多盒留给「玩家真的会从底下钻过去」的布景，等真的要拆时再走 ①（`collision_parts`），**不要**走 ②，因为抬常量会连带改两张图和每个 lab 的预算，收益却只是几个盒。**本轮不动地图契约**（`layout.json`、`validate_map.py`、8 格预算全部保持原样）。
 

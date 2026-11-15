@@ -41,14 +41,14 @@
 | 资产 | 行 | `maxItemSizeWorldM` | `absorbSizeRatio` |
 |---|---|---:|---:|
 | `Labs/StoryLevel/StoryLevel.unity` | 12448-12449 | 8 | 1 |
-| `Labs/BallPlayground/BallPlayground.unity` | 4315-4316 | 8 | 1 |
-| `Labs/BallPlayground/BallPlayground.prefab` | 83-84 | 8 | 1 |
+| `Labs/BallPlayground/BallPlayground.unity`（已退役 2026-11-15，文件已删，行号仅存历史） | 4315-4316 | 8 | 1 |
+| `Labs/BallPlayground/BallPlayground.prefab`（同上，已删） | 83-84 | 8 | 1 |
 | `Labs/CpuSkirmish/CpuSkirmish.unity` | 434-435 | 8 | 1 |
 | 同上（第 2 个电机） | 2442-2443 | 8 | 1 |
 | 同上（第 3 个） | 4144-4145 | 8 | 1 |
 | 同上（第 4 个） | 5321-5322 | 8 | 1 |
 
-> **要改比例，这 7 处序列化覆盖都要改**——`[SerializeField]` 的默认值只在"没有场景覆盖"时生效，改 `:121` 一行不会改变任何现有场景的行为。这是最容易做成"改了没反应"的地方。
+> **要改比例，现存 5 处序列化覆盖都要改**（原表 7 处；`BallPlayground` 的 `.unity`/`.prefab` 两处随该 lab 于 2026-11-15 退役删除，由 `Labs/PhysicsTestField` 取代）——`[SerializeField]` 的默认值只在"没有场景覆盖"时生效，改 `:121` 一行不会改变任何现有场景的行为。这是最容易做成"改了没反应"的地方。
 
 ### 1.1 顺手的发现：文档行号已经漂了
 

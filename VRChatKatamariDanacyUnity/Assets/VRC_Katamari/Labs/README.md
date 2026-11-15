@@ -32,7 +32,7 @@
 
 > 用 SDK 向导建世界会自动补 `PipelineManager` 和 `ReferenceCamera`；**用脚本搭场景必须手动补**，否则 Play Mode 一切正常、构建必挂。
 
-在 `BallPlayground` 里这两件是补过的（`PipelineManager` 挂在根 `BallPlayground` 上，`ReferenceCamera` 指向 `PlaygroundCamera`）。
+原来的 `Labs/BallPlayground` 里这两件是补过的（`PipelineManager` 挂在根上，`ReferenceCamera` 指向 `PlaygroundCamera`）；该场景已于 2026-11-15 退役（由 `Labs/PhysicsTestField` 取代），搭新场景时同样必须自己补。
 
 ## 用编辑器脚本搭 UdonSharp 场景（MCP / execute_code）
 
@@ -96,6 +96,13 @@ var pv = typeof(UdonBehaviour).GetField("publicVariables", BindingFlags.NonPubli
 - **回仓库清单**：每个 program asset（`.asset` + `.meta`），以及 `Assets/SerializedUdonPrograms/` 下每个新文件（+ `.meta`）。曾经 5 个 program asset 没提交，后来一次 merge 把它们静默抹掉，留下一批 `programSource = null` 的行为。
 - **验证规则**：看渲染结果（`CoreMesh` 的 scale 与 renderer bounds），不要只看 motor 报的数；真实按键输入必须由人试。
 
-## BallPlayground
+## 已退役：BallPlayground 与 Bootstrap（2026-11-15）
 
-见 [BallPlayground/README.md](BallPlayground/README.md)。
+`Labs/BallPlayground/`（`BallPlayground.unity`、`BallPlayground.prefab`、`BallPlaygroundBootstrap`、`PlaygroundProp`、4 个材质）与 `Labs/Bootstrap/`（`BootstrapLab.unity`）已于 2026-11-15 退役，由 `Labs/PhysicsTestField` 取代：场景、prefab、`BallPlaygroundBootstrap` 及其 UdonSharp program asset / serialized program 已删除。
+
+`Labs/BallPlayground/` 目录**仍然存在**，因为下面这些资产被在用的场景引用，不能删：
+
+- `Mat_PlaygroundBall/Ground/Prop/Wall` 四个材质：`Labs/StoryLevel/StoryLevel.unity`（`Ground`、4 面墙、`CoreMesh`、`SceneDescriptor.DynamicMaterials`）与 `Labs/CpuSkirmish/CpuSkirmish.unity` 都在用。
+- `PlaygroundProp.cs` + `PlaygroundProp.asset`（+ `Assets/SerializedUdonPrograms/bb940408ec3999040829cf3d16ca2ec1.asset`）：`CpuSkirmish.unity` 的 24 个 `P0_0..P3_5` 道具挂的就是它。
+
+它们的去处（搬到 `Art/Materials/`、把 `PlaygroundProp` 归到 `Runtime/` 还是留在 CpuSkirmish）待 Lead 决定；搬动时必须连 `.meta` 一起搬、保持 GUID 不变。

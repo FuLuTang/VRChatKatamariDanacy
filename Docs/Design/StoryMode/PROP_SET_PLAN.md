@@ -1,5 +1,7 @@
 # 野餐草坪道具集与球成长区间（真实尺寸）
 
+> 逐件道具的目录表（按场景 `itemId` 索引 110 件的设计三轴 / 模型文件 / `propBounds` / 体积 / 可吸球径，含四类异常）见 [`PROP_CATALOG.md`](PROP_CATALOG.md)。
+
 > 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15。本文只写**内容需求**（要哪些真实物件、各自多大、球要多大才吃得到），不改 Unity、不改 `.cs`、不改场景、不改 `generate.py`、不改 `LEVEL_CONTENT_PLAN.md`、不碰 `tasks.json`。**不含逐件价值单位、星级阈值或任何平衡数值**——那几件事在用户明确搁置后，等模型落地再统一重算。（§2.3/§2.4 里出现的"单位"数是 `c` 换掉后的算术结果，只用来证明档与档之间隔着多大一段，**不是价值建议**。）
 > 前提（用户已拍板，不再选项化）：**球小起步；视角在球后、随球长高；玩家是"推球"不是"坐球"；物件一律真实尺寸，绝不缩放凑档。**
 > 引用约定：`路径:行` 相对仓库根；`StoryLevel.unity` = `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/StoryLevel/StoryLevel.unity`；`[csv:N]` = `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 第 N 行；`props/manifest.json` = `Docs/Art/OriginalModels/props/manifest.json`。

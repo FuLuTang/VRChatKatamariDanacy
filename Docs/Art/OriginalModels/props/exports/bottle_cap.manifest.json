@@ -1,6 +1,6 @@
 {
   "id": "bottle_cap",
-  "pivot": "base",
+  "pivot": "center",
   "target_longest_m": 0.05,
   "dimensions_m": {
     "x": 0.05000000074505806,
@@ -12,12 +12,12 @@
     "min": [
       -0.02500000037252903,
       -0.02377641201019287,
-      0.0
+      -0.007249999791383743
     ],
     "max": [
       0.02500000037252903,
       0.02377641201019287,
-      0.014499999582767487
+      0.007249999791383743
     ]
   },
   "vertices": 102,
@@ -40,7 +40,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "884e97f7dfd4299e454a6cf841766482fb2c0ed61c14dd728b9fa8be13cfb156",
+  "geometry_sha256": "01a8f3c33f13db91afff09de07021b3420c99e5fb23938570558aee59583a4ca",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "瓶盖",
   "category": "debris",
@@ -52,9 +52,12 @@
     "row_found": true
   },
   "dimension_check": {
+    "size_reference": "game",
+    "checked_against": "game_longest_dim_m",
     "target_m": 0.05,
     "built_longest_m": 0.05000000074505806,
     "abs_error_m": 7.450580569168253e-10,
+    "csv_target_matches": true,
     "csv_game_longest_matches": true,
     "scale_vs_real_m": 1.667
   },
@@ -76,9 +79,9 @@
   "build_script": "models/bottle_cap.py",
   "preview": "previews/bottle_cap_preview.png",
   "files": {
-    "bottle_cap.fbx": 18476,
-    "bottle_cap.glb": 14044,
-    "bottle_cap.blend": 410508
+    "bottle_cap.fbx": 18652,
+    "bottle_cap.glb": 14064,
+    "bottle_cap.blend": 91762
   },
   "export_settings": {
     "fbx": {
@@ -93,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "3.6.21"
+    "blender": "5.3.0"
   },
-  "preview_bytes": 162673
+  "preview_bytes": 125090
 }

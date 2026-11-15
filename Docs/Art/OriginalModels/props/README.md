@@ -9,13 +9,13 @@
 | 道具 | 中文名 | 三角面 | 顶点 | 尺寸 X×Y×Z（m，Blender） | 最长边 / CSV `game_longest_dim_m` | 枢轴 | 材质 |
 |---|---|---|---|---|---|---|---|
 | `seed` | 草籽 | 144 | 74 | 0.0224 × 0.0400 × 0.0160 | 0.0400 / 0.04 | 几何中心 | `Prop_seed_body` 麦秆黄 `#AD9559` |
-| `acorn` | 橡子 | 220 | 112 | 0.0400 × 0.0380 × 0.0500 | 0.0500 / 0.05 | 底面中心 | `Prop_acorn_nut` `#A27645`／`Prop_acorn_cap` `#65452C` |
-| `pebble` | 小石子 | 80 | 42 | 0.0600 × 0.0440 × 0.0319 | 0.0600 / 0.06 | 底面中心 | `Prop_pebble_stone` 灰石 `#7C7C79` |
-| `bottle_cap` | 瓶盖 | 200 | 102 | 0.0500 × 0.0476 × 0.0145 | 0.0500 / 0.05 | 底面中心 | `Prop_bottle_cap_cap` 暗蓝灰 `#596979` |
-| `paper_scrap` | 纸屑 | 164 | 84 | 0.1000 × 0.0741 × 0.0118 | 0.1000 / 0.10 | 底面中心 | `Prop_paper_scrap_paper` 旧纸白 `#CECBC2` |
-| `toy_ball` | 小皮球 | 288 | 146 | 0.4000 × 0.4000 × 0.4000 | 0.4000 / 0.40 | 球心 | `Prop_toy_ball_shell` `#DAD4C8`／`Prop_toy_ball_band` `#9E3F3C` |
-| `napkin` | 餐巾 | 192 | 98 | 0.3000 × 0.3000 × 0.0280 | 0.3000 / 0.30 | 底面中心 | `Prop_napkin_cloth` 亚麻米色 `#CBC5B8` |
-| `watering_can` | 洒水壶 | 346 | 173 | 0.2603 × 0.5800 × 0.4154 | 0.5800 / 0.58 | 底面中心（壶身轴） | `Prop_watering_can_enamel` 灰绿搪瓷 `#596F59` |
+| `acorn` | 橡子 | 220 | 112 | 0.0400 × 0.0380 × 0.0500 | 0.0500 / 0.05 | 几何中心 | `Prop_acorn_nut` `#A27645`／`Prop_acorn_cap` `#65452C` |
+| `pebble` | 小石子 | 80 | 42 | 0.0600 × 0.0440 × 0.0319 | 0.0600 / 0.06 | 几何中心 | `Prop_pebble_stone` 灰石 `#7C7C79` |
+| `bottle_cap` | 瓶盖 | 200 | 102 | 0.0500 × 0.0476 × 0.0145 | 0.0500 / 0.05 | 几何中心 | `Prop_bottle_cap_cap` 暗蓝灰 `#596979` |
+| `paper_scrap` | 纸屑 | 164 | 84 | 0.1000 × 0.0741 × 0.0118 | 0.1000 / 0.10 | 几何中心 | `Prop_paper_scrap_paper` 旧纸白 `#CECBC2` |
+| `toy_ball` | 小皮球 | 288 | 146 | 0.4000 × 0.4000 × 0.4000 | 0.4000 / 0.40 | 几何中心 | `Prop_toy_ball_shell` `#DAD4C8`／`Prop_toy_ball_band` `#9E3F3C` |
+| `napkin` | 餐巾 | 192 | 98 | 0.3000 × 0.3000 × 0.0280 | 0.3000 / 0.30 | 几何中心 | `Prop_napkin_cloth` 亚麻米色 `#CBC5B8` |
+| `watering_can` | 洒水壶 | 346 | 173 | 0.2603 × 0.5800 × 0.4154 | 0.5800 / 0.58 | 几何中心 | `Prop_watering_can_enamel` 灰绿搪瓷 `#596F59` |
 
 合计 **1634 三角面**。预算：tiny 件 ≤300 tris，watering_can ≤600 tris，全部达标（最大 346）。
 
@@ -44,7 +44,7 @@ CSV 的这几项游戏尺寸（尤其 toy_ball 0.40 m、napkin 0.30 m 对应现�
 - Blender：+Z 向上，模型正面朝 +Y。
 - FBX 导出：`axis_forward='-Z'`、`axis_up='Y'`、`bake_space_transform=True`、`apply_scale_options='FBX_SCALE_UNITS'`；即顶点已烘焙成 Y-up，Unity 预期 Rotation=(0,0,0)、Scale=(1,1,1)、正面 +Z、直立。
 - GLB 导出：`export_yup=True`，同样 Y-up。
-- 枢轴：`seed`、`toy_ball` 在几何中心（球类需要绕中心旋转）；其余在底面中心、底面贴 z=0，可直接按地面高度摆放。
+- 枢轴：2026-11-15 起所有道具统一在几何包围盒中心（`prop_lib.Builder.finish()` 在 `transform_apply` 后用 `origin_set` 取包围盒中心，再复位到原点，导出时烘焙进顶点）。场景与运行期接触判定都按 AABB 中心放置，回读误差 < 1 mm。
 - 该轴/尺度约定是暂定接口，正式尺度与 Unity 导入验证尚未冻结；本批只做了 Blender 端 FBX/GLB 回读验证，**没有在 Unity 中导入**。
 
 ## 3. 拓扑与材质

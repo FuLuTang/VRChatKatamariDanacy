@@ -1,0 +1,1331 @@
+{
+  "note": "FBX/GLB were re-imported into fresh factory-empty Blender scenes; counts are from the imported datablocks, not from the export manifest.",
+  "tolerance_m": 0.0005,
+  "blender_version": "5.3.0",
+  "output_root": "D:\\VRChatKatamariPreview\\PropModels\\fruit-v2",
+  "props": {
+    "strawberry": {
+      "fbx": {
+        "format": "fbx",
+        "file": "strawberry.fbx",
+        "file_bytes": 19756,
+        "expected": {
+          "vertices": 122,
+          "triangles": 240,
+          "dimensions_m": {
+            "x": 0.03620000183582306,
+            "y": 0.03575972467660904,
+            "z": 0.03999999910593033,
+            "longest": 0.03999999910593033
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 122,
+          "triangles": 240,
+          "world_min_m": [
+            -0.0181,
+            -0.01788,
+            -0.02
+          ],
+          "world_max_m": [
+            0.0181,
+            0.01788,
+            0.02
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.0362,
+            "y": 0.03576,
+            "z": 0.04,
+            "longest": 0.04
+          },
+          "materials": [
+            "Prop_strawberry_calyx",
+            "Prop_strawberry_skin"
+          ],
+          "transforms": [
+            {
+              "name": "strawberry",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "strawberry.glb",
+        "file_bytes": 7168,
+        "expected": {
+          "vertices": 122,
+          "triangles": 240,
+          "dimensions_m": {
+            "x": 0.03620000183582306,
+            "y": 0.03575972467660904,
+            "z": 0.03999999910593033,
+            "longest": 0.03999999910593033
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 158,
+          "triangles": 240,
+          "world_min_m": [
+            -0.0181,
+            -0.01788,
+            -0.02
+          ],
+          "world_max_m": [
+            0.0181,
+            0.01788,
+            0.02
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.0362,
+            "y": 0.03576,
+            "z": 0.04,
+            "longest": 0.04
+          },
+          "materials": [
+            "Prop_strawberry_calyx",
+            "Prop_strawberry_skin"
+          ],
+          "transforms": [
+            {
+              "name": "strawberry",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      }
+    },
+    "grapes": {
+      "fbx": {
+        "format": "fbx",
+        "file": "grapes.fbx",
+        "file_bytes": 21116,
+        "expected": {
+          "vertices": 142,
+          "triangles": 288,
+          "dimensions_m": {
+            "x": 0.06000000238418579,
+            "y": 0.021983623504638672,
+            "z": 0.059741185978055,
+            "longest": 0.06000000238418579
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 142,
+          "triangles": 288,
+          "world_min_m": [
+            -0.03,
+            -0.010992,
+            -0.029871
+          ],
+          "world_max_m": [
+            0.03,
+            0.010992,
+            0.029871
+          ],
+          "bbox_center_m": [
+            0.0,
+            -0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.06,
+            "y": 0.021984,
+            "z": 0.059741,
+            "longest": 0.06
+          },
+          "materials": [
+            "Prop_grapes_skin"
+          ],
+          "transforms": [
+            {
+              "name": "grapes",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "grapes.glb",
+        "file_bytes": 6256,
+        "expected": {
+          "vertices": 142,
+          "triangles": 288,
+          "dimensions_m": {
+            "x": 0.06000000238418579,
+            "y": 0.021983623504638672,
+            "z": 0.059741185978055,
+            "longest": 0.06000000238418579
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 142,
+          "triangles": 288,
+          "world_min_m": [
+            -0.03,
+            -0.010992,
+            -0.029871
+          ],
+          "world_max_m": [
+            0.03,
+            0.010992,
+            0.029871
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.06,
+            "y": 0.021984,
+            "z": 0.059741,
+            "longest": 0.06
+          },
+          "materials": [
+            "Prop_grapes_skin"
+          ],
+          "transforms": [
+            {
+              "name": "grapes",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      }
+    },
+    "cookie": {
+      "fbx": {
+        "format": "fbx",
+        "file": "cookie.fbx",
+        "file_bytes": 20124,
+        "expected": {
+          "vertices": 98,
+          "triangles": 192,
+          "dimensions_m": {
+            "x": 0.07000000029802322,
+            "y": 0.06885603070259094,
+            "z": 0.009372258558869362,
+            "longest": 0.07000000029802322
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 98,
+          "triangles": 192,
+          "world_min_m": [
+            -0.035,
+            -0.034428,
+            -0.004686
+          ],
+          "world_max_m": [
+            0.035,
+            0.034428,
+            0.004686
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "dimensions_m": {
+            "x": 0.07,
+            "y": 0.068856,
+            "z": 0.009372,
+            "longest": 0.07
+          },
+          "materials": [
+            "Prop_cookie_chip",
+            "Prop_cookie_dough"
+          ],
+          "transforms": [
+            {
+              "name": "cookie",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "cookie.glb",
+        "file_bytes": 14836,
+        "expected": {
+          "vertices": 98,
+          "triangles": 192,
+          "dimensions_m": {
+            "x": 0.07000000029802322,
+            "y": 0.06885603070259094,
+            "z": 0.009372258558869362,
+            "longest": 0.07000000029802322
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 490,
+          "triangles": 192,
+          "world_min_m": [
+            -0.035,
+            -0.034428,
+            -0.004686
+          ],
+          "world_max_m": [
+            0.035,
+            0.034428,
+            0.004686
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.07,
+            "y": 0.068856,
+            "z": 0.009372,
+            "longest": 0.07
+          },
+          "materials": [
+            "Prop_cookie_chip",
+            "Prop_cookie_dough"
+          ],
+          "transforms": [
+            {
+              "name": "cookie",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      }
+    },
+    "apple": {
+      "fbx": {
+        "format": "fbx",
+        "file": "apple.fbx",
+        "file_bytes": 20188,
+        "expected": {
+          "vertices": 142,
+          "triangles": 280,
+          "dimensions_m": {
+            "x": 0.07999999821186066,
+            "y": 0.07799423485994339,
+            "z": 0.0788944736123085,
+            "longest": 0.07999999821186066
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 142,
+          "triangles": 280,
+          "world_min_m": [
+            -0.04,
+            -0.038997,
+            -0.039447
+          ],
+          "world_max_m": [
+            0.04,
+            0.038997,
+            0.039447
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.08,
+            "y": 0.077994,
+            "z": 0.078894,
+            "longest": 0.08
+          },
+          "materials": [
+            "Prop_apple_skin",
+            "Prop_apple_stem"
+          ],
+          "transforms": [
+            {
+              "name": "apple",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "apple.glb",
+        "file_bytes": 7324,
+        "expected": {
+          "vertices": 142,
+          "triangles": 280,
+          "dimensions_m": {
+            "x": 0.07999999821186066,
+            "y": 0.07799423485994339,
+            "z": 0.0788944736123085,
+            "longest": 0.07999999821186066
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 156,
+          "triangles": 280,
+          "world_min_m": [
+            -0.04,
+            -0.038997,
+            -0.039447
+          ],
+          "world_max_m": [
+            0.04,
+            0.038997,
+            0.039447
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.08,
+            "y": 0.077994,
+            "z": 0.078894,
+            "longest": 0.08
+          },
+          "materials": [
+            "Prop_apple_skin",
+            "Prop_apple_stem"
+          ],
+          "transforms": [
+            {
+              "name": "apple",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      }
+    },
+    "orange": {
+      "fbx": {
+        "format": "fbx",
+        "file": "orange.fbx",
+        "file_bytes": 20268,
+        "expected": {
+          "vertices": 146,
+          "triangles": 288,
+          "dimensions_m": {
+            "x": 0.07999999821186066,
+            "y": 0.07999999821186066,
+            "z": 0.07741688191890717,
+            "longest": 0.07999999821186066
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 146,
+          "triangles": 288,
+          "world_min_m": [
+            -0.04,
+            -0.04,
+            -0.038708
+          ],
+          "world_max_m": [
+            0.04,
+            0.04,
+            0.038708
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.08,
+            "y": 0.08,
+            "z": 0.077417,
+            "longest": 0.08
+          },
+          "materials": [
+            "Prop_orange_rind"
+          ],
+          "transforms": [
+            {
+              "name": "orange",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "orange.glb",
+        "file_bytes": 18200,
+        "expected": {
+          "vertices": 146,
+          "triangles": 288,
+          "dimensions_m": {
+            "x": 0.07999999821186066,
+            "y": 0.07999999821186066,
+            "z": 0.07741688191890717,
+            "longest": 0.07999999821186066
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 640,
+          "triangles": 288,
+          "world_min_m": [
+            -0.04,
+            -0.04,
+            -0.038708
+          ],
+          "world_max_m": [
+            0.04,
+            0.04,
+            0.038708
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.08,
+            "y": 0.08,
+            "z": 0.077417,
+            "longest": 0.08
+          },
+          "materials": [
+            "Prop_orange_rind"
+          ],
+          "transforms": [
+            {
+              "name": "orange",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      }
+    },
+    "pear": {
+      "fbx": {
+        "format": "fbx",
+        "file": "pear.fbx",
+        "file_bytes": 20204,
+        "expected": {
+          "vertices": 142,
+          "triangles": 280,
+          "dimensions_m": {
+            "x": 0.05499999597668648,
+            "y": 0.05362103134393692,
+            "z": 0.08999999612569809,
+            "longest": 0.08999999612569809
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 142,
+          "triangles": 280,
+          "world_min_m": [
+            -0.0275,
+            -0.026811,
+            -0.045
+          ],
+          "world_max_m": [
+            0.0275,
+            0.026811,
+            0.045
+          ],
+          "bbox_center_m": [
+            0.0,
+            -0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.055,
+            "y": 0.053621,
+            "z": 0.09,
+            "longest": 0.09
+          },
+          "materials": [
+            "Prop_pear_skin",
+            "Prop_pear_stem"
+          ],
+          "transforms": [
+            {
+              "name": "pear",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "pear.glb",
+        "file_bytes": 7316,
+        "expected": {
+          "vertices": 142,
+          "triangles": 280,
+          "dimensions_m": {
+            "x": 0.05499999597668648,
+            "y": 0.05362103134393692,
+            "z": 0.08999999612569809,
+            "longest": 0.08999999612569809
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 156,
+          "triangles": 280,
+          "world_min_m": [
+            -0.0275,
+            -0.026811,
+            -0.045
+          ],
+          "world_max_m": [
+            0.0275,
+            0.026811,
+            0.045
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.055,
+            "y": 0.053621,
+            "z": 0.09,
+            "longest": 0.09
+          },
+          "materials": [
+            "Prop_pear_skin",
+            "Prop_pear_stem"
+          ],
+          "transforms": [
+            {
+              "name": "pear",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      }
+    },
+    "banana": {
+      "fbx": {
+        "format": "fbx",
+        "file": "banana.fbx",
+        "file_bytes": 20956,
+        "expected": {
+          "vertices": 152,
+          "triangles": 300,
+          "dimensions_m": {
+            "x": 0.17999999225139618,
+            "y": 0.06779100000858307,
+            "z": 0.03201640397310257,
+            "longest": 0.17999999225139618
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 152,
+          "triangles": 300,
+          "world_min_m": [
+            -0.09,
+            -0.033896,
+            -0.016008
+          ],
+          "world_max_m": [
+            0.09,
+            0.033896,
+            0.016008
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            -0.0
+          ],
+          "dimensions_m": {
+            "x": 0.18,
+            "y": 0.067791,
+            "z": 0.032016,
+            "longest": 0.18
+          },
+          "materials": [
+            "Prop_banana_skin"
+          ],
+          "transforms": [
+            {
+              "name": "banana",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "banana.glb",
+        "file_bytes": 6564,
+        "expected": {
+          "vertices": 152,
+          "triangles": 300,
+          "dimensions_m": {
+            "x": 0.17999999225139618,
+            "y": 0.06779100000858307,
+            "z": 0.03201640397310257,
+            "longest": 0.17999999225139618
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 152,
+          "triangles": 300,
+          "world_min_m": [
+            -0.09,
+            -0.033896,
+            -0.016008
+          ],
+          "world_max_m": [
+            0.09,
+            0.033896,
+            0.016008
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.18,
+            "y": 0.067791,
+            "z": 0.032016,
+            "longest": 0.18
+          },
+          "materials": [
+            "Prop_banana_skin"
+          ],
+          "transforms": [
+            {
+              "name": "banana",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 1
+        },
+        "ok": true
+      }
+    },
+    "watermelon": {
+      "fbx": {
+        "format": "fbx",
+        "file": "watermelon.fbx",
+        "file_bytes": 24780,
+        "expected": {
+          "vertices": 266,
+          "triangles": 528,
+          "dimensions_m": {
+            "x": 0.29999998211860657,
+            "y": 0.2399999499320984,
+            "z": 0.21999990940093994,
+            "longest": 0.29999998211860657
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 266,
+          "triangles": 528,
+          "world_min_m": [
+            -0.15,
+            -0.12,
+            -0.11
+          ],
+          "world_max_m": [
+            0.15,
+            0.12,
+            0.11
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.3,
+            "y": 0.24,
+            "z": 0.22,
+            "longest": 0.3
+          },
+          "materials": [
+            "Prop_watermelon_rind",
+            "Prop_watermelon_stripe"
+          ],
+          "transforms": [
+            {
+              "name": "watermelon",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                90.0,
+                -0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": true,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      },
+      "glb": {
+        "format": "glb",
+        "file": "watermelon.glb",
+        "file_bytes": 14700,
+        "expected": {
+          "vertices": 266,
+          "triangles": 528,
+          "dimensions_m": {
+            "x": 0.29999998211860657,
+            "y": 0.2399999499320984,
+            "z": 0.21999990940093994,
+            "longest": 0.29999998211860657
+          },
+          "pivot": "center",
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "measured": {
+          "mesh_objects": 1,
+          "other_object_types": [],
+          "vertices": 400,
+          "triangles": 528,
+          "world_min_m": [
+            -0.15,
+            -0.12,
+            -0.11
+          ],
+          "world_max_m": [
+            0.15,
+            0.12,
+            0.11
+          ],
+          "bbox_center_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "dimensions_m": {
+            "x": 0.3,
+            "y": 0.24,
+            "z": 0.22,
+            "longest": 0.3
+          },
+          "materials": [
+            "Prop_watermelon_rind",
+            "Prop_watermelon_stripe"
+          ],
+          "transforms": [
+            {
+              "name": "watermelon",
+              "location": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_euler_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "scale": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          ]
+        },
+        "checks": {
+          "triangles_match": true,
+          "vertices_match": false,
+          "dimensions_match": true,
+          "pivot_ok": true,
+          "mesh_objects": 1,
+          "no_extra_object_types": true,
+          "materials_imported": 2
+        },
+        "ok": true
+      }
+    }
+  },
+  "all_ok": true
+}

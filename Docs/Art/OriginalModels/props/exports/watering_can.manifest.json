@@ -1,23 +1,23 @@
 {
   "id": "watering_can",
-  "pivot": "base",
+  "pivot": "center",
   "target_longest_m": 0.58,
   "dimensions_m": {
     "x": 0.2602749466896057,
-    "y": 0.5800000131130219,
+    "y": 0.5800000429153442,
     "z": 0.41543886065483093,
-    "longest": 0.5800000131130219
+    "longest": 0.5800000429153442
   },
   "bounds_m": {
     "min": [
       -0.13013747334480286,
-      -0.13013747334480286,
-      0.0
+      -0.2900000214576721,
+      -0.20771943032741547
     ],
     "max": [
       0.13013747334480286,
-      0.449862539768219,
-      0.41543886065483093
+      0.2900000214576721,
+      0.20771943032741547
     ]
   },
   "vertices": 173,
@@ -40,7 +40,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "568d116b9e468f035445eba69d127161b77f9c6fe938849478e6eab60699df24",
+  "geometry_sha256": "423b89879f7383d862bd42e798a6ed576a70ba2a5de212afb0de31b3b03ecd00",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "洒水壶",
   "category": "garden",
@@ -52,9 +52,12 @@
     "row_found": true
   },
   "dimension_check": {
+    "size_reference": "game",
+    "checked_against": "game_longest_dim_m",
     "target_m": 0.58,
-    "built_longest_m": 0.5800000131130219,
-    "abs_error_m": 1.3113021890553966e-08,
+    "built_longest_m": 0.5800000429153442,
+    "abs_error_m": 4.291534427824928e-08,
+    "csv_target_matches": true,
     "csv_game_longest_matches": true,
     "scale_vs_real_m": 2.32
   },
@@ -76,9 +79,9 @@
   "build_script": "models/watering_can.py",
   "preview": "previews/watering_can_preview.png",
   "files": {
-    "watering_can.fbx": 22172,
-    "watering_can.glb": 18572,
-    "watering_can.blend": 420664
+    "watering_can.fbx": 22652,
+    "watering_can.glb": 18592,
+    "watering_can.blend": 95006
   },
   "export_settings": {
     "fbx": {
@@ -93,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "3.6.21"
+    "blender": "5.3.0"
   },
-  "preview_bytes": 165146
+  "preview_bytes": 126177
 }

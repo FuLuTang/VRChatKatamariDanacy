@@ -1,0 +1,102 @@
+{
+  "id": "orange",
+  "pivot": "center",
+  "target_longest_m": 0.08,
+  "dimensions_m": {
+    "x": 0.07999999821186066,
+    "y": 0.07999999821186066,
+    "z": 0.07741688191890717,
+    "longest": 0.07999999821186066
+  },
+  "bounds_m": {
+    "min": [
+      -0.03999999910593033,
+      -0.03999999910593033,
+      -0.03870844095945358
+    ],
+    "max": [
+      0.03999999910593033,
+      0.03999999910593033,
+      0.03870844095945358
+    ]
+  },
+  "vertices": 146,
+  "triangles": 288,
+  "materials": [
+    "Prop_orange_rind"
+  ],
+  "material_base_colors": {
+    "Prop_orange_rind": [
+      0.52,
+      0.16,
+      0.02
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "9a270d5547158aad154e038312facdeeda62b4f4655bd14d8009a9f19313f288",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "橙子",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.08,
+    "game_longest_dim_m": 0.3,
+    "sourcing_hint": "model ourselves：Ø8 cm 球，表面 8 条浅瓣线",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.08,
+    "built_longest_m": 0.07999999821186066,
+    "abs_error_m": 1.7881393449270533e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "rind",
+      "name_zh": "橙皮",
+      "linear_rgb": [
+        0.52,
+        0.16,
+        0.02
+      ],
+      "roughness": 0.7
+    }
+  ],
+  "notes": "A 0.08 m sphere squashed to 0.072 m tall, so the longest edge is the diameter.  Eight cosine grooves on 24 meridians keep the triangle count at 288 within the 300 budget; the dip is 9 % of the radius (about 3 mm), applied at every sampled height so the crease follows the meridian instead of pinching one ring.",
+  "build_script": "models/orange.py",
+  "preview": "previews/orange_preview.png",
+  "files": {
+    "orange.fbx": 20268,
+    "orange.glb": 18200,
+    "orange.blend": 93273
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 180154
+}

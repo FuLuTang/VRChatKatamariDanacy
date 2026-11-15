@@ -11,7 +11,6 @@ CSV_REAL_LONGEST_M = 0.04
 CSV_GAME_LONGEST_M = 0.06
 SOURCING = 'Kenney Nature Kit rock_small*（渲染不符，需人工复核）或 model ourselves'
 TARGET_LONGEST_M = 0.06
-PIVOT = 'base'
 TRI_BUDGET = 300
 MATERIALS = [
     {'key': 'stone', 'name_zh': '灰石', 'linear_rgb': [0.20, 0.20, 0.19],

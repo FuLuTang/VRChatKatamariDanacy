@@ -19,7 +19,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import prop_lib as lib          # noqa: E402
-import models as propmodels     # noqa: E402
+import build_all                # noqa: E402
 
 TOL = 5e-4
 
@@ -41,6 +41,7 @@ def scene_measure():
         'triangles': tris,
         'world_min_m': [round(v, 6) for v in mn],
         'world_max_m': [round(v, 6) for v in mx],
+        'bbox_center_m': [round((mn[i] + mx[i]) / 2, 6) for i in range(3)],
         'dimensions_m': {
             'x': round(mx[0] - mn[0], 6),
             'y': round(mx[1] - mn[1], 6),
@@ -61,13 +62,15 @@ def scene_measure():
 def check(pid, manifest, measured, kind):
     dims_ok = all(abs(measured['dimensions_m'][k] - manifest['dimensions_m'][k])
                   < TOL for k in ('x', 'y', 'z'))
+    # Pivot contract (2026-11-15): every prop is placed at its AABB centre, so
+    # the imported geometry's bounds centre must sit at the origin.  Check the
+    # measured world bounds rather than the object origin: the FBX importer is
+    # free to put the object's origin wherever it likes, but the scene uses the
+    # geometry, and a base-pivot export would show up as a centre at half the
+    # height.
     pivot = manifest['pivot']
-    if pivot == 'base':
-        pivot_ok = abs(measured['world_min_m'][2]) < TOL
-    else:
-        center = [(measured['world_min_m'][i] + measured['world_max_m'][i]) / 2
-                  for i in range(3)]
-        pivot_ok = all(abs(c) < TOL for c in center)
+    centre = measured['bbox_center_m']
+    pivot_ok = all(abs(c) < TOL for c in centre)
     flags = {
         'triangles_match': measured['triangles'] == manifest['triangles'],
         'vertices_match': measured['vertices'] == manifest['vertices'],
@@ -87,6 +90,7 @@ def check(pid, manifest, measured, kind):
             'triangles': manifest['triangles'],
             'dimensions_m': manifest['dimensions_m'],
             'pivot': pivot,
+            'bbox_center_m': [0.0, 0.0, 0.0],
         },
         'measured': measured,
         'checks': flags,
@@ -97,16 +101,23 @@ def check(pid, manifest, measured, kind):
 
 
 def main():
+    # Read the same deliverables the build wrote: --out / OUT_DIR redirects both
+    # the exports/previews tree and this report, so an out-of-repo build is
+    # verified in place instead of checking the committed repo copies.
+    root = build_all.configure_output()
+    pids = build_all.selected_props()
+    print('VERIFY_ROOT %s' % root, flush=True)
     report = {
         'note': 'FBX/GLB were re-imported into fresh factory-empty Blender '
                 'scenes; counts are from the imported datablocks, not from the '
                 'export manifest.',
         'tolerance_m': TOL,
         'blender_version': bpy.app.version_string,
+        'output_root': root,
         'props': {},
     }
     all_ok = True
-    for pid in propmodels.ORDER:
+    for pid in pids:
         with open(os.path.join(lib.EXPORT_DIR, pid + '.manifest.json'),
                   encoding='utf-8') as fh:
             manifest = json.load(fh)
@@ -126,7 +137,7 @@ def main():
                  for k in ('x', 'y', 'z')], result['ok']), flush=True)
         report['props'][pid] = entry
     report['all_ok'] = all_ok
-    with open(os.path.join(lib.ROOT, 'verification.json'), 'w',
+    with open(os.path.join(root, 'verification.json'), 'w',
               encoding='utf-8') as fh:
         json.dump(report, fh, ensure_ascii=False, indent=2)
     print('VERIFY_ALL_OK' if all_ok else 'VERIFY_FAILED', flush=True)

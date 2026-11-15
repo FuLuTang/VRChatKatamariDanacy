@@ -1,0 +1,118 @@
+{
+  "id": "strawberry",
+  "pivot": "center",
+  "target_longest_m": 0.04,
+  "dimensions_m": {
+    "x": 0.03620000183582306,
+    "y": 0.03575972467660904,
+    "z": 0.03999999910593033,
+    "longest": 0.03999999910593033
+  },
+  "bounds_m": {
+    "min": [
+      -0.01810000091791153,
+      -0.01787986233830452,
+      -0.019999999552965164
+    ],
+    "max": [
+      0.01810000091791153,
+      0.01787986233830452,
+      0.019999999552965164
+    ]
+  },
+  "vertices": 122,
+  "triangles": 240,
+  "materials": [
+    "Prop_strawberry_skin",
+    "Prop_strawberry_calyx"
+  ],
+  "material_base_colors": {
+    "Prop_strawberry_skin": [
+      0.42,
+      0.03,
+      0.04
+    ],
+    "Prop_strawberry_calyx": [
+      0.055,
+      0.13,
+      0.03
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "cf1724c917ba0af25349b793df23f574722631f294fa110fd847dd081bf98e4a",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "草莓",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.04,
+    "game_longest_dim_m": 0.06,
+    "sourcing_hint": "model ourselves：4 cm 高心形旋转体 + 5 片萼，单壳",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.04,
+    "built_longest_m": 0.03999999910593033,
+    "abs_error_m": 8.940696724635266e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 250,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "skin",
+      "name_zh": "草莓红",
+      "linear_rgb": [
+        0.42,
+        0.03,
+        0.04
+      ],
+      "roughness": 0.45
+    },
+    {
+      "key": "calyx",
+      "name_zh": "萼片绿",
+      "linear_rgb": [
+        0.055,
+        0.13,
+        0.03
+      ],
+      "roughness": 0.7
+    }
+  ],
+  "notes": "Blunt tip at z=0, widest at 66 % of the 4 cm height, shoulder at z=3.25 cm, neck at z=3.45 cm.  The five sepal points flare to r=1.9 cm at z=3.45 cm, 2 mm above the shoulder, then the crown closes at z=4 cm.  The ring is a shallow scallop (valleys at 75 % of the point radius), and green is restricted to five leaf sectors (two faces each), so the red top is visible in the notches between the sepals instead of forming a green helmet.  One shell.",
+  "build_script": "models/strawberry.py",
+  "preview": "previews/strawberry_preview.png",
+  "files": {
+    "strawberry.fbx": 19756,
+    "strawberry.glb": 7168,
+    "strawberry.blend": 93646
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 177039
+}

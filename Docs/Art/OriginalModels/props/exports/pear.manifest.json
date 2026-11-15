@@ -1,0 +1,118 @@
+{
+  "id": "pear",
+  "pivot": "center",
+  "target_longest_m": 0.09,
+  "dimensions_m": {
+    "x": 0.05499999597668648,
+    "y": 0.05362103134393692,
+    "z": 0.08999999612569809,
+    "longest": 0.08999999612569809
+  },
+  "bounds_m": {
+    "min": [
+      -0.02749999798834324,
+      -0.02681051567196846,
+      -0.044999998062849045
+    ],
+    "max": [
+      0.02749999798834324,
+      0.02681051567196846,
+      0.044999998062849045
+    ]
+  },
+  "vertices": 142,
+  "triangles": 280,
+  "materials": [
+    "Prop_pear_skin",
+    "Prop_pear_stem"
+  ],
+  "material_base_colors": {
+    "Prop_pear_skin": [
+      0.46,
+      0.4,
+      0.1
+    ],
+    "Prop_pear_stem": [
+      0.1,
+      0.06,
+      0.02
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "6fbeaea6bc91ad0cafd98b6e3718fb4884c2456d5f86c568c99a25328f10b849",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "梨",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.09,
+    "game_longest_dim_m": 0.32,
+    "sourcing_hint": "model ourselves：8 cm 高钟形旋转体，最粗 Ø5.5",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.09,
+    "built_longest_m": 0.08999999612569809,
+    "abs_error_m": 3.8743019070697216e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "skin",
+      "name_zh": "梨皮黄绿",
+      "linear_rgb": [
+        0.46,
+        0.4,
+        0.1
+      ],
+      "roughness": 0.55
+    },
+    {
+      "key": "stem",
+      "name_zh": "果梗褐",
+      "linear_rgb": [
+        0.1,
+        0.06,
+        0.02
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "Body 8 cm tall and 5.5 cm at the widest (z = 25 mm), stem 1.5 cm on the axis, so the 9 cm real-size target is the height.  The stem is the top of the same profile, capped flat; colour split by height.",
+  "build_script": "models/pear.py",
+  "preview": "previews/pear_preview.png",
+  "files": {
+    "pear.fbx": 20204,
+    "pear.glb": 7316,
+    "pear.blend": 94532
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 135909
+}

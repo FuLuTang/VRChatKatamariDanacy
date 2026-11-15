@@ -9,7 +9,6 @@ CSV_REAL_LONGEST_M = 0.03
 CSV_GAME_LONGEST_M = 0.05
 SOURCING = 'model ourselves：0.05 m 橡子（低面数旋转体）'
 TARGET_LONGEST_M = 0.05
-PIVOT = 'base'
 TRI_BUDGET = 300
 MATERIALS = [
     {'key': 'nut', 'name_zh': '橡子果肉', 'linear_rgb': [0.36, 0.18, 0.06],

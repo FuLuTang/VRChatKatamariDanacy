@@ -16,6 +16,7 @@ import hashlib
 import json
 import math
 import os
+import sys
 from mathutils import Matrix, Vector
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -62,6 +63,27 @@ def reset_scene():
     # no .blend1 backups: the exports directory only holds deliverables
     bpy.context.preferences.filepaths.save_version = 0
     ensure_dirs()
+
+
+def script_args(argv=None):
+    """Arguments Blender forwards after its ``--`` separator (may be empty)."""
+    argv = sys.argv if argv is None else list(argv)
+    if '--' not in argv:
+        return []
+    return argv[argv.index('--') + 1:]
+
+
+def cli_option(name, default=None, argv=None):
+    """Value of ``--name VALUE`` or ``--name=VALUE`` given after ``--``."""
+    args = script_args(argv)
+    for index, arg in enumerate(args):
+        if arg == name:
+            if index + 1 >= len(args):
+                raise ValueError('%s needs a value argument' % name)
+            return args[index + 1]
+        if arg.startswith(name + '='):
+            return arg.split('=', 1)[1]
+    return default
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +170,13 @@ def icosphere(subdivisions, radius):
     return _sphere_ico(subdivisions, radius)
 
 
-def tube(points, radii, segments=8, cap_start=True, cap_end=True):
-    """Sweep a circular section along a polyline using parallel transport."""
+def tube(points, radii, segments=8, cap_start=True, cap_end=True,
+         section_fn=None):
+    """Sweep a circular section along a polyline using parallel transport.
+
+    ``section_fn(point_index, angle, radius)`` may modulate the section radius
+    per path point and per angle around the axis (banana ridges, flat straps).
+    """
     pts = [Vector(p) for p in points]
     if len(pts) < 2 or len(radii) != len(pts):
         raise ValueError('tube needs >=2 points and one radius per point')
@@ -183,8 +210,9 @@ def tube(points, radii, segments=8, cap_start=True, cap_end=True):
         ring = []
         for j in range(segments):
             a = TAU * j / segments
-            ring.append(bm.verts.new(p + normal * (math.cos(a) * r)
-                                     + binormal * (math.sin(a) * r)))
+            rr = r if section_fn is None else section_fn(i, a, r)
+            ring.append(bm.verts.new(p + normal * (math.cos(a) * rr)
+                                     + binormal * (math.sin(a) * rr)))
         rings.append(ring)
 
     for k in range(len(rings) - 1):
@@ -244,6 +272,118 @@ def sheet(nx, ny, x0, x1, y0, y1, top_fn, bottom_fn=None, thickness=None):
         bm.faces.new((top[j][nx], bottom[j][nx], bottom[j + 1][nx],
                       top[j + 1][nx]))
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    return bm
+
+
+# ---------------------------------------------------------------------------
+# disc slab / blob cluster
+# ---------------------------------------------------------------------------
+
+def disc_grid(segments, ring_fractions, top_fn, bottom_z, radius=1.0,
+              radius_fn=None):
+    """Closed disc slab: polar height-field top, flat bottom, outer rim.
+
+    ``ring_fractions`` are the ring radii as fractions of the outline radius,
+    ascending, the last one being the outer edge.  ``radius_fn(angle)`` may make
+    the outline wavy (a crumbly cookie edge).  ``top_fn(x, y)`` gives the top
+    height, so dents and domes are sampled straight out of the grid.
+
+    The underside is the single flat plane ``z = bottom_z`` closed by one fan
+    instead of a mirrored vertex grid: for a flat-bottomed food prop that halves
+    the triangle count, which is what the tiny-prop budgets need, and the slab
+    stays watertight.
+    """
+    if not ring_fractions or ring_fractions[-1] > 1.0 + 1e-9:
+        raise ValueError('ring_fractions must end at 1.0 or below')
+    bm = bmesh.new()
+
+    def outline(a):
+        return radius if radius_fn is None else radius_fn(a)
+
+    angles = [TAU * i / segments for i in range(segments)]
+    top_rings = []
+    for f in ring_fractions:
+        ring = []
+        for a in angles:
+            r = outline(a) * f
+            x, y = r * math.cos(a), r * math.sin(a)
+            ring.append(bm.verts.new((x, y, top_fn(x, y))))
+        top_rings.append(ring)
+
+    edge = ring_fractions[-1]
+    bottom_ring = []
+    for a in angles:
+        r = outline(a) * edge
+        bottom_ring.append(bm.verts.new(
+            (r * math.cos(a), r * math.sin(a), bottom_z)))
+
+    ctop = bm.verts.new((0.0, 0.0, top_fn(0.0, 0.0)))
+    cbot = bm.verts.new((0.0, 0.0, bottom_z))
+
+    for i in range(segments):
+        j = (i + 1) % segments
+        bm.faces.new((ctop, top_rings[0][i], top_rings[0][j]))
+    for k in range(len(top_rings) - 1):
+        lo, up = top_rings[k], top_rings[k + 1]
+        for i in range(segments):
+            j = (i + 1) % segments
+            bm.faces.new((lo[i], lo[j], up[j], up[i]))
+    for i in range(segments):
+        j = (i + 1) % segments
+        bm.faces.new((cbot, bottom_ring[j], bottom_ring[i]))
+    top_out = top_rings[-1]
+    for i in range(segments):
+        j = (i + 1) % segments
+        bm.faces.new((top_out[i], top_out[j], bottom_ring[j], bottom_ring[i]))
+
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    return bm
+
+
+def metaball_cluster(spheres, resolution, threshold=0.6, stiffness=2.0,
+                     target_tris=None):
+    """Fuse overlapping spheres into one closed shell through a metaball.
+
+    ``spheres`` = [(centre, radius)] in metres.  Blender evaluates the metaball
+    field and tessellates the iso-surface, so neighbouring parts join with a
+    visible neck instead of a boolean seam - a bunch of grapes needs eight
+    merged berries, which an Exact boolean union cannot afford within the tri
+    budget.  The element radius is the *field* radius; the rendered surface of a
+    lone element sits at about 0.58 x radius for threshold 0.6 / stiffness 2.0,
+    so pass spheres about 1.75x the wanted visible radius.
+
+    ``target_tris`` may collapse the tessellation with a Decimate modifier when
+    the requested ``resolution`` overshoots the budget.  No randomness is
+    involved (metaball tessellation and Decimate are deterministic), so repeated
+    builds give the same geometry digest.
+    """
+    mb = bpy.data.metaballs.new('BlobCluster')
+    mb.resolution = resolution
+    mb.threshold = threshold
+    ob = bpy.data.objects.new('BlobCluster', mb)
+    bpy.context.collection.objects.link(ob)
+    for centre, radius in spheres:
+        el = mb.elements.new(type='BALL')
+        el.co = Vector(centre)
+        el.radius = radius
+        el.stiffness = stiffness
+
+    bpy.ops.object.select_all(action='DESELECT')
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.convert(target='MESH')
+    ob = bpy.context.view_layer.objects.active
+    if target_tris:
+        me = ob.data
+        tris = sum(max(0, len(p.vertices) - 2) for p in me.polygons)
+        if tris > target_tris:
+            mod = ob.modifiers.new('tri_budget', 'DECIMATE')
+            mod.decimate_type = 'COLLAPSE'
+            mod.ratio = max(0.02, float(target_tris) / float(tris))
+            bpy.ops.object.modifier_apply(modifier=mod.name)
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bpy.data.objects.remove(ob, do_unlink=True)
     return bm
 
 
@@ -316,7 +456,7 @@ class Builder:
                 self.objs.remove(tool)
             bpy.data.objects.remove(tool, do_unlink=True)
 
-    def finish(self, target_longest_m, pivot='base'):
+    def finish(self, target_longest_m):
         bpy.ops.object.select_all(action='DESELECT')
         for ob in self.objs:
             ob.select_set(True)
@@ -351,14 +491,23 @@ class Builder:
         for v in me.vertices:
             v.co = v.co * s
 
-        mn, mx = bounds(me)
-        if pivot == 'center':
-            c = (mn + mx) * 0.5
-            for v in me.vertices:
-                v.co = v.co - c
-        else:
-            for v in me.vertices:
-                v.co.z -= mn.z
+        # Every prop is pivot-centred: the scene places a prop at its AABB
+        # centre and the runtime contact test treats itemPosition as that
+        # centre, so the origin must be the geometric bounds centre, never the
+        # bottom.  This happens once here for every model, after
+        # transform_apply as required.  origin_set moves the origin to the
+        # bounds centre while the object is still at that centre; resetting the
+        # location to zero then puts the bounds centre - and therefore the
+        # origin - at the world origin.  That second step matters because the
+        # FBX/GLB exporters bake the object transform: leaving the object at
+        # the old centre would bake an offset into the exported mesh.
+        bpy.ops.object.select_all(action='DESELECT')
+        ob.select_set(True)
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
+        ob.location = (0.0, 0.0, 0.0)
+        me.update()
+
         me.validate(verbose=False)
         me.update()
         self.object = ob
@@ -366,7 +515,7 @@ class Builder:
         mn, mx = bounds(me)
         info = {
             'id': self.pid,
-            'pivot': 'base' if pivot == 'base' else 'center',
+            'pivot': 'center',
             'target_longest_m': target_longest_m,
             'dimensions_m': {
                 'x': mx.x - mn.x, 'y': mx.y - mn.y, 'z': mx.z - mn.z,

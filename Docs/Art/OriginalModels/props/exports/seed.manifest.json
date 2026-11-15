@@ -52,9 +52,12 @@
     "row_found": true
   },
   "dimension_check": {
+    "size_reference": "game",
+    "checked_against": "game_longest_dim_m",
     "target_m": 0.04,
     "built_longest_m": 0.03999999910593033,
     "abs_error_m": 8.940696724635266e-10,
+    "csv_target_matches": true,
     "csv_game_longest_matches": true,
     "scale_vs_real_m": 2.0
   },
@@ -76,9 +79,9 @@
   "build_script": "models/seed.py",
   "preview": "previews/seed_preview.png",
   "files": {
-    "seed.fbx": 17868,
+    "seed.fbx": 17228,
     "seed.glb": 3744,
-    "seed.blend": 406588
+    "seed.blend": 90773
   },
   "export_settings": {
     "fbx": {
@@ -93,7 +96,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "3.6.21"
+    "blender": "5.3.0"
   },
-  "preview_bytes": 147976
+  "preview_bytes": 102472
 }

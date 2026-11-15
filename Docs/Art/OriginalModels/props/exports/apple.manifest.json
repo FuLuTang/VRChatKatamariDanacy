@@ -1,0 +1,118 @@
+{
+  "id": "apple",
+  "pivot": "center",
+  "target_longest_m": 0.08,
+  "dimensions_m": {
+    "x": 0.07999999821186066,
+    "y": 0.07799423485994339,
+    "z": 0.0788944736123085,
+    "longest": 0.07999999821186066
+  },
+  "bounds_m": {
+    "min": [
+      -0.03999999910593033,
+      -0.038997117429971695,
+      -0.03944723680615425
+    ],
+    "max": [
+      0.03999999910593033,
+      0.038997117429971695,
+      0.03944723680615425
+    ]
+  },
+  "vertices": 142,
+  "triangles": 280,
+  "materials": [
+    "Prop_apple_skin",
+    "Prop_apple_stem"
+  ],
+  "material_base_colors": {
+    "Prop_apple_skin": [
+      0.4,
+      0.03,
+      0.025
+    ],
+    "Prop_apple_stem": [
+      0.1,
+      0.05,
+      0.02
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "8b98e5f37f74f8a9be2c8cdde67a7961fd3e6a8083a66eab23fb06388db546eb",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "苹果",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.08,
+    "game_longest_dim_m": 0.3,
+    "sourcing_hint": "model ourselves：Ø8 cm 球体压扁 0.9，顶部凹 + 1.5 cm 梗",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.08,
+    "built_longest_m": 0.07999999821186066,
+    "abs_error_m": 1.7881393449270533e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "skin",
+      "name_zh": "苹果红",
+      "linear_rgb": [
+        0.4,
+        0.03,
+        0.025
+      ],
+      "roughness": 0.35
+    },
+    {
+      "key": "stem",
+      "name_zh": "果梗褐",
+      "linear_rgb": [
+        0.1,
+        0.05,
+        0.02
+      ],
+      "roughness": 0.75
+    }
+  ],
+  "notes": "One lathe: body 0.0796 m wide and 0.0785 m tall, a 4.5 mm deep crown crater (rim r=17.5 mm, floor r=8.8 mm) and a stem column rising from the floor to 0.0785 m, capped flat.  The stem must stay below the diameter or finish() would shrink the body to fit 8 cm.  The brown material is the narrow column above the crater floor plus everything above the rim, so the crater wall stays red.",
+  "build_script": "models/apple.py",
+  "preview": "previews/apple_preview.png",
+  "files": {
+    "apple.fbx": 20188,
+    "apple.glb": 7324,
+    "apple.blend": 94562
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 181048
+}

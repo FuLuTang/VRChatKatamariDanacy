@@ -82,19 +82,29 @@ def requested_output(argv=None):
     ``--out DIR`` / ``--out=DIR`` wins over the OUT_DIR environment variable
     (the name generate.py already uses); None keeps the historical default.
     """
-    argv = sys.argv if argv is None else list(argv)
-    if '--' in argv:
-        argv = argv[argv.index('--') + 1:]
-    else:
-        argv = []
-    for index, arg in enumerate(argv):
-        if arg == '--out':
-            if index + 1 >= len(argv):
-                raise BuildInputError('--out needs a directory argument')
-            return argv[index + 1]
-        if arg.startswith('--out='):
-            return arg.split('=', 1)[1]
-    return os.environ.get('OUT_DIR') or None
+    return (lib.cli_option('--out', None, argv)
+            or os.environ.get('OUT_DIR') or None)
+
+
+def selected_props(argv=None):
+    """Prop ids to build, in registry order: ``--props a,b`` filters ORDER.
+
+    Without the flag the whole registry is built, which is the historical
+    behaviour.  A requested id that is not registered is a hard error, so a
+    typo cannot silently produce an empty batch.
+    """
+    wanted = lib.cli_option('--props', None, argv)
+    if not wanted:
+        return list(propmodels.ORDER)
+    ids = [p.strip() for p in wanted.split(',') if p.strip()]
+    if not ids:
+        raise BuildInputError('--props lists no prop ids')
+    unknown = [p for p in ids if p not in propmodels.ORDER]
+    if unknown:
+        raise BuildInputError(
+            'unknown prop(s) in --props: %s (known: %s)'
+            % (', '.join(unknown), ', '.join(propmodels.ORDER)))
+    return [p for p in propmodels.ORDER if p in ids]
 
 
 def configure_output(argv=None):
@@ -107,6 +117,20 @@ def configure_output(argv=None):
     return lib.OUTPUT_ROOT
 
 
+def csv_size(row, column, pid):
+    """Numeric value of one catalog size column; missing data is fatal."""
+    text = (row.get(column) or '').strip()
+    if not text:
+        raise BuildInputError(
+            'prop %r has no %s in %s' % (pid, column, CSV_PATH))
+    try:
+        return float(text)
+    except ValueError:
+        raise BuildInputError(
+            'prop %r has a non-numeric %s %r in %s'
+            % (pid, column, text, CSV_PATH))
+
+
 def build_one(pid, rows=None):
     if rows is None:
         rows = catalog_rows()
@@ -116,21 +140,22 @@ def build_one(pid, rows=None):
             'prop %r is listed in models.ORDER but not in %s (catalog ids: %s); '
             'add the row or drop the prop from models.ORDER'
             % (pid, CSV_PATH, ', '.join(sorted(rows))))
-    csv_game_text = (row.get('game_longest_dim_m') or '').strip()
-    if not csv_game_text:
-        raise BuildInputError(
-            'prop %r has no game_longest_dim_m in %s' % (pid, CSV_PATH))
-    try:
-        csv_game = float(csv_game_text)
-    except ValueError:
-        raise BuildInputError(
-            'prop %r has a non-numeric game_longest_dim_m %r in %s'
-            % (pid, csv_game_text, CSV_PATH))
-    lib.reset_scene()
+    csv_real = csv_size(row, 'real_longest_dim_m', pid)
+    csv_game = csv_size(row, 'game_longest_dim_m', pid)
     mod = propmodels.load(pid)
+    # Which catalog column is the size contract for this prop: the 2026-11-15
+    # plan moved the prop set to real-world sizes, so a model may declare
+    # SIZE_REFERENCE = 'real'.  Models that keep the older game-scale contract
+    # (the first batch) leave it unset and are still checked against
+    # game_longest_dim_m, so their manifests do not change.
+    size_reference = getattr(mod, 'SIZE_REFERENCE', 'game')
+    csv_column = ('real_longest_dim_m' if size_reference == 'real'
+                  else 'game_longest_dim_m')
+    csv_target = csv_real if size_reference == 'real' else csv_game
+    lib.reset_scene()
     b = lib.Builder(pid)
     mod.build(b)
-    info = b.finish(mod.TARGET_LONGEST_M, mod.PIVOT)
+    info = b.finish(mod.TARGET_LONGEST_M)
     ob = b.object
 
     info.update({
@@ -138,21 +163,23 @@ def build_one(pid, rows=None):
         'category': mod.CATEGORY,
         'catalog': {
             'source_csv': 'Docs/Design/Maps/PicnicLawn/prop_catalog.csv',
-            'real_longest_dim_m': mod.CSV_REAL_LONGEST_M,
+            'real_longest_dim_m': csv_real,
             'game_longest_dim_m': csv_game,
             'sourcing_hint': mod.SOURCING,
             'row_found': bool(row),
         },
         'dimension_check': {
+            'size_reference': size_reference,
+            'checked_against': csv_column,
             'target_m': mod.TARGET_LONGEST_M,
             'built_longest_m': info['dimensions_m']['longest'],
             'abs_error_m': abs(info['dimensions_m']['longest']
                                - mod.TARGET_LONGEST_M),
+            'csv_target_matches': (
+                abs(csv_target - mod.TARGET_LONGEST_M) < 1e-9),
             'csv_game_longest_matches': (
-                csv_game is not None
-                and abs(csv_game - mod.TARGET_LONGEST_M) < 1e-9),
-            'scale_vs_real_m': round(
-                mod.TARGET_LONGEST_M / mod.CSV_REAL_LONGEST_M, 3),
+                abs(csv_game - mod.TARGET_LONGEST_M) < 1e-9),
+            'scale_vs_real_m': round(mod.TARGET_LONGEST_M / csv_real, 3),
         },
         'tri_budget': mod.TRI_BUDGET,
         'within_budget': info['triangles'] <= mod.TRI_BUDGET,
@@ -174,13 +201,13 @@ def build_one(pid, rows=None):
         pid, info['triangles'], info['vertices'],
         info['dimensions_m']['longest'],
         info['mesh_checks']['closed_shells']), flush=True)
-    if not info['dimension_check']['csv_game_longest_matches']:
+    if not info['dimension_check']['csv_target_matches']:
         # A mismatch is not fatal, but it must not vanish into the JSON either:
         # the mesh was scaled to models/<id>.py TARGET_LONGEST_M, so one of the
         # two numbers is wrong.
-        print('WARN %-13s built longest %.4f m != CSV game_longest_dim_m %r'
-              % (pid, info['dimensions_m']['longest'], csv_game_text),
-              flush=True)
+        print('WARN %-13s built longest %.4f m != CSV %s %r'
+              % (pid, info['dimensions_m']['longest'], csv_column,
+                 (row.get(csv_column) or '').strip()), flush=True)
     return info
 
 
@@ -240,8 +267,12 @@ def main():
     print('OUTPUT_ROOT %s' % root, flush=True)
     t0 = time.time()
     rows = catalog_rows()
+    pids = selected_props()
+    full_batch = pids == list(propmodels.ORDER)
+    if not full_batch:
+        print('SUBSET %s' % ','.join(pids), flush=True)
     entries = []
-    for pid in propmodels.ORDER:
+    for pid in pids:
         print('=== %s' % pid, flush=True)
         entries.append(build_one(pid, rows))
 
@@ -251,9 +282,12 @@ def main():
                                          os.path.getsize(contact)), flush=True)
 
     doc = {
-        'title': '原创占位小道具（第一批） / original placeholder tiny props',
-        'status': '原创占位，非最终美术；未指定许可；尺度按 prop_catalog.csv 的 '
-                  'game_longest_dim_m 暂定',
+        'title': ('原创占位小道具（第一批） / original placeholder tiny props'
+                  if full_batch else
+                  '原创占位小道具（子集 %d 件） / original placeholder props '
+                  'subset' % len(entries)),
+        'status': '原创占位，非最终美术；未指定许可；尺度按目标最长边（真实尺寸）'
+                  '与 prop_catalog.csv 逐件核对',
         'units': '1 Blender unit = 1 m',
         'axes': {
             'blender': '+Z up, model front faces +Y',
@@ -290,12 +324,18 @@ def main():
 
     print('', flush=True)
     print('%-13s %6s %6s %6s %8s %8s %s' % (
-        'id', 'tris', 'verts', 'budget', 'longest', 'csv', 'ok'), flush=True)
+        'id', 'tris', 'verts', 'budget', 'longest', 'csv_ref', 'ok'), flush=True)
     for e in entries:
+        # Show the catalog column this prop is actually checked against: the
+        # first batch uses game_longest_dim_m, the real-size set uses
+        # real_longest_dim_m.  Printing the game column for both hid which
+        # contract a row belonged to.
+        checked = e['dimension_check']['checked_against']
+        ref = e['catalog']['real_longest_dim_m' if checked == 'real_longest_dim_m'
+                          else 'game_longest_dim_m']
         print('%-13s %6d %6d %6d %8.4f %8s %s' % (
             e['id'], e['triangles'], e['vertices'], e['tri_budget'],
-            e['dimensions_m']['longest'],
-            e['catalog']['game_longest_dim_m'],
+            e['dimensions_m']['longest'], ref,
             'yes' if e['within_budget'] else 'NO'), flush=True)
     print('TOTAL tris=%d props=%d files=%d elapsed=%.1fs' % (
         sum(e['triangles'] for e in entries), len(entries), len(sums),

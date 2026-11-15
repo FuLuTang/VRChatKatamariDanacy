@@ -16,7 +16,6 @@ CSV_REAL_LONGEST_M = 0.10
 CSV_GAME_LONGEST_M = 0.10
 SOURCING = 'model ourselves：单面薄片，双面材质'
 TARGET_LONGEST_M = 0.10
-PIVOT = 'base'
 TRI_BUDGET = 300
 MATERIALS = [
     {'key': 'paper', 'name_zh': '旧纸白', 'linear_rgb': [0.62, 0.60, 0.54],

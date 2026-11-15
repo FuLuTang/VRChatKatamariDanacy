@@ -1,4 +1,4 @@
-"""Prop registry for the first original tiny-prop batch."""
+"""Prop registry for the original prop batches."""
 
 import importlib
 
@@ -11,6 +11,15 @@ ORDER = [
     'toy_ball',
     'napkin',
     'watering_can',
+    # fruit / snack set, real-world sizes (2026-11-15 plan)
+    'strawberry',
+    'grapes',
+    'cookie',
+    'apple',
+    'orange',
+    'pear',
+    'banana',
+    'watermelon',
 ]
 
 

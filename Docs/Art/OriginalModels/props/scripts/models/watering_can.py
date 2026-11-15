@@ -11,7 +11,6 @@ CSV_REAL_LONGEST_M = 0.25
 CSV_GAME_LONGEST_M = 0.58
 SOURCING = 'model ourselves：壶身圆柱 + 壶嘴，0.58 m'
 TARGET_LONGEST_M = 0.58
-PIVOT = 'base'
 TRI_BUDGET = 600
 MATERIALS = [
     {'key': 'enamel', 'name_zh': '灰绿搪瓷', 'linear_rgb': [0.10, 0.16, 0.10],

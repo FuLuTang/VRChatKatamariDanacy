@@ -228,7 +228,7 @@ d     = (6V/π)^(1/3)
 |---|---|---|
 | 单位 / 朝向 | 1 Blender unit = 1 m；+Z 向上；模型正面 +Y | `Docs/Art/OriginalModels/README.md`「临时约定」 |
 | 根对象 | `<名称>_Root`（空物体），网格是它的子物体 | 同上 |
-| 枢轴 | 球类/圆球在几何中心；**其余一律在底面中心、底面贴 z=0** | 同上 |
+| 枢轴 | **所有道具一律在几何包围盒中心**（2026-11-15 用户硬约束：场景按 AABB 中心放置，接触判定把 `itemPosition` 当中心；`prop_lib.Builder.finish()` 统一用 `origin_set(center='BOUNDS')` 后复位到原点，导出时烘焙；不再使用底面中心） | 用户 2026-11-15 指令 + `props/README.md` §2 |
 | 导出 | FBX `Forward=-Z / Up=Y / apply_transform / bake_space_transform`；Unity 端 Rotation=(0,0,0)、Scale=(1,1,1) | 同上 + `props/manifest.json` 的 `axes` |
 | 命名 | 文件与小写 id 一致（`item_apple.fbx` / `item_apple`）；场景里道具名 `prop_<id>_<NN>` | `LEVEL_CONTENT_PLAN.md` §4.2 |
 | 拓扑 | 单一闭合壳、全三角化、无 n-gon、0 非流形边、0 零面积面、法线朝外 | `props/README.md` §3 |

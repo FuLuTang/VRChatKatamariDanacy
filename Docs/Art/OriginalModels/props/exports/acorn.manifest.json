@@ -1,6 +1,6 @@
 {
   "id": "acorn",
-  "pivot": "base",
+  "pivot": "center",
   "target_longest_m": 0.05,
   "dimensions_m": {
     "x": 0.03999999910593033,
@@ -12,12 +12,12 @@
     "min": [
       -0.019999999552965164,
       -0.019021131098270416,
-      0.0
+      -0.02500000037252903
     ],
     "max": [
       0.019999999552965164,
       0.019021131098270416,
-      0.05000000074505806
+      0.02500000037252903
     ]
   },
   "vertices": 112,
@@ -46,7 +46,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "9b1896a61a56b22c3b01cddb741d0a8d6671b528088c450c7d97e344509cbaed",
+  "geometry_sha256": "1ff40f3759cc2afe5d6c279c7261b086652e174f3b87f7fcdb1b3e89b20e62fb",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "橡子",
   "category": "nature",
@@ -58,9 +58,12 @@
     "row_found": true
   },
   "dimension_check": {
+    "size_reference": "game",
+    "checked_against": "game_longest_dim_m",
     "target_m": 0.05,
     "built_longest_m": 0.05000000074505806,
     "abs_error_m": 7.450580569168253e-10,
+    "csv_target_matches": true,
     "csv_game_longest_matches": true,
     "scale_vs_real_m": 1.667
   },
@@ -92,9 +95,9 @@
   "build_script": "models/acorn.py",
   "preview": "previews/acorn_preview.png",
   "files": {
-    "acorn.fbx": 20252,
-    "acorn.glb": 6120,
-    "acorn.blend": 429892
+    "acorn.fbx": 19212,
+    "acorn.glb": 6140,
+    "acorn.blend": 93266
   },
   "export_settings": {
     "fbx": {
@@ -109,7 +112,7 @@
       "export_yup": true,
       "export_apply": true
     },
-    "blender": "3.6.21"
+    "blender": "5.3.0"
   },
-  "preview_bytes": 190267
+  "preview_bytes": 153598
 }

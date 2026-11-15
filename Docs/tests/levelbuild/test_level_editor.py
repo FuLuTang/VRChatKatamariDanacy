@@ -443,12 +443,21 @@ class RealLevelExportTests(unittest.TestCase):
         result = editor.handle({"op": "export", "args": {"to": str(target)}})["result"]
         self.assertTrue(result["wrote"])
         document = json.loads(target.read_text(encoding="utf-8"))
-        self.assertEqual(len(document["props"]), 127)
-        self.assertEqual(len(document["defs"]), 44, "defs[] must survive the export")
-        self.assertEqual(core.value_units_total(document), 1500)
-        self.assertEqual(document["cameras"], core.load_doc(self.LEVEL)["cameras"])
-        self.assertEqual(document["level"]["expected"], {"propCount": 127,
-                                                        "valueUnits": 1500})
+        # The counts are the live level's, so read them off the document instead of
+        # pinning them here: the export must agree with its source, and
+        # ``level.expected`` must agree with the props it describes.
+        source = core.load_doc(self.LEVEL)
+        self.assertTrue(document["props"])
+        self.assertEqual(len(document["props"]), len(source["props"]))
+        self.assertEqual(len(document["defs"]), len(source["defs"]),
+                         "defs[] must survive the export")
+        self.assertEqual(core.value_units_total(document),
+                         sum(prop["valueUnits"] for prop in document["props"]))
+        self.assertEqual(core.value_units_total(document), core.value_units_total(source))
+        self.assertEqual(document["cameras"], source["cameras"])
+        self.assertEqual(document["level"]["expected"],
+                         {"propCount": len(document["props"]),
+                          "valueUnits": core.value_units_total(document)})
         self.assertEqual(target.read_bytes(), self.LEVEL.read_bytes(),
                          "export -> bytes must equal the committed file")
 

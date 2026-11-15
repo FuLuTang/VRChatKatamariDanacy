@@ -10,11 +10,13 @@ This pins the data end of the K7 chain (``PICNIC_CORNER_LEVEL_ONE.md`` section 5
        ``PlacementImporter`` poses the instance
     -> ``PickupFieldHost.propBounds`` -> the axis-aligned blocking/support box.
 
-The first level has exactly one turned prop, ``struct_lounge_chair_01`` (yaw 90).
-Its stored ``aabb`` is 1.60 x 0.35 x 0.60 (the model's own axes) and its world
-footprint is 0.60 x 0.35 x 1.60.  Feeding the already-turned size back through the
-same quat - the double rotation the old section 7 note invited - would give
-0.80 x 0.35 x 0.30, so each test below states one half of the rule numerically.
+The first level has one turned prop whose footprint moves, ``struct_lounge_chair_01``
+(yaw 90); ``serving_tray_01`` is also turned, but only by a 180 deg flip that leaves
+its box unchanged.  The chair's stored ``aabb`` is 1.60 x 0.35 x 0.60 (the model's own
+axes) and its world footprint is 0.60 x 0.35 x 1.60.  Feeding the already-turned size
+back through the same quat - the double rotation the old section 7 note invited -
+would give 0.80 x 0.35 x 0.30, so each test below states one half of the rule
+numerically.
 E7 in ``PICNIC_CORNER_LEVEL_ONE.md`` quotes the same footprint.
 """
 
@@ -158,16 +160,27 @@ class WorldFootprintTests(unittest.TestCase):
 
 
 class RotationInventoryTests(unittest.TestCase):
-    def test_the_lounge_chair_is_the_only_turned_prop(self):
-        # PICNIC_CORNER_LAYOUT section 4.3/7: 126 props at yaw 0 plus this one at 90.
-        # A new yaw is a data decision with a 41 % wider box at 45 deg, so it must be
-        # made deliberately - update this list and the section 7 note together.
+    def test_only_the_deliberate_props_are_turned(self):
+        # PICNIC_CORNER_LAYOUT section 4.3/7: every prop is at yaw 0 except the
+        # lounge chair at 90.  A new yaw is a data decision with a 41 % wider box at
+        # 45 deg, so it must be made deliberately - update this list and the section
+        # 7 note together.  The serving tray on the bench is set upside down (a 180
+        # deg flip about x), which turns the box without moving its footprint.
         level = load_level()
         turned = [prop["itemId"] for prop in level["props"] if is_turned(prop["rotationQuat"])]
-        self.assertEqual(turned, [LOUNGE_CHAIR],
+        self.assertEqual(turned, ["serving_tray_01", LOUNGE_CHAIR],
                          "the first level is authored with yaw 0 everywhere except the "
-                         "lounge chair; a new turned prop changes its world footprint, "
-                         "the blocking box and the section 7 note")
+                         "lounge chair; a new yaw changes its world footprint, the "
+                         "blocking box and the section 7 note")
+        tray = find_prop(level, "serving_tray_01")
+        self.assertAlmostEqual(tray["rotationQuat"][0], 1.0, delta=1e-6)
+        self.assertEqual(tray["rotationQuat"][1:], [0.0, 0.0, 0.0])
+        self.assertAlmostEqual(core.absorb_diameter_req(tuple(tray["aabb"])),
+                               core.absorb_diameter_req(box_size(world_box(tray))),
+                               delta=1e-5)
+        world_size = box_size(world_box(tray))
+        for axis, stored in enumerate(tray["aabb"]):
+            self.assertAlmostEqual(world_size[axis], stored, delta=TOLERANCE_M)
 
 
 if __name__ == "__main__":

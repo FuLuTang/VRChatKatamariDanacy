@@ -37,8 +37,8 @@
       "blocking": 6
     },
     "expected": {
-      "propCount": 127,
-      "valueUnits": 1500
+      "propCount": 130,
+      "valueUnits": 1522
     },
     "zones": [
       {
@@ -2202,6 +2202,30 @@
       "valueUnits": 4
     },
     {
+      "itemId": "plate_05",
+      "def": "plate",
+      "kind": "tableware",
+      "position": [
+        -12.7,
+        0.0125,
+        -19.01
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.302,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
       "itemId": "sandwich_01",
       "def": "sandwich",
       "kind": "food",
@@ -2378,6 +2402,31 @@
       "valueUnits": 1
     },
     {
+      "itemId": "serving_tray_01",
+      "def": "serving_tray",
+      "kind": "structure",
+      "position": [
+        -13.55,
+        0.47,
+        -16.0
+      ],
+      "rotationQuat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stackedOn": "struct_bench_01",
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.528,
+      "absorbable": true,
+      "valueUnits": 12
+    },
+    {
       "itemId": "small_potted_plant_01",
       "def": "small_potted_plant",
       "kind": "garden",
@@ -2418,6 +2467,31 @@
         0.0,
         1.0
       ],
+      "aabb": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "absorbDiameterReq": 0.431,
+      "absorbable": true,
+      "valueUnits": 6
+    },
+    {
+      "itemId": "small_potted_plant_03",
+      "def": "small_potted_plant",
+      "kind": "garden",
+      "position": [
+        -14.9,
+        0.51,
+        -12.8096
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "stackedOn": "struct_cooler_large_01",
       "aabb": [
         0.1399,
         0.22,

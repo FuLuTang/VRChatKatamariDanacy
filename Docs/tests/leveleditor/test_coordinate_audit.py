@@ -100,8 +100,13 @@ class StoryLevelCoordinateAudit(unittest.TestCase):
             self.assertFalse(wall["support"])
 
     def test_the_design_total_and_the_derived_diameter_fields(self):
-        self.assertEqual(len(self.doc["props"]), 127)
-        self.assertEqual(core.value_units_total(self.doc), 1500)
+        # The totals are the live level's content, so derive them from the props
+        # rather than pinning 127 / 1500 here; the design note's numbers must still
+        # match what is actually placed.
+        expected = self.doc["level"]["expected"]
+        self.assertEqual(expected["propCount"], len(self.doc["props"]))
+        self.assertEqual(expected["valueUnits"],
+                         sum(prop["valueUnits"] for prop in self.doc["props"]))
         for entry in self.doc["props"]:
             self.assertAlmostEqual(entry["absorbDiameterReq"],
                                    core.absorb_diameter_req(entry["aabb"]), places=3)

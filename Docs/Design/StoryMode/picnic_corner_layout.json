@@ -1,0 +1,3695 @@
+{
+  "status": "PROVISIONAL_NOT_TESTED",
+  "generated_by": "/tmp/corner_layout/build.py（作者数据 /tmp/corner_layout/data.py）",
+  "coordinate_system": "Unity 世界坐标，米；与 Docs/Design/Maps/PicnicLawn/layout.json 同一坐标系",
+  "bounds": {
+    "x0": -19.4,
+    "x1": -6.0,
+    "z0": -19.4,
+    "z1": -6.0,
+    "ground_y": 0.0,
+    "area_m2": 179.56
+  },
+  "ball_start": {
+    "x": -12.5,
+    "y": 0.15,
+    "z": -12.5,
+    "start_diameter_m": 0.29974
+  },
+  "spawn": {
+    "x": -14.5,
+    "y": 0.5,
+    "z": -14.5,
+    "yaw_deg": 45.0
+  },
+  "rules": {
+    "absorb": "a*b*c <= (pi/6)*D^3/10",
+    "dreq": "D_req = (60*a*b*c/pi)^(1/3)",
+    "step": "rise <= 0.25*D 才是台阶，否则是墙",
+    "climb_from_ground": "D >= 4*h",
+    "ball_cap_m": 2.2,
+    "max_blocking_boxes": 6,
+    "yaw_allowed": [
+      0,
+      90
+    ],
+    "y_base": "y = support_top + height/2（轴心在几何中心）"
+  },
+  "shell": [
+    {
+      "id": "ground",
+      "zh": "草地",
+      "y": 0.0
+    },
+    {
+      "id": "boundary_x0",
+      "zh": "西边界（树篱内面）",
+      "x": -19.4
+    },
+    {
+      "id": "boundary_x1",
+      "zh": "东边界",
+      "x": -6.0
+    },
+    {
+      "id": "boundary_z0",
+      "zh": "南边界",
+      "z": -19.4
+    },
+    {
+      "id": "boundary_z1",
+      "zh": "北边界（野餐毯南缘）",
+      "z": -6.0
+    },
+    {
+      "id": "flower_bed",
+      "zh": "花圃台（壳；0.26 顶面，P1 后是台面）",
+      "x0": -12.0,
+      "x1": -8.0,
+      "z0": -11.0,
+      "z1": -6.1,
+      "top": 0.26,
+      "absorbable": false
+    },
+    {
+      "id": "shell_tree_trunk",
+      "zh": "角树（壳）",
+      "x": -18.75,
+      "z": -18.75,
+      "size": [
+        0.5,
+        9.0,
+        0.5
+      ],
+      "top": 9.0
+    },
+    {
+      "id": "shell_tree_mound",
+      "zh": "树根丘（壳，0.14 立面）",
+      "x": -18.75,
+      "z": -18.75,
+      "size": [
+        2.5,
+        0.14,
+        2.5
+      ],
+      "top": 0.14
+    },
+    {
+      "id": "shell_signpost",
+      "zh": "区域指示牌（壳）",
+      "x": -13.2,
+      "z": -6.6,
+      "size": [
+        0.45,
+        1.2,
+        0.12
+      ],
+      "top": 1.2
+    }
+  ],
+  "ramps": [
+    {
+      "id": "ramp_to_table",
+      "def": "wood_plank",
+      "kind": "static_ramp",
+      "width": 0.35,
+      "bottom": [
+        -13.1,
+        0.0,
+        -10.712
+      ],
+      "top": [
+        -13.1,
+        0.7,
+        -9.5
+      ],
+      "center": [
+        -13.1,
+        0.35,
+        -10.106
+      ],
+      "normal": [
+        0.0,
+        0.8659,
+        -0.5001
+      ],
+      "right": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "half_width": 0.175,
+      "half_run": 0.606,
+      "run": 1.212,
+      "rise": 0.7,
+      "slope_length": 1.3996,
+      "angle_deg": 30.0089,
+      "absorbable": false,
+      "units": 0,
+      "phase": "P3",
+      "note": "草坪→折叠桌 0.70 台面；30.0°，坡长 1.400 m，水平 1.212 m"
+    },
+    {
+      "id": "ramp_to_bed",
+      "def": "wood_plank",
+      "kind": "static_ramp",
+      "width": 0.35,
+      "bottom": [
+        -9.6,
+        0.0,
+        -12.374
+      ],
+      "top": [
+        -9.6,
+        0.26,
+        -11.0
+      ],
+      "center": [
+        -9.6,
+        0.13,
+        -11.687
+      ],
+      "normal": [
+        0.0,
+        0.9826,
+        -0.1859
+      ],
+      "right": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "half_width": 0.175,
+      "half_run": 0.687,
+      "run": 1.374,
+      "rise": 0.26,
+      "slope_length": 1.3984,
+      "angle_deg": 10.7153,
+      "absorbable": false,
+      "units": 0,
+      "phase": "P3",
+      "note": "草坪→花圃台 0.26 南沿；10.7°，坡长 1.400 m，水平 1.374 m"
+    }
+  ],
+  "structures": [
+    {
+      "id": "struct_beer_crate_01",
+      "def": "beer_crate",
+      "zone": "bed_south",
+      "size": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "x": -12.2,
+      "y": 0.14,
+      "z": -11.2,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.28,
+      "access_phase": "P2",
+      "climb_from": "bed",
+      "climb_rise": 0.02,
+      "min_ball_diameter_to_climb": 0.3,
+      "climb_window": [
+        0.3,
+        0.863
+      ],
+      "climb_window_p1": null,
+      "climb_rule": "rise <= 0.25*D；从 bed 爬 rise=0.020 需 D>=0.080",
+      "absorb_diameter": 0.8625,
+      "absorb_threshold_units": 78.5,
+      "volume": 0.0336,
+      "units": 36,
+      "model": "design",
+      "role": "台面西南沿的啤酒箱：从台面跨出去的 2 cm 踏脚"
+    },
+    {
+      "id": "struct_beer_crate_02",
+      "def": "beer_crate",
+      "zone": "bed_south",
+      "size": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "x": -10.3,
+      "y": 0.14,
+      "z": -11.2,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.28,
+      "access_phase": "P2",
+      "climb_from": "bed",
+      "climb_rise": 0.02,
+      "min_ball_diameter_to_climb": 0.3,
+      "climb_window": [
+        0.3,
+        0.863
+      ],
+      "climb_window_p1": null,
+      "climb_rule": "rise <= 0.25*D；从 bed 爬 rise=0.020 需 D>=0.080",
+      "absorb_diameter": 0.8625,
+      "absorb_threshold_units": 78.5,
+      "volume": 0.0336,
+      "units": 36,
+      "model": "design",
+      "role": "台面南沿的啤酒箱：第二个 2 cm 踏脚"
+    },
+    {
+      "id": "struct_bench_01",
+      "def": "picnic_bench",
+      "zone": "blanket_north",
+      "size": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "x": -12.6,
+      "y": 0.225,
+      "z": -16.0,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.45,
+      "access_phase": "none",
+      "climb_from": "none",
+      "climb_rise": 0.45,
+      "min_ball_diameter_to_climb": null,
+      "climb_window": null,
+      "climb_window_p1": null,
+      "climb_rule": "never steppable (4*h > D_req)",
+      "absorb_diameter": 1.6038,
+      "absorb_threshold_units": 523.4,
+      "volume": 0.216,
+      "units": 130,
+      "model": "design",
+      "role": "野餐长凳：1.63 才吃得动，补 1.5–1.86 的空档；出生点旁的第一个大地标"
+    },
+    {
+      "id": "struct_book_stack_01",
+      "def": "book_stack",
+      "zone": "pocket",
+      "size": [
+        0.26,
+        0.09,
+        0.19
+      ],
+      "x": -11.3,
+      "y": 0.045,
+      "z": -13.6,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.09,
+      "access_phase": "P1",
+      "climb_from": "ground",
+      "climb_rise": 0.09,
+      "min_ball_diameter_to_climb": 0.36,
+      "climb_window": [
+        0.36,
+        0.44
+      ],
+      "climb_window_p1": [
+        0.36,
+        0.44
+      ],
+      "climb_rule": "rise <= 0.25*D；从 ground 爬 rise=0.090 需 D>=0.360",
+      "absorb_diameter": 0.4395,
+      "absorb_threshold_units": 7.4,
+      "volume": 0.004446,
+      "units": 8,
+      "model": "design",
+      "role": "第一级台阶，也是第一件“我把挡我的东西吃掉了”（0.36 可踩→0.44 可吃）"
+    },
+    {
+      "id": "struct_cooler_large_01",
+      "def": "cooler_box_large",
+      "zone": "mid_lawn",
+      "size": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "x": -16.2,
+      "y": 0.2,
+      "z": -12.85,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.4,
+      "access_phase": "none",
+      "climb_from": "none",
+      "climb_rise": 0.4,
+      "min_ball_diameter_to_climb": null,
+      "climb_window": null,
+      "climb_window_p1": null,
+      "climb_rule": "never steppable (4*h > D_req)",
+      "absorb_diameter": 1.3401,
+      "absorb_threshold_units": 303.9,
+      "volume": 0.126,
+      "units": 90,
+      "model": "design",
+      "role": "大冷藏箱：1.34 才吃得动的中后期大件"
+    },
+    {
+      "id": "struct_crate_01",
+      "def": "crate",
+      "zone": "bed_south",
+      "size": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "x": -11.0,
+      "y": 0.2,
+      "z": -11.2,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.4,
+      "access_phase": "P2",
+      "climb_from": "bed",
+      "climb_rise": 0.14,
+      "min_ball_diameter_to_climb": 0.56,
+      "climb_window": [
+        0.56,
+        1.224
+      ],
+      "climb_window_p1": [
+        1.04,
+        1.224
+      ],
+      "climb_rule": "rise <= 0.25*D；从 bed 爬 rise=0.140 需 D>=0.560",
+      "absorb_diameter": 1.2239,
+      "absorb_threshold_units": 230.7,
+      "volume": 0.096,
+      "units": 64,
+      "model": "design",
+      "role": "台面南沿的收纳箱：0.40 高，台面→箱顶的 0.14 一级"
+    },
+    {
+      "id": "struct_crate_02",
+      "def": "crate",
+      "zone": "tree_corner",
+      "size": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "x": -16.1,
+      "y": 0.2,
+      "z": -15.8,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.4,
+      "access_phase": "none",
+      "climb_from": "none",
+      "climb_rise": 0.4,
+      "min_ball_diameter_to_climb": null,
+      "climb_window": null,
+      "climb_window_p1": null,
+      "climb_rule": "never steppable (4*h > D_req)",
+      "absorb_diameter": 1.2239,
+      "absorb_threshold_units": 230.7,
+      "volume": 0.096,
+      "units": 64,
+      "model": "design",
+      "role": "树下的收纳箱：1.22 才吃得动"
+    },
+    {
+      "id": "struct_crate_large_01",
+      "def": "crate_large",
+      "zone": "tree_corner",
+      "size": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "x": -17.85,
+      "y": 0.225,
+      "z": -14.1,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.45,
+      "access_phase": "none",
+      "climb_from": "none",
+      "climb_rise": 0.45,
+      "min_ball_diameter_to_climb": null,
+      "climb_window": null,
+      "climb_window_p1": null,
+      "climb_rule": "never steppable (4*h > D_req)",
+      "absorb_diameter": 1.5092,
+      "absorb_threshold_units": 435.6,
+      "volume": 0.18,
+      "units": 120,
+      "model": "design",
+      "role": "大收纳箱：1.51 才吃得动，树角的挡路地标"
+    },
+    {
+      "id": "struct_folding_table_01",
+      "def": "folding_table",
+      "zone": "west_park",
+      "size": [
+        1.0,
+        0.7,
+        0.6
+      ],
+      "x": -13.1,
+      "y": 0.35,
+      "z": -9.2,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.7,
+      "access_phase": "P3",
+      "climb_from": "ramp",
+      "climb_rise": 0.7,
+      "min_ball_diameter_to_climb": 0.3,
+      "climb_window": [
+        0.3,
+        2.002
+      ],
+      "climb_window_p1": [
+        1.4,
+        2.002
+      ],
+      "climb_rule": "rise <= 0.25*D；从 ramp 爬 rise=0.700 需 D>=2.800",
+      "absorb_diameter": 2.0018,
+      "absorb_threshold_units": 1021.0,
+      "volume": 0.42,
+      "units": 212,
+      "model": "design",
+      "role": "折叠桌（本关的“台球桌”）：0.70 台面 + 桌上一簇小物，斜板搭上来"
+    },
+    {
+      "id": "struct_lounge_chair_01",
+      "def": "lounge_chair",
+      "zone": "west_park",
+      "size": [
+        0.6,
+        0.35,
+        1.6
+      ],
+      "x": -12.3,
+      "y": 0.175,
+      "z": -9.6,
+      "yaw": 90,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.35,
+      "access_phase": "P2",
+      "climb_from": "bed",
+      "climb_rise": 0.09,
+      "min_ball_diameter_to_climb": 0.36,
+      "climb_window": [
+        0.36,
+        1.858
+      ],
+      "climb_window_p1": [
+        1.04,
+        1.858
+      ],
+      "climb_rule": "rise <= 0.25*D；从 bed 爬 rise=0.090 需 D>=0.360",
+      "absorb_diameter": 1.8583,
+      "absorb_threshold_units": 816.1,
+      "volume": 0.336,
+      "units": 150,
+      "model": "design",
+      "role": "躺椅：贴台面西沿，0.35 高；台面→躺椅→折叠桌的进阶路线"
+    },
+    {
+      "id": "struct_plank_01",
+      "def": "wood_plank",
+      "zone": "mid_lawn",
+      "size": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "x": -14.3,
+      "y": 0.0125,
+      "z": -12.45,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.025,
+      "access_phase": "P1",
+      "climb_from": "ground",
+      "climb_rise": 0.025,
+      "min_ball_diameter_to_climb": 0.1,
+      "climb_window": [
+        0.1,
+        0.616
+      ],
+      "climb_window_p1": [
+        0.1,
+        0.616
+      ],
+      "climb_rule": "rise <= 0.25*D；从 ground 爬 rise=0.025 需 D>=0.100",
+      "absorb_diameter": 0.6162,
+      "absorb_threshold_units": 26.4,
+      "volume": 0.01225,
+      "units": 16,
+      "model": "design",
+      "role": "散落的松木板：贴地薄件，碾得过去（0.10 可踩→0.62 可吃）"
+    },
+    {
+      "id": "struct_plank_02",
+      "def": "wood_plank",
+      "zone": "bed_top",
+      "size": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "x": -9.3,
+      "y": 0.2725,
+      "z": -7.6,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "height": 0.025,
+      "access_phase": "P2",
+      "climb_from": "bed",
+      "climb_rise": 0.025,
+      "min_ball_diameter_to_climb": 0.3,
+      "climb_window": [
+        0.3,
+        0.616
+      ],
+      "climb_window_p1": null,
+      "climb_rule": "rise <= 0.25*D；从 bed 爬 rise=0.025 需 D>=0.100",
+      "absorb_diameter": 0.6162,
+      "absorb_threshold_units": 26.4,
+      "volume": 0.01225,
+      "units": 16,
+      "model": "design",
+      "role": "台面上的长木板：把 0.26 台面切成两半"
+    },
+    {
+      "id": "struct_stool_01",
+      "def": "folding_stool",
+      "zone": "west_park",
+      "size": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "x": -14.55,
+      "y": 0.16,
+      "z": -10.55,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.32,
+      "access_phase": "none",
+      "climb_from": "none",
+      "climb_rise": 0.32,
+      "min_ball_diameter_to_climb": null,
+      "climb_window": null,
+      "climb_window_p1": null,
+      "climb_rule": "never steppable (4*h > D_req)",
+      "absorb_diameter": 0.9494,
+      "absorb_threshold_units": 105.8,
+      "volume": 0.0448,
+      "units": 38,
+      "model": "design",
+      "role": "坡底的折叠凳：0.95 才吃得动的矮结构，纯挡路→食物"
+    },
+    {
+      "id": "struct_storage_01",
+      "def": "storage_bin",
+      "zone": "west_park",
+      "size": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "x": -14.75,
+      "y": 0.2,
+      "z": -9.05,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.4,
+      "access_phase": "none",
+      "climb_from": "none",
+      "climb_rise": 0.35,
+      "min_ball_diameter_to_climb": null,
+      "climb_window": null,
+      "climb_window_p1": null,
+      "climb_rule": "never steppable (4*h > D_req)",
+      "absorb_diameter": 1.1372,
+      "absorb_threshold_units": 184.4,
+      "volume": 0.077,
+      "units": 52,
+      "model": "design",
+      "role": "桌旁的收纳箱：1.14 才吃得动，挡在桌子与花圃之间"
+    },
+    {
+      "id": "struct_stroller_01",
+      "def": "stroller",
+      "zone": "tree_corner",
+      "size": [
+        1.0,
+        1.0,
+        0.55
+      ],
+      "x": -17.9,
+      "y": 0.5,
+      "z": -16.4,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 1.0,
+      "access_phase": "none",
+      "climb_from": "none",
+      "climb_rise": 1.0,
+      "min_ball_diameter_to_climb": null,
+      "climb_window": null,
+      "climb_window_p1": null,
+      "climb_rule": "never steppable (4*h > D_req)",
+      "absorb_diameter": 2.1901,
+      "absorb_threshold_units": 1338.0,
+      "volume": 0.55,
+      "units": 32,
+      "model": "design",
+      "role": "婴儿车：本关最高的地标，2.19 才吃得动——尾口"
+    },
+    {
+      "id": "struct_tray_01",
+      "def": "serving_tray",
+      "zone": "blanket_a",
+      "size": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "x": -9.9,
+      "y": 0.02,
+      "z": -15.1,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "height": 0.04,
+      "access_phase": "P1",
+      "climb_from": "ground",
+      "climb_rise": 0.04,
+      "min_ball_diameter_to_climb": 0.16,
+      "climb_window": [
+        0.16,
+        0.528
+      ],
+      "climb_window_p1": [
+        0.16,
+        0.528
+      ],
+      "climb_rule": "rise <= 0.25*D；从 ground 爬 rise=0.040 需 D>=0.160",
+      "absorb_diameter": 0.5278,
+      "absorb_threshold_units": 15.3,
+      "volume": 0.0077,
+      "units": 12,
+      "model": "design",
+      "role": "野餐垫上的托盘：一层碾得过去的薄地板"
+    },
+    {
+      "id": "struct_tray_02",
+      "def": "serving_tray",
+      "zone": "bed_top",
+      "size": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "x": -10.6,
+      "y": 0.28,
+      "z": -9.1,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "height": 0.04,
+      "access_phase": "P2",
+      "climb_from": "bed",
+      "climb_rise": 0.04,
+      "min_ball_diameter_to_climb": 0.3,
+      "climb_window": [
+        0.3,
+        0.528
+      ],
+      "climb_window_p1": null,
+      "climb_rule": "rise <= 0.25*D；从 bed 爬 rise=0.040 需 D>=0.160",
+      "absorb_diameter": 0.5278,
+      "absorb_threshold_units": 15.3,
+      "volume": 0.0077,
+      "units": 12,
+      "model": "design",
+      "role": "台面托盘：0.26 台面上再抬 0.04 的小台子"
+    }
+  ],
+  "gate": [
+    {
+      "id": "gate_basket_01",
+      "def": "picnic_basket",
+      "x": -7.775,
+      "y": 0.11,
+      "z": -10.7,
+      "yaw": 0,
+      "size": [
+        0.45,
+        0.22,
+        0.3
+      ],
+      "support": "ground",
+      "units": 16,
+      "absorb_diameter": 0.8278,
+      "absorb_threshold_units": 69.0
+    },
+    {
+      "id": "gate_basket_02",
+      "def": "picnic_basket",
+      "x": -7.325,
+      "y": 0.11,
+      "z": -10.7,
+      "yaw": 0,
+      "size": [
+        0.45,
+        0.22,
+        0.3
+      ],
+      "support": "ground",
+      "units": 16,
+      "absorb_diameter": 0.8278,
+      "absorb_threshold_units": 69.0
+    },
+    {
+      "id": "gate_basket_03",
+      "def": "picnic_basket",
+      "x": -6.875,
+      "y": 0.11,
+      "z": -10.7,
+      "yaw": 0,
+      "size": [
+        0.45,
+        0.22,
+        0.3
+      ],
+      "support": "ground",
+      "units": 16,
+      "absorb_diameter": 0.8278,
+      "absorb_threshold_units": 69.0
+    },
+    {
+      "id": "gate_cooler_01",
+      "def": "cooler_box",
+      "x": -6.325,
+      "y": 0.15,
+      "z": -10.7,
+      "yaw": 0,
+      "size": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "support": "ground",
+      "units": 16,
+      "absorb_diameter": 1.0332,
+      "absorb_threshold_units": 137.4
+    }
+  ],
+  "props": [
+    {
+      "itemId": "acorn_01",
+      "def": "acorn",
+      "zone": "pocket",
+      "x": -14.2011,
+      "y": 0.025,
+      "z": -11.8478,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "nature",
+      "size": [
+        0.04,
+        0.05,
+        0.038
+      ],
+      "height": 0.05,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1132,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "acorn_02",
+      "def": "acorn",
+      "zone": "pocket",
+      "x": -13.6202,
+      "y": 0.025,
+      "z": -11.8141,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "nature",
+      "size": [
+        0.04,
+        0.05,
+        0.038
+      ],
+      "height": 0.05,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1132,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "apple_01",
+      "def": "apple",
+      "zone": "blanket_a",
+      "x": -7.9298,
+      "y": 0.0394,
+      "z": -17.3045,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "height": 0.0789,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2111,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "apple_02",
+      "def": "apple",
+      "zone": "blanket_a",
+      "x": -10.6142,
+      "y": 0.0394,
+      "z": -16.593,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "height": 0.0789,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2111,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "apple_03",
+      "def": "apple",
+      "zone": "blanket_a",
+      "x": -11.2339,
+      "y": 0.0394,
+      "z": -16.6569,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "height": 0.0789,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2111,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "apple_04",
+      "def": "apple",
+      "zone": "bed_top",
+      "x": -9.1445,
+      "y": 0.2994,
+      "z": -8.6038,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "height": 0.0789,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2111,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "apple_05",
+      "def": "apple",
+      "zone": "bed_top",
+      "x": -10.897,
+      "y": 0.2994,
+      "z": -8.0093,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "height": 0.0789,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2111,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "apple_06",
+      "def": "apple",
+      "zone": "bed_top",
+      "x": -9.1348,
+      "y": 0.2994,
+      "z": -7.3271,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "height": 0.0789,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2111,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "banana_01",
+      "def": "banana",
+      "zone": "blanket_a",
+      "x": -11.2197,
+      "y": 0.016,
+      "z": -16.5593,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.18,
+        0.032,
+        0.0678
+      ],
+      "height": 0.032,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1954,
+      "absorb_threshold_units": -2.5
+    },
+    {
+      "itemId": "banana_02",
+      "def": "banana",
+      "zone": "blanket_a",
+      "x": -7.3139,
+      "y": 0.016,
+      "z": -15.8485,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.18,
+        0.032,
+        0.0678
+      ],
+      "height": 0.032,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1954,
+      "absorb_threshold_units": -2.5
+    },
+    {
+      "itemId": "banana_03",
+      "def": "banana",
+      "zone": "bed_top",
+      "x": -8.4893,
+      "y": 0.276,
+      "z": -8.5418,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.18,
+        0.032,
+        0.0678
+      ],
+      "height": 0.032,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1954,
+      "absorb_threshold_units": -2.5
+    },
+    {
+      "itemId": "banana_04",
+      "def": "banana",
+      "zone": "bed_top",
+      "x": -11.588,
+      "y": 0.276,
+      "z": -7.9315,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.18,
+        0.032,
+        0.0678
+      ],
+      "height": 0.032,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1954,
+      "absorb_threshold_units": -2.5
+    },
+    {
+      "itemId": "bottle_cap_01",
+      "def": "bottle_cap",
+      "zone": "pocket",
+      "x": -13.5881,
+      "y": 0.0073,
+      "z": -12.9149,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "debris",
+      "size": [
+        0.05,
+        0.0145,
+        0.0476
+      ],
+      "height": 0.0145,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.087,
+      "absorb_threshold_units": -3.4
+    },
+    {
+      "itemId": "bowl_01",
+      "def": "bowl",
+      "zone": "bed_top",
+      "x": -11.5645,
+      "y": 0.29,
+      "z": -9.179,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "tableware",
+      "size": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "height": 0.06,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.3084,
+      "absorb_threshold_units": 0.3
+    },
+    {
+      "itemId": "bowl_02",
+      "def": "bowl",
+      "zone": "table_top",
+      "x": -13.4504,
+      "y": 0.73,
+      "z": -9.3349,
+      "yaw": 0,
+      "support": "folding_table",
+      "support_top": 0.7,
+      "kind": "tableware",
+      "size": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "height": 0.06,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.3084,
+      "absorb_threshold_units": 0.3
+    },
+    {
+      "itemId": "bowl_03",
+      "def": "bowl",
+      "zone": "mid_lawn",
+      "x": -14.7292,
+      "y": 0.03,
+      "z": -13.4171,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "height": 0.06,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.3084,
+      "absorb_threshold_units": 0.3
+    },
+    {
+      "itemId": "bowl_04",
+      "def": "bowl",
+      "zone": "alcove",
+      "x": -6.5057,
+      "y": 0.03,
+      "z": -8.4176,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "height": 0.06,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.3084,
+      "absorb_threshold_units": 0.3
+    },
+    {
+      "itemId": "bread_slice_01",
+      "def": "bread_slice",
+      "zone": "bed_top",
+      "x": -8.4722,
+      "y": 0.2675,
+      "z": -7.3739,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "food",
+      "size": [
+        0.1,
+        0.015,
+        0.1
+      ],
+      "height": 0.015,
+      "units": 4,
+      "model": "design",
+      "dreq": 0.142,
+      "absorb_threshold_units": -3.1
+    },
+    {
+      "itemId": "bread_slice_02",
+      "def": "bread_slice",
+      "zone": "mid_lawn",
+      "x": -13.3152,
+      "y": 0.0075,
+      "z": -13.3896,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.1,
+        0.015,
+        0.1
+      ],
+      "height": 0.015,
+      "units": 4,
+      "model": "design",
+      "dreq": 0.142,
+      "absorb_threshold_units": -3.1
+    },
+    {
+      "itemId": "bread_slice_03",
+      "def": "bread_slice",
+      "zone": "mid_lawn",
+      "x": -11.2906,
+      "y": 0.0075,
+      "z": -12.7585,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.1,
+        0.015,
+        0.1
+      ],
+      "height": 0.015,
+      "units": 4,
+      "model": "design",
+      "dreq": 0.142,
+      "absorb_threshold_units": -3.1
+    },
+    {
+      "itemId": "bread_slice_04",
+      "def": "bread_slice",
+      "zone": "outer",
+      "x": -9.5497,
+      "y": 0.0075,
+      "z": -18.5782,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.1,
+        0.015,
+        0.1
+      ],
+      "height": 0.015,
+      "units": 4,
+      "model": "design",
+      "dreq": 0.142,
+      "absorb_threshold_units": -3.1
+    },
+    {
+      "itemId": "bread_slice_05",
+      "def": "bread_slice",
+      "zone": "outer",
+      "x": -16.2539,
+      "y": 0.0075,
+      "z": -18.8928,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.1,
+        0.015,
+        0.1
+      ],
+      "height": 0.015,
+      "units": 4,
+      "model": "design",
+      "dreq": 0.142,
+      "absorb_threshold_units": -3.1
+    },
+    {
+      "itemId": "cheese_slice_01",
+      "def": "cheese_slice",
+      "zone": "pocket",
+      "x": -11.729,
+      "y": 0.004,
+      "z": -13.4975,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.06,
+        0.008,
+        0.05
+      ],
+      "height": 0.008,
+      "units": 1,
+      "model": "design",
+      "dreq": 0.0771,
+      "absorb_threshold_units": -3.4
+    },
+    {
+      "itemId": "cookie_01",
+      "def": "cookie",
+      "zone": "pocket",
+      "x": -11.0423,
+      "y": 0.0047,
+      "z": -12.3599,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.07,
+        0.0094,
+        0.0689
+      ],
+      "height": 0.0094,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0953,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "cookie_02",
+      "def": "cookie",
+      "zone": "pocket",
+      "x": -14.2294,
+      "y": 0.0047,
+      "z": -11.7533,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.07,
+        0.0094,
+        0.0689
+      ],
+      "height": 0.0094,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0953,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "croissant_01",
+      "def": "croissant",
+      "zone": "table_top",
+      "x": -13.4425,
+      "y": 0.7313,
+      "z": -9.0759,
+      "yaw": 0,
+      "support": "folding_table",
+      "support_top": 0.7,
+      "kind": "food",
+      "size": [
+        0.0688,
+        0.0626,
+        0.12
+      ],
+      "height": 0.0626,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2145,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "croissant_02",
+      "def": "croissant",
+      "zone": "mid_lawn",
+      "x": -12.0007,
+      "y": 0.0313,
+      "z": -11.4824,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.0688,
+        0.0626,
+        0.12
+      ],
+      "height": 0.0626,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2145,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "croissant_03",
+      "def": "croissant",
+      "zone": "mid_lawn",
+      "x": -11.2458,
+      "y": 0.0313,
+      "z": -11.5207,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.0688,
+        0.0626,
+        0.12
+      ],
+      "height": 0.0626,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2145,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "croissant_04",
+      "def": "croissant",
+      "zone": "outer",
+      "x": -10.3953,
+      "y": 0.0313,
+      "z": -18.5407,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.0688,
+        0.0626,
+        0.12
+      ],
+      "height": 0.0626,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2145,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "croissant_05",
+      "def": "croissant",
+      "zone": "outer",
+      "x": -15.4032,
+      "y": 0.0313,
+      "z": -18.897,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.0688,
+        0.0626,
+        0.12
+      ],
+      "height": 0.0626,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2145,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "cup_01",
+      "def": "cup",
+      "zone": "bed_top",
+      "x": -10.9633,
+      "y": 0.305,
+      "z": -6.7212,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "tableware",
+      "size": [
+        0.075,
+        0.09,
+        0.075
+      ],
+      "height": 0.09,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.213,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "cup_02",
+      "def": "cup",
+      "zone": "table_top",
+      "x": -13.2877,
+      "y": 0.745,
+      "z": -9.3186,
+      "yaw": 0,
+      "support": "folding_table",
+      "support_top": 0.7,
+      "kind": "tableware",
+      "size": [
+        0.075,
+        0.09,
+        0.075
+      ],
+      "height": 0.09,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.213,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "cup_03",
+      "def": "cup",
+      "zone": "table_top",
+      "x": -13.2975,
+      "y": 0.745,
+      "z": -9.0787,
+      "yaw": 0,
+      "support": "folding_table",
+      "support_top": 0.7,
+      "kind": "tableware",
+      "size": [
+        0.075,
+        0.09,
+        0.075
+      ],
+      "height": 0.09,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.213,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "cup_04",
+      "def": "cup",
+      "zone": "mid_lawn",
+      "x": -11.961,
+      "y": 0.045,
+      "z": -13.4051,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.075,
+        0.09,
+        0.075
+      ],
+      "height": 0.09,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.213,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "cup_05",
+      "def": "cup",
+      "zone": "outer",
+      "x": -11.2333,
+      "y": 0.045,
+      "z": -18.5412,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.075,
+        0.09,
+        0.075
+      ],
+      "height": 0.09,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.213,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "fallen_leaf_01",
+      "def": "fallen_leaf",
+      "zone": "pocket",
+      "x": -14.2467,
+      "y": 0.0006,
+      "z": -12.9529,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "nature",
+      "size": [
+        0.09,
+        0.0011,
+        0.06
+      ],
+      "height": 0.0011,
+      "units": 1,
+      "model": "design",
+      "dreq": 0.0484,
+      "absorb_threshold_units": -3.4
+    },
+    {
+      "itemId": "glass_bottle_01",
+      "def": "glass_bottle",
+      "zone": "alcove",
+      "x": -7.0705,
+      "y": 0.14,
+      "z": -8.9151,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "drink",
+      "size": [
+        0.07,
+        0.28,
+        0.07
+      ],
+      "height": 0.28,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.297,
+      "absorb_threshold_units": -0.1
+    },
+    {
+      "itemId": "grapes_01",
+      "def": "grapes",
+      "zone": "blanket_a",
+      "x": -7.9134,
+      "y": 0.011,
+      "z": -15.9323,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.06,
+        0.022,
+        0.0597
+      ],
+      "height": 0.022,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1146,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "grapes_02",
+      "def": "grapes",
+      "zone": "blanket_a",
+      "x": -10.5669,
+      "y": 0.011,
+      "z": -15.1552,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.06,
+        0.022,
+        0.0597
+      ],
+      "height": 0.022,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1146,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "grapes_03",
+      "def": "grapes",
+      "zone": "blanket_a",
+      "x": -7.9571,
+      "y": 0.011,
+      "z": -14.4393,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.06,
+        0.022,
+        0.0597
+      ],
+      "height": 0.022,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1146,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "grapes_04",
+      "def": "grapes",
+      "zone": "blanket_a",
+      "x": -7.2808,
+      "y": 0.011,
+      "z": -14.5062,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.06,
+        0.022,
+        0.0597
+      ],
+      "height": 0.022,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1146,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "grapes_05",
+      "def": "grapes",
+      "zone": "bed_top",
+      "x": -9.755,
+      "y": 0.271,
+      "z": -9.777,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.06,
+        0.022,
+        0.0597
+      ],
+      "height": 0.022,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1146,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "grapes_06",
+      "def": "grapes",
+      "zone": "bed_top",
+      "x": -9.6733,
+      "y": 0.271,
+      "z": -8.5466,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.06,
+        0.022,
+        0.0597
+      ],
+      "height": 0.022,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1146,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "grapes_07",
+      "def": "grapes",
+      "zone": "bed_top",
+      "x": -10.3256,
+      "y": 0.271,
+      "z": -7.9374,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.06,
+        0.022,
+        0.0597
+      ],
+      "height": 0.022,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1146,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "grapes_08",
+      "def": "grapes",
+      "zone": "bed_top",
+      "x": -9.7355,
+      "y": 0.271,
+      "z": -7.3317,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.06,
+        0.022,
+        0.0597
+      ],
+      "height": 0.022,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1146,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "juice_carton_01",
+      "def": "juice_carton",
+      "zone": "bed_top",
+      "x": -10.35,
+      "y": 0.31,
+      "z": -10.3788,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "drink",
+      "size": [
+        0.06,
+        0.1,
+        0.06
+      ],
+      "height": 0.1,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1902,
+      "absorb_threshold_units": -2.6
+    },
+    {
+      "itemId": "juice_carton_02",
+      "def": "juice_carton",
+      "zone": "mid_lawn",
+      "x": -10.5871,
+      "y": 0.05,
+      "z": -13.4461,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "drink",
+      "size": [
+        0.06,
+        0.1,
+        0.06
+      ],
+      "height": 0.1,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1902,
+      "absorb_threshold_units": -2.6
+    },
+    {
+      "itemId": "juice_carton_03",
+      "def": "juice_carton",
+      "zone": "outer",
+      "x": -13.711,
+      "y": 0.05,
+      "z": -18.9526,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "drink",
+      "size": [
+        0.06,
+        0.1,
+        0.06
+      ],
+      "height": 0.1,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1902,
+      "absorb_threshold_units": -2.6
+    },
+    {
+      "itemId": "juice_carton_04",
+      "def": "juice_carton",
+      "zone": "outer",
+      "x": -12.9199,
+      "y": 0.05,
+      "z": -18.533,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "drink",
+      "size": [
+        0.06,
+        0.1,
+        0.06
+      ],
+      "height": 0.1,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1902,
+      "absorb_threshold_units": -2.6
+    },
+    {
+      "itemId": "napkin_01",
+      "def": "napkin",
+      "zone": "mid_lawn",
+      "x": -9.892,
+      "y": 0.007,
+      "z": -11.5082,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.15,
+        0.014,
+        0.15
+      ],
+      "height": 0.014,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1819,
+      "absorb_threshold_units": -2.7
+    },
+    {
+      "itemId": "napkin_02",
+      "def": "napkin",
+      "zone": "mid_lawn",
+      "x": -10.6058,
+      "y": 0.007,
+      "z": -11.5483,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.15,
+        0.014,
+        0.15
+      ],
+      "height": 0.014,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1819,
+      "absorb_threshold_units": -2.7
+    },
+    {
+      "itemId": "napkin_03",
+      "def": "napkin",
+      "zone": "outer",
+      "x": -18.5721,
+      "y": 0.007,
+      "z": -16.11,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.15,
+        0.014,
+        0.15
+      ],
+      "height": 0.014,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1819,
+      "absorb_threshold_units": -2.7
+    },
+    {
+      "itemId": "napkin_04",
+      "def": "napkin",
+      "zone": "outer",
+      "x": -18.9092,
+      "y": 0.007,
+      "z": -15.2057,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.15,
+        0.014,
+        0.15
+      ],
+      "height": 0.014,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1819,
+      "absorb_threshold_units": -2.7
+    },
+    {
+      "itemId": "napkin_05",
+      "def": "napkin",
+      "zone": "alcove",
+      "x": -7.6059,
+      "y": 0.007,
+      "z": -7.8479,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.15,
+        0.014,
+        0.15
+      ],
+      "height": 0.014,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1819,
+      "absorb_threshold_units": -2.7
+    },
+    {
+      "itemId": "orange_01",
+      "def": "orange",
+      "zone": "blanket_a",
+      "x": -11.2476,
+      "y": 0.0387,
+      "z": -15.2058,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "height": 0.0774,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2115,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "orange_02",
+      "def": "orange",
+      "zone": "blanket_a",
+      "x": -7.2335,
+      "y": 0.0387,
+      "z": -14.4098,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "height": 0.0774,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2115,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "orange_03",
+      "def": "orange",
+      "zone": "blanket_a",
+      "x": -10.6011,
+      "y": 0.0387,
+      "z": -18.0274,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "height": 0.0774,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2115,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "orange_04",
+      "def": "orange",
+      "zone": "bed_top",
+      "x": -11.5818,
+      "y": 0.2987,
+      "z": -6.7585,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "height": 0.0774,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2115,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "orange_05",
+      "def": "orange",
+      "zone": "bed_top",
+      "x": -10.9455,
+      "y": 0.2987,
+      "z": -10.4006,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "height": 0.0774,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2115,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "orange_06",
+      "def": "orange",
+      "zone": "bed_top",
+      "x": -9.1295,
+      "y": 0.2987,
+      "z": -9.8203,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "height": 0.0774,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2115,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "paper_scrap_01",
+      "def": "paper_scrap",
+      "zone": "pocket",
+      "x": -11.0713,
+      "y": 0.0059,
+      "z": -13.4756,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "debris",
+      "size": [
+        0.1,
+        0.0118,
+        0.0741
+      ],
+      "height": 0.0118,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1186,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "pear_01",
+      "def": "pear",
+      "zone": "blanket_a",
+      "x": -9.9083,
+      "y": 0.045,
+      "z": -18.0789,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "height": 0.09,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1718,
+      "absorb_threshold_units": -2.8
+    },
+    {
+      "itemId": "pear_02",
+      "def": "pear",
+      "zone": "blanket_a",
+      "x": -9.9146,
+      "y": 0.045,
+      "z": -17.9955,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "height": 0.09,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1718,
+      "absorb_threshold_units": -2.8
+    },
+    {
+      "itemId": "pear_03",
+      "def": "pear",
+      "zone": "bed_top",
+      "x": -10.3527,
+      "y": 0.305,
+      "z": -6.7587,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "height": 0.09,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1718,
+      "absorb_threshold_units": -2.8
+    },
+    {
+      "itemId": "pear_04",
+      "def": "pear",
+      "zone": "bed_top",
+      "x": -9.7154,
+      "y": 0.305,
+      "z": -10.4019,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "height": 0.09,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1718,
+      "absorb_threshold_units": -2.8
+    },
+    {
+      "itemId": "pear_05",
+      "def": "pear",
+      "zone": "bed_top",
+      "x": -9.7007,
+      "y": 0.305,
+      "z": -8.6234,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "height": 0.09,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1718,
+      "absorb_threshold_units": -2.8
+    },
+    {
+      "itemId": "pebble_01",
+      "def": "pebble",
+      "zone": "pocket",
+      "x": -13.5532,
+      "y": 0.0159,
+      "z": -14.041,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "nature",
+      "size": [
+        0.06,
+        0.0319,
+        0.044
+      ],
+      "height": 0.0319,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.1172,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "plate_01",
+      "def": "plate",
+      "zone": "bed_top",
+      "x": -8.4661,
+      "y": 0.2725,
+      "z": -9.815,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "tableware",
+      "size": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "height": 0.025,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.3018,
+      "absorb_threshold_units": 0.1
+    },
+    {
+      "itemId": "plate_02",
+      "def": "plate",
+      "zone": "mid_lawn",
+      "x": -14.66,
+      "y": 0.0125,
+      "z": -12.1141,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "height": 0.025,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.3018,
+      "absorb_threshold_units": 0.1
+    },
+    {
+      "itemId": "plate_03",
+      "def": "plate",
+      "zone": "mid_lawn",
+      "x": -14.0545,
+      "y": 0.0125,
+      "z": -13.4001,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "height": 0.025,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.3018,
+      "absorb_threshold_units": 0.1
+    },
+    {
+      "itemId": "plate_04",
+      "def": "plate",
+      "zone": "outer",
+      "x": -18.4937,
+      "y": 0.0125,
+      "z": -13.3661,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "height": 0.025,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.3018,
+      "absorb_threshold_units": 0.1
+    },
+    {
+      "itemId": "sandwich_01",
+      "def": "sandwich",
+      "zone": "table_top",
+      "x": -12.782,
+      "y": 0.72,
+      "z": -9.1823,
+      "yaw": 0,
+      "support": "folding_table",
+      "support_top": 0.7,
+      "kind": "food",
+      "size": [
+        0.12,
+        0.04,
+        0.09
+      ],
+      "height": 0.04,
+      "units": 4,
+      "model": "design",
+      "dreq": 0.2021,
+      "absorb_threshold_units": -2.4
+    },
+    {
+      "itemId": "sandwich_02",
+      "def": "sandwich",
+      "zone": "mid_lawn",
+      "x": -14.0155,
+      "y": 0.02,
+      "z": -12.1703,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.12,
+        0.04,
+        0.09
+      ],
+      "height": 0.04,
+      "units": 4,
+      "model": "design",
+      "dreq": 0.2021,
+      "absorb_threshold_units": -2.4
+    },
+    {
+      "itemId": "sandwich_03",
+      "def": "sandwich",
+      "zone": "outer",
+      "x": -18.9529,
+      "y": 0.02,
+      "z": -13.3594,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.12,
+        0.04,
+        0.09
+      ],
+      "height": 0.04,
+      "units": 4,
+      "model": "design",
+      "dreq": 0.2021,
+      "absorb_threshold_units": -2.4
+    },
+    {
+      "itemId": "sandwich_04",
+      "def": "sandwich",
+      "zone": "outer",
+      "x": -17.1122,
+      "y": 0.02,
+      "z": -18.867,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "food",
+      "size": [
+        0.12,
+        0.04,
+        0.09
+      ],
+      "height": 0.04,
+      "units": 4,
+      "model": "design",
+      "dreq": 0.2021,
+      "absorb_threshold_units": -2.4
+    },
+    {
+      "itemId": "seed_01",
+      "def": "seed",
+      "zone": "pocket",
+      "x": -11.668,
+      "y": 0.008,
+      "z": -11.2131,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "nature",
+      "size": [
+        0.0224,
+        0.016,
+        0.04
+      ],
+      "height": 0.016,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0649,
+      "absorb_threshold_units": -3.4
+    },
+    {
+      "itemId": "seed_02",
+      "def": "seed",
+      "zone": "pocket",
+      "x": -13.6462,
+      "y": 0.008,
+      "z": -12.8888,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "nature",
+      "size": [
+        0.0224,
+        0.016,
+        0.04
+      ],
+      "height": 0.016,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0649,
+      "absorb_threshold_units": -3.4
+    },
+    {
+      "itemId": "seed_03",
+      "def": "seed",
+      "zone": "pocket",
+      "x": -13.5642,
+      "y": 0.008,
+      "z": -11.7847,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "nature",
+      "size": [
+        0.0224,
+        0.016,
+        0.04
+      ],
+      "height": 0.016,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0649,
+      "absorb_threshold_units": -3.4
+    },
+    {
+      "itemId": "small_potted_plant_01",
+      "def": "small_potted_plant",
+      "zone": "outer",
+      "x": -18.4898,
+      "y": 0.11,
+      "z": -14.2792,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "garden",
+      "size": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "height": 0.22,
+      "units": 6,
+      "model": "design",
+      "dreq": 0.4312,
+      "absorb_threshold_units": 6.8
+    },
+    {
+      "itemId": "small_potted_plant_02",
+      "def": "small_potted_plant",
+      "zone": "alcove",
+      "x": -6.5367,
+      "y": 0.11,
+      "z": -7.3439,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "garden",
+      "size": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "height": 0.22,
+      "units": 6,
+      "model": "design",
+      "dreq": 0.4312,
+      "absorb_threshold_units": 6.8
+    },
+    {
+      "itemId": "soda_can_01",
+      "def": "soda_can",
+      "zone": "table_top",
+      "x": -13.1703,
+      "y": 0.76,
+      "z": -9.3152,
+      "yaw": 0,
+      "support": "folding_table",
+      "support_top": 0.7,
+      "kind": "drink",
+      "size": [
+        0.0661,
+        0.12,
+        0.0661
+      ],
+      "height": 0.12,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2155,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "soda_can_02",
+      "def": "soda_can",
+      "zone": "mid_lawn",
+      "x": -11.2837,
+      "y": 0.06,
+      "z": -13.3894,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "drink",
+      "size": [
+        0.0661,
+        0.12,
+        0.0661
+      ],
+      "height": 0.12,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2155,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "soda_can_03",
+      "def": "soda_can",
+      "zone": "mid_lawn",
+      "x": -13.2982,
+      "y": 0.06,
+      "z": -11.5334,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "drink",
+      "size": [
+        0.0661,
+        0.12,
+        0.0661
+      ],
+      "height": 0.12,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2155,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "soda_can_04",
+      "def": "soda_can",
+      "zone": "outer",
+      "x": -14.5463,
+      "y": 0.06,
+      "z": -18.9152,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "drink",
+      "size": [
+        0.0661,
+        0.12,
+        0.0661
+      ],
+      "height": 0.12,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2155,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "soda_can_05",
+      "def": "soda_can",
+      "zone": "outer",
+      "x": -12.0554,
+      "y": 0.06,
+      "z": -18.5031,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "drink",
+      "size": [
+        0.0661,
+        0.12,
+        0.0661
+      ],
+      "height": 0.12,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.2155,
+      "absorb_threshold_units": -2.2
+    },
+    {
+      "itemId": "spoon_01",
+      "def": "spoon",
+      "zone": "bed_top",
+      "x": -10.9141,
+      "y": 0.2675,
+      "z": -9.1681,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "tableware",
+      "size": [
+        0.035,
+        0.015,
+        0.18
+      ],
+      "height": 0.015,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1218,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "spoon_02",
+      "def": "spoon",
+      "zone": "mid_lawn",
+      "x": -11.3005,
+      "y": 0.0075,
+      "z": -12.1572,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.035,
+        0.015,
+        0.18
+      ],
+      "height": 0.015,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1218,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "spoon_03",
+      "def": "spoon",
+      "zone": "mid_lawn",
+      "x": -11.925,
+      "y": 0.0075,
+      "z": -11.5317,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.035,
+        0.015,
+        0.18
+      ],
+      "height": 0.015,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1218,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "spoon_04",
+      "def": "spoon",
+      "zone": "alcove",
+      "x": -7.6156,
+      "y": 0.0075,
+      "z": -6.7447,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "tableware",
+      "size": [
+        0.035,
+        0.015,
+        0.18
+      ],
+      "height": 0.015,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.1218,
+      "absorb_threshold_units": -3.2
+    },
+    {
+      "itemId": "strawberry_01",
+      "def": "strawberry",
+      "zone": "blanket_a",
+      "x": -8.6132,
+      "y": 0.02,
+      "z": -17.3282,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "height": 0.04,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0997,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "strawberry_02",
+      "def": "strawberry",
+      "zone": "blanket_a",
+      "x": -7.2401,
+      "y": 0.02,
+      "z": -15.9222,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "height": 0.04,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0997,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "strawberry_03",
+      "def": "strawberry",
+      "zone": "blanket_a",
+      "x": -9.8765,
+      "y": 0.02,
+      "z": -16.6322,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "height": 0.04,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0997,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "strawberry_04",
+      "def": "strawberry",
+      "zone": "blanket_a",
+      "x": -7.3255,
+      "y": 0.02,
+      "z": -14.4345,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "height": 0.04,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0997,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "strawberry_05",
+      "def": "strawberry",
+      "zone": "bed_top",
+      "x": -10.9782,
+      "y": 0.28,
+      "z": -9.2312,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "height": 0.04,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0997,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "strawberry_06",
+      "def": "strawberry",
+      "zone": "bed_top",
+      "x": -11.5013,
+      "y": 0.28,
+      "z": -6.7322,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "height": 0.04,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0997,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "strawberry_07",
+      "def": "strawberry",
+      "zone": "bed_top",
+      "x": -8.4705,
+      "y": 0.28,
+      "z": -8.6191,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "height": 0.04,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0997,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "strawberry_08",
+      "def": "strawberry",
+      "zone": "bed_top",
+      "x": -10.9761,
+      "y": 0.28,
+      "z": -9.175,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "height": 0.04,
+      "units": 1,
+      "model": "real",
+      "dreq": 0.0997,
+      "absorb_threshold_units": -3.3
+    },
+    {
+      "itemId": "toy_ball_01",
+      "def": "toy_ball",
+      "zone": "mid_lawn",
+      "x": -9.9328,
+      "y": 0.2,
+      "z": -12.8024,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "toy",
+      "size": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "height": 0.4,
+      "units": 4,
+      "model": "real",
+      "dreq": 1.0692,
+      "absorb_threshold_units": 152.7
+    },
+    {
+      "itemId": "toy_ball_02",
+      "def": "toy_ball",
+      "zone": "mid_lawn",
+      "x": -10.5975,
+      "y": 0.2,
+      "z": -12.7565,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "toy",
+      "size": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "height": 0.4,
+      "units": 4,
+      "model": "real",
+      "dreq": 1.0692,
+      "absorb_threshold_units": 152.7
+    },
+    {
+      "itemId": "toy_ball_03",
+      "def": "toy_ball",
+      "zone": "outer",
+      "x": -18.9596,
+      "y": 0.2,
+      "z": -16.1209,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "toy",
+      "size": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "height": 0.4,
+      "units": 4,
+      "model": "real",
+      "dreq": 1.0692,
+      "absorb_threshold_units": 152.7
+    },
+    {
+      "itemId": "toy_ball_04",
+      "def": "toy_ball",
+      "zone": "outer",
+      "x": -18.5467,
+      "y": 0.2,
+      "z": -15.1928,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "toy",
+      "size": [
+        0.4,
+        0.4,
+        0.4
+      ],
+      "height": 0.4,
+      "units": 4,
+      "model": "real",
+      "dreq": 1.0692,
+      "absorb_threshold_units": 152.7
+    },
+    {
+      "itemId": "watering_can_01",
+      "def": "watering_can",
+      "zone": "outer",
+      "x": -18.9071,
+      "y": 0.2077,
+      "z": -14.2915,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "garden",
+      "size": [
+        0.2603,
+        0.4154,
+        0.58
+      ],
+      "height": 0.4154,
+      "units": 6,
+      "model": "real",
+      "dreq": 1.062,
+      "absorb_threshold_units": 149.5
+    },
+    {
+      "itemId": "watering_can_02",
+      "def": "watering_can",
+      "zone": "alcove",
+      "x": -7.6084,
+      "y": 0.2077,
+      "z": -8.9115,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "garden",
+      "size": [
+        0.2603,
+        0.4154,
+        0.58
+      ],
+      "height": 0.4154,
+      "units": 6,
+      "model": "real",
+      "dreq": 1.062,
+      "absorb_threshold_units": 149.5
+    },
+    {
+      "itemId": "watermelon_01",
+      "def": "watermelon",
+      "zone": "blanket_a",
+      "x": -11.1961,
+      "y": 0.11,
+      "z": -18.0165,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "height": 0.22,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.6713,
+      "absorb_threshold_units": 35.2
+    },
+    {
+      "itemId": "watermelon_02",
+      "def": "watermelon",
+      "zone": "blanket_a",
+      "x": -7.2344,
+      "y": 0.11,
+      "z": -17.3709,
+      "yaw": 0,
+      "support": "ground",
+      "support_top": 0.0,
+      "kind": "fruit",
+      "size": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "height": 0.22,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.6713,
+      "absorb_threshold_units": 35.2
+    },
+    {
+      "itemId": "watermelon_03",
+      "def": "watermelon",
+      "zone": "bed_top",
+      "x": -11.5711,
+      "y": 0.37,
+      "z": -10.3924,
+      "yaw": 0,
+      "support": "bed",
+      "support_top": 0.26,
+      "kind": "fruit",
+      "size": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "height": 0.22,
+      "units": 4,
+      "model": "real",
+      "dreq": 0.6713,
+      "absorb_threshold_units": 35.2
+    }
+  ],
+  "content_units": {
+    "props_110": 348,
+    "gate": 64,
+    "structures": 1088,
+    "total": 1500,
+    "needed_for_cap": 1356.4,
+    "diameter_at_total_uncapped": 2.2749
+  },
+  "growth_curve": [
+    {
+      "units": 0.0,
+      "piece": 0,
+      "diameter": 0.2997
+    },
+    {
+      "units": 264.0,
+      "piece": 87,
+      "diameter": 1.2794
+    },
+    {
+      "units": 766.0,
+      "piece": 121,
+      "diameter": 1.8196
+    },
+    {
+      "units": 1106.0,
+      "piece": 124,
+      "diameter": 2.0557
+    },
+    {
+      "units": 1468.0,
+      "piece": 126,
+      "diameter": 2.2
+    },
+    {
+      "units": 1500.0,
+      "piece": 127,
+      "diameter": 2.2
+    }
+  ],
+  "time_estimate_120s": {
+    "model": "价值优先 + 门槛合法；小件 1.2 s/件、结构件 3.0 s/件",
+    "units": 1372.0,
+    "diameter": 2.2,
+    "pieces": 74,
+    "last_event_t": 119.40000000000015
+  },
+  "budget": {
+    "ground": {
+      "used": 1,
+      "cap": 1,
+      "items": [
+        "草地（SetGroundPlane）"
+      ]
+    },
+    "planes": {
+      "used": 4,
+      "cap": 8,
+      "items": [
+        "西/南/东/北 4 条边界（AddPlane，无限半空间）"
+      ]
+    },
+    "boxes": {
+      "used": 4,
+      "cap": 8,
+      "items": [
+        "flower_bed",
+        "shell_tree_trunk",
+        "shell_tree_mound",
+        "shell_signpost"
+      ]
+    },
+    "ramps": {
+      "used": 2,
+      "cap": 4,
+      "items": [
+        "ramp_to_table",
+        "ramp_to_bed"
+      ]
+    },
+    "propSupports": {
+      "peak": 3,
+      "cap": 6,
+      "note": "P2：吸不动且 rise<=0.25D 的道具顶面，按最近 6 件选"
+    },
+    "blocking": {
+      "peak": 4,
+      "cap": 6,
+      "note": "动态挡路盒：吸不动且 rise>0.25D 的道具，按最近 6 件选"
+    },
+    "contacts": {
+      "cap": 4,
+      "note": "每步接触（ContactCapacity），不可配置；非作者预算"
+    }
+  },
+  "blocking_budget_samples": [
+    {
+      "probe": "ball_start",
+      "diameter": 0.3,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "ball_start",
+      "diameter": 0.45,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "ball_start",
+      "diameter": 0.6,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "ball_start",
+      "diameter": 0.83,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_beer_crate_01"
+      ]
+    },
+    {
+      "probe": "ball_start",
+      "diameter": 1.03,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "ball_start",
+      "diameter": 1.2,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "ball_start",
+      "diameter": 1.6,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "ball_start",
+      "diameter": 2.0,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "gate_front",
+      "diameter": 0.3,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "gate_front",
+      "diameter": 0.45,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "gate_front",
+      "diameter": 0.6,
+      "blocking_candidates": 2,
+      "nearest": [
+        "gate_basket_03",
+        "gate_basket_02"
+      ]
+    },
+    {
+      "probe": "gate_front",
+      "diameter": 0.83,
+      "blocking_candidates": 1,
+      "nearest": [
+        "gate_cooler_01"
+      ]
+    },
+    {
+      "probe": "gate_front",
+      "diameter": 1.03,
+      "blocking_candidates": 1,
+      "nearest": [
+        "gate_cooler_01"
+      ]
+    },
+    {
+      "probe": "gate_front",
+      "diameter": 1.2,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "gate_front",
+      "diameter": 1.6,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "gate_front",
+      "diameter": 2.0,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "ramp_bottom",
+      "diameter": 0.3,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_beer_crate_01"
+      ]
+    },
+    {
+      "probe": "ramp_bottom",
+      "diameter": 0.45,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_beer_crate_01"
+      ]
+    },
+    {
+      "probe": "ramp_bottom",
+      "diameter": 0.6,
+      "blocking_candidates": 2,
+      "nearest": [
+        "struct_beer_crate_01",
+        "struct_plank_01"
+      ]
+    },
+    {
+      "probe": "ramp_bottom",
+      "diameter": 0.83,
+      "blocking_candidates": 2,
+      "nearest": [
+        "struct_beer_crate_01",
+        "struct_lounge_chair_01"
+      ]
+    },
+    {
+      "probe": "ramp_bottom",
+      "diameter": 1.03,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_lounge_chair_01"
+      ]
+    },
+    {
+      "probe": "ramp_bottom",
+      "diameter": 1.2,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_lounge_chair_01"
+      ]
+    },
+    {
+      "probe": "ramp_bottom",
+      "diameter": 1.6,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_lounge_chair_01"
+      ]
+    },
+    {
+      "probe": "ramp_bottom",
+      "diameter": 2.0,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "table_side",
+      "diameter": 0.3,
+      "blocking_candidates": 4,
+      "nearest": [
+        "struct_beer_crate_01",
+        "watermelon_03",
+        "struct_lounge_chair_01",
+        "struct_crate_01"
+      ]
+    },
+    {
+      "probe": "table_side",
+      "diameter": 0.45,
+      "blocking_candidates": 4,
+      "nearest": [
+        "struct_beer_crate_01",
+        "watermelon_03",
+        "struct_lounge_chair_01",
+        "struct_crate_01"
+      ]
+    },
+    {
+      "probe": "table_side",
+      "diameter": 0.6,
+      "blocking_candidates": 4,
+      "nearest": [
+        "struct_beer_crate_01",
+        "watermelon_03",
+        "struct_lounge_chair_01",
+        "struct_crate_01"
+      ]
+    },
+    {
+      "probe": "table_side",
+      "diameter": 0.83,
+      "blocking_candidates": 3,
+      "nearest": [
+        "struct_beer_crate_01",
+        "struct_lounge_chair_01",
+        "struct_crate_01"
+      ]
+    },
+    {
+      "probe": "table_side",
+      "diameter": 1.03,
+      "blocking_candidates": 2,
+      "nearest": [
+        "struct_lounge_chair_01",
+        "struct_crate_01"
+      ]
+    },
+    {
+      "probe": "table_side",
+      "diameter": 1.2,
+      "blocking_candidates": 2,
+      "nearest": [
+        "struct_lounge_chair_01",
+        "struct_crate_01"
+      ]
+    },
+    {
+      "probe": "table_side",
+      "diameter": 1.6,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_lounge_chair_01"
+      ]
+    },
+    {
+      "probe": "table_side",
+      "diameter": 2.0,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_folding_table_01"
+      ]
+    },
+    {
+      "probe": "bed_south",
+      "diameter": 0.3,
+      "blocking_candidates": 2,
+      "nearest": [
+        "struct_beer_crate_02",
+        "struct_crate_01"
+      ]
+    },
+    {
+      "probe": "bed_south",
+      "diameter": 0.45,
+      "blocking_candidates": 3,
+      "nearest": [
+        "struct_beer_crate_02",
+        "struct_crate_01",
+        "toy_ball_01"
+      ]
+    },
+    {
+      "probe": "bed_south",
+      "diameter": 0.6,
+      "blocking_candidates": 4,
+      "nearest": [
+        "struct_beer_crate_02",
+        "struct_crate_01",
+        "toy_ball_01",
+        "toy_ball_02"
+      ]
+    },
+    {
+      "probe": "bed_south",
+      "diameter": 0.83,
+      "blocking_candidates": 4,
+      "nearest": [
+        "struct_beer_crate_02",
+        "struct_crate_01",
+        "toy_ball_01",
+        "toy_ball_02"
+      ]
+    },
+    {
+      "probe": "bed_south",
+      "diameter": 1.03,
+      "blocking_candidates": 3,
+      "nearest": [
+        "struct_crate_01",
+        "toy_ball_01",
+        "toy_ball_02"
+      ]
+    },
+    {
+      "probe": "bed_south",
+      "diameter": 1.2,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_crate_01"
+      ]
+    },
+    {
+      "probe": "bed_south",
+      "diameter": 1.6,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "bed_south",
+      "diameter": 2.0,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "tree_corner",
+      "diameter": 0.3,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_stroller_01"
+      ]
+    },
+    {
+      "probe": "tree_corner",
+      "diameter": 0.45,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_stroller_01"
+      ]
+    },
+    {
+      "probe": "tree_corner",
+      "diameter": 0.6,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_stroller_01"
+      ]
+    },
+    {
+      "probe": "tree_corner",
+      "diameter": 0.83,
+      "blocking_candidates": 2,
+      "nearest": [
+        "struct_stroller_01",
+        "struct_crate_02"
+      ]
+    },
+    {
+      "probe": "tree_corner",
+      "diameter": 1.03,
+      "blocking_candidates": 3,
+      "nearest": [
+        "struct_stroller_01",
+        "struct_crate_02",
+        "toy_ball_03"
+      ]
+    },
+    {
+      "probe": "tree_corner",
+      "diameter": 1.2,
+      "blocking_candidates": 2,
+      "nearest": [
+        "struct_stroller_01",
+        "struct_crate_02"
+      ]
+    },
+    {
+      "probe": "tree_corner",
+      "diameter": 1.6,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_stroller_01"
+      ]
+    },
+    {
+      "probe": "tree_corner",
+      "diameter": 2.0,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_stroller_01"
+      ]
+    },
+    {
+      "probe": "blanket",
+      "diameter": 0.3,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "blanket",
+      "diameter": 0.45,
+      "blocking_candidates": 1,
+      "nearest": [
+        "struct_tray_01"
+      ]
+    },
+    {
+      "probe": "blanket",
+      "diameter": 0.6,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "blanket",
+      "diameter": 0.83,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "blanket",
+      "diameter": 1.03,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "blanket",
+      "diameter": 1.2,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "blanket",
+      "diameter": 1.6,
+      "blocking_candidates": 0,
+      "nearest": []
+    },
+    {
+      "probe": "blanket",
+      "diameter": 2.0,
+      "blocking_candidates": 0,
+      "nearest": []
+    }
+  ],
+  "validation": {
+    "errors": [],
+    "warnings": []
+  }
+}

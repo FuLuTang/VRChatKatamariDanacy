@@ -1299,7 +1299,7 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 |---|---|---|---|---|---|
 | **S1（已完成）** | Python 参考模型 + 单测 | `Docs/Design/BallMotor/contact_v2/contact_v2.py`、`.../shapes.py`、`Docs/tests/ball_contact_v2/test_contact_v2.py`、`.../test_shapes.py` | 低（不改运行期） | `python3 -m unittest discover -s Docs/tests` 全过（本轮 534 例，含新增 32 例） | 删文件 |
 | **S2（代码已写，未编译）** | C# 纯数学库 + EditMode | 实际落点（2026-11-15）：`Runtime/BallContact/` 的 `ContactTuning.cs`、`ContactCodes.cs`、`ObbContactMath.cs`、`ObbBakeMath.cs`、`ContactClassificationMath.cs`、`ClimbMath.cs`、`BallShapeMath.cs`、`ContactWindowMath.cs`、`ContactSolveMath.cs`、`CurveRampMath.cs`；`Tests/EditMode/BallContact/` 的 8 个测试类 | 中：数值与模型不一致 | 同一组 fixture 与 Python **逐位/1e-6 一致**；面/棱/角/内部、窗口、弯坡段几何。**代码已写但未编译、EditMode 未跑**（写它的机器没有 Unity） | 删文件（还没人调用） |
-| **S3** | 电机集成，**flag 默认 false** | `KatamariBallMotor.cs`：新字段 `contactModelV2Enabled`、`StepContacts`、`FillWindow`、`ClimbState`、卡死/恢复重写、新 getter；`RefreshStepMask`/`TrySweepSphere` 在 v2 分支跳过 | **高**（最大的改动） | flag=false 时与今天**逐位相同**（同一场景同一 run 的 `[ptf]` 行对比）；flag=true 时 C 矩阵 + W 格通过；`recovery == 0` | **flag 置 false**（v1 路径原样保留）；必要时 revert 一个 commit |
+| **S3（代码已写，未编译）** | 电机集成，**flag 默认 false** | `KatamariBallMotor.cs`：`contactModelV2Enabled`、`StepContactV2`/`FillNearWindow`/`WriteContactSupport`/`ApplyGrowthPushOut`/恢复状态机、`AddObb`/`ClearObbs`、新 getter；`StepPositionV1` 保留 v1 原语句；`RefreshStepMask`/`TrySweepSphere` 在 v2 分支跳过；`BallShapeMath.TryNeedleSegmentContact`（针尖段扫掠）+ `NeedleSegmentTests` + `ContactModelV2Tests`；接口与偏差见 §7.5 | **高**（最大的改动） | flag=false 时与今天**逐位相同**（同一场景同一 run 的 `[ptf]` 行对比；`StepPositionV1` 是原中段整体搬移，diff 已核对）；flag=true 时 C 矩阵 + W 格通过；`recovery == 0`。**本轮没有任何 Unity 编译/测试** | **flag 置 false**（v1 路径原样保留）；必要时 revert 一个 commit |
 | **S4** | 数据/导入器 | `LevelArenaHost.cs`（8 角点 OBB 烘、`AddObb`、ramp→slab、`ramps` 数组语义）、`PlacementImporter.cs`（`curve_ramp` 展开）、`placement_core.py`（45° error→warning + 弯坡校验）、`SupportSurfaceMath.cs`（降级为诊断） | 中：旧场景重烘 | 9 个小格的烘焙 OBB 表与旧 AABB **数值相同**（轴对齐）；`levelbuild check` 全绿；弯坡段数/矢高合规 | `LevelArenaHost.useObbBake=false`（回 AABB，v1/v2 都能跑）；弯坡条目 `expanded:false` 不展开 |
 | **S5** | 新测试格 + 沙盒 + 证据 | `Labs/PhysicsTestField`（W/R/S/X 格）、`Labs/PhysicsSandbox`（地图 0）、`physics_test_field.json`、`Docs/Evidence/...` | 中：数据/场景工作量大 | v2 验收表全绿；沙盒能手动滚 | 删格；沙盒场景独立，不影响主场景 |
 
@@ -1335,6 +1335,142 @@ python3 Docs/tools/validate_plan.py                  # 计划数据
 ### 7.4 S4 的回归检查点（必须做）
 
 轴对齐的旧 9 格，`8 角点 OBB` 与 `bounds AABB` 必须给出**完全相同**的 min/max（浮点差 ≤ 1e-6）。做法：`LevelArenaHost` 在 `Setup` 时把两种烘法都算一遍，不一致就 `Debug.LogError` + 用 AABB；这个“双烘自检”在 S4 验收后可以删。
+
+### 7.5 S3 实现与接口（2026-11-15）
+
+**状态：`代码已写，未编译`。** 本轮改的是 `Runtime/BallMotor/KatamariBallMotor.cs`（v2 区域）、`Runtime/BallContact/BallShapeMath.cs`（补 §4A.3 的针尖**段**扫掠）、`Tests/EditMode/BallContact/NeedleSegmentTests.cs`、`Tests/EditMode/BallMotor/ContactModelV2Tests.cs`、`Docs/Design/BallMotor/contact_v2/shapes.py` + `Docs/tests/ball_contact_v2/test_segment_sweep.py`（参考模型与 Python 金值）。**没有**碰 `LevelArenaHost`、`PlacementImporter`、`placement_core`、测试场场景/数据。
+（S2 的 10 个文件已由操作者在 Unity 里编译，EditMode 658 例全绿，仅 SDK URL 检查因离线红色；这是本节的运行前提，不是本轮跑出来的。）
+
+#### 7.5.1 开关、回滚与 v1 路径的改动清单
+
+`[SerializeField] private bool contactModelV2Enabled = false;`（另有 `SetContactModelV2Enabled(bool)` / `IsContactModelV2()` 供实验与 EditMode 用）。
+
+`StepBall(dt)` 现在只做一件事：阶段 1–2 与 5–9 共享，**位置权威**在两者之间二选一：
+
+```
+1 StepInput -> 2 BallMotionMath -> [ flag ? StepContactV2 : StepPositionV1 ] -> 5..9 (含 7.5 长大推挤)
+```
+
+`StepPositionV1` 是**原 StepBall 的中段整体搬移**（语句、注释、常量逐字不变，已用 diff 核对），因此 flag=false 时执行顺序仍是 `RefreshStepMask → TrySweepSphere → TryResolveSupport → GroundContactMath`。
+
+进入 v1 路径的改动**只有这 5 处**（其余全部是新增方法/字段）：
+
+| # | 位置 | 改动 |
+|---|---|---|
+| 1 | `StepBall` 尾部（阶段 7.5） | 新增 `if (contactModelV2Enabled) ApplyGrowthPushOut(...)`，flag 关时不执行 |
+| 2 | `StepPositionV1` 开头/中段 | 三个值从局部变量变成 `out` 参数：`groundedCenter`(`= sweptCenter`)、`followCenter`(`= sweptCenter`)、`supportNormal`(`= groundPlaneNormal`)；方法开头先初始化三者（CS0165） |
+| 3 | `AddBox` / `AddRamp` 末尾 | 各加一次 `RegisterBoxObb` / `RegisterRampSlab` 调用；v1 没有任何读者读这两张表 |
+| 4 | `ClearObstacles` / `TeleportTo` | `ClearObstacles` 加 `ClearObbs()`；`TeleportTo` 加 v2 状态复位（垂直速度、爬升、稳定点、针尖上一帧、roundStartCenter）；v1 不读这些字段 |
+| 5 | `GetSupportKind` 开头 | 加 `if (contactModelV2Enabled) { 针尖支撑→5; 爬升接触→4 }`；flag 关时不进 |
+| 6 | `Start` 末尾 | `AllocateContactV2Buffers()`（约 25 KB，**flag 关了也分配**，这样运行期翻转 flag 仍能看到场景已登记的几何） |
+
+回滚 = flag 置 false；不需要 revert commit。
+
+#### 7.5.2 新增公开 API（S4 按这些签名写）
+
+几何登记（`AddBox` / `AddRamp` / `AddPlane` / `SetGroundPlane` 签名与语义不变）：
+
+```csharp
+bool AddObb(Vector3 center, Vector3 axisX, Vector3 axisY, Vector3 axisZ,
+            Vector3 halfExtents, int surfaceId, int role);   // 容量 256；坏盒/超容拒绝并计数
+void ClearObbs();
+int  GetStaticObbCount();          int  GetStaticObbCapacity();      // 256
+int  GetStaticObbOverflowCount();  int  GetStaticObbRefusalCount();
+string GetLastStaticObbRefusalReason();
+```
+
+接触 / 窗口 / 求解（§6.4）：
+
+```csharp
+int     GetContactCount();                 Vector3 GetContactNormal(int i);
+Vector3 GetContactPoint(int i);            float   GetContactDepth(int i);
+int     GetContactClass(int i);            int     GetContactSurfaceId(int i);
+int     GetContactShape(int i);            int     GetNeedleContactCount();
+int     GetDominantContactClass();         int     GetDominantContactSurfaceId();
+float   GetSolverResidualMax();            bool    WasContactIncomplete();
+int     GetNearObbCount();                 int     GetNearObbDropped();
+int     GetNearObbDroppedTotal();          int     GetNearRebuildCount();
+int     GetWindowOverflowCount();          int     GetWindowSaturatedCount();
+int     GetSubstepCount();                 float   GetLastStepMicros();
+```
+
+爬升 / 恢复 / 长大 / 形状：
+
+```csharp
+bool  IsClimbing();          int   GetClimbState();        // 0 无 / 1 爬 / 2 回滑冷却 / 3 锁定
+float GetClimbHeightWorldM(); float GetClimbSpeedMps();   bool IsClimbLocked();
+int   GetRecoveryCount();    int   GetRecoveryState();     // 0/1 软/2 硬/3 保持
+int   GetLastRecoveryReason();                            // 1 软 2 硬 3 初始深嵌
+bool  IsSizeApplyDeferred(); int   GetSizeApplyDeferredCount();
+int   GetContactSolveFailureCount();   int GetContactRejectedStepCount();
+float GetContactRadiusUsedWorldM();    Vector3 GetContactDriveDirection();
+float GetSupportSlopeDegrees();
+float GetNeedleProtrusionCapWorldM();  float GetNeedleProtrusionMaxWorldM();
+float GetPhysicalRadiusWorldM();       float GetVisualCoreRadiusWorldM();
+float GetRollReachWorldM();            float GetPickupReachWorldM();
+bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabled);
+```
+
+#### 7.5.3 每个 v2 阶段落在哪个方法
+
+| 设计阶段 | 代码 | 说明 |
+|---|---|---|
+| 2.5 台阶掩码 | **无**（v2 分支不调用 `RefreshStepMask`） | 掩码字段/方法仍在，v1 用 |
+| 3 子步 + 窗口 + 接触 + 推挤 + 分类 + 速度响应 | `StepContactV2` → `FillNearWindow` + `ContactSolveMath.TryStep`（S2，内含 `MaxSubSteps`/`TryCollectContacts`/`TryPushOut`/`SelectSupportContact`/`SelectClimbContact`/`ClimbMath`） | 一次 Udon 调用做完全部障碍循环 |
+| 3.5 爬升 | `ContactSolveMath.TryStep` 内的 TryStep 状态机；状态字段在电机（`climbActive/climbAnchorY/climbSurfaceId/climbCooldown/climbLocked/climbAlongSpeed`），`WriteContactSupport` 写回口径 | `GetClimbState` 的 2 = 冷却窗口 |
+| 4 支撑写回 | `WriteContactSupport`（v1 的 `supportSurface*` 字段全部继续写） | 支撑高度用 v1 同一公式 `C.y − dot(n,C−p)/n.y`，针尖支撑自然落到 §2.5 的针尖公式 |
+| 4.5 长大推挤 | `ApplyGrowthPushOut`（在共享尾部的 7.5，flag 关时不跑） | 独立接触 scratch，不覆盖当步 `GetContact*` 读数；≤2 次 × ≤5 cm；失败则**整段不应用** + `sizeApplyDeferred` |
+| 针尖（§4A.3） | `PrepareNeedleShape` / `EstimateNeedleProtrusion` / `CollectNeedleContacts` / `ResolveNeedleContacts` / `MergeNeedleContacts` / `ApplyNeedleVelocityResponse` + `BallShapeMath.TryNeedleSegmentContact` | 段扫掠在 S2 库里（纯数学 + EditMode + Python 金值） |
+| 2.8 卡死/恢复 | `UpdateContactRecovery` / `TryRecoverToStablePoint` / `EnterRecoveryHold` | 软 1.5 s 清速度；硬 3 s 回**最后稳定点**（没有则本回合起点）；10 s 内 3 次 → `recoveryState=3` + 一条 `[BallMotor] recovery hold …`，不再传送 |
+| §5.4 窗口溢出 | `FillNearWindow` + `LogWindowOverflowOnce` | 保留最近 24 条，`contactIncomplete` 锁存 + 每 1 s 最多一条 `[ContactV2] window overflow …` |
+
+**AddBox → OBB**：`center=(min+max)/2`、`halfExtents=(max−min)/2`、轴 = 世界轴、`surfaceId = 1 + boxIndex`（v1 支撑表 id）、`role = 0`。**AddRamp → slab OBB**：`axisY = rampNormal`、`axisX = right 在坡面内的投影归一化`、`axisZ = cross(axisY, axisX)`、`halfExtents = (halfWidth, thickness/2, halfRun / normal.y)`、`center = walkingCenter − normal·thickness/2`、`surfaceId = 10 + rampIndex`、`role = 1`；`thickness = rampSlabThicknessM`（序列化，默认 0.04）。坡的**走向面**就是原来的烘焙平面，所以旧场景开 flag 后球不会陷半个板厚。
+
+#### 7.5.4 getter 在 v2 的口径（旧读者不受影响）
+
+| getter | v1 | v2 |
+|---|---|---|
+| `GetSupportSurfaceId` | 0 / 1+i / 10+i / 100+i | 同上（地面 0、盒 1+i、坡 10+i；`AddObb` 用调用方给的 id） |
+| `GetSupportKind` | 0/1/2/3/−1 | 同上 **+ 4 = 爬升接触**、**5 = 只有针尖撑着** |
+| `GetSupportSurfaceHeightWorldM` | 选中面在球心 XZ 的高度 | 同一公式；针尖支撑时给出针尖处的切平面高度（§2.5） |
+| `GetSupportNormalWorld` | 选中面法线 | 支撑法线；爬升时为爬升接触法线；无支撑时保留上一次 |
+| `GetStepHeightLimitWorldM` | 0.25·D，参与物理 | 仍返回 0.25·D，**只作诊断**（每步刷新） |
+| `IsFalling` | 丢失支撑后进入重力 | = 无支撑接触且不在爬升 |
+| `GetSupportSurfaceCount` | 带内面数 | 当步接触条数 |
+| `GetCollisionRadiusWorldM` | 扫掠半径 | = `r_phys`，接触半径 |
+| `GetSemanticDiameterWorldM` | 视觉/相机/stepLimit/吸收门 | 不变（§4A.5 的三形状拆分不在 S3） |
+| `GetGroundProxyLiftWorldM` / `GetProxyProtrusionCapWorldM` | 径向代理抬升 | v2 不再抬升：前者仍返回最后值（诊断），后者仍按 `min(0.35r,0.30)` 返回（= 针尖 cap） |
+| `GetStepMaskRebuildCount` | 掩码重建次数 | v2 不再重建（值冻结） |
+| `IsTerrainSupportEnabled` / `SetTerrainSupportEnabled` | P1 支撑/台阶/下落开关 | v2 **不读**这个开关（没有掩码、没有高度场、没有 `fallSpeedMps` 下落状态）；flag 开时它无效 |
+
+#### 7.5.5 与设计的偏差（已实现 vs 推迟）
+
+**已实现**：子步上限/窗口/滞回/溢出判据、面/棱/角/内部最近点、三分类、RIDE 不去速、CLIMB 去水平法向、NONE 去三维法向、15° 余量（在 S2 的 `SelectClimbContact`/TryStep 内）、支撑=最高 RIDE、爬升通道（H_cap/速度/锁定/回滑/冷却）、软/硬/保持三段恢复、长大推挤、针尖段扫掠 + 合并 + 推挤 + 去速 + 针尖支撑(5)、针尖对 `H_cap` 的 `L_eff`。
+
+**推迟（有意，写在这里避免误读为已做）**：
+
+1. **针尖接触不在子步循环里**：S2 的 `TryStep` 自己跑子步并在内部收集接触，电机无法把针尖塞进去，所以针尖是**每步一次后置 pass**（2 次推出迭代 + 一次重新收集）。不穿透由**段扫掠**保证，不由子步数保证；代价是顺序确定性差一点。
+2. **针尖不启动爬升通道、不应用 grip 折扣**：`TryStep` 没有 gate 缩放参数，`RequiredSpeedWithGrip` 需要改 S2 的 TryStep 签名（会破坏“两份实现不漂”）。W7/W8 归 S5；本轮的针尖只做推挤、去速、支撑、`L_eff`。
+3. **`L_eff` 用推入方向代替墙法线**：求解前不知道墙法线，用运动层的推力方向做投影（`dot(worldDir, drive)`）。
+4. **长大推挤是“原子”的**：失败时整段不应用并把 `sizeApplyDeferred` 置位（下一步重试）。设计写的“本步回退到 r_old”被实现成“这一步的推挤不生效”，因为进入本步时接触半径本来就是 r_old（尺寸更新发生在求解之后）。
+5. **`GetLastStepMicros` 是粗测**：Udon 没有高精度时钟（无 `Stopwatch`），`Time.time` 每帧才变；一帧跑多个固定步时只有第一个非零，读数只能当“整帧上界”。要真测请用 profiler。
+6. **`contactIncomplete` 是锁存 + 一条日志，不冻结球**：§5.4 的原文就是“仍用 24 条，标记不完整，判据失败”。
+7. **没有 dash**（§3.8）、**没有 `GetFixedStepCount`**（§6.4 列的是 P4 请求，S3 未加）。
+8. **AddBox 容量仍是 8**：现有场景（≤8 盒 + ≤4 坡）可以直接开 flag；地图 0 的 118 条要等 S4 把宿主改成 `AddObb`。`AddRamp` 的 45° 作者门仍在（S4 改 warning），更陡的坡本轮只能用 `AddObb` 直接登记。
+9. **挡路道具 / 支撑道具不进 v2 静态表**：`SetBlockingBoxes` / `SetSupportProps` 仍只写 v1 的 sweep 数组与支撑表，**没有**转成 OBB，所以 flag 开时它们既不挡也不支撑。§5.2 把这两类画成“宿主 20 Hz 扫描的独立池”，但没说 v2 求解器怎么看见它们：S4 要拍板（推荐给 6+6 一个动态槽区，每次扫描重登记，窗口照常扫）。在那之前，flag=true 只应在**没有挡路/支撑道具**的格子里打开（现有 9 格的盒子与坡都是 AddBox/AddRamp，不受影响）。
+10. **三形状拆分（§4A.5）未落到尺寸层**：`r_phys = collisionRadiusWorldM`，`collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` 语义未变；只提供 `GetPhysicalRadiusWorldM` / `GetVisualCoreRadiusWorldM` / `GetRollReachWorldM` / `GetPickupReachWorldM` 四个读数。
+    **pickup 已按 §4A.4 接成 trigger**：`EvaluatePendingCandidates` 在 flag 开时把“球心→该候选”方向上的 `pickupReach(û)` 作为 `PickupAbsorbMath` 的球半径参数（reach = pickupReach + contactR + propBoundingRadius），**只影响“能不能粘”**，不进接触、不挡、不支撑；flag 关时该参数逐字仍是 `collisionRadiusWorldM`。`PickupAbsorbMath` 本身一行未改。隔墙吸（§4A.4 的选项①）行为不变。
+11. **针尖可能漏掉亚毫米的擦角**（`BallShapeMath.TryNeedleSegmentContact` 的 5 采样 + 12 次二分）：面/棱命中精确，角上极浅的擦过可能漏。
+
+#### 7.5.6 本轮跑了什么 / 没跑什么
+
+| 跑了 | 结果 |
+|---|---|
+| `python3 -m unittest discover -s Docs/tests` | 全绿（新增 `ball_contact_v2/test_segment_sweep.py` 12 例） |
+| `python3 Docs/tools/validate_plan.py` | PASS |
+| **没跑** | Unity 编译、U# 全量编译、EditMode、Play Mode、profiler、任何手感/帧时间；**S3 的 C# 一行都没编译过** |
+
+操作者要跑的两组 EditMode：`VRCKatamari.Tests.NeedleSegmentTests`（纯数学，12 例）与 `VRCKatamari.Tests.ContactModelV2Tests`（电机级，10 例）；后者是设计期望值，若红，先看 `GetContactCount/GetSupportKind/GetRecoveryState` 三组读数再判是代码还是期望。
 
 ---
 

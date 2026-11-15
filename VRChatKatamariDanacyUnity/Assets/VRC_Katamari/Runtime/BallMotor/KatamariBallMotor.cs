@@ -1,6 +1,7 @@
 using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
+using VRCKatamari.BallContact;
 using VRCKatamari.BallLayers;
 using VRCKatamari.Core;
 using VRCKatamari.Economy;
@@ -633,6 +634,163 @@ namespace VRCKatamari.BallMotor
         private const int ProxySkipInvalidInput = 5;
         private const int ProxySkipShellRefused = 6;
 
+
+        // ---- Ball contact v2 (Docs/Design/BallMotor/CONTACT_MODEL_V2.md; S3) ----
+        //
+        // PROVISIONAL. The flag is the rollback switch: FALSE runs the v1 position
+        // authority (StepPositionV1, the pre-v2 statements verbatim); TRUE replaces the
+        // step mask, the inflated-AABB sweep, the ramp height-field support and the
+        // radial-proxy ground lift with ONE contact solver (StepContactV2). No number in
+        // this region is measured or play-tested; the values come from ContactTuning.
+        [SerializeField] private bool contactModelV2Enabled = false;
+
+        /// <summary>
+        /// Slab thickness an AddRamp becomes in v2, metres (design §1.5 default 0.04).
+        /// The walking face is the slab's +local-Y face, so the body hangs below the
+        /// authored plane and the ball does not sink by half a board.
+        /// </summary>
+        [SerializeField] private float rampSlabThicknessM = 0.04f;
+
+        // Contact capacities and motor-side thresholds (design §1.3, §2.1, §2.8, §4.2).
+        private const int MaxNeedleContacts = 4;
+        private const float ContactResidualRejectM = 0.02f;
+        private const float ContactGrowthPushCapM = 0.05f;
+        private const float ContactStuckSoftSeconds = 1.5f;
+        private const float ContactStuckHardSeconds = 3f;
+        private const float ContactRecoveryWindowSeconds = 10f;
+        private const int ContactRecoveryHoldCount = 3;
+        private const int ContactRecoveryStateNone = 0;
+        private const int ContactRecoveryStateSoft = 1;
+        private const int ContactRecoveryStateHard = 2;
+        private const int ContactRecoveryStateHold = 3;
+
+        // Static OBB table: the map's geometry, registered once (design §1.3, §5.2).
+        private Vector3[] staticObbCenter;
+        private Vector3[] staticObbAxisX;
+        private Vector3[] staticObbAxisY;
+        private Vector3[] staticObbAxisZ;
+        private Vector3[] staticObbHalfExtents;
+        private int[] staticObbSurfaceId;
+        private int[] staticObbRole;
+        private float[] staticObbBoundingRadius;
+        private int staticObbCount;
+        private int staticObbOverflowCount;
+        private int staticObbRefusalCount;
+        private string staticObbRefusalReason;
+
+        // Per-step near set, its scratch buffers and the hysteresis state (design §5.2).
+        private Vector3[] nearObbCenter;
+        private Vector3[] nearObbAxisX;
+        private Vector3[] nearObbAxisY;
+        private Vector3[] nearObbAxisZ;
+        private Vector3[] nearObbHalfExtents;
+        private float[] nearObbBoundingRadius;
+        private int[] nearObbSurfaceId;
+        private int[] nearObbRole;
+        private int nearObbCount;
+        private int[] windowScratchIndices;
+        private float[] windowScratchDistances;
+        private int[] windowSelectedIndices;
+        private int[] windowPreviousSurfaceIds;
+        private int windowPreviousCount;
+        private int nearRebuildCount;
+        private int windowDroppedCount;
+        private int windowDroppedTotal;
+        private int windowOverflowCount;
+        private int windowSaturatedCount;
+        private bool contactIncomplete;
+        private float lastWindowOverflowLogSeconds;
+
+        // The contact log the solver writes (design §1.3, §2.1): parallel arrays, 12 slots.
+        private Vector3[] contactNormalsV2;
+        private Vector3[] contactPointsV2;
+        private float[] contactDepthsV2;
+        private float[] contactAnglesV2;
+        private int[] contactSurfaceIdsV2;
+        private int[] contactRolesV2;
+        private int[] contactFeaturesV2;
+        private int[] contactClassesV2;
+        private int[] contactShapesV2;
+        private int v2ContactCount;
+        private int v2CoreContactCount;
+        private int v2NeedleContactCount;
+        private float contactResidualMax;
+        private int v2SubstepCount;
+        private int v2DominantSurfaceId;
+        private int v2DominantClass;
+        private bool contactAirborne;
+        private Vector3 contactReportNormal;
+
+        // The needle subset (design §4A.3): clamped supports, the compact index list, and
+        // the per-step needle contacts before they merge into the contact log.
+        private float[] contactNeedleSupports;
+        private int[] contactNeedleIndices;
+        private int needleCompactCount;
+        private Vector3[] contactNeedleNormals;
+        private Vector3[] contactNeedlePoints;
+        private float[] contactNeedleDepths;
+        private float[] contactNeedleAngles;
+        private int[] contactNeedleSurfaceIds;
+        private int[] contactNeedleRoles;
+        private int[] contactNeedleClasses;
+        private int[] contactNeedleShapes;
+        private int needleContactCount;
+        private Vector3 contactPreviousCenterWorld;
+        private Quaternion contactPreviousRotation;
+        private bool contactHasPreviousFrame;
+
+        // Climb channel state (design §3.4). TryStep owns the transitions; these fields
+        // carry them between steps and are what the getters report.
+        private bool climbActive;
+        private float climbAnchorY;
+        private int climbSurfaceId;
+        private float climbCooldown;
+        private bool climbLocked;
+        private float climbAlongSpeed;
+        private float climbHeightWorldM;
+        private float climbSpeedWorldMps;
+
+        // The vertical velocity v2 owns (the v1 path only ever has fallSpeedMps).
+        private float contactVerticalVelocity;
+
+        // Stuck recovery (design §2.8): the last stable point, the round start, the
+        // window and the never-silently-loop state.
+        private Vector3 contactStableCenter;
+        private bool hasContactStableCenter;
+        private float lastStableWriteSeconds;
+        private Vector3 roundStartCenter;
+        private bool hasRoundStartCenter;
+        private int recoveryCount;
+        private int recoveryState;
+        private int lastRecoveryReason;
+        private float recoveryWindowStartSeconds;
+        private bool recoveryHoldLogged;
+        private bool softRecoveryArmed;
+        private float contactV2ClockSeconds;
+
+        // Growth push-out (design §4.2), drive direction, step cost (design §6.4) and the
+        // two support kinds v2 adds (4 = climbing contact, 5 = needle support, §2.5).
+        private float contactRadiusUsedWorldM;
+        private bool sizeApplyDeferred;
+        private int sizeApplyDeferredCount;
+        private Vector3 contactDriveDirection;
+        private float lastStepMicros;
+        private int contactSolveFailureCount;
+        private int contactRejectedStepCount;
+        private bool supportFromNeedle;
+        private bool supportFromClimb;
+
+        // Growth push-out has its own contact scratch set so it cannot clobber the log
+        // the step's getters report.
+        private Vector3[] growthContactNormals;
+        private Vector3[] growthContactPoints;
+        private float[] growthContactDepths;
+        private float[] growthContactAngles;
+        private int[] growthContactSurfaceIds;
+        private int[] growthContactRoles;
+        private int[] growthContactFeatures;
+        private int[] growthContactClasses;
+
         private string[] allowedKinds;
         private int allowedKindCount;
         private float maxCollisionRadiusWorldM;
@@ -809,6 +967,10 @@ namespace VRCKatamari.BallMotor
                 ref proxyEndpointCount, ref proxyItemCount, proxyCandidateKeys,
                 ref proxyCandidateCount);
 
+            // Ball contact v2 (flag off by default): the tables are allocated here, not
+            // behind the flag, so a runtime flip finds the scene's registered geometry.
+            AllocateContactV2Buffers();
+
             allowedKinds = new string[0];
             allowedKindCount = 0;
 
@@ -892,6 +1054,15 @@ namespace VRCKatamari.BallMotor
         /// <summary>
         /// Runs one fixed step through the nine stages in their fixed order.
         /// </summary>
+        /// <remarks>
+        /// Stages 1-2 (intent, motion) and 5-9 (absorb, ledger, size, growth push-out,
+        /// visual roll, follow rig) are shared by both contact models. The position
+        /// authority between them is chosen by <c>contactModelV2Enabled</c>:
+        /// <see cref="StepPositionV1"/> is the pre-v2 order
+        /// (RefreshStepMask -> TrySweepSphere -> TryResolveSupport -> GroundContactMath),
+        /// <see cref="StepContactV2"/> is the one contact solver of
+        /// Docs/Design/BallMotor/CONTACT_MODEL_V2.md §7.3. Rollback = flag off.
+        /// </remarks>
         private void StepBall(float dt)
         {
             authorityFrame = authorityFrame + 1;
@@ -918,6 +1089,91 @@ namespace VRCKatamari.BallMotor
                 requestedDisplacement = stepDisplacement;
             }
 
+            // 2.5 - 4. The position authority for this step. Both write the same three
+            //     values, so the stages below are shared and neither path carries a
+            //     branch: with the flag off the v1 method runs the original statements in
+            //     the original order.
+            Vector3 groundedCenter = Vector3.zero;
+            Vector3 followCenter = Vector3.zero;
+            Vector3 supportNormal = groundPlaneNormal;
+            if (contactModelV2Enabled)
+            {
+                StepContactV2(dt, requestedDisplacement, out groundedCenter, out followCenter,
+                    out supportNormal);
+            }
+            else
+            {
+                StepPositionV1(dt, requestedDisplacement, out groundedCenter, out followCenter,
+                    out supportNormal);
+            }
+
+            // 5. PickupAbsorbMath: a decision per candidate, at the final position
+            //    only, so nothing is absorbed through a wall or from the old centre.
+            EvaluatePendingCandidates(groundedCenter);
+
+            // 6. GrowthLedgerMath: a decision becomes volume only through a commit.
+            CommitAcceptedAbsorbs();
+
+            // 7. SizeModelMath: the three sizes are a function of the confirmed
+            //    volume, never an accumulation of it. The confirmed total is
+            //    recomputed by the one method that owns that identity, so the
+            //    per-step stage and a conversion cannot disagree about it.
+            RecomputeConfirmedAndSize();
+
+            // 7.5 Growth push-out (design §4.2; v2 only). Absorbing grows the radius
+            //     inside one step, so the ball can end a step embedded in the wall it
+            //     just grew into. Guarded, so the v1 frame does not change.
+            if (contactModelV2Enabled)
+            {
+                ApplyGrowthPushOut(ref groundedCenter, ref followCenter, ref supportNormal);
+            }
+
+            // 8. VisualRollMath: the actual centre move, with the discontinuity flag
+            //    supplied so a teleport frame holds the pose.
+            Vector3 actualDisplacement = groundedCenter - ballCenterWorld;
+            Quaternion nextRotation;
+            // The roll axis is the support plane's normal, so a step or a ramp rolls
+            // correctly (F8 of the design). With terrain support off this is exactly
+            // the raw ground normal the call used before P1.
+            if (VisualRollMath.TryAdvanceRotation(visualRollRotation, actualDisplacement,
+                supportNormal, coreRadiusWorldM, discontinuous, true,
+                maxRollDisplacementM, out nextRotation))
+            {
+                visualRollRotation = nextRotation;
+            }
+
+            // 9. FollowRigMath: consumes this step's final pose, returns presentation
+            //    only, and never feeds gameplay state. It is given the smooth core
+            //    centre, not the proxy-lifted one, so the camera does not bob.
+            UpdateFollowRig(followCenter, dt);
+
+            ballCenterWorld = groundedCenter;
+            discontinuous = false;
+        }
+
+        /// <summary>
+        /// The v1 position authority (design stages 2.5-4 plus the v1 stuck recovery):
+        /// step-mask refresh, inflated-AABB sweep, terrain support selection and the
+        /// analytic ground solve.
+        /// </summary>
+        /// <remarks>
+        /// This is the original body of <see cref="StepBall"/>, moved here unchanged so
+        /// the flag can choose between two position authorities without either one
+        /// carrying a branch. Statement order, comments and every constant are the
+        /// pre-v2 ones; the only textual difference is that the three values the shared
+        /// tail stages read are out parameters instead of locals, and they are
+        /// initialised first so every path assigns them (CS0165):
+        /// <c>groundedCenter</c> (the final centre), <c>followCenter</c> (the smooth
+        /// camera anchor) and <c>supportNormal</c> (the visual-roll axis). With
+        /// <c>contactModelV2Enabled</c> false this method is the only position path, so
+        /// rollback is the flag alone.
+        /// </remarks>
+        private void StepPositionV1(float dt, Vector3 requestedDisplacement,
+            out Vector3 groundedCenter, out Vector3 followCenter, out Vector3 supportNormal)
+        {
+            groundedCenter = Vector3.zero;
+            followCenter = Vector3.zero;
+            supportNormal = groundPlaneNormal;
             // 2.5 Terrain support mask (P1): decide which static boxes are steps and
             //     rebuild the sweep obstacle arrays without them. This runs BEFORE the
             //     sweep because entering a step means being allowed inside the box's
@@ -1020,8 +1276,8 @@ namespace VRCKatamari.BallMotor
             // and is the same plane solved for the smooth core sphere. Only the first
             // moves the ball; the second is where the follow rig reads the centre, so a
             // bump cannot bob the camera (the height filter alone would only soften it).
-            Vector3 groundedCenter = sweptCenter;
-            Vector3 followCenter = sweptCenter;
+            groundedCenter = sweptCenter;
+            followCenter = sweptCenter;
             // Every out local is initialised at its declaration: the first ground solve
             // sits behind two conditions (a non-empty shell AND a successful proxy
             // build), so the compiler cannot prove these are assigned before the reads
@@ -1064,7 +1320,7 @@ namespace VRCKatamari.BallMotor
             // both clamps, so descent is gravity and not the old 0.1 m-per-step cap.
             // With terrain support off the pair is the raw ground plane and the caps are
             // exactly the pre-P1 ones, so the frame is bit-identical to before.
-            Vector3 supportNormal = groundPlaneNormal;
+            supportNormal = groundPlaneNormal;
             float supportOffset = groundPlaneOffset;
             if (terrainSupportEnabled)
             {
@@ -1214,41 +1470,1110 @@ namespace VRCKatamari.BallMotor
                 stuckSeconds = 0f;
                 discontinuous = true;
             }
+        }
 
-            // 5. PickupAbsorbMath: a decision per candidate, at the final position
-            //    only, so nothing is absorbed through a wall or from the old centre.
-            EvaluatePendingCandidates(groundedCenter);
 
-            // 6. GrowthLedgerMath: a decision becomes volume only through a commit.
-            CommitAcceptedAbsorbs();
 
-            // 7. SizeModelMath: the three sizes are a function of the confirmed
-            //    volume, never an accumulation of it. The confirmed total is
-            //    recomputed by the one method that owns that identity, so the
-            //    per-step stage and a conversion cannot disagree about it.
-            RecomputeConfirmedAndSize();
+        /// <summary>
+        /// Allocates the v2 tables once. They are allocated whatever the flag says, so a
+        /// runtime flag flip finds the geometry the scene already registered (an AddBox
+        /// that ran before the flip produced its OBB too). About 25 KB in total, which is
+        /// the design's budget (design §1.3).
+        /// </summary>
+        private void AllocateContactV2Buffers()
+        {
+            staticObbCenter = new Vector3[ContactTuning.MaxStaticObbCount];
+            staticObbAxisX = new Vector3[ContactTuning.MaxStaticObbCount];
+            staticObbAxisY = new Vector3[ContactTuning.MaxStaticObbCount];
+            staticObbAxisZ = new Vector3[ContactTuning.MaxStaticObbCount];
+            staticObbHalfExtents = new Vector3[ContactTuning.MaxStaticObbCount];
+            staticObbSurfaceId = new int[ContactTuning.MaxStaticObbCount];
+            staticObbRole = new int[ContactTuning.MaxStaticObbCount];
+            staticObbBoundingRadius = new float[ContactTuning.MaxStaticObbCount];
+            staticObbCount = 0;
+            staticObbOverflowCount = 0;
+            staticObbRefusalCount = 0;
+            staticObbRefusalReason = "";
 
-            // 8. VisualRollMath: the actual centre move, with the discontinuity flag
-            //    supplied so a teleport frame holds the pose.
-            Vector3 actualDisplacement = groundedCenter - ballCenterWorld;
-            Quaternion nextRotation;
-            // The roll axis is the support plane's normal, so a step or a ramp rolls
-            // correctly (F8 of the design). With terrain support off this is exactly
-            // the raw ground normal the call used before P1.
-            if (VisualRollMath.TryAdvanceRotation(visualRollRotation, actualDisplacement,
-                supportNormal, coreRadiusWorldM, discontinuous, true,
-                maxRollDisplacementM, out nextRotation))
+            nearObbCenter = new Vector3[ContactTuning.MaxNearObbCount];
+            nearObbAxisX = new Vector3[ContactTuning.MaxNearObbCount];
+            nearObbAxisY = new Vector3[ContactTuning.MaxNearObbCount];
+            nearObbAxisZ = new Vector3[ContactTuning.MaxNearObbCount];
+            nearObbHalfExtents = new Vector3[ContactTuning.MaxNearObbCount];
+            nearObbBoundingRadius = new float[ContactTuning.MaxNearObbCount];
+            nearObbSurfaceId = new int[ContactTuning.MaxNearObbCount];
+            nearObbRole = new int[ContactTuning.MaxNearObbCount];
+            nearObbCount = 0;
+            windowScratchIndices = new int[ContactTuning.MaxStaticObbCount];
+            windowScratchDistances = new float[ContactTuning.MaxStaticObbCount];
+            windowSelectedIndices = new int[ContactTuning.MaxNearObbCount];
+            windowPreviousSurfaceIds = new int[ContactTuning.MaxNearObbCount];
+            windowPreviousCount = 0;
+            nearRebuildCount = 0;
+            windowDroppedCount = 0;
+            windowDroppedTotal = 0;
+            windowOverflowCount = 0;
+            windowSaturatedCount = 0;
+            contactIncomplete = false;
+            lastWindowOverflowLogSeconds = 0f;
+
+            contactNormalsV2 = new Vector3[ContactTuning.ContactCapacity];
+            contactPointsV2 = new Vector3[ContactTuning.ContactCapacity];
+            contactDepthsV2 = new float[ContactTuning.ContactCapacity];
+            contactAnglesV2 = new float[ContactTuning.ContactCapacity];
+            contactSurfaceIdsV2 = new int[ContactTuning.ContactCapacity];
+            contactRolesV2 = new int[ContactTuning.ContactCapacity];
+            contactFeaturesV2 = new int[ContactTuning.ContactCapacity];
+            contactClassesV2 = new int[ContactTuning.ContactCapacity];
+            contactShapesV2 = new int[ContactTuning.ContactCapacity];
+            v2ContactCount = 0;
+            v2CoreContactCount = 0;
+            v2NeedleContactCount = 0;
+            contactResidualMax = 0f;
+            v2SubstepCount = 0;
+            v2DominantSurfaceId = -1;
+            v2DominantClass = ContactCodes.ClassNone;
+            contactAirborne = true;
+            contactReportNormal = new Vector3(0f, 1f, 0f);
+
+            contactNeedleSupports = new float[RadialProxyMath.DirectionCount];
+            contactNeedleIndices = new int[RadialProxyMath.DirectionCount];
+            contactNeedleNormals = new Vector3[MaxNeedleContacts];
+            contactNeedlePoints = new Vector3[MaxNeedleContacts];
+            contactNeedleDepths = new float[MaxNeedleContacts];
+            contactNeedleAngles = new float[MaxNeedleContacts];
+            contactNeedleSurfaceIds = new int[MaxNeedleContacts];
+            contactNeedleRoles = new int[MaxNeedleContacts];
+            contactNeedleClasses = new int[MaxNeedleContacts];
+            contactNeedleShapes = new int[MaxNeedleContacts];
+            needleCompactCount = 0;
+            needleContactCount = 0;
+            contactPreviousCenterWorld = ballCenterWorld;
+            contactPreviousRotation = Quaternion.identity;
+            contactHasPreviousFrame = false;
+
+            climbActive = false;
+            climbAnchorY = 0f;
+            climbSurfaceId = -1;
+            climbCooldown = 0f;
+            climbLocked = false;
+            climbAlongSpeed = 0f;
+            climbHeightWorldM = 0f;
+            climbSpeedWorldMps = 0f;
+            contactVerticalVelocity = 0f;
+
+            contactStableCenter = ballCenterWorld;
+            hasContactStableCenter = false;
+            lastStableWriteSeconds = 0f;
+            roundStartCenter = startCenterWorld;
+            hasRoundStartCenter = true;
+            recoveryCount = 0;
+            recoveryState = ContactRecoveryStateNone;
+            lastRecoveryReason = 0;
+            recoveryWindowStartSeconds = 0f;
+            recoveryHoldLogged = false;
+            softRecoveryArmed = true;
+            contactV2ClockSeconds = 0f;
+
+            contactRadiusUsedWorldM = 0f;
+            sizeApplyDeferred = false;
+            sizeApplyDeferredCount = 0;
+            contactDriveDirection = new Vector3(0f, 0f, 1f);
+            lastStepMicros = 0f;
+            contactSolveFailureCount = 0;
+            contactRejectedStepCount = 0;
+            supportFromNeedle = false;
+            supportFromClimb = false;
+
+            growthContactNormals = new Vector3[ContactTuning.ContactCapacity];
+            growthContactPoints = new Vector3[ContactTuning.ContactCapacity];
+            growthContactDepths = new float[ContactTuning.ContactCapacity];
+            growthContactAngles = new float[ContactTuning.ContactCapacity];
+            growthContactSurfaceIds = new int[ContactTuning.ContactCapacity];
+            growthContactRoles = new int[ContactTuning.ContactCapacity];
+            growthContactFeatures = new int[ContactTuning.ContactCapacity];
+            growthContactClasses = new int[ContactTuning.ContactCapacity];
+        }
+
+        /// <summary>
+        /// The v2 position authority: near window, one contact solve, support and climb
+        /// write-back, the needle pass, growth-independent stuck recovery (design §7.3
+        /// stages 2.5-4).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// All geometry work is a call into <see cref="ContactSolveMath"/> or
+        /// <see cref="BallShapeMath"/>; this method only orders the calls, owns the state
+        /// the solver cannot hold (UdonSharp has no structs or static fields) and writes
+        /// the readings the diagnostics report. The contact solve replaces four v1 stages
+        /// at once: the step mask is gone because a step is now a contact whose normal
+        /// points up, the inflated-AABB sweep is gone because the query is exact, the
+        /// ramp height field is gone because a ramp is a solid slab, and the radial-proxy
+        /// ground lift is gone because a protruding pin is a contact of its own.
+        /// </para>
+        /// <para>
+        /// Failure is closed. A refused solve keeps the previous position and drops the
+        /// velocity instead of moving the ball with a value nobody could compute; a
+        /// residual beyond 2 cm rejects the step's position (design §2.1); a residual
+        /// beyond the radius is a deep embed and recovers to the last stable point
+        /// (design §2.8).
+        /// </para>
+        /// </remarks>
+        private void StepContactV2(float dt, Vector3 requestedDisplacement,
+            out Vector3 groundedCenter, out Vector3 followCenter, out Vector3 supportNormal)
+        {
+            float stepStartSeconds = Time.time;
+            contactV2ClockSeconds = contactV2ClockSeconds + dt;
+            groundedCenter = ballCenterWorld;
+            followCenter = ballCenterWorld;
+            supportNormal = groundPlaneNormal;
+
+            float radius = collisionRadiusWorldM;
+            if (!KatamariMath.IsFiniteFloat(radius) || radius <= 0f)
             {
-                visualRollRotation = nextRotation;
+                contactSolveFailureCount = contactSolveFailureCount + 1;
+                planarVelocity = Vector3.zero;
+                contactVerticalVelocity = 0f;
+                v2ContactCount = 0;
+                v2CoreContactCount = 0;
+                v2NeedleContactCount = 0;
+                contactResidualMax = 0f;
+                return;
             }
 
-            // 9. FollowRigMath: consumes this step's final pose, returns presentation
-            //    only, and never feeds gameplay state. It is given the smooth core
-            //    centre, not the proxy-lifted one, so the camera does not bob.
-            UpdateFollowRig(followCenter, dt);
+            // The needle shape (design §4A.3 step 1): every proxy support clamped into
+            // [r, r + cap], and the protruding ones selected longest first.
+            PrepareNeedleShape(radius);
 
-            ballCenterWorld = groundedCenter;
-            discontinuous = false;
+            // The drive the climb gate reads is the motion layer's TARGET speed, not the
+            // acceleration-limited request: a ball standing against a wall has no actual
+            // speed and would otherwise never start a climb (design §3.2).
+            float driveSpeed;
+            ComputeDrive(out contactDriveDirection, out driveSpeed);
+
+            // The climb cap's protrusion term: how far a pin reaches towards the wall we
+            // are pushing into (design §3.7, §4A.3).
+            float protrusion = EstimateNeedleProtrusion(radius, contactDriveDirection);
+
+            // The per-step near set (design §5.2). maxTravel covers this step's motion
+            // plus the velocity a contact can add inside the step.
+            float travelX = requestedDisplacement.x;
+            float travelY = requestedDisplacement.y;
+            float travelZ = requestedDisplacement.z;
+            float travel = Mathf.Sqrt(travelX * travelX + travelY * travelY
+                + travelZ * travelZ);
+            float margin = (ContactTuning.Gravity + ContactTuning.ClimbRateLimit) * dt * dt;
+            float maxTravel = travel + margin;
+            if (!KatamariMath.IsFiniteFloat(maxTravel) || maxTravel < 0f) maxTravel = 0f;
+            FillNearWindow(radius, maxTravel);
+
+            Vector3 center = ballCenterWorld;
+            Vector3 planar = planarVelocity;
+            float vertical = contactVerticalVelocity;
+            int contactCount;
+            int dominantSurfaceId;
+            int dominantClass;
+            float climbHeight;
+            float climbSpeed;
+            int substepCount;
+            float residual;
+            bool airborne;
+            Vector3 reportNormal;
+            bool solved = ContactSolveMath.TryStep(true, groundPlaneNormal, groundPlaneOffset,
+                planeNormals, planeOffsets, planeCount, nearObbCenter, nearObbAxisX,
+                nearObbAxisY, nearObbAxisZ, nearObbHalfExtents, nearObbSurfaceId, nearObbRole,
+                nearObbCount, ref center, radius, ref planar, ref vertical, ref climbActive,
+                ref climbAnchorY, ref climbSurfaceId, ref climbCooldown, ref climbLocked,
+                ref climbAlongSpeed, contactDriveDirection, driveSpeed, dt, protrusion,
+                contactNormalsV2, contactPointsV2, contactDepthsV2, contactAnglesV2,
+                contactSurfaceIdsV2, contactRolesV2, contactFeaturesV2, contactClassesV2,
+                ContactTuning.ContactCapacity, out contactCount, out dominantSurfaceId,
+                out dominantClass, out climbHeight, out climbSpeed, out substepCount,
+                out residual, out airborne, out reportNormal);
+            if (!solved)
+            {
+                // Fail closed (design §2.8): keep the previous position, drop the velocity
+                // so a corrupt input cannot keep accelerating, and count it.
+                contactSolveFailureCount = contactSolveFailureCount + 1;
+                planarVelocity = Vector3.zero;
+                contactVerticalVelocity = 0f;
+                v2ContactCount = 0;
+                v2CoreContactCount = 0;
+                v2NeedleContactCount = 0;
+                contactResidualMax = 0f;
+                return;
+            }
+            contactSolveFailureCount = 0;
+            contactRadiusUsedWorldM = radius;
+            v2ContactCount = contactCount;
+            v2CoreContactCount = contactCount;
+            v2NeedleContactCount = 0;
+            contactResidualMax = residual;
+            v2SubstepCount = substepCount;
+            v2DominantSurfaceId = dominantSurfaceId;
+            v2DominantClass = dominantClass;
+            climbHeightWorldM = climbHeight;
+            climbSpeedWorldMps = climbSpeed;
+            contactAirborne = airborne;
+            contactReportNormal = reportNormal;
+            for (int i = 0; i < v2ContactCount; i++)
+            {
+                contactShapesV2[i] = 0;
+            }
+
+            // A residual beyond 2 cm means the push-out did not resolve the step: the
+            // position is rejected (the ball stays where it was) and counted, instead of
+            // being placed inside geometry (design §2.1).
+            if (residual > ContactResidualRejectM)
+            {
+                contactRejectedStepCount = contactRejectedStepCount + 1;
+                center = ballCenterWorld;
+            }
+
+            // Needle tips are swept segments, not points (design §4A.3): they push the
+            // whole ball out and merge into the contact log as their own records.
+            ResolveNeedleContacts(ref center, radius, v2CoreContactCount);
+            ApplyNeedleVelocityResponse(v2CoreContactCount);
+
+            // Deep embed recovery (design §2.8, reason 3): a penetration larger than the
+            // radius cannot be pushed out this step, so the ball goes back to its last
+            // stable point instead of crawling inside the map.
+            if (residual > radius)
+            {
+                TryRecoverToStablePoint(ref center, 3);
+            }
+
+            WriteContactSupport(center, v2CoreContactCount, out supportNormal);
+
+            // Stick recovery, soft then hard, then the hold that never teleports again
+            // (design §2.8). This is the ONLY place v2 moves the ball without physics.
+            UpdateContactRecovery(dt, ref center);
+
+            planarVelocity = planar;
+            contactVerticalVelocity = vertical;
+            groundedCenter = center;
+            // v2 has no proxy lift, so the camera anchor IS the ball centre: the design
+            // wants the eye to follow a climb (design §4.4).
+            followCenter = center;
+
+            contactPreviousCenterWorld = center;
+            contactPreviousRotation = visualRollRotation;
+            contactHasPreviousFrame = true;
+
+            float elapsed = Time.time - stepStartSeconds;
+            float micros = elapsed * 1000000f;
+            if (!KatamariMath.IsFiniteFloat(micros) || micros < 0f) micros = 0f;
+            lastStepMicros = micros;
+        }
+
+        /// <summary>
+        /// Fills the per-step near set from the static table (design §5.2), with the
+        /// hysteresis and the explicit overflow verdict of §5.4.
+        /// </summary>
+        private void FillNearWindow(float radius, float maxTravel)
+        {
+            windowDroppedCount = 0;
+            if (staticObbCenter == null)
+            {
+                nearObbCount = 0;
+                return;
+            }
+            if (staticObbCount <= 0)
+            {
+                nearObbCount = 0;
+                windowPreviousCount = 0;
+                return;
+            }
+
+            // The window radius includes the needle cap: a pin can reach the wall before
+            // the core does (design §4A.3).
+            float windowRadius = radius + BallShapeMath.NeedleProtrusionCap(radius);
+            int selectedCount;
+            int dropped;
+            bool complete;
+            bool rebuilt;
+            if (!ContactWindowMath.TrySelectWindow(staticObbCount, staticObbCenter,
+                staticObbAxisX, staticObbAxisY, staticObbAxisZ, staticObbHalfExtents,
+                staticObbBoundingRadius, staticObbSurfaceId, ballCenterWorld, windowRadius,
+                maxTravel, windowPreviousSurfaceIds, windowPreviousCount,
+                ContactTuning.MaxNearObbCount, windowScratchIndices, windowScratchDistances,
+                windowSelectedIndices, out selectedCount, out dropped, out complete,
+                out rebuilt))
+            {
+                // A window that cannot be built is a fail-closed cell: no near set, the
+                // incomplete flag, and the solver then only sees planes and the ground.
+                nearObbCount = 0;
+                contactIncomplete = true;
+                windowOverflowCount = windowOverflowCount + 1;
+                LogWindowOverflowOnce();
+                return;
+            }
+
+            windowDroppedCount = dropped;
+            if (dropped > 0)
+            {
+                windowDroppedTotal = windowDroppedTotal + dropped;
+                if (!complete)
+                {
+                    // A dropped entry could have been touching: the step's contact set is
+                    // incomplete, which the test field must read as an invalid cell rather
+                    // than a pass (design §5.4).
+                    contactIncomplete = true;
+                    windowOverflowCount = windowOverflowCount + 1;
+                    LogWindowOverflowOnce();
+                }
+                else
+                {
+                    windowSaturatedCount = windowSaturatedCount + 1;
+                }
+            }
+
+            if (!rebuilt && selectedCount == windowPreviousCount) return;
+            for (int i = 0; i < selectedCount; i++)
+            {
+                int source = windowSelectedIndices[i];
+                nearObbCenter[i] = staticObbCenter[source];
+                nearObbAxisX[i] = staticObbAxisX[source];
+                nearObbAxisY[i] = staticObbAxisY[source];
+                nearObbAxisZ[i] = staticObbAxisZ[source];
+                nearObbHalfExtents[i] = staticObbHalfExtents[source];
+                nearObbBoundingRadius[i] = staticObbBoundingRadius[source];
+                nearObbSurfaceId[i] = staticObbSurfaceId[source];
+                nearObbRole[i] = staticObbRole[source];
+                windowPreviousSurfaceIds[i] = staticObbSurfaceId[source];
+            }
+            nearObbCount = selectedCount;
+            windowPreviousCount = selectedCount;
+            nearRebuildCount = nearRebuildCount + 1;
+        }
+
+        /// <summary>One throttled line for a window overflow (design §5.4: at most 1/s).</summary>
+        private void LogWindowOverflowOnce()
+        {
+            if (contactV2ClockSeconds - lastWindowOverflowLogSeconds < 1f) return;
+            lastWindowOverflowLogSeconds = contactV2ClockSeconds;
+            Debug.Log("[ContactV2] window overflow cell=" + ballCenterWorld.x + ","
+                + ballCenterWorld.y + "," + ballCenterWorld.z + " dropped="
+                + windowDroppedCount + " near=" + nearObbCount + " static=" + staticObbCount);
+        }
+
+        /// <summary>
+        /// The motion layer's target speed and the direction the driver pushes in
+        /// (design §3.2). The target speed is recomputed from the motion layer's own
+        /// three inputs because BallMotionMath does not export it; the expression is its
+        /// speed cap times the forward intent.
+        /// </summary>
+        private void ComputeDrive(out Vector3 direction, out float speed)
+        {
+            float growth = Mathf.Clamp(growthFraction, 0f, 1f);
+            float speedCap = maxSpeedMps * (1f - growthSpeedFactor * growth);
+            float intent = Mathf.Abs(Mathf.Clamp(inputForward, -1f, 1f));
+            speed = speedCap * intent;
+            if (!KatamariMath.IsFiniteFloat(speed) || speed < 0f) speed = 0f;
+
+            Vector3 planar = new Vector3(planarVelocity.x, 0f, planarVelocity.z);
+            float length;
+            if (!KatamariMath.TryNormalize(planar, out direction, out length))
+            {
+                // No coasting direction: the way the ball is facing is what a driver
+                // pushing from rest means.
+                float radians = headingDegrees * Mathf.Deg2Rad;
+                direction = new Vector3(Mathf.Sin(radians), 0f, Mathf.Cos(radians));
+            }
+        }
+
+        /// <summary>Clamps every pin support into [r, r + cap] and selects the protruding
+        /// ones (design §4A.3).</summary>
+        private void PrepareNeedleShape(float radius)
+        {
+            needleCompactCount = 0;
+            if (proxySupports == null || proxyDirections == null ||
+                contactNeedleSupports == null || contactNeedleIndices == null) return;
+            for (int i = 0; i < RadialProxyMath.DirectionCount; i++)
+            {
+                float clamped;
+                if (!BallShapeMath.TryClampNeedleSupport(proxySupports[i], radius,
+                    out clamped))
+                {
+                    clamped = radius;
+                }
+                contactNeedleSupports[i] = clamped;
+            }
+            int count;
+            if (!BallShapeMath.TryCollectProtrudingNeedles(contactNeedleSupports,
+                RadialProxyMath.DirectionCount, radius, contactNeedleIndices, out count))
+            {
+                needleCompactCount = 0;
+                return;
+            }
+            needleCompactCount = count;
+        }
+
+        /// <summary>
+        /// L_eff of design §3.7/§4A.3: how far a pin reaches towards the wall, measured
+        /// along the push direction instead of a wall normal the motor does not know
+        /// before the solve. Clamped to the needle protrusion cap.
+        /// </summary>
+        private float EstimateNeedleProtrusion(float radius, Vector3 driveDirection)
+        {
+            float cap = BallShapeMath.NeedleProtrusionCap(radius);
+            if (cap <= 0f || needleCompactCount <= 0) return 0f;
+            float best = 0f;
+            for (int k = 0; k < needleCompactCount; k++)
+            {
+                int index = contactNeedleIndices[k];
+                Vector3 world = visualRollRotation * proxyDirections[index];
+                float projected = world.x * driveDirection.x + world.z * driveDirection.z;
+                if (projected <= 0f) continue;
+                float reach = contactNeedleSupports[index] * projected;
+                if (reach > best) best = reach;
+            }
+            float protrusion = best - radius;
+            if (protrusion < 0f) protrusion = 0f;
+            if (protrusion > cap) protrusion = cap;
+            return protrusion;
+        }
+
+        /// <summary>
+        /// Sweeps every compact pin tip from its previous world position to this one and
+        /// keeps the deepest <see cref="MaxNeedleContacts"/> contacts.
+        /// </summary>
+        /// <remarks>
+        /// The tips are ball-local, so their world position needs the roll rotation; the
+        /// rotation the previous step committed is used for the segment's start, which is
+        /// a one-step lag on the rotational part only (stage 8 runs after this one). The
+        /// translational part is exact. Duplicate surface ids are dropped here so a pin
+        /// and the core never push the same face twice (design §4A.3 step 5).
+        /// </remarks>
+        private int CollectNeedleContacts(Vector3 center, int coreCount)
+        {
+            int count = 0;
+            if (needleCompactCount <= 0) return 0;
+            float tipRadius = ContactTuning.NeedleTipRadiusM;
+            float skin = ContactTuning.ContactSkinM;
+            for (int k = 0; k < needleCompactCount; k++)
+            {
+                int index = contactNeedleIndices[k];
+                Vector3 localDirection = proxyDirections[index];
+                float support = contactNeedleSupports[index];
+                Vector3 worldDirection = visualRollRotation * localDirection;
+                Vector3 tipNow = new Vector3(center.x + worldDirection.x * support,
+                    center.y + worldDirection.y * support,
+                    center.z + worldDirection.z * support);
+                Vector3 tipPrevious = tipNow;
+                if (contactHasPreviousFrame)
+                {
+                    Vector3 previousDirection = contactPreviousRotation * localDirection;
+                    tipPrevious = new Vector3(
+                        contactPreviousCenterWorld.x + previousDirection.x * support,
+                        contactPreviousCenterWorld.y + previousDirection.y * support,
+                        contactPreviousCenterWorld.z + previousDirection.z * support);
+                }
+                float segmentX = tipNow.x - tipPrevious.x;
+                float segmentY = tipNow.y - tipPrevious.y;
+                float segmentZ = tipNow.z - tipPrevious.z;
+                float segmentHalf = 0.5f * Mathf.Sqrt(segmentX * segmentX
+                    + segmentY * segmentY + segmentZ * segmentZ);
+                float middleX = 0.5f * (tipNow.x + tipPrevious.x);
+                float middleY = 0.5f * (tipNow.y + tipPrevious.y);
+                float middleZ = 0.5f * (tipNow.z + tipPrevious.z);
+
+                for (int i = 0; i < nearObbCount; i++)
+                {
+                    // Broadphase: the segment's bounding sphere against the box's.
+                    float dx = middleX - nearObbCenter[i].x;
+                    float dy = middleY - nearObbCenter[i].y;
+                    float dz = middleZ - nearObbCenter[i].z;
+                    float reach = nearObbBoundingRadius[i] + segmentHalf + tipRadius + skin;
+                    if (dx * dx + dy * dy + dz * dz > reach * reach) continue;
+                    Vector3 normal;
+                    float depth;
+                    Vector3 point;
+                    float fraction;
+                    if (!BallShapeMath.TryNeedleSegmentContact(nearObbCenter[i],
+                        nearObbAxisX[i], nearObbAxisY[i], nearObbAxisZ[i],
+                        nearObbHalfExtents[i], tipPrevious, tipNow, tipRadius, out normal,
+                        out depth, out point, out fraction)) continue;
+                    TryInsertNeedleContact(normal, point, depth, nearObbSurfaceId[i],
+                        nearObbRole[i], 1 + k, coreCount, ref count);
+                }
+
+                Vector3 groundNormal;
+                float groundDepth;
+                Vector3 groundPoint;
+                float groundFraction;
+                if (BallShapeMath.TryNeedleSegmentPlaneContact(groundPlaneNormal,
+                    groundPlaneOffset, tipPrevious, tipNow, tipRadius, out groundNormal,
+                    out groundDepth, out groundPoint, out groundFraction))
+                {
+                    TryInsertNeedleContact(groundNormal, groundPoint, groundDepth,
+                        ContactCodes.SurfaceIdGround, ContactCodes.RoleBlocking, 1 + k,
+                        coreCount, ref count);
+                }
+                for (int i = 0; i < planeCount; i++)
+                {
+                    Vector3 planeNormal;
+                    float planeDepth;
+                    Vector3 planePoint;
+                    float planeFraction;
+                    if (!BallShapeMath.TryNeedleSegmentPlaneContact(planeNormals[i],
+                        planeOffsets[i], tipPrevious, tipNow, tipRadius, out planeNormal,
+                        out planeDepth, out planePoint, out planeFraction)) continue;
+                    TryInsertNeedleContact(planeNormal, planePoint, planeDepth,
+                        ContactCodes.PlaneSurfaceId(i), ContactCodes.RoleBlocking, 1 + k,
+                        coreCount, ref count);
+                }
+            }
+            // Deepest first, so the merge takes the contacts that matter most.
+            for (int i = 1; i < count; i++)
+            {
+                int slot = i;
+                while (slot > 0 && contactNeedleDepths[slot] > contactNeedleDepths[slot - 1])
+                {
+                    SwapNeedleContacts(slot, slot - 1);
+                    slot = slot - 1;
+                }
+            }
+            return count;
+        }
+
+        private void SwapNeedleContacts(int a, int b)
+        {
+            Vector3 normal = contactNeedleNormals[a];
+            contactNeedleNormals[a] = contactNeedleNormals[b];
+            contactNeedleNormals[b] = normal;
+            Vector3 point = contactNeedlePoints[a];
+            contactNeedlePoints[a] = contactNeedlePoints[b];
+            contactNeedlePoints[b] = point;
+            float depth = contactNeedleDepths[a];
+            contactNeedleDepths[a] = contactNeedleDepths[b];
+            contactNeedleDepths[b] = depth;
+            float angle = contactNeedleAngles[a];
+            contactNeedleAngles[a] = contactNeedleAngles[b];
+            contactNeedleAngles[b] = angle;
+            int surfaceId = contactNeedleSurfaceIds[a];
+            contactNeedleSurfaceIds[a] = contactNeedleSurfaceIds[b];
+            contactNeedleSurfaceIds[b] = surfaceId;
+            int role = contactNeedleRoles[a];
+            contactNeedleRoles[a] = contactNeedleRoles[b];
+            contactNeedleRoles[b] = role;
+            int contactClass = contactNeedleClasses[a];
+            contactNeedleClasses[a] = contactNeedleClasses[b];
+            contactNeedleClasses[b] = contactClass;
+            int shape = contactNeedleShapes[a];
+            contactNeedleShapes[a] = contactNeedleShapes[b];
+            contactNeedleShapes[b] = shape;
+        }
+
+        private void TryInsertNeedleContact(Vector3 normal, Vector3 point, float depth,
+            int surfaceId, int role, int shape, int coreCount, ref int count)
+        {
+            if (depth < -ContactTuning.ContactSkinM) return;
+            for (int i = 0; i < coreCount; i++)
+            {
+                if (contactSurfaceIdsV2[i] == surfaceId) return;
+            }
+            for (int i = 0; i < count; i++)
+            {
+                if (contactNeedleSurfaceIds[i] != surfaceId) continue;
+                if (contactNeedleDepths[i] >= depth) return;
+                WriteNeedleContact(i, normal, point, depth, surfaceId, role, shape);
+                return;
+            }
+            if (count < MaxNeedleContacts)
+            {
+                WriteNeedleContact(count, normal, point, depth, surfaceId, role, shape);
+                count = count + 1;
+                return;
+            }
+            int shallowest = 0;
+            for (int i = 1; i < count; i++)
+            {
+                if (contactNeedleDepths[i] < contactNeedleDepths[shallowest])
+                    shallowest = i;
+            }
+            if (depth <= contactNeedleDepths[shallowest]) return;
+            WriteNeedleContact(shallowest, normal, point, depth, surfaceId, role, shape);
+        }
+
+        private void WriteNeedleContact(int slot, Vector3 normal, Vector3 point, float depth,
+            int surfaceId, int role, int shape)
+        {
+            contactNeedleNormals[slot] = normal;
+            contactNeedlePoints[slot] = point;
+            contactNeedleDepths[slot] = depth;
+            contactNeedleAngles[slot] = ObbContactMath.ContactAngleDeg(normal);
+            contactNeedleSurfaceIds[slot] = surfaceId;
+            contactNeedleRoles[slot] = role;
+            contactNeedleClasses[slot] =
+                ContactClassificationMath.ClassifyContact(normal);
+            contactNeedleShapes[slot] = shape;
+        }
+
+        /// <summary>
+        /// Runs the needle pass: two sequential whole-ball push-outs with the tips
+        /// recomputed after each move, then one final collection merged into the contact
+        /// log (design §4A.3 steps 4-6).
+        /// </summary>
+        /// <remarks>
+        /// This is a deviation from the letter of §4A.3, which puts the needle sweep
+        /// inside the core substep loop: the core substep loop lives in
+        /// <see cref="ContactSolveMath.TryStep"/> and the needle set is recomputed from
+        /// the motor's own state, so it runs as a per-step pass instead. The no-tunnel
+        /// guarantee for pins comes from the SEGMENT sweep, not from the substep count,
+        /// so the deviation costs determinism of ordering, not safety.
+        /// </remarks>
+        private void ResolveNeedleContacts(ref Vector3 center, float radius, int coreCount)
+        {
+            needleContactCount = 0;
+            v2NeedleContactCount = 0;
+            if (needleCompactCount <= 0) return;
+
+            for (int iteration = 0; iteration < 2; iteration++)
+            {
+                needleContactCount = CollectNeedleContacts(center, coreCount);
+                int deepest = -1;
+                float deepestDepth = ContactTuning.ContactSlopM;
+                for (int i = 0; i < needleContactCount; i++)
+                {
+                    if (contactNeedleDepths[i] > deepestDepth)
+                    {
+                        deepest = i;
+                        deepestDepth = contactNeedleDepths[i];
+                    }
+                }
+                if (deepest < 0) break;
+                center = new Vector3(
+                    center.x + contactNeedleNormals[deepest].x * deepestDepth,
+                    center.y + contactNeedleNormals[deepest].y * deepestDepth,
+                    center.z + contactNeedleNormals[deepest].z * deepestDepth);
+            }
+
+            needleContactCount = CollectNeedleContacts(center, coreCount);
+            v2NeedleContactCount = MergeNeedleContacts();
+        }
+
+        /// <summary>Appends the needle contacts the log still has room for, core first.</summary>
+        private int MergeNeedleContacts()
+        {
+            int merged = 0;
+            for (int i = 0; i < needleContactCount; i++)
+            {
+                if (v2ContactCount >= ContactTuning.ContactCapacity) break;
+                int surfaceId = contactNeedleSurfaceIds[i];
+                bool duplicate = false;
+                for (int j = 0; j < v2ContactCount; j++)
+                {
+                    if (contactSurfaceIdsV2[j] == surfaceId)
+                    {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate) continue;
+                int slot = v2ContactCount;
+                contactNormalsV2[slot] = contactNeedleNormals[i];
+                contactPointsV2[slot] = contactNeedlePoints[i];
+                contactDepthsV2[slot] = contactNeedleDepths[i];
+                contactAnglesV2[slot] = contactNeedleAngles[i];
+                contactSurfaceIdsV2[slot] = surfaceId;
+                contactRolesV2[slot] = contactNeedleRoles[i];
+                contactClassesV2[slot] = contactNeedleClasses[i];
+                contactFeaturesV2[slot] = contactNeedleDepths[i]
+                    > ContactTuning.NeedleTipRadiusM
+                    ? ContactCodes.FeatureInside : ContactCodes.FeatureFace;
+                contactShapesV2[slot] = contactNeedleShapes[i];
+                v2ContactCount = slot + 1;
+                merged = merged + 1;
+            }
+            return merged;
+        }
+
+        /// <summary>
+        /// The solid velocity response for the needle contacts, using the same three
+        /// rules as the solver's non-climb branch: a RIDE contact removes nothing, a
+        /// CLIMB contact removes its horizontal inward component, and a NONE contact
+        /// (underside) removes all three. Kept here because the needle set is resolved
+        /// after the core step; see <see cref="ResolveNeedleContacts"/>.
+        /// </summary>
+        private void ApplyNeedleVelocityResponse(int coreCount)
+        {
+            for (int i = coreCount; i < v2ContactCount; i++)
+            {
+                if (contactDepthsV2[i] <= 0f) continue;
+                int contactClass = contactClassesV2[i];
+                if (contactClass == ContactCodes.ClassRide) continue;
+                Vector3 normal = contactNormalsV2[i];
+                if (contactClass == ContactCodes.ClassClimb)
+                {
+                    float horizontal = Mathf.Sqrt(normal.x * normal.x
+                        + normal.z * normal.z);
+                    if (horizontal <= 0f) continue;
+                    float inverse = 1f / horizontal;
+                    float nx = normal.x * inverse;
+                    float nz = normal.z * inverse;
+                    float inward = planarVelocity.x * nx + planarVelocity.z * nz;
+                    if (inward < 0f)
+                    {
+                        planarVelocity = new Vector3(planarVelocity.x - nx * inward,
+                            planarVelocity.y, planarVelocity.z - nz * inward);
+                    }
+                }
+                else
+                {
+                    float inward = planarVelocity.x * normal.x
+                        + contactVerticalVelocity * normal.y
+                        + planarVelocity.z * normal.z;
+                    if (inward < 0f)
+                    {
+                        planarVelocity = new Vector3(planarVelocity.x - normal.x * inward,
+                            0f, planarVelocity.z - normal.z * inward);
+                        contactVerticalVelocity = contactVerticalVelocity
+                            - normal.y * inward;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Writes the support surface pair from this step's contact log (design §2.5):
+        /// the highest rideable contact, or a needle ride contact when only a pin is
+        /// touching, or the climb contact when the ball is on a wall with no floor.
+        /// </summary>
+        private void WriteContactSupport(Vector3 center, int coreCount,
+            out Vector3 supportNormal)
+        {
+            supportNormal = groundPlaneNormal;
+            previousSupportSurfaceId = supportSurfaceId;
+            previousSupportHeightWorldM = lastSupportHeightWorldM;
+
+            // The step limit stays a DIAGNOSTIC in v2: it is reported, never used.
+            float limit;
+            if (!SupportSurfaceMath.TryStepHeightLimit(semanticDiameterWorldM,
+                stepHeightOverBallDiameter, out limit)) limit = 0f;
+            stepHeightLimitWorldM = limit;
+
+            int support = ContactClassificationMath.SelectSupportContact(contactNormalsV2,
+                contactDepthsV2, contactClassesV2, v2ContactCount);
+            bool fromNeedle = false;
+            if (support < 0)
+            {
+                for (int i = coreCount; i < v2ContactCount; i++)
+                {
+                    if (contactClassesV2[i] != ContactCodes.ClassRide) continue;
+                    support = i;
+                    fromNeedle = true;
+                    break;
+                }
+            }
+            else if (support >= coreCount)
+            {
+                fromNeedle = true;
+            }
+            supportFromNeedle = fromNeedle;
+            supportFromClimb = false;
+            supportCandidateCount = v2ContactCount;
+
+            if (support >= 0)
+            {
+                Vector3 normal = contactNormalsV2[support];
+                Vector3 point = contactPointsV2[support];
+                supportSurfaceId = contactSurfaceIdsV2[support];
+                supportSurfacePointWorld = point;
+                supportSurfaceNormalWorld = normal;
+                supportNormal = normal;
+                // The v1 getter's reading: the tangent plane's height under the centre.
+                // The same expression is the tip formula of §2.5 when the point is a pin
+                // tip, which is why a needle support needs no second formula.
+                if (Mathf.Abs(normal.y) > 1e-4f)
+                {
+                    float offset = (normal.x * (center.x - point.x)
+                        + normal.y * (center.y - point.y)
+                        + normal.z * (center.z - point.z)) / normal.y;
+                    supportSurfaceHeightWorldM = center.y - offset;
+                }
+                else
+                {
+                    supportSurfaceHeightWorldM = point.y;
+                }
+                lastSupportHeightWorldM = supportSurfaceHeightWorldM;
+                isFalling = false;
+                fallSpeedMps = 0f;
+                return;
+            }
+
+            if (climbActive)
+            {
+                // A climbing contact is a support kind of its own (4): there is a surface
+                // to report but no floor height to report.
+                supportFromClimb = true;
+                supportSurfaceId = climbSurfaceId;
+                int wall = ContactClassificationMath.SelectClimbContact(contactNormalsV2,
+                    contactClassesV2, v2ContactCount, contactDriveDirection);
+                if (wall >= 0)
+                {
+                    supportSurfaceNormalWorld = contactNormalsV2[wall];
+                    supportSurfacePointWorld = contactPointsV2[wall];
+                    supportNormal = contactNormalsV2[wall];
+                    supportSurfaceHeightWorldM = contactPointsV2[wall].y;
+                }
+                else
+                {
+                    supportSurfaceNormalWorld = contactReportNormal;
+                    supportNormal = contactReportNormal;
+                    supportSurfaceHeightWorldM = center.y - collisionRadiusWorldM;
+                }
+                lastSupportHeightWorldM = supportSurfaceHeightWorldM;
+                isFalling = false;
+                fallSpeedMps = 0f;
+                return;
+            }
+
+            // No support at all: gravity owns the step. The pair keeps its previous
+            // point/normal (v1 behaves the same when the support query refuses).
+            supportSurfaceId = SupportSurfaceMath.NoSurfaceId;
+            isFalling = contactAirborne;
+            fallSpeedMps = contactVerticalVelocity < 0f ? -contactVerticalVelocity : 0f;
+        }
+
+        /// <summary>
+        /// The stuck-recovery state machine of design §2.8: soft at 1.5 s (clear the
+        /// velocity, do not move), hard at 3 s (back to the last stable point), and after
+        /// three recoveries inside 10 s a hold that stops teleporting and says so once.
+        /// </summary>
+        private void UpdateContactRecovery(float dt, ref Vector3 center)
+        {
+            float moveX = center.x - ballCenterWorld.x;
+            float moveY = center.y - ballCenterWorld.y;
+            float moveZ = center.z - ballCenterWorld.z;
+            float progress = Mathf.Sqrt(moveX * moveX + moveY * moveY + moveZ * moveZ);
+            float driveIntent = Mathf.Abs(inputForward) + Mathf.Abs(inputLateral);
+
+            if (driveIntent > 0.05f && progress < 0.0005f)
+            {
+                stuckSeconds = stuckSeconds + dt;
+            }
+            else
+            {
+                stuckSeconds = 0f;
+                // Moving again re-arms the soft stage: one soft recovery per episode,
+                // not one per step (a soft recovery does not move the ball, so its own
+                // stall would otherwise re-fire it sixty times a second).
+                softRecoveryArmed = true;
+            }
+
+            if (progress > 0.001f && contactResidualMax < 0.001f)
+            {
+                if (!hasContactStableCenter ||
+                    contactV2ClockSeconds - lastStableWriteSeconds > 0.1f)
+                {
+                    contactStableCenter = center;
+                    hasContactStableCenter = true;
+                    lastStableWriteSeconds = contactV2ClockSeconds;
+                }
+            }
+
+            // The window expires: a second episode is recoverable and the hold is left.
+            if (contactV2ClockSeconds - recoveryWindowStartSeconds
+                > ContactRecoveryWindowSeconds)
+            {
+                recoveryWindowStartSeconds = contactV2ClockSeconds;
+                recoveryCount = 0;
+                recoveryHoldLogged = false;
+                if (recoveryState == ContactRecoveryStateHold)
+                    recoveryState = ContactRecoveryStateNone;
+            }
+            if (recoveryState == ContactRecoveryStateHold) return;
+            if (progress > 0.0005f && stuckSeconds <= 0f)
+                recoveryState = ContactRecoveryStateNone;
+
+            if (stuckSeconds > ContactStuckHardSeconds)
+            {
+                if (!TryRecoverToStablePoint(ref center, 2)) return;
+                stuckSeconds = 0f;
+                return;
+            }
+            if (stuckSeconds > ContactStuckSoftSeconds && softRecoveryArmed)
+            {
+                softRecoveryArmed = false;
+                planarVelocity = Vector3.zero;
+                contactVerticalVelocity = 0f;
+                ClearClimbState();
+                recoveryCount = recoveryCount + 1;
+                lastRecoveryReason = 1;
+                recoveryState = ContactRecoveryStateSoft;
+                if (recoveryCount >= ContactRecoveryHoldCount) EnterRecoveryHold(center);
+            }
+        }
+
+        /// <summary>
+        /// Moves the ball to the last stable point (or the round start when it never
+        /// moved), clears every velocity and climb state, and records why. Reason 2 is the
+        /// hard stuck recovery, reason 3 a deep embed (design §2.8).
+        /// </summary>
+        private bool TryRecoverToStablePoint(ref Vector3 center, int reason)
+        {
+            Vector3 target;
+            if (hasContactStableCenter) target = contactStableCenter;
+            else if (hasRoundStartCenter) target = roundStartCenter;
+            else return false;
+            center = target;
+            planarVelocity = Vector3.zero;
+            contactVerticalVelocity = 0f;
+            ClearClimbState();
+            discontinuous = true;
+            hasSupportFrame = false;
+            isFalling = false;
+            fallSpeedMps = 0f;
+            contactStableCenter = target;
+            hasContactStableCenter = true;
+            recoveryCount = recoveryCount + 1;
+            lastRecoveryReason = reason;
+            recoveryState = ContactRecoveryStateHard;
+            if (recoveryCount >= ContactRecoveryHoldCount) EnterRecoveryHold(target);
+            return true;
+        }
+
+        private void EnterRecoveryHold(Vector3 center)
+        {
+            recoveryState = ContactRecoveryStateHold;
+            if (recoveryHoldLogged) return;
+            recoveryHoldLogged = true;
+            Debug.Log("[BallMotor] recovery hold cell=" + center.x + "," + center.y + ","
+                + center.z + " surface=" + supportSurfaceId + " residual="
+                + contactResidualMax + " recoveries=" + recoveryCount);
+        }
+
+        private void ClearClimbState()
+        {
+            climbActive = false;
+            climbAnchorY = 0f;
+            climbSurfaceId = -1;
+            climbCooldown = 0f;
+            climbLocked = false;
+            climbAlongSpeed = 0f;
+            climbHeightWorldM = 0f;
+            climbSpeedWorldMps = 0f;
+        }
+
+        /// <summary>
+        /// The growth push-out of design §4.2: after the size stage the radius can be
+        /// bigger than the one the step was solved with, so the ball may be embedded in
+        /// the contact it just grew into. Up to two pushes of at most 5 cm each; if the
+        /// penetration still exceeds 2 cm the push is not applied at all and
+        /// <c>sizeApplyDeferred</c> records it, because the data (volume, score, size)
+        /// has already been committed and only the position waits a step.
+        /// </summary>
+        private void ApplyGrowthPushOut(ref Vector3 groundedCenter, ref Vector3 followCenter,
+            ref Vector3 supportNormal)
+        {
+            float radius = collisionRadiusWorldM;
+            if (!KatamariMath.IsFiniteFloat(radius) || radius <= 0f) return;
+            if (contactRadiusUsedWorldM <= 0f)
+            {
+                contactRadiusUsedWorldM = radius;
+                return;
+            }
+            if (radius <= contactRadiusUsedWorldM) return;
+
+            Vector3 before = groundedCenter;
+            Vector3 center = groundedCenter;
+            int count = 0;
+            for (int iteration = 0; iteration < 2; iteration++)
+            {
+                int collected;
+                if (!ContactSolveMath.TryCollectContacts(true, groundPlaneNormal,
+                    groundPlaneOffset, planeNormals, planeOffsets, planeCount,
+                    nearObbCenter, nearObbAxisX, nearObbAxisY, nearObbAxisZ,
+                    nearObbHalfExtents, nearObbSurfaceId, nearObbRole, nearObbCount, center,
+                    radius, growthContactNormals, growthContactPoints, growthContactDepths,
+                    growthContactAngles, growthContactSurfaceIds, growthContactRoles,
+                    growthContactFeatures, growthContactClasses,
+                    ContactTuning.ContactCapacity, out collected))
+                {
+                    sizeApplyDeferred = true;
+                    sizeApplyDeferredCount = sizeApplyDeferredCount + 1;
+                    return;
+                }
+                count = collected;
+                int deepest = -1;
+                float deepestDepth = ContactTuning.ContactSlopM;
+                for (int i = 0; i < count; i++)
+                {
+                    if (growthContactDepths[i] > deepestDepth)
+                    {
+                        deepest = i;
+                        deepestDepth = growthContactDepths[i];
+                    }
+                }
+                if (deepest < 0) break;
+                float push = deepestDepth;
+                if (push > ContactGrowthPushCapM) push = ContactGrowthPushCapM;
+                center = new Vector3(
+                    center.x + growthContactNormals[deepest].x * push,
+                    center.y + growthContactNormals[deepest].y * push,
+                    center.z + growthContactNormals[deepest].z * push);
+            }
+
+            int finalCount;
+            if (!ContactSolveMath.TryCollectContacts(true, groundPlaneNormal,
+                groundPlaneOffset, planeNormals, planeOffsets, planeCount, nearObbCenter,
+                nearObbAxisX, nearObbAxisY, nearObbAxisZ, nearObbHalfExtents,
+                nearObbSurfaceId, nearObbRole, nearObbCount, center, radius,
+                growthContactNormals, growthContactPoints, growthContactDepths,
+                growthContactAngles, growthContactSurfaceIds, growthContactRoles,
+                growthContactFeatures, growthContactClasses, ContactTuning.ContactCapacity,
+                out finalCount))
+            {
+                sizeApplyDeferred = true;
+                sizeApplyDeferredCount = sizeApplyDeferredCount + 1;
+                return;
+            }
+            float finalResidual = 0f;
+            for (int i = 0; i < finalCount; i++)
+            {
+                if (growthContactDepths[i] > finalResidual)
+                    finalResidual = growthContactDepths[i];
+            }
+            if (finalResidual > ContactResidualRejectM)
+            {
+                // Not applied: the position stays where the step solved it, and the next
+                // step retries from there (the volume and the size are already committed).
+                groundedCenter = before;
+                followCenter = before;
+                sizeApplyDeferred = true;
+                sizeApplyDeferredCount = sizeApplyDeferredCount + 1;
+                return;
+            }
+
+            sizeApplyDeferred = false;
+            contactRadiusUsedWorldM = radius;
+            float movedX = center.x - before.x;
+            float movedY = center.y - before.y;
+            float movedZ = center.z - before.z;
+            float moved = Mathf.Sqrt(movedX * movedX + movedY * movedY + movedZ * movedZ);
+            // A growth push is not rolling: keep it out of the visual roll (design §4.2).
+            if (moved > 0.02f) discontinuous = true;
+            groundedCenter = center;
+            followCenter = center;
+
+            int support = ContactClassificationMath.SelectSupportContact(
+                growthContactNormals, growthContactDepths, growthContactClasses, finalCount);
+            if (support < 0) return;
+            Vector3 normal = growthContactNormals[support];
+            Vector3 point = growthContactPoints[support];
+            supportNormal = normal;
+            supportSurfaceId = growthContactSurfaceIds[support];
+            supportSurfacePointWorld = point;
+            supportSurfaceNormalWorld = normal;
+            if (Mathf.Abs(normal.y) > 1e-4f)
+            {
+                float offset = (normal.x * (center.x - point.x)
+                    + normal.y * (center.y - point.y)
+                    + normal.z * (center.z - point.z)) / normal.y;
+                supportSurfaceHeightWorldM = center.y - offset;
+            }
+            lastSupportHeightWorldM = supportSurfaceHeightWorldM;
         }
 
         /// <summary>
@@ -1509,9 +2834,27 @@ namespace VRCKatamari.BallMotor
                 // is passed as the ceiling only. semanticDiameterWorldM is the same
                 // reading the size stage derives and GetSemanticDiameterWorldM reports,
                 // while reach keeps using collisionRadiusWorldM.
+                //
+                // Ball contact v2 (design §4A.4): the pickup shape is a TRIGGER, so its
+                // reach along this candidate's direction replaces the sphere radius in the
+                // gate's reach and in nothing else. With the flag off the value is exactly
+                // collisionRadiusWorldM, i.e. the pre-v2 gate.
+                float reachRadius = collisionRadiusWorldM;
+                if (contactModelV2Enabled)
+                {
+                    Vector3 toCandidate = new Vector3(pendingPositions[i].x - center.x,
+                        pendingPositions[i].y - center.y, pendingPositions[i].z - center.z);
+                    float pickupReach;
+                    if (BallShapeMath.TryPickupReach(toCandidate, collisionRadiusWorldM,
+                        proxyDirections, contactNeedleSupports, RadialProxyMath.DirectionCount,
+                        out pickupReach))
+                    {
+                        reachRadius = pickupReach;
+                    }
+                }
                 AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorbWithValueAndBallSize(
                     pendingAbsorbable[i], pendingKinds[i], allowedKinds, allowedKindCount,
-                    pendingBounds[i], pendingPositions[i], center, collisionRadiusWorldM,
+                    pendingBounds[i], pendingPositions[i], center, reachRadius,
                     contactRadiusWorldM, maxItemVolumeWorldM3, maxCollisionRadiusWorldM,
                     semanticDiameterWorldM, absorbVolumeRatio, pendingValues[i]);
                 float evaluatedDistance = Vector3.Distance(pendingPositions[i], center);
@@ -1529,7 +2872,7 @@ namespace VRCKatamari.BallMotor
                     float tracedItemRadius;
                     float tracedReach;
                     if (!PickupAbsorbMath.TryComputeReach(pendingBounds[i],
-                        collisionRadiusWorldM, contactRadiusWorldM, out tracedItemRadius,
+                        reachRadius, contactRadiusWorldM, out tracedItemRadius,
                         out tracedReach))
                     {
                         tracedItemRadius = -1f;
@@ -2136,12 +3479,17 @@ namespace VRCKatamari.BallMotor
             if (!KatamariMath.IsFiniteVector(maximum)) return false;
             if (minimum.x > maximum.x || minimum.y > maximum.y ||
                 minimum.z > maximum.z) return false;
+            int boxIndex = boxCount;
             boxMinimumBuffer[boxCount] = minimum;
             boxMaximumBuffer[boxCount] = maximum;
             boxCount = boxCount + 1;
             // The new box has no step classification yet; the next step evaluates it.
             stepMaskBoxesDirty = true;
             RebuildObstacles();
+            // Ball contact v2: the same box as an axis-aligned OBB under the v1
+            // support-table id (1 + index), so an existing scene runs with the flag on
+            // without re-authoring. v1 never reads it (design §1.4).
+            RegisterBoxObb(boxIndex, minimum, maximum);
             return true;
         }
 
@@ -2206,12 +3554,16 @@ namespace VRCKatamari.BallMotor
                 return false;
             }
 
+            int rampIndex = rampCount;
             rampCenterBuffer[rampCount] = center;
             rampNormalBuffer[rampCount] = unitNormal;
             rampRightBuffer[rampCount] = unitRight;
             rampHalfWidthBuffer[rampCount] = halfWidth;
             rampHalfRunBuffer[rampCount] = halfRun;
             rampCount = rampCount + 1;
+            // Ball contact v2: the ramp as a solid slab whose walking face is the same
+            // plane (design §1.5). v1 never reads it.
+            RegisterRampSlab(rampIndex, center, unitNormal, unitRight, halfWidth, halfRun);
             return true;
         }
 
@@ -2611,7 +3963,526 @@ namespace VRCKatamari.BallMotor
             rampCount = 0;
             // The step mask is indexed by boxing slot, so it must not outlive the boxes.
             ClearStepMask();
+            // The v2 static table is the same scene geometry, so it goes with them.
+            ClearObbs();
             RebuildObstacles();
+        }
+
+        /// <summary>True while the v2 contact solver owns this ball's position authority.</summary>
+        public bool IsContactModelV2()
+        {
+            return contactModelV2Enabled;
+        }
+
+        /// <summary>
+        /// Switches the position authority at runtime. The serialized default is false,
+        /// which is the v1 path; this setter exists so a lab (and the EditMode tests) can
+        /// turn the flag on without a second scene.
+        /// </summary>
+        /// <remarks>
+        /// Nothing is reset on the way across: the v1 state is re-derived from the ball's
+        /// position by the v1 path itself, and the v2 state is recomputed on the next v2
+        /// step. The only carried detail is the needle sweep's previous frame, which is
+        /// dropped so a switch cannot sweep a pin from a position it never had.
+        /// </remarks>
+        public void SetContactModelV2Enabled(bool enabled)
+        {
+            if (contactModelV2Enabled == enabled) return;
+            contactModelV2Enabled = enabled;
+            contactHasPreviousFrame = false;
+        }
+
+        // ------------------------------------------------------------------
+        // Static OBB registration (design §1.3/§1.4/§5.2). AddBox and AddRamp keep
+        // working for v1 and additionally register their v2 solid, so an existing
+        // scene runs with the flag on without a second authoring pass.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Registers one oriented box in the v2 static table: a centre, three orthonormal
+        /// unit axes, three nonnegative half extents in metres, a surface id and a role.
+        /// </summary>
+        /// <returns>
+        /// True when the box is now in the table; false when it was refused, in which case
+        /// nothing is written and <see cref="GetLastStaticObbRefusalReason"/> says why.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// Capacity is <see cref="ContactTuning.MaxStaticObbCount"/> (256). An entry
+        /// beyond it is REFUSED and counted in both
+        /// <see cref="GetStaticObbOverflowCount"/> and the motor's overflow signal, never
+        /// queued or silently dropped: losing a solid means the ball rolls through a wall
+        /// nobody can see (design §5.4).
+        /// </para>
+        /// <para>
+        /// The axes must be unit length and orthogonal
+        /// (<see cref="ObbContactMath.IsValidObb"/>). A sheared box (a non-uniformly
+        /// scaled parent times a rotation) is refused rather than queried: the bake that
+        /// produced it is wrong, and a box the author did not draw is worse than a missing
+        /// one. <paramref name="role"/> is
+        /// <see cref="ContactCodes.RoleBox"/>, <see cref="ContactCodes.RoleSlab"/>,
+        /// <see cref="ContactCodes.RoleProp"/> or <see cref="ContactCodes.RoleBlocking"/>,
+        /// and only labels the entry (design §2.1: no behaviour branches on it).
+        /// </para>
+        /// </remarks>
+        public bool AddObb(Vector3 center, Vector3 axisX, Vector3 axisY, Vector3 axisZ,
+            Vector3 halfExtents, int surfaceId, int role)
+        {
+            if (staticObbCenter == null)
+            {
+                RefuseStaticObb("contact v2 buffers not allocated yet");
+                return false;
+            }
+            if (surfaceId < 0)
+            {
+                RefuseStaticObb("negative surface id");
+                return false;
+            }
+            if (staticObbCount >= ContactTuning.MaxStaticObbCount)
+            {
+                staticObbOverflowCount = staticObbOverflowCount + 1;
+                RefuseStaticObb("obb capacity 256 exceeded");
+                SignalOverflow("obb capacity 256 exceeded");
+                return false;
+            }
+            if (!ObbContactMath.IsValidObb(center, axisX, axisY, axisZ, halfExtents))
+            {
+                RefuseStaticObb("not a finite, unit, orthogonal box");
+                return false;
+            }
+            int index = staticObbCount;
+            staticObbCenter[index] = center;
+            staticObbAxisX[index] = axisX;
+            staticObbAxisY[index] = axisY;
+            staticObbAxisZ[index] = axisZ;
+            staticObbHalfExtents[index] = halfExtents;
+            staticObbSurfaceId[index] = surfaceId;
+            staticObbRole[index] = role;
+            staticObbBoundingRadius[index] = ObbContactMath.BoundingRadius(halfExtents);
+            staticObbCount = index + 1;
+            // A new solid can enter the window next step, so the hysteresis must forget
+            // the previous selection instead of assuming the near set is unchanged.
+            windowPreviousCount = 0;
+            return true;
+        }
+
+        /// <summary>Empties the v2 static table (the scene's geometry moved).</summary>
+        public void ClearObbs()
+        {
+            staticObbCount = 0;
+            windowPreviousCount = 0;
+            nearObbCount = 0;
+            windowDroppedCount = 0;
+            contactIncomplete = false;
+        }
+
+        /// <summary>Static OBBs currently registered (0..256).</summary>
+        public int GetStaticObbCount()
+        {
+            return staticObbCount;
+        }
+
+        /// <summary>Static OBB capacity (256).</summary>
+        public int GetStaticObbCapacity()
+        {
+            return ContactTuning.MaxStaticObbCount;
+        }
+
+        /// <summary>Refused <see cref="AddObb"/> calls caused by the capacity.</summary>
+        public int GetStaticObbOverflowCount()
+        {
+            return staticObbOverflowCount;
+        }
+
+        /// <summary>Every refused <see cref="AddObb"/> call (capacity or bad geometry).</summary>
+        public int GetStaticObbRefusalCount()
+        {
+            return staticObbRefusalCount;
+        }
+
+        /// <summary>The last <see cref="AddObb"/> refusal as a literal, or "".</summary>
+        public string GetLastStaticObbRefusalReason()
+        {
+            if (staticObbRefusalReason == null) return "";
+            return staticObbRefusalReason;
+        }
+
+        private void RefuseStaticObb(string reason)
+        {
+            staticObbRefusalCount = staticObbRefusalCount + 1;
+            staticObbRefusalReason = reason;
+        }
+
+        /// <summary>
+        /// Registers a v1 static box as an axis-aligned OBB under the v1 support-table id
+        /// (1 + index), so an existing scene's boxes exist in v2 too (design §1.4).
+        /// </summary>
+        private void RegisterBoxObb(int boxIndex, Vector3 minimum, Vector3 maximum)
+        {
+            if (staticObbCenter == null) return;
+            Vector3 center = new Vector3((minimum.x + maximum.x) * 0.5f,
+                (minimum.y + maximum.y) * 0.5f, (minimum.z + maximum.z) * 0.5f);
+            Vector3 halfExtents = new Vector3((maximum.x - minimum.x) * 0.5f,
+                (maximum.y - minimum.y) * 0.5f, (maximum.z - minimum.z) * 0.5f);
+            AddObb(center, new Vector3(1f, 0f, 0f), new Vector3(0f, 1f, 0f),
+                new Vector3(0f, 0f, 1f), halfExtents, 1 + boxIndex, ContactCodes.RoleBox);
+        }
+
+        /// <summary>
+        /// Registers a v1 ramp as a solid slab OBB (design §1.5): the walking face is the
+        /// slab's +local-Y face, the body hangs one board thickness below it, and the
+        /// in-plane half length is the horizontal half run divided by n.y.
+        /// </summary>
+        /// <remarks>
+        /// The mapping is exact where it matters: the top face is the same plane the arena
+        /// baked (<see cref="SupportSurfaceMath.TryBakeRamp"/>'s walking centre and
+        /// normal), the width is the same footprint, and the run is scaled so the slab's
+        /// horizontal projection equals the baked horizontal half run. The stored right
+        /// axis is only horizontal, not necessarily perpendicular to the normal, so it is
+        /// projected into the plane and the third axis is their cross product: an OBB
+        /// needs three orthonormal axes and a sheared one would be refused by AddObb.
+        /// </remarks>
+        private void RegisterRampSlab(int rampIndex, Vector3 center, Vector3 normal,
+            Vector3 right, float halfWidth, float halfRun)
+        {
+            if (staticObbCenter == null) return;
+            float normalY = normal.y;
+            if (!KatamariMath.IsFiniteFloat(normalY) || normalY < 0.1f) return;
+            Vector3 axisY = normal;
+            float projection = right.x * axisY.x + right.y * axisY.y + right.z * axisY.z;
+            Vector3 inPlane = new Vector3(right.x - axisY.x * projection,
+                right.y - axisY.y * projection, right.z - axisY.z * projection);
+            Vector3 axisX;
+            float xLength;
+            if (!KatamariMath.TryNormalize(inPlane, out axisX, out xLength)) return;
+            Vector3 axisZ;
+            float zLength;
+            if (!KatamariMath.TryNormalize(Vector3.Cross(axisY, axisX), out axisZ, out zLength))
+                return;
+            float thickness = rampSlabThicknessM;
+            if (!KatamariMath.IsFiniteFloat(thickness) || thickness <= 0f) thickness = 0.04f;
+            float halfThickness = thickness * 0.5f;
+            float halfLength = halfRun / normalY;
+            if (!KatamariMath.IsFiniteFloat(halfLength) || halfLength <= 0f) halfLength = halfRun;
+            if (!KatamariMath.IsFiniteFloat(halfWidth) || halfWidth <= 0f) return;
+            Vector3 slabCenter = new Vector3(center.x - axisY.x * halfThickness,
+                center.y - axisY.y * halfThickness, center.z - axisY.z * halfThickness);
+            AddObb(slabCenter, axisX, axisY, axisZ,
+                new Vector3(halfWidth, halfThickness, halfLength),
+                SupportSurfaceMath.FirstRampSurfaceId + rampIndex, ContactCodes.RoleSlab);
+        }
+
+        // ------------------------------------------------------------------
+        // Contact-model diagnostics (design §6.4). Every index-taking getter returns a
+        // neutral value outside the valid range instead of throwing: Udon has no
+        // try/catch and a test-field probe must not stop the world.
+        // ------------------------------------------------------------------
+
+        /// <summary>Contacts recorded by the last v2 step (core first, then needle).</summary>
+        public int GetContactCount()
+        {
+            if (!contactModelV2Enabled) return 0;
+            return v2ContactCount;
+        }
+
+        /// <summary>Unit normal of contact <paramref name="index"/>, or zero.</summary>
+        public Vector3 GetContactNormal(int index)
+        {
+            if (index < 0 || index >= v2ContactCount) return Vector3.zero;
+            return contactNormalsV2[index];
+        }
+
+        /// <summary>Closest point on the solid for contact <paramref name="index"/>.</summary>
+        public Vector3 GetContactPoint(int index)
+        {
+            if (index < 0 || index >= v2ContactCount) return Vector3.zero;
+            return contactPointsV2[index];
+        }
+
+        /// <summary>Penetration depth of contact <paramref name="index"/> (may be negative).</summary>
+        public float GetContactDepth(int index)
+        {
+            if (index < 0 || index >= v2ContactCount) return 0f;
+            return contactDepthsV2[index];
+        }
+
+        /// <summary>
+        /// Class of contact <paramref name="index"/>:
+        /// <see cref="ContactCodes.ClassNone"/> / <see cref="ContactCodes.ClassRide"/> /
+        /// <see cref="ContactCodes.ClassClimb"/>.
+        /// </summary>
+        public int GetContactClass(int index)
+        {
+            if (index < 0 || index >= v2ContactCount) return ContactCodes.ClassNone;
+            return contactClassesV2[index];
+        }
+
+        /// <summary>Surface id of contact <paramref name="index"/>, or -1.</summary>
+        public int GetContactSurfaceId(int index)
+        {
+            if (index < 0 || index >= v2ContactCount) return -1;
+            return contactSurfaceIdsV2[index];
+        }
+
+        /// <summary>Shape of contact <paramref name="index"/>: 0 core, 1 + i pin.</summary>
+        public int GetContactShape(int index)
+        {
+            if (index < 0 || index >= v2ContactCount) return 0;
+            return contactShapesV2[index];
+        }
+
+        /// <summary>How many of the reported contacts came from a pin tip.</summary>
+        public int GetNeedleContactCount()
+        {
+            return v2NeedleContactCount;
+        }
+
+        /// <summary>Class of the core solver's dominant contact (design §2.5).</summary>
+        public int GetDominantContactClass()
+        {
+            return v2DominantClass;
+        }
+
+        /// <summary>Surface id of the core solver's dominant contact, or -1.</summary>
+        public int GetDominantContactSurfaceId()
+        {
+            return v2DominantSurfaceId;
+        }
+
+        /// <summary>Largest penetration the last v2 step's push-out left behind, metres.</summary>
+        public float GetSolverResidualMax()
+        {
+            return contactResidualMax;
+        }
+
+        /// <summary>
+        /// True once a window overflow could have hidden a touching solid (design §5.4).
+        /// Latched: a test field treats the cell as invalid, not as a pass.
+        /// </summary>
+        public bool WasContactIncomplete()
+        {
+            return contactIncomplete;
+        }
+
+        /// <summary>Solids in the last step's near set (0..24).</summary>
+        public int GetNearObbCount()
+        {
+            return nearObbCount;
+        }
+
+        /// <summary>Candidates the last window had to drop (0 when it fit).</summary>
+        public int GetNearObbDropped()
+        {
+            return windowDroppedCount;
+        }
+
+        /// <summary>Candidates dropped by every window so far (monotonic).</summary>
+        public int GetNearObbDroppedTotal()
+        {
+            return windowDroppedTotal;
+        }
+
+        /// <summary>Near-set copies so far (the hysteresis exists to keep this low).</summary>
+        public int GetNearRebuildCount()
+        {
+            return nearRebuildCount;
+        }
+
+        /// <summary>Windows that could have hidden a touching solid (monotonic).</summary>
+        public int GetWindowOverflowCount()
+        {
+            return windowOverflowCount;
+        }
+
+        /// <summary>Windows that dropped only solids that were out of reach (monotonic).</summary>
+        public int GetWindowSaturatedCount()
+        {
+            return windowSaturatedCount;
+        }
+
+        /// <summary>
+        /// Climb state of design §6.4: 0 none, 1 climbing, 2 sliding back (cooldown after
+        /// leaving the channel), 3 locked after reaching the cap.
+        /// </summary>
+        public int GetClimbState()
+        {
+            if (climbLocked) return 3;
+            if (climbActive) return 1;
+            if (climbCooldown > 0f) return 2;
+            return 0;
+        }
+
+        /// <summary>True while the climb channel owns the velocity.</summary>
+        public bool IsClimbing()
+        {
+            return climbActive;
+        }
+
+        /// <summary>Height climbed above the anchor, metres (0 when not climbing).</summary>
+        public float GetClimbHeightWorldM()
+        {
+            return climbHeightWorldM;
+        }
+
+        /// <summary>Vertical climb rate of the last step, m/s (0 when not climbing).</summary>
+        public float GetClimbSpeedMps()
+        {
+            return climbSpeedWorldMps;
+        }
+
+        /// <summary>True when the last climb reached the cap and only a release clears it.</summary>
+        public bool IsClimbLocked()
+        {
+            return climbLocked;
+        }
+
+        /// <summary>Substeps the last v2 step used (1..8, design §1.7).</summary>
+        public int GetSubstepCount()
+        {
+            return v2SubstepCount;
+        }
+
+        /// <summary>Recoveries inside the current 10 s window (design §2.8).</summary>
+        public int GetRecoveryCount()
+        {
+            return recoveryCount;
+        }
+
+        /// <summary>
+        /// Recovery state: 0 none, 1 soft (velocity cleared), 2 hard (moved to the last
+        /// stable point), 3 hold (three recoveries inside 10 s: stopped and reported).
+        /// </summary>
+        public int GetRecoveryState()
+        {
+            return recoveryState;
+        }
+
+        /// <summary>Why the last recovery happened: 1 soft, 2 hard, 3 deep embed, 0 never.</summary>
+        public int GetLastRecoveryReason()
+        {
+            return lastRecoveryReason;
+        }
+
+        /// <summary>
+        /// Wall-clock cost of the last v2 step, microseconds. COARSE: Udon exposes no
+        /// high-resolution clock (no Stopwatch), and Time.time resolves per frame, so a
+        /// frame that runs several fixed steps reports 0 for all but the first and the
+        /// reading is a whole-frame upper bound rather than a per-step measurement. Use
+        /// it to prove the solver's order of magnitude, not to compare nanoseconds.
+        /// </summary>
+        public float GetLastStepMicros()
+        {
+            return lastStepMicros;
+        }
+
+        /// <summary>theta of the support (or climbing) contact in degrees, 0 when none.</summary>
+        public float GetSupportSlopeDegrees()
+        {
+            if (supportSurfaceId == SupportSurfaceMath.NoSurfaceId) return 0f;
+            Vector3 normal = supportSurfaceNormalWorld;
+            return ObbContactMath.ContactAngleDeg(normal);
+        }
+
+        /// <summary>Physical clamp on a pin's protrusion, min(0.35 r, 0.30), metres.</summary>
+        public float GetNeedleProtrusionCapWorldM()
+        {
+            return BallShapeMath.NeedleProtrusionCap(collisionRadiusWorldM);
+        }
+
+        /// <summary>Largest protrusion among the compact pins this step, metres.</summary>
+        public float GetNeedleProtrusionMaxWorldM()
+        {
+            float radius = collisionRadiusWorldM;
+            float best = 0f;
+            for (int k = 0; k < needleCompactCount; k++)
+            {
+                int index = contactNeedleIndices[k];
+                float protrusion = contactNeedleSupports[index] - radius;
+                if (protrusion > best) best = protrusion;
+            }
+            return best;
+        }
+
+        /// <summary>r_phys: the contact radius (design §4A.5, the v1 collision radius).</summary>
+        public float GetPhysicalRadiusWorldM()
+        {
+            return collisionRadiusWorldM;
+        }
+
+        /// <summary>r_visual = 0.95 r_phys (design §4A.2).</summary>
+        public float GetVisualCoreRadiusWorldM()
+        {
+            float visual;
+            if (!BallShapeMath.TryVisualCoreRadius(collisionRadiusWorldM, out visual))
+                return collisionRadiusWorldM;
+            return visual;
+        }
+
+        /// <summary>How far the rolling shape reaches along the heading, metres.</summary>
+        public float GetRollReachWorldM()
+        {
+            Vector3 direction = HeadingDirection();
+            float reach;
+            if (!BallShapeMath.TryRollingReach(direction, collisionRadiusWorldM,
+                proxyDirections, contactNeedleSupports, RadialProxyMath.DirectionCount,
+                out reach)) return collisionRadiusWorldM;
+            return reach;
+        }
+
+        /// <summary>
+        /// How far the pickup trigger reaches along the heading, metres. This is a TRIGGER
+        /// reach only: it never blocks, pushes or supports (design §4A.4).
+        /// </summary>
+        public float GetPickupReachWorldM()
+        {
+            Vector3 direction = HeadingDirection();
+            float reach;
+            if (!BallShapeMath.TryPickupReach(direction, collisionRadiusWorldM,
+                proxyDirections, contactNeedleSupports, RadialProxyMath.DirectionCount,
+                out reach)) return collisionRadiusWorldM;
+            return reach;
+        }
+
+        /// <summary>True when the last growth push-out could not be applied (design §4.2).</summary>
+        public bool IsSizeApplyDeferred()
+        {
+            return sizeApplyDeferred;
+        }
+
+        /// <summary>Growth push-outs that had to be deferred so far (monotonic).</summary>
+        public int GetSizeApplyDeferredCount()
+        {
+            return sizeApplyDeferredCount;
+        }
+
+        /// <summary>Steps the contact solver refused (invalid input), monotonic.</summary>
+        public int GetContactSolveFailureCount()
+        {
+            return contactSolveFailureCount;
+        }
+
+        /// <summary>Steps whose position was rejected for leaving more than 2 cm of penetration.</summary>
+        public int GetContactRejectedStepCount()
+        {
+            return contactRejectedStepCount;
+        }
+
+        /// <summary>The radius the last v2 solve used (lags the size only after a deferral).</summary>
+        public float GetContactRadiusUsedWorldM()
+        {
+            return contactRadiusUsedWorldM;
+        }
+
+        /// <summary>The current drive direction the climb gate read (unit, planar).</summary>
+        public Vector3 GetContactDriveDirection()
+        {
+            return contactDriveDirection;
+        }
+
+        private Vector3 HeadingDirection()
+        {
+            float radians = headingDegrees * Mathf.Deg2Rad;
+            return new Vector3(Mathf.Sin(radians), 0f, Mathf.Cos(radians));
         }
 
         /// <summary>
@@ -2869,6 +4740,19 @@ namespace VRCKatamari.BallMotor
             planarVelocity = Vector3.zero;
             stuckSeconds = 0f;
             discontinuous = true;
+            // Ball contact v2: the stable point, the climb channel, the vertical velocity
+            // and the needle sweep's previous frame are all about where the ball used to
+            // be. The round start IS redefined here: a teleport is a new start
+            // (design §2.8).
+            contactVerticalVelocity = 0f;
+            ClearClimbState();
+            hasContactStableCenter = false;
+            contactHasPreviousFrame = false;
+            contactPreviousCenterWorld = center;
+            roundStartCenter = center;
+            hasRoundStartCenter = true;
+            sizeApplyDeferred = false;
+            contactRadiusUsedWorldM = collisionRadiusWorldM;
             // A teleport can cross the whole map: the old support surface, the old fall
             // state and the old step mask are all about where the ball used to be. The
             // next step re-derives them from the new position and the ball's own bottom,
@@ -3246,6 +5130,15 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         public int GetSupportKind()
         {
+            // v2 adds two kinds (design §2.5): 5 = only a pin is holding the ball up, and
+            // 4 = the ball is on a climbing contact (a wall with no floor). The id ranges
+            // 0/1..8/10..13/100..105 keep their v1 meaning, which is what lets the test
+            // field's existing reads keep working with the flag on.
+            if (contactModelV2Enabled)
+            {
+                if (supportFromNeedle) return 5;
+                if (supportFromClimb) return 4;
+            }
             if (supportSurfaceId == SupportSurfaceMath.GroundSurfaceId) return 0;
             if (SupportSurfaceMath.IsRampSurfaceId(supportSurfaceId)) return 2;
             if (SupportSurfaceMath.IsPropSurfaceId(supportSurfaceId)) return 3;

@@ -45,6 +45,11 @@ namespace VRCKatamari.BallContact
         // Degenerate distance: the model's 1e-9 double epsilon at float scale.
         private const float Epsilon = 1e-6f;
 
+        // A tip sitting exactly on the inflated face is a contact with depth 0; this
+        // margin absorbs the float error of the entry parameter. At 1e-5 m it is 1/1000
+        // of the 1 cm tip radius, so it cannot invent a contact that is not there.
+        private const float SegmentHitMargin = 1e-5f;
+
         /// <summary>
         /// r_visual = scale * r_phys (default 0.95): the mesh radius, slightly inside the
         /// physical sphere.
@@ -268,6 +273,253 @@ namespace VRCKatamari.BallContact
                 tip.z + normal.z * bestGap);
             depth = tipRadius + bestGap;
             return true;
+        }
+
+        /// <summary>
+        /// Swept needle tip vs one oriented box: the segment from the previous tip to
+        /// this one, swept with the tip's own radius.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Why a segment and not a point. The tip's world velocity is
+        /// <c>v_centre + omega x r_tip</c>: at 4 m/s of rolling with r_roll = 0.15 the
+        /// angular rate is 26.7 rad/s, so a pin 0.45 m out moves at ~16 m/s and one
+        /// 20 ms substep sweeps 0.32 m - farther than a thin wall. A point test
+        /// tunnels through that. The segment test cannot: the entry interval is
+        /// computed analytically.
+        /// </para>
+        /// <para>
+        /// Two stages. (1) A slab clip of the local segment against the box inflated
+        /// by <paramref name="tipRadius"/> gives the entry/exit interval of the
+        /// conservative volume (box (+) sphere is the box with rounded edges and
+        /// corners, so the inflated box is a superset). (2) Inside that interval the
+        /// EXACT closest-point distance is sampled at the entry and at four interior
+        /// points, and the first sample at or inside the tip radius is bisected 12
+        /// times, so an edge/corner pass lands within 1/4096 of the interval (~0.1 mm
+        /// on a 0.32 m sweep). A face contact is found by the entry sample alone, i.e.
+        /// one query; the bisection only runs for an edge/corner pass.
+        /// </para>
+        /// <para>
+        /// Reported depth is <c>tipRadius - distance</c>, never negative: the entry is
+        /// the first touch, so a face contact has depth 0 and a tip that starts inside
+        /// reports <c>tipRadius + gap</c>. <paramref name="fraction"/> is the entry
+        /// parameter in [0, 1]. The still-tip case (previous == now) degenerates to
+        /// <see cref="TryNeedleTipContact"/> exactly, which the tests pin.
+        /// </para>
+        /// <para>
+        /// Honest limit: a graze whose true contact interval is shorter than a quarter
+        /// of the entry chord can be missed between two samples; on a 1 cm tip that is
+        /// a sub-millimetre corner contact. Face and clear edge contacts are exact.
+        /// False also means unusable input (non-finite tip/radius, an invalid box).
+        /// </para>
+        /// </remarks>
+        public static bool TryNeedleSegmentContact(Vector3 center, Vector3 axisX,
+            Vector3 axisY, Vector3 axisZ, Vector3 halfExtents, Vector3 tipPrevious,
+            Vector3 tipNow, float tipRadius, out Vector3 normal, out float depth,
+            out Vector3 point, out float fraction)
+        {
+            normal = Vector3.zero;
+            depth = 0f;
+            point = Vector3.zero;
+            fraction = 0f;
+            if (!KatamariMath.IsFiniteVector(tipPrevious)) return false;
+            if (!KatamariMath.IsFiniteVector(tipNow)) return false;
+            if (!KatamariMath.IsFiniteFloat(tipRadius) || tipRadius < 0f) return false;
+            if (!ObbContactMath.IsValidObb(center, axisX, axisY, axisZ, halfExtents))
+                return false;
+
+            Vector3 localPrevious = ObbContactMath.ToLocal(tipPrevious, center, axisX,
+                axisY, axisZ);
+            Vector3 localNow = ObbContactMath.ToLocal(tipNow, center, axisX, axisY, axisZ);
+            float directionX = localNow.x - localPrevious.x;
+            float directionY = localNow.y - localPrevious.y;
+            float directionZ = localNow.z - localPrevious.z;
+
+            float enter = 0f;
+            float leave = 1f;
+            if (!ClipSlab(localPrevious.x, directionX, halfExtents.x + tipRadius,
+                ref enter, ref leave)) return false;
+            if (!ClipSlab(localPrevious.y, directionY, halfExtents.y + tipRadius,
+                ref enter, ref leave)) return false;
+            if (!ClipSlab(localPrevious.z, directionZ, halfExtents.z + tipRadius,
+                ref enter, ref leave)) return false;
+            if (enter > leave) return false;
+
+            float span = leave - enter;
+            float previousFraction = enter;
+            for (int sample = 0; sample < 5; sample++)
+            {
+                float candidate = enter;
+                if (sample > 0) candidate = enter + span * (0.25f * (float)sample);
+                Vector3 tip = new Vector3(
+                    tipPrevious.x + (tipNow.x - tipPrevious.x) * candidate,
+                    tipPrevious.y + (tipNow.y - tipPrevious.y) * candidate,
+                    tipPrevious.z + (tipNow.z - tipPrevious.z) * candidate);
+                Vector3 candidateNormal;
+                Vector3 candidatePoint;
+                float distance;
+                int feature;
+                if (!ObbContactMath.TryClosestPointOnObb(center, axisX, axisY, axisZ,
+                    halfExtents, tip, out candidatePoint, out distance, out candidateNormal,
+                    out feature)) return false;
+                if (distance <= tipRadius + SegmentHitMargin)
+                {
+                    if (sample == 0)
+                    {
+                        normal = candidateNormal;
+                        point = candidatePoint;
+                        depth = SegmentDepth(tipRadius, distance);
+                        fraction = candidate;
+                        return true;
+                    }
+                    float low = previousFraction;
+                    float high = candidate;
+                    for (int iteration = 0; iteration < 12; iteration++)
+                    {
+                        float middle = 0.5f * (low + high);
+                        Vector3 middleTip = new Vector3(
+                            tipPrevious.x + (tipNow.x - tipPrevious.x) * middle,
+                            tipPrevious.y + (tipNow.y - tipPrevious.y) * middle,
+                            tipPrevious.z + (tipNow.z - tipPrevious.z) * middle);
+                        Vector3 middleNormal;
+                        Vector3 middlePoint;
+                        float middleDistance;
+                        int middleFeature;
+                        if (!ObbContactMath.TryClosestPointOnObb(center, axisX, axisY,
+                            axisZ, halfExtents, middleTip, out middlePoint,
+                            out middleDistance, out middleNormal, out middleFeature))
+                            return false;
+                        if (middleDistance <= tipRadius + SegmentHitMargin)
+                        {
+                            high = middle;
+                            distance = middleDistance;
+                            candidateNormal = middleNormal;
+                            candidatePoint = middlePoint;
+                        }
+                        else
+                        {
+                            low = middle;
+                        }
+                    }
+                    normal = candidateNormal;
+                    point = candidatePoint;
+                    depth = SegmentDepth(tipRadius, distance);
+                    fraction = high;
+                    return true;
+                }
+                previousFraction = candidate;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Swept needle tip vs one one-sided plane: the segment from the previous tip
+        /// to this one, with the tip radius.
+        /// </summary>
+        /// <remarks>
+        /// Same convention as <see cref="ObbContactMath.TryPlaneContact"/> (the free
+        /// side is <c>dot(normal, x) &gt;= offset</c>): false means no contact or
+        /// unusable input, and the reported depth is <c>tipRadius - signedDistance</c>
+        /// at the entry, never negative. A tip that already starts inside reports the
+        /// start (fraction 0), exactly like the box sweep.
+        /// </remarks>
+        public static bool TryNeedleSegmentPlaneContact(Vector3 planeNormal,
+            float planeOffset, Vector3 tipPrevious, Vector3 tipNow, float tipRadius,
+            out Vector3 normal, out float depth, out Vector3 point, out float fraction)
+        {
+            normal = Vector3.zero;
+            depth = 0f;
+            point = Vector3.zero;
+            fraction = 0f;
+            if (!KatamariMath.IsFiniteVector(tipPrevious)) return false;
+            if (!KatamariMath.IsFiniteVector(tipNow)) return false;
+            if (!KatamariMath.IsFiniteFloat(tipRadius) || tipRadius < 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(planeOffset)) return false;
+            Vector3 unitNormal;
+            float normalLength;
+            if (!KatamariMath.TryNormalize(planeNormal, out unitNormal, out normalLength))
+                return false;
+
+            float start = unitNormal.x * tipPrevious.x + unitNormal.y * tipPrevious.y
+                + unitNormal.z * tipPrevious.z - planeOffset;
+            float end = unitNormal.x * tipNow.x + unitNormal.y * tipNow.y
+                + unitNormal.z * tipNow.z - planeOffset;
+            if (!KatamariMath.IsFiniteFloat(start) || !KatamariMath.IsFiniteFloat(end))
+                return false;
+
+            float candidate;
+            if (start <= tipRadius + SegmentHitMargin)
+            {
+                candidate = 0f;
+            }
+            else if (end <= tipRadius)
+            {
+                float denominator = start - end;
+                if (!KatamariMath.IsFiniteFloat(denominator) || denominator <= 0f)
+                    return false;
+                candidate = (start - tipRadius) / denominator;
+                if (candidate < 0f) candidate = 0f;
+                if (candidate > 1f) candidate = 1f;
+            }
+            else
+            {
+                return false;
+            }
+
+            Vector3 entry = new Vector3(
+                tipPrevious.x + (tipNow.x - tipPrevious.x) * candidate,
+                tipPrevious.y + (tipNow.y - tipPrevious.y) * candidate,
+                tipPrevious.z + (tipNow.z - tipPrevious.z) * candidate);
+            float signedDistance = unitNormal.x * entry.x + unitNormal.y * entry.y
+                + unitNormal.z * entry.z - planeOffset;
+            if (!KatamariMath.IsFiniteFloat(signedDistance)) return false;
+            normal = unitNormal;
+            point = new Vector3(entry.x - unitNormal.x * signedDistance,
+                entry.y - unitNormal.y * signedDistance,
+                entry.z - unitNormal.z * signedDistance);
+            depth = SegmentDepth(tipRadius, signedDistance);
+            fraction = candidate;
+            return true;
+        }
+
+        /// <summary>
+        /// <c>r - d</c>, clamped at zero: the entry of a sweep is the first touch, so a
+        /// contact can never report a negative depth.
+        /// </summary>
+        private static float SegmentDepth(float tipRadius, float signedDistance)
+        {
+            float value = tipRadius - signedDistance;
+            if (value < 0f) return 0f;
+            return value;
+        }
+
+        /// <summary>
+        /// One-axis clip of a segment against the slab <c>|origin + t*direction| &lt;= half</c>.
+        /// </summary>
+        /// <remarks>
+        /// False means the segment misses the slab on this axis. An axis-parallel
+        /// segment is inside when its origin is inside, which is why the still-tip case
+        /// keeps the whole [0, 1] interval and degenerates to the point test.
+        /// </remarks>
+        private static bool ClipSlab(float origin, float direction, float half,
+            ref float enter, ref float leave)
+        {
+            if (half < 0f) return false;
+            float absoluteDirection = direction < 0f ? -direction : direction;
+            if (absoluteDirection < 1e-9f)
+            {
+                float absoluteOrigin = origin < 0f ? -origin : origin;
+                return absoluteOrigin <= half;
+            }
+            float first = (-half - origin) / direction;
+            float second = (half - origin) / direction;
+            float low = first < second ? first : second;
+            float high = first < second ? second : first;
+            if (!KatamariMath.IsFiniteFloat(low) || !KatamariMath.IsFiniteFloat(high))
+                return false;
+            if (low > enter) enter = low;
+            if (high < leave) leave = high;
+            return enter <= leave;
         }
 
         /// <summary>

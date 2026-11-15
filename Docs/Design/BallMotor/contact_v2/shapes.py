@@ -200,6 +200,176 @@ def needle_tip_contact(obb_center: Vec3, axis_x: Vec3, axis_y: Vec3, axis_z: Vec
     return normal, tip_radius + best_gap, point
 
 
+def _closest_point_on_obb(center: Vec3, axis_x: Vec3, axis_y: Vec3, axis_z: Vec3,
+                          half_extents: Vec3, point: Vec3) -> Tuple[float, Vec3, Vec3]:
+    """(distance, normal, closest point) of an exact sphere-vs-box query.
+
+    ``distance`` is negative when the point is inside the solid: minus the gap to
+    the nearest face, so the contact depth is ``tip_radius + gap``.
+    """
+    delta = (point[0] - center[0], point[1] - center[1], point[2] - center[2])
+    local = (_dot(delta, axis_x), _dot(delta, axis_y), _dot(delta, axis_z))
+    axes = (axis_x, axis_y, axis_z)
+    clamped = [_clamp(local[i], -half_extents[i], half_extents[i]) for i in range(3)]
+    offset = (local[0] - clamped[0], local[1] - clamped[1], local[2] - clamped[2])
+    distance = _length(offset)
+    if distance > 1e-9:
+        normal_local = (offset[0] / distance, offset[1] / distance, offset[2] / distance)
+        normal = (normal_local[0] * axes[0][0] + normal_local[1] * axes[1][0] + normal_local[2] * axes[2][0],
+                  normal_local[0] * axes[0][1] + normal_local[1] * axes[1][1] + normal_local[2] * axes[2][1],
+                  normal_local[0] * axes[0][2] + normal_local[1] * axes[1][2] + normal_local[2] * axes[2][2])
+        closest = (center[0] + clamped[0] * axis_x[0] + clamped[1] * axis_y[0] + clamped[2] * axis_z[0],
+                   center[1] + clamped[0] * axis_x[1] + clamped[1] * axis_y[1] + clamped[2] * axis_z[1],
+                   center[2] + clamped[0] * axis_x[2] + clamped[1] * axis_y[2] + clamped[2] * axis_z[2])
+        return distance, normal, closest
+    best_axis = 0
+    best_gap = half_extents[0] - abs(local[0])
+    for i in (1, 2):
+        gap = half_extents[i] - abs(local[i])
+        if gap < best_gap:
+            best_gap = gap
+            best_axis = i
+    sign = -1.0 if local[best_axis] < 0.0 else 1.0
+    normal = tuple(sign * axes[best_axis][i] for i in range(3))
+    # Inside: walking along the outward face normal by the gap lands on that face.
+    closest = (point[0] + normal[0] * best_gap, point[1] + normal[1] * best_gap,
+               point[2] + normal[2] * best_gap)
+    return -best_gap, normal, closest
+
+
+def _depth(tip_radius: float, signed_distance: float) -> float:
+    """Contact depth of a tip: r - signed distance, never negative."""
+    depth = tip_radius - signed_distance
+    return 0.0 if depth < 0.0 else depth
+
+
+def _clip_slab(origin: float, direction: float, half: float,
+               enter: float, leave: float) -> Optional[Tuple[float, float]]:
+    """One-axis clip of a segment against the inflated slab ``|x| <= half``."""
+    if abs(direction) < 1e-9:
+        if abs(origin) > half:
+            return None
+        return enter, leave
+    t1 = (-half - origin) / direction
+    t2 = (half - origin) / direction
+    low = t1 if t1 < t2 else t2
+    high = t2 if t1 < t2 else t1
+    if low > enter:
+        enter = low
+    if high < leave:
+        leave = high
+    if enter > leave:
+        return None
+    return enter, leave
+
+
+def needle_segment_contact(obb_center: Vec3, axis_x: Vec3, axis_y: Vec3, axis_z: Vec3,
+                           half_extents: Vec3, tip_previous: Vec3, tip_now: Vec3,
+                           tip_radius: float
+                           ) -> Optional[Tuple[Vec3, float, Vec3, float]]:
+    """Swept tip vs OBB: (normal, depth, point, entry fraction), or None.
+
+    A pin tip moves by ``v_center + omega x r``, up to ~16 m/s at 4 m/s of rolling,
+    so a 20 ms substep can sweep 0.32 m - farther than a thin wall.  A point test
+    tunnels through that; this function sweeps the segment instead.
+
+    The sweep is exact in two stages.  A slab clip against the box inflated by
+    ``tip_radius`` gives the entry/exit interval, which is a conservative superset
+    of the true swept volume (box (+) sphere is the box with rounded edges and
+    corners).  Inside that interval the exact closest-point distance is sampled
+    (entry + 4 interior points) and the first crossing is bisected 12 times, so a
+    face contact is found at the entry itself (one query) and an edge/corner pass
+    is located to 1/4096 of the interval (~0.1 mm of a 0.32 m sweep).  A graze that only admits an interval
+    shorter than a quarter of the entry chord can be missed; that is a
+    sub-millimetre corner contact on a 1 cm tip, and the C# port documents the
+    same caveat.
+    """
+    if tip_radius < 0.0:
+        raise ValueError("tip_radius must be non-negative")
+    delta_prev = (tip_previous[0] - obb_center[0], tip_previous[1] - obb_center[1],
+                  tip_previous[2] - obb_center[2])
+    delta_now = (tip_now[0] - obb_center[0], tip_now[1] - obb_center[1],
+                 tip_now[2] - obb_center[2])
+    local_prev = (_dot(delta_prev, axis_x), _dot(delta_prev, axis_y), _dot(delta_prev, axis_z))
+    local_now = (_dot(delta_now, axis_x), _dot(delta_now, axis_y), _dot(delta_now, axis_z))
+    direction = (local_now[0] - local_prev[0], local_now[1] - local_prev[1],
+                 local_now[2] - local_prev[2])
+
+    enter, leave = 0.0, 1.0
+    for i in range(3):
+        clipped = _clip_slab(local_prev[i], direction[i], half_extents[i] + tip_radius,
+                             enter, leave)
+        if clipped is None:
+            return None
+        enter, leave = clipped
+    if enter > leave:
+        return None
+
+    # A point sitting exactly on the inflated face is a contact with depth 0; the
+    # 1e-5 m margin absorbs the float error of the entry parameter and is 1/1000 of
+    # the tip radius, so it cannot create a contact that is not there.
+    margin = 1e-5
+    span = leave - enter
+    previous_fraction = enter
+    for sample in range(5):
+        fraction = enter if sample == 0 else enter + span * (sample * 0.25)
+        point = (tip_previous[0] + (tip_now[0] - tip_previous[0]) * fraction,
+                 tip_previous[1] + (tip_now[1] - tip_previous[1]) * fraction,
+                 tip_previous[2] + (tip_now[2] - tip_previous[2]) * fraction)
+        distance, normal, closest = _closest_point_on_obb(
+            obb_center, axis_x, axis_y, axis_z, half_extents, point)
+        if distance <= tip_radius + margin:
+            if sample == 0:
+                return normal, _depth(tip_radius, distance), closest, fraction
+            low, high = previous_fraction, fraction
+            for _ in range(12):
+                middle = 0.5 * (low + high)
+                middle_point = (tip_previous[0] + (tip_now[0] - tip_previous[0]) * middle,
+                                tip_previous[1] + (tip_now[1] - tip_previous[1]) * middle,
+                                tip_previous[2] + (tip_now[2] - tip_previous[2]) * middle)
+                middle_distance, middle_normal, middle_closest = _closest_point_on_obb(
+                    obb_center, axis_x, axis_y, axis_z, half_extents, middle_point)
+                if middle_distance <= tip_radius + margin:
+                    high = middle
+                    distance, normal, closest = middle_distance, middle_normal, middle_closest
+                else:
+                    low = middle
+            return normal, _depth(tip_radius, distance), closest, high
+        previous_fraction = fraction
+    return None
+
+
+def needle_segment_plane_contact(plane_normal: Vec3, plane_offset: float,
+                                 tip_previous: Vec3, tip_now: Vec3, tip_radius: float
+                                 ) -> Optional[Tuple[Vec3, float, Vec3, float]]:
+    """Swept tip vs a one-sided plane: (normal, depth, point, entry fraction)."""
+    if tip_radius < 0.0:
+        raise ValueError("tip_radius must be non-negative")
+    unit = _unit(plane_normal, "plane_normal")
+    start = _dot(unit, tip_previous) - plane_offset
+    end = _dot(unit, tip_now) - plane_offset
+    if start <= tip_radius + 1e-5:
+        fraction = 0.0
+    elif end <= tip_radius:
+        denominator = start - end
+        if abs(denominator) < 1e-12:
+            return None
+        fraction = (start - tip_radius) / denominator
+        if fraction < 0.0:
+            fraction = 0.0
+        if fraction > 1.0:
+            fraction = 1.0
+    else:
+        return None
+    entry = (tip_previous[0] + (tip_now[0] - tip_previous[0]) * fraction,
+             tip_previous[1] + (tip_now[1] - tip_previous[1]) * fraction,
+             tip_previous[2] + (tip_now[2] - tip_previous[2]) * fraction)
+    signed = _dot(unit, entry) - plane_offset
+    point = (entry[0] - unit[0] * signed, entry[1] - unit[1] * signed,
+             entry[2] - unit[2] * signed)
+    return unit, _depth(tip_radius, signed), point, fraction
+
+
 # -------------------------------------------------------------- pickup shape ---
 def pickup_reach(direction: Vec3, physical_radius: float,
                  shape: Optional[RollingShape] = None) -> float:

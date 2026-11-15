@@ -71,11 +71,16 @@ namespace VRCKatamari.Riding
         // comfort-level filtering the follow frame itself uses.
         [SerializeField] private float filterHz = 8f;
 
-        // Guards, not tuning: a seated eye height is roughly 0.4-0.9 m, so the limit is a rail
-        // just past a tall seated avatar, not a value the product needs. The plausibility check
-        // in SampleOnce is what catches a datum near a standing eye height - clamping that one
-        // would land the camera on the wrong side of the eye point.
-        [SerializeField] private float verticalLimitMeters = 1f;
+        // Guards, not tuning: a seated eye height is roughly 0.4-0.9 m on real hardware, so this
+        // is a rail just past a tall seated avatar, not a value the product needs. 1.3 m is chosen
+        // to pair with the plausibility rail: the tallest head this project has measured is
+        // ClientSim's 1.204159 m (2026-11-15) and it must be compensated in FULL, because a clamp
+        // below a real measurement leaves the camera visibly high. The plausibility check in
+        // SampleOnce is what catches a datum near a standing eye height - clamping that one would
+        // land the camera on the wrong side of the eye point. What the extra headroom costs is
+        // third person only: the avatar's lower body sinks deeper into the ground. It never moves
+        // the local player's own viewpoint, which is the thing being corrected.
+        [SerializeField] private float verticalLimitMeters = 1.3f;
         [SerializeField] private float horizontalLimitMeters = 0.35f;
 
         // A scene that does not trust the measured horizontal offset can keep the authored
@@ -108,13 +113,12 @@ namespace VRCKatamari.Riding
         private const int RefusalImplausibleHeadDatum = 6;
         private const int RefusalMath = 7;
 
-        // A head further than this from the seat is not a SEATED head. Every seated proportion
-        // measured in this project's scale sits under a metre, and a standing eye height is
-        // 1.5-1.8 m, so this threshold sits in the gap: past it the DATUM is wrong (a standing
-        // eye height instead of the seated head), and the correction is refused rather than
-        // applied halfway, because half of a wrong correction lands the camera on the wrong
-        // side of the eye point - worse than the defect it was meant to fix.
-        private const float MaxPlausibleHeadAboveSeatMeters = 1.2f;
+        // A head further from the seat than the plausibility rail is not a SEATED head, so the
+        // whole correction is refused rather than applied halfway: half of a wrong correction
+        // lands the camera on the wrong side of the eye point, worse than the defect it was
+        // meant to fix. The rail, its measured evidence (ClientSim 1.204 m, real hardware about
+        // 0.85 m) and the reason it is a guard rather than a product value live with the shared
+        // rule in SeatEyeMath.MaxPlausibleHeadAboveSeatMeters.
 
         // The glide is done when the applied offset is this close to its target.
         private const float SettledToleranceMeters = 0.001f;
@@ -350,7 +354,7 @@ namespace VRCKatamari.Riding
 
             float plausibility = Mathf.Sqrt(headInRig.x * headInRig.x +
                 headInRig.y * headInRig.y + headInRig.z * headInRig.z);
-            if (plausibility > MaxPlausibleHeadAboveSeatMeters)
+            if (!SeatEyeMath.IsPlausibleHeadDistance(plausibility))
             {
                 // Refused instead of clamped: this is the wrong datum, and a clamped offset
                 // from a wrong datum is still a wrong offset.

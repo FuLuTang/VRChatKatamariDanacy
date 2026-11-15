@@ -71,10 +71,39 @@ namespace VRCKatamari.Riding
         /// <summary>There were no samples to average.</summary>
         public const int ReasonNoSamples = 5;
 
+        /// <summary>
+        /// The furthest a seated head may plausibly be from the seat anchor, in metres.
+        /// </summary>
+        /// <remarks>
+        /// A guard against reading obviously wrong data (a standing eye height while the camera
+        /// is not actually there), not a product value: past it the DATUM is wrong, and the
+        /// caller refuses the correction instead of half-applying it. Measured heads: 1.204159 m
+        /// in ClientSim (2026-11-15; the ClientSim camera really is that high above the seat), and
+        /// about 0.85 m for a seated pose on real hardware, so 1.35 m leaves headroom over the
+        /// largest measured value while staying below a standing eye height (1.5-1.8 m).
+        /// </remarks>
+        public const float MaxPlausibleHeadAboveSeatMeters = 1.35f;
+
         // A quaternion shorter than this cannot be inverted into usable numbers. The
         // threshold is on the squared length, so a slightly denormalised rotation still
         // normalises through Quaternion.Inverse instead of being refused.
         private const float MinimumQuaternionSquaredLength = 1e-8f;
+
+        /// <summary>
+        /// Whether a measured head-to-seat distance is small enough to trust.
+        /// </summary>
+        /// <remarks>
+        /// The caller passes the length of the rig-frame offset it got from
+        /// <see cref="TrySampleHeadOffset"/>. Equal to
+        /// <see cref="MaxPlausibleHeadAboveSeatMeters"/> counts as plausible - the guard is a
+        /// rail to stay under, not an exclusive bound. A non-finite length compares false, which
+        /// is the wanted answer for a datum this layer could not use anyway. The REFUSAL itself
+        /// stays with the caller: it owns the reason code and the log line.
+        /// </remarks>
+        public static bool IsPlausibleHeadDistance(float distanceMeters)
+        {
+            return distanceMeters <= MaxPlausibleHeadAboveSeatMeters;
+        }
 
         /// <summary>
         /// One sample: where the head is relative to the seat, in the rig frame and in the
@@ -89,9 +118,10 @@ namespace VRCKatamari.Riding
         /// is the number a play tester reads: how far the real eye sits above the seat.
         /// </para>
         /// <para>
-        /// The caller is expected to reject an implausible sample itself (for example a head
-        /// datum that is metres away from the seat): this function only rejects numbers it
-        /// cannot use.
+        /// The caller is expected to reject an implausible sample itself, because a refusal
+        /// belongs to whoever knows why the datum is wrong: <see cref="IsPlausibleHeadDistance"/>
+        /// is the shared rail for "a head datum that is metres away from the seat", and this
+        /// function only rejects numbers it cannot use.
         /// </para>
         /// </remarks>
         public static bool TrySampleHeadOffset(

@@ -30,8 +30,9 @@ namespace VRCKatamari.Tests
         private const float Tolerance = 1e-5f;
 
         // The behavior's committed defaults, written as literals so a changed default fails a
-        // test instead of silently moving the expectation.
-        private const float VerticalLimit = 1f;
+        // test instead of silently moving the expectation. The vertical rail is 1.3 m so the
+        // 1.204159 m head ClientSim actually measured is compensated in full (2026-11-15).
+        private const float VerticalLimit = 1.3f;
         private const float HorizontalLimit = 0.35f;
         private const float FilterHz = 8f;
 
@@ -197,7 +198,10 @@ namespace VRCKatamari.Tests
         public void TheVerticalLimitBoundsTheCorrectionAndReportsWhatIsLeft()
         {
             Rig rig = MakeRig();
-            // A head 1.40 m above the seat is past the guard, so the guard must bite.
+            // A head 1.40 m above the seat is over the 1.3 m clamp, so the clamp must bite: the
+            // seat drops the full 1.3 m and 1.40 - 1.3 = 0.10 m of eye error is left in place.
+            // (This test drives SeatEyeMath directly, so the plausibility rail - which is the
+            // caller's decision and is also under 1.40 m - plays no part here.)
             rig.SeatToHead = new Vector3(0f, 1.40f, 0f);
 
             Vector3 offset;
@@ -214,6 +218,35 @@ namespace VRCKatamari.Tests
             // the limit and the head is exactly that much above the eye point.
             Assert.AreEqual(uncompensated,
                 Vector3.Distance(rig.HeadPositionAfter(offset), rig.EyePoint), Tolerance);
+        }
+
+        [Test]
+        public void TheHeadClientSimMeasuredIsCompensatedInFull()
+        {
+            // The measurement both rails were set from: in ClientSim the seated camera really
+            // is 1.204159 m above the seat (2026-11-15). The plausibility rail has to let it
+            // through AND the vertical clamp has to sit above it - clipping a real measurement
+            // would leave the camera visibly high, which is the defect this layer exists for.
+            const float clientSimHeadMeters = 1.204159f;
+            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistance(clientSimHeadMeters));
+
+            Rig rig = MakeRig();
+            rig.SeatToHead = new Vector3(0f, clientSimHeadMeters, 0f);
+
+            Vector3 offset;
+            float eyeAboveSeat;
+            float uncompensated;
+            int reason;
+            Assert.IsTrue(rig.MeasureAndSolve(out offset, out eyeAboveSeat, out uncompensated,
+                out reason), "reason=" + reason);
+
+            // Nothing is dropped: the seat drops the whole measured height, the reported eye
+            // error is zero, and the eye lands on the eye point.
+            Assert.AreEqual(-clientSimHeadMeters, offset.y, Tolerance);
+            Assert.AreEqual(0f, uncompensated, Tolerance);
+            Assert.AreEqual(clientSimHeadMeters, eyeAboveSeat, Tolerance);
+            Assert.AreEqual(0f, Vector3.Distance(rig.HeadPositionAfter(offset), rig.EyePoint),
+                Tolerance);
         }
 
         [Test]
@@ -389,6 +422,28 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(0f, offset.z, Tolerance);
             Assert.AreEqual(0f, Vector3.Distance(rig.HeadPositionAfter(offset), rig.EyePoint),
                 Tolerance);
+        }
+
+        [Test]
+        public void APlausibleSeatedHeadIsAcceptedAndAStandingOneIsRefused()
+        {
+            // 1.25 m: past every seated head this project has measured - 1.204159 m in
+            // ClientSim (2026-11-15) and about 0.85 m on real hardware - and inside the guard.
+            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistance(1.25f));
+
+            // 1.40 m: a standing eye height, i.e. the wrong datum. Refused, not clamped.
+            Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistance(1.40f));
+
+            // The rail itself, spelled out: the guard is a bound to stay under, so the value
+            // is accepted and a hair past it is not. Changing the constant fails here.
+            Assert.AreEqual(1.35f, SeatEyeMath.MaxPlausibleHeadAboveSeatMeters, Tolerance);
+            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistance(
+                SeatEyeMath.MaxPlausibleHeadAboveSeatMeters));
+            Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistance(
+                SeatEyeMath.MaxPlausibleHeadAboveSeatMeters + 0.001f));
+
+            // A length that cannot be measured is not plausible either.
+            Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistance(float.NaN));
         }
 
         [Test]

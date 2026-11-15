@@ -171,3 +171,6 @@ Thumbs.db
 # Private source transcript; retained locally, never publish
 /Docs/Source/ChatGPT-VRC块魂-20261011-0332.txt
 /Docs/tools/dsh_local_rpc.py
+
+# CodeGraph local code index (rebuilt per machine)
+/.codegraph/

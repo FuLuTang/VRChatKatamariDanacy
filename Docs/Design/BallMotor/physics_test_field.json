@@ -2152,8 +2152,11 @@
       "readout=trace checks are read from the console by a human, so the driver reports them as BLOCKED_UNTIL_manual and counts them as skipped, never as failures",
       "readout=counter checks need the P4 step-cost counters and report BLOCKED_UNTIL_P4",
       "gate=P2 checks are measured when a PickupFieldHost is wired with prop obstacles enabled (its SetSupportProps is the only path for prop tops; a disabled host clears both sets). P3 is in the tree since d31dc9b, so a gate=P3 check is MEASURED: the driver no longer reports BLOCKED_UNTIL_P3",
-      "a metric the driver cannot read now says WHY: reason=unknownMetric means the criterion names a metric with no driver branch (a data typo), while reason=noDeckSample/noLiftSample/noSetter/sizeModelMissing/quantumUnavailable means the metric is real but this run cannot answer it (design 8.3.2)"
-    ]
+      "a metric the driver cannot read now says WHY: reason=unknownMetric means the criterion names a metric with no driver branch (a data typo), while reason=noDeckSample/noLiftSample/noSetter/sizeModelMissing/quantumUnavailable means the metric is real but this run cannot answer it (design 8.3.2)",
+      "a run whose setter says converged but whose ball is not within SizeAppliedToleranceM (20 mm, a constant) of the target is BLOCKED_UNTIL_size with reason=sizeNotApplied, not a physics result (defect 1 of the 2026-11-15 matrix)",
+      "the driver and the setter stamp their U# program revision in Start ([ptf] build=... / [ptf] setter build=...); a log without those lines, or with error=unknownMetric / BLOCKED_UNTIL_P3, is a stale program and its matrix must not be read (design 8.3.3)"
+    ],
+    "build_stamp": "[ptf] build=2026-11-15b cells=9 presets=4"
   },
   "ball_size": {
     "component": "LabBallSizeSetter",
@@ -2171,11 +2174,19 @@
     "quantum_formula": "D / (3 * (baselineVolumeUnits + confirmed)); d(D^3)/dV = D^3 / (baselineVolumeUnits + confirmed). The pricing constant (cubicMetersPerVolumeUnit) and the semantic/core ratio cancel, so the baseline is the only motor number the model needs",
     "size_model_input": "sizeModelBaselineVolumeUnits, written by the criteria importer from the SCENE motor's serialized baselineVolumeUnits; the motor exposes no getter for it (nor for cubicMetersPerVolumeUnit / semanticDiameterPerCoreDiameter / maxCoreRadiusWorldM)",
     "why_analytic": "the previous measured slope needed two settled samples with different volume, and at the 0.30 tier the ball is already at the target after the round reset: Feed converged on the first frame, never fed, the slope stayed 0, GetQuantumM() returned 0 and diameter_error_quanta was reported unknownMetric/skipped (2026-11-15 run of 5835517). The quantum is a property of the size model, not of one run",
-    "failures": ["cannotShrink", "noSizeModel", "capExceeded", "submitRefused"],
+    "failures": [
+      "cannotShrink",
+      "noSizeModel",
+      "capExceeded",
+      "submitRefused"
+    ],
     "reset_primitive": "motor.TryResetForNewRound(newRoundId, startCenter, heading, out reason)",
     "feed_primitive": "motor.SubmitCandidate(true, feederKind, feederBounds, ballCenter, units, feederId, gen)",
     "why_no_runtime_change": "the diameter is a pure function of the confirmed volume, and SubmitCandidate already exists as the host-side seam, so the setter feeds integer volume units and reads the diameter back. Integer because the absorb gate refuses a fractional value (TryAbsorbValueToLedgerGain)",
-    "side_effects": "absorb count, ledger volume and the absorb volume limit all grow; every check that reads them uses a baseline delta (PHYSICS_TEST_FIELD 8.3)"
+    "side_effects": "absorb count, ledger volume and the absorb volume limit all grow; every check that reads them uses a baseline delta (PHYSICS_TEST_FIELD 8.3)",
+    "request_restart": "BeginRequest(); the driver calls it once per run (end of Switch) because TryResetForNewRound re-prices the ball to the baseline. SetDiameterM is idempotent only while a request is in flight (requestActive && !converged); a call after convergence starts a new request. Without this, only the first cell per tier was really resized (2026-11-15 matrix: same size_accuracy constant for 8 of 9 cells)",
+    "live_quantum": "GetQuantumM()/GetCubedSlope() call ReadSizeModel() on every read; there is no cached quantum. A cached value from the previous Feed is what printed +41.2674/+371.6536/+3523.0036 for the cells that never grew",
+    "build_stamp": "[ptf] setter build=2026-11-15b baselineVolumeUnits=<baked>"
   },
   "criteria_importer": {
     "component": "PhysicsTestFieldCriteriaImporter",

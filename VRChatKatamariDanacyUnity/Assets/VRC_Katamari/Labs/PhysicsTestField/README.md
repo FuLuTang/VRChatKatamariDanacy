@@ -17,7 +17,7 @@
 `VRC Katamari/Level/Import Physics Test Field Criteria`）读
 `Docs/Design/BallMotor/physics_test_field.json` 写上面三个组件的序列化数组。
 
-## 三条必须知道的机制
+## 五条必须知道的机制
 
 1. **arena 默认是关的。** `PhysicsTestCell.Start()` 会把自己那格的 `LevelContent/<cell>` `SetActive(false)`；
    驱动只开当前格。`LevelArenaHost` 在自己的 `Update` 里注册，而电机的障碍表是**全局**的——四格同时活着
@@ -30,6 +30,13 @@
    做不到，判据用 `diameter_error_quanta ≤ 1` 表达这件事（设计 §8.3）。量子由 `D/(3·(baseline + confirmed))`
    解析给出，**0.30 档也有**；`baselineVolumeUnits` 由判据导入器从场景 motor 烘进 `sizeModelBaselineVolumeUnits`
    （电机没有这个 getter），所以**改了电机的定价字段要重新导入判据**，否则 `size_accuracy` 报 `reason=sizeModelMissing`。
+4. **每一 run 都是新的一次球径请求。** 复位把球重定价回 0.30，所以驱动在 `Switch` 末尾调 `ballSize.BeginRequest()`；
+   `SetDiameterM` 只在「请求还在飞」时幂等，收敛后再次调用 = 新的请求。收敛之后驱动还要量一次
+   `abs(实测 D − 目标) ≤ 20 mm`，不够就 `reason=sizeNotApplied` + `BLOCKED_UNTIL_size`（2026-11-15 的矩阵就是
+   「说收敛了但球还在 0.30」，整张无效）。
+5. **先确认跑的是哪份程序。** 进 Play 的头两行是 `[ptf] build=…` 与 `[ptf] setter build=… baselineVolumeUnits=…`。
+   没有它们、或日志里出现 `error=unknownMetric` / `BLOCKED_UNTIL_P3`，说明 U# 程序是旧的（数据可能已经是新的），
+   **那份矩阵不能读**（设计 §8.3.3）。
 
 ## 怎么跑（操作员）
 

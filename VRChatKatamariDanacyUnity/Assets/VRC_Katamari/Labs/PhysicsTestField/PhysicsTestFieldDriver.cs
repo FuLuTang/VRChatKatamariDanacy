@@ -77,6 +77,16 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private bool logTrajectory = true;
         [SerializeField] private float trajectoryIntervalSeconds = 0.5f;
 
+        // A converged setter must also have actually resized the ball. A constant, not a serialized
+        // field: a field added to an already-serialized UdonBehaviour reads 0 until the criteria are
+        // re-imported, and a zero tolerance would block every run instead of guarding one.
+        private const float SizeAppliedToleranceM = 0.02f;
+
+        // Stamped into the first log line so "which U# program is running" is checkable. The
+        // 2026-11-15 matrix ran a pre-P3 driver against post-P3 data and nobody could tell from
+        // the log; the build line and the reason= vocabulary make that impossible to repeat.
+        private const string DriverRevision = "2026-11-15b";
+
         // ---- state -------------------------------------------------------------
 
         private const int StateIdle = 0;
@@ -166,6 +176,9 @@ namespace VRCKatamari.Labs.PhysicsTestField
         {
             // Nothing here touches the motor: its Start may not have run yet, and its stores are
             // allocated there. The first Update waits for a positive diameter instead of racing.
+            int cellCount = cells == null ? 0 : cells.Length;
+            Debug.Log("[ptf] build=" + DriverRevision + " cells=" + cellCount.ToString()
+                + " presets=" + (presetDiametersM == null ? 0 : presetDiametersM.Length).ToString());
             if (cells != null)
             {
                 for (int i = 0; i < cells.Length; i++)
@@ -462,6 +475,21 @@ namespace VRCKatamari.Labs.PhysicsTestField
             rampCountAtSwitch = motor.GetRampCount();
             ApplyRampProbe(cell);
 
+            // A ramp cell must be marked as one, or the deck derivation below treats its top deck as
+            // a step and the whole ramp group reads as "should be blocked". The flag comes from the
+            // criteria import (placement role=ramp), so a mismatch is a stale import, not physics.
+            if (rampCountAtSwitch > 0 && !cell.IsRampClimb())
+            {
+                Debug.LogWarning("[ptf] rampCellMismatch cell=" + cell.GetCellId()
+                    + " ramps=" + rampCountAtSwitch.ToString()
+                    + " rampClimb=0; re-import the criteria (the deck derivation would treat the deck as a step)");
+            }
+            else if (cell.IsRampClimb() && rampCountAtSwitch == 0)
+            {
+                Debug.LogWarning("[ptf] rampCellMismatch cell=" + cell.GetCellId()
+                    + " ramps=0 rampClimb=1; the arena registered no ramp, so ramp_support/ramp_count will fail");
+            }
+
             // Baselines are read AFTER the switch and BEFORE anything else moves: the overflow
             // latch and the contact-saturation flag are permanent, so only a delta is meaningful.
             baseOverflow = motor.GetOverflowCount();
@@ -517,6 +545,12 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 + " hdg=" + Fixed(heading, 1)
                 + " arena=" + ArenaReport(cell)
                 + " gates=" + GateSummary(cell));
+
+            // A new run is a new sizing pass: the reset above re-priced the ball to the baseline,
+            // so the setter must not answer from the previous run's converged state even when the
+            // target diameter is unchanged (that was the 2026-11-15 "only the first cell per tier
+            // grows" defect).
+            if (ballSize != null) ballSize.BeginRequest();
 
             state = StateSize;
             stateClock = 0f;
@@ -592,6 +626,25 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
             if (ballSize.IsConverged())
             {
+                // Converged must mean "the ball IS this diameter", not only "the setter stopped
+                // feeding". A stale program or a skipped request used to report converged with the
+                // ball still at the baseline, and the whole matrix silently measured the wrong
+                // ball; that case is a BLOCKED setup, not a physics result.
+                float applied = motor.GetSemanticDiameterWorldM();
+                float appliedGap = applied - target;
+                if (appliedGap < 0f) appliedGap = -appliedGap;
+                if (appliedGap > SizeAppliedToleranceM)
+                {
+                    Debug.Log("[ptf] blocked run=" + runIndex + " cell=" + cell.GetCellId()
+                        + " stage=size reason=sizeNotApplied target=" + Fixed(target, 3)
+                        + " diameter=" + Fixed(applied, 3)
+                        + " verdict=BLOCKED_UNTIL_size");
+                    checkSkipped = checkSkipped + 1;
+                    passSkipped = passSkipped + 1;
+                    FinishRun();
+                    return;
+                }
+
                 state = StateSettle;
                 stateClock = 0f;
                 return;
@@ -1351,7 +1404,9 @@ namespace VRCKatamari.Labs.PhysicsTestField
             if (arena == null) return "none";
             return "planes=" + arena.GetRegisteredPlaneCount().ToString()
                 + "/boxes=" + arena.GetRegisteredBoxCount().ToString()
-                + "/supports=" + arena.GetRegisteredSupportCount().ToString();
+                + "/supports=" + arena.GetRegisteredSupportCount().ToString()
+                + "/ramps=" + motor.GetRampCount().ToString()
+                + "/rampCell=" + (cell.IsRampClimb() ? "1" : "0");
         }
 
         private string GateSummary(PhysicsTestCell cell)

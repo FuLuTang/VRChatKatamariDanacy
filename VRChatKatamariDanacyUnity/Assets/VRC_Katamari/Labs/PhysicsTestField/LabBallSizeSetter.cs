@@ -35,6 +35,14 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// is derived, and there is exactly one derivation.
     /// </para>
     /// <para>
+    /// <b>Every run is a new request.</b> The driver resets the round between runs, and the reset
+    /// re-prices the ball back to the baseline, so an unchanged target still needs a fresh pass:
+    /// <see cref="BeginRequest"/> clears the sticky state, <see cref="SetDiameterM"/> only
+    /// short-circuits while a request is still in flight, and the quantum is recomputed on every
+    /// read. A cached value (the old <c>lastQuantumM</c>) is what let a whole 4 x 9 matrix report
+    /// the same +41.27 quanta for every cell after the first one in a tier.
+    /// </para>
+    /// <para>
     /// <b>The resolution floor is one volume unit, and it is a real limit.</b> One unit is
     /// <c>0.0041 m^3</c>, so the diameter grid is ~29 mm at D = 0.30, ~7.3 mm at 0.60, ~2.2 mm at
     /// 1.10 and ~0.54 mm at 2.20. "Within 2 mm" is therefore NOT reachable at the small presets -
@@ -108,9 +116,20 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private string lastFailure = "";
 
         // ---- analytic size model ----
-        private float slopeCubedPerUnit;
         private float lastErrorM;
-        private float lastQuantumM;
+
+        // Stamped into the first log line. A whole 4 x 9 matrix was invalid because the scene ran
+        // the previous U# program while its data came from the new importer; this makes "which
+        // program am I running" a one-line check instead of a forensic exercise.
+        private const string SetterRevision = "2026-11-15b";
+
+        public void Start()
+        {
+            // baselineVolumeUnits is the one input the setter cannot read from a getter, so print
+            // the baked value: 0 here means the criteria importer did not bake it.
+            Debug.Log("[ptf] setter build=" + SetterRevision
+                + " baselineVolumeUnits=" + sizeModelBaselineVolumeUnits);
+        }
 
         public void Update()
         {
@@ -122,13 +141,40 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // ---- operator API ------------------------------------------------------
 
         /// <summary>
-        /// Asks for one target diameter. Idempotent: repeating the same target is a no-op, so a
-        /// driver may call it every frame while it waits for <see cref="IsConverged"/>.
+        /// Starts one sizing pass. The driver calls it once per run, before the size stage, because
+        /// the round reset re-prices the ball back to the baseline: a new run must re-feed even
+        /// when the target diameter is unchanged.
         /// </summary>
+        /// <remarks>
+        /// Without this, the idempotent <see cref="SetDiameterM"/> short-circuit plus "converged is
+        /// sticky" made every cell after the first one in a tier settle immediately with the ball
+        /// still at 0.30 m (the 2026-11-15 matrix: only C14 per tier was really resized).
+        /// </remarks>
+        public void BeginRequest()
+        {
+            requestActive = false;
+            converged = false;
+            absorbsThisRequest = 0;
+            absorbCount = 0;
+            lastFailure = "";
+            lastErrorM = 0f;
+            nextFeedTime = 0f;
+        }
+
+        /// <summary>
+        /// Asks for one target diameter. Idempotent WHILE a request is still in flight, so a driver
+        /// may call it every frame while it waits for <see cref="IsConverged"/>.
+        /// </summary>
+        /// <remarks>
+        /// A call after convergence is the NEXT run asking again (the driver resets the round
+        /// between runs, which moves the ball without a commit), so it starts a fresh request.
+        /// "A pending request is idempotent, a finished one is not" is the whole rule; there is no
+        /// second reset path.
+        /// </remarks>
         public void SetDiameterM(float targetMeters)
         {
             if (targetMeters <= 0f) return;
-            if (requestActive && Mathf.Abs(targetMeters - targetM) <= 0.000001f) return;
+            if (requestActive && !converged && Mathf.Abs(targetMeters - targetM) <= 0.000001f) return;
             targetM = targetMeters;
             requestActive = true;
             converged = false;
@@ -136,7 +182,6 @@ namespace VRCKatamari.Labs.PhysicsTestField
             absorbCount = 0;
             lastFailure = "";
             lastErrorM = 0f;
-            lastQuantumM = 0f;
             nextFeedTime = 0f;
         }
 
@@ -217,24 +262,58 @@ namespace VRCKatamari.Labs.PhysicsTestField
         }
 
         /// <summary>
-        /// One volume unit expressed as a diameter change at the last measurement, metres.
-        /// Derived from the size model, so it is available before the first feed. Zero when the
-        /// model was not baked.
+        /// One volume unit expressed as a diameter change at the current size, metres.
+        /// Computed from the size model on demand, so it exists before the first feed of the first
+        /// run and can never be a stale copy from an earlier request. Zero when the model was not
+        /// baked or the motor is not ready.
         /// </summary>
         public float GetQuantumM()
         {
-            return lastQuantumM;
+            float slope;
+            float quantum;
+            ReadSizeModel(out slope, out quantum);
+            return quantum;
         }
 
         /// <summary>d(D^3)/d(volume unit) at the current size; 0 when the model was not baked.</summary>
         public float GetCubedSlope()
         {
-            return slopeCubedPerUnit;
+            float slope;
+            float quantum;
+            ReadSizeModel(out slope, out quantum);
+            return slope;
         }
 
         public bool IsCalibrated()
         {
-            return sizeModelBaselineVolumeUnits > 0f;
+            return sizeModelBaselineVolumeUnits > 0f && motor != null;
+        }
+
+        /// <summary>
+        /// The two size-model readings at the CURRENT ball size, derived from one expression.
+        /// </summary>
+        /// <remarks>
+        /// The core radius is <c>cbrt(3 * cubic * total / 4pi)</c> and the semantic diameter is
+        /// proportional to it, so <c>D^3</c> is linear in the total volume units: the slope is
+        /// <c>D^3 / total</c> and one unit is <c>D / (3 * total)</c>. Computed on every read, so a
+        /// cached quantum from the previous request can never leak into a new run.
+        /// </remarks>
+        private void ReadSizeModel(out float slopeCubedPerUnit, out float quantumM)
+        {
+            slopeCubedPerUnit = 0f;
+            quantumM = 0f;
+            if (motor == null) return;
+            if (sizeModelBaselineVolumeUnits <= 0f) return;
+
+            float diameter = motor.GetSemanticDiameterWorldM();
+            if (diameter <= 0f) return;
+            float totalUnits = sizeModelBaselineVolumeUnits + motor.GetConfirmedVolumeUnits();
+            if (totalUnits <= 0f) return;
+
+            float cubed = diameter * diameter * diameter;
+            if (cubed <= 0f) return;
+            slopeCubedPerUnit = cubed / totalUnits;
+            quantumM = diameter / (3f * totalUnits);
         }
 
         // ---- the loop ----------------------------------------------------------
@@ -248,29 +327,15 @@ namespace VRCKatamari.Labs.PhysicsTestField
             // and the field asserts that counter is 0.
             if (motor.GetPendingCandidateCount() > 0) return;
 
-            float volumeUnits = motor.GetConfirmedVolumeUnits();
             float diameter = motor.GetSemanticDiameterWorldM();
             float cubed = diameter * diameter * diameter;
-            float totalUnits = sizeModelBaselineVolumeUnits + volumeUnits;
 
-            // The mapping is exact, so the slope is derived rather than measured: D^3 is linear
-            // in the TOTAL volume units (core radius = cbrt(3 * cubic * total / 4pi), semantic
-            // diameter proportional to core), so C = D^3 / total is d(D^3)/d(unit) at this size
-            // and one unit moves the diameter by C / (3 D^2) = D / (3 total). The pricing
-            // constant and the semantic/core ratio both cancel, so the baseline (the one number
-            // with no getter, mirrored by the criteria importer) is all the model needs.
-            float quantum = 0f;
-            if (sizeModelBaselineVolumeUnits > 0f && totalUnits > 0f && cubed > 0f && diameter > 0f)
-            {
-                slopeCubedPerUnit = cubed / totalUnits;
-                quantum = diameter / (3f * totalUnits);
-            }
-            else
-            {
-                slopeCubedPerUnit = 0f;
-            }
-
-            lastQuantumM = quantum;
+            // The same one derivation the getters use, read fresh every frame: no cached slope and
+            // no cached quantum, so a new run (whose round reset moved the ball back to the
+            // baseline) can never inherit the previous run's numbers.
+            float slopeCubedPerUnit;
+            float quantum;
+            ReadSizeModel(out slopeCubedPerUnit, out quantum);
 
             float error = diameter - targetM;
             lastErrorM = error;

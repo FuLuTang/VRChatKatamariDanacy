@@ -486,6 +486,53 @@ class SizeAccuracyAndRampLimit(unittest.TestCase):
         # The ALERT must not print the old catch-all that made a missing sample look like a typo.
         self.assertNotIn('error=unknownMetric', driver)
 
+    def test_every_run_restarts_the_size_request(self):
+        # The 2026-11-15 4x9 matrix was invalid: only the first cell per tier was resized,
+        # because SetDiameterM short-circuited on an unchanged target and "converged" was
+        # sticky while the round reset had already put the ball back to the baseline. One
+        # rule fixes it and these pins keep it: a pending request is idempotent, a finished
+        # one is not, and the driver opens a fresh request for every run.
+        setter = SETTER_CS.read_text(encoding="utf-8")
+        driver = DRIVER_CS.read_text(encoding="utf-8")
+        self.assertIn("public void BeginRequest()", setter)
+        self.assertIn("requestActive && !converged &&", setter)
+        self.assertIn("ballSize.BeginRequest();", driver)
+        self.assertLess(driver.index("ballSize.BeginRequest();"),
+                        driver.index("state = StateSize;"),
+                        "BeginRequest must run before the size stage starts")
+        # Converged must mean the ball IS the target, or the run is blocked, never a
+        # bogus physics row.
+        self.assertIn("SizeAppliedToleranceM", driver)
+        self.assertIn("reason=sizeNotApplied", driver)
+
+    def test_the_quantum_is_live_not_a_cached_snapshot(self):
+        # The old getter returned lastQuantumM, set only inside Feed; after a short-circuited
+        # request that was the PREVIOUS run's quantum (the +41.27 / +371.65 / +3523.00
+        # constants in the matrix). It is now computed from the live ball on every read.
+        setter = SETTER_CS.read_text(encoding="utf-8")
+        # No cached quantum field and no getter that returns one (the doc may name the old
+        # field while explaining why it is gone).
+        self.assertNotIn("private float lastQuantumM", setter)
+        self.assertNotIn("return lastQuantumM", setter)
+        self.assertIn("private void ReadSizeModel(out float slopeCubedPerUnit, out float quantumM)",
+                      setter)
+        self.assertIn("ReadSizeModel(out slope, out quantum)", setter)
+
+    def test_the_running_program_is_stamped_and_p3_is_not_a_skip(self):
+        # The matrix ran a pre-5835517 driver against post-5835517 data: it printed
+        # BLOCKED_UNTIL_P3 and had no ramp-cell exemption. Both are gone from the source,
+        # and each component stamps its revision so a stale U# program is visible in the
+        # first line of the log.
+        driver = DRIVER_CS.read_text(encoding="utf-8")
+        setter = SETTER_CS.read_text(encoding="utf-8")
+        self.assertNotIn("BLOCKED_UNTIL_P3", driver)
+        self.assertIn("[ptf] build=", driver)
+        self.assertIn("DriverRevision", driver)
+        self.assertIn("[ptf] setter build=", setter)
+        self.assertIn("SetterRevision", setter)
+        # A ramp cell that lost its rampClimb flag is a stale import, not physics.
+        self.assertIn("rampCellMismatch", driver)
+
     def test_the_c05_limit_is_documented_as_a_physics_finding(self):
         # C05 (45 deg) fails `climbed` at every diameter. That is the motor's seam
         # deadlock, not a timeline: the design doc carries the derivation and the angle

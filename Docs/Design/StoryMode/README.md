@@ -468,3 +468,67 @@ python3 -m unittest discover -s Docs/tests
 4. **Idle 的提示行实际显示**：四行 Text 的排版、清空剩余行的效果、`startPrompt` 在场景实例上的序列化，都没有 Play Mode 观察。
 5. **中途离座后的结果卡**：站着到点时结果卡是否仍可读、重试后是否必须先坐回去才动，未实测。
 6. **已经坐在站里进世界**（例如复活回座位）时没有人再按一次左键：站只在 `OnStationEntered` 通知，没有“加载时已在座”的路径，所以会停在 Idle 且骑乘闸门关着，要离座再坐一次才会开始。这是已知缺口，不是已实现的行为。
+
+## 结果卡显隐：按钮只在 Result，卡片从 Presenting 开始
+
+> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-15。本节对应实玩暴露的两个问题：场景一加载就看得见“再试一次”（那时还在 Idle，没有回合、没有结果卡），以及 Presenting 那一拍只有一行“呈给国王”、背后没有任何牌面。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test。
+
+### 两个新链接
+
+| 字段 | 拖什么 | 显示于 | 隐藏于 |
+|---|---|---|---|
+| `retryButtonRoot` | “再试一次”按钮所在对象：uGUI 是挂 `Button` 的那个 GameObject（不是 Canvas，也不是 Text 子物体）；世界内按钮是挂 `StoryRetryButton` + Collider 的那个 GameObject | Result | Idle / Running / Presenting |
+| `resultCardRoot` | 结果卡的底板/面板对象（卡面背景） | Presenting / Result | Idle / Running |
+
+两个都是 `[SerializeField] private GameObject`，默认 null；空链接一律跳过，所以没接的场景（含无头实验）行为与改动前完全一样。
+
+### 一个方法写 active 状态
+
+`ApplyStateVisibility()`（`StoryRoundController.cs:738`）是唯一写这两个对象 `SetActive` 的地方，调用点覆盖全部状态变化：
+
+| 调用点 | 进入的状态 | 卡面 | 按钮 |
+|---|---|---|---|
+| `EnterIdle()`（`:305`） | Idle | 关 | 关 |
+| `BeginRound()`（`:388`，含重试成功后的重开） | Running | 关 | 关 |
+| `SettleRound()`（`:641`） | Presenting | 开 | 关 |
+| `Update()` 的 Presenting→Result 转移（`:409`） | Result | 开 | 开 |
+| `RequestRetry()` 开头（`:492`） | 仍为当前状态 | 按当前状态重写 | 按当前状态重写 |
+
+`Start()` 的两个分支分别走 `EnterIdle()` 或 `BeginRound()`，所以加载后的第一次 Start 就会把按钮关掉（按 Unity 生命周期，Start 在第一帧渲染前跑完），正常不会先闪一帧；场景里把按钮对象在 authoring 时就设成 inactive 是双保险。`RequestRetry()` 开头那一次是“重写”：按错状态进来的调用会把按钮重新藏掉，而不是让按钮与状态各说各话。
+
+### 按钮显隐不是规则，`RequestRetry()` 的状态闸门才是
+
+显隐只决定“看得见/按得到”，不决定“能不能重开”。`RequestRetry()` 仍然只在 `StateResult` 接受（其余状态一行 warning 后返回 false，卡面与回合都不动），所以就算某个场景把按钮拖错、或者在 Result 之前用别的方式把它显示出来，也开不了新回合，更不会出现“新回合配旧球”。这也是本节的显隐逻辑可以放心做的原因：它只改表现，规则仍在一处。
+
+### 场景怎么接（Unity 操作者）
+
+1. `retryButtonRoot` 拖 uGUI `Button` 所在的那个 GameObject（`OnClick` 仍按上一节四步接 `UdonBehaviour.SendCustomEvent("OnRetryPressed")`）；世界内按钮则拖挂 `StoryRetryButton` + Collider 的对象。
+2. `resultCardRoot` 拖结果卡底板。它从 Presenting 起就显示，所以“呈给国王”那一拍背后有牌面，Result 沿用同一块底板；控制器在这两个状态里只改 `resultText` 的文字，牌面本身由场景决定。
+3. **不要把 `resultText` 放进 `resultCardRoot` 的子树**：Idle 会把开始提示（`startPrompt`，默认「点击球坐上去开始」）写进同一条结果行（`resultText` 接了时），而 Idle 时卡面是关的，提示会跟着消失。要“文字压在牌面上”的观感，就让 Text 与底板同级、排在底板之后渲染（同一 Canvas 下的 sibling 顺序），而不是成为底板的子物体。
+4. **不要把这两个字段拖成本控制器自己的 GameObject**：Idle 会对它调 `SetActive(false)`，控制器随后也不再运行，回合永远停在 Idle。它们必须是独立对象（通常和卡面一起放在同一个 Canvas 下）。
+5. 既有字段与签名一个没变：`motor` / `input` / `pickupHost` / 四个 Text / 关卡数据 / 五句评语 / `startOnLoad` / `startPrompt` 全部原名；`RequestRetry()` 仍是 `public bool` 且行为不变。本次只追加两个序列化字段、一个私有方法，以及类注释里的一段说明。
+6. U# 语言约束照旧：没有属性、重载、泛型、`??`、字符串插值、static 字段；`ApplyStateVisibility()` 是无参私有方法，两个 `SetActive` 都是 `GameObject.SetActive(bool)`。
+
+### 与上文的关系（取代一句）
+
+上文「再试一次」一节写过「按钮 GameObject 是否只在结果时显示，是场景自己的选择；本脚本不做显隐」。这句已被本节取代：控制器现在按状态显隐 `retryButtonRoot`。它的后半句仍然成立——真正的规则是 `RequestRetry()` 的状态闸门，显隐只是表现。
+
+### 未验证（不要当成已验证）
+
+1. **没有编译**：U# 全量编译、Console 无错都没发生。`GameObject.SetActive(bool)` 有 `Labs/BallPlayground/PlaygroundProp.cs:167`（BallPlayground 实跑过）的先例，序列化 `GameObject` 字段有同文件 `:38` 的 `visualRoot` 先例，但本文件这个组合没有编译记录。
+2. **ClientSim / Play Mode / Build & Test 全部 NOT_RUN**：加载后按钮不可见、Presenting 时底板可见、Result 时底板+按钮都可见、重试后按钮消失，一条都没有运行时观察。
+3. **Idle 提示行与卡面的渲染顺序**：见接入第 3 条，纯场景侧排布，没有观察。
+4. **`SetActive(false)` 期间按下按钮**：隐藏的对象上 uGUI 不会再派发 `OnClick`，这是本节依赖的机制，但“Result 之前按不到”没有实机记录。
+
+### 验证命令与本次结果
+
+```bash
+python3 Docs/tools/validate_plan.py
+python3 -m unittest discover -s Docs/tests
+```
+
+2026-11-15 本次：第一条 `PASS: 61 tasks; both release DAGs acyclic; source hashes verified.`；第二条 `Ran 270 tests ... OK`。Unity 侧编译、Play Mode、Build & Test 均 **NOT_RUN**（本 agent 不是 Unity 操作者）。
+
+### 没有改动的东西
+
+只改 `Runtime/Story/StoryRoundController.cs`（追加两个序列化字段、`ApplyStateVisibility()`、五个调用点与类注释一段）与本节（追加在本文件末尾）。没有改 `StoryRetryButton.cs`、`PickupFieldHost.cs`、motor、Riding、Labs、asmdef、场景、`tasks.json` 或任何其他文件。

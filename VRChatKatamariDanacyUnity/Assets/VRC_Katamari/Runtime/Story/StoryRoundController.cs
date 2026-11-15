@@ -50,6 +50,14 @@ namespace VRCKatamari.Story
     /// calls <c>TryBank</c> or <c>TryAwardScore</c>.
     /// </para>
     /// <para>
+    /// Result card objects. <c>resultCardRoot</c> (the panel behind the result text) is
+    /// shown from Presenting on and <c>retryButtonRoot</c> (the "再试一次" button) only in
+    /// Result; both are hidden in the other states. They are optional scene links, and
+    /// <c>ApplyStateVisibility</c> is the single place that writes their active state, so
+    /// a scene that ships the button active, or a press from a stale button, is corrected
+    /// on the next state change instead of showing a button before the first round.
+    /// </para>
+    /// <para>
     /// Measuring. The design evaluates the settled ball diameter and the settled
     /// count of confirmed attachments, never a local prediction (GameModes README
     /// section 2.7). The diameter is the collision diameter,
@@ -111,6 +119,19 @@ namespace VRCKatamari.Story
         [SerializeField] private Text currentText;
         [SerializeField] private Text remainingText;
         [SerializeField] private Text resultText;
+
+        // ---- Result card objects (optional; a null link is skipped) ----
+        // The uGUI Button object (or a world-space button object) that presses "再试一次":
+        // visible only in Result, hidden in Idle, Running and Presenting. RequestRetry is
+        // still guarded by the state, so a button left visible in the wrong state cannot
+        // start or break a round.
+        [SerializeField] private GameObject retryButtonRoot;
+
+        // The panel behind the result text: visible from Presenting on, because the
+        // presenting beat ("呈给国王") is the card's first half. It is a background, not the
+        // owner of the text: Idle reuses the same result Text for the start prompt, so the
+        // Text itself stays outside this object.
+        [SerializeField] private GameObject resultCardRoot;
 
         // ---- Level data (one file under Docs/Design/GameModes/Levels/) ----
         // story_01_bench_size.json: reach_target_diameter, 1.25 m, 120 s,
@@ -281,6 +302,8 @@ namespace VRCKatamari.Story
                 remainingText.text = startPrompt;
             }
 
+            ApplyStateVisibility();
+
             Debug.Log("[StoryRoundController] idle: waiting for the local player to sit in"
                 + " the ball's station (startOnLoad=false); level=" + levelId);
         }
@@ -362,6 +385,7 @@ namespace VRCKatamari.Story
             }
             WriteCurrentHud();
             WriteRemainingHud(remainingSeconds);
+            ApplyStateVisibility();
         }
 
         public void Update()
@@ -380,6 +404,9 @@ namespace VRCKatamari.Story
             if (Time.time - presentingStartTimeSeconds < presentingSeconds) return;
             ShowResult();
             state = StateResult;
+            // The card was already visible for the presenting beat; this is what turns
+            // the "再试一次" button on, together with the result text.
+            ApplyStateVisibility();
         }
 
         /// <summary>
@@ -458,6 +485,12 @@ namespace VRCKatamari.Story
         /// </remarks>
         public bool RequestRetry()
         {
+            // Re-assert the card objects for the state this call arrives in, so a press
+            // from a button that was left visible in Idle or Running hides it again. The
+            // state guard below is still what decides whether a round restarts: showing
+            // or hiding the button never opens that gate.
+            ApplyStateVisibility();
+
             if (state != StateResult)
             {
                 Debug.LogWarning("[StoryRoundController] retry ignored: no result card is showing"
@@ -604,6 +637,8 @@ namespace VRCKatamari.Story
             WriteCurrentHud();
 
             if (resultText != null) resultText.text = presenterLine;
+
+            ApplyStateVisibility();
         }
 
         private void EvaluateSettledRound()
@@ -679,6 +714,33 @@ namespace VRCKatamari.Story
             }
             resultText.text = presenterLine + "\n" + StarGlyphs(resultStars) + "  "
                 + measuredLabel + "\n" + CommentLine(resultStars, resultInsidePartialBand);
+        }
+
+        /// <summary>
+        /// Writes the two result-card objects' active state for the current state.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Which state owns which object. The card panel
+        /// (<c>resultCardRoot</c>) is visible in Presenting and Result: the presenting
+        /// beat is the card's first half, so the same panel stands behind both the
+        /// presenter line and the outcome. The "再试一次" button
+        /// (<c>retryButtonRoot</c>) is visible only in Result, the one state where
+        /// <see cref="RequestRetry"/> accepts a press. Idle and Running show neither,
+        /// so the scene cannot present a retry button before any round exists.
+        /// </para>
+        /// <para>
+        /// One method, called from every state change, is what keeps the two objects
+        /// from disagreeing with the state. A null link is skipped, so the headless lab
+        /// and any scene without a result card behave exactly as before.
+        /// </para>
+        /// </remarks>
+        private void ApplyStateVisibility()
+        {
+            bool showCard = state == StatePresenting || state == StateResult;
+            bool showRetry = state == StateResult;
+            if (resultCardRoot != null) resultCardRoot.SetActive(showCard);
+            if (retryButtonRoot != null) retryButtonRoot.SetActive(showRetry);
         }
 
         private void WriteTargetText()

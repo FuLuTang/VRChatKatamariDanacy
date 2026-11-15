@@ -30,10 +30,10 @@
    做不到，判据用 `diameter_error_quanta ≤ 1` 表达这件事（设计 §8.3）。量子由 `D/(3·(baseline + confirmed))`
    解析给出，**0.30 档也有**；`baselineVolumeUnits` 由判据导入器从场景 motor 烘进 `sizeModelBaselineVolumeUnits`
    （电机没有这个 getter），所以**改了电机的定价字段要重新导入判据**，否则 `size_accuracy` 报 `reason=sizeModelMissing`。
-4. **每一 run 都是新的一次球径请求。** 复位把球重定价回 0.30，所以驱动在 `Switch` 末尾调 `ballSize.BeginRequest()`；
-   `SetDiameterM` 只在「请求还在飞」时幂等，收敛后再次调用 = 新的请求。收敛之后驱动还要量一次
-   `abs(实测 D − 目标) ≤ 20 mm`，不够就 `reason=sizeNotApplied` + `BLOCKED_UNTIL_size`（2026-11-15 的矩阵就是
-   「说收敛了但球还在 0.30」，整张无效）。
+4. **球径请求每 run 只发一次：`Switch` 调一次 `SetDiameterM(D)`，`Size` 只读。** 复位把球重定价回 0.30，
+   所以每 run 都要重发；但**不能每帧重发**——`SetDiameterM` 会清 `converged`，`TickSize` 每帧调它就会
+   永远读不到收敛（pass-2 就是这么超时的）。`BeginRequest` 已删除。收敛后驱动还要量一次
+   `abs(实测 D − 目标) ≤ 20 mm`，不够就 `reason=sizeNotApplied` + `BLOCKED_UNTIL_size`（状态机与字段写者表见设计 §8.3.4）。
 5. **先确认跑的是哪份程序。** 进 Play 的头两行是 `[ptf] build=…` 与 `[ptf] setter build=… baselineVolumeUnits=…`。
    没有它们、或日志里出现 `error=unknownMetric` / `BLOCKED_UNTIL_P3`，说明 U# 程序是旧的（数据可能已经是新的），
    **那份矩阵不能读**（设计 §8.3.3）。

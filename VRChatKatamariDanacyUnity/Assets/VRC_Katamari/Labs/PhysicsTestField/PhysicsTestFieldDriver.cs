@@ -85,7 +85,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // Stamped into the first log line so "which U# program is running" is checkable. The
         // 2026-11-15 matrix ran a pre-P3 driver against post-P3 data and nobody could tell from
         // the log; the build line and the reason= vocabulary make that impossible to repeat.
-        private const string DriverRevision = "2026-11-15b";
+        private const string DriverRevision = "2026-11-15c";
 
         // ---- state -------------------------------------------------------------
 
@@ -546,11 +546,13 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 + " arena=" + ArenaReport(cell)
                 + " gates=" + GateSummary(cell));
 
-            // A new run is a new sizing pass: the reset above re-priced the ball to the baseline,
-            // so the setter must not answer from the previous run's converged state even when the
-            // target diameter is unchanged (that was the 2026-11-15 "only the first cell per tier
-            // grows" defect).
-            if (ballSize != null) ballSize.BeginRequest();
+            // The ONE size request of this run. It goes here (after the reset re-priced the ball to
+            // the baseline) and nowhere else: TickSize only observes IsConverged/HasFailed. Two
+            // earlier shapes failed - a "same target" short-circuit kept the previous run's
+            // converged state (only the first cell per tier was resized), and re-issuing the
+            // request from the poll loop cleared converged once per frame (the size stage timed out
+            // on a ball already at the target).
+            if (ballSize != null) ballSize.SetDiameterM(presetDiametersM[diameterIndex]);
 
             state = StateSize;
             stateClock = 0f;
@@ -622,8 +624,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return;
             }
 
-            ballSize.SetDiameterM(target);
-
+            // Read-only from here on: the request was issued once in Switch. Calling SetDiameterM
+            // here would clear converged every frame and the stage would time out.
             if (ballSize.IsConverged())
             {
                 // Converged must mean "the ball IS this diameter", not only "the setter stopped

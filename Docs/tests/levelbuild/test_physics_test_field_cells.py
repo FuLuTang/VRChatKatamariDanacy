@@ -433,6 +433,152 @@ class CellCriteria(unittest.TestCase):
         self.assertEqual(no_ramp["limit"], 0)
 
 
+def method_body(source, signature):
+    """The body of one C# method, by brace matching.
+
+    The per-frame guard needs the body boundary, not a window of lines: a comment or a later
+    method must not be able to hide a call that only looks like it is inside TickSize.
+    """
+    start = source.index(signature)
+    brace = source.index("{", start + len(signature))
+    depth = 0
+    for i in range(brace, len(source)):
+        char = source[i]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[brace + 1:i]
+    raise AssertionError("unbalanced method: " + signature)
+
+
+class _SetterModel:
+    """Minimal model of LabBallSizeSetter: request state plus one Feed per update tick.
+
+    Same rules as the C#: D^3 is linear in (baseline + confirmed), the quantum is D/(3*total),
+    convergence allows max(tolerance, quantum), whole units are rounded in the cube domain, and
+    one candidate is in flight at a time. A commit lands at the start of the next tick.
+    """
+
+    def __init__(self, baseline, cubic, tolerance=0.002):
+        self.baseline = baseline
+        self.cubic = cubic
+        self.tolerance = tolerance
+        self.confirmed = 0.0
+        self.pending = 0.0
+        self.target = 0.0
+        self.request_active = False
+        self.converged = False
+        self.absorbs = 0
+        self.failure = ""
+
+    def diameter(self):
+        return (6.0 * self.cubic * (self.baseline + self.confirmed) / math.pi) ** (1.0 / 3.0)
+
+    def set_diameter(self, target):
+        # the C# body: clear every per-request field, then feed from Update
+        self.target = target
+        self.request_active = True
+        self.converged = False
+        self.absorbs = 0
+        self.failure = ""
+
+    def tick(self):
+        if self.pending:
+            self.confirmed += self.pending
+            self.pending = 0.0
+        if not self.request_active or self.converged:
+            return
+        diameter = self.diameter()
+        cubed = diameter * diameter * diameter
+        total = self.baseline + self.confirmed
+        if total <= 0:
+            return
+        slope = cubed / total
+        quantum = diameter / (3.0 * total)
+        error = abs(diameter - self.target)
+        allowed = max(self.tolerance, quantum)
+        if error <= allowed:
+            self.converged = True
+            return
+        if diameter > self.target + allowed:
+            self.failure = "cannotShrink"
+            self.request_active = False
+            return
+        units = int((self.target ** 3 - cubed) / slope + 0.5)
+        if units < 1:
+            self.converged = True
+            return
+        after = cubed + units * slope
+        if abs(self.target ** 3 - after) >= abs(self.target ** 3 - cubed):
+            self.converged = True
+            return
+        self.pending = float(units)
+        self.absorbs += 1
+
+    def settle(self):
+        """One run's size stage is over: the round reset re-prices the ball to the baseline."""
+        self.confirmed = 0.0
+        self.pending = 0.0
+
+
+def _run_old_design(targets, baseline, cubic, order, max_ticks=200):
+    """The pass-2 shape: TickSize calls SetDiameterM every frame; a call after convergence
+    starts a new request, so converged is cleared before it can be observed."""
+    setter = _SetterModel(baseline, cubic)
+    absorbs = 0
+    for target in targets:
+        setter.settle()
+        observed = False
+        for _ in range(max_ticks):
+            if order == "driver_first":
+                setter.set_diameter(target)
+                if setter.converged:
+                    observed = True
+                    break
+                setter.tick()
+            else:
+                setter.tick()
+                setter.set_diameter(target)
+                if setter.converged:
+                    observed = True
+                    break
+        absorbs += setter.absorbs
+        if not observed:
+            return "timeout", absorbs
+    return "ok", absorbs
+
+
+def _run_new_design(targets, baseline, cubic, order, max_ticks=200):
+    """The final shape: Switch issues the one request; the size stage only observes."""
+    setter = _SetterModel(baseline, cubic)
+    absorbs = 0
+    for target in targets:
+        setter.settle()
+        setter.set_diameter(target)          # Switch, once
+        observed = False
+        for _ in range(max_ticks):
+            if order == "driver_first":
+                if setter.converged or setter.failure:
+                    observed = True
+                    break
+                setter.tick()
+            else:
+                setter.tick()
+                if setter.converged or setter.failure:
+                    observed = True
+                    break
+        absorbs += setter.absorbs
+        if not observed:
+            return "timeout", absorbs
+        if setter.failure:
+            return "blocked:" + setter.failure, absorbs
+        if abs(setter.diameter() - target) > 0.02:
+            return "sizeNotApplied", absorbs
+    return "ok", absorbs
+
+
 class SizeAccuracyAndRampLimit(unittest.TestCase):
     """The two defects the first 9-cell run at D=0.30 exposed (2026-11-15).
 
@@ -486,24 +632,65 @@ class SizeAccuracyAndRampLimit(unittest.TestCase):
         # The ALERT must not print the old catch-all that made a missing sample look like a typo.
         self.assertNotIn('error=unknownMetric', driver)
 
-    def test_every_run_restarts_the_size_request(self):
-        # The 2026-11-15 4x9 matrix was invalid: only the first cell per tier was resized,
-        # because SetDiameterM short-circuited on an unchanged target and "converged" was
-        # sticky while the round reset had already put the ball back to the baseline. One
-        # rule fixes it and these pins keep it: a pending request is idempotent, a finished
-        # one is not, and the driver opens a fresh request for every run.
-        setter = SETTER_CS.read_text(encoding="utf-8")
+    def test_the_size_request_is_issued_once_and_the_poll_is_read_only(self):
+        # pass-1: a "same target" short-circuit kept the previous run's converged flag, so only
+        # the first cell per tier was resized. pass-2: the fix re-issued SetDiameterM from the
+        # poll loop every frame, which cleared converged every frame, so TickSize never observed
+        # it and the size stage timed out on a ball already at the target. The final rule is:
+        # one request, issued in Switch after the reset; the size stage only reads.
         driver = DRIVER_CS.read_text(encoding="utf-8")
-        self.assertIn("public void BeginRequest()", setter)
-        self.assertIn("requestActive && !converged &&", setter)
-        self.assertIn("ballSize.BeginRequest();", driver)
-        self.assertLess(driver.index("ballSize.BeginRequest();"),
-                        driver.index("state = StateSize;"),
-                        "BeginRequest must run before the size stage starts")
-        # Converged must mean the ball IS the target, or the run is blocked, never a
-        # bogus physics row.
-        self.assertIn("SizeAppliedToleranceM", driver)
-        self.assertIn("reason=sizeNotApplied", driver)
+        setter = SETTER_CS.read_text(encoding="utf-8")
+        switch = method_body(driver, "private void TickSwitch()")
+        size = method_body(driver, "private void TickSize()")
+
+        self.assertEqual(driver.count("ballSize.SetDiameterM("), 1)
+        self.assertIn("ballSize.SetDiameterM(", switch)
+        # the request must come AFTER the reset that re-prices the ball back to the baseline
+        self.assertLess(switch.index("TryResetForNewRound"),
+                        switch.index("ballSize.SetDiameterM("))
+        # the size stage and its poll never write the request state
+        for forbidden in ("SetDiameterM(", "BeginRequest"):
+            self.assertNotIn(forbidden, size, "TickSize must only observe the setter")
+        self.assertNotIn("BeginRequest", driver)
+        self.assertNotIn("BeginRequest", setter)
+        # convergence must still mean the ball IS the target
+        self.assertIn("SizeAppliedToleranceM", size)
+        self.assertIn("reason=sizeNotApplied", size)
+
+    def test_the_setter_request_clears_every_per_request_field(self):
+        setter = SETTER_CS.read_text(encoding="utf-8")
+        body = method_body(setter, "public void SetDiameterM(float targetMeters)")
+        # no same-target short-circuit: every call is a new request (pass-1 defect)
+        self.assertNotIn("Mathf.Abs(targetMeters - targetM)", body)
+        for field in ("requestActive = true", "converged = false", "absorbsThisRequest = 0",
+                      "absorbCount = 0", "nextFeedTime = 0f", "lastFailure = ", "lastErrorM = 0f"):
+            self.assertIn(field, body, field)
+        # converged is cleared in exactly one place: the request entry point
+        self.assertEqual(setter.count("converged = false"), 1)
+
+    def test_the_state_machine_simulation_converges_on_every_path(self):
+        # A minimal model of the two state machines (same formulas as the C#): the pass-2 shape
+        # must deadlock, the final shape must converge, for both Update orders (the order between
+        # two U# behaviours is undefined). This is the guard that reproduces the timeout instead
+        # of only pinning the source text.
+        motor = MOTOR_CS.read_text(encoding="utf-8")
+        baseline = float(re.search(r"baselineVolumeUnits = ([0-9.]+)f", motor).group(1))
+        cubic = float(re.search(r"cubicMetersPerVolumeUnit = ([0-9.]+)f", motor).group(1))
+        for order in ("driver_first", "setter_first"):
+            # pass-2 shape: TickSize re-issues the request every frame
+            self.assertEqual(_run_old_design([0.30], baseline, cubic, order),
+                             ("timeout", 0), order)
+            # final shape: 0.30 already at the target -> no feed; the other tiers -> one feed
+            self.assertEqual(_run_new_design([0.30], baseline, cubic, order), ("ok", 0), order)
+            for target in (0.60, 1.10, 2.20):
+                self.assertEqual(_run_new_design([target], baseline, cubic, order),
+                                 ("ok", 1), (target, order))
+            # same tier, nine consecutive cells: every run must re-feed
+            self.assertEqual(_run_new_design([0.60] * 9, baseline, cubic, order),
+                             ("ok", 9), order)
+            # tier changes: 0.30 -> 0.60 -> 1.10 -> 2.20
+            self.assertEqual(_run_new_design([0.30, 0.60, 1.10, 2.20], baseline, cubic, order),
+                             ("ok", 3), order)
 
     def test_the_quantum_is_live_not_a_cached_snapshot(self):
         # The old getter returned lastQuantumM, set only inside Feed; after a short-circuited

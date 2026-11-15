@@ -35,12 +35,15 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// is derived, and there is exactly one derivation.
     /// </para>
     /// <para>
-    /// <b>Every run is a new request.</b> The driver resets the round between runs, and the reset
-    /// re-prices the ball back to the baseline, so an unchanged target still needs a fresh pass:
-    /// <see cref="BeginRequest"/> clears the sticky state, <see cref="SetDiameterM"/> only
-    /// short-circuits while a request is still in flight, and the quantum is recomputed on every
-    /// read. A cached value (the old <c>lastQuantumM</c>) is what let a whole 4 x 9 matrix report
-    /// the same +41.27 quanta for every cell after the first one in a tier.
+    /// <b>One request per run, written by one caller.</b> The driver resets the round between runs
+    /// and the reset re-prices the ball to the baseline, so an unchanged target still needs a fresh
+    /// pass: <see cref="SetDiameterM"/> is the setter's only request entry point and it always
+    /// starts a new request. The driver calls it exactly once per run (in <c>Switch</c>) and only
+    /// reads <see cref="IsConverged"/> / <see cref="HasFailed"/> afterwards. Two earlier designs
+    /// failed here: a "same target" short-circuit kept the previous run's converged state (pass-1
+    /// matrix: only the first cell per tier was resized), and re-issuing the request from the poll
+    /// loop cleared <c>converged</c> once per frame (pass-2: the size stage timed out on a ball
+    /// that was already at the target).
     /// </para>
     /// <para>
     /// <b>The resolution floor is one volume unit, and it is a real limit.</b> One unit is
@@ -121,7 +124,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // Stamped into the first log line. A whole 4 x 9 matrix was invalid because the scene ran
         // the previous U# program while its data came from the new importer; this makes "which
         // program am I running" a one-line check instead of a forensic exercise.
-        private const string SetterRevision = "2026-11-15b";
+        private const string SetterRevision = "2026-11-15c";
 
         public void Start()
         {
@@ -141,40 +144,29 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // ---- operator API ------------------------------------------------------
 
         /// <summary>
-        /// Starts one sizing pass. The driver calls it once per run, before the size stage, because
-        /// the round reset re-prices the ball back to the baseline: a new run must re-feed even
-        /// when the target diameter is unchanged.
+        /// Starts one sizing pass for one target diameter. This is the setter's ONLY request entry
+        /// point: it resets every per-request field and then feeds until the ball reaches the
+        /// target. The driver calls it exactly once per run (from Switch, after the round reset);
+        /// a caller that wants the result polls <see cref="IsConverged"/> / <see cref="HasFailed"/>.
         /// </summary>
         /// <remarks>
-        /// Without this, the idempotent <see cref="SetDiameterM"/> short-circuit plus "converged is
-        /// sticky" made every cell after the first one in a tier settle immediately with the ball
-        /// still at 0.30 m (the 2026-11-15 matrix: only C14 per tier was really resized).
-        /// </remarks>
-        public void BeginRequest()
-        {
-            requestActive = false;
-            converged = false;
-            absorbsThisRequest = 0;
-            absorbCount = 0;
-            lastFailure = "";
-            lastErrorM = 0f;
-            nextFeedTime = 0f;
-        }
-
-        /// <summary>
-        /// Asks for one target diameter. Idempotent WHILE a request is still in flight, so a driver
-        /// may call it every frame while it waits for <see cref="IsConverged"/>.
-        /// </summary>
-        /// <remarks>
-        /// A call after convergence is the NEXT run asking again (the driver resets the round
-        /// between runs, which moves the ball without a commit), so it starts a fresh request.
-        /// "A pending request is idempotent, a finished one is not" is the whole rule; there is no
-        /// second reset path.
+        /// <para>
+        /// <b>Do not call this every frame.</b> Each call is a new request and clears
+        /// <c>converged</c>; re-issuing it from a poll loop made the flag flip false once per frame,
+        /// so the driver never observed convergence and the size stage timed out (the 2026-11-15
+        /// pass-2 defect). The polling contract is read-only: <see cref="IsConverged"/>,
+        /// <see cref="HasFailed"/>, <see cref="GetQuantumM"/>, <see cref="GetLastErrorM"/>.
+        /// </para>
+        /// <para>
+        /// It also has to reset on every run rather than short-circuit on "same target": the round
+        /// reset re-prices the ball back to the baseline, so the second cell in a tier must re-feed
+        /// even though the target diameter did not change (the 2026-11-15 pass-1 defect, where only
+        /// the first cell per tier was really resized).
+        /// </para>
         /// </remarks>
         public void SetDiameterM(float targetMeters)
         {
             if (targetMeters <= 0f) return;
-            if (requestActive && !converged && Mathf.Abs(targetMeters - targetM) <= 0.000001f) return;
             targetM = targetMeters;
             requestActive = true;
             converged = false;

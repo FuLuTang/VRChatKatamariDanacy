@@ -9,8 +9,9 @@
 > **2026-11-15 第一轮 9 格实跑（commit 5835517，D=0.30）后的复查**：两处缺陷已查清。① `size_accuracy` 在所有格被跳过（`error=unknownMetric`）——根因是「实测斜率」在 0.30 档永远解不出来（复位后就在目标上，一次都不喂），已改成**解析量子** `D/(3·(baseline + confirmed))`，并把「名字错」与「现在读不到（带原因）」分开（§8.3 / §8.3.2）。② C05（45°）`climbed` 失败 0.0887 m——**不是时间线太短，是电机在 45° 接缝上的死锁**（膨胀 AABB + `stepLimit = 0.5r`，极限角 `asin(0.6) = 36.87°`），数据/判据未动，作为物理发现记录（§4.1.3）。本轮**仍未编译、未跑 Unity**；改的是 Labs 两个组件 + 判据导入器 + 本文件 + 一个 Python 守卫。
 > **2026-11-15 第二轮（4 档 × 9 格矩阵，证据 `Docs/Evidence/PhysicsTestField/2026-11-15_pass1/`）后的复查**：**这张矩阵整张无效**，但它暴露了一个真缺陷、澄清了两个假缺陷。
 > ① **无效的原因**：跑的是**旧 U# 程序**——日志里的 `error=unknownMetric`、`BLOCKED_UNTIL_P3`、`landing_gap_m`/`fall_frames`/`max_bottom_rise_m` 报 `unknownMetric`、`value=0.0000` 无 `+`，四条都只可能来自 5835517 之前的驱动；而场景数据是新的（`sizeModelBaselineVolumeUnits` 已烘）。所以「0.30 全跳过」「第一跑 unknownMetric」「坡道格 BLOCKED_UNTIL_P3」都是旧程序的症状（§8.3.3）。
-> ② **真缺陷（已修）**：`SetDiameterM` 的幂等短路 + 粘住的 `converged` + 缓存的 `lastQuantumM`，让**每档只有第一格真的长到目标径**，其余八格停在 0.30（同档除首格外 `size_accuracy` 是常数 +41.2674 / +371.6536 / +3523.0036）。修法：`BeginRequest()` + 只在「请求在飞」时幂等 + 量子按需实时算 + 驱动收敛后校验收敛是否属实 + 两行 build 指纹（§7.4 / §8.3 / §8.3.3）。
+> ② **真缺陷（已修）**：`SetDiameterM` 的幂等短路 + 粘住的 `converged` + 缓存的 `lastQuantumM`，让**每档只有第一格真的长到目标径**，其余八格停在 0.30（同档除首格外 `size_accuracy` 是常数 +41.2674 / +371.6536 / +3523.0036）。修法：量子按需实时算（§8.3）+ 驱动收敛后校验收敛是否属实 + 两行 build 指纹（§8.3.3 / §8.3.4）。
 > ③ **没改**：C05 的 `climbed` 仍是已知极限（§4.1.3，仅这一条 UNEXPECTED_FAIL）；数据、几何、判据一处未动。
+> **2026-11-15 第三轮（pass-2，7f27ab3）后的复查**：上一轮的修法自己引入了死锁。规则被写成「收敛后再调用 `SetDiameterM` = 新请求」，但驱动 `TickSize` **每帧**都调 `SetDiameterM(target)`：`Feed` 刚把 `converged=true`，下一帧 `TickSize` 又把它清回 `false`，`IsConverged()` 永远读不到 `true` → `reason=timeout`（球本来就在 0.300）。**最终规则（只保留一种实现）**：`Switch` 里在复位之后调**一次** `SetDiameterM(target)`，`TickSize` 只观察 `IsConverged`/`HasFailed`，不再发请求、也不清任何状态；`BeginRequest` 删除（请求与清状态合并成 `SetDiameterM` 一件事）。状态机、字段写者表与四条路径见 §8.3.4，Python 用状态机模拟复现旧死锁并证明新设计收敛。
 
 ---
 
@@ -715,7 +716,7 @@ Idle → Switch(cell) → Size(D) → Settle → Drive → Report → (next D | 
 
 | 状态 | 做什么 | 失败时 |
 |---|---|---|
-| `Switch` | 关掉上一个 arena、开本格 arena 并 `Reapply()`、重发 kind 白名单、记 `ramp_count`、有 `rampProbe` 的格调 `motor.AddRamp` 取证拒绝、记基线、`TryResetForNewRound`、`ResetField`、`ballSize.BeginRequest()`（**每一 run 都是新的一次球径请求**，复位已经把球重定价回基线）、打 `run=` 行 | `TryResetForNewRound` 的 reason ≠ 0 → `BLOCKED_UNTIL_reset` 并跳过本 run（换下一径/下一格） |
+| `Switch` | 关掉上一个 arena、开本格 arena 并 `Reapply()`、重发 kind 白名单、记 `ramp_count`、有 `rampProbe` 的格调 `motor.AddRamp` 取证拒绝、记基线、`TryResetForNewRound`、`ResetField`、`ballSize.SetDiameterM(D)` **一次**（本 run **唯一**的球径请求；复位已经把球重定价回基线，所以每 run 必须重新发请求，但只发一次）、打 `run=` 行 | `TryResetForNewRound` 的 reason ≠ 0 → `BLOCKED_UNTIL_reset` 并跳过本 run（换下一径/下一格） |
 | `Size` | `ballSize.SetDiameterM(D)`，每帧问 `IsConverged()`；**收敛后还要校验收敛是真的**：`abs(实测 D − 目标) ≤ SizeAppliedToleranceM`（常量 20 mm） | `HasFailed()` → `BLOCKED_UNTIL_size`（reason 来自设定器）；收敛但球不在目标径 → `reason=sizeNotApplied`；超 `sizeTimeoutSeconds` → `reason=timeout` |
 | `Settle` | 等 `settleSeconds` | —— |
 | `Drive` | 按 `drive[]` 的阶段推 axes，每帧采样，每 0.5 s 一条 `traj` | —— |
@@ -764,8 +765,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private float feedIntervalSeconds = 0.05f;
 
         public void SelectPreset(int index);                 // HUD 按钮绑这个
-        public void BeginRequest();                          // 每 run 一次：清掉上一次的 converged/request 状态
-        public void SetDiameterM(float targetM);             // 驱动器用；请求在飞时重复同目标 = no-op
+        public void SetDiameterM(float targetM);             // 唯一的请求入口：每 run 调一次（Switch），每次都清状态并重发
         public void SetDiameterFromLabel(string label);      // "1.10"
         public void Cancel();
         public bool IsConverged();
@@ -809,7 +809,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
 - **为什么量子是解析的（2026-11-15 修）**：旧实现用「两次相邻样本解 `d(D³)/dV`」。那在 0.30 档**永远解不出来**：复位后球已经在目标上（0.2997369 vs 0.30，误差 0.26 mm），`Feed()` 第一帧就收敛、一次都不喂，斜率保持 0 → `GetQuantumM()` 返回 0 → 驱动原来的 `diameter_error_quanta` 直接报 `unknownMetric` 并跳过。斜率是**尺寸模型的属性，不是某一次 run 的属性**，所以改成推导：核心半径 `cbrt(3·cubic·total/4π)`、语义球径与核心半径成正比 ⇒ `D³` 对**总**体积单位是线性的，`d(D³)/dV = D³/total`，一个单位的直径当量 `= D/(3·total)`。**`cubicMetersPerVolumeUnit` 与 `semanticDiameterPerCoreDiameter` 在这个式子里正好约掉**，所以模型只需要 `baselineVolumeUnits` 一个电机数字。
 - **那一个数字怎么来**：电机的 `baselineVolumeUnits` 是 `[SerializeField] private`、**没有 getter**（`cubicMetersPerVolumeUnit` / `semanticDiameterPerCoreDiameter` / `maxCoreRadiusWorldM` 也一样），所以**没有给电机加成员**，而是由判据导入器用 `SerializedObject` 读**场景里那台 motor** 的序列化字段，写进设定器的 `sizeModelBaselineVolumeUnits`（与 `approach_m` / `rampFootM` 同一套「编辑器读场景 → 烘进组件」的做法）。改电机的定价后**重新导入判据**即可；没导（字段为 0）时 `IsCalibrated()` 为 false，`diameter_error_quanta` 报 `reason=sizeModelMissing`，超过当前尺寸的请求报 `noSizeModel`，**不会**用猜的数字换一个假 PASS。
-- **每一 run 都是新的一次请求（2026-11-15 修）**：复位 `TryResetForNewRound` 会把球重定价回 0.30，但目标径没变；旧实现里 `SetDiameterM` 的幂等短路直接返回、`converged` 保持上一轮的 `true`，于是**每档只有第一格真的长到目标径**，其余八格还在 0.30 跑（矩阵里同档除首格外 `size_accuracy` 全是同一个常数：+41.2674 / +371.6536 / +3523.0036，因为 `lastQuantumM` 也是缓存的上一次 `Feed` 的值）。现在：驱动在 `Switch` 末尾调 `ballSize.BeginRequest()`；`SetDiameterM` 只在「请求还在飞（`requestActive && !converged`）」时幂等，收敛后再次调用 = 下一 run 的新请求；量子**改为按需实时计算**（`ReadSizeModel`），没有缓存字段。规则只有一条：**在飞的请求幂等，结束的请求不幂等**。
+- **每一个 run 发一次请求，只有这一个地方发（2026-11-15 第二、三次修）**：复位 `TryResetForNewRound` 会把球重定价回 0.30，所以每 run 都必须重新发；但**只发一次**——`Switch` 里复位之后 `ballSize.SetDiameterM(D)`，`TickSize` 只读 `IsConverged()`/`HasFailed()`。两次失败都写在这里：① 旧实现「同目标就短路」保留了上一轮的 `converged`，每档只有第一格真的长到目标径（同档其余格 `size_accuracy` 是同一个常数 +41.2674 / +371.6536 / +3523.0036，因为 `lastQuantumM` 也是缓存值）；② 上一版把规则写成「收敛后再调 = 新请求」，而 `TickSize` 每帧都调，于是 `converged` 每帧被清一次、驱动永远读不到 `true` → `reason=timeout`。最终：`SetDiameterM` 是唯一请求入口（每次都清状态并重发），`BeginRequest` 已删除，轮询是**只读**的（状态机与四条路径见 §8.3.4）。量子也改为按需实时计算（`ReadSizeModel`），没有缓存字段。
 - **收敛不等于到位（2026-11-15 修）**：`Size` 状态在 `IsConverged()` 之后还要量一次 `abs(实测 D − 目标) ≤ 20 mm`，否则报 `reason=sizeNotApplied` 并把该 run 标成 `BLOCKED_UNTIL_size`。没有这道门，一个「说收敛了但球还在 0.30」的旧程序会安静地跑完一整张矩阵，把 41 个量子当成物理结果。
 - **为什么 feed 必须是整数**：`PickupAbsorbMath.TryAbsorbValueToLedgerGain` 拒绝小数（账本增益是 int），喂 0.35 单位会被判 `RejectNoGain`、候选一直留在队列里。整数单位同时也是账本记的那个数。
 - **为什么一次只允许一个候选在飞**：候选队列只有 4 格，第 5 次提交会 `SignalOverflow("pending candidate capacity 4 exceeded")` **永久 latch** overflow 计数——而本场好几条判据断言它 Δ=0。所以 feed 前先看 `GetPendingCandidateCount() == 0`，宁可慢也不要污染。
@@ -856,11 +856,48 @@ ALERT 行因此变成：
 而场景数据是新的（`sizeModelBaselineVolumeUnits=3.4390244` 已烘进去）。为让这件事下次一眼可见，两个组件在 `Start` 各打一行指纹：
 
 ```
-[ptf] build=2026-11-15b cells=9 presets=4
-[ptf] setter build=2026-11-15b baselineVolumeUnits=3.4390244
+[ptf] build=2026-11-15c cells=9 presets=4
+[ptf] setter build=2026-11-15c baselineVolumeUnits=3.4390244
 ```
 
 **看到第一行之后才可信**：没有 `build=` 行 = U# 程序没重编；`baselineVolumeUnits=0` = 判据没重导。两条都不满足时不要读矩阵。
+
+### 8.3.4 两个组件的状态机：谁发请求、谁清状态、谁只读（2026-11-15 定稿）
+
+**一句话规则：`SetDiameterM` 每 run 只被调用一次（`Switch` 里、`TryResetForNewRound` 之后）；`Size` 状态只读。**
+
+`LabBallSizeSetter` 的字段写者（每帧都会跑的是 `Update()` → `Feed()`）：
+
+| 成员 | 谁写 | 何时 |
+|---|---|---|
+| `targetM` | `SetDiameterM` | 每请求一次 |
+| `requestActive` | `SetDiameterM`（true）/ `Cancel`（false）/ `Fail`（false） | 请求开始 / 取消 / 失败 |
+| `converged` | `SetDiameterM`（false）/ `Feed`（true） | 请求开始 / 到位或到分辨率下限 |
+| `absorbsThisRequest` | `SetDiameterM`（0）/ `Feed`（+1） | |
+| `absorbCount` | `SetDiameterM`（0）/ `Feed`（+1） | |
+| `nextFeedTime` | `SetDiameterM`（0）/ `Feed`（now + interval） | |
+| `lastFailure` | `SetDiameterM`（""）/ `Feed`（收敛时置 ""）/ `Fail`（原因） | |
+| `lastErrorM` | `SetDiameterM`（0）/ `Feed`（每帧） | |
+| `generationSequence` | `Feed`（+1，**不重置**：itemId 必须全局唯一） | |
+
+`PhysicsTestFieldDriver` 在这条链上的动作：
+
+| 动作 | 状态 | 性质 |
+|---|---|---|
+| `ballSize.SetDiameterM(D)` | `Switch`（复位之后） | **全驱动唯一一处**；清状态 + 重发 |
+| `ballSize.IsConverged()` / `HasFailed()` / `GetQuantumM()` / `GetLastErrorM()` | `Size` / `Report` | **只读** |
+| `ballSize.BeginRequest()` | —— | **已删除**，全仓不再存在 |
+
+**四条路径的逐步转移**（`D₀ = 0.2997369`，`q` = 当前量子 = `D/(3·(baseline+confirmed))`）：
+
+| 路径 | 步骤 | 结果 |
+|---|---|---|
+| 0.30（球已在目标） | 复位 → `D = 0.2997`；`SetDiameterM(0.30)` → `converged=false`；`Feed`：`q=0.02905`，误差 `0.00026 ≤ max(0.002, q)` → `converged=true`（**0 次喂料**）；`TickSize` 观察到 → 到位校验 `0.00026 ≤ 0.02` → `Settle` | 收敛，absorb = 0 |
+| 0.60（要喂料） | `SetDiameterM(0.60)`；`Feed`：`slope = D₀³/3.439 = 0.00783`，`q = 0.02905`，误差 0.30 > q → `units = round(24.15) = 24` → 提交；候选在飞时 `Feed` 直接返回；提交后 `D = 0.598942`、`q = 0.007276`，误差 0.00106 ≤ q → `converged`（**1 次喂料**） | 收敛，absorb = 1 |
+| 同档连续格（C14→C09 @0.60） | 新 run：复位 → `D` 回到 0.2997；`SetDiameterM(0.60)` **再次清状态并重发**（不短路）→ 与上一行相同 | 每格都真的长到 0.60 |
+| 换档（0.60→1.10→2.20） | 每次 `SetDiameterM(新目标)`；`units = 167 / 1356`，1 次喂料到 `1.100994 / 2.199792`，误差 0.00099 / 0.00021 ≤ q | 收敛，absorb = 1 |
+
+**为什么旧死锁不会再发生**：`converged` 的唯一清除者是 `SetDiameterM`，它每 run 只在 `Switch` 调用一次；此后 `TickSize` 不写任何 setter 字段，所以 `Feed` 置的 `true` 会一直保留到该 run 结束。Python 侧把它写成了一个最小状态机模拟（`test_the_driver_never_reissues_the_size_request`）：旧设计（每帧 `SetDiameterM` + 「收敛后重发」）在模型里复现 3 秒超时，新设计在 0.30/0.60/1.10/2.20、同档连续 9 格与两种 Update 顺序下都收敛。
 
 ### 8.4 HUD 控件
 
@@ -1028,8 +1065,8 @@ ALERT 行因此变成：
 - **先看两行指纹**（§8.3.3），没有它们就不要读后面的矩阵：
 
 ```
-[ptf] build=2026-11-15b cells=9 presets=4
-[ptf] setter build=2026-11-15b baselineVolumeUnits=3.4390244
+[ptf] build=2026-11-15c cells=9 presets=4
+[ptf] setter build=2026-11-15c baselineVolumeUnits=3.4390244
 ```
 
 - 用 MCP（`executeMethod`/UnityEvent）或临时 HUD 调 `driver.BeginCellAtDiameter("C14", 0.30f)`；
@@ -1187,6 +1224,7 @@ C00（零点） → C14 → C09 → C08 → C10 → C07 → C11 → C12 → C13�
 | **U14** | **45° 坡 + 齐平台面的接缝死锁（2026-11-15 实测）**：C05 `climbed = 0.0887`。`SweepMath` 用半径膨胀 AABB 判盒子接触，球心在台面边 − r 处就被挡；那点球底比台面低 `r(tanθ+1−secθ) = 0.0878`，大于 `stepLimit = 0.5r = 0.0749`，台面永远进不了 step band ⇒ 死锁。**阈值 θ = asin(0.6) = 36.87°，与球径无关**（两边都 ∝ r）。C01/C03/C13 的 0.0125/0.0544/0.0270 都在带内，所以同一时间线能过 | 本批：**数据/几何/判据一律不动**，`climbed` 的 FAIL 就是正确红灯；机制与对照写进 §4.1.3。**候选后续**：(a) 数据侧把 C05 改成「记录 45° 极限」或给台缘加 0.05 m 过渡台阶；(b) 运行时把盒子接触改成真正的球-盒（圆角）扫掠（`Runtime/BallLayers/Sweep`） | 两条都改语义/运行时代码，**需 Lead 拍板**；在那之前 C05 每次 pass 都会红一条 `climbed` |
 | **U15** | **解析量子要的那一个电机数字没有 getter**：`D³/total` 与 `D/(3·total)` 里 `cubicMetersPerVolumeUnit` 和 `semanticDiameterPerCoreDiameter` 都约掉了，只剩 `baselineVolumeUnits`；而它是 `[SerializeField] private`，与 `cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` 一样**没有 getter** | 本批**没有给电机加成员**（遵守「不改 `KatamariBallMotor`」的写范围）：判据导入器用 `SerializedObject` 读**场景 motor** 的该字段，烘进设定器 `sizeModelBaselineVolumeUnits`，并在报告里打 `size model: baselineVolumeUnits=...`。没烘/没连 motor 时 `size_accuracy` 报 `reason=sizeModelMissing`，不猜 | 若 Lead 认为「场景数据里镜像一个运行时输入」不可接受，最小替代是给 motor 加**一行只读** `GetBaselineVolumeUnits()`（不改任何行为、不改序列化），然后删掉导入器里的镜像与设定器的字段；**需 Lead 批**。在那之前，改电机的定价字段后必须**重新导入判据** |
 | **U16** | **「跑的到底是哪份 U# 程序」曾是盲区**：2026-11-15 的 4×9 矩阵整张无效，因为场景跑的是 5835517 之前的驱动（日志里的 `error=unknownMetric` / `BLOCKED_UNTIL_P3` / 缺 3 个 metric / `value=` 无 `+`），而数据是新导入器的 | 两个组件在 `Start` 打 `[ptf] build=…` / `[ptf] setter build=… baselineVolumeUnits=…`（§8.3.3）；判据读 `reason=` 词汇；`Size` 状态新增「收敛但球没到目标径 → `reason=sizeNotApplied`」；坡道格新增 `rampCellMismatch` 警告 | 仍需要操作员养成「先看 build 行」的习惯；若 U# 编译失败而编辑器不报，只能靠这两行发现。真正的根治是编译后的 UdonSharp 程序资产必须提交/同步（AGENTS.md 的「compile noise 成批提交或丢弃」在这里是风险点） |
+| **U17** | **「每帧都调的方法」是这条链上最危险的面**：pass-1 的短路和 pass-2 的每帧重发都发生在 `TickSize`/`Update` 这类每帧路径上 | 定稿：请求只在 `Switch` 发一次；`TickSize` 只读；`Feed` 是唯一在每个 `Update` 里写 setter 状态的函数（字段写者表见 §8.3.4）；Python 守卫用 §8.3.4 的方法体边界断言 + 状态机模拟复现旧死锁 | 以后给 setter/driver 加任何「每帧调用」的方法，先在这张写者表里登记它写哪个字段；没有登记就不要写状态 |
 
 
 ---
@@ -1248,17 +1286,18 @@ OK
 | `levelbuild check`（9 格） | **9/9 PASS**（C06 仍是 0 error + 1 条预期 warning） |
 | 操作员下一步 | 重新编译 U#、**重新导入判据**（期望 `driverFields=6` + `size model: baselineVolumeUnits=3.439 …`），再跑 C14 0.30 看 `size_accuracy = +0.0091 raw=PASS`；C05 的 `climbed` 仍会红（预期，见 §4.1.3） |
 
-### 13.2 2026-11-15 第二轮（4×9 矩阵之后）
+### 13.2 2026-11-15 第二、三轮（4×9 矩阵与 pass-2 之后）
 
 | 项 | 状态 |
 |---|---|
-| 改 | `LabBallSizeSetter.cs`（`BeginRequest()`、只在「请求在飞」时幂等、量子改 `ReadSizeModel` 实时计算、去掉 `lastQuantumM`/`slopeCubedPerUnit` 缓存、`Start` 打 setter 指纹）、`PhysicsTestFieldDriver.cs`（`Switch` 末尾调 `BeginRequest`、收敛后到位校验 `sizeNotApplied`、`Start` 打 `[ptf] build=`、arena 行加 `ramps=`/`rampCell=`、坡道格 `rampCellMismatch` 警告）、本文件（顶部复查②/§7.4/§8.2/§8.3/§8.3.2/新增 §8.3.3/§9.5/§12 U16/§13.2）、`physics_test_field.json`（只加说明字段）、`Labs/PhysicsTestField/README.md`、`Docs/tests/levelbuild/test_physics_test_field_cells.py`（+3 个守卫：每 run 重开请求、量子实时、build 指纹 + 无 P3 skip） |
+| 改 | `LabBallSizeSetter.cs`（**唯一请求入口 `SetDiameterM`：每 run 一次、每次清状态并重发**；`BeginRequest` 删除；量子 `ReadSizeModel` 实时算，无缓存字段；到位校验的配对常量在驱动侧；`Start` 打 setter 指纹）、`PhysicsTestFieldDriver.cs`（`Switch` 里复位之后调一次 `SetDiameterM`；`TickSize` **只读**；收敛后 `SizeAppliedToleranceM` 到位校验 → `sizeNotApplied`；`Start` 打 `[ptf] build=`；arena 行加 `ramps=`/`rampCell=`；坡道格 `rampCellMismatch` 警告）、本文件（顶部复查②③/§7.4/§8.2/§8.3/§8.3.2/§8.3.3/**§8.3.4 状态机 + 字段写者表 + 四条路径**/§9.5/§12 U16 U17/§13.2）、`physics_test_field.json`（只加说明字段）、`Labs/PhysicsTestField/README.md`、`Docs/tests/levelbuild/test_physics_test_field_cells.py`（守卫：请求只在 `Switch` 发一次 + `TickSize` 只读 + 到位校验 + 量子实时 + build 指纹 + 无 P3 skip + **Python 状态机模拟**） |
 | 未改（按写范围） | `Runtime/` 全部、任何 `.unity` / `.prefab` / `.asset` / `.meta`、`tasks.json`、`Tools/levelbuild/`、C05 的数据/几何/判据、`physics_test_field.json` 的 cell/check/drive |
 | Unity 编译 / U# 编译 / Play Mode | **NOT_RUN**（本 agent 不是 Unity 操作者） |
 | `levelbuild check`（9 格） | **9/9 PASS**（C06 仍 0 error + 1 条预期 warning） |
 | `python3 Docs/tools/validate_plan.py` | **PASS** |
-| `python3 -m unittest discover -s Docs/tests` | **OK（494 tests）**；`test_physics_test_field_cells` 43 tests OK |
-| 操作员下一步 | **先确认 U# 真的重编了**（`[ptf] build=` / `[ptf] setter build=` 两行），再按 §9.5 的四档期望表跑；同一档里出现 +41/+372/+3523 就是球没长大（旧缺陷），不是物理 |
+| `python3 -m unittest discover -s Docs/tests` | **OK（496 tests）**；`test_physics_test_field_cells` 45 tests OK |
+| 操作员下一步 | **先确认 U# 真的重编了**（`[ptf] build=2026-11-15c` / `[ptf] setter build=2026-11-15c` 两行），再按 §9.5 的四档期望表跑；`reason=timeout` 说明驱动还在每帧发请求（旧程序），`+41/+372/+3523` 说明球没长大（pass-1 缺陷） |
+
 **下一步（按顺序，都是操作员/下一批的事）**：
 1. §9.5 的接线清单：场景 → 导入九格几何 → 加 9 个 `LevelArenaHost` → 加 3 个组件的实例 → 烘判据 → Play Mode 跑 `BeginCellAtDiameter("C14", 0.30f)`；
 2. 看 `[ptf] summary` 与 §9.5 的期望表对不对；C14 必须 `pass=7`（它今天若 FAIL 就是 P1 的真实回归）；

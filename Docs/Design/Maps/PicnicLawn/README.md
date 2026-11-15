@@ -491,3 +491,64 @@ T21 在 Unity 里要做的（灰盒）：
 4. 用真实构建填 `MapRubrics/route_checks.csv`（8 条出生出口、最大球主路、2 条交分路线、成长脱困）与 `spawn_fairness.csv`（四角可达收益、到首资源/交分/出口的路程）。
 5. 验 §8 的 0.26 m 花圃台、1.20 m 主路余量、3.6 m 对角门在最大球下的实际通过性；不通就按 §8 降级。
 6. 只有拿到真实数据后，才能把本文件的状态从 `PROVISIONAL_NOT_TESTED` 改成实测结论；在那之前不得声称任何公平/性能/舒适 PASS。
+
+## 18. 体积口径下的可吸性审计（2026-11-15）
+
+> 本节只**记录**现状与后果，**不改任何机器可读字段**。原因写在 §18.3：`layout.json` 与 `prop_catalog.csv` 已被两份关卡 JSON 的 `map_snapshot` 钉住，改一个字节就会让 `python3 Docs/Design/GameModes/validate_levels.py` 报「地图已变更」、`python3 -m unittest discover -s Docs/tests` 变红；重钉哈希属于 GameModes 负责人的动作（决定 (g)：**哈希不手抄、不自动刷新**），不在本次写范围。
+
+### 18.1 现行门槛与本文的旧口径
+
+吸收门自 2026-11-15 起是**体积**口径（`Docs/OPEN_DECISIONS.md` (l)）：
+
+```text
+可吸 ⇔ a·b·c ≤ min(maxItemVolumeWorldM3, (π/6)·D³ / absorbVolumeRatio)
+     = min(512, (π/6)·D³ / 10)          D = 球的语义直径
+等价：D_req = (60·V/π)^(1/3) = 2.673·a_eq,  a_eq = (a·b·c)^(1/3)
+```
+
+| D | 门槛体积 m³ | 等价立方体边长上界 |
+|---:|---:|---:|
+| 0.30 | 0.0014137 | 0.1123 |
+| 1.25 | 0.1022654 | 0.4676 |
+| **2.20**（本图 `ball_max_collision_diameter_m`） | **0.5575280** | **0.8230** |
+| 3.20（(n)/`PROP_SET_PLAN §2.8.5` 说的"大球区"上限） | 1.7178 | 1.197 |
+
+**本文件 §2「尺寸门槛 s/m/l」与 §9「成长解锁」整节仍是长度口径**（`D ≥ 最长边`）。它们没有错到会崩，但**已经不是运行时的判据**：一件 `3.6 × 0.55 × 0.80` 的长凳按长度只要 3.6 m 球，按体积要 `2.673 × 1.166 = 3.12 m`；反过来一根 `0.02 × 0.02 × 0.85` 的细杆按长度要 0.85 m 球，按体积只要 `0.19 m`。**§9 的「吸走所需球径」列请按本节重算后再引用**（表在 `Docs/Design/StoryMode/PICNIC_CORNER_LEVEL_ONE.md` §3.3，逐件给出 `a_eq` / `D_req` / 2.20 判定）。
+
+### 18.2 2.20 m 上限下的判定（只列会被改结论的行）
+
+| 目录 id | AABB m（来源） | `a_eq` | `D_req` | 2.20 下 |
+|---|---|---:|---:|---|
+| `collapsed_bench` | 3.6×0.55×0.80（设计） | 1.166 | **3.116** | **吸不到**（对角门那 4 张长凳在本图 2.20 上限下永远打不开；与 (n) 一致） |
+| `picnic_table` | 1.50×0.75×0.72（设计） | 0.932 | **2.492** | 吸不到 |
+| `park_bench` | 1.80×0.55×0.80（设计） | 0.925 | **2.473** | 吸不到 |
+| `thermos`（**场景占位 0.9³**） | 0.9×0.9×0.9（场景） | 0.900 | **2.406** | 吸不到 —— 与 `PROP_CATALOG §2.2` 的 4 件死物同一件事 |
+| `thermos`（真实尺寸 0.12×0.12×0.30） | 0.12×0.12×0.30（设计） | 0.163 | 0.435 | 可吸 |
+| `toy_ball` / `watering_can` | 0.40³ / 0.26×0.58×0.42（模型，仍是游戏尺寸） | 0.400 / 0.397 | 1.069 / 1.062 | 可吸，但要 ~1.07 m 球 |
+| `watermelon` | 0.30×0.24×0.22（模型） | 0.251 | 0.671 | 可吸（本图最大的真实尺寸件） |
+
+三条口径后果：
+
+1. **`@size=<米>` 立方体通道在体积门下会把门件写成死件**：`@size=1.25` 把长凳记成 `1.25³ = 1.95 m³`，需要 **2.60 m** 球。正确做法是 `propBounds` 说真话（模型 AABB）+ 挡路盒另立（见 `Docs/Design/PickupAbsorb/BLOCKING_PROPS_PLAN.md`、`COLLIDER_LAYER.md`），不是把拾取尺寸压成一个立方体。
+2. **薄片类（`fallen_leaf` / `cheese_slice` / `cookie` / `paper_scrap`）在体积门下等于沙粒**：0.30 m 起手球就能吃，这是 (l) 已记录的忠实行为（原作同样用包围盒，`ABSORB_SIZE_RATIO.md` S-AR07），不是本图的数据错误。要不要给薄片设厚度下限是设计判断（`PROP_CATALOG §2.4` 已量化）。
+3. **本图的成长兑现要按新门槛重算**：§9 的「≥1.25 m 吸长凳」在 2.20 上限下不成立（要 3.12 m）。整图要么把上限提到 3.20（(n)/`PROP_SET_PLAN` 的说法，但与本文件 `scale.ball_max_collision_diameter_m = 2.2` 及校验器的路线余量判据冲突，需要先拍板），要么把对角门改成非长凳的门件。
+
+### 18.3 为什么这次不改数据
+
+| 文件 | 能改吗 | 原因 |
+|---|---|---|
+| `layout.json` | **不改** | `scale.item_tier_pickup_diameter_m`（s 0.08–0.30 / m 0.32–0.95 / l 1.00–1.95）是**长度**档位，且是 `Tools/mapbuild/validate_map.py` 第 11 条唯一的判据（`clamp(game_longest_dim_m, 档窗口) ≤ 最大球径`）。改成体积档位必须同时改校验器与 `PickupFieldAuthoringRules` 的值表；只改数据会让校验器按旧判据误报/漏报 |
+| `prop_catalog.csv` | **不改** | `game_longest_dim_m` 同时喂校验器第 11 条与 `build_greybox.py` 的脚印/间距模型；改它会让 `--check` 失效、§3.3 的可行性表（被 `ReadmeFeasibilityTableTests` 逐字比对）与 README 不一致 |
+| `unity_greybox.json` | **不改** | 生成物，`--check` 要求与作者数据逐字节一致 |
+| 本 README | 只**追加**这一节 | §3.3 那张表必须与 `--feasibility-markdown` 逐字一致，任何改动都会被打回 |
+
+### 18.4 校验器需要怎么改（只列，不在本次范围）
+
+1. 第 11 条：把 `clamp(game_longest_dim_m, 档窗口)` 换成 `a_eq`（或目录新增 `aabb_m` / `volume_m3` 列）判 `D_req ≤ D_cap`；长度档位退化为"价值分档"，与可吸性脱钩。
+2. 第 14 条：`pickup_dim_m ≤ max_pickup_diameter_m` 换成体积上界；`pickup_dim_m` 通道退役。
+3. 第 13 条：`climb_step` 与运行时对齐——motor **没有 step-up**（`KatamariBallMotor` 只有一张解析地面 + 实心盒），所以本图的 `climb` 门目前只能是设计意图，不能当成"已验证可翻越"。
+4. 目录 schema：可选列 `aabb_m`（"x;y;z"）或 `volume_m3`，**由建模清单生成，禁止手抄**。
+
+### 18.5 与本图相关的迁移方案
+
+第一关迁进本图**西南角**（`x ∈ [−19.4,−6.0]`、`z ∈ [−19.4,−6.0]`，净 160.0 m²）的完整方案、110 件/412 单位的角内映射、motor 的边界能力与缺口，见 [`Docs/Design/StoryMode/PICNIC_CORNER_LEVEL_ONE.md`](../../StoryMode/PICNIC_CORNER_LEVEL_ONE.md)。

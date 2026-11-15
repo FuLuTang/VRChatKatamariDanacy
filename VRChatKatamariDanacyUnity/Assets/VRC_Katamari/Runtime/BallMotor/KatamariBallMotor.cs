@@ -653,6 +653,7 @@ namespace VRCKatamari.BallMotor
 
         // Contact capacities and motor-side thresholds (design §1.3, §2.1, §2.8, §4.2).
         private const int MaxNeedleContacts = 4;
+        private const int MaxPropObbCount = 12;
         private const float ContactResidualRejectM = 0.02f;
         private const float ContactGrowthPushCapM = 0.05f;
         private const float ContactStuckSoftSeconds = 1.5f;
@@ -677,6 +678,15 @@ namespace VRCKatamari.BallMotor
         private int staticObbOverflowCount;
         private int staticObbRefusalCount;
         private string staticObbRefusalReason;
+
+        // The prop OBB block (design §1.4: blocking/support props are the same primitive).
+        // Its entries live in the SAME arrays, immediately after the static prefix
+        // [staticObbCount, staticObbCount + propObbCount), so the near window sees one
+        // distance-sorted table and needs no second scan or second capacity.
+        private int propObbCount;
+        private int propObbOverflowCount;
+        private int propObbRefusalCount;
+        private string propObbRefusalReason;
 
         // Per-step near set, its scratch buffers and the hysteresis state (design §5.2).
         private Vector3[] nearObbCenter;
@@ -1482,18 +1492,22 @@ namespace VRCKatamari.BallMotor
         /// </summary>
         private void AllocateContactV2Buffers()
         {
-            staticObbCenter = new Vector3[ContactTuning.MaxStaticObbCount];
-            staticObbAxisX = new Vector3[ContactTuning.MaxStaticObbCount];
-            staticObbAxisY = new Vector3[ContactTuning.MaxStaticObbCount];
-            staticObbAxisZ = new Vector3[ContactTuning.MaxStaticObbCount];
-            staticObbHalfExtents = new Vector3[ContactTuning.MaxStaticObbCount];
-            staticObbSurfaceId = new int[ContactTuning.MaxStaticObbCount];
-            staticObbRole = new int[ContactTuning.MaxStaticObbCount];
-            staticObbBoundingRadius = new float[ContactTuning.MaxStaticObbCount];
+            staticObbCenter = new Vector3[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
+            staticObbAxisX = new Vector3[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
+            staticObbAxisY = new Vector3[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
+            staticObbAxisZ = new Vector3[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
+            staticObbHalfExtents = new Vector3[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
+            staticObbSurfaceId = new int[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
+            staticObbRole = new int[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
+            staticObbBoundingRadius = new float[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
             staticObbCount = 0;
             staticObbOverflowCount = 0;
             staticObbRefusalCount = 0;
             staticObbRefusalReason = "";
+            propObbCount = 0;
+            propObbOverflowCount = 0;
+            propObbRefusalCount = 0;
+            propObbRefusalReason = "";
 
             nearObbCenter = new Vector3[ContactTuning.MaxNearObbCount];
             nearObbAxisX = new Vector3[ContactTuning.MaxNearObbCount];
@@ -1504,8 +1518,11 @@ namespace VRCKatamari.BallMotor
             nearObbSurfaceId = new int[ContactTuning.MaxNearObbCount];
             nearObbRole = new int[ContactTuning.MaxNearObbCount];
             nearObbCount = 0;
-            windowScratchIndices = new int[ContactTuning.MaxStaticObbCount];
-            windowScratchDistances = new float[ContactTuning.MaxStaticObbCount];
+            // One scratch slot per entry of the LOGICAL table (static prefix + prop
+            // block): TrySelectWindow refuses a table longer than its scratch buffers.
+            windowScratchIndices = new int[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
+            windowScratchDistances =
+                new float[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
             windowSelectedIndices = new int[ContactTuning.MaxNearObbCount];
             windowPreviousSurfaceIds = new int[ContactTuning.MaxNearObbCount];
             windowPreviousCount = 0;
@@ -1778,7 +1795,11 @@ namespace VRCKatamari.BallMotor
                 nearObbCount = 0;
                 return;
             }
-            if (staticObbCount <= 0)
+            // The logical table is the static prefix followed by the prop block, so one
+            // selection call sees both kinds and the 24-entry budget is shared: the
+            // nearest solids win regardless of which table they came from (design §5.2).
+            int totalObbCount = staticObbCount + propObbCount;
+            if (totalObbCount <= 0)
             {
                 nearObbCount = 0;
                 windowPreviousCount = 0;
@@ -1792,7 +1813,7 @@ namespace VRCKatamari.BallMotor
             int dropped;
             bool complete;
             bool rebuilt;
-            if (!ContactWindowMath.TrySelectWindow(staticObbCount, staticObbCenter,
+            if (!ContactWindowMath.TrySelectWindow(totalObbCount, staticObbCenter,
                 staticObbAxisX, staticObbAxisY, staticObbAxisZ, staticObbHalfExtents,
                 staticObbBoundingRadius, staticObbSurfaceId, ballCenterWorld, windowRadius,
                 maxTravel, windowPreviousSurfaceIds, windowPreviousCount,
@@ -1854,7 +1875,8 @@ namespace VRCKatamari.BallMotor
             lastWindowOverflowLogSeconds = contactV2ClockSeconds;
             Debug.Log("[ContactV2] window overflow cell=" + ballCenterWorld.x + ","
                 + ballCenterWorld.y + "," + ballCenterWorld.z + " dropped="
-                + windowDroppedCount + " near=" + nearObbCount + " static=" + staticObbCount);
+                + windowDroppedCount + " near=" + nearObbCount + " static="
+                + (staticObbCount + propObbCount));
         }
 
         /// <summary>
@@ -3963,7 +3985,9 @@ namespace VRCKatamari.BallMotor
             rampCount = 0;
             // The step mask is indexed by boxing slot, so it must not outlive the boxes.
             ClearStepMask();
-            // The v2 static table is the same scene geometry, so it goes with them.
+            // The v2 tables are the same scene geometry, so they go with them. Props go
+            // first, so ClearObbs does not have to move a prop block down.
+            ClearPropObbs();
             ClearObbs();
             RebuildObstacles();
         }
@@ -4050,6 +4074,10 @@ namespace VRCKatamari.BallMotor
                 RefuseStaticObb("not a finite, unit, orthogonal box");
                 return false;
             }
+            // The prop block lives immediately after the static prefix, so a new static
+            // entry has to move it up one slot first. Static registration is a setup-time
+            // event, so this copy runs at most a handful of times per scene.
+            MovePropBlock(staticObbCount, staticObbCount + 1);
             int index = staticObbCount;
             staticObbCenter[index] = center;
             staticObbAxisX[index] = axisX;
@@ -4069,11 +4097,215 @@ namespace VRCKatamari.BallMotor
         /// <summary>Empties the v2 static table (the scene's geometry moved).</summary>
         public void ClearObbs()
         {
+            // The prop block keeps its place after the (now empty) static prefix, i.e. it
+            // moves down to index 0, so the logical range stays contiguous.
+            MovePropBlock(staticObbCount, 0);
             staticObbCount = 0;
             windowPreviousCount = 0;
             nearObbCount = 0;
             windowDroppedCount = 0;
             contactIncomplete = false;
+        }
+
+        /// <summary>
+        /// Replaces the whole prop OBB block: the blocking/absorb-proof props the host
+        /// re-selects on its scan (design §1.4, §5.2).
+        /// </summary>
+        /// <returns>
+        /// True when the block is now exactly the one passed; false when the call was
+        /// refused, in which case the previous block stays registered.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// Props are the SAME primitive as static boxes: an entry is a centre, three
+        /// orthonormal unit axes and three nonnegative half extents, and it goes through
+        /// <see cref="ContactSolveMath"/> exactly like a static entry - no prop branch
+        /// anywhere in the solver. The caller labels entries with a surface id and a role:
+        /// the project convention (<see cref="ContactCodes"/>, SupportSurfaceMath) is a
+        /// prop surface id of <see cref="SupportSurfaceMath.FirstPropSurfaceId"/> + slot
+        /// (100..111) and role <see cref="ContactCodes.RoleProp"/> or
+        /// <see cref="ContactCodes.RoleBlocking"/>, which is what makes
+        /// <see cref="GetContactRole"/> and <see cref="GetSupportKind"/> (kind 3) classify
+        /// a prop contact as a prop. Static boxes stay 1..8, ramps 10..13, the ground 0 and
+        /// boundary planes 1000 + i.
+        /// </para>
+        /// <para>
+        /// Capacity is <see cref="MaxPropObbCount"/> (12). More than that is REFUSED and
+        /// counted (<see cref="GetPropObbsOverflowCount"/>) with one console line; nothing
+        /// is silently dropped, because a dropped prop means the ball rolls through a
+        /// bench nobody can see. A refused call changes nothing: every entry is validated
+        /// before the first one is written.
+        /// </para>
+        /// <para>
+        /// The block is a function of where the ball is, so a teleport and
+        /// <see cref="ClearObstacles"/> clear it (<see cref="ClearPropObbs"/>); the next
+        /// host scan re-registers what still blocks.
+        /// </para>
+        /// </remarks>
+        public bool SetPropObbs(Vector3[] centers, Vector3[] axisX, Vector3[] axisY,
+            Vector3[] axisZ, Vector3[] halfExtents, int[] surfaceIds, int[] roles, int count)
+        {
+            if (staticObbCenter == null)
+            {
+                RefusePropObbs("contact v2 buffers not allocated yet");
+                return false;
+            }
+            if (count < 0)
+            {
+                RefusePropObbs("negative count");
+                return false;
+            }
+            if (count > MaxPropObbCount)
+            {
+                propObbOverflowCount = propObbOverflowCount + 1;
+                RefusePropObbs("prop obb capacity 12 exceeded");
+                LogPropObbOverflowOnce(count);
+                return false;
+            }
+            if (count > 0)
+            {
+                if (centers == null || axisX == null || axisY == null || axisZ == null ||
+                    halfExtents == null || surfaceIds == null || roles == null)
+                {
+                    RefusePropObbs("null prop obb buffer");
+                    return false;
+                }
+                if (count > centers.Length || count > axisX.Length || count > axisY.Length ||
+                    count > axisZ.Length || count > halfExtents.Length ||
+                    count > surfaceIds.Length || count > roles.Length)
+                {
+                    RefusePropObbs("count exceeds a buffer length");
+                    return false;
+                }
+            }
+
+            // Validate the whole block first, so a refused call cannot leave half a set
+            // behind (the same rule SetBlockingBoxes follows).
+            for (int i = 0; i < count; i++)
+            {
+                if (surfaceIds[i] < 0)
+                {
+                    RefusePropObbs("negative surface id");
+                    return false;
+                }
+                if (!ObbContactMath.IsValidObb(centers[i], axisX[i], axisY[i], axisZ[i],
+                    halfExtents[i]))
+                {
+                    RefusePropObbs("not a finite, unit, orthogonal box");
+                    return false;
+                }
+            }
+
+            int baseIndex = staticObbCount;
+            for (int i = 0; i < count; i++)
+            {
+                int slot = baseIndex + i;
+                staticObbCenter[slot] = centers[i];
+                staticObbAxisX[slot] = axisX[i];
+                staticObbAxisY[slot] = axisY[i];
+                staticObbAxisZ[slot] = axisZ[i];
+                staticObbHalfExtents[slot] = halfExtents[i];
+                staticObbSurfaceId[slot] = surfaceIds[i];
+                staticObbRole[slot] = roles[i];
+                staticObbBoundingRadius[slot] = ObbContactMath.BoundingRadius(halfExtents[i]);
+            }
+            propObbCount = count;
+            // The union changed: the hysteresis must forget the previous selection.
+            windowPreviousCount = 0;
+            return true;
+        }
+
+        /// <summary>Empties the prop OBB block (the static table stays).</summary>
+        public void ClearPropObbs()
+        {
+            if (propObbCount == 0) return;
+            propObbCount = 0;
+            windowPreviousCount = 0;
+        }
+
+        /// <summary>Prop OBBs currently registered (0..12).</summary>
+        public int GetPropObbsCount()
+        {
+            return propObbCount;
+        }
+
+        /// <summary>Prop OBB capacity (12).</summary>
+        public int GetPropObbsCapacity()
+        {
+            return MaxPropObbCount;
+        }
+
+        /// <summary>Refused prop blocks caused by the capacity (monotonic).</summary>
+        public int GetPropObbsOverflowCount()
+        {
+            return propObbOverflowCount;
+        }
+
+        /// <summary>Every refused <see cref="SetPropObbs"/> call (monotonic).</summary>
+        public int GetPropObbsRefusalCount()
+        {
+            return propObbRefusalCount;
+        }
+
+        /// <summary>The last <see cref="SetPropObbs"/> refusal as a literal, or "".</summary>
+        public string GetPropObbsRefusalReason()
+        {
+            if (propObbRefusalReason == null) return "";
+            return propObbRefusalReason;
+        }
+
+        private void RefusePropObbs(string reason)
+        {
+            propObbRefusalCount = propObbRefusalCount + 1;
+            propObbRefusalReason = reason;
+        }
+
+        /// <summary>One console line per capacity refusal (design §5.4 discipline).</summary>
+        private void LogPropObbOverflowOnce(int count)
+        {
+            if (propObbOverflowCount > 1) return;
+            Debug.Log("[ContactV2] prop obb overflow count=" + count + " capacity="
+                + MaxPropObbCount);
+        }
+
+        /// <summary>
+        /// Moves the prop block from one base index to another inside the shared table.
+        /// </summary>
+        /// <remarks>
+        /// The layout invariant is "static prefix, then prop block, no gaps", which is what
+        /// lets one <see cref="ContactWindowMath.TrySelectWindow"/> call see both kinds in
+        /// one distance-sorted set. Only two callers move it: <see cref="AddObb"/> (up one
+        /// slot, descending copy) and <see cref="ClearObbs"/> (down to zero, ascending).
+        /// </remarks>
+        private void MovePropBlock(int fromBase, int toBase)
+        {
+            if (propObbCount <= 0) return;
+            if (fromBase == toBase) return;
+            if (toBase > fromBase)
+            {
+                for (int i = propObbCount - 1; i >= 0; i--)
+                {
+                    CopyObbSlot(fromBase + i, toBase + i);
+                }
+                return;
+            }
+            for (int i = 0; i < propObbCount; i++)
+            {
+                CopyObbSlot(fromBase + i, toBase + i);
+            }
+        }
+
+        private void CopyObbSlot(int from, int to)
+        {
+            if (from == to) return;
+            staticObbCenter[to] = staticObbCenter[from];
+            staticObbAxisX[to] = staticObbAxisX[from];
+            staticObbAxisY[to] = staticObbAxisY[from];
+            staticObbAxisZ[to] = staticObbAxisZ[from];
+            staticObbHalfExtents[to] = staticObbHalfExtents[from];
+            staticObbSurfaceId[to] = staticObbSurfaceId[from];
+            staticObbRole[to] = staticObbRole[from];
+            staticObbBoundingRadius[to] = staticObbBoundingRadius[from];
         }
 
         /// <summary>Static OBBs currently registered (0..256).</summary>
@@ -4217,7 +4449,25 @@ namespace VRCKatamari.BallMotor
             return contactClassesV2[index];
         }
 
-        /// <summary>Surface id of contact <paramref name="index"/>, or -1.</summary>
+        /// <summary>
+        /// Role of contact <paramref name="index"/> (<see cref="ContactCodes.RoleBox"/>,
+        /// <see cref="ContactCodes.RoleSlab"/>, <see cref="ContactCodes.RoleProp"/>,
+        /// <see cref="ContactCodes.RoleBlocking"/>), or
+        /// <see cref="ContactCodes.RoleBox"/> outside the valid range.
+        /// </summary>
+        public int GetContactRole(int index)
+        {
+            if (index < 0 || index >= v2ContactCount) return ContactCodes.RoleBox;
+            return contactRolesV2[index];
+        }
+
+        /// <summary>
+        /// Surface id of contact <paramref name="index"/>, or -1. The id carries the kind,
+        /// which is how a reader tells a prop contact from a static one (there is no
+        /// separate prop branch in the solver): 0 ground, 1..8 static box, 10..13 ramp,
+        /// 100..111 prop, 1000 + i boundary plane. The role of the same record
+        /// (<see cref="GetContactRole"/>) is the second, table-independent label.
+        /// </summary>
         public int GetContactSurfaceId(int index)
         {
             if (index < 0 || index >= v2ContactCount) return -1;
@@ -4753,6 +5003,9 @@ namespace VRCKatamari.BallMotor
             hasRoundStartCenter = true;
             sizeApplyDeferred = false;
             contactRadiusUsedWorldM = collisionRadiusWorldM;
+            // The prop block was selected for the old position, exactly like the blocking
+            // box set the v1 path clears here; the next host scan re-registers it.
+            ClearPropObbs();
             // A teleport can cross the whole map: the old support surface, the old fall
             // state and the old step mask are all about where the ball used to be. The
             // next step re-derives them from the new position and the ball's own bottom,

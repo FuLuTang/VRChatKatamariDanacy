@@ -316,6 +316,178 @@ namespace VRCKatamari.Tests
                 1e-5f, "the pin cap is min(0.35 r, 0.30)");
         }
 
+        private bool HasContactWithSurfaceIdAtLeast(int minimumSurfaceId)
+        {
+            int count = (int)Invoke("GetContactCount");
+            for (int i = 0; i < count; i++)
+            {
+                if ((int)Invoke("GetContactSurfaceId", i) >= minimumSurfaceId) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Registers one prop OBB (surface id 100, blocking role) and returns the result.
+        /// The arrays are single-entry on purpose: SetPropObbs takes caller-owned parallel
+        /// arrays, and the test keeps that contract visible.
+        /// </summary>
+        private bool SetOnePropObb(Vector3 center, Vector3 halfExtents, int surfaceId,
+            int role)
+        {
+            Vector3[] centers = { center };
+            Vector3[] axisX = { new Vector3(1f, 0f, 0f) };
+            Vector3[] axisY = { new Vector3(0f, 1f, 0f) };
+            Vector3[] axisZ = { new Vector3(0f, 0f, 1f) };
+            Vector3[] half = { halfExtents };
+            int[] ids = { surfaceId };
+            int[] roles = { role };
+            return (bool)Invoke("SetPropObbs", centers, axisX, axisY, axisZ, half, ids,
+                roles, 1);
+        }
+
+        [Test]
+        public void APropObbBlocksTheBallLikeAStaticOne()
+        {
+            EnableV2();
+            float radius = Radius();
+            // Teleport FIRST: a teleport clears the prop block (it was chosen for the old
+            // position), exactly like the v1 blocking-box set.
+            Invoke("TeleportTo", new Vector3(0f, radius, 0f));
+            Assert.IsTrue(SetOnePropObb(new Vector3(0f, 1.5f, 2.5f),
+                new Vector3(2f, 1.5f, 0.5f), 100, ContactCodes.RoleBlocking),
+                "one prop OBB must fit in the twelve-entry block");
+            Assert.AreEqual(1, (int)Invoke("GetPropObbsCount"));
+            Invoke("SetMoveAxes", 1f, 0f, 0f);
+            Step(150);
+            Vector3 center = GetCenter();
+            // The prop's near face is z = 2.0, so the centre may not come closer than r:
+            // the prop goes through exactly the same contact solver as a static box.
+            Assert.GreaterOrEqual(center.z, 2f - radius - 0.002f,
+                "a prop OBB must not be penetrable either");
+            Assert.IsTrue(HasContactWithSurfaceIdAtLeast(100),
+                "the contact log must carry the prop surface id");
+            bool sawBlockingRole = false;
+            bool sawClimbClass = false;
+            int count = (int)Invoke("GetContactCount");
+            for (int i = 0; i < count; i++)
+            {
+                if ((int)Invoke("GetContactSurfaceId", i) < 100) continue;
+                if ((int)Invoke("GetContactRole", i) == ContactCodes.RoleBlocking)
+                {
+                    sawBlockingRole = true;
+                }
+                // A vertical prop wall classifies exactly like a vertical static one: the
+                // class comes from theta, so the prop gets no branch and no exception.
+                if ((int)Invoke("GetContactClass", i) == ContactCodes.ClassClimb)
+                {
+                    sawClimbClass = true;
+                }
+            }
+            Assert.IsTrue(sawBlockingRole,
+                "the prop contact must keep the role the host registered");
+            Assert.IsTrue(sawClimbClass,
+                "a vertical prop wall is a climb-class contact, like a static one");
+        }
+
+        [Test]
+        public void PropObbsShareTheNearWindowBudgetAndWinByDistance()
+        {
+            EnableV2();
+            float radius = Radius();
+            Invoke("TeleportTo", new Vector3(0f, radius, 0f));
+            // Twenty-four statics just inside R_in but out of reach, so they are window
+            // candidates without touching the ball.
+            for (int i = 0; i < 24; i++)
+            {
+                float angle = (float)i * 0.2618f;
+                AddObb(new Vector3(Mathf.Cos(angle) * 0.34f, 0.2f, Mathf.Sin(angle) * 0.34f),
+                    new Vector3(0.1f, 0.1f, 0.1f), 1 + i);
+            }
+            // One prop, nearer than every static: the union is 25 candidates for 24 slots,
+            // so the budget is shared and the nearest entry (the prop) must survive.
+            Assert.IsTrue(SetOnePropObb(new Vector3(0f, 0.2f, 0.2f),
+                new Vector3(0.1f, 0.1f, 0.1f), 100, ContactCodes.RoleProp),
+                "the prop must register next to the static block");
+            Assert.AreEqual(24, (int)Invoke("GetStaticObbCount"));
+            Assert.AreEqual(1, (int)Invoke("GetPropObbsCount"));
+            Step(1);
+            Assert.AreEqual(24, (int)Invoke("GetNearObbCount"),
+                "the near set must still hold 24 entries for the union, not 24 per table");
+            Assert.Greater((int)Invoke("GetNearObbDropped"), 0,
+                "25 candidates for 24 slots must be reported as a drop");
+            Assert.IsTrue(HasContactWithSurfaceIdAtLeast(100),
+                "the nearest candidate is the prop, so the drop must have taken a static");
+        }
+
+        [Test]
+        public void APropBlockAboveTheCapacityIsRefusedAndCounted()
+        {
+            EnableV2();
+            Vector3[] centers = new Vector3[13];
+            Vector3[] axisX = new Vector3[13];
+            Vector3[] axisY = new Vector3[13];
+            Vector3[] axisZ = new Vector3[13];
+            Vector3[] half = new Vector3[13];
+            int[] ids = new int[13];
+            int[] roles = new int[13];
+            for (int i = 0; i < 13; i++)
+            {
+                centers[i] = new Vector3(i * 3f, 0f, 0f);
+                axisX[i] = new Vector3(1f, 0f, 0f);
+                axisY[i] = new Vector3(0f, 1f, 0f);
+                axisZ[i] = new Vector3(0f, 0f, 1f);
+                half[i] = new Vector3(0.5f, 0.5f, 0.5f);
+                ids[i] = 100 + i;
+                roles[i] = ContactCodes.RoleProp;
+            }
+            Assert.IsFalse((bool)Invoke("SetPropObbs", centers, axisX, axisY, axisZ, half,
+                ids, roles, 13), "thirteen props must be refused, not truncated");
+            Assert.AreEqual(0, (int)Invoke("GetPropObbsCount"), "a refused call changes nothing");
+            Assert.AreEqual(1, (int)Invoke("GetPropObbsOverflowCount"));
+            Assert.AreEqual(1, (int)Invoke("GetPropObbsRefusalCount"));
+            Assert.AreNotEqual("", (string)Invoke("GetPropObbsRefusalReason"));
+            Assert.AreEqual(12, (int)Invoke("GetPropObbsCapacity"));
+            Assert.IsTrue((bool)Invoke("SetPropObbs", centers, axisX, axisY, axisZ, half,
+                ids, roles, 12), "twelve props must fit");
+            Assert.AreEqual(12, (int)Invoke("GetPropObbsCount"));
+        }
+
+        [Test]
+        public void ClearObstaclesAndTeleportClearThePropBlock()
+        {
+            EnableV2();
+            float radius = Radius();
+            Assert.IsTrue(SetOnePropObb(new Vector3(0f, 0.5f, 3f),
+                new Vector3(0.5f, 0.5f, 0.5f), 100, ContactCodes.RoleProp));
+            Assert.IsTrue(AddBox(new Vector3(-1f, -1f, -1f), new Vector3(1f, 0f, 1f)));
+            Invoke("ClearObstacles");
+            Assert.AreEqual(0, (int)Invoke("GetPropObbsCount"),
+                "ClearObstacles is 'all obstacles', so props go too");
+            Assert.AreEqual(0, (int)Invoke("GetStaticObbCount"));
+            Assert.IsTrue(SetOnePropObb(new Vector3(0f, 0.5f, 3f),
+                new Vector3(0.5f, 0.5f, 0.5f), 100, ContactCodes.RoleProp));
+            Invoke("TeleportTo", new Vector3(0f, radius, 0f));
+            Assert.AreEqual(0, (int)Invoke("GetPropObbsCount"),
+                "a teleport drops the prop set that was chosen for the old position");
+        }
+
+        [Test]
+        public void PropObbsAreIgnoredWhileTheFlagIsOff()
+        {
+            float radius = Radius();
+            Invoke("TeleportTo", new Vector3(0f, radius, 0f));
+            Assert.IsTrue(SetOnePropObb(new Vector3(0f, 1.5f, 2.5f),
+                new Vector3(2f, 1.5f, 0.5f), 100, ContactCodes.RoleBlocking),
+                "registration is flag-independent, so the v1 frame can ignore it");
+            Invoke("SetMoveAxes", 1f, 0f, 0f);
+            Step(150);
+            // v1 has no v2 table at all: the ball rolls straight through where the prop is.
+            Assert.Greater(GetCenter().z, 3f,
+                "the v1 path must keep using SetBlockingBoxes/SetSupportProps only");
+            Assert.AreEqual(0, (int)Invoke("GetNearObbCount"));
+            Assert.AreEqual(0, (int)Invoke("GetContactCount"));
+        }
+
         [Test]
         public void TheClimbStateGetterSeparatesClimbingSlidingAndLocked()
         {

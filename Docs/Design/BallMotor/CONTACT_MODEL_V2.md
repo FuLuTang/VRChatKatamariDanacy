@@ -1379,6 +1379,14 @@ void ClearObbs();
 int  GetStaticObbCount();          int  GetStaticObbCapacity();      // 256
 int  GetStaticObbOverflowCount();  int  GetStaticObbRefusalCount();
 string GetLastStaticObbRefusalReason();
+
+// 道具块（S4b 的宿主每次扫描重登记；容量 12，固定数组，超容拒绝+计数+一条日志）
+bool SetPropObbs(Vector3[] centers, Vector3[] axisX, Vector3[] axisY, Vector3[] axisZ,
+                 Vector3[] halfExtents, int[] surfaceIds, int[] roles, int count);
+void ClearPropObbs();
+int  GetPropObbsCount();          int  GetPropObbsCapacity();        // 12
+int  GetPropObbsOverflowCount();  int  GetPropObbsRefusalCount();
+string GetPropObbsRefusalReason();
 ```
 
 接触 / 窗口 / 求解（§6.4）：
@@ -1387,6 +1395,7 @@ string GetLastStaticObbRefusalReason();
 int     GetContactCount();                 Vector3 GetContactNormal(int i);
 Vector3 GetContactPoint(int i);            float   GetContactDepth(int i);
 int     GetContactClass(int i);            int     GetContactSurfaceId(int i);
+int     GetContactRole(int i);
 int     GetContactShape(int i);            int     GetNeedleContactCount();
 int     GetDominantContactClass();         int     GetDominantContactSurfaceId();
 float   GetSolverResidualMax();            bool    WasContactIncomplete();
@@ -1418,7 +1427,7 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 | 设计阶段 | 代码 | 说明 |
 |---|---|---|
 | 2.5 台阶掩码 | **无**（v2 分支不调用 `RefreshStepMask`） | 掩码字段/方法仍在，v1 用 |
-| 3 子步 + 窗口 + 接触 + 推挤 + 分类 + 速度响应 | `StepContactV2` → `FillNearWindow` + `ContactSolveMath.TryStep`（S2，内含 `MaxSubSteps`/`TryCollectContacts`/`TryPushOut`/`SelectSupportContact`/`SelectClimbContact`/`ClimbMath`） | 一次 Udon 调用做完全部障碍循环 |
+| 3 子步 + 窗口 + 接触 + 推挤 + 分类 + 速度响应 | `StepContactV2` → `FillNearWindow` + `ContactSolveMath.TryStep`（S2，内含 `MaxSubSteps`/`TryCollectContacts`/`TryPushOut`/`SelectSupportContact`/`SelectClimbContact`/`ClimbMath`） | 一次 Udon 调用做完全部障碍循环。**窗口把静态表与道具块混排**：两块放在同一组数组里（静态前缀 `[0, static)` + 道具块 `[static, static+prop)`），`FillNearWindow` 用 `static + prop` 作为条目数调**一次** `TrySelectWindow`，所以 R_in/R_out、24 上限、距离排序、滞回、溢出判据全部是同一份；求解器看到的是同一张 near 表，没有任何“道具分支” |
 | 3.5 爬升 | `ContactSolveMath.TryStep` 内的 TryStep 状态机；状态字段在电机（`climbActive/climbAnchorY/climbSurfaceId/climbCooldown/climbLocked/climbAlongSpeed`），`WriteContactSupport` 写回口径 | `GetClimbState` 的 2 = 冷却窗口 |
 | 4 支撑写回 | `WriteContactSupport`（v1 的 `supportSurface*` 字段全部继续写） | 支撑高度用 v1 同一公式 `C.y − dot(n,C−p)/n.y`，针尖支撑自然落到 §2.5 的针尖公式 |
 | 4.5 长大推挤 | `ApplyGrowthPushOut`（在共享尾部的 7.5，flag 关时不跑） | 独立接触 scratch，不覆盖当步 `GetContact*` 读数；≤2 次 × ≤5 cm；失败则**整段不应用** + `sizeApplyDeferred` |
@@ -1439,6 +1448,8 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 | `GetStepHeightLimitWorldM` | 0.25·D，参与物理 | 仍返回 0.25·D，**只作诊断**（每步刷新） |
 | `IsFalling` | 丢失支撑后进入重力 | = 无支撑接触且不在爬升 |
 | `GetSupportSurfaceCount` | 带内面数 | 当步接触条数 |
+| `GetContactSurfaceId` / `GetContactRole` | — | 同一条接触的两种标签，用来区分静态与道具（**没有**道具专用分支）：地面 0 / 静态盒 1..8 / 坡 10..13 / 道具 100..111 / 边界平面 1000+i；role 0 盒、1 坡、2 支撑道具、3 挡路。`GetDominantContactSurfaceId` 返回原样 id，读者按区间判类 |
+| `GetNearObbCount` | — | 静态 + 道具合并后的近集条数（≤24）；`GetNearObbDropped` 是**两块共享预算**下丢掉的条数 |
 | `GetCollisionRadiusWorldM` | 扫掠半径 | = `r_phys`，接触半径 |
 | `GetSemanticDiameterWorldM` | 视觉/相机/stepLimit/吸收门 | 不变（§4A.5 的三形状拆分不在 S3） |
 | `GetGroundProxyLiftWorldM` / `GetProxyProtrusionCapWorldM` | 径向代理抬升 | v2 不再抬升：前者仍返回最后值（诊断），后者仍按 `min(0.35r,0.30)` 返回（= 针尖 cap） |
@@ -1459,7 +1470,7 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 6. **`contactIncomplete` 是锁存 + 一条日志，不冻结球**：§5.4 的原文就是“仍用 24 条，标记不完整，判据失败”。
 7. **没有 dash**（§3.8）、**没有 `GetFixedStepCount`**（§6.4 列的是 P4 请求，S3 未加）。
 8. **AddBox 容量仍是 8**：现有场景（≤8 盒 + ≤4 坡）可以直接开 flag；地图 0 的 118 条要等 S4 把宿主改成 `AddObb`。`AddRamp` 的 45° 作者门仍在（S4 改 warning），更陡的坡本轮只能用 `AddObb` 直接登记。
-9. **挡路道具 / 支撑道具不进 v2 静态表**：`SetBlockingBoxes` / `SetSupportProps` 仍只写 v1 的 sweep 数组与支撑表，**没有**转成 OBB，所以 flag 开时它们既不挡也不支撑。§5.2 把这两类画成“宿主 20 Hz 扫描的独立池”，但没说 v2 求解器怎么看见它们：S4 要拍板（推荐给 6+6 一个动态槽区，每次扫描重登记，窗口照常扫）。在那之前，flag=true 只应在**没有挡路/支撑道具**的格子里打开（现有 9 格的盒子与坡都是 AddBox/AddRamp，不受影响）。
+9. **挡路道具 / 支撑道具：缺口已填（S4b 宿主 + 本轮 `SetPropObbs`）**。宿主在它的 20 Hz 扫描里把近邻道具作为真 OBB 交给 `SetPropObbs`（12 槽，surface id 100+i，role 2/3），它们与静态盒走**同一份**接触/分类/推挤，窗口里按距离与静态混排。**v1 的 `SetBlockingBoxes` / `SetSupportProps` 没有自动转换**（它们仍只喂 v1 的 sweep/支撑表，flag 关时行为逐字不变）；`TeleportTo`/`ClearObstacles` 清道具块，下一次宿主扫描重登记，与 v1 清挡路盒的策略一致。§7.6.5 里 S4b 记的「缺口没填」是它提交时的状态，电机侧本轮已按它请求的签名落地（见 §7.6.5 末尾的注）。
 10. **三形状拆分（§4A.5）未落到尺寸层**：`r_phys = collisionRadiusWorldM`，`collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` 语义未变；只提供 `GetPhysicalRadiusWorldM` / `GetVisualCoreRadiusWorldM` / `GetRollReachWorldM` / `GetPickupReachWorldM` 四个读数。
     **pickup 已按 §4A.4 接成 trigger**：`EvaluatePendingCandidates` 在 flag 开时把“球心→该候选”方向上的 `pickupReach(û)` 作为 `PickupAbsorbMath` 的球半径参数（reach = pickupReach + contactR + propBoundingRadius），**只影响“能不能粘”**，不进接触、不挡、不支撑；flag 关时该参数逐字仍是 `collisionRadiusWorldM`。`PickupAbsorbMath` 本身一行未改。隔墙吸（§4A.4 的选项①）行为不变。
 11. **针尖可能漏掉亚毫米的擦角**（`BallShapeMath.TryNeedleSegmentContact` 的 5 采样 + 12 次二分）：面/棱命中精确，角上极浅的擦过可能漏。
@@ -1472,7 +1483,7 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 | `python3 Docs/tools/validate_plan.py` | PASS |
 | **没跑** | Unity 编译、U# 全量编译、EditMode、Play Mode、profiler、任何手感/帧时间；**S3 的 C# 一行都没编译过** |
 
-操作者要跑的两组 EditMode：`VRCKatamari.Tests.NeedleSegmentTests`（纯数学，12 例）与 `VRCKatamari.Tests.ContactModelV2Tests`（电机级，10 例）；后者是设计期望值，若红，先看 `GetContactCount/GetSupportKind/GetRecoveryState` 三组读数再判是代码还是期望。
+操作者要跑的两组 EditMode：`VRCKatamari.Tests.NeedleSegmentTests`（纯数学，12 例）与 `VRCKatamari.Tests.ContactModelV2Tests`（电机级，15 例，含道具 OBB 的挡球/混排/超容/清理/flag 关无效五例）；后者是设计期望值，若红，先看 `GetContactCount/GetSupportKind/GetRecoveryState` 三组读数再判是代码还是期望。
 
 ### 7.6 S4b 实现与接口（2026-11-15）
 
@@ -1524,6 +1535,8 @@ string GetPropObbsRefusalReason();
 ```
 
 语义请求：与静态表同构；`FillNearWindow` 把两张表一起扫（同一 `R_in/R_out`、同一条 24 条上限，先静态后道具不行——应按距离混合）；`ClearObstacles` 清掉它；道具被吸收/移走由宿主每扫描期重发整批（宿主已经这样做了）。**在那之前**：v2 flag 打开且有道具障碍时，宿主打**一条** `[PickupFieldHost] contact v2 has no prop OBB table yet …` 警告，并保持 v1 两套表继续更新（回滚到 v1 时立刻自洽）。也就是说 §7.5.5 第 9 条的缺口**没有**被本轮填上，只是把它变成了「有读数、有警告、有一次性接入点」。
+
+> **S3 后续（2026-11-15）**：上面请求的电机 API 已落地，签名与本节一致（另加 `GetPropObbsCapacity()`），`FillNearWindow` 已把静态前缀与道具块放进**同一张数组、同一次 `TrySelectWindow`**（按距离混合，共享 24 上限）。本节「缺口没有被填上」描述的是 S4b 提交时的状态；宿主侧仍需在 `ApplyPropObbSet` 里把这一行接上（那行属于宿主文件，S3 不能改），接上之前 v2 仍看不到道具。
 
 #### 7.6.6 本轮跑了什么 / 没跑什么
 

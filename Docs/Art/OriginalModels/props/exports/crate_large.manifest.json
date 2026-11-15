@@ -1,0 +1,118 @@
+{
+  "id": "crate_large",
+  "pivot": "center",
+  "target_longest_m": 0.8,
+  "dimensions_m": {
+    "x": 0.800000011920929,
+    "y": 0.5,
+    "z": 0.44999998807907104,
+    "longest": 0.800000011920929
+  },
+  "bounds_m": {
+    "min": [
+      -0.4000000059604645,
+      -0.25,
+      -0.22499999403953552
+    ],
+    "max": [
+      0.4000000059604645,
+      0.25,
+      0.22499999403953552
+    ]
+  },
+  "vertices": 148,
+  "triangles": 308,
+  "materials": [
+    "Prop_crate_large_wood",
+    "Prop_crate_large_trim"
+  ],
+  "material_base_colors": {
+    "Prop_crate_large_wood": [
+      0.25,
+      0.155,
+      0.075
+    ],
+    "Prop_crate_large_trim": [
+      0.135,
+      0.082,
+      0.038
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "8df72f40411fa46fc6d1587f657c85abfe02d53e43db640d499c722d43255f68",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "大收纳箱",
+  "category": "container",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.8,
+    "game_longest_dim_m": 0.8,
+    "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / U3（真实三轴，无 CSV 行）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.8,
+    "built_longest_m": 0.800000011920929,
+    "abs_error_m": 1.1920928910669204e-08,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": true,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 700,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "wood",
+      "name_zh": "箱体旧木",
+      "linear_rgb": [
+        0.25,
+        0.155,
+        0.075
+      ],
+      "roughness": 0.8
+    },
+    {
+      "key": "trim",
+      "name_zh": "框条深木",
+      "linear_rgb": [
+        0.135,
+        0.082,
+        0.038
+      ],
+      "roughness": 0.76
+    }
+  ],
+  "notes": "Body 0.700 x 0.400 (R 12 mm) from z 0.030 to 0.412; four 0.055 square posts at (+/-0.3725, +/-0.2225) from z 0 to 0.450; lid 0.780 x 0.480 (R 14 mm) from z 0.412 to 0.450, recessed 10 mm from the post faces.  Two 0.660 x 0.020 x 0.040 battens per long side (y 0.195-0.215, z 0.115 and 0.300) and one 0.400 x 0.020 x 0.040 batten per short end (x 0.350-0.370, z 0.160).  AABB 0.800 x 0.500 x 0.450; lid plane and post tops coplanar at z 0.450.  Materials by face extent: trim = lid slab above z 0.4114, anything outside the body outline (|x| > 0.3545 or |y| > 0.2045) and the end battens; wood elsewhere.",
+  "build_script": "models/crate_large.py",
+  "preview": "previews/crate_large_preview.png",
+  "files": {
+    "crate_large.fbx": 20140,
+    "crate_large.glb": 13352,
+    "crate_large.blend": 453732
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "4.0.2"
+  },
+  "preview_bytes": 190330
+}

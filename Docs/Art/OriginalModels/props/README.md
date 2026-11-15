@@ -327,3 +327,64 @@ set B=D:\SteamLibrary\steamapps\common\Blender\blender.exe
 - 本批 6 件**没有碰撞体**；建议的分箱见交付正文（`wood_plank` 1 box、`serving_tray` 1 box、`folding_table` 桌面 1 + 4 腿各 1、`picnic_basket` 1、`folding_stool` 座面 1 + 两框各 1、`cooler_box` 1）。
 - 骨架清单里本批未做的：`crate` / `book_stack` / `beer_crate` / `lounge_chair` / `stroller` / `picnic_table`（按 6 件配额截断，主次按 Lead 的三件"薄长平面"优先）。
 - 当前 motor 只有一个解析地面、没有竖直支撑，所以这 6 件**实际上都不能爬**；平顶与 2.5 cm 板是给将来的坡面/支撑补丁留的形状，今天它们只是"挡路 ↔ 可吸"两态。
+
+## 13. 第六批：第一关剩下的 9 件可吸结构件（2026-11-15）
+
+`Docs/Design/StoryMode/PICNIC_CORNER_LAYOUT.md` §4.1 的 17 件可吸结构件用的是 13 个 def。逐个对着本目录 `scripts/models/` + `exports/*.manifest.json` 核对后，**9 个 def 没有模型**：
+
+- 第五批按配额截断、没做的 5 件：`crate` / `book_stack` / `beer_crate` / `lounge_chair` / `stroller`（见 §12.6）；
+- 布局文档 U3 为了填 1.10–1.60 空档新加的 4 件：`storage_bin` / `cooler_box_large` / `crate_large` / `picnic_bench`。
+
+`serving_tray` / `wood_plank` / `folding_table` / `folding_stool` 已有模型，未重做。110 件小道具的 31 个 def 全部已有模型（本批只补结构件）。
+`picnic_table`（`LEVEL_CONSTRUCTION.md` §4 P0，D_req 2.492 > 2.20）**不在第一关布局里**，`PROP_SET_PLAN` §2.8.5 已把它划给 PicnicLawn，本批**没有建**，不是漏项。
+
+### 13.1 尺寸、面数、可吸球径
+
+布局文档的 `size` 是 `[x, 高度, z]`；下表"实测"列是 Blender 的 X×Y×Z（Y 是深度、Z 是高度），与布局的三轴一一对应（x → X，高度 → Z，z → Y）。FBX/GLB 按 README §2 的约定导出（Y-up、`bake_space_transform`），Unity 端预期 identity。
+
+| 道具 | 中文 | 设计（布局 §4.1，x×高×z） | 实测 X×Y×Z (m) | 面数/预算 | 壳 | `D_req` | 场景角色 |
+|---|---|---|---|---|---:|---:|---|
+| `book_stack` | 书堆 | 0.26 × 0.09 × 0.19 | 0.260 × 0.190 × 0.090 | 160/300 | 1 | 0.440 | 第一级台阶（0.36 可踩 → 0.44 可吃） |
+| `beer_crate` | 啤酒箱 | 0.40 × 0.28 × 0.30 | 0.400 × 0.300 × 0.280 | 182/400 | 1 | 0.863 | 台面南沿的 2 cm 踏脚 |
+| `crate` | 木箱 | 0.60 × 0.40 × 0.40 | 0.600 × 0.400 × 0.400 | 272/600 | 1 | 1.224 | 台面 → 箱顶的 0.14 一级 / 树角挡路 |
+| `storage_bin` | 收纳箱小 | 0.55 × 0.40 × 0.35 | 0.550 × 0.350 × 0.400 | 310/600 | 1 | 1.137 | 桌与花圃之间的矮柜 |
+| `crate_large` | 大收纳箱 | 0.80 × 0.45 × 0.50 | 0.800 × 0.500 × 0.450 | 308/700 | 1 | 1.509 | 树角的挡路地标 |
+| `cooler_box_large` | 大冷藏箱 | 0.70 × 0.40 × 0.45 | 0.700 × 0.450 × 0.400 | 204/600 | 1 | 1.340 | 中后期第一件"大"的 |
+| `picnic_bench` | 野餐长凳 | 1.20 × 0.45 × 0.40 | 1.200 × 0.400 × 0.450 | 360/700 | 1 | 1.604 | 出生点旁第一个大地标 |
+| `lounge_chair` | 折叠躺椅 | 0.60 × 0.35 × 1.60（布局 `yaw=90`，已是世界 AABB） | 1.600 × 0.600 × 0.350 | 354/900 | 1 | 1.858 | 唯一"踩上去再吃掉"的件（台顶 → 躺椅 → 桌面） |
+| `stroller` | 婴儿车 | 1.00 × 1.00 × 0.55 | 1.000 × 0.550 × 1.000 | 888/900 | 1 | 2.190 | 尾口 / 最高的地标 |
+
+合计 **9 件 / 3038 tris**。三轴与布局文档的差都 < 1e-6 m；`D = (60·a·b·c/π)^(1/3)`，9 件全部 ≤ 2.20，没有纯布景件。
+面数预算取 `LEVEL_CONSTRUCTION.md` §4 的 P0/P1/P2 表（`crate` 600、`lounge_chair` 900、`stroller` 900、`book_stack` 300、`beer_crate` 400）；U3 的 4 个新 def 该文档没有给预算，按同尺寸档沿用 **600 / 600 / 700 / 700**。
+
+### 13.2 建模取舍（读图后改过的地方）
+
+1. **`lounge_chair` 没有靠背**。布局把它当 0.35 m 的地形用（台顶 0.26 → 躺椅 0.35 → 桌面 0.70），所以躺面是**一整块 z = 0.350 的平面**，靠背/扶手/枕头一个都不能高过它。它读成躺椅靠的是：1.60 × 0.60 的赭色布面 + 两根 28 mm 边管 + 四条腿 + 两道横撑；头端 250 mm 是一块**与自己共面**的 1 mm 米色板（折叠毛巾），不是凸起。
+2. **`stroller` 的行驶方向在 +X，不在 +Y**。布局的 `size` 是 `[x, 高度, z]` 且 `yaw = 0`，所以车宽必须落在 X（1.00）、进深落在 Z（0.55）。模型就是按这个朝向建的（车架在 -X 端），AABB 才能同时对上 D_req 与挡路盒。这是**唯一**一件正面不是 +Y 的商品；已在 `NOTES` 里写明。
+3. **`beer_crate` 是开口瓶箱，不是第二个木箱**。16 mm 壁 + 20 mm 底 + 六格（2 排 × 3 列、8 mm 隔板，隔板比口沿低 20 mm）+ 两端手指孔；0.28 m 的口沿是平的，但格子里是空的——球踩的是 AABB 顶面，和 `folding_stool` 的凳面同一种处理。
+4. **`storage_bin` 与 `crate` 必须一眼分开**：两者尺寸接近（0.55×0.40×0.35 vs 0.60×0.40×0.40），所以前者做成塑料收纳箱——浅灰直壁 + 两道模压横筋 + 深蓝盖（5 mm 出檐、8 mm 台阶）+ 正面米色标签牌；后者是木箱（角柱 + 压条 + 盖板）。
+5. **`crate` / `crate_large` 的顶面是一个平面**：盖板顶与四根角柱顶共面（z = 0.400 / 0.450），所以"叠两件"和挡路高度都对得上；`crate_large` 只是把柱加粗到 55 mm、箱体缩进 22.5 mm，并给两端各加一根压条。
+6. **`cooler_box_large` 的盖上有提手槽**（180 × 55 × 12 mm 凹槽，深色内衬）：0.55 m 的小保温箱当初否掉了顶提手（它的顶是桌面），这一件 `D_req` 1.34、`4×h` = 1.60，永远不当支撑面，所以可以按真实冷藏箱做。AABB 顶仍是 0.400 的盖沿平面。
+7. **`book_stack` 的书脊是"面"不是"件"**：每本书 = 4 mm 内缩的书页块 + 5 mm 全轮廓封面；书页块在 +X 侧与封面齐平，那个立面直接刷封面色 = 书脊。第一版给书脊单独做了一个 8 mm 棱柱，它的方角穿过封面的圆角，并集后留下 3 条边界边（`non_manifold_edges: 3`），改成"颜色带"后是 0。
+8. **一次一个壳体**：9 件全部 `closed_shells: 1`、`non_manifold_edges: 0`、`zero_area_faces: 0`、`ngons: 0`、`duplicate_faces: 0`、`loose_vertices: 0`。过程中踩到并修掉的坑（都写进了各自脚本注释）：腿部管件的**平头端**必须插进上方面板 10 mm（`lounge_chair` 第一版腿顶正好停在板底，导出 3 个壳）；`picnic_bench` 的单一中撑**碰不到两侧腿**（导出 2 个壳），改成两条与腿同排的撑；`stroller` 的底篮开口会被上方的睡篮封住、内表面变成封闭空腔（多一个壳），所以底篮改成**实心深色块**。
+9. **相机的"看不见"也算偏差**：`stroller` 的推杆第一版是一根扫掠管，肩部的环被弯折带斜，管顶只到 0.9926 m；改成两根立柱 + 一根 **8 边形圆柱横杆**（90° 顶点朝上）后正好 1.000 m。轮子同样是 12 边形：10 边形在 0° 起头时没有正下方的顶点，轮胎会离地 4.4 mm、整体高度掉到 0.995。
+
+### 13.3 复现
+
+本批在 Linux 无头 Blender **4.0.2** 上构建与回读（`source ~/tools/blender-env.sh`），命令与 §5 / §12.5 相同，只是把输出指到仓库外：
+
+```bash
+PROPS="book_stack,beer_crate,crate,storage_bin,crate_large,cooler_box_large,picnic_bench,lounge_chair,stroller"
+"$BLENDER" $BLENDER_FLAGS --python Docs/Art/OriginalModels/props/scripts/build_all.py  -- --out /tmp/props_b6_stage --props "$PROPS"
+"$BLENDER" $BLENDER_FLAGS --python Docs/Art/OriginalModels/props/scripts/verify_import.py -- --out /tmp/props_b6_stage --props "$PROPS"
+```
+
+产物：`exports/<id>.fbx|.glb|.blend|.manifest.json`、`previews/<id>_preview.png`（本批已复制回仓库），外加 `previews/contact_sheet_batch6.png`（9 件拼图）。回读 **18 次全 `ok`（`VERIFY_ALL_OK`）**：FBX 与 GLB 的三角面数与源网格逐一相同，世界尺寸与 manifest 差 < 5e-4 m，包围盒中心在原点。
+
+### 13.4 未做与边界
+
+- **没有重新生成** `manifest.json`（总清单）与 `SHA256SUMS`：那两份是整个 `props/` 的产物，本批只追加了 9 个 def 的四件套。要合并时跑一次全量 `build_all.py`（不带 `--props`）即可；`sign.py` 也能只重算指纹。
+- **没有在 Unity 里导入验证**（本 agent 不是 Unity 操作员）：材质仍需按 `exports/<id>.manifest.json` 的 `material_base_colors` 重建，或改用 GLB。
+- 预览图的像素来自 **Blender 4.0.2 的 EEVEE**，和本目录里 3.6.21 / 5.3.0 生成的旧预览不是同一渲染器；几何、清单与拼图布局不受影响。
+- 9 件**没有碰撞体**。建议分箱：`book_stack` 1、`beer_crate` 1、`crate` 1、`storage_bin` 1、`crate_large` 1、`cooler_box_large` 1、`picnic_bench` 座面 1 + 两条腿框各 1、`lounge_chair` 躺面 1 + 四条腿各 1、`stroller` 车体 1 + 车架 1。
+- 当前 motor 没有竖直支撑（同 §12.6），所以这批的平顶现在仍然只是"挡路 ↔ 可吸"两态的形状准备。

@@ -58,6 +58,21 @@ ORDER = [
     'wood_plank',
     'serving_tray',
     'folding_table',
+    # Remaining absorbable structural pieces of the first level (2026-11-15
+    # sixth batch).  PICNIC_CORNER_LAYOUT.md 4.1 uses 13 structure defs; nine of
+    # them had no model, so they are built here with the layout's real
+    # three-axis.  None of them has a prop_catalog.csv row (the four U3 defs are
+    # new, the other five were cut from the fifth batch), so each model module
+    # declares DOC_ROW.
+    'book_stack',
+    'beer_crate',
+    'crate',
+    'storage_bin',
+    'crate_large',
+    'cooler_box_large',
+    'picnic_bench',
+    'lounge_chair',
+    'stroller',
 ]
 
 

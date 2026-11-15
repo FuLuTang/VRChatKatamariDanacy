@@ -44,14 +44,46 @@ namespace VRCKatamari.Tests
             return limit;
         }
 
+        private static float[] NoFloats()
+        {
+            return new float[0];
+        }
+
+        // The mask the motor would compute for these boxes at this reference: one call to
+        // the ONE step predicate per box. The selection cases below use it so they test
+        // geometry and ordering; the mask-specific cases build it by hand instead.
+        private static bool[] MaskFor(Vector3[] maxima, int boxCount, float referenceHeight,
+            float stepLimit)
+        {
+            bool[] mask = new bool[boxCount];
+            for (int i = 0; i < boxCount; i++)
+            {
+                mask[i] = SupportSurfaceMath.IsStepWithinLimit(maxima[i].y, referenceHeight,
+                    stepLimit);
+            }
+            return mask;
+        }
+
+        private static bool ResolveWithMask(Vector3 probe, float referenceHeight,
+            float stepLimit, Vector3[] minima, Vector3[] maxima, bool[] mask, int boxCount,
+            out int surfaceId, out Vector3 point, out Vector3 normal, out float height,
+            out int candidateCount)
+        {
+            return SupportSurfaceMath.TryResolveSupport(probe, referenceHeight, stepLimit, Up, 0f,
+                minima, maxima, mask, boxCount,
+                new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
+                NoProps(), NoProps(), 0,
+                out surfaceId, out point, out normal, out height, out candidateCount);
+        }
+
         private static bool Resolve(Vector3 probe, float referenceHeight, float stepLimit,
             Vector3[] minima, Vector3[] maxima, int boxCount,
             out int surfaceId, out Vector3 point, out Vector3 normal, out float height,
             out int candidateCount)
         {
-            return SupportSurfaceMath.TryResolveSupport(probe, referenceHeight, stepLimit, Up, 0f,
-                minima, maxima, boxCount, NoProps(), NoProps(), 0, out surfaceId, out point,
-                out normal, out height, out candidateCount);
+            return ResolveWithMask(probe, referenceHeight, stepLimit, minima, maxima,
+                MaskFor(maxima, boxCount, referenceHeight, stepLimit), boxCount,
+                out surfaceId, out point, out normal, out height, out candidateCount);
         }
 
         // ---------------------------------------------------------------- 1 ----
@@ -67,8 +99,10 @@ namespace VRCKatamari.Tests
             Vector3[] maxima = NoBoxes();
 
             Assert.IsTrue(SupportSurfaceMath.TryResolveSupport(new Vector3(1f, 5f, 2f), 0f, 0.6f,
-                Up, 0.5f, minima, maxima, 0, NoProps(), NoProps(), 0, out id, out point,
-                out normal, out height, out candidates));
+                Up, 0.5f, minima, maxima, MaskFor(maxima, 0, 0f, 0.6f), 0,
+                new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
+                NoProps(), NoProps(), 0, out id, out point, out normal, out height,
+                out candidates));
 
             Assert.AreEqual(SupportSurfaceMath.GroundSurfaceId, id);
             Assert.AreEqual(0.5f, height, Tolerance);
@@ -185,7 +219,7 @@ namespace VRCKatamari.Tests
                 minima, maxima, 1, out id, out point, out normal, out height, out candidates));
             Assert.AreEqual(SupportSurfaceMath.GroundSurfaceId, id);
             Assert.AreEqual(0f, height, Tolerance);
-            Assert.AreEqual(1, candidates, "only the ground is inside the band");
+            Assert.AreEqual(1, candidates, "only the ground is a candidate: the box mask is false");
 
             // The band edge is inclusive: a top exactly at reference + limit is a
             // candidate (it is the step the ball may enter, not a wall).
@@ -241,9 +275,10 @@ namespace VRCKatamari.Tests
             // The mask has no latch. What used to be "one-way hysteresis" is the shared
             // reference: airborne 0.02 m above the floor, the ball's own bottom is the
             // reference, so a 0.075 m deck sits inside a 0.074934 m limit; grounded, the
-            // same deck is a wall. The support table reads the SAME reference, so both
-            // sides flip together instead of diverging (C09's ghost step: the mask
-            // latched at spawn and never released).
+            // same deck is a wall. The support table reads the mask (not a second
+            // comparison), and the gate that recomputes the mask is keyed on this same
+            // reference (StepMaskNeedsRefresh), so both sides flip together instead of
+            // diverging (C09's ghost step: the mask stayed steppable at spawn).
             float limit = StepLimit(0.2997369f);
             Assert.IsTrue(SupportSurfaceMath.IsStepWithinLimit(0.075f, 0.02f, limit),
                 "airborne reference: a 0.055 m rise is inside the limit");
@@ -288,8 +323,10 @@ namespace VRCKatamari.Tests
             int candidates = 99;
 
             Assert.IsFalse(SupportSurfaceMath.TryResolveSupport(new Vector3(float.NaN, 1f, 0f), 0f,
-                0.3f, Up, 0f, minima, maxima, 1, NoProps(), NoProps(), 0, out id, out point,
-                out normal, out height, out candidates));
+                0.3f, Up, 0f, minima, maxima, MaskFor(maxima, 1, 0f, 0.3f), 1,
+                new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
+                NoProps(), NoProps(), 0, out id, out point, out normal, out height,
+                out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
             Assert.AreEqual(Vector3.zero, point);
             Assert.AreEqual(Vector3.zero, normal);
@@ -301,23 +338,31 @@ namespace VRCKatamari.Tests
             id = 99;
             height = 99f;
             Assert.IsFalse(SupportSurfaceMath.TryResolveSupport(new Vector3(0f, 1f, 0f), 0f,
-                0.3f, Up, 0f, minima, invertedMaxima, 1, NoProps(), NoProps(), 0, out id,
-                out point, out normal, out height, out candidates));
+                0.3f, Up, 0f, minima, invertedMaxima,
+                MaskFor(invertedMaxima, 1, 0f, 0.3f), 1,
+                new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
+                NoProps(), NoProps(), 0,
+                out id, out point, out normal, out height, out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
             Assert.AreEqual(0f, height, Tolerance);
 
             // A wall-like (horizontal) ground normal cannot answer a height query.
             id = 99;
             Assert.IsFalse(SupportSurfaceMath.TryResolveSupport(new Vector3(0f, 1f, 0f), 0f,
-                0.3f, new Vector3(1f, 0f, 0f), 0f, minima, maxima, 1, NoProps(), NoProps(),
-                0, out id, out point, out normal, out height, out candidates));
+                0.3f, new Vector3(1f, 0f, 0f), 0f, minima, maxima,
+                MaskFor(maxima, 1, 0f, 0.3f), 1,
+                new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
+                NoProps(), NoProps(), 0,
+                out id, out point, out normal, out height, out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
 
             // A count larger than the buffers is refused instead of read past the end.
             id = 99;
             Assert.IsFalse(SupportSurfaceMath.TryResolveSupport(new Vector3(0f, 1f, 0f), 0f,
-                0.3f, Up, 0f, minima, maxima, 2, NoProps(), NoProps(), 0, out id, out point,
-                out normal, out height, out candidates));
+                0.3f, Up, 0f, minima, maxima, MaskFor(maxima, 1, 0f, 0.3f), 2,
+                new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
+                NoProps(), NoProps(), 0, out id, out point, out normal, out height,
+                out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
         }
 
@@ -422,8 +467,10 @@ namespace VRCKatamari.Tests
 
             // A ground offset is honoured, so the fallback is the real floor.
             Assert.IsTrue(SupportSurfaceMath.TryResolveSupport(new Vector3(0f, 1f, 0f), 0f, 0.3f,
-                Up, -0.05f, minima, maxima, 0, NoProps(), NoProps(), 0, out id, out point,
-                out normal, out height, out candidates));
+                Up, -0.05f, minima, maxima, MaskFor(maxima, 0, 0f, 0.3f), 0,
+                new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
+                NoProps(), NoProps(), 0, out id, out point, out normal, out height,
+                out candidates));
             Assert.AreEqual(-0.05f, height, Tolerance);
         }
 
@@ -432,11 +479,14 @@ namespace VRCKatamari.Tests
         public void WalkingOffTheLedgeStartsAFall()
         {
             bool dropped;
-            Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(0f, 0.26f, 0.001f, out dropped));
+            Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(0f, 0.26f, 0.001f, false,
+                out dropped));
             Assert.IsTrue(dropped, "0.26 m down is a lost surface");
-            Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(0.26f, 0.26f, 0.001f, out dropped));
+            Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(0.26f, 0.26f, 0.001f, false,
+                out dropped));
             Assert.IsFalse(dropped, "same surface height is not a drop");
-            Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(0.2595f, 0.26f, 0.001f, out dropped));
+            Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(0.2595f, 0.26f, 0.001f, false,
+                out dropped));
             Assert.IsFalse(dropped, "sub-millimetre noise is not a ledge");
 
             // A drop starts a fall even before the ground solve has run.
@@ -584,34 +634,186 @@ namespace VRCKatamari.Tests
         [Test]
         public void TheSweepMaskAndTheSupportTableNeverDisagree()
         {
-            // The invariant the ghost step broke: for every box top and every reference
-            // the mask can compute, "the mask drops it" and "the support table selects
-            // it" are the same answer. The references include the mask refresh gate's
-            // +/-5 mm wobble, so a jitter cannot split the two sides.
+            // The invariant the ghost step broke, now by construction: the support table
+            // reads the motor's box mask instead of re-running the step comparison. So
+            // for every top, every MASK reference, and every QUERY reference - including
+            // references a gate has not refreshed yet - the box is selected exactly when
+            // the mask says so. The query reference is deliberately allowed to differ
+            // from the mask reference: that is the C09 state, and the table must follow
+            // the mask rather than re-deciding on the newer reference.
             float limit = StepLimit(0.2997369f);
             float[] tops = { 0.0700f, 0.0749f, 0.0750f, 0.0800f, 0.0950f };
-            float[] references = { 0f, 0.004f, -0.004f, 0.02f };
+            float[] maskReferences = { 0f, 0.004f, -0.004f, 0.02f };
+            float[] queryReferences = { 0f, 0.02f, -0.004f };
             Vector3 probe = new Vector3(15f, 0.15f, -4f);
             for (int t = 0; t < tops.Length; t++)
             {
-                for (int r = 0; r < references.Length; r++)
+                for (int m = 0; m < maskReferences.Length; m++)
                 {
-                    Vector3[] minima = { new Vector3(12f, 0f, -6f) };
-                    Vector3[] maxima = { new Vector3(18f, tops[t], -2f) };
-                    bool maskStep = SupportSurfaceMath.IsStepWithinLimit(tops[t],
-                        references[r], limit);
-                    int id;
-                    Vector3 point;
-                    Vector3 normal;
-                    float height;
-                    int candidates;
-                    Assert.IsTrue(Resolve(probe, references[r], limit, minima, maxima, 1,
-                        out id, out point, out normal, out height, out candidates));
-                    bool supported = id == 1;
-                    Assert.AreEqual(maskStep, supported,
-                        "top=" + tops[t] + " reference=" + references[r]);
+                    for (int q = 0; q < queryReferences.Length; q++)
+                    {
+                        Vector3[] minima = { new Vector3(12f, 0f, -6f) };
+                        Vector3[] maxima = { new Vector3(18f, tops[t], -2f) };
+                        bool maskStep = SupportSurfaceMath.IsStepWithinLimit(tops[t],
+                            maskReferences[m], limit);
+                        int id;
+                        Vector3 point;
+                        Vector3 normal;
+                        float height;
+                        int candidates;
+                        Assert.IsTrue(ResolveWithMask(probe, queryReferences[q], limit,
+                            minima, maxima, new bool[] { maskStep }, 1, out id, out point,
+                            out normal, out height, out candidates));
+                        bool supported = id == 1;
+                        Assert.AreEqual(maskStep, supported, "top=" + tops[t]
+                            + " maskReference=" + maskReferences[m]
+                            + " queryReference=" + queryReferences[q]);
+                    }
                 }
             }
+
+            // A stale true (the C09 spawn state) still selects, and a stale false still
+            // refuses: the table never re-decides. One bit, two readers.
+            Vector3[] staleMinima = { new Vector3(12f, 0f, -6f) };
+            Vector3[] staleMaxima = { new Vector3(18f, 0.075f, -2f) };
+            int staleId;
+            Vector3 stalePoint;
+            Vector3 staleNormal;
+            float staleHeight;
+            int staleCandidates;
+            Assert.IsTrue(ResolveWithMask(probe, 0f, limit, staleMinima, staleMaxima,
+                new bool[] { true }, 1, out staleId, out stalePoint, out staleNormal,
+                out staleHeight, out staleCandidates));
+            Assert.AreEqual(1, staleId, "a stale steppable mask still supports");
+            Assert.IsTrue(ResolveWithMask(probe, 0.02f, limit, staleMinima, staleMaxima,
+                new bool[] { false }, 1, out staleId, out stalePoint, out staleNormal,
+                out staleHeight, out staleCandidates));
+            Assert.AreEqual(SupportSurfaceMath.GroundSurfaceId, staleId,
+                "a stale wall mask still refuses even at a reference that would accept it");
+        }
+
+        // --------------------------------------------------------------- 21 ----
+        [Test]
+        public void ALandedBallKeepsTheC09DeckInTheSweep()
+        {
+            // 2026-11-15 regression (the P1 fix did not hold in Unity): the lab spawns
+            // the ball 0.020 m above the floor, so the first mask reference is 0.020 and
+            // the 0.075 m deck is inside the 0.074934 m limit -> the mask drops it from
+            // the sweep. The ball lands a few steps later: its bottom, and therefore the
+            // reference, becomes 0, the support height never moved off 0, and the old
+            // gate (which watched the support height) never recomputed. The support table
+            // then used the new reference and refused the deck: a box removed from the
+            // sweep that cannot support = the ball drove through it.
+            float diameter = 0.2997369f;
+            float limit = StepLimit(diameter);
+            Assert.Less(limit, 0.075f, "the quantized limit is 0.074934 m");
+
+            // Spawn: the mask would call the deck a step.
+            Assert.IsTrue(SupportSurfaceMath.IsStepWithinLimit(0.075f, 0.02f, limit));
+            // Landed: the same predicate calls it a wall.
+            Assert.IsFalse(SupportSurfaceMath.IsStepWithinLimit(0.075f, 0f, limit));
+
+            // The gate must fire on the reference move even though the support height is
+            // unchanged (both steps have support height 0). This is the fix.
+            Assert.IsTrue(SupportSurfaceMath.StepMaskNeedsRefresh(true, false, diameter,
+                diameter, 0f, 0.02f),
+                "landing from a 20 mm spawn clearance changes the predicate's reference");
+            // And it does NOT fire on the small reference wobble the gate is for.
+            Assert.IsFalse(SupportSurfaceMath.StepMaskNeedsRefresh(true, false, diameter,
+                diameter, 0f, 0.004f));
+
+            // After the refresh the mask is false, so the deck stays in the sweep as a
+            // wall AND the support table refuses it: the two halves of C09 agree.
+            bool[] refreshedMask = new bool[1];
+            refreshedMask[0] = SupportSurfaceMath.IsStepWithinLimit(0.075f, 0f, limit);
+            Assert.IsFalse(refreshedMask[0]);
+            Vector3[] minima = { new Vector3(12f, 0f, -6f) };
+            Vector3[] maxima = { new Vector3(18f, 0.075f, -2f) };
+            int id;
+            Vector3 point;
+            Vector3 normal;
+            float height;
+            int candidates;
+            Assert.IsTrue(ResolveWithMask(new Vector3(15f, 0.15f, -4f), 0f, limit,
+                minima, maxima, refreshedMask, 1, out id, out point, out normal, out height,
+                out candidates));
+            Assert.AreEqual(SupportSurfaceMath.GroundSurfaceId, id,
+                "the refreshed wall is not a support");
+        }
+
+        // --------------------------------------------------------------- 22 ----
+        [Test]
+        public void TheStepMaskGateFollowsThePredicateInputs()
+        {
+            float diameter = 0.2997369f;
+            float limit = StepLimit(diameter);
+
+            // Validity and topology force a recompute.
+            Assert.IsTrue(SupportSurfaceMath.StepMaskNeedsRefresh(false, false, diameter,
+                diameter, 0f, 0f));
+            Assert.IsTrue(SupportSurfaceMath.StepMaskNeedsRefresh(true, true, diameter,
+                diameter, 0f, 0f));
+
+            // Diameter gate: 2 mm inclusive is still the same mask.
+            Assert.IsFalse(SupportSurfaceMath.StepMaskNeedsRefresh(true, false,
+                diameter + 0.0019f, diameter, 0f, 0f));
+            Assert.IsTrue(SupportSurfaceMath.StepMaskNeedsRefresh(true, false,
+                diameter + 0.0021f, diameter, 0f, 0f));
+
+            // Reference gate: 5 mm inclusive is still the same mask, 5.1 mm recomputes.
+            Assert.IsFalse(SupportSurfaceMath.StepMaskNeedsRefresh(true, false, diameter,
+                diameter, 0f, 0.0049f));
+            Assert.IsTrue(SupportSurfaceMath.StepMaskNeedsRefresh(true, false, diameter,
+                diameter, 0f, 0.0051f));
+
+            // The input that the old support-height gate could not see: the ball's own
+            // bottom moving while the selected support stays put.
+            Assert.IsTrue(SupportSurfaceMath.StepMaskNeedsRefresh(true, false, diameter,
+                diameter, 0f, 0.02f));
+
+            // A corrupt input recomputes rather than keeping an unverifiable mask.
+            Assert.IsTrue(SupportSurfaceMath.StepMaskNeedsRefresh(true, false, float.NaN,
+                diameter, 0f, 0f));
+            Assert.IsTrue(SupportSurfaceMath.StepMaskNeedsRefresh(true, false, diameter,
+                diameter, 0f, float.NaN));
+
+            // A mask recomputed with the mask reference reproduces the predicate for the
+            // same box in both directions.
+            Assert.IsTrue(SupportSurfaceMath.IsStepWithinLimit(0.075f, 0.02f, limit));
+            Assert.IsFalse(SupportSurfaceMath.IsStepWithinLimit(0.075f, 0f, limit));
+        }
+
+        // --------------------------------------------------------------- 23 ----
+        [Test]
+        public void DroppingDownTheSameSurfaceIsNotALostSurface()
+        {
+            // P3 caught this: rolling DOWN a 30 degree ramp at 4 m/s lowers the plane
+            // height under the probe by 46 mm per 20 ms step. The surface did not go
+            // away, so a same-id change is not a fall. Without the flag every downhill
+            // ramp step would enter the gravity-fall state.
+            bool dropped;
+            Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(0.654f, 0.7f, 0.01f, true,
+                out dropped));
+            Assert.IsFalse(dropped, "the same continuous surface is not a ledge");
+
+            // The same height change across a surface change IS a ledge.
+            Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(0.654f, 0.7f, 0.01f, false,
+                out dropped));
+            Assert.IsTrue(dropped);
+
+            // The trigger is still the height difference, not the id alone: a 10 mm
+            // change across surfaces is a ledge, a tiny one is not.
+            Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(0.689f, 0.7f, 0.01f, false,
+                out dropped));
+            Assert.IsTrue(dropped);
+            Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(0.699f, 0.7f, 0.01f, false,
+                out dropped));
+            Assert.IsFalse(dropped);
+
+            // Invalid input is refused and writes false.
+            Assert.IsFalse(SupportSurfaceMath.SupportDroppedAway(float.NaN, 0.7f, 0.01f,
+                false, out dropped));
+            Assert.IsFalse(dropped);
         }
     }
 }

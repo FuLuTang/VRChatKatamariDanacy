@@ -60,7 +60,7 @@
       "collision": "box",
       "absorbable": false,
       "support": true,
-      "notes": "boundary case: rise 0.075 == stepLimit(0.30) = 0.075, so this cell answers whether the step rule is <= or <. Top face is support; the west face is the wall when rise > stepLimit"
+      "notes": "boundary case, corrected 2026-11-15: the 0.30 m preset quantizes to D = 0.2997369 (one volume unit = 0.0041 m^3), so stepLimit = 0.0749342 < 0.075. The deck is therefore a WALL for the 0.30 m ball: it stays in the sweep and must not be a support (the a9aedf6 ghost step is exactly this cell). Equality (rise == stepLimit, both directions) is pinned offline, not by this cell; to test the equality case in world, lower the deck to 0.0749 m or use a 0.300 m-exact test ball. Top face is support only for a ball large enough that 0.25*D >= 0.075"
     },
     {
       "id": "ground",

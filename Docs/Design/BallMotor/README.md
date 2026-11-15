@@ -20,7 +20,7 @@
 |---|---|---|---|---|
 | 1 | `ControlIntentMath` | 原始输入 + 上帧边沿状态 | 意图序列 | 一切的下游来源；去抖/菜单抑制只在这里发生 |
 | 2 | `BallMotionMath` | 意图里的 `Move2D` + 当前速度 | 新速度、请求位移 | 位移决定后面所有几何 |
-| 3 | `SweepMath` | 请求位移 + 障碍数组（P1：先由 `SupportSurfaceMath.IsSteppable` 决定哪些静态盒是台阶并从数组里剔除） | 实际位移、是否卡住、墙面接触法线（去速用） | **先扫掠再落地面**：被挡住时不能把球放进障碍里；只有实际位移可以用于视觉滚动。去速必须在扫掠之后，否则位移用的还是撞墙的请求。台阶掩码必须在扫掠**之前**刷新，因为「能上」的含义就是「允许球心进入扩张 AABB」 |
+| 3 | `SweepMath` | 请求位移 + 障碍数组（P1：扫掠**前**用 `SupportSurfaceMath.IsStepWithinLimit` 算出静态盒掩码，掩码为真的盒从数组里剔除；P3 起斜面从不进这个数组） | 实际位移、是否卡住、墙面接触法线（去速用） | **先扫掠再落地面**：被挡住时不能把球放进障碍里；只有实际位移可以用于视觉滚动。去速必须在扫掠之后，否则位移用的还是撞墙的请求。台阶掩码必须在扫掠**之前**刷新，因为「能上」的含义就是「允许球心进入扩张 AABB」；掩码是静态盒的**唯一**台阶结论，支撑表直接读它（P1 第二次 C09 修复） |
 | 4 | `GroundContactMath` | 扫掠后中心 + **本步选中的支撑面**（P1；关掉地形支撑时仍是原始地面平面）+ 径向代理外壳（长物件 AABB 角点，按突出上限夹紧） | 贴地后的中心、支持高度、法线修正 | 支持高度依赖最终位置，先移动再贴地。选面必须在扫掠之后（用扫掠后的 XZ），下落预算必须在调用之前算好（见「地形支撑接线」） |
 | 5 | `PickupAbsorbMath` | 碰撞半径 + 候选物件尺寸/位置 | 吸收/拒绝 + 每件体积 | 必须在位置上定稿之后判，否则会隔空吸到 |
 | 6 | `GrowthLedgerMath` | 已确认的吸收事件 | 已确认体积、交分事务 | 只有确认值能进分数；拾取结算在位置定稿后 |
@@ -202,18 +202,18 @@ StepBall:
 | `terrainSupportEnabled` | **true** | 总开关。关掉时与 P1 之前逐位一致（四条见下） |
 | `stepHeightOverBallDiameter` | **0.25** | 比例，不是高度：`stepLimit = 0.25 × 语义直径`（数据/校验器/关卡门同一口径） |
 | `maxStepUpLiftWorldM` | 0.6 m | 单次跨级抬升护栏（> 0.25 × 2.2 = 0.55，正常碰不到） |
-| `stepHysteresisM` | 0.02 m | 台阶单向迟滞（判成台阶后要超 `limit + 0.02` 才回到墙） |
-| `stepStickMarginM` | 0.01 m | 「球已在盒顶之上」余量，避免扫掠把站在台阶上的球推出去 |
 | `minStepHeightM` | 0.005 m | 小于它的落差只是数值噪声，不给大抬升（**不是**地图的 0.05 m 分类门） |
+| `maxSupportSlopeDegrees` | **45°** | P3 斜面坡度护栏；超过则 `AddRamp` 带原因码拒绝。硬上限 51.3° 由单步钳位反推，45 是 30% 余量（PROVISIONAL） |
+| `rampTangentialGravityScale` | **0** | P3 可配置切向重力（0 = 不加，1 = g·sinθ）；只对 ramp 支撑、非下落生效。默认 0 逐位等于 P1 行为 |
 | `gravityMps2` | **9.81 m/s²** | 竖直重力（只有下落时作用；没有跳跃） |
 | `maxFallSpeedMps` | 40 m/s | 下落速度护栏（单步 ≤0.8 m），不是产品值 |
-| `supportDropTriggerM` | **0.01 m** | 「支撑面掉走」的容差；更小的落差由 `maxDropPerStep` 一步吃掉 |
+| `supportDropTriggerM` | **0.01 m** | 「支撑面掉走」的容差；**仅当选中面 id 变化**时才算掉走（沿坡下滚不是）。更小的落差由 `maxDropPerStep` 一步吃掉 |
 
-**公开方法（P1/P2）**：`SetGroundPlane(n, o)`、`SetTerrainSupportEnabled(bool)` / `IsTerrainSupportEnabled()`、`GetStepHeightLimitWorldM()`、`GetSupportSurfaceHeightWorldM()`（**支撑面**高度，不是球心减支撑长度）、`GetSupportNormalWorld()`、`GetSupportSurfaceCount()`（本步 band 内面数；地图 0 的 `active_surface_max` 就是它）、`GetSupportSurfaceId()`（0 = 地面，1+i = 第 i 个静态盒，100+i = 第 i 个道具支撑槽）、`GetSupportKind()`（0 地面 / 1 静态盒 / 3 道具支撑 / -1 未解出；2 斜面留给 P3）、`GetStepMaskRebuildCount()`（掩码翻转引起的扫掠数组重建次数）、`IsFalling()`。`LevelArenaHost` 侧另有 `Reapply()`：清表后重注册，地图 0 的「一格一注册」靠它。P2 的 `SetSupportProps` / `ClearSupportProps`、`GetSupportPropCount()` / `GetSupportPropCapacity()`、`GetSupportPropRefusalCount()` / `GetSupportPropRefusalReason()`、`IsSupportingAProp()` 已实现（道具顶面进同一张支撑表）；P3 的 `AddRamp` 仍然**没有**实现，不要在这里找。
+**公开方法（P1/P2/P3）**：`SetGroundPlane(n, o)`、`SetTerrainSupportEnabled(bool)` / `IsTerrainSupportEnabled()`、`GetStepHeightLimitWorldM()`、`GetSupportSurfaceHeightWorldM()`（**支撑面**高度，不是球心减支撑长度）、`GetSupportNormalWorld()`、`GetSupportSurfaceCount()`（本步 band 内面数；地图 0 的 `active_surface_max` 就是它）、`GetSupportSurfaceId()`（0 = 地面，1+i = 第 i 个静态盒，**10+i = 第 i 个静态斜面**，100+i = 第 i 个道具支撑槽）、`GetSupportKind()`（0 地面 / 1 静态盒 / **2 斜面** / 3 道具支撑 / -1 未解出）、`GetStepMaskRebuildCount()`（掩码翻转引起的扫掠数组重建次数）、`IsFalling()`。`LevelArenaHost` 侧另有 `Reapply()`：清表后重注册，地图 0 的「一格一注册」靠它。P2 的 `SetSupportProps` / `ClearSupportProps`、`GetSupportPropCount()` / `GetSupportPropCapacity()`、`GetSupportPropRefusalCount()` / `GetSupportPropRefusalReason()`、`IsSupportingAProp()` 已实现（道具顶面进同一张支撑表）；P3 的 `AddRamp(center, normal, right, halfWidth, halfRun)` / `ClearRamps()` / `GetRampCount()` / `GetRampCapacity()` / `GetRampRefusalCount()` / `GetLastRampRefusalCode()` / `GetLastRampRefusalReason()` / `GetLastRampRefusalSlopeDegrees()` / `GetMaxSupportSlopeDegrees()` 已实现（斜面只支撑、不进扫掠；容量 4）。
 
 **关掉开关 = 逐位一致**：①掩码不刷新、`RebuildObstacles` 按注册顺序复制全部静态盒；②`GroundContactMath` 拿原始 `(groundPlaneNormal, groundPlaneOffset)`；③升降上限还是 `maxLiftPerStep` / `maxProxyLiftPerStep` / `maxDropPerStep`，`isFalling` 恒 false；④`VisualRollMath` 拿原始地面法线。运行期切换会清掩码并重建扫掠数组，`TeleportTo` 也会重置支撑参考与下落状态（传送进空气 → 真下落，不是 0.1/步 缓降）。
 
-**每步成本（常数，与已吸物件数无关）**：掩码门控 ≤8 次比较（尺寸变化 >2 mm / 支撑面变化 >5 mm / 盒集合变化才重算）；选面 ≤8 盒 × 约 15 flops + 1 次归一化，无分配；重力约 10 flops。掩码变化才重建扫掠数组（现有实现本来就会在条数变化时 `new Vector3[]`，P4 实测 GC）。
+**每步成本（常数，与已吸物件数无关）**：掩码门控 ≤8 次比较（直径变化 >2 mm / **参考高度**变化 >5 mm / 盒集合变化才重算）；选面 ≤8 盒（只读掩码）+ ≤4 斜面 ×（1 次归一化 + 高度 + 足迹）+ 6 道具，无分配；重力约 10 flops。掩码变化才重建扫掠数组（现有实现本来就会在条数变化时 `new Vector3[]`，P4 实测 GC）。
 
 **与小棍的接法**：小棍决定「球的哪个点最低」，支撑查询决定「那个点下面的面在哪」；本层喂 `GroundContactMath` 的是支撑面的 `(n, dot(n,P))`，代理点数组照旧。跨级那一步用 `min(stepLimit, maxStepUpLiftWorldM)` 覆盖 0.04 的代理上限，下一步立刻回到 0.04，所以长棍仍然弹不动球。**镜头仍读空代理数组解出的核心球心**，不跟台阶/下落起伏（低通照旧）。
 
@@ -309,7 +309,9 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 | `stuckTimeoutSeconds` | 1.5 | 本层临时恢复策略 |
 | `terrainSupportEnabled` | true | P1 地形支撑总开关（2026-11-15 用户改定；旧 lab 显式关） |
 | `stepHeightOverBallDiameter` / `maxStepUpLiftWorldM` | 0.25 / 0.6 m | 台阶比例（与 `layout.json` 同源）与单次跨级抬升护栏；PROVISIONAL |
-| `stepHysteresisM` / `stepStickMarginM` / `minStepHeightM` | 0.02 / 0.01 / 0.005 m | 三条防抖：单向迟滞、已在顶上、去噪；PROVISIONAL |
+| `minStepHeightM` | 0.005 m | 数值去噪（小于它不算跨级）；**不是**地图的 0.05 m 分类门。单向迟滞 `stepHysteresisM` 与「已在顶上」`stepStickMarginM` 已于 2026-11-15 删除（C09 回归，见 TERRAIN_SUPPORT §8.1 D4/D5） |
+| `maxSupportSlopeDegrees` | 45° | P3 斜面坡度护栏（PROVISIONAL；硬上限 51.3°） |
+| `rampTangentialGravityScale` | 0 | P3 切向重力比例（默认关闭；U3 试玩用） |
 | `gravityMps2` / `maxFallSpeedMps` / `supportDropTriggerM` | 9.81 m/s² / 40 m/s / 0.01 m | 下落重力、速度护栏、掉走容差；PROVISIONAL（原作无测量） |
 
 ### 缺口（数学层没提供、本层没有自己编）

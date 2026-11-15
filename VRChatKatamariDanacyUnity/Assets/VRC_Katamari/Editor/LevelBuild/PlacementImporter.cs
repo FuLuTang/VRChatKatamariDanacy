@@ -123,6 +123,7 @@ namespace VRCKatamari.Editor.LevelBuild
         private const string GroundOffsetField = "groundOffset";
         private const string BoundaryWallsField = "boundaryWalls";
         private const string StaticBoxesField = "staticBoxes";
+        private const string RampBoxesField = "rampBoxes";
         private const string AllowedKindsField = "allowedKinds";
 
         // ------------------------------------------------------------------ DTO ---
@@ -920,10 +921,9 @@ namespace VRCKatamari.Editor.LevelBuild
         /// A <c>box</c> entry becomes a real cube with a real <see cref="BoxCollider"/>: the
         /// collider's <c>bounds</c> are what the arena bakes into the motor's min/max once, so
         /// the ball needs no runtime physics for it. A <c>ramp</c> entry gets the same
-        /// treatment but is not registered yet - <c>LevelArenaHost</c> has no
-        /// <c>rampBoxes</c> in P1 (the Lead's note); it is deliberately kept out of
-        /// <c>staticBoxes</c> as well, because a ramp registered as a box puts an invisible
-        /// wall at its foot (TERRAIN_SUPPORT 7.7).
+        /// collider but is wired into <c>LevelArenaHost.rampBoxes</c>, never
+        /// <c>staticBoxes</c>: a ramp registered as a box puts the radius-expanded AABB of
+        /// the tilted board at its foot, an invisible wall (TERRAIN_SUPPORT 5.5/7.7).
         /// </para>
         /// </remarks>
         private static bool ApplyStructures(PlacementDocument doc, Transform structuresRoot,
@@ -1136,12 +1136,6 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 collider.center = Vector3.zero;
                 collider.size = Vector3.one;
-            }
-
-            if (string.Equals(structure.role, "ramp", StringComparison.Ordinal))
-            {
-                report.Note("ramp '" + structure.id + "' has its BoxCollider, but LevelArenaHost has no " +
-                            "rampBoxes in P1: it is not registered with the motor yet (P3)");
             }
 
             return true;
@@ -1696,9 +1690,10 @@ namespace VRCKatamari.Editor.LevelBuild
         /// The fields and their meanings are the component's, not this tool's:
         /// <c>groundNormal/groundOffset</c> for the floor, <c>boundaryWalls</c> (one Transform
         /// per wall, local +Z pointing into the field, origin on the collision plane),
-        /// <c>staticBoxes</c> (BoxColliders whose bounds the host bakes once), and
-        /// <c>allowedKinds</c> (the whitelist the motor receives). A ramp is deliberately not
-        /// in <c>staticBoxes</c> - the component has no ramp slot yet.
+        /// <c>staticBoxes</c> (BoxColliders whose bounds the host bakes once),
+        /// <c>rampBoxes</c> (BoxColliders the host bakes into support-only oriented planes),
+        /// and <c>allowedKinds</c> (the whitelist the motor receives). A ramp is deliberately
+        /// never in <c>staticBoxes</c>: a sweep box at the ramp foot is an invisible wall.
         /// </para>
         /// <para>
         /// Writing an UdonSharp behaviour is a two-step contract: fill the proxy's serialized
@@ -1741,19 +1736,22 @@ namespace VRCKatamari.Editor.LevelBuild
             SerializedProperty groundOffset = serialized.FindProperty(GroundOffsetField);
             SerializedProperty walls = serialized.FindProperty(BoundaryWallsField);
             SerializedProperty boxes = serialized.FindProperty(StaticBoxesField);
+            SerializedProperty ramps = serialized.FindProperty(RampBoxesField);
             SerializedProperty kinds = serialized.FindProperty(AllowedKindsField);
 
             if (groundNormal == null || groundOffset == null || walls == null || boxes == null ||
-                kinds == null)
+                ramps == null || kinds == null)
             {
                 report.Error("LevelArenaHost is missing one of " + GroundNormalField + "/" +
                              GroundOffsetField + "/" + BoundaryWallsField + "/" + StaticBoxesField +
-                             "/" + AllowedKindsField + "; the arena arrays were not filled");
+                             "/" + RampBoxesField + "/" + AllowedKindsField +
+                             "; the arena arrays were not filled");
                 return;
             }
 
             var wallList = new List<Transform>();
             var boxList = new List<BoxCollider>();
+            var rampList = new List<BoxCollider>();
             Vector3 floorNormal = Vector3.up;
             float floorOffset = 0f;
             bool hasGround = false;
@@ -1786,16 +1784,22 @@ namespace VRCKatamari.Editor.LevelBuild
                         continue;
                     }
 
-                    if (string.Equals(structure.role, "ramp", StringComparison.Ordinal))
+                    BoxCollider collider = found.GetComponent<BoxCollider>();
+                    if (collider == null)
                     {
-                        continue;   // no ramp slot in LevelArenaHost yet (P3)
+                        continue;
                     }
 
-                    BoxCollider collider = found.GetComponent<BoxCollider>();
-                    if (collider != null)
+                    // A ramp is support-only (P3): it goes into its own array, never into
+                    // staticBoxes, because a sweep box of the tilted board is the invisible
+                    // wall at the ramp foot (TERRAIN_SUPPORT 5.5).
+                    if (string.Equals(structure.role, "ramp", StringComparison.Ordinal))
                     {
-                        boxList.Add(collider);
+                        rampList.Add(collider);
+                        continue;
                     }
+
+                    boxList.Add(collider);
                 }
             }
 
@@ -1814,6 +1818,7 @@ namespace VRCKatamari.Editor.LevelBuild
             kindList.Sort(StringComparer.Ordinal);
             wallList.Sort((left, right) => string.CompareOrdinal(left.name, right.name));
             boxList.Sort((left, right) => string.CompareOrdinal(left.name, right.name));
+            rampList.Sort((left, right) => string.CompareOrdinal(left.name, right.name));
 
             groundNormal.vector3Value = floorNormal;
             groundOffset.floatValue = floorOffset;
@@ -1828,6 +1833,12 @@ namespace VRCKatamari.Editor.LevelBuild
             for (int i = 0; i < boxList.Count; i++)
             {
                 boxes.GetArrayElementAtIndex(i).objectReferenceValue = boxList[i];
+            }
+
+            ramps.arraySize = rampList.Count;
+            for (int i = 0; i < rampList.Count; i++)
+            {
+                ramps.GetArrayElementAtIndex(i).objectReferenceValue = rampList[i];
             }
 
             kinds.arraySize = kindList.Count;
@@ -1857,7 +1868,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
             report.ArenaWired = true;
             report.ArenaBoxes = boxList.Count;
-            report.ArenaRamps = 0;
+            report.ArenaRamps = rampList.Count;
             report.ArenaPlanes = wallList.Count;
             report.ArenaKinds = kindList.Count;
         }

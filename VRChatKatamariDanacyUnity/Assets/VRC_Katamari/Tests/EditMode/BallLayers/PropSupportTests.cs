@@ -44,6 +44,27 @@ namespace VRCKatamari.Tests
             return role;
         }
 
+        private static float[] NoFloats()
+        {
+            return new float[0];
+        }
+
+        // The mask the motor's sweep would compute at this reference (one call to the one
+        // step predicate per box). The prop cases below pass empty box tables in most
+        // cases; the two that use a box still need a mask because the support table reads
+        // the mask for static boxes instead of re-deciding them.
+        private static bool[] MaskFor(Vector3[] maxima, int boxCount, float referenceHeight,
+            float stepLimit)
+        {
+            bool[] mask = new bool[boxCount];
+            for (int i = 0; i < boxCount; i++)
+            {
+                mask[i] = SupportSurfaceMath.IsStepWithinLimit(maxima[i].y, referenceHeight,
+                    stepLimit);
+            }
+            return mask;
+        }
+
         private static bool Resolve(Vector3 probe, float referenceHeight, float stepLimit,
             Vector3[] boxMinima, Vector3[] boxMaxima, int boxCount,
             Vector3[] propMinima, Vector3[] propMaxima, int propCount,
@@ -51,8 +72,11 @@ namespace VRCKatamari.Tests
             out int candidateCount)
         {
             return SupportSurfaceMath.TryResolveSupport(probe, referenceHeight, stepLimit,
-                Up, 0f, boxMinima, boxMaxima, boxCount, propMinima, propMaxima, propCount,
-                out surfaceId, out point, out normal, out height, out candidateCount);
+                Up, 0f, boxMinima, boxMaxima,
+                MaskFor(boxMaxima, boxCount, referenceHeight, stepLimit), boxCount,
+                new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
+                propMinima, propMaxima, propCount, out surfaceId, out point, out normal,
+                out height, out candidateCount);
         }
 
         // ---------------------------------------------------------------- 1 ----
@@ -300,7 +324,7 @@ namespace VRCKatamari.Tests
             // 3. That drop starts the P1 fall; there is no second fall rule.
             bool dropped;
             Assert.IsTrue(SupportSurfaceMath.SupportDroppedAway(height, previousSupportHeight,
-                0.01f, out dropped));
+                0.01f, false, out dropped));
             Assert.IsTrue(dropped);
             Assert.IsTrue(SupportSurfaceMath.ResolveFallState(false, dropped, false, false));
 

@@ -134,7 +134,28 @@ namespace VRCKatamari.BallMotor
         // per 20 ms step), which is flicker, not physics. A centimetre is below anything
         // the ball should visibly fall off, and such a drop is taken by the normal
         // maxDropPerStep clamp in one step, i.e. reads as glued to the floor.
+        // It only applies when the SELECTED SURFACE changed: a ramp or tilted ground
+        // lowers the plane under the moving probe as the ball rolls along it (a 30 deg
+        // ramp at 4 m/s drops 46 mm per step) and that is not a lost surface.
         [SerializeField] private float supportDropTriggerM = 0.01f;
+
+        // ---- Static ramps (P3: support only, never sweep obstacles) ----
+        // The guard-rail on a ramp's slope, degrees (PROVISIONAL). 45 is the design's
+        // 30%-margin value over the hard 51.3 degree ceiling that the one-step clamps
+        // imply: tan(theta) <= min(maxLiftPerStep, maxDropPerStep) / (maxSpeedMps *
+        // fixedStepSeconds) = 0.1 / (4 * 0.02) = 1.25. Changing maxLiftPerStep,
+        // maxDropPerStep, maxSpeedMps or fixedStepSeconds changes that ceiling, which is
+        // why this is serialized and NOT hard-coded in the math: SupportSurfaceMath takes
+        // it as a parameter. A steeper ramp is refused with a reason code, never
+        // registered (the ball would climb a wall) and never silently ignored (the ball
+        // would pass through).
+        [SerializeField] private float maxSupportSlopeDegrees = SupportSurfaceMath.DefaultMaxSupportSlopeDegrees;
+        // Optional downhill acceleration on a ramp, as a fraction of g * sin(slope).
+        // PROVISIONAL and OFF by default: the design's U3 recommendation is "a ramp is a
+        // channel, the ball does not slide down by itself", and the P1 motion contract is
+        // planar velocity only. A pilot can raise this without touching the motion layer;
+        // at 0 the step is bit-for-bit the P1 behaviour.
+        [SerializeField] private float rampTangentialGravityScale = 0f;
 
         // ---- Radial proxy caps and long-object admission (PROVISIONAL, unmeasured) ----
         // The protrusion cap is relative to the core radius (the contract's rule) and also
@@ -376,6 +397,26 @@ namespace VRCKatamari.BallMotor
         private int supportPropRefusalCount;
         private string supportPropRefusalReason;
 
+        // ---- Static ramps (P3): support-only oriented planes ----
+        // These are NOT sweep obstacles and share no slots with the static boxes. A ramp
+        // registered as a box would put the radius-expanded AABB of the whole tilted board
+        // at the ramp foot: the invisible wall of design §5.5. The parallel arrays are the
+        // UdonSharp shape (no user structs); the support query reads exactly rampCount
+        // entries. The centre is a point on the WALKING PLANE (the box's +Y face), not the
+        // box centre, so the ball sits on the board rather than half a thickness inside it.
+        private Vector3[] rampCenterBuffer;
+        private Vector3[] rampNormalBuffer;
+        private Vector3[] rampRightBuffer;
+        private float[] rampHalfWidthBuffer;
+        private float[] rampHalfRunBuffer;
+        private int rampCount;
+        // Refusals are counted separately from SignalOverflow for the same reason prop
+        // refusals are, except for capacity: a fifth ramp is a scene-wiring error and does
+        // latch the one-shot overflow signal, exactly like a ninth static box.
+        private int rampRefusalCount;
+        private int rampRefusalCode;
+        private float rampRefusalSlopeDegrees;
+
         private Vector3[] planeNormals;
         private float[] planeOffsets;
         private Vector3[] boxMinima;
@@ -396,18 +437,23 @@ namespace VRCKatamari.BallMotor
         // carries its result and the two memories the design asks for (which box is a
         // step, and which surface the ball stood on last step).
         //
-        // boxIsSteppable is indexed like the static box buffers and caches this step's
-        // answer for the sweep arrays. The support table does NOT read this array: it calls
-        // the same SupportSurfaceMath.IsStepWithinLimit with the same reference, so the two
-        // sides are one implementation rather than two readers of one number (§4.3). A true
-        // entry is excluded from the sweep and is a support candidate; a false entry stays
-        // a wall.
+        // boxIsSteppable is indexed like the static box buffers, caches this step's
+        // answer for the sweep arrays, AND is the support table's candidacy answer for a
+        // static box (TryResolveSupport reads it). One conclusion, two readers: a true
+        // entry is excluded from the sweep and is a support candidate, a false entry stays
+        // a wall. Computing the comparison twice was the P1 C09 ghost step (the mask's
+        // reference and the query's reference could drift apart while the ball landed);
+        // see SupportSurfaceMath.StepMaskNeedsRefresh for the gate.
         private bool[] boxIsSteppable;
         private bool stepMaskValid;
         private bool stepMaskBoxesDirty;
         private int stepMaskRebuildCount;
         private float stepMaskDiameterWorldM;
-        private float stepMaskSupportHeightWorldM;
+        // The REFERENCE the mask was computed with, i.e. the predicate's own input
+        // (SupportReferenceHeight of the last support and the ball's bottom), not the
+        // selected support height. Landing from a spawn clearance moves the reference
+        // without moving the support, so a support-height gate could not see it.
+        private float stepMaskReferenceWorldM;
         // Selected support of the current step, as the plane pair the ground solve
         // consumes plus the diagnostics the host and the lab read.
         private int supportSurfaceId;
@@ -677,6 +723,11 @@ namespace VRCKatamari.BallMotor
             blockingMaximumBuffer = new Vector3[MaxBlockingBoxCount];
             supportPropMinimumBuffer = new Vector3[MaxSupportPropCount];
             supportPropMaximumBuffer = new Vector3[MaxSupportPropCount];
+            rampCenterBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
+            rampNormalBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
+            rampRightBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
+            rampHalfWidthBuffer = new float[SupportSurfaceMath.MaxRampCount];
+            rampHalfRunBuffer = new float[SupportSurfaceMath.MaxRampCount];
             planeCount = 0;
             boxCount = 0;
             blockingBoxCount = 0;
@@ -685,6 +736,10 @@ namespace VRCKatamari.BallMotor
             supportPropCount = 0;
             supportPropRefusalCount = 0;
             supportPropRefusalReason = "";
+            rampCount = 0;
+            rampRefusalCount = 0;
+            rampRefusalCode = SupportSurfaceMath.RampRefusalNone;
+            rampRefusalSlopeDegrees = 0f;
             RebuildObstacles();
             contactCenters = new Vector3[ContactCapacity];
             contactPoints = new Vector3[ContactCapacity];
@@ -703,7 +758,7 @@ namespace VRCKatamari.BallMotor
             stepMaskBoxesDirty = true;
             stepMaskRebuildCount = 0;
             stepMaskDiameterWorldM = 0f;
-            stepMaskSupportHeightWorldM = 0f;
+            stepMaskReferenceWorldM = 0f;
             supportSurfaceId = SupportSurfaceMath.GroundSurfaceId;
             supportSurfacePointWorld = new Vector3(0f, groundPlaneOffset, 0f);
             supportSurfaceNormalWorld = new Vector3(0f, 1f, 0f);
@@ -938,6 +993,24 @@ namespace VRCKatamari.BallMotor
             //     The selection is a pure call into SupportSurfaceMath; this layer only
             //     carries the surface pair into stage 4 and the gravity state.
             ResolveTerrainSupport(sweptCenter);
+
+            // 3.6 Optional ramp downhill acceleration (PROVISIONAL, off by default).
+            //     The motion layer produced this step's displacement already, so a
+            //     non-zero scale takes effect from the next step (a 20 ms lag). At the
+            //     default scale 0 this block is skipped and the step is bit-for-bit the
+            //     P1 behaviour. The decision math lives in SupportSurfaceMath; this layer
+            //     only carries the velocity back.
+            if (terrainSupportEnabled && !isFalling && rampTangentialGravityScale > 0f &&
+                SupportSurfaceMath.IsRampSurfaceId(supportSurfaceId))
+            {
+                Vector3 slopeVelocity;
+                if (SupportSurfaceMath.TryApplyRampTangentialGravity(planarVelocity,
+                    supportSurfaceNormalWorld, gravityMps2, rampTangentialGravityScale, dt,
+                    maxSpeedMps, out slopeVelocity))
+                {
+                    planarVelocity = slopeVelocity;
+                }
+            }
 
             // 4. GroundContactMath: support height and the normal-only correction.
             //
@@ -1195,13 +1268,23 @@ namespace VRCKatamari.BallMotor
         /// the sweep but unsupportable" state cannot exist.
         /// </para>
         /// <para>
-        /// Frequency gate (design §3.5): recompute only when the box set changed, the
-        /// semantic diameter moved by more than 2 mm, or the reference support height
-        /// moved by more than 5 mm. The mask uses the previous step's support height,
-        /// which is the accepted one-step lag; the rebuild of the sweep arrays only runs
-        /// when the mask actually changed. The gate is the ONLY anti-jitter device: the
-        /// one-way hysteresis it used to sit next to was removed on 2026-11-15 because it
-        /// could diverge from the support table (C09 ghost step).
+        /// Frequency gate: recompute only when the box set changed, the semantic diameter
+        /// moved by more than 2 mm, or the REFERENCE moved by more than 5 mm. The gate is
+        /// <see cref="SupportSurfaceMath.StepMaskNeedsRefresh"/>, whose inputs are the
+        /// predicate's own inputs (reference height and the diameter that becomes the
+        /// limit) rather than the selected support height. That distinction is the second
+        /// half of the 2026-11-15 C09 fix: a ball spawning 20 mm above the floor has the
+        /// spawn clearance as its reference, lands within a few steps, and the support
+        /// height never moves off 0 - a support-height gate would never fire, while the
+        /// reference gate fires on the first landed step.
+        /// </para>
+        /// <para>
+        /// The mask result is ALSO the support table's answer for static boxes
+        /// (<see cref="SupportSurfaceMath.TryResolveSupport"/> takes this array), so a box
+        /// dropped from the sweep is always selectable and a wall is never selectable.
+        /// The rebuild of the sweep arrays only runs when the mask actually changed. The
+        /// gate is the ONLY anti-jitter device: the one-way hysteresis the mask used to
+        /// have was removed on 2026-11-15 because it could diverge from the support table.
         /// </para>
         /// </remarks>
         private void RefreshStepMask()
@@ -1215,30 +1298,21 @@ namespace VRCKatamari.BallMotor
             }
             stepHeightLimitWorldM = limit;
 
-            bool needRecompute = !stepMaskValid || stepMaskBoxesDirty;
-            if (!needRecompute)
+            // The reference is the predicate's own input: the higher of the previous
+            // support and the ball's own bottom (pre-sweep, the accepted one-step lag).
+            float reference = SupportSurfaceMath.SupportReferenceHeight(lastSupportHeightWorldM,
+                ballCenterWorld.y - collisionRadiusWorldM);
+            if (!SupportSurfaceMath.StepMaskNeedsRefresh(stepMaskValid, stepMaskBoxesDirty,
+                semanticDiameterWorldM, stepMaskDiameterWorldM, reference,
+                stepMaskReferenceWorldM))
             {
-                if (Mathf.Abs(semanticDiameterWorldM - stepMaskDiameterWorldM) > 0.002f)
-                {
-                    needRecompute = true;
-                }
-                else if (Mathf.Abs(lastSupportHeightWorldM - stepMaskSupportHeightWorldM) > 0.005f)
-                {
-                    needRecompute = true;
-                }
+                return;
             }
-            if (!needRecompute) return;
 
             stepMaskValid = true;
             stepMaskBoxesDirty = false;
             stepMaskDiameterWorldM = semanticDiameterWorldM;
-            stepMaskSupportHeightWorldM = lastSupportHeightWorldM;
-
-            // The reference is the one SupportSurfaceMath.TryResolveSupport will compare
-            // against after the sweep. It uses the current (pre-sweep) centre; the support
-            // query uses the swept centre, and the design accepts that one-step lag.
-            float reference = SupportSurfaceMath.SupportReferenceHeight(lastSupportHeightWorldM,
-                ballCenterWorld.y - collisionRadiusWorldM);
+            stepMaskReferenceWorldM = reference;
 
             bool changed = false;
             for (int i = 0; i < boxCount; i++)
@@ -1301,6 +1375,9 @@ namespace VRCKatamari.BallMotor
         private void ResolveTerrainSupport(Vector3 center)
         {
             if (boxMinimumBuffer == null || boxMaximumBuffer == null) return;
+            // The support query reads the step mask for the static boxes; before Start
+            // allocates it, there is nothing to resolve against.
+            if (boxIsSteppable == null) return;
             if (!hasSupportFrame)
             {
                 supportSurfaceId = SupportSurfaceMath.NoSurfaceId;
@@ -1344,9 +1421,14 @@ namespace VRCKatamari.BallMotor
             // query is bit-for-bit the P1 query (an empty prop list) and a diagnostic
             // read can never claim a prop is supporting a ball the feature ignores.
             int activePropCount = terrainSupportEnabled ? supportPropCount : 0;
+            // Ramps obey the same switch as the rest of terrain support: off means the
+            // query sees an empty ramp table, so the result is exactly the P1/P2 one.
+            int activeRampCount = terrainSupportEnabled ? rampCount : 0;
             if (SupportSurfaceMath.TryResolveSupport(center, bandReference, limit,
                 groundPlaneNormal, groundPlaneOffset, boxMinimumBuffer, boxMaximumBuffer,
-                boxCount, supportPropMinimumBuffer, supportPropMaximumBuffer,
+                boxIsSteppable, boxCount, rampCenterBuffer, rampNormalBuffer, rampRightBuffer,
+                rampHalfWidthBuffer, rampHalfRunBuffer, activeRampCount,
+                supportPropMinimumBuffer, supportPropMaximumBuffer,
                 activePropCount, out id, out point, out normal, out height, out candidates))
             {
                 supportSurfaceId = id;
@@ -1364,9 +1446,15 @@ namespace VRCKatamari.BallMotor
             }
 
             bool dropped;
+            // A drop only counts when the SELECTED SURFACE changed. A continuous ramp (or
+            // a tilted ground plane) lowers the height under the moving probe as the ball
+            // rolls along it; treating that as a lost surface would put the ball into the
+            // gravity-fall state on every downhill step (a 30 degree ramp at 4 m/s drops
+            // 46 mm per 20 ms step). A real ledge changes the surface id.
+            bool sameSurface = previousSupportSurfaceId == supportSurfaceId;
             if (terrainSupportEnabled &&
                 SupportSurfaceMath.SupportDroppedAway(supportSurfaceHeightWorldM,
-                    lastSupportHeightWorldM, supportDropTriggerM, out dropped))
+                    lastSupportHeightWorldM, supportDropTriggerM, sameSurface, out dropped))
             {
                 isFalling = SupportSurfaceMath.ResolveFallState(isFalling, dropped, false, false);
             }
@@ -2058,6 +2146,137 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// Registers one static ramp: an oriented walking plane plus a horizontal
+        /// footprint, a support surface ONLY (never a sweep obstacle).
+        /// </summary>
+        /// <param name="center">
+        /// A point on the walking plane (LevelArenaHost passes the box's +Y face centre
+        /// from <see cref="SupportSurfaceMath.TryBakeRamp"/>), not the box centre.
+        /// </param>
+        /// <param name="normal">Plane normal; must point up (n.y &gt; 0.05).</param>
+        /// <param name="right">The footprint's horizontal axis; only its XZ projection is used.</param>
+        /// <param name="halfWidth">Half the footprint along <paramref name="right"/>, metres.</param>
+        /// <param name="halfRun">Half the HORIZONTAL run along the downhill direction, metres.</param>
+        /// <returns>
+        /// True when the ramp is now registered; false when it was refused, in which case
+        /// nothing is written and <see cref="GetLastRampRefusalCode"/> says why.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// This is a SEAM, not a rule: the acceptance decision (upward normal, slope
+        /// guard, degenerate geometry) is
+        /// <see cref="SupportSurfaceMath.TryValidateRamp"/>, and the capacity check is
+        /// <see cref="SupportSurfaceMath.IsRampCountAllowed"/>; this method only orders the
+        /// calls and stores the result. The slope guard exists because over the limit
+        /// neither registering (the ball climbs a wall) nor ignoring (the ball passes
+        /// through) is correct: the author must replace that board with an AddBox wall.
+        /// </para>
+        /// <para>
+        /// A ramp must never also be registered through <see cref="AddBox"/>: the sweep is
+        /// a radius-expanded AABB, so the tilted board would stop the ball at the ramp
+        /// foot (design §5.5). LevelArenaHost keeps the two arrays separate and reports a
+        /// collider that appears in both.
+        /// </para>
+        /// <para>
+        /// Registering a ramp does not rebuild the sweep arrays and does not touch the
+        /// step mask: ramps are read directly from these buffers by the support query every
+        /// step. With terrain support disabled the query receives a ramp count of 0, so the
+        /// feature switch stays bit-for-bit the pre-P3 behaviour.
+        /// </para>
+        /// </remarks>
+        public bool AddRamp(Vector3 center, Vector3 normal, Vector3 right,
+            float halfWidth, float halfRun)
+        {
+            if (!SupportSurfaceMath.IsRampCountAllowed(rampCount))
+            {
+                RefuseRamp(SupportSurfaceMath.RampRefusalCapacity, 0f);
+                SignalOverflow("ramp capacity 4 exceeded");
+                return false;
+            }
+
+            Vector3 unitNormal;
+            Vector3 unitRight;
+            float slopeDegrees;
+            int refusalCode;
+            if (!SupportSurfaceMath.TryValidateRamp(center, normal, right, halfWidth, halfRun,
+                maxSupportSlopeDegrees, out unitNormal, out unitRight, out slopeDegrees,
+                out refusalCode))
+            {
+                RefuseRamp(refusalCode, slopeDegrees);
+                return false;
+            }
+
+            rampCenterBuffer[rampCount] = center;
+            rampNormalBuffer[rampCount] = unitNormal;
+            rampRightBuffer[rampCount] = unitRight;
+            rampHalfWidthBuffer[rampCount] = halfWidth;
+            rampHalfRunBuffer[rampCount] = halfRun;
+            rampCount = rampCount + 1;
+            return true;
+        }
+
+        /// <summary>
+        /// Removes every static ramp. Planes, static boxes and prop supports stay
+        /// registered (the map's other geometry did not move).
+        /// </summary>
+        public void ClearRamps()
+        {
+            rampCount = 0;
+        }
+
+        /// <summary>Static ramps currently registered (0..4).</summary>
+        public int GetRampCount()
+        {
+            return rampCount;
+        }
+
+        /// <summary>How many static ramps one ball can take at once (4).</summary>
+        public int GetRampCapacity()
+        {
+            return SupportSurfaceMath.MaxRampCount;
+        }
+
+        /// <summary>Refused <see cref="AddRamp"/> calls so far (monotonic).</summary>
+        public int GetRampRefusalCount()
+        {
+            return rampRefusalCount;
+        }
+
+        /// <summary>
+        /// Why the last <see cref="AddRamp"/> was refused: one of
+        /// <c>SupportSurfaceMath.RampRefusal*</c>, or 0 before any refusal.
+        /// </summary>
+        public int GetLastRampRefusalCode()
+        {
+            return rampRefusalCode;
+        }
+
+        /// <summary>The last <see cref="AddRamp"/> refusal as a literal, or "".</summary>
+        public string GetLastRampRefusalReason()
+        {
+            return SupportSurfaceMath.RampRefusalReason(rampRefusalCode);
+        }
+
+        /// <summary>The measured slope of the last refused ramp, degrees (0 when none).</summary>
+        public float GetLastRampRefusalSlopeDegrees()
+        {
+            return rampRefusalSlopeDegrees;
+        }
+
+        /// <summary>The slope guard-rail this motor applies, degrees.</summary>
+        public float GetMaxSupportSlopeDegrees()
+        {
+            return maxSupportSlopeDegrees;
+        }
+
+        private void RefuseRamp(int refusalCode, float slopeDegrees)
+        {
+            rampRefusalCount = rampRefusalCount + 1;
+            rampRefusalCode = refusalCode;
+            rampRefusalSlopeDegrees = slopeDegrees;
+        }
+
+        /// <summary>
         /// Replaces the whole dynamic blocking-box set in one call: the boxes of the nearby
         /// props this ball cannot absorb yet.
         /// </summary>
@@ -2387,6 +2606,9 @@ namespace VRCKatamari.BallMotor
             boxCount = 0;
             blockingBoxCount = 0;
             supportPropCount = 0;
+            // Ramps are scene geometry like the static boxes: "all obstacles" clears them
+            // too, and the arena's Reapply re-registers them after this call.
+            rampCount = 0;
             // The step mask is indexed by boxing slot, so it must not outlive the boxes.
             ClearStepMask();
             RebuildObstacles();
@@ -2973,9 +3195,10 @@ namespace VRCKatamari.BallMotor
 
         /// <summary>
         /// Which surface supports the ball: 0 = ground, 1+i = static box i,
-        /// 100+i = support-prop slot i (P2). The host registers its support rows in
-        /// ascending prop-index order, so a slot is stable while the prop stays
-        /// selected; it is a diagnostic key, not a durable prop identity.
+        /// 10+i = static ramp i (P3), 100+i = support-prop slot i (P2). The host
+        /// registers its support rows in ascending prop-index order, so a slot is stable
+        /// while the prop stays selected; it is a diagnostic key, not a durable prop
+        /// identity.
         /// </summary>
         public int GetSupportSurfaceId()
         {
@@ -3012,18 +3235,19 @@ namespace VRCKatamari.BallMotor
 
         /// <summary>
         /// What kind of surface supports the ball: 0 = ground, 1 = static box top,
-        /// 3 = support prop top (P2), -1 = no surface resolved.
+        /// 2 = static ramp (P3), 3 = support prop top (P2), -1 = no surface resolved.
         /// </summary>
         /// <remarks>
-        /// 2 (ramp) is reserved for P3 and is never returned by this revision. It is a
-        /// kind, not an index: <see cref="GetSupportSurfaceId"/> names WHICH box or prop,
-        /// this says WHAT it is, and a reader that only needs "can a prop sit here" should
-        /// read this one. Prop ids are <c>FirstPropSurfaceId + i</c>, so the range test is
-        /// the same one <see cref="IsSupportingAProp"/> uses.
+        /// It is a kind, not an index: <see cref="GetSupportSurfaceId"/> names WHICH box,
+        /// ramp or prop, this says WHAT it is, and a reader that only needs "is this a
+        /// slope" should read this one. Ids are ordered so the range tests are the ones
+        /// SupportSurfaceMath already owns: ramps are 10..13 (FirstRampSurfaceId + i) and
+        /// props are 100..105 (FirstPropSurfaceId + i), while static boxes stay 1..8.
         /// </remarks>
         public int GetSupportKind()
         {
             if (supportSurfaceId == SupportSurfaceMath.GroundSurfaceId) return 0;
+            if (SupportSurfaceMath.IsRampSurfaceId(supportSurfaceId)) return 2;
             if (SupportSurfaceMath.IsPropSurfaceId(supportSurfaceId)) return 3;
             if (supportSurfaceId > 0) return 1;
             return -1;

@@ -1,13 +1,15 @@
 using UdonSharp;
 using UnityEngine;
+using VRCKatamari.BallLayers;
 using VRCKatamari.BallMotor;
 
 namespace VRCKatamari.Story
 {
     /// <summary>
     /// One level's arena geometry, registered with the ball motor at level start:
-    /// the ground plane, boundary wall planes, and the static boxes whose tops the
-    /// ball can stand on.
+    /// the ground plane, boundary wall planes, the static boxes whose tops the
+    /// ball can stand on, and the static ramps whose walking planes the ball can
+    /// roll up.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -36,6 +38,16 @@ namespace VRCKatamari.Story
     /// <c>offset = dot(normal, transform.position)</c>, so the wall's local +Z (blue
     /// arrow) must point INTO the play area and its origin must lie on the face the
     /// ball should stop at.
+    /// </para>
+    /// <para>
+    /// Ramps (P3) are a separate array on purpose. A ramp is a support-only oriented
+    /// plane baked from its collider's centre/size/rotation, and it must NEVER also
+    /// appear in <see cref="staticBoxes"/>: the sweep is a radius-expanded AABB, so a
+    /// box registration of the tilted board would stop the ball at the ramp foot (the
+    /// invisible wall of design §5.5). Setup watches for the same collider in both
+    /// arrays and drops the box registration, keeping the ramp. The bake goes through
+    /// <see cref="SupportSurfaceMath.TryBakeRamp"/>, so the walking face is the box's
+    /// +Y face and the slope guard is the motor's own serialized limit.
     /// </para>
     /// <para>
     /// Division of labour with the pickup host (design §7.4, a hard rule): a prop's
@@ -67,6 +79,12 @@ namespace VRCKatamari.Story
         [Header("Static boxes (sweep obstacle AND a support top; bounds baked at Setup)")]
         [SerializeField] private BoxCollider[] staticBoxes;
 
+        [Header("Static ramps (support only, NEVER a sweep box; baked at Setup)")]
+        // Each entry's local +Y is the walking plane and its local +Z is the run; the
+        // board's thickness extends downward from that face. An entry also listed in
+        // staticBoxes is reported and its box registration is skipped.
+        [SerializeField] private BoxCollider[] rampBoxes;
+
         [Header("Optional")]
         // null/empty = the motor refuses every absorb candidate (its contract).
         [SerializeField] private string[] allowedKinds;
@@ -78,7 +96,9 @@ namespace VRCKatamari.Story
         private bool groundRegistered;
         private int registeredPlaneCount;
         private int registeredBoxCount;
+        private int registeredRampCount;
         private int refusedCount;
+        private string lastRampRefusal = "";
         private string setupReport = "";
 
         public void Update()
@@ -94,10 +114,12 @@ namespace VRCKatamari.Story
         /// </summary>
         /// <remarks>
         /// Registration order is the design's (§7.3) and is not interchangeable: the
-        /// ground first (so the fallback exists), then boundary planes, then static
-        /// boxes (sweep + support tops), then the kind whitelist, then the round open.
-        /// A refused registration is counted, never retried and never logged per frame;
-        /// the single <c>[arena]</c> line carries the counts.
+        /// ground first (so the fallback exists), then boundary planes, then ramps
+        /// (support-only, so they must be known before any box that might overlap them),
+        /// then static boxes (sweep + support tops), then the kind whitelist, then the
+        /// round open. A refused registration is counted, never retried and never logged
+        /// per frame; the single <c>[arena]</c> line carries the counts and the last ramp
+        /// refusal reason.
         /// </remarks>
         public void Setup()
         {
@@ -107,7 +129,9 @@ namespace VRCKatamari.Story
 
             registeredPlaneCount = 0;
             registeredBoxCount = 0;
+            registeredRampCount = 0;
             refusedCount = 0;
+            lastRampRefusal = "";
 
             groundRegistered = motor.SetGroundPlane(groundNormal, groundOffset);
             if (!groundRegistered) refusedCount = refusedCount + 1;
@@ -130,12 +154,35 @@ namespace VRCKatamari.Story
                 }
             }
 
+            if (rampBoxes != null)
+            {
+                for (int i = 0; i < rampBoxes.Length; i++)
+                {
+                    BoxCollider box = rampBoxes[i];
+                    if (box == null) continue;
+                    if (RegisterRamp(box)) registeredRampCount = registeredRampCount + 1;
+                    else refusedCount = refusedCount + 1;
+                }
+            }
+
             if (staticBoxes != null)
             {
                 for (int i = 0; i < staticBoxes.Length; i++)
                 {
                     BoxCollider box = staticBoxes[i];
                     if (box == null) continue;
+                    // A collider in both arrays is the authoring trap of design §5.5. The
+                    // ramp wins (it is support-only, so it cannot create the foot wall),
+                    // and the box registration is skipped so the ball is not stopped under
+                    // the board. This is O(n*m) over two tiny serialized arrays, once.
+                    if (IsRampCollider(box))
+                    {
+                        Debug.LogError("[arena] '" + box.gameObject.name + "' is in both staticBoxes and "
+                            + "rampBoxes; the box registration is skipped so the ramp foot has "
+                            + "no invisible wall (keep it out of staticBoxes)");
+                        refusedCount = refusedCount + 1;
+                        continue;
+                    }
                     // The only Collider read in this component's lifetime. A rotated box
                     // bakes to its enclosing world AABB (a documented P1 limitation); the
                     // motor only ever sees min/max.
@@ -159,9 +206,12 @@ namespace VRCKatamari.Story
                 + (boundaryWalls == null ? 0 : boundaryWalls.Length)
                 + " boxes=" + registeredBoxCount + "/"
                 + (staticBoxes == null ? 0 : staticBoxes.Length)
+                + " ramps=" + registeredRampCount + "/"
+                + (rampBoxes == null ? 0 : rampBoxes.Length)
                 + " supports=" + GetRegisteredSupportCount()
                 + " refused=" + refusedCount
                 + " kinds=" + kindCount;
+            if (lastRampRefusal.Length > 0) setupReport = setupReport + " rampRefusal=" + lastRampRefusal;
 
             if (!logSetupLine) return;
             if (refusedCount > 0) Debug.LogError(setupReport);
@@ -208,8 +258,15 @@ namespace VRCKatamari.Story
             return registeredBoxCount;
         }
 
+        /// <summary>Static ramps the motor accepted this setup.</summary>
+        public int GetRegisteredRampCount()
+        {
+            return registeredRampCount;
+        }
+
         /// <summary>
-        /// Support surfaces the arena registered: the ground plus one top per static box.
+        /// Support surfaces the arena registered: the ground plus one top per static box
+        /// plus one walking plane per static ramp.
         /// </summary>
         /// <remarks>
         /// A count of REGISTRATIONS, not of active candidates: which of them is inside the
@@ -218,7 +275,7 @@ namespace VRCKatamari.Story
         /// </remarks>
         public int GetRegisteredSupportCount()
         {
-            int supports = registeredBoxCount;
+            int supports = registeredBoxCount + registeredRampCount;
             if (groundRegistered) supports = supports + 1;
             return supports;
         }
@@ -228,6 +285,68 @@ namespace VRCKatamari.Story
         {
             if (setupReport == null) return "";
             return setupReport;
+        }
+
+        /// <summary>
+        /// Bakes one ramp collider through <see cref="SupportSurfaceMath.TryBakeRamp"/>
+        /// and registers it with the motor.
+        /// </summary>
+        /// <remarks>
+        /// This is the ONLY place the component reads a collider's centre, size and
+        /// rotation, and it does so once. The world size uses the transform's lossy scale
+        /// because the importer scales a unit cube: the collider's local size is one and
+        /// the authored size is the scale. The world centre is
+        /// <c>position + rotation * scale * collider.center</c> (the importer sets the
+        /// collider centre to zero, and this form avoids a TransformPoint extern).
+        /// The slope guard passed in is the motor's serialized value, so the host and the
+        /// motor cannot disagree about what is too steep.
+        /// </remarks>
+        private bool RegisterRamp(BoxCollider box)
+        {
+            Transform owner = box.transform;
+            Vector3 normal = owner.rotation * new Vector3(0f, 1f, 0f);
+            Vector3 right = owner.rotation * new Vector3(1f, 0f, 0f);
+            Vector3 scale = owner.lossyScale;
+            Vector3 localCenter = box.center;
+            Vector3 localSize = box.size;
+            Vector3 boxCenter = owner.position + owner.rotation * new Vector3(
+                localCenter.x * scale.x, localCenter.y * scale.y, localCenter.z * scale.z);
+            Vector3 worldSize = new Vector3(Mathf.Abs(scale.x) * localSize.x,
+                Mathf.Abs(scale.y) * localSize.y, Mathf.Abs(scale.z) * localSize.z);
+
+            Vector3 walkingCenter;
+            Vector3 rampNormal;
+            Vector3 rampRight;
+            float halfWidth;
+            float halfRun;
+            float slopeDegrees;
+            int refusalCode;
+            if (!SupportSurfaceMath.TryBakeRamp(boxCenter, normal, right, worldSize,
+                motor.GetMaxSupportSlopeDegrees(), out walkingCenter, out rampNormal,
+                out rampRight, out halfWidth, out halfRun, out slopeDegrees, out refusalCode))
+            {
+                lastRampRefusal = box.gameObject.name + ": "
+                    + SupportSurfaceMath.RampRefusalReason(refusalCode)
+                    + " (slope " + slopeDegrees + " deg)";
+                return false;
+            }
+            if (!motor.AddRamp(walkingCenter, rampNormal, rampRight, halfWidth, halfRun))
+            {
+                lastRampRefusal = box.gameObject.name + ": " + motor.GetLastRampRefusalReason();
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>True when the same collider is listed in <see cref="rampBoxes"/>.</summary>
+        private bool IsRampCollider(BoxCollider candidate)
+        {
+            if (rampBoxes == null) return false;
+            for (int i = 0; i < rampBoxes.Length; i++)
+            {
+                if (rampBoxes[i] == candidate) return true;
+            }
+            return false;
         }
     }
 }

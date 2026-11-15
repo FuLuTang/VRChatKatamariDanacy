@@ -22,6 +22,7 @@ from Docs.Design.BallLayers.TerrainSupport.terrain_support import (
     support_dropped_away,
     try_integrate_fall,
     try_resolve_support,
+    is_step_within_limit,
     try_step_height_limit,
 )
 
@@ -39,7 +40,11 @@ def box(minimum, maximum):
 
 
 def resolve(probe, reference, limit, boxes=(), props=(), prop_count=None):
-    return try_resolve_support(probe, reference, limit, UP, 0.0, list(boxes), None,
+    box_list = list(boxes)
+    box_steppable = [is_step_within_limit(box_list[i][1][1], reference, limit)
+                     for i in range(len(box_list))]
+    return try_resolve_support(probe, reference, limit, UP, 0.0, box_list,
+                               box_steppable, len(box_list), [], None,
                                list(props), prop_count)
 
 
@@ -158,7 +163,7 @@ class PropSupportTests(unittest.TestCase):
         self.assertEqual(surface.surface_id, GROUND_SURFACE_ID)
         self.assertAlmostEqual(surface.height, 0.0, delta=TOLERANCE)
 
-        self.assertTrue(support_dropped_away(surface.height, previous, 0.01))
+        self.assertTrue(support_dropped_away(surface.height, previous, 0.01, False))
         self.assertTrue(resolve_fall_state(False, True, False, False))
 
         speed, budget = try_integrate_fall(0.0, 9.81, 0.02, 40.0)

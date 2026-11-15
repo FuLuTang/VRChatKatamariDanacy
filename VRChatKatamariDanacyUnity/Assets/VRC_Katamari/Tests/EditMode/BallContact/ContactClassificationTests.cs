@@ -1,0 +1,127 @@
+using NUnit.Framework;
+using UnityEngine;
+using VRCKatamari.BallContact;
+
+namespace VRCKatamari.Tests
+{
+    /// <summary>
+    /// EditMode port of the classification cases of
+    /// Docs/tests/ball_contact_v2/test_contact_v2.py, plus the support/wall selection and
+    /// the 15 deg "the surface is curving over" rule that the Python model applies inline.
+    ///
+    /// Angles are degrees from +Y: 0 is a floor, 90 a wall. Expected values are geometric
+    /// identities (the 45 deg normal of a 45 deg board, cos(70 deg), the 15 deg margin),
+    /// never a copy of the implementation.
+    /// </summary>
+    public class ContactClassificationTests
+    {
+        private const float Tolerance = 1e-5f;
+        private const float Sin45 = 0.70710678f;
+        private const float Cos45 = 0.70710678f;
+
+        private static Vector3 SlopeNormal(float angleDeg)
+        {
+            float angle = angleDeg * Mathf.Deg2Rad;
+            return new Vector3(0f, Mathf.Cos(angle), -Mathf.Sin(angle));
+        }
+
+        [Test]
+        public void ThreeBandsAreDerivedFromOneNormal()
+        {
+            Assert.AreEqual(ContactCodes.ClassRide,
+                ContactClassificationMath.ClassifyContact(new Vector3(0f, 1f, 0f)));
+            Assert.AreEqual(ContactCodes.ClassRide,
+                ContactClassificationMath.ClassifyContact(new Vector3(0f, Cos45, -Sin45)));
+            Assert.AreEqual(ContactCodes.ClassClimb,
+                ContactClassificationMath.ClassifyContact(SlopeNormal(70f)));
+            Assert.AreEqual(ContactCodes.ClassClimb,
+                ContactClassificationMath.ClassifyContact(new Vector3(0f, 0f, 1f)));
+            Assert.AreEqual(ContactCodes.ClassNone,
+                ContactClassificationMath.ClassifyContact(new Vector3(0f, -1f, 0f)));
+            // 50 deg is already outside the ride band (that is C06's redesign).
+            Assert.AreEqual(ContactCodes.ClassClimb,
+                ContactClassificationMath.ClassifyContact(SlopeNormal(50f)));
+        }
+
+        [Test]
+        public void TheRideBoundaryHasHalfADegreeOfTolerance()
+        {
+            // 45.4 deg rides, 45.6 deg climbs: the 0.5 deg band is what keeps a 45 deg board
+            // from flipping on float noise.
+            Assert.AreEqual(ContactCodes.ClassRide,
+                ContactClassificationMath.ClassifyContact(SlopeNormal(45.4f)));
+            Assert.AreEqual(ContactCodes.ClassClimb,
+                ContactClassificationMath.ClassifyContact(SlopeNormal(45.6f)));
+        }
+
+        [Test]
+        public void TheContactAngleIsTheAngleFromUp()
+        {
+            Assert.AreEqual(0f, ObbContactMath.ContactAngleDeg(new Vector3(0f, 1f, 0f)),
+                Tolerance);
+            Assert.AreEqual(45f, ObbContactMath.ContactAngleDeg(new Vector3(0f, Cos45, -Sin45)),
+                Tolerance);
+            Assert.AreEqual(90f, ObbContactMath.ContactAngleDeg(new Vector3(0f, 0f, 1f)),
+                Tolerance);
+        }
+
+        [Test]
+        public void TheSupportIsTheHighestRideableNormalAndTiesGoToTheDeeperContact()
+        {
+            Vector3[] normals = { new Vector3(0f, 1f, 0f), SlopeNormal(45f) };
+            float[] depths = { 0.001f, 0.010f };
+            int[] classes = { ContactCodes.ClassRide, ContactCodes.ClassRide };
+            // The floor normal has the higher +Y, so it wins even with the smaller depth.
+            Assert.AreEqual(0, ContactClassificationMath.SelectSupportContact(normals, depths,
+                classes, 2));
+
+            // Equal normals: the deeper contact wins.
+            Vector3[] tied = { new Vector3(0f, 1f, 0f), new Vector3(0f, 1f, 0f) };
+            float[] tiedDepths = { 0.002f, 0.005f };
+            Assert.AreEqual(1, ContactClassificationMath.SelectSupportContact(tied, tiedDepths,
+                classes, 2));
+
+            // A climb contact is never a support.
+            int[] climbs = { ContactCodes.ClassClimb, ContactCodes.ClassClimb };
+            Assert.AreEqual(-1, ContactClassificationMath.SelectSupportContact(normals, depths,
+                climbs, 2));
+        }
+
+        [Test]
+        public void TheWallIsTheContactTheDrivePushesIntoMost()
+        {
+            Vector3[] normals =
+            {
+                new Vector3(0f, 0f, -1f),   // wall straight ahead
+                new Vector3(1f, 0f, 0f),    // wall to the side
+                new Vector3(0f, 1f, 0f)     // floor
+            };
+            int[] classes =
+            {
+                ContactCodes.ClassClimb, ContactCodes.ClassClimb, ContactCodes.ClassRide
+            };
+            Assert.AreEqual(0, ContactClassificationMath.SelectClimbContact(normals, classes, 3,
+                new Vector3(0f, 0f, -1f)));
+            Assert.AreEqual(1, ContactClassificationMath.SelectClimbContact(normals, classes, 3,
+                new Vector3(1f, 0f, 0f)));
+            // A zero drive direction cannot select a wall.
+            Assert.AreEqual(-1, ContactClassificationMath.SelectClimbContact(normals, classes, 3,
+                Vector3.zero));
+            // A count past the buffers is refused rather than read out of bounds.
+            Assert.AreEqual(-1, ContactClassificationMath.SelectClimbContact(normals, classes, 4,
+                new Vector3(0f, 0f, -1f)));
+        }
+
+        [Test]
+        public void ASurfaceCurvingOverIsNotAClimb()
+        {
+            // 50 deg over a 45 deg support is the surface turning over; 60 deg is a wall.
+            Assert.IsFalse(ContactClassificationMath.IsClimbSteeperThanSupport(50f, 45f));
+            Assert.IsFalse(ContactClassificationMath.IsClimbSteeperThanSupport(59.9f, 45f));
+            Assert.IsTrue(ContactClassificationMath.IsClimbSteeperThanSupport(60f, 45f));
+            Assert.IsTrue(ContactClassificationMath.IsClimbSteeperThanSupport(65f, 45f));
+            // With no support (support angle 0) any climb contact counts as a wall.
+            Assert.IsTrue(ContactClassificationMath.IsClimbSteeperThanSupport(20f, 0f));
+        }
+    }
+}

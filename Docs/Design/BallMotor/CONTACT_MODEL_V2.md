@@ -2,6 +2,7 @@
 
 **状态：`DESIGN_ONLY`。** 本文只写设计，不改任何 `Runtime/`、`Editor/` C#，不改测试场数据，不碰 Unity/Windows。
 所有运行期数字都是 **PROVISIONAL（我方设计/暂定）**，只有明确标 `[官方]`/`[专利]` 的地方来自原作证据。
+> **S2 状态（2026-11-15）**：§7.1 的 S2 纯数学库已写入 `Assets/VRC_Katamari/Runtime/BallContact/`（10 个文件）与 `Assets/VRC_Katamari/Tests/EditMode/BallContact/`（8 个文件，含 Python 金值）。**这些文件尚未在 Unity 里编译，EditMode 测试也尚未运行**；电机仍未接入（S3），运行期行为一行未变。
 本文的算术有一份可执行参考模型：`Docs/Design/BallMotor/contact_v2/contact_v2.py` + `Docs/tests/ball_contact_v2/test_contact_v2.py`
 （`python3 -m unittest discover -s Docs/tests`，本轮 32 例全过：24 接触 + 8 形状）。
 
@@ -1297,7 +1298,7 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 | 阶段 | 内容 | 文件 | 风险 | 验收 | 回滚 |
 |---|---|---|---|---|---|
 | **S1（已完成）** | Python 参考模型 + 单测 | `Docs/Design/BallMotor/contact_v2/contact_v2.py`、`.../shapes.py`、`Docs/tests/ball_contact_v2/test_contact_v2.py`、`.../test_shapes.py` | 低（不改运行期） | `python3 -m unittest discover -s Docs/tests` 全过（本轮 534 例，含新增 32 例） | 删文件 |
-| **S2** | C# 纯数学库 + EditMode | 新 `Runtime/BallLayers/ContactV2/ContactSolveMath.cs`（静态、无状态、并行数组）、`ObbBakeMath.cs`；新 `Tests/EditMode/BallLayers/ContactSolveV2Tests.cs`、`ObbBakeTests.cs` | 中：数值与模型不一致 | 同一组 fixture 与 Python **逐位/1e-6 一致**；面/棱/角/内部、窗口、弯坡段几何 | 删文件（还没人调用） |
+| **S2（代码已写，未编译）** | C# 纯数学库 + EditMode | 实际落点（2026-11-15）：`Runtime/BallContact/` 的 `ContactTuning.cs`、`ContactCodes.cs`、`ObbContactMath.cs`、`ObbBakeMath.cs`、`ContactClassificationMath.cs`、`ClimbMath.cs`、`BallShapeMath.cs`、`ContactWindowMath.cs`、`ContactSolveMath.cs`、`CurveRampMath.cs`；`Tests/EditMode/BallContact/` 的 8 个测试类 | 中：数值与模型不一致 | 同一组 fixture 与 Python **逐位/1e-6 一致**；面/棱/角/内部、窗口、弯坡段几何。**代码已写但未编译、EditMode 未跑**（写它的机器没有 Unity） | 删文件（还没人调用） |
 | **S3** | 电机集成，**flag 默认 false** | `KatamariBallMotor.cs`：新字段 `contactModelV2Enabled`、`StepContacts`、`FillWindow`、`ClimbState`、卡死/恢复重写、新 getter；`RefreshStepMask`/`TrySweepSphere` 在 v2 分支跳过 | **高**（最大的改动） | flag=false 时与今天**逐位相同**（同一场景同一 run 的 `[ptf]` 行对比）；flag=true 时 C 矩阵 + W 格通过；`recovery == 0` | **flag 置 false**（v1 路径原样保留）；必要时 revert 一个 commit |
 | **S4** | 数据/导入器 | `LevelArenaHost.cs`（8 角点 OBB 烘、`AddObb`、ramp→slab、`ramps` 数组语义）、`PlacementImporter.cs`（`curve_ramp` 展开）、`placement_core.py`（45° error→warning + 弯坡校验）、`SupportSurfaceMath.cs`（降级为诊断） | 中：旧场景重烘 | 9 个小格的烘焙 OBB 表与旧 AABB **数值相同**（轴对齐）；`levelbuild check` 全绿；弯坡段数/矢高合规 | `LevelArenaHost.useObbBake=false`（回 AABB，v1/v2 都能跑）；弯坡条目 `expanded:false` 不展开 |
 | **S5** | 新测试格 + 沙盒 + 证据 | `Labs/PhysicsTestField`（W/R/S/X 格）、`Labs/PhysicsSandbox`（地图 0）、`physics_test_field.json`、`Docs/Evidence/...` | 中：数据/场景工作量大 | v2 验收表全绿；沙盒能手动滚 | 删格；沙盒场景独立，不影响主场景 |

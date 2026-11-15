@@ -91,18 +91,29 @@ namespace VRCKatamari.Story
         /// </summary>
         /// <remarks>
         /// <c>bottom</c> is the ball's lowest core point in world Y
-        /// (<c>centre.y - collision radius</c>); <c>gap</c> is that bottom above the selected
-        /// support surface. Both are reported because one proves the height and the other
-        /// proves the ball actually sits on the surface (0.000 +/-0.005) and goes positive
-        /// while it falls.
+        /// (<c>centre.y - collision radius</c>); <c>gap</c> is the distance from the centre to
+        /// the selected support plane along that plane's normal, minus the radius. Both are
+        /// reported because one proves the height and the other proves the ball actually sits on
+        /// the surface (0.000 +/-0.005) and goes positive while it falls. The normal form matters
+        /// on ramps: the vertical form reads <c>r(1/n.y - 1)</c> there (design R11).
         /// </remarks>
         private void Report()
         {
             Vector3 center = motor.GetCenterWorld();
             float diameter = motor.GetSemanticDiameterWorldM();
             float supportHeight = motor.GetSupportSurfaceHeightWorldM();
-            float bottom = center.y - motor.GetCollisionRadiusWorldM();
-            float gap = bottom - supportHeight;
+            Vector3 supportNormal = motor.GetSupportNormalWorld();
+            // Gap is measured ALONG THE SUPPORT NORMAL: "ball centre to the support plane,
+            // minus the radius". The design's R11 case is a ramp: the vertical
+            // (centre.y - supportHeight - r) would read r(1/n.y - 1), i.e. 0.455 m for a
+            // 45-degree board and a 2.20 m ball, and look like the ball floats. Projecting by
+            // n.y turns that into exactly 0 on any plane. Flat ground has n.y = 1, so its
+            // number is the old one (up to float association order).
+            float normalY = supportNormal.y;
+            if (!(normalY > 0.001f) || normalY > 1.0001f) normalY = 1f;
+            float radius = motor.GetCollisionRadiusWorldM();
+            float bottom = center.y - radius;
+            float gap = (center.y - supportHeight) * normalY - radius;
             // The kind comes from the motor, not from a range test on the id: prop tops are
             // 100+i, so "id > 0" would mislabel one as a box.
             int supportId = motor.GetSupportSurfaceId();

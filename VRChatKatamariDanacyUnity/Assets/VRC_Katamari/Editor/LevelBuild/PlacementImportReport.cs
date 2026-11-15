@@ -140,7 +140,7 @@ namespace VRCKatamari.Editor.LevelBuild
             text.AppendLine();
             text.Append("  arena: ").Append(ArenaWired ? "wired" : "not wired")
                 .Append(" (boxes=").Append(ArenaBoxes).Append(", walls=").Append(ArenaPlanes)
-                .Append(", ramps=").Append(ArenaRamps).Append(" [P1 has no ramp slot], kinds=")
+                .Append(", ramps=").Append(ArenaRamps).Append(", kinds=")
                 .Append(ArenaKinds).Append(")");
 
             for (int i = 0; i < ValueUnitProblems.Count; i++)

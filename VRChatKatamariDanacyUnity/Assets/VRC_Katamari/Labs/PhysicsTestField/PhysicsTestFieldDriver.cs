@@ -29,21 +29,22 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// radial proxies the reset left behind.
     /// </para>
     /// <para>
-    /// <b>Cells that cannot be measured are not failures.</b> A check gated on a stage this build
-    /// does not have (P3), a P2 check with no <see cref="PickupFieldHost"/> wired or with the
-    /// host's prop obstacles switched off (the only caller of <c>SetSupportProps</c>), a check
-    /// whose readout is a console trace a human reads
-    /// (<c>readout=trace</c>), and a check that needs the P4 step counters all report
-    /// <c>BLOCKED_UNTIL_*</c> and are counted as skipped. Only a measured check can be
-    /// <c>UNEXPECTED_*</c>.
+    /// <b>Cells that cannot be measured are not failures.</b> A P2 check with no
+    /// <see cref="PickupFieldHost"/> wired or with the host's prop obstacles switched off (the
+    /// only caller of <c>SetSupportProps</c>), a check whose readout is a console trace a human
+    /// reads (<c>readout=trace</c>), and a check that needs the P4 step counters all report
+    /// <c>BLOCKED_UNTIL_*</c> and are counted as skipped. P3 is in the tree, so a P3 check is
+    /// measured, not skipped. Only a measured check can be <c>UNEXPECTED_*</c>.
     /// </para>
     /// <para>
     /// <b>Metrics are written in terms of the ball's collision radius and the cell's nominal
-    /// dimension</b> (the plate thickness or the step rise), never in terms of a box's coordinates:
-    /// that keeps one limit valid for all four diameters and keeps geometry in the placement file
-    /// where it belongs. <c>deck_gap_m</c> is the minimum over the whole run of
+    /// dimension</b> (the plate thickness or the step rise / ramp top height), never in terms of a
+    /// box's coordinates: that keeps one limit valid for all four diameters and keeps geometry in
+    /// the placement file where it belongs. <c>deck_gap_m</c> is the minimum over the whole run of
     /// <c>|(centre.y - collisionRadius) - nominal|</c>, which reads 0 when the ball ever stood on
-    /// the deck and <c>nominal</c> when it never did - exactly "did it climb".
+    /// the deck and <c>nominal</c> when it never did - exactly "did it climb". On a ramp cell the
+    /// step-limit derivation of that expectation is skipped: the ramp exists to lift the ball above
+    /// every step limit, and <see cref="PhysicsTestCell.IsRampClimb"/> is what says so.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
@@ -107,8 +108,6 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private int passUnexpected;
         private int passSkipped;
 
-        private PhysicsTestCell activeCell;
-
         // ---- per-run samples ---------------------------------------------------
 
         private Vector3 startCenterWorld;
@@ -125,9 +124,22 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private float peakSpeedEarly;
         private float peakSpeedLate;
         private bool hasPrevCenter;
+        private bool previousFalling;
         private float previousCenterY;
         private float maxFrameDy;
+        private float maxGroundedFrameDy;
         private float maxCenterY;
+        private int sawRampSupport;
+        private int fallFrameCount;
+        private float lastForwardIntent;
+        private bool hasStopAnchor;
+        private bool hasStopped;
+        private float stopAnchorProgress;
+        private float stoppedMinProgress;
+        private float slipBack;
+        private int rampCountAtSwitch;
+        private int rampProbeReasonLength;
+        private float rampProbeSlopeDegrees;
 
         // ---- per-run result ----------------------------------------------------
 
@@ -147,10 +159,22 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 for (int i = 0; i < cells.Length; i++)
                 {
                     if (cells[i] == null) continue;
-                    // Every arena starts OFF. LevelArenaHost registers itself in its own Update,
-                    // and the motor's obstacle tables are global: four active cells would register
-                    // four floors and sixteen walls into eight plane slots on frame one and latch
-                    // the overflow counter for the whole session.
+                    if (i == 0)
+                    {
+                        // The first cell's arena is the only one allowed to register at load.
+                        // Every cell stays visible (compact field), so this is about the motor's
+                        // global tables, not about the floor: one registrant cannot overflow.
+                        // It registers itself in LevelArenaHost.Update once the motor is ready,
+                        // and a later switch re-applies it rather than adding a second one.
+                        cells[i].ApplyRegistration();
+                        continue;
+                    }
+
+                    // Every other arena starts SUSPENDED: its geometry stays visible, but its
+                    // host may not self-register. LevelArenaHost registers in its own Update and
+                    // the motor's tables are global, so nine registrants would put nine floors
+                    // and thirty-six walls into eight plane slots on frame one and latch the
+                    // overflow counter for the whole session.
                     cells[i].ReleaseArena();
                 }
             }
@@ -398,14 +422,33 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return;
             }
 
-            if (activeCell != null && activeCell != cell) activeCell.ReleaseArena();
-            activeCell = cell;
+            // Exactly one arena may be REGISTERED; all of them stay visible. ReleaseArena now
+            // means "suspend self-registration", not "hide", so this loop is safe to run on
+            // every switch and on Start without turning the field into a set of empty pads.
+            // It does not trust "the previous cell": Start leaves cell 0 allowed to register
+            // without ever having run a switch, so the first switch must still suspend it.
+            for (int i = 0; i < cells.Length; i++)
+            {
+                if (cells[i] == null) continue;
+                if (cells[i] == cell) continue;
+                cells[i].ReleaseArena();
+            }
+
             cell.ApplyRegistration();
 
             if (kindWhitelist != null)
             {
                 motor.SetAllowedKinds(kindWhitelist, kindWhitelist.Length);
             }
+
+            // The arena has registered its own ramps (or refused them at bake time); read that
+            // count before the probe so it describes what the ARENA put in the motor. Then, for
+            // a cell that authors an over-limit board (C06), ask the motor to register the
+            // board's walking face directly: the refusal IS the criterion, and it is the only
+            // way the motor's refusal getters can be exercised, because LevelArenaHost's bake
+            // refuses an over-limit board before it ever calls AddRamp.
+            rampCountAtSwitch = motor.GetRampCount();
+            ApplyRampProbe(cell);
 
             // Baselines are read AFTER the switch and BEFORE anything else moves: the overflow
             // latch and the contact-saturation flag are permanent, so only a delta is meaningful.
@@ -465,6 +508,38 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
             state = StateSize;
             stateClock = 0f;
+        }
+
+        private void ApplyRampProbe(PhysicsTestCell cell)
+        {
+            rampProbeReasonLength = 0;
+            rampProbeSlopeDegrees = 0f;
+            if (cell == null) return;
+            if (!cell.HasRampProbe()) return;
+
+            bool accepted = motor.AddRamp(cell.GetRampProbeCenter(), cell.GetRampProbeNormal(),
+                cell.GetRampProbeRight(), cell.GetRampProbeHalfWidth(),
+                cell.GetRampProbeHalfRun());
+            if (accepted)
+            {
+                // The probe exists to be REFUSED. An accepted probe means the authored board
+                // and the motor's slope guard disagree; drop it again so the support table is
+                // exactly the arena's, then re-apply the arena (the ClearRamps call is
+                // deliberately narrower than ClearObstacles).
+                motor.ClearRamps();
+                cell.ApplyRegistration();
+                rampCountAtSwitch = motor.GetRampCount();
+                Debug.LogError("[ptf] rampProbe cell=" + cell.GetCellId()
+                    + " accepted but should be refused; the board and the slope guard disagree");
+                return;
+            }
+
+            string reason = motor.GetLastRampRefusalReason();
+            if (reason != null) rampProbeReasonLength = reason.Length;
+            rampProbeSlopeDegrees = motor.GetLastRampRefusalSlopeDegrees();
+            Log("[ptf] rampProbe cell=" + cell.GetCellId()
+                + " refused=1 slope=" + Fixed(rampProbeSlopeDegrees, 2)
+                + " reason=" + reason);
         }
 
         private void TickSize()
@@ -636,10 +711,12 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
             if (!found)
             {
+                lastForwardIntent = 0f;
                 motor.SetMoveAxes(0f, 0f, 0f);
                 return;
             }
 
+            lastForwardIntent = forward;
             motor.SetMoveAxes(forward, turn, lateral);
         }
 
@@ -678,15 +755,66 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 if (blocking > maxBlocking) maxBlocking = blocking;
             }
 
+            bool falling = motor.IsFalling();
             if (hasPrevCenter)
             {
                 float dy = center.y - previousCenterY;
-                if (dy < 0f) dy = -dy;
-                if (dy > maxFrameDy) maxFrameDy = dy;
+                float absDy = dy;
+                if (absDy < 0f) absDy = -absDy;
+                if (absDy > maxFrameDy) maxFrameDy = absDy;
+                // The seam check must not read the free fall as a "step": the ramp cell's drop
+                // is tens of centimetres in one frame, while a seam is millimetres. Both ends of
+                // the frame must be grounded, otherwise the landing frame (already not falling,
+                // but the previous sample was mid-air) would enter as a huge "seam" step.
+                if (!falling && !previousFalling && absDy > maxGroundedFrameDy)
+                {
+                    maxGroundedFrameDy = absDy;
+                }
             }
 
             hasPrevCenter = true;
+            previousFalling = falling;
             previousCenterY = center.y;
+
+            // Ramp and landing readings. "Saw a ramp" is a per-frame latch: support_kind is
+            // instantaneous, and a run that climbs and then stops on the top landing would
+            // otherwise report "box" and look like the ramp never engaged.
+            if (motor.GetSupportKind() == 2) sawRampSupport = 1;
+            if (falling) fallFrameCount = fallFrameCount + 1;
+
+            // Slip on a ramp, measured in EVERY released window (the drive plan deliberately
+            // stops mid-slope for 5 s). The anchor is the last frame that was still moving;
+            // once the ball is stopped ON A RAMP (support kind 2), only progress DECREASING
+            // counts. That is the downhill distance after the stop; tangential gravity is off
+            // by default, so it should be 0. A stop on the flat landing (kind 1) is not a
+            // slip test and does not enter the reading.
+            if (lastForwardIntent != 0f)
+            {
+                hasStopAnchor = false;
+                hasStopped = false;
+            }
+            else
+            {
+                float progress = ProgressMeters();
+                if (speed > 0.10f)
+                {
+                    stopAnchorProgress = progress;
+                    hasStopAnchor = true;
+                    hasStopped = false;
+                }
+                else if (hasStopAnchor && motor.GetSupportKind() == 2)
+                {
+                    if (!hasStopped)
+                    {
+                        hasStopped = true;
+                        stoppedMinProgress = stopAnchorProgress;
+                    }
+
+                    if (progress < stoppedMinProgress) stoppedMinProgress = progress;
+                    float slip = stopAnchorProgress - stoppedMinProgress;
+                    if (slip > slipBack) slipBack = slip;
+                }
+            }
         }
 
         private void FollowBall()
@@ -721,7 +849,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 // 0.075 m: a baked "pass" would demand a climb the step rule forbids (design
                 // section 8.3.1). Only the deck metric is derived here; every other check
                 // keeps its baked row, so no other criterion's meaning moves.
-                if (Same(metric, "deck_gap_m"))
+                if (Same(metric, "deck_gap_m") && !cell.IsRampClimb())
                 {
                     float deckRise = cell.GetNominalM();
                     float runStepLimit = motor.GetStepHeightLimitWorldM();
@@ -756,12 +884,10 @@ namespace VRCKatamari.Labs.PhysicsTestField
                     continue;
                 }
 
-                if (gateStage == 3)
-                {
-                    LogSkipped(checkId, metric, op, limit, expectText, "BLOCKED_UNTIL_P3");
-                    checkSkipped = checkSkipped + 1;
-                    continue;
-                }
+                // P3 is in the tree (AddRamp plus its refusal codes), so a P3 check is measured
+                // like any other. The token stays in the data vocabulary but is no longer a skip
+                // condition: a build without ramps would report 0 ramps and fail the check,
+                // which is the honest answer.
 
                 if (readout == 1)
                 {
@@ -966,6 +1092,67 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return true;
             }
 
+            if (Same(metric, "grounded_frame_dy_m"))
+            {
+                value = maxGroundedFrameDy;
+                return true;
+            }
+
+            if (Same(metric, "ramp_support_seen"))
+            {
+                value = (float)sawRampSupport;
+                return true;
+            }
+
+            if (Same(metric, "ramp_entry_progress_m"))
+            {
+                PhysicsTestCell cell = cells[cellIndex];
+                value = ProgressMeters() - cell.GetRampFootM();
+                return true;
+            }
+
+            if (Same(metric, "slip_back_m"))
+            {
+                value = slipBack;
+                return true;
+            }
+
+            if (Same(metric, "landing_gap_m"))
+            {
+                value = Mathf.Abs(center.y - radius);
+                return true;
+            }
+
+            if (Same(metric, "fall_frames"))
+            {
+                value = (float)fallFrameCount;
+                return true;
+            }
+
+            if (Same(metric, "max_bottom_rise_m"))
+            {
+                value = maxCenterY - radius;
+                return true;
+            }
+
+            if (Same(metric, "ramp_count"))
+            {
+                value = (float)rampCountAtSwitch;
+                return true;
+            }
+
+            if (Same(metric, "ramp_refusal_reason_len"))
+            {
+                value = (float)rampProbeReasonLength;
+                return true;
+            }
+
+            if (Same(metric, "ramp_refusal_slope_deg"))
+            {
+                value = rampProbeSlopeDegrees;
+                return true;
+            }
+
             if (Same(metric, "frame_dy_m"))
             {
                 value = maxFrameDy;
@@ -1132,9 +1319,21 @@ namespace VRCKatamari.Labs.PhysicsTestField
             peakSpeedEarly = 0f;
             peakSpeedLate = 0f;
             hasPrevCenter = false;
+            previousFalling = true;
             previousCenterY = 0f;
             maxFrameDy = 0f;
+            maxGroundedFrameDy = 0f;
             maxCenterY = 0f;
+            sawRampSupport = 0;
+            fallFrameCount = 0;
+            lastForwardIntent = 0f;
+            hasStopAnchor = false;
+            hasStopped = false;
+            stopAnchorProgress = 0f;
+            stoppedMinProgress = 0f;
+            slipBack = 0f;
+            rampProbeReasonLength = 0;
+            rampProbeSlopeDegrees = 0f;
             checkPass = 0;
             checkUnexpected = 0;
             checkSkipped = 0;

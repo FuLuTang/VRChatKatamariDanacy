@@ -135,7 +135,7 @@ namespace VRCKatamari.Labs.StoryLevel
 
         /// <summary>
         /// One line per second: elapsed, centre, heading, diameter, the ball's bottom,
-        /// the gap above the selected support, which surface that is, and whether the
+        /// the gap along the selected support normal, which surface that is, and whether the
         /// ball is falling. See the class remarks for why bottom and gap are both here.
         /// </summary>
         private void Report()
@@ -143,8 +143,16 @@ namespace VRCKatamari.Labs.StoryLevel
             Vector3 center = motor.GetCenterWorld();
             float diameter = motor.GetSemanticDiameterWorldM();
             float supportHeight = motor.GetSupportSurfaceHeightWorldM();
-            float bottom = center.y - motor.GetCollisionRadiusWorldM();
-            float gap = bottom - supportHeight;
+            Vector3 supportNormal = motor.GetSupportNormalWorld();
+            // Gap along the support normal (centre to plane, minus radius), the same reading
+            // StoryBallDiagnostics prints. R11: the vertical form reads r(1/n.y - 1) on a ramp,
+            // which looks like the ball floats; on flat ground n.y = 1 and the number is the
+            // old one (up to float association order).
+            float normalY = supportNormal.y;
+            if (!(normalY > 0.001f) || normalY > 1.0001f) normalY = 1f;
+            float radius = motor.GetCollisionRadiusWorldM();
+            float bottom = center.y - radius;
+            float gap = (center.y - supportHeight) * normalY - radius;
             // "ground" / "box" / "prop" reads better than the raw id in the acceptance log;
             // the id is still printed because it names WHICH box or prop top when several
             // are registered. The kind comes from the motor, not from a range test on the

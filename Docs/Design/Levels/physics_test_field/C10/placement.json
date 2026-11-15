@@ -9,15 +9,15 @@
     "ballDiameterMax": 2.2,
     "bounds": [
       [
-        -44.0,
-        -44.0
+        -14.0,
+        -15.0
       ],
       [
-        44.0,
-        44.0
+        14.0,
+        16.5
       ]
     ],
-    "spawnClearanceM": 1.0,
+    "spawnClearanceM": 0.5,
     "budget": {
       "planes": 8,
       "boxes": 8,
@@ -31,7 +31,7 @@
     },
     "arena": {
       "id": "C10",
-      "notes": "one arena cell: the driver re-applies it alone, because the whole field does not fit the motor's static capacity"
+      "notes": "one compact arena cell; only the active cell registers, and its 4 boundary planes enclose this pad"
     }
   },
   "props": [],
@@ -42,14 +42,14 @@
       "role": "box",
       "shape": "box",
       "center": [
-        15.0,
+        3.5,
         0.05,
-        1.0
+        0.0
       ],
       "size": [
-        6.0,
+        4.0,
         0.1,
-        4.0
+        1.5
       ],
       "rotationQuat": [
         0.0,
@@ -60,7 +60,7 @@
       "collision": "box",
       "absorbable": false,
       "support": true,
-      "notes": "clearly a wall at 0.30 (0.100 > 0.075) and climbable at 0.60: the positive baseline for 'is a wall'"
+      "notes": "step rise 0.100 m; south face at z=-0.75, 2.75 m runway from the start"
     },
     {
       "id": "ground",
@@ -68,14 +68,14 @@
       "role": "ground",
       "shape": "plane",
       "center": [
-        0.0,
+        3.5,
         0.0,
         0.0
       ],
       "size": [
-        88.0,
+        6.0,
         0.04,
-        88.0
+        9.0
       ],
       "rotationQuat": [
         0.0,
@@ -86,7 +86,7 @@
       "collision": "none",
       "absorbable": false,
       "support": true,
-      "notes": "arena floor: a plane through its centre, so the motor's ground offset is 0"
+      "notes": "this cell's own small floor (compact field; every cell carries ground + 4 low boundary planes)"
     },
     {
       "id": "wall_x_max",
@@ -94,14 +94,14 @@
       "role": "boundary",
       "shape": "plane",
       "center": [
-        44.0,
-        1.5,
+        6.5,
+        0.2,
         0.0
       ],
       "size": [
-        88.0,
+        9.0,
         0.04,
-        3.0
+        0.4
       ],
       "rotationQuat": [
         -0.5,
@@ -112,7 +112,7 @@
       "collision": "none",
       "absorbable": false,
       "support": false,
-      "notes": "local +Y is the inward normal (-X); the field never leaves x <= 44"
+      "notes": "local +Y is the inward normal (-X); low (0.4 m) visual/player wall, infinite half-space to the motor"
     },
     {
       "id": "wall_x_min",
@@ -120,14 +120,14 @@
       "role": "boundary",
       "shape": "plane",
       "center": [
-        -44.0,
-        1.5,
+        0.5,
+        0.2,
         0.0
       ],
       "size": [
-        88.0,
+        9.0,
         0.04,
-        3.0
+        0.4
       ],
       "rotationQuat": [
         -0.5,
@@ -138,7 +138,7 @@
       "collision": "none",
       "absorbable": false,
       "support": false,
-      "notes": "local +Y is the inward normal (+X); the field never leaves x >= -44"
+      "notes": "local +Y is the inward normal (+X); low (0.4 m) visual/player wall, infinite half-space to the motor"
     },
     {
       "id": "wall_z_max",
@@ -146,14 +146,14 @@
       "role": "boundary",
       "shape": "plane",
       "center": [
-        0.0,
-        1.5,
-        44.0
+        3.5,
+        0.2,
+        4.5
       ],
       "size": [
-        88.0,
+        6.0,
         0.04,
-        3.0
+        0.4
       ],
       "rotationQuat": [
         -0.707107,
@@ -164,7 +164,7 @@
       "collision": "none",
       "absorbable": false,
       "support": false,
-      "notes": "local +Y is the inward normal (-Z); the field never leaves z <= 44"
+      "notes": "local +Y is the inward normal (-Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
     },
     {
       "id": "wall_z_min",
@@ -172,14 +172,14 @@
       "role": "boundary",
       "shape": "plane",
       "center": [
-        0.0,
-        1.5,
-        -44.0
+        3.5,
+        0.2,
+        -4.5
       ],
       "size": [
-        88.0,
+        6.0,
         0.04,
-        3.0
+        0.4
       ],
       "rotationQuat": [
         0.0,
@@ -190,7 +190,7 @@
       "collision": "none",
       "absorbable": false,
       "support": false,
-      "notes": "local +Y is the inward normal (+Z); the field never leaves z >= -44"
+      "notes": "local +Y is the inward normal (+Z); low (0.4 m) visual/player wall, infinite half-space to the motor"
     }
   ]
 }

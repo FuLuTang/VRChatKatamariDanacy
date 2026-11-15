@@ -24,12 +24,13 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// trying to measure.
     /// </para>
     /// <para>
-    /// The arena object starts INACTIVE, deliberately. <see cref="LevelArenaHost"/> registers
-    /// itself in its own <c>Update</c>, and the motor's obstacle tables are global: with every
-    /// cell's arena active at scene load, the first frame would register 4 floors and 16 walls
-    /// into 8 plane slots and latch the overflow counter for the whole session. Deactivating
-    /// here makes "one cell at a time" true by construction instead of by author discipline;
-    /// <see cref="ApplyRegistration"/> turns exactly one back on.
+    /// Every cell's arena object stays ACTIVE, deliberately: the compact field is meant to be
+    /// seen as a whole (its pads sit on a grid with 1 m walkways). Registration is a separate
+    /// switch: <see cref="LevelArenaHost"/> registers itself in its own <c>Update</c>, and the
+    /// motor's obstacle tables are global, so the driver calls <see cref="ReleaseArena"/> on
+    /// every cell but the first at load. That suspends the host's self-registration while
+    /// leaving the floor, low walls and boxes visible; one active arena can never overflow the
+    /// motor. <see cref="ApplyRegistration"/> resumes exactly one cell for a switch.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
@@ -65,6 +66,26 @@ namespace VRCKatamari.Labs.PhysicsTestField
                  "primary box's near face, metres. blocked_gap_m = approach - progress - radius.")]
         [SerializeField] private float approachM;
 
+        // ---- ramp geometry (derived by the criteria importer) -------------------
+
+        [Header("Ramp cell (derived from the placement's role=ramp / kind=ramp_probe)")]
+        [Tooltip("True when the placement carries a role=ramp. The deck_gap expectation is " +
+                 "then a climb, not a step rule comparison: a ramp exists precisely to lift " +
+                 "the ball above every stepLimit.")]
+        [SerializeField] private bool rampClimb;
+        [Tooltip("Distance along the authored heading from the start to the ramp's footprint, " +
+                 "metres. ramp_entry_progress_m = progress - this.")]
+        [SerializeField] private float rampFootM;
+        [Tooltip("True when the placement carries a kind=ramp_probe box. The driver asks the " +
+                 "motor to register that box's +Y face as a ramp: over the slope guard the " +
+                 "call must be refused, and the refusal is the criterion.")]
+        [SerializeField] private bool rampProbe;
+        [SerializeField] private Vector3 rampProbeCenter;
+        [SerializeField] private Vector3 rampProbeNormal;
+        [SerializeField] private Vector3 rampProbeRight;
+        [SerializeField] private float rampProbeHalfWidth;
+        [SerializeField] private float rampProbeHalfRun;
+
         // ---- drive timeline (from cells[].drive) -------------------------------
 
         [Header("Drive timeline: (t, forward, turn, lateral), applied in order")]
@@ -93,29 +114,40 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // ---- operator seams ----------------------------------------------------
 
         /// <summary>
-        /// Makes this cell the registered arena: activates the arena object and re-applies it
-        /// (clear the motor's obstacle tables, then register ground + walls + boxes).
+        /// Makes this cell the registered arena: allows its host to register and re-applies it
+        /// (clear the motor's obstacle tables, then register ground + walls + boxes/ramps).
         /// </summary>
+        /// <remarks>
+        /// The GameObject is already active: the compact field shows every cell at once, and
+        /// visibility is not the registration switch. The switch is the host's
+        /// <c>SuspendRegistration</c> flag, so activating here is only a safety net for a scene
+        /// that was saved with an inactive object.
+        /// </remarks>
         public void ApplyRegistration()
         {
             if (arena == null) return;
-            // Activate first: the host reads its own BoxColliders' bounds while registering.
             arena.gameObject.SetActive(true);
+            arena.ResumeRegistration();
             arena.Reapply();
         }
 
-        /// <summary>Turns this cell's arena off so its own Update cannot register it again.</summary>
+        /// <summary>
+        /// Stops this cell's arena from registering while keeping its floor, walls and boxes
+        /// visible. The host's own Update is the only self-registration path, so suspending it
+        /// is exactly "visible but not registered".
+        /// </summary>
         public void ReleaseArena()
         {
             if (arena == null) return;
-            arena.gameObject.SetActive(false);
+            arena.SuspendRegistration();
         }
 
-        /// <summary>True when the arena is currently on. The driver uses it to avoid flicker.</summary>
+        /// <summary>True when the arena is visible AND allowed to register.</summary>
         public bool IsArenaActive()
         {
             if (arena == null) return false;
-            return arena.gameObject.activeSelf;
+            if (!arena.gameObject.activeSelf) return false;
+            return !arena.IsRegistrationSuspended();
         }
 
         // ---- identity / spatial getters ---------------------------------------
@@ -149,6 +181,49 @@ namespace VRCKatamari.Labs.PhysicsTestField
         public float GetApproachM()
         {
             return approachM;
+        }
+
+        /// <summary>True when the placement's ramp is the thing that lifts the ball.</summary>
+        public bool IsRampClimb()
+        {
+            return rampClimb;
+        }
+
+        /// <summary>Distance from the start to the ramp footprint along the heading, metres.</summary>
+        public float GetRampFootM()
+        {
+            return rampFootM;
+        }
+
+        /// <summary>True when this cell asks the motor to judge an over-limit ramp plane.</summary>
+        public bool HasRampProbe()
+        {
+            return rampProbe;
+        }
+
+        public Vector3 GetRampProbeCenter()
+        {
+            return rampProbeCenter;
+        }
+
+        public Vector3 GetRampProbeNormal()
+        {
+            return rampProbeNormal;
+        }
+
+        public Vector3 GetRampProbeRight()
+        {
+            return rampProbeRight;
+        }
+
+        public float GetRampProbeHalfWidth()
+        {
+            return rampProbeHalfWidth;
+        }
+
+        public float GetRampProbeHalfRun()
+        {
+            return rampProbeHalfRun;
         }
 
         public float GetStopSeconds()

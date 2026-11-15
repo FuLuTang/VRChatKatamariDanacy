@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using VRCKatamari.BallLayers;
 using VRCKatamari.Labs.PhysicsTestField;
 using VRCKatamari.Story;
 using UdonSharp;
@@ -23,7 +24,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
     /// <para>
     /// This is the editor half of the "one authoring copy" rule
     /// (<c>Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md</c> section 7.3): the Udon runtime cannot read
-    /// disk JSON, and a human must not retype 4 cells x 7 checks by hand, so exactly one tool reads
+    /// disk JSON, and a human must not retype 9 cells x 60 checks by hand, so exactly one tool reads
     /// <c>physics_test_field.json</c> and writes the serialized arrays.
     /// </para>
     /// <para>
@@ -123,6 +124,38 @@ namespace VRCKatamari.Editor.PhysicsTestField
             public string readout;
             public string gate;
             public string[] expect;
+        }
+
+        /// <summary>Only the placement keys this tool reads; JsonUtility ignores the rest.</summary>
+        [Serializable]
+        public class PlacementDocument
+        {
+            public PlacementStructureEntry[] structures;
+        }
+
+        [Serializable]
+        public class PlacementStructureEntry
+        {
+            public string id;
+            public string kind;
+            public string role;
+        }
+
+        /// <summary>
+        /// What the cell's placement says about ramps, resolved against the scene's own arena:
+        /// the placement names the structures, the arena's serialized colliders are the geometry
+        /// the motor will actually see (the same rule as approach_m).
+        /// </summary>
+        private sealed class CellGeometry
+        {
+            public bool HasRamp;
+            public float RampFootM;
+            public bool HasProbe;
+            public Vector3 ProbeCenter;
+            public Vector3 ProbeNormal;
+            public Vector3 ProbeRight;
+            public float ProbeHalfWidth;
+            public float ProbeHalfRun;
         }
 
         // ---- report ------------------------------------------------------------
@@ -258,7 +291,8 @@ namespace VRCKatamari.Editor.PhysicsTestField
                 }
 
                 float approach = ComputeApproach(arena, cell);
-                int checks = WriteCell(component, cell, arena, approach, report);
+                CellGeometry geometry = ReadCellGeometry(path, arena, cell, report);
+                int checks = WriteCell(component, cell, arena, approach, geometry, report);
                 if (checks >= 0)
                 {
                     report.CellsWritten++;
@@ -298,7 +332,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
         // ---- cell writing -------------------------------------------------------
 
         private static int WriteCell(PhysicsTestCell component, CellEntry cell, LevelArenaHost arena,
-            float approachM, Report report)
+            float approachM, CellGeometry geometry, Report report)
         {
             var serialized = new SerializedObject(component);
             int checkCount = cell.checks == null ? 0 : cell.checks.Length;
@@ -315,6 +349,17 @@ namespace VRCKatamari.Editor.PhysicsTestField
                 ToVector2(cell.footprint == null ? null : cell.footprint.size, Vector2.zero), report);
             SetFloat(serialized, "nominalM", cell.nominal_m, report);
             SetFloat(serialized, "approachM", approachM, report);
+            SetBool(serialized, "rampClimb", geometry != null && geometry.HasRamp, report);
+            SetFloat(serialized, "rampFootM", geometry == null ? 0f : geometry.RampFootM, report);
+            SetBool(serialized, "rampProbe", geometry != null && geometry.HasProbe, report);
+            if (geometry != null && geometry.HasProbe)
+            {
+                SetVector3(serialized, "rampProbeCenter", geometry.ProbeCenter, report);
+                SetVector3(serialized, "rampProbeNormal", geometry.ProbeNormal, report);
+                SetVector3(serialized, "rampProbeRight", geometry.ProbeRight, report);
+                SetFloat(serialized, "rampProbeHalfWidth", geometry.ProbeHalfWidth, report);
+                SetFloat(serialized, "rampProbeHalfRun", geometry.ProbeHalfRun, report);
+            }
             SetFloat(serialized, "stopSeconds", cell.stop_seconds > 0f ? cell.stop_seconds : 1.5f, report);
 
             int driveCount = cell.drive == null ? 0 : cell.drive.Length;
@@ -610,6 +655,180 @@ namespace VRCKatamari.Editor.PhysicsTestField
             return best;
         }
 
+        /// <summary>
+        /// Reads the parts of the cell's placement the runner needs that are NOT a second copy of
+        /// the geometry: whether a ramp is the climb, where its footprint starts, and whether a
+        /// <c>kind=ramp_probe</c> board has to be put in front of the motor's slope guard. The
+        /// geometry itself is read from the ARENA's colliders, exactly like
+        /// <see cref="ComputeApproach"/>: the placement names the structure, the scene owns the
+        /// transform the motor will bake.
+        /// </summary>
+        private static CellGeometry ReadCellGeometry(string fieldPath, LevelArenaHost arena,
+            CellEntry cell, Report report)
+        {
+            var geometry = new CellGeometry();
+            PlacementDocument placement = LoadPlacement(fieldPath, cell, report);
+            if (placement == null || placement.structures == null) return geometry;
+
+            string probeId = null;
+            for (int i = 0; i < placement.structures.Length; i++)
+            {
+                PlacementStructureEntry structure = placement.structures[i];
+                if (structure == null) continue;
+                if (string.Equals(structure.role, "ramp", StringComparison.Ordinal))
+                {
+                    geometry.HasRamp = true;
+                }
+
+                if (string.Equals(structure.kind, "ramp_probe", StringComparison.Ordinal))
+                {
+                    probeId = structure.id;
+                }
+            }
+
+            if (geometry.HasRamp) geometry.RampFootM = ComputeRampFoot(arena, cell);
+            if (!string.IsNullOrEmpty(probeId))
+            {
+                BakeRampProbe(arena, probeId, geometry, report);
+            }
+
+            return geometry;
+        }
+
+        private static PlacementDocument LoadPlacement(string fieldPath, CellEntry cell, Report report)
+        {
+            if (string.IsNullOrEmpty(cell.placement))
+            {
+                report.Note(cell.id + " has no placement path; its ramp data was not read");
+                return null;
+            }
+
+            string repoRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fieldPath) ?? ".",
+                "..", "..", ".."));
+            string path = Path.Combine(repoRoot, "Docs", "Design", "Levels", cell.placement);
+            if (!File.Exists(path))
+            {
+                report.Note(cell.id + ": placement not found at " + path + "; ramp data was not read");
+                return null;
+            }
+
+            try
+            {
+                return JsonUtility.FromJson<PlacementDocument>(File.ReadAllText(path));
+            }
+            catch (Exception exception)
+            {
+                report.Note(cell.id + ": cannot read " + path + " (" + exception.Message + ")");
+                return null;
+            }
+        }
+
+        /// <summary>Distance from the start, along the heading, to the first ramp footprint.</summary>
+        private static float ComputeRampFoot(LevelArenaHost arena, CellEntry cell)
+        {
+            if (arena == null || cell.start_pose == null) return 0f;
+            float[] start = cell.start_pose.center;
+            if (start == null || start.Length < 3) return 0f;
+
+            float heading = cell.start_pose.heading_deg * Mathf.Deg2Rad;
+            float dirX = Mathf.Sin(heading);
+            float dirZ = Mathf.Cos(heading);
+            if (Mathf.Abs(dirX) < 1e-5f && Mathf.Abs(dirZ) < 1e-5f) return 0f;
+
+            var serialized = new SerializedObject(arena);
+            SerializedProperty ramps = serialized.FindProperty("rampBoxes");
+            if (ramps == null || !ramps.isArray) return 0f;
+
+            float best = -1f;
+            for (int i = 0; i < ramps.arraySize; i++)
+            {
+                BoxCollider box = ramps.GetArrayElementAtIndex(i).objectReferenceValue as BoxCollider;
+                if (box == null) continue;
+                Bounds bounds = box.bounds;
+                float distance;
+                if (!RayEnters(start[0], start[2], dirX, dirZ, bounds.min.x, bounds.max.x,
+                    bounds.min.z, bounds.max.z, out distance))
+                {
+                    continue;
+                }
+
+                if (best < 0f || distance < best) best = distance;
+            }
+
+            return best < 0f ? 0f : best;
+        }
+
+        /// <summary>
+        /// Bakes the probe board's +Y face into the plane the driver hands to
+        /// <c>motor.AddRamp</c>. The bake uses a permissive ceiling on purpose: the point is to
+        /// obtain the over-limit plane unchanged and let the MOTOR refuse it at run time, so the
+        /// refusal getters carry the reason. (LevelArenaHost's own bake would refuse it here, in
+        /// the editor, and the motor would never see it.)
+        /// </summary>
+        private static void BakeRampProbe(LevelArenaHost arena, string probeId, CellGeometry geometry,
+            Report report)
+        {
+            BoxCollider box = FindArenaBox(arena, "staticBoxes", probeId);
+            if (box == null)
+            {
+                report.Note("ramp probe '" + probeId + "' has no BoxCollider in the arena's " +
+                            "staticBoxes; the refusal check will read 0");
+                return;
+            }
+
+            Transform owner = box.transform;
+            Vector3 normal = owner.rotation * new Vector3(0f, 1f, 0f);
+            Vector3 right = owner.rotation * new Vector3(1f, 0f, 0f);
+            Vector3 scale = owner.lossyScale;
+            Vector3 localCenter = box.center;
+            Vector3 localSize = box.size;
+            Vector3 boxCenter = owner.position + owner.rotation * new Vector3(
+                localCenter.x * scale.x, localCenter.y * scale.y, localCenter.z * scale.z);
+            Vector3 worldSize = new Vector3(Mathf.Abs(scale.x) * localSize.x,
+                Mathf.Abs(scale.y) * localSize.y, Mathf.Abs(scale.z) * localSize.z);
+
+            Vector3 walkingCenter;
+            Vector3 rampNormal;
+            Vector3 rampRight;
+            float halfWidth;
+            float halfRun;
+            float slopeDegrees;
+            int refusalCode;
+            if (!SupportSurfaceMath.TryBakeRamp(boxCenter, normal, right, worldSize, 89.5f,
+                out walkingCenter, out rampNormal, out rampRight, out halfWidth, out halfRun,
+                out slopeDegrees, out refusalCode))
+            {
+                report.Note("ramp probe '" + probeId + "' could not be baked: "
+                            + SupportSurfaceMath.RampRefusalReason(refusalCode));
+                return;
+            }
+
+            geometry.HasProbe = true;
+            geometry.ProbeCenter = walkingCenter;
+            geometry.ProbeNormal = rampNormal;
+            geometry.ProbeRight = rampRight;
+            geometry.ProbeHalfWidth = halfWidth;
+            geometry.ProbeHalfRun = halfRun;
+            report.Note("ramp probe '" + probeId + "' baked at " + slopeDegrees.ToString("0.0") +
+                        " deg; the motor must refuse it at run time");
+        }
+
+        private static BoxCollider FindArenaBox(LevelArenaHost arena, string fieldName, string objectName)
+        {
+            if (arena == null) return null;
+            var serialized = new SerializedObject(arena);
+            SerializedProperty boxes = serialized.FindProperty(fieldName);
+            if (boxes == null || !boxes.isArray) return null;
+            for (int i = 0; i < boxes.arraySize; i++)
+            {
+                BoxCollider box = boxes.GetArrayElementAtIndex(i).objectReferenceValue as BoxCollider;
+                if (box == null) continue;
+                if (string.Equals(box.gameObject.name, objectName, StringComparison.Ordinal)) return box;
+            }
+
+            return null;
+        }
+
         /// <summary>2D slab test: distance along (dirX, dirZ) from (x, z) to the box, or false.</summary>
         private static bool RayEnters(float x, float z, float dirX, float dirZ, float minX, float maxX,
             float minZ, float maxZ, out float distance)
@@ -735,6 +954,12 @@ namespace VRCKatamari.Editor.PhysicsTestField
         {
             SerializedProperty property = RequireProperty(serialized, name, report);
             if (property != null) property.floatValue = value;
+        }
+
+        private static void SetBool(SerializedObject serialized, string name, bool value, Report report)
+        {
+            SerializedProperty property = RequireProperty(serialized, name, report);
+            if (property != null) property.boolValue = value;
         }
 
         private static void SetVector3(SerializedObject serialized, string name, Vector3 value,

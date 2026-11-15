@@ -1,4 +1,4 @@
-"""The physics test field's data contract: four cells, their placements and their criteria.
+"""The physics test field's data contract: 9 cells, their placements and their criteria.
 
 Run from the repository root:
 
@@ -16,6 +16,10 @@ drift is here:
   start inside it too (a rect that is a lie would move the wrong cell on);
 * ``nominal_m`` must equal the cell's deck height, because every deck/step criterion is
   written against it;
+* a ramp cell must declare ``role=ramp`` (the motor must accept it) and a 50-degree
+  adversarial cell must declare a ``kind=ramp_probe`` box instead, because the authoring
+  gate refuses over-45 ramps (it asks for a box) and the motor's refusal getter can only
+  be exercised through a probe;
 * every metric a wired check names must be one the driver can actually read
   (``TryReadMetric``), which is checked by reading the C# source rather than keeping a
   second list of metric names in Python.
@@ -74,6 +78,19 @@ def structure_aabb(structure):
     half = core.world_half_extents(size, quat)
     return ((center[0] - half[0], center[1] - half[1], center[2] - half[2]),
             (center[0] + half[0], center[1] + half[1], center[2] + half[2]))
+
+
+def structure_slope(structure):
+    return core.structure_slope_deg(structure)
+
+
+def walkable_top(structure):
+    """World Y of the highest point of a box or ramp (its walking surface at the top)."""
+    return structure_aabb(structure)[1][1]
+
+
+def deck_structures(doc):
+    return [s for s in doc["structures"] if s["role"] in ("box", "ramp")]
 
 
 class FieldJsonShape(unittest.TestCase):
@@ -157,6 +174,14 @@ class CellPlacements(unittest.TestCase):
             self.assertTrue(path.is_file(), path)
             report = core.validate(core.load_doc(path), path=path)
             self.assertTrue(report.ok, "%s: %s" % (path, report.errors))
+            if cell["id"] == "C06":
+                # C06 is the adversarial cell: its 50-degree board must be a BOX (the
+                # authoring gate refuses role=ramp over 45 degrees and says "make it a
+                # box"), so the validator's tilted-box warning is expected and is the only
+                # warning allowed anywhere in the field.
+                self.assertEqual(len(report.warnings), 1, "%s: %s" % (path, report.warnings))
+                self.assertIn("tilted box", report.warnings[0])
+                continue
             self.assertEqual(report.warnings, [], "%s: %s" % (path, report.warnings))
 
     def test_arena_id_matches_the_cell_and_its_folder(self):
@@ -166,35 +191,106 @@ class CellPlacements(unittest.TestCase):
             self.assertEqual(Path(cell["placement"]).parent.name, cell["id"])
 
     def test_every_cell_is_a_complete_arena(self):
-        # ClearObstacles zeroes the motor's global plane table, so a cell that borrowed the
-        # field's walls from another host would leave the ball with no boundary at all.
+        # ClearObstacles zeroes the motor's global plane table, so every cell carries its own
+        # floor and its own four boundary planes; a borrowed wall would leave the ball with no
+        # boundary after a switch.
         for cell in self.cells:
             doc = load_cell(cell["placement"])
             roles = [structure["role"] for structure in doc["structures"]]
             self.assertEqual(roles.count("ground"), 1, cell["id"])
             self.assertEqual(roles.count("boundary"), 4, cell["id"])
-            self.assertEqual(roles.count("box"), 1, cell["id"])
+            self.assertIn(roles.count("box"), (0, 1, 2, 8), cell["id"])
+            self.assertIn(roles.count("ramp"), (0, 1), cell["id"])
             self.assertEqual(doc["props"], [], cell["id"])
+            self.assertGreaterEqual(roles.count("box") + roles.count("ramp"), 1, cell["id"])
 
-    def test_the_shared_base_is_identical_in_every_cell(self):
-        bases = {}
+    def test_every_cell_has_its_own_compact_pad(self):
+        # The compact field (2026-11-15): one pad per cell, the ground is exactly the cell's
+        # footprint, four low boundary markers sit on its edges, and the whole field fits in
+        # 28 x 31.5 m. This replaces the old "one shared 88 m base, byte-identical" rule.
+        xs, zs = [], []
         for cell in self.cells:
             doc = load_cell(cell["placement"])
-            base = [structure for structure in doc["structures"]
-                    if structure["role"] in ("ground", "boundary")]
-            bases[cell["id"]] = json.dumps(sorted(base, key=lambda item: item["id"]),
-                                           sort_keys=True)
-        distinct = set(bases.values())
-        self.assertEqual(len(distinct), 1,
-                         "the field floor / walls differ between cells: %s" % sorted(bases))
+            ground = [s for s in doc["structures"] if s["role"] == "ground"][0]
+            footprint = cell["footprint"]
+            self.assertAlmostEqual(ground["center"][0], footprint["center"][0], places=4,
+                                   msg=cell["id"])
+            self.assertAlmostEqual(ground["center"][2], footprint["center"][1], places=4,
+                                   msg=cell["id"])
+            self.assertAlmostEqual(ground["size"][0], footprint["size"][0], places=4,
+                                   msg=cell["id"])
+            self.assertAlmostEqual(ground["size"][2], footprint["size"][1], places=4,
+                                   msg=cell["id"])
+            self.assertLessEqual(ground["size"][0], 6.001, cell["id"])
+            self.assertLessEqual(ground["size"][2], 10.001, cell["id"])
+            walls = [s for s in doc["structures"] if s["role"] == "boundary"]
+            self.assertEqual(len(walls), 4, cell["id"])
+            for wall in walls:
+                self.assertAlmostEqual(wall["size"][2], 0.4, places=6, msg=cell["id"])
+            low, high = structure_aabb(ground)
+            xs.extend([low[0], high[0]])
+            zs.extend([low[2], high[2]])
+        self.assertLessEqual(max(xs) - min(xs), 28.001, "field is wider than the compact target")
+        self.assertLessEqual(max(zs) - min(zs), 31.501, "field is deeper than the compact target")
 
     def test_nominal_is_the_deck_height(self):
+        # The invariant is "nominal is the top the ball has to reach", so it is the highest
+        # walking surface of the cell's box/ramp structures. For a step cell that is the box
+        # top; for a ramp cell it is the landing the ramp meets (1.50 / 0.60); for C06 it is
+        # the adversarial board's world AABB top (1.50), which is deliberately a wall.
         for cell in self.cells:
             doc = load_cell(cell["placement"])
-            deck = [structure for structure in doc["structures"] if structure["role"] == "box"][0]
-            (_, bottom, _), (_, top, _) = structure_aabb(deck)
-            self.assertAlmostEqual(bottom, 0.0, places=6, msg=cell["id"])
-            self.assertAlmostEqual(cell["nominal_m"], top, places=6, msg=cell["id"])
+            surfaces = deck_structures(doc)
+            top = max(walkable_top(structure) for structure in surfaces)
+            self.assertAlmostEqual(cell["nominal_m"], top, places=4, msg=cell["id"])
+
+    def test_ramp_cells_declare_a_ramp_and_a_landing(self):
+        ramp_cells = {"C01", "C03", "C05", "C13"}
+        for cell in self.cells:
+            doc = load_cell(cell["placement"])
+            ramps = [s for s in doc["structures"] if s["role"] == "ramp"]
+            if cell["id"] in ramp_cells:
+                self.assertEqual(len(ramps), 1, cell["id"])
+                self.assertIn("meets", ramps[0], cell["id"])
+                landing = [s for s in doc["structures"] if s["id"] == ramps[0]["meets"]][0]
+                self.assertAlmostEqual(walkable_top(landing), walkable_top(ramps[0]),
+                                       places=4, msg=cell["id"])
+            else:
+                self.assertEqual(ramps, [], cell["id"])
+
+    def test_ramp_slopes_are_inside_the_motor_ceiling(self):
+        expected = {"C01": 5.0, "C03": 25.0, "C05": 45.0, "C13": 11.31}
+        for cell in self.cells:
+            if cell["id"] not in expected:
+                continue
+            doc = load_cell(cell["placement"])
+            ramp = [s for s in doc["structures"] if s["role"] == "ramp"][0]
+            slope = structure_slope(ramp)
+            self.assertAlmostEqual(slope, expected[cell["id"]], delta=0.02, msg=cell["id"])
+            self.assertLessEqual(slope, core.RAMP_MAX_SLOPE_DEG + 0.01, cell["id"])
+
+    def test_c06_is_an_over_limit_box_probe_not_a_ramp(self):
+        # The authoring gate refuses role=ramp over 45 degrees, so the 50-degree board must be
+        # a box. Its world AABB is the design's fallback wall, and the criteria importer bakes
+        # its +Y face so the driver can ask motor.AddRamp and read the refusal.
+        doc = load_cell("physics_test_field/C06/placement.json")
+        self.assertEqual([s for s in doc["structures"] if s["role"] == "ramp"], [])
+        probes = [s for s in doc["structures"] if s.get("kind") == "ramp_probe"]
+        self.assertEqual(len(probes), 1)
+        probe = probes[0]
+        self.assertEqual(probe["role"], "box")
+        self.assertAlmostEqual(structure_slope(probe), 50.0, delta=0.02)
+        low, high = structure_aabb(probe)
+        self.assertAlmostEqual(high[1], 0.6, places=4)             # compact fallback top
+        self.assertAlmostEqual(low[1], -0.128, delta=0.002)        # board thickness under ground
+        self.assertAlmostEqual(high[2] - low[2], 0.656, delta=0.003)
+
+    def test_new_cells_are_wired_and_not_planned(self):
+        ids = {cell["id"] for cell in self.cells}
+        planned = {cell["id"] for cell in self.field["planned_cells"]}
+        for cell_id in ("C01", "C03", "C05", "C06", "C13"):
+            self.assertIn(cell_id, ids)
+            self.assertNotIn(cell_id, planned)
 
     def test_geometry_stays_inside_its_own_footprint(self):
         for cell in self.cells:
@@ -302,6 +398,36 @@ class CellCriteria(unittest.TestCase):
         self.assertIn('Same(metric, "deck_gap_m")', source)
         self.assertIn("GetStepHeightLimitWorldM()", source)
         self.assertIn("GetNominalM()", source)
+        # ... but never on a ramp cell: a ramp exists to lift the ball above every step
+        # limit, so the derivation must be skipped exactly when the placement has a ramp.
+        self.assertIn("IsRampClimb()", source)
+
+    def test_ramp_checks_use_the_ramp_readings(self):
+        metrics = {}
+        for cell in self.cells:
+            metrics[cell["id"]] = {check["metric"] for check in cell["checks"]}
+        for cell_id in ("C01", "C03", "C05", "C13"):
+            self.assertIn("ramp_support_seen", metrics[cell_id])
+            self.assertIn("ramp_entry_progress_m", metrics[cell_id])
+            self.assertIn("ramp_count", metrics[cell_id])
+        # Only C03 keeps a mid-slope hold in the compact timeline; C05 is the 45-degree
+        # equality case and its short runway has no room for a stop window.
+        self.assertIn("slip_back_m", metrics["C03"])
+        self.assertIn("ramp_refusal_reason_len", metrics["C06"])
+        self.assertIn("ramp_refusal_slope_deg", metrics["C06"])
+        self.assertIn("max_bottom_rise_m", metrics["C06"])
+        self.assertIn("blocked_gap_m", metrics["C06"])
+        for metric in ("landing_gap_m", "fall_frames", "support_kind", "grounded_frame_dy_m"):
+            self.assertIn(metric, metrics["C13"])
+
+    def test_the_refusal_check_expects_a_refusal_at_every_diameter(self):
+        c06 = [cell for cell in self.cells if cell["id"] == "C06"][0]
+        refused = [check for check in c06["checks"] if check["id"] == "ramp_refused"][0]
+        self.assertEqual(refused["expect"], ["pass", "pass", "pass", "pass"])
+        self.assertGreaterEqual(refused["limit"], 1)
+        no_ramp = [check for check in c06["checks"] if check["id"] == "no_ramp_registered"][0]
+        self.assertEqual(no_ramp["op"], "==")
+        self.assertEqual(no_ramp["limit"], 0)
 
 
 class ArenaRules(unittest.TestCase):

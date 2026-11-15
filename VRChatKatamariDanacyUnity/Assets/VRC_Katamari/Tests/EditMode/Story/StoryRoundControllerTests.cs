@@ -202,3 +202,106 @@ namespace VRCKatamari.Tests
         }
     }
 }
+
+namespace VRCKatamari.Tests
+{
+    /// <summary>
+    /// Pins the LevelArenaHost registration switch the compact physics test field relies on:
+    /// every cell stays visible, but only the active one may write the motor. The seam is
+    /// <c>SuspendRegistration</c> / <c>ResumeRegistration</c>; an explicit <c>Reapply</c> must
+    /// still register a resumed arena.
+    /// </summary>
+    /// <remarks>
+    /// Reflection for the same reason as the round tests: this assembly has no UdonSharp
+    /// reference, so the UdonSharpBehaviour types cannot appear in a field or signature. The
+    /// motor is started through its private <c>Start</c> (it only allocates stores and derives
+    /// the baseline size), which is the state the host's own gate reads.
+    /// </remarks>
+    public class LevelArenaHostRegistrationTests
+    {
+        private const BindingFlags Any =
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+
+        private GameObject arenaObject;
+        private Component arena;
+        private GameObject motorObject;
+        private Component motor;
+
+        [SetUp]
+        public void SetUp()
+        {
+            Type motorType = Resolve("VRCKatamari.BallMotor.KatamariBallMotor");
+            Type arenaType = Resolve("VRCKatamari.Story.LevelArenaHost");
+
+            motorObject = new GameObject("LevelArenaHostRegistrationTests_Motor");
+            motor = motorObject.AddComponent(motorType);
+            Invoke(motor, "Start");
+
+            arenaObject = new GameObject("LevelArenaHostRegistrationTests_Arena");
+            arena = arenaObject.AddComponent(arenaType);
+            Field(arena, "motor").SetValue(arena, motor);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (arenaObject != null) UnityEngine.Object.DestroyImmediate(arenaObject);
+            if (motorObject != null) UnityEngine.Object.DestroyImmediate(motorObject);
+        }
+
+        [Test]
+        public void AnUnmodifiedArenaStillSelfRegisters()
+        {
+            // The default path every existing scene uses: Start leaves the flag false, and the
+            // host's first Update registers. A change here would break the shipped levels.
+            Invoke(arena, "Update");
+            Assert.IsTrue((bool)Invoke(arena, "IsReady"));
+            Assert.IsFalse((bool)Invoke(arena, "IsRegistrationSuspended"));
+        }
+
+        [Test]
+        public void SuspendedArenaDoesNotSelfRegisterUntilResumedAndReapplied()
+        {
+            Invoke(arena, "SuspendRegistration");
+            Assert.IsTrue((bool)Invoke(arena, "IsRegistrationSuspended"));
+
+            Invoke(arena, "Update");
+            Assert.IsFalse((bool)Invoke(arena, "IsReady"),
+                "a suspended arena must not register itself in Update");
+
+            Invoke(arena, "ResumeRegistration");
+            Assert.IsFalse((bool)Invoke(arena, "IsRegistrationSuspended"));
+            Invoke(arena, "Reapply");
+            Assert.IsTrue((bool)Invoke(arena, "IsReady"),
+                "Reapply must register a resumed arena even though Update was skipped");
+        }
+
+        private static Type Resolve(string name)
+        {
+            Type type = Type.GetType(name + ", VRCKatamari.Runtime");
+            if (type != null) return type;
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                type = assembly.GetType(name);
+                if (type != null) return type;
+            }
+
+            Assert.Fail(name + " type not loaded");
+            return null;
+        }
+
+        private static object Invoke(object target, string method)
+        {
+            MethodInfo info = target.GetType().GetMethod(method, Any);
+            Assert.IsNotNull(info, target.GetType().Name + "." + method + " not found");
+            return info.Invoke(target, null);
+        }
+
+        private static FieldInfo Field(object target, string name)
+        {
+            FieldInfo info = target.GetType().GetField(name, Any);
+            Assert.IsNotNull(info, target.GetType().Name + "." + name + " not found");
+            return info;
+        }
+    }
+}

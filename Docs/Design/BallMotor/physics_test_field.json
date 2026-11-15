@@ -16,10 +16,11 @@
     "fields_from_placement": [
       "structures[] (ground / boundary / box / ramp: the ONLY geometry)",
       "level.arena.id (the managed-root child and the cell's identity)",
-      "level.budget (per-cell capacity, checked by levelbuild check)"
+      "level.budget (per-cell capacity, checked by levelbuild check)",
+      "structures[].role / structures[].kind (does this cell have a role=ramp, and which box is the kind=ramp_probe board the motor must refuse)"
     ],
-    "not_duplicated_here": "registration boxes, ramp angles, boundary planes, ground",
-    "why_footprint_is_not_geometry": "cells[].footprint is the RUNNER's activation rect: it includes the run-up (C14 is 6 m wide but 12 m deep for a 6 m plate) and no placement holds it. The test suite refuses geometry that leaves its own footprint, so the rect cannot drift away from the boxes",
+    "not_duplicated_here": "registration boxes, ramp angles, boundary planes, ground, the ramp foot distance and the probe plane (all read from the scene colliders the importer built)",
+    "why_footprint_is_not_geometry": "cells[].footprint is the RUNNER's activation rect and is now exactly the cell's pad (the ground plane has the same centre and size); the run-up is inside the pad. The test suite refuses geometry that leaves its own footprint.",
     "check": "python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/physics_test_field/<cell>/placement.json",
     "preview": "source ~/tools/blender-env.sh && \"$BLENDER\" $BLENDER_FLAGS --python Tools/levelbuild/blender/render_views.py -- --placement Docs/Design/Levels/physics_test_field/<cell>/placement.json --preset plan"
   },
@@ -44,7 +45,7 @@
       },
       "heading_convention": "heading 0 = +Z；heading 90 = +X；heading 180 = -Z；heading -90 = -X"
     },
-    "bounds_note": "the 88 m x 88 m field box and its 4 boundary planes are part of every cell's placement (level.bounds there is the CELL's activation rect, and each cell carries the shared ground + walls because ClearObstacles empties the motor's global plane table on every switch)"
+    "bounds_note": "the compact field is a 27 m x 30.5 m grid (4 columns x 3 rows, 1-1.5 m walkways). Each cell placement carries its OWN 6x9 or 6x10 ground plane and 4 low (0.4 m) boundary planes because ClearObstacles empties the motor's global plane table on every switch; level.bounds is [[-14,-15],[14,16.5]]."
   },
   "motor_constants": {
     "fixed_step_seconds": 0.02,
@@ -121,7 +122,7 @@
   },
   "registration_model": {
     "mode": "one_cell_at_a_time",
-    "why": "motor 的静态盒上限 8、斜面上限 4；一个 22 格的场同时注册必然超容量并 latch overflow。所以每格自带一组 BoxCollider，切格时 motor.ClearObstacles() → 目标格 LevelArenaHost.Reapply()",
+    "why": "motor 的静态盒上限 8、斜面上限 4；一个 21 格的场同时注册必然超容量并 latch overflow。所以每格自带一组 BoxCollider，切格时 motor.ClearObstacles() → 目标格 LevelArenaHost.Reapply()",
     "switch_rule": "active = 离球心最近的格足迹（外扩 activate_margin_m = r + 2.0）；换格需连续 0.25 s 稳定；球在无格区时保持上一格 1.0 s 后清到 base",
     "per_cell_arena": "every placement.json is a COMPLETE arena: ground + 4 boundary planes + that cell's boxes. motor.ClearObstacles() zeroes the global plane table, so the host that registers last owns every plane; a cell cannot borrow the field's walls from another host. The 4 wall objects are therefore duplicated per cell in the scene (they are markers, not colliders).",
     "base_registration": {
@@ -145,20 +146,20 @@
       "placement": "physics_test_field/C14/placement.json",
       "start_pose": {
         "center": [
-          -21.0,
+          -10.5,
           0.15,
-          -22.0
+          -13.0
         ],
-        "heading_deg": 180.0
+        "heading_deg": 0.0
       },
       "footprint": {
         "center": [
-          -21.0,
-          -28.0
+          -10.5,
+          -10.0
         ],
         "size": [
           6.0,
-          12.0
+          9.0
         ]
       },
       "nominal_m": 0.028,
@@ -169,14 +170,14 @@
           "forward": 1.0,
           "turn": 0.0,
           "lateral": 0.0,
-          "note": "全速 −Z（heading 180）从北侧碾过薄片"
+          "note": "全速 +Z 碾过 3×3 薄板（板占 z −11.5…−8.5，1.5 m 助跑）"
         },
         {
-          "t": 4.5,
+          "t": 3.0,
           "forward": 0.0,
           "turn": 0.0,
           "lateral": 0.0,
-          "note": "松手：4.5 s 足够四个球径都跑出 8 m，包括 2.20 的加速段"
+          "note": "松手"
         }
       ],
       "checks": [
@@ -184,7 +185,7 @@
           "id": "crossed",
           "metric": "progress_m",
           "op": ">=",
-          "limit": 8.0,
+          "limit": 4.5,
           "unit": "m",
           "readout": "frame",
           "gate": "P1",
@@ -195,7 +196,7 @@
             "pass",
             "pass"
           ],
-          "note": "沿 heading 的有符号位移 >= 8 m：真的从薄片上滚过去，而不是被隐形墙挡住"
+          "note": "沿 heading 的有符号位移 >= 4.5 m：紧凑格 9 m 深，板后还有 3 m；真的从薄片上滚过去，而不是被隐形墙挡住"
         },
         {
           "id": "no_speed_loss",
@@ -313,7 +314,7 @@
         "p2": "PASS",
         "p3": "PASS"
       },
-      "notes": "P1 的旗舰反例：0.028 < stepLimit(0.30) = 0.075，所以 P1 之前它必然是墙、之后必须能碾过去。FAIL 的那次也是有效证据"
+      "notes": "0.028 m 板在 6×9 m 的格内；跑道缩短后判据从 8 m 改成 4.5 m（板前 1.5 + 板 3）"
     },
     {
       "id": "C09",
@@ -325,20 +326,20 @@
       "placement": "physics_test_field/C09/placement.json",
       "start_pose": {
         "center": [
-          7.5,
+          -3.5,
           0.15,
-          -4.0
+          -3.5
         ],
-        "heading_deg": 90.0
+        "heading_deg": 0.0
       },
       "footprint": {
         "center": [
-          12.0,
-          -4.0
+          -3.5,
+          0.0
         ],
         "size": [
-          12.0,
-          4.0
+          6.0,
+          9.0
         ]
       },
       "nominal_m": 0.075,
@@ -349,14 +350,14 @@
           "forward": 1.0,
           "turn": 0.0,
           "lateral": 0.0,
-          "note": "全速 +X 撞台阶（heading 90）"
+          "note": "全速 +Z 撞台阶（台阶南面 z=−0.75，2.75 m 助跑）"
         },
         {
-          "t": 4.0,
+          "t": 3.0,
           "forward": 0.0,
           "turn": 0.0,
           "lateral": 0.0,
-          "note": "松手：让球停在台面上或台阶前，停住后的读数才算数"
+          "note": "松手"
         }
       ],
       "checks": [
@@ -459,7 +460,7 @@
         "p2": "PASS",
         "p3": "PASS"
       },
-      "notes": "边界格：rise == stepLimit。按 TERRAIN_SUPPORT 4.1 的 <= 判据应可上；实测是墙就是契约偏差，不是浮点抖动"
+      "notes": "紧凑格 6×9 m：台阶 4×h×1.5，南面 z=−0.75"
     },
     {
       "id": "C08",
@@ -471,20 +472,20 @@
       "placement": "physics_test_field/C08/placement.json",
       "start_pose": {
         "center": [
-          7.5,
+          -10.5,
           0.15,
-          -9.0
+          -3.5
         ],
-        "heading_deg": 90.0
+        "heading_deg": 0.0
       },
       "footprint": {
         "center": [
-          12.0,
-          -9.0
+          -10.5,
+          0.0
         ],
         "size": [
-          12.0,
-          4.0
+          6.0,
+          9.0
         ]
       },
       "nominal_m": 0.05,
@@ -495,14 +496,14 @@
           "forward": 1.0,
           "turn": 0.0,
           "lateral": 0.0,
-          "note": "全速 +X 撞台阶（heading 90）"
+          "note": "全速 +Z 撞台阶（台阶南面 z=−0.75，2.75 m 助跑）"
         },
         {
-          "t": 4.0,
+          "t": 3.0,
           "forward": 0.0,
           "turn": 0.0,
           "lateral": 0.0,
-          "note": "松手：让球停在台面上或台阶前，停住后的读数才算数"
+          "note": "松手"
         }
       ],
       "checks": [
@@ -605,7 +606,7 @@
         "p2": "PASS",
         "p3": "PASS"
       },
-      "notes": "明确可上的一格：用来把「台阶规则本身坏了」与「边界值有争议」分开"
+      "notes": "紧凑格 6×9 m：台阶 4×h×1.5，南面 z=−0.75"
     },
     {
       "id": "C10",
@@ -617,20 +618,20 @@
       "placement": "physics_test_field/C10/placement.json",
       "start_pose": {
         "center": [
-          7.5,
+          3.5,
           0.15,
-          1.0
+          -3.5
         ],
-        "heading_deg": 90.0
+        "heading_deg": 0.0
       },
       "footprint": {
         "center": [
-          12.0,
-          1.0
+          3.5,
+          0.0
         ],
         "size": [
-          12.0,
-          4.0
+          6.0,
+          9.0
         ]
       },
       "nominal_m": 0.1,
@@ -641,14 +642,14 @@
           "forward": 1.0,
           "turn": 0.0,
           "lateral": 0.0,
-          "note": "全速 +X 撞台阶（heading 90）"
+          "note": "全速 +Z 撞台阶（台阶南面 z=−0.75，2.75 m 助跑）"
         },
         {
-          "t": 4.0,
+          "t": 3.0,
           "forward": 0.0,
           "turn": 0.0,
           "lateral": 0.0,
-          "note": "松手：让球停在台面上或台阶前，停住后的读数才算数"
+          "note": "松手"
         }
       ],
       "checks": [
@@ -768,7 +769,961 @@
         "p2": "PASS",
         "p3": "PASS"
       },
-      "notes": "墙的正面基线：被挡时球心到立面的距离 = 0，且没有绕过去；0.60 球要能上"
+      "notes": "紧凑格 6×9 m：台阶 4×h×1.5，南面 z=−0.75"
+    },
+    {
+      "id": "C01",
+      "slug": "ramp_050",
+      "name_zh": "5° 斜板",
+      "kind": "ramp",
+      "stage": "P3",
+      "wired": true,
+      "placement": "physics_test_field/C01/placement.json",
+      "start_pose": {
+        "center": [
+          -10.5,
+          0.15,
+          6.8
+        ],
+        "heading_deg": 0.0
+      },
+      "footprint": {
+        "center": [
+          -10.5,
+          11.0
+        ],
+        "size": [
+          6.0,
+          10.0
+        ]
+      },
+      "nominal_m": 0.6,
+      "stop_seconds": 2.0,
+      "drive": [
+        {
+          "t": 0.0,
+          "forward": 1.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "全速 +Z 上 5° 坡（0.6 m 升程，坡脚 z=7.6，坡顶 z=14.46）"
+        },
+        {
+          "t": 1.0,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "在坡上停住（8 m/s² 刹车约 1 m）"
+        },
+        {
+          "t": 6.0,
+          "forward": 1.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "停 5 s（测不往回滑）后继续上到 0.60 台面"
+        },
+        {
+          "t": 8.0,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "松手"
+        }
+      ],
+      "checks": [
+        {
+          "id": "ramp_support",
+          "metric": "ramp_support_seen",
+          "op": "==",
+          "limit": 1,
+          "unit": "bool",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "整段至少一帧 GetSupportKind()==2：球真的被斜面撑着，而不是被别的面托着"
+        },
+        {
+          "id": "ramp_entered",
+          "metric": "ramp_entry_progress_m",
+          "op": ">=",
+          "limit": 0.3,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "从坡脚沿坡向上的水平位移 >= 0.30 m：坡脚没有隐形墙（S15）"
+        },
+        {
+          "id": "ramp_registered",
+          "metric": "ramp_count",
+          "op": "==",
+          "limit": 1,
+          "unit": "count",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "切格后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "arena 的 role=ramp 被 motor 接受：GetRampCount()==1（45 含等号）"
+        },
+        {
+          "id": "climbed",
+          "metric": "deck_gap_m",
+          "op": "abs<=",
+          "limit": 0.01,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段最小值",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "坡顶台面 0.60（升程 0.6；5.0° 水平 6.86 m）：|(球心 − 半径) − 0.60| 的最小值 = 0 表示真的上到顶"
+        },
+        {
+          "id": "no_overflow",
+          "metric": "overflow_delta",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "1 盒 + 1 斜面的容量 latch 基线差必须为 0"
+        },
+        {
+          "id": "size_accuracy",
+          "metric": "diameter_error_quanta",
+          "op": "<=",
+          "limit": 1.0,
+          "unit": "quantum",
+          "readout": "frame",
+          "gate": null,
+          "window": "设定器收敛后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "球径误差 <= 1 个体积单位折算的直径；只要求落在网格最近点"
+        }
+      ],
+      "cameras": [
+        "cam_ramps",
+        "cam_top"
+      ],
+      "acceptance_refs": [
+        "S13",
+        "S15"
+      ],
+      "expectation": {
+        "pre_p1": "BLOCKED_UNTIL_P3",
+        "p1": "BLOCKED_UNTIL_P3",
+        "p2": "BLOCKED_UNTIL_P3",
+        "p3": "PASS"
+      },
+      "notes": "紧凑格：5° 升 0.60、水平 6.86、宽 4；台面 4×0.6×1.5，坡脚 z=7.6"
+    },
+    {
+      "id": "C03",
+      "slug": "ramp_250",
+      "name_zh": "25° 斜板",
+      "kind": "ramp",
+      "stage": "P3",
+      "wired": true,
+      "placement": "physics_test_field/C03/placement.json",
+      "start_pose": {
+        "center": [
+          -3.5,
+          0.15,
+          7.1
+        ],
+        "heading_deg": 0.0
+      },
+      "footprint": {
+        "center": [
+          -3.5,
+          11.0
+        ],
+        "size": [
+          6.0,
+          10.0
+        ]
+      },
+      "nominal_m": 0.6,
+      "stop_seconds": 2.0,
+      "drive": [
+        {
+          "t": 0.0,
+          "forward": 1.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "全速 +Z 上 25° 坡（坡脚 z=7.6，坡顶 z=8.89）"
+        },
+        {
+          "t": 0.6,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "在坡上停住（约 1 m 刹车）"
+        },
+        {
+          "t": 5.6,
+          "forward": 1.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "停 5 s（测不往回滑）后继续上到 0.60 台面"
+        },
+        {
+          "t": 7.6,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "松手"
+        }
+      ],
+      "checks": [
+        {
+          "id": "ramp_support",
+          "metric": "ramp_support_seen",
+          "op": "==",
+          "limit": 1,
+          "unit": "bool",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "整段至少一帧 GetSupportKind()==2：球真的被斜面撑着，而不是被别的面托着"
+        },
+        {
+          "id": "ramp_entered",
+          "metric": "ramp_entry_progress_m",
+          "op": ">=",
+          "limit": 0.3,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "从坡脚沿坡向上的水平位移 >= 0.30 m：坡脚没有隐形墙（S15）"
+        },
+        {
+          "id": "ramp_registered",
+          "metric": "ramp_count",
+          "op": "==",
+          "limit": 1,
+          "unit": "count",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "切格后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "arena 的 role=ramp 被 motor 接受：GetRampCount()==1（45 含等号）"
+        },
+        {
+          "id": "climbed",
+          "metric": "deck_gap_m",
+          "op": "abs<=",
+          "limit": 0.01,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段最小值",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "坡顶台面 0.60（升程 0.6；25.0° 水平 1.29 m）：|(球心 − 半径) − 0.60| 的最小值 = 0 表示真的上到顶"
+        },
+        {
+          "id": "no_slip_back",
+          "metric": "slip_back_m",
+          "op": "abs<=",
+          "limit": 0.02,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "停住后 5 s",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "松手停在坡上 5 s 后沿坡向下的位移 <= 0.02 m：切向重力默认 0，球不往回滑（S17）"
+        },
+        {
+          "id": "no_overflow",
+          "metric": "overflow_delta",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "1 盒 + 1 斜面的容量 latch 基线差必须为 0"
+        },
+        {
+          "id": "size_accuracy",
+          "metric": "diameter_error_quanta",
+          "op": "<=",
+          "limit": 1.0,
+          "unit": "quantum",
+          "readout": "frame",
+          "gate": null,
+          "window": "设定器收敛后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "球径误差 <= 1 个体积单位折算的直径；只要求落在网格最近点"
+        }
+      ],
+      "cameras": [
+        "cam_ramps",
+        "cam_top"
+      ],
+      "acceptance_refs": [
+        "S13",
+        "S15",
+        "S17"
+      ],
+      "expectation": {
+        "pre_p1": "BLOCKED_UNTIL_P3",
+        "p1": "BLOCKED_UNTIL_P3",
+        "p2": "BLOCKED_UNTIL_P3",
+        "p3": "PASS"
+      },
+      "notes": "紧凑格：25° 升 0.60、水平 1.29、宽 4；坡上停 5 s 是「不滑」的采样窗口"
+    },
+    {
+      "id": "C05",
+      "slug": "ramp_450",
+      "name_zh": "45° 斜板",
+      "kind": "ramp",
+      "stage": "P3",
+      "wired": true,
+      "placement": "physics_test_field/C05/placement.json",
+      "start_pose": {
+        "center": [
+          3.5,
+          0.15,
+          6.8
+        ],
+        "heading_deg": 0.0
+      },
+      "footprint": {
+        "center": [
+          3.5,
+          11.0
+        ],
+        "size": [
+          6.0,
+          10.0
+        ]
+      },
+      "nominal_m": 0.6,
+      "stop_seconds": 2.0,
+      "drive": [
+        {
+          "t": 0.0,
+          "forward": 1.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "全速 +Z 上 45° 坡（坡脚 z=7.6，坡顶 z=8.20）"
+        },
+        {
+          "t": 2.5,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "到 0.60 台面后松手"
+        }
+      ],
+      "checks": [
+        {
+          "id": "ramp_support",
+          "metric": "ramp_support_seen",
+          "op": "==",
+          "limit": 1,
+          "unit": "bool",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "整段至少一帧 GetSupportKind()==2：球真的被斜面撑着，而不是被别的面托着"
+        },
+        {
+          "id": "ramp_entered",
+          "metric": "ramp_entry_progress_m",
+          "op": ">=",
+          "limit": 0.3,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "从坡脚沿坡向上的水平位移 >= 0.30 m：坡脚没有隐形墙（S15）"
+        },
+        {
+          "id": "ramp_registered",
+          "metric": "ramp_count",
+          "op": "==",
+          "limit": 1,
+          "unit": "count",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "切格后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "arena 的 role=ramp 被 motor 接受：GetRampCount()==1（45 含等号）"
+        },
+        {
+          "id": "climbed",
+          "metric": "deck_gap_m",
+          "op": "abs<=",
+          "limit": 0.01,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段最小值",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "坡顶台面 0.60（升程 0.6；45.0° 水平 0.60 m）：|(球心 − 半径) − 0.60| 的最小值 = 0 表示真的上到顶"
+        },
+        {
+          "id": "no_overflow",
+          "metric": "overflow_delta",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "1 盒 + 1 斜面的容量 latch 基线差必须为 0"
+        },
+        {
+          "id": "size_accuracy",
+          "metric": "diameter_error_quanta",
+          "op": "<=",
+          "limit": 1.0,
+          "unit": "quantum",
+          "readout": "frame",
+          "gate": null,
+          "window": "设定器收敛后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "球径误差 <= 1 个体积单位折算的直径；只要求落在网格最近点"
+        }
+      ],
+      "cameras": [
+        "cam_ramps",
+        "cam_top"
+      ],
+      "acceptance_refs": [
+        "S13",
+        "S15",
+        "S17"
+      ],
+      "expectation": {
+        "pre_p1": "BLOCKED_UNTIL_P3",
+        "p1": "BLOCKED_UNTIL_P3",
+        "p2": "BLOCKED_UNTIL_P3",
+        "p3": "PASS"
+      },
+      "notes": "紧凑格：45° 等号边界；升 0.60、水平 0.60、宽 4；必须被接受"
+    },
+    {
+      "id": "C06",
+      "slug": "ramp_500",
+      "name_zh": "50° 斜板（应爬不上：拒绝注册）",
+      "kind": "ramp",
+      "stage": "P3",
+      "wired": true,
+      "placement": "physics_test_field/C06/placement.json",
+      "start_pose": {
+        "center": [
+          10.5,
+          0.15,
+          -3.5
+        ],
+        "heading_deg": 0.0
+      },
+      "footprint": {
+        "center": [
+          10.5,
+          0.0
+        ],
+        "size": [
+          6.0,
+          9.0
+        ]
+      },
+      "nominal_m": 0.6,
+      "stop_seconds": 2.0,
+      "drive": [
+        {
+          "t": 0.0,
+          "forward": 1.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "全速 +Z 撞 50° 板（板脚 z=−2.0，1.5 m 助跑）"
+        },
+        {
+          "t": 2.0,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "顶住兜底墙 2 s：球应停在板前，不穿过去"
+        }
+      ],
+      "checks": [
+        {
+          "id": "ramp_refused",
+          "metric": "ramp_refusal_reason_len",
+          "op": ">=",
+          "limit": 1,
+          "unit": "chars",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "切格后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "50° 板交给 motor.AddRamp 必须被拒，且 GetLastRampRefusalReason() 非空（P3 护栏）"
+        },
+        {
+          "id": "refusal_slope",
+          "metric": "ramp_refusal_slope_deg",
+          "op": ">=",
+          "limit": 49.0,
+          "unit": "deg",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "切格后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "motor 报出的被拒斜面实测坡度 >= 49°：拒绝的是这块 50° 板，不是别的输入"
+        },
+        {
+          "id": "no_ramp_registered",
+          "metric": "ramp_count",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "切格后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "被拒的斜面不能留下注册项：GetRampCount()==0（ramps=0/1 的 0）"
+        },
+        {
+          "id": "no_climb",
+          "metric": "max_bottom_rise_m",
+          "op": "<=",
+          "limit": 0.05,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段最大值",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "球底最高只比地面高 5 cm：没有把被拒的坡当成支撑偷偷抬上去"
+        },
+        {
+          "id": "stopped_by_wall",
+          "metric": "blocked_gap_m",
+          "op": "abs<=",
+          "limit": 0.03,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P1",
+          "window": "末帧",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "球停在 50° 板世界 AABB 的正面（z=−2.0）= 兜底墙生效；大数表示提前停住（隐形墙）"
+        },
+        {
+          "id": "no_overflow",
+          "metric": "overflow_delta",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "1 盒 = 兜底墙，0 斜面；容量 latch 基线差必须为 0"
+        },
+        {
+          "id": "size_accuracy",
+          "metric": "diameter_error_quanta",
+          "op": "<=",
+          "limit": 1.0,
+          "unit": "quantum",
+          "readout": "frame",
+          "gate": null,
+          "window": "设定器收敛后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "球径误差 <= 1 个体积单位折算的直径"
+        }
+      ],
+      "cameras": [
+        "cam_ramps",
+        "cam_top"
+      ],
+      "acceptance_refs": [
+        "S16"
+      ],
+      "expectation": {
+        "pre_p1": "BLOCKED_UNTIL_P3",
+        "p1": "BLOCKED_UNTIL_P3",
+        "p2": "BLOCKED_UNTIL_P3",
+        "p3": "PASS"
+      },
+      "notes": "紧凑格：50° 板升 0.60、宽 4、厚 0.20，世界 AABB 顶 0.60（> 2.20 档 stepLimit 0.55，永远是墙）。作者门在 45° 之上拒绝 role=ramp（LEVEL_AUTHORING 4.3「改成 box」），所以板以 box 落库：AABB 进 staticBoxes 当兜底墙；判据导入器把同一块板的 +Y 面烘给驱动，驱动运行时调 motor.AddRamp 取证拒绝原因。arena 行是 ramps=0/0，被拒的 0/1 由驱动的 probe 行给出（PHYSICS_TEST_FIELD.md §4.1.2）"
+    },
+    {
+      "id": "C13",
+      "slug": "plateau_edge",
+      "name_zh": "0.6 m 台面：一侧斜坡上、一侧直角边下",
+      "kind": "plateau",
+      "stage": "P1",
+      "wired": true,
+      "placement": "physics_test_field/C13/placement.json",
+      "start_pose": {
+        "center": [
+          10.5,
+          0.15,
+          6.5
+        ],
+        "heading_deg": 0.0
+      },
+      "footprint": {
+        "center": [
+          10.5,
+          11.0
+        ],
+        "size": [
+          6.0,
+          10.0
+        ]
+      },
+      "nominal_m": 0.6,
+      "stop_seconds": 2.5,
+      "drive": [
+        {
+          "t": 0.0,
+          "forward": 1.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "全速 +Z：0.5 m 助跑 → 11.31° 坡（坡脚 z=7.0，坡顶 z=10.0）"
+        },
+        {
+          "t": 3.0,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "越过 5×4 台面北缘（z=14）后松手：接缝、直角边掉落、落地同一次 run"
+        }
+      ],
+      "checks": [
+        {
+          "id": "ramp_support",
+          "metric": "ramp_support_seen",
+          "op": "==",
+          "limit": 1,
+          "unit": "bool",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "至少一帧 GetSupportKind()==2：球真的走在 11.31° 坡上"
+        },
+        {
+          "id": "ramp_entered",
+          "metric": "ramp_entry_progress_m",
+          "op": ">=",
+          "limit": 0.3,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "沿坡向上的水平位移 >= 0.30 m：坡脚无隐形墙"
+        },
+        {
+          "id": "ramp_registered",
+          "metric": "ramp_count",
+          "op": "==",
+          "limit": 1,
+          "unit": "count",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "切格后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "arena 的 11.31° 斜面被接受（GetRampCount()==1）"
+        },
+        {
+          "id": "seam_no_step",
+          "metric": "grounded_frame_dy_m",
+          "op": "<=",
+          "limit": 0.05,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P3",
+          "window": "整段（非下落帧）",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "落地前的最大单帧 |Δy| <= 0.05 m：坡顶与台面接缝（δ=0）不顿、不弹（S14）。自由落体的帧不进这个读数（否则会读成「接缝跳变」）"
+        },
+        {
+          "id": "climbed",
+          "metric": "deck_gap_m",
+          "op": "abs<=",
+          "limit": 0.005,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P1",
+          "window": "整段最小值",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "台面 0.60：整段 |(球心 − 半径) − 0.60| 的最小值 = 0 表示真的上过台面"
+        },
+        {
+          "id": "landing_gap",
+          "metric": "landing_gap_m",
+          "op": "abs<=",
+          "limit": 0.005,
+          "unit": "m",
+          "readout": "frame",
+          "gate": "P1",
+          "window": "末帧",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "从 0.6 m 直角边掉到地面后 |球心 − 半径| <= 5 mm：落地贴地、不是悬空/穿地"
+        },
+        {
+          "id": "fall_frames",
+          "metric": "fall_frames",
+          "op": ">=",
+          "limit": 3,
+          "unit": "frames",
+          "readout": "frame",
+          "gate": "P1",
+          "window": "整段",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "掉落期间至少 3 帧 IsFalling()：排除瞬移式落地"
+        },
+        {
+          "id": "landed_on_ground",
+          "metric": "support_kind",
+          "op": "==",
+          "limit": 0,
+          "unit": "kind",
+          "readout": "frame",
+          "gate": "P1",
+          "window": "末帧",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "末帧支撑面是地面（kind 0）：确实离开了台面，不是停在台面上"
+        },
+        {
+          "id": "no_overflow",
+          "metric": "overflow_delta",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "1 盒 + 1 斜面的容量 latch 基线差必须为 0"
+        },
+        {
+          "id": "size_accuracy",
+          "metric": "diameter_error_quanta",
+          "op": "<=",
+          "limit": 1.0,
+          "unit": "quantum",
+          "readout": "frame",
+          "gate": null,
+          "window": "设定器收敛后",
+          "expect": [
+            "pass",
+            "pass",
+            "pass",
+            "pass"
+          ],
+          "note": "球径误差 <= 1 个体积单位折算的直径"
+        }
+      ],
+      "cameras": [
+        "cam_deck",
+        "cam_top"
+      ],
+      "acceptance_refs": [
+        "S3",
+        "S4",
+        "S5",
+        "S14",
+        "S15"
+      ],
+      "expectation": {
+        "pre_p1": "EXPECTED_FAIL（没有斜面）",
+        "p1": "PASS（台面/落地）；斜面入口 BLOCKED_UNTIL_P3",
+        "p2": "PASS",
+        "p3": "PASS"
+      },
+      "notes": "紧凑格：0.6 m 台面 5×4（z 10…14），南侧 11.31° 坡（水平 3.0），北缘直角边掉 0.60 m"
     }
   ],
   "planned_cells": [
@@ -789,22 +1744,6 @@
       "note": "geometry not migrated yet: author it as Docs/Design/Levels/physics_test_field/C00/placement.json, then flip wired and copy the checks; the design numbers are in PHYSICS_TEST_FIELD.md section 4"
     },
     {
-      "id": "C01",
-      "slug": "ramp_050",
-      "name_zh": "5° 斜板",
-      "kind": "ramp",
-      "stage": "P3",
-      "wired": false,
-      "placement": null,
-      "expectation": {
-        "pre_p1": "EXPECTED_FAIL",
-        "p1": "EXPECTED_FAIL",
-        "p2": "EXPECTED_FAIL",
-        "p3": "PASS"
-      },
-      "note": "geometry not migrated yet: author it as Docs/Design/Levels/physics_test_field/C01/placement.json, then flip wired and copy the checks; the design numbers are in PHYSICS_TEST_FIELD.md section 4"
-    },
-    {
       "id": "C02",
       "slug": "ramp_150",
       "name_zh": "15° 斜板",
@@ -821,22 +1760,6 @@
       "note": "geometry not migrated yet: author it as Docs/Design/Levels/physics_test_field/C02/placement.json, then flip wired and copy the checks; the design numbers are in PHYSICS_TEST_FIELD.md section 4"
     },
     {
-      "id": "C03",
-      "slug": "ramp_250",
-      "name_zh": "25° 斜板",
-      "kind": "ramp",
-      "stage": "P3",
-      "wired": false,
-      "placement": null,
-      "expectation": {
-        "pre_p1": "EXPECTED_FAIL",
-        "p1": "EXPECTED_FAIL",
-        "p2": "EXPECTED_FAIL",
-        "p3": "PASS"
-      },
-      "note": "geometry not migrated yet: author it as Docs/Design/Levels/physics_test_field/C03/placement.json, then flip wired and copy the checks; the design numbers are in PHYSICS_TEST_FIELD.md section 4"
-    },
-    {
       "id": "C04",
       "slug": "ramp_350",
       "name_zh": "35° 斜板",
@@ -851,38 +1774,6 @@
         "p3": "PASS"
       },
       "note": "geometry not migrated yet: author it as Docs/Design/Levels/physics_test_field/C04/placement.json, then flip wired and copy the checks; the design numbers are in PHYSICS_TEST_FIELD.md section 4"
-    },
-    {
-      "id": "C05",
-      "slug": "ramp_450",
-      "name_zh": "45° 斜板",
-      "kind": "ramp",
-      "stage": "P3",
-      "wired": false,
-      "placement": null,
-      "expectation": {
-        "pre_p1": "EXPECTED_FAIL",
-        "p1": "EXPECTED_FAIL",
-        "p2": "EXPECTED_FAIL",
-        "p3": "PASS"
-      },
-      "note": "geometry not migrated yet: author it as Docs/Design/Levels/physics_test_field/C05/placement.json, then flip wired and copy the checks; the design numbers are in PHYSICS_TEST_FIELD.md section 4"
-    },
-    {
-      "id": "C06",
-      "slug": "ramp_500",
-      "name_zh": "50° 斜板（应爬不上：拒绝注册）",
-      "kind": "ramp",
-      "stage": "P3",
-      "wired": false,
-      "placement": null,
-      "expectation": {
-        "pre_p1": "BLOCKED_UNTIL_P3",
-        "p1": "BLOCKED_UNTIL_P3",
-        "p2": "BLOCKED_UNTIL_P3",
-        "p3": "PASS"
-      },
-      "note": "geometry not migrated yet: author it as Docs/Design/Levels/physics_test_field/C06/placement.json, then flip wired and copy the checks; the design numbers are in PHYSICS_TEST_FIELD.md section 4"
     },
     {
       "id": "C07",
@@ -931,22 +1822,6 @@
         "p3": "PASS"
       },
       "note": "geometry not migrated yet: author it as Docs/Design/Levels/physics_test_field/C12/placement.json, then flip wired and copy the checks; the design numbers are in PHYSICS_TEST_FIELD.md section 4"
-    },
-    {
-      "id": "C13",
-      "slug": "plateau_edge",
-      "name_zh": "0.6 m 台面：一侧斜坡上、一侧直角边下",
-      "kind": "plateau",
-      "stage": "P1",
-      "wired": false,
-      "placement": null,
-      "expectation": {
-        "pre_p1": "EXPECTED_FAIL",
-        "p1": "PASS（entry=teleport）",
-        "p2": "PASS",
-        "p3": "PASS（entry=ramp 也过）"
-      },
-      "note": "geometry not migrated yet: author it as Docs/Design/Levels/physics_test_field/C13/placement.json, then flip wired and copy the checks; the design numbers are in PHYSICS_TEST_FIELD.md section 4"
     },
     {
       "id": "C15",
@@ -1276,7 +2151,7 @@
     "blocked_notes": [
       "readout=trace checks are read from the console by a human, so the driver reports them as BLOCKED_UNTIL_manual and counts them as skipped, never as failures",
       "readout=counter checks need the P4 step-cost counters and report BLOCKED_UNTIL_P4",
-      "gate=P2 checks are measured when a PickupFieldHost is wired with prop obstacles enabled (its SetSupportProps is the only path for prop tops; a disabled host clears both sets); gate=P3 still reports BLOCKED_UNTIL_P3 in this revision"
+      "gate=P2 checks are measured when a PickupFieldHost is wired with prop obstacles enabled (its SetSupportProps is the only path for prop tops; a disabled host clears both sets). P3 is in the tree since d31dc9b, so a gate=P3 check is MEASURED: the driver no longer reports BLOCKED_UNTIL_P3"
     ]
   },
   "ball_size": {
@@ -1304,10 +2179,10 @@
     "status": "WRITTEN_NOT_COMPILED",
     "reads": [
       "Docs/Design/BallMotor/physics_test_field.json",
-      "each wired cell's placement.json (start pose, activation rect, approach distance)"
+      "each wired cell's placement.json (start pose, activation rect, approach distance, role=ramp / kind=ramp_probe, ramp foot)"
     ],
     "writes": [
-      "PhysicsTestCell: cellId, arena, startCenter, startHeadingDegrees, footprint, nominalM, approachM, check arrays, drive timeline",
+      "PhysicsTestCell: cellId, arena, startCenter, startHeadingDegrees, footprint, nominalM, approachM, rampClimb, rampFootM, rampProbe plane, check arrays, drive timeline",
       "PhysicsTestFieldDriver: cells[], presetDiametersM[], kindWhitelist",
       "LabBallSizeSetter: presetDiametersM[], presetLabels[] (same diameters[], same file)"
     ],

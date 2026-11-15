@@ -92,6 +92,7 @@ namespace VRCKatamari.Story
         [SerializeField] private bool logSetupLine = true;
 
         private bool ready;
+        private bool registrationSuspended;
         private bool beganPlaying;
         private bool groundRegistered;
         private int registeredPlaneCount;
@@ -103,6 +104,12 @@ namespace VRCKatamari.Story
 
         public void Update()
         {
+            // A suspended arena is VISIBLE but must not write the motor. The compact physics
+            // test field keeps every cell's geometry on screen while registering only the
+            // active one; without this gate the other hosts would self-register on their own
+            // Update and latch the motor's capacity. An explicit Reapply() ignores the flag:
+            // it is the owner's "register this now" call.
+            if (registrationSuspended) return;
             if (ready) return;
             if (motor == null) return;
             if (motor.GetSemanticDiameterWorldM() <= 0f) return;
@@ -238,6 +245,28 @@ namespace VRCKatamari.Story
             motor.ClearObstacles();
             ready = false;
             Setup();
+        }
+
+        /// <summary>
+        /// Stops this arena from registering itself in <see cref="Update"/> while leaving its
+        /// GameObject and visible children on screen. The flag starts false, so every existing
+        /// scene keeps its exact behaviour.
+        /// </summary>
+        public void SuspendRegistration()
+        {
+            registrationSuspended = true;
+        }
+
+        /// <summary>Lets <see cref="Update"/> register this arena again (no-op if ready).</summary>
+        public void ResumeRegistration()
+        {
+            registrationSuspended = false;
+        }
+
+        /// <summary>True while the arena is visible but forbidden to self-register.</summary>
+        public bool IsRegistrationSuspended()
+        {
+            return registrationSuspended;
         }
 
         /// <summary>True once the arena has been registered with the motor.</summary>

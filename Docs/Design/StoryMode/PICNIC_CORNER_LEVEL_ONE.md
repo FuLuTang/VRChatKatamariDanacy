@@ -334,7 +334,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | 类别 | 数量 | 来源（`Docs/Design/Levels/story_01_bench_size/placement.json`） | 上限 | 谁读它 |
 |---|---:|---|---:|---|
 | 地面 | 1 | `structures[role=ground]`：`center (−12.7, 0, −12.7)`、法线 `+Y` | 1 | `SetGroundPlane` |
-| 墙平面 | 4 | `boundary_x0 / x1 / z0 / z1`，在 `LevelContent/Structures/` 下是**空物体**（无 Renderer、无 Collider），局部 +Z 指向场内 | 8 | `AddPlane` |
+| 墙平面 | 4 | `boundary_x0 / x1 / z0 / z1`，在 `LevelContent/Structures/` 下是**空物体标记**（无 Renderer、无 Collider，局部 +Z 指向场内）；可见墙 + 玩家碰撞盒在它的 `Visual` 子物体上（2026-11-15 起） | 8 | `AddPlane`（标记）；`Visual` 只给玩家 |
 | 静态盒 | 4 | `flower_bed`（`(−10, 0.13, −8.55)`、`4.0×0.26×4.9`）、`shell_signpost`（`0.45×1.2×0.12`）、`shell_tree_mound`（`2.5×0.14×2.5`）、`shell_tree_trunk`（`0.5×9×0.5`） | 8 | `AddBox`（墙 + 顶面支撑两用） |
 | 斜面 | 2 | `ramp_to_bed`（10.7°）、`ramp_to_table`（30.0°） | 4（P3） | **今天没人读**：只有 `BoxCollider` 给玩家 |
 | 道具支撑 / 挡路 | 各 ≤6（动态） | 127 件里「吸不动」的那些，每 `0.05 s` 重扫 | 6 / 6 | `SetSupportProps` / `SetBlockingBoxes` |
@@ -368,7 +368,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | G8 | 没有「可爬的结构物」 | **部分关闭**：盒顶（P1）与道具顶（P2）可上；**斜面 / 悬空 / 叠放 / 曲面仍不能** | 本关竖向只到 0.70（折叠桌）；「沿板上桌」= P3 |
 | G9 | 挡路盒 6 格 + 没有厚度过滤 | 第 ② 条**已关闭**：台阶规则取代了「固定 5 cm 过滤」（尺寸相关，更忠实），旧 C9 **作废**；第 ① 条**仍在**：门堆 1.5 m 内不要放其它未解锁大件 | 作者侧保持门堆附近干净 |
 | **G10** | —— | **验收读数只有一个来源**：`gap` / `support` / `supportId` / `stepLimit` / `falling` 这些数只在 `StoryLevelLabBootstrap.Report()` 的 `[story-lab]` 行里。正式场景一旦不挂 Lab 脚本，P1/P2 的 Play 验收就失去读数 | §5.2 B 与 K1（拆一个只读诊断组件） |
-| **G11** | —— | **导入器不产视觉**：`ground` / `boundary` 是空物体标记，`box` / `ramp` 是默认材质的 primitive cube | §5.3 C6：地面与矮墙复用现有对象与 `Art/Materials/Mat_Playground*`；K3 可选 |
+| **G11** | —— | **已关闭（2026-11-15）**：导入器给 `ground` / `boundary` 生成 `Visual`（cube + `BoxCollider`，`Art/Materials/Mat_Playground*`），`box` / `ramp` 的 cube 也补上 `Mat_PlaygroundProp` | §5.3 C1/C2/C6 改成「导入器生成」，见 `LEVEL_AUTHORING` §7.6 的「可见体」表 |
 | **G12** | —— | **数据与旧文档两套账**：`placement.json` 是 127 件 / 1500 u / 12 区，本文 §3.4 与 `LEVEL_AUTHORING` §11 P1 表仍写 110 件 / 412 u | §3.4 的指针；文档修正交 Lead（K6） |
 
 ## 5. Q5 迁移执行（Unity 操作员清单，2026-11-15 按现状重写）
@@ -411,8 +411,8 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 | 对象 | 现在 | 处置 | 理由 |
 |---|---|---|---|
-| `Ground` | `scale (20, 0.4, 20)`、`pos (0, −0.2, 0)`，顶面 `y = 0` | **改**：`localPosition (−12.7, −0.2, −12.7)`、`localScale (13.4, 0.4, 13.4)` | 正好覆盖 `x, z ∈ [−19.4, −6.0]`；材质 `Mat_PlaygroundGround` 保留 = 草地视觉（导入器不产地面视觉） |
-| `Wall_South / North / East / West` | `±10`、`scale (20, 2, 0.4)`、各带 `BoxCollider` | **改**：见 C2 的四个坐标 | 它们是**玩家**的碰撞体；球的墙来自导入的 4 个 boundary 平面。导入器不会给 boundary 生成视觉 |
+| `Ground` | `scale (20, 0.4, 20)`、`pos (0, −0.2, 0)`，顶面 `y = 0` | **删**（§5.4 导入之后再删，见 C1） | 导入器现在按 `structures[role=ground]` 生成地面板（13.4 × 0.04 × 13.4，顶面 `y = 0`，`BoxCollider` + `Mat_PlaygroundGround`），给玩家站；球的地面仍是 motor 的解析平面。留着这块旧 `Ground` 会有两块同顶面的地板（z-fighting + 双份碰撞） |
+| `Wall_South / North / East / West` | `±10`、`scale (20, 2, 0.4)`、各带 `BoxCollider` | **删**（同 C2） | 4 个 `boundary` 导入后，每面墙的标记下都有一个 `Visual`（1.2 × 0.04 × 13.4 + `BoxCollider` + `Mat_PlaygroundWall`）：内表面正好在边界线上。手做的四面墙留着就是八面墙、两层碰撞 |
 | `LevelArena/ArenaWall_North/South/East/West` | 4 个空物体，被 `LevelArenaHost.boundaryWalls` 引用 | **删**（导入后 `boundaryWalls` 会被改成 `LevelContent/Structures/boundary_*`） | 留着就是 8 个平面（上限 8，一格余量都没有） |
 | `LevelArena`（根对象） | 挂 proxy + `UdonBehaviour` + `LevelArenaHost`（`staticBoxes` 目前为空） | **留**（只清空子物体） | 组件与 U# backing 已接好，重建等于重做一遍接线 |
 | `PickupField`（根对象，挂 `PickupFieldHost`）+ 9 个 kind 文件夹 / 110 件 | 旧道具树与 110 行宿主数组 | **改名**为 `LevelContent`（受管根），**再删** 9 个 kind 文件夹（顺序见 C5：**先导入、后删**）；宿主组件留在根上 | 导入器的受管根必须叫 `LevelContent` 且是**场景根**；宿主是 `LevelContent/Props` 的祖先，导入报告才不会打「host is outside」（C4） |
@@ -424,16 +424,16 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 | # | 做什么 | 验收 / 回读 | 失败长什么样 |
 |---|---|---|---|
-| **C1** | 地面：`Ground` 的 transform 按上表改（顶面仍在 `y = 0`） | 顶视截图：地面正好覆盖 `[−19.4, −6.0]²`；Play 里 `gap = 0.000`（±0.002） | 只改尺寸不改中心 → 覆盖 `[−6.7, 6.7]`，球出生在半空 |
-| **C2** | 四面玩家墙：南 `(−12.7, 1, −19.6) scale (13.8, 2, 0.4)`、北 `(−12.7, 1, −5.8) scale (13.8, 2, 0.4)`、西 `(−19.6, 1, −12.7) scale (0.4, 2, 13.8)`、东 `(−5.8, 1, −12.7) scale (0.4, 2, 13.8)`。**内表面正好落在边界线上**（厚度 0.4 → 中心外移 0.2）；长度 13.8 让四角叠合 0.2 m 不留缝 | 顶视截图：四面首尾相接、无缝隙；玩家走不到墙外；`[arena] planes=4/4` | 用 20 m 长的旧墙只挪中心 → 墙伸出场地 3 m，顶视图立刻看出来 |
+| **C1** | 地面：**不用手摆**。`§5.4` 导入会生成 `LevelContent/Structures/ground/Visual`（顶面 `y = 0`、13.4 m 见方、带 `BoxCollider`）；导入成功后删掉旧的 `Ground` 根对象 | 顶视截图：地面正好覆盖 `[−19.4, −6.0]²`；Play 里 `gap = 0.000`（±0.002）；玩家站在 `y ≈ 0` 不掉；`ground` 节点下有 `Visual` 子物体 | 先删 `Ground` 再导入失败 → 这一轮玩家没地板（导入报告是 `Fail`，重跑即可）；`Ground` 留着没删 → 两块地板同顶面，视角抖动 |
+| **C2** | 四面玩家墙：**不用手摆**。4 个 `boundary` 的 `Visual`（1.2 m 高、0.04 m 厚、13.4 m 长）内表面落在边界线上、向场外延伸一个厚度；导入成功后删掉手做的 `Wall_South / North / East / West` | 顶视截图：四面墙贴着 `[−19.4, −6.0]` 的边；玩家走不到墙外；`[arena] planes=4/4` | 手做的墙没删 → 两层墙、两种高度（2.0 与 1.2），顶视图一眼看得出错位；`planes=8/8` → 旧 `ArenaWall_*` 没删（C3） |
 | **C3** | 删 `ArenaWall_*` 四个子物体 | `LevelArenaHost.boundaryWalls` 4 项全指向 `LevelContent/Structures/boundary_*`；`[arena] planes=4/4`（**不是** 8/8） | 不删 → `planes=8/8`，一格余量都没有，两面墙的法线还可能互相打架 |
 | **C4** | 把根对象 `PickupField` **改名**为 `LevelContent`（组件不动、引用不动） | 根对象名 = `LevelContent`；`PickupFieldHost` 仍在该对象上；导入报告的 notes 里**没有**「the host … is outside …」 | 忘了改名 → 导入器自己再建一个 `LevelContent`，场景里两个根、宿主在另一个里 → 报告打 note，归属不清 |
 | **C5** | 删 `LevelContent` 下 9 个旧 kind 文件夹（`fruit / toy / garden / debris / food / drink / container / tableware / nature`，共 110 件）。**顺序：先做 §5.4 的导入，再删**——导入会重写宿主数组指向新件，此时删旧件不会留下悬空引用 | `LevelContent` 下只剩 `Props/`、`Structures/` 与宿主组件；`propTransforms` 数组里没有 `{fileID: 0}` 槽位 | 先删后导入 → 有一轮宿主数组指向被删对象（不会崩，但中间态很难看，且一旦导入失败场景就脏了） |
-| **C6** | **视觉补丁（导入器不产）**：① 地面 = C1 的 `Ground`（`Mat_PlaygroundGround`）；② 矮墙 = C2 的四面 `Wall_*`（`Mat_PlaygroundWall`）；③ 6 个 primitive cube（花圃台 / 指示牌 / 树根丘 / 角树 / 两块斜板）= 导入后手赋 `Art/Materials/Mat_PlaygroundProp.mat` | 场景视图里 0 个灰白 / 洋红 cube；Play 截图能认出花圃台与墙 | 想「让导入器顺便产视觉」→ 那是 K3（可选），本轮不要手改导入器 |
+| **C6** | **视觉由导入器生成**（2026-11-15 起，K3）：① 地面 = `ground/Visual`（`Mat_PlaygroundGround`）；② 矮墙 = 4 个 `boundary/Visual`（`Mat_PlaygroundWall`）；③ `box` / `ramp` 的 6 个 primitive cube 若还是内置默认材质，导入时自动换成 `Art/Materials/Mat_PlaygroundProp.mat`。**手做的材质不被覆盖** | 场景视图里 0 个灰白 / 洋红 cube；Play 截图能认出花圃台与墙；报告里 `structures: +0 ~N -0` 就是补上的体块数（第二次导入应为 `+0 ~0 -0`） | 材质资产被挪走 → 报告 `error: no material at Assets/...`（不静默）；把某个 cube 手改成别的材质 → 导入保留它（占位材质只填空） |
 | **C7** | 球与玩家：motor `startCenterWorld = (−12.5, 0.15, −12.5)`；`maxCoreRadiusWorldM` 保持 `1.1`（D 上限 2.20）；`terrainSupportEnabled = 1`、`stepHeightOverBallDiameter = 0.25`（都已是现状值，复核即可）；`Spawn` 按上表 | Play 首帧球心 ≈ `(−12.5, 0.15, −12.5)`；出生点到 `Spawn` < 0.5 m 且面朝东北（截图） | 只改 `Spawn` 不改 `startCenterWorld` → 玩家在角里、球在原点，走两秒才发现 |
 | **C8** | `SceneDescriptor.ReferenceCamera`：新建一个 Camera（摆在球起点后上方，例如 `(−12.5, 4, −17)` 朝北）并指进去 | Play Mode 无 `Reference camera is not set` 警告 | 指到 `BallView`（它没有 Camera 组件）→ 字段非 0 但仍然是错的 |
 
-**为什么墙建议 2.0 m 而不是 placement 的 1.2 m**：`placement` 的 `boundary` 只是一个平面声明（`size [1.2, 0.04, 13.4]`），导入器把它做成**空物体**（`scale = 1`），这个 `size` **没有任何运行时消费方**——墙的几何完全由操作员决定。VRChat 允许跳跃，1.2 m 的墙玩家一跳就出去了，而球的墙是无限平面、与高度无关。**想兼顾观感与限制**：视觉做 1.2 m、另加一个 2.0 m 的不可见 `BoxCollider`——那要多一个对象，属 P2 美术，本轮先用 2.0 m。
+**关于墙高 2.0 m 与 placement 的 1.2 m**（2026-11-15 改写）：`placement` 的 `boundary` 仍是平面声明（`size [1.2, 0.04, 13.4]`），但 `size` **现在有消费方**了——导入器按它生成 `Visual`（`scale = size`），所以墙的可见高度就是数据里的那一维。球不受影响（墙是无限平面、与高度无关），**受影响的只有玩家**：VRChat 允许跳跃，1.2 m 的墙可能被跳过，跳过之后场外没有地板 → 直接掉下去。要更高的墙就把数据改成 2.0（第一关东西墙的高在 `size[0]`、南北墙的在 `size[2]`，两处都改），**不要手摆**——手摆的墙下次导入不会被删，但会和 `Visual` 重叠。这一条留给 Lead 定：改数据（推荐，一处真源）还是接受 1.2 m。
 
 ### 5.4 D 导入
 
@@ -497,7 +497,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 |---|---|---|---|
 | **K1**（**已实现** 2026-11-15：`Runtime/Story/StoryBallDiagnostics.cs`） | 新 `Runtime/Story/StoryBallDiagnostics.cs`（U#，`BehaviourSyncMode.None`，类 `StoryBallDiagnostics`）；`.cs.meta` 与 `.asset`、场景挂载与 `motor` 引用待 Unity 操作员 | 只读诊断：每 `logIntervalSeconds`（默认 1 s）一行 `[story]`，字段与今天的 `[story-lab]` **同名同序**（`t / center / heading / diameter / bottom / gap / support / supportId / supportY / supports / stepLimit / falling / axes / absorbed / rejects`）；**只有** `motor` 一个引用；`loggingEnabled` 可整体关闭；等 `GetSemanticDiameterWorldM() > 0` 才开始；不要 drive、不要相机 | 正式场景不再挂 Lab 脚本（B），但 P1/P2 的 Play 验收**必须有** `gap / support / stepLimit / falling`（`TERRAIN_SUPPORT` §3.6-3、§9 R11）。验收：每秒一行、字段齐全；`StoryLevelLabBootstrap` 删除后 Console 无 `Missing Script` |
 | **K2** | 删 `Labs/StoryLevel/StoryLevelLabBootstrap.cs / .cs.meta / .asset / .asset.meta` + `Assets/SerializedUdonPrograms/<hash>.asset(+meta)` | 整删 | K1 落地后它没有消费者（`AGENTS.md`：不要平行草稿 / 一次性 builder）。**顺序：先 K1 后 K2** |
-| **K3** | `Editor/LevelBuild/PlacementImporter.cs`（可选） | 给 `box` / `ramp` 的 primitive cube 赋一个**可配置材质**（序列化字段或 `Mat_PlaygroundProp` 常量）；给 `ground` / `boundary` 标记一个「此处需要视觉」的提示 | 现在 C6 全靠人手赋材质：重跑导入不会覆盖（导入器不碰 Renderer），但下一个人不知道。优先级**低**，不做也不阻塞本轮 |
+| **K3**（**已实现** 2026-11-15：`PlacementImporter` 的 `Visual` 体块 + 角色材质） | `Editor/LevelBuild/PlacementImporter.cs` | 给 `ground` / `boundary` 生成 `Visual`（cube + `BoxCollider`，`Mat_PlaygroundGround` / `Mat_PlaygroundWall`）；给 `box` / `ramp` 的 primitive cube 在没有材质时补 `Mat_PlaygroundProp`（手赋的材质不覆盖） | C6 不再是手工作业；重跑导入只会补缺。验收：`LEVEL_AUTHORING` §7.6 的「可见体」表 + `Tests/EditMode/LevelBuild/PlacementImporterVisualTests` |
 | **K4** | `Runtime/BallMotor/KatamariBallMotor.cs` + `Runtime/Story/LevelArenaHost.cs` | `AddRamp / ClearRamps / GetRampCount / GetLastRampRefusalReason` + `rampBoxes` 烘焙（P3） | 斜板今天对球**不存在**（E8）。列出来是为了防止有人把「球穿过斜板」当 bug 修成「把斜板塞进 `staticBoxes`」（那会造坡脚隐形墙）。**不属本轮** |
 | **K5** | `Runtime/Story/StoryRetryButton.cs` | 正式形态并入 hub（`HubStartButton` 那条调用链）；本轮不动 | F2 的三条证据（无 `EventSystem`、`onClick` 目标为 0、世界按钮无 Collider） |
 | **K6** | `Docs/Design/Tools/LEVEL_AUTHORING.md` §11 P1 表 + §8 第 14 条 | 「110 件 / 412 u」→「127 件 / 1500 u」，期望值同步 | 文档修正，不在本 agent 写范围：本文 §3.4 与那份 P1 表是**同一处过期** |

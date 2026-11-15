@@ -442,11 +442,22 @@ planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）
 
 | JSON | `LevelArenaHost` | 说明 |
 |---|---|---|
-| `structures[role=ground]` | `groundNormal` / `groundOffset`（`SetGroundPlane`） | 恰好 1 条；**平面过 `center`**（`offset = dot(normal, center)`） |
-| `structures[role=boundary]` | `boundaryWalls[]`（`Transform`） | `LevelArenaHost` 读每面墙的**局部 +Z** 当法线、`dot(n, position)` 当 offset，所以导入器生成「空物体墙」：原点在碰撞面上、+Z 指向场内（不是 `planeNormals/planeOffsets` 数组） |
+| `structures[role=ground]` | `groundNormal` / `groundOffset`（`SetGroundPlane`） | 恰好 1 条；**平面过 `center`**（`offset = dot(normal, center)`）；导入器另在该标记下生成子物体 `Visual`（地面板 + `BoxCollider`），顶面就是这张平面 |
+| `structures[role=boundary]` | `boundaryWalls[]`（`Transform`） | `LevelArenaHost` 读每面墙的**局部 +Z** 当法线、`dot(n, position)` 当 offset，所以导入器生成「空物体墙」**标记**：原点在碰撞面上、+Z 指向场内（不是 `planeNormals/planeOffsets` 数组）；每个标记下另有子物体 `Visual`（可见墙 + 玩家 `BoxCollider`），内表面就贴在这张平面上、向场外延伸一个厚度 |
 | `structures[role=box]` | `staticBoxes[]`（`BoxCollider`） | `Setup` 烘焙 min/max → `AddBox`，一次两用 |
 | `structures[role=ramp]` | **P1 无槽位**（P3 的 `rampBoxes`） | 导入器给 `BoxCollider` 但**不登记**，也**绝不进 `staticBoxes`**（`TERRAIN_SUPPORT` §7.7 审计第 1 条） |
 | `props[]` 中 `absorbable=false` | **不进 arena**：`PickupFieldHost` 按 `rise vs stepLimit` 自己分成「地形/挡路」 | `LevelArenaHost` **不得**引用道具（§7.4 硬规则） |
+
+**`ground` / `boundary` 的可见体（2026-11-15 起由导入器生成）**：这两个角色以前只产标记，于是新场景「压根没放地板」——画面一片虚无，ClientSim 玩家站不住、掉下去、反复重生。现在标记保持原样（供 `LevelArenaHost` 读），标记下多一个 `Visual` 子物体：
+
+| 项 | 规则 |
+|---|---|
+| 几何 | 一个 cube：`scale = size`（`size` 按「面内 X × 厚度 × 面内 Z」读，**厚度就是法线方向的那一维**），并带上相对标记的滚转，所以 `size` 里哪一维是「高」由 `rotationQuat` 决定（第一关东西墙的高在 `size[0]`，南北墙的在 `size[2]`） |
+| 位置 | 体块是「作者盒沿作者 -Y 平移半个厚度」：地面顶面 = ground 平面，墙内表面 = 墙平面，其余向**下 / 场外**延伸 |
+| 碰撞 | 同尺寸 `BoxCollider`，**只给玩家胶囊**；球的墙/地面仍是解析平面，这块 cube **不进** `staticBoxes`（否则吃掉盒预算，还在墙顶造出可站的窄条） |
+| 地面覆盖 | 结构 `size` 若小于场地，按**四面 boundary 平面的位置**把地面板长出去（就近取「墙脚」当边界：`level.bounds` 是 `[[minX,minZ],[maxX,maxZ]]` 的嵌套数组，`JsonUtility` 不读锯齿数组，为一个字段再写一个 JSON 解析器不值当；平面已经解析好了，而且它才是玩家看得见的那道边） |
+| 材质 | `ground` → `Art/Materials/Mat_PlaygroundGround.mat`，`boundary` → `Mat_PlaygroundWall.mat`，`box` / `ramp` 的 cube **若还是内置默认材质** → `Mat_PlaygroundProp.mat`；找不到资产时 `report.Error` 带路径，不静默。**人手指定的材质不覆盖**（占位材质是默认值，不是美术覆盖）；要按结构单独指定材质，得等 schema 加 `structures[].material`——那是 schema 变动，归 §8 那条线，导入器这侧不改 |
+| 幂等 | 位姿/碰撞体形状/材质逐项比较后才写；旧场景（只有标记）重导一次即补上 `Visual`，计为 `~N`（结构更新），再导一次仍是 `+0 ~0 -0`、`other=0` |
 
 ### 7.7 失败模式（写下来是为了「下次一眼认出来」）
 
@@ -457,6 +468,7 @@ planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）
 | 整关吸不到任何东西 | `allowedKinds` 为空 = 全部拒绝 | `[arena]` 那行日志里 kinds=0 |
 | 第二遍导入还显示 `+110` | 幂等键不是 `itemId`（例如按名字/按顺序） | 报告计数 |
 | 道具吸到球上后还剩一个悬空碰撞盒 | `propColliders[i]` 是 `null` 槽位（静默通过） | 同步后的槽位核对（§7.4） |
+| 新场景「没地板」：画面一片虚无，玩家一直下落、每 0.25 s 被传送回出生点 | 旧场景只有 `ground` / `boundary` 标记，没有 `Visual` 子物体（2026-11-15 之前导入的） | 该结构节点下没有 `Visual` 子物体；重跑一次导入，报告里 `other` / `structures: +0 ~N -0` 就是补上的体块数 |
 
 ---
 
@@ -665,7 +677,7 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 2. **四元数写规范符号**（`w<0` 取反）：否则同一姿态可以写成 `q` 或 `-q`，「重新导出逐字节相同」就不成立。
 3. **`ground` 与 `boundary` 是「过 `center` 的平面」**，不是盒子的顶面；否则 `groundOffset` 会和场景里的地面差半个厚度，所有贴地件一起报「穿地 0.02 m」。
 4. **`defs[]` 与按 def 的价值**（§4.2、§7.4 已改）：Lead 2026-11-15 拍板，`valueUnits` 由关卡数据按 def 声明；导入器把声明值传给 `PickupFieldSync` 一次写入并回读（U2 已实现）。**缺值表行不再丢件**：同步工具已删除 (kind, tier) 值表，`container m` 这类没有旧表行的组合照常成行，价值来自声明。
-5. **`boundary` 在 Unity 里是空物体墙**（§7.6 已改）：以 `LevelArenaHost` 的真实字段 `boundaryWalls` 为准（局部 +Z 指向场内、原点在碰撞面上），不是 `planeNormals/planeOffsets`。`rampBoxes` P1 没有，斜面有 collider 但不登记。
+5. **`boundary` 在 Unity 里是空物体墙标记 + `Visual` 子物体**（§7.6 已改）：以 `LevelArenaHost` 的真实字段 `boundaryWalls` 为准（局部 +Z 指向场内、原点在碰撞面上），不是 `planeNormals/planeOffsets`；可见体与玩家碰撞盒挂在子物体上（2026-11-15 加，见 §7.6 后的「可见体」表）。`rampBoxes` P1 没有，斜面有 collider 但不登记。
 6. **导入器没有 `LevelItem` 标记组件**（§7.2 曾设想）：Editor 程序集里的 MonoBehaviour 无法序列化进场景，而 `Runtime/` 不在本工具写范围。`itemId` 就是物体名，正好也是 `PickupFieldSync` 的行 id——一个键、两个消费方。
 7. **俯视图的 `coverage_m` 是「短边保证入画」**，渲染时按分辨率比例放大 `ortho_scale`；否则 16:9 会把方形场地上下裁掉（实测 13.4 m 场地只看到 7.9 m）。
 8. **没有 `--stale`**（§8 第 16 条的一半）：它要 `.blend` 指纹，而 `.blend` 不进仓库；现在用「重新导出逐字节相同」代替，`export_placement.py` 自带往返自检。

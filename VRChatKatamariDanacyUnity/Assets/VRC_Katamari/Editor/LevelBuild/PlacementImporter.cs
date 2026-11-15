@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -60,6 +61,16 @@ namespace VRCKatamari.Editor.LevelBuild
     /// it preserves every value already serialized on the host.
     /// </para>
     /// <para>
+    /// Structure bodies (2026-11-15). A <c>ground</c> or <c>boundary</c> entry stays a bare
+    /// marker Transform, because <see cref="LevelArenaHost"/> reads the marker's world position
+    /// and (for a wall) its local +Z, and nothing else - a Renderer or a
+    /// <see cref="BoxCollider"/> on the marker itself would change what the arena bakes and how
+    /// a marker is recognized as a marker. The body the player stands on and bumps into is a
+    /// <c>Visual</c> child carrying a cube <see cref="MeshRenderer"/> and a
+    /// <see cref="BoxCollider"/>, with its visible face on the marker's plane. See
+    /// <see cref="ApplyStructureVisuals"/>.
+    /// </para>
+    /// <para>
     /// Assembly placement: <c>Editor/</c> compiles into the predefined
     /// <c>Assembly-CSharp-Editor</c> (see the remark in <c>PickupFieldSync.cs</c>), which is
     /// why the UdonSharp editor usings below resolve without an asmdef.
@@ -83,6 +94,26 @@ namespace VRCKatamari.Editor.LevelBuild
         private const float RotationDotTolerance = 0.99999f;
 
         private const string PropsArtFolder = "Assets/VRC_Katamari/Art/Props";
+
+        // One placeholder material per structure role, from the greybox palette the preview
+        // already uses. Paths, not GUIDs: the path is readable here, and a move is a one-line
+        // edit whose failure mode is a named report error instead of a silent white body.
+        private const string GroundMaterialPath =
+            "Assets/VRC_Katamari/Art/Materials/Mat_PlaygroundGround.mat";
+        private const string WallMaterialPath =
+            "Assets/VRC_Katamari/Art/Materials/Mat_PlaygroundWall.mat";
+        private const string PropMaterialPath =
+            "Assets/VRC_Katamari/Art/Materials/Mat_PlaygroundProp.mat";
+
+        // The visible child under a ground/boundary marker. The marker itself stays bare (see
+        // the class remark), so this name is the only handle the tool has on the body.
+        private const string StructureVisualName = "Visual";
+
+        // Unity names a primitive cube's built-in material "Default-Material" (older projects
+        // also ship "Default-Diffuse"). A body still carrying one has no material decision of
+        // its own, so the role default may replace it; any other material is hand art.
+        private const string BuiltinDefaultMaterialName = "Default-Material";
+        private const string BuiltinDefaultDiffuseMaterialName = "Default-Diffuse";
 
         // LevelArenaHost's serialized field names (Runtime/Story/LevelArenaHost.cs). They are
         // private, so they are looked up by name exactly like PickupFieldSync does with the
@@ -880,8 +911,10 @@ namespace VRCKatamari.Editor.LevelBuild
         /// <see cref="LevelArenaHost"/> only reads <c>groundNormal/groundOffset</c> and, for
         /// each wall, <b>local +Z as the plane normal</b> plus the wall's world position as the
         /// plane offset - it never looks at geometry or a collider. Those two roles are
-        /// therefore <b>not</b> boxes: making them boxes would add a walkable ledge at the top
-        /// of every wall and eat the box budget (design 4.3).
+        /// therefore <b>not</b> boxes: making the marker itself a box would add a walkable ledge
+        /// at the top of every wall and eat the box budget (design 4.3). Their <b>visible
+        /// body</b> is a separate <c>Visual</c> child (<see cref="ApplyStructureVisuals"/>), so
+        /// the player has a floor and walls without the arena ever seeing a box for them.
         /// </para>
         /// <para>
         /// A <c>box</c> entry becomes a real cube with a real <see cref="BoxCollider"/>: the
@@ -897,6 +930,12 @@ namespace VRCKatamari.Editor.LevelBuild
             PlacementImportReport report)
         {
             var wanted = new HashSet<string>(StringComparer.Ordinal);
+
+            // Which ids already existed before this run. A body added to a marker that predates
+            // the run is an UPDATE (the migration's "~N"); a body on an object this run created
+            // is part of the creation and must not be counted a second time.
+            var existedBefore = SnapshotStructureIds(structuresRoot);
+
             int total = doc.structures == null ? 0 : doc.structures.Length;
             for (int i = 0; i < total; i++)
             {
@@ -963,13 +1002,28 @@ namespace VRCKatamari.Editor.LevelBuild
                 }
             }
 
-            return true;
+            // Bodies last, from the same document, so a size or role change can never leave a
+            // stale one behind: the marker pose above is what the body is derived from.
+            return ApplyStructureVisuals(doc, structuresRoot, existedBefore, report);
         }
 
         private static bool IsMarkerRole(StructureEntry structure)
         {
-            return string.Equals(structure.role, "ground", StringComparison.Ordinal) ||
-                   string.Equals(structure.role, "boundary", StringComparison.Ordinal);
+            return structure != null && IsMarkerRole(structure.role);
+        }
+
+        /// <summary>
+        /// True for the two roles that are a plane to the arena (<c>ground</c>, <c>boundary</c>).
+        /// </summary>
+        /// <remarks>
+        /// One spelling of the rule: the marker decision, the collider decision and the body
+        /// decision all ask this, so a role cannot be a marker to one of them and a box to
+        /// another.
+        /// </remarks>
+        private static bool IsMarkerRole(string role)
+        {
+            return string.Equals(role, "ground", StringComparison.Ordinal) ||
+                   string.Equals(role, "boundary", StringComparison.Ordinal);
         }
 
         private static bool WantsBoxCollider(StructureEntry structure)
@@ -1091,6 +1145,453 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             return true;
+        }
+
+        // ------------------------------------------------- structure bodies ---
+
+        /// <summary>
+        /// Gives the marker roles a visible body (<c>Visual</c> cube + <see cref="BoxCollider"/>)
+        /// and puts the role's default material on every structure body, box and ramp included.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Why a child, not the marker: <see cref="LevelArenaHost"/> reads the marker's world
+        /// position as a plane offset and its local +Z as a wall normal, and
+        /// <see cref="CollectProps"/>-style scans under <c>Props</c> treat "has a Renderer" as
+        /// "is a prop". A child leaves all of that untouched - the marker keeps scale 1, no
+        /// Renderer, no collider - while the player gets something to stand on and walk into.
+        /// The compilable rule this implements is "the importer produces what the player
+        /// collides with; the arena still reads markers" (PICNIC_CORNER_LEVEL_ONE 5.3 G11).
+        /// </para>
+        /// <para>
+        /// Why the body is not a <c>box</c> to the arena: a boundary is an infinite plane to the
+        /// ball, so registering a cube for it would add a walkable ledge and spend a box slot
+        /// (design 4.3). <see cref="BindArenaHost"/> fills <c>staticBoxes</c> from the <c>box</c>
+        /// role alone and never walks this subtree.
+        /// </para>
+        /// <para>
+        /// Idempotency is per written value: pose, collider shape and material are each compared
+        /// before they are written, so a second run reports nothing. A body that already carries
+        /// a material this tool did not put there is left alone - the placeholder is a default,
+        /// not an overwrite of hand art - and a box/ramp cube only gets a material when it still
+        /// carries Unity's built-in one.
+        /// </para>
+        /// </remarks>
+        private static bool ApplyStructureVisuals(PlacementDocument doc, Transform structuresRoot,
+            HashSet<string> existedBefore, PlacementImportReport report)
+        {
+            if (doc.structures == null)
+            {
+                return true;
+            }
+
+            // The ground's footprint is grown to the boundary planes, so the floor reaches the
+            // walls instead of stopping short of them.
+            Vector3[] boundaryCenters = CollectBoundaryCenters(doc);
+            var materials = new Dictionary<string, Material>(StringComparer.Ordinal);
+            bool ok = true;
+            int bodiesAdded = 0;
+            int bodiesUpdated = 0;
+
+            for (int i = 0; i < doc.structures.Length; i++)
+            {
+                StructureEntry structure = doc.structures[i];
+                if (structure == null)
+                {
+                    continue;   // ValidateDocument already refused it
+                }
+
+                Transform instance = FindChild(structuresRoot, structure.id);
+                if (instance == null)
+                {
+                    continue;   // the loop above either built it or refused the run
+                }
+
+                bool preexisting = existedBefore != null && existedBefore.Contains(structure.id);
+
+                if (IsMarkerRole(structure))
+                {
+                    bool created;
+                    bool changed;
+                    if (!ApplyMarkerVisual(structure, instance, boundaryCenters, materials, report,
+                            out created, out changed))
+                    {
+                        ok = false;
+                        continue;
+                    }
+
+                    if (!changed || !preexisting)
+                    {
+                        continue;   // nothing to do, or part of an object this run created
+                    }
+
+                    if (created)
+                    {
+                        bodiesAdded++;
+                    }
+                    else
+                    {
+                        bodiesUpdated++;
+                    }
+                }
+                else
+                {
+                    // A box/ramp body is the object itself, so only its material is this pass's
+                    // business: the pose and the collider belong to the box/ramp path.
+                    bool dressed = EnsureStructureMaterial(instance.GetComponent<Renderer>(),
+                        PropMaterialPath, materials, report);
+                    if (dressed && preexisting)
+                    {
+                        bodiesUpdated++;
+                    }
+                }
+            }
+
+            if (bodiesAdded > 0 || bodiesUpdated > 0)
+            {
+                // The update counts belong to the structures (the marker ids own the rows), so
+                // the idempotency gate keeps reading "+0 ~0 -0 other=0" on a settled scene.
+                report.StructuresUpdated += bodiesAdded + bodiesUpdated;
+                report.Note("structure bodies: +" + bodiesAdded + " ~" + bodiesUpdated +
+                            " (a ground/boundary marker gained or repaired its Visual child; the marker " +
+                            "Transform itself is unchanged)");
+            }
+
+            return ok;
+        }
+
+        /// <summary>
+        /// Creates or repairs one marker's <c>Visual</c> child.
+        /// </summary>
+        /// <returns>False when the structure was refused (a degenerate size, a missing material
+        /// or a hand-broken child); <paramref name="created"/> and <paramref name="changed"/> say
+        /// whether the child is new and whether anything was written.</returns>
+        private static bool ApplyMarkerVisual(StructureEntry structure, Transform marker,
+            Vector3[] boundaryCenters, Dictionary<string, Material> materials,
+            PlacementImportReport report, out bool created, out bool changed)
+        {
+            created = false;
+            changed = false;
+
+            Vector3 authoredSize = new Vector3(structure.size[0], structure.size[1], structure.size[2]);
+            Quaternion authored = ToQuaternion(structure.rotationQuat);
+            Quaternion markerRotation = marker.rotation;
+            bool floorGrown = false;
+            string floorGrownFrom = null;
+
+            if (string.Equals(structure.role, "ground", StringComparison.Ordinal))
+            {
+                // The authored size is the designer's floor rectangle; the boundary planes are
+                // where the arena actually ends. Grow the slab to reach them when they lie
+                // outside it, so a level can shrink its ground block without leaving the walls
+                // standing over a hole.
+                Vector2 halfExtents = CoverHalfExtentsInPlane(marker.position, markerRotation,
+                    authoredSize, boundaryCenters);
+                var covered = new Vector3(halfExtents.x * 2f, authoredSize.y, halfExtents.y * 2f);
+                if (Vector3.Distance(covered, authoredSize) > PositionToleranceM)
+                {
+                    floorGrownFrom = Format(authoredSize);
+                    authoredSize = covered;
+                    floorGrown = true;
+                }
+            }
+
+            Vector3 localPosition;
+            Quaternion localRotation;
+            Vector3 localScale;
+            if (!TryComputePlaneBodyPose(authored, markerRotation, authoredSize, out localPosition,
+                    out localRotation, out localScale))
+            {
+                report.Error("structure '" + structure.id + "' has no usable size for a visible body (" +
+                             "size=[" + Format(authoredSize) + "]; every axis must be finite and " +
+                             "positive). The marker is unchanged, but nothing visible was created");
+                return false;
+            }
+
+            Material material = ResolveStructureMaterial(
+                string.Equals(structure.role, "ground", StringComparison.Ordinal)
+                    ? GroundMaterialPath
+                    : WallMaterialPath, materials, report);
+            if (material == null)
+            {
+                return false;   // the missing asset is already an error, with its path
+            }
+
+            Transform visual = FindChild(marker, StructureVisualName);
+            if (visual == null)
+            {
+                GameObject primitive = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                primitive.name = StructureVisualName;
+                Undo.RegisterCreatedObjectUndo(primitive, UndoLabel);
+                Undo.SetTransformParent(primitive.transform, marker, UndoLabel);
+                visual = primitive.transform;
+                created = true;
+                changed = true;
+            }
+
+            if (!LocalPoseMatches(visual, localPosition, localRotation, localScale))
+            {
+                Undo.RecordObject(visual, UndoLabel);
+                visual.localPosition = localPosition;
+                visual.localRotation = localRotation;
+                visual.localScale = localScale;
+                changed = true;
+            }
+
+            // The collider sits on the scaled cube, so a unit box is exactly the authored size.
+            // It is player geometry only: the ball reads the analytic plane and never this box.
+            BoxCollider collider = visual.GetComponent<BoxCollider>();
+            if (collider == null)
+            {
+                collider = Undo.AddComponent<BoxCollider>(visual.gameObject);
+                changed = true;
+            }
+
+            if (collider.center != Vector3.zero || collider.size != Vector3.one)
+            {
+                Undo.RecordObject(collider, UndoLabel);
+                collider.center = Vector3.zero;
+                collider.size = Vector3.one;
+                changed = true;
+            }
+
+            MeshRenderer renderer = visual.GetComponent<MeshRenderer>();
+            if (renderer == null)
+            {
+                // A cube primitive always has one, so this is a hand edit (or a replaced mesh).
+                report.Error("structure '" + structure.id + "': the " + StructureVisualName +
+                             " child has no MeshRenderer; it cannot be made visible. Delete that child " +
+                             "and import again");
+                return false;
+            }
+
+            if (renderer.sharedMaterial != material)
+            {
+                Undo.RecordObject(renderer, UndoLabel);
+                renderer.sharedMaterial = material;
+                changed = true;
+            }
+
+            // Reported only when the growth actually wrote something: a settled scene's report
+            // stays free of "and also it grew" lines that changed nothing.
+            if (changed && floorGrown)
+            {
+                report.Note("ground visual grown from " + floorGrownFrom + " to " +
+                            Format(authoredSize) + " to cover the boundary planes (the authored size " +
+                            "was smaller than the field)");
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Puts <paramref name="path"/>'s material on a body that has no material of its own.
+        /// </summary>
+        /// <returns>True when the material was assigned.</returns>
+        /// <remarks>
+        /// Only the built-in default counts as "has none": a box or ramp the operator already
+        /// dressed keeps its material, and the idempotency gate stays honest because the second
+        /// run finds the role material already in place.
+        /// </remarks>
+        private static bool EnsureStructureMaterial(Renderer renderer, string path,
+            Dictionary<string, Material> materials, PlacementImportReport report)
+        {
+            if (renderer == null)
+            {
+                return false;
+            }
+
+            Material current = renderer.sharedMaterial;
+            if (current != null &&
+                !string.Equals(current.name, BuiltinDefaultMaterialName, StringComparison.Ordinal) &&
+                !string.Equals(current.name, BuiltinDefaultDiffuseMaterialName, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            Material material = ResolveStructureMaterial(path, materials, report);
+            if (material == null)
+            {
+                return false;
+            }
+
+            Undo.RecordObject(renderer, UndoLabel);
+            renderer.sharedMaterial = material;
+            return true;
+        }
+
+        /// <summary>
+        /// Loads one placeholder material, once per run, and reports a missing asset once.
+        /// </summary>
+        private static Material ResolveStructureMaterial(string path, Dictionary<string, Material> cache,
+            PlacementImportReport report)
+        {
+            Material material;
+            if (cache.TryGetValue(path, out material))
+            {
+                return material;   // may be null: the error was reported on the first miss
+            }
+
+            material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                report.Error("no material at " + path + "; the structure body was created without its " +
+                             "placeholder material. Move or restore the asset, then import again");
+            }
+
+            cache[path] = material;
+            return material;
+        }
+
+        /// <summary>
+        /// The <c>Visual</c> child's local pose for a <c>ground</c> or <c>boundary</c> marker.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Pure on purpose: <c>Tests/EditMode/LevelBuild/PlacementImporterVisualTests.cs</c>
+        /// exercises it by reflection, because this file compiles into the editor assembly and
+        /// the test assembly references only <c>VRCKatamari.Runtime</c>.
+        /// </para>
+        /// <para>
+        /// Two facts decide the answer, and both are the document's convention, not a style
+        /// choice. First, a plane role declares its normal as the authored local <b>+Y</b> (the
+        /// validator's rule), so <c>size</c> reads "in-plane X by thickness by in-plane Z" and
+        /// the plane is the authored local <c>y = 0</c> plane through the authored origin.
+        /// Second, the visible face must BE that plane - a floor's top face, a wall's inner face
+        /// - so the body is the authored box shifted half a thickness along authored
+        /// <b>-Y</b>: downward for a floor, outward for a wall.
+        /// </para>
+        /// <para>
+        /// Rotation is the marker's own re-roll of the authored frame.
+        /// <see cref="ApplyStructure"/> turns a boundary marker to <c>LookRotation(inward, up)</c>,
+        /// which discards the authored roll: for the picnic level's west/east walls the authored
+        /// <c>size[0]</c> is the height, for its south/north walls it is the length. Carrying the
+        /// relative rotation into the body is what keeps <c>size</c> meaning what the designer
+        /// drew instead of guessing which axis is up.
+        /// </para>
+        /// </remarks>
+        public static bool TryComputePlaneBodyPose(Quaternion authoredRotation, Quaternion markerRotation,
+            Vector3 authoredSize, out Vector3 localPosition, out Quaternion localRotation,
+            out Vector3 localScale)
+        {
+            localPosition = Vector3.zero;
+            localRotation = Quaternion.identity;
+            localScale = Vector3.one;
+
+            float thickness = authoredSize.y;
+            if (!IsPositiveFinite(authoredSize.x) || !IsPositiveFinite(thickness) ||
+                !IsPositiveFinite(authoredSize.z))
+            {
+                return false;
+            }
+
+            localScale = new Vector3(authoredSize.x, thickness, authoredSize.z);
+
+            // The authored frame as the marker sees it: the two differ only by a roll about the
+            // plane normal, so this stays a rotation about the marker's own +Z.
+            localRotation = Quaternion.Inverse(markerRotation) * authoredRotation;
+            localPosition = localRotation * new Vector3(0f, -thickness * 0.5f, 0f);
+            return true;
+        }
+
+        /// <summary>
+        /// Half extents, in the plane's own X and Z, a body needs so that every point in
+        /// <paramref name="mustCoverWorld"/> lies under it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The input is the boundary planes' origins, not a separate bounds field.
+        /// <c>level.bounds</c> would be the obvious source, but it is written as a nested
+        /// <c>[[minX, minZ], [maxX, maxZ]]</c> array and <c>JsonUtility</c> does not map jagged
+        /// arrays, so reading it would mean a second JSON parser in this tool for one field.
+        /// The boundary planes are already parsed, they are where the arena actually ends, and
+        /// they are the walls the player can see: covering them covers the field the player can
+        /// reach. When a flat bounds block ever lands in the schema, this is the one place to
+        /// change.
+        /// </para>
+        /// <para>
+        /// Pure: no scene, no asset, so the EditMode test can pin it.
+        /// </para>
+        /// </remarks>
+        public static Vector2 CoverHalfExtentsInPlane(Vector3 planeOrigin, Quaternion planeRotation,
+            Vector3 authoredSize, Vector3[] mustCoverWorld)
+        {
+            float halfX = authoredSize.x * 0.5f;
+            float halfZ = authoredSize.z * 0.5f;
+            if (mustCoverWorld == null)
+            {
+                return new Vector2(halfX, halfZ);
+            }
+
+            Vector3 axisX = planeRotation * Vector3.right;
+            Vector3 axisZ = planeRotation * Vector3.forward;
+            for (int i = 0; i < mustCoverWorld.Length; i++)
+            {
+                Vector3 offset = mustCoverWorld[i] - planeOrigin;
+                float alongX = Mathf.Abs(Vector3.Dot(offset, axisX));
+                float alongZ = Mathf.Abs(Vector3.Dot(offset, axisZ));
+                if (alongX > halfX)
+                {
+                    halfX = alongX;
+                }
+
+                if (alongZ > halfZ)
+                {
+                    halfZ = alongZ;
+                }
+            }
+
+            return new Vector2(halfX, halfZ);
+        }
+
+        private static Vector3[] CollectBoundaryCenters(PlacementDocument doc)
+        {
+            var centers = new List<Vector3>();
+            for (int i = 0; i < doc.structures.Length; i++)
+            {
+                StructureEntry structure = doc.structures[i];
+                if (structure == null || !IsVector(structure.center, 3) ||
+                    !string.Equals(structure.role, "boundary", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                centers.Add(ToVector(structure.center));
+            }
+
+            return centers.ToArray();
+        }
+
+        private static HashSet<string> SnapshotStructureIds(Transform structuresRoot)
+        {
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < structuresRoot.childCount; i++)
+            {
+                ids.Add(structuresRoot.GetChild(i).name);
+            }
+
+            return ids;
+        }
+
+        private static bool LocalPoseMatches(Transform body, Vector3 localPosition,
+            Quaternion localRotation, Vector3 localScale)
+        {
+            return Vector3.Distance(body.localPosition, localPosition) <= PositionToleranceM &&
+                   Vector3.Distance(body.localScale, localScale) <= PositionToleranceM &&
+                   Mathf.Abs(Quaternion.Dot(body.localRotation, localRotation)) >= RotationDotTolerance;
+        }
+
+        private static bool IsPositiveFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value) && value > 0f;
+        }
+
+        /// <summary>"x,y,z" for a report line; invariant, so two runs print the same text.</summary>
+        private static string Format(Vector3 size)
+        {
+            return size.x.ToString("0.###", CultureInfo.InvariantCulture) + "x" +
+                   size.y.ToString("0.###", CultureInfo.InvariantCulture) + "x" +
+                   size.z.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
         // ---------------------------------------------------------------- sync ---

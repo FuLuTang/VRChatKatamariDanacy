@@ -27,6 +27,8 @@ namespace VRCKatamari.Editor.LevelBuild
         private const int ConsoleRowLimit = 40;
 
         public string LevelId;
+        /// <summary>The arena cell this run imported, or null for a whole-level document.</summary>
+        public string ArenaId;
         public string PlacementPath;
         public string ManagedRootPath;
         public string SceneName;
@@ -85,7 +87,8 @@ namespace VRCKatamari.Editor.LevelBuild
         /// <summary>The one-line gate the Unity operator reads first.</summary>
         public string Headline()
         {
-            return "[level] +" + PropsCreated + " ~" + PropsUpdated + " -" + PropsDeleted +
+            string arena = string.IsNullOrEmpty(ArenaId) ? "" : " cell=" + ArenaId;
+            return "[level]" + arena + " +" + PropsCreated + " ~" + PropsUpdated + " -" + PropsDeleted +
                    " props=" + (PropsCreated + PropsUpdated + PropsSkipped) +
                    " other=" + (StructuresCreated + StructuresUpdated + StructuresDeleted) +
                    " errors=" + PropErrors;
@@ -99,6 +102,11 @@ namespace VRCKatamari.Editor.LevelBuild
             if (!string.IsNullOrEmpty(LevelId))
             {
                 text.Append("  level=").Append(LevelId);
+            }
+
+            if (!string.IsNullOrEmpty(ArenaId))
+            {
+                text.Append("  arena=").Append(ArenaId);
             }
 
             if (!string.IsNullOrEmpty(SceneName))

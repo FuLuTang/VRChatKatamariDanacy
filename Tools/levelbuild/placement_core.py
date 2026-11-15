@@ -107,7 +107,8 @@ PRESET_KEYS = ("id", "camera", "engine", "res", "samples")
 DEF_KEYS = ("id", "kind", "valueUnits", "notes")
 LEVEL_KEYS = ("id", "scene", "units", "convention", "ballStart", "playerSpawn",
               "ballDiameterStart", "ballDiameterMax", "groundY", "bounds",
-              "spawnClearanceM", "budget", "expected", "zones")
+              "spawnClearanceM", "budget", "expected", "zones", "arena")
+ARENA_KEYS = ("id", "notes")
 BUDGET_KEYS = ("planes", "boxes", "ramps", "blocking", "propSupports")
 ENGINES = ("WORKBENCH", "EEVEE", "CYCLES")
 
@@ -599,6 +600,8 @@ def canonical_doc(doc, manifests=None):
         elif key == "zones":
             value = [_ordered(zone, ("id", "rect", "notes")) for zone in sorted(
                 value, key=lambda zone: str(zone.get("id", "")))]
+        elif key == "arena":
+            value = _ordered(value, ARENA_KEYS)
         level_out[key] = value
 
     props_out = []
@@ -1121,6 +1124,79 @@ def _check_budget(doc, report, structures_by_id):
                               "limits": {k: budget.get(k) for k in BUDGET_KEYS}}
 
 
+def _check_arena(doc, report, structures_by_id, path=None):
+    """The ``level.arena`` contract: one document describes one repeatedly-applied arena.
+
+    A cell document exists because the motor's static capacity (8 planes / 8 boxes /
+    4 ramps) is smaller than a whole test field, so the field switches one arena at a
+    time (``PHYSICS_TEST_FIELD`` section 3).  The extra rules here are:
+
+    * the arena needs an id, because the Unity importer uses it as the managed-root
+      child and the cell component finds its ``LevelArenaHost`` by it;
+    * the id must equal the containing directory name, so a copied file cannot
+      silently keep the old cell's identity;
+    * every box/ramp must lie inside ``level.bounds``, the field extent the arena
+      registers against (a coarse guard: a typo that puts a box a hundred metres out
+      is caught here).
+
+    The runner's own data - where the ball starts, and which rect makes this cell the
+    active one - is NOT here: it lives once, in the field's criteria file
+    (``cells[].start_pose`` / ``cells[].footprint``), because the runner is the only
+    consumer.  ``Docs/tests/levelbuild/test_physics_test_field_cells.py`` keeps the two
+    files honest by refusing a cell whose geometry leaves its own footprint.
+    """
+    level = doc.get("level") or {}
+    arena = level.get("arena")
+    if arena is None:
+        return
+    if not isinstance(arena, dict):
+        report.err("level.arena must be an object with an id")
+        return
+
+    arena_id = arena.get("id")
+    if not isinstance(arena_id, str) or not arena_id.strip():
+        report.err("level.arena.id is required (the Unity importer names the managed root "
+                   "child after it)")
+        arena_id = None
+
+    if path is not None and arena_id:
+        folder = Path(path).resolve().parent.name
+        if folder and folder != arena_id:
+            report.err("level.arena.id is %r but the file lives in %r; a copied cell file "
+                       "must be renamed together with its arena id" % (arena_id, folder))
+
+    bounds = level.get("bounds")
+    if not (isinstance(bounds, list) and len(bounds) == 2):
+        return      # _check_bounds_and_spawn already reports this
+    low = (float(bounds[0][0]), float(bounds[0][1]))
+    high = (float(bounds[1][0]), float(bounds[1][1]))
+    for structure_id, structure in sorted(structures_by_id.items()):
+        if structure.get("role") not in ("box", "ramp"):
+            continue
+        box = _structure_world_aabb(structure, report)
+        if box is None:
+            continue
+        over = 0.0
+        axis = ""
+        for index, axis_name in ((0, "x"), (2, "z")):
+            low_index = 0 if index == 0 else 1
+            if box[0][index] < low[low_index] - BOUNDS_MARGIN_M:
+                delta = low[low_index] - box[0][index]
+                if delta > over:
+                    over, axis = delta, axis_name + " low"
+            if box[1][index] > high[low_index] + BOUNDS_MARGIN_M:
+                delta = box[1][index] - high[low_index]
+                if delta > over:
+                    over, axis = delta, axis_name + " high"
+        if over > 0.0:
+            report.err("%s leaves level.bounds by %.3f m (%s); a cell document's bounds are the "
+                       "88 m field box, so this is a coordinate mistake"
+                       % (structure_id, over, axis))
+
+    report.tables.setdefault("arena", {})
+    report.tables["arena"].update({"id": arena_id, "bounds": [list(low), list(high)]})
+
+
 def _check_bounds_and_spawn(doc, report, boxes):
     level = doc.get("level") or {}
     bounds = level.get("bounds")
@@ -1360,6 +1436,7 @@ def validate(doc, path=None, manifests=None):
     boxes = _check_props(doc, report, manifests, catalog)
     structures_by_id = _check_structures(doc, report)
     _check_budget(doc, report, structures_by_id)
+    _check_arena(doc, report, structures_by_id, path)
     _check_bounds_and_spawn(doc, report, boxes)
     _check_support_and_overlap(doc, report, boxes, structures_by_id)
     _check_expected(doc, report)
@@ -1543,7 +1620,11 @@ def format_report_tables(tables, expected=None):
 # --------------------------------------------------------------------------- #
 # small path helpers shared by the CLI and the Blender scripts
 # --------------------------------------------------------------------------- #
-_LEVEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+#: A level id is its directory under ``Docs/Design/Levels``.  One level of nesting is
+#: allowed so a field made of many small arenas can keep one document per cell
+#: (``physics_test_field/C14``) instead of one document per scene, which is what the
+#: motor's per-arena capacity forces (see ``_check_arena``).
+_LEVEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*(/[A-Za-z0-9][A-Za-z0-9_.-]*)?$")
 
 
 def is_valid_level_id(level_id):
@@ -1552,7 +1633,8 @@ def is_valid_level_id(level_id):
 
 def level_folder(level_id, levels_dir=None):
     if not is_valid_level_id(level_id):
-        raise ValueError("bad level id %r (letters, digits, '_', '-', '.' only)" % (level_id,))
+        raise ValueError("bad level id %r (letters, digits, '_', '-', '.', and at most "
+                         "one '/' for a field cell)" % (level_id,))
     return Path(levels_dir or LEVELS_DIR) / level_id
 
 

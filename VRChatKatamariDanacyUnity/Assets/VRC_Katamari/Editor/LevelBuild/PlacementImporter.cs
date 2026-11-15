@@ -109,6 +109,25 @@ namespace VRCKatamari.Editor.LevelBuild
             public string scene;
             public float ballDiameterMax = 2.2f;
             public BudgetBlock budget;
+            public ArenaBlock arena;
+        }
+
+        /// <summary>
+        /// Present when this document describes ONE arena cell instead of a whole level.
+        /// </summary>
+        /// <remarks>
+        /// The motor's static tables hold 8 planes / 8 boxes / 4 ramps, so the physics test
+        /// field registers one cell at a time (<c>PHYSICS_TEST_FIELD.md</c> section 3) and each
+        /// cell needs its own <see cref="LevelArenaHost"/>. One document per cell is what makes
+        /// that 1:1 with the importer: the cell id names a managed subtree
+        /// (<c>LevelContent/&lt;id&gt;</c>) and the arena host that registers only that subtree.
+        /// Without an arena block the importer keeps its old behaviour (one level per scene, one
+        /// arena host found anywhere in it).
+        /// </remarks>
+        [Serializable]
+        public class ArenaBlock
+        {
+            public string id;
         }
 
         [Serializable]
@@ -163,26 +182,87 @@ namespace VRCKatamari.Editor.LevelBuild
         // ------------------------------------------------------------------ menu ---
 
         /// <summary>
-        /// Imports the level whose <c>level.scene</c> matches the open scene's name.
+        /// Imports every document whose <c>level.scene</c> matches the open scene's name.
         /// </summary>
         /// <remarks>
-        /// A menu item cannot prompt for text, and importing "every level found" would put
-        /// several levels into one scene, so the file says which scene it belongs to and the
-        /// menu refuses when that is ambiguous. Programmatic callers use
+        /// <para>
+        /// A menu item cannot prompt for text, so the file says which scene it belongs to. Two
+        /// cases exist:
+        /// </para>
+        /// <list type="bullet">
+        /// <item>one level names the scene: import it (the historic behaviour);</item>
+        /// <item>several name it, and every one of them is an arena cell
+        /// (<c>level.arena</c> is set): import each cell, because that is exactly what the test
+        /// field is - one scene, one arena document per cell (see
+        /// <see cref="ArenaBlock"/>).</item>
+        /// </list>
+        /// <para>
+        /// A mix of cell and whole-level documents naming one scene is refused: importing both
+        /// would register two arenas into the same motor. Programmatic callers use
         /// <see cref="Import(string)"/> instead.
+        /// </para>
         /// </remarks>
         [MenuItem(MenuPath, false, 200)]
         public static void ImportActiveSceneLevel()
         {
-            string levelId;
+            List<string> matches;
+            List<string> seen;
             string failure;
-            if (!TryResolveLevelForActiveScene(out levelId, out failure))
+            if (!TryResolveLevelsForActiveScene(out matches, out seen, out failure))
             {
                 Debug.LogError("[level] " + failure);
                 return;
             }
 
-            Import(levelId);
+            if (matches.Count == 1)
+            {
+                Import(matches[0]);
+                return;
+            }
+
+            for (int i = 0; i < matches.Count; i++)
+            {
+                if (!IsArenaLevel(matches[i]))
+                {
+                    Debug.LogError("[level] several documents name the scene '" +
+                                   EditorSceneManager.GetActiveScene().name + "': " +
+                                   string.Join(", ", matches.ToArray()) + ", and '" + matches[i] +
+                                   "' is a whole level, not an arena cell. Call " +
+                                   "PlacementImporter.Import(levelId) with the one you mean");
+                    return;
+                }
+            }
+
+            int imported = 0;
+            var failed = new List<string>();
+            for (int i = 0; i < matches.Count; i++)
+            {
+                var cellReport = new PlacementImportReport();
+                if (RunImport(matches[i], cellReport))
+                {
+                    imported++;
+                }
+                else
+                {
+                    // An attempt is not an import: a cell whose arena host is missing, or whose
+                    // placement failed validation, is a failed run even though it logged a report.
+                    failed.Add(matches[i]);
+                }
+
+                cellReport.Log();
+            }
+
+            string line = "[level] imported " + imported + "/" + matches.Count + " arena cell(s): " +
+                          string.Join(", ", matches.ToArray()) + " (levels naming this scene: " +
+                          string.Join(", ", seen.ToArray()) + ")";
+            if (failed.Count > 0)
+            {
+                Debug.LogError(line + "  FAILED: " + string.Join(", ", failed.ToArray()));
+            }
+            else
+            {
+                Debug.Log(line);
+            }
         }
 
         /// <summary>
@@ -192,6 +272,21 @@ namespace VRCKatamari.Editor.LevelBuild
         public static string Import(string levelId)
         {
             var report = new PlacementImportReport();
+            RunImport(levelId, report);
+            report.Log();
+            return report.BuildSummary();
+        }
+
+        /// <summary>
+        /// Imports one level into a caller-owned report and returns whether the run was accepted.
+        /// </summary>
+        /// <remarks>
+        /// Split from <see cref="Import(string)"/> so a caller that imports several documents (the
+        /// menu does, one per arena cell) can count <b>accepted runs</b> instead of attempts. A
+        /// failed run still logs its own summary - it just must not be added to the success count.
+        /// </remarks>
+        public static bool RunImport(string levelId, PlacementImportReport report)
+        {
             report.LevelId = levelId;
             report.SceneName = EditorSceneManager.GetActiveScene().name;
 
@@ -219,8 +314,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 }
             }
 
-            report.Log();
-            return report.BuildSummary();
+            return report.Success;
         }
 
         // -------------------------------------------------------------- import ---
@@ -272,10 +366,20 @@ namespace VRCKatamari.Editor.LevelBuild
                 return false;
             }
 
-            report.ManagedRootPath = HierarchyPath(managedRoot);
+            // A cell document owns one subtree and one arena host; a whole-level document keeps the
+            // old shape (everything directly under LevelContent).
+            Transform levelRoot = managedRoot;
+            string arenaId = ArenaIdOf(doc);
+            if (!string.IsNullOrEmpty(arenaId))
+            {
+                levelRoot = EnsureFolder(managedRoot, arenaId);
+                report.ArenaId = arenaId;
+            }
 
-            Transform propsRoot = EnsureFolder(managedRoot, PropsFolderName);
-            Transform structuresRoot = EnsureFolder(managedRoot, StructuresFolderName);
+            report.ManagedRootPath = HierarchyPath(levelRoot);
+
+            Transform propsRoot = EnsureFolder(levelRoot, PropsFolderName);
+            Transform structuresRoot = EnsureFolder(levelRoot, StructuresFolderName);
 
             bool propsOk = ApplyProps(doc, propsRoot, report);
             bool structuresOk = ApplyStructures(doc, structuresRoot, report);
@@ -290,12 +394,13 @@ namespace VRCKatamari.Editor.LevelBuild
             // The pickup sync runs after the props exist, because it derives rows from them.
             Dictionary<string, int> hostIndex;
             PickupFieldHost host;
-            if (propsOk && TrySyncPickupField(propsRoot, report, out host, out hostIndex))
+            if (propsOk && TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, report, out host,
+                    out hostIndex))
             {
                 WriteDeclaredValueUnits(doc, host, hostIndex, report);
             }
 
-            BindArenaHost(doc, structuresRoot, report);
+            BindArenaHost(doc, levelRoot, structuresRoot, report);
 
             return propsOk && structuresOk;
         }
@@ -935,19 +1040,48 @@ namespace VRCKatamari.Editor.LevelBuild
 
         // ---------------------------------------------------------------- sync ---
 
-        private static bool TrySyncPickupField(Transform propsRoot, PlacementImportReport report,
-            out PickupFieldHost host, out Dictionary<string, int> index)
+        private static bool TrySyncPickupField(Transform levelRoot, string arenaId, Transform propsRoot,
+            PlacementImportReport report, out PickupFieldHost host, out Dictionary<string, int> index)
         {
             host = null;
             index = null;
 
-            PickupFieldHost[] hosts = UnityEngine.Object.FindObjectsOfType<PickupFieldHost>();
-            if (hosts == null || hosts.Length == 0)
+            PickupFieldHost[] hosts;
+            if (!string.IsNullOrEmpty(arenaId))
             {
-                report.Note("no PickupFieldHost in the scene: the props were imported but the host " +
-                            "arrays were not synced (add the host, then run VRC Katamari/Pickup/" +
-                            "Sync Prop Arrays From Children)");
-                return false;
+                // Cell mode: only a host INSIDE this cell's subtree may be synced. Picking the first
+                // host in the scene would make a field of cells write every cell's prop rows into
+                // one host - and, worse, wipe that host's arrays when this cell has no props.
+                hosts = levelRoot.GetComponentsInChildren<PickupFieldHost>(true);
+                if (hosts == null || hosts.Length == 0)
+                {
+                    string message = "no PickupFieldHost under " + HierarchyPath(levelRoot) +
+                                     ": nothing was synced. A cell that declares props must own its " +
+                                     "host (LevelContent/" + arenaId + "/PickupField)";
+                    if (propsRoot.childCount > 0)
+                    {
+                        // Silent failure mode: the props exist as geometry but no gameplay row, so
+                        // nobody can absorb them. Loud on purpose when there is something to lose.
+                        report.Error(message);
+                    }
+                    else
+                    {
+                        report.Note(message + " - this cell has no props, so there is nothing to sync");
+                    }
+
+                    return false;
+                }
+            }
+            else
+            {
+                hosts = UnityEngine.Object.FindObjectsOfType<PickupFieldHost>();
+                if (hosts == null || hosts.Length == 0)
+                {
+                    report.Note("no PickupFieldHost in the scene: the props were imported but the host " +
+                                "arrays were not synced (add the host, then run VRC Katamari/Pickup/" +
+                                "Sync Prop Arrays From Children)");
+                    return false;
+                }
             }
 
             Array.Sort(hosts, (left, right) => string.CompareOrdinal(HierarchyPath(left.transform),
@@ -956,8 +1090,10 @@ namespace VRCKatamari.Editor.LevelBuild
 
             if (hosts.Length > 1)
             {
-                report.Note("found " + hosts.Length + " PickupFieldHost; syncing " + HierarchyPath(host.transform) +
-                            " (the first in hierarchy order)");
+                report.Note("found " + hosts.Length + " PickupFieldHost" +
+                            (string.IsNullOrEmpty(arenaId) ? " in the scene" : " under " +
+                             HierarchyPath(levelRoot)) + "; syncing " + HierarchyPath(host.transform) +
+                            " (the first in hierarchy order). A cell must own exactly one host");
             }
 
             if (!propsRoot.IsChildOf(host.transform) && host.transform != propsRoot)
@@ -1173,15 +1309,33 @@ namespace VRCKatamari.Editor.LevelBuild
         /// <see cref="PickupFieldSync"/>.
         /// </para>
         /// </remarks>
-        private static void BindArenaHost(PlacementDocument doc, Transform structuresRoot,
-            PlacementImportReport report)
+        private static void BindArenaHost(PlacementDocument doc, Transform levelRoot,
+            Transform structuresRoot, PlacementImportReport report)
         {
-            LevelArenaHost host = UnityEngine.Object.FindObjectOfType<LevelArenaHost>();
-            if (host == null)
+            string arenaId = ArenaIdOf(doc);
+            LevelArenaHost host;
+            if (!string.IsNullOrEmpty(arenaId))
             {
-                report.Note("no LevelArenaHost in the scene: the structures were imported but the arena " +
-                            "arrays were not filled (add the component, then import again)");
-                return;
+                // Cell mode: the arena lives on the cell's own root, so two cells can never
+                // register each other's geometry.
+                host = levelRoot.GetComponent<LevelArenaHost>();
+                if (host == null)
+                {
+                    report.Note("no LevelArenaHost on " + HierarchyPath(levelRoot) + ": the cell's " +
+                                "structures were imported, but its arena arrays were not filled. Add the " +
+                                "component to that object, then import again");
+                    return;
+                }
+            }
+            else
+            {
+                host = UnityEngine.Object.FindObjectOfType<LevelArenaHost>();
+                if (host == null)
+                {
+                    report.Note("no LevelArenaHost in the scene: the structures were imported but the " +
+                                "arena arrays were not filled (add the component, then import again)");
+                    return;
+                }
             }
 
             var serialized = new SerializedObject(host);
@@ -1310,6 +1464,14 @@ namespace VRCKatamari.Editor.LevelBuild
             report.ArenaKinds = kindList.Count;
         }
 
+        /// <summary>The cell id when this document is one arena cell, else null.</summary>
+        private static string ArenaIdOf(PlacementDocument doc)
+        {
+            if (doc == null || doc.level == null || doc.level.arena == null) return null;
+            if (string.IsNullOrEmpty(doc.level.arena.id)) return null;
+            return doc.level.arena.id;
+        }
+
         // --------------------------------------------------------------- paths ---
 
         /// <summary>
@@ -1359,12 +1521,15 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         /// <summary>
-        /// Picks the level whose <c>level.scene</c> (or, failing that, <c>level.id</c>) names
-        /// the open scene. Ambiguity is refused with the candidate list.
+        /// Every level whose <c>level.scene</c> (or, failing that, whose directory name) names the
+        /// open scene. Searches one level of nesting, because a field keeps one arena document per
+        /// cell (<c>Levels/physics_test_field/C14/placement.json</c>).
         /// </summary>
-        private static bool TryResolveLevelForActiveScene(out string levelId, out string failure)
+        private static bool TryResolveLevelsForActiveScene(out List<string> matches,
+            out List<string> seen, out string failure)
         {
-            levelId = null;
+            matches = new List<string>();
+            seen = new List<string>();
             failure = null;
             string active = EditorSceneManager.GetActiveScene().name;
 
@@ -1376,53 +1541,90 @@ namespace VRCKatamari.Editor.LevelBuild
                 return false;
             }
 
-            var matches = new List<string>();
-            var seen = new List<string>();
+            CollectLevels(folder, "", matches, seen, active);
+
+            if (matches.Count > 0)
+            {
+                return true;
+            }
+
+            failure = "no level under " + LevelsRepoRelativeFolder + " names the scene '" + active +
+                      "'; levels found: " + string.Join(", ", seen.ToArray());
+            return false;
+        }
+
+        /// <summary>
+        /// Walks one level of directories. A directory that has a placement.json is a level; a
+        /// directory without one is a field folder and is walked once more.
+        /// </summary>
+        private static void CollectLevels(string folder, string prefix, List<string> matches,
+            List<string> seen, string active)
+        {
             string[] directories = Directory.GetDirectories(folder);
             Array.Sort(directories, StringComparer.Ordinal);
             for (int i = 0; i < directories.Length; i++)
             {
+                string name = Path.GetFileName(directories[i]);
                 string placement = Path.Combine(directories[i], PlacementFileName);
-                if (!File.Exists(placement))
+                string id = string.IsNullOrEmpty(prefix) ? name : prefix + "/" + name;
+                if (File.Exists(placement))
                 {
+                    seen.Add(id);
+                    string scene = ReadSceneOf(placement);
+                    if (string.Equals(scene, active, StringComparison.Ordinal) ||
+                        (string.IsNullOrEmpty(scene) && string.Equals(name, active, StringComparison.Ordinal)))
+                    {
+                        matches.Add(id);
+                    }
+
                     continue;
                 }
 
-                string id = Path.GetFileName(directories[i]);
-                seen.Add(id);
-                string scene = null;
-                try
+                if (string.IsNullOrEmpty(prefix))
                 {
-                    var doc = JsonUtility.FromJson<PlacementDocument>(File.ReadAllText(placement));
-                    if (doc != null && doc.level != null)
-                    {
-                        scene = doc.level.scene;
-                    }
-                }
-                catch (Exception)
-                {
-                    // A broken file is the CLI's problem; the menu only needs the level list.
-                }
-
-                if (string.Equals(scene, active, StringComparison.Ordinal) ||
-                    (string.IsNullOrEmpty(scene) && string.Equals(id, active, StringComparison.Ordinal)))
-                {
-                    matches.Add(id);
+                    CollectLevels(directories[i], id, matches, seen, active);
                 }
             }
+        }
 
-            if (matches.Count == 1)
+        /// <summary>True when that level's document declares one arena cell.</summary>
+        private static bool IsArenaLevel(string levelId)
+        {
+            string path;
+            List<string> tried;
+            if (!TryResolvePlacementPath(levelId, out path, out tried))
             {
-                levelId = matches[0];
-                return true;
+                return false;
             }
 
-            failure = matches.Count == 0
-                ? "no level under " + LevelsRepoRelativeFolder + " names the scene '" + active +
-                  "'; levels found: " + string.Join(", ", seen.ToArray())
-                : "several levels name the scene '" + active + "': " + string.Join(", ", matches.ToArray()) +
-                  "; call PlacementImporter.Import(levelId) with the one you mean";
-            return false;
+            try
+            {
+                var doc = JsonUtility.FromJson<PlacementDocument>(File.ReadAllText(path));
+                return doc != null && doc.level != null && doc.level.arena != null &&
+                       !string.IsNullOrEmpty(doc.level.arena.id);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private static string ReadSceneOf(string placementPath)
+        {
+            try
+            {
+                var doc = JsonUtility.FromJson<PlacementDocument>(File.ReadAllText(placementPath));
+                if (doc != null && doc.level != null)
+                {
+                    return doc.level.scene;
+                }
+            }
+            catch (Exception)
+            {
+                // A broken file is the CLI's problem; the menu only needs the level list.
+            }
+
+            return null;
         }
 
         private static string ResolveLevelsFolder()

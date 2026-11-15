@@ -1,0 +1,196 @@
+{
+  "schema": "katamari.placement/0",
+  "level": {
+    "id": "physics_test_field/C14",
+    "scene": "PhysicsTestField",
+    "units": "m",
+    "convention": "unity-y-up-left-handed-quat-xyzw",
+    "ballDiameterStart": 0.3,
+    "ballDiameterMax": 2.2,
+    "bounds": [
+      [
+        -44.0,
+        -44.0
+      ],
+      [
+        44.0,
+        44.0
+      ]
+    ],
+    "spawnClearanceM": 1.0,
+    "budget": {
+      "planes": 8,
+      "boxes": 8,
+      "ramps": 4,
+      "blocking": 6,
+      "propSupports": 6
+    },
+    "expected": {
+      "propCount": 0,
+      "valueUnits": 0
+    },
+    "arena": {
+      "id": "C14",
+      "notes": "one arena cell: the driver re-applies it alone, because the whole field does not fit the motor's static capacity"
+    }
+  },
+  "props": [],
+  "structures": [
+    {
+      "id": "C14_plate",
+      "kind": "plate",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -21.0,
+        0.014,
+        -28.0
+      ],
+      "size": [
+        6.0,
+        0.028,
+        6.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "static 0.028 m plate: the P1 feature test (0.028 < stepLimit(0.30) = 0.075). The real napkin is 0.014 m and walks the prop path in C18, so the two numbers stay separate"
+    },
+    {
+      "id": "ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "size": [
+        88.0,
+        0.04,
+        88.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "arena floor: a plane through its centre, so the motor's ground offset is 0"
+    },
+    {
+      "id": "wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        44.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        88.0,
+        0.04,
+        3.0
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); the field never leaves x <= 44"
+    },
+    {
+      "id": "wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -44.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        88.0,
+        0.04,
+        3.0
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); the field never leaves x >= -44"
+    },
+    {
+      "id": "wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        0.0,
+        1.5,
+        44.0
+      ],
+      "size": [
+        88.0,
+        0.04,
+        3.0
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); the field never leaves z <= 44"
+    },
+    {
+      "id": "wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        0.0,
+        1.5,
+        -44.0
+      ],
+      "size": [
+        88.0,
+        0.04,
+        3.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); the field never leaves z >= -44"
+    }
+  ]
+}

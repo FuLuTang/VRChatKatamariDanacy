@@ -517,7 +517,16 @@ namespace VRCKatamari.BallLayers
             return Mathf.Abs(magnitude - 1f) <= UnitDirectionTolerance;
         }
 
-        private static bool IsUnitRotation(Quaternion rotation)
+        /// <summary>
+        /// True when the quaternion is finite and unit length within the layer's
+        /// tolerance.
+        /// </summary>
+        /// <remarks>
+        /// Public because the integration layer (<see cref="RadialProxyShellMath"/>)
+        /// builds an absorbed prop's corners in the ball frame and must reject the same
+        /// broken rotations this layer rejects, rather than normalizing a scaled one.
+        /// </remarks>
+        public static bool IsUnitRotation(Quaternion rotation)
         {
             if (!KatamariMath.IsFiniteQuaternion(rotation)) return false;
             float squaredLength = rotation.x * rotation.x + rotation.y * rotation.y +

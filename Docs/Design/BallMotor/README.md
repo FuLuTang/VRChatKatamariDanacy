@@ -21,7 +21,7 @@
 | 1 | `ControlIntentMath` | 原始输入 + 上帧边沿状态 | 意图序列 | 一切的下游来源；去抖/菜单抑制只在这里发生 |
 | 2 | `BallMotionMath` | 意图里的 `Move2D` + 当前速度 | 新速度、请求位移 | 位移决定后面所有几何 |
 | 3 | `SweepMath` | 请求位移 + 障碍数组 | 实际位移、是否卡住、墙面接触法线（去速用） | **先扫掠再落地面**：被挡住时不能把球放进障碍里；只有实际位移可以用于视觉滚动。去速必须在扫掠之后，否则位移用的还是撞墙的请求 |
-| 4 | `GroundContactMath` | 扫掠后中心 + 地面平面 + 代理点 | 贴地后的中心、支持高度、法线修正 | 支持高度依赖最终位置，先移动再贴地 |
+| 4 | `GroundContactMath` | 扫掠后中心 + 地面平面 + 径向代理外壳（长物件 AABB 角点，按突出上限夹紧） | 贴地后的中心、支持高度、法线修正 | 支持高度依赖最终位置，先移动再贴地 |
 | 5 | `PickupAbsorbMath` | 碰撞半径 + 候选物件尺寸/位置 | 吸收/拒绝 + 每件体积 | 必须在位置上定稿之后判，否则会隔空吸到 |
 | 6 | `GrowthLedgerMath` | 已确认的吸收事件 | 已确认体积、交分事务 | 只有确认值能进分数；拾取结算在位置定稿后 |
 | 7 | `SizeModelMath` | 已确认体积 | 三个尺寸（核心半径/碰撞半径/语义直径） | 尺寸是账本的纯函数，不能累积增长 |
@@ -81,6 +81,7 @@
 | `discontinuous` | 传送/重生标记，喂 `VisualRollMath` 与 `FollowRigMath` | `TeleportTo`、卡住恢复；每步末尾消费后清零 |
 | `visualRollRotation` | 视觉滚动位姿 | 第 8 步成功时 |
 | `followRigWorldPosition` / `followRigYawDegrees` / `followRigHeightMeters` / `hasFollowRigFrame` | 跟随架上一帧滤波状态（`followRigHeightMeters` 是相对球心的竖向偏移，不是眼高常量） | 第 9 步成功时 |
+| `proxyDirections` / `proxySupports` / `proxyEndpointPool` / `proxyItem*` / `proxyCandidateKeys` | 径向代理外壳：32 个固定方向、32 个端点支持长度、最多 4 个长物件 × 8 个 AABB 角点、极值候选键 | `Start` 一次分配；`AttachRadialProxy` / `DetachRadialProxy` / `ClearRadialProxies` / `RebuildRadialProxies`；第 4 步只读 |
 
 另有账本列（单行、单回合）、输入意图缓冲、扫掠缓冲区、待处理吸收候选队列；都是预分配、复用、不 per-step 分配的字段，不是玩法状态。
 
@@ -111,7 +112,8 @@ StepBall:
   3 SweepMath.TrySweepSphere    → sweptCenter（成功才赋值；stuck 交给卡住计时）
     SweepMath.TryCollectWallContactNormals + TryRemoveWallNormalVelocity
                                 → planarVelocity（只去墙面法向分量，切向保留）
-  4 GroundContactMath.TrySolve  → groundedCenter（成功才赋值）
+  4 GroundContactMath.TrySolve  → groundedCenter（代理外壳，夹紧突出量）
+    GroundContactMath.TrySolve  → followCenter（空代理数组，核心球心）
   ★ 卡住计时/恢复（本层策略，扫掠层只报 `stuck`）
   5 PickupAbsorbMath.EvaluateAbsorb（对队列里每个候选，用最终位置）
   6 GrowthLedgerMath.TrySubmitClaim + TryResolveClaims（成功才读回体积）
@@ -157,11 +159,37 @@ StepBall:
 
 读取时机是检查点（场景装载后、调参后），不是每帧轮询。
 
+### 径向凹凸代理接线（B 阶段；PROVISIONAL）
+
+合同 §3.3 的 B：径向代理驱动**接地高度**，球芯随长物件起伏，镜头不跟着颠。C（代理进入水平碰撞/PVP）**没做**：墙面、挡路盒和 PVP 仍只用球形碰撞半径。
+
+**归属。** 外壳状态在 motor 里——它本来就持有球位姿，并且是唯一调用 `GroundContactMath` 的地方；32 方向、32 支持长度、32 端点池（4 个长物件 × 8 个 AABB 角点）、4 个候选键都在 `Start` 一次分配、复用。吸附/删除/重建/角点/夹紧的**组合协议**放在新文件 `Runtime/BallLayers/RadialProxy/RadialProxyShellMath.cs`；方向生成、世界点转局部、受影响方向、支持求解、候选键和整账本重建仍然只调用 `RadialProxyMath`，没有第二份数学。`PickupFieldHost` 在视觉吸附成功后调 `motor.AttachRadialProxy(itemId, propBounds, localPosition, localRotation)`（作为参数的 `localPosition/localRotation` 就是刚写进 prop 的球局部位姿），整场 `ResetField` 调 `motor.ClearRadialProxies()`；宿主不持有任何代理状态。
+
+**数据流。** 吸收确认（账本 commit）→ 宿主 `AttachProp` 写球局部位姿 → `AttachRadialProxy` → 8 个角点进端点池、只重算受影响方向、登记候选键 → 每步 `RadialProxyShellMath.TryBuildContactPoints` 按突出上限夹紧 → `GroundContactMath.TrySolve` → `ballCenterWorld` 的高度随凹凸变化。**移除**：`DetachRadialProxy` 按幸存端点重算受影响方向（不是历史 max）；`ResetField` / `TryResetForNewRound` 清空外壳；`TryBank` 缩小时与 `TeleportTo` 走整账本 `RebuildRadialProxies`。本版**没有掉落路径**（吸附物是终态），所以没有"单件掉落"的调用点；接掉落时必须调 `DetachRadialProxy`，不能只从视觉上拿走。
+
+**上限与准入（序列化字段，PROVISIONAL）**：
+
+| 字段 | 默认 | 作用 |
+|---|---:|---|
+| `maxProxyProtrusionPerCoreRadius` | 0.35 | 允许的最大突出量 = 0.35 × 当前核心半径；相对量，球长大时绝对值跟着长，但 `support − core` 的原始突出仍会先自然收回 |
+| `maxProxyProtrusionWorldM` | 0.30 m | 绝对护栏，防止大球的 0.35·r 变成夸张的抬升 |
+| `maxProxyLiftPerStep` | 0.04 m | 代理起伏引起的单步抬升上限（只在外壳非空时传给 `GroundContactMath`）；非代理的普通贴地仍用 `maxLiftPerStep = 0.1` |
+| `maxProxyNormalSpeedPerturbation` | 0.15 m/s | 法向速度扰动上限。B 只有位置通道，requested 扰动传 0；这个上限留给以后真有法向速度时也不能超过 |
+| `longObjectMinLongestEdgePerCoreDiameter` | 0.5 | 长物件准入：最长边 ≥ 0.5 × 球直径 |
+| `longObjectMinElongation` | 2.5 | 长物件准入：最长边 ≥ 2.5 × **第二长**边（一个轴压过另外两个轴；方片不算） |
+| `minProxyProtrusionM` | 0.01 m | 吸附时最远角点连 `core + 1 cm` 都不到就不登记（对支撑没有贡献） |
+
+**镜头不跟着颠。** 第 4 步对同一个平面调用两次 `GroundContactMath.TrySolve`：一次喂夹紧后的代理点，结果决定球的位置；一次喂空数组（核心球心），只把中心交给 `FollowRigMath`。第二次调用的单步升降夹紧故意放到 10 m——它不是玩法移动，锚点必须正好是核心球心，而不是每步最多 0.1 m 追赶出来的近似，所以眼点不会随凹凸上下抖；表现层自己的 5 Hz 低通与传送吸附仍在，但低通不再独自承担防颠。跟随架的 `ballRadiusM` 仍是语义直径的一半（核心），突出量不会被当成球变大。
+
+**每步成本（常数，与已吸附物件总数无关）**：夹紧 32 个端点（≤32 次 sqrt + 缩放）、代理接地 ≤32 次点积、核心球心一次空数组调用（约 10 次运算）。吸附一次：8 角点 + 受影响方向扫描（最坏 32×8 点积）+ 受影响支持重算（最坏 32 方向 × 32 端点），约 1k 次点积；删除同理。整账本重建（32×32 点积）只在交分、传送、重试时发生。
+
+**验证。** 纯逻辑测试在 `Tests/EditMode/BallLayers/RadialProxyShellTests.cs`：单根长棍抬升且不超过突出/单步上限、移除后回落、两件共享方向去掉一件不误删另一件、核心长大后原始突出收回、增量与整账本重建等价、容量满时拒绝且不改旧壳、角点夹紧与未用槽清零。**Unity 编译与 `run_tests` 没有在本检出运行**（Linux 侧不碰 Unity）。
+
 ### 跟随架（2026-11-15 定稿语义，PROVISIONAL 数值）
 
 跟随架是**表现层**，也是玩家坐姿的落点：`VRCStation` 挂在 `followRigRoot` 下面，它指向哪里，玩家就在哪里。它只读球的位置、朝向与半径，不写回任何玩法状态。
 
-**这是眼点，不是座位**（2026-11-15 补）：上面的式子给的是**眼睛**该在哪，不是**座位**该在哪。玩家由 `VRCStation` 承载，station 落的是 avatar 的**根**而不是眼睛；把座位直接摆在眼点上，真实相机（avatar 自己的头部相机，场景里没有 Camera 对象）就会再高出一个坐姿眼高（因 avatar 而异，通常 0.4–0.9 m）——试玩反馈的"坐下后头的位置偏高"就是这一条。所以座位由**骑乘层**按实测眼高反推：`Runtime/Riding/SeatEyeCompensation` 在本地玩家坐下后的稳定窗口里实测 `GetTrackingData(Head)` 相对入座点的偏移，再把入座点按 `−inverse(R)·d` 摆到"头正好落在眼点"的位置（R 是跟随架 yaw，d 是实测偏移）；motor 与 `FollowRigMath` 都不知道这件事，公式仍然只负责眼点。偏移测一次就冻结（VR 下头部会随真实头动，不能每帧拉回），离座、重生、换 avatar 时复位重测。
+**这是眼点，不是座位**（2026-11-15 补）：上面的式子给的是**眼睛**该在哪，不是**座位**该在哪。玩家由 `VRCStation` 承载，station 落的是 avatar 的**根**而不是眼睛；把座位直接摆在眼点上，真实相机（avatar 自己的头部相机，场景里没有 Camera 对象）就会再高出一个坐姿眼高（因 avatar 而异，通常 0.4–0.9 m）——试玩反馈的"坐下后头的位置偏高"就是这一条。所以座位由**骑乘层**按实测眼高反推：`Runtime/Riding/SeatEyeCompensation` 在本地玩家坐下后的稳定窗口里实测 `GetTrackingData(Head)` 相对入座点的偏移，再把入座点按 `−inverse(R)·d` 摆到"头正好落在眼点"的位置（R 是跟随架 yaw，d 是实测偏移）；motor 与 `FollowRigMath` 都不知道这件事，公式仍然只负责眼点。偏移测一次就冻结（VR 下头部会随真实头动，不能每帧拉回），离座、重生、换 avatar 时复位重测。补偿量落在两条护栏之内：① 合理性上限 `SeatEyeMath.MaxPlausibleHeadAboveSeatMeters = 1.35 m`，实测头距超过它就整条拒绝（`reason=6`）而不是减半补偿——它是防「读到明显错误的数据（站姿眼高而相机并不在那里）」的护栏，不是产品值：ClientSim 实测 **1.204159 m**（2026-11-15，那里的相机确实就在那个高度）、真机坐姿约 **0.85 m**，1.35 给最大值留了余量、又仍在站姿眼高 1.5–1.8 m 之下；② 竖向钳位 `verticalLimitMeters = 1.0 m`，超出的部分不补偿并计入 `uncompensatedMeters`（所以 1.204 m 的头在 ClientSim 里会先被护栏放行、再被这条钳到 1.0 m，剩 0.204 m 报出来）。
 
 **为什么是「球后方的 station」而不是摄像机**（这条必须留着，别让后来的人以为方案选错了）：VRChat **没有任何 API 能连续移动玩家 avatar**，唯一手段是 `VRCStation`（或传送）。所以「人推球」在这台引擎上只能实现成**摆在球后方的一个 station**：第一人称下玩家看到的正是「球在身前、视角在球后上方」，与推球一致；但第三人称会看到 avatar 是坐姿——这是引擎限制，不是设计取舍。球的**位置**仍然只由 motor 决定，座位只是它的观察点。
 
@@ -187,7 +215,7 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 
 护栏（不是调参）：`eyeUpMinMeters = 0.1` / `eyeUpMaxMeters = 8` 钳的是**离球心**的高度，`eyeMaxBackM = 8` 钳后退。默认值永远碰不到它们——2.2 m 的球（半径 1.1）也只有 3.19 m，旧方案里那个绝对值 3 m 的天花板会把它削平，所以上下限必须跟着半径走。
 
-滤波不变：x/z 与高度用 `heightFilterHz`（5 Hz）、yaw 用 `yawFilterHz`（8 Hz），alpha = `1 − exp(−2π·hz·dt)`；传送/卡住恢复靠 `discontinuous` 一次吸附。后退偏移沿**滤波后的 yaw**取，所以偏移方向和写进 transform 的朝向不会打架。代价照旧要说清：后退偏移也是转向时座位横移的半径——110°/s 满转在 2.3 m 后退下约 4.4 m/s；觉得像「侧滑」就降 `eyeBackPerRadius`。
+滤波不变：x/z 与高度用 `heightFilterHz`（5 Hz）、yaw 用 `yawFilterHz`（8 Hz），alpha = `1 − exp(−2π·hz·dt)`；传送/卡住恢复靠 `discontinuous` 一次吸附。**喂进来的中心是第 4 步空代理数组解出的核心球心**（见上一节），代理凹凸不进入这条高度通道，所以低通只需要处理正常地面/转向，不再需要独自压住长棍的起伏。后退偏移沿**滤波后的 yaw**取，所以偏移方向和写进 transform 的朝向不会打架。代价照旧要说清：后退偏移也是转向时座位横移的半径——110°/s 满转在 2.3 m 后退下约 4.4 m/s；觉得像「侧滑」就降 `eyeBackPerRadius`。
 
 新增的序列化字段（改名/新增都要 Unity 侧重接，见 `Labs/README.md` 的实例变量表说明）：
 
@@ -212,6 +240,7 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 - 网络、远端球代理、多客户端权威/抢单仲裁：本层只有**一个本地玩家行**的账本；远端提交应走 `GrowthLedgerMath.TryApplyCommit` 的快照/提交路径，由回合控制器拥有。
 - 回合状态机本体：`TryBeginPlaying` 只是把 Lobby→Ready→Preparing→Playing 三条合法边转发给账本，没有计时、轮换或结算。
 - HUD、尺寸读数、音效、粒子、道具生命周期、物品注册表、空间索引（候选由宿主/适配层收集后 `SubmitCandidate` 送入）。
+- C 阶段：径向代理**只**参与第 4 步接地高度；水平扫掠（`SweepMath`）、挡路盒、PVP 外形摘要仍然只用球形碰撞半径。代理不写 `RemoteProxyMath`，也不进任何分数/账本。
 - 场景资产、prefab、新 asmdef：都没加；U# 程序集仍是 `VRCKatamari.Runtime`（`BankShrinkMath.cs` 与其 `.meta` 是运行时代码文件，不新增程序集）。
 
 ### Unity 操作者还要接线
@@ -220,7 +249,7 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 2. 场景：`startCenterWorld`、地面平面法线/偏移、`AddPlane`/`AddBox` 喂障碍、`startCenterWorld` 同时是卡住恢复点。
 3. 玩家 rig：`FollowRig` 挂到 Station/玩家参考系；本层只给位置 + yaw，不碰 HMD 姿态。
 4. 输入：要么在 Inspector 拖 `debugForward/Turn/Lateral` 做桌面预览，要么由适配层每帧调 `SetMoveAxes` / `SetMenuOpen`；若要接 `VRCInput`，必须先确认 SDK 里确实有该 API（本检出无法确认）。
-5. 吸收：候选收集器（触发器/空间结构）填 `SubmitCandidate(...)`，并用 `SetAllowedKinds` 提供允许的种类；**默认空集合 = 全部拒绝**，这是有意的：种类是世界数据，不在本层编。
+5. 吸收：候选收集器（触发器/空间结构）填 `SubmitCandidate(...)`，并用 `SetAllowedKinds` 提供允许的种类；**默认空集合 = 全部拒绝**，这是有意的：种类是世界数据，不在本层编。`PickupFieldHost` 在 `AttachProp` 里已经接了 `AttachRadialProxy`，`ResetField` 里已经接了 `ClearRadialProxies`；换宿主时这两个调用是必须的（否则球永远只有核心球壳）。
 6. 交分：兑换区触发器在停留满足后调 `TryBank(now, requestId)`，`requestId` 必须每次交分唯一（重放的 id 会被账本拒绝）。
 7. 关卡开始：`autoStartPlaying` 为真时 Start 已自动进 Playing；正式回合应由回合控制器调 `TryBeginPlaying`。
 8. Unity 侧验收：先 `refresh_unity` 让 U# 全量编译，再 `run_tests`；本条与“验收”一节同义，本文件写作者不是 Unity 操作者。
@@ -240,6 +269,9 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 | `eyeBaseBackMeters` / `eyeBackPerRadius` / `eyeMaxBackM` | 0.75 m / 2.2 / 8 m | 同上：球心后方（常量 + 半径×系数），上限是护栏 |
 | `maxItemVolumeWorldM3` / `absorbVolumeRatio` / `contactRadiusWorldM` | 512 / 10 / 0 | 体积门（决定 (l)）：上限 = `min(512, 球体积/10)`；旧的 `maxItemSizeWorldM` / `absorbSizeRatio` 已删除。`contactRadiusWorldM = 0` 是决定 (i) |
 | `maxLiftPerStep` / `maxDropPerStep` / `separationEpsilon` / `maxRollDisplacementM` | 0.1 / 0.1 / 0.001 / 0.5 | 本层临时，非实测容差 |
+| `maxProxyProtrusionPerCoreRadius` / `maxProxyProtrusionWorldM` | 0.35 / 0.30 m | 径向代理突出上限（相对核心半径 + 绝对护栏）；PROVISIONAL，需单长棍测试 |
+| `maxProxyLiftPerStep` / `maxProxyNormalSpeedPerturbation` | 0.04 m / 0.15 m/s | 代理单步抬升与法向速度扰动上限；PROVISIONAL，保守值 |
+| `longObjectMinLongestEdgePerCoreDiameter` / `longObjectMinElongation` / `minProxyProtrusionM` | 0.5 / 2.5 / 0.01 m | 长物件准入（最长边 ≥ 0.5 球直径且 ≥ 2.5 × 第二长边）与最小可贡献突出；PROVISIONAL，未做道具普查 |
 | `stuckTimeoutSeconds` | 1.5 | 本层临时恢复策略 |
 
 ### 缺口（数学层没提供、本层没有自己编）

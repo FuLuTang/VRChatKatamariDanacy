@@ -82,11 +82,34 @@ namespace VRCKatamari.BallMotor
         [SerializeField] private float growthSpeedFactor = 0.25f;
         [SerializeField] private float growthTurnFactor = 0.35f;
 
-        // ---- GroundContactMath inputs: one analytic plane, no proxy points yet ----
+        // ---- GroundContactMath inputs: one analytic plane + the radial proxy shell ----
         [SerializeField] private Vector3 groundPlaneNormal = new Vector3(0f, 1f, 0f);
         [SerializeField] private float groundPlaneOffset = 0f;
+        // PROVISIONAL one-step caps, metres. maxLiftPerStep also bounds a teleport-free
+        // rise onto a slope; maxProxyLiftPerStep additionally bounds the rise caused by a
+        // proxy bump, so a long rod cannot pop the ball up in one step.
         [SerializeField] private float maxLiftPerStep = 0.1f;
         [SerializeField] private float maxDropPerStep = 0.1f;
+        [SerializeField] private float maxProxyLiftPerStep = 0.04f;
+
+        // ---- Radial proxy caps and long-object admission (PROVISIONAL, unmeasured) ----
+        // The protrusion cap is relative to the core radius (the contract's rule) and also
+        // has an absolute rail for a large ball. Both are engineering limits against a rod
+        // catapult, not measured product values.
+        [SerializeField] private float maxProxyProtrusionPerCoreRadius = 0.35f;
+        [SerializeField] private float maxProxyProtrusionWorldM = 0.3f;
+        // The vertical channel is position-only in this revision, so the requested normal
+        // speed perturbation is 0; the cap is still a serialized input so a later revision
+        // that does add a normal velocity cannot exceed it.
+        [SerializeField] private float maxProxyNormalSpeedPerturbation = 0.15f;
+        // Admission: longest edge >= this many ball diameters, and >= this many times the
+        // SECOND-longest edge (one axis dominates the other two). A rod/plank passes both;
+        // a cup, a box, and a square sheet with one thin axis pass neither.
+        [SerializeField] private float longObjectMinLongestEdgePerCoreDiameter = 0.5f;
+        [SerializeField] private float longObjectMinElongation = 2.5f;
+        // A long item whose farthest corner does not clear the core by this much cannot
+        // contribute a support above the core, so it is not registered.
+        [SerializeField] private float minProxyProtrusionM = 0.01f;
 
         // ---- SweepMath inputs ----
         [SerializeField] private float separationEpsilon = 0.001f;
@@ -189,7 +212,6 @@ namespace VRCKatamari.BallMotor
         private float stuckSeconds;
         private bool discontinuous;
         private Quaternion visualRollRotation;
-        private Quaternion proxyRotation;
 
         // ---- Volume readings: only committed values, never predictions ----
         private int unbankedVolumeUnits;
@@ -365,6 +387,12 @@ namespace VRCKatamari.BallMotor
         // costs one length check per candidate. A scene sets an item id to ask "was
         // this item evaluated, and with what numbers"; nothing reads it for gameplay.
         [SerializeField] private string debugTraceItemId = "";
+        // Radial-proxy support trace: one console line per accepted ground solve while
+        // enabled, capped by the same TraceLineLimit. This is the single-rod lab's data
+        // source (support height / core radius / lift / endpoint count); it is off by
+        // default and reads no gameplay state back.
+        [SerializeField] private bool debugTraceProxySupport = false;
+        private int proxyTraceLinesLogged;
         private const int TraceLineLimit = 400;
         private int traceLinesLogged;
 
@@ -411,8 +439,51 @@ namespace VRCKatamari.BallMotor
         private int blockingRefusalCount;
         private string blockingRefusalReason;
 
-        // ---- Sizes used once in Start; not part of the per-step state ----
+        // ---- Radial proxy shell (one owner; the layers stay stateless) ----
+        // The shell lives on the motor because the motor already owns the ball pose and
+        // is the only place that feeds GroundContactMath. The arrays are allocated once
+        // in Start and reused: 32 directions, 32 endpoint-only supports, a 32-slot pool
+        // (4 long items x 8 AABB corners), the per-item slices and the 4 candidate keys.
+        private const int ProxyItemCapacity = RadialProxyMath.MaxExtremeCandidates;
+        private const int ProxyEndpointCapacity = ProxyItemCapacity * RadialProxyShellMath.AabbCornerCount;
+
+        private Vector3[] proxyDirections;
+        private float[] proxySupports;
+        private Vector3[] proxyEndpointPool;
+        private int proxyEndpointCount;
+        private int[] proxyItemStarts;
+        private int[] proxyItemLengths;
+        private string[] proxyItemKeys;
+        private bool[] proxyItemIsCandidate;
+        private int proxyItemCount;
+        private string[] proxyCandidateKeys;
+        private int proxyCandidateCount;
+        private int[] proxyAffectedIndices;
+        private float[] proxySolveScratch;
         private Vector3[] localProxyPoints;
+        // localProxyPoints is the array actually passed to GroundContactMath: rebuilt from
+        // proxyEndpointPool every step with each endpoint's length clamped to core+cap, and
+        // unused slots zeroed (an empty shell keeps it all-zero and support is the core).
+        private Vector3[] proxyCorners;
+        private Vector3[] proxyRemovedCorners;
+        private Vector3[] proxyEmptyPoints;
+        private float proxyGroundSupportHeightM;
+        private float proxyProtrusionCapWorldM;
+        private int proxySkipCount;
+        private int proxySkipReason;
+        private int proxyRefusalCount;
+        private int proxyRefusalLogCount;
+
+        // Why AttachRadialProxy did not register an item. 1 and 2 are ordinary skips
+        // (the prop simply cannot contribute); 3..6 are scene/data problems.
+        private const int ProxySkipNone = 0;
+        private const int ProxySkipNotLongObject = 1;
+        private const int ProxySkipInsideCore = 2;
+        private const int ProxySkipCandidateFull = 3;
+        private const int ProxySkipPoolFull = 4;
+        private const int ProxySkipInvalidInput = 5;
+        private const int ProxySkipShellRefused = 6;
+
         private string[] allowedKinds;
         private int allowedKindCount;
         private float maxCollisionRadiusWorldM;
@@ -515,10 +586,43 @@ namespace VRCKatamari.BallMotor
             contactPenetrationDepths = new float[ContactCapacity];
             wallContactNormals = new Vector3[ContactCapacity];
 
-            // RadialProxy is its own layer; until it feeds the motor the support
-            // height degenerates to the core sphere, which is the documented
-            // empty-proxy case.
-            localProxyPoints = new Vector3[0];
+            // The radial proxy shell is the ball's sparse support shell: 32 fixed
+            // directions plus the endpoints of at most four long objects. State is
+            // owned here; the attach/detach/rebuild protocol is RadialProxyShellMath
+            // and the pure support math stays in RadialProxyMath. An empty shell is
+            // the documented core-sphere case.
+            proxyDirections = new Vector3[RadialProxyMath.DirectionCount];
+            if (!RadialProxyMath.TryFillDirections(proxyDirections))
+            {
+                Debug.LogWarning("[BallMotor] radial proxy directions could not be generated;"
+                    + " the shell stays at the core sphere.");
+            }
+            proxySupports = new float[RadialProxyMath.DirectionCount];
+            proxyEndpointPool = new Vector3[ProxyEndpointCapacity];
+            proxyEndpointCount = 0;
+            proxyItemStarts = new int[ProxyItemCapacity];
+            proxyItemLengths = new int[ProxyItemCapacity];
+            proxyItemKeys = new string[ProxyItemCapacity];
+            proxyItemIsCandidate = new bool[ProxyItemCapacity];
+            proxyItemCount = 0;
+            proxyCandidateKeys = new string[RadialProxyMath.MaxExtremeCandidates];
+            proxyCandidateCount = 0;
+            proxyAffectedIndices = new int[RadialProxyMath.DirectionCount];
+            proxySolveScratch = new float[RadialProxyMath.DirectionCount];
+            localProxyPoints = new Vector3[ProxyEndpointCapacity];
+            proxyCorners = new Vector3[RadialProxyShellMath.AabbCornerCount];
+            proxyRemovedCorners = new Vector3[RadialProxyShellMath.AabbCornerCount];
+            proxyEmptyPoints = new Vector3[0];
+            proxyGroundSupportHeightM = 0f;
+            proxyProtrusionCapWorldM = 0f;
+            proxySkipCount = 0;
+            proxySkipReason = ProxySkipNone;
+            proxyRefusalCount = 0;
+            proxyRefusalLogCount = 0;
+            RadialProxyShellMath.TryClearShell(proxyDirections, proxySupports,
+                ref proxyEndpointCount, ref proxyItemCount, proxyCandidateKeys,
+                ref proxyCandidateCount);
+
             allowedKinds = new string[0];
             allowedKindCount = 0;
 
@@ -526,9 +630,7 @@ namespace VRCKatamari.BallMotor
             planarVelocity = Vector3.zero;
             headingDegrees = 0f;
             visualRollRotation = Quaternion.identity;
-            proxyRotation = Quaternion.identity;
             if (ballVisualRollRoot != null) visualRollRotation = ballVisualRollRoot.rotation;
-            if (ballPhysicsRoot != null) proxyRotation = ballPhysicsRoot.rotation;
             discontinuous = true;
 
             maxCollisionRadiusWorldM = maxCoreRadiusWorldM * collisionToCoreRadiusRatio;
@@ -679,8 +781,16 @@ namespace VRCKatamari.BallMotor
             }
 
             // 4. GroundContactMath: support height and the normal-only correction.
+            //
+            // Two solves per step, both cheap. The first uses the radial proxy shell's
+            // clamped endpoints, so a long rod pointing at the ground lifts the core by
+            // up to maxProxyProtrusion (and no more); the second uses an empty proxy array
+            // and is the same plane solved for the smooth core sphere. Only the first
+            // moves the ball; the second is where the follow rig reads the centre, so a
+            // bump cannot bob the camera (the height filter alone would only soften it).
             Vector3 groundedCenter = sweptCenter;
-            float supportHeight;
+            Vector3 followCenter = sweptCenter;
+            float supportHeight = 0f;
             Vector3 correctedCenter;
             float centerNormalCoordinate;
             Vector3 planeAnchor;
@@ -688,13 +798,88 @@ namespace VRCKatamari.BallMotor
             float normalSpeedPerturbation;
             bool liftClamped;
             bool dropClamped;
-            if (GroundContactMath.TrySolve(coreRadiusWorldM, proxyRotation, localProxyPoints,
-                groundPlaneNormal, groundPlaneOffset, sweptCenter, maxLiftPerStep,
-                maxDropPerStep, 0f, 0f, out supportHeight, out correctedCenter,
-                out centerNormalCoordinate, out planeAnchor, out appliedNormalCorrection,
-                out normalSpeedPerturbation, out liftClamped, out dropClamped))
+            float proxyProtrusionCap = maxProxyProtrusionPerCoreRadius * coreRadiusWorldM;
+            float absoluteProtrusionCap = maxProxyProtrusionWorldM;
+            if (!KatamariMath.IsFiniteFloat(absoluteProtrusionCap) || absoluteProtrusionCap < 0f)
+            {
+                absoluteProtrusionCap = 0f;
+            }
+            if (!KatamariMath.IsFiniteFloat(proxyProtrusionCap) || proxyProtrusionCap < 0f)
+            {
+                proxyProtrusionCap = 0f;
+            }
+            else if (proxyProtrusionCap > absoluteProtrusionCap)
+            {
+                proxyProtrusionCap = absoluteProtrusionCap;
+            }
+            proxyProtrusionCapWorldM = proxyProtrusionCap;
+            float proxyLiftCap = maxLiftPerStep;
+            if (proxyEndpointCount > 0 && maxProxyLiftPerStep < proxyLiftCap)
+            {
+                proxyLiftCap = maxProxyLiftPerStep;
+            }
+            bool groundAccepted = false;
+            if (proxyEndpointCount > 0 &&
+                RadialProxyShellMath.TryBuildContactPoints(coreRadiusWorldM, proxyProtrusionCap,
+                    proxyEndpointPool, proxyEndpointCount, localProxyPoints))
+            {
+                groundAccepted = GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation,
+                    localProxyPoints, groundPlaneNormal, groundPlaneOffset, sweptCenter,
+                    proxyLiftCap, maxDropPerStep, 0f, maxProxyNormalSpeedPerturbation,
+                    out supportHeight, out correctedCenter, out centerNormalCoordinate,
+                    out planeAnchor, out appliedNormalCorrection, out normalSpeedPerturbation,
+                    out liftClamped, out dropClamped);
+            }
+            if (!groundAccepted)
+            {
+                // Empty shell, or a rejected proxy build: keep the core-sphere behaviour
+                // rather than leaving the ball ungrounded.
+                groundAccepted = GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation,
+                    proxyEmptyPoints, groundPlaneNormal, groundPlaneOffset, sweptCenter,
+                    maxLiftPerStep, maxDropPerStep, 0f, maxProxyNormalSpeedPerturbation,
+                    out supportHeight, out correctedCenter, out centerNormalCoordinate,
+                    out planeAnchor, out appliedNormalCorrection, out normalSpeedPerturbation,
+                    out liftClamped, out dropClamped);
+            }
+            if (groundAccepted)
             {
                 groundedCenter = correctedCenter;
+                proxyGroundSupportHeightM = supportHeight;
+                if (debugTraceProxySupport && proxyTraceLinesLogged < TraceLineLimit)
+                {
+                    proxyTraceLinesLogged = proxyTraceLinesLogged + 1;
+                    Debug.Log("[ProxyTrace] t=" + localClockSeconds
+                        + " support=" + supportHeight
+                        + " core=" + coreRadiusWorldM
+                        + " lift=" + (supportHeight - coreRadiusWorldM)
+                        + " cap=" + proxyProtrusionCap
+                        + " points=" + proxyEndpointCount
+                        + " candidates=" + proxyCandidateCount
+                        + " centerY=" + correctedCenter.y);
+                }
+            }
+
+            // Camera anchor: the same plane without the proxy points. The per-step lift/drop
+            // clamps are deliberately made huge for this call: it does not move the ball, and
+            // the anchor must be the EXACT core-sphere centre, not a lagging approximation of
+            // it. The follow rig's own height filter and teleport snap handle presentation.
+            float cameraAnchorUnclamped = 10f;
+            float smoothSupportHeight;
+            Vector3 smoothCenter;
+            float smoothNormalCoordinate;
+            Vector3 smoothAnchor;
+            float smoothCorrection;
+            float smoothPerturbation;
+            bool smoothLiftClamped;
+            bool smoothDropClamped;
+            if (GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation, proxyEmptyPoints,
+                groundPlaneNormal, groundPlaneOffset, sweptCenter, cameraAnchorUnclamped,
+                cameraAnchorUnclamped, 0f, maxProxyNormalSpeedPerturbation,
+                out smoothSupportHeight, out smoothCenter, out smoothNormalCoordinate,
+                out smoothAnchor, out smoothCorrection, out smoothPerturbation,
+                out smoothLiftClamped, out smoothDropClamped))
+            {
+                followCenter = smoothCenter;
             }
 
             // Stuck recovery sits between the position stages and the presentation
@@ -717,6 +902,7 @@ namespace VRCKatamari.BallMotor
             if (stuckSeconds > stuckTimeoutSeconds)
             {
                 groundedCenter = startCenterWorld;
+                followCenter = startCenterWorld;
                 planarVelocity = Vector3.zero;
                 stuckSeconds = 0f;
                 discontinuous = true;
@@ -747,8 +933,9 @@ namespace VRCKatamari.BallMotor
             }
 
             // 9. FollowRigMath: consumes this step's final pose, returns presentation
-            //    only, and never feeds gameplay state.
-            UpdateFollowRig(groundedCenter, dt);
+            //    only, and never feeds gameplay state. It is given the smooth core
+            //    centre, not the proxy-lifted one, so the camera does not bob.
+            UpdateFollowRig(followCenter, dt);
 
             ballCenterWorld = groundedCenter;
             discontinuous = false;
@@ -1192,6 +1379,10 @@ namespace VRCKatamari.BallMotor
             absorbRequestSequence = 0;
 
             ClearCandidates();
+            // The shell's items are the old round's attached props. Clear it here as well
+            // as on the host's field reset: a retry must not inherit a bench's protrusion
+            // even when no host reset runs first.
+            ClearRadialProxies();
             absorbedEventRingCount = 0;
             rejectEventCount = 0;
             absorbedCount = 0;
@@ -1786,6 +1977,10 @@ namespace VRCKatamari.BallMotor
             }
             carriedVolumeUnits = carried;
             RecomputeConfirmedAndSize();
+            // A conversion can shrink the core a long way. The endpoint pool is unchanged,
+            // but the contract asks for a whole-ledger rebuild after a large shrink, so the
+            // shell is re-derived from the surviving items instead of being scaled.
+            RebuildRadialProxies();
             return true;
         }
 
@@ -1808,6 +2003,297 @@ namespace VRCKatamari.BallMotor
             stuckSeconds = 0f;
             discontinuous = true;
             ClearBlockingBoxes();
+            // The endpoints are ball-local, so a teleport cannot change them; the rebuild
+            // is the contract's discontinuity path and proves the support table still
+            // matches the ledger instead of carrying a value across the jump.
+            RebuildRadialProxies();
+        }
+
+        // ------------------------------------------------------------------
+        // Radial proxy seam: the pickup host registers an absorbed prop's
+        // simplified AABB after it attaches the visual prop. The motor owns the
+        // shell; the host owns no proxy state.
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Registers one absorbed prop's simplified AABB as a radial proxy item.
+        /// </summary>
+        /// <returns>
+        /// True when the item is represented (or was already registered); false when it
+        /// was skipped. A skip is normal for a prop that is not a long object or that
+        /// does not clear the core; capacity and invalid-input skips are refusals and
+        /// are counted/logged. The reason of the most recent skip is
+        /// <see cref="GetLastProxySkipReason"/>.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// bounds is the prop's full AABB edge lengths in metres (the same
+        /// <c>propBounds</c> the absorb gate and the blocking boxes use), read as the
+        /// prop's local axes. ballLocalCenter and ballLocalRotation are the pose
+        /// <c>AttachmentMath.TryWorldPoseToLocal</c> just produced for the visual
+        /// attach, so the proxy and the visible prop occupy the same ball-frame box.
+        /// Endpoints are the eight corners, and the item becomes one of the at-most-four
+        /// long-object candidates.
+        /// </para>
+        /// <para>
+        /// Idempotent by item id: one call per attached prop, and a retried call cannot
+        /// add the same corners twice. Registered items are removed by a field reset,
+        /// by <see cref="DetachRadialProxy"/>, or by <see cref="TryResetForNewRound"/>.
+        /// </para>
+        /// </remarks>
+        public bool AttachRadialProxy(string itemInstanceId, Vector3 bounds,
+            Vector3 ballLocalCenter, Quaternion ballLocalRotation)
+        {
+            if (proxyEndpointPool == null)
+            {
+                RecordProxySkip(ProxySkipInvalidInput);
+                return false;
+            }
+            if (itemInstanceId == null || itemInstanceId.Length == 0)
+            {
+                RecordProxySkip(ProxySkipInvalidInput);
+                return false;
+            }
+            for (int i = 0; i < proxyItemCount; i++)
+            {
+                if (string.CompareOrdinal(proxyItemKeys[i], itemInstanceId) == 0) return true;
+            }
+            if (!KatamariMath.IsFiniteVector(bounds) || bounds.x < 0f || bounds.y < 0f ||
+                bounds.z < 0f)
+            {
+                RecordProxySkip(ProxySkipInvalidInput);
+                return false;
+            }
+            if (!KatamariMath.IsFiniteVector(ballLocalCenter) ||
+                !RadialProxyMath.IsUnitRotation(ballLocalRotation))
+            {
+                RecordProxySkip(ProxySkipInvalidInput);
+                return false;
+            }
+            if (!KatamariMath.IsFiniteFloat(coreRadiusWorldM) || coreRadiusWorldM < 0f)
+            {
+                RecordProxySkip(ProxySkipInvalidInput);
+                return false;
+            }
+
+            bool isLongObject;
+            if (!RadialProxyShellMath.TryClassifyLongObject(bounds, coreRadiusWorldM,
+                longObjectMinElongation, longObjectMinLongestEdgePerCoreDiameter,
+                out isLongObject))
+            {
+                RecordProxySkip(ProxySkipInvalidInput);
+                return false;
+            }
+            if (!isLongObject)
+            {
+                RecordProxySkip(ProxySkipNotLongObject);
+                return false;
+            }
+
+            float farthestDistance;
+            if (!RadialProxyShellMath.TryBuildAabbCorners(ballLocalCenter, ballLocalRotation,
+                bounds, proxyCorners, out farthestDistance))
+            {
+                RecordProxySkip(ProxySkipInvalidInput);
+                return false;
+            }
+            float minProtrusion = minProxyProtrusionM;
+            if (!KatamariMath.IsFiniteFloat(minProtrusion) || minProtrusion < 0f) minProtrusion = 0f;
+            if (farthestDistance <= coreRadiusWorldM + minProtrusion)
+            {
+                RecordProxySkip(ProxySkipInsideCore);
+                return false;
+            }
+            if (proxyItemCount >= ProxyItemCapacity ||
+                proxyCandidateCount >= proxyCandidateKeys.Length)
+            {
+                RecordProxySkip(ProxySkipCandidateFull);
+                return false;
+            }
+            if (proxyEndpointCount > ProxyEndpointCapacity - RadialProxyShellMath.AabbCornerCount)
+            {
+                RecordProxySkip(ProxySkipPoolFull);
+                return false;
+            }
+            if (!RadialProxyShellMath.TryAttachItem(proxyDirections, proxySupports,
+                proxyEndpointPool, ref proxyEndpointCount, proxyItemStarts, proxyItemLengths,
+                proxyItemKeys, proxyItemIsCandidate, ref proxyItemCount, proxyCandidateKeys,
+                ref proxyCandidateCount, proxyAffectedIndices, proxySolveScratch, itemInstanceId,
+                proxyCorners, RadialProxyShellMath.AabbCornerCount, true))
+            {
+                RecordProxySkip(ProxySkipShellRefused);
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Removes one item's proxy contribution and recomputes the directions it used
+        /// to affect. Returns false when the id was not registered; the shell is then
+        /// unchanged. There is no drop path in this revision, so the only runtime
+        /// removals are a whole field reset and <see cref="TryResetForNewRound"/>.
+        /// </summary>
+        public bool DetachRadialProxy(string itemInstanceId)
+        {
+            if (proxyEndpointPool == null) return false;
+            if (itemInstanceId == null || itemInstanceId.Length == 0) return false;
+            bool existed;
+            if (!RadialProxyShellMath.TryDetachItem(proxyDirections, proxySupports,
+                proxyEndpointPool, ref proxyEndpointCount, proxyItemStarts, proxyItemLengths,
+                proxyItemKeys, proxyItemIsCandidate, ref proxyItemCount, proxyCandidateKeys,
+                ref proxyCandidateCount, proxyAffectedIndices, proxySolveScratch,
+                proxyRemovedCorners, itemInstanceId, out existed))
+            {
+                RecordProxySkip(ProxySkipShellRefused);
+                return false;
+            }
+            return existed;
+        }
+
+        /// <summary>
+        /// Empties the shell: every support returns to zero and every item row and
+        /// candidate slot is released. Used by a round retry and by a pickup field
+        /// reset, which returns every prop to its authored pose.
+        /// </summary>
+        public void ClearRadialProxies()
+        {
+            if (proxyDirections == null) return;
+            if (!RadialProxyShellMath.TryClearShell(proxyDirections, proxySupports,
+                ref proxyEndpointCount, ref proxyItemCount, proxyCandidateKeys,
+                ref proxyCandidateCount))
+            {
+                RecordProxySkip(ProxySkipShellRefused);
+                return;
+            }
+            proxyGroundSupportHeightM = 0f;
+        }
+
+        /// <summary>
+        /// Re-derives the whole support table and candidate list from the surviving
+        /// items. False leaves the previous shell in place (the rebuild is atomic).
+        /// Called after a bank shrink and on a teleport.
+        /// </summary>
+        public bool RebuildRadialProxies()
+        {
+            if (proxyDirections == null) return false;
+            int candidateCount;
+            if (!RadialProxyShellMath.TryRebuildShell(proxyDirections, proxySupports,
+                proxyEndpointPool, proxyEndpointCount, proxyItemStarts, proxyItemLengths,
+                proxyItemKeys, proxyItemIsCandidate, proxyItemCount, proxyCandidateKeys,
+                out candidateCount))
+            {
+                RecordProxySkip(ProxySkipShellRefused);
+                return false;
+            }
+            proxyCandidateCount = candidateCount;
+            return true;
+        }
+
+        private void RecordProxySkip(int reason)
+        {
+            proxySkipCount = proxySkipCount + 1;
+            proxySkipReason = reason;
+            if (reason == ProxySkipNotLongObject || reason == ProxySkipInsideCore) return;
+            proxyRefusalCount = proxyRefusalCount + 1;
+            if (proxyRefusalLogCount >= 3) return;
+            proxyRefusalLogCount = proxyRefusalLogCount + 1;
+            Debug.LogWarning("[BallMotor] radial proxy refused: " + ProxySkipText(reason)
+                + " (refusals " + proxyRefusalCount + ")");
+        }
+
+        private string ProxySkipText(int reason)
+        {
+            if (reason == ProxySkipNotLongObject) return "not a long object";
+            if (reason == ProxySkipInsideCore) return "no meaningful protrusion";
+            if (reason == ProxySkipCandidateFull) return "candidate slots full (4)";
+            if (reason == ProxySkipPoolFull) return "endpoint pool full (32)";
+            if (reason == ProxySkipInvalidInput) return "invalid item input";
+            if (reason == ProxySkipShellRefused) return "shell math refused the ledger";
+            return "none";
+        }
+
+        /// <summary>Endpoints currently in the shell pool (0..32).</summary>
+        public int GetProxyPointCount()
+        {
+            return proxyEndpointCount;
+        }
+
+        /// <summary>Long-object items currently registered (0..4).</summary>
+        public int GetProxyCandidateCount()
+        {
+            return proxyCandidateCount;
+        }
+
+        /// <summary>Fixed direction count of the shell (32).</summary>
+        public int GetProxyDirectionCount()
+        {
+            return RadialProxyMath.DirectionCount;
+        }
+
+        /// <summary>
+        /// Current support length along one direction, metres, floored by the core
+        /// radius. This is the RAW endpoint maximum (uncapped); the per-step contact
+        /// clamp to core+maxProtrusion is applied when the ground points are built, so
+        /// a value here can exceed what the ball actually lifted by. -1 for an
+        /// out-of-range index or before Start.
+        /// </summary>
+        public float GetProxySupportLength(int directionIndex)
+        {
+            if (proxySupports == null || directionIndex < 0 ||
+                directionIndex >= RadialProxyMath.DirectionCount) return -1f;
+            float support = proxySupports[directionIndex];
+            if (support < coreRadiusWorldM) support = coreRadiusWorldM;
+            return support;
+        }
+
+        /// <summary>
+        /// The support height the last accepted ground solve used, metres. This is the
+        /// target height (including the proxy bump and its protrusion cap), not the
+        /// clamped centre move; 0 before the first accepted solve.
+        /// </summary>
+        public float GetGroundSupportHeightWorldM()
+        {
+            return proxyGroundSupportHeightM;
+        }
+
+        /// <summary>
+        /// The last accepted support height above the core sphere: max(0,
+        /// supportHeight - coreRadius). This is the bump the long term wants to see in
+        /// the single-rod lab; it is capped by maxProxyProtrusionPerCoreRadius.
+        /// </summary>
+        public float GetGroundProxyLiftWorldM()
+        {
+            float lift = proxyGroundSupportHeightM - coreRadiusWorldM;
+            if (lift < 0f) return 0f;
+            return lift;
+        }
+
+        /// <summary>
+        /// The protrusion cap the last ground solve used, metres: min(core *
+        /// maxProxyProtrusionPerCoreRadius, maxProxyProtrusionWorldM). Read-only, for the
+        /// single-rod lab and for a HUD that shows why the lift stopped growing.
+        /// </summary>
+        public float GetProxyProtrusionCapWorldM()
+        {
+            return proxyProtrusionCapWorldM;
+        }
+
+        /// <summary>Every attach that did not register an item (normal skips included).</summary>
+        public int GetProxySkipCount()
+        {
+            return proxySkipCount;
+        }
+
+        /// <summary>Reason code of the most recent proxy skip; 0 before any skip.</summary>
+        public int GetLastProxySkipReason()
+        {
+            return proxySkipReason;
+        }
+
+        /// <summary>Skips that were faults (capacity/invalid input/math), not shape misses.</summary>
+        public int GetProxyRefusalCount()
+        {
+            return proxyRefusalCount;
         }
 
         // ------------------------------------------------------------------

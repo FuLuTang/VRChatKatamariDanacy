@@ -409,6 +409,10 @@ namespace VRCKatamari.Pickup
             // move). Clearing here as well as in TeleportTo covers a reset that does not
             // teleport, and the next scan rebuilds from the restored field.
             if (motor != null) motor.ClearBlockingBoxes();
+            // Every registered proxy item is one of the props just restored, so the shell
+            // is emptied rather than edited. Clearing here as well as in the motor's own
+            // round reset covers a field reset that does not restart the ball.
+            if (motor != null) motor.ClearRadialProxies();
             blockingAppliedCount = 0;
             blockingCandidateCount = 0;
             previousBlockingCount = 0;
@@ -857,6 +861,12 @@ namespace VRCKatamari.Pickup
             prop.localRotation = localRotation;
             if (propColliders != null && index < propColliders.Length && propColliders[index] != null)
                 propColliders[index].enabled = false;
+
+            // The shell wants the same simplified volume the absorb gate used, in the same
+            // ball-local pose the visual prop just took. The motor decides whether this
+            // item is a long object worth an endpoint candidate; a small or buried prop is
+            // skipped there, and this host owns no proxy state.
+            motor.AttachRadialProxy(itemIds[index], propBounds[index], localPosition, localRotation);
 
             propStates[index] = StateAttached;
             lastSubmitTimes[index] = 0f;

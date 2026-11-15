@@ -1,0 +1,249 @@
+"""Tests for the level authoring data layer (no Blender, no Unity).
+
+Run from the repository root:
+
+    python3 -m unittest discover -s Docs/tests -p 'test_*.py'
+
+The rules under test are the ones that fail *silently* if they are wrong -
+coordinate conversion, quaternion order, the absorb gate, seating on a tilted
+surface, and the deterministic byte layout - so each has a numeric test rather
+than a "looks fine" check.
+"""
+
+import copy
+import json
+import math
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from Tools.levelbuild import placement_core as core  # noqa: E402
+
+EXAMPLE = ROOT / "Tools/levelbuild/examples/placement.json"
+MANIFESTS = core.load_manifests()
+
+
+def manifest_aabb(def_id):
+    return list(MANIFESTS[def_id]["aabb"])
+
+
+def has_negative_zero(node):
+    """True when any float in the document is a negative zero (it would print as -0.0)."""
+    if isinstance(node, float):
+        return node == 0.0 and math.copysign(1.0, node) < 0.0
+    if isinstance(node, dict):
+        return any(has_negative_zero(value) for value in node.values())
+    if isinstance(node, list):
+        return any(has_negative_zero(value) for value in node)
+    return False
+
+
+def valid_doc():
+    """A minimal document that must pass every rule; the tests mutate copies of it."""
+    table_top = 0.425
+    plate_aabb = manifest_aabb("plate")
+    return {
+        "schema": core.SCHEMA,
+        "level": {
+            "id": "unit_test_field",
+            "scene": "TestScene",
+            "units": "m",
+            "convention": core.CONVENTION,
+            "ballStart": [-2.5, 0.15, -2.5],
+            "playerSpawn": [-3.6, 0.5, -3.6],
+            "ballDiameterStart": 0.30,
+            "ballDiameterMax": 2.20,
+            "bounds": [[-4.0, -4.0], [4.0, 4.0]],
+            "spawnClearanceM": 1.0,
+            "budget": {"planes": 8, "boxes": 8, "ramps": 4, "propSupports": 6, "blocking": 6},
+            "expected": {"propCount": 3, "valueUnits": 6},
+        },
+        "defs": [
+            {"id": "apple", "kind": "fruit", "valueUnits": 1},
+            {"id": "orange", "kind": "fruit", "valueUnits": 1},
+            {"id": "plate", "kind": "tableware", "valueUnits": 4},
+        ],
+        "props": [
+            {"itemId": "prop_apple_000", "def": "apple", "zone": "lawn",
+             "position": [0.6, 0.0387, 0.6], "rotationQuat": [0.0, 0.0, 0.0, 1.0],
+             "aabb": manifest_aabb("apple"), "valueUnits": 1},
+            {"itemId": "prop_orange_000", "def": "orange", "zone": "lawn",
+             "position": [-1.2, 0.0387, 0.9], "rotationQuat": [0.0, 0.0, 0.0, 1.0],
+             "aabb": manifest_aabb("orange"), "valueUnits": 1},
+            {"itemId": "prop_plate_000", "def": "plate", "zone": "table",
+             "position": [1.5, table_top + plate_aabb[1] / 2.0, -1.5],
+             "rotationQuat": [0.0, 0.0, 0.0, 1.0], "aabb": plate_aabb,
+             "support": "picnic_table", "valueUnits": 4},
+        ],
+        "structures": [
+            {"id": "ground", "role": "ground", "shape": "plane",
+             "center": [0.0, 0.0, 0.0], "size": [8.0, 0.04, 8.0],
+             "rotationQuat": [0.0, 0.0, 0.0, 1.0], "collision": "none",
+             "absorbable": False, "support": True},
+            {"id": "picnic_table", "role": "box", "shape": "box",
+             "center": [1.5, 0.4, -1.5], "size": [1.2, 0.05, 0.8],
+             "rotationQuat": [0.0, 0.0, 0.0, 1.0], "collision": "box",
+             "absorbable": False, "support": True},
+        ],
+    }
+
+
+class CoordinateTests(unittest.TestCase):
+    def test_position_swap_is_its_own_inverse(self):
+        for point in ((1.0, 2.0, 3.0), (-0.5, 0.0, 4.25)):
+            self.assertEqual(core.blender_to_unity_position(point), (point[0], point[2], point[1]))
+            self.assertEqual(core.unity_to_blender_position(
+                core.blender_to_unity_position(point)), point)
+
+    def test_blender_z_rotation_becomes_unity_negative_y_rotation(self):
+        # A quarter turn about Blender +Z is a quarter turn about Unity +Y the other way
+        # (the axis swap is improper). Unity's +Y yaw turns forward (+Z) towards +X.
+        q_blender = core.quat_axis_angle((0.0, 0.0, 1.0), math.radians(90.0))
+        q_unity = core.blender_to_unity_quat(
+            (q_blender[3], q_blender[0], q_blender[1], q_blender[2]))
+        forward = core.quat_rotate(q_unity, (0.0, 0.0, 1.0))
+        self.assertAlmostEqual(forward[0], -1.0, places=6)
+        self.assertAlmostEqual(forward[1], 0.0, places=6)
+        self.assertAlmostEqual(forward[2], 0.0, places=6)
+
+    def test_quaternion_round_trip(self):
+        q = core.canonical_quat(core.quat_axis_angle((0.3, 0.5, -0.8), 0.7))
+        blender = core.unity_to_blender_quat(q)
+        back = core.blender_to_unity_quat(blender)
+        self.assertAlmostEqual(max(abs(a - b) for a, b in zip(q, back)), 0.0, places=12)
+
+    def test_canonical_sign_is_stable(self):
+        q = core.quat_axis_angle((0.0, 1.0, 0.0), math.radians(200.0))
+        negated = tuple(-v for v in q)
+        self.assertEqual(core.canonical_quat(q), core.canonical_quat(negated))
+
+    def test_rotated_world_aabb(self):
+        # A 0.24 x 0.025 x 0.24 plate yawed 45 deg has a wider world footprint.
+        q = core.quat_axis_angle((0.0, 1.0, 0.0), math.radians(45.0))
+        half = core.world_half_extents((0.24, 0.025, 0.24), q)
+        self.assertAlmostEqual(half[0], 0.24 * math.sqrt(0.5), places=6)
+        self.assertAlmostEqual(half[1], 0.0125, places=6)
+        self.assertAlmostEqual(half[2], 0.24 * math.sqrt(0.5), places=6)
+
+
+class AbsorbGateTests(unittest.TestCase):
+    def test_formula_matches_the_design(self):
+        size = (0.08, 0.078, 0.0789)
+        expected = (60.0 * size[0] * size[1] * size[2] / math.pi) ** (1.0 / 3.0)
+        self.assertAlmostEqual(core.absorb_diameter_req(size), expected, places=12)
+        # The design's rounded form: 2.673 * cbrt(a*b*c).
+        self.assertAlmostEqual(core.absorb_diameter_req(size),
+                               round(2.6727 * (size[0] * size[1] * size[2]) ** (1 / 3), 3), places=2)
+
+    def test_known_values(self):
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("apple")), 0.211, places=3)
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("thermos")), 0.403, places=3)
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("watermelon")), 0.671, places=3)
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("plate")), 0.302, places=3)
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("napkin")), 0.182, places=3)
+
+    def test_gate_is_the_volume_rule(self):
+        for def_id in ("apple", "banana", "thermos", "plate", "watermelon", "napkin"):
+            size = manifest_aabb(def_id)
+            diameter = core.absorb_diameter_req(size)
+            volume = size[0] * size[1] * size[2]
+            # volume <= (pi/6) * D^3 / 10
+            self.assertLessEqual(volume, (math.pi / 6.0) * diameter ** 3 / 10.0 + 1e-12)
+
+    def test_absorbable_flips_at_the_ceiling(self):
+        size = manifest_aabb("watermelon")
+        diameter = core.absorb_diameter_req(size)
+        self.assertFalse(core.is_absorbable(size, diameter - 1e-6))
+        self.assertTrue(core.is_absorbable(size, diameter + 1e-6))
+
+
+class SeatingTests(unittest.TestCase):
+    def setUp(self):
+        self.doc = valid_doc()
+        self.ramp = {"id": "plank", "role": "ramp", "shape": "box",
+                     "center": [-0.5, 0.2, 0.0], "size": [1.1, 0.04, 0.42],
+                     "rotationQuat": list(core.quat_axis_angle((0.0, 0.0, 1.0),
+                                                               math.radians(20.0))),
+                     "collision": "box", "absorbable": False, "support": True}
+
+    def test_seated_prop_is_level_and_sunk_prop_is_not(self):
+        size = manifest_aabb("apple")
+        normal, point = core.structure_top_plane(self.ramp)
+        position = (0.0, 0.3, 0.0)
+        seated, quat = core.seat_pose(position, size, normal, point, yaw_rad=0.0)
+        corners = core.box_corners(seated, size, quat)
+        self.assertAlmostEqual(min(core.plane_distance(normal, point, c) for c in corners), 0.0, places=6)
+        # An upright prop pushed down to touch the plane by its AABB must have a corner under it.
+        upright = (seated[0], seated[1], seated[2])
+        upright = core.seat_position(position, size, normal, point)
+        flat = core.box_corners(upright, size, (0.0, 0.0, 0.0, 1.0))
+        self.assertLess(min(core.plane_distance(normal, point, c) for c in flat), -0.01)
+
+    def test_reseat_keeps_the_prop_on_its_support(self):
+        doc = copy.deepcopy(self.doc)
+        doc["structures"].append(self.ramp)
+        size = manifest_aabb("apple")
+        normal, point = core.structure_top_plane(self.ramp)
+        doc["props"].append({
+            "itemId": "prop_apple_001", "def": "apple", "zone": "ramp",
+            "position": [core.rounded(0.0, 4), core.rounded(0.3, 4), 0.0],
+            "rotationQuat": [0.0, 0.0, 0.0, 1.0], "aabb": size,
+            "support": "plank", "valueUnits": 1,
+        })
+        doc["level"]["expected"] = {"propCount": 4, "valueUnits": 7}
+        self.assertTrue(core.validate(doc).errors)  # upright on a 20 deg board = sunk corner
+
+        prop = doc["props"][-1]
+        new_position, new_quat = core.reseat(tuple(prop["position"]), tuple(prop["aabb"]),
+                                            tuple(prop["rotationQuat"]), normal, point)
+        prop["position"] = [core.rounded(v, core.POSITION_DECIMALS) for v in new_position]
+        prop["rotationQuat"] = [core.rounded(v, core.QUAT_DECIMALS) for v in new_quat]
+        report = core.validate(doc)
+        self.assertEqual(report.errors, [])
+
+
+class DeterminismTests(unittest.TestCase):
+    def test_canonical_form_is_sorted_rounded_and_clean(self):
+        doc = valid_doc()
+        doc["props"].reverse()
+        doc["structures"].reverse()
+        doc["props"][0]["position"] = [-0.0, 0.0387, 1.23456]
+        text = core.dump_doc(doc)
+        self.assertFalse(has_negative_zero(json.loads(text)), "a -0.0 survived the canonical pass")
+        self.assertIn("1.2346", text)
+        ids = [line for line in text.splitlines() if '"itemId"' in line]
+        self.assertEqual(ids, sorted(ids))
+
+    def test_derived_fields_are_recomputed(self):
+        doc = valid_doc()
+        doc["props"][0]["absorbable"] = False
+        doc["props"][0]["absorbDiameterReq"] = 9.999
+        text = core.dump_doc(doc)
+        self.assertNotIn("9.999", text)
+        self.assertIn('"absorbDiameterReq": 0.211', text)
+        self.assertIn('"absorbable": true', text)
+
+    def test_dump_is_byte_stable_through_a_round_trip(self):
+        doc = valid_doc()
+        once = core.dump_doc(doc)
+        twice = core.dump_doc(json.loads(once))
+        self.assertEqual(once, twice)
+
+    def test_example_is_canonical(self):
+        doc = core.load_doc(EXAMPLE)
+        self.assertEqual(core.dump_doc(doc), EXAMPLE.read_text(encoding="utf-8"))
+
+    def test_value_units_fall_back_to_the_def_catalog(self):
+        doc = valid_doc()
+        for prop in doc["props"]:
+            prop.pop("valueUnits", None)
+        self.assertEqual(core.value_units_total(doc), 6)
+        self.assertEqual(core.validate(doc).errors, [])
+
+
+if __name__ == "__main__":
+    unittest.main()

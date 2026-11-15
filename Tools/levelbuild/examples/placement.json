@@ -1,0 +1,774 @@
+{
+  "schema": "katamari.placement/0",
+  "level": {
+    "id": "picnic_corner_demo",
+    "scene": "StoryLevel",
+    "units": "m",
+    "convention": "unity-y-up-left-handed-quat-xyzw",
+    "ballStart": [
+      -3.2,
+      0.15,
+      -3.2
+    ],
+    "playerSpawn": [
+      -3.9,
+      0.5,
+      -3.9
+    ],
+    "ballDiameterStart": 0.3,
+    "ballDiameterMax": 2.2,
+    "bounds": [
+      [
+        -4.5,
+        -4.5
+      ],
+      [
+        4.5,
+        4.5
+      ]
+    ],
+    "spawnClearanceM": 1.0,
+    "budget": {
+      "planes": 8,
+      "boxes": 8,
+      "ramps": 4,
+      "propSupports": 6,
+      "blocking": 6
+    },
+    "expected": {
+      "propCount": 16,
+      "valueUnits": 35
+    },
+    "zones": [
+      {
+        "id": "edge",
+        "rect": [
+          2.3,
+          -2.0,
+          3.2,
+          3.0
+        ]
+      },
+      {
+        "id": "lawn",
+        "rect": [
+          -1.0,
+          -3.0,
+          3.0,
+          3.0
+        ]
+      },
+      {
+        "id": "ramp",
+        "rect": [
+          -3.45,
+          -1.45,
+          -2.35,
+          -0.95
+        ]
+      },
+      {
+        "id": "table",
+        "rect": [
+          -2.45,
+          -1.65,
+          -0.75,
+          -0.75
+        ]
+      }
+    ]
+  },
+  "props": [
+    {
+      "itemId": "prop_acorn_000",
+      "def": "acorn",
+      "kind": "nature",
+      "zone": "lawn",
+      "position": [
+        1.2,
+        0.015,
+        2.1
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.024,
+        0.03,
+        0.0228
+      ],
+      "absorbDiameterReq": 0.068,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "prop_apple_000",
+      "def": "apple",
+      "kind": "fruit",
+      "zone": "ramp",
+      "position": [
+        -2.7005,
+        0.3734,
+        -1.2
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.190809,
+        0.981627
+      ],
+      "support": "plank_ramp",
+      "aabb": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 1,
+      "notes": "seated on the ramp normal, not lifted straight up"
+    },
+    {
+      "itemId": "prop_banana_000",
+      "def": "banana",
+      "kind": "fruit",
+      "zone": "lawn",
+      "position": [
+        0.6,
+        0.016,
+        1.6
+      ],
+      "rotationQuat": [
+        0.0,
+        0.21644,
+        0.0,
+        0.976296
+      ],
+      "aabb": [
+        0.18,
+        0.032,
+        0.0678
+      ],
+      "absorbDiameterReq": 0.195,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "prop_bottle_cap_000",
+      "def": "bottle_cap",
+      "kind": "debris",
+      "zone": "lawn",
+      "position": [
+        -0.4,
+        0.0043,
+        2.9
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.03,
+        0.0087,
+        0.0285
+      ],
+      "absorbDiameterReq": 0.052,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "prop_cookie_000",
+      "def": "cookie",
+      "kind": "food",
+      "zone": "table",
+      "position": [
+        -1.78,
+        0.4747,
+        -1.18
+      ],
+      "rotationQuat": [
+        0.0,
+        0.173648,
+        0.0,
+        0.984808
+      ],
+      "support": "picnic_table",
+      "stackedOn": "prop_plate_000",
+      "aabb": [
+        0.07,
+        0.0094,
+        0.0689
+      ],
+      "absorbDiameterReq": 0.095,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "prop_fallen_leaf_000",
+      "def": "fallen_leaf",
+      "kind": "nature",
+      "zone": "lawn",
+      "position": [
+        2.4,
+        0.0006,
+        -2.6
+      ],
+      "rotationQuat": [
+        0.0,
+        0.573576,
+        0.0,
+        0.819152
+      ],
+      "aabb": [
+        0.06,
+        0.0011,
+        0.09
+      ],
+      "absorbDiameterReq": 0.048,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "prop_glass_bottle_000",
+      "def": "glass_bottle",
+      "kind": "drink",
+      "zone": "table",
+      "position": [
+        -1.35,
+        0.585,
+        -1.02
+      ],
+      "rotationQuat": [
+        0.0,
+        0.130526,
+        0.0,
+        0.991445
+      ],
+      "support": "picnic_table",
+      "aabb": [
+        0.07,
+        0.28,
+        0.07
+      ],
+      "absorbDiameterReq": 0.297,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "prop_orange_000",
+      "def": "orange",
+      "kind": "fruit",
+      "zone": "lawn",
+      "position": [
+        -0.9,
+        0.0387,
+        2.9
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "prop_paper_scrap_000",
+      "def": "paper_scrap",
+      "kind": "debris",
+      "zone": "lawn",
+      "position": [
+        1.9,
+        0.0059,
+        0.6
+      ],
+      "rotationQuat": [
+        0.0,
+        0.34202,
+        0.0,
+        0.939693
+      ],
+      "aabb": [
+        0.1,
+        0.0118,
+        0.0741
+      ],
+      "absorbDiameterReq": 0.119,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "prop_pear_000",
+      "def": "pear",
+      "kind": "fruit",
+      "zone": "table",
+      "position": [
+        -1.95,
+        0.49,
+        -1.05
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "picnic_table",
+      "aabb": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "absorbDiameterReq": 0.172,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "prop_pebble_000",
+      "def": "pebble",
+      "kind": "nature",
+      "zone": "lawn",
+      "position": [
+        0.2,
+        0.0106,
+        2.6
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.04,
+        0.0213,
+        0.0293
+      ],
+      "absorbDiameterReq": 0.078,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "prop_plate_000",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "table",
+      "position": [
+        -1.78,
+        0.4575,
+        -1.18
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "picnic_table",
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.302,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "prop_small_potted_plant_000",
+      "def": "small_potted_plant",
+      "kind": "garden",
+      "zone": "edge",
+      "position": [
+        2.8,
+        0.11,
+        2.6
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "absorbDiameterReq": 0.431,
+      "absorbable": true,
+      "valueUnits": 6
+    },
+    {
+      "itemId": "prop_strawberry_000",
+      "def": "strawberry",
+      "kind": "fruit",
+      "zone": "table",
+      "position": [
+        -2.05,
+        0.465,
+        -1.4
+      ],
+      "rotationQuat": [
+        0.0,
+        -0.258819,
+        0.0,
+        0.965926
+      ],
+      "support": "picnic_table",
+      "aabb": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "absorbDiameterReq": 0.1,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "prop_watering_can_000",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "edge",
+      "position": [
+        2.9,
+        0.0896,
+        -1.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.939693,
+        0.0,
+        0.34202
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.458,
+      "absorbable": true,
+      "valueUnits": 6
+    },
+    {
+      "itemId": "prop_watermelon_000",
+      "def": "watermelon",
+      "kind": "food",
+      "zone": "table",
+      "position": [
+        -1.45,
+        0.555,
+        -1.42
+      ],
+      "rotationQuat": [
+        0.0,
+        0.069756,
+        0.0,
+        0.997564
+      ],
+      "support": "picnic_table",
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.671,
+      "absorbable": true,
+      "valueUnits": 4
+    }
+  ],
+  "structures": [
+    {
+      "id": "crate",
+      "kind": "crate",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        1.6,
+        0.17,
+        1.4
+      ],
+      "size": [
+        0.34,
+        0.34,
+        0.34
+      ],
+      "rotationQuat": [
+        0.0,
+        -0.104528,
+        0.0,
+        0.994522
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true
+    },
+    {
+      "id": "ground",
+      "kind": "lawn",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "size": [
+        9.4,
+        0.04,
+        9.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "arena floor; its top face is y = 0"
+    },
+    {
+      "id": "picnic_table",
+      "kind": "table",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -1.6,
+        0.42,
+        -1.2
+      ],
+      "size": [
+        1.6,
+        0.05,
+        0.8
+      ],
+      "rotationQuat": [
+        0.0,
+        0.069756,
+        0.0,
+        0.997564
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "table top; legs are not modelled yet (known gap, design section 13)"
+    },
+    {
+      "id": "plank_ramp",
+      "kind": "ramp",
+      "role": "ramp",
+      "shape": "box",
+      "center": [
+        -2.91,
+        0.2246,
+        -1.2
+      ],
+      "size": [
+        1.1,
+        0.04,
+        0.42
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.190809,
+        0.981627
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "meets": "picnic_table",
+      "notes": "board leaning onto the table; author it as role=ramp, never also as a box"
+    },
+    {
+      "id": "wall_east",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        4.7,
+        0.6,
+        0.0
+      ],
+      "size": [
+        9.4,
+        0.04,
+        1.2
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.707107,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false
+    },
+    {
+      "id": "wall_north",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        0.0,
+        0.6,
+        4.7
+      ],
+      "size": [
+        9.4,
+        0.04,
+        1.2
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false
+    },
+    {
+      "id": "wall_south",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        0.0,
+        0.6,
+        -4.7
+      ],
+      "size": [
+        9.4,
+        0.04,
+        1.2
+      ],
+      "rotationQuat": [
+        0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false
+    },
+    {
+      "id": "wall_west",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -4.7,
+        0.6,
+        0.0
+      ],
+      "size": [
+        9.4,
+        0.04,
+        1.2
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        -0.707107,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false
+    }
+  ],
+  "cameras": [
+    {
+      "id": "ball_eye",
+      "type": "perspective",
+      "location": [
+        -3.2,
+        0.35,
+        -4.6
+      ],
+      "target": [
+        -1.8,
+        0.35,
+        -1.4
+      ],
+      "lens": 30
+    },
+    {
+      "id": "overview_3q",
+      "type": "perspective",
+      "location": [
+        -4.6,
+        3.0,
+        -5.4
+      ],
+      "target": [
+        -0.6,
+        0.3,
+        -1.2
+      ],
+      "lens": 45
+    },
+    {
+      "id": "top",
+      "type": "ortho_top",
+      "location": [
+        0.0,
+        12.0,
+        0.0
+      ],
+      "target": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "coverage_m": 10.0
+    }
+  ],
+  "renderPresets": [
+    {
+      "id": "ball_eye",
+      "camera": "ball_eye",
+      "engine": "EEVEE",
+      "res": [
+        1280,
+        720
+      ]
+    },
+    {
+      "id": "overview",
+      "camera": "overview_3q",
+      "engine": "EEVEE",
+      "res": [
+        1280,
+        720
+      ]
+    },
+    {
+      "id": "plan",
+      "camera": "top",
+      "engine": "WORKBENCH",
+      "res": [
+        1280,
+        720
+      ]
+    }
+  ]
+}

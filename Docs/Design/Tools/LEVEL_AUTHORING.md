@@ -213,7 +213,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 | `aabb` | ✓ | 世界轴对齐尺寸（未旋转的模型 AABB），**只作校验与预估**，真值仍在 manifest/预制体 | 导出器（读 manifest） |
 | `absorbDiameterReq` | ✓ | `D_req = 2.673 · (a·b·c)^(1/3)`，来自 aabb；**同一个函数只在校验器里实现**（§8） | 校验器回填 |
 | `absorbable` | ✓ | `D_req ≤ level.ballDiameterMax`；**派生**，写进文件只为「一眼看」 | 校验器回填 |
-| `valueUnits` | ○ | 分数单位。**注意**：现行 `PickupFieldSync` 按**最长边**定价，与体积门是**两个消费者**，JSON 里两者都要显式带（§7.4） | 目录/manifest |
+| `valueUnits` | ○ | 分数单位。**2026-11-15 Lead 拍板**：按 **def** 由关卡数据声明（新增的 `defs[].valueUnits`，`props[].valueUnits` 可逐件覆盖），导入器在同步后照写并回读（§7.4）；不再采用 `PickupFieldSync` 的最长边定价 | 关卡数据（`defs[]`）/ 逐件覆盖 |
 | `support` / `stackedOn` | ○ | 「它踩在谁上面」——`support` 是结构 id，`stackedOn` 是另一件道具的 `itemId`。**引擎不读它**，校验器用它判「悬空/穿模」并把责任指到具体那一件 | 导出器 |
 
 > `support`/`stackedOn` 是**关系**不是坐标：导入器只用 `position/rotationQuat` 摆东西。这样「逻辑」和「画面」不会互相打架；关系字段只喂校验器。
@@ -436,10 +436,10 @@ planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）
 
 | JSON | `LevelArenaHost` | 说明 |
 |---|---|---|
-| `structures[role=ground]` | `groundNormal` / `groundOffset`（`SetGroundPlane`） | 恰好 1 条 |
-| `structures[role=boundary]` | `planeNormals[]` / `planeOffsets[]` | 平面，不是盒 |
+| `structures[role=ground]` | `groundNormal` / `groundOffset`（`SetGroundPlane`） | 恰好 1 条；**平面过 `center`**（`offset = dot(normal, center)`） |
+| `structures[role=boundary]` | `boundaryWalls[]`（`Transform`） | `LevelArenaHost` 读每面墙的**局部 +Z** 当法线、`dot(n, position)` 当 offset，所以导入器生成「空物体墙」：原点在碰撞面上、+Z 指向场内（不是 `planeNormals/planeOffsets` 数组） |
 | `structures[role=box]` | `staticBoxes[]`（`BoxCollider`） | `Setup` 烘焙 min/max → `AddBox`，一次两用 |
-| `structures[role=ramp]` | `rampBoxes[]`（`BoxCollider`） | **绝不进 `staticBoxes`**（`TERRAIN_SUPPORT` §7.7 审计第 1 条） |
+| `structures[role=ramp]` | **P1 无槽位**（P3 的 `rampBoxes`） | 导入器给 `BoxCollider` 但**不登记**，也**绝不进 `staticBoxes`**（`TERRAIN_SUPPORT` §7.7 审计第 1 条） |
 | `props[]` 中 `absorbable=false` | **不进 arena**：`PickupFieldHost` 按 `rise vs stepLimit` 自己分成「地形/挡路」 | `LevelArenaHost` **不得**引用道具（§7.4 硬规则） |
 
 ### 7.7 失败模式（写下来是为了「下次一眼认出来」）
@@ -634,3 +634,55 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 - 写：**只有本文件**（`Docs/Design/Tools/LEVEL_AUTHORING.md`，目录新建）。实测文件在 `~/tools/` 与 `/tmp/blender_test/`。
 - 不写：代码（`Tools/`、`Editor/`、`Runtime/`）、`.unity`/`.asset`/`.prefab`、其它文档、`tasks.json`。没有碰 Unity、没有跑 git 写命令。
 - `python3 Docs/tools/validate_plan.py` → `PASS: 61 tasks; both release DAGs acyclic; source hashes verified.`（Unity/Udon 编译、VR、多人、性能、commerce 仍 `NOT_RUN`；本文不改任务与配置，跑它是为了证明没弄坏规划数据）。
+
+---
+
+## 15. 实现状态（2026-11-15，P0 + P1 的 Linux 部分）
+
+> 本轮**没有碰 Unity 编辑器、没有跑 git 写命令**。Unity 侧只有源码，编译/导入/幂等**都没有验证**（`NOT_RUN`）。本节记的是「代码在哪、和上面的设计哪里不一样、还差什么」。
+
+### 15.1 落地了什么
+
+| 文件 | 内容 |
+|---|---|
+| `Tools/levelbuild/placement_core.py` | **唯一实现**：schema、规范形（排序/取整/`-0.0`/规范四元数符号）、Blender↔Unity 坐标、世界 AABB、`D_req = (60abc/π)^(1/3)`、支撑/落位（含斜面法线摆正）、预算与人口/三态表、`defs[]` 价值回退 |
+| `Tools/levelbuild/levelbuild.py` | `check`（§8 的 1–12、14 条 + 规范性 warning）、`format`、`seat`、`from-layout` |
+| `Tools/levelbuild/blender/{blender_common,build_scene,export_placement,render_views}.py` | 库导入（每 def 一个**不 link 进场景**的集合）、按 JSON 铺场景、场景→JSON（自检 + 逐字节往返）、相机预设→PNG（三引擎） |
+| `Tools/levelbuild/examples/placement.json` | 16 件 / 8 结构 / 4 区的小样例，`check` 0 错，JSON→场景→JSON **逐字节一致** |
+| `Tools/levelbuild/README.md` | 人/代理/Unity 三边的用法 |
+| `Docs/tests/levelbuild/` | 35 个测试：坐标、四元数、AABB、`D_req`、坐正、确定性、5 个负向用例、CLI 退出码 |
+| `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/LevelBuild/PlacementImporter.cs` + `PlacementImportReport.cs` | 单向导入器（受管根、按 `itemId` 增改删、结构 `BoxCollider`、`LevelArenaHost` 接线、`valueUnits` 写后回读、不 `SaveScene`） |
+
+### 15.2 和上面正文不一样的地方（都是实测/拍板逼出来的）
+
+1. **`aabb` 的轴向**（§4.2 补注）：manifest 的 `dimensions_m` 是 Blender 轴向（`z` 是高），JSON 要 Unity 轴向，所以 `aabb = (dx, dz, dy)`。§13 的实测脚本把 manifest 三个数直接写进 JSON——对矮件无害，对暖壶/水瓶这种高件会让它躺倒、`y = aabb.y/2` 也跟着错。现在只有一个转换点 `placement_core.manifest_aabb`。
+2. **四元数写规范符号**（`w<0` 取反）：否则同一姿态可以写成 `q` 或 `-q`，「重新导出逐字节相同」就不成立。
+3. **`ground` 与 `boundary` 是「过 `center` 的平面」**，不是盒子的顶面；否则 `groundOffset` 会和场景里的地面差半个厚度，所有贴地件一起报「穿地 0.02 m」。
+4. **`defs[]` 与按 def 的价值**（§4.2、§7.4 已改）：Lead 2026-11-15 拍板，`valueUnits` 由关卡数据按 def 声明，导入器在 `PickupFieldSync` 之后照写并回读。仍存的耦合：同步工具会**丢掉**没有值表行的 `(kind, tier)`，所以 kind 文件夹必须落在 `ValueTable` 里（`container m` 仍缺，见 `PICNIC_CORNER_LEVEL_ONE` §6 C5）。
+5. **`boundary` 在 Unity 里是空物体墙**（§7.6 已改）：以 `LevelArenaHost` 的真实字段 `boundaryWalls` 为准（局部 +Z 指向场内、原点在碰撞面上），不是 `planeNormals/planeOffsets`。`rampBoxes` P1 没有，斜面有 collider 但不登记。
+6. **导入器没有 `LevelItem` 标记组件**（§7.2 曾设想）：Editor 程序集里的 MonoBehaviour 无法序列化进场景，而 `Runtime/` 不在本工具写范围。`itemId` 就是物体名，正好也是 `PickupFieldSync` 的行 id——一个键、两个消费方。
+7. **俯视图的 `coverage_m` 是「短边保证入画」**，渲染时按分辨率比例放大 `ortho_scale`；否则 16:9 会把方形场地上下裁掉（实测 13.4 m 场地只看到 7.9 m）。
+8. **没有 `--stale`**（§8 第 16 条的一半）：它要 `.blend` 指纹，而 `.blend` 不进仓库；现在用「重新导出逐字节相同」代替，`export_placement.py` 自带往返自检。
+
+### 15.3 用设计者布局转出来的第一关（**产物在 `/tmp`，未入库**）
+
+```bash
+python3 Tools/levelbuild/levelbuild.py from-layout Docs/Design/StoryMode/picnic_corner_layout.json \
+    --out /tmp/levelbuild/story_01_bench_size/placement.json [--expected 127,1500]
+python3 Tools/levelbuild/levelbuild.py check <该文件> --report     # 0 错
+```
+
+读数：**116 件 / 718 u / 35 def / 结构 1 ground + 4 boundary + 4 box + 2 ramp**（带 `--expected 127,1500` 时 `check` 会红成 `-11 件 / -782 u`，正好等于缺的那几件——这才是该有的闸）。设计表是 127 件 / 1500 u，差额 **11 件 / 782 u** 全部来自 **9 个还没有模型的 def**（`beer_crate`、`book_stack`、`cooler_box_large`、`crate`、`crate_large`、`lounge_chair`、`picnic_bench`、`storage_bin`、`stroller`）——模型到位后重跑 `from-layout` 就会对上。转换做了三件事：按**真实尺寸**重坐（布局的 `y` 用的是它自己的高度表）、`support` 标签→id（`bed→flower_bed`、`folding_table→那件折叠桌的 itemId` 走 `stackedOn`）、两块的斜板的中心从**坡脚点**重建（直接抄 `center` 会让坡脚浮 0.245 m）。
+
+另有一条源数据观察：`shell_tree_mound`（2.5×2.5，在 `(-18.75,-18.75)`）会越过 `x0/z0` 两道边界平面约 0.65 m——结构不参与越界规则，所以不是错误，但角树有一半在场外。
+
+### 15.4 还没做 / 需要别人做的
+
+| 项 | 为什么 |
+|---|---|
+| Unity 侧任何验证（编译、导入、`+0 ~0 -0`、`valueUnits` 回读、`[arena] planes=… boxes=…`） | 本轮不碰编辑器；需要 Unity 操作员按 §11.2 的六条验收 |
+| `Art/Props/<def>/<def>.prefab` 预制体库（P2） | 导入器现在直接实例化 `.fbx` |
+| `PickupFieldAuthoringRules.ValueTable` 的 `container m` 行 | 值表缺口；不加则野餐篮那一行会被同步工具丢掉（导入器会点名报错） |
+| `LevelArenaHost.rampBoxes`（P3） | 现在斜面只有 collider，不登记 |
+| 9 个 def 的模型 | 第一关的 11 件 / 782 u |
+| `physics_test_field.json` 迁到本格式 | Lead 说之后再做；本 schema 是「一格一份 placement」（`level.id` + 目录），没有假设一场景一份 |

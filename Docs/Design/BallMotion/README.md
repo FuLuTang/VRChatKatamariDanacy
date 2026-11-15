@@ -1,4 +1,4 @@
-# T46 球形运动、追尾与眼高离线参考模型
+# T46 球形运动离线参考模型
 
 > **DRAFT 草案 / UNVERIFIED**：这是可运行、可重复的主机侧标准库参考模型，用于讨论和测试数学性质；不是 Unity、Udon 或 VRChat 实现。公共接口未冻结。没有声称 VR、舒适性、Udon runtime、Unity、网络或设备实测通过。
 
@@ -15,14 +15,14 @@
 - 加速度 `acceleration_mps2`、制动 `braking_mps2`、摩擦 `friction_per_s`、最大速度 `max_speed_mps` 均显式带单位；摩擦采用指数衰减，空输入时制动为非反向速度限额。
 - 半径用暂定线性映射 `r=base+(max-base)*clamp(growth,0,1)`（米）。成长越大，速度上限与转向率按 `1-factor*growth_fraction` 下调，确保因子保持非负。公式与参数全属可替换实验假设，不是定案数值。
 - 地面模型为解析平面/无限缓坡 `y=tan(slope)*x`。球心受支持高度约束 `y>=floor(x)+r`，不施加弹跳或坡面动力学。墙面作为自由侧约定的解析平面；每固定步对球心线段做连续球-平面扫掠，解首次距离等于半径的时刻，再去除指向固体的法向速度，避免单步跨过薄墙。墙面角点、双面碰撞、复杂地形尚非完整碰撞解。
-- FollowRig 的位置与眼高使用指数平滑；高度目标为球心/输入位置高度加 `eye_height_m`。只读输入姿态的 yaw（偏航），独立过滤角差；每次输出将 roll（翻滚）和 pitch（俯仰）硬置零。眼高与过滤频率均为草案参数，不代表舒适阈值。
+- 跟随取景不在本模块：唯一模型是 [`BallLayers/FollowRig/follow_rig.py`](../BallLayers/FollowRig/follow_rig.py)，本模块不含眼高。旧的 `FollowRig` 类与 `eye_height_m = 1.6` 已删除（2026-11-15）；眼点公式为 `eye = 球心 − forward·(0.75 + 2.2r) + up·(0.55 + 2.4r)`，见 `Docs/OPEN_DECISIONS.md` (k)。
 - 卡住超过 `stuck_timeout_s` 后清零速度并投影到解析地面；超出 `bounds_half_extent_m` 则置 `out_of_bounds` 并恢复原点。复位行为是离线占位策略，正式世界的恢复点/状态须另定。
 - Python 标准库参考代码：[`ball_motion.py`](ball_motion.py)。目前接口仅用于本草案与测试，不冻结。
 
 ### 【未决】
 - 世界尺度仍为 **OPEN，等待 T06**；不得把这里的米制参数当作最终地图尺度。
 - 公平阈值、回合时长、结算细则不得由本模型决定；速度/转向随成长的函数、坡度上限、球体与墙角的实际手感、追尾延迟/舒适阈值都需讨论或实测。参考 [`Docs/08_SOURCES_AND_OPEN_QUESTIONS.md`](../../08_SOURCES_AND_OPEN_QUESTIONS.md)，特别是 Q2/Q3/Q4/Q8；其中没有替本任务解决世界尺度。
-- `growth_fraction`、`slope_deg`、`bounds_half_extent_m`、眼高与滤波频率、全部速度/加速度参数均为显式占位参数，不构成已批准数值。
+- `growth_fraction`、`slope_deg`、`bounds_half_extent_m` 与全部速度/加速度参数均为显式占位参数，不构成已批准数值；跟随取景的滤波频率与眼点参数在 `BallLayers/FollowRig/`，不在本模块。
 - Udon 可实现性、Station 的 VR 行为、真实坡道与物理碰撞、网络追尾/同步均未验证（UNVERIFIED）。
 
 ## 参数单位表（默认值仅供参考实现运行）
@@ -36,8 +36,6 @@
 | `friction_per_s` | 1.2 | 每秒⁻¹ | DRAFT 占位 |
 | `turn_rate_degps` | 110 | 度/秒 | DRAFT 占位 |
 | `max_lateral_mps` | 1.2 | 米/秒 | DRAFT 占位 |
-| `eye_height_m` | 1.6 | 米 | DRAFT 占位，非舒适性结论 |
-| `height_filter_hz` / `yaw_filter_hz` | 5 / 8 | Hz | DRAFT 占位 |
 | `slope_deg` | 调用方输入 | 度 | 坡度上限未决 |
 
 ## 运行与测试
@@ -69,10 +67,8 @@ Python 测试 → NUnit 对照：
 | Python | NUnit | 说明 |
 |---|---|---|
 | `test_fast_sweep_does_not_tunnel_thin_wall` | `StepTravelIsUnclampedAndReproducible`（部分） | 只验本层给出完整 `v*dt` 且不裁剪；扫掠本身归 `SweepMath`（已有 `SweepTests.cs`） |
-| `test_follow_rig_ignores_roll_pitch` | 未移植 | 属 `FollowRigMath`，已由 `Docs/tests/ball_follow_rig` + `FollowRigTests.cs` 覆盖 |
 | `test_slopes_5_to_15_degrees_stay_supported_and_stable` | 未移植 | 坡面支持是垂直方向的事（`y>=floor(x)+r`、`vy` 恒 0），本层没有 `vy` 通道，当前也未实现 |
 | `test_delay_and_fixed_step_are_bounded_and_reproducible` | `StepTravelIsUnclampedAndReproducible` | 定步长累积器归调用方时钟；C# 侧只承诺同一 `dt` 序列可复现 |
-| `test_follow_lag_is_bounded_and_does_not_overshoot` | 未移植 | 属 `FollowRigMath` |
 | `test_growth_clamps_and_parameters_remain_legal_at_max` | `InputsAndGrowthAreClampedToTheModelBounds` | 半径夹取归 `SizeModelMath`；本层验 `growth` 夹取与降额后上限仍非负 |
 | `test_out_of_bounds_recovers_to_origin` | 未移植 | 复位/边界属 `BallMotor` 与世界设置 |
 
@@ -90,5 +86,5 @@ Python 测试 → NUnit 对照：
 - **SweepMath → PickupAbsorbMath**：实际落点、被消耗的位移、接触（点、法线、时刻、障碍索引、穿透深度）、`blocked`/`stuck`、去掉法向分量后的速度。
 - **PickupAbsorbMath → SizeModelMath**：本步确认的体积增量与当前确认体积（只传账本已确认值，不传远程装饰）。
 - **SizeModelMath → VisualRollMath**：滚动半径、支撑法线、本步确认位移、是否瞬移/不连续。
-- **VisualRollMath → FollowRigMath**：球心世界位置、水平 yaw、眼高目标；FollowRig 只回位置 + yaw，不回写玩法状态。
+- **VisualRollMath → FollowRigMath**：球心世界位置、球半径、水平 yaw 与 7 个眼点系数（4 个几何 + 3 条护栏）；FollowRig 只回位置 + yaw，不回写玩法状态。
 - **SizeModelMath → BallMotionMath（下一帧）**：由新半径算出的 `growthFraction=(r-base)/(max-base)`（再夹到 [0,1]），是唯一回灌量，避免半径映射分叉。

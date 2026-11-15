@@ -1,14 +1,15 @@
-"""Offline deterministic ball-motion reference model; provisional, not a runtime contract."""
+"""Offline deterministic ball-motion reference model; provisional, not a runtime contract.
+
+Follow-camera geometry is deliberately not part of this module: the only follow-rig
+model is `Docs/Design/BallLayers/FollowRig/follow_rig.py` (see
+`Docs/OPEN_DECISIONS.md` (k)). This module contains no eye height.
+"""
 from dataclasses import dataclass
 import math
 
 
 def clamp(v, lo, hi):
     return max(lo, min(hi, v))
-
-
-def wrap_degrees(v):
-    return (v + 180.0) % 360.0 - 180.0
 
 
 @dataclass
@@ -92,7 +93,6 @@ class BallSimulator:
         self.config = config
         self.state = BallState(radius_m=config.base_radius_m)
         self._accumulator = 0.0
-        self._last_position = (0.0, 0.0, 0.0)
 
     def set_growth(self, growth_fraction):
         c = self.config
@@ -172,32 +172,3 @@ class BallSimulator:
             s.vx = s.vy = s.vz = 0.0
             s.y = max(s.y, floor_y+r)
             s.stuck_seconds = 0.0
-
-
-@dataclass
-class FollowRig:
-    eye_height_m: float = 1.6
-    height_filter_hz: float = 5.0
-    yaw_filter_hz: float = 8.0
-    x: float = 0.0
-    y: float = 0.0
-    z: float = 0.0
-    yaw_deg: float = 0.0
-    roll_deg: float = 0.0
-    pitch_deg: float = 0.0
-
-    def update(self, position, orientation_euler_deg, dt_s):
-        """Smooth position and yaw only; input tuple is (roll,pitch,yaw), degrees."""
-        if dt_s < 0:
-            raise ValueError("dt_s must be non-negative")
-        tx, ty, tz = position
-        alpha_h = 1.0-math.exp(-2*math.pi*self.height_filter_hz*dt_s)
-        alpha_y = 1.0-math.exp(-2*math.pi*self.yaw_filter_hz*dt_s)
-        self.x += (tx-self.x)*alpha_h
-        self.y += (ty+self.eye_height_m-self.y)*alpha_h
-        self.z += (tz-self.z)*alpha_h
-        target_yaw = orientation_euler_deg[2] % 360.0
-        self.yaw_deg = (self.yaw_deg + wrap_degrees(target_yaw-self.yaw_deg)*alpha_y) % 360.0
-        self.roll_deg = 0.0
-        self.pitch_deg = 0.0
-        return self

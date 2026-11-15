@@ -23,13 +23,19 @@ namespace VRCKatamari.BallLayers
     /// arrays, and the EditMode tests own another.
     /// </para>
     /// <para>
-    /// Coordinates. Prop bounds are full edge lengths in metres (the same
-    /// <c>propBounds</c> vector the absorb gate and the blocking boxes use) and are
-    /// read as the prop's local axes. The prop's ball-local pose comes from
-    /// <c>AttachmentMath.TryWorldPoseToLocal</c>, so a corner is
+    /// Coordinates. Bounds are full edge lengths in metres measured along the PROP'S
+    /// OWN LOCAL AXES, never a world AABB. The prop's ball-local pose comes from
+    /// <c>AttachmentMath.TryWorldPoseToLocal</c>, whose rotation is
+    /// inverse(ball) * propWorldRotation and therefore already contains the prop's
+    /// own rotation, so a corner is
     /// <c>localCenter + localRotation * (+-extent/2)</c> in the ball frame
-    /// established by <c>BallVisualRollRoot</c>. Endpoints are therefore static in
-    /// the ball frame and rotate with the ball's visual roll.
+    /// established by <c>BallVisualRollRoot</c>. A world AABB fed into that formula
+    /// applies the prop's rotation twice (a yaw-90 lounge chair would get its long
+    /// axis put on the wrong world axis). That is why <c>PickupFieldHost</c> passes
+    /// <c>propLocalBounds</c> here: a separate authoring column from the
+    /// <c>propBounds</c> world AABB that the absorb gate, the blocking boxes and the
+    /// support classification consume. Endpoints are static in the ball frame and
+    /// rotate with the ball's visual roll.
     /// </para>
     /// <para>
     /// Stored supports are endpoint-only maxima: the core-radius floor is NOT
@@ -60,9 +66,70 @@ namespace VRCKatamari.BallLayers
         /// <summary>Endpoint pool a full candidate list needs: 4 items x 8 corners.</summary>
         public const int EndpointCapacity = ItemCapacity * AabbCornerCount;
 
+        // Why TryResolvePropExtents fell back from the prop-local column to the
+        // legacy world-AABB column. 0 means the prop-local value was used; the host
+        // prints the code once instead of arguing about which array is stale.
+        public const int ExtentsSourceLocal = 0;
+        public const int ExtentsSourceWorldMissing = 1;
+        public const int ExtentsSourceWorldLengthMismatch = 2;
+        public const int ExtentsSourceWorldRowInvalid = 3;
+
+        /// <summary>
+        /// Resolves the full extents one prop row contributes to the shell, preferring
+        /// the optional prop-local column and falling back to the legacy world-AABB
+        /// column when it is unusable.
+        /// </summary>
+        /// <remarks>
+        /// The shell needs sizes along the prop's local axes (see the class remarks);
+        /// the absorb gate, blocking boxes and support classification keep using the
+        /// world AABB. A scene written before the local column existed has a null or
+        /// short array, so this returns the world value with a non-zero
+        /// <paramref name="source"/> rather than refusing the prop: the old behaviour
+        /// is wrong only for a rotated prop, while dropping the row would lose the
+        /// prop. A per-row non-finite or negative local value also falls back, with
+        /// <see cref="ExtentsSourceWorldRowInvalid"/>. The world value is not
+        /// validated here - the motor's attach validates its input and reports the
+        /// ordinary invalid-input skip.
+        /// </remarks>
+        public static bool TryResolvePropExtents(Vector3[] localExtents, Vector3[] worldExtents,
+            int index, int expectedRows, out Vector3 fullExtents, out int source)
+        {
+            fullExtents = Vector3.zero;
+            source = ExtentsSourceLocal;
+            if (worldExtents == null || expectedRows < 0) return false;
+            if (index < 0 || index >= expectedRows || index >= worldExtents.Length) return false;
+
+            Vector3 world = worldExtents[index];
+            if (localExtents == null)
+            {
+                fullExtents = world;
+                source = ExtentsSourceWorldMissing;
+                return true;
+            }
+            if (localExtents.Length != expectedRows)
+            {
+                fullExtents = world;
+                source = ExtentsSourceWorldLengthMismatch;
+                return true;
+            }
+
+            Vector3 local = localExtents[index];
+            if (!KatamariMath.IsFiniteVector(local) || local.x < 0f || local.y < 0f ||
+                local.z < 0f)
+            {
+                fullExtents = world;
+                source = ExtentsSourceWorldRowInvalid;
+                return true;
+            }
+
+            fullExtents = local;
+            return true;
+        }
+
         /// <summary>
         /// Decides whether an absorbed prop is a long object worth an endpoint
-        /// candidate, from its full AABB extents and the ball's core radius.
+        /// candidate, from its full extents along the prop's local axes and the ball's
+        /// core radius.
         /// </summary>
         /// <remarks>
         /// Two provisional shape rules, both needed: the longest edge must be at
@@ -124,8 +191,12 @@ namespace VRCKatamari.BallLayers
         /// </summary>
         /// <remarks>
         /// <paramref name="fullExtents"/> is the full edge length of each prop-local
-        /// axis; the corners are at +-half on every axis, rotated by the prop's
-        /// ball-local rotation and offset by its ball-local centre. The rotation
+        /// axis, measured along the prop's own axes and NOT a world AABB; the
+        /// corners are at +-half on every axis, rotated by the prop's ball-local
+        /// rotation and offset by its ball-local centre. The rotation
+        /// (<c>inverse(ball) * propWorldRotation</c>, from
+        /// <c>AttachmentMath.TryWorldPoseToLocal</c>) already contains the prop's own
+        /// orientation, so a world-AABB size would be rotated twice. The rotation
         /// must be unit length (the same rule as every transform call in this
         /// layer); a scaled or zero quaternion is rejected instead of normalized.
         /// The farthest distance is the raw support at this attach pose before the

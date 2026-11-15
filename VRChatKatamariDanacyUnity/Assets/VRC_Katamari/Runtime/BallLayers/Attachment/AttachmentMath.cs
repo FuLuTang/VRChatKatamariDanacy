@@ -86,6 +86,11 @@ namespace VRCKatamari.BallLayers
         /// position or rotation, because the ball's growth must not scale the object.
         /// The local rotation is the normalized product inverse(ballRotation) *
         /// objectRotation, i.e. the object's rotation relative to the ball root.
+        /// Any attached geometry that a caller sizes alongside this pose must
+        /// therefore be expressed in the object's OWN local axes. The world AABB of
+        /// the object already contains its rotation, so passing that size to a
+        /// consumer that multiplies by <paramref name="localRotation"/> rotates the
+        /// object's orientation twice; use a prop-local size instead.
         /// </remarks>
         public static bool TryWorldPoseToLocal(Vector3 ballPosition, Quaternion ballRotation,
             Vector3 objectPosition, Quaternion objectRotation, Vector3 objectScale,

@@ -11,7 +11,7 @@ using VRCKatamari.Pickup;
 namespace VRCKatamari.Editor.Pickup
 {
     /// <summary>
-    /// The one authoring path that fills <see cref="PickupFieldHost"/>'s six index-aligned
+    /// The one authoring path that fills <see cref="PickupFieldHost"/>'s seven index-aligned
     /// serialized arrays from the props already placed in the scene.
     /// </summary>
     /// <remarks>
@@ -36,7 +36,14 @@ namespace VRCKatamari.Editor.Pickup
     /// <c>@size=&lt;metres&gt;</c>: that declared absorb size becomes a cube of that edge and
     /// the suffix is stripped from the item id (a gate bench 3.2 m long but 1.25 m thick is
     /// recorded as 1.25 m, not 3.2 m - see
-    /// <see cref="PickupFieldAuthoringRules.TryParseDeclaredSize"/>);</description></item>
+    /// <see cref="PickupFieldAuthoringRules.TryParseDeclaredSize"/>). This column is the
+    /// world AABB on purpose: the absorb gate, the blocking boxes and the support
+    /// classification all read it as an axis-aligned world box;</description></item>
+    /// <item><description>prop-local bounds = the same prop measured along its own root-local
+    /// axes, with the root's rotation removed and child rotations/scales baked in. The
+    /// radial-proxy shell rotates this size by the prop's ball-local rotation (which already
+    /// contains the root rotation), so it must NOT receive the world AABB - that would turn a
+    /// yaw-90 prop's box twice. The declared <c>@size=</c> edge is applied here too;</description></item>
     /// <item><description>collider = the prop's own Collider when it has one, else the first
     /// child Collider in ordinal path order (the host disables at most one per
     /// prop);</description></item>
@@ -94,6 +101,7 @@ namespace VRCKatamari.Editor.Pickup
         private const string ItemIdsField = "itemIds";
         private const string KindsField = "kinds";
         private const string PropBoundsField = "propBounds";
+        private const string PropLocalBoundsField = "propLocalBounds";
         private const string ValueUnitsField = "valueUnits";
         private const string PropCollidersField = "propColliders";
 
@@ -154,7 +162,7 @@ namespace VRCKatamari.Editor.Pickup
         }
 
         /// <summary>
-        /// Reads the props under <paramref name="fieldRoot"/> and writes the host's six
+        /// Reads the props under <paramref name="fieldRoot"/> and writes the host's seven
         /// index-aligned arrays.
         /// </summary>
         /// <param name="host">The field host to fill; its backing UdonBehaviour must already exist.</param>
@@ -242,7 +250,7 @@ namespace VRCKatamari.Editor.Pickup
             {
                 if (string.IsNullOrEmpty(report.Failure))
                 {
-                    report.Fail("the six arrays did not read back at the expected length (" + rows.Count +
+                    report.Fail("the seven arrays did not read back at the expected length (" + rows.Count +
                                 "); the write did not persist");
                 }
             }
@@ -277,6 +285,7 @@ namespace VRCKatamari.Editor.Pickup
             public string DeclaredSizeError;
             public bool HasRenderer;
             public Vector3 BoundsSize;
+            public Vector3 LocalBoundsSize;
             public Collider PrimaryCollider;
             public int ColliderCount;
             public string Rejection;
@@ -288,6 +297,7 @@ namespace VRCKatamari.Editor.Pickup
             public string Kind;
             public string ItemId;
             public Vector3 BoundsSize;
+            public Vector3 LocalBoundsSize;
             public int ValueUnits;
             public Collider PrimaryCollider;
         }
@@ -368,6 +378,7 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             candidate.BoundsSize = bounds.size;
+            candidate.LocalBoundsSize = MeasureLocalBounds(root, renderers);
 
             var colliders = new List<Collider>(root.GetComponentsInChildren<Collider>(true));
             colliders.Sort((left, right) => string.CompareOrdinal(RelativePath(root, left.transform),
@@ -382,6 +393,133 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             return candidate;
+        }
+
+        /// <summary>
+        /// Measures a prop's full extents along its OWN root-local axes, in world metres.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the second bounds interpretation: the radial-proxy shell multiplies
+        /// these sizes by the prop's ball-local rotation, which already contains the prop
+        /// root's rotation (<c>AttachmentMath.TryWorldPoseToLocal</c>). Feeding it the
+        /// world AABB from <c>renderer.bounds</c> would therefore apply the prop's rotation
+        /// twice and put a yaw-90 long prop's long axis on the wrong ball axis. The absorb
+        /// gate, the blocking boxes and the support classification keep using the world
+        /// AABB and are not affected by this column.
+        /// </para>
+        /// <para>
+        /// Measurement: every mesh AABB is moved into root-local space corner by corner
+        /// (so a rotated child is baked in), then each local extent is multiplied by the
+        /// world length of that root axis - the localToWorld column norms - which keeps the
+        /// result in metres when the prop or a parent is scaled. A renderer without a
+        /// readable mesh contributes its world-AABB corners instead, which is conservative
+        /// but still axis-correct in the root frame. The root rotation is deliberately not
+        /// part of the result: the runtime applies it. Returns zero when nothing could be
+        /// measured, and the caller then falls back to the world size for that row.
+        /// </para>
+        /// </remarks>
+        private static Vector3 MeasureLocalBounds(Transform root, Renderer[] renderers)
+        {
+            if (root == null || renderers == null || renderers.Length == 0)
+            {
+                return Vector3.zero;
+            }
+
+            bool hasPoint = false;
+            Vector3 minimum = Vector3.zero;
+            Vector3 maximum = Vector3.zero;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                MeshFilter filter = renderer.GetComponent<MeshFilter>();
+                if (filter != null && filter.sharedMesh != null)
+                {
+                    IncludeBoundsCorners(root, renderer.transform, filter.sharedMesh.bounds,
+                        ref hasPoint, ref minimum, ref maximum);
+                }
+                else
+                {
+                    IncludeWorldBoundsCorners(root, renderer.bounds, ref hasPoint, ref minimum,
+                        ref maximum);
+                }
+            }
+
+            if (!hasPoint)
+            {
+                return Vector3.zero;
+            }
+
+            Vector3 localSize = maximum - minimum;
+            Matrix4x4 localToWorld = root.localToWorldMatrix;
+            float axisX = localToWorld.MultiplyVector(Vector3.right).magnitude;
+            float axisY = localToWorld.MultiplyVector(Vector3.up).magnitude;
+            float axisZ = localToWorld.MultiplyVector(Vector3.forward).magnitude;
+            return new Vector3(localSize.x * axisX, localSize.y * axisY, localSize.z * axisZ);
+        }
+
+        private static void IncludeBoundsCorners(Transform root, Transform source, Bounds bounds,
+            ref bool hasPoint, ref Vector3 minimum, ref Vector3 maximum)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 sign = new Vector3(
+                    (i & 1) == 0 ? -1f : 1f,
+                    (i & 2) == 0 ? -1f : 1f,
+                    (i & 4) == 0 ? -1f : 1f);
+                Vector3 localPoint = bounds.center + Vector3.Scale(bounds.extents, sign);
+                Vector3 rootLocal = root.InverseTransformPoint(source.TransformPoint(localPoint));
+                IncludePoint(rootLocal, ref hasPoint, ref minimum, ref maximum);
+            }
+        }
+
+        private static void IncludeWorldBoundsCorners(Transform root, Bounds bounds,
+            ref bool hasPoint, ref Vector3 minimum, ref Vector3 maximum)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 sign = new Vector3(
+                    (i & 1) == 0 ? -1f : 1f,
+                    (i & 2) == 0 ? -1f : 1f,
+                    (i & 4) == 0 ? -1f : 1f);
+                Vector3 worldPoint = bounds.center + Vector3.Scale(bounds.extents, sign);
+                Vector3 rootLocal = root.InverseTransformPoint(worldPoint);
+                IncludePoint(rootLocal, ref hasPoint, ref minimum, ref maximum);
+            }
+        }
+
+        private static void IncludePoint(Vector3 point, ref bool hasPoint, ref Vector3 minimum,
+            ref Vector3 maximum)
+        {
+            if (!IsFinite(point.x) || !IsFinite(point.y) || !IsFinite(point.z))
+            {
+                return;
+            }
+
+            if (!hasPoint)
+            {
+                minimum = point;
+                maximum = point;
+                hasPoint = true;
+                return;
+            }
+
+            if (point.x < minimum.x) minimum.x = point.x;
+            if (point.y < minimum.y) minimum.y = point.y;
+            if (point.z < minimum.z) minimum.z = point.z;
+            if (point.x > maximum.x) maximum.x = point.x;
+            if (point.y > maximum.y) maximum.y = point.y;
+            if (point.z > maximum.z) maximum.z = point.z;
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         private static PropCandidate RejectedCandidate(Transform root, string kind, Transform fieldRoot,
@@ -435,6 +573,7 @@ namespace VRCKatamari.Editor.Pickup
 
             var rows = new List<PropRow>();
             int multiColliderProps = 0;
+            int localBoundsFallbacks = 0;
             for (int i = 0; i < candidates.Count; i++)
             {
                 PropCandidate candidate = candidates[i];
@@ -490,15 +629,33 @@ namespace VRCKatamari.Editor.Pickup
                 // AABB is still required above: a renderer whose AABB is degenerate is a data
                 // error even when the pickup size is spelled out in the name.
                 Vector3 pickSize = candidate.BoundsSize;
+                // Same row, measured along the prop's own axes, for the radial-proxy shell. A
+                // row whose local measurement failed keeps the world AABB (the pre-fix
+                // behaviour for that one row) instead of dropping the prop; it is reported
+                // below so a rotated prop among them is not silently wrong.
+                Vector3 pickLocalSize = candidate.LocalBoundsSize;
+
                 string declaredSizeNote = null;
                 if (candidate.DeclaredSizeM > 0f)
                 {
                     pickSize = new Vector3(candidate.DeclaredSizeM, candidate.DeclaredSizeM,
                         candidate.DeclaredSizeM);
+                    // The declared edge is the gameplay volume, not the model AABB, so it
+                    // replaces both columns with the same cube. A cube is rotation-invariant,
+                    // which also keeps a declared gate prop out of the long-object admission.
+                    pickLocalSize = pickSize;
                     declaredSizeNote = "'" + candidate.Path + "' declares " + candidate.SourceName +
-                                       ": propBounds is a " + FormatMetres(candidate.DeclaredSizeM) +
-                                       " m cube instead of the " + FormatVector(candidate.BoundsSize) +
-                                       " m renderer AABB";
+                                       ": propBounds and propLocalBounds are a " +
+                                       FormatMetres(candidate.DeclaredSizeM) +
+                                       " m cube instead of the renderer AABBs (world " +
+                                       FormatVector(candidate.BoundsSize) + ", local " +
+                                       FormatVector(candidate.LocalBoundsSize) + ")";
+                }
+                else if (!PickupFieldAuthoringRules.HasUsableBounds(pickLocalSize.x,
+                             pickLocalSize.y, pickLocalSize.z))
+                {
+                    pickLocalSize = pickSize;
+                    localBoundsFallbacks++;
                 }
 
                 // The value is content data, never a price. The declaration wins; without
@@ -528,6 +685,7 @@ namespace VRCKatamari.Editor.Pickup
                 row.Kind = candidate.Kind;
                 row.ItemId = candidate.ItemId;
                 row.BoundsSize = pickSize;
+                row.LocalBoundsSize = pickLocalSize;
                 row.ValueUnits = valueUnits;
                 row.PrimaryCollider = candidate.PrimaryCollider;
                 rows.Add(row);
@@ -567,6 +725,13 @@ namespace VRCKatamari.Editor.Pickup
                                  "only one per prop (the host disables one collider on attach)");
             }
 
+            if (localBoundsFallbacks > 0)
+            {
+                report.Notes.Add(localBoundsFallbacks + " prop(s) have no usable prop-local bounds; " +
+                                 "propLocalBounds copied propBounds for them, so a rotated prop among them " +
+                                 "keeps the pre-fix double-rotated radial shell");
+            }
+
             if (report.ValueUnitsPreserved > 0)
             {
                 report.Notes.Add(report.ValueUnitsPreserved + " row(s) kept the valueUnits already serialized " +
@@ -604,11 +769,11 @@ namespace VRCKatamari.Editor.Pickup
         private static bool WriteRows(PickupFieldHost host, List<PropRow> rows, PickupFieldSyncReport report)
         {
             var serialized = new SerializedObject(host);
-            var properties = new SerializedProperty[6];
+            var properties = new SerializedProperty[7];
             string[] fieldNames =
             {
-                PropTransformsField, ItemIdsField, KindsField, PropBoundsField, ValueUnitsField,
-                PropCollidersField,
+                PropTransformsField, ItemIdsField, KindsField, PropBoundsField, PropLocalBoundsField,
+                ValueUnitsField, PropCollidersField,
             };
 
             for (int i = 0; i < fieldNames.Length; i++)
@@ -626,8 +791,9 @@ namespace VRCKatamari.Editor.Pickup
             SerializedProperty ids = properties[1];
             SerializedProperty kinds = properties[2];
             SerializedProperty bounds = properties[3];
-            SerializedProperty values = properties[4];
-            SerializedProperty colliders = properties[5];
+            SerializedProperty localBounds = properties[4];
+            SerializedProperty values = properties[5];
+            SerializedProperty colliders = properties[6];
 
             // Registered only after the contract fields were found, so a failed lookup leaves
             // no empty undo step behind.
@@ -647,6 +813,7 @@ namespace VRCKatamari.Editor.Pickup
             ids.arraySize = rows.Count;
             kinds.arraySize = rows.Count;
             bounds.arraySize = rows.Count;
+            localBounds.arraySize = rows.Count;
             values.arraySize = rows.Count;
             colliders.arraySize = anyCollider ? rows.Count : 0;
 
@@ -657,6 +824,7 @@ namespace VRCKatamari.Editor.Pickup
                 ids.GetArrayElementAtIndex(i).stringValue = row.ItemId;
                 kinds.GetArrayElementAtIndex(i).stringValue = row.Kind;
                 bounds.GetArrayElementAtIndex(i).vector3Value = row.BoundsSize;
+                localBounds.GetArrayElementAtIndex(i).vector3Value = row.LocalBoundsSize;
                 values.GetArrayElementAtIndex(i).intValue = row.ValueUnits;
                 if (anyCollider)
                 {
@@ -736,7 +904,8 @@ namespace VRCKatamari.Editor.Pickup
             var serialized = new SerializedObject(host);
             string[] fields =
             {
-                PropTransformsField, ItemIdsField, KindsField, PropBoundsField, ValueUnitsField,
+                PropTransformsField, ItemIdsField, KindsField, PropBoundsField,
+                PropLocalBoundsField, ValueUnitsField,
             };
 
             for (int i = 0; i < fields.Length; i++)

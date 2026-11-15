@@ -164,7 +164,17 @@ namespace VRCKatamari.Pickup
         [SerializeField] private Transform[] propTransforms;
         [SerializeField] private string[] itemIds;
         [SerializeField] private string[] kinds;
+        // propBounds is the prop's WORLD AABB (full edge lengths, metres). The absorb
+        // gate, the blocking boxes and the support classification all read it as an
+        // axis-aligned world box, so its meaning must not change.
         [SerializeField] private Vector3[] propBounds;
+        // propLocalBounds is the same prop measured along its OWN local axes (full edge
+        // lengths, metres; the prop root's rotation is NOT included). The radial-proxy
+        // shell rotates these sizes by the prop's ball-local rotation, which already
+        // contains the root rotation, so it needs this column - passing propBounds
+        // would rotate a yawed prop twice. Optional: an un-synced scene has no column
+        // and the host falls back to propBounds with one reason-coded warning.
+        [SerializeField] private Vector3[] propLocalBounds;
         [SerializeField] private int[] valueUnits;
         // Optional: wired colliders are disabled on attach so an absorbed prop cannot block
         // anything. Leave the array empty to skip that.
@@ -279,6 +289,9 @@ namespace VRCKatamari.Pickup
         private bool loggedSelectionCapacity;
         private bool loggedNoColliders;
         private bool loggedBlockingSet;
+        // Rows whose radial proxy had to use the legacy world-AABB column. Fixed once
+        // in Start, reported in the ready line and in one reason-coded warning.
+        private int proxyLocalBoundsFallbackRows;
 
         private void Start()
         {
@@ -289,6 +302,7 @@ namespace VRCKatamari.Pickup
             MarkSubmittable();
             PreparePropRows();
             ReportPropDataProblems();
+            ReportProxyLocalBoundsSource();
             seenEvents = 0;
             nextScanTime = 0f;
             nextBlockingScanTime = 0f;
@@ -296,6 +310,7 @@ namespace VRCKatamari.Pickup
                 + " submittable=" + submittableCount
                 + " propRows=" + propUsableCount
                 + " propObstacles=" + (blockingDisabled ? "off" : "on")
+                + " proxyBounds=" + (proxyLocalBoundsFallbackRows > 0 ? "fallback" : "local")
                 + " activationR=" + activationRadiusM
                 + " releaseR=" + releaseRadiusM
                 + " scanInterval=" + scanIntervalSeconds);
@@ -510,6 +525,22 @@ namespace VRCKatamari.Pickup
         public int GetPropCount()
         {
             return propCount;
+        }
+
+        /// <summary>Rows in the optional <c>propLocalBounds</c> column (0 when absent).</summary>
+        public int GetPropLocalBoundsRowCount()
+        {
+            if (propLocalBounds == null) return 0;
+            return propLocalBounds.Length;
+        }
+
+        /// <summary>
+        /// Rows whose radial proxy used the legacy world AABB instead of
+        /// <c>propLocalBounds</c>; 0 means every row used the local column.
+        /// </summary>
+        public int GetRadialProxyBoundsFallbackRows()
+        {
+            return proxyLocalBoundsFallbackRows;
         }
 
         public bool IsCollecting()
@@ -806,6 +837,77 @@ namespace VRCKatamari.Pickup
             }
         }
 
+        /// <summary>
+        /// Reports, once, how many rows will fall back from <c>propLocalBounds</c> to
+        /// <c>propBounds</c> for the radial proxy, and why.
+        /// </summary>
+        /// <remarks>
+        /// The fallback is deliberate for a scene that was never re-synced after the
+        /// local column was added: refusing the prop would be worse than the old shell
+        /// (which is wrong only for a rotated prop). The warning names the array problem
+        /// so a re-sync is the obvious fix. The reason codes are the ones
+        /// <see cref="RadialProxyShellMath.TryResolvePropExtents"/> reports; printing the
+        /// number as well as the text keeps the line greppable.
+        /// </remarks>
+        private void ReportProxyLocalBoundsSource()
+        {
+            proxyLocalBoundsFallbackRows = 0;
+            if (propCount <= 0) return;
+            int expectedRows = itemIds == null ? 0 : itemIds.Length;
+            int reasonCode = RadialProxyShellMath.ExtentsSourceLocal;
+            for (int i = 0; i < propCount; i++)
+            {
+                Vector3 extents;
+                int source;
+                if (!RadialProxyShellMath.TryResolvePropExtents(propLocalBounds, propBounds, i,
+                        expectedRows, out extents, out source))
+                {
+                    // The row is outside one of the two arrays; treat it as a bad local row
+                    // rather than silently trusting a value this loop could not read.
+                    source = RadialProxyShellMath.ExtentsSourceWorldRowInvalid;
+                }
+                if (source == RadialProxyShellMath.ExtentsSourceLocal) continue;
+                proxyLocalBoundsFallbackRows = proxyLocalBoundsFallbackRows + 1;
+                if (reasonCode == RadialProxyShellMath.ExtentsSourceLocal) reasonCode = source;
+            }
+            if (proxyLocalBoundsFallbackRows == 0) return;
+            Debug.LogWarning("[PickupFieldHost] radial proxy bounds fallback reason=" + reasonCode
+                + " (" + ProxyBoundsFallbackReasonText(reasonCode) + ")"
+                + " rows=" + proxyLocalBoundsFallbackRows + "/" + propCount
+                + " localBoundsRows=" + (propLocalBounds == null ? 0 : propLocalBounds.Length)
+                + " expectedRows=" + expectedRows
+                + " - these rows use propBounds (world AABB), so a rotated prop's proxy box is"
+                + " rotated twice and its long axis is wrong. The absorb gate, blocking boxes"
+                + " and support classification are unaffected. Re-run VRC"
+                + " Katamari/Pickup/Sync Prop Arrays From Children.");
+        }
+
+        /// <summary>
+        /// Full extents to hand the radial proxy for one row: prop-local when the column
+        /// is usable, the legacy world AABB otherwise.
+        /// </summary>
+        private Vector3 RadialProxyExtentsFor(int index)
+        {
+            int expectedRows = itemIds == null ? 0 : itemIds.Length;
+            Vector3 extents;
+            int source;
+            if (!RadialProxyShellMath.TryResolvePropExtents(propLocalBounds, propBounds, index,
+                    expectedRows, out extents, out source))
+                return propBounds[index];
+            return extents;
+        }
+
+        private string ProxyBoundsFallbackReasonText(int reasonCode)
+        {
+            if (reasonCode == RadialProxyShellMath.ExtentsSourceWorldMissing)
+                return "propLocalBounds is missing (the scene predates the column; re-sync it)";
+            if (reasonCode == RadialProxyShellMath.ExtentsSourceWorldLengthMismatch)
+                return "propLocalBounds length is not itemIds length (re-sync the arrays)";
+            if (reasonCode == RadialProxyShellMath.ExtentsSourceWorldRowInvalid)
+                return "propLocalBounds row is not a finite non-negative size (re-sync the arrays)";
+            return "none";
+        }
+
         // ------------------------------------------------------------------
         // Ring consumption: absolute cursor, one event per committed absorb.
         // ------------------------------------------------------------------
@@ -914,11 +1016,14 @@ namespace VRCKatamari.Pickup
             if (propColliders != null && index < propColliders.Length && propColliders[index] != null)
                 propColliders[index].enabled = false;
 
-            // The shell wants the same simplified volume the absorb gate used, in the same
-            // ball-local pose the visual prop just took. The motor decides whether this
-            // item is a long object worth an endpoint candidate; a small or buried prop is
-            // skipped there, and this host owns no proxy state.
-            motor.AttachRadialProxy(itemIds[index], propBounds[index], localPosition, localRotation);
+            // The shell wants the prop's size along ITS OWN local axes, in the same
+            // ball-local pose the visual prop just took. localRotation already contains the
+            // prop's own rotation, so passing the world AABB (propBounds) would turn a yawed
+            // prop twice. The motor decides whether this item is a long object worth an
+            // endpoint candidate; a small or buried prop is skipped there, and this host
+            // owns no proxy state.
+            motor.AttachRadialProxy(itemIds[index], RadialProxyExtentsFor(index), localPosition,
+                localRotation);
 
             propStates[index] = StateAttached;
             lastSubmitTimes[index] = 0f;

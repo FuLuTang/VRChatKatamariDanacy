@@ -18,6 +18,23 @@
 - `TryRebuild` 先在临时逻辑里校验整个账本，全部成功后才替换支持表与候选表；失败保留旧壳。
 - 本层不实现接触高度（`GroundContactMath`）、Sweep、价值/吸附裁决、Renderer、掉落轨迹、真实 mesh 碰撞或 PVP 外壳。稀疏方向/半球近邻可能漏掉中段或相邻采样峰值；性能及跨平台逐位一致性未测。
 
+### 尺寸口径：`propBounds`（世界 AABB）与 `propLocalBounds`（道具局部轴）
+
+径向代理壳读的是**道具自身局部轴上的全长**，不是世界 AABB。两个口径各有消费者，不能互换：
+
+| 序列化列 | 口径 | 消费者 |
+|---|---|---|
+| `propBounds` | 道具的**世界 AABB**（已含道具根旋转；`@size=` 时是声明边长的立方体） | 吸收体积门、挡路盒、支撑分类——都把它当轴对齐**世界**盒读，旋转只发生一次且是正确的 |
+| `propLocalBounds` | 道具**自身局部轴**上的全长（不含道具根旋转；子节点的相对旋转/缩放已烘进去；`@size=` 同样写成声明立方体） | 径向代理壳（`TryBuildAabbCorners` / `motor.AttachRadialProxy`） |
+
+为什么必须分两列：`AttachmentMath.TryWorldPoseToLocal` 给出的 `localRotation = inverse(ball) × 道具世界旋转` **已经含道具自身旋转**，壳再算 `localCenter + localRotation * (±尺寸/2)`。如果把世界 AABB 交给它，躺椅（yaw 90°）的长轴会被转第二次，落到错误的球局部轴上。躺椅的模型是 `1.60 × 0.35 × 0.60`（长轴在自身 X），世界 AABB 是 `0.60 × 0.35 × 1.60`；壳要的是前者。吸收门只看体积、挡路/支撑按世界轴建盒，都不受这个问题影响。
+
+注意 `[ProxyTrace]` 不打印端点轴：躺椅吸附后要看壳的长轴，最直接的是本文件的 EditMode 测试（同一个 1.6 × 0.35 × 0.6 盒），或在 Play Mode 比较 `support` 峰值出现的滚转角；也可以用下面 Lab 里那根根节点设为 yaw 90° 的 1 m Cube 测试杆做可重复的角度检查。
+
+`Editor/Pickup/PickupFieldSync` 在一次同步里同时写两列：世界 AABB 仍由 `Renderer.bounds` 并集得到；局部尺寸把每个 mesh 的 `sharedMesh.bounds` 角点变换到道具根局部系再合并，最后乘根三轴的世界长度（`localToWorld` 列范数），所以道具或父级有缩放时结果仍是米。
+
+旧场景没有 `propLocalBounds`（或长度与 `itemIds` 不一致、某行非有限/负数）时，宿主回退到 `propBounds`，并打**一条**带原因码的 warning：`1` 缺列、`2` 长度与 `itemIds` 不一致、`3` 行值非法；`[PickupFieldHost] ready` 行也会写 `proxyBounds=local|fallback`。回退行为与修复前相同（旋转道具的壳仍然错），只影响吸附壳，吸收门/挡路/支撑不受影响。
+
 ## Unity 实现
 
 ### 纯数学（无状态）
@@ -37,8 +54,9 @@
 
 | 方法 | 作用 |
 |---|---|
-| `TryClassifyLongObject(bounds, core, minElongation, minLongestEdgePerCoreDiameter, out bool)` | 长物件准入：最长边 ≥ 0.5 × 球直径 **且** ≥ 2.5 × 第二长边（一个轴压过另外两个轴） |
-| `TryBuildAabbCorners(localCenter, localRotation, fullExtents, corners, out farthest)` | 8 个球局部 AABB 角点 + 最远角点距离（相对球心） |
+| `TryClassifyLongObject(bounds, core, minElongation, minLongestEdgePerCoreDiameter, out bool)` | 长物件准入：`bounds` 是**道具局部轴**全长；最长边 ≥ 0.5 × 球直径 **且** ≥ 2.5 × 第二长边（一个轴压过另外两个轴） |
+| `TryBuildAabbCorners(localCenter, localRotation, fullExtents, corners, out farthest)` | 8 个球局部 AABB 角点 + 最远角点距离（相对球心）；`fullExtents` 是道具局部轴全长 |
+| `TryResolvePropExtents(local, world, index, rows, out extents, out source)` | 选列：`propLocalBounds` 可用则用（source 0），否则回退 `propBounds` 并给原因码 1 缺列 / 2 长度不符 / 3 行值非法 |
 | `TryAttachItem(...)` | 追加 8 端点、只重算受影响方向、登记候选键；容量/键/端点全部先校验，失败不动旧表 |
 | `TryDetachItem(...)` | 复制被删角点 → 压缩池和 item 行 → 按幸存端点重算受影响方向 → 释放候选键 |
 | `TryRebuildShell(...)` | 整账本原子重建（调用 `RadialProxyMath.TryRebuild`） |
@@ -62,7 +80,7 @@
 ```
 吸收确认（GrowthLedgerMath commit）
   → PickupFieldHost.AttachProp：算局部位姿、SetParent(attachmentRoot)
-  → motor.AttachRadialProxy(itemId, propBounds, localPosition, localRotation)
+  → motor.AttachRadialProxy(itemId, propLocalBounds, localPosition, localRotation)
       → 长物件准入 + 8 角点 + 只重算受影响方向 + 候选键
   → 每步 StepBall 第 4 步：
       TryBuildContactPoints(core, cap)         // 长度夹到 core+cap
@@ -86,7 +104,7 @@
 **每个长物件取 AABB 的 8 个角点**，不是沿最长轴的两个端点：
 
 1. 长杆的尖端本来就是 AABB 的角；8 角点覆盖杆/板/长凳的所有极端方向，而“两个轴向端点”会漏掉斜放扁板的侧角，支撑会系统性偏低。
-2. `propBounds` 是项目里已经统一的简化体积（吸收体积门、挡路盒都用它），8 角点是同一个盒子的保守支撑，三个消费者对“这件道具多大”只有一个答案。
+2. 壳用的 `propLocalBounds` 与吸收体积门/挡路盒用的 `propBounds` 是**同一件道具的两种口径**：前者是局部轴全长（供壳旋转一次），后者是世界 AABB（供轴对齐世界盒）。两列由同一次同步写出，`@size=` 对两者都生效；壳不再直接读 `propBounds`。旧场景未重跑同步时宿主回退到 `propBounds`，那会复现旋转两次的问题（见“尺寸口径”一节）。
 3. 成本有界：4 个候选 × 8 = 32 个端点，正好是每步扫描的常数上限；两个端点虽然更省，但会让“长杆必须能被表示为突出”依赖于杆恰好沿某轴放。
 
 **为什么只登记长物件**：合同给的是“32 个固定方向 + 最多 4 个长物件极值候选”，不是“每件吸附物都进壳”。小道具的角点最多比核心高几厘米，把它们全部塞进端点池会让池随吸附数量增长（PicnicLawn 一场可吸附数百件），每步扫描和吸附重算都会爆；长物件才是能真正顶起球、且 32 方向容易漏掉尖端的形状。准入用两条暂定规则（长 ≥ 0.5 球直径、长 ≥ 2.5 × 第二长边），所以杯子/方块/方片不占候选，勺/香蕉/棍/长凳会占。
@@ -131,6 +149,12 @@
   - `LongObjectAdmissionUsesLengthAndSecondLongestEdge`：勺过、杯不过、短棍不过、扁板过、负尺寸拒绝。
   - `CornersFollowThePropsBallLocalRotation`：杆的角点随球局部旋转转向，零四元数拒绝。
   - `ContactPointsClampLongEndpointsAndZeroUnusedSlots`：夹紧到 core+cap、未用槽清零、长度不一致拒绝。
+- `Tests/EditMode/BallLayers/RadialProxyLocalBoundsTests.cs`（新增 5 例，覆盖本次 bounds 口径修复）：
+  - `TurnedPropUsesLocalExtentsOnItsOwnLongAxis`：躺椅尺寸 `1.6×0.35×0.6`、yaw 90°，局部列仍是 `1.6×0.35×0.6`（世界 AABB 是 `0.6×0.35×1.6`），建壳后长轴沿球 Z（道具自身长轴），不是世界 X。
+  - `MissingLocalColumnFallsBackToTheWorldAabbAndKeepsTheOldRotation`：缺列时返回世界 AABB（原因码 1），并复现旧的双转几何（长轴落到球 X）。
+  - `ResolvePropExtentsReportsEveryFallbackReason`：0 局部 / 1 缺列 / 2 长度与 `itemIds` 不一致 / 3 行值非法；越界行与 null 世界列拒绝。
+  - `LocalBoundsIgnoreTheRootRotation` / `ChildRotationIsBakedIntoTheLocalColumn`：根旋转不烘进局部列；子节点 45° 旋转被烘进去。
+- Python 模型只接收预烘焙的 `endpoints_world`，不读道具 bounds，所以本次没有 Python 逻辑改动；`Docs/tests/ball_radial_proxy` 不改。
 
 **没有跑 Unity 编译、EditMode/NUnit 或 Play Mode**。以上测试是源码级证据，不等于 Unity 证据。
 
@@ -145,7 +169,8 @@
    - **`banana_01`–`banana_04` 是起始球上最合适的现有长物件**：bounds `(0.18, 0.032, 0.068)`，最长边 0.18 m、第二长边 0.068 m（2.65 ≥ 2.5），起始球（直径 0.30 m）的准入线是 0.15 m；体积 0.00039 m³ 也低于 0.00141 m³ 的吸收门。**首选它。**
    - `napkin_01`–`napkin_05`（bounds `(0.3, 0.028, 0.3)`）**不会**登记：最长边/第二长边 = 1，按“一个轴压过另外两个轴”的准入被排除。这正好验证规则不是只看“最薄的那一轴”。
    - `spoon_01` 的 `propBounds` 是 `0.34³` 的立方体（伸长比 1），**过不了伸长准入**；`thermos_01` 是 `0.9³` 立方体；`watering_can_01` 是 `(0.26, 0.42, 0.58)`（最长/第二长 = 1.38）——这三件都不会登记，正好可以拿来验证“非长物件不占候选”。
-   - 如果香蕉的抬升太小（0.18 m 的道具在 0.30 m 球上，角点最多突出几厘米）：**临时**在草地上放一根测试杆——空 GameObject + Cylinder，`localScale` 设为 `(0.04, 0.5, 0.04)`（长 1.0 m），加 MeshRenderer；把它加进 `PickupFieldHost` 的平行数组一行：`itemId = prop_proxy_rod_01`、`kind = debris`、`propBounds = (0.04, 1.0, 0.04)`、`valueUnits = 1`，Transform 拖进去。**不要保存/提交这个场景改动**，它是实验件；测完删除该行和对象。
+   - 如果香蕉的抬升太小（0.18 m 的道具在 0.30 m 球上，角点最多突出几厘米）：**临时**在草地上放一根测试杆——空 GameObject + Cylinder，`localScale` 设为 `(0.04, 0.5, 0.04)`（长 1.0 m），加 MeshRenderer；把它加进 `PickupFieldHost` 的平行数组一行：`itemId = prop_proxy_rod_01`、`kind = debris`、`propBounds = (0.04, 1.0, 0.04)`、`propLocalBounds = (0.04, 1.0, 0.04)`、`valueUnits = 1`，Transform 拖进去。**两列都要填**：只填 `propBounds` 会走回退并在 Console 留一条原因码 1 的 warning。**不要保存/提交这个场景改动**，它是实验件；测完删除该行和对象。
+   - 若要验证本次 `propLocalBounds` 轴向修复：用 **Cube**（不是上面那根 Cylinder；Cylinder 的长轴在局部 Y，绕 Y 转看不出来）做一根长轴在局部 Z 的杆——`localScale = (0.04, 0.04, 1.0)`，根节点 yaw 90°（世界长轴 X）。手动填 `propBounds = (1.0, 0.04, 0.04)`、`propLocalBounds = (0.04, 0.04, 1.0)`、`valueUnits = 1`。正确的壳应在杆的**局部 +Z** 转到朝下时 `support` 最大；把 `propBounds` 当局部尺寸的旧回退会把这个峰值偏到世界 Z 朝下（差 90°）。`[ProxyTrace]` 不打印端点轴，用 `support` 峰值出现的滚转角判断。
 3. 确保球的 `pickupFieldHost` / `attachmentRoot` / `motor` 与现有 StoryLevel 接线一致（`attachmentRoot` 在 `BallVisualRollRoot` 下、局部 0、scale 1；宿主已经在 `AttachProp` 里调 `AttachRadialProxy`）。
 
 ### 步骤
@@ -170,7 +195,7 @@
 ## 未决/风险
 
 - **4 个候选是拒绝制**（合同模型）：第 5 件长物件不驱逐已有候选，只被跳过。若实机发现长物件经常超过 4 件，应先做候选选择策略（按突出量排序、显式驱逐），而不是偷偷扩容量。
-- **AABB 是保守近似**：斜放扁板的角点可能比真实网格高；`propBounds` 对声明尺寸（`@size=`）的道具是立方体，长杆的声明尺寸会把它变粗。当前 `StoryLevel.unity` 的多数小道具 `propBounds` 本来就是立方体（勺 `0.34³`、保温杯 `0.9³`），所以它们的**视觉细长形状不在 `propBounds` 里**——本层按项目统一口径只用 `propBounds`，不会去读 Renderer；要让勺/叉产生凹凸，得先让它们的 `propBounds` 说真话（数据/编辑器侧，不在本次范围）。`banana_01–04` 是当前场景里能通过准入的现有行（起始球上）；更长的门挡长凳等整张 PicnicLawn 进场景后才会出现。
+- **两列 AABB 都是保守近似**：局部列把子 mesh 的旋转/缩放烘成根局部 AABB，斜放扁板的角点可能比真实网格高；吸收门/挡路盒继续用世界 AABB，径向壳用局部列，两个消费者对“这件道具多大”不再共用同一个数——口径不同是有意的，见“尺寸口径”。`@size=` 声明尺寸对两列都生效，所以勺 `0.34³`、保温杯 `0.9³` 这类声明件仍然是立方体、仍过不了伸长准入；未声明且 yaw 0 的道具，世界 AABB 与局部列本来就相同。**旧场景未重跑同步时壳回退世界 AABB，旋转道具的双转问题仍在**；`banana_01–04` 这类 yaw 0 的现有长件不受回退影响。更长的门挡长凳等整张 PicnicLawn 进场景后才会出现。
 - **没有掉落路径**：吸附物是终态，所以“掉落”只有整场复位；接掉落时必须调 `DetachRadialProxy`，不能只移动 Transform。
 - **C 阶段未做**：代理不参与 `SweepMath`、挡路盒、PVP 外形摘要，远端球也不广播它；水平碰撞仍用球形半径。
 - **未测**：Unity 编译、U# 全量编译、EditMode/NUnit、Play Mode、帧率、VR 舒适度。32 方向/4 候选/三个上限/两条准入规则都是原型值。

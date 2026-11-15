@@ -49,7 +49,7 @@ namespace VRCKatamari.Editor.Pickup
         /// <summary>True when the UdonSharp compile + proxy copy was issued without throwing.</summary>
         public bool UdonCopyIssued;
 
-        /// <summary>True when the six serialized arrays read back at the expected lengths.</summary>
+        /// <summary>True when the seven serialized arrays read back at the expected lengths.</summary>
         public bool ReadBackVerified;
 
         public readonly List<PickupFieldKindCount> Kinds = new List<PickupFieldKindCount>();

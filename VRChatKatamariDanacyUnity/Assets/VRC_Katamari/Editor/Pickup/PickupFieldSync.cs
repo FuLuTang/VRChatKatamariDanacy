@@ -40,10 +40,20 @@ namespace VRCKatamari.Editor.Pickup
     /// <item><description>collider = the prop's own Collider when it has one, else the first
     /// child Collider in ordinal path order (the host disables at most one per
     /// prop);</description></item>
-    /// <item><description>size tier = longest AABB extent, then the value units come from the
-    /// explicit (kind, tier) table in
-    /// <see cref="PickupFieldAuthoringRules"/>.</description></item>
+    /// <item><description>value units = the caller's declaration for that item id (the level
+    /// importer passes <c>placement.json</c>'s <c>defs[].valueUnits</c>/<c>props[].valueUnits</c>),
+    /// else the value already serialized on the host for that id, else 0 with a report note.
+    /// A missing declaration or an old value-table row never drops a prop
+    /// (Docs/OPEN_DECISIONS.md (q) U2).</description></item>
     /// </list>
+    /// <para>
+    /// The value-units rule is intentionally not a price. Before U2 this class derived
+    /// <c>valueUnits</c> from the longest AABB edge through a (kind, tier) table; that made
+    /// a level's declared content value unreachable and dropped any prop whose (kind, tier)
+    /// had no row. Now the declaration is the only source, and a host that is re-synced
+    /// without one keeps its serialized values bit-for-bit - the path un-migrated scenes
+    /// (<c>StoryLevel</c>'s 110 props, <c>CpuSkirmish</c>) take.
+    /// </para>
     /// <para>
     /// Ordering is deterministic: candidates are sorted by field-root-relative hierarchy
     /// path with an ordinal comparison, so the same scene always produces the same row
@@ -134,6 +144,16 @@ namespace VRCKatamari.Editor.Pickup
         // -------------------------------------------------------------- entry point ---
 
         /// <summary>
+        /// Syncs with no declaration map: every value already serialized on the host is
+        /// preserved. This is the menu path and the un-migrated scene path (StoryLevel's 110
+        /// props, CpuSkirmish).
+        /// </summary>
+        public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot)
+        {
+            return SyncFromChildren(host, fieldRoot, null);
+        }
+
+        /// <summary>
         /// Reads the props under <paramref name="fieldRoot"/> and writes the host's six
         /// index-aligned arrays.
         /// </summary>
@@ -142,10 +162,19 @@ namespace VRCKatamari.Editor.Pickup
         /// The root whose immediate children are kind folders. The menu passes the host's own
         /// transform; a level that keeps its props elsewhere passes that transform instead.
         /// </param>
+        /// <param name="declaredValueUnits">
+        /// Item id to value units, supplied by the level importer from
+        /// <c>placement.json</c>. When an id is absent, the value already serialized on the
+        /// host is preserved; a row with neither is written as 0 and reported. Pass
+        /// <c>null</c> when no declaration exists - that is the un-migrated scene path, and
+        /// it must not change any existing value.
+        /// </param>
         /// <returns>What was written, and every row that was refused and why.</returns>
-        public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot)
+        public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
+            IDictionary<string, int> declaredValueUnits)
         {
             var report = new PickupFieldSyncReport();
+            report.ValueUnitsRequested = declaredValueUnits != null && declaredValueUnits.Count > 0;
 
             if (host == null)
             {
@@ -179,8 +208,14 @@ namespace VRCKatamari.Editor.Pickup
                 return report;
             }
 
+            // Read the host's current values before any array is resized: this is the whole
+            // un-migrated-scene contract. A row whose item id is already present keeps its
+            // serialized value unless the caller declared a different one.
+            Dictionary<string, int> existingValueUnits = ReadExistingValueUnits(host);
+
             List<PropCandidate> candidates = CollectCandidates(fieldRoot);
-            List<PropRow> rows = ValidateCandidates(candidates, report);
+            List<PropRow> rows = ValidateCandidates(candidates, declaredValueUnits, existingValueUnits,
+                report);
 
             if (rows.Count == 0 && report.Rejected.Count > 0)
             {
@@ -203,10 +238,22 @@ namespace VRCKatamari.Editor.Pickup
             MarkDirty(host);
             CopyProxy(host, report);
             report.ReadBackVerified = VerifyReadBack(host, rows.Count);
-            if (!report.ReadBackVerified && string.IsNullOrEmpty(report.Failure))
+            if (!report.ReadBackVerified)
             {
-                report.Fail("the six arrays did not read back at the expected length (" + rows.Count +
-                            "); the write did not persist");
+                if (string.IsNullOrEmpty(report.Failure))
+                {
+                    report.Fail("the six arrays did not read back at the expected length (" + rows.Count +
+                                "); the write did not persist");
+                }
+            }
+            else
+            {
+                report.ValueUnitsVerified = VerifyDeclaredValueUnits(host, declaredValueUnits, report);
+                if (!report.ValueUnitsVerified && string.IsNullOrEmpty(report.Failure))
+                {
+                    report.Fail(report.ValueUnitMismatches.Count + " declared valueUnits row(s) did not " +
+                                "read back as declared; treat the host arrays as wrong until this is fixed");
+                }
             }
 
             if (string.IsNullOrEmpty(report.Failure))
@@ -369,6 +416,7 @@ namespace VRCKatamari.Editor.Pickup
         // -------------------------------------------------------------- validation ---
 
         private static List<PropRow> ValidateCandidates(List<PropCandidate> candidates,
+            IDictionary<string, int> declaredValueUnits, Dictionary<string, int> existingValueUnits,
             PickupFieldSyncReport report)
         {
             var ids = new List<string>();
@@ -427,9 +475,8 @@ namespace VRCKatamari.Editor.Pickup
                     continue;
                 }
 
-                string aabbTier = PickupFieldAuthoringRules.ClassifySizeTier(candidate.BoundsSize.x,
-                    candidate.BoundsSize.y, candidate.BoundsSize.z);
-                if (aabbTier.Length == 0)
+                if (!PickupFieldAuthoringRules.HasUsableBounds(candidate.BoundsSize.x,
+                        candidate.BoundsSize.y, candidate.BoundsSize.z))
                 {
                     report.Reject(candidate.Path, candidate.ItemId,
                         "no usable size from bounds " + FormatVector(candidate.BoundsSize) +
@@ -443,33 +490,36 @@ namespace VRCKatamari.Editor.Pickup
                 // AABB is still required above: a renderer whose AABB is degenerate is a data
                 // error even when the pickup size is spelled out in the name.
                 Vector3 pickSize = candidate.BoundsSize;
-                string tier = aabbTier;
                 string declaredSizeNote = null;
                 if (candidate.DeclaredSizeM > 0f)
                 {
                     pickSize = new Vector3(candidate.DeclaredSizeM, candidate.DeclaredSizeM,
                         candidate.DeclaredSizeM);
-                    tier = PickupFieldAuthoringRules.ClassifySizeTier(pickSize.x, pickSize.y, pickSize.z);
                     declaredSizeNote = "'" + candidate.Path + "' declares " + candidate.SourceName +
                                        ": propBounds is a " + FormatMetres(candidate.DeclaredSizeM) +
                                        " m cube instead of the " + FormatVector(candidate.BoundsSize) +
-                                       " m renderer AABB (size tier " + aabbTier + " -> " + tier + ")";
+                                       " m renderer AABB";
                 }
 
-                int declared = PickupFieldAuthoringRules.LookupValueUnits(candidate.Kind, tier);
+                // The value is content data, never a price. The declaration wins; without
+                // one the host's existing row is preserved; with neither the row is still
+                // written (0) and named in the notes, because dropping it would lose the
+                // prop's geometry and pickup wiring over a missing number.
+                int declaredValue = 0;
+                bool hasDeclaredValue = declaredValueUnits != null &&
+                                        declaredValueUnits.TryGetValue(candidate.ItemId, out declaredValue);
+                int existingValue = 0;
+                bool hasExistingValue = existingValueUnits != null &&
+                                        existingValueUnits.TryGetValue(candidate.ItemId, out existingValue);
+
                 int valueUnits;
-                if (!PickupFieldAuthoringRules.HasValueRow(candidate.Kind, tier))
+                string valueSource;
+                if (!PickupFieldAuthoringRules.TryResolveValueUnits(declaredValue, hasDeclaredValue,
+                        existingValue, hasExistingValue, out valueUnits, out valueSource))
                 {
                     report.Reject(candidate.Path, candidate.ItemId,
-                        "no value-table row for kind '" + candidate.Kind + "' + size tier '" + tier +
-                        "' (bounds " + FormatVector(pickSize) + ")");
-                    continue;
-                }
-
-                if (!PickupFieldAuthoringRules.TryValidateValueUnits(declared, out valueUnits))
-                {
-                    report.Reject(candidate.Path, candidate.ItemId,
-                        "value " + declared + " is not a whole number >= 1 (Docs/OPEN_DECISIONS.md (j))");
+                        "declared valueUnits " + declaredValue + " is not a whole number >= 1 " +
+                        "(Docs/OPEN_DECISIONS.md (j)); the row was left out rather than priced");
                     continue;
                 }
 
@@ -481,6 +531,21 @@ namespace VRCKatamari.Editor.Pickup
                 row.ValueUnits = valueUnits;
                 row.PrimaryCollider = candidate.PrimaryCollider;
                 rows.Add(row);
+
+                if (string.Equals(valueSource, PickupFieldAuthoringRules.ValueSourceDeclared,
+                        StringComparison.Ordinal))
+                {
+                    report.ValueUnitsDeclared += valueUnits;
+                }
+                else if (string.Equals(valueSource, PickupFieldAuthoringRules.ValueSourceExisting,
+                             StringComparison.Ordinal))
+                {
+                    report.ValueUnitsPreserved++;
+                }
+                else
+                {
+                    report.ValueUnitsUndeclared++;
+                }
 
                 report.CountRow(row.Kind, row.ValueUnits);
                 report.TotalValueUnits += row.ValueUnits;
@@ -500,6 +565,21 @@ namespace VRCKatamari.Editor.Pickup
             {
                 report.Notes.Add(multiColliderProps + " prop(s) have more than one collider; propColliders wires " +
                                  "only one per prop (the host disables one collider on attach)");
+            }
+
+            if (report.ValueUnitsPreserved > 0)
+            {
+                report.Notes.Add(report.ValueUnitsPreserved + " row(s) kept the valueUnits already serialized " +
+                                 "on the host (no declaration was supplied). This is the pre-U2 scene path and " +
+                                 "is intentionally not repriced");
+            }
+
+            if (report.ValueUnitsUndeclared > 0)
+            {
+                report.Notes.Add(report.ValueUnitsUndeclared + " row(s) have no declared value and no " +
+                                 "existing serialized value; valueUnits was written as 0 and the host will " +
+                                 "ignore those rows at runtime until a value is declared " +
+                                 "(Docs/OPEN_DECISIONS.md (q) U2)");
             }
 
             report.PropCount = rows.Count;
@@ -677,6 +757,97 @@ namespace VRCKatamari.Editor.Pickup
             // propColliders is allowed to be empty (no prop has a collider) but never longer
             // than the other rows.
             return colliders.arraySize == 0 || colliders.arraySize == expectedRows;
+        }
+
+        /// <summary>
+        /// Reads the host's current <c>itemIds</c>/<c>valueUnits</c> into an id-keyed map
+        /// before the sync resizes anything.
+        /// </summary>
+        /// <remarks>
+        /// Keyed by item id rather than array index on purpose: the sync is allowed to
+        /// reorder rows (props sort by hierarchy path), and moving a row must not move its
+        /// value to a different prop. A host with no arrays yields an empty map; an unaligned
+        /// pair contributes only its overlapping prefix, so the write never invents a value.
+        /// </remarks>
+        private static Dictionary<string, int> ReadExistingValueUnits(PickupFieldHost host)
+        {
+            var existing = new Dictionary<string, int>(StringComparer.Ordinal);
+            var serialized = new SerializedObject(host);
+            SerializedProperty ids = serialized.FindProperty(ItemIdsField);
+            SerializedProperty values = serialized.FindProperty(ValueUnitsField);
+            if (ids == null || values == null || !ids.isArray || !values.isArray)
+            {
+                return existing;
+            }
+
+            int rows = ids.arraySize < values.arraySize ? ids.arraySize : values.arraySize;
+            for (int i = 0; i < rows; i++)
+            {
+                string itemId = ids.GetArrayElementAtIndex(i).stringValue;
+                if (!string.IsNullOrEmpty(itemId) && !existing.ContainsKey(itemId))
+                {
+                    existing.Add(itemId, values.GetArrayElementAtIndex(i).intValue);
+                }
+            }
+
+            return existing;
+        }
+
+        /// <summary>
+        /// Re-reads the host after the write and reports every declared value that did not
+        /// land, plus every declared id that has no row.
+        /// </summary>
+        /// <remarks>
+        /// This is the U2 guard: the importer never touches the arrays itself, so this
+        /// read-back is the only place a declaration can be proven to have reached the host.
+        /// A mismatch is a ledger bug that nothing later in the pipeline would notice, so the
+        /// run is failed with the details in <see cref="PickupFieldSyncReport.ValueUnitMismatches"/>.
+        /// </remarks>
+        private static bool VerifyDeclaredValueUnits(PickupFieldHost host,
+            IDictionary<string, int> declaredValueUnits, PickupFieldSyncReport report)
+        {
+            if (declaredValueUnits == null || declaredValueUnits.Count == 0)
+            {
+                // Nothing was declared, so there is nothing to verify; preserved values are
+                // the contract for this path.
+                return true;
+            }
+
+            var serialized = new SerializedObject(host);
+            SerializedProperty ids = serialized.FindProperty(ItemIdsField);
+            SerializedProperty values = serialized.FindProperty(ValueUnitsField);
+            if (ids == null || values == null || !ids.isArray || !values.isArray ||
+                ids.arraySize != values.arraySize)
+            {
+                report.ValueUnitMismatches.Add("the host's " + ItemIdsField + "/" + ValueUnitsField +
+                                               " arrays could not be read back index-aligned");
+                return false;
+            }
+
+            var readIds = new string[ids.arraySize];
+            var readValues = new int[values.arraySize];
+            for (int i = 0; i < ids.arraySize; i++)
+            {
+                readIds[i] = ids.GetArrayElementAtIndex(i).stringValue;
+                readValues[i] = values.GetArrayElementAtIndex(i).intValue;
+            }
+
+            string[] mismatches = PickupFieldAuthoringRules.FindValueUnitMismatches(readIds, readValues,
+                declaredValueUnits);
+            string[] missingRows = PickupFieldAuthoringRules.FindDeclaredIdsWithoutRows(readIds,
+                declaredValueUnits);
+
+            for (int i = 0; i < mismatches.Length; i++)
+            {
+                report.ValueUnitMismatches.Add("read-back mismatch: " + mismatches[i]);
+            }
+
+            for (int i = 0; i < missingRows.Length; i++)
+            {
+                report.ValueUnitMismatches.Add("declared itemId has no host row: " + missingRows[i]);
+            }
+
+            return mismatches.Length == 0 && missingRows.Length == 0;
         }
 
         // ------------------------------------------------------------------ utilities ---

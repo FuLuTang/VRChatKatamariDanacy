@@ -15,10 +15,12 @@ namespace VRCKatamari.Editor.LevelBuild
     /// console. The report never claims success for a run that had errors.
     /// </para>
     /// <para>
-    /// Two counters are specific to the single-source-of-truth decision: the number of
-    /// props whose declared <c>valueUnits</c> had to be written over the pricing the
-    /// pickup sync produced, and whether that write read back. A level's value total is
-    /// gameplay data, so it is verified after the write rather than assumed.
+    /// The value-unit counters are specific to the single-source-of-truth decision: the
+    /// level's declared total, the rows the sync preserved from an existing host value, the
+    /// rows it could not give any value, and whether the declared values read back. A
+    /// level's value total is gameplay data, so it is verified after the one write rather
+    /// than assumed. There is no "rewritten over the sync" counter any more: the sync is the
+    /// only writer (U2, 2026-11-15).
     /// </para>
     /// </remarks>
     public sealed class PlacementImportReport
@@ -49,7 +51,8 @@ namespace VRCKatamari.Editor.LevelBuild
         public bool UdonCopyIssued;
 
         public int ValueUnitsDeclared;
-        public int ValueUnitsRewritten;
+        public int ValueUnitsPreserved;
+        public int ValueUnitsUndeclared;
         public bool ValueUnitsVerified;
 
         public int ArenaBoxes;
@@ -63,7 +66,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
         public readonly List<string> Notes = new List<string>();
         public readonly List<string> Errors = new List<string>();
-        public readonly List<string> Rewrites = new List<string>();
+        public readonly List<string> ValueUnitProblems = new List<string>();
 
         public void Fail(string reason)
         {
@@ -131,7 +134,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 .Append("; udon copy: ").Append(UdonCopyIssued ? "issued" : "not issued");
             text.AppendLine();
             text.Append("  valueUnits: declared=").Append(ValueUnitsDeclared)
-                .Append(", rewritten over sync=").Append(ValueUnitsRewritten)
+                .Append(", preserved=").Append(ValueUnitsPreserved)
+                .Append(", undeclared=").Append(ValueUnitsUndeclared)
                 .Append(", read-back: ").Append(ValueUnitsVerified ? "verified" : "NOT verified");
             text.AppendLine();
             text.Append("  arena: ").Append(ArenaWired ? "wired" : "not wired")
@@ -139,10 +143,10 @@ namespace VRCKatamari.Editor.LevelBuild
                 .Append(", ramps=").Append(ArenaRamps).Append(" [P1 has no ramp slot], kinds=")
                 .Append(ArenaKinds).Append(")");
 
-            for (int i = 0; i < Rewrites.Count; i++)
+            for (int i = 0; i < ValueUnitProblems.Count; i++)
             {
                 text.AppendLine();
-                text.Append("  value rewrote ").Append(Rewrites[i]);
+                text.Append("  valueUnits: ").Append(ValueUnitProblems[i]);
             }
 
             for (int i = 0; i < Notes.Count; i++)

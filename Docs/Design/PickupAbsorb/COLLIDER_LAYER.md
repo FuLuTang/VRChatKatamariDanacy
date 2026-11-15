@@ -257,14 +257,14 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 |---|---|
 | 只**接**已有 `Collider`（`PropCandidate.PrimaryCollider` 取道具自身或路径序第一个子 collider），**从不创建** | 按 `collision.boxes` 创建/更新道具物体上的 `BoxCollider`（v1 只用 `boxes[0]`：`center` = 盒中心、`size` = 盒尺寸），`source: none` 时明确不建 |
 | 只读场景（Renderer bounds、层级路径） | 另读 `<id>.manifest.json` 的 `collision` 块；路径要能在 Editor 里解析（`Docs/` 不在 Unity 资产库里，见下） |
-| `valueUnits` 由 `PickupFieldAuthoringRules` 的 (kind, tier) 表算出并**写回** | **在价值口径统一前仍然拒绝它的 `valueUnits` 变更**：读到既有非零值时保留、报告一条「refused: value units pending one rubric」，不覆盖 |
+| 旧行为：`valueUnits` 由 `PickupFieldAuthoringRules` 的 (kind, tier) 表算出并**写回** | **已改（U2，2026-11-15）**：不再用值表定价。调用方（导入器）把声明值传给 `SyncFromChildren`，同步工具一次写入并回读校验；没有声明时保留宿主既有值。缺 (kind, tier) 行不再丢件，`refused: value units pending one rubric` 守卫解除 |
 
 **代价（要写清楚，不是免费的）**：
 
 1. **同步工具要加两段新逻辑**：manifest 读取（含 `collision` 缺失时的默认 `none`）与碰撞盒生成（幂等、可 Undo、不乱改 prefab 实例）。这不是小改，`PickupFieldSync.cs` 已有 700+ 行且承担 U# 程序资产拷贝顺序。
 2. **manifest 位置要定**：`Docs/Art/OriginalModels/props/exports/` 不在 `Assets/` 里，Unity 的 `AssetDatabase` 看不到。要么同步工具用项目相对路径直接 `File.ReadAllText`（可跑但绕开资产库，路径随仓库布局变化就会静默失效），要么由流水线把同一份清单写进 `Assets/`（例如 `Assets/VRC_Katamari/Art/Props/prop_collision.json`）——**这一条仍是执行时要定的小项，不再是「选哪个方案」的未决**。
 3. **需要测试**：EditMode 用例至少覆盖 ① 全 0/无 `collision` 时 `BoxCollider` 与 `propColliders` **逐位不变**（等价于今天的行为）；② 幂等（连跑两次结果相同）；③ identity 旋转下 `BoxCollider.size` == `boxes[0]` 尺寸、盒 ⊆ `propBounds`；④ `source: none` 时不留 collider。
-4. **`valueUnits` 口径未统一前的运行期拒绝**见上表第三行；这条不是「以后再补」，是**加碰撞盒这一次就要带上的守卫**，否则一次同步会顺手把 110 行的分值改掉。
+4. **`valueUnits` 的写入口径**见上表第三行：U2 落地后同步工具不再定价，声明值由调用方传入并一次写入、回读校验，未声明时保留既有值。因此扩展碰撞盒时**不需要**再加「拒绝变更」守卫，但必须保持「先写声明值、再回读」的顺序，且不能绕过 `SyncFromChildren` 直接改数组。
 
 - 挂在哪：道具物体本身（scale≈1、rotation=identity、原点=AABB 中心），`BoxCollider.center` = 盒中心、`size` = 盒尺寸，**不需要子物体**。
 - 接进 `propColliders[i]`。**不要**把 `"not fully wired"` 不出现当成验收：那条警告只在数组长度不足时生效，而场景里长度已经是 110。真实验收是**逐件核对槽位非空**，再抽一件吸掉、看原来位置有没有留下悬空实体。
@@ -325,7 +325,7 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 | 步 | 做什么 | 行为变化 | 验收 |
 |---|---|---|---|
 | **S0** | 本文 + 目录列 | 无 | `validate_plan.py` + `Docs/tests` |
-| **S1** | 扩展 `PickupFieldSync`：加 manifest 读取、`collision` 缺失按 `none`、按 `boxes[0]` 幂等生成 `BoxCollider` 并接 `propColliders`，同时保留 `valueUnits` 拒绝守卫；带 4 条 EditMode 测试（§5.3） | 无（首次全 `none`，空跑） | 测试全绿；连跑两次场景逐位不变；`valueUnits` 一个都没变 |
+| **S1** | 扩展 `PickupFieldSync`：加 manifest 读取、`collision` 缺失按 `none`、按 `boxes[0]` 幂等生成 `BoxCollider` 并接 `propColliders`，同时保持 `valueUnits` 的声明值写入/回读校验（无声明时保留既有值）；带 4 条 EditMode 测试（§5.3） | 无（首次全 `none`，空跑） | 测试全绿；连跑两次场景逐位不变；`valueUnits` 与声明一致（无声明时一位不变） |
 | **S2** | manifest 增 `collision`：`watering_can` 一条 `authored`，`toy_ball`/`watermelon` 两条 `aabb_fallback`，其余 13 件按「没有 `_COL_` 对象」自动判 `none`；重跑 S1 的同步工具落地 3 个 def / 9 件 = 9 个盒 | 玩家不再穿过 0.4 m 球/西瓜/洒水壶；球行为**不变** | `SHA256SUMS` 更新、`verify_import` 仍 1 个 mesh、场景里每个 `BoxCollider` 与 manifest 对应盒逐个相等、吸掉一件后原地无悬空实体 |
 | **S3** | 宿主加 `propBoxCounts` 等三数组（全 0）+ `TryWorldBoxFromLocal` | 无（逐位不变） | `BlockingPropMathTests` 全绿；Play Mode 球感不变 |
 | **S4** | 家具建模时填 `counts ≥ 1`，先只填 1 盒/件 | 桌下可通行 | 0.3 m 球从桌下过、1.0 m 球被桌面挡 |
@@ -427,7 +427,7 @@ manifest（每件，Blender 产出）
 
    **已定（2026-11-15，Lead）：选 C ——不是手挂，也不是新写生成器，而是扩展现有的编辑器同步工具 `PickupFieldSync`（`Editor/Pickup/`），让它读 manifest 的 `collision.boxes` 并同步碰撞盒；模型改了重跑同步即可。**
 
-   代价（完整版见 §5.3）：同步工具要加「读 manifest」与「生成/更新 `BoxCollider`」两段逻辑，并补 4 条 EditMode 测试（无 `collision` 时逐位不变、幂等、盒 ⊆ `propBounds`、`source: none` 不留盒）；manifest 在 `Docs/` 下不在 Unity 资产库里，路径解析方式要定（直读 vs 写一份进 `Assets/`）；**在价值口径统一前，同步工具运行时仍要拒绝它的 `valueUnits` 变更**——今天它是按 (kind, tier) 表写回 `valueUnits` 的，扩展时必须加守卫，否则一次同步会顺手改掉 110 行的分值。
+   代价（完整版见 §5.3）：同步工具要加「读 manifest」与「生成/更新 `BoxCollider`」两段逻辑，并补 4 条 EditMode 测试（无 `collision` 时逐位不变、幂等、盒 ⊆ `propBounds`、`source: none` 不留盒）；manifest 在 `Docs/` 下不在 Unity 资产库里，路径解析方式要定（直读 vs 写一份进 `Assets/`）；**`valueUnits` 不再由同步工具定价**（U2，2026-11-15）：声明值由导入器传入、同步工具一次写入并回读，未声明时保留既有值，缺 (kind, tier) 行不再丢件，所以扩展碰撞盒时不再需要「拒绝变更」守卫。
 
    - A（否）：场景里手挂，数值照 manifest 抄。成本：模型改了会静默过期，需要一条离线校验兜底。
    - B（否）：新写 `Editor/Props/PropColliderBuilder` 读资产侧 JSON 幂等生成。成本：~100 行 + 测试 + 一份 `Assets/` 副本，且与 `PickupFieldSync` 争「谁写 `propColliders`」。

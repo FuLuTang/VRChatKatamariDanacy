@@ -5,8 +5,9 @@ using System.Globalization;
 namespace VRCKatamari.Editor.Pickup
 {
     /// <summary>
-    /// The pure half of the pickup-field authoring path: size tier from bounds, value-unit
-    /// lookup by kind and tier, duplicate-id detection, the optional
+    /// The pure half of the pickup-field authoring path: renderer-bounds usability, the
+    /// resolution of a row's declared or already-serialized value units, read-back
+    /// mismatch detection, duplicate-id detection, the optional
     /// <c>@size=&lt;metres&gt;</c> name suffix and deterministic path ordering.
     /// </summary>
     /// <remarks>
@@ -27,45 +28,41 @@ namespace VRCKatamari.Editor.Pickup
     /// that derivation that is decidable without looking at a scene.
     /// </para>
     /// <para>
+    /// Values are content data, not a pricing rule. The Lead's decision of 2026-11-15
+    /// (Docs/OPEN_DECISIONS.md (q) U2) puts <c>valueUnits</c> on the level's per-def
+    /// declaration (<c>placement.json</c> <c>defs[].valueUnits</c>, overridable per
+    /// <c>props[].valueUnits</c>), so this class no longer carries a (kind, tier) value
+    /// table and the sync no longer prices a prop from its longest edge. A missing table
+    /// row therefore cannot drop a prop. What remains here is the decision a sync still
+    /// has to make for each row:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>a value supplied by the caller (the importer's declaration)
+    /// wins;</description></item>
+    /// <item><description>without a declaration, the value already serialized on the host
+    /// is preserved - that is what keeps un-migrated scenes (StoryLevel's 110 props,
+    /// CpuSkirmish) bit-identical;</description></item>
+    /// <item><description>a row with neither is written as 0 and reported, never silently
+    /// given a size-derived number.</description></item>
+    /// </list>
+    /// <para>
     /// Values are whole units at least 1, because the ledger rejects anything else as
     /// <c>RejectNoGain</c> (Docs/OPEN_DECISIONS.md (j); the runtime mirror is
-    /// <c>PickupAbsorbMath.TryAbsorbValueToLedgerGain</c>). The table below is explicit:
-    /// an unknown kind, or a known kind in a tier it does not declare, is reported as a
-    /// rejected row instead of being given a silent default. Adding a kind is a one-line
-    /// edit here, and that is deliberate - the project has already paid for values that
-    /// looked plausible but were never declared anywhere.
-    /// </para>
-    /// <para>
-    /// The tier boundaries and the default rows are PROVISIONAL. They are read off the gaps
-    /// in the PicnicLawn prop catalog (<c>Docs/Design/Maps/PicnicLawn/unity_greybox.json</c>:
-    /// small props top out at 0.18 m, medium at 0.72 m, large start at 0.80 m), not measured
-    /// original-game values, and the table records the catalog's dominant value per
-    /// (kind, tier). Where the catalog varies inside one tier (food m 4/6, drink m 4/5,
-    /// tableware m 3/4, container l 16/20), one row cannot carry both numbers: the table
-    /// records the lower one and the level author who needs the other value adds a row for
-    /// their own kind or tier here, instead of hand-editing the six arrays.
-    /// </para>
-    /// <para>
-    /// Two rows are not catalog rows: <c>fruit s 1</c> and <c>fruit m 4</c> are the story
-    /// level-2 (fruit counting) values of
-    /// <c>Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md</c> section 3.1, also PROVISIONAL.
-    /// They are added here because the plan's fruit kinds cannot be counted by the host
-    /// unless the row exists: an undeclared (kind, tier) pair is a rejected row, so level 2
-    /// would see 0 fruit. <c>fruit l</c> is deliberately absent - the plan's largest fruit
-    /// (watermelon, 0.72 m) is medium tier, and a larger fruit must get its own declared row
-    /// rather than a silent default.
+    /// <c>PickupAbsorbMath.TryAbsorbValueToLedgerGain</c>). <see cref="TryValidateValueUnits"/>
+    /// is still the one place that rule is spelled out, so the declaration path and the
+    /// ledger cannot drift apart.
     /// </para>
     /// <para>
     /// An explicit absorb size for a prop whose visual is much longer than its pickup size
     /// (a gate bench, a fallen log) is a suffix on the GameObject name:
     /// <c>prop_bench_01@size=1.25</c>. <see cref="TryParseDeclaredSize"/> is the only reader
     /// of that convention, it strips the suffix from the item id, and the sync turns the
-    /// declared edge into a cube for <c>propBounds</c> and the tier. Why a name suffix and
-    /// not a marker child or a component: the name travels with the object through a rename
-    /// or a prefab move, it needs no scene object and no runtime type, and stripping keeps
-    /// the item id equal to the level plan's <c>prop_&lt;definitionId&gt;_&lt;NN&gt;</c>
-    /// naming. A malformed suffix is a rejected row with the reason in the report, never a
-    /// silent fallback to the AABB.
+    /// declared edge into a cube for <c>propBounds</c>. Why a name suffix and not a marker
+    /// child or a component: the name travels with the object through a rename or a prefab
+    /// move, it needs no scene object and no runtime type, and stripping keeps the item id
+    /// equal to the level plan's <c>prop_&lt;definitionId&gt;_&lt;NN&gt;</c> naming. A
+    /// malformed suffix is a rejected row with the reason in the report, never a silent
+    /// fallback to the AABB.
     /// </para>
     /// </remarks>
     public static class PickupFieldAuthoringRules
@@ -79,72 +76,33 @@ namespace VRCKatamari.Editor.Pickup
         // longest side counts, so a flat prop (a plane or a leaf with a zero side) is fine.
         public const float MinBoundsExtentM = 0.0001f;
 
-        // Tier bands, metres of the longest AABB extent. PROVISIONAL: the s/m gap in the
-        // PicnicLawn catalog is 0.18 -> 0.24 m and the m/l gap is 0.72 -> 0.80 m, so the
-        // boundaries sit in the middle of those gaps.
-        public const float SmallTierMaxExtentM = 0.21f;
-        public const float MediumTierMaxExtentM = 0.76f;
-
-        public const string TierSmall = "s";
-        public const string TierMedium = "m";
-        public const string TierLarge = "l";
-
         // The one spelling of the declared-size suffix ("prop_bench_01@size=1.25"). Exact,
         // lowercase: a case variant is reported instead of being ignored, because a marker
         // that does nothing is the failure mode this convention exists to prevent.
         public const string DeclaredSizeMarker = "@size=";
 
-        // Explicitly declared (kind, tier) -> value units. Rows come from the PicnicLawn
-        // catalog for the categories that are absorbable props; categories whose catalog
-        // value is 0 (boundary, gameplay, landmark, terrain) deliberately have no row and
-        // are refused by the sync instead of shipping an unabsorbable prop. The fruit rows
-        // are the story level-2 values (Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md 3.1).
-        private sealed class ValueRow
-        {
-            public ValueRow(string kind, string tier, int units)
-            {
-                Kind = kind;
-                Tier = tier;
-                Units = units;
-            }
-
-            public readonly string Kind;
-            public readonly string Tier;
-            public readonly int Units;
-        }
-
-        private static readonly ValueRow[] ValueTable =
-        {
-            new ValueRow("debris", TierSmall, 1),
-            new ValueRow("food", TierSmall, 1),
-            new ValueRow("fruit", TierSmall, 1),
-            new ValueRow("nature", TierSmall, 1),
-            new ValueRow("drink", TierMedium, 4),
-            new ValueRow("food", TierMedium, 4),
-            new ValueRow("fruit", TierMedium, 4),
-            new ValueRow("garden", TierMedium, 6),
-            new ValueRow("tableware", TierMedium, 4),
-            new ValueRow("toy", TierMedium, 4),
-            new ValueRow("container", TierLarge, 16),
-            new ValueRow("furniture", TierLarge, 16),
-            new ValueRow("garden", TierLarge, 16),
-        };
+        // Where a written valueUnits row came from. Strings rather than an enum because the
+        // report prints them and the EditMode tests reach them through reflection.
+        public const string ValueSourceDeclared = "declared";
+        public const string ValueSourceExisting = "existing";
+        public const string ValueSourceNone = "none";
 
         /// <summary>
-        /// Classifies a full-size AABB into the authoring's size tier.
+        /// True when a full-size AABB can size a prop: every side finite and >= 0, and the
+        /// longest side at least <see cref="MinBoundsExtentM"/>.
         /// </summary>
-        /// <returns>
-        /// <c>"s"</c>, <c>"m"</c> or <c>"l"</c>; the empty string when the bounds cannot
-        /// size a prop: a negative or non-finite side, or a longest side shorter than
-        /// <see cref="MinBoundsExtentM"/>. A side of exactly 0 is not an error by itself -
-        /// a plane, a sheet of paper or a leaf has a flat AABB - so the decision is made on
-        /// the longest side only.
-        /// </returns>
-        public static string ClassifySizeTier(float sizeX, float sizeY, float sizeZ)
+        /// <remarks>
+        /// A side of exactly 0 is not an error by itself - a plane, a sheet of paper or a
+        /// leaf has a flat AABB - so the decision is made on the longest side only. The rule
+        /// is independent of any value table: the tiers that used to turn this answer into a
+        /// price are gone (Docs/OPEN_DECISIONS.md (q) U2), but a degenerate AABB is still a
+        /// data error even when the pickup size is spelled out in the name.
+        /// </remarks>
+        public static bool HasUsableBounds(float sizeX, float sizeY, float sizeZ)
         {
             if (!IsFiniteNonNegative(sizeX) || !IsFiniteNonNegative(sizeY) || !IsFiniteNonNegative(sizeZ))
             {
-                return string.Empty;
+                return false;
             }
 
             float longest = sizeX;
@@ -158,22 +116,161 @@ namespace VRCKatamari.Editor.Pickup
                 longest = sizeZ;
             }
 
-            if (longest < MinBoundsExtentM)
+            return longest >= MinBoundsExtentM;
+        }
+
+        /// <summary>
+        /// Decides the value units to write for one row.
+        /// </summary>
+        /// <param name="declaredValueUnits">
+        /// The caller's declared value for the row; only read when
+        /// <paramref name="hasDeclaredValueUnits"/> is true.
+        /// </param>
+        /// <param name="hasDeclaredValueUnits">
+        /// True when the caller (the level importer) declared a value for this row.
+        /// </param>
+        /// <param name="existingValueUnits">
+        /// The value already serialized on the host; only read when
+        /// <paramref name="hasExistingValueUnits"/> is true.
+        /// </param>
+        /// <param name="hasExistingValueUnits">
+        /// True when the host already had a row with this item id before the sync.
+        /// </param>
+        /// <param name="valueUnits">The number to write.</param>
+        /// <param name="source">
+        /// <see cref="ValueSourceDeclared"/>, <see cref="ValueSourceExisting"/> or
+        /// <see cref="ValueSourceNone"/> when the function returns true; null when it
+        /// returns false.
+        /// </param>
+        /// <returns>
+        /// False only when a declaration exists and is not a whole number >= 1. A bad
+        /// declaration is refused instead of falling back to the old value: silently
+        /// keeping a different number than the level states is the bug U2 removes.
+        /// </returns>
+        /// <remarks>
+        /// Order is deliberate. A declaration is the truth when present; an existing
+        /// serialized value is preserved when there is no declaration (the un-migrated
+        /// scene path); a new row with neither is written as 0, which the host notices at
+        /// run time, rather than being dropped from the arrays or given a rule-derived
+        /// number.
+        /// </remarks>
+        public static bool TryResolveValueUnits(int declaredValueUnits, bool hasDeclaredValueUnits,
+            int existingValueUnits, bool hasExistingValueUnits, out int valueUnits, out string source)
+        {
+            valueUnits = 0;
+            source = null;
+
+            if (hasDeclaredValueUnits)
             {
-                return string.Empty;
+                int validated;
+                if (!TryValidateValueUnits(declaredValueUnits, out validated))
+                {
+                    return false;
+                }
+
+                valueUnits = validated;
+                source = ValueSourceDeclared;
+                return true;
             }
 
-            if (longest <= SmallTierMaxExtentM)
+            if (hasExistingValueUnits)
             {
-                return TierSmall;
+                // Preserved bit-for-bit, including 0: an un-migrated scene must not have its
+                // serialized values zeroed or repriced by a sync that only meant to refresh
+                // transforms and bounds.
+                valueUnits = existingValueUnits;
+                source = ValueSourceExisting;
+                return true;
             }
 
-            if (longest <= MediumTierMaxExtentM)
+            source = ValueSourceNone;
+            return true;
+        }
+
+        /// <summary>
+        /// Returns one line per row whose host value differs from the declared value.
+        /// </summary>
+        /// <remarks>
+        /// The sync calls this on a fresh read-back after its write. The comparison is by
+        /// item id, not by array index, because a missing declaration must stay visible even
+        /// if the row order changed. Rows without a declaration are not compared: preserving
+        /// them is the intended behaviour.
+        /// </remarks>
+        public static string[] FindValueUnitMismatches(string[] itemIds, int[] hostValueUnits,
+            IDictionary<string, int> declaredValueUnits)
+        {
+            if (itemIds == null || hostValueUnits == null || declaredValueUnits == null ||
+                declaredValueUnits.Count == 0)
             {
-                return TierMedium;
+                return new string[0];
             }
 
-            return TierLarge;
+            int rows = itemIds.Length < hostValueUnits.Length ? itemIds.Length : hostValueUnits.Length;
+            var mismatches = new List<string>();
+            for (int i = 0; i < rows; i++)
+            {
+                string itemId = itemIds[i];
+                if (string.IsNullOrEmpty(itemId))
+                {
+                    continue;
+                }
+
+                int declared;
+                if (!declaredValueUnits.TryGetValue(itemId, out declared))
+                {
+                    continue;
+                }
+
+                if (hostValueUnits[i] != declared)
+                {
+                    mismatches.Add(itemId + ": host=" + hostValueUnits[i] + ", declared=" + declared);
+                }
+            }
+
+            mismatches.Sort(StringComparer.Ordinal);
+            return mismatches.ToArray();
+        }
+
+        /// <summary>
+        /// Returns every declared item id that has no row on the host, in ordinal order.
+        /// </summary>
+        /// <remarks>
+        /// A declaration without a row means the sync dropped that prop (a malformed
+        /// <c>@size</c> marker, duplicate id, degenerate AABB, ...), or the caller passed an
+        /// id that is not in this field. Either way the level's declared total and the host
+        /// disagree, so the run must not be accepted as verified.
+        /// </remarks>
+        public static string[] FindDeclaredIdsWithoutRows(string[] itemIds,
+            IDictionary<string, int> declaredValueUnits)
+        {
+            if (declaredValueUnits == null || declaredValueUnits.Count == 0)
+            {
+                return new string[0];
+            }
+
+            var present = new HashSet<string>(StringComparer.Ordinal);
+            if (itemIds != null)
+            {
+                for (int i = 0; i < itemIds.Length; i++)
+                {
+                    if (!string.IsNullOrEmpty(itemIds[i]))
+                    {
+                        present.Add(itemIds[i]);
+                    }
+                }
+            }
+
+            var missing = new List<string>();
+            foreach (KeyValuePair<string, int> pair in declaredValueUnits)
+            {
+                if (!present.Contains(pair.Key))
+                {
+                    missing.Add(pair.Key);
+                }
+            }
+
+            missing.Sort(StringComparer.Ordinal);
+            return missing.ToArray();
         }
 
         /// <summary>
@@ -319,61 +416,14 @@ namespace VRCKatamari.Editor.Pickup
         }
 
         /// <summary>
-        /// True when the table declares a value for this (kind, tier) pair, whatever the
-        /// declared number is.
-        /// </summary>
-        /// <remarks>
-        /// Kept separate from <see cref="LookupValueUnits"/> so "this kind+tier is not
-        /// declared" and "this row declares an illegal value" stay distinguishable: the
-        /// second is a table bug, and the report must be able to name it instead of telling
-        /// the author the row does not exist.
-        /// </remarks>
-        public static bool HasValueRow(string kind, string tier)
-        {
-            int units;
-            return FindValueUnits(kind, tier, out units);
-        }
-
-        /// <summary>
-        /// Looks up the declared value unit of a (kind, tier) pair.
-        /// </summary>
-        /// <returns>The declared units, or 0 when no row declares this pair.</returns>
-        public static int LookupValueUnits(string kind, string tier)
-        {
-            int units;
-            return FindValueUnits(kind, tier, out units) ? units : 0;
-        }
-
-        private static bool FindValueUnits(string kind, string tier, out int units)
-        {
-            units = 0;
-            if (kind == null || tier == null)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < ValueTable.Length; i++)
-            {
-                ValueRow row = ValueTable[i];
-                if (string.Equals(row.Kind, kind, StringComparison.Ordinal) &&
-                    string.Equals(row.Tier, tier, StringComparison.Ordinal))
-                {
-                    units = row.Units;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
         /// Applies the ledger's value rule to a raw number: whole units, at least 1.
         /// </summary>
         /// <remarks>
-        /// The table stores integers, so no shipped row fails this today; the check exists
-        /// because a hand-edited row (0, or a fractional literal) must be reported as a value
-        /// error instead of being rounded, and because the ledger's rule must live in one
-        /// place rather than being assumed from the field's type.
+        /// Declarations arrive as integers today, so no shipped row fails this; the check
+        /// exists because a hand-edited declaration (0, or a fractional literal in a caller's
+        /// map) must be reported as a value error instead of being rounded, and because the
+        /// ledger's rule must live in one place rather than being assumed from the field's
+        /// type.
         /// </remarks>
         public static bool TryValidateValueUnits(float rawValueUnits, out int valueUnits)
         {

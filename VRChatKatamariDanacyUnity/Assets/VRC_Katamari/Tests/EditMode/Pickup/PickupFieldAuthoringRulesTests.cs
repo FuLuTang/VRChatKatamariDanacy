@@ -7,9 +7,10 @@ using NUnit.Framework;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins the pure rules behind the pickup-field authoring path: size tier from bounds,
-    /// value-unit lookup by (kind, tier), the <c>@size=</c> declared-size suffix,
-    /// duplicate-id detection and deterministic ordering.
+    /// Pins the pure rules behind the pickup-field authoring path: renderer-bounds
+    /// usability, the <c>@size=</c> declared-size suffix, duplicate-id detection and
+    /// deterministic ordering. Value units are level data since U2, so this file no longer
+    /// tests a (kind, tier) price table; see <c>PickupFieldValueUnitsTests</c>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -25,109 +26,49 @@ namespace VRCKatamari.Tests
     /// </para>
     /// <para>
     /// Expected values are hand calculations from the declared rules, not copies of the
-    /// implementation: the tier boundaries sit in the gaps of the PicnicLawn prop catalog
-    /// (small props end at 0.18 m, medium at 0.72 m, large begin at 0.80 m, so 0.21 m and
-    /// 0.76 m split the two gaps), the value rule is the ledger's "whole units >= 1" from
-    /// Docs/OPEN_DECISIONS.md (j), and the <c>@size=</c> suffix is the explicit absorb size
-    /// for gate props (Docs/Design/Maps/REGION_MAP_PLAN.md, gap G13): invariant culture, one
-    /// marker, stripped from the item id, and refused - never ignored - when malformed.
+    /// implementation: bounds are usable when every side is finite and non-negative and the
+    /// longest side is at least 0.0001 m (a zero side is a legal flat prop), the value rule
+    /// is the ledger's "whole units >= 1" from Docs/OPEN_DECISIONS.md (j), and the
+    /// <c>@size=</c> suffix is the explicit absorb size for gate props
+    /// (Docs/Design/Maps/REGION_MAP_PLAN.md, gap G13): invariant culture, one marker,
+    /// stripped from the item id, and refused - never ignored - when malformed.
     /// </para>
     /// </remarks>
     public class PickupFieldAuthoringRulesTests
     {
         private const string RulesTypeName = "VRCKatamari.Editor.Pickup.PickupFieldAuthoringRules";
 
-        // Mirrors the published boundaries; kept as literals so a change to either the rule
-        // or the test shows up as a failing assertion instead of silently agreeing.
-        private const float SmallTierMax = 0.21f;
-        private const float MediumTierMax = 0.76f;
+        // The published minimum, kept as a literal so a change to either the rule or the
+        // test shows up as a failing assertion instead of silently agreeing.
+        private const float MinBoundsExtent = 0.0001f;
 
         [Test]
-        public void SizeTiersSplitTheCatalogGaps()
+        public void BoundsAreUsableOnlyWithAUsableLongestSide()
         {
-            // Small: 0.05 m acorn through 0.18 m pine cone.
-            Assert.AreEqual("s", Classify(0.05f, 0.05f, 0.05f));
-            Assert.AreEqual("s", Classify(0.18f, 0.06f, 0.03f));
+            // Only the longest side decides. A typical small prop (0.05 m acorn through
+            // 0.18 m pine cone) and a large one (1.4 m bench) are both usable; the exact
+            // tier no longer matters because values are declared level data (U2).
+            Assert.IsTrue(UsableBounds(0.05f, 0.05f, 0.05f));
+            Assert.IsTrue(UsableBounds(0.18f, 0.06f, 0.03f));
+            Assert.IsTrue(UsableBounds(1.4f, 0.5f, 0.5f));
 
-            // Boundaries are inclusive on the lower tier.
-            Assert.AreEqual("s", Classify(SmallTierMax, 0.1f, 0.1f));
-            Assert.AreEqual("m", Classify(SmallTierMax + 0.0001f, 0.1f, 0.1f));
-
-            // Medium: 0.72 m watermelon through 0.76 m.
-            Assert.AreEqual("m", Classify(0.72f, 0.5f, 0.5f));
-            Assert.AreEqual("m", Classify(MediumTierMax, 0.1f, 0.1f));
-
-            // Large: 0.80 m and up (1.4 m bench).
-            Assert.AreEqual("l", Classify(MediumTierMax + 0.0001f, 0.1f, 0.1f));
-            Assert.AreEqual("l", Classify(1.4f, 0.5f, 0.5f));
-
-            // Only the longest extent decides.
-            Assert.AreEqual("s", Classify(0.05f, 0.18f, 0.04f));
-        }
-
-        [Test]
-        public void DegenerateBoundsHaveNoTier()
-        {
-            // Only the longest side is compared, so "degenerate" means every side is
-            // unusable: a zero volume, an extent below MinBoundsExtentM on all axes, a
-            // negative side, or a non-finite side. A single zero side is covered by
-            // FlatPropsKeepTheirLongestSideTier below - it is legal, not degenerate.
-            Assert.AreEqual(string.Empty, Classify(0f, 0f, 0f));
-            Assert.AreEqual(string.Empty, Classify(0.00005f, 0.00005f, 0.00005f));
-            Assert.AreEqual(string.Empty, Classify(-1f, 0.1f, 0.1f));
-            Assert.AreEqual(string.Empty, Classify(float.NaN, 0.1f, 0.1f));
-            Assert.AreEqual(string.Empty, Classify(0.1f, float.PositiveInfinity, 0.1f));
-            Assert.AreEqual(string.Empty, Classify(0.1f, 0.1f, float.NegativeInfinity));
-        }
-
-        [Test]
-        public void FlatPropsKeepTheirLongestSideTier()
-        {
             // A zero side is legal geometry, not a data error: Unity's Plane primitive and a
-            // paper/leaf AABB are flat, and the tier rule looks only at the longest side.
-            Assert.AreEqual("s", Classify(0f, 0.1f, 0f));
-            Assert.AreEqual("s", Classify(0.06f, 0f, 0.04f));
+            // paper/leaf AABB are flat, and the rule looks only at the longest side.
+            Assert.IsTrue(UsableBounds(0f, 0.1f, 0f));
+            Assert.IsTrue(UsableBounds(0.06f, 0f, 0.04f));
 
-            // The flat side does not change the tier of a larger prop.
-            Assert.AreEqual("m", Classify(0.3f, 0f, 0.3f));
-            Assert.AreEqual("l", Classify(1.6f, 0f, 0f));
+            // Inclusive on the minimum: exactly 0.0001 m is usable, just below is not.
+            Assert.IsTrue(UsableBounds(MinBoundsExtent, 0.1f, 0.1f));
+            Assert.IsFalse(UsableBounds(0.00005f, 0.00005f, 0.00005f));
 
-            // ... nor does it rescue an AABB whose longest side is still unusable.
-            Assert.AreEqual(string.Empty, Classify(0f, 0f, 0.00005f));
-        }
-
-        [Test]
-        public void ValueTableIsKeyedByKindAndTier()
-        {
-            // Declared rows, taken from the catalog's dominant value per (kind, tier).
-            Assert.AreEqual(1, Lookup("nature", "s"));
-            Assert.AreEqual(1, Lookup("food", "s"));
-            Assert.AreEqual(4, Lookup("food", "m"));
-            Assert.AreEqual(6, Lookup("garden", "m"));
-            Assert.AreEqual(16, Lookup("container", "l"));
-
-            // Story level 2 (fruit counting) rows, LEVEL_CONTENT_PLAN.md 3.1: strawberry and
-            // grapes s = 1, apple/pear/orange/banana/watermelon m = 4. Without these two rows
-            // every fruit row is refused by the sync and the level counts 0 fruit.
-            Assert.AreEqual(1, Lookup("fruit", "s"));
-            Assert.AreEqual(4, Lookup("fruit", "m"));
-
-            // Undeclared combinations are refused instead of defaulted.
-            Assert.AreEqual(0, Lookup("bewildered", "s"));
-            Assert.AreEqual(0, Lookup("nature", "l"));
-            Assert.AreEqual(0, Lookup("boundary", "l"));
-            Assert.AreEqual(0, Lookup("fruit", "l"));
-            Assert.AreEqual(0, Lookup(null, "s"));
-            Assert.AreEqual(0, Lookup("nature", null));
-
-            // "Not declared" and "declared with an illegal number" stay distinguishable, so a
-            // broken table row is reported as a value error rather than as a missing row.
-            Assert.IsTrue(HasValueRow("nature", "s"));
-            Assert.IsTrue(HasValueRow("fruit", "m"));
-            Assert.IsFalse(HasValueRow("nature", "l"));
-            Assert.IsFalse(HasValueRow("fruit", "l"));
-            Assert.IsFalse(HasValueRow("boundary", "l"));
-            Assert.IsFalse(HasValueRow(null, "s"));
+            // Degenerate means every side is unusable: zero volume, a negative side, or a
+            // non-finite side. A single zero side never disqualifies a prop.
+            Assert.IsFalse(UsableBounds(0f, 0f, 0f));
+            Assert.IsFalse(UsableBounds(-1f, 0.1f, 0.1f));
+            Assert.IsFalse(UsableBounds(float.NaN, 0.1f, 0.1f));
+            Assert.IsFalse(UsableBounds(0.1f, float.PositiveInfinity, 0.1f));
+            Assert.IsFalse(UsableBounds(0.1f, 0.1f, float.NegativeInfinity));
+            Assert.IsFalse(UsableBounds(0f, 0f, 0.00005f));
         }
 
         [Test]
@@ -223,7 +164,7 @@ namespace VRCKatamari.Tests
             AssertRejected("prop_bench_01@size=+0");
             AssertRejected("prop_bench_01@size=-1.25");
 
-            // Positive but below the tier rule's minimum is still unusable, not "small".
+            // Positive but below the bounds-usability minimum is still unusable, not "small".
             AssertRejected("prop_bench_01@size=0.00005");
 
             Assert.IsFalse(Usable(0f));
@@ -278,16 +219,16 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void DeclaredSizeFeedsTierAndValueTable()
+        public void ValuesAreNoLongerPricedFromKindAndTier()
         {
-            // The declared edge replaces the AABB in the tier decision: a 3.2 m bench that
-            // declares 1.25 m is large tier, and the furniture l row supplies its value.
-            Assert.AreEqual("l", Classify(1.25f, 1.25f, 1.25f));
-            Assert.AreEqual(16, Lookup("furniture", "l"));
-
-            // The plan's 0.72 m watermelon stays medium tier with the fruit m value.
-            Assert.AreEqual("m", Classify(0.72f, 0.72f, 0.72f));
-            Assert.AreEqual(4, Lookup("fruit", "m"));
+            // U2: the (kind, tier) table is gone, so a pair it never had - container m is
+            // the gap recorded in PICNIC_CORNER_LEVEL_ONE C5 - can no longer drop a prop.
+            // The declared value is the only input; PickupFieldValueUnitsTests covers the
+            // resolution itself.
+            Assert.IsNull(RulesType().GetMethod("LookupValueUnits", BindingFlags.Public | BindingFlags.Static),
+                "LookupValueUnits must be gone: value units are level data, not a price");
+            Assert.IsNull(RulesType().GetMethod("HasValueRow", BindingFlags.Public | BindingFlags.Static),
+                "HasValueRow must be gone with the value table");
         }
 
         [Test]
@@ -375,19 +316,9 @@ namespace VRCKatamari.Tests
             return method.Invoke(null, arguments);
         }
 
-        private static string Classify(float sizeX, float sizeY, float sizeZ)
+        private static bool UsableBounds(float sizeX, float sizeY, float sizeZ)
         {
-            return (string)Invoke("ClassifySizeTier", sizeX, sizeY, sizeZ);
-        }
-
-        private static int Lookup(string kind, string tier)
-        {
-            return (int)Invoke("LookupValueUnits", new object[] { kind, tier });
-        }
-
-        private static bool HasValueRow(string kind, string tier)
-        {
-            return (bool)Invoke("HasValueRow", new object[] { kind, tier });
+            return (bool)Invoke("HasUsableBounds", sizeX, sizeY, sizeZ);
         }
 
         private static bool Validate(float rawValueUnits, out int valueUnits)

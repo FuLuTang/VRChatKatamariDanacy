@@ -25,6 +25,27 @@ namespace VRCKatamari.Editor.Pickup
         public int PropCount;
         public int TotalValueUnits;
 
+        /// <summary>
+        /// True when the caller supplied a non-empty declaration map. False means no values
+        /// were verified because none were declared (the un-migrated scene path).
+        /// </summary>
+        public bool ValueUnitsRequested;
+
+        /// <summary>Sum of the units taken from the caller's declarations.</summary>
+        public int ValueUnitsDeclared;
+
+        /// <summary>Rows whose value was read back from the host and preserved unchanged.</summary>
+        public int ValueUnitsPreserved;
+
+        /// <summary>Rows written as 0 because they had neither a declaration nor an existing value.</summary>
+        public int ValueUnitsUndeclared;
+
+        /// <summary>True when every declared value read back from the host exactly.</summary>
+        public bool ValueUnitsVerified;
+
+        /// <summary>Declared values that did not land, and declared ids with no row.</summary>
+        public readonly List<string> ValueUnitMismatches = new List<string>();
+
         /// <summary>True when the UdonSharp compile + proxy copy was issued without throwing.</summary>
         public bool UdonCopyIssued;
 
@@ -86,6 +107,14 @@ namespace VRCKatamari.Editor.Pickup
                 .Append(TotalValueUnits).Append(" value unit(s), ").Append(Rejected.Count)
                 .Append(" rejected");
 
+            text.AppendLine();
+            text.Append("  valueUnits: declared=").Append(ValueUnitsDeclared)
+                .Append(", preserved=").Append(ValueUnitsPreserved)
+                .Append(", undeclared=").Append(ValueUnitsUndeclared)
+                .Append(", read-back: ").Append(!ValueUnitsRequested
+                    ? "n/a (no declarations)"
+                    : (ValueUnitsVerified ? "verified" : "NOT verified"));
+
             if (!string.IsNullOrEmpty(FieldRootPath))
             {
                 text.AppendLine();
@@ -113,6 +142,19 @@ namespace VRCKatamari.Editor.Pickup
                     .Append(" more rejected row(s) in the returned report");
             }
 
+            for (int i = 0; i < ValueUnitMismatches.Count && i < ConsoleRejectionLimit; i++)
+            {
+                text.AppendLine();
+                text.Append("  valueUnits ").Append(ValueUnitMismatches[i]);
+            }
+
+            if (ValueUnitMismatches.Count > ConsoleRejectionLimit)
+            {
+                text.AppendLine();
+                text.Append("  ... ").Append(ValueUnitMismatches.Count - ConsoleRejectionLimit)
+                    .Append(" more valueUnits problem(s) in the returned report");
+            }
+
             for (int i = 0; i < Notes.Count; i++)
             {
                 text.AppendLine();
@@ -121,7 +163,7 @@ namespace VRCKatamari.Editor.Pickup
 
             text.AppendLine();
             text.Append("  udon copy: ").Append(UdonCopyIssued ? "issued" : "not issued")
-                .Append("; read-back: ").Append(ReadBackVerified ? "verified" : "not verified");
+                .Append("; array read-back: ").Append(ReadBackVerified ? "verified" : "not verified");
 
             if (!string.IsNullOrEmpty(Failure))
             {

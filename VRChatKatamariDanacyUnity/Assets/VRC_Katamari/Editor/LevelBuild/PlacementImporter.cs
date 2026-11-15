@@ -47,10 +47,17 @@ namespace VRCKatamari.Editor.LevelBuild
     /// <para>
     /// value units are the level's data, not a pricing rule. The Lead's decision of
     /// 2026-11-15 moved the number onto the per-def declaration in the JSON
-    /// (<c>defs[].valueUnits</c>, overridable per prop), so this importer writes the declared
-    /// value over whatever <see cref="PickupFieldSync"/> derived from the longest edge, then
-    /// reads every row back and verifies it (<see cref="WriteDeclaredValueUnits"/>). The sync
-    /// remains the only writer of the other five arrays and of the row set.
+    /// (<c>defs[].valueUnits</c>, overridable per prop), so this importer builds one
+    /// item-id-to-value map and hands it to <see cref="PickupFieldSync.SyncFromChildren"/>.
+    /// The sync writes the declared value together with the other five arrays and reads it
+    /// back; the importer never touches a host array itself (Docs/OPEN_DECISIONS.md (q) U2).
+    /// A declaration the sync cannot apply (a dropped row) or one that does not read back is
+    /// an error, not something this tool repairs by rewriting.
+    /// </para>
+    /// <para>
+    /// The importer is not the path for an un-migrated scene: it only imports a
+    /// <c>placement.json</c>. The menu sync called with no declaration map is that path, and
+    /// it preserves every value already serialized on the host.
     /// </para>
     /// <para>
     /// Assembly placement: <c>Editor/</c> compiles into the predefined
@@ -86,9 +93,6 @@ namespace VRCKatamari.Editor.LevelBuild
         private const string BoundaryWallsField = "boundaryWalls";
         private const string StaticBoxesField = "staticBoxes";
         private const string AllowedKindsField = "allowedKinds";
-
-        private const string ValueUnitsField = "valueUnits";
-        private const string ItemIdsField = "itemIds";
 
         // ------------------------------------------------------------------ DTO ---
 
@@ -392,12 +396,13 @@ namespace VRCKatamari.Editor.LevelBuild
             MarkSceneDirty();
 
             // The pickup sync runs after the props exist, because it derives rows from them.
-            Dictionary<string, int> hostIndex;
-            PickupFieldHost host;
-            if (propsOk && TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, report, out host,
-                    out hostIndex))
+            // The declaration map is the only value input: the sync writes it in the same
+            // pass as the other arrays and reads it back, so there is no second write here.
+            Dictionary<string, int> declaredValueUnits = BuildDeclaredValueUnits(doc);
+            report.ValueUnitsDeclared = SumDeclaredValueUnits(doc);
+            if (propsOk)
             {
-                WriteDeclaredValueUnits(doc, host, hostIndex, report);
+                TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredValueUnits, report);
             }
 
             BindArenaHost(doc, levelRoot, structuresRoot, report);
@@ -570,6 +575,56 @@ namespace VRCKatamari.Editor.LevelBuild
             return 0;
         }
 
+        /// <summary>
+        /// Item id to declared value, ready for <see cref="PickupFieldSync.SyncFromChildren"/>.
+        /// </summary>
+        /// <remarks>
+        /// One map, built once, passed once. The importer deliberately does not keep a
+        /// second path that writes <c>valueUnits</c> after the sync: that was the U2
+        /// double-write, and it made the sync's write and the declaration disagree whenever
+        /// the read-back guard was skipped.
+        /// </remarks>
+        private static Dictionary<string, int> BuildDeclaredValueUnits(PlacementDocument doc)
+        {
+            var declared = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (doc.props == null)
+            {
+                return declared;
+            }
+
+            for (int i = 0; i < doc.props.Length; i++)
+            {
+                PropEntry prop = doc.props[i];
+                if (prop != null && !string.IsNullOrEmpty(prop.itemId))
+                {
+                    declared[prop.itemId] = DeclaredValueUnits(doc, prop);
+                }
+            }
+
+            return declared;
+        }
+
+        /// <summary>The level's declared total, for the one-line report.</summary>
+        private static int SumDeclaredValueUnits(PlacementDocument doc)
+        {
+            int total = 0;
+            if (doc.props == null)
+            {
+                return total;
+            }
+
+            for (int i = 0; i < doc.props.Length; i++)
+            {
+                PropEntry prop = doc.props[i];
+                if (prop != null)
+                {
+                    total += DeclaredValueUnits(doc, prop);
+                }
+            }
+
+            return total;
+        }
+
         private static string DeclaredKind(PlacementDocument doc, PropEntry prop)
         {
             if (!string.IsNullOrEmpty(prop.kind))
@@ -591,9 +646,9 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             // No fallback on purpose: the kind folder is what PickupFieldSync reports as the
-            // row kind, and guessing one (from the def name, say) would silently price and
-            // group the prop as something nobody declared. The CLI fills defs[].kind from the
-            // def's manifest category, so a missing kind is a data bug with a one-line fix.
+            // row kind, and guessing one (from the def name, say) would silently group the
+            // prop as something nobody declared. The CLI fills defs[].kind from the def's
+            // manifest category, so a missing kind is a data bug with a one-line fix.
             return null;
         }
 
@@ -1041,11 +1096,8 @@ namespace VRCKatamari.Editor.LevelBuild
         // ---------------------------------------------------------------- sync ---
 
         private static bool TrySyncPickupField(Transform levelRoot, string arenaId, Transform propsRoot,
-            PlacementImportReport report, out PickupFieldHost host, out Dictionary<string, int> index)
+            IDictionary<string, int> declaredValueUnits, PlacementImportReport report)
         {
-            host = null;
-            index = null;
-
             PickupFieldHost[] hosts;
             if (!string.IsNullOrEmpty(arenaId))
             {
@@ -1086,7 +1138,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
             Array.Sort(hosts, (left, right) => string.CompareOrdinal(HierarchyPath(left.transform),
                 HierarchyPath(right.transform)));
-            host = hosts[0];
+            PickupFieldHost host = hosts[0];
 
             if (hosts.Length > 1)
             {
@@ -1104,11 +1156,20 @@ namespace VRCKatamari.Editor.LevelBuild
                             "assumes (LEVEL_AUTHORING 7.4)");
             }
 
-            PickupFieldSyncReport sync = PickupFieldSync.SyncFromChildren(host, propsRoot);
+            PickupFieldSyncReport sync = PickupFieldSync.SyncFromChildren(host, propsRoot,
+                declaredValueUnits);
             report.SyncRan = true;
             report.SyncPropCount = sync.PropCount;
             report.SyncRejected = sync.Rejected.Count;
             report.UdonCopyIssued = sync.UdonCopyIssued;
+            report.ValueUnitsPreserved = sync.ValueUnitsPreserved;
+            report.ValueUnitsUndeclared = sync.ValueUnitsUndeclared;
+            report.ValueUnitsVerified = sync.ValueUnitsVerified;
+
+            for (int i = 0; i < sync.ValueUnitMismatches.Count && i < 20; i++)
+            {
+                report.ValueUnitProblems.Add(sync.ValueUnitMismatches[i]);
+            }
 
             if (!sync.Success)
             {
@@ -1121,171 +1182,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 report.Error("sync rejected " + sync.Rejected[i].Path + ": " + sync.Rejected[i].Reason);
             }
 
-            index = ReadHostIndex(host);
-            if (index == null)
-            {
-                report.Error("the host's " + ItemIdsField + " array could not be read back");
-                return false;
-            }
-
             return true;
-        }
-
-        private static Dictionary<string, int> ReadHostIndex(PickupFieldHost host)
-        {
-            var serialized = new SerializedObject(host);
-            SerializedProperty ids = serialized.FindProperty(ItemIdsField);
-            if (ids == null || !ids.isArray)
-            {
-                return null;
-            }
-
-            var index = new Dictionary<string, int>(StringComparer.Ordinal);
-            for (int i = 0; i < ids.arraySize; i++)
-            {
-                string itemId = ids.GetArrayElementAtIndex(i).stringValue;
-                if (!string.IsNullOrEmpty(itemId) && !index.ContainsKey(itemId))
-                {
-                    index.Add(itemId, i);
-                }
-            }
-
-            return index;
-        }
-
-        /// <summary>
-        /// Writes the level's declared <c>valueUnits</c> over the sync's pricing, then verifies.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// <see cref="PickupFieldSync"/> prices a prop from its longest AABB edge through
-        /// <see cref="PickupFieldAuthoringRules.LookupValueUnits"/>. That is a different
-        /// consumer from the volume absorb gate, and it produces numbers the level design did
-        /// not author (a 0.30 m napkin priced as a medium prop, a 1.6 m bench pinned at the
-        /// table's top row). The Lead's decision is that the level's own per-def value is the
-        /// truth, so this method rewrites the one array with the declared numbers.
-        /// </para>
-        /// <para>
-        /// This is the only place where the importer writes a host array directly instead of
-        /// going through the sync, and it is deliberately narrow: the sync still owns the row
-        /// set, the order, the transforms, the bounds, the kinds and the colliders. Doing it
-        /// the other way round (letting the sync price) would put a rule the level never
-        /// declared into the ledger.
-        /// </para>
-        /// <para>
-        /// The read-back is the guard: if any row does not hold its declared value the run is
-        /// reported as failed, because a wrong value unit is a ledger bug that nothing later
-        /// in the pipeline would notice.
-        /// </para>
-        /// </remarks>
-        private static void WriteDeclaredValueUnits(PlacementDocument doc, PickupFieldHost host,
-            Dictionary<string, int> index, PlacementImportReport report)
-        {
-            var serialized = new SerializedObject(host);
-            SerializedProperty ids = serialized.FindProperty(ItemIdsField);
-            SerializedProperty values = serialized.FindProperty(ValueUnitsField);
-            if (ids == null || values == null || !values.isArray || values.arraySize != ids.arraySize)
-            {
-                report.Error("the host's " + ItemIdsField + "/" + ValueUnitsField + " arrays are not " +
-                             "index-aligned; valueUnits was not written");
-                return;
-            }
-
-            var declared = new Dictionary<string, int>(StringComparer.Ordinal);
-            for (int i = 0; i < doc.props.Length; i++)
-            {
-                PropEntry prop = doc.props[i];
-                int value = DeclaredValueUnits(doc, prop);
-                declared[prop.itemId] = value;
-                report.ValueUnitsDeclared += value;
-
-                int row;
-                if (!index.TryGetValue(prop.itemId, out row))
-                {
-                    report.Error(prop.itemId + " is not a row on the host: the sync dropped it (most " +
-                                 "likely 'no value-table row for kind + size tier'; fix the kind folder " +
-                                 "or add the row to PickupFieldAuthoringRules.ValueTable)");
-                    continue;
-                }
-
-                if (row >= values.arraySize)
-                {
-                    report.Error(prop.itemId + " maps to row " + row + " which is past valueUnits[" +
-                                 values.arraySize + "]");
-                    continue;
-                }
-
-                SerializedProperty element = values.GetArrayElementAtIndex(row);
-                if (element.intValue == value)
-                {
-                    continue;
-                }
-
-                if (report.Rewrites.Count < 20)
-                {
-                    report.Rewrites.Add(prop.itemId + ": " + element.intValue + " -> " + value);
-                }
-
-                element.intValue = value;
-                report.ValueUnitsRewritten++;
-            }
-
-            if (report.ValueUnitsRewritten > 0)
-            {
-                serialized.ApplyModifiedPropertiesWithoutUndo();
-                EditorUtility.SetDirty(host);
-                CopyProxy(host, report);
-            }
-
-            // Read back from a fresh SerializedObject: the write above is only a request until
-            // the object is serialized again.
-            var verify = new SerializedObject(host);
-            SerializedProperty readIds = verify.FindProperty(ItemIdsField);
-            SerializedProperty readValues = verify.FindProperty(ValueUnitsField);
-            bool verified = readIds != null && readValues != null && readValues.isArray;
-            if (verified)
-            {
-                for (int i = 0; i < readIds.arraySize; i++)
-                {
-                    string itemId = readIds.GetArrayElementAtIndex(i).stringValue;
-                    int expected;
-                    if (!declared.TryGetValue(itemId, out expected))
-                    {
-                        continue;
-                    }
-
-                    if (readValues.GetArrayElementAtIndex(i).intValue != expected)
-                    {
-                        report.Error("valueUnits read-back mismatch for " + itemId + ": host " +
-                                     readValues.GetArrayElementAtIndex(i).intValue + ", declared " +
-                                     expected);
-                        verified = false;
-                    }
-                }
-            }
-
-            report.ValueUnitsVerified = verified;
-            if (!verified)
-            {
-                report.Error("valueUnits did not read back as declared; treat the host arrays as wrong " +
-                             "until this is fixed");
-            }
-        }
-
-        private static void CopyProxy(PickupFieldHost host, PlacementImportReport report)
-        {
-            try
-            {
-                UdonSharpProgramAsset.CompileAllCsPrograms(false, false);
-                UdonSharpEditorUtility.CopyProxyToUdon(host);
-                report.UdonCopyIssued = true;
-            }
-            catch (Exception exception)
-            {
-                report.Error("CopyProxyToUdon threw after the valueUnits write: " + exception.Message +
-                             ". The proxy now disagrees with the backing UdonBehaviour; run the pickup " +
-                             "sync again once the compile has finished");
-            }
         }
 
         // --------------------------------------------------------------- arena ---

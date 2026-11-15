@@ -161,6 +161,8 @@ StepBall:
 
 跟随架是**表现层**，也是玩家坐姿的落点：`VRCStation` 挂在 `followRigRoot` 下面，它指向哪里，玩家就在哪里。它只读球的位置、朝向与半径，不写回任何玩法状态。
 
+**这是眼点，不是座位**（2026-11-15 补）：上面的式子给的是**眼睛**该在哪，不是**座位**该在哪。玩家由 `VRCStation` 承载，station 落的是 avatar 的**根**而不是眼睛；把座位直接摆在眼点上，真实相机（avatar 自己的头部相机，场景里没有 Camera 对象）就会再高出一个坐姿眼高（因 avatar 而异，通常 0.4–0.9 m）——试玩反馈的"坐下后头的位置偏高"就是这一条。所以座位由**骑乘层**按实测眼高反推：`Runtime/Riding/SeatEyeCompensation` 在本地玩家坐下后的稳定窗口里实测 `GetTrackingData(Head)` 相对入座点的偏移，再把入座点按 `−inverse(R)·d` 摆到"头正好落在眼点"的位置（R 是跟随架 yaw，d 是实测偏移）；motor 与 `FollowRigMath` 都不知道这件事，公式仍然只负责眼点。偏移测一次就冻结（VR 下头部会随真实头动，不能每帧拉回），离座、重生、换 avatar 时复位重测。
+
 **为什么是「球后方的 station」而不是摄像机**（这条必须留着，别让后来的人以为方案选错了）：VRChat **没有任何 API 能连续移动玩家 avatar**，唯一手段是 `VRCStation`（或传送）。所以「人推球」在这台引擎上只能实现成**摆在球后方的一个 station**：第一人称下玩家看到的正是「球在身前、视角在球后上方」，与推球一致；但第三人称会看到 avatar 是坐姿——这是引擎限制，不是设计取舍。球的**位置**仍然只由 motor 决定，座位只是它的观察点。
 
 取景模型（v0.3 用户拍板，还原《块魂》：球一开始就很小，视角在球**后面**，球越大视角越高）：
@@ -200,6 +202,10 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 | `eyeMaxBackM` | float | 8 m | 护栏：后退上限 |
 
 删除的字段：`eyeHeightMeters`、`eyeHeightMinMeters`、`eyeHeightMaxMeters`（旧「离球心常量眼高」语义）。**模型侧已于 2026-11-15 同步**：`Docs/Design/BallLayers/FollowRig/follow_rig.py` 的 `try_update(...)` 与 C# `TryUpdate` 同名同序（含调用方持有的上一帧状态），7 个眼点系数是每次调用的参数、模型里不再有 `eye_height_m` 默认值；`Docs/tests/ball_follow_rig/` 由 8 例改为 9 例（新增「球后上方、两项随半径增长」的四档直径检查），`Docs/tests/ball_visual_roll/test_presentation_cross_layer_simulation.py` 的 4 处旧调用一并改完。以后改这里的式子，C# 与 Python 必须同一提交。
+
+### 推球方向浮标（2026-11-15，纯视觉，PROVISIONAL）
+
+`Runtime/BallLayers/PushCue/` 的 `PushDirectionCue` 在球前方浮一个方向小箭头，只读本层与 `BallRideStation` 的公开接口：位置 = 球心 + `forward(跟随架 yaw) × (半径 + 间距)`，高度 = 球心 + `半径 + 悬空量`（即贴着球顶上方浮着），朝向 = 跟随架 yaw，大小 = `基准长度 + 直径 × 系数`（夹在护栏内），再叠一个 0.25 Hz / 2.5 cm 的上下浮动；只在本地玩家坐在球上、且（接了控制器时）回合状态为 `StateRunning` 时显示。**方向取跟随架 yaw 而不是球速**：静止时球速为零，而 yaw 就是座位朝向，指示物与座位不会打架。间距/高度/缩放都随**语义直径**线性放大（直径 0.30 m → 球心前方 0.635 m、离地 0.38 m、长 0.22 m；2.00 m → 2.25 m、2.08 m、0.90 m），因此各尺寸下浮标都落在骑士视轴下方约 20°、球轮廓之外；贴地版本在球长大后会被球自己挡住，所以高度从球顶量起。纯表现：不进候选、不登记碰撞/遮挡数组、不参与任何玩法。公式在 `PushCueMath`，测试在 `Tests/EditMode/BallLayers/PushCueTests.cs`。
 
 ### 刻意不在这里
 

@@ -62,6 +62,16 @@ namespace VRCKatamari.Riding
     /// station's own network state, and this slice is single player. Nothing here is
     /// synced, so a remote client would still see its own prompt - out of scope.
     /// </para>
+    /// <para>
+    /// Seat height. The follow frame computes where the viewer's EYE should be, and the
+    /// station carries the avatar's ROOT, so a seat placed on the eye point puts the real
+    /// camera a seated eye height higher - the "viewpoint too high" defect. The correction
+    /// belongs to this layer, not to the motor: <see cref="SeatEyeCompensation"/> measures
+    /// the local head above the seat once per ride and moves the seat by that much, and this
+    /// behaviour is the only caller because it is the only place that knows the local player
+    /// sat down. The reference is optional: unwired, the station behaves exactly as before
+    /// (seat on the eye point) and says so once in the log.
+    /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class BallRideStation : UdonSharpBehaviour
@@ -81,6 +91,11 @@ namespace VRCKatamari.Riding
         // arrives, so an unwired station means a round that never starts.
         [SerializeField] private StoryRoundController roundController;
 
+        // Optional. Measures the local head above the seat and offsets the seat so the EYE
+        // lands on the follow frame's eye point. Unwired is legal (the seat stays on the eye
+        // point, the pre-fix behaviour) and is announced once in Start.
+        [SerializeField] private SeatEyeCompensation seatEye;
+
         private bool seated;
 
         private void Start()
@@ -88,6 +103,12 @@ namespace VRCKatamari.Riding
             // Start runs before the local player can sit, so this always closes the
             // ride gate: a standing player must not be able to steer the ball.
             SetRideGate(false);
+            if (seatEye == null)
+            {
+                // One line, once: an unwired correction looks exactly like "the fix does
+                // nothing", which is the same trap the input gate had.
+                Debug.Log("[ride] no seat-eye compensation wired: the seat stays on the eye point");
+            }
         }
 
         public override void Interact()
@@ -109,6 +130,7 @@ namespace VRCKatamari.Riding
             // In any state but Idle the controller ignores the call, so sitting down
             // after the round ended or mid-round cannot restart it.
             if (roundController != null) roundController.NotifyRiderSeated();
+            if (seatEye != null) seatEye.BeginSeated();
             Debug.Log("[ride] seated entered");
         }
 
@@ -121,6 +143,7 @@ namespace VRCKatamari.Riding
             seated = false;
             DisableInteractive = false;
             SetRideGate(false);
+            if (seatEye != null) seatEye.EndSeated();
             if (wasSeated) Debug.Log("[ride] seated exited");
         }
 
@@ -131,12 +154,38 @@ namespace VRCKatamari.Riding
             seated = false;
             DisableInteractive = false;
             SetRideGate(false);
+            // Before the station exit below: the exit can deliver OnStationExited (which does
+            // the same cleanup) but a path that keeps the avatar in the station still has to
+            // put the seat back, or the next ride would start from a moved seat.
+            if (seatEye != null) seatEye.EndSeated();
             if (!wasSeated || station == null) return;
             // A respawn can leave the avatar in the station without a station-exit
             // callback, which would leave Interact disabled for good. The lab took
             // the same precaution (StationLabDriver.OnPlayerRespawn).
             Debug.Log("[ride] respawn while seated: leaving station");
             station.ExitStation(player);
+        }
+
+        /// <summary>
+        /// A new avatar is a new seated pose, so the seat offset measured for the previous
+        /// avatar is wrong: measure again while seated, ignore it while standing.
+        /// </summary>
+        public override void OnAvatarChanged(VRCPlayerApi player)
+        {
+            if (player == null || !player.isLocal) return;
+            if (!seated || seatEye == null) return;
+            seatEye.BeginSeated();
+        }
+
+        /// <summary>
+        /// Avatar scaling changes the avatar's proportions the same way a new avatar does,
+        /// and this event fires for scaling as well as for a switch.
+        /// </summary>
+        public override void OnAvatarEyeHeightChanged(VRCPlayerApi player, float previousEyeHeight)
+        {
+            if (player == null || !player.isLocal) return;
+            if (!seated || seatEye == null) return;
+            seatEye.BeginSeated();
         }
 
         /// <summary>

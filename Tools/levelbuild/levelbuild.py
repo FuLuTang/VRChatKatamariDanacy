@@ -226,6 +226,16 @@ LAYOUT_SUPPORT_ALIASES = {
     "bed": "flower_bed",
 }
 
+#: The ``overview_3q`` camera stands outside the **south-east** corner: the corner tree is
+#: a 9 m pillar at the south-west one, so a south-west view has the trunk between the
+#: camera and the arena - the old 45 mm, 4 m-out pose cropped the whole south-west corner
+#: (tree and stroller), and simply widening it put the trunk across the middle of the
+#: frame.  Distance, height and lens scale with the field so every corner stays in frame
+#: (at the 13.4 m first level the four corners land at 90 % of the half-frame).
+_OVERVIEW_MARGIN = 0.47
+_OVERVIEW_HEIGHT = 0.37
+_OVERVIEW_LENS = 32
+
 
 def _yaw_quat(yaw_deg):
     return core.quat_axis_angle((0.0, 1.0, 0.0), math.radians(float(yaw_deg or 0.0)))
@@ -292,22 +302,30 @@ def _structure_from_shell(shell, bounds):
 def _structure_from_ramp(ramp):
     """A ramp is a box whose local +Y is the surface normal and whose +Z runs up the slope.
 
+    **The author's line is the walking surface, not the board's underside.**  ``bottom``
+    and ``top`` are points on the plane the ball rolls on (``PICNIC_CORNER_LAYOUT`` 4.4
+    authors them as ``底 → 顶`` and demands the top edge flush with the table, delta = 0).
+    The walking surface is the box's +Y face - what ``structure_top_plane`` returns and
+    what P3's ``AddRamp(center, n, right, halfWidth, halfRun)`` has to take its ``center``
+    from - so that face is what has to land on those points.  The 4 cm board therefore hangs *below* the authored line: the centre
+    sits half a thickness under it (``- normal * t/2``), not above it.  At the foot the
+    board's lower corner is up to one thickness under the ground, which is intended; the
+    validator allows exactly that for ``role=ramp`` (``RAMP_UNDERSIDE_ALLOWANCE_M``).
+
     The centre is rebuilt from the author's *foot point* rather than copied from the
-    layout's ``center``: the foot point is on the walking surface, so the box's underside
-    has to sit half a thickness below it, and copying ``center`` leaves the boards either
-    floating or 2 cm sunk (the validator catches both).  Local +Z is the slope because
-    ``align_up_to`` turns the model's +Y onto the normal and leaves +X alone, which is the
-    layout's ``right`` axis.
+    layout's ``center``: copying ``center`` leaves the boards either floating or 2 cm sunk
+    (the validator catches both).  Local +Z is the slope because ``align_up_to`` turns the
+    model's +Y onto the normal and leaves +X alone, which is the layout's ``right`` axis.
     """
     normal = tuple(float(v) for v in ramp["normal"])
     quat = core.align_up_to(normal)
-    thickness = 0.04
+    thickness = core.RAMP_THICKNESS_M
     bottom = tuple(float(v) for v in ramp["bottom"])
     top = tuple(float(v) for v in ramp["top"])
     tangent = core.normalized(core.sub(top, bottom))
     length = float(ramp["slope_length"])
     centre = core.add(bottom, core.add(core.scale(tangent, length / 2.0),
-                                       core.scale(normal, thickness / 2.0)))
+                                       core.scale(normal, -thickness / 2.0)))
     return {
         "id": ramp["id"], "kind": "ramp", "role": "ramp", "shape": "box",
         "center": [round(v, 4) for v in centre],
@@ -531,9 +549,10 @@ def cmd_from_layout(args):
         "structures": structures,
         "cameras": [
             {"id": "overview_3q", "type": "perspective",
-             "location": [round(float(bounds["x0"]) + 1.0, 3), 4.2,
-                          round(float(bounds["z0"]) - 4.0, 3)],
-             "target": [round(centre_x, 3), 0.35, round(centre_z, 3)], "lens": 45},
+             "location": [round(float(bounds["x1"]) + _OVERVIEW_MARGIN * span, 3),
+                          round(_OVERVIEW_HEIGHT * span, 3),
+                          round(float(bounds["z0"]) - _OVERVIEW_MARGIN * span, 3)],
+             "target": [round(centre_x, 3), 0.35, round(centre_z, 3)], "lens": _OVERVIEW_LENS},
             {"id": "top", "type": "ortho_top",
              "location": [round(centre_x, 3), 14.0, round(centre_z, 3)],
              "target": [round(centre_x, 3), 0.0, round(centre_z, 3)],

@@ -83,6 +83,15 @@ MANIFEST_AABB_TOLERANCE_M = 0.001
 RAMP_MAX_SLOPE_DEG = 45.0
 #: Ramp foot may not rise more than this above the ground (or the step limit).
 RAMP_FOOT_MAX_M = 0.05
+#: Board thickness of an authored ramp.  A ``role=ramp`` structure is 4 cm thick and its
+#: **+Y face is the walking surface** (``story_01``'s boards, ``LEVEL_AUTHORING`` 10).
+RAMP_THICKNESS_M = 0.04
+#: How far a ramp's *underside* may reach below the ground: one full board thickness
+#: (plus the ordinary sink tolerance).  Because the authored ``bottom``/``top`` line is
+#: the walking surface, the board hangs underneath it, so at a foot on the ground the low
+#: corner is legitimately ``thickness * cos(slope)`` below ``y = ground`` - that is not a
+#: sunk ramp, the ball still meets the top face at the design height.
+RAMP_UNDERSIDE_ALLOWANCE_M = RAMP_THICKNESS_M + SINK_TOLERANCE_M
 #: Cap on per-check detail lines so one broken file cannot flood the console.
 DETAIL_LIMIT = 25
 
@@ -412,7 +421,14 @@ def boundary_plane(structure):
 
 
 def structure_top_plane(structure):
-    """``(normal, point)`` of the structure's +Y face."""
+    """``(normal, point)`` of the structure's +Y face.
+
+    For ``role=ramp`` this face is the **walking surface**: it is the plane the layout's
+    ``bottom``/``top`` line lands on (the 4 cm board hangs below it, see
+    ``RAMP_THICKNESS_M``).  Props with ``support=<ramp id>`` are seated on this plane, and
+    P3's ``AddRamp(center, n, right, halfWidth, halfRun)`` has to take ``center`` from it
+    rather than from the box centre.
+    """
     normal = structure_up(structure)
     point = add(structure["center"], scale(normal, structure["size"][1] * 0.5))
     return normal, point
@@ -1062,9 +1078,13 @@ def _check_structures(doc, report):
             corners = box_corners(center, size, quat)
             foot = min(corner[1] for corner in corners)
             floor = ground_level(doc)
-            if foot < floor - SINK_TOLERANCE_M:
-                report.err("%s ramp %r foot is %.3f m below the ground (%.3f); it is sunk"
-                           % (label, structure_id, foot, floor))
+            # The authored line is the walking surface, so the board itself hangs below
+            # it: one thickness of underside under the ground is by design, deeper is sunk.
+            if foot < floor - RAMP_UNDERSIDE_ALLOWANCE_M:
+                report.err("%s ramp %r foot is %.3f m below the ground (%.3f); it is sunk "
+                           "(a ramp may hang at most one board thickness - %.3f m - under the "
+                           "ground, because its authored line is the walking surface)"
+                           % (label, structure_id, foot, floor, RAMP_UNDERSIDE_ALLOWANCE_M))
             elif foot > floor + RAMP_FOOT_MAX_M:
                 report.err("%s ramp %r foot floats %.3f m above the ground; the ball cannot get on it"
                            % (label, structure_id, foot - floor))

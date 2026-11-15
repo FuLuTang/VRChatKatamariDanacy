@@ -213,7 +213,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 | `aabb` | ✓ | 世界轴对齐尺寸（未旋转的模型 AABB），**只作校验与预估**，真值仍在 manifest/预制体 | 导出器（读 manifest） |
 | `absorbDiameterReq` | ✓ | `D_req = 2.673 · (a·b·c)^(1/3)`，来自 aabb；**同一个函数只在校验器里实现**（§8） | 校验器回填 |
 | `absorbable` | ✓ | `D_req ≤ level.ballDiameterMax`；**派生**，写进文件只为「一眼看」 | 校验器回填 |
-| `valueUnits` | ○ | 分数单位。**2026-11-15 Lead 拍板**：按 **def** 由关卡数据声明（新增的 `defs[].valueUnits`，`props[].valueUnits` 可逐件覆盖），导入器在同步后照写并回读（§7.4）；不再采用 `PickupFieldSync` 的最长边定价 | 关卡数据（`defs[]`）/ 逐件覆盖 |
+| `valueUnits` | ○ | 分数单位。**2026-11-15 Lead 拍板**：按 **def** 由关卡数据声明（`defs[].valueUnits`，`props[].valueUnits` 可逐件覆盖）；导入器把声明值传给 `PickupFieldSync` **一次写入并回读**（§7.4），不再由同步工具按最长边定价 | 关卡数据（`defs[]`）/ 逐件覆盖 |
 | `support` / `stackedOn` | ○ | 「它踩在谁上面」——`support` 是结构 id，`stackedOn` 是另一件道具的 `itemId`。**引擎不读它**，校验器用它判「悬空/穿模」并把责任指到具体那一件 | 导出器 |
 
 > `support`/`stackedOn` 是**关系**不是坐标：导入器只用 `position/rotationQuat` 摆东西。这样「逻辑」和「画面」不会互相打架；关系字段只喂校验器。
@@ -241,7 +241,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 | `ground` | `LevelArenaHost` → `motor.SetGroundPlane(normal, offset)` | 1 张地面 | **恰好 1 条**；`shape` 只能是 `plane` |
 | `boundary` | `LevelArenaHost` → `motor.AddPlane(normal, offset)` | ≤8 平面 | **用平面、不用盒**（否则墙顶变成可站的窄条，还吃掉盒预算） |
 | `box` | `LevelArenaHost.staticBoxes[]`（`BoxCollider` → `Setup` 烘焙 min/max → `motor.AddBox`） | ≤8 盒 | **一次登记两用**：扫掠是墙、顶面是支撑 |
-| `ramp` | `LevelArenaHost.rampBoxes[]` → `motor.AddRamp(...)` | ≤4 斜面 | **绝不能同时是 `box`**（否则坡底出现「隐形墙」）；坡度 > 45° 时拒绝并要求改成 `box` |
+| `ramp` | `LevelArenaHost.rampBoxes[]` → `motor.AddRamp(...)` | ≤4 斜面 | **绝不能同时是 `box`**（否则坡底出现「隐形墙」）；坡度 > 45° 时拒绝并要求改成 `box`；**板的本地 +Y 面是行走面**（`support` 落座读这一面；P3 的 `AddRamp` 中心也必须取这一面，不是盒中心），4 cm 板体在它下面 |
 
 `collision` 字段只管**玩家胶囊**（三层里的第二层）：`box` = 生成 `BoxCollider`（玩家能撞到），`none` = 纯视觉。`absorbable=false` 的结构**永远**不参与吸收门——吸收门只看道具的 `propBounds`，不读结构的盘口。
 
@@ -340,7 +340,7 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_s
 |---|---|---|
 | **seat（贴地/贴面）** | `position.y = 支撑面高 + aabb.y/2`（旋转过就用**世界 AABB** 的下沿） | 导出器算，校验器复核（穿地/悬空 ≤ 1 cm） |
 | **stack（叠放）** | 上层件的 `position.y = 下层件的顶面 + 自身半高`；关系写 `stackedOn` | 导出器算，校验器查「有没有真的落在下面那件的顶面上」 |
-| **lean（斜搭）** | 一块 `role=ramp` 的板 + 板上道具（`support=<ramp id>`）；道具按板法线摆正 | 校验器查坡度 ≤45°、底边不穿地、顶边齐平台面（§10.2） |
+| **lean（斜搭）** | 一块 `role=ramp` 的板 + 板上道具（`support=<ramp id>`）；道具按板法线摆正 | 校验器查坡度 ≤45°、**行走面底边**与地面齐平（板底可低一个板厚）、顶边齐平台面（§10.2） |
 | **group（成组）** | 一组件的 `zone` 相同 + `group` 字段相同；Blender 里是集合实例 | 导入器把 `group` 变成一层父节点（`LevelContent/<zone>/<group>/`），**只为可读与人手排查**，不影响坐标 |
 
 ### 5.4 出图
@@ -390,7 +390,7 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_s
 |---|---|
 | 在 `LevelContent` 根下创建/更新/删除**自己命名**的子节点 | 新增/删除 `LevelContent` 之外的任何对象 |
 | 给这些子节点加 `MeshFilter/MeshRenderer/BoxCollider/Transform` | 改 `KatamariBallMotor`、`PickupFieldHost`、`StoryRoundController`、`HUD`、`VRCStation` 的任何字段（**除了**调用 `PickupFieldHost` 的公开同步入口，§7.4） |
-| 调用 `PickupFieldSync.SyncFromChildren(host, root)` | 调用 `SaveScene`（除非显式 `--save`） |
+| 调用 `PickupFieldSync.SyncFromChildren(host, root, declaredValueUnits)` | 调用 `SaveScene`（除非显式 `--save`） |
 | 一次性生成/更新预制体（独立菜单，不随导入跑） | 重排/移动 `LevelContent` 之外的对象、改 `.unity` 里房间那一半 |
 
 根节点约定：`LevelContent/<zone>/<group?>/<itemId>`。**层级只是为了可读**，坐标全部是世界坐标写进 Transform（导入器算好局部值）。
@@ -413,18 +413,18 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_s
 | `MeshFilter/MeshRenderer` | `Art/Props/<def>/<def>.fbx` | 材质按 `manifest.material_base_colors` 建（FBX 不保存 Principled 颜色，`props/README.md` §7.8 已记录） |
 | `propBounds`（玩法体积）= 模型 AABB | `manifest.bounds_m`（**真值**，不是目录的 `game_longest_dim_m`） | `localScale = 1`；这消灭了「0.9 m 立方体暖壶」那类把体积放大几十倍的错 |
 | `BoxCollider`（玩家层） | `manifest.collision.boxes`（**尚未实现**，[COLLIDER_LAYER](../PickupAbsorb/COLLIDER_LAYER.md) 只定了接口） | 没有 `collision` 块时**不生成碰撞体**（不是「回退成大盒」——回退会把 2.8 cm 的餐巾变成空气墙） |
-| 价值 | 目录 + 定价规则 | 与 `valueUnits` 一致；导入器**不重算** |
+| 价值 | 关卡数据 `defs[].valueUnits` / `props[].valueUnits` | 导入器只把声明值传给同步工具，**不重算**；预制体不带价值 |
 
 预制体是**资产**（`.prefab` + `.meta`，GUID 稳定，进仓库）。导入器只 `PrefabUtility.InstantiatePrefab`，不自己拼 mesh——这样「长什么样」只有一处定义。
 
-### 7.4 与 `PickupFieldSync` 的接线（以及 `valueUnits` 守卫）
+### 7.4 与 `PickupFieldSync` 的接线（声明值单次写入）
 
-现状：`PickupFieldSync` 从子物体扫 `propBounds` 与**按最长边定价的 `valueUnits`**，写进宿主的平行数组。这是「一件一件手配」的总开关，**必须复用，不能并行造第二个**。但它有两个行为与本工具冲突：
+现状：`PickupFieldSync` 从子物体扫 `propBounds`、行集合与 `propColliders`，写进宿主的平行数组；`valueUnits` 自 U2（2026-11-15）起改由调用方声明、**一次写入并回读**，无声明时保留宿主既有值。这是「一件一件手配」的总开关，**必须复用，不能并行造第二个**。
 
 | 冲突 | 现象 | 对策（设计） |
 |---|---|---|
-| 按**最长边**定价 | 体积门是**体积**的；`napkin` 0.30×0.30×0.028 最长边 0.30 → 定价高，但体积只有 0.0025 m³ | **JSON 里 `valueUnits` 与 `absorbDiameterReq` 两个字段并存**（两个消费者，两个数）。导入器把 `valueUnits` 当作**声明值**传下去，同步后**回读校验**：任何一件的 `valueUnits` 与 JSON 不符 → 报错并列出，不静默接受 |
-| 会写宿主的平行数组 | 数组是「场景接线」，导入器一碰就可能重排别人的引用 | 只允许通过 `SyncFromChildren(host, fieldRoot)` 这一个入口写；**不直接改数组元素**。同步前先断言 `host` 属于本关卡的受管根 |
+| 价值来自哪里 | 体积门是**体积**的；`napkin` 0.30×0.30×0.028 最长边 0.30，按最长边定价会与体积门脱节 | **JSON 里 `valueUnits` 与 `absorbDiameterReq` 两个字段并存**（两个消费者，两个数）。导入器把 `valueUnits` 当作**声明值**传给 `SyncFromChildren`，同步工具一次写入并回读：任何一件与 JSON 不符、或声明的 itemId 没有成行 → 报错并列出，不静默接受，也不自己重算 |
+| 会写宿主的平行数组 | 数组是「场景接线」，导入器一碰就可能重排别人的引用 | 只允许通过 `SyncFromChildren(host, fieldRoot, declaredValueUnits)` 这一个入口写；**不直接改数组元素**。同步前先断言 `host` 属于本关卡的受管根 |
 
 `propColliders` 的坑（[COLLIDER_LAYER](../PickupAbsorb/COLLIDER_LAYER.md) §2.2 已查实）：数组长度够、槽位是 `null` 时**静默通过**，所以「没报警 ≠ 接对了」。导入器在同步后逐件核对槽位（`null` 且该 def 有碰撞体 → 报错），并把 `propColliders` 的长度与 `props.Length` 一起打进报告。
 
@@ -477,7 +477,7 @@ planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）
 | 7 | **道具互穿** | AABB 两两相交体积 > 较小者 5% 且无 `stackedOn/support` 关系 | `apple 与 bowl 交叠 38%` |
 | 8 | **结构互穿** | 道具 AABB 不得穿入 `role=box` 的实体（桌面除外：桌面之下的件必须显式 `support`） | `thermos 穿进 crate 0.08 m` |
 | 9 | **预算** | `planes ≤8 / boxes ≤8 / ramps ≤4 / ground =1`；`props` 里「不可吸且挡路」的件数 ≤ `blocking` 6 | `boxes=11 超 3（zone=table 多放了 2 个台面）` |
-| 10 | 斜面几何 | 坡度 ≤45°；底边 ≥ 地面 −0.01 且 ≤ 地面 `min(0.05, stepLimit)`；顶边对齐台面（δ ≤ stepLimit） | `plank 底边 −0.03（穿地）` |
+| 10 | 斜面几何 | 坡度 ≤45°；**行走面底边** = 地面（可低至 `地面 − 0.01 − 板厚`，坡脚板底入地不算穿地）且 ≤ 地面 `min(0.05, stepLimit)`；**行走面顶边**对齐台面（δ ≤ stepLimit） | `plank 板底 −0.06（穿地）` |
 | 11 | 斜面身份 | 同一 `id` 不得同时出现在 `box` 与 `ramp` | 直接硬错误（对应本文 §7.7 第一行「坡底隐形墙」） |
 | 12 | 可吸性 | `D_req = 2.673·(abc)^(1/3) ≤ ballDiameterMax` 才允许 `absorbable=true`；`absorbable=true` 但 `D_req` 超过 = 数据自相矛盾 | `thermos D_req=2.41 > 2.20` |
 | 13 | **分档人口** | 按球径档（0.30/0.50/0.80/1.10/1.50/2.20）统计「能吸的件数/单位」，与关卡设计表对照；**打印成表** | `t2 档只有 3 件，设计表要 12 件` |
@@ -497,7 +497,7 @@ planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）
 | `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` | 目录 + 游戏/真实尺寸 + 数量 | **保留**，仍是 `def` 的唯一来源。**注意**：`game_longest_dim_m` 不再当拾取门槛（体积门取代长度档），但列先不动（PICNIC §2.2 已记录这个口径冲突） |
 | `Tools/mapbuild/build_greybox.py` + `unity_greybox.json` | 数据 → 扁平载荷 → 灰盒 Builder | **保留 `--check`**（守住「生成物 = 作者数据」）；**不再用它建关卡** |
 | `Editor/MapGreybox/PicnicLawnGreyboxBuilder.cs` | 「整图 · 从零重建 · 会 `SaveScene`」，重跑必然抹掉手工接线 | **退役为「地图预览生成器」**：只用于整图俯瞰数据核对，**禁止**在正式场景上跑。它的 `ExpectedZones/ExpectedStructures/...` 硬计数保留（那是数据的回归门） |
-| `Editor/Pickup/PickupFieldSync.cs` | 从子物体扫 `propBounds`/`valueUnits` 写宿主数组 | **保留且成为唯一写入口**，导入器调用它（§7.4），并加 `valueUnits` 回读守卫 |
+| `Editor/Pickup/PickupFieldSync.cs` | 从子物体扫 `propBounds` 等数组；`valueUnits` 自 U2 起消费声明值，无声明时保留既有值 | **保留且成为唯一写入口**，导入器调用它（§7.4），声明值一次写入并回读 |
 | 场景里 110 件的平行数组（`propBounds`/`propColliders`/`valueUnits`） | 只活在 `StoryLevel.unity` | **第一次导入后仍然存在**（`PickupFieldSync` 的产物），但**真源变成 `placement.json`**；「只活在场景里」的回归风险由此消除 |
 | `Editor/MapGreybox/GreyboxPayload.cs` | `[Serializable]` DTO + `JsonUtility` 载荷 | **保留**（地图预览用）；`placement.json` 走自己的 DTO，**不复用**——两者层级不同（一个整图，一个关卡实例），硬合并会让两边都变难改 |
 | 新：`Tools/levelbuild/`（校验器 + Blender 脚本桥） | — | **新增**（P0） |
@@ -563,7 +563,7 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 | 结构清单 | 地面 1 + 边界 4 平面 + 盒 ≤8（花圃台、树根丘、角树、指示牌、毯缘…按 `PICNIC` §3.2 的真实坐标）+ 斜面 ≤4（第一关先 0–1 块，验证「木板搭上桌」的手感） |
 | 校验报告 | `levelbuild check --report`：0 错；分区/分档人口表；**预测的三态表**（哪些件在哪档变地形/挡路/食物） |
 | 渲染 | `plan` + `overview` + `ball_eye` 各一张 1280×720，进 `Docs/Evidence/`（代理**先自己看图**再交） |
-| Unity 导入 | `LevelContent` 根 + 110 件实例 + `PickupFieldSync` 同步 + `valueUnits` 回读一致；**第二遍导入 `+0 ~0 -0`** |
+| Unity 导入 | `LevelContent` 根 + 110 件实例 + `PickupFieldSync` 一次写入声明值并回读一致；**第二遍导入 `+0 ~0 -0`** |
 | 接线 | `LevelArenaHost` 的 planes/boxes/ramps 与 JSON 计数一致；`[arena] planes=5 boxes=4 ramps=0` |
 
 **P1 的验收判据（六条，缺一不算完）**：
@@ -664,7 +664,7 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 1. **`aabb` 的轴向**（§4.2 补注）：manifest 的 `dimensions_m` 是 Blender 轴向（`z` 是高），JSON 要 Unity 轴向，所以 `aabb = (dx, dz, dy)`。§13 的实测脚本把 manifest 三个数直接写进 JSON——对矮件无害，对暖壶/水瓶这种高件会让它躺倒、`y = aabb.y/2` 也跟着错。现在只有一个转换点 `placement_core.manifest_aabb`。
 2. **四元数写规范符号**（`w<0` 取反）：否则同一姿态可以写成 `q` 或 `-q`，「重新导出逐字节相同」就不成立。
 3. **`ground` 与 `boundary` 是「过 `center` 的平面」**，不是盒子的顶面；否则 `groundOffset` 会和场景里的地面差半个厚度，所有贴地件一起报「穿地 0.02 m」。
-4. **`defs[]` 与按 def 的价值**（§4.2、§7.4 已改）：Lead 2026-11-15 拍板，`valueUnits` 由关卡数据按 def 声明，导入器在 `PickupFieldSync` 之后照写并回读。仍存的耦合：同步工具会**丢掉**没有值表行的 `(kind, tier)`，所以 kind 文件夹必须落在 `ValueTable` 里（`container m` 仍缺，见 `PICNIC_CORNER_LEVEL_ONE` §6 C5）。
+4. **`defs[]` 与按 def 的价值**（§4.2、§7.4 已改）：Lead 2026-11-15 拍板，`valueUnits` 由关卡数据按 def 声明；导入器把声明值传给 `PickupFieldSync` 一次写入并回读（U2 已实现）。**缺值表行不再丢件**：同步工具已删除 (kind, tier) 值表，`container m` 这类没有旧表行的组合照常成行，价值来自声明。
 5. **`boundary` 在 Unity 里是空物体墙**（§7.6 已改）：以 `LevelArenaHost` 的真实字段 `boundaryWalls` 为准（局部 +Z 指向场内、原点在碰撞面上），不是 `planeNormals/planeOffsets`。`rampBoxes` P1 没有，斜面有 collider 但不登记。
 6. **导入器没有 `LevelItem` 标记组件**（§7.2 曾设想）：Editor 程序集里的 MonoBehaviour 无法序列化进场景，而 `Runtime/` 不在本工具写范围。`itemId` 就是物体名，正好也是 `PickupFieldSync` 的行 id——一个键、两个消费方。
 7. **俯视图的 `coverage_m` 是「短边保证入画」**，渲染时按分辨率比例放大 `ortho_scale`；否则 16:9 会把方形场地上下裁掉（实测 13.4 m 场地只看到 7.9 m）。
@@ -678,7 +678,7 @@ python3 Tools/levelbuild/levelbuild.py from-layout Docs/Design/StoryMode/picnic_
 python3 Tools/levelbuild/levelbuild.py check <该文件> --report     # 0 错
 ```
 
-读数：**116 件 / 718 u / 35 def / 结构 1 ground + 4 boundary + 4 box + 2 ramp**（带 `--expected 127,1500` 时 `check` 会红成 `-11 件 / -782 u`，正好等于缺的那几件——这才是该有的闸）。设计表是 127 件 / 1500 u，差额 **11 件 / 782 u** 全部来自 **9 个还没有模型的 def**（`beer_crate`、`book_stack`、`cooler_box_large`、`crate`、`crate_large`、`lounge_chair`、`picnic_bench`、`storage_bin`、`stroller`）——模型到位后重跑 `from-layout` 就会对上。转换做了三件事：按**真实尺寸**重坐（布局的 `y` 用的是它自己的高度表）、`support` 标签→id（`bed→flower_bed`、`folding_table→那件折叠桌的 itemId` 走 `stackedOn`）、两块的斜板的中心从**坡脚点**重建（直接抄 `center` 会让坡脚浮 0.245 m）。
+读数：**116 件 / 718 u / 35 def / 结构 1 ground + 4 boundary + 4 box + 2 ramp**（带 `--expected 127,1500` 时 `check` 会红成 `-11 件 / -782 u`，正好等于缺的那几件——这才是该有的闸）。设计表是 127 件 / 1500 u，差额 **11 件 / 782 u** 全部来自 **9 个还没有模型的 def**（`beer_crate`、`book_stack`、`cooler_box_large`、`crate`、`crate_large`、`lounge_chair`、`picnic_bench`、`storage_bin`、`stroller`）——模型到位后重跑 `from-layout` 就会对上。转换做了三件事：按**真实尺寸**重坐（布局的 `y` 用的是它自己的高度表）、`support` 标签→id（`bed→flower_bed`、`folding_table→那件折叠桌的 itemId` 走 `stackedOn`）、两块的斜板从**坡脚点**重建、且把**作者给的底/顶线当成行走面**（中心 = 坡脚 + 半坡长 − 半板厚·法线；板体向地面/坡内延伸，所以坡脚板底比地面低约 3.5 cm，这是设计意图，校验器按「一个板厚」放行）。直接把 `center` 抄进盒会错两层：坡脚浮 0.245 m，行走面又高出设计线一个板厚（实测 `ramp_to_table` 0.746 vs 台面 0.70）。
 
 另有一条源数据观察：`shell_tree_mound`（2.5×2.5，在 `(-18.75,-18.75)`）会越过 `x0/z0` 两道边界平面约 0.65 m——结构不参与越界规则，所以不是错误，但角树有一半在场外。
 
@@ -688,7 +688,7 @@ python3 Tools/levelbuild/levelbuild.py check <该文件> --report     # 0 错
 |---|---|
 | Unity 侧任何验证（编译、导入、`+0 ~0 -0`、`valueUnits` 回读、`[arena] planes=… boxes=…`） | 本轮不碰编辑器；需要 Unity 操作员按 §11.2 的六条验收 |
 | `Art/Props/<def>/<def>.prefab` 预制体库（P2） | 导入器现在直接实例化 `.fbx` |
-| `PickupFieldAuthoringRules.ValueTable` 的 `container m` 行 | 值表缺口；不加则野餐篮那一行会被同步工具丢掉（导入器会点名报错） |
+| 值表的 `container m` 行 | 已随 U2 解除：值表删除后缺行不再丢件，价值由 `defs[].valueUnits` 声明 |
 | `LevelArenaHost.rampBoxes`（P3） | 现在斜面只有 collider，不登记 |
 | 9 个 def 的模型 | 第一关的 11 件 / 782 u |
 | `physics_test_field.json` 迁到本格式 | Lead 说之后再做；本 schema 是「一格一份 placement」（`level.id` + 目录），没有假设一场景一份 |

@@ -155,7 +155,7 @@ source ~/tools/blender-env.sh
 | 源 | 去处 |
 |---|---|
 | `props[]` + `gate[]` + `structures[]`（17 件可吸家具） | `props[]` |
-| `ramps[]` | `structures[]` `role=ramp`（`meets` 用顶边几何匹配台面） |
+| `ramps[]` | `structures[]` `role=ramp`（`meets` 用顶边几何匹配台面；作者的 `bottom`/`top` 是**行走面**，4 cm 板体在它下面，坡脚板底可低地面一个板厚） |
 | `shell` 的 ground/4 边界/花圃台/角树/树根丘/指示牌 | `structures[]`（1 ground / 4 boundary / 4 box） |
 
 它不是「整表搬运」，做了三件作者数据不做的事，都为了过门：

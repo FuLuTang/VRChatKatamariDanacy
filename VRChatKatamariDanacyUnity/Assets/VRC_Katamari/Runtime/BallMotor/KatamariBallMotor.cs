@@ -92,6 +92,50 @@ namespace VRCKatamari.BallMotor
         [SerializeField] private float maxDropPerStep = 0.1f;
         [SerializeField] private float maxProxyLiftPerStep = 0.04f;
 
+        // ---- Terrain support (P1: static box tops, the step rule, gravity fall) ----
+        // PROVISIONAL values, all from Docs/Design/BallMotor/TERRAIN_SUPPORT.md.
+        //
+        // The switch: when false, every input this layer feeds to every other layer is
+        // exactly what it was before terrain support existed (the sweep keeps all
+        // static boxes, GroundContactMath gets the raw ground plane, no fall state
+        // exists and VisualRoll gets the raw ground normal), so an older lab can keep
+        // its frame behaviour bit for bit. It defaults to true because a level's floor
+        // and ledges are static boxes; a lab that predates the step rule must call
+        // SetTerrainSupportEnabled(false).
+        [SerializeField] private bool terrainSupportEnabled = true;
+        // The RATIO, never a height: stepLimit = ratio * semantic diameter. 0.25 is the
+        // value already in Docs/Design/Maps/PicnicLawn/layout.json and in the map
+        // validator's climb_step rule; runtime read it nowhere before P1. The radius
+        // form is deliberately absent (see SupportSurfaceMath.TryStepHeightLimit).
+        [SerializeField] private float stepHeightOverBallDiameter = 0.25f;
+        // Rail on one step-up lift, so a mis-set ratio cannot teleport the ball. 0.6 is
+        // above 0.25 * 2.20 = 0.55, so a correct configuration never touches it.
+        [SerializeField] private float maxStepUpLiftWorldM = 0.6f;
+        // A box already classified as a step stays one until its rise exceeds
+        // stepLimit + this. Stops the sweep mask from flipping on rim noise.
+        [SerializeField] private float stepHysteresisM = 0.02f;
+        // "The ball is already above this box's top" margin. Without it, a ball standing
+        // on a step box can be re-classified into a wall while its centre is inside the
+        // expanded box, and the sweep's penetration branch pushes it off.
+        [SerializeField] private float stepStickMarginM = 0.01f;
+        // Below this rise a crossing grants no large lift: numeric de-noise, NOT the
+        // map's 0.05 m ground-decal/facade classification threshold.
+        [SerializeField] private float minStepHeightM = 0.005f;
+        // A fall is real gravity, not the old 0.1 m-per-step drop clamp (which would cap
+        // descent at 5 m/s and read as a slow float down). 9.81 is PROVISIONAL: no
+        // original-game measurement says the ball falls at Earth gravity.
+        [SerializeField] private float gravityMps2 = 9.81f;
+        // Safety rail on fall speed so a long drop cannot produce an absurd per-step
+        // move; it is tens of m/s, not a re-named 0.1 m clamp.
+        [SerializeField] private float maxFallSpeedMps = 40f;
+        // A surface drop smaller than this is the same surface, not a ledge. It is a
+        // tolerance, not a gameplay cap: 1 mm would make every step on a slightly tilted
+        // ground plane enter and leave the fall state (a 7 deg plane at 4 m/s drops 9.8 mm
+        // per 20 ms step), which is flicker, not physics. A centimetre is below anything
+        // the ball should visibly fall off, and such a drop is taken by the normal
+        // maxDropPerStep clamp in one step, i.e. reads as glued to the floor.
+        [SerializeField] private float supportDropTriggerM = 0.01f;
+
         // ---- Radial proxy caps and long-object admission (PROVISIONAL, unmeasured) ----
         // The protrusion cap is relative to the core radius (the contract's rule) and also
         // has an absolute rail for a large ball. Both are engineering limits against a rod
@@ -322,6 +366,39 @@ namespace VRCKatamari.BallMotor
         // the contact log (boxes may report an inner-face normal; see the stage 3
         // remarks). Reused, never reallocated per step.
         private Vector3[] wallContactNormals;
+
+        // ---- Terrain support state (P1) ----
+        // The support decision itself lives in SupportSurfaceMath; this layer only
+        // carries its result and the two memories the design asks for (which box is a
+        // step, and which surface the ball stood on last step).
+        //
+        // boxIsSteppable is indexed like the static box buffers and is the ONE answer
+        // both the sweep mask and the support table read (§4.3: two places must not
+        // compute rise separately). A true entry is excluded from the sweep and can
+        // support the ball; a false entry stays a wall.
+        private bool[] boxIsSteppable;
+        private bool stepMaskValid;
+        private bool stepMaskBoxesDirty;
+        private int stepMaskRebuildCount;
+        private float stepMaskDiameterWorldM;
+        private float stepMaskSupportHeightWorldM;
+        // Selected support of the current step, as the plane pair the ground solve
+        // consumes plus the diagnostics the host and the lab read.
+        private int supportSurfaceId;
+        private Vector3 supportSurfacePointWorld;
+        private Vector3 supportSurfaceNormalWorld;
+        private float supportSurfaceHeightWorldM;
+        private int supportCandidateCount;
+        private float stepHeightLimitWorldM;
+        // The previous step's selected support: the band reference and the rise base.
+        private int previousSupportSurfaceId;
+        private float previousSupportHeightWorldM;
+        private float lastSupportHeightWorldM;
+        private bool hasSupportFrame;
+        // Gravity fall state. There is no jump and no upward velocity: the only way in
+        // is losing support, and arriving at a surface is the only way out.
+        private bool isFalling;
+        private float fallSpeedMps;
 
         // ---- Pending absorb candidates; candidate collection is host-side ----
         private const int PendingCandidateCapacity = 4;
@@ -586,6 +663,29 @@ namespace VRCKatamari.BallMotor
             contactPenetrationDepths = new float[ContactCapacity];
             wallContactNormals = new Vector3[ContactCapacity];
 
+            // Terrain support: the mask has one entry per static box slot and starts
+            // empty (nothing is a step until a step has been evaluated). The support
+            // pair starts on the configured ground plane; the first step resolves the
+            // real surface.
+            boxIsSteppable = new bool[MaxBoxCount];
+            stepMaskValid = false;
+            stepMaskBoxesDirty = true;
+            stepMaskRebuildCount = 0;
+            stepMaskDiameterWorldM = 0f;
+            stepMaskSupportHeightWorldM = 0f;
+            supportSurfaceId = SupportSurfaceMath.GroundSurfaceId;
+            supportSurfacePointWorld = new Vector3(0f, groundPlaneOffset, 0f);
+            supportSurfaceNormalWorld = new Vector3(0f, 1f, 0f);
+            supportSurfaceHeightWorldM = groundPlaneOffset;
+            supportCandidateCount = 1;
+            stepHeightLimitWorldM = 0f;
+            previousSupportSurfaceId = SupportSurfaceMath.NoSurfaceId;
+            previousSupportHeightWorldM = 0f;
+            lastSupportHeightWorldM = 0f;
+            hasSupportFrame = false;
+            isFalling = false;
+            fallSpeedMps = 0f;
+
             // The radial proxy shell is the ball's sparse support shell: 32 fixed
             // directions plus the endpoints of at most four long objects. State is
             // owned here; the attach/detach/rebuild protocol is RadialProxyShellMath
@@ -662,9 +762,22 @@ namespace VRCKatamari.BallMotor
                 semanticDiameterWorldM = semanticDiameter;
             }
             RecomputeConfirmedAndSize();
+
+            // Publish the step limit and resolve the starting surface once, so the
+            // diagnostics read a real surface before the first fixed step and a ball
+            // placed above the floor (or teleported later) falls instead of snapping.
+            float initialStepLimit;
+            if (SupportSurfaceMath.TryStepHeightLimit(semanticDiameterWorldM,
+                stepHeightOverBallDiameter, out initialStepLimit))
+            {
+                stepHeightLimitWorldM = initialStepLimit;
+            }
+            ResolveTerrainSupport(ballCenterWorld);
+
             Debug.Log("[BallMotor] Start ready diameter=" + semanticDiameterWorldM
                 + " collisionRadius=" + collisionRadiusWorldM
-                + " hasLocalRow=" + hasLocalRow);
+                + " hasLocalRow=" + hasLocalRow
+                + " terrainSupport=" + terrainSupportEnabled);
         }
 
         private void Update()
@@ -718,6 +831,14 @@ namespace VRCKatamari.BallMotor
                 planarVelocity = nextVelocity;
                 requestedDisplacement = stepDisplacement;
             }
+
+            // 2.5 Terrain support mask (P1): decide which static boxes are steps and
+            //     rebuild the sweep obstacle arrays without them. This runs BEFORE the
+            //     sweep because entering a step means being allowed inside the box's
+            //     expanded AABB; it uses the previous step's support height, which is
+            //     the design's accepted one-step lag. The mask and the support table
+            //     read the same answer (boxIsSteppable), so they cannot disagree.
+            if (terrainSupportEnabled) RefreshStepMask();
 
             // 3. SweepMath: actual displacement. Only this — never the requested
             //    motion — may reach the visual roll later, so a blocked step does
@@ -780,6 +901,12 @@ namespace VRCKatamari.BallMotor
                 }
             }
 
+            // 3.5 Terrain support selection (P1): which surface is under the ball
+            //     centre at the swept XZ, and does that surface drop away (a ledge)?
+            //     The selection is a pure call into SupportSurfaceMath; this layer only
+            //     carries the surface pair into stage 4 and the gravity state.
+            ResolveTerrainSupport(sweptCenter);
+
             // 4. GroundContactMath: support height and the normal-only correction.
             //
             // Two solves per step, both cheap. The first uses the radial proxy shell's
@@ -790,14 +917,18 @@ namespace VRCKatamari.BallMotor
             // bump cannot bob the camera (the height filter alone would only soften it).
             Vector3 groundedCenter = sweptCenter;
             Vector3 followCenter = sweptCenter;
+            // Every out local is initialised at its declaration: the first ground solve
+            // sits behind two conditions (a non-empty shell AND a successful proxy
+            // build), so the compiler cannot prove these are assigned before the reads
+            // below. This is an initialiser, not a change of logic.
             float supportHeight = 0f;
             Vector3 correctedCenter = Vector3.zero;
-            float centerNormalCoordinate;
-            Vector3 planeAnchor;
-            float appliedNormalCorrection;
-            float normalSpeedPerturbation;
-            bool liftClamped;
-            bool dropClamped;
+            float centerNormalCoordinate = 0f;
+            Vector3 planeAnchor = Vector3.zero;
+            float appliedNormalCorrection = 0f;
+            float normalSpeedPerturbation = 0f;
+            bool liftClamped = false;
+            bool dropClamped = false;
             float proxyProtrusionCap = maxProxyProtrusionPerCoreRadius * coreRadiusWorldM;
             float absoluteProtrusionCap = maxProxyProtrusionWorldM;
             if (!KatamariMath.IsFiniteFloat(absoluteProtrusionCap) || absoluteProtrusionCap < 0f)
@@ -818,14 +949,66 @@ namespace VRCKatamari.BallMotor
             {
                 proxyLiftCap = maxProxyLiftPerStep;
             }
+            float coreLiftCap = maxLiftPerStep;
+            float proxyDropCap = maxDropPerStep;
+            float coreDropCap = maxDropPerStep;
+
+            // P1 terrain: the plane this solve sees is the SELECTED support, not the raw
+            // ground, and a step crossing gets its own one-step lift allowance (§4.4)
+            // instead of the 0.04 m proxy cap. A fall uses this step's gravity budget as
+            // both clamps, so descent is gravity and not the old 0.1 m-per-step cap.
+            // With terrain support off the pair is the raw ground plane and the caps are
+            // exactly the pre-P1 ones, so the frame is bit-identical to before.
+            Vector3 supportNormal = groundPlaneNormal;
+            float supportOffset = groundPlaneOffset;
+            if (terrainSupportEnabled)
+            {
+                supportNormal = supportSurfaceNormalWorld;
+                supportOffset = supportNormal.x * supportSurfacePointWorld.x
+                    + supportNormal.y * supportSurfacePointWorld.y
+                    + supportNormal.z * supportSurfacePointWorld.z;
+                if (isFalling)
+                {
+                    float nextFallSpeed;
+                    float fallBudget;
+                    if (SupportSurfaceMath.TryIntegrateFall(fallSpeedMps, gravityMps2, dt,
+                        maxFallSpeedMps, out nextFallSpeed, out fallBudget))
+                    {
+                        fallSpeedMps = nextFallSpeed;
+                        proxyDropCap = fallBudget;
+                        coreDropCap = fallBudget;
+                        proxyLiftCap = fallBudget;
+                        coreLiftCap = fallBudget;
+                    }
+                    else
+                    {
+                        // A corrupt gravity setting must not leave the ball falling
+                        // forever: drop the state and let the old clamp crawl it down.
+                        isFalling = false;
+                        fallSpeedMps = 0f;
+                    }
+                }
+                else if (supportSurfaceId != previousSupportSurfaceId &&
+                    SupportSurfaceMath.IsStepCrossing(
+                        supportSurfaceHeightWorldM - previousSupportHeightWorldM,
+                        minStepHeightM))
+                {
+                    // Only the step that crosses a step gets the large allowance; the next
+                    // step is back to 0.1 / 0.04, so a long rod still cannot pop the ball.
+                    float stepLift = stepHeightLimitWorldM;
+                    if (stepLift > maxStepUpLiftWorldM) stepLift = maxStepUpLiftWorldM;
+                    proxyLiftCap = stepLift;
+                    coreLiftCap = stepLift;
+                }
+            }
             bool groundAccepted = false;
             if (proxyEndpointCount > 0 &&
                 RadialProxyShellMath.TryBuildContactPoints(coreRadiusWorldM, proxyProtrusionCap,
                     proxyEndpointPool, proxyEndpointCount, localProxyPoints))
             {
                 groundAccepted = GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation,
-                    localProxyPoints, groundPlaneNormal, groundPlaneOffset, sweptCenter,
-                    proxyLiftCap, maxDropPerStep, 0f, maxProxyNormalSpeedPerturbation,
+                    localProxyPoints, supportNormal, supportOffset, sweptCenter,
+                    proxyLiftCap, proxyDropCap, 0f, maxProxyNormalSpeedPerturbation,
                     out supportHeight, out correctedCenter, out centerNormalCoordinate,
                     out planeAnchor, out appliedNormalCorrection, out normalSpeedPerturbation,
                     out liftClamped, out dropClamped);
@@ -835,8 +1018,8 @@ namespace VRCKatamari.BallMotor
                 // Empty shell, or a rejected proxy build: keep the core-sphere behaviour
                 // rather than leaving the ball ungrounded.
                 groundAccepted = GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation,
-                    proxyEmptyPoints, groundPlaneNormal, groundPlaneOffset, sweptCenter,
-                    maxLiftPerStep, maxDropPerStep, 0f, maxProxyNormalSpeedPerturbation,
+                    proxyEmptyPoints, supportNormal, supportOffset, sweptCenter,
+                    coreLiftCap, coreDropCap, 0f, maxProxyNormalSpeedPerturbation,
                     out supportHeight, out correctedCenter, out centerNormalCoordinate,
                     out planeAnchor, out appliedNormalCorrection, out normalSpeedPerturbation,
                     out liftClamped, out dropClamped);
@@ -845,6 +1028,14 @@ namespace VRCKatamari.BallMotor
             {
                 groundedCenter = correctedCenter;
                 proxyGroundSupportHeightM = supportHeight;
+                // Arriving ends the fall: the solve reached the surface without being
+                // drop-clamped by this step's fall budget. A failed solve keeps the state.
+                if (isFalling)
+                {
+                    isFalling = SupportSurfaceMath.ResolveFallState(true, false, true,
+                        dropClamped);
+                    if (!isFalling) fallSpeedMps = 0f;
+                }
                 if (debugTraceProxySupport && proxyTraceLinesLogged < TraceLineLimit)
                 {
                     proxyTraceLinesLogged = proxyTraceLinesLogged + 1;
@@ -864,6 +1055,17 @@ namespace VRCKatamari.BallMotor
             // the anchor must be the EXACT core-sphere centre, not a lagging approximation of
             // it. The follow rig's own height filter and teleport snap handle presentation.
             float cameraAnchorUnclamped = 10f;
+            // While falling the anchor must follow the SAME descent as the ball; with the
+            // unclamped value above it would snap to the surface underneath and drag the
+            // camera down while the ball is still in the air. Grounded, the unclamped call
+            // is still the exact core centre (the correction is ~0 on a flat plane).
+            float cameraAnchorLift = cameraAnchorUnclamped;
+            float cameraAnchorDrop = cameraAnchorUnclamped;
+            if (terrainSupportEnabled && isFalling)
+            {
+                cameraAnchorLift = coreLiftCap;
+                cameraAnchorDrop = coreDropCap;
+            }
             float smoothSupportHeight;
             Vector3 smoothCenter;
             float smoothNormalCoordinate;
@@ -873,8 +1075,8 @@ namespace VRCKatamari.BallMotor
             bool smoothLiftClamped;
             bool smoothDropClamped;
             if (GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation, proxyEmptyPoints,
-                groundPlaneNormal, groundPlaneOffset, sweptCenter, cameraAnchorUnclamped,
-                cameraAnchorUnclamped, 0f, maxProxyNormalSpeedPerturbation,
+                supportNormal, supportOffset, sweptCenter, cameraAnchorLift,
+                cameraAnchorDrop, 0f, maxProxyNormalSpeedPerturbation,
                 out smoothSupportHeight, out smoothCenter, out smoothNormalCoordinate,
                 out smoothAnchor, out smoothCorrection, out smoothPerturbation,
                 out smoothLiftClamped, out smoothDropClamped))
@@ -925,8 +1127,11 @@ namespace VRCKatamari.BallMotor
             //    supplied so a teleport frame holds the pose.
             Vector3 actualDisplacement = groundedCenter - ballCenterWorld;
             Quaternion nextRotation;
+            // The roll axis is the support plane's normal, so a step or a ramp rolls
+            // correctly (F8 of the design). With terrain support off this is exactly
+            // the raw ground normal the call used before P1.
             if (VisualRollMath.TryAdvanceRotation(visualRollRotation, actualDisplacement,
-                groundPlaneNormal, coreRadiusWorldM, discontinuous, true,
+                supportNormal, coreRadiusWorldM, discontinuous, true,
                 maxRollDisplacementM, out nextRotation))
             {
                 visualRollRotation = nextRotation;
@@ -939,6 +1144,196 @@ namespace VRCKatamari.BallMotor
 
             ballCenterWorld = groundedCenter;
             discontinuous = false;
+        }
+
+        /// <summary>
+        /// Refreshes which static boxes are steps this step, and rebuilds the sweep
+        /// array without the steppable ones.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the sweep side of §4.3 of Docs/Design/BallMotor/TERRAIN_SUPPORT.md: a
+        /// box the ball may climb must be absent from the sweep, because the sweep is a
+        /// conservative radius-expanded AABB and a 2.8 cm lip would otherwise be a wall
+        /// for every ball. The support table reads the same <c>boxIsSteppable</c> answer,
+        /// so the two cannot disagree about a box.
+        /// </para>
+        /// <para>
+        /// Frequency gate (design §3.5): recompute only when the box set changed, the
+        /// semantic diameter moved by more than 2 mm, or the reference support height
+        /// moved by more than 5 mm. The mask uses the previous step's support height,
+        /// which is the accepted one-step lag; the rebuild of the sweep arrays only runs
+        /// when the mask actually changed.
+        /// </para>
+        /// </remarks>
+        private void RefreshStepMask()
+        {
+            if (boxIsSteppable == null) return;
+            float limit;
+            if (!SupportSurfaceMath.TryStepHeightLimit(semanticDiameterWorldM,
+                stepHeightOverBallDiameter, out limit))
+            {
+                limit = 0f;
+            }
+            stepHeightLimitWorldM = limit;
+
+            bool needRecompute = !stepMaskValid || stepMaskBoxesDirty;
+            if (!needRecompute)
+            {
+                if (Mathf.Abs(semanticDiameterWorldM - stepMaskDiameterWorldM) > 0.002f)
+                {
+                    needRecompute = true;
+                }
+                else if (Mathf.Abs(lastSupportHeightWorldM - stepMaskSupportHeightWorldM) > 0.005f)
+                {
+                    needRecompute = true;
+                }
+            }
+            if (!needRecompute) return;
+
+            stepMaskValid = true;
+            stepMaskBoxesDirty = false;
+            stepMaskDiameterWorldM = semanticDiameterWorldM;
+            stepMaskSupportHeightWorldM = lastSupportHeightWorldM;
+
+            bool changed = false;
+            float ballBottom = ballCenterWorld.y - collisionRadiusWorldM;
+            for (int i = 0; i < boxCount; i++)
+            {
+                float top = boxMaximumBuffer[i].y;
+                float rise = top - lastSupportHeightWorldM;
+                // "Already above the top" is unconditional: a ball standing on the box
+                // must never be re-classified into a wall while its centre is inside the
+                // expanded box, or the sweep's penetration branch pushes it off.
+                bool alreadyAbove = ballBottom >= top - stepStickMarginM;
+                bool steppable = SupportSurfaceMath.IsSteppable(rise, limit, alreadyAbove,
+                    boxIsSteppable[i], stepHysteresisM);
+                if (steppable != boxIsSteppable[i])
+                {
+                    boxIsSteppable[i] = steppable;
+                    changed = true;
+                }
+            }
+            for (int i = boxCount; i < MaxBoxCount; i++)
+            {
+                boxIsSteppable[i] = false;
+            }
+            if (changed)
+            {
+                // A step classification flipped, so the sweep arrays must be rebuilt. This
+                // is the allocation the design flags for a P4 profiler pass; the counter is
+                // how the physics test field reads it.
+                stepMaskRebuildCount = stepMaskRebuildCount + 1;
+                RebuildObstacles();
+            }
+        }
+
+        /// <summary>Forgets every step classification (box set change, feature off).</summary>
+        private void ClearStepMask()
+        {
+            if (boxIsSteppable == null) return;
+            for (int i = 0; i < MaxBoxCount; i++)
+            {
+                boxIsSteppable[i] = false;
+            }
+            stepMaskValid = false;
+            stepMaskBoxesDirty = true;
+        }
+
+        /// <summary>
+        /// Selects this step's support surface and updates the gravity fall state.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The support decision itself is a single call into
+        /// <see cref="SupportSurfaceMath"/>; this method only carries the result and the
+        /// two memories the layers need (the previous support, for the band and the step
+        /// rise) and decides nothing about heights or footprints itself.
+        /// </para>
+        /// <para>
+        /// The first call after Start (and after a teleport, which clears the flag) takes
+        /// the ball's own bottom as the reference surface. That is what makes a ball
+        /// placed above the floor fall under gravity instead of snapping down at 0.1 m per
+        /// step, without a separate "spawned in the air" rule.
+        /// </para>
+        /// <para>
+        /// With terrain support off this still resolves the ground-only surface for the
+        /// diagnostics, but the fall state is never entered, so nothing downstream moves.
+        /// </para>
+        /// </remarks>
+        private void ResolveTerrainSupport(Vector3 center)
+        {
+            if (boxMinimumBuffer == null || boxMaximumBuffer == null) return;
+            if (!hasSupportFrame)
+            {
+                supportSurfaceId = SupportSurfaceMath.NoSurfaceId;
+                previousSupportSurfaceId = SupportSurfaceMath.NoSurfaceId;
+                previousSupportHeightWorldM = center.y - collisionRadiusWorldM;
+                lastSupportHeightWorldM = previousSupportHeightWorldM;
+                hasSupportFrame = true;
+                isFalling = false;
+                fallSpeedMps = 0f;
+            }
+            else
+            {
+                previousSupportSurfaceId = supportSurfaceId;
+                previousSupportHeightWorldM = lastSupportHeightWorldM;
+            }
+
+            float limit;
+            if (!SupportSurfaceMath.TryStepHeightLimit(semanticDiameterWorldM,
+                stepHeightOverBallDiameter, out limit))
+            {
+                limit = 0f;
+            }
+            stepHeightLimitWorldM = limit;
+
+            // The band reference is the higher of the previous support and the ball's own
+            // bottom. With gravity in the model, "the previous support + stepLimit" alone
+            // would exclude a surface the ball is falling ONTO (it is above the old
+            // support but below the ball), and because such a box is also out of the sweep
+            // when it is already-above, the ball would fall through it. Grounded, the ball
+            // bottom equals the support, so this is the design's band unchanged.
+            float bandReference = lastSupportHeightWorldM;
+            float ballBottom = center.y - collisionRadiusWorldM;
+            if (ballBottom > bandReference) bandReference = ballBottom;
+
+            int id;
+            Vector3 point;
+            Vector3 normal;
+            float height;
+            int candidates;
+            if (SupportSurfaceMath.TryResolveSupport(center, bandReference, limit,
+                groundPlaneNormal, groundPlaneOffset, boxMinimumBuffer, boxMaximumBuffer,
+                boxCount, out id, out point, out normal, out height, out candidates))
+            {
+                supportSurfaceId = id;
+                supportSurfacePointWorld = point;
+                supportSurfaceNormalWorld = normal;
+                supportSurfaceHeightWorldM = height;
+                supportCandidateCount = candidates;
+            }
+            else
+            {
+                // The ground plane itself was refused (a corrupt normal or offset). Keep
+                // the previous surface pair instead of inventing one; the ground solve
+                // rejects the same plane and the step keeps its previous position.
+                supportCandidateCount = 0;
+            }
+
+            bool dropped;
+            if (terrainSupportEnabled &&
+                SupportSurfaceMath.SupportDroppedAway(supportSurfaceHeightWorldM,
+                    lastSupportHeightWorldM, supportDropTriggerM, out dropped))
+            {
+                isFalling = SupportSurfaceMath.ResolveFallState(isFalling, dropped, false, false);
+            }
+            if (!terrainSupportEnabled)
+            {
+                isFalling = false;
+                fallSpeedMps = 0f;
+            }
+            lastSupportHeightWorldM = supportSurfaceHeightWorldM;
         }
 
         /// <summary>
@@ -1550,6 +1945,40 @@ namespace VRCKatamari.BallMotor
             pendingCandidateCount = 0;
         }
 
+        /// <summary>
+        /// Sets the analytic ground plane (the always-present support fallback).
+        /// </summary>
+        /// <remarks>
+        /// The plane is the same <c>dot(normal, point) = offset</c> pair
+        /// GroundContactMath already consumed, so nothing downstream needs a new
+        /// convention. It is separate from <see cref="AddPlane"/> on purpose: a boundary
+        /// plane is a wall and never a support, and the ground is a support and never a
+        /// sweep obstacle (design §3.4). The raw pair is stored (GroundContactMath
+        /// rescales normal and offset together), and the surface pair is re-resolved so
+        /// the diagnostics do not keep the previous floor.
+        /// </remarks>
+        public bool SetGroundPlane(Vector3 normal, float offset)
+        {
+            if (!KatamariMath.IsFiniteVector(normal)) return false;
+            if (!KatamariMath.IsFiniteFloat(offset)) return false;
+            Vector3 unitNormal;
+            float rawLength;
+            if (!KatamariMath.TryNormalize(normal, out unitNormal, out rawLength)) return false;
+            // A wall-like ground plane cannot answer "what is the height under the probe",
+            // so it is refused here instead of failing every step inside the query. The
+            // same threshold is enforced by SupportSurfaceMath.TryResolveSupport.
+            if (unitNormal.y <= 1e-3f) return false;
+            groundPlaneNormal = normal;
+            groundPlaneOffset = offset;
+            // The floor moved: the previous support/step classification is about the old
+            // one. Re-derive from the ball's own bottom on the next step.
+            hasSupportFrame = false;
+            lastSupportHeightWorldM = ballCenterWorld.y - collisionRadiusWorldM;
+            stepMaskValid = false;
+            if (boxMinimumBuffer != null) ResolveTerrainSupport(ballCenterWorld);
+            return true;
+        }
+
         public bool AddPlane(Vector3 normal, float offset)
         {
             if (planeCount >= MaxPlaneCount)
@@ -1580,6 +2009,8 @@ namespace VRCKatamari.BallMotor
             boxMinimumBuffer[boxCount] = minimum;
             boxMaximumBuffer[boxCount] = maximum;
             boxCount = boxCount + 1;
+            // The new box has no step classification yet; the next step evaluates it.
+            stepMaskBoxesDirty = true;
             RebuildObstacles();
             return true;
         }
@@ -1757,6 +2188,8 @@ namespace VRCKatamari.BallMotor
             planeCount = 0;
             boxCount = 0;
             blockingBoxCount = 0;
+            // The step mask is indexed by boxing slot, so it must not outlive the boxes.
+            ClearStepMask();
             RebuildObstacles();
         }
 
@@ -1819,23 +2252,36 @@ namespace VRCKatamari.BallMotor
                 planeOffsets[i] = planeOffsetBuffer[i];
             }
 
-            int totalBoxCount = boxCount + blockingBoxCount;
+            // Step boxes are excluded: a box the ball may climb must be enterable, and
+            // the sweep only reports where a sphere stops. The exclusion is OFF when
+            // terrain support is disabled, in which case this loop copies every static
+            // box in registration order, exactly as before P1.
+            int staticBoxSweepCount = 0;
+            for (int i = 0; i < boxCount; i++)
+            {
+                if (terrainSupportEnabled && boxIsSteppable != null && boxIsSteppable[i]) continue;
+                staticBoxSweepCount = staticBoxSweepCount + 1;
+            }
+            int totalBoxCount = staticBoxSweepCount + blockingBoxCount;
             if (boxMinima == null || boxMaxima == null ||
                 boxMinima.Length != totalBoxCount || boxMaxima.Length != totalBoxCount)
             {
                 boxMinima = new Vector3[totalBoxCount];
                 boxMaxima = new Vector3[totalBoxCount];
             }
+            int writeIndex = 0;
             for (int i = 0; i < boxCount; i++)
             {
-                boxMinima[i] = boxMinimumBuffer[i];
-                boxMaxima[i] = boxMaximumBuffer[i];
+                if (terrainSupportEnabled && boxIsSteppable != null && boxIsSteppable[i]) continue;
+                boxMinima[writeIndex] = boxMinimumBuffer[i];
+                boxMaxima[writeIndex] = boxMaximumBuffer[i];
+                writeIndex = writeIndex + 1;
             }
             for (int i = 0; i < blockingBoxCount; i++)
             {
-                int slot = boxCount + i;
-                boxMinima[slot] = blockingMinimumBuffer[i];
-                boxMaxima[slot] = blockingMaximumBuffer[i];
+                boxMinima[writeIndex] = blockingMinimumBuffer[i];
+                boxMaxima[writeIndex] = blockingMaximumBuffer[i];
+                writeIndex = writeIndex + 1;
             }
         }
 
@@ -2002,6 +2448,15 @@ namespace VRCKatamari.BallMotor
             planarVelocity = Vector3.zero;
             stuckSeconds = 0f;
             discontinuous = true;
+            // A teleport can cross the whole map: the old support surface, the old fall
+            // state and the old step mask are all about where the ball used to be. The
+            // next step re-derives them from the new position and the ball's own bottom,
+            // so a teleport into the air becomes a real fall (not a 0.1 m/step crawl).
+            hasSupportFrame = false;
+            lastSupportHeightWorldM = center.y - collisionRadiusWorldM;
+            isFalling = false;
+            fallSpeedMps = 0f;
+            ClearStepMask();
             ClearBlockingBoxes();
             // The endpoints are ball-local, so a teleport cannot change them; the rebuild
             // is the contract's discontinuity path and proves the support table still
@@ -2254,6 +2709,105 @@ namespace VRCKatamari.BallMotor
         public float GetGroundSupportHeightWorldM()
         {
             return proxyGroundSupportHeightM;
+        }
+
+        /// <summary>
+        /// Turns the P1 terrain-support feature on or off at runtime.
+        /// </summary>
+        /// <remarks>
+        /// Off is the pre-P1 frame: the sweep keeps every static box, the ground solve
+        /// gets the raw ground plane, no fall state exists and VisualRoll gets the raw
+        /// ground normal. The switch exists so a lab whose geometry predates the step
+        /// rule can keep its old behaviour bit for bit (design §8.1 / S7).
+        /// </remarks>
+        public void SetTerrainSupportEnabled(bool enabled)
+        {
+            if (terrainSupportEnabled == enabled) return;
+            terrainSupportEnabled = enabled;
+            if (!enabled)
+            {
+                ClearStepMask();
+                RebuildObstacles();
+                isFalling = false;
+                fallSpeedMps = 0f;
+            }
+            else
+            {
+                // Re-evaluate every box against the current size and support height.
+                stepMaskValid = false;
+            }
+        }
+
+        /// <summary>True while the P1 support/step/fall path is active.</summary>
+        public bool IsTerrainSupportEnabled()
+        {
+            return terrainSupportEnabled;
+        }
+
+        /// <summary>
+        /// Height of the selected support surface under the ball centre, world Y, metres.
+        /// </summary>
+        /// <remarks>
+        /// This is the SURFACE height, not "centre.y minus the support length": reporting
+        /// the latter would be lifted by the radial-proxy shell, so a host comparing a
+        /// prop's top against it would classify against a moving number (design R6).
+        /// </remarks>
+        public float GetSupportSurfaceHeightWorldM()
+        {
+            return supportSurfaceHeightWorldM;
+        }
+
+        /// <summary>Unit normal of the selected support surface.</summary>
+        public Vector3 GetSupportNormalWorld()
+        {
+            return supportSurfaceNormalWorld;
+        }
+
+        /// <summary>Which surface supports the ball: 0 = ground, 1+i = static box i.</summary>
+        public int GetSupportSurfaceId()
+        {
+            return supportSurfaceId;
+        }
+
+        /// <summary>Surfaces inside this step's band (footprint not applied). Diagnostic.</summary>
+        public int GetSupportSurfaceCount()
+        {
+            return supportCandidateCount;
+        }
+
+        /// <summary>This step's step limit: kStep * semantic diameter, metres.</summary>
+        public float GetStepHeightLimitWorldM()
+        {
+            return stepHeightLimitWorldM;
+        }
+
+        /// <summary>True while the ball is falling (lost its support; gravity active).</summary>
+        public bool IsFalling()
+        {
+            return isFalling;
+        }
+
+        /// <summary>
+        /// What kind of surface supports the ball: 0 = ground, 1 = static box top,
+        /// -1 = no surface resolved.
+        /// </summary>
+        /// <remarks>
+        /// 2 (ramp) and 3 (prop top) are reserved for P3/P2 and are never returned by this
+        /// revision. It is a kind, not an index: <see cref="GetSupportSurfaceId"/> names
+        /// WHICH box, this says WHAT it is, and a reader that only needs "can a prop sit
+        /// here" should read this one.
+        /// </remarks>
+        public int GetSupportKind()
+        {
+            if (supportSurfaceId == SupportSurfaceMath.GroundSurfaceId) return 0;
+            if (supportSurfaceId > 0) return 1;
+            return -1;
+        }
+
+        /// <summary>Sweep-array rebuilds caused by a step classification flip (diagnostic).</summary>
+        public int GetStepMaskRebuildCount()
+        {
+            return stepMaskRebuildCount;
         }
 
         /// <summary>

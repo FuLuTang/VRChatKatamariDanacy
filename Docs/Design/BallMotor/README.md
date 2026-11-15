@@ -20,8 +20,8 @@
 |---|---|---|---|---|
 | 1 | `ControlIntentMath` | 原始输入 + 上帧边沿状态 | 意图序列 | 一切的下游来源；去抖/菜单抑制只在这里发生 |
 | 2 | `BallMotionMath` | 意图里的 `Move2D` + 当前速度 | 新速度、请求位移 | 位移决定后面所有几何 |
-| 3 | `SweepMath` | 请求位移 + 障碍数组 | 实际位移、是否卡住、墙面接触法线（去速用） | **先扫掠再落地面**：被挡住时不能把球放进障碍里；只有实际位移可以用于视觉滚动。去速必须在扫掠之后，否则位移用的还是撞墙的请求 |
-| 4 | `GroundContactMath` | 扫掠后中心 + 地面平面 + 径向代理外壳（长物件 AABB 角点，按突出上限夹紧） | 贴地后的中心、支持高度、法线修正 | 支持高度依赖最终位置，先移动再贴地 |
+| 3 | `SweepMath` | 请求位移 + 障碍数组（P1：先由 `SupportSurfaceMath.IsSteppable` 决定哪些静态盒是台阶并从数组里剔除） | 实际位移、是否卡住、墙面接触法线（去速用） | **先扫掠再落地面**：被挡住时不能把球放进障碍里；只有实际位移可以用于视觉滚动。去速必须在扫掠之后，否则位移用的还是撞墙的请求。台阶掩码必须在扫掠**之前**刷新，因为「能上」的含义就是「允许球心进入扩张 AABB」 |
+| 4 | `GroundContactMath` | 扫掠后中心 + **本步选中的支撑面**（P1；关掉地形支撑时仍是原始地面平面）+ 径向代理外壳（长物件 AABB 角点，按突出上限夹紧） | 贴地后的中心、支持高度、法线修正 | 支持高度依赖最终位置，先移动再贴地。选面必须在扫掠之后（用扫掠后的 XZ），下落预算必须在调用之前算好（见「地形支撑接线」） |
 | 5 | `PickupAbsorbMath` | 碰撞半径 + 候选物件尺寸/位置 | 吸收/拒绝 + 每件体积 | 必须在位置上定稿之后判，否则会隔空吸到 |
 | 6 | `GrowthLedgerMath` | 已确认的吸收事件 | 已确认体积、交分事务 | 只有确认值能进分数；拾取结算在位置定稿后 |
 | 7 | `SizeModelMath` | 已确认体积 | 三个尺寸（核心半径/碰撞半径/语义直径） | 尺寸是账本的纯函数，不能累积增长 |
@@ -109,11 +109,15 @@ Update: 累积 deltaTime → 夹积压 → while(够一步且未到 maxSteps) St
 StepBall:
   1 StepInput()                 ControlIntentMath.TryProcess → Move2D 的 y/x + turn 轴
   2 BallMotionMath.TryStep      → heading、planarVelocity、requestedDisplacement（成功才赋值）
+  2.5 RefreshStepMask()         (P1，仅地形支撑开启) 台阶掩码 + 必要时重建扫掠数组
   3 SweepMath.TrySweepSphere    → sweptCenter（成功才赋值；stuck 交给卡住计时）
     SweepMath.TryCollectWallContactNormals + TryRemoveWallNormalVelocity
                                 → planarVelocity（只去墙面法向分量，切向保留）
-  4 GroundContactMath.TrySolve  → groundedCenter（代理外壳，夹紧突出量）
+  3.5 ResolveTerrainSupport()   (P1) 选支撑面 + 判定「支撑面掉走」→ isFalling
+  4 重力（仅下落）              fallSpeed += g·dt；本步上限 = fallSpeed·dt
+    GroundContactMath.TrySolve  → groundedCenter（代理外壳，夹紧突出量；台阶跨级/下落预算换上限）
     GroundContactMath.TrySolve  → followCenter（空代理数组，核心球心）
+    落地判定                    → isFalling = false，fallSpeed = 0
   ★ 卡住计时/恢复（本层策略，扫掠层只报 `stuck`）
   5 PickupAbsorbMath.EvaluateAbsorb（对队列里每个候选，用最终位置）
   6 GrowthLedgerMath.TrySubmitClaim + TryResolveClaims（成功才读回体积）
@@ -185,6 +189,36 @@ StepBall:
 
 **验证。** 纯逻辑测试在 `Tests/EditMode/BallLayers/RadialProxyShellTests.cs`：单根长棍抬升且不超过突出/单步上限、移除后回落、两件共享方向去掉一件不误删另一件、核心长大后原始突出收回、增量与整账本重建等价、容量满时拒绝且不改旧壳、角点夹紧与未用槽清零。**Unity 编译与 `run_tests` 没有在本检出运行**（Linux 侧不碰 Unity）。
 
+### 地形支撑接线（P1，2026-11-15；PROVISIONAL）
+
+支撑、台阶、重力下落的**数学**在 `Runtime/BallLayers/TerrainSupport/SupportSurfaceMath.cs`；装配层只搬运和排序。设计与取舍见 [TERRAIN_SUPPORT.md](TERRAIN_SUPPORT.md)（§8.1 是实现记录，含与设计的偏离）。
+
+**每步顺序（P1 新增的两处）**：`RefreshStepMask` 在扫掠**前**（台阶盒必须从扫掠里剔除，球才进得去）；`ResolveTerrainSupport` 在扫掠**后**（探针用扫掠后的 XZ）；重力预算在 `GroundContactMath` **前**算好。
+
+**序列化字段（默认值，全部 PROVISIONAL）**：
+
+| 字段 | 默认 | 作用 |
+|---|---:|---|
+| `terrainSupportEnabled` | **true** | 总开关。关掉时与 P1 之前逐位一致（四条见下） |
+| `stepHeightOverBallDiameter` | **0.25** | 比例，不是高度：`stepLimit = 0.25 × 语义直径`（数据/校验器/关卡门同一口径） |
+| `maxStepUpLiftWorldM` | 0.6 m | 单次跨级抬升护栏（> 0.25 × 2.2 = 0.55，正常碰不到） |
+| `stepHysteresisM` | 0.02 m | 台阶单向迟滞（判成台阶后要超 `limit + 0.02` 才回到墙） |
+| `stepStickMarginM` | 0.01 m | 「球已在盒顶之上」余量，避免扫掠把站在台阶上的球推出去 |
+| `minStepHeightM` | 0.005 m | 小于它的落差只是数值噪声，不给大抬升（**不是**地图的 0.05 m 分类门） |
+| `gravityMps2` | **9.81 m/s²** | 竖直重力（只有下落时作用；没有跳跃） |
+| `maxFallSpeedMps` | 40 m/s | 下落速度护栏（单步 ≤0.8 m），不是产品值 |
+| `supportDropTriggerM` | **0.01 m** | 「支撑面掉走」的容差；更小的落差由 `maxDropPerStep` 一步吃掉 |
+
+**公开方法（P1）**：`SetGroundPlane(n, o)`、`SetTerrainSupportEnabled(bool)` / `IsTerrainSupportEnabled()`、`GetStepHeightLimitWorldM()`、`GetSupportSurfaceHeightWorldM()`（**支撑面**高度，不是球心减支撑长度）、`GetSupportNormalWorld()`、`GetSupportSurfaceCount()`（本步 band 内面数；地图 0 的 `active_surface_max` 就是它）、`GetSupportSurfaceId()`（0 = 地面，1+i = 第 i 个静态盒）、`GetSupportKind()`（0 地面 / 1 盒 / -1 未解出；2 斜面、3 道具留给 P3/P2）、`GetStepMaskRebuildCount()`（掩码翻转引起的扫掠数组重建次数）、`IsFalling()`。`LevelArenaHost` 侧另有 `Reapply()`：清表后重注册，地图 0 的「一格一注册」靠它。P2 的 `SetSupportProps`、P3 的 `AddRamp` 都**没有**实现，不要在这里找。
+
+**关掉开关 = 逐位一致**：①掩码不刷新、`RebuildObstacles` 按注册顺序复制全部静态盒；②`GroundContactMath` 拿原始 `(groundPlaneNormal, groundPlaneOffset)`；③升降上限还是 `maxLiftPerStep` / `maxProxyLiftPerStep` / `maxDropPerStep`，`isFalling` 恒 false；④`VisualRollMath` 拿原始地面法线。运行期切换会清掩码并重建扫掠数组，`TeleportTo` 也会重置支撑参考与下落状态（传送进空气 → 真下落，不是 0.1/步 缓降）。
+
+**每步成本（常数，与已吸物件数无关）**：掩码门控 ≤8 次比较（尺寸变化 >2 mm / 支撑面变化 >5 mm / 盒集合变化才重算）；选面 ≤8 盒 × 约 15 flops + 1 次归一化，无分配；重力约 10 flops。掩码变化才重建扫掠数组（现有实现本来就会在条数变化时 `new Vector3[]`，P4 实测 GC）。
+
+**与小棍的接法**：小棍决定「球的哪个点最低」，支撑查询决定「那个点下面的面在哪」；本层喂 `GroundContactMath` 的是支撑面的 `(n, dot(n,P))`，代理点数组照旧。跨级那一步用 `min(stepLimit, maxStepUpLiftWorldM)` 覆盖 0.04 的代理上限，下一步立刻回到 0.04，所以长棍仍然弹不动球。**镜头仍读空代理数组解出的核心球心**，不跟台阶/下落起伏（低通照旧）。
+
+**关卡登记**：`Runtime/Story/LevelArenaHost.cs` 引用场景里的 `BoxCollider`（台面/台阶/墙）与墙的 `Transform`（局部 +Z 指向场内），`Setup` 时**烘焙一次** `bounds` / 平面 `(n, offset)` 后就不再读 Collider。`Labs/StoryLevel/StoryLevelLabBootstrap` 不再登记任何几何。
+
 ### 跟随架（2026-11-15 定稿语义，PROVISIONAL 数值）
 
 跟随架是**表现层**，也是玩家坐姿的落点：`VRCStation` 挂在 `followRigRoot` 下面，它指向哪里，玩家就在哪里。它只读球的位置、朝向与半径，不写回任何玩法状态。
@@ -246,7 +280,7 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 ### Unity 操作者还要接线
 
 1. 建 prefab：`BallPhysicsRoot`（本层只写 position）、其下的 `BallVisualRollRoot`（只写 rotation）、独立的 `FollowRig`，把三个 Transform 挂到 `ballPhysicsRoot` / `ballVisualRollRoot` / `followRigRoot`。
-2. 场景：`startCenterWorld`、地面平面法线/偏移、`AddPlane`/`AddBox` 喂障碍、`startCenterWorld` 同时是卡住恢复点。
+2. 场景：`startCenterWorld`（同时是卡住恢复点）由本层给；**地面/墙/静态盒改由 `LevelArenaHost` 登记**（`SetGroundPlane` + `AddPlane` + `AddBox`，box 的 bounds 在 Setup 烘焙）。旧 lab 若保留 `AddBox` 行为，显式 `SetTerrainSupportEnabled(false)`。
 3. 玩家 rig：`FollowRig` 挂到 Station/玩家参考系；本层只给位置 + yaw，不碰 HMD 姿态。
 4. 输入：要么在 Inspector 拖 `debugForward/Turn/Lateral` 做桌面预览，要么由适配层每帧调 `SetMoveAxes` / `SetMenuOpen`；若要接 `VRCInput`，必须先确认 SDK 里确实有该 API（本检出无法确认）。
 5. 吸收：候选收集器（触发器/空间结构）填 `SubmitCandidate(...)`，并用 `SetAllowedKinds` 提供允许的种类；**默认空集合 = 全部拒绝**，这是有意的：种类是世界数据，不在本层编。`PickupFieldHost` 在 `AttachProp` 里已经接了 `AttachRadialProxy`，`ResetField` 里已经接了 `ClearRadialProxies`；换宿主时这两个调用是必须的（否则球永远只有核心球壳）。
@@ -273,6 +307,10 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 | `maxProxyLiftPerStep` / `maxProxyNormalSpeedPerturbation` | 0.04 m / 0.15 m/s | 代理单步抬升与法向速度扰动上限；PROVISIONAL，保守值 |
 | `longObjectMinLongestEdgePerCoreDiameter` / `longObjectMinElongation` / `minProxyProtrusionM` | 0.5 / 2.5 / 0.01 m | 长物件准入（最长边 ≥ 0.5 球直径且 ≥ 2.5 × 第二长边）与最小可贡献突出；PROVISIONAL，未做道具普查 |
 | `stuckTimeoutSeconds` | 1.5 | 本层临时恢复策略 |
+| `terrainSupportEnabled` | true | P1 地形支撑总开关（2026-11-15 用户改定；旧 lab 显式关） |
+| `stepHeightOverBallDiameter` / `maxStepUpLiftWorldM` | 0.25 / 0.6 m | 台阶比例（与 `layout.json` 同源）与单次跨级抬升护栏；PROVISIONAL |
+| `stepHysteresisM` / `stepStickMarginM` / `minStepHeightM` | 0.02 / 0.01 / 0.005 m | 三条防抖：单向迟滞、已在顶上、去噪；PROVISIONAL |
+| `gravityMps2` / `maxFallSpeedMps` / `supportDropTriggerM` | 9.81 m/s² / 40 m/s / 0.01 m | 下落重力、速度护栏、掉走容差；PROVISIONAL（原作无测量） |
 
 ### 缺口（数学层没提供、本层没有自己编）
 

@@ -5,19 +5,33 @@ using VRCKatamari.BallMotor;
 namespace VRCKatamari.Labs.StoryLevel
 {
     /// <summary>
-    /// Wiring for the first story level slice: register the floor and walls with the ball
-    /// motor, open the round, and trail the camera. No rules live here.
+    /// Operator aid for the first story level slice: scripted drive, camera trail and a
+    /// one-line-per-second report. It registers NOTHING with the motor any more.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Scope is deliberately one ball, one floor, four walls. Round state, settlement and
-    /// scoring are NOT here: the story mode's own controller is a later task, and a second
-    /// copy of that logic in a lab is the duplicate this project keeps paying for.
+    /// The arena belongs to <see cref="VRCKatamari.Story.LevelArenaHost"/>: ground plane,
+    /// boundary walls, static boxes and the kind whitelist are that component's job
+    /// (Docs/Design/BallMotor/TERRAIN_SUPPORT.md §7.1/§7.6). Keeping a second writer here
+    /// would mean two components registering the same floor and the same boxes, and the
+    /// lab's copy would silently win or lose depending on Update order. The file and
+    /// class name are unchanged on purpose: the scene still references this script, and
+    /// the rename/move is a separate scene migration.
     /// </para>
     /// <para>
-    /// Registration is deferred to the first Update because Unity does not promise that this
-    /// component's Start runs after the motor's, and the motor allocates its stores in Start.
-    /// A positive diameter is the public proof that the motor is ready.
+    /// What remains is what a lab is for: a timeline that exercises the real input seam,
+    /// a camera that trails the ball, and the acceptance log. A positive semantic
+    /// diameter is the public proof that the motor is ready, so reporting waits for it
+    /// instead of racing Start order.
+    /// </para>
+    /// <para>
+    /// The log carries two height numbers on purpose:
+    /// <c>bottom</c> is the ball's lowest core point in world Y (<c>centre.y - collision
+    /// radius</c>), which is what the old acceptance line pinned (on a 0.26 m platform it
+    /// must read 0.260); <c>gap</c> is that bottom above the selected support surface,
+    /// which is the number that proves the ball actually sits ON the step (0.000 ±0.005)
+    /// and goes positive while it falls. Reporting only one of them would either break
+    /// the old check or hide a float/sink.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
@@ -27,14 +41,6 @@ namespace VRCKatamari.Labs.StoryLevel
         [SerializeField] private Transform cameraFollow;
         [SerializeField] private Vector3 cameraOffset = new Vector3(0f, 3.2f, -5.5f);
         [SerializeField] private Vector3 cameraEuler = new Vector3(24f, 0f, 0f);
-
-        [Header("Ground / obstacles")]
-        [SerializeField] private Vector3 groundNormal = new Vector3(0f, 1f, 0f);
-        [SerializeField] private float groundOffset = 0f;
-        [SerializeField] private BoxCollider[] obstacleBoxes;
-
-        [Header("Kinds")]
-        [SerializeField] private string[] allowedKinds;
 
         [Header("Self-test drive (operator aid, off by default)")]
         // The operator cannot press keys, and calling SetMoveAxes from C# does not reach the
@@ -55,7 +61,8 @@ namespace VRCKatamari.Labs.StoryLevel
 
         public void Start()
         {
-            // Nothing here touches the motor: its Start may not have run yet.
+            // Nothing here touches the motor: its Start may not have run yet, and its
+            // stores are allocated there.
         }
 
         public void Update()
@@ -63,8 +70,10 @@ namespace VRCKatamari.Labs.StoryLevel
             if (!initialised)
             {
                 if (!MotorReady()) return;
-                Setup();
-                if (!initialised) return;
+                startDiameter = motor.GetSemanticDiameterWorldM();
+                elapsed = 0f;
+                nextLogTime = 0f;
+                initialised = true;
             }
 
             elapsed = elapsed + Time.deltaTime;
@@ -110,35 +119,6 @@ namespace VRCKatamari.Labs.StoryLevel
             return motor.GetSemanticDiameterWorldM() > 0f;
         }
 
-        private void Setup()
-        {
-            int kindCount = allowedKinds == null ? 0 : allowedKinds.Length;
-            motor.SetAllowedKinds(allowedKinds, kindCount);
-            motor.AddPlane(groundNormal, groundOffset);
-
-            if (obstacleBoxes != null)
-            {
-                for (int i = 0; i < obstacleBoxes.Length; i++)
-                {
-                    BoxCollider box = obstacleBoxes[i];
-                    if (box == null) continue;
-                    Bounds b = box.bounds;
-                    motor.AddBox(b.min, b.max);
-                }
-            }
-
-            motor.TryBeginPlaying(Time.time);
-            startDiameter = motor.GetSemanticDiameterWorldM();
-            elapsed = 0f;
-            nextLogTime = 0f;
-            initialised = true;
-
-            Debug.Log("[story-lab] setup kinds=" + kindCount
-                + " startDiameter=" + startDiameter
-                + " boxes=" + (obstacleBoxes == null ? 0 : obstacleBoxes.Length)
-                + " playing=" + (motor.GetConfirmedVolumeUnits() >= 0f));
-        }
-
         /// <summary>Trails the ball: position and heading only, never the roll rotation.</summary>
         private void FollowBall()
         {
@@ -154,21 +134,35 @@ namespace VRCKatamari.Labs.StoryLevel
         }
 
         /// <summary>
-        /// One line per second: elapsed, centre, heading, diameter and the ball's bottom
-        /// height. "bottom" is the number that proves the ball sits on the floor rather than
-        /// floating or sinking, and it is the check the size rule is judged by.
+        /// One line per second: elapsed, centre, heading, diameter, the ball's bottom,
+        /// the gap above the selected support, which surface that is, and whether the
+        /// ball is falling. See the class remarks for why bottom and gap are both here.
         /// </summary>
         private void Report()
         {
             Vector3 center = motor.GetCenterWorld();
             float diameter = motor.GetSemanticDiameterWorldM();
-            float bottom = center.y - diameter * 0.5f;
+            float supportHeight = motor.GetSupportSurfaceHeightWorldM();
+            float bottom = center.y - motor.GetCollisionRadiusWorldM();
+            float gap = bottom - supportHeight;
+            // "ground" / "box" reads better than the raw id in the acceptance log; the id
+            // is still printed because it names WHICH box when several are registered.
+            int supportId = motor.GetSupportSurfaceId();
+            string supportName = "ground";
+            if (supportId > 0) supportName = "box";
             Vector3 axes = motor.GetPlanarVelocity();
             Debug.Log("[story-lab] t=" + (Mathf.Floor(elapsed * 10f) / 10f)
                 + " center=" + center
                 + " heading=" + (Mathf.Floor(motor.GetHeadingDegrees() * 10f) / 10f)
                 + " diameter=" + (Mathf.Floor(diameter * 10000f) / 10000f)
                 + " bottom=" + (Mathf.Floor(bottom * 1000f) / 1000f)
+                + " gap=" + (Mathf.Floor(gap * 1000f) / 1000f)
+                + " support=" + supportName
+                + " supportId=" + supportId
+                + " supportY=" + (Mathf.Floor(supportHeight * 1000f) / 1000f)
+                + " supports=" + motor.GetSupportSurfaceCount()
+                + " stepLimit=" + (Mathf.Floor(motor.GetStepHeightLimitWorldM() * 1000f) / 1000f)
+                + " falling=" + motor.IsFalling()
                 + " axes=" + (Mathf.Floor(axes.x * 100f) / 100f) + "," + (Mathf.Floor(axes.z * 100f) / 100f)
                 + " absorbed=" + motor.GetAbsorbedCount()
                 + " rejects=" + motor.GetRejectEventCount());

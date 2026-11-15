@@ -1,0 +1,134 @@
+{
+  "id": "small_potted_plant",
+  "pivot": "center",
+  "target_longest_m": 0.22,
+  "dimensions_m": {
+    "x": 0.1398693472146988,
+    "y": 0.13636252284049988,
+    "z": 0.2199999988079071,
+    "longest": 0.2199999988079071
+  },
+  "bounds_m": {
+    "min": [
+      -0.0699346736073494,
+      -0.06818126142024994,
+      -0.10999999940395355
+    ],
+    "max": [
+      0.0699346736073494,
+      0.06818126142024994,
+      0.10999999940395355
+    ]
+  },
+  "vertices": 247,
+  "triangles": 489,
+  "materials": [
+    "Prop_small_potted_plant_pot",
+    "Prop_small_potted_plant_soil",
+    "Prop_small_potted_plant_leaf"
+  ],
+  "material_base_colors": {
+    "Prop_small_potted_plant_pot": [
+      0.42,
+      0.16,
+      0.08
+    ],
+    "Prop_small_potted_plant_soil": [
+      0.075,
+      0.048,
+      0.028
+    ],
+    "Prop_small_potted_plant_leaf": [
+      0.12,
+      0.23,
+      0.06
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 3,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "7d04cfd389becfd4478dd4b78d8916fd7e987e96586e51d28e9c14c957a3a443",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "小盆栽",
+  "category": "garden",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.22,
+    "game_longest_dim_m": 0.55,
+    "sourcing_hint": "model ourselves：Ø14×12 cm 锥台盆 + 22 cm 高叶丛（CSV 提示 Kenney pot_small + flower_redA，本批自行建模）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.22,
+    "built_longest_m": 0.2199999988079071,
+    "abs_error_m": 1.1920928966180355e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 500,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "pot",
+      "name_zh": "陶土盆",
+      "linear_rgb": [
+        0.42,
+        0.16,
+        0.08
+      ],
+      "roughness": 0.8
+    },
+    {
+      "key": "soil",
+      "name_zh": "盆土深褐",
+      "linear_rgb": [
+        0.075,
+        0.048,
+        0.028
+      ],
+      "roughness": 0.95
+    },
+    {
+      "key": "leaf",
+      "name_zh": "叶片绿",
+      "linear_rgb": [
+        0.12,
+        0.23,
+        0.06
+      ],
+      "roughness": 0.65
+    }
+  ],
+  "notes": "Pot: 16-segment, 8-point lathe, base 0.090 m, rim 0.140 m at z=0.120, 4 mm rim wall, soil surface at z=0.104: 192 triangles.  Six leaves: 5-segment flat lens sweep with 4 stations each (40 triangles), bases on a 12 mm radius at z=0.096, rising to tips at r=0.058 and 0.198-0.220 m (one leaf at the full 0.220 m, the rest scaled 0.90-0.98 so the cluster is not a fan of identical blades); azimuths 15/75/135/195/255/315 degrees, welded with exact unions.  Materials are re-assigned by position after the union (leaf above the rim or above the soil inside r<0.045).  Total about 450 triangles, one closed shell.",
+  "build_script": "models/small_potted_plant.py",
+  "preview": "previews/small_potted_plant_preview.png",
+  "files": {
+    "small_potted_plant.fbx": 28476,
+    "small_potted_plant.glb": 18596,
+    "small_potted_plant.blend": 100606
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 151397
+}

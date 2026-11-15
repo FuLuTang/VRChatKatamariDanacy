@@ -1,0 +1,118 @@
+{
+  "id": "bread_slice",
+  "pivot": "center",
+  "target_longest_m": 0.1,
+  "dimensions_m": {
+    "x": 0.09964858740568161,
+    "y": 0.10000000149011612,
+    "z": 0.014341353438794613,
+    "longest": 0.10000000149011612
+  },
+  "bounds_m": {
+    "min": [
+      -0.049824293702840805,
+      -0.05000000074505806,
+      -0.0071706767193973064
+    ],
+    "max": [
+      0.049824293702840805,
+      0.05000000074505806,
+      0.0071706767193973064
+    ]
+  },
+  "vertices": 82,
+  "triangles": 160,
+  "materials": [
+    "Prop_bread_slice_crumb",
+    "Prop_bread_slice_crust"
+  ],
+  "material_base_colors": {
+    "Prop_bread_slice_crumb": [
+      0.64,
+      0.47,
+      0.25
+    ],
+    "Prop_bread_slice_crust": [
+      0.23,
+      0.095,
+      0.035
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "99a33bf8821df6fed63358ca516c4bbb2c7df52b2cb0c9030c07232aaafc2a91",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "面包片",
+  "category": "food",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.1,
+    "game_longest_dim_m": 0.3,
+    "sourcing_hint": "model ourselves：10×10×1.5 cm 片，四周一圈面包皮（CSV 提示 Kenney bread.glb，本批自行建模）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.1,
+    "built_longest_m": 0.10000000149011612,
+    "abs_error_m": 1.4901161138336505e-09,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 200,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "crumb",
+      "name_zh": "面包瓤米白",
+      "linear_rgb": [
+        0.64,
+        0.47,
+        0.25
+      ],
+      "roughness": 0.85
+    },
+    {
+      "key": "crust",
+      "name_zh": "面包皮棕",
+      "linear_rgb": [
+        0.23,
+        0.095,
+        0.035
+      ],
+      "roughness": 0.6
+    }
+  ],
+  "notes": "20 segments, three top rings (0.55 / 0.86 / 1.0) and a flat underside fan: 160 triangles.  Outline is a superellipse with p = 5, half-width 0.050 m and a 1.2% six-lobe rim wobble, so the slice is a rounded square 0.100 x 0.100 m.  Top height field runs 0.0110 m at the rim to 0.0145 m at the centre; the flat underside is z=0.  Crust is the outer 10% of the outline radius (rim faces and the top border band), crumb everywhere else; the hidden underside stays crumb.  One closed shell, no separate crust geometry.",
+  "build_script": "models/bread_slice.py",
+  "preview": "previews/bread_slice_preview.png",
+  "files": {
+    "bread_slice.fbx": 19404,
+    "bread_slice.glb": 12128,
+    "bread_slice.blend": 92008
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 117637
+}

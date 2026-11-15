@@ -33,6 +33,16 @@ ORDER = [
     'bowl',
     'thermos',
     'croissant',
+    # Remaining StoryLevel placeholders with a real size source (2026-11-15
+    # fourth batch): the food / tableware / garden pieces that had no model yet.
+    # Every one of them comes from PROP_SET_PLAN.md 3.3-3.4 with a real three
+    # axis, and every one keeps its catalog id.
+    'bread_slice',
+    'cheese_slice',
+    'fallen_leaf',
+    'sandwich',
+    'spoon',
+    'small_potted_plant',
 ]
 
 

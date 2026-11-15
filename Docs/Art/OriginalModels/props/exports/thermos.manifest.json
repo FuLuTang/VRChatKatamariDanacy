@@ -3,34 +3,46 @@
   "pivot": "center",
   "target_longest_m": 0.3,
   "dimensions_m": {
-    "x": 0.12124750763177872,
-    "y": 0.10582362115383148,
+    "x": 0.10871821641921997,
+    "y": 0.10529220849275589,
     "z": 0.29999998211860657,
     "longest": 0.29999998211860657
   },
   "bounds_m": {
     "min": [
-      -0.06062375381588936,
-      -0.05291181057691574,
+      -0.054359108209609985,
+      -0.052646104246377945,
       -0.14999999105930328
     ],
     "max": [
-      0.06062375381588936,
-      0.05291181057691574,
+      0.054359108209609985,
+      0.052646104246377945,
       0.14999999105930328
     ]
   },
-  "vertices": 187,
-  "triangles": 374,
+  "vertices": 194,
+  "triangles": 388,
   "materials": [
     "Prop_thermos_body",
+    "Prop_thermos_handle",
+    "Prop_thermos_belt",
     "Prop_thermos_cap"
   ],
   "material_base_colors": {
     "Prop_thermos_body": [
-      0.42,
-      0.05,
-      0.035
+      0.34,
+      0.36,
+      0.385
+    ],
+    "Prop_thermos_handle": [
+      0.07,
+      0.075,
+      0.085
+    ],
+    "Prop_thermos_belt": [
+      0.02,
+      0.115,
+      0.105
     ],
     "Prop_thermos_cap": [
       0.64,
@@ -46,7 +58,7 @@
     "duplicate_faces": 0,
     "closed_shells": 1
   },
-  "geometry_sha256": "8bfd2fad4334a5b48004aca846cc964138ef8eb301a3713fd722b75762dd36c5",
+  "geometry_sha256": "17a6a2065c9cf955429ce1431e4df6e076b5f0d43319d1b575c6ae780759c591",
   "transforms": "identity (applied; geometry in metres)",
   "name_zh": "保温壶",
   "category": "container",
@@ -54,7 +66,7 @@
     "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
     "real_longest_dim_m": 0.3,
     "game_longest_dim_m": 0.9,
-    "sourcing_hint": "model ourselves：Ø0.106 x 0.30 m 旋转体 + 杯盖 + 提手",
+    "sourcing_hint": "model ourselves：Ø0.10 x 0.30 m 旋转体 + 倒扣杯盖 + 竖向提手",
     "row_found": true
   },
   "dimension_check": {
@@ -72,13 +84,33 @@
   "materials_declared": [
     {
       "key": "body",
-      "name_zh": "保温壶红",
+      "name_zh": "不锈钢灰",
       "linear_rgb": [
-        0.42,
-        0.05,
-        0.035
+        0.34,
+        0.36,
+        0.385
       ],
-      "roughness": 0.4
+      "roughness": 0.3
+    },
+    {
+      "key": "handle",
+      "name_zh": "提手炭黑",
+      "linear_rgb": [
+        0.07,
+        0.075,
+        0.085
+      ],
+      "roughness": 0.55
+    },
+    {
+      "key": "belt",
+      "name_zh": "腰带深青",
+      "linear_rgb": [
+        0.02,
+        0.115,
+        0.105
+      ],
+      "roughness": 0.45
     },
     {
       "key": "cap",
@@ -91,13 +123,13 @@
       "roughness": 0.5
     }
   ],
-  "notes": "16-segment body, 11 profile points, plus a 5-segment handle tube; about 368 triangles before the exact union and one shell after it.  Body 0.106 m diameter from z=0.018 to 0.210, shoulder to 0.266, neck 0.062, cup lid 0.070 wide and 0.020 tall, total 0.300 m.  Handle centre-line at x=0.064, tube radius 5.5 mm, entering the body at z=0.055 and 0.205; it leaves a 5.5 mm finger gap.  Measured X is the 0.106 m body plus the handle on one side, so it is ~0.122 m, not the catalog 0.12 m: the catalog value is the body diameter and cannot also include a usable handle.",
+  "notes": "14-segment body, 12 profile points, plus a 6-station, 5-segment strap handle; about 340 triangles before the exact union, one shell after it.  Body r=0.048 from the 0.010 base chamfer to 0.210, short shoulder to a 0.040 neck at 0.230; belt bulges to r=0.051 over z=0.130-0.180; cup flange at z=0.230 (r 0.040 -> 0.054), wall tapers to r=0.0525 at 0.292, flat top closes at 0.300.  Handle centreline x=0.066, strap 19 x 7 mm, entering at z=0.052 and 0.215, swung 40 degrees round from +X so the finger gap reads as background: 14.5 mm.  Four materials: steel body, charcoal handle, teal belt, cream cup.  Measured X 0.111 m (handle side), Y 0.108 m (cup diameter), Z 0.300 m - the footprint is 10 mm narrower than the second-batch version because the handle no longer points at +X; body, cup and height are unchanged.",
   "build_script": "models/thermos.py",
   "preview": "previews/thermos_preview.png",
   "files": {
-    "thermos.fbx": 22028,
-    "thermos.glb": 9012,
-    "thermos.blend": 96440
+    "thermos.fbx": 24588,
+    "thermos.glb": 11728,
+    "thermos.blend": 98757
   },
   "export_settings": {
     "fbx": {
@@ -114,5 +146,5 @@
     },
     "blender": "5.3.0"
   },
-  "preview_bytes": 123467
+  "preview_bytes": 129511
 }

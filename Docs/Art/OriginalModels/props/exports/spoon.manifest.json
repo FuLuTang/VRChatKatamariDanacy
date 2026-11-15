@@ -1,0 +1,102 @@
+{
+  "id": "spoon",
+  "pivot": "center",
+  "target_longest_m": 0.18,
+  "dimensions_m": {
+    "x": 0.03498135134577751,
+    "y": 0.17999999970197678,
+    "z": 0.014991585165262222,
+    "longest": 0.17999999970197678
+  },
+  "bounds_m": {
+    "min": [
+      -0.017490675672888756,
+      -0.09000000357627869,
+      -0.007495792582631111
+    ],
+    "max": [
+      0.017490675672888756,
+      0.08999999612569809,
+      0.007495792582631111
+    ]
+  },
+  "vertices": 143,
+  "triangles": 282,
+  "materials": [
+    "Prop_spoon_steel"
+  ],
+  "material_base_colors": {
+    "Prop_spoon_steel": [
+      0.56,
+      0.57,
+      0.58
+    ]
+  },
+  "mesh_checks": {
+    "non_manifold_edges": 0,
+    "zero_area_faces": 0,
+    "loose_vertices": 0,
+    "ngons": 0,
+    "duplicate_faces": 0,
+    "closed_shells": 1
+  },
+  "geometry_sha256": "31fccaea279b4a75e04a789893791a810d4e302425a1a1e547a8a0ae2957c46b",
+  "transforms": "identity (applied; geometry in metres)",
+  "name_zh": "勺子",
+  "category": "tableware",
+  "catalog": {
+    "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+    "real_longest_dim_m": 0.18,
+    "game_longest_dim_m": 0.34,
+    "sourcing_hint": "model ourselves：18 cm 长，柄宽 1.2 cm，头部 3.5×5 cm 浅凹（CSV 提示 Kenney utensil-spoon.glb）",
+    "row_found": true
+  },
+  "dimension_check": {
+    "size_reference": "real",
+    "checked_against": "real_longest_dim_m",
+    "target_m": 0.18,
+    "built_longest_m": 0.17999999970197678,
+    "abs_error_m": 2.98023217215615e-10,
+    "csv_target_matches": true,
+    "csv_game_longest_matches": false,
+    "scale_vs_real_m": 1.0
+  },
+  "tri_budget": 300,
+  "within_budget": true,
+  "materials_declared": [
+    {
+      "key": "steel",
+      "name_zh": "不锈钢",
+      "linear_rgb": [
+        0.56,
+        0.57,
+        0.58
+      ],
+      "roughness": 0.28
+    }
+  ],
+  "notes": "Bowl: 16-segment, 8-point lathe scaled to 70% in X = 0.035 x 0.050 m oval, rim 0.0115 m, well floor 0.0056 m (5.9 mm deep), underside flat at z=0.  Handle: 5 stations, 6-segment flat elliptical sweep from the bowl centre to y=-0.155, half-width 0.0075 -> 0.0032 m, half-thickness 0.0018 -> 0.0010 m, welded by an exact union.  Total length 0.180 m along Y, one closed shell, about 250 triangles before the union.",
+  "build_script": "models/spoon.py",
+  "preview": "previews/spoon_preview.png",
+  "files": {
+    "spoon.fbx": 20044,
+    "spoon.glb": 6236,
+    "spoon.blend": 93629
+  },
+  "export_settings": {
+    "fbx": {
+      "axis_forward": "-Z",
+      "axis_up": "Y",
+      "bake_space_transform": true,
+      "apply_scale_options": "FBX_SCALE_UNITS",
+      "mesh_smooth_type": "FACE"
+    },
+    "glb": {
+      "format": "GLB",
+      "export_yup": true,
+      "export_apply": true
+    },
+    "blender": "5.3.0"
+  },
+  "preview_bytes": 73780
+}

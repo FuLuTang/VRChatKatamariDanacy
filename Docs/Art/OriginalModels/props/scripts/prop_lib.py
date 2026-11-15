@@ -481,10 +481,16 @@ class Builder:
         self.objs.append(ob)
         return ob
 
-    def boolean_union(self, target, tools):
+    def _apply_boolean(self, target, tools, operation, prefix):
+        """Apply one Exact boolean per tool and consume the tool objects.
+
+        Both the union and the difference path must leave ``target`` as the only
+        object in ``self.objs`` for that part (and delete the tool datablocks),
+        so the two share this loop instead of duplicating it.
+        """
         for tool in tools:
-            mod = target.modifiers.new('union_' + tool.name, 'BOOLEAN')
-            mod.operation = 'UNION'
+            mod = target.modifiers.new(prefix + tool.name, 'BOOLEAN')
+            mod.operation = operation
             mod.solver = 'EXACT'
             mod.object = tool
             bpy.ops.object.select_all(action='DESELECT')
@@ -494,6 +500,20 @@ class Builder:
             if tool in self.objs:
                 self.objs.remove(tool)
             bpy.data.objects.remove(tool, do_unlink=True)
+
+    def boolean_union(self, target, tools):
+        self._apply_boolean(target, tools, 'UNION', 'union_')
+
+    def boolean_difference(self, target, tools):
+        """Cut ``tools`` out of ``target``; the result stays one closed shell.
+
+        Added for the 2026-11-15 fourth batch: a cheese slice needs blind holes
+        (dents that do not break through), and a blind hole cannot be made by
+        welding two shells - the cavity has to be subtracted from the solid.  A
+        difference that stays inside the target keeps the mesh watertight with
+        no buried faces, which is the same contract boolean_union provides.
+        """
+        self._apply_boolean(target, tools, 'DIFFERENCE', 'diff_')
 
     def finish(self, target_longest_m):
         bpy.ops.object.select_all(action='DESELECT')

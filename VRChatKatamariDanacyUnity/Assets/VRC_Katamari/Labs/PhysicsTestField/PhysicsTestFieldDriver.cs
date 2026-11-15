@@ -28,7 +28,9 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// </para>
     /// <para>
     /// <b>Cells that cannot be measured are not failures.</b> A check gated on a stage this build
-    /// does not have (P2/P3), a check whose readout is a console trace a human reads
+    /// does not have (P3), a P2 check with no <see cref="PickupFieldHost"/> wired or with the
+    /// host's prop obstacles switched off (the only caller of <c>SetSupportProps</c>), a check
+    /// whose readout is a console trace a human reads
     /// (<c>readout=trace</c>), and a check that needs the P4 step counters all report
     /// <c>BLOCKED_UNTIL_*</c> and are counted as skipped. Only a measured check can be
     /// <c>UNEXPECTED_*</c>.
@@ -709,7 +711,12 @@ namespace VRCKatamari.Labs.PhysicsTestField
                     continue;
                 }
 
-                if (gateStage == 2)
+                // P2 is in the motor, but prop tops only reach it through SetSupportProps, and
+                // PickupFieldHost is the only caller. Without a host - or with its prop
+                // obstacles switched off (it clears both sets) - the P2 readings (what supports
+                // the ball, how many prop tops are registered) can never leave their defaults,
+                // so a gate=P2 check is unmeasurable rather than failed.
+                if (gateStage == 2 && (pickupHost == null || !pickupHost.IsBlockingEnabled()))
                 {
                     LogSkipped(checkId, metric, op, limit, expectText, "BLOCKED_UNTIL_P2");
                     checkSkipped = checkSkipped + 1;
@@ -806,6 +813,22 @@ namespace VRCKatamari.Labs.PhysicsTestField
             if (Same(metric, "support_gap_m"))
             {
                 value = (center.y - radius) - motor.GetSupportSurfaceHeightWorldM();
+                return true;
+            }
+
+            if (Same(metric, "support_kind"))
+            {
+                // -1 none, 0 ground, 1 static box top, 2 ramp (P3, never returned yet),
+                // 3 support prop top. A prop top has surface id 100+i, so a check on the
+                // kind must read this getter rather than test the id's sign.
+                value = (float)motor.GetSupportKind();
+                return true;
+            }
+
+            if (Same(metric, "support_prop_count"))
+            {
+                // Prop tops the motor actually holds (0..6), not the host's candidate count.
+                value = (float)motor.GetSupportPropCount();
                 return true;
             }
 

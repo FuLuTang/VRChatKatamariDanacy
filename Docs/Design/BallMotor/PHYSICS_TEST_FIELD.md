@@ -16,10 +16,10 @@
 3. **判据全部落在「已有的 getter」或「每固定步一行的 `[ProxyTrace]` 日志」上**。唯一现在拿不到的是每步成本计数器（`activeSurfaceCount` / 单步耗时），本场把它列成**待加 getter**（§6.4），拿到之前 `readout=counter` 的判据报 `BLOCKED_UNTIL_P4`，而不是假装能测。
 4. **球径设定不改运行时代码**：用现有接缝做闭环——`SubmitCandidate(体积单位)` 喂体积 → `GetSemanticDiameterWorldM()` 读回 → 迭代收敛；回 0.30 用 `TryResetForNewRound`（它会把球重置回 baseline 直径）。三条路线的权衡在 §8.3。
 5. **三处判据落在等号上**，必须写成「含等号」才自洽：0.075 m 台阶 vs `stepLimit(0.30) = 0.075`；45.0° vs `maxSupportSlopeDegrees = 45`；`collapsed_bench` 的 0.55 m 高 vs `stepLimit(2.20) = 0.55`。这三处要么全按 `≤` 读，要么全按 `<`；**混用会产出互相矛盾的 PASS**（§6.5）。
-6. **P1 已合入，所以「现在就该 PASS 的第一批」是 C14**：它的 0.028 m 板在 `stepLimit(0.30) = 0.075` 之内，P1 之前必 FAIL（隐形墙），P1 之后必 PASS；FAIL 那次也是有效证据。剩下只需「地面 + 挡路 + 扫掠 + 径向代理」的 C00/C15/C16/C17/C18/C19 还没有各自的 placement（它们在 `planned_cells`）。
+6. **P1/P2 已合入，所以「现在就该 PASS 的第一批」是 C14**：它的 0.028 m 板在 `stepLimit(0.30) = 0.075` 之内，P1 之前必 FAIL（隐形墙），P1 之后必 PASS；FAIL 那次也是有效证据。剩下只需「地面 + 挡路 + 扫掠 + 径向代理」的 C00/C15/C16/C17/C18/C19 还没有各自的 placement（它们在 `planned_cells`）。
 7. **`napkin` 的厚度有数据冲突**：文档写 2.8 cm，`napkin.manifest.json` 实际是 **1.4 cm**。本场用一块**静态 0.028 m 薄板**钉住文档口径（C14），同时把真 napkin 放进挡路行（C18 #1），两条路径分开走（§12 U3）。
 
-> **树状态（2026-11-15 08:00 复核，替换此前「getter 不存在、未接进 motor」的过期描述）**：P1 的支撑链**已经进树**——`KatamariBallMotor` 里 `GetSupportSurfaceHeightWorldM` / `GetSupportNormalWorld` / `GetSupportSurfaceId` / `GetSupportSurfaceCount` / `GetStepHeightLimitWorldM` / `IsFalling()` / `GetSupportKind()` / `GetStepMaskRebuildCount` 都在（`Runtime/BallMotor/KatamariBallMotor.cs`），`Runtime/Story/LevelArenaHost.cs` 也在（`groundNormal/groundOffset`、`boundaryWalls`、`staticBoxes`、`allowedKinds`、`Reapply()`），`SetTerrainSupportEnabled` 让旧 lab 能退回 P1 之前的行为。**仍然没有**的是：`AddRamp`/`rampBoxes`（P3）、道具支撑（P2）、每步成本计数器（P4）。所以本文的 gate 规则是：`gate=P1` 的判据**现在就该算**（P1 getter 已在），`gate=P2/P3` 报 `BLOCKED_UNTIL_P2/P3`；`readout=trace` 的判据由人读 `[ProxyTrace]`，驱动报 `BLOCKED_UNTIL_manual`；`readout=counter` 报 `BLOCKED_UNTIL_P4`。这三类都**不算失败**（§5.3）。
+> **树状态（2026-11-15 08:00 复核，P2 落地后更新）**：P1/P2 的支撑链**已经进树**——`KatamariBallMotor` 里 `GetSupportSurfaceHeightWorldM` / `GetSupportNormalWorld` / `GetSupportSurfaceId` / `GetSupportSurfaceCount` / `GetStepHeightLimitWorldM` / `IsFalling()` / `GetSupportKind()` / `GetStepMaskRebuildCount` / `SetSupportProps` / `ClearSupportProps` / `GetSupportPropCount` / `GetSupportPropCapacity` / `IsSupportingAProp` 都在（`Runtime/BallMotor/KatamariBallMotor.cs`），`Runtime/Story/LevelArenaHost.cs` 也在（`groundNormal/groundOffset`、`boundaryWalls`、`staticBoxes`、`allowedKinds`、`Reapply()`），`Runtime/Pickup/PickupFieldHost.cs` 的 `UpdatePropObstacles` 负责挡路/支撑一遍分类，`SetTerrainSupportEnabled` 让旧 lab 能退回 P1 之前的行为。**仍然没有**的是：`AddRamp`/`rampBoxes`（P3）、每步成本计数器（P4）。所以本文的 gate 规则是：`gate=P1` 的判据**现在就该算**；`gate=P2` 的判据在场景接了 `PickupFieldHost` 且它的 `IsBlockingEnabled()` 为 true（`SetSupportProps` 的唯一调用方；关掉时宿主会清两个集合）后**也该算**，否则仍报 `BLOCKED_UNTIL_P2`；`gate=P3` 报 `BLOCKED_UNTIL_P3`；`readout=trace` 的判据由人读 `[ProxyTrace]`，驱动报 `BLOCKED_UNTIL_manual`；`readout=counter` 报 `BLOCKED_UNTIL_P4`。这些都不算失败（§5.3）。
 > **本轮新增**（§9.5）：`Labs/PhysicsTestField/` 三个组件（`PhysicsTestCell` / `PhysicsTestFieldDriver` / `LabBallSizeSetter`）与 `Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs` 已写，**未编译**。
 
 ---
@@ -97,7 +97,7 @@
 | 静态盒 | 8 | `MaxBoxCount`（现状；地图数据契约，`validate_map.py` 也抄成 8） |
 | 斜面 | 4 | `MaxRampCount`（P3 计划） |
 | 挡路盒 | 6 | `MaxBlockingBoxCount`（现状） |
-| 道具支撑 | 6 | `MaxSupportPropCount`（P2 计划） |
+| 道具支撑 | 6 | `MaxSupportPropCount`（P2 已实现） |
 | 每步接触 | 4 | `ContactCapacity`（现状） |
 
 ### 3.2 一张图装不下的算术
@@ -386,7 +386,8 @@
 
 | token | 什么时候 | 谁能解开 |
 |---|---|---|
-| `BLOCKED_UNTIL_P2` / `_P3` | 判据声明 `gate=P2/P3`，而这两个阶段的接口（道具支撑 / `AddRamp`）还没有 | 对应阶段落地后改驱动的 gate 映射 |
+| `BLOCKED_UNTIL_P2` | 判据声明 `gate=P2`，但场景里没有接 `PickupFieldHost`，或宿主关掉了道具障碍（`SetSupportProps` 的唯一调用方） | P2 的 getter 已进树；接上宿主且 `IsBlockingEnabled()` 为 true 后判据自动可测 |
+| `BLOCKED_UNTIL_P3` | 判据声明 `gate=P3`，而斜面的接口（`AddRamp`）还没有 | P3 落地后改驱动的 gate 映射 |
 | `BLOCKED_UNTIL_manual` | `readout=trace`：读数只存在于 `[ProxyTrace]` 的逐行日志里，驱动读不到自己的 Console | 人（grep console） |
 | `BLOCKED_UNTIL_P4` | `readout=counter`：每步成本计数器还不存在 | §6.4 的接口请求 |
 | `BLOCKED_UNTIL_reset` / `_size` / `_setter` / `_setup` | 这一 run 根本没跑起来（复位失败 / 球径没收敛 / 没挂设定器 / 场景没接好） | 操作员；这是**场景问题**不是物理结论 |
@@ -938,7 +939,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
 |---|---|---|---|---|
 | **A（现在）** | 无（今天的代码） | C00 起点/球径台、C15 薄墙、C16 内角、C17 夹缝、C18 挡路行、C19 长杆 + **C14 作为「预期失败」的反例** | 6 格 PASS、C14 EXPECTED_FAIL（隐形墙）、C18 的 crate 在 2.20 之前一律「挡」 | ~5 min |
 | **B（P1 合入后）** | `LevelArenaHost` + 盒顶支撑 + step-up + P1 的 14 条 NUnit 绿 | **第一批**：C14（PASS）、C07、C08、C09；然后 C10、C11、C12；最后 C13 的 `entry=teleport` | 台阶矩阵 6×4 全对；C14 从 FAIL 翻 PASS；C13 站得稳、掉得下去 | ~12 min |
-| **C（P2 合入后）** | 道具支撑/挡路拆分（`SetSupportProps`） | C18 的两个子项：crate 在 2.20 变支撑、`sets_disjoint` | 「同一件道具先挡路、后通路」成立；两个集合永不重叠 | ~4 min |
+| **C（P2 已合入，2026-11-15 Linux 侧；C18 几何待迁移）** | 道具支撑/挡路拆分（`SetSupportProps` + `PickupFieldHost.UpdatePropObstacles`） | C18 的两个子项：crate 在 2.20 变支撑、`sets_disjoint` | 「同一件道具先挡路、后通路」成立；两个集合永不重叠 | ~4 min |
 | **D（P3 合入后）** | 斜面（`AddRamp` 烘焙 + 护栏） | C01–C06、C13 的 `entry=ramp`、C20 | 5 档坡度可上、50° 被拒、组合路线全程通 | ~10 min |
 
 ### 10.2 第一批（P1 合入后 30 分钟内要能跑起来）的格
@@ -994,6 +995,8 @@ C00（零点） → C14 → C09 → C08 → C10 → C07 → C11 → C12 → C13(
 | S16（45.1° 板 → 拒绝 + 墙） | **C06**（50°） | `ramp_refused` / `refused_not_registered` / `stopped_by_wall` | 50° 比 45.1° 更狠，且离 45° 有 5° 余量，不会踩浮点 |
 | S17（停 30° 坡 5 s 不动） | **C03**（25°）/ **C04**（35°）的 `no_slip_back` | `slip_back ≤ 0.02` | 25/35 夹住 30，避免只测一个点 |
 | NUnit `StepLimitScalesWithDiameter` | C00 + C07–C12 | `size_accuracy` + `step_outcome` | 四个球径的 `stepLimit` 由 C00 实测读数交叉验证 |
+
+> P2 的接口（`SetSupportProps` / `GetSupportKind` / `GetSupportPropCount`）已于 2026-11-15 进树；S8–S12 里依赖道具支撑的判据仍随 C18 的几何（`planned_cells`）一起待迁移。本表是验收项到格位的映射，不是「已可跑的判据清单」。
 
 ---
 

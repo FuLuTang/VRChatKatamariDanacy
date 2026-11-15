@@ -69,7 +69,7 @@
       "support_props": 6,
       "contacts": 4
     },
-    "source": "Runtime/BallMotor/KatamariBallMotor.cs 的序列化字段与常量；ramps / support_props / step 规则为 TERRAIN_SUPPORT 的 P1/P2/P3 计划项"
+    "source": "Runtime/BallMotor/KatamariBallMotor.cs 的序列化字段与常量；ramps 为 TERRAIN_SUPPORT 的 P3 计划项，step 规则与 support_props（P1/P2）已实现"
   },
   "diameters": [
     {
@@ -1276,7 +1276,7 @@
     "blocked_notes": [
       "readout=trace checks are read from the console by a human, so the driver reports them as BLOCKED_UNTIL_manual and counts them as skipped, never as failures",
       "readout=counter checks need the P4 step-cost counters and report BLOCKED_UNTIL_P4",
-      "gate=P2/P3 checks report BLOCKED_UNTIL_P2/P3 in this revision"
+      "gate=P2 checks are measured when a PickupFieldHost is wired with prop obstacles enabled (its SetSupportProps is the only path for prop tops; a disabled host clears both sets); gate=P3 still reports BLOCKED_UNTIL_P3 in this revision"
     ]
   },
   "ball_size": {

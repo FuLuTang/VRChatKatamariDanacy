@@ -67,7 +67,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 | 数据项 | 位置 | 现状 | 新口径 | 这次动不动 | 为什么 |
 |---|---|---|---|---|---|
-| `scale.item_tier_pickup_diameter_m`（s 0.08–0.30 / m 0.32–0.95 / l 1.00–1.95） | `layout.json:49` | **长度**档位：`clamp(game_longest_dim_m, 档窗口)` 当"拾取门槛" | 体积门 `a·b·c ≤ (π/6)·D³/10`；等价边长 `a_eq = (abc)^(1/3)`，`D_req = 2.673·a_eq` | **不动** | 它是内容侧分档、也是校验器第 11 条唯一的判据；改它必须同时改校验器与值表，而校验器不在写范围 |
+| `scale.item_tier_pickup_diameter_m`（s 0.08–0.30 / m 0.32–0.95 / l 1.00–1.95） | `layout.json:49` | **长度**档位：`clamp(game_longest_dim_m, 档窗口)` 当"拾取门槛" | 体积门 `a·b·c ≤ (π/6)·D³/10`；等价边长 `a_eq = (abc)^(1/3)`，`D_req = 2.673·a_eq` | **不动** | 它是内容侧分档、也是校验器第 11 条唯一的判据；改它必须同时改校验器与声明值（值表已删），而校验器不在写范围 |
 | `game_longest_dim_m`（目录列） | `prop_catalog.csv` | 「游戏尺寸」（比真实尺寸放大，例：`apple` 0.08→0.30） | 真实尺寸建模、`localScale = 1`、`propBounds` = 模型 AABB | **不动** | 同一列同时喂校验器与生成器的脚印/间距模型；改它会让 `build_greybox --check` 与 README §3.3 的可行性表一起失效（那张表被 `ReadmeFeasibilityTableTests` 逐字比对） |
 | `real_longest_dim_m`（目录列） | `prop_catalog.csv` | 真实最长边，只有一列、没有三轴 | 需要三轴或 `volume_m3` | **不动** | 缺第三轴，任何 `a_eq` 都是估的；按「不手抄推导数字」的规矩不写 |
 | `@size=<米>` 立方体写法 | 场景道具命名（`Editor/Pickup/PickupFieldAuthoringRules.TryParseDeclaredSize`） | 「挡路 3.6 m、拾取 1.25 m」→ 把 `propBounds` 记成 1.25³ = 1.95 m³ | 体积门下 1.95 m³ 需要 **2.60 m** 球，比 2.20 上限还大 —— 这个通道**已经把门件写成死件**（(l) 原文点名） | **不动（列为实现者改动 C6）** | 正确做法是「`propBounds` 说真话（模型 AABB）+ 挡路盒另立」（挡路接线那条线在做）；改 `PickupFieldAuthoringRules` 属代码，不在写范围 |
@@ -374,7 +374,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | **S4** | **角内布景**（按 `layout.json` 真坐标）：花圃台 `(−10,0.13,−8.55)` `4.0×0.26×4.9`；树根丘 `(−18.75,0.07,−18.75)` `Ø2.5×0.14`；角树 `(−18.75,0,−18.75)` `Ø0.5×9`（灰盒＝圆柱/胶囊即可）；指示牌 `(−13.2,0.6,−6.6)`；出生地贴 `(−14.5,0.01,−14.5)` `Ø1.8`；毯缘一段 `x∈[−13.5,−7]` 贴 `z=−6.0`（纯视觉、**不加 Collider**，见 §6 U5） | 顶视截图与 `Labs/PicnicLawnGreybox/PicnicLawnGreybox_top.png` 的西南角**逐件对齐**（同一坐标，误差 ≤0.1 m）；`read_console` 无 Collider 警告 |
 | **S4b** | **结构门件（§3.5）**：在壁龛南口 `z ≈ −10.6` 横排 4 件——野餐篮 ×3（各 0.45 长）+ 保温箱 ×1（0.55 长），贴地 `y = 高/2`、首尾相接、**净宽做到 0.10 m**；壁龛内摆 6 件（离门 ≥1.0 m）；花圃台顶摆 5 件纯布景（**不进宿主、不给 Collider**） | 顶视截图：门堆总长 1.90 m、净宽 0.10 m（±0.02）；起手直冲门洞被挡住（`rej=` 一行 `TOO_LARGE` + 截图）；壁龛内 6 件中心离门中线 ≥1.0 m |
 | **S5** | **道具重排**：`PickupField` 下 31 个定义 / 110 件按 §3.4 的 7 个区重新摆；删掉落在花圃足迹/出生净空里的件；2 m 缝里只留门堆 4 件 + 壁龛 6 件；薄片与水果换真实网格（有模型的 16 个定义），其余保留方块占位但**把 `localScale` 调成该件的真实 AABB**（真实尺寸口径） | 逐件回读：110 件中心 `x ∈ [−19.3,−6.1]`、`z ∈ [−19.3,−6.1]`（四面墙内侧各留 ≥0.1 m）；花圃足迹内 0 件；2 m 缝内**只允许门堆 4 件 + 壁龛 6 件**（逐件名单核对）；球起点 1.0 m 内 0 件（写一条 4 行的 Python/Console 脚本回读） |
-| **S6** | **宿主数组重同步**：对 `PickupField` 上的 `PickupFieldHost` 跑 `VRC Katamari/Pickup/Sync Prop Arrays From Children`；**先确认值表**（`fruit s 1 / fruit m 4 / …`）与 §3.4 的逐件单位一致 | Console：`[PickupFieldHost] ready props=110 submittable=110`；`valueUnits` 合计 **412**；无 `no value-table row` 警告；无 `duplicate itemId` |
+| **S6** | **宿主数组重同步**：对 `PickupField` 上的 `PickupFieldHost` 跑 `VRC Katamari/Pickup/Sync Prop Arrays From Children`；**先确认 §3.4 的逐件单位已作为声明值给出**（值表已删，`valueUnits` 不再按 (kind, tier) 推导） | Console：`[PickupFieldHost] ready props=110 submittable=110`；`valueUnits` 合计 **412**；无 `declared valueUnits` 不一致报告；无 `duplicate itemId` |
 | **S7** | **motor 参数**：`startCenterWorld = (−12.5, 0.15, −12.5)`；`maxCoreRadiusWorldM = 1.1`（第一关 2.20 上限，(n)）；`groundPlaneNormal/Offset` 保持 `(0,1,0)/0`；`contactRadiusWorldM` 保持 0（(i)） | `read_console`：`[story-lab] setup … startDiameter=0.29974`；Play Mode 首帧球心 `y ≈ 0.15` |
 | **S8** | **出生点**：`Spawn` 移到 `(−14.5, 0.5, −14.5)`、yaw 45°；`SceneDescriptor.spawns` 仍指向它 | Play Mode 出生位置到 `Spawn` 距离 <0.5 m；面朝东北（截图） |
 | **S9** | **骑乘点**：`RideSeat` 仍在 `RideRoot` 下（followRig 每帧写位置/yaw）；把 `RideRoot`/`RideSeat` 的 `localPosition` 从球后上方偏移**清零**（(k) 的硬约束：不许再叠一层） | 入座后眼点在球后上方，`[ride] seated entered` 一行；截图：球在画面前下方、不糊镜头 |
@@ -393,8 +393,8 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | **C1** | 新 `Runtime/Story/LevelArenaHost.cs`（UdonSharp，`BehaviourSyncMode.None`） | 序列化 `KatamariBallMotor motor`、`Vector3[] planeNormals`、`float[] planeOffsets`、`BoxCollider[] boxes`（或 `Vector3[] boxMin/boxMax`）；`Update` 首次 `GetSemanticDiameterWorldM() > 0` 后注册 5 平面 + 4 盒、`TryBeginPlaying`、写一行 `[story-arena] planes=… boxes=…`；超 8 时按电机返回值报错 | 取代 `StoryLevelLabBootstrap` 的注册段：把 Lab 专用墙登记换成通用「关卡边界」。验收：5/4 计数行正确；第 9 个盒被拒并报 `[story-arena] box capacity exceeded` |
 | **C2** | `Labs/StoryLevel/StoryLevelLabBootstrap.cs` → `Runtime/Story/StoryArenaHost.cs` | 删 `scriptedDrive`/`DriveScripted`/`Report`/`GetStartDiameter`/`cameraFollow`（Lab 自测件）；保留"注册 + `TryBeginPlaying`"，或整体并入 C1 后删除。**文件名与类名必须一起改**（Unity 要求 MonoBehaviour 类名 = 文件名），`.cs`/`.cs.meta`/`.asset`/`.asset.meta` 同搬，GUID 不变（场景与 program asset 的引用才不会断） | HUB_LOOP_PLAN §7 配套 1 已要求；正式场景不挂叫 Lab 的脚本 |
 | **C3** | `Runtime/Pickup/PickupFieldHost.cs` | **本关不需要改**（`activationRadiusM = 1.6` 对最大 0.30 m 的件足够：reach = 球碰撞半径 + 包围球半径 ≤ 0.74 + 0.26）。整图大件才需要"每件激活半径 = 当前半径 + 该件包围半径 + 0.3"（REGION_MAP_PLAN G8） | 明确写出来，防止有人顺手改半径把本关手感搅乱 |
-| **C4** | `Editor/Pickup/PickupFieldSync.cs` | **重排后必须重跑一次**，但**先确认值表**；`@size=` 通道应改成"不许再用于门件"（体积门下立方体会把 3.6 m 长凳写成 1.95 m³ = 要 2.60 m 球） | 重跑会按 AABB 重分档 → `valueUnits` 可能整体变化（真实尺寸后大多数落 s/m），**412 会变**；因此重跑必须与关卡阈值重定一起做（§6 U4） |
-| **C5** | `Editor/Pickup/PickupFieldAuthoringRules.cs` | ① `SmallTierMaxExtentM = 0.21` / `MediumTierMaxExtentM = 0.76` 是**长度**分档；若要"大件更值钱"，需改成按 `a_eq`/`volume` 分档 + 扩表。② **值表缺 `container m`**：野餐篮 0.45 m、保温箱 0.55 m 都落 `m` 档，而 `ValueTable` 只有 `container l`（16）——不加这一行，4 件门件会被同步工具当 rejected row **直接丢掉**，门就没了 | 验收：同步报告里 4 件门件都成行、`valueUnits` 各 16；无 `no value-table row for kind 'container'` |
+| **C4** | `Editor/Pickup/PickupFieldSync.cs` | **重排后必须重跑一次**，但**先确认 §3.4 的声明单位**；`@size=` 通道应改成"不许再用于门件"（体积门下立方体会把 3.6 m 长凳写成 1.95 m³ = 要 2.60 m 球） | 重跑不再按 AABB 定价：`valueUnits` 取声明值、无声明时保留既有值，所以 **412 只在声明值变化时变**；重跑仍须与关卡阈值重定一起做（§6 U4） |
+| **C5** | `Editor/Pickup/PickupFieldAuthoringRules.cs` | **已随 U2 关闭（2026-11-15）**：`ValueTable` 与长度分档已删除，`valueUnits` 由 def/placement 声明给出；缺表行不再丢件，`container` 也不需要单独补行 | 验收：4 件门件的 `valueUnits` 与声明一致；报告里没有 `declared valueUnits` 不一致行 |
 | **C6** | `@size=` 约定（同上文件 + 场景命名） | 退役：门件的 `propBounds` 用真实 AABB，挡路用 `SetBlockingBoxes`（挡路接线那条线在做）；过渡期至少**禁止**在体积门下给 `@size=` 写"只比最长边小一点"的值 | 否则门件会变成永久死件（`@size=1.25` 长凳 = 1.95 m³） |
 | **C7** | `Runtime/Story/StoryRoundController.cs` | **不改**：星级/评语属可拆卸评分模块（(m)），回合核心不认识它；本关只搬几何 | 明确写出来，防止有人为了"新场地"动状态机 |
 | **C8** | 数据侧（建议，非本关硬需求） | 角内布置目前**没有数据文件**；若要 `--check` 兜底，需要给第一关一份自己的布置数据（例：`Docs/Design/StoryMode/StoryLevels/story_01/placement.json`）与一个校验（件数/单位/净空/间距），而不是把布置留在场景里 | 今天只能靠 S5/S6 的逐件回读；这是本方案最大的"不可回归"风险 |
@@ -420,7 +420,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | | | B 当墙：毯缘进碰撞集 | 吃掉 1 个盒；观感"布墙" |
 | **U7** | **第一关是否也用整图的 452 件散布** | **A（推荐）不用**：角内只放本关 110 件；整图的 `spawn_sw`(12) + `tree_roots_sw`(14) + `flower_bed_sw`(12) + `fringe_west/south` 的角内段（各约 6–7 件）合计 **≈50 件 / ≈50 单位**会白送进角，412 立刻失真 | 与"一个角就是一张小图"一致 |
 | | | B 用整图散布替代 110 件 | 关卡阈值、件数目标、关卡 2 的水果计数全部要重算 |
-| **U8** | **结构门件怎么算进 110/412** | **a（推荐）3 篮 + 1 箱顶替 4 支暖壶**：件数仍是 110、单位仍是 412，顺带把 U3 的 64 u 死账换成"一扇会消失的门"（门后 28 u 是壁龛内容，从 `outer` 挪过去） | 需要 2 个新模型（野餐篮、保温箱，真实尺寸）+ 值表 `container m` 一行（C5） |
+| **U8** | **结构门件怎么算进 110/412** | **a（推荐）3 篮 + 1 箱顶替 4 支暖壶**：件数仍是 110、单位仍是 412，顺带把 U3 的 64 u 死账换成"一扇会消失的门"（门后 28 u 是壁龛内容，从 `outer` 挪过去） | 需要 2 个新模型（野餐篮、保温箱，真实尺寸）+ 它们的声明单位（C5 已改为声明值） |
 | | | b 结构件**另加**（不顶替）：114 件 / 476 u，★1.25 = 51.7%、上限 1.55 m | 关卡阈值要重定（与 (p)"现在不调数值"冲突），且 ★ 掉到 52% 偏松 |
 | | | c 结构件只当布景、不进宿主 | 没有"挡路 → 食物"的翻转，等于放弃用户补充的那条原则 |
 

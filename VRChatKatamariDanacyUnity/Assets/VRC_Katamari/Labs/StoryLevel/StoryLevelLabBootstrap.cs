@@ -145,11 +145,17 @@ namespace VRCKatamari.Labs.StoryLevel
             float supportHeight = motor.GetSupportSurfaceHeightWorldM();
             float bottom = center.y - motor.GetCollisionRadiusWorldM();
             float gap = bottom - supportHeight;
-            // "ground" / "box" reads better than the raw id in the acceptance log; the id
-            // is still printed because it names WHICH box when several are registered.
+            // "ground" / "box" / "prop" reads better than the raw id in the acceptance log;
+            // the id is still printed because it names WHICH box or prop top when several
+            // are registered. The kind comes from the motor, not from a range test on the
+            // id: prop tops are 100+i, so "id > 0" would mislabel one as a box.
             int supportId = motor.GetSupportSurfaceId();
-            string supportName = "ground";
-            if (supportId > 0) supportName = "box";
+            int supportKind = motor.GetSupportKind();
+            string supportName = "none";
+            if (supportKind == 0) supportName = "ground";
+            else if (supportKind == 1) supportName = "box";
+            else if (supportKind == 2) supportName = "ramp";
+            else if (supportKind == 3) supportName = "prop";
             Vector3 axes = motor.GetPlanarVelocity();
             Debug.Log("[story-lab] t=" + (Mathf.Floor(elapsed * 10f) / 10f)
                 + " center=" + center

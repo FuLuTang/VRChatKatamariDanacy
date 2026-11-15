@@ -791,7 +791,7 @@ namespace VRCKatamari.BallMotor
             Vector3 groundedCenter = sweptCenter;
             Vector3 followCenter = sweptCenter;
             float supportHeight = 0f;
-            Vector3 correctedCenter;
+            Vector3 correctedCenter = Vector3.zero;
             float centerNormalCoordinate;
             Vector3 planeAnchor;
             float appliedNormalCorrection;

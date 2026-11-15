@@ -142,6 +142,17 @@ sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/pr
 
 「差一点」的部分评价（`[项目自选]`，`PROVISIONAL`）：未达成但落在目标值的 `partial_band = 90%` 以内时，国王不说「完全不行」，改说「就差一点点」。这只是一个评语文案分支，**不改变星级**（0 星仍是 0 星）。
 
+**实现边界（2026-11-15 拆分，评分是可选模块）**：星级属于「最后评分标准」，不是回合核心的一部分，因此代码按「核心只报事实、评分单独成件」分工：
+
+| 归属 | 位置 | 负责 |
+|---|---|---|
+| 回合核心 | `Runtime/Story/StoryRoundController.cs` | 坐下/计时/到点冻结（输入、收集、候选）/状态机 `Idle→Running→Presenting→Result`/重试；结算瞬间把**事实**冻结成只读值：碰撞直径 `GetResultDiameterM()`、确认件数 `GetResultCount()`、状态 `GetState()`、剩余时间 `GetRemainingSeconds()`、目标 `GetGoalType()` / `GetTargetDiameterM()` / `GetTargetCount()`。它**不认识星级**：没有星级阈值、没有评语、没有结果卡 Text/面板。 |
+| 星级算术 | `Runtime/Story/StoryStarMath.cs` | 纯静态、无状态：`TryEvaluateSizeStars` / `TryEvaluateCountStars`（tier1 = 委托目标，tier2/3 由调用方传入；partial band 判据）。 |
+| 评分呈现（可选） | `Runtime/Story/StoryResultPresenter.cs` | 持有控制器的引用、自己的 tier2/3 与 `partial_band`、评语、结果卡 Text/面板；**轮询** `GetState()`，刚进入 `Presenting` 时读事实、算星级、写卡。 |
+| 时钟 | `Runtime/Story/StoryRoundMath.cs` | `TryRemainingSeconds` 与共用的两位小数截断文本（HUD 与结果卡同一约定）。 |
+
+依赖是**单向**的：`StoryRoundController` 里没有任何对 presenter 的引用、调用或字段，presenter 只通过控制器的公开 getter 读事实。因此**场景里不挂 presenter 是受支持的配置**——回合照常开始、计时、结算、冻结球、可重试，只是没有结果卡（此时场景里的结果卡面板应保持关闭，否则会露出场景自带的占位文字）。关卡数据里 tier 1 仍是委托目标（§4.5 规则 9），所以目标值留在控制器，tier 2/3、`partial_band` 与评语在 presenter 上；本文 §3 的星级数值不变。
+
 ### 2.5 重试
 
 - **无限重试，无惩罚**（`[项目自选]`）。不记录失败次数、不扣星、不进 PvP 账本。

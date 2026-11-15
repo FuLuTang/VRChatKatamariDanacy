@@ -9,14 +9,14 @@ using VRCKatamari.Pickup;
 namespace VRCKatamari.Story
 {
     /// <summary>
-    /// Runs one timed story round: countdown, HUD, freeze at the bell, present the
-    /// ball, then show the stars the level's thresholds award.
+    /// Runs one timed story round: countdown, HUD, freeze at the bell, and the settled
+    /// facts a presenter may read. It does not grade the round.
     /// </summary>
     /// <remarks>
     /// <para>
     /// States. Idle (the scene has loaded and the player has not sat down yet) to
     /// Running (the countdown) to Presenting (the ball is offered to the quest giver) to
-    /// Result (stars, the measured number and one line of comment). The order is the
+    /// Result (the round is over and its facts are final). The order is the
     /// plan's (Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md section 4, step S4) and the
     /// design's (GameModes README section 2.3). The states are plain ints, not an enum,
     /// so a scene or a lab can log them without depending on a type.
@@ -39,6 +39,17 @@ namespace VRCKatamari.Story
     /// that reset from <see cref="RequestRetry"/> and owns none of its rules.
     /// </para>
     /// <para>
+    /// Scoring is not here either. Stars are the "final grading" module, not part of the
+    /// core loop: the round must sit down, time, settle, freeze the ball and retry with no
+    /// grader attached at all. So this behaviour reports facts only - the settled collision
+    /// diameter, the settled confirmed count, the state, the remaining time and the goal -
+    /// and the star thresholds, the comments, the card panel and its Text live on the
+    /// optional presenter that watches <see cref="GetState"/>. The dependency is one-way by
+    /// construction: nothing in this file calls, holds or names that presenter, which is
+    /// why a scene without it is a working configuration (a round with no card) rather than
+    /// a broken one.
+    /// </para>
+    /// <para>
     /// Retry. "再试一次" on the result card is the only caller of
     /// <see cref="RequestRetry"/>. It is accepted only in
     /// <see cref="StateResult"/>: before the card exists there is no button to press,
@@ -50,15 +61,19 @@ namespace VRCKatamari.Story
     /// calls <c>TryBank</c> or <c>TryAwardScore</c>.
     /// </para>
     /// <para>
-    /// Result card objects. <c>resultCardRoot</c> (the panel behind the result text) is
-    /// shown from Presenting on and <c>retryButtonRoot</c> (the "再试一次" button) only in
-    /// Result; both are hidden in the other states. The start prompt is the opposite case:
-    /// an instruction, not an outcome, so it has a Text of its own
-    /// (<c>startPromptText</c>) shown in Idle only - a prompt riding a field the card hides
-    /// is a prompt the player never sees. The links are optional scene links, and
-    /// <c>ApplyStateVisibility</c> is the single place that writes their active state, so
-    /// a scene that ships the button active, or a press from a stale button, is corrected
-    /// on the next state change instead of showing a button before the first round.
+    /// The HUD objects this behaviour owns are the round's, not the card's:
+    /// <c>targetText</c>, <c>currentText</c> and <c>remainingText</c> (the quest, the live
+    /// progress and the clock), <c>startPromptText</c> (what the player has to do to
+    /// begin, an instruction rather than an outcome, hence a Text of its own) and
+    /// <c>retryButtonRoot</c> (the button <see cref="RequestRetry"/> accepts a press
+    /// from, which restarts the round rather than grading it). The result card panel and
+    /// its Text are not here: they belong to the optional presenter, which writes their
+    /// active state from the same state value. Two writers for one object would fight, so
+    /// this behaviour does not touch the card. Every link is optional, and
+    /// <c>ApplyStateVisibility</c> is the single place that writes these objects' active
+    /// state, so a scene that ships the button active, or a press from a stale button, is
+    /// corrected on the next state change instead of showing a button before the first
+    /// round.
     /// </para>
     /// <para>
     /// Measuring. The design evaluates the settled ball diameter and the settled
@@ -67,7 +82,9 @@ namespace VRCKatamari.Story
     /// <c>2 * KatamariBallMotor.GetCollisionRadiusWorldM()</c>, which is the value
     /// the plan names (section 4) and today equals the semantic diameter because
     /// both ratios are 1; the count comes from the pickup host's per-kind confirmed
-    /// counter, which is the only owner of "what was really absorbed".
+    /// counter, which is the only owner of "what was really absorbed". Both are frozen
+    /// once, at the bell, and read back through <see cref="GetResultDiameterM"/> and
+    /// <see cref="GetResultCount"/>; the round never turns them into a verdict.
     /// </para>
     /// <para>
     /// Freezing at the bell. Input is disabled first, then collection, then the
@@ -84,8 +101,10 @@ namespace VRCKatamari.Story
     /// (AGENTS.md "No editor APIs or disk JSON in Udon runtime"), so until the
     /// Editor importer of GameModes README section 7 item 2 exists, the scene
     /// instance is where the numbers live and each field names the JSON key it
-    /// carries. Tier 1 of the star table is the objective itself, which validator
-    /// rule 9 of the GameModes README enforces, so it is not a separate field.
+    /// carries. Only the fields the round itself needs are here: the goal and its
+    /// target. Tier 1 of the star table is that same objective, and tiers 2 and 3 are
+    /// scoring data on the optional presenter (validator rule 9 of the GameModes README
+    /// is what makes "tier 1 is the objective" true).
     /// </para>
     /// <para>
     /// Assembly. Own GameObject by project convention (clear ownership and a readable
@@ -109,7 +128,7 @@ namespace VRCKatamari.Story
         /// <summary>The clock ran out; the ball is offered and frozen.</summary>
         public const int StatePresenting = 2;
 
-        /// <summary>The result card is on screen. Nothing else changes.</summary>
+        /// <summary>The round is over and its facts are final. Nothing else changes.</summary>
         public const int StateResult = 3;
 
         // ---- Scene links (the operator wires these; a null link is skipped) ----
@@ -121,35 +140,28 @@ namespace VRCKatamari.Story
         [SerializeField] private Text targetText;
         [SerializeField] private Text currentText;
         [SerializeField] private Text remainingText;
-        [SerializeField] private Text resultText;
 
         // The start prompt's own line: what the player has to do to begin
-        // ("点击球坐上去开始" by default). It is a separate Text from resultText because
-        // the two carry different things in different states - an instruction read in
-        // Idle, an outcome the card shows from Presenting on - and the result card hides
+        // ("点击球坐上去开始" by default). It is a separate Text from the result card's text
+        // because the two carry different things in different states - an instruction read
+        // in Idle, an outcome the card shows from Presenting on - and the result card hides
         // its own contents in Idle, which used to hide the prompt with them. Shown in
         // Idle only, by ApplyStateVisibility. It must be a dedicated object: this Text
-        // alone, outside resultCardRoot's subtree. A null link is skipped, never thrown.
+        // alone, outside the result card's subtree. A null link is skipped, never thrown.
         [SerializeField] private Text startPromptText;
 
-        // ---- Result card objects (optional; a null link is skipped) ----
         // The uGUI Button object (or a world-space button object) that presses "再试一次":
         // visible only in Result, hidden in Idle, Running and Presenting. RequestRetry is
         // still guarded by the state, so a button left visible in the wrong state cannot
-        // start or break a round.
+        // start or break a round. It restarts the round, which is why the round owns it and
+        // the optional result presenter does not.
         [SerializeField] private GameObject retryButtonRoot;
 
-        // The panel behind the result text: visible from Presenting on, because the
-        // presenting beat ("呈给国王") is the card's first half. It is a background, not the
-        // owner of any text: the start prompt has its own line outside this object,
-        // because Idle hides the whole card and a prompt inside it would go with it.
-        [SerializeField] private GameObject resultCardRoot;
-
         // ---- Level data (one file under Docs/Design/GameModes/Levels/) ----
-        // story_01_bench_size.json: reach_target_diameter, 1.25 m, 120 s,
-        // stars 1.25 / 1.45 / 1.60, partial_band 0.90, bank off.
-        // story_02_fruit_ten.json: collect_category_count, fruit x 10, 120 s,
-        // stars 10 / 20 / 30, partial_band 0.90, bank off.
+        // story_01_bench_size.json: reach_target_diameter, 1.25 m, 120 s, bank off.
+        // story_02_fruit_ten.json: collect_category_count, fruit x 10, 120 s, bank off.
+        // The star tiers (1.45 / 1.60 m and 20 / 30 items) are scoring data and live on
+        // the optional result presenter, not here.
         // A level sets exactly one goal type; the fields of the other one are left
         // at their defaults and are never read.
         [SerializeField] private string levelId = "story_01_bench_size";
@@ -158,16 +170,8 @@ namespace VRCKatamari.Story
         // quest.objective.target_diameter_m, which is also stars[0].requires.
         [SerializeField] private float targetDiameterM = 1.25f;
 
-        // stars[1].requires.target_diameter_m / stars[2].requires.target_diameter_m.
-        [SerializeField] private float star2DiameterM = 1.45f;
-        [SerializeField] private float star3DiameterM = 1.6f;
-
         // quest.objective.count, which is also stars[0].requires.count.
         [SerializeField] private int targetCount = 10;
-
-        // stars[1].requires.count / stars[2].requires.count.
-        [SerializeField] private int star2Count = 20;
-        [SerializeField] private int star3Count = 30;
 
         // time_limit_s.
         [SerializeField] private float timeLimitSeconds = 120f;
@@ -180,27 +184,11 @@ namespace VRCKatamari.Story
         // key counts every confirmed attachment.
         [SerializeField] private string countGoalKind = "fruit";
 
-        // evaluation.partial_band: the "just barely" line, never a star.
-        [SerializeField] private float partialBand = 0.9f;
-
         [Header("Presentation")]
-        // Shown while the ball is offered; the result card repeats it on its first line.
-        [SerializeField] private string presenterLine = "呈给国王";
-
-        // Level 1's result comments: GameModes README section 3.1, "评语（结算）"
-        // (0/1/2/3 星), plus the "just barely" band branch of section 2.4. The level
-        // JSON (Docs/Design/GameModes/Levels/) does not carry comment text yet, so
-        // these serialized defaults are the level-1 wording; a later level sets its
-        // own lines on its scene instance (level 2's king-counts-fruit wording is
-        // section 3.2). Stars are keyed the same way as the star thresholds above.
-        [SerializeField] private string star3Comment = "好！这才是朕要的球！";
-        [SerializeField] private string star2Comment = "不错不错，有点样子了。";
-        [SerializeField] private string star1Comment = "嗯，勉强能看。";
-        [SerializeField] private string partialComment = "就差一点点，再来一次。";
-        [SerializeField] private string failComment = "……就这样？朕的野餐会还没开始呢。再来一次。";
-
-        // How long Presenting lasts before the result card appears. Zero or less
-        // skips the beat instead of waiting forever.
+        // How long Presenting lasts before the round counts as Result. Zero or less
+        // skips the beat instead of waiting forever. This is the state's own duration, so
+        // it stays on the state machine: the round decides when the result exists, an
+        // optional card only decides what to draw when it does.
         [SerializeField] private float presentingSeconds = 3f;
 
         [Header("Start flow")]
@@ -219,10 +207,8 @@ namespace VRCKatamari.Story
         private float startTimeSeconds;
         private float presentingStartTimeSeconds;
 
-        // The settled measurement, frozen when the clock ran out. These are what the
-        // result card shows; nothing recomputes them afterwards.
-        private int resultStars = StoryRoundMath.StarsNone;
-        private bool resultInsidePartialBand;
+        // The settled measurement, frozen when the clock ran out. These are facts the round
+        // reports; nothing recomputes them afterwards and nothing here grades them.
         private float resultDiameterM;
         private int resultCount;
 
@@ -298,15 +284,11 @@ namespace VRCKatamari.Story
 
             WriteTargetText();
             WriteCurrentHud();
-            // The result line belongs to the card, which Idle hides. Clearing it keeps a
-            // scene whose result Text sits outside the card from showing a stale outcome
-            // (or its authored placeholder) before the first round.
-            if (resultText != null) resultText.text = "";
             if (startPromptText != null)
             {
                 // The prompt has a line of its own. It must not go on the result line:
-                // that Text lives in the result card, which is hidden in Idle, so the
-                // prompt written there was hidden too.
+                // that Text lives in the result card, which is hidden in Idle (and is not
+                // this behaviour's to write), so the prompt written there was hidden too.
                 startPromptText.text = startPrompt;
                 // A countdown that has not started must not sit on the HUD looking
                 // frozen; BeginRound writes the real one back (lastRemainingShown = -1).
@@ -350,7 +332,7 @@ namespace VRCKatamari.Story
         /// (leaving is the player's choice, and pausing would turn the clock into a
         /// resource the player can stop at will). Input is already closed by the ride
         /// gate that the station closes on exit, so the ball brakes and the clock is the
-        /// only thing still moving; the result card appears on time whether the player is
+        /// only thing still moving; the round settles on time whether the player is
         /// seated or not.
         /// </para>
         /// </remarks>
@@ -372,7 +354,8 @@ namespace VRCKatamari.Story
         /// </summary>
         /// <remarks>
         /// This is the seam a lab uses to run a short test level, and the last step of
-        /// <see cref="RequestRetry"/>. It resets this behaviour's own state and the two
+        /// <see cref="RequestRetry"/>. It resets this behaviour's own state (including the
+        /// frozen measurement, so a new round starts with no facts) and the two
         /// things the timeout closes - its round gate and the pickup host's collecting
         /// flag; it does not reset the ball, the ledger or the props. Those are the
         /// motor's and the pickup host's reset seams, and <see cref="RequestRetry"/>
@@ -384,14 +367,11 @@ namespace VRCKatamari.Story
             state = StateRunning;
             lastCurrentShown = -1;
             lastRemainingShown = -1;
-            resultStars = StoryRoundMath.StarsNone;
-            resultInsidePartialBand = false;
             resultDiameterM = 0f;
             resultCount = 0;
 
             if (input != null) input.SetRoundGate(true);
             if (pickupHost != null) pickupHost.SetCollecting(true);
-            if (resultText != null) resultText.text = "";
 
             WriteTargetText();
             float remainingSeconds;
@@ -419,10 +399,9 @@ namespace VRCKatamari.Story
             }
             if (state != StatePresenting) return;
             if (Time.time - presentingStartTimeSeconds < presentingSeconds) return;
-            ShowResult();
+            // Only the state moves. The result card is drawn by whoever is watching this
+            // state; announcing "the result exists" is all this behaviour does.
             state = StateResult;
-            // The card was already visible for the presenting beat; this is what turns
-            // the "再试一次" button on, together with the result text.
             ApplyStateVisibility();
         }
 
@@ -441,10 +420,42 @@ namespace VRCKatamari.Story
             return levelId;
         }
 
-        /// <summary>The settled star count (0..3); 0 until the clock has run out.</summary>
-        public int GetResultStars()
+        // ---- Facts (read-only; the round reports them, it does not grade them) ----
+
+        /// <summary>The quest type this level sets.</summary>
+        /// <remarks>
+        /// Shared with whoever reports the result, so it can tell which of the two frozen
+        /// measurements to look at without a second copy of the level's goal.
+        /// </remarks>
+        public StoryGoalType GetGoalType()
         {
-            return resultStars;
+            return goalType;
+        }
+
+        /// <summary>
+        /// quest.objective.target_diameter_m, which is also star tier 1.
+        /// </summary>
+        /// <remarks>
+        /// Only meaningful for a size level: a count level leaves the field at its
+        /// serialized default and never reads it, so a caller asks <see cref="GetGoalType"/>
+        /// first instead of trusting this number.
+        /// </remarks>
+        public float GetTargetDiameterM()
+        {
+            return targetDiameterM;
+        }
+
+        /// <summary>
+        /// quest.objective.count, which is also star tier 1.
+        /// </summary>
+        /// <remarks>
+        /// Only meaningful for a count level, for the same reason as
+        /// <see cref="GetTargetDiameterM"/>: the other goal type leaves it at its
+        /// serialized default.
+        /// </remarks>
+        public int GetTargetCount()
+        {
+            return targetCount;
         }
 
         /// <summary>The settled collision diameter in metres; 0 for a count level.</summary>
@@ -457,6 +468,27 @@ namespace VRCKatamari.Story
         public int GetResultCount()
         {
             return resultCount;
+        }
+
+        /// <summary>
+        /// Seconds left in the countdown: the full limit in Idle (the clock has not
+        /// started), the live value in Running, 0 once the ball is frozen.
+        /// </summary>
+        /// <remarks>
+        /// A fact read, computed with the same clock arithmetic the HUD uses, so a lab or a
+        /// result readout cannot show a different countdown than the player's line.
+        /// </remarks>
+        public float GetRemainingSeconds()
+        {
+            if (state == StateIdle) return timeLimitSeconds;
+            if (state != StateRunning) return 0f;
+            float remainingSeconds;
+            if (!StoryRoundMath.TryRemainingSeconds(startTimeSeconds, Time.time,
+                timeLimitSeconds, out remainingSeconds))
+            {
+                return 0f;
+            }
+            return remainingSeconds;
         }
 
         /// <summary>0 for the first round, 1 for the first retry, 2 for the next, and so on.</summary>
@@ -502,7 +534,7 @@ namespace VRCKatamari.Story
         /// </remarks>
         public bool RequestRetry()
         {
-            // Re-assert the card objects for the state this call arrives in, so a press
+            // Re-assert the HUD objects for the state this call arrives in, so a press
             // from a button that was left visible in Idle or Running hides it again. The
             // state guard below is still what decides whether a round restarts: showing
             // or hiding the button never opens that gate.
@@ -628,12 +660,13 @@ namespace VRCKatamari.Story
         }
 
         /// <summary>
-        /// Freezes the round at the bell and offers the ball.
+        /// Freezes the round at the bell, records the settled facts and offers the ball.
         /// </summary>
         /// <remarks>
         /// Order matters and is the plan's: input, then collection, then the candidate
-        /// queue. Reads the measurement only after the freeze, so the numbers on the
-        /// card are the numbers at the bell.
+        /// queue. Reads the measurement only after the freeze, so the numbers reported
+        /// afterwards are the numbers at the bell. No stars, no comment and no card text:
+        /// this is where the round stops changing, not where it is judged.
         /// </remarks>
         private void SettleRound()
         {
@@ -646,37 +679,33 @@ namespace VRCKatamari.Story
             if (pickupHost != null) pickupHost.SetCollecting(false);
             if (motor != null) motor.ClearCandidates();
 
-            EvaluateSettledRound();
+            MeasureSettledRound();
 
-            // Re-show the frozen value on the HUD so the progress line and the result
-            // card can never disagree by one frame.
+            // Re-show the frozen value on the HUD so the progress line and anything the
+            // result reads can never disagree by one frame.
             lastCurrentShown = -1;
             WriteCurrentHud();
-
-            if (resultText != null) resultText.text = presenterLine;
 
             ApplyStateVisibility();
         }
 
-        private void EvaluateSettledRound()
+        /// <summary>
+        /// Records the settled measurement as a fact: the collision diameter, or the
+        /// confirmed count for a count level.
+        /// </summary>
+        /// <remarks>
+        /// The two goal types measure different quantities, so the one this level does not
+        /// use stays at 0. Nothing is compared against a threshold here; the star table is
+        /// the optional presenter's.
+        /// </remarks>
+        private void MeasureSettledRound()
         {
-            resultStars = StoryRoundMath.StarsNone;
-            resultInsidePartialBand = false;
             resultDiameterM = 0f;
             resultCount = 0;
 
             if (goalType == StoryGoalType.CollectCategoryCount)
             {
                 resultCount = MeasuredCount();
-                int stars;
-                bool insidePartialBand;
-                if (!StoryRoundMath.TryEvaluateCountStars(resultCount, targetCount,
-                    star2Count, star3Count, partialBand, out stars, out insidePartialBand))
-                {
-                    return;
-                }
-                resultStars = stars;
-                resultInsidePartialBand = insidePartialBand;
                 return;
             }
 
@@ -686,16 +715,6 @@ namespace VRCKatamari.Story
             // started reads 0, which reads as a diameter below every threshold rather
             // than a false success.
             resultDiameterM = motor.GetCollisionRadiusWorldM() * 2f;
-            int sizeStars;
-            bool sizeInsidePartialBand;
-            if (!StoryRoundMath.TryEvaluateSizeStars(resultDiameterM, targetDiameterM,
-                star2DiameterM, star3DiameterM, partialBand, out sizeStars,
-                out sizeInsidePartialBand))
-            {
-                return;
-            }
-            resultStars = sizeStars;
-            resultInsidePartialBand = sizeInsidePartialBand;
         }
 
         /// <summary>
@@ -717,58 +736,40 @@ namespace VRCKatamari.Story
             return pickupHost.GetAttachedCountForKind(countGoalKind);
         }
 
-        private void ShowResult()
-        {
-            if (resultText == null) return;
-            string measuredLabel;
-            if (goalType == StoryGoalType.CollectCategoryCount)
-            {
-                measuredLabel = "件数 " + resultCount + " / " + targetCount;
-            }
-            else
-            {
-                measuredLabel = "直径 " + HundredthsText(resultDiameterM) + " m";
-            }
-            resultText.text = presenterLine + "\n" + StarGlyphs(resultStars) + "  "
-                + measuredLabel + "\n" + CommentLine(resultStars, resultInsidePartialBand);
-        }
-
         /// <summary>
-        /// Writes the start prompt's and the two result-card objects' active state for the
-        /// current state.
+        /// Writes the start prompt's and the retry button's active state for the current
+        /// state.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Which state owns which object. The card panel
-        /// (<c>resultCardRoot</c>) is visible in Presenting and Result: the presenting
-        /// beat is the card's first half, so the same panel stands behind both the
-        /// presenter line and the outcome. The "再试一次" button
-        /// (<c>retryButtonRoot</c>) is visible only in Result, the one state where
-        /// <see cref="RequestRetry"/> accepts a press. Idle and Running show neither,
-        /// so the scene cannot present a retry button before any round exists.
+        /// Which state owns which object. The start prompt (<c>startPromptText</c>) is
+        /// owned by Idle: it says what to do to begin, so it has to be readable before the
+        /// round exists, and it has to be gone once the countdown owns the HUD. The
+        /// "再试一次" button (<c>retryButtonRoot</c>) is visible only in Result, the one
+        /// state where <see cref="RequestRetry"/> accepts a press. Idle and Running show
+        /// neither, so the scene cannot present a retry button before any round exists.
         /// </para>
         /// <para>
-        /// The start prompt (<c>startPromptText</c>) is the third object and the only one
-        /// owned by Idle. It says what to do to begin, so it has to be readable before
-        /// the round exists, and it has to be gone once the countdown owns the HUD. Being
-        /// a Text of its own is what makes that possible: the card can stay hidden in
-        /// Idle while the prompt stays visible.
+        /// The result card is deliberately not here. It belongs to the optional presenter,
+        /// which drives its own visibility from the same state value; this behaviour could
+        /// only hide a card it was not allowed to know about, and two writers of one
+        /// object's active state would fight over it. The split by object is why attaching
+        /// no presenter means "no card" instead of "a card stuck in whatever state the
+        /// scene authored".
         /// </para>
         /// <para>
-        /// One method, called from every state change, is what keeps the three objects
+        /// One method, called from every state change, is what keeps the objects
         /// from disagreeing with the state. A null link is skipped, so the headless lab
         /// and any scene without a result card behave exactly as before.
         /// </para>
         /// </remarks>
         private void ApplyStateVisibility()
         {
-            bool showCard = state == StatePresenting || state == StateResult;
             bool showRetry = state == StateResult;
-            // The prompt is the mirror image of the card: an instruction belongs to the
-            // one state where the player has not started yet, and must be gone once the
-            // countdown takes over the HUD.
+            // The prompt belongs to the one state where the player has not started yet and
+            // has to be gone once the countdown takes over the HUD; the button belongs to
+            // the one state where a press restarts the round.
             bool showStartPrompt = state == StateIdle;
-            if (resultCardRoot != null) resultCardRoot.SetActive(showCard);
             if (retryButtonRoot != null) retryButtonRoot.SetActive(showRetry);
             if (startPromptText != null) startPromptText.gameObject.SetActive(showStartPrompt);
         }
@@ -791,9 +792,9 @@ namespace VRCKatamari.Story
         /// </summary>
         /// <remarks>
         /// Only the visible number is written, so a per-frame refresh does not build a
-        /// string every frame. The measured value is the same one the settled
-        /// evaluation reads, so the HUD cannot show a different quantity than the one
-        /// the king judges.
+        /// string every frame. The settled fact is recorded with the same expression, so
+        /// the HUD cannot show a different quantity than the one the result is graded
+        /// against.
         /// </remarks>
         private void WriteCurrentHud()
         {
@@ -812,7 +813,7 @@ namespace VRCKatamari.Story
             if (hundredths == lastCurrentShown) return;
             lastCurrentShown = hundredths;
             if (currentText == null) return;
-            currentText.text = "当前 " + HundredthsText(diameterM) + " m";
+            currentText.text = "当前 " + StoryRoundMath.HundredthsText(diameterM) + " m";
         }
 
         private void WriteRemainingHud(float remainingSeconds)
@@ -827,47 +828,6 @@ namespace VRCKatamari.Story
         {
             if (remainingText == null) return;
             remainingText.text = "剩余 " + wholeSeconds + " s";
-        }
-
-        /// <summary>
-        /// A metric length to two decimals, truncated rather than rounded.
-        /// </summary>
-        /// <remarks>
-        /// Truncation is the same convention the playground HUD uses, and it is the
-        /// honest one here: a shown number must never claim a size the ball did not
-        /// reach, so 1.2499 m reads 1.24 m next to a 1.25 m threshold it missed.
-        /// </remarks>
-        private string HundredthsText(float value)
-        {
-            return (Mathf.Floor(value * 100f) / 100f).ToString();
-        }
-
-        private string StarGlyphs(int stars)
-        {
-            if (stars >= StoryRoundMath.StarsMax) return "★★★";
-            if (stars == 2) return "★★☆";
-            if (stars == 1) return "★☆☆";
-            return "☆☆☆";
-        }
-
-        /// <summary>
-        /// One line of comment for the result card.
-        /// </summary>
-        /// <remarks>
-        /// The lines are presentation data, not rules: they live in the serialized
-        /// fields above so a level can reword them without touching this file. The
-        /// defaults are level 1's lines from GameModes README section 3.1
-        /// ("评语（结算）"); the "just barely" branch is the band branch of section 2.4.
-        /// Level 2 has its own wording in section 3.2 (the king counting fruit), which
-        /// arrives with that level's instance rather than a second rule here.
-        /// </remarks>
-        private string CommentLine(int stars, bool insidePartialBand)
-        {
-            if (stars >= StoryRoundMath.StarsMax) return star3Comment;
-            if (stars == 2) return star2Comment;
-            if (stars == 1) return star1Comment;
-            if (insidePartialBand) return partialComment;
-            return failComment;
         }
     }
 }

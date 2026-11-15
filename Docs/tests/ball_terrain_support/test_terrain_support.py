@@ -1,4 +1,4 @@
-"""Port of Tests/EditMode/BallLayers/SupportSurfaceTests.cs (17 cases).
+"""Port of Tests/EditMode/BallLayers/SupportSurfaceTests.cs (20 cases).
 
 The C# is the runtime authority and this file is its offline mirror; case names
 map one-to-one (CamelCase -> snake_case).  Lengths are metres, +Y up.  Expected
@@ -12,9 +12,10 @@ from Docs.Design.BallLayers.TerrainSupport.terrain_support import (
     GROUND_SURFACE_ID,
     NO_SURFACE_ID,
     is_step_crossing,
-    is_steppable,
+    is_step_within_limit,
     resolve_fall_state,
     support_dropped_away,
+    support_reference_height,
     try_integrate_fall,
     try_resolve_support,
     try_step_height_limit,
@@ -111,28 +112,39 @@ class SupportSurfaceTests(unittest.TestCase):
 
     # ------------------------------------------------------------ 8 ----
     def test_the_box_that_is_within_the_limit_leaves_the_sweep(self):
-        self.assertTrue(is_steppable(0.26, step_limit(1.10), False, False, 0.02))
-        self.assertFalse(is_steppable(0.26, step_limit(0.30), False, False, 0.02))
-        self.assertTrue(is_steppable(-0.1, 0.0, False, False, 0.0))
+        self.assertTrue(is_step_within_limit(0.26, 0.0, step_limit(1.10)))
+        self.assertFalse(is_step_within_limit(0.26, 0.0, step_limit(0.30)))
+        self.assertTrue(is_step_within_limit(-0.1, 0.0, 0.0))
         with self.assertRaises(ValueError):
-            is_steppable(float("nan"), 0.275, False, False, 0.02)
+            is_step_within_limit(float("nan"), 0.0, 0.275)
         with self.assertRaises(ValueError):
-            is_steppable(0.1, -1.0, False, False, 0.02)
+            is_step_within_limit(0.1, 0.0, -1.0)
+        with self.assertRaises(ValueError):
+            is_step_within_limit(0.1, float("nan"), 0.275)
 
     # ------------------------------------------------------------ 9 ----
-    def test_hysteresis_keeps_a_steppable_box_out_until_it_exceeds_the_limit_plus_the_margin(
-            self):
-        self.assertTrue(is_steppable(0.28, 0.275, False, True, 0.02))
-        self.assertFalse(is_steppable(0.28, 0.275, False, False, 0.02))
-        self.assertFalse(is_steppable(0.30, 0.275, False, True, 0.02))
-        self.assertTrue(is_steppable(0.29, 0.275, False, True, 0.02))
+    def test_the_reference_height_is_the_only_memory_the_step_rule_needs(self):
+        # No latch: what used to be "one-way hysteresis" is the shared reference.
+        # Airborne above the floor the ball's own bottom (0.02 m) is the reference, so a
+        # 0.075 m deck is inside a 0.074934 m limit; grounded, the same deck is a wall.
+        limit = step_limit(0.2997369)
+        self.assertTrue(is_step_within_limit(0.075, 0.02, limit))
+        self.assertFalse(is_step_within_limit(0.075, 0.0, limit))
+        self.assertAlmostEqual(support_reference_height(0.0, 0.02), 0.02, delta=TOLERANCE)
+        self.assertAlmostEqual(support_reference_height(0.3, 0.02), 0.3, delta=TOLERANCE)
+        self.assertAlmostEqual(support_reference_height(0.3, float("nan")), 0.3,
+                               delta=TOLERANCE)
 
     # ----------------------------------------------------------- 10 ----
     def test_a_ball_already_above_the_top_is_never_pushed_out(self):
-        self.assertTrue(is_steppable(0.0, 0.275, True, True, 0.02))
-        self.assertTrue(is_steppable(1.0, 0.275, True, False, 0.02))
+        # Standing on the box or above it: the reference is the ball's own bottom, so the
+        # rise is zero or negative. This is the old unconditional "already above" rule,
+        # now a consequence of the shared reference instead of a second comparison.
+        limit = step_limit(0.30)
+        self.assertTrue(is_step_within_limit(0.075, 0.075, limit))
+        self.assertTrue(is_step_within_limit(0.075, 1.0, limit))
         with self.assertRaises(ValueError):
-            is_steppable(float("nan"), 0.275, True, False, 0.0)
+            is_step_within_limit(float("nan"), 0.075, limit)
 
     # ----------------------------------------------------------- 11 ----
     def test_non_finite_input_is_refused_and_nothing_is_written(self):
@@ -243,6 +255,54 @@ class SupportSurfaceTests(unittest.TestCase):
         self.assertGreater(20.0 - ball_bottom, 75 * max_drop_per_step)
         self.assertAlmostEqual(fall_speed, gravity * 75 * fixed_step, delta=1e-6)
         self.assertLess(fall_speed, max_fall_speed)
+
+    # ----------------------------------------------------------- 19 ----
+    def test_the_quantized_diameter_puts_the_boundary_deck_above_the_limit(self):
+        # The lab cannot set D = 0.300: the 0.30 preset quantizes to 0.2997369 m (one
+        # volume unit = 0.0041 m^3). Its limit is 0.074934 m, so C09's 0.075 m deck is
+        # ABOVE the limit: the mask must keep it in the sweep (a wall) and the support
+        # table must not select it. Before the fix the mask had already dropped it, and
+        # the 0.30 m ball drove through the deck.
+        limit = step_limit(0.2997369)
+        self.assertLess(limit, 0.075)
+        self.assertGreater(0.075 - limit, 0.0)
+
+        deck = [box((12.0, 0.0, -6.0), (18.0, 0.075, -2.0))]
+        probe = (15.0, 0.15, -4.0)
+
+        self.assertFalse(is_step_within_limit(0.075, 0.0, limit),
+                         "the mask must KEEP the deck in the sweep")
+        surface = resolve(probe, limit=limit, boxes=deck)
+        self.assertEqual(surface.surface_id, GROUND_SURFACE_ID,
+                         "a box the mask keeps as a wall must not be a support either")
+        self.assertAlmostEqual(surface.height, 0.0, delta=TOLERANCE)
+
+        # Just under the limit: it is a step, and the same call makes it a support.
+        lower_top = 0.0749
+        self.assertTrue(is_step_within_limit(lower_top, 0.0, limit))
+        surface = resolve(probe, limit=limit, boxes=[box((12.0, 0.0, -6.0),
+                                                         (18.0, lower_top, -2.0))])
+        self.assertEqual(surface.surface_id, 1)
+        self.assertAlmostEqual(surface.height, lower_top, delta=TOLERANCE)
+
+    # ----------------------------------------------------------- 20 ----
+    def test_the_sweep_mask_and_the_support_table_never_disagree(self):
+        # The invariant the ghost step broke: for every box top and every reference the
+        # mask can compute, "the mask drops it" and "the support table selects it" are the
+        # same answer. The references include the mask refresh gate's +/-5 mm wobble, so a
+        # jitter cannot split the two sides.
+        limit = step_limit(0.2997369)
+        tops = (0.0700, 0.0749, 0.0750, 0.0800, 0.0950)
+        references = (0.0, 0.004, -0.004, 0.02)
+        probe = (15.0, 0.15, -4.0)
+        for top in tops:
+            for reference in references:
+                mask_step = is_step_within_limit(top, reference, limit)
+                surface = resolve(probe, reference=reference, limit=limit,
+                                  boxes=[box((12.0, 0.0, -6.0), (18.0, top, -2.0))])
+                supported = surface.surface_id == 1
+                self.assertEqual(mask_step, supported,
+                                 "top=%s reference=%s" % (top, reference))
 
     # Extra guard for the pure step-crossing predicate (the motor's lift cap).
     def test_step_crossing_ignores_numerical_noise(self):

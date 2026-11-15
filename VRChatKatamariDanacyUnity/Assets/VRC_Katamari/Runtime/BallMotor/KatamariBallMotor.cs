@@ -396,10 +396,12 @@ namespace VRCKatamari.BallMotor
         // carries its result and the two memories the design asks for (which box is a
         // step, and which surface the ball stood on last step).
         //
-        // boxIsSteppable is indexed like the static box buffers and is the ONE answer
-        // both the sweep mask and the support table read (§4.3: two places must not
-        // compute rise separately). A true entry is excluded from the sweep and can
-        // support the ball; a false entry stays a wall.
+        // boxIsSteppable is indexed like the static box buffers and caches this step's
+        // answer for the sweep arrays. The support table does NOT read this array: it calls
+        // the same SupportSurfaceMath.IsStepWithinLimit with the same reference, so the two
+        // sides are one implementation rather than two readers of one number (§4.3). A true
+        // entry is excluded from the sweep and is a support candidate; a false entry stays
+        // a wall.
         private bool[] boxIsSteppable;
         private bool stepMaskValid;
         private bool stepMaskBoxesDirty;
@@ -865,8 +867,9 @@ namespace VRCKatamari.BallMotor
             //     rebuild the sweep obstacle arrays without them. This runs BEFORE the
             //     sweep because entering a step means being allowed inside the box's
             //     expanded AABB; it uses the previous step's support height, which is
-            //     the design's accepted one-step lag. The mask and the support table
-            //     read the same answer (boxIsSteppable), so they cannot disagree.
+            //     the design's accepted one-step lag. The mask and the support table call
+            //     the SAME SupportSurfaceMath predicate with the same reference, so a box
+            //     the sweep drops is always one the support table can select.
             if (terrainSupportEnabled) RefreshStepMask();
 
             // 3. SweepMath: actual displacement. Only this — never the requested
@@ -1184,15 +1187,21 @@ namespace VRCKatamari.BallMotor
         /// This is the sweep side of §4.3 of Docs/Design/BallMotor/TERRAIN_SUPPORT.md: a
         /// box the ball may climb must be absent from the sweep, because the sweep is a
         /// conservative radius-expanded AABB and a 2.8 cm lip would otherwise be a wall
-        /// for every ball. The support table reads the same <c>boxIsSteppable</c> answer,
-        /// so the two cannot disagree about a box.
+        /// for every ball. The decision is
+        /// <see cref="SupportSurfaceMath.IsStepWithinLimit"/> with the SAME reference the
+        /// support table uses (<see cref="SupportSurfaceMath.SupportReferenceHeight"/> of
+        /// the previous support and the ball's bottom). One function, one reference: a box
+        /// excluded here is always a box the support table can select, so the "removed from
+        /// the sweep but unsupportable" state cannot exist.
         /// </para>
         /// <para>
         /// Frequency gate (design §3.5): recompute only when the box set changed, the
         /// semantic diameter moved by more than 2 mm, or the reference support height
         /// moved by more than 5 mm. The mask uses the previous step's support height,
         /// which is the accepted one-step lag; the rebuild of the sweep arrays only runs
-        /// when the mask actually changed.
+        /// when the mask actually changed. The gate is the ONLY anti-jitter device: the
+        /// one-way hysteresis it used to sit next to was removed on 2026-11-15 because it
+        /// could diverge from the support table (C09 ghost step).
         /// </para>
         /// </remarks>
         private void RefreshStepMask()
@@ -1225,18 +1234,17 @@ namespace VRCKatamari.BallMotor
             stepMaskDiameterWorldM = semanticDiameterWorldM;
             stepMaskSupportHeightWorldM = lastSupportHeightWorldM;
 
+            // The reference is the one SupportSurfaceMath.TryResolveSupport will compare
+            // against after the sweep. It uses the current (pre-sweep) centre; the support
+            // query uses the swept centre, and the design accepts that one-step lag.
+            float reference = SupportSurfaceMath.SupportReferenceHeight(lastSupportHeightWorldM,
+                ballCenterWorld.y - collisionRadiusWorldM);
+
             bool changed = false;
-            float ballBottom = ballCenterWorld.y - collisionRadiusWorldM;
             for (int i = 0; i < boxCount; i++)
             {
-                float top = boxMaximumBuffer[i].y;
-                float rise = top - lastSupportHeightWorldM;
-                // "Already above the top" is unconditional: a ball standing on the box
-                // must never be re-classified into a wall while its centre is inside the
-                // expanded box, or the sweep's penetration branch pushes it off.
-                bool alreadyAbove = ballBottom >= top - stepStickMarginM;
-                bool steppable = SupportSurfaceMath.IsSteppable(rise, limit, alreadyAbove,
-                    boxIsSteppable[i], stepHysteresisM);
+                bool steppable = SupportSurfaceMath.IsStepWithinLimit(boxMaximumBuffer[i].y,
+                    reference, limit);
                 if (steppable != boxIsSteppable[i])
                 {
                     boxIsSteppable[i] = steppable;
@@ -1317,15 +1325,15 @@ namespace VRCKatamari.BallMotor
             }
             stepHeightLimitWorldM = limit;
 
-            // The band reference is the higher of the previous support and the ball's own
-            // bottom. With gravity in the model, "the previous support + stepLimit" alone
-            // would exclude a surface the ball is falling ONTO (it is above the old
-            // support but below the ball), and because such a box is also out of the sweep
-            // when it is already-above, the ball would fall through it. Grounded, the ball
-            // bottom equals the support, so this is the design's band unchanged.
-            float bandReference = lastSupportHeightWorldM;
-            float ballBottom = center.y - collisionRadiusWorldM;
-            if (ballBottom > bandReference) bandReference = ballBottom;
+            // The reference is the higher of the previous support and the ball's own
+            // bottom, from the one shared helper the sweep mask also calls. "The previous
+            // support + stepLimit" alone would exclude a surface the ball is falling ONTO
+            // (above the old support but below the ball) and the ball would fall through
+            // it. Grounded, the ball's bottom equals the support, so this is the design's
+            // band unchanged; airborne, the ball's own bottom makes "already above the
+            // top" true without a second unconditional rule.
+            float bandReference = SupportSurfaceMath.SupportReferenceHeight(
+                lastSupportHeightWorldM, center.y - collisionRadiusWorldM);
 
             int id;
             Vector3 point;

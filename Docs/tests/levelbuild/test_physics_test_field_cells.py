@@ -277,16 +277,31 @@ class CellCriteria(unittest.TestCase):
             for check in cell["checks"]:
                 self.assertIn("pass", check["expect"], "%s/%s" % (cell["id"], check["id"]))
 
-    def test_boundary_cells_state_the_equality(self):
-        # C09 is the <= vs < case: rise == stepLimit(0.30) == 0.075 must expect a climb.
+    def test_boundary_cell_expects_the_runtime_step_limit_not_the_preset_label(self):
+        # C09 is the <= vs < case, but the 0.30 preset is quantized: the ball is
+        # D = 0.2997369 m (one volume unit = 0.0041 m^3), so stepLimit = 0.074934 m and the
+        # 0.075 m deck is ABOVE the limit. The 0.30 row therefore expects the ball to be
+        # BLOCKED (on_step = fail, deck_gap = 0.075), and the driver derives that row at
+        # run time from the runtime stepLimit instead of trusting the preset label.
         c09 = [cell for cell in self.cells if cell["id"] == "C09"][0]
         self.assertAlmostEqual(c09["nominal_m"], 0.075, places=6)
+        self.assertLess(0.25 * 0.2997369, c09["nominal_m"],
+                        "the quantized 0.30 ball cannot step 0.075 m")
         on_step = [check for check in c09["checks"] if check["id"] == "on_step"][0]
-        self.assertEqual(on_step["expect"][0], "pass")
-        # C10 is the wall case at 0.30 and climbable from 0.60.
+        self.assertEqual(on_step["expect"], ["fail", "pass", "pass", "pass"])
+        self.assertIn("stepLimit", on_step["note"])
+        # C10 is the wall case at 0.30 (0.100 > 0.074934) and climbable from 0.60.
         c10 = [cell for cell in self.cells if cell["id"] == "C10"][0]
         wall = [check for check in c10["checks"] if check["id"] == "on_step"][0]
         self.assertEqual(wall["expect"], ["fail", "pass", "pass", "pass"])
+
+    def test_the_driver_derives_the_deck_expectation_from_the_step_limit(self):
+        # The JSON row is the nominal-preset answer; the driver must re-derive it from the
+        # runtime step limit, or a quantized diameter would demand an impossible climb.
+        source = DRIVER_CS.read_text(encoding="utf-8")
+        self.assertIn('Same(metric, "deck_gap_m")', source)
+        self.assertIn("GetStepHeightLimitWorldM()", source)
+        self.assertIn("GetNominalM()", source)
 
 
 class ArenaRules(unittest.TestCase):

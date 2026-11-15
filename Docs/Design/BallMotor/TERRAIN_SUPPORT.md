@@ -8,6 +8,7 @@
 >
 > **P1 已落地（2026-11-15，Linux 侧实现；Unity/U# 编译与 Play Mode 未跑）**：`SupportSurfaceMath`、motor 接线（支撑面/台阶/重力/诊断）、`LevelArenaHost`、NUnit 18 例 + Python 18 例。实现与本设计有**三处偏离**，逐条理由写在新加的 **§8.1**：①球有竖直重力、会从台面边缘掉下去（用户 2026-11-15 定，§5.4 的「没有重力」前提作废）；②支撑带（band）的参考高度改成 `max(上一步支撑面, 球心下方最低核心点)`，否则下落中的球会穿过脚下的盒顶；③`TryBakeRamp` 推迟到 P3（P1 没有斜面，不写未用代码）。§10.2 的默认值、§8 的 P1 表、§12 的校验状态都已按实现更新。
 > **P2 已落地（2026-11-15，Linux 侧实现；Unity/U# 编译与 Play Mode 未跑）**：`SupportSurfaceMath` 新增道具角色分类/容量/道具面 id 与支撑表道具段；`PickupFieldHost` 一遍扫描出「挡路 / 支撑」两个掩码（`UpdatePropObstacles`），经 `SetSupportProps` 单一接缝进 motor；NUnit 15 例 + Python 15 例。规则在 **§8 P2 的「定型规则」**，与原文的偏离（分类函数放 `SupportSurfaceMath` 而不是新 `PickupObstacleMath`、不新增 `supportMarginM`、`blockingDisabled` 同时管两个角色、道具查询段 `alreadyAbove`）逐条写在那里。
+> **P1 回归修复（2026-11-15，地图 0 的 C09 实测）**：0.30 m 球（量化后 D = 0.2997369、`stepLimit = 0.074934`）能**穿过** 0.075 m 静态盒——盒既不在扫掠里（被当台阶剔除）也没成为支撑（不在 band 内），正是本文禁止的「剔除扫掠却不能支撑」。根因是**两条判据**：`RefreshStepMask` 用 `IsSteppable(rise, limit, alreadyAbove, wasSteppable, +0.02 迟滞)`，支撑表用 `top <= reference + stepLimit`，且支撑表**从未**读过 `boxIsSteppable`；球在出生点离地 0.02 m 时掩码把盒锁成台阶（rise 0.055 ≤ limit），落地后单向迟滞不让它翻回墙。**修法**：`SupportSurfaceMath` 只留一条 `IsStepWithinLimit(top, reference, limit)`（一次减法、含等号）与一个 `SupportReferenceHeight(support, ballBottom)`；掩码与支撑表用**同一函数、同一参考**；删除 `stepHysteresisM` / `stepStickMarginM` 与单向闩锁（去噪只由 §3.5 的刷新门控承担，门控对两边对称）。「已在顶上」由参考取球底自然成立，不再是第二条比较。回归：NUnit/Python 新增 C09 量化边界的成对用例（见 §8.1 D4）。
 
 ---
 
@@ -153,9 +154,9 @@
 ```
 输入：球心 C（世界）、语义直径 D、上一步的 supportSurfaceY、stepLimit = kStep·D
 1. 探针 P = (C.x, C.z)                         ← 球心正下方（见下「为什么是球心」）
-2. 激活带（P1 落地时参考高度改为 bandReference = max(supportSurfaceY, 球心下方最低核心点)，
-   否则下落中的球会穿过脚下的盒顶；见 §8.1 D2）：
-     面 i 激活 ⇔ height_i(P) ≤ bandReference + stepLimit
+2. 激活带（参考高度 bandReference = SupportReferenceHeight(上一步支撑面, 球心下方最低核心点)，
+   否则下落中的球会穿过脚下的盒顶；见 §8.1 D2）——**与扫掠掩码用同一函数 `IsStepWithinLimit`**：
+     面 i 激活 ⇔ top_i − bandReference ≤ stepLimit      // 一次减法，含等号；不是 "top_i ≤ reference + stepLimit"
 3. 在激活面里取 height_i(P) 最大者 → surfaceId、surfacePoint P_i、surfaceNormal n_i
 4. 输出 (n_i, dot(n_i, P_i))，喂 GroundContactMath.TrySolve
 ```
@@ -264,7 +265,8 @@ rise >  stepLimit           → 墙
 ```
 
 - **一步的滞后是可接受的**：掩码用的是**上一步**的 `supportSurfaceY`。球在平地上接近台阶时 support 稳定，不会滞后；球正在爬的时候 support 在变，但那时盒**已经**是台阶了（掩码只会更保守）。这与挡路盒 20 Hz 扫描的滞后同性质（`BLOCKING_PROPS_PLAN` §3「时间误差」）。
-- **一次刷新两件事**：扫掠掩码 + 支撑激活掩码由**同一个函数**算，不允许两处各算一遍 `rise`（那就会出现「扫掠里是墙、支撑里是台阶」的死状态）。
+- **一条判据**：扫掠剔除和支撑激活都调用 `SupportSurfaceMath.IsStepWithinLimit(top, reference, stepLimit)`，`reference` 都来自 `SupportSurfaceMath.SupportReferenceHeight`。不允许在任何一侧另写一遍 `rise`/`band`：2026-11-15 的 C09 就是这样出现「扫掠里是墙、支撑里不是面」的死状态（一侧带 0.02 迟滞、另一侧没有，且支撑表根本没读掩码）。判据只有一条：**盒被剔除 ⇒ 盒必须是可支撑候选**。
+- **没有单向迟滞**：去噪只由上面的刷新门控（2 mm 直径 / 5 mm 支撑面）承担。门控对两边对称，所以两边只会一起翻；单向闩锁只会让剔除比支撑更宽，永远不安全（§8.1 D4）。
 
 ### 4.4 抬升速度：台阶必须有自己的上限（与小棍的**最大冲突点**）
 
@@ -281,13 +283,17 @@ maxStepUpLiftPerStep = min(stepLimit, maxStepUpLiftWorldM)      // maxStepUpLift
 - **为什么不 weaken 小棍的护栏**：`maxProxyLiftPerStep` 存在的理由是「一根长棍不能把球弹上天」（README 三条上限）。台阶是**面不连续**，性质不同，所以给**独立的、只作用于一次跨级的**上限是对的；跨级之后立即回到 0.04，长棍依然弹不动球。
 - `maxStepUpLiftWorldM = 0.6` 是护栏：`kStep` 被误配成 1.0 时（`D = 2.2` → 2.2 m 瞬移）不至于把球送到天上。`0.6 > 0.55 = 0.25 × 2.2`，所以正常范围碰不到它。
 
-### 4.5 防抖（三条，缺一就会在棱上抖）
+### 4.5 防抖（台阶判定两条 + 抬升去噪一条，缺一就会在棱上抖）
+
+**规则一句话**：一个静态盒对当前球要么是**台阶**（从扫掠剔除且可当支撑），要么是**墙**（留在扫掠里）——两侧共用 `SupportSurfaceMath` 的**一份**判据 `IsStepWithinLimit(top, reference, stepLimit)` 与**同一个** `reference`；不存在「剔除扫掠却不能支撑」的中间态。
 
 | # | 规则 | 防的是什么 |
 |---|---|---|
-| 1 | **单向迟滞**：已经判为台阶的盒，要 `rise > stepLimit + stepHysteresisM (0.02)` 才回到「墙」 | 球在棱上 `supportSurfaceY` 微抖 → 盒在墙/台阶之间每步翻转 → 扫掠数组反复重建 + 球被推一下 |
-| 2 | **已在顶上就是台阶**：`C.y − r ≥ 盒顶 − stepStickMarginM (0.01)` 时，**无条件**判台阶 | 球站上盒顶后 `support` 变成盒顶、`rise = 0` 仍会成立；但若因为别的原因（如交分缩球）`rise` 变大，盒会回到扫掠，而球**正站在扩张盒里** → 初始穿透分支把球推开（`SweepMath` 的 penetration 分支）。这条是**必须**的 |
+| 1 | **刷新门控**：直径变化 > 2 mm、支撑面变化 > 5 mm 或盒集合变化才重算掩码 | 球在棱上 `supportSurfaceY` 微抖 → 盒在墙/台阶之间每步翻转 → 扫掠数组反复重建 + 球被推一下。门控对两侧对称（同一 `reference`），只会一起翻 |
+| 2 | **参考取球底**：`reference = max(上一步支撑面, 球心下方最低核心点)`；球站在盒顶或在其上方时 `rise ≤ 0`，自动是台阶 | 球站上盒顶后 `support` 变成盒顶；若因缩球/台阶边缘等原因 `rise` 变大，盒会回到扫掠，而球**正站在扩张盒里** → 初始穿透分支把球推开。用球底作参考后这条是**恒等式**，不是第二条比较 |
 | 3 | **最小台阶**：`rise < minStepHeightM (0.005)` 时不算「跨级」（不给大抬升，不记台阶事件） | 0.004 m 的高度差被当成台阶 → 每步一次大抬升 → 抖动。数值与 `layout.json` 的 `max_route_step_m = 0.05` 不同：**0.05 是作者分类「地贴 vs 立面」的门槛，0.005 是数值去噪**，两者不要混用（混用会让 2.8 cm 餐巾变成「地贴」而跳过支撑） |
+
+> **已删除（2026-11-15，C09 回归）**：单向迟滞 `stepHysteresisM` 与「已在顶上」余量 `stepStickMarginM`。前者让「剔除扫掠」的判据比支撑判据宽 0.02 m，且支撑表从未读过掩码——0.30 m 球因此穿过 0.075 m 台阶；后者被 `reference = max(支撑面, 球底)` 完全覆盖。理由见 §8.1 D4。
 
 ### 4.6 与挡路（`SetBlockingBoxes`）的关系
 
@@ -611,8 +617,8 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 
 | 文件 | 改什么 |
 |---|---|
-| 新 `Runtime/BallLayers/TerrainSupport/SupportSurfaceMath.cs` | **唯一**的地形数学：`TryResolveSupport(probe, referenceSupportY, stepLimit, 地面, 盒表, 斜面表, 道具表, out surfaceId, out point, out normal, out height)`；`IsSteppable(rise, stepLimit, alreadyAbove, hysteresisM)`；`TryBakeRamp(center, normal, right, size, out …)`（P3 用，先写签名）。纯静态、无分配、UdonSharp 安全 |
-| `Runtime/BallMotor/KatamariBallMotor.cs` | ① `AddBox` 记录顶面（支撑槽复用同一缓冲）；② `RebuildObstacles` 增加「剔除台阶盒」的掩码；③ `StepBall` 在扫掠前刷新掩码、扫掠后选面、把 `(supportNormal, supportOffset)` 喂 `GroundContactMath`、把 `supportNormal` 喂 `VisualRollMath`；④ 新字段 `stepHeightOverBallDiameter = 0.25f`、`terrainSupportEnabled = false`、`maxStepUpLiftWorldM = 0.6f`、`stepHysteresisM = 0.02f`、`stepStickMarginM = 0.01f`、`minStepHeightM = 0.005f`；⑤ 新 getter（§7.5 里 P1 需要的四个） |
+| 新 `Runtime/BallLayers/TerrainSupport/SupportSurfaceMath.cs` | **唯一**的地形数学：`TryResolveSupport(probe, referenceSupportY, stepLimit, 地面, 盒表, 斜面表, 道具表, out surfaceId, out point, out normal, out height)`；`IsStepWithinLimit(top, reference, stepLimit)`（两侧唯一的台阶判据）与 `SupportReferenceHeight(supportHeight, ballBottom)`；`TryBakeRamp(center, normal, right, size, out …)`（P3 用，先写签名）。纯静态、无分配、UdonSharp 安全 |
+| `Runtime/BallMotor/KatamariBallMotor.cs` | ① `AddBox` 记录顶面（支撑槽复用同一缓冲）；② `RebuildObstacles` 增加「剔除台阶盒」的掩码；③ `StepBall` 在扫掠前刷新掩码、扫掠后选面、把 `(supportNormal, supportOffset)` 喂 `GroundContactMath`、把 `supportNormal` 喂 `VisualRollMath`；④ 新字段 `stepHeightOverBallDiameter = 0.25f`、`terrainSupportEnabled = false`、`maxStepUpLiftWorldM = 0.6f`、`minStepHeightM = 0.005f`（`stepHysteresisM`/`stepStickMarginM` 已于 2026-11-15 删除，见 §8.1 D4）；⑤ 新 getter（§7.5 里 P1 需要的四个） |
 | 新 `Runtime/Story/LevelArenaHost.cs`（+ `.meta`） | §7.2/§7.3 |
 | `Labs/StoryLevel/StoryLevelLabBootstrap.cs` | 删注册段（或整体并入 M3） |
 | 新 `Docs/Design/BallLayers/TerrainSupport/terrain_support.py` | Python 参考模型，与 C# 同名同序（本仓库每层都有的镜像；**没有它，C# 就没有离线对照**） |
@@ -629,6 +635,7 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 6. `SurfacesAboveTheStepBandAreNotCandidates` — `height > supportY + stepLimit` 的面被排除（这就是「墙的顶面不能被当地板」）。
 7. `StepLimitScalesWithDiameter` — 0.30/0.83/1.10/2.20 四个直径的 `stepLimit`。
 8. `TheBoxThatIsWithinTheLimitLeavesTheSweep` — 掩码：0.26 m 盒在 `D = 1.10` 时被剔除、在 `D = 0.30` 时保留。
+   19/20. `TheQuantizedDiameterPutsTheBoundaryDeckAboveTheLimit` / `TheSweepMaskAndTheSupportTableNeverDisagree` — C09 的 0.075 > 0.074934 必须留作墙，且任何 top/reference 下「剔除」与「可支撑」同答案（2026-11-15 回归）。
 9. `HysteresisKeepsASteppableBoxOutUntilItExceedsTheLimitPlusTheMargin`。
 10. `ABallAlreadyAboveTheTopIsNeverPushedOut` — 规则 2。
 11. `NonFiniteInputIsRefusedAndNothingIsWritten`。
@@ -659,6 +666,7 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 | D1 | §5.4「没有重力、球永远贴地」；§4.7 用 `maxDropPerStep = 0.1` 限速下落 | **球有竖直重力**：失去支撑时 `fallSpeed += 9.81·dt`，`maxDrop`/`maxLift` 都换成该步的重力预算 `fallSpeed·dt`；落地即清零；不做跳跃、不做向上速度 | 用户 2026-11-15 拍板：「球有向下的重力，会从台面边缘掉下去；不做跳跃」。旧的 0.1/步钳位会把 1 m 的掉落拉成 0.5 s 的缓降，观感是漂浮 |
 | D2 | §3.3 的 band 参考 = `supportSurfaceY`（上一步选中的支撑面高） | band 参考 = `max(上一步支撑面高, 球心下方最低核心点)` | 有重力之后「下落中」的球会经过比「上一步支撑面 + stepLimit」高、但比球自己低的面（例：从高台掉向一张台面）。按原式这些面被排除，而它们在 `alreadyAbove` 下又已从扫掠里剔除 → 球**穿过**台面。取球自己的最低点作参考后，可落的面永远在 band 内；贴地时最低点 = 支撑面，band 与原文完全一致 |
 | D3 | §8 文件表要求先写 `TryBakeRamp` 签名 | **不写**，推迟到 P3 | P1 没有斜面；一个没有调用方、没有测试的烘焙函数就是「平行草稿」，本仓 `AGENTS.md` 明令不要 |
+| D4 | §4.5 三条防抖里的「单向迟滞」（`stepHysteresisM`）与「已在顶上余量」（`stepStickMarginM`）；§3.3 的 band 由支撑表单独判 | **删除两个字段与闩锁**；两侧共用 `IsStepWithinLimit(top, reference, limit)` + `SupportReferenceHeight(support, ballBottom)`；「已在顶上」由 `reference` 取球底自动成立 | 2026-11-15 地图 0 的 C09 实测：0.30 m 球（D 量化 0.2997369、limit 0.074934）**穿过** 0.075 m 盒。球在出生点离地 0.02 m 时掩码按「球底参考」把盒判成台阶（rise 0.055），落地后支撑表（`top ≤ 0 + 0.074934`）不认它，而单向迟滞让掩码停在台阶——「剔除扫掠却不能支撑」。迟滞只要存在就只能让剔除更宽，无法与支撑表同步；去噪由 §3.5 的 5 mm 门控承担（对称），所以删掉是唯一安全解 |
 
 #### 开关（`terrainSupportEnabled`，默认 **true**）
 
@@ -677,7 +685,7 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 
 | 阶段 | 成本 | 频次 |
 |---|---|---|
-| `RefreshStepMask` | ≤8 盒 ×（1 减法、1 比较、1 次 `IsSteppable` ≈ 10 flops）；**门控**：尺寸变化 > 2 mm 或支撑面变化 > 5 mm 或盒集合变化才重算 | 每步一次门控（≈8 次比较），重算低频 |
+| `RefreshStepMask` | ≤8 盒 ×（1 减法、1 比较、1 次 `IsStepWithinLimit` ≈ 6 flops）；**门控**：尺寸变化 > 2 mm 或支撑面变化 > 5 mm 或盒集合变化才重算（调 `IsStepWithinLimit` 一次） | 每步一次门控（≈8 次比较），重算低频 |
 | `RebuildObstacles`（掩码变化时） | 现有实现本来就在条数变化时 `new Vector3[]`；掩码变化是低频（球长大/爬到新高度） | 低频，P4 实测 GC |
 | `ResolveTerrainSupport` | `TryResolveSupport`：1 次归一化 + 探针/盒校验（≤8×2 向量有限性）+ ≤8 次足迹/高度比较，约 120 flops；无分配 | 每步 |
 | 重力 | `TryIntegrateFall` + `ResolveFallState`：约 10 flops | 每步（仅下落时改上限） |
@@ -795,7 +803,7 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 
 1. **探针细化**：骑棱时用「最低点正下方」而不是球心（多一次 32 点扫描，§3.5）。
 2. **GC 实测**：台阶掩码重建的 `new Vector3[]` 是否可见（Profiler）；若可见，评估「把 `maxStepHeight` 下沉进 `SweepMath`」——**代价是同步改 `sweep.py` 参考模型与 `SweepTests`**，不能只改 C#。
-3. **参数试玩**：`stepHeightOverBallDiameter`（0.25 是否太松/太紧）、`maxSupportSlopeDegrees`（45）、`stepHysteresisM`、`supportStickinessM`。
+3. **参数试玩**：`stepHeightOverBallDiameter`（0.25 是否太松/太紧）、`maxSupportSlopeDegrees`（45）、`supportStickinessM`。
 4. **依赖**：等 `COLLIDER_LAYER.md` 的「带朝向盒」进 manifest，把 `PropTop` 升级成 `PropRamp`（§6.5）。
 5. **HUD 一行**：`support=<kind> y=… step=<0|1>`，只在 `logSetupLine` 打开时每 0.5 s 打一次（不要每帧）。
 
@@ -805,7 +813,7 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 
 | # | 风险 | 机制 | 处理 |
 |---|---|---|---|
-| R1 | **台阶边缘抖动**（在棱上反复上下） | 探针在足迹边界内外跳；`supportSurfaceY` 在 0.26 与 0 之间抖 | §4.5 三条规则（单向迟滞、已在顶上优先、最小台阶）；验收 S3（10 s 波动 < 1 mm）。**残余风险**：球静止在恰好 0.5 步宽的位置仍可能每 3 步抖一次 —— 若出现，加「足迹内缩 0.01 m 的迟滞环带」（两条边界：进入用外沿、退出用内沿） |
+| R1 | **台阶边缘抖动**（在棱上反复上下） | 探针在足迹边界内外跳；`supportSurfaceY` 在 0.26 与 0 之间抖 | §4.5 的两条（刷新门控、参考取球底）+ 最小台阶；验收 S3（10 s 波动 < 1 mm）。**残余风险**：球静止在恰好 0.5 步宽的位置仍可能每 3 步抖一次 —— 若出现，加「足迹内缩 0.01 m 的迟滞环带」（两条边界：进入用外沿、退出用内沿） |
 | R2 | **抬升穿模** | 台阶比 `proxyLiftCap = 0.04` 高得多 | §4.4 的 `maxStepUpLiftPerStep`；**只跨级那一步**给大上限。验收 S2 看单步 `center.y` 跳变 ≤ 0.275（D=1.1） |
 | R3 | **接触饱和**（`ContactCapacity = 4`） | 墙角 + 台阶边缘 | 台阶盒被**剔除**后接触数**下降**（本设计对饱和是减压方向）；仍读 `WasContactBufferSaturated()` 作诊断；墙角卡顿优先怀疑这里（`BLOCKING_PROPS_PLAN` R3） |
 | R4 | **每步成本** | 19 个候选面（最坏）；方法调用开销 | 典型 1–3 激活面、~36 flops/步；**一个静态函数吃数组**、不分配；P4 实测帧时间（0/6/12 个激活面） |
@@ -843,9 +851,8 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 |---|---:|---|---|
 | `stepHeightOverBallDiameter` | **0.25** | `layout.json` 已有常量（F13），与 `gate_bed_*` 的 0.95→1.10 m 门互锁；**原作比例未公开**（O2） | 关卡（序列化字段） |
 | `maxStepUpLiftWorldM` | 0.6 m | 护栏：`> 0.25 × 2.2 = 0.55`，正常范围碰不到；防 `kStep` 被误配 | 代码常量 |
-| `stepHysteresisM` | 0.02 m | 迟滞量级取「盒高的 8%」，够盖住浮点抖动、不足以让球爬上不该上的东西 | 序列化 |
-| `stepStickMarginM` | 0.01 m | 「已在顶上」的判定余量 | 序列化 |
 | `minStepHeightM` | 0.005 m | 数值去噪；**不要**与 `max_route_step_m = 0.05` 混用 | 序列化 |
+| 台阶参考高度 | `max(上一步支撑面, 球心下方最低核心点)` | **不是旋钮**：它是「扫掠剔除与支撑激活共用同一个参考」的载体（§4.5、§8.1 D4）；`stepHysteresisM` / `stepStickMarginM` 已删除 | 代码（不序列化） |
 | `maxSupportSlopeDegrees` | **45°** | 硬上限 51.3° 由 `min(maxLift,maxDrop)/(maxSpeed·dt) = 1.25` 反推（§5.2），取 30% 余量 | 序列化 |
 | `MaxRampCount` | 4 | 本关角内最多 1–2 个斜板；4 留余量 | 代码常量 |
 | `MaxSupportPropCount` | 6 | 与 `MaxBlockingBoxCount` 对称；「球周围同时贴几件」的估法同 `BLOCKING_PROPS_PLAN` §9-2 | 代码常量 |

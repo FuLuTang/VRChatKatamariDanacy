@@ -92,25 +92,44 @@ def try_step_height_limit(semantic_diameter_m: float,
     return limit
 
 
-def is_steppable(rise_m: float, step_limit_m: float, already_above: bool,
-                 was_steppable: bool, hysteresis_m: float) -> bool:
-    """The only place the rise-vs-limit comparison exists (design §4.5 rules 1-2)."""
-    rise = _finite(rise_m, "rise_m")
+def support_reference_height(support_height_m: float, ball_bottom_m: float) -> float:
+    """The ONE reference the sweep mask and the support table compare a top against.
+
+    The higher of the surface the ball was on and the ball's own bottom. Using the
+    ball's bottom lets a surface the ball is falling ONTO count, and it makes "the
+    ball is already above the top" a consequence of the reference (zero or negative
+    rise) rather than a second unconditional rule.  A non-finite ball bottom is
+    ignored: the surface height is the conservative answer.
+    """
+    support = _finite(support_height_m, "support_height_m")
+    try:
+        bottom = _finite(ball_bottom_m, "ball_bottom_m")
+    except (TypeError, ValueError):
+        return support
+    return bottom if bottom > support else support
+
+
+def is_step_within_limit(top_y: float, reference_support_height_m: float,
+                         step_limit_m: float) -> bool:
+    """The ONE static-box step decision: is this top inside the ball's step limit?
+
+    Both sides call this with the same reference: the motor's sweep mask decides
+    exclusion, ``try_resolve_support`` decides candidacy.  One subtraction and one
+    inclusive bound; a band written as ``top <= reference + limit`` is not
+    bit-identical to it and was half of the 2026-11-15 C09 ghost step.  There is
+    deliberately no one-way hysteresis: a latch can only widen the exclusion
+    beyond the support rule, and a box dropped from the sweep that cannot support
+    is exactly the state that let the 0.30 m ball drive through a 0.075 m deck.
+    """
+    top = _finite(top_y, "top_y")
+    reference = _finite(reference_support_height_m, "reference_support_height_m")
     limit = _finite(step_limit_m, "step_limit_m")
     if limit < 0.0:
         raise ValueError("step_limit_m must be nonnegative")
-    hysteresis = _finite(hysteresis_m, "hysteresis_m")
-    if hysteresis < 0.0:
-        raise ValueError("hysteresis_m must be nonnegative")
-    if not isinstance(already_above, bool) or not isinstance(was_steppable, bool):
-        raise ValueError("already_above/was_steppable must be bool")
-    if already_above:
-        return True
-    if rise <= limit:
-        return True
-    if was_steppable and rise <= limit + hysteresis:
-        return True
-    return False
+    rise = top - reference
+    if not math.isfinite(rise):
+        raise ValueError("step rise is non-finite")
+    return rise <= limit
 
 
 def is_step_crossing(rise_m: float, min_step_height_m: float) -> bool:
@@ -127,9 +146,12 @@ def classify_prop(beyond_absorb_volume_limit: bool, top_y: float, support_height
     """The only place a prop's role is decided (P2, design §8 P2 rule 1).
 
     An absorbable prop is food (``PROP_ROLE_NONE``) whatever its geometry. An
-    absorb-proof one is a support when ``top - support <= stepLimit`` (the boundary
-    is inclusive) or when the ball is already above its top (the static box's
-    anti-jitter rule 2), otherwise a wall. ``beyond_absorb_volume_limit`` is the
+    absorb-proof one is a support when its top is inside the step limit
+    (:func:`is_step_within_limit`, the same comparison the static-box mask uses;
+    the boundary is inclusive) or when the ball is already above its top,
+    otherwise a wall.  The already-above branch cannot disagree with the support
+    table: the motor's reference is the ball's bottom when it is above the top, so
+    the table's rise is zero or negative.  ``beyond_absorb_volume_limit`` is the
     host's ``IsBeyondAbsorbVolumeLimit`` answer, passed in so this layer reads no
     prop and the three identities share one predicate.
     """
@@ -142,12 +164,9 @@ def classify_prop(beyond_absorb_volume_limit: bool, top_y: float, support_height
         raise ValueError("step_limit_m must be nonnegative")
     if not beyond_absorb_volume_limit:
         return PROP_ROLE_NONE
-    rise = top - support
-    if not math.isfinite(rise):
-        raise ValueError("prop rise is non-finite")
     if already_above:
         return PROP_ROLE_SUPPORT
-    return PROP_ROLE_SUPPORT if rise <= limit else PROP_ROLE_BLOCKING
+    return PROP_ROLE_SUPPORT if is_step_within_limit(top, support, limit) else PROP_ROLE_BLOCKING
 
 
 def is_support_prop_count_allowed(count: int) -> bool:
@@ -222,10 +241,6 @@ def try_resolve_support(probe_point: Sequence[float], reference_support_height_m
     validated_props = tuple(_validate_box(props[i], i, "props")
                             for i in range(prop_count))
 
-    band = reference + limit
-    if not math.isfinite(band):
-        raise ValueError("step band is non-finite")
-
     # y = (offset - nx*px - nz*pz) / ny on the ground plane.
     ground_height = (offset - normal[0] * probe[0] - normal[2] * probe[2]) / normal[1]
     if not math.isfinite(ground_height):
@@ -240,11 +255,13 @@ def try_resolve_support(probe_point: Sequence[float], reference_support_height_m
     selected_height = ground_height
     selected_point = ground_point
     selected_normal = normal
-    active_count = 1 if ground_height <= band else 0
+    # The step decision is the SAME call the motor's sweep mask makes per box;
+    # writing the band here instead was the second half of the C09 ghost step.
+    active_count = 1 if is_step_within_limit(ground_height, reference, limit) else 0
 
     for index, (minimum, maximum) in enumerate(validated):
         top = maximum[1]
-        if top > band:
+        if not is_step_within_limit(top, reference, limit):
             continue
         active_count += 1
         if probe[0] < minimum[0] or probe[0] > maximum[0]:
@@ -260,7 +277,7 @@ def try_resolve_support(probe_point: Sequence[float], reference_support_height_m
 
     for index, (minimum, maximum) in enumerate(validated_props):
         top = maximum[1]
-        if top > band:
+        if not is_step_within_limit(top, reference, limit):
             continue
         active_count += 1
         if probe[0] < minimum[0] or probe[0] > maximum[0]:

@@ -223,43 +223,56 @@ namespace VRCKatamari.Tests
         public void TheBoxThatIsWithinTheLimitLeavesTheSweep()
         {
             // 0.26 m picnic bed. A 1.10 m ball has a 0.275 m limit -> step; a
-            // 0.30 m ball has 0.075 m -> wall.
-            Assert.IsTrue(SupportSurfaceMath.IsSteppable(0.26f, StepLimit(1.10f), false, false, 0.02f));
-            Assert.IsFalse(SupportSurfaceMath.IsSteppable(0.26f, StepLimit(0.30f), false, false, 0.02f));
+            // 0.30 m ball has 0.075 m -> wall. The comparison is `top - reference`.
+            Assert.IsTrue(SupportSurfaceMath.IsStepWithinLimit(0.26f, 0f, StepLimit(1.10f)));
+            Assert.IsFalse(SupportSurfaceMath.IsStepWithinLimit(0.26f, 0f, StepLimit(0.30f)));
             // A top below the support is never a wall either.
-            Assert.IsTrue(SupportSurfaceMath.IsSteppable(-0.1f, 0f, false, false, 0f));
+            Assert.IsTrue(SupportSurfaceMath.IsStepWithinLimit(-0.1f, 0f, 0f));
             // Invalid numbers are conservative: keep the box as a wall.
-            Assert.IsFalse(SupportSurfaceMath.IsSteppable(float.NaN, 0.275f, false, false, 0.02f));
-            Assert.IsFalse(SupportSurfaceMath.IsSteppable(0.1f, -1f, false, false, 0.02f));
+            Assert.IsFalse(SupportSurfaceMath.IsStepWithinLimit(float.NaN, 0f, 0.275f));
+            Assert.IsFalse(SupportSurfaceMath.IsStepWithinLimit(0.1f, 0f, -1f));
+            Assert.IsFalse(SupportSurfaceMath.IsStepWithinLimit(0.1f, float.NaN, 0.275f));
         }
 
         // ---------------------------------------------------------------- 9 ----
         [Test]
-        public void HysteresisKeepsASteppableBoxOutUntilItExceedsTheLimitPlusTheMargin()
+        public void TheReferenceHeightIsTheOnlyMemoryTheStepRuleNeeds()
         {
-            // 0.28 m is above the 0.275 limit but inside the 0.02 m hysteresis, so a
-            // box already classified as a step stays one; a fresh box does not.
-            Assert.IsTrue(SupportSurfaceMath.IsSteppable(0.28f, 0.275f, false, true, 0.02f));
-            Assert.IsFalse(SupportSurfaceMath.IsSteppable(0.28f, 0.275f, false, false, 0.02f));
-            // Past limit + hysteresis it goes back to being a wall.
-            Assert.IsFalse(SupportSurfaceMath.IsSteppable(0.30f, 0.275f, false, true, 0.02f));
-            // Exactly at limit + hysteresis still counts (inclusive).
-            Assert.IsTrue(SupportSurfaceMath.IsSteppable(0.29f, 0.275f, false, true, 0.02f));
+            // The mask has no latch. What used to be "one-way hysteresis" is the shared
+            // reference: airborne 0.02 m above the floor, the ball's own bottom is the
+            // reference, so a 0.075 m deck sits inside a 0.074934 m limit; grounded, the
+            // same deck is a wall. The support table reads the SAME reference, so both
+            // sides flip together instead of diverging (C09's ghost step: the mask
+            // latched at spawn and never released).
+            float limit = StepLimit(0.2997369f);
+            Assert.IsTrue(SupportSurfaceMath.IsStepWithinLimit(0.075f, 0.02f, limit),
+                "airborne reference: a 0.055 m rise is inside the limit");
+            Assert.IsFalse(SupportSurfaceMath.IsStepWithinLimit(0.075f, 0f, limit),
+                "grounded reference: a 0.075 m rise is above the 0.074934 m limit");
+
+            // The helper is the max, and a non-finite ball bottom cannot poison it.
+            Assert.AreEqual(0.02f, SupportSurfaceMath.SupportReferenceHeight(0f, 0.02f),
+                Tolerance);
+            Assert.AreEqual(0.3f, SupportSurfaceMath.SupportReferenceHeight(0.3f, 0.02f),
+                Tolerance);
+            Assert.AreEqual(0.3f, SupportSurfaceMath.SupportReferenceHeight(0.3f, float.NaN),
+                Tolerance);
         }
 
         // --------------------------------------------------------------- 10 ----
         [Test]
         public void ABallAlreadyAboveTheTopIsNeverPushedOut()
         {
-            // Standing on the box: rise is 0 and the box is a step. Even a bogus
-            // rise far above the limit must not turn it into a wall while the ball's
-            // bottom is already at or above the top: that is the case where the sweep
-            // would otherwise push a ball that is inside the expanded box.
-            Assert.IsTrue(SupportSurfaceMath.IsSteppable(0f, 0.275f, true, true, 0.02f));
-            Assert.IsTrue(SupportSurfaceMath.IsSteppable(1f, 0.275f, true, false, 0.02f));
-            // Non-finite input is still refused first: a corrupt state must not
-            // masquerade as a classified box.
-            Assert.IsFalse(SupportSurfaceMath.IsSteppable(float.NaN, 0.275f, true, false, 0f));
+            // Standing on the box, or above it, the reference is the ball's own bottom, so
+            // the rise is zero or negative and the box is a step. This is the old
+            // unconditional "already above" rule as a consequence of the shared
+            // reference, not a second comparison that could disagree with the table.
+            float limit = StepLimit(0.30f);
+            Assert.IsTrue(SupportSurfaceMath.IsStepWithinLimit(0.075f, 0.075f, limit));
+            Assert.IsTrue(SupportSurfaceMath.IsStepWithinLimit(0.075f, 1f, limit));
+            // A corrupt top is still refused first: a corrupt state must not masquerade
+            // as a classified box.
+            Assert.IsFalse(SupportSurfaceMath.IsStepWithinLimit(float.NaN, 0.075f, limit));
         }
 
         // --------------------------------------------------------------- 11 ----
@@ -525,6 +538,80 @@ namespace VRCKatamari.Tests
             Assert.IsFalse(SupportSurfaceMath.IsStepCrossing(0.005f, 0.005f),
                 "the threshold is exclusive");
             Assert.IsFalse(SupportSurfaceMath.IsStepCrossing(float.NaN, 0.005f));
+        }
+
+        // --------------------------------------------------------------- 19 ----
+        [Test]
+        public void TheQuantizedDiameterPutsTheBoundaryDeckAboveTheLimit()
+        {
+            // The lab cannot set D = 0.300: the 0.30 preset quantizes to 0.2997369
+            // (one volume unit = 0.0041 m^3). Its limit is 0.074934 m, so C09's 0.075 m
+            // deck is ABOVE the limit: the box must stay in the sweep (a wall) and the
+            // support table must not select it. Before the fix the mask had already
+            // dropped it from the sweep, which is why the ball drove through it.
+            float limit = StepLimit(0.2997369f);
+            Assert.Less(limit, 0.075f, "the quantized 0.30 ball cannot step 0.075 m");
+            Assert.Greater(0.075f - limit, 0f);
+
+            Vector3[] minima = { new Vector3(12f, 0f, -6f) };
+            Vector3[] maxima = { new Vector3(18f, 0.075f, -2f) };
+            Vector3 probe = new Vector3(15f, 0.15f, -4f);
+            int id;
+            Vector3 point;
+            Vector3 normal;
+            float height;
+            int candidates;
+
+            Assert.IsFalse(SupportSurfaceMath.IsStepWithinLimit(0.075f, 0f, limit),
+                "the mask must KEEP the deck in the sweep");
+            Assert.IsTrue(Resolve(probe, 0f, limit, minima, maxima, 1,
+                out id, out point, out normal, out height, out candidates));
+            Assert.AreEqual(SupportSurfaceMath.GroundSurfaceId, id,
+                "a box the mask keeps as a wall must not be a support either");
+            Assert.AreEqual(0f, height, Tolerance);
+
+            // Just under the limit: it is a step, and the same call makes it a support.
+            float lowerTop = 0.0749f;
+            Assert.IsTrue(SupportSurfaceMath.IsStepWithinLimit(lowerTop, 0f, limit));
+            Vector3[] lowerMaxima = { new Vector3(18f, lowerTop, -2f) };
+            Assert.IsTrue(Resolve(probe, 0f, limit, minima, lowerMaxima, 1,
+                out id, out point, out normal, out height, out candidates));
+            Assert.AreEqual(1, id);
+            Assert.AreEqual(lowerTop, height, Tolerance);
+        }
+
+        // --------------------------------------------------------------- 20 ----
+        [Test]
+        public void TheSweepMaskAndTheSupportTableNeverDisagree()
+        {
+            // The invariant the ghost step broke: for every box top and every reference
+            // the mask can compute, "the mask drops it" and "the support table selects
+            // it" are the same answer. The references include the mask refresh gate's
+            // +/-5 mm wobble, so a jitter cannot split the two sides.
+            float limit = StepLimit(0.2997369f);
+            float[] tops = { 0.0700f, 0.0749f, 0.0750f, 0.0800f, 0.0950f };
+            float[] references = { 0f, 0.004f, -0.004f, 0.02f };
+            Vector3 probe = new Vector3(15f, 0.15f, -4f);
+            for (int t = 0; t < tops.Length; t++)
+            {
+                for (int r = 0; r < references.Length; r++)
+                {
+                    Vector3[] minima = { new Vector3(12f, 0f, -6f) };
+                    Vector3[] maxima = { new Vector3(18f, tops[t], -2f) };
+                    bool maskStep = SupportSurfaceMath.IsStepWithinLimit(tops[t],
+                        references[r], limit);
+                    int id;
+                    Vector3 point;
+                    Vector3 normal;
+                    float height;
+                    int candidates;
+                    Assert.IsTrue(Resolve(probe, references[r], limit, minima, maxima, 1,
+                        out id, out point, out normal, out height, out candidates));
+                    bool supported = id == 1;
+                    Assert.AreEqual(maskStep, supported,
+                        "top=" + tops[t] + " reference=" + references[r]);
+                }
+            }
         }
     }
 }

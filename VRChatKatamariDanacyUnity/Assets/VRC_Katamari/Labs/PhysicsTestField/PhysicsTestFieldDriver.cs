@@ -22,9 +22,11 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// <b>Switch order is not arbitrary.</b> Clear-then-register, then the kind whitelist, then the
     /// ball reset, then the prop reset, then the size. The reset must come after the arena (it
     /// re-derives the size and teleports the ball onto the new floor) and before the size (the reset
-    /// re-prices the ball from zero volume, so sizing first would throw the work away). The prop
-    /// reset comes last of the three, because it clears the candidate queue and the radial proxies
-    /// the reset left behind.
+    /// re-prices the ball from zero volume, so sizing first would throw the work away). The radius
+    /// used for the spawn height is read AFTER the reset, from the ball the reset just restored;
+    /// reading it before the reset used the previous run's grown radius and spawned the ball in the
+    /// air. The prop reset comes last of the three, because it clears the candidate queue and the
+    /// radial proxies the reset left behind.
     /// </para>
     /// <para>
     /// <b>Cells that cannot be measured are not failures.</b> A check gated on a stage this build
@@ -413,16 +415,21 @@ namespace VRCKatamari.Labs.PhysicsTestField
             baseAttached = 0;
             if (pickupHost != null) baseAttached = pickupHost.GetAttachedCount();
 
-            float radius = motor.GetCollisionRadiusWorldM();
-            if (radius <= 0f) radius = 0.15f;
             Vector3 authored = cell.GetStartCenter();
-            Vector3 pose = new Vector3(authored.x, radius + 0.02f, authored.z);
             float heading = cell.GetStartHeadingDegrees();
             runHeadingDegrees = heading;
 
             string roundId = "ptf-" + cell.GetCellId() + "-" + runIndex.ToString();
             int reason = -1;
-            bool reset = motor.TryResetForNewRound(roundId, pose, heading, out reason);
+            // Reset FIRST, then read the radius. TryResetForNewRound restores the round's
+            // baseline size, so a radius read AFTER it is the radius the ball actually has
+            // when the pose is applied. The old order read it BEFORE the reset, i.e. the
+            // PREVIOUS run's grown radius: after a 2.2 m run the next run spawned at
+            // y = 1.12 instead of 0.17, fell from the air, and the step mask called a
+            // 0.075 m deck "already above" (C10 was not blocked in a full BeginAll pass).
+            // The reset is given the cell's authored pose; the teleport below replaces its
+            // height with the radius-derived one.
+            bool reset = motor.TryResetForNewRound(roundId, authored, heading, out reason);
             if (!reset)
             {
                 Debug.Log("[ptf] blocked run=" + runIndex + " cell=" + cell.GetCellId()
@@ -433,6 +440,11 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 FinishRun();
                 return;
             }
+
+            float radius = motor.GetCollisionRadiusWorldM();
+            if (radius <= 0f) radius = 0.15f;
+            Vector3 pose = new Vector3(authored.x, radius + 0.02f, authored.z);
+            motor.TeleportTo(pose);
 
             if (pickupHost != null) pickupHost.ResetField();
 
@@ -702,6 +714,27 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 int readout = cell.GetCheckReadout(i);
                 int gateStage = cell.GetCheckGateStage(i);
                 int expect = cell.GetCheckExpect(i, diameterIndex);
+
+                // A deck check asks "did the ball get onto the deck"; whether it SHOULD is the
+                // runtime step limit, not the preset label. The presets are quantized (the
+                // 0.30 preset is 0.2997369 m, so its limit is 0.074934 m) and C09's deck is
+                // 0.075 m: a baked "pass" would demand a climb the step rule forbids (design
+                // section 8.3.1). Only the deck metric is derived here; every other check
+                // keeps its baked row, so no other criterion's meaning moves.
+                if (Same(metric, "deck_gap_m"))
+                {
+                    float deckRise = cell.GetNominalM();
+                    float runStepLimit = motor.GetStepHeightLimitWorldM();
+                    if (deckRise > 0f && runStepLimit >= 0f)
+                    {
+                        expect = deckRise <= runStepLimit ? 1 : 2;
+                        Log("[ptf] derived cell=" + cell.GetCellId() + " check=" + checkId
+                            + " deck_rise=" + Fixed(deckRise, 4)
+                            + " step_limit=" + Fixed(runStepLimit, 6)
+                            + " expect=" + ExpectText(expect));
+                    }
+                }
+
                 string expectText = ExpectText(expect);
 
                 if (gateStage == 1 && !motor.IsTerrainSupportEnabled())

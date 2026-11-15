@@ -75,7 +75,8 @@ namespace VRCKatamari.Editor.Pickup
         public const int MinValueUnits = 1;
 
         // A prop whose longest renderer extent is below this has no usable size: an AABB
-        // that small is a missing renderer or a degenerate mesh, not a tiny prop.
+        // that small is a missing renderer or a degenerate mesh, not a tiny prop. Only the
+        // longest side counts, so a flat prop (a plane or a leaf with a zero side) is fine.
         public const float MinBoundsExtentM = 0.0001f;
 
         // Tier bands, metres of the longest AABB extent. PROVISIONAL: the s/m gap in the
@@ -134,8 +135,10 @@ namespace VRCKatamari.Editor.Pickup
         /// </summary>
         /// <returns>
         /// <c>"s"</c>, <c>"m"</c> or <c>"l"</c>; the empty string when the bounds cannot
-        /// describe a prop (negative, non-finite, or shorter than
-        /// <see cref="MinBoundsExtentM"/>).
+        /// size a prop: a negative or non-finite side, or a longest side shorter than
+        /// <see cref="MinBoundsExtentM"/>. A side of exactly 0 is not an error by itself -
+        /// a plane, a sheet of paper or a leaf has a flat AABB - so the decision is made on
+        /// the longest side only.
         /// </returns>
         public static string ClassifySizeTier(float sizeX, float sizeY, float sizeZ)
         {

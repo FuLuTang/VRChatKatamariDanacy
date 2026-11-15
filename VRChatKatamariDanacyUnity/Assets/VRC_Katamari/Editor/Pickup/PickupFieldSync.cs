@@ -432,8 +432,10 @@ namespace VRCKatamari.Editor.Pickup
                 if (aabbTier.Length == 0)
                 {
                     report.Reject(candidate.Path, candidate.ItemId,
-                        "zero or non-finite bounds " + FormatVector(candidate.BoundsSize) +
-                        "; a prop needs a positive renderer AABB");
+                        "no usable size from bounds " + FormatVector(candidate.BoundsSize) +
+                        ": every side must be finite and >= 0, and the longest side must be at least " +
+                        FormatMetres(PickupFieldAuthoringRules.MinBoundsExtentM) +
+                        " m (a zero side is allowed)");
                     continue;
                 }
 

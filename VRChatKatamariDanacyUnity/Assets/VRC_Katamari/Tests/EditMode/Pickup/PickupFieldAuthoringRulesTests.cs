@@ -68,13 +68,32 @@ namespace VRCKatamari.Tests
         [Test]
         public void DegenerateBoundsHaveNoTier()
         {
-            // A prop row needs a positive AABB; these are data errors, not small props.
-            Assert.AreEqual(string.Empty, Classify(0f, 0.1f, 0.1f));
-            Assert.AreEqual(string.Empty, Classify(0.00005f, 0.1f, 0.1f));
+            // Only the longest side is compared, so "degenerate" means every side is
+            // unusable: a zero volume, an extent below MinBoundsExtentM on all axes, a
+            // negative side, or a non-finite side. A single zero side is covered by
+            // FlatPropsKeepTheirLongestSideTier below - it is legal, not degenerate.
+            Assert.AreEqual(string.Empty, Classify(0f, 0f, 0f));
+            Assert.AreEqual(string.Empty, Classify(0.00005f, 0.00005f, 0.00005f));
             Assert.AreEqual(string.Empty, Classify(-1f, 0.1f, 0.1f));
             Assert.AreEqual(string.Empty, Classify(float.NaN, 0.1f, 0.1f));
             Assert.AreEqual(string.Empty, Classify(0.1f, float.PositiveInfinity, 0.1f));
             Assert.AreEqual(string.Empty, Classify(0.1f, 0.1f, float.NegativeInfinity));
+        }
+
+        [Test]
+        public void FlatPropsKeepTheirLongestSideTier()
+        {
+            // A zero side is legal geometry, not a data error: Unity's Plane primitive and a
+            // paper/leaf AABB are flat, and the tier rule looks only at the longest side.
+            Assert.AreEqual("s", Classify(0f, 0.1f, 0f));
+            Assert.AreEqual("s", Classify(0.06f, 0f, 0.04f));
+
+            // The flat side does not change the tier of a larger prop.
+            Assert.AreEqual("m", Classify(0.3f, 0f, 0.3f));
+            Assert.AreEqual("l", Classify(1.6f, 0f, 0f));
+
+            // ... nor does it rescue an AABB whose longest side is still unusable.
+            Assert.AreEqual(string.Empty, Classify(0f, 0f, 0.00005f));
         }
 
         [Test]

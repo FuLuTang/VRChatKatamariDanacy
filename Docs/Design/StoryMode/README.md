@@ -601,7 +601,7 @@ prop_bench_01@size=1.25
 ### 工具怎么用它
 
 - 声明尺寸按**立方体**写进 `propBounds`（`1.25` → `(1.25, 1.25, 1.25)`），尺寸档也按这个边长判；`valueUnits` 仍走 (kind, tier) 表。所以门件的 kind 必须有对应档位的行：长凳在 `furniture` 下、l 档 = 16（`Editor/Pickup/PickupFieldAuthoringRules.cs` 的价值表）。
-- **AABB 仍然必须先存在且为正**：没有 Renderer、或 AABB 退化的道具，即便写了 `@size=` 也照拒。声明的是拾取尺寸，不是「这个物体不用渲染」。
+- **AABB 仍然必须先存在且可用**：没有 Renderer、AABB 的**最长边** < 0.0001 m、或任一边为负/非有限的道具，即便写了 `@size=` 也照拒。某一边正好是 0 **不算**退化（纸片、叶子、Unity 的 Plane 本来就是扁的），档位只按最长边判。声明的是拾取尺寸，不是「这个物体不用渲染」。
 - 报告：每个采用声明尺寸的行加一条 `note`（路径、原名、声明边长、原 AABB、档位变化，例如 `s -> l`）。被拒行照旧进 `rejected` 列表。
 - 纯函数在 `Editor/Pickup/PickupFieldAuthoringRules.cs`：`DeclaredSizeMarker`（`"@size="`）、`TryParseDeclaredSize(name, out itemId, out declaredEdgeM, out error)`、`IsUsableDeclaredSize(edgeM)`。同步侧只在 `Editor/Pickup/PickupFieldSync.cs` 里调用它们，没有第二套解析。既有公开名字一个没改。
 
@@ -615,7 +615,7 @@ prop_bench_01@size=1.25
 
 ### 测试与未验证
 
-- 测试新增在 `Tests/EditMode/Pickup/PickupFieldAuthoringRulesTests.cs`：解析并剥名、非法数字、多个标记、非正/过小、非有限与指数、locale 独立（在 `de-DE` 下 `1.25` 通过、`1,25` 被拒）、档位与值表联动（`1.25` 立方 → l，`furniture l = 16`；`0.72` → m，`fruit m = 4`），并把 `fruit s/m` 与 `fruit l` 缺失补进原有表测试。
+- 测试新增在 `Tests/EditMode/Pickup/PickupFieldAuthoringRulesTests.cs`：解析并剥名、非法数字、多个标记、非正/过小、非有限与指数、locale 独立（在 `de-DE` 下 `1.25` 通过、`1,25` 被拒）、档位与值表联动（`1.25` 立方 → l，`furniture l = 16`；`0.72` → m，`fruit m = 4`），并把 `fruit s/m` 与 `fruit l` 缺失补进原有表测试。`DegenerateBoundsHaveNoTier` 原先断言「一边为 0、另两边 0.1」没有档位，那与「只按最长边分档」矛盾（Unity 全量跑出的唯一失败）：现在它只覆盖三边都不可用的 AABB（全 0、三边 0.00005、负数、NaN、±Infinity），另加 `FlatPropsKeepTheirLongestSideTier` 钉住「一边为 0、其余边正常 → 仍按最长边分档」。
 - **没有跑 Unity 编译、没有 `run_tests`**：`PickupFieldAuthoringRulesTests` 的结果是 NOT_RUN，不是 PASS。
 - 没有改场景：没有任何道具被改名，`PickupFieldHost` 的六个数组没有被写过一次，`propBounds` 的真实取值还没有运行时观察。
 - 文档侧的旧口径仍在（不在本 agent 写范围）：`Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md:174` 仍写「工具把 GameObject 名直接当 itemId」，`Docs/Design/Maps/REGION_MAP_PLAN.md:123` 仍把 G13 标成「挡」。整合时由 Lead 决定是改这两处，还是在它们上面加一句「见本节」。

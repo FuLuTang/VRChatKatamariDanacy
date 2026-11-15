@@ -383,7 +383,7 @@ PROPS="book_stack,beer_crate,crate,storage_bin,crate_large,cooler_box_large,picn
 
 ### 13.4 未做与边界
 
-- **没有重新生成** `manifest.json`（总清单）与 `SHA256SUMS`：那两份是整个 `props/` 的产物，本批只追加了 9 个 def 的四件套。要合并时跑一次全量 `build_all.py`（不带 `--props`）即可；`sign.py` 也能只重算指纹。
+- **本批没有重新生成** `manifest.json`（总清单）与 `SHA256SUMS`：那两份是整个 `props/` 的产物，本批只追加了 9 个 def 的四件套。要合并时跑一次全量 `build_all.py`（不带 `--props`）即可；`sign.py` 也能只重算指纹。**2026-11-15 后续合并**：`manifest.json` 已由 48 个 `exports/<id>.manifest.json` 汇总（未重跑几何），`SHA256SUMS` 用 `sign.py` 重算。
 - **没有在 Unity 里导入验证**（本 agent 不是 Unity 操作员）：材质仍需按 `exports/<id>.manifest.json` 的 `material_base_colors` 重建，或改用 GLB。
 - 预览图的像素来自 **Blender 4.0.2 的 EEVEE**，和本目录里 3.6.21 / 5.3.0 生成的旧预览不是同一渲染器；几何、清单与拼图布局不受影响。
 - 9 件**没有碰撞体**。建议分箱：`book_stack` 1、`beer_crate` 1、`crate` 1、`storage_bin` 1、`crate_large` 1、`cooler_box_large` 1、`picnic_bench` 座面 1 + 两条腿框各 1、`lounge_chair` 躺面 1 + 四条腿各 1、`stroller` 车体 1 + 车架 1。

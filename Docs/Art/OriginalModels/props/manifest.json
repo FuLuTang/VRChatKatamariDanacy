@@ -1,6 +1,6 @@
 {
-  "title": "原创占位小道具（第一批） / original placeholder tiny props",
-  "status": "原创占位，非最终美术；未指定许可；尺度按 prop_catalog.csv 的 game_longest_dim_m 暂定",
+  "title": "原创占位小道具（全目录 48 件） / original placeholder props (complete directory)",
+  "status": "原创占位，非最终美术；未指定许可；每件的尺度口径见其 dimension_check，48 件全部为 real（第一批 8 件按 README §12.4 重标）",
   "units": "1 Blender unit = 1 m",
   "axes": {
     "blender": "+Z up, model front faces +Y",
@@ -36,28 +36,28 @@
   ],
   "catalog_source": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
   "build_script": "scripts/build_all.py",
-  "blender_version": "3.6.21",
+  "blender_version": "mixed: 5.3.0 (39 props, batches 1-5) / 4.0.2 (9 props, batch 6); per prop: export_settings.blender",
   "props": [
     {
       "id": "seed",
       "pivot": "center",
-      "target_longest_m": 0.04,
+      "target_longest_m": 0.02,
       "dimensions_m": {
-        "x": 0.02240000106394291,
-        "y": 0.03999999910593033,
-        "z": 0.01600000075995922,
-        "longest": 0.03999999910593033
+        "x": 0.011200000531971455,
+        "y": 0.019999999552965164,
+        "z": 0.00800000037997961,
+        "longest": 0.019999999552965164
       },
       "bounds_m": {
         "min": [
-          -0.011200000531971455,
-          -0.019999999552965164,
-          -0.00800000037997961
+          -0.005600000265985727,
+          -0.009999999776482582,
+          -0.004000000189989805
         ],
         "max": [
-          0.011200000531971455,
-          0.019999999552965164,
-          0.00800000037997961
+          0.005600000265985727,
+          0.009999999776482582,
+          0.004000000189989805
         ]
       },
       "vertices": 74,
@@ -80,7 +80,7 @@
         "duplicate_faces": 0,
         "closed_shells": 1
       },
-      "geometry_sha256": "214875338e190336afdf3de4e504b710125fb740ea4fa43fd1c95c509126456b",
+      "geometry_sha256": "d75c95cd605b4c9c45186700f2bb9397381aa42678277b65f248e7c4f0067e8d",
       "transforms": "identity (applied; geometry in metres)",
       "name_zh": "草籽",
       "category": "food",
@@ -92,11 +92,14 @@
         "row_found": true
       },
       "dimension_check": {
-        "target_m": 0.04,
-        "built_longest_m": 0.03999999910593033,
-        "abs_error_m": 8.940696724635266e-10,
-        "csv_game_longest_matches": true,
-        "scale_vs_real_m": 2.0
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.02,
+        "built_longest_m": 0.019999999552965164,
+        "abs_error_m": 4.470348362317633e-10,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
       },
       "tri_budget": 300,
       "within_budget": true,
@@ -116,9 +119,9 @@
       "build_script": "models/seed.py",
       "preview": "previews/seed_preview.png",
       "files": {
-        "seed.fbx": 17868,
-        "seed.glb": 3744,
-        "seed.blend": 406588
+        "seed.fbx": 17228,
+        "seed.glb": 3748,
+        "seed.blend": 90768
       },
       "export_settings": {
         "fbx": {
@@ -133,30 +136,30 @@
           "export_yup": true,
           "export_apply": true
         },
-        "blender": "3.6.21"
+        "blender": "5.3.0"
       },
-      "preview_bytes": 147976
+      "preview_bytes": 57149
     },
     {
       "id": "acorn",
-      "pivot": "base",
-      "target_longest_m": 0.05,
+      "pivot": "center",
+      "target_longest_m": 0.03,
       "dimensions_m": {
-        "x": 0.03999999910593033,
-        "y": 0.03804226219654083,
-        "z": 0.05000000074505806,
-        "longest": 0.05000000074505806
+        "x": 0.023999998345971107,
+        "y": 0.02282535657286644,
+        "z": 0.029999999329447746,
+        "longest": 0.029999999329447746
       },
       "bounds_m": {
         "min": [
-          -0.019999999552965164,
-          -0.019021131098270416,
-          0.0
+          -0.011999999172985554,
+          -0.01141267828643322,
+          -0.014999999664723873
         ],
         "max": [
-          0.019999999552965164,
-          0.019021131098270416,
-          0.05000000074505806
+          0.011999999172985554,
+          0.01141267828643322,
+          0.014999999664723873
         ]
       },
       "vertices": 112,
@@ -185,7 +188,7 @@
         "duplicate_faces": 0,
         "closed_shells": 1
       },
-      "geometry_sha256": "9b1896a61a56b22c3b01cddb741d0a8d6671b528088c450c7d97e344509cbaed",
+      "geometry_sha256": "3b9c3af0a4307624d7439d820201b17d4795b113c10b25fde75bf10dd1c9df6f",
       "transforms": "identity (applied; geometry in metres)",
       "name_zh": "橡子",
       "category": "nature",
@@ -197,11 +200,14 @@
         "row_found": true
       },
       "dimension_check": {
-        "target_m": 0.05,
-        "built_longest_m": 0.05000000074505806,
-        "abs_error_m": 7.450580569168253e-10,
-        "csv_game_longest_matches": true,
-        "scale_vs_real_m": 1.667
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.03,
+        "built_longest_m": 0.029999999329447746,
+        "abs_error_m": 6.705522526129215e-10,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
       },
       "tri_budget": 300,
       "within_budget": true,
@@ -231,9 +237,9 @@
       "build_script": "models/acorn.py",
       "preview": "previews/acorn_preview.png",
       "files": {
-        "acorn.fbx": 20252,
-        "acorn.glb": 6120,
-        "acorn.blend": 429892
+        "acorn.fbx": 19244,
+        "acorn.glb": 6140,
+        "acorn.blend": 93281
       },
       "export_settings": {
         "fbx": {
@@ -248,30 +254,30 @@
           "export_yup": true,
           "export_apply": true
         },
-        "blender": "3.6.21"
+        "blender": "5.3.0"
       },
-      "preview_bytes": 190267
+      "preview_bytes": 78349
     },
     {
       "id": "pebble",
-      "pivot": "base",
-      "target_longest_m": 0.06,
+      "pivot": "center",
+      "target_longest_m": 0.04,
       "dimensions_m": {
-        "x": 0.06000000052154064,
-        "y": 0.04398905299603939,
-        "z": 0.031932003796100616,
-        "longest": 0.06000000052154064
+        "x": 0.03999999910593033,
+        "y": 0.02932603657245636,
+        "z": 0.021288003772497177,
+        "longest": 0.03999999910593033
       },
       "bounds_m": {
         "min": [
-          -0.030335459858179092,
-          -0.02288866601884365,
-          0.0
+          -0.019999999552965164,
+          -0.01466301828622818,
+          -0.010644001886248589
         ],
         "max": [
-          0.02966454066336155,
-          0.02110038697719574,
-          0.031932003796100616
+          0.019999999552965164,
+          0.01466301828622818,
+          0.010644001886248589
         ]
       },
       "vertices": 42,
@@ -294,7 +300,7 @@
         "duplicate_faces": 0,
         "closed_shells": 1
       },
-      "geometry_sha256": "06585b4e5e064a97aa510123da228c72e8605eb24dc8d6c7952f7ea0ffef4d3a",
+      "geometry_sha256": "f44df56ad3bda8d0cf396888096bf715a9aac3c467e279ef7b17d234121beccc",
       "transforms": "identity (applied; geometry in metres)",
       "name_zh": "小石子",
       "category": "nature",
@@ -306,11 +312,14 @@
         "row_found": true
       },
       "dimension_check": {
-        "target_m": 0.06,
-        "built_longest_m": 0.06000000052154064,
-        "abs_error_m": 5.21540644005114e-10,
-        "csv_game_longest_matches": true,
-        "scale_vs_real_m": 1.5
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.04,
+        "built_longest_m": 0.03999999910593033,
+        "abs_error_m": 8.940696724635266e-10,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
       },
       "tri_budget": 300,
       "within_budget": true,
@@ -330,9 +339,9 @@
       "build_script": "models/pebble.py",
       "preview": "previews/pebble_preview.png",
       "files": {
-        "pebble.fbx": 16940,
-        "pebble.glb": 7336,
-        "pebble.blend": 402108
+        "pebble.fbx": 17132,
+        "pebble.glb": 7356,
+        "pebble.blend": 89600
       },
       "export_settings": {
         "fbx": {
@@ -347,30 +356,30 @@
           "export_yup": true,
           "export_apply": true
         },
-        "blender": "3.6.21"
+        "blender": "5.3.0"
       },
-      "preview_bytes": 154113
+      "preview_bytes": 104513
     },
     {
       "id": "bottle_cap",
-      "pivot": "base",
-      "target_longest_m": 0.05,
+      "pivot": "center",
+      "target_longest_m": 0.03,
       "dimensions_m": {
-        "x": 0.05000000074505806,
-        "y": 0.04755282402038574,
-        "z": 0.014499999582767487,
-        "longest": 0.05000000074505806
+        "x": 0.029999999329447746,
+        "y": 0.028531692922115326,
+        "z": 0.008699999190866947,
+        "longest": 0.029999999329447746
       },
       "bounds_m": {
         "min": [
-          -0.02500000037252903,
-          -0.02377641201019287,
-          0.0
+          -0.014999999664723873,
+          -0.014265846461057663,
+          -0.004349999595433474
         ],
         "max": [
-          0.02500000037252903,
-          0.02377641201019287,
-          0.014499999582767487
+          0.014999999664723873,
+          0.014265846461057663,
+          0.004349999595433474
         ]
       },
       "vertices": 102,
@@ -393,7 +402,7 @@
         "duplicate_faces": 0,
         "closed_shells": 1
       },
-      "geometry_sha256": "884e97f7dfd4299e454a6cf841766482fb2c0ed61c14dd728b9fa8be13cfb156",
+      "geometry_sha256": "5b1a6e1ac47c3a42cbd316cfc2bb8f74bbf806fa9c48333897fe478f59d34458",
       "transforms": "identity (applied; geometry in metres)",
       "name_zh": "瓶盖",
       "category": "debris",
@@ -405,11 +414,14 @@
         "row_found": true
       },
       "dimension_check": {
-        "target_m": 0.05,
-        "built_longest_m": 0.05000000074505806,
-        "abs_error_m": 7.450580569168253e-10,
-        "csv_game_longest_matches": true,
-        "scale_vs_real_m": 1.667
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.03,
+        "built_longest_m": 0.029999999329447746,
+        "abs_error_m": 6.705522526129215e-10,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
       },
       "tri_budget": 300,
       "within_budget": true,
@@ -429,9 +441,9 @@
       "build_script": "models/bottle_cap.py",
       "preview": "previews/bottle_cap_preview.png",
       "files": {
-        "bottle_cap.fbx": 18476,
-        "bottle_cap.glb": 14044,
-        "bottle_cap.blend": 410508
+        "bottle_cap.fbx": 18636,
+        "bottle_cap.glb": 13876,
+        "bottle_cap.blend": 91742
       },
       "export_settings": {
         "fbx": {
@@ -446,30 +458,30 @@
           "export_yup": true,
           "export_apply": true
         },
-        "blender": "3.6.21"
+        "blender": "5.3.0"
       },
-      "preview_bytes": 162673
+      "preview_bytes": 82754
     },
     {
       "id": "paper_scrap",
-      "pivot": "base",
+      "pivot": "center",
       "target_longest_m": 0.1,
       "dimensions_m": {
-        "x": 0.09999999776482582,
+        "x": 0.09999999403953552,
         "y": 0.07412444055080414,
         "z": 0.011834502220153809,
-        "longest": 0.09999999776482582
+        "longest": 0.09999999403953552
       },
       "bounds_m": {
         "min": [
-          -0.04851318895816803,
-          -0.036373574286699295,
-          0.0
+          -0.04999999701976776,
+          -0.03706222027540207,
+          -0.005917251110076904
         ],
         "max": [
-          0.05148680880665779,
-          0.03775086626410484,
-          0.011834502220153809
+          0.04999999701976776,
+          0.03706222027540207,
+          0.005917251110076904
         ]
       },
       "vertices": 84,
@@ -492,7 +504,7 @@
         "duplicate_faces": 0,
         "closed_shells": 1
       },
-      "geometry_sha256": "7a4c471b44836e0d84bf3c302546977913130ed2733cd7d771d655049b68d831",
+      "geometry_sha256": "c4055c825b2a4746831e54852ee1c47f763a1859c120ea6d0d8c6a41c45ac59b",
       "transforms": "identity (applied; geometry in metres)",
       "name_zh": "纸屑",
       "category": "debris",
@@ -504,9 +516,12 @@
         "row_found": true
       },
       "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
         "target_m": 0.1,
-        "built_longest_m": 0.09999999776482582,
-        "abs_error_m": 2.2351741846282636e-09,
+        "built_longest_m": 0.09999999403953552,
+        "abs_error_m": 5.960464483090178e-09,
+        "csv_target_matches": true,
         "csv_game_longest_matches": true,
         "scale_vs_real_m": 1.0
       },
@@ -528,9 +543,9 @@
       "build_script": "models/paper_scrap.py",
       "preview": "previews/paper_scrap_preview.png",
       "files": {
-        "paper_scrap.fbx": 18924,
-        "paper_scrap.glb": 12844,
-        "paper_scrap.blend": 407988
+        "paper_scrap.fbx": 19052,
+        "paper_scrap.glb": 12864,
+        "paper_scrap.blend": 91284
       },
       "export_settings": {
         "fbx": {
@@ -545,30 +560,30 @@
           "export_yup": true,
           "export_apply": true
         },
-        "blender": "3.6.21"
+        "blender": "5.3.0"
       },
-      "preview_bytes": 134132
+      "preview_bytes": 88064
     },
     {
       "id": "toy_ball",
       "pivot": "center",
-      "target_longest_m": 0.4,
+      "target_longest_m": 0.15,
       "dimensions_m": {
-        "x": 0.3999999761581421,
-        "y": 0.3999999761581421,
-        "z": 0.4000000059604645,
-        "longest": 0.4000000059604645
+        "x": 0.15000000596046448,
+        "y": 0.15000000596046448,
+        "z": 0.15000000596046448,
+        "longest": 0.15000000596046448
       },
       "bounds_m": {
         "min": [
-          -0.19999998807907104,
-          -0.19999998807907104,
-          -0.20000000298023224
+          -0.07500000298023224,
+          -0.07500000298023224,
+          -0.07500000298023224
         ],
         "max": [
-          0.19999998807907104,
-          0.19999998807907104,
-          0.20000000298023224
+          0.07500000298023224,
+          0.07500000298023224,
+          0.07500000298023224
         ]
       },
       "vertices": 146,
@@ -597,7 +612,7 @@
         "duplicate_faces": 0,
         "closed_shells": 1
       },
-      "geometry_sha256": "daa1dd75dfc8d4dcb962c4f9ced48c49ebcda933b6bc109d5258acf3b1011649",
+      "geometry_sha256": "80e3b41d5ba24f2852d57af4ff8b213949b9a46c6675d21b2cdff1496d78960a",
       "transforms": "identity (applied; geometry in metres)",
       "name_zh": "小皮球",
       "category": "toy",
@@ -609,11 +624,14 @@
         "row_found": true
       },
       "dimension_check": {
-        "target_m": 0.4,
-        "built_longest_m": 0.4000000059604645,
-        "abs_error_m": 5.960464455334602e-09,
-        "csv_game_longest_matches": true,
-        "scale_vs_real_m": 2.667
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.15,
+        "built_longest_m": 0.15000000596046448,
+        "abs_error_m": 5.960464483090178e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
       },
       "tri_budget": 300,
       "within_budget": true,
@@ -643,9 +661,9 @@
       "build_script": "models/toy_ball.py",
       "preview": "previews/toy_ball_preview.png",
       "files": {
-        "toy_ball.fbx": 22396,
+        "toy_ball.fbx": 20732,
         "toy_ball.glb": 8680,
-        "toy_ball.blend": 434652
+        "toy_ball.blend": 94759
       },
       "export_settings": {
         "fbx": {
@@ -660,30 +678,30 @@
           "export_yup": true,
           "export_apply": true
         },
-        "blender": "3.6.21"
+        "blender": "5.3.0"
       },
-      "preview_bytes": 209956
+      "preview_bytes": 163504
     },
     {
       "id": "napkin",
-      "pivot": "base",
-      "target_longest_m": 0.3,
+      "pivot": "center",
+      "target_longest_m": 0.15,
       "dimensions_m": {
-        "x": 0.29999998211860657,
-        "y": 0.29999998211860657,
-        "z": 0.0279999990016222,
-        "longest": 0.29999998211860657
+        "x": 0.14999999105930328,
+        "y": 0.14999999105930328,
+        "z": 0.0139999995008111,
+        "longest": 0.14999999105930328
       },
       "bounds_m": {
         "min": [
-          -0.14999999105930328,
-          -0.14999999105930328,
-          0.0
+          -0.07499999552965164,
+          -0.07499999552965164,
+          -0.00699999975040555
         ],
         "max": [
-          0.14999999105930328,
-          0.14999999105930328,
-          0.0279999990016222
+          0.07499999552965164,
+          0.07499999552965164,
+          0.00699999975040555
         ]
       },
       "vertices": 98,
@@ -706,7 +724,7 @@
         "duplicate_faces": 0,
         "closed_shells": 1
       },
-      "geometry_sha256": "45470cbad0c11954607e2608037647f47f4ad34d7b4124206825e4cbc3d69171",
+      "geometry_sha256": "77b51a25d0de1971345e675031206bc0eea441fd50d89c4d05f85433d6ef40e5",
       "transforms": "identity (applied; geometry in metres)",
       "name_zh": "餐巾",
       "category": "tableware",
@@ -718,11 +736,14 @@
         "row_found": true
       },
       "dimension_check": {
-        "target_m": 0.3,
-        "built_longest_m": 0.29999998211860657,
-        "abs_error_m": 1.7881393421514957e-08,
-        "csv_game_longest_matches": true,
-        "scale_vs_real_m": 2.0
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.15,
+        "built_longest_m": 0.14999999105930328,
+        "abs_error_m": 8.940696710757479e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
       },
       "tri_budget": 300,
       "within_budget": true,
@@ -742,9 +763,9 @@
       "build_script": "models/napkin.py",
       "preview": "previews/napkin_preview.png",
       "files": {
-        "napkin.fbx": 16652,
-        "napkin.glb": 6276,
-        "napkin.blend": 409948
+        "napkin.fbx": 16604,
+        "napkin.glb": 6296,
+        "napkin.blend": 91326
       },
       "export_settings": {
         "fbx": {
@@ -759,30 +780,30 @@
           "export_yup": true,
           "export_apply": true
         },
-        "blender": "3.6.21"
+        "blender": "5.3.0"
       },
-      "preview_bytes": 155360
+      "preview_bytes": 109896
     },
     {
       "id": "watering_can",
-      "pivot": "base",
-      "target_longest_m": 0.58,
+      "pivot": "center",
+      "target_longest_m": 0.25,
       "dimensions_m": {
-        "x": 0.2602749466896057,
-        "y": 0.5800000131130219,
-        "z": 0.41543886065483093,
-        "longest": 0.5800000131130219
+        "x": 0.1121874749660492,
+        "y": 0.25,
+        "z": 0.17906847596168518,
+        "longest": 0.25
       },
       "bounds_m": {
         "min": [
-          -0.13013747334480286,
-          -0.13013747334480286,
-          0.0
+          -0.0560937374830246,
+          -0.125,
+          -0.08953423798084259
         ],
         "max": [
-          0.13013747334480286,
-          0.449862539768219,
-          0.41543886065483093
+          0.0560937374830246,
+          0.125,
+          0.08953423798084259
         ]
       },
       "vertices": 173,
@@ -805,7 +826,7 @@
         "duplicate_faces": 0,
         "closed_shells": 1
       },
-      "geometry_sha256": "568d116b9e468f035445eba69d127161b77f9c6fe938849478e6eab60699df24",
+      "geometry_sha256": "a717f40dc98bcf3d69da86829c549399a9ca3b91cb8a42e3c3d9ab09cd8505c3",
       "transforms": "identity (applied; geometry in metres)",
       "name_zh": "洒水壶",
       "category": "garden",
@@ -817,11 +838,14 @@
         "row_found": true
       },
       "dimension_check": {
-        "target_m": 0.58,
-        "built_longest_m": 0.5800000131130219,
-        "abs_error_m": 1.3113021890553966e-08,
-        "csv_game_longest_matches": true,
-        "scale_vs_real_m": 2.32
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.25,
+        "built_longest_m": 0.25,
+        "abs_error_m": 0.0,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
       },
       "tri_budget": 600,
       "within_budget": true,
@@ -841,9 +865,9 @@
       "build_script": "models/watering_can.py",
       "preview": "previews/watering_can_preview.png",
       "files": {
-        "watering_can.fbx": 22172,
-        "watering_can.glb": 18572,
-        "watering_can.blend": 420664
+        "watering_can.fbx": 22524,
+        "watering_can.glb": 18564,
+        "watering_can.blend": 94975
       },
       "export_settings": {
         "fbx": {
@@ -858,16 +882,4770 @@
           "export_yup": true,
           "export_apply": true
         },
-        "blender": "3.6.21"
+        "blender": "5.3.0"
       },
-      "preview_bytes": 165146
+      "preview_bytes": 116866
+    },
+    {
+      "id": "strawberry",
+      "pivot": "center",
+      "target_longest_m": 0.04,
+      "dimensions_m": {
+        "x": 0.03620000183582306,
+        "y": 0.03575972467660904,
+        "z": 0.03999999910593033,
+        "longest": 0.03999999910593033
+      },
+      "bounds_m": {
+        "min": [
+          -0.01810000091791153,
+          -0.01787986233830452,
+          -0.019999999552965164
+        ],
+        "max": [
+          0.01810000091791153,
+          0.01787986233830452,
+          0.019999999552965164
+        ]
+      },
+      "vertices": 122,
+      "triangles": 240,
+      "materials": [
+        "Prop_strawberry_skin",
+        "Prop_strawberry_calyx"
+      ],
+      "material_base_colors": {
+        "Prop_strawberry_skin": [
+          0.42,
+          0.03,
+          0.04
+        ],
+        "Prop_strawberry_calyx": [
+          0.055,
+          0.13,
+          0.03
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "cf1724c917ba0af25349b793df23f574722631f294fa110fd847dd081bf98e4a",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "草莓",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.04,
+        "game_longest_dim_m": 0.06,
+        "sourcing_hint": "model ourselves：4 cm 高心形旋转体 + 5 片萼，单壳",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.04,
+        "built_longest_m": 0.03999999910593033,
+        "abs_error_m": 8.940696724635266e-10,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 250,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "skin",
+          "name_zh": "草莓红",
+          "linear_rgb": [
+            0.42,
+            0.03,
+            0.04
+          ],
+          "roughness": 0.45
+        },
+        {
+          "key": "calyx",
+          "name_zh": "萼片绿",
+          "linear_rgb": [
+            0.055,
+            0.13,
+            0.03
+          ],
+          "roughness": 0.7
+        }
+      ],
+      "notes": "Blunt tip at z=0, widest at 66 % of the 4 cm height, shoulder at z=3.25 cm, neck at z=3.45 cm.  The five sepal points flare to r=1.9 cm at z=3.45 cm, 2 mm above the shoulder, then the crown closes at z=4 cm.  The ring is a shallow scallop (valleys at 75 % of the point radius), and green is restricted to five leaf sectors (two faces each), so the red top is visible in the notches between the sepals instead of forming a green helmet.  One shell.",
+      "build_script": "models/strawberry.py",
+      "preview": "previews/strawberry_preview.png",
+      "files": {
+        "strawberry.fbx": 19756,
+        "strawberry.glb": 7168,
+        "strawberry.blend": 93646
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 177039
+    },
+    {
+      "id": "grapes",
+      "pivot": "center",
+      "target_longest_m": 0.06,
+      "dimensions_m": {
+        "x": 0.06000000238418579,
+        "y": 0.021983623504638672,
+        "z": 0.059741185978055,
+        "longest": 0.06000000238418579
+      },
+      "bounds_m": {
+        "min": [
+          -0.030000001192092896,
+          -0.010991811752319336,
+          -0.029870592057704926
+        ],
+        "max": [
+          0.030000001192092896,
+          0.010991811752319336,
+          0.029870593920350075
+        ]
+      },
+      "vertices": 142,
+      "triangles": 288,
+      "materials": [
+        "Prop_grapes_skin"
+      ],
+      "material_base_colors": {
+        "Prop_grapes_skin": [
+          0.13,
+          0.045,
+          0.22
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "96b34fa4635d6dfa0d2c5bf098aab06263f027c47576ed87d6a70df0305ef7be",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "葡萄",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.06,
+        "game_longest_dim_m": 0.08,
+        "sourcing_hint": "model ourselves：6 cm 宽一串，7–9 颗 Ø1.8 cm 球用短梗连成一个闭合壳",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.06,
+        "built_longest_m": 0.06000000238418579,
+        "abs_error_m": 2.384185793236071e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "skin",
+          "name_zh": "葡萄紫",
+          "linear_rgb": [
+            0.13,
+            0.045,
+            0.22
+          ],
+          "roughness": 0.35
+        }
+      ],
+      "notes": "Berries are listed as visible radii and converted to metaball field radii for threshold 0.6 / stiffness 2.0 (surface sits at ~0.575 of the field radius).  Seven berries in a 2-3-2 bunch, every neighbour about 0.34 design units away; the bunch is almost square (0.98 x 0.96) so the 6 cm target lands on the width.  Four small field balls at the row gaps act as short stems and keep the bunch one closed shell; they are field elements, not separate stem meshes.",
+      "build_script": "models/grapes.py",
+      "preview": "previews/grapes_preview.png",
+      "files": {
+        "grapes.fbx": 21116,
+        "grapes.glb": 6256,
+        "grapes.blend": 94618
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 180698
+    },
+    {
+      "id": "cookie",
+      "pivot": "center",
+      "target_longest_m": 0.07,
+      "dimensions_m": {
+        "x": 0.07000000029802322,
+        "y": 0.06885603070259094,
+        "z": 0.009372258558869362,
+        "longest": 0.07000000029802322
+      },
+      "bounds_m": {
+        "min": [
+          -0.03500000014901161,
+          -0.03442801535129547,
+          -0.004686129279434681
+        ],
+        "max": [
+          0.03500000014901161,
+          0.03442801535129547,
+          0.004686129279434681
+        ]
+      },
+      "vertices": 165,
+      "triangles": 326,
+      "materials": [
+        "Prop_cookie_dough",
+        "Prop_cookie_chip"
+      ],
+      "material_base_colors": {
+        "Prop_cookie_dough": [
+          0.42,
+          0.24,
+          0.1
+        ],
+        "Prop_cookie_chip": [
+          0.055,
+          0.03,
+          0.02
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "487045e3692a1266a8b5bd4c68e065db0e948497f97fb577becc52828a25a650",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "饼干",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.07,
+        "game_longest_dim_m": 0.09,
+        "sourcing_hint": "model ourselves：Ø7 cm、厚 0.9 cm 圆饼，5 颗凸起巧克力豆",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.07,
+        "built_longest_m": 0.07000000029802322,
+        "abs_error_m": 2.98023217215615e-10,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 340,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "dough",
+          "name_zh": "饼干面团",
+          "linear_rgb": [
+            0.42,
+            0.24,
+            0.1
+          ],
+          "roughness": 0.8
+        },
+        {
+          "key": "chip",
+          "name_zh": "巧克力豆",
+          "linear_rgb": [
+            0.055,
+            0.03,
+            0.02
+          ],
+          "roughness": 0.6
+        }
+      ],
+      "notes": "24 segments, two top rings (0.62 / 1.0), flat underside: 144 base triangles.  Five chip domes, each 6-sided with a 3.4 mm base and a 3.7 mm rise, are unioned into the base; the visible result is about 326 triangles after the exact solver.  Chips sit at (0.003, 0.001) and on a 0.0205 m ring at 35/125/215/305 degrees, well inside the outline.  The six-scallop 3.5% outline is unchanged from the old cookie; with the same 24 sampled angles the raw AABB and the finish scale are unchanged, so the exported size and pivot match exactly.",
+      "build_script": "models/cookie.py",
+      "preview": "previews/cookie_preview.png",
+      "files": {
+        "cookie.fbx": 23628,
+        "cookie.glb": 16840,
+        "cookie.blend": 95690
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 104929
+    },
+    {
+      "id": "apple",
+      "pivot": "center",
+      "target_longest_m": 0.08,
+      "dimensions_m": {
+        "x": 0.07999999821186066,
+        "y": 0.07799423485994339,
+        "z": 0.0788944736123085,
+        "longest": 0.07999999821186066
+      },
+      "bounds_m": {
+        "min": [
+          -0.03999999910593033,
+          -0.038997117429971695,
+          -0.03944723680615425
+        ],
+        "max": [
+          0.03999999910593033,
+          0.038997117429971695,
+          0.03944723680615425
+        ]
+      },
+      "vertices": 142,
+      "triangles": 280,
+      "materials": [
+        "Prop_apple_skin",
+        "Prop_apple_stem"
+      ],
+      "material_base_colors": {
+        "Prop_apple_skin": [
+          0.4,
+          0.03,
+          0.025
+        ],
+        "Prop_apple_stem": [
+          0.1,
+          0.05,
+          0.02
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "8b98e5f37f74f8a9be2c8cdde67a7961fd3e6a8083a66eab23fb06388db546eb",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "苹果",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.08,
+        "game_longest_dim_m": 0.3,
+        "sourcing_hint": "model ourselves：Ø8 cm 球体压扁 0.9，顶部凹 + 1.5 cm 梗",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.08,
+        "built_longest_m": 0.07999999821186066,
+        "abs_error_m": 1.7881393449270533e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "skin",
+          "name_zh": "苹果红",
+          "linear_rgb": [
+            0.4,
+            0.03,
+            0.025
+          ],
+          "roughness": 0.35
+        },
+        {
+          "key": "stem",
+          "name_zh": "果梗褐",
+          "linear_rgb": [
+            0.1,
+            0.05,
+            0.02
+          ],
+          "roughness": 0.75
+        }
+      ],
+      "notes": "One lathe: body 0.0796 m wide and 0.0785 m tall, a 4.5 mm deep crown crater (rim r=17.5 mm, floor r=8.8 mm) and a stem column rising from the floor to 0.0785 m, capped flat.  The stem must stay below the diameter or finish() would shrink the body to fit 8 cm.  The brown material is the narrow column above the crater floor plus everything above the rim, so the crater wall stays red.",
+      "build_script": "models/apple.py",
+      "preview": "previews/apple_preview.png",
+      "files": {
+        "apple.fbx": 20188,
+        "apple.glb": 7324,
+        "apple.blend": 94562
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 181048
+    },
+    {
+      "id": "orange",
+      "pivot": "center",
+      "target_longest_m": 0.08,
+      "dimensions_m": {
+        "x": 0.07999999821186066,
+        "y": 0.07999999821186066,
+        "z": 0.07741700112819672,
+        "longest": 0.07999999821186066
+      },
+      "bounds_m": {
+        "min": [
+          -0.03999999910593033,
+          -0.03999999910593033,
+          -0.03870850056409836
+        ],
+        "max": [
+          0.03999999910593033,
+          0.03999999910593033,
+          0.03870850056409836
+        ]
+      },
+      "vertices": 182,
+      "triangles": 360,
+      "materials": [
+        "Prop_orange_rind",
+        "Prop_orange_stem"
+      ],
+      "material_base_colors": {
+        "Prop_orange_rind": [
+          0.52,
+          0.16,
+          0.02
+        ],
+        "Prop_orange_stem": [
+          0.11,
+          0.23,
+          0.06
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "ce3fc0dbd923ff7d0da2c181b384ecff6290b80532ec4aa192a697a59569f1d3",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "橙子",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.08,
+        "game_longest_dim_m": 0.3,
+        "sourcing_hint": "model ourselves：Ø8 cm 微扁球 + 小绿梗",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.08,
+        "built_longest_m": 0.07999999821186066,
+        "abs_error_m": 1.7881393449270533e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 360,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "rind",
+          "name_zh": "橙皮",
+          "linear_rgb": [
+            0.52,
+            0.16,
+            0.02
+          ],
+          "roughness": 0.7
+        },
+        {
+          "key": "stem",
+          "name_zh": "绿梗",
+          "linear_rgb": [
+            0.11,
+            0.23,
+            0.06
+          ],
+          "roughness": 0.6
+        }
+      ],
+      "notes": "20 segments, 11 profile points = 360 triangles, smooth-shaded.  Raw diameter 0.080 m, raw height 0.077417 m, so finish() scales by 1.0 and the exported size stays exactly 0.080000 x 0.080000 x 0.077417 m.  The body is an oblate spheroid with its widest ring at z=0.036; the navel pulls in to r=0.0036 at z=0.0728, then the stem rises to a 0.0026 m flat top at 0.077417.  Green material above z=0.0728 and inside r=0.0050.  One closed shell, no grooves, no separate stem.",
+      "build_script": "models/orange.py",
+      "preview": "previews/orange_preview.png",
+      "files": {
+        "orange.fbx": 21196,
+        "orange.glb": 8920,
+        "orange.blend": 96203
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 159093
+    },
+    {
+      "id": "pear",
+      "pivot": "center",
+      "target_longest_m": 0.09,
+      "dimensions_m": {
+        "x": 0.05499999597668648,
+        "y": 0.05362103134393692,
+        "z": 0.08999999612569809,
+        "longest": 0.08999999612569809
+      },
+      "bounds_m": {
+        "min": [
+          -0.02749999798834324,
+          -0.02681051567196846,
+          -0.044999998062849045
+        ],
+        "max": [
+          0.02749999798834324,
+          0.02681051567196846,
+          0.044999998062849045
+        ]
+      },
+      "vertices": 142,
+      "triangles": 280,
+      "materials": [
+        "Prop_pear_skin",
+        "Prop_pear_stem"
+      ],
+      "material_base_colors": {
+        "Prop_pear_skin": [
+          0.46,
+          0.4,
+          0.1
+        ],
+        "Prop_pear_stem": [
+          0.1,
+          0.06,
+          0.02
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "6fbeaea6bc91ad0cafd98b6e3718fb4884c2456d5f86c568c99a25328f10b849",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "梨",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.09,
+        "game_longest_dim_m": 0.32,
+        "sourcing_hint": "model ourselves：8 cm 高钟形旋转体，最粗 Ø5.5",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.09,
+        "built_longest_m": 0.08999999612569809,
+        "abs_error_m": 3.8743019070697216e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "skin",
+          "name_zh": "梨皮黄绿",
+          "linear_rgb": [
+            0.46,
+            0.4,
+            0.1
+          ],
+          "roughness": 0.55
+        },
+        {
+          "key": "stem",
+          "name_zh": "果梗褐",
+          "linear_rgb": [
+            0.1,
+            0.06,
+            0.02
+          ],
+          "roughness": 0.75
+        }
+      ],
+      "notes": "Body 8 cm tall and 5.5 cm at the widest (z = 25 mm), stem 1.5 cm on the axis, so the 9 cm real-size target is the height.  The stem is the top of the same profile, capped flat; colour split by height.",
+      "build_script": "models/pear.py",
+      "preview": "previews/pear_preview.png",
+      "files": {
+        "pear.fbx": 20204,
+        "pear.glb": 7316,
+        "pear.blend": 94532
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 135909
+    },
+    {
+      "id": "banana",
+      "pivot": "center",
+      "target_longest_m": 0.18,
+      "dimensions_m": {
+        "x": 0.17999999225139618,
+        "y": 0.06779100000858307,
+        "z": 0.03201640397310257,
+        "longest": 0.17999999225139618
+      },
+      "bounds_m": {
+        "min": [
+          -0.08999999612569809,
+          -0.033895500004291534,
+          -0.016008201986551285
+        ],
+        "max": [
+          0.08999999612569809,
+          0.033895500004291534,
+          0.016008201986551285
+        ]
+      },
+      "vertices": 152,
+      "triangles": 300,
+      "materials": [
+        "Prop_banana_skin"
+      ],
+      "material_base_colors": {
+        "Prop_banana_skin": [
+          0.72,
+          0.58,
+          0.06
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "14ca20d3caef7f5222959445e9cc3a5b65756513d9aae32e82c61683d91f3ed8",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "香蕉",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.18,
+        "game_longest_dim_m": 0.45,
+        "sourcing_hint": "model ourselves：18 cm 弧形管，截面 Ø3.2，两端收口",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.18,
+        "built_longest_m": 0.17999999225139618,
+        "abs_error_m": 7.748603814139443e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 400,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "skin",
+          "name_zh": "香蕉黄",
+          "linear_rgb": [
+            0.72,
+            0.58,
+            0.06
+          ],
+          "roughness": 0.45
+        }
+      ],
+      "notes": "Lies on its side: the bow is horizontal so the whole belly touches the table instead of the banana balancing on its tips.  Longest edge is the chord across X (0.18 m); the 3.2 cm section is the vertical extent.",
+      "build_script": "models/banana.py",
+      "preview": "previews/banana_preview.png",
+      "files": {
+        "banana.fbx": 20956,
+        "banana.glb": 6564,
+        "banana.blend": 94325
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 93116
+    },
+    {
+      "id": "watermelon",
+      "pivot": "center",
+      "target_longest_m": 0.3,
+      "dimensions_m": {
+        "x": 0.29999998211860657,
+        "y": 0.2399999499320984,
+        "z": 0.21999990940093994,
+        "longest": 0.29999998211860657
+      },
+      "bounds_m": {
+        "min": [
+          -0.14999999105930328,
+          -0.1199999749660492,
+          -0.10999995470046997
+        ],
+        "max": [
+          0.14999999105930328,
+          0.1199999749660492,
+          0.10999995470046997
+        ]
+      },
+      "vertices": 266,
+      "triangles": 528,
+      "materials": [
+        "Prop_watermelon_rind",
+        "Prop_watermelon_stripe"
+      ],
+      "material_base_colors": {
+        "Prop_watermelon_rind": [
+          0.035,
+          0.12,
+          0.03
+        ],
+        "Prop_watermelon_stripe": [
+          0.22,
+          0.33,
+          0.09
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "b211ee917cd09e6e3104a1e4f44c1836754b1443b53897b236c3f75ca9341a85",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "西瓜",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.3,
+        "game_longest_dim_m": 0.72,
+        "sourcing_hint": "model ourselves：整颗椭球，30×24×22 cm，深绿底 + 浅色纵纹",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.3,
+        "built_longest_m": 0.29999998211860657,
+        "abs_error_m": 1.7881393421514957e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 600,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "rind",
+          "name_zh": "深绿瓜皮",
+          "linear_rgb": [
+            0.035,
+            0.12,
+            0.03
+          ],
+          "roughness": 0.4
+        },
+        {
+          "key": "stripe",
+          "name_zh": "浅绿瓜纹",
+          "linear_rgb": [
+            0.22,
+            0.33,
+            0.09
+          ],
+          "roughness": 0.4
+        }
+      ],
+      "notes": "24 x 12 UV sphere = 528 triangles, rotated so the poles are on X and then squashed to 0.30/0.24/0.22 m (the three axes the plan lists).  Six stripes: faces whose longitude around X falls within 15 degrees of one of six centres get the pale material, so each stripe is two whole faces wide and follows the sphere longitude end to end.",
+      "build_script": "models/watermelon.py",
+      "preview": "previews/watermelon_preview.png",
+      "files": {
+        "watermelon.fbx": 24780,
+        "watermelon.glb": 14700,
+        "watermelon.blend": 99524
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 157466
+    },
+    {
+      "id": "cup",
+      "pivot": "center",
+      "target_longest_m": 0.09,
+      "dimensions_m": {
+        "x": 0.07499999552965164,
+        "y": 0.07499999552965164,
+        "z": 0.08999999612569809,
+        "longest": 0.08999999612569809
+      },
+      "bounds_m": {
+        "min": [
+          -0.03749999776482582,
+          -0.03749999776482582,
+          -0.044999998062849045
+        ],
+        "max": [
+          0.03749999776482582,
+          0.03749999776482582,
+          0.044999998062849045
+        ]
+      },
+      "vertices": 142,
+      "triangles": 280,
+      "materials": [
+        "Prop_cup_paper"
+      ],
+      "material_base_colors": {
+        "Prop_cup_paper": [
+          0.64,
+          0.6,
+          0.5
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "192545c218870705e723b5c629056dcd948f6ec73899669d2a20f6436a9ce16a",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "杯子",
+      "category": "tableware",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.09,
+        "game_longest_dim_m": 0.26,
+        "sourcing_hint": "model ourselves：Ø0.075 x 0.09 m 锥形纸杯，空心单壳（CSV 提示 Kenney cup.glb，本批自行建模）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.09,
+        "built_longest_m": 0.08999999612569809,
+        "abs_error_m": 3.8743019070697216e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "paper",
+          "name_zh": "纸杯米白",
+          "linear_rgb": [
+            0.64,
+            0.6,
+            0.5
+          ],
+          "roughness": 0.55
+        }
+      ],
+      "notes": "20 segments, 9 profile points: 280 triangles.  Outside 0.0750 m at the rim and 0.0536 m at the base (a 1:14 taper), 0.0900 m tall.  Wall 2.2-2.4 mm, floor 4 mm; the rim is a 2.2 mm flat ring, so the inside is closed without a second object.  One shell, no caps buried inside.",
+      "build_script": "models/cup.py",
+      "preview": "previews/cup_preview.png",
+      "files": {
+        "cup.fbx": 20044,
+        "cup.glb": 15276,
+        "cup.blend": 93399
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 176677
+    },
+    {
+      "id": "soda_can",
+      "pivot": "center",
+      "target_longest_m": 0.12,
+      "dimensions_m": {
+        "x": 0.06610169261693954,
+        "y": 0.06610169261693954,
+        "z": 0.12000000476837158,
+        "longest": 0.12000000476837158
+      },
+      "bounds_m": {
+        "min": [
+          -0.03305084630846977,
+          -0.03305084630846977,
+          -0.06000000238418579
+        ],
+        "max": [
+          0.03305084630846977,
+          0.03305084630846977,
+          0.06000000238418579
+        ]
+      },
+      "vertices": 162,
+      "triangles": 320,
+      "materials": [
+        "Prop_soda_can_metal",
+        "Prop_soda_can_label"
+      ],
+      "material_base_colors": {
+        "Prop_soda_can_metal": [
+          0.38,
+          0.4,
+          0.43
+        ],
+        "Prop_soda_can_label": [
+          0.48,
+          0.03,
+          0.02
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "5501ca4d5d05474314491d0798acdc53d7106a867744dac9e9c697009e405dd7",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "易拉罐",
+      "category": "drink",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.07,
+        "game_longest_dim_m": 0.24,
+        "sourcing_hint": "model ourselves：Ø0.066 x 0.12 m 罐体 + 收口 + 凹盖（CSV 的 0.07 疑为罐径）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.12,
+        "built_longest_m": 0.12000000476837158,
+        "abs_error_m": 4.768371586472142e-09,
+        "csv_target_matches": false,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.714
+      },
+      "tri_budget": 340,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "metal",
+          "name_zh": "铝罐银",
+          "linear_rgb": [
+            0.38,
+            0.4,
+            0.43
+          ],
+          "roughness": 0.35
+        },
+        {
+          "key": "label",
+          "name_zh": "罐身红",
+          "linear_rgb": [
+            0.48,
+            0.03,
+            0.02
+          ],
+          "roughness": 0.4
+        }
+      ],
+      "notes": "16 segments, 12 profile points = 320 triangles.  Raw 0.0650 m wide and 0.1180 m tall, scaled once by finish() to the 0.12 m design height, which gives 0.0661 x 0.0661 x 0.1200 m (the design asks 0.066 x 0.066 x 0.12).  Flat-shaded so the rim and lid stay crisp.  Bottom chamfer 5.5 mm; body straight to 0.108 m; neck-in to 0.116 m; flat rim annulus at 0.118 m; flat lid 2 mm below the rim.  The red label is the face band from 0.012 to 0.104 m, leaving thin silver bands at the foot and the shoulder.  One closed shell.  build_all prints a WARN because TARGET (0.12) deliberately differs from the CSV 0.07 cell.",
+      "build_script": "models/soda_can.py",
+      "preview": "previews/soda_can_preview.png",
+      "files": {
+        "soda_can.fbx": 21292,
+        "soda_can.glb": 17716,
+        "soda_can.blend": 95107
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 145311
+    },
+    {
+      "id": "juice_carton",
+      "pivot": "center",
+      "target_longest_m": 0.1,
+      "dimensions_m": {
+        "x": 0.05999999865889549,
+        "y": 0.05999999865889549,
+        "z": 0.10000000149011612,
+        "longest": 0.10000000149011612
+      },
+      "bounds_m": {
+        "min": [
+          -0.029999999329447746,
+          -0.029999999329447746,
+          -0.05000000074505806
+        ],
+        "max": [
+          0.029999999329447746,
+          0.029999999329447746,
+          0.05000000074505806
+        ]
+      },
+      "vertices": 20,
+      "triangles": 36,
+      "materials": [
+        "Prop_juice_carton_card",
+        "Prop_juice_carton_panel"
+      ],
+      "material_base_colors": {
+        "Prop_juice_carton_card": [
+          0.7,
+          0.64,
+          0.5
+        ],
+        "Prop_juice_carton_panel": [
+          0.56,
+          0.19,
+          0.02
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "0949dbcc005fc7fbe1ef9d235d25a1515471d2f63c28736391c800f9c0751dc5",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "果汁盒",
+      "category": "drink",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.1,
+        "game_longest_dim_m": 0.34,
+        "sourcing_hint": "model ourselves：0.06 x 0.06 x 0.10 m 山墙顶纸盒",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.1,
+        "built_longest_m": 0.10000000149011612,
+        "abs_error_m": 1.4901161138336505e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 200,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "card",
+          "name_zh": "纸盒米白",
+          "linear_rgb": [
+            0.7,
+            0.64,
+            0.5
+          ],
+          "roughness": 0.7
+        },
+        {
+          "key": "panel",
+          "name_zh": "正面橙汁色",
+          "linear_rgb": [
+            0.56,
+            0.19,
+            0.02
+          ],
+          "roughness": 0.6
+        }
+      ],
+      "notes": "Ten-point section in the XZ plane: 0.060 m wide, square body to 0.080 m, gable to 0.094 m, then a 4 mm wide, 6 mm tall fin seal up to the 0.100 m target; extruded 0.060 m along Y.  The front cap (y=+0.030) is the orange printed panel, the sides and the back are cream.  The fin is what separates the silhouette from a house roof.  36 triangles, one closed shell.  No straw or screw cap: either would push an axis past the 0.06 x 0.06 x 0.10 design box.",
+      "build_script": "models/juice_carton.py",
+      "preview": "previews/juice_carton_preview.png",
+      "files": {
+        "juice_carton.fbx": 16284,
+        "juice_carton.glb": 3568,
+        "juice_carton.blend": 89651
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 164346
+    },
+    {
+      "id": "glass_bottle",
+      "pivot": "center",
+      "target_longest_m": 0.28,
+      "dimensions_m": {
+        "x": 0.07000000029802322,
+        "y": 0.07000000029802322,
+        "z": 0.2800000011920929,
+        "longest": 0.2800000011920929
+      },
+      "bounds_m": {
+        "min": [
+          -0.03500000014901161,
+          -0.03500000014901161,
+          -0.14000000059604645
+        ],
+        "max": [
+          0.03500000014901161,
+          0.03500000014901161,
+          0.14000000059604645
+        ]
+      },
+      "vertices": 194,
+      "triangles": 384,
+      "materials": [
+        "Prop_glass_bottle_glass"
+      ],
+      "material_base_colors": {
+        "Prop_glass_bottle_glass": [
+          0.025,
+          0.085,
+          0.035
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "d1486e0384e31550601c677fa01cf446473be562a429eb1432668ad461dd41e6",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "玻璃瓶",
+      "category": "drink",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.28,
+        "game_longest_dim_m": 0.52,
+        "sourcing_hint": "model ourselves：Ø0.07 x 0.28 m 玻璃瓶，空心 + 开口",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.28,
+        "built_longest_m": 0.2800000011920929,
+        "abs_error_m": 1.19209286886246e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 400,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "glass",
+          "name_zh": "深绿玻璃",
+          "linear_rgb": [
+            0.025,
+            0.085,
+            0.035
+          ],
+          "roughness": 0.18
+        }
+      ],
+      "notes": "12 segments, 18 profile points = 384 triangles.  Outside: foot 0.052 m, body 0.070 m from z=0.070 to 0.160, shoulder 0.205, neck 0.025, mouth 0.029 at 0.280.  Wall 3 mm through the body, 2.5 mm at the neck, rim 3.5 mm; inner floor 4 mm above the punt.  One closed shell with an open mouth, no separate cap or label.  Glass is a flat Principled base colour at roughness 0.18 - no transmission, since the batch is plain-colour by decision.",
+      "build_script": "models/glass_bottle.py",
+      "preview": "previews/glass_bottle_preview.png",
+      "files": {
+        "glass_bottle.fbx": 20396,
+        "glass_bottle.glb": 8096,
+        "glass_bottle.blend": 95246
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 108904
+    },
+    {
+      "id": "plate",
+      "pivot": "center",
+      "target_longest_m": 0.24,
+      "dimensions_m": {
+        "x": 0.23999999463558197,
+        "y": 0.23999999463558197,
+        "z": 0.02500000037252903,
+        "longest": 0.23999999463558197
+      },
+      "bounds_m": {
+        "min": [
+          -0.11999999731779099,
+          -0.11999999731779099,
+          -0.012500000186264515
+        ],
+        "max": [
+          0.11999999731779099,
+          0.11999999731779099,
+          0.012500000186264515
+        ]
+      },
+      "vertices": 194,
+      "triangles": 384,
+      "materials": [
+        "Prop_plate_ceramic"
+      ],
+      "material_base_colors": {
+        "Prop_plate_ceramic": [
+          0.76,
+          0.735,
+          0.68
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "3ee18e5512047aff399b2cee8b1691c03cb501d4ac7e6baa190b6dd9ed5c0755",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "盘子",
+      "category": "tableware",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.24,
+        "game_longest_dim_m": 0.5,
+        "sourcing_hint": "model ourselves：Ø0.24 x 0.025 m 餐盘，圈足 + 浅盘心",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.24,
+        "built_longest_m": 0.23999999463558197,
+        "abs_error_m": 5.364418020903372e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 400,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "ceramic",
+          "name_zh": "陶瓷米白",
+          "linear_rgb": [
+            0.76,
+            0.735,
+            0.68
+          ],
+          "roughness": 0.32
+        }
+      ],
+      "notes": "24 segments, 10 profile points = 384 triangles.  Diameter 0.240 m, height 0.025 m exactly.  Foot ring 0.060-0.072 m at z=0; the underside rises from 0.0035 m at the centre to the 0.025 m rim; the top well drops from the rim to 0.006 m at the centre, leaving a 2.5 mm centre and 3 mm rim.  One closed shell, no separate foot.",
+      "build_script": "models/plate.py",
+      "preview": "previews/plate_preview.png",
+      "files": {
+        "plate.fbx": 20300,
+        "plate.glb": 8072,
+        "plate.blend": 95268
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 97117
+    },
+    {
+      "id": "bowl",
+      "pivot": "center",
+      "target_longest_m": 0.16,
+      "dimensions_m": {
+        "x": 0.1599999964237213,
+        "y": 0.1599999964237213,
+        "z": 0.05999999865889549,
+        "longest": 0.1599999964237213
+      },
+      "bounds_m": {
+        "min": [
+          -0.07999999821186066,
+          -0.07999999821186066,
+          -0.029999999329447746
+        ],
+        "max": [
+          0.07999999821186066,
+          0.07999999821186066,
+          0.029999999329447746
+        ]
+      },
+      "vertices": 194,
+      "triangles": 384,
+      "materials": [
+        "Prop_bowl_enamel"
+      ],
+      "material_base_colors": {
+        "Prop_bowl_enamel": [
+          0.15,
+          0.28,
+          0.3
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "86ae3b05db98a63664faa661bcf285748c233a8f5408a3990cbc849a489fc875",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "碗",
+      "category": "tableware",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.16,
+        "game_longest_dim_m": 0.42,
+        "sourcing_hint": "model ourselves：Ø0.16 x 0.06 m 搪瓷碗，空心 + 圈足",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.16,
+        "built_longest_m": 0.1599999964237213,
+        "abs_error_m": 3.5762786898541066e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 400,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "enamel",
+          "name_zh": "蓝灰搪瓷",
+          "linear_rgb": [
+            0.15,
+            0.28,
+            0.3
+          ],
+          "roughness": 0.35
+        }
+      ],
+      "notes": "16 segments, 14 profile points = 384 triangles.  Diameter 0.160 m at the lip, height 0.060 m.  Foot ring 0.045-0.055 m at z=0; outside flares from 0.060 m at z=0.006 to 0.080 m at the lip; inside runs from 0.075 m at the rim to a 0.0065 m floor.  Wall 4.5-5 mm, base 6.5 mm.  One closed shell, no separate foot, no cap inside.",
+      "build_script": "models/bowl.py",
+      "preview": "previews/bowl_preview.png",
+      "files": {
+        "bowl.fbx": 20412,
+        "bowl.glb": 8072,
+        "bowl.blend": 95411
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 134434
+    },
+    {
+      "id": "thermos",
+      "pivot": "center",
+      "target_longest_m": 0.3,
+      "dimensions_m": {
+        "x": 0.10871821641921997,
+        "y": 0.10529220849275589,
+        "z": 0.29999998211860657,
+        "longest": 0.29999998211860657
+      },
+      "bounds_m": {
+        "min": [
+          -0.054359108209609985,
+          -0.052646104246377945,
+          -0.14999999105930328
+        ],
+        "max": [
+          0.054359108209609985,
+          0.052646104246377945,
+          0.14999999105930328
+        ]
+      },
+      "vertices": 194,
+      "triangles": 388,
+      "materials": [
+        "Prop_thermos_body",
+        "Prop_thermos_handle",
+        "Prop_thermos_belt",
+        "Prop_thermos_cap"
+      ],
+      "material_base_colors": {
+        "Prop_thermos_body": [
+          0.34,
+          0.36,
+          0.385
+        ],
+        "Prop_thermos_handle": [
+          0.07,
+          0.075,
+          0.085
+        ],
+        "Prop_thermos_belt": [
+          0.02,
+          0.115,
+          0.105
+        ],
+        "Prop_thermos_cap": [
+          0.64,
+          0.58,
+          0.44
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "17a6a2065c9cf955429ce1431e4df6e076b5f0d43319d1b575c6ae780759c591",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "保温壶",
+      "category": "container",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.3,
+        "game_longest_dim_m": 0.9,
+        "sourcing_hint": "model ourselves：Ø0.10 x 0.30 m 旋转体 + 倒扣杯盖 + 竖向提手",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.3,
+        "built_longest_m": 0.29999998211860657,
+        "abs_error_m": 1.7881393421514957e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 400,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "body",
+          "name_zh": "不锈钢灰",
+          "linear_rgb": [
+            0.34,
+            0.36,
+            0.385
+          ],
+          "roughness": 0.3
+        },
+        {
+          "key": "handle",
+          "name_zh": "提手炭黑",
+          "linear_rgb": [
+            0.07,
+            0.075,
+            0.085
+          ],
+          "roughness": 0.55
+        },
+        {
+          "key": "belt",
+          "name_zh": "腰带深青",
+          "linear_rgb": [
+            0.02,
+            0.115,
+            0.105
+          ],
+          "roughness": 0.45
+        },
+        {
+          "key": "cap",
+          "name_zh": "杯盖米白",
+          "linear_rgb": [
+            0.64,
+            0.58,
+            0.44
+          ],
+          "roughness": 0.5
+        }
+      ],
+      "notes": "14-segment body, 12 profile points, plus a 6-station, 5-segment strap handle; about 340 triangles before the exact union, one shell after it.  Body r=0.048 from the 0.010 base chamfer to 0.210, short shoulder to a 0.040 neck at 0.230; belt bulges to r=0.051 over z=0.130-0.180; cup flange at z=0.230 (r 0.040 -> 0.054), wall tapers to r=0.0525 at 0.292, flat top closes at 0.300.  Handle centreline x=0.066, strap 19 x 7 mm, entering at z=0.052 and 0.215, swung 40 degrees round from +X so the finger gap reads as background: 14.5 mm.  Four materials: steel body, charcoal handle, teal belt, cream cup.  Measured X 0.111 m (handle side), Y 0.108 m (cup diameter), Z 0.300 m - the footprint is 10 mm narrower than the second-batch version because the handle no longer points at +X; body, cup and height are unchanged.",
+      "build_script": "models/thermos.py",
+      "preview": "previews/thermos_preview.png",
+      "files": {
+        "thermos.fbx": 24588,
+        "thermos.glb": 11728,
+        "thermos.blend": 98757
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 129511
+    },
+    {
+      "id": "croissant",
+      "pivot": "center",
+      "target_longest_m": 0.12,
+      "dimensions_m": {
+        "x": 0.06875023990869522,
+        "y": 0.11999999731779099,
+        "z": 0.0626286193728447,
+        "longest": 0.11999999731779099
+      },
+      "bounds_m": {
+        "min": [
+          -0.03437511995434761,
+          -0.05999999865889549,
+          -0.03131430968642235
+        ],
+        "max": [
+          0.03437511995434761,
+          0.05999999865889549,
+          0.03131430968642235
+        ]
+      },
+      "vertices": 191,
+      "triangles": 378,
+      "materials": [
+        "Prop_croissant_crust"
+      ],
+      "material_base_colors": {
+        "Prop_croissant_crust": [
+          0.52,
+          0.255,
+          0.055
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "859af47292fb08361abd9531cbfb3145a6935f01de2f5af714bfaea0a451e8e0",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "牛角包",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.12,
+        "game_longest_dim_m": 0.34,
+        "sourcing_hint": "model ourselves：0.12 x 0.07 x 0.06 m 牛角包（替代无目录的 baguette）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.12,
+        "built_longest_m": 0.11999999731779099,
+        "abs_error_m": 2.682209010451686e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 400,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "crust",
+          "name_zh": "牛角包金棕",
+          "linear_rgb": [
+            0.52,
+            0.255,
+            0.055
+          ],
+          "roughness": 0.55
+        }
+      ],
+      "notes": "21 path stations, 9 segments = 378 triangles.  Quadratic Bezier with tips at (0.020, +/-0.056) and the control at (-0.060, 0), all at z=0.030; the curve bows back to x=-0.020 and opens toward +X, so the 0.12 m length is Y and the 0.07 m depth is X.  Section is an ellipse 30 mm tall x 24 mm wide at the middle, tapered to 1.6 mm at the horns, with a six-lobe +/-15% radius wave.  Raw Y is about 0.118 m, so finish() scales by ~1.017: measured 0.069 x 0.120 x 0.0605 m.  One closed shell, no separate crumbs or scoring.",
+      "build_script": "models/croissant.py",
+      "preview": "previews/croissant_preview.png",
+      "files": {
+        "croissant.fbx": 22092,
+        "croissant.glb": 7976,
+        "croissant.blend": 95685
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 119495
+    },
+    {
+      "id": "bread_slice",
+      "pivot": "center",
+      "target_longest_m": 0.1,
+      "dimensions_m": {
+        "x": 0.09964858740568161,
+        "y": 0.10000000149011612,
+        "z": 0.014341353438794613,
+        "longest": 0.10000000149011612
+      },
+      "bounds_m": {
+        "min": [
+          -0.049824293702840805,
+          -0.05000000074505806,
+          -0.0071706767193973064
+        ],
+        "max": [
+          0.049824293702840805,
+          0.05000000074505806,
+          0.0071706767193973064
+        ]
+      },
+      "vertices": 82,
+      "triangles": 160,
+      "materials": [
+        "Prop_bread_slice_crumb",
+        "Prop_bread_slice_crust"
+      ],
+      "material_base_colors": {
+        "Prop_bread_slice_crumb": [
+          0.64,
+          0.47,
+          0.25
+        ],
+        "Prop_bread_slice_crust": [
+          0.23,
+          0.095,
+          0.035
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "99a33bf8821df6fed63358ca516c4bbb2c7df52b2cb0c9030c07232aaafc2a91",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "面包片",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.1,
+        "game_longest_dim_m": 0.3,
+        "sourcing_hint": "model ourselves：10×10×1.5 cm 片，四周一圈面包皮（CSV 提示 Kenney bread.glb，本批自行建模）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.1,
+        "built_longest_m": 0.10000000149011612,
+        "abs_error_m": 1.4901161138336505e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 200,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "crumb",
+          "name_zh": "面包瓤米白",
+          "linear_rgb": [
+            0.64,
+            0.47,
+            0.25
+          ],
+          "roughness": 0.85
+        },
+        {
+          "key": "crust",
+          "name_zh": "面包皮棕",
+          "linear_rgb": [
+            0.23,
+            0.095,
+            0.035
+          ],
+          "roughness": 0.6
+        }
+      ],
+      "notes": "20 segments, three top rings (0.55 / 0.86 / 1.0) and a flat underside fan: 160 triangles.  Outline is a superellipse with p = 5, half-width 0.050 m and a 1.2% six-lobe rim wobble, so the slice is a rounded square 0.100 x 0.100 m.  Top height field runs 0.0110 m at the rim to 0.0145 m at the centre; the flat underside is z=0.  Crust is the outer 10% of the outline radius (rim faces and the top border band), crumb everywhere else; the hidden underside stays crumb.  One closed shell, no separate crust geometry.",
+      "build_script": "models/bread_slice.py",
+      "preview": "previews/bread_slice_preview.png",
+      "files": {
+        "bread_slice.fbx": 19404,
+        "bread_slice.glb": 12128,
+        "bread_slice.blend": 92008
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 117637
+    },
+    {
+      "id": "cheese_slice",
+      "pivot": "center",
+      "target_longest_m": 0.06,
+      "dimensions_m": {
+        "x": 0.05999999865889549,
+        "y": 0.05000000074505806,
+        "z": 0.00800000037997961,
+        "longest": 0.05999999865889549
+      },
+      "bounds_m": {
+        "min": [
+          -0.029999999329447746,
+          -0.02500000037252903,
+          -0.004000000189989805
+        ],
+        "max": [
+          0.029999999329447746,
+          0.02500000037252903,
+          0.004000000189989805
+        ]
+      },
+      "vertices": 73,
+      "triangles": 142,
+      "materials": [
+        "Prop_cheese_slice_cheese"
+      ],
+      "material_base_colors": {
+        "Prop_cheese_slice_cheese": [
+          0.72,
+          0.52,
+          0.12
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "03de50608b56026629133e8e0e303f0382742912d45159078bfdae88f346b35a",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "奶酪片",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.06,
+        "game_longest_dim_m": 0.08,
+        "sourcing_hint": "model ourselves：6×5×0.8 cm 三角片，3 个 Ø1 cm 凹孔（原概念“楔形”不成立，改片状）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.06,
+        "built_longest_m": 0.05999999865889549,
+        "abs_error_m": 1.341104505225843e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 200,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "cheese",
+          "name_zh": "奶酪浅黄",
+          "linear_rgb": [
+            0.72,
+            0.52,
+            0.12
+          ],
+          "roughness": 0.55
+        }
+      ],
+      "notes": "Right-triangle prism, 0.060 x 0.050 m footprint and 0.008 m thick: 8 triangles.  Three 10-segment dents of 5 mm radius and 4 mm depth are subtracted from the top face (exact boolean), leaving a closed solid with no through holes; the final count is about 150 triangles.  Dent centres (0.01405, -0.00205), (0.00799, -0.01255) and (0.02011, -0.01255) m, i.e. within 12 mm of the incentre, so every dent stays inside the 15.95 mm incentre radius and the wedge keeps its edges.",
+      "build_script": "models/cheese_slice.py",
+      "preview": "previews/cheese_slice_preview.png",
+      "files": {
+        "cheese_slice.fbx": 16780,
+        "cheese_slice.glb": 7000,
+        "cheese_slice.blend": 90506
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 98496
+    },
+    {
+      "id": "fallen_leaf",
+      "pivot": "center",
+      "target_longest_m": 0.09,
+      "dimensions_m": {
+        "x": 0.06000048667192459,
+        "y": 0.08999999612569809,
+        "z": 0.0010876336600631475,
+        "longest": 0.08999999612569809
+      },
+      "bounds_m": {
+        "min": [
+          -0.030000243335962296,
+          -0.044999998062849045,
+          -0.0005438168300315738
+        ],
+        "max": [
+          0.030000243335962296,
+          0.044999998062849045,
+          0.0005438168300315738
+        ]
+      },
+      "vertices": 98,
+      "triangles": 192,
+      "materials": [
+        "Prop_fallen_leaf_leaf"
+      ],
+      "material_base_colors": {
+        "Prop_fallen_leaf_leaf": [
+          0.15,
+          0.22,
+          0.055
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "0c05bb0f27d43159bdbfe7a41b74925f239d70e445369f5c7ba186de85a5c818",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "落叶",
+      "category": "nature",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.09,
+        "game_longest_dim_m": 0.1,
+        "sourcing_hint": "model ourselves：9×6×0.1 cm 薄片，边缘微卷（CSV 提示 Kenney 叶片）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.09,
+        "built_longest_m": 0.08999999612569809,
+        "abs_error_m": 3.8743019070697216e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 200,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "leaf",
+          "name_zh": "落叶橄榄绿",
+          "linear_rgb": [
+            0.15,
+            0.22,
+            0.055
+          ],
+          "roughness": 0.72
+        }
+      ],
+      "notes": "6 x 6 grid slab: 72 top + 72 bottom + 48 rim = 192 triangles.  Length 0.090 m along Y, blade width 0.057 m (plus a 3 mm bend, so X is about 0.060 m), thickness 0.45-0.70 mm, overall Z about 0.9 mm.  The petiole is part of the same outline (a 1.6 mm wide tail), so there is no second object and no boolean.  Three edge curls (up at v=0.30 and 0.58, down at 0.86) and a raised midrib are modelled; the other four of the five planned veins are omitted because they are sub-pixel at this thickness.",
+      "build_script": "models/fallen_leaf.py",
+      "preview": "previews/fallen_leaf_preview.png",
+      "files": {
+        "fallen_leaf.fbx": 19484,
+        "fallen_leaf.glb": 14388,
+        "fallen_leaf.blend": 91857
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 80156
+    },
+    {
+      "id": "sandwich",
+      "pivot": "center",
+      "target_longest_m": 0.12,
+      "dimensions_m": {
+        "x": 0.12000000476837158,
+        "y": 0.090023934841156,
+        "z": 0.039992477744817734,
+        "longest": 0.12000000476837158
+      },
+      "bounds_m": {
+        "min": [
+          -0.06000000238418579,
+          -0.045011967420578,
+          -0.019996238872408867
+        ],
+        "max": [
+          0.06000000238418579,
+          0.045011967420578,
+          0.019996238872408867
+        ]
+      },
+      "vertices": 72,
+      "triangles": 140,
+      "materials": [
+        "Prop_sandwich_crust",
+        "Prop_sandwich_crumb",
+        "Prop_sandwich_ham",
+        "Prop_sandwich_cheese"
+      ],
+      "material_base_colors": {
+        "Prop_sandwich_crust": [
+          0.23,
+          0.095,
+          0.035
+        ],
+        "Prop_sandwich_crumb": [
+          0.64,
+          0.47,
+          0.25
+        ],
+        "Prop_sandwich_ham": [
+          0.48,
+          0.145,
+          0.135
+        ],
+        "Prop_sandwich_cheese": [
+          0.78,
+          0.56,
+          0.15
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "19893a5c8b3d6be5e2de9f6d8a000b10e1248d66caab5f8ce4b3e9459ca6ae31",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "三明治",
+      "category": "food",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.12,
+        "game_longest_dim_m": 0.38,
+        "sourcing_hint": "model ourselves：12×9×4 cm 三角柱，两层夹心三色（CSV 提示 Kenney sandwich.glb）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.12,
+        "built_longest_m": 0.12000000476837158,
+        "abs_error_m": 4.768371586472142e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 400,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "crust",
+          "name_zh": "面包皮棕",
+          "linear_rgb": [
+            0.23,
+            0.095,
+            0.035
+          ],
+          "roughness": 0.6
+        },
+        {
+          "key": "crumb",
+          "name_zh": "面包瓤米白",
+          "linear_rgb": [
+            0.64,
+            0.47,
+            0.25
+          ],
+          "roughness": 0.85
+        },
+        {
+          "key": "ham",
+          "name_zh": "火腿粉",
+          "linear_rgb": [
+            0.48,
+            0.145,
+            0.135
+          ],
+          "roughness": 0.55
+        },
+        {
+          "key": "cheese",
+          "name_zh": "夹心奶酪黄",
+          "linear_rgb": [
+            0.78,
+            0.56,
+            0.15
+          ],
+          "roughness": 0.5
+        }
+      ],
+      "notes": "Nine-point rounded-triangle section (12 cm long cut face at y=+0.045, apex at y=-0.045, 12 mm corner chamfers) extruded through seven z rings at 0 / 3 / 12 / 20 / 28 / 37 / 40 mm, plus an inset top ring at 92% for the crumb: 6 x 9 side quads + 9 top ring quads + two 9-gon caps + the crumb cap = 140 triangles.  Side bands by face-centre z: 3 mm crust, 9 mm crumb, 8 mm ham, 8 mm cheese, 9 mm crumb, 3 mm crust, so both cut faces read as brown edge / pale crumb / ham / cheese / pale crumb / brown edge.  The bottom cap is crust; the top is a thin crust border with a pale crumb centre.  Footprint 0.120 x 0.090 m, height 0.040 m, one closed shell.",
+      "build_script": "models/sandwich.py",
+      "preview": "previews/sandwich_preview.png",
+      "files": {
+        "sandwich.fbx": 20108,
+        "sandwich.glb": 10088,
+        "sandwich.blend": 93792
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 129795
+    },
+    {
+      "id": "spoon",
+      "pivot": "center",
+      "target_longest_m": 0.18,
+      "dimensions_m": {
+        "x": 0.03498135134577751,
+        "y": 0.17999999970197678,
+        "z": 0.014991585165262222,
+        "longest": 0.17999999970197678
+      },
+      "bounds_m": {
+        "min": [
+          -0.017490675672888756,
+          -0.09000000357627869,
+          -0.007495792582631111
+        ],
+        "max": [
+          0.017490675672888756,
+          0.08999999612569809,
+          0.007495792582631111
+        ]
+      },
+      "vertices": 143,
+      "triangles": 282,
+      "materials": [
+        "Prop_spoon_steel"
+      ],
+      "material_base_colors": {
+        "Prop_spoon_steel": [
+          0.56,
+          0.57,
+          0.58
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "31fccaea279b4a75e04a789893791a810d4e302425a1a1e547a8a0ae2957c46b",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "勺子",
+      "category": "tableware",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.18,
+        "game_longest_dim_m": 0.34,
+        "sourcing_hint": "model ourselves：18 cm 长，柄宽 1.2 cm，头部 3.5×5 cm 浅凹（CSV 提示 Kenney utensil-spoon.glb）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.18,
+        "built_longest_m": 0.17999999970197678,
+        "abs_error_m": 2.98023217215615e-10,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "steel",
+          "name_zh": "不锈钢",
+          "linear_rgb": [
+            0.56,
+            0.57,
+            0.58
+          ],
+          "roughness": 0.28
+        }
+      ],
+      "notes": "Bowl: 16-segment, 8-point lathe scaled to 70% in X = 0.035 x 0.050 m oval, rim 0.0115 m, well floor 0.0056 m (5.9 mm deep), underside flat at z=0.  Handle: 5 stations, 6-segment flat elliptical sweep from the bowl centre to y=-0.155, half-width 0.0075 -> 0.0032 m, half-thickness 0.0018 -> 0.0010 m, welded by an exact union.  Total length 0.180 m along Y, one closed shell, about 250 triangles before the union.",
+      "build_script": "models/spoon.py",
+      "preview": "previews/spoon_preview.png",
+      "files": {
+        "spoon.fbx": 20044,
+        "spoon.glb": 6236,
+        "spoon.blend": 93629
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 73780
+    },
+    {
+      "id": "small_potted_plant",
+      "pivot": "center",
+      "target_longest_m": 0.22,
+      "dimensions_m": {
+        "x": 0.1398693472146988,
+        "y": 0.13636252284049988,
+        "z": 0.2199999988079071,
+        "longest": 0.2199999988079071
+      },
+      "bounds_m": {
+        "min": [
+          -0.0699346736073494,
+          -0.06818126142024994,
+          -0.10999999940395355
+        ],
+        "max": [
+          0.0699346736073494,
+          0.06818126142024994,
+          0.10999999940395355
+        ]
+      },
+      "vertices": 247,
+      "triangles": 489,
+      "materials": [
+        "Prop_small_potted_plant_pot",
+        "Prop_small_potted_plant_soil",
+        "Prop_small_potted_plant_leaf"
+      ],
+      "material_base_colors": {
+        "Prop_small_potted_plant_pot": [
+          0.42,
+          0.16,
+          0.08
+        ],
+        "Prop_small_potted_plant_soil": [
+          0.075,
+          0.048,
+          0.028
+        ],
+        "Prop_small_potted_plant_leaf": [
+          0.12,
+          0.23,
+          0.06
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 3,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "7d04cfd389becfd4478dd4b78d8916fd7e987e96586e51d28e9c14c957a3a443",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "小盆栽",
+      "category": "garden",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.22,
+        "game_longest_dim_m": 0.55,
+        "sourcing_hint": "model ourselves：Ø14×12 cm 锥台盆 + 22 cm 高叶丛（CSV 提示 Kenney pot_small + flower_redA，本批自行建模）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.22,
+        "built_longest_m": 0.2199999988079071,
+        "abs_error_m": 1.1920928966180355e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 500,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "pot",
+          "name_zh": "陶土盆",
+          "linear_rgb": [
+            0.42,
+            0.16,
+            0.08
+          ],
+          "roughness": 0.8
+        },
+        {
+          "key": "soil",
+          "name_zh": "盆土深褐",
+          "linear_rgb": [
+            0.075,
+            0.048,
+            0.028
+          ],
+          "roughness": 0.95
+        },
+        {
+          "key": "leaf",
+          "name_zh": "叶片绿",
+          "linear_rgb": [
+            0.12,
+            0.23,
+            0.06
+          ],
+          "roughness": 0.65
+        }
+      ],
+      "notes": "Pot: 16-segment, 8-point lathe, base 0.090 m, rim 0.140 m at z=0.120, 4 mm rim wall, soil surface at z=0.104: 192 triangles.  Six leaves: 5-segment flat lens sweep with 4 stations each (40 triangles), bases on a 12 mm radius at z=0.096, rising to tips at r=0.058 and 0.198-0.220 m (one leaf at the full 0.220 m, the rest scaled 0.90-0.98 so the cluster is not a fan of identical blades); azimuths 15/75/135/195/255/315 degrees, welded with exact unions.  Materials are re-assigned by position after the union (leaf above the rim or above the soil inside r<0.045).  Total about 450 triangles, one closed shell.",
+      "build_script": "models/small_potted_plant.py",
+      "preview": "previews/small_potted_plant_preview.png",
+      "files": {
+        "small_potted_plant.fbx": 28476,
+        "small_potted_plant.glb": 18596,
+        "small_potted_plant.blend": 100606
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 151397
+    },
+    {
+      "id": "picnic_blanket",
+      "pivot": "center",
+      "target_longest_m": 5.0,
+      "dimensions_m": {
+        "x": 5.0,
+        "y": 4.5,
+        "z": 0.012000000104308128,
+        "longest": 5.0
+      },
+      "bounds_m": {
+        "min": [
+          -2.5,
+          -2.25,
+          -0.006000000052154064
+        ],
+        "max": [
+          2.5,
+          2.25,
+          0.006000000052154064
+        ]
+      },
+      "vertices": 182,
+      "triangles": 360,
+      "materials": [
+        "Prop_picnic_blanket_cream",
+        "Prop_picnic_blanket_stripe"
+      ],
+      "material_base_colors": {
+        "Prop_picnic_blanket_cream": [
+          0.62,
+          0.52,
+          0.355
+        ],
+        "Prop_picnic_blanket_stripe": [
+          0.355,
+          0.075,
+          0.055
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "2b746f9a8f98acde1b4757363a003a2ef5797f6a4d4af9f195dc8c85ef295b5d",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "野餐毯",
+      "category": "terrain",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 12.0,
+        "game_longest_dim_m": 12.0,
+        "sourcing_hint": "model ourselves：平面 + 条纹材质；2 张 6.5×12 m + 2 张 5×4.5 m（本件为 5.0×4.5 m 小毯）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 5.0,
+        "built_longest_m": 5.0,
+        "abs_error_m": 0.0,
+        "csv_target_matches": false,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 0.417
+      },
+      "tri_budget": 600,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "cream",
+          "name_zh": "毯面米白",
+          "linear_rgb": [
+            0.62,
+            0.52,
+            0.355
+          ],
+          "roughness": 0.92
+        },
+        {
+          "key": "stripe",
+          "name_zh": "毯面条纹砖红",
+          "linear_rgb": [
+            0.355,
+            0.075,
+            0.055
+          ],
+          "roughness": 0.92
+        }
+      ],
+      "notes": "Flat slab 5.00 x 4.50 x 0.012 m: a 12 x 6 top grid at z = 0.012, the same grid at z = 0 and a rim, 360 triangles.  Six 0.8333 m stripes by face-centre x, alternating cream and brick red, so the weave is colour only - no texture, UV or vertex colour.  The top plane is flat to the last vertex because the ball has to rest on it; the 0.06 m greybox pad and its 0.8 m / 7.5% apron stay terrain and are deliberately not part of the cloth.  Catalog real length is 12 m (the big variant), so the build warns once against that column - this is the 5.0 m map variant.",
+      "build_script": "models/picnic_blanket.py",
+      "preview": "previews/picnic_blanket_preview.png",
+      "files": {
+        "picnic_blanket.fbx": 19244,
+        "picnic_blanket.glb": 12452,
+        "picnic_blanket.blend": 95504
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 104649
+    },
+    {
+      "id": "picnic_basket",
+      "pivot": "center",
+      "target_longest_m": 0.45,
+      "dimensions_m": {
+        "x": 0.44999998807907104,
+        "y": 0.30000001192092896,
+        "z": 0.22130000591278076,
+        "longest": 0.44999998807907104
+      },
+      "bounds_m": {
+        "min": [
+          -0.22499999403953552,
+          -0.15000000596046448,
+          -0.11065000295639038
+        ],
+        "max": [
+          0.22499999403953552,
+          0.15000000596046448,
+          0.11065000295639038
+        ]
+      },
+      "vertices": 276,
+      "triangles": 552,
+      "materials": [
+        "Prop_picnic_basket_wicker",
+        "Prop_picnic_basket_handle"
+      ],
+      "material_base_colors": {
+        "Prop_picnic_basket_wicker": [
+          0.34,
+          0.21,
+          0.1
+        ],
+        "Prop_picnic_basket_handle": [
+          0.25,
+          0.15,
+          0.07
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "8e2a14ed51165ef7f27e3d0e92769b1f324487c0f94f6616c835c8cad7fa7300",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "野餐篮",
+      "category": "container",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.45,
+        "game_longest_dim_m": 1.2,
+        "sourcing_hint": "model ourselves：0.45 m 篮体放大到 1.20 m 游戏尺寸（藤条用 alpha 卡）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.45,
+        "built_longest_m": 0.44999998807907104,
+        "abs_error_m": 1.1920928966180355e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 800,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "wicker",
+          "name_zh": "藤条浅棕",
+          "linear_rgb": [
+            0.34,
+            0.21,
+            0.1
+          ],
+          "roughness": 0.85
+        },
+        {
+          "key": "handle",
+          "name_zh": "提手深棕",
+          "linear_rgb": [
+            0.25,
+            0.15,
+            0.07
+          ],
+          "roughness": 0.8
+        }
+      ],
+      "notes": "Rounded-rect tub: body 0.446 x 0.296 to z 0.150, rim lip and three weave bands 0.450 x 0.300 both 2 mm proud, wall 14-16 mm, floor 12 mm, open top by boolean difference; handle is a 9-station, 6-segment tube (r 10 mm) from y = +/-0.142, z = 0.140 to z = 0.230, so the AABB is exactly 0.450 x 0.300 x 0.240.  Materials by face-centre z: handle above 0.152, wicker below.",
+      "build_script": "models/picnic_basket.py",
+      "preview": "previews/picnic_basket_preview.png",
+      "files": {
+        "picnic_basket.fbx": 24780,
+        "picnic_basket.glb": 21088,
+        "picnic_basket.blend": 99711
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 138878
+    },
+    {
+      "id": "cooler_box",
+      "pivot": "center",
+      "target_longest_m": 0.55,
+      "dimensions_m": {
+        "x": 0.550000011920929,
+        "y": 0.3499999940395355,
+        "z": 0.30000001192092896,
+        "longest": 0.550000011920929
+      },
+      "bounds_m": {
+        "min": [
+          -0.2750000059604645,
+          -0.17499999701976776,
+          -0.15000000596046448
+        ],
+        "max": [
+          0.2750000059604645,
+          0.17499999701976776,
+          0.15000000596046448
+        ]
+      },
+      "vertices": 64,
+      "triangles": 124,
+      "materials": [
+        "Prop_cooler_box_shell",
+        "Prop_cooler_box_lid",
+        "Prop_cooler_box_grip"
+      ],
+      "material_base_colors": {
+        "Prop_cooler_box_shell": [
+          0.05,
+          0.15,
+          0.185
+        ],
+        "Prop_cooler_box_lid": [
+          0.6,
+          0.62,
+          0.59
+        ],
+        "Prop_cooler_box_grip": [
+          0.03,
+          0.033,
+          0.035
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "4106759b6bc169a2a77f4eb43e2b7942bcac1e51a1b95aa26e8060372563f406",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "保温箱",
+      "category": "container",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.55,
+        "game_longest_dim_m": 1.6,
+        "sourcing_hint": "model ourselves：0.55 m 箱体放大到 1.60 m，带提手与盖缝",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.55,
+        "built_longest_m": 0.550000011920929,
+        "abs_error_m": 1.1920928910669204e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 800,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "shell",
+          "name_zh": "箱体青蓝",
+          "linear_rgb": [
+            0.05,
+            0.15,
+            0.185
+          ],
+          "roughness": 0.55
+        },
+        {
+          "key": "lid",
+          "name_zh": "盖面浅灰",
+          "linear_rgb": [
+            0.6,
+            0.62,
+            0.59
+          ],
+          "roughness": 0.6
+        },
+        {
+          "key": "grip",
+          "name_zh": "握槽深灰",
+          "linear_rgb": [
+            0.03,
+            0.033,
+            0.035
+          ],
+          "roughness": 0.72
+        }
+      ],
+      "notes": "Rounded-rect body 0.544 x 0.344 x 0.292 (R 28 mm) unioned with a lid 0.550 x 0.350 x 0.018 starting at z = 0.282 (R 32 mm, 3 mm overhang and a 10 mm step), then two 0.120 x 0.050 x 0.025 grip recesses cut into the +/-X ends at z 0.190-0.240.  AABB 0.550 x 0.320 x 0.320, top is one flat plane.  Materials: lid above z 0.3017, dark grip inside |x| 0.240-0.272 and |y| < 0.062 at z 0.182-0.248, shell elsewhere.",
+      "build_script": "models/cooler_box.py",
+      "preview": "previews/cooler_box_preview.png",
+      "files": {
+        "cooler_box.fbx": 18860,
+        "cooler_box.glb": 8060,
+        "cooler_box.blend": 92446
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 142919
+    },
+    {
+      "id": "folding_stool",
+      "pivot": "center",
+      "target_longest_m": 0.4,
+      "dimensions_m": {
+        "x": 0.4000000059604645,
+        "y": 0.3499903976917267,
+        "z": 0.3199999928474426,
+        "longest": 0.4000000059604645
+      },
+      "bounds_m": {
+        "min": [
+          -0.20000000298023224,
+          -0.17499519884586334,
+          -0.1599999964237213
+        ],
+        "max": [
+          0.20000000298023224,
+          0.17499519884586334,
+          0.1599999964237213
+        ]
+      },
+      "vertices": 270,
+      "triangles": 556,
+      "materials": [
+        "Prop_folding_stool_canvas",
+        "Prop_folding_stool_frame"
+      ],
+      "material_base_colors": {
+        "Prop_folding_stool_canvas": [
+          0.085,
+          0.17,
+          0.095
+        ],
+        "Prop_folding_stool_frame": [
+          0.55,
+          0.57,
+          0.58
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 1,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "85bca0f0c069b87f0493bccae5acb63600344318cc66404eeda3ddc45b2a1d55",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "折叠凳",
+      "category": "furniture",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.4,
+        "game_longest_dim_m": 1.4,
+        "sourcing_hint": "model ourselves：0.40 m 布面凳放大到 1.40 m",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.4,
+        "built_longest_m": 0.4000000059604645,
+        "abs_error_m": 5.960464455334602e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 700,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "canvas",
+          "name_zh": "座面帆布墨绿",
+          "linear_rgb": [
+            0.085,
+            0.17,
+            0.095
+          ],
+          "roughness": 0.9
+        },
+        {
+          "key": "frame",
+          "name_zh": "铝腿银灰",
+          "linear_rgb": [
+            0.55,
+            0.57,
+            0.58
+          ],
+          "roughness": 0.35
+        }
+      ],
+      "notes": "Seat slab 0.350 x 0.250 x 0.012 (R 20 mm) with its top at 0.320; two planar trapezoid frames of 1.5 cm tubes (r 0.0075): top bar 0.336 long at y = -/+0.1175, z = 0.308, bottom bar 0.400 long at y = +/-0.1685, z = 0.0075, rails ending 7.5 mm inside each bar.  AABB 0.400 x 0.350 x 0.320, feet on z = 0.  The two frames cross at mid-height, so the union is one shell.  Materials by face centre: canvas above z 0.3075 inside the seat outline, frame elsewhere.",
+      "build_script": "models/folding_stool.py",
+      "preview": "previews/folding_stool_preview.png",
+      "files": {
+        "folding_stool.fbx": 26892,
+        "folding_stool.glb": 14680,
+        "folding_stool.blend": 100188
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 159820
+    },
+    {
+      "id": "flower_pot_large",
+      "pivot": "center",
+      "target_longest_m": 0.4,
+      "dimensions_m": {
+        "x": 0.3400000035762787,
+        "y": 0.3400000035762787,
+        "z": 0.4000000059604645,
+        "longest": 0.4000000059604645
+      },
+      "bounds_m": {
+        "min": [
+          -0.17000000178813934,
+          -0.17000000178813934,
+          -0.20000000298023224
+        ],
+        "max": [
+          0.17000000178813934,
+          0.17000000178813934,
+          0.20000000298023224
+        ]
+      },
+      "vertices": 130,
+      "triangles": 256,
+      "materials": [
+        "Prop_flower_pot_large_terracotta"
+      ],
+      "material_base_colors": {
+        "Prop_flower_pot_large_terracotta": [
+          0.4,
+          0.155,
+          0.075
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "0ff1359c743e6b4ec537d51830eab16b760b9ae0a4deab956c35fba9cd00afcc",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "大花盆",
+      "category": "garden",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.4,
+        "game_longest_dim_m": 1.0,
+        "sourcing_hint": "Kenney Nature Kit 2.1 pot_large.glb（先看图确认无花）→ 空盆重画",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.4,
+        "built_longest_m": 0.4000000059604645,
+        "abs_error_m": 5.960464455334602e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 400,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "terracotta",
+          "name_zh": "陶土砖红",
+          "linear_rgb": [
+            0.4,
+            0.155,
+            0.075
+          ],
+          "roughness": 0.88
+        }
+      ],
+      "notes": "Ten-point lathe profile, 16 segments: base 0 -> 0.118, fillet to 0.123 at z 0.010, outer wall to 0.170 at z 0.398, flat 2 cm lip at z 0.400 (outer 0.170, inner 0.152), inner wall down to 0.115 at z 0.022, flat floor to the axis.  Wall 8-18 mm, floor 22 mm.  AABB 0.340 x 0.340 x 0.400, foot ring on z = 0, no plant and no drainage hole.",
+      "build_script": "models/flower_pot_large.py",
+      "preview": "previews/flower_pot_large_preview.png",
+      "files": {
+        "flower_pot_large.fbx": 19260,
+        "flower_pot_large.glb": 13484,
+        "flower_pot_large.blend": 92879
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 168104
+    },
+    {
+      "id": "collapsed_bench",
+      "pivot": "center",
+      "target_longest_m": 1.6,
+      "dimensions_m": {
+        "x": 1.600000023841858,
+        "y": 0.5499999523162842,
+        "z": 0.8100000023841858,
+        "longest": 1.600000023841858
+      },
+      "bounds_m": {
+        "min": [
+          -0.800000011920929,
+          -0.2749999761581421,
+          -0.4050000011920929
+        ],
+        "max": [
+          0.800000011920929,
+          0.2749999761581421,
+          0.4050000011920929
+        ]
+      },
+      "vertices": 248,
+      "triangles": 512,
+      "materials": [
+        "Prop_collapsed_bench_wood",
+        "Prop_collapsed_bench_metal"
+      ],
+      "material_base_colors": {
+        "Prop_collapsed_bench_wood": [
+          0.3,
+          0.19,
+          0.095
+        ],
+        "Prop_collapsed_bench_metal": [
+          0.14,
+          0.15,
+          0.16
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "5e8e98c45275d0380954cbcfae460b0e2938c478c152e6c8272c5bac1235382c",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "倒塌长凳",
+      "category": "gate",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 1.6,
+        "game_longest_dim_m": 3.6,
+        "sourcing_hint": "model ourselves：3.6 m 长凳横躺（四条腿朝侧），专用于对角门",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 1.6,
+        "built_longest_m": 1.600000023841858,
+        "abs_error_m": 2.3841857821338408e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": false,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 600,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "wood",
+          "name_zh": "旧木条",
+          "linear_rgb": [
+            0.3,
+            0.19,
+            0.095
+          ],
+          "roughness": 0.82
+        },
+        {
+          "key": "metal",
+          "name_zh": "凳腿深铁灰",
+          "linear_rgb": [
+            0.14,
+            0.15,
+            0.16
+          ],
+          "roughness": 0.5
+        }
+      ],
+      "notes": "Upright slatted bench, real metres: four seat slats 1.600 x 0.115 x 0.030 at z 0.420-0.450 (20 mm gaps, centres +/-0.0675 / +/-0.2025), two side rails 0.060 x 0.520 x 0.050 at x +/-0.680, four 0.055 square legs at y +/-0.200 up to z 0.440, two back posts 0.050 x 0.050 at y 0.240-0.290 up to z 0.800, two back slats 1.600 x 0.030 x 0.100 at z 0.560-0.660 and 0.710-0.800.  AABB 1.600 x 0.550 x 0.800 (back at -Y, seat front +Y).  The seat gaps are through-holes.  Materials split at z 0.395: metal legs below, wood above.  This replaces the catalog note \"lying on its side\" with the upright bench its three-axis describes.",
+      "build_script": "models/collapsed_bench.py",
+      "preview": "previews/collapsed_bench_preview.png",
+      "files": {
+        "collapsed_bench.fbx": 21660,
+        "collapsed_bench.glb": 20504,
+        "collapsed_bench.blend": 98972
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 128716
+    },
+    {
+      "id": "wood_plank",
+      "pivot": "center",
+      "target_longest_m": 1.4,
+      "dimensions_m": {
+        "x": 1.399999976158142,
+        "y": 0.3499999940395355,
+        "z": 0.02500000037252903,
+        "longest": 1.399999976158142
+      },
+      "bounds_m": {
+        "min": [
+          -0.699999988079071,
+          -0.17499999701976776,
+          -0.012500000186264515
+        ],
+        "max": [
+          0.699999988079071,
+          0.17499999701976776,
+          0.012500000186264515
+        ]
+      },
+      "vertices": 24,
+      "triangles": 44,
+      "materials": [
+        "Prop_wood_plank_wood"
+      ],
+      "material_base_colors": {
+        "Prop_wood_plank_wood": [
+          0.415,
+          0.285,
+          0.15
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "605e58fce82cadeb30289f7796b0a1a7f2e6a108f8e32766d958309ed98fe709",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "木板",
+      "category": "structure",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 1.4,
+        "game_longest_dim_m": 1.4,
+        "sourcing_hint": "model ourselves：LEVEL_CONSTRUCTION.md 4 P0（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 1.4,
+        "built_longest_m": 1.399999976158142,
+        "abs_error_m": 2.3841857821338408e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 250,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "wood",
+          "name_zh": "原木",
+          "linear_rgb": [
+            0.415,
+            0.285,
+            0.15
+          ],
+          "roughness": 0.72
+        }
+      ],
+      "notes": "One 12-gon rounded-rect prism 1.400 x 0.350 x 0.025 (R 15 mm), top and bottom flat, pivot at the AABB centre.  Size from LEVEL_CONSTRUCTION.md section 4 P0 (no CSV row); budget 250 tris.",
+      "build_script": "models/wood_plank.py",
+      "preview": "previews/wood_plank_preview.png",
+      "files": {
+        "wood_plank.fbx": 15340,
+        "wood_plank.glb": 3108,
+        "wood_plank.blend": 88680
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 77223
+    },
+    {
+      "id": "serving_tray",
+      "pivot": "center",
+      "target_longest_m": 0.55,
+      "dimensions_m": {
+        "x": 0.550000011920929,
+        "y": 0.3499999940395355,
+        "z": 0.03999999910593033,
+        "longest": 0.550000011920929
+      },
+      "bounds_m": {
+        "min": [
+          -0.2750000059604645,
+          -0.17499999701976776,
+          -0.019999999552965164
+        ],
+        "max": [
+          0.2750000059604645,
+          0.17499999701976776,
+          0.019999999552965164
+        ]
+      },
+      "vertices": 49,
+      "triangles": 94,
+      "materials": [
+        "Prop_serving_tray_wood"
+      ],
+      "material_base_colors": {
+        "Prop_serving_tray_wood": [
+          0.47,
+          0.34,
+          0.19
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "1a4147603641dbd9d612e0eb2e83bbe9aa9552d2dd1e79a26522237527d3919a",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "托盘",
+      "category": "structure",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.55,
+        "game_longest_dim_m": 0.55,
+        "sourcing_hint": "model ourselves：LEVEL_CONSTRUCTION.md 4 P2（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.55,
+        "built_longest_m": 0.550000011920929,
+        "abs_error_m": 1.1920928910669204e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 250,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "wood",
+          "name_zh": "浅木",
+          "linear_rgb": [
+            0.47,
+            0.34,
+            0.19
+          ],
+          "roughness": 0.7
+        }
+      ],
+      "notes": "Rounded-rect tray 0.550 x 0.350 x 0.040 (R 20 mm) with an inner cut 0.500 x 0.300 from z 0.012, leaving a 12 mm floor and a 25 mm rim; rim top and floor are both flat.  Size from LEVEL_CONSTRUCTION.md section 4 P2 (no CSV row); budget 250 tris.",
+      "build_script": "models/serving_tray.py",
+      "preview": "previews/serving_tray_preview.png",
+      "files": {
+        "serving_tray.fbx": 16172,
+        "serving_tray.glb": 5196,
+        "serving_tray.blend": 89591
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 101842
+    },
+    {
+      "id": "folding_table",
+      "pivot": "center",
+      "target_longest_m": 1.0,
+      "dimensions_m": {
+        "x": 1.0,
+        "y": 0.6000000238418579,
+        "z": 0.699999988079071,
+        "longest": 1.0
+      },
+      "bounds_m": {
+        "min": [
+          -0.5,
+          -0.30000001192092896,
+          -0.3499999940395355
+        ],
+        "max": [
+          0.5,
+          0.30000001192092896,
+          0.3499999940395355
+        ]
+      },
+      "vertices": 120,
+      "triangles": 236,
+      "materials": [
+        "Prop_folding_table_top",
+        "Prop_folding_table_frame"
+      ],
+      "material_base_colors": {
+        "Prop_folding_table_top": [
+          0.56,
+          0.43,
+          0.27
+        ],
+        "Prop_folding_table_frame": [
+          0.17,
+          0.18,
+          0.19
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "1a8bc7ebe292a5b6ece2a366d0ae1940fbad4175ab45ba06dcbac6ed2f61951b",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "折叠桌",
+      "category": "furniture",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 1.0,
+        "game_longest_dim_m": 1.0,
+        "sourcing_hint": "model ourselves：LEVEL_CONSTRUCTION.md 4 P0（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 1.0,
+        "built_longest_m": 1.0,
+        "abs_error_m": 0.0,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 900,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "top",
+          "name_zh": "桌面浅木",
+          "linear_rgb": [
+            0.56,
+            0.43,
+            0.27
+          ],
+          "roughness": 0.68
+        },
+        {
+          "key": "frame",
+          "name_zh": "桌腿深灰",
+          "linear_rgb": [
+            0.17,
+            0.18,
+            0.19
+          ],
+          "roughness": 0.4
+        }
+      ],
+      "notes": "Top 1.000 x 0.600 x 0.030 with its upper plane at z = 0.700; four 0.040 square legs at x +/-0.420, y +/-0.240; AABB 1.000 x 0.600 x 0.700, flat top. Size from LEVEL_CONSTRUCTION.md section 4 P0 (no CSV row).",
+      "build_script": "models/folding_table.py",
+      "preview": "previews/folding_table_preview.png",
+      "files": {
+        "folding_table.fbx": 19132,
+        "folding_table.glb": 12384,
+        "folding_table.blend": 93356
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "5.3.0"
+      },
+      "preview_bytes": 130257
+    },
+    {
+      "id": "book_stack",
+      "pivot": "center",
+      "target_longest_m": 0.26,
+      "dimensions_m": {
+        "x": 0.25999999046325684,
+        "y": 0.1899999976158142,
+        "z": 0.09000000357627869,
+        "longest": 0.25999999046325684
+      },
+      "bounds_m": {
+        "min": [
+          -0.12999999523162842,
+          -0.0949999988079071,
+          -0.04500000178813934
+        ],
+        "max": [
+          0.12999999523162842,
+          0.0949999988079071,
+          0.04500000178813934
+        ]
+      },
+      "vertices": 82,
+      "triangles": 160,
+      "materials": [
+        "Prop_book_stack_pages",
+        "Prop_book_stack_cover_a",
+        "Prop_book_stack_cover_b",
+        "Prop_book_stack_cover_c"
+      ],
+      "material_base_colors": {
+        "Prop_book_stack_pages": [
+          0.62,
+          0.575,
+          0.465
+        ],
+        "Prop_book_stack_cover_a": [
+          0.175,
+          0.045,
+          0.035
+        ],
+        "Prop_book_stack_cover_b": [
+          0.04,
+          0.075,
+          0.13
+        ],
+        "Prop_book_stack_cover_c": [
+          0.105,
+          0.105,
+          0.045
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "37f4e68870c055f9f794d06f088bd3a51d75e76c4b00e1a8e9cfd77ed2eef3c8",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "书堆",
+      "category": "furniture",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.26,
+        "game_longest_dim_m": 0.26,
+        "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / LEVEL_CONSTRUCTION.md 4 P2（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.26,
+        "built_longest_m": 0.25999999046325684,
+        "abs_error_m": 9.536743172944284e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 300,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "pages",
+          "name_zh": "书页米白",
+          "linear_rgb": [
+            0.62,
+            0.575,
+            0.465
+          ],
+          "roughness": 0.88
+        },
+        {
+          "key": "cover_a",
+          "name_zh": "封面砖红",
+          "linear_rgb": [
+            0.175,
+            0.045,
+            0.035
+          ],
+          "roughness": 0.72
+        },
+        {
+          "key": "cover_b",
+          "name_zh": "封面深蓝",
+          "linear_rgb": [
+            0.04,
+            0.075,
+            0.13
+          ],
+          "roughness": 0.72
+        },
+        {
+          "key": "cover_c",
+          "name_zh": "封面橄榄",
+          "linear_rgb": [
+            0.105,
+            0.105,
+            0.045
+          ],
+          "roughness": 0.72
+        }
+      ],
+      "notes": "Three hardbacks.  Bottom 0.260 x 0.190 x 0.032, axis aligned (it owns the AABB).  Middle 0.220 x 0.150 turned +8 deg at (0.004, 0.000), z 0.031-0.062 - 0.150 deep, not 0.160: at +8 deg a 0.160 deep book reaches y -0.0965 and pushes the AABB 0.001 past the design depth.  Top 0.240 x 0.150 turned -7 deg at (0.000, 0.003), z 0.061-0.090.  Each book: page block inset 4 mm from three sides and flush at the +x spine, plus a 5 mm full-footprint cover slab on top.  AABB 0.260 x 0.190 x 0.090, flat top at z = 0.090.  Materials by face centre: cover slabs (z >= book top - 5 mm), the +x spine face and everything outside the page footprint are the book colour; the other three page-block sides are pages.",
+      "build_script": "models/book_stack.py",
+      "preview": "previews/book_stack_preview.png",
+      "files": {
+        "book_stack.fbx": 21164,
+        "book_stack.glb": 10536,
+        "book_stack.blend": 487864
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "4.0.2"
+      },
+      "preview_bytes": 176739
+    },
+    {
+      "id": "beer_crate",
+      "pivot": "center",
+      "target_longest_m": 0.4,
+      "dimensions_m": {
+        "x": 0.4000000059604645,
+        "y": 0.30000001192092896,
+        "z": 0.2800000011920929,
+        "longest": 0.4000000059604645
+      },
+      "bounds_m": {
+        "min": [
+          -0.20000000298023224,
+          -0.15000000596046448,
+          -0.14000000059604645
+        ],
+        "max": [
+          0.20000000298023224,
+          0.15000000596046448,
+          0.14000000059604645
+        ]
+      },
+      "vertices": 89,
+      "triangles": 182,
+      "materials": [
+        "Prop_beer_crate_shell",
+        "Prop_beer_crate_web",
+        "Prop_beer_crate_floor"
+      ],
+      "material_base_colors": {
+        "Prop_beer_crate_shell": [
+          0.035,
+          0.09,
+          0.055
+        ],
+        "Prop_beer_crate_web": [
+          0.18,
+          0.23,
+          0.195
+        ],
+        "Prop_beer_crate_floor": [
+          0.045,
+          0.05,
+          0.048
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "691dc14becb70d29cf246c99e86faa05412ea229d996d8dce2286756a155ccac",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "啤酒箱",
+      "category": "container",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.4,
+        "game_longest_dim_m": 0.4,
+        "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / LEVEL_CONSTRUCTION.md 4 P2（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.4,
+        "built_longest_m": 0.4000000059604645,
+        "abs_error_m": 5.960464455334602e-09,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 400,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "shell",
+          "name_zh": "箱体瓶绿",
+          "linear_rgb": [
+            0.035,
+            0.09,
+            0.055
+          ],
+          "roughness": 0.58
+        },
+        {
+          "key": "web",
+          "name_zh": "隔板浅灰绿",
+          "linear_rgb": [
+            0.18,
+            0.23,
+            0.195
+          ],
+          "roughness": 0.62
+        },
+        {
+          "key": "floor",
+          "name_zh": "底板深灰",
+          "linear_rgb": [
+            0.045,
+            0.05,
+            0.048
+          ],
+          "roughness": 0.8
+        }
+      ],
+      "notes": "Outer 0.400 x 0.300 x 0.280 rounded-rect (R 12 mm, 12-gon) with a cavity 0.368 x 0.268 (R 8 mm) cut from z = 0.020 through the top, leaving a 16 mm wall and a 20 mm floor.  Six cells: one 8 mm web along X at y = 0, two along Y at x = +/-0.0613, all from z 0.020 to 0.260.  Two 0.100 x 0.030 hand holes cut 22 mm into the +/-X ends at z 0.190-0.220.  AABB 0.400 x 0.300 x 0.280, rim flat at z = 0.280.  Materials by face centre: floor below z 0.0215, webs within 6 mm of the divider planes, shell elsewhere.",
+      "build_script": "models/beer_crate.py",
+      "preview": "previews/beer_crate_preview.png",
+      "files": {
+        "beer_crate.fbx": 19740,
+        "beer_crate.glb": 10272,
+        "beer_crate.blend": 467732
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "4.0.2"
+      },
+      "preview_bytes": 200912
+    },
+    {
+      "id": "crate",
+      "pivot": "center",
+      "target_longest_m": 0.6,
+      "dimensions_m": {
+        "x": 0.6000000238418579,
+        "y": 0.40000003576278687,
+        "z": 0.40000003576278687,
+        "longest": 0.6000000238418579
+      },
+      "bounds_m": {
+        "min": [
+          -0.30000001192092896,
+          -0.20000001788139343,
+          -0.20000001788139343
+        ],
+        "max": [
+          0.30000001192092896,
+          0.20000001788139343,
+          0.20000001788139343
+        ]
+      },
+      "vertices": 138,
+      "triangles": 272,
+      "materials": [
+        "Prop_crate_wood",
+        "Prop_crate_trim"
+      ],
+      "material_base_colors": {
+        "Prop_crate_wood": [
+          0.33,
+          0.215,
+          0.11
+        ],
+        "Prop_crate_trim": [
+          0.185,
+          0.108,
+          0.05
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "c9bfd6c92bb34147734fd4195ccfbff1f7980c1d62086c3d45377566e0507be3",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "木箱收纳箱",
+      "category": "container",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.6,
+        "game_longest_dim_m": 0.6,
+        "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / LEVEL_CONSTRUCTION.md 4 P0（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.6,
+        "built_longest_m": 0.6000000238418579,
+        "abs_error_m": 2.384185793236071e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 600,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "wood",
+          "name_zh": "箱体浅木",
+          "linear_rgb": [
+            0.33,
+            0.215,
+            0.11
+          ],
+          "roughness": 0.78
+        },
+        {
+          "key": "trim",
+          "name_zh": "盖板角柱深木",
+          "linear_rgb": [
+            0.185,
+            0.108,
+            0.05
+          ],
+          "roughness": 0.74
+        }
+      ],
+      "notes": "Body 0.560 x 0.360 x 0.348 (R 10 mm) from z 0.020; four 0.040 square corner posts at (+/-0.280, +/-0.180) from z 0 to 0.400; lid 0.592 x 0.392 x 0.032 (R 12 mm) from z 0.368 to 0.400.  Two 0.480 x 0.016 x 0.040 battens per long side, outer face at y = +/-0.196, at z 0.090 and 0.250, plus one 0.300 x 0.040 batten per short end at z 0.170 (outer face x = +/-0.288, 8 mm proud of the body).  AABB 0.600 x 0.400 x 0.400; the lid plane and the four post tops are coplanar at z = 0.400.  Two materials by face extent: trim (the lid slab, everything above z 0.3674) and every face outside the body outline (|y| > 0.1815 or |x| > 0.2815), wood elsewhere.",
+      "build_script": "models/crate.py",
+      "preview": "previews/crate_preview.png",
+      "files": {
+        "crate.fbx": 19612,
+        "crate.glb": 12292,
+        "crate.blend": 451832
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "4.0.2"
+      },
+      "preview_bytes": 200965
+    },
+    {
+      "id": "storage_bin",
+      "pivot": "center",
+      "target_longest_m": 0.55,
+      "dimensions_m": {
+        "x": 0.550000011920929,
+        "y": 0.3499999940395355,
+        "z": 0.4000000059604645,
+        "longest": 0.550000011920929
+      },
+      "bounds_m": {
+        "min": [
+          -0.2750000059604645,
+          -0.17499999701976776,
+          -0.20000000298023224
+        ],
+        "max": [
+          0.2750000059604645,
+          0.17499999701976776,
+          0.20000000298023224
+        ]
+      },
+      "vertices": 157,
+      "triangles": 310,
+      "materials": [
+        "Prop_storage_bin_body",
+        "Prop_storage_bin_lid",
+        "Prop_storage_bin_label"
+      ],
+      "material_base_colors": {
+        "Prop_storage_bin_body": [
+          0.4,
+          0.395,
+          0.365
+        ],
+        "Prop_storage_bin_lid": [
+          0.055,
+          0.09,
+          0.135
+        ],
+        "Prop_storage_bin_label": [
+          0.6,
+          0.565,
+          0.46
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "6887123b1a26ad802d89cb1bb3f073d6b0e3ad1481f4e4e4c3f4fdadaa972853",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "收纳箱小",
+      "category": "container",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.55,
+        "game_longest_dim_m": 0.55,
+        "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / U3（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.55,
+        "built_longest_m": 0.550000011920929,
+        "abs_error_m": 1.1920928910669204e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 600,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "body",
+          "name_zh": "箱体浅灰",
+          "linear_rgb": [
+            0.4,
+            0.395,
+            0.365
+          ],
+          "roughness": 0.62
+        },
+        {
+          "key": "lid",
+          "name_zh": "箱盖深蓝",
+          "linear_rgb": [
+            0.055,
+            0.09,
+            0.135
+          ],
+          "roughness": 0.58
+        },
+        {
+          "key": "label",
+          "name_zh": "标签米色",
+          "linear_rgb": [
+            0.6,
+            0.565,
+            0.46
+          ],
+          "roughness": 0.85
+        }
+      ],
+      "notes": "Body 0.540 x 0.340 (R 22 mm, 12-gon) from z 0 to 0.350; two ribs 0.546 x 0.346 (R 23 mm) at z 0.055-0.075 and 0.235-0.255; lid 0.550 x 0.350 (R 28 mm) from z 0.342 to 0.400, 5 mm overhang and an 8 mm step; front label plate 0.130 x 0.070 x 0.006 at y 0.169-0.175, z 0.130-0.200.  AABB 0.550 x 0.350 x 0.400, flat lid at z = 0.400.  Materials by face extent: label (beyond y 0.172 above z 0.128), lid (front face above z 0.3415), body elsewhere.",
+      "build_script": "models/storage_bin.py",
+      "preview": "previews/storage_bin_preview.png",
+      "files": {
+        "storage_bin.fbx": 21836,
+        "storage_bin.glb": 15852,
+        "storage_bin.blend": 475396
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "4.0.2"
+      },
+      "preview_bytes": 202160
+    },
+    {
+      "id": "crate_large",
+      "pivot": "center",
+      "target_longest_m": 0.8,
+      "dimensions_m": {
+        "x": 0.800000011920929,
+        "y": 0.5,
+        "z": 0.44999998807907104,
+        "longest": 0.800000011920929
+      },
+      "bounds_m": {
+        "min": [
+          -0.4000000059604645,
+          -0.25,
+          -0.22499999403953552
+        ],
+        "max": [
+          0.4000000059604645,
+          0.25,
+          0.22499999403953552
+        ]
+      },
+      "vertices": 148,
+      "triangles": 308,
+      "materials": [
+        "Prop_crate_large_wood",
+        "Prop_crate_large_trim"
+      ],
+      "material_base_colors": {
+        "Prop_crate_large_wood": [
+          0.25,
+          0.155,
+          0.075
+        ],
+        "Prop_crate_large_trim": [
+          0.135,
+          0.082,
+          0.038
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "8df72f40411fa46fc6d1587f657c85abfe02d53e43db640d499c722d43255f68",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "大收纳箱",
+      "category": "container",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.8,
+        "game_longest_dim_m": 0.8,
+        "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / U3（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.8,
+        "built_longest_m": 0.800000011920929,
+        "abs_error_m": 1.1920928910669204e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 700,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "wood",
+          "name_zh": "箱体旧木",
+          "linear_rgb": [
+            0.25,
+            0.155,
+            0.075
+          ],
+          "roughness": 0.8
+        },
+        {
+          "key": "trim",
+          "name_zh": "框条深木",
+          "linear_rgb": [
+            0.135,
+            0.082,
+            0.038
+          ],
+          "roughness": 0.76
+        }
+      ],
+      "notes": "Body 0.700 x 0.400 (R 12 mm) from z 0.030 to 0.412; four 0.055 square posts at (+/-0.3725, +/-0.2225) from z 0 to 0.450; lid 0.780 x 0.480 (R 14 mm) from z 0.412 to 0.450, recessed 10 mm from the post faces.  Two 0.660 x 0.020 x 0.040 battens per long side (y 0.195-0.215, z 0.115 and 0.300) and one 0.400 x 0.020 x 0.040 batten per short end (x 0.350-0.370, z 0.160).  AABB 0.800 x 0.500 x 0.450; lid plane and post tops coplanar at z 0.450.  Materials by face extent: trim = lid slab above z 0.4114, anything outside the body outline (|x| > 0.3545 or |y| > 0.2045) and the end battens; wood elsewhere.",
+      "build_script": "models/crate_large.py",
+      "preview": "previews/crate_large_preview.png",
+      "files": {
+        "crate_large.fbx": 20140,
+        "crate_large.glb": 13352,
+        "crate_large.blend": 453732
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "4.0.2"
+      },
+      "preview_bytes": 190330
+    },
+    {
+      "id": "cooler_box_large",
+      "pivot": "center",
+      "target_longest_m": 0.7,
+      "dimensions_m": {
+        "x": 0.699999988079071,
+        "y": 0.44999998807907104,
+        "z": 0.4000000059604645,
+        "longest": 0.699999988079071
+      },
+      "bounds_m": {
+        "min": [
+          -0.3499999940395355,
+          -0.22499999403953552,
+          -0.20000000298023224
+        ],
+        "max": [
+          0.3499999940395355,
+          0.22499999403953552,
+          0.20000000298023224
+        ]
+      },
+      "vertices": 104,
+      "triangles": 204,
+      "materials": [
+        "Prop_cooler_box_large_shell",
+        "Prop_cooler_box_large_lid",
+        "Prop_cooler_box_large_grip"
+      ],
+      "material_base_colors": {
+        "Prop_cooler_box_large_shell": [
+          0.045,
+          0.12,
+          0.15
+        ],
+        "Prop_cooler_box_large_lid": [
+          0.6,
+          0.615,
+          0.585
+        ],
+        "Prop_cooler_box_large_grip": [
+          0.03,
+          0.035,
+          0.038
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "3a295919af8df081c370263625e774c70f091e6694f7585de433de6948f15df9",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "大冷藏箱",
+      "category": "container",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 0.7,
+        "game_longest_dim_m": 0.7,
+        "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / U3（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 0.7,
+        "built_longest_m": 0.699999988079071,
+        "abs_error_m": 1.1920928910669204e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 600,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "shell",
+          "name_zh": "箱体青蓝",
+          "linear_rgb": [
+            0.045,
+            0.12,
+            0.15
+          ],
+          "roughness": 0.55
+        },
+        {
+          "key": "lid",
+          "name_zh": "盖面浅灰",
+          "linear_rgb": [
+            0.6,
+            0.615,
+            0.585
+          ],
+          "roughness": 0.6
+        },
+        {
+          "key": "grip",
+          "name_zh": "握槽深灰",
+          "linear_rgb": [
+            0.03,
+            0.035,
+            0.038
+          ],
+          "roughness": 0.72
+        }
+      ],
+      "notes": "Body 0.690 x 0.440 (R 32 mm, 16-gon) from z 0 to 0.352; lid 0.700 x 0.450 (R 40 mm) from z 0.345 to 0.400 (5 mm overhang, 7 mm step); two 0.160 x 0.060 x 0.030 grip recesses in the +/-X ends at z 0.190-0.250; a 0.180 x 0.055 x 0.012 handle recess in the lid top; two 0.060 x 0.028 latch clips on +Y at z 0.290-0.318, 4 mm proud of the body.  AABB 0.700 x 0.450 x 0.400, lid rim flat at z = 0.400.  Materials by face extent: dark grip/latch regions, lid above z 0.3444, shell elsewhere.",
+      "build_script": "models/cooler_box_large.py",
+      "preview": "previews/cooler_box_large_preview.png",
+      "files": {
+        "cooler_box_large.fbx": 20044,
+        "cooler_box_large.glb": 11460,
+        "cooler_box_large.blend": 469140
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "4.0.2"
+      },
+      "preview_bytes": 192250
+    },
+    {
+      "id": "picnic_bench",
+      "pivot": "center",
+      "target_longest_m": 1.2,
+      "dimensions_m": {
+        "x": 1.2000000476837158,
+        "y": 0.40000003576278687,
+        "z": 0.45000001788139343,
+        "longest": 1.2000000476837158
+      },
+      "bounds_m": {
+        "min": [
+          -0.6000000238418579,
+          -0.20000001788139343,
+          -0.22500000894069672
+        ],
+        "max": [
+          0.6000000238418579,
+          0.20000001788139343,
+          0.22500000894069672
+        ]
+      },
+      "vertices": 174,
+      "triangles": 360,
+      "materials": [
+        "Prop_picnic_bench_wood",
+        "Prop_picnic_bench_metal"
+      ],
+      "material_base_colors": {
+        "Prop_picnic_bench_wood": [
+          0.23,
+          0.16,
+          0.1
+        ],
+        "Prop_picnic_bench_metal": [
+          0.13,
+          0.14,
+          0.15
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "c5ee92b8ae3609218ae72ba7796076e534abe62d610d853ee409a6679dd9c3b6",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "野餐长凳",
+      "category": "furniture",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 1.2,
+        "game_longest_dim_m": 1.2,
+        "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / U3（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 1.2,
+        "built_longest_m": 1.2000000476837158,
+        "abs_error_m": 4.768371586472142e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 700,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "wood",
+          "name_zh": "凳面旧木",
+          "linear_rgb": [
+            0.23,
+            0.16,
+            0.1
+          ],
+          "roughness": 0.84
+        },
+        {
+          "key": "metal",
+          "name_zh": "凳腿深铁灰",
+          "linear_rgb": [
+            0.13,
+            0.14,
+            0.15
+          ],
+          "roughness": 0.5
+        }
+      ],
+      "notes": "Three seat slats 1.200 x 0.116 x 0.035 (R 6 mm) with their tops at z 0.450, centres at y -0.142 / 0 / +0.142 (26 mm through-gaps, outer edges at y +/-0.200); two end rails 0.060 x 0.370 x 0.050 at x +/-0.520, z 0.365-0.415; four 0.050 square legs at (+/-0.520, +/-0.160); two stretchers 1.020 x 0.050 x 0.045 at y +/-0.160, z 0.140-0.185.  AABB 1.200 x 0.400 x 0.450, seat plane flat at z 0.450.  Materials by face extent: metal below z 0.210 (legs and stretcher), wood above.",
+      "build_script": "models/picnic_bench.py",
+      "preview": "previews/picnic_bench_preview.png",
+      "files": {
+        "picnic_bench.fbx": 20684,
+        "picnic_bench.glb": 15408,
+        "picnic_bench.blend": 456800
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "4.0.2"
+      },
+      "preview_bytes": 155971
+    },
+    {
+      "id": "lounge_chair",
+      "pivot": "center",
+      "target_longest_m": 1.6,
+      "dimensions_m": {
+        "x": 1.600000023841858,
+        "y": 0.6000000238418579,
+        "z": 0.3499999940395355,
+        "longest": 1.600000023841858
+      },
+      "bounds_m": {
+        "min": [
+          -0.800000011920929,
+          -0.30000001192092896,
+          -0.17499999701976776
+        ],
+        "max": [
+          0.800000011920929,
+          0.30000001192092896,
+          0.17499999701976776
+        ]
+      },
+      "vertices": 175,
+      "triangles": 354,
+      "materials": [
+        "Prop_lounge_chair_canvas",
+        "Prop_lounge_chair_towel",
+        "Prop_lounge_chair_frame"
+      ],
+      "material_base_colors": {
+        "Prop_lounge_chair_canvas": [
+          0.3,
+          0.115,
+          0.06
+        ],
+        "Prop_lounge_chair_towel": [
+          0.62,
+          0.575,
+          0.47
+        ],
+        "Prop_lounge_chair_frame": [
+          0.55,
+          0.57,
+          0.58
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "19b82d31f89212288d5d3605f52dfbecfa2776220d4172446d54840f12d241e5",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "折叠躺椅",
+      "category": "furniture",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 1.6,
+        "game_longest_dim_m": 1.6,
+        "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / LEVEL_CONSTRUCTION.md 4 P1（真实三轴，无 CSV 行，布局里 yaw=90）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 1.6,
+        "built_longest_m": 1.600000023841858,
+        "abs_error_m": 2.3841857821338408e-08,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 900,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "canvas",
+          "name_zh": "躺面赭布",
+          "linear_rgb": [
+            0.3,
+            0.115,
+            0.06
+          ],
+          "roughness": 0.9
+        },
+        {
+          "key": "towel",
+          "name_zh": "头端米色布",
+          "linear_rgb": [
+            0.62,
+            0.575,
+            0.47
+          ],
+          "roughness": 0.92
+        },
+        {
+          "key": "frame",
+          "name_zh": "铝架银灰",
+          "linear_rgb": [
+            0.55,
+            0.57,
+            0.58
+          ],
+          "roughness": 0.35
+        }
+      ],
+      "notes": "Deck 1.600 x 0.600 x 0.040 (R 100 mm, 16-gon) from z 0.310 to 0.350, one flat plane on top.  Frame: two 28 mm rails along X at y +/-0.286, z 0.300, x +/-0.760; four 28 mm legs at (+/-0.660, +/-0.240) from z 0 to 0.322 (12 mm inside the deck); two 24 mm cross braces at x +/-0.660, z 0.220.  AABB 1.600 x 0.600 x 0.350 (the deck corners reach +/-0.800 / +/-0.300).  Materials by face extent: frame below z 0.308, pale towel colour for the 1 mm head-end plate (x -0.780..-0.550, y +/-0.260, top also z 0.350), canvas elsewhere.",
+      "build_script": "models/lounge_chair.py",
+      "preview": "previews/lounge_chair_preview.png",
+      "files": {
+        "lounge_chair.fbx": 23916,
+        "lounge_chair.glb": 12240,
+        "lounge_chair.blend": 477880
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "4.0.2"
+      },
+      "preview_bytes": 140699
+    },
+    {
+      "id": "stroller",
+      "pivot": "center",
+      "target_longest_m": 1.0,
+      "dimensions_m": {
+        "x": 1.0,
+        "y": 0.550000011920929,
+        "z": 1.0,
+        "longest": 1.0
+      },
+      "bounds_m": {
+        "min": [
+          -0.5,
+          -0.2750000059604645,
+          -0.5
+        ],
+        "max": [
+          0.5,
+          0.2750000059604645,
+          0.5
+        ]
+      },
+      "vertices": 438,
+      "triangles": 888,
+      "materials": [
+        "Prop_stroller_rubber",
+        "Prop_stroller_metal",
+        "Prop_stroller_basket",
+        "Prop_stroller_body",
+        "Prop_stroller_canopy"
+      ],
+      "material_base_colors": {
+        "Prop_stroller_rubber": [
+          0.028,
+          0.03,
+          0.032
+        ],
+        "Prop_stroller_metal": [
+          0.52,
+          0.545,
+          0.56
+        ],
+        "Prop_stroller_basket": [
+          0.055,
+          0.062,
+          0.07
+        ],
+        "Prop_stroller_body": [
+          0.56,
+          0.545,
+          0.49
+        ],
+        "Prop_stroller_canopy": [
+          0.115,
+          0.15,
+          0.12
+        ]
+      },
+      "mesh_checks": {
+        "non_manifold_edges": 0,
+        "zero_area_faces": 0,
+        "loose_vertices": 0,
+        "ngons": 0,
+        "duplicate_faces": 0,
+        "closed_shells": 1
+      },
+      "geometry_sha256": "8bde7f85b06089d4fbc66b0fb59500fc20ca3c8783d34cbeddad840e3b9f51b0",
+      "transforms": "identity (applied; geometry in metres)",
+      "name_zh": "婴儿车",
+      "category": "furniture",
+      "catalog": {
+        "source_csv": "Docs/Design/Maps/PicnicLawn/prop_catalog.csv",
+        "real_longest_dim_m": 1.0,
+        "game_longest_dim_m": 1.0,
+        "sourcing_hint": "model ourselves：PICNIC_CORNER_LAYOUT.md 4.1 / LEVEL_CONSTRUCTION.md 4 P1（真实三轴，无 CSV 行）",
+        "row_found": true
+      },
+      "dimension_check": {
+        "size_reference": "real",
+        "checked_against": "real_longest_dim_m",
+        "target_m": 1.0,
+        "built_longest_m": 1.0,
+        "abs_error_m": 0.0,
+        "csv_target_matches": true,
+        "csv_game_longest_matches": true,
+        "scale_vs_real_m": 1.0
+      },
+      "tri_budget": 900,
+      "within_budget": true,
+      "materials_declared": [
+        {
+          "key": "rubber",
+          "name_zh": "轮胎深灰",
+          "linear_rgb": [
+            0.028,
+            0.03,
+            0.032
+          ],
+          "roughness": 0.88
+        },
+        {
+          "key": "metal",
+          "name_zh": "车架银灰",
+          "linear_rgb": [
+            0.52,
+            0.545,
+            0.56
+          ],
+          "roughness": 0.38
+        },
+        {
+          "key": "basket",
+          "name_zh": "底篮深布",
+          "linear_rgb": [
+            0.055,
+            0.062,
+            0.07
+          ],
+          "roughness": 0.9
+        },
+        {
+          "key": "body",
+          "name_zh": "睡篮米白",
+          "linear_rgb": [
+            0.56,
+            0.545,
+            0.49
+          ],
+          "roughness": 0.85
+        },
+        {
+          "key": "canopy",
+          "name_zh": "顶篷灰绿",
+          "linear_rgb": [
+            0.115,
+            0.15,
+            0.12
+          ],
+          "roughness": 0.88
+        }
+      ],
+      "notes": "Wheels O 0.180 x 0.040 at (+/-0.410, +/-0.255, 0.090) - the four extremes give x +/-0.500, y +/-0.275, z 0.  Axles O 24 mm at x +/-0.410, z 0.090.  Chassis rails O 28 mm at y +/-0.190, z 0.190; four O 24 mm fork struts from (+/-0.410, +/-0.190, 0.190) to (+/-0.410, +/-0.245, 0.090).  Under-basket 0.520 x 0.400 x 0.165 at z 0.135-0.300 (solid dark block; its top is welded into the tub floor, and the rails run through its side walls).  Bassinet 0.620 x 0.420 (R 100 mm) at z 0.295-0.440 with a 0.560 x 0.360 cavity from z 0.345.  Canopy: half-cylinder R 200 mm, centre (-0.075, 0.430), 0.420 wide, top z 0.630.  Push bar: 32 mm tube from the rails (-0.400, +/-0.190, 0.190) up to (-0.460, +/-0.150, 0.980), plus a 0.300 m cross bar (O 32 mm 8-sided cylinder on Y) at z 0.984 whose 90-degree vertex puts the crown at exactly z = 1.000.  AABB 1.000 x 0.550 x 1.000.  Materials by face extent: rubber within 0.098 of a wheel axis while the face centre is outside |y| 0.230, metal below z 0.135 or beyond x -0.305 above z 0.430 (push bar), basket 0.135-0.300, canopy above z 0.4405, body between.",
+      "build_script": "models/stroller.py",
+      "preview": "previews/stroller_preview.png",
+      "files": {
+        "stroller.fbx": 39756,
+        "stroller.glb": 31320,
+        "stroller.blend": 551916
+      },
+      "export_settings": {
+        "fbx": {
+          "axis_forward": "-Z",
+          "axis_up": "Y",
+          "bake_space_transform": true,
+          "apply_scale_options": "FBX_SCALE_UNITS",
+          "mesh_smooth_type": "FACE"
+        },
+        "glb": {
+          "format": "GLB",
+          "export_yup": true,
+          "export_apply": true
+        },
+        "blender": "4.0.2"
+      },
+      "preview_bytes": 197885
     }
   ],
   "contact_sheet": "previews/contact_sheet.png",
   "limitations": [
     "占位美术，非最终风格",
-    "未在 Unity 中导入验证（本批次只做 Blender 端 FBX 回读验证）",
+    "未在 Unity 中导入验证（只做 Blender 端 FBX/GLB 回读验证）",
     "FBX 不携带材质贴图；Unity 端需按材质名重建 base colour",
-    "无 LOD、无 UV、无碰撞体"
+    "无 LOD、无 UV、无碰撞体",
+    "单张 previews/contact_sheet.png 只覆盖第一批 8 件；其余批次见 previews/contact_sheet_*.png",
+    "本清单由各 exports/<id>.manifest.json 汇总；每个条目的 export_settings.blender 是实际构建版本"
   ]
 }

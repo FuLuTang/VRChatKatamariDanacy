@@ -282,6 +282,12 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 }
 ```
 
+| 键 | 必填 | 含义 |
+|---|---|---|
+| `arena` | ○ | `{"id": "<格名>"}`：声明这份文档是**一格 arena**（多格测试场一次只注册一格）；`id` 必须等于所在目录名，Unity 导入器据此把几何放进 `LevelContent/<id>/` 并绑定该对象上的 `LevelArenaHost`；该格的 `box`/`ramp` 必须落在 `level.bounds` 内。 |
+
+`arena` 只用于多格测试场的单格文档（见 [physics_test_field/README.md](../Levels/physics_test_field/README.md) 与 `placement_core._check_arena`）；单关文档不写。
+
 `budget` 与 `expected` 是**从运行期契约抄下来的常量**（不是每家一套）：`planes/boxes/ramps` 来自 [TERRAIN_SUPPORT](../BallMotor/TERRAIN_SUPPORT.md) §3.2、§7.5 的容量与 `motor.AddPlane/AddBox/AddRamp` 的槽位；`expected` 来自 [PICNIC_CORNER_LEVEL_ONE](../StoryMode/PICNIC_CORNER_LEVEL_ONE.md) §3.4（110 件 / 412 u）。**校验器拿它当硬门**：第一关少一件就红，避免「重排时丢了一件没人发现」。
 
 ### 4.6 三条约定（这三条错了会静默出错）

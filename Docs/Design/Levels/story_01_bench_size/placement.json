@@ -1,0 +1,3872 @@
+{
+  "schema": "katamari.placement/0",
+  "level": {
+    "id": "story_01_bench_size",
+    "scene": "StoryLevel",
+    "units": "m",
+    "convention": "unity-y-up-left-handed-quat-xyzw",
+    "ballStart": [
+      -12.5,
+      0.15,
+      -12.5
+    ],
+    "playerSpawn": [
+      -14.5,
+      0.5,
+      -14.5
+    ],
+    "ballDiameterStart": 0.2997,
+    "ballDiameterMax": 2.2,
+    "groundY": 0.0,
+    "bounds": [
+      [
+        -19.4,
+        -19.4
+      ],
+      [
+        -6.0,
+        -6.0
+      ]
+    ],
+    "spawnClearanceM": 1.0,
+    "budget": {
+      "planes": 8,
+      "boxes": 8,
+      "ramps": 4,
+      "propSupports": 6,
+      "blocking": 6
+    },
+    "expected": {
+      "propCount": 127,
+      "valueUnits": 1500
+    },
+    "zones": [
+      {
+        "id": "alcove"
+      },
+      {
+        "id": "bed_south"
+      },
+      {
+        "id": "bed_top"
+      },
+      {
+        "id": "blanket_a"
+      },
+      {
+        "id": "blanket_north"
+      },
+      {
+        "id": "gate"
+      },
+      {
+        "id": "mid_lawn"
+      },
+      {
+        "id": "outer"
+      },
+      {
+        "id": "pocket"
+      },
+      {
+        "id": "table_top"
+      },
+      {
+        "id": "tree_corner"
+      },
+      {
+        "id": "west_park"
+      }
+    ]
+  },
+  "defs": [
+    {
+      "id": "acorn",
+      "kind": "nature",
+      "valueUnits": 1
+    },
+    {
+      "id": "apple",
+      "kind": "fruit",
+      "valueUnits": 4
+    },
+    {
+      "id": "banana",
+      "kind": "fruit",
+      "valueUnits": 4
+    },
+    {
+      "id": "beer_crate",
+      "kind": "container",
+      "valueUnits": 36
+    },
+    {
+      "id": "book_stack",
+      "kind": "furniture",
+      "valueUnits": 8
+    },
+    {
+      "id": "bottle_cap",
+      "kind": "debris",
+      "valueUnits": 1
+    },
+    {
+      "id": "bowl",
+      "kind": "tableware",
+      "valueUnits": 4
+    },
+    {
+      "id": "bread_slice",
+      "kind": "food",
+      "valueUnits": 4
+    },
+    {
+      "id": "cheese_slice",
+      "kind": "food",
+      "valueUnits": 1
+    },
+    {
+      "id": "cookie",
+      "kind": "food",
+      "valueUnits": 1
+    },
+    {
+      "id": "cooler_box",
+      "kind": "container",
+      "valueUnits": 16
+    },
+    {
+      "id": "cooler_box_large",
+      "kind": "container",
+      "valueUnits": 90
+    },
+    {
+      "id": "crate",
+      "kind": "container",
+      "valueUnits": 64
+    },
+    {
+      "id": "crate_large",
+      "kind": "container",
+      "valueUnits": 120
+    },
+    {
+      "id": "croissant",
+      "kind": "food",
+      "valueUnits": 4
+    },
+    {
+      "id": "cup",
+      "kind": "tableware",
+      "valueUnits": 4
+    },
+    {
+      "id": "fallen_leaf",
+      "kind": "nature",
+      "valueUnits": 1
+    },
+    {
+      "id": "folding_stool",
+      "kind": "furniture",
+      "valueUnits": 38
+    },
+    {
+      "id": "folding_table",
+      "kind": "furniture",
+      "valueUnits": 212
+    },
+    {
+      "id": "glass_bottle",
+      "kind": "drink",
+      "valueUnits": 4
+    },
+    {
+      "id": "grapes",
+      "kind": "fruit",
+      "valueUnits": 1
+    },
+    {
+      "id": "juice_carton",
+      "kind": "drink",
+      "valueUnits": 4
+    },
+    {
+      "id": "lounge_chair",
+      "kind": "furniture",
+      "valueUnits": 150
+    },
+    {
+      "id": "napkin",
+      "kind": "tableware",
+      "valueUnits": 4
+    },
+    {
+      "id": "orange",
+      "kind": "fruit",
+      "valueUnits": 4
+    },
+    {
+      "id": "paper_scrap",
+      "kind": "debris",
+      "valueUnits": 1
+    },
+    {
+      "id": "pear",
+      "kind": "fruit",
+      "valueUnits": 4
+    },
+    {
+      "id": "pebble",
+      "kind": "nature",
+      "valueUnits": 1
+    },
+    {
+      "id": "picnic_basket",
+      "kind": "container",
+      "valueUnits": 16
+    },
+    {
+      "id": "picnic_bench",
+      "kind": "furniture",
+      "valueUnits": 130
+    },
+    {
+      "id": "plate",
+      "kind": "tableware",
+      "valueUnits": 4
+    },
+    {
+      "id": "sandwich",
+      "kind": "food",
+      "valueUnits": 4
+    },
+    {
+      "id": "seed",
+      "kind": "nature",
+      "valueUnits": 1
+    },
+    {
+      "id": "serving_tray",
+      "kind": "structure",
+      "valueUnits": 12
+    },
+    {
+      "id": "small_potted_plant",
+      "kind": "garden",
+      "valueUnits": 6
+    },
+    {
+      "id": "soda_can",
+      "kind": "drink",
+      "valueUnits": 4
+    },
+    {
+      "id": "spoon",
+      "kind": "tableware",
+      "valueUnits": 4
+    },
+    {
+      "id": "storage_bin",
+      "kind": "container",
+      "valueUnits": 52
+    },
+    {
+      "id": "strawberry",
+      "kind": "fruit",
+      "valueUnits": 1
+    },
+    {
+      "id": "stroller",
+      "kind": "furniture",
+      "valueUnits": 32
+    },
+    {
+      "id": "toy_ball",
+      "kind": "toy",
+      "valueUnits": 4
+    },
+    {
+      "id": "watering_can",
+      "kind": "garden",
+      "valueUnits": 6
+    },
+    {
+      "id": "watermelon",
+      "kind": "fruit",
+      "valueUnits": 4
+    },
+    {
+      "id": "wood_plank",
+      "kind": "structure",
+      "valueUnits": 16
+    }
+  ],
+  "props": [
+    {
+      "itemId": "acorn_01",
+      "def": "acorn",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -14.2011,
+        0.015,
+        -11.8478
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.024,
+        0.03,
+        0.0228
+      ],
+      "absorbDiameterReq": 0.068,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "acorn_02",
+      "def": "acorn",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -13.6202,
+        0.015,
+        -11.8141
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.024,
+        0.03,
+        0.0228
+      ],
+      "absorbDiameterReq": 0.068,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "apple_01",
+      "def": "apple",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -7.9298,
+        0.0394,
+        -17.3045
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "apple_02",
+      "def": "apple",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -10.6142,
+        0.0394,
+        -16.593
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "apple_03",
+      "def": "apple",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -11.2339,
+        0.0394,
+        -16.6569
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "apple_04",
+      "def": "apple",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -9.1445,
+        0.2994,
+        -8.6038
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "apple_05",
+      "def": "apple",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -10.897,
+        0.2994,
+        -8.0093
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "apple_06",
+      "def": "apple",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -9.1348,
+        0.2994,
+        -7.3271
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.08,
+        0.0789,
+        0.078
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "banana_01",
+      "def": "banana",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -11.2197,
+        0.016,
+        -16.5593
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.18,
+        0.032,
+        0.0678
+      ],
+      "absorbDiameterReq": 0.195,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "banana_02",
+      "def": "banana",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -7.3139,
+        0.016,
+        -15.8485
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.18,
+        0.032,
+        0.0678
+      ],
+      "absorbDiameterReq": 0.195,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "banana_03",
+      "def": "banana",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -8.4893,
+        0.276,
+        -8.5418
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.18,
+        0.032,
+        0.0678
+      ],
+      "absorbDiameterReq": 0.195,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "banana_04",
+      "def": "banana",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -11.588,
+        0.276,
+        -7.9315
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.18,
+        0.032,
+        0.0678
+      ],
+      "absorbDiameterReq": 0.195,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "bottle_cap_01",
+      "def": "bottle_cap",
+      "kind": "debris",
+      "zone": "pocket",
+      "position": [
+        -13.5881,
+        0.0043,
+        -12.9149
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.03,
+        0.0087,
+        0.0285
+      ],
+      "absorbDiameterReq": 0.052,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "bowl_01",
+      "def": "bowl",
+      "kind": "tableware",
+      "zone": "bed_top",
+      "position": [
+        -11.5645,
+        0.29,
+        -9.179
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "absorbDiameterReq": 0.308,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "bowl_02",
+      "def": "bowl",
+      "kind": "tableware",
+      "zone": "table_top",
+      "position": [
+        -13.4504,
+        0.73,
+        -9.3349
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "stackedOn": "struct_folding_table_01",
+      "aabb": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "absorbDiameterReq": 0.308,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "bowl_03",
+      "def": "bowl",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -14.7292,
+        0.03,
+        -13.4171
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "absorbDiameterReq": 0.308,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "bowl_04",
+      "def": "bowl",
+      "kind": "tableware",
+      "zone": "alcove",
+      "position": [
+        -6.5057,
+        0.03,
+        -8.4176
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "absorbDiameterReq": 0.308,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "bread_slice_01",
+      "def": "bread_slice",
+      "kind": "food",
+      "zone": "bed_top",
+      "position": [
+        -8.4722,
+        0.2671,
+        -7.3739
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.0996,
+        0.0143,
+        0.1
+      ],
+      "absorbDiameterReq": 0.14,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "bread_slice_02",
+      "def": "bread_slice",
+      "kind": "food",
+      "zone": "mid_lawn",
+      "position": [
+        -13.3152,
+        0.0072,
+        -13.3896
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0996,
+        0.0143,
+        0.1
+      ],
+      "absorbDiameterReq": 0.14,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "bread_slice_03",
+      "def": "bread_slice",
+      "kind": "food",
+      "zone": "mid_lawn",
+      "position": [
+        -11.2906,
+        0.0072,
+        -12.7585
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0996,
+        0.0143,
+        0.1
+      ],
+      "absorbDiameterReq": 0.14,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "bread_slice_04",
+      "def": "bread_slice",
+      "kind": "food",
+      "zone": "outer",
+      "position": [
+        -9.5497,
+        0.0072,
+        -18.5782
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0996,
+        0.0143,
+        0.1
+      ],
+      "absorbDiameterReq": 0.14,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "bread_slice_05",
+      "def": "bread_slice",
+      "kind": "food",
+      "zone": "outer",
+      "position": [
+        -16.2539,
+        0.0072,
+        -18.8928
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0996,
+        0.0143,
+        0.1
+      ],
+      "absorbDiameterReq": 0.14,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "cheese_slice_01",
+      "def": "cheese_slice",
+      "kind": "food",
+      "zone": "pocket",
+      "position": [
+        -11.729,
+        0.004,
+        -13.4975
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.06,
+        0.008,
+        0.05
+      ],
+      "absorbDiameterReq": 0.077,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "cookie_01",
+      "def": "cookie",
+      "kind": "food",
+      "zone": "pocket",
+      "position": [
+        -11.0423,
+        0.0047,
+        -12.3599
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.07,
+        0.0094,
+        0.0689
+      ],
+      "absorbDiameterReq": 0.095,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "cookie_02",
+      "def": "cookie",
+      "kind": "food",
+      "zone": "pocket",
+      "position": [
+        -14.2294,
+        0.0047,
+        -11.7533
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.07,
+        0.0094,
+        0.0689
+      ],
+      "absorbDiameterReq": 0.095,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "croissant_01",
+      "def": "croissant",
+      "kind": "food",
+      "zone": "table_top",
+      "position": [
+        -13.4425,
+        0.7313,
+        -9.0759
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "stackedOn": "struct_folding_table_01",
+      "aabb": [
+        0.0688,
+        0.0626,
+        0.12
+      ],
+      "absorbDiameterReq": 0.215,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "croissant_02",
+      "def": "croissant",
+      "kind": "food",
+      "zone": "mid_lawn",
+      "position": [
+        -12.0007,
+        0.0313,
+        -11.4824
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0688,
+        0.0626,
+        0.12
+      ],
+      "absorbDiameterReq": 0.215,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "croissant_03",
+      "def": "croissant",
+      "kind": "food",
+      "zone": "mid_lawn",
+      "position": [
+        -11.2458,
+        0.0313,
+        -11.5207
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0688,
+        0.0626,
+        0.12
+      ],
+      "absorbDiameterReq": 0.215,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "croissant_04",
+      "def": "croissant",
+      "kind": "food",
+      "zone": "outer",
+      "position": [
+        -10.3953,
+        0.0313,
+        -18.5407
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0688,
+        0.0626,
+        0.12
+      ],
+      "absorbDiameterReq": 0.215,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "croissant_05",
+      "def": "croissant",
+      "kind": "food",
+      "zone": "outer",
+      "position": [
+        -15.4032,
+        0.0313,
+        -18.897
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0688,
+        0.0626,
+        0.12
+      ],
+      "absorbDiameterReq": 0.215,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "cup_01",
+      "def": "cup",
+      "kind": "tableware",
+      "zone": "bed_top",
+      "position": [
+        -10.9633,
+        0.305,
+        -6.7212
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.075,
+        0.09,
+        0.075
+      ],
+      "absorbDiameterReq": 0.213,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "cup_02",
+      "def": "cup",
+      "kind": "tableware",
+      "zone": "table_top",
+      "position": [
+        -13.2877,
+        0.745,
+        -9.3186
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "stackedOn": "struct_folding_table_01",
+      "aabb": [
+        0.075,
+        0.09,
+        0.075
+      ],
+      "absorbDiameterReq": 0.213,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "cup_03",
+      "def": "cup",
+      "kind": "tableware",
+      "zone": "table_top",
+      "position": [
+        -13.2975,
+        0.745,
+        -9.0787
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "stackedOn": "struct_folding_table_01",
+      "aabb": [
+        0.075,
+        0.09,
+        0.075
+      ],
+      "absorbDiameterReq": 0.213,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "cup_04",
+      "def": "cup",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -11.961,
+        0.045,
+        -13.4051
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.075,
+        0.09,
+        0.075
+      ],
+      "absorbDiameterReq": 0.213,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "cup_05",
+      "def": "cup",
+      "kind": "tableware",
+      "zone": "outer",
+      "position": [
+        -11.2333,
+        0.045,
+        -18.5412
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.075,
+        0.09,
+        0.075
+      ],
+      "absorbDiameterReq": 0.213,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "fallen_leaf_01",
+      "def": "fallen_leaf",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -14.2467,
+        0.0006,
+        -12.9529
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.06,
+        0.0011,
+        0.09
+      ],
+      "absorbDiameterReq": 0.048,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "gate_basket_01",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -7.775,
+        0.1106,
+        -10.7
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.829,
+      "absorbable": true,
+      "valueUnits": 16
+    },
+    {
+      "itemId": "gate_basket_02",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -7.325,
+        0.1106,
+        -10.7
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.829,
+      "absorbable": true,
+      "valueUnits": 16
+    },
+    {
+      "itemId": "gate_basket_03",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -6.875,
+        0.1106,
+        -10.7
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.829,
+      "absorbable": true,
+      "valueUnits": 16
+    },
+    {
+      "itemId": "gate_cooler_01",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -6.325,
+        0.15,
+        -10.7
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 1.033,
+      "absorbable": true,
+      "valueUnits": 16
+    },
+    {
+      "itemId": "glass_bottle_01",
+      "def": "glass_bottle",
+      "kind": "drink",
+      "zone": "alcove",
+      "position": [
+        -7.0705,
+        0.14,
+        -8.9151
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.07,
+        0.28,
+        0.07
+      ],
+      "absorbDiameterReq": 0.297,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "grapes_01",
+      "def": "grapes",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -7.9134,
+        0.0299,
+        -15.9323
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.06,
+        0.0597,
+        0.022
+      ],
+      "absorbDiameterReq": 0.115,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "grapes_02",
+      "def": "grapes",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -10.5669,
+        0.0299,
+        -15.1552
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.06,
+        0.0597,
+        0.022
+      ],
+      "absorbDiameterReq": 0.115,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "grapes_03",
+      "def": "grapes",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -7.9571,
+        0.0299,
+        -14.4393
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.06,
+        0.0597,
+        0.022
+      ],
+      "absorbDiameterReq": 0.115,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "grapes_04",
+      "def": "grapes",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -7.2808,
+        0.0299,
+        -14.5062
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.06,
+        0.0597,
+        0.022
+      ],
+      "absorbDiameterReq": 0.115,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "grapes_05",
+      "def": "grapes",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -9.755,
+        0.2898,
+        -9.777
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.06,
+        0.0597,
+        0.022
+      ],
+      "absorbDiameterReq": 0.115,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "grapes_06",
+      "def": "grapes",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -9.6733,
+        0.2898,
+        -8.5466
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.06,
+        0.0597,
+        0.022
+      ],
+      "absorbDiameterReq": 0.115,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "grapes_07",
+      "def": "grapes",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -10.3256,
+        0.2898,
+        -7.9374
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.06,
+        0.0597,
+        0.022
+      ],
+      "absorbDiameterReq": 0.115,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "grapes_08",
+      "def": "grapes",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -9.7355,
+        0.2898,
+        -7.3317
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.06,
+        0.0597,
+        0.022
+      ],
+      "absorbDiameterReq": 0.115,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "juice_carton_01",
+      "def": "juice_carton",
+      "kind": "drink",
+      "zone": "bed_top",
+      "position": [
+        -10.35,
+        0.31,
+        -10.3788
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.06,
+        0.1,
+        0.06
+      ],
+      "absorbDiameterReq": 0.19,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "juice_carton_02",
+      "def": "juice_carton",
+      "kind": "drink",
+      "zone": "mid_lawn",
+      "position": [
+        -10.5871,
+        0.05,
+        -13.4461
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.06,
+        0.1,
+        0.06
+      ],
+      "absorbDiameterReq": 0.19,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "juice_carton_03",
+      "def": "juice_carton",
+      "kind": "drink",
+      "zone": "outer",
+      "position": [
+        -13.711,
+        0.05,
+        -18.9526
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.06,
+        0.1,
+        0.06
+      ],
+      "absorbDiameterReq": 0.19,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "juice_carton_04",
+      "def": "juice_carton",
+      "kind": "drink",
+      "zone": "outer",
+      "position": [
+        -12.9199,
+        0.05,
+        -18.533
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.06,
+        0.1,
+        0.06
+      ],
+      "absorbDiameterReq": 0.19,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "napkin_01",
+      "def": "napkin",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -9.892,
+        0.007,
+        -11.5082
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.014,
+        0.15
+      ],
+      "absorbDiameterReq": 0.182,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "napkin_02",
+      "def": "napkin",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -10.6058,
+        0.007,
+        -11.5483
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.014,
+        0.15
+      ],
+      "absorbDiameterReq": 0.182,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "napkin_03",
+      "def": "napkin",
+      "kind": "tableware",
+      "zone": "outer",
+      "position": [
+        -18.5721,
+        0.007,
+        -16.11
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.014,
+        0.15
+      ],
+      "absorbDiameterReq": 0.182,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "napkin_04",
+      "def": "napkin",
+      "kind": "tableware",
+      "zone": "outer",
+      "position": [
+        -18.9092,
+        0.007,
+        -15.2057
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.014,
+        0.15
+      ],
+      "absorbDiameterReq": 0.182,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "napkin_05",
+      "def": "napkin",
+      "kind": "tableware",
+      "zone": "alcove",
+      "position": [
+        -7.6059,
+        0.007,
+        -7.8479
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.014,
+        0.15
+      ],
+      "absorbDiameterReq": 0.182,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "orange_01",
+      "def": "orange",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -11.2476,
+        0.0387,
+        -15.2058
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "orange_02",
+      "def": "orange",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -7.2335,
+        0.0387,
+        -14.4098
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "orange_03",
+      "def": "orange",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -10.6011,
+        0.0387,
+        -18.0274
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "orange_04",
+      "def": "orange",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -11.5818,
+        0.2987,
+        -6.7585
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "orange_05",
+      "def": "orange",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -10.9455,
+        0.2987,
+        -10.4006
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "orange_06",
+      "def": "orange",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -9.1295,
+        0.2987,
+        -9.8203
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.08,
+        0.0774,
+        0.08
+      ],
+      "absorbDiameterReq": 0.211,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "paper_scrap_01",
+      "def": "paper_scrap",
+      "kind": "debris",
+      "zone": "pocket",
+      "position": [
+        -11.0713,
+        0.0059,
+        -13.4756
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1,
+        0.0118,
+        0.0741
+      ],
+      "absorbDiameterReq": 0.119,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "pear_01",
+      "def": "pear",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -9.9083,
+        0.045,
+        -18.0789
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "absorbDiameterReq": 0.172,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "pear_02",
+      "def": "pear",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -9.9146,
+        0.045,
+        -17.9955
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "absorbDiameterReq": 0.172,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "pear_03",
+      "def": "pear",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -10.3527,
+        0.305,
+        -6.7587
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "absorbDiameterReq": 0.172,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "pear_04",
+      "def": "pear",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -9.7154,
+        0.305,
+        -10.4019
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "absorbDiameterReq": 0.172,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "pear_05",
+      "def": "pear",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -9.7007,
+        0.305,
+        -8.6234
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.055,
+        0.09,
+        0.0536
+      ],
+      "absorbDiameterReq": 0.172,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "pebble_01",
+      "def": "pebble",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -13.5532,
+        0.0106,
+        -14.041
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.04,
+        0.0213,
+        0.0293
+      ],
+      "absorbDiameterReq": 0.078,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "plate_01",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "bed_top",
+      "position": [
+        -8.4661,
+        0.2725,
+        -9.815
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.302,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "plate_02",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -14.66,
+        0.0125,
+        -12.1141
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.302,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "plate_03",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -14.0545,
+        0.0125,
+        -13.4001
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.302,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "plate_04",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "outer",
+      "position": [
+        -18.4937,
+        0.0125,
+        -13.3661
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.302,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "sandwich_01",
+      "def": "sandwich",
+      "kind": "food",
+      "zone": "table_top",
+      "position": [
+        -12.782,
+        0.72,
+        -9.1823
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "stackedOn": "struct_folding_table_01",
+      "aabb": [
+        0.12,
+        0.04,
+        0.09
+      ],
+      "absorbDiameterReq": 0.202,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "sandwich_02",
+      "def": "sandwich",
+      "kind": "food",
+      "zone": "mid_lawn",
+      "position": [
+        -14.0155,
+        0.02,
+        -12.1703
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.12,
+        0.04,
+        0.09
+      ],
+      "absorbDiameterReq": 0.202,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "sandwich_03",
+      "def": "sandwich",
+      "kind": "food",
+      "zone": "outer",
+      "position": [
+        -18.9529,
+        0.02,
+        -13.3594
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.12,
+        0.04,
+        0.09
+      ],
+      "absorbDiameterReq": 0.202,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "sandwich_04",
+      "def": "sandwich",
+      "kind": "food",
+      "zone": "outer",
+      "position": [
+        -17.1122,
+        0.02,
+        -18.867
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.12,
+        0.04,
+        0.09
+      ],
+      "absorbDiameterReq": 0.202,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "seed_01",
+      "def": "seed",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -11.668,
+        0.004,
+        -11.2131
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0112,
+        0.008,
+        0.02
+      ],
+      "absorbDiameterReq": 0.032,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "seed_02",
+      "def": "seed",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -13.6462,
+        0.004,
+        -12.8888
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0112,
+        0.008,
+        0.02
+      ],
+      "absorbDiameterReq": 0.032,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "seed_03",
+      "def": "seed",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -13.5642,
+        0.004,
+        -11.7847
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0112,
+        0.008,
+        0.02
+      ],
+      "absorbDiameterReq": 0.032,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "small_potted_plant_01",
+      "def": "small_potted_plant",
+      "kind": "garden",
+      "zone": "outer",
+      "position": [
+        -18.4898,
+        0.11,
+        -14.2792
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "absorbDiameterReq": 0.431,
+      "absorbable": true,
+      "valueUnits": 6
+    },
+    {
+      "itemId": "small_potted_plant_02",
+      "def": "small_potted_plant",
+      "kind": "garden",
+      "zone": "alcove",
+      "position": [
+        -6.5367,
+        0.11,
+        -7.3439
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "absorbDiameterReq": 0.431,
+      "absorbable": true,
+      "valueUnits": 6
+    },
+    {
+      "itemId": "soda_can_01",
+      "def": "soda_can",
+      "kind": "drink",
+      "zone": "table_top",
+      "position": [
+        -13.1703,
+        0.76,
+        -9.3152
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "stackedOn": "struct_folding_table_01",
+      "aabb": [
+        0.0661,
+        0.12,
+        0.0661
+      ],
+      "absorbDiameterReq": 0.216,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "soda_can_02",
+      "def": "soda_can",
+      "kind": "drink",
+      "zone": "mid_lawn",
+      "position": [
+        -11.2837,
+        0.06,
+        -13.3894
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0661,
+        0.12,
+        0.0661
+      ],
+      "absorbDiameterReq": 0.216,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "soda_can_03",
+      "def": "soda_can",
+      "kind": "drink",
+      "zone": "mid_lawn",
+      "position": [
+        -13.2982,
+        0.06,
+        -11.5334
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0661,
+        0.12,
+        0.0661
+      ],
+      "absorbDiameterReq": 0.216,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "soda_can_04",
+      "def": "soda_can",
+      "kind": "drink",
+      "zone": "outer",
+      "position": [
+        -14.5463,
+        0.06,
+        -18.9152
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0661,
+        0.12,
+        0.0661
+      ],
+      "absorbDiameterReq": 0.216,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "soda_can_05",
+      "def": "soda_can",
+      "kind": "drink",
+      "zone": "outer",
+      "position": [
+        -12.0554,
+        0.06,
+        -18.5031
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0661,
+        0.12,
+        0.0661
+      ],
+      "absorbDiameterReq": 0.216,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "spoon_01",
+      "def": "spoon",
+      "kind": "tableware",
+      "zone": "bed_top",
+      "position": [
+        -10.9141,
+        0.2675,
+        -9.1681
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.035,
+        0.015,
+        0.18
+      ],
+      "absorbDiameterReq": 0.122,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "spoon_02",
+      "def": "spoon",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -11.3005,
+        0.0075,
+        -12.1572
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.035,
+        0.015,
+        0.18
+      ],
+      "absorbDiameterReq": 0.122,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "spoon_03",
+      "def": "spoon",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -11.925,
+        0.0075,
+        -11.5317
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.035,
+        0.015,
+        0.18
+      ],
+      "absorbDiameterReq": 0.122,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "spoon_04",
+      "def": "spoon",
+      "kind": "tableware",
+      "zone": "alcove",
+      "position": [
+        -7.6156,
+        0.0075,
+        -6.7447
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.035,
+        0.015,
+        0.18
+      ],
+      "absorbDiameterReq": 0.122,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "strawberry_01",
+      "def": "strawberry",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -8.6132,
+        0.02,
+        -17.3282
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "absorbDiameterReq": 0.1,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "strawberry_02",
+      "def": "strawberry",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -7.2401,
+        0.02,
+        -15.9222
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "absorbDiameterReq": 0.1,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "strawberry_03",
+      "def": "strawberry",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -9.8765,
+        0.02,
+        -16.6322
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "absorbDiameterReq": 0.1,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "strawberry_04",
+      "def": "strawberry",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -7.3255,
+        0.02,
+        -14.4345
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "absorbDiameterReq": 0.1,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "strawberry_05",
+      "def": "strawberry",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -10.9782,
+        0.28,
+        -9.2312
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "absorbDiameterReq": 0.1,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "strawberry_06",
+      "def": "strawberry",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -11.5013,
+        0.28,
+        -6.7322
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "absorbDiameterReq": 0.1,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "strawberry_07",
+      "def": "strawberry",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -8.4705,
+        0.28,
+        -8.6191
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "absorbDiameterReq": 0.1,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "strawberry_08",
+      "def": "strawberry",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -10.9761,
+        0.28,
+        -9.175
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.0362,
+        0.04,
+        0.0358
+      ],
+      "absorbDiameterReq": 0.1,
+      "absorbable": true,
+      "valueUnits": 1
+    },
+    {
+      "itemId": "struct_beer_crate_01",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "bed_south",
+      "position": [
+        -12.2,
+        0.14,
+        -11.2
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.863,
+      "absorbable": true,
+      "valueUnits": 36
+    },
+    {
+      "itemId": "struct_beer_crate_02",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "bed_south",
+      "position": [
+        -10.3,
+        0.14,
+        -11.2
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.863,
+      "absorbable": true,
+      "valueUnits": 36
+    },
+    {
+      "itemId": "struct_bench_01",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "blanket_north",
+      "position": [
+        -12.6,
+        0.225,
+        -16.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.604,
+      "absorbable": true,
+      "valueUnits": 130
+    },
+    {
+      "itemId": "struct_book_stack_01",
+      "def": "book_stack",
+      "kind": "furniture",
+      "zone": "pocket",
+      "position": [
+        -11.3,
+        0.045,
+        -13.6
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.26,
+        0.09,
+        0.19
+      ],
+      "absorbDiameterReq": 0.44,
+      "absorbable": true,
+      "valueUnits": 8
+    },
+    {
+      "itemId": "struct_cooler_large_01",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "mid_lawn",
+      "position": [
+        -16.2,
+        0.2,
+        -12.85
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "valueUnits": 90
+    },
+    {
+      "itemId": "struct_crate_01",
+      "def": "crate",
+      "kind": "container",
+      "zone": "bed_south",
+      "position": [
+        -11.0,
+        0.2,
+        -11.2
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.224,
+      "absorbable": true,
+      "valueUnits": 64
+    },
+    {
+      "itemId": "struct_crate_02",
+      "def": "crate",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -16.1,
+        0.2,
+        -15.8
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.224,
+      "absorbable": true,
+      "valueUnits": 64
+    },
+    {
+      "itemId": "struct_crate_large_01",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -17.85,
+        0.225,
+        -14.1
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.509,
+      "absorbable": true,
+      "valueUnits": 120
+    },
+    {
+      "itemId": "struct_folding_table_01",
+      "def": "folding_table",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -13.1,
+        0.35,
+        -9.2
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.0,
+        0.7,
+        0.6
+      ],
+      "absorbDiameterReq": 2.002,
+      "absorbable": true,
+      "valueUnits": 212
+    },
+    {
+      "itemId": "struct_lounge_chair_01",
+      "def": "lounge_chair",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -12.3,
+        0.175,
+        -9.6
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.0,
+        0.707107
+      ],
+      "aabb": [
+        1.6,
+        0.35,
+        0.6
+      ],
+      "absorbDiameterReq": 1.858,
+      "absorbable": true,
+      "valueUnits": 150
+    },
+    {
+      "itemId": "struct_plank_01",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "mid_lawn",
+      "position": [
+        -14.3,
+        0.0125,
+        -12.45
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.616,
+      "absorbable": true,
+      "valueUnits": 16
+    },
+    {
+      "itemId": "struct_plank_02",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "bed_top",
+      "position": [
+        -9.3,
+        0.2725,
+        -7.6
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.616,
+      "absorbable": true,
+      "valueUnits": 16
+    },
+    {
+      "itemId": "struct_stool_01",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -14.55,
+        0.16,
+        -10.55
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.949,
+      "absorbable": true,
+      "valueUnits": 38
+    },
+    {
+      "itemId": "struct_storage_01",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -14.75,
+        0.2,
+        -9.05
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.137,
+      "absorbable": true,
+      "valueUnits": 52
+    },
+    {
+      "itemId": "struct_stroller_01",
+      "def": "stroller",
+      "kind": "furniture",
+      "zone": "tree_corner",
+      "position": [
+        -17.9,
+        0.5,
+        -16.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.0,
+        1.0,
+        0.55
+      ],
+      "absorbDiameterReq": 2.19,
+      "absorbable": true,
+      "valueUnits": 32
+    },
+    {
+      "itemId": "struct_tray_01",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "blanket_a",
+      "position": [
+        -9.9,
+        0.02,
+        -15.1
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.528,
+      "absorbable": true,
+      "valueUnits": 12
+    },
+    {
+      "itemId": "struct_tray_02",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "bed_top",
+      "position": [
+        -10.6,
+        0.28,
+        -9.1
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.528,
+      "absorbable": true,
+      "valueUnits": 12
+    },
+    {
+      "itemId": "toy_ball_01",
+      "def": "toy_ball",
+      "kind": "toy",
+      "zone": "mid_lawn",
+      "position": [
+        -9.9328,
+        0.075,
+        -12.8024
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "absorbDiameterReq": 0.401,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "toy_ball_02",
+      "def": "toy_ball",
+      "kind": "toy",
+      "zone": "mid_lawn",
+      "position": [
+        -10.5975,
+        0.075,
+        -12.7565
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "absorbDiameterReq": 0.401,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "toy_ball_03",
+      "def": "toy_ball",
+      "kind": "toy",
+      "zone": "outer",
+      "position": [
+        -18.9596,
+        0.075,
+        -16.1209
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "absorbDiameterReq": 0.401,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "toy_ball_04",
+      "def": "toy_ball",
+      "kind": "toy",
+      "zone": "outer",
+      "position": [
+        -18.5467,
+        0.075,
+        -15.1928
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "absorbDiameterReq": 0.401,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "watering_can_01",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "outer",
+      "position": [
+        -18.9071,
+        0.0896,
+        -14.2915
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.458,
+      "absorbable": true,
+      "valueUnits": 6
+    },
+    {
+      "itemId": "watering_can_02",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "alcove",
+      "position": [
+        -7.6084,
+        0.0896,
+        -8.9115
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.458,
+      "absorbable": true,
+      "valueUnits": 6
+    },
+    {
+      "itemId": "watermelon_01",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -11.1961,
+        0.11,
+        -18.0165
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.671,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "watermelon_02",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -7.2344,
+        0.11,
+        -17.3709
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.671,
+      "absorbable": true,
+      "valueUnits": 4
+    },
+    {
+      "itemId": "watermelon_03",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "bed_top",
+      "position": [
+        -11.5711,
+        0.37,
+        -10.3924
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "support": "flower_bed",
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.671,
+      "absorbable": true,
+      "valueUnits": 4
+    }
+  ],
+  "structures": [
+    {
+      "id": "boundary_x0",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -19.4,
+        0.6,
+        -12.7
+      ],
+      "size": [
+        13.4,
+        0.04,
+        1.2
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        -0.707107,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false
+    },
+    {
+      "id": "boundary_x1",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -6.0,
+        0.6,
+        -12.7
+      ],
+      "size": [
+        13.4,
+        0.04,
+        1.2
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.707107,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false
+    },
+    {
+      "id": "boundary_z0",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -12.7,
+        0.6,
+        -19.4
+      ],
+      "size": [
+        13.4,
+        0.04,
+        1.2
+      ],
+      "rotationQuat": [
+        0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false
+    },
+    {
+      "id": "boundary_z1",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -12.7,
+        0.6,
+        -6.0
+      ],
+      "size": [
+        13.4,
+        0.04,
+        1.2
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false
+    },
+    {
+      "id": "flower_bed",
+      "kind": "shell",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -10.0,
+        0.13,
+        -8.55
+      ],
+      "size": [
+        4.0,
+        0.26,
+        4.9
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true
+    },
+    {
+      "id": "ground",
+      "kind": "lawn",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        -12.7,
+        0.0,
+        -12.7
+      ],
+      "size": [
+        13.4,
+        0.04,
+        13.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "arena floor: this is the level's ground plane"
+    },
+    {
+      "id": "ramp_to_bed",
+      "kind": "ramp",
+      "role": "ramp",
+      "shape": "box",
+      "center": [
+        -9.6,
+        0.1497,
+        -11.6907
+      ],
+      "size": [
+        0.35,
+        0.04,
+        1.3984
+      ],
+      "rotationQuat": [
+        -0.093355,
+        0.0,
+        0.0,
+        0.995633
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "meets": "flower_bed",
+      "notes": "草坪→花圃台 0.26 南沿；10.7°，坡长 1.400 m，水平 1.374 m"
+    },
+    {
+      "id": "ramp_to_table",
+      "kind": "ramp",
+      "role": "ramp",
+      "shape": "box",
+      "center": [
+        -13.1,
+        0.3673,
+        -10.116
+      ],
+      "size": [
+        0.35,
+        0.04,
+        1.3996
+      ],
+      "rotationQuat": [
+        -0.258891,
+        0.0,
+        0.0,
+        0.965907
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true,
+      "notes": "草坪→折叠桌 0.70 台面；30.0°，坡长 1.400 m，水平 1.212 m"
+    },
+    {
+      "id": "shell_signpost",
+      "kind": "shell",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -13.2,
+        0.6,
+        -6.6
+      ],
+      "size": [
+        0.45,
+        1.2,
+        0.12
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true
+    },
+    {
+      "id": "shell_tree_mound",
+      "kind": "shell",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -18.75,
+        0.07,
+        -18.75
+      ],
+      "size": [
+        2.5,
+        0.14,
+        2.5
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true
+    },
+    {
+      "id": "shell_tree_trunk",
+      "kind": "shell",
+      "role": "box",
+      "shape": "box",
+      "center": [
+        -18.75,
+        4.5,
+        -18.75
+      ],
+      "size": [
+        0.5,
+        9.0,
+        0.5
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "box",
+      "absorbable": false,
+      "support": true
+    }
+  ],
+  "cameras": [
+    {
+      "id": "ball_eye",
+      "type": "perspective",
+      "location": [
+        -12.5,
+        0.35,
+        -14.1
+      ],
+      "target": [
+        -10.5,
+        0.35,
+        -11.5
+      ],
+      "lens": 30
+    },
+    {
+      "id": "overview_3q",
+      "type": "perspective",
+      "location": [
+        -18.4,
+        4.2,
+        -23.4
+      ],
+      "target": [
+        -12.7,
+        0.35,
+        -12.7
+      ],
+      "lens": 45
+    },
+    {
+      "id": "top",
+      "type": "ortho_top",
+      "location": [
+        -12.7,
+        14.0,
+        -12.7
+      ],
+      "target": [
+        -12.7,
+        0.0,
+        -12.7
+      ],
+      "coverage_m": 14.07
+    }
+  ],
+  "renderPresets": [
+    {
+      "id": "ball_eye",
+      "camera": "ball_eye",
+      "engine": "EEVEE",
+      "res": [
+        1280,
+        720
+      ]
+    },
+    {
+      "id": "overview",
+      "camera": "overview_3q",
+      "engine": "EEVEE",
+      "res": [
+        1280,
+        720
+      ]
+    },
+    {
+      "id": "plan",
+      "camera": "top",
+      "engine": "WORKBENCH",
+      "res": [
+        1280,
+        720
+      ]
+    }
+  ]
+}

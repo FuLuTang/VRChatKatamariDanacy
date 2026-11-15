@@ -2,102 +2,278 @@ import inspect
 import math
 import unittest
 
-from Docs.Design.BallLayers.FollowRig.follow_rig import FollowRig
+from Docs.Design.BallLayers.FollowRig.follow_rig import FollowRig, try_update
 
 
 def _wrap_shortest(target, current):
     return (target - current + 180.0) % 360.0 - 180.0
 
 
+# The motor's committed FollowRigMath inputs (KatamariBallMotor.cs:137-143), written as
+# literals on purpose: a changed default must fail a test instead of silently moving the
+# expectation. Order is the C# argument order:
+# eye_base_up_m, eye_up_per_radius, eye_up_min_m, eye_up_max_m,
+# eye_base_back_m, eye_back_per_radius, eye_max_back_m.
+MOTOR_EYE = (0.55, 2.4, 0.1, 8.0, 0.75, 2.2, 8.0)
+
+
+def _step(rig, ball, radius, yaw, dt, *, reset=False, eye=MOTOR_EYE):
+    return rig.update(ball, radius, yaw, dt, *eye, reset=reset)
+
+
 class FollowRigTests(unittest.TestCase):
     def test_heading_wrap_uses_short_arc_in_both_directions(self):
+        # 359 -> 1 is a +2 deg arc, not a -358 deg one. The first sample snaps, so dt
+        # only matters for the second: alpha = 1 - exp(-2*pi*1*0.05) = 0.269597, giving
+        # a 2 * 0.269597 = 0.5392 deg step.
         forward = FollowRig(height_filter_hz=0.0, yaw_filter_hz=1.0)
-        first = forward.update((0.0, 0.0, 0.0), 359.0, 0.01, 1.0, 0.4, 1.8)
-        next_frame = forward.update((0.0, 0.0, 0.0), 1.0, 0.05, 1.0, 0.4, 1.8)
+        first = _step(forward, (0.0, 0.0, 0.0), 0.15, 359.0, 0.01)
+        next_frame = _step(forward, (0.0, 0.0, 0.0), 0.15, 1.0, 0.05)
         short_step = _wrap_shortest(next_frame.yaw_deg, first.yaw_deg)
         self.assertGreater(short_step, 0.0)
         self.assertLess(short_step, 2.0)
+        self.assertAlmostEqual(short_step, 0.5392, delta=1e-3)
 
         reverse = FollowRig(height_filter_hz=0.0, yaw_filter_hz=1.0)
-        first = reverse.update((0.0, 0.0, 0.0), 1.0, 0.01, 1.0, 0.4, 1.8)
-        next_frame = reverse.update((0.0, 0.0, 0.0), 359.0, 0.05, 1.0, 0.4, 1.8)
+        first = _step(reverse, (0.0, 0.0, 0.0), 0.15, 1.0, 0.01)
+        next_frame = _step(reverse, (0.0, 0.0, 0.0), 0.15, 359.0, 0.05)
         short_step = _wrap_shortest(next_frame.yaw_deg, first.yaw_deg)
         self.assertLess(short_step, 0.0)
         self.assertGreater(short_step, -2.0)
+        self.assertAlmostEqual(short_step, -0.5392, delta=1e-3)
 
     def test_filters_are_bounded_and_do_not_overshoot(self):
         rig = FollowRig(height_filter_hz=2.0, yaw_filter_hz=3.0)
-        rig.update((0.0, 0.0, 0.0), 0.0, 0.1, 1.0, 0.4, 1.8)
-        frame = rig.update((10.0, 2.0, -6.0), 90.0, 0.1, 1.7, 0.4, 1.8)
+        # First sample snaps: 0.15 m radius, so 0.75 + 2.2 * 0.15 = 1.08 m back and
+        # 0.55 + 2.4 * 0.15 = 0.91 m above the centre; yaw 0 puts the offset on -z.
+        first = _step(rig, (0.0, 0.0, 0.0), 0.15, 0.0, 0.1)
+        self.assertAlmostEqual(first.position[0], 0.0, delta=1e-12)
+        self.assertAlmostEqual(first.position[1], 0.91, delta=1e-12)
+        self.assertAlmostEqual(first.position[2], -1.08, delta=1e-12)
+
+        frame = _step(rig, (10.0, 2.0, -6.0), 0.15, 90.0, 0.1)
         self.assertGreater(frame.position[0], 0.0)
         self.assertLess(frame.position[0], 10.0)
         self.assertGreater(frame.position[2], -6.0)
         self.assertLess(frame.position[2], 0.0)
         self.assertGreater(frame.yaw_deg, 0.0)
         self.assertLess(frame.yaw_deg, 90.0)
-        self.assertGreaterEqual(frame.position[1] - 2.0, 0.4)
-        self.assertLessEqual(frame.position[1] - 2.0, 1.8)
+        self.assertGreaterEqual(frame.position[1] - 2.0, MOTOR_EYE[2])
+        self.assertLessEqual(frame.position[1] - 2.0, MOTOR_EYE[3])
+        # Height target is constant here (same radius), so the height alpha cannot move
+        # it. The x/z step is the height alpha (1 - exp(-2*pi*2*0.1) = 0.71539) from the
+        # old frame to the behind-target, and that target is taken along the FILTERED
+        # yaw (90 * 0.84816 = 76.3348 deg), not along the raw 90: target_x = 10 -
+        # sin(76.3348) * 1.08 = 8.95057, target_z = -6 - cos(76.3348) * 1.08 = -6.25515,
+        # so x = 0.71539 * 8.95057 = 6.40315 and z = -1.08 + (-6.25515 + 1.08) * 0.71539
+        # = -4.78225.
+        self.assertAlmostEqual(frame.yaw_deg, 76.3348, delta=1e-4)
+        self.assertAlmostEqual(frame.position[0], 6.40315, delta=1e-4)
+        self.assertAlmostEqual(frame.position[2], -4.78225, delta=1e-4)
+
         for _ in range(300):
-            frame = rig.update((10.0, 2.0, -6.0), 90.0, 1.0 / 60.0,
-                               1.7, 0.4, 1.8)
-        self.assertAlmostEqual(frame.position[0], 10.0, delta=1e-5)
-        self.assertAlmostEqual(frame.position[2], -6.0, delta=1e-5)
-        self.assertAlmostEqual(frame.position[1] - 2.0, 1.7, delta=1e-5)
-        self.assertAlmostEqual(frame.yaw_deg, 90.0, delta=1e-5)
+            frame = _step(rig, (10.0, 2.0, -6.0), 0.15, 90.0, 1.0 / 60.0)
+        # yaw = 90 puts the back offset on -x: x = 10 - 1.08, z = -6.
+        self.assertAlmostEqual(frame.position[0], 10.0 - 1.08, delta=1e-9)
+        self.assertAlmostEqual(frame.position[2], -6.0, delta=1e-9)
+        self.assertAlmostEqual(frame.position[1] - 2.0, 0.91, delta=1e-9)
+        self.assertAlmostEqual(frame.yaw_deg, 90.0, delta=1e-9)
 
     def test_respawn_or_teleport_marker_snaps_and_restarts_filter_baseline(self):
         rig = FollowRig(height_filter_hz=0.5, yaw_filter_hz=0.5)
-        rig.update((2.0, 1.0, 3.0), 15.0, 0.1, 1.0, 0.5, 1.5)
-        lagged = rig.update((20.0, 4.0, -10.0), 30.0, 0.01, 1.0, 0.5, 1.5)
+        _step(rig, (2.0, 1.0, 3.0), 0.15, 15.0, 0.1)
+        lagged = _step(rig, (20.0, 4.0, -10.0), 0.15, 30.0, 0.01)
         self.assertLess(lagged.position[0], 20.0)
         self.assertLess(abs(_wrap_shortest(30.0, lagged.yaw_deg)), 30.0)
-        respawned = rig.update((-90.0, -4.0, 120.0), 271.0, 0.0,
-                               8.0, 0.6, 1.4, reset=True)
-        self.assertEqual(respawned.position, (-90.0, -2.6, 120.0))
-        self.assertEqual(respawned.yaw_deg, 271.0)
+
+        # A 0.55 + 2.4 * 0.5 = 1.75 m height clamps to the caller's 1.4 m rail, and
+        # 0.75 + 2.2 * 0.5 = 1.85 m of back offset at yaw 270 (sin = -1, cos = 0) lands
+        # entirely on +x: x = -90 + 1.85, z = 120, y = -4 + 1.4.
+        respawned = _step(rig, (-90.0, -4.0, 120.0), 0.5, 270.0, 0.0,
+                          reset=True, eye=(0.55, 2.4, 0.6, 1.4, 0.75, 2.2, 8.0))
+        self.assertAlmostEqual(respawned.position[0], -90.0 + 0.75 + 2.2 * 0.5, delta=1e-9)
+        self.assertAlmostEqual(respawned.position[1], -4.0 + 1.4, delta=1e-9)
+        self.assertAlmostEqual(respawned.position[2], 120.0, delta=1e-9)
+        self.assertAlmostEqual(respawned.yaw_deg, 270.0, delta=1e-12)
+        self.assertAlmostEqual(rig.height_m, 1.4, delta=1e-12)
         self.assertEqual(rig.frame, respawned)
 
-    def test_eye_height_is_clamped_to_explicit_finite_limits(self):
+        # The returned frame is the new baseline: feeding it back with dt = 0 must
+        # reproduce it and not fall back to the pre-teleport frame.
+        again = _step(rig, (-90.0, -4.0, 120.0), 0.5, 270.0, 0.0,
+                      eye=(0.55, 2.4, 0.6, 1.4, 0.75, 2.2, 8.0))
+        self.assertEqual(again, respawned)
+        self.assertAlmostEqual(rig.height_m, 1.4, delta=1e-12)
+
+    def test_height_and_back_rails_are_rails_not_tuning(self):
+        # 100 Hz over 0.2 s gives a full-weight step, so the height lands on the clamped
+        # target immediately. The bounds bound the height above the ball's CENTRE.
         rig = FollowRig(height_filter_hz=100.0, yaw_filter_hz=0.0)
-        low = rig.update((0.0, 5.0, 0.0), 0.0, 0.2, -100.0, 0.75, 1.25)
-        self.assertAlmostEqual(low.position[1] - 5.0, 0.75)
-        high = rig.update((0.0, 5.0, 0.0), 0.0, 0.2, 100.0, 0.75, 1.25)
-        self.assertAlmostEqual(high.position[1] - 5.0, 1.25)
-        inside = rig.update((0.0, 5.0, 0.0), 0.0, 0.2, 1.0, 0.75, 1.25)
-        self.assertAlmostEqual(inside.position[1] - 5.0, 1.0)
+        first = _step(rig, (0.0, 5.0, 0.0), 0.5, 0.0, 0.2,
+                      eye=(100.0, 0.0, 0.5, 1.5, 0.75, 2.2, 8.0))
+        self.assertAlmostEqual(first.position[1] - 5.0, 1.5, delta=1e-12)
+
+        low = _step(rig, (0.0, 5.0, 0.0), 0.5, 0.0, 0.2,
+                    eye=(0.1, 0.0, 0.5, 1.5, 0.75, 2.2, 8.0))
+        self.assertAlmostEqual(low.position[1] - 5.0, 0.5, delta=1e-12)
+
+        inside = _step(rig, (0.0, 5.0, 0.0), 0.5, 0.0, 0.2,
+                       eye=(1.0, 0.0, 0.5, 1.5, 0.75, 2.2, 8.0))
+        self.assertAlmostEqual(inside.position[1] - 5.0, 1.0, delta=1e-12)
+
+        # The back offset has its own rail: 0.75 + 2.2 * 0.5 = 1.85 m of back offset
+        # clamps to 1.0, so at yaw 0 the frame is 1.0 m behind the centre on -z.
+        clamped_back = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
+        frame = _step(clamped_back, (0.0, 0.0, 0.0), 0.5, 0.0, 0.0,
+                      reset=True, eye=(0.55, 2.4, 0.1, 8.0, 0.75, 2.2, 1.0))
+        self.assertAlmostEqual(frame.position[2], -1.0, delta=1e-12)
+
+        # A zero radius is allowed (a motor that has not derived a size yet reports it):
+        # the same geometry with no ball, so 0.55 m up and 0.75 m back.
+        zero = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
+        zero_frame = _step(zero, (0.0, 0.0, 0.0), 0.0, 0.0, 0.0, reset=True)
+        self.assertAlmostEqual(zero.height_m, 0.55, delta=1e-12)
+        self.assertAlmostEqual(zero_frame.position[2], -0.75, delta=1e-12)
+
+        # The full size range ends at 2.2 m, i.e. radius 1.1: 0.55 + 2.4 * 1.1 = 3.19 m
+        # above the centre, well inside the 8 m rail. A rail at 2.5 must clamp it, which
+        # is the rail doing its job rather than the model failing.
+        large = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
+        _step(large, (0.0, 1.1, 0.0), 1.1, 0.0, 0.0, reset=True)
+        self.assertAlmostEqual(large.height_m, 3.19, delta=1e-12)
+        pinned = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
+        _step(pinned, (0.0, 1.1, 0.0), 1.1, 0.0, 0.0,
+              reset=True, eye=(0.55, 2.4, 0.1, 2.5, 0.75, 2.2, 8.0))
+        self.assertAlmostEqual(pinned.height_m, 2.5, delta=1e-12)
+
+    def test_camera_is_behind_and_above_and_both_grow_with_the_ball(self):
+        # The four judged diameters: height = 0.55 + 2.4 * r, back = 0.75 + 2.2 * r, from
+        # r = d / 2. A snap (reset) keeps this a pure model check: no filter lag.
+        diameters = (0.10, 0.30, 0.72, 1.43)
+        expected_height = (0.67, 0.91, 1.414, 2.266)
+        expected_back = (0.86, 1.08, 1.542, 2.323)
+        previous_height = None
+        previous_back = None
+        previous_gap = None
+        frames = []
+
+        for index, diameter in enumerate(diameters):
+            radius = diameter * 0.5
+            rig = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
+            frame = _step(rig, (0.0, radius, 0.0), radius, 0.0, 0.0, reset=True)
+            frames.append(frame)
+
+            self.assertAlmostEqual(frame.position[1] - radius, expected_height[index],
+                                   delta=1e-9, msg=f"height above the centre at d={diameter}")
+            self.assertAlmostEqual(-frame.position[2], expected_back[index],
+                                   delta=1e-9, msg=f"back offset at d={diameter}")
+            self.assertAlmostEqual(frame.position[0], 0.0, delta=1e-12)
+            self.assertAlmostEqual(rig.height_m, expected_height[index], delta=1e-9)
+
+            # The property the old fixed height lost: the clearance above the SURFACE
+            # (height - radius) must not shrink as the ball grows.
+            gap = frame.position[1] - 2.0 * radius
+            if previous_gap is not None:
+                self.assertGreater(gap, previous_gap)
+                self.assertGreater(frame.position[1] - radius, previous_height)
+                self.assertGreater(expected_back[index], previous_back)
+            previous_height = frame.position[1] - radius
+            previous_back = expected_back[index]
+            previous_gap = gap
+
+        # The 0.10 m ball is played from just above the floor: 0.67 m above the centre
+        # is 0.72 m above the floor for a grounded ball and 0.62 m above its top - not a
+        # standing person's eye height, and not hugging the floor either.
+        small_height = frames[0].position[1] - 0.05
+        self.assertLess(small_height, 0.9)
+        self.assertGreater(frames[0].position[1], 0.5)
+        self.assertGreater(small_height - 0.05, 0.0)
+
+    def test_interface_matches_the_csharp_signature(self):
+        # try_update mirrors FollowRigMath.TryUpdate argument order, including the
+        # caller-owned previous frame.
+        self.assertEqual(
+            tuple(inspect.signature(try_update).parameters),
+            ("height_filter_hz", "yaw_filter_hz", "ball_position", "ball_radius_m",
+             "horizontal_yaw_deg", "dt_s", "eye_base_up_m", "eye_up_per_radius",
+             "eye_up_min_m", "eye_up_max_m", "eye_base_back_m", "eye_back_per_radius",
+             "eye_max_back_m", "reset_to_teleport", "has_previous_frame",
+             "previous_rig_position", "previous_rig_yaw_deg", "previous_height_m"))
+        self.assertEqual(
+            tuple(inspect.signature(FollowRig.update).parameters),
+            ("self", "ball_position", "ball_radius_m", "horizontal_yaw_deg", "dt_s",
+             "eye_base_up_m", "eye_up_per_radius", "eye_up_min_m", "eye_up_max_m",
+             "eye_base_back_m", "eye_back_per_radius", "eye_max_back_m", "reset"))
+        frame = _step(FollowRig(), (0.0, 1.0, 0.0), 0.15, 123.0, 0.0)
+        self.assertFalse(hasattr(frame, "roll_deg"))
+        self.assertFalse(hasattr(frame, "pitch_deg"))
 
     def test_invalid_inputs_are_rejected_atomically(self):
         rig = FollowRig()
-        old = rig.update((1.0, 2.0, 3.0), 45.0, 0.1, 1.0, 0.5, 1.5)
+        old = _step(rig, (1.0, 2.0, 3.0), 0.15, 45.0, 0.1)
+        old_height = rig.height_m
+
+        def eye_with(**changes):
+            values = list(MOTOR_EYE)
+            names = ("eye_base_up_m", "eye_up_per_radius", "eye_up_min_m", "eye_up_max_m",
+                     "eye_base_back_m", "eye_back_per_radius", "eye_max_back_m")
+            for name, value in changes.items():
+                values[names.index(name)] = value
+            return tuple(values)
+
         bad_calls = (
-            ((float("nan"), 0.0, 0.0), 0.0, 0.1, 1.0, 0.5, 1.5),
-            ((0.0, 0.0, 0.0), float("inf"), 0.1, 1.0, 0.5, 1.5),
-            ((0.0, 0.0, 0.0), 0.0, -0.1, 1.0, 0.5, 1.5),
-            ((0.0, 0.0, 0.0), 0.0, 0.1, float("nan"), 0.5, 1.5),
-            ((0.0, 0.0, 0.0), 0.0, 0.1, 1.0, 2.0, 1.0),
+            # ball position / radius
+            ((float("nan"), 0.0, 0.0), 0.15, 0.0, 0.1, MOTOR_EYE),
+            ((0.0, 0.0, 0.0), float("nan"), 0.0, 0.1, MOTOR_EYE),
+            ((0.0, 0.0, 0.0), -0.15, 0.0, 0.1, MOTOR_EYE),
+            ((0.0, 0.0, 0.0), float("inf"), 0.0, 0.1, MOTOR_EYE),
+            # heading / time
+            ((0.0, 0.0, 0.0), 0.15, float("inf"), 0.1, MOTOR_EYE),
+            ((0.0, 0.0, 0.0), 0.15, float("nan"), 0.1, MOTOR_EYE),
+            ((0.0, 0.0, 0.0), 0.15, 0.0, -0.1, MOTOR_EYE),
+            ((0.0, 0.0, 0.0), 0.15, 0.0, float("nan"), MOTOR_EYE),
+            # eye geometry and rails
+            ((0.0, 0.0, 0.0), 0.15, 0.0, 0.1, eye_with(eye_base_up_m=float("nan"))),
+            ((0.0, 0.0, 0.0), 0.15, 0.0, 0.1, eye_with(eye_base_up_m=-0.55)),
+            ((0.0, 0.0, 0.0), 0.15, 0.0, 0.1, eye_with(eye_up_per_radius=-2.4)),
+            ((0.0, 0.0, 0.0), 0.15, 0.0, 0.1, eye_with(eye_up_min_m=8.0, eye_up_max_m=0.1)),
+            ((0.0, 0.0, 0.0), 0.15, 0.0, 0.1, eye_with(eye_up_min_m=-0.1)),
+            ((0.0, 0.0, 0.0), 0.15, 0.0, 0.1, eye_with(eye_up_max_m=-1.0)),
+            ((0.0, 0.0, 0.0), 0.15, 0.0, 0.1, eye_with(eye_base_back_m=-0.75)),
+            ((0.0, 0.0, 0.0), 0.15, 0.0, 0.1, eye_with(eye_back_per_radius=-2.2)),
+            ((0.0, 0.0, 0.0), 0.15, 0.0, 0.1, eye_with(eye_max_back_m=-8.0)),
         )
-        for args in bad_calls:
-            with self.subTest(args=args), self.assertRaises(ValueError):
-                rig.update(*args)
-            self.assertEqual(rig.frame, old)
+        for ball, radius, yaw, dt, eye in bad_calls:
+            with self.subTest(ball=ball, radius=radius, yaw=yaw, dt=dt, eye=eye):
+                with self.assertRaises(ValueError):
+                    rig.update(ball, radius, yaw, dt, *eye)
+                self.assertEqual(rig.frame, old)
+                self.assertEqual(rig.height_m, old_height)
+
         with self.assertRaises(ValueError):
-            rig.update((0.0, 0.0, 0.0), 0.0, 0.1, 1.0, 0.5, 1.5, reset=1)
+            _step(rig, (0.0, 0.0, 0.0), 0.15, 0.0, 0.1, reset=1)
         self.assertEqual(rig.frame, old)
+        self.assertEqual(rig.height_m, old_height)
 
     def test_huge_filter_product_is_rejected_without_partial_commit(self):
         rig = FollowRig(height_filter_hz=1e308, yaw_filter_hz=1.0)
-        old = rig.update((0.0, 0.0, 0.0), 0.0, 0.0, 1.0, 0.5, 1.5)
+        old = _step(rig, (0.0, 0.0, 0.0), 0.15, 0.0, 0.0)
+        old_height = rig.height_m
+        # 2*pi*1e308 overflows a double to infinity, so the call is refused instead of
+        # committing a candidate frame. (C# hits this same rejection path at ~3.4e38
+        # because its fields are float32; the Python twin only overflows at double's
+        # ~1.8e308 - the documented precision-domain difference, not a semantic one.)
         with self.assertRaises(OverflowError):
-            rig.update((10.0, 0.0, 0.0), 90.0, 1e308, 1.0, 0.5, 1.5)
+            _step(rig, (10.0, 0.0, 0.0), 0.15, 90.0, 1e308)
         self.assertEqual(rig.frame, old)
+        self.assertEqual(rig.height_m, old_height)
 
-    def test_interface_has_only_scalar_horizontal_heading_not_hmd_or_spin(self):
-        parameters = tuple(inspect.signature(FollowRig.update).parameters)
-        self.assertEqual(parameters, ("self", "ball_position", "horizontal_yaw_deg", "dt_s",
-                                      "eye_height_m", "eye_height_min_m", "eye_height_max_m", "reset"))
-        frame = FollowRig().update((0.0, 1.0, 0.0), 123.0, 0.0, 1.0, 0.5, 1.5)
-        self.assertFalse(hasattr(frame, "roll_deg"))
-        self.assertFalse(hasattr(frame, "pitch_deg"))
+        # An infinite geometry term is refused the same way: a 1e308 m radius makes the
+        # back offset overflow before any candidate is committed.
+        with self.assertRaises(OverflowError):
+            _step(rig, (10.0, 0.0, 0.0), 1e308, 90.0, 0.1)
+        self.assertEqual(rig.frame, old)
+        self.assertEqual(rig.height_m, old_height)
 
     def test_deterministic_long_sequence_remains_finite_and_height_limited(self):
         rig = FollowRig(height_filter_hz=4.0, yaw_filter_hz=6.0)
@@ -105,12 +281,24 @@ class FollowRigTests(unittest.TestCase):
             x = math.sin(i * 0.013) * 50.0
             z = math.cos(i * 0.017) * 30.0
             yaw = (359.0 + i * 0.7) % 360.0
-            frame = rig.update((x, float(i % 9) - 4.0, z), yaw, 1.0 / 90.0,
-                               2.0, 0.7, 1.4)
+            ball_y = float(i % 9) - 4.0
+            radius = 0.05 + (i % 7) * 0.1
+            had_frame = rig.frame is not None
+            previous_yaw = rig.frame.yaw_deg if rig.frame else 0.0
+
+            frame = _step(rig, (x, ball_y, z), radius, yaw, 1.0 / 90.0)
             self.assertTrue(all(math.isfinite(value) for value in frame.position))
             self.assertTrue(math.isfinite(frame.yaw_deg))
-            self.assertGreaterEqual(frame.position[1] - (float(i % 9) - 4.0), 0.7 - 1e-12)
-            self.assertLessEqual(frame.position[1] - (float(i % 9) - 4.0), 1.4 + 1e-12)
+            self.assertGreaterEqual(rig.height_m, MOTOR_EYE[2] - 1e-12)
+            self.assertLessEqual(rig.height_m, MOTOR_EYE[3] + 1e-12)
+            self.assertAlmostEqual(frame.position[1], ball_y + rig.height_m, delta=1e-9)
+
+            if had_frame:
+                # A filtered yaw approaches its target monotonically: the remaining
+                # short-arc distance cannot grow.
+                before = abs(_wrap_shortest(yaw, previous_yaw))
+                after = abs(_wrap_shortest(yaw, frame.yaw_deg))
+                self.assertLessEqual(after, before + 1e-3)
 
 
 if __name__ == "__main__":

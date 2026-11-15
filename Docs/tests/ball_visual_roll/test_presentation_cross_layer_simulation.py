@@ -18,6 +18,12 @@ def _cross_for_oracle(a, b):
             a[0] * b[1] - a[1] * b[0])
 
 
+# FollowRigMath's committed inputs (KatamariBallMotor.cs:137-143), in the C# argument
+# order: eye_base_up_m, eye_up_per_radius, eye_up_min_m, eye_up_max_m,
+# eye_base_back_m, eye_back_per_radius, eye_max_back_m.
+RIG_EYE = (0.55, 2.4, 0.1, 8.0, 0.75, 2.2, 8.0)
+
+
 def _len(v):
     return math.sqrt(sum(c * c for c in v))
 
@@ -54,14 +60,14 @@ class PresentationCrossLayerSimulationTests(unittest.TestCase):
         roll = VisualRollState.identity()
         rig = FollowRig(height_filter_hz=4.0, yaw_filter_hz=5.0)
         proxy = RemoteProxyCache(max_records=8, renderer_budget=2)
-        frame = rig.update((0.0, 0.0, 0.0), 359.0, 0.0, 1.0, 0.7, 1.3)
+        frame = rig.update((0.0, 0.0, 0.0), 0.15, 359.0, 0.0, *RIG_EYE)
 
         # Normal motion: no-slip oracle independently checks the chosen axis.
         radius = 0.8
         displacement = (0.0, 0.0, 0.16)
         roll = roll.advance(displacement, (0.0, 1.0, 0.0), radius)
         _assert_no_slip(self, roll, displacement, (0.0, 1.0, 0.0), radius)
-        frame = rig.update((0.0, 0.0, 0.16), 1.0, 0.05, 1.0, 0.7, 1.3)
+        frame = rig.update((0.0, 0.0, 0.16), 0.15, 1.0, 0.05, *RIG_EYE)
         short_delta = (frame.yaw_deg - 359.0 + 180.0) % 360.0 - 180.0
         self.assertGreater(short_delta, 0.0)
         self.assertLess(short_delta, 2.0)
@@ -107,10 +113,14 @@ class PresentationCrossLayerSimulationTests(unittest.TestCase):
         roll_after_teleport = roll.advance((100.0, 0.0, -50.0), (0.0, 1.0, 0.0),
                                            radius, discontinuous=True)
         self.assertIs(roll_after_teleport, before_teleport)
-        frame = rig.update((-20.0, 4.0, 8.0), 271.0, 0.0, 9.0,
-                           0.6, 1.4, reset=True)
-        self.assertEqual(frame.position, (-20.0, 5.4, 8.0))
-        self.assertEqual(frame.yaw_deg, 271.0)
+        # A 0.5 m radius snaps to 0.55 + 2.4 * 0.5 = 1.75 m above the centre and
+        # 0.75 + 2.2 * 0.5 = 1.85 m behind it; at yaw 270 (sin = -1, cos = 0) the back
+        # offset lands entirely on +x: x = -20 + 1.85, y = 4 + 1.75, z = 8.
+        frame = rig.update((-20.0, 4.0, 8.0), 0.5, 270.0, 0.0, *RIG_EYE, reset=True)
+        self.assertAlmostEqual(frame.position[0], -20.0 + 1.85, delta=1e-9)
+        self.assertAlmostEqual(frame.position[1], 4.0 + 1.75, delta=1e-9)
+        self.assertAlmostEqual(frame.position[2], 8.0, delta=1e-9)
+        self.assertAlmostEqual(frame.yaw_deg, 270.0, delta=1e-12)
         next_roll = roll_after_teleport.advance((0.0, 0.0, 0.08),
                                                 (0.0, 1.0, 0.0), radius)
         self.assertNotEqual(next_roll.local_rotation, roll.local_rotation)
@@ -124,7 +134,7 @@ class PresentationCrossLayerSimulationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             next_roll.advance((float("nan"), 0.0, 0.0), (0.0, 1.0, 0.0), radius)
         with self.assertRaises(ValueError):
-            rig.update((0.0, 0.0, 0.0), 0.0, -1.0, 1.0, 0.5, 1.5)
+            rig.update((0.0, 0.0, 0.0), 0.15, 0.0, -1.0, *RIG_EYE)
         with self.assertRaises(SummaryError):
             proxy.apply(replace(old_event, position=(float("inf"), 0.0, 0.0)))
         self.assertEqual(next_roll.local_rotation, old_roll)

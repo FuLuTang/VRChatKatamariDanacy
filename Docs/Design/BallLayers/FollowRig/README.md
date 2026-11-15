@@ -2,9 +2,10 @@
 
 ## Unity 实现
 
-`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/FollowRig/FollowRigMath.cs`：`public static class FollowRigMath.TryUpdate`，纯静态、无静态字段，成功返回 `true`；输入非有限、`min>max` 或滤波指数溢出时返回 `false`（对应 Python 的 `ValueError`/`OverflowError`），失败不写输出，调用方保留旧状态。
+`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/FollowRig/FollowRigMath.cs`：`public static class FollowRigMath.TryUpdate`，纯静态、无静态字段，成功返回 `true`；输入非有限、`min>max`、负半径/负系数、滤波指数或 alpha 越界时返回 `false`（对应 Python 的 `ValueError`/`OverflowError`），失败不写输出，调用方保留旧状态。
 
 - 单位/坐标：位置为米，yaw 为绕 +Y 的度，输出规范到 `[0,360)`；帧只有位置 + yaw，没有 roll/pitch，也没有球四元数、自转、HMD、控制器或 Camera 输入。
-- 状态在调用方：`hasPreviousFrame` 与上一帧位置/yaw/偏移作为参数传入并回写。`resetToTeleport`（或首帧）立即贴合新参考，不跨地图插值。`previousRigWorldPosition` 只读 x/z，y 永远按“当前球 Y + 眼高偏移”重算。
-- 滤波：`alpha = 1 - exp(-2*pi*hz*dt)`（与 Python 的 `-expm1(-exponent)` 等价；float 下指数小于约 `6e-8` 时 alpha 会舍入为 0），x/z、偏移共用高度 alpha，yaw 用 yaw alpha 并走最短弧。眼高先夹到调用方给的 `[min,max]`，滤波后再夹一次。
-- 测试：`Tests/EditMode/BallLayers/FollowRigTests.cs` 覆盖 `Docs/tests/ball_follow_rig/test_follow_rig.py` 的 8 个用例，另加“原地旋转球不改变帧”“瞬移后保持有界”两个不变量。未在 Unity、UdonSharp 或 VR 中运行，5Hz/8Hz 仍只是旧 T46 起始值。
+- 取景几何（2026-11-15 定稿）：`eye = ballCentre − forward(滤波后的 yaw) · back + up · height`，`height = eyeBaseUpMeters + radius · eyeUpPerRadius` 先夹到 `[eyeUpMinMeters, eyeUpMaxMeters]`，`back = eyeBaseBackMeters + radius · eyeBackPerRadius` 再夹到 `[0, eyeMaxBackM]`。两项都从**球心**量起、都随半径线性放大：直径 0.10 / 0.30 / 0.72 / 1.43 m 四档的高度是 0.67 / 0.91 / 1.414 / 2.266 m、后退是 0.86 / 1.08 / 1.542 / 2.323 m（`BallMotor/README.md` 的「跟随架」有整张表）。后退方向沿**滤波后的 yaw**，所以偏移方向与写进 transform 的朝向不会打架。
+- 状态在调用方：`hasPreviousFrame` 与上一帧位置/yaw/**离球心高度**作为参数传入并回写。`resetToTeleport`（或首帧）立即贴合新参考，不跨地图插值。`previousRigWorldPosition` 只读 x/z，y 永远按「当前球 Y + 本次 height」重算。
+- 滤波：`alpha = 1 − exp(−2π·hz·dt)`（C# 是 `1f - Mathf.Exp(-exponent)`；Python 用同一式子而不是 `-expm1`，因为要以 C# 的 float 行为为准）。x/z 与高度共用 height alpha，yaw 用 yaw alpha 并走最短弧；高度先夹到调用方给的 `[min,max]`，滤波后再夹一次，所以换 bounds 不会让存下来的高度非法。**唯一有意的精度差异**：C# 是 float32，`2π·hz·dt` 超过约 `3.4e38` 就溢出并拒绝；Python 是 double，要到约 `1.8e308` 才溢出。拒绝路径同一条，测试用真正 double 溢出的输入覆盖（见 `follow_rig.py` 模块 docstring）。
+- 测试：`Tests/EditMode/BallLayers/FollowRigTests.cs` 与 `Docs/tests/ball_follow_rig/test_follow_rig.py`（2026-11-15 由 8 例改为 9 例）共同覆盖短弧双向、滤波有界不超调、瞬移吸附并重置基线、高度/后退护栏、球后上方形（四档直径的手算期望值）、非法输入原子拒绝、巨大滤波积拒绝、接口形状只有位置+yaw、1000 步有限序列；C# 另有「平视时球在画面下缘的角度」「原地旋转球不改变帧」「瞬移后保持有界」。Python 侧新增的那一例补的正是旧 8 例缺的纯几何检查：`back` 与 `height` 都随半径增长、且球面净空（height − radius）单调增。未在 Unity、UdonSharp 或 VR 中运行，5Hz/8Hz 仍只是旧 T46 起始值。`SuiteFoundation/SIMULATION_REPORT.md`（2026-10-14）记录的是重写前那 8 例，不描述当前测试。

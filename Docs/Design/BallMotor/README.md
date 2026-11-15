@@ -166,8 +166,8 @@ StepBall:
 取景模型（v0.3 用户拍板，还原《块魂》：球一开始就很小，视角在球**后面**，球越大视角越高）：
 
 ```
-eye = ballCenter − headingForward * (eyeBaseBackMeters + radius * eyeBackPerRadius)
-                + up             * (eyeBaseUpMeters   + radius * eyeUpPerRadius)
+eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBackPerRadius)
+                + up                    * (eyeBaseUpMeters   + radius * eyeUpPerRadius)
 ```
 
 即**后方 + 上方，两项都随半径线性放大**，不再有「球心正上方 + 常量眼高」，也不再有「离球顶」的中间量。旧语义 `y = 球心 + 1.6` 的净空是 `1.6 − r`（线性下滑：0.30 m 球 1.45 m、1.43 m 球 0.885 m），而吸收物站在球面上、约一个物件深（门槛是「物件最大边 ≤ 球半径」），球越大越往里挤——这就是 1.43 m 时画面被糊满的几何原因。
@@ -199,7 +199,7 @@ eye = ballCenter − headingForward * (eyeBaseBackMeters + radius * eyeBackPerRa
 | `eyeBackPerRadius` | float | 2.2 | 每米半径再后退多少米 |
 | `eyeMaxBackM` | float | 8 m | 护栏：后退上限 |
 
-删除的字段：`eyeHeightMeters`、`eyeHeightMinMeters`、`eyeHeightMaxMeters`（旧「离球心常量眼高」语义）。**模型侧还没同步**：`Docs/Design/BallLayers/FollowRig/follow_rig.py` 与 `Docs/tests/ball_follow_rig/`（8 例）、`Docs/tests/ball_visual_roll/test_presentation_cross_layer_simulation.py`（4 处旧调用）仍是旧语义，等授权后一起改，否则两边会长期不一致。
+删除的字段：`eyeHeightMeters`、`eyeHeightMinMeters`、`eyeHeightMaxMeters`（旧「离球心常量眼高」语义）。**模型侧已于 2026-11-15 同步**：`Docs/Design/BallLayers/FollowRig/follow_rig.py` 的 `try_update(...)` 与 C# `TryUpdate` 同名同序（含调用方持有的上一帧状态），7 个眼点系数是每次调用的参数、模型里不再有 `eye_height_m` 默认值；`Docs/tests/ball_follow_rig/` 由 8 例改为 9 例（新增「球后上方、两项随半径增长」的四档直径检查），`Docs/tests/ball_visual_roll/test_presentation_cross_layer_simulation.py` 的 4 处旧调用一并改完。以后改这里的式子，C# 与 Python 必须同一提交。
 
 ### 刻意不在这里
 

@@ -58,6 +58,14 @@
 
 **（j）取代的旧说法：** `Design/PickupAbsorb/README.md` L181 与 L192 把这件事写成“两个草案都没定义取整规则，所以它不四舍五入”的**实现说明**，读起来像一条还没定策略的临时行为——自此它是项目决定：不取整就是口径，不是待补齐的规则。同一文件 L231 的“整数单位契约（有意为之，不是缺陷）”与本条一致，保留。另注：该文件 L181／L192 引的 `PickupAbsorbMath.cs:218-230` 是旧行号（今天该函数在 `:259-271`），等 PickupAbsorb 的 owner 下次触碰时改一行，本次没有动那个文件。
 
+### 跟随架眼点：球后上方、随半径线性（2026-11-15 拍板）
+
+同 (a)–(j)：这条也是“按这个口径往下做”的决定，不是测量结果，也不改任务依赖。它定的是**玩家视点**（跟随架参考帧）的几何；Unity 侧已是该实现，Python 孪生与两侧测试同日追平。
+
+- **（k）眼点 = 球心后方 + 上方，两项都随球半径线性放大，不再有「离球心常量眼高」。** 公式 `eye = ballCentre − forward(滤波后的 yaw) · (eyeBaseBackMeters + radius · eyeBackPerRadius) + up · (eyeBaseUpMeters + radius · eyeUpPerRadius)`，默认 `0.75 + 2.2r` 后退、`0.55 + 2.4r` 抬高，护栏 `eyeUpMinMeters = 0.1` / `eyeUpMaxMeters = 8`（钳**离球心**高度）、`eyeMaxBackM = 8`（钳后退）。四档直径（0.10 / 0.30 / 0.72 / 1.43 m）算出来是：上方 0.670 / 0.910 / 1.414 / 2.266 m，后退 0.860 / 1.080 / 1.542 / 2.323 m，球面净空（上方 − 半径）0.62 / 0.76 / 1.05 / 1.55 m。依据：旧语义 `y = 球心 + 1.6` 的净空是 `1.6 − r`，0.30 m 球 1.45 m、1.43 m 球 0.885 m；而吸附物站在球面上、约一个物件深（吸收门槛是「物件最大边 ≤ 球半径」），球越大画面越被糊满——1.43 m 正是设计判定的最坏档。改成随半径增长后净空**变大**，平视时「球 + 吸附壳」上沿仍在视轴下 20.4°–32.7°，球留在画面下缘而不是糊住中间。已否决：A. 保留常量眼高（净空线性下滑，1.43 m 时只剩 0.885 m）；B. 只抬高不后退（球顶在视点正下方，吸收物直接糊镜头，也失去“推球”的纵深）；C. 改成按「离球顶」定义高度（等于把半径从式子里再减一次，净空还是常量，换名字不换问题）。数值全部 PROVISIONAL，须在 T05/T06 的舒适性与尺度门禁里由真人头显复核；公式本身是几何，不是舒适参数。
+- **（k）的硬约束：`VRCStation` 是这台引擎上唯一能连续移动玩家的手段。** VRChat **没有**任何 API 能连续移动玩家 avatar，可用的只有 `VRCStation` 与传送。所以「人推球」只能实现成**摆在球后方的一个 station**：第一人称下玩家看到的正是「球在身前、视角在球后上方」，与推球一致；第三人称会看到 avatar 是坐姿——这是引擎限制，不是设计取舍。这条同时解释了为什么方案不是「让玩家自己走、摄像机跟球」：玩家自己走既不能保证与球同速同向，VRChat 里也没有“每帧把玩家搬到某点”的接口。口径后果：motor 只写 `followRigRoot` 的 position + yaw（不碰 HMD、不写玩家位置），Station 挂在这个根下，且它的局部偏移**不能**再叠一层「球后上方」——旧文档的 0.25–0.5 m 眼高 + `(0, 0.8, −2.2)` 偏移在新语义下会叠成约 4 m 后退，已作废。代码位置：`FollowRigMath.TryUpdate`（`Runtime/BallLayers/FollowRig/FollowRigMath.cs`）、7 个字段 `KatamariBallMotor.cs:137-143`、`UpdateFollowRig` 与 `ApplyPresentation`（`:1004-1032`）。
+- **实现状态（2026-11-15）**：C# 已是该语义；Python 孪生 `Docs/Design/BallLayers/FollowRig/follow_rig.py` 的 `try_update(...)` 与 C# `TryUpdate` 同名同序（含调用方持有的上一帧位置/yaw/离球心高度），`Docs/tests/ball_follow_rig/` 由 8 例改为 9 例（新增四档直径的球后上方检查，期望值手算），`Docs/tests/ball_visual_roll/test_presentation_cross_layer_simulation.py` 的 4 处旧调用一并改完；`Docs/Design/BallMotor/README.md` 的「跟随架」表、`Docs/Design/BallLayers/FollowRig/` 的三份文档与 `Docs/Design/Parameters/README.md` 的重复清单已同步。**未在 Unity、UdonSharp 或 VR 中运行**，第三人称坐姿与坐姿视点补偿仍待 Build & Test。
+
 ## 需要在正式发布范围/终验前回答
 
 | 事项 | 当前基线与选项（均未选择） | 影响 | 决定时点 |
@@ -79,5 +87,5 @@
 ## 不因本摘要改变的门禁
 
 - P17中的单图方案只是提案；修改任务依赖只能在用户/主管批准后进行，并须运行计划校验。([RFC执行纪律](Archive/Preparation/ReleaseRFC/comparison.md#L36-L38)、[候选DAG声明](Archive/Preparation/ReleaseRFC/proposed_dag.json#L5-L7))
-- (a)–(j) 的数值仍是 PROVISIONAL：决定记录的是“用这个暂定值往下做”，不是验证通过；T01 规则冻结、T21 地图验证与 T39 多人试玩后须复核，改动只需更新本文与相关配置，不动任务依赖。（(h)(i)(j) 是运行时契约决定：(h) 已于 2026-11-15 落地、比例仍是 PROVISIONAL，(j) 没有暂定数值、代码已是该行为，见该条“实现状态”。）
+- (a)–(k) 的数值仍是 PROVISIONAL：决定记录的是“用这个暂定值往下做”，不是验证通过；T01 规则冻结、T21 地图验证与 T39 多人试玩后须复核，改动只需更新本文与相关配置，不动任务依赖。（(h)(i)(j)(k) 是运行时契约决定：(h) 与 (k) 已于 2026-11-15 落地、(k) 的数值仍 PROVISIONAL，(j) 没有暂定数值、代码已是该行为，见各条“实现状态”。）
 - 本文不认证原作细节、不定正式公平阈值、不冻结公共接口、不改T任务状态；后续批准应另行明确记录。

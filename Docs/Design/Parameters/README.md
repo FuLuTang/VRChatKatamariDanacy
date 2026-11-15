@@ -310,7 +310,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 ```
 
 - 测试 1 是**防静默丢弃**的机制：往载荷加一个参数而不加组件字段，立刻红；
-- 测试 3 是**防重复回来**的机制：`bankResidualFraction` 之类重新出现在 motor 上就红。没有它，§7 的 67 份副本会在半年内重新长出来。
+- 测试 3 是**防重复回来**的机制：`bankResidualFraction` 之类重新出现在 motor 上就红。没有它，§7 的 65 份副本会在半年内重新长出来。
 - 跑法：MCP `run_tests`（程序集 `VRCKatamari.Tests.EditMode`）。
 
 ### 4.3 第 3 层：版本钉（跨文件，可选但推荐）
@@ -338,7 +338,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
   - [`prototype_defaults.json`](../../config/prototype_defaults.json) 的 `match.durationSeconds`(L9)、`pvp.*`(L15-17)、`powerups.*`(L20-24)、`shape.*`(L27-28)；
   - `bank.residual_fraction` / `bank.min_conversion_diameter_m`：**只写引用条目**（`"source": "layout.bank.rules.bank_residual_fraction"`），不写值——它们留在 `layout.json`（L1636-1637），规则集不复制，见下方取舍；
   - `growth.units_to_max_diameter` 1356、`absorb.size_ratio` 1.0（值取自 `round_model.py` L117-119）；
-  - `motion.*` 8 个（值取自 motor L76-83）、`follow_rig.*` 3 个（L106-108）。
+  - `motion.*` 8 个（值取自 motor L76-83）、`follow_rig.*`（2 个滤波 L124-125 + 眼点系数与三条护栏 L137-143）。
 - 新增 `Docs/tests/test_rules.py`，**只**跑一条断言：镜像值 == 现存副本值（正则读 motor/`ball_motion.py`，`json.load` 读另两个）。这条断言的作用是把“27 个参数现在写在哪”变成可执行的事实，而不是本文的一段回忆。
 - **仍然成立**：运行时、模型、地图、关卡一个字都没变；游戏行为 0 变化；Unity 不需要打开。
 - **验证**：`python3 -m unittest discover -s Docs/tests`。
@@ -373,7 +373,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 ### 步骤 5 —— 切换消费方（**唯一的风险步**）
 
 - 改 `KatamariBallMotor.cs`：
-  - 删调参字段：L76-83（8 个运动）、L106-110（5 个跟随）、L95-99（2 个尺寸输入 + 2 个比值）、L103（`maxItemSizeWorldM`）、L116-117（2 个交分）；
+  - 删调参字段：L76-83（8 个运动）、L124-125 与 L137-143（2 个滤波 + 7 个眼点/护栏）、L95-99（2 个尺寸输入 + 2 个比值）、L103（`maxItemSizeWorldM`）、L116-117（2 个交分）；
   - 加 `[SerializeField] private KatamariRules rules;`；
   - 在 `Start()` 里把这些值**拷进带前缀的私有字段**（`localMaxSpeedMps`、`localBankResidualFraction` …），之后每帧照旧用私有字段（跨 Behaviour 字段访问在 U# 里有分发开销，不进每帧路径）；**前缀是必须的**，否则 §4.2 测试 3 无法区分“从规则组件拷来的副本”和“重新长出来的第二真源”。
 - 同一次提交里加 §4.2 的测试 3。
@@ -448,7 +448,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 | `maxRollDisplacementM` | 0.5 m | motor L113 | 视觉滚动钳位，不是玩法 |
 | `contactRadiusWorldM` | 0 | motor L102 | **项目决定，不是占位**：容差已由物件包围球代理提供，0＝球须实质接触、无额外手感窗口；reach vs 边长算例见 [`OPEN_DECISIONS.md`](../../OPEN_DECISIONS.md) (i) 与 [`PickupAbsorb/README.md`](../PickupAbsorb/README.md) §1–2 |
 | `collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` | 1 / 1 | motor L98-99 | 今天让三个尺寸重合，只为让现有场景跑起来；[`02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md) §1（L15-21）要求它们分开。**这是场景接线缺口，不是参数值问题**，不要在这里“调参”解决 |
-| `eyeHeightMinMeters` / `eyeHeightMaxMeters` | 0.25 / 3 m | motor L109-110 | 防越界夹取，不是舒适阈值（[`BallMotor/README.md`](../BallMotor/README.md) L187） |
+| `eyeUpMinMeters` / `eyeUpMaxMeters` / `eyeMaxBackM` | 0.1 / 8 / 8 m | motor L139-140、L143 | 护栏，不是舒适阈值：钳的是**离球心**的高度与后退量，随半径走（[`BallMotor/README.md`](../BallMotor/README.md) 的「跟随架」护栏段） |
 | `ControlIntentMath.DefaultDebounceSeconds` | 0.2 s | `ControlIntentMath.cs:130` | 输入去抖的实现常量；若以后变成体验旋钮，必须整条搬进规则集 |
 
 这些值**不进载荷**，理由是它们没有“作者改一个数、游戏应该跟着变”的语义。（顺带核对过：本代码库**没有** lookahead / 前瞻类常量——`grep -rn lookahead` 在 `Runtime/` 与 `Docs/Design/` 下为零；语义上最接近的是 `maxRollDisplacementM` 与 `stuckTimeoutSeconds`，两者都已在表中。）反过来说：**只要某个运行时量开始有人想按关卡调，它就必须整条搬进规则集**，而不是在 Inspector 上就地改——那会重新打开第二个真源。
@@ -487,7 +487,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 ---
 
-## 7. 现在的重复清单（27 个参数 / 67 处机器可读副本）
+## 7. 现在的重复清单（27 个条目 / 65 处机器可读副本）
 
 只统计**机器读取**的位置（`json` 数据、运行时字段、Python 默认值、可被正则扫到的 C# 常量）。文档复述（§0.1 第 4、5 行那类）不计入，但它们必须按步骤 7 改成引用。
 
@@ -515,9 +515,11 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 | 13 | `max_lateral_mps` 1.2 | `README.md:38`、`ball_motion.py:40`、`motor:81` | 3 | 规则集 |
 | 14 | `growth_speed_factor` 0.25 | `ball_motion.py:41`、`motor:82` | 2 | 规则集 |
 | 15 | `growth_turn_factor` 0.35 | `ball_motion.py:42`、`motor:83` | 2 | 规则集 |
-| 16 | `eye_height_m` 1.6 | `README.md:39`、`ball_motion.py:179`、`motor:108` | 3 | 规则集 |
-| 17 | `height_filter_hz` 5.0 | `ball_motion.py:180`、`follow_rig.py:66`、`motor:106` | 3 | 规则集 |
-| 18 | `yaw_filter_hz` 8.0 | `ball_motion.py:181`、`follow_rig.py:66`、`motor:107` | 3 | 规则集 |
+| 16 | 眼点几何 `eyeBaseUpMeters` 0.55 / `eyeUpPerRadius` 2.4 / `eyeBaseBackMeters` 0.75 / `eyeBackPerRadius` 2.2（2026-11-15 取代 `eye_height_m` 1.6） | `motor:137-138、141-142` | 1 | 规则集 |
+| 17 | `height_filter_hz` 5.0 | `ball_motion.py:180`、`follow_rig.py:206`、`motor:124` | 3 | 规则集 |
+| 18 | `yaw_filter_hz` 8.0 | `ball_motion.py:181`、`follow_rig.py:206`、`motor:125` | 3 | 规则集 |
+
+第 16 行 2026-11-15 换了对象：眼点从「离球心常量眼高 `eye_height_m`」改成「球后上方、两项随半径线性」，运行时的唯一副本就是 motor 的 `eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeBaseBackMeters` / `eyeBackPerRadius`（三条护栏仍有各自副本，见 §6.4 表）。Python 孪生 `follow_rig.py` 现在把 7 个系数**当参数收**、不自带默认值，所以它不再是这组数的副本；`ball_motion.py:179` 的 `eye_height_m = 1.6` 是 T46 宿主草稿自己的字段（那个文件里还有一份旧 `FollowRig` 类），不是运行时副本，等 BallMotion 的 owner 处理。
 
 **C 组 对局规则**（全部 `prototype_defaults.json` ↔ `round_model.py`，且运行时尚未实现，所以今天只有两份）
 
@@ -538,7 +540,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 | 26 | `directionSamples` 32 | `prototype_defaults.json:27`、`RadialProxyMath.cs:57` | 2 | 不烘焙，用 §4.1-5 等价测试钉住 |
 | 27 | `maximumExtraExtremePoints` 4 | `prototype_defaults.json:28`、`RadialProxyMath.cs:60` | 2 | 同上 |
 
-合计：**13 个参数写满三处（39 份）+ 14 个写两处（28 份）= 67 份机器可读副本，27 个参数。** 另有 1 处派生（起始球径，`motor:95-96` → 0.29974 m）不计入：它不是字面量，而是 §6.3 那条“运行时派生不得烘焙”的实例。
+合计：**12 个条目写满三处（36 份）+ 14 个写两处（28 份）+ 1 个只在运行时一处（1 份）= 65 份机器可读副本，27 个条目。** 另有 1 处派生（起始球径，`motor:95-96` → 0.29974 m）不计入：它不是字面量，而是 §6.3 那条“运行时派生不得烘焙”的实例。
 
 ---
 

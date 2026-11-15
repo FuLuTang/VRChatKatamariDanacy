@@ -193,16 +193,16 @@
 
 ## 8. 与现有「再试一次」「结果卡」的冲突与归宿
 
-现状：`retryButtonRoot`（结果时才显示）、`resultCardRoot`（Presenting 起显示）、`resultText`（HUD 第四行，既放“点击球坐上去开始”也放结果）三个字段在关卡里；`StoryRetryButton` 的代码提供了世界内 `Interact` 与 uGUI `OnRetryPressed` 两条入口，但场景里两条都还没接通（世界内对象没有 Collider，Canvas 上没有 Button/EventSystem）；`RequestRetry()` 是“复位 + 原地重开”。
+现状：`retryButtonRoot`（结果时才显示）、`resultCardRoot`（Presenting 起显示）、`resultText`（结果行，只放“呈给国王”与结算内容）、`startPromptText`（提示行，只在 Idle 显示）四个字段在关卡里；`StoryRetryButton` 的代码提供了世界内 `Interact` 与 uGUI `OnRetryPressed` 两条入口，但场景里两条都还没接通（世界内对象没有 Collider，Canvas 上没有 Button/EventSystem）；`RequestRetry()` 是“复位 + 原地重开”。
 
 | 现有物 | 新形态里的归宿 | 建议 |
 |---|---|---|
 | `resultCardRoot` | 房间结果卡的底板（Presenting/Result 可见，语义不变） | **保留字段，对象搬到房间**；不改代码 |
-| `resultText` | 房间卡面上的结果文本 | **保留**；按既有警告，不要把它放进 `resultCardRoot` 子树（Idle 会写提示而卡面是隐藏的） |
+| `resultText` | 房间卡面上的结果文本 | **保留**；它从 Presenting 起才有内容，和卡面同显同隐，放进 `resultCardRoot` 子树正好（旧版“别放进去”的警告来自提示复用结果行，那个耦合已经拆开） |
 | `retryButtonRoot` | 房间卡面上的“再来一次”（Result 可见，语义不变） | **保留字段，对象搬到房间**；它的 `Interact`/`OnClick` 改成调 `RequestStart()`（或 `StoryRetryButton` 加一个 `StartMode`），不再调 `RequestRetry()` |
 | `StoryRetryButton` | 正式形态里没有位置 | **保留为调试入口**（无房间的 lab、快速回归）；正式场景不摆这颗按钮 |
 | `RequestRetry()` | 原地重开（复位 + `BeginRound()`，不传送） | **保留，降级为调试路径**；把“复位”抽成私有 `TryResetForNextAttempt()`，`RequestRetry()` 与新的 `RequestStart()` 都调它——**一份复位实现，两个入口** |
-| `Start()` / `EnterIdle()` 的提示行 | 房间的“开始”提示 | 现在 `startPrompt` 默认“点击球坐上去开始”；房间场景该改成“选好关卡，按开始进入”（场景实例上改字符串即可） |
+| `Start()` / `EnterIdle()` 的提示行（`startPromptText`，独立 Text，只在 Idle 显示） | 房间的“开始”提示 | 现在 `startPrompt` 默认“点击球坐上去开始”；房间场景该改成“选好关卡，按开始进入”（场景实例上改字符串即可）。提示行对象随面板搬到房间，但**必须留在卡片外面**：控制器在非 Idle 会把它整个关掉 |
 | `NotifyRiderSeated()` | 无房间场景的旧起点 / 有房间场景里 `Running` 中忽略 | 保留；有房间时它是无害的 no-op |
 
 **要不要删“再试一次”？建议不删，只降级。** 理由：无房间的 lab 与 Build & Test 的快循环需要“不传送、原地重开”这条路径；删掉会把“重开是否可用”的验证绑在传送上（传送一坏，重开一起坏）。但正式场景不要摆它——两颗“重开”按钮会让玩家分不清“回房间再开”与“原地再开”。

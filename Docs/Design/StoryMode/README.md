@@ -94,12 +94,12 @@
 
 ### 必需的物体布局（少一条就不成立）
 
-1. **FollowRig** 必须是 motor 的 `followRigRoot`（`KatamariBallMotor.cs:137`；每帧只写它的 `position` 与 yaw，`:935-939`）。不接的话 rig 帧没有落点，载人整段不生效。
-2. **rig 根贴球心**：把 `eyeHeightMeters` 从默认 1.6 起调到 0.25–0.5（默认值是给人形 rig 的，`KatamariBallMotor.cs:118`），“球后上方”交给 Station 自己的局部偏移。
+1. **FollowRig** 必须是 motor 的 `followRigRoot`（`KatamariBallMotor.cs:160`；每帧只写它的 `position` 与 yaw，`:1026-1032`）。不接的话 rig 帧没有落点，载人整段不生效。
+2. **rig 根就是取景眼点**：`followRigRoot` 收到的是 `eye = 球心 − forward·back + up·height`，`height = 0.55 + 2.4·r`、`back = 0.75 + 2.2·r`（`BallMotor/README.md` 的「跟随架」）。旧的 `eyeHeightMeters` 常量（默认 1.6）已在 2026-11-15 删除，**不要再把 rig 根调成贴球心**：这个式子给 0.30 m 球 1.06 m、1.43 m 球 2.98 m 的地面视高，正是“球越大视角越高”。
 3. **一个 GameObject 同时挂 VRCStation + 交互 Collider + `BallRideStation`**。三样必须同物体，不是风格：`Interact` 送到被点到的 Collider 所在物体的 UdonBehaviour；`OnStationEntered`/`OnStationExited` 送到 VRCStation 所在物体的 Behaviour。实验场景就是这个布局（`Labs/StationPlatform/StationPlatformLab.unity:157` driver、`:198` VRCStation、`:277` BoxCollider 全在 `Station` 物体上），并在 T04 的 PC Build & Test 里实测过。
-4. **Station 是 rig 根的子物体**，`localPosition` 起始 `(0, 0.8, −2.2)`（球的后上方，计划 §1 给的起点）。坐着的人由 Station 承载，跟随靠 motor 写 rig 根，不靠任何脚本搬人。
+4. **Station 是 rig 根的子物体**，`localPosition` 起始 `(0, 0, 0)`。「球后上方」已经由 rig 根本身给出（0.5 m 球时后方 1.85 m、上方 1.75 m），**不要再叠进 Station 的局部偏移**；坐着的人由 Station 承载，跟随靠 motor 写 rig 根，不靠任何脚本搬人。坐姿视点补偿（VRCStation 把人的眼睛放在座位上方的某个高度，本仓未实测）在首次 Build & Test 里量，本文不编数。
 5. **VRCStation 打开 Disable Station Exit**（实验场景 `disableStationExit: 1`，`StationPlatformLab.unity:204`）。Player Mobility 先保持实验文件里的序列化值 `0`，含义未在本仓核实（VRChat 组件文档的枚举是 Mobile / Immobilize / ImmobilizeForVehicle，文档建议会动的载具用 Immobilize For Vehicle）。
-6. **Collider 要覆盖球的可见位置**：座位在球后上方 2.2 m，所以把 BoxCollider 的 `center` 前移下移（起始试 `center (0, −0.8, +2.2)`、`size 1.2³`），让准星对着球就能点到；否则点的是空中的座位，用户会说“点球没反应”。
+6. **Collider 要覆盖球的可见位置**：座位现在随 rig 根后退/抬高（0.5 m 球时球心在 Station 的 `(0, −1.75, +1.85)`），固定的局部 `center`/`size` 只在一档球径上对准球；起始按 0.5 m 球试 `center (0, −1.75, +1.85)`、`size 1.2³`，再在 Build & Test 里按实际球径重定。否则点的是空中的座位，用户会说“点球没反应”。
 7. **`DesktopInput` 物体**：独占 `DesktopMoveInput`，把 `BallRideStation.input` 指过去。项目惯例是分开挂：motor、Station、输入各占一个对象，职责和自检都清楚（同物体本身合法，见 [BallMotor README](../BallMotor/README.md) 的「装配约束」）。
 8. **退出按钮**：独立 GameObject + Collider + `BallRideExitButton`，`station` 指同一个 Station；放在坐姿视野前方、不被球的 Collider 挡住。坐姿下鼠标左键仍可交互（T04 PC 实测的退出按钮路径）。
 
@@ -131,10 +131,10 @@
 1. **没有编译**：U# 全量编译、Console 无错都还没发生。
 2. **坐姿桌面轴是否到达 Udon**：这正是上面探针要回答的，现在未知（`Docs/Evidence/StationPlatform/axis_logging.md:3`、`:110-112` 也只到“改了源码没编译”）。
 3. **Station 回调必须与 VRCStation 同物体**：本仓的依据是实验场景布局 + T04 PC 实测，不是 VRChat 文档的原文；文档只写“一个 GameObject 挂 VRCStation + Collider + UdonBehaviour”。若实际允许跨物体，可以再把 Collider 拆到球上。
-4. **点击距离**：座位在球后上方，准星到球的 Collider 约 2.2 m 起。超出桌面交互距离就点不到——首次测试第一件事就是确认能坐下；点不到就减小座位偏移或加大 Collider。
+4. **点击距离**：座位在 rig 根上，准星到球的 Collider 至少是 `back`（0.5 m 球 1.85 m 起、1.43 m 球 2.32 m）。超出桌面交互距离就点不到——首次测试第一件事就是确认能坐下；点不到就减小 `eyeBaseBackMeters`/`eyeBackPerRadius`，或把 Collider 加大。
 5. **坐姿下是否还有第二个提示**：T04 的 D1 只证明 `DisableInteractive = true` 让 Behaviour 的“坐下”提示消失；VRCStation 组件自带的提示是否也被压掉，没有分开观察过。
 6. **退出按钮在未入座时**：`ExitStation` 无对象可退出，预期是 no-op，未验证。
-7. **坐姿镜头**（计划风险 2）：偏移 `(0, 0.8, −2.2)`、`eyeHeightMeters` 只是起点，会不会看天/被球挡只能 Build & Test 里调。
+7. **坐姿镜头**（计划风险 2）：rig 根已经给出「球后上方」，坐姿视点还要再叠 VRCStation 的人眼高度补偿，补偿量、会不会看天/被球挡只能 Build & Test 里调（旧的 `eyeHeightMeters` 0.25–0.5 + Station 偏移 `(0, 0.8, −2.2)` 已作废）。
 8. **Player Mobility = 0 的含义**：实验文件里是 0，本仓没有核实它对应 Mobile 还是 Immobilize；探针的第 5 步排查依赖这一点。
 9. **多人/远端**：`BehaviourSyncMode.None`，`DisableInteractive` 是本地状态，远端客户端会看到自己的提示。切片是单人，不做。
 10. **`IsLocalPlayerSeated()` 的跨 Behaviour 调用**：签名与调用方式（类型化引用上直接调公开方法）与 `DesktopMoveInput` 调 `motor.SetMoveAxes` 同形（`DesktopMoveInput.cs:149`）。`DesktopMoveInput` 本身已编译（commit `e74ff8c`），但探针这个调用方自己没有编译过。
@@ -434,12 +434,12 @@ python3 -m unittest discover -s Docs/tests
 
 ### 每状态的闸门（生效输入 = 两把都开）
 
-| 回合状态 | 回合闸门 `SetRoundGate` | 骑乘闸门 `SetRideGate` | 收集 `SetCollecting` | 剩余行 / 结果行 |
+| 回合状态 | 回合闸门 `SetRoundGate` | 骑乘闸门 `SetRideGate` | 收集 `SetCollecting` | 剩余行 / 提示行 / 结果行 |
 |---|---|---|---|---|
-| Idle | 关（`Start()`，`startOnLoad=false`） | 关（Station 的 `Start()`；本地球员入座时开） | 关（`Start()`） | 剩余行清空；结果行显示 `startPrompt`（默认「点击球坐上去开始」） |
-| Running | 开（`BeginRound()`） | 入座开、离座关 | 开（`BeginRound()`） | 「剩余 N s」；结果行空 |
-| Presenting | 关（`SettleRound()`） | 同上 | 关（`SettleRound()`） | 「剩余 0 s」；结果行 `presenterLine` |
-| Result | 关 | 同上 | 关 | 结果卡（星/测量值/评语） |
+| Idle | 关（`Start()`，`startOnLoad=false`） | 关（Station 的 `Start()`；本地球员入座时开） | 关（`Start()`） | 剩余行清空；提示行（`startPromptText`）显示 `startPrompt`（默认「点击球坐上去开始」）；结果行空 |
+| Running | 开（`BeginRound()`） | 入座开、离座关 | 开（`BeginRound()`） | 「剩余 N s」；提示行关；结果行空 |
+| Presenting | 关（`SettleRound()`） | 同上 | 关（`SettleRound()`） | 「剩余 0 s」；提示行关；结果行 `presenterLine` |
+| Result | 关 | 同上 | 关 | 提示行关；结果卡（星/测量值/评语） |
 
 所以：Idle 里谁都开不动球（回合闸门关，而且站着时骑乘闸门也关）；Running 里站着的人开不动球（只剩骑乘闸门把关）；到点后无论坐着还是站着都不会再吸收。
 
@@ -451,21 +451,21 @@ python3 -m unittest discover -s Docs/tests
 - **`NotifyRiderSeated()` 在 Result：什么也不做。** 重试只能按结果卡上的按钮：`BeginRound()` 单独跑不会复位球、账本行、回合 id 和道具，坐下就重开等于“新回合配旧球”；`RequestRetry()` 才是先 motor 复位、再道具复位、最后 `BeginRound()` 的那条路。Running/Presenting 同样忽略，否则坐下会静默重开计时。
 - **`startOnLoad = true`** 保留旧行为，给没有 Station、没有人可坐的无头/键盘实验；有 Station 的场景必须保持 `false`。
 - **站不接 `roundController` 时**照样能坐、能开关骑乘闸门、能显示提示（StationPlatform 实验就是这样）；但场景里有 `StoryRoundController` 就必须把站上的 `roundController` 指过去，否则控制器永远停在 Idle、回合闸门一直关，表现为“坐上去也开不动”。
-- 提示行落在**结果行**（结果卡将来出现的那一行）；结果行没接时退回**剩余行**，并把剩余行清空以免显示一条没开始的倒计时。
+- 提示行有**自己的一条 Text**（`startPromptText`），只在 Idle 显示；没接这条提示行时退回**剩余行**，并把剩余行清空以免显示一条没开始的倒计时。结果行（`resultText`）不再承载提示，只放「呈给国王」与结算内容——它随结果卡一起在 Idle 隐藏。
 
 ### 场景怎么接（Unity 操作者）
 
 1. `BallRideStation.roundController` 指向场景里的 `StoryRoundController`；不接 = 见上一条。
 2. 有 Station 的可玩场景：`StoryRoundController.startOnLoad` 保持默认 `false`。无头实验勾上。
-3. HUD 照旧四行（目标/当前/剩余/结果）；`startPrompt` 想换文案就在场景实例上改这个字符串，不用改代码。
-4. 既有序列化字段名与公开签名一个没变（只追加 `startOnLoad`、`startPrompt` 与 `NotifyRiderSeated()`，站上只追加 `roundController`），旧场景实例里新字段取默认值（`false` / 默认文案）。
+3. HUD 四行（目标/当前/剩余/结果）之外多一条**提示行** `startPromptText`，只在 Idle 显示（见下节「结果卡显隐」）；`startPrompt` 想换文案就在场景实例上改这个字符串，不用改代码。
+4. 既有序列化字段名与公开签名一个没变（本节只追加 `startOnLoad`、`startPrompt` 与 `NotifyRiderSeated()`，站上只追加 `roundController`；后面「结果卡显隐」一节又追加了 `retryButtonRoot` / `resultCardRoot` / `startPromptText`），旧场景实例里新字段取默认值（`false` / 默认文案 / `null`，`null` 一律跳过）。
 
 ### 未验证（不要当成已验证）
 
 1. **没有编译**：U# 全量编译、Console 无错都没发生；跨命名空间类型引用（`Riding` 里的站引用 `Story` 里的控制器）与新增的站序列化字段在 U# 下的编译没有记录。
 2. **ClientSim / Play Mode / Build & Test 全部 NOT_RUN**：本节描述的“加载后停在 Idle、左键上球才开始计时、坐着 WASD 才驱球、到点出结果卡、重试/退出可用”一条都还没有运行时数据。
 3. **`Interact` → `UseStation` → `OnStationEntered` 的同帧顺序**：代码按“先开骑乘闸门再通知”写，但“通知当帧球就能动”没有观察（桌面按住 W 时 VRChat 只在值变化发轴，可能要先松再按）。
-4. **Idle 的提示行实际显示**：四行 Text 的排版、清空剩余行的效果、`startPrompt` 在场景实例上的序列化，都没有 Play Mode 观察。
+4. **Idle 的提示行实际显示**：五行 Text 的排版、清空剩余行的效果、`startPrompt` 与 `startPromptText` 在场景实例上的序列化与接线，都没有 Play Mode 观察。
 5. **中途离座后的结果卡**：站着到点时结果卡是否仍可读、重试后是否必须先坐回去才动，未实测。
 6. **已经坐在站里进世界**（例如复活回座位）时没有人再按一次左键：站只在 `OnStationEntered` 通知，没有“加载时已在座”的路径，所以会停在 Idle 且骑乘闸门关着，要离座再坐一次才会开始。这是已知缺口，不是已实现的行为。
 
@@ -473,28 +473,29 @@ python3 -m unittest discover -s Docs/tests
 
 > 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-15。本节对应实玩暴露的两个问题：场景一加载就看得见“再试一次”（那时还在 Idle，没有回合、没有结果卡），以及 Presenting 那一拍只有一行“呈给国王”、背后没有任何牌面。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test。
 
-### 两个新链接
+### 三个新链接（卡面两个 + 提示行一个）
 
 | 字段 | 拖什么 | 显示于 | 隐藏于 |
 |---|---|---|---|
 | `retryButtonRoot` | “再试一次”按钮所在对象：uGUI 是挂 `Button` 的那个 GameObject（不是 Canvas，也不是 Text 子物体）；世界内按钮是挂 `StoryRetryButton` + Collider 的那个 GameObject | Result | Idle / Running / Presenting |
 | `resultCardRoot` | 结果卡的底板/面板对象（卡面背景） | Presenting / Result | Idle / Running |
+| `startPromptText` | 提示行的 `Text` 本身：一个只有这个 `Text` 的独立对象，**不要**放进 `resultCardRoot` 子树（Idle 会把提示和卡面一起关掉） | Idle | Running / Presenting / Result |
 
-两个都是 `[SerializeField] private GameObject`，默认 null；空链接一律跳过，所以没接的场景（含无头实验）行为与改动前完全一样。
+前两个是 `[SerializeField] private GameObject`，第三个是 `[SerializeField] private Text`；默认都是 null，空链接一律跳过，所以没接的场景（含无头实验）行为与改动前完全一样——没有提示行时，Idle 的提示退回剩余行。
 
 ### 一个方法写 active 状态
 
-`ApplyStateVisibility()`（`StoryRoundController.cs:738`）是唯一写这两个对象 `SetActive` 的地方，调用点覆盖全部状态变化：
+`ApplyStateVisibility()`（`StoryRoundController.cs:763`）是唯一写这三个对象 active 状态的地方（卡面、按钮，以及提示行的 `startPromptText.gameObject`），调用点覆盖全部状态变化：
 
-| 调用点 | 进入的状态 | 卡面 | 按钮 |
-|---|---|---|---|
-| `EnterIdle()`（`:305`） | Idle | 关 | 关 |
-| `BeginRound()`（`:388`，含重试成功后的重开） | Running | 关 | 关 |
-| `SettleRound()`（`:641`） | Presenting | 开 | 关 |
-| `Update()` 的 Presenting→Result 转移（`:409`） | Result | 开 | 开 |
-| `RequestRetry()` 开头（`:492`） | 仍为当前状态 | 按当前状态重写 | 按当前状态重写 |
+| 调用点 | 进入的状态 | 提示行 | 卡面 | 按钮 |
+|---|---|---|---|---|
+| `EnterIdle()`（`:322`） | Idle | 开 | 关 | 关 |
+| `BeginRound()`（`:405`，含重试成功后的重开） | Running | 关 | 关 | 关 |
+| `SettleRound()`（`:658`） | Presenting | 关 | 开 | 关 |
+| `Update()` 的 Presenting→Result 转移（`:426`） | Result | 关 | 开 | 开 |
+| `RequestRetry()` 开头（`:509`） | 仍为当前状态 | 按当前状态重写 | 按当前状态重写 | 按当前状态重写 |
 
-`Start()` 的两个分支分别走 `EnterIdle()` 或 `BeginRound()`，所以加载后的第一次 Start 就会把按钮关掉（按 Unity 生命周期，Start 在第一帧渲染前跑完），正常不会先闪一帧；场景里把按钮对象在 authoring 时就设成 inactive 是双保险。`RequestRetry()` 开头那一次是“重写”：按错状态进来的调用会把按钮重新藏掉，而不是让按钮与状态各说各话。
+`Start()` 的两个分支分别走 `EnterIdle()` 或 `BeginRound()`，所以加载后的第一次 Start 就会把按钮关掉（按 Unity 生命周期，Start 在第一帧渲染前跑完），正常不会先闪一帧；Idle 分支同时把提示行打开。场景里把按钮对象在 authoring 时就设成 inactive 是双保险。`RequestRetry()` 开头那一次是“重写”：按错状态进来的调用会把按钮重新藏掉，而不是让按钮与状态各说各话。
 
 ### 按钮显隐不是规则，`RequestRetry()` 的状态闸门才是
 
@@ -504,10 +505,10 @@ python3 -m unittest discover -s Docs/tests
 
 1. `retryButtonRoot` 拖 uGUI `Button` 所在的那个 GameObject（`OnClick` 仍按上一节四步接 `UdonBehaviour.SendCustomEvent("OnRetryPressed")`）；世界内按钮则拖挂 `StoryRetryButton` + Collider 的对象。
 2. `resultCardRoot` 拖结果卡底板。它从 Presenting 起就显示，所以“呈给国王”那一拍背后有牌面，Result 沿用同一块底板；控制器在这两个状态里只改 `resultText` 的文字，牌面本身由场景决定。
-3. **不要把 `resultText` 放进 `resultCardRoot` 的子树**：Idle 会把开始提示（`startPrompt`，默认「点击球坐上去开始」）写进同一条结果行（`resultText` 接了时），而 Idle 时卡面是关的，提示会跟着消失。要“文字压在牌面上”的观感，就让 Text 与底板同级、排在底板之后渲染（同一 Canvas 下的 sibling 顺序），而不是成为底板的子物体。
-4. **不要把这两个字段拖成本控制器自己的 GameObject**：Idle 会对它调 `SetActive(false)`，控制器随后也不再运行，回合永远停在 Idle。它们必须是独立对象（通常和卡面一起放在同一个 Canvas 下）。
-5. 既有字段与签名一个没变：`motor` / `input` / `pickupHost` / 四个 Text / 关卡数据 / 五句评语 / `startOnLoad` / `startPrompt` 全部原名；`RequestRetry()` 仍是 `public bool` 且行为不变。本次只追加两个序列化字段、一个私有方法，以及类注释里的一段说明。
-6. U# 语言约束照旧：没有属性、重载、泛型、`??`、字符串插值、static 字段；`ApplyStateVisibility()` 是无参私有方法，两个 `SetActive` 都是 `GameObject.SetActive(bool)`。
+3. **结果行 `resultText` 就放在 `resultCardRoot` 的子树里**：它从 Presenting 起才有内容，卡面也正好在这两个状态开着，两者同显同隐最省事。旧版这条写的是“不要放进去”，理由是当时 Idle 会把开始提示（`startPrompt`）写进同一条结果行、而 Idle 时卡面是关的——那个耦合已经拆开：开始提示有自己的一条 Text（`startPromptText`），由控制器在 Idle 打开、其余状态关掉。所以反过来，**`startPromptText` 必须放在卡片外面**：放进 `resultCardRoot` 的提示会在 Idle 跟着卡面一起消失，也就是这次修掉的 bug。
+4. **不要把这三个对象拖成本控制器自己的 GameObject**：卡面与按钮在 Idle 会被 `SetActive(false)`，提示行在非 Idle 被关；只要控制器自己的对象被关掉，它随后就不再运行，回合永远停在 Idle。三者都必须是独立对象（通常和卡面一起放在同一个 Canvas 下）；提示行还要是只有这一个 `Text` 的专属对象，别拖一个共用的父物体，否则关它会连带关掉别的 HUD 行。
+5. 既有字段与签名一个没变：`motor` / `input` / `pickupHost` / 五个 Text / 关卡数据 / 五句评语 / `startOnLoad` / `startPrompt` 全部原名；`RequestRetry()` 仍是 `public bool` 且行为不变。本次共追加三个序列化字段（`retryButtonRoot` / `resultCardRoot` / `startPromptText`）、一个私有方法，以及类注释里的一段说明。
+6. U# 语言约束照旧：没有属性、重载、泛型、`??`、字符串插值、static 字段；`ApplyStateVisibility()` 是无参私有方法，三个 `SetActive` 里前两个是 `GameObject.SetActive(bool)`，第三个是 `Text.gameObject.SetActive(bool)`（`PickupFieldHost.cs` 有 `prop.gameObject.SetActive(...)` 先例）。
 
 ### 与上文的关系（取代一句）
 
@@ -517,7 +518,7 @@ python3 -m unittest discover -s Docs/tests
 
 1. **没有编译**：U# 全量编译、Console 无错都没发生。`GameObject.SetActive(bool)` 有 `Labs/BallPlayground/PlaygroundProp.cs:167`（BallPlayground 实跑过）的先例，序列化 `GameObject` 字段有同文件 `:38` 的 `visualRoot` 先例，但本文件这个组合没有编译记录。
 2. **ClientSim / Play Mode / Build & Test 全部 NOT_RUN**：加载后按钮不可见、Presenting 时底板可见、Result 时底板+按钮都可见、重试后按钮消失，一条都没有运行时观察。
-3. **Idle 提示行与卡面的渲染顺序**：见接入第 3 条，纯场景侧排布，没有观察。
+3. **Idle 提示行的实际显示**：提示行现在是独立对象（`startPromptText`），由控制器在 Idle 打开、其余状态关掉；它在 Canvas 里与 `ResultCard` 的相对位置、以及 Play Mode 下是否真的可见，都没有观察。
 4. **`SetActive(false)` 期间按下按钮**：隐藏的对象上 uGUI 不会再派发 `OnClick`，这是本节依赖的机制，但“Result 之前按不到”没有实机记录。
 
 ### 验证命令与本次结果
@@ -531,7 +532,7 @@ python3 -m unittest discover -s Docs/tests
 
 ### 没有改动的东西
 
-只改 `Runtime/Story/StoryRoundController.cs`（追加两个序列化字段、`ApplyStateVisibility()`、五个调用点与类注释一段）与本节（追加在本文件末尾）。没有改 `StoryRetryButton.cs`、`PickupFieldHost.cs`、motor、Riding、Labs、asmdef、场景、`tasks.json` 或任何其他文件。
+只改 `Runtime/Story/StoryRoundController.cs`（追加三个序列化字段、`ApplyStateVisibility()`、五个调用点与类注释一段）与本节（追加在本文件末尾）。没有改 `StoryRetryButton.cs`、`PickupFieldHost.cs`、motor、Riding、Labs、asmdef、场景、`tasks.json` 或任何其他文件。
 
 ## 道具字段的编辑器同步（PickupFieldSync）
 

@@ -12,7 +12,7 @@ namespace VRCKatamari.Tests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Two groups, each with the source of its expected values written out:
+    /// Three groups, each with the source of its expected values written out:
     /// <list type="number">
     /// <item>THE SPRING. The step is the closed form Unity's <c>SmoothDamp</c> uses for a
     /// critically damped spring: <c>omega = 2 / smoothTime</c>, <c>decay = 1 / (1 + x + 0.48x^2
@@ -32,6 +32,14 @@ namespace VRCKatamari.Tests
     /// pin the NUMBER (1.10 m radius -&gt; 1.045 -&gt; a 2.09 m mesh) and that the physical
     /// diameter and the lookup are passed through unchanged, so the visual factor cannot leak
     /// into anything the motor owns.
+    /// </item>
+    /// <item>THE LOG QUANTITIES. After the O6 full round, two diagnostic lines were read as
+    /// disagreeing when they were a radius against a diameter at two different moments
+    /// (Docs/Evidence/StoryMode/2026-11-16_first_full_round). The apparent-size helper the
+    /// <c>[eye]</c> line uses is pinned against that round's own sample, and one test pins
+    /// that every line's "visual diameter" is ONE number (<c>[story] d_vis</c> = <c>[ballview]
+    /// d_vis</c> = <c>2 * [shell] r_core</c> = the target BallView chases), which is what makes
+    /// the lines agree by construction instead of by reading.
     /// </item>
     /// </list>
     /// </para>
@@ -255,6 +263,78 @@ namespace VRCKatamari.Tests
                 out targetDiameterM));
             Assert.IsFalse(BallPresentationMath.TryCoreTargetDiameter(float.NaN, 0.1f, true,
                 out targetDiameterM));
+        }
+
+        // ---------------------------------------------------------------- log quantities
+
+        /// <summary>
+        /// The apparent size the <c>[eye]</c> line prints is the core diameter over the eye
+        /// distance. The first case is the O6 full round's own sample (0.7863 m core at
+        /// 2.297 m reads 0.3423 rad), so the printed line can be checked against the evidence
+        /// folder by hand.
+        /// </summary>
+        [Test]
+        public void ApparentSizeIsCoreDiameterOverEyeDistance()
+        {
+            float apparent;
+            Assert.IsTrue(BallPresentationMath.TryApparentSize(0.7863f, 2.297f, out apparent));
+            Assert.AreEqual(0.3423f, apparent, 5e-5f);
+
+            Assert.IsTrue(BallPresentationMath.TryApparentSize(1f, 2f, out apparent));
+            Assert.AreEqual(0.5f, apparent, 1e-6f);
+
+            // Doubling the distance halves the apparent size: that factor is exactly the
+            // follow rig's pull-back, which is why the audit multiplies growth by it.
+            float near;
+            float far;
+            Assert.IsTrue(BallPresentationMath.TryApparentSize(0.5f, 1f, out near));
+            Assert.IsTrue(BallPresentationMath.TryApparentSize(0.5f, 2f, out far));
+            Assert.AreEqual(0.5f * near, far, 1e-6f);
+        }
+
+        /// <summary>
+        /// A degenerate eye or a missing ball is not a measurement: the line then prints
+        /// <c>app=none</c> instead of an invented number.
+        /// </summary>
+        [Test]
+        public void ApparentSizeRefusesADegenerateEyeOrBall()
+        {
+            float apparent;
+            Assert.IsFalse(BallPresentationMath.TryApparentSize(0.7863f, 0f, out apparent));
+            Assert.AreEqual(0f, apparent);
+            Assert.IsFalse(BallPresentationMath.TryApparentSize(0.7863f, 0.00001f, out apparent));
+            Assert.IsFalse(BallPresentationMath.TryApparentSize(0.7863f, -1f, out apparent));
+            Assert.IsFalse(BallPresentationMath.TryApparentSize(0.7863f, float.NaN, out apparent));
+            Assert.IsFalse(BallPresentationMath.TryApparentSize(0f, 2f, out apparent));
+            Assert.IsFalse(BallPresentationMath.TryApparentSize(-1f, 2f, out apparent));
+            Assert.IsFalse(BallPresentationMath.TryApparentSize(float.NaN, 2f, out apparent));
+        }
+
+        /// <summary>
+        /// The lines cannot disagree by construction: <c>[story] d_vis</c>,
+        /// <c>[ballview] d_vis</c> and <c>2 * [shell] r_core</c> are the same value, and it is
+        /// the very diameter the mesh chases when the 0.95 toggle is on. Pinned at the O6
+        /// round's final size (1.312 m physical, r_core 0.6232).
+        /// </summary>
+        [Test]
+        public void TheLinesPrintOneVisualDiameterAndOnePhysicalDiameter()
+        {
+            float physicalDiameterM = 1.312f;
+            float visualRadiusM;
+            Assert.IsTrue(BallShapeMath.TryVisualCoreRadius(0.5f * physicalDiameterM,
+                out visualRadiusM));
+
+            float printedVisualDiameterM = 2f * visualRadiusM;
+            float meshTargetDiameterM;
+            Assert.IsTrue(BallPresentationMath.TryCoreTargetDiameter(physicalDiameterM,
+                visualRadiusM, true, out meshTargetDiameterM));
+
+            Assert.AreEqual(printedVisualDiameterM, meshTargetDiameterM,
+                "the diameter [story]/[ballview] print and the one BallView chases must be one number");
+            Assert.AreEqual(0.95f * physicalDiameterM, printedVisualDiameterM, 1e-5f);
+            // 0.6232 is the RADIUS the [shell] line printed for this ball; the diameter is
+            // 1.312. The r_/d_ prefixes exist to keep those two apart.
+            Assert.AreEqual(0.6232f, visualRadiusM, 1e-4f);
         }
 
         /// <summary>

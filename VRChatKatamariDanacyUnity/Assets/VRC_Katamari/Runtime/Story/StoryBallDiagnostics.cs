@@ -17,12 +17,24 @@ namespace VRCKatamari.Story
     /// Docs/Design/BallMotor/TERRAIN_SUPPORT.md section 3.6 item 3 and section 9 R11).
     /// </para>
     /// <para>
-    /// The field set, names, order and number truncation are the lab line's, unchanged:
-    /// <c>t / center / heading / diameter / bottom / gap / support / supportId / supportY /
-    /// supports / stepLimit / falling / axes / absorbed / rejects</c>. Only the prefix
-    /// differs (<c>[story]</c> instead of <c>[story-lab]</c>), because the scene tag says
-    /// which scene produced the line, not which script. Keeping the order fixed matters:
-    /// the acceptance notes quote these numbers field by field.
+    /// The field set is the lab line's with ONE addition, and the order is otherwise
+    /// unchanged: <c>t / center / heading / diameter / d_vis / bottom / gap / support /
+    /// supportId / supportY / supports / stepLimit / falling / axes / absorbed / rejects</c>.
+    /// Only the prefix differs (<c>[story]</c> instead of <c>[story-lab]</c>), because the
+    /// scene tag says which scene produced the line, not which script. Keeping the order
+    /// fixed matters: the acceptance notes quote these numbers field by field.
+    /// </para>
+    /// <para>
+    /// <c>diameter</c> is <c>GetSemanticDiameterWorldM()</c>, the gameplay diameter: the
+    /// absorb gate and the HUD read it (the HUD adds the original's +0.02 cm display fudge).
+    /// <c>d_vis</c> is <c>2 * GetVisualCoreRadiusWorldM()</c>, the design's visual core
+    /// (<c>0.95 r_phys</c>, CONTACT_MODEL_V2 4A.2) that the core mesh is drawn at. Both are
+    /// on the same line, read in the same frame, because the O6 full round compared a visual
+    /// radius against a semantic diameter and read the 2x difference as a disagreement. The
+    /// result board and the star targets evaluate the collision diameter
+    /// (<c>2 * GetCollisionRadiusWorldM()</c>, frozen at the bell by
+    /// <c>StoryRoundController.MeasureSettledRound</c>); it equals <c>diameter</c> today
+    /// because both size ratios are 1, and it is deliberately not repeated here.
     /// </para>
     /// <para>
     /// It reads and does nothing else: no drive, no camera, no motor registration, no
@@ -85,9 +97,9 @@ namespace VRCKatamari.Story
         }
 
         /// <summary>
-        /// One line per interval: elapsed since the ball started, centre, heading, diameter,
-        /// the ball's bottom, the gap above the selected support, which surface that is,
-        /// and whether the ball is falling.
+        /// One line per interval: elapsed since the ball started, centre, heading, the semantic
+        /// and the visual diameter, the ball's bottom, the gap above the selected support,
+        /// which surface that is, and whether the ball is falling.
         /// </summary>
         /// <remarks>
         /// <c>bottom</c> is the ball's lowest core point in world Y
@@ -101,6 +113,11 @@ namespace VRCKatamari.Story
         {
             Vector3 center = motor.GetCenterWorld();
             float diameter = motor.GetSemanticDiameterWorldM();
+            // The drawn core's design diameter, in the same frame as the gameplay diameter:
+            // a visual radius and a semantic diameter on one line cannot be read as agreeing
+            // or disagreeing by accident (O6 round, Docs/Evidence/StoryMode/
+            // 2026-11-16_first_full_round).
+            float visualDiameter = 2f * motor.GetVisualCoreRadiusWorldM();
             float supportHeight = motor.GetSupportSurfaceHeightWorldM();
             Vector3 supportNormal = motor.GetSupportNormalWorld();
             // Gap is measured ALONG THE SUPPORT NORMAL: "ball centre to the support plane,
@@ -128,6 +145,7 @@ namespace VRCKatamari.Story
                 + " center=" + center
                 + " heading=" + (Mathf.Floor(motor.GetHeadingDegrees() * 10f) / 10f)
                 + " diameter=" + (Mathf.Floor(diameter * 10000f) / 10000f)
+                + " d_vis=" + (Mathf.Floor(visualDiameter * 10000f) / 10000f)
                 + " bottom=" + (Mathf.Floor(bottom * 1000f) / 1000f)
                 + " gap=" + (Mathf.Floor(gap * 1000f) / 1000f)
                 + " support=" + supportName

@@ -383,6 +383,24 @@ namespace VRCKatamari.Editor.LevelBuild
             public string collision;
             public bool support;
             public string meets;
+            /// <summary>
+            /// v2's contact proxy for a <c>shape:"proxy"</c> solid (same encoding as
+            /// <c>defs[].collider</c>). Null for every other shape; <see cref="contactIsProxy"/>
+            /// is what the scene builder branches on.
+            /// </summary>
+            public ColliderEntry collider;
+            /// <summary>v2's <c>proxySource</c> (def/aabb-fallback/manual); null for v1.</summary>
+            public string proxySource;
+            /// <summary>
+            /// True when this solid's contact shape comes from the proxy rather than from
+            /// <see cref="size"/>. The two derived numbers below are already the metres-space
+            /// contact box (§4), computed from the v2 document by
+            /// <see cref="PlacementV2Rules.TrySolidContactBox"/> - the view carries the answer so
+            /// the scene builder never re-derives geometry.
+            /// </summary>
+            public bool contactIsProxy;
+            public float[] contactCenter;
+            public float[] contactSize;
         }
 
         /// <summary>
@@ -2374,12 +2392,37 @@ namespace VRCKatamari.Editor.LevelBuild
 
             bool wantsCollider = WantsBoxCollider(structure);
             BoxCollider collider = instance.GetComponent<BoxCollider>();
+
+            // A proxy solid's collider is its contact box in METRES, while the object itself is
+            // scaled to the authored AABB (the visual and the support box). A BoxCollider's
+            // numbers are local, so the contact box is divided by that scale once - the same
+            // "one conversion, at import" rule the prop proxies follow.
+            Vector3 targetColliderCenter = Vector3.zero;
+            Vector3 targetColliderSize = Vector3.one;
+            if (structure.contactIsProxy && structure.contactCenter != null &&
+                structure.contactCenter.Length == 3 && structure.contactSize != null &&
+                structure.contactSize.Length == 3)
+            {
+                targetColliderCenter = new Vector3(
+                    DivideByContactScale(structure.contactCenter[0], targetScale.x),
+                    DivideByContactScale(structure.contactCenter[1], targetScale.y),
+                    DivideByContactScale(structure.contactCenter[2], targetScale.z));
+                targetColliderSize = new Vector3(
+                    DivideByContactScale(structure.contactSize[0], targetScale.x),
+                    DivideByContactScale(structure.contactSize[1], targetScale.y),
+                    DivideByContactScale(structure.contactSize[2], targetScale.z));
+            }
+
             bool poseMatches =
                 Vector3.Distance(instance.transform.position, targetPosition) <= PositionToleranceM &&
                 Mathf.Abs(Quaternion.Dot(instance.transform.rotation, targetRotation)) >=
                 RotationDotTolerance &&
                 Vector3.Distance(instance.transform.localScale, targetScale) <= PositionToleranceM;
-            bool colliderMatches = wantsCollider ? collider != null : collider == null;
+            bool colliderMatches = wantsCollider
+                ? collider != null &&
+                  Vector3.Distance(collider.center, targetColliderCenter) <= PositionToleranceM &&
+                  Vector3.Distance(collider.size, targetColliderSize) <= PositionToleranceM
+                : collider == null;
 
             if (poseMatches && colliderMatches)
             {
@@ -2409,11 +2452,27 @@ namespace VRCKatamari.Editor.LevelBuild
 
             if (collider != null)
             {
-                collider.center = Vector3.zero;
-                collider.size = Vector3.one;
+                Undo.RecordObject(collider, UndoLabel);
+                collider.center = targetColliderCenter;
+                collider.size = targetColliderSize;
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Converts a metres value in the solid's frame into the collider's local units: the
+        /// object is scaled to the AABB, so the contact box is divided by that scale.
+        /// </summary>
+        /// <remarks>
+        /// A degenerate axis (a zero-extent solid) would divide by zero; the value is then taken
+        /// as unscaled and <see cref="LevelArenaHost"/> refuses the degenerate box with its own
+        /// reason code, which is louder than a NaN collider.
+        /// </remarks>
+        private static float DivideByContactScale(float value, float scale)
+        {
+            if (Mathf.Abs(scale) <= 1e-6f) return value;
+            return value / scale;
         }
 
         // ------------------------------------------------------ curved ramps ---

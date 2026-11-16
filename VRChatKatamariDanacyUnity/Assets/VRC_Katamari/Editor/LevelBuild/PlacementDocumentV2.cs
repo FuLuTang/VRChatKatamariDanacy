@@ -206,9 +206,17 @@ namespace VRCKatamari.Editor.LevelBuild
         public string Kind;
         /// <summary><c>box</c> / <c>ramp</c> / <c>curve_ramp</c>.</summary>
         public string Role;
-        /// <summary><c>box</c> / <c>plane</c>.</summary>
+        /// <summary>
+        /// <c>box</c> / <c>proxy</c> / <c>plane</c> (a legacy boundary only). <c>proxy</c> means
+        /// "the contact shape is <see cref="Collider"/>, the support face is <see cref="Size"/>".
+        /// </summary>
         public string Shape;
         public float[] Center;
+        /// <summary>
+        /// The AABB extents. For <c>shape:"proxy"</c> this is the SUPPORT face only (§4: the
+        /// ball stands on this box's top, because a fitted convex hull's top can be a spike),
+        /// not the contact shape.
+        /// </summary>
         public float[] Size;
         public PlacementV2Curve Curve;
         public float[] RotationQuat;
@@ -219,6 +227,19 @@ namespace VRCKatamari.Editor.LevelBuild
         public string Meets;
         public string Material;
         public string Notes;
+        /// <summary>
+        /// The contact proxy of a <c>shape:"proxy"</c> solid: local to <see cref="Center"/> +
+        /// <see cref="RotationQuat"/>, encoded exactly like <c>defs[].collider</c>
+        /// (box/sphere/capsule/convex). Null for every other shape - and an empty block with no
+        /// <c>type</c> is not a declared proxy either (presence by content).
+        /// </summary>
+        public PlacementV2Collider Collider;
+        /// <summary>
+        /// <c>def</c> / <c>aabb-fallback</c> / <c>manual</c>: where the proxy came from. Required
+        /// with <c>shape:"proxy"</c>, because an AABB fallback must be visible in the data
+        /// (§9 <c>[structure_proxy]</c>).
+        /// </summary>
+        public string ProxySource;
     }
 
     /// <summary>The <c>curve</c> block of a <c>role=curve_ramp</c> solid (same shape as v1).</summary>
@@ -299,6 +320,13 @@ namespace VRCKatamari.Editor.LevelBuild
         public float Phase;
         public int ClipStart = -1;
         public bool ShakeOff;
+        /// <summary>
+        /// The extractor's spawn-record index (<c>instanceIndex</c>), 0-based and unique within
+        /// the document. Preserved as provenance: the importer's identity is still
+        /// <c>itemId</c>, but this is the number a report about "instance #411" means.
+        /// </summary>
+        public int InstanceIndex = -1;
+        public bool HasInstanceIndex;
         public string Parent;
         public bool HasParent;
         public string RigidGroup;
@@ -489,7 +517,8 @@ namespace VRCKatamari.Editor.LevelBuild
         private static readonly string[] SolidKeys =
         {
             "id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
-            "collision", "absorbable", "support", "meets", "material", "notes"
+            "collision", "absorbable", "support", "meets", "material", "notes", "collider",
+            "proxySource"
         };
 
         private static readonly string[] CurveKeys =
@@ -518,7 +547,8 @@ namespace VRCKatamari.Editor.LevelBuild
             "itemId", "def", "kind", "behaviour", "motion", "inherit", "phase", "clipStart",
             "shakeOff", "zone", "position", "rotationQuat", "scale", "aabb", "volumeK",
             "growthMm3", "volumePenalty", "absorbDiameterReqMm", "absorbable", "valueUnits",
-            "parent", "rigidGroup", "support", "stackedOn", "floatingOk", "notes"
+            "parent", "rigidGroup", "support", "stackedOn", "floatingOk", "notes",
+            "instanceIndex"
         };
 
         private static readonly string[] DefKeys =
@@ -884,6 +914,9 @@ namespace VRCKatamari.Editor.LevelBuild
                     Notes = item.GetString("notes")
                 };
                 solid.Curve = ReadCurve(item.Get("curve"), result, document, i);
+                solid.ProxySource = item.GetString("proxySource");
+                solid.Collider = ReadCollider(item.Get("collider"), result, document,
+                    "structures.solids[" + i + "].collider");
                 solids[i] = solid;
             }
 
@@ -1063,6 +1096,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 prop.HasClipStart = item.Has("clipStart");
                 prop.ClipStart = item.GetInt("clipStart", -1);
                 prop.ShakeOff = item.GetBool("shakeOff", false);
+                prop.HasInstanceIndex = item.Has("instanceIndex");
+                prop.InstanceIndex = item.GetInt("instanceIndex", -1);
                 prop.HasParent = item.Has("parent") && item.Get("parent") != null &&
                                  item.Get("parent").Kind == LevelJsonKind.String;
                 prop.Parent = prop.HasParent ? item.GetString("parent") : null;
@@ -1121,7 +1156,8 @@ namespace VRCKatamari.Editor.LevelBuild
                     }
                 }
 
-                def.Collider = ReadCollider(item.Get("collider"), result, document, i);
+                def.Collider = ReadCollider(item.Get("collider"), result, document,
+                    "defs[" + i + "].collider");
                 defs[i] = def;
             }
 
@@ -1129,10 +1165,10 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         private static PlacementV2Collider ReadCollider(LevelJsonNode node,
-            PlacementV2ReadResult result, PlacementV2Document document, int defIndex)
+            PlacementV2ReadResult result, PlacementV2Document document, string path)
         {
             if (node == null || node.Kind != LevelJsonKind.Object) return null;
-            ReportUnknown(node, "defs[" + defIndex + "].collider", ColliderKeys, result, document);
+            ReportUnknown(node, path, ColliderKeys, result, document);
             // Presence by CONTENT, not by null: an empty block is not a declared proxy. This is
             // the v1 bug (44 "collider.type must be ... (got '')" errors) made structural.
             string type = node.GetString("type");
@@ -1160,8 +1196,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 }
                 else
                 {
-                    result.Errors.Add("defs[" + defIndex +
-                                      "].collider.hull must be a flat list of numbers (3N)");
+                    result.Errors.Add(path + ".hull must be a flat list of numbers (3N)");
                 }
             }
 
@@ -1362,6 +1397,12 @@ namespace VRCKatamari.Editor.LevelBuild
                 if (prop.Aabb == null)
                 {
                     result.Errors.Add(prop.ItemId + " has no usable aabb[3]");
+                }
+
+                if (prop.HasInstanceIndex && prop.InstanceIndex < 0)
+                {
+                    result.Errors.Add("[prop_instance_index] " + prop.ItemId + " instanceIndex " +
+                                      prop.InstanceIndex + " must be a whole number >= 0");
                 }
             }
 

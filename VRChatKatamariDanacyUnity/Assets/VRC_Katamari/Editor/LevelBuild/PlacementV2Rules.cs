@@ -415,6 +415,306 @@ namespace VRCKatamari.Editor.LevelBuild
             return TryFindDef(document.Defs, prop.Def, out def) ? def : null;
         }
 
+        // -------------------------------------------------------------- structures ---
+
+        public const string ShapeBox = "box";
+        public const string ShapeProxy = "proxy";
+        public const string ShapePlane = "plane";
+
+        public const string ProxySourceDef = "def";
+        public const string ProxySourceAabbFallback = "aabb-fallback";
+        public const string ProxySourceManual = "manual";
+
+        /// <summary>The three states a solid's <c>shape</c> may take (§4).</summary>
+        public static bool IsShape(string value)
+        {
+            if (value == null) return false;
+            string shape = value.Trim();
+            return string.Equals(shape, ShapeBox, StringComparison.Ordinal) ||
+                   string.Equals(shape, ShapeProxy, StringComparison.Ordinal) ||
+                   string.Equals(shape, ShapePlane, StringComparison.Ordinal);
+        }
+
+        public static bool IsProxySource(string value)
+        {
+            if (value == null) return false;
+            string source = value.Trim();
+            return string.Equals(source, ProxySourceDef, StringComparison.Ordinal) ||
+                   string.Equals(source, ProxySourceAabbFallback, StringComparison.Ordinal) ||
+                   string.Equals(source, ProxySourceManual, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// The §9 <c>[structure_proxy]</c> rule for one solid, or null.
+        /// </summary>
+        /// <remarks>
+        /// <c>shape:"proxy"</c> must carry a legal <c>collider</c> AND a <c>proxySource</c> in
+        /// the enum; <c>shape:"box"</c> (or no shape at all, the legacy spelling) must not carry
+        /// a <c>collider</c> - a written block that the runtime ignores is worse than no block,
+        /// because the next reader believes the contact shape is the proxy. The proxy block
+        /// itself is validated here rather than by the defs path, because a solid's proxy is
+        /// fitted against the SOLID's AABB, not a def's.
+        /// </remarks>
+        public static string SolidProxyError(PlacementV2Solid solid)
+        {
+            if (solid == null) return null;
+            string name = string.IsNullOrEmpty(solid.Id) ? "(unnamed solid)" : solid.Id;
+            string shape = solid.Shape == null ? "" : solid.Shape.Trim();
+            bool isProxy = string.Equals(shape, ShapeProxy, StringComparison.Ordinal);
+            bool hasCollider = solid.Collider != null;
+
+            if (!isProxy)
+            {
+                if (hasCollider)
+                {
+                    return "[structure_proxy] " + name + " has shape '" +
+                           (shape.Length == 0 ? ShapeBox : shape) +
+                           "' but also writes a collider block; only shape:\"proxy\" may declare " +
+                           "a contact proxy (an ignored block makes the next reader believe the " +
+                           "contact shape is the proxy)";
+                }
+
+                return null;
+            }
+
+            if (!hasCollider)
+            {
+                return "[structure_proxy] " + name +
+                       " is shape:\"proxy\" but has no collider block";
+            }
+
+            if (!IsProxySource(solid.ProxySource))
+            {
+                return "[structure_proxy] " + name + " is shape:\"proxy\" but proxySource is '" +
+                       (solid.ProxySource ?? "") + "' (expected def/aabb-fallback/manual)";
+            }
+
+            PlacementV2Collider collider = solid.Collider;
+            string type = collider.Type == null ? "" : collider.Type.Trim().ToLowerInvariant();
+            if (type.Length == 0)
+            {
+                return "[structure_proxy] " + name + " has an empty collider.type";
+            }
+
+            if (type != "box" && type != "sphere" && type != "capsule" && type != "convex")
+            {
+                return "[structure_proxy] " + name + " collider.type '" + collider.Type +
+                       "' is not box/sphere/capsule/convex";
+            }
+
+            if (type == "box" && !HasPositiveSize(collider.Size))
+            {
+                return "[structure_proxy] " + name + " has a box proxy without a positive size[3]";
+            }
+
+            if ((type == "sphere" || type == "capsule") && !(collider.Radius > 0f))
+            {
+                return "[structure_proxy] " + name + " has a " + type +
+                       " proxy without a positive radius";
+            }
+
+            if (type == "capsule")
+            {
+                string axis = collider.Axis == null ? "" : collider.Axis.Trim().ToLowerInvariant();
+                if (axis != "x" && axis != "y" && axis != "z")
+                {
+                    return "[structure_proxy] " + name + " has a capsule proxy without axis x/y/z";
+                }
+
+                if (collider.HalfHeight < 0f)
+                {
+                    return "[structure_proxy] " + name + " has a capsule proxy with halfHeight < 0";
+                }
+            }
+
+            if (type == "convex")
+            {
+                if (collider.Hull == null || collider.Hull.Length < 12 ||
+                    collider.Hull.Length > 72 || collider.Hull.Length % 3 != 0)
+                {
+                    return "[structure_proxy] " + name + " has a convex proxy whose hull is not a " +
+                           "flat list of 3N numbers (4..24 points)";
+                }
+
+                for (int i = 0; i < collider.Hull.Length; i++)
+                {
+                    if (!IsFinite(collider.Hull[i]))
+                    {
+                        return "[structure_proxy] " + name + " has a non-finite hull point";
+                    }
+                }
+            }
+
+            if (solid.Size == null || solid.Size.Length != 3)
+            {
+                return "[structure_proxy] " + name + " is shape:\"proxy\" but has no size[3]; the " +
+                       "support face is the size box's top, so it cannot be derived";
+            }
+
+            return null;
+        }
+
+        /// <summary>True when an authored size vector is three positive numbers.</summary>
+        private static bool HasPositiveSize(float[] values)
+        {
+            if (values == null || values.Length != 3) return false;
+            return values[0] > 0f && values[1] > 0f && values[2] > 0f;
+        }
+
+        /// <summary>
+        /// The box the runtime gets as a solid's contact shape, in the solid's LOCAL frame.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The contract this implements (§4, owner ruling): the contact FOOTPRINT comes from the
+        /// proxy, the standable TOP comes from <c>size</c>. The motor's static table holds OBBs
+        /// only, so a sphere, a capsule or a convex hull reaches the scene as its local AABB box
+        /// - that is the documented interim ("先用盒包住代理做过渡"), not a silent fallback:
+        /// <see cref="PlacementSolidContactBox.Note"/> says so per solid and the importer prints
+        /// an aggregate <c>[structure_proxy]</c> line.
+        /// </para>
+        /// <para>
+        /// Raising the box's top to the <c>size</c> top is what keeps the ball standing on the
+        /// VISUAL top instead of on a fitted hull's ceiling; it never lowers a top (a fitted
+        /// proxy cannot stick out above its AABB) and never widens the footprint.
+        /// </para>
+        /// </remarks>
+        public sealed class PlacementSolidContactBox
+        {
+            /// <summary>Local centre of the contact box.</summary>
+            public float[] Center;
+            /// <summary>Local full extents of the contact box.</summary>
+            public float[] Size;
+            /// <summary>The proxy's own type: box/sphere/capsule/convex.</summary>
+            public string ProxyType;
+            /// <summary>True when the box IS the authored contact shape (a box proxy, unraised).</summary>
+            public bool Exact;
+            /// <summary>The top was raised to the size box's top (the support face).</summary>
+            public bool TopRaisedToSizeTop;
+            /// <summary>Why this is not exact, or null.</summary>
+            public string Note;
+        }
+
+        public static bool TrySolidContactBox(PlacementV2Solid solid,
+            out PlacementSolidContactBox box, out string error)
+        {
+            box = null;
+            error = SolidProxyError(solid);
+            if (error != null) return false;
+            if (solid == null) return false;
+            if (!string.Equals(solid.Shape == null ? "" : solid.Shape.Trim(), ShapeProxy,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            PlacementV2Collider collider = solid.Collider;
+            string type = collider.Type.Trim().ToLowerInvariant();
+            float[] center = collider.Center != null && collider.Center.Length == 3
+                ? (float[])collider.Center.Clone()
+                : new[] { 0f, 0f, 0f };
+            float[] size;
+            if (type == "box")
+            {
+                size = (float[])collider.Size.Clone();
+            }
+            else if (type == "sphere")
+            {
+                float diameter = collider.Radius * 2f;
+                size = new[] { diameter, diameter, diameter };
+            }
+            else if (type == "capsule")
+            {
+                float diameter = collider.Radius * 2f;
+                float length = collider.HalfHeight * 2f + diameter;
+                size = new[] { diameter, diameter, diameter };
+                string axis = collider.Axis.Trim().ToLowerInvariant();
+                if (axis == "x") size[0] = length;
+                else if (axis == "z") size[2] = length;
+                else size[1] = length;
+            }
+            else
+            {
+                float[] minimum;
+                float[] maximum;
+                HullBounds(collider.Hull, out minimum, out maximum);
+                size = new[]
+                {
+                    maximum[0] - minimum[0], maximum[1] - minimum[1], maximum[2] - minimum[2]
+                };
+                center = new[]
+                {
+                    center[0] + (minimum[0] + maximum[0]) * 0.5f,
+                    center[1] + (minimum[1] + maximum[1]) * 0.5f,
+                    center[2] + (minimum[2] + maximum[2]) * 0.5f
+                };
+            }
+
+            bool exact = string.Equals(type, "box", StringComparison.Ordinal);
+            string note = exact
+                ? null
+                : "[structure_proxy] " + (string.IsNullOrEmpty(solid.Id) ? "solid" : solid.Id) +
+                  " contact is a " + type + " proxy; the motor's static table is OBB-only, so the " +
+                  "scene gets the proxy's local AABB box";
+
+            bool raised = false;
+            if (solid.Size != null && solid.Size.Length == 3 && solid.Size[1] > 0f)
+            {
+                float proxyTop = center[1] + size[1] * 0.5f;
+                float sizeTop = solid.Size[1] * 0.5f;
+                if (sizeTop > proxyTop + 1e-4f)
+                {
+                    float bottom = center[1] - size[1] * 0.5f;
+                    if (bottom < sizeTop)
+                    {
+                        center[1] = (bottom + sizeTop) * 0.5f;
+                        size[1] = sizeTop - bottom;
+                        raised = true;
+                        exact = false;
+                    }
+                }
+            }
+
+            box = new PlacementSolidContactBox
+            {
+                Center = center,
+                Size = size,
+                ProxyType = type,
+                Exact = exact,
+                TopRaisedToSizeTop = raised,
+                Note = note
+            };
+            return true;
+        }
+
+        private static void HullBounds(float[] hull, out float[] minimum, out float[] maximum)
+        {
+            minimum = new[] { float.MaxValue, float.MaxValue, float.MaxValue };
+            maximum = new[] { float.MinValue, float.MinValue, float.MinValue };
+            for (int i = 0; i + 2 < hull.Length; i += 3)
+            {
+                for (int axis = 0; axis < 3; axis++)
+                {
+                    float value = hull[i + axis];
+                    if (value < minimum[axis]) minimum[axis] = value;
+                    if (value > maximum[axis]) maximum[axis] = value;
+                }
+            }
+
+            if (minimum[0] > maximum[0])
+            {
+                minimum = new[] { 0f, 0f, 0f };
+                maximum = new[] { 0f, 0f, 0f };
+            }
+        }
+
+        /// <summary>The support face a proxy solid must offer: the <c>size</c> box's top.</summary>
+        public static float SolidSupportTopY(PlacementV2Solid solid)
+        {
+            if (solid == null || solid.Size == null || solid.Size.Length != 3) return 0f;
+            return solid.Size[1] * 0.5f;
+        }
+
         // ------------------------------------------------------------------ walls ---
 
         /// <summary>One edge of an activity wall, as the plane channel consumes it.</summary>

@@ -361,6 +361,82 @@ namespace VRCKatamari.Tests
                 false, 0, -1));
         }
 
+        [Test]
+        public void ASeatedPlayerIsNeverHeldEvenWhenThePositionLooksWrong()
+        {
+            // A seated avatar is carried by the station and a client can report its
+            // position at the seat, the station or somewhere in between. The station's
+            // seated flag is the reliable fact, so it wins over any distance reading.
+            Assert.IsFalse(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, true, 100f, 0f, 2.5f, 0, 3));
+
+            // The same reading with nobody seated is exactly the case the hold exists for.
+            Assert.IsTrue(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 100f, 0f, 2.5f, 0, 3));
+
+            // Inside the island still means no correction.
+            Assert.IsFalse(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                true, false, 100f, 0f, 2.5f, 0, 3));
+        }
+
+        [Test]
+        public void TheHoldWaitsOutItsGraceWindowAfterAStart()
+        {
+            // The 2026-11-16 ClientSim run had the hold pull a respawned player back three
+            // times in the first second of a round. A start is teleport -> measure -> seat;
+            // nothing may move the player during that window.
+            Assert.IsFalse(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 10f, 9f, 2.5f, 0, 3));
+            Assert.IsFalse(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 11f, 9f, 2.5f, 0, 3));
+            Assert.IsTrue(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 11.5f, 9f, 2.5f, 0, 3));
+
+            // No start recorded yet (-1): no window to wait for.
+            Assert.IsTrue(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 1f, -1f, 2.5f, 0, 3));
+        }
+
+        [Test]
+        public void TheHoldRefusesUnusableReadings()
+        {
+            Assert.IsFalse(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, float.NaN, 0f, 2.5f, 0, 3));
+            Assert.IsFalse(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 100f, float.NaN, 2.5f, 0, 3));
+            Assert.IsFalse(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 100f, 0f, float.NaN, 0, 3));
+        }
+
+        [Test]
+        public void TheSeatedAwareHoldStillStopsAtItsAttemptLimit()
+        {
+            Assert.IsTrue(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 100f, 0f, 2.5f, 2, 3));
+            Assert.IsFalse(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 100f, 0f, 2.5f, 3, 3));
+            Assert.IsFalse(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 100f, 0f, 2.5f, 0, 0));
+            Assert.IsFalse(HubLoopMath.ShouldHoldInLevelNow(StoryRoundController.StateRunning,
+                false, false, 100f, 0f, 2.5f, 0, -1));
+        }
+
+        [Test]
+        public void ASeatRequestIsRetriedInsideItsWindowAndStopsAtTheLimit()
+        {
+            // Unanswered after the interval: ask again.
+            Assert.IsTrue(HubLoopMath.ShouldRetrySeat(false, 1, 3, 10, 10));
+            // Too soon, already successful, or out of attempts: no.
+            Assert.IsFalse(HubLoopMath.ShouldRetrySeat(false, 1, 3, 9, 10));
+            Assert.IsFalse(HubLoopMath.ShouldRetrySeat(true, 1, 3, 10, 10));
+            Assert.IsFalse(HubLoopMath.ShouldRetrySeat(false, 3, 3, 10, 10));
+            Assert.IsFalse(HubLoopMath.ShouldRetrySeat(false, 1, 0, 10, 10));
+            // A negative frame delta is not a retry window.
+            Assert.IsFalse(HubLoopMath.ShouldRetrySeat(false, 1, 3, -1, 10));
+            // Zero interval means "retry now" while attempts remain.
+            Assert.IsTrue(HubLoopMath.ShouldRetrySeat(false, 1, 3, 0, 0));
+        }
+
         // ------------------------------------------------------------------ reason text
 
         [Test]

@@ -135,6 +135,16 @@ namespace VRCKatamari.Hub
         [SerializeField] private VRC.SDK3.Components.VRCStation rideStation;
         [SerializeField] private BallRideStation rideSeat;
 
+        // Owner decision 2026-11-16: the room flow seats the player on the ball, with no
+        // click and no Station trigger. A negative flag, so an old scene instance that
+        // predates the field reads as "seat on" instead of "off".
+        [Header("Seat on start")]
+        [SerializeField] private bool disableAutoSeat = false;
+        // Frames a seat request may take before the launcher declares it failed.
+        // UseStation is asynchronous and OnStationEntered can land a few frames later;
+        // 30 frames is about half a second and matches the start's arrival budget.
+        [SerializeField] private int seatCheckFrames = 30;
+
         // The room panel's prompt line. Written only on a state change.
         [Header("Room panel (optional)")]
         [SerializeField] private Text statusText;
@@ -181,6 +191,11 @@ namespace VRCKatamari.Hub
         // Corrections per round. A broken teleport must not become a per-frame loop.
         [SerializeField] private int holdAttemptLimit = 3;
 
+        // Seconds after a round opens before the containment correction may move anyone.
+        // A start is teleport -> measure -> seat; a client that lands or respawns in that
+        // window must not be pulled around while it settles.
+        [SerializeField] private float holdGraceSeconds = 2.5f;
+
         // ------------------------------------------------------------------ state
 
         // -1 is "no state seen yet", so the first Update counts as a change and writes
@@ -211,8 +226,29 @@ namespace VRCKatamari.Hub
 
         private int holdAttempts;
 
+        // Where this attempt's arrival is measured: the seat transform when auto-seat is
+        // on and a station is wired, the level entry otherwise. Kept as a Transform so a
+        // moving ball's seat keeps the hold radius centred on the rider.
+        private Transform startArrivalPoint;
+        private Transform activeLevelPoint;
+
+        // Seat request window after a start and after a hold correction. UseStation is
+        // asynchronous; a request that has not landed is retried at a fixed interval
+        // inside the window, then reported once.
+        private bool seatCheckPending;
+        private int seatCheckFrame;
+        private int seatAttempts;
+        private int lastSeatRequestFrame;
+
+        // Time.time when the current round opened; negative means no round yet.
+        private float lastStartSeconds = -1f;
+
         private bool warnedMissingController;
         private bool warnedMissingRoomPoint;
+
+        // Seat retries inside seatCheckFrames: two more attempts ten frames apart.
+        private const int SeatRetryLimit = 3;
+        private const int SeatRetryIntervalFrames = 10;
 
         // ------------------------------------------------------------------ lifecycle
 
@@ -256,6 +292,16 @@ namespace VRCKatamari.Hub
                 holdPlayerInLevel = false;
             }
             if (holdAttemptLimit < 0) holdAttemptLimit = 0;
+            // Both are safety values, and a scene saved before the fields existed can
+            // deserialize them as zero. Treat zero as "use the default" rather than as an
+            // instruction to disable the protection; the operator can still tune them.
+            if (seatCheckFrames < 1) seatCheckFrames = 30;
+            if (!KatamariMath.IsFiniteFloat(holdGraceSeconds) || holdGraceSeconds <= 0f)
+            {
+                Debug.LogWarning("[hub] holdGraceSeconds=" + holdGraceSeconds
+                    + " is not usable; using 2.5");
+                holdGraceSeconds = 2.5f;
+            }
 
             if (controller == null)
             {
@@ -278,6 +324,8 @@ namespace VRCKatamari.Hub
 
             Debug.Log("[hub] ready levels=" + LevelCount() + " state=" + StateText()
                 + " holdInLevel=" + holdPlayerInLevel
+                + " autoSeat=" + (!disableAutoSeat && rideStation != null && rideSeat != null)
+                + " holdGrace=" + holdGraceSeconds
                 + " lift=" + arrivalLiftMeters
                 + " tolerance=" + arrivalToleranceMeters
                 + " cooldown=" + transferCooldownSeconds);
@@ -297,6 +345,46 @@ namespace VRCKatamari.Hub
             }
 
             int state = controller.GetState();
+
+            // The one-line answer to "did the scripted seat actually take?" is read on
+            // later frames, because UseStation is asynchronous: success logs as soon as
+            // OnStationEntered lands, and only a request still unanswered at the deadline
+            // is a failure. Logged even while a transfer is pending, so a failed seat is
+            // never swallowed by a later return.
+            if (seatCheckPending)
+            {
+                bool seatedNow = rideSeat != null && rideSeat.IsLocalPlayerSeated();
+                if (seatedNow)
+                {
+                    seatCheckPending = false;
+                    Debug.Log("[hub] seat result seated=true frame=" + Time.frameCount
+                        + " state=" + state);
+                }
+                else if (HubLoopMath.ShouldRetrySeat(seatedNow, seatAttempts, SeatRetryLimit,
+                    Time.frameCount - lastSeatRequestFrame, SeatRetryIntervalFrames))
+                {
+                    // The first request can land while the player is still airborne from
+                    // the arrival teleport. Asking again after a short fall/settle window
+                    // is cheap and is the difference between "seated" and "standing next
+                    // to the ball" on a slow client.
+                    seatAttempts++;
+                    lastSeatRequestFrame = Time.frameCount;
+                    bool again = rideSeat != null && rideSeat.TrySeatLocalPlayer();
+                    Debug.Log("[hub] seat retry attempt=" + seatAttempts
+                        + " requested=" + again
+                        + " frame=" + Time.frameCount);
+                }
+                else if (Time.frameCount >= seatCheckFrame)
+                {
+                    seatCheckPending = false;
+                    Debug.LogWarning("[hub] seat result seated=false frame=" + Time.frameCount
+                        + " attempts=" + seatAttempts
+                        + " state=" + state + "; the station did not take the player within "
+                        + seatCheckFrames + " frames. The round keeps running and the player"
+                        + " can still click the ball (BallRideStation.Interact), but a client"
+                        + " without station support cannot drive.");
+                }
+            }
 
             if (state != lastState)
             {
@@ -397,15 +485,25 @@ namespace VRCKatamari.Hub
                 return false;
             }
 
+            // Where the player is sent. With a station wired, the room flow seats the
+            // player on the ball, so the arrival is the seat's own transform: the station
+            // carries them from there and a seat that fails still leaves the player on the
+            // level floor next to the ball instead of at a hand-placed point that can be
+            // metres off (the 2026-11-16 run put LevelEntry in the void, the player fell,
+            // and ClientSim respawned them at the room). The level entry stays as the
+            // no-station fallback and as the destination when auto-seat is off.
             Transform entry = LevelEntry(levelIndex);
-            if (entry == null)
+            bool seatArrival = !disableAutoSeat && rideStation != null && rideSeat != null;
+            Transform arrivalPoint = entry;
+            if (seatArrival) arrivalPoint = rideStation.transform;
+            if (arrivalPoint == null)
             {
                 reason = HubLoopMath.ReasonLevelEntryUnwired;
                 return false;
             }
 
             Vector3 arrival;
-            if (!HubLoopMath.TryLiftedPoint(entry.position, arrivalLiftMeters, out arrival))
+            if (!HubLoopMath.TryLiftedPoint(arrivalPoint.position, arrivalLiftMeters, out arrival))
             {
                 reason = HubLoopMath.ReasonPositionNotFinite;
                 return false;
@@ -414,6 +512,7 @@ namespace VRCKatamari.Hub
             // Stamped on the request, not on the arrival: two presses in the same frame
             // are already refused by startPending, and this covers the frames after.
             lastTransferSeconds = nowSeconds;
+            startArrivalPoint = arrivalPoint;
 
             Vector3 position = player.GetPosition();
             if (HubLoopMath.IsWithin(position, arrival, arrivalToleranceMeters))
@@ -432,11 +531,12 @@ namespace VRCKatamari.Hub
             startFramesWaited = 0;
             startArrival = arrival;
 
-            TeleportPlayer(arrival, entry.rotation,
+            TeleportPlayer(arrival, arrivalPoint.rotation,
                 "enter-level levelIndex=" + levelIndex
                 + " name=" + LevelName(levelIndex)
                 + " mode=" + mode
-                + " state=" + state);
+                + " state=" + state
+                + " arrivalSource=" + (seatArrival ? "seat" : "entry"));
             return true;
         }
 
@@ -599,6 +699,8 @@ namespace VRCKatamari.Hub
             int framesWaited, string cause)
         {
             activeLevelIndex = levelIndex;
+            activeLevelPoint = startArrivalPoint;
+            if (activeLevelPoint == null) activeLevelPoint = LevelEntry(levelIndex);
             holdAttempts = 0;
 
             if (mode == HubLoopMath.StartModeResetThenBegin)
@@ -637,6 +739,9 @@ namespace VRCKatamari.Hub
                 + " state=" + controller.GetState()
                 + " distanceFromEntry=" + distanceFromEntry
                 + " framesWaited=" + framesWaited);
+
+            lastStartSeconds = Time.time;
+            RequestSeat("started");
         }
 
         private void AbortStart(int reason)
@@ -681,6 +786,9 @@ namespace VRCKatamari.Hub
         private void BeginReturn(string cause)
         {
             if (returnPending) return;
+            // A seat whose answer is still in flight is irrelevant once the room flow
+            // starts taking the player out; do not log a stale "seated=false" after it.
+            seatCheckPending = false;
 
             if (roomSpawn == null)
             {
@@ -851,15 +959,23 @@ namespace VRCKatamari.Hub
             if (state != StoryRoundController.StateRunning) return;
             if (activeLevelIndex < 0) return;
 
-            Transform entry = LevelEntry(activeLevelIndex);
+            // The seat transform when auto-seat is on (it moves with the ball), the
+            // hand-placed entry otherwise. Null only if the scene lost both.
+            Transform entry = activeLevelPoint;
+            if (entry == null) entry = LevelEntry(activeLevelIndex);
             if (entry == null) return;
 
             VRCPlayerApi player = Networking.LocalPlayer;
             if (player == null) return;
 
+            // Seated is the strongest "in level" reading, and a client can report a seated
+            // player's position in more than one place; ask the station instead of measuring
+            // a point. The grace window covers the teleport/land/seat frames after a start.
+            bool seated = rideSeat != null && rideSeat.IsLocalPlayerSeated();
             Vector3 position = player.GetPosition();
             bool inside = HubLoopMath.IsWithin(position, entry.position, levelAreaRadiusMeters);
-            if (!HubLoopMath.ShouldHoldInLevel(state, inside, holdAttempts, holdAttemptLimit))
+            if (!HubLoopMath.ShouldHoldInLevelNow(state, inside, seated, Time.time,
+                lastStartSeconds, holdGraceSeconds, holdAttempts, holdAttemptLimit))
             {
                 return;
             }
@@ -884,11 +1000,46 @@ namespace VRCKatamari.Hub
                 "hold-in-level attempt=" + holdAttempts
                 + " distanceFromLevel=" + distance);
 
+            // The correction put the player back at the ball; asking the station to seat
+            // again is what turns "back in the level" into "riding", and it is the same
+            // one-shot path a start uses.
+            RequestSeat("hold-in-level");
+
             if (holdAttempts >= holdAttemptLimit)
             {
                 Debug.LogWarning("[hub] hold-in-level gave up after " + holdAttempts
                     + " attempts; the round keeps running and settles on its own");
             }
+        }
+
+        // ------------------------------------------------------------------ seat
+
+        /// <summary>
+        /// Asks the ball's station to seat the local player and arms the one-line result
+        /// check. No-op when auto-seat is off or no station is wired.
+        /// </summary>
+        /// <remarks>
+        /// This is the launcher's only seat call and it goes through
+        /// <see cref="BallRideStation.TrySeatLocalPlayer"/>, which wraps the same
+        /// <c>VRCStation.UseStation</c> the ball's Interact uses. It is called after a
+        /// start opens the round and after a hold correction puts the player back at the
+        /// ball; the result is read a few frames later because UseStation is asynchronous.
+        /// The round is not delayed on the seat: a client that never seats is still a
+        /// valid round (the player can click the ball), just not a drivable one.
+        /// </remarks>
+        private void RequestSeat(string cause)
+        {
+            if (disableAutoSeat || rideSeat == null) return;
+
+            bool requested = rideSeat.TrySeatLocalPlayer();
+            seatCheckPending = requested;
+            seatCheckFrame = Time.frameCount + seatCheckFrames;
+            seatAttempts = 1;
+            lastSeatRequestFrame = Time.frameCount;
+            Debug.Log("[hub] seat request cause=" + cause
+                + " requested=" + requested
+                + " seated=" + rideSeat.IsLocalPlayerSeated()
+                + " frame=" + Time.frameCount);
         }
 
         // ------------------------------------------------------------------ teleport

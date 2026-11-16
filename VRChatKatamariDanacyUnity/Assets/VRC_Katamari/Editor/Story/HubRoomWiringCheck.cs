@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using VRCKatamari.BallMotor;
 using VRCKatamari.Hub;
 using VRCKatamari.Story;
 using VRCKatamari.Story.Hub;
@@ -110,6 +111,38 @@ namespace VRCKatamari.Editor.Story
             if (firstEntry == null && entries > 0)
             {
                 Report("launcher.levelEntries[0] is empty", ref problems);
+            }
+            // The entry is the fallback destination when auto-seat is off or no station is
+            // wired, so it still has to be on the level floor next to the ball. O4 placed
+            // it at (0, -2.2) while the ball is at (-12.5, -12.5); the player arrived in
+            // the void, fell, and ClientSim respawned them in the room.
+            var motor = Object.FindObjectOfType<KatamariBallMotor>();
+            if (motor != null && firstEntry != null)
+            {
+                SerializedProperty startPose = new SerializedObject(motor).FindProperty(
+                    "startCenterWorld");
+                if (startPose == null)
+                {
+                    Warn("cannot read KatamariBallMotor.startCenterWorld; the level entry's"
+                        + " position was not compared with the ball");
+                }
+                else
+                {
+                    float fromBall = Vector3.Distance(firstEntry.position,
+                        startPose.vector3Value);
+                    if (fromBall > 5f)
+                    {
+                        Warn("launcher.levelEntries[0] is " + fromBall.ToString("F1")
+                            + " m from the ball's startCenterWorld. It is the fallback arrival,"
+                            + " and it must be on the level floor near the ball; an entry in"
+                            + " the void makes the player fall and respawn at the room spawn");
+                    }
+                    else
+                    {
+                        Debug.Log("[hub-check] level entry is " + fromBall.ToString("F1")
+                            + " m from the ball start");
+                    }
+                }
             }
             if (firstEntry != null && hubCenter != null)
             {

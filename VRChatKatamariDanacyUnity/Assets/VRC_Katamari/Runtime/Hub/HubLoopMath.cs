@@ -368,6 +368,83 @@ namespace VRCKatamari.Hub
             return attempts < holdAttemptLimit;
         }
 
+        /// <summary>
+        /// The hold-in-level rule with the two facts the 2026-11-16 ClientSim run added:
+        /// a seated player is in the level no matter what <c>GetPosition</c> answers, and a
+        /// start needs a short grace window before the correction may move anyone.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Why seated counts as in-level. A seated avatar is carried by the station; a
+        /// client can report its position at the station, at the seat, or somewhere in
+        /// between, and none of those is a useful "did they leave the level" reading.
+        /// The station already owns the only reliable seated flag
+        /// (<c>BallRideStation.IsLocalPlayerSeated</c>), so the correction asks it instead
+        /// of measuring a point. This also stops a correction from teleporting a seated
+        /// player, which the station could refuse or turn into a stand-up.
+        /// </para>
+        /// <para>
+        /// Why the grace window. The start is two-phase (teleport, then measure) and a
+        /// client may spend a frame or two applying the move, landing, or respawning. A
+        /// correction that fires in that window fights the start it was meant to protect;
+        /// the 2026-11-16 run showed a respawn being pulled back three times because the
+        /// hold saw the room spawn before the player had settled. The window starts when a
+        /// round actually opens, so a retry gets its own window.
+        /// </para>
+        /// <para>
+        /// Fail closed on non-finite readings: a NaN would compare false against every
+        /// distance and turn the correction into a per-frame teleport loop. A negative
+        /// <paramref name="lastStartSeconds"/> means no start yet and skips the window.
+        /// </para>
+        /// </remarks>
+        public static bool ShouldHoldInLevelNow(int roundState, bool insideLevelArea,
+            bool seated, float nowSeconds, float lastStartSeconds, float graceSeconds,
+            int holdAttemptsUsed, int holdAttemptLimit)
+        {
+            if (roundState != StoryRoundController.StateRunning) return false;
+            // Seated is the strongest "in the level" fact there is; never move a rider.
+            if (seated) return false;
+            if (insideLevelArea) return false;
+            if (holdAttemptLimit <= 0) return false;
+            if (!KatamariMath.IsFiniteFloat(nowSeconds)) return false;
+            if (!KatamariMath.IsFiniteFloat(lastStartSeconds)) return false;
+            if (!KatamariMath.IsFiniteFloat(graceSeconds)) return false;
+            if (graceSeconds < 0f) graceSeconds = 0f;
+
+            if (lastStartSeconds >= 0f)
+            {
+                float sinceStart = nowSeconds - lastStartSeconds;
+                if (!KatamariMath.IsFiniteFloat(sinceStart)) return false;
+                if (sinceStart < graceSeconds) return false;
+            }
+
+            int attempts = holdAttemptsUsed;
+            if (attempts < 0) attempts = 0;
+            return attempts < holdAttemptLimit;
+        }
+
+        /// <summary>
+        /// Whether an unanswered seat request should be asked again inside its window.
+        /// </summary>
+        /// <remarks>
+        /// <c>UseStation</c> is asynchronous, and the first request can land while the
+        /// player is still falling from the arrival teleport. Retrying on a fixed interval
+        /// is what makes a scripted seat robust on a slow frame; the limit stops a client
+        /// without station support from calling it every frame. A negative frame delta or a
+        /// non-positive interval means "no waiting information" and refuses the retry.
+        /// </remarks>
+        public static bool ShouldRetrySeat(bool seated, int attemptsUsed, int attemptLimit,
+            int framesSinceRequest, int retryIntervalFrames)
+        {
+            if (seated) return false;
+            if (attemptLimit <= 0) return false;
+            if (framesSinceRequest < 0) return false;
+            if (attemptsUsed < 0) attemptsUsed = 0;
+            if (attemptsUsed >= attemptLimit) return false;
+            if (retryIntervalFrames <= 0) return true;
+            return framesSinceRequest >= retryIntervalFrames;
+        }
+
         /// <summary>One English phrase per reason code, for the launcher's log lines.</summary>
         public static string DescribeReason(int reason)
         {

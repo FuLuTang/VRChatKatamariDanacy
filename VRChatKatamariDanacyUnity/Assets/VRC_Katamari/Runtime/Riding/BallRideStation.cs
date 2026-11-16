@@ -114,9 +114,59 @@ namespace VRCKatamari.Riding
         public override void Interact()
         {
             if (seated) return;
+            TrySeatLocalPlayer();
+        }
+
+        /// <summary>
+        /// Seats the local player without a click: the hub's "walk in, teleport, sit"
+        /// flow calls this after it has measured the arrival at the ball.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the same <c>VRCStation.UseStation</c> path <see cref="Interact"/> uses,
+        /// so the click and the room flow cannot diverge: <c>OnStationEntered</c> is still
+        /// the only place that sets <c>seated</c>, opens the ride gate, tells the round
+        /// controller and starts the seat-eye measurement. Seating by script is not a
+        /// second seat implementation, it is the same station API with a different caller.
+        /// </para>
+        /// <para>
+        /// Refusals are logged and answered false, never thrown. There is no distance
+        /// check on purpose: <c>UseStation</c> is a script API, not an Interact ray, so
+        /// "the player is not looking at the station" is not a reason to refuse. The
+        /// station object must be active, because an inactive station cannot carry an
+        /// avatar.
+        /// </para>
+        /// <para>
+        /// The caller still has to verify the result through
+        /// <see cref="IsLocalPlayerSeated"/>: <c>UseStation</c> is asynchronous, and a
+        /// client that does not support it (notably an environment without a station
+        /// implementation) leaves the player standing. That is a logged false, not a
+        /// thrown error.
+        /// </para>
+        /// </remarks>
+        public bool TrySeatLocalPlayer()
+        {
             VRCPlayerApi player = Networking.LocalPlayer;
-            if (player == null || station == null) return;
+            if (player == null)
+            {
+                Debug.LogWarning("[ride] seat request refused: no local player");
+                return false;
+            }
+            if (station == null)
+            {
+                Debug.LogWarning("[ride] seat request refused: no VRCStation is wired");
+                return false;
+            }
+            if (!station.gameObject.activeSelf)
+            {
+                Debug.LogWarning("[ride] seat request refused: the station object is inactive");
+                return false;
+            }
+            if (seated) return true;
+
             station.UseStation(player);
+            Debug.Log("[ride] seat requested without a click frame=" + Time.frameCount);
+            return true;
         }
 
         public override void OnStationEntered(VRCPlayerApi player)

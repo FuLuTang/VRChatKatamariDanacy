@@ -15724,7 +15724,7 @@ MonoBehaviour:
   motor: {fileID: 1524211376}
   coreMesh: {fileID: 2109846803}
   useVisualCoreRadius: 1
-  smoothCoreGrowth: 1
+  smoothCoreGrowth: 0
   smoothTimeSeconds: 0.08
 --- !u!4 &1875452169
 Transform:

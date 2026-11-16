@@ -300,3 +300,29 @@ Step B 把 `valueUnits` 换成 `long[]` 后，**每个元素从 8 个十六进�
 - **不要**提交探针用的临时 `.cs` / 场景 / `.asset`；跑完连同 `.meta` 一起删掉，只把结论写回本文件。
 - **不要**在 Step A 顺手改 `PickupFieldHost.valueUnits` 的类型来"顺便验一下 long[]"——那会立刻让所有关卡场景丢字段，正是 (r) 把 B 独立成一步的原因。
 - **不要**把本文件的预期输出当成实测结果引用；没跑就是没跑。
+
+---
+
+## 6. 实测回填（2026-11-16，Unity 会话 round O1）
+
+```text
+探针1 Udon long / long[]：PASS — 控制台原文：[longprobe] ok=True scalar=-9223372036854775808 sum=9007203549708290 mid=9007199254740993
+探针2 JsonUtility/SerializedProperty long+long[]：PASS — 原文：
+[longprobe-json] out={"big":9007199254740993,"bigs":[1,4294967296,9223372036854775807],"small":-7}
+[longprobe-json] roundtrip=True,True small=-7
+[longprobe-sp] type=Integer longValue=9007199254740993 arraySize=3
+[longprobe-sp] e0=1 e1=4294967296 e2=9223372036854775807
+[longprobe-sp] applied longValue=9007199254740993
+探针3 重导入 diff：Step A 空 diff = YES — numstat：StoryMode.unity 重同步+保存后 git diff --numstat 为空
+```
+
+补充事实（本次实测，替代 §1 的"零先例"读数方式）：
+
+- 合并 `78ee9c1` 之后**立即**扫 `Assets/SerializedUdonPrograms/*.asset` 仍是 67 份 / `SystemInt64` = **0**，但那是**程序资产还没重编**；触发 U# 重编后变成 68 份（多出探针程序）/ **51** 次。
+  所以"0 次"只能当基线，不能当"Udon 拒绝 long"的证据——必须先确认程序是新编的（看 `.asset` mtime 或强制 `CompileAllCsPrograms(true,false)`）。
+- `KatamariBallMotor.asset` 的 `serializedUdonProgramAsset` 实测是 `Assets/SerializedUdonPrograms/eb192fc99d65a434aba5fe70424086c1.asset`，重编后含 **40** 次 `SystemInt64`，
+  即 Step A 的账本 `long` 标量与四个 `long[]` 确实进了 Udon 程序体。
+- `SerializedProperty.propertyType` 打出的是 `Integer`（不是 `Long`），`longValue` 读写逐位正确；场景 YAML 中 `long` 标量是十进制、`long[]` 是每元素 16 个十六进制字符。
+- 场景 YAML 实测串与 §1 预期**逐字符相等**：`values: 010000000000000000000000010000000100000000002000ffffffffffffff7f`。
+
+证据目录：[Docs/Evidence/ContentVolume/2026-11-16_long_probes](<Docs/Evidence/ContentVolume/2026-11-16_long_probes/README.md>)。

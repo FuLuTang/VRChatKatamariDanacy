@@ -1,0 +1,13 @@
+diff --git a/VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity b/VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity
+index 04ee15b..2ebe69d 100644
+--- a/VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity
++++ b/VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity
+@@ -15724,7 +15724,7 @@ MonoBehaviour:
+   motor: {fileID: 1524211376}
+   coreMesh: {fileID: 2109846803}
+   useVisualCoreRadius: 1
+-  smoothCoreGrowth: 1
++  smoothCoreGrowth: 0
+   smoothTimeSeconds: 0.08
+ --- !u!4 &1875452169
+ Transform:

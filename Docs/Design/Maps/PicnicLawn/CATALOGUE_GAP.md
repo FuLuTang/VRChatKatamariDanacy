@@ -1,6 +1,6 @@
 # 野餐草坪（PicnicLawn）目录缺口：逐档还差多少
 
-> 状态：`MEASURED + INFERRED`，2026-11-15（**同日按 REROLL 数据挖掘修订目标值**）。**实测**部分来自 `Docs/Design/Levels/story_01_bench_size/placement.json`（127 个 props / 44 个 def）与 128 个模型的实测包围盒；**目标**部分来自 [ContentVolume](../../../Research/ContentVolume/README.md) **§4.4**（原作单关 523–3955 实例 / 107–565 种；我们按 156 种 / 650 实例规划）。§4.1 的旧目标（111/365）已作废。
+> 状态：`MEASURED + INFERRED`，2026-11-15（**同日按 REROLL 数据挖掘修订目标值**）。**实测**部分来自 `Docs/Design/Levels/story_01_bench_size/placement.json`（127 个 props / 44 个 def）与 128 个模型的实测包围盒；**目标**部分来自 [ContentVolume](../../../Research/ContentVolume/README.md) **§4.4**（原作单关 523–3955 实例 / 107–565 种；我们按 156 种 / 650 实例规划）。
 > 范围：只盘点「还差多少种、还差多少件」，不改关卡 JSON、不改 Unity、不做定价。补件的生产计划见 [catalogue.csv](catalogue.csv)。
 
 ## 1. 口径

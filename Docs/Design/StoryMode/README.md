@@ -137,7 +137,7 @@
 4. **点击距离**：座位在 rig 根上，准星到球的 Collider 至少是 `back`（0.5 m 球 1.85 m 起、1.43 m 球 2.32 m）。超出桌面交互距离就点不到——首次测试第一件事就是确认能坐下；点不到就减小 `eyeBaseBackMeters`/`eyeBackPerRadius`，或把 Collider 加大。
 5. **坐姿下是否还有第二个提示**：T04 的 D1 只证明 `DisableInteractive = true` 让 Behaviour 的“坐下”提示消失；VRCStation 组件自带的提示是否也被压掉，没有分开观察过。
 6. **退出按钮在未入座时**：`ExitStation` 无对象可退出，预期是 no-op，未验证。
-7. **坐姿镜头**（计划风险 2）：rig 根已经给出「球后上方」，坐姿视点还要再叠 VRCStation 的人眼高度补偿，补偿量、会不会看天/被球挡只能 Build & Test 里调（旧的 `eyeHeightMeters` 0.25–0.5 + Station 偏移 `(0, 0.8, −2.2)` 已作废）。
+7. **坐姿镜头**（计划风险 2）：rig 根已经给出「球后上方」，坐姿视点还要再叠 VRCStation 的人眼高度补偿，补偿量、会不会看天/被球挡只能 Build & Test 里调（rig 根已是取景眼点，不要再叠一层 Station 偏移）。
 8. **Player Mobility = 0 的含义**：实验文件里是 0，本仓没有核实它对应 Mobile 还是 Immobilize；探针的第 5 步排查依赖这一点。
 9. **多人/远端**：`BehaviourSyncMode.None`，`DisableInteractive` 是本地状态，远端客户端会看到自己的提示。切片是单人，不做。
 10. **`IsLocalPlayerSeated()` 的跨 Behaviour 调用**：签名与调用方式（类型化引用上直接调公开方法）与 `DesktopMoveInput` 调 `motor.SetMoveAxes` 同形（`DesktopMoveInput.cs:149`）。`DesktopMoveInput` 本身已编译（commit `e74ff8c`），但探针这个调用方自己没有编译过。

@@ -41,7 +41,7 @@
 |---|---|---|
 | 1→2 | `Vector2 move`（已钳位）、帧时间戳 | 原始按键、菜单状态 |
 | 2→3 | `Vector3 requestedPlanarDisplacement`（米） | 速度、意图 |
-| 3→4 | 扫掠后的 `Vector3 center`、是否卡住 | 请求位移（已作废） |
+| 3→4 | 扫掠后的 `Vector3 center`、是否卡住 | 请求位移 |
 | 4→5 | 最终 `center`、`collisionRadiusWorldM` | 语义直径、核心半径 |
 | 5→6 | 每件 `absorbedVolumeUnits` + 事件标识 | 位置、模型尺寸 |
 | 6→7 | `confirmedVolumeUnits`（累计、已确认） | 未确认/待处理值 |

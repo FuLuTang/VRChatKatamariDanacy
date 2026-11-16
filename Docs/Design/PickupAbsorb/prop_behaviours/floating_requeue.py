@@ -34,7 +34,7 @@
 
 from Tools.levelbuild import placement_core as core
 
-# --- 状态（与 PROP_BEHAVIOURS §5.3 的 propState 同值） ----------------------
+# --- 状态（与 PROP_BEHAVIOURS §4 的 propState 同值） ----------------------
 RESTING = 0
 FALLING = 1
 SETTLED = 2

@@ -312,7 +312,7 @@ respawn / player_count_plans / performance_budget
 
 - **不重叠**：相邻台圆心距 8.40 m > 2×1.60 m，通用校验器（`Tools/mapbuild/validate_map.py`）强制检查。
 - **轮换（暂定）**：同时只有 1 个台激活，顺序 `bank_a → bank_d → bank_c → bank_b`（顺时针），周期 60 s，提前 8 s 预告（喇叭 + 旗杆降半 + 圆环闪烁）。激活时刻 0 / 60 / 120 / 180 s；180 s 一局内实际只有 3 个 60 s 窗口（0–60 / 60–120 / 120–180），**第 4 个台在终场哨（180 s）激活、本局内不会被用到**。为不让任何一个台永久闲置，下一局的轮换起点按 +1 台偏移（本局没用到的台成为下一局首位），偏移按房间内已完成局数推进、单局内恒定；规则写在 `layout.json` 的 `bank.rotation.timeline_note`。
-- **轮换与预告是决策（01 §2），8 s 与顺序是暂定**；原作兑换区约每 60 秒换位属 `[强暗示]`（研究核查 C3；证据＝Tier 2 玩家实机 + Tier 3 wiki），精确秒数未确认，不得写成原作确认值。本图原 45 s 周期作废，`layout.json` 已改为 60 s。
+- **轮换与预告是决策（01 §2），8 s 与顺序是暂定**；原作兑换区约每 60 秒换位属 `[强暗示]`（研究核查 C3；证据＝Tier 2 玩家实机 + Tier 3 wiki），精确秒数未确认，不得写成原作确认值。本图周期 60 s（`layout.json`）。
 - **可多人同时交分**（01 §2 原型规则）：圆盘不做占位锁；`max_concurrent_bankers = 4`。
 - **交分后按比例缩小（不是回初始体积）**：`post = max(start, start + (pre − start) × residual)`，全部按**碰撞直径**算，`start` = 0.30 m、`residual = 0.25`。例：2.20 m 交分后 = 0.30 + (2.20 − 0.30) × 0.25 = **0.775 m**；公式里的 `max` 是下限保护，任何 residual 下都不会把球缩到起始球径以下。**球径 < 0.55 m 不能交分**（`bank_min_conversion_diameter_m`），进台不计分。`residual = 0.25` 与 `0.55 m` 都是 `[项目自选]` **PROVISIONAL**（01 §2 / 研究核查 C2、C4 只确认「交分后球变小」「球太小不给分」，比例与阈值未公开），与 `Docs/Design/Gameplay/round_model.py` 的 `bank_residual_fraction` / `min_bank_diameter_m` 默认值相同。规则写在 `layout.json` 的 `bank.rules`：`bank_size_rule = "proportional_shrink"`、`bank_residual_fraction = 0.25`、`bank_min_conversion_diameter_m = 0.55`；旧的 `bank_resets_ball_to_start_size` 仅为 Unity payload 兼容保留、值已是 `false`。**这份数据还没有消费方**：运行时侧的同一条公式实现在 `Runtime/BallMotor/BankShrinkMath.cs`（`post = max(start, start + (pre − start) × residual)`，直径空间），它不读这份 JSON；灰盒 payload 的 `GreyboxPayload.GreyboxBankRotation` 也只声明了旧 int 字段、Builder 从不读规则（§16 风险 14）。
 - **交分后位置**：留在台上；最近出口 2.2 m（对角门，已开时）到 5.1 m（同侧 5 m 入口），四个方向都能走，不做单向陷阱。缩小后的球按正常球处理（不再有额外保护），是否会被门口卡住属 T21 实测项。
@@ -499,7 +499,7 @@ T21 在 Unity 里要做的（灰盒）：
 
 > 本节只**记录**现状与后果，**不改任何机器可读字段**。原因写在 §18.3：`layout.json` 与 `prop_catalog.csv` 已被两份关卡 JSON 的 `map_snapshot` 钉住，改一个字节就会让 `python3 Docs/Design/GameModes/validate_levels.py` 报「地图已变更」、`python3 -m unittest discover -s Docs/tests` 变红；重钉哈希属于 GameModes 负责人的动作（决定 (g)：**哈希不手抄、不自动刷新**），不在本次写范围。
 
-### 18.1 现行门槛与本文的旧口径
+### 18.1 现行门槛
 
 吸收门自 2026-11-15 起是**体积**口径（`Docs/OPEN_DECISIONS.md` (l)）：
 
@@ -516,7 +516,7 @@ T21 在 Unity 里要做的（灰盒）：
 | **2.20**（本图 `ball_max_collision_diameter_m`） | **0.5575280** | **0.8230** |
 | 3.20（(n)/`PROP_SET_PLAN §2.8.5` 说的"大球区"上限） | 1.7178 | 1.197 |
 
-**本文件 §2「尺寸门槛 s/m/l」与 §9「成长解锁」整节仍是长度口径**（`D ≥ 最长边`）。它们没有错到会崩，但**已经不是运行时的判据**：一件 `3.6 × 0.55 × 0.80` 的长凳按长度只要 3.6 m 球，按体积要 `2.673 × 1.166 = 3.12 m`；反过来一根 `0.02 × 0.02 × 0.85` 的细杆按长度要 0.85 m 球，按体积只要 `0.19 m`。**§9 的「吸走所需球径」列请按本节重算后再引用**（表在 `Docs/Design/StoryMode/PICNIC_CORNER_LEVEL_ONE.md` §3.3，逐件给出 `a_eq` / `D_req` / 2.20 判定）。
+**本文件 §2「尺寸门槛 s/m/l」与 §9「成长解锁」按最长边写（`D ≥ 最长边`），不是现行判据**，引用前必须按本节重算：一件 `3.6 × 0.55 × 0.80` 的长凳按长度只要 3.6 m 球，按体积要 `2.673 × 1.166 = 3.12 m`；反过来一根 `0.02 × 0.02 × 0.85` 的细杆按长度要 0.85 m 球，按体积只要 `0.19 m`。**§9 的「吸走所需球径」列请按本节重算后再引用**（表在 `Docs/Design/StoryMode/PICNIC_CORNER_LEVEL_ONE.md` §3.3，逐件给出 `a_eq` / `D_req` / 2.20 判定）。
 
 ### 18.2 2.20 m 上限下的判定（只列会被改结论的行）
 

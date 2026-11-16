@@ -1,209 +1,170 @@
-# 原作「推墙即爬」实机录像观测（第一批 · 未得到可判爬升事件）
+# 原作「推墙即爬」跨系列公开资料核查（初代 / REROLL / We Love / Beautiful / Forever / ノ・ビ～タ / Once Upon）
 
-**调研日期：2026-11-16 UTC（项目时区 Asia/Shanghai）。** 目标：用原作实机录像量出
-[TERRAIN_CLIMB](../../Design/BallMotor/TERRAIN_CLIMB.md) 的两个暂定值——上限 `H_cap = k_h·D`（暂定 `k_h = 1.5`）
-与「爬到上限的时长」`T_climb`（暂定 4.5 s）。
+**调研日期：2026-11-16 UTC（项目时区 Asia/Shanghai）。** 本文是**文献核查**，不是录像量测：
+用各作攻略、手册转述、官方页与直接讨论机制的帖子，把「贴墙爬升」这条机制的**存在性、操作条件、
+上限、时长**逐条钉到来源上，并明确哪些数字**至今没有任何来源**。
 
-**结论先说（这不是完成态）**：本批素材里**没有量到任何一个「贴墙连续上升 → 到上限掉落」的完整事件**。
-下面给的是**可复现的素材定位 + 量测口径 + 8 段接触观察 + 为什么没量到 + 下一轮要什么素材**。
-`k_h` 与 `T_climb` **本轮未测出（`不可判`）**，设计里的 1.5 倍 / 4.5 s 仍然是 PROVISIONAL，
-既没有被证实也没有被推翻。
+**结论先说**
 
-> 证据等级口径沿用同目录文档：**【实测】**（我自己跑出来、可复现的像素或时间）、**【推断】**（合理未证实）、
-> **【未验证】**。截图只落在 `~/KatamariRef/viewer_evidence/climb/`（仓外，不入 git）。
+1. **机制存在，且跨作都在**：推着墙滚就能沿竖墙往上爬。REROLL 有明确的操作描述（慢贴、别弹开、再往前推）；
+   We Love Katamari 的手册（经维基转述）直接说「rolling against a wall allows the katamari to "climb" it」。
+2. **梯子/绳是另一套**：墙上有梯子（或台阶/绳）时可以**无限爬**；这是**多个独立来源一致**的说法。
+   传说里「初代能爬半分钟上工厂烟囱」的那个烟囱，**日文攻略两处都写明烟囱上有ハシゴ（梯子）**——
+   所以它是**梯子案例，不是普通墙案例**。这一条直接推翻了「初代普通墙能无限爬」的主要论据。
+3. **初代普通墙有没有上限：仍然未知。** 唯一正面主张（初代可无限爬）的作者在同一帖里自认「十多年没玩、
+   只是印象」；反方（封顶 ≈2 倍球高）说的是**续作/新作**，同样无来源。
+4. **没有任何来源给出初代/REROLL 的爬升上限倍数、爬升速度、到顶时长。** 只出现过「1–2 倍球高」
+   （续作/新作、社区、帖内被反驳）与「约 3 秒后被弹开」（新作、玩家观察）。
+   ⇒ 设计里 `k_h = 1.5` / `T_climb = 4.5 s` **落在传言区间内不等于被证实**，两者仍是我们自己的暂定值。
 
 ---
 
-## 1. 素材：能拿到什么、拿不到什么
+## 1. 证据分级与本文口径
 
-**YouTube 全部不可用**【实测】：本机 `DSH_VIDEO_COOKIES` 指向的 cookies.txt 只有 **B 站 SESSDATA**，
-YouTube 侧只有游客 cookie（`VISITOR_INFO1_LIVE`/`YSC`/`PREF`，无登录态），`video_probe` 对
-`watch?v=…` 直接返回 `this video needs a signed-in session`。所以本批**全部是 B 站素材**（B 站搬运的原作录像）。
-
-| 代号 | 链接 | 版本 | 时长 | 清晰度（实际取到） | 用途 |
-|---|---|---|---:|---|---|
-| **P1** | <https://www.bilibili.com/video/BV14A411K7os>（p1，「第1~11关」） | **PS2 初代**，PCSX2 + Vulkan 512×448 上采样（画面左下 OSD 可见 `Vulkan 512x448 / 30 FPS`） | 114:19 | 756×480 @30 fps | 主素材（巨蟹座全关） |
-| R1 | <https://www.bilibili.com/video/BV1Ve41147Zv?p=1> | REROLL（PC，无解说） | 57:38 | 720p 源，工具读 480p | 交叉核对 |
-| R2 | <https://www.bilibili.com/video/BV1jb411G7DU?p=1> | REROLL（PC，无解说，4 分P） | 57:14 | 480p | 备用 |
-
-**取帧手段**【实测】：DSH `video_probe/storyboard` 对 B 站只给到 **480p**（`available: 360p, 480p`，即使带登录
-cookie 也一样）；`bili video frames -q hd` 与直接用 DASH URL 走 ffmpeg 都能拿到 **720p**。所以量测帧一律用后者
-（B 站 480p 的 HUD 数字只有 ~20 px 高，读不稳）。全程**没有保存整段视频**：只取 1–5 s 的窗口和单帧，工作副本在
-`/tmp`，用完删。
-
-### 1.1 巨蟹座在 P1 里的准确位置【实测】
-
-PM2 原作这一段是逐帧核对的，用于下一轮直接跳进去：
-
-| 时间戳 | 内容 | 依据 |
+| 级 | 含义 | 例 |
 |---|---|---|
-| 21:10–21:21 | 巨蟹座开场白，王：「Speaking of delicious. **We say crab. Most certainly crab.**」 | 逐帧读字幕 |
-| 21:21 | 关卡开始，HUD **22cm2mm**、蟹计数 0 | HUD 左上 |
-| 21:38 / 22:0x / 23:22 / 25:05 / 26:20 | 23cm3mm / 25cm5mm / 34cm2mm / 59cm7mm / 62cm8mm | HUD 左上 |
-| 26:45 | 结算屏「Cancer 65%」 | 结算画面 |
+| **A 官方** | 厂商页面、手册、官方补丁说明 | Bandai 的 PS2 作品页；OUAK 1.1.0 补丁说明 |
+| **B 手册转述** | 维基等以手册为引用源的转述（未见手册原文） | 维基 We Love Katamari 的 gameplay 段（`cite_note-Manual`） |
+| **C 攻略/媒体** | 攻略站、UP 主/博客、游戏媒体报道 | psmk2、wazap、der3 的蟹座 100% 攻略、Gamer.ne.jp |
+| **D 社区帖** | Steam/论坛玩家描述，可能有记忆偏差 | Steam REROLL/OUAK 讨论串 |
+| **E 摘要** | 只能拿到搜索引擎摘要（站点 Cloudflare 403，未直接 fetch） | TV Tropes 的 Katamari 条目 |
 
-⇒ **巨蟹座本体约 5 分 20 秒**（21:21 → 26:40），与攻略页写的 PS2 版 5 分钟计时一致。
-起点区是**下沉的褐色地面 + 格栅墙/立柱**（对应我们 `placement.v2.json` 里出生凹坑那一块）【推断】。
-
-### 1.2 REROLL 版巨蟹座**不在** R1 的 P1 里【实测】
-
-顺手排掉了三个错点，省下一轮：R1 P1 的 20:40 是 **12cm2mm 巷内关**、33:50 是 **13cm 室内和室关**、
-46:00 是 **21cm5mm 警局/手铐关**、50:00–53:00 是 **71–98cm 城市关**。巨蟹座起步 22cm2mm，
-所以 **REROLL 的巨蟹座在 P1 之后**。下一轮要 REROLL 版就直接从 P2 里找，别再扫 P1。
+引用一律**只摘一句原文**（版权）。凡「未知」就写未知，不拿区间中值冒充测量值。
 
 ---
 
-## 2. 量测口径：两个必须先排除的坑
+## 2. 逐作核查表（存在性 + 操作条件）
 
-### 2.1 坑一：球被相机钉在屏幕上，屏幕位移不能当高度【实测】
+| # | 作品（年） | 原文（≤1 句） | 来源 / 级别 | 判读 |
+|---|---|---|---|---|
+| S1 | **REROLL**（2018） | "You can't jump but you can cimb some **short walls**. Approach the wall **slowly** so that you touch it without bumping away, and then **move forward** to roll up the vertical wall." | [Steam REROLL 讨论「Can you jump with ball?」2018-12-14, Demodulated](https://steamcommunity.com/app/848350/discussions/0/3561682879997803952/) / **D** | 机制存在；**操作三要素**：慢接近、不弹开、持续前推。注意他说的是 **short walls**（矮墙）——作者已给出「不是所有墙都能爬」的暗示，但没给比例 |
+| S2 | REROLL | "there are a few **ladders** here and there you can climb as Demodulated has described" | 同上串 2018-12-15, stray_pengo / **D** | 梯子 = 另一种可爬物 |
+| S3 | REROLL | "items only fly off whenever there's multiple attempts at either rolling on something too big or is **too steep a wall to climb**" | [Steam REROLL「Do items fly off more easily…」2018-12-11, Lenky Lad](https://steamcommunity.com/app/848350/discussions/0/1741102632991672789/) / **D** | 存在**「太陡 ⇒ 爬不上去」**的坡/壁阈值（未给角度） |
+| S4 | REROLL | "You had items fall off for doing simple things like **just trying to climb**." | 同上串 2018-12-14, UNBREAKABLE / **D** | 尝试爬 = 碰撞 = 掉件（对应本作「脆」的观感） |
+| S5 | **初代 2004** | "None of the tutorials or hints in the first game let you know that the katamari can climb walls… if a wall has a **ladder or steps** on it, you can climb it **indefinitely**" | [TV Tropes 条目（搜索摘要，2025-10-28）](https://tvtropes.org/pmwiki/pmwiki.php/Sandbox/KatamariGames) / **E** | 初代**没有任何教学**教你爬墙（所以「原作没这功能」的印象很常见）；梯子/台阶可无限爬；同段还说「碰墙即算碰撞」 |
+| S6 | **We Love**（2005） | "Rolling against a wall allows the player katamari to **\"climb\"** it in order to reach higher areas." | [维基 We Love Katamari, Gameplay 段，注 3 = 手册](https://en.wikipedia.org/wiki/We_Love_Katamari) / **B** | 手册级来源确认「贴墙→爬→到高处」；**注意：这句里没有任何尺寸比例** |
+| S7 | **We Love / Forever** | "you are able to roll, or climb, up the wall if you held **both the analog sticks forward**… In… Katamari Forever… the tutorial, after learning all the basic controls, you have to hold both joysticks forward the climb up a wall." | [Unreal Engine 论坛 2016-07-06](https://forums.unrealengine.com/t/help-with-remaking-katamari-damacy-in-hd/68356) / **D** | 双摇杆前推 = 推墙；**Forever 的教程强制你爬一次墙**（说明是官方承认的正式机制，不是隐藏技巧） |
+| S8 | **ノ・ビ～タ**（Vita, 2011） | 「乗り越えたい壁に向かって**3回ほどフリック**すれば、壁を越えていくことができる」 | [Gamer.ne.jp 2011-10-27](https://www.gamer.ne.jp/news/201110270001/) / **C** | Vita 版把「越墙」做成独立动作（3 次甩动）；同一机制在不同作上换了输入 |
+| S9 | **Forever**（2009） | "the Prince Hop… makes it a lot easier to get out of tight spots, and also increases the maneuverability of the Katamari to **reach higher places**" | [trophyunlocked 评测 2025-10-22](https://trophyunlocked.blogspot.com/2025/10/katamari-forever.html) / **C** | Forever 增加了**跳**（Prince Hop）来解决「上不去」，与「爬」并存 |
+| S10 | **Once Upon**（2025） | "Most surfaces have a bump or a piece of geometry that cause me to **bounce instead of climbing after about 3 seconds**, then launches me back down …" | [Steam OUAK「Wall climbing and me…」2025-11-01, 楼主](https://steamcommunity.com/app/1880620/discussions/0/845114064658264667/) / **D** | **新作**里：爬约 3 秒后被几何凸起弹回；作者认为爬只在教程里有效 |
+| S11 | Once Upon | "Improved the **operability of wall-climbing actions** within stages." | [OUAK 1.1.0 补丁说明（2026-03-06 报道）](https://nintendoeverything.com/once-upon-a-katamari-1-1-0-update-out-now-patch-notes) / **A** | 官方承认「壁登り」是独立动作，并在 2026 年专门修过手感 |
+| S12 | **Beautiful**（2007） | —（未找到任何直接谈爬墙的原文） | — | **无资料**。按「各作相近」的假设可外推，但**没有来源**，不要写成事实 |
 
-把巨蟹座若干段降到 378×240 做逐帧质心跟踪（约 120 帧，5–10 fps）：球心稳定落在
-**x≈0.46–0.56、y≈0.52–0.65**（画面中央偏下），帧间位移多在 1–3 %、最大 < 10 % 画幅。原因是 chase cam 跟着球走。
-
-⇒ **不能**用「球在屏幕上抬高了多少」当爬升高度（相机一并抬，读数接近 0）；
-必须用**同一帧里的静止世界参照**（墙顶棱 / 踢面棱 / 地面线）+ **球径的像素长度**做同帧比值。
-
-### 2.2 坑二：HUD 左侧那个「50cm / 1m / 1.5m」箭头不是比例尺【实测】
-
-它长得像尺子，但量了实际像素：REROLL 20:40（球 **12cm2mm**，球在画面上约 88 px 直径）时，
-箭头「**50cm**」全长只有 ≈43 px（756 px 宽画面）。若它是比例尺，则 0.86 px/cm，
-而同帧球径 12.2 cm ⇒ 88 px 反推 **7.2 px/cm**，差近一个数量级。
-
-⇒ 箭头是**尺度档位标签**（随球升级换字样：50cm → 1m → 1.5m），**长度不随世界距离变**。下一轮别拿它当尺子。
-
-### 2.3 于是本次实际采用的量法
-
-1. 球径 `D`：读 HUD 左上（`22cm2mm` 这种，精度 1 mm，视频压缩下读错 ≤1 mm）。
-2. 高度 `h`：同一帧内量 (a) 球底边缘 y 与 (b) 该接触实体的**底面/顶面棱 y**，两处同深度，取像素差 `h_px`。
-3. `h/D = h_px / D_px`，`D_px` 取球轮廓的水平直径（球未被遮挡时）。
-4. 时长：用**帧计数**（源 30 fps 恒定，取帧代数按 fps 设定），不以播放器秒表为准。
+**存在性小结**：初代/REROLL/We Love/Forever/ノ・ビ～タ/Once Upon **都有**这条机制（S1、S5-S11）；
+Beautiful 缺资料（S12）。「原作没有爬墙」是**误读**——初代只是**没有教学**（S5）。
 
 ---
 
-## 3. 事件表（8 段接触观察）
+## 3. 普通墙 vs 梯子（必须分开的两件事）
 
-> 「可判」列：**是**＝能读出爬升起点/终点与高度；**否**＝接触存在但读不出爬升（标 `不可判`）。
-> 「帧数」是**我真正看过的帧数**（含拼图/放大），不是抽帧数。
-
-| # | 素材 + 时间戳 | 关卡/位置 | 球径（HUD） | 接触面 | 抽帧（fps × 帧） | 球底是否上升 | 爬升时长 | 高度÷球径 | 结局 | 可判 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| E1 | [P1 21:33.5–21:38.0](https://www.bilibili.com/video/BV14A411K7os) | 巨蟹座 起点区出口 | **22cm7mm** | 格栅墙 + 立柱之间的窄缝 | 12 fps × 54（已看 13 帧，含 4 帧放大） | **未见上升**，但**球被立柱遮挡**（相机在栏杆外侧），球底读数不可信 | — | — | 从缝里横穿过去 | 否（遮挡） |
-| E2 | [P1 21:38–21:41](https://www.bilibili.com/video/BV14A411K7os) | 同上 格栅墙正面 | 23cm3mm | 网格状格栅墙 | 1 fps × 4 | 不可判（帧太疏） | — | — | 贴着墙走 | 否 |
-| E3 | [P1 21:21–21:26](https://www.bilibili.com/video/BV14A411K7os) | 起点凹坑侧壁 | **22cm2mm** | 坑壁 / 缓坡 | 1 fps × 6 | 不可判（走的是坡道，不是直壁） | — | — | 出坑 | 否 |
-| E4 | [P1 23:22–23:28](https://www.bilibili.com/video/BV14A411K7os) | 混凝土台地边沿 | **34cm2mm** | 台沿立面（目测高 0.10–0.20 m ≈ 0.3–0.6 D） | 8 fps × 32 + 12 fps × 26 | **否**（直接滚越，无滞留） | 未见爬升段 | ≤0.6（未越顶） | **滚越** | 否（只得到「≤0.6 D 的台沿直接滚过」） |
-| E5 | [P1 23:28–23:32](https://www.bilibili.com/video/BV14A411K7os) | 室内（床 / 衣柜旁） | **47cm1mm** | 床、家具侧面；**无直壁接触** | 8 fps × 32 | 否 | — | — | 在软性家具上平滚 | 否 |
-| E6 | [P1 25:30–25:45](https://www.bilibili.com/video/BV14A411K7os) | 蟹区矮墙/池边 | 59–62cm | 矮墙（高度 < 球半径） | 0.04 fps × 3 | 不可判 | — | — | 绕过 | 否 |
-| E7 | [P1 34:00](https://www.bilibili.com/video/BV14A411K7os) | 屋内墙角夹缝 | **80cm2mm** | 两面墙 + 地板夹角 | 单帧 | 不可判（单帧，相机贴得很近） | — | — | 卡在角里 | 否 |
-| E8 | [R1 20:40](https://www.bilibili.com/video/BV1Ve41147Zv?p=1) | 巷内高墙（非巨蟹座） | **12cm2mm** | 高墙 + 墙基台阶 | 单帧 | 不可判 | — | — | — | 否 |
-
-**合计：8 段接触观察，其中 0 段能给出「爬升时长」与「高度÷球径」的可判读数。**
-（E4 是唯一有定量产出的：`34 cm` 球把目测 `0.10–0.20 m`（≈`0.3–0.6 D`）的台沿**直接滚越**、没有出现「贴墙滞留在半腰」的姿态。）
-
----
-
-## 4. 由录像能推出的区间（本次只有弱结论）
-
-| 量 | 本轮结论 | 依据强度 |
-|---|---|---|
-| `k_h`（上限 ÷ 球径） | **未测出**。可辩护的只有一条下界式陈述：在巨蟹座 22–62 cm 的 5 分 20 秒里，**没有出现超过 ≈0.6 D 的「滞留半腰」姿态**；台阶/台沿一律被直接滚越或以「卡住」结束 | 弱（负证据，样本 8 段） |
-| `T_climb`（爬到上限的时长） | **未测出**。没有任何一个「起爬到停止」的连续段 | — |
-| 「推墙即爬」这件事本身 | **既未证实也未推翻**。8 段接触里没有一段出现「球底离开地面、沿直壁升高」 | 弱 |
-| 滚越门槛 | 台沿 ≈0.3–0.6 D 时**直接滚越**、无停顿 | 中（E4，1 个事件） |
-
-**为什么不给数字**：`k_h = 1.5` / `T_climb = 4.5 s` 这两个量要的是「上升段的斜率」和「上升段的终点」。
-本批素材里 0 个事件同时具备（a）清晰的直壁、（b）球底离开地面、（c）≥6 fps 的连续帧。硬凑数字就是编。
-
----
-
-## 5. 与设计暂定值（1.5 倍 / 4.5 秒）的对比
-
-| 设计值 | 本轮录像 | 判定 |
-|---|---|---|
-| `H_cap = 1.5·D` | 无事件可测 | **不可判**（不算证实，也不算推翻） |
-| `T_climb = 4.5 s`（所有球径相同） | 无事件可测 | **不可判** |
-| 「球底越过墙顶就翻上去」 | E4 只有一个 ≈0.3–0.6 D 的滚越样本 | 方向一致，**不足以定 `k_h`** |
-| 「超限时带离墙速度掉落」 | 8 段里没有一段出现「掉下来 + 被弹开」 | **不可判** |
-
-⇒ [TERRAIN_CLIMB](../../Design/BallMotor/TERRAIN_CLIMB.md) §6.4 的参数表**不要**因为本轮改成「已测」。
-`k_h = 1.5` 目前的支撑仍然只有 E4（0.222 m 球上 0.30 m 台阶，`ORIGINAL_TERRAIN_AND_LAYOUT.md` §7.3，可信度低）。
-
----
-
-## 6. 对 Lead 四条线索的逐条判定
-
-| # | 线索 | 本轮判定 | 说明 |
+| 类型 | 能爬多高 | 原文/依据 | 强度 |
 |---|---|---|---|
-| L1 | **速度门**：慢慢靠近、轻碰不弹开，再往前推就能沿竖墙滚上去；高速撞墙会被弹开 | **无法判断** | 8 段接触全部是低速贴近，**没有一帧出现「被弹开」**（球从未明显离开墙面弹回），但**也没有一段出现上升**。等于只验证了「低速不弹开」这半句 |
-| L2 | **高度上限**：初代能否无限爬？普通墙封顶 1–2 倍球径？ | **无法判断** | 这是本轮最该钉死的一条，但 0 个可判爬升事件。素材里既没有「爬很高然后掉」，也没有「爬到 1.5 D 就掉」 |
-| L3 | **梯子/烟囱无限爬**：星を作る9 的 ALOHA 套装在銭湯烟囱顶，要爬梯子 | **无法判断（未定位到片段）** | P1 是「第1~11关」，我在 1:24–1:44 抽了 6 帧都是**城市大球关**（81cm → 4m62cm），没抽到銭湯/烟囱段。**没有看到梯子机制**，也没有看到烟囱 |
-| L4 | **撞墙掉道具**：初代碰一下墙就掉几件 | **无法判断** | 没有逐帧核对「球上道具数」；E1/E2 的格栅墙接触里没有看到明显的掉件动画（但有收集特效闪光，容易混） |
+| **普通竖墙** | **未知**。REROLL 只说到「short walls」（S1）；新作侧说「capped to 1-2x your ball height」（S13）、「capped to … twice the height」（S14）；初代侧一说无限（S13）、一说封顶（S14 回应） | S1/S13/S14 | 定性 D，**无一手数值** |
+| **梯子 / 绳 / 台阶** | **无限**（一直爬到顶） | S2（ladders）、S5（"ladder or steps… indefinitely"）、S13（"only exception is… a rope or a ladder"）、S15/S16（烟囱上有ハシゴ） | **多来源一致**，C+D，可当工作假设 |
+| **烟囱案例** | 被当作「初代可无限爬普通墙」的证据，实际是**梯子** | S15「煙突にはハシゴが付いていて、そこから上へと登れる」；S16「煙突についているハシゴに向かって進めば上れる」 | **C，两处独立** ⇒ 推翻该论据 |
 
-> 提醒 Lead：L2 的另一半——「2025 新作封顶 1–2 倍球高」——是**续作/新作**的说法，与本项目复刻的
-> **2004 初代/REROLL** 未必同源。在拿到初代的可判素材前，不要把「封顶 1–2 倍」当作初代事实引用。
+S13/S14 出处（同一帖的两方）：
 
----
+> "Only the first game allowed you to climb indefinitely (one level even had a present hidden atop a factory smokestack where you had to climb for half a minute to reach it). **In the sequels and in this game, the climb height is capped to 1-2x your ball height.**… The only exception is if the surface has a rope or a ladder." —— Meat Miracle（被楼主标为答案）
+>
+> "you could only climb that smoke stack as it had a **ladder**, any other surface and you're capped to… **twice the height** of the Katamari. Think only Forever was a bit more lenient" —— Aries
+>
+> "It must've been over a decade since I played the original, but I'm fairly sure you could climb any height in it you wanted." —— Meat Miracle 的回应（自己降级为印象）
 
-## 7. 可信度与误差来源
+**读法**：这两条数字（1–2×、2×）都**不是**初代的测量值，而且**同一帖里互相打架**；
+其中「烟囱」这个唯一的具体案例已经被日文攻略证伪（是梯子）——所以连「爬了半分钟」这个时长
+也是**梯子上的时间**，不能拿来推普通墙的爬升速度。所以：
 
-**为什么本批没抓到（按可能性排序）**
-
-1. **长流程录像的玩家不贴墙推**【主因，推断】：5 分 20 秒的巨蟹座里，玩家一路在开阔地/台地上滚，
-   主动撞直壁的次数本来就只有个位数；我 1 fps 抽样 + 定点加密的窗口恰好都落在「滚越」和「横穿」上。
-2. **事件太短**：真正的「贴墙上升」目测 ≤1.5 s（社区描述与一手手感都是「一下子」），1 fps 抽样漏检率高。
-3. **直壁太少**：巨蟹座是**宽缓台地**为主的图（台沿高差 0.15–0.3 m），不是「窄巷直墙」图；
-   球在 22–62 cm 时绝大多数立面都比球矮或只高一点点 ⇒ 天然走「滚越」通道。
-4. **画质**：PS2 原画 512×448 上采样到 756×480，球底边缘与地面线的分界只有 3–8 px，
-   `h_px` 的单帧读数误差 ≈ ±5 px；换成 34 cm 球（≈90 px）也还有 ±6%。
-
-**能否用本批数据下结论**：不能。本文的否定性陈述（「没看到」）只在**已看过的 8 段 / 约 470 帧**内成立，
-不能外推成「原作没有连续爬升」。
+* 「初代普通墙无限爬」= **未证实**（作者自认凭印象，且其唯一例证是梯子）。
+* 「续作/新作封顶 1–2×（或 2×）」= **社区说法，方向一致、数值不一致**，只能当**量级**。
+* **初代/REROLL 普通墙的上限倍数 = 未知。**
 
 ---
 
-## 8. 下一轮采集规格（要什么素材、怎么量）
+## 4. 直接落到我们复刻关卡（蟹座）的一条
 
-**素材**（任一即可，优先级从高到低）：
+| # | 原文 | 来源 | 判读 |
+|---|---|---|---|
+| S17 | 「初期位置から出て、左側奥の**塀**に動き回っているカニがそこそこいます。…**王子ルックで見てから登って**巻き込むのがよいです。」「ポイント4の**塀から登れる高台**に2つ木があります。」 | [der3「塊魂アンコール かに座 100%」2018-12-10](https://der3.hatenablog.com/entry/2018/12/10/024748) / **C** | **蟹座（REROLL）里确实存在「一面可以爬上去的塀 + 上面的高台」**，而且是 100% 收集的必要路线。这给我们的参考关卡一条可判据：那张图里**至少有一面墙的高度落在可爬范围内** |
 
-1. **速通/100% 录像里「为了拿高处道具而主动爬墙」的片段**——100% 收集必然要爬；
-   筛法：搜 `Katamari 100%` / `全收集`，定位含梯子、烟囱、屋顶的关卡（星を作る9 銭湯、工厂）。
-2. **自录**：任意版本、任意关卡，小球阶段（≤50 cm），对着同一面**直墙**连续推 10 s ×3 次（推→顶→松手），
-   60 fps 录制。这是最省事、最可控的路径——**建议直接采用**。
-3. 攻略视频里「必须爬上去」的桥段（xneo 攻略提到銭湯烟囱、梯子）。
-
-**录制/取帧要求**：≥720p；60 fps（PS2 原机 60 场，抽帧用 30 fps 也行但时间分辨率减半）；
-固定机位段 ≥3 s；HUD 必须可读（球径 + 蟹/道具计数）。
-
-**每个事件记 6 个量**：球径（HUD）、接触面类型（直壁/踢面/棱/梯）、起爬时刻、停止/掉落时刻、
-最高球底 vs 墙面底棱（同帧像素比）、结局（翻上/掉落/被弹开/松手滑下）。
-
-**判读规则**（避免本轮踩过的坑）：不用球的屏幕位移；不用 HUD 那个 50cm 箭头；相机跟随期间只用**同帧比值**。
+> 这条只能证明「可爬」，**不能**推出比例；但它把「蟹座里到底有没有可爬的墙」这个问题从推测变成有出处。
 
 ---
 
-## 9. 截帧清单（仓外，`~/KatamariRef/viewer_evidence/climb/`）
+## 5. 数值状态表（哪些有、哪些没有）
 
-| 文件 | 内容 |
-|---|---|
-| `p1_ps2_cancer_intro_21m10-21m21.jpg` | 巨蟹座开场白 9 格（含「We say crab」） |
-| `p1_ps2_cancer_start_22cm2mm_21m21.jpg` | 关卡开始，HUD 22cm2mm、蟹计数 0 |
-| `p1_ps2_pillar_press_22cm7mm_21m33.jpg` | E1：格栅墙窄缝 9 格（12 fps 抽样） |
-| `p1_ps2_pillar_press_zoom_22cm7mm_21m34.jpg` | E1 放大 4 帧（球底贴地证据） |
-| `p1_ps2_terrace_34cm6mm_23m03.jpg` | E4 前段：34cm6mm 接近台沿 9 格 |
-| `p1_ps2_terrace_roll_over_34cm2mm_23m06.jpg` | E4：34cm2mm 滚越台沿 9 格（12 fps） |
-| `r1_reroll_room_13cm_33m50.jpg` | R1 交叉样本（13cm，室内） |
-| `r1_reroll_alley_12cm2mm_20m40.jpg` | E8：12cm2mm 巷内高墙 |
+| 量 | 初代 / REROLL | 续作 / 新作 | 来源强度 |
+|---|---|---|---|
+| 机制存在 | **有**（S1、S5 的默认前提） | 有（S6-S11） | 高（多来源） |
+| 操作条件 | 慢贴 + 不弹开 + 持续前推（S1）；太陡/太高 ⇒ 爬不上（S3） | 双摇杆前推（S7）/ 三连甩（S8） | 中-高 |
+| **上限倍数** | **未知** | 「1–2×」/「2×」（S13/S14，互相矛盾） | 低 |
+| **爬升速度 / 到顶秒数** | **未知**（无任何来源） | 「约 3 秒后被弹开」（S10，新作，单条玩家观察） | 极低 |
+| 掉落语义 | 未知（无来源描述「到顶掉落是否带离墙速度」） | 未知 | — |
+| 梯子/绳 | **无限**（S2/S5） | 无限（S13） | 中-高 |
+| 掉件代价 | 尝试爬也算碰撞、会掉件（S4、S5） | 续作起大幅减轻（同串多人口径） | 中 |
+
+**明确未知（本轮没有任何来源）**：初代/REROLL 的 `H_cap ÷ 球径`、爬升速率（m/s）、`T_climb`、
+上限处的离墙速度、可爬墙的坡度上限（只有「太陡」这一定性词）、球径是否影响可否起爬。
 
 ---
 
-## 10. 复现（本机命令，全部只读网络流、不落整段视频）
+## 6. 对 [TERRAIN_CLIMB](../../Design/BallMotor/TERRAIN_CLIMB.md) 的影响
 
-```bash
-# 1) 定位关卡（720p 单帧，约 15 s/帧）
-bili video frames BV14A411K7os -p 1 --at 21:21 --at 23:22 -q hd --no-sheet --out ~/KatamariRef/viewer_evidence/climb
-# 2) 取一段 2–5 s 的密集帧（12 fps）→ 本地 ffmpeg 拼 3×3 观察表
-ffmpeg -ss 66.0 -t 2.2 -i <local-window.mp4> -vf fps=12 -q:v 2 /tmp/w/f_%03d.jpg
-# 3) DASH URL（WBI 签名）→ ffmpeg 直取，避免 480p 上限
-```
+| 设计项 | 现在的依据 | 本轮核查后 |
+|---|---|---|
+| `k_h = 1.5`（上限 1.5·D） | 手册「约一个球径」+ 0.222 球上 0.30 m 台阶（E4，低可信） | **仍无来源支持**。唯一的手册级转述（S6）**不含尺寸比例**；「1–2×」是续作/新作的社区说法且帖内自相矛盾。1.5 落在该区间内**不构成证实** |
+| `T_climb = 4.5 s` | 手感旋钮 | **仍无来源**。文献里唯一的时间数字是「约 3 秒后被弹开」，且属于 2025 新作、单条玩家观察，不能移植 |
+| 「上限之下能翻上去」 | 一手手感 + E4 | 方向有支持（S1 的 short walls、S17 的塀→高台），**比例仍未知** |
+| 「梯子可无限爬」 | 之前只有社区传闻 | **可升级为工作假设**（S2/S5/S13/S15/S16），并**必须与普通墙分开实现**（若我们要做梯子） |
+| 手册引文的措辞 | `ContactTuning.cs` 头注写的是「can climb over walls that are about the same size as your katamari」 | ⚠ **需要复核**：维基对该手册句的转述是「climb it in order to reach higher areas」，**没有**「about the same size」。原文可能存在于手册别处，但目前**没有**可引的出处 |
 
-> 说明：第 3 步的签名脚本本轮写在 `/tmp`（未入仓）；它只做 `nav` + `playurl` 的 wbi 签名，
-> 不下载整段视频。若下一轮要常态化使用，应放进 `Tools/`（需要 Lead 决定许可与存放位置）。
+> 一句话：机制存在是硬的，**数字全是软的**。`k_h = 1.5` / `T_climb = 4.5 s` 应继续标 PROVISIONAL，
+> 并且不要在任何地方写成「原作实测」。
+
+---
+
+## 7. Lead 四条线索的最终判定（文献版）
+
+| # | 线索 | 判定 | 依据 |
+|---|---|---|---|
+| L1 | 慢靠近、不弹开、再前推就能沿竖墙滚上去 | **证实（REROLL）** | S1（原文）；S7 补充「双摇杆前推」 |
+| L2 | 初代普通墙能否无限爬 / 封顶 1–2 倍 | **无法判定**；且「初代无限」的主要论据（烟囱）被证伪为**梯子** | S13 vs S14 自相矛盾；S15/S16 |
+| L3 | 梯子/绳可无限爬 | **证实（多来源一致）** | S2/S5/S13 |
+| L4 | 撞墙/尝试爬会掉件，续作起减轻 | **证实（社区一致，REROLL 侧）** | S3/S4 + 同串多人；官方侧只有「高速撞墙会崩」的 PS2 作品页说法（附注） |
+| L5（新） | 初代没有教学教爬墙 | **证实（E 级）**，可用于解释「原作没这功能」的普遍印象 | S5 |
+
+附注（官方措辞，仅供对照）：Bandai 的 PS2 作品页把「变大后能过去」写成**段差**（台阶/高低差），
+并把「高速撞到卷不动的东西或**墙**」写成**块会崩、变小**；该页**没有**提贴墙爬升。
+（[Wayback 快照](https://web.archive.org/web/20260726191017/https://www.bandainamcoent.co.jp/cs/list/katamari_damacy_ps2/concept/) / **A**，原页现 403）
+
+---
+
+## 8. 若要继续（不需要模拟器、不需要自录）
+
+1. **手册原文**：找 We Love Katamari 手册 PDF 的「How to Play」页，核实 S6 那句手册原文里到底有没有尺寸词
+   ——这是唯一可能把 `k_h` 钉在**官方文字**上的入口，也直接决定 D1。
+2. **Beautiful Katamari**（S12 空缺）：找它的说明书/攻略里有没有「climb」条目，补齐跨作一致性。
+3. **梯子与普通墙的分野**：把「梯子/绳/台阶 = 无限」当工作假设，但要在实现上作为**独立类别**，
+   不要用普通墙的 `k_h` 去套。
+4. 若将来真要量：注意两个坑——追尾相机把球钉在屏幕固定位置（屏幕位移不能当高度），
+   HUD 左侧「50cm/1m」箭头是尺度档位标签而非比例尺（实测箭头长度不随世界距离变）。
+
+---
+
+## 9. 来源清单
+
+| 编号 | URL | 日期 | 类型 |
+|---|---|---|---|
+| S1/S2 | <https://steamcommunity.com/app/848350/discussions/0/3561682879997803952/> | 2018-12-13~15 | 社区帖 |
+| S3/S4 | <https://steamcommunity.com/app/848350/discussions/0/1741102632991672789/> | 2018-12-11~14 | 社区帖 |
+| S5 | <https://tvtropes.org/pmwiki/pmwiki.php/Sandbox/KatamariGames> | 2025-10-28 | Wiki（仅摘要，站点 403） |
+| S6 | <https://en.wikipedia.org/wiki/We_Love_Katamari> | 2026 修订 | 百科（引手册） |
+| S7 | <https://forums.unrealengine.com/t/help-with-remaking-katamari-damacy-in-hd/68356> | 2016-07-06 | 论坛 |
+| S8 | <https://www.gamer.ne.jp/news/201110270001/> | 2011-10-27 | 媒体 |
+| S9 | <https://trophyunlocked.blogspot.com/2025/10/katamari-forever.html> | 2025-10-22 | 评测 |
+| S10/S13/S14 | <https://steamcommunity.com/app/1880620/discussions/0/845114064658264667/> | 2025-11-01~03 | 社区帖（含楼主采纳的答案） |
+| S11 | <https://nintendoeverything.com/once-upon-a-katamari-1-1-0-update-out-now-patch-notes> | 2026-03-06 | 媒体转官方补丁说明 |
+| S15 | <http://psmk2.net/ps2/soft_04/act/katak.html> | 2000s | 攻略站 |
+| S16 | <https://wazap.com/question/%e5%85%a8%e9%83%a8%e3%81%ae%e3%83%97%e3%83%ac%e3%82%bc%e3%83%b3%e3%83%88%e3%81%ae%e3%81%82%e3%82%8b%e5%a0%b4%e6%89%80%e3%82%92%e6%95%99%e3%81%88%e3%81%a6%e3%81%8f%e3%81%a0%e3%81%95%e3%81%84%0d%0a%e3%81%8a%e3%81%ad%e3%81%8c%e3%81%84%e3%81%97%e3%81%be%e3%81%99%e3%80%82/30336/> | 2016-10-23 | Q&A |
+| S17 | <https://der3.hatenablog.com/entry/2018/12/10/024748> | 2018-12-10 | 攻略博客（蟹座 100%） |
+| 附注 | <https://web.archive.org/web/20260726191017/https://www.bandainamcoent.co.jp/cs/list/katamari_damacy_ps2/concept/> | 2026-07-26 快照 | 官方作品页 |

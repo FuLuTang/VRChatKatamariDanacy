@@ -584,9 +584,9 @@ python3 /tmp/corner_layout/build.py            # 落位 + 校验 + 写 JSON
 
 ## 9. 需要拍板（已全部拍板，2026-11-15）
 
-> **本节六条已由 Lead 于 2026-11-15 拍板，记录在 [`Docs/OPEN_DECISIONS.md`](../../OPEN_DECISIONS.md) 的 (q) 条**（「野餐一角布局：内容量、结构件单位来源与三条通路」）。用户可推翻。**本节不再是待决项：**下表保留原问题、决定与仍然要认的代价/复核点，选项历史以 (q) 正文为准。
+> **本节六条已由 Lead 于 2026-11-15 拍板，记录在 [`Docs/OPEN_DECISIONS.md`](../../OPEN_DECISIONS.md) 的 (q) 条**（「野餐一角布局：内容量、结构件单位来源与三条通路」）。用户可推翻。**本节不再是待决项：**下表是六条已决定项与仍要认的代价/复核点，决定正文见 (q)。
 
-| # | 原问题 | 决定（OPEN_DECISIONS (q)） | 仍要认的代价 / 复核点 |
+| # | 事项 | 决定（OPEN_DECISIONS (q)） | 仍要认的代价 / 复核点 |
 |---|---|---|---|
 | **U1** | **内容总量 1500 / 1183 / 1356 u？**（§5.5） | **已决定：S1 = 1500 u**——110 件小道具 412 u 不动 + 17 件结构件 1088 u；2.20 m 落在 90.4%，全吃光 2.275 m 被夹住 | ★ 摊薄到 16.4%（1.25/1.45/1.60 阈值不变）；2.00 之后约 40 s 清场尾巴。星级不重要、属可拆卸评分模块，**现阶段不调星级数** |
 | **U2** | **结构件的单位从哪来？**（值表顶格 16，本方案要 8–212） | **已决定：按 def 定义、由 placement 数据给出**（`placement.json` / def 目录）；`PickupFieldSync` 不再按最长边定价，退化为消费者 + 回读校验 | **已实现（2026-11-15）**：同步工具只消费声明值并回读校验，无声明时保留既有值；`refused: value units pending one rubric` 守卫已解除。具体数值属被 (p) 搁置的那一轮 |
@@ -623,7 +623,7 @@ python3 -m unittest discover -s Docs/tests
 | 文档 | 关系 |
 |---|---|
 | `LEVEL_CONSTRUCTION.md` §3.2 的 11 件骨架 | **本文是它的落地版**：11 件里 `picnic_basket`/`cooler_box` 归入 110 件的门件，其余 9 个类型按「2 托盘 / 2 木板 / 2 啤酒箱 / 2 收纳箱」展开成 13 件，再加 4 个新 def（`storage_bin` / `cooler_box_large` / `crate_large` / `picnic_bench`）= **17 件可吸家具**；`picnic_table`（2.49）**不进本关**（`PROP_SET_PLAN` §2.8.5 已划给 PicnicLawn） |
-| `PICNIC_CORNER_LEVEL_ONE.md` §3.4 的 7 区 | 区名沿用（`pocket`/`blanket_a`/`mid_lawn`/`outer`/`alcove`/`gate`），**`fruit_b` 从西北角挪到花圃台面**、新增 `bed_top`/`table_top` 两个「按平面成簇」的载体（`LEVEL_CONSTRUCTION` R4） |
+| `PICNIC_CORNER_LEVEL_ONE.md` 的 7 区规划 | 区名沿用（`pocket`/`blanket_a`/`mid_lawn`/`outer`/`alcove`/`gate`），**`fruit_b` 从西北角挪到花圃台面**、新增 `bed_top`/`table_top` 两个「按平面成簇」的载体（`LEVEL_CONSTRUCTION` R4） |
 | 同上 §3.5.3 的壁龛门 | **原样保留**（3 篮 + 1 箱、净宽 0.10 m、0.83 开第一道），只是位置按新骨架微调到 `z = −10.70` |
-| 同上 §3.5.3 的 L3「只放布景」 | **作废**：P1 之后台顶是地形、台面件在宿主里且够得着，不存在「永远吸不到的死行」 |
+| 同上 §3.5.3 的 L3 | **台面是内容**：P1 之后台顶是地形、台面件在宿主里且够得着，不存在「永远吸不到的死行」 |
 | `TERRAIN_SUPPORT.md` 11-U4 | 本文按 **A（P3 先做静态斜面）** 落地 |

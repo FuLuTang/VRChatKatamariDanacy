@@ -410,7 +410,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 - **④ 不是漏洞，判据是「有没有代理」而不是「有没有碰撞体」**：`def.collider` 是**导入器要建的碰撞代理**（`box`/`sphere`/`capsule`/`convex`），没有它就等于「按无碰撞处理」，而非均匀缩放唯一会失真的东西——代理形状——压根不存在。所以 ④ 比 ③ 宽是**有理由的宽**，不是绕过校验：一件 def 若写了 `collider:convex`，哪怕它 `static`、无父、不可吸，仍然被 ③ 拒。反过来 ④ 也只放行最没有风险的形态（`static` + `absorbable:false`），因为它「视觉可以任意拉伸、物理完全不参与」。
 - **原作的 1 件非均匀**（`sparrow_001`，def `sparrow` 不写 collider，D-5 原文即「按无碰撞处理」）就是 ④ 的唯一实例：照写 `scale`，标 `absorbable:false`、`behaviour:"static"`、不写 `collider`，并记进迁移报告的 `divergences`。
 
-`aabb` 一律是**已乘 scale** 的尺寸，`volumeMm3` 由它和 `volumeK` 推出。**不要**在运行时再乘一次 scale。为什么允许逐件缩放、以及它和旧口径「不缩放」的关系，见 §18。
+`aabb` 一律是**已乘 scale** 的尺寸，`volumeMm3` 由它和 `volumeK` 推出。**不要**在运行时再乘一次 scale。为什么允许逐件缩放，见 §18。
 
 ### 6.5 父指针与刚性组
 
@@ -1019,7 +1019,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 | `[prop_bounds]` | error | 道具离开 `meta.bounds` 超过 5 cm |
 | `[prop_instance_index]` | error | `props[].instanceIndex` 非整数/布尔/负值；或同一关内重复（它是对表键，必须唯一）。**超出 523 不报错**（出处可能指向提取结果里已不列出的记录） |
 | `[caps_props]` | error | 件数 > `caps.props`（每关按 130/511/4000 档自己声明） |
-| `[caps_motion]` | error | `caps.movingProps > caps.props`，或 `caps.animators > caps.props`（**动画与运动是两回事**：D-11 下动画件可以多于运动件——Cancer 是 153 个骨骼动画实例、129 个有运动的实例，所以 `animators` 只能对 `props`，**不能**对 `movingProps`；旧口径 `animators ≤ movingProps` 会把原作自己的数据判错，2026-11-16 已改） |
+| `[caps_motion]` | error | `caps.movingProps > caps.props`，或 `caps.animators > caps.props`（**动画与运动是两回事**：D-11 下动画件可以多于运动件——Cancer 是 153 个骨骼动画实例、129 个有运动的实例，所以 `animators` 只能对 `props`，**不能**对 `movingProps`——`animators ≤ movingProps` 会把原作自己的数据判错） |
 | `[canonical]` | warning | 文件不是规范字节（现有行为） |
 | `[schema_legacy]` | error | 读到 v1 文件：提示先跑转换器 |
 
@@ -1368,7 +1368,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | **D-2** | 地形存哪 | A 全内联；B >512 三角形走 `.katerrain` 侧车 + sha256 | **B**：内联保可读，大网格走二进制并钉哈希；参考关卡也用同一格式 | JSON/侧车、编辑器、导入器 |
 | **D-3** | 地形要不要水平阻挡 | A 只支撑；B 支撑 + 陡面挡（θ 分类） | **B**，但**分阶段**：T0/T1 只做支撑/推出/去法向速度，T2 才做滚/爬分类与爬升；在 T2 前用 `structures` slab 补关键阻挡 | 电机、测试场、关卡设计 |
 | **D-4** | 活动区越界后果 | A 硬墙；B 硬墙 + 软边距（减速/提示）；C 只提示 | **A + 每关 kill plane**（owner 2026-11-16）：硬墙 + 球径门，**玩法范围主要靠地图布局限制**（参考关就是这么限制的，不只靠墙）；掉出用逐关 Y 的重启阈值，不做软边距（HUD 是另一个模块） | `activityArea`、电机、关卡设计、HUD |
-| **D-5** | 逐件缩放策略 | A 视觉-only；B 全量参与几何/体积；C 只允许均匀 | **②+③+④**（§6.4 四层）：①运行时永不缩放（旧口径，不变）；②作者态均匀全允许（含挂接件）；③非均匀 + 有代理只允许无父、static、box/sphere；④非均匀 + **无代理**（def 无 `collider`）允许无父、static、`absorbable:false`。原作 6 件非单位：4×0.9、1×0.1（**挂接件**）、1 非均匀 = ④ 的唯一实例 `sparrow_001` | props、导入器、吸收门 |
+| **D-5** | 逐件缩放策略 | A 视觉-only；B 全量参与几何/体积；C 只允许均匀 | **②+③+④**（§6.4 四层）：①运行时永不缩放（不变）；②作者态均匀全允许（含挂接件）；③非均匀 + 有代理只允许无父、static、box/sphere；④非均匀 + **无代理**（def 无 `collider`）允许无父、static、`absorbable:false`。原作 6 件非单位：4×0.9、1×0.1（**挂接件**）、1 非均匀 = ④ 的唯一实例 `sparrow_001` | props、导入器、吸收门 |
 | **D-6** | zone id 的用法 | A 不透明标签；B 现在映射成玩法区（8=void 等） | **A**：只做标签/统计（`killPlane.zoneId` 只记诊断）；kill plane 是独立字段、**取逐关 Y**，运行时由**回合状态机**当「重启阈值」执行（不是全局地板），没有回合状态机的世界退回 `ActivityAreaHost` 兜底 | 地形、活动区、回合状态机、统计 |
 | **D-7** | 现有 ramp/curve_ramp/box 是否迁进地形 | A 保留解析体；B 全烘进网格 | **A**：能解析体表达的就不进网格；只有曲面/悬垂才用地形 | 引擎、数据、编辑器 |
 | **D-8** | 参考关卡数据保留 | A 只留 `~/KatamariRef`；B 允许进仓库 | **A**（现行规则）：导入器只写 `_ref_*` 与 `_RefUnlicensed`；任何网格/贴图/BIN 永不入库 | 导入器、git 守卫 |
@@ -1508,20 +1508,9 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 ## 18. Q&A：为什么允许逐件缩放
 
-> owner 2026-11-16 的问题：「以前说『不缩放』，现在怎么又允许逐件缩放了？」短的答案：**旧的「不缩放」说的是两件事——运行时不许缩放、作者不许改尺寸凑档——这两条都还在；新的只是承认原作数据里本来就有 6 件不是单位缩放，照抄它。** 下面把这三件事分开。
+> 「不缩放」与「允许逐件缩放」不是矛盾：**运行时不许缩放、作者不许改尺寸凑档**这两条照旧；允许的是照抄原作数据里本来就不等于 1 的 6 件缩放。三条分开写。
 
-### 18.1 旧口径到底说了什么
-
-| 旧句子 | 出处 | 它当时的意思 |
-|---|---|---|
-| 「物件一律真实尺寸，绝不缩放凑档」 | [PROP_SET_PLAN 文首前提](../StoryMode/PROP_SET_PLAN.md) | 作者不许把模型改大改小去够某个档位/门槛 |
-| 「本项目**不缩放**、真实尺寸、轴心在几何中心」 | [PROP_BEHAVIOURS §2](../PickupAbsorb/PROP_BEHAVIOURS.md) | 同上 + 运行时不改道具尺寸 |
-| 「吸附物冻结，不缩放、不随球长大外移」 | [PARITY_AUDIT 的 `C06` 行](../Parity/PARITY_AUDIT.md) | 吸上去之后不许再缩放（原作专利行为） |
-| 「挂在父件下的子件永远不缩放」 | 本文旧 §6.4 | 挂接件的位姿由父件决定，缩子件会破坏接触面 |
-
-这四句在当时**都对**，而且都还在（§6.4 的①）。它们为什么会看起来像「一刀切不许缩放」：**v1 的数据源里根本没有缩放字段**——REROLL 导出表只有 `position`（[ORIGINAL_TERRAIN_AND_LAYOUT §0](../../Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)、[STACKS_IN_ORIGINAL §0](../../Research/KatamariBallRules/STACKS_IN_ORIGINAL.md)），所以 13 份 `placement.json` 里每一件都是 1:1，规则写成「不缩放」也不会漏掉任何东西。
-
-### 18.2 新数据说了什么
+### 18.1 数据说了什么
 
 PS2 的实例记录是 0x40 字节，`+0x30..+0x38` 三个 f32 就是缩放（[NOCLIP_KATAMARI_FORMAT §3.2](../../Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)）。Cancer 524 件里 **6 件不是 1**：
 
@@ -1531,20 +1520,20 @@ PS2 的实例记录是 0x40 字节，`+0x30..+0x38` 三个 f32 就是缩放（[N
 
 **如果不允许逐件缩放，这三类件只能二选一：要么按 1:1 导入（渲染、体积、门槛全错），要么丢掉（参考关卡少 6 件，其中 1 件是挂接链上的）。** 前者会让「参考关卡与原作对拍」这件事直接不成立，后者是数据丢失——两样都比「多一个 `scale` 字段」贵。
 
-### 18.3 所以现在是四层（不是「放开了」）
+### 18.2 四层规则
 
-| 层 | 旧口径 | 现在 |
-|---|---|---|
-| ① 运行时缩放 | 不许 | **不许**（不变）：`scale` 已在导入期乘进 `aabb`，运行时只读 `aabb`；父件带子件只搬位姿 |
-| ② 作者态均匀缩放 | 没有这个字段 | **允许**（新）：任何 `behaviour`、任何 `parent`，因为原作就有 4 件 0.9 和 1 件 0.1 |
-| ③ 作者态非均匀缩放（有代理） | 没有这个字段 | **仍限制**：只允许无父、static、box/sphere；胶囊/凸包在非均匀下不再是同类形状 |
-| ④ 作者态非均匀缩放（无代理） | 没有这个字段 | **允许**（2026-11-16）：def 没有 `collider` 就没有代理可失真，条件是 `static` + `absorbable:false`；原作那 1 件 `sparrow_001` 正属此层，照写 `scale`、记 `divergences` |
+| 层 | 现在 |
+|---|---|
+| ① 运行时缩放 | **不许**：`scale` 已在导入期乘进 `aabb`，运行时只读 `aabb`；父件带子件只搬位姿 |
+| ② 作者态均匀缩放 | **允许**：任何 `behaviour`、任何 `parent`，因为原作就有 4 件 0.9 和 1 件 0.1 |
+| ③ 作者态非均匀缩放（有代理） | **限制**：只允许无父、static、box/sphere；胶囊/凸包在非均匀下不再是同类形状 |
+| ④ 作者态非均匀缩放（无代理） | **允许**：def 没有 `collider` 就没有代理可失真，条件是 `static` + `absorbable:false`；原作那 1 件 `sparrow_001` 正属此层，照写 `scale`、记 `divergences` |
 
-**没有放开的两条**：不许把道具改大改小去凑体积档（②只能照抄原值或写明理由，调体积只能用 `volumeK`）；挂接件在运行时仍然永不缩放（①）。
+**两条不变**：不许把道具改大改小去凑体积档（②只能照抄原值或写明理由，调体积只能用 `volumeK`）；挂接件在运行时永不缩放（①）。
 
 ### 18.4 代价与风险（写清楚，免得以后再解释一遍）
 
-- **挂接件的那件 0.1**：旧规则会把它判成 `[prop_scale_attached]` 硬错误，参考导入就拒掉一件真实数据。所以 `[prop_scale_attached]` 收窄成「挂接件带**非均匀** scale」。
+- **挂接件的那件 0.1**：`[prop_scale_attached]` 只对「挂接件带**非均匀** scale」报错，所以这件均匀缩小的真实数据能导入。
 - **碰撞代理**：`aabb` 已经是乘过 scale 的尺寸，但逐型 `collider` 代理（`COLLIDER_PROXY`）的半径/半高是**模型空间**写的；导入器必须把 `scale` 也乘进代理参数（均匀时三个轴同一个数，非均匀时只允许 box/sphere 所以仍可乘），否则 0.1 那件会带着 10 倍大的胶囊。**这一条是导入器实现要求，未实现。**
 - **AABB 与支撑推导**：`aabb` 变了，支撑面/叠放推导跟着变——已经在 §9 的「已乘 scale」约定里，不需要额外规则。
 - **U4 的影响**：校验器的 OBB 互穿筛选用世界 AABB；接进 scale 后 0.9/0.1 那几件的误报会变化，`Docs/tests/levelbuild` 要加用例。
@@ -1557,12 +1546,12 @@ PS2 的实例记录是 0x40 字节，`+0x30..+0x38` 三个 f32 就是缩放（[N
 | 事实 | 依据 |
 |---|---|
 | noclip.website 的 `LICENSE` 是 **MIT 正文 + 一段反编译说明**（"部分实现是逆向的、非净室"）；`package.json` 写 `"license": "MIT"`；GitHub 因那段说明报 `NOASSERTION` | [NOCLIP_KATAMARI_FORMAT §10](../../Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)、`LICENSE` @ pinned commit |
-| **「noclip 是 GPL-3」的旧前提不成立** | 同上；本项目 2026-11-16 更正 |
+| **noclip 的许可是 MIT，不是 GPL-3** | 同上 |
 | 即便如此，逐行翻译仍是对该作品的**衍生作品**；MIT 允许再分发，但必须保留版权与许可声明 | 常规许可法理【推断，但确定】 |
 | 我们的路线：**照规格重实现**（已做，解析器在 `~/KatamariRef/tools/katamari_stage_extract/`，981 行，仓库外）；仓库只放规格 | NOCLIP §0/§9/§10 |
 | 仓库许可仍未定；解析器进仓库的前提是 owner 选定许可（MIT/Apache/GPL 兼容都可以，只要不搬 noclip 源码/逐行翻译） | [OPEN_DECISIONS](../../OPEN_DECISIONS.md) |
 
-**本轮同步更正的地方**：`AGENTS.md` 的旧规则（把 noclip 列为 GPL 工具）改为「派生自第三方代码的解析器在 owner 选定仓库许可前留在仓库外；移植/衍生必须保留原版权与许可声明（MIT 允许）；首选照规格重实现」；`OPEN_DECISIONS.md` 的 noclip 条与「Still open 仓库许可」同步改写；本文件旧稿中「noclip 是 GPL-3」的断言全部替换为上面的更正，仍保留「不是 GPL-3」这句本身作为纠正记录。**其余许可判断（素材 CC-BY-SA/GPL 不混用等）不受影响，保持原文。**
+**同步口径**：`AGENTS.md` 与 `OPEN_DECISIONS.md` 的 noclip 条都按上表写：派生自第三方代码的解析器在 owner 选定仓库许可前留在仓库外；移植/衍生必须保留原版权与许可声明（MIT 允许）；首选照规格重实现。其余许可判断（素材 CC-BY-SA/GPL 不混用等）不受影响。
 
 ## 20. 变更记录
 
@@ -1571,5 +1560,5 @@ PS2 的实例记录是 0x40 字节，`+0x30..+0x38` 三个 f32 就是缩放（[N
 | 2026-11-16 | 建立骨架 | 需求/约束、研究问题、引擎事实、NOW/WAIT；schema 标 `DRAFT_BLOCKED_ON_RESEARCH` |
 | 2026-11-16 | **本版：最终提案** | 两份研究落地后按研究结论改写：五层 schema 定稿、terrain/structures/activityArea/props 字段、两个 JSON 例子、规范形与侧车、错误码、v1→v2 转换器、Unity 映射、容量预算、地形接触分阶段计划与 4 个新测试格、编辑器升级、迁移阶段、owner 决策；许可前提更正为 MIT（非 GPL-3） |
 | 2026-11-16 | **第 2 版：运动/动画** | 吸收 `ORIGINAL_ANIMATION_OBSERVATIONS`：`motions[]`/`paths[]` 逐关表、`props[].motion/inherit/phase/clipStart/shakeOff`、`defs[].speedIndex/clips`、13 类运动与速度档、10/15 Hz 更新预算、共享剪辑×8 相位桶、移动件吸收/父链规则、三个运动 JSON 例子、错误码、编辑器 E9/E10、D-10–D-14 与 U5–U9 |
-| 2026-11-16 | **第 3 版：owner 拍板 + 两个问答** | 记录 owner 2026-11-16 的裁定（球径 20 m、活动区靠布局、逐关 kill plane、D-10 全加、D-11 研究结论、D-12 相位、D-13 不做、D-14 挂起）；新增 §17「一个世界 = 一张场景」（多地图架构、我们今天的 StoryMode 两岛结构、A/B/C 建议、格式与编辑器要求）、§18「为什么允许逐件缩放」（旧口径四句 → 新数据 6 件非单位 → 三层规则）；§6.4 改写为三层并收窄 `[prop_scale_attached]`；`caps.animators` 明确为「Animator 组件预算」而非「只播 64 件」；原许可/变更记录顺延为 §19/§20 |
+| 2026-11-16 | **第 3 版：owner 拍板 + 两个问答** | 记录 owner 2026-11-16 的裁定（球径 20 m、活动区靠布局、逐关 kill plane、D-10 全加、D-11 研究结论、D-12 相位、D-13 不做、D-14 挂起）；新增 §17「一个世界 = 一张场景」（多地图架构、我们今天的 StoryMode 两岛结构、A/B/C 建议、格式与编辑器要求）、§18「为什么允许逐件缩放」（新数据 6 件非单位 → 四层规则）；§6.4 改写为三层并收窄 `[prop_scale_attached]`；`caps.animators` 明确为「Animator 组件预算」而非「只播 64 件」；原许可/变更记录顺延为 §19/§20 |
 | 2026-11-16 | **第 4 版：性能口径 + 命名定稿** | owner 两条补充拍板：①**性能不预先优化**——D-11 重写为「153 个骨骼实例直接挂普通 Animator/蒙皮，不做 VAT」，`caps.animators` 退成统计字段（`[anim_budget]` 只对账、`[caps_motion]` 改 `animators ≤ props`），「64 不够」与 VAT 降级为「以后真测出瓶颈再看」，同时写明后续**真实测量**照旧要做；②怀旧关正式名 **「怀旧关：蟹座小院 / Cancer Courtyard」**（Nostalgia 作别名，内部 id 仍是 `_ref_cancer`） |

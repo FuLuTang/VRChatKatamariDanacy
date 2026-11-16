@@ -5,7 +5,7 @@
 > 范围：第一关（`story_01_bench_size`，滚到 1.25 m / 120 s）从实验室平地切片搬进 PicnicLawn 西南角；回答场景归属、生成器、角内范围、墙与边界、迁移步骤、未决六问。
 > 非目标：不改 `.unity` / `.asset` / prefab / C# / `Tools/` 代码 / `tasks.json` / 其它文档；不设计新物理；不调数值（决定 (p)）；不做多人、交分、第二关。
 > 引用约定：`Runtime/…`、`Editor/…`、`Labs/…`、`Tests/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；`Docs/…`、`Tools/…` 相对仓库根。**符号名才是契约**：本轮读代码时 `KatamariBallMotor.cs` / `PickupFieldHost.cs` / `RadialProxy*` 正被并行修改（工作区 mtime 2026-11-15 06:23），文中行号是当时的读数，会漂；引用时请按符号名复核。
-> **§4 / §5 于 2026-11-15 按现状重写**：写稿之后，地形支撑 P1（静态盒顶支撑 + 台阶 0.25·D + 重力下落）与 P2（吸不动的道具顶面当支撑，≤6 件）已实现并编译通过、P3（斜面）已落地（d31dc9b：斜面只注册成支撑面，不进扫掠盒）；场地注册已交给通用组件 `Runtime/Story/LevelArenaHost.cs`（`StoryMode` 已接上）；搭地图工具已落地（真源 `Docs/Design/Levels/story_01_bench_size/placement.json`，导入器 `Editor/LevelBuild/PlacementImporter.cs`）。旧 §4 的「花圃台只能是墙 / 没有台阶 / 没有竖向通路」与旧 §5 的 C1/C2（新造「关卡边界」组件、把 `StoryLevelLabBootstrap` 改名 `StoryArenaHost`）**全部作废**。§1–§3 只改了与之矛盾的句子，均就地标注。
+> **§4 / §5 按 2026-11-15 的代码现状写**：地形支撑 P1（静态盒顶支撑 + 台阶 0.25·D + 重力下落）、P2（吸不动的道具顶面当支撑，≤6 件）、P3（斜面只注册成支撑面、不进扫掠盒，d31dc9b）已落地；场地注册归 `Runtime/Story/LevelArenaHost.cs`（`StoryMode` 已接上）；搭地图真源是 `Docs/Design/Levels/story_01_bench_size/placement.json`，导入器 `Editor/LevelBuild/PlacementImporter.cs`。
 
 ## 0. 六问一句话结论
 
@@ -13,7 +13,7 @@
 |---|---|---|
 | 1 | 场景归属 | **正本 = 把 `Labs/StoryLevel/StoryLevel.unity` 同一文件搬成正式场景（同一 GUID）**，角内几何按地图真坐标长在它里面；不翻新、也不转正 `PicnicLawnGreybox`，不新建第二张场景（§1）。 |
 | 2 | 生成器还能不能用 | **不能用它建这一关**：`PicnicLawnGreyboxBuilder` 是「整图 · 从零重建 · 只产几何 · 会 `SaveScene`」，重跑必然覆盖手工接线；`--check` 只证明生成物与作者数据一致，与场景接线无关。数据侧只作 `--check` 回归，不重跑（§2）。 |
-| 3 | 一角的范围 | **西南角** `x∈[−19.40,−6.00]`、`z∈[−19.40,−6.00]`：毛 179.56 m²、扣花圃 19.60 m² 后**净 160.0 m²**；角内只有平地 + 花圃台（0.26 m）+ 树根丘/角树 + 指示牌 + 毯缘一条线；角内内容已改为 **127 件 / 1500 u / 12 区**（真源 `placement.json`：110 件小道具 412 u + 17 件可吸家具 1088 u），其中 4 件是**结构门件**（§3.4 的指针、§3.5.3）。 |
+| 3 | 一角的范围 | **西南角** `x∈[−19.40,−6.00]`、`z∈[−19.40,−6.00]`：毛 179.56 m²、扣花圃 19.60 m² 后**净 160.0 m²**；角内只有平地 + 花圃台（0.26 m）+ 树根丘/角树 + 指示牌 + 毯缘一条线；角内内容已改为 **127 件 / 1500 u / 12 区**（真源 `placement.json`：110 件小道具 412 u + 17 件可吸家具 1088 u），其中 4 件是**结构门件**（§3.5.3）。 |
 | 4 | 地形与场地注册 | 边界是 **4 个竖直平面**（球）+ 4 面既有墙碰撞体（玩家）；地形现在**能上**：静态盒顶与「吸不动的道具顶」都是支撑面，台阶判据 `rise ≤ 0.25·D`（含等号）——花圃台 0.26 需 `D ≥ 1.04`，P2 链「台顶 0.26 → 躺椅 0.35 → 折叠桌 0.70」需 `D ≥ 1.40`；**斜面（P3）已注册成支撑面**（`rampBoxes` → `AddRamp`，d31dc9b），坡脚没有隐形墙。场地注册归 `LevelArenaHost`（4 平面 + 4 盒 + 2 斜面 + 11 kind），不是 Lab 脚本（§4）。 |
 | 5 | 迁移步骤 | 操作员清单 **A → E（轮 1，含 F1）+ F2/G（轮 2）**：场景转正、Lab 脚本去留、清理旧内容与补视觉、导入（两次幂等 `+0 ~0 -0`）、Play 验收；实现者改动 7 项 `K1–K7`（核心是「把 Lab 的每秒读数拆成只读诊断组件」）（§5）。 |
 | 6 | 未决 | 原六组已由 `OPEN_DECISIONS` (q) 与 [PICNIC_CORNER_LAYOUT](PICNIC_CORNER_LAYOUT.md) §9 拍板（场地 160 m²、127 件 / 1500 u、星级暂不重定）；**仍然开着的**是 120 s 与星级要不要按新内容重定（§6 U4）、`.git` 侧转正由谁先做（§5.1 A2），以及本轮的 Play 验收（§5.5）——全部 `NOT_RUN`（§6 头部说明）。 |
@@ -64,7 +64,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 2. **它是幂等重建，不是增量更新**：场景在临时场景里从零搭好再调用 `EditorSceneManager.SaveScene(scene, ScenePath)`。任何手工接线（宿主数组、motor 引用、Station、HUD）都会在重跑时消失。
 3. **它硬校验记录数**：`ExpectedZones = 21`、`ExpectedStructures = 60`、`ExpectedSizeGates = 8`、`ExpectedScatterRegions = 20`、`ExpectedRoutes = 21`、`ExpectedChokepoints = 16`、`ExpectedProps = 54`；数据一变（比如为一角改件数/区数）它会**直接拒绝构建**，不会静默出一张不同的图。
 
-### 2.2 数据里哪些是旧口径（逐项判定）
+### 2.2 数据里哪些概念过期（逐项判定）
 
 | 数据项 | 位置 | 现状 | 新口径 | 这次动不动 | 为什么 |
 |---|---|---|---|---|---|
@@ -77,22 +77,23 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | `pickup_dim_m`（可选列） | 目录 schema | 故事图专用「声明拾取尺寸 ≠ 外形」通道 | 体积门不需要它；需要的是真实 AABB + 挡路盒 | **不动** | PicnicLawn 目录里没有这一列；它有在故事图 fixture 里，与本次无关 |
 | 障碍/平面的 `collision` 声明 | `layout.json` 结构 | 无（0/8、0/8） | 第 14 条运行时预算 | **不动** | PicnicLawn 是全图 PvP 图，不是这一关的关卡数据；这一关的边界账在本文 §4 |
 
-**结论**：数据文件里真正「过期」的是**概念**（线性档位、`@size` 立方体、game/real 双列），而它们的消费方（校验器 `validate_map.py` 第 11 条 + `PickupFieldAuthoringRules` + `build_greybox`）**都还按旧口径判**。按「不改校验器就只改不受影响的字段」的规矩，本轮**一个机器可读字段都不改**。
+**结论**：数据文件里真正「过期」的是**概念**（线性档位、`@size` 立方体、game/real 双列），而它们的消费方（校验器 `validate_map.py` 第 11 条 + `PickupFieldAuthoringRules` + `build_greybox`）**都还按这些旧概念判**。按「不改校验器就只改不受影响的字段」的规矩，本轮**一个机器可读字段都不改**。
 
 ### 2.3 取舍：「翻新数据 → 重跑 → 再接线」还是「不重跑、手工迁移」
 
 | 路线 | 适用 | 代价 |
 |---|---|---|
 | **翻新数据 → 重跑生成器 → 再接线** | 整图 PicnicLawn 的下一版灰盒（T21） | 必须先补校验器（§2.5）、补生成器的「保留手工接线」能力（今天没有），再重做全部 Udon 接线；对角内第一关是纯亏 |
-| **不重跑生成器、手工迁移一角**（推荐） | **本关** | 旧稿是「110 件要重排」；2026-11-15 起改为**导入器按 `placement.json` 建 127 件**（§5.4），不再是手工摆；接线、宿主数组、交付路径全部保住 |
+| **不重跑生成器、手工迁移一角**（推荐） | **本关** | 现在的做法是**导入器按 `placement.json` 建 127 件**（§5.4），不是手工摆；接线、宿主数组、交付路径全部保住 |
 | 折中：数据照旧，只跑 `--check` 回归 | 日常 | `python3 Tools/mapbuild/build_greybox.py --check` 必须保持 OK（本轮实测 OK） |
 
 **生成器仍然有用的地方**：① `--check` 守住「生成物 = 作者数据」；② `--feasibility` 是唯一被测试保护的容量模型，重排 110 件时**照它的公式算**（`RSA_SITE_AREA = 1.436·S²`，用量 ≤85%）；③ 俯视图 `PicnicLawnGreybox_top.png` 是角内布置的参考底图。
 
 ### 2.4 角内布置该由谁负责（**缺口已关闭，2026-11-15**）
 
-> **本节原文已作废。** 「今天没有任何数据文件描述第一关的角内布置」不再成立：真源是 `Docs/Design/Levels/story_01_bench_size/placement.json`（127 件 / 1500 u / 44 def / 1 ground + 4 boundary + 4 box + 2 ramp，坐标为 PicnicLawn 真坐标），由 `Editor/LevelBuild/PlacementImporter.cs` 单向导入到受管根 `LevelContent`，设计见 [LEVEL_AUTHORING](../Tools/LEVEL_AUTHORING.md)。`layout.json` 仍然只描述整图 PvP 语义，两者不冲突（一个「地图长什么样」，一个「这一关摆哪」）。
-> 仍然保留的判断：**布置的真源不能留在场景里**（旧稿这条是对的），只是兜底手段从「手写校验」换成了「导入器 + 幂等门 `+0 ~0 -0` + `valueUnits` 回读」——见 §5.4。旧稿提到的 C8（造一份布置数据）**已由 `placement.json` 关闭**。
+> 真源是 `Docs/Design/Levels/story_01_bench_size/placement.json`（127 件 / 1500 u / 44 def / 1 ground + 4 boundary + 4 box + 2 ramp，坐标为 PicnicLawn 真坐标），由 `Editor/LevelBuild/PlacementImporter.cs` 单向导入到受管根 `LevelContent`，设计见 [LEVEL_AUTHORING](../Tools/LEVEL_AUTHORING.md)。`layout.json` 只描述整图 PvP 语义，两者不冲突（一个「地图长什么样」，一个「这一关摆哪」）。
+>
+> **布置的真源不能留在场景里**：兜底是「导入器 + 幂等门 `+0 ~0 -0` + `valueUnits` 回读」，见 §5.4。
 
 ### 2.5 校验器需要怎么改（本轮不改，只列）
 
@@ -189,40 +190,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 - **角内「可吸」与「布景」的分界不是难度，是角色**：目录里 `role = fixed` 的 17 行（地面、毯、树篱、墙、树、花圃框、地贴、指示牌、交分台、道具台、远景…）**永远不可吸**；`absorbable` 行在 2.20 下只有三件越线（`collapsed_bench` 3.12、`picnic_table` 2.49、`park_bench` 2.47），它们全部在角外或整图区。
 - **薄片类（`fallen_leaf` / `cheese_slice` / `cookie` / `paper_scrap`）在体积门下等于沙粒**：0.30 m 起手球就能吃。这是 (l) 已记录的忠实行为，不是本关的 bug；要不要给薄片设厚度下限是设计判断（`PROP_CATALOG §2.4` 已列出），本方案不替用户决定。
 - **「按什么尺寸算」比「哪件」更决定结论**：同样是 `absorbable` 的大件，按目录的 `game_longest_dim_m`（当立方体）算，2.20 下**全死** —— `cooler_box` 1.6³→**4.28 m**、`folding_stool` 1.4³→**3.74 m**、`picnic_basket` 1.2³→**3.21 m**、`flower_pot_large` 1.0³→**2.67 m**、`thermos` 0.9³→**2.41 m**，再加 `collapsed_bench` 3.12 / `picnic_table` 2.49 / `park_bench` 2.47。按真实尺寸（(o) 的建模口径）算，前五件全部复活（`D_req` 1.07–1.47 m；暖壶按 0.12×0.12×0.30 是 0.435），只剩三件桌/长凳级越线。这就是 (l) 说的"先让 `bounds` 说真话"在本图的具体形态 —— **不是比值 10 太大，是方块 `bounds` 把体积放大了几十倍**。
-- **本关真正的"上限件"是 4 支暖壶**（**已解决，2026-11-15**）：现状 0.9³ 立方体在 2.20 下**永久吸不到**（`D_req 2.406`）。现在 `placement.json` 里**已经没有 `thermos`**：`container` 改由 3 篮 + 1 箱 + 箱柜类（`beer_crate / cooler_box / cooler_box_large / crate / crate_large / picnic_basket / storage_bin`）承担，按真实尺寸建模。旧稿担心的「412 u 里有 64 u 是空账」不再成立（见 §3.4 的指针）。
-
-### 3.4 现有 110 件 / 412 单位 / 9 kind 怎么映射进去
-
-> **本节已被 [PICNIC_CORNER_LAYOUT](PICNIC_CORNER_LAYOUT.md) §7 与 `placement.json` 取代（2026-11-15）**，保留作历史：现在的账是 **127 件 / 1500 u / 11 kind / 12 区**（110 件小道具仍是 412 u，另 17 件可吸家具 1088 u）；区名沿用但 `fruit_b` 从西北角挪到花圃台面，并新增 `bed_top` / `table_top`。下面的件数 / 单位 / 区表**只用于读旧决策**，**不要照它摆**——摆什么由 `placement.json` 决定（§5.4）。
-
-**总量不变**：110 件、412 u、9 个 kind（`fruit 40 / tableware 22 / food 17 / drink 10 / nature 7 / container 4 / garden 4 / toy 4 / debris 2`）原样保留，只换布置 —— 4 支暖壶换成 3 篮 1 箱之后，**每个 kind 的件数一点没变**（container 仍是 4），所以关卡 2 的 `fruit 40` 不受影响。分 7 个区（其中 `heavy` 的 4 件是**结构型可吸物**，见 §3.5）：
-
-| 区 id | 位置（真坐标） | 面积 m² | 道具 | 件 | 单位 | 间距 S | RSA 上限 | 用量 |
-|---|---|---:|---|---:|---:|---:|---:|---:|
-| `pocket` 起步口袋 | 球起点 `(−12.5,−12.5)` 的环带 `r ∈ [1.0, 3.2]`（扣与水果簇 A 的重叠） | 26.5 | seed 3、acorn 2、pebble 1、bottle_cap 1、paper_scrap 1、fallen_leaf 1、cookie 2、cheese_slice 1 | 12 | 12 | 0.40 | 115 | 10% |
-| `fruit_a` 水果簇 A | `x ∈ [−11.8,−6.2]`，`z ∈ [−19.2,−13.6]`（东南，靠 2 m 缝入口；扣与口袋环的重叠） | 28.2 | strawberry 4、grapes 4、apple 3、pear 2、orange 3、banana 2、watermelon 2 | 20 | 56 | 0.60 | 55 | 37% |
-| `fruit_b` 水果簇 B | `x ∈ [−19.2,−13.6]`，`z ∈ [−12.8,−6.2]`（西北，花圃西侧后方） | 31.7 | strawberry 4、grapes 4、apple 3、pear 3、orange 3、banana 2、watermelon 1 | 20 | 56 | 0.60 | 61 | 33% |
-| `mid` 中圈 | 其余空地（扣口袋环、水果簇 A/B、花圃、壁龛、门堆） | 60.4（与 `outer`/`heavy` 共用） | cup 4、bowl 3、plate 3、spoon 3、croissant 3、bread_slice 3、sandwich 2、soda_can 3、juice_carton 2、toy_ball 2、napkin 2 | 30 | 120 | 0.70 | 86（mid+outer+heavy 合计） | 60% |
-| `outer` 外圈 | 同上，靠墙角与花圃两侧 | —— | cup 1、spoon 1、croissant 2、bread_slice 2、sandwich 2、soda_can 2、juice_carton 2、toy_ball 2、napkin 2、small_potted_plant 1、watering_can 1 | 18 | 76 | 0.70 | 同上 | 同上 |
-| `alcove` 花圃壁龛 | `x ∈ [−8,−6]`，`z ∈ [−11,−6]`（花圃东面与东墙之间的死胡同，**只有南口一个入口**） | 10.0 | glass_bottle 1、plate 1、bowl 1、napkin 1、small_potted_plant 1、watering_can 1 | 6 | 28 | 0.60 | 19 | 32% |
-| `heavy` 结构件 | 壁龛南口（`z ≈ −10.6`，横跨 `x −8.0..−6.0`） | —— | picnic_basket 3、cooler_box 1（**顶替 4 支暖壶**，见 §3.5） | 4 | 64 | 0.70 | 并入上式 | —— |
-| **合计** | | **160.0** | 31 个定义 | **110** | **412** | | | |
-
-**校验算式**（可手算复核）：
-
-- 件数：12 + 20 + 20 + 30 + 18 + 6 + 4 = **110** ✓
-- 单位：12 + 56 + 56 + 120 + 76 + 28 + 64 = **412** ✓
-- 逐定义合计与 [LEVEL_CONTENT_PLAN](LEVEL_CONTENT_PLAN.md) §2.1 完全一致，扣掉 4 支暖壶、换成 3 篮 1 箱之后仍对得上：apple 3+3=6、pear 2+3=5、plate 3+1=4、bowl 3+1=4、cup 4+1=5、napkin 2+2+1=5、small_potted_plant 1+1=2、watering_can 1+1=2、glass_bottle 0+1=1、picnic_basket 0+3=3、cooler_box 0+1=1、thermos 4−4=0。
-- 容量：`cap = area / (1.436·S²)`（与 `Tools/mapbuild/build_greybox.py` 同一个 RSA 模型），`mid+outer+heavy` 52 件共用 60.4 m²，`S = 0.70` → `cap = 60.4/(1.436×0.49) = 86`，用量 52/86 = **60%** ≤ 85% ✓；壁龛 6 件 / 10.0 m²、`S = 0.60` → `cap = 19`，用量 32% ✓。
-
-**摆放规则（操作员照做）**：
-
-1. 球起点 1.0 m 内净空；玩家出生点 1.0 m 内无碰撞体。
-2. 花圃台足迹内**不放任何道具**（那是布景台，球上不去）；花圃四周留 0.5 m 净距。
-3. 2 m 缝（`x ∈ [−8,−6]`，`z ∈ [−11,−6]`）**只放 §3.5 的门堆 4 件与壁龛 6 件**，其余留空；离门中线 1.5 m 内不要有其它未解锁件（挡路盒只有 6 格）。
-4. 每件按真实尺寸、`localScale = 1`、轴心在几何中心、贴地 `y = 高/2`（(o) 三层分离）；**已换真实网格的道具不带 `BoxCollider`**。
-5. 命名 `prop_<definitionId>_<NN>`、父级 `PickupField/<kind>/`（同步工具按这两条取 itemId 与 kind）。
-6. 本关**没有尺寸门**（没有 `absorb` 门；`climb` 门在运行时也不成立，见 §4 G1），所以**不要**给角内写 `blocks_ball_diameter_below_m` / `opens_path` 之类的字段。
+- **本关真正的"上限件"是 4 支暖壶**（**已解决，2026-11-15**）：现状 0.9³ 立方体在 2.20 下**永久吸不到**（`D_req 2.406`）。现在 `placement.json` 里**已经没有 `thermos`**：`container` 改由 3 篮 + 1 箱 + 箱柜类（`beer_crate / cooler_box / cooler_box_large / crate / crate_large / picnic_basket / storage_bin`）承担，按真实尺寸建模。
 
 ### 3.5 结构型可吸物：同一件东西的三种身份，我们能兑现两种
 
@@ -232,11 +200,11 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 | 身份 | 原作怎么用 | 我们能不能 | 代码依据 |
 |---|---|---|---|
-| **通路 / 地形**（滚上去、搭坡、叠放） | 斜板、叠箱、桌面 | **能了，但只有三种面**（2026-11-15：P1 静态盒顶 + P2 道具顶；**斜面仍是 P3**） | 旧依据（「支撑只对一张全局平面 / 没有 step-up」）**已作废**：`SupportSurfaceMath` 每步在球心正下方选一个局部面（地面 / 盒顶 / 道具顶），`rise ≤ 0.25·D` 的盒从扫掠里剔除并成为支撑（`IsStepWithinLimit` / `RefreshStepMask`），失去支撑时按 9.81 m/s² 下落。**仍然做不到**：斜面（P3）、悬空、叠放、曲面。详见本文 §4 与 `TERRAIN_SUPPORT` §3–§5 |
+| **通路 / 地形**（滚上去、搭坡、叠放） | 斜板、叠箱、桌面 | **能了，但只有三种面**（2026-11-15：P1 静态盒顶 + P2 道具顶；**斜面仍是 P3**） | `SupportSurfaceMath` 每步在球心正下方选一个局部面（地面 / 盒顶 / 道具顶），`rise ≤ 0.25·D` 的盒从扫掠里剔除并成为支撑（`IsStepWithinLimit` / `RefreshStepMask`），失去支撑时按 9.81 m/s² 下落。**仍然做不到**：斜面（P3）、悬空、叠放、曲面。详见本文 §4 与 `TERRAIN_SUPPORT` §3–§5 |
 | **挡路**（吸不动时挡球） | 大件挡住小球的去路 | **能，而且是现成的** | `PickupFieldHost.UpdateBlockingProps` 用 `propBounds` 建轴对齐盒、经 `motor.SetBlockingBoxes` 进扫掠；谓词就是吸收门自己：`PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bounds, limit)`（`PickupFieldHost.UpdateBlockingProps`，头注释与 `IsBeyondAbsorbVolumeLimit` 调用处） |
 | **食物**（长大后吸走） | 同一件东西后来被吃 | **能，和上一条是同一个函数** | 球长大 → `limit` = `(π/6)·D³/10` 超过该件体积 → 同一谓词不再成立 → 下一帧扫描撤掉挡路盒、同时吸收门放行。**"挡路"与"可吸"是同一个判据的两面，不会漂移** |
 
-一句话（**2026-11-15 起**）：**我们有竖向通路了，但它只由「地面 / 静态盒顶 / 吸不动的道具顶」这三种平面构成**，靠台阶规则（`rise ≤ 0.25·D`）走上去；「挡路 → 食物」的翻转与吸收门同源、不会漂移。所以本关的结构设计同时是两件事：**搭出可以走上去的台面层级**，和**用可吸物搭出一扇会自己消失的门**。旧稿「我们没有竖向通路」只对斜面/悬空/叠放成立。
+一句话（**2026-11-15 起**）：**我们有竖向通路了，但它只由「地面 / 静态盒顶 / 吸不动的道具顶」这三种平面构成**，靠台阶规则（`rise ≤ 0.25·D`）走上去；「挡路 → 食物」的翻转与吸收门同源、不会漂移。所以本关的结构设计同时是两件事：**搭出可以走上去的台面层级**，和**用可吸物搭出一扇会自己消失的门**。斜面、悬空与叠放仍然做不到。
 
 #### 3.5.2 结构件与阈值（`D_req = (60·a·b·c/π)^(1/3)`）
 
@@ -248,9 +216,9 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | 保温箱 `cooler_box` | 0.55×0.35×0.30 | 0.05775 | 0.387 | **1.033** | 挡路 | 食物 |
 | 折叠凳 `folding_stool`（本关**不用**，留作 B 案） | 0.40×0.30×0.45 | 0.05400 | 0.378 | 1.010 | 挡路 | 食物 |
 | 卷起的野餐垫（B 案） | 0.80×0.20×0.20 | 0.03200 | 0.317 | 0.849 | 挡路 | 食物 |
-| 托盘（B 案） | 0.55×0.35×0.04 | 0.00770 | 0.197 | 0.528 | **"薄墙"**：0.04 m 低于 0.05 m 台阶阈值，但旧版仍会建挡路盒（§4.4 G9）→ 起手是一堵 4 cm 墙；**P2 的台阶规则落地后它已经是台阶（碾过去）**，旧的 C9 作废 | 食物 |
+| 托盘（B 案） | 0.55×0.35×0.04 | 0.00770 | 0.197 | 0.528 | **"薄墙"→台阶**：0.04 m 低于 0.05 m 台阶阈值时起手是一堵 4 cm 墙（§4.4 G9）；P2 的台阶规则落地后它已经是台阶（碾过去） | 食物 |
 | 保温壶（真实 0.12×0.12×0.30） | 0.12×0.12×0.30 | 0.00432 | 0.163 | 0.435 | 挡路 | 食物（**本关被篮子/箱子顶替**） |
-| 平铺野餐垫（视觉毯） | 1.80×1.40×0.02 | 0.05040 | 0.369 | 0.987 | **"通路"的唯一候选**：0.02 m 平，只要不给它建挡路盒，球就碾过去（§4.4 G9；P2 落地后由台阶规则自动成立，旧的 C9 作废） | 食物 |
+| 平铺野餐垫（视觉毯） | 1.80×1.40×0.02 | 0.05040 | 0.369 | 0.987 | **"通路"的唯一候选**：0.02 m 平，只要不给它建挡路盒，球就碾过去（§4.4 G9；由台阶规则自动成立） | 食物 |
 | 野餐桌 `picnic_table` | 1.50×0.75×0.72 | 0.81000 | 0.932 | **2.492** | 永远挡路/布景 | **仍不可吸**（> 2.20） |
 | 公园长椅 `park_bench` | 1.80×0.55×0.80 | 0.79200 | 0.925 | **2.473** | 永远 | **仍不可吸** |
 | 倒塌长凳 `collapsed_bench` | 3.60×0.55×0.80 | 1.58400 | 1.166 | **3.116** | 永远 | **仍不可吸**（角外东北） |
@@ -270,7 +238,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | 第一次打开 | **D ≥ 0.83** 吃掉最外侧的篮子 → 净宽 0.55 → 再吃一只 → 1.00 → 0.83 的球过得去 |
 | 完全清空 | **D ≥ 1.03** 吃掉保温箱 → 净宽 1.45 m |
 | 门后 | 6 件 / **28 u**（`glass_bottle` 1、`plate` 1、`bowl` 1、`napkin` 1、盆栽 1、洒水壶 1），只占全关 6.8% |
-| 软锁检查 | ★ 要 245.99 u，门外有 384 u → **门后内容不是必经**，0.55–0.82 m 的窗口期进不去也不会卡死（**这两个数是旧的 412 u 账**；现行 127 件 / 1500 u 账见 §3.4 的指针——结论方向不变，门后仍是小头） |
+| 软锁检查 | ★ 要 245.99 u，门外有 384 u → **门后内容不是必经**，0.55–0.82 m 的窗口期进不去也不会卡死（这两个数是 412 u 小道具账；现行全关 127 件 / 1500 u，门后仍是小头，结论方向不变） |
 | 观感 | 一堵"野餐篮 + 保温箱"堆起来的墙，正是原作那种"用可吸物搭场景"的读法 |
 
 **为什么不是"一条只有小球能钻的缝"**：起手球就是 0.30 m，任何 ≥0.30 m 的缝开局就能过，缝就不成门。**在 0.30 m 起手的关卡里，"门"只能是"完全封死 + 吃掉才开"**；这条与整图 PicnicLawn 的 `bed_gap`（2.0 m 小球侧缝）语义不同，不要混用（那张图起手也是 0.30，它的缝是"大球过不去"，属于**永久窄口**，不是门）。
@@ -280,12 +248,12 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | 层 | 高度 | 本关内容 | 球的身份 |
 |---|---|---|---|
 | L0 地面 | `y = 0` | 草地（解析平面） | 唯一的"地形" |
-| L1 贴地层 | ≤ 0.05 m（`scale.max_route_step_m`） | 平铺野餐毯、小路、出生地贴 | **通路**（碾过去；旧的 C9「厚度过滤」**已作废**，由 P2 的台阶规则取代——尺寸相关，更忠实）→ 长大后可吸 |
+| L1 贴地层 | ≤ 0.05 m（`scale.max_route_step_m`） | 平铺野餐毯、小路、出生地贴 | **通路**（碾过去；由 P2 的台阶规则判定——尺寸相关）→ 长大后可吸 |
 | L2 剪影层 | 0.20–0.45 m | 躺倒的篮子 0.22、保温箱 0.30、凳子 0.45（B 案） | **挡路 → 食物**（就是上面那扇门） |
 | L3 台面层 | 0.26 m | 花圃台顶（4.0×4.9 m）：`bed_top` 区的 28 件（**在宿主里**） | **能上去**（`D ≥ 1.04`，step-up）；上去之后就是台面上的食物 |
 | L4 桌面/叠放 | ≥ 0.5 m 且悬空 | 折叠桌 0.70 由「台顶 → 躺椅 → 桌面」链上去；悬空/叠放**没有** | 台面可达（P2，`D ≥ 1.40`）；悬空/叠放仍不可实现 |
 
-**L3 的读法（2026-11-15 改正）**：旧稿「花圃台顶只放纯布景、永远上不去」**已作废**——P1 之后台顶是地形，`bed_top` 的 28 件在宿主里、`D ≥ 1.04` 上得去，也就是 `PICNIC_CORNER_LAYOUT` §11 明确作废的那一条。台顶**是**内容，不是布景。
+**L3 的读法**：台顶是地形，`bed_top` 的 28 件在宿主里、`D ≥ 1.04` 上得去。台顶**是**内容，不是布景。
 
 **如果以后要做真正的"沿斜板上桌"**（P3 的活，本方案不设计物理）：下面三条里**第 1、3 条已落地**（场景物体参与支撑 = 盒顶/道具顶；step-up = 台阶规则），**只剩第 2 条**：
 
@@ -298,12 +266,12 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 1. **门堆的四件贴地摆**（`y = 高/2`），横向首尾相接、**不留缝**；总长 1.90 m、净宽 0.10 m，误差 ±0.02 m。
 2. **门堆 1.5 m 内不要再放任何"吸不动"的件**：宿主的动态挡路盒只有 **6 格**（`MaxBlockingBoxCount = 6`），门堆已占 4 格，附近再挤 3 件未解锁的大件就会把门件挤出选择集、门出现"漏缝"（§4.4 G9）。
 3. 壁龛内 6 件靠里摆（离门 ≥1.0 m），否则球在门外就能把它们吸出来——`activationRadiusM = 1.6` 是按球心算的，门件一被吃掉，壁龛口就会进入 1.6 m 半径。
-4. **花圃台顶的 `bed_top` 28 件是正式内容**（**不是布景**，2026-11-15 改正）：它们在 `PickupField` 里、`D ≥ 1.04` 能上去吃。旧稿「L3 只放纯布景」已随 `PICNIC_CORNER_LAYOUT` §11 作废。
+4. **花圃台顶的 `bed_top` 28 件是正式内容**（**不是布景**）：它们在 `PickupField` 里、`D ≥ 1.04` 能上去吃。
 5. 验收补一条：**起手直冲门洞必须被挡住**（截图 + `rej=` 行 `TOO_LARGE`），吃到 0.83 m 后必须能进（截图）。
 
 ## 4. Q4 场地与支撑：motor 现在能做到什么（2026-11-15 按现状重写）
 
-> 本节按当日**代码现状**重写。旧版写于地形支撑之前，结论「花圃台只能是墙、没有台阶、没有竖向通路」**已作废**。物理设计真源是 [TERRAIN_SUPPORT](../BallMotor/TERRAIN_SUPPORT.md)（§3 支撑面模型、§4 台阶、§5 斜面、§7 场地接口、§8 分阶段与 Play 验收、§8.1 P1 的三处偏离、§10.2 暂定值）；本节只回答「现在的代码能做什么、本关的登记账长什么样、哪些缺口还在」。
+> 本节按当日**代码现状**写。物理设计真源是 [TERRAIN_SUPPORT](../BallMotor/TERRAIN_SUPPORT.md)（§3 支撑面模型、§4 台阶、§5 斜面、§7 场地接口、§8 分阶段与 Play 验收、§8.1 P1 的三处偏离、§10.2 暂定值）；本节只回答「现在的代码能做什么、本关的登记账长什么样、哪些缺口还在」。
 > 判据只有两条，**别用眼睛估高度**：吸收门 `a·b·c ≤ (π/6)·D³/10`（`PickupAbsorbMath.IsBeyondAbsorbVolumeLimit`）；台阶 `rise = 顶面 − 当前支撑面 ≤ 0.25·D`（`SupportSurfaceMath.IsStepWithinLimit`，**含等号**）。
 > 状态：P1（静态盒顶支撑 + 台阶 + 重力下落）与 P2（道具顶面当支撑）的源码、NUnit 用例与 Python 参考模型已进树并编译通过；**Unity 编译、`run_tests`、Play Mode 全部 `NOT_RUN`**（作者不是 Unity 操作者）。所以本节写的是「代码这么写」，不是「跑起来是这样」。
 
@@ -311,7 +279,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 | 能力 | 现状 | 符号 |
 |---|---|---|
-| 地面 | 一张解析平面，但**运行期可改**：`SetGroundPlane(normal, offset)`（P1 新增；`n.y ≤ 1e-3` 拒绝，因为墙一样的「地面」答不出「球下面多高」）——旧版 §4.3 的 G2 缺口**已关闭** | `KatamariBallMotor.SetGroundPlane` |
+| 地面 | 一张解析平面，但**运行期可改**：`SetGroundPlane(normal, offset)`（P1 新增；`n.y ≤ 1e-3` 拒绝，因为墙一样的「地面」答不出「球下面多高」）| `KatamariBallMotor.SetGroundPlane` |
 | 支撑面 | 每步在**球心正下方**选**一个**局部平面（地面 / 静态盒顶 / 道具顶），把 `(n, dot(n,P))` 喂 `GroundContactMath.TrySolve`；`GroundContactMath` 本身一行没改 | `SupportSurfaceMath.TryResolveSupport` |
 | 台阶 | `rise ≤ stepLimit = 0.25·D` → 该盒**从扫掠里剔除**并进支撑表；否则仍是实心墙。三条防抖：迟滞 `+0.02 m`、已在顶上（`+0.01 m` 余量）无条件算台阶、跨级需 `> 0.005 m` | `IsStepWithinLimit` / `RefreshStepMask` / `IsStepCrossing` |
 | 重力 | 失去支撑 → `fallSpeed += 9.81·dt`，当步的 `maxLift/maxDrop` 换成重力预算，落地清零；**没有跳跃、没有向上速度** | `ResolveFallState` / `TryIntegrateFall` |
@@ -347,9 +315,9 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 `supports=7` = 地面 1 + 盒顶 4 + 斜面 2；`refused=0` 是关键（非 0 说明重复登记或容量溢出）；`kinds=11` 是 placement 里出现过的 kind 数（`fruit / tableware / food / container / drink / nature / furniture / garden / structure / toy / debris`）。**空的 `allowedKinds` 等于全部拒绝吸**，这是最容易犯的「什么都吸不到」接法错误。
 
-### 4.3 现在的四条硬结论（取代旧版三条）
+### 4.3 现在的四条硬结论
 
-1. **竖向通路存在，但只有三种面**：花圃台 `0.26` 需 `D ≥ 1.04`；P2 链「台顶 `0.26` → 躺椅 `0.35` → 折叠桌 `0.70`」在 `D ≥ 1.40` 上成立（两级 rise 分别 0.09 / 0.35）。这是 §3.5.1「没有竖向通路」的**作废点**；斜面已有支撑面（P3）；悬空、叠放、曲面**仍然做不到**（P4）。
+1. **竖向通路存在，但只有三种面**：花圃台 `0.26` 需 `D ≥ 1.04`；P2 链「台顶 `0.26` → 躺椅 `0.35` → 折叠桌 `0.70`」在 `D ≥ 1.40` 上成立（两级 rise 分别 0.09 / 0.35）。斜面已有支撑面（P3）；悬空、叠放、曲面**仍然做不到**（P4）。
 2. **毯缘 6 cm 必须继续当纯视觉**：它一旦进 `staticBoxes`，`rise = 0.06 ≤ 0.25·D` 在 `D ≥ 0.24` 时就是台阶，球会踩着毯子走。北边界平面先把球挡在 `z ≤ −6.0 − r`，毯子本来就不在球的可行域里 → 维持 §6 U6-A（不加 Collider、不进盒数组）。
 3. **斜板是支撑面，不是扫掠墙**：`ramp_to_bed` / `ramp_to_table` 在 `rampBoxes` 里，由 `RegisterRamp` 烘成可行走的支撑面（P3，d31dc9b）；它们**不进 `staticBoxes`**，所以坡脚没有隐形墙（`TERRAIN_SUPPORT` §5.5、§7.7 第 1 条）。坡度超过电机上限时 `RegisterRamp` 会拒绝并写原因，而不是退化成墙。
 4. **静态盒注册一次永不删**：只有 `ClearObstacles()`（全清）+ `LevelArenaHost.Reapply()`。所以「会消失的门」只能用动态挡路盒（门堆 3 篮 + 1 箱正是这么做的）；把门件登记成静态盒就会变成永久墙。
@@ -366,10 +334,10 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | G6 | 盒只有 AABB、没有旋转盒 | **仍在**：45° 件退化；本关角内无 45° 件（躺椅 yaw 90° 的 AABB 由数据侧算好） | 整图另案 |
 | G7 | 静态布景的「多盒」没有契约 | **仍在**（一件多盒会破 `validate_map` 第 14 条的账） | 与本关无关 |
 | G8 | 没有「可爬的结构物」 | **部分关闭**：盒顶（P1）与道具顶（P2）可上；**斜面 / 悬空 / 叠放 / 曲面仍不能** | 本关竖向只到 0.70（折叠桌）；「沿板上桌」= P3 |
-| G9 | 挡路盒 6 格 + 没有厚度过滤 | 第 ② 条**已关闭**：台阶规则取代了「固定 5 cm 过滤」（尺寸相关，更忠实），旧 C9 **作废**；第 ① 条**仍在**：门堆 1.5 m 内不要放其它未解锁大件 | 作者侧保持门堆附近干净 |
+| G9 | 挡路盒 6 格 + 没有厚度过滤 | 第 ② 条**已关闭**：台阶规则（尺寸相关）取代「固定 5 cm 过滤」；第 ① 条**仍在**：门堆 1.5 m 内不要放其它未解锁大件 | 作者侧保持门堆附近干净 |
 | **G10** | —— | **验收读数只有一个来源**：`gap` / `support` / `supportId` / `stepLimit` / `falling` 这些数只在 `StoryLevelLabBootstrap.Report()` 的 `[story-lab]` 行里。正式场景一旦不挂 Lab 脚本，P1/P2 的 Play 验收就失去读数 | §5.2 B 与 K1（拆一个只读诊断组件） |
 | **G11** | —— | **已关闭（2026-11-15）**：导入器给 `ground` / `boundary` 生成 `Visual`（cube + `BoxCollider`，`Art/Materials/Mat_Playground*`），`box` / `ramp` 的 cube 也补上 `Mat_PlaygroundProp` | §5.3 C1/C2/C6 改成「导入器生成」，见 `LEVEL_AUTHORING` §7.6 的「可见体」表 |
-| **G12** | —— | **数据与旧文档两套账**：`placement.json` 是 127 件 / 1500 u / 12 区，本文 §3.4 与 `LEVEL_AUTHORING` §11 P1 表仍写 110 件 / 412 u | §3.4 的指针；文档修正交 Lead（K6） |
+| **G12** | —— | **数据与文档两套账**：`placement.json` 是 127 件 / 1500 u / 12 区，`LEVEL_AUTHORING` §11 P1 表仍写 110 件 / 412 u | 文档修正交 Lead（K6） |
 
 ## 5. Q5 迁移执行（Unity 操作员清单，2026-11-15 按现状重写）
 
@@ -403,11 +371,11 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 - **B1** 场景：删 `StoryLevelLab` 根对象（含 proxy + backing `UdonBehaviour`）。验收：`grep -rn "StoryLevelLabBootstrap" Assets/` 里除了待删的 `.cs` 本身 **0 命中**；场景 0 Missing Script。
 - **B2** 资产：删 `Labs/StoryLevel/StoryLevelLabBootstrap.cs` + `.cs.meta` + `.asset` + `.asset.meta` + `Assets/SerializedUdonPrograms/<hash>.asset`(+`.meta`)。验收：`Labs/StoryLevel/` 目录**整个消失**（A4 的材质搬走之后）；Console 无 `programSource = null`。
 - **B3（备选，只在 K1 本轮做不了时用）**：E 轮验收期间**临时**保留 `StoryLevelLabBootstrap`（`scriptedDrive = true`），验收完再删。代价：正式场景里挂着一个叫 Lab 的脚本（`HUB_LOOP_PLAN` §7 配套 1 明确反对），而且它的时间轴（4 s 直行 + 转向）对 E6 / E7 没用。**不推荐**。
-- **B4 不要做的事**：把 `StoryLevelLabBootstrap` 改名成 `StoryArenaHost`（旧 C2 的写法**已作废**——注册职责已经归 `LevelArenaHost`，改名只会留下一个空壳）。
+- **B4 不要做的事**：把 `StoryLevelLabBootstrap` 改名成 `StoryArenaHost`（注册职责已经归 `LevelArenaHost`，改名只会留下一个空壳）。
 
 ### 5.3 C 清理旧内容与补视觉
 
-先给一张「哪些删、哪些改、哪些留」的表（对象名取自当前场景的 20 个根对象）。**编号提示**：本节的 `C1–C8` 与旧版 §5.2 的实现者清单 `C1–C9` 同名但**不是一回事**——旧的清单已整体换成 §5.8 的 `K1–K7`，正文里凡是提到旧编号都写成「旧 C…」。
+先给一张「哪些删、哪些改、哪些留」的表（对象名取自当前场景的 20 个根对象）。**编号提示**：本节的 `C1–C8` 是 §5.3 的对象清单编号，与 §5.8 的实现者清单 `K1–K7` 是两套编号。
 
 | 对象 | 现在 | 处置 | 理由 |
 |---|---|---|---|
@@ -460,7 +428,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | **E4** | 吸收 | `absorbed=` 增长、HUD「当前」增长、球肉眼变大；吃起步环（`D_req 0.03–0.12` 的小件）无延迟；`rej=` 不增长 |
 | **E5** | 挡路 | `D = 0.30` 撞保温箱 / 西瓜 / 皮球 → **停住**，`rej=` 出现 `TOO_LARGE`；`D ≥ 0.83` 吃掉最外侧的篮子后能进壁龛（净宽 0.10 → 0.55） |
 | **E6** | **P1 台阶**（花圃台 0.26） | `D = 1.00` → 被挡；`D ≥ 1.04` → 上去；静止后 `gap = 0.000 ± 0.005`、`support=box`、`supportY=0.260`；台顶沿边来回 10 s：`center.y` 波动 < 1 mm、`support` 不翻转；从台顶开出去 → `support=ground`、`falling` 至少一帧为真、落回后 `gap ≈ 0` |
-| **E7** | **P2 链**（台顶 → 躺椅 0.35 → 折叠桌 0.70） | 站上台顶后能跨上躺椅（rise 0.09，`D ≥ 0.36` 就有资格）；`D ≥ 1.45` 能上桌；`support=prop`、`supportId ≥ 100`；站上桌后 `D ≥ 2.00` 吃掉桌子 → `falling` 至少一帧、落回地面。**两个数要盯**：① 桌子的可用窗口是 `[1.40, 2.00)`（`4×rise` 到 `D_req`），1.40 是**等号**，实测请按 1.45 判（`D = 1.40` 时 `stepLimit` 恰好等于 rise，任何一点浮点误差都会让球掉下去）；② 躺椅 yaw 90° → 世界足迹 `x∈[−12.6,−12.0]`、`z∈[−10.4,−8.8]`，折叠桌 `x∈[−13.6,−12.6]`、`z∈[−9.5,−8.9]`，两者**只在 `x = −12.6` 这条线相接（重叠面积 0）**，不是旧稿写的「0.5×0.2 m」。链能不能过必须实测 |
+| **E7** | **P2 链**（台顶 → 躺椅 0.35 → 折叠桌 0.70） | 站上台顶后能跨上躺椅（rise 0.09，`D ≥ 0.36` 就有资格）；`D ≥ 1.45` 能上桌；`support=prop`、`supportId ≥ 100`；站上桌后 `D ≥ 2.00` 吃掉桌子 → `falling` 至少一帧、落回地面。**两个数要盯**：① 桌子的可用窗口是 `[1.40, 2.00)`（`4×rise` 到 `D_req`），1.40 是**等号**，实测请按 1.45 判（`D = 1.40` 时 `stepLimit` 恰好等于 rise，任何一点浮点误差都会让球掉下去）；② 躺椅 yaw 90° → 世界足迹 `x∈[−12.6,−12.0]`、`z∈[−10.4,−8.8]`，折叠桌 `x∈[−13.6,−12.6]`、`z∈[−9.5,−8.9]`，两者**只在 `x = −12.6` 这条线相接（重叠面积 0）**，不是 0.5×0.2 m。链能不能过必须实测 |
 | **E8** | 斜板（P3） | 球从坡脚上坡：`support=ramp`、`supportId` 落在斜面槽位、`center.y` 随坡上升；坡脚没有隐形墙（不会在坡前被挡）。两张截图：坡脚进入 / 坡顶接缝 |
 | **E9** | 限时结束与结算 | 120 s 到点 → `SettleRound` 冻结 → 卡面显示「呈给国王」→ 3 s 后星 / 直径 / 评语；`GetBankedScoreUnits() == 0`；HUD 隐藏。**重试按钮本轮不验**（F2）：它没有 Collider，uGUI 那条也没接 `EventSystem` |
 | **E10** | 方向指示与入座视点 | 推杆时 `PushDirectionCue` 指向球的前进方向（截图）；点球入座后眼点在球后上方、球在画面下前方不糊镜头；`[ride] seated entered` 一行 |
@@ -500,7 +468,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | **K3**（**已实现** 2026-11-15：`PlacementImporter` 的 `Visual` 体块 + 角色材质） | `Editor/LevelBuild/PlacementImporter.cs` | 给 `ground` / `boundary` 生成 `Visual`（cube + `BoxCollider`，`Mat_PlaygroundGround` / `Mat_PlaygroundWall`）；给 `box` / `ramp` 的 primitive cube 在没有材质时补 `Mat_PlaygroundProp`（手赋的材质不覆盖） | C6 不再是手工作业；重跑导入只会补缺。验收：`LEVEL_AUTHORING` §7.6 的「可见体」表 + `Tests/EditMode/LevelBuild/PlacementImporterVisualTests` |
 | **K4**（**已实现** 2026-11-15：d31dc9b） | `Runtime/BallMotor/KatamariBallMotor.cs` + `Runtime/Story/LevelArenaHost.cs` | `AddRamp / ClearRamps / GetRampCount / GetLastRampRefusalReason` + `rampBoxes` 烘焙（P3） | 斜面已注册成支撑面（E8）；**不要**把斜板塞进 `staticBoxes`，那会造坡脚隐形墙 |
 | **K5** | `Runtime/Story/StoryRetryButton.cs` | 正式形态并入 hub（`HubStartButton` 那条调用链）；本轮不动 | F2 的三条证据（无 `EventSystem`、`onClick` 目标为 0、世界按钮无 Collider） |
-| **K6** | `Docs/Design/Tools/LEVEL_AUTHORING.md` §11 P1 表 + §8 第 14 条 | 「110 件 / 412 u」→「127 件 / 1500 u」，期望值同步 | 文档修正，不在本 agent 写范围：本文 §3.4 与那份 P1 表是**同一处过期** |
+| **K6** | `Docs/Design/Tools/LEVEL_AUTHORING.md` §11 P1 表 + §8 第 14 条 | 「110 件 / 412 u」→「127 件 / 1500 u」，期望值同步 | 文档修正，不在本 agent 写范围：`LEVEL_AUTHORING` §11 P1 表仍写 110 件 / 412 u |
 | **K7**（**已实现** 2026-11-15：`Runtime/Pickup/PickupFieldHost.cs` + `Editor/Pickup/PickupFieldSync.cs`） | `Docs/Design/StoryMode/PICNIC_CORNER_LAYOUT.md` §7 的注（历史文本，仍待 Lead 统一措辞） | 结论：挡路/支撑盒**不受影响**——`propBounds` 是世界 AABB，`BlockingPropMath` / `SupportSurfaceMath` 只把它当轴对齐世界盒用，不再乘道具旋转，躺椅的 `0.60×0.35×1.60` 只转了一次；真正会“再转一次”的是吸附后的**径向代理壳**，它曾把 `propBounds` 当道具局部轴尺寸，再乘含躺椅 yaw 90° 的 `localRotation`。修复：同步额外写 `propLocalBounds`（局部轴尺寸，躺椅 `1.60×0.35×0.60`），`PickupFieldHost.AttachRadialProxy` 改传该列；旧场景缺列时回退 `propBounds` 并打一次原因码 warning（行为同旧） | 验收：同步后躺椅行 `propBounds=(0.60,0.35,1.60)`、`propLocalBounds=(1.60,0.35,0.60)`，宿主 ready 行 `proxyBounds=local`；轴向由 `RadialProxyLocalBoundsTests` 固定。`[ProxyTrace]` 不打印端点轴，Play Mode 可用一根把根节点设为 yaw 90 的 1 m Cube 测试杆（`localScale=(0.04,0.04,1.0)`，`propBounds=(1.0,0.04,0.04)`、`propLocalBounds=(0.04,0.04,1.0)`）看 `[ProxyTrace] candidates=1` 及 `support` 峰值角度，或观察躺椅吸附后 support 峰值随滚转角的变化。挡路盒/支撑/E7 足迹不变。§7 那句历史注的措辞仍归 Lead（文档层，不阻塞） |
 
 ### 5.9 本轮不做什么（防误伤）
@@ -509,33 +477,13 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 ## 6. Q6 风险与未决（需要用户拍板，带选项与代价）
 
-> **2026-11-15 状态更新**：U1（160 m²）、U2（内容重排）、U3（暖壶按真实尺寸建模；现在 `thermos` 已不在本关）、U5、U6、U7、U8 已由 [`Docs/OPEN_DECISIONS.md`](../../OPEN_DECISIONS.md) 的 (q) 条与 [PICNIC_CORNER_LAYOUT](PICNIC_CORNER_LAYOUT.md) §9 拍板。**仍然开着的只有 U4**（120 s 与星级 1.25/1.45/1.60 要不要按新内容 1500 u 重定——(q) 明写「现阶段不调星级数」）。下表保留原问题与代价，作为决策历史；旧口径里的「110 件 / 412 u」按 §3.4 的指针读成「127 件 / 1500 u」。
-
-| # | 问题 | 选项 | 代价 |
-|---|---|---|---|
-| **U1** | **场地多大** | **A（推荐）160.0 m²**：`x,z ∈ [−19.4,−6.0]`，边界全落在真实几何上（西/南墙、北毯缘、东 2 m 缝） | 110 件必须重排（S4b/S5，约 0.5–1 个操作员工作日）；密度从 ≈0.29（当前 19.6×19.6 内空）→ 0.69 件/m²，节奏会变（§6 U4） |
-| | | B ≈ 187 m²：东界推到 `x = −4.0`（15.4 × 13.4 − 花圃 = 186.8），含中央草坪西南角与 `collapsed_bench` | +27 m²，但多一个 3.6 m 死件（`collapsed_bench`）挡在东北角，且要新增东墙；重排照样要做 |
-| | | C 384 m²：整 20×20 象限（零重排，整体平移 `(−9.8,0,−9.8)`） | 两堵墙（`x=0`/`z=0`）把西毯、南篮子区、中央草坪各切一半；毯缘变成场内一道 6 cm 墙 —— 与"真实布局"目标冲突 |
-| **U2** | **110 件是否重排** | 跟 A 走：重排，坐标按 §3.4 | 见 U1-A |
-| | | 不重排：只能选 C | 见 U1-C |
-| **U3** | **4 支暖壶怎么办**（现状 0.9 m 立方体 → `D_req 2.406` > 2.20，**永久吸不到**，涉及 64 u；**与 U8 一起拍**：若选 U8a，暖壶已不在第一关，本条自动关闭） | **a（推荐）按真实尺寸建模 0.12×0.12×0.30**：`D_req 0.435`，412 u 保住，与"真实尺寸"决定一致 | 需要一个模型（Blender 改造，属美术线，不在本方案） |
-| | | b 保留 0.9³ 占位：4 件变死件 → 可达 348 u、上限 1.408 m，★★/★★★ 必须重定 | 相当于把 412 的门槛体系打掉 16% |
-| | | c 把暖壶移出第一关：106 件 / 348 u | 同上，且 `container` 这个 kind 在第一关消失（关卡 1 不受影响，关卡 2 也不用 container） |
-| **U4** | **120 s / 1.25 m 三档是否先测再议** | **A（推荐）先测一轮，不改数**（(p) 现行）：§5.5 E9 跑一次（120 s 满局），用实测决定 | 一次 Play Mode 的 2 分钟；结论可能指向"时间太松" |
-| | | B 现在就按新密度把时限/星级重算 | 违反 (p)，且新场地的手感还没测过，等于盲调 |
-| **U5** | **PicnicLawn 全图与 3.20 m 上限** | **A（推荐）本关只管角，全图另案**；但先确认一个事实：`layout.json` 写 `ball_max_collision_diameter_m = 2.2`，而 (n)/`PROP_SET_PLAN §2.8.5` 说野餐桌/长椅/长凳改由 "PicnicLawn 3.20 m 上限"承接 —— **两处口径不一致**，且校验器按 2.20 判路线余量 | 若真要 3.20，PicnicLawn 的路线净宽（3.40/4.00/5.00）与余量（1.20）要重算，校验器会先报 warning/error；不确认就会在"门件该不该可吸"上反复 |
-| | | B 现在就把 PicnicLawn 改成 3.20 | 需要同时改 `scale`/路线/关卡快照/README 手抄值，且两份关卡 JSON 的 `map_snapshot` 要重钉（不在本次写范围） |
-| **U6** | **毯缘 6 cm 算墙还是纯视觉** | **A（推荐）纯视觉、不加 Collider**：球滚到边界时被北平面挡住，视觉上"毯子在墙外"，不出现"巨球被一块布挡住" | 需要毯子不带碰撞体（今天它就是 `plane_raised` + 0.06 m，本来也不是玩家必经） |
-| | | B 当墙：毯缘进碰撞集 | 吃掉 1 个盒；观感"布墙" |
-| **U7** | **第一关是否也用整图的 452 件散布** | **A（推荐）不用**：角内只放本关 110 件；整图的 `spawn_sw`(12) + `tree_roots_sw`(14) + `flower_bed_sw`(12) + `fringe_west/south` 的角内段（各约 6–7 件）合计 **≈50 件 / ≈50 单位**会白送进角，412 立刻失真 | 与"一个角就是一张小图"一致 |
-| | | B 用整图散布替代 110 件 | 关卡阈值、件数目标、关卡 2 的水果计数全部要重算 |
-| **U8** | **结构门件怎么算进 110/412** | **a（推荐）3 篮 + 1 箱顶替 4 支暖壶**：件数仍是 110、单位仍是 412，顺带把 U3 的 64 u 死账换成"一扇会消失的门"（门后 28 u 是壁龛内容，从 `outer` 挪过去） | 需要 2 个新模型（野餐篮、保温箱，真实尺寸）+ 它们的声明单位（`PickupFieldSync` 已改为只消费声明值并回读，见 §5.4） |
-| | | b 结构件**另加**（不顶替）：114 件 / 476 u，★1.25 = 51.7%、上限 1.55 m | 关卡阈值要重定（与 (p)"现在不调数值"冲突），且 ★ 掉到 52% 偏松 |
-| | | c 结构件只当布景、不进宿主 | 没有"挡路 → 食物"的翻转，等于放弃用户补充的那条原则 |
+> U1（160 m²）、U2（内容重排）、U3（暖壶按真实尺寸建模）、U5、U6、U7、U8 已由 [`Docs/OPEN_DECISIONS.md`](../../OPEN_DECISIONS.md) 的 (q) 条与 [PICNIC_CORNER_LAYOUT](PICNIC_CORNER_LAYOUT.md) §9 拍板。
+>
+> **仍然开着的只有 U4**：120 s 与星级 1.25 / 1.45 / 1.60 要不要按新内容 1500 u 重定——(q) 明写「现阶段不调星级数」。
 
 **其它风险（不需要拍板，但必须知道）**：
 
-1. **密度翻倍**：≈0.29 → **0.79 件/m²**（127 ÷ 160.0，比旧稿的 110 件更高），`120 s` 的达标会更容易（这是 §5.5 E9 要测的第一件事）。
+1. **密度翻倍**：≈0.29 → **0.79 件/m²**（127 ÷ 160.0），`120 s` 的达标会更容易（这是 §5.5 E9 要测的第一件事）。
 2. **球被 6 cm 毯缘挡住**（若选 U6-B）或**自己陷进毯子 6 cm**（若选 U6-A 且毯子在同一平面）——两者都是视觉问题，不是物理问题。
 3. **指示牌数据不自洽**（`position.y = 0` vs 1.2 m 高）：本关按柱脚 0 建模；地图数据留给 owner。
 4. **`PickupFieldSync` 重跑会改 `valueUnits`**：真实尺寸落地后大多数件落 s/m 档，412 会变；重跑必须与阈值重定同批做。
@@ -558,7 +506,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` | **未改** | 同上（`catalog_sha256`）；另外它的 `game_longest_dim_m` 同时喂校验器第 11 条与生成器的脚印模型，改了会让 `build_greybox --check` 与 README 可行性表一起失效 |
 | `Docs/Design/Maps/PicnicLawn/unity_greybox.json` | **未改** | 生成物：`--check` 要求它与作者数据逐字节一致，手改即失效；重生成要先改上面两个文件 |
 
-**第二轮（§4 / §5 重写，2026-11-15 傍晚）**：只改本文件——§4、§5 整节重写；§0 / §1 / §2 / §3 / §6 / §7 只就地改正与之矛盾的句子，每处都带「2026-11-15 起 / 已作废 / 已关闭」这类标注，不删历史。没有碰任何数据文件（`layout.json` / `prop_catalog.csv` / `unity_greybox.json` / `placement.json`）、没有碰代码、场景、prefab、`tasks.json`。
+**第二轮（§4 / §5 重写，2026-11-15 傍晚）**：只改本文件——§4、§5 整节重写；§0 / §1 / §2 / §3 / §6 / §7 就地改正与之矛盾的句子。没有碰任何数据文件（`layout.json` / `prop_catalog.csv` / `unity_greybox.json` / `placement.json`）、没有碰代码、场景、prefab、`tasks.json`。
 
 ### 7.2 第一轮实跑的命令与结果（上午，留档）
 
@@ -587,13 +535,13 @@ python3 Docs/Design/GameModes/validate_levels.py
 
 ### 7.4 实施顺序（**已由 §5.7 的轮次划分取代**）
 
-旧写法（C1/C2 + S1–S3 先做…）**已作废**：C1/C2 由 `LevelArenaHost` 取代，S 编号整套换成 §5 的 A→G。现在的排期只有三行：
+排期按 §5 的 A→G 编号，只有三行：
 
 1. **轮 1 = §5.1 A（转正）→ §5.3 C（清理 + 视觉）→ §5.4 D（导入）→ §5.5 E（Play 验收）**，外加 §5.6 F1（HUD 裁切，S 大小）与 §5.2 B 的前置 K1。
 2. **轮 2 = §5.6 F2 + §5.7 G**（主房间 + 世界内重试按钮 + 结果卡搬家 + `spawns` 改房间）。
 3. **轮 3 = P3 斜面**（`TERRAIN_SUPPORT` §8 P3，另一条线）。
 
-仍然成立的两条接缝：**挡路/支撑那条线**已经落地（`PickupFieldHost.UpdatePropObstacles`，P2），所以旧稿第 3 条对门件的担心只剩「作者侧保持门堆附近干净」；**`Runtime/Hub/` 与本文不冲突**，但两边都不能改 `StoryRoundController` 的状态机（(m)）。
+仍然成立的两条接缝：**挡路/支撑那条线**已经落地（`PickupFieldHost.UpdatePropObstacles`，P2），对门件的担心只剩「作者侧保持门堆附近干净」；**`Runtime/Hub/` 与本文不冲突**，但两边都不能改 `StoryRoundController` 的状态机（(m)）。
 
 ### 7.5 第二轮（§4 / §5 重写）的实跑结果
 

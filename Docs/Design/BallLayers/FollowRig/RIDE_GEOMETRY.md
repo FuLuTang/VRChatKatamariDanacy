@@ -156,13 +156,13 @@ b·c − a·d = 2.4·0.75 − 0.55·2.2 = 0.59 > 0   # 单调递增 ⇒ 36.25° 
 | `eyeMaxBackM` | 8 | **210** | r=15 需 82.15 |
 
 `Parameters/README.md` 第 16 行与 §6.4 护栏表同步（4 个眼点系数 → α / β / 眼点下限；两条 8 m 护栏 →
-40/210）。顺带作废旧的"22 m 上限"：新模型 `L ≥ 5.76·r`，相机永远在球外。
+40/210）。新模型 `L ≥ 5.76·r`，相机永远在球外。
 
 ### 6.2 顺序
 
 1. `FollowRigMath.TryUpdate`（H1：签名 + 公式 + 拒绝条件）——**与另一位 agent 无关**。
 2. `follow_rig.py` 同名同序改（H3）+ `Docs/tests/ball_follow_rig` 9 例改期：四档 0.67/0.91/1.414/2.266
-   与 0.86/1.08/1.542/2.323 **全部作废**，换成 §2.2 的 up/back。
+   四档换成 §2.2 的 up/back。
 3. `KatamariBallMotor.cs` 字段区（H2）+ `UpdateFollowRig` 调用点（H5）+ `.asset` 的序列化键（旧键失配
    后回落到新默认值，属清理，不是前提）。
 4. `Tests/EditMode/BallLayers/FollowRigTests.cs` 重写（§2.2 表 + α>β 拒绝）；场景 7 步（§7 末尾）。

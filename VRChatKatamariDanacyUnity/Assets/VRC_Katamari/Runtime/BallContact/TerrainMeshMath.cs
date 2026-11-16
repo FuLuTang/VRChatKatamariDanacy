@@ -179,6 +179,39 @@ namespace VRCKatamari.BallContact
             int chunkCount,
             out Vector3 point, out Vector3 normal, out int surfaceId)
         {
+            int discardedTriangles = 0;
+            int discardedEvaluations = 0;
+            return TrySupportProbeCounted(probe, maxHeight, vertices, indices, triangleCount,
+                chunkMin, chunkMax, chunkStarts, chunkTriangleCounts, chunkZoneIds, chunkCount,
+                ref discardedTriangles, ref discardedEvaluations, out point, out normal,
+                out surfaceId);
+        }
+
+        /// <summary>
+        /// <see cref="TrySupportProbe"/> plus the two work counters the motor's cost
+        /// diagnostic needs.
+        /// </summary>
+        /// <remarks>
+        /// ONE body: <see cref="TrySupportProbe"/> delegates here with two throw-away
+        /// counters, so the query and the count can never drift. The counters are
+        /// instructions, not measurements:
+        /// <paramref name="trianglesTested"/> counts every triangle that survives the chunk
+        /// AABB filter (i.e. every per-triangle iteration), and
+        /// <paramref name="fullEvals"/> counts the ones that also survive the per-triangle
+        /// XZ AABB and therefore pay the cross product, the plane height and the barycentric
+        /// test. That split is what tells a reader whether a slow step is "too many
+        /// triangles" or "too much work per triangle".
+        /// </remarks>
+        public static bool TrySupportProbeCounted(
+            Vector3 probe,
+            float maxHeight,
+            Vector3[] vertices, int[] indices, int triangleCount,
+            Vector3[] chunkMin, Vector3[] chunkMax,
+            int[] chunkStarts, int[] chunkTriangleCounts, int[] chunkZoneIds,
+            int chunkCount,
+            ref int trianglesTested, ref int fullEvals,
+            out Vector3 point, out Vector3 normal, out int surfaceId)
+        {
             point = Vector3.zero;
             normal = Vector3.zero;
             surfaceId = -1;
@@ -203,6 +236,7 @@ namespace VRCKatamari.BallContact
                 int end = start + chunkTriangleCounts[c];
                 for (int t = start; t < end; t++)
                 {
+                    trianglesTested = trianglesTested + 1;
                     int at = t * 3;
                     Vector3 a = vertices[indices[at]];
                     Vector3 b = vertices[indices[at + 1]];
@@ -211,6 +245,7 @@ namespace VRCKatamari.BallContact
                         probe.x > Mathf.Max(a.x, Mathf.Max(b.x, d.x)) + Epsilon) continue;
                     if (probe.z < Mathf.Min(a.z, Mathf.Min(b.z, d.z)) - Epsilon ||
                         probe.z > Mathf.Max(a.z, Mathf.Max(b.z, d.z)) + Epsilon) continue;
+                    fullEvals = fullEvals + 1;
 
                     Vector3 raw = Cross(b - a, d - a);
                     float length = raw.magnitude;
@@ -275,7 +310,16 @@ namespace VRCKatamari.BallContact
         /// No allocation: the probe list is caller-owned and the loop reads only the fixed
         /// buffers. Cost is at most <c>(probeCount) * trianglesInHitChunks</c> triangle tests,
         /// one more probe than the old ring-only query (the ball's own XZ is no longer a
-        /// fallback that runs only on a miss).
+        /// fallback that runs only on a miss), PLUS a linear scan of every chunk per probe:
+        /// <see cref="TrySupportProbeCounted"/>'s chunk filter is an O(chunkCount) XZ-AABB
+        /// scan, not a spatial index. That is why chunking a mesh into more, smaller chunks
+        /// helps only while the triangle work it removes exceeds the chunk scans it adds, and
+        /// why the optimum is tens of triangles per chunk rather than one.
+        /// </para>
+        /// <para>
+        /// <paramref name="trianglesTested"/>/<paramref name="fullEvals"/> are work counters
+        /// for the motor's cost diagnostic (see
+        /// <see cref="TrySupportProbeCounted"/>); nothing here branches on them.
         /// </para>
         /// </remarks>
         public static bool TrySelectSupport(
@@ -284,6 +328,7 @@ namespace VRCKatamari.BallContact
             Vector3[] vertices, int[] indices, int triangleCount,
             Vector3[] chunkMin, Vector3[] chunkMax,
             int[] chunkStarts, int[] chunkTriangleCounts, int[] chunkZoneIds, int chunkCount,
+            ref int trianglesTested, ref int fullEvals,
             out Vector3 normal, out float height, out int surfaceId)
         {
             normal = Vector3.zero;
@@ -317,9 +362,10 @@ namespace VRCKatamari.BallContact
                 Vector3 candidatePoint;
                 Vector3 candidateNormal;
                 int candidateId;
-                if (!TrySupportProbe(probe, ceiling, vertices, indices, triangleCount, chunkMin,
-                    chunkMax, chunkStarts, chunkTriangleCounts, chunkZoneIds, chunkCount,
-                    out candidatePoint, out candidateNormal, out candidateId)) continue;
+                if (!TrySupportProbeCounted(probe, ceiling, vertices, indices, triangleCount,
+                    chunkMin, chunkMax, chunkStarts, chunkTriangleCounts, chunkZoneIds,
+                    chunkCount, ref trianglesTested, ref fullEvals, out candidatePoint,
+                    out candidateNormal, out candidateId)) continue;
                 // The triangle's plane at the BALL's XZ, not at the probe's: a slope tilts
                 // under the centre, and GroundContactMath solves for the centre.
                 float centreHeight = (Dot(candidateNormal, candidatePoint) -

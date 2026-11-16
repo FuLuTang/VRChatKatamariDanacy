@@ -53,10 +53,34 @@ namespace VRCKatamari.Tests
                 }
             }
             Assert.IsNotNull(motorType, "KatamariBallMotor type not loaded");
+            CreateMotor();
+        }
+
+        /// <summary>
+        /// A fresh motor on a fresh host. A case that needs a different mesh (one terrain per
+        /// motor) recreates instead of re-entering SetUp/TearDown, so nothing leaks.
+        /// </summary>
+        private void CreateMotor()
+        {
             host = new GameObject("TerrainSupportStepTests");
             host.hideFlags = HideFlags.DontSave;
             motor = host.AddComponent(motorType);
             Invoke("Start");
+        }
+
+        private void RecreateMotor()
+        {
+            if (host != null) UnityEngine.Object.DestroyImmediate(host);
+            host = null;
+            motor = null;
+            CreateMotor();
+        }
+
+        private void SetField(string name, object value)
+        {
+            FieldInfo field = motorType.GetField(name, Any);
+            Assert.IsNotNull(field, name + " field not found");
+            field.SetValue(motor, value);
         }
 
         [TearDown]
@@ -156,6 +180,84 @@ namespace VRCKatamari.Tests
             Assert.That((float)Invoke("GetSupportSurfaceHeightWorldM"),
                 Is.EqualTo(-1f).Within(1e-3f),
                 "the ball's support is the mesh 1 m down, so it starts to fall into it");
+        }
+
+        [Test]
+        public void TheSupportAndPenetrationCostsAreSeparateAndTheWorkCountersExplainThem()
+        {
+            // The support ring alone: the ball is 0.15 m above the mesh, so the sphere's AABB
+            // does not overlap any triangle and T1 has nothing to do.
+            RegisterFlatMesh(0f, 16);
+            Step(1);
+
+            float support = (float)Invoke("GetLastTerrainSupportMicros");
+            float penetration = (float)Invoke("GetLastTerrainPenetrationMicros");
+            float total = (float)Invoke("GetLastTerrainQueryMicros");
+            int tested = (int)Invoke("GetTerrainTrianglesTested");
+            int fullEvals = (int)Invoke("GetTerrainFullEvals");
+
+            Assert.That(support, Is.GreaterThan(0f), "the support ring is the timed half");
+            Assert.That(penetration, Is.GreaterThanOrEqualTo(0f));
+            Assert.That(total, Is.EqualTo(support + penetration).Within(1e-3f),
+                "the total is exactly the two halves, so a reader can attribute the cost");
+            Assert.That(support, Is.GreaterThan(penetration),
+                "the 17-probe ring dominates an empty push-out scan");
+
+            // Explainable work: every probe visits every triangle of the single chunk that
+            // contains it, so 17 probes x 512 triangles is EXACT, not an estimate.
+            Assert.AreEqual(17 * 512, tested,
+                "17 probes x 512 triangles: one chunk contains every probe");
+            Assert.That(fullEvals, Is.GreaterThan(0), "at least the triangle under the ball");
+            Assert.That(fullEvals, Is.LessThan(tested / 10),
+                "the per-triangle AABB rejects almost everything, which is why the split matters");
+
+            // A penetration case: drop the ball's centre to 0.10 m so its sphere is 0.05 m
+            // INTO the floor from the front side (T1 is single-sided; a ball under a +Y face
+            // is never pushed, which is the roof rule). The scan now visits the whole chunk
+            // and the closest-point branch runs, so the penetration half has real work.
+            RecreateMotor();
+            RegisterFlatMesh(0f, 16);
+            SetField("ballCenterWorld", new Vector3(0f, 0.10f, 0f));
+            Step(1);
+            float buriedPenetration = (float)Invoke("GetLastTerrainPenetrationMicros");
+            Assert.That(buriedPenetration, Is.GreaterThan(0f),
+                "a sphere 0.05 m inside the floor pays for the T1 scan");
+            Assert.That(buriedPenetration, Is.GreaterThan(penetration),
+                "and strictly more than the empty scan above");
+            Assert.That(GetCenterY(), Is.GreaterThan(0.14f),
+                "T1 pushed it back out and the ground solve put it on the surface");
+        }
+
+        private float GetCenterY()
+        {
+            Vector3 center = (Vector3)Invoke("GetCenterWorld");
+            return center.y;
+        }
+
+        [Test]
+        public void TheV2AuthorityDoesNotLeaveAStaleTerrainReading()
+        {
+            // The bug this pins: the counters were reset inside StepPositionV1, so with the
+            // contact v2 authority on (which never enters that method) every reading was a
+            // stale value from the last v1 step. Reset now lives in StepBall, which BOTH
+            // authorities pass through.
+            RegisterFlatMesh(0f, 16);
+            Step(1);
+            Assert.That((float)Invoke("GetLastTerrainQueryMicros"), Is.GreaterThan(1f),
+                "the v1 step measured something");
+            Assert.That((int)Invoke("GetTerrainTrianglesTested"), Is.GreaterThan(0));
+
+            Invoke("SetContactModelV2Enabled", true);
+            Assert.IsTrue((bool)Invoke("IsContactModelV2"));
+            Step(1);
+
+            Assert.AreEqual(0f, (float)Invoke("GetLastTerrainQueryMicros"), 1e-6f,
+                "the v2 authority does not query the mesh, so the reading must be ZERO, " +
+                "not the previous v1 step's value");
+            Assert.AreEqual(0f, (float)Invoke("GetLastTerrainSupportMicros"), 1e-6f);
+            Assert.AreEqual(0f, (float)Invoke("GetLastTerrainPenetrationMicros"), 1e-6f);
+            Assert.AreEqual(0, (int)Invoke("GetTerrainTrianglesTested"));
+            Assert.AreEqual(0, (int)Invoke("GetTerrainFullEvals"));
         }
 
         [Test]

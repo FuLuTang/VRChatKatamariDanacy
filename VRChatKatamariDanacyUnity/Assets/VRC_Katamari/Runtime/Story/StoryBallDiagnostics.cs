@@ -157,7 +157,20 @@ namespace VRCKatamari.Story
                 + " falling=" + motor.IsFalling()
                 + " axes=" + (Mathf.Floor(axes.x * 100f) / 100f) + "," + (Mathf.Floor(axes.z * 100f) / 100f)
                 + " absorbed=" + motor.GetAbsorbedCount()
-                + " rejects=" + motor.GetRejectEventCount());
+                + " rejects=" + motor.GetRejectEventCount()
+                // Terrain cost, on ONE line so micros/full-eval can be computed by eye:
+                // tq is the LAST step, steps is how many steps the frame ran, so the frame's
+                // terrain cost is tq * steps. tqSup/tqPen split the ring from the T1
+                // push-out; triTests is every triangle the chunk filter let through and
+                // fullEvals the ones that paid the cross/plane/barycentric work.
+                + " terrain=" + motor.GetTerrainMeshTriangleCount() + "/"
+                + motor.GetTerrainMeshChunkCount()
+                + " tq=" + (Mathf.Floor(motor.GetLastTerrainQueryMicros() * 10f) / 10f)
+                + " tqSup=" + (Mathf.Floor(motor.GetLastTerrainSupportMicros() * 10f) / 10f)
+                + " tqPen=" + (Mathf.Floor(motor.GetLastTerrainPenetrationMicros() * 10f) / 10f)
+                + " triTests=" + motor.GetTerrainTrianglesTested()
+                + " fullEvals=" + motor.GetTerrainFullEvals()
+                + " steps=" + motor.GetStepsThisFrame());
         }
     }
 }

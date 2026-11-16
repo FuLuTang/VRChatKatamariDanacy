@@ -564,7 +564,19 @@ namespace VRCKatamari.BallMotor
         private Vector3[] terrainChunkMax;
         private int terrainChunkCount;
         private bool terrainMeshReady;
+        // ---- Terrain cost diagnostics (per LAST fixed step; see ResetTerrainCostCounters) ----
+        // The total is kept for existing readers; the split says whether the support ring or
+        // the T1 push-out is the expensive half, and the two work counters say whether the
+        // cost is "too many triangles" (trianglesTested) or "too much work per triangle"
+        // (fullEvals / trianglesTested).
         private float lastTerrainQueryMicros;
+        private float lastTerrainSupportMicros;
+        private float lastTerrainPenetrationMicros;
+        private int terrainTrianglesTested;
+        private int terrainFullEvals;
+        // Steps the last Update ran. A frame's terrain cost is lastTerrainQueryMicros times
+        // this, and Update zeroes both when it runs no step at all.
+        private int stepsThisFrame;
 
         // ---- Pending absorb candidates; candidate collection is host-side ----
         private const int PendingCandidateCapacity = 4;
@@ -1402,6 +1414,11 @@ namespace VRCKatamari.BallMotor
                 fixedStepAccumulator = maximumAccumulator;
             }
 
+            // A frame that runs no step has no terrain cost either, and the pair
+            // (lastTerrainQueryMicros, stepsThisFrame) must stay consistent so a reader can
+            // multiply them without a zero-step frame looking like a free one.
+            stepsThisFrame = 0;
+            ResetTerrainCostCounters();
             int steps = 0;
             while (fixedStepAccumulator >= fixedStepSeconds && steps < maxStepsPerFrame)
             {
@@ -1426,6 +1443,14 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         private void StepBall(float dt)
         {
+            // ONE reset for both position authorities. It used to live in StepPositionV1, so
+            // with contact model v2 on (which never enters that method) every reading was a
+            // STALE value from the last v1 step. Reset here and the v2 authority honestly
+            // reports "this authority does not query the terrain mesh" as zeroes.
+            // The reading is the LAST step only: a frame's cost is the reading times the
+            // number of steps that frame ran (see GetStepsThisFrame).
+            ResetTerrainCostCounters();
+            stepsThisFrame = stepsThisFrame + 1;
             authorityFrame = authorityFrame + 1;
 
             // 1. ControlIntentMath: the only place a raw axis becomes an intent,
@@ -3373,8 +3398,11 @@ namespace VRCKatamari.BallMotor
                 proxyDirections, visualRollRotation, collisionRadiusWorldM * 0.9f,
                 terrainVertices, terrainIndices, terrainTriangleCount, terrainChunkMin,
                 terrainChunkMax, terrainChunkStarts, terrainChunkTriangleCounts,
-                terrainChunkZoneIds, terrainChunkCount, out normal, out height, out surfaceId);
-            lastTerrainQueryMicros = lastTerrainQueryMicros + ElapsedMicros(start);
+                terrainChunkZoneIds, terrainChunkCount, ref terrainTrianglesTested,
+                ref terrainFullEvals, out normal, out height, out surfaceId);
+            float micros = ElapsedMicros(start);
+            lastTerrainSupportMicros = lastTerrainSupportMicros + micros;
+            lastTerrainQueryMicros = lastTerrainQueryMicros + micros;
             return found;
         }
 
@@ -3442,7 +3470,9 @@ namespace VRCKatamari.BallMotor
                         0f, planarVelocity.z - normal.z * inward);
                 }
             }
-            lastTerrainQueryMicros = lastTerrainQueryMicros + ElapsedMicros(start);
+            float micros = ElapsedMicros(start);
+            lastTerrainPenetrationMicros = lastTerrainPenetrationMicros + micros;
+            lastTerrainQueryMicros = lastTerrainQueryMicros + micros;
         }
 
         /// <summary>
@@ -4811,6 +4841,19 @@ namespace VRCKatamari.BallMotor
             return true;
         }
 
+        /// <summary>
+        /// Zeroes this step's terrain cost counters. Called from <see cref="StepBall"/> (both
+        /// position authorities) and from <see cref="Update"/> for a frame with no step.
+        /// </summary>
+        private void ResetTerrainCostCounters()
+        {
+            lastTerrainQueryMicros = 0f;
+            lastTerrainSupportMicros = 0f;
+            lastTerrainPenetrationMicros = 0f;
+            terrainTrianglesTested = 0;
+            terrainFullEvals = 0;
+        }
+
         /// <summary>Drops the terrain mesh; the plane/box/ramp support world stays.</summary>
         public void ClearTerrainMesh()
         {
@@ -4843,18 +4886,74 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// This step's terrain query time in microseconds: the support selection plus the T1
-        /// push-out, accumulated and reset at the top of every step.
+        /// The LAST fixed step's terrain query time in microseconds: the support selection
+        /// plus the T1 push-out. <b>A frame's cost is this reading times the number of steps
+        /// the frame ran</b> - see <see cref="GetStepsThisFrame"/>.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// Measured with the wall clock (<see cref="WallClockSeconds"/>), not with
         /// <c>Time.time</c>, which is a frame timestamp and made this counter read 0 on
         /// every step. It is a diagnostic: nothing branches on it, it allocates nothing, and
         /// its own cost is two property reads per query.
+        /// </para>
+        /// <para>
+        /// Reset once per step in <see cref="StepBall"/>, the one place both position
+        /// authorities pass through, so with contact model v2 on (which never queries the
+        /// terrain mesh) this reads 0 instead of a stale v1 value. It is the sum of
+        /// <see cref="GetLastTerrainSupportMicros"/> and
+        /// <see cref="GetLastTerrainPenetrationMicros"/>.
+        /// </para>
         /// </remarks>
         public float GetLastTerrainQueryMicros()
         {
             return lastTerrainQueryMicros;
+        }
+
+        /// <summary>The last step's share of the terrain query spent selecting the support.</summary>
+        public float GetLastTerrainSupportMicros()
+        {
+            return lastTerrainSupportMicros;
+        }
+
+        /// <summary>The last step's share of the terrain query spent on the T1 push-out.</summary>
+        public float GetLastTerrainPenetrationMicros()
+        {
+            return lastTerrainPenetrationMicros;
+        }
+
+        /// <summary>
+        /// Triangles the last step's support query iterated: every triangle of every chunk
+        /// whose AABB contains a probe (17 probes). Compare with
+        /// <see cref="GetTerrainFullEvals"/>: a large <c>trianglesTested</c> means the chunk
+        /// broad phase is not filtering; a large <c>fullEvals</c> share means the per-triangle
+        /// work is what costs.
+        /// </summary>
+        public int GetTerrainTrianglesTested()
+        {
+            return terrainTrianglesTested;
+        }
+
+        /// <summary>
+        /// Triangles that passed the per-triangle XZ AABB in the last support query and paid
+        /// the cross product, plane height and barycentric test. This is the number to divide
+        /// <see cref="GetLastTerrainSupportMicros"/> by to get "microseconds per full
+        /// triangle evaluation".
+        /// </summary>
+        public int GetTerrainFullEvals()
+        {
+            return terrainFullEvals;
+        }
+
+        /// <summary>
+        /// Fixed steps the last <c>Update</c> ran (0..<c>maxStepsPerFrame</c>). Multiply
+        /// <see cref="GetLastTerrainQueryMicros"/> by this for the frame's terrain cost; a
+        /// frame with no step reports 0 and zeroes the terrain readings with it, so the
+        /// product is never misleadingly small.
+        /// </summary>
+        public int GetStepsThisFrame()
+        {
+            return stepsThisFrame;
         }
 
         private void EnsureTerrainMeshBuffers()

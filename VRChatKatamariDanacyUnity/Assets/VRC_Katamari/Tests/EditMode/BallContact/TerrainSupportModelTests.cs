@@ -172,11 +172,16 @@ namespace VRCKatamari.Tests
         private static bool Select(Mesh mesh, Vector3 center, float ballBottom, float stepLimit,
             out float height, out Vector3 normal, out int surfaceId)
         {
+            // The work counters are the motor's cost diagnostic; these cases assert heights,
+            // so they discard them (the counter cases live in EditMode/BallMotor).
+            int discardedTriangles = 0;
+            int discardedEvaluations = 0;
             return TerrainMeshMath.TrySelectSupport(center, ballBottom, stepLimit, Directions(),
                 Quaternion.identity, RingRadius, mesh.Vertices, mesh.Indices,
                 mesh.TriangleCount, mesh.ChunkMin, mesh.ChunkMax, mesh.ChunkStarts,
-                mesh.ChunkTriangleCounts, mesh.ChunkZoneIds, mesh.ChunkCount, out normal,
-                out height, out surfaceId);
+                mesh.ChunkTriangleCounts, mesh.ChunkZoneIds, mesh.ChunkCount,
+                ref discardedTriangles, ref discardedEvaluations, out normal, out height,
+                out surfaceId);
         }
 
         /// <summary>The one selection the motor runs, with no boxes, ramps or props.</summary>

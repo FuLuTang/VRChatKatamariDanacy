@@ -97,10 +97,19 @@ float GetLastTerrainQueryMicros();
 - 上表是三角形**测试次数**，不是 flop；每个三角形 AABB ≈6 次比较，平面/重心 ≈20 flops，
   worst ≈1.2 Mflop/step（50 Hz ≈60 Mflop/s），Udon 解释器开销另计。**T3 的 1 m 网格才是 2–6k 目标**；
   当前 512-triangle chunk 只是上限，导入器应按空间切小（Cancer 3456/68 AABB ≈51 tri/AABB）。
-- 每步读数：`GetLastTerrainQueryMicros()`，微秒，累计本步的支撑选择 + T1 推出，每步开头清零。
+- 每步读数（**全部是「最后一个固定步」的值**，不是一帧的和）：
+  - `GetLastTerrainQueryMicros()` = 支撑选择 + T1 推出的合计；
+  - `GetLastTerrainSupportMicros()` / `GetLastTerrainPenetrationMicros()` = 两半各多少；
+  - `GetTerrainTrianglesTested()` = 被 chunk 粗筛放行、真正逐三角形迭代的次数（17 probe × 命中
+    chunk 的三角形）；`GetTerrainFullEvals()` = 其中通过三角形 XZ 包围盒、付了叉积/平面/重心
+    的数目；`GetLastTerrainSupportMicros() / GetTerrainFullEvals()` 就是「µs / 次完整求值」；
+  - `GetStepsThisFrame()` = 上一次 `Update` 跑了几步 ⇒ **帧成本 = 读数 × 步数**（`maxStepsPerFrame = 5`）。
+    跑 0 步的帧把计数一并清零，所以乘积不会被读成「免费」。
   **2026-11-16 修正**：原来两端都取 `Time.time`（帧时间戳），同一帧内差值恒为 0，四格采样
   永远是 0。现在用 `Time.realtimeSinceStartupAsDouble`（帧内会走的墙钟）；每步两次原生属性
   读数、零分配、不进任何判定路径，相对它测量的一轮 17 probe × 三角形测试可忽略。
+  **清零位置**：`StepBall`（v1/v2 两条权威都经过它）。原来写在 `StepPositionV1` 里，开了
+  contact v2 之后读数会是**上一次 v1 步的陈旧值**——v2 权威不查地形，现在如实报 0。
 - 容量 8192 tri / 16384 vert / 64 chunk；数组约 300 KB（运行时，不序列化）。
 
 ## 5. 测试
@@ -122,7 +131,9 @@ float GetLastTerrainQueryMicros();
 
 `Tests/EditMode/BallMotor/TerrainSupportStepTests.cs`（电机级，同一轮新增）：地形把支撑从
 「压在它上面的平面」手里拿走（`GetSupportKind() == 6`、`GetSupportSurfaceHeightWorldM() == −1`）、
-`GetLastTerrainQueryMicros() > 1`（计时是真的）。`Tests/EditMode/BallMotor/StaticBoxCapacityTests.cs`：
+`GetLastTerrainQueryMicros() > 1`（计时是真的）、`support + penetration == total` 且
+`trianglesTested == 17 × 512`（可解释的工作量）、球埋进地板时穿透计数非零、
+开 contact v2 后计数器**归零而不是沿用旧值**（陈旧读数回归）。`Tests/EditMode/BallMotor/StaticBoxCapacityTests.cs`：
 第 64 个静态盒有效、第 65 个**显式拒绝**并 latch 原因、64 个盒里只有 1 个在球附近时答案不变。
 
 电机 flag-off 的等价性由代码路径（false 时零查询）保证，运行时未在 Unity 验证。

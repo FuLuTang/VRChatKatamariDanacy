@@ -35,6 +35,9 @@
 
     <div class="group">
       <button id="region-mode" title="区域模式：左键在地面拖出轴对齐盒；拖动 6 个面把手精调">区域</button>
+      <label class="toggle hidden" id="parent-toggle" title="参考关卡的 group/groupId 父子指针：从子道具到父道具画一条细线">
+        <input id="show-parent-lines" type="checkbox"> 父子连线 <span id="parent-count"></span>
+      </label>
       <label class="toggle" title="选中后同时显示淡灰色世界轴对齐包围盒（旋转后的外包盒，仅 v1 粗筛/互穿校验用）">
         <input id="show-aabb" type="checkbox"> 显示轴对齐盒
       </label>
@@ -95,6 +98,10 @@
 
     <div id="viewport">
       <canvas id="canvas" tabindex="0"></canvas>
+      <div id="ref-banner" class="ref-banner hidden" role="alert">
+        <strong>UNLICENSED REFERENCE</strong>
+        <span id="ref-banner-text"></span>
+      </div>
       <div id="tool-hud" class="tool-hud">
         <div class="tool-row">
           <button data-tool="hand" title="手形：左键拖动平移（选择暂停）">Q 手形</button>

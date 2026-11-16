@@ -50,6 +50,7 @@ if str(ROOT) not in sys.path:
 
 from Tools.levelbuild import editor_core  # noqa: E402
 from Tools.levelbuild import placement_core as core  # noqa: E402
+from Tools.levelbuild import ref_models  # noqa: E402
 
 SERVICE = "vrc-katamari-leveleditor"
 PROTOCOL = 1
@@ -230,13 +231,23 @@ class WebEditor:
     """One open level + the browser-facing state and history."""
 
     def __init__(self, level, levels_dir=None, state_dir=None, lock=True,
-                 manifests=None):
+                 manifests=None, ref_models_dir=None, placement=None):
         self.levels_dir = Path(levels_dir) if levels_dir else core.LEVELS_DIR
         self.state_dir = Path(state_dir) if state_dir else default_state_dir()
         self.scene = WebScene()
+        self.repo_manifests = manifests if manifests is not None else core.load_manifests()
         self.editor = editor_core.Editor(
-            self.scene, manifests=manifests or core.load_manifests(),
+            self.scene, manifests=self.repo_manifests,
             auto_export=True, undo_limit=50, levels_dir=self.levels_dir)
+        self.ref_models_dir = ref_models_dir
+        self.placement_name = placement
+        #: True only for a level id starting with ``_ref_``.  Reference levels show
+        #: unlicensed local meshes and are read-only (see ``ref_models``).
+        self.ref_mode = False
+        self.ref_models_root = None
+        self.ref_table = {}
+        self.ref_resolution = {}
+        self.ref_fbx_only = {}
         self.lock_enabled = bool(lock)
         self.lock = None
         self.history = []
@@ -265,7 +276,20 @@ class WebEditor:
         return levels
 
     def resolve(self, level):
-        return core.placement_path(level, self.levels_dir)
+        """The file this level opens.
+
+        A reference level prefers the converted ``placement.model.json`` (it is the
+        one that carries the defs' ``model`` and the original's ``group`` parent
+        links); an explicit ``--placement`` wins for both kinds.
+        """
+        folder = core.level_folder(level, self.levels_dir)
+        if self.placement_name:
+            return folder / self.placement_name
+        if ref_models.is_ref_level(level):
+            model_file = folder / "placement.model.json"
+            if model_file.is_file():
+                return model_file
+        return folder / "placement.json"
 
     # -- lifecycle ------------------------------------------------------ #
     def open_level(self, level):
@@ -276,9 +300,28 @@ class WebEditor:
         if self.lock_enabled:
             new_lock = LevelLock(path, self.state_dir)
             new_lock.acquire()
+        previous = (self.ref_mode, self.ref_models_root, self.ref_table,
+                    self.ref_resolution, self.ref_fbx_only, self.editor.base_manifests)
+        is_ref = ref_models.is_ref_level(level)
         try:
-            opened = self.editor.open(level=level)
+            if is_ref:
+                self.ref_models_root = ref_models.normalized_models_dir(self.ref_models_dir)
+                self.ref_table = ref_models.load_model_table(path.parent)
+                level_manifests = core.load_manifests(path.parent / "manifests")
+                self.editor.base_manifests = level_manifests or self.repo_manifests
+            else:
+                self.ref_models_root = None
+                self.ref_table = {}
+                self.editor.base_manifests = self.repo_manifests
+            self.editor.manifests = self.editor.base_manifests
+            opened = self.editor.open(level=level, path=path)
+            self.ref_mode = is_ref
+            self._refresh_ref_models()
         except Exception:
+            (self.ref_mode, self.ref_models_root, self.ref_table,
+             self.ref_resolution, self.ref_fbx_only,
+             self.editor.base_manifests) = previous
+            self.editor.manifests = self.editor.base_manifests
             if new_lock is not None:
                 new_lock.release()
             raise
@@ -291,9 +334,38 @@ class WebEditor:
         self._publish()
         return opened
 
+    def _refresh_ref_models(self):
+        """Resolve the local viewer mesh for every def of a reference level.
+
+        Read-only mode means this stays valid for the whole session; ``reload``
+        calls it again after re-reading the document.
+        """
+        self.ref_resolution = {}
+        self.ref_fbx_only = {}
+        if not self.ref_mode:
+            return
+        doc = self.editor.doc or {}
+        catalog = core.def_catalog(doc)
+        for entry in doc.get("defs") or []:
+            if not isinstance(entry, dict):
+                continue
+            def_id = entry.get("id")
+            if not isinstance(def_id, str) or not def_id:
+                continue
+            resolved = ref_models.resolve_model(
+                def_id, core.def_model(catalog, def_id), self.ref_table,
+                self.ref_models_root)
+            if resolved is None:
+                continue
+            if resolved["kind"] == "glb":
+                self.ref_resolution[def_id] = resolved
+            else:
+                self.ref_fbx_only[def_id] = resolved
+
     def reload_level(self):
         previous_path = Path(self.editor.path) if self.editor.path else None
         result = self.editor.reload()
+        self._refresh_ref_models()
         if previous_path is not None and self.lock is not None:
             # The lock is per path; reload never changes it.
             pass
@@ -403,8 +475,18 @@ class WebEditor:
         if not isinstance(payload, dict):
             return {"ok": False, "error": "the request body must be a JSON object"}
         op = payload.get("op") if "op" in payload else ("batch" if "ops" in payload else None)
+        effective_op = self.editor.aliases.get(op, op) if isinstance(op, str) else op
         with self.mu:
             try:
+                if self.ref_mode and ("ops" in payload
+                                      or effective_op in editor_core.MUTATING_OPS
+                                      or effective_op in ("export", "undo", "redo")):
+                    raise editor_core.OpError(
+                        "UNLICENSED REFERENCE level is read-only: its positions/sizes "
+                        "come from a community data mine and its meshes are ripped "
+                        "assets. View/select/region statistics only; nothing can be "
+                        "edited, exported or baked into the managed props.",
+                        ["reopen a normal level (not `_ref_*`) to edit"])
                 if op in ("undo", "redo"):
                     response = self._undo(op, payload.get("args") or {})
                 elif op == "open":
@@ -566,6 +648,7 @@ class WebEditor:
             "dirty": self.editor._dirty(),
             "history": {"undo": len(self.history), "redo": len(self.redo)},
             "lastSaved": self.last_saved,
+            "ref": bool(self.ref_mode),
             "version": self.version,
         }
 
@@ -609,6 +692,7 @@ class WebEditor:
         out = {}
         for def_id, entry in self.editor.manifests.items():
             manifest = entry.get("manifest") or {}
+            resolved = self.ref_resolution.get(def_id) if self.ref_mode else None
             out[def_id] = {
                 "aabb": _round_seq(entry["aabb"]),
                 "category": entry.get("category") or "",
@@ -623,6 +707,11 @@ class WebEditor:
                 "dReq": round(core.absorb_diameter_req(entry["aabb"]), 3),
                 "kind": (catalog.get(def_id) or {}).get("kind")
                         or entry.get("category") or "",
+                # The viewer only: repo GLBs are centre-pivoted; the reference GLBs are
+                # the ripped assets, centred bottom-up at load time (see view.js).
+                "viewerPivot": "bottom" if resolved else "center",
+                "refModel": bool(resolved),
+                "refSource": (resolved or {}).get("source"),
             }
         return out
 
@@ -867,6 +956,40 @@ class WebEditor:
         return {"regions": rows, "metric": params.get("metric") or "count",
                 "diameter": float(params.get("diameter") or 0.3)}
 
+    # -- reference-level facts (display + refusal) ----------------------- #
+    def ref_state(self):
+        """The reference-level banner facts, or ``None`` for a normal level."""
+        if not self.ref_mode:
+            return None
+        doc = self.editor.doc or {}
+        links = ref_models.parent_links(doc)
+        kinds = {}
+        for resolved in self.ref_resolution.values():
+            kinds[resolved["source"]] = kinds.get(resolved["source"], 0) + 1
+        total = len(doc.get("defs") or [])
+        missing = [entry.get("id") for entry in doc.get("defs") or []
+                   if isinstance(entry, dict)
+                   and entry.get("id") not in self.ref_resolution
+                   and entry.get("id") not in self.ref_fbx_only]
+        return {
+            "unlicensed": True,
+            "readOnly": True,
+            "banner": ("UNLICENSED REFERENCE — positions/sizes from a community data "
+                       "mine, meshes ripped from a commercial game. Not for "
+                       "distribution, upload or the managed props. Read-only view."),
+            "placement": Path(self.editor.path).name,
+            "modelsDir": ref_models.display_path(self.ref_models_root),
+            "modelCounts": {"total": total,
+                            "resolved": len(self.ref_resolution),
+                            "convertible": len(self.ref_fbx_only),
+                            "missing": len(missing),
+                            "bySource": kinds},
+            "missingDefs": missing[:40],
+            "convertibleDefs": sorted(self.ref_fbx_only)[:40],
+            "parentLinkCount": len(links),
+            "parentLinks": links,
+        }
+
     def state(self):
         with self.mu:
             doc = self.editor.doc
@@ -882,6 +1005,7 @@ class WebEditor:
                 "check": check,
                 "levels": self.list_levels(),
                 "bounds": (doc.get("level") or {}).get("bounds"),
+                "ref": self.ref_state(),
                 "uptimeSeconds": round(time.time() - self.started, 1),
             })
             return payload
@@ -1194,6 +1318,29 @@ class Handler(BaseHTTPRequestHandler):
         def_id = urllib.parse.unquote(def_id)
         if def_id.endswith(".glb"):
             def_id = def_id[:-4]
+        if app.ref_mode:
+            resolved = app.ref_resolution.get(def_id)
+            if resolved is None:
+                if def_id in app.ref_fbx_only:
+                    self._error(404, "reference def %r has only an FBX source (%s); "
+                                     "convert it to viewer_glb/%s.glb first"
+                                % (def_id, app.ref_fbx_only[def_id]["source"], def_id))
+                else:
+                    self._error(404, "no local viewer mesh for reference def %r" % def_id)
+                return
+            path = Path(resolved["path"])
+            if not path.is_file():
+                self._error(404, "the resolved reference mesh is gone: %r" % def_id)
+                return
+            data = path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "model/gltf-binary")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Unlicensed-Reference", "1")
+            self.end_headers()
+            self.wfile.write(data)
+            return
         manifest = app.editor.manifests.get(def_id)
         path = core.prop_glb(def_id)
         if manifest is None or not path.is_file():
@@ -1345,6 +1492,13 @@ def build_parser():
     parser.add_argument("--port", type=int, default=DEFAULT_PORT,
                         help="port (default %d; 0 = pick one)" % DEFAULT_PORT)
     parser.add_argument("--levels-dir", default=None, help="override Docs/Design/Levels")
+    parser.add_argument("--placement", default=None,
+                        help="placement file inside the level dir (default placement.json; "
+                             "levels whose id starts with _ref_ prefer placement.model.json)")
+    parser.add_argument("--ref-models-dir", default=None,
+                        help="local mesh root for UNLICENSED reference levels (default: "
+                             "$VRC_KATAMARI_REF_MODELS or ~/KatamariRef/models); only used "
+                             "for level ids starting with _ref_")
     parser.add_argument("--state-dir", default=None,
                         help="token and lock directory (default: XDG state dir)")
     parser.add_argument("--token", default=None,
@@ -1376,7 +1530,8 @@ def main(argv=None):
         state_dir.mkdir(parents=True, exist_ok=True)
         token = load_or_create_token(state_dir, args.token)
         app = WebEditor(level_id, levels_dir=args.levels_dir, state_dir=state_dir,
-                        lock=not args.no_lock)
+                        lock=not args.no_lock, ref_models_dir=args.ref_models_dir,
+                        placement=args.placement)
         httpd = make_http_server(app, args.host, args.port, token=token,
                                  token_path=state_dir / "token", quiet=args.quiet)
     except Exception as error:                               # noqa: BLE001 - startup
@@ -1387,6 +1542,11 @@ def main(argv=None):
     level_path = core.display_path(Path(app.editor.path))
     print("%s %d" % (SERVICE, PROTOCOL), flush=True)
     print("level:   %s  (%s)" % (app.editor.level, level_path), flush=True)
+    if app.ref_mode:
+        print("REFERENCE: UNLICENSED — this level is read-only; meshes are ripped assets "
+              "served only from %s; do not distribute, upload or bake them into the "
+              "managed props or Docs/Art."
+              % ref_models.display_path(app.ref_models_root), flush=True)
     print("auth:   every /api read and write requires the token (header %s: … or "
           "?token=…); static files and GET /healthz are open" % TOKEN_HEADER,
           flush=True)

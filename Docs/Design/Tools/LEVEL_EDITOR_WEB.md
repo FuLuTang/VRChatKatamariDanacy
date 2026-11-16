@@ -425,3 +425,27 @@ python3 Docs/tools/validate_plan.py
    不设独立“进入飞行”状态；相机位置/速度在编辑期间保留。
 4. **只读 API**：在 tailnet 下也要求 token；页面/JS/CSS/字体与 `GET /healthz` 例外。
 5. **区域持久化**：`regions.json` schemaVersion 1，独立于 placement.json 与 undo。
+
+### 11.2 未授权参考关卡（`_ref_*`，2026-11-16 追加）
+
+`Docs/Design/Levels/_ref_cancer` 与 `_ref_mas1` 是**只在本机查看**的参考关卡：位置/尺寸
+来自社区数据挖掘，网格是从商业游戏提取的 PS2 资产，两个目录都被 `.gitignore` 忽略。
+编辑器的规则：
+
+- 只有 `level.id` 以 `_ref_` 开头的关卡进入参考模式；它自动打开 `placement.model.json`
+  （带 `defs[].model` 与 `group`/`groupId`），并使用关卡自己的 `manifests/`。
+- 网格由 `Tools/levelbuild/ref_models.py` 解析：`original_defs.json → modelFile` →
+  `<ref-models-dir>/glb-pack/<file>.glb`；备选 `viewer_glb/<def>.glb`（Blender 转换缓存）。
+  模型根默认 `~/KatamariRef/models`，**必须在仓库之外**（否则启动拒绝），CLI 为
+  `--ref-models-dir`；`--placement` 可覆盖关卡文件名。普通关卡永远不进入这个解析路径，
+  同 id 的仓库 GLB 也不会被参考关卡借用。
+- 参考模式**只读**：所有改文档的 op、`export`、`undo`/`redo`/`batch` 一律拒绝；页面显示
+  红黑条纹 `UNLICENSED REFERENCE` 横幅，道具库/结构/复制/删除/贴地/落面禁用。选中、
+  区域统计（`regions.json` 仍可写，它是 git-ignored 的旁路数据）、球径阶梯、飞行/环绕
+  相机不变。
+- 参考 GLB 底部中心枢轴，viewer 在加载后按自身 bbox 居中 x/z、底面放到
+  `position.y - aabb.y/2`；因此与 placement 的 AABB 中心语义一致。
+- `group`/`groupId` 父子指针在顶部「父子连线 (N)」开关里画成细线（Cancer 83 条，
+  MAS1 38 条）；选中面板显示这两个字段。
+- 测试：`Docs/tests/leveleditor/test_ref_models.py`（解析、只读、文件不变、普通关卡
+  不能通过 `/api/models` 取到参考网格、模型根必须在仓库外）。

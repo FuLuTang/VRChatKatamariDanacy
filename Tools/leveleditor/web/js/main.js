@@ -190,6 +190,10 @@ function currentLevelChanged() {
   updateStructureDefaults();
   loadRegionsForLevel();
   updateToolHud();
+  if (view) {
+    $("show-parent-lines").checked = false;
+    view.setParentLines(false);
+  }
 }
 
 function renderAll() {
@@ -207,8 +211,45 @@ function renderAll() {
     $("save-status").className = "save-status";
   }
   if (!api.hasToken) $("readonly-banner").classList.remove("hidden");
+  renderRefMode();
   updateToolHud();
   updateCameraButtons();
+}
+
+// --------------------------------------------------------------------------- //
+// UNLICENSED reference levels (read-only, local ripped meshes)
+// --------------------------------------------------------------------------- //
+function renderRefMode() {
+  const ref = state?.ref || null;
+  const banner = $("ref-banner");
+  if (ref) {
+    const counts = ref.modelCounts || {};
+    banner.classList.remove("hidden");
+    $("ref-banner-text").textContent = `${ref.banner} ${ref.placement} · `
+      + `本地网格 ${counts.resolved ?? 0}/${counts.total ?? 0}（${ref.modelsDir ?? "?"}）· `
+      + `只读，不能编辑或导出。`;
+    document.body.classList.add("ref-mode");
+  } else {
+    banner.classList.add("hidden");
+    document.body.classList.remove("ref-mode");
+  }
+  for (const id of ["add-structure", "auto-expected", "duplicate", "delete", "seat",
+                    "rest-surface", "drop-ground"]) {
+    const element = $(id);
+    if (!element) continue;
+    if (ref) {
+      element.dataset.refDisabled = "1";
+      element.disabled = true;
+    } else if (element.dataset.refDisabled) {
+      delete element.dataset.refDisabled;
+      element.disabled = false;
+    }
+  }
+  view?.setReadOnly(Boolean(ref?.readOnly));
+  const toggle = $("parent-toggle");
+  const links = ref?.parentLinkCount || 0;
+  toggle.classList.toggle("hidden", !links);
+  $("parent-count").textContent = links ? `(${links})` : "";
 }
 
 function renderStatus() {
@@ -235,6 +276,11 @@ function renderLevelFacts() {
     ["expected", `${level.expected?.propCount ?? "—"} 件 / ${level.expected?.valueUnits ?? "—"} u`],
     ["结构", `${state.counts.structures}（box ${level.budget?.boxes ?? "?"} / ramp ${level.budget?.ramps ?? "?"} / plane ${level.budget?.planes ?? "?"}）`],
   ];
+  if (state.ref) {
+    const counts = state.ref.modelCounts || {};
+    rows.push(["参考资产", `UNLICENSED · 本地网格 ${counts.resolved ?? 0}/${counts.total ?? 0} · 只读`]);
+    rows.push(["父子指针", `${state.ref.parentLinkCount ?? 0} 条（group/groupId）`]);
+  }
   $("level-facts").innerHTML = rows
     .map(([key, value]) => `<div class="k">${escapeHtml(key)}</div><div class="v">${escapeHtml(value)}</div>`)
     .join("");
@@ -327,7 +373,7 @@ function buildPalette(force = false) {
     const manifest = manifests[def];
     const item = document.createElement("div");
     item.className = "palette-item";
-    item.draggable = Boolean(manifest.valueUnits);
+    item.draggable = !state.ref && Boolean(manifest.valueUnits);
     item.dataset.def = def;
     item.dataset.category = manifest.category || "other";
     item.dataset.search = `${def} ${manifest.name} ${manifest.nameZh} ${manifest.category}`.toLowerCase();
@@ -462,6 +508,13 @@ function renderSelection(info) {
       rows.push(["valueUnits", String(info.valueUnits ?? "—")]);
       rows.push([info.stackedOn ? "stackedOn" : "support",
         escapeHtml(info.stackedOn || info.support || "—")]);
+      if (info.group || info.groupId) {
+        rows.push(["group", escapeHtml(info.group || info.groupId)]);
+        rows.push(["groupId", escapeHtml(info.groupId || info.group || "—")]);
+      }
+      if (info.refModel) {
+        rows.push(["参考网格", "UNLICENSED · 本机缓存 · 禁止分发"]);
+      }
     } else {
       rows.push(["role", escapeHtml(info.role || "—")]);
       rows.push(["size", `${formatVec(info.size, 3)} m`]);
@@ -1399,6 +1452,12 @@ function bindUI() {
     toast(`已保存 ${result.name}`, "ok", 3000);
   });
   $("show-aabb").addEventListener("change", () => view.setShowWorldBoxes($("show-aabb").checked));
+  $("show-parent-lines").addEventListener("change", () => {
+    const count = view.setParentLines($("show-parent-lines").checked);
+    if ($("show-parent-lines").checked && !count) {
+      toast("该关卡没有 group/groupId 父子指针", "ok", 2400);
+    }
+  });
   $("region-mode").addEventListener("click", () => {
     regionMode = !regionMode;
     view.setRegionMode(regionMode);
@@ -1511,6 +1570,8 @@ function fillLevelSelect() {
 // boot
 // --------------------------------------------------------------------------- //
 async function boot() {
+  const bootStarted = performance.now();
+  const bootTiming = { startMs: Math.round(bootStarted) };
   setLoading("连接服务器…");
   try {
     const payload = await api.loadLevel();
@@ -1520,6 +1581,7 @@ async function boot() {
     showError(`连不上服务器：${error.message}`);
     return;
   }
+  bootTiming.stateMs = Math.round(performance.now() - bootStarted);
 
   view = new EditorView($("canvas"), {
     onSelect: (info) => {
@@ -1554,6 +1616,7 @@ async function boot() {
     },
   });
 
+  bootTiming.viewCtorMs = Math.round(performance.now() - bootStarted - bootTiming.stateMs);
   bindKeyboard();
   bindUI();
   view.apiToken = api.token;
@@ -1571,8 +1634,12 @@ async function boot() {
     if (statsScope === "region") scheduleStats(60);
   };
   await view.load({ ...state });
+  bootTiming.loadMs = view.lastLoadTiming?.totalMs ?? null;
+  bootTiming.loadDetail = view.lastLoadTiming || null;
   currentLevelChanged();
   renderAll();
+  bootTiming.readyMs = Math.round(performance.now() - bootStarted);
+  window.__leveleditorBootTiming = bootTiming;
   $("show-aabb").checked = false;
   setLoading("");
   setSaved(null);

@@ -64,3 +64,48 @@ node Tools/leveleditor/test/smoke.mjs                            PASS
 - 指针锁定：**非 localhost 的 http** 上 headless Chromium 授予；Windows 实机 Chrome
   仍需主人按一次键确认（失败会自动退化为按住右键读 movementX）。
 - 结束时 `placement.json` sha256 = `8f6f6ea8…`（用户试用后的当前 HEAD 状态，未回退）。
+
+## 未授权参考关卡（`_ref_cancer` / `_ref_mas1`，2026-11-16）
+
+这两关的网格是从商业游戏提取的未授权资产，**截图本身也不入库**：它们放在仓库外、
+git-ignored 的 `~/KatamariRef/viewer_evidence/`（`ref_cancer_view_overview.png`、
+`ref_cancer_view_parent_lines.png`、`ref_cancer_evidence.json`）。仓库里只保留这段文字描述。
+
+打开方式（本机 Linux，headless Chromium 156，SwiftShader，964×773 画布）：
+
+```bash
+python3 Tools/leveleditor/server.py --level _ref_cancer --port 8791
+```
+
+- 编辑器自动打开 `Docs/Design/Levels/_ref_cancer/placement.model.json`（511 件 / 145 def /
+  5 结构 / 737,377 u），页面顶部是红黑条纹 `UNLICENSED REFERENCE` 横幅，道具库、结构、
+  复制/删除/贴地/落面全部禁用；服务端对 move/set/remove/export/batch/undo/redo 一律拒绝，
+  文件 sha256 在尝试前后不变。
+- 145/145 def 通过 `original_defs.json → modelFile → ~/KatamariRef/models/glb-pack/*.glb`
+  解析到本地 GLB（2.46 MB 传输）；全部 511 件的世界包围盒与数据 `aabb` 比值 **0.9982–1.0022**
+  （中位数 1.0000），底面与 `position.y − aabb.y/2` 的误差 **0**。
+- `ref_cancer_view_overview.png`：3/4 俯瞰，59×80 m 的围墙场地里是日式海岸小镇——左侧
+  一排民居/店铺（蓝顶、灰瓦、带招牌的 `barbershop`、`barbershop_sign`）、中间小路和密集
+  小道具（番茄、柿子、螃蟹、栅栏、邮筒、花圃）、右侧一排树冠和 `medium_tree`、后方
+  两栋多层公寓/超市。为看清地图，截图时临时隐藏了 4 面编辑器 boundary 平面；其余 UI
+  （版本、UNLICENSED 横幅、父子连线 (83)、球径阶梯 207/19/206/79）都是真实状态。
+- `ref_cancer_view_parent_lines.png`：选中 `horseshoe_crab_001`（子）与其父
+  `medium_tree_002` 并打开「父子连线」；两条品红色细线从螃蟹/旁边的桶连到树中心，
+  周围能看到带贴图的树冠、樱花树、向日葵、理发店转灯、房屋和地面上的柿子/番茄。
+  选中面板显示 `group`/`groupId` 与「参考网格 UNLICENSED」。
+- 加载（headless SwiftShader，软件渲染）：页面 ready 11.9–16.6 s，其中 `/api/level`
+  0.95–1.1 s、`new WebGLRenderer`/着色器初始化 9.2–13.8 s、145 个 GLB + 511 次摆放
+  1.7–6.6 s（模型网络 1.6–6.5 s、摆放 0.05–0.10 s）。软件光栅器的首帧着色器编译可达数十秒。
+- 帧时间（`renderer.render` + `gl.finish()`，5 帧中位数）：开阴影 30–50 ms（≈20–34 fps，
+  1071 draw calls / 119,630 tris）；关阴影 16–26 ms（≈38–63 fps，551 calls）。
+  这是无 GPU 的 SwiftShader 数字；同样的场景在主人 Windows 机器上应远高于此。
+- `_ref_mas1` 同样可开：648 件 / 105 def / 5 结构 / 1,448 u，105/105 GLB 解析成功，
+  38 条父子指针，726 个 mesh；页面 ready 12.3 s（WebGL 初始化 9.75 s、105 个 GLB 1.19 s），
+  无 JS 异常。`~/KatamariRef/viewer_evidence/ref_mas1_view_overview.png` 是一间日式房间：
+  竖立的拉门/障子、墙边柜子和桌台、地面上的小件（电池、铅笔、硬币、玩偶等），
+  所有模型朝上且与 placement 的底部对齐；右侧阶梯在 D=0.30 m 显示 587 可吸 / 61 灰。
+- 区域统计在参考关卡同样可用：`regions.json`（git-ignored）里保存 `town`
+  `[-16,0,-12]..[22,8,34]`，`GET /api/stats?scope=region&region=town` 返回
+  492 件 / 911.25 m³ / 155,235 u，页面区域盒与统计面板可正常显示。
+- 测试：`python3 -m unittest discover -s Docs/tests` → **790 passed**；
+  `python3 Docs/tools/validate_plan.py` → **PASS**。

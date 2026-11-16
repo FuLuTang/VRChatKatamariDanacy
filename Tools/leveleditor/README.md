@@ -133,6 +133,39 @@ python3 Tools/leveleditor/server.py --level story_01_bench_size --port 8777
 - 模型全部来自 `Docs/Art/OriginalModels/props/exports/*.glb`（44 个关卡 def 全都有 GLB）。**不需要 Blender**；如需给只有 FBX 的 def 补 GLB，用 `source ~/tools/blender-env.sh` 的 headless Blender 导出到该目录（属性同现有 manifest），本工具只读。
 - 没有 `node_modules`、没有构建步骤：`index.html` 直接加载 ES modules。
 
+### 4.1 UNLICENSED 参考关卡（`_ref_*`）
+
+`Docs/Design/Levels/_ref_cancer`、`_ref_mas1` 是**未授权参考数据**：位置/尺寸来自社区数据挖掘，
+网格是从商业游戏提取的 PS2 资产。这两个目录被 `.gitignore` 忽略，里面的任何东西都不能
+进 git、上传或复制到 `Docs/Art` / 托管道具里；网格只允许在本机编辑器里查看。
+
+```bash
+# 模型根默认 ~/KatamariRef/models（或 $VRC_KATAMARI_REF_MODELS）
+python3 Tools/leveleditor/server.py --level _ref_cancer --port 8790
+# 也可显式指定；--ref-models-dir 必须在仓库之外，否则启动拒绝
+python3 Tools/leveleditor/server.py --level _ref_mas1 --ref-models-dir ~/KatamariRef/models
+```
+
+- **自动打开 `placement.model.json`**（带 def 的 `model` 和原作的 `group`/`groupId` 父子指针）；
+  `--placement` 可强制指定文件名，普通关卡仍默认 `placement.json`。
+- 网格解析：关卡里的 `original_defs.json → defs[].modelFile` 指向
+  `<models-dir>/glb-pack/<file>.glb`（three r186 直接加载；本仓库的 145/105 个 def 全部命中）。
+  备选是 `<models-dir>/viewer_glb/<def>.glb`（Blender 转换缓存）和
+  `converted_local/<def>/<def>.fbx` / `converted/<modelFile>.fbx`（只报告可转换，不冒充 GLB）。
+  这个映射由 `Tools/levelbuild/ref_models.py` 唯一实现；**不会**回退到
+  `Docs/Art/OriginalModels/props/exports`，所以同 id 的仓库模型（例如 `acorn`）不会串进来。
+- **只读**：`add_prop`/`set`/`move`/`remove`/`export`/`undo`/`redo`/`batch` 全部拒绝，文件
+  一个字节都不写；页面顶部有红黑条纹 **UNLICENSED REFERENCE** 横幅，道具库/结构/删除/复制禁用。
+  选中、区域统计、球径阶梯、飞行/环绕相机照常可用。
+- **父子指针**：顶部「父子连线 (N)」开关把每个 `group`/`groupId` 子道具连到父道具的中心
+  （Cancer 83 条，MAS1 38 条）；选中面板显示 `group`/`groupId`。
+- **网格朝向/枢轴**：参考 GLB 是底部中心枢轴；viewer 在加载后按自身包围盒把 x/z 居中、
+  底面放到 `position.y - aabb.y/2`，因此与 placement 的 AABB 中心语义一致（实测 511 件的
+  世界包围盒三轴与数据 `aabb` 的比值 0.998–1.002，底面误差 0）。
+- 模型响应带 `X-Unlicensed-Reference: 1` 且 `Cache-Control: no-store`；普通关卡打开时
+  `/api/models/<ref-def>.glb` 一律 404，参考网格不会被别的关卡借走。
+
+
 ---
 
 ## 5. 测试
@@ -193,7 +226,9 @@ Tools/leveleditor/
 │   ├── js/main.js            # UI 面板与操作编排
 │   └── vendor/three/         # three r186 + addons + LICENSE（MIT）
 └── test/smoke.mjs            # 可选浏览器冒烟
+Tools/levelbuild/ref_models.py # _ref_* 本地网格解析与只读规则（唯一实现）
 Docs/tests/leveleditor/
 ├── test_web_server.py        # API/权限/undo/原子写/锁/冲突/SSE
+├── test_ref_models.py        # 参考关卡解析/只读/不跨关卡提供网格
 └── test_coordinate_audit.py  # 坐标审计（椅子/花圃/斜面/边界）
 ```

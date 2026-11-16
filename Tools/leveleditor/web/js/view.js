@@ -131,6 +131,7 @@ export class EditorView {
 
     this.loader = new GLTFLoader();
     this.defPromises = new Map();
+    this.defBoxes = new Map();
     this.propObjects = new Map();
     this.structureObjects = new Map();
     this.pickTargets = [];
@@ -138,6 +139,12 @@ export class EditorView {
     this.selectionObbHelpers = new Map();
     this.selectionWorldHelpers = new Map();
     this.highlightHelpers = new Map();
+    //: UNLICENSED reference levels: bottom-pivoted ripped meshes and parent lines.
+    this.refMode = false;
+    this.readOnly = false;
+    this.showParentLines = false;
+    this.parentLines = null;
+    this.parentLineCount = 0;
     this.multiFrame = null;
     this.showWorldBoxes = false;
     this.boxStyle = "obb";
@@ -808,6 +815,9 @@ export class EditorView {
         def: data.def,
         kind: derived?.kind || data.kind,
         zone: data.zone,
+        group: data.group,
+        groupId: data.groupId,
+        refModel: Boolean(this.refMode && (this.manifests[data.def] || {}).refModel),
         support: data.support,
         stackedOn: data.stackedOn,
         valueUnits: derived?.valueUnits ?? data.valueUnits,
@@ -965,6 +975,18 @@ export class EditorView {
     const start = this.groupStart;
     this.groupStart = null;
     if (!start) return true;
+    if (this.readOnly) {
+      for (const item of start.items) {
+        item.group.position.copy(item.position);
+        item.group.quaternion.copy(item.quaternion);
+      }
+      this.proxy.position.copy(start.pivot);
+      this.proxy.quaternion.copy(start.proxyQuaternion);
+      this._updateSelectionVisuals();
+      this.needsRender = true;
+      this.callbacks.onError?.("UNLICENSED REFERENCE level is read-only; the transform was not sent.");
+      return false;
+    }
 
     const changedProps = new Set();
     const changedStructures = new Set();
@@ -1066,6 +1088,10 @@ export class EditorView {
   }
 
   async nudgeSelection(dx, dy, dz) {
+    if (this.readOnly) {
+      this.callbacks.onError?.("UNLICENSED REFERENCE level is read-only; nothing was moved.");
+      return false;
+    }
     const operations = [];
     for (const id of this.selectionIds) {
       const group = this.objectGroup(id);
@@ -1177,15 +1203,22 @@ export class EditorView {
   // scene construction
   // ------------------------------------------------------------------ #
   async load(state) {
+    const loadStarted = performance.now();
     this.loading = true;
     this.state = state;
     this.doc = state.doc;
     this.derived = state.derived || { props: {}, structures: {} };
     this.manifests = state.manifests || {};
+    this.refMode = Boolean(state.ref?.unlicensed);
+    this.readOnly = Boolean(state.ref?.readOnly);
+    this.defBoxes.clear();
     this._clearLevel();
     this._buildWorld();
     this._buildStructures();
+    const assetsStarted = performance.now();
     await this._buildProps();
+    const modelsDone = performance.now();
+    this._buildParentLines();
     this.selectionIds.clear();
     this._rebuildSelection();
     this._applyLadderToAll();
@@ -1193,6 +1226,14 @@ export class EditorView {
     this._updateBall();
     this.loading = false;
     this.needsRender = true;
+    this.lastLoadTiming = {
+      assetsMs: Math.round(assetsStarted - loadStarted),
+      modelsMs: Math.round(modelsDone - assetsStarted),
+      modelFetchMs: this.lastModelLoadMs,
+      placementMs: this.lastPlacementMs,
+      finishMs: Math.round(performance.now() - modelsDone),
+      totalMs: Math.round(performance.now() - loadStarted),
+    };
     return this;
   }
 
@@ -1202,6 +1243,15 @@ export class EditorView {
     this.propObjects.clear();
     this.structureObjects.clear();
     this.pickTargets = [];
+    if (this.parentLines) {
+      this.scene.remove(this.parentLines);
+      this.parentLines.traverse((object) => {
+        object.geometry?.dispose?.();
+        object.material?.dispose?.();
+      });
+      this.parentLines = null;
+      this.parentLineCount = 0;
+    }
     if (this.worldGroup) {
       this.scene.remove(this.worldGroup);
       this.worldGroup = null;
@@ -1256,6 +1306,13 @@ export class EditorView {
     const bounds = this.state.bounds || [[-10, -10], [10, 10]];
     const sizeX = bounds[1][0] - bounds[0][0];
     const sizeZ = bounds[1][1] - bounds[0][1];
+    // A 60x80 m reference field would sit entirely inside the default fog; scale the
+    // fog with the level so the overview is legible (small levels keep 55/190).
+    const diagonal = Math.hypot(sizeX, sizeZ) || 1;
+    if (this.scene.fog) {
+      this.scene.fog.near = Math.max(55, diagonal * 1.4);
+      this.scene.fog.far = Math.max(190, diagonal * 4);
+    }
 
     const hemi = new THREE.HemisphereLight(0xf4fbff, 0x5f6b4c, 1.55);
     hemi.position.set(0, 30, 0);
@@ -1393,6 +1450,7 @@ export class EditorView {
   }
 
   async _buildProps() {
+    const started = performance.now();
     const props = this.doc.props || [];
     const defs = [...new Set(props.map((prop) => prop.def))];
     let done = 0;
@@ -1407,6 +1465,7 @@ export class EditorView {
       done += 1;
       this.callbacks.onProgress?.(`加载模型 ${done}/${defs.length}`);
     }));
+    const modelsDone = performance.now();
     this.callbacks.onProgress?.(`摆放 ${props.length} 件道具…`);
     for (const prop of props) {
       const group = await this._makeProp(prop);
@@ -1415,6 +1474,8 @@ export class EditorView {
       this.pickTargets.push(group);
     }
     this.callbacks.onProgress?.("");
+    this.lastModelLoadMs = Math.round(modelsDone - started);
+    this.lastPlacementMs = Math.round(performance.now() - modelsDone);
   }
 
   async _makeProp(prop) {
@@ -1431,6 +1492,20 @@ export class EditorView {
           object.userData.originalMaterial = object.material;
         }
       });
+      // The reference GLBs are the ripped assets: bottom-pivoted at load time.  The
+      // placement position is the prop AABB CENTRE, so lift by half the declared
+      // height and centre the mesh's own bbox in x/z.  (Repo GLBs are centre-pivoted
+      // and need no offset.)
+      const viewerPivot = (this.manifests[prop.def] || {}).viewerPivot;
+      const box = this.defBoxes.get(prop.def);
+      if (this.refMode && viewerPivot === "bottom" && box) {
+        const height = (prop.aabb || [0, 0, 0])[1] || 0;
+        model.position.set(
+          -(box.min.x + box.max.x) / 2,
+          -box.min.y - height / 2,
+          -(box.min.z + box.max.z) / 2
+        );
+      }
     } catch (error) {
       const fallback = new THREE.Mesh(
         new THREE.BoxGeometry(1, 1, 1),
@@ -1445,6 +1520,59 @@ export class EditorView {
     group.quaternion.copy(toThreeQuaternion(prop.rotationQuat));
     group.userData = { type: "prop", id: prop.itemId, def: prop.def, data: prop, model };
     return group;
+  }
+
+  /**
+   * The reference data's ``group``/``groupId`` parent-control pointer, drawn as a
+   * thin line from child to parent.  This is structure the original level carries
+   * (83 children in Make Cancer) that the web editor would otherwise not show.
+   */
+  _buildParentLines() {
+    if (this.parentLines) {
+      this.scene.remove(this.parentLines);
+      this.parentLines.traverse((object) => {
+        object.geometry?.dispose?.();
+        object.material?.dispose?.();
+      });
+      this.parentLines = null;
+    }
+    this.parentLineCount = 0;
+    const props = this.doc?.props || [];
+    if (!this.refMode || !props.length) return;
+    const byId = new Map(props.map((prop) => [prop.itemId, prop]));
+    const points = [];
+    for (const prop of props) {
+      const parentId = prop.group || prop.groupId;
+      if (!parentId || parentId === prop.itemId) continue;
+      const parent = byId.get(parentId);
+      if (!parent) continue;
+      points.push(toThreePosition(prop.position), toThreePosition(parent.position));
+    }
+    if (!points.length) return;
+    this.parentLineCount = points.length / 2;
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color: 0xff5fd2, transparent: true, opacity: 0.85, depthTest: false,
+    });
+    const lines = new THREE.LineSegments(geometry, material);
+    lines.renderOrder = 20;
+    lines.userData = { type: "parent-lines" };
+    this.parentLines = new THREE.Group();
+    this.parentLines.add(lines);
+    this.parentLines.visible = this.showParentLines;
+    this.scene.add(this.parentLines);
+    this.needsRender = true;
+  }
+
+  setParentLines(visible) {
+    this.showParentLines = Boolean(visible);
+    if (this.parentLines) this.parentLines.visible = this.showParentLines;
+    this.needsRender = true;
+    return this.parentLineCount;
+  }
+
+  setReadOnly(value) {
+    this.readOnly = Boolean(value);
   }
 
   loadDef(def) {
@@ -1462,6 +1590,7 @@ export class EditorView {
             object.material = this._propMaterial(def, object.material, cache);
           });
           scene.updateMatrixWorld(true);
+          this.defBoxes.set(def, new THREE.Box3().setFromObject(scene));
           return scene;
         });
       this.defPromises.set(def, promise);
@@ -1872,6 +2001,8 @@ export class EditorView {
     this.doc = state.doc;
     this.derived = state.derived || { props: {}, structures: {} };
     this.manifests = state.manifests || this.manifests;
+    this.refMode = Boolean(state.ref?.unlicensed);
+    this.readOnly = Boolean(state.ref?.readOnly);
 
     const seen = new Set();
     for (const prop of this.doc.props || []) {
@@ -1924,6 +2055,7 @@ export class EditorView {
     const surviving = [...this.selectionIds].filter((id) => this.objectGroup(id));
     this._setSelection(surviving);
     this._applyLadderToAll();
+    this._buildParentLines();
     this._updateBall();
     this.needsRender = true;
   }

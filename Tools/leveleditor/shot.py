@@ -80,7 +80,7 @@ FIT_FOV = 45.0
 SHEET_ORDER = ("top", "iso", "start", "focus:auto")
 
 LAYER_NAMES = ("props", "structures", "terrain", "collision", "parents", "grid",
-               "wire", "labels", "tier", "ball", "select")
+               "wire", "labels", "tier", "ball", "select", "motions")
 BASE_LAYERS = ("props", "structures")
 
 
@@ -722,7 +722,12 @@ def build_parser():
                         help="enable shadow maps (slower; off by default for shots)")
     parser.add_argument("--layers", default=None,
                         help="comma list: props, structures, terrain, collision, parents, "
-                             "grid, wire, labels[:N], tier:<D>, ball:<D>, select:<ids>")
+                             "grid, wire, motions, labels[:N], tier:<D>, ball:<D>, "
+                             "select:<ids>")
+    parser.add_argument("--time", type=float, default=None, metavar="SECONDS",
+                        help="put the world at that second of the server's motion trajectory "
+                             "before rendering (same data as the page's play button; "
+                             "implies the motion colouring + paths)")
     parser.add_argument("--w", type=int, default=DEFAULT_W, help="tile width (default 1280)")
     parser.add_argument("--h", type=int, default=DEFAULT_H, help="tile height (default 720)")
     parser.add_argument("--max-px", type=int, default=DEFAULT_MAX_PX,
@@ -751,7 +756,7 @@ def build_parser():
 def parse_layers(text, level_start_diameter):
     layers = {name: False for name in BASE_LAYERS}
     layers.update({"terrain": False, "collision": False, "parents": False,
-                   "grid": False, "wire": False, "labels": 0,
+                   "grid": False, "wire": False, "labels": 0, "motions": False,
                    "tier": None, "ball": None, "select": [], "requested": []})
     raw_items = [item.strip() for item in str(text or "").split(",") if item.strip()]
     # `select:a,b` is one layer whose value is a comma list, so a bare token that does
@@ -774,7 +779,7 @@ def parse_layers(text, level_start_diameter):
                             % (name, ", ".join(LAYER_NAMES)), "bad_layer")
         layers["requested"].append(item)
         if name in BASE_LAYERS or name in ("terrain", "collision", "parents",
-                                           "grid", "wire"):
+                                           "grid", "wire", "motions"):
             layers[name] = True
         elif name == "labels":
             count = 10 if not value else int(_finite(value, "labels"))
@@ -847,8 +852,19 @@ def normalize_request(args):
     if is_ref_level(level):
         # The watermark is the page's job; the daemon passes this flag through.
         out["watermark"] = True
+    time_s = None
+    if getattr(args, "time", None) is not None:
+        time_s = float(args.time)
+        if not (0.0 <= time_s <= 3600.0):
+            raise ShotError("--time must be 0..3600 seconds", "bad_argument")
+        # A still of the animation is only readable if the motion layers are on: the
+        # colouring says which class moved, the paths say where it is going.
+        layers["motions"] = True
+        if "motions" not in layers["requested"]:
+            layers["requested"].append("motions")
     request = {
         "level": level,
+        "time": time_s,
         "views": views,
         "frames": frames,
         "interval": interval,

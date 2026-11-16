@@ -38,6 +38,11 @@ const ROLE_COLORS = {
 };
 
 const SELECTION_COLOR = 0xffdf6a;
+// The motion layer's own colour, used when a path is not the selected prop's path.
+const MOTION_PATH_COLOR = 0x7fd4ff;
+// A path that belongs to the selected prop is drawn in the selection colour so the
+// highlighted polyline matches the selection box.
+const MOTION_PATH_SELECTED_COLOR = 0xffdf6a;
 const CLICK_THRESHOLD_PX = 4;
 
 export function toThreePosition(position) {
@@ -143,6 +148,34 @@ export class EditorView {
     this.refMode = false;
     this.readOnly = false;
     this.showParentLines = false;
+    //: The motion layer (motions[]/paths[], from /api/v2/motion): one row per moving or
+    //: parented prop, the class palette, and the paths[] polylines.  This client never
+    //: computes motion: rows come resolved from the server and are only drawn/applied.
+    this.v2Motions = null;
+    this.v2MotionRows = new Map();
+    this.v2MotionPaths = [];
+    this.motionClassColors = new Map();
+    this.motionClassMaterials = new Map();
+    this.showMotionColors = false;
+    this.showMotionPaths = false;
+    this.showMotionRadius = true;
+    this.motionPathGroup = null;
+    this.motionPathLines = new Map();
+    this.motionPathCount = 0;
+    this.motionOverlay = null;
+    //: Playback: the world-pose trajectory came from the server (motion_sim), and this
+    //: client only interpolates between samples.  Times are seconds of game time.
+    this.trajectory = null;
+    this.trajectoryRows = new Map();
+    this.trajectoryRate = 30;
+    this.trajectoryDurationS = 0;
+    this.playback = { playing: false, time: 0, speed: 1, scope: "all", loop: true };
+    this.playbackBase = new Map();
+    this.playbackPropCount = 0;
+    this._playbackReportedAt = 0;
+    this._playbackPosition = new THREE.Vector3();
+    this._playbackQuaternionA = new THREE.Quaternion();
+    this._playbackQuaternionB = new THREE.Quaternion();
     this.parentLines = null;
     this.parentLineCount = 0;
     //: The original stage of a reference level: terrain (stage.glb), the collision
@@ -672,6 +705,7 @@ export class EditorView {
     }
     if (!groups.length) {
       this.selectionIds.clear();
+      this._updateMotionOverlay();
       this.selectionBox.makeEmpty();
       this.gizmo.detach();
       this.gizmoHelper.visible = false;
@@ -691,6 +725,7 @@ export class EditorView {
     else this.proxy.quaternion.identity();
     this.proxy.scale.set(1, 1, 1);
     this._applyBoxStyle();
+    this._updateMotionOverlay();
     this._refreshGizmo();
     this.callbacks.onSelect?.(this.selectionInfo());
     this.callbacks.onStatus?.("selection", groups.length);
@@ -1874,6 +1909,506 @@ export class EditorView {
     return Boolean(this.v2KillGroup);
   }
 
+  // ------------------------------------------------------------------ #
+  // motion layer (motions[] / paths[]; LEVEL_FORMAT_V2 6.7)
+  // ------------------------------------------------------------------ #
+  /**
+   * Install the payload from `GET /api/v2/motion`.
+   *
+   * Every value here was resolved server-side: the classes and paths are document data, the
+   * speeds / phase seeds / trigger radii come from the `motion_sim` tool that compiles
+   * MotionMath.cs.  This method stores them and draws them; it never derives a motion
+   * number itself.
+   */
+  setMotionData(payload) {
+    this.v2Motions = payload || null;
+    this.v2MotionRows = new Map();
+    this.motionClassColors = new Map();
+    this.motionClassMaterials.clear();
+    for (const entry of (payload?.classes || [])) {
+      this.motionClassColors.set(entry.class, entry.color);
+    }
+    for (const row of (payload?.props || [])) {
+      this.v2MotionRows.set(row.itemId, row);
+    }
+    this.v2MotionPaths = (payload?.paths || []).slice();
+    this._buildMotionPaths();
+    this._applyPropAppearance();
+    this._updateMotionOverlay();
+    this.needsRender = true;
+    return this.v2MotionRows.size;
+  }
+
+  motionInfo(itemId) {
+    return this.v2MotionRows.get(itemId) || null;
+  }
+
+  motionLegend() {
+    return (this.v2Motions?.classes || []).slice();
+  }
+
+  motionSummary() {
+    const payload = this.v2Motions;
+    if (!payload) return null;
+    return {
+      available: payload.available !== false,
+      reason: payload.reason || null,
+      counts: payload.counts || null,
+      approximations: payload.approximations || [],
+      evaluator: payload.evaluator || null,
+    };
+  }
+
+  /** Colour every prop that has a motion class by that class (a display layer only). */
+  setMotionColors(visible) {
+    this.showMotionColors = Boolean(visible);
+    this._applyPropAppearance();
+    this.needsRender = true;
+    return this.showMotionColors ? this.v2MotionRows.size : 0;
+  }
+
+  setMotionPaths(visible) {
+    this.showMotionPaths = Boolean(visible);
+    if (this.motionPathGroup) this.motionPathGroup.visible = this.showMotionPaths;
+    this._updateMotionOverlay();
+    this.needsRender = true;
+    return this.motionPathGroup ? this.motionPathCount : 0;
+  }
+
+  setMotionRadius(visible) {
+    this.showMotionRadius = Boolean(visible);
+    this._updateMotionOverlay();
+    this.needsRender = true;
+    return this.showMotionRadius;
+  }
+
+  _motionClassMaterial(name) {
+    if (!this.motionClassMaterials.has(name)) {
+      const color = this.motionClassColors.get(name) || "#cccccc";
+      this.motionClassMaterials.set(name, new THREE.MeshStandardMaterial({
+        color: new THREE.Color(color),
+        roughness: 0.62,
+        metalness: 0,
+        emissive: new THREE.Color(color).multiplyScalar(0.16),
+      }));
+    }
+    return this.motionClassMaterials.get(name);
+  }
+
+  _disposeMotionPaths() {
+    if (this.motionPathGroup) {
+      this.scene.remove(this.motionPathGroup);
+      this.motionPathGroup.traverse((object) => {
+        // The tubes and nodes share two geometries (see _buildMotionPaths); disposing them
+        // once below must not be repeated per mesh, and the trail may still be using them.
+        if (object.geometry && object.geometry !== this.motionSegmentGeometry
+          && object.geometry !== this.motionNodeGeometry) {
+          object.geometry.dispose?.();
+        }
+        object.material?.dispose?.();
+      });
+    }
+    this.motionPathGroup = null;
+    this.motionPathLines.clear();
+    this.motionPathCount = 0;
+    this.motionSegmentGeometry?.dispose?.();
+    this.motionSegmentGeometry = null;
+    this.motionNodeGeometry?.dispose?.();
+    this.motionNodeGeometry = null;
+  }
+
+  /**
+   * The `paths[]` polylines, in world metres.
+   *
+   * A path is drawn as a thin tube per segment rather than a `THREE.Line`, because a 1 px
+   * line is invisible at level scale and `linewidth` is ignored by every browser.  Straight
+   * segments are kept straight - the format says a path is a polyline and must not be
+   * smoothed (LEVEL_FORMAT_V2 6.7.4) - so each segment is its own cylinder and the corners
+   * are exact.  The first point gets a marker so the direction of travel is readable.
+   */
+  _buildMotionPaths() {
+    this._disposeMotionPaths();
+    if (!this.v2MotionPaths.length) return;
+    const group = new THREE.Group();
+    group.name = "v2-motion-paths";
+    group.userData = { type: "motion-paths" };
+    // One unit cylinder / sphere, scaled per segment, so 113 segments share two geometries.
+    this.motionSegmentGeometry = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
+    this.motionNodeGeometry = new THREE.SphereGeometry(1, 8, 6);
+    const up = new THREE.Vector3(0, 1, 0);
+    for (const path of this.v2MotionPaths) {
+      const raw = (path.points || []).map((point) => toThreePosition(point));
+      if (raw.length < 2) continue;
+      // A path sits on the surface the props walk on; lift it a hair so it is not z-fighting
+      // with the terrain it lies on.
+      const points = raw.map((point) => point.clone().setY(point.y + 0.03));
+      const closed = path.closed !== false;
+      const pathGroup = new THREE.Group();
+      pathGroup.userData = { type: "motion-path", pathId: path.id, path };
+      const materials = [];
+      const segmentCount = closed ? points.length : points.length - 1;
+      for (let index = 0; index < segmentCount; index += 1) {
+        const from = points[index];
+        const to = points[(index + 1) % points.length];
+        const direction = to.clone().sub(from);
+        const length = direction.length();
+        if (length < 1e-4) continue;
+        const material = new THREE.MeshBasicMaterial({
+          color: MOTION_PATH_COLOR, transparent: true, opacity: 0.92, depthTest: false,
+        });
+        materials.push(material);
+        const segment = new THREE.Mesh(this.motionSegmentGeometry, material);
+        segment.position.copy(from).add(to).multiplyScalar(0.5);
+        segment.scale.set(0.028, length, 0.028);
+        segment.quaternion.setFromUnitVectors(up, direction.normalize());
+        segment.renderOrder = 18;
+        pathGroup.add(segment);
+      }
+      for (const point of points) {
+        const material = new THREE.MeshBasicMaterial({
+          color: MOTION_PATH_COLOR, transparent: true, opacity: 0.92, depthTest: false,
+        });
+        materials.push(material);
+        const node = new THREE.Mesh(this.motionNodeGeometry, material);
+        node.position.copy(point);
+        node.scale.setScalar(0.035);
+        node.renderOrder = 18;
+        pathGroup.add(node);
+      }
+      this.motionPathLines.set(path.id, { group: pathGroup, materials });
+      group.add(pathGroup);
+    }
+    this.motionPathCount = this.motionPathLines.size;
+    group.visible = this.showMotionPaths;
+    this.motionPathGroup = group;
+    this.scene.add(group);
+    this.needsRender = true;
+  }
+
+  /**
+   * A trail along the selected prop's sampled world positions (from the trajectory the
+   * server computed).  Returns ``null`` when no trajectory covers this prop, so a level
+   * without playback still shows the class, the path and the trigger ring.
+   */
+  _motionTrailObject(itemId, color) {
+    const row = this.trajectoryRows.get(itemId);
+    if (!row || !row.pos || row.pos.length < 6) return null;
+    const samples = row.pos.length / 3;
+    const step = Math.max(1, Math.ceil(samples / 240));
+    if (!this.motionSegmentGeometry) {
+      this.motionSegmentGeometry = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
+    }
+    const group = new THREE.Group();
+    group.userData = { type: "motion-trail", itemId, samples, step };
+    const material = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(color), transparent: true, opacity: 0.75, depthTest: false,
+    });
+    const up = new THREE.Vector3(0, 1, 0);
+    let previous = null;
+    for (let index = 0; index < samples; index += step) {
+      const point = new THREE.Vector3(
+        row.pos[index * 3], row.pos[index * 3 + 1], -row.pos[index * 3 + 2]);
+      if (previous) {
+        const direction = point.clone().sub(previous);
+        const length = direction.length();
+        if (length > 1e-4) {
+          const segment = new THREE.Mesh(this.motionSegmentGeometry, material);
+          segment.position.copy(previous).add(point).multiplyScalar(0.5);
+          segment.scale.set(0.018, length, 0.018);
+          segment.quaternion.setFromUnitVectors(up, direction.normalize());
+          segment.renderOrder = 19;
+          group.add(segment);
+        }
+      }
+      previous = point;
+    }
+    if (!group.children.length) return null;
+    return group;
+  }
+
+  _disposeMotionOverlay() {
+    if (!this.motionOverlay) return;
+    const overlay = this.motionOverlay;
+    this.scene.remove(overlay);
+    overlay.traverse((object) => {
+      // The path tubes and the trail share one unit cylinder / sphere geometry; only the
+      // per-object materials belong to the overlay.
+      if (object.geometry && object.geometry !== this.motionSegmentGeometry
+        && object.geometry !== this.motionNodeGeometry) {
+        object.geometry.dispose?.();
+      }
+      object.material?.dispose?.();
+    });
+    this.motionOverlay = null;
+    for (const entry of this.motionPathLines.values()) {
+      for (const material of entry.materials) {
+        material.color.set(MOTION_PATH_COLOR);
+        material.opacity = 0.92;
+      }
+    }
+  }
+
+  /**
+   * What the selection adds to the motion layer: the WaitForPlayer trigger ring on the
+   * ground, the line to the parent prop, and the selected prop's path in the selection
+   * colour.  Nothing here moves a prop; it is all annotation of the resolved data.
+   */
+  _updateMotionOverlay() {
+    this._disposeMotionOverlay();
+    if (this.selectionIds.size !== 1) return;
+    const id = [...this.selectionIds][0];
+    const row = this.v2MotionRows.get(id);
+    const group = this.propObjects.get(id);
+    if (!row || !group) return;
+    const overlay = new THREE.Group();
+    overlay.name = "v2-motion-overlay";
+    overlay.userData = { type: "motion-overlay", itemId: id };
+    const color = this.motionClassColors.get(row.motionClass) || "#f05a8e";
+    if (this.showMotionRadius && row.triggerRadiusM) {
+      const groundY = Number.isFinite(row.groundY) ? row.groundY : group.position.y;
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(
+          Math.max(0.01, row.triggerRadiusM - 0.03), row.triggerRadiusM, 96),
+        new THREE.MeshBasicMaterial({
+          color: new THREE.Color(color), transparent: true, opacity: 0.55,
+          side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+        }),
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(group.position.x, groundY + 0.02, group.position.z);
+      ring.renderOrder = 17;
+      ring.userData = { type: "motion-radius", radiusM: row.triggerRadiusM };
+      overlay.add(ring);
+      const disc = new THREE.Mesh(
+        new THREE.CircleGeometry(row.triggerRadiusM, 64),
+        new THREE.MeshBasicMaterial({
+          color: new THREE.Color(color), transparent: true, opacity: 0.10,
+          side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+        }),
+      );
+      disc.rotation.x = -Math.PI / 2;
+      disc.position.copy(ring.position);
+      disc.renderOrder = 16;
+      overlay.add(disc);
+    }
+    const parent = row.parent ? this.propObjects.get(row.parent) : null;
+    if (parent) {
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          group.position.clone(), parent.position.clone(),
+        ]),
+        new THREE.LineBasicMaterial({
+          color: 0xff5fd2, transparent: true, opacity: 0.95, depthTest: false,
+        }),
+      );
+      line.renderOrder = 21;
+      line.userData = { type: "motion-parent-link", parent: row.parent };
+      overlay.add(line);
+    }
+    // The selected prop's own sampled trajectory: this is what "看到它的行为轨迹" means once a
+    // trajectory is loaded - the世界 positions the server sampled, drawn as a thin trail.
+    const trail = this._motionTrailObject(id, color);
+    if (trail) overlay.add(trail);
+    const pathEntry = row.path ? this.motionPathLines.get(row.path) : null;
+    if (pathEntry) {
+      for (const material of pathEntry.materials) {
+        material.color.set(MOTION_PATH_SELECTED_COLOR);
+        material.opacity = 1;
+      }
+      if (this.motionPathGroup) this.motionPathGroup.visible = true;
+    }
+    this.motionOverlay = overlay;
+    this.scene.add(overlay);
+    this.needsRender = true;
+  }
+
+  // ------------------------------------------------------------------ #
+  // motion playback (world poses from the server; interpolation only here)
+  // ------------------------------------------------------------------ #
+  /**
+   * Install a trajectory payload from `GET /api/v2/motion/trajectory`.
+   *
+   * `pos` is a flat `x, y, z` array per prop and `rot` a flat `x, y, z, w` array, both
+   * sampled at `rate` Hz by `Tools/motion_sim`; the spawn transform of every prop is
+   * remembered so stopping puts the scene back exactly as the document describes it.
+   */
+  setTrajectory(payload, scope = null) {
+    if (this.playback.playing) this.pauseMotion();
+    if (scope) this.playback.scope = scope;
+    this.trajectory = payload || null;
+    this.trajectoryRows = new Map();
+    this.trajectoryRate = Number(payload?.rate) || 30;
+    this.trajectoryDurationS = Number(payload?.seconds) || 0;
+    for (const row of (payload?.props || [])) {
+      if (!this.propObjects.has(row.itemId)) continue;
+      this.trajectoryRows.set(row.itemId, row);
+      if (!this.playbackBase.has(row.itemId)) {
+        const group = this.propObjects.get(row.itemId);
+        this.playbackBase.set(row.itemId, {
+          position: group.position.clone(),
+          quaternion: group.quaternion.clone(),
+        });
+      }
+    }
+    this.playbackPropCount = this.trajectoryRows.size;
+    this.playback.time = 0;
+    this._updateMotionOverlay();
+    this.needsRender = true;
+    this.callbacks.onPlayback?.(this.playbackState());
+    return this.playbackPropCount;
+  }
+
+  /**
+   * Merge more sampled rows into the installed trajectory (the selection trail asks for one
+   * prop at a time).  Playback state and the clock are untouched.
+   */
+  addTrajectoryRows(payload) {
+    if (!payload) return this.trajectoryRows.size;
+    for (const row of (payload.props || [])) {
+      if (!this.propObjects.has(row.itemId)) continue;
+      this.trajectoryRows.set(row.itemId, row);
+      if (!this.playbackBase.has(row.itemId)) {
+        const group = this.propObjects.get(row.itemId);
+        this.playbackBase.set(row.itemId, {
+          position: group.position.clone(),
+          quaternion: group.quaternion.clone(),
+        });
+      }
+    }
+    this.trajectoryRate = Number(payload.rate) || this.trajectoryRate;
+    this.trajectoryDurationS = Math.max(this.trajectoryDurationS,
+      Number(payload.seconds) || 0);
+    this.playbackPropCount = this.trajectoryRows.size;
+    this._updateMotionOverlay();
+    this.needsRender = true;
+    return this.playbackPropCount;
+  }
+
+  /** True when a trajectory covering at least this many seconds is installed. */
+  hasTrajectory(seconds = 0) {
+    return Boolean(this.trajectory) && this.trajectoryDurationS + 1e-6 >= Number(seconds);
+  }
+
+  playbackState() {
+    return {
+      playing: this.playback.playing,
+      time: Number(this.playback.time.toFixed(3)),
+      durationS: this.trajectoryDurationS,
+      speed: this.playback.speed,
+      scope: this.playback.scope,
+      loop: this.playback.loop,
+      rate: this.trajectoryRate,
+      props: this.playbackPropCount,
+      sampleCount: this.trajectory?.sampleCount ?? 0,
+    };
+  }
+
+  /**
+   * Put every animated prop at time `seconds` by linear interpolation of the position and
+   * shortest-arc interpolation of the rotation - the whole of the client-side "motion
+   * logic", which is why there is no motion rule in this file.
+   */
+  setPlaybackTime(seconds, { silent = false } = {}) {
+    if (!this.trajectoryRows.size) return 0;
+    const duration = this.trajectoryDurationS;
+    let time = Number(seconds);
+    if (!Number.isFinite(time)) time = 0;
+    time = Math.min(Math.max(time, 0), duration);
+    this.playback.time = time;
+    const sample = time * this.trajectoryRate;
+    const index = Math.min(Math.floor(sample), Math.max(0, this.trajectory?.sampleCount - 1 || 0));
+    const next = Math.min(index + 1, Math.max(0, (this.trajectory?.sampleCount || 1) - 1));
+    const alpha = sample - index;
+    for (const [itemId, row] of this.trajectoryRows) {
+      const group = this.propObjects.get(itemId);
+      if (!group) continue;
+      const slider = index * 3;
+      const nextSlider = next * 3;
+      group.position.set(
+        row.pos[slider] + (row.pos[nextSlider] - row.pos[slider]) * alpha,
+        row.pos[slider + 1] + (row.pos[nextSlider + 1] - row.pos[slider + 1]) * alpha,
+        -row.pos[slider + 2] + (-row.pos[nextSlider + 2] + row.pos[slider + 2]) * alpha,
+      );
+      const rotIndex = index * 4;
+      const nextRot = next * 4;
+      this._playbackQuaternionA.copy(toThreeQuaternion(
+        [row.rot[rotIndex], row.rot[rotIndex + 1], row.rot[rotIndex + 2],
+          row.rot[rotIndex + 3]]));
+      this._playbackQuaternionB.copy(toThreeQuaternion(
+        [row.rot[nextRot], row.rot[nextRot + 1], row.rot[nextRot + 2],
+          row.rot[nextRot + 3]]));
+      group.quaternion.copy(this._playbackQuaternionA)
+        .slerp(this._playbackQuaternionB, alpha);
+    }
+    for (const id of this.selectionIds) {
+      const group = this.propObjects.get(id);
+      const helper = this.selectionObbHelpers.get(id);
+      if (group && helper) {
+        helper.position.copy(group.position);
+        helper.quaternion.copy(group.quaternion);
+      }
+    }
+    this.needsRender = true;
+    if (!silent) this.callbacks.onPlayback?.(this.playbackState());
+    return this.trajectoryRows.size;
+  }
+
+  playMotion() {
+    if (!this.trajectoryRows.size) return false;
+    if (this.playback.time >= this.trajectoryDurationS - 1e-4) this.playback.time = 0;
+    this.playback.playing = true;
+    this.callbacks.onPlayback?.(this.playbackState());
+    return true;
+  }
+
+  pauseMotion() {
+    const wasPlaying = this.playback.playing;
+    this.playback.playing = false;
+    if (wasPlaying) this.callbacks.onPlayback?.(this.playbackState());
+    return this.playback.time;
+  }
+
+  togglePlayback() {
+    if (this.playback.playing) {
+      this.pauseMotion();
+      return false;
+    }
+    return this.playMotion();
+  }
+
+  setPlaybackSpeed(speed) {
+    const value = Number(speed);
+    this.playback.speed = Number.isFinite(value) && value > 0 ? value : 1;
+    this.callbacks.onPlayback?.(this.playbackState());
+    return this.playback.speed;
+  }
+
+  setPlaybackLoop(loop) {
+    this.playback.loop = Boolean(loop);
+    return this.playback.loop;
+  }
+
+  /** Stop and put every prop back exactly where the document placed it. */
+  stopMotion({ keepTrajectory = true } = {}) {
+    this.pauseMotion();
+    for (const [itemId, base] of this.playbackBase) {
+      const group = this.propObjects.get(itemId);
+      if (!group) continue;
+      group.position.copy(base.position);
+      group.quaternion.copy(base.quaternion);
+    }
+    this.playback.time = 0;
+    if (!keepTrajectory) {
+      this.trajectory = null;
+      this.trajectoryRows.clear();
+      this.trajectoryDurationS = 0;
+      this.playbackPropCount = 0;
+    }
+    this.needsRender = true;
+    this.callbacks.onPlayback?.(this.playbackState());
+    return true;
+  }
+
   async setV2Transforms(rotation = this.v2Rotations, scale = this.v2Scale) {
     this.v2Rotations = Boolean(rotation);
     this.v2Scale = Boolean(scale);
@@ -2805,10 +3340,13 @@ export class EditorView {
       const tier = derived ? this._tierFor(derived.dReqMm, derived.dReq) : "grey";
       group.userData.tier = tier;
       const faded = this.statsScopeIds && !this.statsScopeIds.has(id);
+      const motionRow = this.showMotionColors ? this.v2MotionRows.get(id) : null;
       group.traverse((object) => {
         if (!object.isMesh) return;
         if (faded) {
           object.material = this.fadedMaterial;
+        } else if (motionRow) {
+          object.material = this._motionClassMaterial(motionRow.motionClass);
         } else if (this.ladder.enabled) {
           object.material = this._tierMaterial(tier);
         } else if (object.userData.baseMaterial) {
@@ -2995,6 +3533,21 @@ export class EditorView {
     this._frame = requestAnimationFrame(this._animate);
     const delta = Math.min(0.1, (now - (this._last || now)) / 1000);
     this._last = now;
+    if (this.playback.playing && this.trajectoryRows.size) {
+      let time = this.playback.time + delta * this.playback.speed;
+      const duration = this.trajectoryDurationS;
+      if (time >= duration) {
+        if (this.playback.loop) time = duration > 0 ? time % duration : 0;
+        else { time = duration; this.playback.playing = false; }
+      }
+      this.setPlaybackTime(time, { silent: true });
+      // The time readout is for a human; ten updates a second is plenty and keeps the DOM
+      // out of the render path.
+      if (now - this._playbackReportedAt > 100) {
+        this._playbackReportedAt = now;
+        this.callbacks.onPlayback?.(this.playbackState());
+      }
+    }
     if (this.cam.update(delta)) this.needsRender = true;
     if (!this.loading && (this.needsRender || this.isFlying)) {
       const started = performance.now();

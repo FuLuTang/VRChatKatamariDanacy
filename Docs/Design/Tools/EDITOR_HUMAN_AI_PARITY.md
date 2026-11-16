@@ -75,12 +75,12 @@ CLI 约 15 项；真正缺的是四类：
 | 26 | 父子连线 | 顶部开关 | 无 op/query（页面读 `/api/ref-stage/transforms.json`） | 无 | **JS `_buildParentLines`** | ⚠️ 数据可取，关系图无 query |
 | 27 | 地形 / 碰撞叠加 | 顶部开关（仅 `_ref_*` 有） | `/api/ref-stage/stage.glb`、`collision.json` | 无 | **JS 构建** + `ref_stage` 解析 | ⚠️ 渲染仅 JS；无结构化的 terrain/collision query |
 | 28 | 坐标审计 / 贴地报告 | 无按钮（`window.__leveleditor.audit`） | 无 | 无 | **JS `view.audit` / `terrainContactReport`** | ❌ 分析只在 JS |
-| 29 | 运动 / 路径（v2 E9/E10） | 未实现 | 无 | 无 | 规划 | ❌ |
+| 29 | 运动 / 路径（v2 E9/E10） | 顶部「运动着色 / 路径 / 触发圈」；右侧「运动」面板；选中面板的运动块 | `GET /api/v2/motion`、`/api/v2/motion/paths`、`/api/v2/motion/prop/<itemId>`、`/api/v2/motion/trajectory`；`GET /api/v2/layers` 的 `motionLayers` | 无专用子命令（`curl` 同一端点） | 文档数据在 `v2_document.py`；**运动数值只在** `Tools/motion_sim`（编译 `MotionMath.cs`） | ✅ 只读查看 + 播放（§1.2.2） |
 | 30 | 活动区 / kill plane（v2 E7） | 未实现 | 无 | 无 | 规划 | ❌ |
 | 31 | 道具缩略图 / benchmark | 道具库缩略图；无 UI | 无 | 无 | JS 渲染工具 | ✅ 视图专属，不要求 op |
 | 32 | 查看（本次 `shot.py`） | 浏览器自己看 | **`GET /api/render`** | **`shot.py`** | **Python 相机规划 + 页面执行** | ✅ 新基线 |
 
-**计数**：32 项能力；✅ 14、⚠️ 11、❌ 7（不含仅视图的 31）。
+**计数**：32 项能力；✅ 15、⚠️ 11、❌ 6（不含仅视图的 31）。
 
 ### 1.2.1 v2 视图开关（2026-11-16 落地状态）
 
@@ -104,6 +104,48 @@ mutating op 返回错误，`check` 明确标为「结构检查（v2）」，不�
 v1 的 544 个错误。**缺口**：v2 设计数值校验器、v2 编辑路径、`motions[]/paths[]` 预览
 （E9/E10）仍未实现；`shot.py` 的 layer 名尚未加 v2 别名，HTTP 入口以 `/api/v2/*` 为准。
 真正的 ❌ 集中在 **选择模型、自动坐正、复制、分析 op、v2 新能力**。
+
+### 1.2.2 运动图层（`motions[]` / `paths[]`，2026-11-16 落地）
+
+原始 13 类运动的**唯一实现**是 `Runtime/Pickup/MotionMath.cs`。任何地方都不能再写一份：
+不是 Python，也不是浏览器 JS。落地方式是 **`Tools/motion_sim`**（.NET 命令行工具）把
+`MotionMath.cs`、`PhaseSeed.cs`、`KatamariMath.cs` **按原文件编入**（`motion_sim.csproj` 的
+`Compile Include`，不复制），用 `UnityStubs.cs` 提供它用到的 6 个 `Mathf` 函数与
+`Vector3`/`Quaternion`，于是在 Linux 上无 Unity 也能跑。编辑器服务调用它、缓存结果，浏览器
+只做插值与绘制。
+
+| 能力 | GUI（人类） | HTTP（agent，同一份 Python） | 数据/状态 |
+|---|---|---|---|
+| 运动类着色 | 顶部 `show-v2-motion-colors` | `GET /api/v2/motion/props`（也在 `/api/v2/motion` 里） | 13 类调色板来自 Python（`MOTION_CLASS_COLORS`），113 件 + 15 件 attached；✅ |
+| 路径折线 | 顶部 `show-v2-motion-paths` | `GET /api/v2/motion/paths` | 4 条 `paths[]`（p00/p15/p22/p23，米），标出每条的用户；✅ |
+| WaitForPlayer 触发圈 | 顶部 `show-v2-motion-radius`（默认开） | `GET /api/v2/motion/props?radius=1` | 半径 = `MotionMath.PanicRadiusM(sizeGroup=0)` = 2.0 m；圈画在侧车地形高度上；✅ |
+| 选中件运动详情 | 右侧「选中」面板的运动块 | `GET /api/v2/motion/prop/<itemId>` | 按运动类、参数、resolved 速度、相位 seed、半高、触发半径、父件链、所属路径、该行的 `assumptions`；✅ |
+| 父件连线（选中件） | 选中时自动画 | 同上（`parentChain`） | `props[].parent` + `inherit`；Cancer 里 2 件 attached 真的随父件转（父件 spin），其余 13 件父件不动；✅ |
+| 选中件的轨迹线 | 选中即画（自动取该件轨迹） | `GET /api/v2/motion/trajectory?items=<id>` | 30 s 采样的世界位置折线；sway=椭圆、hop=竖线、路径件=折线；✅ |
+| 播放（播放全部 / 只播选中） | 右侧「运动」面板：播放/暂停/时间轴/倍速 | `GET /api/v2/motion/trajectory?items=&seconds=&rate=&all=1` | 世界位姿 30 Hz 采样，缓存键 = (文档 sha256, items, seconds, rate)；✅ |
+
+聚合：`GET /api/v2/layers` 现在额外返回 `motionLayers`（5 个开关的 id/http/计数）与合并后的
+`counts`（`motions`/`paths`/`motionProps`/`attachedProps`/`waitForPlayerProps`/`movingProps`）。
+
+**为什么这样才算「同构」**：GUI 的每个开关调用的是 `view.setMotionColors/setMotionPaths/
+setMotionRadius`，而这三个方法用的 payload 与 HTTP 端点**是同一个 Python 调用**
+（`V2Document.motion_payload()`），数值又来自同一个 `motion_sim`。浏览器里没有一类运动的
+公式、没有一个速度表、没有一次相位哈希。`shot.py` 的 `--time` 也走同一个端点（§1.4）。
+
+**确定性**：相位种子由 `PhaseSeed.Hash32(level.id + "/" + itemId)`（FNV-1a，`Runtime/Pickup/PhaseSeed.cs`）
+给出，导入器与编辑器共用同一个文件；不用 `Math.random()`，也不依赖加载顺序。
+
+**播放**：服务端一次算出整段轨迹（默认 30 s @ 30 Hz，155 件 × 901 采样 ≈ 6 MB），按键缓存
+（文档 sha256 + items + seconds + rate）；页面只做**位置线性插值 + 旋转球面插值**，并按
+`requestAnimationFrame` 推进时钟（`view.playback`）。「播放全部」= `all=1`，「只播选中」=
+`items=<选中 ids>`（换范围会先 `stopMotion` 把所有件放回文档位姿，避免半途冻结）。`shot.py
+--time T` 走同一个端点，因此「页面上看到的第 T 秒」与「出的那张图」是同一份数据。
+headless 软渲染只有 2–4 fps，而时钟每帧最多前进 0.1 s，所以无头下播放像慢动作——这是渲染
+速度，不是逻辑；真 GPU 上按实际时间推进。
+
+**近似（界面与文档都写明）**：size group 固定 0（v2 不带原作 size id）；不做地面跟随 /
+zone / 前方被挡查询；预览里没有玩家，所以 WaitForPlayer 只画半径不触发；`props[].phase`
+即使写了也不生效（`MotionMath` 的 `Reset*` 只吃种子）。
 
 ## 1.3 只在 JS / 重复实现的逻辑（逐条 file:symbol）
 
@@ -137,6 +179,9 @@ v1 的 544 个错误。**缺口**：v2 设计数值校验器、v2 编辑路径�
   水印 + PNG `tEXt` 溯源；渲染只读。
 - 元数据：`camera/views`、`levelHash`、`propCount`、`layers.applied/unavailable`、
   `visibleBox`、`consoleErrors`、`timings`、`warm`、`bookmark`、`sheet`、`labels`。
+- `--time <秒>`：先向 `GET /api/v2/motion/trajectory` 取同一份轨迹，把世界摆到该时刻再渲染，
+  返回的 JSON 带 `playback`（`time`/`durationS`/`props`/`sampleCount`/`rate`）并自动打开
+  `motions` 图层（按类着色 + 路径折线），所以一张静止图就能说明「那一刻谁在哪」。
 - 这证明了目标形态：**Python 决定“看什么/怎么框”，浏览器只执行**；编辑/查询应沿用同一形态。
 
 ## 1.5 参考关卡与宿主分流

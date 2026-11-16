@@ -331,6 +331,7 @@ class RenderDaemon:
             "diff": bool(params.get("diff")),
             "layers": layers,
             "labels": int(layers.get("labels") or 0),
+            "time": params.get("time"),
             "watermark": bool(params.get("watermark")),
             "shadows": bool(params.get("shadows")),
         }
@@ -481,6 +482,7 @@ class RenderDaemon:
             "tile": {"w": tile_w, "h": tile_h},
             "imageSize": {"w": final_w, "h": final_h},
             "layers": result.get("layers"),
+            "playback": result.get("playback"),
             "shadows": bool(params.get("shadows")),
             "labels": result.get("labels"),
             "visibleBox": result.get("visibleBox"),

@@ -85,6 +85,15 @@
       <label class="toggle" title="应用 props[].scale（关闭只是查看，不改文件）">
         <input id="v2-apply-scale" type="checkbox" checked> 缩放
       </label>
+      <label class="toggle" title="按运动类给道具着色（motions[] 13 类；数据来自 /api/v2/motion/props）">
+        <input id="show-v2-motion-colors" type="checkbox"> 运动着色
+      </label>
+      <label class="toggle" title="画出 paths[] 折线（4 条；数据来自 /api/v2/motion/paths）">
+        <input id="show-v2-motion-paths" type="checkbox"> 路径
+      </label>
+      <label class="toggle" title="选中件的 WaitForPlayer 触发半径圈（PanicRadiusM，来自 MotionMath）">
+        <input id="show-v2-motion-radius" type="checkbox" checked> 触发圈
+      </label>
     </div>
 
     <div class="group">
@@ -301,6 +310,48 @@
         </div>
         <p class="note">颜色 = 服务器算出的 <code>D_req</code> 与当前 D 的比较；灰 = 结构/不可吸布景。
           体积 = aabb 三边之积（m³）；百分比的分母是该统计范围内的总体积。</p>
+      </section>
+
+      <section class="panel motion-panel">
+        <div class="panel-head">
+          <h2>运动 <span class="badge" id="motion-count">0</span></h2>
+          <span class="hint" id="motion-state">—</span>
+        </div>
+        <div id="motion-summary" class="facts">…</div>
+        <div class="motion-playback" id="motion-playback">
+          <div class="play-row">
+            <button id="motion-play" class="primary mini"
+                    title="按服务端轨迹播放（GET /api/v2/motion/trajectory）">▶ 播放</button>
+            <button id="motion-stop" class="mini" title="停止并回到文档位置">■ 停止</button>
+            <select id="motion-scope" title="播放全部 = 整关 155 件；只播选中 = 当前选中">
+              <option value="all">播放全部</option>
+              <option value="selected">只播选中</option>
+            </select>
+          </div>
+          <div class="play-row">
+            <input id="motion-timeline" type="range" min="0" max="30" step="0.0333" value="0"
+                   title="时间轴（秒，游戏时间 30 Hz）">
+          </div>
+          <div class="play-row">
+            <select id="motion-speed" title="倍速">
+              <option value="0.25">0.25×</option>
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+            </select>
+            <select id="motion-duration" title="轨迹时长（秒）">
+              <option value="10">10 s</option>
+              <option value="30" selected>30 s</option>
+              <option value="60">60 s</option>
+            </select>
+            <span class="time-read" id="motion-time">0.00 / 30.0 s</span>
+          </div>
+          <div class="note" id="motion-playback-note"></div>
+        </div>
+        <div id="motion-legend" class="motion-legend"></div>
+        <div id="motion-paths" class="motion-paths"></div>
+        <div id="motion-assumptions" class="note"></div>
       </section>
 
       <section class="panel">

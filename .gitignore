@@ -180,6 +180,12 @@ Thumbs.db
 /Tools/leveleditor/web/vendor/**/*.map
 /Docs/Design/Levels/**/*.tmp-*
 
+# motion_sim is a real, hand-written source project: the Unity rules above ignore *.csproj
+# and build output, but this one is checked in and its bin/obj are not.
+!/Tools/motion_sim/motion_sim.csproj
+/Tools/motion_sim/bin/
+/Tools/motion_sim/obj/
+
 # Reference-only study material: extracted third-party game assets are NEVER committed.
 # See /home/fulutang/KatamariRef/PROVENANCE.md (outside this repo) for provenance.
 /KatamariRef/

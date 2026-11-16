@@ -345,6 +345,12 @@ function applyLayers(view, layers, warnings) {
   setWireframe(view, has("wire"));
   if (has("wire")) applied.push("wire");
 
+  if (layers.motions === true) {
+    const colored = view.setMotionColors(true);
+    const paths = view.setMotionPaths(true);
+    applied.push(`motions(colors ${colored}, paths ${paths})`);
+    if (!colored && !paths) unavailable.push("motions (this level has no motion data)");
+  }
   view.clearHighlights();
   view.clearSelection();
   if (Array.isArray(layers.select) && layers.select.length) {
@@ -585,6 +591,21 @@ async function render(spec) {
 
   const sync = await syncScene(view);
   timing.syncMs = Math.round(performance.now() - started);
+  // `--time`: put the world at that moment of the server's trajectory before any frame is
+  // drawn.  The pose is the same one the page's play button shows, because both come from
+  // GET /api/v2/motion/trajectory.
+  let playback = null;
+  if (spec.time !== null && spec.time !== undefined) {
+    const absolute = Math.max(0, Number(spec.time) || 0);
+    const seconds = Math.max(30, Math.ceil(absolute) + 1);
+    const loaded = await window.__leveleditor.loadTrajectory?.(seconds);
+    if (loaded) {
+      playback = window.__leveleditor.setMotionTime(absolute);
+      timing.timeMs = Math.round(performance.now() - started - timing.syncMs);
+    } else {
+      warnings.push("time: the motion trajectory was not available");
+    }
+  }
   const layersInfo = await applyLayersBefore(view, spec.layers || {}, warnings);
   const appliedCount = layersInfo.applied.length;
 
@@ -717,6 +738,7 @@ async function render(spec) {
     visibleBox: threeBoxToWorld(finalBox),
     sceneBox: threeBoxToWorld(sceneBox),
     sync,
+    playback,
     timings: timing,
     warnings,
     errors,

@@ -53,6 +53,7 @@ from Tools.levelbuild import placement_core as core  # noqa: E402
 from Tools.levelbuild import ref_models  # noqa: E402
 from Tools.levelbuild import ref_stage  # noqa: E402
 from Tools.leveleditor import v2_document  # noqa: E402
+from Tools.motion_sim import motion_cli  # noqa: E402
 
 SERVICE = "vrc-katamari-leveleditor"
 PROTOCOL = 1
@@ -417,6 +418,9 @@ class WebEditor:
         #: one structural checker) and never enters the v1 editor/validator.
         self.v2_mode = False
         self.v2_document = None
+        #: Trajectory payloads keyed by (document sha256, items, seconds, rate).  The
+        #: evaluator is the motion_sim tool; this only avoids asking it twice.
+        self._motion_trajectory_cache = {}
         self.active_placement = None
         self.lock_enabled = bool(lock)
         self.lock = None
@@ -1599,6 +1603,75 @@ class WebEditor:
                 % "; ".join(self.v2_document.errors) or "not loaded")
         return terrain
 
+    # -- v2 motion (motions[]/paths[], LEVEL_FORMAT_V2 6.7) --------------- #
+    def v2_motion_payload(self, radius=True):
+        """The motion layer the GUI loads once; also ``GET /api/v2/motion``.
+
+        Every number that describes how a prop *moves* comes from ``Tools/motion_sim``,
+        which compiles MotionMath.cs.  This method only merges the tool's answer with the
+        document's declared data and the terrain height, so there is no second copy of a
+        motion rule on the Python side.
+        """
+        if not self.v2_mode:
+            raise editor_core.OpError("no v2 document is open")
+        return self.v2_document.motion_payload(radius=radius)
+
+    def v2_motion_paths_payload(self):
+        if not self.v2_mode:
+            raise editor_core.OpError("no v2 document is open")
+        return self.v2_document.motion_paths_payload()
+
+    def v2_motion_prop_payload(self, item_id):
+        if not self.v2_mode:
+            raise editor_core.OpError("no v2 document is open")
+        return self.v2_document.motion_prop_payload(item_id)
+
+    def v2_motion_trajectory(self, items=None, seconds=30.0, rate=30):
+        """World poses for the requested props, cached per (document, items, seconds, rate).
+
+        The one evaluator is the .NET tool; this method adds caching so playback and a
+        headless frame at time t never pay for the same trajectory twice.  A cache entry is
+        keyed by the document's sha256, so editing or reopening the level cannot serve a
+        stale trajectory.
+        """
+        if not self.v2_mode:
+            raise editor_core.OpError("no v2 document is open")
+        seconds = float(seconds)
+        if not (0 < seconds <= 3600):
+            raise editor_core.OpError("seconds must be 0..3600")
+        rate = int(rate)
+        if rate not in (5, 10, 15, 30):
+            raise editor_core.OpError("rate must be 5, 10, 15 or 30")
+        items = [str(entry).strip() for entry in (items or []) if str(entry).strip()]
+        known = {prop.get("itemId") for prop in self.v2_document.document.get("props") or []
+                 if isinstance(prop, dict)}
+        unknown = [item for item in items if item not in known]
+        if unknown:
+            raise editor_core.OpError("no such prop: %s" % ", ".join(sorted(unknown)))
+        key = (self.v2_document.sha256, tuple(sorted(items)) if items else None,
+               round(seconds, 3), rate)
+        with self.mu:
+            cached = self._motion_trajectory_cache.get(key)
+        if cached is not None:
+            hit = dict(cached)
+            hit["cached"] = True
+            return hit
+        try:
+            payload = motion_cli.trajectory(self.v2_document.path, seconds=seconds, rate=rate,
+                                            items=sorted(items) if items else None)
+        except motion_cli.MotionSimError as error:
+            raise editor_core.OpError("motion trajectory unavailable (%s): %s"
+                                     % (error.code, error))
+        payload["cached"] = False
+        with self.mu:
+            # Bounded on purpose: a whole-level 30 s trajectory is ~6 MB, so a handful of
+            # entries is plenty for one session and a stale document is never reused.
+            if len(self._motion_trajectory_cache) >= 6:
+                for stale in list(self._motion_trajectory_cache)[:3]:
+                    self._motion_trajectory_cache.pop(stale, None)
+            self._motion_trajectory_cache[key] = payload
+        return payload
+
     # -- hints (read-only, display only) --------------------------------- #
     def hints(self, diameter):
         """The three-state prediction at a ball diameter, for the overlay only.
@@ -1990,11 +2063,13 @@ class Handler(BaseHTTPRequestHandler):
         headers = {"X-Unlicensed-Reference": "1"} if app.ref_mode else None
         try:
             if name == "layers":
+                motion_counts = app.v2_document.motion_counts()
                 self._json(200, {
                     "ok": True, "schema": v2_document.SCHEMA_V2,
                     "level": app.editor.level,
                     "layers": v2_document.layer_map(app.v2_document),
-                    "counts": app.v2_document.summary["counts"],
+                    "motionLayers": v2_document.motion_layer_map(motion_counts),
+                    "counts": dict(app.v2_document.summary["counts"], **motion_counts),
                 }, headers)
                 return
             if name == "terrain":
@@ -2023,6 +2098,29 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"ok": True, "rotation": rotation, "scale": scale,
                                  "count": len(props), "props": props}, headers)
                 return
+            if name in ("motion", "motions"):
+                # The whole motion layer (LEVEL_FORMAT_V2 6.7): classes + palette,
+                # motions[], paths[], one row per moving/parented prop, and the list of
+                # approximations.  Same payload the GUI loads once when a v2 level opens.
+                radius = self._v2_flag(query, "radius", True)
+                self._json(200, app.v2_motion_payload(radius=radius), headers)
+                return
+            if name == "motion/paths":
+                self._json(200, app.v2_motion_paths_payload(), headers)
+                return
+            if name.startswith("motion/prop/"):
+                item_id = urllib.parse.unquote(name[len("motion/prop/"):]).strip()
+                try:
+                    payload = app.v2_motion_prop_payload(item_id)
+                except v2_document.V2LoadError as refusal:
+                    self._json(404, {"ok": False, "error": str(refusal),
+                                     "code": "no_motion_prop"}, headers)
+                    return
+                self._json(200, payload, headers)
+                return
+            if name == "motion/trajectory":
+                self._serve_motion_trajectory(query, headers)
+                return
             if name == "view":
                 payload = app.v2_payload(
                     terrain=self._v2_flag(query, "terrain", True),
@@ -2043,6 +2141,40 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as unexpected:                          # noqa: BLE001 - transport
             self._json(500, {"ok": False, "error": "%s: %s"
                              % (type(unexpected).__name__, unexpected)}, headers)
+
+    def _serve_motion_trajectory(self, query, headers):
+        """World poses for the playing props; the CLI spelling is
+        ``python3 -m Tools.motion_sim.motion_cli`` plus this same JSON.
+
+        ``items`` (comma list) narrows to the selected props; ``all=1`` or an empty list
+        plays the whole level.  ``seconds`` and ``rate`` are the same arguments the GUI's
+        play controls use, so a screenshot at time t and the page see one trajectory.
+        """
+        app = self.server.app
+        items = []
+        for raw in query.get("items") or []:
+            items.extend(entry.strip() for entry in str(raw).split(",") if entry.strip())
+        if str((query.get("all") or ["0"])[0]).strip().lower() in ("1", "true", "yes", "on"):
+            items = []
+        try:
+            seconds = float((query.get("seconds") or query.get("seconds") or ["30"])[0])
+        except (TypeError, ValueError):
+            self._json(200, {"ok": False, "code": "bad_argument",
+                             "error": "seconds must be a number"}, headers)
+            return
+        try:
+            rate = int((query.get("rate") or ["30"])[0])
+        except (TypeError, ValueError):
+            self._json(200, {"ok": False, "code": "bad_argument",
+                             "error": "rate must be 5, 10, 15 or 30"}, headers)
+            return
+        try:
+            payload = app.v2_motion_trajectory(items=items, seconds=seconds, rate=rate)
+        except editor_core.OpError as refusal:
+            self._json(200, {"ok": False, "code": "motion_unavailable",
+                             "error": str(refusal)}, headers)
+            return
+        self._json(200, payload, headers)
 
     def _serve_model(self, def_id):
         app = self.server.app

@@ -23,11 +23,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
 from Tools.levelbuild import placement_core as core
 from Tools.levelbuild import placement_v2
 from Tools.levelbuild import ref_v2_from_extract as ref_v2
+from Tools.motion_sim import motion_cli
 
 SCHEMA_V2 = ref_v2.SCHEMA_V2
 
@@ -35,6 +37,49 @@ SCHEMA_V2 = ref_v2.SCHEMA_V2
 #: document uses the original MAX_DIAMETER 1.20 m (its own notes say so); this fallback
 #: only keeps the v1-shaped ladder/statistics fields finite.
 FALLBACK_MAX_DIAMETER_M = 1.20
+
+#: The 13 motion classes of LEVEL_FORMAT_V2 section 6.7.3, in the order the legend lists
+#: them.  Display only: the *behaviour* of each class is MotionMath's, never this module's.
+MOTION_CLASS_ORDER = (
+    "spin", "flip", "bob", "sway", "hop", "whack_a_mole", "wait_for_player",
+    "sporadic_walk", "clouds", "path_collision", "sloping_path", "back_and_forth",
+    "dragged_along",
+)
+
+#: One colour per class, used by the "colour props by motion class" layer.  A palette is a
+#: display decision, so it lives here (Python) and the browser only applies it, which keeps
+#: the GUI and any headless screenshot using the same colours.
+MOTION_CLASS_COLORS = {
+    "spin": "#f6c344",
+    "flip": "#f39a55",
+    "bob": "#b7d94a",
+    "sway": "#4fd1a5",
+    "hop": "#4aa3f0",
+    "whack_a_mole": "#a06bf0",
+    "wait_for_player": "#f05a8e",
+    "sporadic_walk": "#e05a4a",
+    "clouds": "#8fd8f0",
+    "path_collision": "#2fb9c9",
+    "sloping_path": "#7d8ff0",
+    "back_and_forth": "#c9a0f0",
+    "dragged_along": "#b9b3a8",
+}
+
+MOTION_CLASS_LABELS = {
+    "spin": "自转 Spin",
+    "flip": "翻转 Flip",
+    "bob": "浮沉 Bob",
+    "sway": "摇摆 Sway",
+    "hop": "跳动 Hop",
+    "whack_a_mole": "打地鼠 WhackAMole",
+    "wait_for_player": "等玩家 WaitForPlayer",
+    "sporadic_walk": "随机游走 SporadicWalk",
+    "clouds": "云 Clouds",
+    "path_collision": "路径 · 碰撞 PathCollision",
+    "sloping_path": "路径 · 斜坡 SlopingPath",
+    "back_and_forth": "路径 · 来回 BackAndForth",
+    "dragged_along": "随父件 DraggedAlong",
+}
 
 
 class V2LoadError(RuntimeError):
@@ -103,6 +148,113 @@ def _class_counts(classes):
     return {str(key): counts[key] for key in sorted(counts)}
 
 
+class TerrainHeight:
+    """Ground height over the ``.katerrain`` collision mesh: the host-side query.
+
+    This is the one host fact the motion preview needs (the trigger-radius ring has to lie
+    on the ground, not float at the prop's centre), and it is a *query over the level's own
+    terrain*, not motion logic: MotionMath's entry points never look at the ground, they take
+    the host's answer where the original consults it.
+
+    Buckets of ``CELL_M`` keep one lookup at a handful of triangles instead of the full
+    3,455-triangle mesh.  ``zone`` membership and the "is the next step blocked" ray are not
+    implemented - the editor states that as an approximation instead of pretending.
+    """
+
+    CELL_M = 4.0
+
+    def __init__(self, vertices, indices):
+        self.triangles = []
+        limit = len(vertices)
+        for index in range(0, len(indices or []) - 2, 3):
+            a, b, c = indices[index], indices[index + 1], indices[index + 2]
+            if max(a, b, c) >= limit or min(a, b, c) < 0:
+                continue
+            self.triangles.append((vertices[a], vertices[b], vertices[c]))
+        self.buckets = {}
+        cell = self.CELL_M
+        for triangle, (p0, p1, p2) in enumerate(self.triangles):
+            low_x = int(math.floor(min(p0[0], p1[0], p2[0]) / cell))
+            high_x = int(math.floor(max(p0[0], p1[0], p2[0]) / cell))
+            low_z = int(math.floor(min(p0[2], p1[2], p2[2]) / cell))
+            high_z = int(math.floor(max(p0[2], p1[2], p2[2]) / cell))
+            for ix in range(low_x, high_x + 1):
+                for iz in range(low_z, high_z + 1):
+                    self.buckets.setdefault((ix, iz), []).append(triangle)
+
+    def height_at(self, x, z, max_y=None):
+        """The highest terrain surface under ``(x, z)``, or ``None`` when there is none."""
+        try:
+            key = (int(math.floor(float(x) / self.CELL_M)),
+                   int(math.floor(float(z) / self.CELL_M)))
+        except (TypeError, ValueError):
+            return None
+        best = None
+        for index in self.buckets.get(key, ()):
+            height = self._triangle_height(self.triangles[index], x, z)
+            if height is None:
+                continue
+            if max_y is not None and height > max_y:
+                continue
+            if best is None or height > best:
+                best = height
+        return None if best is None else round(best, 4)
+
+    @staticmethod
+    def _triangle_height(triangle, x, z):
+        (x1, y1, z1), (x2, y2, z2), (x3, y3, z3) = triangle
+        determinant = (z2 - z3) * (x1 - x3) + (x3 - x2) * (z1 - z3)
+        if abs(determinant) < 1e-12:
+            return None
+        a = ((z2 - z3) * (x - x3) + (x3 - x2) * (z - z3)) / determinant
+        b = ((z3 - z1) * (x - x3) + (x1 - x3) * (z - z3)) / determinant
+        c = 1.0 - a - b
+        if a < -1e-9 or b < -1e-9 or c < -1e-9:
+            return None
+        return a * y1 + b * y2 + c * y3
+
+
+def motion_layer_map(classes=None):
+    """The motion view toggles and their HTTP spellings (GUI, docs and tests share this).
+
+    Same idea as :func:`layer_map`: every toggle the GUI offers names the endpoint that
+    serves the data behind it, so an agent reaches the same Python with one request.
+    """
+    counts = classes or {}
+    return {
+        "motionColors": {
+            "id": "show-v2-motion-colors", "default": False,
+            "http": "/api/v2/motion/props",
+            "count": counts.get("motionProps"),
+            "label": "按运动类着色（13 类调色板来自 /api/v2/motion/props）",
+        },
+        "motionPaths": {
+            "id": "show-v2-motion-paths", "default": False,
+            "http": "/api/v2/motion/paths",
+            "count": counts.get("paths"),
+            "label": "路径折线（paths[]，米；4 条折线）",
+        },
+        "motionRadius": {
+            "id": "show-v2-motion-radius", "default": True,
+            "http": "/api/v2/motion/props?radius=1",
+            "count": counts.get("waitForPlayerProps"),
+            "label": "WaitForPlayer 触发半径圈（PanicRadiusM，来自 MotionMath）",
+        },
+        "motionParents": {
+            "id": "show-v2-motion-parent", "default": True,
+            "http": "/api/v2/motion/prop/<itemId>",
+            "count": counts.get("attachedProps"),
+            "label": "选中件的父件连线（props[].parent + inherit）",
+        },
+        "motionPlayback": {
+            "id": "v2-motion-play", "default": False,
+            "http": "/api/v2/motion/trajectory?items=<ids>&seconds=<s>",
+            "count": counts.get("movingProps"),
+            "label": "播放（世界轨迹由 Tools/motion_sim 逐帧采样）",
+        },
+    }
+
+
 class V2Document:
     """One loaded v2 document, its sidecar, and the browser-facing view model."""
 
@@ -127,6 +279,13 @@ class V2Document:
         self.sidecar = None
         self.errors = []
         self.sidecar_check_skipped = False
+        # Motion layer (motions[]/paths[]): the facts come from the motion_sim tool that
+        # compiles MotionMath.cs, resolved lazily so opening a level never pays for a build.
+        self._motion_attempted = False
+        self._motion_facts = None
+        self._motion_error = None
+        self._motion_error_code = None
+        self._terrain_height = None
         self._load_sidecar()
         self.errors = self._structural_errors()
         self.summary = self._build_summary()
@@ -217,6 +376,16 @@ class V2Document:
             "terrainChunks": len(terrain.get("chunks") or []),
             "broadPhaseBoxes": len((terrain.get("broadPhase") or {}).get("boxes") or []),
             "zones": len(meta.get("zones") or []),
+            # Motion facts the document itself declares (LEVEL_FORMAT_V2 6.7).  The
+            # resolved numbers (speed, phase, radius) come from Tools/motion_sim and are
+            # served by /api/v2/motion, not counted here.
+            "motions": len([motion for motion in self.document.get("motions") or []
+                            if isinstance(motion, dict)]),
+            "paths": len([path for path in self.document.get("paths") or []
+                          if isinstance(path, dict)]),
+            "motionProps": sum(1 for prop in props if prop.get("motion")),
+            "attachedProps": sum(1 for prop in props
+                                 if prop.get("behaviour") == "attached"),
         }
         expected = meta.get("expected") or {}
         return {
@@ -365,6 +534,297 @@ class V2Document:
             "bounds": _terrain_bounds(sidecar["vertices"]),
             "zoneCounts": _zone_counts(sidecar["zoneIds"]),
             "classCounts": _class_counts(sidecar["classes"]),
+        }
+
+    # -- motion (motions[] / paths[], LEVEL_FORMAT_V2 6.7) -------------- #
+    def _motion_tables(self):
+        """``(motions by id, paths by id)`` from the document, both ordered by id."""
+        motions = {}
+        for motion in self.document.get("motions") or []:
+            if isinstance(motion, dict) and motion.get("id"):
+                motions[motion["id"]] = motion
+        paths = {}
+        for path in self.document.get("paths") or []:
+            if isinstance(path, dict) and path.get("id"):
+                paths[path["id"]] = path
+        return motions, paths
+
+    def document_motion_rows(self):
+        """Per-prop motion facts read straight from the document (no evaluator involved).
+
+        This is what makes class colouring, the path polylines and the "which motion does
+        this prop use" answer work even on a machine without the .NET SDK: they are declared
+        data.  The *resolved* numbers (speed in m/s, phase seed, trigger radius, poses) come
+        from :meth:`motion_facts`, i.e. from MotionMath, and are merged in
+        :meth:`motion_payload`.
+        """
+        motions, paths = self._motion_tables()
+        rows = {}
+        for prop in self.document.get("props") or []:
+            if not isinstance(prop, dict):
+                continue
+            item_id = prop.get("itemId")
+            if not item_id:
+                continue
+            motion_id = prop.get("motion")
+            behaviour = prop.get("behaviour")
+            motion = motions.get(motion_id) if motion_id else None
+            if motion is not None:
+                motion_class = motion.get("class")
+            elif behaviour == "attached":
+                # 6.7.3: dragged_along is the parent relation expressed as data.
+                motion_class = "dragged_along"
+            else:
+                motion_class = None
+            parent = prop.get("parent")
+            if motion_class is None and not parent:
+                continue
+            path = paths.get((motion or {}).get("path")) if motion else None
+            rows[item_id] = {
+                "itemId": item_id,
+                "def": prop.get("def"),
+                "behaviour": behaviour,
+                "inherit": prop.get("inherit"),
+                "parent": parent,
+                "motion": motion_id,
+                "motionClass": motion_class,
+                "instanceIndex": prop.get("instanceIndex"),
+                "zone": prop.get("zone"),
+                "aabb": prop.get("aabb"),
+                "updatesPerSecond": (motion or {}).get("updatesPerSecond"),
+                "loop": (motion or {}).get("loop"),
+                "params": (motion or {}).get("params") or {},
+                "provenance": (motion or {}).get("provenance") or {},
+                "speedSource": ((motion or {}).get("speed") or {}).get("source"),
+                "speedCmPerSec": (path or {}).get("speedCmPerSec"),
+                "path": (path or {}).get("id"),
+                "outputSpace": None,
+                "resolved": False,
+            }
+        return rows
+
+    def motion_facts(self):
+        """The ``motion_sim`` answer for this document (cached, ``None`` when unavailable)."""
+        if self._motion_attempted:
+            return self._motion_facts
+        self._motion_attempted = True
+        if not (self.document.get("motions") or self.document.get("paths")):
+            self._motion_error = "this document declares no motions[]/paths[]"
+            self._motion_error_code = "no_motion_data"
+            return None
+        try:
+            self._motion_facts = motion_cli.params(self.path)
+        except motion_cli.MotionSimError as error:
+            self._motion_error = str(error)
+            self._motion_error_code = error.code
+        return self._motion_facts
+
+    def terrain_height(self, x, z, max_y=None):
+        """Ground height at a world x/z from the ``.katerrain`` sidecar (or ``None``)."""
+        if not self.sidecar:
+            return None
+        if self._terrain_height is None:
+            self._terrain_height = TerrainHeight(self.sidecar["vertices"],
+                                                 self.sidecar["indices"])
+        return self._terrain_height.height_at(x, z, max_y=max_y)
+
+    def motion_counts(self):
+        rows = self.document_motion_rows()
+        by_class = {}
+        for row in rows.values():
+            if row["motionClass"]:
+                by_class[row["motionClass"]] = by_class.get(row["motionClass"], 0) + 1
+        motions, paths = self._motion_tables()
+        facts = self.motion_facts()
+        return {
+            "motions": len(motions),
+            "paths": len(paths),
+            "motionProps": sum(1 for row in rows.values() if row["motion"]),
+            "attachedProps": sum(1 for row in rows.values()
+                                 if row["behaviour"] == "attached"),
+            "waitForPlayerProps": by_class.get("wait_for_player", 0),
+            "movingProps": ((facts or {}).get("counts") or {}).get("movingProps"),
+            "byClass": by_class,
+        }
+
+    def motion_payload(self, radius=True):
+        """The whole motion layer: classes, motions[], paths[], per-prop rows, approximations.
+
+        One implementation behind both the GUI (loaded once when a v2 level opens) and
+        ``GET /api/v2/motion``.  ``available`` is false when the .NET tool that compiles
+        MotionMath.cs cannot run here; the declared data (classes, paths, parents) is still
+        served, and ``reason`` says exactly what is missing.
+        """
+        rows = self.document_motion_rows()
+        motions, paths = self._motion_tables()
+        facts = self.motion_facts()
+        counts = self.motion_counts()
+        if facts is not None:
+            by_id = {row.get("itemId"): row for row in facts.get("props") or []}
+            for item_id, row in rows.items():
+                resolved = by_id.get(item_id)
+                if not resolved:
+                    continue
+                row["resolved"] = True
+                for key in ("speedMps", "speedCmPerSec", "speedSource", "speedIndex",
+                            "halfHeightM", "phaseSeed", "phase", "outputSpace",
+                            "hopSpeedCmPerFrame", "triggerRadiusM", "triggerMotionId",
+                            "pathClosed", "updatesPerSecond", "loop", "moves"):
+                    if key in resolved:
+                        row[key] = resolved[key]
+                row["assumptions"] = list(resolved.get("assumptions") or [])
+        if radius:
+            # The trigger ring has to lie on the ground, so the one host query the preview
+            # needs is a terrain height at the prop's own x/z (section 6.7.3's gate is a
+            # horizontal distance; the ring is drawn on the surface under the prop).
+            for row in rows.values():
+                if not row.get("triggerRadiusM"):
+                    continue
+                position = None
+                for prop in self.document.get("props") or []:
+                    if isinstance(prop, dict) and prop.get("itemId") == row["itemId"]:
+                        position = prop.get("position")
+                        break
+                if isinstance(position, (list, tuple)) and len(position) >= 3:
+                    row["groundY"] = self.terrain_height(float(position[0]),
+                                                         float(position[2]))
+        path_rows = []
+        for path_id in sorted(paths):
+            path = paths[path_id]
+            users = sorted(item for item, row in rows.items() if row.get("path") == path_id)
+            path_rows.append({
+                "id": path_id,
+                "points": path.get("points") or [],
+                "loop": path.get("loop"),
+                "closed": (path.get("loop") != "once"),
+                "speedCmPerSec": path.get("speedCmPerSec"),
+                "notes": path.get("notes"),
+                "users": users,
+            })
+        class_rows = []
+        for name in MOTION_CLASS_ORDER:
+            if name not in counts["byClass"] and name != "dragged_along":
+                continue
+            motion = next((m for m in motions.values() if m.get("class") == name), None)
+            class_rows.append({
+                "class": name,
+                "label": MOTION_CLASS_LABELS.get(name, name),
+                "color": MOTION_CLASS_COLORS.get(name, "#cccccc"),
+                "count": counts["byClass"].get(name, 0),
+                "updatesPerSecond": (motion or {}).get("updatesPerSecond"),
+                "speedSource": (((motion or {}).get("speed")) or {}).get("source"),
+                "path": (motion or {}).get("path"),
+            })
+        approximations = [
+            "size group: v2 carries no original size id, so MotionMath's size-group tables "
+            "(hop speed, WaitForPlayer trigger radius) use group 0 - every Cancer motion "
+            "prop is original size 2, i.e. group 0",
+            "ground: heights come from the .katerrain sidecar at the prop's own x/z; the "
+            "ground-following and zone rays the original runs are not modelled",
+            "blocking: walkers and clouds treat every forward step and every turn candidate "
+            "as allowed (no zone or obstacle queries)",
+            "player: a level preview has no player, so WaitForPlayer reports its radius and "
+            "never triggers",
+            "phase: from the D-12 seed PhaseSeed.Hash32(level.id + \"/\" + itemId); a "
+            "declared props[].phase is not applied",
+        ]
+        if facts is None:
+            approximations.insert(0, "motion evaluator unavailable: %s"
+                                 % (self._motion_error or "unknown reason"))
+        return {
+            "ok": True,
+            "schema": SCHEMA_V2,
+            "level": (self.document.get("meta") or {}).get("id"),
+            "available": facts is not None,
+            "reason": self._motion_error,
+            "errorCode": self._motion_error_code,
+            "evaluator": {
+                "name": "Tools/motion_sim",
+                "compiles": "Runtime/Pickup/MotionMath.cs (source, not a copy)",
+                "gameFramesPerSecond": (facts or {}).get("gameFramesPerSecond", 30),
+            },
+            "counts": counts,
+            "classes": class_rows,
+            "motions": [dict(motion) for motion in motions.values()],
+            "paths": path_rows,
+            "props": [rows[item_id] for item_id in sorted(rows)],
+            "layers": motion_layer_map(counts),
+            "approximations": approximations,
+            "assumptions": (facts or {}).get("assumptions"),
+        }
+
+    def motion_paths_payload(self):
+        payload = self.motion_payload(radius=False)
+        return {
+            "ok": True,
+            "level": payload["level"],
+            "available": payload["available"],
+            "reason": payload["reason"],
+            "count": len(payload["paths"]),
+            "paths": payload["paths"],
+            "layers": payload["layers"],
+        }
+
+    def motion_prop_payload(self, item_id):
+        """One prop's motion facts, plus the ground height under it and its parent chain."""
+        rows = self.document_motion_rows()
+        row = rows.get(item_id)
+        if row is None:
+            raise V2LoadError("prop %r has no motion and no parent in this document"
+                              % item_id)
+        facts = self.motion_facts()
+        if facts is not None:
+            for resolved in facts.get("props") or []:
+                if resolved.get("itemId") != item_id:
+                    continue
+                row["resolved"] = True
+                for key in ("speedMps", "speedCmPerSec", "speedSource", "speedIndex",
+                            "halfHeightM", "phaseSeed", "phase", "outputSpace",
+                            "hopSpeedCmPerFrame", "triggerRadiusM", "triggerMotionId",
+                            "pathClosed", "updatesPerSecond", "loop", "moves"):
+                    if key in resolved:
+                        row[key] = resolved[key]
+                row["assumptions"] = list(resolved.get("assumptions") or [])
+                break
+        for prop in self.document.get("props") or []:
+            if isinstance(prop, dict) and prop.get("itemId") == item_id:
+                row["position"] = prop.get("position")
+                row["rotationQuat"] = prop.get("rotationQuat")
+                ground = None
+                if isinstance(prop.get("position"), (list, tuple)) and len(prop["position"]) >= 3:
+                    ground = self.terrain_height(float(prop["position"][0]),
+                                                 float(prop["position"][2]))
+                row["groundY"] = ground
+                break
+        chain = []
+        seen = set()
+        current = row.get("parent")
+        while current and current not in seen and len(chain) < 16:
+            seen.add(current)
+            parent_row = rows.get(current)
+            chain.append({
+                "itemId": current,
+                "motionClass": (parent_row or {}).get("motionClass"),
+                "motion": (parent_row or {}).get("motion"),
+                "moves": bool((parent_row or {}).get("moves"))
+                or bool((parent_row or {}).get("motion")),
+            })
+            current = (parent_row or {}).get("parent")
+        row["parentChain"] = chain
+        path = None
+        if row.get("path"):
+            for entry in self.motion_payload(radius=False)["paths"]:
+                if entry["id"] == row["path"]:
+                    path = entry
+                    break
+        row["pathDetail"] = path
+        return {
+            "ok": True,
+            "level": (self.document.get("meta") or {}).get("id"),
+            "available": facts is not None,
+            "reason": self._motion_error,
+            "itemId": item_id,
+            "prop": row,
         }
 
     def props_payload(self, rotation=True, scale=True):

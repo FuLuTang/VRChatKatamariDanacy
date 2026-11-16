@@ -196,6 +196,235 @@ function currentLevelChanged() {
     $("show-parent-lines").checked = false;
     view.setParentLines(false);
   }
+  // The motion layer is per level; boot and every level switch come through here, so this
+  // is the one place that (re)loads it.
+  if (view) view.stopMotion({ keepTrajectory: false });
+  motionTrajectoryScope = null;
+  motionPlaybackNote("");
+  if (state?.v2) {
+    scheduleMotionLayer();
+  } else {
+    motionLayer = null;
+    view?.setMotionData(null);
+    renderMotion();
+  }
+}
+
+// --------------------------------------------------------------------------- //
+// motion layer (motions[] / paths[]; LEVEL_FORMAT_V2 6.7)
+//
+// The browser owns none of this data: classes, paths and every resolved number come from
+// `GET /api/v2/motion` (document facts) merged with `Tools/motion_sim` (MotionMath).  This
+// code stores the payload, draws it and lists it - that is all.
+// --------------------------------------------------------------------------- //
+let motionLayer = null;
+let motionLoading = false;
+let motionTimer = null;
+
+function scheduleMotionLayer() {
+  clearTimeout(motionTimer);
+  motionTimer = setTimeout(() => { loadMotionLayer(); }, 60);
+}
+
+async function loadMotionLayer() {
+  if (!state?.v2) {
+    motionLayer = null;
+    view?.setMotionData(null);
+    renderMotion();
+    return null;
+  }
+  if (motionLoading) return motionLayer;
+  motionLoading = true;
+  try {
+    const payload = await api.get("/api/v2/motion");
+    motionLayer = payload;
+    view?.setMotionData(payload);
+    renderMotion();
+    return payload;
+  } catch (error) {
+    motionLayer = null;
+    view?.setMotionData(null);
+    renderMotion(error.message);
+    return null;
+  } finally {
+    motionLoading = false;
+  }
+}
+
+function renderMotion(errorMessage = null) {
+  const panel = $("motion-summary");
+  if (!panel) return;
+  const summary = motionLayer?.counts || null;
+  const available = motionLayer ? motionLayer.available !== false : false;
+  const stateCell = $("motion-state");
+  if (stateCell) {
+    stateCell.textContent = !motionLayer
+      ? (errorMessage ? `不可用：${errorMessage}` : "—")
+      : (available ? "运动数据已载入" : `不可用：${motionLayer.reason || "原因未知"}`);
+  }
+  const badge = $("motion-count");
+  if (badge) {
+    badge.textContent = summary
+      ? `${summary.motionProps ?? 0} + ${summary.attachedProps ?? 0}`
+      : "0";
+  }
+  if (!motionLayer) {
+    panel.innerHTML = `<div class="k">状态</div><div class="v">${escapeHtml(
+      errorMessage || "这个关卡没有 v2 运动数据")}</div>`;
+    $("motion-legend").innerHTML = "";
+    $("motion-paths").innerHTML = "";
+    $("motion-assumptions").textContent = "";
+    return;
+  }
+  const rows = [
+    ["运动程序", `${summary?.motions ?? 0} 条 · 路径 ${summary?.paths ?? 0} 条`],
+    ["带 motion", `${summary?.motionProps ?? 0} 件`],
+    ["随父件", `${summary?.attachedProps ?? 0} 件（dragged_along）`],
+    ["会动", `${summary?.movingProps ?? "?"} 件（含随动父件的静止子件）`],
+    ["求值器", motionLayer.evaluator?.name || "—"],
+  ];
+  panel.innerHTML = rows.map(([key, value]) =>
+    `<div class="k">${key}</div><div class="v">${escapeHtml(value)}</div>`).join("");
+
+  const legend = view?.motionLegend?.() || [];
+  $("motion-legend").innerHTML = legend.map((entry) =>
+    `<div class="legend-row" title="${escapeHtml(entry.label || entry.class)} · `
+    + `${entry.updatesPerSecond ?? "?"} Hz">
+       <span class="swatch" style="background:${escapeHtml(entry.color)}"></span>
+       <span>${escapeHtml(entry.label || entry.class)}</span>
+       <b>${entry.count}</b>
+     </div>`).join("");
+
+  const paths = motionLayer.paths || [];
+  $("motion-paths").innerHTML = paths.length
+    ? paths.map((path) => `<div class="path-row">
+        <span><b>${escapeHtml(path.id)}</b> · ${path.points?.length ?? 0} 点 · `
+        + `${path.speedCmPerSec ?? "—"} cm/s · ${(path.users || []).length} 件</span>
+        <span>${path.closed ? "闭环" : "单程"}</span>
+      </div>`).join("")
+    : `<div class="path-row"><span>没有 paths[]</span></div>`;
+
+  const notes = (motionLayer.approximations || []).slice();
+  $("motion-assumptions").textContent = notes.length
+    ? `近似：${notes.join("；")}` : "";
+}
+
+// --------------------------------------------------------------------------- //
+// motion playback
+//
+// The whole world-pose trajectory is computed on the server by Tools/motion_sim (which
+// compiles MotionMath.cs); this page only asks for it, plays it back by interpolating and
+// draws the clock.  Nothing here advances a motion program.
+// --------------------------------------------------------------------------- //
+let motionTrajectoryScope = null;
+
+function renderPlaybackClock(state) {
+  if (!state || !$("motion-time")) return;
+  const duration = Number(state.durationS) || Number($("motion-duration").value) || 30;
+  $("motion-time").textContent = `${Number(state.time).toFixed(2)} / ${duration.toFixed(1)} s`;
+  const slider = $("motion-timeline");
+  slider.max = String(duration);
+  if (document.activeElement !== slider) slider.value = String(state.time);
+  $("motion-play").textContent = state.playing ? "⏸ 暂停" : "▶ 播放";
+}
+
+function motionPlaybackNote(text) {
+  const cell = $("motion-playback-note");
+  if (cell) cell.textContent = text || "";
+}
+
+/** Fetch the trajectory for the current scope/duration, unless the same one is loaded. */
+async function ensureTrajectory({ force = false, seconds = null } = {}) {
+  const scope = $("motion-scope").value;
+  const duration = Number(seconds ?? $("motion-duration").value) || 30;
+  const key = `${scope}:${duration}`;
+  if (!force && motionTrajectoryScope === key && view.hasTrajectory(duration)) return true;
+  motionPlaybackNote("正在生成轨迹…（motion_sim 逐帧采样 30 Hz）");
+  let url = `/api/v2/motion/trajectory?seconds=${encodeURIComponent(duration)}&rate=30`;
+  if (scope === "selected") {
+    const ids = [...view.selectionIds];
+    if (!ids.length) {
+      motionPlaybackNote("「只播选中」需要先选中至少一件道具");
+      return false;
+    }
+    url += `&items=${ids.map(encodeURIComponent).join(",")}`;
+  } else {
+    url += "&all=1";
+  }
+  try {
+    const payload = await api.get(url);
+    if (!payload.ok) {
+      motionPlaybackNote(`轨迹不可用：${payload.error}`);
+      return false;
+    }
+    // A different scope/duration replaces the set of animated props, so put every prop
+    // back on its documented transform first - otherwise a prop only the old trajectory
+    // moved would stay frozen mid-motion.
+    view.stopMotion({ keepTrajectory: false });
+    view.setTrajectory(payload, scope);
+    motionTrajectoryScope = key;
+    const counts = motionLayer?.counts || {};
+    motionPlaybackNote(`${payload.cached ? "轨迹（服务端缓存）" : "轨迹已生成"}：`
+      + `${payload.props.length} 件 × ${payload.sampleCount} 采样 · `
+      + `${payload.seconds} s @ ${payload.rate} Hz`
+      + (scope === "all" ? `（整关 ${counts.movingProps ?? "?"} 件会动）` : ""));
+    renderPlaybackClock(view.playbackState());
+    return true;
+  } catch (error) {
+    motionPlaybackNote(`轨迹请求失败：${error.message}`);
+    return false;
+  }
+}
+
+async function togglePlayback() {
+  if (view.playback.playing) {
+    view.pauseMotion();
+    return false;
+  }
+  if (!(await ensureTrajectory())) return false;
+  view.playMotion();
+  renderPlaybackClock(view.playbackState());
+  return true;
+}
+
+// --------------------------------------------------------------------------- //
+// the selected prop's own trajectory (its "behaviour trail")
+// --------------------------------------------------------------------------- //
+let trailTimer = null;
+let trailToken = 0;
+
+function scheduleSelectionTrail(itemId) {
+  clearTimeout(trailTimer);
+  trailTimer = setTimeout(() => { ensureSelectionTrail(itemId); }, 150);
+}
+
+/**
+ * Selecting one prop fetches *its* trajectory (one prop is ~60 KB, not the whole level) so
+ * the viewport can draw the trail it actually follows - the "选中一件就能看到它的行为轨迹"
+ * half of the feature, before anything is played.
+ */
+async function ensureSelectionTrail(itemId) {
+  if (!state?.v2 || !itemId || !view?.motionInfo?.(itemId)) return null;
+  if (view.trajectoryRows?.has?.(itemId)) return view.playbackState();
+  const token = (trailToken += 1);
+  const duration = Number($("motion-duration")?.value) || 30;
+  try {
+    const payload = await api.get(
+      `/api/v2/motion/trajectory?items=${encodeURIComponent(itemId)}`
+      + `&seconds=${encodeURIComponent(duration)}&rate=30`);
+    if (token !== trailToken) return null;
+    if (!payload.ok) {
+      motionPlaybackNote(`选中件的轨迹不可用：${payload.error}`);
+      return null;
+    }
+    view.addTrajectoryRows(payload);
+    motionPlaybackNote(`已载入选中件的轨迹（${payload.sampleCount} 采样 · `
+      + `${payload.seconds} s）`);
+    return view.playbackState();
+  } catch (error) {
+    motionPlaybackNote(`选中件轨迹请求失败：${error.message}`);
+    return null;
+  }
 }
 
 function renderAll() {
@@ -262,6 +491,9 @@ function renderRefMode() {
     $("show-v2-parent-lines").checked = view?.showParentLines ?? false;
     $("v2-apply-rotation").checked = view?.v2Rotations ?? true;
     $("v2-apply-scale").checked = view?.v2Scale ?? true;
+    $("show-v2-motion-colors").checked = view?.showMotionColors ?? false;
+    $("show-v2-motion-paths").checked = view?.showMotionPaths ?? false;
+    $("show-v2-motion-radius").checked = view?.showMotionRadius ?? true;
   }
   if (ref && !v2) {
     $("show-terrain").checked = view?.showTerrain ?? true;
@@ -672,6 +904,7 @@ function renderSelection(info) {
       rows.push(["size", `${formatVec(info.size, 3)} m`]);
       rows.push(["kind", escapeHtml(info.kind || "—")]);
     }
+    if (info.type === "prop") appendMotionRows(rows, info);
     rows.push(["position", formatVec(info.position, 3)]);
   } else {
     rows.push(["对象", `${info.props || 0} 道具 + ${info.structures || 0} 结构`]);
@@ -696,6 +929,68 @@ function renderSelection(info) {
   }
   $("gizmo-move").classList.toggle("active", view.tool === "move");
   $("gizmo-rotate").classList.toggle("active", view.tool === "rotate");
+}
+
+/**
+ * The motion block of the selection panel.
+ *
+ * Every value shown here is read from the `GET /api/v2/motion` payload; nothing is
+ * recomputed in the browser (a speed, a phase or a trigger radius that disagreed with
+ * MotionMath would be worse than showing nothing).
+ */
+function appendMotionRows(rows, info) {
+  const row = view?.motionInfo?.(info.id);
+  if (!row) return;
+  const legend = view?.motionLegend?.() || [];
+  const entry = legend.find((item) => item.class === row.motionClass) || {};
+  const color = entry.color || "#cccccc";
+  const swatch = `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;`
+    + `background:${escapeHtml(color)};margin-right:4px"></span>`;
+  rows.push(["运动类", `${swatch}<b>${escapeHtml(entry.label || row.motionClass || "—")}</b>`
+    + (row.motion ? ` <span class="muted">${escapeHtml(row.motion)}</span>` : "")]);
+  const tier = [];
+  if (row.updatesPerSecond) tier.push(`${row.updatesPerSecond} Hz`);
+  if (row.loop === false) tier.push("单次");
+  if (row.outputSpace) tier.push(row.outputSpace);
+  if (tier.length) rows.push(["更新", escapeHtml(tier.join(" · "))]);
+  if (row.speedSource) {
+    const resolved = Number.isFinite(row.speedMps)
+      ? `${formatNumber(row.speedMps, 3)} m/s（${formatNumber((row.speedMps || 0) * 100, 1)} cm/s）`
+      : "—";
+    const source = row.speedSource === "type"
+      ? `逐类型档${row.speedIndex >= 0 ? ` speedIndex ${row.speedIndex}` : ""}`
+      : (row.speedSource === "path" ? "路径速度" : row.speedSource);
+    rows.push(["速度", `${resolved} <span class="muted">· ${escapeHtml(source)}</span>`]);
+  }
+  if (Number.isFinite(row.halfHeightM)) {
+    rows.push(["半高 h", `${formatNumber(row.halfHeightM, 4)} m <span class="muted">· 摆动/行程以它为单位</span>`]);
+  }
+  if (Number.isFinite(row.phaseSeed)) {
+    rows.push(["相位", `${formatNumber(row.phase, 4)} <span class="muted">· D-12 seed ${row.phaseSeed}</span>`]);
+  }
+  if (Number.isFinite(row.triggerRadiusM)) {
+    const ground = Number.isFinite(row.groundY) ? `${formatNumber(row.groundY, 3)} m` : "未知";
+    rows.push(["触发半径", `<b>${formatNumber(row.triggerRadiusM, 2)} m</b> `
+      + `<span class="muted">· motionID 0x0${row.triggerMotionId?.toString(16) ?? "?"}`
+      + ` · 圈画在地面 y=${ground}</span>`]);
+  }
+  if (row.path) {
+    const detail = view?.v2Motions?.paths?.find?.((path) => path.id === row.path);
+    rows.push(["路径", `<b>${escapeHtml(row.path)}</b> <span class="muted">· `
+      + `${detail?.points?.length ?? row.pathPointCount ?? "?"} 点 · `
+      + `${detail?.speedCmPerSec ?? "—"} cm/s · ${detail?.closed === false ? "单程" : "闭环"}</span>`]);
+  }
+  if (row.parent) {
+    rows.push(["父件", `${escapeHtml(row.parent)} <span class="muted">· inherit `
+      + `${escapeHtml(row.inherit || "—")}</span>`]);
+    const chain = (view?.v2MotionRows?.get?.(row.parent) || null);
+    rows.push(["", `<span class="muted">${chain?.motionClass
+      ? `父件有运动（${escapeHtml(chain.motionClass)}），子件随动`
+      : "父件不动，所以这件也不动"}</span>`]);
+  }
+  if ((row.assumptions || []).length) {
+    rows.push(["假设", `<span class="muted">${escapeHtml(row.assumptions.join("；"))}</span>`]);
+  }
 }
 
 // The per-def volume factor (the original's `Volume = k * a*b*c`, default 0.70).  One
@@ -1678,6 +1973,48 @@ function bindUI() {
     const count = view.setParentLines($("show-v2-parent-lines").checked);
     if ($("show-v2-parent-lines").checked && !count) toast("这个 v2 文档没有 props[].parent", "ok", 2400);
   });
+  $("motion-play").addEventListener("click", () => { togglePlayback(); });
+  $("motion-stop").addEventListener("click", () => {
+    view.stopMotion({ keepTrajectory: false });
+    motionTrajectoryScope = null;
+    motionPlaybackNote("已停止：所有道具回到文档位置");
+  });
+  $("motion-scope").addEventListener("change", () => {
+    motionTrajectoryScope = null;
+    view.stopMotion({ keepTrajectory: false });
+    motionPlaybackNote($("motion-scope").value === "selected"
+      ? "只播选中：先选中道具，再按播放" : "播放全部：整关所有会动的道具");
+  });
+  $("motion-duration").addEventListener("change", () => {
+    motionTrajectoryScope = null;
+    view.stopMotion({ keepTrajectory: false });
+    motionPlaybackNote(`轨迹时长改为 ${$("motion-duration").value} s`);
+  });
+  $("motion-speed").addEventListener("change", () => {
+    view.setPlaybackSpeed(Number($("motion-speed").value));
+  });
+  $("motion-timeline").addEventListener("input", async () => {
+    const time = Number($("motion-timeline").value);
+    if (!(await ensureTrajectory())) return;
+    view.pauseMotion();
+    view.setPlaybackTime(time);
+  });
+  $("show-v2-motion-colors").addEventListener("change", () => {
+    const count = view.setMotionColors($("show-v2-motion-colors").checked);
+    if ($("show-v2-motion-colors").checked) {
+      if (!count) toast("这个 v2 文档没有运动数据（先看右侧「运动」面板）", "ok", 2600);
+      else toast(`按运动类着色：${count} 件`, "ok", 2000);
+    }
+  });
+  $("show-v2-motion-paths").addEventListener("change", () => {
+    const count = view.setMotionPaths($("show-v2-motion-paths").checked);
+    if ($("show-v2-motion-paths").checked && !count) {
+      toast("这个 v2 文档没有 paths[]", "ok", 2400);
+    }
+  });
+  $("show-v2-motion-radius").addEventListener("change", () => {
+    view.setMotionRadius($("show-v2-motion-radius").checked);
+  });
   $("v2-apply-rotation").addEventListener("change", async () => {
     await view.setV2Transforms($("v2-apply-rotation").checked, $("v2-apply-scale").checked);
     renderSelection(view.selectionInfo());
@@ -1833,12 +2170,14 @@ async function boot() {
     onSelect: (info) => {
       renderSelection(info);
       if (statsScope === "selection") scheduleStats(60);
+      if (info?.count === 1 && info.type === "prop") scheduleSelectionTrail(info.id);
     },
     onBatch: (operations, meta) => onBatch(operations, meta),
     onError: (message) => showError(message),
     onProgress: (text) => {
       if (text) setLoading(text);
     },
+    onPlayback: (playback) => renderPlaybackClock(playback),
     onStatus: (status, value) => {
       if (status === "tool") {
         currentTool = value;
@@ -2001,6 +2340,40 @@ async function boot() {
       $("v2-apply-scale").checked = Boolean(scale);
       renderSelection(view.selectionInfo());
       return result;
+    },
+    async loadMotion() { return loadMotionLayer(); },
+    async selectionTrail(itemId = null) {
+      const id = itemId || [...view.selectionIds][0];
+      return ensureSelectionTrail(id);
+    },
+    async loadTrajectory(seconds = null) {
+      const ok = await ensureTrajectory({ force: true, seconds });
+      return ok ? view.playbackState() : null;
+    },
+    async playMotion(seconds = null) {
+      const ok = await ensureTrajectory({ seconds });
+      if (!ok) return null;
+      view.playMotion();
+      return view.playbackState();
+    },
+    pauseMotion() { view.pauseMotion(); return view.playbackState(); },
+    stopMotion() {
+      view.stopMotion({ keepTrajectory: false });
+      motionTrajectoryScope = null;
+      return view.playbackState();
+    },
+    setMotionTime(seconds) { view.setPlaybackTime(Number(seconds)); return view.playbackState(); },
+    motionClock() { return view.playbackState(); },
+    setMotionSpeed(speed) { return view.setPlaybackSpeed(Number(speed)); },
+    motionData() { return motionLayer; },
+    setMotionLayer(name, visible = true) {
+      const methods = {
+        colors: () => view.setMotionColors(visible),
+        paths: () => view.setMotionPaths(visible),
+        radius: () => view.setMotionRadius(visible),
+      };
+      if (!methods[name]) throw new Error(`unknown motion layer ${name}`);
+      return methods[name]();
     },
     async op(name, args) { return sendOp({ op: name, args }); },
     async refresh() { await refreshState(); return state; },

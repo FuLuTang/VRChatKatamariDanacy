@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    motion_sim: the editor's motion evaluator (Tools/motion_sim/README.md).
+
+    The motion classes are NOT copied here.  The project compiles the Unity runtime sources
+    as linked items, so VRC_Katamari/Runtime/Pickup/MotionMath.cs stays the single
+    implementation of the 13 motion programs and this tool cannot drift from it.  The only
+    local sources are Program.cs (the CLI) and UnityStubs.cs (the few UnityEngine members
+    MotionMath.cs uses, so it links on Linux without Unity).
+
+    Build:  ./build.sh   (or: dotnet build -c Release)
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>9.0</LangVersion>
+    <AssemblyName>motion_sim</AssemblyName>
+    <RootNamespace>MotionSim</RootNamespace>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <!-- The linked Unity sources predate nullable annotations; keep their warnings quiet. -->
+    <NoWarn>CS0649;CS0169;CS0414</NoWarn>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The repository's own sources, compiled verbatim (never copied). -->
+    <Compile Include="../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Pickup/MotionMath.cs"
+             Link="Linked/MotionMath.cs" />
+    <Compile Include="../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Pickup/PhaseSeed.cs"
+             Link="Linked/PhaseSeed.cs" />
+    <Compile Include="../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Core/KatamariMath.cs"
+             Link="Linked/KatamariMath.cs" />
+  </ItemGroup>
+
+</Project>

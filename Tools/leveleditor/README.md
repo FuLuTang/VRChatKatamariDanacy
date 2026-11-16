@@ -190,6 +190,64 @@ python3 Tools/leveleditor/server.py --level _ref_mas1 --ref-models-dir ~/Katamar
   按钮；v1 关卡（第一关）行为不变，只有存在 v2 兄弟文件时才提示。
 
 
+### 4.3 运动图层与播放（v2 `motions[]` / `paths[]`，§6.7）
+
+参考关卡的运动数据**不在 Python 里解释**。13 类运动的唯一实现是
+`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Pickup/MotionMath.cs`；编辑器通过
+[`Tools/motion_sim`](../motion_sim/README.md) 把这个文件（连同 `PhaseSeed.cs`、`KatamariMath.cs`）
+**按原文件编进一个小 .NET 工具**，由它给出每一件的 resolved 参数与逐帧世界位姿。Python 只做
+文档解析、地形高度查询与缓存，浏览器只做插值与绘制。
+
+```bash
+# 一次性看这个工具能给你什么（不需要浏览器、不需要起编辑器）
+python3 -m Tools.motion_sim.motion_cli status                  # 是否可用 / dll 路径
+python3 -m Tools.motion_sim.motion_cli params \
+  Docs/Design/Levels/_ref_cancer/placement.v2.json --items fiddler_crab_012
+python3 -m Tools.motion_sim.motion_cli trajectory \
+  Docs/Design/Levels/_ref_cancer/placement.v2.json --items fiddler_crab_012 \
+  --seconds 30 --out /tmp/traj.json
+```
+
+- **顶部开关**：`运动着色`（按 13 类着色）、`路径`（4 条 `paths[]` 折线）、`触发圈`
+  （WaitForPlayer 的 `PanicRadiusM` 半径圈，画在侧车地形高度上）。
+- **右侧「运动」面板**：运动程序/路径条数、113 件带 motion、15 件 attached、会动的件数、
+  13 类图例（颜色 + 计数）、每条路径的点数/速度/用户数、以及**近似清单**。
+- **选中面板的运动块**：运动类、更新率、resolved 速度（m/s 与 cm/s）、半高 `h`、
+  相位（D-12 seed）、触发半径、父件与 `inherit`（及父件是否真的在动）、所属路径、该行的
+  `assumptions`。选中时视口里画触发圈、父件连线，并把该路径折线换成选中色。
+- **选中件的轨迹**：选中一件会单独取它的轨迹（1 件 ≈ 60 KB，不是整关），在视口里画出它
+  这 30 秒真正走过的**轨迹线**（采样世界位置；sway 是椭圆、hop 是竖线、路径件就是那条折线），
+  所以「选中一件就能看到它的行为轨迹」不用先按播放。端点：`GET /api/v2/motion/trajectory?items=<id>`。
+- **HTTP（与 GUI 同一份 Python）**：
+
+  | 端点 | 内容 |
+  |---|---|
+  | `GET /api/v2/motion`（别名 `/api/v2/motion`） | 整个运动层：classes + 调色板、`motions[]`、`paths[]`、191 行逐件数据、`counts`、`approximations` |
+  | `GET /api/v2/motion/paths` | 只是 4 条折线 |
+  | `GET /api/v2/motion/prop/<itemId>` | 单件的详情 + 地面高度 + 父件链 + 所属路径 |
+  | `GET /api/v2/motion/trajectory?items=a,b&seconds=30&rate=30` | 世界位姿轨迹（`all=1` 或省略 items = 整关） |
+  | `GET /api/v2/layers` | 额外返回 `motionLayers` 与合并后的 `counts` |
+
+- **播放**：右侧「运动」面板的播放/暂停、时间轴、倍速、「播放全部 / 只播选中」。轨迹由服务端
+  一次算好后缓存在 `server.py`（键 = 文档 sha256 + items + seconds + rate）；页面只按时间插值。
+- **无头**：`shot.py --time <秒>` 用同一份轨迹把场景摆到那一刻再出图（自动打开运动着色与路径；
+  返回 JSON 的 `playback` 写出 `time`/`durationS`/`props`/`sampleCount`）。
+  ```bash
+  python3 Tools/leveleditor/shot.py _ref_cancer --view iso --time 3 \
+    --out ~/KatamariRef/viewer_evidence/shots/motion_shot_t3.png
+  # playback: {"time": 3, "durationS": 30, "props": 155, "sampleCount": 901, "rate": 30}
+  ```
+- **播放节奏**：`requestAnimationFrame` 推进时钟，每帧最多前进 0.1 s；headless 软渲染只有 2–4 fps，
+  所以无头下播放看起来像慢动作（真 GPU 上按真实时间）。换「播放全部/只播选中」或改时长会先
+  停止并把所有道具放回文档位姿。
+- **近似**（界面与文档都明说）：size group 固定 0（v2 不带原作 size id）；不做地面跟随 /
+  zone / 前方被挡查询；预览里没有玩家，所以 WaitForPlayer 只画半径不触发；`props[].phase`
+  即使写了也不生效（`MotionMath` 的 `Reset*` 只吃种子）。逐条见
+  [motion_sim 的 assumptions](../motion_sim/README.md#assumptions-stated-not-hidden)。
+- **测试**：`Docs/tests/leveleditor/test_editor_motion.py`（数据读入、端点、计数 113/15/4、
+  Spin 4.19 s、Sway 椭圆、Hop 6 cm、路径 24.4 cm/s、整关 30 s 轨迹耗时）。没有 .NET SDK
+  或没有本地 `_ref_cancer` 时这些用例自己 skip。
+
 ---
 
 ## 4.2 Agent cookbook: looking at a level（给 LLM/脚本）

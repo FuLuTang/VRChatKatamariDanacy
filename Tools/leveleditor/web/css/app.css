@@ -379,3 +379,23 @@ footer .spacer { flex: 1; }
 body.has-legacy .tool-hud { top: 64px; }
 body.ref-mode.has-legacy .tool-hud { top: 120px; }
 .v2-tools.hidden { display: none; }
+
+/* ---------------------------------------------------------------------- */
+/* motion layer (LEVEL_FORMAT_V2 6.7): legend, paths, playback            */
+/* ---------------------------------------------------------------------- */
+.motion-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px;
+  margin: 7px 0 4px; font-size: 10.5px; }
+.motion-legend .legend-row { display: flex; align-items: center; gap: 5px;
+  color: var(--muted); cursor: default; }
+.motion-legend .swatch { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+.motion-legend .legend-row b { color: var(--text); font-weight: 600; }
+.motion-paths { display: grid; gap: 2px; font-size: 10.5px; color: var(--muted); }
+.motion-paths .path-row { display: flex; justify-content: space-between; gap: 6px; }
+.motion-paths .path-row b { color: var(--text); font-weight: 600; }
+.motion-panel .note { font-size: 10px; line-height: 1.45; color: var(--muted); margin-top: 6px; }
+.motion-playback { display: grid; gap: 6px; margin-top: 8px; }
+.motion-playback .play-row { display: flex; gap: 5px; align-items: center; }
+.motion-playback .play-row button { flex: 0 0 auto; }
+.motion-playback input[type="range"] { flex: 1 1 auto; min-width: 40px; }
+.motion-playback .time-read { font-variant-numeric: tabular-nums; font-size: 10.5px;
+  color: var(--muted); }

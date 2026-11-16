@@ -204,7 +204,7 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/_ref_cancer/plac
 
 | 层 | 内容 |
 |---|---|
-| `meta` | 起始 **0.222 m**、目标 **0.80 m**、`maxDiameterRef:"global"`、时限 **420 s**（原作 GAME_TIME 7 分钟）、出生点 `fieldCentreGuess`（场心，向下打地形取面，再找 0.5 m 净空的点）、`groundY −3.0`（地形最低 −1.59 m 再低 1.4 m）、`bounds` 覆盖 511 件道具、`caps` 511/4096/8192/256/8 |
+| `meta` | 起始 **0.222 m**、目标 **0.80 m**、`maxDiameterRef:"global"`、时限 **420 s**（原作 GAME_TIME 7 分钟）、出生点 `authored`（在本关地形/道具/结构上量出的可玩点：平坦 RIDE 面、默认 +z 前方 4 m 通、同层 8 件以上可吸；量法/数值见生成物的 `arena.notes` 与 ORIGINAL_TERRAIN_AND_LAYOUT §2.4）、`groundY −3.0`（地形最低 −1.59 m 再低 1.4 m）、`bounds` 覆盖 511 件道具、`caps` 511/4096/8192/256/8 |
 | `terrain` | 提取器的**碰撞网格**（不是视觉 `stage.glb`）：**7,154 顶点 / 3,455 三角形**（原 3,456，1 个零面积三角形按 `[terrain_mesh]` 删掉），世界米、绕序翻一次；**7 个 chunk**，每个 ≤512 三角形并且就是一条 broad-phase AABB（`triangleRange` 首尾相接、无洞）；`grid` 1 m / 19×15 |
 | `triangles` | `count 3455` + `zoneCounts`（0:2727, 1:23, 3:244, 5:21, 8:73, 24:367）；逐三角形 zone 取三顶点多数票（平票取小），逐三角形 `classes` 在侧车里（ride 1698 / climb 503 / wall 1254） |
 | `structures.solids` | **35 条**，接触形状是 **def 的拟合代理**（`shape:"proxy"` + `collider` + `proxySource:"def"`；`size` 只作支撑面），规则见 §8.2 |

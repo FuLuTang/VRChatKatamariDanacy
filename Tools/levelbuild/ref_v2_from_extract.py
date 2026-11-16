@@ -103,6 +103,11 @@ ANIMATED_INSTANCES_REFERENCE = 153
 #: Reference level design ceiling: the original's MAX_DIAMETER 120 cm.
 DESIGN_MAX_DIAMETER_M = 1.20
 
+#: The start ball's semantic diameter on every reference level: the original's `initDiam`
+#: 22.2 cm.  The spawn rules are stated for this diameter (footprint/step/reach), so it is
+#: one constant rather than a literal repeated at each call site.
+START_DIAMETER_M = 0.222
+
 #: The original's own recovery penalty (PARITY_AUDIT G06/G13).
 DEFAULT_VOLUME_PENALTY = core.DEFAULT_VOLUME_PENALTY
 
@@ -1114,18 +1119,27 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
     level = level_doc.get("level") or {}
     growth_total = sum(entry["growthMm3"] for entry in placements)
     overlap_budget = _overlap_pairs(placements)
-    ball_start = _ball_start(level, terrain, placements)
+    ball_start, spawn_source, spawn_note = _spawn(level_id, level, terrain, placements)
+    notes = ("reference rebuild of the original stage; runtime ball cap is the "
+             "project global cap, but this level's own design ceiling is %.2f m "
+             "(the original's MAX_DIAMETER) and absorbable/structures are decided "
+             "against it. caps.animators = %d, source: %s (D-11: one Animator per "
+             "animated instance, no VAT). motions: %s"
+             % (max_diameter_m, int(animators), animator_source,
+                _motion_note(motions_summary)))
+    if spawn_note is not None:
+        notes = notes + ". " + spawn_note
     return {
         "id": level_id,
         "scene": _scene_name(level_id, level),
         "units": "m",
         "convention": "unity-y-up-left-handed-quat-xyzw",
         "ball": {
-            "startDiameterM": n4(0.222),
+            "startDiameterM": n4(START_DIAMETER_M),
             "targetDiameterM": n4(0.80),
             "maxDiameterRef": "global",
             "start": vec3(ball_start),
-            "spawnSource": "fieldCentreGuess",
+            "spawnSource": spawn_source,
         },
         "timeLimitS": int(round(time_limit_s)) if float(time_limit_s).is_integer()
                       else n4(time_limit_s),
@@ -1137,13 +1151,7 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
                   for zone in zones],
         "arena": {
             "id": level_id,
-            "notes": ("reference rebuild of the original stage; runtime ball cap is the "
-                      "project global cap, but this level's own design ceiling is %.2f m "
-                      "(the original's MAX_DIAMETER) and absorbable/structures are decided "
-                      "against it. caps.animators = %d, source: %s (D-11: one Animator per "
-                      "animated instance, no VAT). motions: %s"
-                      % (max_diameter_m, int(animators), animator_source,
-                         _motion_note(motions_summary))),
+            "notes": notes,
         },
         "caps": {
             "props": 512,
@@ -1209,23 +1217,80 @@ def _bounds(placements, margin=0.0):
     return [[n4(low_x), n4(low_z)], [n4(high_x), n4(high_z)]]
 
 
-def _ball_start(level, terrain, placements):
-    """The original's spawn estimate: the field centre, on the terrain below it.
+#: A reference import has to *choose* a spawn: the original's tables carry no spawn position
+#: (ORIGINAL_TERRAIN_AND_LAYOUT §2.4).  The field-centre guess is good enough when the centre
+#: happens to be open ground; ``_ref_cancer``'s is not.  Its field centre lands at the edge
+#: of a 1.2 x 0.9 m floor slot -- vertical faces 0.006-0.08 m from the ball centre to the
+#: sides and behind, a 15 m building wall 0.09 m ahead on the default +z heading, a platform
+#: 1.53 m overhead -- so a 0.222 m ball has no free 0.1 m step in any direction (reachable
+#: ground at the start diameter: 0.01 m2).  A field-centre guess would repeat that trap for
+#: any level whose centre is not open.
+#:
+#: The replacement is measured against the built document (terrain sidecar + props +
+#: ``structures.solids`` + ``activityArea``), not drawn by eye.  The five rules and the
+#: measured values are in ORIGINAL_TERRAIN_AND_LAYOUT §2.4 and LEVEL_FORMAT_V2 §ball;
+#: ``ground`` pins the terrain face the point was measured on, so a terrain rebuild that
+#: moves it fails the build instead of spawning the ball in mid-air or inside a step.
+AUTHORED_SPAWNS = {
+    "_ref_cancer": {
+        "start": (3.10, -0.5313, -0.70),         # x, ball-centre y, z (world metres)
+        "ground": -0.6423,                       # the flat face under it (veranda floor)
+        "why": ("flat veranda face (0.6 m footprint all RIDE, 1 m height range 0.029 m), "
+                "4.00 m of clear walkable ground on the default +z heading, 9 props "
+                "absorbable at the 0.222 m start diameter on the same layer 2.2-4.1 m "
+                "ahead, 5.47 m inside the activity boundary, 35.6 m2 of ground reachable "
+                "at the start diameter, nearest wall/solid 1.10 m (the house wall the "
+                "sliding doors sit in) -- the 1.5 m clearance rule is the one rule this "
+                "level cannot meet anywhere it still has 8 start-absorbable props in "
+                "front of the ball"),
+    },
+}
 
-    The missions table gives no spawn position (ORIGINAL_TERRAIN §2.4), so this is the
-    field-centre guess the format asks a reference import to declare (``fieldCentreGuess``).
-    The height comes from a downward ray through the real terrain, so the ball starts on the
-    ground rather than inside a prop or 0.8 m above it (which is what the v1 file's flattened
-    y did).
-    """
-    bounds = level.get("bounds") or [[-10.0, -10.0], [10.0, 10.0]]
-    centre_x = (bounds[0][0] + bounds[1][0]) / 2.0
-    centre_z = (bounds[0][1] + bounds[1][1]) / 2.0
-    lookup = ref_stage.terrain_lookup([
+
+def _terrain_lookup(terrain):
+    """``(x, z, ceiling) -> the highest terrain face at or below the ceiling``."""
+    return ref_stage.terrain_lookup([
         (terrain["vertices"][terrain["indices"][index]],
          terrain["vertices"][terrain["indices"][index + 1]],
          terrain["vertices"][terrain["indices"][index + 2]])
         for index in range(0, len(terrain["indices"]), 3)])
+
+
+def _spawn(level_id, level, terrain, placements):
+    """``(ball_start, spawn_source, note)``: the authored point, else the field-centre guess.
+
+    An authored level gets ``spawnSource: "authored"`` and a note for ``meta.arena.notes``;
+    everything else keeps the guessed ``fieldCentreGuess`` and has nothing to add.
+    """
+    authored = AUTHORED_SPAWNS.get(level_id)
+    if authored is None:
+        return _ball_start(level, terrain, placements), "fieldCentreGuess", None
+    start = [n4(value) for value in authored["start"]]
+    surface = _terrain_lookup(terrain)(
+        start[0], start[2], start[1] - START_DIAMETER_M / 2.0 + 1e-4)
+    if surface is None or abs(surface - authored["ground"]) > 0.02:
+        raise RefV2Error(
+            "%s: the authored spawn %r was measured on a face at y=%.4f, but the terrain "
+            "under it is now %r -- a terrain change moved the point; re-measure it against "
+            "the rules in ORIGINAL_TERRAIN_AND_LAYOUT §2.4 before rebuilding"
+            % (level_id, start, authored["ground"], surface))
+    return start, "authored", ("Ball spawn: authored, not a field-centre guess -- "
+                               + authored["why"])
+
+
+def _ball_start(level, terrain, placements):
+    """The fallback spawn: the field centre, on the terrain below it.
+
+    The missions table gives no spawn position (ORIGINAL_TERRAIN §2.4), so this is the
+    field-centre guess the format asks a reference import to declare (``fieldCentreGuess``)
+    when it has no measured point.  The height comes from a downward ray through the real
+    terrain, so the ball starts on the ground rather than inside a prop or 0.8 m above it
+    (which is what the v1 file's flattened y did).
+    """
+    bounds = level.get("bounds") or [[-10.0, -10.0], [10.0, 10.0]]
+    centre_x = (bounds[0][0] + bounds[1][0]) / 2.0
+    centre_z = (bounds[0][1] + bounds[1][1]) / 2.0
+    lookup = _terrain_lookup(terrain)
     footprint = [(entry["position"][0], entry["position"][2],
                   max(entry["aabb"][0], entry["aabb"][2]) / 2.0) for entry in placements]
 

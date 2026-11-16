@@ -384,6 +384,28 @@ class RealExtractionTests(unittest.TestCase):
         self.assertLess(document["activityArea"]["killPlane"]["y"], document["meta"]["groundY"])
         self.assertLess(document["meta"]["groundY"], lowest)
 
+    def test_the_spawn_is_authored_and_rests_on_the_terrain(self):
+        """The reference level's spawn is a measured point, not the field-centre guess.
+
+        The value itself lives in ``ref_v2_from_extract.AUTHORED_SPAWNS`` (one source); this
+        checks what the document must satisfy because of it: the source is ``authored``, the
+        note says so, ``playerSpawn`` is the same column 0.4 m up (the format's rule), and the
+        ball's bottom actually meets a terrain face (so a terrain rebuild that moves it would
+        have to re-measure instead of drifting).
+        """
+        meta = self.document["meta"]
+        ball = meta["ball"]
+        self.assertEqual(ball["spawnSource"], "authored")
+        self.assertIn("Ball spawn: authored", meta["arena"]["notes"])
+        spawn = meta["playerSpawn"]
+        self.assertEqual((spawn[0], spawn[2]), (ball["start"][0], ball["start"][2]))
+        self.assertAlmostEqual(spawn[1] - ball["start"][1], 0.4, places=4)
+        radius = ball["startDiameterM"] / 2.0
+        lookup = build._terrain_lookup(build.read_sidecar(self.sidecar))
+        surface = lookup(ball["start"][0], ball["start"][2], ball["start"][1] - radius + 1e-4)
+        self.assertIsNotNone(surface, "no terrain face under the authored spawn")
+        self.assertLess(abs(surface + radius - ball["start"][1]), 1e-3)
+
     def test_chunks_are_spatially_compact(self):
         """A chunk covers a small piece of the map, never an index-order run across it."""
         terrain = self.document["terrain"]

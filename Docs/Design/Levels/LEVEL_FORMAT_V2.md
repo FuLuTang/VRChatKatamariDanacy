@@ -348,9 +348,10 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 |---|---|---|---|
 | `itemId` | string | 是 | **导入幂等键**；全局唯一；改名 = 删一件 + 加一件 |
 | `def` | string | 是 | 指向 `defs[].id` |
+| `instanceIndex` | int | 否（参考导入必写） | 原作实例下标（`0–523`）。v2 用它把道具与提取结果的**运动/路径表对起来**（参考关卡 511/511 件、`0–523` 唯一），`motion`/`path`/父链对表一律按它，**禁止用名字匹配**。校验：非整数/布尔/负值 → `[prop_instance_index]` 错误，重复 → 错误，**超出 523 不报错**（出处可能指向提取结果里已不列出的记录） |
 | `kind` | string | 是 | 内容分类（喂吸收白名单/统计），与 `behaviour` **分两列**（PROP_BEHAVIOURS §10.1，已定） |
 | `behaviour` | enum | 是 | `static`（无自运动）／`motion`（由 `motion` 引用的运动程序驱动）／`attached`（自己不动、跟父件；`DraggedAlong` 的落点）／`ambient`（云/远景漂移：**也引用 motion**，但默认 `absorbable:false`）／`stacked`（摞放，作者态）。`kind` 与它仍是两列（PROP_BEHAVIOURS §10.1，已定） |
-| `motion` | string \| null | 条件 | `behaviour:"motion"` 或 `"ambient"` 时必填，引用 `motions[].id`；`static`/`attached`/`stacked` 必须省略/null。**129 个原作动件共用 16 个 `moveType`，所以是「实例 → 本关程序表」，不是逐件内联曲线** |
+| `motion` | string \| null | 条件 | `behaviour:"motion"` 或 `"ambient"` 时必填，引用 `motions[].id`；`static`/`attached`/`stacked` 必须省略/null。**129 个原作动件共用 15 个 `moveType`（落成 14 条 `motions[]`），所以是「实例 → 本关程序表」，不是逐件内联曲线** |
 | `zone` | string | 否 | `meta.zones[].id` 之一 |
 | `position` | 3×number | 是 | **AABB 中心**（世界米）。原作 `position` 就是中心；保持这一约定，不再 re-seat |
 | `rotationQuat` | 4×number `[x,y,z,w]` | 是 | Unity 顺序、单位长、**规范符号**（`w<0` 取反；`w==0` 时首个非零分量为正）。原作的轴+角经 §8.2 转换后写这里；无旋转写 `[0,0,0,1]` |
@@ -447,6 +448,8 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 
 ### 6.7 `motions[]` / `paths[]`：原作的运动程序与路径（新）
 
+**先说实际形状，别按「129 件都有 motion」去实现**（参考关卡实测）：129 条带运动程序的记录 → **128 件渲染道具**（差的那 1 条是 `#497 Dummy Hit 01` 命中判定体，没有道具）→ 其中 **113 件**带 `props[].motion`（**108** 条 `motion` + **5** 条 `ambient`），**15 件**是 `behaviour:"attached"`（`motionClass = dragged_along`：按 §6.7.3 既不写 `motions[]` 项、也不写 `props[].motion`，跟父件走即可）。`motions[]` 因此是 **14** 条（15 个 `moveType` 减掉 `dragged_along`），`paths[]` 是 **4** 条。`paths[].points` 的点数预算与简化规则见 §12.2。
+
 #### 6.7.1 为什么是「逐关表 + 逐实例引用」而不是逐件曲线
 
 原作的驱动链是三层【实测】：
@@ -459,7 +462,7 @@ props[].moveType（原作 s16，逐实例；v2 用 props[].motion 引用取代�
       只有 pathIndex ≥ 0 时才用路径记录里的 f32 速度
 ```
 
-Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 16 个 `moveType`。所以 v2 把它压成两张逐关表：
+Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用到 **15 个 `moveType`**（含 `dragged_along`；524 件里另有 16 个取值的旧说法是把「无运动」也数了进去）。所以 v2 把它压成两张逐关表：
 
 - `motions[]`：运动**程序**（类、参数、速度来源、更新率）；
 - `paths[]`：可选**折线路径**（只有 11/524 个实例真的沿路径走）；
@@ -538,11 +541,11 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 
 | 字段 | 语义 |
 |---|---|
-| `points` | 2–64 个 3D 世界点（米）；相邻点距离 ≥0.05 m；路径是折线，不插值曲率 |
+| `points` | 2–64 个 3D 世界点（米）；相邻点距离 ≥0.05 m；路径是折线，不插值曲率。**64 是引擎容量**，转换时的 Douglas–Peucker 简化规则见 §12.2 |
 | `loop` | `"loop"`（首尾相连）／`"ping_pong"`（来回）／`"once"`（走完停住） |
 | `speedCmPerSec` | 0–500；路径型运动用它，**优先于**逐类型档（原作的规则） |
 
-**路径数据我们目前没有**（原作 11/524 个 Cancer 实例有路径，但提取器只存了 `pathIndex`，没有点表）。v2 先定义表；参考关卡在拿到路径点之前只能把这些实例降级成 `sporadic_walk` 或静态，并在导入报告里记 `paths_missing`。
+**路径点已经有了，但被简化过**：提取器给出 **11 个实例引用 4 条不同路径**（`p00` 2 点、`p15` 59 点、`p22` 2 点、`p23` 50 点），而原作折线很密（`p15` 原始 137 点、`p23` 134 点）。v2 规定 `points` 上限 **64**（引擎定长数组），转换时用 Douglas–Peucker 简化、最大偏差 ≤ 2 cm，每条的 `notes` 记「原始点数 / 容差 / 实测最大偏差」——细则见 §12.2。**不要**在运行时再插值、重采样或按名字找路径。
 
 #### 6.7.5 相位、更新率与运行时调度（Udon）
 
@@ -1014,6 +1017,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 | `[prop_key]` | error | `props[]` 出现未知键（不得静默丢弃） |
 | `[prop_support]` / `[prop_overlap]` | error | 声明支撑不存在/悬空；两件 AABB 互穿且无父子/摞放关系 |
 | `[prop_bounds]` | error | 道具离开 `meta.bounds` 超过 5 cm |
+| `[prop_instance_index]` | error | `props[].instanceIndex` 非整数/布尔/负值；或同一关内重复（它是对表键，必须唯一）。**超出 523 不报错**（出处可能指向提取结果里已不列出的记录） |
 | `[caps_props]` | error | 件数 > `caps.props`（每关按 130/511/4000 档自己声明） |
 | `[caps_motion]` | error | `caps.movingProps > caps.props`，或 `caps.animators > caps.props`（**动画与运动是两回事**：D-11 下动画件可以多于运动件——Cancer 是 153 个骨骼动画实例、129 个有运动的实例，所以 `animators` 只能对 `props`，**不能**对 `movingProps`；旧口径 `animators ≤ movingProps` 会把原作自己的数据判错，2026-11-16 已改） |
 | `[canonical]` | warning | 文件不是规范字节（现有行为） |
@@ -1052,10 +1056,11 @@ WALL_KEYS      = ("id","points","closed","heightM","thicknessM","minBallDiameter
 KILL_KEYS      = ("y","respawn","zoneId")
 PROP_KEYS_V2   = ("itemId","def","kind","behaviour","motion","inherit","phase","clipStart",
                   "shakeOff","zone","position","rotationQuat","scale","aabb","volumeK",
-                  "volumeMm3","absorbDiameterReqMm","absorbable","valueUnits","parent",
-                  "rigidGroup","support","stackedOn","floatingOk","notes")
-DEF_KEYS_V2    = ("id","kind","model","valueUnits","volumeK","collider","scalePolicy",
-                  "speedIndex","clips","notes")
+                  "volumePenalty","volumeMm3","growthMm3","absorbDiameterReqMm","absorbable",
+                  "valueUnits","parent","rigidGroup","support","stackedOn","floatingOk",
+                  "notes","instanceIndex")
+DEF_KEYS_V2    = ("id","kind","model","valueUnits","volumeK","volumePenalty","collider",
+                  "scalePolicy","speedIndex","clips","notes")
 MOTION_KEYS    = ("id","class","speed","path","params","updatesPerSecond","loop",
                   "provenance","notes")
 PROVENANCE_KEYS = ("moveType","motionID","action","backupIndex","pathIndex")
@@ -1069,7 +1074,7 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
 
 `EXPECTED_KEYS` 是**实现与参考文档的实际并集**：`growthMm3`/`structureCount`/`staticObbs`/`overlapBudget` 是 v2 新增的派生/声明量（`valueUnits` 只作为 v1 输入兼容保留、写出时丢弃，两者共存不报警告）。
 
-`PROP_KEYS_V2` **删掉了** v1 的 `group`/`groupId`（原作的视觉挂接组由 `parent` + `rotationQuat` 表达；组容器由导入器按 `parent` 建）、浮点 `absorbDiameterReq`，以及上一版的 `behaviourParams`（`linkAction` 迁到 `inherit`，其余进 `notes`）；**加进了** `behaviour`/`motion`/`inherit`/`phase`/`clipStart`/`shakeOff`/`scale`/`volumeMm3`/`absorbDiameterReqMm`/`parent`/`rigidGroup`/`floatingOk`。删掉的键在 v2 里是未知键，转换器负责搬走。
+`PROP_KEYS_V2` **删掉了** v1 的 `group`/`groupId`（原作的视觉挂接组由 `parent` + `rotationQuat` 表达；组容器由导入器按 `parent` 建）、浮点 `absorbDiameterReq`，以及上一版的 `behaviourParams`（`linkAction` 迁到 `inherit`，其余进 `notes`）；**加进了** `behaviour`/`motion`/`inherit`/`phase`/`clipStart`/`shakeOff`/`scale`/`volumeMm3`/`absorbDiameterReqMm`/`parent`/`rigidGroup`/`floatingOk`，以及 `volumePenalty`/`growthMm3`/`instanceIndex`（前者是逐件回收惩罚，后两者是派生量与对表键，见 §6.2）。删掉的键在 v2 里是未知键，转换器负责搬走。
 
 ---
 
@@ -1197,7 +1202,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | 平面 | 8 | 不变（活动区主边界 + 兜底） |
 | 静态盒 | 8 | 不变（structures 的 `role=box`，接触 v2 后并入 256） |
 | 斜面 | 4 | 不变（`role=ramp`；接触 v2 后并入 256） |
-| 静态 OBB 总表 | 256 | 不变（structures + activity 墙 + 道具近邻共享） |
+| 静态 OBB 总表 | 256 | 不变（structures + activity 墙 + 道具近邻共享）。**已知缺口（2026-11-16）**：`structures.solids` 的接触形状是拟合代理，但静态表只认 OBB，所以参考关卡那 **18 个凸包固体被装箱成 OBB**；真凸包/球/胶囊要新的静态非 OBB 接触通道（`PARITY_AUDIT` 的「静态固体的接触形状」行） |
 | 挡路盒 / 道具支撑 | 6 / 6 | 不变 |
 | 接触 | 4（v1）/ 8（v2） | 地形最多占 2（v1）/ 4（v2），剩余给静态/道具；超了按距离截断并计数 |
 | 地形 | **新增** | 32 chunk / 128 broad box / 每步 48 三角形窄相；地形接触计入上面的总接触预算（v1 2 / v2 4） |
@@ -1210,6 +1215,8 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | `_ref_cancer` | 511 | 3,456 / 7,154 顶点 | ≈113 KB | 7（每块 ≤512） | 1（容量 512） |
 | 未来大关 | 4,000 | ≤8,192 | ≤250 KB | 16 | **8**（每片 512） |
 
+**路径点预算与简化规则（已定，2026-11-16）**：`paths[].points` 上限 **64 点**——这是引擎容量（导入后进 `MotionHost` 的定长数组，§6.7.4），不是审美选择。原作折线很密（`p15` 137 点、`p23` 134 点），转换时用 **Douglas–Peucker** 简化，要求**最大偏差 ≤ 2 cm**，并在每条 path 的 `notes` 里记「原始点数 / 容差 / 实测最大偏差」。实测两例：`p15` 137 → 59（容差 0.013 m，实测偏差 0.0106 m）、`p23` 134 → 50（容差 0.005 m，实测偏差 0.0050 m）。**这是已定的做法，不是待选**；以后若需要原始精度，就改 schema 上限并重新生成折线，届时应单独记，不要悄悄把 64 抬大。
+
 ### 12.3 运动与动画预算
 
 | 项 | 容量 | 依据 |
@@ -1218,7 +1225,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | 运动更新 | 30 Hz（`hop`/`whack_a_mole`）、15 Hz（`sway`/路径/随机游走）、10 Hz（`bob`/`clouds`）、5 Hz（`spin`/`flip`/触发检测）、0 Hz（attached/static/纯表现） | 按位移定（`ORIGINAL_MOTION_PROGRAM` §12.0）；全量 1,810 次/秒 = 12,420 基线的 14.6%，50 Hz 定步可直接承载 |
 | `caps.animators` | **统计字段**（Cancer = 153），不是 64 硬预算 | 2026-11-16 拍板：153 个骨骼实例直接挂普通 Animator/蒙皮，不预先优化；`caps.animators` 只记录数量，供 `[anim_budget]` 对账 |
 | 相位桶 | 8 | `floor(phase × 8) % 8`；桶内同步是可接受的产品取舍（原作相位来源未知） |
-| 每关 `motions`/`paths` | ≤64 / ≤32 条，每条路径 ≤64 点 | 129 个动件只有 16 个 `moveType`；Cancer 真路径 11 条 |
+| 每关 `motions`/`paths` | ≤64 / ≤32 条，每条路径 ≤64 点 | 129 个动件只有 **15 个 `moveType`**（含 `dragged_along`）；Cancer 落成 **14 条 `motions` + 4 条真路径**（11 个实例引用），简化规则见 §12.2 |
 
 **为什么现在是逐实例 Animator**：2026-11-16 拍板不预先优化——参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求极低；「同帧同相看起来机械」用相位/相位桶解决，不靠砍组件数。**为什么不是逐件曲线**：原作是「行为 + 速度档 + 运行时算」，逐件曲线既不能按类型调速，也无法复用逻辑（§6.7.1）。
 

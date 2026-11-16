@@ -17,7 +17,7 @@
 
 - **（a）** 一发现分歧就加一行，六列齐全：区域、原作行为（**带数据来源路径**）、我方、保留我方的理由（没有理由就写 `none -> restore`）、决定、owner。行是活的：决定改了改同一行，不另起一行。
 - **（b）** **默认决定是 `restore`**，除非写下理由，且只认四类：VRChat/Udon 限制、性能预算、授权、owner 的刻意设计选择。没写理由的一律标 `none -> restore`。
-- **（c）** 已知分歧已全部入表（下 24 行）。owner 已拍板的按拍板写；未拍板的写 `undecided`，**不要替 owner 定**。
+- **（c）** 已知分歧已全部入表（下 25 行）。owner 已拍板的按拍板写；未拍板的写 `undecided`，**不要替 owner 定**。
 - **（d）** **未授权的参考资产永不入库**：表里只许写结构、数字、id 和文件路径；不许贴原作资产、模型、贴图或语料（`corpus_*.json` 已在 `.gitignore`，见 §6.1）。
 
 | 区域 area | 原作行为（数据来源路径） | 我方 | 保留我方的理由（或 `none -> restore`） | 决定 | owner |
@@ -45,6 +45,7 @@
 | 骨骼动画的呈现（Animator 数量） | 153 个实例带骨骼蒙皮，逐实例播（19 型、每型 4–6 段剪辑，`ORIGINAL_ANIMATION_OBSERVATIONS` §3/§4/§5.4） | **照原作挂满**：153 个实例各挂普通 Animator + 蒙皮，不做 VAT、不按 64 截断（`LEVEL_FORMAT_V2` §6.7.6、§16.2、D-11） | owner 的刻意设计选择：参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求本身极低，**现阶段不预先优化**；VAT 与「按球距截断」降级为「以后真测出瓶颈再看」 | restore（2026-11-16 重写 D-11；后续真实测量照旧） | owner 2026-11-16 |
 | `WaitForPlayer` 触发门 | 原作 `panicRadii[sizeGroup]`：7 件（`moveType 7`/`motionID 0x00`）本关全是 `size=2` ⇒ **200 cm**；另 8 件（`moveType 10`/`0x04`）条件是 `inZone && parentRolled`，参考实现写死 false、原作真实条件未知（M2）（`ORIGINAL_MOTION_PROGRAM` §4.5、§12.11、§14） | **只有** `wake_radius_m = 12` 的距离剔除，**没有**触发门（`PROP_BEHAVIOURS` §7.2/§7.3） | 两个量语义不同：12 决定「算不算在动」，原作 2–3 m 决定「怕不怕你」；拿 12 当触发门会让球在 12 m 外就把蟹惊跑（覆盖 452 m² vs 12.6/28 m²），把剔除压到 2–3 m 会让院子里 128 件全冻、远处蟹全静止 | separate（12 不动；新增 `triggerRadiusM` 2.0/3.0，原作五档 2/3/5/7/9 m；`0x04` 的 8 件测量前保持静止） | lead 2026-11-16 |
 | `Dummy Hit` 命中判定体 / `Lalala` | 524 条 spawn 里 12 条是 `Dummy Hit 01/02/03`（无网格命中判定体）+ 1 条 `Lalala`（精灵道具，社区模型包无网格），**不是可收集道具**；511 件道具是剩下的部分（`ORIGINAL_MOTION_PROGRAM` §11.3） | 511 件道具；不建这些判定体 | 原作用途未测（是否参与碰撞/吸附判定未知） | keep（v1 不建；实机测量后再定是否需要） | lead 2026-11-16 |
+| 静态固体的接触形状（`structures.solids`） | 原作的静态碰撞**跟模型形状**：参考关卡 35 条 scenery 固体（门 > 1.2 m、整件外壳），其中 **18 个是凸包**、17 个能当 box（`Docs/Design/Levels/_ref_cancer/placement.v2.json`、`REF_STAGE_VIEW.md`） | 导入的接触形状已经是**拟合代理**（`shape:"proxy"`，`proxySource` 记 `def`/`aabb-fallback`/`manual`），但**电机的静态表只认 OBB**，所以那 18 个凸包今天被「装箱成 OBB」 | 真凸包/球/胶囊需要一条新的**静态非 OBB 接触通道**（另需一条「只支撑不阻挡」的静态通道）；OBB 装箱是近似，不是原作的形状。导入器**没有静默降级**：逐件打 note + 汇总一行 | acknowledged（待新通道；不是 v1 阻塞） | lead 2026-11-16 |
 | 支撑图（`rests_on`） | **堆叠逻辑无公开证据**：专利也不讲堆叠，官方图鉴只有反证（`PROP_BEHAVIOURS.md` §5.1）；但原作数据侧有**单父指针** `parentProp.monoControlIndex`（1,970 条子件 / 1,082 个父件 / 链深 13 层，§10.4）——那就是原作表达「组」的唯一形式 | `support`/`stackedOn` 只喂校验器；Python 有 CSR 支撑图（`support_graph.py`，活计数 + 上限 4）；运行时没有（`C05`） | 原作**逻辑**未知（拿得到数据、拿不到逻辑，§10.4/P18）；按原作的父指针形状做，不做支撑计数 | restore（**用原作的父指针形式**；owner 2026-11-16 确认「子件坠落、不带」，v1 设计见 `PROP_BEHAVIOURS.md` §10.9 / `OPEN_DECISIONS` (s)） | owner 2026-11-16 |
 
 > 细节不在这里重复：`k` 系数与三处同源见 §5.3.2；D1/D2 落地后哪几行会变见 §5.1；连续体积的 7 个受影响点见 §5.2；21 档核心的观感论证见 `VISUAL_GROWTH_AUDIT.md` §3b/§5；行为与支撑见 `PROP_BEHAVIOURS.md`。本表只负责「承认分歧 + 定方向」。

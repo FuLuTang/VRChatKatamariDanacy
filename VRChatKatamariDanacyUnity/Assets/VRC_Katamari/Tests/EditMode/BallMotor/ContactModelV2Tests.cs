@@ -628,23 +628,33 @@ namespace VRCKatamari.Tests
             // Start must not re-allocate the table over it (pass6 read
             // GetStaticObbCount == 0 while [arena] reported obbs=1/1).
             GameObject earlyHost = new GameObject("ContactModelV2TestsPreStart");
-            Component early = earlyHost.AddComponent(motorType);
-            MethodInfo addObb = motorType.GetMethod("AddObb", Any);
-            Assert.IsNotNull(addObb, "AddObb not found");
-            bool accepted = (bool)addObb.Invoke(early, new object[]
+            bool accepted;
+            int countBeforeStart;
+            int countAfterStart;
+            try
             {
-                new Vector3(0f, 0.25f, 0f), new Vector3(1f, 0f, 0f),
-                new Vector3(0f, 1f, 0f), new Vector3(0f, 0f, 1f),
-                new Vector3(1f, 0.25f, 1f), 1, ContactCodes.RoleBox,
-            });
-            int countBeforeStart = (int)motorType.GetField("staticObbCount", Any)
-                .GetValue(early);
-            MethodInfo start = motorType.GetMethod("Start", Any);
-            Assert.IsNotNull(start, "Start not found");
-            start.Invoke(early, null);
-            int countAfterStart = (int)motorType.GetField("staticObbCount", Any)
-                .GetValue(early);
-            UnityEngine.Object.DestroyImmediate(earlyHost);
+                Component early = earlyHost.AddComponent(motorType);
+                MethodInfo addObb = motorType.GetMethod("AddObb", Any);
+                Assert.IsNotNull(addObb, "AddObb not found");
+                accepted = (bool)addObb.Invoke(early, new object[]
+                {
+                    new Vector3(0f, 0.25f, 0f), new Vector3(1f, 0f, 0f),
+                    new Vector3(0f, 1f, 0f), new Vector3(0f, 0f, 1f),
+                    new Vector3(1f, 0.25f, 1f), 1, ContactCodes.RoleBox,
+                });
+                countBeforeStart = (int)motorType.GetField("staticObbCount", Any)
+                    .GetValue(early);
+                MethodInfo start = motorType.GetMethod("Start", Any);
+                Assert.IsNotNull(start, "Start not found");
+                start.Invoke(early, null);
+                countAfterStart = (int)motorType.GetField("staticObbCount", Any)
+                    .GetValue(early);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(earlyHost);
+            }
+
             Assert.IsTrue(accepted, "registration before Start must be accepted");
             Assert.AreEqual(1, countBeforeStart, "the table exists as soon as it is needed");
             Assert.AreEqual(1, countAfterStart,

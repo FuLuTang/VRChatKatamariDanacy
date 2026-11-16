@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
@@ -30,11 +31,40 @@ namespace VRCKatamari.Tests
     /// <c>PickupFieldAuthoringRulesTests</c> does. Expected numbers are hand calculations
     /// for a 1.6 x 0.35 x 0.6 box yawed 90 degrees, not re-runs of the implementation.
     /// </para>
+    /// <para>
+    /// The fixture prop is built in whatever scene the operator has open (an EditMode test
+    /// has none of its own), so it follows the rule in
+    /// <c>Docs/Design/CODE_CONVENTIONS.md</c>: every created object is tracked from the
+    /// moment it exists and destroyed again in <c>[TearDown]</c>. The thrown-away prop must
+    /// never be left behind, because the next save of the open scene (StoryMode.unity in the
+    /// incident this guards) would write it into the repository. Tracking happens inside
+    /// <see cref="CreateProp"/> rather than in each test, so a failure between the two
+    /// creations is cleaned up as well, and every object is also flagged
+    /// <see cref="HideFlags.DontSave"/>: a run that is aborted before TearDown still cannot
+    /// serialize the leftover into the scene.
+    /// </para>
     /// </remarks>
     public class RadialProxyLocalBoundsTests
     {
         private const string SyncTypeName = "VRCKatamari.Editor.Pickup.PickupFieldSync";
         private const float Tolerance = 1e-4f;
+
+        // Creation order; destroyed in reverse order in TearDown.
+        private readonly List<GameObject> created = new List<GameObject>();
+
+        [TearDown]
+        public void TearDown()
+        {
+            for (int i = created.Count - 1; i >= 0; i--)
+            {
+                if (created[i] != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(created[i]);
+                }
+            }
+
+            created.Clear();
+        }
 
         [Test]
         public void TurnedPropUsesLocalExtentsOnItsOwnLongAxis()
@@ -42,45 +72,34 @@ namespace VRCKatamari.Tests
             // The lounge chair's model is 1.6 m long on its local X. At yaw 90 that length
             // lies on world Z, so the world AABB is 0.6 x 0.35 x 1.6. The shell must get
             // 1.6 x 0.35 x 0.6 and let localRotation (which contains the yaw) place it.
-            GameObject root = null;
-            try
-            {
-                root = CreateProp(new Vector3(1.6f, 0.35f, 0.6f),
-                    Quaternion.AngleAxis(90f, Vector3.up));
-                Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
-                Assert.AreEqual(1, renderers.Length, "one visual renderer");
+            GameObject root = CreateProp(new Vector3(1.6f, 0.35f, 0.6f),
+                Quaternion.AngleAxis(90f, Vector3.up));
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            Assert.AreEqual(1, renderers.Length, "one visual renderer");
 
-                Vector3 local = MeasureLocalBounds(root.transform, renderers);
-                AssertVector(new Vector3(1.6f, 0.35f, 0.6f), local,
-                    "propLocalBounds is measured along the prop's own axes");
-                AssertVector(new Vector3(0.6f, 0.35f, 1.6f), renderers[0].bounds.size,
-                    "propBounds stays the world AABB");
+            Vector3 local = MeasureLocalBounds(root.transform, renderers);
+            AssertVector(new Vector3(1.6f, 0.35f, 0.6f), local,
+                "propLocalBounds is measured along the prop's own axes");
+            AssertVector(new Vector3(0.6f, 0.35f, 1.6f), renderers[0].bounds.size,
+                "propBounds stays the world AABB");
 
-                Vector3 localPosition;
-                Quaternion localRotation;
-                Assert.IsTrue(AttachmentMath.TryWorldPoseToLocal(Vector3.zero,
-                        Quaternion.identity, root.transform.position, root.transform.rotation,
-                        root.transform.lossyScale, out localPosition, out localRotation),
-                    "the runtime pose conversion accepts the prop");
+            Vector3 localPosition;
+            Quaternion localRotation;
+            Assert.IsTrue(AttachmentMath.TryWorldPoseToLocal(Vector3.zero,
+                    Quaternion.identity, root.transform.position, root.transform.rotation,
+                    root.transform.lossyScale, out localPosition, out localRotation),
+                "the runtime pose conversion accepts the prop");
 
-                Vector3[] corners = new Vector3[RadialProxyShellMath.AabbCornerCount];
-                float farthest;
-                Assert.IsTrue(RadialProxyShellMath.TryBuildAabbCorners(Vector3.zero,
-                    localRotation, local, corners, out farthest));
+            Vector3[] corners = new Vector3[RadialProxyShellMath.AabbCornerCount];
+            float farthest;
+            Assert.IsTrue(RadialProxyShellMath.TryBuildAabbCorners(Vector3.zero,
+                localRotation, local, corners, out farthest));
 
-                // local +X turned +90 about +Y points along -Z in the ball frame, so the
-                // 0.8 m half-length lands on Z and the 0.3 m half-width on X.
-                Assert.AreEqual(0.3f, MaxAbs(corners, 0), 1e-3f, "thin axis after the turn");
-                Assert.AreEqual(0.8f, MaxAbs(corners, 2), 1e-3f, "long axis follows the prop");
-                Assert.Greater(farthest, 0.8f, "the far corner is a long-object tip");
-            }
-            finally
-            {
-                if (root != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(root);
-                }
-            }
+            // local +X turned +90 about +Y points along -Z in the ball frame, so the
+            // 0.8 m half-length lands on Z and the 0.3 m half-width on X.
+            Assert.AreEqual(0.3f, MaxAbs(corners, 0), 1e-3f, "thin axis after the turn");
+            Assert.AreEqual(0.8f, MaxAbs(corners, 2), 1e-3f, "long axis follows the prop");
+            Assert.Greater(farthest, 0.8f, "the far corner is a long-object tip");
         }
 
         [Test]
@@ -157,27 +176,16 @@ namespace VRCKatamari.Tests
         {
             // The column is authored once. Re-posing the prop in the scene must not change
             // it: the root rotation is the runtime's job, so the measurement cancels it.
-            GameObject root = null;
-            try
-            {
-                root = CreateProp(new Vector3(0.9f, 0.2f, 1.4f), Quaternion.identity);
-                Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
-                Vector3 atRest = MeasureLocalBounds(root.transform, renderers);
+            GameObject root = CreateProp(new Vector3(0.9f, 0.2f, 1.4f), Quaternion.identity);
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            Vector3 atRest = MeasureLocalBounds(root.transform, renderers);
 
-                root.transform.rotation = Quaternion.AngleAxis(37f,
-                    new Vector3(1f, 2f, 3f).normalized);
-                Vector3 turned = MeasureLocalBounds(root.transform, renderers);
+            root.transform.rotation = Quaternion.AngleAxis(37f,
+                new Vector3(1f, 2f, 3f).normalized);
+            Vector3 turned = MeasureLocalBounds(root.transform, renderers);
 
-                AssertVector(new Vector3(0.9f, 0.2f, 1.4f), atRest, "authored local size");
-                AssertVector(atRest, turned, "the root rotation is not baked into the column");
-            }
-            finally
-            {
-                if (root != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(root);
-                }
-            }
+            AssertVector(new Vector3(0.9f, 0.2f, 1.4f), atRest, "authored local size");
+            AssertVector(atRest, turned, "the root rotation is not baked into the column");
         }
 
         [Test]
@@ -185,29 +193,18 @@ namespace VRCKatamari.Tests
         {
             // A child turned 45 degrees inside the prop is part of the prop's own axes: the
             // local column must enclose it, not read the child's un-rotated mesh size.
-            GameObject root = null;
-            try
-            {
-                root = CreateProp(new Vector3(1f, 0.1f, 0.1f), Quaternion.identity);
-                Transform visual = root.transform.GetChild(0);
-                visual.localRotation = Quaternion.AngleAxis(45f, Vector3.up);
-                Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            GameObject root = CreateProp(new Vector3(1f, 0.1f, 0.1f), Quaternion.identity);
+            Transform visual = root.transform.GetChild(0);
+            visual.localRotation = Quaternion.AngleAxis(45f, Vector3.up);
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
 
-                Vector3 local = MeasureLocalBounds(root.transform, renderers);
-                // Half extents: 0.5*cos45 + 0.05*sin45 = 0.38909 m on X and Z; Y unchanged.
-                float expectedWidth = 2f * (0.5f * Mathf.Cos(45f * Mathf.Deg2Rad) +
-                                            0.05f * Mathf.Sin(45f * Mathf.Deg2Rad));
-                Assert.AreEqual(expectedWidth, local.x, 1e-3f, "rotated child width");
-                Assert.AreEqual(expectedWidth, local.z, 1e-3f, "rotated child depth");
-                Assert.AreEqual(0.1f, local.y, 1e-3f, "thin axis unchanged");
-            }
-            finally
-            {
-                if (root != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(root);
-                }
-            }
+            Vector3 local = MeasureLocalBounds(root.transform, renderers);
+            // Half extents: 0.5*cos45 + 0.05*sin45 = 0.38909 m on X and Z; Y unchanged.
+            float expectedWidth = 2f * (0.5f * Mathf.Cos(45f * Mathf.Deg2Rad) +
+                                        0.05f * Mathf.Sin(45f * Mathf.Deg2Rad));
+            Assert.AreEqual(expectedWidth, local.x, 1e-3f, "rotated child width");
+            Assert.AreEqual(expectedWidth, local.z, 1e-3f, "rotated child depth");
+            Assert.AreEqual(0.1f, local.y, 1e-3f, "thin axis unchanged");
         }
 
         [Test]
@@ -216,36 +213,25 @@ namespace VRCKatamari.Tests
             // The level importer creates its props from FBX models whose import settings
             // have addColliders: 0. Without this step propColliders would be empty, the host
             // would warn, and an absorbed prop would keep its (here: missing) collider.
-            GameObject root = null;
-            try
-            {
-                root = CreateProp(new Vector3(1.6f, 0.35f, 0.6f),
-                    Quaternion.AngleAxis(90f, Vector3.up));
-                Assert.IsNull(root.GetComponentInChildren<Collider>(true),
-                    "the fixture starts with no collider, like an imported FBX prop");
+            GameObject root = CreateProp(new Vector3(1.6f, 0.35f, 0.6f),
+                Quaternion.AngleAxis(90f, Vector3.up));
+            Assert.IsNull(root.GetComponentInChildren<Collider>(true),
+                "the fixture starts with no collider, like an imported FBX prop");
 
-                Collider first = EnsureCollider(root);
-                Assert.IsNotNull(first, "a prop with no collider must get one");
-                Assert.IsTrue(first is BoxCollider, "the created collider is a BoxCollider");
-                Assert.AreSame(root, first.gameObject, "the box lives on the prop root");
+            Collider first = EnsureCollider(root);
+            Assert.IsNotNull(first, "a prop with no collider must get one");
+            Assert.IsTrue(first is BoxCollider, "the created collider is a BoxCollider");
+            Assert.AreSame(root, first.gameObject, "the box lives on the prop root");
 
-                var box = (BoxCollider)first;
-                AssertVector(new Vector3(1.6f, 0.35f, 0.6f), box.size,
-                    "the box follows the prop's own axes, not the world AABB");
-                AssertVector(Vector3.zero, box.center, "the fixture's mesh is centred on the root");
+            var box = (BoxCollider)first;
+            AssertVector(new Vector3(1.6f, 0.35f, 0.6f), box.size,
+                "the box follows the prop's own axes, not the world AABB");
+            AssertVector(Vector3.zero, box.center, "the fixture's mesh is centred on the root");
 
-                Collider second = EnsureCollider(root);
-                Assert.AreSame(first, second, "a second sync must reuse the created collider");
-                Assert.AreEqual(1, root.GetComponentsInChildren<Collider>(true).Length,
-                    "one collider per prop is the host's contract");
-            }
-            finally
-            {
-                if (root != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(root);
-                }
-            }
+            Collider second = EnsureCollider(root);
+            Assert.AreSame(first, second, "a second sync must reuse the created collider");
+            Assert.AreEqual(1, root.GetComponentsInChildren<Collider>(true).Length,
+                "one collider per prop is the host's contract");
         }
 
         [Test]
@@ -253,37 +239,33 @@ namespace VRCKatamari.Tests
         {
             // A hand-wired prop (the old scenes) keeps its authored collider; the importer's
             // create-missing path must not add a second one to the root.
-            GameObject root = null;
-            try
-            {
-                root = CreateProp(new Vector3(0.8f, 0.4f, 0.6f), Quaternion.identity);
-                Collider authored = root.transform.GetChild(0).gameObject.AddComponent<BoxCollider>();
+            GameObject root = CreateProp(new Vector3(0.8f, 0.4f, 0.6f), Quaternion.identity);
+            Collider authored = root.transform.GetChild(0).gameObject.AddComponent<BoxCollider>();
 
-                Collider wired = EnsureCollider(root);
+            Collider wired = EnsureCollider(root);
 
-                Assert.AreSame(authored, wired, "the existing child collider is the row's slot");
-                Assert.IsNull(root.GetComponent<Collider>(),
-                    "no second collider is added when one already exists");
-                Assert.AreEqual(1, root.GetComponentsInChildren<Collider>(true).Length,
-                    "still one collider per prop");
-            }
-            finally
-            {
-                if (root != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(root);
-                }
-            }
+            Assert.AreSame(authored, wired, "the existing child collider is the row's slot");
+            Assert.IsNull(root.GetComponent<Collider>(),
+                "no second collider is added when one already exists");
+            Assert.AreEqual(1, root.GetComponentsInChildren<Collider>(true).Length,
+                "still one collider per prop");
         }
 
         // ------------------------------------------------------------- fixtures ---
 
-        private static GameObject CreateProp(Vector3 localSize, Quaternion rootRotation)
+        private GameObject CreateProp(Vector3 localSize, Quaternion rootRotation)
         {
             var root = new GameObject("test_prop");
+            // Tracked (and DontSave) as soon as it exists: an exception in the lines below
+            // must not leave a prop the operator's next scene save would commit.
+            root.hideFlags = HideFlags.DontSave;
+            created.Add(root);
             root.transform.rotation = rootRotation;
+
             GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Cube);
             visual.name = "visual";
+            visual.hideFlags = HideFlags.DontSave;
+            created.Add(visual);
             visual.transform.SetParent(root.transform, false);
             visual.transform.localPosition = Vector3.zero;
             visual.transform.localRotation = Quaternion.identity;

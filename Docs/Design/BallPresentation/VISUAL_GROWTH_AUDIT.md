@@ -1,5 +1,7 @@
 # VISUAL_GROWTH_AUDIT — 吸附之后，视觉球到底有没有马上变大
 
+> **2026-11-16 owner 实机记录（此后以此为准）：** 一轮 StoryMode Play，29 次 `[grow]` 的每次吸收直径增幅 min **0.2%** / 中位 **2.5%** / max **23.8%**；D<0.4 档中位 **16.3%**；D>1.0 档连续 3 次 ≤ **0.9%**；`[shell]` 的 swallowed/attached 收敛到 **22/30**。owner 判定：**开了 80 ms 弹簧仍读作「跳一下」**，所以 **80 ms 核心追赶弹簧已从 play 移除**（`BallView.smoothCoreGrowth` 默认关，数学与单测保留、作选项目；场景里的序列化值需 Unity 操作者改成 0）。真因是**价值定价**（整数 unit 的最小增益过大），修复走定点体积与 level-1 重定价，见 `Docs/Research/ContentVolume/WHY_OUR_GROWTH_IS_BIG.md`。测量原文：`Docs/Evidence/BallPresentation/2026-11-16_owner_play_log/summary.md`。
+
 - 日期：2026-11-15
 - 范围：只读审计 + 离线模型 + 提案。**没有跑 Unity**（本 agent 不是 Unity 操作者），没有任何 Play Mode 观感结论标 PASS。
 - 证据分级：`[代码事实]` 可在本仓库复核（`文件:行`）。**行号核对于 2026-11-15T22:55Z；`KatamariBallMotor.cs`/`PickupFieldHost.cs` 同时被其他 agent 修改，若行号漂移请以函数名为准。**

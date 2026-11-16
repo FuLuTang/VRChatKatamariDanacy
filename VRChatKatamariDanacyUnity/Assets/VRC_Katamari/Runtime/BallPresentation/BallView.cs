@@ -33,13 +33,16 @@ namespace VRCKatamari.BallPresentation
     /// the physical diameter, 5% larger than the design).
     /// </para>
     /// <para>
-    /// <b>Short catch-up spring</b> (<c>smoothCoreGrowth</c>, on by default). The motor
-    /// re-derives the diameter in the same fixed step that commits an absorb, so a raw copy
-    /// turns every absorb into a step. The spring (<see cref="BallPresentationMath"/>, time
-    /// constant 0.08 s, critically damped) makes that read as the ball being inflated: it
-    /// never crosses the target, it snaps bit-exactly onto it once it is within 1e-5 m, and a
-    /// target that collapsed by more than half (a new round, a respawn) snaps instead of
-    /// being animated. Off restores the dead-zone-only copy this layer used before.
+    /// <b>Short catch-up spring</b> (<c>smoothCoreGrowth</c>, off by default; kept as an
+    /// option). The motor re-derives the diameter in the same fixed step that commits an
+    /// absorb, so a raw copy turns every absorb into a step. The spring
+    /// (<see cref="BallPresentationMath"/>, time constant 0.08 s, critically damped) makes
+    /// that read as the ball being inflated: it never crosses the target, it snaps
+    /// bit-exactly onto it once it is within 1e-5 m, and a target that collapsed by more than
+    /// half (a new round, a respawn) snaps instead of being animated. It is off by default
+    /// because the owner removed it on 2026-11-16: growth still read as a jump even with the
+    /// spring on, since the real cause is value pricing, not smoothing. Revisit after
+    /// repricing. Off is exactly the dead-zone-only copy this layer used before.
     /// </para>
     /// <para>
     /// It writes no rotation: visual roll belongs to the visual-roll layer, which
@@ -72,8 +75,8 @@ namespace VRCKatamari.BallPresentation
         [Tooltip("Draw the core at 0.95 x the physical radius (CONTACT_MODEL_V2 4A.2), so absorbed props stick out of it. Off draws the full physical diameter.")]
         [SerializeField] private bool useVisualCoreRadius = true;
 
-        [Tooltip("Catch a size change with a short spring instead of jumping to it. Presentation only; the physical radius, the absorb gate and the camera are untouched.")]
-        [SerializeField] private bool smoothCoreGrowth = true;
+        [Tooltip("Off by default; kept as an option, owner removed it 2026-11-16 because growth still read as a jump; revisit after repricing. On catches a size change with a short spring instead of jumping to it (presentation only; the physical radius, the absorb gate and the camera are untouched).")]
+        [SerializeField] private bool smoothCoreGrowth = false;
 
         [Tooltip("Critically damped catch-up time in seconds. 0.08 s is 96% caught up at 200 ms and bit-exact on target by about 0.42 s. A non-positive value falls back to 0.08.")]
         [SerializeField] private float smoothTimeSeconds = defaultSmoothTimeSeconds;

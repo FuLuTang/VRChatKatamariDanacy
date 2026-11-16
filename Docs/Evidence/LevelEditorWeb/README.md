@@ -109,3 +109,37 @@ python3 Tools/leveleditor/server.py --level _ref_cancer --port 8791
   492 件 / 911.25 m³ / 155,235 u，页面区域盒与统计面板可正常显示。
 - 测试：`python3 -m unittest discover -s Docs/tests` → **790 passed**；
   `python3 Docs/tools/validate_plan.py` → **PASS**。
+
+## v2 文档查看（`_ref_cancer/placement.v2.json`，2026-11-16）
+
+v2 的截图同样含未授权网格，只放在仓库外 `~/KatamariRef/viewer_evidence/`；仓库里只写描述。
+
+```bash
+python3 Tools/leveleditor/server.py --level _ref_cancer --port 8794
+# 默认就是 placement.v2.json；要复现旧文件：
+python3 Tools/leveleditor/server.py --level _ref_cancer --port 8795 --placement placement.model.json
+```
+
+- `ref_cancer_v2_perspective.png`：整关 3/4 远景。59×80 m 的场地里，中心是 v2 地形
+  （绿/棕分区；侧车 3,455 三角里 class 3 的碰撞墙面默认不画，规则墙由活动墙层表示），
+  35 个固体是紫色解析盒，活动墙是青色 20×15 m 矩形（高 3 m），
+  kill plane 是红色网格（y=-4），511 件道具按原作位置/旋转/缩放摆放；屋顶、树冠、
+  房屋、昆虫笼等贴图模型可见。右侧阶梯 D=0.30 m 显示 214 食物 / 65 黄 / 148 红 / 84 灰。
+- `ref_cancer_v2_top.png`：正俯视整关。能数出地形分区、紫色固体、墙上沿、树木列和
+  场地边界；kill plane 红网格铺在场地下方。地形仅覆盖 20×15 m 碰撞核心，核心外的
+  511 件布景本来就只有 v1 的视觉 stage 有地面，v2 碰撞文档没有——不是渲染丢失。
+- `ref_cancer_v2_parent_lines.png`：选中 `beetle_fight_001`（父 `insect_cage_001`），
+  品红色父子线从子件连到笼子；选中面板显示 `parent`、`behaviour`、`scale`、`absorbable`、
+  `growthMm3` 和「参考网格 UNLICENSED」。
+- `ref_cancer_v2_after_switch.png`：从 v1 文件点「打开 v2」后的同一页；横幅变成 v2、
+  v2 工具条出现、校验变成「结构检查（v2）0 错」。
+- `ref_cancer_v1_legacy.png`：显式打开 `placement.model.json` 时的黄色横幅
+  「这是 v1 旧文档，已被 v2 取代」+「打开 v2」按钮；它明确说明 v1 的 544 个错误
+  不代表 v2 数据。
+- `ref_cancer_v2_evidence.json`：本次 headless 的计数/开关/加载时间/异常记录。
+
+本次读出：v2 结构检查 **0 错**（`ref_v2_from_extract.structural_errors`）；511 props /
+145 defs / 35 solids / 1 wall / 83 parent links / 3,455 terrain triangles。页面 ready
+约 17 s（SwiftShader 软件 GL；其中 WebGL 初始化 ~15 s、145 GLB 加载 ~1.6 s），渲染
+1,140 draw calls / 120,917 triangles。`/api/v2/*` 的七个开关均有 HTTP 入口；
+v2 编辑/设计数值校验器仍未实现（见 `Docs/Design/Tools/EDITOR_HUMAN_AI_PARITY.md` §1.2.1）。

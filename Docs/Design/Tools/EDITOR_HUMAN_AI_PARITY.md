@@ -81,6 +81,28 @@ CLI 约 15 项；真正缺的是四类：
 | 32 | 查看（本次 `shot.py`） | 浏览器自己看 | **`GET /api/render`** | **`shot.py`** | **Python 相机规划 + 页面执行** | ✅ 新基线 |
 
 **计数**：32 项能力；✅ 14、⚠️ 11、❌ 7（不含仅视图的 31）。
+
+### 1.2.1 v2 视图开关（2026-11-16 落地状态）
+
+v2 文档（`katamari.placement/2`）当前是**只读查看**路径；每个视图开关的 GUI 控件与
+HTTP 入口共用同一份 Python 数据（`Tools/leveleditor/v2_document.py`；侧车用
+`placement_v2.read_sidecar`，结构检查用 `ref_v2_from_extract.structural_errors`）。
+
+| 开关 | GUI id | HTTP（同一实现） | 数据/状态 |
+|---|---|---|---|
+| v2 地形 | `show-v2-terrain` | `GET /api/v2/terrain`；`/api/v2/view?terrain=1` | 3,455 三角 / 7,154 顶点，来自 `.katerrain`；✅ |
+| v2 固体 | `show-v2-solids` | `GET /api/v2/solids`；`/api/v2/view?solids=1` | `structures.solids` 35 条；GUI 紫色盒；✅ |
+| v2 活动墙 | `show-v2-walls` | `GET /api/v2/activity`；`/api/v2/view?walls=1` | `activityArea.walls` 1 面；✅ |
+| v2 kill plane | `show-v2-kill-plane` | `GET /api/v2/activity`；`/api/v2/view?kill=1` | `activityArea.killPlane`（y −4.0）；✅ |
+| v2 父子 | `show-v2-parent-lines` | `GET /api/v2/parents`；`/api/v2/view?parents=1` | `props[].parent` 83 条；✅ |
+| 应用旋转 | `v2-apply-rotation` | `GET /api/v2/props?rotation=0`；`/api/v2/view?rotation=0` | 392 件有旋转；关闭只改显示；✅ |
+| 应用缩放 | `v2-apply-scale` | `GET /api/v2/props?scale=0`；`/api/v2/view?scale=0` | 6 件有缩放；关闭只改显示；✅ |
+
+聚合入口：`GET /api/v2/layers`（开关清单 + 计数）、`GET /api/v2/view?terrain=&solids=&walls=&kill=&parents=&rotation=&scale=&props=`
+（任意组合，等价于 GUI 的可见性/旋转/缩放状态）。v2 的编辑/校验仍是只读：
+mutating op 返回错误，`check` 明确标为「结构检查（v2）」，不跑 v1 校验器，也不显示
+v1 的 544 个错误。**缺口**：v2 设计数值校验器、v2 编辑路径、`motions[]/paths[]` 预览
+（E9/E10）仍未实现；`shot.py` 的 layer 名尚未加 v2 别名，HTTP 入口以 `/api/v2/*` 为准。
 真正的 ❌ 集中在 **选择模型、自动坐正、复制、分析 op、v2 新能力**。
 
 ## 1.3 只在 JS / 重复实现的逻辑（逐条 file:symbol）

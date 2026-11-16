@@ -62,6 +62,31 @@
       </label>
     </div>
 
+    <div class="group v2-tools hidden" id="v2-tools"
+         title="katamari.placement/2 图层（UNLICENSED 本地参考数据，只显示、不分发）">
+      <label class="toggle" title="v2 地形：从 terrain/cancer.katerrain 侧车读取的碰撞三角网">
+        <input id="show-v2-terrain" type="checkbox" checked> v2 地形
+      </label>
+      <label class="toggle" title="v2 固体：structures.solids（35 条解析盒）">
+        <input id="show-v2-solids" type="checkbox" checked> 固体
+      </label>
+      <label class="toggle" title="v2 活动墙：activityArea.walls">
+        <input id="show-v2-walls" type="checkbox" checked> 活动墙
+      </label>
+      <label class="toggle" title="v2 kill plane：activityArea.killPlane.y">
+        <input id="show-v2-kill-plane" type="checkbox" checked> kill plane
+      </label>
+      <label class="toggle" title="v2 父子指针：props[].parent（83 条）">
+        <input id="show-v2-parent-lines" type="checkbox"> 父子
+      </label>
+      <label class="toggle" title="应用 props[].rotationQuat（关闭只是查看，不改文件）">
+        <input id="v2-apply-rotation" type="checkbox" checked> 旋转
+      </label>
+      <label class="toggle" title="应用 props[].scale（关闭只是查看，不改文件）">
+        <input id="v2-apply-scale" type="checkbox" checked> 缩放
+      </label>
+    </div>
+
     <div class="group">
       <button id="undo" title="撤销 (Ctrl+Z)">↶</button>
       <button id="redo" title="重做 (Ctrl+Y / Ctrl+Shift+Z)">↷</button>
@@ -120,6 +145,11 @@
       <div id="ref-banner" class="ref-banner hidden" role="alert">
         <strong>UNLICENSED REFERENCE</strong>
         <span id="ref-banner-text"></span>
+      </div>
+      <div id="legacy-banner" class="legacy-banner hidden" role="alert">
+        <strong>v1 旧文档</strong>
+        <span id="legacy-text"></span>
+        <button id="open-v2" class="primary mini">打开 v2</button>
       </div>
       <div id="tool-hud" class="tool-hud">
         <div class="tool-row">

@@ -168,6 +168,27 @@ python3 Tools/leveleditor/server.py --level _ref_mas1 --ref-models-dir ~/Katamar
 - 模型响应带 `X-Unlicensed-Reference: 1` 且 `Cache-Control: no-store`；普通关卡打开时
   `/api/models/<ref-def>.glb` 一律 404，参考网格不会被别的关卡借走。
 
+### 4.2 v2 文档（`katamari.placement/2`，只读查看）
+
+`_ref_*` 现在**默认打开 `placement.v2.json`**（`--placement` 可显式指定）。v2 的五层由
+`Tools/leveleditor/v2_document.py` 读取，侧车解析复用 `placement_v2.read_sidecar`，结构检查
+复用 `ref_v2_from_extract.structural_errors`；**不**把 v2 翻成 v1 再跑 v1 校验器。
+
+- 顶部工具条变成 v2 图层：`v2 地形`/`固体`/`活动墙`/`kill plane`/`父子`/`旋转`/`缩放`。
+  v2 地形来自 `terrain/*.katerrain`（3,455 三角 / 7,154 顶点），固体 35 条，活动墙 1 面，
+  kill plane `y=-4.0`，`props[].parent` 83 条，旋转 392 件、缩放 6 件。
+- 校验面板明确写「结构检查（v2）」：只跑 `structural_errors()`，不再显示 v1 的 544 个错误；
+  v2 设计数值校验器未交付前，物理提示只按 `absorbDiameterReqMm` 分食物/挡路。
+- 每个开关都有 HTTP 入口（同一 Python 实现）：`/api/v2/terrain`、`/api/v2/solids`、
+  `/api/v2/activity`、`/api/v2/parents`、`/api/v2/props?rotation=0|1&scale=0|1`、
+  `/api/v2/view?...`（组合）、`/api/v2/layers`（清单与计数）。GUI 初始从 `/api/v2/view`
+  取数；开关只改可见性/显示变换，不改文件。
+- v2 是**只读**：所有 mutating op / `export` / `batch` 拒绝；`check`/`status`/`list`/`get`
+  走 v2 路径，不进入 v1 `Editor`。
+- 若显式打开一个 v1 文件（例如 `--placement placement.model.json`），而同目录有
+  `placement.v2.json`，页面顶部出现黄色横幅「这是 v1 旧文档，已被 v2 取代」和「打开 v2」
+  按钮；v1 关卡（第一关）行为不变，只有存在 v2 兄弟文件时才提示。
+
 
 ---
 
@@ -340,8 +361,10 @@ Tools/leveleditor/
 │   └── vendor/three/         # three r186 + addons + LICENSE（MIT）
 └── test/smoke.mjs            # 可选浏览器冒烟
 Tools/levelbuild/ref_models.py # _ref_* 本地网格解析与只读规则（唯一实现）
+Tools/leveleditor/v2_document.py # v2 只读加载/图层/结构检查适配（侧车复用 placement_v2）
 Docs/tests/leveleditor/
 ├── test_web_server.py        # API/权限/undo/原子写/锁/冲突/SSE
 ├── test_ref_models.py        # 参考关卡解析/只读/不跨关卡提供网格
+├── test_v2_editor.py         # v2 默认打开/结构检查/图层 HTTP/legacy 提示
 └── test_coordinate_audit.py  # 坐标审计（椅子/花圃/斜面/边界）
 ```

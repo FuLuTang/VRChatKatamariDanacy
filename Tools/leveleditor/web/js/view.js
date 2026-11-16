@@ -159,6 +159,20 @@ export class EditorView {
     this.showLegacyPlanes = false;
     this.useOriginalHeight = true;
     this.refLoadMs = null;
+    //: v2 (katamari.placement/2): terrain sidecar mesh, solids, activity walls/kill
+    //: plane and the original prop rotation/scale.  All layers come from /api/v2/*.
+    this.v2Mode = false;
+    this.v2Summary = null;
+    this.v2View = null;
+    this.v2WallsGroup = null;
+    this.v2KillGroup = null;
+    this.v2WallCount = 0;
+    this.v2ParentLinks = [];
+    this.v2Rotations = true;
+    this.v2Scale = true;
+    this.v2ShowSolids = true;
+    this.v2ShowWalls = true;
+    this.v2ShowKill = true;
     this.multiFrame = null;
     this.showWorldBoxes = false;
     this.boxStyle = "obb";
@@ -831,6 +845,11 @@ export class EditorView {
         zone: data.zone,
         group: data.group,
         groupId: data.groupId,
+        parent: data.parent,
+        scale: data.scale,
+        behaviour: data.behaviour,
+        absorbable: data.absorbable,
+        growthMm3: derived?.growthMm3 ?? data.growthMm3,
         refModel: Boolean(this.refMode && (this.manifests[data.def] || {}).refModel),
         support: data.support,
         stackedOn: data.stackedOn,
@@ -1230,12 +1249,27 @@ export class EditorView {
     this.manifests = state.manifests || {};
     this.refMode = Boolean(state.ref?.unlicensed);
     this.readOnly = Boolean(state.ref?.readOnly);
+    this.v2Mode = Boolean(state.v2);
+    this.v2Summary = state.v2 || null;
+    if (this.v2Mode) {
+      this.v2Rotations = true;
+      this.v2Scale = true;
+      this.v2ShowSolids = true;
+      this.v2ShowWalls = true;
+      this.v2ShowKill = true;
+      this.showTerrain = true;
+      this.terrainWireframe = false;
+    }
     this.defBoxes.clear();
     this._clearLevel();
     this._buildWorld();
     this._buildStructures();
     const stageStarted = performance.now();
-    await this._loadRefStage(state);
+    if (this.v2Mode) {
+      await this._loadV2View(state);
+    } else {
+      await this._loadRefStage(state);
+    }
     this.refLoadMs = Math.round(performance.now() - stageStarted);
     const assetsStarted = performance.now();
     await this._buildProps();
@@ -1279,7 +1313,7 @@ export class EditorView {
       this.scene.remove(this.worldGroup);
       this.worldGroup = null;
     }
-    for (const name of ["terrainGroup", "collisionGroup"]) {
+    for (const name of ["terrainGroup", "collisionGroup", "v2WallsGroup", "v2KillGroup"]) {
       const group = this[name];
       if (!group) continue;
       this.scene.remove(group);
@@ -1294,6 +1328,9 @@ export class EditorView {
     }
     this.terrainMaterial = null;
     this.collisionPayload = null;
+    this.v2View = null;
+    this.v2WallCount = 0;
+    this.v2ParentLinks = [];
   }
 
   _levelCenter() {
@@ -1322,6 +1359,26 @@ export class EditorView {
   }
 
   _groundBox() {
+    // v2's collision mesh includes high walls/ceilings; frame the walkable core, not
+    // the 14 m outlier, or the camera ends up outside a green box looking at its side.
+    if (this.v2Mode) {
+      // The v2 collision mesh covers only the walkable core (20x15 m), while props
+      // fill the whole 59x80 m level.  Frame the level, using the terrain's low band
+      // for height so the 14 m collision-wall outlier does not zoom the camera out.
+      const bounds = this.state?.bounds || [[-10, -10], [10, 10]];
+      let low = -1.6;
+      if (this.terrainGroup) {
+        const probe = new THREE.Box3();
+        this.terrainGroup.traverse((object) => {
+          if (object.isMesh) probe.expandByObject(object);
+        });
+        if (!probe.isEmpty()) low = probe.min.y;
+      }
+      return new THREE.Box3(
+        new THREE.Vector3(bounds[0][0], low, -bounds[1][1]),
+        new THREE.Vector3(bounds[1][0], low + 4.0, -bounds[0][1]),
+      );
+    }
     // In reference mode the real stage replaces the placement's flat ground plane, so
     // the camera presets frame the extracted terrain (minus the sky shell) instead.
     if (this.refMode && this.terrainGroup?.visible) {
@@ -1431,7 +1488,7 @@ export class EditorView {
       new THREE.MeshBasicMaterial({ color: 0xffa53b, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.set(ballStart.x, 0.012, ballStart.z);
+    ring.position.set(ballStart.x, ballStart.y, ballStart.z);
     group.add(ring);
 
     this.ballGhost = new THREE.Mesh(
@@ -1458,7 +1515,7 @@ export class EditorView {
     const group = new THREE.Group();
     const size = structure.size;
     const role = structure.role || "box";
-    const material = this._structureMaterial(role);
+    const material = this.v2Mode ? this._v2SolidMaterial() : this._structureMaterial(role);
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
     mesh.scale.set(size[0], size[1], size[2]);
     mesh.position.set(0, 0, 0);
@@ -1488,6 +1545,16 @@ export class EditorView {
     group.quaternion.copy(toThreeQuaternion(structure.rotationQuat));
     group.userData = { type: "structure", id: structure.id, role, data: structure, mesh };
     return group;
+  }
+
+  _v2SolidMaterial() {
+    if (!this.v2SolidMaterial) {
+      this.v2SolidMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8f7ae8, roughness: 0.8, metalness: 0,
+        transparent: true, opacity: 0.55, depthWrite: false,
+      });
+    }
+    return this.v2SolidMaterial;
   }
 
   _structureMaterial(role) {
@@ -1558,19 +1625,25 @@ export class EditorView {
       const viewerPivot = (this.manifests[prop.def] || {}).viewerPivot;
       const box = this.defBoxes.get(prop.def);
       const instance = this._refTransform(prop);
-      const scale = instance ? instance.scale : null;
-      const scaleX = scale ? scale[0] : 1;
-      const scaleY = scale ? scale[1] : 1;
-      const scaleZ = scale ? scale[2] : 1;
-      if (this.refMode && viewerPivot === "bottom" && box) {
-        const height = (prop.aabb || [0, 0, 0])[1] || 0;
-        model.position.set(
-          -(box.min.x + box.max.x) / 2 * scaleX,
-          (-box.min.y - height / 2) * scaleY,
-          -(box.min.z + box.max.z) / 2 * scaleZ
-        );
+      if (this.v2Mode) {
+        // v2's prop.aabb is already multiplied by prop.scale, and position is the
+        // AABB centre; the shared helper is also used by the rotation/scale toggles.
+        this._placeV2Model(group, model, prop);
+      } else {
+        const scale = instance ? instance.scale : null;
+        const scaleX = scale ? scale[0] : 1;
+        const scaleY = scale ? scale[1] : 1;
+        const scaleZ = scale ? scale[2] : 1;
+        if (this.refMode && viewerPivot === "bottom" && box) {
+          const height = (prop.aabb || [0, 0, 0])[1] || 0;
+          model.position.set(
+            -(box.min.x + box.max.x) / 2 * scaleX,
+            (-box.min.y - height / 2) * scaleY,
+            -(box.min.z + box.max.z) / 2 * scaleZ
+          );
+        }
+        if (scale) model.scale.set(scaleX, scaleY, scaleZ);
       }
-      if (scale) model.scale.set(scaleX, scaleY, scaleZ);
     } catch (error) {
       const fallback = new THREE.Mesh(
         new THREE.BoxGeometry(1, 1, 1),
@@ -1586,6 +1659,264 @@ export class EditorView {
     group.userData = { type: "prop", id: prop.itemId, def: prop.def, data: prop, model };
     this._applyRefTransform(group, prop);
     return group;
+  }
+
+  // ------------------------------------------------------------------ #
+  // v2 layers (katamari.placement/2; one implementation in /api/v2/*)
+  // ------------------------------------------------------------------ #
+  async _loadV2View(state) {
+    const token = this.apiToken ? `&token=${encodeURIComponent(this.apiToken)}` : "";
+    const started = performance.now();
+    try {
+      const response = await fetch(
+        `/api/v2/view?terrain=1&solids=1&walls=1&kill=1&parents=1`
+        + `&rotation=${this.v2Rotations ? 1 : 0}&scale=${this.v2Scale ? 1 : 0}`
+        + `&props=0${token}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      this.v2View = payload;
+      this.v2Summary = state.v2 || this.v2Summary;
+      this.v2ParentLinks = payload.parents || [];
+      this._buildV2Terrain(payload.terrain);
+      this._buildV2Walls(payload.activity);
+      this._buildV2KillPlane(payload.activity);
+      this._applyV2LayerVisibility();
+      this.lastTerrainMs = Math.round(performance.now() - started);
+      this.needsRender = true;
+    } catch (error) {
+      console.warn("v2 layers failed", error);
+      this.callbacks.onError?.(`v2 图层加载失败：${error.message}`);
+    }
+  }
+
+  _buildV2Terrain(terrain) {
+    if (!terrain || !Array.isArray(terrain.vertices) || !Array.isArray(terrain.indices)) return;
+    const zoneColors = {
+      0: 0x6f8c63, 1: 0x9a7b4f, 3: 0x7d8a96, 5: 0xb08968,
+      8: 0x8aa6a0, 24: 0xc2a878,
+    };
+    const fallback = new THREE.Color(0x8a8f83);
+    const positions = [];
+    const colors = [];
+    const vertices = terrain.vertices;
+    const indices = terrain.indices;
+    const zones = terrain.zoneIds || [];
+    const classes = terrain.classes || [];
+    for (let triangle = 0; triangle < indices.length / 3; triangle += 1) {
+      // class 3 is the collision "wall" band; the activity-wall layer already shows
+      // the rule walls, and drawing every collision wall here turns the core into a
+      // green box that hides the floor.  Ride/climb surfaces are the visible terrain.
+      if (classes[triangle] === 3) continue;
+      const color = zoneColors[zones[triangle]] !== undefined
+        ? new THREE.Color(zoneColors[zones[triangle]]) : fallback;
+      for (let corner = 0; corner < 3; corner += 1) {
+        const point = vertices[indices[triangle * 3 + corner]];
+        if (!point) continue;
+        positions.push(point[0], point[1], -point[2]);
+        colors.push(color.r, color.g, color.b);
+      }
+    }
+    if (!positions.length) return;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    geometry.computeVertexNormals();
+    this.terrainMaterial = new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.96, metalness: 0,
+      // The sidecar is CCW; FrontSide is the correct culling mode.  DoubleSide would
+      // show the inside of every collision wall and turn the core into a green box.
+      side: THREE.FrontSide, wireframe: this.terrainWireframe,
+    });
+    const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
+    mesh.name = "v2-terrain";
+    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    const group = new THREE.Group();
+    group.name = "v2-terrain";
+    group.add(mesh);
+    group.visible = this.showTerrain;
+    this.terrainGroup = group;
+    this.scene.add(group);
+    this._applyLegacyPlaneVisibility();
+  }
+
+  _buildV2Walls(activity) {
+    if (!activity || !Array.isArray(activity.walls) || !activity.walls.length) return;
+    const meta = this.v2Summary?.meta || {};
+    const terrainLow = this.v2Summary?.terrain?.bounds?.[0]?.[1];
+    const groundY = Number(meta.groundY ?? -3.0);
+    const baseY = Number.isFinite(terrainLow) ? Math.min(terrainLow, groundY) : groundY;
+    const positions = [];
+    const edges = [];
+    for (const wall of activity.walls) {
+      const points = wall.points || [];
+      if (points.length < 2) continue;
+      const pairs = [];
+      for (let index = 0; index + 1 < points.length; index += 1) {
+        pairs.push([points[index], points[index + 1]]);
+      }
+      if (wall.closed) pairs.push([points[points.length - 1], points[0]]);
+      const top = baseY + Number(wall.heightM || 1.0);
+      for (const [start, end] of pairs) {
+        const a = [start[0], baseY, -start[1]];
+        const b = [end[0], baseY, -end[1]];
+        const c = [end[0], top, -end[1]];
+        const d = [start[0], top, -start[1]];
+        positions.push(...a, ...b, ...c, ...a, ...c, ...d);
+        edges.push(...a, ...b, ...b, ...c, ...c, ...d, ...d, ...a);
+      }
+    }
+    if (!positions.length) return;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.computeVertexNormals();
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x49b8e8, transparent: true, opacity: 0.22,
+      side: THREE.DoubleSide, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = 4;
+    const line = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(
+        Array.from({ length: edges.length / 3 }, (_, index) =>
+          new THREE.Vector3(edges[index * 3], edges[index * 3 + 1], edges[index * 3 + 2])),
+      ),
+      new THREE.LineBasicMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.85 }),
+    );
+    line.renderOrder = 21;
+    const group = new THREE.Group();
+    group.name = "v2-activity-walls";
+    group.add(mesh, line);
+    group.visible = this.v2ShowWalls;
+    this.v2WallsGroup = group;
+    this.v2WallCount = activity.walls.length;
+    this.scene.add(group);
+  }
+
+  _buildV2KillPlane(activity) {
+    const kill = activity?.killPlane;
+    if (!kill || !Number.isFinite(Number(kill.y))) return;
+    const bounds = this.state?.bounds || [[-10, -10], [10, 10]];
+    const width = Math.max(10, (bounds[1][0] - bounds[0][0]) * 1.25);
+    const depth = Math.max(10, (bounds[1][1] - bounds[0][1]) * 1.25);
+    // A filled plane at y=-4 reads as a pink false floor from above; a red grid +
+    // border at the same height says "kill plane" without competing with the terrain.
+    const centerX = (bounds[0][0] + bounds[1][0]) / 2;
+    const centerZ = -(bounds[0][1] + bounds[1][1]) / 2;
+    const grid = new THREE.GridHelper(Math.max(width, depth), 12, 0xff3b30, 0xff3b30);
+    grid.position.set(centerX, Number(kill.y), centerZ);
+    grid.material.transparent = true;
+    grid.material.opacity = 0.3;
+    grid.material.depthWrite = false;
+    grid.renderOrder = 3;
+    const halfW = width / 2;
+    const halfD = depth / 2;
+    const border = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(centerX - halfW, Number(kill.y), centerZ - halfD),
+        new THREE.Vector3(centerX + halfW, Number(kill.y), centerZ - halfD),
+        new THREE.Vector3(centerX + halfW, Number(kill.y), centerZ + halfD),
+        new THREE.Vector3(centerX - halfW, Number(kill.y), centerZ + halfD),
+      ]),
+      new THREE.LineBasicMaterial({ color: 0xff3b30, transparent: true, opacity: 0.8 }),
+    );
+    border.renderOrder = 3;
+    const group = new THREE.Group();
+    group.name = "v2-kill-plane";
+    group.add(grid, border);
+    group.visible = this.v2ShowKill;
+    this.v2KillGroup = group;
+    this.scene.add(group);
+  }
+
+  _applyV2LayerVisibility() {
+    if (!this.v2Mode) return;
+    if (this.terrainGroup) this.terrainGroup.visible = this.showTerrain;
+    if (this.v2WallsGroup) this.v2WallsGroup.visible = this.v2ShowWalls;
+    if (this.v2KillGroup) this.v2KillGroup.visible = this.v2ShowKill;
+    for (const group of this.structureObjects.values()) {
+      group.visible = this.v2ShowSolids;
+    }
+    this._applyLegacyPlaneVisibility();
+    this.needsRender = true;
+  }
+
+  setV2Terrain(visible) {
+    this.showTerrain = Boolean(visible);
+    if (this.terrainGroup) this.terrainGroup.visible = this.showTerrain;
+    this._applyLegacyPlaneVisibility();
+    this.needsRender = true;
+    return Boolean(this.terrainGroup);
+  }
+
+  setV2Solids(visible) {
+    this.v2ShowSolids = Boolean(visible);
+    for (const group of this.structureObjects.values()) {
+      group.visible = this.v2ShowSolids;
+    }
+    this.needsRender = true;
+    return this.structureObjects.size;
+  }
+
+  setV2Walls(visible) {
+    this.v2ShowWalls = Boolean(visible);
+    if (this.v2WallsGroup) this.v2WallsGroup.visible = this.v2ShowWalls;
+    this.needsRender = true;
+    return this.v2WallCount;
+  }
+
+  setV2KillPlane(visible) {
+    this.v2ShowKill = Boolean(visible);
+    if (this.v2KillGroup) this.v2KillGroup.visible = this.v2ShowKill;
+    this.needsRender = true;
+    return Boolean(this.v2KillGroup);
+  }
+
+  async setV2Transforms(rotation = this.v2Rotations, scale = this.v2Scale) {
+    this.v2Rotations = Boolean(rotation);
+    this.v2Scale = Boolean(scale);
+    const token = this.apiToken ? `&token=${encodeURIComponent(this.apiToken)}` : "";
+    try {
+      const response = await fetch(
+        `/api/v2/props?rotation=${this.v2Rotations ? 1 : 0}`
+        + `&scale=${this.v2Scale ? 1 : 0}${token}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      const byId = new Map((payload.props || []).map((prop) => [prop.itemId, prop]));
+      for (const [itemId, group] of this.propObjects) {
+        const prop = byId.get(itemId);
+        if (!prop) continue;
+        group.userData.data = prop;
+        group.quaternion.copy(toThreeQuaternion(prop.rotationQuat));
+        const model = group.userData.model;
+        if (model) this._placeV2Model(group, model, prop);
+      }
+      this._buildParentLines();
+      this._updateSelectionVisuals();
+      this.needsRender = true;
+      return { rotation: this.v2Rotations, scale: this.v2Scale, count: byId.size };
+    } catch (error) {
+      this.callbacks.onError?.(`v2 旋转/缩放显示切换失败：${error.message}`);
+      return null;
+    }
+  }
+
+  _placeV2Model(group, model, prop) {
+    const viewerPivot = (this.manifests[prop.def] || {}).viewerPivot;
+    const box = this.defBoxes.get(prop.def);
+    const scale = prop.scale || [1, 1, 1];
+    if (this.refMode && viewerPivot === "bottom" && box) {
+      model.position.set(
+        -(box.min.x + box.max.x) / 2 * scale[0],
+        -box.min.y * scale[1] - ((prop.aabb || [0, 0, 0])[1] || 0) / 2,
+        -(box.min.z + box.max.z) / 2 * scale[2],
+      );
+    }
+    model.scale.set(scale[0], scale[1], scale[2]);
   }
 
   // ------------------------------------------------------------------ #
@@ -1928,6 +2259,17 @@ export class EditorView {
       transforms: this.refTransforms ? Object.keys(this.refTransforms).length : 0,
       parentLinks: (this.refParentLinks || []).length,
       backdropMeshes: this._refBackdropCount(),
+      v2: Boolean(this.v2Mode),
+      v2Terrain: Boolean(this.terrainGroup && this.v2Mode),
+      v2Solids: this.v2Mode ? this.structureObjects.size : 0,
+      v2SolidsVisible: Boolean(this.v2ShowSolids),
+      v2Walls: this.v2WallCount,
+      v2WallsVisible: Boolean(this.v2WallsGroup?.visible),
+      v2KillPlane: Boolean(this.v2KillGroup),
+      v2KillVisible: Boolean(this.v2KillGroup?.visible),
+      v2Parents: (this.v2ParentLinks || []).length,
+      v2Rotations: Boolean(this.v2Rotations),
+      v2Scale: Boolean(this.v2Scale),
     };
   }
 
@@ -1948,6 +2290,10 @@ export class EditorView {
     this._disposeParentLines();
     const props = this.doc?.props || [];
     if (!this.refMode || !props.length) return;
+    if (this.v2Mode) {
+      this._buildV2ParentLines();
+      return;
+    }
     if (this.refStage?.available && (this.refParentLinks || []).length) {
       this._buildInstanceParentLines();
       return;
@@ -1980,6 +2326,20 @@ export class EditorView {
       const parent = byId.get(parentId);
       if (!parent) continue;
       points.push(toThreePosition(prop.position), toThreePosition(parent.position));
+    }
+    if (!points.length) return;
+    this.parentLineCount = points.length / 2;
+    this._addParentLines(points, 0xff5fd2);
+  }
+
+  _buildV2ParentLines() {
+    const links = this.v2ParentLinks || [];
+    const points = [];
+    for (const link of links) {
+      const child = this.propObjects.get(link.child);
+      const parent = link.parent ? this.propObjects.get(link.parent) : null;
+      if (!child || !parent) continue;
+      points.push(child.position.clone(), parent.position.clone());
     }
     if (!points.length) return;
     this.parentLineCount = points.length / 2;
@@ -2469,7 +2829,7 @@ export class EditorView {
     const start = toThreePosition(this._ballStart());
     const ground = Number((this.doc.level || {}).groundY || 0);
     this.ballGhost.scale.setScalar(radius / 0.5);
-    this.ballGhost.position.set(start.x, ground + radius, start.z);
+    this.ballGhost.position.set(start.x, this.v2Mode ? start.y : ground + radius, start.z);
   }
 
   // ------------------------------------------------------------------ #
@@ -2478,7 +2838,11 @@ export class EditorView {
   async applyState(state) {
     const oldLevel = this.doc?.level?.id;
     const newLevel = state.doc?.level?.id;
-    if (!this.doc || oldLevel !== newLevel) {
+    // Same id is not the same document: v1 <-> v2 (or placement.model.json <->
+    // placement.v2.json) must rebuild the scene, not just refresh the panels.
+    const modeChanged = Boolean(this.state?.v2) !== Boolean(state.v2)
+      || this.state?.file?.path !== state.file?.path;
+    if (!this.doc || oldLevel !== newLevel || modeChanged) {
       await this.load(state);
       return;
     }
@@ -2488,6 +2852,10 @@ export class EditorView {
     this.manifests = state.manifests || this.manifests;
     this.refMode = Boolean(state.ref?.unlicensed);
     this.readOnly = Boolean(state.ref?.readOnly);
+    if (this.v2Mode) {
+      this.v2Summary = state.v2 || this.v2Summary;
+      this.v2ParentLinks = state.v2?.parents || this.v2ParentLinks;
+    }
 
     const seen = new Set();
     for (const prop of this.doc.props || []) {
@@ -2545,6 +2913,9 @@ export class EditorView {
     const surviving = [...this.selectionIds].filter((id) => this.objectGroup(id));
     this._setSelection(surviving);
     this._applyLadderToAll();
+    if (this.v2Mode && (!this.v2Rotations || !this.v2Scale)) {
+      await this.setV2Transforms(this.v2Rotations, this.v2Scale);
+    }
     this._buildParentLines();
     this._updateBall();
     this.needsRender = true;

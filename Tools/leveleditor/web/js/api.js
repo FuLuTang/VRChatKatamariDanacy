@@ -120,7 +120,7 @@ export class API {
     return this.post({ op: name, args });
   }
 
-  openLevel(level) {
+  openLevel(level, options = {}) {
     if (!this.token) {
       throw new ApiError("打开关卡需要写入令牌（?token=… 链接）");
     }
@@ -130,7 +130,7 @@ export class API {
         "Content-Type": "application/json",
         "X-Editor-Token": this.token,
       },
-      body: JSON.stringify({ level }),
+      body: JSON.stringify({ level, ...options }),
     }).then((response) => this._read(response));
   }
 

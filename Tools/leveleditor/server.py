@@ -52,6 +52,7 @@ from Tools.levelbuild import editor_core  # noqa: E402
 from Tools.levelbuild import placement_core as core  # noqa: E402
 from Tools.levelbuild import ref_models  # noqa: E402
 from Tools.levelbuild import ref_stage  # noqa: E402
+from Tools.leveleditor import v2_document  # noqa: E402
 
 SERVICE = "vrc-katamari-leveleditor"
 PROTOCOL = 1
@@ -411,6 +412,12 @@ class WebEditor:
         #: reference level, read from the byte-level extraction outside the repo.
         self.ref_stage = None
         self._ref_stage_glb = None
+        #: True for a ``katamari.placement/2`` document.  v2 is currently a read-only
+        #: viewer path: it loads through ``v2_document`` (the one sidecar parser and the
+        #: one structural checker) and never enters the v1 editor/validator.
+        self.v2_mode = False
+        self.v2_document = None
+        self.active_placement = None
         self.lock_enabled = bool(lock)
         self.lock = None
         #: The bound HTTP port, announced after ``make_http_server`` so a lock refusal
@@ -427,31 +434,42 @@ class WebEditor:
 
     # -- discovery ------------------------------------------------------ #
     def list_levels(self):
-        levels = []
-        for path in sorted(self.levels_dir.rglob("placement.json")):
-            level_id = path.parent.relative_to(self.levels_dir).as_posix()
-            if not core.is_valid_level_id(level_id):
-                continue
-            try:
-                stat = path.stat()
-            except OSError:
-                continue
-            levels.append({"id": level_id, "bytes": stat.st_size,
-                           "modified": time.strftime("%Y-%m-%dT%H:%M:%S",
-                                                     time.localtime(stat.st_mtime))})
-        return levels
+        levels = {}
+        for name in ("placement.v2.json", "placement.json"):
+            for path in sorted(self.levels_dir.rglob(name)):
+                level_id = path.parent.relative_to(self.levels_dir).as_posix()
+                if not core.is_valid_level_id(level_id) or level_id in levels:
+                    continue
+                try:
+                    stat = path.stat()
+                except OSError:
+                    continue
+                levels[level_id] = {
+                    "id": level_id, "bytes": stat.st_size,
+                    "file": name,
+                    "schema": v2_document.detect_schema(path),
+                    "modified": time.strftime("%Y-%m-%dT%H:%M:%S",
+                                              time.localtime(stat.st_mtime)),
+                }
+        return [levels[key] for key in sorted(levels)]
 
-    def resolve(self, level):
+    def resolve(self, level, placement=None):
         """The file this level opens.
 
-        A reference level prefers the converted ``placement.model.json`` (it is the
-        one that carries the defs' ``model`` and the original's ``group`` parent
-        links); an explicit ``--placement`` wins for both kinds.
+        A reference level prefers the current ``placement.v2.json``.  The old
+        ``placement.model.json`` is only the fallback; loading it puts the page in
+        legacy mode with an explicit banner and a one-click switch (the v1 file's
+        numbers are not the v2 data's numbers).  ``--placement`` / an explicit open
+        wins for both kinds.
         """
         folder = core.level_folder(level, self.levels_dir)
-        if self.placement_name:
-            return folder / self.placement_name
+        name = placement or self.placement_name
+        if name:
+            return folder / name
         if ref_models.is_ref_level(level):
+            v2_file = folder / "placement.v2.json"
+            if v2_file.is_file():
+                return v2_file
             model_file = folder / "placement.model.json"
             if model_file.is_file():
                 return model_file
@@ -473,7 +491,7 @@ class WebEditor:
         except OSError:
             return False
 
-    def open_level(self, level):
+    def open_level(self, level, placement=None):
         """Open a level without ever self-deadlocking on the one-writer lock.
 
         * The already-open file is a **reload in place**: no second flock, no history
@@ -483,8 +501,10 @@ class WebEditor:
         * A different level acquires its lock *before* the old one is released, so a
           second process never sees a window with neither lock.  If the open fails the
           old document, lock and history stay exactly as they were.
+        * ``placement`` is the explicit file name (``placement.v2.json``,
+          ``placement.model.json``); it switches a v1 session onto v2 without a restart.
         """
-        path = self.resolve(level)
+        path = self.resolve(level, placement=placement)
         if not path.is_file():
             raise editor_core.OpError("cannot read %s" % core.display_path(path))
         if self._same_file(self.editor.path, path):
@@ -499,6 +519,7 @@ class WebEditor:
             "ref": (self.ref_mode, self.ref_models_root, self.ref_table,
                     self.ref_resolution, self.ref_fbx_only, self.ref_stage,
                     self._ref_stage_glb, self.editor.base_manifests),
+            "v2": (self.v2_mode, self.v2_document, self.active_placement),
             "editor": {
                 "doc": self.editor.doc, "path": self.editor.path,
                 "level": self.editor.level, "manifests": self.editor.manifests,
@@ -511,6 +532,7 @@ class WebEditor:
                       self.scene.syncs),
         }
         is_ref = ref_models.is_ref_level(level)
+        is_v2 = v2_document.detect_schema(path) == v2_document.SCHEMA_V2
         try:
             if is_ref:
                 self.ref_models_root = ref_models.normalized_models_dir(self.ref_models_dir)
@@ -522,14 +544,54 @@ class WebEditor:
                 self.ref_table = {}
                 self.editor.base_manifests = self.repo_manifests
             self.editor.manifests = self.editor.base_manifests
-            opened = self.editor.open(level=level, path=path)
+            if is_v2:
+                loaded = v2_document.load(path)
+                self.v2_mode = True
+                self.v2_document = loaded
+                self.editor.doc = loaded.view_doc
+                self.editor.path = path
+                self.editor.level = ((loaded.view_doc.get("level") or {}).get("id")
+                                     or level)
+                self.editor.manifests = core.manifests_with_models(
+                    loaded.view_doc, self.editor.base_manifests)
+                self.editor.undo_stack = []
+                self.editor.known_errors = set()
+                self.editor.unexported = False
+                self.editor.last_export = None
+                self.scene.reset()
+                counts = self.scene.sync(loaded.view_doc, None)
+                opened = {
+                    "level": self.editor.level,
+                    "path": core.display_path(path),
+                    "counts": self.editor._counts(loaded.view_doc),
+                    "gate": loaded.check_payload(),
+                    "scene": counts,
+                    "v2": True,
+                    "canonical": True,
+                }
+            else:
+                self.v2_mode = False
+                self.v2_document = None
+                opened = self.editor.open(level=level, path=path)
             self.ref_mode = is_ref
+            self.active_placement = placement
             self._refresh_ref_models()
-            self._refresh_ref_stage()
+            if is_v2:
+                self.ref_stage = {
+                    "available": False,
+                    "reason": "v2 文档自带 terrain/structures/activityArea，"
+                              "旧的 stage.glb 叠加层已停用",
+                    "dir": None, "counts": {}, "frame": None, "transforms": None,
+                    "collision": None, "zones": [],
+                }
+                self._ref_stage_glb = None
+            else:
+                self._refresh_ref_stage()
         except Exception:
             (self.ref_mode, self.ref_models_root, self.ref_table,
              self.ref_resolution, self.ref_fbx_only, self.ref_stage,
              self._ref_stage_glb, self.editor.base_manifests) = snapshot["ref"]
+            (self.v2_mode, self.v2_document, self.active_placement) = snapshot["v2"]
             for key, value in snapshot["editor"].items():
                 setattr(self.editor, key, value)
             (self.scene.props, self.scene.structures, self.scene.cameras,
@@ -620,9 +682,32 @@ class WebEditor:
         return self._ref_stage_glb
 
     def reload_level(self):
-        result = self.editor.op_reload({})
-        self._refresh_ref_models()
-        self._refresh_ref_stage()
+        if self.v2_mode:
+            loaded = v2_document.load(self.editor.path)
+            self.v2_document = loaded
+            self.editor.doc = loaded.view_doc
+            self.editor.level = ((loaded.view_doc.get("level") or {}).get("id")
+                                 or self.editor.level)
+            self.editor.manifests = core.manifests_with_models(
+                loaded.view_doc, self.editor.base_manifests)
+            self.editor.undo_stack = []
+            self.editor.known_errors = set()
+            self.scene.reset()
+            counts = self.scene.sync(loaded.view_doc, None)
+            self._refresh_ref_models()
+            result = {
+                "level": self.editor.level,
+                "path": core.display_path(self.editor.path),
+                "counts": self.editor._counts(loaded.view_doc),
+                "gate": loaded.check_payload(),
+                "scene": counts,
+                "v2": True,
+                "undo": "cleared (read-only v2 document)",
+            }
+        else:
+            result = self.editor.op_reload({})
+            self._refresh_ref_models()
+            self._refresh_ref_stage()
         if self.lock is not None:
             self.lock.announce(port=self.port, level=self.editor.level)
         self.history = []
@@ -657,6 +742,15 @@ class WebEditor:
         if self.editor.doc is None or self.editor.path is None:
             return None
         path = Path(self.editor.path)
+        if self.v2_mode:
+            try:
+                current = path.read_bytes()
+            except OSError:
+                return "%s is gone; reload from disk" % core.display_path(path)
+            if hashlib.sha256(current).hexdigest() != self.v2_document.sha256:
+                return ("%s changed on disk; it is a read-only v2 document, press "
+                        "Reload to take the disk version." % core.display_path(path))
+            return None
         if not path.is_file():
             return "%s is gone; reload from disk or reopen the level" % core.display_path(path)
         try:
@@ -745,6 +839,15 @@ class WebEditor:
                         "assets. View/select/region statistics only; nothing can be "
                         "edited, exported or baked into the managed props.",
                         ["reopen a normal level (not `_ref_*`) to edit"])
+                if self.v2_mode and (effective_op in editor_core.MUTATING_OPS
+                                     or effective_op in ("export", "undo", "redo")
+                                     or "ops" in payload):
+                    raise editor_core.OpError(
+                        "this is a read-only katamari.placement/2 document: the v2 "
+                        "validator and the v2 edit path are not delivered yet. "
+                        "View/query/region statistics only; nothing is written.",
+                        ["the v1 editor path is unchanged for v1 levels; open a v1 "
+                         "placement.json to edit"])
                 if op in ("undo", "redo"):
                     response = self._undo(op, payload.get("args") or {})
                 elif op == "open":
@@ -752,7 +855,11 @@ class WebEditor:
                     level = args.get("level")
                     if not isinstance(level, str) or not level:
                         raise editor_core.OpError("open needs level=<id>")
-                    opened = self.open_level(level)
+                    placement = args.get("placement")
+                    if placement is not None and (not isinstance(placement, str)
+                                                  or not placement):
+                        raise editor_core.OpError("placement must be a file name")
+                    opened = self.open_level(level, placement=placement)
                     response = {"ok": True, "op": "open", "result": opened,
                                 "error": "", "details": []}
                 elif op == "reload":
@@ -769,6 +876,21 @@ class WebEditor:
                                 "error": "the web editor renders in the browser; there is no "
                                          "Blender here. Use the Screenshot button.",
                                 "details": []}
+                elif effective_op == "check" and self.v2_mode:
+                    check = self.v2_document.check_payload()
+                    response = {"ok": True, "op": "check", "result": check,
+                                "error": "", "details": [], "gate": check}
+                elif effective_op == "status" and self.v2_mode:
+                    response = {"ok": True, "op": "status",
+                                "result": dict(self.state_summary(),
+                                               scene=self.scene.status(),
+                                               v2=True, readOnly=True),
+                                "error": "", "details": []}
+                elif effective_op in ("list", "get") and self.v2_mode:
+                    result = getattr(self.editor, "op_" + effective_op)(
+                        payload.get("args") or {})
+                    response = {"ok": True, "op": effective_op, "result": result,
+                                "error": "", "details": []}
                 elif op in editor_core.MUTATING_OPS or "ops" in payload:
                     conflict = self.disk_conflict()
                     if conflict:
@@ -790,6 +912,10 @@ class WebEditor:
                         raise editor_core.OpError(conflict, [
                             "export refused before anything changed; the file is the truth"])
                     response = self.editor.handle(payload)
+                elif self.v2_mode:
+                    raise editor_core.OpError(
+                        "v2 read-only supports open/reload/check/status/list/get; "
+                        "%r is not available on this document" % effective_op)
                 else:
                     response = self.editor.handle(payload)
             except editor_core.OpError as refusal:
@@ -806,8 +932,12 @@ class WebEditor:
                                    "redoLabels": [item["label"] for item in self.redo]}
             response["seconds"] = round(time.perf_counter() - started, 3)
             if self.editor.doc is not None:
-                response["gate"] = response.get("gate") or editor_core.summarize(
-                    self.editor._validate(self.editor.doc))
+                if self.v2_mode:
+                    response["gate"] = (response.get("gate")
+                                        or self.v2_document.check_payload())
+                else:
+                    response["gate"] = response.get("gate") or editor_core.summarize(
+                        self.editor._validate(self.editor.doc))
             return response
 
     def _saved_payload(self, export, entry):
@@ -887,8 +1017,46 @@ class WebEditor:
         doc = self.editor.doc
         if doc is None:
             return {"open": False, "level": None}
-        report = self.editor._validate(doc)
         path = Path(self.editor.path)
+        if self.v2_mode:
+            loaded = self.v2_document
+            check = loaded.check_payload()
+            document = loaded.summary["document"]
+            counts = {
+                "level": self.editor.level,
+                "props": loaded.summary["counts"]["props"],
+                "structures": loaded.summary["counts"]["solids"],
+                "cameras": len(doc.get("cameras") or []),
+                "presets": len(doc.get("renderPresets") or []),
+                "defs": loaded.summary["counts"]["defs"],
+                "valueUnits": 0,
+                "growthMm3": loaded.summary["counts"]["growthMm3"],
+            }
+            file_state = {
+                "path": core.display_path(path),
+                "bytes": document["bytes"],
+                "sha256": document["sha256"],
+                "modified": time.strftime("%Y-%m-%dT%H:%M:%S",
+                                          time.localtime(path.stat().st_mtime)),
+                "sidecar": document.get("sidecarPath"),
+                "sidecarSha256": document.get("sidecarSha256"),
+                "schema": v2_document.SCHEMA_V2,
+            }
+            return {
+                "open": True,
+                "level": self.editor.level,
+                "counts": counts,
+                "gate": check,
+                "file": file_state,
+                "dirty": False,
+                "history": {"undo": 0, "redo": 0},
+                "lastSaved": None,
+                "ref": bool(self.ref_mode),
+                "v2": True,
+                "legacy": None,
+                "version": self.version,
+            }
+        report = self.editor._validate(doc)
         try:
             data = path.read_bytes()
             file_state = {"path": core.display_path(path), "bytes": len(data),
@@ -907,7 +1075,28 @@ class WebEditor:
             "history": {"undo": len(self.history), "redo": len(self.redo)},
             "lastSaved": self.last_saved,
             "ref": bool(self.ref_mode),
+            "v2": False,
+            "legacy": self.legacy_state(),
             "version": self.version,
+        }
+
+    def legacy_state(self):
+        """A v1 file that has a v2 sibling: say so instead of showing v1 numbers."""
+        if self.v2_mode or self.editor.path is None:
+            return None
+        path = Path(self.editor.path)
+        if path.name == "placement.v2.json":
+            return None
+        v2_file = path.parent / "placement.v2.json"
+        if not v2_file.is_file():
+            return None
+        return {
+            "kind": "v1",
+            "schema": v2_document.detect_schema(path),
+            "replacedBy": v2_file.name,
+            "canSwitch": True,
+            "message": ("这是 v1 旧文档，已被 v2 取代。页面上显示的错误数来自 v1 校验器，"
+                        "不是 v2 数据的当前校验结果。"),
         }
 
     def derived(self):
@@ -921,6 +1110,24 @@ class WebEditor:
                 quat = tuple(float(value) for value in prop["rotationQuat"])
                 low, high = core.world_aabb(position, size, quat)
             except (KeyError, TypeError, ValueError):
+                continue
+            if self.v2_mode:
+                volume_k = prop.get("volumeK")
+                d_req_mm = int(prop.get("absorbDiameterReqMm") or 0)
+                props[prop.get("itemId")] = {
+                    "dReq": round(d_req_mm / 1000.0, 3),
+                    "dReqMm": d_req_mm,
+                    "volumeK": volume_k,
+                    "worldAabb": [_round_seq(low), _round_seq(high)],
+                    "growthMm3": int(prop.get("growthMm3") or 0),
+                    "volumePenalty": prop.get("volumePenalty"),
+                    "valueUnits": int(prop.get("valueUnits") or 0),
+                    "kind": prop.get("kind") or "",
+                    "parent": prop.get("parent"),
+                    "scale": prop.get("scale") or [1.0, 1.0, 1.0],
+                    "behaviour": prop.get("behaviour"),
+                    "absorbable": prop.get("absorbable"),
+                }
                 continue
             volume_k = core.effective_volume_k(prop, catalog)
             props[prop.get("itemId")] = {
@@ -1108,17 +1315,24 @@ class WebEditor:
                 if not self._region_contains(low, high, position, region_box, mode):
                     continue
             volume = size[0] * size[1] * size[2]
-            volume_k = core.effective_volume_k(prop, catalog)
+            if self.v2_mode:
+                d_req_mm = int(prop.get("absorbDiameterReqMm") or 0)
+                volume_k = prop.get("volumeK")
+                units = int(prop.get("growthMm3") or 0)
+            else:
+                volume_k = core.effective_volume_k(prop, catalog)
+                d_req_mm = core.absorb_diameter_req_mm(size, volume_k)
+                units = core.effective_value_units(prop, catalog) or 0
             included.append({
                 "id": item_id,
                 "def": prop.get("def"),
                 # The original gate quantity: Req floored to whole millimetres, priced at
                 # the prop's own k.  Every count below compares integers, never floats.
-                "dReq": core.absorb_diameter_req(size, volume_k),
-                "dReqMm": core.absorb_diameter_req_mm(size, volume_k),
+                "dReq": d_req_mm / 1000.0,
+                "dReqMm": d_req_mm,
                 "volumeK": volume_k,
                 "volume": volume,
-                "units": core.effective_value_units(prop, catalog) or 0,
+                "units": units,
                 "low": low,
                 "high": high,
             })
@@ -1258,7 +1472,10 @@ class WebEditor:
         if not self.ref_mode:
             return None
         doc = self.editor.doc or {}
-        links = ref_models.parent_links(doc)
+        if self.v2_mode:
+            links = list(self.v2_document.summary["parents"])
+        else:
+            links = ref_models.parent_links(doc)
         kinds = {}
         for resolved in self.ref_resolution.values():
             kinds[resolved["source"]] = kinds.get(resolved["source"], 0) + 1
@@ -1285,6 +1502,12 @@ class WebEditor:
             "parentLinkCount": len(links),
             "parentLinks": links,
             "stage": self.ref_stage_state(),
+            "document": (self.v2_document.summary["document"] if self.v2_mode else {
+                "path": core.display_path(self.editor.path),
+                "name": Path(self.editor.path).name,
+                "schema": v2_document.detect_schema(self.editor.path),
+            }),
+            "v2": bool(self.v2_mode),
         }
 
     def ref_stage_state(self):
@@ -1321,22 +1544,60 @@ class WebEditor:
     def state(self):
         with self.mu:
             doc = self.editor.doc
-            check = self.editor.op_check({"report": True})
+            if self.v2_mode:
+                check = self.v2_document.check_payload()
+            else:
+                check = self.editor.op_check({"report": True})
             payload = self.state_summary()
             payload.update({
                 "service": SERVICE,
                 "protocol": PROTOCOL,
                 "pid": os.getpid(),
                 "doc": doc,
+                "v2": self.v2_state(),
                 "derived": self.derived(),
                 "manifests": self.manifests(),
                 "check": check,
                 "levels": self.list_levels(),
                 "bounds": (doc.get("level") or {}).get("bounds"),
                 "ref": self.ref_state(),
+                "legacy": self.legacy_state(),
                 "uptimeSeconds": round(time.time() - self.started, 1),
             })
             return payload
+
+    def v2_state(self):
+        """The v2 layers/summary that are small enough for every /api/level response."""
+        if not self.v2_mode:
+            return None
+        loaded = self.v2_document
+        return {
+            "schema": loaded.summary["schema"],
+            "document": loaded.summary["document"],
+            "meta": loaded.summary["meta"],
+            "counts": loaded.summary["counts"],
+            "terrain": loaded.summary["terrain"],
+            "activity": loaded.summary["activity"],
+            "solids": loaded.summary["solids"],
+            "parents": loaded.summary["parents"],
+            "layers": v2_document.layer_map(loaded),
+            "check": loaded.check_payload(),
+        }
+
+    def v2_payload(self, **flags):
+        if not self.v2_mode:
+            raise editor_core.OpError("no v2 document is open")
+        return self.v2_document.view_payload(**flags)
+
+    def v2_terrain_payload(self):
+        if not self.v2_mode:
+            raise editor_core.OpError("no v2 document is open")
+        terrain = self.v2_document.terrain_payload()
+        if terrain is None:
+            raise editor_core.OpError(
+                "v2 terrain sidecar unavailable: %s"
+                % "; ".join(self.v2_document.errors) or "not loaded")
+        return terrain
 
     # -- hints (read-only, display only) --------------------------------- #
     def hints(self, diameter):
@@ -1349,6 +1610,32 @@ class WebEditor:
         doc = self.editor.doc
         diameter = max(0.01, float(diameter))
         step = core.STEP_RATIO * diameter
+        if self.v2_mode:
+            meta = self.v2_document.summary["meta"]
+            props = []
+            for prop in doc.get("props") or []:
+                d_req = float(prop.get("absorbDiameterReqMm") or 0) / 1000.0
+                props.append({
+                    "id": prop.get("itemId"), "def": prop.get("def"),
+                    "dReq": round(d_req, 3),
+                    "dReqMm": int(prop.get("absorbDiameterReqMm") or 0),
+                    "top": None, "rise": 0.0,
+                    "kind": "food" if d_req <= diameter + 1e-9 else "blocking",
+                })
+            food = [entry for entry in props if entry["kind"] == "food"]
+            blocking = [entry for entry in props if entry["kind"] == "blocking"]
+            return {
+                "unsupported": True,
+                "reason": ("v2 物理提示需要 v2 校验器/地形支撑查询；在它交付前这里只按 "
+                           "absorbDiameterReqMm 分出食物/挡路，地形与 rise 不判定。"),
+                "diameter": round(diameter, 3), "stepLimit": round(step, 4),
+                "floor": meta.get("groundY"),
+                "props": {"food": food, "terrain": [], "blocking": blocking},
+                "structures": {"terrain": [], "blocking": []},
+                "counts": {"food": len(food), "terrain": 0,
+                           "blocking": len(blocking),
+                           "climbableStructures": 0, "blockingStructures": 0},
+            }
         floor = core.ground_level(doc)
         structures_by_id = {structure.get("id"): structure
                             for structure in doc.get("structures") or []}
@@ -1644,6 +1931,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, result)
                 return
             if path == "/api/check":
+                if app.v2_mode:
+                    check = app.v2_document.check_payload()
+                    self._json(200, {"ok": True, "op": "check", "result": check,
+                                     "gate": check, "error": "", "details": []})
+                    return
                 with app.mu:
                     response = app.editor.handle({"op": "check", "args": {"report": True}})
                 self._json(200, response)
@@ -1658,6 +1950,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/models/"):
                 self._serve_model(path[len("/api/models/"):])
+                return
+            if path.startswith("/api/v2/"):
+                self._serve_v2(path[len("/api/v2/"):])
                 return
             if path.startswith("/api/ref-stage/"):
                 self._serve_ref_stage(path[len("/api/ref-stage/"):])
@@ -1676,6 +1971,78 @@ class Handler(BaseHTTPRequestHandler):
                 self._error(500, "%s: %s" % (type(unexpected).__name__, unexpected))
             except OSError:
                 pass
+
+    @staticmethod
+    def _v2_flag(query, name, default=True):
+        raw = (query.get(name) or [None])[0]
+        if raw is None:
+            return bool(default)
+        return str(raw).strip().lower() not in ("0", "false", "no", "off", "")
+
+    def _serve_v2(self, name):
+        """The v2 view layers.  Every GUI toggle has one HTTP spelling here."""
+        app = self.server.app
+        name = urllib.parse.unquote(name).strip("/")
+        if not app.v2_mode:
+            self._error(404, "no katamari.placement/2 document is open")
+            return
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        headers = {"X-Unlicensed-Reference": "1"} if app.ref_mode else None
+        try:
+            if name == "layers":
+                self._json(200, {
+                    "ok": True, "schema": v2_document.SCHEMA_V2,
+                    "level": app.editor.level,
+                    "layers": v2_document.layer_map(app.v2_document),
+                    "counts": app.v2_document.summary["counts"],
+                }, headers)
+                return
+            if name == "terrain":
+                self._json(200, {"ok": True, "terrain": app.v2_terrain_payload()},
+                           headers)
+                return
+            if name == "solids":
+                solids = app.v2_document.summary["solids"]
+                self._json(200, {"ok": True, "count": len(solids), "solids": solids},
+                           headers)
+                return
+            if name == "activity":
+                self._json(200, {"ok": True,
+                                 "activity": app.v2_document.summary["activity"]},
+                           headers)
+                return
+            if name == "parents":
+                parents = app.v2_document.summary["parents"]
+                self._json(200, {"ok": True, "count": len(parents),
+                                 "parents": parents}, headers)
+                return
+            if name == "props":
+                rotation = self._v2_flag(query, "rotation", True)
+                scale = self._v2_flag(query, "scale", True)
+                props = app.v2_document.props_payload(rotation=rotation, scale=scale)
+                self._json(200, {"ok": True, "rotation": rotation, "scale": scale,
+                                 "count": len(props), "props": props}, headers)
+                return
+            if name == "view":
+                payload = app.v2_payload(
+                    terrain=self._v2_flag(query, "terrain", True),
+                    solids=self._v2_flag(query, "solids", True),
+                    walls=self._v2_flag(query, "walls", True),
+                    kill=self._v2_flag(query, "kill", True),
+                    parents=self._v2_flag(query, "parents", True),
+                    rotation=self._v2_flag(query, "rotation", True),
+                    scale=self._v2_flag(query, "scale", True),
+                    props=self._v2_flag(query, "props", True),
+                )
+                self._json(200, payload, headers)
+                return
+            self._error(404, "no such v2 resource: %s" % name)
+        except editor_core.OpError as refusal:
+            self._json(404, {"ok": False, "error": str(refusal),
+                             "details": refusal.details}, headers)
+        except Exception as unexpected:                          # noqa: BLE001 - transport
+            self._json(500, {"ok": False, "error": "%s: %s"
+                             % (type(unexpected).__name__, unexpected)}, headers)
 
     def _serve_model(self, def_id):
         app = self.server.app
@@ -1870,7 +2237,11 @@ class Handler(BaseHTTPRequestHandler):
         app = self.server.app
         if path == "/api/open":
             payload.setdefault("op", "open")
-            payload["args"] = {"level": payload.pop("level", None)}
+            args = {"level": payload.pop("level", None)}
+            placement = payload.pop("placement", None)
+            if placement is not None:
+                args["placement"] = placement
+            payload["args"] = args
         if path == "/api/regions":
             try:
                 with app.mu:
@@ -1976,6 +2347,15 @@ def main(argv=None):
     level_path = core.display_path(Path(app.editor.path))
     print("%s %d" % (SERVICE, PROTOCOL), flush=True)
     print("level:   %s  (%s)" % (app.editor.level, level_path), flush=True)
+    if app.v2_mode:
+        summary = app.v2_document.summary
+        print("document: v2 %s — %s props, %s solids, terrain %s tri / %s verts, "
+              "%s activity walls, structural errors %s"
+              % (v2_document.SCHEMA_V2, summary["counts"]["props"],
+                 summary["counts"]["solids"],
+                 summary["counts"]["terrainTriangles"],
+                 summary["counts"]["terrainVertices"],
+                 summary["counts"]["walls"], len(app.v2_document.errors)), flush=True)
     if app.ref_mode:
         print("REFERENCE: UNLICENSED — this level is read-only; meshes are ripped assets "
               "served only from %s; do not distribute, upload or bake them into the "

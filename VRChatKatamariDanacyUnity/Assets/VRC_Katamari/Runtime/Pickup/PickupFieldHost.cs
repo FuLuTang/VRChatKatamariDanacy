@@ -176,6 +176,12 @@ namespace VRCKatamari.Pickup
         // would rotate a yawed prop twice. Optional: an un-synced scene has no column
         // and the host falls back to propBounds with one reason-coded warning.
         [SerializeField] private Vector3[] propLocalBounds;
+        // Value units per prop, from the level's declared data. DELIBERATELY still
+        // int[]: this column is serialized into every level scene and prefab, and
+        // `long[]` has no precedent in a serialized field (Docs/OPEN_DECISIONS.md (r),
+        // unverified item 1). The fixed-point migration therefore widens the read site
+        // (SubmitProp) and the ledger, never this array's shape, until Step B re-imports
+        // every scene with the widened column and the value's own type.
         [SerializeField] private int[] valueUnits;
         // Optional: wired colliders are disabled on attach so an absorbed prop cannot block
         // anything. Leave the array empty to skip that.
@@ -1302,8 +1308,16 @@ namespace VRCKatamari.Pickup
         private void SubmitProp(int index)
         {
             Vector3 itemPosition = propTransforms[index].position;
+            // The column stays int[] and is widened HERE, at the read site. Step A of the
+            // fixed-point volume migration (Docs/OPEN_DECISIONS.md (r)) widens ledger
+            // quantities to long, but a serialized array must not change shape until
+            // Unity has proven long[] in a serialized field; valueUnits is scene and
+            // placement data, so it keeps its int[] and every consumer widens the read.
+            // (float)(long)value == (float)value for every int, so this is the same
+            // number the motor received before.
+            long itemValueUnits = (long)valueUnits[index];
             motor.SubmitCandidate(true, kinds[index], propBounds[index],
-                itemPosition, (float)valueUnits[index], itemIds[index], 0);
+                itemPosition, (float)itemValueUnits, itemIds[index], 0);
             // Stamped even when the motor answered "already queued": both cases leave this
             // host willing to withdraw the id later if the ball leaves.
             lastSubmitTimes[index] = Time.time;

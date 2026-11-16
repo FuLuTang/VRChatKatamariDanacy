@@ -27,8 +27,11 @@ namespace VRCKatamari.Tests
         public readonly float[] RoundClock = new float[GrowthLedgerMath.RoundClockCount];
 
         public readonly string[] PlayerIds = new string[PlayerCapacity];
-        public readonly int[] ConfirmedVolumes = new int[PlayerCapacity];
-        public readonly int[] BankedScores = new int[PlayerCapacity];
+        // The ledger's quantity columns are 64-bit (Docs/OPEN_DECISIONS.md (r) step A),
+        // so this host owns long[] exactly as the motor does. The tests' numbers do not
+        // change; a total past int.MaxValue is representable instead of wrapping.
+        public readonly long[] ConfirmedVolumes = new long[PlayerCapacity];
+        public readonly long[] BankedScores = new long[PlayerCapacity];
         public readonly int[] LifeStates = new int[PlayerCapacity];
         public readonly bool[] RespawnAtSet = new bool[PlayerCapacity];
         public readonly float[] RespawnAt = new float[PlayerCapacity];
@@ -39,7 +42,7 @@ namespace VRCKatamari.Tests
         public readonly int[] CommitGenerations = new int[CommitCapacity];
         public readonly string[] CommitWinners = new string[CommitCapacity];
         public readonly int[] CommitSequences = new int[CommitCapacity];
-        public readonly int[] CommitGains = new int[CommitCapacity];
+        public readonly long[] CommitGains = new long[CommitCapacity];
         public int CommitCount;
 
         public readonly string[] ClaimItemIds = new string[ClaimCapacity];
@@ -52,7 +55,7 @@ namespace VRCKatamari.Tests
         public readonly string[] PredictionPlayerIds = new string[PredictionCapacity];
         public readonly string[] PredictionItemIds = new string[PredictionCapacity];
         public readonly int[] PredictionGenerations = new int[PredictionCapacity];
-        public readonly int[] PredictionGains = new int[PredictionCapacity];
+        public readonly long[] PredictionGains = new long[PredictionCapacity];
         public int PredictionCount;
 
         public readonly string[] BankRequestPlayerIds = new string[BankRequestCapacity];
@@ -85,7 +88,7 @@ namespace VRCKatamari.Tests
             return advanced;
         }
 
-        public bool Predict(string playerId, string item, int generation, int gain)
+        public bool Predict(string playerId, string item, int generation, long gain)
         {
             return GrowthLedgerMath.TryPredict(Round, PlayerIds, PlayerCount,
                 PredictionPlayerIds, PredictionItemIds, PredictionGenerations,
@@ -102,7 +105,7 @@ namespace VRCKatamari.Tests
                 generation, playerId, frame, requestSequence);
         }
 
-        public bool TryResolve(string item, int generation, int gain, out int commitRow)
+        public bool TryResolve(string item, int generation, long gain, out int commitRow)
         {
             return GrowthLedgerMath.TryResolveClaims(RoundState, PlayerIds,
                 ConfirmedVolumes, BankedScores, LifeStates, RespawnAtSet, RespawnAt,
@@ -114,7 +117,7 @@ namespace VRCKatamari.Tests
                 item, generation, gain, out commitRow);
         }
 
-        public int Resolve(string item, int generation, int gain)
+        public int Resolve(string item, int generation, long gain)
         {
             int commitRow;
             Assert.IsTrue(TryResolve(item, generation, gain, out commitRow),
@@ -123,7 +126,7 @@ namespace VRCKatamari.Tests
         }
 
         public bool TryApplyCommit(string item, int generation, string winner, int sequence,
-            int gain, out bool applied)
+            long gain, out bool applied)
         {
             return GrowthLedgerMath.TryApplyCommit(RoundState, PlayerIds, ConfirmedVolumes,
                 BankedScores, LifeStates, RespawnAtSet, RespawnAt, PlayerGenerations,
@@ -135,7 +138,7 @@ namespace VRCKatamari.Tests
         }
 
         public bool ApplyCommit(string item, int generation, string winner, int sequence,
-            int gain)
+            long gain)
         {
             bool applied;
             Assert.IsTrue(TryApplyCommit(item, generation, winner, sequence, gain, out applied),
@@ -143,7 +146,7 @@ namespace VRCKatamari.Tests
             return applied;
         }
 
-        public bool Bank(string playerId, int amount, string requestId)
+        public bool Bank(string playerId, long amount, string requestId)
         {
             return GrowthLedgerMath.TryBank(RoundState, PlayerIds, ConfirmedVolumes,
                 BankedScores, LifeStates, RespawnAtSet, RespawnAt, PlayerGenerations,
@@ -151,7 +154,7 @@ namespace VRCKatamari.Tests
                 playerId, amount, requestId);
         }
 
-        public bool Ko(string victim, string attacker, float now, float delay, int share)
+        public bool Ko(string victim, string attacker, float now, float delay, long share)
         {
             return GrowthLedgerMath.TryKo(RoundState, PlayerIds, ConfirmedVolumes,
                 BankedScores, LifeStates, RespawnAtSet, RespawnAt, PlayerGenerations,
@@ -199,12 +202,12 @@ namespace VRCKatamari.Tests
             return row;
         }
 
-        public int Confirmed(string playerId)
+        public long Confirmed(string playerId)
         {
             return ConfirmedVolumes[PlayerRow(playerId)];
         }
 
-        public int Banked(string playerId)
+        public long Banked(string playerId)
         {
             return BankedScores[PlayerRow(playerId)];
         }

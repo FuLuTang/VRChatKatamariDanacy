@@ -544,7 +544,7 @@ namespace VRCKatamari.Pickup
         private static AbsorbOutcome ApplyValueGate(AbsorbOutcome geometry, float itemValue)
         {
             if (geometry != AbsorbOutcome.Absorb) return geometry;
-            int gain;
+            long gain;
             if (!TryAbsorbValueToLedgerGain(itemValue, out gain)) return AbsorbOutcome.RejectNoGain;
             if (gain <= 0) return AbsorbOutcome.RejectNoGain;
             return AbsorbOutcome.Absorb;
@@ -554,25 +554,34 @@ namespace VRCKatamari.Pickup
         /// Converts one absorbed item's float value into the ledger's integer gain.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// The two DRAFT models use different numeric domains: the pickup model's
-        /// `Item.value` is a float and the ledger's event gain is an int of the same
-        /// volume unit. Neither model defines a rounding rule, and inventing one would
-        /// silently change a total, so a non-integral value, a negative value, a
-        /// non-finite value and a value outside the 32-bit integer range are all
+        /// `Item.value` is a float and the ledger's event gain is a whole number of the
+        /// same volume unit. Neither model defines a rounding rule, and inventing one
+        /// would silently change a total, so a non-integral value, a negative value, a
+        /// non-finite value and a value outside the ledger's integer range are all
         /// rejected. An accepted value maps 1:1 with no scaling and no rounding, and the
         /// result is only the accounting input: it becomes real value only once
         /// <see cref="VRCKatamari.Economy.GrowthLedgerMath.TryResolveClaims"/> or
         /// <see cref="VRCKatamari.Economy.GrowthLedgerMath.TryApplyCommit"/> commits the
         /// matching event key.
+        /// </para>
+        /// <para>
+        /// The gain is a 64-bit <c>long</c> because the ledger's volume columns are
+        /// (Docs/OPEN_DECISIONS.md (r), migration step A), so the range guard is the
+        /// 64-bit one instead of the retired 2^31 bound. The unit is unchanged: a value
+        /// of 2 still becomes a gain of 2. The refusal itself is unchanged (false, out
+        /// value zero), so every caller's "no gain" branch keeps its meaning.
+        /// </para>
         /// </remarks>
-        public static bool TryAbsorbValueToLedgerGain(float itemValue, out int gain)
+        public static bool TryAbsorbValueToLedgerGain(float itemValue, out long gain)
         {
-            gain = 0;
+            gain = 0L;
             if (!KatamariMath.IsFiniteFloat(itemValue) || itemValue < 0f) return false;
-            // 2^31 is exactly representable as a float; comparing against it first keeps
+            // 2^63 is exactly representable as a float; comparing against it first keeps
             // the integer cast below inside the representable range.
-            if (itemValue >= 2147483648f) return false;
-            int truncated = (int)itemValue;
+            if (itemValue >= 9223372036854775808f) return false;
+            long truncated = (long)itemValue;
             // A fractional value has no defined rounding policy in either model.
             if ((float)truncated != itemValue) return false;
             gain = truncated;

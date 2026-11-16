@@ -125,7 +125,8 @@ namespace VRCKatamari.Tests
                 motorType.GetMethod("TryBeginPlaying", any).Invoke(motor, new object[] { Time.time });
 
                 int row = (int)motorType.GetField("localRow", any).GetValue(motor);
-                int[] banked = (int[])motorType.GetField("bankedScores", any).GetValue(motor);
+                // The ledger's score column is 64-bit (Docs/OPEN_DECISIONS.md (r) step A).
+                long[] banked = (long[])motorType.GetField("bankedScores", any).GetValue(motor);
                 MethodInfo award = motorType.GetMethod("TryAwardScore", any);
                 Assert.IsNotNull(award, "TryAwardScore not found");
 

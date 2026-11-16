@@ -377,7 +377,7 @@ namespace VRCKatamari.Tests
         {
             LedgerTestHost host = Playing();
             Assert.IsTrue(host.SubmitClaim("i", 0, "a", 0, 1));
-            int confirmedBefore = host.Confirmed("a");
+            long confirmedBefore = host.Confirmed("a");
             int commitCountBefore = host.CommitCount;
             int row;
 

@@ -51,7 +51,9 @@ namespace VRCKatamari.Economy
     /// <para>
     /// Units. A volume unit is the model's integer volume: `confirmed_volume`,
     /// `banked_score` and every event gain are counted in the same unit, and banking
-    /// converts 1:1. The model defines no world-space scale for one unit. Time (`now`,
+    /// converts 1:1. One unit is stored as a 64-bit integer (Docs/OPEN_DECISIONS.md (r)
+    /// step A); the unit itself, its scale and every stored number are unchanged. The
+    /// model defines no world-space scale for one unit. Time (`now`,
     /// deadlines, respawn times) is in seconds from the caller's monotonic clock; the
     /// model never reads a clock and every value here is supplied by the caller. A
     /// frame is the authority's integer frame index, used only for claim ordering.
@@ -132,11 +134,19 @@ namespace VRCKatamari.Economy
     /// leaves the stores exactly as they were.
     /// </para>
     /// <para>
-    /// Fixed-width differences. Python integers are unbounded; these are 32-bit ints.
-    /// A gain, deposit or wake-up that would overflow a confirmed total, a banked score
-    /// or a generation is rejected instead of wrapping negative, because a negative
-    /// total would break every safety invariant. Capacities are the column lengths; a
-    /// full store rejects instead of evicting.
+    /// Fixed-width differences. Python integers are unbounded; these are fixed width.
+    /// The QUANTITY columns (confirmed volume, banked score, commit gain, prediction
+    /// gain) and every quantity argument are 64-bit <c>long</c>, so a total can pass
+    /// int.MaxValue without wrapping (Docs/OPEN_DECISIONS.md (r), migration step A: the
+    /// unit and every number are unchanged, only the type is wider). The QUANTITY
+    /// guards are therefore <c>long.MaxValue - x</c>: a gain, deposit or attacker share
+    /// that would overflow a confirmed total or a banked score is rejected instead of
+    /// wrapping negative, because a negative total would break every safety invariant.
+    /// Counts, row indices, event generations, claim frames, request sequences and the
+    /// round's commit sequence stay 32-bit <c>int</c>: none of them is a volume or a
+    /// score, and their stores (roundState, lifeStates, the key columns) are 32-bit on
+    /// purpose. Capacities are the column lengths; a full store rejects instead of
+    /// evicting.
     /// </para>
     /// <para>
     /// Deliberate omissions. The model's `same_frame_tie`, `round_duration_placeholder`
@@ -364,7 +374,7 @@ namespace VRCKatamari.Economy
         /// not rejected because the model does not reject it.
         /// </remarks>
         public static bool TryJoin(int[] roundState, string[] playerIds,
-            int[] confirmedVolumes, int[] bankedScores, int[] lifeStates,
+            long[] confirmedVolumes, long[] bankedScores, int[] lifeStates,
             bool[] respawnAtSet, float[] respawnAt, int[] playerGenerations,
             ref int playerCount, string playerId)
         {
@@ -447,14 +457,14 @@ namespace VRCKatamari.Economy
         /// </remarks>
         public static bool TryResetRowForNewRound(int[] roundState, bool[] roundFlags,
             float[] roundClock,
-            string[] playerIds, int[] confirmedVolumes, int[] bankedScores, int[] lifeStates,
+            string[] playerIds, long[] confirmedVolumes, long[] bankedScores, int[] lifeStates,
             bool[] respawnAtSet, float[] respawnAt, int[] playerGenerations, int playerCount,
             string[] commitItemIds, int[] commitGenerations, string[] commitWinners,
-            int[] commitSequences, int[] commitGains, ref int commitCount,
+            int[] commitSequences, long[] commitGains, ref int commitCount,
             string[] claimItemIds, int[] claimGenerations, string[] claimPlayerIds,
             int[] claimFrames, int[] claimRequestSequences, ref int claimCount,
             string[] predictedPlayerIds, string[] predictedItemIds, int[] predictedGenerations,
-            int[] predictedGains, ref int predictedCount,
+            long[] predictedGains, ref int predictedCount,
             string[] bankRequestPlayerIds, string[] bankRequestIds, ref int bankRequestCount,
             string[] awardedKeys, int[] awardedPoints, ref int awardedCount,
             string newRoundId, string playerId, out int failureCode)
@@ -555,8 +565,8 @@ namespace VRCKatamari.Economy
         /// </remarks>
         public static bool TryPredict(string roundId, string[] playerIds, int playerCount,
             string[] predictedPlayerIds, string[] predictedItemIds, int[] predictedGenerations,
-            int[] predictedGains, ref int predictedCount,
-            string playerId, string eventRoundId, string itemInstanceId, int generation, int gain)
+            long[] predictedGains, ref int predictedCount,
+            string playerId, string eventRoundId, string itemInstanceId, int generation, long gain)
         {
             if (!TryValidatePlayerIdentity(playerIds, playerCount)) return false;
             if (!TryValidatePredictionColumns(predictedPlayerIds, predictedItemIds,
@@ -739,15 +749,15 @@ namespace VRCKatamari.Economy
         /// the module report); accepting it would drive a total below zero.
         /// </remarks>
         public static bool TryResolveClaims(int[] roundState,
-            string[] playerIds, int[] confirmedVolumes, int[] bankedScores, int[] lifeStates,
+            string[] playerIds, long[] confirmedVolumes, long[] bankedScores, int[] lifeStates,
             bool[] respawnAtSet, float[] respawnAt, int[] playerGenerations, int playerCount,
             string[] commitItemIds, int[] commitGenerations, string[] commitWinners,
-            int[] commitSequences, int[] commitGains, ref int commitCount,
+            int[] commitSequences, long[] commitGains, ref int commitCount,
             string[] claimItemIds, int[] claimGenerations, string[] claimPlayerIds,
             int[] claimFrames, int[] claimRequestSequences, ref int claimCount,
             string[] predictedPlayerIds, string[] predictedItemIds, int[] predictedGenerations,
-            int[] predictedGains, ref int predictedCount,
-            string roundId, string eventRoundId, string itemInstanceId, int generation, int gain,
+            long[] predictedGains, ref int predictedCount,
+            string roundId, string eventRoundId, string itemInstanceId, int generation, long gain,
             out int commitRow)
         {
             commitRow = NoRow;
@@ -789,7 +799,7 @@ namespace VRCKatamari.Economy
             if (!TryFindPlayerRow(playerIds, playerCount, winnerId, out winnerPlayerRow)) return false;
             if (roundState[RoundCommitSequenceState] >= int.MaxValue) return false;
             if (commitCount >= commitItemIds.Length) return false;
-            if (confirmedVolumes[winnerPlayerRow] > int.MaxValue - gain) return false;
+            if (confirmedVolumes[winnerPlayerRow] > long.MaxValue - gain) return false;
 
             int sequence = roundState[RoundCommitSequenceState] + 1;
             for (int row = 0; row < claimCount; row++)
@@ -831,14 +841,14 @@ namespace VRCKatamari.Economy
         /// leave the stores untouched.
         /// </remarks>
         public static bool TryApplyCommit(int[] roundState,
-            string[] playerIds, int[] confirmedVolumes, int[] bankedScores, int[] lifeStates,
+            string[] playerIds, long[] confirmedVolumes, long[] bankedScores, int[] lifeStates,
             bool[] respawnAtSet, float[] respawnAt, int[] playerGenerations, int playerCount,
             string[] commitItemIds, int[] commitGenerations, string[] commitWinners,
-            int[] commitSequences, int[] commitGains, ref int commitCount,
+            int[] commitSequences, long[] commitGains, ref int commitCount,
             string[] predictedPlayerIds, string[] predictedItemIds, int[] predictedGenerations,
-            int[] predictedGains, ref int predictedCount,
+            long[] predictedGains, ref int predictedCount,
             string roundId, string eventRoundId, string itemInstanceId, int generation,
-            string winnerId, int sequence, int gain, out bool applied)
+            string winnerId, int sequence, long gain, out bool applied)
         {
             applied = false;
             if (!TryValidateRoundScalars(roundState)) return false;
@@ -865,7 +875,7 @@ namespace VRCKatamari.Economy
             int winnerPlayerRow;
             if (!TryFindPlayerRow(playerIds, playerCount, winnerId, out winnerPlayerRow)) return false;
             if (commitCount >= commitItemIds.Length) return false;
-            if (confirmedVolumes[winnerPlayerRow] > int.MaxValue - gain) return false;
+            if (confirmedVolumes[winnerPlayerRow] > long.MaxValue - gain) return false;
 
             int write = commitCount;
             commitItemIds[write] = itemInstanceId;
@@ -897,10 +907,10 @@ namespace VRCKatamari.Economy
         /// the model.
         /// </remarks>
         public static bool TryBank(int[] roundState,
-            string[] playerIds, int[] confirmedVolumes, int[] bankedScores, int[] lifeStates,
+            string[] playerIds, long[] confirmedVolumes, long[] bankedScores, int[] lifeStates,
             bool[] respawnAtSet, float[] respawnAt, int[] playerGenerations, int playerCount,
             string[] bankRequestPlayerIds, string[] bankRequestIds, ref int bankRequestCount,
-            string playerId, int amount, string requestId)
+            string playerId, long amount, string requestId)
         {
             if (!TryValidateRoundScalars(roundState)) return false;
             if (!TryValidatePlayerColumns(playerIds, confirmedVolumes, bankedScores, lifeStates,
@@ -922,7 +932,7 @@ namespace VRCKatamari.Economy
             if (lifeStates[playerRow] != (int)PlayerLifecycle.Active) return false;
             if (amount <= 0 || amount > confirmedVolumes[playerRow]) return false;
             if (bankRequestCount >= bankRequestPlayerIds.Length) return false;
-            if (bankedScores[playerRow] > int.MaxValue - amount) return false;
+            if (bankedScores[playerRow] > long.MaxValue - amount) return false;
 
             int write = bankRequestCount;
             bankRequestPlayerIds[write] = playerId;
@@ -951,11 +961,11 @@ namespace VRCKatamari.Economy
         /// gets no share. Negative placeholder values are rejected (the model raises).
         /// </remarks>
         public static bool TryKo(int[] roundState,
-            string[] playerIds, int[] confirmedVolumes, int[] bankedScores, int[] lifeStates,
+            string[] playerIds, long[] confirmedVolumes, long[] bankedScores, int[] lifeStates,
             bool[] respawnAtSet, float[] respawnAt, int[] playerGenerations, int playerCount,
             string[] predictedPlayerIds, string[] predictedItemIds, int[] predictedGenerations,
-            int[] predictedGains, ref int predictedCount,
-            string victimId, string attackerId, float now, float respawnDelay, int attackerShare)
+            long[] predictedGains, ref int predictedCount,
+            string victimId, string attackerId, float now, float respawnDelay, long attackerShare)
         {
             if (!TryValidateRoundScalars(roundState)) return false;
             if (!TryValidatePlayerColumns(playerIds, confirmedVolumes, bankedScores, lifeStates,
@@ -973,8 +983,8 @@ namespace VRCKatamari.Economy
             if (lifeStates[victimRow] != (int)PlayerLifecycle.Active) return false;
             if (playerGenerations[victimRow] >= int.MaxValue) return false;
 
-            int lost = confirmedVolumes[victimRow];
-            int share = 0;
+            long lost = confirmedVolumes[victimRow];
+            long share = 0L;
             int attackerRow = NoRow;
             if (attackerId != null && attackerId.Length > 0 &&
                 string.CompareOrdinal(attackerId, victimId) != 0)
@@ -982,7 +992,7 @@ namespace VRCKatamari.Economy
                 if (TryFindPlayerRow(playerIds, playerCount, attackerId, out attackerRow))
                 {
                     share = attackerShare < lost ? attackerShare : lost;
-                    if (confirmedVolumes[attackerRow] > int.MaxValue - share) return false;
+                    if (confirmedVolumes[attackerRow] > long.MaxValue - share) return false;
                 }
             }
             float respawnAtValue = now + respawnDelay;
@@ -1013,10 +1023,10 @@ namespace VRCKatamari.Economy
         /// by its body, so no protection parameter exists here.
         /// </remarks>
         public static bool TryRespawn(int[] roundState,
-            string[] playerIds, int[] confirmedVolumes, int[] bankedScores, int[] lifeStates,
+            string[] playerIds, long[] confirmedVolumes, long[] bankedScores, int[] lifeStates,
             bool[] respawnAtSet, float[] respawnAt, int[] playerGenerations, int playerCount,
             string[] predictedPlayerIds, string[] predictedItemIds, int[] predictedGenerations,
-            int[] predictedGains, ref int predictedCount, string playerId, float now)
+            long[] predictedGains, ref int predictedCount, string playerId, float now)
         {
             if (!TryValidateRoundScalars(roundState)) return false;
             if (!TryValidatePlayerColumns(playerIds, confirmedVolumes, bankedScores, lifeStates,
@@ -1052,12 +1062,12 @@ namespace VRCKatamari.Economy
         /// undecided in the model and are not invented here.
         /// </remarks>
         public static bool TryDisconnect(int[] roundState,
-            string[] playerIds, int[] confirmedVolumes, int[] bankedScores, int[] lifeStates,
+            string[] playerIds, long[] confirmedVolumes, long[] bankedScores, int[] lifeStates,
             bool[] respawnAtSet, float[] respawnAt, int[] playerGenerations, int playerCount,
             string[] claimItemIds, int[] claimGenerations, string[] claimPlayerIds,
             int[] claimFrames, int[] claimRequestSequences, ref int claimCount,
             string[] predictedPlayerIds, string[] predictedItemIds, int[] predictedGenerations,
-            int[] predictedGains, ref int predictedCount, string playerId)
+            long[] predictedGains, ref int predictedCount, string playerId)
         {
             if (!TryValidateRoundScalars(roundState)) return false;
             if (!TryValidatePlayerColumns(playerIds, confirmedVolumes, bankedScores, lifeStates,
@@ -1101,19 +1111,19 @@ namespace VRCKatamari.Economy
         /// </remarks>
         public static bool TryInstallSnapshot(int[] roundState, bool[] roundFlags,
             float[] roundClock,
-            string[] playerIds, int[] confirmedVolumes, int[] bankedScores, int[] lifeStates,
+            string[] playerIds, long[] confirmedVolumes, long[] bankedScores, int[] lifeStates,
             bool[] respawnAtSet, float[] respawnAt, int[] playerGenerations,
             ref int playerCount,
             string[] commitItemIds, int[] commitGenerations, string[] commitWinners,
-            int[] commitSequences, int[] commitGains, ref int commitCount,
+            int[] commitSequences, long[] commitGains, ref int commitCount,
             ref int predictedCount, ref int claimCount,
             string roundId, string snapshotRoundId,
             int[] snapshotRoundState, bool[] snapshotRoundFlags, float[] snapshotRoundClock,
-            string[] snapshotPlayerIds, int[] snapshotConfirmedVolumes, int[] snapshotBankedScores,
+            string[] snapshotPlayerIds, long[] snapshotConfirmedVolumes, long[] snapshotBankedScores,
             int[] snapshotLifeStates, int snapshotPlayerCount,
             string[] snapshotCommitItemIds, int[] snapshotCommitGenerations,
             string[] snapshotCommitWinners, int[] snapshotCommitSequences,
-            int[] snapshotCommitGains, int snapshotCommitCount)
+            long[] snapshotCommitGains, int snapshotCommitCount)
         {
             if (!TryValidateRoundStore(roundState, roundFlags, roundClock)) return false;
             if (!TryValidatePlayerColumns(playerIds, confirmedVolumes, bankedScores, lifeStates,
@@ -1232,8 +1242,8 @@ namespace VRCKatamari.Economy
             return true;
         }
 
-        private static bool TryValidatePlayerColumns(string[] playerIds, int[] confirmedVolumes,
-            int[] bankedScores, int[] lifeStates, bool[] respawnAtSet, float[] respawnAt,
+        private static bool TryValidatePlayerColumns(string[] playerIds, long[] confirmedVolumes,
+            long[] bankedScores, int[] lifeStates, bool[] respawnAtSet, float[] respawnAt,
             int[] playerGenerations, int playerCount)
         {
             if (!TryValidatePlayerIdentityAndLife(playerIds, lifeStates, playerCount)) return false;
@@ -1270,7 +1280,7 @@ namespace VRCKatamari.Economy
 
         private static bool TryValidateCommitColumns(string[] commitItemIds,
             int[] commitGenerations, string[] commitWinners, int[] commitSequences,
-            int[] commitGains, int commitCount)
+            long[] commitGains, int commitCount)
         {
             if (!TryValidateCommitKeyColumns(commitItemIds, commitGenerations, commitCount))
                 return false;
@@ -1307,7 +1317,7 @@ namespace VRCKatamari.Economy
         }
 
         private static bool TryValidatePredictionColumns(string[] predictedPlayerIds,
-            string[] predictedItemIds, int[] predictedGenerations, int[] predictedGains,
+            string[] predictedItemIds, int[] predictedGenerations, long[] predictedGains,
             int predictedCount)
         {
             if (predictedPlayerIds == null || predictedItemIds == null) return false;
@@ -1351,7 +1361,7 @@ namespace VRCKatamari.Economy
         }
 
         private static bool TryValidateSnapshotPlayerColumns(string[] snapshotPlayerIds,
-            int[] snapshotConfirmedVolumes, int[] snapshotBankedScores,
+            long[] snapshotConfirmedVolumes, long[] snapshotBankedScores,
             int[] snapshotLifeStates, int snapshotPlayerCount)
         {
             if (snapshotPlayerIds == null || snapshotConfirmedVolumes == null) return false;
@@ -1378,7 +1388,7 @@ namespace VRCKatamari.Economy
 
         private static bool TryValidateSnapshotCommitColumns(string[] snapshotCommitItemIds,
             int[] snapshotCommitGenerations, string[] snapshotCommitWinners,
-            int[] snapshotCommitSequences, int[] snapshotCommitGains, int snapshotCommitCount)
+            int[] snapshotCommitSequences, long[] snapshotCommitGains, int snapshotCommitCount)
         {
             if (!TryValidateCommitKeyColumns(snapshotCommitItemIds, snapshotCommitGenerations,
                 snapshotCommitCount)) return false;
@@ -1475,7 +1485,7 @@ namespace VRCKatamari.Economy
         }
 
         private static void RemovePredictionsForPlayer(string[] predictedPlayerIds,
-            string[] predictedItemIds, int[] predictedGenerations, int[] predictedGains,
+            string[] predictedItemIds, int[] predictedGenerations, long[] predictedGains,
             ref int predictedCount, string playerId)
         {
             int write = 0;
@@ -1495,7 +1505,7 @@ namespace VRCKatamari.Economy
         }
 
         private static void RemovePredictionsForKey(string[] predictedPlayerIds,
-            string[] predictedItemIds, int[] predictedGenerations, int[] predictedGains,
+            string[] predictedItemIds, int[] predictedGenerations, long[] predictedGains,
             ref int predictedCount, string itemInstanceId, int generation)
         {
             int write = 0;

@@ -105,12 +105,15 @@ namespace VRCKatamari.Tests
         /// </summary>
         private void SetConfirmedUnits(int units)
         {
-            SetField("unbankedVolumeUnits", units);
+            // The motor's ledger mirror and its confirmed column are 64-bit
+            // (Docs/OPEN_DECISIONS.md (r) step A), so both writes box a long; the unit and
+            // the numbers in these tests are unchanged.
+            SetField("unbankedVolumeUnits", (long)units);
             FieldInfo f = motorType.GetField("confirmedVolumes", Any);
             Assert.IsNotNull(f, "confirmedVolumes field not found");
-            int[] volumes = (int[])f.GetValue(motor);
+            long[] volumes = (long[])f.GetValue(motor);
             int row = (int)motorType.GetField("localRow", Any).GetValue(motor);
-            volumes[row] = units;
+            volumes[row] = (long)units;
         }
 
         private int BankReason(string requestId, int unbanked)

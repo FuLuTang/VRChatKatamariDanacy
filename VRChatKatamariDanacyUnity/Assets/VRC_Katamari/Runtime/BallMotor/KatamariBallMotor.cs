@@ -295,10 +295,16 @@ namespace VRCKatamari.BallMotor
         private Quaternion visualRollRotation;
 
         // ---- Volume readings: only committed values, never predictions ----
-        private int unbankedVolumeUnits;
+        // The two ledger mirrors are 64-bit (Docs/OPEN_DECISIONS.md (r) step A): the
+        // ledger columns are long, and a mirror narrower than its source would wrap at
+        // int.MaxValue. The unit and every number are unchanged; carriedVolumeUnits and
+        // confirmedVolumeUnits stay float because they are the SIZE MODEL's quantities
+        // (a display input), not ledger sums - they are recomputed from the mirrors, they
+        // never accumulate, and step C re-derives them from a mm^3 ledger.
+        private long unbankedVolumeUnits;
         private float carriedVolumeUnits;
         private float confirmedVolumeUnits;
-        private int bankedScoreUnits;
+        private long bankedScoreUnits;
         private int absorbedCount;
 
         // ---- FollowRig filter state ----
@@ -323,8 +329,8 @@ namespace VRCKatamari.BallMotor
         private bool[] roundFlags;
         private float[] roundClock;
         private string[] playerIds;
-        private int[] confirmedVolumes;
-        private int[] bankedScores;
+        private long[] confirmedVolumes;
+        private long[] bankedScores;
         private int[] lifeStates;
         private bool[] respawnAtSet;
         private float[] respawnAt;
@@ -334,7 +340,7 @@ namespace VRCKatamari.BallMotor
         private int[] commitGenerations;
         private string[] commitWinners;
         private int[] commitSequences;
-        private int[] commitGains;
+        private long[] commitGains;
         private int commitCount;
         private string[] claimItemIds;
         private int[] claimGenerations;
@@ -345,7 +351,7 @@ namespace VRCKatamari.BallMotor
         private string[] predictedPlayerIds;
         private string[] predictedItemIds;
         private int[] predictedGenerations;
-        private int[] predictedGains;
+        private long[] predictedGains;
         private int predictedCount;
         private string[] bankRequestPlayerIds;
         private string[] bankRequestIds;
@@ -873,8 +879,8 @@ namespace VRCKatamari.BallMotor
             roundFlags = new bool[GrowthLedgerMath.RoundFlagCount];
             roundClock = new float[GrowthLedgerMath.RoundClockCount];
             playerIds = new string[PlayerCapacity];
-            confirmedVolumes = new int[PlayerCapacity];
-            bankedScores = new int[PlayerCapacity];
+            confirmedVolumes = new long[PlayerCapacity];
+            bankedScores = new long[PlayerCapacity];
             lifeStates = new int[PlayerCapacity];
             respawnAtSet = new bool[PlayerCapacity];
             respawnAt = new float[PlayerCapacity];
@@ -883,7 +889,7 @@ namespace VRCKatamari.BallMotor
             commitGenerations = new int[CommitCapacity];
             commitWinners = new string[CommitCapacity];
             commitSequences = new int[CommitCapacity];
-            commitGains = new int[CommitCapacity];
+            commitGains = new long[CommitCapacity];
             claimItemIds = new string[ClaimCapacity];
             claimGenerations = new int[ClaimCapacity];
             claimPlayerIds = new string[ClaimCapacity];
@@ -892,7 +898,7 @@ namespace VRCKatamari.BallMotor
             predictedPlayerIds = new string[PredictionCapacity];
             predictedItemIds = new string[PredictionCapacity];
             predictedGenerations = new int[PredictionCapacity];
-            predictedGains = new int[PredictionCapacity];
+            predictedGains = new long[PredictionCapacity];
             bankRequestPlayerIds = new string[BankRequestCapacity];
             bankRequestIds = new string[BankRequestCapacity];
 
@@ -3299,7 +3305,7 @@ namespace VRCKatamari.BallMotor
                 bool absorbed = false;
                 if (pendingAccepted[read])
                 {
-                    int gain;
+                    long gain;
                     if (PickupAbsorbMath.TryAbsorbValueToLedgerGain(pendingValues[read],
                         out gain))
                     {
@@ -3355,7 +3361,7 @@ namespace VRCKatamari.BallMotor
             pendingSubmitTimes[write] = pendingSubmitTimes[read];
         }
 
-        private bool TryCommitAbsorb(string itemInstanceId, int generation, int gain)
+        private bool TryCommitAbsorb(string itemInstanceId, int generation, long gain)
         {
             absorbRequestSequence = absorbRequestSequence + 1;
             int claimFailure;
@@ -3391,8 +3397,8 @@ namespace VRCKatamari.BallMotor
                 return false;
             }
 
-            int confirmed = confirmedVolumes[localRow];
-            int banked = bankedScores[localRow];
+            long confirmed = confirmedVolumes[localRow];
+            long banked = bankedScores[localRow];
             if (confirmed < 0 || banked < 0) return false;
             unbankedVolumeUnits = confirmed;
             bankedScoreUnits = banked;
@@ -5336,8 +5342,8 @@ namespace VRCKatamari.BallMotor
                 return false;
             }
 
-            int confirmed = confirmedVolumes[localRow];
-            int banked = bankedScores[localRow];
+            long confirmed = confirmedVolumes[localRow];
+            long banked = bankedScores[localRow];
             if (confirmed < 0 || banked < 0) { reason = 7; return false; }
             unbankedVolumeUnits = confirmed;
             bankedScoreUnits = banked;
@@ -5884,12 +5890,54 @@ namespace VRCKatamari.BallMotor
             return semanticDiameterWorldM;
         }
 
+        /// <summary>
+        /// The confirmed volume the size model consumes: the ledger's unbanked volume plus
+        /// the already-scored carried residual, as a float.
+        /// </summary>
+        /// <remarks>
+        /// A SIZE quantity, not a ledger sum: it is recomputed from the 64-bit ledger
+        /// mirror on every step through <see cref="RecomputeConfirmedAndSize"/>, so it
+        /// never accumulates and cannot drift away from the ledger. The exact 64-bit
+        /// ledger quantity is <see cref="GetConfirmedLedgerVolumeUnits"/>.
+        /// </remarks>
         public float GetConfirmedVolumeUnits()
         {
             return confirmedVolumeUnits;
         }
 
+        /// <summary>
+        /// The ledger's confirmed (unbanked) volume for the local row, exactly, as a long.
+        /// </summary>
+        /// <remarks>
+        /// This is the ledger quantity itself: a commit adds to it, a bank subtracts from
+        /// it, and it is never a prediction. It is 64-bit because the ledger columns are
+        /// (Docs/OPEN_DECISIONS.md (r), migration step A), so a total beyond int.MaxValue
+        /// reads back exactly. A per-absorb delta is the difference of two of these, which
+        /// is exact integer arithmetic; subtracting two float accumulators is not.
+        /// </remarks>
+        public long GetConfirmedLedgerVolumeUnits()
+        {
+            return unbankedVolumeUnits;
+        }
+
+        /// <summary>
+        /// The banked score, projected onto int for the existing 32-bit callers.
+        /// </summary>
+        /// <remarks>
+        /// The ledger's banked score is 64-bit (Docs/OPEN_DECISIONS.md (r) step A). This
+        /// projection saturates at int.MaxValue instead of wrapping, so a score above it
+        /// can never read as negative; a caller that needs the exact value reads
+        /// <see cref="GetBankedLedgerScoreUnits"/>. It exists because the debug harness in
+        /// Runtime/Ai consumes an int and is not part of this migration step.
+        /// </remarks>
         public int GetBankedScoreUnits()
+        {
+            if (bankedScoreUnits > int.MaxValue) return int.MaxValue;
+            return (int)bankedScoreUnits;
+        }
+
+        /// <summary>The ledger's banked score for the local row, exactly, as a long.</summary>
+        public long GetBankedLedgerScoreUnits()
         {
             return bankedScoreUnits;
         }
@@ -6199,11 +6247,11 @@ namespace VRCKatamari.BallMotor
             if (!hasLocalRow) { lastAwardFailure = 5; return false; }
             if (bankedScores == null) { lastAwardFailure = 5; return false; }
 
-            int banked = bankedScores[localRow];
+            long banked = bankedScores[localRow];
             if (banked < 0) { lastAwardFailure = 5; return false; }
             if (points > 0)
             {
-                int projected = banked + points;
+                long projected = banked + points;
                 if (projected < banked) { lastAwardFailure = 5; return false; }
             }
 
@@ -6276,7 +6324,7 @@ namespace VRCKatamari.BallMotor
         /// accepted); resolveFailure is 1 when TryResolveClaims itself refused, and
         /// commitRow -1 marks the "success but no commit row" case.
         /// </remarks>
-        private void LogCommitFailureOnce(string itemId, int gain, int claimFailure,
+        private void LogCommitFailureOnce(string itemId, long gain, int claimFailure,
             int resolveFailure, int commitRow)
         {
             if (commitDiagnosticsLogged >= commitDiagnosticsLimit) return;

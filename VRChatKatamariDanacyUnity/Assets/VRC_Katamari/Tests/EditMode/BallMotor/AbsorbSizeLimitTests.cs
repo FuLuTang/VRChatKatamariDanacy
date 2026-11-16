@@ -113,7 +113,7 @@ namespace VRCKatamari.Tests
             // Drive the size stage to the cap the way a round would: confirmed units are
             // the only input, so writing the unbanked total and recomputing is exactly
             // what a committed absorb does.
-            SetField("unbankedVolumeUnits", (int)UnitsAtCap);
+            SetField("unbankedVolumeUnits", (long)UnitsAtCap);
             Invoke("RecomputeConfirmedAndSize");
 
             float diameter = Getter("GetSemanticDiameterWorldM");
@@ -161,6 +161,16 @@ namespace VRCKatamari.Tests
         }
 
         private void SetField(string name, int value)
+        {
+            FieldInfo field = motorType.GetField(name,
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            Assert.IsNotNull(field, "field " + name + " not found");
+            field.SetValue(motor, value);
+        }
+
+        // The ledger mirror is 64-bit (Docs/OPEN_DECISIONS.md (r) step A): reflection
+        // assigns a boxed long to it, never a boxed int, which would throw.
+        private void SetField(string name, long value)
         {
             FieldInfo field = motorType.GetField(name,
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);

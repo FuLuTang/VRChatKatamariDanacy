@@ -92,9 +92,12 @@ namespace VRCKatamari.BallPresentation
 
         // Change detection for the per-absorb line. Both are seeded from the motor on the
         // first ready frame, so a ball that started before this component did not report the
-        // absorbs that already happened as one giant line.
+        // absorbs that already happened as one giant line. lastConfirmedUnits is the
+        // LEDGER quantity (64-bit) so the delta below is exact integer arithmetic, not the
+        // difference of two float accumulators - that difference silently loses units once
+        // a total passes float32's 2^24 integer window.
         private int lastAbsorbedCount;
-        private float lastConfirmedUnits;
+        private long lastConfirmedUnits;
         private float lastDiameterM;
 
         public void Update()
@@ -109,7 +112,7 @@ namespace VRCKatamari.BallPresentation
                 elapsed = 0f;
                 nextLogTime = 0f;
                 lastAbsorbedCount = motor.GetAbsorbedCount();
-                lastConfirmedUnits = motor.GetConfirmedVolumeUnits();
+                lastConfirmedUnits = motor.GetConfirmedLedgerVolumeUnits();
                 lastDiameterM = motor.GetSemanticDiameterWorldM();
             }
 
@@ -142,6 +145,13 @@ namespace VRCKatamari.BallPresentation
         /// so <c>before</c> is the diameter read on the PREVIOUS frame - at 50 Hz that is at
         /// most 20 ms stale, which is under one fixed step's worth of absorbs and far below the
         /// 1% line this number is compared against.
+        /// <para>
+        /// The units figure is the motor's 64-bit ledger quantity, and the delta is integer
+        /// subtraction of two readings of that quantity. It is NOT the difference of two
+        /// float accumulators: a float holds consecutive integers only up to 2^24, so once a
+        /// confirmed total passed that window a float-difference delta would quietly report
+        /// the wrong number of units gained. The logged unit is unchanged.
+        /// </para>
         /// </remarks>
         private void TrackGrowth()
         {
@@ -153,8 +163,11 @@ namespace VRCKatamari.BallPresentation
                 return;
             }
 
-            float confirmedUnits = motor.GetConfirmedVolumeUnits();
-            float gainedUnits = confirmedUnits - lastConfirmedUnits;
+            // The ledger quantity, subtracted as integers: exact for any magnitude the
+            // ledger can hold. The unit is unchanged, so the logged number is the same
+            // units figure as before this went 64-bit.
+            long confirmedUnits = motor.GetConfirmedLedgerVolumeUnits();
+            long gainedUnits = confirmedUnits - lastConfirmedUnits;
             float beforeM = lastDiameterM;
             if (!(beforeM > 0f)) beforeM = diameterM;
             float percent = 0f;
@@ -162,7 +175,7 @@ namespace VRCKatamari.BallPresentation
             string sign = "";
             if (percent >= 0f) sign = "+";
 
-            Debug.Log("[grow] units=" + ToThousandth(gainedUnits)
+            Debug.Log("[grow] units=" + ToThousandth((float)gainedUnits)
                 + " D=" + ToTenThousandth(beforeM)
                 + " -> " + ToTenThousandth(diameterM)
                 + " (" + sign + ToTenth(percent) + "%)");

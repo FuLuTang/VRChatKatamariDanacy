@@ -262,7 +262,7 @@ flowchart LR
 5. **`Running` 中途回房仍被拒绝**：控制器没有公开的“立即结束本局”；要做“放弃本局回房”需要那个接缝，且必须自己保证冻结与闸门顺序。
 6. **结果板没有独立的星级显示**：结果板 = `StoryResultPresenter` 的卡；要独立板需要给 presenter 加只读 getter（§6）。
 7. **多人**：`BehaviourSyncMode.None`，最后一位按圈的人各自开各自的局；房间与实际位置可能在不同客户端不一致，不在本文范围（[HUB_LOOP_PLAN](<HUB_LOOP_PLAN.md>) §6.4 已判单人）。
-8. **音频/渲染串扰**：1200 m 只是“看不见”的暂定值，不是性能测量；房间与关卡同在一个 bundle。
+8. **音频/渲染串扰**：1200 m 只是“看不见”的暂定值，不是性能测量。
 9. **导入器 cell 形式是借用**：`level.arena` 本来是为物理测试场设计的；本文借它拿到 `LevelContent/hub` 子树。若 Lead 给 `PlacementImporter` 增加“per-level managed root”字段，房间数据应改回普通 whole-level 文档（一个字段 + 一处文档）。
 10. **`HubRoomWiringCheck` 只读检查**：它按序列化字段名读，字段改名会报 problem；它不验证 teleport、Station 或 Udon 资产。
 

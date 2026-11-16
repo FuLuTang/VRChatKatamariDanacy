@@ -3,7 +3,7 @@
 > 状态：几何推导与补丁提案，**未编译、未在 Unity/Play/VR 运行**，本文件不修改任何 C#。依据：
 > `KatamariBallMotor.cs:250-257,3401-3419,3421-3430`、`FollowRigMath.cs:81-141`、
 > `BallRideStation.cs:97-111,184-189`、`SeatEyeCompensation.cs:53-95,434`、`BallMotor/README.md`
-> 「跟随架」、`StoryMode/README.md:98-102`、`VRC_WORLD_SIZE_LIMITS.md` §6.2/§6.3。数字唯一来源：
+> 「跟随架」、`StoryMode/README.md:98-102`。数字唯一来源：
 > `ride_geometry.py`（运行即打印 §2.2 表），测试 `Docs/tests/follow_rig/test_ride_geometry.py`（14 例）。
 
 ## 0. 结论
@@ -98,7 +98,7 @@ b·c − a·d = 2.4·0.75 − 0.55·2.2 = 0.59 > 0   # 单调递增 ⇒ 36.25° 
 
 机制：Station 承载 avatar 的**根**，头 = 座位 + 坐姿头偏移（本仓只确认偏移量：ClientSim **1.204159 m**、
 真机约 **0.85 m**）。玩家自缩放眼高 **0.2–5.0 m**；Udon 设置眼高**接受 0.01–10000 m**、官方支持
-**0.1–100 m**；**碰撞体不缩放**（`VRC_WORLD_SIZE_LIMITS.md` §S2/S3/S4）。玩家眼高是唯一不受控量，规则三条：
+**0.1–100 m**；**碰撞体不缩放**。玩家眼高是唯一不受控量，规则三条：
 
 1. **球的几何只用世界米**，不读玩家眼高：0.15 m 的球在 1.7 m 与 5 m 玩家眼里是同一个球。
 2. **座位 = 眼点 − 实测头高**（`SeatEyeCompensation` 已在做）。
@@ -156,7 +156,7 @@ b·c − a·d = 2.4·0.75 − 0.55·2.2 = 0.59 > 0   # 单调递增 ⇒ 36.25° 
 | `eyeMaxBackM` | 8 | **210** | r=15 需 82.15 |
 
 `Parameters/README.md` 第 16 行与 §6.4 护栏表同步（4 个眼点系数 → α / β / 眼点下限；两条 8 m 护栏 →
-40/210）。顺带作废 `VRC_WORLD_SIZE_LIMITS.md` §6.2 的"22 m 上限"：新模型 `L ≥ 5.76·r`，相机永远在球外。
+40/210）。顺带作废旧的"22 m 上限"：新模型 `L ≥ 5.76·r`，相机永远在球外。
 
 ### 6.2 顺序
 

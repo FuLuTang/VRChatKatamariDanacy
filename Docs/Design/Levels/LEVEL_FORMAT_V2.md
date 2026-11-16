@@ -1193,7 +1193,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 |---|---:|---|
 | `caps.movingProps` | 每关动件数（Cancer 129） | 运动宿主并行数组的容量；`props` 仍是总件数 |
 | 运动更新 | 15 Hz（路径/随机游走）、10 Hz（其余程序化）、0 Hz（attached/static/纯表现） | §6.7.5 的 12,420 次/秒基线；Cancer 10–15 Hz 占 10–16% |
-| `caps.animators` | **统计字段**（Cancer = 153），不是 64 硬预算 | 2026-11-16 拍板：153 个骨骼实例直接挂普通 Animator/蒙皮，不预先优化；`caps.animators` 只记录数量，供 `[anim_budget]` 对账与包体预算参考 |
+| `caps.animators` | **统计字段**（Cancer = 153），不是 64 硬预算 | 2026-11-16 拍板：153 个骨骼实例直接挂普通 Animator/蒙皮，不预先优化；`caps.animators` 只记录数量，供 `[anim_budget]` 对账 |
 | 相位桶 | 8 | `floor(phase × 8) % 8`；桶内同步是可接受的产品取舍（原作相位来源未知） |
 | 每关 `motions`/`paths` | ≤64 / ≤32 条，每条路径 ≤64 点 | 129 个动件只有 16 个 `moveType`；Cancer 真路径 11 条 |
 
@@ -1388,7 +1388,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 **这条放松的是什么、不放松什么**（写清楚，免得以后再问一遍）：
 
 - **放松**：不再为「153 个 Animator / 153 次 skinned draw call / 1.5–3 千骨骼 Transform」做任何预先设计取舍——先照原作挂满，跑起来再说。
-- **不放松**：Quest/Android **100 MB 包体硬上限**照旧检查（那是包体，不是 Animator 数量）；后续**真实测量**照旧要做（P5 的 4000 件合成场景、真机帧率、Quest 实机），测出瓶颈再谈优化。
+- **不放松**：后续**真实测量**照旧要做（P5 的 4000 件合成场景、真机帧率、Quest 实机），测出瓶颈再谈优化。
 - **不放松**：`defs[].clips` / `props[].clipStart` / `phase` 三个字段照旧，数据不丢。
 
 **「以后真测出瓶颈再看」的备选（现在不做，只留账）**：
@@ -1415,18 +1415,17 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | 能不能在编辑器里叠加（additive）第二张场景 | 编辑器里能打开，但**导出的是活动场景那一份 bundle**，叠加进来的场景内容不进世界【推断，强：导出 API 只接收活动场景，构建产物是一份 bundle】 | 同上；官方「一张场景一个 descriptor」 |
 | Udon 能不能运行时 `LoadScene` | **不能**。Udon 的 API 是白名单（UdonSharp 编译器 `CompilerUdonInterface.IsExposedToUdon` 只放行 node definition 表里的签名；官方 [Class Exposure Tree](https://creators.vrchat.com/worlds/udon/udonsharp/class-exposure-tree/) 就是这张表），白名单组件里没有场景加载器；客户端加载世界是**单场景**加载（`UdonManager.OnSceneLoaded` 遇 `LoadSceneMode.Single` 会清空 Udon 目录再注册），加载世界是客户端的事、不是脚本的事 | SDK 3.10.5：`worlds/Runtime/Udon/UdonManager.cs`、`worlds/Integrations/UdonSharp/Editor/Compiler/Udon/CompilerUdonInterface.cs`；[白名单世界组件](https://creators.vrchat.com/worlds/whitelisted-world-components/) |
 | 能不能运行时下载资源（Addressables / AssetBundle / 模型 / 预制体） | **不能**。允许的运行时外部内容只有**图片、字符串、视频、音频串流**（`VRCUrl` + 域名白名单）；UdonSharp 的 `Instantiate` 只能传 `GameObject`，文档明说传 `Material`/`ScriptableObject` 编译失败。官方文档里没有 Addressables 这一路 | [External URLs](https://creators.vrchat.com/worlds/udon/external-urls/)、[Image Loading](https://creators.vrchat.com/worlds/udon/image-loading/)、[UdonSharp](https://creators.vrchat.com/worlds/udon/udonsharp/) |
-| 世界能多大 | 官方建议 **<200 MB**；**Android 硬上限 100 MB**（构建压缩后）；SDK 上传前有 `CheckIfAssetBundleFileTooLarge` 按平台限额硬检查（限额值在 DLL 里，本轮没解出来，只确认检查存在） | [Submitting a world](https://creators.vrchat.com/worlds/submitting-a-world-to-be-made-public/)、[Quest 内容优化](https://creators.vrchat.com/platforms/android/quest-content-optimization/)、`VRCSdkControlPanelWorldBuilder.cs` 的上传校验 |
 | 多张地图之间怎么跳 | **传送门**：`VRC_PortalMarker`（Udon 可写 `roomId` 再 `RefreshPortal()`），或世界的「World 链接」。跳过去是**另一个世界实例**，不共享任何运行时状态 | [VRC_PortalMarker](https://creators.vrchat.com/worlds/components/vrc_portalmarker/) |
-| 对象池 | `VRC Object Pool` 同步的是对象的 **active 状态**，对象仍在同一场景里；省 `Instantiate`/`Destroy`，不省包体 | [Network Components](https://creators.vrchat.com/worlds/udon/networking/network-components/) |
+| 对象池 | `VRC Object Pool` 同步的是对象的 **active 状态**，对象仍在同一场景里；省 `Instantiate`/`Destroy` | [Network Components](https://creators.vrchat.com/worlds/udon/networking/network-components/) |
 
 ### 17.2 于是只有四种做法（不是五种）
 
 | 做法 | 能做到 | 代价 | 什么时候用 |
 |---|---|---|---|
-| **(a) 全部塞进一张场景** | 一次加载、零切换、状态随便传 | 包体 = 所有图之和；进世界加载时间 = 所有图之和；远处内容仍然被加载（只是不渲染） | 地图总量在 200 MB 内、都要从房间直达 |
+| **(a) 全部塞进一张场景** | 一次加载、零切换、状态随便传 | 进世界加载时间 = 所有图之和；远处内容仍然被加载（只是不渲染） | 都要从房间直达 |
 | **(b) 一张场景 + 每个区域一个根物体，按需 `SetActive`** | 「按需」的唯一形式：省 Update/渲染/物理，不省内存、不省加载时间 | 需要在状态机里管「谁能被启用」；禁用中的道具不会被复位逻辑跑到，容易留下脏状态；本项目还有三条硬阻断（§17.4） | **v1 不做**（见 §17.4 的落地顺序）；多张图同场景、只想让当前图跑脚本时才值得 |
-| **(c) 上传成多个世界，用传送门/World 链接跳** | 每张图单独发布、单独审核、单独算包体 | 跨世界状态全丢（分数、球大小、库存）；每张图都要单独上传与验收；portal 有加载 | 某张图单独超 100 MB、或发布节奏不同 |
-| **(d) 对象池（`VRC Object Pool` / 自建池）** | 省运行时 `Instantiate`/`Destroy` 峰值 | 仍在同一场景，包体不变；池本身要预热 | 大量同类件（碎屑、小蟹）反复生成 |
+| **(c) 上传成多个世界，用传送门/World 链接跳** | 每张图单独发布、单独审核 | 跨世界状态全丢（分数、球大小、库存）；每张图都要单独上传与验收；portal 有加载 | 某张图要做独立发布节奏 |
+| **(d) 对象池（`VRC Object Pool` / 自建池）** | 省运行时 `Instantiate`/`Destroy` 峰值 | 仍在同一场景；池本身要预热 | 大量同类件（碎屑、小蟹）反复生成 |
 
 **没有第五条**：没有 additive 流式加载、没有运行时 AssetBundle、没有「按需下载地图」。
 
@@ -1449,11 +1448,11 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 | 方案 | 适用 | 成本 | 风险 |
 |---|---|---|---|
-| **A 一张场景，每关一个岛**（推荐 v1） | 房间 + 若干张 10–20 m 见方的图；总量 <200 MB（Android <100 MB） | 包体与加载时间是所有图之和；岛间距 ≥1200 m 时 **float 精度足够**（1200 m 处约 0.1 mm，10 km 处才掉到 ~1 mm） | 导入器要多受管根（现在只有一个，§17.5）；同一材质/贴图要在图之间共享（省包体）；将来要按需停用还要另两条前置（§17.4） |
-| B 每张图一个独立世界 + 传送门 | 单图超 100 MB、要单独发布/审核、或内容风格完全不同的图 | 跨世界状态全丢；每张图单独上传、单独验收；portal 有加载 | 房间与图之间的「回合」要跨世界重建（球大小、分数都得重算或走存档），玩家体验切成两段 |
+| **A 一张场景，每关一个岛**（推荐 v1） | 房间 + 若干张 10–20 m 见方的图 | 加载时间是所有图之和；岛间距 ≥1200 m 时 **float 精度足够**（1200 m 处约 0.1 mm，10 km 处才掉到 ~1 mm） | 导入器要多受管根（现在只有一个，§17.5）；同一材质/贴图要在图之间共享；将来要按需停用还要另两条前置（§17.4） |
+| B 每张图一个独立世界 + 传送门 | 要单独发布/审核、或内容风格完全不同的图 | 跨世界状态全丢；每张图单独上传、单独验收；portal 有加载 | 房间与图之间的「回合」要跨世界重建（球大小、分数都得重算或走存档），玩家体验切成两段 |
 | C 混合：房间图 + 大图独立世界 | 只有 1–2 张图真的很大 | 只有在需要时才付 B 的代价 | 两套切换路径（teleport 与 portal）都要测 |
 
-**为什么推荐 A**：(1) 我们的房间/关卡切换已经是 teleport + 状态机，A 不需要新机制；(2) 1200 m 的间距已经验证过「互相看不见」，再加岛就是复制这段距离，模式不变；(3) B 的跨世界状态重建是全新工程，而现在没有任何一张图接近 100 MB（参考关 511 件、59,056 三角）。**B 的触发条件写死**：某张图单独构建后仍 >100 MB（Android）或 >200 MB（PC 建议值），或它需要独立发布节奏。
+**为什么推荐 A**：(1) 我们的房间/关卡切换已经是 teleport + 状态机，A 不需要新机制；(2) 1200 m 的间距已经验证过「互相看不见」，再加岛就是复制这段距离，模式不变；(3) B 的跨世界状态重建是全新工程，而现在的图都在同一张场景里（参考关 511 件、59,056 三角）。**B 的触发条件**：某张图需要独立发布节奏。
 
 **A 的落地顺序（别一步跨到 `SetActive`）**，因为 HUB_ROOM §7.1 已经把「整块启用/禁用」挡在三件事前面：
 
@@ -1542,4 +1541,4 @@ PS2 的实例记录是 0x40 字节，`+0x30..+0x38` 三个 f32 就是缩放（[N
 | 2026-11-16 | **本版：最终提案** | 两份研究落地后按研究结论改写：五层 schema 定稿、terrain/structures/activityArea/props 字段、两个 JSON 例子、规范形与侧车、错误码、v1→v2 转换器、Unity 映射、容量预算、地形接触分阶段计划与 4 个新测试格、编辑器升级、迁移阶段、owner 决策；许可前提更正为 MIT（非 GPL-3） |
 | 2026-11-16 | **第 2 版：运动/动画** | 吸收 `ORIGINAL_ANIMATION_OBSERVATIONS`：`motions[]`/`paths[]` 逐关表、`props[].motion/inherit/phase/clipStart/shakeOff`、`defs[].speedIndex/clips`、13 类运动与速度档、10/15 Hz 更新预算、共享剪辑×8 相位桶、移动件吸收/父链规则、三个运动 JSON 例子、错误码、编辑器 E9/E10、D-10–D-14 与 U5–U9 |
 | 2026-11-16 | **第 3 版：owner 拍板 + 两个问答** | 记录 owner 2026-11-16 的裁定（球径 20 m、活动区靠布局、逐关 kill plane、D-10 全加、D-11 研究结论、D-12 相位、D-13 不做、D-14 挂起）；新增 §17「一个世界 = 一张场景」（多地图架构、我们今天的 StoryMode 两岛结构、A/B/C 建议、格式与编辑器要求）、§18「为什么允许逐件缩放」（旧口径四句 → 新数据 6 件非单位 → 三层规则）；§6.4 改写为三层并收窄 `[prop_scale_attached]`；`caps.animators` 明确为「Animator 组件预算」而非「只播 64 件」；原许可/变更记录顺延为 §19/§20 |
-| 2026-11-16 | **第 4 版：性能口径 + 命名定稿** | owner 两条补充拍板：①**性能不预先优化**——D-11 重写为「153 个骨骼实例直接挂普通 Animator/蒙皮，不做 VAT」，`caps.animators` 退成统计字段（`[anim_budget]` 只对账、`[caps_motion]` 改 `animators ≤ props`），「64 不够」与 VAT 降级为「以后真测出瓶颈再看」，同时写明**不取消** Quest/安卓 100 MB 包体检查与后续真实测量；②怀旧关正式名 **「怀旧关：蟹座小院 / Cancer Courtyard」**（Nostalgia 作别名，内部 id 仍是 `_ref_cancer`） |
+| 2026-11-16 | **第 4 版：性能口径 + 命名定稿** | owner 两条补充拍板：①**性能不预先优化**——D-11 重写为「153 个骨骼实例直接挂普通 Animator/蒙皮，不做 VAT」，`caps.animators` 退成统计字段（`[anim_budget]` 只对账、`[caps_motion]` 改 `animators ≤ props`），「64 不够」与 VAT 降级为「以后真测出瓶颈再看」，同时写明后续**真实测量**照旧要做；②怀旧关正式名 **「怀旧关：蟹座小院 / Cancer Courtyard」**（Nostalgia 作别名，内部 id 仍是 `_ref_cancer`） |

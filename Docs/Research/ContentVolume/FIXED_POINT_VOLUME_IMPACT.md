@@ -130,7 +130,7 @@ float gainedUnits = confirmedUnits - lastConfirmedUnits;
 - `story_01_bench_size` 全关 1,522 units = 6.24 m³
 - `_ref_mas1` 全关 1,448 units = 5.94 m³
 - `_ref_cancer` 全关 737,377 units = 3,023.2 m³
-- 假想的 30 m 球：`π/6·30³ = 14,137 m³`（`VRC_WORLD_SIZE_LIMITS.md` §5 明确讨论过这个尺寸）
+- 假想的 30 m 球：`π/6·30³ = 14,137 m³`
 
 **结论：** int32 只有在「milli-unit 或更粗」时能装下现有内容；**任何 mm³ / micro 级方案都必须 int64**。账本里 `confirmed` 与 `banked` 是**守恒转移**（bank 把量从前者搬到后者，不新增），所以单个玩家的 absorbed 总量 ≤ 关卡供给 + 补货；Cancer 的 3023 m³ 因此是当前最坏的现实下界。
 
@@ -140,7 +140,7 @@ float gainedUnits = confirmedUnits - lastConfirmedUnits;
 
 **现状：0 字节。** `Runtime/` 全部 **20** 个 UdonSharpBehaviour 都声明 `BehaviourSyncMode.None`（`KatamariBallMotor.cs:68`、`PickupFieldHost.cs:92`、`StoryRoundController.cs:119`、`CpuSkirmishBootstrap.cs:20`、`BallView.cs:58`、`BallGrowthDiagnostics.cs:68` …）。体积今天**完全没有进网络**，所以 200 B / 280,496 B 两个预算现在是空的。
 
-**这会变，而且是体积定点方案的主要外部约束。** 官方预算（`Docs/Research/ReferenceRules/VRC_WORLD_SIZE_LIMITS.md:191`、`:328`，来源 S8 = creators.vrchat.com network-details）：continuous **~200 B / serialization**（超了直接序列化失败）、manual **280,496 B / serialization**（超了缓存/延迟）、每脚本 **~11 KB/s**。
+**这会变，而且是体积定点方案的主要外部约束。** 官方预算（来源 S8 = creators.vrchat.com network-details）：continuous **~200 B / serialization**（超了直接序列化失败）、manual **280,496 B / serialization**（超了缓存/延迟）、每脚本 **~11 KB/s**。
 
 按「账本快照 = 每玩家 {confirmed, banked, lifeState, generation}」估算：
 
@@ -596,4 +596,4 @@ Unity EditMode 与 Python 测试**都没有跑**（本轮禁止开 Unity；也�
 - 决定：`Docs/OPEN_DECISIONS.md:53-59,99`；`Docs/Design/Parity/PARITY_AUDIT.md:14-38,83-84,110-118,143-151,200-255`；`Docs/Design/Ledger/README.md:1-20,39-40`
 - 参数：`Docs/Design/Parameters/README.md:35-42,218-245,568-572`
 - 原作数据挖掘（本机，不入库）：`~/KatamariRef/meta/{raw_growth_mechanism.txt,DATAMODEL_NOTES.md,solid_volume/README.md,solid_volume/worst20.csv}`
-- 平台限制：`Docs/Research/ReferenceRules/VRC_WORLD_SIZE_LIMITS.md:191,328`（S8 = creators.vrchat.com network-details：200 B 连续 / 280,496 B manual / ~11 KB/s）
+- 平台限制（S8 = creators.vrchat.com network-details：200 B 连续 / 280,496 B manual / ~11 KB/s）

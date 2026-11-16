@@ -170,7 +170,7 @@
 
 ### Owner decisions 2026-11-16（追加：性能口径、怀旧关命名）
 
-- **性能口径：现阶段不预先优化（D-11 重写）** — 参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求本身极低，现阶段完全不必担心 Animator 数量、顶点数、骨骼数；**153 个骨骼动画实例直接挂普通 Animator/蒙皮，不做顶点动画纹理（VAT）**，「64 Animators 不够」的论证与 VAT 方案降级为「以后真测出瓶颈再看」，`caps.animators` 退成统计字段。**只放松「不预先优化」**：Quest/安卓 100 MB 包体硬上限照旧检查，后续真实测量（P5 合成场景、真机帧率、Quest 实机）照旧要做。见 [LEVEL_FORMAT_V2 §6.7.6 / §16.2 / D-11](Design/Levels/LEVEL_FORMAT_V2.md)、[PARITY_AUDIT 的「骨骼动画的呈现（Animator 数量）」行](Design/Parity/PARITY_AUDIT.md)、[ORIGINAL_ANIMATION_OBSERVATIONS §5.4](Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)。
+- **性能口径：现阶段不预先优化（D-11 重写）** — 参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求本身极低，现阶段完全不必担心 Animator 数量、顶点数、骨骼数；**153 个骨骼动画实例直接挂普通 Animator/蒙皮，不做顶点动画纹理（VAT）**，「64 Animators 不够」的论证与 VAT 方案降级为「以后真测出瓶颈再看」，`caps.animators` 退成统计字段。**只放松「不预先优化」**：后续真实测量（P5 合成场景、真机帧率、Quest 实机）照旧要做。见 [LEVEL_FORMAT_V2 §6.7.6 / §16.2 / D-11](Design/Levels/LEVEL_FORMAT_V2.md)、[PARITY_AUDIT 的「骨骼动画的呈现（Animator 数量）」行](Design/Parity/PARITY_AUDIT.md)、[ORIGINAL_ANIMATION_OBSERVATIONS §5.4](Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)。
 - **怀旧关正式名：怀旧关：蟹座小院 / Cancer Courtyard**（工作名 Nostalgia 可作别名） — 这个定名是给以后换皮发布的版本用的；内部 id 在换皮前仍是 `_ref_cancer`，不在 `_ref_*` 上直接改成正式内容（先换成我们自己的贴图/模型，再用正式名建关）。见 [_ref_cancer README](Design/Levels/_ref_cancer/README.md)、[原作优先原则](../AGENTS.md)。
 
 ### Still open

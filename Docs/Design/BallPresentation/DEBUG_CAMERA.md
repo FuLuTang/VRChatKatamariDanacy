@@ -12,7 +12,6 @@
   AllowHDR / DepthTextureMode / UseOcclusionCulling / AllowMSAA / ClearFlags / BackgroundColor /
   LayerCullDistances，以及**只对 ScreenCamera 有效**的 CullingMask（对别的实例 set 会抛异常）。原始
   `Camera` 组件不暴露。也就是说：世界**不能**移动或替换玩家视角，也没有"把视角切给某个世界相机"的入口。
-  本仓 `Docs/Research/ReferenceRules/VRC_WORLD_SIZE_LIMITS.md` S9 行同此结论。
 - `VRC_SceneDescriptor` 的 Reference Camera 只是把 near/far/FOV 之类**设置**应用到用户相机，不是视角切换。
 - 结论：用**第二个 Camera + RenderTexture + RawImage** 的"画中画"，ClientSim 与真实客户端都成立。
 

@@ -46,6 +46,19 @@ namespace VRCKatamari.Input
     /// nothing: the axes are already zero until the player moves.
     /// </para>
     /// <para>
+    /// DEV-ONLY operator overlay. <c>debugDriveEnabled</c> plus <c>debugAxisX</c>,
+    /// <c>debugAxisZ</c> and <c>debugDriveSeconds</c> let an operator in Play feed the two
+    /// axes from outside this behaviour (Udon program variables, written with
+    /// <c>SetProgramVariable</c> on the backing <c>UdonBehaviour</c>), because MCP cannot
+    /// hold a keyboard key and a probe's own <c>SetMoveAxes</c> call is overwritten by the
+    /// next device frame. It is off by default, and a scene that never writes the fields
+    /// behaves exactly as before: the device handlers keep their order and <c>Update</c>
+    /// returns after one bool test. While it is on, the debug axes go through this same
+    /// behaviour - same gates, same finite-value drop, same <c>PushAxes</c> - so a standing
+    /// player still cannot steer. Override live state is not synced to anyone.
+    /// Operator steps and the acceptance run: Docs/Design/ControlIntent/DEBUG_DRIVE.md.
+    /// </para>
+    /// <para>
     /// Assembly: its own GameObject by project convention (clear ownership and a
     /// readable self-check; a rebuilt hierarchy cannot leave a stale copy running),
     /// and it references a motor on a different object. Sharing an object is legal -
@@ -69,6 +82,26 @@ namespace VRCKatamari.Input
         // scene without a ride station or a round controller still drives.
         private bool rideGateOpen = true;
         private bool roundGateOpen = true;
+
+        // ---- DEV ONLY: operator drive override (default off; see the class remarks) ----
+        // These four are Udon program variables on purpose: the UdonSharp proxy component is
+        // only an edit-time shadow, so an operator writes the backing UdonBehaviour's variables
+        // (SetProgramVariable) and Update below polls them. The defaults are the release
+        // behaviour, so a scene that never touches them drives exactly as it always did.
+        [Header("DEV ONLY - operator drive override (leave off in release)")]
+        [Tooltip("When on, the two axes below replace the device axes. The ride and round gates still apply.")]
+        [SerializeField] private bool debugDriveEnabled = false;
+        [Tooltip("Turn axis, the same one InputMoveHorizontal carries (+1 = turn right). Clamped to [-1, 1].")]
+        [SerializeField] private float debugAxisX = 0f;
+        [Tooltip("Forward axis, the same one InputMoveVertical carries (+1 = forward). Clamped to [-1, 1].")]
+        [SerializeField] private float debugAxisZ = 0f;
+        [Tooltip("Seconds until the override clears itself. 0 (the default) = until the operator clears it.")]
+        [SerializeField] private float debugDriveSeconds = 0f;
+
+        // The override state this behaviour last applied. Kept so the toggle logs once rather
+        // than per frame, and so a build where nobody enables it costs Update one bool test.
+        private bool debugDriveActive;
+        private float debugDriveStartTime;
 
         /// <summary>
         /// The ride gate, owned by BallRideStation: open only while the local player is
@@ -94,6 +127,9 @@ namespace VRCKatamari.Input
 
         public override void InputMoveVertical(float value, UdonInputEventArgs args)
         {
+            // The DEV-ONLY override owns the axes while it is on; a real key press must not
+            // fight it. Off (the default) this is one bool test before the unchanged path.
+            if (debugDriveEnabled) return;
             if (!InputOpen()) return;
             if (!KatamariMath.IsFiniteFloat(value)) return;
             if (value == forward) return;
@@ -103,6 +139,7 @@ namespace VRCKatamari.Input
 
         public override void InputMoveHorizontal(float value, UdonInputEventArgs args)
         {
+            if (debugDriveEnabled) return;
             if (!InputOpen()) return;
             if (!KatamariMath.IsFiniteFloat(value)) return;
             if (value == turn) return;
@@ -138,6 +175,78 @@ namespace VRCKatamari.Input
         {
             forward = 0f;
             turn = 0f;
+            PushAxes();
+        }
+
+        // Update is a Unity lifecycle message forward to Udon, not a member of
+        // UdonSharpBehaviour, so it is an ordinary method and must not be override. Its whole
+        // job is the DEV-ONLY override; with the flag off it returns after that one test, which
+        // is why the device handlers keep their own order and pushes.
+        private void Update()
+        {
+            if (!debugDriveEnabled)
+            {
+                if (!debugDriveActive) return;
+                debugDriveActive = false;
+                Debug.Log("[input] debug drive off");
+                ZeroAxes();
+                return;
+            }
+
+            if (!debugDriveActive) BeginDebugDrive();
+
+            if (DebugDriveMath.HasExpired(debugDriveStartTime, Time.time, debugDriveSeconds))
+            {
+                // Clear the operator's flag too, so a Play-mode Inspector or a read-back shows
+                // the override is over rather than merely not applying.
+                debugDriveEnabled = false;
+                debugDriveActive = false;
+                Debug.Log("[input] debug drive expired after=" + debugDriveSeconds + "s");
+                ZeroAxes();
+                return;
+            }
+
+            // The same gates as the device path. While either is closed the ball is braked and
+            // the override pushes nothing, which is what keeps a standing player, a settled
+            // round and a respawn undriven even with the override on.
+            if (!InputOpen())
+            {
+                if (forward != 0f || turn != 0f) ZeroAxes();
+                return;
+            }
+
+            PushDebugAxes();
+        }
+
+        private void BeginDebugDrive()
+        {
+            float axisX;
+            float axisZ;
+            // The announcement clamps as well, so the line shows the axes that will actually
+            // run. A non-finite pair is announced as (0,0); PushDebugAxes keeps dropping it,
+            // exactly like a device frame, instead of pushing a repaired value.
+            if (!DebugDriveMath.TryClampAxes(debugAxisX, debugAxisZ, out axisX, out axisZ))
+            {
+                axisX = 0f;
+                axisZ = 0f;
+            }
+            debugDriveActive = true;
+            debugDriveStartTime = Time.time;
+            Debug.Log("[input] debug drive on axes=(" + axisX + "," + axisZ + ") seconds="
+                + debugDriveSeconds);
+        }
+
+        private void PushDebugAxes()
+        {
+            float axisX;
+            float axisZ;
+            // The device path's validation, reused: a non-finite value is dropped and the last
+            // accepted axis kept, because the motor holds the axes of a rejected frame. A push
+            // happens only when a clamped value changed, the same traffic as holding a key.
+            if (!DebugDriveMath.TryClampAxes(debugAxisX, debugAxisZ, out axisX, out axisZ)) return;
+            if (axisX == turn && axisZ == forward) return;
+            turn = axisX;
+            forward = axisZ;
             PushAxes();
         }
 

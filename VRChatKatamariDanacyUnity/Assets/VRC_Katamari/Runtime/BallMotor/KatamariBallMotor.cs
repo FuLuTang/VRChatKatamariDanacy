@@ -629,7 +629,9 @@ namespace VRCKatamari.BallMotor
 
         private bool[] pendingAbsorbable;
         private string[] pendingKinds;
-        private Vector3[] pendingBounds;
+        // The item's OWN three edge lengths (the original's a, b, c). Both the size gate and
+        // the contact reach read them, so neither depends on how the item is turned.
+        private Vector3[] pendingSizes;
         private Vector3[] pendingPositions;
         // The item's finished growth in mm^3 (penalty * k * a*b*c, priced once at import or
         // by the host fallback), not a float "value". This is the ledger gain.
@@ -822,6 +824,14 @@ namespace VRCKatamari.BallMotor
         private const float ContactGrowthPushCapM = 0.05f;
         private const float ContactStuckSoftSeconds = 1.5f;
         private const float ContactStuckHardSeconds = 3f;
+        /// <summary>
+        /// A stuck episode lasts while the ball stays inside this radius of the point the
+        /// episode started at. A wedged ball does not hold still: the solver trades the
+        /// two faces' normal components every few steps, so single steps of 1-3 mm
+        /// interleave with 0.3 mm ones, and a per-step progress threshold keeps resetting.
+        /// 1 cm is three times the jitter span measured on a 50-degree wedge.
+        /// </summary>
+        private const float ContactStuckConfineM = 0.01f;
         private const float ContactRecoveryWindowSeconds = 10f;
         private const int ContactRecoveryHoldCount = 3;
         private const int ContactRecoveryStateNone = 0;
@@ -984,6 +994,7 @@ namespace VRCKatamari.BallMotor
         private float recoveryWindowStartSeconds;
         private bool recoveryHoldLogged;
         private bool softRecoveryArmed;
+        private Vector3 contactStuckAnchor;
         private float contactV2ClockSeconds;
 
         // Growth push-out (design §4.2), drive direction, step cost (design §6.4) and the
@@ -1410,7 +1421,7 @@ namespace VRCKatamari.BallMotor
             {
                 pendingAbsorbable = new bool[PendingCandidateCapacity];
                 pendingKinds = new string[PendingCandidateCapacity];
-                pendingBounds = new Vector3[PendingCandidateCapacity];
+                pendingSizes = new Vector3[PendingCandidateCapacity];
                 pendingPositions = new Vector3[PendingCandidateCapacity];
                 pendingGrowthMm3 = new long[PendingCandidateCapacity];
                 pendingVolumeK = new float[PendingCandidateCapacity];
@@ -1435,14 +1446,14 @@ namespace VRCKatamari.BallMotor
         private bool CandidateBuffersAtCapacity()
         {
             if (pendingAbsorbable == null || pendingKinds == null) return false;
-            if (pendingBounds == null || pendingPositions == null) return false;
+            if (pendingSizes == null || pendingPositions == null) return false;
             if (pendingGrowthMm3 == null || pendingVolumeK == null) return false;
             if (pendingItemIds == null) return false;
             if (pendingGenerations == null || pendingAccepted == null) return false;
             if (pendingSubmitTimes == null) return false;
             if (pendingAbsorbable.Length < PendingCandidateCapacity) return false;
             if (pendingKinds.Length < PendingCandidateCapacity) return false;
-            if (pendingBounds.Length < PendingCandidateCapacity) return false;
+            if (pendingSizes.Length < PendingCandidateCapacity) return false;
             if (pendingPositions.Length < PendingCandidateCapacity) return false;
             if (pendingGrowthMm3.Length < PendingCandidateCapacity) return false;
             if (pendingVolumeK.Length < PendingCandidateCapacity) return false;
@@ -2064,6 +2075,7 @@ namespace VRCKatamari.BallMotor
             recoveryWindowStartSeconds = 0f;
             recoveryHoldLogged = false;
             softRecoveryArmed = true;
+            contactStuckAnchor = ballCenterWorld;
             contactV2ClockSeconds = 0f;
 
             contactRadiusUsedWorldM = 0f;
@@ -2140,7 +2152,8 @@ namespace VRCKatamari.BallMotor
             // acceleration-limited request: a ball standing against a wall has no actual
             // speed and would otherwise never start a climb (design §3.2).
             float driveSpeed;
-            ComputeDrive(out contactDriveDirection, out driveSpeed);
+            Vector3 intentDirection;
+            ComputeDrive(out contactDriveDirection, out intentDirection, out driveSpeed);
 
             // A climb whose gate has closed (input released, or the push turned away)
             // leaves the channel here, so the ball slides back instead of hovering
@@ -2306,6 +2319,15 @@ namespace VRCKatamari.BallMotor
                 center = ballCenterWorld;
             }
 
+            // The solver's velocity is the step's velocity from here on. Everything below
+            // that edits the members (the needle response, the deep-embed and stuck
+            // recoveries, the fall speed WriteContactSupport reads) works on the fields,
+            // so the write-back has to come first: after them it would overwrite a
+            // recovery's cleared velocity with the pre-recovery one and a "teleport and
+            // clear" would keep its speed (design §2.8, rule 2).
+            planarVelocity = planar;
+            contactVerticalVelocity = vertical;
+
             // Needle tips are swept segments, not points (design §4A.3): they push the
             // whole ball out and merge into the contact log as their own records.
             ResolveNeedleContacts(ref center, radius, v2CoreContactCount);
@@ -2323,10 +2345,8 @@ namespace VRCKatamari.BallMotor
 
             // Stick recovery, soft then hard, then the hold that never teleports again
             // (design §2.8). This is the ONLY place v2 moves the ball without physics.
-            UpdateContactRecovery(dt, ref center);
+            UpdateContactRecovery(dt, intentDirection, ref center);
 
-            planarVelocity = planar;
-            contactVerticalVelocity = vertical;
             groundedCenter = center;
             // v2 has no proxy lift, so the camera anchor IS the ball centre: the design
             // wants the eye to follow a climb (design §4.4).
@@ -2471,8 +2491,33 @@ namespace VRCKatamari.BallMotor
         /// three inputs because BallMotionMath does not export it; the expression is its
         /// speed cap times the forward intent.
         /// </summary>
-        private void ComputeDrive(out Vector3 direction, out float speed)
+        /// <remarks>
+        /// <paramref name="direction"/> is the way the ball is MOVING (its planar velocity,
+        /// the facing only when it is at rest), which is what the climb gate and the
+        /// protrusion estimate want. <paramref name="intentDirection"/> is the way the
+        /// player is PUSHING: the forward and lateral axes taken along the current
+        /// heading, signed, unit length, or zero without input. A wall deflects the
+        /// velocity (a ball wedged between two faces swaps sideways every step) but not
+        /// the intent, so the recovery's "is this push blocked" test reads the intent.
+        /// </remarks>
+        private void ComputeDrive(out Vector3 direction, out Vector3 intentDirection,
+            out float speed)
         {
+            float headingRadians = headingDegrees * Mathf.Deg2Rad;
+            float forwardIntent = Mathf.Clamp(inputForward, -1f, 1f);
+            float lateralIntent = Mathf.Clamp(inputLateral, -1f, 1f);
+            Vector3 intentSum = new Vector3(
+                Mathf.Sin(headingRadians) * forwardIntent
+                    + Mathf.Cos(headingRadians) * lateralIntent,
+                0f,
+                Mathf.Cos(headingRadians) * forwardIntent
+                    - Mathf.Sin(headingRadians) * lateralIntent);
+            float intentLength;
+            if (!KatamariMath.TryNormalize(intentSum, out intentDirection, out intentLength))
+            {
+                intentDirection = Vector3.zero;
+            }
+
             float growth = Mathf.Clamp(growthFraction, 0f, 1f);
             float speedCap = maxSpeedMps * (1f - growthSpeedFactor * growth);
             float intent = Mathf.Abs(Mathf.Clamp(inputForward, -1f, 1f));
@@ -3008,7 +3053,8 @@ namespace VRCKatamari.BallMotor
         /// velocity, do not move), hard at 3 s (back to the last stable point), and after
         /// three recoveries inside 10 s a hold that stops teleporting and says so once.
         /// </summary>
-        private void UpdateContactRecovery(float dt, ref Vector3 center)
+        private void UpdateContactRecovery(float dt, Vector3 intentDirection,
+            ref Vector3 center)
         {
             float moveX = center.x - ballCenterWorld.x;
             float moveY = center.y - ballCenterWorld.y;
@@ -3016,12 +3062,15 @@ namespace VRCKatamari.BallMotor
             float progress = Mathf.Sqrt(moveX * moveX + moveY * moveY + moveZ * moveZ);
             float driveIntent = Mathf.Abs(inputForward) + Mathf.Abs(inputLateral);
 
-            // A wall the drive pushes into is BLOCKED, not stuck: that is the same contract
+            // A wall the PLAYER pushes into is BLOCKED, not stuck: that is the same contract
             // SweepMath already owns (its own case is FullSingleWallBlockIsBlockedNotStuck),
             // and it is what v1 fed the timer (`sweepStuck`, not `sweepBlocked`). Counting a
             // wall press as stuck made the soft stage call ClearClimbState (killing the
             // climb) and three episodes entered the recovery hold - the 2026-11-16 RefCancer
             // pit: 18 s of forward into a building wall, recoveries=3, frozen.
+            // The push is the INTENT direction, not the velocity direction: a ball wedged
+            // between two faces has its velocity deflected sideways and flipping every
+            // step, which read as "pushing into the face" and hid a real wedge.
             bool blockedByContact = false;
             for (int i = 0; i < v2ContactCount; i++)
             {
@@ -3030,8 +3079,8 @@ namespace VRCKatamari.BallMotor
                 float horizontal = Mathf.Sqrt(normalX * normalX + normalZ * normalZ);
                 if (horizontal <= 1e-4f) continue;
                 float inverse = 1f / horizontal;
-                float into = contactDriveDirection.x * normalX * inverse
-                    + contactDriveDirection.z * normalZ * inverse;
+                float into = intentDirection.x * normalX * inverse
+                    + intentDirection.z * normalZ * inverse;
                 if (into < -0.5f)
                 {
                     blockedByContact = true;
@@ -3039,7 +3088,22 @@ namespace VRCKatamari.BallMotor
                 }
             }
 
-            if (driveIntent > 0.05f && progress < 0.0005f && !blockedByContact)
+            // "Stuck" is: pushing, not blocked, and not leaving a small disc around where
+            // the episode started (ContactStuckConfineM). The episode's start is the
+            // position before the first step of the run (stuckSeconds is 0 between
+            // episodes). A per-step displacement threshold cannot see a wedge: the
+            // solver's side-to-side trade makes a 2-3 mm step every few steps.
+            bool stuckStep = false;
+            if (driveIntent > 0.05f && !blockedByContact)
+            {
+                if (stuckSeconds <= 0f) contactStuckAnchor = ballCenterWorld;
+                float awayX = center.x - contactStuckAnchor.x;
+                float awayY = center.y - contactStuckAnchor.y;
+                float awayZ = center.z - contactStuckAnchor.z;
+                stuckStep = awayX * awayX + awayY * awayY + awayZ * awayZ
+                    < ContactStuckConfineM * ContactStuckConfineM;
+            }
+            if (stuckStep)
             {
                 stuckSeconds = stuckSeconds + dt;
             }
@@ -3732,7 +3796,7 @@ namespace VRCKatamari.BallMotor
                 }
                 AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorbWithValue(
                     pendingAbsorbable[i], pendingKinds[i], allowedKinds, allowedKindCount,
-                    pendingBounds[i], pendingPositions[i], center, reachRadius,
+                    pendingSizes[i], pendingPositions[i], center, reachRadius,
                     contactRadiusWorldM, pendingVolumeK[i], semanticDiameterWorldM,
                     maxCollisionRadiusWorldM, pendingGrowthMm3[i]);
                 float evaluatedDistance = Vector3.Distance(pendingPositions[i], center);
@@ -3749,7 +3813,7 @@ namespace VRCKatamari.BallMotor
                     // file's invalid marker.
                     float tracedItemRadius;
                     float tracedReach;
-                    if (!PickupAbsorbMath.TryComputeReach(pendingBounds[i],
+                    if (!PickupAbsorbMath.TryComputeReach(pendingSizes[i],
                         reachRadius, contactRadiusWorldM, out tracedItemRadius,
                         out tracedReach))
                     {
@@ -3845,7 +3909,7 @@ namespace VRCKatamari.BallMotor
             if (write == read) return;
             pendingAbsorbable[write] = pendingAbsorbable[read];
             pendingKinds[write] = pendingKinds[read];
-            pendingBounds[write] = pendingBounds[read];
+            pendingSizes[write] = pendingSizes[read];
             pendingPositions[write] = pendingPositions[read];
             pendingGrowthMm3[write] = pendingGrowthMm3[read];
             pendingVolumeK[write] = pendingVolumeK[read];
@@ -4221,7 +4285,7 @@ namespace VRCKatamari.BallMotor
         /// logged per frame.
         /// </para>
         /// </remarks>
-        public bool SubmitCandidate(bool absorbable, string kind, Vector3 bounds,
+        public bool SubmitCandidate(bool absorbable, string kind, Vector3 size,
             Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration)
         {
             // LEGACY BRIDGE, Lab/tests only: `valueUnits` is the retired integer unit
@@ -4231,7 +4295,7 @@ namespace VRCKatamari.BallMotor
             // without re-importing the scene this round.
             long growthMm3 = LegacyUnitsToGrowthMm3(valueUnits);
             if (growthMm3 <= 0L) return false;
-            return SubmitCandidateWithVolumeK(absorbable, kind, bounds, worldPosition,
+            return SubmitCandidateWithVolumeK(absorbable, kind, size, worldPosition,
                 growthMm3, itemInstanceId, itemGeneration,
                 PickupAbsorbMath.DefaultVolumeK);
         }
@@ -4259,23 +4323,23 @@ namespace VRCKatamari.BallMotor
         /// <see cref="LegacyUnitsToGrowthMm3"/> and then uses the real entry point
         /// <see cref="SubmitCandidateWithVolumeKMm3"/>. The shipped host no longer calls this.
         /// </remarks>
-        public bool SubmitCandidateWithVolumeK(bool absorbable, string kind, Vector3 bounds,
+        public bool SubmitCandidateWithVolumeK(bool absorbable, string kind, Vector3 size,
             Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration,
             float volumeK)
         {
             long growthMm3 = LegacyUnitsToGrowthMm3(valueUnits);
             if (growthMm3 <= 0L) return false;
-            return SubmitCandidateWithVolumeKMm3(absorbable, kind, bounds, worldPosition,
+            return SubmitCandidateWithVolumeKMm3(absorbable, kind, size, worldPosition,
                 growthMm3, itemInstanceId, itemGeneration, volumeK);
         }
 
         /// <summary>
         /// Queues one candidate whose growth is already priced in mm^3, at the default k.
         /// </summary>
-        public bool SubmitCandidateMm3(bool absorbable, string kind, Vector3 bounds,
+        public bool SubmitCandidateMm3(bool absorbable, string kind, Vector3 size,
             Vector3 worldPosition, long growthMm3, string itemInstanceId, int itemGeneration)
         {
-            return SubmitCandidateWithVolumeKMm3(absorbable, kind, bounds, worldPosition,
+            return SubmitCandidateWithVolumeKMm3(absorbable, kind, size, worldPosition,
                 growthMm3, itemInstanceId, itemGeneration, PickupAbsorbMath.DefaultVolumeK);
         }
 
@@ -4291,12 +4355,17 @@ namespace VRCKatamari.BallMotor
         /// together because they are the same underlying volume seen by two consumers.
         /// </para>
         /// <para>
+        /// `size` is the item's own three edge lengths, the original's `a, b, c`: the gate
+        /// multiplies them and the reach takes their half-diagonal, so neither depends on how
+        /// the item is turned. A caller must never pass the world AABB of a turned item here.
+        /// </para>
+        /// <para>
         /// Kept as separate entry points rather than optional parameters because UdonSharp
         /// does not support default arguments, and because a lab that submits a hand-authored
         /// prop should not have to name a k it does not have.
         /// </para>
         /// </remarks>
-        public bool SubmitCandidateWithVolumeKMm3(bool absorbable, string kind, Vector3 bounds,
+        public bool SubmitCandidateWithVolumeKMm3(bool absorbable, string kind, Vector3 size,
             Vector3 worldPosition, long growthMm3, string itemInstanceId, int itemGeneration,
             float volumeK)
         {
@@ -4334,7 +4403,7 @@ namespace VRCKatamari.BallMotor
             int index = pendingCandidateCount;
             pendingAbsorbable[index] = absorbable;
             pendingKinds[index] = kind;
-            pendingBounds[index] = bounds;
+            pendingSizes[index] = size;
             pendingPositions[index] = worldPosition;
             pendingGrowthMm3[index] = growthMm3;
             pendingVolumeK[index] = volumeK;
@@ -6704,9 +6773,9 @@ namespace VRCKatamari.BallMotor
         /// </returns>
         /// <remarks>
         /// <para>
-        /// bounds is the prop's full AABB edge lengths in metres (the same
-        /// <c>propBounds</c> the absorb gate and the blocking boxes use), read as the
-        /// prop's local axes. ballLocalCenter and ballLocalRotation are the pose
+        /// bounds is the prop's full edge lengths in metres along its own axes (the host's
+        /// prop-own size, the same one the absorb gate reads), read as the prop's local
+        /// axes. ballLocalCenter and ballLocalRotation are the pose
         /// <c>AttachmentMath.TryWorldPoseToLocal</c> just produced for the visual
         /// attach, so the proxy and the visible prop occupy the same ball-frame box.
         /// Endpoints are the eight corners, and the item becomes one of the at-most-four
@@ -7453,7 +7522,7 @@ namespace VRCKatamari.BallMotor
 
             float itemRadius;
             float reach;
-            if (!PickupAbsorbMath.TryComputeReach(pendingBounds[index], collisionRadiusWorldM,
+            if (!PickupAbsorbMath.TryComputeReach(pendingSizes[index], collisionRadiusWorldM,
                 contactRadiusWorldM, out itemRadius, out reach))
             {
                 // Illegal bounds: the gate refused them as invalid input before it had a

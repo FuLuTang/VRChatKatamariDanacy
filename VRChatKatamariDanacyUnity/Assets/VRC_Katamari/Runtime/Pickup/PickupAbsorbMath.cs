@@ -41,18 +41,22 @@ namespace VRCKatamari.Pickup
     /// Port of Docs/Design/PickupAbsorb/pickup_absorb.py, the DRAFT offline reference
     /// model. The real-time contact test is a reach comparison, not a sweep or a
     /// physics query: the caller supplies the ball's collision radius in metres, the
-    /// item's world bounds and both world positions.
+    /// item's size and both world positions.
     /// </para>
     /// <para>
     /// Units and quantities. Lengths are metres in the project's single world space
     /// (+Y up); the volumes this layer compares are cubic metres (the `WorldM3` suffix).
-    /// Bounds are the item's full axis-aligned extents, not half extents; the size gate
-    /// multiplies the three of them, so it compares the item's AABB volume, and this
-    /// port keeps exactly that comparison. The bounding-sphere radius used for contact is
-    /// derived from the half extents, `sqrt((x/2)^2 + (y/2)^2 + (z/2)^2)`, as the
-    /// model does. Values are in caller-defined value units; the model's item value
-    /// is a float, and the ledger's gain is an integer of the same unit (see
-    /// <see cref="TryAbsorbValueToLedgerGain"/>).
+    /// The item's extent is its `itemSize`: its OWN three full edge lengths (the bounding box
+    /// of its model along its own axes, the original's per-type `a, b, c`), not half extents.
+    /// It does not change when the item is turned, and it is the only item geometry this
+    /// layer reads: the size gate multiplies its three edges, so it compares the item's own
+    /// box volume, and the contact reach takes its bounding-sphere radius,
+    /// `sqrt((x/2)^2 + (y/2)^2 + (z/2)^2)`, as the model does. That sphere circumscribes the
+    /// box whatever its orientation, so it still contains the whole item. The axis-aligned
+    /// box of a TURNED item is larger than the item; it is a loose bound caused by the
+    /// rotation, never an input here. Values are in caller-defined value units; the
+    /// model's item value is a float, and the ledger's gain is an integer of the same unit
+    /// (see <see cref="TryAbsorbValueToLedgerGain"/>).
     /// </para>
     /// <para>
     /// The size gate is the ORIGINAL's, in the original's own quantities (owner decision
@@ -98,8 +102,8 @@ namespace VRCKatamari.Pickup
     /// <para>
     /// Two size quantities are still not interchangeable: the round model compares the
     /// item's declared `pickup_diameter_m` (a length), while this layer compares the
-    /// bounds' AABB volume, so the two produce the same verdict only when the author data
-    /// fills bounds consistently with the declared pickup diameter.
+    /// item size's box volume, so the two produce the same verdict only when the author
+    /// data fills the size consistently with the declared pickup diameter.
     /// </para>
     /// <para>
     /// The reach comparison uses the *collision radius* and never the semantic
@@ -111,9 +115,9 @@ namespace VRCKatamari.Pickup
     /// semantic diameter appears, and it is consumed there as a DIAMETER (converted to
     /// whole millimetres inside <see cref="TryFloorMillimetres"/>) and never added to
     /// reach. The item's
-    /// bounding-sphere radius used by reach and its AABB volume used by the size gate are
-    /// also two different quantities, read from the same `bounds`: a slender prop can have
-    /// a large radius and a tiny volume.
+    /// bounding-sphere radius used by reach and the box volume used by the size gate are
+    /// also two different quantities, both read from the same `itemSize`: a slender prop
+    /// can have a large radius and a tiny volume.
     /// </para>
     /// <para>
     /// Contact test. `distance &lt;= collisionRadius + contactRadius + itemRadius`, where
@@ -246,15 +250,17 @@ namespace VRCKatamari.Pickup
         /// <para>
         /// The size gate is <see cref="IsBeyondAbsorbLimit"/> and nothing else: the item's
         /// `k * a*b*c` priced at `k`, the ball's semantic diameter, both floored to whole
-        /// millimetres. `itemVolumeK` is the per-item factor (the original's `Volume =
-        /// k * bbox`; 0.70 is the default the authoring path fills in, and the range
-        /// 0 &lt; k &lt;= <see cref="MaxVolumeK"/> is validated here as an input).
+        /// millimetres. `a, b, c` are the item's own size (`itemSize`), so the verdict does
+        /// not depend on how the item is turned. `itemVolumeK` is the per-item factor (the
+        /// original's `Volume = k * bbox`; 0.70 is the default the authoring path fills in,
+        /// and the range 0 &lt; k &lt;= <see cref="MaxVolumeK"/> is validated here as an
+        /// input).
         /// </para>
         /// <para>
         /// The contact geometry (the item's bounding-sphere radius and the reach sum) is
-        /// <see cref="TryComputeReach"/>; this method only compares the centre distance
-        /// against it, so a caller that needs the number the gate used asks for the same
-        /// function instead of re-deriving it.
+        /// <see cref="TryComputeReach"/> over the same `itemSize`; this method only compares
+        /// the centre distance against it, so a caller that needs the number the gate used
+        /// asks for the same function instead of re-deriving it.
         /// </para>
         /// </remarks>
         public static AbsorbOutcome EvaluateAbsorb(
@@ -262,7 +268,7 @@ namespace VRCKatamari.Pickup
             string itemKind,
             string[] allowedKinds,
             int allowedKindCount,
-            Vector3 itemBounds,
+            Vector3 itemSize,
             Vector3 itemPosition,
             Vector3 ballPosition,
             float collisionRadiusWorldM,
@@ -274,7 +280,8 @@ namespace VRCKatamari.Pickup
             if (itemKind == null || allowedKinds == null) return AbsorbOutcome.RejectInvalidInput;
             if (allowedKindCount < 0 || allowedKindCount > allowedKinds.Length)
                 return AbsorbOutcome.RejectInvalidInput;
-            if (!KatamariMath.IsFiniteVector(itemBounds) || !KatamariMath.IsFiniteVector(itemPosition) ||
+            if (!KatamariMath.IsFiniteVector(itemSize) ||
+                !KatamariMath.IsFiniteVector(itemPosition) ||
                 !KatamariMath.IsFiniteVector(ballPosition))
                 return AbsorbOutcome.RejectInvalidInput;
             if (!KatamariMath.IsFiniteFloat(collisionRadiusWorldM) ||
@@ -283,7 +290,7 @@ namespace VRCKatamari.Pickup
                 !KatamariMath.IsFiniteFloat(ballSemanticDiameterWorldM) ||
                 !KatamariMath.IsFiniteFloat(maxGrowthRadiusWorldM))
                 return AbsorbOutcome.RejectInvalidInput;
-            if (itemBounds.x < 0f || itemBounds.y < 0f || itemBounds.z < 0f)
+            if (itemSize.x < 0f || itemSize.y < 0f || itemSize.z < 0f)
                 return AbsorbOutcome.RejectInvalidInput;
             if (collisionRadiusWorldM < 0f) return AbsorbOutcome.RejectInvalidInput;
             if (itemVolumeK <= 0f || itemVolumeK > MaxVolumeK)
@@ -292,14 +299,14 @@ namespace VRCKatamari.Pickup
 
             // An unrepresentable product is an invalid input, not a large item: 1e20^3 is
             // infinity, and letting the gate below answer "too large" would describe broken
-            // bounds as a legitimate wall.
+            // size data as a legitimate wall.
             float itemVolumeWorldM3;
-            if (!TryComputeOriginalItemVolume(itemBounds, itemVolumeK, out itemVolumeWorldM3))
+            if (!TryComputeOriginalItemVolume(itemSize, itemVolumeK, out itemVolumeWorldM3))
                 return AbsorbOutcome.RejectInvalidInput;
 
             // One size gate: the gate and every host-side wall/floor classification call
             // this same predicate, so "beyond the absorb limit" cannot mean two things.
-            bool beyondLimit = IsBeyondAbsorbLimit(itemBounds, itemVolumeK,
+            bool beyondLimit = IsBeyondAbsorbLimit(itemSize, itemVolumeK,
                 ballSemanticDiameterWorldM);
 
             if (!itemAbsorbable) return AbsorbOutcome.RejectNotAbsorbable;
@@ -324,7 +331,7 @@ namespace VRCKatamari.Pickup
 
             float itemRadius;
             float reach;
-            if (!TryComputeReach(itemBounds, collisionRadiusWorldM, contactRadiusWorldM,
+            if (!TryComputeReach(itemSize, collisionRadiusWorldM, contactRadiusWorldM,
                 out itemRadius, out reach))
                 return AbsorbOutcome.RejectInvalidInput;
             return distance <= reach ? AbsorbOutcome.Absorb : AbsorbOutcome.RejectOutOfReach;
@@ -336,7 +343,8 @@ namespace VRCKatamari.Pickup
         /// </summary>
         /// <remarks>
         /// <para>
-        /// `itemRadius = sqrt((x/2)^2 + (y/2)^2 + (z/2)^2)` over the item's FULL extents, and
+        /// `itemRadius = sqrt((x/2)^2 + (y/2)^2 + (z/2)^2)` over the item's own FULL edge
+        /// lengths - the circumscribed sphere of its box, whatever the orientation - and
         /// `reach = collisionRadiusWorldM + contactRadiusWorldM + itemRadius`. Both are
         /// metres and are only summed: no scaling, no falloff, no epsilon. This is the
         /// deliberate bounds proxy described in the class remarks, and this method is the
@@ -353,20 +361,20 @@ namespace VRCKatamari.Pickup
         /// falls on is NOT decided here; the comparison stays the gate's.
         /// </para>
         /// </remarks>
-        public static bool TryComputeReach(Vector3 itemBounds, float collisionRadiusWorldM,
+        public static bool TryComputeReach(Vector3 itemSize, float collisionRadiusWorldM,
             float contactRadiusWorldM, out float itemRadiusM, out float reachM)
         {
             itemRadiusM = 0f;
             reachM = 0f;
-            if (!KatamariMath.IsFiniteVector(itemBounds)) return false;
+            if (!KatamariMath.IsFiniteVector(itemSize)) return false;
             if (!KatamariMath.IsFiniteFloat(collisionRadiusWorldM)) return false;
             if (!KatamariMath.IsFiniteFloat(contactRadiusWorldM)) return false;
-            if (itemBounds.x < 0f || itemBounds.y < 0f || itemBounds.z < 0f) return false;
+            if (itemSize.x < 0f || itemSize.y < 0f || itemSize.z < 0f) return false;
             if (collisionRadiusWorldM < 0f) return false;
 
-            float halfX = itemBounds.x * 0.5f;
-            float halfY = itemBounds.y * 0.5f;
-            float halfZ = itemBounds.z * 0.5f;
+            float halfX = itemSize.x * 0.5f;
+            float halfY = itemSize.y * 0.5f;
+            float halfZ = itemSize.z * 0.5f;
             float itemRadiusSquared = halfX * halfX + halfY * halfY + halfZ * halfZ;
             if (!KatamariMath.IsFiniteFloat(itemRadiusSquared)) return false;
             float itemRadius = Mathf.Sqrt(itemRadiusSquared);
@@ -379,30 +387,30 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
-        /// The item's AABB volume, `x * y * z`, the quantity the size gate compares.
+        /// The item's box volume, `a * b * c`, the quantity the size gate compares.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Cubic metres, from the item's full extents. `false` for a non-finite or
+        /// Cubic metres, from the item's own full edge lengths. `false` for a non-finite or
         /// negative side, and for a product that overflows float: an unrepresentable
         /// volume is an invalid input, not a large item, so the gate reports
         /// <see cref="AbsorbOutcome.RejectInvalidInput"/> instead of silently letting a
         /// sum of infinities decide.
         /// </para>
         /// <para>
-        /// This is the only place the raw AABB volume is derived. The gate and every
+        /// This is the only place the raw box volume is derived. The gate and every
         /// blocking/support classification reach it through one path - the raw product
         /// here, multiplied by the item's `k` in
         /// <see cref="TryComputeOriginalItemVolume"/> - so the blocking set and the absorb
         /// gate cannot disagree about how big an item is.
         /// </para>
         /// </remarks>
-        public static bool TryComputeItemVolume(Vector3 itemBounds, out float volumeWorldM3)
+        public static bool TryComputeItemVolume(Vector3 itemSize, out float volumeWorldM3)
         {
             volumeWorldM3 = 0f;
-            if (!KatamariMath.IsFiniteVector(itemBounds)) return false;
-            if (itemBounds.x < 0f || itemBounds.y < 0f || itemBounds.z < 0f) return false;
-            float volume = itemBounds.x * itemBounds.y * itemBounds.z;
+            if (!KatamariMath.IsFiniteVector(itemSize)) return false;
+            if (itemSize.x < 0f || itemSize.y < 0f || itemSize.z < 0f) return false;
+            float volume = itemSize.x * itemSize.y * itemSize.z;
             if (!KatamariMath.IsFiniteFloat(volume)) return false;
             volumeWorldM3 = volume;
             return true;
@@ -422,19 +430,19 @@ namespace VRCKatamari.Pickup
         /// </para>
         /// <para>
         /// `false` for a non-finite or non-positive `k`, for `k` above
-        /// <see cref="MaxVolumeK"/>, and for any bounds the raw product refuses. The range
+        /// <see cref="MaxVolumeK"/>, and for any size the raw product refuses. The range
         /// check is deliberate rather than a clamp: `k = 0` would price every item at zero
         /// volume, and a typo like 70 would make a chair absorbable by a pinhead.
         /// </para>
         /// </remarks>
-        public static bool TryComputeOriginalItemVolume(Vector3 itemBounds, float volumeK,
+        public static bool TryComputeOriginalItemVolume(Vector3 itemSize, float volumeK,
             out float volumeWorldM3)
         {
             volumeWorldM3 = 0f;
             if (!KatamariMath.IsFiniteFloat(volumeK)) return false;
             if (volumeK <= 0f || volumeK > MaxVolumeK) return false;
             float boxVolumeWorldM3;
-            if (!TryComputeItemVolume(itemBounds, out boxVolumeWorldM3)) return false;
+            if (!TryComputeItemVolume(itemSize, out boxVolumeWorldM3)) return false;
             float volume = volumeK * boxVolumeWorldM3;
             if (!KatamariMath.IsFiniteFloat(volume)) return false;
             volumeWorldM3 = volume;
@@ -490,7 +498,7 @@ namespace VRCKatamari.Pickup
         /// the Ant is the extreme case at ~8.8x).
         /// </para>
         /// <para>
-        /// `false` for illegal bounds or `k` (see
+        /// `false` for an illegal size or `k` (see
         /// <see cref="TryComputeOriginalItemVolume"/>) and for a volume above
         /// <see cref="MaxItemVolumeSanityWorldM3"/>. That ceiling is a numerical sanity
         /// bound, not a gameplay gate: at the 2.20 m ball cap the gate allows at most
@@ -501,12 +509,12 @@ namespace VRCKatamari.Pickup
         /// absorbable.
         /// </para>
         /// </remarks>
-        public static bool TryComputePickupReqDiameterMm(Vector3 itemBounds, float volumeK,
+        public static bool TryComputePickupReqDiameterMm(Vector3 itemSize, float volumeK,
             out float reqMm)
         {
             reqMm = 0f;
             float volumeWorldM3;
-            if (!TryComputeOriginalItemVolume(itemBounds, volumeK, out volumeWorldM3)) return false;
+            if (!TryComputeOriginalItemVolume(itemSize, volumeK, out volumeWorldM3)) return false;
             if (volumeWorldM3 > MaxItemVolumeSanityWorldM3) return false;
             float exactDiameterM = Mathf.Pow(60f * volumeWorldM3 / Mathf.PI, 1f / 3f);
             if (!KatamariMath.IsFiniteFloat(exactDiameterM)) return false;
@@ -527,7 +535,7 @@ namespace VRCKatamari.Pickup
         /// whose Req is exactly the ball's whole-millimetre diameter is food.
         /// </para>
         /// <para>
-        /// `true` (beyond) for every input the gate refuses as invalid: non-finite bounds,
+        /// `true` (beyond) for every input the gate refuses as invalid: a non-finite size,
         /// negative extents, an overflowing product, illegal `k`, a non-finite or negative
         /// diameter, and a volume above the sanity ceiling. The gate reports those as
         /// <see cref="AbsorbOutcome.RejectInvalidInput"/> (or RejectItemTooLarge for the
@@ -536,11 +544,11 @@ namespace VRCKatamari.Pickup
         /// the symptom the blocking feature exists to remove.
         /// </para>
         /// </remarks>
-        public static bool IsBeyondAbsorbLimit(Vector3 itemBounds, float volumeK,
+        public static bool IsBeyondAbsorbLimit(Vector3 itemSize, float volumeK,
             float ballSemanticDiameterWorldM)
         {
             float reqMm;
-            if (!TryComputePickupReqDiameterMm(itemBounds, volumeK, out reqMm)) return true;
+            if (!TryComputePickupReqDiameterMm(itemSize, volumeK, out reqMm)) return true;
             float ballMm;
             if (!TryFloorMillimetres(ballSemanticDiameterWorldM, out ballMm)) return true;
             return reqMm > ballMm;
@@ -557,13 +565,13 @@ namespace VRCKatamari.Pickup
         /// second copy. `false` means one of the inputs is illegal, in which case the
         /// predicate above answers "beyond".
         /// </remarks>
-        public static bool TryResolveAbsorbGate(Vector3 itemBounds, float volumeK,
+        public static bool TryResolveAbsorbGate(Vector3 itemSize, float volumeK,
             float ballSemanticDiameterWorldM, out float reqMm, out float ballMm, out bool within)
         {
             reqMm = 0f;
             ballMm = 0f;
             within = false;
-            if (!TryComputePickupReqDiameterMm(itemBounds, volumeK, out reqMm)) return false;
+            if (!TryComputePickupReqDiameterMm(itemSize, volumeK, out reqMm)) return false;
             if (!TryFloorMillimetres(ballSemanticDiameterWorldM, out ballMm)) return false;
             within = reqMm <= ballMm;
             return true;
@@ -630,7 +638,7 @@ namespace VRCKatamari.Pickup
             string itemKind,
             string[] allowedKinds,
             int allowedKindCount,
-            Vector3 itemBounds,
+            Vector3 itemSize,
             Vector3 itemPosition,
             Vector3 ballPosition,
             float collisionRadiusWorldM,
@@ -641,8 +649,8 @@ namespace VRCKatamari.Pickup
             long itemGrowthMm3)
         {
             AbsorbOutcome geometry = EvaluateAbsorb(itemAbsorbable, itemKind, allowedKinds,
-                allowedKindCount, itemBounds, itemPosition, ballPosition, collisionRadiusWorldM,
-                contactRadiusWorldM, itemVolumeK, ballSemanticDiameterWorldM,
+                allowedKindCount, itemSize, itemPosition, ballPosition,
+                collisionRadiusWorldM, contactRadiusWorldM, itemVolumeK, ballSemanticDiameterWorldM,
                 maxGrowthRadiusWorldM);
             return ApplyGrowthGate(geometry, itemGrowthMm3);
         }

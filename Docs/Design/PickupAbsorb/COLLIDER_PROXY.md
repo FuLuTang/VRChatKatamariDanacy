@@ -18,7 +18,7 @@
 |---|---|---|---|
 | 视觉网格 | FBX / MeshFilter | 渲染 | 只读，用来拟合 |
 | **碰撞形状（本文）** | `defs[].collider` → 将来烘焙成世界空间代理 | 球接触 v2（将来）、玩家胶囊（将来） | **新增可选块** |
-| 玩法体积 | `propBounds`（场景平行数组） | 吸收门、reach、挡路门 | **不动** |
+| 玩法体积 | `propLocalBounds`（自身尺寸）、`propBounds`（世界包围盒），场景平行数组 | 吸收门、reach 与挡路门读自身尺寸，挡路盒形状读世界包围盒 | **不动** |
 
 - 「挡不挡」仍然是 `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(propBounds[i], limit)`，与吸收门同一个函数；`propBounds` 仍是 AABB 体积。**本块不参与吸收判定**，也不许回写 `propBounds`。
 - `PARITY_AUDIT` 的 `G13`（原作 `Volume = k·bbox`，默认 k=0.70）是**体积口径**的问题，属于吸收门；本文不碰它，也不把碰撞代理的实体体积当成吸收体积。一个道具可以「玩法体积含空腔、碰撞体不含」，这是 [COLLIDER_LAYER](COLLIDER_LAYER.md) §1 已经写明的同构。

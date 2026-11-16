@@ -409,13 +409,32 @@ D5 陡坡登记门不动。
 的台阶在 **z≈5.67、球背后 1.07 m**（另一组三角形，顶面 −0.622）。所以「爬不出去」不是假台沿：球一直推
 的是一面 15 m 的墙，cap+掉落是设计行为；**出生点由另一任务按数据重选**（不在本文范围）。v2 的冻结另有一条：
 recovery 把「推墙」当「卡住」（每步位移 <0.5 mm 且驱动开），soft 阶段 `ClearClimbState()`、三次后进
-hold——v1 用的是 `sweepStuck`，而 SweepMath 自己的契约是 blocked ≠ stuck。已按该契约修：**只要有一个接触的
-水平法线与驱动方向点积 < −0.5 就算 blocked，不计 stuck**。角落的推导：内角 β、沿角平分线推进时法线点积 =
-−sin(β/2) ⇒ **β > 60° 的角落一律 blocked**（球总能靠转向/后退脱出，推挤只去掉法向分量、切向仍在）；
-β < 60° 的尖楔不 blocked、恢复仍会触发（10 s 内 3 次进 hold）。本轮**不加**「blocked 久了也算 stuck」的兜底：
-推墙与角落都是输入可脱出的，加了会把 R25d 的冻结带回来。测试：`APushIntoATallWallIsBlockedNotStuckAndStaysControllable`（推墙 300 步 recoveries=0、不穿墙、反向 60 步离墙 ≥0.2 m）与
-`AShallowWedgeWithNoOpposingContactIsStillRecovered`（130° 浅楔仍进 hold）。
+hold——v1 用的是 `sweepStuck`，而 SweepMath 自己的契约是 blocked ≠ stuck。现行规则（`UpdateContactRecovery`）：
+**受阻** = 任一接触的水平法线与**意图方向**（`ComputeDrive` 的 `intentDirection`：输入的前进/侧向轴按当前朝向合成的
+有符号单位向量，不随墙面偏转的速度变化；速度方向 `contactDriveDirection` 仍只给爬升门和针尖估计用）点积 < −0.5，
+受阻不计 stuck。**卡住** = 有输入、不受阻、且球心仍在本次 episode 起点周围 `ContactStuckConfineM`（1 cm）内；
+不再用「单步位移 <0.5 mm」——楔里求解器逐面轮流去掉法向分量，速度左右翻转，每隔几步就有 2–3 mm 的一步，逐步阈值
+会被一次次清零。角落的推导：内角 β、沿角平分线推进时法线点积 = −sin(β/2) ⇒ **β > 60° 的角落一律受阻**
+（球总能靠转向/后退脱出，推挤只去掉法向分量、切向仍在）；β < 60° 的尖楔不受阻、恢复会触发：soft 1.5 s（清速度）、
+hard 3 s（回最后稳定点，soft 不重新武装）、再 3 s 的第二次 hard 即第三次恢复，进 hold，所以 50° 楔从进楔起约 6.2 s
+（310 步）进 hold。本轮**不加**「受阻久了也算 stuck」的兜底：推墙与角落都是输入可脱出的，加了会把 R25d 的冻结带回来。
+测试：`APushIntoATallWallIsBlockedNotStuckAndStaysControllable`（推墙 300 步 recoveries=0、不穿墙、反向 60 步离墙 ≥0.2 m）、
+`ANarrowFiftyDegreeWedgeIsStuckNotBlockedAndEndsInTheRecoveryHold`（50° 窄 V 楔 330 步后 recoveries≥1 且进 hold）、
+`APushIntoARightAngleCornerIsBlockedNotStuck`（90° 内角沿平分线推 400 步 recoveries=0，转身 60 步脱出 ≥0.2 m）、
+`SlidingAlongAWallIsNeitherBlockedStuckNorFrozenAtAnyIncidence`（45°/75° 贴墙斜推 150 步滑出 ≥2 m、recoveries=0）。
+针尖（长物件撑出的 pin）碰墙的速度响应：`TheNeedleVelocityResponseFollowsTheSolversThreeClassRules`（按类去速：CLIMB 去水平法向、RIDE 不去、NONE 去三维、深度 ≤ 0 与向外速度不动）、
+`APinThatTouchesTheWallBeforeTheCoreStopsTheBallThereWithoutRebound`（针尖先于核心碰墙：球停在针尖处、不穿墙、不爬、不反弹，松手不漂、反推立刻离开）。
 **「局部台沿」烘焙**（用相邻三角形/顶边替代三角形最高顶点）在真实数据里**对本槽不改变 13.85**，
 且需要建网格期的邻接表 + 一个明确的「局部」定义 ⇒ **BLOCKED**，等有真实的长三角带出局部台沿的样本再做。
 
 **证据缺口**：E9（3,455 三角形 + 0.19 m 凹槽）只在对话里、**没落盘**；下次跑请在 `Docs/Evidence/ReferenceLevels/` 补一份。
+
+**待办（2026-11-16，只读评估；不在本次实现）**：爬升门（`ContactSolveMath` 的 pushIn、`RefreshClimbGate`）、针尖突出量估计、
+`SelectClimbContact` 仍读**速度**方向 `contactDriveDirection`。离线复算（胶水照抄，非 Unity 执行）：贴墙 60°/75° 滑行时若把爬升门改读意图，
+球会反复起爬而掉速（v 1.97→0.82 m/s），读速度则一路滑过——速度方向对爬升门是对的，别改。针尖突出量按速度方向投影，
+楔里偏转 ≤ 20° 只差 ≤ 6% × cap（r=0.15 时 ≤ 3 mm），无害。**有风险的是 `SelectClimbContact`**：50° 楔里速度方向每步左右翻转，被选作「墙」的面
+也每步在两面间切换；爬升在 cap 锁定后重新起爬时落到另一面，`sameFace` 判假而重新锚定 `anchorY`，于是满推 40 s 的峰值是
+0.69 m（rest 0.15 + H_cap 0.45 = 0.60，超出约 0.09 m），而同一时间平墙的峰值 ≤ 0.57 m。后果是楔里像烟囱一样「爬—掉—再爬」，
+不冻结、不进恢复。修法方向：爬升中保持已选面（迟滞）直到该面失去接触，由下一位带 Unity 的实现者设计并加测试；
+在那之前不要把爬升门改读意图（会更糟：峰值 0.80 m）。
+

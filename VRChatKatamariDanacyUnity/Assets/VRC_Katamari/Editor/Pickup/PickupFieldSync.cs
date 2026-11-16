@@ -952,7 +952,8 @@ namespace VRCKatamari.Editor.Pickup
                 // AABB is still required above: a renderer whose AABB is degenerate is a data
                 // error even when the pickup size is spelled out in the name.
                 Vector3 pickSize = candidate.BoundsSize;
-                // Same row, measured along the prop's own axes, for the radial-proxy shell. A
+                // Same row, measured along the prop's own axes: the prop's own size, which the
+                // absorb gate, the growth pricing below and the radial-proxy shell read. A
                 // row whose local measurement failed keeps the world AABB (the pre-fix
                 // behaviour for that one row) instead of dropping the prop; it is reported
                 // below so a rotated prop among them is not silently wrong.
@@ -1028,7 +1029,7 @@ namespace VRCKatamari.Editor.Pickup
                     declaredGrowthMm3.TryGetValue(candidate.ItemId, out declaredGrowth) &&
                     declaredGrowth > 0L;
                 long boundsGrowth;
-                bool boundsPriced = PickupAbsorbMath.TryComputeGrowthMm3(pickSize, volumeK,
+                bool boundsPriced = PickupAbsorbMath.TryComputeGrowthMm3(pickLocalSize, volumeK,
                     volumePenalty, out boundsGrowth);
                 long growthMm3;
                 if (hasDeclaredGrowth)

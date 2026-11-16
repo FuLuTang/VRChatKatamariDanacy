@@ -411,6 +411,16 @@ namespace VRCKatamari.Story
                 UpdateRunning();
                 return;
             }
+            if (state == StateIdle)
+            {
+                // EnterIdle runs in this behaviour's Start, and component Start order is not
+                // guaranteed: the motor may not have derived its start diameter yet, so the
+                // one write there can show 0 m. The write is a no-op while the shown number
+                // is unchanged, so repeating it per idle frame costs no string and corrects
+                // the line as soon as the motor can answer.
+                WriteCurrentHud();
+                return;
+            }
             if (state != StatePresenting) return;
             if (Time.time - presentingStartTimeSeconds < presentingSeconds) return;
             // Only the state moves. The result card is drawn by whoever is watching this

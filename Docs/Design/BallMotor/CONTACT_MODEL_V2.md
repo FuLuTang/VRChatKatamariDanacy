@@ -373,21 +373,31 @@ C05：坡 45°、台面顶 0.6、台面南面 z=8.2、球 r=0.1499。
 ### 2.8 卡死 / 传送：不允许静默循环
 
 ```
-每步：
+每步（UpdateContactRecovery，在求解器速度写回成员之后）：
   driveIntent = |inputForward| + |inputLateral|
-  progress    = |C_new − C_old|                       # 三维，爬升的竖直位移也算
-  if driveIntent > 0.05 and progress < 0.0005: stuckSeconds += dt
-  else:                                        stuckSeconds = 0
-  if progress > 0.001 and residual < 0.001:   lastStableCenter = C_new   # 每条 0.1 s 最多写一次
+  intent      = 输入的前进/侧向轴按当前朝向合成的有符号单位向量   # ComputeDrive 的 intentDirection；不随墙面偏转的速度变化
+  blocked     = 任一接触的水平法线 n_h 满足 dot(intent, n_h) < −0.5   # 玩家的推进被接触面正面挡住
+  if stuckSeconds == 0: anchor = 本步开始前的球心                    # 本次 episode 的起点
+  confined    = |C_new − anchor| < 0.01 m                           # ContactStuckConfineM
+  if driveIntent > 0.05 and not blocked and confined: stuckSeconds += dt
+  else:                                               stuckSeconds = 0; softArmed = true
+  progress    = |C_new − C_old|                                     # 三维，爬升的竖直位移也算
+  if progress > 0.001 and residual < 0.001:           lastStableCenter = C_new   # 每条 0.1 s 最多写一次
 ```
+
+**受阻不是卡住。** 推墙、推进 β > 60° 的内角（沿角平分线推进时每面的点积是 −sin(β/2)）都是输入可脱出的，不计 `stuckSeconds`；β < 60° 的尖楔（50° 时点积 −0.42）不受阻，球不动就是卡住。判据读**意图**方向而不是速度方向：求解器逐面去掉法向分量，楔里的速度会左右翻转，读速度会把一次真卡住读成「顶着某一面」。**卡住按「待在起点 1 cm 圆盘内」判，不按单步位移**：楔里的球每隔几步有一步 1–3 mm，逐步阈值会被一次次清零。
 
 | 触发 | 动作 | 视觉 |
 |---|---|---|
-| `stuckSeconds > 1.5`（软） | 清 `planarVelocity`、清爬升/下落状态、清 `solverResidual` 相关缓存；**不动位置**；`recoveryCount++`，`recoveryReason=1` | 无跳变 |
-| 仍卡到 3.0 s（硬） | 传送到 `lastStableCenter`；清速度；`discontinuous=true`；`recoveryReason=2` | 一次跳变 |
+| `stuckSeconds > 1.5`（软）且 `softArmed` | 清 `planarVelocity`、`contactVerticalVelocity`、爬升状态；**不动位置**；`softArmed = false`（每个 episode 只有一次软恢复）；`recoveryCount++`，`recoveryReason=1` | 无跳变 |
+| `stuckSeconds > 3.0`（硬） | 传送到 `lastStableCenter`；清速度；`stuckSeconds = 0`；`discontinuous=true`；`recoveryReason=2`。**不重新武装软恢复**：只有一步「不卡住」（离开起点 1 cm、受阻或松开输入）才重新武装，所以球仍困在原处时下一个 episode 直接等硬恢复 | 一次跳变 |
 | 没有 `lastStableCenter`（本回合从未移动） | 传送到**本回合起点**（`TryResetForNewRound`/`TeleportTo` 写入的 `roundStartCenter`） | 一次跳变 |
 | 10 s 内 `recoveryCount ≥ 3` | **不再传送**：停在原地，`recoveryState=3`，打一条 `[BallMotor] recovery hold cell=… surface=… residual=…`；测试场据此判 `recovery_hold == 0` 失败 | 无（但会被判据抓住） |
 | 初始就深嵌（`residual > r`） | 沿最深法线一次推出全部穿透；若仍 > 0.02 m，传送 `lastStableCenter` 并 `recoveryReason=3` | 一次跳变 |
+
+**进入 hold 的最短时间。** 球始终困在起点 1 cm 内（楔）：软恢复在 >1.5 s（计数 1）、第一次硬恢复在 >3.0 s（计数 2）、第二个 episode 的硬恢复再 >3.0 s（计数 3），合计 ≥ 6.0 s 的卡住时间（50° 楔加上 0.2 s 滚入，约 6.2 s、310 步）。中间只要有一步不卡住，软恢复就重新武装，第三次恢复可提前为软恢复：最短 1.5 + 1.5 + 1.5 = 4.5 s。三次恢复必须落在同一个 10 s 窗口内，窗口过期后计数清零、hold 解除。
+
+**速度写回的顺序是不变式**：`ContactSolveMath.TryStep` 的速度结果先写回 `planarVelocity` / `contactVerticalVelocity`，**然后**才做针尖推出与针尖速度响应、深嵌恢复、支撑写回和上面的卡死恢复。这些步骤都改成员字段，写回若放在它们之后，会用恢复前的速度覆盖恢复清掉的速度（等于「传送 + 保留速度」，下面第 2 条禁止的事）。
 
 **三条不许做的事**（都是 v1 的教训）：
 1. **不许**用序列化的 `startCenterWorld` 当恢复点（它是场景烘死的 y=0.15，不随球径、不随本回合；C13 的 0.95 m 就是它）。

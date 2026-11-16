@@ -301,13 +301,16 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void AShallowWedgeWithNoOpposingContactIsStillRecovered()
+        public void ANarrowFiftyDegreeWedgeIsStuckNotBlockedAndEndsInTheRecoveryHold()
         {
-            // The recovery net's real job: no progress while NO contact opposes the drive.
-            // Two walls 130 deg apart (each normal 65 deg off the +Z drive) have a horizontal
-            // dot of -cos(65) = -0.42, which is NOT "blocked" (the gate is < -0.5), so a ball
-            // wedged in the apex cannot move, cannot slide out along the drive, and the
-            // recovery must still fire and end in the hold (design 2.8).
+            // The recovery net's real job: no progress while no contact opposes the PUSH.
+            // Two faces whose normals are 65 deg either side of -Z leave a 50 deg V (inner
+            // angle beta = 180 - 130). Pushing along +Z, the bisector, gives each face a
+            // dot of -sin(beta / 2) = -sin(25 deg) = -0.42: not below the -0.5 gate, so the
+            // press is stuck, not blocked, and the recovery must fire and end in the hold
+            // (design 2.8). The gate reads the player's intent, not the velocity: the
+            // solver strips each face's normal component in turn, so the velocity swings
+            // to +-0.35 of +Z every few steps and would read as pushing into one face.
             EnableV2();
             float radius = Radius();
             float angle = 65f * Mathf.Deg2Rad;
@@ -318,11 +321,220 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(AddWall(apex - normalB * 0.5f, normalB, 3f, 1.5f, 0.5f, 3));
             Invoke("TeleportTo", new Vector3(0f, radius, 2.6f));
             Invoke("SetMoveAxes", 0.5f, 0f, 0f);
-            Step(300);
+
+            // Steps to the hold, from the recovery constants (dt = 0.02 s):
+            //   ~0.2 s  the ball rolls the 0.045 m into the apex (half push, 2.5 m/s^2);
+            //   +3.0 s  stuck > ContactStuckHardSeconds. On the way the soft stage fires
+            //           once at 1.5 s (count 1); the hard stage then teleports to the stable
+            //           point (count 2) and zeroes the timer;
+            //   +3.0 s  the second episode starts at once (the stable point is the apex),
+            //           the soft stage is not re-armed (only a step that leaves the
+            //           ContactStuckConfineM disc or releases the push re-arms it), so it
+            //           runs to the next hard stage (count 3 = ContactRecoveryHoldCount).
+            //   = 0.2 + 3.0 + 3.0 = 6.2 s = 310 steps, plus one step per strict '>' check.
+            // 330 steps (6.6 s) keeps 0.4 s of slack and stays inside the 10 s hold window.
+            Step(330);
             Assert.GreaterOrEqual((int)Invoke("GetRecoveryCount"), 1,
-                "a wedge that no contact opposes must still be recovered");
+                "a wedge that no contact opposes must be recovered");
             Assert.AreEqual(3, (int)Invoke("GetRecoveryState"),
                 "three episodes inside 10 s must end in the hold");
+        }
+
+        [Test]
+        public void APushIntoARightAngleCornerIsBlockedNotStuck()
+        {
+            // The same -sin(beta / 2) rule on the other side of the gate: a 90 deg inner
+            // corner pushed along its bisector gives each face -sin(45 deg) = -0.71, so it
+            // is blocked and the ball stays in control (TERRAIN_CLIMB 6.3: beta > 60 deg).
+            EnableV2();
+            float radius = Radius();
+            // Faces z = 3 (normal -Z) and x = 1 (normal -X); the corner is (1, 3).
+            AddObb(new Vector3(0f, 1.5f, 3.4f), new Vector3(4f, 1.5f, 0.4f), 2);
+            AddObb(new Vector3(1.4f, 1.5f, 0f), new Vector3(0.4f, 1.5f, 4f), 3);
+            Invoke("TeleportTo", new Vector3(1f - radius - 0.05f, radius, 3f - radius - 0.05f));
+            SetField("headingDegrees", 45f);
+            Invoke("SetMoveAxes", 0.5f, 0f, 0f);
+            Step(400);
+            Assert.AreEqual(0, (int)Invoke("GetRecoveryCount"),
+                "a corner the push runs into is blocked, not stuck");
+            Assert.AreNotEqual(3, (int)Invoke("GetRecoveryState"));
+            Vector3 pressed = GetCenter();
+            Assert.Greater((int)Invoke("GetContactCount"), 0, "the ball must be touching");
+            Assert.LessOrEqual(pressed.x, 1f - radius + 0.002f, "no penetration of the x face");
+            Assert.LessOrEqual(pressed.z, 3f - radius + 0.002f, "no penetration of the z face");
+
+            // Still controlled: turning round and pushing walks the ball out of the corner.
+            SetField("headingDegrees", 225f);
+            Step(60);
+            Vector3 after = GetCenter();
+            float away = Mathf.Sqrt((after.x - pressed.x) * (after.x - pressed.x)
+                + (after.z - pressed.z) * (after.z - pressed.z));
+            Assert.GreaterOrEqual(away, 0.2f, "the ball must leave the corner when pushed out");
+            Assert.AreEqual(0, (int)Invoke("GetRecoveryCount"));
+        }
+
+        [Test]
+        public void SlidingAlongAWallIsNeitherBlockedStuckNorFrozenAtAnyIncidence()
+        {
+            // The ball is driven along a long wall at 45 deg (intent dot with the normal
+            // -0.71, blocked) and at 75 deg (-0.26, not blocked). Neither may count a
+            // stuck episode, and both keep moving along the wall: the stuck test is "stayed
+            // inside a 1 cm disc", which a ball sliding at 1-2 m/s never does.
+            float[] headings = { 45f, 75f };
+            for (int i = 0; i < headings.Length; i++)
+            {
+                RecreateMotor();
+                EnableV2();
+                float radius = Radius();
+                AddObb(new Vector3(0f, 1.5f, 3.4f), new Vector3(8f, 1.5f, 0.4f), 1);
+                Invoke("TeleportTo", new Vector3(-4f, radius, 3f - radius - 0.05f));
+                SetField("headingDegrees", headings[i]);
+                Invoke("SetMoveAxes", 0.5f, 0f, 0f);
+                Step(150);
+                Vector3 center = GetCenter();
+                Assert.GreaterOrEqual(center.x, -2f,
+                    "the ball must have slid at least 2 m along the wall, heading=" + headings[i]);
+                Assert.LessOrEqual(center.z, 3f - radius + 0.002f,
+                    "no penetration, heading=" + headings[i]);
+                Assert.AreEqual(0, (int)Invoke("GetRecoveryCount"),
+                    "a slide is not a stuck episode, heading=" + headings[i]);
+            }
+        }
+
+        private Vector3[] ContactNormals()
+        {
+            return (Vector3[])motorType.GetField("contactNormalsV2", Any).GetValue(motor);
+        }
+
+        /// <summary>
+        /// Writes a contact log of one core contact (index 0, which the needle response
+        /// must never touch) and one needle contact (index 1), with the given velocity.
+        /// </summary>
+        private void SetNeedleLog(Vector3 needleNormal, float needleDepth, int needleClass,
+            Vector3 planar, float vertical)
+        {
+            Vector3[] normals = ContactNormals();
+            float[] depths = (float[])motorType.GetField("contactDepthsV2", Any).GetValue(motor);
+            int[] classes = (int[])motorType.GetField("contactClassesV2", Any).GetValue(motor);
+            normals[0] = new Vector3(0f, 0f, -1f);
+            depths[0] = 0.01f;
+            classes[0] = ContactCodes.ClassClimb;
+            normals[1] = needleNormal;
+            depths[1] = needleDepth;
+            classes[1] = needleClass;
+            SetField("v2ContactCount", 2);
+            SetField("planarVelocity", planar);
+            SetField("contactVerticalVelocity", vertical);
+        }
+
+        [Test]
+        public void TheNeedleVelocityResponseFollowsTheSolversThreeClassRules()
+        {
+            // CONTACT_MODEL_V2 4A.3 / 7.5: a pin contact removes velocity by class, exactly
+            // as the core solver does, and never adds any (no restitution, no rebound).
+            EnableV2();
+            Vector3 moving = new Vector3(0.3f, 0f, 2f);
+
+            // CLIMB: the horizontal inward component goes, the tangential one and the
+            // vertical velocity stay.
+            SetNeedleLog(new Vector3(0f, 0f, -1f), 0.001f, ContactCodes.ClassClimb, moving, -1f);
+            Invoke("ApplyNeedleVelocityResponse", 1);
+            Assert.AreEqual(0.3f, ((Vector3)Invoke("GetPlanarVelocity")).x, 1e-5f);
+            Assert.AreEqual(0f, ((Vector3)Invoke("GetPlanarVelocity")).z, 1e-5f,
+                "the inward component of a wall contact is removed");
+            Assert.AreEqual(-1f, GetFloat("contactVerticalVelocity"), 1e-5f);
+
+            // CLIMB, velocity already leaving the surface: untouched (no push away).
+            SetNeedleLog(new Vector3(0f, 0f, -1f), 0.001f, ContactCodes.ClassClimb,
+                new Vector3(0.3f, 0f, -1f), 0f);
+            Invoke("ApplyNeedleVelocityResponse", 1);
+            Assert.AreEqual(-1f, ((Vector3)Invoke("GetPlanarVelocity")).z, 1e-5f,
+                "an outward velocity is not touched: the response never rebounds");
+
+            // RIDE (a pin standing on a floor): removes nothing.
+            SetNeedleLog(new Vector3(0f, 1f, 0f), 0.001f, ContactCodes.ClassRide, moving, -1f);
+            Invoke("ApplyNeedleVelocityResponse", 1);
+            Assert.AreEqual(2f, ((Vector3)Invoke("GetPlanarVelocity")).z, 1e-5f);
+            Assert.AreEqual(-1f, GetFloat("contactVerticalVelocity"), 1e-5f);
+
+            // NONE (an underside / ceiling): removes the inward part in all three axes.
+            SetNeedleLog(new Vector3(0f, -1f, 0f), 0.001f, ContactCodes.ClassNone, moving, 2f);
+            Invoke("ApplyNeedleVelocityResponse", 1);
+            Assert.AreEqual(0f, GetFloat("contactVerticalVelocity"), 1e-5f,
+                "an upward velocity into a ceiling is removed");
+            Assert.AreEqual(2f, ((Vector3)Invoke("GetPlanarVelocity")).z, 1e-5f,
+                "the horizontal velocity is not the ceiling's business");
+
+            // A contact with no depth (a first touch of the sweep) removes nothing, and the
+            // core contact at index 0 is never read by this pass.
+            SetNeedleLog(new Vector3(0f, 0f, -1f), 0f, ContactCodes.ClassClimb, moving, 0f);
+            Invoke("ApplyNeedleVelocityResponse", 1);
+            Assert.AreEqual(2f, ((Vector3)Invoke("GetPlanarVelocity")).z, 1e-5f,
+                "depth <= 0 is not a response, and the core contact (index 0) is skipped");
+        }
+
+        [Test]
+        public void APinThatTouchesTheWallBeforeTheCoreStopsTheBallThereWithoutRebound()
+        {
+            // A long item stuck to the ball is a pin (a "needle") that reaches r + cap, up
+            // to 35% of a radius beyond the core. Pushed into a wall, the pin touches
+            // first: the ball must stop with the pin tip at the wall (not with the core
+            // there, and not with the tip inside the wall), keep no speed into the wall,
+            // not bounce, not climb, and leave at once when the push reverses.
+            EnableV2();
+            float radius = Radius();
+            float tipReach = radius + Mathf.Min(0.35f * radius, 0.3f);
+            // The face z = 3 (normal -Z).
+            AddObb(new Vector3(0f, 1.5f, 3.4f), new Vector3(2f, 1.5f, 0.4f), 1);
+            Invoke("TeleportTo", new Vector3(0f, radius,
+                3f - tipReach - ContactTuning.NeedleTipRadiusM - 0.02f));
+
+            // The shell has 16 fixed pin directions; the rod is laid along the one nearest
+            // +Z and the ball is rolled so that pin points at the wall (otherwise whether a
+            // pin or the core touches first would depend on the roll phase).
+            Vector3[] directions = (Vector3[])motorType.GetField("proxyDirections", Any)
+                .GetValue(motor);
+            Vector3 pin = directions[0];
+            for (int i = 1; i < directions.Length; i++)
+            {
+                if (directions[i].z > pin.z) pin = directions[i];
+            }
+            Assert.IsTrue((bool)Invoke("AttachRadialProxy", "rod", new Vector3(0.02f, 0.02f, 0.8f),
+                Vector3.zero, Quaternion.FromToRotation(Vector3.forward, pin)),
+                "a 0.8 m rod is a long object and must register");
+            SetField("visualRollRotation", Quaternion.FromToRotation(pin, Vector3.forward));
+            Invoke("SetMoveAxes", 1f, 0f, 0f);
+
+            bool sawNeedleContact = false;
+            float slowestZ = 0f;
+            for (int i = 0; i < 100; i++)
+            {
+                Invoke("StepBall", 0.02f);
+                if ((int)Invoke("GetNeedleContactCount") > 0) sawNeedleContact = true;
+                slowestZ = Mathf.Min(slowestZ, ((Vector3)Invoke("GetPlanarVelocity")).z);
+            }
+            Vector3 pressed = GetCenter();
+            Quaternion roll = (Quaternion)motorType.GetField("visualRollRotation", Any)
+                .GetValue(motor);
+            Vector3 tip = pressed + roll * pin * tipReach;
+            Assert.IsTrue(sawNeedleContact, "the pin, not only the core, must have touched");
+            Assert.LessOrEqual(pressed.z, 3f - radius - 0.02f,
+                "the ball must stop at least 2 cm before where the bare core would (cap is 5 cm)");
+            Assert.LessOrEqual(tip.z, 3f, "the pin tip must not be inside the wall");
+            Assert.LessOrEqual(pressed.y, radius + 0.01f, "the ball must not climb the wall");
+            Assert.LessOrEqual(((Vector3)Invoke("GetPlanarVelocity")).z, 0.2f,
+                "after 2 s of pushing no speed into the wall may be left");
+            Assert.GreaterOrEqual(slowestZ, -0.1f, "the response removes velocity, never reverses it");
+            Assert.AreEqual(0, (int)Invoke("GetRecoveryCount"), "a pinned press is blocked, not stuck");
+
+            // Releasing holds the ball where it is, reversing walks it off at once.
+            Invoke("SetMoveAxes", 0f, 0f, 0f);
+            Step(30);
+            Assert.AreEqual(pressed.z, GetCenter().z, 0.01f, "released: no drift into the wall");
+            Invoke("SetMoveAxes", -1f, 0f, 0f);
+            Step(40);
+            Assert.LessOrEqual(GetCenter().z, pressed.z - 0.2f,
+                "reversed: the ball must leave the wall without having to cancel a stored speed");
         }
 
         [Test]

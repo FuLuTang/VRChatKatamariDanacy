@@ -66,10 +66,10 @@ namespace VRCKatamari.Pickup
     /// ONE classification of the same scan, so a prop is never a wall and a floor at once.
     /// The predicate is the absorb gate's OWN whole-millimetre rule
     /// (<see cref="PickupAbsorbMath.IsBeyondAbsorbLimit"/> with the prop's
-    /// <c>propVolumeK</c> and the motor's semantic diameter), never a second threshold: the
-    /// instant the ball's whole-mm diameter reaches the prop's Req, the same function stops
-    /// calling it "too big", the next scan drops it from both sets, and the prop becomes
-    /// absorbable. Boxes come from the
+    /// <c>propVolumeK</c>, the prop's own size and the motor's semantic diameter), never a
+    /// second threshold: the instant the ball's whole-mm diameter reaches the prop's Req,
+    /// the same function stops calling it "too big", the next scan drops it from both sets,
+    /// and the prop becomes absorbable. Boxes come from the
     /// gameplay volume <c>propBounds</c> around the prop's world position - not from a
     /// <c>BoxCollider</c> and not from the visual mesh - because the three layers are
     /// separate and most scene props are authored without a collider at all
@@ -160,16 +160,19 @@ namespace VRCKatamari.Pickup
         [SerializeField] private Transform[] propTransforms;
         [SerializeField] private string[] itemIds;
         [SerializeField] private string[] kinds;
-        // propBounds is the prop's WORLD AABB (full edge lengths, metres). The absorb
-        // gate, the blocking boxes and the support classification all read it as an
-        // axis-aligned world box, so its meaning must not change.
+        // propBounds is the prop's WORLD AABB (full edge lengths, metres). The blocking
+        // boxes and the support classification read it as an axis-aligned world box, so its
+        // meaning must not change. A turned prop's world box is larger than the prop, so it
+        // is never the size the absorb gate or the contact reach reads.
         [SerializeField] private Vector3[] propBounds;
         // propLocalBounds is the same prop measured along its OWN local axes (full edge
-        // lengths, metres; the prop root's rotation is NOT included). The radial-proxy
-        // shell rotates these sizes by the prop's ball-local rotation, which already
-        // contains the root rotation, so it needs this column - passing propBounds
-        // would rotate a yawed prop twice. Optional: an un-synced scene has no column
-        // and the host falls back to propBounds with one reason-coded warning.
+        // lengths, metres; the prop root's rotation is NOT included): the prop's own size,
+        // the original's per-type a, b, c. It feeds the absorb gate, the contact reach and
+        // the blocking classification (none depends on how the prop is turned) and the
+        // radial-proxy shell, which rotates these sizes by the prop's ball-local rotation
+        // (that rotation already contains the root rotation, so passing propBounds would
+        // rotate a yawed prop twice). Optional: an un-synced scene has no column and the
+        // host falls back to propBounds with one reason-coded warning.
         [SerializeField] private Vector3[] propLocalBounds;
         // Per-item volume factor k (the original's `Volume = k * a*b*c`; 0.70 default).
         // Filled by the level importer from `defs[].volumeK` (a prop's own `volumeK` wins),
@@ -186,7 +189,7 @@ namespace VRCKatamari.Pickup
         // section 3). `long[]` because the ledger is 64-bit and the value is the gain itself:
         // the runtime does no pricing, no unit conversion and no float hop. A scene synced
         // before this column existed has an empty/short array and the host derives each row
-        // once at Start from propBounds + propVolumeK + the default 0.8 penalty, which is the
+        // once at Start from the prop's own size + propVolumeK + the default 0.8 penalty, the
         // same formula, so an un-reimported lab stays playable.
         [SerializeField] private long[] propGrowthMm3;
         // Optional: wired colliders are disabled on attach so an absorbed prop cannot block
@@ -246,8 +249,12 @@ namespace VRCKatamari.Pickup
         // the scan costs one array read per prop.
         private bool[] submittable;
         // The growth actually offered to the motor: the serialized column when it is valid,
-        // otherwise the Start-time fallback (propBounds x k x 0.8). Filled once in Start.
+        // otherwise the Start-time fallback (own size x k x 0.8). Filled once in Start.
         private long[] growthMm3;
+        // The prop's own three edge lengths, resolved once in Start: propLocalBounds when
+        // the row is usable, else the world box. The gate, the blocking predicate, the
+        // growth fallback and the radial proxy all read this one array.
+        private Vector3[] propOwnSizes;
         private int growthFallbackRows;
 
         // Bounded nearest-first selection for one scan.
@@ -380,9 +387,9 @@ namespace VRCKatamari.Pickup
         private bool loggedSelectionCapacity;
         private bool loggedNoColliders;
         private bool loggedBlockingSet;
-        // Rows whose radial proxy had to use the legacy world-AABB column. Fixed once
-        // in Start, reported in the ready line and in one reason-coded warning.
-        private int proxyLocalBoundsFallbackRows;
+        // Rows whose own size had to come from the world-AABB column. Fixed once in Start,
+        // reported in the ready line and in one reason-coded warning.
+        private int ownSizeFallbackRows;
 
         private void Start()
         {
@@ -390,11 +397,11 @@ namespace VRCKatamari.Pickup
             ResolvePropCount();
             AllocatePropStore();
             RecordOriginalPoses();
+            ResolveOwnSizes();
             ResolveGrowthMm3();
             MarkSubmittable();
             PreparePropRows();
             ReportPropDataProblems();
-            ReportProxyLocalBoundsSource();
             seenEvents = 0;
             nextScanTime = 0f;
             nextBlockingScanTime = 0f;
@@ -402,7 +409,7 @@ namespace VRCKatamari.Pickup
                 + " submittable=" + submittableCount
                 + " propRows=" + propUsableCount
                 + " propObstacles=" + (blockingDisabled ? "off" : "on")
-                + " proxyBounds=" + (proxyLocalBoundsFallbackRows > 0 ? "fallback" : "local")
+                + " ownSize=" + (ownSizeFallbackRows > 0 ? "fallback" : "local")
                 + " activationR=" + activationRadiusM
                 + " releaseR=" + releaseRadiusM
                 + " scanInterval=" + scanIntervalSeconds);
@@ -659,12 +666,21 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
-        /// Rows whose radial proxy used the legacy world AABB instead of
-        /// <c>propLocalBounds</c>; 0 means every row used the local column.
+        /// Rows whose own size (absorb gate, blocking predicate, radial proxy) used the
+        /// world AABB instead of <c>propLocalBounds</c>; 0 means every row used the local
+        /// column.
         /// </summary>
-        public int GetRadialProxyBoundsFallbackRows()
+        public int GetOwnSizeFallbackRows()
         {
-            return proxyLocalBoundsFallbackRows;
+            return ownSizeFallbackRows;
+        }
+
+        /// <summary>One row's resolved own size (zero when the row is outside the field).</summary>
+        public Vector3 GetPropOwnSize(int index)
+        {
+            if (propOwnSizes == null || index < 0 || index >= propOwnSizes.Length)
+                return Vector3.zero;
+            return propOwnSizes[index];
         }
 
         public bool IsCollecting()
@@ -791,6 +807,7 @@ namespace VRCKatamari.Pickup
             originalActiveStates = new bool[propCount];
             submittable = new bool[propCount];
             growthMm3 = new long[propCount];
+            propOwnSizes = new Vector3[propCount];
             growthFallbackRows = 0;
             nearestIndices = new int[SelectionCapacity];
             nearestDistSq = new float[SelectionCapacity];
@@ -937,7 +954,7 @@ namespace VRCKatamari.Pickup
                 }
 
                 long derived;
-                if (PickupAbsorbMath.TryComputeGrowthMm3(propBounds[i], EffectiveVolumeK(i),
+                if (PickupAbsorbMath.TryComputeGrowthMm3(propOwnSizes[i], EffectiveVolumeK(i),
                     PickupAbsorbMath.DefaultVolumePenalty, out derived))
                 {
                     growthMm3[i] = derived;
@@ -953,7 +970,7 @@ namespace VRCKatamari.Pickup
             {
                 Debug.LogWarning("[PickupFieldHost] " + growthFallbackRows + " row(s) have no"
                     + " usable serialized propGrowthMm3; the host priced them once at Start"
-                    + " from propBounds x k x 0.80. Re-import the level so the derived column"
+                    + " from the prop's own size x k x 0.80. Re-import the level so the derived column"
                     + " is written (the imported value is exact; this fallback is float).");
             }
         }
@@ -972,6 +989,9 @@ namespace VRCKatamari.Pickup
             Vector3 bounds = propBounds[index];
             if (!KatamariMath.IsFiniteVector(bounds)) return false;
             if (bounds.x < 0f || bounds.y < 0f || bounds.z < 0f) return false;
+            Vector3 size = propOwnSizes[index];
+            if (!KatamariMath.IsFiniteVector(size)) return false;
+            if (size.x < 0f || size.y < 0f || size.z < 0f) return false;
             return true;
         }
 
@@ -1085,20 +1105,22 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
-        /// Reports, once, how many rows will fall back from <c>propLocalBounds</c> to
-        /// <c>propBounds</c> for the radial proxy, and why.
+        /// Resolves every row's own size once - <c>propLocalBounds</c> when usable, else the
+        /// world AABB - and reports, once, how many rows fell back and why.
         /// </summary>
         /// <remarks>
-        /// The fallback is deliberate for a scene that was never re-synced after the
-        /// local column was added: refusing the prop would be worse than the old shell
-        /// (which is wrong only for a rotated prop). The warning names the array problem
-        /// so a re-sync is the obvious fix. The reason codes are the ones
-        /// <see cref="RadialProxyShellMath.TryResolvePropExtents"/> reports; printing the
+        /// The absorb gate, the blocking predicate, the growth fallback and the radial proxy
+        /// all need the prop's size along ITS OWN axes; the world AABB of a turned prop is
+        /// larger than the prop and would price it too high. The fallback is deliberate for a
+        /// scene that was never re-synced after the local column was added: refusing the prop
+        /// would be worse than the old behaviour (wrong only for a turned prop). The warning
+        /// names the array problem so a re-sync is the obvious fix. The reason codes are the
+        /// ones <see cref="RadialProxyShellMath.TryResolvePropExtents"/> reports; printing the
         /// number as well as the text keeps the line greppable.
         /// </remarks>
-        private void ReportProxyLocalBoundsSource()
+        private void ResolveOwnSizes()
         {
-            proxyLocalBoundsFallbackRows = 0;
+            ownSizeFallbackRows = 0;
             if (propCount <= 0) return;
             int expectedRows = itemIds == null ? 0 : itemIds.Length;
             int reasonCode = RadialProxyShellMath.ExtentsSourceLocal;
@@ -1111,40 +1133,26 @@ namespace VRCKatamari.Pickup
                 {
                     // The row is outside one of the two arrays; treat it as a bad local row
                     // rather than silently trusting a value this loop could not read.
+                    extents = propBounds[i];
                     source = RadialProxyShellMath.ExtentsSourceWorldRowInvalid;
                 }
+                propOwnSizes[i] = extents;
                 if (source == RadialProxyShellMath.ExtentsSourceLocal) continue;
-                proxyLocalBoundsFallbackRows = proxyLocalBoundsFallbackRows + 1;
+                ownSizeFallbackRows = ownSizeFallbackRows + 1;
                 if (reasonCode == RadialProxyShellMath.ExtentsSourceLocal) reasonCode = source;
             }
-            if (proxyLocalBoundsFallbackRows == 0) return;
-            Debug.LogWarning("[PickupFieldHost] radial proxy bounds fallback reason=" + reasonCode
-                + " (" + ProxyBoundsFallbackReasonText(reasonCode) + ")"
-                + " rows=" + proxyLocalBoundsFallbackRows + "/" + propCount
+            if (ownSizeFallbackRows == 0) return;
+            Debug.LogWarning("[PickupFieldHost] prop own-size fallback reason=" + reasonCode
+                + " (" + OwnSizeFallbackReasonText(reasonCode) + ")"
+                + " rows=" + ownSizeFallbackRows + "/" + propCount
                 + " localBoundsRows=" + (propLocalBounds == null ? 0 : propLocalBounds.Length)
                 + " expectedRows=" + expectedRows
-                + " - these rows use propBounds (world AABB), so a rotated prop's proxy box is"
-                + " rotated twice and its long axis is wrong. The absorb gate, blocking boxes"
-                + " and support classification are unaffected. Re-run VRC"
-                + " Katamari/Pickup/Sync Prop Arrays From Children.");
+                + " - these rows use propBounds (world AABB) as the prop's size, so a turned"
+                + " prop's absorb requirement is priced too high and its radial proxy box is"
+                + " rotated twice. Re-run VRC Katamari/Pickup/Sync Prop Arrays From Children.");
         }
 
-        /// <summary>
-        /// Full extents to hand the radial proxy for one row: prop-local when the column
-        /// is usable, the legacy world AABB otherwise.
-        /// </summary>
-        private Vector3 RadialProxyExtentsFor(int index)
-        {
-            int expectedRows = itemIds == null ? 0 : itemIds.Length;
-            Vector3 extents;
-            int source;
-            if (!RadialProxyShellMath.TryResolvePropExtents(propLocalBounds, propBounds, index,
-                    expectedRows, out extents, out source))
-                return propBounds[index];
-            return extents;
-        }
-
-        private string ProxyBoundsFallbackReasonText(int reasonCode)
+        private string OwnSizeFallbackReasonText(int reasonCode)
         {
             if (reasonCode == RadialProxyShellMath.ExtentsSourceWorldMissing)
                 return "propLocalBounds is missing (the scene predates the column; re-sync it)";
@@ -1269,7 +1277,7 @@ namespace VRCKatamari.Pickup
             // prop twice. The motor decides whether this item is a long object worth an
             // endpoint candidate; a small or buried prop is skipped there, and this host
             // owns no proxy state.
-            motor.AttachRadialProxy(itemIds[index], RadialProxyExtentsFor(index), localPosition,
+            motor.AttachRadialProxy(itemIds[index], propOwnSizes[index], localPosition,
                 localRotation);
 
             propStates[index] = StateAttached;
@@ -1490,12 +1498,13 @@ namespace VRCKatamari.Pickup
         private void SubmitProp(int index)
         {
             Vector3 itemPosition = propTransforms[index].position;
-            // Two per-item quantities travel together: k for the gate (the original's
-            // Req = floor(1000*cbrt(60*k*a*b*c/pi))) and the finished growth in mm^3 for the
-            // ledger. Neither is derived here; the host resolved both once in Start.
-            motor.SubmitCandidateWithVolumeKMm3(true, kinds[index], propBounds[index],
-                itemPosition, growthMm3[index], itemIds[index], 0,
-                EffectiveVolumeK(index));
+            // Per-item quantities travel together: the prop's own size and k for the gate (the
+            // original's Req = floor(1000*cbrt(60*k*a*b*c/pi)), a, b, c being the prop's own
+            // edges, never its turned world box) and for the contact reach (the size's
+            // circumscribed sphere), and the finished growth in mm^3 for the ledger. None is
+            // derived here; the host resolved them once in Start.
+            motor.SubmitCandidateWithVolumeKMm3(true, kinds[index], propOwnSizes[index],
+                itemPosition, growthMm3[index], itemIds[index], 0, EffectiveVolumeK(index));
             // Stamped even when the motor answered "already queued": both cases leave this
             // host willing to withdraw the id later if the ball leaves.
             lastSubmitTimes[index] = Time.time;
@@ -1542,11 +1551,12 @@ namespace VRCKatamari.Pickup
         /// mask uses, so props and scene geometry cannot disagree about what a step is.
         /// </para>
         /// <para>
-        /// Boxes come from the gameplay volume <c>propBounds</c> around the prop's current
-        /// world position - never from a collider and never from the visual mesh. Rotation
-        /// is not applied (an axis-aligned box around the authored volume), so a turned prop
-        /// can register slightly early; that is the documented AABB choice, not an
-        /// oversight.
+        /// The predicate reads the prop's own size, so turning a prop never changes whether it
+        /// blocks. Boxes come from the gameplay volume <c>propBounds</c> around the prop's
+        /// current world position - never from a collider and never from the visual mesh.
+        /// Rotation is not applied (an axis-aligned box around the authored volume), so a
+        /// turned prop can register slightly early; that is the documented AABB choice, not
+        /// an oversight.
         /// </para>
         /// <para>
         /// Failures keep the registered set instead of clearing it: an empty set is exactly
@@ -1685,7 +1695,7 @@ namespace VRCKatamari.Pickup
                 float pruneLimit = pruneRadius + propHalfDiagonal[i];
                 if (distanceSq > pruneLimit * pruneLimit) continue;
 
-                if (!PickupAbsorbMath.IsBeyondAbsorbLimit(propBounds[i], EffectiveVolumeK(i),
+                if (!PickupAbsorbMath.IsBeyondAbsorbLimit(propOwnSizes[i], EffectiveVolumeK(i),
                     ballDiameterM)) continue;
 
                 Vector3 minimum;

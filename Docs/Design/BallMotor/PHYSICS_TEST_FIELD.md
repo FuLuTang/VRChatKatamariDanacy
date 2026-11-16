@@ -502,7 +502,7 @@ per-tier 结果（`r` = D/2，`stepLimit` = 0.25·D）：
 | `protrusion_ratio` | `GetGroundProxyLiftWorldM() / GetProxyProtrusionCapWorldM()` | 突出是否被夹住 | A | `≤ 1.001`；负对照 `≤ 0.02` |
 | `proxy_points` / `proxy_candidates` | `GetProxyPointCount()` / `GetProxyCandidateCount()` | 长物件进没进壳 | A | `≥ 8` |
 | `roll_distance_ratio` | `abs(滚动角 × r − 位移) / 位移` | 无滑滚 | A | `≤ 0.10` |
-| `diameter_error_quanta` | `abs(D − preset) / quantum`，`quantum` = 一个体积单位在**当前球径**折算的直径变化，解析式 `D / (3 · (baselineVolumeUnits + confirmed))`（§8.3） | 球径设定是否落在网格最近点。**一个体积单位 = 0.0041 m³**，在 D=0.30 时约 29 mm、0.60 时 7.3 mm、1.10 时 2.2 mm、2.20 时 0.54 mm，所以「±2 mm」在 1.10 以下做不到（§8.3） | A | `≤ 1.0` |
+| `diameter_error_m` | `motor.GetSemanticDiameterWorldM() − presetDiametersM[diameterIndex]`（米，带符号；判据用 `abs<=`） | 设定器是否把球放到了预设直径。步骤 C+D 后成长量子是 1 mm³（约 7 nm 直径当量），所以 1 mm 是判据限，不是物理下限（§8.3） | A | `abs<= 0.001` |
 | `max_center_y_m` | 整段窗口内 `center.y` 的最大值 | 「最高只到 r + 一点」= 没爬上去 | A | 按格 |
 | `max_bottom_rise_m` | `max(center.y) − 碰撞半径` | C06 专用：球底最高比地面高多少；被拒的坡不该把球抬高 | A | `≤ 0.05` |
 | `ramp_support_seen` | 整段里是否至少一帧 `GetSupportKind() == 2`（0/1） | 球真的被斜面撑着；终点在台面时 `support_kind` 已经是 box，所以需要这个逐帧锁存 | A | `== 1` |
@@ -673,7 +673,7 @@ CONTACT_MODEL_V2 §6.2 的十个格（W1–W6、R1/R2、S1、X1）已经以**设
 [ptf] check=on_step metric=deck_gap_m value=-0.1199 op=abs<=0.0050 expect=fail raw=FAIL verdict=EXPECTED
 [ptf] check=rest_gap metric=support_gap_m value=+0.0000 op=abs<=0.0050 expect=pass raw=PASS verdict=EXPECTED
 [ptf] check=blocked_gap metric=blocked_gap_m value=-0.0007 op=abs<=0.0100 expect=pass raw=PASS verdict=EXPECTED
-[ptf] check=size_accuracy metric=diameter_error_quanta value=-0.0031 op=<=1.0000 expect=pass raw=PASS verdict=EXPECTED
+[ptf] check=size_accuracy metric=diameter_error_m value=-0.0000 op=abs<=0.0010 expect=pass raw=PASS verdict=EXPECTED
 [ptf] summary cell=C10 D=0.300 checks=6 pass=6 unexpected=0 skipped=0 verdict=EXPECTED elapsed=5.50s
 [ptf] traj t=2.50 p=(11.85,0.17,1.00) sup=0.000 lift=0.000 cap=0.0525 stuck=1.20
 [ptf] field cells=4 runs=16 verdict=EXPECTED unexpected=0 skipped=0 elapsed=94s
@@ -892,7 +892,7 @@ PTF C10 D0.30 [4/84] checks 5/5  exp 0  skip 0   v=EXPECTED
 
 ### 8.1 需求
 
-同一格要在 0.30 / 0.60 / 1.10 / 2.20 四个球径下各跑一遍。现状：直径**只是账本的纯函数**（`SizeModelMath.TryDerive(confirmedVolume)`），没有 setter；`startCenterWorld` 与 `baselineVolumeUnits` 都是序列化字段（改了要重开场景）。
+同一格要在 0.30 / 0.60 / 1.10 / 2.20 四个球径下各跑一遍。现状：直径**只是账本的纯函数**（`SizeModelMath.TryDerive(confirmedVolume)`），没有 setter；`startCenterWorld` 与 `startVolumeMm3` 都是序列化字段（改了要重开场景）。
 
 ### 8.2 接口（已实现，未编译）
 
@@ -940,7 +940,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
 |---|---|---|---|---|
 | **A. 闭环喂体积（采用并已实现）** | 每次 `SubmitCandidate(true, "lab-feeder", 0.02³, 球心, units, "ptf-feeder-<n>", gen)`；下一帧读 `GetSemanticDiameterWorldM()`，用**解析斜率**算下一次的整数 `units`（§8.3.2），通常一次喂足、≤ 6 次收敛到「网格最近点」 | **零运行时代码改动** | ① 吸收计数/事件被污染（挡路行与长杆格的 `absorbed_delta` 要先记基线，已按 §5.4 处理）；② 需要 `allowedKinds` 含 `lab-feeder`；③ 不能「变小」——只能 `TryResetForNewRound` 回 0.30 再长大 | **采用** |
 | B. 加测试专用接缝 | `motor.SetConfirmedVolumeUnitsForTest(float)`（带 `testModeEnabled` 开关，默认 false） | 一处运行时代码 | 多一个「生产里不该存在」的写入口；U# 没有编译期隔离，只能靠开关纪律 | 备选，需 Lead 批 |
-| C. 一个球径一个场景 | 改 `baselineVolumeUnits`，做 4 个场景 | 4 份场景 + 4 份维护 | 「同一格不同球径」变成跨场景比对，切格/机位/几何都可能漂 | 否决 |
+| C. 一个球径一个场景 | 改 `startVolumeMm3`，做 4 个场景 | 4 份场景 + 4 份维护 | 「同一格不同球径」变成跨场景比对，切格/机位/几何都可能漂 | 否决 |
 
 **A 的实际闭环**（已实现，和草案的差别是「斜率」的来源）：
 
@@ -957,32 +957,30 @@ namespace VRCKatamari.Labs.PhysicsTestField
         motor.SubmitCandidate(true, feederKind, feederBounds, center, units, "ptf-feeder-<n>", gen)
 ```
 
-- **为什么量子是解析的（2026-11-15 修）**：旧实现用「两次相邻样本解 `d(D³)/dV`」。那在 0.30 档**永远解不出来**：复位后球已经在目标上（0.2997369 vs 0.30，误差 0.26 mm），`Feed()` 第一帧就收敛、一次都不喂，斜率保持 0 → `GetQuantumM()` 返回 0 → 驱动原来的 `diameter_error_quanta` 直接报 `unknownMetric` 并跳过。斜率是**尺寸模型的属性，不是某一次 run 的属性**，所以改成推导：核心半径 `cbrt(3·cubic·total/4π)`、语义球径与核心半径成正比 ⇒ `D³` 对**总**体积单位是线性的，`d(D³)/dV = D³/total`，一个单位的直径当量 `= D/(3·total)`。**`cubicMetersPerVolumeUnit` 与 `semanticDiameterPerCoreDiameter` 在这个式子里正好约掉**，所以模型只需要 `baselineVolumeUnits` 一个电机数字。
-- **那一个数字怎么来**：电机的 `baselineVolumeUnits` 是 `[SerializeField] private`、**没有 getter**（`cubicMetersPerVolumeUnit` / `semanticDiameterPerCoreDiameter` / `maxCoreRadiusWorldM` 也一样），所以**没有给电机加成员**，而是由判据导入器用 `SerializedObject` 读**场景里那台 motor** 的序列化字段，写进设定器的 `sizeModelBaselineVolumeUnits`（与 `approach_m` / `rampFootM` 同一套「编辑器读场景 → 烘进组件」的做法）。改电机的定价后**重新导入判据**即可；没导（字段为 0）时 `IsCalibrated()` 为 false，`diameter_error_quanta` 报 `reason=sizeModelMissing`，超过当前尺寸的请求报 `noSizeModel`，**不会**用猜的数字换一个假 PASS。
+- **斜率是解析的（2026-11-16，步骤 C+D 后的口径）**：`D³` 对**总体积**是线性的（`D = (6V/π)^(1/3)`，V 以 mm³ 计），所以 `d(D³)/dV = D³/total`，一次 feed 就能精确落在目标直径上。这里不再有「整体积单位」的量子：旧文档里的 29 mm / 7.25 mm / 2.16 mm / 0.54 mm 是 **0.0041 m³ 整数单位**的直径当量，随那个单位一起退役。
+- **那一个数字怎么来**：电机的 `startVolumeMm3` 是 `[SerializeField] private`、**没有 getter**，所以判据导入器用 `SerializedObject` 读**场景里那台 motor** 的 `startDiameterWorldM`/`startVolumeMm3`，写进设定器的 `sizeModelStartVolumeMm3`（与 `approach_m` / `rampFootM` 同一套「编辑器读场景 → 烘进组件」的做法）。改电机起始尺寸后**重新导入判据**；没导（字段为 0）时 `IsCalibrated()` 为 false，设定器对超过当前尺寸的请求报 `noSizeModel`，该 run 在 Size 阶段被标 `BLOCKED_UNTIL_size`，**不会**用猜的数字换一个假 PASS。
 - **每一个 run 发一次请求，只有这一个地方发（2026-11-15 第二、三次修）**：复位 `TryResetForNewRound` 会把球重定价回 0.30，所以每 run 都必须重新发；但**只发一次**——`Switch` 里复位之后 `ballSize.SetDiameterM(D)`，`TickSize` 只读 `IsConverged()`/`HasFailed()`。两次失败都写在这里：① 旧实现「同目标就短路」保留了上一轮的 `converged`，每档只有第一格真的长到目标径（同档其余格 `size_accuracy` 是同一个常数 +41.2674 / +371.6536 / +3523.0036，因为 `lastQuantumM` 也是缓存值）；② 上一版把规则写成「收敛后再调 = 新请求」，而 `TickSize` 每帧都调，于是 `converged` 每帧被清一次、驱动永远读不到 `true` → `reason=timeout`。最终：`SetDiameterM` 是唯一请求入口（每次都清状态并重发），`BeginRequest` 已删除，轮询是**只读**的（状态机与四条路径见 §8.3.4）。量子也改为按需实时计算（`ReadSizeModel`），没有缓存字段。
 - **收敛不等于到位（2026-11-15 修）**：`Size` 状态在 `IsConverged()` 之后还要量一次 `abs(实测 D − 目标) ≤ 20 mm`，否则报 `reason=sizeNotApplied` 并把该 run 标成 `BLOCKED_UNTIL_size`。没有这道门，一个「说收敛了但球还在 0.30」的旧程序会安静地跑完一整张矩阵，把 41 个量子当成物理结果。
 - **为什么 feed 必须是整数**：`PickupAbsorbMath.TryAbsorbValueToLedgerGain` 拒绝小数（账本增益是 int），喂 0.35 单位会被判 `RejectNoGain`、候选一直留在队列里。整数单位同时也是账本记的那个数。
 - **为什么一次只允许一个候选在飞**：候选队列只有 4 格，第 5 次提交会 `SignalOverflow("pending candidate capacity 4 exceeded")` **永久 latch** overflow 计数——而本场好几条判据断言它 Δ=0。所以 feed 前先看 `GetPendingCandidateCount() == 0`，宁可慢也不要污染。
-- **分辨率下限（解析，不是猜）**：`baselineVolumeUnits = 3.4390244`、`cubicMetersPerVolumeUnit = 0.0041` ⇒ `D₀ = 0.2997369`、`stepLimit = 0.074934`。一个单位的直径当量 `= D/(3·total)`：**D=0.30 时 29.0 mm、0.60 时 7.25 mm、1.10 时 2.16 mm、2.20 时 0.54 mm**（旧文档在 0.30 写的 58 mm 是算错了一倍，实际 29.0 mm）。**「±2 mm」只有 1.10 与 2.20 档能保证**；0.30 档由复位命中（误差 0.26 mm = **0.0091 个量子**），0.60 档喂 24 单位后误差 ~1 mm（0.14 个量子）。这就是判据用 `diameter_error_quanta`（≤1 个网格单位）而不是 `abs ≤ 0.002 m` 的原因——后者在小球径上是在要求一件物理上做不到的事。
+- **分辨率下限（解析，不是猜）**：`startVolumeMm3 = 14,094,798`（`D₀ = 0.2997`）、`stepLimit = 0.25·D₀ = 0.074925`。一个 mm³ 的直径当量 `= D/(3·total)` ≈ **7.1 nm**（0.30 m 球），所以分辨率**不是**限制：设定器可以落在任意预设直径上。判据因此是 `abs(diameter_error_m) ≤ 1 mm`（`size_accuracy`），收敛容差同样是 1 mm；1 mm 与 float32 的直径预算（~2e-8 相对，30 m 球上 ~1 µm）相比余量极大。
 - **副作用清单**（必须写进 Evidence 的 README）：吸收计数 +N、`GetAbsorbedCount()` 变大、账本体积变大、`GetAbsorbVolumeLimitWorldM3()` 变大 → **挡路集与支撑集的分界会跟着变**。这正是我们要测的东西之一（C18 的「长大可吸」），但会污染 C14 的 `not_blocking` 判据——所以那条判据读的是「基线差」，不是绝对值。
 
 ### 8.3.1 结论对判据的影响（要写进 Evidence）
 
-- `size_accuracy` 判据 = `diameter_error_quanta ≤ 1.0`。它证明的是「设定器落在网格最近点」，**不是**「±2 mm」。四个球径的 `quantum` 要打进 Evidence 的 README（`GetQuantumM()` 每 run 都有；现在是解析值，**每个球径都有**，不再有「没喂过所以为 0」的档）。
+- `size_accuracy` 判据 = `abs(diameter_error_m) ≤ 1 mm`。它证明的是「设定器把球放到了预设直径」，四个档都要求 pass；不再有「整单位量子」这回事（那个量随 0.0041 m³ 单位退役）。
 - **球径量化会翻转边界格**：`stepLimit = 0.25·D`，而 D 来自整数体积单位（0.30 → 0.2997369，`stepLimit = 0.074934`）。所以 C09（0.075 m）在 0.30 档不是等号，而是**高出 0.066 mm 的墙**。任何拿预设标签（0.30 → 0.075）当实际球径写死的 expect 都会假红；驱动因此对 `deck_gap_m` 按运行时的 `GetStepHeightLimitWorldM()` 推导期望（`rise ≤ 实际 limit → pass`，否则 `→ fail`，并打一行 `[ptf] derived ...`）。JSON 里的 `expect` 行保留为「名义预设答案」：C09 的 0.30 档 = `fail`，0.60/1.10/2.20 = `pass`。
-- 若将来要真正的 ±2 mm，唯一干净的路是给电机加一个测试接缝（上表路线 B），那需要 Lead 批一处运行时代码；本批不做。
+- ±1 mm 现在就是判据本身（`abs(diameter_error_m) ≤ 0.001`），不需要再给电机加测试接缝。
 
 ### 8.3.2 读数的失败语义：名字错 ≠ 现在读不到（2026-11-15 修）
 
-`diameter_error_quanta` 以前把两种完全不同的情况都印成 `error=unknownMetric`：`TryReadMetric` 返回 false 就一律当「这个名字驱动不认识」。0.30 档的量子为 0 时就是这样——名字是对的、数据是缺的，日志却像判据拼错了。现在 `TryReadMetric` 返回一个**状态码**而不是 bool，ALERT 再把状态码映射成原因：
+（历史：旧的 `diameter_error_quanta` 曾把两种不同的情况都印成 `error=unknownMetric`——`TryReadMetric` 返回 false 就一律当「这个名字驱动不认识」。0.30 档的量子为 0 时就是这样。该 metric 已随整单位量子退役；下面这套状态码机制保留。）`TryReadMetric` 返回**状态码**而不是 bool，ALERT 再把状态码映射成原因：
 
 | reason | 含义 | 谁的问题 |
 |---|---|---|
 | `unknownMetric` | 驱动里**没有这个分支**（`metric` 名字错/拼错） | 判据文件（`physics_test_field.json`） |
 | `noDeckSample` / `noLiftSample` | 这一 run 还没采到样本（run 没进 drive 就结束了） | 运行/时间线 |
-| `noSetter` | 驱动没连 `LabBallSizeSetter` | 场景接线 |
-| `sizeModelMissing` | 设定器的 `sizeModelBaselineVolumeUnits` 是 0（判据导入器没烘或没连 motor） | 重新导入判据 |
-| `quantumUnavailable` | 模型已烘但算出的量子 ≤ 1e-7（模型退化或 motor 未就绪） | 电机定价字段 / 时序 |
+| （已退役）`noSetter` / `sizeModelMissing` / `quantumUnavailable` | 只属于旧的「整单位量子」判据；mm³ 判据不读设定器也不读烘进去的模型 | 驱动没连设定器时，Size 阶段直接报 `BLOCKED_UNTIL_setter`；模型没烘时 `noSizeModel` 报在设定器里 |
 
 ALERT 行因此变成：
 `[ptf] ALERT cell=<id> D=<p> check=<id> metric=<name> reason=<上表> value=n/a verdict=SKIPPED`。
@@ -1007,10 +1005,10 @@ ALERT 行因此变成：
 
 ```
 [ptf] build=2026-11-15d cells=9 presets=4
-[ptf] setter build=2026-11-15d baselineVolumeUnits=3.4390244
+[ptf] setter build=2026-11-15d startVolumeMm3=14094798
 ```
 
-**看到第一行之后才可信**：没有 `build=` 行 = U# 程序没重编；`baselineVolumeUnits=0` = 判据没重导。两条都不满足时不要读矩阵。
+**看到第一行之后才可信**：没有 `build=` 行 = U# 程序没重编；`startVolumeMm3=0` = 判据没重导。两条都不满足时不要读矩阵。
 
 ### 8.3.4 两个组件的状态机：谁发请求、谁清状态、谁只读（2026-11-15 定稿）
 
@@ -1205,8 +1203,8 @@ ALERT 行因此变成：
           driverFields=6 = 驱动 3 个数组 + 设定器 2 个 + 设定器的 sizeModelBaselineVolumeUnits）
         报告里另应看到 `ramp probe 'C06_ramp' baked at 50.0 deg; the motor must refuse it at run time`
         （没有这条 = C06 的 probe 没接上，ramp_refused 会读到 0）
-        以及 `size model: baselineVolumeUnits=3.439 read from the scene motor; ...`（2026-11-15 新增：
-        没有这条 = size_accuracy 会报 reason=sizeModelMissing，不是判据坏了，见 §8.3.2）
+        以及 `size model: startVolumeMm3=14094798 (read from the scene motor ...)`（2026-11-16 改：
+        没有这条 = 设定器没烘到 startVolumeMm3，Size 阶段会报 BLOCKED_UNTIL_size，不是判据坏了）
 ```
 
 **5. 跑第一个 run**
@@ -1216,7 +1214,7 @@ ALERT 行因此变成：
 
 ```
 [ptf] build=2026-11-15d cells=9 presets=4
-[ptf] setter build=2026-11-15d baselineVolumeUnits=3.4390244
+[ptf] setter build=2026-11-15d startVolumeMm3=14094798
 ```
 
 - 用 MCP（`executeMethod`/UnityEvent）或临时 HUD 调 `driver.BeginCellAtDiameter("C14", 0.30f)`；
@@ -1229,7 +1227,7 @@ ALERT 行因此变成：
 [ptf] check=lift_bounded metric=lift_over_nominal_m value=+0.0000 op=<=0.0100 expect=pass raw=PASS verdict=EXPECTED
 [ptf] check=not_blocking metric=blocking_max value=+0.0000 op===0.0000 expect=pass raw=PASS verdict=EXPECTED
 [ptf] check=no_saturation metric=saturated_delta value=+0.0000 op===0.0000 expect=pass raw=PASS verdict=EXPECTED
-[ptf] check=size_accuracy metric=diameter_error_quanta value=+0.0091 op=<=1.0000 expect=pass raw=PASS verdict=EXPECTED
+[ptf] check=size_accuracy metric=diameter_error_m value=+0.0000 op=abs<=0.0010 expect=pass raw=PASS verdict=EXPECTED
 [ptf] check=no_overflow metric=overflow_delta value=+0.0000 op===0.0000 expect=pass raw=PASS verdict=EXPECTED
 [ptf] summary cell=C14 D=0.300 checks=7 pass=7 unexpected=0 skipped=0 verdict=EXPECTED elapsed=4.51s
 ```
@@ -1240,7 +1238,7 @@ ALERT 行因此变成：
 
 | D | 0.30 | 0.60 | 1.10 | 2.20 |
 |---|---|---|---|---|
-| `diameter_error_quanta` | **+0.0091** | **+0.1454** | **+0.4614** | **+0.3854** |
+| `abs(diameter_error_m)` | **≤ 0.0010** | **≤ 0.0010** | **≤ 0.0010** | **≤ 0.0010** |
 
 **各格 summary 的期望（pass / skipped / unexpected，checks 固定）**——2026-11-15d 起（§4.1.4 的适用性与推导阈值、§4.1.5 的缺陷单）：
 
@@ -1374,15 +1372,15 @@ C00（零点） → C14 → C09 → C08 → C10 → C07 → C11 → C12 → C13�
 | **U4** | **球径设定走闭环喂体积（A）还是加测试接缝（B）** | **已定：A**（Lead 2026-11-15），并已实现。副作用：吸收计数/账本被污染（用「基线差」判据规避）、只能长大（复位负责回 0.30）、每次请求 ≤ 6 次吸收 | B 仍留着：只有它能让小球的球径精度好过「一个体积单位」 |
 | **U5** | **挡路容量 6 的正向夹取在本场构造不出来**：挡路件都是 0.45–1.6 m 的大件，2.5 m 间距下球周围最多 3–4 件进 `SelectNearest` 范围；要挤到 7 个候选就得让大件 AABB 互相重叠（那是另一个错误） | 场内只做**负向**判据（`blocking_max ≤ 6` 且不 latch），正向夹取交给 NUnit `OnlyTheNearestCapacityPropsBlock` | 若以后真要场内验夹取，只能缩小件的尺寸 —— 但那些件在 2.20 球面前就是食物，不再挡路，逻辑上凑不出 |
 | **U6** | **切格重建扫掠数组的 GC 是否可见** | 未测；本场 21 次切格 / 84 次重置正好是量它的最小场景 | 若 Profiler 显示明显尖峰，P4 要考虑「把 `maxStepHeight` 下沉进 `SweepMath`」（TERRAIN_SUPPORT §8 P4 已列，代价是同步改 `sweep.py`） |
-| **U8** | **球径分辨率 = 一个体积单位（新发现）**：`0.0041 m³` 在 D=0.60 上是 7.25 mm 直径当量，在 0.30 上是 **29.0 mm**（旧文档写 58 mm，是算错了一倍；`D/(3·total)` 在 D₀=0.2997369、total=3.439 时 = 0.02905 m） | 判据是 `diameter_error_quanta ≤ 1`，量子现在**解析可得**（设定器 `GetQuantumM()`，每档都有，不再依赖「喂过一次」）。若某个判据真的需要 ±2 mm，只能走 U4 的路线 B | 不改运行时代码就**无法**在 1.10 以下做到 ±2 mm；把这句写进 Evidence，避免下一个人以为是设定器坏了 |
+| **U8** | ~~球径分辨率 = 一个体积单位~~ **已结（2026-11-16，步骤 C+D）**：`0.0041 m³` 单位退役，成长量子 1 mm³（D=0.30 上约 7.1 nm 直径当量）。判据改为 `abs(diameter_error_m) ≤ 1 mm`，设定器容差同为 1 mm | 不再需要 U4 的路线 B；不存在「小球径做不到 ±2 mm」这回事 | 无 |
 | **U9** | **`allowedKinds` 的两份名单**：arena 的 `allowedKinds` 是「本格道具的 kind」，而球径设定器的 feeder 也必须过同一道吸收门 | 驱动在每次 `Reapply()` 之后重发一份 `kindWhitelist`（本批只有 `lab-feeder`），arena 那份是它的子集 | 多一处「谁最后写谁生效」的约定；已写进 §6.1 与 §9.5 |
 | **U7** | **`PickupFieldHost` 的成熟度**：`BLOCKING_PROPS_PLAN` 自述「已写、未编译」；`StoryLevel.unity` 里确实挂了 `PickupField` 实例 | 本场是它**第一次被系统性测量**（C18 的全部判据都依赖它） | 若它本身有 bug，C18 的 18 条逐件判据会一起红——先看 `[PickupFieldHost]` 的启动行，再看判据 |
 | **U10** | **C06 的「ramps=0/1」字面值与工具链冲突**：`levelbuild` 的 `role=ramp` 硬门是 45°（超过直接 error，要求写 box），所以 50° 板进不了 `rampBoxes`；而 `LevelArenaHost` 的 `TryBakeRamp` 也在 `AddRamp` 之前就拒了，motor 的拒绝 getter 看不到它 | 本批：板以 `role=box`+`kind=ramp_probe` 落库（AABB 当兜底墙），判据导入器把同一块板的 +Y 面烘成 probe，驱动运行时调 `motor.AddRamp` 取证。`ramp_count=0` + `ramp_refusal_reason_len>=1` + 日志里的 probe 行覆盖「拒绝 + 原因」；arena 行是 `ramps=0/0` | 若 Lead 要字面 `ramps=0/1`：放行 `Tools/levelbuild` 的对抗性 ramp（新字段/新豁免）并让 `LevelArenaHost` 把拒绝原因转给 motor（或新增一个 arena 拒绝 getter）。两处都不在本批写范围 |
 | **U11** | **斜面的驱动时间线是估的**：8 m/s² 刹车、4 m/s 上限、切向重力 0 都来自代码常量，但 `SetMoveAxes` 在坡上的实际速度、坡顶接缝的支撑切换没有实跑过 | JSON 里的 `drive[]` 按「加速 1 s → 松手在坡上停 5 s → 再加速到台面」写；首次 Play 以 `traj` 行核对，必要时只改 JSON 的 `t`，不改几何 | 时间线错只影响「有没有走到坡顶」的判据，几何/容量/护栏判据不受影响 |
 | **U12** | **C13 的 `seam_no_step` 用 `grounded_frame_dy` 而不是设计原口径 `frame_dy`** | 0.6 m 自由落体单帧位移远大于接缝；全局 `frame_dy` 会把「正常掉落」判成「接缝跳变」。所以逐帧 dy 只在 `!IsFalling()` 时累计，阈值 0.05（11.31°、4 m/s、30 fps 下单帧约 0.026 m） | 若以后要更严格，需要「接缝窗口」而不是全段最大值；本批不做 |
 | **U14** | **45° 坡 + 齐平台面的接缝死锁（2026-11-15 实测）**：C05 `climbed = 0.0887`。`SweepMath` 用半径膨胀 AABB 判盒子接触，球心在台面边 − r 处就被挡；那点球底比台面低 `r(tanθ+1−secθ) = 0.0878`，大于 `stepLimit = 0.5r = 0.0749`，台面永远进不了 step band ⇒ 死锁。**阈值 θ = asin(0.6) = 36.87°，与球径无关**（两边都 ∝ r）。C01/C03/C13 的 0.0125/0.0544/0.0270 都在带内，所以同一时间线能过 | 本批：**数据/几何/判据一律不动**，`climbed` 的 FAIL 就是正确红灯；机制与对照写进 §4.1.3。**候选后续**：(a) 数据侧把 C05 改成「记录 45° 极限」或给台缘加 0.05 m 过渡台阶；(b) 运行时把盒子接触改成真正的球-盒（圆角）扫掠（`Runtime/BallLayers/Sweep`） | 两条都改语义/运行时代码，**需 Lead 拍板**；在那之前 C05 每次 pass 都会红一条 `climbed` |
-| **U15** | **解析量子要的那一个电机数字没有 getter**：`D³/total` 与 `D/(3·total)` 里 `cubicMetersPerVolumeUnit` 和 `semanticDiameterPerCoreDiameter` 都约掉了，只剩 `baselineVolumeUnits`；而它是 `[SerializeField] private`，与 `cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` 一样**没有 getter** | 本批**没有给电机加成员**（遵守「不改 `KatamariBallMotor`」的写范围）：判据导入器用 `SerializedObject` 读**场景 motor** 的该字段，烘进设定器 `sizeModelBaselineVolumeUnits`，并在报告里打 `size model: baselineVolumeUnits=...`。没烘/没连 motor 时 `size_accuracy` 报 `reason=sizeModelMissing`，不猜 | 若 Lead 认为「场景数据里镜像一个运行时输入」不可接受，最小替代是给 motor 加**一行只读** `GetBaselineVolumeUnits()`（不改任何行为、不改序列化），然后删掉导入器里的镜像与设定器的字段；**需 Lead 批**。在那之前，改电机的定价字段后必须**重新导入判据** |
-| **U16** | **「跑的到底是哪份 U# 程序」曾是盲区**：2026-11-15 的 4×9 矩阵整张无效，因为场景跑的是 5835517 之前的驱动（日志里的 `error=unknownMetric` / `BLOCKED_UNTIL_P3` / 缺 3 个 metric / `value=` 无 `+`），而数据是新导入器的 | 两个组件在 `Start` 打 `[ptf] build=…` / `[ptf] setter build=… baselineVolumeUnits=…`（§8.3.3）；判据读 `reason=` 词汇；`Size` 状态新增「收敛但球没到目标径 → `reason=sizeNotApplied`」；坡道格新增 `rampCellMismatch` 警告 | 仍需要操作员养成「先看 build 行」的习惯；若 U# 编译失败而编辑器不报，只能靠这两行发现。真正的根治是编译后的 UdonSharp 程序资产必须提交/同步（AGENTS.md 的「compile noise 成批提交或丢弃」在这里是风险点） |
+| **U15** | **解析量子要的那一个电机数字没有 getter**：`D³/total` 与 `D/(3·total)` 里 `cubicMetersPerVolumeUnit` 和 `semanticDiameterPerCoreDiameter` 都约掉了，只剩起始体积（步骤 C+D 后是 `startVolumeMm3`；`cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` 已删）；而它是 `[SerializeField] private`、**没有 getter** | 本批**没有给电机加成员**（遵守「不改 `KatamariBallMotor`」的写范围）：判据导入器用 `SerializedObject` 读**场景 motor** 的该字段，烘进设定器 `sizeModelStartVolumeMm3`，并在报告里打 `size model: startVolumeMm3=...`。没烘/没连 motor 时 Size 阶段报 `BLOCKED_UNTIL_size`（设定器 `noSizeModel`），不猜 | 若 Lead 认为「场景数据里镜像一个运行时输入」不可接受，最小替代是给 motor 加**一行只读** `GetBaselineVolumeUnits()`（不改任何行为、不改序列化），然后删掉导入器里的镜像与设定器的字段；**需 Lead 批**。在那之前，改电机的定价字段后必须**重新导入判据** |
+| **U16** | **「跑的到底是哪份 U# 程序」曾是盲区**：2026-11-15 的 4×9 矩阵整张无效，因为场景跑的是 5835517 之前的驱动（日志里的 `error=unknownMetric` / `BLOCKED_UNTIL_P3` / 缺 3 个 metric / `value=` 无 `+`），而数据是新导入器的 | 两个组件在 `Start` 打 `[ptf] build=…` / `[ptf] setter build=… startVolumeMm3=…`（§8.3.3）；判据读 `reason=` 词汇；`Size` 状态新增「收敛但球没到目标径 → `reason=sizeNotApplied`」；坡道格新增 `rampCellMismatch` 警告 | 仍需要操作员养成「先看 build 行」的习惯；若 U# 编译失败而编辑器不报，只能靠这两行发现。真正的根治是编译后的 UdonSharp 程序资产必须提交/同步（AGENTS.md 的「compile noise 成批提交或丢弃」在这里是风险点） |
 | **U17** | **「每帧都调的方法」是这条链上最危险的面**：pass-1 的短路和 pass-2 的每帧重发都发生在 `TickSize`/`Update` 这类每帧路径上 | 定稿：请求只在 `Switch` 发一次；`TickSize` 只读；`Feed` 是唯一在每个 `Update` 里写 setter 状态的函数（字段写者表见 §8.3.4）；Python 守卫用 §8.3.4 的方法体边界断言 + 状态机模拟复现旧死锁 | 以后给 setter/driver 加任何「每帧调用」的方法，先在这张写者表里登记它写哪个字段；没有登记就不要写状态 |
 
 
@@ -1443,7 +1441,7 @@ OK
 | `python3 Docs/tools/validate_plan.py` | **PASS**（61 tasks，两个 release DAG 无环，source hash 一致） |
 | `python3 -m unittest discover -s Docs/tests` | **OK（491 tests）**；`test_physics_test_field_cells` 40 tests OK |
 | `levelbuild check`（9 格） | **9/9 PASS**（C06 仍是 0 error + 1 条预期 warning） |
-| 操作员下一步 | 重新编译 U#、**重新导入判据**（期望 `driverFields=6` + `size model: baselineVolumeUnits=3.439 …`），再跑 C14 0.30 看 `size_accuracy = +0.0091 raw=PASS`；C05 的 `climbed` 仍会红（预期，见 §4.1.3） |
+| 操作员下一步 | 重新编译 U#、**重新导入判据**（期望 `driverFields=6` + `size model: baselineVolumeUnits=3.439 …`），再跑 C14 0.30 看 `size_accuracy metric=diameter_error_m value=+0.0000 op=abs<=0.0010 raw=PASS`；C05 的 `climbed` 仍会红（预期，见 §4.1.3） |
 
 ### 13.2 2026-11-15 第二、三轮（4×9 矩阵与 pass-2 之后）
 

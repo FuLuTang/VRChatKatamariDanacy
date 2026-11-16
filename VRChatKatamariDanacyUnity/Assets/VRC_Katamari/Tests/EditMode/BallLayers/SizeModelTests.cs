@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using VRCKatamari.BallLayers;
 
@@ -27,6 +28,20 @@ namespace VRCKatamari.Tests
         private const float Tolerance = 1e-6f;
         private const long StartMm3 = 14094798L;          // pi/6 * 0.2997^3 * 1e9
         private const long Cap30Mm3 = 14137166941154L;    // pi/6 * 30^3 * 1e9
+
+        // FLOAT32 BUDGET for volume goldens (FIXED_POINT_STEP_CD section 4): the model's
+        // cube root runs in float, so a double golden can differ in the last bits by
+        // <= ~7e-7 relative (6 float ops x 0.5 ulp of eps=1.19e-7); 2e-6 with 3x margin.
+        // Diameters are asserted in metres with 1e-6 m, far below one millimetre.
+        private const double FloatVolumeBudget = 2e-6;
+
+        private static void AssertVolume(long expected, long actual)
+        {
+            Assert.IsTrue(Math.Abs((double)actual - (double)expected) <=
+                Math.Abs((double)expected) * FloatVolumeBudget + 1.0,
+                "volume " + actual + " must equal " + expected +
+                " within the float32 budget 2e-6 relative");
+        }
 
         /// <summary>Derives at the default ratios (both 1) and the given cap.</summary>
         private static bool Derive(long startMm3, long confirmedMm3, float capDiameterM,
@@ -74,15 +89,15 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(diameterA, diameterB, 0f, "saturation is exact, not approximate");
             // effectiveConfirmedMm3 is the CONFIRMED part that fits under the cap, i.e. the
             // cap volume minus the start volume - not the cap volume itself.
-            Assert.AreEqual(Cap30Mm3 - StartMm3, effectiveA);
-            Assert.AreEqual(Cap30Mm3 - StartMm3, effectiveB);
+            AssertVolume(Cap30Mm3 - StartMm3, effectiveA);
+            AssertVolume(Cap30Mm3 - StartMm3, effectiveB);
             Assert.AreEqual(15f, coreA, Tolerance);
 
             // A per-level cap still works through the same single parameter (2.20 m here).
             Assert.IsTrue(Derive(StartMm3, 5575279763L, 2.2f, out _, out _, out float d22,
                 out long e22));
             Assert.AreEqual(2.2f, d22, Tolerance);
-            Assert.AreEqual(5575279763L - StartMm3, e22);
+            AssertVolume(5575279763L - StartMm3, e22);
         }
 
         [Test]
@@ -91,7 +106,7 @@ namespace VRCKatamari.Tests
             // D = 1.00 m -> V_total = pi/6 * 1e9 = 523,598,776 mm^3 (rounded); confirmed is
             // that minus the start.
             Assert.IsTrue(SizeModelMath.TrySphereVolumeMm3(1f, 1f, out long total));
-            Assert.AreEqual(523598776L, total);
+            AssertVolume(523598776L, total);
             Assert.IsTrue(SizeModelMath.TryConfirmedVolumeMm3ForSemanticDiameter(1f, StartMm3,
                 1f, out long confirmed));
             Assert.AreEqual(total - StartMm3, confirmed);
@@ -138,12 +153,24 @@ namespace VRCKatamari.Tests
         [Test]
         public void RatiosScaleTheCollisionRadiusAndTheSemanticDiameter()
         {
-            // core = D / (2 * semanticPerCore); collision = core * collisionRatio.
+            // The ratio is SEMANTIC DIAMETER / CORE DIAMETER (the old convention:
+            // semantic = 2 * coreRadius * ratio), so with ratio = 2 the core radius is
+            // D / (2 * 2) = 0.074925 m, NOT D / 2. The first version of this test read the
+            // core as the no-ratio radius and "found" a half-size bug that was not there;
+            // this assertion is the convention, written out.
             Assert.IsTrue(SizeModelMath.TryDerive(StartMm3, 0L, 30f, 1.5f, 2f,
                 out float core, out float collision, out float semantic, out _));
             Assert.AreEqual(0.2997f, semantic, 1e-5f);
-            Assert.AreEqual(0.14985f, core, 1e-5f);
+            Assert.AreEqual(0.2997f / 4f, core, 1e-5f);
             Assert.AreEqual(core * 1.5f, collision, 1e-5f);
+
+            // Sanity at the default ratio 1: the core radius is half the diameter and the
+            // collision radius equals it (ratio 1), i.e. the plain sphere case.
+            Assert.IsTrue(SizeModelMath.TryDerive(StartMm3, 0L, 30f, 1f, 1f,
+                out float core1, out float collision1, out float semantic1, out _));
+            Assert.AreEqual(0.2997f / 2f, core1, 1e-5f);
+            Assert.AreEqual(core1, collision1, 1e-6f);
+            Assert.AreEqual(0.2997f, semantic1, 1e-5f);
         }
     }
 }

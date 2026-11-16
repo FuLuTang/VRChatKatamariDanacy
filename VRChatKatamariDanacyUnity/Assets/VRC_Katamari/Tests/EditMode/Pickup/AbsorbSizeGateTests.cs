@@ -159,23 +159,25 @@ namespace VRCKatamari.Tests
         public void TheSanityCeilingIsNotAGameplayGate()
         {
             // The retired 512 m^3 cap on the item's bbox refused anything larger, whatever
-            // the ball. The replacement is a 1000 m^3 guard on the ORIGINAL volume
-            // (k * bbox), far above the largest item a legal ball can take: at the 2.20 m
-            // cap the gate allows at most 0.558 m^3, so 1000 m^3 is ~1,792x that.
-            Assert.AreEqual(1000f, PickupAbsorbMath.MaxItemVolumeSanityWorldM3);
+            // the ball. The replacement is a 14,137 m^3 guard on the ORIGINAL volume
+            // (k * bbox): steps C+D raised it because the ONE global cap is 30 m, whose
+            // largest legal item is (pi/6*30^3)/10 = 1,413.7 m^3, and the guard keeps a 10x
+            // margin over that. It is a broken-data bound, not a gameplay gate.
+            Assert.AreEqual(14137f, PickupAbsorbMath.MaxItemVolumeSanityWorldM3);
             Assert.AreEqual(10f, PickupAbsorbMath.AbsorbVolumeRatio);
 
             // 640 m^3 of bbox at k=0.70 is 448 m^3 of item volume: under the guard, and a
-            // 21 m ball (20,453 mm requirement) takes it. Under the retired cap the same
-            // item was refused outright because its bbox exceeded 512.
+            // 21 m ball (20,453 mm requirement) takes it. Under the retired 512 m^3 bbox cap
+            // the same item was allowed too, so this asserts the guard did not tighten.
             Vector3 big = new Vector3(8f, 8f, 10f);
             Assert.AreEqual(20453f, ReqMm(big, 0.70f));
             Assert.AreEqual(AbsorbOutcome.Absorb, EvaluateAtBall(21f, 0.70f, big));
             Assert.AreEqual(AbsorbOutcome.RejectItemTooLarge, EvaluateAtBall(20f, 0.70f, big));
 
             // Above the guard the answer is "not absorbable", never "absorbable" and never
-            // an infinity: 2,000 m^3 of bbox at k=0.70 is 1,400 m^3 of item volume.
-            Vector3 absurd = new Vector3(10f, 10f, 20f);
+            // an infinity: 27,000 m^3 of bbox at k=0.70 is 18,900 m^3 of item volume, which
+            // is past 14,137.
+            Vector3 absurd = new Vector3(30f, 30f, 30f);
             float reqMm;
             Assert.IsFalse(PickupAbsorbMath.TryComputePickupReqDiameterMm(absurd, K, out reqMm));
             Assert.AreEqual(0f, reqMm, 1e-9f);

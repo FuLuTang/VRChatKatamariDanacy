@@ -477,7 +477,11 @@ def write_v1_snapshot():
                    "snapshot instead of `git show HEAD:` keeps that proof in a clean checkout and "
                    "after the v2 rows were themselves committed (a4c9f4a)",
             "source_commit": "9a71727 (the commit before the v2 overrides; verified equal to the "
-                             "working tree's v1 view when the snapshot was written)",
+                             "working tree's v1 view when the snapshot was written). Re-frozen "
+                             "2026-11-16 after the steps-C+D criteria change: size_accuracy moved "
+                             "from diameter_error_quanta to abs(diameter_error_m) <= 1 mm, and the "
+                             "pass7 per-run counts still hold (the row now measures instead of "
+                             "skipping)",
             "generated_by": "python3 Docs/tests/levelbuild/test_physics_test_field_cells.py "
                             "--write-v1-snapshot",
             "regenerate_when": "only when a v1 criterion is changed on purpose - which also "
@@ -911,33 +915,55 @@ class SizeAccuracyAndRampLimit(unittest.TestCase):
         for removed in ("lastCubedDiameter", "lastVolumeUnits", "hasSample"):
             self.assertNotIn(removed, setter)
 
-    def test_the_size_accuracy_expectation_matches_the_analytic_quantum(self):
-        # quantum = D / (3 * (baseline + confirmed)); at the 0.30 tier the ball is at the
-        # baseline after the reset, so the driver's value is this error in quanta. The
-        # design doc's expected console line has to be that number, not 0.
-        motor = MOTOR_CS.read_text(encoding="utf-8")
-        # Steps C+D: the start volume is mm^3 and one quantum is 1 mm^3, so the analytic
-        # quantum is D / (3 * totalMm3) metres. The old unit-based numbers (29.0 mm / +0.0091)
-        # belonged to 0.0041 m^3 units and are retired with them; the field's expected console
-        # line is re-pinned by the operator's next run (PHYSICS_TEST_FIELD.md), so this test
-        # pins the QUANTITY and its derivation instead of a stale doc string.
-        start_mm3 = float(re.search(r"startVolumeMm3 = ([0-9]+)L", motor).group(1))
+    def test_the_size_accuracy_criterion_is_the_mm3_one(self):
+        # Steps C+D retired the integer volume unit, so "error in whole units" measures
+        # nothing any more. The criterion is now the exact-diameter comparison in metres:
+        # every cell's size_accuracy is abs(diameter_error_m) <= 1 mm, and the setter's
+        # tolerance is that same millimetre.
+        doc = json.loads(FIELD_JSON.read_text(encoding="utf-8"))
+        seen = []
+        for cell in doc.get("cells", []):
+            for check in cell.get("checks", []):
+                if check.get("id") != "size_accuracy":
+                    continue
+                seen.append(cell.get("id"))
+                self.assertEqual("diameter_error_m", check.get("metric"), cell.get("id"))
+                self.assertEqual("abs<=", check.get("op"), cell.get("id"))
+                self.assertEqual(0.001, check.get("limit"), cell.get("id"))
+                self.assertEqual("m", check.get("unit"), cell.get("id"))
+                self.assertEqual(["pass"] * 4, check.get("expect"), cell.get("id"))
+        self.assertEqual(9, len(seen), "one size_accuracy per wired cell")
+
+        # The driver answers it, and the retired quantum metric is gone rather than left as
+        # a second, meaningless reading.
+        driver = DRIVER_CS.read_text(encoding="utf-8")
+        self.assertIn('Same(metric, "diameter_error_m")', driver)
+        self.assertNotIn("diameter_error_quanta", driver)
+        self.assertNotIn("quantumUnavailable", driver)
+
+        # The setter's convergence tolerance is the criterion's limit (it used to be 2 mm,
+        # the old unit's quantum floor). One mm^3 is ~7 nm of diameter, so the millimetre is
+        # the only floor left.
+        setter = SETTER_CS.read_text(encoding="utf-8")
+        self.assertIn("private float toleranceM = 0.001f", setter)
+        start_mm3 = float(re.search(r"startVolumeMm3 = ([0-9]+)L",
+                                    MOTOR_CS.read_text(encoding="utf-8")).group(1))
         diameter = (6.0 * start_mm3 * 1e-9 / math.pi) ** (1.0 / 3.0)
         quantum = diameter / (3.0 * start_mm3)
-        self.assertAlmostEqual(diameter, 0.2997, places=3)
-        self.assertAlmostEqual(quantum * 1e6, 0.0070876, places=6,
-                               msg="one mm^3 is ~7.1 nm of diameter at the start ball")
-        value = abs(diameter - 0.30) / quantum
-        printed = int(value * 10000.0 + 0.5) / 10000.0
-        self.assertGreater(printed, 40000.0,
-                           "a 0.3 mm start offset is tens of thousands of mm^3 quanta")
+        self.assertLess(quantum, 1e-6, "1 mm^3 is far below the 1 mm tolerance")
 
     def test_the_driver_separates_a_wrong_metric_name_from_an_unavailable_one(self):
         driver = DRIVER_CS.read_text(encoding="utf-8")
         self.assertIn("private int TryReadMetric(string metric, out float value)", driver)
         self.assertIn("return MetricUnknown;", driver)
-        self.assertIn("return MetricSizeModelMissing;", driver)
-        self.assertIn("return MetricNoSetter;", driver)
+        self.assertIn("return MetricNoDeckSample;", driver)
+        self.assertIn("return MetricNoGateSample;", driver)
+        # noSetter and sizeModelMissing are retired with the quantum metric: the mm^3
+        # criterion does not read the setter or a baked size model. A missing setter still
+        # blocks the run in TickSize (BLOCKED_UNTIL_setter), which is a blocked stage, not a
+        # metric-availability reason.
+        self.assertNotIn("MetricNoSetter", driver)
+        self.assertNotIn("MetricSizeModelMissing", driver)
         self.assertIn('" reason=" + MetricReason(metricStatus)', driver)
         # The ALERT must not print the old catch-all that made a missing sample look like a typo.
         self.assertNotIn('error=unknownMetric', driver)

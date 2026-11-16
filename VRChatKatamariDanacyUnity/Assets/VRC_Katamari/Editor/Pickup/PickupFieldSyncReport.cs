@@ -36,11 +36,11 @@ namespace VRCKatamari.Editor.Pickup
         /// <summary>Sum of the derived growth of the rows this run priced.</summary>
         public long GrowthMm3Priced;
 
-        /// <summary>Rows whose growth was priced from the declared/effective k (not a default).</summary>
-        public int GrowthPreservedRows;
+        /// <summary>Rows whose growth came from the placement file's authored `growthMm3`.</summary>
+        public int GrowthFileRows;
 
-        /// <summary>Rows the run could not price (illegal bounds/k/penalty); written as 0.</summary>
-        public int GrowthUndeclaredRows;
+        /// <summary>Rows with no authored growth (old file): priced from the measured bounds.</summary>
+        public int GrowthBoundsRows;
 
         /// <summary>True when every written row's growth read back from the host exactly.</summary>
         public bool GrowthVerified;
@@ -126,9 +126,9 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             text.AppendLine();
-            text.Append("  growthMm3: priced=").Append(GrowthMm3Priced)
-                .Append(", preservedRows=").Append(GrowthPreservedRows)
-                .Append(", unpricedRows=").Append(GrowthUndeclaredRows)
+            text.Append("  growthMm3: written=").Append(GrowthMm3Priced)
+                .Append(", fromFile=").Append(GrowthFileRows)
+                .Append(", fromBounds=").Append(GrowthBoundsRows)
                 .Append(", read-back: ").Append(!GrowthPriced
                     ? "n/a (no rows)"
                     : (GrowthVerified ? "verified" : "NOT verified"));

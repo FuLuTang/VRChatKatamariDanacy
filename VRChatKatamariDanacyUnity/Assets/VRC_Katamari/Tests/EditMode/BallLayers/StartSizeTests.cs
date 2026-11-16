@@ -30,6 +30,19 @@ namespace VRCKatamari.Tests
 
         private const long CalibrationStartMm3 = 14094798L;
 
+        // Same float32 volume budget as SizeCalibrationTests (FIXED_POINT_STEP_CD section 4):
+        // the start volume is computed with Mathf.Pow in float, so a double golden can differ
+        // in the last bits by <= ~7e-7 relative; 2e-6 with a 3x margin.
+        private const double FloatVolumeBudget = 2e-6;
+
+        private static void AssertVolume(long expected, long actual)
+        {
+            Assert.IsTrue(Math.Abs((double)actual - (double)expected) <=
+                Math.Abs((double)expected) * FloatVolumeBudget + 1.0,
+                "start volume " + actual + " must equal " + expected +
+                " within the float32 budget 2e-6 relative");
+        }
+
         private Type motorType;
         private GameObject motorHost;
         private Component motor;
@@ -64,8 +77,7 @@ namespace VRCKatamari.Tests
 
             // pi/6 * 0.05^3 * 1e9 = 65,449.8 -> 65,450 mm^3 (rounded once).
             long startMm3 = (long)GetField("startVolumeMm3");
-            Assert.AreEqual(65450L, startMm3,
-                "the start volume is the 0.05 m ball expressed in mm^3");
+            AssertVolume(65450L, startMm3);
             Assert.AreEqual(0.05f, DiameterOf(startMm3), 0.001f,
                 "the derived start volume maps back to the same diameter");
         }
@@ -101,7 +113,7 @@ namespace VRCKatamari.Tests
             SetField("startDiameterWorldM", 0.55f);
             Invoke("Start");
             long first = (long)GetField("startVolumeMm3");
-            Assert.AreEqual(87113746L, first, "pi/6 * 0.55^3 * 1e9");
+            AssertVolume(87113746L, first);
 
             // Start again with a different level value: the conversion is a pure function of
             // the current field, so the second number must not be first * something.

@@ -2,7 +2,7 @@
   "_meta": {
     "what": "the v1 rows of Docs/Design/BallMotor/physics_test_field.json, with every check's optional `v2` block removed",
     "why": "with contactModelV2Enabled=false the 36-run matrix must stay byte-identical to pass7. TestFieldCriteriaModels compares this file against the working tree; a snapshot instead of `git show HEAD:` keeps that proof in a clean checkout and after the v2 rows were themselves committed (a4c9f4a)",
-    "source_commit": "9a71727 (the commit before the v2 overrides; verified equal to the working tree's v1 view when the snapshot was written)",
+    "source_commit": "9a71727 (the commit before the v2 overrides; verified equal to the working tree's v1 view when the snapshot was written). Re-frozen 2026-11-16 after the steps-C+D criteria change: size_accuracy moved from diameter_error_quanta to abs(diameter_error_m) <= 1 mm, and the pass7 per-run counts still hold (the row now measures instead of skipping)",
     "generated_by": "python3 Docs/tests/levelbuild/test_physics_test_field_cells.py --write-v1-snapshot",
     "regenerate_when": "only when a v1 criterion is changed on purpose - which also invalidates criteria_models.v1_baseline_pass7",
     "cells": 9,
@@ -157,10 +157,10 @@
         },
         {
           "id": "size_accuracy",
-          "metric": "diameter_error_quanta",
-          "op": "<=",
-          "limit": 1.0,
-          "unit": "quantum",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
           "readout": "frame",
           "gate": null,
           "window": "setter 收敛后",
@@ -170,7 +170,7 @@
             "pass",
             "pass"
           ],
-          "note": "球径误差 < 1 个「体积单位」折算的直径。一个体积单位 = 0.0041 m^3，在 D=0.60 时约 7 mm，在 2.20 时约 0.5 mm，所以 ±2 mm 在 1.10 以下物理上做不到；这条判据只要求「已经落在网格的最近点上」"
+          "note": "球径误差 ≤ 1 mm（绝对值）：步骤 C+D 后成长量子是 1 mm³（约 7 nm 的直径当量），所以设定器能精确落在预设直径上，判据改为「实测直径与预设直径之差 ≤ 1 mm」。1 mm 与 float32 预算（直径 ~2e-8 相对）相比余量极大，只看设定器有没有收敛"
         },
         {
           "id": "no_overflow",
@@ -305,10 +305,10 @@
         },
         {
           "id": "size_accuracy",
-          "metric": "diameter_error_quanta",
-          "op": "<=",
-          "limit": 1.0,
-          "unit": "quantum",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
           "readout": "frame",
           "gate": null,
           "window": "setter 收敛后",
@@ -318,7 +318,7 @@
             "pass",
             "pass"
           ],
-          "note": "球径误差 < 1 个「体积单位」折算的直径。一个体积单位 = 0.0041 m^3，在 D=0.60 时约 7 mm，在 2.20 时约 0.5 mm，所以 ±2 mm 在 1.10 以下物理上做不到；这条判据只要求「已经落在网格的最近点上」"
+          "note": "球径误差 ≤ 1 mm（绝对值）：步骤 C+D 后成长量子是 1 mm³（约 7 nm 的直径当量），所以设定器能精确落在预设直径上，判据改为「实测直径与预设直径之差 ≤ 1 mm」。1 mm 与 float32 预算（直径 ~2e-8 相对）相比余量极大，只看设定器有没有收敛"
         },
         {
           "id": "no_overflow",
@@ -453,10 +453,10 @@
         },
         {
           "id": "size_accuracy",
-          "metric": "diameter_error_quanta",
-          "op": "<=",
-          "limit": 1.0,
-          "unit": "quantum",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
           "readout": "frame",
           "gate": null,
           "window": "setter 收敛后",
@@ -466,7 +466,7 @@
             "pass",
             "pass"
           ],
-          "note": "球径误差 < 1 个「体积单位」折算的直径。一个体积单位 = 0.0041 m^3，在 D=0.60 时约 7 mm，在 2.20 时约 0.5 mm，所以 ±2 mm 在 1.10 以下物理上做不到；这条判据只要求「已经落在网格的最近点上」"
+          "note": "球径误差 ≤ 1 mm（绝对值）：步骤 C+D 后成长量子是 1 mm³（约 7 nm 的直径当量），所以设定器能精确落在预设直径上，判据改为「实测直径与预设直径之差 ≤ 1 mm」。1 mm 与 float32 预算（直径 ~2e-8 相对）相比余量极大，只看设定器有没有收敛"
         },
         {
           "id": "no_overflow",
@@ -618,10 +618,10 @@
         },
         {
           "id": "size_accuracy",
-          "metric": "diameter_error_quanta",
-          "op": "<=",
-          "limit": 1.0,
-          "unit": "quantum",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
           "readout": "frame",
           "gate": null,
           "window": "setter 收敛后",
@@ -631,7 +631,7 @@
             "pass",
             "pass"
           ],
-          "note": "球径误差 < 1 个「体积单位」折算的直径。一个体积单位 = 0.0041 m^3，在 D=0.60 时约 7 mm，在 2.20 时约 0.5 mm，所以 ±2 mm 在 1.10 以下物理上做不到；这条判据只要求「已经落在网格的最近点上」"
+          "note": "球径误差 ≤ 1 mm（绝对值）：步骤 C+D 后成长量子是 1 mm³（约 7 nm 的直径当量），所以设定器能精确落在预设直径上，判据改为「实测直径与预设直径之差 ≤ 1 mm」。1 mm 与 float32 预算（直径 ~2e-8 相对）相比余量极大，只看设定器有没有收敛"
         },
         {
           "id": "no_overflow",
@@ -815,10 +815,10 @@
         },
         {
           "id": "size_accuracy",
-          "metric": "diameter_error_quanta",
-          "op": "<=",
-          "limit": 1.0,
-          "unit": "quantum",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
           "readout": "frame",
           "gate": null,
           "window": "设定器收敛后",
@@ -828,7 +828,7 @@
             "pass",
             "pass"
           ],
-          "note": "球径误差 <= 1 个体积单位折算的直径；只要求落在网格最近点"
+          "note": "球径误差 <= 1 mm（绝对值）：成长量子已是 1 mm³，设定器能落在预设直径上"
         }
       ]
     },
@@ -1013,10 +1013,10 @@
         },
         {
           "id": "size_accuracy",
-          "metric": "diameter_error_quanta",
-          "op": "<=",
-          "limit": 1.0,
-          "unit": "quantum",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
           "readout": "frame",
           "gate": null,
           "window": "设定器收敛后",
@@ -1026,7 +1026,7 @@
             "pass",
             "pass"
           ],
-          "note": "球径误差 <= 1 个体积单位折算的直径；只要求落在网格最近点"
+          "note": "球径误差 <= 1 mm（绝对值）：成长量子已是 1 mm³，设定器能落在预设直径上"
         }
       ]
     },
@@ -1192,10 +1192,10 @@
         },
         {
           "id": "size_accuracy",
-          "metric": "diameter_error_quanta",
-          "op": "<=",
-          "limit": 1.0,
-          "unit": "quantum",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
           "readout": "frame",
           "gate": null,
           "window": "设定器收敛后",
@@ -1205,7 +1205,7 @@
             "pass",
             "pass"
           ],
-          "note": "球径误差 <= 1 个体积单位折算的直径；只要求落在网格最近点"
+          "note": "球径误差 <= 1 mm（绝对值）：成长量子已是 1 mm³，设定器能落在预设直径上"
         }
       ]
     },
@@ -1374,10 +1374,10 @@
         },
         {
           "id": "size_accuracy",
-          "metric": "diameter_error_quanta",
-          "op": "<=",
-          "limit": 1.0,
-          "unit": "quantum",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
           "readout": "frame",
           "gate": null,
           "window": "设定器收敛后",
@@ -1387,7 +1387,7 @@
             "pass",
             "pass"
           ],
-          "note": "球径误差 <= 1 个体积单位折算的直径"
+          "note": "球径误差 <= 1 mm（绝对值）：成长量子已是 1 mm³，设定器能落在预设直径上"
         }
       ]
     },
@@ -1623,10 +1623,10 @@
         },
         {
           "id": "size_accuracy",
-          "metric": "diameter_error_quanta",
-          "op": "<=",
-          "limit": 1.0,
-          "unit": "quantum",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
           "readout": "frame",
           "gate": null,
           "window": "设定器收敛后",
@@ -1636,7 +1636,7 @@
             "pass",
             "pass"
           ],
-          "note": "球径误差 <= 1 个体积单位折算的直径"
+          "note": "球径误差 <= 1 mm（绝对值）：成长量子已是 1 mm³，设定器能落在预设直径上"
         }
       ]
     }

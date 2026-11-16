@@ -131,10 +131,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private const int MetricUnknown = 1;
         private const int MetricNoDeckSample = 2;
         private const int MetricNoLiftSample = 3;
-        private const int MetricNoSetter = 4;
-        private const int MetricSizeModelMissing = 5;
-        private const int MetricQuantumUnavailable = 6;
-        private const int MetricNoGateSample = 7;
+        private const int MetricNoGateSample = 4;
 
         private bool pendingBegin;
         private int pendingCellIndex;
@@ -1344,34 +1341,10 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return MetricOk;
             }
 
-            if (Same(metric, "diameter_error_quanta"))
-            {
-                if (ballSize == null)
-                {
-                    return MetricNoSetter;
-                }
-
-                // The quantum is a property of the motor's size model, and the setter derives it
-                // analytically from the baseline the criteria importer mirrored onto it. Zero
-                // means that mirror is missing (or the model is degenerate), not that this run
-                // was too short - so the ALERT names the missing input instead of pretending
-                // the metric does not exist.
-                if (!ballSize.IsCalibrated())
-                {
-                    return MetricSizeModelMissing;
-                }
-
-                float quantum = ballSize.GetQuantumM();
-                if (quantum <= 0.0000001f)
-                {
-                    return MetricQuantumUnavailable;
-                }
-
-                float error = motor.GetSemanticDiameterWorldM() - presetDiametersM[diameterIndex];
-                if (error < 0f) error = -error;
-                value = error / quantum;
-                return MetricOk;
-            }
+            // size_accuracy is read through `diameter_error_m` (abs<= 1 mm) since steps C+D:
+            // the growth quantum is 1 mm^3 (a nanometre of diameter at the start ball), so the
+            // old "error in whole volume units" ratio measured the retired unit, not the
+            // setter. The exact-diameter comparison is the honest one now.
 
             if (Same(metric, "max_center_y_m"))
             {
@@ -1520,9 +1493,6 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 case MetricUnknown: return "unknownMetric";
                 case MetricNoDeckSample: return "noDeckSample";
                 case MetricNoLiftSample: return "noLiftSample";
-                case MetricNoSetter: return "noSetter";
-                case MetricSizeModelMissing: return "sizeModelMissing";
-                case MetricQuantumUnavailable: return "quantumUnavailable";
                 case MetricNoGateSample: return "noGateSample";
                 default: return "unavailable";
             }

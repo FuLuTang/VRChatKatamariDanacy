@@ -6377,27 +6377,51 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         public float GetConfirmedVolumeUnits()
         {
-            // DEPRECATED name kept for one migration round: the value is now CUBIC METRES of
-            // the confirmed growth (not integer units), which is what every reader wanted.
-            return GetConfirmedVolumeCubicMetres();
+            // DEPRECATED name kept for one migration round. It used to be the confirmed
+            // growth in integer units; it is now the ball's TOTAL volume in CUBIC METRES
+            // (start + confirmed + carried), because that is the reading its callers wanted.
+            // New code uses GetConfirmedVolumeMm3 / GetTotalVolumeMm3 and never converts.
+            return GetTotalVolumeCubicMetres();
         }
 
-        /// <summary>The ledger's confirmed growth for the local row, exactly, in mm^3.</summary>
+        /// <summary>
+        /// The ledger's CONFIRMED GROWTH for the local row, exactly, in mm^3.
+        /// </summary>
+        /// <remarks>
+        /// MEANING, chosen once and used everywhere: this is the volume the ledger has
+        /// confirmed ABOVE the start ball - unbanked commits plus the already-scored carried
+        /// residual - NOT the ball's total volume and NOT the start volume. At round start it
+        /// is 0. The total is <see cref="GetTotalVolumeMm3"/>; a scene that wants "how big is
+        /// the ball" must not read this one (the LabBallSizeSetter adds the start explicitly,
+        /// which is why <c>sizeModelStartVolumeMm3</c> travels with the setter).
+        /// </remarks>
         public long GetConfirmedVolumeMm3()
         {
-            return unbankedVolumeUnits;
+            long confirmed = unbankedVolumeUnits + carriedVolumeMm3;
+            return confirmed < 0L ? 0L : confirmed;
         }
 
-        /// <summary>The ball's TOTAL volume in cubic metres (start + confirmed + carried).</summary>
+        /// <summary>The ball's TOTAL volume in mm^3: start ball + confirmed growth.</summary>
         /// <remarks>
-        /// A display/analysis reading only: it is recomputed from the integer columns, never
-        /// accumulated, so no float drift can reach the ledger.
+        /// The quantity the size model and the gate actually use. Integer addition only; it is
+        /// never accumulated in float.
         /// </remarks>
+        public long GetTotalVolumeMm3()
+        {
+            long total = startVolumeMm3 + unbankedVolumeUnits + carriedVolumeMm3;
+            return total < 0L ? 0L : total;
+        }
+
+        /// <summary>The confirmed growth in cubic metres - a display/analysis reading only.</summary>
         public float GetConfirmedVolumeCubicMetres()
         {
-            long totalMm3 = startVolumeMm3 + unbankedVolumeUnits + carriedVolumeMm3;
-            if (totalMm3 < 0L) return 0f;
-            return (float)totalMm3 * 1e-9f;
+            return (float)GetConfirmedVolumeMm3() * 1e-9f;
+        }
+
+        /// <summary>The ball's total volume in cubic metres - a display/analysis reading only.</summary>
+        public float GetTotalVolumeCubicMetres()
+        {
+            return (float)GetTotalVolumeMm3() * 1e-9f;
         }
 
         /// <summary>

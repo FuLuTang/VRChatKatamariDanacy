@@ -59,8 +59,13 @@ namespace VRCKatamari.Tests
             object collider = defType.GetField("collider").GetValue(def);
             Assert.IsNotNull(collider,
                 "JsonUtility materialises the nested ColliderEntry even when the key is absent");
-            Assert.AreEqual("", (string)colliderType.GetField("type").GetValue(collider),
-                "the absent block's type is empty");
+            // JsonUtility leaves the absent block's `type` at its CLR default. For a string
+            // that is null (not ""), so the predicate must treat both as "not declared"
+            // (it does: null and a blank string are the same answer). The test accepts
+            // either spelling instead of pinning one serializer detail.
+            string absentType = (string)colliderType.GetField("type").GetValue(collider);
+            Assert.IsTrue(absentType == null || absentType.Trim().Length == 0,
+                "the absent block's type must be null or empty, got '" + absentType + "'");
 
             Assert.IsFalse((bool)InvokeRules("IsColliderDeclared", ""),
                 "an empty type is not a declaration");

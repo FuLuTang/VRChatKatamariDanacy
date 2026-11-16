@@ -300,8 +300,20 @@ namespace VRCKatamari.Editor.LevelBuild
             public float[] aabb;
             public string support;
             public string stackedOn;
-            /// <summary>Per-prop override of the def's value units; 64-bit, like the host column.</summary>
+            /// <summary>
+            /// DEPRECATED per-prop value units (accepted, ignored for growth).
+            /// </summary>
             public long valueUnits;
+            /// <summary>
+            /// The prop's DERIVED growth in mm^3, written by the canonical writer
+            /// (<c>round(penalty*k*a*b*c*1e9)</c>) and never hand-typed. This is the
+            /// AUTHORITY the sync writes into <c>PickupFieldHost.propGrowthMm3</c>: the
+            /// Python writer computes it in double from the authored aabb, and the scene's
+            /// measured bounds are only a VERIFICATION (they cannot reproduce the authored
+            /// number bit-for-bit). 0 = absent (an old file): the importer prices it from the
+            /// aabb and reports the fallback.
+            /// </summary>
+            public long growthMm3;
             /// <summary>
             /// Per-prop override of the def's <c>volumeK</c> (0 = not declared). Rare by
             /// design: the factor is a property of the TYPE, so the def carries it; the
@@ -597,7 +609,7 @@ namespace VRCKatamari.Editor.LevelBuild
             // The pickup sync runs after the props exist, because it derives rows from them.
             // The declaration map is the only value input: the sync writes it in the same
             // pass as the other arrays and reads it back, so there is no second write here.
-            Dictionary<string, long> declaredValueUnits = BuildDeclaredValueUnits(doc);
+            Dictionary<string, long> declaredGrowthMm3 = BuildDeclaredGrowthMm3(doc);
             Dictionary<string, float> declaredVolumeK = BuildDeclaredVolumeK(doc);
             Dictionary<string, float> declaredVolumePenalty = BuildDeclaredVolumePenalty(doc);
             Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies =
@@ -605,7 +617,7 @@ namespace VRCKatamari.Editor.LevelBuild
             report.GrowthMm3Declared = SumDeclaredGrowthMm3(doc);
             if (propsOk)
             {
-                TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredValueUnits,
+                TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredGrowthMm3,
                     declaredVolumeK, declaredVolumePenalty, declaredProxies, report);
             }
 
@@ -1402,12 +1414,74 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         /// <summary>
+        /// Item id to the prop's AUTHORED derived growth (the canonical writer's number).
+        /// </summary>
+        /// <remarks>
+        /// ONE pricer, and it is the data: <c>canonical_doc</c> computes
+        /// <c>round(penalty*k*a*b*c*1e9)</c> in double from the authored aabb and writes
+        /// <c>props[].growthMm3</c>; the sync copies that number into the host column. The
+        /// scene's measured bounds are only a verification, because Unity's renderer bounds
+        /// and the authored aabb differ by rounding - pricing from them is what made the host
+        /// sum disagree with the file (O7: 1,417,080,788 vs 1,417,085,102).
+        /// </remarks>
+        private static Dictionary<string, long> BuildDeclaredGrowthMm3(PlacementDocument doc)
+        {
+            var declared = new Dictionary<string, long>(StringComparer.Ordinal);
+            if (doc.props == null)
+            {
+                return declared;
+            }
+
+            for (int i = 0; i < doc.props.Length; i++)
+            {
+                PropEntry prop = doc.props[i];
+                if (prop == null || string.IsNullOrEmpty(prop.itemId))
+                {
+                    continue;
+                }
+
+                long growth = DeclaredGrowthMm3(doc, prop);
+                if (growth > 0L)
+                {
+                    declared[prop.itemId] = growth;
+                }
+            }
+
+            return declared;
+        }
+
+        /// <summary>
+        /// One prop's authored growth: <c>props[].growthMm3</c> when present. An old file with
+        /// no column is priced from the aabb by the SAME formula, so it still imports; that
+        /// fallback is counted and reported, never silent.
+        /// </summary>
+        private static long DeclaredGrowthMm3(PlacementDocument doc, PropEntry prop)
+        {
+            if (prop.growthMm3 > 0L)
+            {
+                return prop.growthMm3;
+            }
+
+            if (prop.aabb == null || prop.aabb.Length != 3) return 0L;
+            float volumeK = DeclaredVolumeK(doc, prop);
+            if (volumeK <= 0f) volumeK = PickupAbsorbMath.DefaultVolumeK;
+            float penalty = DeclaredVolumePenalty(doc, prop);
+            if (penalty <= 0f) penalty = PickupAbsorbMath.DefaultVolumePenalty;
+            Vector3 bounds = new Vector3(prop.aabb[0], prop.aabb[1], prop.aabb[2]);
+            long computed;
+            return PickupAbsorbMath.TryComputeGrowthMm3(bounds, volumeK, penalty, out computed)
+                ? computed
+                : 0L;
+        }
+
+        /// <summary>
         /// The level's total growth in mm^3, for the one-line report.
         /// </summary>
         /// <remarks>
-        /// The same formula the sync uses (<c>penalty * k * a*b*c</c>, mm^3), priced from the
-        /// JSON aabb. A row whose data cannot be priced contributes 0 here and is named by the
-        /// sync's refusal.
+        /// The sum of the same authored numbers the sync writes, so the report's
+        /// <c>declared=</c>, the host column's sum and <c>placement.json</c>'s total are one
+        /// number by construction. A row with neither column nor usable aabb contributes 0
+        /// and is named by the sync's refusal.
         /// </remarks>
         private static long SumDeclaredGrowthMm3(PlacementDocument doc)
         {
@@ -1420,20 +1494,9 @@ namespace VRCKatamari.Editor.LevelBuild
             for (int i = 0; i < doc.props.Length; i++)
             {
                 PropEntry prop = doc.props[i];
-                if (prop == null || prop.aabb == null || prop.aabb.Length != 3)
+                if (prop != null)
                 {
-                    continue;
-                }
-
-                float volumeK = DeclaredVolumeK(doc, prop);
-                if (volumeK <= 0f) volumeK = PickupAbsorbMath.DefaultVolumeK;
-                float penalty = DeclaredVolumePenalty(doc, prop);
-                if (penalty <= 0f) penalty = PickupAbsorbMath.DefaultVolumePenalty;
-                Vector3 bounds = new Vector3(prop.aabb[0], prop.aabb[1], prop.aabb[2]);
-                long growth;
-                if (PickupAbsorbMath.TryComputeGrowthMm3(bounds, volumeK, penalty, out growth))
-                {
-                    total += growth;
+                    total += DeclaredGrowthMm3(doc, prop);
                 }
             }
 
@@ -2896,7 +2959,7 @@ namespace VRCKatamari.Editor.LevelBuild
         // ---------------------------------------------------------------- sync ---
 
         private static bool TrySyncPickupField(Transform levelRoot, string arenaId, Transform propsRoot,
-            IDictionary<string, long> declaredValueUnits, IDictionary<string, float> declaredVolumeK,
+            IDictionary<string, long> declaredGrowthMm3, IDictionary<string, float> declaredVolumeK,
             IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
             PlacementImportReport report)
@@ -2965,14 +3028,14 @@ namespace VRCKatamari.Editor.LevelBuild
             // the old "wire what is already there" behaviour.
             bool createMissingColliders = string.IsNullOrEmpty(arenaId);
             PickupFieldSyncReport sync = PickupFieldSync.SyncFromChildren(host, propsRoot,
-                declaredValueUnits, declaredVolumeK, declaredVolumePenalty, declaredProxies,
+                declaredGrowthMm3, declaredVolumeK, declaredVolumePenalty, declaredProxies,
                 createMissingColliders);
             report.SyncRan = true;
             report.SyncPropCount = sync.PropCount;
             report.SyncRejected = sync.Rejected.Count;
             report.UdonCopyIssued = sync.UdonCopyIssued;
-            report.GrowthPreservedRows = sync.GrowthPreservedRows;
-            report.GrowthUndeclaredRows = sync.GrowthUndeclaredRows;
+            report.GrowthFileRows = sync.GrowthFileRows;
+            report.GrowthBoundsRows = sync.GrowthBoundsRows;
             report.GrowthVerified = sync.GrowthVerified;
             report.ProxyVerified = sync.ProxyVerified;
             report.SyncCollidersCreated = sync.CollidersCreated;

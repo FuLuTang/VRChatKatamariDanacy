@@ -164,12 +164,11 @@ namespace VRCKatamari.BallPresentation
         /// and after, and the relative change.
         /// </summary>
         /// <remarks>
-        /// The unit delta is the LEDGER's integer column
-        /// (<c>GetConfirmedLedgerVolumeUnits()</c>), not the float
-        /// <c>GetConfirmedVolumeUnits()</c>: the exact difference of two longs is exact, and
-        /// the float getter is being repurposed (it already returns cubic metres rather than
-        /// units in the working tree), so a log that read it would silently change unit
-        /// without changing its name.
+        /// The delta is the LEDGER's integer column (<c>GetConfirmedLedgerVolumeUnits()</c>,
+        /// mm^3 since steps C+D), not a float reading: the exact difference of two longs is
+        /// exact, while the float getters are display helpers (and <c>GetConfirmedVolumeUnits</c>
+        /// is a deprecated name that now returns TOTAL cubic metres). A log that read a float
+        /// would silently change unit without changing its name.
         /// </remarks>
         private void TrackGrowth()
         {

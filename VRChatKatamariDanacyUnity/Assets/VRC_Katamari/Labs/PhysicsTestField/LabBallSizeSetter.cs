@@ -101,8 +101,9 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private string feederKind = "lab-feeder";
         [Tooltip("The candidate's declared bounds. Gameplay volume only; it is never a real object.")]
         [SerializeField] private Vector3 feederBounds = new Vector3(0.02f, 0.02f, 0.02f);
-        [Tooltip("Stop when the error is this small - unless one volume unit is coarser than this.")]
-        [SerializeField] private float toleranceM = 0.002f;
+        [Tooltip("Stop when the error is this small. 1 mm = the size_accuracy criterion's limit; " +
+                 "the mm^3 growth quantum is ~7 nm of diameter, so it never coarsens this.")]
+        [SerializeField] private float toleranceM = 0.001f;
         [SerializeField] private int maxAbsorbsPerRequest = 6;
         [Tooltip("Seconds between feeds. The motor steps at 50 Hz, so a shorter gap only queues.")]
         [SerializeField] private float feedIntervalSeconds = 0.05f;

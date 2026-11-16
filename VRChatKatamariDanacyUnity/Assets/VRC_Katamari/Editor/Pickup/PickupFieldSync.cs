@@ -139,6 +139,16 @@ namespace VRCKatamari.Editor.Pickup
         // being silently left out of the wiring.
         private const float MinCreatedColliderExtentM = 0.001f;
 
+        // The authored growth is the authority; the measured bounds are a VERIFICATION. They
+        // cannot agree to the millimetre because Unity's renderer bounds and the authored aabb
+        // round differently (O7 samples: 9203 vs 9193 mm^3), so a disagreement is a WARNING
+        // with the item id when it exceeds max(2%, 1 cm^3 = 1000 mm^3). The 2% is large
+        // enough to absorb measured-vs-authored bounds and small enough to catch a stale
+        // growthMm3 (a size or k edit moves the value by far more).
+        private const double GrowthAgreementFraction = 0.02;
+        private const long GrowthAgreementFloorMm3 = 1000L;
+        private const int GrowthMismatchNoteLimit = 20;
+
         // ------------------------------------------------------------------ menu ---
 
         [MenuItem(MenuPath, true)]
@@ -204,18 +214,19 @@ namespace VRCKatamari.Editor.Pickup
         /// The root whose immediate children are kind folders. The menu passes the host's own
         /// transform; a level that keeps its props elsewhere passes that transform instead.
         /// </param>
-        /// <param name="declaredValueUnits">
-        /// Item id to value units, supplied by the level importer from
-        /// <c>placement.json</c>; 64-bit, like the host column it is written into. When an id
-        /// is absent, the value already serialized on the host is preserved; a row with
-        /// neither is written as 0 and reported. Pass <c>null</c> when no declaration exists
-        /// - that is the un-migrated scene path, and it must not change any existing value.
+        /// <param name="declaredGrowthMm3">
+        /// Item id to the AUTHORED growth in mm^3, supplied by the level importer from
+        /// <c>placement.json</c>'s derived <c>props[].growthMm3</c> column. This is the
+        /// authority: it is written into the host verbatim, so the host sum, the report's
+        /// total and the file's total are one number. An id with no authored value (an old
+        /// file) is priced from the measured bounds and counted as such; pass <c>null</c>
+        /// for the menu/un-migrated path (every row then uses the bounds pricing).
         /// </param>
         /// <returns>What was written, and every row that was refused and why.</returns>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
-            IDictionary<string, long> declaredValueUnits)
+            IDictionary<string, long> declaredGrowthMm3)
         {
-            return SyncFromChildren(host, fieldRoot, declaredValueUnits, false);
+            return SyncFromChildren(host, fieldRoot, declaredGrowthMm3, false);
         }
 
         /// <summary>
@@ -233,9 +244,9 @@ namespace VRCKatamari.Editor.Pickup
         /// hand-authored scenery and the importer must not add physics to them.
         /// </remarks>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
-            IDictionary<string, long> declaredValueUnits, bool createMissingColliders)
+            IDictionary<string, long> declaredGrowthMm3, bool createMissingColliders)
         {
-            return SyncFromChildren(host, fieldRoot, declaredValueUnits, null, null, null,
+            return SyncFromChildren(host, fieldRoot, declaredGrowthMm3, null, null, null,
                 createMissingColliders);
         }
 
@@ -245,14 +256,14 @@ namespace VRCKatamari.Editor.Pickup
         /// preserves every row already serialized on the host.
         /// </summary>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
-            IDictionary<string, long> declaredValueUnits, IDictionary<string, float> declaredVolumeK,
+            IDictionary<string, long> declaredGrowthMm3, IDictionary<string, float> declaredVolumeK,
             IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
             bool createMissingColliders)
         {
             var report = new PickupFieldSyncReport();
-            // Every run prices and verifies the growth column from bounds x k x penalty; the
-            // deprecated declaredValueUnits map is accepted and ignored.
+            // The growth column is written from the authored file values when present, and
+            // verified against bounds x k x penalty (a warning, not a rewrite).
             report.GrowthPriced = true;
 
             if (host == null)
@@ -296,7 +307,7 @@ namespace VRCKatamari.Editor.Pickup
                 ReadExistingProxies(host);
 
             List<PropCandidate> candidates = CollectCandidates(fieldRoot);
-            List<PropRow> rows = ValidateCandidates(candidates, declaredValueUnits,
+            List<PropRow> rows = ValidateCandidates(candidates, declaredGrowthMm3,
                 declaredVolumeK, existingVolumeK, declaredVolumePenalty,
                 declaredProxies, existingProxies,
                 createMissingColliders, report);
@@ -793,7 +804,7 @@ namespace VRCKatamari.Editor.Pickup
         // -------------------------------------------------------------- validation ---
 
         private static List<PropRow> ValidateCandidates(List<PropCandidate> candidates,
-            IDictionary<string, long> declaredValueUnits,
+            IDictionary<string, long> declaredGrowthMm3,
             IDictionary<string, float> declaredVolumeK, Dictionary<string, float> existingVolumeK,
             IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
@@ -819,6 +830,9 @@ namespace VRCKatamari.Editor.Pickup
             int localBoundsFallbacks = 0;
             int collidersCreated = 0;
             int volumeKDefaulted = 0;
+            int growthFromFile = 0;
+            int growthFromBounds = 0;
+            int growthBoundsMismatches = 0;
             int proxyDeclared = 0;
             int proxyPreserved = 0;
             for (int i = 0; i < candidates.Count; i++)
@@ -944,15 +958,48 @@ namespace VRCKatamari.Editor.Pickup
                         "the original's default)");
                     continue;
                 }
+                // AUTHORITY: the placement file's authored growthMm3 (the canonical writer's
+                // double-precision number). The bounds-priced value is computed only to verify
+                // it; see GrowthAgreementFraction for why they cannot match exactly.
+                long declaredGrowth;
+                bool hasDeclaredGrowth = declaredGrowthMm3 != null &&
+                    declaredGrowthMm3.TryGetValue(candidate.ItemId, out declaredGrowth) &&
+                    declaredGrowth > 0L;
+                long boundsGrowth;
+                bool boundsPriced = PickupAbsorbMath.TryComputeGrowthMm3(pickSize, volumeK,
+                    volumePenalty, out boundsGrowth);
                 long growthMm3;
-                if (!PickupAbsorbMath.TryComputeGrowthMm3(pickSize, volumeK, volumePenalty,
-                        out growthMm3))
+                if (hasDeclaredGrowth)
+                {
+                    growthMm3 = declaredGrowth;
+                    growthFromFile++;
+                    if (boundsPriced && !GrowthAgrees(declaredGrowth, boundsGrowth,
+                            out long difference))
+                    {
+                        growthBoundsMismatches++;
+                        if (growthBoundsMismatches <= GrowthMismatchNoteLimit)
+                        {
+                            report.GrowthMismatches.Add("bounds disagree with the file for '" +
+                                candidate.ItemId + "': file=" + declaredGrowth + " mm^3, bounds "
+                                + boundsGrowth + " mm^3 (diff " + difference + "); the FILE wins,"
+                                + " re-check volumeK/penalty/aabb if this is unexpected");
+                        }
+                    }
+                }
+                else if (boundsPriced)
+                {
+                    growthMm3 = boundsGrowth;
+                    growthFromBounds++;
+                }
+                else
                 {
                     report.Reject(candidate.Path, candidate.ItemId,
-                        "growth cannot be priced from bounds " + FormatVector(pickSize) +
+                        "growth cannot be priced: no authored growthMm3 in the placement file " +
+                        "and the bounds " + FormatVector(pickSize) +
                         ", k=" + volumeK.ToString("0.###", CultureInfo.InvariantCulture) +
                         ", penalty=" +
-                        volumePenalty.ToString("0.###", CultureInfo.InvariantCulture));
+                        volumePenalty.ToString("0.###", CultureInfo.InvariantCulture) +
+                        " cannot be priced; re-run the writer so the column exists");
                     continue;
                 }
 
@@ -1067,6 +1114,15 @@ namespace VRCKatamari.Editor.Pickup
                                  "keeps the pre-fix double-rotated radial shell");
             }
 
+            report.GrowthFileRows = growthFromFile;
+            report.GrowthBoundsRows = growthFromBounds;
+            if (growthBoundsMismatches > GrowthMismatchNoteLimit)
+            {
+                report.GrowthMismatches.Add("... " +
+                    (growthBoundsMismatches - GrowthMismatchNoteLimit) +
+                    " more bounds/file growth disagreement(s); the file still wins for every row");
+            }
+
             if (volumeKDefaulted > 0)
             {
                 report.Notes.Add(volumeKDefaulted + " row(s) got the default volume factor k=0.70 " +
@@ -1083,6 +1139,21 @@ namespace VRCKatamari.Editor.Pickup
 
             report.PropCount = rows.Count;
             return rows;
+        }
+
+        /// <summary>True when the measured-bounds growth is within the stated budget.</summary>
+        /// <remarks>
+        /// The budget is <c>max(2% of the authored value, 1000 mm^3 = 1 cm^3)</c>. Measured
+        /// renderer bounds and the authored aabb differ by rounding, so an exact match is not
+        /// a property of the world; a stale authored value (a size/k/penalty edit) is far
+        /// outside 2%, which is what this catches.
+        /// </remarks>
+        private static bool GrowthAgrees(long declared, long bounds, out long difference)
+        {
+            difference = declared > bounds ? declared - bounds : bounds - declared;
+            double budget = System.Math.Abs((double)declared) * GrowthAgreementFraction;
+            if (budget < (double)GrowthAgreementFloorMm3) budget = GrowthAgreementFloorMm3;
+            return (double)difference <= budget;
         }
 
         private static bool IsDuplicate(string[] duplicates, string itemId)

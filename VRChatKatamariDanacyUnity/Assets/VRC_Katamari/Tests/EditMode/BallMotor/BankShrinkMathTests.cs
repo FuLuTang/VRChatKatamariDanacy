@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using VRCKatamari.BallLayers;
 using VRCKatamari.BallMotor;
@@ -31,6 +32,19 @@ namespace VRCKatamari.Tests
         private const long PostBankConfirmedMm3 = 97594703L;  // 0.5975 m sphere minus the start
         private const float RoundTripToleranceM = 1e-5f;
 
+        // float32 volume budget (FIXED_POINT_STEP_CD section 4): the inverse runs through
+        // Mathf.Pow in float, so a double golden differs by <= ~7e-7 relative; 2e-6 with
+        // 3x margin. Diameters keep their metre tolerance.
+        private const double FloatVolumeBudget = 2e-6;
+
+        private static void AssertVolume(long expected, long actual)
+        {
+            Assert.IsTrue(Math.Abs((double)actual - (double)expected) <=
+                Math.Abs((double)expected) * FloatVolumeBudget + 1.0,
+                "post-bank confirmed volume " + actual + " must equal " + expected +
+                " within the float32 budget 2e-6 relative");
+        }
+
         [Test]
         public void ResidualAppliesInDiameterSpaceAndEndsNearSixtyCentimetres()
         {
@@ -52,7 +66,7 @@ namespace VRCKatamari.Tests
             // 97,594,703 mm^3. This is the one conversion the bank path uses.
             Assert.IsTrue(BankShrinkMath.TryBankVolumeMm3(0.5975f, StartMm3, 1f,
                 out long postBankConfirmedMm3));
-            Assert.AreEqual(PostBankConfirmedMm3, postBankConfirmedMm3);
+            AssertVolume(PostBankConfirmedMm3, postBankConfirmedMm3);
 
             // Round trip: the forward map must report the same diameter, which is what makes
             // the shrink a diameter rule rather than a volume approximation.

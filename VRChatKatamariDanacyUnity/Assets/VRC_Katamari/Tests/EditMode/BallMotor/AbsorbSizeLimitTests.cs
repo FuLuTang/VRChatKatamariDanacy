@@ -102,12 +102,16 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(large,
                 PickupAbsorbMath.DefaultVolumeK, diameter));
 
-            // The ball's total volume is start + confirmed in mm^3 (never a float sum).
+            // MEANING (pinned): "confirmed" is the ledger growth ABOVE the start ball, so a
+            // fresh ball has 0 confirmed and a TOTAL of StartMm3. The gate/size model read
+            // the total; the ledger reads the confirmed part.
             Assert.AreEqual(StartMm3, (long)GetField("startVolumeMm3"));
-            Assert.AreEqual(StartMm3, (long)InvokeGetter("GetConfirmedVolumeMm3"),
+            Assert.AreEqual(0L, (long)InvokeGetter("GetConfirmedVolumeMm3"),
                 "with nothing absorbed the ledger growth is zero");
+            Assert.AreEqual(StartMm3, (long)InvokeGetter("GetTotalVolumeMm3"),
+                "the total volume of the start ball is its start volume");
             Assert.AreEqual((float)(StartMm3 / 1e9),
-                (float)InvokeGetter("GetConfirmedVolumeCubicMetres"), 1e-6f);
+                (float)InvokeGetter("GetTotalVolumeCubicMetres"), 1e-6f);
         }
 
         [Test]
@@ -137,7 +141,11 @@ namespace VRCKatamari.Tests
             // 30 m ball's gate allows up to (pi/6*30^3)/10 = 1,413.7 m^3, so it is food. The
             // retired 512 m^3 ceiling would also have passed this one, but the SANITY bound
             // must not: a broken 100 m cube (1,000,000 m^3) is beyond it and reads blocking.
-            SetField("unbankedVolumeUnits", 0L);
+            // The ball must actually BE at the 30 m cap: this test's first version left the
+            // ledger at zero and then judged a 5 m cube with a 0.30 m ball, which flipped the
+            // verdict for the right reason (0.3 m ball, huge cube).
+            const long Cap30Mm3 = 14137166941154L;
+            SetField("unbankedVolumeUnits", Cap30Mm3 - StartMm3);
             Invoke("RecomputeConfirmedAndSize");
             float diameter = Getter("GetSemanticDiameterWorldM");
             Vector3 huge = new Vector3(5f, 5f, 5f);

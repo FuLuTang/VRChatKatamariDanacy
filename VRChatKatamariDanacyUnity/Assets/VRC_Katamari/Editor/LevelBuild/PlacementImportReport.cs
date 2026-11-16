@@ -71,8 +71,8 @@ namespace VRCKatamari.Editor.LevelBuild
         /// 64-bit because the ledger is; the other two counters are row counts.
         /// </summary>
         public long GrowthMm3Declared;
-        public int GrowthPreservedRows;
-        public int GrowthUndeclaredRows;
+        public int GrowthFileRows;
+        public int GrowthBoundsRows;
         public bool GrowthVerified;
         /// <summary>Every declared collider proxy read back bit-identically.</summary>
         public bool ProxyVerified;
@@ -169,8 +169,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 .Append(SyncCollidersCreated > 0 ? " (from each prop's visual local AABB)" : "");
             text.AppendLine();
             text.Append("  growthMm3: declared=").Append(GrowthMm3Declared)
-                .Append(", preservedRows=").Append(GrowthPreservedRows)
-                .Append(", unpricedRows=").Append(GrowthUndeclaredRows)
+                .Append(", fromFile=").Append(GrowthFileRows)
+                .Append(", fromBounds=").Append(GrowthBoundsRows)
                 .Append(", read-back: ").Append(GrowthVerified ? "verified" : "NOT verified");
             text.AppendLine();
             text.Append("  arena: ").Append(ArenaWired ? "wired" : "not wired")

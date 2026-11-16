@@ -251,7 +251,12 @@ namespace VRCKatamari.Tests
 
         // --------------------------------------------------------------- fixtures ---
 
-        private static string Prop(string itemId, string extra, string extra2,
+        /// <summary>
+        /// One <c>props[]</c> entry as JSON. Every fragment after <paramref name="itemId"/> is
+        /// optional and appended in order, so a test can write only the keys it is about; the
+        /// four-argument form ends with the parent id.
+        /// </summary>
+        private static string Prop(string itemId, string extra = null, string extra2 = null,
             string parentId = null)
         {
             var body = new System.Text.StringBuilder();

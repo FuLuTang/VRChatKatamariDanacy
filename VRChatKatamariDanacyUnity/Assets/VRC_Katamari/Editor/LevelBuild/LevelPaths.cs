@@ -174,7 +174,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 return false;
             }
 
-            return TryResolvePlacementIn(directory, out path, tried);
+            return TryResolvePlacementIn(directory, out path, out tried);
         }
 
         /// <summary>The same resolution for a directory the caller already resolved.</summary>

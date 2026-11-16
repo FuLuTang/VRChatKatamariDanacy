@@ -674,7 +674,7 @@ namespace VRCKatamari.Editor.LevelBuild
         private static bool ApplyActivityWalls(PlacementV2Document doc, Transform levelRoot,
             PlacementImportReport report)
         {
-            PlacementV2WallSegment[] segments = PlacementV2Rules.AllWallSegments(doc, out string error);
+            PlacementV2Rules.PlacementV2WallSegment[] segments = PlacementV2Rules.AllWallSegments(doc, out string error);
             if (error != null)
             {
                 // WallError already reported the per-wall reason in validation; this is the
@@ -703,7 +703,7 @@ namespace VRCKatamari.Editor.LevelBuild
             bool ok = true;
             for (int i = 0; i < segments.Length; i++)
             {
-                PlacementV2WallSegment segment = segments[i];
+                PlacementV2Rules.PlacementV2WallSegment segment = segments[i];
                 wanted.Add(segment.Id);
                 Transform marker = FindChild(wallsRoot, segment.Id);
                 bool created = false;
@@ -776,7 +776,7 @@ namespace VRCKatamari.Editor.LevelBuild
         /// <summary>The wall markers this document owns, for <c>BindArenaHost</c>'s plane list.</summary>
         private static Transform[] CollectWallMarkers(Transform levelRoot, PlacementV2Document doc)
         {
-            PlacementV2WallSegment[] segments = PlacementV2Rules.AllWallSegments(doc, out string error);
+            PlacementV2Rules.PlacementV2WallSegment[] segments = PlacementV2Rules.AllWallSegments(doc, out string error);
             if (error != null || segments.Length == 0) return null;
             Transform wallsRoot = FindChild(levelRoot, ActivityWallsFolderName);
             if (wallsRoot == null) return null;

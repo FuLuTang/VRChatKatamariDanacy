@@ -1,8 +1,9 @@
 # 关卡数据格式 v2（最终提案）
 
-> 状态：**`FINAL_PROPOSAL`，2026-11-16**（原 `DRAFT_BLOCKED_ON_RESEARCH` 已解除）。触发：owner 2026-11-16「整体升级地图数据结构 + 网页编辑器一起升」；研究先于设计，两份研究均已落地：
-> [ORIGINAL_TERRAIN_AND_LAYOUT](../../Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)（REROLL 导出表能推出什么）与
-> [NOCLIP_KATAMARI_FORMAT](../../Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)（PS2 舞台包/任务包的字节布局）。
+> 状态：**`FINAL_PROPOSAL`，2026-11-16（第 2 版：吸收动画研究）**（原 `DRAFT_BLOCKED_ON_RESEARCH` 已解除）。触发：owner 2026-11-16「整体升级地图数据结构 + 网页编辑器一起升」；研究先于设计，三份研究均已落地：
+> [ORIGINAL_TERRAIN_AND_LAYOUT](../../Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)（REROLL 导出表能推出什么）、
+> [NOCLIP_KATAMARI_FORMAT](../../Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)（PS2 舞台包/任务包的字节布局）与
+> [ORIGINAL_ANIMATION_OBSERVATIONS](../../Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)（逐帧观察：多少东西在动、怎么动、预算多少）。
 > **本文是设计定稿，不是 owner 决定清单**：字段名、代码与本项目的写入方式是提案；凡 owner 已拍板的，逐条标「已定」。
 > 本轮**只写 Docs**：没有改代码、场景、`placement.json`、`Tools/`、Unity，没有跑 git 写命令、没有开 Unity。
 > 引用约定：`Runtime/…`、`Editor/…`、`Labs/…`、`Tests/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；其余相对仓库根。**按符号名与节号引用，不写行号**（相关文件正被并行修改）。
@@ -21,9 +22,10 @@
 | **Q-T4** 碰撞数据形态 | 4 个碰撞扇区（Make Cancer 条目数 66/0/1/1）；每条 AABB 自带一个三角形带；顶点第 4 个 float 是 **zone id**（位模式），分布 `{0:5712, 24:762, 3:456, 8:131, 1:47, 5:46}`。 | `terrain.broadPhase.boxes[]` 与 `triangles.zoneIds`；zone id 作为不透明标签保留（§3.7） |
 | **Q-T3 / Q-N4** 活动区机制 | 12 个 `DummyProps` 是**大件命中外壳**（全在 r<12 m 核心，19 关共 277 个），不是隐形墙；关卡包与任务表里**没有** bounds/radius/kill-plane 字段；社区 `barrier` 是按球径开门的**可见墙**。 | `activityArea` 由**我们作者化**：多边形墙段 + 球径门 + kill plane（§5）；不照抄 DummyProps |
 | **Q-T6/Q-T7** 尺度与坐标帧 | 1 原始单位 = 1 cm；**REROLL `position` = −0.01 × PS2 平移**（三轴全取反，无平移），524 件中 360 件误差 <1 µm；因此两套数据**同一世界坐标系**。三轴取反是**点反射**（det −1），网格并进来要**翻转三角形绕序**。真实地面主带 **y ≈ −1.0 m**（946 m² 上表面里 55% 落在 −1.2…−0.6），我们的假地板 y=0 **高了约 1 m**。 | 导入直接使用原作高度，不再 re-seat 到 0；`windingFix:"flip"` 是参考导入的必填项 |
+| **Q-M1** 原作的动件有多少、怎么动 | Make Cancer 524 个实例里 **129 个（24.6%）有运动程序**、**153 个（29.2%）有骨骼动画，只来自 19 个类型**；13 类运动（SporadicWalk 31、Hop 18、Sway 15、DraggedAlong 15、WaitForPlayer 15、WhackAMole 8、PathCollision 8、Spin 7、Clouds 5、Flip 2、Bob 2、SlopingPath 2、BackAndForth 1）；**1 速度单位 = 30.3 cm/s**；Sway 周期 ≈1.5 s、Bob ≈2.8 s、Hop 5–6 cm + 3.4–5 s 驻留、WhackAMole 0.7 s 升 12.4 cm；**43/90 条父子是静止子件随动父件**；noclip 不渲染舞台动画，5 朵云是 `moveType 16` 的道具。【实测】 | 新增 `motions[]`/`paths[]` 逐关表 + `props[].motion` 引用 + `defs[].speedIndex/clips` + `props[].phase/clipStart/inherit`；Udon 10–15 Hz 分档、共享剪辑 + 8 相位桶（§6.7） |
 | **Q-N6** 许可边界 | noclip 仓库的 LICENSE 是 **MIT + 一段反编译说明**（GitHub 因该说明报 `NOASSERTION`），**不是 GPL-3**。原假设有误。 | 见 §17 与 AGENTS/OPEN_DECISIONS 的更正；解析器仍是「照规格重实现」，仓库许可仍待 owner |
 
-**仍未解决、本文不假装解决的**：缩放字段的语义（那 1 件可能是贴花尺寸/碰撞盒尺寸）；zone id 的**玩法含义**（只有「逐三角形带标签」这一个事实）；7 个任务级体积的确切作用（其中第一个是 y=−1,691.5 cm 的巨大平面，像掉出判定面）；`moveType` 的语义；REROLL 523 与 PS2 524 差的那 1 件。
+**仍未解决、本文不假装解决的**：缩放字段的语义（那 1 件可能是贴花尺寸/碰撞盒尺寸）；zone id 的**玩法含义**（只有「逐三角形带标签」这一个事实）；7 个任务级体积的确切作用（其中第一个是 y=−1,691.5 cm 的巨大平面，像掉出判定面）；**逐实例相位从哪来**（原作可能是种子，noclip 用 `Math.random()`，我们暂用确定性哈希）、`locPosType` 是否表示随机摆放、`shakeOffFlag` 是否等于「可甩脱」、舞台模型有没有动画（noclip 没做，证不了）；REROLL 523 与 PS2 524 差的那 1 件。
 
 ---
 
@@ -50,7 +52,7 @@
 | `activityArea` | 球能去哪、多大才能去、掉出去怎么办 | 是 | 否 | `ActivityAreaHost` | 四面 `boundary` 平面 |
 | `props` | 每件可吸物：是什么、多大、坐哪、朝哪、值多少、怎么动、挂在谁下面 | 否（可动） | 是 | `PickupFieldHost` + 行为宿主 + 账本 | `props[]` + `defs[]` |
 
-`defs[]`、`cameras`、`renderPresets`、`regions` 仍是旁挂表，不属五层之一。
+`defs[]`、`motions[]`、`paths[]`、`cameras`、`renderPresets`、`regions` 仍是旁挂表，不属五层之一；`motions`/`paths` 是逐关表、不是逐实例数据（§6.7）。
 
 ### 1.3 三条硬边界（引擎侧已经定死，研究改不了）
 
@@ -85,7 +87,7 @@
   "zones": [{"id": "alcove", "code": 24, "kind": "ground"}],
   "arena": {"id": "story_01_bench_size"},
   "caps": {"props": 512, "terrainTriangles": 8192, "terrainVertices": 16384,
-           "staticSolids": 256, "activityWalls": 64},
+           "staticSolids": 256, "activityWalls": 64, "movingProps": 0, "animators": 0},
   "budget": {"planes": 8, "boxes": 8, "ramps": 4, "blocking": 6, "propSupports": 6},
   "expected": {"propCount": 130, "valueUnits": 1522, "terrainTriangles": 0},
   "source": {"kind": "authored"},
@@ -113,7 +115,7 @@
 | `spawnClearanceM` | number | 是 | 出生点净空半径 |
 | `zones` | array | 否 | 命名区：`id`（字符串，作者用）+ `code`（0–255 整数，地形三角形引用）+ `kind`（`ground`/`room`/`void`/`other`，仅提示） |
 | `arena` | object | 是 | `{id, notes}`；导入器据此建 `LevelArenaHost` |
-| `caps` | object | 是 | 数据规模上限（§12）；转换器按文件实际值补齐 |
+| `caps` | object | 是 | 数据规模上限（§12）；`movingProps`/`animators` 缺省 0；转换器按文件实际值补齐 |
 | `budget` | object | 是 | 电机 v1 注册预算（沿用今天五个键）。它约束 `structures`，**不约束 `terrain`**（地形有自己的表）；接触 v2 打开后 `boxes`/`ramps` 并入 256 OBB 表 |
 | `expected` | object | 是 | 设计门：件数、价值单位、三角数；`levelbuild check` 对实际值 |
 | `source` | object | 是 | `kind` ∈ `authored`/`reference`/`imported`；参考关卡的 `kind=reference` 会让导入器拒绝写进受管根（§11.3） |
@@ -309,7 +311,8 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 
 ```json
 {"itemId": "teacup_12", "def": "teacup", "kind": "tableware",
- "behaviour": "static", "behaviourParams": {},
+ "behaviour": "static", "motion": null,
+ "inherit": "full",
  "zone": "porch",
  "position": [0.42, -0.53, 1.07],
  "rotationQuat": [0.0, 0.766044, 0.0, 0.642788],
@@ -335,8 +338,8 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | `itemId` | string | 是 | **导入幂等键**；全局唯一；改名 = 删一件 + 加一件 |
 | `def` | string | 是 | 指向 `defs[].id` |
 | `kind` | string | 是 | 内容分类（喂吸收白名单/统计），与 `behaviour` **分两列**（PROP_BEHAVIOURS §10.1，已定） |
-| `behaviour` | enum | 是 | `static`／`ambient`／`path`／`orbit`／`stacked`（PROP_BEHAVIOURS §3.2 词义不变） |
-| `behaviourParams` | object | 否 | 按 behaviour 校验：`linkAction`（0/1/3/6，原作挂接动作）、`phase`、`pathSpeedIndex`、`orbitRadiusM`…；**未知键报错** |
+| `behaviour` | enum | 是 | `static`（无自运动）／`motion`（由 `motion` 引用的运动程序驱动）／`attached`（自己不动、跟父件；`DraggedAlong` 的落点）／`ambient`（云/远景漂移：**也引用 motion**，但默认 `absorbable:false`）／`stacked`（摞放，作者态）。`kind` 与它仍是两列（PROP_BEHAVIOURS §10.1，已定） |
+| `motion` | string \| null | 条件 | `behaviour:"motion"` 或 `"ambient"` 时必填，引用 `motions[].id`；`static`/`attached`/`stacked` 必须省略/null。**129 个原作动件共用 16 个 `moveType`，所以是「实例 → 本关程序表」，不是逐件内联曲线** |
 | `zone` | string | 否 | `meta.zones[].id` 之一 |
 | `position` | 3×number | 是 | **AABB 中心**（世界米）。原作 `position` 就是中心；保持这一约定，不再 re-seat |
 | `rotationQuat` | 4×number `[x,y,z,w]` | 是 | Unity 顺序、单位长、**规范符号**（`w<0` 取反；`w==0` 时首个非零分量为正）。原作的轴+角经 §8.2 转换后写这里；无旋转写 `[0,0,0,1]` |
@@ -348,6 +351,10 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | `absorbable` | bool | 是 | 作者声明；false 的件永远不可吸（结构件/装饰） |
 | `valueUnits` | int | 是 | 账本整数（≥1；0/小数当场拒绝，已定 (j)）。与 `volumeMm3` 是两个轴：一个记账、一个几何门 |
 | `parent` | string \| null | 否 | **单父指针**：父件的 `itemId`；null = 无父件。子件在父件被吃后**坠落**、不随父进账（已定 (s)） |
+| `inherit` | `"full"` \| `"position"` \| `"none"` | 否 | 父件运动如何传给子件：`full` = 位置+朝向（`linkAction` 0/1/3）；`position` = 只跟位置、朝向不跟（`linkAction` 6/4）；`none` = 不跟（脱钩/坠落）。缺省：有 `parent` 时 `full`，否则 `none`。**43/90 条父子是「自己 `moveType=-1` 却随父跑」**，靠这个字段表达 |
+| `phase` | number [0,1] | 否 | 逐实例相位（4 位小数）；驱动 Sway/Bob 等周期与动画桶。省略时导入器用 `itemId + level.id` 的确定性哈希派生（**不用 `Math.random()`**；原作相位来源见 §16.1）。规范写 `0 ≤ phase ≤ 1`，`1` 与 `0` 等价（写 `0`） |
+| `clipStart` | int | 否 | 起始剪辑下标（对应 `defs[].clips`）；`-1`/省略 = 不指定。对应原作逐实例 `playAnimNo`（`−1/0/1`，152/153 与带骨骼动画的实例吻合【推断，强】） |
+| `shakeOff` | bool | 否 | 原作 `u8MonoShakeOffFlag`（Cancer 仅 3 个为 1）的**存证**；v1 运行时不读（已定：不做击飞/甩脱）。语义见 §16.1 |
 | `rigidGroup` | string \| null | 否 | 刚性组：同组实例运行时共用一个刚体变换（多件拼成一件摆设，如桌+桌腿），**不产生父子语义**；与 `parent` 互斥 |
 | `support` | string \| null | 否 | 作者声明的支撑（结构 id 或道具 itemId）；导入期推导的提示，不是物理 |
 | `stackedOn` | string \| null | 否 | 摞在另一件道具上；与 `support` 至多一个 |
@@ -372,16 +379,16 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | **挂在父件下的子件** | **永远不缩放**：`parent != null` 时 `scale` 必须缺省或 `[1,1,1]`，否则 `[prop_scale_attached]` 硬错误 | 已定「attached props 不缩放」：挂接件的位姿由父件决定，缩放子件会破坏接触面 |
 | 均匀缩放（`sx=sy=sz`） | 允许，任意 `behaviour` | 等价于换一个尺寸的同一件 |
 | 非均匀缩放 | 只允许 **`parent == null` 且 `behaviour == "static"` 且 def.collider.type ∈ {box,sphere}**；否则 `[prop_scale_nonuniform]` | 胶囊/凸包在非均匀缩放下不再是同类形状；动态件的接触与吸收门会随姿态变，不可解释 |
-| 原作的 1 件非均匀 `(0.0741, 0.0291, 0.0197)` | 转换器照写 `scale`，但标 `absorbable:false`、`collision:"none"`（贴花/薄片，不参与玩法），并记进迁移报告的 `divergences` | 语义未验证（NOCLIP §12.1）；不拿它去赌接触或体积 |
+| 原作的 1 件非均匀 `(0.0741, 0.0291, 0.0197)` | 转换器照写 `scale`，但标 `absorbable:false`、`behaviour:"static"`、不写 `collider`（按无碰撞处理），并记进迁移报告的 `divergences` | 语义未验证（NOCLIP §12.1）；不拿它去赌接触或体积 |
 
 `aabb` 一律是**已乘 scale** 的尺寸，`volumeMm3` 由它和 `volumeK` 推出。**不要**在运行时再乘一次 scale。
 
 ### 6.5 父指针与刚性组
 
-- `parent` 的语义照抄原作 `parentBlock` 的 `(child,parent)` 对：单父、无环、父必须存在。Cancer 区域 2 有 130 对，其中 **90 条真父子**、40 条只有「我是挂接件」标志（父 = −1）。后者在 v2 里表达为 `parent:null` + `behaviourParams.linkAction` 原值，并记 `notes`。
+- `parent` 的语义照抄原作 `parentBlock` 的 `(child,parent)` 对：单父、无环、父必须存在。Cancer 区域 2 有 130 对，其中 **90 条真父子**、40 条只有「我是挂接件」标志（父 = −1）。后者在 v2 里表达为 `parent:null` + `inherit:"none"`，`linkAction` 原值记 `notes`。**90 条真父子里有 43 条子件自己 `moveType=-1` 却随会动的父件跑**（§6.7），所以父链必须携带运动继承。
 - **12 个 `dummyParent` 锚点就是那 12 个 `DummyProps` 命中代理**（Cancer 全部在 area 0；`DUMMYHIT01/02/03` 是大件外壳）。它们不是可吸道具，v2 不写进 `props[]`；`props` 的件数是 511（523 − 12），不是 524。
 - 运行时形状照 PROP_BEHAVIOURS §10.9：`int[] propParent`（−1 = 无父）+ 每 tick 浮空复检 + 子件坠落，**不做 carry**。
-- `rigidGroup` 是作者便利：同组只在**变换**上刚性（导入器给同组建一个父 `Transform`），不改变吸收/坠落语义。组内不得有 `parent`，组 ≤16 件。
+- `rigidGroup` 是作者便利：同组只在**变换**上刚性（导入器给同组建一个父 `Transform`），不改变吸收/坠落语义。组内不得有 `parent`，组 ≤16 件。**运动只能由组根拥有**：组内成员 `behaviour` 必须是 `static`（没有父件时 `attached` 也非法），否则 `[prop_motion_group]`。组根被吸时，成员按 §6.7.7 释放/坠落，**不整组进账**；组根运动时成员作为刚性子件跟随。成员没有 `parent`，所以不读 `inherit`——它们由组根 Transform 刚性带着。
 
 ### 6.6 `defs[]`：类型级数据
 
@@ -391,7 +398,10 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
  "valueUnits": 1, "volumeK": 0.7,
  "collider": {"type": "capsule", "center": [0.0, 0.0, 0.0],
               "radius": 0.043, "halfHeight": 0.0, "axis": "y"},
- "scalePolicy": "uniform", "notes": ""}
+ "scalePolicy": "uniform", "speedIndex": 2,
+ "clips": [{"id": "teacup_idle", "asset": "Assets/VRC_Katamari/Art/Props/teacup_idle.anim",
+            "fps": 30, "lengthSec": 2.0}],
+ "notes": ""}
 ```
 
 | 字段 | 语义 |
@@ -401,13 +411,156 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | `volumeK` | 类型默认填充系数；实例可覆盖；缺省 0.70 |
 | `collider` | 按型代理：`box`/`sphere`/`capsule`/`convex`（4–24 点），字段与校验规则**完全沿用** [COLLIDER_PROXY](../PickupAbsorb/COLLIDER_PROXY.md) §2：局部空间、`hull` 相对 `center`、未知/跨类型字段报错、盒 ⊆ 视觉 AABB。v2 只加一条：实例 `scale` 会作用在代理上，**非均匀缩放时胶囊/凸包不被允许**（§6.4） |
 | `scalePolicy` | `uniform`（默认）／`nonuniform`；后者只表示该类型允许被非均匀缩放，仍需满足 §6.4 的实例侧三条 |
+| `speedIndex` | 0–11，缺省 2；映射到原作的逐类型速度档（§6.7.3）。**同一运动程序下不同螃蟹速度不同**，就是因为各自类型的 `pathSpeedIndex` 不同（moveType 13 里 11 个 1 档、2 个 2 档）【实测】 |
+| `clips` | 0–6 段骨骼剪辑：`{id, asset?, fps?, lengthSec?}`。原作 153 个带动画实例只来自 **19 个类型**（每类型 4–6 段）；`asset` 缺省表示只有存证、运行时不能播。逐实例只存 `clipStart` 下标 |
 | `notes` | 自由文本 |
 
 **`defs[]` 不存 `aabb`**：AABB 是逐实例的（旋转后的包围盒语义在 `props[].aabb`），类型级尺寸只在 manifest 里。`volumeMm3` 也不进 defs：它由实例 aabb × k 推出（§6.2）。
 
+### 6.7 `motions[]` / `paths[]`：原作的运动程序与路径（新）
+
+#### 6.7.1 为什么是「逐关表 + 逐实例引用」而不是逐件曲线
+
+原作的驱动链是三层【实测】：
+
+```
+props[].moveType（原作 s16，逐实例；v2 用 props[].motion 引用取代）
+  → 本关 6 字节运动表项 (backupIndex s16, pathIndex s16, motionID s16)
+  → motionActionTable[motionID] → 具体行为函数
+速度：默认取 defs[].speedIndex（逐类型 pathSpeedIndex）→ 11 档速度表；
+      只有 pathIndex ≥ 0 时才用路径记录里的 f32 速度
+```
+
+Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 16 个 `moveType`。所以 v2 把它压成两张逐关表：
+
+- `motions[]`：运动**程序**（类、参数、速度来源、更新率）；
+- `paths[]`：可选**折线路径**（只有 11/524 个实例真的沿路径走）；
+- `props[].motion` 引用其中一条；**没有逐件写死的位移曲线**。
+
+`motions[]`、`paths[]` 是 `props`/`defs` 之外的旁挂表，但**不是逐实例数据**；它们与 `defs` 一样，导入后进 `MotionHost` 的定长数组。按 original-first，**13 类全部进数据模型**（D-10），运行时可以分阶段实现，但参考导入不丢类别。
+
+#### 6.7.2 `motions[]`
+
+```json
+"motions": [
+  {"id": "crab_scuttle", "class": "sporadic_walk",
+   "speed": {"source": "type"},
+   "params": {"turnDegPerSec": 180.0, "pauseFraction": 0.25, "wanderRadiusM": 1.5},
+   "updatesPerSecond": 15, "loop": true,
+   "provenance": {"moveType": 13},
+   "notes": "Cancer moveType 13；31 个实例实测净速 20–25 cm/s、瞬时 30.3"}
+]
+```
+
+| 字段 | 类型 | 必填 | 语义 |
+|---|---|---|---|
+| `id` | string | 是 | 本关唯一；`props[].motion` 引用它 |
+| `class` | enum | 是 | 13 类，见 §6.7.3 |
+| `speed` | object | 是 | `{"source":"none"}`（该类没有线速度：Sway/Hop/Whack/Spin/Flip/Bob/WaitForPlayer/拖挂）／`{"source":"type"}`（逐类型档，默认）／`{"source":"path"}`（用路径记录速度）／`{"source":"explicit","cmPerSec":30.3}`。`cmPerSec` 有限、0–500 |
+| `path` | string \| null | 条件 | 路径型 class 必填，引用 `paths[].id`；其他 class 必须 null（否则 `[motion_path]`） |
+| `params` | object | 否 | 按 class 校验的键值；未知键报错（§6.7.3） |
+| `updatesPerSecond` | int | 是 | `0/10/15/30`；`0` 只允许没有位移的 class（如 `sway` 走共享剪辑/表现层）。默认按 §6.7.5 的档位 |
+| `loop` | bool | 是 | `false` = 播放一次后停在末态（WhackAMole 的「停顶」用这个，而不是循环） |
+| `provenance` | object | 否 | 原作的 `moveType` / `motionID` / `action` / `backupIndex` / `pathIndex` 原值，只由参考导入写；用于对拍，不参与运行 |
+| `notes` | string | 否 | 存证/作者说明 |
+
+#### 6.7.3 13 个运动类（数值是测得的；没测到的留空，不编）
+
+> 证据标签：**【实测】** = 本轮逐帧/数据观察；**【推断】** = 参考实现一致但未原机证实；未标 = 我们的实现参数/默认值（PROVISIONAL）。
+
+| class | Cancer 实例 | 观测（强度） | `params`（键名/单位） | 速度来源 | 建议更新档 |
+|---|---:|---|---|---|---|
+| `sporadic_walk` | 31 | 随机游走，净 20–25 cm/s、瞬时 30.3【实测】 | `turnDegPerSec`、`pauseFraction`、`wanderRadiusM`（后三个是**我们的实现参数**，原作未公开） | `type` | **15 Hz** |
+| `hop` | 18 | 单跳 5.4–6.6 cm，随后停 3.4–5 s【实测】 | `heightM`、`restSecMin`、`restSecMax` | `none` | 10 Hz（或共享剪辑） |
+| `sway` | 15 | 竖直 ±3.6 cm，周期 1.4–1.6 s【实测】 | `amplitudeM`、`periodSec`、`axis`（`x/y/z`） | `none` | 10 Hz 或表现层 |
+| `dragged_along` | 15 | 自己不动，跟父件【实测】 | 无（用 `parent` + `inherit`） | `none`（继承父） | **0 Hz** |
+| `wait_for_player` | 15 | 球靠近前完全静止【实测；触发半径未验证】 | `wakeRadiusM`（默认 12，沿用项目值，**不是原作测量**）、`wakeMotion`（可选：另一条 `motions[].id`） | `none` | 10 Hz 唤醒检查 |
+| `whack_a_mole` | 8 | 0.7 s 升 12.4 cm，之后 ≥2.5 s 停在顶【实测；回落未测】 | `riseM`、`riseSec`、`holdSec` | `none` | 10 Hz（或共享剪辑） |
+| `path_collision` | 8 | 真折线，恒速 24.5 cm/s【实测】 | 无（路径给点） | `path` | **15 Hz** |
+| `spin` | 7 | 匀速自转【实测；角速度未量化】 | `degPerSec`（我们的参数，未测） | `none`（角速度） | 10 Hz |
+| `clouds` | 5 | 固定高度 y≈17.4 m，303 cm/s，绕圈【实测】 | `altitudeM`、`turnRadiusM`（未测） | `type`（10 单位） | 10 Hz |
+| `flip` | 2 | 周期性翻转【实测；周期未测】 | `periodSec` | `none` | 10 Hz |
+| `bob` | 2 | ±0.8 cm，周期 ≈2.8 s【实测】 | `amplitudeM`、`periodSec` | `none` | 10 Hz |
+| `sloping_path` | 2 | 沿路径 1.2 档 = 37 cm/s【实测】 | 无 | `path` | **15 Hz** |
+| `back_and_forth` | 1 | 沿路径 0.6 档 = 18.2 cm/s 来回【实测】 | 无 | `path` | **15 Hz** |
+
+**速度档**：`defs[].speedIndex` 0–11 映射到原作 11 档 + 哨兵：
+`MOTION_SPEED_UNITS = (0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0)`；
+**1 单位 = 30.3 cm/s**（5 档交叉验证误差 ≤2%【实测】）。`speed.cmPerSec` 只是覆盖，不改变档位语义。
+
+**`dragged_along` 不单独写 `motions[]`**：它等价于 `behaviour:"attached"` + `parent` + `inherit`。原作的 15 个 DraggedAlong 实例与 43 个「静止子件随动父件」在 v2 里都落成 `attached`，class 名只留在导入报告的统计里；枚举保留它是为了让报告能对齐原作分布。**5 朵云是 `moveType 16` 的道具实例**，不是舞台动画；它们落成 `behaviour:"ambient"` + `motions[].class:"clouds"`。
+
+**只做数据、不做猜测**：`spin` 的角速度、`flip` 周期、`whack_a_mole` 的回落、`clouds` 的绕圈半径都没有测到；v2 允许 `params` 省略这些键（校验器不强制），运行时用项目默认值并在诊断里标 `PROVISIONAL`。**不要把「noclip 的 Math.random 相位」当原作事实**。
+
+#### 6.7.4 `paths[]`
+
+```json
+"paths": [
+  {"id": "town_truck_loop",
+   "points": [[-12.0, 0.0, 4.0], [-2.0, 0.0, 6.0], [8.0, 0.0, 4.0],
+              [8.0, 0.0, -6.0], [-12.0, 0.0, -6.0]],
+   "loop": "loop", "speedCmPerSec": 243.0,
+   "notes": "小镇关螺旋桨飞机同速档 8；卡车是作者示例"}
+]
+```
+
+| 字段 | 语义 |
+|---|---|
+| `points` | 2–64 个 3D 世界点（米）；相邻点距离 ≥0.05 m；路径是折线，不插值曲率 |
+| `loop` | `"loop"`（首尾相连）／`"ping_pong"`（来回）／`"once"`（走完停住） |
+| `speedCmPerSec` | 0–500；路径型运动用它，**优先于**逐类型档（原作的规则） |
+
+**路径数据我们目前没有**（原作 11/524 个 Cancer 实例有路径，但提取器只存了 `pathIndex`，没有点表）。v2 先定义表；参考关卡在拿到路径点之前只能把这些实例降级成 `sporadic_walk` 或静态，并在导入报告里记 `paths_missing`。
+
+#### 6.7.5 相位、更新率与运行时调度（Udon）
+
+- **相位**：`props[].phase ∈ [0,1]`（1 与 0 等价）。省略时导入器派生 `phase = frac(hash32(level.id + "/" + itemId) / 2^32)`；**确定性**，同一份数据每次一样。周期运动的相位偏移 = `phase × period`；动画桶 = `floor(phase × 8) % 8`。**禁止 `Math.random()`**（账本/重放/双端一致性的前提）。
+- **更新率分档**：路径型 + 随机游走 **15 Hz**；其余程序化动作 **10 Hz**；纯表现（Sway/Bob/Flip）可交给共享剪辑/材质，CPU **0 Hz**；`attached`/`static` **0 Hz**。10 Hz 下 30 cm/s 的件每步 3 cm，配合表现层插值足够；15 Hz 是 2 cm/步。
+- **`MotionHost` 形状**（UdonSharp，全定长并行数组，不逐件 `Update`）：
+  ```
+  int[]  motionIndex;      // -1 = 不更新（static/attached）
+  int[]  motionClass;      // 枚举整数
+  float[] motionClock;     // 秒
+  float[] phase;           // 0..1
+  float[] speedCmPerSec;   // 预解算，避免每步查表
+  int[]  state;            // 0 idle / 1 active / 2 hold / 3 done
+  int[]  pending; bool[] pendingFlag; int pendingHead, pendingCount;
+  ```
+  每个定步 tick 只处理 `pending` 队列里到期的行；到期时间 = `1 / updatesPerSecond`。没有 `List`/字典/结构体；容量 = 关卡动件数（Cancer 129，上限 `caps.movingProps`）。
+- **表现层插值**：`MotionHost` 写「本步目标位姿」，`BallPresentation`/道具表现按渲染帧插值；不要把 10 Hz 的阶梯直接写进 Transform（会看起来一顿一顿）。
+- **与父链/刚体组**：子件世界位姿 = 父件世界位姿 × 局部；`inherit` 决定是否吃父的旋转。子件自己的 `motion`（若有）是**局部运动**，叠在父变换上；`behaviour:"attached"` 的子件没有自己的 motion。刚体组的运动只由组根拥有（§6.5）。
+- **预算**（基线 `PROP_BEHAVIOURS §7`：138 次单件更新/帧 @90 Hz = **12,420 次/秒**）：
+
+| 场景 | 动件 | 10 Hz | 15 Hz | 30 Hz |
+|---|---:|---:|---:|---:|
+| Make Cancer（524 件，129 动） | 129 | 1,290/s（**10%**） | 1,935/s（16%） | 3,870/s（31%） |
+| 1,381 件、25% 在动 | 345 | 3,450/s（**28%**） | 5,175/s（42%） | 10,350/s（83%） |
+| 同上，只给路径+随机游走（≈1/3） | 115 | 1,150/s（9%） | 1,725/s（14%） | 3,450/s（28%） |
+
+  结论【实测数字 + 我方换算】：**逐实例 CPU 变换在 10–15 Hz 完全够**；真正贵的是**逐实例 Animator**（见 §6.7.6），不是运动程序。
+
+#### 6.7.6 骨骼动画：逐类型、共享剪辑、相位桶
+
+- 原作 Cancer 的 **153 个带动画实例只来自 19 个类型**（每类型 4–6 段剪辑）；Town 97 个来自 33 个类型【实测】。逐实例挂 153 个 Animator 不可接受（状态机开销 + 同帧同步像机械）。
+- v2 的数据形状：`defs[].clips[]`（类型级）+ `props[].clipStart`（逐实例起始段）+ `props[].phase`（相位）。运行时策略（建议，D-11）：
+  1. **按类型 × 8 相位桶** 共享**控制器/剪辑**（不是共享 Animator 组件——每个被动画的实例仍要自己的 Animator）；同桶实例同帧同相，8 桶足以掩盖大部分机械感；
+  2. 硬上限 **64 个被动画实例/关**（`caps.animators`）；超了按「离球近 / 有 `clipStart`」优先，其余降级为静态网格；
+  3. 若不想付 Animator 成本：v1 **只播 CPU 运动、不播骨骼**（数据仍保留），或把常用剪辑烘成顶点/材质动画（C）——这是产品取舍，不是数据缺失。
+- 原作的剪辑选择看运行时状态（`AnimationType` + 置换），**不是**数据字段；v2 的 `clipStart` 只是「开局放哪段」（对应 `playAnimNo`，152/153 吻合，【推断，强】）。运行时何时切 `MOVING/WRIGGLE/PANIC` 是**我们的行为模型**，标 PROVISIONAL。
+
+#### 6.7.7 移动件被吸收：用当前位姿，父链一起处理
+
+- **吸收判定用当前位姿**：球心到道具**此刻**世界 AABB 的最近点距离 ≤ `collisionRadius + itemRadius`（原有 reach），再走 `volumeMm3` 体积门；不是用 `placement.json` 里的摆放位置。移动件没有豁免，也不额外加难度。
+- **动态 AABB**：移动件的世界 AABB 在同一调度里写回 `PickupFieldHost`，不是每步读 Transform（Udon 读 Transform 太贵）。吸收最多滞后一步：10 Hz 时 10 cm 的件在 30 cm/s 下移动 3 cm，reach 的包围球余量足以覆盖。OBB 近似用「AABB + 当前 yaw」即可（PROVISIONAL）；`collider` 逐型代理仍用于静态件与落地/支撑查询。
+- **父件被吸**（已定 (s)）：立刻停父件的运动程序；子件 `parent = null`，保留**当前**世界位姿，进入 `FALLING`，脚下没东西就落；**不 carry、不随父进账**。子件自己的 `motion` 在 `FALLING` 期间挂起，`SETTLED` 后可恢复（建议；D-14）。
+- **刚体组**：吸收其中一件只处理那一件；组不整组进账（与 `carry` 无关）。组根被吸时，成员先摘组、保留当前位姿、进入 `FALLING`；成员自己若有 `motion`，按 D-14 挂起。
+- **`shakeOff`**：Cancer 仅 3 个实例为 1，语义未验证；v2 只存证，v1 运行时不读。已定「不做击飞」，所以不要用这个字段实现甩脱。
+- **不做的事**：不因为道具在动就把它当「障碍/敌人」；**移动件不注册为支撑面或挡路盒**（它们的位置每 10/15 Hz 才更新，当静态碰撞体会抖/穿），只参与吸收（这是我们的实现取舍；原作里球撞到移动件会怎样，noclip 观察不到，见 §16.1）；停下来的 `hold`/`done` 也不改变这个分类（按 `behaviour` 判，不按运行时状态判）。
+
+
 ---
 
-## 7. 两个完整例子
+## 7. 例子（一个完整文档 + 四个片段）
 
 ### 7.1 最小关卡（4 m × 4 m 平台，两块三角形地面、一件道具、一面墙；其余方向交给 kill plane）
 
@@ -430,7 +583,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
     "zones": [{"id": "pad", "code": 0, "kind": "ground"}],
     "arena": {"id": "tiny_pad"},
     "caps": {"props": 16, "terrainTriangles": 512, "terrainVertices": 1024,
-             "staticSolids": 8, "activityWalls": 8},
+             "staticSolids": 8, "activityWalls": 8, "movingProps": 0, "animators": 0},
     "budget": {"planes": 8, "boxes": 8, "ramps": 4, "blocking": 6, "propSupports": 6},
     "expected": {"propCount": 1, "valueUnits": 1, "terrainTriangles": 2},
     "source": {"kind": "authored"}
@@ -465,7 +618,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
   },
   "props": [
     {"itemId": "acorn_01", "def": "acorn", "kind": "nature", "behaviour": "static",
-     "behaviourParams": {}, "zone": "pad",
+     "motion": null, "inherit": "none", "zone": "pad",
      "position": [-0.8, 0.015, -0.6], "rotationQuat": [0.0, 0.0, 0.0, 1.0],
      "aabb": [0.024, 0.03, 0.0228], "volumeK": 0.7, "volumeMm3": 11491,
      "absorbDiameterReqMm": 60, "absorbable": true, "valueUnits": 1,
@@ -478,6 +631,8 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
      "collider": {"type": "sphere", "center": [0.0, 0.0, 0.0], "radius": 0.012},
      "scalePolicy": "uniform"}
   ],
+  "motions": [],
+  "paths": [],
   "cameras": [],
   "renderPresets": [],
   "regions": []
@@ -508,7 +663,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
               {"id": "zone_b", "code": 3}, {"id": "zone_c", "code": 8}],
     "arena": {"id": "_ref_cancer"},
     "caps": {"props": 511, "terrainTriangles": 4096, "terrainVertices": 8192,
-             "staticSolids": 256, "activityWalls": 8},
+             "staticSolids": 256, "activityWalls": 8, "movingProps": 129, "animators": 64},
     "budget": {"planes": 8, "boxes": 8, "ramps": 4, "blocking": 6, "propSupports": 6},
     "expected": {"propCount": 511, "terrainTriangles": 3456},
     "source": {"kind": "reference", "provenance": "~/KatamariRef/noclip_export/kse_out"}
@@ -555,21 +710,23 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
   },
   "props": [
     {"itemId": "crab_001", "def": "small_fiddler_crab", "kind": "animal",
-     "behaviour": "static", "behaviourParams": {"linkAction": 0}, "zone": "zone_a",
+     "behaviour": "motion", "motion": "crab_scuttle", "inherit": "none",
+     "phase": 0.37, "clipStart": 0, "zone": "zone_a",
      "position": [4.80, -1.32, 3.10],
      "rotationQuat": [0.0, 0.766044, 0.0, 0.642788],
      "aabb": [0.115, 0.080, 0.086], "volumeK": 0.7, "volumeMm3": 553840,
      "absorbDiameterReqMm": 219, "absorbable": true, "valueUnits": 1,
      "parent": null, "rigidGroup": null, "support": null, "stackedOn": null},
     {"itemId": "ceiling_light_01", "def": "ceiling_light", "kind": "furniture",
-     "behaviour": "static", "behaviourParams": {"linkAction": 6}, "zone": "zone_b",
+     "behaviour": "attached", "motion": null, "inherit": "position",
+     "phase": 0.0, "zone": "zone_b",
      "position": [0.0, 0.21, 0.0],
      "rotationQuat": [1.0, 0.0, 0.0, 0.0],
      "aabb": [0.16, 0.10, 0.16], "volumeK": 0.5, "volumeMm3": 1280000,
      "absorbDiameterReqMm": 290, "absorbable": true, "valueUnits": 9,
      "parent": "house_01", "rigidGroup": null, "support": null, "stackedOn": null},
     {"itemId": "decal_017", "def": "decal", "kind": "decor",
-     "behaviour": "static", "behaviourParams": {}, "zone": "zone_b",
+     "behaviour": "static", "motion": null, "inherit": "none", "zone": "zone_b",
      "position": [1.2, -0.55, 0.4],
      "rotationQuat": [0.0, 0.0, 0.0, 1.0],
      "scale": [0.0741, 0.0291, 0.0197],
@@ -585,8 +742,17 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
      "collider": {"type": "convex", "center": [0.0, 0.0, 0.0],
                   "hull": [[-0.06, -0.04, -0.05], [0.06, -0.04, -0.05],
                            [0.0, 0.045, 0.05], [0.0, -0.03, 0.05]]},
-     "scalePolicy": "uniform"}
+     "scalePolicy": "uniform", "speedIndex": 1,
+     "clips": [{"id": "crab_walk", "asset": "Assets/VRC_Katamari/Art/Props/crab_walk.anim",
+                "fps": 30, "lengthSec": 1.0}]}
   ],
+  "motions": [
+    {"id": "crab_scuttle", "class": "sporadic_walk",
+     "speed": {"source": "type"}, "path": null,
+     "params": {"turnDegPerSec": 180.0, "pauseFraction": 0.25, "wanderRadiusM": 1.5},
+     "updatesPerSecond": 15, "loop": true}
+  ],
+  "paths": [],
   "cameras": [],
   "renderPresets": [],
   "regions": []
@@ -594,6 +760,118 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 ```
 
 > 这是**片段**，不是可独立通过校验的文件：`meshRef.sha256` 是占位、`structures.solids` 只给了一条、`zone_a/zone_b/zone_c` 的 code 是**作者暂定映射**（原作的 24/3/8 到底叫什么仍未证实，§3.7）。逐三角形的 `zoneIds`/`classes` 在侧车里，JSON 只写 `count`（§8.3）。原作的 zone 分布是**逐顶点**的（7,154 个值），我们按每三角形三个顶点的多数票派生逐三角形标签，所以不照抄那组计数。
+
+### 7.3 三个运动片段（只列相关表，不是完整文档）
+
+#### 7.3.1 Sway 的树 + 挂在树上的风铃（父件动、子件跟）
+
+```json
+{
+  "motions": [
+    {"id": "tree_sway", "class": "sway",
+     "speed": {"source": "none"}, "path": null,
+     "params": {"amplitudeM": 0.036, "periodSec": 1.5, "axis": "y"},
+     "updatesPerSecond": 10, "loop": true}
+  ],
+  "paths": [],
+  "defs": [
+    {"id": "tree", "kind": "plant", "model": "Assets/VRC_Katamari/Art/Props/tree.fbx",
+     "valueUnits": 40, "volumeK": 0.35, "speedIndex": 2,
+     "clips": [{"id": "tree_idle", "asset": "Assets/VRC_Katamari/Art/Props/tree_idle.anim",
+                "fps": 30, "lengthSec": 3.0}],
+     "collider": {"type": "box", "center": [0.0, 0.0, 0.0], "size": [0.4, 2.2, 0.4]}},
+    {"id": "chime", "kind": "decor", "model": "Assets/VRC_Katamari/Art/Props/chime.fbx",
+     "valueUnits": 2, "volumeK": 0.6,
+     "collider": {"type": "sphere", "center": [0.0, 0.0, 0.0], "radius": 0.03}}
+  ],
+  "props": [
+    {"itemId": "tree_01", "def": "tree", "kind": "plant",
+     "behaviour": "motion", "motion": "tree_sway", "inherit": "none",
+     "phase": 0.12, "clipStart": 0,
+     "position": [1.0, 1.1, 0.0], "rotationQuat": [0.0, 0.0, 0.0, 1.0],
+     "aabb": [0.4, 2.2, 0.4], "volumeMm3": 123200000, "absorbDiameterReqMm": 1330,
+     "absorbable": true, "valueUnits": 40},
+    {"itemId": "chime_01", "def": "chime", "kind": "decor",
+     "behaviour": "attached", "motion": null, "inherit": "full",
+     "parent": "tree_01", "position": [1.25, 1.45, 0.0],
+     "rotationQuat": [0.0, 0.0, 0.0, 1.0],
+     "aabb": [0.06, 0.10, 0.06], "volumeMm3": 216000, "absorbDiameterReqMm": 160,
+     "absorbable": true, "valueUnits": 2}
+  ]
+}
+```
+
+读法：树自己按 1.5 s 周期摆 ±3.6 cm；风铃 `inherit:"full"`，世界位姿跟着树的变换走，**自己 0 Hz**。原作 8 个风铃挂在树上就是这么跑的（43 条「静止子件随动父件」之一）。若风铃还要自转，给它自己的 `motion`（局部运动，叠在父变换上），不要另建父链。
+
+#### 7.3.2 SporadicWalk 的螃蟹（同程序、不同速度靠类型档）
+
+```json
+{
+  "motions": [
+    {"id": "crab_scuttle", "class": "sporadic_walk",
+     "speed": {"source": "type"}, "path": null,
+     "params": {"turnDegPerSec": 180.0, "pauseFraction": 0.25, "wanderRadiusM": 1.5},
+     "updatesPerSecond": 15, "loop": true}
+  ],
+  "paths": [],
+  "defs": [
+    {"id": "small_fiddler_crab", "kind": "animal",
+     "model": "Assets/VRC_Katamari/Art/Props/small_fiddler_crab.fbx",
+     "valueUnits": 1, "volumeK": 0.7, "speedIndex": 1,
+     "clips": [{"id": "crab_walk", "asset": "Assets/VRC_Katamari/Art/Props/crab_walk.anim",
+                "fps": 30, "lengthSec": 1.0}],
+     "collider": {"type": "convex", "center": [0.0, 0.0, 0.0],
+                  "hull": [[-0.06, -0.04, -0.05], [0.06, -0.04, -0.05],
+                           [0.0, 0.045, 0.05], [0.0, -0.03, 0.05]]}}
+  ],
+  "props": [
+    {"itemId": "crab_001", "def": "small_fiddler_crab", "kind": "animal",
+     "behaviour": "motion", "motion": "crab_scuttle", "inherit": "none",
+     "phase": 0.37, "clipStart": 0,
+     "position": [4.80, -1.32, 3.10],
+     "rotationQuat": [0.0, 0.766044, 0.0, 0.642788],
+     "aabb": [0.115, 0.080, 0.086], "volumeMm3": 553840,
+     "absorbDiameterReqMm": 219, "absorbable": true, "valueUnits": 1}
+  ]
+}
+```
+
+读法：`speedIndex: 1` ⇒ 1 单位 ⇒ **30.3 cm/s**；同为 `crab_scuttle` 的椰子蟹类型 `speedIndex: 2` ⇒ 60.6 cm/s。**不要**把速度写进 `motion`（同一程序要服务多类型）；`speed.cmPerSec` 只给没有类型档的导入件兜底。
+
+#### 7.3.3 沿路径跑的卡车（真路径，速度取路径记录）
+
+```json
+{
+  "motions": [
+    {"id": "truck_drive", "class": "path_collision",
+     "speed": {"source": "path"}, "path": "town_truck_loop",
+     "params": {}, "updatesPerSecond": 15, "loop": true}
+  ],
+  "paths": [
+    {"id": "town_truck_loop",
+     "points": [[-12.0, 0.0, 4.0], [-2.0, 0.0, 6.0], [8.0, 0.0, 4.0],
+                [8.0, 0.0, -6.0], [-12.0, 0.0, -6.0]],
+     "loop": "loop", "speedCmPerSec": 243.0}
+  ],
+  "defs": [
+    {"id": "truck", "kind": "vehicle", "model": "Assets/VRC_Katamari/Art/Props/truck.fbx",
+     "valueUnits": 120, "volumeK": 0.55, "speedIndex": 5,
+     "collider": {"type": "box", "center": [0.0, 0.0, 0.0], "size": [2.0, 2.2, 5.0]}}
+  ],
+  "props": [
+    {"itemId": "truck_01", "def": "truck", "kind": "vehicle",
+     "behaviour": "motion", "motion": "truck_drive", "inherit": "none",
+     "phase": 0.0,
+     "position": [-12.0, 1.1, 4.0],
+     "rotationQuat": [0.0, 0.0, 0.0, 1.0],
+     "aabb": [2.0, 2.2, 5.0], "volumeMm3": 12100000000,
+     "absorbDiameterReqMm": 6136, "absorbable": true, "valueUnits": 120}
+  ]
+}
+```
+
+读法：路径型运动**只用 `paths[].speedCmPerSec`**，`defs[].speedIndex` 只是类型默认（8 单位 = 243 cm/s，对应 `speedIndex 5`；与实测小镇螺旋桨飞机一致）；`loop:"loop"` 首尾相连。路径点是世界米；如果是 `ping_pong`（原作 BackAndForth），到端点反向。
+
 
 ---
 
@@ -605,11 +883,11 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 |---|---|
 | 编码 | UTF-8 无 BOM；LF；末尾一个换行 |
 | 缩进 | 2 空格；对象一成员一行；数组元素一行一个（顶点 `[x, y, z]` 单独一行） |
-| 键序 | 文档：`schema, meta, terrain, structures, activityArea, props, defs, cameras, renderPresets, regions`；对象内部按本文表格的字段顺序（`*_KEYS` 常量）；**未知键是错误**，所以不存在「保留键序」的歧义 |
-| 排序 | `props` 按 `itemId`；`defs` 按 `id`；`structures.solids` 按 `id`；`activityArea.walls` 按 `id`；`broadPhase.boxes`/`chunks` 按 `id`；`zones` 按 `code` 再 `id`；`cameras`/`renderPresets` 按 `id`；**几何数组保持作者/源顺序**（顶点/索引的顺序是几何身份，不能排序） |
-| 数字 | 位置/尺寸/`aabb`/`scale` 4 位；四元数 6 位；`volumeK` 4 位；`volumeMm3`/`absorbDiameterReqMm` 整数；角度字段 3 位；所有数不得是 NaN/Inf；`-0.0 → 0.0`（全局，含嵌套数组） |
+| 键序 | 文档：`schema, meta, terrain, structures, activityArea, props, defs, motions, paths, cameras, renderPresets, regions`；对象内部按本文表格的字段顺序（`*_KEYS` 常量）；**未知键是错误**，所以不存在「保留键序」的歧义 |
+| 排序 | `props` 按 `itemId`；`defs` 按 `id`；`motions` 按 `id`；`paths` 按 `id`；`structures.solids` 按 `id`；`activityArea.walls` 按 `id`；`broadPhase.boxes`/`chunks` 按 `id`；`zones` 按 `code` 再 `id`；`cameras`/`renderPresets` 按 `id`；**几何数组保持作者/源顺序**（顶点/索引的顺序是几何身份，不能排序） |
+| 数字 | 位置/尺寸/`aabb`/`scale` 4 位；四元数 6 位；`volumeK` 4 位；`volumeMm3`/`absorbDiameterReqMm` 整数；`phase` 4 位；`periodSec`/`holdSec`/`restSec*`/`riseSec` 3 位；`amplitudeM`/`heightM`/`riseM` 4 位；`degPerSec` 3 位；`cmPerSec` 1 位；角度字段 3 位；所有数不得是 NaN/Inf；`-0.0 → 0.0`（全局，含嵌套数组） |
 | 四元数 | 规范符号：`w<0` 整体取反；`w==0` 时首个非零分量为正 |
-| 布尔/空 | 所有可空键（`parent`/`rigidGroup`/`support`/`stackedOn`）显式 `null` 与省略等价；**规范写出一律省略**。本文示例为可读性保留 `null`，转换器/导出器不写 |
+| 布尔/空 | 所有可空键（`parent`/`rigidGroup`/`support`/`stackedOn`/`motion`/`path`）显式 `null` 与省略等价；`phase` 省略 = 由哈希派生；`clipStart:-1` 与省略等价；`shakeOff:false` 省略。**规范写出一律省略**。本文示例为可读性保留 `null`，转换器/导出器不写 |
 | 重复 | 同层不得有重复键；`itemId`/`id` 全局唯一 |
 | 幂等 | `load → dump` 逐字节相同；`v2 → v2` 转换是 no-op；`v1 → v2` 转换是确定性的（同输入同输出，两次运行同 sha256） |
 
@@ -680,11 +958,29 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | `[prop_scale_nonuniform]` | error | 非均匀但违反 §6.4 的三个条件 |
 | `[prop_volume_stale]` | error | `volumeMm3` 与 `k·a·b·c` 差 >1 mm³；例外：`absorbable:false` 且体积 <1 mm³ 时允许 0 |
 | `[prop_absorb_req_stale]` | error | `absorbDiameterReqMm` ≠ 由 `volumeMm3` 推出的整毫米 |
-| `[prop_behaviour]` | error | 未知 behaviour / 该 behaviour 不允许的 `behaviourParams` 键 |
+| `[prop_behaviour]` | error | 未知 behaviour；`behaviour:"motion"`/`"ambient"` 没有 `motion`；`static`/`attached`/`stacked` 却带 `motion`；`ambient` 且 `absorbable:true` |
+| `[prop_motion]` | error | `motion` 引用不存在的 `motions[].id`；`motion` 的 class 与 `behaviour` 不兼容 |
+| `[prop_inherit]` | error | `inherit` 非三值之一；无父件却写 `inherit:"full"/"position"`；`inherit` 与 `parent:null` 矛盾 |
+| `[prop_phase]` | error | `phase` 不在 [0,1]；规范写出 4 位小数（不是校验条件） |
+| `[prop_clip]` | error | `clipStart` 越界（`< -1` 或 ≥ `defs[].clips` 长度）；`clipStart ≥ 0` 但 def 没有 `clips` |
+| `[prop_motion_group]` | error | `rigidGroup` 成员带 `motion`（运动只能由组根拥有） |
+| `[motion_id]` | error | `motions[].id` 缺失/重复/前后空白 |
+| `[motion_key]` / `[path_key]` | error | `motions[]`/`paths[]` 出现未知键（键白名单同批落地） |
+| `[motion_class]` | error | 未知 class；`dragged_along` 没有 `parent` 的实例引用它 |
+| `[motion_params]` | error | 该 class 不允许的 `params` 键，或必填参数缺失/非有限/越界 |
+| `[motion_path]` | error | 路径型 class 缺 `path`；非路径型带 `path`；`path` 引用不存在 |
+| `[motion_speed]` | error | `speed.source` 非四值；`explicit` 缺 `cmPerSec`；`path` 但无路径速度；`none`/`type` 却给 `cmPerSec`；`cmPerSec` 不在 0–500 |
+| `[motion_rate]` | warning | `updatesPerSecond` 与 §6.7.5 的建议档不符（允许，但要说明） |
+| `[motion_budget]` | warning | `caps.movingProps` × 实际更新率超过预算表（§6.7.5） |
+| `[paths_id]` / `[path_points]` / `[path_speed]` | error | 路径 id 重复；点数不在 2–64、点非 3 数、相邻点 <0.05 m；速度不在 0–500 |
+| `[def_speed_index]` | error | `speedIndex` 不在 0–11 |
+| `[def_clips]` | error/warning | 剪辑数 >6、`id` 重复、`fps` ≤0（error）；我们的关卡有 `clips` 但 `asset` 缺失（warning） |
+| `[anim_budget]` | warning | 该关 `behaviour:"motion"` 且 `clipStart ≥ 0` 的实例 > `caps.animators`（每个被动画实例仍需一个 Animator） |
 | `[prop_key]` | error | `props[]` 出现未知键（不得静默丢弃） |
 | `[prop_support]` / `[prop_overlap]` | error | 声明支撑不存在/悬空；两件 AABB 互穿且无父子/摞放关系 |
 | `[prop_bounds]` | error | 道具离开 `meta.bounds` 超过 5 cm |
 | `[caps_props]` | error | 件数 > `caps.props`（每关按 130/511/4000 档自己声明） |
+| `[caps_motion]` | error | `caps.movingProps` > `caps.props`，或 `caps.animators` > `caps.movingProps` |
 | `[canonical]` | warning | 文件不是规范字节（现有行为） |
 | `[schema_legacy]` | error | 读到 v1 文件：提示先跑转换器 |
 
@@ -697,7 +993,7 @@ META_KEYS      = ("id","scene","units","convention","ball","timeLimitS","playerS
 BALL_KEYS      = ("startDiameterM","targetDiameterM","maxDiameterRef","maxDiameterM",
                   "start","spawnSource")
 CAPS_KEYS      = ("props","terrainTriangles","terrainVertices","staticSolids",
-                  "activityWalls")
+                  "activityWalls","movingProps","animators")
 BUDGET_KEYS    = ("planes","boxes","ramps","blocking","propSupports")
 EXPECTED_KEYS  = ("propCount","valueUnits","terrainTriangles")
 SOURCE_KEYS    = ("kind","provenance","windingFix","licence")
@@ -717,14 +1013,24 @@ ACTIVITY_KEYS  = ("walls","killPlane","softMarginM","source")
 WALL_KEYS      = ("id","points","closed","heightM","thicknessM","minBallDiameterM",
                   "kind","material","notes")
 KILL_KEYS      = ("y","respawn","zoneId")
-PROP_KEYS_V2   = ("itemId","def","kind","behaviour","behaviourParams","zone","position",
-                  "rotationQuat","scale","aabb","volumeK","volumeMm3",
-                  "absorbDiameterReqMm","absorbable","valueUnits","parent","rigidGroup",
-                  "support","stackedOn","floatingOk","notes")
-DEF_KEYS_V2    = ("id","kind","model","valueUnits","volumeK","collider","scalePolicy","notes")
+PROP_KEYS_V2   = ("itemId","def","kind","behaviour","motion","inherit","phase","clipStart",
+                  "shakeOff","zone","position","rotationQuat","scale","aabb","volumeK",
+                  "volumeMm3","absorbDiameterReqMm","absorbable","valueUnits","parent",
+                  "rigidGroup","support","stackedOn","floatingOk","notes")
+DEF_KEYS_V2    = ("id","kind","model","valueUnits","volumeK","collider","scalePolicy",
+                  "speedIndex","clips","notes")
+MOTION_KEYS    = ("id","class","speed","path","params","updatesPerSecond","loop",
+                  "provenance","notes")
+PROVENANCE_KEYS = ("moveType","motionID","action","backupIndex","pathIndex")
+SPEED_KEYS     = ("source","cmPerSec")
+PATH_KEYS      = ("id","points","loop","speedCmPerSec","notes")
+CLIP_KEYS      = ("id","asset","fps","lengthSec")
+MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player",
+                  "whack_a_mole","path_collision","spin","clouds","flip","bob",
+                  "sloping_path","back_and_forth")
 ```
 
-`PROP_KEYS_V2` **删掉了** v1 的 `group`/`groupId`（原作的视觉挂接组由 `parent` + `rotationQuat` 表达；组容器由导入器按 `parent` 建）和浮点 `absorbDiameterReq`；**加进了** `behaviour`/`behaviourParams`/`scale`/`volumeMm3`/`absorbDiameterReqMm`/`parent`/`rigidGroup`/`floatingOk`。删掉的键在 v2 里是未知键，转换器负责搬走。
+`PROP_KEYS_V2` **删掉了** v1 的 `group`/`groupId`（原作的视觉挂接组由 `parent` + `rotationQuat` 表达；组容器由导入器按 `parent` 建）、浮点 `absorbDiameterReq`，以及上一版的 `behaviourParams`（`linkAction` 迁到 `inherit`，其余进 `notes`）；**加进了** `behaviour`/`motion`/`inherit`/`phase`/`clipStart`/`shakeOff`/`scale`/`volumeMm3`/`absorbDiameterReqMm`/`parent`/`rigidGroup`/`floatingOk`。删掉的键在 v2 里是未知键，转换器负责搬走。
 
 ---
 
@@ -741,7 +1047,8 @@ DEF_KEYS_V2    = ("id","kind","model","valueUnits","volumeK","collider","scalePo
 | C5 | **会改语义的字段必须报告**：`absorbDiameterReq` 从 bbox 门改成 `k·bbox` 门（已定），新值可能不同；转换器输出 `gate_changes.csv`（itemId、旧 mm、新 mm、`absorbable` 变化），**先看报告再提交** | 报告条数与人工复核 |
 | C6 | **上限迁移**：`ballDiameterMax` 不再作为每关玩法上限；写进 `meta.migration.maxDiameterM` 供审计，运行时读全局 | 转换后 `meta.ball.maxDiameterRef == "global"` |
 | C7 | **边界迁移**：4 张矩形 `boundary` 平面 → `activityArea.walls` 的闭合矩形；非矩形/非轴对齐保留 `role:"boundary"` + warning | 9 个测试场 + hub + story_01 的边界逐份核对 |
-| C8 | **ground 迁移**：`role=ground` 的平面不再进 `structures`，`meta.groundY` 取其平面高度；没有 terrain 的关卡保持平地 | 关卡视觉不变（导入后场景对比） |
+| C8 | **ground 迁移**：`role=ground` 的平面不再进 `structures`，`meta.groundY` 取其平面高度；没有 terrain 的关卡保持平地 |
+| C11 | **运动数据不伪造**：v1 的 13 份文件没有 `motions`/`paths`，转换器写空表并把 `behaviour` 设为 `static`；参考关卡的 129 个动件由 §11.5 的参考导入器从 `instances.json` 的 `motion{id,action,speed,pathIndex}` 生成，**不能**用「看起来像」猜 class | 参考导入报告列出每个未映射的 `motionID` |
 | C9 | **参考关卡**：转换产物仍在 `_ref_*/` 目录，被 `.gitignore` 排除；转换器不把任何网格/坐标写进仓库内其他路径 | `git status` 干净 |
 | C10 | **可回滚**：转换在 git 分支上做；v1 文件在转换器验证通过前不被覆盖（先写 `.v2.json` 草稿，人工确认后 `--apply`） | 转换器有 `--dry-run` |
 
@@ -753,9 +1060,11 @@ DEF_KEYS_V2    = ("id","kind","model","valueUnits","volumeK","collider","scalePo
   → meta：改名 / 补 caps（按实际计数）/ 补 spawnSource
   → structures：ground → meta.groundY；boundary → activityArea.walls（可无损时）；
                  box/ramp/curve_ramp 原样进 structures.solids
-  → props：补 behaviour="static"、behaviourParams={}、scale 省略、parent=null、
-           rigidGroup=null、floatingOk=false；重算 volumeMm3 与 absorbDiameterReqMm
-  → defs：补 volumeK（已有则保留）、scalePolicy="uniform"
+  → props：补 behaviour="static"、motion=null、inherit=none（有父件则 full）、
+           phase 省略、clipStart=-1、scale 省略、parent=null、rigidGroup=null、
+           floatingOk=false；重算 volumeMm3 与 absorbDiameterReqMm
+  → defs：补 volumeK（已有则保留）、scalePolicy="uniform"、speedIndex=2、clips=[]
+  → motions=[]、paths=[]（v1 没有运动数据；参考关卡由 §11.5 导入器填）
   → 平地图省略 terrain；参考关卡的地形由 §11.5 导入器写（转换器不造几何）
   → canonical_doc → --dry-run 报告 → --apply
 ```
@@ -784,7 +1093,9 @@ DEF_KEYS_V2    = ("id","kind","model","valueUnits","volumeK","collider","scalePo
 | `structures.solids[role=ramp/curve_ramp]` | 同上 → `rampBoxes`（弯坡展开成 `<id>_00…` 子物体） | 与今天逐位等价 |
 | `activityArea.walls` | **新** `ActivityAreaHost` + 每段一个 `BoxCollider`（关碰撞、只作注册源） | 跨门槛时重注册；不建 Renderer（`visible` 才建） |
 | `activityArea.killPlane` | `ActivityAreaHost` 的标量字段 | 每步/10 Hz 查 `ballCentreY < y` → `motor.TeleportTo(ballStart)` + 清速度 |
-| `props[]` | `LevelContent/Props/<kind>/<itemId>`（现有）+ `PickupFieldHost` 行 | `parent`/`volumeMm3`/`behaviour` 进新的行为宿主数组；`scale` 写 Transform.localScale（仅限合法情况） |
+| `props[]` | `LevelContent/Props/<kind>/<itemId>`（现有）+ `PickupFieldHost` 行 + **新** `MotionHost` 行 | `parent`/`inherit`/`volumeMm3`/`behaviour` 进行为宿主数组；`motion` → `MotionHost` 的 motion 槽；`phase` → 相位桶；`clipStart` → 起始剪辑；`scale` 写 Transform.localScale（仅限合法情况） |
+| `motions[]` / `paths[]` | **新** `MotionHost` / `PathHost` 的定长数组（`LevelContent` 根上） | 逐关表，导入期烘成 `motionClass[]`/`params[]`/`pathPointStart[]`/`pathPoint[]`；运行时不读 JSON |
+| `defs[].clips[]` | 共享动画预制体/控制器（按类型 × 8 相位桶） | 硬上限 `caps.animators`；`asset` 缺失的剪辑只存证，不实例化 Animator |
 | `defs[]` | manifest + 模型 + `collider` 代理 | 与今天一致；`scalePolicy` 只在编辑器校验里用 |
 | `cameras`/`renderPresets` | 编辑器/Blender 用，不进场景 | 不变 |
 
@@ -809,7 +1120,7 @@ DEF_KEYS_V2    = ("id","kind","model","valueUnits","volumeK","collider","scalePo
 
 ### 11.4 幂等与「第二次导入 +0 ~0 -0」
 
-- 导入键：结构/地形/墙按 `id`，道具按 `itemId`；组容器按 `rigidGroup`/父 `itemId` 派生。
+- 导入键：结构/地形/墙/运动/路径按 `id`，道具按 `itemId`；组容器按 `rigidGroup`/父 `itemId` 派生。
 - 位姿比较用变换矩阵（位置 1 mm、旋转点积 0.99999），尺寸/材质逐项比较；只有不同才写。
 - 新增组件（`TerrainFieldHost`/`ActivityAreaHost`/`LevelMetaHost`）第一次导入计 `+N`（结构更新），第二次必须 `+0 ~0 -0`。
 - 地形数组按「内容哈希」比较：sha256 相同就跳过重写，避免每次导入都算 100 KB 数组 diff。
@@ -831,7 +1142,9 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 ```
 
 - 适配器**不解析游戏二进制**（那件事在仓库外，见 §17 许可更正）；它只读提取器已经导出的 JSON/GLB 并做坐标/绕序/字段映射。代码可以进仓库，因为它不衍生自 noclip 源码，也不含游戏数据。
-- 映射校验（导入器自检，不通过就拒绝）：`524` 实例、`90` 条真父子、`68` 个 AABB、`3,456` 三角形、`7,154` 顶点、3 个有效图形扇区、`7` 个模型。数字对不上说明提取器版本变了，**不猜**。
+- 映射校验（导入器自检，不通过就拒绝）：`524` 实例、`90` 条真父子、`129` 个带运动程序、`153` 个带动画、`68` 个 AABB、`3,456` 三角形、`7,154` 顶点、3 个有效图形扇区、`7` 个模型。数字对不上说明提取器版本变了，**不猜**。
+- **运动映射**：`instances.json` 的 `motion{id,action,speed,pathIndex}` → `motions[]`；`motionID/action` 到 13 类的映射表来自 `motionActionTable`，**未识别的一律写 `null` 并进报告**，不按名字猜。`playAnimNo` → `clipStart`（提取器若没带这个字段，`clipStart` 留 −1 并在报告里记 `missing_playAnim`）；骨骼剪辑本身没有导出（noclip 不导出动画数据），所以 `defs[].clips` 只写段数与 id，**没有 `asset`**，运行时不能播，只能作为后续重建的规格。
+- **路径映射**：`pathIndex ≥ 0` 的 11 个 Cancer 实例目前**没有点表**；导入报告写 `paths_missing`，这些实例临时降级为 `behaviour:"static"` 或 `sporadic_walk`（二选一必须在报告里逐件列出，不能静默）。
 - 参考导入的 `spawnSource` 必须写 `fieldCentreGuess`，`notes` 保留 `src_y`。
 
 ---
@@ -858,7 +1171,19 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | `_ref_cancer` | 511 | 3,456 / 7,154 顶点 | ≈113 KB | 7（每块 ≤512） | 1（容量 512） |
 | 未来大关 | 4,000 | ≤8,192 | ≤250 KB | 16 | **8**（每片 512） |
 
-### 12.3 4000 件怎么装下
+### 12.3 运动与动画预算
+
+| 项 | 容量 | 依据 |
+|---|---:|---|
+| `caps.movingProps` | 每关动件数（Cancer 129） | 运动宿主并行数组的容量；`props` 仍是总件数 |
+| 运动更新 | 15 Hz（路径/随机游走）、10 Hz（其余程序化）、0 Hz（attached/static/纯表现） | §6.7.5 的 12,420 次/秒基线；Cancer 10–15 Hz 占 10–16% |
+| `caps.animators` | **64 个被动画实例**（硬上限） | 153 个原作动画实例来自 19 个类型；类型 × 8 相位桶只共享控制器/剪辑，不减少 Animator 组件；超过 64 就降级为静态网格或烘顶点动画 |
+| 相位桶 | 8 | `floor(phase × 8) % 8`；桶内同步是可接受的产品取舍（原作相位来源未知） |
+| 每关 `motions`/`paths` | ≤64 / ≤32 条，每条路径 ≤64 点 | 129 个动件只有 16 个 `moveType`；Cancer 真路径 11 条 |
+
+**为什么不是逐实例 Animator**：VRChat 里每个 Animator 都有状态机开销；153 个还会同帧同相，看起来机械。**为什么不是逐件曲线**：原作是「行为 + 速度档 + 运行时算」，逐件曲线既不能按类型调速，也无法复用逻辑（§6.7.1）。
+
+### 12.4 4000 件怎么装下
 
 - `PickupFieldHost` 的并行数组按 **512 行/宿主**切分，最多 8 个宿主；`itemId`→`(host,row)` 的映射表由导入器生成，存在 `PickupFieldRouter`（512×8 的表，16 KB）。
 - **父指针是关卡全局的**：`PropGroupHost` 持 `int[] propParent`（4000 × 4 B = 16 KB）+ 待复检队列（4000 × 4 B + 4000 bool）+ 状态/速度数组（各 16 KB）；与 `PickupFieldHost` 的三态只在吸收事件同步（PROP_BEHAVIOURS §10.9）。
@@ -941,7 +1266,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 | 已有 | 缺口 |
 |---|---|
-| three.js 视图、点选/框选、移动/旋转 gizmo（yaw + 支撑重坐）、行走、球径阶梯、区域统计、校验面板、参考关卡只读 + 父子连线 | 地形网格查看、碰撞 AABB/三角形叠加、真四元数旋转、`parent`/`support` 连线与派生预览、`volumeK`/`volumeMm3` 编辑（进行中）、活动区 gizmo、错误码面板 |
+| three.js 视图、点选/框选、移动/旋转 gizmo（yaw + 支撑重坐）、行走、球径阶梯、区域统计、校验面板、参考关卡只读 + 父子连线 | 地形网格查看、碰撞 AABB/三角形叠加、真四元数旋转、`parent`/`support` 连线与派生预览、`volumeK`/`volumeMm3` 编辑（进行中）、活动区 gizmo、错误码面板、运动预览循环、路径 gizmo |
 
 ### 14.2 计划（S ≤ 半天，M 1–3 天，L >3 天）
 
@@ -954,9 +1279,11 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | E5 | 地形网格查看 | 读内联数组或 `.katerrain`；three.js `BufferGeometry` 渲染；按 `materialSegments` 分色；大网格分块加载 | **L** | §8.3 侧车格式 + `Tools/levelbuild` 读取器 | 4 |
 | E6 | 碰撞叠加 | 开关：broad-phase AABB 线框、三角形按 `classes` 着色（ride/climb/wall）、zone 颜色；点三角形显示 zone/box | **M** | E5 | 5 |
 | E7 | 活动区 gizmo | 在地面画多边形/折线；每段设 `minBallDiameterM` 滑条（球径阶梯联动显示「此刻哪些墙生效」）；kill plane 水平面 + 拖动 | **M** | §5 校验器 + 电机墙注册 | 6 |
-| E8 | 4000 件浏览 | 虚拟化道具列表、按区域/kind 过滤、分片指示 | **M** | §12.3 分片方案 | 7（可与 E5–E7 并行） |
+| E9 | 运动预览循环 | 选中动件后播放/暂停/拖时间轴（0–10 s），显示 class、速度（cm/s）、周期、相位桶；Sway/Bob/Hop/Whack 直接由浏览器按参数算，不依赖 Unity；`phase` 滑条与「重派生」按钮 | **M** | E3（位姿）+ E4（父链）+ §6.7 表 | 8 |
+| E10 | 路径 gizmo | 在地面画/拖折线点，设 `loop`（loop/ping_pong/once）与 `speedCmPerSec`；沿路径走一个小球标记预览；保存为 `paths[]` 并让 `motion` 引用 | **M** | E9 + §6.7.4 校验 | 9 |
+| E8 | 4000 件浏览 | 虚拟化道具列表、按区域/kind 过滤、分片指示 | **M** | §12.4 分片方案 | 10（可与 E5–E7 并行） |
 
-**顺序理由**：E1/E2 是「数据正确」的地基，先做；E3 改变旋转语义，必须在 E4/E5 之前（否则连线/碰撞叠加都建在 yaw-only 的位姿上）；E5 依赖侧车格式冻结；E7 放在 E6 后，因为墙的门槛与球径阶梯共用同一套可视逻辑。
+**顺序理由**：E1/E2 是「数据正确」的地基，先做；E3 改变旋转语义，必须在 E4/E5 之前（否则连线/碰撞叠加都建在 yaw-only 的位姿上）；E5 依赖侧车格式冻结；E7 放在 E6 后，因为墙的门槛与球径阶梯共用同一套可视逻辑；E9 依赖父链/位姿，E10 依赖 E9 的运动预览。**每个 GUI 操作都要有 CLI/HTTP 等价 op**（AGENTS 的编辑器 parity 规则）：至少 `set_motion`、`set_path`、`preview_motion` 三个 op，浏览器只负责画。
 
 ### 14.3 参考关卡的编辑器路径
 
@@ -970,12 +1297,12 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 | 阶段 | 内容 | 交付 | 门（不过不进下一阶段） |
 |---|---|---|---|
-| **P0 文档与 schema 冻结** | 本文、`*_KEYS` 草案、错误码表、owner 决策清单 | 本文 + 评审 | owner 对 §16 的 D-2/D-4/D-5 给方向；不再改字段名 |
+| **P0 文档与 schema 冻结** | 本文、`*_KEYS` 草案、错误码表、owner 决策清单 | 本文 + 评审 | owner 对 §16 的 D-2/D-4/D-5/D-10–D-12 给方向；不再改字段名 |
 | **P1 校验器 + 转换器** | `placement_core` v2 读写、13 份转换、`check` 0 错、`gate_changes.csv` | 工具 + 测试 | 13 份转换；v2 再转 no-op；`python3 -m unittest discover -s Docs/tests` 全绿 |
 | **P2 Unity 导入（无地形）** | `PlacementImporter` v2：meta/structures/activity/props；地形字段读入但不建网格 | 导入器 + 场景 | 13 份重导入第二次 `+0 ~0 -0`；`volumeMm3`/`Req mm` 回读一致 |
 | **P3 地形数据与视觉** | 侧车读写、`TerrainFieldHost`/`TerrainChunkHost`、Mesh 资产生成、T0 支撑 | 数据 + 组件 | C21/C24 通过；地形上站得住；参考地形 3,456 三角形加载成功 |
 | **P4 地形接触 T1/T2** | 穿透/天花板、θ 分类、连续检测；C22/C23 | 电机地形层 | C21–C24 四档全绿；4 m/s 不穿 0.1 m 板 |
-| **P5 行为与规模** | `parent`/`rigidGroup`/`scale` 运行时；子件坠落；4000 分片与空间桶 | 宿主组件 | 90 条父子关系在 Cancer 参考关卡跑通；4000 件合成场景不掉帧目标（先测再定） |
+| **P5 行为、运动与规模** | `parent`/`inherit`/`rigidGroup`/`scale` 运行时；子件坠落；`MotionHost`（10/15 Hz 队列 + 相位）；路径 host；共享剪辑/相位桶；4000 分片与空间桶 | 宿主组件 | 90 条父子关系在 Cancer 参考关卡跑通；129 个动件预算 ≤16%（15 Hz）；Animator ≤64；4000 件合成场景不掉帧目标（先测再定） |
 | **P6 编辑器** | E2–E8 | 编辑器 | 各功能有截图/冒烟；参考关卡只读不变 |
 | **P7 收尾** | 删 v1 读取器；`OPEN_DECISIONS` 状态更新；证据归档 | 清理 | 仓库无 v1 写入路径；全部测试绿 |
 
@@ -985,7 +1312,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 ## 16. Owner 决策清单（需要拍板）
 
-> 已定、不再问的输入：地形支持 3D 表面（三角网 + 空间加速，高度场只作优化）、解析器照规格重实现在仓库外、吸收门按原作 `k × bbox`、`volumeMm3` 定点、父件被吃子件坠落（单父指针）、每件四元数、碰撞代理按型。下面只列**研究回答不了的产品/工程取舍**。
+> 已定、不再问的输入：地形支持 3D 表面（三角网 + 空间加速，高度场只作优化）、解析器照规格重实现在仓库外、吸收门按原作 `k × bbox`、`volumeMm3` 定点、父件被吃子件坠落（单父指针）、每件四元数、碰撞代理按型、不做击飞/甩脱。下面只列**研究回答不了的产品/工程取舍**。
 
 | # | 决定 | 选项 | 建议 | 影响面 |
 |---|---|---|---|---|
@@ -998,6 +1325,11 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | **D-7** | 现有 ramp/curve_ramp/box 是否迁进地形 | A 保留解析体；B 全烘进网格 | **A**：能解析体表达的就不进网格；只有曲面/悬垂才用地形 | 引擎、数据、编辑器 |
 | **D-8** | 参考关卡数据保留 | A 只留 `~/KatamariRef`；B 允许进仓库 | **A**（现行规则）：导入器只写 `_ref_*` 与 `_RefUnlicensed`；任何网格/贴图/BIN 永不入库 | 导入器、git 守卫 |
 | **D-9** | 仓库许可（与 noclip 的 MIT 无关，见 §17） | A 暂不决定；B 现在选 MIT/Apache；C 现在选 copyleft（GPL 兼容） | **A**（LICENSING 未定）：不 vendor 第三方代码；若将来移植 MIT 代码，保留版权与许可声明；首选「照规格重实现」 | 全仓库 |
+| **D-10** | 运动保真度：13 类全做，还是先做子集 | A 数据模型收全 13 类、运行时先实现位移类 + 表现类；B 只做 `static`/`attached`；C 13 类全部第一版实现 | **A**：数据不丢（参考导入能存下全部 129 个动件），运行时按 §6.7.5 分档逐步补齐；`wait_for_player`/`spin`/`flip`/`clouds` 可后置 | schema、`MotionHost`、编辑器 |
+| **D-11** | 骨骼动画路线 | A v1 不播骨骼（只保数据）；B 类型 × 8 相位桶、≤64 个被动画实例；C 烘成顶点/材质动画 | **B**，并保留 A 作为超预算降级；**153 个逐实例 Animator 不可接受**（19 个类型也救不了组件数） | 导入器、`MotionHost`、美术 |
+| **D-12** | 逐实例相位从哪来 | A 确定性哈希 + 作者 `phase` 覆盖；B 运行时随机；C 等原作种子证据 | **A**：账本/双端一致要求确定性；原作相位来源未知，`phase` 字段留作以后覆盖 | 导入器、运行时 |
+| **D-13** | 舞台动画（水面/招牌/霓虹） | A v1 不做；B 以后用材质/Shader 做；C 现在查证据 | **A**：本轮只证明「noclip 没做」，不能证明原作没有；5 朵云是 `moveType 16` 的道具（不是舞台），参考实现的风车/转灯是手写补的、不是数据给的 | 美术、舞台 |
+| **D-14** | 移动件被吸后，带自己 motion 的子件怎么办 | A 挂起，`SETTLED` 后恢复；B 立即恢复；C 随父一起吸（carry） | **A**；C 与已定「子件坠落、不 carry」冲突 | `MotionHost`、行为宿主 |
 
 ### 16.1 未验证项（不因本文定稿而变成已验证）
 
@@ -1007,6 +1339,13 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | **U2** | 生成 Mesh 资产的确定性、GUID 稳定性 | 重新导入不能换引用，否则场景丢网格 | 同一 JSON 生成两次比 sha；改一条顶点再看 GUID 是否变 |
 | **U3** | `TerrainFieldHost` 每步成本 | §13.3 全是 flop 估算；Udon 解释器开销可能高一个量级 | profiler + `GetLastStepMicros()` 读数进 `Docs/Evidence/` |
 | **U4** | 校验器的 OBB 互穿、`scale` 作用到 collider 后的代理包围 | 现在校验器用世界 AABB 粗筛；旋转/缩放接进来后必须换 OBB，否则误报会变多（参考关卡今天 26 个 AABB 互穿） | `Docs/tests/levelbuild` 加 OBB 用例；参考关卡跑一遍看报错是否收敛 |
+| **U5** | 运动相位的原作来源（速度已实测：1 单位 = 30.3 cm/s） | `Math.random()` 是 noclip 的，不是原作；`phase` 用哈希是**我们的选择** | 原机录像/内存采样；先把确定性哈希跑通，再把 `phase` 作为作者覆盖 |
+| **U6** | `locPosType` 是否表示随机摆放 | 若是，固定摆放就差一条「每局位置随机」的规则 | 参考实现源码 + 同关卡多次加载对比 |
+| **U7** | `shakeOffFlag` 是否等于「可甩脱」 | Cancer 只有 3 个为 1；不能拿它实现击飞 | 查原机/攻略；在证实前只存证 |
+| **U8** | 舞台动画是否存在 | noclip 没做舞台动画，不能反证原作没有 | 原机录像；在证实前不做 |
+| **U9** | Spin 角速度、WhackAMole 回落、Clouds 绕圈半径、`wait_for_player` 触发半径 | 这些数值没测到，运行时只能用 PROVISIONAL 默认 | 拉长细步序列到完整周期；用球位标测触发半径 |
+
+**对这些开放问题的建议**：`phase` 用确定性哈希并允许作者覆盖（D-12）；`locPosType` 先按**固定摆放**导入，保留原值到 `notes`，不实现「每局随机」（等证据）；`shakeOff` 只存证、v1 不读（已定不做击飞）；舞台动画 v1 不做（D-13）；Spin/Whack/Clouds/触发半径用 PROVISIONAL 默认并在诊断中标记，试玩后再调。
 
 
 ---
@@ -1029,3 +1368,4 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 |---|---|---|
 | 2026-11-16 | 建立骨架 | 需求/约束、研究问题、引擎事实、NOW/WAIT；schema 标 `DRAFT_BLOCKED_ON_RESEARCH` |
 | 2026-11-16 | **本版：最终提案** | 两份研究落地后按研究结论改写：五层 schema 定稿、terrain/structures/activityArea/props 字段、两个 JSON 例子、规范形与侧车、错误码、v1→v2 转换器、Unity 映射、容量预算、地形接触分阶段计划与 4 个新测试格、编辑器升级、迁移阶段、owner 决策；许可前提更正为 MIT（非 GPL-3） |
+| 2026-11-16 | **第 2 版：运动/动画** | 吸收 `ORIGINAL_ANIMATION_OBSERVATIONS`：`motions[]`/`paths[]` 逐关表、`props[].motion/inherit/phase/clipStart/shakeOff`、`defs[].speedIndex/clips`、13 类运动与速度档、10/15 Hz 更新预算、共享剪辑×8 相位桶、移动件吸收/父链规则、三个运动 JSON 例子、错误码、编辑器 E9/E10、D-10–D-14 与 U5–U9 |

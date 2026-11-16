@@ -1,0 +1,8938 @@
+{
+  "schema": "katamari.additions/0",
+  "level": "story_01_bench_size",
+  "basePlacement": "Docs/Design/Levels/story_01_bench_size/placement.json",
+  "kind": "dry-run patch: not merged into placement.json",
+  "intent": "Fill the food chain of level 1 to the absorb gate: every 0.05 m rung from 0.30 to 2.20 m gets newly-edible props, the 2.20 m cap becomes reachable, and the supply ratio reaches >= 3x at each star. Sized so that each prop sits at 0.85-1.0 of the gate of the rung it belongs to (the absorb step is set by volume, not by count).",
+  "howToApply": "python3 Tools/levelbuild/supply_plan.py Docs/Design/Levels/story_01_bench_size/placement.json --additions Docs/Design/Levels/story_01_bench_size/proposed_additions.json --merged-out /tmp/story_01_merged.json && python3 Tools/levelbuild/levelbuild.py check /tmp/story_01_merged.json",
+  "placementRules": [
+    "every prop sits on the level floor (support omitted -> ground plane y=0)",
+    "AABB inside level.bounds with the 0.05 m margin the validator allows",
+    ">= 1.0 m clear of ballStart and playerSpawn (spawnClearanceM)",
+    "zones by radius from ballStart: 0.30-0.40 m items in the 1.1-2.5 m ring, the 1.6-2.2 m class only beyond 7 m (small clusters centrally, bigger items sparser and further out, ContentVolume section 4.4)",
+    "no prop/prop AABB overlap above 5 % of the smaller (packed with a 15 mm gap)",
+    "no new prop inside a solid structure (flower bed, ramps, signpost, tree mound)",
+    "yaw only, from an 8-value set; a yaw keeps the bottom face horizontal so the seated-on-floor rule is unaffected",
+    "zone: a new prop takes the zone of the nearest existing prop's zone centroid (everything on the flower bed is bed_top); the label only groups the report table, it changes nothing about placement or gameplay"
+  ],
+  "summary": {
+    "count": 352,
+    "types": 35,
+    "newDefsUsed": [
+      "ceramic_mug",
+      "cereal_bowl",
+      "chip_bag",
+      "collapsed_bench",
+      "dung_ball_medium",
+      "dung_ball_small",
+      "flower_pot_large",
+      "jam_jar",
+      "pizza_box",
+      "t_shirt",
+      "thermos",
+      "tissue_box",
+      "wool_tuft"
+    ],
+    "byDRreqBandMm": {
+      "1000-1100": 29,
+      "1100-1200": 22,
+      "1300-1400": 18,
+      "1400-1500": 12,
+      "1600-1700": 8,
+      "1700-1800": 8,
+      "1900-2000": 1,
+      "2100-2200": 4,
+      "225-300": 40,
+      "300-400": 40,
+      "400-500": 44,
+      "500-600": 40,
+      "700-800": 32,
+      "800-900": 26,
+      "900-1000": 28
+    },
+    "growthMm3": 14220883336,
+    "creditedM3": 11.3767
+  },
+  "defs": [
+    {
+      "id": "ceramic_mug",
+      "kind": "tableware"
+    },
+    {
+      "id": "cereal_bowl",
+      "kind": "tableware"
+    },
+    {
+      "id": "chip_bag",
+      "kind": "food"
+    },
+    {
+      "id": "collapsed_bench",
+      "kind": "furniture"
+    },
+    {
+      "id": "dung_ball_medium",
+      "kind": "nature"
+    },
+    {
+      "id": "dung_ball_small",
+      "kind": "nature"
+    },
+    {
+      "id": "flower_pot_large",
+      "kind": "garden"
+    },
+    {
+      "id": "jam_jar",
+      "kind": "food"
+    },
+    {
+      "id": "pizza_box",
+      "kind": "food"
+    },
+    {
+      "id": "t_shirt",
+      "kind": "debris"
+    },
+    {
+      "id": "thermos",
+      "kind": "container"
+    },
+    {
+      "id": "tissue_box",
+      "kind": "container"
+    },
+    {
+      "id": "wool_tuft",
+      "kind": "nature"
+    }
+  ],
+  "props": [
+    {
+      "itemId": "beer_crate_01",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -16.59,
+        0.14,
+        -15.69
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_02",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -7.17,
+        0.14,
+        -10.29
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_03",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -17.19,
+        0.14,
+        -19.17
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_04",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -7.17,
+        0.14,
+        -19.11
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_05",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.03,
+        0.14,
+        -15.51
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_06",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -8.73,
+        0.14,
+        -11.97
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_07",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -14.31,
+        0.14,
+        -9.45
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_08",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -15.87,
+        0.14,
+        -13.35
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_09",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -14.91,
+        0.14,
+        -9.87
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_10",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "pocket",
+      "position": [
+        -15.51,
+        0.14,
+        -12.45
+      ],
+      "rotationQuat": [
+        0.0,
+        0.923881,
+        0.0,
+        0.382681
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_11",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -10.89,
+        0.14,
+        -15.09
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_12",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -15.33,
+        0.14,
+        -11.13
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_13",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.99,
+        0.14,
+        -15.51
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_14",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "pocket",
+      "position": [
+        -15.45,
+        0.14,
+        -13.17
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_15",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.57,
+        0.14,
+        -15.57
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "beer_crate_16",
+      "def": "beer_crate",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -13.83,
+        0.14,
+        -9.69
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.4,
+        0.28,
+        0.3
+      ],
+      "absorbDiameterReq": 0.765,
+      "absorbable": true,
+      "growthMm3": 18816000
+    },
+    {
+      "itemId": "book_stack_01",
+      "def": "book_stack",
+      "kind": "furniture",
+      "zone": "mid_lawn",
+      "position": [
+        -11.97,
+        0.045,
+        -13.77
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.26,
+        0.09,
+        0.19
+      ],
+      "absorbDiameterReq": 0.39,
+      "absorbable": true,
+      "growthMm3": 2489760
+    },
+    {
+      "itemId": "book_stack_02",
+      "def": "book_stack",
+      "kind": "furniture",
+      "zone": "blanket_north",
+      "position": [
+        -13.71,
+        0.045,
+        -15.63
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.26,
+        0.09,
+        0.19
+      ],
+      "absorbDiameterReq": 0.39,
+      "absorbable": true,
+      "growthMm3": 2489760
+    },
+    {
+      "itemId": "book_stack_03",
+      "def": "book_stack",
+      "kind": "furniture",
+      "zone": "pocket",
+      "position": [
+        -12.27,
+        0.045,
+        -13.95
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.26,
+        0.09,
+        0.19
+      ],
+      "absorbDiameterReq": 0.39,
+      "absorbable": true,
+      "growthMm3": 2489760
+    },
+    {
+      "itemId": "book_stack_04",
+      "def": "book_stack",
+      "kind": "furniture",
+      "zone": "blanket_north",
+      "position": [
+        -13.35,
+        0.045,
+        -15.57
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.26,
+        0.09,
+        0.19
+      ],
+      "absorbDiameterReq": 0.39,
+      "absorbable": true,
+      "growthMm3": 2489760
+    },
+    {
+      "itemId": "bowl_05",
+      "def": "bowl",
+      "kind": "tableware",
+      "zone": "west_park",
+      "position": [
+        -12.75,
+        0.03,
+        -10.35
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "absorbDiameterReq": 0.273,
+      "absorbable": true,
+      "growthMm3": 860160
+    },
+    {
+      "itemId": "bowl_06",
+      "def": "bowl",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -11.43,
+        0.03,
+        -14.07
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "absorbDiameterReq": 0.273,
+      "absorbable": true,
+      "growthMm3": 860160
+    },
+    {
+      "itemId": "bowl_07",
+      "def": "bowl",
+      "kind": "tableware",
+      "zone": "blanket_north",
+      "position": [
+        -12.87,
+        0.03,
+        -14.91
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "absorbDiameterReq": 0.273,
+      "absorbable": true,
+      "growthMm3": 860160
+    },
+    {
+      "itemId": "bowl_08",
+      "def": "bowl",
+      "kind": "tableware",
+      "zone": "pocket",
+      "position": [
+        -14.25,
+        0.03,
+        -12.09
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "absorbDiameterReq": 0.273,
+      "absorbable": true,
+      "growthMm3": 860160
+    },
+    {
+      "itemId": "bowl_09",
+      "def": "bowl",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -10.83,
+        0.03,
+        -12.81
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "absorbDiameterReq": 0.273,
+      "absorbable": true,
+      "growthMm3": 860160
+    },
+    {
+      "itemId": "bowl_10",
+      "def": "bowl",
+      "kind": "tableware",
+      "zone": "pocket",
+      "position": [
+        -14.55,
+        0.03,
+        -12.75
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.16,
+        0.06,
+        0.16
+      ],
+      "absorbDiameterReq": 0.273,
+      "absorbable": true,
+      "growthMm3": 860160
+    },
+    {
+      "itemId": "ceramic_mug_01",
+      "def": "ceramic_mug",
+      "kind": "tableware",
+      "zone": "pocket",
+      "position": [
+        -13.29,
+        0.0499,
+        -14.07
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.12,
+        0.0998,
+        0.0899
+      ],
+      "absorbDiameterReq": 0.243,
+      "absorbable": true,
+      "growthMm3": 602920
+    },
+    {
+      "itemId": "ceramic_mug_02",
+      "def": "ceramic_mug",
+      "kind": "tableware",
+      "zone": "bed_south",
+      "position": [
+        -12.21,
+        0.0499,
+        -10.47
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.12,
+        0.0998,
+        0.0899
+      ],
+      "absorbDiameterReq": 0.243,
+      "absorbable": true,
+      "growthMm3": 602920
+    },
+    {
+      "itemId": "ceramic_mug_03",
+      "def": "ceramic_mug",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -10.47,
+        0.0499,
+        -13.41
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.12,
+        0.0998,
+        0.0899
+      ],
+      "absorbDiameterReq": 0.243,
+      "absorbable": true,
+      "growthMm3": 602920
+    },
+    {
+      "itemId": "ceramic_mug_04",
+      "def": "ceramic_mug",
+      "kind": "tableware",
+      "zone": "pocket",
+      "position": [
+        -14.85,
+        0.0499,
+        -11.91
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.12,
+        0.0998,
+        0.0899
+      ],
+      "absorbDiameterReq": 0.243,
+      "absorbable": true,
+      "growthMm3": 602920
+    },
+    {
+      "itemId": "ceramic_mug_05",
+      "def": "ceramic_mug",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -11.31,
+        0.0499,
+        -12.87
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.12,
+        0.0998,
+        0.0899
+      ],
+      "absorbDiameterReq": 0.243,
+      "absorbable": true,
+      "growthMm3": 602920
+    },
+    {
+      "itemId": "ceramic_mug_06",
+      "def": "ceramic_mug",
+      "kind": "tableware",
+      "zone": "blanket_north",
+      "position": [
+        -12.03,
+        0.0499,
+        -14.43
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.12,
+        0.0998,
+        0.0899
+      ],
+      "absorbDiameterReq": 0.243,
+      "absorbable": true,
+      "growthMm3": 602920
+    },
+    {
+      "itemId": "ceramic_mug_07",
+      "def": "ceramic_mug",
+      "kind": "tableware",
+      "zone": "bed_south",
+      "position": [
+        -10.47,
+        0.0499,
+        -12.09
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.12,
+        0.0998,
+        0.0899
+      ],
+      "absorbDiameterReq": 0.243,
+      "absorbable": true,
+      "growthMm3": 602920
+    },
+    {
+      "itemId": "ceramic_mug_08",
+      "def": "ceramic_mug",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -12.51,
+        0.0499,
+        -11.25
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.12,
+        0.0998,
+        0.0899
+      ],
+      "absorbDiameterReq": 0.243,
+      "absorbable": true,
+      "growthMm3": 602920
+    },
+    {
+      "itemId": "cereal_bowl_01",
+      "def": "cereal_bowl",
+      "kind": "tableware",
+      "zone": "blanket_north",
+      "position": [
+        -12.27,
+        0.035,
+        -15.03
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.18,
+        0.07,
+        0.18
+      ],
+      "absorbDiameterReq": 0.311,
+      "absorbable": true,
+      "growthMm3": 1270080
+    },
+    {
+      "itemId": "cereal_bowl_02",
+      "def": "cereal_bowl",
+      "kind": "tableware",
+      "zone": "west_park",
+      "position": [
+        -12.75,
+        0.035,
+        -10.59
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.18,
+        0.07,
+        0.18
+      ],
+      "absorbDiameterReq": 0.311,
+      "absorbable": true,
+      "growthMm3": 1270080
+    },
+    {
+      "itemId": "cereal_bowl_03",
+      "def": "cereal_bowl",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -11.13,
+        0.035,
+        -14.07
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.18,
+        0.07,
+        0.18
+      ],
+      "absorbDiameterReq": 0.311,
+      "absorbable": true,
+      "growthMm3": 1270080
+    },
+    {
+      "itemId": "cereal_bowl_04",
+      "def": "cereal_bowl",
+      "kind": "tableware",
+      "zone": "west_park",
+      "position": [
+        -14.43,
+        0.035,
+        -10.89
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.18,
+        0.07,
+        0.18
+      ],
+      "absorbDiameterReq": 0.311,
+      "absorbable": true,
+      "growthMm3": 1270080
+    },
+    {
+      "itemId": "cereal_bowl_05",
+      "def": "cereal_bowl",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -10.77,
+        0.035,
+        -13.05
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.18,
+        0.07,
+        0.18
+      ],
+      "absorbDiameterReq": 0.311,
+      "absorbable": true,
+      "growthMm3": 1270080
+    },
+    {
+      "itemId": "chip_bag_01",
+      "def": "chip_bag",
+      "kind": "food",
+      "zone": "pocket",
+      "position": [
+        -14.01,
+        0.0389,
+        -12.99
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.28,
+        0.0779,
+        0.1972
+      ],
+      "absorbDiameterReq": 0.385,
+      "absorbable": true,
+      "growthMm3": 2408743
+    },
+    {
+      "itemId": "chip_bag_02",
+      "def": "chip_bag",
+      "kind": "food",
+      "zone": "bed_south",
+      "position": [
+        -11.01,
+        0.0389,
+        -11.91
+      ],
+      "rotationQuat": [
+        0.0,
+        0.382684,
+        0.0,
+        0.923879
+      ],
+      "aabb": [
+        0.28,
+        0.0779,
+        0.1972
+      ],
+      "absorbDiameterReq": 0.385,
+      "absorbable": true,
+      "growthMm3": 2408743
+    },
+    {
+      "itemId": "chip_bag_03",
+      "def": "chip_bag",
+      "kind": "food",
+      "zone": "mid_lawn",
+      "position": [
+        -12.75,
+        0.0389,
+        -11.13
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.28,
+        0.0779,
+        0.1972
+      ],
+      "absorbDiameterReq": 0.385,
+      "absorbable": true,
+      "growthMm3": 2408743
+    },
+    {
+      "itemId": "chip_bag_04",
+      "def": "chip_bag",
+      "kind": "food",
+      "zone": "mid_lawn",
+      "position": [
+        -11.07,
+        0.0389,
+        -13.11
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        0.28,
+        0.0779,
+        0.1972
+      ],
+      "absorbDiameterReq": 0.385,
+      "absorbable": true,
+      "growthMm3": 2408743
+    },
+    {
+      "itemId": "chip_bag_05",
+      "def": "chip_bag",
+      "kind": "food",
+      "zone": "west_park",
+      "position": [
+        -14.01,
+        0.0389,
+        -10.47
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.28,
+        0.0779,
+        0.1972
+      ],
+      "absorbDiameterReq": 0.385,
+      "absorbable": true,
+      "growthMm3": 2408743
+    },
+    {
+      "itemId": "collapsed_bench_01",
+      "def": "collapsed_bench",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -18.45,
+        0.4,
+        -6.45
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.6,
+        0.8,
+        0.55
+      ],
+      "absorbDiameterReq": 2.111,
+      "absorbable": true,
+      "growthMm3": 394240000
+    },
+    {
+      "itemId": "collapsed_bench_02",
+      "def": "collapsed_bench",
+      "kind": "furniture",
+      "zone": "alcove",
+      "position": [
+        -7.11,
+        0.4,
+        -6.33
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.6,
+        0.8,
+        0.55
+      ],
+      "absorbDiameterReq": 2.111,
+      "absorbable": true,
+      "growthMm3": 394240000
+    },
+    {
+      "itemId": "collapsed_bench_03",
+      "def": "collapsed_bench",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -18.51,
+        0.4,
+        -7.05
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.6,
+        0.8,
+        0.55
+      ],
+      "absorbDiameterReq": 2.111,
+      "absorbable": true,
+      "growthMm3": 394240000
+    },
+    {
+      "itemId": "collapsed_bench_04",
+      "def": "collapsed_bench",
+      "kind": "furniture",
+      "zone": "alcove",
+      "position": [
+        -6.93,
+        0.4,
+        -7.53
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        1.6,
+        0.8,
+        0.55
+      ],
+      "absorbDiameterReq": 2.111,
+      "absorbable": true,
+      "growthMm3": 394240000
+    },
+    {
+      "itemId": "cooler_box_01",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -13.35,
+        0.15,
+        -17.13
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_02",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -13.11,
+        0.15,
+        -7.59
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_03",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -16.23,
+        0.15,
+        -15.27
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_04",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -15.45,
+        0.15,
+        -8.91
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_05",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.01,
+        0.15,
+        -13.65
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_06",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -10.11,
+        0.15,
+        -16.47
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_07",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -17.01,
+        0.15,
+        -13.65
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_08",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.03,
+        0.15,
+        -17.13
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_09",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -9.57,
+        0.15,
+        -16.59
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_10",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -6.63,
+        0.15,
+        -10.29
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_11",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -7.77,
+        0.15,
+        -19.17
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_12",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -7.77,
+        0.15,
+        -13.11
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_13",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -16.29,
+        0.15,
+        -9.81
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_14",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -15.03,
+        0.15,
+        -17.85
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_15",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -13.05,
+        0.15,
+        -6.27
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_16",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -13.95,
+        0.15,
+        -8.13
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_17",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "alcove",
+      "position": [
+        -6.33,
+        0.15,
+        -8.79
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_18",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -12.39,
+        0.15,
+        -8.07
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_19",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -6.63,
+        0.15,
+        -19.17
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_20",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -14.79,
+        0.15,
+        -8.49
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_21",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -15.39,
+        0.15,
+        -9.45
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_22",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "alcove",
+      "position": [
+        -6.33,
+        0.15,
+        -6.93
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_23",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -14.61,
+        0.15,
+        -16.17
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_24",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -11.79,
+        0.15,
+        -16.65
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_25",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -13.35,
+        0.15,
+        -8.37
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_26",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -15.45,
+        0.15,
+        -15.75
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_27",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -16.65,
+        0.15,
+        -11.01
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_28",
+      "def": "cooler_box",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -15.27,
+        0.15,
+        -10.47
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.3,
+        0.35
+      ],
+      "absorbDiameterReq": 0.917,
+      "absorbable": true,
+      "growthMm3": 32340000
+    },
+    {
+      "itemId": "cooler_box_large_01",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -18.03,
+        0.2,
+        -12.39
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_02",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -16.89,
+        0.2,
+        -9.33
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_03",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -11.67,
+        0.2,
+        -18.15
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_04",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -7.11,
+        0.2,
+        -13.47
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_05",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -7.65,
+        0.2,
+        -9.87
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_06",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.33,
+        0.2,
+        -18.03
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_07",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -17.85,
+        0.2,
+        -13.53
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_08",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.31,
+        0.2,
+        -17.31
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_09",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -6.63,
+        0.2,
+        -12.93
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_10",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -13.29,
+        0.2,
+        -19.11
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_11",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.01,
+        0.2,
+        -15.63
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_12",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -15.27,
+        0.2,
+        -17.19
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_13",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -14.97,
+        0.2,
+        -19.11
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_14",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -9.69,
+        0.2,
+        -17.13
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_15",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -12.33,
+        0.2,
+        -7.41
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_16",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -16.95,
+        0.2,
+        -16.35
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_17",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -16.71,
+        0.2,
+        -18.99
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_18",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "alcove",
+      "position": [
+        -6.33,
+        0.2,
+        -7.89
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_19",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -17.43,
+        0.2,
+        -10.95
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_20",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -10.95,
+        0.2,
+        -17.61
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_21",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -13.83,
+        0.2,
+        -7.65
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "cooler_box_large_22",
+      "def": "cooler_box_large",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -16.23,
+        0.2,
+        -9.15
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.4,
+        0.45
+      ],
+      "absorbDiameterReq": 1.189,
+      "absorbable": true,
+      "growthMm3": 70560000
+    },
+    {
+      "itemId": "crate_01",
+      "def": "crate",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -7.47,
+        0.2,
+        -11.43
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_02",
+      "def": "crate",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -7.77,
+        0.2,
+        -14.13
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_03",
+      "def": "crate",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.13,
+        0.2,
+        -15.15
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_04",
+      "def": "crate",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -15.81,
+        0.2,
+        -19.11
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_05",
+      "def": "crate",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -15.51,
+        0.2,
+        -8.49
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_06",
+      "def": "crate",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -14.13,
+        0.2,
+        -19.11
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_07",
+      "def": "crate",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.51,
+        0.2,
+        -17.55
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_08",
+      "def": "crate",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -13.65,
+        0.2,
+        -17.85
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_09",
+      "def": "crate",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.37,
+        0.2,
+        -18.99
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_10",
+      "def": "crate",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.97,
+        0.2,
+        -17.19
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_11",
+      "def": "crate",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -10.71,
+        0.2,
+        -18.45
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_12",
+      "def": "crate",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -6.27,
+        0.2,
+        -14.97
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_13",
+      "def": "crate",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -11.73,
+        0.2,
+        -17.55
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_14",
+      "def": "crate",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.97,
+        0.2,
+        -15.69
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_15",
+      "def": "crate",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -18.33,
+        0.2,
+        -10.53
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.6,
+        0.4,
+        0.4
+      ],
+      "absorbDiameterReq": 1.086,
+      "absorbable": true,
+      "growthMm3": 53760000
+    },
+    {
+      "itemId": "crate_large_01",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.15,
+        0.225,
+        -18.93
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_02",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -16.29,
+        0.225,
+        -17.19
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_03",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -15.57,
+        0.225,
+        -7.53
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_04",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -18.21,
+        0.225,
+        -11.25
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_05",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -13.95,
+        0.225,
+        -6.39
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_06",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.37,
+        0.225,
+        -18.21
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_07",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -18.93,
+        0.225,
+        -13.83
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_08",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -9.87,
+        0.225,
+        -17.67
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_09",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -6.57,
+        0.225,
+        -12.39
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_10",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -14.31,
+        0.225,
+        -18.03
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_11",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -17.01,
+        0.225,
+        -18.27
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_12",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -6.81,
+        0.225,
+        -14.19
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_13",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -12.39,
+        0.225,
+        -6.51
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_14",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "alcove",
+      "position": [
+        -7.65,
+        0.225,
+        -7.35
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_15",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -19.05,
+        0.225,
+        -7.77
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_16",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -14.67,
+        0.225,
+        -7.05
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_17",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "alcove",
+      "position": [
+        -7.11,
+        0.225,
+        -8.61
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "crate_large_18",
+      "def": "crate_large",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -13.11,
+        0.225,
+        -17.97
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.8,
+        0.45,
+        0.5
+      ],
+      "absorbDiameterReq": 1.34,
+      "absorbable": true,
+      "growthMm3": 100800000
+    },
+    {
+      "itemId": "dung_ball_medium_01",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "blanket_a",
+      "position": [
+        -7.29,
+        0.1217,
+        -14.13
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_02",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "west_park",
+      "position": [
+        -14.91,
+        0.1217,
+        -10.41
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_03",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "gate",
+      "position": [
+        -8.73,
+        0.1217,
+        -12.33
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_04",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "table_top",
+      "position": [
+        -12.21,
+        0.1217,
+        -8.61
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_05",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "gate",
+      "position": [
+        -8.25,
+        0.1217,
+        -13.29
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_06",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "tree_corner",
+      "position": [
+        -16.53,
+        0.1217,
+        -14.91
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_07",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "table_top",
+      "position": [
+        -14.19,
+        0.1217,
+        -6.81
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_08",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "blanket_a",
+      "position": [
+        -8.61,
+        0.1217,
+        -15.21
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_09",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "blanket_a",
+      "position": [
+        -7.47,
+        0.1217,
+        -16.05
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_10",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "tree_corner",
+      "position": [
+        -18.27,
+        0.1217,
+        -15.15
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_11",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "blanket_a",
+      "position": [
+        -9.75,
+        0.1217,
+        -13.59
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_12",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "tree_corner",
+      "position": [
+        -16.59,
+        0.1217,
+        -13.95
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_medium_13",
+      "def": "dung_ball_medium",
+      "kind": "nature",
+      "zone": "blanket_north",
+      "position": [
+        -12.45,
+        0.1217,
+        -16.35
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.2442,
+        0.2435,
+        0.25
+      ],
+      "absorbDiameterReq": 0.583,
+      "absorbable": true,
+      "growthMm3": 8324778
+    },
+    {
+      "itemId": "dung_ball_small_01",
+      "def": "dung_ball_small",
+      "kind": "nature",
+      "zone": "blanket_north",
+      "position": [
+        -11.97,
+        0.0516,
+        -14.85
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.12,
+        0.1032,
+        0.1124
+      ],
+      "absorbDiameterReq": 0.264,
+      "absorbable": true,
+      "growthMm3": 779498
+    },
+    {
+      "itemId": "dung_ball_small_02",
+      "def": "dung_ball_small",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -14.37,
+        0.0516,
+        -11.67
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.12,
+        0.1032,
+        0.1124
+      ],
+      "absorbDiameterReq": 0.264,
+      "absorbable": true,
+      "growthMm3": 779498
+    },
+    {
+      "itemId": "dung_ball_small_03",
+      "def": "dung_ball_small",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -13.59,
+        0.0516,
+        -11.37
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.12,
+        0.1032,
+        0.1124
+      ],
+      "absorbDiameterReq": 0.264,
+      "absorbable": true,
+      "growthMm3": 779498
+    },
+    {
+      "itemId": "dung_ball_small_04",
+      "def": "dung_ball_small",
+      "kind": "nature",
+      "zone": "bed_south",
+      "position": [
+        -10.59,
+        0.0516,
+        -11.19
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.12,
+        0.1032,
+        0.1124
+      ],
+      "absorbDiameterReq": 0.264,
+      "absorbable": true,
+      "growthMm3": 779498
+    },
+    {
+      "itemId": "dung_ball_small_05",
+      "def": "dung_ball_small",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -13.89,
+        0.0516,
+        -11.79
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.12,
+        0.1032,
+        0.1124
+      ],
+      "absorbDiameterReq": 0.264,
+      "absorbable": true,
+      "growthMm3": 779498
+    },
+    {
+      "itemId": "dung_ball_small_06",
+      "def": "dung_ball_small",
+      "kind": "nature",
+      "zone": "mid_lawn",
+      "position": [
+        -11.19,
+        0.0516,
+        -13.83
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.12,
+        0.1032,
+        0.1124
+      ],
+      "absorbDiameterReq": 0.264,
+      "absorbable": true,
+      "growthMm3": 779498
+    },
+    {
+      "itemId": "dung_ball_small_07",
+      "def": "dung_ball_small",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -14.07,
+        0.0516,
+        -11.97
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.12,
+        0.1032,
+        0.1124
+      ],
+      "absorbDiameterReq": 0.264,
+      "absorbable": true,
+      "growthMm3": 779498
+    },
+    {
+      "itemId": "dung_ball_small_08",
+      "def": "dung_ball_small",
+      "kind": "nature",
+      "zone": "mid_lawn",
+      "position": [
+        -11.13,
+        0.0516,
+        -12.51
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.12,
+        0.1032,
+        0.1124
+      ],
+      "absorbDiameterReq": 0.264,
+      "absorbable": true,
+      "growthMm3": 779498
+    },
+    {
+      "itemId": "flower_pot_large_01",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -11.49,
+        0.46,
+        -6.27
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_02",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -10.83,
+        0.46,
+        -7.41
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_03",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -11.55,
+        0.46,
+        -8.79
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_04",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -8.61,
+        0.46,
+        -6.87
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_05",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -8.61,
+        0.46,
+        -8.91
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_06",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -9.27,
+        0.46,
+        -10.17
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_07",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -8.49,
+        0.46,
+        -10.23
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_08",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -8.43,
+        0.46,
+        -8.07
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_09",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -11.25,
+        0.46,
+        -6.75
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_10",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -11.01,
+        0.46,
+        -8.61
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_11",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -9.93,
+        0.46,
+        -10.05
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_12",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -10.59,
+        0.46,
+        -8.67
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "flower_pot_large_13",
+      "def": "flower_pot_large",
+      "kind": "garden",
+      "zone": "bed_top",
+      "position": [
+        -10.23,
+        0.46,
+        -7.71
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.34,
+        0.4,
+        0.34
+      ],
+      "absorbDiameterReq": 0.851,
+      "absorbable": true,
+      "growthMm3": 25894400,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_01",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -9.21,
+        0.42,
+        -9.45
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_02",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -10.11,
+        0.42,
+        -9.51
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_03",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -10.41,
+        0.42,
+        -8.25
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_04",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -9.09,
+        0.42,
+        -6.57
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_05",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -9.21,
+        0.42,
+        -10.77
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_06",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -9.51,
+        0.42,
+        -8.07
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_07",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -11.37,
+        0.42,
+        -8.19
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_08",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -8.55,
+        0.42,
+        -10.71
+      ],
+      "rotationQuat": [
+        0.0,
+        0.923881,
+        0.0,
+        0.382681
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_09",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -9.99,
+        0.42,
+        -8.43
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_10",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -11.43,
+        0.42,
+        -7.65
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_11",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -10.59,
+        0.42,
+        -6.45
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_12",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -9.75,
+        0.42,
+        -6.87
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_stool_13",
+      "def": "folding_stool",
+      "kind": "furniture",
+      "zone": "bed_top",
+      "position": [
+        -9.63,
+        0.42,
+        -9.15
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.4,
+        0.32,
+        0.35
+      ],
+      "absorbDiameterReq": 0.842,
+      "absorbable": true,
+      "growthMm3": 25088000,
+      "support": "flower_bed"
+    },
+    {
+      "itemId": "folding_table_01",
+      "def": "folding_table",
+      "kind": "furniture",
+      "zone": "tree_corner",
+      "position": [
+        -18.99,
+        0.35,
+        -16.77
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        1.0,
+        0.7,
+        0.6
+      ],
+      "absorbDiameterReq": 1.777,
+      "absorbable": true,
+      "growthMm3": 235200000
+    },
+    {
+      "itemId": "folding_table_02",
+      "def": "folding_table",
+      "kind": "furniture",
+      "zone": "tree_corner",
+      "position": [
+        -18.81,
+        0.35,
+        -15.63
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.0,
+        0.7,
+        0.6
+      ],
+      "absorbDiameterReq": 1.777,
+      "absorbable": true,
+      "growthMm3": 235200000
+    },
+    {
+      "itemId": "folding_table_03",
+      "def": "folding_table",
+      "kind": "furniture",
+      "zone": "blanket_a",
+      "position": [
+        -9.99,
+        0.35,
+        -18.69
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        1.0,
+        0.7,
+        0.6
+      ],
+      "absorbDiameterReq": 1.777,
+      "absorbable": true,
+      "growthMm3": 235200000
+    },
+    {
+      "itemId": "folding_table_04",
+      "def": "folding_table",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -18.69,
+        0.35,
+        -9.93
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.0,
+        0.7,
+        0.6
+      ],
+      "absorbDiameterReq": 1.777,
+      "absorbable": true,
+      "growthMm3": 235200000
+    },
+    {
+      "itemId": "folding_table_05",
+      "def": "folding_table",
+      "kind": "furniture",
+      "zone": "blanket_a",
+      "position": [
+        -7.35,
+        0.35,
+        -16.71
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        1.0,
+        0.7,
+        0.6
+      ],
+      "absorbDiameterReq": 1.777,
+      "absorbable": true,
+      "growthMm3": 235200000
+    },
+    {
+      "itemId": "folding_table_06",
+      "def": "folding_table",
+      "kind": "furniture",
+      "zone": "gate",
+      "position": [
+        -6.63,
+        0.35,
+        -11.43
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        1.0,
+        0.7,
+        0.6
+      ],
+      "absorbDiameterReq": 1.777,
+      "absorbable": true,
+      "growthMm3": 235200000
+    },
+    {
+      "itemId": "folding_table_07",
+      "def": "folding_table",
+      "kind": "furniture",
+      "zone": "tree_corner",
+      "position": [
+        -18.81,
+        0.35,
+        -12.45
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.0,
+        0.7,
+        0.6
+      ],
+      "absorbDiameterReq": 1.777,
+      "absorbable": true,
+      "growthMm3": 235200000
+    },
+    {
+      "itemId": "folding_table_08",
+      "def": "folding_table",
+      "kind": "furniture",
+      "zone": "blanket_a",
+      "position": [
+        -7.11,
+        0.35,
+        -14.97
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.0,
+        0.7,
+        0.6
+      ],
+      "absorbDiameterReq": 1.777,
+      "absorbable": true,
+      "growthMm3": 235200000
+    },
+    {
+      "itemId": "glass_bottle_02",
+      "def": "glass_bottle",
+      "kind": "drink",
+      "zone": "blanket_north",
+      "position": [
+        -13.29,
+        0.14,
+        -14.37
+      ],
+      "rotationQuat": [
+        0.0,
+        0.923881,
+        0.0,
+        0.382681
+      ],
+      "aabb": [
+        0.07,
+        0.28,
+        0.07
+      ],
+      "absorbDiameterReq": 0.263,
+      "absorbable": true,
+      "growthMm3": 768320
+    },
+    {
+      "itemId": "glass_bottle_03",
+      "def": "glass_bottle",
+      "kind": "drink",
+      "zone": "pocket",
+      "position": [
+        -14.43,
+        0.14,
+        -11.91
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.07,
+        0.28,
+        0.07
+      ],
+      "absorbDiameterReq": 0.263,
+      "absorbable": true,
+      "growthMm3": 768320
+    },
+    {
+      "itemId": "glass_bottle_04",
+      "def": "glass_bottle",
+      "kind": "drink",
+      "zone": "pocket",
+      "position": [
+        -12.99,
+        0.14,
+        -11.43
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.07,
+        0.28,
+        0.07
+      ],
+      "absorbDiameterReq": 0.263,
+      "absorbable": true,
+      "growthMm3": 768320
+    },
+    {
+      "itemId": "glass_bottle_05",
+      "def": "glass_bottle",
+      "kind": "drink",
+      "zone": "pocket",
+      "position": [
+        -12.69,
+        0.14,
+        -14.07
+      ],
+      "rotationQuat": [
+        0.0,
+        0.382684,
+        0.0,
+        0.923879
+      ],
+      "aabb": [
+        0.07,
+        0.28,
+        0.07
+      ],
+      "absorbDiameterReq": 0.263,
+      "absorbable": true,
+      "growthMm3": 768320
+    },
+    {
+      "itemId": "glass_bottle_06",
+      "def": "glass_bottle",
+      "kind": "drink",
+      "zone": "blanket_north",
+      "position": [
+        -12.51,
+        0.14,
+        -14.31
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.07,
+        0.28,
+        0.07
+      ],
+      "absorbDiameterReq": 0.263,
+      "absorbable": true,
+      "growthMm3": 768320
+    },
+    {
+      "itemId": "glass_bottle_07",
+      "def": "glass_bottle",
+      "kind": "drink",
+      "zone": "west_park",
+      "position": [
+        -13.35,
+        0.14,
+        -11.07
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.07,
+        0.28,
+        0.07
+      ],
+      "absorbDiameterReq": 0.263,
+      "absorbable": true,
+      "growthMm3": 768320
+    },
+    {
+      "itemId": "jam_jar_01",
+      "def": "jam_jar",
+      "kind": "food",
+      "zone": "bed_south",
+      "position": [
+        -11.31,
+        0.06,
+        -11.73
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.17,
+        0.12,
+        0.17
+      ],
+      "absorbDiameterReq": 0.359,
+      "absorbable": true,
+      "growthMm3": 1942080
+    },
+    {
+      "itemId": "jam_jar_02",
+      "def": "jam_jar",
+      "kind": "food",
+      "zone": "pocket",
+      "position": [
+        -12.87,
+        0.06,
+        -13.65
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.17,
+        0.12,
+        0.17
+      ],
+      "absorbDiameterReq": 0.359,
+      "absorbable": true,
+      "growthMm3": 1942080
+    },
+    {
+      "itemId": "jam_jar_03",
+      "def": "jam_jar",
+      "kind": "food",
+      "zone": "blanket_north",
+      "position": [
+        -11.25,
+        0.06,
+        -16.83
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.17,
+        0.12,
+        0.17
+      ],
+      "absorbDiameterReq": 0.359,
+      "absorbable": true,
+      "growthMm3": 1942080
+    },
+    {
+      "itemId": "jam_jar_04",
+      "def": "jam_jar",
+      "kind": "food",
+      "zone": "pocket",
+      "position": [
+        -15.15,
+        0.06,
+        -12.87
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.17,
+        0.12,
+        0.17
+      ],
+      "absorbDiameterReq": 0.359,
+      "absorbable": true,
+      "growthMm3": 1942080
+    },
+    {
+      "itemId": "jam_jar_05",
+      "def": "jam_jar",
+      "kind": "food",
+      "zone": "pocket",
+      "position": [
+        -12.51,
+        0.06,
+        -13.71
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.17,
+        0.12,
+        0.17
+      ],
+      "absorbDiameterReq": 0.359,
+      "absorbable": true,
+      "growthMm3": 1942080
+    },
+    {
+      "itemId": "lounge_chair_01",
+      "def": "lounge_chair",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -18.51,
+        0.175,
+        -9.27
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.6,
+        0.35,
+        0.6
+      ],
+      "absorbDiameterReq": 1.649,
+      "absorbable": true,
+      "growthMm3": 188160000
+    },
+    {
+      "itemId": "lounge_chair_02",
+      "def": "lounge_chair",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -17.97,
+        0.175,
+        -7.71
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.6,
+        0.35,
+        0.6
+      ],
+      "absorbDiameterReq": 1.649,
+      "absorbable": true,
+      "growthMm3": 188160000
+    },
+    {
+      "itemId": "lounge_chair_03",
+      "def": "lounge_chair",
+      "kind": "furniture",
+      "zone": "blanket_a",
+      "position": [
+        -7.23,
+        0.175,
+        -18.33
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        1.6,
+        0.35,
+        0.6
+      ],
+      "absorbDiameterReq": 1.649,
+      "absorbable": true,
+      "growthMm3": 188160000
+    },
+    {
+      "itemId": "lounge_chair_04",
+      "def": "lounge_chair",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -16.77,
+        0.175,
+        -6.39
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.6,
+        0.35,
+        0.6
+      ],
+      "absorbDiameterReq": 1.649,
+      "absorbable": true,
+      "growthMm3": 188160000
+    },
+    {
+      "itemId": "lounge_chair_05",
+      "def": "lounge_chair",
+      "kind": "furniture",
+      "zone": "outer",
+      "position": [
+        -15.63,
+        0.175,
+        -18.39
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.6,
+        0.35,
+        0.6
+      ],
+      "absorbDiameterReq": 1.649,
+      "absorbable": true,
+      "growthMm3": 188160000
+    },
+    {
+      "itemId": "lounge_chair_06",
+      "def": "lounge_chair",
+      "kind": "furniture",
+      "zone": "blanket_a",
+      "position": [
+        -6.63,
+        0.175,
+        -16.83
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        1.6,
+        0.35,
+        0.6
+      ],
+      "absorbDiameterReq": 1.649,
+      "absorbable": true,
+      "growthMm3": 188160000
+    },
+    {
+      "itemId": "lounge_chair_07",
+      "def": "lounge_chair",
+      "kind": "furniture",
+      "zone": "tree_corner",
+      "position": [
+        -18.99,
+        0.175,
+        -11.19
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        1.6,
+        0.35,
+        0.6
+      ],
+      "absorbDiameterReq": 1.649,
+      "absorbable": true,
+      "growthMm3": 188160000
+    },
+    {
+      "itemId": "lounge_chair_08",
+      "def": "lounge_chair",
+      "kind": "furniture",
+      "zone": "blanket_a",
+      "position": [
+        -9.03,
+        0.175,
+        -18.27
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        1.6,
+        0.35,
+        0.6
+      ],
+      "absorbDiameterReq": 1.649,
+      "absorbable": true,
+      "growthMm3": 188160000
+    },
+    {
+      "itemId": "picnic_basket_01",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.87,
+        0.1106,
+        -16.89
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_02",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -13.11,
+        0.1106,
+        -7.95
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_03",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -14.61,
+        0.1106,
+        -7.71
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_04",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.45,
+        0.1106,
+        -18.45
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_05",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -7.95,
+        0.1106,
+        -14.67
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_06",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -14.55,
+        0.1106,
+        -18.57
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_07",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -15.81,
+        0.1106,
+        -9.51
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_08",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "alcove",
+      "position": [
+        -7.53,
+        0.1106,
+        -8.13
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_09",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -7.77,
+        0.1106,
+        -17.55
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_10",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -14.07,
+        0.1106,
+        -9.03
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_11",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.55,
+        0.1106,
+        -15.63
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_12",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -11.49,
+        0.1106,
+        -16.29
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_13",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -14.01,
+        0.1106,
+        -16.05
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_14",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -14.37,
+        0.1106,
+        -9.87
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_15",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -15.75,
+        0.1106,
+        -15.27
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_basket_16",
+      "def": "picnic_basket",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -8.73,
+        0.1106,
+        -12.75
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.45,
+        0.2213,
+        0.3
+      ],
+      "absorbDiameterReq": 0.736,
+      "absorbable": true,
+      "growthMm3": 16730280
+    },
+    {
+      "itemId": "picnic_bench_01",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "outer",
+      "position": [
+        -16.95,
+        0.225,
+        -17.37
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_02",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "table_top",
+      "position": [
+        -15.09,
+        0.225,
+        -6.27
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_03",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -18.39,
+        0.225,
+        -8.55
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_04",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "outer",
+      "position": [
+        -15.93,
+        0.225,
+        -17.79
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_05",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "tree_corner",
+      "position": [
+        -18.03,
+        0.225,
+        -17.13
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_06",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "tree_corner",
+      "position": [
+        -18.75,
+        0.225,
+        -14.79
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_07",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -15.63,
+        0.225,
+        -6.99
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_08",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "blanket_a",
+      "position": [
+        -11.07,
+        0.225,
+        -18.99
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_09",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "blanket_a",
+      "position": [
+        -6.75,
+        0.225,
+        -15.57
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_10",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "gate",
+      "position": [
+        -6.75,
+        0.225,
+        -9.87
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_11",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "outer",
+      "position": [
+        -13.77,
+        0.225,
+        -18.63
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "picnic_bench_12",
+      "def": "picnic_bench",
+      "kind": "furniture",
+      "zone": "alcove",
+      "position": [
+        -6.87,
+        0.225,
+        -9.21
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.2,
+        0.45,
+        0.4
+      ],
+      "absorbDiameterReq": 1.424,
+      "absorbable": true,
+      "growthMm3": 120960000
+    },
+    {
+      "itemId": "pizza_box_01",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "west_park",
+      "position": [
+        -13.59,
+        0.0225,
+        -10.53
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "pizza_box_02",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "blanket_north",
+      "position": [
+        -13.17,
+        0.0225,
+        -14.79
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "pizza_box_03",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "west_park",
+      "position": [
+        -14.73,
+        0.0225,
+        -11.43
+      ],
+      "rotationQuat": [
+        0.0,
+        0.923881,
+        0.0,
+        0.382681
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "pizza_box_04",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "bed_south",
+      "position": [
+        -10.41,
+        0.0225,
+        -11.85
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "pizza_box_05",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "mid_lawn",
+      "position": [
+        -10.23,
+        0.0225,
+        -13.53
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "pizza_box_06",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "blanket_north",
+      "position": [
+        -12.57,
+        0.0225,
+        -14.85
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "pizza_box_07",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "bed_south",
+      "position": [
+        -10.23,
+        0.0225,
+        -12.99
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "pizza_box_08",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "pocket",
+      "position": [
+        -15.27,
+        0.0225,
+        -11.97
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "pizza_box_09",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "west_park",
+      "position": [
+        -13.89,
+        0.0225,
+        -11.01
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "pizza_box_10",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "bed_south",
+      "position": [
+        -9.15,
+        0.0225,
+        -12.39
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "pizza_box_11",
+      "def": "pizza_box",
+      "kind": "food",
+      "zone": "pocket",
+      "position": [
+        -14.61,
+        0.0225,
+        -13.11
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.3495,
+        0.0449,
+        0.35
+      ],
+      "absorbDiameterReq": 0.418,
+      "absorbable": true,
+      "growthMm3": 3075740
+    },
+    {
+      "itemId": "plate_06",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "pocket",
+      "position": [
+        -13.83,
+        0.0125,
+        -11.55
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.268,
+      "absorbable": true,
+      "growthMm3": 806400
+    },
+    {
+      "itemId": "plate_07",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "pocket",
+      "position": [
+        -13.05,
+        0.0125,
+        -14.31
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.268,
+      "absorbable": true,
+      "growthMm3": 806400
+    },
+    {
+      "itemId": "plate_08",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -11.61,
+        0.0125,
+        -13.71
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.268,
+      "absorbable": true,
+      "growthMm3": 806400
+    },
+    {
+      "itemId": "plate_09",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "mid_lawn",
+      "position": [
+        -10.83,
+        0.0125,
+        -13.71
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.268,
+      "absorbable": true,
+      "growthMm3": 806400
+    },
+    {
+      "itemId": "plate_10",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "blanket_north",
+      "position": [
+        -12.27,
+        0.0125,
+        -14.43
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.268,
+      "absorbable": true,
+      "growthMm3": 806400
+    },
+    {
+      "itemId": "plate_11",
+      "def": "plate",
+      "kind": "tableware",
+      "zone": "west_park",
+      "position": [
+        -13.05,
+        0.0125,
+        -10.95
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.24,
+        0.025,
+        0.24
+      ],
+      "absorbDiameterReq": 0.268,
+      "absorbable": true,
+      "growthMm3": 806400
+    },
+    {
+      "itemId": "serving_tray_02",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "tree_corner",
+      "position": [
+        -16.05,
+        0.02,
+        -14.73
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "serving_tray_03",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "bed_south",
+      "position": [
+        -9.09,
+        0.02,
+        -11.79
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "serving_tray_04",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "blanket_a",
+      "position": [
+        -10.71,
+        0.02,
+        -15.93
+      ],
+      "rotationQuat": [
+        0.0,
+        0.923881,
+        0.0,
+        0.382681
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "serving_tray_05",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "west_park",
+      "position": [
+        -16.05,
+        0.02,
+        -10.53
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "serving_tray_06",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "bed_south",
+      "position": [
+        -10.29,
+        0.02,
+        -12.33
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "serving_tray_07",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "mid_lawn",
+      "position": [
+        -10.65,
+        0.02,
+        -14.25
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "serving_tray_08",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "blanket_north",
+      "position": [
+        -13.11,
+        0.02,
+        -16.41
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "serving_tray_09",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "pocket",
+      "position": [
+        -15.81,
+        0.02,
+        -11.85
+      ],
+      "rotationQuat": [
+        0.0,
+        0.923881,
+        0.0,
+        0.382681
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "serving_tray_10",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "blanket_a",
+      "position": [
+        -9.09,
+        0.02,
+        -15.03
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "serving_tray_11",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "blanket_north",
+      "position": [
+        -12.51,
+        0.02,
+        -16.83
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "serving_tray_12",
+      "def": "serving_tray",
+      "kind": "structure",
+      "zone": "table_top",
+      "position": [
+        -14.07,
+        0.02,
+        -8.67
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.04,
+        0.35
+      ],
+      "absorbDiameterReq": 0.468,
+      "absorbable": true,
+      "growthMm3": 4312000
+    },
+    {
+      "itemId": "small_potted_plant_04",
+      "def": "small_potted_plant",
+      "kind": "garden",
+      "zone": "bed_south",
+      "position": [
+        -10.71,
+        0.11,
+        -11.79
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "absorbDiameterReq": 0.382,
+      "absorbable": true,
+      "growthMm3": 2350947
+    },
+    {
+      "itemId": "small_potted_plant_05",
+      "def": "small_potted_plant",
+      "kind": "garden",
+      "zone": "pocket",
+      "position": [
+        -13.65,
+        0.11,
+        -11.97
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "absorbDiameterReq": 0.382,
+      "absorbable": true,
+      "growthMm3": 2350947
+    },
+    {
+      "itemId": "small_potted_plant_06",
+      "def": "small_potted_plant",
+      "kind": "garden",
+      "zone": "mid_lawn",
+      "position": [
+        -11.85,
+        0.11,
+        -14.13
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "absorbDiameterReq": 0.382,
+      "absorbable": true,
+      "growthMm3": 2350947
+    },
+    {
+      "itemId": "small_potted_plant_07",
+      "def": "small_potted_plant",
+      "kind": "garden",
+      "zone": "mid_lawn",
+      "position": [
+        -12.75,
+        0.11,
+        -11.37
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "absorbDiameterReq": 0.382,
+      "absorbable": true,
+      "growthMm3": 2350947
+    },
+    {
+      "itemId": "small_potted_plant_08",
+      "def": "small_potted_plant",
+      "kind": "garden",
+      "zone": "pocket",
+      "position": [
+        -14.31,
+        0.11,
+        -13.23
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.1399,
+        0.22,
+        0.1364
+      ],
+      "absorbDiameterReq": 0.382,
+      "absorbable": true,
+      "growthMm3": 2350947
+    },
+    {
+      "itemId": "storage_bin_01",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.73,
+        0.2,
+        -13.35
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_02",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -16.05,
+        0.2,
+        -14.19
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_03",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -16.41,
+        0.2,
+        -13.35
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_04",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -8.61,
+        0.2,
+        -13.95
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_05",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -14.55,
+        0.2,
+        -15.75
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_06",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -10.17,
+        0.2,
+        -15.81
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_07",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -13.65,
+        0.2,
+        -16.53
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_08",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "table_top",
+      "position": [
+        -12.69,
+        0.2,
+        -8.49
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_09",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -14.85,
+        0.2,
+        -9.51
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_10",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -9.21,
+        0.2,
+        -14.43
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_11",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "west_park",
+      "position": [
+        -15.75,
+        0.2,
+        -9.99
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_12",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -16.11,
+        0.2,
+        -13.77
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_13",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "gate",
+      "position": [
+        -8.67,
+        0.2,
+        -11.37
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "storage_bin_14",
+      "def": "storage_bin",
+      "kind": "container",
+      "zone": "blanket_a",
+      "position": [
+        -10.89,
+        0.2,
+        -16.65
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.55,
+        0.4,
+        0.35
+      ],
+      "absorbDiameterReq": 1.009,
+      "absorbable": true,
+      "growthMm3": 43120000
+    },
+    {
+      "itemId": "stroller_01",
+      "def": "stroller",
+      "kind": "furniture",
+      "zone": "west_park",
+      "position": [
+        -17.07,
+        0.5,
+        -6.99
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.0,
+        1.0,
+        0.55
+      ],
+      "absorbDiameterReq": 1.944,
+      "absorbable": true,
+      "growthMm3": 308000000
+    },
+    {
+      "itemId": "t_shirt_01",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "blanket_north",
+      "position": [
+        -11.61,
+        0.01,
+        -14.49
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "t_shirt_02",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "tree_corner",
+      "position": [
+        -16.77,
+        0.01,
+        -14.37
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "t_shirt_03",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "tree_corner",
+      "position": [
+        -17.19,
+        0.01,
+        -12.87
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "t_shirt_04",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "blanket_north",
+      "position": [
+        -11.43,
+        0.01,
+        -15.81
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "t_shirt_05",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "outer",
+      "position": [
+        -14.37,
+        0.01,
+        -16.95
+      ],
+      "rotationQuat": [
+        0.0,
+        0.923881,
+        0.0,
+        0.382681
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "t_shirt_06",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "bed_south",
+      "position": [
+        -9.51,
+        0.01,
+        -12.99
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "t_shirt_07",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "blanket_a",
+      "position": [
+        -8.55,
+        0.01,
+        -14.49
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "t_shirt_08",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "blanket_a",
+      "position": [
+        -9.99,
+        0.01,
+        -14.19
+      ],
+      "rotationQuat": [
+        0.0,
+        0.923881,
+        0.0,
+        0.382681
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "t_shirt_09",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "blanket_a",
+      "position": [
+        -9.57,
+        0.01,
+        -15.87
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "t_shirt_10",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "west_park",
+      "position": [
+        -15.93,
+        0.01,
+        -11.13
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "t_shirt_11",
+      "def": "t_shirt",
+      "kind": "debris",
+      "zone": "gate",
+      "position": [
+        -8.07,
+        0.01,
+        -11.43
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.7,
+        0.02,
+        0.5
+      ],
+      "absorbDiameterReq": 0.454,
+      "absorbable": true,
+      "growthMm3": 3920000
+    },
+    {
+      "itemId": "thermos_01",
+      "def": "thermos",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.75,
+        0.15,
+        -14.43
+      ],
+      "rotationQuat": [
+        0.0,
+        0.382684,
+        0.0,
+        0.923879
+      ],
+      "aabb": [
+        0.1087,
+        0.3,
+        0.1053
+      ],
+      "absorbDiameterReq": 0.358,
+      "absorbable": true,
+      "growthMm3": 1922946
+    },
+    {
+      "itemId": "thermos_02",
+      "def": "thermos",
+      "kind": "container",
+      "zone": "tree_corner",
+      "position": [
+        -15.63,
+        0.15,
+        -14.01
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1087,
+        0.3,
+        0.1053
+      ],
+      "absorbDiameterReq": 0.358,
+      "absorbable": true,
+      "growthMm3": 1922946
+    },
+    {
+      "itemId": "thermos_03",
+      "def": "thermos",
+      "kind": "container",
+      "zone": "bed_south",
+      "position": [
+        -10.29,
+        0.15,
+        -11.55
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.1087,
+        0.3,
+        0.1053
+      ],
+      "absorbDiameterReq": 0.358,
+      "absorbable": true,
+      "growthMm3": 1922946
+    },
+    {
+      "itemId": "thermos_04",
+      "def": "thermos",
+      "kind": "container",
+      "zone": "mid_lawn",
+      "position": [
+        -10.83,
+        0.15,
+        -13.47
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.1087,
+        0.3,
+        0.1053
+      ],
+      "absorbDiameterReq": 0.358,
+      "absorbable": true,
+      "growthMm3": 1922946
+    },
+    {
+      "itemId": "thermos_05",
+      "def": "thermos",
+      "kind": "container",
+      "zone": "pocket",
+      "position": [
+        -13.17,
+        0.15,
+        -13.71
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        0.1087,
+        0.3,
+        0.1053
+      ],
+      "absorbDiameterReq": 0.358,
+      "absorbable": true,
+      "growthMm3": 1922946
+    },
+    {
+      "itemId": "tissue_box_01",
+      "def": "tissue_box",
+      "kind": "container",
+      "zone": "outer",
+      "position": [
+        -15.03,
+        0.0456,
+        -15.99
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.24,
+        0.0911,
+        0.12
+      ],
+      "absorbDiameterReq": 0.327,
+      "absorbable": true,
+      "growthMm3": 1469261
+    },
+    {
+      "itemId": "tissue_box_02",
+      "def": "tissue_box",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -11.55,
+        0.0456,
+        -14.91
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.24,
+        0.0911,
+        0.12
+      ],
+      "absorbDiameterReq": 0.327,
+      "absorbable": true,
+      "growthMm3": 1469261
+    },
+    {
+      "itemId": "tissue_box_03",
+      "def": "tissue_box",
+      "kind": "container",
+      "zone": "pocket",
+      "position": [
+        -13.77,
+        0.0456,
+        -13.23
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.24,
+        0.0911,
+        0.12
+      ],
+      "absorbDiameterReq": 0.327,
+      "absorbable": true,
+      "growthMm3": 1469261
+    },
+    {
+      "itemId": "tissue_box_04",
+      "def": "tissue_box",
+      "kind": "container",
+      "zone": "blanket_north",
+      "position": [
+        -12.03,
+        0.0456,
+        -16.29
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.24,
+        0.0911,
+        0.12
+      ],
+      "absorbDiameterReq": 0.327,
+      "absorbable": true,
+      "growthMm3": 1469261
+    },
+    {
+      "itemId": "tissue_box_05",
+      "def": "tissue_box",
+      "kind": "container",
+      "zone": "bed_south",
+      "position": [
+        -9.93,
+        0.0456,
+        -13.17
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.24,
+        0.0911,
+        0.12
+      ],
+      "absorbDiameterReq": 0.327,
+      "absorbable": true,
+      "growthMm3": 1469261
+    },
+    {
+      "itemId": "toy_ball_05",
+      "def": "toy_ball",
+      "kind": "toy",
+      "zone": "pocket",
+      "position": [
+        -14.07,
+        0.075,
+        -11.67
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "absorbDiameterReq": 0.356,
+      "absorbable": true,
+      "growthMm3": 1890000
+    },
+    {
+      "itemId": "toy_ball_06",
+      "def": "toy_ball",
+      "kind": "toy",
+      "zone": "tree_corner",
+      "position": [
+        -15.75,
+        0.075,
+        -13.05
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "absorbDiameterReq": 0.356,
+      "absorbable": true,
+      "growthMm3": 1890000
+    },
+    {
+      "itemId": "toy_ball_07",
+      "def": "toy_ball",
+      "kind": "toy",
+      "zone": "blanket_north",
+      "position": [
+        -13.35,
+        0.075,
+        -16.83
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "absorbDiameterReq": 0.356,
+      "absorbable": true,
+      "growthMm3": 1890000
+    },
+    {
+      "itemId": "toy_ball_08",
+      "def": "toy_ball",
+      "kind": "toy",
+      "zone": "pocket",
+      "position": [
+        -12.51,
+        0.075,
+        -14.01
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "absorbDiameterReq": 0.356,
+      "absorbable": true,
+      "growthMm3": 1890000
+    },
+    {
+      "itemId": "toy_ball_09",
+      "def": "toy_ball",
+      "kind": "toy",
+      "zone": "west_park",
+      "position": [
+        -15.21,
+        0.075,
+        -10.05
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "absorbDiameterReq": 0.356,
+      "absorbable": true,
+      "growthMm3": 1890000
+    },
+    {
+      "itemId": "toy_ball_10",
+      "def": "toy_ball",
+      "kind": "toy",
+      "zone": "tree_corner",
+      "position": [
+        -15.69,
+        0.075,
+        -13.65
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "absorbDiameterReq": 0.356,
+      "absorbable": true,
+      "growthMm3": 1890000
+    },
+    {
+      "itemId": "watering_can_03",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "west_park",
+      "position": [
+        -13.71,
+        0.0896,
+        -9.27
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watering_can_04",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "blanket_a",
+      "position": [
+        -9.57,
+        0.0896,
+        -14.73
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watering_can_05",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "blanket_a",
+      "position": [
+        -9.51,
+        0.0896,
+        -15.09
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watering_can_06",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "west_park",
+      "position": [
+        -14.31,
+        0.0896,
+        -11.31
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watering_can_07",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "outer",
+      "position": [
+        -14.91,
+        0.0896,
+        -17.55
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watering_can_08",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "gate",
+      "position": [
+        -7.83,
+        0.0896,
+        -11.01
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watering_can_09",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "blanket_north",
+      "position": [
+        -13.17,
+        0.0896,
+        -15.21
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watering_can_10",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "tree_corner",
+      "position": [
+        -16.65,
+        0.0896,
+        -12.39
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watering_can_11",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "blanket_a",
+      "position": [
+        -9.93,
+        0.0896,
+        -14.79
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watering_can_12",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "gate",
+      "position": [
+        -7.41,
+        0.0896,
+        -11.01
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watering_can_13",
+      "def": "watering_can",
+      "kind": "garden",
+      "zone": "gate",
+      "position": [
+        -7.59,
+        0.0896,
+        -13.59
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.1122,
+        0.1791,
+        0.25
+      ],
+      "absorbDiameterReq": 0.406,
+      "absorbable": true,
+      "growthMm3": 2813303
+    },
+    {
+      "itemId": "watermelon_04",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -10.47,
+        0.11,
+        -14.85
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_05",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "tree_corner",
+      "position": [
+        -16.17,
+        0.11,
+        -12.45
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_06",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "alcove",
+      "position": [
+        -7.71,
+        0.11,
+        -8.61
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_07",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "west_park",
+      "position": [
+        -13.71,
+        0.11,
+        -10.11
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_08",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -9.09,
+        0.11,
+        -13.77
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_09",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "table_top",
+      "position": [
+        -13.17,
+        0.11,
+        -8.73
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_10",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "gate",
+      "position": [
+        -8.01,
+        0.11,
+        -11.85
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_11",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "table_top",
+      "position": [
+        -13.77,
+        0.11,
+        -6.81
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_12",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "outer",
+      "position": [
+        -14.25,
+        0.11,
+        -17.61
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_13",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "gate",
+      "position": [
+        -7.29,
+        0.11,
+        -13.05
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_14",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "blanket_north",
+      "position": [
+        -12.63,
+        0.11,
+        -15.21
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_15",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "blanket_north",
+      "position": [
+        -11.61,
+        0.11,
+        -15.15
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_16",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "bed_south",
+      "position": [
+        -9.15,
+        0.11,
+        -11.25
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "watermelon_17",
+      "def": "watermelon",
+      "kind": "fruit",
+      "zone": "blanket_a",
+      "position": [
+        -10.47,
+        0.11,
+        -15.33
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.3,
+        0.22,
+        0.24
+      ],
+      "absorbDiameterReq": 0.596,
+      "absorbable": true,
+      "growthMm3": 8870400
+    },
+    {
+      "itemId": "wood_plank_01",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "west_park",
+      "position": [
+        -14.97,
+        0.0125,
+        -8.07
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_02",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "table_top",
+      "position": [
+        -13.47,
+        0.0125,
+        -7.17
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_03",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "outer",
+      "position": [
+        -15.87,
+        0.0125,
+        -16.47
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_04",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "tree_corner",
+      "position": [
+        -17.43,
+        0.0125,
+        -15.33
+      ],
+      "rotationQuat": [
+        0.0,
+        0.923881,
+        0.0,
+        0.382681
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_05",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "tree_corner",
+      "position": [
+        -18.39,
+        0.0125,
+        -12.99
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_06",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "west_park",
+      "position": [
+        -17.37,
+        0.0125,
+        -8.91
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_07",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "blanket_a",
+      "position": [
+        -8.49,
+        0.0125,
+        -16.47
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_08",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "west_park",
+      "position": [
+        -17.25,
+        0.0125,
+        -10.23
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_09",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "west_park",
+      "position": [
+        -16.47,
+        0.0125,
+        -8.01
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_10",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "gate",
+      "position": [
+        -6.33,
+        0.0125,
+        -13.89
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707108,
+        0.0,
+        0.707105
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_11",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "gate",
+      "position": [
+        -7.83,
+        0.0125,
+        -12.45
+      ],
+      "rotationQuat": [
+        0.0,
+        0.195091,
+        0.0,
+        0.980785
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_12",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "blanket_north",
+      "position": [
+        -11.01,
+        0.0125,
+        -17.13
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wood_plank_13",
+      "def": "wood_plank",
+      "kind": "structure",
+      "zone": "tree_corner",
+      "position": [
+        -16.95,
+        0.0125,
+        -11.85
+      ],
+      "rotationQuat": [
+        0.0,
+        0.980786,
+        0.0,
+        0.195087
+      ],
+      "aabb": [
+        1.4,
+        0.025,
+        0.35
+      ],
+      "absorbDiameterReq": 0.547,
+      "absorbable": true,
+      "growthMm3": 6860000
+    },
+    {
+      "itemId": "wool_tuft_01",
+      "def": "wool_tuft",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -13.05,
+        0.0425,
+        -14.01
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.11,
+        0.085,
+        0.095
+      ],
+      "absorbDiameterReq": 0.228,
+      "absorbable": true,
+      "growthMm3": 497420
+    },
+    {
+      "itemId": "wool_tuft_02",
+      "def": "wool_tuft",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -13.95,
+        0.0425,
+        -12.75
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.11,
+        0.085,
+        0.095
+      ],
+      "absorbDiameterReq": 0.228,
+      "absorbable": true,
+      "growthMm3": 497420
+    },
+    {
+      "itemId": "wool_tuft_03",
+      "def": "wool_tuft",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -13.83,
+        0.0425,
+        -12.03
+      ],
+      "rotationQuat": [
+        0.0,
+        0.555571,
+        0.0,
+        0.831469
+      ],
+      "aabb": [
+        0.11,
+        0.085,
+        0.095
+      ],
+      "absorbDiameterReq": 0.228,
+      "absorbable": true,
+      "growthMm3": 497420
+    },
+    {
+      "itemId": "wool_tuft_04",
+      "def": "wool_tuft",
+      "kind": "nature",
+      "zone": "blanket_north",
+      "position": [
+        -11.07,
+        0.0425,
+        -14.49
+      ],
+      "rotationQuat": [
+        0.0,
+        0.923881,
+        0.0,
+        0.382681
+      ],
+      "aabb": [
+        0.11,
+        0.085,
+        0.095
+      ],
+      "absorbDiameterReq": 0.228,
+      "absorbable": true,
+      "growthMm3": 497420
+    },
+    {
+      "itemId": "wool_tuft_05",
+      "def": "wool_tuft",
+      "kind": "nature",
+      "zone": "west_park",
+      "position": [
+        -13.59,
+        0.0425,
+        -11.01
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "aabb": [
+        0.11,
+        0.085,
+        0.095
+      ],
+      "absorbDiameterReq": 0.228,
+      "absorbable": true,
+      "growthMm3": 497420
+    },
+    {
+      "itemId": "wool_tuft_06",
+      "def": "wool_tuft",
+      "kind": "nature",
+      "zone": "pocket",
+      "position": [
+        -14.43,
+        0.0425,
+        -12.09
+      ],
+      "rotationQuat": [
+        0.0,
+        -1.0,
+        0.0,
+        4e-06
+      ],
+      "aabb": [
+        0.11,
+        0.085,
+        0.095
+      ],
+      "absorbDiameterReq": 0.228,
+      "absorbable": true,
+      "growthMm3": 497420
+    }
+  ]
+}

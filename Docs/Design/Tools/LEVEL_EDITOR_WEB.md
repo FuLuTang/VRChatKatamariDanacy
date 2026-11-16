@@ -106,8 +106,11 @@ WebSocket 需要自己实现握手/分帧（标准库没有）。设计上明确
 
 ### 3.3 单写者
 
-- 一份关卡一个 `flock`（`~/.local/state/vrc-katamari-leveleditor/locks/<sha>.lock`），
-  第二个 Web 编辑器启动时直接拒绝。
+- 一份关卡一个 `flock`（`~/.local/state/vrc-katamari-leveleditor/locks/v2-<sha256>.lock`），
+  第二个 Web 编辑器启动时直接拒绝；锁体是 `{pid, port, level, placement}`，拒绝信息会
+  指明持有者的 pid/端口/关卡。旧命名 `<sha1-16>.lock` 作为兼容锁同时持有，避免滚动重启
+  期间旧版本进程和新版本同时写。**重新打开当前关卡 = 原地 reload，不重新抢锁**；切换
+  关卡先拿新锁再放旧锁，失败时旧关卡/旧锁/历史保持原样。
 - 每次写前做**语义冲突检测**：把磁盘上的 JSON 按 `canonical_doc` 和内存文档比较；
   不同就拒绝（提示「文件在磁盘上变了，按 Reload」）。这样即使 Blender 常驻编辑器
   或人手改了同一份文件，也不会被静默覆盖。
@@ -213,7 +216,7 @@ rotation:  (x, y, z, w)   →  (-x, -y, z, w)
     改动会让该 def 的 `absorbDiameterReq`/`absorbable` 立刻按新 k 重算
     （`editor_core._commit` 先把文档过一遍 writer 再校验，所以不会留下 stale 行）。
 - Web 端额外/不同：
-  - `open`：换关卡（重新取锁、清历史）；
+  - `open`：换关卡（重新取锁、清历史）；打开当前关卡则原地 `reload`（不清锁）；
   - `reload`：从磁盘重读（人手改过文件后用）；
   - `undo` / `redo`：快照历史（支持 `steps`）；
   - `render`：**明确拒绝**（没有 Blender），截图在浏览器完成；

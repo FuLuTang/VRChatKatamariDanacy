@@ -19,6 +19,7 @@ import json
 import os
 import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -591,3 +592,214 @@ class RegionStatsTests(WebServerCase):
         self.assertEqual(row["count"], payload["stats"]["regions"][0]["count"])
         self.assertIn("absorbableRatio", row)
         self.assertTrue(prop)
+
+class LockedOpenCase(unittest.TestCase):
+    """A lock-taking editor over HTTP: reopen, failed switch, and ref round-trip.
+
+    The ordinary ``WebServerCase`` runs with ``lock=False`` so it can be stopped and
+    restarted freely; this case is deliberately the real, locked configuration.
+    """
+
+    level = "picnic_corner_demo"
+    ref_level = "_ref_locked_test"
+    token = "locked-test-token"
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="leveleditor-locked-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.levels = self.tmp / "levels"
+        folder = self.levels / self.level
+        folder.mkdir(parents=True)
+        self.placement = folder / "placement.json"
+        self.placement.write_bytes(EXAMPLE.read_bytes())
+
+        ref_folder = self.levels / self.ref_level
+        ref_folder.mkdir(parents=True)
+        document = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+        document["level"]["id"] = self.ref_level
+        self.ref_placement = ref_folder / "placement.model.json"
+        self.ref_placement.write_text(core.dump_doc(document), encoding="utf-8")
+        self.ref_models = self.tmp / "ref-models"
+        self.ref_models.mkdir()
+        self.ref_stage = self.tmp / "ref-stage"  # absent: ref mode still opens
+
+        self.state_dir = self.tmp / "state"
+        self.app = self.locked_app(self.level)
+        self.httpd = web.make_http_server(self.app, "127.0.0.1", 0, token=self.token,
+                                          token_path=self.state_dir / "token")
+        self.thread = threading.Thread(target=self.httpd.serve_forever,
+                                       kwargs={"poll_interval": 0.02}, daemon=True)
+        self.thread.start()
+        self.base = "http://127.0.0.1:%d" % self.httpd.server_address[1]
+        self.addCleanup(self._stop)
+
+    def locked_app(self, level):
+        return web.WebEditor(level, levels_dir=self.levels, state_dir=self.state_dir,
+                             lock=True, ref_models_dir=self.ref_models,
+                             ref_stage_dir=self.ref_stage)
+
+    def _stop(self):
+        self.httpd.stop_event.set()
+        self.httpd.shutdown()
+        self.app.close()
+        self.httpd.server_close()
+        self.thread.join(5)
+
+    def call(self, path, payload=None, token=token):
+        data = None if payload is None else json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(self.base + path, data=data, headers={
+            "Content-Type": "application/json"})
+        if token:
+            request.add_header(web.TOKEN_HEADER, token)
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return response.status, json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            return error.code, json.loads(error.read())
+
+    def op(self, name, token=token, **args):
+        return self.call("/api/op", {"op": name, "args": args}, token=token)
+
+    def state(self):
+        status, payload = self.call("/api/level")
+        self.assertEqual(status, 200)
+        return payload["state"]
+
+    def test_reopening_the_same_level_is_a_reload_in_place(self):
+        lock_path = self.app.lock.path
+        descriptor = self.app.lock._fd
+        version = self.app.version
+        self.assertIsNotNone(descriptor)
+        for _ in range(3):
+            status, payload = self.call("/api/open", {"level": self.level})
+            self.assertEqual(status, 200)
+            self.assertTrue(payload["ok"], payload.get("error"))
+            self.assertEqual(payload["result"]["level"], self.level)
+            self.assertEqual(payload["state"]["level"], self.level)
+        # No new lock object, no second fd, no window without a lock.
+        self.assertEqual(self.app.lock.path, lock_path)
+        self.assertEqual(self.app.lock._fd, descriptor)
+        self.assertIsNotNone(self.app.lock._fd)
+        self.assertGreater(self.app.version, version)
+        # Direct API path (not just HTTP) behaves the same.
+        self.app.open_level(self.level)
+        self.assertEqual(self.app.lock._fd, descriptor)
+
+    def test_reopen_after_an_edit_reads_the_disk_and_keeps_the_session(self):
+        status, payload = self.op("move", id="prop_acorn_000", to=[1.9, 0.015, 2.1])
+        self.assertTrue(payload["ok"], payload.get("error"))
+        status, payload = self.call("/api/open", {"level": self.level})
+        self.assertTrue(payload["ok"], payload.get("error"))
+        prop = next(row for row in self.state()["doc"]["props"]
+                    if row["itemId"] == "prop_acorn_000")
+        self.assertEqual(prop["position"], [1.9, 0.015, 2.1])
+        self.assertIsNotNone(self.app.lock._fd)
+
+    def test_failed_switch_keeps_the_old_level_and_lock(self):
+        old_path = Path(self.app.editor.path)
+        old_level = self.app.editor.level
+        old_lock = self.app.lock.path
+        old_fd = self.app.lock._fd
+        status, payload = self.call("/api/open", {"level": "does_not_exist"})
+        self.assertFalse(payload["ok"])
+        self.assertIn("cannot read", payload["error"])
+        self.assertEqual(self.app.editor.level, old_level)
+        self.assertEqual(Path(self.app.editor.path), old_path)
+        self.assertEqual(self.app.lock.path, old_lock)
+        self.assertEqual(self.app.lock._fd, old_fd)
+        with self.assertRaises(RuntimeError) as caught:
+            self.locked_app(self.level)
+        self.assertIn("one level, one writer", str(caught.exception))
+
+    def test_failure_after_the_document_opened_restores_the_old_level(self):
+        status, payload = self.call("/api/open", {"level": self.ref_level})
+        self.assertTrue(payload["ok"], payload.get("error"))
+        old_doc = self.app.editor.doc
+        old_path = Path(self.app.editor.path)
+        old_level = self.app.editor.level
+        old_lock = self.app.lock.path
+        old_fd = self.app.lock._fd
+        with mock.patch.object(self.app, "_refresh_ref_models",
+                               side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                self.app.open_level(self.level)
+        self.assertEqual(self.app.editor.level, old_level)
+        self.assertEqual(Path(self.app.editor.path), old_path)
+        self.assertIs(self.app.editor.doc, old_doc)
+        self.assertEqual(self.app.lock.path, old_lock)
+        self.assertEqual(self.app.lock._fd, old_fd)
+        # The failed switch released its new (normal) lock; the ref lock is still held.
+        other = self.locked_app(self.level)
+        other.close()
+        with self.assertRaises(RuntimeError):
+            self.locked_app(self.ref_level)
+
+    def test_switch_to_reference_and_back_in_one_server(self):
+        normal_lock = self.app.lock.path
+        status, payload = self.call("/api/open", {"level": self.ref_level})
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"], payload.get("error"))
+        self.assertTrue(payload["state"]["ref"])
+        self.assertTrue(self.app.ref_mode)
+        self.assertNotEqual(self.app.lock.path, normal_lock)
+        body = json.loads(self.app.lock.path.read_text(encoding="utf-8"))
+        self.assertEqual(body["level"], self.ref_level)
+        self.assertEqual(body["port"], self.httpd.server_address[1])
+
+        before = sha(self.ref_placement)
+        status, payload = self.call("/api/op", {"op": "add_prop", "args": {
+            "def": "acorn", "position": [1.0, 0.1, 1.0]}})
+        self.assertFalse(payload["ok"])
+        self.assertIn("read-only", payload["error"])
+        self.assertEqual(sha(self.ref_placement), before)
+
+        # The normal level's lock was released while the reference level is open.
+        other = self.locked_app(self.level)
+        other.close()
+
+        status, payload = self.call("/api/open", {"level": self.level})
+        self.assertTrue(payload["ok"], payload.get("error"))
+        self.assertFalse(payload["state"]["ref"])
+        self.assertFalse(self.app.ref_mode)
+        self.assertEqual(self.app.lock.path, normal_lock)
+
+        # The reference level's lock was released while the normal level is open.
+        other_ref = self.locked_app(self.ref_level)
+        other_ref.close()
+
+    def test_second_process_refusal_names_pid_port_and_level(self):
+        script = (
+            "import sys\n"
+            "sys.path.insert(0, %r)\n"
+            "from Tools.leveleditor import server as web\n"
+            "try:\n"
+            "    web.WebEditor(%r, levels_dir=%r, state_dir=%r, lock=True)\n"
+            "except Exception as error:\n"
+            "    print(str(error))\n"
+            "    raise SystemExit(0)\n"
+            "raise SystemExit(3)\n"
+            % (str(ROOT), self.level, str(self.levels), str(self.state_dir)))
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        message = result.stdout.strip()
+        self.assertIn("one level, one writer", message)
+        self.assertIn("pid %d" % os.getpid(), message)
+        self.assertIn("port %d" % self.httpd.server_address[1], message)
+        self.assertIn("level %s" % self.level, message)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_two_servers_on_different_levels_can_both_lock(self):
+        second_folder = self.levels / "second_level"
+        second_folder.mkdir()
+        document = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+        document["level"]["id"] = "second_level"
+        (second_folder / "placement.json").write_text(
+            core.dump_doc(document), encoding="utf-8")
+        second = self.locked_app("second_level")
+        try:
+            self.assertEqual(second.editor.level, "second_level")
+            self.assertNotEqual(second.lock.path, self.app.lock.path)
+        finally:
+            second.close()
+

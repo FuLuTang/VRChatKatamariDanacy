@@ -180,49 +180,205 @@ def validate_regions(payload):
 class LevelLock:
     """An advisory ``flock`` per placement.json, so two editors cannot both write.
 
+    The **flock is the authority**: a lock file whose process died holds no flock, so
+    the next editor can take it over without manual cleanup.  The file body is a small
+    JSON diagnostic (pid, port, level, placement) that another editor can report when
+    the flock is genuinely held; it is never trusted for exclusion.
+
+    The filename carries a scheme prefix (``v2-``); the old sha1/16 name is also
+    flocked as a compatibility lock, so an editor still running the pre-rotation code
+    cannot acquire the same level during a rolling restart.  The v2 body is the
+    diagnostic authority; the old body stays a bare pid for old readers.
+
     It protects against a second *web* editor (the Blender resident editor uses its
-    own single-process rule).  A stale lock dies with its process, so there is no
-    manual cleanup.  The lock lives in the state directory, never in the repo.
+    own single-process rule).  Locks live in the state directory, never in the repo.
     """
 
-    def __init__(self, level_path, state_dir):
-        digest = hashlib.sha1(str(Path(level_path).resolve()).encode("utf-8")).hexdigest()
-        self.path = Path(state_dir) / "locks" / (digest[:16] + ".lock")
-        self._fd = None
+    SCHEME = "v2"
 
+    def __init__(self, level_path, state_dir, level=None, port=None):
+        self.level_path = Path(level_path).resolve()
+        digest = hashlib.sha256(str(self.level_path).encode("utf-8")).hexdigest()
+        self.path = (Path(state_dir) / "locks"
+                     / ("%s-%s.lock" % (self.SCHEME, digest[:20])))
+        #: The pre-rotation name.  New code holds it too while old servers may still
+        #: be running, so an old-code writer cannot start on a level this editor owns.
+        legacy = hashlib.sha1(str(self.level_path).encode("utf-8")).hexdigest()
+        self.legacy_path = Path(state_dir) / "locks" / (legacy[:16] + ".lock")
+        self.level = level
+        self.port = int(port) if port else None
+        self._fd = None
+        self._legacy_fd = None
+        #: The previous body found when this acquire succeeded (stale holder info).
+        self.taken_over = None
+
+    # -- body ----------------------------------------------------------- #
+    def _body(self):
+        return {
+            "pid": os.getpid(),
+            "port": self.port,
+            "level": self.level,
+            "placement": str(self.level_path),
+            "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+
+    @staticmethod
+    def _read_body(descriptor):
+        """Parse the holder body from an open descriptor; never raise."""
+        try:
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            raw = os.read(descriptor, 4096).decode("utf-8", "replace").strip()
+        except OSError:
+            return {}
+        if not raw:
+            return {}
+        try:
+            body = json.loads(raw)
+            if isinstance(body, dict):
+                return body
+            if isinstance(body, int) and not isinstance(body, bool):
+                return {"pid": body}
+            return {"raw": raw[:200]}
+        except (json.JSONDecodeError, ValueError):
+            # A file written by the old code was just "<pid>\n"; keep that useful.
+            first = raw.split()[0] if raw.split() else ""
+            try:
+                return {"pid": int(first)}
+            except ValueError:
+                return {"raw": raw[:200]}
+
+    @staticmethod
+    def describe(body):
+        if not isinstance(body, dict) or not body:
+            return ""
+        parts = []
+        if body.get("pid") is not None:
+            parts.append("pid %s" % body["pid"])
+        if body.get("port") is not None:
+            parts.append("port %s" % body["port"])
+        if body.get("level"):
+            parts.append("level %s" % body["level"])
+        if not parts and body.get("raw"):
+            parts.append(str(body["raw"])[:120])
+        return (", ".join(parts))
+
+    def _write_body(self):
+        if self._fd is None:
+            return
+        payload = (json.dumps(self._body(), ensure_ascii=False, sort_keys=True)
+                   + "\n").encode("utf-8")
+        os.ftruncate(self._fd, 0)
+        os.lseek(self._fd, 0, os.SEEK_SET)
+        os.write(self._fd, payload)
+        try:
+            os.fsync(self._fd)
+        except OSError:
+            pass
+
+    def announce(self, port=None, level=None):
+        """Record this editor's HTTP port/level in the lock body (used in refusals)."""
+        if port:
+            self.port = int(port)
+        if level is not None:
+            self.level = level
+        self._write_body()
+
+    @staticmethod
+    def _pid_alive(pid):
+        try:
+            pid = int(pid)
+        except (TypeError, ValueError):
+            return False
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except OSError:
+            return False
+        return True
+
+    # -- lifecycle ------------------------------------------------------ #
     def acquire(self):
+        if self._fd is not None or self._legacy_fd is not None:
+            raise RuntimeError("this level editor already holds %s" % self.path.name)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         descriptor = os.open(str(self.path), os.O_RDWR | os.O_CREAT, 0o600)
         try:
             import fcntl
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except ImportError:
+            # No advisory locking on this platform; the body is diagnostic only.
             pass
         except OSError:
-            try:
-                holder = os.read(descriptor, 200).decode("ascii", "replace").strip()
-            except OSError:
-                holder = ""
+            holder = self._read_body(descriptor)
             os.close(descriptor)
+            detail = self.describe(holder)
             raise RuntimeError(
                 "another level editor already holds %s%s; one level, one writer"
-                % (self.path.name, (" (pid %s)" % holder) if holder else ""))
-        os.ftruncate(descriptor, 0)
-        os.write(descriptor, ("%d\n" % os.getpid()).encode("ascii"))
-        self._fd = descriptor
-
-    def release(self):
-        if self._fd is None:
-            return
+                % (self.path.name, (" (%s)" % detail) if detail else ""))
+        # Compatibility lock: hold the old name too, so an editor still running the
+        # pre-rotation code cannot acquire the same level while this one owns it.
+        legacy = os.open(str(self.legacy_path), os.O_RDWR | os.O_CREAT, 0o600)
         try:
             import fcntl
-            fcntl.flock(self._fd, fcntl.LOCK_UN)
-        except (ImportError, OSError):
+            fcntl.flock(legacy, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except ImportError:
             pass
+        except OSError:
+            holder = self._read_body(legacy)
+            os.close(legacy)
+            try:
+                import fcntl
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            except (ImportError, OSError):
+                pass
+            os.close(descriptor)
+            detail = self.describe(holder)
+            raise RuntimeError(
+                "another level editor (older lock format) already holds %s%s; "
+                "one level, one writer"
+                % (self.legacy_path.name, (" (%s)" % detail) if detail else ""))
+        previous = self._read_body(descriptor)
+        self._fd = descriptor
+        self._legacy_fd = legacy
+        self._write_body()
+        # Old code reads the legacy body as a bare pid; keep it readable.
         try:
-            os.close(self._fd)
-        finally:
-            self._fd = None
+            os.ftruncate(legacy, 0)
+            os.lseek(legacy, 0, os.SEEK_SET)
+            os.write(legacy, ("%d\n" % os.getpid()).encode("ascii"))
+            os.fsync(legacy)
+        except OSError:
+            pass
+        if previous and previous.get("pid") not in (None, os.getpid()):
+            self.taken_over = previous
+            state = ("pid is gone (stale lock)"
+                     if not self._pid_alive(previous.get("pid"))
+                     else "previous process still runs but no longer holds the flock")
+            detail = self.describe(previous)
+            print("leveleditor: took over %s from %s; %s"
+                  % (self.path.name, detail or "an unknown holder", state),
+                  file=sys.stderr, flush=True)
+        return self
+
+    def release(self):
+        for attribute in ("_fd", "_legacy_fd"):
+            descriptor = getattr(self, attribute, None)
+            if descriptor is None:
+                continue
+            try:
+                import fcntl
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            except (ImportError, OSError):
+                pass
+            try:
+                os.close(descriptor)
+            finally:
+                setattr(self, attribute, None)
 
 
 # --------------------------------------------------------------------------- #
@@ -257,6 +413,9 @@ class WebEditor:
         self._ref_stage_glb = None
         self.lock_enabled = bool(lock)
         self.lock = None
+        #: The bound HTTP port, announced after ``make_http_server`` so a lock refusal
+        #: from another process can say which editor holds the level.
+        self.port = None
         self.history = []
         self.redo = []
         self.last_saved = None
@@ -299,17 +458,58 @@ class WebEditor:
         return folder / "placement.json"
 
     # -- lifecycle ------------------------------------------------------ #
+    def announce(self, port):
+        """Publish the bound port for diagnostics and for the lock body."""
+        self.port = int(port) if port else None
+        if self.lock is not None:
+            self.lock.announce(port=self.port, level=self.editor.level)
+
+    @staticmethod
+    def _same_file(left, right):
+        if left is None or right is None:
+            return False
+        try:
+            return Path(left).resolve() == Path(right).resolve()
+        except OSError:
+            return False
+
     def open_level(self, level):
+        """Open a level without ever self-deadlocking on the one-writer lock.
+
+        * The already-open file is a **reload in place**: no second flock, no history
+          jump to another level, same session/lock.  (Reopening the same level used to
+          open a second fd for the same lock file, which flock refuses even inside one
+          process.)
+        * A different level acquires its lock *before* the old one is released, so a
+          second process never sees a window with neither lock.  If the open fails the
+          old document, lock and history stay exactly as they were.
+        """
         path = self.resolve(level)
         if not path.is_file():
             raise editor_core.OpError("cannot read %s" % core.display_path(path))
+        if self._same_file(self.editor.path, path):
+            # Same file: this is "open the level I already have" = reload from disk.
+            return self.reload_level()
+
         new_lock = None
         if self.lock_enabled:
-            new_lock = LevelLock(path, self.state_dir)
+            new_lock = LevelLock(path, self.state_dir, level=level, port=self.port)
             new_lock.acquire()
-        previous = (self.ref_mode, self.ref_models_root, self.ref_table,
+        snapshot = {
+            "ref": (self.ref_mode, self.ref_models_root, self.ref_table,
                     self.ref_resolution, self.ref_fbx_only, self.ref_stage,
-                    self._ref_stage_glb, self.editor.base_manifests)
+                    self._ref_stage_glb, self.editor.base_manifests),
+            "editor": {
+                "doc": self.editor.doc, "path": self.editor.path,
+                "level": self.editor.level, "manifests": self.editor.manifests,
+                "base_manifests": self.editor.base_manifests,
+                "undo_stack": list(self.editor.undo_stack),
+                "known_errors": set(self.editor.known_errors),
+                "unexported": self.editor.unexported,
+            },
+            "scene": (self.scene.props, self.scene.structures, self.scene.cameras,
+                      self.scene.syncs),
+        }
         is_ref = ref_models.is_ref_level(level)
         try:
             if is_ref:
@@ -329,8 +529,11 @@ class WebEditor:
         except Exception:
             (self.ref_mode, self.ref_models_root, self.ref_table,
              self.ref_resolution, self.ref_fbx_only, self.ref_stage,
-             self._ref_stage_glb, self.editor.base_manifests) = previous
-            self.editor.manifests = self.editor.base_manifests
+             self._ref_stage_glb, self.editor.base_manifests) = snapshot["ref"]
+            for key, value in snapshot["editor"].items():
+                setattr(self.editor, key, value)
+            (self.scene.props, self.scene.structures, self.scene.cameras,
+             self.scene.syncs) = snapshot["scene"]
             if new_lock is not None:
                 new_lock.release()
             raise
@@ -417,13 +620,11 @@ class WebEditor:
         return self._ref_stage_glb
 
     def reload_level(self):
-        previous_path = Path(self.editor.path) if self.editor.path else None
-        result = self.editor.reload()
+        result = self.editor.op_reload({})
         self._refresh_ref_models()
         self._refresh_ref_stage()
-        if previous_path is not None and self.lock is not None:
-            # The lock is per path; reload never changes it.
-            pass
+        if self.lock is not None:
+            self.lock.announce(port=self.port, level=self.editor.level)
         self.history = []
         self.redo = []
         self.last_saved = None
@@ -1700,6 +1901,8 @@ def make_http_server(app, host="127.0.0.1", port=0, token=None, token_path=None,
     """Build (but do not serve) the HTTP server; tests use this too."""
     httpd = EditorHTTPServer((host, port), Handler)
     httpd.app = app
+    if hasattr(app, "announce"):
+        app.announce(httpd.server_address[1])
     httpd.token = token if token is not None else secrets.token_urlsafe(16)
     httpd.token_path = token_path or (Path(app.state_dir) / "token")
     httpd.addresses = addresses()

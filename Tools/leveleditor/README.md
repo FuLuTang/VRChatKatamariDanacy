@@ -54,6 +54,9 @@ python3 Tools/leveleditor/server.py --level story_01_bench_size --port 8777
   token 和文件锁不受重启影响。
 - 端口被占时用 `--port 0` 让系统分配，或换一个端口；日志会打印实际端口。
 - 同一份关卡只允许一个 Web 编辑器写（`~/.local/state/.../locks/` 下的 `flock`）。**不要**同时用 `levelserve.py`（Blender 常驻编辑器）改同一份文件：Web 端每次写前会比较磁盘上的文档，发现被别人改过就拒绝并提示「按 Reload」。
+- **重新打开当前关卡 = 原地重载**（不会二次抢自己的锁）；**切换关卡**先拿到新锁再放旧锁，失败时旧关卡/旧锁/历史原样保留。锁文件名是 `v2-<sha256>.lock`，内容是 `{pid, port, level, placement}`；被别的进程占用时错误会写明 `pid`、端口和关卡，例如
+  `another level editor already holds v2-….lock (pid 1234, port 8777, level story_01_bench_size); one level, one writer`。
+  进程已死的陈旧锁会被自动接管并在 stderr 打一行 `took over … (stale lock)`；旧命名方案（sha1/16）的锁同时作为兼容锁持有，尚未重启的旧版本进程不会和新版本同时写同一关。
 - 探活：`curl -s http://127.0.0.1:8777/healthz`（无 token）；`/api/health` 需要 token。
 - `--no-lock` 只用于测试（两个实例同时开同一关）。
 

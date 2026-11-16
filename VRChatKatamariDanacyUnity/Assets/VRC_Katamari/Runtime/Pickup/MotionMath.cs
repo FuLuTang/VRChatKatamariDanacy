@@ -54,6 +54,15 @@ namespace VRCKatamari.Pickup
     /// item S1 is the prefab check that a +Z-forward prefab would fail).
     /// </description></item>
     /// <item><description>
+    /// YAW RANGE: every emitted euler.y is normalized into [0, 2*pi) - Spin, Flip,
+    /// SporadicWalk and the three path classes (pitch and roll are not wrapped; their ranges
+    /// are already the useful ones). That is what makes the section 15.1 item 1 binding a
+    /// fixed range as well as a convention: walking -Z is 0, walking +Z is pi, and nothing
+    /// is emitted at the interval's 2*pi end. A direction a hair off -Z lands a hair below
+    /// 2*pi, so a consumer comparing facings should compare angles (Mathf.DeltaAngle), not
+    /// the wrapped numbers.
+    /// </description></item>
+    /// <item><description>
     /// ABSOLUTE world position with world yaw/pitch: PathCollision, SlopingPath,
     /// BackAndForthNoYaw. Path points are world points (section 6.7.4) and the original
     /// teleports the prop onto the nearest point at init (section 12.9), so these three
@@ -210,6 +219,11 @@ namespace VRCKatamari.Pickup
         public const float WalkCandidateTurnFrames = 12f;
         public const float CloudsTurnMinFrames = 90f;
         public const float CloudsTurnRangeFrames = 600f;
+
+        // Yaw output is normalized into [0, 2*pi); a value this close to 2*pi is reported as
+        // 0 instead, so walking straight along -Z reads as model yaw 0 (section 15.1 item 1)
+        // rather than as the 2*pi end of the interval. 1e-4 rad = 0.006 degrees.
+        public const float YawSeamRadians = 1e-4f;
 
         // A path's adjacent points must be at least 5 cm apart (LEVEL_FORMAT_V2 6.7.4);
         // the loader is allowed to be a little looser, but a zero-length segment would make
@@ -401,7 +415,7 @@ namespace VRCKatamari.Pickup
             if (!IsValidStep(dtFrames)) return false;
 
             state[0] = state[0] + dtFrames;
-            float yaw = WrapRadiansPositive(SpinRadiansPerFrame * state[0]);
+            float yaw = NormalizeYaw(SpinRadiansPerFrame * state[0]);
             if (!KatamariMath.IsFiniteFloat(yaw)) return false;
             eulerRad = new Vector3(0f, yaw, 0f);
             return true;
@@ -435,7 +449,7 @@ namespace VRCKatamari.Pickup
             if (!IsValidStep(dtFrames)) return false;
 
             state[0] = state[0] + dtFrames;
-            float pitch = WrapRadiansPositive(-SpinRadiansPerFrame * state[0]);
+            float pitch = NormalizeYaw(-SpinRadiansPerFrame * state[0]);
             if (!KatamariMath.IsFiniteFloat(pitch)) return false;
             eulerRad = new Vector3(pitch, 0f, 0f);
             return true;
@@ -964,8 +978,9 @@ namespace VRCKatamari.Pickup
             if (!ignoreYaw)
             {
                 // Section 15.1 item 1: pi + atan2(vx, vz), one formula for walking and
-                // turning alike. v = (0, 0, -1) gives 2*pi, i.e. model zero yaw faces -Z.
-                float yaw = Mathf.PI + Mathf.Atan2(velocityX, velocityZ);
+                // turning alike, then normalized into [0, 2*pi) so that v = (0, 0, -1) is 0
+                // (model zero yaw faces -Z) instead of the interval's 2*pi end.
+                float yaw = NormalizeYaw(Mathf.PI + Mathf.Atan2(velocityX, velocityZ));
                 if (!KatamariMath.IsFiniteFloat(yaw)) return false;
                 state[14] = yaw;
                 eulerRad = new Vector3(0f, yaw, 0f);
@@ -1227,7 +1242,7 @@ namespace VRCKatamari.Pickup
             int previous = PreviousSegment(pointCount, closed, segmentIndex);
             float targetYaw = SegmentYaw(pathPointsM, pointCount, closed, segmentIndex);
             float previousYaw = SegmentYaw(pathPointsM, pointCount, closed, previous);
-            float yaw = EaseAngle(previousYaw, targetYaw, fraction);
+            float yaw = NormalizeYaw(EaseAngle(previousYaw, targetYaw, fraction));
             if (!KatamariMath.IsFiniteFloat(yaw)) return false;
 
             positionM = new Vector3(sample.x, sample.y - halfHeightM, sample.z);
@@ -1275,7 +1290,7 @@ namespace VRCKatamari.Pickup
             int previous = PreviousSegment(pointCount, closed, segmentIndex);
             float targetYaw = SegmentYaw(pathPointsM, pointCount, closed, segmentIndex);
             float previousYaw = SegmentYaw(pathPointsM, pointCount, closed, previous);
-            float yaw = EaseAngle(previousYaw, targetYaw, fraction);
+            float yaw = NormalizeYaw(EaseAngle(previousYaw, targetYaw, fraction));
 
             float targetPitch = SegmentPitch(pathPointsM, pointCount, closed, segmentIndex);
             float previousPitch = SegmentPitch(pathPointsM, pointCount, closed, previous);
@@ -1592,10 +1607,15 @@ namespace VRCKatamari.Pickup
             return KatamariMath.IsFiniteFloat(value) && value > 0f;
         }
 
-        private static float WrapRadiansPositive(float radians)
+        // Normalizes an emitted yaw into [0, 2*pi). The value is folded to 0 when it lands
+        // within YawSeamRadians of 2*pi: the two are the same rotation, and without the fold a
+        // prop walking along -Z would sit at ~2*pi instead of the 0 that section 15.1 item 1
+        // binds model yaw 0 to (the formula itself puts -Z on the interval's 2*pi end).
+        private static float NormalizeYaw(float radians)
         {
             float wrapped = radians % TwoPi;
             if (wrapped < 0f) wrapped = wrapped + TwoPi;
+            if (wrapped > TwoPi - YawSeamRadians) wrapped = 0f;
             return wrapped;
         }
     }

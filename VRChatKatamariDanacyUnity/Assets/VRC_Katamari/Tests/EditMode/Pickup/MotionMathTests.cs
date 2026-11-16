@@ -598,8 +598,12 @@ namespace VRCKatamari.Tests
                 out offset, out euler));
             Assert.AreEqual(0f, offset.x - previous.x, 1e-4f);
             Assert.AreEqual(-0.303f / 30f, offset.z - previous.z, 1e-4f);
-            // Section 15.1 item 1: walking -Z is model yaw 0 (pi + atan2(0, -1) = 2*pi).
-            Assert.AreEqual(0f, Mathf.Repeat(euler.y, 2f * Mathf.PI), 1e-4f);
+            // Section 15.1 item 1: walking -Z is model yaw 0. The formula lands on the 2*pi
+            // end of the interval and the library folds that seam to 0, so the emitted value
+            // is exactly 0 and euler.y always lives in [0, 2*pi).
+            Assert.AreEqual(0f, euler.y, 1e-6f);
+            Assert.GreaterOrEqual(euler.y, 0f);
+            Assert.Less(euler.y, 2f * Mathf.PI);
         }
 
         [Test]
@@ -608,8 +612,9 @@ namespace VRCKatamari.Tests
             // Section 15.1 item 1: the reference implementation has ONE facing formula,
             // euler.y = TAU/2 + atan2(vx, vz) = pi + atan2(vx, vz), used for walking and
             // turning alike and fed the velocity direction. Its binding convention is that
-            // v = (0, 0, -1) gives atan2(0, -1) + pi = 2*pi, i.e. MODEL ZERO YAW FACES -Z;
-            // a prefab authored +Z forward would walk backwards (section 15.2 item S1).
+            // v = (0, 0, -1) gives atan2(0, -1) + pi = 2*pi, normalized to 0, i.e. MODEL ZERO
+            // YAW FACES -Z; a prefab authored +Z forward would walk backwards
+            // (section 15.2 item S1).
             float[] state = new float[MotionMath.WanderStateFloats];
             MotionMath.ResetSporadicWalk(state, 12345);
             Vector3 offset;
@@ -629,7 +634,9 @@ namespace VRCKatamari.Tests
                 Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 0x7F, false,
                     out offset, out euler));
             }
-            Assert.AreEqual(Mathf.PI, Mathf.Repeat(euler.y, 2f * Mathf.PI), 1e-4f);
+            Assert.AreEqual(Mathf.PI, euler.y, 1e-3f);      // walking +Z, the far end of the range
+            Assert.GreaterOrEqual(euler.y, 0f);
+            Assert.Less(euler.y, 2f * Mathf.PI);
         }
 
         // --- Clouds -------------------------------------------------------------

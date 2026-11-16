@@ -148,7 +148,7 @@
 - **道具行为按原作的分列结构：`kind` 与 `behaviour` 两列、纯重力坠落、落定不倾斜、v1 不做 `carry`、单父指针、父件被吃子件坠落** — 原作本来就是「内容分类」和「怎么动」两轴；「掉」比「带」少一轮体积门与重复计收益的工作量。见 [PROP_BEHAVIOURS §10.1–§10.3、§10.9](Design/PickupAbsorb/PROP_BEHAVIOURS.md)；其中坠落传播见上方 (s) 条，不在此重复。
 - **碰撞体必须跟视觉形状，按型给代理，不用 AABB** — AABB 的角部比西瓜/玩具球多出几厘米，玩家会看到「没碰到就被挡」。见 [COLLIDER_PROXY](Design/PickupAbsorb/COLLIDER_PROXY.md)、[COLLIDER_LAYER](Design/PickupAbsorb/COLLIDER_LAYER.md)。
 - **贴图：法线不得来自噪声，UV 必须有效** — fbm 噪声法线会把釉面/金属打成「湿报纸」；重叠或零面积 UV 不进 Unity。见 [TEXTURE_PBR_SPEC §10、§10.1](Art/OriginalModels/props/TEXTURE_PBR_SPEC.md)。
-- **关卡格式与编辑器整体升级：研究已落地，v2 进入最终提案** — 地形/碰撞/旋转/缩放/父表/许可都已查清，字段与分层见 [LEVEL_FORMAT_V2](Design/Levels/LEVEL_FORMAT_V2.md)（`FINAL_PROPOSAL`）；Unity 侧尚未验证。仍然有效的原则：新键与校验器同批落地、未知键硬错误、不静默丢弃。
+- **关卡格式与编辑器整体升级：研究已落地，v2 进入最终提案** — 地形/碰撞/旋转/缩放/父表/许可都已查清，字段与分层见 [LEVEL_FORMAT_V2](Design/Levels/LEVEL_FORMAT_V2.md)（`FINAL_PROPOSAL`）；Unity 侧尚未验证。仍然有效的原则：新键与校验器同批落地、未知键硬错误、不静默丢弃。另（2026-11-16）：**出生点与球起点允许是两个 marker**——参考数据 `ball.start` 与 `playerSpawn` 差 0.4 m（Cancer `[4.0337,-0.6909,6.7809]` vs `[4.0337,-0.2909,6.7809]`），导入建 `Markers/BallStart` 与 `Markers/PlayerSpawn` 两个；只有两者重合时才合成一个 `Markers/Spawn`。这是数据驱动，不是随手多建。
 - **地形必须支持真正的三维表面，纯 heightfield 不够** — 原作有洞、隧道和悬挑，所以碰撞至少要三角网 + 空间加速结构（大片简单区域可以再用 heightfield 当优化）。数据侧形态已定：静态三角网 + 碰撞 AABB broad phase + 烘焙网格；运行时接触分 T0–T4，每步成本与 Udon 传参仍待 Unity 实测。见 [ORIGINAL_TERRAIN_AND_LAYOUT](Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)、[NOCLIP_KATAMARI_FORMAT](Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)、[LEVEL_FORMAT_V2 §3/§13](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **noclip.website：不 vendor 它的代码，自己写解析器、出我们自己的格式** — **许可更正（2026-11-16）**：noclip 的 LICENSE 是 **MIT + 一段反编译说明**（GitHub 因此报 `NOASSERTION`），**不是 GPL-3**；原「GPL-3」前提有误。即便如此，逐行翻译仍属衍生作品，MIT 允许再分发但必须保留版权与许可声明。首选照规格重实现（已完成，981 行解析器在 `~/KatamariRef/`，仓库外）；仓库许可仍未定。见 [NOCLIP_KATAMARI_FORMAT §10](Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)、[LEVEL_FORMAT_V2 §19](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **关卡编辑器：Unity 式鼠标操作 + 区域统计（件数与总体积）** — 复用玩家/作者已经会的手感；区域统计用来验内容密度与供给。见 [LEVEL_EDITOR_WEB §7.1 与飞行/操作节](Design/Tools/LEVEL_EDITOR_WEB.md)。
@@ -166,7 +166,7 @@
 - **D-12：相位 = 确定性哈希 + 作者覆盖** — 「相位」= 这件从周期的哪一刻开始动；用 `itemId + level.id` 哈希派生，同一件每次进世界一致（账本/双端/回放不飘），作者可用 `phase` 覆盖；不用 `Math.random()`，原作种子来源仍未验证（U5）。见 [LEVEL_FORMAT_V2 §16.2 与 D-12](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **D-13：舞台动画现在不做** — noclip 没做舞台动画，不能反证原作没有；等原机证据，或用材质/Shader 另立项。见 [LEVEL_FORMAT_V2 的 D-13](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **D-14：下落期间挂起子件自己的运动，落定后恢复** — 与已定「子件坠落、不 carry」一致。见 [LEVEL_FORMAT_V2 的 D-14](Design/Levels/LEVEL_FORMAT_V2.md)。
-- **逐件缩放 = 三层，不是放开** — ①运行时永不缩放（旧规则不变）；②作者态均匀缩放全允许（含挂接件：原作就有 1 件 0.1 挂在父件下）；③非均匀只允许无父、static、box/sphere。原作 524 件里 6 件非单位（4×0.9、1×0.1、1 非均匀），忽略会让体积/门槛/渲染全错（0.1 那件门差 10×、非均匀差 28.7×）。「不许改尺寸凑档」仍然有效。见 [LEVEL_FORMAT_V2 §6.4、§18 与 D-5](Design/Levels/LEVEL_FORMAT_V2.md)。
+- **逐件缩放 = 四层，不是放开**（2026-11-16 加第四层：非均匀 + 无代理） — ①运行时永不缩放（旧规则不变）；②作者态均匀缩放全允许（含挂接件：原作就有 1 件 0.1 挂在父件下）；③非均匀 + 有碰撞代理只允许无父、static、box/sphere；④非均匀 + **无代理**（def 不写 `collider`）允许无父、static、`absorbable:false`（实现记 `NonUniformNoProxy`；判据是「有没有代理」，不是「有没有碰撞体」）。原作 524 件里 6 件非单位（4×0.9、1×0.1、1 非均匀），忽略会让体积/门槛/渲染全错（0.1 那件门差 10×、非均匀差 28.7×）。「不许改尺寸凑档」仍然有效。唯一的 ④ 实例 `sparrow_001`（`k = 0.122` 的 1.7 cm 薄片）按「贴花」处理——渲染位置对、不碰撞、不可吸，**不再列为待定**（原选项 A）。见 [LEVEL_FORMAT_V2 §6.4、§18 与 D-5](Design/Levels/LEVEL_FORMAT_V2.md)。
 
 ### Owner decisions 2026-11-16（追加：性能口径、怀旧关命名）
 
@@ -183,6 +183,7 @@
 
 ### Still open
 
+- **参考关卡：47 件道具嵌进 scenery 固体 — 待主人/待设计确认（不是校验器错误）** — `Docs/Design/Levels/_ref_cancer/placement.v2.json` 有 35 条 `structures.solids`（原作「这一关永远吸不动的大件」：门 > 1.2 m 且 AABB ≥50 % 落在提取器碰撞盒里），其中 **47 件道具的 8 个 OBB 角点**沉进某条固体，最深 **1.094 m**（`coconut_crab_001` 进 `medium_tree_002`；`chopsticks_001` 进 `snoozing_momma_001` 只有 0.03 m）。`levelbuild.py check` 旧的那条规则打印 24 条 + 「… 22 more」= **47**，v2 的 `[prop_overlap]` 只判**道具×道具**（§9.2 没有道具×结构的 tag），所以 v2 校验器把它写成 note，**没有放宽任何阈值**。为什么不能「顺手改数据」：这些固体是**从道具自己推出来的**（一条 scenery 固体就是那件大件的盒子），而螃蟹/筷子/小狗本来就贴着树根、招牌、睡着的人站——重叠是原作的摆放事实，不是坐标错。选项：**A** 保持现状（note 记录，引擎侧把 scenery 固体当“可穿”的视觉件，碰撞交给地形网格——提取器的碰撞三角形已经在同一空间里）；**B** 把 35 条固体缩到模型真实 AABB 并把 `support` 关掉，再重测 47 → 未知；**C** 给"贴着 scenery 站"的道具加显式豁免字段（新 schema 工作量）。影响：球会不会被树/招牌/睡着的人挡住、以及 47 件道具能不能被吸（它们现在是可吸的，`absorbable` 按门）。见 [REF_STAGE_VIEW §8](Design/Tools/REF_STAGE_VIEW.md)、[LEVEL_FORMAT_V2 §4/§9.2](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **地形接触的运行时成本**：数据侧（三角网 + AABB broad phase + 网格 + 侧车）已定；T0–T4 的每步成本、Udon 行为间数组传参、3,456 三角形实测未做（[LEVEL_FORMAT_V2 §13/§16.1](Design/Levels/LEVEL_FORMAT_V2.md)）。
 - **仓库许可**：未选，且不再由 GPL 顾虑驱动——noclip 是 MIT；将来若移植第三方 MIT 代码，保留原版权/许可声明即可，首选仍是照规格重实现；任何解析器在许可选定前留在仓库外（见本节 noclip 条）。
 

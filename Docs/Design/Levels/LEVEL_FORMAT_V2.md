@@ -381,21 +381,23 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | `(1,1,1)` | 518 | — | 98.9% |
 | `(0.9,0.9,0.9)` | 4 | 无 | tableIndex 2/9/12/16，`nameIdx` 246/248/250（同类三型四件） |
 | `(0.1,0.1,0.1)` | 1 | **有**（tableIndex 411，父 410、祖父 409） | 10× 小，挂接链上的最内一层 |
-| `(0.0741,0.0291,0.0197)` | 1 | 无 | 非均匀，语义未验证（§16.1、NOCLIP §12.1） |
+| `(0.0741,0.0291,0.0197)` | 1 | 无 | 非均匀；**语义**仍未验证（§16.1、NOCLIP §12.1），但处理方式已定 = ④（贴花：不碰撞、不可吸） |
 
-规则分三**层**，别混成一句「不缩放」：
+规则分四**层**，别混成一句「不缩放」：
 
 | 层 | 规则 | 落点 |
 |---|---|---|
 | **① 运行时** | **任何件在运行时都不按 `scale` 缩放**（挂接件尤其）：导入期已把 `scale` 乘进 `aabb`，运行时只读 `aabb`；父件带走子件时只搬位姿、不搬尺寸 | 运行时契约；`[prop_volume_stale]` 间接守住 |
 | **② 作者态：均匀**（`sx=sy=sz`） | 允许，**任意 `behaviour`、任意 `parent`** | 原作的 4 件 0.9 + 1 件 0.1 都靠这条 |
-| **③ 作者态：非均匀** | 只允许 **`parent == null` 且 `behaviour == "static"` 且 def.collider.type ∈ {box,sphere}**；否则 `[prop_scale_nonuniform]` | 胶囊/凸包非均匀缩放下不再是同类形状；动态件的接触与吸收门会随姿态变 |
+| **③ 作者态：非均匀 + 有碰撞代理** | 只允许 **`parent == null` 且 `behaviour == "static"` 且 def.collider.type ∈ {box,sphere}**；否则 `[prop_scale_nonuniform]` | 胶囊/凸包非均匀缩放下不再是同类形状；动态件的接触与吸收门会随姿态变 |
+| **④ 作者态：非均匀 + 无碰撞代理**（2026-11-16 新增） | 允许，条件是 **def 里根本没有 `collider`**（不是「没有 Collider 组件」）、`parent == null`、`behaviour == "static"`、`absorbable:false`；导入器记作 `NonUniformNoProxy` | 没有代理就没有可失真的形状：非均匀缩放只作用于视觉，`absorbable:false` 让它不进吸收门 |
 
 - **「挂接件永不缩放」保留为①（运行时），不再是②的禁令**：原作那件 `(0.1,0.1,0.1)` 就挂在父件下。若照旧写成「`parent != null` 时 `scale` 必须为 1」，参考导入会拒掉一件真实数据。`[prop_scale_attached]` 因此改成「挂接件带**非均匀** scale」。
 - **②的 `scale` 是静态列的一部分**：导入器把它乘进 `aabb` / `volumeMm3` / `absorbDiameterReqMm`，原值留在 `scale` 供审计；下游（电机、吸收门、拾取、编辑器）**不再乘第二次**，也不需要知道它存在。
-- **这不是「可以把道具改大改小去凑档」**：③仍禁止非均匀，②只允许原值照抄或作者写明理由；调体积只能用 `volumeK`（PARITY_AUDIT G13），不是改 `scale`。
+- **这不是「可以把道具改大改小去凑档」**：②只允许原值照抄或作者写明理由，③④ 都要求无父 + `static`（③ 还限 box/sphere、④ 限无代理且不可吸）；调体积只能用 `volumeK`（PARITY_AUDIT G13），不是改 `scale`。
 - **忽略缩放会错多少**（所以不能省这个字段）：`0.9` 体积差 1.37×、门差 1.11×；`0.1` 体积差 1000×、门差 10×（门槛会要求 10 倍大的球）；非均匀体积差 23,547×、门差 28.7×。渲染上忽略非均匀那件会每轴大 13.5 / 34.4 / 50.8 倍（一块 23×10×15 cm 的实心片，而不是 1.7×0.3×0.3 cm 的薄片）。
-- **原作的 1 件非均匀** 转换方式照旧：照写 `scale`，但标 `absorbable:false`、`behaviour:"static"`、不写 `collider`（按无碰撞处理），并记进迁移报告的 `divergences`。
+- **④ 不是漏洞，判据是「有没有代理」而不是「有没有碰撞体」**：`def.collider` 是**导入器要建的碰撞代理**（`box`/`sphere`/`capsule`/`convex`），没有它就等于「按无碰撞处理」，而非均匀缩放唯一会失真的东西——代理形状——压根不存在。所以 ④ 比 ③ 宽是**有理由的宽**，不是绕过校验：一件 def 若写了 `collider:convex`，哪怕它 `static`、无父、不可吸，仍然被 ③ 拒。反过来 ④ 也只放行最没有风险的形态（`static` + `absorbable:false`），因为它「视觉可以任意拉伸、物理完全不参与」。
+- **原作的 1 件非均匀**（`sparrow_001`，def `sparrow` 不写 collider，D-5 原文即「按无碰撞处理」）就是 ④ 的唯一实例：照写 `scale`，标 `absorbable:false`、`behaviour:"static"`、不写 `collider`，并记进迁移报告的 `divergences`。
 
 `aabb` 一律是**已乘 scale** 的尺寸，`volumeMm3` 由它和 `volumeK` 推出。**不要**在运行时再乘一次 scale。为什么允许逐件缩放、以及它和旧口径「不缩放」的关系，见 §18。
 
@@ -1017,7 +1019,8 @@ BALL_KEYS      = ("startDiameterM","targetDiameterM","maxDiameterRef","maxDiamet
 CAPS_KEYS      = ("props","terrainTriangles","terrainVertices","staticSolids",
                   "activityWalls","movingProps","animators")
 BUDGET_KEYS    = ("planes","boxes","ramps","blocking","propSupports")
-EXPECTED_KEYS  = ("propCount","valueUnits","terrainTriangles")
+EXPECTED_KEYS  = ("propCount","growthMm3","structureCount","staticObbs","overlapBudget",
+                  "valueUnits","terrainTriangles")
 SOURCE_KEYS    = ("kind","provenance","windingFix","licence")
 ZONE_KEYS      = ("id","code","kind")
 TERRAIN_KEYS   = ("id","kind","winding","vertices","indices","meshRef","triangles",
@@ -1051,6 +1054,8 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
                   "whack_a_mole","path_collision","spin","clouds","flip","bob",
                   "sloping_path","back_and_forth")
 ```
+
+`EXPECTED_KEYS` 是**实现与参考文档的实际并集**：`growthMm3`/`structureCount`/`staticObbs`/`overlapBudget` 是 v2 新增的派生/声明量（`valueUnits` 只作为 v1 输入兼容保留、写出时丢弃，两者共存不报警告）。
 
 `PROP_KEYS_V2` **删掉了** v1 的 `group`/`groupId`（原作的视觉挂接组由 `parent` + `rotationQuat` 表达；组容器由导入器按 `parent` 建）、浮点 `absorbDiameterReq`，以及上一版的 `behaviourParams`（`linkAction` 迁到 `inherit`，其余进 `notes`）；**加进了** `behaviour`/`motion`/`inherit`/`phase`/`clipStart`/`shakeOff`/`scale`/`volumeMm3`/`absorbDiameterReqMm`/`parent`/`rigidGroup`/`floatingOk`。删掉的键在 v2 里是未知键，转换器负责搬走。
 
@@ -1344,7 +1349,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | **D-2** | 地形存哪 | A 全内联；B >512 三角形走 `.katerrain` 侧车 + sha256 | **B**：内联保可读，大网格走二进制并钉哈希；参考关卡也用同一格式 | JSON/侧车、编辑器、导入器 |
 | **D-3** | 地形要不要水平阻挡 | A 只支撑；B 支撑 + 陡面挡（θ 分类） | **B**，但**分阶段**：T0/T1 只做支撑/推出/去法向速度，T2 才做滚/爬分类与爬升；在 T2 前用 `structures` slab 补关键阻挡 | 电机、测试场、关卡设计 |
 | **D-4** | 活动区越界后果 | A 硬墙；B 硬墙 + 软边距（减速/提示）；C 只提示 | **A + 每关 kill plane**（owner 2026-11-16）：硬墙 + 球径门，**玩法范围主要靠地图布局限制**（参考关就是这么限制的，不只靠墙）；掉出用逐关 Y 的重启阈值，不做软边距（HUD 是另一个模块） | `activityArea`、电机、关卡设计、HUD |
-| **D-5** | 逐件缩放策略 | A 视觉-only；B 全量参与几何/体积；C 只允许均匀 | **②+③**（§6.4 三层）：①运行时永不缩放（旧口径，不变）；②作者态均匀全允许（含挂接件）；③非均匀只允许无父、static、box/sphere。原作 6 件非单位：4×0.9、1×0.1（**挂接件**）、1 非均匀（语义未验证） | props、导入器、吸收门 |
+| **D-5** | 逐件缩放策略 | A 视觉-only；B 全量参与几何/体积；C 只允许均匀 | **②+③+④**（§6.4 四层）：①运行时永不缩放（旧口径，不变）；②作者态均匀全允许（含挂接件）；③非均匀 + 有代理只允许无父、static、box/sphere；④非均匀 + **无代理**（def 无 `collider`）允许无父、static、`absorbable:false`。原作 6 件非单位：4×0.9、1×0.1（**挂接件**）、1 非均匀 = ④ 的唯一实例 `sparrow_001` | props、导入器、吸收门 |
 | **D-6** | zone id 的用法 | A 不透明标签；B 现在映射成玩法区（8=void 等） | **A**：只做标签/统计（`killPlane.zoneId` 只记诊断）；kill plane 是独立字段、**取逐关 Y**，运行时由**回合状态机**当「重启阈值」执行（不是全局地板），没有回合状态机的世界退回 `ActivityAreaHost` 兜底 | 地形、活动区、回合状态机、统计 |
 | **D-7** | 现有 ramp/curve_ramp/box 是否迁进地形 | A 保留解析体；B 全烘进网格 | **A**：能解析体表达的就不进网格；只有曲面/悬垂才用地形 | 引擎、数据、编辑器 |
 | **D-8** | 参考关卡数据保留 | A 只留 `~/KatamariRef`；B 允许进仓库 | **A**（现行规则）：导入器只写 `_ref_*` 与 `_RefUnlicensed`；任何网格/贴图/BIN 永不入库 | 导入器、git 守卫 |
@@ -1503,17 +1508,18 @@ PS2 的实例记录是 0x40 字节，`+0x30..+0x38` 三个 f32 就是缩放（[N
 
 - **4 件 `0.9`**（无父、同类小尺寸）：忽略 → 体积差 1.37×，吸收门差 1.11×；
 - **1 件 `0.1`**（**挂在父件下**，chain 409→410→411）：忽略 → 体积差 1000×，门会要求 10 倍大的球，渲染大 10 倍；
-- **1 件非均匀 `(0.0741, 0.0291, 0.0197)`**（无父，语义未验证）：忽略 → 体积差 23,547×，门差 28.7×，每轴大 13.5 / 34.4 / 50.8 倍。
+- **1 件非均匀 `(0.0741, 0.0291, 0.0197)`**（无父；语义未验证，按 ④ 处理）：忽略 → 体积差 23,547×，门差 28.7×，每轴大 13.5 / 34.4 / 50.8 倍。
 
 **如果不允许逐件缩放，这三类件只能二选一：要么按 1:1 导入（渲染、体积、门槛全错），要么丢掉（参考关卡少 6 件，其中 1 件是挂接链上的）。** 前者会让「参考关卡与原作对拍」这件事直接不成立，后者是数据丢失——两样都比「多一个 `scale` 字段」贵。
 
-### 18.3 所以现在是三层（不是「放开了」）
+### 18.3 所以现在是四层（不是「放开了」）
 
 | 层 | 旧口径 | 现在 |
 |---|---|---|
 | ① 运行时缩放 | 不许 | **不许**（不变）：`scale` 已在导入期乘进 `aabb`，运行时只读 `aabb`；父件带子件只搬位姿 |
 | ② 作者态均匀缩放 | 没有这个字段 | **允许**（新）：任何 `behaviour`、任何 `parent`，因为原作就有 4 件 0.9 和 1 件 0.1 |
-| ③ 作者态非均匀缩放 | 没有这个字段 | **仍限制**：只允许无父、static、box/sphere；原作那 1 件照写但标不可吸、无碰撞、记 `divergences` |
+| ③ 作者态非均匀缩放（有代理） | 没有这个字段 | **仍限制**：只允许无父、static、box/sphere；胶囊/凸包在非均匀下不再是同类形状 |
+| ④ 作者态非均匀缩放（无代理） | 没有这个字段 | **允许**（2026-11-16）：def 没有 `collider` 就没有代理可失真，条件是 `static` + `absorbable:false`；原作那 1 件 `sparrow_001` 正属此层，照写 `scale`、记 `divergences` |
 
 **没有放开的两条**：不许把道具改大改小去凑体积档（②只能照抄原值或写明理由，调体积只能用 `volumeK`）；挂接件在运行时仍然永不缩放（①）。
 

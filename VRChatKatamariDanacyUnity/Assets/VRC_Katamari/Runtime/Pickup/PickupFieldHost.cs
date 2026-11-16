@@ -1060,7 +1060,7 @@ namespace VRCKatamari.Pickup
                     + ignored + " trailing entr(y/ies) of the longer arrays. props=" + propCount);
             }
             if (missingTransforms > 0 || emptyIds > 0 || emptyKinds > 0 ||
-                badValues > 0 || degenerateBounds > 0)
+                badGrowth > 0 || degenerateBounds > 0)
             {
                 Debug.LogWarning("[PickupFieldHost] prop data: missingTransforms=" + missingTransforms
                     + " emptyIds=" + emptyIds

@@ -371,7 +371,7 @@ MonoBehaviour:
     - Name: tooltip
       Entry: 1
       Data: Seconds between report lines. A non-positive value falls back to 0.5
-        s.
+        s. Lower it to 0.1 s for one Play to see the core spring move.
     - Name: 
       Entry: 8
       Data: 

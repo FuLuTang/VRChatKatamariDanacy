@@ -114,7 +114,7 @@ namespace VRCKatamari.Tests
         public void TheCapIsTwoPointTwoMetresOnDemandAndThirtyMetresByDefault()
         {
             // The motor's default cap is the ONE global parameter (30 m).
-            Assert.AreEqual(30f, (float)FieldOrNull("maxBallDiameterM"), 1e-6f);
+            Assert.AreEqual(30f, (float)GetField("maxBallDiameterM"), 1e-6f);
 
             // A level may pin a smaller cap through that same field; the 2.20 m content
             // ladder is then a data choice, not a second code path.

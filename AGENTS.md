@@ -35,6 +35,9 @@ Some data structures and behaviours take priority for restoration to the origina
 - Game-file parsers derived from third-party code (e.g. noclip.website, whose LICENSE is MIT plus a decompilation note) stay outside the repository until the owner chooses the repo licence; do not vendor their code or commit a line-by-line port. A port or derivative must keep the original copyright and licence notice (MIT allows this). The preferred route is a reimplementation from the format spec, which is what we did: that parser lives outside the repo.
 - Level editor (`Tools/leveleditor`): the browser GUI (human mode) and headless CLI/HTTP (AI mode, e.g. the planned render CLI `Tools/leveleditor/shot.py`) are thin clients of the same implementation — every GUI operation must be reachable by an agent through a command, and no editing or analysis logic may live only in browser JS; `_ref_*` levels are read-only but fully queryable and renderable. Details go in the planned `Docs/Design/Tools/EDITOR_HUMAN_AI_PARITY.md`.
 - Gameplay invariants: one shared world coordinate system; avatars and remote decorations never decide gameplay collision; only confirmed ledger values affect scores, banking or PvP; item generations and requests are idempotent.
+- **C# compile gate:** before delivering any C# change, the implementer runs `python3 Tools/csharp_check/check.py` — local Roslyn 4.3.1 mirroring Unity 2022.3, covering `VRCKatamari.Runtime`, `VRCKatamari.Editor`, `Assembly-CSharp-Editor` and `VRCKatamari.Tests.EditMode` in about 15 s ([usage](<Tools/csharp_check/README.md>)); 0 errors is the bar, and the report pastes the last output.
+- It checks C# compilation only: the UdonSharp language subset, U# program compilation, EditMode test runs and scene/serialization behaviour still need a Unity round.
+- Every "checked / 0 issues" claim names the scope scanned and its denominator; a claim without a denominator counts as not checked.
 
 ## Delegation and Git
 

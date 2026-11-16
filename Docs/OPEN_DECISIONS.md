@@ -155,20 +155,23 @@
 - **VR 验收后置，不着急** — 先把桌面闭环与灰盒跑通，VR 放在 Build & Test 有内容之后。
 - **每次派 subagent 前重查模型路由** — 本地/文档/代码走 `dsh-opencode-go` + `deepseek-v4.1-flash`；需要联网或操作 Unity 走 `deepseek-official` + `deepseek-flash`。见 [AGENTS.md 委派与 Git](<../AGENTS.md>)。
 
-### Owner decisions 2026-11-16（球径、活动区、坠落重生、动画与相位、缩放、命名）
+### Owner decisions 2026-11-16（球径、活动区、坠落重生、运动与相位、缩放）
 
-> 与上面 2026-11-15/16 同一天的第二批裁定：一行一条，细节在指针里，不在此重复。凡与旧条目冲突处（如 2.20 m 包线、D-10 的「先做子集」、D-11 的「≤64 个被动画实例」），以本节为准。
+> 与上面 2026-11-15/16 同一天的第二批裁定：一行一条，细节在指针里，不在此重复。凡与旧条目冲突处（如 2.20 m 包线、D-10 的「先做子集」、D-11 的「≤64 个被动画实例」），以本节与随后的「追加」节为准。
 
 - **球径上限 = 全局 20 m（不是 30）** — 上限是引擎护栏、不是玩法目标，正常游玩很少摸到；仍是单一全局资产，实验/测试关才可覆盖并打 warning。见 [LEVEL_FORMAT_V2 的 D-1](Design/Levels/LEVEL_FORMAT_V2.md)、[PARITY_AUDIT 的「球径上限」行](Design/Parity/PARITY_AUDIT.md)。
 - **活动区 = 硬墙 + 地图设计** — 参考关本来就是靠布局限制玩法范围的，不只是靠墙；越界后果 = 硬墙 + 球径门 + 掉出重生，软边距（减速/提示）不做。见 [LEVEL_FORMAT_V2 §5 与 D-4](Design/Levels/LEVEL_FORMAT_V2.md)、[HUB_ROOM](Design/StoryMode/HUB_ROOM.md)。
 - **掉出重生 = 逐关 Y 的重启阈值，由回合状态机执行（不是全局地板）** — `activityArea.killPlane.y` 逐关写，运行时由 `StoryRound` 读它当重启阈值；没有回合状态机的世界才退回 `ActivityAreaHost` 兜底。见 [LEVEL_FORMAT_V2 §5.5 与 D-6](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **D-10：13 类运动全加** — 数据与运行时都进第一版，不先做子集；没测到参数的类（`wait_for_player`/`whack_a_mole`/`clouds`/`spin`）用 PROVISIONAL 默认并在诊断里标记，不用「先做位移类」拖后。见 [LEVEL_FORMAT_V2 §6.7 与 D-10](Design/Levels/LEVEL_FORMAT_V2.md)、[ORIGINAL_ANIMATION_OBSERVATIONS](Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)。
-- **D-11：64 是 Animator 预算，不是「只播 64 件」** — Cancer 的 153 个动画实例里 **120 个（78%）是 3 型螃蟹**（各 140 三角、256² 贴图），走顶点/材质动画（VAT）；剩下 33 件/16 型才用真 Animator（≤64 够）；VAT 做出来之前用「不播骨骼」降级，并把这 153 件记一条 `PARITY_AUDIT` 分歧。**153 个逐实例 Animator 的账**：153 次 skinned draw call + 约 1.5–3 千骨骼 Transform/帧，桌面端不至于崩、Quest 有风险。见 [LEVEL_FORMAT_V2 §16.2 与 D-11](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **D-12：相位 = 确定性哈希 + 作者覆盖** — 「相位」= 这件从周期的哪一刻开始动；用 `itemId + level.id` 哈希派生，同一件每次进世界一致（账本/双端/回放不飘），作者可用 `phase` 覆盖；不用 `Math.random()`，原作种子来源仍未验证（U5）。见 [LEVEL_FORMAT_V2 §16.2 与 D-12](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **D-13：舞台动画现在不做** — noclip 没做舞台动画，不能反证原作没有；等原机证据，或用材质/Shader 另立项。见 [LEVEL_FORMAT_V2 的 D-13](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **D-14：下落期间挂起子件自己的运动，落定后恢复** — 与已定「子件坠落、不 carry」一致。见 [LEVEL_FORMAT_V2 的 D-14](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **逐件缩放 = 三层，不是放开** — ①运行时永不缩放（旧规则不变）；②作者态均匀缩放全允许（含挂接件：原作就有 1 件 0.1 挂在父件下）；③非均匀只允许无父、static、box/sphere。原作 524 件里 6 件非单位（4×0.9、1×0.1、1 非均匀），忽略会让体积/门槛/渲染全错（0.1 那件门差 10×、非均匀差 28.7×）。「不许改尺寸凑档」仍然有效。见 [LEVEL_FORMAT_V2 §6.4、§18 与 D-5](Design/Levels/LEVEL_FORMAT_V2.md)。
-- **参考关卡的对外工作名：蟹座小院 / Cancer Courtyard**（提议，待 owner 确认） — 现在的叫法是 "Make Cancer rebuild / `_ref_cancer`"；`_ref_cancer` 作为**内部参考 id** 保留到换皮完成，换皮（换成我们自己的贴图/模型）后再用工作名建正式关卡，不在 `_ref_*` 上直接改成正式内容。见 [_ref_cancer README](Design/Levels/_ref_cancer/README.md)、[原作优先原则](../AGENTS.md)。
+
+### Owner decisions 2026-11-16（追加：性能口径、怀旧关命名）
+
+- **性能口径：现阶段不预先优化（D-11 重写）** — 参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求本身极低，现阶段完全不必担心 Animator 数量、顶点数、骨骼数；**153 个骨骼动画实例直接挂普通 Animator/蒙皮，不做顶点动画纹理（VAT）**，「64 Animators 不够」的论证与 VAT 方案降级为「以后真测出瓶颈再看」，`caps.animators` 退成统计字段。**只放松「不预先优化」**：Quest/安卓 100 MB 包体硬上限照旧检查，后续真实测量（P5 合成场景、真机帧率、Quest 实机）照旧要做。见 [LEVEL_FORMAT_V2 §6.7.6 / §16.2 / D-11](Design/Levels/LEVEL_FORMAT_V2.md)、[PARITY_AUDIT 的「骨骼动画的呈现（Animator 数量）」行](Design/Parity/PARITY_AUDIT.md)、[ORIGINAL_ANIMATION_OBSERVATIONS §5.4](Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)。
+- **怀旧关正式名：怀旧关：蟹座小院 / Cancer Courtyard**（工作名 Nostalgia 可作别名） — 这个定名是给以后换皮发布的版本用的；内部 id 在换皮前仍是 `_ref_cancer`，不在 `_ref_*` 上直接改成正式内容（先换成我们自己的贴图/模型，再用正式名建关）。见 [_ref_cancer README](Design/Levels/_ref_cancer/README.md)、[原作优先原则](../AGENTS.md)。
 
 ### Still open
 

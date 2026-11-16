@@ -1,6 +1,6 @@
 # 关卡数据格式 v2（最终提案）
 
-> 状态：**`FINAL_PROPOSAL`，2026-11-16（第 3 版：owner 拍板 + 场景结构/缩放问答）**（原 `DRAFT_BLOCKED_ON_RESEARCH` 已解除）。触发：owner 2026-11-16「整体升级地图数据结构 + 网页编辑器一起升」；研究先于设计，三份研究均已落地：
+> 状态：**`FINAL_PROPOSAL`，2026-11-16（第 4 版：性能口径 + 命名定稿）**（原 `DRAFT_BLOCKED_ON_RESEARCH` 已解除）。触发：owner 2026-11-16「整体升级地图数据结构 + 网页编辑器一起升」；研究先于设计，三份研究均已落地：
 > [ORIGINAL_TERRAIN_AND_LAYOUT](../../Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)（REROLL 导出表能推出什么）、
 > [NOCLIP_KATAMARI_FORMAT](../../Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)（PS2 舞台包/任务包的字节布局）与
 > [ORIGINAL_ANIMATION_OBSERVATIONS](../../Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)（逐帧观察：多少东西在动、怎么动、预算多少）。
@@ -22,7 +22,7 @@
 | **Q-T4** 碰撞数据形态 | 4 个碰撞扇区（Make Cancer 条目数 66/0/1/1）；每条 AABB 自带一个三角形带；顶点第 4 个 float 是 **zone id**（位模式），分布 `{0:5712, 24:762, 3:456, 8:131, 1:47, 5:46}`。 | `terrain.broadPhase.boxes[]` 与 `triangles.zoneIds`；zone id 作为不透明标签保留（§3.7） |
 | **Q-T3 / Q-N4** 活动区机制 | 12 个 `DummyProps` 是**大件命中外壳**（全在 r<12 m 核心，19 关共 277 个），不是隐形墙；关卡包与任务表里**没有** bounds/radius/kill-plane 字段；社区 `barrier` 是按球径开门的**可见墙**。 | `activityArea` 由**我们作者化**：多边形墙段 + 球径门 + kill plane（§5）；不照抄 DummyProps |
 | **Q-T6/Q-T7** 尺度与坐标帧 | 1 原始单位 = 1 cm；**REROLL `position` = −0.01 × PS2 平移**（三轴全取反，无平移），524 件中 360 件误差 <1 µm；因此两套数据**同一世界坐标系**。三轴取反是**点反射**（det −1），网格并进来要**翻转三角形绕序**。真实地面主带 **y ≈ −1.0 m**（946 m² 上表面里 55% 落在 −1.2…−0.6），我们的假地板 y=0 **高了约 1 m**。 | 导入直接使用原作高度，不再 re-seat 到 0；`windingFix:"flip"` 是参考导入的必填项 |
-| **Q-M1** 原作的动件有多少、怎么动 | Make Cancer 524 个实例里 **129 个（24.6%）有运动程序**、**153 个（29.2%）有骨骼动画，只来自 19 个类型**；13 类运动（SporadicWalk 31、Hop 18、Sway 15、DraggedAlong 15、WaitForPlayer 15、WhackAMole 8、PathCollision 8、Spin 7、Clouds 5、Flip 2、Bob 2、SlopingPath 2、BackAndForth 1）；**1 速度单位 = 30.3 cm/s**；Sway 周期 ≈1.5 s、Bob ≈2.8 s、Hop 5–6 cm + 3.4–5 s 驻留、WhackAMole 0.7 s 升 12.4 cm；**43/90 条父子是静止子件随动父件**；noclip 不渲染舞台动画，5 朵云是 `moveType 16` 的道具。【实测】 | 新增 `motions[]`/`paths[]` 逐关表 + `props[].motion` 引用 + `defs[].speedIndex/clips` + `props[].phase/clipStart/inherit`；Udon 10–15 Hz 分档、共享剪辑 + 8 相位桶（§6.7） |
+| **Q-M1** 原作的动件有多少、怎么动 | Make Cancer 524 个实例里 **129 个（24.6%）有运动程序**、**153 个（29.2%）有骨骼动画，只来自 19 个类型**；13 类运动（SporadicWalk 31、Hop 18、Sway 15、DraggedAlong 15、WaitForPlayer 15、WhackAMole 8、PathCollision 8、Spin 7、Clouds 5、Flip 2、Bob 2、SlopingPath 2、BackAndForth 1）；**1 速度单位 = 30.3 cm/s**；Sway 周期 ≈1.5 s、Bob ≈2.8 s、Hop 5–6 cm + 3.4–5 s 驻留、WhackAMole 0.7 s 升 12.4 cm；**43/90 条父子是静止子件随动父件**；noclip 不渲染舞台动画，5 朵云是 `moveType 16` 的道具。【实测】 | 新增 `motions[]`/`paths[]` 逐关表 + `props[].motion` 引用 + `defs[].speedIndex/clips` + `props[].phase/clipStart/inherit`；Udon 10–15 Hz 分档、共享剪辑 + 8 相位桶（§6.7）；**153 个动画实例照原作挂 Animator，不做 VAT**（2026-11-16 拍板，§16.2） |
 | **Q-N6** 许可边界 | noclip 仓库的 LICENSE 是 **MIT + 一段反编译说明**（GitHub 因该说明报 `NOASSERTION`），**不是 GPL-3**。原假设有误。 | 见 §19 与 AGENTS/OPEN_DECISIONS 的更正；解析器仍是「照规格重实现」，仓库许可仍待 owner |
 
 **仍未解决、本文不假装解决的**：缩放字段的语义（那 1 件可能是贴花尺寸/碰撞盒尺寸）；zone id 的**玩法含义**（只有「逐三角形带标签」这一个事实）；7 个任务级体积的确切作用（其中第一个是 y=−1,691.5 cm 的巨大平面，像掉出判定面）；**逐实例相位从哪来**（原作可能是种子，noclip 用 `Math.random()`，我们暂用确定性哈希）、`locPosType` 是否表示随机摆放、`shakeOffFlag` 是否等于「可甩脱」、舞台模型有没有动画（noclip 没做，证不了）；REROLL 523 与 PS2 524 差的那 1 件。
@@ -552,15 +552,16 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 | 1,381 件、25% 在动 | 345 | 3,450/s（**28%**） | 5,175/s（42%） | 10,350/s（83%） |
 | 同上，只给路径+随机游走（≈1/3） | 115 | 1,150/s（9%） | 1,725/s（14%） | 3,450/s（28%） |
 
-  结论【实测数字 + 我方换算】：**逐实例 CPU 变换在 10–15 Hz 完全够**；真正贵的是**逐实例 Animator**（见 §6.7.6），不是运动程序。
+  结论【实测数字 + 我方换算】：**逐实例 CPU 变换在 10–15 Hz 完全够**；Animator 数量不由这条决定（2026-11-16：不预先优化，见 §6.7.6）。
 
-#### 6.7.6 骨骼动画：逐类型、共享剪辑、相位桶
+#### 6.7.6 骨骼动画：153 个实例直接挂 Animator（不预先优化）
 
-- 原作 Cancer 的 **153 个带动画实例只来自 19 个类型**（每类型 4–6 段剪辑）；Town 97 个来自 33 个类型【实测】。153 个逐实例 Animator 不是崩，而是 **153 次 skinned draw call + 每帧几千个骨骼 Transform**，且 3 型螃蟹（120 件，占 78%）完全没必要用骨骼——数字见 §16.2。
-- v2 的数据形状：`defs[].clips[]`（类型级）+ `props[].clipStart`（逐实例起始段）+ `props[].phase`（相位）。运行时策略（建议，D-11）：
-  1. **按类型 × 8 相位桶** 共享**控制器/剪辑**（不是共享 Animator 组件——每个被动画的实例仍要自己的 Animator）；同桶实例同帧同相，8 桶足以掩盖大部分机械感；
-  2. **Animator 预算 64 个实例/关**（`caps.animators`）；超出的被动画实例必须走顶点/材质动画（C）或降级为静态网格，**不是数据错误**（`[anim_budget]` 只是 warning）；按「离球近 / 有 `clipStart`」决定谁拿 Animator；
-  3. 若不想付 Animator 成本：v1 **只播 CPU 运动、不播骨骼**（数据仍保留，A 降级），或把常用剪辑烘成顶点/材质动画（C，推荐给螃蟹三型）——这是产品取舍，不是数据缺失。
+- 原作 Cancer 的 **153 个带动画实例只来自 19 个类型**（每类型 4–6 段剪辑）；Town 97 个来自 33 个类型【实测】。
+- **2026-11-16 拍板（D-11 重写）**：这一步**不预先优化**。参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求本身极低；153 个实例**各挂一个普通 Animator + 骨骼蒙皮**，不做顶点动画纹理（VAT），也不按 64 个砍。19 个类型共享控制器/剪辑仍然要做，但那只省资产，不省组件。
+- v2 的数据形状：`defs[].clips[]`（类型级）+ `props[].clipStart`（逐实例起始段）+ `props[].phase`（相位）。运行时策略（已定，D-11）：
+  1. 每个被动画实例一个 Animator；控制器/剪辑按类型共享（8 相位桶可选，用来打散「同帧同相」，是**表现**手段不是性能手段）；
+  2. `caps.animators` 只作**数据统计**（Cancer = 153），不再是 64 的硬预算；`[anim_budget]` 只在 `caps` 与实际数量不一致时提示，不拦；
+  3. **降级/优化路线全部押后**：VAT、按球距只播一部分、v1 不播骨骼——都写进 §16.2 的「以后真测出瓶颈再看」，**现在不做**。
 - 原作的剪辑选择看运行时状态（`AnimationType` + 置换），**不是**数据字段；v2 的 `clipStart` 只是「开局放哪段」（对应 `playAnimNo`，152/153 吻合，【推断，强】）。运行时何时切 `MOVING/WRIGGLE/PANIC` 是**我们的行为模型**，标 PROVISIONAL。
 
 #### 6.7.7 移动件被吸收：用当前位姿，父链一起处理
@@ -678,7 +679,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
               {"id": "zone_b", "code": 3}, {"id": "zone_c", "code": 8}],
     "arena": {"id": "_ref_cancer"},
     "caps": {"props": 511, "terrainTriangles": 4096, "terrainVertices": 8192,
-             "staticSolids": 256, "activityWalls": 8, "movingProps": 129, "animators": 64},
+             "staticSolids": 256, "activityWalls": 8, "movingProps": 129, "animators": 153},
     "budget": {"planes": 8, "boxes": 8, "ramps": 4, "blocking": 6, "propSupports": 6},
     "expected": {"propCount": 511, "terrainTriangles": 3456},
     "source": {"kind": "reference", "provenance": "~/KatamariRef/noclip_export/kse_out"}
@@ -990,12 +991,12 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 | `[paths_id]` / `[path_points]` / `[path_speed]` | error | 路径 id 重复；点数不在 2–64、点非 3 数、相邻点 <0.05 m；速度不在 0–500 |
 | `[def_speed_index]` | error | `speedIndex` 不在 0–11 |
 | `[def_clips]` | error/warning | 剪辑数 >6、`id` 重复、`fps` ≤0（error）；我们的关卡有 `clips` 但 `asset` 缺失（warning） |
-| `[anim_budget]` | warning | 该关 `behaviour:"motion"` 且 `clipStart ≥ 0` 的实例 > `caps.animators`（每个真 Animator 实例仍需一个组件；超出部分应由顶点/材质动画承担，见 §16.2） |
+| `[anim_budget]` | warning | 被动画实例数（`clipStart ≥ 0`）≠ `caps.animators`（`caps` 过期）；已不是 64 硬预算（2026-11-16 改口径，§6.7.6） |
 | `[prop_key]` | error | `props[]` 出现未知键（不得静默丢弃） |
 | `[prop_support]` / `[prop_overlap]` | error | 声明支撑不存在/悬空；两件 AABB 互穿且无父子/摞放关系 |
 | `[prop_bounds]` | error | 道具离开 `meta.bounds` 超过 5 cm |
 | `[caps_props]` | error | 件数 > `caps.props`（每关按 130/511/4000 档自己声明） |
-| `[caps_motion]` | error | `caps.movingProps` > `caps.props`，或 `caps.animators` > `caps.movingProps` |
+| `[caps_motion]` | error | `caps.movingProps` > `caps.props`，或 `caps.animators` > `caps.props`（Cancer 有 153 个动画实例但只有 129 个动件，旧规则会把正常数据判错） |
 | `[canonical]` | warning | 文件不是规范字节（现有行为） |
 | `[schema_legacy]` | error | 读到 v1 文件：提示先跑转换器 |
 
@@ -1110,7 +1111,7 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
 | `activityArea.killPlane` | `ActivityAreaHost` 的标量字段 | 每步/10 Hz 查 `ballCentreY < y` → `motor.TeleportTo(ballStart)` + 清速度 |
 | `props[]` | `LevelContent/Props/<kind>/<itemId>`（现有）+ `PickupFieldHost` 行 + **新** `MotionHost` 行 | `parent`/`inherit`/`volumeMm3`/`behaviour` 进行为宿主数组；`motion` → `MotionHost` 的 motion 槽；`phase` → 相位桶；`clipStart` → 起始剪辑；`scale` 写 Transform.localScale（仅限合法情况） |
 | `motions[]` / `paths[]` | **新** `MotionHost` / `PathHost` 的定长数组（`LevelContent` 根上） | 逐关表，导入期烘成 `motionClass[]`/`params[]`/`pathPointStart[]`/`pathPoint[]`；运行时不读 JSON |
-| `defs[].clips[]` | 共享动画预制体/控制器（按类型 × 8 相位桶） | 硬上限 `caps.animators`；`asset` 缺失的剪辑只存证，不实例化 Animator |
+| `defs[].clips[]` | 共享动画预制体/控制器（按类型共享，相位桶可选） | 每个被动画实例一个 Animator（2026-11-16：不预先优化）；`asset` 缺失的剪辑只存证，不实例化 Animator |
 | `defs[]` | manifest + 模型 + `collider` 代理 | 与今天一致；`scalePolicy` 只在编辑器校验里用 |
 | `cameras`/`renderPresets` | 编辑器/Blender 用，不进场景 | 不变 |
 
@@ -1192,11 +1193,11 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 |---|---:|---|
 | `caps.movingProps` | 每关动件数（Cancer 129） | 运动宿主并行数组的容量；`props` 仍是总件数 |
 | 运动更新 | 15 Hz（路径/随机游走）、10 Hz（其余程序化）、0 Hz（attached/static/纯表现） | §6.7.5 的 12,420 次/秒基线；Cancer 10–15 Hz 占 10–16% |
-| `caps.animators` | **64 个 Animator 实例**（运行时预算，不是「只播 64 件」） | 153 个原作动画实例来自 19 个类型；类型 × 8 相位桶只共享控制器/剪辑，不减少 Animator 组件。3 型螃蟹（120 件）走顶点/材质动画后，剩下的 33 件在 64 以内（§16.2） |
+| `caps.animators` | **统计字段**（Cancer = 153），不是 64 硬预算 | 2026-11-16 拍板：153 个骨骼实例直接挂普通 Animator/蒙皮，不预先优化；`caps.animators` 只记录数量，供 `[anim_budget]` 对账与包体预算参考 |
 | 相位桶 | 8 | `floor(phase × 8) % 8`；桶内同步是可接受的产品取舍（原作相位来源未知） |
 | 每关 `motions`/`paths` | ≤64 / ≤32 条，每条路径 ≤64 点 | 129 个动件只有 16 个 `moveType`；Cancer 真路径 11 条 |
 
-**为什么不是逐实例 Animator**：VRChat 里每个 Animator 都有状态机开销；153 个还会同帧同相，看起来机械。**为什么不是逐件曲线**：原作是「行为 + 速度档 + 运行时算」，逐件曲线既不能按类型调速，也无法复用逻辑（§6.7.1）。
+**为什么现在是逐实例 Animator**：2026-11-16 拍板不预先优化——参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求极低；「同帧同相看起来机械」用相位/相位桶解决，不靠砍组件数。**为什么不是逐件曲线**：原作是「行为 + 速度档 + 运行时算」，逐件曲线既不能按类型调速，也无法复用逻辑（§6.7.1）。
 
 ### 12.4 4000 件怎么装下
 
@@ -1317,7 +1318,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | **P2 Unity 导入（无地形）** | `PlacementImporter` v2：meta/structures/activity/props；地形字段读入但不建网格 | 导入器 + 场景 | 13 份重导入第二次 `+0 ~0 -0`；`volumeMm3`/`Req mm` 回读一致 |
 | **P3 地形数据与视觉** | 侧车读写、`TerrainFieldHost`/`TerrainChunkHost`、Mesh 资产生成、T0 支撑 | 数据 + 组件 | C21/C24 通过；地形上站得住；参考地形 3,456 三角形加载成功 |
 | **P4 地形接触 T1/T2** | 穿透/天花板、θ 分类、连续检测；C22/C23 | 电机地形层 | C21–C24 四档全绿；4 m/s 不穿 0.1 m 板 |
-| **P5 行为、运动与规模** | `parent`/`inherit`/`rigidGroup`/`scale` 运行时；子件坠落；`MotionHost`（10/15 Hz 队列 + 相位）；路径 host；共享剪辑/相位桶；4000 分片与空间桶 | 宿主组件 | 90 条父子关系在 Cancer 参考关卡跑通；129 个动件预算 ≤16%（15 Hz）；Animator ≤64；4000 件合成场景不掉帧目标（先测再定） |
+| **P5 行为、运动与规模** | `parent`/`inherit`/`rigidGroup`/`scale` 运行时；子件坠落；`MotionHost`（10/15 Hz 队列 + 相位）；路径 host；共享剪辑/相位桶；4000 分片与空间桶 | 宿主组件 | 90 条父子关系在 Cancer 参考关卡跑通；129 个动件预算 ≤16%（15 Hz）；153 个被动画实例照原作挂 Animator（不做 VAT，2026-11-16）；4000 件合成场景不掉帧目标（先测再定） |
 | **P6 编辑器** | E2–E8 | 编辑器 | 各功能有截图/冒烟；参考关卡只读不变 |
 | **P7 收尾** | 删 v1 读取器；`OPEN_DECISIONS` 状态更新；证据归档 | 清理 | 仓库无 v1 写入路径；全部测试绿 |
 
@@ -1343,7 +1344,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | **D-8** | 参考关卡数据保留 | A 只留 `~/KatamariRef`；B 允许进仓库 | **A**（现行规则）：导入器只写 `_ref_*` 与 `_RefUnlicensed`；任何网格/贴图/BIN 永不入库 | 导入器、git 守卫 |
 | **D-9** | 仓库许可（与 noclip 的 MIT 无关，见 §19） | A 暂不决定；B 现在选 MIT/Apache；C 现在选 copyleft（GPL 兼容） | **A**（LICENSING 未定）：不 vendor 第三方代码；若将来移植 MIT 代码，保留版权与许可声明；首选「照规格重实现」 | 全仓库 |
 | **D-10** | 运动保真度：13 类全做，还是先做子集 | A 数据模型收全 13 类、运行时先实现位移类 + 表现类；B 只做 `static`/`attached`；C 13 类全部第一版实现 | **C（owner 2026-11-16：全加）**：13 类数据与运行时都进第一版；没测到参数的类（`wait_for_player`/`whack_a_mole`/`clouds`/`spin`）用 PROVISIONAL 默认并在诊断里标记（U9），不用「先做子集」拖到后面 | schema、`MotionHost`、编辑器、测试 |
-| **D-11** | 骨骼动画路线 | A v1 不播骨骼（只保数据）；B 类型 × 8 相位桶、≤64 个被动画实例；C 烘成顶点/材质动画 | **B + C 混合**：153 个动画实例里 **120 个（78%）是 3 个螃蟹型**，走顶点/材质动画（C）；**≤64 个真 Animator** 留给其余 16 型 33 件（B）；A 作超预算降级。**64 当 Animator 上限成立，当「只播 64 件」的上限不成立**——数字与代价见 §16.2 | 导入器、`MotionHost`、美术 |
+| **D-11** | 骨骼动画路线（**2026-11-16 重写**） | A 153 个实例各挂普通 Animator（不优化）；B 类型 × 相位桶 + 截断到 64；C 顶点动画纹理（VAT） | **A（owner 2026-11-16）**：153 个骨骼实例**直接挂普通 Animator/蒙皮**，不做 VAT、不按 64 砍；B/C 降级为「以后真测出瓶颈再看」（§16.2 保留评估数字，但不作为当前设计）。`caps.animators` 改作统计字段 | 导入器、`MotionHost`、美术 |
 | **D-12** | 逐实例相位从哪来 | A 确定性哈希 + 作者 `phase` 覆盖；B 运行时随机；C 等原作种子证据 | **A（owner 2026-11-16）**：相位 = 「这件从周期的哪一刻开始动」；不读原作种子，用 `itemId + level.id` 的确定性哈希，作者可用 `phase` 覆盖。白话解释与为什么不用随机见 §16.2 | 导入器、运行时 |
 | **D-13** | 舞台动画（水面/招牌/霓虹） | A v1 不做；B 以后用材质/Shader 做；C 现在查证据 | **A（owner 2026-11-16：现在不做）**：本轮只证明「noclip 没做」，不能证明原作没有；5 朵云是 `moveType 16` 的道具（不是舞台），参考实现的风车/转灯是手写补的、不是数据给的 | 美术、舞台 |
 | **D-14** | 移动件被吸后，带自己 motion 的子件怎么办 | A 挂起，`SETTLED` 后恢复；B 立即恢复；C 随父一起吸（carry） | **A（owner 2026-11-16 确认）**：下落期间挂起子件自己的运动，落定后恢复；C 与已定「子件坠落、不 carry」冲突 | `MotionHost`、行为宿主 |
@@ -1364,7 +1365,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 **对这些开放问题的建议**：`phase` 用确定性哈希并允许作者覆盖（D-12）；`locPosType` 先按**固定摆放**导入，保留原值到 `notes`，不实现「每局随机」（等证据）；`shakeOff` 只存证、v1 不读（已定不做击飞）；舞台动画 v1 不做（D-13）；Spin/Whack/Clouds/触发半径用 PROVISIONAL 默认并在诊断中标记，试玩后再调。
 
-### 16.2 D-11 / D-12 的回答（研究回填 + 白话）
+### 16.2 D-11 / D-12 的记录（研究回填 + 白话）
 
 **D-12：什么是「相位」，从哪来**。一件摇摆的风铃、一只蹦的螃蟹，动作按周期重复；**相位 = 这件从周期的哪一刻开始**。两只一模一样的螃蟹，相位 0 与 0.5 会一只抬左腿、一只抬右腿。原作逐件记录里没有这个值（`playAnimNo` 是「开局放第几段剪辑」，不是相位），所以我们不能照抄，只能选一个：
 
@@ -1372,7 +1373,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 - 作者觉得不好看，就写 `phase` 覆盖；
 - **不用 `Math.random()`**：每次进世界都不同，同一件道具两次加载动作不同步，回放与对拍都会飘。原作的种子来源仍是 U5（未验证）。
 
-**D-11：64 个被动画实例（Animator）够不够？不够——但也不是把上限提到 153 就对了。**
+**D-11（2026-11-16 重写）：不预先优化。** 参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求本身极低；现阶段完全不必担心 Animator 数量、顶点数、骨骼数。**153 个带骨骼动画的实例直接用普通 Animator + 骨骼蒙皮**，不做顶点动画纹理（VAT），也不按 64 个砍。
 
 | 事实 | 数 |
 |---|---|
@@ -1382,15 +1383,23 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | 剩下 | **33 件 / 16 型** |
 | 整关规模 | 511 件、**59,056 三角**（实例加权；最大单型 356） |
 
-两条路的账（我方估算；「idle Animator 在 100–200 个时可忽略」有社区实测，[SO 74951690](https://stackoverflow.com/questions/74951690)，但那只算 Animator 状态机、不算蒙皮与 draw call）：
+所以当前设计只有一句话：**每个被动画实例一个 Animator，控制器/剪辑按 19 个类型共享，`caps.animators` 记 153 只作统计。** 共享剪辑省的是资产，不是组件；相位桶（可选）解决的是「同帧同相看起来机械」，是表现手段，不是性能手段。
 
-| 路线 | 每帧的账 | 结论 |
+**这条放松的是什么、不放松什么**（写清楚，免得以后再问一遍）：
+
+- **放松**：不再为「153 个 Animator / 153 次 skinned draw call / 1.5–3 千骨骼 Transform」做任何预先设计取舍——先照原作挂满，跑起来再说。
+- **不放松**：Quest/Android **100 MB 包体硬上限**照旧检查（那是包体，不是 Animator 数量）；后续**真实测量**照旧要做（P5 的 4000 件合成场景、真机帧率、Quest 实机），测出瓶颈再谈优化。
+- **不放松**：`defs[].clips` / `props[].clipStart` / `phase` 三个字段照旧，数据不丢。
+
+**「以后真测出瓶颈再看」的备选（现在不做，只留账）**：
+
+| 备选 | 前提 | 账（我方估算，仅供将来判断） |
 |---|---|---|
-| 153 个逐实例 Animator | 153 个状态机 + **153 次 skinned draw call**（SkinnedMeshRenderer 不参与批处理/实例化）+ 约 1.5–3 千个骨骼 Transform 每帧更新（按每型 10–20 骨估，未验） | 桌面端不至于崩，但这是 153 次 draw call + 几千个 Transform；Quest（世界 100 MB 上限、移动 GPU）下 153 个带骨网格是真实风险 |
-| 3 型螃蟹改 VAT（顶点动画贴图） | 140 三角 ≈ 100 顶点；4–6 段 × 60 帧 ≈ 0.1–0.4 MB/型，**3 型 ≈ 0.3–1.2 MB**（8 相位桶再 ×8 ≈ 2.4–9 MB）；**0 个 Animator、0 次蒙皮** | 螃蟹占 78% 的实例，一次解决；剩下 33 件/16 型塞进 64 个 Animator 绰绰有余 |
+| 3 型螃蟹改 VAT（顶点动画贴图） | 真测出 153 个 Animator 拖帧，且螃蟹仍是多数 | 140 三角 ≈ 100 顶点；4–6 段 × 60 帧 ≈ 0.1–0.4 MB/型，3 型 ≈ 0.3–1.2 MB（8 相位桶再 ×8 ≈ 2.4–9 MB）；0 Animator、0 蒙皮 |
+| 按球距截断（只给近处挂 Animator） | 同上，且远处动画看不出差别 | 需要「离球近 / 有 `clipStart`」的优先级规则；远处退化成静态网格 |
+| v1 不播骨骼（只保数据） | 连跑都跑不起来时的兜底 | 数据不丢，画面少一层；记一条 `PARITY_AUDIT` 分歧 |
 
-**建议（D-11 = B + C）**：`caps.animators` 保持 **64**，但它约束的是**真 Animator 组件**，不是「只播 64 件」；数据侧 153 件的 `defs[].clips` 与 `props[].clipStart` 全部保留。螃蟹三型走 VAT（C），其余 16 型 33 件走真 Animator（B）；VAT 没做出来之前用 A（不播骨骼）降级，并把这 153 件的动画记一条 `PARITY_AUDIT` 分歧——**不要用「只播 64 件」蒙过去**。判断标准：换关时先重算这张表（3 型是否仍占多数、每型三角数是否仍 <400），再决定 64 够不够。
-
+「idle Animator 在 100–200 个时可忽略」有社区实测（[SO 74951690](https://stackoverflow.com/questions/74951690)，只算状态机、不算蒙皮与 draw call）；**这只是旁证，不作为当前设计的依据**——现在的依据是 owner 的性能口径：先还原，后优化。
 
 ---
 
@@ -1533,3 +1542,4 @@ PS2 的实例记录是 0x40 字节，`+0x30..+0x38` 三个 f32 就是缩放（[N
 | 2026-11-16 | **本版：最终提案** | 两份研究落地后按研究结论改写：五层 schema 定稿、terrain/structures/activityArea/props 字段、两个 JSON 例子、规范形与侧车、错误码、v1→v2 转换器、Unity 映射、容量预算、地形接触分阶段计划与 4 个新测试格、编辑器升级、迁移阶段、owner 决策；许可前提更正为 MIT（非 GPL-3） |
 | 2026-11-16 | **第 2 版：运动/动画** | 吸收 `ORIGINAL_ANIMATION_OBSERVATIONS`：`motions[]`/`paths[]` 逐关表、`props[].motion/inherit/phase/clipStart/shakeOff`、`defs[].speedIndex/clips`、13 类运动与速度档、10/15 Hz 更新预算、共享剪辑×8 相位桶、移动件吸收/父链规则、三个运动 JSON 例子、错误码、编辑器 E9/E10、D-10–D-14 与 U5–U9 |
 | 2026-11-16 | **第 3 版：owner 拍板 + 两个问答** | 记录 owner 2026-11-16 的裁定（球径 20 m、活动区靠布局、逐关 kill plane、D-10 全加、D-11 研究结论、D-12 相位、D-13 不做、D-14 挂起）；新增 §17「一个世界 = 一张场景」（多地图架构、我们今天的 StoryMode 两岛结构、A/B/C 建议、格式与编辑器要求）、§18「为什么允许逐件缩放」（旧口径四句 → 新数据 6 件非单位 → 三层规则）；§6.4 改写为三层并收窄 `[prop_scale_attached]`；`caps.animators` 明确为「Animator 组件预算」而非「只播 64 件」；原许可/变更记录顺延为 §19/§20 |
+| 2026-11-16 | **第 4 版：性能口径 + 命名定稿** | owner 两条补充拍板：①**性能不预先优化**——D-11 重写为「153 个骨骼实例直接挂普通 Animator/蒙皮，不做 VAT」，`caps.animators` 退成统计字段（`[anim_budget]` 只对账、`[caps_motion]` 改 `animators ≤ props`），「64 不够」与 VAT 降级为「以后真测出瓶颈再看」，同时写明**不取消** Quest/安卓 100 MB 包体检查与后续真实测量；②怀旧关正式名 **「怀旧关：蟹座小院 / Cancer Courtyard」**（Nostalgia 作别名，内部 id 仍是 `_ref_cancer`） |

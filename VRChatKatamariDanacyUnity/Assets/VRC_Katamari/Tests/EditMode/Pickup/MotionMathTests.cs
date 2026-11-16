@@ -61,8 +61,8 @@ namespace VRCKatamari.Tests
             Assert.Less(first, 1f);
 
             // Two seeds an installer would plausibly hand out must not land on one phase.
-            Assert.AreNotEqual(MotionMath.Phase01(54321), first, 0f);
-            Assert.AreNotEqual(MotionMath.Phase01(0), first, 0f);
+            Assert.Greater(Mathf.Abs(MotionMath.Phase01(54321) - first), 0f);
+            Assert.Greater(Mathf.Abs(MotionMath.Phase01(0) - first), 0f);
 
             // Seeds are ints and the mix is over the full 32 bits, including negatives.
             Assert.GreaterOrEqual(MotionMath.Phase01(-7), 0f);
@@ -310,7 +310,7 @@ namespace VRCKatamari.Tests
             int seed = 7;
             float[] state = new float[MotionMath.WhackAMoleStateFloats];
             MotionMath.ResetWhackAMole(state, seed);
-            Vector3 offset;
+            Vector3 offset = Vector3.zero;
             Vector3 euler;
             for (int i = 0; i < 500; i++)
             {
@@ -546,7 +546,7 @@ namespace VRCKatamari.Tests
             MotionMath.ResetSporadicWalk(state, 12345);
             Vector3 before = Vector3.zero;
             Vector3 offset = Vector3.zero;
-            Vector3 euler;
+            Vector3 euler = Vector3.zero;
             // Stop on a frame that actually walked: a pause frame would make the revert
             // assertion vacuous.
             for (int i = 0; i < 600; i++)
@@ -935,8 +935,8 @@ namespace VRCKatamari.Tests
             int seed = 12345;
             Vector3 offset;
             Vector3 euler;
-            Vector3 smallOffset;
-            Vector3 smallEuler;
+            Vector3 smallOffset = Vector3.zero;
+            Vector3 smallEuler = Vector3.zero;
 
             float[] spinSmall = new float[MotionMath.SpinStateFloats];
             float[] spinBig = new float[MotionMath.SpinStateFloats];

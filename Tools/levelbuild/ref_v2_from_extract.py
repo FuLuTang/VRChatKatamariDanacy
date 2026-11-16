@@ -58,10 +58,25 @@ if str(ROOT) not in sys.path:
 
 from Tools.levelbuild import collider_proxy  # noqa: E402
 from Tools.levelbuild import placement_core as core  # noqa: E402
+from Tools.levelbuild import placement_v2  # noqa: E402
 from Tools.levelbuild import ref_models  # noqa: E402
 from Tools.levelbuild import ref_stage  # noqa: E402
 
-SCHEMA_V2 = "katamari.placement/2"
+SCHEMA_V2 = placement_v2.SCHEMA
+
+#: Canonical bytes, the ``.katerrain`` codec and the sidecar constants are the *format*'s,
+#: not the builder's: they live in ``placement_v2`` and are re-exported here for the callers
+#: (and tests) that only import the builder.
+canonical_text = placement_v2.canonical_text
+sidecar_bytes = placement_v2.sidecar_bytes
+read_sidecar = placement_v2.read_sidecar
+SidecarError = placement_v2.SidecarError
+CHUNK_TRIANGLES = placement_v2.CHUNK_TRIANGLES
+SIDECAR_NAME = placement_v2.SIDECAR_NAME
+TERRAIN_ID = placement_v2.TERRAIN_ID
+KATERRAIN_MAGIC = placement_v2.KATERRAIN_MAGIC
+KATERRAIN_VERSION = placement_v2.KATERRAIN_VERSION
+U16_VERTEX_LIMIT = placement_v2.U16_VERTEX_LIMIT
 
 #: Everything this builder may *read* lives under the owner's reference tree.
 READ_ROOT = Path.home() / "KatamariRef"
@@ -69,18 +84,21 @@ READ_ROOT = Path.home() / "KatamariRef"
 #: Everything it may *write* lives in a git-ignored reference level directory.
 LEVELS_ROOT = core.LEVELS_DIR
 
-SIDECAR_NAME = "cancer.katerrain"
-TERRAIN_ID = "cancer_ground"
 DOCUMENT_NAME = "placement.v2.json"
 
-#: Triangles per terrain chunk (the Udon single-chunk limit, LEVEL_FORMAT_V2 §3.5).
-CHUNK_TRIANGLES = 512
+#: The sidecar/binary names come from the format module (re-exported with it).
 
 #: Grid cell for terrain queries (§3.3 suggests 0.5-4 m; 1 m keeps the core at 19x15).
 GRID_CELL_M = 1.0
 
 #: Vertex budget of the sidecar's u16 index width.
-U16_VERTEX_LIMIT = 65536
+
+#: The original's skeletal-animation load for Make Cancer:
+#: ``ORIGINAL_ANIMATION_OBSERVATIONS.md`` §4.3 — 153 of the 524 instances carry bone
+#: animation, 152 of them with ``playAnimNo >= 0``, from 19 object types (5 clips x 126,
+#: 4 clips x 25, 6 clips x 2).  It is the number the owner's D-11 ("照原作挂满、不做 VAT")
+#: budgets Animators for.
+ANIMATED_INSTANCES_REFERENCE = 153
 
 #: Reference level design ceiling: the original's MAX_DIAMETER 120 cm.
 DESIGN_MAX_DIAMETER_M = 1.20
@@ -91,10 +109,6 @@ DEFAULT_VOLUME_PENALTY = core.DEFAULT_VOLUME_PENALTY
 #: A scenery prop needs at least this much of its AABB inside the extractor's collision space.
 SCENERY_COVERAGE = 0.5
 
-KATERRAIN_MAGIC = b"KTRN"
-KATERRAIN_VERSION = 1
-KATERRAIN_FLAG_ZONES = 0x1
-KATERRAIN_FLAG_CLASSES = 0x2
 
 
 class RefV2Error(RuntimeError):
@@ -304,57 +318,28 @@ def grid_for(boxes, cell=GRID_CELL_M):
 # --------------------------------------------------------------------------- #
 # the .katerrain sidecar (LEVEL_FORMAT_V2 §8.3)
 # --------------------------------------------------------------------------- #
-def sidecar_bytes(terrain):
-    vertices = terrain["vertices"]
-    indices = terrain["indices"]
-    zone_ids = terrain["zoneIds"]
-    classes = terrain["classes"]
-    index_width = 2 if len(vertices) < U16_VERTEX_LIMIT else 4
-    flags = KATERRAIN_FLAG_ZONES | KATERRAIN_FLAG_CLASSES
-    out = bytearray()
-    out += KATERRAIN_MAGIC
-    out += struct.pack("<H", KATERRAIN_VERSION)
-    out += struct.pack("<B", index_width)
-    out += struct.pack("<B", flags)
-    out += struct.pack("<III", len(vertices), len(indices), len(indices) // 3)
-    for point in vertices:
-        out += struct.pack("<3f", float(point[0]), float(point[1]), float(point[2]))
-    index_format = "<%d%s" % (len(indices), "H" if index_width == 2 else "I")
-    out += struct.pack(index_format, *indices)
-    out += bytes(bytearray(min(255, max(0, int(code))) for code in zone_ids))
-    out += bytes(bytearray(classes))
-    return bytes(out), index_width
-
-
-def read_sidecar(data):
-    """Parse a ``.katerrain`` back (the test uses it; the validator will too)."""
-    if len(data) < 20 or data[:4] != KATERRAIN_MAGIC:
-        raise RefV2Error("not a .katerrain file")
-    version, index_width, flags = struct.unpack_from("<HBB", data, 4)
-    if version != KATERRAIN_VERSION:
-        raise RefV2Error("unsupported .katerrain version %d" % version)
-    vertex_count, index_count, triangle_count = struct.unpack_from("<III", data, 8)
-    offset = 20
-    vertices = []
-    for _ in range(vertex_count):
-        vertices.append(struct.unpack_from("<3f", data, offset))
-        offset += 12
-    width = 2 if index_width == 2 else 4
-    indices = list(struct.unpack_from("<%d%s" % (index_count, "H" if width == 2 else "I"),
-                                      data, offset))
-    offset += index_count * width
-    zones = list(data[offset:offset + triangle_count]) if flags & KATERRAIN_FLAG_ZONES else []
-    offset += triangle_count if flags & KATERRAIN_FLAG_ZONES else 0
-    classes = list(data[offset:offset + triangle_count]) if flags & KATERRAIN_FLAG_CLASSES else []
-    return {"vertices": vertices, "indices": indices, "zoneIds": zones,
-            "classes": classes, "indexWidth": index_width, "flags": flags,
-            "counts": {"vertices": vertex_count, "indices": index_count,
-                       "triangles": triangle_count}}
-
-
 # --------------------------------------------------------------------------- #
 # props / defs / structures
 # --------------------------------------------------------------------------- #
+def animated_instances(stage_dir, props):
+    """``(count, source)``: how many instances need an Animator (§6.7.6 / D-11).
+
+    The extraction is the preferred source: a per-instance ``playAnimNo >= 0`` is the
+    original's "start at clip N" flag and matches the 153 animated instances (152/153).  The
+    current extractor does **not** export that field, so the documented reference count is
+    used instead and the caller records which source it was; the count is capped by this
+    document's props (a level cannot animate more props than it has).
+    """
+    records = ref_stage.load_instances(stage_dir)
+    flagged = [record for record in records
+               if isinstance(record.get("playAnimNo"), int) and record["playAnimNo"] >= 0]
+    if flagged:
+        return min(len(flagged), len(props)), "instances.json playAnimNo >= 0"
+    return min(ANIMATED_INSTANCES_REFERENCE, len(props)), (
+        "ORIGINAL_ANIMATION_OBSERVATIONS §4.3 (153/524; the extractor does not export "
+        "playAnimNo)")
+
+
 def def_volume_k(defn):
     """The original's own solid/bbox fill ratio, clamped to the schema's range."""
     ratio = (defn or {}).get("bboxOverSolidVolume")
@@ -496,11 +481,15 @@ def build_structures(placements, boxes, max_diameter_m=DESIGN_MAX_DIAMETER_M):
         report["neverAbsorbable"] += 1
         covered = coverage(entry["worldAabb"], boxes)
         if covered >= SCENERY_COVERAGE:
-            solids.append({
+            solid = {
                 "id": entry["itemId"],
                 "kind": entry["def"],
                 "role": "box",
-                "shape": "box",
+                # The contact shape is the def's fitted proxy, not the raw AABB: a box that
+                # wraps a tree or a lamppost reports "a crab is 60 cm inside the tree" for a
+                # crab standing at its base.  ``size`` stays the AABB because it is the
+                # *support* surface (the top face the ball can stand on).
+                "shape": "proxy",
                 "center": vec3(entry["position"]),
                 "size": vec3(entry["aabb"]),
                 "rotationQuat": entry["rotationQuat"],
@@ -509,7 +498,18 @@ def build_structures(placements, boxes, max_diameter_m=DESIGN_MAX_DIAMETER_M):
                 "support": True,
                 "notes": "scenery: gate %d mm; %.0f%% inside the extractor's collision "
                          "space" % (gate, covered * 100.0),
-            })
+            }
+            collider = entry.get("collider")
+            if isinstance(collider, dict):
+                solid["collider"] = collider
+                solid["proxySource"] = "def"
+                solid["notes"] += "; contact uses the def's %s proxy" % collider.get("type")
+            else:
+                solid["shape"] = "box"
+                solid["proxySource"] = "aabb-fallback"
+                solid["notes"] += "; no def collider: contact falls back to the AABB"
+                report["aabbFallback"] = report.get("aabbFallback", 0) + 1
+            solids.append(solid)
             report["withSolid"] += 1
         else:
             report["background"] += 1
@@ -581,9 +581,15 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
     boxes_raw = collision_boxes(collisions)
     zones, zone_names = zone_table(collisions, level_doc)
 
+    defs_by_id = {entry["id"]: entry for entry in original.get("defs") or []}
+    colliders_by_def = {}
+    if with_colliders:
+        for def_id, defn in defs_by_id.items():
+            collider = def_collider(defn, models_root, model_table)
+            if collider is not None:
+                colliders_by_def[def_id] = collider
     prepared = ref_stage.prepare(directory, folder, level_doc)
     transforms = (prepared.get("transforms") or {}).get("byItemId") or {}
-    defs_by_id = {entry["id"]: entry for entry in original.get("defs") or []}
 
     placements = []
     scavenged = {"positionMoved": 0, "positionMaxShift": 0.0, "scaleApplied": 0,
@@ -657,6 +663,7 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
             "absorbable": absorbable,
             "nonUniform": non_uniform,
             "zone": zone,
+            "collider": colliders_by_def.get(prop.get("def")),
             "worldAabb": world,
             "notes": notes,
             "instance": instance,
@@ -664,6 +671,7 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
             "v1Position": [float(value) for value in prop["position"]],
         })
 
+    animators, animator_source = animated_instances(directory, placements)
     solids, scenery = build_structures(placements, boxes_raw, max_diameter_m)
     rectangle, area_info = activity_polygon(terrain, boxes_raw)
     terrain_min_y = min(point[1] for point in terrain["vertices"])
@@ -674,7 +682,7 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
         "schema": SCHEMA_V2,
         "meta": _meta(level_id, level_doc, placements, terrain, solids, rectangle,
                       ground_y, kill_y, max_diameter_m, volume_penalty, time_limit_s,
-                      scenery, area_info, zones),
+                      scenery, area_info, zones, animators, animator_source),
         "terrain": None,          # filled below (needs the sidecar hash)
         "structures": {"solids": solids},
         "activityArea": {
@@ -694,7 +702,8 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
         },
         "props": [_prop_block(entry) for entry in sorted(placements, key=lambda item: item["itemId"])],
         "defs": _defs(level_doc, original, models_root, model_table, with_colliders,
-                      {entry["def"] for entry in placements if entry.get("nonUniform")}),
+                      {entry["def"] for entry in placements if entry.get("nonUniform")},
+                      colliders_by_def),
         "motions": [],
         "paths": [],
         "cameras": [],
@@ -726,12 +735,14 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
         "volumeK": {"min": min(entry["volumeK"] for entry in placements),
                     "max": max(entry["volumeK"] for entry in placements)},
         "expected": document["meta"]["expected"],
+        "animators": {"count": animators, "source": animator_source},
     }
     return document, sidecar, report
 
 
 def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y, kill_y,
-          max_diameter_m, volume_penalty, time_limit_s, scenery, area_info, zones):
+          max_diameter_m, volume_penalty, time_limit_s, scenery, area_info, zones,
+          animators=0, animator_source="none"):
     level = level_doc.get("level") or {}
     growth_total = sum(entry["growthMm3"] for entry in placements)
     overlap_budget = _overlap_pairs(placements)
@@ -761,7 +772,9 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
             "notes": ("reference rebuild of the original stage; runtime ball cap is the "
                       "project global cap, but this level's own design ceiling is %.2f m "
                       "(the original's MAX_DIAMETER) and absorbable/structures are decided "
-                      "against it" % max_diameter_m),
+                      "against it. caps.animators = %d, source: %s (D-11: one Animator per "
+                      "animated instance, no VAT)"
+                      % (max_diameter_m, int(animators), animator_source)),
         },
         "caps": {
             "props": 512,
@@ -770,7 +783,7 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
             "staticSolids": 256,
             "activityWalls": 8,
             "movingProps": 0,
-            "animators": 0,
+            "animators": int(animators),
         },
         "budget": {"planes": 8, "boxes": 64, "ramps": 4, "blocking": 6,
                    "propSupports": 6},
@@ -945,7 +958,7 @@ def _terrain_block(terrain, boxes, chunks, index_width, digest):
 
 
 def _defs(level_doc, original, models_root, model_table, with_colliders,
-          non_uniform_defs=()):
+          non_uniform_defs=(), colliders=None):
     defs = {entry["id"]: entry for entry in original.get("defs") or []}
     models = {entry.get("id"): entry.get("model") for entry in level_doc.get("defs") or []}
     blocks = []
@@ -962,9 +975,9 @@ def _defs(level_doc, original, models_root, model_table, with_colliders,
                 source.get("bboxOverSolidVolume") if source.get("bboxOverSolidVolume")
                 else "default 0.70"),
         }
-        collider = None
-        if with_colliders and def_id not in non_uniform_defs:
-            collider = def_collider(source, models_root, model_table)
+        collider = (colliders or {}).get(def_id)
+        if not with_colliders or def_id in non_uniform_defs:
+            collider = None
         if collider is not None:
             block["collider"] = collider
         blocks.append(block)
@@ -972,33 +985,46 @@ def _defs(level_doc, original, models_root, model_table, with_colliders,
 
 
 # --------------------------------------------------------------------------- #
-# canonical bytes
+# canonical bytes / sidecar / structural check: the format module owns them
 # --------------------------------------------------------------------------- #
-DOC_ORDER = ("schema", "meta", "terrain", "structures", "activityArea", "props", "defs",
-             "motions", "paths", "cameras", "renderPresets", "regions")
+#: The §9.2 tags that describe the document's *shape* (keys, ordering, counts, quaternions,
+#: sidecar bookkeeping) rather than its design numbers.  ``structural_errors`` keeps just
+#: these, so a builder can assert "the file is well formed" without asserting gameplay.
+STRUCTURAL_TAGS = ("[schema]", "[schema_legacy]", "[meta_unknown_key]", "[meta_units]",
+                   "[meta_convention]", "[meta_id]", "[meta_caps]", "[meta_budget]",
+                   "[meta_expected]", "[meta_source]", "[meta_migration]", "[meta_arena]",
+                   "[meta_zone_code]", "[meta_bounds]", "[terrain_key]", "[terrain_mesh]",
+                   "[terrain_winding]", "[terrain_budget]", "[terrain_zone]",
+                   "[terrain_classes]", "[terrain_broadphase]", "[terrain_grid]",
+                   "[terrain_segment]", "[terrain_sidecar]", "[structure_key]",
+                   "[structure_role]", "[structure_shape]", "[structure_rotation]",
+                   "[structure_collision]", "[activity_wall]", "[activity_kill_plane]",
+                   "[prop_key]", "[prop_id]", "[prop_def]", "[prop_kind]",
+                   "[prop_position]", "[prop_rotation]", "[prop_aabb]", "[prop_absorbable]",
+                   "[prop_zone]", "[prop_inherit]", "[prop_parent]", "[def_key]",
+                   "[def_model]", "[motion_key]", "[path_key]", "[paths_id]",
+                   "[path_points]", "[path_speed]", "[unknown_key]")
 
 
-def _clean_numbers(value):
-    """``-0.0 -> 0.0`` everywhere (LEVEL_FORMAT_V2 §8.1: global, nested arrays included)."""
-    if isinstance(value, float):
-        return 0.0 if value == 0.0 else value
-    if isinstance(value, list):
-        return [_clean_numbers(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _clean_numbers(item) for key, item in value.items()}
-    return value
+def structural_errors(document, sidecar_data=None):
+    """Every *shape* problem in a v2 document (no design numbers).
+
+    A thin filter over :func:`placement_v2.validate` so there is exactly one implementation
+    of each shape rule; the model, terrain, prop and def checks all live in the format module.
+    """
+    report = placement_v2.validate(document, path=None, sidecar_bytes_=sidecar_data)
+    problems = []
+    for message in report.errors:
+        if any(message.startswith(tag) for tag in STRUCTURAL_TAGS):
+            problems.append(message)
+    return problems
 
 
-def canonical_text(document):
-    ordered = {key: document[key] for key in DOC_ORDER if key in document}
-    for key in document:
-        if key not in ordered:
-            ordered[key] = document[key]
-    return json.dumps(_clean_numbers(ordered), ensure_ascii=False, indent=2) + "\n"
-
-
+# --------------------------------------------------------------------------- #
+# writing the pair of files (guarded)
+# --------------------------------------------------------------------------- #
 def write_outputs(folder, document, sidecar, *, dry_run=False):
-    """Write ``placement.v2.json`` + ``terrain/<name>.katerrain`` (guarded)."""
+    """Write ``placement.v2.json`` + ``terrain/<name>.katerrain`` (both path-guarded)."""
     folder = Path(folder)
     document_path = guard_write(folder / DOCUMENT_NAME)
     sidecar_path = guard_write(folder / "terrain" / SIDECAR_NAME)
@@ -1012,292 +1038,6 @@ def write_outputs(folder, document, sidecar, *, dry_run=False):
     return {"document": document_path, "sidecar": sidecar_path, "written": True,
             "bytes": len(text.encode("utf-8")), "sidecarBytes": len(sidecar),
             "sha256": hashlib.sha256(sidecar).hexdigest()}
-
-
-# --------------------------------------------------------------------------- #
-# structural validation of a v2 document (shape only, no design numbers)
-# --------------------------------------------------------------------------- #
-META_KEYS = ("id", "scene", "units", "convention", "ball", "timeLimitS", "playerSpawn",
-             "groundY", "bounds", "spawnClearanceM", "zones", "arena", "caps", "budget",
-             "expected", "source", "migration")
-BALL_KEYS = ("startDiameterM", "targetDiameterM", "maxDiameterRef", "maxDiameterM", "start",
-             "spawnSource")
-TERRAIN_KEYS = ("id", "kind", "winding", "vertices", "indices", "meshRef", "triangles",
-                "broadPhase", "chunks", "grid", "materialSegments", "source")
-MESHREF_KEYS = ("path", "sha256", "vertexCount", "indexCount", "triangleCount",
-                "indexWidth", "zoneIds", "classes")
-PROP_KEYS = ("itemId", "def", "kind", "behaviour", "motion", "inherit", "phase", "clipStart",
-             "shakeOff", "zone", "position", "rotationQuat", "scale", "aabb", "volumeK",
-             "volumePenalty", "volumeMm3", "absorbDiameterReqMm", "growthMm3", "absorbable",
-             "valueUnits", "parent", "rigidGroup", "support", "stackedOn", "floatingOk",
-             "notes")
-DEF_KEYS = ("id", "kind", "model", "valueUnits", "volumeK", "volumePenalty", "collider",
-            "scalePolicy", "speedIndex", "clips", "notes")
-STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
-                  "collision", "absorbable", "support", "meets", "material", "notes")
-WALL_KEYS = ("id", "points", "closed", "heightM", "thicknessM", "minBallDiameterM", "kind",
-             "material", "notes")
-KILL_KEYS = ("y", "respawn", "zoneId")
-ZONE_KEYS = ("id", "code", "kind")
-BOX_KEYS = ("id", "min", "max", "triangleRange")
-CHUNK_KEYS = ("id", "boxRange", "triangleRange")
-BEHAVIOURS = ("static", "motion", "attached", "ambient", "stacked")
-
-
-def structural_errors(document, sidecar_data=None):
-    """Every *shape* problem in a v2 document (LEVEL_FORMAT_V2 §2-§8, §9.3).
-
-    These are the rules that hold whatever the numbers are: unknown keys, missing required
-    keys, unique/sorted ids, quaternion unit length, ranges, ``chunks``/``broadPhase``
-    bookkeeping and the sidecar's own counts.  Design numbers (expected totals, budgets,
-    overlap) belong to the validator, not here.
-    """
-    errors = []
-
-    def keys(obj, allowed, label):
-        if not isinstance(obj, dict):
-            errors.append("%s is not an object" % label)
-            return False
-        for key in obj:
-            if key not in allowed:
-                errors.append("%s has unknown key %r" % (label, key))
-        return True
-
-    if document.get("schema") != SCHEMA_V2:
-        errors.append("schema is %r, expected %r" % (document.get("schema"), SCHEMA_V2))
-    order = [key for key in DOC_ORDER if key in document]
-    if list(document.keys())[:len(order)] != order:
-        errors.append("document keys are not in the canonical order")
-    for key in ("meta", "terrain", "structures", "activityArea", "props", "defs", "motions",
-                "paths", "cameras", "renderPresets", "regions"):
-        if key not in document:
-            errors.append("the document has no %r layer" % key)
-    if errors:
-        return errors
-
-    meta = document["meta"]
-    keys(meta, META_KEYS, "meta")
-    if meta.get("units") != "m":
-        errors.append("meta.units must be 'm'")
-    if meta.get("convention") != "unity-y-up-left-handed-quat-xyzw":
-        errors.append("meta.convention is not the project convention")
-    ball = meta.get("ball") or {}
-    keys(ball, BALL_KEYS, "meta.ball")
-    if ball.get("maxDiameterRef") not in ("global", "level"):
-        errors.append("meta.ball.maxDiameterRef must be global/level")
-    start = ball.get("start") or []
-    if len(start) != 3 or not all(isinstance(value, (int, float)) for value in start):
-        errors.append("meta.ball.start must be 3 numbers")
-    if ball.get("spawnSource") not in ("authored", "fieldCentreGuess", "reference"):
-        errors.append("meta.ball.spawnSource is not a known source")
-    codes = [zone.get("code") for zone in meta.get("zones") or []]
-    for zone in meta.get("zones") or []:
-        keys(zone, ZONE_KEYS, "meta.zones[]")
-        if not isinstance(zone.get("code"), int) or not 0 <= zone["code"] <= 255:
-            errors.append("zone %r code is not 0..255" % zone.get("id"))
-    if codes.count(0) > 1:
-        errors.append("zone code 0 must be declared at most once")
-    if len(set(codes)) != len(codes):
-        errors.append("zone codes are not unique")
-    terrain_min = None
-
-    terrain = document["terrain"]
-    keys(terrain, TERRAIN_KEYS, "terrain")
-    if terrain.get("kind") != "mesh" or terrain.get("winding") != "ccw":
-        errors.append("terrain.kind must be mesh and terrain.winding ccw")
-    if "vertices" in terrain or "indices" in terrain:
-        errors.append("terrain carries inline geometry and a meshRef")
-    mesh_ref = terrain.get("meshRef") or {}
-    keys(mesh_ref, MESHREF_KEYS, "terrain.meshRef")
-    if mesh_ref.get("indexWidth") not in (2, 4):
-        errors.append("terrain.meshRef.indexWidth must be 2 or 4")
-    triangles = terrain.get("triangles") or {}
-    if not isinstance(triangles.get("count"), int):
-        errors.append("terrain.triangles.count must be an integer")
-    broad = terrain.get("broadPhase") or {}
-    if broad.get("kind") != "aabb":
-        errors.append("terrain.broadPhase.kind must be aabb")
-    boxes = broad.get("boxes") or []
-    expected_start = 0
-    for box in boxes:
-        keys(box, BOX_KEYS, "terrain.broadPhase.boxes[]")
-        low, high = box.get("min") or [], box.get("max") or []
-        if len(low) != 3 or len(high) != 3:
-            errors.append("broad-phase box %r has no 3-number min/max" % box.get("id"))
-            continue
-        if any(low[axis] > high[axis] for axis in range(3)):
-            errors.append("broad-phase box %r has min > max" % box.get("id"))
-        start, count = box.get("triangleRange") or [None, None]
-        if start != expected_start:
-            errors.append("broad-phase box %r starts at %r, expected %d (a hole or an "
-                          "overlap)" % (box.get("id"), start, expected_start))
-        expected_start = (start or 0) + (count or 0)
-    if triangles.get("count") is not None and expected_start != triangles["count"]:
-        errors.append("broad-phase boxes cover %d triangles, triangles.count is %d"
-                      % (expected_start, triangles["count"]))
-    chunks = terrain.get("chunks") or []
-    chunk_total = 0
-    for chunk in chunks:
-        keys(chunk, CHUNK_KEYS, "terrain.chunks[]")
-        box_range = chunk.get("boxRange") or [None, None]
-        tri_range = chunk.get("triangleRange") or [None, None]
-        if box_range[1] is not None and box_range[1] > CHUNK_TRIANGLES:
-            errors.append("chunk %r covers %d triangles (limit %d)"
-                          % (chunk.get("id"), box_range[1], CHUNK_TRIANGLES))
-        if tri_range[1] is not None and tri_range[1] > CHUNK_TRIANGLES:
-            errors.append("chunk %r owns %d triangles (limit %d)"
-                          % (chunk.get("id"), tri_range[1], CHUNK_TRIANGLES))
-        if tri_range[1] is not None:
-            chunk_total += tri_range[1]
-    if chunks and triangles.get("count") is not None and chunk_total != triangles["count"]:
-        errors.append("chunks own %d triangles, triangles.count is %d"
-                      % (chunk_total, triangles["count"]))
-    segments = terrain.get("materialSegments") or []
-    coverage = 0
-    for segment in segments:
-        if segment.get("firstIndex") != coverage:
-            errors.append("material segment %r does not start at %d" % (segment.get("id"),
-                                                                       coverage))
-        coverage += int(segment.get("indexCount") or 0)
-    if segments and mesh_ref.get("indexCount") is not None             and coverage != mesh_ref["indexCount"]:
-        errors.append("material segments cover %d indices, meshRef says %d"
-                      % (coverage, mesh_ref["indexCount"]))
-
-    for solid in (document.get("structures") or {}).get("solids") or []:
-        keys(solid, STRUCTURE_KEYS, "structures.solids[]")
-        quat = solid.get("rotationQuat") or []
-        if len(quat) != 4 or abs(sum(value * value for value in quat) - 1.0) > 1e-4:
-            errors.append("structure %r rotationQuat is not a unit quaternion"
-                          % solid.get("id"))
-    solids_by_id = {}
-    for solid in (document.get("structures") or {}).get("solids") or []:
-        if solid.get("id") in solids_by_id:
-            errors.append("duplicate structure id %r" % solid.get("id"))
-        solids_by_id[solid.get("id")] = solid
-
-    activity = document.get("activityArea") or {}
-    for wall in activity.get("walls") or []:
-        keys(wall, WALL_KEYS, "activityArea.walls[]")
-        points = wall.get("points") or []
-        if len(points) < 2:
-            errors.append("wall %r has fewer than 2 points" % wall.get("id"))
-        for point in points:
-            if len(point) != 2:
-                errors.append("wall %r has a point that is not [x, z]" % wall.get("id"))
-        if not isinstance(wall.get("heightM"), (int, float)) or wall["heightM"] <= 0:
-            errors.append("wall %r heightM must be > 0" % wall.get("id"))
-        if wall.get("kind") not in ("visible", "invisible"):
-            errors.append("wall %r kind must be visible/invisible" % wall.get("id"))
-    kill = activity.get("killPlane") or {}
-    keys(kill, KILL_KEYS, "activityArea.killPlane")
-    if not isinstance(kill.get("y"), (int, float)):
-        errors.append("killPlane.y must be a number")
-    if kill.get("respawn") != "ballStart" and not isinstance(kill.get("respawn"), list):
-        errors.append("killPlane.respawn must be 'ballStart' or a coordinate")
-
-    zones = {zone.get("id") for zone in meta.get("zones") or []}
-    defs = {entry.get("id") for entry in document.get("defs") or []}
-    if len(defs) != len(document.get("defs") or []):
-        errors.append("duplicate def ids")
-    for entry in document.get("defs") or []:
-        keys(entry, DEF_KEYS, "defs[]")
-        if entry.get("id") not in defs:
-            errors.append("def %r has no id" % entry.get("id"))
-        if entry.get("scalePolicy") not in (None, "uniform", "nonuniform"):
-            errors.append("def %r scalePolicy is unknown" % entry.get("id"))
-        model = entry.get("model") or ""
-        if not model.startswith("Assets/") or ".." in model:
-            errors.append("def %r model must be an Assets/ relative path" % entry.get("id"))
-        collider = entry.get("collider")
-        if collider is not None:
-            problems = collider_proxy.collider_schema_errors(collider)
-            errors.extend("def %r collider: %s" % (entry.get("id"), problem)
-                          for problem in problems)
-
-    item_ids = set()
-    for prop in document.get("props") or []:
-        keys(prop, PROP_KEYS, "props[]")
-        item_id = prop.get("itemId")
-        if item_id in item_ids:
-            errors.append("duplicate itemId %r" % item_id)
-        item_ids.add(item_id)
-        if prop.get("behaviour") not in BEHAVIOURS:
-            errors.append("%s behaviour is unknown" % item_id)
-        if prop.get("def") not in defs:
-            errors.append("%s def %r is not declared" % (item_id, prop.get("def")))
-        if prop.get("zone") is not None and prop["zone"] not in zones:
-            errors.append("%s zone %r is not declared" % (item_id, prop["zone"]))
-        quat = prop.get("rotationQuat") or []
-        if len(quat) != 4 or abs(sum(value * value for value in quat) - 1.0) > 1e-4:
-            errors.append("%s rotationQuat is not a unit quaternion" % item_id)
-        elif quat[3] < -1e-9:
-            errors.append("%s rotationQuat is not canonical (w < 0)" % item_id)
-        for key in ("position", "aabb"):
-            if len(prop.get(key) or []) != 3:
-                errors.append("%s %s must be 3 numbers" % (item_id, key))
-        if any(value <= 0 for value in (prop.get("aabb") or [0])):
-            errors.append("%s aabb must be positive" % item_id)
-        if not isinstance(prop.get("absorbable"), bool):
-            errors.append("%s absorbable must be a bool" % item_id)
-        if prop.get("parent") is not None and prop["parent"] not in item_ids:
-            # A forward reference is only visible after the whole list is read; checked below.
-            pass
-        if prop.get("parent") is not None and prop.get("rigidGroup") is not None:
-            errors.append("%s has both parent and rigidGroup" % item_id)
-        scale = prop.get("scale")
-        if scale is not None:
-            if len(scale) != 3 or any(value <= 0 for value in scale):
-                errors.append("%s scale must be 3 positive numbers" % item_id)
-            elif len({round(value, 6) for value in scale}) > 1 and prop.get("parent"):
-                errors.append("%s is non-uniformly scaled and attached" % item_id)
-    for prop in document.get("props") or []:
-        parent = prop.get("parent")
-        if parent is not None and parent not in item_ids:
-            errors.append("%s parent %r does not exist" % (prop.get("itemId"), parent))
-        if parent == prop.get("itemId"):
-            errors.append("%s is its own parent" % prop.get("itemId"))
-
-    if sidecar_data is not None:
-        try:
-            parsed = read_sidecar(sidecar_data)
-        except RefV2Error as error:
-            errors.append("sidecar: %s" % error)
-        else:
-            digest = hashlib.sha256(sidecar_data).hexdigest()
-            if digest != mesh_ref.get("sha256"):
-                errors.append("sidecar sha256 %s does not match meshRef %s"
-                              % (digest, mesh_ref.get("sha256")))
-            for key in ("vertices", "indices", "triangles"):
-                declared = mesh_ref.get({"vertices": "vertexCount", "indices": "indexCount",
-                                         "triangles": "triangleCount"}[key])
-                if parsed["counts"][key] != declared:
-                    errors.append("sidecar %s count %d does not match meshRef %s"
-                                  % (key, parsed["counts"][key], declared))
-            if parsed["counts"]["indices"] != 3 * parsed["counts"]["triangles"]:
-                errors.append("sidecar indices are not 3 per triangle")
-            if parsed["counts"]["vertices"] >= U16_VERTEX_LIMIT \
-                    and mesh_ref.get("indexWidth") != 4:
-                errors.append("sidecar needs a 4-byte index width")
-            if parsed["zoneIds"] and len(parsed["zoneIds"]) != parsed["counts"]["triangles"]:
-                errors.append("sidecar zoneIds length is not the triangle count")
-            if parsed["classes"] and len(parsed["classes"]) != parsed["counts"]["triangles"]:
-                errors.append("sidecar classes length is not the triangle count")
-            if parsed["classes"] and set(parsed["classes"]) - {1, 2, 3}:
-                errors.append("sidecar classes carry a value outside 1/2/3")
-            if parsed["vertices"]:
-                terrain_min = min(point[1] for point in parsed["vertices"])
-                ground = meta.get("groundY")
-                if isinstance(ground, (int, float)) and ground >= terrain_min:
-                    errors.append("meta.groundY %r is not below the terrain's lowest point %r"
-                                  % (ground, n4(terrain_min)))
-                if isinstance(kill.get("y"), (int, float)) \
-                        and kill["y"] >= min(ground, terrain_min):
-                    errors.append("killPlane.y is not below groundY and the terrain")
-            for index in parsed["indices"]:
-                if index >= parsed["counts"]["vertices"]:
-                    errors.append("sidecar index %d is out of range" % index)
-                    break
-    return errors
 
 
 # --------------------------------------------------------------------------- #

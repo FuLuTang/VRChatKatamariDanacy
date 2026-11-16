@@ -207,7 +207,7 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/_ref_cancer/plac
 | `meta` | 起始 **0.222 m**、目标 **0.80 m**、`maxDiameterRef:"global"`、时限 **420 s**（原作 GAME_TIME 7 分钟）、出生点 `fieldCentreGuess`（场心，向下打地形取面，再找 0.5 m 净空的点）、`groundY −3.0`（地形最低 −1.59 m 再低 1.4 m）、`bounds` 覆盖 511 件道具、`caps` 511/4096/8192/256/8 |
 | `terrain` | 提取器的**碰撞网格**（不是视觉 `stage.glb`）：**7,154 顶点 / 3,455 三角形**（原 3,456，1 个零面积三角形按 `[terrain_mesh]` 删掉），世界米、绕序翻一次；**7 个 chunk**，每个 ≤512 三角形并且就是一条 broad-phase AABB（`triangleRange` 首尾相接、无洞）；`grid` 1 m / 19×15 |
 | `triangles` | `count 3455` + `zoneCounts`（0:2727, 1:23, 3:244, 5:21, 8:73, 24:367）；逐三角形 zone 取三顶点多数票（平票取小），逐三角形 `classes` 在侧车里（ride 1698 / climb 503 / wall 1254） |
-| `structures.solids` | **35 条**：规则见 §8.2 |
+| `structures.solids` | **35 条**，接触形状是 **def 的拟合代理**（`shape:"proxy"` + `collider` + `proxySource:"def"`；`size` 只作支撑面），规则见 §8.2 |
 | `activityArea` | 一条闭合矩形墙（碰撞足迹并集 + 1 m，x −11.81…8.57 / z −7.54…8.99，高 3.0 m、厚 0.2 m、不可见）+ kill plane `y −4.0` |
 | `props` | **511 件全部保留**：原作位置/旋转/缩放、`parent` 83 条、`volumeK`（原作 `1/bboxOverSolidVolume`，0.1…14.7）、`volumePenalty 0.8`、`growthMm3` 与 `absorbDiameterReqMm` 派生、`absorbable` 426 件（按 1.20 m 门；唯一非均匀缩放的 `sparrow_001` 按 D-5 标 false）、`zone` 按脚下碰撞三角 |
 | `defs` | 145 条，`collider` **144 条**（`sparrow` 只有那件非均匀缩放的实例，按 D-5「不写 collider」；代理拟合见 §8.3） |
@@ -220,10 +220,14 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/_ref_cancer/plac
    1,704 : 319，`classes` 才有意义。
 2. **structures = 这一关永远吸不动的大件**：`gate > 1200 mm`（原作 `MAX_DIAMETER`，本关
    设计上限）**且** 其 AABB ≥50% 落在提取器 68 个碰撞 AABB 之一的内部。84 件永远吸不动，
-   其中 **35 件**在碰撞覆盖的核心区内 → 给解析盒（`role:box`，可支撑）；另外 49 件（街区外
+   其中 **35 件**在碰撞覆盖的核心区内 → 给解析体（`role:box`，可支撑）；另外 49 件（街区外
    的民宿、餐馆、樱花树）是背景，活动墙把球挡在外面，不需要固体。**碰撞 AABB 本身不是
    固体**（它们是舞台网格的 broad phase，和地形三角形重复），只作为「这里确实是实心」的
    证据。判据、阈值、两侧件数都写在转换器报告里。
+   **接触形状 = def 的拟合代理**（2026-11-16 改）：18 条 `convex` + 17 条 `box`（盒代理也可能比
+   声明 AABB 小，因为拟合时统一缩放塞进 AABB），`size` 只留给支撑面。原来用 AABB 时"螃蟹贴树根站着"会被判成嵌进固体
+   60 cm——那是我们的代理粗，不是原作的摆放（[OPEN_DECISIONS](../../OPEN_DECISIONS.md) 的
+   「碰撞体必须跟视觉形状」同一条口径）。
 3. **activityArea 是我们作者化的**：原作没有边界字段（§5.1），但它有碰撞几何，碰撞几何的
    XZ 足迹就是球能去的地方。所以多边形 = 68 个碰撞 AABB 的并集足迹（含地形三角形）外扩
    1 m。kill plane 放在兜底地面 `groundY` 再低 1 m（校验器要求它低于地形与 `groundY`）。
@@ -236,54 +240,51 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/_ref_cancer/plac
 不做逐轴缩放，因为提取器没记录 GLB 的轴向；结果是保守的（可能比模型略小），
 `collider_schema_errors` 逐条过了，145 条都合法。`scalePolicy` 一律 `uniform`。
 
-### 8.4 校验结果（v1 vs v2）
+### 8.4 校验结果
 
-`levelbuild.py check` 目前只实现了 v1 规则（`katamari.placement/0`）。v2 文档由
-`to_v1_view()` 翻成 v1 形状后跑**同一套规则**（不写第二个校验器），所以下面的数字可比：
+`levelbuild.py check` 现在**按 schema 分流**：v1 文档走 `placement_core.validate`，v2 文档走
+`placement_v2.validate`（[LEVEL_FORMAT_V2 §9](../Levels/LEVEL_FORMAT_V2.md) 的 tag 集，每条带
+`路径 + 期望 + 实际`）。两个校验器**共用底层规则**（吸收门/体积、`world_aabb`、`overlap_scan`、
+`structure_penetrations`、collider schema），只有层的语义各写一份；v2 不再翻译成 v1 视图
+（`to_v1_view()` 只留作对比工具）。
 
-| | v1 `placement.model.json` | v2 `placement.v2.json` |
+参考关卡的实际输出（原文）：
+
+```
+schema=katamari.placement/2  level=_ref_cancer  scene=StoryMode
+ball 0.222 -> 0.8 m  (global)  timeLimit 420s  groundY -3.0
+props 511 (426 absorbable, 83 with a parent)  defs 145  zones 6
+structures 35  terrain 3455 triangles  chunks 7  motions 0  paths 0
+PASS Docs/Design/Levels/_ref_cancer/placement.v2.json (0 error(s), 1 warning(s))
+```
+
+剩下的一条 warning 与三条 note，逐项如下（**没有为了变绿放宽任何阈值**）：
+
+| 类别 | 内容 | 为什么不是错误 |
 |---|---|---|
-| 旋转 | 全部单位（`[0,0,0,1]`） | 原作 392 件非零 |
-| 高度 | 全部压平到底面 y=0 | 原作高度（511 件） |
-| 错误 | **544** | **818** |
-| 警告 | 146 | 229 |
-| prop/prop 重叠对（>5% 小者） | **367**（25 行 + "…341 more"） | **216**（不计父件豁免）/ **153**（计豁免，已声明为 `expected.overlapBudget`） |
-| 浮空/入地 | 0（都在 y=0） | **790** |
-| 道具穿结构 | — | 25 |
-| D-5 声明（非均匀那件 `absorbable:false`） | — | 1（v1 规则要求 absorbable 跟随门，v2 里它是作者声明） |
-| 派生值过期（`absorbDiameterReq`/`growthMm3`） | 511（v1 文件用的是旧口径） | **0** |
+| warning | `[prop_overlap]` 153 对（= 声明的 `expected.overlapBudget`，示例 `bamboo_blind_001+laundry_hanger_001`…） | 密集的真实小镇必然有；该字段就是"本关最多允许多少对"的预算，超出才是错误 |
+| note | `sparrow_001`：非均匀缩放且 def 无 collider（D-5 的既定处理） | D-5 明写"照写 scale、标 absorbable:false、不写 collider、按无碰撞处理" |
+| note | `sparrow_001`：`absorbable=false` 但门说 True | v2 里 `absorbable` 是**作者声明**，不是门的函数；校验器只记录分歧 |
+| note | 24 件道具沉进 scenery 固体的**拟合代理**（最深 0.614 m；同一判据按**原始 AABB** 是 47 件 / 1.094 m） | §9.2 只把**道具×道具**互穿定为错误，没有道具×结构的 tag；21 件差额是 AABB 代理过粗造成的假阳性，见 [OPEN_DECISIONS](../../OPEN_DECISIONS.md) |
 
-读法：
-
-- **重叠对 367 → 216（−41%）**，再按原作 83 条父链豁免（子件本来就该在父件里）→ **153**，
-  写成 `expected.overlapBudget`（这个字段就是为「一件密集的真实房间」准备的），于是重叠从
-  367 条错误变成 0 条错误。注意：**只加旋转、仍把 y 压平**时 AABB 重叠反而升到 **440**——
-  旋转后的盒子 AABB 变大，压平又把 511 件挤进同一层；真正让重叠掉下来的是「原作高度」。
-  这条要按 AABB 口径理解，v1 校验器没有 OBB 相交。
-- **790 条浮空/入地是 v1 规则的产物，不是数据问题**：v1 的规则拿固定平面 `y=0` 量每个道具的
-  底面（`floats … above the ground` / `reaches … below y=0`），而参考关卡的地面在 **−1.0 m**
-  且有 1.6 m 起伏；v2 的支撑查询是「球底以下最高的地形面」（§3.6），必须由 v2 校验器来量。
-  实测：按原作高度摆放后，510/511 件脚下有地形，**272 件（53.3%）底面离地 ≤10 cm**，
-  中位 **−0.0001 m**；按 v1 的压平高度则只有 7 件（1.4%）、中位 +0.775 m（见 §6）。
-- **25 条「道具穿结构」**是真发现：螃蟹/筷子/小狗与树、招牌、睡着的妈妈这些 35 个解析盒
-  相交。密集的真实关卡必然有；v2 校验器要按 `[prop_overlap]` 的规则（父子/摞放豁免）来判。
-- **6 件缩放**：5 件均匀（4×0.9 的房子 + 1×0.1 的 `rc_controller_001`，后者**挂在 `cubby_001` 下**——
-  这正是 2026-11-16 的 D-5 ②「均匀缩放对挂接件也合法」），1 件非均匀 `sparrow_001` 按 D-5 照写
-  `scale`、标 `absorbable:false`、其 def 不写 collider，并进 notes。v1 视图会为它报 1 条
-  「absorbable=False 但门说 True」——v2 里 `absorbable` 是作者声明，不是门的函数。
-- **警告 229 条里 214 条是「参考模型没有 manifest」**（原型资产没有提交 manifest，属预期），
-  其余是 v1 的 canonical 形状提示（v2 的规范字节由转换器保证，不要跑 `levelbuild.py format`）。
+顺带（同一批数据的 v1 视图对照，只作历史对比）：v1 `placement.model.json` **544 error / 146
+warning**，其中 511 条是派生列过期、367 对道具互穿（25 行 + "…341 more"）；v1 视图跑 v2 数据是
+**818 error**，其中 **790 条是 v1 的"以 y=0 平地量浮空/入地"**（参考关卡的地面在 −1.0 m，
+这条规则对地形关卡不适用——v2 用"球底以下最高的地形面"量：510/511 有地面，272 件（53.3 %）
+在 10 cm 内，中位 −0.0001 m）。**别再拿 818 当 v2 的成绩单**：那是 v1 规则的误报集合。
 
 ### 8.5 还缺什么（Unity 导入前）
 
-1. **v2 校验器**（`LEVEL_FORMAT_V2 §9` 的 50 多个 tag）没有实现；现在只有 §8.4 的 v1 视图。
-   `ref_v2_from_extract.structural_errors()` 覆盖了**结构**（键白名单、顺序、单位四元数、
-   chunk/broad-phase 账、侧车计数与 sha256、`groundY`/`killPlane` 相对地形），不覆盖设计数值。
+1. **v2 校验器已落地**（`Tools/levelbuild/placement_v2.py`，§9.2 的 tag 集；`levelbuild.py check`
+   直接按 schema 分流）。仍未实现的是**运行时**那一侧：`TerrainFieldHost` 的数组、接触求解、
+   以及 §9.2 里依赖运行时语义的判定（例如"墙顶不可站"的实测）。
 2. **`PlacementImporter` 的 v2 分支**（`TerrainFieldHost`/`ActivityAreaHost`/`LevelMetaHost`/
    `MotionHost`）不在本轮；地形网格资产路径按 §11.3 应落在
    `Assets/_RefUnlicensed/Levels/_ref_cancer/Terrain.asset`。
-3. **`motions[]`/`paths[]` 空**：提取器没有运动程序表与路径点表（C11），所以 129 个动件在 v2 里
-   都是 `static`，`moveType` 只在 `notes` 里存证。
+3. **`motions[]`/`paths[]` 空**：本轮的提取结果还没有运动/路径表（下一步由
+   `motion_table.json` / `path_table.json` 补；C11 要求不按名字猜 class），所以 511 件现在都是
+   `static`，`moveType` 只在 `notes` 里存证。`caps.animators = 153` 已按原作动画挂载量填好
+   （D-11：照原作挂满、不做 VAT），来源写在 `meta.arena.notes`。
 4. **贴图/材质**：地形仍是无贴图的纯色块（`materialSegments` 只有一段、无 `material`）。
 5. **`props[].kind` 全是 `reference`**：提取器没有「动物/餐具/建筑」这类内容分类（v1 文件也没有），
    要等 collection 表接入。

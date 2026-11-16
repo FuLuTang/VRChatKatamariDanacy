@@ -145,7 +145,9 @@ class TerrainTests(unittest.TestCase):
         self.assertEqual(len(parsed["indices"]), 9)
 
     def test_a_bad_sidecar_is_refused(self):
-        with self.assertRaises(build.RefV2Error):
+        # The codec lives in placement_v2 (the format module) and raises its own error type,
+        # re-exported by the builder so callers do not need to know where it lives.
+        with self.assertRaises(build.SidecarError):
             build.read_sidecar(b"JUNK" + b"\0" * 32)
 
 

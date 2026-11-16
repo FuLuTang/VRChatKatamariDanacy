@@ -27,10 +27,10 @@ if str(ROOT) not in sys.path:
 from Tools.levelbuild import editor_core  # noqa: E402
 from Tools.levelbuild import placement_core as core
 from Tools.levelbuild import supports as support_geometry  # noqa: E402
-from Tools.levelbuild import ref_v2_from_extract  # noqa: E402
+from Tools.levelbuild import placement_v2  # noqa: E402
 
-#: The v2 schema string; a v2 document is checked through the v1 rule set (see cmd_check).
-V2_SCHEMA = "katamari.placement/2" 
+#: The v2 schema string; a v2 document goes through ``placement_v2.validate`` (its own rules).
+V2_SCHEMA = placement_v2.SCHEMA
 
 
 def _print_banner(doc):
@@ -149,15 +149,10 @@ def cmd_check(args):
         print("levelbuild: %s is not readable JSON: %s" % (path, error), file=sys.stderr)
         return 2
 
-    # A v2 document is checked through the v1 rule set: one validator, one set of geometric
-    # rules (overlap, seating, bounds, budgets, expected totals).  The v2-only layer rules of
-    # LEVEL_FORMAT_V2.md section 9 are not implemented yet, so the translation is spelled out
-    # in ref_v2_from_extract.to_v1_view instead of adding a second validator here.
-    if isinstance(doc, dict) and doc.get("schema") == V2_SCHEMA:
-        print("v2: %s is a %s document; checked through the v1 rules (v2-only layer rules "
-              "are not implemented yet)" % (core.display_path(path), V2_SCHEMA),
-              file=sys.stderr)
-        doc = ref_v2_from_extract.to_v1_view(doc)
+    # A v2 document runs the v2 rules (Tools/levelbuild/placement_v2.py).  Both validators
+    # share every low-level rule (gate/growth, AABB, overlap scan, seating, collider schema);
+    # what differs is the layer semantics, so neither translates into the other.
+    v2 = isinstance(doc, dict) and doc.get("schema") == V2_SCHEMA
 
     manifests = None
     if args.manifests:
@@ -167,9 +162,13 @@ def cmd_check(args):
             return 2
         manifests = core.load_manifests(directory)
 
-    report = core.validate(doc, path=path, manifests=manifests,
-                           strict_parents=args.strict_parents)
-    if args.strict:
+    if v2:
+        report = placement_v2.validate(doc, path=path, manifests=manifests,
+                                       strict=args.strict)
+    else:
+        report = core.validate(doc, path=path, manifests=manifests,
+                               strict_parents=args.strict_parents)
+    if args.strict and not v2:
         report.errors.extend(report.warnings)
         report.warnings = []
 
@@ -178,13 +177,15 @@ def cmd_check(args):
         # this straight into json.load without stripping a banner first.
         print(json.dumps({
             "path": core.display_path(path),
-            "level": (doc.get("level") or {}).get("id"),
+            "level": (doc.get("meta") or {}).get("id") if v2 else (doc.get("level") or {}).get("id"),
             "schema": doc.get("schema"),
             "quatOrder": core.QUAT_ORDER,
             "props": len([p for p in doc.get("props") or [] if isinstance(p, dict)]),
-            "growthMm3": core.growth_mm3_total(doc),
-            "supports": support_geometry.propose(doc)["counts"],
-            "seating": {
+            "growthMm3": (sum(int(prop.get("growthMm3") or 0)
+                              for prop in doc.get("props") or []
+                              if isinstance(prop, dict)) if v2 else core.growth_mm3_total(doc)),
+            "supports": (None if v2 else support_geometry.propose(doc)["counts"]),
+            "seating": (None if v2 else {
                 "seated": len(_seating(doc)["seated"]),
                 "notSeated": len(_seating(doc)["notSeated"]),
                 "authoredNotSeated": len([entry for entry in _seating(doc)["notSeated"]
@@ -193,7 +194,7 @@ def cmd_check(args):
                                          if entry["derived"]]),
                 "pinned": len(_seating(doc)["pinned"]),
                 "notSeatedParents": _seating(doc)["notSeated"],
-            },
+            }),
             "errors": report.errors,
             "warnings": report.warnings,
             "notes": report.notes,
@@ -201,19 +202,24 @@ def cmd_check(args):
         }, ensure_ascii=False, indent=2))
         return 0 if report.ok else 1
 
-    _print_banner(doc)
-    print(_summary(doc))
-    print(_supports_text(doc))
-    print("")
-
-    if args.report:
-        print(core.format_report_tables(report.tables,
-                                        expected=(doc.get("level") or {}).get("expected")))
+    if v2:
+        for line in placement_v2.summary_lines(doc):
+            print(line)
         print("")
-        pointers = _pointer_report_text(doc)
-        if pointers:
-            print(pointers)
+    else:
+        _print_banner(doc)
+        print(_summary(doc))
+        print(_supports_text(doc))
+        print("")
+
+        if args.report:
+            print(core.format_report_tables(report.tables,
+                                            expected=(doc.get("level") or {}).get("expected")))
             print("")
+            pointers = _pointer_report_text(doc)
+            if pointers:
+                print(pointers)
+                print("")
 
     text = _report_text(report, doc)
     if text:
@@ -237,15 +243,10 @@ def cmd_format(args):
         print("levelbuild: %s is not readable JSON: %s" % (path, error), file=sys.stderr)
         return 2
 
-    # A v2 document is checked through the v1 rule set: one validator, one set of geometric
-    # rules (overlap, seating, bounds, budgets, expected totals).  The v2-only layer rules of
-    # LEVEL_FORMAT_V2.md section 9 are not implemented yet, so the translation is spelled out
-    # in ref_v2_from_extract.to_v1_view instead of adding a second validator here.
-    if isinstance(doc, dict) and doc.get("schema") == V2_SCHEMA:
-        print("v2: %s is a %s document; checked through the v1 rules (v2-only layer rules "
-              "are not implemented yet)" % (core.display_path(path), V2_SCHEMA),
-              file=sys.stderr)
-        doc = ref_v2_from_extract.to_v1_view(doc)
+    # A v2 document runs the v2 rules (Tools/levelbuild/placement_v2.py).  Both validators
+    # share every low-level rule (gate/growth, AABB, overlap scan, seating, collider schema);
+    # what differs is the layer semantics, so neither translates into the other.
+    v2 = isinstance(doc, dict) and doc.get("schema") == V2_SCHEMA
 
     canonical = core.dump_doc(doc)
     current = path.read_text(encoding="utf-8")

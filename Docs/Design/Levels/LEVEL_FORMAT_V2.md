@@ -252,10 +252,20 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | 字段 | 说明 |
 |---|---|
 | `role` | `box`（静态 OBB：扫掠 + 顶面支撑）／`ramp`（只支撑的斜板；接触 v2 后是 slab）／`curve_ramp`（弧展开成 N 段 slab） |
-| `shape` | `box`／`plane`（平面只给 `boundary` 遗留用；v2 新文件不写 `plane`） |
+| `shape` | `box`／`proxy`（**2026-11-16 追加**：接触形状用 `collider` 代理，见下）／`plane`（平面只给 `boundary` 遗留用；v2 新文件不写 `plane`） |
+| `collider` | 仅 `shape:"proxy"`：**局部空间**的接触代理，编码与 `defs[].collider` 完全相同（`box`/`sphere`/`capsule`/`convex` 4–24 点），由 `collider_proxy.fit_proxy` 拟合 |
+| `proxySource` | 仅 `shape:"proxy"`：`def`（取自该 def 的拟合代理）／`aabb-fallback`（**没有代理时**退回 AABB 盒，必须写出来）／`manual` |
 | `collision` | `box`／`none`；`none` 表示纯视觉标记 |
-| `support` | 是否可当支撑面（`collision:"none"` 必须 `support:false`） |
+| `support` | 是否可当支撑面（`collision:"none"` 必须 `support:false`）。**`shape:"proxy"` 时支撑面仍取 `size` 盒的顶面**，见下 |
 | `curve` | 仅 `curve_ramp`：`radius_m`/`arc_deg`/`segments`/`bend`/`width_m`/`thickness_m`（沿用今天） |
+
+**`shape:"proxy"`：接触用代理、支撑用盒顶面（2026-11-16 追加，owner 口径「碰撞体必须跟视觉形状，按型给代理，不用 AABB」）。** 参考关卡的大件（树、招牌、睡着的妈妈…）原来用 AABB 当固体，一棵树的盒子把整个树冠包进去，螃蟹贴着树根站就被判「嵌进固体 60 cm」——那不是原作的摆放事实，是**我们的代理太粗**。所以：
+
+- `collider` 是该 def 的拟合代理（`defs[].collider` 同一份），放在 `center` + `rotationQuat` 的局部帧里；盒/球/胶囊/凸包照原样用。
+- `size` 仍写 AABB：它只用于**支撑面**（顶面）与旧的盒逻辑回退，不再当接触形状。两件事分开的理由：代理是凹/圆/斜的形状，而「球能站在它上面」需要一个水平顶面；用拟合凸包的顶面取支撑会在树冠上给出一个球站不住的尖角面。
+- 只有 def 确实没有代理时才 `shape:"box"` + `proxySource:"aabb-fallback"`，并在 `notes` 标出来。
+- 校验器：`shape:"proxy"` 要求 `collider` 合法且 `proxySource` 在枚举里；`shape:"box"` 带 `collider` 是错误（`[structure_proxy]`）。
+- **C# 侧目前只认盒**：`PlacementV2Rules`/导入器要读 `collider` 并建对应的代理碰撞体（可先用盒包住代理做过渡），这一步由导入器负责人排期；在那之前 `shape:"proxy"` 的固体按 `size` 盒工作（旧行为，不会更差）。
 
 **v1 的 `role=boundary` 不再进 `structures`**：它本质是活动范围，迁移到 `activityArea`（§5）。**`role=ground` 也不再进 `structures`**：平地由 `meta.groundY` 兜底，真地形由 `terrain` 表达。转换器遇到无法无损映射的边界（非矩形、非轴对齐）时保留为 `role:"boundary"` 并记 warning，不猜。
 
@@ -969,6 +979,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 | `[terrain_grid]` | error | `cellM` 越界、`origin` 不覆盖 broad phase |
 | `[terrain_sidecar]` | error | 文件缺失、sha256 不符、计数不符、路径越界 |
 | `[structure_role]` | error | v2 新文件写 `role:"boundary"`/`"ground"`（迁移产物允许并 warning） |
+| `[structure_proxy]` | error | `shape:"proxy"` 缺 `collider`/`collider` 不合法/`proxySource` 不在枚举；`shape:"box"` 却带 `collider` |
 | `[structure_capacity]` | error | 静态固体 > `caps.staticSolids`（256）或 v2 关闭时 `ramps` >4、`boxes` >8 |
 | `[activity_wall]` | error | 点数 <2、闭合多边形自交、`heightM ≤ 0`、`minBallDiameterM` 不是正数（若出现） |
 | `[activity_wall_gate]` | warning | 门的阈值 ≤ 起始球径（这扇门从第一帧就是开的，多半写错了；要永久墙请省略该键） |
@@ -1032,7 +1043,8 @@ CHUNK_KEYS     = ("id","boxRange","triangleRange")
 GRID_KEYS      = ("cellM","origin","cellsX","cellsZ")
 SEGMENT_KEYS   = ("id","firstIndex","indexCount","material")
 STRUCTURE_KEYS_V2 = ("id","kind","role","shape","center","size","curve","rotationQuat",
-                     "collision","absorbable","support","meets","material","notes")
+                     "collision","absorbable","support","meets","material","notes",
+                     "collider","proxySource")
 SOLIDS_KEYS    = ("solids",)
 ACTIVITY_KEYS  = ("walls","killPlane","softMarginM","source")
 WALL_KEYS      = ("id","points","closed","heightM","thicknessM","minBallDiameterM",

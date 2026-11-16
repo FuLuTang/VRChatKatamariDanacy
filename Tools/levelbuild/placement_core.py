@@ -2385,6 +2385,262 @@ def _support_surface(doc, prop, structures_by_id, report):
     return ("floor", ground_level(doc))
 
 
+def overlap_scan(boxes, exempt=None):
+    """Every pair of boxes overlapping more than :data:`OVERLAP_FRACTION` of the smaller.
+
+    ``boxes`` maps id -> ``(low, high)``.  ``exempt(left_id, right_id)`` suppresses a pair
+    the level says belongs together (a parent and its child, the members of one authored
+    group).  Both validators call this: "two props interpenetrate" is one rule, not two.
+    Returns ``[(left_id, right_id, fraction)]`` in sorted-id order.
+    """
+    ids = sorted(boxes)
+    pairs = []
+    for index, left_id in enumerate(ids):
+        left_box = boxes[left_id]
+        left_volume = aabb_volume(left_box)
+        for right_id in ids[index + 1:]:
+            right_box = boxes[right_id]
+            overlap = aabb_intersection(left_box, right_box)
+            if overlap <= 0.0:
+                continue
+            smaller = min(left_volume, aabb_volume(right_box))
+            if smaller <= 0.0:
+                continue
+            fraction = overlap / smaller
+            if fraction <= OVERLAP_FRACTION:
+                continue
+            if exempt is not None and exempt(left_id, right_id):
+                continue
+            pairs.append((left_id, right_id, fraction))
+    return pairs
+
+
+    """``[(item_id, structure_id, worst_depth)]`` for props sunk into a solid structure.
+
+    A prop's eight OBB corners are tested against each structure's solid boxes; the deepest
+    corner is the penetration (design rule 8).  Both validators call this: the depth test is
+    one rule, and a caller decides whether the hit is an error (v1's document model) or a
+    note (v2 has no rule for a prop inside a structure box).
+    """
+    hits = []
+    for prop in props:
+        item_id = prop.get("itemId")
+        if item_id not in boxes:
+            continue
+        try:
+            aabb = tuple(float(v) for v in prop["aabb"])
+            position = tuple(float(v) for v in prop["position"])
+            quat = tuple(float(v) for v in prop["rotationQuat"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        corners = box_corners(position, aabb, quat)
+        for structure_id, structure in sorted(structures_by_id.items()):
+            if not isinstance(structure, dict) or structure.get("collision") == "none":
+                continue
+            try:
+                solids = structure_solid_boxes(structure, ball_radius_m)
+            except (KeyError, TypeError, ValueError, FileNotFoundError):
+                continue
+            worst = 0.0
+            for solid in solids:
+                try:
+                    worst = max(worst, max(obb_penetration(corner, solid) for corner in corners))
+                except (KeyError, TypeError, ValueError):
+                    continue
+            if worst > STRUCTURE_PENETRATION_M:
+                hits.append((item_id, structure_id, worst))
+    return hits
+
+
+def proxy_penetration(point, collider, center, quat):
+    """How deep ``point`` sits inside a collider proxy, in metres (<=0 when outside).
+
+    The proxy is the def-local one (``defs[].collider`` / ``structures.solids[].collider``),
+    placed by ``center`` + ``quat``.  This is the point test the runtime needs too, so it
+    lives next to the rest of the collision maths instead of inside a validator: the box,
+    sphere and capsule cases are closed forms, and a convex hull is the minimum inward
+    distance over its face planes (``collider_proxy.hull_planes``).
+    """
+    m = quat_to_matrix(tuple(float(v) for v in quat))
+    delta = (float(point[0]) - float(center[0]), float(point[1]) - float(center[1]),
+             float(point[2]) - float(center[2]))
+    local = tuple(m[0][row] * delta[0] + m[1][row] * delta[1] + m[2][row] * delta[2]
+                  for row in range(3))
+    kind = (collider or {}).get("type")
+    offset = (collider or {}).get("center") or (0.0, 0.0, 0.0)
+    d = tuple(local[axis] - float(offset[axis]) for axis in range(3))
+    if kind == "box":
+        size = (collider or {}).get("size") or (0.0, 0.0, 0.0)
+        return min(float(size[axis]) / 2.0 - abs(d[axis]) for axis in range(3))
+    if kind == "sphere":
+        radius = float((collider or {}).get("radius") or 0.0)
+        return radius - math.sqrt(sum(value * value for value in d))
+    if kind == "capsule":
+        radius = float((collider or {}).get("radius") or 0.0)
+        half = float((collider or {}).get("halfHeight") or 0.0)
+        axis = CAPSULE_AXIS_INDEX.get((collider or {}).get("axis"), 1)
+        along = max(-half, min(half, d[axis]))
+        closest = [0.0, 0.0, 0.0]
+        closest[axis] = along
+        distance = math.sqrt(sum((d[i] - closest[i]) ** 2 for i in range(3)))
+        return radius - distance
+    if kind == "convex":
+        planes = _hull_planes_cached(collider)
+        if not planes:
+            return -math.inf
+        inward = math.inf
+        for normal, plane in planes:
+            inward = min(inward, plane - dot(normal, d))
+        return inward
+    return -math.inf
+
+
+_HULL_PLANE_CACHE = {}
+
+
+def _hull_planes_cached(collider):
+    """``[(normal, offset)]`` for one convex proxy, computed once per payload.
+
+    A validator runs this for every prop corner; the hull does not change between them.
+    """
+    points = collider_proxy.hull_points(collider)
+    if not points:
+        return []
+    key = tuple(tuple(round(float(value), 9) for value in point) for point in points)
+    if key not in _HULL_PLANE_CACHE:
+        _HULL_PLANE_CACHE.clear()
+        hull = collider_proxy.convex_hull([tuple(point) for point in points])
+        _HULL_PLANE_CACHE[key] = collider_proxy.hull_planes(hull[0], hull[1]) if hull else []
+    return _HULL_PLANE_CACHE[key]
+
+
+def proxy_world_aabb(collider, center, quat):
+    """The world AABB of a placed proxy (the broad-phase pre-test for the corner scan)."""
+    kind = (collider or {}).get("type")
+    offset = (collider or {}).get("center") or (0.0, 0.0, 0.0)
+    if kind == "box":
+        half = [float(value) / 2.0 for value in (collider or {}).get("size") or (0, 0, 0)]
+    elif kind == "sphere":
+        radius = float((collider or {}).get("radius") or 0.0)
+        half = [radius, radius, radius]
+    elif kind == "capsule":
+        radius = float((collider or {}).get("radius") or 0.0)
+        half_height = float((collider or {}).get("halfHeight") or 0.0)
+        axis = CAPSULE_AXIS_INDEX.get((collider or {}).get("axis"), 1)
+        half = [radius, radius, radius]
+        half[axis] = radius + half_height
+    elif kind == "convex":
+        points = collider_proxy.hull_points(collider) or []
+        if not points:
+            return None
+        low = [min(point[axis] for point in points) for axis in range(3)]
+        high = [max(point[axis] for point in points) for axis in range(3)]
+        half = [(high[axis] - low[axis]) / 2.0 for axis in range(3)]
+        offset = tuple((high[axis] + low[axis]) / 2.0 for axis in range(3))
+    else:
+        return None
+    rotated = quat_rotate(tuple(float(v) for v in quat), tuple(float(v) for v in offset))
+    world_center = tuple(float(center[axis]) + rotated[axis] for axis in range(3))
+    m = quat_to_matrix(tuple(float(v) for v in quat))
+    extent = [sum(abs(m[row][axis]) * half[row] for row in range(3)) for axis in range(3)]
+    return (tuple(world_center[axis] - extent[axis] for axis in range(3)),
+            tuple(world_center[axis] + extent[axis] for axis in range(3)))
+
+
+#: ``collider.axis`` -> index, for the capsule point test.
+CAPSULE_AXIS_INDEX = {"x": 0, "y": 1, "z": 2}
+
+
+def structure_penetrations(props, boxes, structures_by_id, ball_radius_m, proxy="ignore"):
+    """``[(item_id, structure_id, worst_depth)]`` for props sunk into a solid structure.
+
+    A prop's eight OBB corners are tested against each structure's solid volume; the deepest
+    corner is the penetration (design rule 8).  ``proxy``:
+
+    * ``"ignore"`` (v1's document model): the structure's solid boxes, as authored;
+    * ``"prefer"`` (v2 scenery): the structure's ``collider`` proxy when it has one, because a
+      box that wraps a tree/lamppost is *our* coarse proxy, not the object's shape — a crab
+      standing at the tree's base looks "inside" a box but not inside the tree.
+
+    Both validators call this; which mode a caller passes is a document-model decision.
+    """
+    hits = []
+    structure_proxies = {}
+    if proxy == "prefer":
+        for structure_id, structure in structures_by_id.items():
+            if not isinstance(structure, dict) or structure.get("collision") == "none":
+                continue
+            collider = structure.get("collider")
+            if not isinstance(collider, dict):
+                continue
+            try:
+                bounds = proxy_world_aabb(collider,
+                                          tuple(float(v) for v in structure["center"]),
+                                          tuple(float(v) for v in structure["rotationQuat"]))
+            except (KeyError, TypeError, ValueError):
+                bounds = None
+            structure_proxies[structure_id] = (collider, bounds)
+    for prop in props:
+        item_id = prop.get("itemId")
+        if item_id not in boxes:
+            continue
+        try:
+            aabb = tuple(float(v) for v in prop["aabb"])
+            position = tuple(float(v) for v in prop["position"])
+            quat = tuple(float(v) for v in prop["rotationQuat"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        corners = box_corners(position, aabb, quat)
+        prop_box = boxes[item_id]
+        for structure_id, structure in structure_by_id_items(structures_by_id):
+            if not isinstance(structure, dict) or structure.get("collision") == "none":
+                continue
+            worst = 0.0
+            collider = (structure.get("collider") if proxy == "prefer" else None)
+            if proxy == "prefer" and structure_id in structure_proxies:
+                cached, bounds = structure_proxies[structure_id]
+                if bounds is not None and not _boxes_touch(prop_box, bounds,
+                                                           STRUCTURE_PENETRATION_M):
+                    continue
+                collider = cached
+            if isinstance(collider, dict):
+                try:
+                    center = tuple(float(v) for v in structure["center"])
+                    rotation = tuple(float(v) for v in structure["rotationQuat"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                worst = max(proxy_penetration(corner, collider, center, rotation)
+                            for corner in corners)
+            else:
+                try:
+                    solids = structure_solid_boxes(structure, ball_radius_m)
+                except (KeyError, TypeError, ValueError, FileNotFoundError):
+                    continue
+                for solid in solids:
+                    try:
+                        worst = max(worst, max(obb_penetration(corner, solid)
+                                              for corner in corners))
+                    except (KeyError, TypeError, ValueError):
+                        continue
+            if worst > STRUCTURE_PENETRATION_M:
+                hits.append((item_id, structure_id, worst))
+    return hits
+
+
+def structure_by_id_items(structures_by_id):
+    """``sorted(items)`` that tolerates a non-string id (a malformed document)."""
+    try:
+        return sorted(structures_by_id.items())
+    except TypeError:
+        return list(structures_by_id.items())
+
+
+def _boxes_touch(first, second, margin=0.0):
+    return not (first[1][0] + margin < second[0][0] or second[1][0] + margin < first[0][0]
+                or first[1][1] + margin < second[0][1] or second[1][1] + margin < first[0][1]
+                or first[1][2] + margin < second[0][2] or second[1][2] + margin < first[0][2])
+
+
 def _check_support_and_overlap(doc, report, boxes, structures_by_id):
     props = [prop for prop in doc.get("props") or [] if isinstance(prop, dict)]
     by_id = {prop.get("itemId"): prop for prop in props}
@@ -2456,35 +2712,26 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
     # pair count is compared against it instead of every pair being an error.  Absent =
     # the historic rule, byte-for-byte.
     budget = overlap_budget(doc)
-    ids = sorted(boxes)
+
+    def exempt(left_id, right_id):
+        left = by_id.get(left_id) or {}
+        right = by_id.get(right_id) or {}
+        if prop_parent(left) == right_id or prop_parent(right) == left_id:
+            return True
+        group = left.get("groupId")
+        return bool(isinstance(group, str) and group and group == right.get("groupId"))
+
+    scanned = overlap_scan(boxes, exempt)
     printed = 0
     pairs = []
-    for i, left_id in enumerate(ids):
-        for right_id in ids[i + 1:]:
-            left_box, right_box = boxes[left_id], boxes[right_id]
-            overlap = aabb_intersection(left_box, right_box)
-            if overlap <= 0.0:
-                continue
-            smaller = min(aabb_volume(left_box), aabb_volume(right_box))
-            if smaller <= 0.0:
-                continue
-            fraction = overlap / smaller
-            if fraction <= OVERLAP_FRACTION:
-                continue
-            left = by_id.get(left_id) or {}
-            right = by_id.get(right_id) or {}
-            if prop_parent(left) == right_id or prop_parent(right) == left_id:
-                continue
-            group = left.get("groupId")
-            if isinstance(group, str) and group and group == right.get("groupId"):
-                continue
-            if budget is None:
-                if printed < DETAIL_LIMIT:
-                    report.err("%s and %s overlap %.0f%% of the smaller AABB"
-                               % (left_id, right_id, fraction * 100.0))
-                printed += 1
-            else:
-                pairs.append((left_id, right_id))
+    for left_id, right_id, fraction in scanned:
+        if budget is None:
+            if printed < DETAIL_LIMIT:
+                report.err("%s and %s overlap %.0f%% of the smaller AABB"
+                           % (left_id, right_id, fraction * 100.0))
+            printed += 1
+        else:
+            pairs.append((left_id, right_id))
     if budget is None:
         if printed > DETAIL_LIMIT:
             report.err("... %d more prop/prop overlap(s)" % (printed - DETAIL_LIMIT))
@@ -2498,39 +2745,13 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
                           ("; e.g. " + examples) if examples else ""))
 
     # props inside solid structures (design rule 8)
-    printed = 0
-    for prop in props:
-        item_id = prop.get("itemId")
-        if item_id not in boxes:
-            continue
-        try:
-            aabb = tuple(float(v) for v in prop["aabb"])
-            position = tuple(float(v) for v in prop["position"])
-            quat = tuple(float(v) for v in prop["rotationQuat"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        corners = box_corners(position, aabb, quat)
-        ball_radius_m = curve_ball_radius_m(doc.get("level"))
-        for structure_id, structure in sorted(structures_by_id.items()):
-            if structure.get("collision") == "none":
-                continue
-            try:
-                solids = structure_solid_boxes(structure, ball_radius_m)
-            except (KeyError, TypeError, ValueError, FileNotFoundError):
-                continue
-            worst = 0.0
-            for solid in solids:
-                try:
-                    worst = max(worst, max(obb_penetration(corner, solid) for corner in corners))
-                except (KeyError, TypeError, ValueError):
-                    continue
-            if worst > STRUCTURE_PENETRATION_M:
-                if printed < DETAIL_LIMIT:
-                    report.err("%s penetrates structure %r by %.3f m"
-                               % (item_id, structure_id, worst))
-                printed += 1
-    if printed > DETAIL_LIMIT:
-        report.err("... %d more prop/structure penetration(s)" % (printed - DETAIL_LIMIT))
+    hits = structure_penetrations(props, boxes, structures_by_id,
+                                  curve_ball_radius_m(doc.get("level")))
+    for index, (item_id, structure_id, worst) in enumerate(hits):
+        if index < DETAIL_LIMIT:
+            report.err("%s penetrates structure %r by %.3f m" % (item_id, structure_id, worst))
+    if len(hits) > DETAIL_LIMIT:
+        report.err("... %d more prop/structure penetration(s)" % (len(hits) - DETAIL_LIMIT))
 
 
 def _check_parents(doc, report, boxes, strict_parents=False):

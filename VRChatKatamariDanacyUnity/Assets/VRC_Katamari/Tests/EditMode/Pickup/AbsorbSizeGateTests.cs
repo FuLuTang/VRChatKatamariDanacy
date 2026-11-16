@@ -37,8 +37,11 @@ namespace VRCKatamari.Tests
         private const float ContactRadiusM = 0f;
 
         // Far above any collision radius used here, so the growth-cap gate (which is
-        // inclusive at the cap) cannot mask the size gate. The 21 m ball case needs > 10.5.
-        private const float MaxGrowthRadiusM = 50f;
+        // inclusive at the cap) cannot mask the size gate. The helper passes the ball's
+        // radius as half its diameter, so the ceiling must clear the LARGEST ball below:
+        // the 100 m ball's 50 m radius is exactly the old ceiling and the cap gate fired
+        // (RejectBallAtGrowthCap) before the size gate could answer. 1000 m has 20x headroom.
+        private const float MaxGrowthRadiusM = 1000f;
 
         // The original's default per-item volume factor (PARITY_AUDIT G13).
         private const float K = PickupAbsorbMath.DefaultVolumeK;

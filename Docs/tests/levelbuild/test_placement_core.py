@@ -205,6 +205,14 @@ class AbsorbGateTests(unittest.TestCase):
         # A ball diameter that is only float-noise above the boundary still passes.
         self.assertTrue(core.is_absorbable(size, req_m + 1e-9))
 
+        # The ball side floors the diameter it actually has, not the label the scene reads:
+        # the motor's cap ball at 1356 confirmed units derives 2.199792 m (the 2.20 m cap is
+        # a core-RADIUS cap, reached at 5.57528 m^3), so the gate's ball side is 2199 mm, not
+        # 2200. The C# twin pins the same number in AbsorbSizeLimitTests
+        # (AFullyGrownBallCanTakeAOnePointTwoMetrePlank), so the two gates cannot disagree.
+        self.assertEqual(core.floor_mm(2.199792), 2199)
+        self.assertEqual(core.floor_mm(2.2), 2200)
+
     def test_epsilon_lifts_an_exact_boundary_back_onto_its_millimetre(self):
         # A 0.3 m cube scaled by the gate's own constants lands on an exact 300 mm
         # boundary; the product of three floats lands a few ulps below it.

@@ -137,12 +137,17 @@ namespace VRCKatamari.Tests
                 PickupAbsorbMath.DefaultVolumeK, diameter));
 
             // The ball's own volume is still the calibrated 0.0141 m^3 - the gate no longer
-            // reads it, but the size model that produces the diameter does.
+            // reads it, but the size model that produces the diameter does. The ball's volume
+            // is (baseline + confirmed) * cubicMetersPerVolumeUnit, NOT confirmed alone: the
+            // baseline is 3.4390244 units of the same 0.0041 m^3 unit (0.0141 m^3), so a
+            // zero-confirmed ball still has a volume. LabBallSizeSetter is the other reader
+            // that adds the two, and this assertion is the one that would catch a dropped
+            // baseline in the size model.
             SetField("unbankedVolumeUnits", 0L);
             Invoke("RecomputeConfirmedAndSize");
-            Assert.AreEqual(StartBallVolumeWorldM3,
-                (float)InvokeGetter("GetConfirmedVolumeUnits") *
-                    Field("cubicMetersPerVolumeUnit"), 1e-4f);
+            float ballVolumeWorldM3 = (Field("baselineVolumeUnits") +
+                (float)InvokeGetter("GetConfirmedVolumeUnits")) * Field("cubicMetersPerVolumeUnit");
+            Assert.AreEqual(StartBallVolumeWorldM3, ballVolumeWorldM3, 1e-4f);
         }
 
         [Test]
@@ -156,9 +161,15 @@ namespace VRCKatamari.Tests
 
             float diameter = Getter("GetSemanticDiameterWorldM");
             float ballMm = Getter("GetAbsorbGateDiameterMm");
-            // 2.20 m is the cap SizeCalibrationTests pins for 1356 units -> 2200 mm.
+            // SizeCalibrationTests pins 1356 units at 2.20 m to a CENTIMETRE, but the derived
+            // diameter there is 2.199792 m: the cap is a core-RADIUS cap (1.1 m), and the cap
+            // VOLUME (4*pi/3 * 1.1^3 = 5.575280 m^3) is only reached at V = (3.4390244 + 1356)
+            // * 0.0041 = 5.573700 m^3 + 0.385 volume units. The gate's ball side floors the
+            // REAL diameter (floor(1000*2.199792 + 1e-3) = 2199), so 2199 is the correct
+            // reading - 2200 would mean it rounded a length the original floors. The
+            // micrometre guard cannot and must not close a 0.2 mm gap.
             Assert.AreEqual(2.20f, diameter, 0.01f);
-            Assert.AreEqual(2200f, ballMm, 1e-6f);
+            Assert.AreEqual(2199f, ballMm, 1e-6f);
 
             // A 1.2 x 0.1 x 0.1 m plank is 0.012 m^3 of bbox, 0.0084 m^3 at k=0.70, so
             // Req = floor(1000*cbrt(60*0.0084/pi)) = 543 mm, i.e. 4x inside the cap ball.
@@ -170,6 +181,16 @@ namespace VRCKatamari.Tests
             Assert.Less(reqMm, ballMm, "a 1.2 m plank must be within a full ball's gate");
             Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(plank,
                 PickupAbsorbMath.DefaultVolumeK, diameter));
+
+            // Saturate the cap the way a round's last commit can: one absorb may land above
+            // the cap volume, and the mapping then returns the cap parameter itself. That is
+            // the only place the ball's diameter is exactly 2.20 m and its whole-mm reading
+            // exactly 2200 (2.2f * 1000f is exactly 2200.0f, so here the floor is decided by
+            // the saturation, not by the boundary guard).
+            SetField("unbankedVolumeUnits", (long)UnitsAtCap + 1L);
+            Invoke("RecomputeConfirmedAndSize");
+            Assert.AreEqual(2.20f, Getter("GetSemanticDiameterWorldM"), 1e-6f);
+            Assert.AreEqual(2200f, Getter("GetAbsorbGateDiameterMm"), 1e-6f);
         }
 
         [Test]

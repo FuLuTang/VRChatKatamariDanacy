@@ -209,7 +209,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
             Debug.Log("[ptf] build=" + DriverRevision + " cells=" + cellCount.ToString()
                 + " presets=" + (presetDiametersM == null ? 0 : presetDiametersM.Length).ToString()
                 + " model=" + ModelText()
-                + " cellRev=" + CellRevisionText());
+                + " cellRev=" + CellRevisionText()
+                + " v2Rows=" + V2RowsText());
             if (cells != null)
             {
                 for (int i = 0; i < cells.Length; i++)
@@ -481,6 +482,28 @@ namespace VRCKatamari.Labs.PhysicsTestField
             // The model this run is judged under. Read once per run: the flag belongs to the motor
             // and can be toggled in Play, and every row of one run must describe one model.
             modelIsV2 = motor.IsContactModelV2();
+
+            // A v2 verdict needs the cells' v2 override rows, and those are DATA the importer bakes
+            // into the scene (build 2026-11-15e), not a driver rule. A cell baked before that has no
+            // tables, so HasCheckV2() answers false for every check and the run silently judges all
+            // 11 override rows as their v1 rows - the 2026-11-16 O3a regression, where a working
+            // ball produced 31 "unexpected" verdicts (ramp_registered read ramp_count 0, which is
+            // the v2 model's CORRECT ramp count). Refuse to publish a matrix that was judged under
+            // rows the model does not use: this is a setup error, and it is loud.
+            if (modelIsV2 && cell.GetCheckCount() > 0 && cell.GetCheckV2RowCount() < 0)
+            {
+                Debug.LogError("[ptf] abort reason=staleCriteriaV2 cell=" + cell.GetCellId()
+                    + " model=v2 v2Rows=missing: this cell was baked before the criteria knew the "
+                    + "contact model, so every v2 override row would be judged as v1. Re-import the "
+                    + "criteria (VRC Katamari/Physics Test Field/Import Criteria) and SAVE the "
+                    + "scene, then rerun; the import must print v2Rows=11 and this build line must "
+                    + "repeat it.");
+                autoAdvance = false;
+                passActive = false;
+                state = StateIdle;
+                Debug.Log("[ptf] field aborted reason=staleCriteriaV2");
+                return;
+            }
 
             // Exactly one arena may be REGISTERED; all of them stay visible. ReleaseArena now
             // means "suspend self-registration", not "hide", so this loop is safe to run on
@@ -1601,6 +1624,32 @@ namespace VRCKatamari.Labs.PhysicsTestField
             }
 
             return "none";
+        }
+
+        /// <summary>
+        /// How many v2 override rows the SCENE's bake carries (sum over cells), or "missing" when a
+        /// cell has no v2 tables at all.
+        /// </summary>
+        /// <remarks>
+        /// The criteria importer's report prints the same counter (<c>v2Rows=11</c>), so the first
+        /// [ptf] line and the import log are directly comparable. The bake is scene data, not code:
+        /// a build stamp alone cannot tell a cell baked before the v2 rows from one baked after, and
+        /// that gap produced the 2026-11-16 O3a "31 unexpected" run where every override row was
+        /// silently judged as v1.
+        /// </remarks>
+        private string V2RowsText()
+        {
+            if (cells == null) return "none";
+            int total = 0;
+            for (int i = 0; i < cells.Length; i++)
+            {
+                if (cells[i] == null) continue;
+                int rows = cells[i].GetCheckV2RowCount();
+                if (rows < 0) return "missing";
+                total = total + rows;
+            }
+
+            return total.ToString();
         }
 
         /// <summary>H_cap for the ball in play: k_h * D (a cell's balls carry no protruding prop).</summary>

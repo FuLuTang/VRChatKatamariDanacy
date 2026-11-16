@@ -301,14 +301,39 @@ namespace VRCKatamari.Editor.Pickup
                 }
             }
 
-            for (int i = 0; i < itemIds.Length; i++)
+            // "Declared but no row" is the sync-DROPPED case, not a value disagreement: the
+            // declaration maps one prop id, so a declaration with no host row means that prop
+            // never landed (a malformed @size marker, a degenerate AABB, ...). It must be
+            // reported or the level's declared k silently does not play. The source of that
+            // answer is the DECLARATION, not itemIds: iterating itemIds can only ever see
+            // declarations that are already `seen`, i.e. it can never report the dropped prop
+            // (the valueUnits twin, FindDeclaredIdsWithoutRows, iterates the dictionary for the
+            // same reason). Rows past the host's columns count as missing too.
+            var missing = new List<string>();
+            var reportedMissing = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = rows; i < itemIds.Length; i++)
             {
                 string itemId = itemIds[i];
                 if (!string.IsNullOrEmpty(itemId) && declaredVolumeK.ContainsKey(itemId) &&
-                    !seen.Contains(itemId))
+                    reportedMissing.Add(itemId))
                 {
-                    mismatches.Add(itemId + ": declared " + declaredVolumeK[itemId] + ", no row");
+                    missing.Add(itemId);
                 }
+            }
+
+            foreach (KeyValuePair<string, float> pair in declaredVolumeK)
+            {
+                if (!string.IsNullOrEmpty(pair.Key) && !seen.Contains(pair.Key) &&
+                    reportedMissing.Add(pair.Key))
+                {
+                    missing.Add(pair.Key);
+                }
+            }
+
+            missing.Sort(StringComparer.Ordinal);
+            for (int i = 0; i < missing.Count; i++)
+            {
+                mismatches.Add(missing[i] + ": declared " + declaredVolumeK[missing[i]] + ", no row");
             }
 
             return mismatches.ToArray();

@@ -541,5 +541,52 @@ namespace VRCKatamari.Labs.PhysicsTestField
             if (checkV2Thresholds == null || index < 0 || index >= checkV2Thresholds.Length) return 0;
             return checkV2Thresholds[index];
         }
+
+        /// <summary>
+        /// How many criteria of this cell carry a v2 override row, or -1 when this cell has
+        /// no v2 tables at all.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The six per-check v2 arrays are baked by
+        /// <c>PhysicsTestFieldCriteriaImporter</c> (build 2026-11-15e). A cell baked before
+        /// that has none of them, so <see cref="HasCheckV2"/> answers false for every check
+        /// and a v2 run silently judges every override row as its v1 row - the exact
+        /// 2026-11-16 regression, where a working ball produced 31 "unexpected" verdicts.
+        /// </para>
+        /// <para>
+        /// -1 (tables absent) is deliberately different from 0 (tables present, this cell has
+        /// no overrides): the driver prints the count in its first line and refuses to judge a
+        /// v2 run against a bake that predates the tables. The importer prints the same
+        /// counter in its own report (<c>v2Rows=11</c>), so the two lines are comparable.
+        /// </para>
+        /// </remarks>
+        public int GetCheckV2RowCount()
+        {
+            if (checkHasV2 == null || checkV2Metrics == null || checkV2Ops == null ||
+                checkV2Limits == null || checkV2ExpectMasks == null || checkV2Thresholds == null)
+            {
+                return -1;
+            }
+
+            // The importer sizes every criteria array to checkIds, so a table shorter than the
+            // check list is a partial bake, not a cell with no overrides: HasCheckV2 would answer
+            // false for the tail, which is the same silent downgrade this method exists to catch.
+            int rows = GetCheckCount();
+            if (checkHasV2.Length < rows || checkV2Metrics.Length < rows ||
+                checkV2Ops.Length < rows || checkV2Limits.Length < rows ||
+                checkV2ExpectMasks.Length < rows || checkV2Thresholds.Length < rows)
+            {
+                return -1;
+            }
+
+            int count = 0;
+            for (int i = 0; i < rows; i++)
+            {
+                if (checkHasV2[i] != 0) count++;
+            }
+
+            return count;
+        }
     }
 }

@@ -153,7 +153,6 @@
 - **noclip.website：不 vendor 它的代码，自己写解析器、出我们自己的格式** — **许可更正（2026-11-16）**：noclip 的 LICENSE 是 **MIT + 一段反编译说明**（GitHub 因此报 `NOASSERTION`），**不是 GPL-3**；原「GPL-3」前提有误。即便如此，逐行翻译仍属衍生作品，MIT 允许再分发但必须保留版权与许可声明。首选照规格重实现（已完成，981 行解析器在 `~/KatamariRef/`，仓库外）；仓库许可仍未定。见 [NOCLIP_KATAMARI_FORMAT §10](Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)、[LEVEL_FORMAT_V2 §19](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **关卡编辑器：Unity 式鼠标操作 + 区域统计（件数与总体积）** — 复用玩家/作者已经会的手感；区域统计用来验内容密度与供给。见 [LEVEL_EDITOR_WEB §7.1 与飞行/操作节](Design/Tools/LEVEL_EDITOR_WEB.md)。
 - **VR 验收后置，不着急** — 先把桌面闭环与灰盒跑通，VR 放在 Build & Test 有内容之后。
-- **每次派 subagent 前重查模型路由** — 本地/文档/代码走 `dsh-opencode-go` + `deepseek-v4.1-flash`；需要联网或操作 Unity 走 `deepseek-official` + `deepseek-flash`。见 [AGENTS.md 委派与 Git](<../AGENTS.md>)。**已被取代（2026-11-16）**：原文保留作历史，现行口径见下方「Owner decisions 2026-11-16（追加：子代理模型路由）」——联网与搜索类工作不再例外，唯一路由是 `dsh-opencode-go` + `deepseek-v4.1-flash`。
 
 ### Owner decisions 2026-11-16（球径、活动区、坠落重生、运动与相位、缩放）
 
@@ -175,9 +174,7 @@
 
 ### Owner decisions 2026-11-16（追加：子代理模型路由）
 
-> 同日修正：取消「需要内置搜索/联网时才用 `deepseek-official` + `deepseek-flash`」这一例外。
-
-- **子代理模型：一律 opencode 的 DeepSeek V4.1 Flash，搜索类调研也不再例外（owner 2026-11-16）** — 默认且唯一的子代理路由是 `dsh-opencode-go` + `deepseek-v4.1-flash`（DeepSeek V4.1 Flash 1017），包括需要联网、搜索、无头浏览器、下载的工作（该路由本身有正常 shell/网络权限）；原 `deepseek-official` + `deepseek-flash` 的搜索例外作废。`provider` 与 `model` 仍必须同时传。见 [AGENTS.md 委派与 Git](<../AGENTS.md>)。
+- **子代理模型：一律 opencode 的 DeepSeek V4.1 Flash，搜索类调研同样走这条路由（owner 2026-11-16）** — 默认且唯一的子代理路由是 `dsh-opencode-go` + `deepseek-v4.1-flash`（DeepSeek V4.1 Flash 1017），包括需要联网、搜索、无头浏览器、下载的工作；该路由本身有正常 shell/网络权限。`provider` 与 `model` 必须同时传。见 [AGENTS.md 委派与 Git](<../AGENTS.md>)。
 
 ### Lead decisions 2026-11-16（触发门、判定体、运动更新率）
 

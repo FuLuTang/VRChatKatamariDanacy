@@ -105,6 +105,12 @@ namespace VRCKatamari.BallMotor
         // SetTerrainSupportEnabled(false).
         [SerializeField] private bool terrainSupportEnabled = true;
 
+        // Cell size of the uniform XZ grid the motor builds over the terrain mesh at
+        // SetTerrainMesh time (TerrainGridMath). 1 m matches the v2 document's terrain.grid
+        // unit; a refused grid is reported and the query falls back to the full scan, so
+        // this is a speed knob only.
+        [SerializeField] private float terrainGridCellM = 1f;
+
         // T0/T1 terrain mesh contact (LEVEL_FORMAT_V2 §13). Default FALSE: with it off
         // no terrain array is queried and the v1 position path is exactly the pre-mesh
         // one. The mesh is the extra 3D-ground source; it does not replace the ground
@@ -564,6 +570,35 @@ namespace VRCKatamari.BallMotor
         private Vector3[] terrainChunkMax;
         private int terrainChunkCount;
         private bool terrainMeshReady;
+
+        // ---- Terrain grid index (built once in SetTerrainMesh; never in the frame) ----
+        // Per-triangle XZ AABB + surface id: the candidate query reads four floats instead of
+        // computing eight Mathf.Min/Max per triangle per probe.
+        private float[] terrainTriangleMinX;
+        private float[] terrainTriangleMaxX;
+        private float[] terrainTriangleMinZ;
+        private float[] terrainTriangleMaxZ;
+        private int[] terrainTriangleSurfaceId;
+        // CSR: cell k owns terrainCellTriangles[terrainCellStart[k] .. terrainCellStart[k+1]).
+        private int[] terrainCellStart;
+        private int[] terrainCellTriangles;
+        private int[] terrainCellCursor;
+        private float terrainGridOriginX;
+        private float terrainGridOriginZ;
+        // terrainGridCellM (the built cell size) IS the serialized knob above: the build
+        // clamps it in place, so a reader sees what was actually used.
+        private int terrainGridCellsX;
+        private int terrainGridCellsZ;
+        private int terrainGridCellCount;
+        private bool terrainGridReady;
+        private int terrainGridRefusalCode;
+        private int terrainGridRefusalDetail;
+        // One candidate list per step, shared by the support ring and the T1 push-out.
+        private int[] terrainCandidates;
+        private bool[] terrainCandidateMark;
+        // Count of the list currently marked (0 when the marks are clear). Also the number the
+        // support/penetration queries are handed, and the diagnostic's candidate count.
+        private int terrainCandidateCount;
         // ---- Terrain cost diagnostics (per LAST fixed step; see ResetTerrainCostCounters) ----
         // The total is kept for existing readers; the split says whether the support ring or
         // the T1 push-out is the expensive half, and the two work counters say whether the
@@ -3314,7 +3349,8 @@ namespace VRCKatamari.BallMotor
             if (terrainSupportEnabled && terrainMeshContactEnabled && terrainMeshReady &&
                 terrainTriangleCount > 0)
             {
-                TryQueryTerrainSupport(center, ballBottom, limit, out terrainId,
+                int candidateCount = CollectTerrainCandidates(center);
+                TryQueryTerrainSupport(center, ballBottom, limit, candidateCount, out terrainId,
                     out terrainNormal, out terrainHeight);
             }
 
@@ -3378,6 +3414,35 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// Collects this step's candidate triangles for one centre: every mesh triangle whose
+        /// grid cell the ball's footprint (± one collision radius, which covers both the
+        /// 0.9 r support ring and T1's ± r sphere AABB) overlaps.
+        /// </summary>
+        /// <returns>
+        /// The candidate count, or -1 when no grid exists (the queries then take -1 and scan
+        /// every chunk, which is slower but never wrong).
+        /// </returns>
+        /// <remarks>
+        /// One deduped list is what turns 17 probes x every triangle into 17 probes x a few
+        /// dozen: the probes only walk this array. The list is rebuilt per query because the
+        /// support query runs AFTER T1, whose push can move the centre; rebuilding is a few
+        /// cell lookups and a few mark writes, far below the triangle scan it replaces.
+        /// Nothing allocates: the buffers are the motor's fixed arrays.
+        /// </remarks>
+        private int CollectTerrainCandidates(Vector3 center)
+        {
+            if (!terrainGridReady || terrainGridCellCount <= 0) return -1;
+            TerrainGridMath.ClearCandidates(terrainCandidates, terrainCandidateCount,
+                terrainCandidateMark);
+            terrainCandidateCount = TerrainGridMath.CollectCandidates(center.x, center.z,
+                collisionRadiusWorldM, terrainGridCellM, terrainGridOriginX,
+                terrainGridOriginZ, terrainGridCellsX, terrainGridCellsZ,
+                terrainGridCellCount, terrainCellStart, terrainCellTriangles,
+                terrainCandidates, terrainCandidateMark);
+            return terrainCandidateCount;
+        }
+
+        /// <summary>
         /// T0 support query: the highest mesh triangle under the ball's footprint ring that
         /// is inside the ball's step band, re-measured on its plane at the ball's XZ. The
         /// returned height is a surface height, so <c>GroundContactMath</c> consumes it
@@ -3391,14 +3456,16 @@ namespace VRCKatamari.BallMotor
         /// back to the arena ground plane.
         /// </remarks>
         private bool TryQueryTerrainSupport(Vector3 center, float ballBottom, float stepLimit,
-            out int surfaceId, out Vector3 normal, out float height)
+            int candidateCount, out int surfaceId, out Vector3 normal, out float height)
         {
             double start = WallClockSeconds();
             bool found = TerrainMeshMath.TrySelectSupport(center, ballBottom, stepLimit,
                 proxyDirections, visualRollRotation, collisionRadiusWorldM * 0.9f,
                 terrainVertices, terrainIndices, terrainTriangleCount, terrainChunkMin,
                 terrainChunkMax, terrainChunkStarts, terrainChunkTriangleCounts,
-                terrainChunkZoneIds, terrainChunkCount, ref terrainTrianglesTested,
+                terrainChunkZoneIds, terrainChunkCount, terrainCandidates, candidateCount,
+                terrainTriangleMinX, terrainTriangleMaxX, terrainTriangleMinZ,
+                terrainTriangleMaxZ, terrainTriangleSurfaceId, ref terrainTrianglesTested,
                 ref terrainFullEvals, out normal, out height, out surfaceId);
             float micros = ElapsedMicros(start);
             lastTerrainSupportMicros = lastTerrainSupportMicros + micros;
@@ -3451,6 +3518,10 @@ namespace VRCKatamari.BallMotor
         private void ResolveTerrainPenetration(ref Vector3 center, ref Vector3 planarVelocity)
         {
             if (!terrainMeshReady || terrainTriangleCount <= 0) return;
+            // T1's own candidate set, collected at the pre-push centre: the support query runs
+            // after this and re-collects at the corrected centre, so neither query ever tests
+            // a footprint the other's list did not cover.
+            int candidates = CollectTerrainCandidates(center);
             double start = WallClockSeconds();
             for (int iteration = 0; iteration < 2; iteration++)
             {
@@ -3460,7 +3531,9 @@ namespace VRCKatamari.BallMotor
                 if (!TerrainMeshMath.TryDeepestPenetration(center, collisionRadiusWorldM,
                     terrainVertices, terrainIndices, terrainTriangleCount, terrainChunkMin,
                     terrainChunkMax, terrainChunkStarts, terrainChunkTriangleCounts,
-                    terrainChunkCount, out point, out normal, out depth)) break;
+                    terrainChunkCount, terrainCandidates, candidates, terrainTriangleMinX,
+                    terrainTriangleMaxX, terrainTriangleMinZ, terrainTriangleMaxZ,
+                    out point, out normal, out depth)) break;
                 if (!KatamariMath.IsFiniteFloat(depth) || depth <= 0f) break;
                 center = center + normal * (depth + separationEpsilon);
                 float inward = planarVelocity.x * normal.x + planarVelocity.z * normal.z;
@@ -4838,7 +4911,91 @@ namespace VRCKatamari.BallMotor
             terrainChunkCount = chunks;
             terrainMeshReady = true;
             lastTerrainQueryMicros = 0f;
+            BuildTerrainGrid(chunks);
             return true;
+        }
+
+        /// <summary>
+        /// Builds the XZ grid and the per-triangle lookup data for the mesh just registered.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A LOAD-TIME call (SetTerrainMesh), never in the frame. A grid refusal does NOT
+        /// refuse the mesh: collision must not depend on an acceleration structure, so the
+        /// motor keeps the mesh, records the refusal and the query falls back to the full
+        /// chunk scan. The refusal is explicit (<see cref="GetTerrainGridRefusalCode"/> plus
+        /// <see cref="GetTerrainGridRefusalReason"/>) and TerrainFieldHost logs it, so a
+        /// silent performance cliff cannot happen.
+        /// </para>
+        /// <para>
+        /// The cell size is the serialized <c>terrainGridCellM</c> clamped to the grid's
+        /// range; the origin and cell counts come from the chunk AABBs' union, which is the
+        /// mesh's true XZ extent.
+        /// </para>
+        /// </remarks>
+        private void BuildTerrainGrid(int chunkCount)
+        {
+            terrainGridReady = false;
+            terrainGridCellCount = 0;
+            terrainGridRefusalCode = TerrainGridMath.RefusalNone;
+            terrainGridRefusalDetail = 0;
+            terrainCandidateCount = 0;
+            if (terrainCandidateMark != null)
+            {
+                for (int i = 0; i < terrainCandidateMark.Length; i++) terrainCandidateMark[i] = false;
+            }
+            if (chunkCount <= 0 || terrainChunkMin == null || terrainChunkMax == null) return;
+
+            float minX = float.MaxValue;
+            float minZ = float.MaxValue;
+            float maxX = -float.MaxValue;
+            float maxZ = -float.MaxValue;
+            for (int c = 0; c < chunkCount; c++)
+            {
+                Vector3 chunkLow = terrainChunkMin[c];
+                Vector3 chunkHigh = terrainChunkMax[c];
+                if (!KatamariMath.IsFiniteVector(chunkLow)) return;
+                if (!KatamariMath.IsFiniteVector(chunkHigh)) return;
+                if (chunkLow.x < minX) minX = chunkLow.x;
+                if (chunkLow.z < minZ) minZ = chunkLow.z;
+                if (chunkHigh.x > maxX) maxX = chunkHigh.x;
+                if (chunkHigh.z > maxZ) maxZ = chunkHigh.z;
+            }
+
+            float cellM = terrainGridCellM;
+            if (!KatamariMath.IsFiniteFloat(cellM) || cellM < TerrainGridMath.MinCellM)
+                cellM = TerrainGridMath.DefaultCellM;
+            if (cellM > TerrainGridMath.MaxCellM) cellM = TerrainGridMath.MaxCellM;
+
+            int refusalCode;
+            int refusalDetail;
+            int cellsX;
+            int cellsZ;
+            int cellCount;
+            int referenceCount;
+            float originX;
+            float originZ;
+            if (!TerrainGridMath.TryBuild(minX, minZ, maxX, maxZ, cellM,
+                terrainVertices, terrainIndices, terrainTriangleCount, terrainChunkStarts,
+                terrainChunkTriangleCounts, terrainChunkZoneIds, chunkCount,
+                terrainTriangleMinX, terrainTriangleMaxX, terrainTriangleMinZ,
+                terrainTriangleMaxZ, terrainTriangleSurfaceId, terrainCellStart,
+                terrainCellTriangles, terrainCellCursor, out originX, out originZ,
+                out cellsX, out cellsZ, out cellCount, out referenceCount, out refusalCode,
+                out refusalDetail))
+            {
+                terrainGridRefusalCode = refusalCode;
+                terrainGridRefusalDetail = refusalDetail;
+                return;
+            }
+
+            terrainGridOriginX = originX;
+            terrainGridOriginZ = originZ;
+            terrainGridCellM = cellM;
+            terrainGridCellsX = cellsX;
+            terrainGridCellsZ = cellsZ;
+            terrainGridCellCount = cellCount;
+            terrainGridReady = true;
         }
 
         /// <summary>
@@ -4861,6 +5018,15 @@ namespace VRCKatamari.BallMotor
             terrainTriangleCount = 0;
             terrainChunkCount = 0;
             terrainMeshReady = false;
+            terrainGridReady = false;
+            terrainGridCellCount = 0;
+            terrainGridRefusalCode = TerrainGridMath.RefusalNone;
+            terrainGridRefusalDetail = 0;
+            terrainCandidateCount = 0;
+            if (terrainCandidateMark != null)
+            {
+                for (int i = 0; i < terrainCandidateMark.Length; i++) terrainCandidateMark[i] = false;
+            }
             lastTerrainQueryMicros = 0f;
         }
 
@@ -4916,6 +5082,56 @@ namespace VRCKatamari.BallMotor
             return lastTerrainSupportMicros;
         }
 
+        /// <summary>
+        /// Triangles the last terrain query actually walked: the grid candidate list, or 0
+        /// when no grid is available (the query then scans every chunk and
+        /// <see cref="GetTerrainTrianglesTested"/> shows the full count).
+        /// </summary>
+        public int GetTerrainCandidates()
+        {
+            if (terrainCandidateCount < 0) return 0;
+            return terrainCandidateCount;
+        }
+
+        /// <summary>True when the terrain grid built and the candidate path is in use.</summary>
+        public bool IsTerrainGridReady()
+        {
+            return terrainGridReady;
+        }
+
+        /// <summary>Cells in the terrain grid (0 when it was refused or no mesh is set).</summary>
+        public int GetTerrainGridCellCount()
+        {
+            return terrainGridCellCount;
+        }
+
+        /// <summary>The cell size the grid was actually built with, metres.</summary>
+        public float GetTerrainGridCellM()
+        {
+            return terrainGridCellM;
+        }
+
+        /// <summary>
+        /// Why the grid was refused (0 = accepted). A refusal is a PERFORMANCE answer only:
+        /// the mesh stays registered and the queries fall back to the full scan.
+        /// </summary>
+        public int GetTerrainGridRefusalCode()
+        {
+            return terrainGridRefusalCode;
+        }
+
+        /// <summary>The number that broke the cap, for a log line (cells / span / references).</summary>
+        public int GetTerrainGridRefusalDetail()
+        {
+            return terrainGridRefusalDetail;
+        }
+
+        /// <summary>The one literal per grid refusal code; "" when the grid is fine.</summary>
+        public string GetTerrainGridRefusalReason()
+        {
+            return TerrainGridMath.RefusalReason(terrainGridRefusalCode);
+        }
+
         /// <summary>The last step's share of the terrain query spent on the T1 push-out.</summary>
         public float GetLastTerrainPenetrationMicros()
         {
@@ -4966,10 +5182,27 @@ namespace VRCKatamari.BallMotor
             terrainChunkZoneIds = new int[TerrainMeshMath.MaxChunks];
             terrainChunkMin = new Vector3[TerrainMeshMath.MaxChunks];
             terrainChunkMax = new Vector3[TerrainMeshMath.MaxChunks];
+            // Grid lookup data (load-time allocation, like every other terrain buffer):
+            // 4 x 32 KB of per-triangle AABB floats, 32 KB of surface ids, the CSR table
+            // (16 KB starts + 128 KB references + 16 KB cursor) and the per-step candidate
+            // list + dedupe marks (32 KB + 8 KB). About 370 KB at the 8,192-triangle cap.
+            terrainTriangleMinX = new float[TerrainMeshMath.MaxTriangles];
+            terrainTriangleMaxX = new float[TerrainMeshMath.MaxTriangles];
+            terrainTriangleMinZ = new float[TerrainMeshMath.MaxTriangles];
+            terrainTriangleMaxZ = new float[TerrainMeshMath.MaxTriangles];
+            terrainTriangleSurfaceId = new int[TerrainMeshMath.MaxTriangles];
+            terrainCellStart = new int[TerrainGridMath.MaxGridCells + 1];
+            terrainCellTriangles = new int[TerrainGridMath.MaxGridReferences];
+            terrainCellCursor = new int[TerrainGridMath.MaxGridCells];
+            terrainCandidates = new int[TerrainMeshMath.MaxTriangles];
+            terrainCandidateMark = new bool[TerrainMeshMath.MaxTriangles];
             terrainVertexCount = 0;
             terrainTriangleCount = 0;
             terrainChunkCount = 0;
             terrainMeshReady = false;
+            terrainGridReady = false;
+            terrainGridCellCount = 0;
+            terrainCandidateCount = 0;
             lastTerrainQueryMicros = 0f;
         }
 

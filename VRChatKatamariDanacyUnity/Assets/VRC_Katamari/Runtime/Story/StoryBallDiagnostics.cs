@@ -165,6 +165,8 @@ namespace VRCKatamari.Story
                 // fullEvals the ones that paid the cross/plane/barycentric work.
                 + " terrain=" + motor.GetTerrainMeshTriangleCount() + "/"
                 + motor.GetTerrainMeshChunkCount()
+                + " grid=" + motor.GetTerrainGridCellCount()
+                + " cands=" + motor.GetTerrainCandidates()
                 + " tq=" + (Mathf.Floor(motor.GetLastTerrainQueryMicros() * 10f) / 10f)
                 + " tqSup=" + (Mathf.Floor(motor.GetLastTerrainSupportMicros() * 10f) / 10f)
                 + " tqPen=" + (Mathf.Floor(motor.GetLastTerrainPenetrationMicros() * 10f) / 10f)

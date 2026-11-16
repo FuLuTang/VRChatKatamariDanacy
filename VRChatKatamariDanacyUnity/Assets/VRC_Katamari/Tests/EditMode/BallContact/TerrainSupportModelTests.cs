@@ -140,7 +140,7 @@ namespace VRCKatamari.Tests
                     meshVertices, meshIndices, chunkStarts, chunkCounts, chunkZones,
                     chunkMin, chunkMax, out builtTriangles, out builtChunks),
                     "build mesh: " + triangleCount + " triangles");
-                return new Mesh
+                Mesh mesh = new Mesh
                 {
                     Vertices = meshVertices,
                     Indices = meshIndices,
@@ -152,6 +152,47 @@ namespace VRCKatamari.Tests
                     TriangleCount = builtTriangles,
                     ChunkCount = builtChunks,
                 };
+                mesh.TriMinX = new float[TerrainMeshMath.MaxTriangles];
+                mesh.TriMaxX = new float[TerrainMeshMath.MaxTriangles];
+                mesh.TriMinZ = new float[TerrainMeshMath.MaxTriangles];
+                mesh.TriMaxZ = new float[TerrainMeshMath.MaxTriangles];
+                mesh.TriSurfaceId = new int[TerrainMeshMath.MaxTriangles];
+                mesh.CellStart = new int[TerrainGridMath.MaxGridCells + 1];
+                mesh.CellTriangles = new int[TerrainGridMath.MaxGridReferences];
+                mesh.CellCursor = new int[TerrainGridMath.MaxGridCells];
+                mesh.Candidates = new int[TerrainMeshMath.MaxTriangles];
+                mesh.CandidateMark = new bool[TerrainMeshMath.MaxTriangles];
+                float minX = float.MaxValue;
+                float minZ = float.MaxValue;
+                float maxX = -float.MaxValue;
+                float maxZ = -float.MaxValue;
+                for (int c = 0; c < builtChunks; c++)
+                {
+                    if (chunkMin[c].x < minX) minX = chunkMin[c].x;
+                    if (chunkMin[c].z < minZ) minZ = chunkMin[c].z;
+                    if (chunkMax[c].x > maxX) maxX = chunkMax[c].x;
+                    if (chunkMax[c].z > maxZ) maxZ = chunkMax[c].z;
+                }
+                int cellsX;
+                int cellsZ;
+                int cellCount;
+                int referenceCount;
+                int refusalCode;
+                int refusalDetail;
+                mesh.GridReady = TerrainGridMath.TryBuild(minX, minZ, maxX, maxZ,
+                    TerrainGridMath.DefaultCellM, meshVertices, meshIndices, builtTriangles,
+                    chunkStarts, chunkCounts, chunkZones, builtChunks, mesh.TriMinX,
+                    mesh.TriMaxX, mesh.TriMinZ, mesh.TriMaxZ, mesh.TriSurfaceId,
+                    mesh.CellStart, mesh.CellTriangles, mesh.CellCursor, out mesh.GridOriginX,
+                    out mesh.GridOriginZ, out cellsX, out cellsZ, out cellCount,
+                    out referenceCount, out refusalCode, out refusalDetail);
+                mesh.GridCellsX = cellsX;
+                mesh.GridCellsZ = cellsZ;
+                mesh.GridCellCount = cellCount;
+                mesh.GridCellM = TerrainGridMath.DefaultCellM;
+                mesh.GridRefusalDetail = refusalDetail;
+                Assert.IsTrue(mesh.GridReady, "the fixture's grid built: code " + refusalCode);
+                return mesh;
             }
         }
 
@@ -166,6 +207,26 @@ namespace VRCKatamari.Tests
             public Vector3[] ChunkMax;
             public int TriangleCount;
             public int ChunkCount;
+
+            // The grid the motor builds in SetTerrainMesh, for the equivalence case.
+            public float[] TriMinX;
+            public float[] TriMaxX;
+            public float[] TriMinZ;
+            public float[] TriMaxZ;
+            public int[] TriSurfaceId;
+            public int[] CellStart;
+            public int[] CellTriangles;
+            public int[] CellCursor;
+            public float GridOriginX;
+            public float GridOriginZ;
+            public float GridCellM;
+            public int GridCellsX;
+            public int GridCellsZ;
+            public int GridCellCount;
+            public bool GridReady;
+            public int GridRefusalDetail;
+            public int[] Candidates;
+            public bool[] CandidateMark;
         }
 
         /// <summary>The mesh's answer for one ball pose (one candidate surface, or none).</summary>
@@ -180,6 +241,7 @@ namespace VRCKatamari.Tests
                 Quaternion.identity, RingRadius, mesh.Vertices, mesh.Indices,
                 mesh.TriangleCount, mesh.ChunkMin, mesh.ChunkMax, mesh.ChunkStarts,
                 mesh.ChunkTriangleCounts, mesh.ChunkZoneIds, mesh.ChunkCount,
+                null, -1, null, null, null, null, null,
                 ref discardedTriangles, ref discardedEvaluations, out normal, out height,
                 out surfaceId);
         }
@@ -197,6 +259,48 @@ namespace VRCKatamari.Tests
                 new float[0], 0, new Vector3[0], new Vector3[0], 0, terrainId, terrainHeight,
                 terrainNormal, out surfaceId, out point, out normal, out height,
                 out candidates);
+        }
+
+        /// <summary>The full chunk scan (the reference every candidate answer must match).</summary>
+        private static bool SelectFull(Mesh mesh, Vector3 center, float ballBottom,
+            out float height, out Vector3 normal, out int surfaceId)
+        {
+            int tested = 0;
+            int evals = 0;
+            return TerrainMeshMath.TrySelectSupport(center, ballBottom, StepLimit, Directions(),
+                Quaternion.identity, RingRadius, mesh.Vertices, mesh.Indices,
+                mesh.TriangleCount, mesh.ChunkMin, mesh.ChunkMax, mesh.ChunkStarts,
+                mesh.ChunkTriangleCounts, mesh.ChunkZoneIds, mesh.ChunkCount, null, -1, null,
+                null, null, null, null, ref tested, ref evals, out normal, out height,
+                out surfaceId);
+        }
+
+        /// <summary>The same query, walking only the grid's candidates.</summary>
+        private static bool SelectGrid(Mesh mesh, Vector3 center, float ballBottom,
+            int candidateCount, out float height, out Vector3 normal, out int surfaceId)
+        {
+            int tested = 0;
+            int evals = 0;
+            return TerrainMeshMath.TrySelectSupport(center, ballBottom, StepLimit, Directions(),
+                Quaternion.identity, RingRadius, mesh.Vertices, mesh.Indices,
+                mesh.TriangleCount, mesh.ChunkMin, mesh.ChunkMax, mesh.ChunkStarts,
+                mesh.ChunkTriangleCounts, mesh.ChunkZoneIds, mesh.ChunkCount,
+                mesh.Candidates, candidateCount, mesh.TriMinX, mesh.TriMaxX, mesh.TriMinZ,
+                mesh.TriMaxZ, mesh.TriSurfaceId, ref tested, ref evals, out normal, out height,
+                out surfaceId);
+        }
+
+        private static int Collect(Mesh mesh, Vector3 center)
+        {
+            return TerrainGridMath.CollectCandidates(center.x, center.z, Radius, mesh.GridCellM,
+                mesh.GridOriginX, mesh.GridOriginZ, mesh.GridCellsX, mesh.GridCellsZ,
+                mesh.GridCellCount, mesh.CellStart, mesh.CellTriangles, mesh.Candidates,
+                mesh.CandidateMark);
+        }
+
+        private static void Clear(Mesh mesh, int count)
+        {
+            TerrainGridMath.ClearCandidates(mesh.Candidates, count, mesh.CandidateMark);
         }
 
         // ------------------------------------------------------------------ cases ---
@@ -348,8 +452,9 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(TerrainMeshMath.TryDeepestPenetration(
                 new Vector3(0f, 1.1f, 0f), Radius, mesh.Vertices, mesh.Indices,
                 mesh.TriangleCount, mesh.ChunkMin, mesh.ChunkMax, mesh.ChunkStarts,
-                mesh.ChunkTriangleCounts, mesh.ChunkCount, out contact, out pushNormal,
-                out depth), "the roof is a contact, not a support");
+                mesh.ChunkTriangleCounts, mesh.ChunkCount, null, -1, null, null, null, null,
+                out contact, out pushNormal, out depth),
+                "the roof is a contact, not a support");
             Assert.AreEqual(0.05f, depth, 1e-3f);
             Assert.That(pushNormal.y, Is.LessThan(-0.99f), "a roof pushes the ball down");
         }
@@ -386,6 +491,131 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(Select(mesh, new Vector3(0f, Radius, 0f), 0f, StepLimit, out height,
                 out normal, out surfaceId));
             Assert.AreEqual(-10f, height, Tolerance);
+        }
+
+        [Test]
+        public void TheGridCandidatesSelectTheSameSupportAsTheFullScan()
+        {
+            // The equivalence that makes the grid safe to use: for a REAL multi-level soup
+            // (flat floor, 1 m pit, a step at twice the step limit, a 10 degree slope and a
+            // roof), the support and the penetration coming from the grid candidates must be
+            // the same answers the full chunk scan gives, at every sampled ball pose.
+            Mesh mesh = new Soup()
+                .Floor(0f, -4f, 4f, -4f, -1f)          // south floor
+                .Floor(0f, -4f, 4f, 1f, 4f)            // north floor
+                .Floor(-1f, -4f, 4f, -1f, 1f)          // pit floor at -1
+                .Wall(0f, -1f, -4f, 4f, 1f, false)
+                .Wall(0f, -1f, -4f, 4f, -1f, true)
+                .Wall(0f, 2f * StepLimit, -4f, 4f, 3f, false)
+                .Floor(2f * StepLimit, -4f, 4f, 3f, 4f) // 2 * step limit step
+                .Roof(1.2f, -4f, 4f, -4f, 4f)          // roof over everything
+                .Build();
+            Assert.IsTrue(mesh.GridReady, "the fixture's grid must build");
+
+            // Deterministic sweep, not a random one: same 200 poses every run.
+            int compared = 0;
+            int supported = 0;
+            for (int i = 0; i < 200; i++)
+            {
+                float x = -3.5f + 7f * (i % 20) / 19f;
+                float z = -3.5f + 7f * (i / 20) / 9f;
+                float ballBottom = -1.5f + 2.5f * ((i * 7) % 19) / 18f;
+                Vector3 center = new Vector3(x, ballBottom + Radius, z);
+
+                int candidateCount = Collect(mesh, center);
+                Assert.That(candidateCount, Is.LessThanOrEqualTo(mesh.TriangleCount),
+                    "the list is a subset of the mesh");
+
+                float fullHeight;
+                Vector3 fullNormal;
+                int fullId;
+                bool full = SelectFull(mesh, center, ballBottom, out fullHeight,
+                    out fullNormal, out fullId);
+                float gridHeight;
+                Vector3 gridNormal;
+                int gridId;
+                bool grid = SelectGrid(mesh, center, ballBottom, candidateCount, out gridHeight,
+                    out gridNormal, out gridId);
+                if (full)
+                {
+                    Assert.IsTrue(grid, "pose " + i + ": the grid must find the support");
+                    Assert.AreEqual(fullId, gridId, "pose " + i + ": surface id");
+                    Assert.AreEqual(fullHeight, gridHeight, 1e-5f, "pose " + i + ": height");
+                    Assert.AreEqual(fullNormal.x, gridNormal.x, 1e-5f, "pose " + i + ": normal x");
+                    Assert.AreEqual(fullNormal.y, gridNormal.y, 1e-5f, "pose " + i + ": normal y");
+                    Assert.AreEqual(fullNormal.z, gridNormal.z, 1e-5f, "pose " + i + ": normal z");
+                    supported = supported + 1;
+                }
+                else
+                {
+                    Assert.IsFalse(grid, "pose " + i + ": the grid must not invent a support");
+                }
+
+                // Penetration: same triangle set, same push.
+                Vector3 fullPoint;
+                Vector3 fullPush;
+                float fullDepth;
+                bool fullHit = TerrainMeshMath.TryDeepestPenetration(center, Radius,
+                    mesh.Vertices, mesh.Indices, mesh.TriangleCount, mesh.ChunkMin,
+                    mesh.ChunkMax, mesh.ChunkStarts, mesh.ChunkTriangleCounts, mesh.ChunkCount,
+                    null, -1, null, null, null, null, out fullPoint, out fullPush, out fullDepth);
+                Vector3 gridPoint;
+                Vector3 gridPush;
+                float gridDepth;
+                bool gridHit = TerrainMeshMath.TryDeepestPenetration(center, Radius,
+                    mesh.Vertices, mesh.Indices, mesh.TriangleCount, mesh.ChunkMin,
+                    mesh.ChunkMax, mesh.ChunkStarts, mesh.ChunkTriangleCounts, mesh.ChunkCount,
+                    mesh.Candidates, candidateCount, mesh.TriMinX, mesh.TriMaxX, mesh.TriMinZ,
+                    mesh.TriMaxZ, out gridPoint, out gridPush, out gridDepth);
+                Assert.AreEqual(fullHit, gridHit, "pose " + i + ": penetration found");
+                if (fullHit)
+                {
+                    Assert.AreEqual(fullDepth, gridDepth, 1e-5f, "pose " + i + ": depth");
+                    Assert.AreEqual(fullPush.x, gridPush.x, 1e-5f, "pose " + i + ": push x");
+                    Assert.AreEqual(fullPush.y, gridPush.y, 1e-5f, "pose " + i + ": push y");
+                    Assert.AreEqual(fullPush.z, gridPush.z, 1e-5f, "pose " + i + ": push z");
+                }
+
+                Clear(mesh, candidateCount);
+                compared = compared + 1;
+            }
+            Assert.AreEqual(200, compared);
+            Assert.That(supported, Is.GreaterThan(20),
+                "the sweep must actually support the ball often enough to be meaningful");
+        }
+
+        [Test]
+        public void TheCandidateListIsDedupedAndStaysSmall()
+        {
+            // A 8 x 8 m floor as one chunk: the full scan walks every triangle on every probe,
+            // the grid walks only the cell's. Both must answer the same.
+            Mesh mesh = new Soup().Floor(0f, -4f, 4f, -4f, 4f).Build();
+            Vector3 center = new Vector3(0.49f, Radius, 0.49f); // near a 1 m cell corner
+            int count = Collect(mesh, center);
+            Assert.That(count, Is.GreaterThan(0));
+            Assert.That(count, Is.LessThan(mesh.TriangleCount),
+                "a 1 m cell cannot hold the whole 8 x 8 m floor");
+            for (int i = 0; i < count; i++)
+            {
+                for (int j = i + 1; j < count; j++)
+                {
+                    Assert.AreNotEqual(mesh.Candidates[i], mesh.Candidates[j],
+                        "candidate " + i + " and " + j + " are the same triangle");
+                }
+            }
+            float fullHeight;
+            Vector3 fullNormal;
+            int fullId;
+            float gridHeight;
+            Vector3 gridNormal;
+            int gridId;
+            Assert.IsTrue(SelectFull(mesh, center, 0f, out fullHeight, out fullNormal,
+                out fullId));
+            Assert.IsTrue(SelectGrid(mesh, center, 0f, count, out gridHeight, out gridNormal,
+                out gridId));
+            Assert.AreEqual(fullId, gridId);
+            Assert.AreEqual(fullHeight, gridHeight, 1e-5f);
+            Clear(mesh, count);
         }
 
         [Test]

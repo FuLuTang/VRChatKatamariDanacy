@@ -234,6 +234,8 @@ namespace VRCKatamari.BallContact
 
                 int start = chunkStarts[c];
                 int end = start + chunkTriangleCounts[c];
+                int zone = chunkZoneIds[c];
+                int chunkSurfaceId = FirstTerrainSurfaceId + (zone >= 0 ? zone : c);
                 for (int t = start; t < end; t++)
                 {
                     trianglesTested = trianglesTested + 1;
@@ -247,30 +249,122 @@ namespace VRCKatamari.BallContact
                         probe.z > Mathf.Max(a.z, Mathf.Max(b.z, d.z)) + Epsilon) continue;
                     fullEvals = fullEvals + 1;
 
-                    Vector3 raw = Cross(b - a, d - a);
-                    float length = raw.magnitude;
-                    if (!KatamariMath.IsFiniteFloat(length) || length <= Epsilon) continue;
-                    Vector3 face = raw * (1f / length);
-                    if (face.y < 0f) face = face * -1f;
-                    if (face.y <= MinUpwardNormalY) continue;
-
-                    float planeOffset = Dot(face, a);
-                    float height = (planeOffset - face.x * probe.x - face.z * probe.z) / face.y;
-                    if (!KatamariMath.IsFiniteFloat(height) || height > maxHeight + Epsilon)
-                        continue;
-                    if (!PointInTriangleXZ(probe, a, b, d)) continue;
+                    float height;
+                    Vector3 face;
+                    if (!TryTrianglePlane(t, probe, maxHeight, vertices, indices, out height,
+                        out face)) continue;
                     if (height <= bestHeight) continue;
 
                     bestHeight = height;
                     point = new Vector3(probe.x, height, probe.z);
                     normal = face;
-                    int zone = chunkZoneIds[c];
-                    surfaceId = FirstTerrainSurfaceId + (zone >= 0 ? zone : c);
+                    surfaceId = chunkSurfaceId;
                     found = true;
                 }
             }
 
             return found;
+        }
+
+        /// <summary>
+        /// <see cref="TrySupportProbe"/> against ONE pre-collected candidate list, using the
+        /// per-triangle XZ AABB the grid precomputed.
+        /// </summary>
+        /// <remarks>
+        /// This is the per-step fast path: the caller collects the triangles of the cells the
+        /// ball's footprint overlaps (TerrainGridMath.CollectCandidates) once, then all 17
+        /// probes walk that same short list. The geometry is
+        /// <see cref="TryTrianglePlane"/> - the SAME body the full scan calls - so a candidate
+        /// query and a full scan cannot disagree about whether a triangle supports the ball;
+        /// only the set of triangles each one looks at differs, and the grid is built so that
+        /// the candidate set is a superset of every triangle a probe can be inside.
+        /// </remarks>
+        public static bool TrySupportProbeInCandidates(
+            Vector3 probe,
+            float maxHeight,
+            int[] candidates, int candidateCount,
+            float[] triangleMinX, float[] triangleMaxX, float[] triangleMinZ,
+            float[] triangleMaxZ, int[] triangleSurfaceId,
+            Vector3[] vertices, int[] indices,
+            ref int trianglesTested, ref int fullEvals,
+            out Vector3 point, out Vector3 normal, out int surfaceId)
+        {
+            point = Vector3.zero;
+            normal = Vector3.zero;
+            surfaceId = -1;
+            if (!KatamariMath.IsFiniteVector(probe)) return false;
+            if (!KatamariMath.IsFiniteFloat(maxHeight)) return false;
+            if (candidates == null || triangleMinX == null || triangleMaxX == null ||
+                triangleMinZ == null || triangleMaxZ == null || triangleSurfaceId == null ||
+                vertices == null || indices == null) return false;
+            if (candidateCount <= 0 || candidateCount > candidates.Length) return false;
+            if (candidateCount > triangleMinX.Length || candidateCount > triangleMaxX.Length ||
+                candidateCount > triangleMinZ.Length || candidateCount > triangleMaxZ.Length ||
+                candidateCount > triangleSurfaceId.Length) return false;
+
+            bool found = false;
+            float bestHeight = -float.MaxValue;
+            for (int k = 0; k < candidateCount; k++)
+            {
+                int t = candidates[k];
+                if (t < 0 || t >= triangleMinX.Length) continue;
+                trianglesTested = trianglesTested + 1;
+                if (probe.x < triangleMinX[t] - Epsilon ||
+                    probe.x > triangleMaxX[t] + Epsilon) continue;
+                if (probe.z < triangleMinZ[t] - Epsilon ||
+                    probe.z > triangleMaxZ[t] + Epsilon) continue;
+                fullEvals = fullEvals + 1;
+
+                float height;
+                Vector3 face;
+                if (!TryTrianglePlane(t, probe, maxHeight, vertices, indices, out height,
+                    out face)) continue;
+                if (height <= bestHeight) continue;
+
+                bestHeight = height;
+                point = new Vector3(probe.x, height, probe.z);
+                normal = face;
+                surfaceId = triangleSurfaceId[t];
+                found = true;
+            }
+            return found;
+        }
+
+        /// <summary>
+        /// The ONE support test for one triangle: upward-facing, plane height under the probe
+        /// inside the ceiling, and the probe inside the XZ projection.
+        /// </summary>
+        /// <remarks>
+        /// Both probe paths call this, so the support rule exists once. The bounding-box
+        /// reject is deliberately the CALLER's: the full scan computes it from the vertices
+        /// (12 <c>Mathf.Min/Max</c> calls), the candidate path reads the four floats the grid
+        /// precomputed. That difference is the whole optimisation; nothing in here changes.
+        /// </remarks>
+        private static bool TryTrianglePlane(int triangle, Vector3 probe, float maxHeight,
+            Vector3[] vertices, int[] indices, out float height, out Vector3 normal)
+        {
+            height = 0f;
+            normal = Vector3.zero;
+            int at = triangle * 3;
+            Vector3 a = vertices[indices[at]];
+            Vector3 b = vertices[indices[at + 1]];
+            Vector3 d = vertices[indices[at + 2]];
+            Vector3 raw = Cross(b - a, d - a);
+            float length = raw.magnitude;
+            if (!KatamariMath.IsFiniteFloat(length) || length <= Epsilon) return false;
+            Vector3 face = raw * (1f / length);
+            if (face.y < 0f) face = face * -1f;
+            if (face.y <= MinUpwardNormalY) return false;
+
+            float planeOffset = Dot(face, a);
+            float candidateHeight = (planeOffset - face.x * probe.x - face.z * probe.z) /
+                face.y;
+            if (!KatamariMath.IsFiniteFloat(candidateHeight) ||
+                candidateHeight > maxHeight + Epsilon) return false;
+            if (!PointInTriangleXZ(probe, a, b, d)) return false;
+            height = candidateHeight;
+            normal = face;
+            return true;
         }
 
         /// <summary>
@@ -328,6 +422,9 @@ namespace VRCKatamari.BallContact
             Vector3[] vertices, int[] indices, int triangleCount,
             Vector3[] chunkMin, Vector3[] chunkMax,
             int[] chunkStarts, int[] chunkTriangleCounts, int[] chunkZoneIds, int chunkCount,
+            int[] candidates, int candidateCount,
+            float[] triangleMinX, float[] triangleMaxX, float[] triangleMinZ,
+            float[] triangleMaxZ, int[] triangleSurfaceId,
             ref int trianglesTested, ref int fullEvals,
             out Vector3 normal, out float height, out int surfaceId)
         {
@@ -362,10 +459,23 @@ namespace VRCKatamari.BallContact
                 Vector3 candidatePoint;
                 Vector3 candidateNormal;
                 int candidateId;
-                if (!TrySupportProbeCounted(probe, ceiling, vertices, indices, triangleCount,
-                    chunkMin, chunkMax, chunkStarts, chunkTriangleCounts, chunkZoneIds,
-                    chunkCount, ref trianglesTested, ref fullEvals, out candidatePoint,
-                    out candidateNormal, out candidateId)) continue;
+                bool probeFound;
+                if (candidateCount >= 0)
+                {
+                    probeFound = TrySupportProbeInCandidates(probe, ceiling, candidates,
+                        candidateCount, triangleMinX, triangleMaxX, triangleMinZ,
+                        triangleMaxZ, triangleSurfaceId, vertices, indices,
+                        ref trianglesTested, ref fullEvals, out candidatePoint,
+                        out candidateNormal, out candidateId);
+                }
+                else
+                {
+                    probeFound = TrySupportProbeCounted(probe, ceiling, vertices, indices,
+                        triangleCount, chunkMin, chunkMax, chunkStarts, chunkTriangleCounts,
+                        chunkZoneIds, chunkCount, ref trianglesTested, ref fullEvals,
+                        out candidatePoint, out candidateNormal, out candidateId);
+                }
+                if (!probeFound) continue;
                 // The triangle's plane at the BALL's XZ, not at the probe's: a slope tilts
                 // under the centre, and GroundContactMath solves for the centre.
                 float centreHeight = (Dot(candidateNormal, candidatePoint) -
@@ -394,6 +504,9 @@ namespace VRCKatamari.BallContact
             Vector3[] chunkMin, Vector3[] chunkMax,
             int[] chunkStarts, int[] chunkTriangleCounts,
             int chunkCount,
+            int[] candidates, int candidateCount,
+            float[] triangleMinX, float[] triangleMaxX, float[] triangleMinZ,
+            float[] triangleMaxZ,
             out Vector3 point, out Vector3 normal, out float depth)
         {
             point = Vector3.zero;
@@ -401,9 +514,7 @@ namespace VRCKatamari.BallContact
             depth = 0f;
             if (!KatamariMath.IsFiniteVector(center)) return false;
             if (!KatamariMath.IsFiniteFloat(radius) || radius <= 0f) return false;
-            if (vertices == null || indices == null || chunkMin == null || chunkMax == null ||
-                chunkStarts == null || chunkTriangleCounts == null) return false;
-            if (triangleCount <= 0 || chunkCount <= 0) return false;
+            if (vertices == null || indices == null) return false;
 
             float bestDepth = 0f;
             bool found = false;
@@ -412,44 +523,28 @@ namespace VRCKatamari.BallContact
             Vector3 maximum = new Vector3(center.x + radius, center.y + radius,
                 center.z + radius);
 
-            for (int c = 0; c < chunkCount; c++)
+            if (candidateCount >= 0)
             {
-                if (chunkMax[c].x < minimum.x || chunkMin[c].x > maximum.x) continue;
-                if (chunkMax[c].y < minimum.y || chunkMin[c].y > maximum.y) continue;
-                if (chunkMax[c].z < minimum.z || chunkMin[c].z > maximum.z) continue;
-
-                int start = chunkStarts[c];
-                int end = start + chunkTriangleCounts[c];
-                for (int t = start; t < end; t++)
+                // The per-step fast path: the same candidate list the support query used, so
+                // T1 and T0 look at one set of triangles instead of two scans.
+                if (candidates == null || triangleMinX == null || triangleMaxX == null ||
+                    triangleMinZ == null || triangleMaxZ == null) return false;
+                if (candidateCount > candidates.Length ||
+                    candidateCount > triangleMinX.Length ||
+                    candidateCount > triangleMaxX.Length ||
+                    candidateCount > triangleMinZ.Length ||
+                    candidateCount > triangleMaxZ.Length) return false;
+                for (int k = 0; k < candidateCount; k++)
                 {
-                    int at = t * 3;
-                    Vector3 a = vertices[indices[at]];
-                    Vector3 b = vertices[indices[at + 1]];
-                    Vector3 d = vertices[indices[at + 2]];
-                    if (maximum.x < Mathf.Min(a.x, Mathf.Min(b.x, d.x)) ||
-                        minimum.x > Mathf.Max(a.x, Mathf.Max(b.x, d.x))) continue;
-                    if (maximum.y < Mathf.Min(a.y, Mathf.Min(b.y, d.y)) ||
-                        minimum.y > Mathf.Max(a.y, Mathf.Max(b.y, d.y))) continue;
-                    if (maximum.z < Mathf.Min(a.z, Mathf.Min(b.z, d.z)) ||
-                        minimum.z > Mathf.Max(a.z, Mathf.Max(b.z, d.z))) continue;
-
-                    Vector3 raw = Cross(b - a, d - a);
-                    float length = raw.magnitude;
-                    if (!KatamariMath.IsFiniteFloat(length) || length <= Epsilon) continue;
-                    Vector3 face = raw * (1f / length);
-                    // Single-sided: a query behind the winding normal is outside the solid.
-                    if (Dot(face, center - a) < -Epsilon) continue;
-
+                    int t = candidates[k];
+                    if (t < 0 || t >= triangleMinX.Length) continue;
+                    if (maximum.x < triangleMinX[t] || minimum.x > triangleMaxX[t]) continue;
+                    if (maximum.z < triangleMinZ[t] || minimum.z > triangleMaxZ[t]) continue;
                     Vector3 closest;
-                    if (!TryClosestPointOnTriangle(center, a, b, d, out closest)) continue;
-                    Vector3 delta = center - closest;
-                    float distance = delta.magnitude;
-                    if (!KatamariMath.IsFiniteFloat(distance) || distance >= radius) continue;
                     Vector3 outward;
-                    if (distance > Epsilon) outward = delta * (1f / distance);
-                    else outward = face;
-                    if (Dot(outward, face) < 0f) outward = face;
-                    float candidateDepth = radius - distance;
+                    float candidateDepth;
+                    if (!TryTrianglePenetration(t, center, radius, vertices, indices,
+                        out closest, out outward, out candidateDepth)) continue;
                     if (!found || candidateDepth > bestDepth)
                     {
                         found = true;
@@ -459,9 +554,93 @@ namespace VRCKatamari.BallContact
                     }
                 }
             }
+            else
+            {
+                if (chunkMin == null || chunkMax == null || chunkStarts == null ||
+                    chunkTriangleCounts == null) return false;
+                if (triangleCount <= 0 || chunkCount <= 0) return false;
+                for (int c = 0; c < chunkCount; c++)
+                {
+                    if (chunkMax[c].x < minimum.x || chunkMin[c].x > maximum.x) continue;
+                    if (chunkMax[c].y < minimum.y || chunkMin[c].y > maximum.y) continue;
+                    if (chunkMax[c].z < minimum.z || chunkMin[c].z > maximum.z) continue;
+
+                    int start = chunkStarts[c];
+                    int end = start + chunkTriangleCounts[c];
+                    for (int t = start; t < end; t++)
+                    {
+                        int at = t * 3;
+                        Vector3 a = vertices[indices[at]];
+                        Vector3 b = vertices[indices[at + 1]];
+                        Vector3 d = vertices[indices[at + 2]];
+                        if (maximum.x < Mathf.Min(a.x, Mathf.Min(b.x, d.x)) ||
+                            minimum.x > Mathf.Max(a.x, Mathf.Max(b.x, d.x))) continue;
+                        if (maximum.y < Mathf.Min(a.y, Mathf.Min(b.y, d.y)) ||
+                            minimum.y > Mathf.Max(a.y, Mathf.Max(b.y, d.y))) continue;
+                        if (maximum.z < Mathf.Min(a.z, Mathf.Min(b.z, d.z)) ||
+                            minimum.z > Mathf.Max(a.z, Mathf.Max(b.z, d.z))) continue;
+                        Vector3 closest;
+                        Vector3 outward;
+                        float candidateDepth;
+                        if (!TryTrianglePenetration(t, center, radius, vertices, indices,
+                            out closest, out outward, out candidateDepth)) continue;
+                        if (!found || candidateDepth > bestDepth)
+                        {
+                            found = true;
+                            bestDepth = candidateDepth;
+                            point = closest;
+                            normal = outward;
+                        }
+                    }
+                }
+            }
 
             if (!found) return false;
             depth = bestDepth;
+            return true;
+        }
+
+        /// <summary>
+        /// The ONE sphere-vs-triangle push-out test for one triangle: single-sided (a query
+        /// behind the winding normal is outside the solid), nearest point on the triangle, and
+        /// a positive depth when the sphere reaches it.
+        /// </summary>
+        /// <remarks>
+        /// Both the chunk scan and the candidate path call this, so the push-out rule exists
+        /// once. The bounding-box rejects stay with the CALLER: the chunk scan computes them
+        /// from the vertices, the candidate path reads the grid's precomputed XZ floats, and
+        /// the candidate path relies on this body's distance test for the Y axis.
+        /// </remarks>
+        private static bool TryTrianglePenetration(int triangle, Vector3 center, float radius,
+            Vector3[] vertices, int[] indices,
+            out Vector3 point, out Vector3 normal, out float depth)
+        {
+            point = Vector3.zero;
+            normal = Vector3.zero;
+            depth = 0f;
+            int at = triangle * 3;
+            Vector3 a = vertices[indices[at]];
+            Vector3 b = vertices[indices[at + 1]];
+            Vector3 d = vertices[indices[at + 2]];
+            Vector3 raw = Cross(b - a, d - a);
+            float length = raw.magnitude;
+            if (!KatamariMath.IsFiniteFloat(length) || length <= Epsilon) return false;
+            Vector3 face = raw * (1f / length);
+            // Single-sided: a query behind the winding normal is outside the solid.
+            if (Dot(face, center - a) < -Epsilon) return false;
+
+            Vector3 closest;
+            if (!TryClosestPointOnTriangle(center, a, b, d, out closest)) return false;
+            Vector3 delta = center - closest;
+            float distance = delta.magnitude;
+            if (!KatamariMath.IsFiniteFloat(distance) || distance >= radius) return false;
+            Vector3 outward;
+            if (distance > Epsilon) outward = delta * (1f / distance);
+            else outward = face;
+            if (Dot(outward, face) < 0f) outward = face;
+            point = closest;
+            normal = outward;
+            depth = radius - distance;
             return true;
         }
 

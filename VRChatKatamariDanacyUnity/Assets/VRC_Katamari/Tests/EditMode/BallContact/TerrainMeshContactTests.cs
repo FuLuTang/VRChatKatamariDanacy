@@ -150,8 +150,8 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(TerrainMeshMath.TryDeepestPenetration(
                 new Vector3(0.5f, 0.6f, 0.5f), 0.3f, mesh.Vertices, mesh.Indices,
                 mesh.TriangleCount, mesh.ChunkMin, mesh.ChunkMax, mesh.ChunkStarts,
-                mesh.ChunkTriangleCounts, mesh.ChunkCount, out contact, out pushNormal,
-                out depth));
+                mesh.ChunkTriangleCounts, mesh.ChunkCount, null, -1, null, null, null, null,
+                out contact, out pushNormal, out depth));
             Assert.That(depth, Is.GreaterThan(0f));
             Assert.That(pushNormal.y, Is.LessThan(-0.5f), "a roof pushes the sphere down");
         }
@@ -213,7 +213,8 @@ namespace VRCKatamari.Tests
                 new int[4], new int[4], new int[4], 0, out point, out normal, out surfaceId));
             Assert.IsFalse(TerrainMeshMath.TryDeepestPenetration(Vector3.zero, 1f,
                 new Vector3[8], new int[24], 0, new Vector3[4], new Vector3[4],
-                new int[4], new int[4], 0, out point, out normal, out float depth));
+                new int[4], new int[4], 0, null, -1, null, null, null, null,
+                out point, out normal, out float depth));
 
             // A chunk gap (0..1 then 3..4) must be refused, not silently split.
             Vector3[] vertices = new Vector3[8];

@@ -87,6 +87,20 @@ namespace VRCKatamari.BallLayers
                 Debug.LogError("[TerrainFieldHost] motor refused terrain '" + terrainId +
                                "' (triangles=" + triangleCount + ", vertices=" + vertexCount +
                                ", chunks=" + chunkCount + ")");
+                return;
+            }
+
+            // The grid is a speed structure: if it was refused, the mesh is still registered
+            // and the queries fall back to the full scan. Report it once at setup, with the
+            // number that broke the cap, so a silent performance cliff cannot happen.
+            int gridRefusal = motor.GetTerrainGridRefusalCode();
+            if (gridRefusal != 0)
+            {
+                Debug.LogWarning("[TerrainFieldHost] terrain '" + terrainId +
+                                 "' registered, but its grid is unavailable (code " +
+                                 gridRefusal + ", detail " + motor.GetTerrainGridRefusalDetail() +
+                                 ": " + motor.GetTerrainGridRefusalReason() +
+                                 "); support queries use the full chunk scan");
             }
         }
     }

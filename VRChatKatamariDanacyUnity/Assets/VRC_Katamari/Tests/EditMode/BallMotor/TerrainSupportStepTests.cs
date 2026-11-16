@@ -261,6 +261,30 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void TheGridCutsTheTrianglesTheSupportQueryWalks()
+        {
+            // 4 x 4 m of 16 x 16 quads = 512 triangles in ONE chunk: before the grid every
+            // probe walked all 512. The grid cuts the ball's footprint down to the 1 m cell it
+            // stands in, and the invariants below say exactly how much work that saved.
+            RegisterFlatMesh(0f, 16);
+            Step(1);
+            Assert.IsTrue((bool)Invoke("IsTerrainGridReady"), "a 4 x 4 m mesh is grid-able");
+            int cells = (int)Invoke("GetTerrainGridCellCount");
+            int candidates = (int)Invoke("GetTerrainCandidates");
+            int tested = (int)Invoke("GetTerrainTrianglesTested");
+            Assert.That(cells, Is.GreaterThan(0));
+            Assert.That((float)Invoke("GetTerrainGridCellM"),
+                Is.EqualTo(1f).Within(1e-6f), "the default cell size");
+            Assert.That(candidates, Is.GreaterThan(0));
+            Assert.That(candidates, Is.LessThan(512 / 4),
+                "one 1 m cell of a 16 x 16 grid holds far fewer than the whole mesh");
+            Assert.AreEqual(17 * candidates, tested,
+                "17 probes walk exactly the candidate list; the full scan would walk 17 x 512");
+            Assert.That(tested, Is.LessThan(17 * 512 / 2),
+                "the grid at least halves the per-step triangle iterations on this fixture");
+        }
+
+        [Test]
         public void TheTerrainQueryMicrosecondsAreReal()
         {
             // The counter used Time.time, a FRAME timestamp, so two reads inside one step

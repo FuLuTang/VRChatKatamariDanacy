@@ -139,6 +139,17 @@ namespace VRCKatamari.Tests
                 new Vector3(0f, 1f, 0f), new Vector3(0f, 0f, 1f), halfExtents, surfaceId, 0);
         }
 
+        /// <summary>An OBB whose local +Z is <paramref name="normal"/> (a tilted wall).</summary>
+        private bool AddWall(Vector3 center, Vector3 normal, float halfWidth, float halfHeight,
+            float halfDepth, int surfaceId)
+        {
+            Vector3 axisY = new Vector3(0f, 1f, 0f);
+            Vector3 axisZ = normal.normalized;
+            Vector3 axisX = Vector3.Cross(axisY, axisZ).normalized;
+            return (bool)Invoke("AddObb", center, axisX, axisY, axisZ,
+                new Vector3(halfWidth, halfHeight, halfDepth), surfaceId, 0);
+        }
+
         [Test]
         public void TheFlagDefaultsToOffAndTheV2ReadingsAreNeutral()
         {
@@ -254,33 +265,64 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void PushingIntoATallWallEndsInTheRecoveryHoldInsteadOfLooping()
+        public void APushIntoATallWallIsBlockedNotStuckAndStaysControllable()
         {
+            // v1's contract (SweepMath: "a clean stop is blocked=true, stuck=false") applies
+            // to v2 too: pressing a wall is not a stuck episode, so the recovery must NOT
+            // fire, clear the climb state or freeze the ball (the 2026-11-16 RefCancer pit).
             EnableV2();
             float radius = Radius();
             AddObb(new Vector3(0f, 1.5f, 3.4f), new Vector3(2f, 1.5f, 0.4f), 1);
-            // The run-up is deliberately short: the ball must reach the wall SLOWER than
-            // the climb gate. v_gate = max(|v_planar|, k_intent * v_drive) = max(v, 1.0)
-            // at half push, so a 2 m run-up arrives at ~2 m/s, passes v_req(90 deg) = 1.5,
-            // opens the climb channel and spends seconds climbing the 0.3 m cap before it
-            // can ever be "stuck". From rest 0.10 m out, contact speed is
-            // sqrt(2 * 5 m/s^2 * 0.10 m) = 1.0 m/s, the gate stays closed, and the ball is
-            // pressed against the wall with driveIntent 0.5 from the first contact on.
+            // Short run-up and half push: the contact speed (sqrt(2*5*0.1) = 1.0 m/s) and
+            // v_gate = max(v, k_intent * 0.5 * maxSpeed = 1.0) stay under v_req(90) = 1.5, so
+            // the climb never opens and the ball is simply pressed against the wall.
             Invoke("TeleportTo", new Vector3(0f, radius, 3f - radius - 0.1f));
             Invoke("SetMoveAxes", 0.5f, 0f, 0f);
             Step(300);
-            int recoveries = (int)Invoke("GetRecoveryCount");
-            Assert.GreaterOrEqual(recoveries, 1,
-                "a ball that cannot move and is still being pushed must be recovered");
+            Assert.AreEqual(0, (int)Invoke("GetRecoveryCount"),
+                "pushing a wall is blocked, not stuck: no recovery episode may fire");
+            Assert.AreNotEqual(3, (int)Invoke("GetRecoveryState"),
+                "the recovery hold must never engage for a wall press");
+            Vector3 pressed = GetCenter();
+            Assert.GreaterOrEqual(pressed.z, 3f - radius - 0.002f,
+                "the wall push-out must keep the sphere out of the wall");
+            Assert.IsFalse(float.IsNaN(pressed.x) || float.IsNaN(pressed.y) ||
+                float.IsNaN(pressed.z), "the pressed state must stay finite");
+
+            // The real point of the recovery net is that the ball is still CONTROLLED:
+            // reversing the push walks it away from the wall instead of leaving it frozen.
+            Invoke("SetMoveAxes", -1f, 0f, 0f);
+            Step(60);
+            Vector3 after = GetCenter();
+            Assert.LessOrEqual(after.z, pressed.z - 0.2f,
+                "reversing the push must move the ball at least 0.2 m off the wall");
+            Assert.LessOrEqual((int)Invoke("GetRecoveryCount"), 0,
+                "leaving a wall is not a recovery episode either");
+        }
+
+        [Test]
+        public void AShallowWedgeWithNoOpposingContactIsStillRecovered()
+        {
+            // The recovery net's real job: no progress while NO contact opposes the drive.
+            // Two walls 130 deg apart (each normal 65 deg off the +Z drive) have a horizontal
+            // dot of -cos(65) = -0.42, which is NOT "blocked" (the gate is < -0.5), so a ball
+            // wedged in the apex cannot move, cannot slide out along the drive, and the
+            // recovery must still fire and end in the hold (design 2.8).
+            EnableV2();
+            float radius = Radius();
+            float angle = 65f * Mathf.Deg2Rad;
+            Vector3 normalA = new Vector3(Mathf.Sin(angle), 0f, -Mathf.Cos(angle));
+            Vector3 normalB = new Vector3(-Mathf.Sin(angle), 0f, -Mathf.Cos(angle));
+            Vector3 apex = new Vector3(0f, 1.5f, 3f);
+            Assert.IsTrue(AddWall(apex - normalA * 0.5f, normalA, 3f, 1.5f, 0.5f, 2));
+            Assert.IsTrue(AddWall(apex - normalB * 0.5f, normalB, 3f, 1.5f, 0.5f, 3));
+            Invoke("TeleportTo", new Vector3(0f, radius, 2.6f));
+            Invoke("SetMoveAxes", 0.5f, 0f, 0f);
+            Step(300);
+            Assert.GreaterOrEqual((int)Invoke("GetRecoveryCount"), 1,
+                "a wedge that no contact opposes must still be recovered");
             Assert.AreEqual(3, (int)Invoke("GetRecoveryState"),
-                "three recoveries inside 10 s must stop and report recoveryState 3");
-            // The hold must not keep teleporting: the ball stays where the last recovery
-            // left it while the push continues.
-            Vector3 held = GetCenter();
-            Step(50);
-            Assert.AreEqual(held.x, GetCenter().x, 0.02f, "the hold must not teleport the ball");
-            Assert.AreEqual(held.z, GetCenter().z, 0.02f, "the hold must not teleport the ball");
-            Assert.GreaterOrEqual((int)Invoke("GetLastRecoveryReason"), 1);
+                "three episodes inside 10 s must end in the hold");
         }
 
         [Test]

@@ -135,12 +135,18 @@ namespace VRCKatamari.Story
             // 100+i, so "id > 0" would mislabel one as a box.
             int supportId = motor.GetSupportSurfaceId();
             int supportKind = motor.GetSupportKind();
-            string supportName = "none";
-            if (supportKind == 0) supportName = "ground";
-            else if (supportKind == 1) supportName = "box";
-            else if (supportKind == 2) supportName = "ramp";
-            else if (supportKind == 3) supportName = "prop";
-            else if (supportKind == 6) supportName = "terrain";
+            // v2 adds kind 4 (a climb contact holds the ball) and 5 (only a pin holds it):
+            // without them the line said "none" while the ball was visibly climbing. A climb
+            // reports supportY = the ball's own bottom ON PURPOSE (the test field's
+            // support_gap must read 0 on a wall; pass6 C08/C09/C10 read exactly -r otherwise),
+            // so gap is a floor reading, never a climb reading.
+            string supportName = BallDiagnosticsMath.SupportName(supportKind);
+            bool supported = BallDiagnosticsMath.HasSupport(supportKind);
+            // A PIN support is a shape-layer answer (design 4A.3): the core gap formula does
+            // not describe it (it reads the tangent plane through the tip, which is 0 here,
+            // and pass6 showed it reading -r for a wall) - so the line reports the kind and
+            // leaves the floor reading out.
+            bool gapMeaningful = supported && supportKind != 5;
             Vector3 axes = motor.GetPlanarVelocity();
             Debug.Log("[story] t=" + (Mathf.Floor(elapsed * 10f) / 10f)
                 + " center=" + center
@@ -148,10 +154,15 @@ namespace VRCKatamari.Story
                 + " diameter=" + (Mathf.Floor(diameter * 10000f) / 10000f)
                 + " d_vis=" + (Mathf.Floor(visualDiameter * 10000f) / 10000f)
                 + " bottom=" + (Mathf.Floor(bottom * 1000f) / 1000f)
-                + " gap=" + (Mathf.Floor(gap * 1000f) / 1000f)
+                // An unsupported frame keeps the PREVIOUS support pair (the motor's
+                // documented v1 behaviour), so its height and gap would describe another
+                // frame: print na instead of a number nobody can act on.
+                + " gap=" + (gapMeaningful
+                    ? (Mathf.Floor(gap * 1000f) / 1000f).ToString() : "na")
                 + " support=" + supportName
                 + " supportId=" + supportId
-                + " supportY=" + (Mathf.Floor(supportHeight * 1000f) / 1000f)
+                + " supportY=" + (supported
+                    ? (Mathf.Floor(supportHeight * 1000f) / 1000f).ToString() : "na")
                 + " supports=" + motor.GetSupportSurfaceCount()
                 + " stepLimit=" + (Mathf.Floor(motor.GetStepHeightLimitWorldM() * 1000f) / 1000f)
                 + " falling=" + motor.IsFalling()

@@ -3016,7 +3016,30 @@ namespace VRCKatamari.BallMotor
             float progress = Mathf.Sqrt(moveX * moveX + moveY * moveY + moveZ * moveZ);
             float driveIntent = Mathf.Abs(inputForward) + Mathf.Abs(inputLateral);
 
-            if (driveIntent > 0.05f && progress < 0.0005f)
+            // A wall the drive pushes into is BLOCKED, not stuck: that is the same contract
+            // SweepMath already owns (its own case is FullSingleWallBlockIsBlockedNotStuck),
+            // and it is what v1 fed the timer (`sweepStuck`, not `sweepBlocked`). Counting a
+            // wall press as stuck made the soft stage call ClearClimbState (killing the
+            // climb) and three episodes entered the recovery hold - the 2026-11-16 RefCancer
+            // pit: 18 s of forward into a building wall, recoveries=3, frozen.
+            bool blockedByContact = false;
+            for (int i = 0; i < v2ContactCount; i++)
+            {
+                float normalX = contactNormalsV2[i].x;
+                float normalZ = contactNormalsV2[i].z;
+                float horizontal = Mathf.Sqrt(normalX * normalX + normalZ * normalZ);
+                if (horizontal <= 1e-4f) continue;
+                float inverse = 1f / horizontal;
+                float into = contactDriveDirection.x * normalX * inverse
+                    + contactDriveDirection.z * normalZ * inverse;
+                if (into < -0.5f)
+                {
+                    blockedByContact = true;
+                    break;
+                }
+            }
+
+            if (driveIntent > 0.05f && progress < 0.0005f && !blockedByContact)
             {
                 stuckSeconds = stuckSeconds + dt;
             }

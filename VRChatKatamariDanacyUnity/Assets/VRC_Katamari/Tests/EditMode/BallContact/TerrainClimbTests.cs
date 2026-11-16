@@ -367,6 +367,28 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void AWallWhoseTopIsFarAboveTheBallNeverHovers()
+        {
+            // RefCancer's spawn pit: the building wall in front of the ball is ONE strip whose
+            // top is 13.85 m, so contactTopY = 13.85 is that wall's TRUE top and the ledge exit
+            // can never fire. The cap must govern, and the ball must never be lifted above it
+            // (the R25b failure mode was a hang that kept climbing with no ledge to reach).
+            TerrainFixture mesh = TerrainFixture.Step(13.85f, false);
+            ContactBall ball = Ball(new Vector3(0f, Radius, 1f));
+            mesh.Bind(ball);
+            float cap = ClimbMath.ClimbHeightCap(Radius, 0f);
+            float maxBottom = 0f;
+            for (int step = 0; step < 250; step++)
+            {
+                Assert.IsTrue(ball.Step(Empty(), new Vector3(0f, 0f, 1f), 4f, Dt, 20f));
+                if (Bottom(ball) > maxBottom) maxBottom = Bottom(ball);
+            }
+            Assert.LessOrEqual(maxBottom, cap + 0.03f,
+                "a wall with no reachable ledge must stop at H_cap, not hover above it");
+            Assert.GreaterOrEqual(maxBottom, 0.10f, "it still climbs before the cap");
+        }
+
+        [Test]
         public void AWallTallerThanTheCapStopsAtTheCapAndNeverPops()
         {
             TerrainFixture mesh = TerrainFixture.Step(2.0f, false);

@@ -153,7 +153,7 @@
 - **noclip.website：不 vendor 它的代码，自己写解析器、出我们自己的格式** — **许可更正（2026-11-16）**：noclip 的 LICENSE 是 **MIT + 一段反编译说明**（GitHub 因此报 `NOASSERTION`），**不是 GPL-3**；原「GPL-3」前提有误。即便如此，逐行翻译仍属衍生作品，MIT 允许再分发但必须保留版权与许可声明。首选照规格重实现（已完成，981 行解析器在 `~/KatamariRef/`，仓库外）；仓库许可仍未定。见 [NOCLIP_KATAMARI_FORMAT §10](Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)、[LEVEL_FORMAT_V2 §19](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **关卡编辑器：Unity 式鼠标操作 + 区域统计（件数与总体积）** — 复用玩家/作者已经会的手感；区域统计用来验内容密度与供给。见 [LEVEL_EDITOR_WEB §7.1 与飞行/操作节](Design/Tools/LEVEL_EDITOR_WEB.md)。
 - **VR 验收后置，不着急** — 先把桌面闭环与灰盒跑通，VR 放在 Build & Test 有内容之后。
-- **每次派 subagent 前重查模型路由** — 本地/文档/代码走 `dsh-opencode-go` + `deepseek-v4.1-flash`；需要联网或操作 Unity 走 `deepseek-official` + `deepseek-flash`。见 [AGENTS.md 委派与 Git](<../AGENTS.md>)。
+- **每次派 subagent 前重查模型路由** — 本地/文档/代码走 `dsh-opencode-go` + `deepseek-v4.1-flash`；需要联网或操作 Unity 走 `deepseek-official` + `deepseek-flash`。见 [AGENTS.md 委派与 Git](<../AGENTS.md>)。**已被取代（2026-11-16）**：原文保留作历史，现行口径见下方「Owner decisions 2026-11-16（追加：子代理模型路由）」——联网与搜索类工作不再例外，唯一路由是 `dsh-opencode-go` + `deepseek-v4.1-flash`。
 
 ### Owner decisions 2026-11-16（球径、活动区、坠落重生、运动与相位、缩放）
 
@@ -172,6 +172,12 @@
 
 - **性能口径：现阶段不预先优化（D-11 重写）** — 参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求本身极低，现阶段完全不必担心 Animator 数量、顶点数、骨骼数；**153 个骨骼动画实例直接挂普通 Animator/蒙皮，不做顶点动画纹理（VAT）**，「64 Animators 不够」的论证与 VAT 方案降级为「以后真测出瓶颈再看」，`caps.animators` 退成统计字段。**只放松「不预先优化」**：后续真实测量（P5 合成场景、真机帧率、Quest 实机）照旧要做。见 [LEVEL_FORMAT_V2 §6.7.6 / §16.2 / D-11](Design/Levels/LEVEL_FORMAT_V2.md)、[PARITY_AUDIT 的「骨骼动画的呈现（Animator 数量）」行](Design/Parity/PARITY_AUDIT.md)、[ORIGINAL_ANIMATION_OBSERVATIONS §5.4](Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)。
 - **怀旧关正式名：怀旧关：蟹座小院 / Cancer Courtyard**（工作名 Nostalgia 可作别名） — 这个定名是给以后换皮发布的版本用的；内部 id 在换皮前仍是 `_ref_cancer`，不在 `_ref_*` 上直接改成正式内容（先换成我们自己的贴图/模型，再用正式名建关）。见 [_ref_cancer README](Design/Levels/_ref_cancer/README.md)、[原作优先原则](../AGENTS.md)。
+
+### Owner decisions 2026-11-16（追加：子代理模型路由）
+
+> 同日修正：取消「需要内置搜索/联网时才用 `deepseek-official` + `deepseek-flash`」这一例外。
+
+- **子代理模型：一律 opencode 的 DeepSeek V4.1 Flash，搜索类调研也不再例外（owner 2026-11-16）** — 默认且唯一的子代理路由是 `dsh-opencode-go` + `deepseek-v4.1-flash`（DeepSeek V4.1 Flash 1017），包括需要联网、搜索、无头浏览器、下载的工作（该路由本身有正常 shell/网络权限）；原 `deepseek-official` + `deepseek-flash` 的搜索例外作废。`provider` 与 `model` 仍必须同时传。见 [AGENTS.md 委派与 Git](<../AGENTS.md>)。
 
 ### Lead decisions 2026-11-16（触发门、判定体、运动更新率）
 

@@ -120,8 +120,8 @@ namespace VRCKatamari.Editor.LevelBuild
             // tool must not answer "where is Docs/Design/Levels" in two different ways (that
             // was the measured defect: ProjectRoot() is the UNITY project directory).
             string levelDir;
-            List<string> tried;
-            if (!LevelPaths.TryResolveLevelDirectory(levelId, out levelDir, out tried))
+            var tried = new List<string>();
+            if (!LevelPaths.TryResolveLevelDirectory(levelId, out levelDir, tried))
             {
                 report.Error("[terrain_source] no level directory for '" + levelId +
                              "'. Searched:\n  " + string.Join("\n  ", tried.ToArray()));
@@ -130,7 +130,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
             string path;
             var placementTried = new List<string>();
-            if (!LevelPaths.TryResolvePlacementIn(levelDir, out path, out placementTried))
+            if (!LevelPaths.TryResolvePlacementIn(levelDir, out path, placementTried))
             {
                 report.Error("[terrain_source] no placement.json / placement.v2.json in " +
                              levelDir + ". Searched:\n  " +

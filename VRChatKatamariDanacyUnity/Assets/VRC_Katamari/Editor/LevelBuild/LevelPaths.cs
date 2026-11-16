@@ -98,11 +98,19 @@ namespace VRCKatamari.Editor.LevelBuild
         /// (<c>physics_test_field/C21</c>) and, failing that, matching the id a document
         /// DECLARES (<c>Import("C21")</c> finds <c>physics_test_field/C21</c>).
         /// </summary>
+        /// <param name="tried">
+        /// APPEND-ONLY diagnostics: every candidate path this call tried is added to the list
+        /// the caller owns, so a caller that already collected candidates (the placement
+        /// resolver) keeps them. It is NOT an <c>out</c> parameter on purpose - an <c>out</c>
+        /// parameter may not be read before it is assigned, and this method's whole job is to
+        /// append to a list that may already hold entries. A null list means "collect nothing":
+        /// the return value is unaffected and only the error text loses its candidate paths.
+        /// </param>
         public static bool TryResolveLevelDirectory(string levelId, out string directory,
-            out List<string> tried)
+            List<string> tried)
         {
             directory = null;
-            tried = new List<string>();
+            if (tried == null) tried = new List<string>();
             if (string.IsNullOrEmpty(levelId)) return false;
 
             string levels = LevelsFolder();
@@ -168,18 +176,26 @@ namespace VRCKatamari.Editor.LevelBuild
             out List<string> tried)
         {
             path = null;
+            // `tried` is out HERE (the caller gets the whole diagnostics list) and an
+            // append-only in-parameter everywhere below; it is assigned before anything reads it.
+            tried = new List<string>();
             string directory;
-            if (!TryResolveLevelDirectory(levelId, out directory, out tried))
+            if (!TryResolveLevelDirectory(levelId, out directory, tried))
             {
                 return false;
             }
 
-            return TryResolvePlacementIn(directory, out path, out tried);
+            return TryResolvePlacementIn(directory, out path, tried);
         }
 
         /// <summary>The same resolution for a directory the caller already resolved.</summary>
+        /// <param name="tried">
+        /// APPEND-ONLY diagnostics (see <see cref="TryResolveLevelDirectory"/>): the caller's
+        /// list gains this call's candidates, so the failure message names every path the whole
+        /// resolution tried. A null list collects nothing and changes no return value.
+        /// </param>
         public static bool TryResolvePlacementIn(string directory, out string path,
-            out List<string> tried)
+            List<string> tried)
         {
             path = null;
             if (tried == null) tried = new List<string>();

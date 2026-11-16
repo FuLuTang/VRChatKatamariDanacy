@@ -1,5 +1,5 @@
 using System;
-using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 
@@ -76,11 +76,13 @@ namespace VRCKatamari.Tests
         [Test]
         public void MissingLevelListsEveryPathItTried()
         {
-            var args = new object[] { "no_such_level_anywhere", null, null };
+            // `tried` is an APPEND-ONLY list the caller owns (not an out parameter: it may
+            // already hold the candidates of an earlier call), so the caller can read it even
+            // when the resolution fails - which is the whole point of the diagnostics.
+            var tried = new List<string>();
+            var args = new object[] { "no_such_level_anywhere", null, tried };
             bool found = (bool)Invoke("TryResolveLevelDirectory", args);
             Assert.IsFalse(found);
-            var tried = (IList)args[2];
-            Assert.IsNotNull(tried, "the resolution must report the paths it tried");
             Assert.Greater(tried.Count, 0, "a failure that names no path is the defect again");
         }
 
@@ -95,10 +97,13 @@ namespace VRCKatamari.Tests
             }
 
             string directory = ResolveDirectory("_ref_cancer");
-            var args = new object[] { directory, null, null };
+            var tried = new List<string>();
+            var args = new object[] { directory, null, tried };
             bool found = (bool)Invoke("TryResolvePlacementIn", args);
             Assert.IsTrue(found, "no placement document in " + directory);
             StringAssert.EndsWith("placement.v2.json", (string)args[1]);
+            CollectionAssert.Contains(tried, System.IO.Path.Combine(directory, "placement.json"),
+                "both candidate names must be reported, not only the one that won");
         }
 
         [Test]
@@ -110,7 +115,8 @@ namespace VRCKatamari.Tests
             }
 
             string directory = ResolveDirectory("story_01_bench_size");
-            var args = new object[] { directory, null, null };
+            var tried = new List<string>();
+            var args = new object[] { directory, null, tried };
             Assert.IsTrue((bool)Invoke("TryResolvePlacementIn", args));
             StringAssert.EndsWith("placement.json", (string)args[1]);
             string text = System.IO.File.ReadAllText((string)args[1]);
@@ -140,23 +146,16 @@ namespace VRCKatamari.Tests
 
         private string ResolveDirectory(string levelId)
         {
-            var args = new object[] { levelId, null, null };
+            var tried = new List<string>();
+            var args = new object[] { levelId, null, tried };
             bool found = (bool)Invoke("TryResolveLevelDirectory", args);
             if (!found)
             {
-                var tried = args[2] as IList;
                 Assert.Fail("'" + levelId + "' did not resolve. Tried: " +
-                            (tried == null ? "(none)" : string.Join(", ", ToStrings(tried))));
+                            (tried.Count == 0 ? "(none)" : string.Join(", ", tried.ToArray())));
             }
 
             return (string)args[1];
-        }
-
-        private static string[] ToStrings(IList list)
-        {
-            var values = new string[list.Count];
-            for (int i = 0; i < list.Count; i++) values[i] = list[i] == null ? "" : list[i].ToString();
-            return values;
         }
 
         private bool LevelExists(string levelId)

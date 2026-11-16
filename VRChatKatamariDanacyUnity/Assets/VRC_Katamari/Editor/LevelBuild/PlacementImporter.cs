@@ -3602,7 +3602,12 @@ namespace VRCKatamari.Editor.LevelBuild
         private static bool TryResolvePlacementPath(string levelId, out string path,
             out List<string> tried)
         {
-            return LevelPaths.TryResolvePlacementPath(levelId, out path, out tried);
+            path = null;
+            // The importer's callers read `tried` for their failure message, so this wrapper
+            // keeps the out parameter and hands LevelPaths a list it already owns (LevelPaths
+            // APPENDS to the caller's list; see its signature for why that is not `out`).
+            tried = new List<string>();
+            return LevelPaths.TryResolvePlacementPath(levelId, out path, tried);
         }
 
         /// <summary>

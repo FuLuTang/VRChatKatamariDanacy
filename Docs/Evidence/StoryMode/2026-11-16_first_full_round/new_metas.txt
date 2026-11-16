@@ -1,0 +1,4 @@
+VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallContact/ProxyContactMath.cs.meta
+VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Input/DebugDriveMath.cs.meta
+VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/BallContact/ProxyContactTests.cs.meta
+VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/Input/DebugDriveTests.cs.meta

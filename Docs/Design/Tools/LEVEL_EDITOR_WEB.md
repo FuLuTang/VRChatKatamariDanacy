@@ -4,6 +4,10 @@
 > `Docs/Design/Levels/<id>/placement.json`；Unity 导入器仍只做单向导入。
 > 相关的数据/规则文档：[LEVEL_AUTHORING](LEVEL_AUTHORING.md)、
 > [`Tools/levelbuild/README.md`](../../../Tools/levelbuild/README.md)。
+>
+> Agent 看图：`python3 Tools/leveleditor/shot.py <level-id>` 或 `GET /api/render`
+> （headless 渲染、2×2 联络表、tier/地形/碰撞图层）；6 个配方见
+> [`Tools/leveleditor/README.md`](../../../Tools/leveleditor/README.md#42-agent-cookbook-looking-at-a-level给-llm脚本)。
 
 ## 0. 一句话
 
@@ -458,5 +462,14 @@ python3 Docs/tools/validate_plan.py
   `position.y - aabb.y/2`；因此与 placement 的 AABB 中心语义一致。
 - `group`/`groupId` 父子指针在顶部「父子连线 (N)」开关里画成细线（Cancer 83 条，
   MAS1 38 条）；选中面板显示这两个字段。
+- **原作舞台**（2026-11-16 追加，详见 [REF_STAGE_VIEW.md](<REF_STAGE_VIEW.md>)）：参考模式
+  还能加载提取器输出的地形网格、68 个碰撞 AABB / 3,456 个碰撞三角形 / 7 个 zone，并按
+  `instances.json` 给每件道具套上原作旋转/缩放/高度（显示用，文件不动）。顶部开关
+  「地形 / 线框 / 碰撞 / 旧平面 / 原作高度」；数据只在 `_ref_*` 关卡打开时经由
+  `/api/ref-stage/{stage.glb,transforms.json,collision.json,contact}` 提供，同样要 token、
+  带 `X-Unlicensed-Reference: 1`；提取目录默认 `~/KatamariRef/noclip_export/kse_out`
+  （`--ref-stage-dir` / `$VRC_KATAMARI_REF_STAGE`），必须在仓库之外。
 - 测试：`Docs/tests/leveleditor/test_ref_models.py`（解析、只读、文件不变、普通关卡
-  不能通过 `/api/models` 取到参考网格、模型根必须在仓库外）。
+  不能通过 `/api/models` 取到参考网格、模型根必须在仓库外）与
+  `Docs/tests/leveleditor/test_ref_stage.py`（帧检测、实例配对、GLB 转换、碰撞组索引、
+  接触测量、`/api/ref-stage/*` 契约）。

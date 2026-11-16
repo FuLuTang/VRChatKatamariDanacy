@@ -224,14 +224,38 @@ function renderRefMode() {
   const banner = $("ref-banner");
   if (ref) {
     const counts = ref.modelCounts || {};
+    const stage = ref.stage || null;
+    const instances = stage?.instances || {};
     banner.classList.remove("hidden");
     $("ref-banner-text").textContent = `${ref.banner} ${ref.placement} · `
       + `本地网格 ${counts.resolved ?? 0}/${counts.total ?? 0}（${ref.modelsDir ?? "?"}）· `
-      + `只读，不能编辑或导出。`;
+      + (stage?.available
+        ? `原地形 ${stage.terrain?.vertices ?? "?"} 顶点 / ${stage.collision?.aabbs ?? "?"} 碰撞盒 / `
+          + `${instances.matched ?? "?"} 件道具还原实例${instances.rotated ? `（${instances.rotated} 件带旋转` : ""}`
+          + `${instances.scaled ? `、${instances.scaled} 件带缩放` : ""}${instances.rotated ? "）" : ""}`
+          + ` · zone ${stage.zones ?? "?"}`
+        : `无原地形（${stage?.reason || "未配置提取结果"}）`)
+      + ` · 只读，不能编辑或导出。`;
     document.body.classList.add("ref-mode");
   } else {
     banner.classList.add("hidden");
     document.body.classList.remove("ref-mode");
+  }
+  const tools = $("ref-tools");
+  const stage = ref?.stage || null;
+  tools.classList.toggle("hidden", !ref?.available && !stage?.available);
+  if (ref) {
+    $("show-terrain").checked = view?.showTerrain ?? true;
+    $("terrain-wireframe").checked = view?.terrainWireframe ?? false;
+    $("show-collision").checked = view?.showCollision ?? false;
+    $("show-legacy-planes").checked = view?.showLegacyPlanes ?? false;
+    $("use-original-height").checked = view?.useOriginalHeight ?? true;
+    for (const id of ["show-terrain", "terrain-wireframe", "show-collision",
+                      "show-legacy-planes", "use-original-height"]) {
+      const input = $(id);
+      input.disabled = !stage?.available;
+      if (!stage?.available) input.checked = false;
+    }
   }
   for (const id of ["add-structure", "auto-expected", "duplicate", "delete", "seat",
                     "rest-surface", "drop-ground"]) {
@@ -280,6 +304,22 @@ function renderLevelFacts() {
     const counts = state.ref.modelCounts || {};
     rows.push(["参考资产", `UNLICENSED · 本地网格 ${counts.resolved ?? 0}/${counts.total ?? 0} · 只读`]);
     rows.push(["父子指针", `${state.ref.parentLinkCount ?? 0} 条（group/groupId）`]);
+    const stage = state.ref.stage || null;
+    if (stage) {
+      const instances = stage.instances || {};
+      rows.push(["原地形", stage.available
+        ? `${stage.terrain?.vertices ?? "?"} 顶点 · ${stage.terrain?.materials ?? "?"} 材质段 · ${stage.dir}`
+        : `无（${stage.reason || "?"}）`]);
+      if (stage.available) {
+        rows.push(["碰撞体", `${stage.collision?.aabbs ?? "?"} AABB · ${stage.collision?.triangles ?? "?"} 三角形 · zone ${stage.zones ?? "?"}`]);
+        rows.push(["实例还原", `配对 ${instances.matched ?? "?"}/${stage.counts?.props ?? "?"}`
+          + ` · ≤1cm ${instances.exact ?? "?"} · 旋转 ${instances.rotated ?? 0} · 缩放 ${instances.scaled ?? 0}`]);
+        rows.push(["原作父表", `真父子 ${instances.parentsResolved ?? 0}（挂接件 ${instances.withParent ?? 0}）`]);
+        rows.push(["坐标帧", stage.frame
+          ? `reroll = ${stage.frame.scale} × PS2 cm · 中位误差 ${formatNumber(stage.frame.medianError, 4)} m`
+          : "?"]);
+      }
+    }
   }
   $("level-facts").innerHTML = rows
     .map(([key, value]) => `<div class="k">${escapeHtml(key)}</div><div class="v">${escapeHtml(value)}</div>`)
@@ -377,7 +417,9 @@ function buildPalette(force = false) {
     item.dataset.def = def;
     item.dataset.category = manifest.category || "other";
     item.dataset.search = `${def} ${manifest.name} ${manifest.nameZh} ${manifest.category}`.toLowerCase();
-    item.title = `${def}\n${manifest.nameZh || manifest.name}\n尺寸 ${formatVec(manifest.aabb, 3)} m\nD_req ${formatNumber(manifest.dReq, 3)} m · ${manifest.valueUnits ?? "?"} u`;
+    item.title = `${def}\n${manifest.nameZh || manifest.name}\n尺寸 ${formatVec(manifest.aabb, 3)} m\n`
+      + `Req ${manifest.dReqMm ?? "?"} mm (k=${manifest.volumeK ?? 0.7})\n`
+      + `${manifest.valueUnits ?? "?"} u`;
     const image = document.createElement("img");
     image.className = "palette-thumb";
     image.alt = def;
@@ -422,7 +464,8 @@ function updatePaletteValues() {
     if (!manifest) continue;
     const sub = item.querySelector(`[data-sub="${def}"]`);
     if (sub) {
-      sub.textContent = `${formatVec(manifest.aabb, 2)} · ${manifest.valueUnits ?? "—"} u · D ${formatNumber(manifest.dReq, 2)}`;
+      sub.textContent = `${formatVec(manifest.aabb, 2)} · ${manifest.valueUnits ?? "—"} u`
+        + ` · Req ${manifest.dReqMm ?? "?"} mm`;
     }
   }
 }
@@ -504,8 +547,35 @@ function renderSelection(info) {
       rows.push(["def", escapeHtml(info.def)]);
       rows.push(["kind/zone", escapeHtml(`${info.kind || "?"} / ${info.zone || "—"}`)]);
       rows.push(["aabb 尺寸", `${formatVec(info.aabb, 3)} m`]);
-      rows.push(["D_req", `${formatNumber(info.dReq, 3)} m`]);
+      rows.push(["Req（整 mm 门槛）",
+        `${info.dReqMm === undefined ? "—" : `${info.dReqMm} mm`}`
+        + ` <span class="muted">· ${formatNumber(info.dReq, 3)} m</span>`]);
+      const ladderD = view?.ladder?.diameter;
+      if (ladderD) {
+        const ballMm = Math.floor(Number(ladderD) * 1000 + 1e-6);
+        rows.push(["可吸 @ 当前梯档",
+          `${ballMm} mm 球 → <b>${info.dReqMm !== undefined && info.dReqMm <= ballMm
+            ? "现在可吸" : "太大 / 挡路"}</b>`]);
+      }
       rows.push(["valueUnits", String(info.valueUnits ?? "—")]);
+      {
+        // The per-item volume factor k: `Volume = k * a*b*c`, the original's default 0.70.
+        // It lives on the DEF (a whole type shares one number); an empty box means
+        // "no override" and clearing it restores 0.70 without writing a key.
+        const defEntry = (state.doc.defs || []).find((entry) => entry.id === info.def);
+        const current = info.volumeK ?? (defEntry && defEntry.volumeK) ?? 0.70;
+        // Editable only for a def this level declares: set_def edits defs[] and refuses an
+        // undeclared id, so offering the box there would only produce an error message.
+        const editable = !state.ref && Boolean(defEntry);
+        rows.push(["体积系数 k（def）",
+          `<input id="def-volume-k" type="number" step="0.01" min="0.01" max="32"`
+          + ` value="${current}"${editable ? "" : " disabled"} style="width:5.5em">`
+          + (editable
+            ? ` <button id="def-volume-k-apply" type="button">应用</button>`
+              + ` <span class="muted">空 = 恢复 0.70 默认</span>`
+            : ` <span class="muted">${state.ref ? "参考关卡只读"
+              : "此 def 不在 defs[] 里，先 add_def"}</span>`)]);
+      }
       rows.push([info.stackedOn ? "stackedOn" : "support",
         escapeHtml(info.stackedOn || info.support || "—")]);
       if (info.group || info.groupId) {
@@ -514,6 +584,29 @@ function renderSelection(info) {
       }
       if (info.refModel) {
         rows.push(["参考网格", "UNLICENSED · 本机缓存 · 禁止分发"]);
+      }
+      const instance = info.refInstance || null;
+      if (instance) {
+        const axis = Array.isArray(instance.axis) ? instance.axis : [];
+        const turn = `${formatNumber(instance.angleDeg, 1)}° @ (${axis.map((v) => formatNumber(v, 2)).join(", ")})`;
+        rows.push(["原作旋转", `${turn} <span class="muted">四元数 ${formatVec(instance.quat, 3)}</span>`]);
+        rows.push(["原作缩放", `${formatVec(instance.scale, 3)}`]);
+        rows.push(["原作父件", instance.parent
+          ? `${escapeHtml(instance.parent)} <span class="muted">#${instance.parentInstance}</span>`
+          : (instance.parentInstance === null || instance.parentInstance === undefined
+            ? "无"
+            : `<span class="muted">#${instance.parentInstance}（挂接件，父为哑锚点）</span>`)]);
+        rows.push(["分区", `area ${instance.area ?? "—"} · 实例 #${instance.instance ?? "—"}`
+          + (instance.zone === null || instance.zone === undefined
+            ? " · 碰撞 zone —"
+            : ` · 碰撞 zone ${instance.zone}（面 y=${formatNumber(instance.zoneSurfaceY, 2)}）`)]);
+        if (info.positions?.placed && instance.position) {
+          const placed = info.positions.placed;
+          const original = instance.position;
+          rows.push(["高度", info.refApplied
+            ? `显示用原作 y=${formatNumber(original[1], 3)} · 文件 y=${formatNumber(placed[1], 3)}`
+            : `文件 y=${formatNumber(placed[1], 3)} · 原作 y=${formatNumber(original[1], 3)}`]);
+        }
       }
     } else {
       rows.push(["role", escapeHtml(info.role || "—")]);
@@ -538,8 +631,37 @@ function renderSelection(info) {
   $("selection-kv").innerHTML = rows
     .map(([key, value]) => `<div class="k">${key}</div><div class="v">${value}</div>`)
     .join("");
+  const applyVolumeK = $("def-volume-k-apply");
+  if (applyVolumeK && info.type === "prop") {
+    applyVolumeK.addEventListener("click", () => applyDefVolumeK(info.def));
+  }
   $("gizmo-move").classList.toggle("active", view.tool === "move");
   $("gizmo-rotate").classList.toggle("active", view.tool === "rotate");
+}
+
+// The per-def volume factor (the original's `Volume = k * a*b*c`, default 0.70).  One
+// API call, validated server-side by placement_core.volume_k_error (finite, 0 < k <= 32);
+// an empty input clears the key, which restores the default and keeps the file
+// byte-identical to one that never declared a k.
+async function applyDefVolumeK(defId) {
+  if (!defId) return;
+  const field = $("def-volume-k");
+  if (!field) return;
+  const raw = field.value.trim();
+  let volumeK = null;
+  if (raw !== "") {
+    volumeK = Number(raw);
+    if (!Number.isFinite(volumeK) || volumeK <= 0 || volumeK > 32) {
+      showError("k 必须是有限数且 0 < k <= 32（原作默认 0.70）");
+      return;
+    }
+  }
+  const response = await sendOp({ op: "set_def", args: { id: defId, volumeK } });
+  if (response?.ok) {
+    toast(volumeK === null
+      ? `def ${defId} 的 k 已恢复默认 0.70`
+      : `def ${defId} 的 k = ${volumeK}（Req 已按 k 重算）`, "ok", 2400);
+  }
 }
 
 // --------------------------------------------------------------------------- //
@@ -689,10 +811,13 @@ function renderStats() {
   histogram.replaceChildren();
   for (const bin of stats.bins) {
     const center = (bin.low + bin.high) / 2;
+    const floorMm = (meters) => Math.floor(Number(meters) * 1000 + 1e-6);
+    const centerMm = floorMm(center);
+    const ballMm = floorMm(diameter);
     let tierColor = "red";
-    if (center > max) tierColor = "grey";
-    else if (center <= diameter) tierColor = "green";
-    else if (center <= diameter * 1.2) tierColor = "yellow";
+    if (centerMm > floorMm(max)) tierColor = "grey";
+    else if (centerMm <= ballMm) tierColor = "green";
+    else if (centerMm <= floorMm(diameter * 1.2)) tierColor = "yellow";
     const value = binValue(bin);
     const ratio = statsLog && value > 0
       ? Math.log(1 + value) / Math.log(1 + peak) : value / peak;
@@ -702,7 +827,8 @@ function renderStats() {
     const top = bin.items.slice().sort((left, right) =>
       (metric === "volume" ? right.volume - left.volume : right.units - left.units))
       .slice(0, 4).map((item) => item.id);
-    bar.title = `${bin.low.toFixed(2)}–${bin.high.toFixed(2)} m\n`
+    bar.title = `${bin.low.toFixed(2)}–${bin.high.toFixed(2)} m`
+      + ` (${Math.round(bin.low * 1000)}–${Math.round(bin.high * 1000)} mm)\n`
       + `件数 ${bin.count} · 体积 ${formatNumber(bin.volume, 4)} m³ (${bin.volumePct}%)\n`
       + `valueUnits ${bin.units}\n` + (top.length ? `如 ${top.join(", ")}` : "空");
     if (bin.ids.length) {
@@ -747,7 +873,7 @@ function renderCompareTable() {
   if (!statsCompare?.regions?.length) return;
   const table = document.createElement("table");
   table.innerHTML = `<thead><tr><th>区域</th><th>件数</th><th>体积 m³</th>
-    <th>可吸体积%</th><th>D_req 中位</th></tr></thead>`;
+    <th>可吸体积%</th><th>Req 中位 mm</th></tr></thead>`;
   const body = document.createElement("tbody");
   for (const row of statsCompare.regions) {
     const tr = document.createElement("tr");
@@ -755,7 +881,8 @@ function renderCompareTable() {
     tr.innerHTML = `<td>${escapeHtml(row.name)}</td><td>${row.count}</td>
       <td>${formatNumber(row.volume, 3)}</td>
       <td>${(row.absorbableRatio * 100).toFixed(0)}%</td>
-      <td>${row.dReqMedian === null ? "—" : row.dReqMedian.toFixed(2)}</td>`;
+      <td>${row.dReqMedianMm === null || row.dReqMedianMm === undefined
+        ? "—" : Math.round(row.dReqMedianMm)}</td>`;
     body.appendChild(tr);
   }
   table.appendChild(body);
@@ -1452,6 +1579,30 @@ function bindUI() {
     toast(`已保存 ${result.name}`, "ok", 3000);
   });
   $("show-aabb").addEventListener("change", () => view.setShowWorldBoxes($("show-aabb").checked));
+  $("show-terrain").addEventListener("change", () => {
+    const shown = view.setTerrain($("show-terrain").checked);
+    if ($("show-terrain").checked && !shown) {
+      toast("这个关卡没有原地形提取结果", "ok", 2600);
+    }
+  });
+  $("terrain-wireframe").addEventListener("change", () => {
+    view.setTerrainWireframe($("terrain-wireframe").checked);
+  });
+  $("show-collision").addEventListener("change", async () => {
+    const enabled = $("show-collision").checked;
+    const built = await view.setCollision(enabled);
+    if (enabled && !built) {
+      toast("这个关卡没有碰撞数据", "ok", 2600);
+      $("show-collision").checked = false;
+    }
+  });
+  $("show-legacy-planes").addEventListener("change", () => {
+    view.setLegacyPlanes($("show-legacy-planes").checked);
+  });
+  $("use-original-height").addEventListener("change", () => {
+    view.setOriginalHeight($("use-original-height").checked);
+    renderSelection(view.selectionInfo());
+  });
   $("show-parent-lines").addEventListener("change", () => {
     const count = view.setParentLines($("show-parent-lines").checked);
     if ($("show-parent-lines").checked && !count) {
@@ -1688,6 +1839,55 @@ async function boot() {
       else view._endFly();
     },
     async screenshot() { return view.screenshot(); },
+    refStage() { return view.refSummary(); },
+    async setTerrain(visible = true) {
+      $("show-terrain").checked = Boolean(visible);
+      view.setTerrain(visible);
+      return view.refSummary();
+    },
+    async setTerrainWireframe(enabled = true) {
+      $("terrain-wireframe").checked = Boolean(enabled);
+      view.setTerrainWireframe(enabled);
+      return view.refSummary();
+    },
+    async setCollision(visible = true) {
+      $("show-collision").checked = Boolean(visible);
+      await view.setCollision(visible);
+      return view.refSummary();
+    },
+    setLegacyPlanes(visible = true) {
+      $("show-legacy-planes").checked = Boolean(visible);
+      view.setLegacyPlanes(visible);
+      return view.refSummary();
+    },
+    setOriginalHeight(enabled = true) {
+      $("use-original-height").checked = Boolean(enabled);
+      view.setOriginalHeight(enabled);
+      return view.refSummary();
+    },
+    terrainContact(tolerance = 0.1) { return view.terrainContact(tolerance); },
+    benchmarkFrames(count = 60) { return view.benchmarkFrames(count); },
+    async lookAt(eye, target) {
+      const camera = view.cam;
+      camera.setFromPositionTarget(
+        camera.pivot.clone().set(eye[0], eye[1], eye[2]),
+        camera.pivot.clone().set(target[0], target[1], target[2])
+      );
+      view.needsRender = true;
+      view.renderNow();
+      return camera.camera.position.toArray().map((v) => Number(v.toFixed(3)));
+    },
+    async renderInfo() {
+      const info = view.renderer.info;
+      return {
+        calls: info.render.calls,
+        triangles: info.render.triangles,
+        geometries: info.memory.geometries,
+        textures: info.memory.textures,
+        programs: info.programs?.length ?? null,
+        lastFrameMs: view.lastFrameMs ?? null,
+      };
+    },
     async openLevel(id) { await openLevel(id); return state?.level; },
     async op(name, args) { return sendOp({ op: name, args }); },
     async refresh() { await refreshState(); return state; },

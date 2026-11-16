@@ -43,6 +43,25 @@
       </label>
     </div>
 
+    <div class="group ref-tools hidden" id="ref-tools"
+         title="原作舞台（UNLICENSED 本地数据，只显示、不分发）：地形网格、碰撞体、真实实例变换">
+      <label class="toggle" title="原作舞台网格 stage.glb：真实地形（台地、沟壑），替换 placement 里的平地与边界平面">
+        <input id="show-terrain" type="checkbox" checked> 地形
+      </label>
+      <label class="toggle" title="地形线框：看清三角面与台地边缘">
+        <input id="terrain-wireframe" type="checkbox"> 线框
+      </label>
+      <label class="toggle" title="68 个碰撞 AABB + 3,456 个碰撞三角形 + 7 个 zone 盒">
+        <input id="show-collision" type="checkbox"> 碰撞
+      </label>
+      <label class="toggle" title="显示 placement 自己的平地/边界平面（有地形时默认隐藏）">
+        <input id="show-legacy-planes" type="checkbox"> 旧平面
+      </label>
+      <label class="toggle" title="用原作实例的 y（+0x10）代替 placement 压平的高度：只影响显示，文件不动">
+        <input id="use-original-height" type="checkbox" checked> 原作高度
+      </label>
+    </div>
+
     <div class="group">
       <button id="undo" title="撤销 (Ctrl+Z)">↶</button>
       <button id="redo" title="重做 (Ctrl+Y / Ctrl+Shift+Z)">↷</button>
@@ -281,5 +300,6 @@
 </div>
 
 <script type="module" src="js/main.js"></script>
+<script type="module" src="js/shot.js"></script>
 </body>
 </html>

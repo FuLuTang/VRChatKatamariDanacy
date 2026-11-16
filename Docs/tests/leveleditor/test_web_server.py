@@ -159,9 +159,11 @@ class SurfaceTests(WebServerCase):
         self.assertIn("picnic_corner_demo", state["file"]["path"])
         self.assertGreaterEqual(len(state["manifests"]), 44)
         self.assertIn("dReq", state["manifests"]["apple"])
-        self.assertAlmostEqual(state["manifests"]["apple"]["dReq"], 0.211, places=3)
+        # k=0.70 (the original's default volume factor) floors apple's Req to 187 mm.
+        self.assertAlmostEqual(state["manifests"]["apple"]["dReq"], 0.187, places=3)
         derived = state["derived"]["props"]["prop_acorn_000"]
-        self.assertAlmostEqual(derived["dReq"], 0.068, places=3)
+        # k=0.70 -> 60 mm (was 68 mm under the k-less gate), still whole millimetres.
+        self.assertAlmostEqual(derived["dReq"], 0.06, places=3)
         self.assertEqual(derived["valueUnits"], 1)
         self.assertEqual(len(derived["worldAabb"]), 2)
         self.assertIn("tiers", state["check"]["tables"])
@@ -405,6 +407,45 @@ class HintsTests(WebServerCase):
         self.assertEqual(hints["counts"]["blocking"], tier["blocking"])
         self.assertEqual(hints["diameter"], 0.5)
         self.assertAlmostEqual(hints["stepLimit"], 0.125)
+
+
+class VolumeKApiTests(WebServerCase):
+    """The web surface of the per-item volume factor: derived rows, stats, and set_def."""
+
+    def test_derived_rows_carry_whole_mm_req_and_the_factor(self):
+        status, payload = self.call("/api/level")
+        state = payload["state"]
+        derived = state["derived"]["props"]["prop_acorn_000"]
+        self.assertEqual(derived["dReqMm"], 60)
+        self.assertAlmostEqual(derived["dReq"], 0.06, places=3)
+        self.assertEqual(derived["volumeK"], 0.70)
+        manifest = state["manifests"]["acorn"]
+        self.assertEqual(manifest["volumeK"], 0.70)
+        self.assertEqual(manifest["dReqMm"], 60)
+
+    def test_set_def_changes_the_derived_gate_and_stats(self):
+        status, payload = self.op("add_def", id="apple", valueUnits=1, kind="fruit")
+        self.assertTrue(payload["ok"], payload["error"])
+        before = self.state()["derived"]["props"]["prop_apple_000"]
+        status, payload = self.op("set_def", id="apple", volumeK=2.0)
+        self.assertTrue(payload["ok"], payload["error"])
+        after = self.state()["derived"]["props"]["prop_apple_000"]
+        self.assertEqual(after["volumeK"], 2.0)
+        self.assertGreater(after["dReqMm"], before["dReqMm"])
+        status, payload = self.call("/api/stats?scope=all&metric=count&bin=0.05&diameter=0.5")
+        self.assertEqual(status, 200)
+        stats = payload["stats"]
+        self.assertEqual(stats["ballMm"], 500)
+        self.assertEqual(sum(tier["count"] for tier in stats["tiers"].values()),
+                         stats["totals"]["count"])
+
+    def test_stats_green_tier_is_the_validator_food_count(self):
+        status, payload = self.call("/api/stats?scope=all&metric=count&bin=0.05&diameter=0.3")
+        stats = payload["stats"]
+        tier = next(row for row in self.state()["check"]["tables"]["tiers"]
+                    if row["diameter"] == 0.30)
+        self.assertEqual(stats["tiers"]["green"]["count"], tier["food"])
+        self.assertEqual(stats["dReqMedianMm"] is not None, True)
 
 
 class OpenTests(WebServerCase):

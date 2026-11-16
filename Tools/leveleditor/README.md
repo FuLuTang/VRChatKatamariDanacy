@@ -168,6 +168,111 @@ python3 Tools/leveleditor/server.py --level _ref_mas1 --ref-models-dir ~/Katamar
 
 ---
 
+## 4.2 Agent cookbook: looking at a level（给 LLM/脚本）
+
+`shot.py` 是**给 agent 的看图入口**：一条命令、一行 JSON、若干 PNG；不需要开浏览器，
+也不用摆相机。第一次调用会自己起一个常驻渲染 daemon（headless Chromium + 私有
+`server.py`，默认控制端口 `8793`），之后复用同一个页面，所以重复看图是秒级。
+
+```bash
+cd /home/fulutang/Documents/Github/VRChatKatamariDanacy
+
+# 0) 状态 / 停止（daemon 空闲 900 s 也会自己退出）
+python3 Tools/leveleditor/shot.py --status
+python3 Tools/leveleditor/shot.py --stop
+```
+
+### 配方 1：一张 2×2 总览（默认）
+```bash
+python3 Tools/leveleditor/shot.py story_01_bench_size
+# 默认 sheet = top / iso / start / focus:auto（最高 valueUnits 的地标，平手按体积）
+# 1280x720 一格，拼成 2560x1440；JSON 里有 camera / levelHash / propCount /
+# visibleBox / layers / timings / consoleErrors。
+```
+
+### 配方 2：起点沟壑近景（看玩家第一眼看到什么）
+```bash
+python3 Tools/leveleditor/shot.py story_01_bench_size \
+  --view start --layers props,structures,grid --w 1280 --h 720
+# start = 球出生点、眼高 = 8×球半径（0.30 m 球 → 1.2 m），沿关卡 ball_eye 相机方向，
+# FOV 60°；JSON 的 camera.position/target 是世界坐标，可直接复用到别处。
+```
+
+### 配方 3：按 0.222 m 球径着色（看能吸什么）
+```bash
+python3 Tools/leveleditor/shot.py story_01_bench_size \
+  --view top --layers props,structures,grid,tier:0.222
+# 绿=当前球径可吸，黄=1.2×球径内，红=更大，灰=超过 ballDiameterMax；
+# 与 GUI 滑条同一套 `_tierFor` 规则（Req mm 与 floor(1000·D) 比较）。
+```
+
+### 配方 4：某个道具/def 到底在哪
+```bash
+python3 Tools/leveleditor/shot.py story_01_bench_size \
+  --view focus:cup --layers props,structures,labels:10
+# focus:<itemId|defId> 用该道具（def 则取所有同 def 的并集）的世界 AABB 取景，
+# 黄色框标出目标，labels 标出离视野中心最近的 N 个 itemId。
+```
+
+### 配方 5：比较两帧 / 动画检查
+```bash
+python3 Tools/leveleditor/shot.py story_01_bench_size \
+  --view start --frames 4 --interval 0.5
+# 输出 _f01.._f04.png + _diff.png（红=首末帧变化）；同一相机、无随机抖动。
+# 只要单帧时用 --no-diff 可省掉热图。
+```
+
+### 配方 6：参考关卡（UNLICENSED，只读）
+```bash
+python3 Tools/leveleditor/shot.py _ref_cancer \
+  --view iso --layers props,structures,terrain,collision,parents,labels:8
+# 输出只允许在 ~/KatamariRef/viewer_evidence/shots/ 下（或 $VRC_KATAMARI_REF_SHOTS），
+# 任何仓库内 --out 都会被拒绝；图上有 UNLICENSED REFERENCE 水印和 PNG tEXt 标记。
+# terrain/collision/parents 只有 _ref_* 关卡有；普通关卡会显示在 unavailable 里。
+```
+
+### 同一实现的 HTTP 入口
+编辑器服务器（`server.py`）的 `GET /api/render` 和 CLI 走**同一个** daemon 与相机规划：
+
+```bash
+TOKEN=$(cat ~/.local/state/vrc-katamari-leveleditor/token)
+curl -s -H "X-Editor-Token: $TOKEN" \
+  'http://127.0.0.1:8777/api/render?view=top&layers=props,grid&w=1280&h=720'
+```
+
+参数与 CLI 同名：`view`（可重复）/`views`、`frames`、`interval`、`layers`、`w`、`h`、
+`max-px`、`out`、`save-bookmark`、`timeout`。返回同样的 JSON；失败时 `ok:false`、
+`error`、`code`，CLI 退出码 1。
+
+### 选项速查
+
+```bash
+--view top|iso|side|start|focus:<id|def>|focus:auto|region:<name>|bookmark:<name>
+--view 'cam=x,y,z>tx,ty,tz[,fov]'      # 世界坐标（Unity 米），默认 FOV 60
+--frames N --interval S [--no-diff]     # 同一相机多帧；只允许单个 view
+--layers props,structures,terrain,collision,parents,grid,wire,
+         labels:N,tier:<D>,ball:<D>,select:<itemId,...>
+--w 1280 --h 720 --max-px 4000000       # 每格尺寸与最终图像素上限
+--out DIR|FILE.png                      # 参考关卡只能写到 viewer_evidence/shots
+--save-bookmark NAME                    # 把当前单视图相机写进关卡 cameras[]（复用）
+```
+
+- **默认** layers = `props,structures`；`ball` 只在显式给出或 `tier:` 时画（近景不会被
+  0.3 m 幽灵球挡住）；grid 是 1 m 细线 + 10 m 粗线，另加米制比例尺。
+- **可复现**：相机由 Python 从关卡文档算出（top 只框 bounds，iso/side 含真实高度），
+  同一输入同一像素；JSON 的 `camera`/`views` 是可直接复用的世界坐标。
+- **热/冷**：本机（software GL）实测 `story_01_bench_size` 首次约 30–60 s（Chromium +
+  44 个 GLB + 首帧 shader 编译；机器忙时更久），之后约 1 s；`_ref_cancer` 首次约
+  2 min（511 件、145 个 GLB、地形），之后约 1.1 s。超时用 `--timeout`。
+- **失败**：`--out` 越界、未知 view/layer、参考关卡写仓库、页面 console 有错都会在 JSON
+  里给出 `code` 和 `error`，不会留下半个文件（临时文件 + `os.replace`）。
+- **已知限制**：`render` op 本身仍拒绝（它属于 Blender 路径）；看图走 `shot.py` /
+  `GET /api/render`。top 是透视俯视（不是正交）；阴影默认关（`--shadows` 可开，慢）。
+- **下一步**：GUI 与 agent 的完整同构（操作注册表、查询/选择、dry-run、路线图）见
+  [EDITOR_HUMAN_AI_PARITY.md](../../Docs/Design/Tools/EDITOR_HUMAN_AI_PARITY.md)。
+
+---
+
 ## 5. 测试
 
 ```bash
@@ -217,6 +322,10 @@ Shift 加选、框选、右键飞行+W+滚轮、中键/空格平移、Alt+左键
 Tools/leveleditor/
 ├── server.py                 # HTTP 服务 + WebEditor（复用 editor_core）
 ├── README.md                 # 本文件
+├── shot.py                   # agent 看图 CLI（相机规划/参考路径守卫/daemon 客户端）
+├── shot_daemon.py            # 常驻渲染 daemon（私有 server + headless Chromium）
+├── shot_cdp.py               # 极简 CDP/WebSocket 客户端
+├── shot_png.py               # PNG 尺寸检查 + tEXt 溯源块
 ├── web/
 │   ├── index.html            # 布局 + import map
 │   ├── favicon.svg
@@ -224,6 +333,7 @@ Tools/leveleditor/
 │   ├── js/api.js             # token / op 调用 / SSE
 │   ├── js/view.js            # three.js 场景、选择、gizmo、行走、阶梯、审计
 │   ├── js/main.js            # UI 面板与操作编排
+│   ├── js/shot.js            # 无头渲染钩子（__editorReady / __editorShot）
 │   └── vendor/three/         # three r186 + addons + LICENSE（MIT）
 └── test/smoke.mjs            # 可选浏览器冒烟
 Tools/levelbuild/ref_models.py # _ref_* 本地网格解析与只读规则（唯一实现）

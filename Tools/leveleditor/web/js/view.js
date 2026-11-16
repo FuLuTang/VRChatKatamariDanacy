@@ -145,6 +145,20 @@ export class EditorView {
     this.showParentLines = false;
     this.parentLines = null;
     this.parentLineCount = 0;
+    //: The original stage of a reference level: terrain (stage.glb), the collision
+    //: volumes, the true instance transforms, and whether each is currently drawn.
+    this.refStage = null;            // state.ref.stage: counts + extraction location
+    this.refTransforms = null;       // {itemId: {quat, scale, position, parent, zone, ...}}
+    this.terrainGroup = null;
+    this.terrainMaterial = null;
+    this.collisionGroup = null;
+    this.collisionPayload = null;
+    this.showTerrain = true;
+    this.terrainWireframe = false;
+    this.showCollision = false;
+    this.showLegacyPlanes = false;
+    this.useOriginalHeight = true;
+    this.refLoadMs = null;
     this.multiFrame = null;
     this.showWorldBoxes = false;
     this.boxStyle = "obb";
@@ -821,13 +835,18 @@ export class EditorView {
         support: data.support,
         stackedOn: data.stackedOn,
         valueUnits: derived?.valueUnits ?? data.valueUnits,
+        dReqMm: derived?.dReqMm,
+        volumeK: derived?.volumeK,
         aabb: data.aabb,
         size: data.size,
         role: data.role,
         dReq: derived?.dReq,
         worldAabb: derived?.worldAabb || union,
         position: pivot,
+        positions: { placed: data.position, instance: group.userData.refInstance?.position || null },
         rotationQuat: fromThreeQuaternion(group.quaternion),
+        refInstance: group.userData.refInstance || null,
+        refApplied: Boolean(group.userData.refApplied),
       };
     }
     const propIds = ids.filter((id) => this.propObjects.has(id));
@@ -1215,6 +1234,9 @@ export class EditorView {
     this._clearLevel();
     this._buildWorld();
     this._buildStructures();
+    const stageStarted = performance.now();
+    await this._loadRefStage(state);
+    this.refLoadMs = Math.round(performance.now() - stageStarted);
     const assetsStarted = performance.now();
     await this._buildProps();
     const modelsDone = performance.now();
@@ -1231,6 +1253,7 @@ export class EditorView {
       modelsMs: Math.round(modelsDone - assetsStarted),
       modelFetchMs: this.lastModelLoadMs,
       placementMs: this.lastPlacementMs,
+      refStageMs: this.refLoadMs,
       finishMs: Math.round(performance.now() - modelsDone),
       totalMs: Math.round(performance.now() - loadStarted),
     };
@@ -1256,6 +1279,21 @@ export class EditorView {
       this.scene.remove(this.worldGroup);
       this.worldGroup = null;
     }
+    for (const name of ["terrainGroup", "collisionGroup"]) {
+      const group = this[name];
+      if (!group) continue;
+      this.scene.remove(group);
+      const materials = new Set();
+      group.traverse((object) => {
+        object.geometry?.dispose?.();
+        if (Array.isArray(object.material)) object.material.forEach((m) => materials.add(m));
+        else if (object.material) materials.add(object.material);
+      });
+      for (const material of materials) material.dispose?.();
+      this[name] = null;
+    }
+    this.terrainMaterial = null;
+    this.collisionPayload = null;
   }
 
   _levelCenter() {
@@ -1284,6 +1322,25 @@ export class EditorView {
   }
 
   _groundBox() {
+    // In reference mode the real stage replaces the placement's flat ground plane, so
+    // the camera presets frame the extracted terrain (minus the sky shell) instead.
+    if (this.refMode && this.terrainGroup?.visible) {
+      const box = new THREE.Box3();
+      this.terrainGroup.traverse((object) => {
+        if (!object.isMesh || object.userData.refBackdrop) return;
+        box.expandByObject(object);
+      });
+      // The stage also carries distant coast/walls far outside the prop field; clip to
+      // the level so the presets frame the map the props live in, not the ocean.
+      const bounds = this.state?.bounds;
+      if (bounds) {
+        box.intersect(new THREE.Box3(
+          new THREE.Vector3(bounds[0][0], -100, -bounds[1][1]),
+          new THREE.Vector3(bounds[1][0], 100, -bounds[0][1])
+        ));
+      }
+      if (!box.isEmpty()) return box;
+    }
     const groundGroup = [...this.structureObjects.values()]
       .find((group) => group.userData.role === "ground");
     if (groundGroup) {
@@ -1346,12 +1403,14 @@ export class EditorView {
     lawn.position.set(center.x, -0.035, center.z);
     lawn.receiveShadow = true;
     group.add(lawn);
+    this.lawn = lawn;
 
     const grid = new THREE.GridHelper(Math.max(sizeX, sizeZ), Math.max(2, Math.round(Math.max(sizeX, sizeZ))), 0x5d7a52, 0x6f8c63);
     grid.position.set(center.x, 0.006, center.z);
     grid.material.transparent = true;
     grid.material.opacity = 0.28;
     group.add(grid);
+    this.grid = grid;
 
     const points = [
       new THREE.Vector3(bounds[0][0], 0.02, -bounds[0][1]),
@@ -1495,17 +1554,23 @@ export class EditorView {
       // The reference GLBs are the ripped assets: bottom-pivoted at load time.  The
       // placement position is the prop AABB CENTRE, so lift by half the declared
       // height and centre the mesh's own bbox in x/z.  (Repo GLBs are centre-pivoted
-      // and need no offset.)
+      // and need no offset.)  The offset is applied after the instance scale, below.
       const viewerPivot = (this.manifests[prop.def] || {}).viewerPivot;
       const box = this.defBoxes.get(prop.def);
+      const instance = this._refTransform(prop);
+      const scale = instance ? instance.scale : null;
+      const scaleX = scale ? scale[0] : 1;
+      const scaleY = scale ? scale[1] : 1;
+      const scaleZ = scale ? scale[2] : 1;
       if (this.refMode && viewerPivot === "bottom" && box) {
         const height = (prop.aabb || [0, 0, 0])[1] || 0;
         model.position.set(
-          -(box.min.x + box.max.x) / 2,
-          -box.min.y - height / 2,
-          -(box.min.z + box.max.z) / 2
+          -(box.min.x + box.max.x) / 2 * scaleX,
+          (-box.min.y - height / 2) * scaleY,
+          -(box.min.z + box.max.z) / 2 * scaleZ
         );
       }
+      if (scale) model.scale.set(scaleX, scaleY, scaleZ);
     } catch (error) {
       const fallback = new THREE.Mesh(
         new THREE.BoxGeometry(1, 1, 1),
@@ -1519,7 +1584,359 @@ export class EditorView {
     group.position.copy(toThreePosition(prop.position));
     group.quaternion.copy(toThreeQuaternion(prop.rotationQuat));
     group.userData = { type: "prop", id: prop.itemId, def: prop.def, data: prop, model };
+    this._applyRefTransform(group, prop);
     return group;
+  }
+
+  // ------------------------------------------------------------------ #
+  // the original stage of a reference level (UNLICENSED, local only)
+  // ------------------------------------------------------------------ #
+  _refTransform(prop) {
+    if (!this.refMode || !this.refTransforms || !prop) return null;
+    return this.refTransforms[prop.itemId] || null;
+  }
+
+  /**
+   * Draw one prop with the *original* instance transform: rotation from the record's
+   * axis/angle, scale from +0x30, and (optionally) its original height.
+   *
+   * The placement files are never modified - this is a display override, which is why
+   * it only runs in reference mode (read-only) and why the height is a separate toggle:
+   * ``placement.model.json`` put every prop's AABB bottom on y = 0, while the original
+   * ground steps by ~0.8 m, so the x/z of the file with the y of the instance is what
+   * makes props stand on the terrain.
+   */
+  _applyRefTransform(group, prop) {
+    const instance = this._refTransform(prop);
+    group.userData.refInstance = instance;
+    if (!instance) {
+      if (group.userData.refApplied) {
+        group.quaternion.copy(toThreeQuaternion(prop.rotationQuat));
+        group.userData.refApplied = false;
+      }
+      return;
+    }
+    group.quaternion.copy(toThreeQuaternion(instance.quat || prop.rotationQuat));
+    const placed = toThreePosition(prop.position);
+    const y = this.useOriginalHeight && Array.isArray(instance.position)
+      ? Number(instance.position[1])
+      : placed.y;
+    group.position.set(placed.x, y, placed.z);
+    group.userData.refApplied = true;
+  }
+
+  /**
+   * Fetch the original stage for a reference level: the extractor's per-item transforms
+   * and then the terrain GLB.  A missing extraction is not an error - the level still
+   * opens, and ``refStage.reason`` says why there is no terrain.
+   */
+  async _loadRefStage(state) {
+    this.refStage = state.ref?.stage || null;
+    this.refTransforms = null;
+    this.terrainOrder = null;
+    if (!this.refMode || !this.refStage?.available) return;
+    const token = this.apiToken ? `?token=${encodeURIComponent(this.apiToken)}` : "";
+    try {
+      const response = await fetch(`/api/ref-stage/transforms.json${token}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      this.refTransforms = payload.byItemId || null;
+      this.refParentLinks = payload.parents || [];
+      this.refAnchors = payload.anchors || [];
+      this.refZones = payload.zones || this.refStage?.zones || [];
+    } catch (error) {
+      console.warn("reference transforms failed", error);
+      this.callbacks.onError?.(`原作实例变换加载失败：${error.message}`);
+      this.refTransforms = null;
+    }
+    await this._buildRefTerrain();
+  }
+
+  async _buildRefTerrain() {
+    if (!this.refMode || !this.refStage?.available) return;
+    const token = this.apiToken ? `?token=${encodeURIComponent(this.apiToken)}` : "";
+    const started = performance.now();
+    try {
+      const gltf = await this.loader.loadAsync(`/api/ref-stage/stage.glb${token}`);
+      const group = new THREE.Group();
+      group.name = "ref-terrain";
+      // The extraction has no textures (232 material segments, all white), so one matte
+      // stone material reads the geometry better than 232 identical white ones.
+      // Front faces only: the extractor's ``stage.glb`` keeps the PS2 index order, this
+      // loader flips it once (the PS2 -> REROLL map has determinant -1), and the result
+      // agrees with the stored normals on 14,672 of 14,734 triangles - so culling the
+      // back faces is what the original renderer does, and it is also what hides the
+      // 242 m sky shell (sector1) when the camera is inside it.
+      this.terrainMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff, roughness: 0.96, metalness: 0,
+        side: THREE.FrontSide, wireframe: this.terrainWireframe,
+        vertexColors: true,
+      });
+      const bounds = this.state?.bounds || [[-10, -10], [10, 10]];
+      const levelDiagonal = Math.hypot(bounds[1][0] - bounds[0][0],
+        bounds[1][1] - bounds[0][1]) || 100;
+      gltf.scene.traverse((object) => {
+        if (!object.isMesh) return;
+        object.material = this.terrainMaterial;
+        object.castShadow = false;
+        object.receiveShadow = true;
+        object.frustumCulled = true;
+        this._tintTerrainByHeight(object.geometry);
+        const box = new THREE.Box3().setFromObject(object);
+        // A mesh far bigger than the level is scenery around it (the sky shell, the
+        // distant coast); it must not drive the camera framing.
+        object.userData.refBackdrop = !box.isEmpty()
+          && box.getSize(new THREE.Vector3()).length() > 2 * levelDiagonal;
+        // The sky shell has no texture (the extraction carries none), so drawing it
+        // only puts a grey wall around the map; it stays loaded but hidden.
+        if (object.userData.refBackdrop) object.visible = false;
+      });
+      group.add(gltf.scene);
+      group.visible = this.showTerrain;
+      this.terrainGroup = group;
+      this.scene.add(group);
+      this.lastTerrainMs = Math.round(performance.now() - started);
+      this._applyLegacyPlaneVisibility();
+      this.needsRender = true;
+    } catch (error) {
+      console.warn("terrain failed", error);
+      this.callbacks.onError?.(`原地形加载失败：${error.message}`);
+      this.terrainGroup = null;
+    }
+  }
+
+  /** Build the collision overlay (68 AABBs + 3,456 triangles + 7 zone boxes). */
+  async _ensureCollision() {
+    if (this.collisionGroup) return this.collisionGroup;
+    if (!this.refMode || !this.refStage?.available) return null;
+    const token = this.apiToken ? `?token=${encodeURIComponent(this.apiToken)}` : "";
+    try {
+      if (!this.collisionPayload) {
+        const response = await fetch(`/api/ref-stage/collision.json${token}`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        this.collisionPayload = await response.json();
+      }
+    } catch (error) {
+      console.warn("collision failed", error);
+      this.callbacks.onError?.(`碰撞数据加载失败：${error.message}`);
+      return null;
+    }
+    const payload = this.collisionPayload;
+    const group = new THREE.Group();
+    group.name = "ref-collision";
+    const boxPoints = [];
+    for (const box of payload.aabbs || []) {
+      const [x0, y0, z0] = box.min;
+      const [x1, y1, z1] = box.max;
+      const corners = [
+        [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1],
+        [x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1],
+      ];
+      for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0],
+        [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) {
+        boxPoints.push(new THREE.Vector3(...corners[a]), new THREE.Vector3(...corners[b]));
+      }
+    }
+    if (boxPoints.length) {
+      const boxes = new THREE.LineSegments(
+        new THREE.BufferGeometry().setFromPoints(boxPoints),
+        new THREE.LineBasicMaterial({ color: 0xff9f1c, transparent: true, opacity: 0.55 }),
+      );
+      boxes.renderOrder = 6;
+      group.add(boxes);
+    }
+    const triangles = payload.triangles || [];
+    if (triangles.length) {
+      // A triangle soup of 3,456 triangles is a wireframe of its edges (the surface is
+      // already drawn by the terrain); every triangle contributes three segments.
+      const edges = [];
+      for (let index = 0; index < triangles.length; index += 9) {
+        const p = [0, 3, 6].map((offset) => new THREE.Vector3(
+          triangles[index + offset], triangles[index + offset + 1],
+          triangles[index + offset + 2]));
+        edges.push(p[0], p[1], p[1], p[2], p[2], p[0]);
+      }
+      const mesh = new THREE.LineSegments(
+        new THREE.BufferGeometry().setFromPoints(edges),
+        new THREE.LineBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.75 }),
+      );
+      mesh.renderOrder = 7;
+      group.add(mesh);
+    }
+    const zonePoints = [];
+    for (const zone of payload.zones || this.refZones || []) {
+      if (!zone.min || !zone.max) continue;
+      const [x0, y0, z0] = zone.min;
+      const [x1, y1, z1] = zone.max;
+      const corners = [
+        new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y0, z0),
+        new THREE.Vector3(x1, y0, z1), new THREE.Vector3(x0, y0, z1),
+        new THREE.Vector3(x0, y1, z0), new THREE.Vector3(x1, y1, z0),
+        new THREE.Vector3(x1, y1, z1), new THREE.Vector3(x0, y1, z1),
+      ];
+      for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0],
+        [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) {
+        zonePoints.push(corners[a], corners[b]);
+      }
+    }
+    if (zonePoints.length) {
+      const zones = new THREE.LineSegments(
+        new THREE.BufferGeometry().setFromPoints(zonePoints),
+        new THREE.LineBasicMaterial({ color: 0x9f7aea, transparent: true, opacity: 0.7 }),
+      );
+      zones.renderOrder = 6;
+      group.add(zones);
+    }
+    group.visible = this.showCollision;
+    this.collisionGroup = group;
+    this.scene.add(group);
+    this.needsRender = true;
+    return group;
+  }
+
+  /**
+   * A grey stage with no textures reads as one flat surface; tinting the vertices by
+   * height (a viewer aid, not original data) makes the terraces, ramps and the low
+   * channel at the start legible at a glance.
+   */
+  _tintTerrainByHeight(geometry) {
+    const position = geometry?.getAttribute?.("position");
+    if (!position) return;
+    const low = new THREE.Color(0x6f7d7a);
+    const high = new THREE.Color(0xc3b394);
+    const colors = new Float32Array(position.count * 3);
+    const mix = new THREE.Color();
+    for (let index = 0; index < position.count; index += 1) {
+      const y = position.getY(index);
+      const t = Math.min(1, Math.max(0, (y + 1.6) / 2.2));
+      mix.copy(low).lerp(high, t);
+      colors[index * 3] = mix.r;
+      colors[index * 3 + 1] = mix.g;
+      colors[index * 3 + 2] = mix.b;
+    }
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  }
+
+  setTerrain(visible) {
+    this.showTerrain = Boolean(visible);
+    if (this.terrainGroup) this.terrainGroup.visible = this.showTerrain;
+    this._applyLegacyPlaneVisibility();
+    this.needsRender = true;
+    return Boolean(this.terrainGroup);
+  }
+
+  setTerrainWireframe(enabled) {
+    this.terrainWireframe = Boolean(enabled);
+    if (this.terrainMaterial) {
+      this.terrainMaterial.wireframe = this.terrainWireframe;
+      // A wireframe has to show the far faces too, or half the stage disappears.
+      this.terrainMaterial.side = this.terrainWireframe ? THREE.DoubleSide : THREE.FrontSide;
+      this.terrainMaterial.needsUpdate = true;
+    }
+    this.needsRender = true;
+    return this.terrainWireframe;
+  }
+
+  async setCollision(visible) {
+    this.showCollision = Boolean(visible);
+    if (this.showCollision) await this._ensureCollision();
+    if (this.collisionGroup) this.collisionGroup.visible = this.showCollision;
+    this.needsRender = true;
+    return Boolean(this.collisionGroup);
+  }
+
+  /** Show the placement's own ground/boundary planes on top of (or instead of) the stage. */
+  setLegacyPlanes(visible) {
+    this.showLegacyPlanes = Boolean(visible);
+    this._applyLegacyPlaneVisibility();
+    this.needsRender = true;
+    return this.showLegacyPlanes;
+  }
+
+  /** Put each prop at its original instance height (display only; the file is untouched). */
+  setOriginalHeight(enabled) {
+    this.useOriginalHeight = Boolean(enabled);
+    for (const [id, group] of this.propObjects) {
+      const prop = group.userData.data;
+      this._applyRefTransform(group, prop || { itemId: id });
+    }
+    this._buildParentLines();
+    this._updateSelectionVisuals();
+    this.needsRender = true;
+    return this.useOriginalHeight;
+  }
+
+  _applyLegacyPlaneVisibility() {
+    // The reference placement carries a flat ground plane at y = 0 and four boundary
+    // planes; the original stage replaces both when it is drawn.
+    const hide = Boolean(this.refMode && this.terrainGroup && this.showTerrain
+      && !this.showLegacyPlanes);
+    for (const group of this.structureObjects.values()) {
+      const role = group.userData.role;
+      if (role !== "ground" && role !== "boundary") continue;
+      group.visible = !hide;
+    }
+    // The editor's own lawn and grid are drawn at y = 0, which is ~1 m above the real
+    // ground; they would both hide the low parts of the stage and float over it.
+    if (this.lawn) this.lawn.visible = !hide;
+    if (this.grid) this.grid.visible = !hide;
+  }
+
+  /**
+   * Terrain contact of every prop, measured by the server (``/api/ref-stage/contact``).
+   *
+   * The analysis lives in ``Tools/levelbuild/ref_stage.py`` so a headless client can
+   * ask the same question; the browser only displays the answer.
+   */
+  async terrainContact(tolerance = 0.1) {
+    if (!this.refMode || !this.refStage?.available) return null;
+    const token = this.apiToken ? `&token=${encodeURIComponent(this.apiToken)}` : "";
+    const started = performance.now();
+    try {
+      const response = await fetch(`/api/ref-stage/contact?t=${tolerance}${token}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      payload.requestMs = Math.round(performance.now() - started);
+      return payload;
+    } catch (error) {
+      this.callbacks.onError?.(`地形接触测量失败：${error.message}`);
+      return null;
+    }
+  }
+
+  refSummary() {
+    const stage = this.refStage || {};
+    return {
+      available: Boolean(stage.available),
+      reason: stage.reason || null,
+      dir: stage.dir || null,
+      counts: stage.counts || {},
+      frame: stage.frame || null,
+      terrain: Boolean(this.terrainGroup),
+      terrainVisible: Boolean(this.terrainGroup?.visible),
+      wireframe: this.terrainWireframe,
+      collision: Boolean(this.collisionGroup),
+      collisionVisible: Boolean(this.collisionGroup?.visible),
+      legacyPlanes: this.showLegacyPlanes,
+      originalHeight: this.useOriginalHeight,
+      transforms: this.refTransforms ? Object.keys(this.refTransforms).length : 0,
+      parentLinks: (this.refParentLinks || []).length,
+      backdropMeshes: this._refBackdropCount(),
+    };
+  }
+
+  _refBackdropCount() {
+    let count = 0;
+    this.terrainGroup?.traverse((object) => {
+      if (object.isMesh && object.userData.refBackdrop) count += 1;
+    });
+    return count;
   }
 
   /**
@@ -1528,6 +1945,17 @@ export class EditorView {
    * (83 children in Make Cancer) that the web editor would otherwise not show.
    */
   _buildParentLines() {
+    this._disposeParentLines();
+    const props = this.doc?.props || [];
+    if (!this.refMode || !props.length) return;
+    if (this.refStage?.available && (this.refParentLinks || []).length) {
+      this._buildInstanceParentLines();
+      return;
+    }
+    this._buildGroupParentLines(props);
+  }
+
+  _disposeParentLines() {
     if (this.parentLines) {
       this.scene.remove(this.parentLines);
       this.parentLines.traverse((object) => {
@@ -1537,8 +1965,13 @@ export class EditorView {
       this.parentLines = null;
     }
     this.parentLineCount = 0;
-    const props = this.doc?.props || [];
-    if (!this.refMode || !props.length) return;
+  }
+
+  /**
+   * The placement's own ``group``/``groupId`` pointer, drawn as a thin line from child
+   * to parent.  Used when the stage extraction has no parent table for this level.
+   */
+  _buildGroupParentLines(props) {
     const byId = new Map(props.map((prop) => [prop.itemId, prop]));
     const points = [];
     for (const prop of props) {
@@ -1550,15 +1983,60 @@ export class EditorView {
     }
     if (!points.length) return;
     this.parentLineCount = points.length / 2;
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({
-      color: 0xff5fd2, transparent: true, opacity: 0.85, depthTest: false,
-    });
-    const lines = new THREE.LineSegments(geometry, material);
-    lines.renderOrder = 20;
-    lines.userData = { type: "parent-lines" };
+    this._addParentLines(points, 0xff5fd2);
+  }
+
+  /**
+   * The original parent table (``parentBlock``), resolved through the instance table:
+   * 83 child -> parent links in Make Cancer.  Links the placement's ``group`` pointer
+   * also carries are drawn magenta, extractor-only ones orange, so the two sources can
+   * be compared on sight.
+   */
+  _buildInstanceParentLines() {
+    const links = this.refParentLinks || [];
+    const known = new Set();
+    for (const prop of this.doc?.props || []) {
+      const parentId = prop.group || prop.groupId;
+      if (parentId) known.add(`${prop.itemId}>${parentId}`);
+    }
+    const corroborated = [];
+    const extra = [];
+    for (const link of links) {
+      const child = this.propObjects.get(link.child);
+      const parent = link.parent ? this.propObjects.get(link.parent) : null;
+      if (!child || !parent) continue;
+      const pair = [child.position.clone(), parent.position.clone()];
+      if (known.has(`${link.child}>${link.parent}`)) corroborated.push(...pair);
+      else extra.push(...pair);
+    }
+    if (!corroborated.length && !extra.length) return;
+    this.parentLineCount = (corroborated.length + extra.length) / 2;
     this.parentLines = new THREE.Group();
-    this.parentLines.add(lines);
+    this.parentLines.userData = { type: "parent-lines" };
+    if (corroborated.length) {
+      this.parentLines.add(this._parentLineObject(corroborated, 0xff5fd2, 0.9));
+    }
+    if (extra.length) {
+      this.parentLines.add(this._parentLineObject(extra, 0xffa53b, 0.9));
+    }
+    this.parentLines.visible = this.showParentLines;
+    this.scene.add(this.parentLines);
+    this.needsRender = true;
+  }
+
+  _parentLineObject(points, color, opacity) {
+    const lines = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false }),
+    );
+    lines.renderOrder = 20;
+    return lines;
+  }
+
+  _addParentLines(points, color) {
+    this.parentLines = new THREE.Group();
+    this.parentLines.userData = { type: "parent-lines" };
+    this.parentLines.add(this._parentLineObject(points, color, 0.85));
     this.parentLines.visible = this.showParentLines;
     this.scene.add(this.parentLines);
     this.needsRender = true;
@@ -1933,11 +2411,18 @@ export class EditorView {
     this.needsRender = true;
   }
 
-  _tierFor(dReq) {
-    const max = Number((this.doc.level || {}).ballDiameterMax || 2.2);
-    if (dReq > max + 1e-9) return "grey";
-    if (dReq <= this.ladder.diameter + 1e-9) return "green";
-    if (dReq <= this.ladder.diameter * 1.2 + 1e-9) return "yellow";
+  // The original's gate, in whole millimetres: an item is food iff
+  // floor(1000*D) >= Req_mm (Req = floor(1000*cbrt(60*k*a*b*c/pi))).  Derived rows carry
+  // dReqMm from the server because that is the integer the data gate used; dReq is the
+  // same quantity in metres and is only a fallback for an older payload.
+  _tierFor(dReqMm, dReq) {
+    const floorMm = (meters) => Math.floor(Number(meters) * 1000 + 1e-6);
+    const maxMm = floorMm((this.doc.level || {}).ballDiameterMax || 2.2);
+    const ballMm = floorMm(this.ladder.diameter);
+    const reqMm = Number.isFinite(dReqMm) ? dReqMm : floorMm(dReq);
+    if (reqMm > maxMm) return "grey";
+    if (reqMm <= ballMm) return "green";
+    if (reqMm <= floorMm(this.ladder.diameter * 1.2)) return "yellow";
     return "red";
   }
 
@@ -1957,7 +2442,7 @@ export class EditorView {
   _applyPropAppearance() {
     for (const [id, group] of this.propObjects) {
       const derived = this.derived.props[id];
-      const tier = derived ? this._tierFor(derived.dReq) : "grey";
+      const tier = derived ? this._tierFor(derived.dReqMm, derived.dReq) : "grey";
       group.userData.tier = tier;
       const faded = this.statsScopeIds && !this.statsScopeIds.has(id);
       group.traverse((object) => {
@@ -2017,6 +2502,7 @@ export class EditorView {
         group.userData.data = prop;
         group.position.copy(toThreePosition(prop.position));
         group.quaternion.copy(toThreeQuaternion(prop.rotationQuat));
+        this._applyRefTransform(group, prop);
       }
     }
     for (const [id, group] of [...this.propObjects]) {
@@ -2052,6 +2538,10 @@ export class EditorView {
       this.pickTargets = this.pickTargets.filter((entry) => entry !== group);
     }
 
+    for (const group of this.structureObjects.values()) {
+      const role = group.userData.role;
+      if (role === "ground" || role === "boundary") this._applyLegacyPlaneVisibility();
+    }
     const surviving = [...this.selectionIds].filter((id) => this.objectGroup(id));
     this._setSelection(surviving);
     this._applyLadderToAll();
@@ -2136,9 +2626,35 @@ export class EditorView {
     this._last = now;
     if (this.cam.update(delta)) this.needsRender = true;
     if (!this.loading && (this.needsRender || this.isFlying)) {
+      const started = performance.now();
       this.renderer.render(this.scene, this.camera);
       this.needsRender = false;
+      // Frame cost of the last drawn frame (software GL makes this the load-bearing
+      // number, and the headless verification reads it instead of guessing).
+      this.lastFrameMs = Math.round((performance.now() - started) * 10) / 10;
+      this.frames = (this.frames || 0) + 1;
     }
+  }
+
+  /** Draw ``count`` frames and time them (used by the headless verification). */
+  async benchmarkFrames(count = 60) {
+    const times = [];
+    for (let index = 0; index < count; index += 1) {
+      const started = performance.now();
+      this.renderer.render(this.scene, this.camera);
+      times.push(performance.now() - started);
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    times.sort((a, b) => a - b);
+    const median = times[Math.floor(times.length / 2)];
+    return {
+      frames: count,
+      medianMs: Math.round(median * 10) / 10,
+      meanMs: Math.round((times.reduce((sum, value) => sum + value, 0) / times.length) * 10) / 10,
+      p95Ms: Math.round(times[Math.floor(times.length * 0.95)] * 10) / 10,
+      maxMs: Math.round(times[times.length - 1] * 10) / 10,
+      fps: Math.round(1000 / median * 10) / 10,
+    };
   }
 
   // ------------------------------------------------------------------ #

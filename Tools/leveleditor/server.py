@@ -51,6 +51,7 @@ if str(ROOT) not in sys.path:
 from Tools.levelbuild import editor_core  # noqa: E402
 from Tools.levelbuild import placement_core as core  # noqa: E402
 from Tools.levelbuild import ref_models  # noqa: E402
+from Tools.levelbuild import ref_stage  # noqa: E402
 
 SERVICE = "vrc-katamari-leveleditor"
 PROTOCOL = 1
@@ -231,7 +232,8 @@ class WebEditor:
     """One open level + the browser-facing state and history."""
 
     def __init__(self, level, levels_dir=None, state_dir=None, lock=True,
-                 manifests=None, ref_models_dir=None, placement=None):
+                 manifests=None, ref_models_dir=None, placement=None,
+                 ref_stage_dir=None):
         self.levels_dir = Path(levels_dir) if levels_dir else core.LEVELS_DIR
         self.state_dir = Path(state_dir) if state_dir else default_state_dir()
         self.scene = WebScene()
@@ -240,6 +242,7 @@ class WebEditor:
             self.scene, manifests=self.repo_manifests,
             auto_export=True, undo_limit=50, levels_dir=self.levels_dir)
         self.ref_models_dir = ref_models_dir
+        self.ref_stage_dir = ref_stage_dir
         self.placement_name = placement
         #: True only for a level id starting with ``_ref_``.  Reference levels show
         #: unlicensed local meshes and are read-only (see ``ref_models``).
@@ -248,6 +251,10 @@ class WebEditor:
         self.ref_table = {}
         self.ref_resolution = {}
         self.ref_fbx_only = {}
+        #: The original stage (terrain, collision, true instance transforms) of a
+        #: reference level, read from the byte-level extraction outside the repo.
+        self.ref_stage = None
+        self._ref_stage_glb = None
         self.lock_enabled = bool(lock)
         self.lock = None
         self.history = []
@@ -301,7 +308,8 @@ class WebEditor:
             new_lock = LevelLock(path, self.state_dir)
             new_lock.acquire()
         previous = (self.ref_mode, self.ref_models_root, self.ref_table,
-                    self.ref_resolution, self.ref_fbx_only, self.editor.base_manifests)
+                    self.ref_resolution, self.ref_fbx_only, self.ref_stage,
+                    self._ref_stage_glb, self.editor.base_manifests)
         is_ref = ref_models.is_ref_level(level)
         try:
             if is_ref:
@@ -317,10 +325,11 @@ class WebEditor:
             opened = self.editor.open(level=level, path=path)
             self.ref_mode = is_ref
             self._refresh_ref_models()
+            self._refresh_ref_stage()
         except Exception:
             (self.ref_mode, self.ref_models_root, self.ref_table,
-             self.ref_resolution, self.ref_fbx_only,
-             self.editor.base_manifests) = previous
+             self.ref_resolution, self.ref_fbx_only, self.ref_stage,
+             self._ref_stage_glb, self.editor.base_manifests) = previous
             self.editor.manifests = self.editor.base_manifests
             if new_lock is not None:
                 new_lock.release()
@@ -362,10 +371,56 @@ class WebEditor:
             else:
                 self.ref_fbx_only[def_id] = resolved
 
+    def _refresh_ref_stage(self):
+        """Attach the original stage of a reference level (terrain, collision, transforms).
+
+        The extraction is optional: a reference level still opens when it is missing or
+        written in another space, and ``ref_state()["stage"]["reason"]`` says why the
+        terrain is not drawn.  Nothing here touches the placement document.
+        """
+        self.ref_stage = None
+        self._ref_stage_glb = None
+        if not self.ref_mode:
+            return
+        try:
+            directory, reason = ref_stage.resolve_stage_dir(self.ref_stage_dir)
+        except ref_stage.RefStageError as refusal:
+            self.ref_stage = {"available": False, "reason": str(refusal), "dir": None,
+                              "counts": {}, "frame": None, "transforms": None,
+                              "collision": None, "zones": []}
+            return
+        if directory is None:
+            self.ref_stage = {"available": False, "reason": reason, "dir": None,
+                              "counts": {}, "frame": None, "transforms": None,
+                              "collision": None, "zones": []}
+            return
+        try:
+            self.ref_stage = ref_stage.prepare(directory, Path(self.editor.path).parent,
+                                               self.editor.doc or {})
+        except (ref_stage.RefStageError, OSError, ValueError, KeyError) as refusal:
+            self.ref_stage = {"available": False, "reason": str(refusal),
+                              "dir": ref_models.display_path(directory),
+                              "counts": {}, "frame": None, "transforms": None,
+                              "collision": None, "zones": []}
+
+    def ref_stage_glb(self):
+        """The converted terrain GLB for this level (cached until the file changes)."""
+        if not self.ref_mode or not (self.ref_stage or {}).get("available"):
+            raise ref_stage.RefStageError(
+                "the original stage is only served while a _ref_* level with a stage "
+                "extraction is open")
+        if self._ref_stage_glb is None:
+            directory, _reason = ref_stage.resolve_stage_dir(self.ref_stage_dir)
+            if directory is None:
+                raise ref_stage.RefStageError("the stage extraction is gone")
+            self._ref_stage_glb = ref_stage.stage_glb_bytes(directory)
+        return self._ref_stage_glb
+
     def reload_level(self):
         previous_path = Path(self.editor.path) if self.editor.path else None
         result = self.editor.reload()
         self._refresh_ref_models()
+        self._refresh_ref_stage()
         if previous_path is not None and self.lock is not None:
             # The lock is per path; reload never changes it.
             pass
@@ -654,6 +709,7 @@ class WebEditor:
 
     def derived(self):
         doc = self.editor.doc
+        catalog = core.def_catalog(doc)
         props = {}
         for prop in doc.get("props") or []:
             try:
@@ -663,12 +719,17 @@ class WebEditor:
                 low, high = core.world_aabb(position, size, quat)
             except (KeyError, TypeError, ValueError):
                 continue
+            volume_k = core.effective_volume_k(prop, catalog)
             props[prop.get("itemId")] = {
-                "dReq": round(core.absorb_diameter_req(size), 3),
+                # dReq is the original's `Req Pickup Size`: whole millimetres, floored,
+                # priced at V = volumeK * a * b * c.  dReqMm is the integer the comparison
+                # actually uses, so a UI never re-rounds it.
+                "dReq": round(core.absorb_diameter_req(size, volume_k), 3),
+                "dReqMm": core.absorb_diameter_req_mm(size, volume_k),
+                "volumeK": volume_k,
                 "worldAabb": [_round_seq(low), _round_seq(high)],
-                "valueUnits": core.effective_value_units(
-                    prop, core.def_catalog(doc)) or 0,
-                "kind": core.effective_kind(prop, core.def_catalog(doc),
+                "valueUnits": core.effective_value_units(prop, catalog) or 0,
+                "kind": core.effective_kind(prop, catalog,
                                             self.editor.manifests) or "",
             }
         structures = {}
@@ -704,7 +765,11 @@ class WebEditor:
                               for material in manifest.get("materials_declared") or []
                               if isinstance(material, dict)},
                 "valueUnits": (catalog.get(def_id) or {}).get("valueUnits"),
-                "dReq": round(core.absorb_diameter_req(entry["aabb"]), 3),
+                "volumeK": core.effective_volume_k({"def": def_id}, catalog),
+                "dReq": round(core.absorb_diameter_req(
+                    entry["aabb"], core.effective_volume_k({"def": def_id}, catalog)), 3),
+                "dReqMm": core.absorb_diameter_req_mm(
+                    entry["aabb"], core.effective_volume_k({"def": def_id}, catalog)),
                 "kind": (catalog.get(def_id) or {}).get("kind")
                         or entry.get("category") or "",
                 # The viewer only: repo GLBs are centre-pivoted; the reference GLBs are
@@ -833,10 +898,15 @@ class WebEditor:
                 if not self._region_contains(low, high, position, region_box, mode):
                     continue
             volume = size[0] * size[1] * size[2]
+            volume_k = core.effective_volume_k(prop, catalog)
             included.append({
                 "id": item_id,
                 "def": prop.get("def"),
-                "dReq": core.absorb_diameter_req(size),
+                # The original gate quantity: Req floored to whole millimetres, priced at
+                # the prop's own k.  Every count below compares integers, never floats.
+                "dReq": core.absorb_diameter_req(size, volume_k),
+                "dReqMm": core.absorb_diameter_req_mm(size, volume_k),
+                "volumeK": volume_k,
                 "volume": volume,
                 "units": core.effective_value_units(prop, catalog) or 0,
                 "low": low,
@@ -846,12 +916,16 @@ class WebEditor:
         total_volume = sum(entry["volume"] for entry in included)
         total_units = sum(entry["units"] for entry in included)
 
+        ball_mm = core.floor_mm(diameter)
+        max_mm = core.floor_mm(max_diameter)
+        near_mm = core.floor_mm(diameter * 1.2)
+
         def tier_for(entry):
-            if entry["dReq"] > max_diameter + 1e-9:
+            if entry["dReqMm"] > max_mm:
                 return "grey"
-            if entry["dReq"] <= diameter + 1e-9:
+            if entry["dReqMm"] <= ball_mm:
                 return "green"
-            if entry["dReq"] <= diameter * 1.2 + 1e-9:
+            if entry["dReqMm"] <= near_mm:
                 return "yellow"
             return "red"
 
@@ -867,13 +941,16 @@ class WebEditor:
 
         upper = max(max_diameter, max((entry["dReq"] for entry in included), default=0.0))
         bin_count = max(1, int((upper + bin_width - 1e-9) // bin_width))
+        bin_edges_mm = [core.floor_mm(index * bin_width) for index in range(bin_count + 1)]
         bins = []
         for index in range(bin_count):
             low = round(index * bin_width, 6)
             high = round(low + bin_width, 6)
+            low_mm = bin_edges_mm[index]
+            high_mm = bin_edges_mm[index + 1]
             entries = [entry for entry in included
-                       if entry["dReq"] >= low - 1e-9
-                       and (entry["dReq"] < high - 1e-9 or index == bin_count - 1)]
+                       if entry["dReqMm"] >= low_mm
+                       and (entry["dReqMm"] < high_mm or index == bin_count - 1)]
             volume = sum(entry["volume"] for entry in entries)
             units = sum(entry["units"] for entry in entries)
             bins.append({
@@ -887,6 +964,8 @@ class WebEditor:
                 "ids": [entry["id"] for entry in entries],
                 "items": [{"id": entry["id"], "def": entry["def"],
                            "dReq": round(entry["dReq"], 3),
+                           "dReqMm": entry["dReqMm"],
+                           "volumeK": entry["volumeK"],
                            "volume": round(entry["volume"], 6),
                            "units": entry["units"]} for entry in entries],
             })
@@ -896,7 +975,8 @@ class WebEditor:
         point = max(0.0, min(start_diameter, diameter))
         guard = 0
         while point <= diameter + 1e-9 and guard < 1000:
-            absorbable = [entry for entry in included if entry["dReq"] <= point + 1e-9]
+            point_mm = core.floor_mm(point)
+            absorbable = [entry for entry in included if entry["dReqMm"] <= point_mm]
             cumulative.append({
                 "diameter": round(point, 3),
                 "count": len(absorbable),
@@ -907,6 +987,7 @@ class WebEditor:
             guard += 1
 
         dreqs = sorted(entry["dReq"] for entry in included)
+        dreqs_mm = sorted(entry["dReqMm"] for entry in included)
         if dreqs:
             middle = len(dreqs) // 2
             median = (dreqs[middle] if len(dreqs) % 2
@@ -930,7 +1011,12 @@ class WebEditor:
             "tiers": tiers,
             "bins": bins,
             "cumulative": cumulative,
+            "ballMm": ball_mm,
             "dReqMedian": round(median, 4) if median is not None else None,
+            "dReqMedianMm": (dreqs_mm[len(dreqs_mm) // 2] if len(dreqs_mm) % 2
+                             else (dreqs_mm[len(dreqs_mm) // 2 - 1]
+                                   + dreqs_mm[len(dreqs_mm) // 2]) / 2.0)
+                            if dreqs_mm else None,
             "absorbableCountRatio": round(tiers["green"]["count"] / len(included), 6)
                                     if included else 0.0,
             "absorbableVolumeRatio": round(tiers["green"]["volume"] / total_volume, 6)
@@ -988,6 +1074,38 @@ class WebEditor:
             "convertibleDefs": sorted(self.ref_fbx_only)[:40],
             "parentLinkCount": len(links),
             "parentLinks": links,
+            "stage": self.ref_stage_state(),
+        }
+
+    def ref_stage_state(self):
+        """The original-stage banner facts (terrain, collision, true transforms)."""
+        stage = self.ref_stage or {"available": False, "reason": "not inspected"}
+        counts = stage.get("counts") or {}
+        frame = stage.get("frame") or {}
+        return {
+            "available": bool(stage.get("available")),
+            "reason": stage.get("reason"),
+            "dir": stage.get("dir"),
+            "counts": counts,
+            "frame": ({key: frame.get(key) for key in
+                       ("scale", "matched", "exact", "medianError", "confident",
+                        "hypothesis")} if frame else None),
+            "glbBytes": counts.get("stageBytes"),
+            "terrain": {"vertices": counts.get("meshVertices"),
+                        "materials": counts.get("meshMaterials"),
+                        "bytes": counts.get("stageBytes")},
+            "collision": {"aabbs": counts.get("aabbs"),
+                          "triangles": counts.get("triangles")},
+            "instances": {"total": counts.get("instances"),
+                          "matched": counts.get("matched"),
+                          "exact": counts.get("exact"),
+                          "anchors": counts.get("anchors"),
+                          "rotated": counts.get("rotated"),
+                          "scaled": counts.get("scaled"),
+                          "withParent": counts.get("withParent"),
+                          "parentsResolved": counts.get("parentsResolved"),
+                          "withZone": counts.get("withZone")},
+            "zones": len(stage.get("zones") or []),
         }
 
     def state(self):
@@ -1025,6 +1143,7 @@ class WebEditor:
         structures_by_id = {structure.get("id"): structure
                             for structure in doc.get("structures") or []}
         props_by_id = {prop.get("itemId"): prop for prop in doc.get("props") or []}
+        catalog = core.def_catalog(doc)
         props = []
         for prop in doc.get("props") or []:
             try:
@@ -1034,11 +1153,13 @@ class WebEditor:
                 low, high = core.world_aabb(position, size, quat)
             except (KeyError, TypeError, ValueError):
                 continue
-            d_req = core.absorb_diameter_req(size)
+            d_req = core.absorb_diameter_req(size, core.effective_volume_k(prop, catalog))
+            d_req_mm = core.absorb_diameter_req_mm(
+                size, core.effective_volume_k(prop, catalog))
             entry = {"id": prop.get("itemId"), "def": prop.get("def"),
-                     "dReq": round(d_req, 3), "top": round(high[1], 3),
-                     "rise": 0.0, "kind": "food"}
-            if d_req <= diameter + 1e-9:
+                     "dReq": round(d_req, 3), "dReqMm": d_req_mm,
+                     "top": round(high[1], 3), "rise": 0.0, "kind": "food"}
+            if d_req_mm <= core.floor_mm(diameter):
                 props.append(entry)
                 continue
             support = prop.get("support")
@@ -1282,6 +1403,36 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self._json(200, {"ok": True, "stats": result})
                 return
+            if path == "/api/render":
+                # The same renderer the CLI uses: a persistent headless-Chromium
+                # daemon renders the real page.  This endpoint is the HTTP spelling
+                # of `shot.py`; parameters are identical (view/views/layers/w/h/...).
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                try:
+                    from Tools.leveleditor import shot as shot_render
+                except Exception as unexpected:               # noqa: BLE001 - optional
+                    self._json(200, {"ok": False, "code": "render_unavailable",
+                                     "error": "the shot renderer is not importable: %s"
+                                              % unexpected})
+                    return
+                try:
+                    params = shot_render.request_from_query(
+                        query, app.editor.level, levels_dir=app.levels_dir,
+                        state_dir=Path(app.state_dir))
+                    result = shot_render.render_request(
+                        params, directory=Path(app.state_dir),
+                        token=shot_render.load_token(Path(app.state_dir)))
+                except shot_render.ShotError as refusal:
+                    self._json(200, {"ok": False, "error": refusal.message,
+                                     "code": refusal.code, "details": refusal.details})
+                    return
+                except Exception as unexpected:               # noqa: BLE001 - transport
+                    self._json(200, {"ok": False, "error": "%s: %s"
+                                     % (type(unexpected).__name__, unexpected),
+                                     "code": "render_failed"})
+                    return
+                self._json(200, result)
+                return
             if path == "/api/check":
                 with app.mu:
                     response = app.editor.handle({"op": "check", "args": {"report": True}})
@@ -1297,6 +1448,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/models/"):
                 self._serve_model(path[len("/api/models/"):])
+                return
+            if path.startswith("/api/ref-stage/"):
+                self._serve_ref_stage(path[len("/api/ref-stage/"):])
                 return
             if path == "/api/events":
                 self._serve_events()
@@ -1351,6 +1505,69 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "model/gltf-binary")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _serve_ref_stage(self, name):
+        """The original stage of a reference level: terrain GLB, collision, transforms.
+
+        Same rule as ``/api/models``: the bytes exist only while a ``_ref_*`` level with
+        an extraction open, they are never cached by the browser, and the unlicensed
+        origin is on the response so no caller can mistake them for project assets.
+        """
+        app = self.server.app
+        name = urllib.parse.unquote(name)
+        if not app.ref_mode:
+            self._error(404, "the original stage is only available for a _ref_* level")
+            return
+        stage = app.ref_stage or {}
+        if not stage.get("available"):
+            self._error(404, "no stage extraction for this level: %s"
+                        % (stage.get("reason") or "unknown reason"))
+            return
+        if name in ("stage.glb", "terrain.glb"):
+            try:
+                data = app.ref_stage_glb()
+            except ref_stage.RefStageError as refusal:
+                self._error(404, str(refusal))
+                return
+            self._send_bytes(data, "model/gltf-binary")
+            return
+        if name == "contact":
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            try:
+                tolerance = float((query.get("t") or query.get("tolerance")
+                                   or ["0.1"])[0])
+            except ValueError:
+                tolerance = 0.1
+            directory, _reason = ref_stage.resolve_stage_dir(app.ref_stage_dir)
+            try:
+                report = ref_stage.contact_report(directory, stage,
+                                                  app.editor.doc or {},
+                                                  max(0.0, tolerance))
+            except ref_stage.RefStageError as refusal:
+                self._error(404, str(refusal))
+                return
+            body = json.dumps({"ok": True, **report}, ensure_ascii=False).encode("utf-8")
+            self._send_bytes(body, "application/json; charset=utf-8")
+            return
+        if name in ("collision.json", "transforms.json"):
+            payload = stage.get("collision") if name.startswith("collision") else stage.get("transforms")
+            if payload is None:
+                self._error(404, "no %s for this level" % name)
+                return
+            body = json.dumps({"ok": True, "zones": stage.get("zones") or [],
+                               **payload}, ensure_ascii=False).encode("utf-8")
+            self._send_bytes(body, "application/json; charset=utf-8")
+            return
+        self._error(404, "no such stage resource: %s" % name)
+
+    def _send_bytes(self, data, content_type):
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Unlicensed-Reference", "1")
         self.end_headers()
         self.wfile.write(data)
 
@@ -1499,6 +1716,11 @@ def build_parser():
                         help="local mesh root for UNLICENSED reference levels (default: "
                              "$VRC_KATAMARI_REF_MODELS or ~/KatamariRef/models); only used "
                              "for level ids starting with _ref_")
+    parser.add_argument("--ref-stage-dir", default=None,
+                        help="byte-level stage extraction of a reference level (terrain, "
+                             "collision, true instance transforms): default "
+                             "$VRC_KATAMARI_REF_STAGE or ~/KatamariRef/noclip_export/kse_out; "
+                             "only used for level ids starting with _ref_")
     parser.add_argument("--state-dir", default=None,
                         help="token and lock directory (default: XDG state dir)")
     parser.add_argument("--token", default=None,
@@ -1531,7 +1753,7 @@ def main(argv=None):
         token = load_or_create_token(state_dir, args.token)
         app = WebEditor(level_id, levels_dir=args.levels_dir, state_dir=state_dir,
                         lock=not args.no_lock, ref_models_dir=args.ref_models_dir,
-                        placement=args.placement)
+                        placement=args.placement, ref_stage_dir=args.ref_stage_dir)
         httpd = make_http_server(app, args.host, args.port, token=token,
                                  token_path=state_dir / "token", quiet=args.quiet)
     except Exception as error:                               # noqa: BLE001 - startup
@@ -1547,6 +1769,17 @@ def main(argv=None):
               "served only from %s; do not distribute, upload or bake them into the "
               "managed props or Docs/Art."
               % ref_models.display_path(app.ref_models_root), flush=True)
+    if app.ref_mode:
+        stage = app.ref_stage or {}
+        if stage.get("available"):
+            counts = stage.get("counts") or {}
+            print("stage:   %s — %s vertices, %s collision AABBs, %s collision triangles, "
+                  "%s/%s props resolved to an instance, %s parent links, %s zones"
+                  % (stage.get("dir"), counts.get("meshVertices"), counts.get("aabbs"),
+                     counts.get("triangles"), counts.get("matched"), counts.get("props"),
+                     counts.get("parentsResolved"), counts.get("zones")), flush=True)
+        else:
+            print("stage:   none (%s)" % (stage.get("reason") or "not found"), flush=True)
     print("auth:   every /api read and write requires the token (header %s: … or "
           "?token=…); static files and GET /healthz are open" % TOKEN_HEADER,
           flush=True)

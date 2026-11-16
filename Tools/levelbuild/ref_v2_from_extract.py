@@ -277,7 +277,81 @@ def _finish_terrain(vertices, vertex_zones, triangles):
                       "climb": classes.count(2), "wall": classes.count(3)}}
 
 
-def chunk_layout(vertices, indices, limit=CHUNK_TRIANGLES, margin=0.001):
+#: Chunking (2026-11-16).  The runtime's broad phase is one XZ AABB per chunk, tested for all
+#: 17 probes every step, so a chunk must be *spatially compact*: consecutive-in-index chunks of
+#: 512 triangles put the whole courtyard in every box and every probe then pays ~1,950 k_t.
+#: Cutting 3 m XZ tiles and sorting inside a tile by height gives ~96-triangle chunks whose
+#: boxes hold one small piece of the map; ``MaxChunks = 64`` (TerrainMeshMath) is the hard
+#: limit, so the triangle budget leaves ~7 chunks of headroom for future edits.
+#: Measured on the reference level: 3 m tiles / 60 triangles gives 58 chunks (6 below the
+#: runtime's 64 cap, which is the owner's headroom for the reskin) and the best cost that fits
+#: that cap.  A tighter tile stops helping (2 m: 428 vs 467 k_t, within noise) because a chunk
+#: AABB is the union of whole triangles and 89 triangles here are wider than 3 m.
+CHUNK_TILE_M = 3.0
+CHUNK_LIMIT = 60
+#: A chunk never spans a bigger vertical gap than this, so it cannot hold both the floor and
+#: a roof (§ the runtime's prefilter has no max-Y: an upper chunk would stay a candidate).
+CHUNK_Y_GAP_M = 2.0
+
+
+def triangle_bounds(vertices, indices, corner):
+    """``(low, high, centre)`` of one triangle, in triangle units."""
+    points = [vertices[indices[corner * 3 + step]] for step in range(3)]
+    low = [min(point[axis] for point in points) for axis in range(3)]
+    high = [max(point[axis] for point in points) for axis in range(3)]
+    return low, high, [(low[axis] + high[axis]) / 2.0 for axis in range(3)]
+
+
+def spatial_triangle_order(vertices, indices, tile=CHUNK_TILE_M, limit=CHUNK_LIMIT,
+                           gap=CHUNK_Y_GAP_M):
+    """A spatially coherent triangle permutation: ``[triangle_index, ...]``.
+
+    Deterministic: tiles are visited in ``(x, z)`` cell order, triangles inside a tile are
+    sorted by height, and a run is cut early where the height jumps (floor vs roof).  The
+    result is what makes ``triangleRange`` chunks compact *and* contiguous.
+    """
+    total = len(indices) // 3
+    tiles = {}
+    for corner in range(total):
+        _low, _high, centre = triangle_bounds(vertices, indices, corner)
+        tiles.setdefault((math.floor(centre[0] / tile), math.floor(centre[2] / tile)),
+                         []).append((corner, centre))
+    order = []
+    for key in sorted(tiles):
+        members = sorted(tiles[key], key=lambda item: (round(item[1][1], 3),
+                                                       round(item[1][2], 3),
+                                                       round(item[1][0], 3), item[0]))
+        start = 0
+        while start < len(members):
+            stop = min(start + limit, len(members))
+            if stop < len(members):
+                window = range(start + max(1, limit // 2), stop)
+                gaps = [(members[k + 1][1][1] - members[k][1][1], k) for k in window]
+                if gaps:
+                    biggest, split = max(gaps, key=lambda item: item[0])
+                    if biggest > gap:
+                        stop = split + 1
+            order.extend(member[0] for member in members[start:stop])
+            start = stop
+    return order
+
+
+def permute_terrain(terrain, order):
+    """Rewrite ``indices`` and the per-triangle arrays in ``order`` (everything else stays)."""
+    indices = terrain["indices"]
+    permuted = []
+    for corner in order:
+        permuted.extend(indices[corner * 3:corner * 3 + 3])
+    out = dict(terrain)
+    out["indices"] = permuted
+    for key in ("zoneIds", "classes"):
+        values = terrain.get(key)
+        if isinstance(values, list) and len(values) == len(order):
+            out[key] = [values[corner] for corner in order]
+    return out
+
+
+def chunk_layout(vertices, indices, limit=CHUNK_LIMIT, margin=0.001):
     """``(boxes, chunks)``: consecutive ``limit``-triangle runs, one AABB each."""
     total = len(indices) // 3
     boxes = []
@@ -833,7 +907,13 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
     guard_read(directory)
     collisions = ref_stage.read_json(ref_stage.collision_file(directory))
     terrain = terrain_from_collision(collisions)
+    # Spatial (not index-order) chunks: the runtime probes one XZ AABB per chunk.
+    order = spatial_triangle_order(terrain["vertices"], terrain["indices"])
+    terrain = permute_terrain(terrain, order)
     boxes, chunks = chunk_layout(terrain["vertices"], terrain["indices"])
+    chunk_triangles = sorted(chunk["triangleRange"][1] for chunk in chunks)
+    chunk_xz = sorted(math.hypot(box["max"][0] - box["min"][0], box["max"][2] - box["min"][2])
+                      for box in boxes)
     boxes_raw = collision_boxes(collisions)
     zones, zone_names = zone_table(collisions, level_doc)
 
@@ -1016,6 +1096,12 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
         "volumeK": {"min": min(entry["volumeK"] for entry in placements),
                     "max": max(entry["volumeK"] for entry in placements)},
         "expected": document["meta"]["expected"],
+        "chunks": {"count": len(chunks),
+                   "triangles": [chunk_triangles[0], chunk_triangles[len(chunk_triangles) // 2],
+                                 chunk_triangles[-1]],
+                   "xzMedianM": round(chunk_xz[len(chunk_xz) // 2], 3),
+                   "xzMaxM": round(chunk_xz[-1], 3),
+                   "budget": 64, "tileM": CHUNK_TILE_M, "limit": CHUNK_LIMIT},
         "animators": {"count": animators, "source": animator_source},
         "motions": motion_summary,
     }
@@ -1031,7 +1117,7 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
     ball_start = _ball_start(level, terrain, placements)
     return {
         "id": level_id,
-        "scene": level.get("scene") or "StoryMode",
+        "scene": _scene_name(level_id, level),
         "units": "m",
         "convention": "unity-y-up-left-handed-quat-xyzw",
         "ball": {
@@ -1087,6 +1173,20 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
                       "maxDiameterM": n4(max_diameter_m),
                       "volumePenalty": n4(volume_penalty)},
     }
+
+
+#: The importer's menu matches the *active Unity scene name* against ``meta.scene``, so a
+#: reference level must name its own scene (``Assets/_RefUnlicensed/Scenes/RefCancer.unity``),
+#: not the game mode it plays like.
+REFERENCE_SCENES = {"_ref_cancer": "RefCancer"}
+
+
+def _scene_name(level_id, level):
+    """The Unity scene a level is imported into (the menu matches on this)."""
+    known = REFERENCE_SCENES.get(level_id)
+    if known:
+        return known
+    return level.get("scene") or "StoryMode"
 
 
 def _motion_note(summary):

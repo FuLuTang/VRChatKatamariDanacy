@@ -365,9 +365,17 @@ class RealExtractionTests(unittest.TestCase):
         self.assertEqual(behaviours.get("motion", 0), 108)
         self.assertTrue(all("rotationQuat" in prop for prop in document["props"]))
         chunks = terrain["chunks"]
-        self.assertEqual(len(chunks), math.ceil(3455 / build.CHUNK_TRIANGLES))
-        self.assertTrue(all(chunk["triangleRange"][1] <= build.CHUNK_TRIANGLES
+        self.assertEqual(len(chunks), 58)                    # 6 below the runtime's 64
+        self.assertLessEqual(len(chunks), build.placement_v2.MAX_CHUNKS)
+        self.assertTrue(all(chunk["triangleRange"][1] <= build.CHUNK_LIMIT
                             for chunk in chunks))
+        # the chunks tile the triangle buffer exactly once, in index order (the runtime
+        # requires start == expectedStart)
+        expected = 0
+        for chunk in chunks:
+            self.assertEqual(chunk["triangleRange"][0], expected)
+            expected += chunk["triangleRange"][1]
+        self.assertEqual(expected, 3455)
         # every prop's zone is declared, and the terrain's block is one terrain
         zones = {zone["id"] for zone in document["meta"]["zones"]}
         self.assertTrue({prop["zone"] for prop in document["props"]} <= zones)
@@ -375,6 +383,72 @@ class RealExtractionTests(unittest.TestCase):
         lowest = min(point[1] for point in build.read_sidecar(self.sidecar)["vertices"])
         self.assertLess(document["activityArea"]["killPlane"]["y"], document["meta"]["groundY"])
         self.assertLess(document["meta"]["groundY"], lowest)
+
+    def test_chunks_are_spatially_compact(self):
+        """A chunk covers a small piece of the map, never an index-order run across it."""
+        terrain = self.document["terrain"]
+        boxes, chunks = terrain["broadPhase"]["boxes"], terrain["chunks"]
+        self.assertEqual(len(boxes), len(chunks))
+        self.assertEqual([chunk["boxRange"] for chunk in chunks],
+                         [[index, 1] for index in range(len(chunks))])
+        spans = sorted(math.hypot(box["max"][0] - box["min"][0],
+                                  box["max"][2] - box["min"][2]) for box in boxes)
+        self.assertLess(spans[len(spans) // 2], 6.0)          # median chunk: a few metres
+        self.assertLess(spans[-1], 20.0)                      # no scene-wide aggregate box
+        # at most one in ten chunks may be wider than 12 m, and only because it contains one
+        # of the oversized triangles (12.7 m) rather than because of a bad partition
+        self.assertLessEqual(sum(1 for span in spans if span > 12.0), len(spans) // 5)
+
+    def test_a_chunk_does_not_straddle_a_height_gap(self):
+        """Inside a chunk, consecutive triangles in the sort order are within the y gap."""
+        sidecar = build.read_sidecar(self.sidecar)
+        vertices, indices = sidecar["vertices"], sidecar["indices"]
+        for chunk in self.document["terrain"]["chunks"]:
+            start, count = chunk["triangleRange"]
+            heights = []
+            for corner in range(start, start + count):
+                points = [vertices[indices[corner * 3 + step]] for step in range(3)]
+                heights.append(sum(point[1] for point in points) / 3.0)
+            heights.sort()
+            for previous, current in zip(heights, heights[1:]):
+                self.assertLessEqual(current - previous, 6.0,
+                                     "chunk %r spans %.2f m of empty height"
+                                     % (chunk["id"], current - previous))
+
+    def test_the_permutation_keeps_every_triangle(self):
+        """Group-by-group: same triangles, same area, same winding, only the order changed."""
+        stage_dir, reason = build.ref_stage.resolve_stage_dir()
+        self.assertIsNotNone(stage_dir, reason)
+        original = build.terrain_from_collision(
+            build.ref_stage.read_json(build.ref_stage.collision_file(stage_dir)))
+        permuted = build.permute_terrain(
+            original, build.spatial_triangle_order(original["vertices"], original["indices"]))
+        self.assertEqual(len(permuted["indices"]), len(original["indices"]))
+        self.assertEqual(len(permuted["zoneIds"]), 3455)
+        # the per-triangle arrays travel with their triangles: same multiset, new order
+        self.assertEqual(sorted(permuted["zoneIds"]), sorted(original["zoneIds"]))
+        self.assertEqual(sorted(permuted["classes"]), sorted(original["classes"]))
+
+        def triangles(vertices, indices):
+            out = []
+            for corner in range(len(indices) // 3):
+                points = [tuple(vertices[indices[corner * 3 + step]]) for step in range(3)]
+                # canonical key: rotate the corner order so the same triangle always matches
+                rotations = [points, points[1:] + points[:1], points[2:] + points[:2]]
+                key = min(tuple(tuple(round(value, 5) for value in point) for point in item)
+                          for item in rotations)
+                winding = 1 if rotations.index(sorted(rotations)[0]) == 0 else -1
+                area = 0.5 * math.dist(points[0], points[1]) * math.dist(points[0], points[2])
+                out.append((key, round(area, 6)))
+            return sorted(out)
+
+        self.assertEqual(triangles(permuted["vertices"], permuted["indices"]),
+                         triangles(original["vertices"], original["indices"]))
+
+    def test_a_chunk_never_straddles_a_big_height_gap(self):
+        retained = self.document["terrain"]["broadPhase"]["boxes"]
+        for box in retained:
+            self.assertLessEqual(box["max"][1] - box["min"][1], 30.0)
 
     def test_the_reported_numbers_match_the_document(self):
         report = self.report

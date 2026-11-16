@@ -43,6 +43,8 @@ GLOBAL_MAX_DIAMETER_M = 20.0
 #: Triangles per terrain chunk and the Udon single-chunk vertex limit (§3.5).
 CHUNK_TRIANGLES = 512
 CHUNK_VERTICES = 1536
+#: ``TerrainMeshMath.MaxChunks``: a level may declare at most this many streamed chunks.
+MAX_CHUNKS = 64
 
 #: Sidecar magic / version / flags (§8.3) and the u16 index width limit.
 SIDECAR_NAME = "cancer.katerrain"
@@ -698,6 +700,9 @@ def _check_terrain(document, terrain, meta, report, path, given_sidecar, rel_tol
     if not chunks and count > CHUNK_TRIANGLES:
         report.err("[terrain_budget] terrain.chunks: expected chunks of <= %d triangles for "
                    "%d triangles, got none" % (CHUNK_TRIANGLES, count))
+    if len(chunks) > MAX_CHUNKS:
+        report.err("[terrain_chunk_capacity] terrain.chunks: expected <= %d chunks "
+                   "(TerrainMeshMath.MaxChunks), got %d" % (MAX_CHUNKS, len(chunks)))
 
     _check_broadphase(terrain, vertices, indices, count, report)
 

@@ -110,6 +110,14 @@
 - **（r）迁移顺序 A → B → C → D，四步各自独立验收，不许合并。** **A** 只加宽类型、量子不变：`GrowthLedgerMath` 的 `int` 参数与数组、电机的 `unbankedVolumeUnits` / `bankedScoreUnits`、`PickupAbsorbMath.TryAbsorbValueToLedgerGain` 的 out 参数改 `long`，**全部黄金值一个不动、场景不重导入**；**B** `valueUnits` 由 `int[]` 加宽到 `long[]`（`PickupFieldHost` / `PickupFieldSync` / `PickupFieldAuthoringRules` / `PlacementImporter`），数据形状变、语义不变，**所有关卡场景与预制体同批重导入**；**C** 换量子：`valueUnits` → `volumeMm3`，删 `c`（`cubicMetersPerVolumeUnit`）与 `baselineVolumeUnits`（改每关 `startVolumeMm3`），黄金值换成 mm³（`1356` 单位 → `≈5.56e9 mm³`），验收是**直径逐帧一致（1e-6 m）**；**D** 恢复原作数值形式（`V = k·a·b·c`、`penalty` 默认 0.8、门槛向下取整 mm、HUD +0.02 cm、群组连带子件），即 parity 表已拍 `restore` 的那几行。**C 与 D 不许合成一步**：C 错的表现是直径漂移，D 错的表现是成长曲线变。
 - **（r）未验证项（要 Unity，不因本条变成已验证）：** UdonSharp 的 `long[]` 序列化字段（`long` 标量有先例，`long[]` 没有）、`JsonUtility` 与 `SerializedProperty` 对 `long` 的处理、重导入后的场景 YAML diff 大小。任一条不成立就退回「`int[]` 拆高低位」或「`int[]` + milli-unit」兼容档（[影响审计](Research/ContentVolume/FIXED_POINT_VOLUME_IMPACT.md) §4/§11）。本条只定表示与顺序，不改代码、场景或任务依赖；`c` / `valueUnits` 的退役发生在 C 步，**只做 A/B 不会让「unit 本身」这条分歧消失**。
 
+### 堆叠传播：父件被吃 ⇒ 子件坠落，组用单父指针（2026-11-16 拍板）
+
+同 (a)–(r)：这条是**玩法机制**的决定（owner 2026-11-16 拍板），不是测量结果，也不改任务依赖。它把 [道具行为](Design/PickupAbsorb/PROP_BEHAVIOURS.md) §10.4 的「组表 + 每 tick 复检」假设落成 v1 的确定形态，并结掉该文 §10.8 的第 1、2、5 条。
+
+- **（s）父件被吃掉时，子件「掉」，不「带」。** 一件道具被吸收时，挂在它下面的子件**开始坠落**，**不**随之一起进账——v1 不做 `carry`（携带），子件不算父件的一部分。**组关系沿用原作的单父指针**：每件一个 `parent` 索引（-1 = 无父件），形状照抄原作的 `object dump.parentProp.monoControlIndex`（实测 1,970 条子件 / 1,082 个父件 / 单父最多 30 个子件 / 链最深 13 层）；「组」不另存表，由这个数组派生。运行时是**每 tick 浮空复检**：子件被放进定长待复检队列，每个定步 tick 问一次「脚下有没有东西」——没有就落，有就等，落了再把它的子件入队，所以传播是**跨 tick 一层一层往上爬**（1 被吃 → 2 落 → 3 看见 2 还在下面先等 → 几 tick 后 2 落开，3 才落）。**没有支撑者计数、没有「最多 4 个支撑者」的上限、不重建关系**；坠落仍是纯重力落到正下方最高的面、**落定不倾斜**（§10.2 不变）。状态 `resting` / `falling` / `settled` 属于**行为宿主自己的数组**，不塞进 `PickupFieldHost` 的 `Free`/`Attached`/`Hidden` 三态，两套只在「吸收」这一个事件上同步；数据结构只用定长并行数组（UdonSharp 没有 `List` / 字典 / 结构体 / 自定义类）。设计正文见 [PROP_BEHAVIOURS.md §10.9](Design/PickupAbsorb/PROP_BEHAVIOURS.md)，被取代的「支撑计数 + CSR 反向边」原文保留在该文 §5.2–§5.5 / §10.5 / §10.6 供对照。
+- **（s）这是与原作的一处有记录的有意偏离。** 原作游戏内证据（速通/数据挖掘者的机制笔记 `raw_growth_mechanism.txt` 第 4 条，即本文档外的 `/tmp/orig_physics/doc.txt`，非官方文档）说**跟着父件动的子件在父件被吃时一起进账**——那正是 `carry`。我们选「掉下来」的理由：`carry` 要同时满足「所有子件都过体积门」与「不能重复计收益」（[技术契约](02_TECHNICAL_CONTRACTS.md) §6 的红线），是独立一轮的工作量；机制上先让「吃掉底下那件，上面会掉」成立，再谈携带。口径后果：`parity` 审计的「支撑图（`rests_on`）」行按**原作的父指针形式**记 `restore`（本条即其 owner 确认），「群组物件体积」行（连带子件体积入账）**顺延到 v2**，`carry` 键位与词义保留、以后要做的就是多一条传播分支。
+- **（s）未实现、未验证，且今天数据里还写不进去。** 本轮只改 Docs：`parent` 字段**还没**进 `placement_core.PROP_KEYS`，所以现在往 `placement.json` 里写会被校验器静默忽略、被任何一次 rewrite 静默丢弃（PROP_BEHAVIOURS §0.6 的同一类坑），字段与校验器必须同批落地；`rests_on` 的 ≤4 校验也仍然按旧口径跑（不然作者会写出今天跑不了的数据）。**未在 Unity / UdonSharp 里运行过任何东西**。仍然开着的实现问题（浮空测试的精确形式、复检 tick 频率、每 tick 预算、坠落件被球碰到算吃掉还是挡路）逐条列在 PROP_BEHAVIOURS §10.9 末节，owner 未拍板。
+
 ## 需要在正式发布范围/终验前回答
 
 | 事项 | 当前基线与选项（均未选择） | 影响 | 决定时点 |
@@ -119,7 +127,7 @@
 
 ## 可暂缓至项目试玩/相应契约门禁
 
-(a)–(d) 四条已在上节决定；本表只剩下列事项。
+(a)–(s) 十五条已在上节决定（a–d 回合与交分、e–g 地形与指纹、h–l 拾取与吸收口径、m–p 产品与工程口径、q 野餐布局、r 体积表示、s 堆叠传播）；本表只剩下列事项。
 
 | 事项 | 已知与未决边界 | 需要决定的阶段 / 暂缓条件 |
 |---|---|---|

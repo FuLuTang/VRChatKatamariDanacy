@@ -31,7 +31,7 @@
 | 10 倍体积门 | `πD³/6 ≥ 10·V`（`raw_growth_mechanism.txt` §2、`DATAMODEL_NOTES.md` §3） | 同一条（`absorbVolumeRatio = 10`，`PickupAbsorbMath.cs:350`） | 已一致，无分歧（`G07`） | keep | — |
 | 定步频率 | 逻辑 30 Hz 定步 `DoTick(1/30f)`，画面另插值（`/tmp/orig_physics/reroll_datamodel.md` §0，KatamariMods FramerateUncap 的 IL） | 50 Hz（`fixedStepSeconds = 0.02`，`Docs/Design/BallMotor/README.md:295`） | 性能预算 + 现有接触/子步参数按 0.02 s 标定过；切换单独立项 | keep（owner 计划切到 30 Hz，先留 50 Hz） | owner 2026-11-16 |
 | 每关分段回收曲线 | 按尺寸分段线性，按关给：MAS1 5 cm .8 → 15 cm .4 → 20 cm .16（`raw_growth_mechanism.txt` §3 的关卡曲线表） | 全局常数 100% | `none -> restore`（§5.1） | restore | owner 2026-11-15（D2） |
-| 群组物件体积 | 拾取父件时**连带子件体积一起入账**（解释高侧离群点）（`meta/raw_growth_mechanism.txt` §4、`meta/DATAMODEL_NOTES.md`；38 件 `parentProp` 群组） | `group` / `groupId` 只存不读，没有价值聚合（`PickupFieldHost`、`placement_core` 的 `PROP_KEYS`） | `none -> restore`（§10 R9：「移动件/行为字段」行讲的是 `parentProp` 行为字段，不是体积规则） | restore | owner |
+| 群组物件体积 | 拾取父件时**连带子件体积一起入账**（解释高侧离群点）（`meta/raw_growth_mechanism.txt` §4、`meta/DATAMODEL_NOTES.md`；`parentProp` 单父指针实测 **1,970 条子件 / 1,082 个父件**，口径见 `PROP_BEHAVIOURS.md` §10.4，不是旧写的「38 件群组」） | `group` / `groupId` 只存不读，没有价值聚合（`PickupFieldHost`、`placement_core` 的 `PROP_KEYS`） | `none -> restore`（§10 R9：「移动件/行为字段」行讲的是 `parentProp` 行为字段，不是体积规则） | restore（**延后到 v2**：owner 2026-11-16 拍板 v1 子件坠落、不带，见下「支撑图（`rests_on`）」行与 `OPEN_DECISIONS` (s)） | owner 2026-11-16 |
 | 交分缩径 | 增长侧数据只见增不减（`meta/raw_growth_mechanism.txt` §3）；兑换区的缩径在原作研究里只确认「球会变小」、比例与最小兑换体积未公开（C2/C4/C20） | `post = max(start, start + (pre − start) × residual)`，`residual = 0.25`；交分后残量 `carried` 记入且不再计分（`BankShrinkMath`、`round_model.post_bank_diameter`） | §10 R10 判「缺行 + 缺理由」；这里的理由是 owner 2026-11-14 的刻意设计（**not** a parity restore），`0.25` 与 carried 语义都是 PROVISIONAL | keep（PROVISIONAL，待 T21/T39 复核） | owner 2026-11-14（(a)/(b)） |
 | 每玩家账本 | 原作**单机**，没有 per-player 账本（§10 R13） | 每玩家 `confirmed` / `banked` + `(spawnId, generation)` 幂等键（`GrowthLedgerMath`、[Ledger README](../Ledger/README.md)） | 多人是本项目范围（VRChat 世界必须多端可重建账本）；原作单机没有这个需求，属**范围差异**而非行为偏离（§10 R13 的「需补行」） | keep | —（既有技术契约：02_TECHNICAL_CONTRACTS / Ledger README） |
 | 每关起始/目标球径 | 逐关不同：MAS1 5 → 10 cm、Cancer 22.2 → 80 cm、第三星 10 cm（`missions` 表、`/tmp/orig_physics/dump.csv`、`DATAMODEL_NOTES.md` §1） | 一套 0.30 → 1.25 m（`placement.json` / `story_01_bench_size.json`），运行时尚未从关卡 JSON 读（§5.3.2 步骤 1） | `none -> restore` | restore | owner 2026-11-15（D6） |
@@ -41,8 +41,8 @@
 | 骑手/座位尺度 | 小型王子骑在球后滚球，第三人称相机（`meta/DATAMODEL_NOTES.md` 的 `missions.CAMERA_FOV` / `initPos`；[研究核查](../../Research/KatamariBallRules/README.md) C3 王子シップ） | 玩家 avatar 经 `VRCStation` 就座，第一人称眼点在球后上方（`FollowRigMath`、`SeatEyeCompensation`）；avatar 眼高 0.2–5 m 由玩家自选（[RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md) §3） | VR 第一人称：Udon 不能缩放玩家 avatar，只能把座位写成「眼点 − 实测坐姿头高」，所以骑手是真人身高而不是王子比例（`OPEN_DECISIONS` (k) 的硬约束） | keep（proposed，owner 未拍板） | owner |
 | 吸附物位姿 | 吸附瞬间冻结，不缩放、不随球长大外移（专利 US7402104B2 `Mp`） | 同原作（`PickupFieldHost.cs:1064-1074`，`AttachmentMath` 不施加 objectScale） | 已一致，无分歧（`C06`） | keep | — |
 | 区域化尺寸分布 | 每区一套分布：第二区起不再放新小件、小件集中中央（MAS4 60→12→5.5→0%、Cancer ρ=+0.354；`zone_stats`、`/tmp/orig_physics/sheets/`、`reroll_numbers.md` §2） | 只有一个尺寸带、没有区（`C08`/`C10`/`C11`） | `none -> restore` | restore | owner |
-| 移动件/行为字段 | 每型带 `pathSpeedIndex`（5 种）、vault 点（52/107 型）、逐实例 `playAnimNo`、`parentProp`（38 件群组）（`name_props`、`object dump`、`DATAMODEL_NOTES.md`） | 数据无 behaviour 字段、运行时不读（`PROP_BEHAVIOURS.md` §0.5） | 性能预算：行为件按 15 Hz 分摊 ≤800 movers（`PROP_BEHAVIOURS.md` §7） | restore | owner |
-| 支撑图（`rests_on`） | **无公开证据**：专利也不讲堆叠，官方图鉴只有反证（`PROP_BEHAVIOURS.md` §5.1） | `support`/`stackedOn` 只喂校验器；Python 有 CSR 图（`support_graph.py`），运行时没有（`C05`） | 原作未知 → 只能按我方设计补运行时支撑检查 | undecided | owner |
+| 移动件/行为字段 | 每型带 `pathSpeedIndex`（**11 个取值**，`2` 为缺省 80.2%，余下 0/1/3–10 共 338 型，另 1 个坏值 `t`）、vault 点（0/2/3/8 个：805/261/650/1 型）、逐实例 `playAnimNo`（4 个取值，9.7% 实例带动画）、`parentProp` 单父指针（**1,970 条子件 / 1,082 个父件** / 单父最多 30 子件 / 链最深 **13 层**，如 Make Cygnus 的 13 蛋塔）（`raw_reroll_dump__name_props_0x30.tsv`、`raw_reroll_dump__object_dump.tsv`、`DATAMODEL_NOTES.md`；实测计数见 `PROP_BEHAVIOURS.md` §10.1 表 1/表 2） | 数据无 behaviour 字段、运行时不读（`PROP_BEHAVIOURS.md` §0.5） | 性能预算：行为件按 15 Hz 分摊 ≤800 movers（`PROP_BEHAVIOURS.md` §7） | restore | owner |
+| 支撑图（`rests_on`） | **堆叠逻辑无公开证据**：专利也不讲堆叠，官方图鉴只有反证（`PROP_BEHAVIOURS.md` §5.1）；但原作数据侧有**单父指针** `parentProp.monoControlIndex`（1,970 条子件 / 1,082 个父件 / 链深 13 层，§10.4）——那就是原作表达「组」的唯一形式 | `support`/`stackedOn` 只喂校验器；Python 有 CSR 支撑图（`support_graph.py`，活计数 + 上限 4）；运行时没有（`C05`） | 原作**逻辑**未知（拿得到数据、拿不到逻辑，§10.4/P18）；按原作的父指针形状做，不做支撑计数 | restore（**用原作的父指针形式**；owner 2026-11-16 确认「子件坠落、不带」，v1 设计见 `PROP_BEHAVIOURS.md` §10.9 / `OPEN_DECISIONS` (s)） | owner 2026-11-16 |
 
 > 细节不在这里重复：`k` 系数与三处同源见 §5.3.2；D1/D2 落地后哪几行会变见 §5.1；连续体积的 7 个受影响点见 §5.2；21 档核心的观感论证见 `VISUAL_GROWTH_AUDIT.md` §3b/§5；行为与支撑见 `PROP_BEHAVIOURS.md`。本表只负责「承认分歧 + 定方向」。
 
@@ -164,8 +164,8 @@
 | `C01` 实例数 | 一关摆多少件 | 654（MAS1；单关 523–3955，F6） | 127 | 件 | 差 5.2×；"吃两下就变大"最直接的物理解释 |
 | `C02` 类型数 | 多少种 | 107（单关 107–565） | 44 | 种 | 差 2.4×；原作靠种类密度维持"每步都有新东西" |
 | `C03` 内容体积 / 满径球体积 | 内容够不够 | 2.46×（D_req≤30 cm 的 598 件 = 0.0348 m³ / 0.0141 m³） | 0.451×（2.517 m³ / 5.575 m³） | × | 原作超饱和，我们**不够**：即使按"k·bbox"口径（原作 `Volume`）重算也走不到 2.20（`repricing_proposal.md` §0） |
-| `C04` 逐物件行为字段 | 数据里有没有行为 | `pathSpeedIndex` 5 种取值；52/107 型有 vault 点；逐实例 `playAnimNo`、`parentProp`（38 件群组）（F8） | 数据无 behaviour 字段，运行时不读（`PROP_BEHAVIOURS.md` §0.5） | — | **缺机制**：内容能搬，行为不能搬 |
-| `C05` 堆叠支撑图 | 摞着的东西怎么倒 | **无公开证据**（`PROP_BEHAVIOURS.md` §5.1：专利也不讲堆叠） | `support/stackedOn` 只喂校验器；Python 有 CSR 图（`support_graph.py`），运行时没有 | — | 两边都不是"已有机制"；我们连运行时都缺 |
+| `C04` 逐物件行为字段 | 数据里有没有行为 | `pathSpeedIndex` **11 个取值**（`2` 为缺省 80.2%，含 1 个坏值 `t`）；vault 点 0/2/3/8 个（805/261/650/1 型）；逐实例 `playAnimNo`（9.7% 实例带动画）、`parentProp` 单父指针（1,970 条子件 / 1,082 个父件 / 深 13 层）（F8；计数见 `PROP_BEHAVIOURS.md` §10.1） | 数据无 behaviour 字段，运行时不读（`PROP_BEHAVIOURS.md` §0.5） | — | **缺机制**：内容能搬，行为不能搬 |
+| `C05` 堆叠支撑图 | 摞着的东西怎么倒 | **堆叠逻辑无公开证据**（`PROP_BEHAVIOURS.md` §5.1：专利也不讲堆叠）；数据侧只有父指针（1,970/1,082，深 13 层） | `support/stackedOn` 只喂校验器；Python 有 CSR 图（`support_graph.py`），运行时没有 | — | 两边都不是"已有机制"；我们连运行时都缺 |
 | `C06` 吸附物是否放大 | 粘上去后跟不跟球长大 | 不缩放，保持吸附瞬间位姿（专利） | 不缩放，只缩放 `CoreMesh`（`BallView.cs:19-22`） | — | **一致**；且都允许互相穿插 |
 | `C08` 区域最小件/入场球径 | 入场时最小件相对球多大 | 0.30（MAS1）/ 0.329（Cancer）；32 区域中位 0.277 | 0.108（story_01）/ 0.80（`_ref_mas1`） | × | 原作最小件≈球的 1/4–1/3；story_01 只有 0.11，`_ref_mas1` 的 0.8 是因为 5 cm 球配 4 cm 硬币 |
 | `C09` 入场可吃占比 | 进场立刻能吃的比例 | MAS1 59%、Cancer 35%；32 区域 12–76%、典型 ~26% | 67%（story_01）/ 见对照节（`_ref_mas1`） | — | 两边都"进场有得吃"；原作按区下降，我们没有区 |
@@ -214,7 +214,7 @@
 | H12 | 原作速度/加速度/坡度常数可以对齐 | **UNKNOWN（不可）** | F9：无公开数值 | `M01`/`M02`/`M06` |
 | H13 | 原作是否按尺寸阈值换区 | **UNKNOWN** | `swirls` 是"播特效的尺寸点"，真正换区机制未在公开源码出现（`reroll_datamodel.md` §4） | `L01` |
 | H14 | 时限单位 | **UNKNOWN** | F10 | `L02` |
-| H15 | 原作堆叠的规则 | **UNKNOWN** | `PROP_BEHAVIOURS.md` §5.1 | `C05` |
+| H15 | 原作堆叠的规则 | **UNKNOWN**（数据侧只有父指针，逻辑未公开） | `PROP_BEHAVIOURS.md` §5.1、§10.4（P18：拿得到数据、拿不到逻辑） | `C05` |
 
 ---
 
@@ -248,7 +248,7 @@
 | **1** | 把 MAS1 的 652 件真实坐标转成 `placement.json`（`ref-level-builder` 在做），跑我们的校验器 | 数据（已到手）+ 我们的 `placement_core` | 0.5 天，**不需要 Unity** | 产出"5 cm 球下哪些件被拒绝/超容量"的清单（`S03` 的具体受害件） |
 | **2** | 成长：`ΔV = 0.8·V_box`、`c` 0.0041→0.0005、取消 1 u 量化 | 代码（电机 + 账本）+ 数据（44 个 def 重定价） | 1–2 天 | `G06`、`G10`、`C03`；`growth_audit` 方案 A+C 已算过数值 |
 | **3** | 尺寸档/换区阈值表进关卡数据（先只做"读数 + 播报"，不做特效） | 数据 schema + 一次校验器改动 | 1 天 | `L01` 0→1 |
-| **4** | 行为字段 + 支撑图运行时（CSR + 活计数 + 坠落） | `PROP_BEHAVIOURS.md` §5.3 的数据形状 + `placement_core` 同批改 | 3–5 天 | `C04`、`C05` |
+| **4** | 行为字段 + 堆叠运行时（`parent` 父指针 + 每 tick 浮空复检 + 坠落） | `PROP_BEHAVIOURS.md` §10.9 的数据形状 + `placement_core` 同批改 | 3–5 天 | `C04`、`C05` |
 | **5** | 埋没 cull（整 AABB 在核心内 → 关渲染） | `BallView` + `PickupFieldHost` 一处 | 0.5 天 | `C07` |
 | **6** | 5 cm 球实跑 MAS1 灰盒（Unity） | `PhysicsTestField` 一套 cell + 球径 preset | 2 天 + Unity 操作 | `T01`/`T03`/`M0x` 的手感与每步成本；`S03` 从"算得出"变"量得到" |
 | **7** | 相机 37° 与 HUD cm 显示 | 场景 + HUD 一处 | 0.5 天 | `L03`、`L04` |
@@ -406,7 +406,7 @@
 1. **旋转与缩放**：dump 没有（F7）。→ 重建必须自定朝向；`ref-level-builder` 的 placement 里应写"朝向由我们选"。
 2. **area≥1 的坐标**：13/32 个 area 全零。→ 多 area 关只能做 B 档审计。
 3. **物理常数**：无公开来源（F9）。→ `M01`/`M02`/`M06` 永远是"原作未知"；除非用户愿意在自己机器上跑一次运行时 hook（本轮禁区）。
-4. **`pathSpeedIndex` / vault 点的语义**：字段存在、取值存在，但"index 2 是什么意思"未知。→ `C04` 只报"有这些字段"，不报"有 574 个移动件"。
+4. **`pathSpeedIndex` / vault 点的语义**：字段存在、取值存在（`pathSpeedIndex` 11 个取值，`2` 占 80.2%，含 1 个坏值 `t`；vault 点 0/2/3/8 个），但"index 2 是什么意思"未知——只能判它是**速度档**（`[推断]`，原版没给单位）。→ `C04` 只报"有这些字段"，不报"有 574 个移动件"。
 5. **随机位置组**：`position=0` 的行属于 `randomLocGroup + spawn chance(x/256)` 表（202 行），本语料未展开。→ 多 area 关的实例数会低估。
 6. **`Req Pickup Size` 的 mm 取整**：原作门槛取整，我们的 `D_req` 不取整；语料里存原值（mm），比较时用浮点。差 <1 mm。
 

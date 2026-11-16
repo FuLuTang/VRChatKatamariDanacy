@@ -72,7 +72,7 @@ namespace VRCKatamari.Story
     /// <list type="bullet">
     /// <item><description><b>v2 + useObbBake</b>: eight-corner OBB per collider, through
     /// <c>AddObb</c>. Surface ids stay in the v1 space (box <c>1+i</c>, ramp
-    /// <c>10+i</c>), so a diagnostic reading an id still knows what it points at.</description></item>
+    /// <c>SupportSurfaceMath.FirstRampSurfaceId + i</c>), so a diagnostic reading an id still knows what it points at.</description></item>
     /// <item><description><b>v2 + !useObbBake</b>: the rollback path - <c>AddBox</c>/<c>AddRamp</c>
     /// only, and the motor's mirror supplies axis-aligned OBBs (§7.1).</description></item>
     /// <item><description><b>v1</b>: <c>AddBox</c>/<c>AddRamp</c> only, exactly as before
@@ -597,7 +597,7 @@ namespace VRCKatamari.Story
 
         /// <summary>
         /// Registers one ramp (or one curved-ramp slab segment) as a solid slab OBB under the
-        /// v1 ramp surface id (<c>10 + i</c>).
+        /// v1 ramp surface id (<c>SupportSurfaceMath.FirstRampSurfaceId + i</c>).
         /// </summary>
         /// <remarks>
         /// The collider IS the board: its local +Y is the walking-face normal and its top

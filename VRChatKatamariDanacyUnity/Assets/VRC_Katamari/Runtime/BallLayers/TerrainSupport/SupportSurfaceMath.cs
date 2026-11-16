@@ -54,13 +54,13 @@ namespace VRCKatamari.BallLayers
     /// </para>
     /// <para>
     /// The step decision. For a static box it is computed ONCE per refresh by the
-    /// motor's sweep mask (<see cref="IsStepWithinLimit"/> with
-    /// <see cref="SupportSurfaceMath.SupportReferenceHeight"/>) and this query reads that
+    /// motor's sweep mask (<see cref="IsStepWithinLimit"/>) and this query reads that
     /// mask; the sweep exclusion and the support candidacy are therefore the same bit,
     /// and no reference drift between the two call sites can reopen the C09 ghost step.
-    /// For the ground, ramps and props - none of which has a sweep entry - the query
-    /// itself calls the same one predicate. The ground is always the fallback even when
-    /// it is outside the band, so a query never reports "no support".
+    /// For the ground, ramps, props and the terrain mesh - none of which has a sweep
+    /// entry - the query itself calls the same one predicate. A query therefore never
+    /// reports "no support": where the mesh answers under the ball the mesh is the
+    /// answer, and where it does not the ground plane is.
     /// </para>
     /// <para>
     /// UdonSharp: static methods, caller-owned arrays, no allocation, no
@@ -80,7 +80,7 @@ namespace VRCKatamari.BallLayers
         /// <summary>
         /// The first surface id owned by a support prop: prop slot <c>i</c> is
         /// <c>FirstPropSurfaceId + i</c>. The gap leaves the static box range
-        /// (<c>1 + i</c>, at most eight) unambiguous and lets a reader tell "a prop
+        /// (<c>1 + i</c>, 1..64) unambiguous and lets a reader tell "a prop
         /// supports me" from "a box supports me" by id alone. It is a diagnostic
         /// and a switch key, not a stable prop identity: the host sorts its
         /// selected rows by prop index, so the slot is stable while membership is,
@@ -98,13 +98,18 @@ namespace VRCKatamari.BallLayers
 
         /// <summary>
         /// The first surface id owned by a static ramp: ramp slot <c>i</c> is
-        /// <c>FirstRampSurfaceId + i</c> (10..13). The gap is deliberate: the static
-        /// box range is <c>1 + i</c> (1..8) and the prop range starts at
-        /// <see cref="FirstPropSurfaceId"/> (100), so a ramp id can never be mistaken
-        /// for either. Like a prop slot it is a diagnostic and a switch key, not a
-        /// durable identity; registration order is fixed for the scene's lifetime.
+        /// <c>FirstRampSurfaceId + i</c> (500..503). Every range is disjoint and each is
+        /// documented at its mint: ground 0, static box <c>1 + i</c> (1..64), prop
+        /// <see cref="FirstPropSurfaceId"/> + i (100..105), ramp 500 + i, boundary plane
+        /// (<see cref="VRCKatamari.BallContact.ContactCodes.PlaneSurfaceId"/>,
+        /// 1000..1007) and terrain 2000 +.
+        /// It used to be 10 + i, which collided with box <c>1 + i</c> once the static box
+        /// table grew past 9 (2026-11-16: 8 -> 64); 1000 + i was the first choice and is
+        /// already taken by the v2 solver's boundary planes. Like a prop slot it is a
+        /// diagnostic and a switch key, not a durable identity; registration order is fixed
+        /// for the scene's lifetime.
         /// </summary>
-        public const int FirstRampSurfaceId = 10;
+        public const int FirstRampSurfaceId = 500;
 
         /// <summary>
         /// How many static ramps one ball can have registered (4). This is the ONE
@@ -200,22 +205,24 @@ namespace VRCKatamari.BallLayers
         }
 
         /// <summary>
-        /// The support reference height for one step: the higher of the surface the
-        /// ball was on and the ball's own bottom.
+        /// The higher of two heights (a total function: a non-finite second argument is
+        /// ignored).
         /// </summary>
         /// <remarks>
         /// <para>
-        /// This is the ONE reference the sweep mask and the support table both compare
-        /// a box top against. The band form "top &lt;= reference + limit" alone would
-        /// exclude a surface the ball is falling ONTO (above the old support but below
-        /// the ball), so the ball's bottom joins in; and because the mask reads the same
-        /// expression, "the ball is already above the top" needs no separate
-        /// unconditional rule: the reference is then the ball's own bottom, so the rise
-        /// is zero or negative.
+        /// POLICY CHANGE 2026-11-16: this used to be the band reference the sweep mask and
+        /// the support table both compared against - "the previous support or the ball's
+        /// bottom, whichever is higher". The terrain run showed what a stale anchor does: a
+        /// support that is higher than the ball's own bottom widens the band upward and lets
+        /// a surface the ball is falling past be adopted, and a support below the ball (an
+        /// arena plane at -1000) makes the mesh look unreachable. The band is now anchored on
+        /// the BALL'S BOTTOM alone (<c>LEVEL_FORMAT_V2</c> §1.3 rule 3, §3.6), and the
+        /// motor passes that number. The function stays as the plain max utility the C09
+        /// post-mortem's "already above the top" argument was written in terms of.
         /// </para>
         /// <para>
-        /// A non-finite <paramref name="ballBottomM"/> is ignored rather than poisoning
-        /// the step: the surface height is the conservative answer.
+        /// A non-finite <paramref name="ballBottomM"/> is ignored rather than poisoning the
+        /// caller: the surface height is the conservative answer.
         /// </para>
         /// </remarks>
         public static float SupportReferenceHeight(float supportHeightM, float ballBottomM)
@@ -231,11 +238,12 @@ namespace VRCKatamari.BallLayers
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The motor's sweep mask calls THIS function per box, with
-        /// <see cref="SupportReferenceHeight"/> as the reference, and stores the answer in
-        /// <c>boxIsSteppable</c>; <see cref="TryResolveSupport"/> reads that mask for the
-        /// static boxes instead of calling this again. The comparison is one subtraction
-        /// and one inclusive bound (<c>top - reference &lt;= stepLimit</c>). A band written
+        /// The motor's sweep mask calls THIS function per box, with the BALL'S BOTTOM as
+        /// the reference, and stores the answer in <c>boxIsSteppable</c>;
+        /// <see cref="TryResolveSupport"/> reads that mask for the static boxes instead of
+        /// calling this again, and the terrain query passes the same ball bottom. The
+        /// comparison is one subtraction and one inclusive bound
+        /// (<c>top - reference &lt;= stepLimit</c>). A band written
         /// as <c>top &lt;= reference + stepLimit</c> is not bit-identical to it, and that
         /// second form was half of the 2026-11-15 C09 divergence.
         /// </para>
@@ -668,9 +676,8 @@ namespace VRCKatamari.BallLayers
         /// <para>
         /// <paramref name="alreadyAbove"/> (the ball's bottom is at or above the prop
         /// top) makes the role support unconditionally. That branch cannot disagree with
-        /// the support table: the motor's reference is
-        /// <see cref="SupportReferenceHeight"/>, so when the ball's bottom is at or above
-        /// the top the reference is at least the top and the table's rise is at most zero.
+        /// the support table: the table's reference is the ball's own bottom, so when the
+        /// bottom is at or above the top the rise is at most zero.
         /// It is kept as an explicit branch because this layer is given the host's
         /// already-above answer rather than the ball's bottom.
         /// </para>
@@ -711,9 +718,16 @@ namespace VRCKatamari.BallLayers
         }
 
         /// <summary>True when <paramref name="surfaceId"/> names a prop top.</summary>
+        /// <remarks>
+        /// A BOUNDED range (100..105), not "100 and above": the ramp (500+), boundary-plane
+        /// (1000+) and terrain (2000+) ranges live above it, and an open-ended test reported
+        /// a terrain or ramp support as "the ball is standing on a prop" in
+        /// <c>IsSupportingAProp</c>.
+        /// </remarks>
         public static bool IsPropSurfaceId(int surfaceId)
         {
-            return surfaceId >= FirstPropSurfaceId;
+            return surfaceId >= FirstPropSurfaceId &&
+                surfaceId < FirstPropSurfaceId + MaxSupportPropCount;
         }
 
         /// <summary>Prop index inside that surface id, or -1 when it is not one.</summary>
@@ -729,19 +743,31 @@ namespace VRCKatamari.BallLayers
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Selection order is deterministic: the ground is the initial winner and a
-        /// box, ramp or prop replaces it only when strictly higher, so ties keep the
-        /// ground and, among equals, the earlier reader (boxes, then ramps, then props,
-        /// each in registration order). A box therefore wins a tie against a ramp and a
-        /// ramp wins a tie against a prop, which is the stable scene-before-per-scan
-        /// order. Two identical calls return identical values; a test pins that.
+        /// ONE selection for every source. The candidates are the terrain mesh's answer
+        /// (<paramref name="terrainSurfaceId"/> &gt;= 0: a height under the probe's XZ plus
+        /// that triangle's normal), the static boxes whose sweep-mask entry is true, the
+        /// static ramps, the absorb-proof prop tops, and - only where the mesh does not
+        /// answer - the analytic ground plane. Selection order is deterministic: the
+        /// starting surface is the terrain when it answers and the ground otherwise, and a
+        /// box, ramp or prop replaces it only when strictly higher, so ties keep the earlier
+        /// reader (terrain, then boxes, then ramps, then props, each in registration order).
+        /// Two identical calls return identical values; a test pins that.
         /// </para>
         /// <para>
-        /// <paramref name="referenceSupportHeightM"/> is the height the caller compares
-        /// against for the surfaces that have no mask: <see cref="SupportReferenceHeight"/>
-        /// of the previous support and the ball's own bottom. It never selects.
-        /// <paramref name="stepLimitM"/> is <see cref="TryStepHeightLimit"/>'s result for
-        /// this step's size.
+        /// THE GROUND IS NOT A COMPETITOR WHERE THE MESH ANSWERS. That is the whole fix for
+        /// the 2026-11-16 terrain run: a copied arena plane at y=0 held a 0.30 m ball at
+        /// y=0.15 over a 1 m gully because the mesh triangle at -1 could only replace it by
+        /// being HIGHER. A plane is now the answer only when the mesh has nothing under the
+        /// ball (a seam hole, or a level with no terrain), which is its documented fallback
+        /// role (ORIGINAL_TERRAIN §6.5) - it never holds the ball above terrain.
+        /// </para>
+        /// <para>
+        /// <paramref name="referenceSupportHeightM"/> is the height the band is measured
+        /// FROM, and it is the BALL'S BOTTOM, not the previous support and not the ground
+        /// plane (<c>LEVEL_FORMAT_V2</c> §1.3 rule 3, §3.6). Upward the band is
+        /// <paramref name="stepLimitM"/> (the step gate); downward it has no bound at all, so
+        /// a surface any distance below the ball is a candidate and a real fall is the
+        /// level's kill plane's decision. It never selects.
         /// </para>
         /// <para>
         /// <paramref name="boxIsSteppable"/> is the motor's step mask, indexed like the
@@ -786,9 +812,10 @@ namespace VRCKatamari.BallLayers
         /// diagnostic only.
         /// </para>
         /// <para>
-        /// Returns false for non-finite input, a non-upward ground normal, or a
-        /// box/prop with inverted/non-finite bounds, and writes nothing that could
-        /// be mistaken for a surface.
+        /// Returns false for non-finite input, a non-upward ground normal, a box/prop with
+        /// inverted/non-finite bounds, or a terrain candidate whose id is set but whose
+        /// height/normal is not a finite upward plane, and writes nothing that could be
+        /// mistaken for a surface.
         /// </para>
         /// </remarks>
         public static bool TryResolveSupport(Vector3 probePoint, float referenceSupportHeightM,
@@ -797,6 +824,7 @@ namespace VRCKatamari.BallLayers
             Vector3[] rampCenters, Vector3[] rampNormals, Vector3[] rampRights,
             float[] rampHalfWidths, float[] rampHalfRuns, int rampCount,
             Vector3[] propMinima, Vector3[] propMaxima, int propCount,
+            int terrainSurfaceId, float terrainHeightM, Vector3 terrainNormal,
             out int surfaceId, out Vector3 surfacePoint, out Vector3 surfaceNormal,
             out float surfaceHeightM, out int candidateCount)
         {
@@ -893,17 +921,53 @@ namespace VRCKatamari.BallLayers
                 probePoint.z - unitNormal.z * toPlane);
             if (!KatamariMath.IsFiniteVector(groundPoint)) return false;
 
-            int selectedId = GroundSurfaceId;
-            float selectedHeight = groundHeight;
-            Vector3 selectedPoint = groundPoint;
-            Vector3 selectedNormal = unitNormal;
+            int selectedId;
+            float selectedHeight;
+            Vector3 selectedPoint;
+            Vector3 selectedNormal;
+            int activeCount;
 
-            // The ground, ramps and props have no sweep mask, so they use the one band
-            // predicate (IsStepWithinLimit) with the caller's reference. Writing the band
-            // as `top <= reference + limit` instead is not bit-identical and was half of
-            // the C09 ghost-step bug.
-            int activeCount = IsStepWithinLimit(groundHeight, referenceSupportHeightM,
-                stepLimitM) ? 1 : 0;
+            // The terrain candidate: the mesh's own answer for the ball's footprint
+            // (TerrainMeshMath.TrySelectSupport) as one height under the ball's XZ plus that
+            // triangle's face normal. A negative id means "the mesh did not answer here", the
+            // same convention every surface id uses.
+            Vector3 terrainUnitNormal = Vector3.zero;
+            bool terrainSelected = terrainSurfaceId >= 0;
+            if (terrainSelected)
+            {
+                if (!KatamariMath.IsFiniteFloat(terrainHeightM)) return false;
+                if (!KatamariMath.IsFiniteVector(terrainNormal)) return false;
+                float terrainNormalLength;
+                if (!KatamariMath.TryNormalize(terrainNormal, out terrainUnitNormal,
+                    out terrainNormalLength)) return false;
+                // A normal that is not upward cannot answer "what is the height under the
+                // probe"; the mesh already refuses those, this is the second gate.
+                if (terrainUnitNormal.y <= 0f) return false;
+                selectedId = terrainSurfaceId;
+                selectedHeight = terrainHeightM;
+                selectedPoint = new Vector3(probePoint.x, terrainHeightM, probePoint.z);
+                selectedNormal = terrainUnitNormal;
+                activeCount = 1;
+            }
+            else
+            {
+                // The analytic ground plane is the "no terrain here" answer: the fallback
+                // under a seam hole, and the only surface on a level with no mesh. It is NOT
+                // a competitor against a mesh triangle, above OR below it: where the mesh
+                // answers, the plane is out of the competition entirely, which is the
+                // "there is no support plane where there is terrain" rule (LEVEL_FORMAT_V2
+                // §1.3, §13.5; ORIGINAL_TERRAIN §6.5 keeps the plane as the seam net).
+                selectedId = GroundSurfaceId;
+                selectedHeight = groundHeight;
+                selectedPoint = groundPoint;
+                selectedNormal = unitNormal;
+                // The ground, ramps and props have no sweep mask, so they use the one band
+                // predicate (IsStepWithinLimit) with the caller's reference. Writing the band
+                // as `top <= reference + limit` instead is not bit-identical and was half of
+                // the C09 ghost-step bug.
+                activeCount = IsStepWithinLimit(groundHeight, referenceSupportHeightM,
+                    stepLimitM) ? 1 : 0;
+            }
             // Static boxes do NOT re-run the step comparison here. boxIsSteppable is the
             // motor's mask, produced once per refresh by IsStepWithinLimit with the same
             // reference the sweep exclusion used, and this query reads that conclusion.

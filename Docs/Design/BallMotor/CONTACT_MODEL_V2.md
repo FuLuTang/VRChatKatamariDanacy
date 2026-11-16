@@ -1441,14 +1441,14 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 
 | getter | v1 | v2 |
 |---|---|---|
-| `GetSupportSurfaceId` | 0 / 1+i / 10+i / 100+i | 同上（地面 0、盒 1+i、坡 10+i；`AddObb` 用调用方给的 id） |
+| `GetSupportSurfaceId` | 0 / 1+i / 500+i / 100+i / 2000+ | 同上（地面 0、盒 1+i（1..64）、坡 500+i、道具 100+i、地形 2000+；`AddObb` 用调用方给的 id） |
 | `GetSupportKind` | 0/1/2/3/−1 | 同上 **+ 4 = 爬升接触**、**5 = 只有针尖撑着** |
 | `GetSupportSurfaceHeightWorldM` | 选中面在球心 XZ 的高度 | 同一公式；针尖支撑时给出针尖处的切平面高度（§2.5）；**爬升时没有地板可报**，返回球的底部（`center.y − r`），使 `support_gap` 读 0（首跑把墙接触点的 y 当高度，读成 `−r`，见 §7.7） |
 | `GetSupportNormalWorld` | 选中面法线 | 支撑法线；爬升时为爬升接触法线；无支撑时保留上一次 |
 | `GetStepHeightLimitWorldM` | 0.25·D，参与物理 | 仍返回 0.25·D，**只作诊断**（每步刷新） |
 | `IsFalling` | 丢失支撑后进入重力 | = 无支撑接触且不在爬升 |
 | `GetSupportSurfaceCount` | 带内面数 | 当步接触条数 |
-| `GetContactSurfaceId` / `GetContactRole` | — | 同一条接触的两种标签，用来区分静态与道具（**没有**道具专用分支）：地面 0 / 静态盒 1..8 / 坡 10..13 / 道具 100..111 / 边界平面 1000+i；role 0 盒、1 坡、2 支撑道具、3 挡路。`GetDominantContactSurfaceId` 返回原样 id，读者按区间判类 |
+| `GetContactSurfaceId` / `GetContactRole` | — | 同一条接触的两种标签，用来区分静态与道具（**没有**道具专用分支）：地面 0 / 静态盒 1..64 / 坡 500..503 / 道具 100..111 / 边界平面 1000+i / 地形 2000+；role 0 盒、1 坡、2 支撑道具、3 挡路。`GetDominantContactSurfaceId` 返回原样 id，读者按区间判类 |
 | `GetNearObbCount` | — | 静态 + 道具合并后的近集条数（≤24）；`GetNearObbDropped` 是**两块共享预算**下丢掉的条数 |
 | `GetCollisionRadiusWorldM` | 扫掠半径 | = `r_phys`，接触半径 |
 | `GetSemanticDiameterWorldM` | 视觉/相机/stepLimit/吸收门 | 不变（§4A.5 的三形状拆分不在 S3） |
@@ -1469,7 +1469,7 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 5. **`GetLastStepMicros` 是粗测**：Udon 没有高精度时钟（无 `Stopwatch`），`Time.time` 每帧才变；一帧跑多个固定步时只有第一个非零，读数只能当“整帧上界”。要真测请用 profiler。
 6. **`contactIncomplete` 是锁存 + 一条日志，不冻结球**：§5.4 的原文就是“仍用 24 条，标记不完整，判据失败”。
 7. **没有 dash**（§3.8）、**没有 `GetFixedStepCount`**（§6.4 列的是 P4 请求，S3 未加）。
-8. **AddBox 容量仍是 8**：现有场景（≤8 盒 + ≤4 坡）可以直接开 flag；地图 0 的 118 条要等 S4 把宿主改成 `AddObb`。`AddRamp` 的 45° 作者门仍在（S4 改 warning），更陡的坡本轮只能用 `AddObb` 直接登记。
+8. **AddBox 容量 64**（2026-11-16 由 8 提到 64）：现有场景（≤64 盒 + ≤4 坡）可以直接开 flag；地图 0 的 118 条要等 S4 把宿主改成 `AddObb`。`AddRamp` 的 45° 作者门仍在（S4 改 warning），更陡的坡本轮只能用 `AddObb` 直接登记。
 9. **挡路道具 / 支撑道具：缺口已填（S4b 宿主 + 本轮 `SetPropObbs`）**。宿主在它的 20 Hz 扫描里把近邻道具作为真 OBB 交给 `SetPropObbs`（12 槽，surface id 100+i，role 2/3），它们与静态盒走**同一份**接触/分类/推挤，窗口里按距离与静态混排。**v1 的 `SetBlockingBoxes` / `SetSupportProps` 没有自动转换**（它们仍只喂 v1 的 sweep/支撑表，flag 关时行为逐字不变）；`TeleportTo`/`ClearObstacles` 清道具块，下一次宿主扫描重登记，与 v1 清挡路盒的策略一致。§7.6.5 记的宿主侧实现已按这个签名接通（S4b 后续提交）。
 10. **三形状拆分（§4A.5）未落到尺寸层**：`r_phys = collisionRadiusWorldM`，`collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` 语义未变；只提供 `GetPhysicalRadiusWorldM` / `GetVisualCoreRadiusWorldM` / `GetRollReachWorldM` / `GetPickupReachWorldM` 四个读数。
     **pickup 已按 §4A.4 接成 trigger**：`EvaluatePendingCandidates` 在 flag 开时把“球心→该候选”方向上的 `pickupReach(û)` 作为 `PickupAbsorbMath` 的球半径参数（reach = pickupReach + contactR + propBoundingRadius），**只影响“能不能粘”**，不进接触、不挡、不支撑；flag 关时该参数逐字仍是 `collisionRadiusWorldM`。`PickupAbsorbMath` 本身一行未改。隔墙吸（§4A.4 的选项①）行为不变。
@@ -1497,7 +1497,7 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 
 | 模式 | arena 的登记 | 电机 v2 静态表里是谁 | 静态 OBB 条数 |
 |---|---|---|---|
-| v2（`IsContactModelV2()`）且 `useObbBake` | 每个 box/ramp/弯坡段：8 世界角点 → `ObbBakeMath.TryBakeFromCorners` → `AddObb`（box `1+i`、slab `10+i`，role 0/1） | arena 登记的真 OBB | box + ramp/段 |
+| v2（`IsContactModelV2()`）且 `useObbBake` | 每个 box/ramp/弯坡段：8 世界角点 → `ObbBakeMath.TryBakeFromCorners` → `AddObb`（box `1+i`、slab `500+i`，role 0/1） | arena 登记的真 OBB | box + ramp/段 |
 | v2 且 `!useObbBake` | 与 v1 相同：`AddBox`/`AddRamp`（§7.1 的回滚路径） | 电机镜像的轴对齐 OBB（S3 §7.5.3） | box + ramp/段 |
 | v1 | 与 v1 相同：`AddBox`/`AddRamp` | 电机镜像（v1 不读） | box + ramp/段 |
 
@@ -1513,7 +1513,7 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 
 导入器（S4a）把一条弧展开成 `<id>_00…` 的 slab 子物体，**逐段进 `rampBoxes`**；arena 对 `rampBoxes` 的每一段走**同一条** ramp→slab 路径，所以：
 
-- 表面 id 是 `10 + 已登记段序号`（一条 8 段弧 = 10..17）。`SupportSurfaceMath.IsRampSurfaceId` 的上界仍是旧 `MaxRampCount=4` 的 `10..13`，v2 的弯坡会超出——那是**诊断读者**的旧假设，不是登记约束，留给 S5 一起改。
+- 表面 id 是 `SupportSurfaceMath.FirstRampSurfaceId + 已登记段序号`（2026-11-16 起 500 起；一条 8 段弧 = 500..507）。`SupportSurfaceMath.IsRampSurfaceId` 的上界仍是 `MaxRampCount=4` 的 `500..503`，v2 的弯坡会超出——那是**诊断读者**的旧假设，不是登记约束，留给 S5 一起改。
 - v2 **不套 45° 门**：θ 是连续处理的，弧末段接近垂直也能登记（这也是 `AddRamp` 在 v2 不被调用的原因之一：`AddRamp` 的坡度门和 4 条上限都不适用）。v1 照旧拒绝 >45° 的段。
 - `[arena] … ramps=<成功>/<数组长度>` 统计的是**段数**（`rampBoxes` 的条目数），所以一条弧在报告里就是它的段数；`obbs=` 再给一次总数。
 

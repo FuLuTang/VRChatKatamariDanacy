@@ -115,7 +115,7 @@
 | F1 | 地面是**一张解析平面**：`(groundPlaneNormal, groundPlaneOffset)` 两个序列化标量，喂给 `GroundContactMath.TrySolve` | `KatamariBallMotor.groundPlaneNormal/groundPlaneOffset`、`StepBall` 第 4 段 |
 | F2 | **`GroundContactMath` 是平面通用的**：`support = max(coreRadius, max_i −dot(n, Q·p_i))`、`target = offset + support`、位移只沿 `n`。**它对 `n` 不假设朝上** | `GroundContactMath.TrySolve` |
 | F3 | 因此「局部支撑面」**不需要改这一层**：传入斜面/盒顶的 `(n, offset)` 即可，`offset = dot(n, P)`（`TrySolve` 内部会除以 `|n|`，传单位法线即可） | 同上；`offset = rawPlaneOffset / rawPlaneLength` |
-| F4 | 扫掠障碍 = **≤8 平面 + ≤8 轴对齐盒**，另加 **≤6 动态挡路盒**；超出**静默丢弃并 latch** | `MaxPlaneCount`、`MaxBoxCount`、`MaxBlockingBoxCount`、`SignalOverflow` |
+| F4 | 扫掠障碍 = **≤8 平面 + ≤64 轴对齐盒**（2026-11-16 由 8 提到 64），另加 **≤6 动态挡路盒**；超出**显式返回 false 并 latch 原因**（不是静默丢弃） | `MaxPlaneCount`、`MaxBoxCount`、`MaxBlockingBoxCount`、`SignalOverflow` |
 | F5 | 盒是**实心 AABB**，扫掠只把球停在盒外；**没有任何 step-up 通道**；盒没有旋转 | `SweepMath.TrySweepSphere`、`AddBox(min,max)` |
 | F6 | 扫掠数组**按总条数重建**，`SweepMath` 用 `array.Length` 当障碍数（数组不能留空槽） | `RebuildObstacles`、`BLOCKING_PROPS_PLAN` §5.2 |
 | F7 | 单步抬升 `maxLiftPerStep = 0.1`；**有径向壳时，「代理接地」那一次求解的抬升上限降到 `maxProxyLiftPerStep = 0.04`**（喂核心球心那次仍是 0.1） | `StepBall` 里 `proxyLiftCap`、两次 `GroundContactMath.TrySolve` |
@@ -147,7 +147,7 @@
 |---|---|---|---|---|
 | **Ground**（地面平面） | 复用现有 `groundPlaneNormal/Offset`；新增 `SetGroundPlane(n, o)`（补 PICNIC §4.3 G2 的缺口） | 1 | `LevelArenaHost` | 永远是最低的兜底；查询永远不返回「无支撑」 |
 | **BoxTop**（静态盒顶面） | **复用 `AddBox(min,max)` 的 8 个槽位**：盒的 `x∈[min.x,max.x]`、`z∈[min.z,max.z]`、支撑面 `y = max.y`、`n = (0,1,0)`、`offset = max.y` | ≤8（与扫掠同槽） | `LevelArenaHost` | 一次 `AddBox` **两用**：扫掠(墙) + 支撑(顶面)。**不需要**第二个注册调用，也不需要新容量 |
-| **Ramp**（斜面/斜板） | 5 个标量 + 3 个向量：`center`（**行走面**上的一点，不是盒中心）、`normal`（单位，`n.y > 0.05`）、`right`（水平单位 = 作者右轴的 XZ 投影）、`halfWidth`（沿 `right`）、`halfRun`（沿 `down` = 法线的水平分量；斜面法线向**低侧**倾斜，所以 `down = normalize(n.x, 0, n.z)`，不是 `-n`）。支撑平面 = `dot(n,P) = dot(n,center)`，足迹 = 水平矩形。面 id = `10 + i` | ≤4 | `LevelArenaHost` | **不进扫掠**（见 §5.5 的作者陷阱）；坡度 > 上限时**拒绝注册**并带原因码（§5.2） |
+| **Ramp**（斜面/斜板） | 5 个标量 + 3 个向量：`center`（**行走面**上的一点，不是盒中心）、`normal`（单位，`n.y > 0.05`）、`right`（水平单位 = 作者右轴的 XZ 投影）、`halfWidth`（沿 `right`）、`halfRun`（沿 `down` = 法线的水平分量；斜面法线向**低侧**倾斜，所以 `down = normalize(n.x, 0, n.z)`，不是 `-n`）。支撑平面 = `dot(n,P) = dot(n,center)`，足迹 = 水平矩形。面 id = `FirstRampSurfaceId + i`（500..503） | ≤4 | `LevelArenaHost` | **不进扫掠**（见 §5.5 的作者陷阱）；坡度 > 上限时**拒绝注册**并带原因码（§5.2） |
 | **PropTop**（可吸结构顶面） | `(min,max)` 两个向量，**与挡路盒同一份 `propBounds` + 同一个 Transform 位置** | ≤6 | `PickupFieldHost` | 与挡路集**同源、互斥**：一件道具在同一扫描里只能落进两者之一（§6） |
 
 > **为什么 PropTop 不复用 `AddBox`**：静态盒是「场景几何」，注册一次永不删；道具会消失（被吸走）、会重生，且来源是 `propBounds` 不是场景 Collider。把它们塞进同一组槽位会让「清空静态障碍」(`ClearObstacles`) 与「道具状态刷新」互相踩。分开容量，就没这个问题。
@@ -198,7 +198,7 @@
 
 ### 3.5 容量与每步成本
 
-**容量**：`MaxPlaneCount = 8` / `MaxBoxCount = 8` / `MaxBlockingBoxCount = 6`（都不动）+ **新增** `MaxRampCount = 4`、`MaxSupportPropCount = 6`。最坏候选面数 = 1(地面) + 8(盒) + 4(斜面) + 6(道具) = **19**；激活面数通常 1–3。
+**容量**：`MaxPlaneCount = 8` / `MaxBoxCount = 64`（2026-11-16 由 8 提到 64）/ `MaxBlockingBoxCount = 6` + **新增** `MaxRampCount = 4`、`MaxSupportPropCount = 6`。最坏候选面数 = 1(地面或地形) + 64(盒) + 4(斜面) + 6(道具) = **75**；激活面数通常 1–3。
 
 **每步成本**（与已吸附物件总数无关）：
 
@@ -682,7 +682,7 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 | S3 | 在台顶沿边来回开 10 s | `center.y` 波动 < 1 mm（无抖动）；`support` 不来回翻转 |
 | S4 | 从台顶开出去 | 落到地面；**没有**被推一下；`support=ground` 在 3 步内 |
 | S5 | 站在台顶不推摇杆 5 s | 球不动、不下沉（`bottom` 恒 0.26） |
-| S6 | 容量：临时加第 9 个盒 | 日志报 `box capacity 8 exceeded`；前 8 个照旧；`overflowCount == 1` |
+| S6 | 容量：临时加第 65 个盒 | `AddBox` 返回 false、日志报 `box capacity 64 exceeded`；前 64 个照旧；`overflowCount == 1` |
 | S7 | 旧 lab 回归 | `CpuSkirmish` 在 `terrainSupportEnabled = false` 下**帧行为与今天一致**（原并联的 `BallPlayground` 已于 2026-11-15 退役、场景已删，无法再回归） |
 
 ### 8.1 P1 实现记录：与本文的偏离、开关、成本（实现后补）
@@ -714,7 +714,7 @@ public bool    IsSupportingAProp();           // 站在可吸结构上（§11 U2
 
 | 阶段 | 成本 | 频次 |
 |---|---|---|
-| `RefreshStepMask` | ≤8 盒 ×（1 减法、1 比较、1 次 `IsStepWithinLimit` ≈ 6 flops）；**门控**：尺寸变化 > 2 mm 或支撑面变化 > 5 mm 或盒集合变化才重算（调 `IsStepWithinLimit` 一次） | 每步一次门控（≈8 次比较），重算低频 |
+| `RefreshStepMask` | ≤64 盒 ×（1 减法、1 比较、1 次 `IsStepWithinLimit` ≈ 6 flops）；**门控**：尺寸变化 > 2 mm 或支撑面变化 > 5 mm 或盒集合变化才重算（调 `IsStepWithinLimit` 一次） | 每步一次门控（≈64 次比较，未过门时零成本），重算低频 |
 | `RebuildObstacles`（掩码变化时） | 现有实现本来就在条数变化时 `new Vector3[]`；掩码变化是低频（球长大/爬到新高度） | 低频，P4 实测 GC |
 | `ResolveTerrainSupport` | `TryResolveSupport`：1 次归一化 + 探针/盒校验（≤8×2 向量有限性）+ ≤8 次足迹/高度比较，约 120 flops；无分配 | 每步 |
 | 重力 | `TryIntegrateFall` + `ResolveFallState`：约 10 flops | 每步（仅下落时改上限） |

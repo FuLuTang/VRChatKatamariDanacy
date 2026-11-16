@@ -60,6 +60,14 @@ namespace VRCKatamari.Editor.LevelBuild
         /// <summary>The motor's static box table when contact model v2 is active (§12.1).</summary>
         private const int V2StaticBoxCapacity = StaticObbCapacity;
 
+        /// <summary>
+        /// The motor's static box table on the v1 path: <c>KatamariBallMotor.MaxBoxCount</c>
+        /// (64 since 2026-11-16; it was 8, the pre-v2 authoring contract). Kept as a literal
+        /// here because the editor assembly does not import the motor's private constant; the
+        /// two move together and this comment is the pair.
+        /// </summary>
+        private const int V1StaticBoxCapacity = 64;
+
         // ------------------------------------------------------------------ entry ---
 
         /// <summary>
@@ -285,32 +293,45 @@ namespace VRCKatamari.Editor.LevelBuild
             for (int i = 0; i < doc.Solids.Length; i++)
             {
                 PlacementV2Solid solid = doc.Solids[i];
-                view.structures[i] = solid == null
-                    ? null
-                    : new StructureEntry
-                    {
-                        id = solid.Id,
-                        kind = solid.Kind,
-                        role = solid.Role,
-                        shape = solid.Shape,
-                        center = solid.Center,
-                        size = solid.Size,
-                        rotationQuat = solid.RotationQuat,
-                        collision = solid.Collision,
-                        support = solid.Support,
-                        meets = solid.Meets,
-                        curve = solid.Curve == null
-                            ? null
-                            : new CurveEntry
-                            {
-                                radius_m = solid.Curve.RadiusM,
-                                arc_deg = solid.Curve.ArcDeg,
-                                segments = solid.Curve.Segments,
-                                bend = solid.Curve.Bend,
-                                width_m = solid.Curve.WidthM,
-                                thickness_m = solid.Curve.ThicknessM
-                            }
-                    };
+                if (solid == null)
+                {
+                    view.structures[i] = null;
+                    continue;
+                }
+
+                PlacementV2Rules.PlacementSolidContactBox contact;
+                string contactError;
+                bool hasContact = PlacementV2Rules.TrySolidContactBox(solid, out contact,
+                    out contactError);
+                view.structures[i] = new StructureEntry
+                {
+                    id = solid.Id,
+                    kind = solid.Kind,
+                    role = solid.Role,
+                    shape = solid.Shape,
+                    center = solid.Center,
+                    size = solid.Size,
+                    rotationQuat = solid.RotationQuat,
+                    collision = solid.Collision,
+                    support = solid.Support,
+                    meets = solid.Meets,
+                    collider = ToColliderEntry(solid.Collider),
+                    proxySource = solid.ProxySource,
+                    contactIsProxy = hasContact,
+                    contactCenter = hasContact ? contact.Center : null,
+                    contactSize = hasContact ? contact.Size : null,
+                    curve = solid.Curve == null
+                        ? null
+                        : new CurveEntry
+                        {
+                            radius_m = solid.Curve.RadiusM,
+                            arc_deg = solid.Curve.ArcDeg,
+                            segments = solid.Curve.Segments,
+                            bend = solid.Curve.Bend,
+                            width_m = solid.Curve.WidthM,
+                            thickness_m = solid.Curve.ThicknessM
+                        }
+                };
             }
 
             return view;
@@ -404,10 +425,10 @@ namespace VRCKatamari.Editor.LevelBuild
                              "needs an ActivityAreaHost, which does not exist yet)");
             }
 
-            // The motor's static box table: 8 on the v1 path, 256 when contact model v2 bakes
+            // The motor's static box table: 64 on the v1 path, 256 when contact model v2 bakes
             // the OBBs. A document whose solids exceed it is an error that names both numbers,
             // because silently dropping the overflow is the failure mode this check exists for.
-            int boxCapacity = 8;
+            int boxCapacity = V1StaticBoxCapacity;
             KatamariBallMotor motor = UnityEngine.Object.FindObjectOfType<KatamariBallMotor>();
             if (motor != null && motor.IsContactModelV2()) boxCapacity = V2StaticBoxCapacity;
             int boxes = 0;
@@ -426,7 +447,7 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 report.Error("[level:v2] [structure_capacity] " + boxes + " > " + boxCapacity +
                              " static solids; the motor's table refuses the overflow. " +
-                             (boxCapacity == 8
+                             (boxCapacity == V1StaticBoxCapacity
                                  ? "This scene's motor is running v1 contact: turn on contact model " +
                                    "v2 with the OBB bake (256 slots), or shrink the level. "
                                  : "Raise the table or shrink the level. ") +
@@ -467,6 +488,77 @@ namespace VRCKatamari.Editor.LevelBuild
                                 "it: PickupFieldHost has no absorbable column, so the gate still " +
                                 "decides from k * aabb (owner ruling D)");
                 }
+            }
+
+            // §4/§9: a solid's contact shape may come from a proxy; the runtime's static table
+            // is OBB-only, so a non-box proxy reaches the scene as its local AABB box. That is
+            // stated per family rather than silently - owner ruling 3.
+            int proxySolids = 0;
+            int exactBoxProxies = 0;
+            int boxedProxies = 0;
+            int raisedTops = 0;
+            int fallbackProxies = 0;
+            int legacyPlaneSolids = 0;
+            for (int i = 0; i < doc.Solids.Length; i++)
+            {
+                PlacementV2Solid solid = doc.Solids[i];
+                if (solid == null) continue;
+                string proxyError = PlacementV2Rules.SolidProxyError(solid);
+                if (proxyError != null)
+                {
+                    report.Error("[level:v2] " + proxyError);
+                    continue;
+                }
+
+                if (string.Equals(solid.Shape, PlacementV2Rules.ShapePlane, StringComparison.Ordinal))
+                {
+                    legacyPlaneSolids++;
+                    continue;
+                }
+
+                if (!string.Equals(solid.Shape, PlacementV2Rules.ShapeProxy, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                proxySolids++;
+                if (string.Equals(solid.ProxySource, PlacementV2Rules.ProxySourceAabbFallback,
+                    StringComparison.Ordinal))
+                {
+                    fallbackProxies++;
+                }
+
+                PlacementV2Rules.PlacementSolidContactBox box;
+                string contactError;
+                if (!PlacementV2Rules.TrySolidContactBox(solid, out box, out contactError)) continue;
+                if (box.Exact) exactBoxProxies++;
+                else boxedProxies++;
+                if (box.TopRaisedToSizeTop) raisedTops++;
+            }
+
+            if (proxySolids > 0)
+            {
+                report.Note(V2Tag + "[structure_proxy] " + proxySolids + " solid(s) carry a contact " +
+                            "proxy: " + exactBoxProxies + " exact box(es)" +
+                            (boxedProxies > 0
+                                ? ", " + boxedProxies + " boxed to the proxy's local AABB" +
+                                  " (the motor's static table is OBB-only; a true convex/sphere/" +
+                                  "capsule static collider needs a new channel)"
+                                : "") +
+                            (raisedTops > 0
+                                ? "; " + raisedTops + " contact box top(s) raised to the size top" +
+                                  " (the support face)"
+                                : "") +
+                            (fallbackProxies > 0
+                                ? "; " + fallbackProxies + " declared proxySource=aabb-fallback"
+                                : ""));
+            }
+
+            if (legacyPlaneSolids > 0)
+            {
+                report.Note(V2Tag + "[structure_role] " + legacyPlaneSolids +
+                            " solid(s) are shape:\"plane\"; a v2 file should not write one " +
+                            "(the boundary role moved to activityArea)");
             }
 
             if (summary.ParentError != null)

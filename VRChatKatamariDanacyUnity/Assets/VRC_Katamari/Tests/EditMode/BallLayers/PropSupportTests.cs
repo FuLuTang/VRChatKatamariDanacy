@@ -75,7 +75,7 @@ namespace VRCKatamari.Tests
                 Up, 0f, boxMinima, boxMaxima,
                 MaskFor(boxMaxima, boxCount, referenceHeight, stepLimit), boxCount,
                 new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
-                propMinima, propMaxima, propCount, out surfaceId, out point, out normal,
+                propMinima, propMaxima, propCount, SupportSurfaceMath.NoSurfaceId, 0f, Vector3.zero, out surfaceId, out point, out normal,
                 out height, out candidateCount);
         }
 

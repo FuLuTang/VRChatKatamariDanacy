@@ -246,7 +246,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 |---|---|---|---|
 | `ground` | `LevelArenaHost` → `motor.SetGroundPlane(normal, offset)` | 1 张地面 | **恰好 1 条**；`shape` 只能是 `plane` |
 | `boundary` | `LevelArenaHost` → `motor.AddPlane(normal, offset)` | ≤8 平面 | **用平面、不用盒**（否则墙顶变成可站的窄条，还吃掉盒预算） |
-| `box` | `LevelArenaHost.staticBoxes[]`（`BoxCollider` → `Setup` 烘焙 min/max → `motor.AddBox`） | ≤8 盒 | **一次登记两用**：扫掠是墙、顶面是支撑 |
+| `box` | `LevelArenaHost.staticBoxes[]`（`BoxCollider` → `Setup` 烘焙 min/max → `motor.AddBox`） | ≤64 盒（2026-11-16 由 8 提到 64） | **一次登记两用**：扫掠是墙、顶面是支撑 |
 | `ramp` | `LevelArenaHost.rampBoxes[]` → `motor.AddRamp(...)` | ≤4 斜面 | **绝不能同时是 `box`**（否则坡底出现「隐形墙」）；**板的本地 +Y 面是行走面**（`support` 落座读这一面；`AddRamp` 中心也必须取这一面，不是盒中心），4 cm 板体在它下面；坡度 > 45° 只是 **warning**（v2 慢爬，见 §4.3.1 / `CONTACT_MODEL_V2` 3.10），板面朝下（inverted）或 90°（侧立的墙）仍是硬错误 |
 | `curve_ramp` | `LevelArenaHost.rampBoxes[]`（导入期展开成 N 段 slab） | ≤4 斜面（**一条算一条**） | 一条弧 = 一个 `structures[]` 条目 + 一个 `curve` 块；导入器把它展开成 `<id>_00…` 的 N 个 cube 子物体（各带 `BoxCollider`），逐段进 `rampBoxes`。段数默认由「弦高 ≤ 5%·最小球半径」自动定（§4.3.1） |
 
@@ -495,7 +495,7 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_s
 
 ### 7.5 预算守卫（在 Unity 侧再挡一次）
 
-`LevelArenaHost` 的容量是硬上限，超了会 `SignalOverflow` + **静默丢弃**（`MaxPlaneCount/MaxBoxCount/MaxRampCount`）。所以导入器在建 `BoxCollider` 之前先数一遍 `role`：
+`LevelArenaHost` 的容量是硬上限，超了 `AddBox`/`AddPlane`/`AddRamp` **显式返回 false**、`SignalOverflow` 记一次原因（2026-11-16 起静态盒上限 64，不再是静默丢弃）。所以导入器在建 `BoxCollider` 之前先数一遍 `role`：
 
 ```
 planes ≤ 8   boxes ≤ 8   ramps ≤ 4   （来自 level.budget）

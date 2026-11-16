@@ -316,7 +316,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 | 台阶 | `rise ≤ stepLimit = 0.25·D` → 该盒**从扫掠里剔除**并进支撑表；否则仍是实心墙。三条防抖：迟滞 `+0.02 m`、已在顶上（`+0.01 m` 余量）无条件算台阶、跨级需 `> 0.005 m` | `IsStepWithinLimit` / `RefreshStepMask` / `IsStepCrossing` |
 | 重力 | 失去支撑 → `fallSpeed += 9.81·dt`，当步的 `maxLift/maxDrop` 换成重力预算，落地清零；**没有跳跃、没有向上速度** | `ResolveFallState` / `TryIntegrateFall` |
 | 道具的两个角色 | 每 `0.05 s` 一遍扫描同时出「挡路」「支撑」两个掩码：吸不动 + `rise ≤ stepLimit` → 支撑；吸不动 + `rise > stepLimit` → 挡路；吸得动 → 食物（两边都不进） | `SupportSurfaceMath.TryClassifyProp` / `PickupFieldHost.UpdatePropObstacles` |
-| 容量 | 平面 **8**、静态盒 **8**、动态挡路盒 **6**、道具支撑 **6**；**斜面 4**（P3 已落地：`MaxRampCount`） | `MaxPlaneCount` / `MaxBoxCount` / `MaxBlockingBoxCount` / `MaxSupportPropCount` |
+| 容量 | 平面 **8**、静态盒 **64**（2026-11-16 由 8 提到 64）、动态挡路盒 **6**、道具支撑 **6**；**斜面 4**（P3 已落地：`MaxRampCount`） | `MaxPlaneCount` / `MaxBoxCount` / `MaxBlockingBoxCount` / `MaxSupportPropCount` |
 | 斜面 | **只当支撑面**：`motor.AddRamp` 与 `LevelArenaHost.rampBoxes` 都在（P3，d31dc9b）。导入器把 `role=ramp` 的 `BoxCollider` 填进 `rampBoxes`，由 `RegisterRamp` 烘成可行走的支撑面；它**不进 `staticBoxes`**，所以坡脚没有隐形墙 | `PlacementImporter.BindArenaHost` 的 ramp 分支；`LevelArenaHost.RegisterRamp` |
 | 旋转盒 | 没有。`BoxCollider.bounds` 烘焙成世界 AABB，45° 摆会胖（本关角内没有 45° 件） | `LevelArenaHost.Setup` |
 | 卡住恢复 | 1.5 s 无进展 → 球心瞬移回 `startCenterWorld` | `stuckTimeoutSeconds` |

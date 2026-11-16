@@ -9,6 +9,7 @@ import math
 import unittest
 
 from Docs.Design.BallLayers.TerrainSupport.terrain_support import (
+    FIRST_RAMP_SURFACE_ID,
     GROUND_SURFACE_ID,
     NO_SURFACE_ID,
     step_mask_needs_refresh,
@@ -392,6 +393,50 @@ class SupportSurfaceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             is_step_crossing(float("nan"), 0.005)
 
+
+    # ----------------------------------------------------------- 24 ----
+    def test_there_is_no_support_plane_where_the_mesh_answers(self):
+        # 2026-11-16, C22: the copied arena plane sits at y=0 and the gully floor is 1 m
+        # BELOW it. The mesh only ever replaced the plane by being HIGHER, so the ball
+        # drove across the gully at y=0.15. A terrain candidate now seeds the selection,
+        # so the plane is out of the competition above AND below the mesh.
+        surface = try_resolve_support((0.0, 0.15, 0.0), 0.0, step_limit(0.30), UP, 0.0,
+                                      [], [], terrain_surface_id=2000,
+                                      terrain_height_m=-1.0, terrain_normal=UP)
+        self.assertEqual(surface.surface_id, 2000)
+        self.assertAlmostEqual(surface.height, -1.0, delta=TOLERANCE)
+        self.assertEqual(surface.point, (0.0, -1.0, 0.0))
+        self.assertEqual(surface.candidate_count, 1)
+
+        # The same call without a terrain answer is the plane, which is the fallback for
+        # a seam hole or a level with no mesh.
+        surface = try_resolve_support((0.0, 0.15, 0.0), 0.0, step_limit(0.30), UP, 0.0,
+                                      [], [])
+        self.assertEqual(surface.surface_id, GROUND_SURFACE_ID)
+        self.assertAlmostEqual(surface.height, 0.0, delta=TOLERANCE)
+
+        # A terrain candidate still loses to something HIGHER and inside the band: a box
+        # top. Highest wins, and the plane is the only source that is excluded.
+        surface = try_resolve_support((0.0, 0.15, 0.0), 0.0, step_limit(0.30), UP, 0.0,
+                                      [box((-1.0, -2.0, -1.0), (1.0, -0.5, 1.0))], [True],
+                                      terrain_surface_id=2000, terrain_height_m=-1.0,
+                                      terrain_normal=UP)
+        self.assertEqual(surface.surface_id, 1)
+        self.assertAlmostEqual(surface.height, -0.5, delta=TOLERANCE)
+
+        # A non-upward terrain normal cannot answer "what is the height under the probe".
+        with self.assertRaises(ValueError):
+            try_resolve_support((0.0, 0.15, 0.0), 0.0, step_limit(0.30), UP, 0.0,
+                                [], [], terrain_surface_id=2000, terrain_height_m=0.0,
+                                terrain_normal=(1.0, 0.0, 0.0))
+
+    # ----------------------------------------------------------- 25 ----
+    def test_the_surface_id_ranges_are_disjoint(self):
+        # Boxes are 1 + i up to the v2 table's 64, so the ramp base moved off 10 (which
+        # collided from the tenth box) and off 1000 (the v2 solver's boundary planes).
+        self.assertEqual(FIRST_RAMP_SURFACE_ID, 500)
+        self.assertLess(64, FIRST_RAMP_SURFACE_ID)
+        self.assertGreater(FIRST_RAMP_SURFACE_ID, 105)
 
     # ----------------------------------------------------------- 23 ----
     def test_dropping_down_the_same_surface_is_not_a_lost_surface(self):

@@ -154,7 +154,7 @@ StepBall:
 
 ### 固定容量与溢出信号
 
-注册类缓冲区是固定容量：`MaxPlaneCount = 8`、`MaxBoxCount = 8`、`PendingCandidateCapacity = 4`，加上扫掠每步最多 `ContactCapacity = 4` 个接触点。超出容量的条目**直接丢弃**，不排队、不扩容、不降级，所以：
+注册类缓冲区是固定容量：`MaxPlaneCount = 8`、`MaxBoxCount = 64`（2026-11-16 由 8 提到 64）、`PendingCandidateCapacity = 4`，加上扫掠每步最多 `ContactCapacity = 4` 个接触点。超出容量的条目**被拒绝并返回 false + latch 原因**（不是静默丢弃），不排队、不扩容、不降级，所以：
 
 - 障碍超出会改变球实际能撞到什么；
 - 候选队列超出会静默丢掉一个本可吸收的物件。
@@ -212,11 +212,11 @@ StepBall:
 | `maxFallSpeedMps` | 40 m/s | 下落速度护栏（单步 ≤0.8 m），不是产品值 |
 | `supportDropTriggerM` | **0.01 m** | 「支撑面掉走」的容差；**仅当选中面 id 变化**时才算掉走（沿坡下滚不是）。更小的落差由 `maxDropPerStep` 一步吃掉 |
 
-**公开方法（P1/P2/P3）**：`SetGroundPlane(n, o)`、`SetTerrainSupportEnabled(bool)` / `IsTerrainSupportEnabled()`、`GetStepHeightLimitWorldM()`、`GetSupportSurfaceHeightWorldM()`（**支撑面**高度，不是球心减支撑长度）、`GetSupportNormalWorld()`、`GetSupportSurfaceCount()`（本步 band 内面数；地图 0 的 `active_surface_max` 就是它）、`GetSupportSurfaceId()`（0 = 地面，1+i = 第 i 个静态盒，**10+i = 第 i 个静态斜面**，100+i = 第 i 个道具支撑槽）、`GetSupportKind()`（0 地面 / 1 静态盒 / **2 斜面** / 3 道具支撑 / -1 未解出）、`GetStepMaskRebuildCount()`（掩码翻转引起的扫掠数组重建次数）、`IsFalling()`。`LevelArenaHost` 侧另有 `Reapply()`：清表后重注册，地图 0 的「一格一注册」靠它。P2 的 `SetSupportProps` / `ClearSupportProps`、`GetSupportPropCount()` / `GetSupportPropCapacity()`、`GetSupportPropRefusalCount()` / `GetSupportPropRefusalReason()`、`IsSupportingAProp()` 已实现（道具顶面进同一张支撑表）；P3 的 `AddRamp(center, normal, right, halfWidth, halfRun)` / `ClearRamps()` / `GetRampCount()` / `GetRampCapacity()` / `GetRampRefusalCount()` / `GetLastRampRefusalCode()` / `GetLastRampRefusalReason()` / `GetLastRampRefusalSlopeDegrees()` / `GetMaxSupportSlopeDegrees()` 已实现（斜面只支撑、不进扫掠；容量 4）。
+**公开方法（P1/P2/P3）**：`SetGroundPlane(n, o)`、`SetTerrainSupportEnabled(bool)` / `IsTerrainSupportEnabled()`、`GetStepHeightLimitWorldM()`、`GetSupportSurfaceHeightWorldM()`（**支撑面**高度，不是球心减支撑长度）、`GetSupportNormalWorld()`、`GetSupportSurfaceCount()`（本步 band 内面数；地图 0 的 `active_surface_max` 就是它）、`GetSupportSurfaceId()`（0 = 地面，1+i = 第 i 个静态盒（1..64），**500+i = 第 i 个静态斜面**，100+i = 第 i 个道具支撑槽，2000+ = 地形 chunk/zone）、`GetSupportKind()`（0 地面 / 1 静态盒 / **2 斜面** / 3 道具支撑 / 6 地形 / -1 未解出）、`GetStepMaskRebuildCount()`（掩码翻转引起的扫掠数组重建次数）、`IsFalling()`。`LevelArenaHost` 侧另有 `Reapply()`：清表后重注册，地图 0 的「一格一注册」靠它。P2 的 `SetSupportProps` / `ClearSupportProps`、`GetSupportPropCount()` / `GetSupportPropCapacity()`、`GetSupportPropRefusalCount()` / `GetSupportPropRefusalReason()`、`IsSupportingAProp()` 已实现（道具顶面进同一张支撑表）；P3 的 `AddRamp(center, normal, right, halfWidth, halfRun)` / `ClearRamps()` / `GetRampCount()` / `GetRampCapacity()` / `GetRampRefusalCount()` / `GetLastRampRefusalCode()` / `GetLastRampRefusalReason()` / `GetLastRampRefusalSlopeDegrees()` / `GetMaxSupportSlopeDegrees()` 已实现（斜面只支撑、不进扫掠；容量 4）。
 
 **关掉开关 = 逐位一致**：①掩码不刷新、`RebuildObstacles` 按注册顺序复制全部静态盒；②`GroundContactMath` 拿原始 `(groundPlaneNormal, groundPlaneOffset)`；③升降上限还是 `maxLiftPerStep` / `maxProxyLiftPerStep` / `maxDropPerStep`，`isFalling` 恒 false；④`VisualRollMath` 拿原始地面法线。运行期切换会清掩码并重建扫掠数组，`TeleportTo` 也会重置支撑参考与下落状态（传送进空气 → 真下落，不是 0.1/步 缓降）。
 
-**每步成本（常数，与已吸物件数无关）**：掩码门控 ≤8 次比较（直径变化 >2 mm / **参考高度**变化 >5 mm / 盒集合变化才重算）；选面 ≤8 盒（只读掩码）+ ≤4 斜面 ×（1 次归一化 + 高度 + 足迹）+ 6 道具，无分配；重力约 10 flops。掩码变化才重建扫掠数组（现有实现本来就会在条数变化时 `new Vector3[]`，P4 实测 GC）。
+**每步成本（常数，与已吸物件数无关）**：掩码门控 ≤64 次比较（直径变化 >2 mm / **参考高度**变化 >5 mm / 盒集合变化才重算）；选面 ≤64 盒（只读掩码）+ ≤4 斜面 ×（1 次归一化 + 高度 + 足迹）+ 6 道具，无分配；重力约 10 flops。掩码变化才重建扫掠数组（现有实现本来就会在条数变化时 `new Vector3[]`，P4 实测 GC）。
 
 **与小棍的接法**：小棍决定「球的哪个点最低」，支撑查询决定「那个点下面的面在哪」；本层喂 `GroundContactMath` 的是支撑面的 `(n, dot(n,P))`，代理点数组照旧。跨级那一步用 `min(stepLimit, maxStepUpLiftWorldM)` 覆盖 0.04 的代理上限，下一步立刻回到 0.04，所以长棍仍然弹不动球。**镜头仍读空代理数组解出的核心球心**，不跟台阶/下落起伏（低通照旧）。
 

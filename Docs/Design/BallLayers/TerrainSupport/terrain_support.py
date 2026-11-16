@@ -32,10 +32,13 @@ GROUND_SURFACE_ID = 0
 MAX_SUPPORT_PROPS = 6
 FIRST_PROP_SURFACE_ID = 100
 
-# P3: static ramps. Ids 10..13, so they never collide with boxes (1..8) or props
-# (100..105). Ramps are support-only: the motor never appends them to its sweep.
+# P3: static ramps. Ids 500..503, so they never collide with the other surface-id
+# ranges: ground 0, static box 1..64 (the v2 budget; it was 1..8 until 2026-11-16),
+# prop 100..105, boundary plane 1000..1007 and terrain 2000+. Rams are support-only:
+# the motor never appends them to its sweep. (10..13 collided with box 1+i once the
+# static box table grew past nine; 1000+i is taken by the v2 solver's planes.)
 MAX_RAMPS = 4
-FIRST_RAMP_SURFACE_ID = 10
+FIRST_RAMP_SURFACE_ID = 500
 MIN_RAMP_UPWARD_NORMAL_Y = 0.05
 MIN_RAMP_HORIZONTAL_NORMAL = 1e-4
 DEFAULT_MAX_SUPPORT_SLOPE_DEGREES = 45.0
@@ -440,7 +443,10 @@ def try_resolve_support(probe_point: Sequence[float], reference_support_height_m
                         ramps: Sequence[Sequence] = (),
                         ramp_count: Optional[int] = None,
                         props: Sequence[Sequence[Sequence[float]]] = (),
-                        prop_count: Optional[int] = None) -> SupportSurface:
+                        prop_count: Optional[int] = None,
+                        terrain_surface_id: int = NO_SURFACE_ID,
+                        terrain_height_m: float = 0.0,
+                        terrain_normal: Optional[Sequence[float]] = None) -> SupportSurface:
     """Highest candidate surface under the probe's XZ, with the ground as fallback.
 
     Selection is deterministic: the ground starts as the winner and a box, ramp or
@@ -462,6 +468,18 @@ def try_resolve_support(probe_point: Sequence[float], reference_support_height_m
 
     A prop ``i`` reports ``FIRST_PROP_SURFACE_ID + i``; a ramp ``i`` reports
     ``FIRST_RAMP_SURFACE_ID + i`` and its surface normal is the plane normal.
+
+    ``terrain_surface_id`` >= 0 is the terrain mesh's own answer for this footprint
+    (the height under the probe's XZ plus that triangle's normal, from
+    ``TerrainMeshMath.TrySelectSupport``). THE GROUND IS NOT A COMPETITOR WHERE THE
+    MESH ANSWERS: a terrain candidate replaces the ground as the starting surface, so
+    a mesh triangle BELOW the arena plane still wins (the 2026-11-16 C22 regression:
+    a copied plane at y=0 held a 0.30 m ball at y=0.15 across a 1 m gully). The plane
+    stays the answer only where the mesh answers nothing (a seam hole, or no mesh).
+
+    ``reference_support_height_m`` is the BALL'S BOTTOM, not the previous support and
+    not the ground plane (LEVEL_FORMAT_V2 §1.3 rule 3): upward the band is the step
+    gate and downward it has no bound at all.
     """
     probe = _vec3(probe_point, "probe_point")
     reference = _finite(reference_support_height_m, "reference_support_height_m")
@@ -526,13 +544,27 @@ def try_resolve_support(probe_point: Sequence[float], reference_support_height_m
                     probe[1] - normal[1] * to_plane,
                     probe[2] - normal[2] * to_plane)
 
-    selected_id = GROUND_SURFACE_ID
-    selected_height = ground_height
-    selected_point = ground_point
-    selected_normal = normal
-    # The step decision is the SAME call the motor's sweep mask makes per box;
-    # writing the band here instead was the second half of the C09 ghost step.
-    active_count = 1 if is_step_within_limit(ground_height, reference, limit) else 0
+    if terrain_surface_id >= 0:
+        terrain_up = _unit(_vec3(terrain_normal if terrain_normal is not None else (0.0, 1.0, 0.0),
+                                 "terrain_normal"), "terrain_normal")[0]
+        if terrain_up[1] <= 0.0:
+            raise ValueError("terrain_normal must point upward")
+        terrain_height = _finite(terrain_height_m, "terrain_height_m")
+        # The mesh answers here, so the analytic ground is out of the competition -
+        # above OR below the mesh (the C22 gully regression).
+        selected_id = terrain_surface_id
+        selected_height = terrain_height
+        selected_point = (probe[0], terrain_height, probe[2])
+        selected_normal = terrain_up
+        active_count = 1
+    else:
+        selected_id = GROUND_SURFACE_ID
+        selected_height = ground_height
+        selected_point = ground_point
+        selected_normal = normal
+        # The step decision is the SAME call the motor's sweep mask makes per box;
+        # writing the band here instead was the second half of the C09 ghost step.
+        active_count = 1 if is_step_within_limit(ground_height, reference, limit) else 0
 
     for index, (minimum, maximum) in enumerate(validated):
         if not box_steppable[index]:

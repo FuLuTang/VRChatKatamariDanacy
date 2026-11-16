@@ -386,13 +386,19 @@ namespace VRCKatamari.BallMotor
         private bool[] intentValueBuffer;
 
         // ---- Sweep buffers; obstacle order is planes first, then boxes ----
+        // 8 planes stay (activity walls + the cell's own pads, LEVEL_FORMAT_V2 §5.4).
+        // 64 static boxes: the v2 format's own budget for `structures[role=box]` is 64 and
+        // its `caps.staticSolids` is 256, and the reference (nostalgia) level imports 35
+        // scenery solids that must block the ball - 8 was the pre-v2 v1 contract, not a
+        // measurement. The static box SURFACE ids stay 1 + i, so the ramp base moved to
+        // FirstRampSurfaceId (1000) to keep the namespaces disjoint; props stay 100 + i.
         private const int MaxPlaneCount = 8;
-        private const int MaxBoxCount = 8;
+        private const int MaxBoxCount = 64;
         private const int ContactCapacity = 4;
 
         // Dynamic blocking boxes get their own capacity instead of borrowing the static
-        // box budget. A map's 8 static boxes are an authoring contract the map validator
-        // mirrors (8/8), while "which nearby props are too big to absorb" is re-decided
+        // box budget. A map's static boxes are an authoring contract the map validator
+        // mirrors (v2: budget.boxes 64), while "which nearby props are too big to absorb" is re-decided
         // every scan; sharing one budget would make a lab's walls compete with props for
         // slots and would change every map's data when the prop count needs a bigger
         // window. Six is a provisional estimate of how many props a ball can touch at
@@ -523,10 +529,10 @@ namespace VRCKatamari.BallMotor
         private bool stepMaskBoxesDirty;
         private int stepMaskRebuildCount;
         private float stepMaskDiameterWorldM;
-        // The REFERENCE the mask was computed with, i.e. the predicate's own input
-        // (SupportReferenceHeight of the last support and the ball's bottom), not the
-        // selected support height. Landing from a spawn clearance moves the reference
-        // without moving the support, so a support-height gate could not see it.
+        // The REFERENCE the mask was computed with, i.e. the predicate's own input - the
+        // ball's own bottom - and not the selected support height. Landing from a spawn
+        // clearance moves the bottom without moving the support, so a support-height gate
+        // could not see it.
         private float stepMaskReferenceWorldM;
         // Selected support of the current step, as the plane pair the ground solve
         // consumes plus the diagnostics the host and the lab read.
@@ -2026,7 +2032,7 @@ namespace VRCKatamari.BallMotor
         private void StepContactV2(float dt, Vector3 requestedDisplacement,
             out Vector3 groundedCenter, out Vector3 followCenter, out Vector3 supportNormal)
         {
-            float stepStartSeconds = Time.time;
+            double stepStartSeconds = WallClockSeconds();
             contactV2ClockSeconds = contactV2ClockSeconds + dt;
             groundedCenter = ballCenterWorld;
             followCenter = ballCenterWorld;
@@ -2182,10 +2188,7 @@ namespace VRCKatamari.BallMotor
             contactPreviousRotation = visualRollRotation;
             contactHasPreviousFrame = true;
 
-            float elapsed = Time.time - stepStartSeconds;
-            float micros = elapsed * 1000000f;
-            if (!KatamariMath.IsFiniteFloat(micros) || micros < 0f) micros = 0f;
-            lastStepMicros = micros;
+            lastStepMicros = ElapsedMicros(stepStartSeconds);
         }
 
         /// <summary>
@@ -3158,10 +3161,14 @@ namespace VRCKatamari.BallMotor
             }
             stepHeightLimitWorldM = limit;
 
-            // The reference is the predicate's own input: the higher of the previous
-            // support and the ball's own bottom (pre-sweep, the accepted one-step lag).
-            float reference = SupportSurfaceMath.SupportReferenceHeight(lastSupportHeightWorldM,
-                ballCenterWorld.y - collisionRadiusWorldM);
+            // The reference is the predicate's own input: the ball's own bottom, measured
+            // pre-sweep (the accepted one-step lag). It is the same number
+            // ResolveTerrainSupport hands the support table, so a box this mask drops from
+            // the sweep is always a box the support table can select. The previous support
+            // is deliberately NOT part of it: a stale, higher anchor widens the band upward
+            // and lets a surface the ball is already passing be adopted as a step
+            // (LEVEL_FORMAT_V2 §1.3 rule 3, §3.6).
+            float reference = ballCenterWorld.y - collisionRadiusWorldM;
             if (!SupportSurfaceMath.StepMaskNeedsRefresh(stepMaskValid, stepMaskBoxesDirty,
                 semanticDiameterWorldM, stepMaskDiameterWorldM, reference,
                 stepMaskReferenceWorldM))
@@ -3217,15 +3224,17 @@ namespace VRCKatamari.BallMotor
         /// <remarks>
         /// <para>
         /// The support decision itself is a single call into
-        /// <see cref="SupportSurfaceMath"/>; this method only carries the result and the
-        /// two memories the layers need (the previous support, for the band and the step
-        /// rise) and decides nothing about heights or footprints itself.
+        /// <see cref="SupportSurfaceMath.TryResolveSupport"/>; this method only gathers the
+        /// terrain candidate, carries the result and keeps the two memories the layers need
+        /// (the previous support, for the step rise and the ledge decision). The BAND is the
+        /// ball's own bottom plus this step's limit - the previous support deliberately does
+        /// not enter it (LEVEL_FORMAT_V2 §1.3 rule 3).
         /// </para>
         /// <para>
         /// The first call after Start (and after a teleport, which clears the flag) takes
-        /// the ball's own bottom as the reference surface. That is what makes a ball
-        /// placed above the floor fall under gravity instead of snapping down at 0.1 m per
-        /// step, without a separate "spawned in the air" rule.
+        /// the ball's own bottom as the previous surface. That is what makes a ball placed
+        /// above the floor fall under gravity instead of snapping down at 0.1 m per step,
+        /// without a separate "spawned in the air" rule.
         /// </para>
         /// <para>
         /// With terrain support off this still resolves the ground-only surface for the
@@ -3262,15 +3271,27 @@ namespace VRCKatamari.BallMotor
             }
             stepHeightLimitWorldM = limit;
 
-            // The reference is the higher of the previous support and the ball's own
-            // bottom, from the one shared helper the sweep mask also calls. "The previous
-            // support + stepLimit" alone would exclude a surface the ball is falling ONTO
-            // (above the old support but below the ball) and the ball would fall through
-            // it. Grounded, the ball's bottom equals the support, so this is the design's
-            // band unchanged; airborne, the ball's own bottom makes "already above the
-            // top" true without a second unconditional rule.
-            float bandReference = SupportSurfaceMath.SupportReferenceHeight(
-                lastSupportHeightWorldM, center.y - collisionRadiusWorldM);
+            // THE BAND IS ANCHORED ON THE BALL'S BOTTOM. Not on the previous support (a stale
+            // anchor) and not on the arena ground plane: upward the limit is this step's step
+            // gate, downward there is NO limit, so a gully, a pit or a tunnel floor any
+            // distance below the ball stays a support and the level's kill plane - not a band
+            // - decides a real fall (LEVEL_FORMAT_V2 §1.3 rule 3, §3.6).
+            float ballBottom = center.y - collisionRadiusWorldM;
+
+            // T0 GEOMETRY: the mesh answers with at most one candidate surface for this
+            // footprint (the highest triangle under it inside the step band). It is one
+            // candidate, not a second selection: the selection below is the only place a
+            // support is chosen, which is what keeps the mesh from having to be "higher than
+            // the plane" to win.
+            int terrainId = SupportSurfaceMath.NoSurfaceId;
+            Vector3 terrainNormal = Vector3.zero;
+            float terrainHeight = 0f;
+            if (terrainSupportEnabled && terrainMeshContactEnabled && terrainMeshReady &&
+                terrainTriangleCount > 0)
+            {
+                TryQueryTerrainSupport(center, ballBottom, limit, out terrainId,
+                    out terrainNormal, out terrainHeight);
+            }
 
             int id;
             Vector3 point;
@@ -3284,12 +3305,13 @@ namespace VRCKatamari.BallMotor
             // Ramps obey the same switch as the rest of terrain support: off means the
             // query sees an empty ramp table, so the result is exactly the P1/P2 one.
             int activeRampCount = terrainSupportEnabled ? rampCount : 0;
-            if (SupportSurfaceMath.TryResolveSupport(center, bandReference, limit,
+            if (SupportSurfaceMath.TryResolveSupport(center, ballBottom, limit,
                 groundPlaneNormal, groundPlaneOffset, boxMinimumBuffer, boxMaximumBuffer,
                 boxIsSteppable, boxCount, rampCenterBuffer, rampNormalBuffer, rampRightBuffer,
                 rampHalfWidthBuffer, rampHalfRunBuffer, activeRampCount,
                 supportPropMinimumBuffer, supportPropMaximumBuffer,
-                activePropCount, out id, out point, out normal, out height, out candidates))
+                activePropCount, terrainId, terrainHeight, terrainNormal,
+                out id, out point, out normal, out height, out candidates))
             {
                 supportSurfaceId = id;
                 supportSurfacePointWorld = point;
@@ -3305,33 +3327,16 @@ namespace VRCKatamari.BallMotor
                 supportCandidateCount = 0;
             }
 
-            // T0: the mesh is an additional support source. It may only raise the selected
-            // support (a lower mesh triangle loses to the arena plane/box/ramp), and the
-            // band is the SAME SupportSurfaceMath predicate the other sources use.
-            if (terrainMeshContactEnabled && terrainMeshReady && terrainTriangleCount > 0)
-            {
-                int terrainId;
-                Vector3 terrainPoint;
-                Vector3 terrainNormal;
-                float terrainHeight;
-                if (TryQueryTerrainSupport(center, bandReference, limit, out terrainId,
-                    out terrainPoint, out terrainNormal, out terrainHeight) &&
-                    terrainHeight > supportSurfaceHeightWorldM)
-                {
-                    supportSurfaceId = terrainId;
-                    supportSurfacePointWorld = terrainPoint;
-                    supportSurfaceNormalWorld = terrainNormal;
-                    supportSurfaceHeightWorldM = terrainHeight;
-                    supportCandidateCount = supportCandidateCount + 1;
-                }
-            }
-
             bool dropped;
             // A drop only counts when the SELECTED SURFACE changed. A continuous ramp (or
             // a tilted ground plane) lowers the height under the moving probe as the ball
             // rolls along it; treating that as a lost surface would put the ball into the
             // gravity-fall state on every downhill step (a 30 degree ramp at 4 m/s drops
-            // 46 mm per 20 ms step). A real ledge changes the surface id.
+            // 46 mm per 20 ms step). A ledge usually changes the surface id (a box top to
+            // the floor, one zone to the next). KNOWN, DELIBERATE LIMIT: the mesh's id is
+            // per chunk/zone, so a gully inside one zone keeps its id and the ball descends
+            // on the falls' 0.1 m-per-step clamp instead of ballistically; it still lands on
+            // the floor, and a real out-of-world fall is the level's kill plane's job.
             bool sameSurface = previousSupportSurfaceId == supportSurfaceId;
             if (terrainSupportEnabled &&
                 SupportSurfaceMath.SupportDroppedAway(supportSurfaceHeightWorldM,
@@ -3348,109 +3353,65 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// T0 support query: 16 radial directions projected to XZ, each probe asking the
-        /// mesh for the highest upward triangle in the step band; the highest probe wins.
-        /// The returned point is on that triangle's plane at the ball's XZ, so
-        /// <c>GroundContactMath</c> consumes it exactly like a plane/box/ramp support.
+        /// T0 support query: the highest mesh triangle under the ball's footprint ring that
+        /// is inside the ball's step band, re-measured on its plane at the ball's XZ. The
+        /// returned height is a surface height, so <c>GroundContactMath</c> consumes it
+        /// exactly like a plane/box/ramp support.
         /// </summary>
-        private bool TryQueryTerrainSupport(Vector3 center, float bandReference,
-            float stepLimit, out int surfaceId, out Vector3 point, out Vector3 normal,
-            out float height)
+        /// <remarks>
+        /// The geometry and the band live in <see cref="TerrainMeshMath.TrySelectSupport"/>
+        /// (one implementation, and EditMode-testable with real triangles); this method only
+        /// binds the motor's arrays and accounts the query time. A false return means the
+        /// mesh has nothing under this footprint inside the band, and the selection falls
+        /// back to the arena ground plane.
+        /// </remarks>
+        private bool TryQueryTerrainSupport(Vector3 center, float ballBottom, float stepLimit,
+            out int surfaceId, out Vector3 normal, out float height)
         {
-            surfaceId = SupportSurfaceMath.NoSurfaceId;
-            point = Vector3.zero;
-            normal = Vector3.zero;
-            height = 0f;
-            if (!terrainMeshReady || terrainTriangleCount <= 0) return false;
-            float start = Time.time;
-            float maxHeight = bandReference + stepLimit;
-            if (!KatamariMath.IsFiniteFloat(maxHeight)) return false;
+            double start = WallClockSeconds();
+            bool found = TerrainMeshMath.TrySelectSupport(center, ballBottom, stepLimit,
+                proxyDirections, visualRollRotation, collisionRadiusWorldM * 0.9f,
+                terrainVertices, terrainIndices, terrainTriangleCount, terrainChunkMin,
+                terrainChunkMax, terrainChunkStarts, terrainChunkTriangleCounts,
+                terrainChunkZoneIds, terrainChunkCount, out normal, out height, out surfaceId);
+            lastTerrainQueryMicros = lastTerrainQueryMicros + ElapsedMicros(start);
+            return found;
+        }
 
-            float ring = collisionRadiusWorldM * 0.9f;
-            float bestHeight = -float.MaxValue;
-            bool found = false;
-            if (proxyDirections != null && proxyDirections.Length > 0)
-            {
-                int count = proxyDirections.Length;
-                if (count > TerrainMeshMath.MaxProbes) count = TerrainMeshMath.MaxProbes;
-                for (int i = 0; i < count; i++)
-                {
-                    // proxyDirections is the local 16-direction set; the probe ring is
-                    // world-space, so rotate exactly like the needle path does.
-                    Vector3 direction = visualRollRotation * proxyDirections[i];
-                    float horizontal = Mathf.Sqrt(direction.x * direction.x +
-                        direction.z * direction.z);
-                    if (!KatamariMath.IsFiniteFloat(horizontal) || horizontal <= 1e-4f)
-                        continue;
-                    Vector3 probe = new Vector3(center.x + direction.x / horizontal * ring,
-                        center.y, center.z + direction.z / horizontal * ring);
-                    Vector3 candidatePoint;
-                    Vector3 candidateNormal;
-                    int candidateId;
-                    if (!TerrainMeshMath.TrySupportProbe(probe, maxHeight, terrainVertices,
-                        terrainIndices, terrainTriangleCount, terrainChunkMin, terrainChunkMax,
-                        terrainChunkStarts, terrainChunkTriangleCounts, terrainChunkZoneIds,
-                        terrainChunkCount, out candidatePoint, out candidateNormal,
-                        out candidateId))
-                        continue;
-                    float centerHeight = (candidateNormal.x * candidatePoint.x +
-                        candidateNormal.y * candidatePoint.y +
-                        candidateNormal.z * candidatePoint.z -
-                        candidateNormal.x * center.x - candidateNormal.z * center.z) /
-                        candidateNormal.y;
-                    if (!KatamariMath.IsFiniteFloat(centerHeight)) continue;
-                    if (!SupportSurfaceMath.IsStepWithinLimit(centerHeight, bandReference,
-                        stepLimit)) continue;
-                    if (!found || centerHeight > bestHeight)
-                    {
-                        found = true;
-                        bestHeight = centerHeight;
-                        surfaceId = candidateId;
-                        normal = candidateNormal;
-                    }
-                }
-            }
-            if (!found)
-            {
-                // No radial direction (unlikely) or every ring probe missed: one centre
-                // probe keeps a flat mesh under a stationary ball working.
-                Vector3 candidatePoint;
-                Vector3 candidateNormal;
-                int candidateId;
-                if (!TerrainMeshMath.TrySupportProbe(center, maxHeight, terrainVertices,
-                    terrainIndices, terrainTriangleCount, terrainChunkMin, terrainChunkMax,
-                    terrainChunkStarts, terrainChunkTriangleCounts, terrainChunkZoneIds,
-                    terrainChunkCount, out candidatePoint, out candidateNormal,
-                    out candidateId))
-                {
-                    lastTerrainQueryMicros = lastTerrainQueryMicros +
-                        (Time.time - start) * 1000000f;
-                    return false;
-                }
-                float centerHeight = (candidateNormal.x * candidatePoint.x +
-                    candidateNormal.y * candidatePoint.y +
-                    candidateNormal.z * candidatePoint.z -
-                    candidateNormal.x * center.x - candidateNormal.z * center.z) /
-                    candidateNormal.y;
-                if (!KatamariMath.IsFiniteFloat(centerHeight) ||
-                    !SupportSurfaceMath.IsStepWithinLimit(centerHeight, bandReference,
-                        stepLimit))
-                {
-                    lastTerrainQueryMicros = lastTerrainQueryMicros +
-                        (Time.time - start) * 1000000f;
-                    return false;
-                }
-                found = true;
-                bestHeight = centerHeight;
-                surfaceId = candidateId;
-                normal = candidateNormal;
-            }
+        /// <summary>
+        /// Wall-clock seconds as a double: the one clock that advances DURING a frame.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <c>Time.time</c> is a frame timestamp, so two reads inside one step return the
+        /// same value and BOTH per-step microsecond counters read 0: the terrain query
+        /// counter on every step of the 2026-11-16 terrain run, and the v2 step counter
+        /// (<see cref="GetLastStepMicros"/>) whenever the v2 authority is on.
+        /// <c>Time.realtimeSinceStartupAsDouble</c> reads the actual clock;
+        /// the double form is required because the float property's ulp is already ~0.24 ms
+        /// after an hour of uptime, which is coarser than the query being measured.
+        /// </para>
+        /// <para>
+        /// Cost: two native property reads per measured block, no allocation, no string, and
+        /// nothing in any decision path reads the result - it is a diagnostic counter only.
+        /// Against the loop it measures (up to 17 probes x the triangles of the hit chunks)
+        /// that is below the noise floor of the Udon interpreter, so leaving it on in a
+        /// shipped build is free. If a build's Udon whitelist lacks the AsDouble property,
+        /// this ONE method is the only line to change (to <c>Time.realtimeSinceStartup</c>,
+        /// accepting the coarser resolution).
+        /// </para>
+        /// </remarks>
+        private double WallClockSeconds()
+        {
+            return Time.realtimeSinceStartupAsDouble;
+        }
 
-            point = new Vector3(center.x, bestHeight, center.z);
-            height = bestHeight;
-            lastTerrainQueryMicros = lastTerrainQueryMicros +
-                        (Time.time - start) * 1000000f;
-            return true;
+        /// <summary>Microseconds since <paramref name="startSeconds"/>; never negative.</summary>
+        private float ElapsedMicros(double startSeconds)
+        {
+            double elapsed = WallClockSeconds() - startSeconds;
+            if (elapsed < 0.0) elapsed = 0.0;
+            return (float)(elapsed * 1000000.0);
         }
 
         /// <summary>
@@ -3462,7 +3423,7 @@ namespace VRCKatamari.BallMotor
         private void ResolveTerrainPenetration(ref Vector3 center, ref Vector3 planarVelocity)
         {
             if (!terrainMeshReady || terrainTriangleCount <= 0) return;
-            float start = Time.time;
+            double start = WallClockSeconds();
             for (int iteration = 0; iteration < 2; iteration++)
             {
                 Vector3 point;
@@ -3481,8 +3442,7 @@ namespace VRCKatamari.BallMotor
                         0f, planarVelocity.z - normal.z * inward);
                 }
             }
-            lastTerrainQueryMicros = lastTerrainQueryMicros +
-                (Time.time - start) * 1000000f;
+            lastTerrainQueryMicros = lastTerrainQueryMicros + ElapsedMicros(start);
         }
 
         /// <summary>
@@ -4264,7 +4224,9 @@ namespace VRCKatamari.BallMotor
             if (!EnsureRegistrationBuffers()) return false;
             if (boxCount >= MaxBoxCount)
             {
-                SignalOverflow("box capacity 8 exceeded");
+                // Explicit failure, never a silent drop: the caller (LevelArenaHost) counts
+                // the refusal and the importer reports [structure_capacity] for the level.
+                SignalOverflow("box capacity " + MaxBoxCount + " exceeded");
                 return false;
             }
             if (!KatamariMath.IsFiniteVector(minimum)) return false;
@@ -4880,7 +4842,16 @@ namespace VRCKatamari.BallMotor
             return terrainChunkCount;
         }
 
-        /// <summary>Last step's terrain support + penetration query time, microseconds.</summary>
+        /// <summary>
+        /// This step's terrain query time in microseconds: the support selection plus the T1
+        /// push-out, accumulated and reset at the top of every step.
+        /// </summary>
+        /// <remarks>
+        /// Measured with the wall clock (<see cref="WallClockSeconds"/>), not with
+        /// <c>Time.time</c>, which is a frame timestamp and made this counter read 0 on
+        /// every step. It is a diagnostic: nothing branches on it, it allocates nothing, and
+        /// its own cost is two property reads per query.
+        /// </remarks>
         public float GetLastTerrainQueryMicros()
         {
             return lastTerrainQueryMicros;
@@ -5026,7 +4997,7 @@ namespace VRCKatamari.BallMotor
         /// (100..111) and role <see cref="ContactCodes.RoleProp"/> or
         /// <see cref="ContactCodes.RoleBlocking"/>, which is what makes
         /// <see cref="GetContactRole"/> and <see cref="GetSupportKind"/> (kind 3) classify
-        /// a prop contact as a prop. Static boxes stay 1..8, ramps 10..13, the ground 0 and
+        /// a prop contact as a prop. Static boxes stay 1..64, ramps 500..503, the ground 0 and
         /// boundary planes 1000 + i.
         /// </para>
         /// <para>
@@ -5637,7 +5608,7 @@ namespace VRCKatamari.BallMotor
         /// <summary>
         /// Surface id of contact <paramref name="index"/>, or -1. The id carries the kind,
         /// which is how a reader tells a prop contact from a static one (there is no
-        /// separate prop branch in the solver): 0 ground, 1..8 static box, 10..13 ramp,
+        /// separate prop branch in the solver): 0 ground, 1..64 static box, 500..503 ramp,
         /// 100..111 prop, 1000 + i boundary plane. The role of the same record
         /// (<see cref="GetContactRole"/>) is the second, table-independent label.
         /// </summary>
@@ -5787,12 +5758,15 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Wall-clock cost of the last v2 step, microseconds. COARSE: Udon exposes no
-        /// high-resolution clock (no Stopwatch), and Time.time resolves per frame, so a
-        /// frame that runs several fixed steps reports 0 for all but the first and the
-        /// reading is a whole-frame upper bound rather than a per-step measurement. Use
-        /// it to prove the solver's order of magnitude, not to compare nanoseconds.
+        /// Wall-clock cost of the last v2 step, microseconds.
         /// </summary>
+        /// <remarks>
+        /// Measured like <see cref="GetLastTerrainQueryMicros"/>: with
+        /// <see cref="WallClockSeconds"/>, the one clock that advances during a frame. It
+        /// used <c>Time.time</c> and therefore reported 0 for every fixed step inside one
+        /// frame. It is still a per-step measurement now, but its resolution is the platform
+        /// clock's, not a nanosecond counter: use it for an order of magnitude.
+        /// </remarks>
         public float GetLastStepMicros()
         {
             return lastStepMicros;
@@ -5940,7 +5914,7 @@ namespace VRCKatamari.BallMotor
         /// place" is what keeps a 20 Hz scan from allocating a pair of arrays per tick.
         /// </para>
         /// <para>
-        /// Fixed capacities are MaxPlaneCount = 8, MaxBoxCount = 8,
+        /// Fixed capacities are MaxPlaneCount = 8, MaxBoxCount = 64,
         /// MaxBlockingBoxCount = 6, PendingCandidateCapacity = 4 and ContactCapacity = 4.
         /// An entry beyond a capacity is DROPPED, never queued, resized or degraded:
         /// overflowing the obstacle set changes what the ball can collide with,
@@ -6504,7 +6478,8 @@ namespace VRCKatamari.BallMotor
 
         /// <summary>
         /// Which surface supports the ball: 0 = ground, 1+i = static box i,
-        /// 10+i = static ramp i (P3), 100+i = support-prop slot i (P2). The host
+        /// 500+i = static ramp i (P3), 100+i = support-prop slot i (P2), 2000+ = terrain.
+        /// The host
         /// registers its support rows in ascending prop-index order, so a slot is stable
         /// while the prop stays selected; it is a diagnostic key, not a durable prop
         /// identity.
@@ -6544,20 +6519,22 @@ namespace VRCKatamari.BallMotor
 
         /// <summary>
         /// What kind of surface supports the ball: 0 = ground, 1 = static box top,
-        /// 2 = static ramp (P3), 3 = support prop top (P2), -1 = no surface resolved.
+        /// 2 = static ramp (P3), 3 = support prop top (P2), 4 = climbing contact (v2),
+        /// 5 = needle only (v2), 6 = terrain mesh triangle, -1 = no surface resolved.
         /// </summary>
         /// <remarks>
         /// It is a kind, not an index: <see cref="GetSupportSurfaceId"/> names WHICH box,
         /// ramp or prop, this says WHAT it is, and a reader that only needs "is this a
         /// slope" should read this one. Ids are ordered so the range tests are the ones
-        /// SupportSurfaceMath already owns: ramps are 10..13 (FirstRampSurfaceId + i) and
-        /// props are 100..105 (FirstPropSurfaceId + i), while static boxes stay 1..8.
+        /// SupportSurfaceMath already owns: ramps are 500..503 (FirstRampSurfaceId + i),
+        /// props are 100..105 (FirstPropSurfaceId + i, a bounded range) and the terrain is
+        /// 2000+, while static boxes stay 1..64.
         /// </remarks>
         public int GetSupportKind()
         {
             // v2 adds two kinds (design §2.5): 5 = only a pin is holding the ball up, and
             // 4 = the ball is on a climbing contact (a wall with no floor). The id ranges
-            // 0/1..8/10..13/100..105 keep their v1 meaning, which is what lets the test
+            // 0/1..64/500..503/100..105 keep their v1 meaning, which is what lets the test
             // field's existing reads keep working with the flag on.
             if (contactModelV2Enabled)
             {
@@ -6567,6 +6544,9 @@ namespace VRCKatamari.BallMotor
             if (supportSurfaceId == SupportSurfaceMath.GroundSurfaceId) return 0;
             if (SupportSurfaceMath.IsRampSurfaceId(supportSurfaceId)) return 2;
             if (SupportSurfaceMath.IsPropSurfaceId(supportSurfaceId)) return 3;
+            if (TerrainMeshMath.IsTerrainSurfaceId(supportSurfaceId)) return 6;
+            // Static boxes are 1 + i, i < MaxBoxCount, and every other range is excluded
+            // above, so the remainder is a box id.
             if (supportSurfaceId > 0) return 1;
             return -1;
         }

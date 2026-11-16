@@ -68,6 +68,19 @@ namespace VRCKatamari.BallLayers
                 return;
             }
 
+            // One motor holds ONE terrain mesh: SetTerrainMesh replaces the buffers, so a
+            // second host on the same motor silently wins and the first level's triangles are
+            // gone. That is a wiring mistake, not a supported mode (a multi-cell field must
+            // re-register on cell switch), so it is reported once instead of being invisible.
+            int alreadyHeld = motor.GetTerrainMeshTriangleCount();
+            if (alreadyHeld > 0)
+            {
+                Debug.LogWarning("[TerrainFieldHost] motor already holds a " + alreadyHeld +
+                                 "-triangle terrain; '" + terrainId + "' replaces it (one " +
+                                 "terrain per motor - link only one host, or re-register on " +
+                                 "a cell switch)");
+            }
+
             if (!motor.SetTerrainMesh(vertices, vertexCount, indices, indexCount,
                 chunkStarts, chunkTriangleCounts, chunkZoneIds, chunkCount))
             {

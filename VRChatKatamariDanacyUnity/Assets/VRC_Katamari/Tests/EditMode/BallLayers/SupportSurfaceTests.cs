@@ -72,7 +72,7 @@ namespace VRCKatamari.Tests
             return SupportSurfaceMath.TryResolveSupport(probe, referenceHeight, stepLimit, Up, 0f,
                 minima, maxima, mask, boxCount,
                 new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
-                NoProps(), NoProps(), 0,
+                NoProps(), NoProps(), 0, SupportSurfaceMath.NoSurfaceId, 0f, Vector3.zero,
                 out surfaceId, out point, out normal, out height, out candidateCount);
         }
 
@@ -101,7 +101,7 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(SupportSurfaceMath.TryResolveSupport(new Vector3(1f, 5f, 2f), 0f, 0.6f,
                 Up, 0.5f, minima, maxima, MaskFor(maxima, 0, 0f, 0.6f), 0,
                 new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
-                NoProps(), NoProps(), 0, out id, out point, out normal, out height,
+                NoProps(), NoProps(), 0, SupportSurfaceMath.NoSurfaceId, 0f, Vector3.zero, out id, out point, out normal, out height,
                 out candidates));
 
             Assert.AreEqual(SupportSurfaceMath.GroundSurfaceId, id);
@@ -325,7 +325,7 @@ namespace VRCKatamari.Tests
             Assert.IsFalse(SupportSurfaceMath.TryResolveSupport(new Vector3(float.NaN, 1f, 0f), 0f,
                 0.3f, Up, 0f, minima, maxima, MaskFor(maxima, 1, 0f, 0.3f), 1,
                 new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
-                NoProps(), NoProps(), 0, out id, out point, out normal, out height,
+                NoProps(), NoProps(), 0, SupportSurfaceMath.NoSurfaceId, 0f, Vector3.zero, out id, out point, out normal, out height,
                 out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
             Assert.AreEqual(Vector3.zero, point);
@@ -341,7 +341,7 @@ namespace VRCKatamari.Tests
                 0.3f, Up, 0f, minima, invertedMaxima,
                 MaskFor(invertedMaxima, 1, 0f, 0.3f), 1,
                 new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
-                NoProps(), NoProps(), 0,
+                NoProps(), NoProps(), 0, SupportSurfaceMath.NoSurfaceId, 0f, Vector3.zero,
                 out id, out point, out normal, out height, out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
             Assert.AreEqual(0f, height, Tolerance);
@@ -352,7 +352,7 @@ namespace VRCKatamari.Tests
                 0.3f, new Vector3(1f, 0f, 0f), 0f, minima, maxima,
                 MaskFor(maxima, 1, 0f, 0.3f), 1,
                 new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
-                NoProps(), NoProps(), 0,
+                NoProps(), NoProps(), 0, SupportSurfaceMath.NoSurfaceId, 0f, Vector3.zero,
                 out id, out point, out normal, out height, out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
 
@@ -361,7 +361,7 @@ namespace VRCKatamari.Tests
             Assert.IsFalse(SupportSurfaceMath.TryResolveSupport(new Vector3(0f, 1f, 0f), 0f,
                 0.3f, Up, 0f, minima, maxima, MaskFor(maxima, 1, 0f, 0.3f), 2,
                 new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
-                NoProps(), NoProps(), 0, out id, out point, out normal, out height,
+                NoProps(), NoProps(), 0, SupportSurfaceMath.NoSurfaceId, 0f, Vector3.zero, out id, out point, out normal, out height,
                 out candidates));
             Assert.AreEqual(SupportSurfaceMath.NoSurfaceId, id);
         }
@@ -403,11 +403,11 @@ namespace VRCKatamari.Tests
         [Test]
         public void CapacityRefusesTheNinthBoxWithoutTouchingTheFirst()
         {
-            // The motor's AddBox keeps the ninth registration out (its own capacity
-            // signal); this query's contract is that the box table is exactly
-            // boxCount entries, so a leftover ninth slot can never be read. The
-            // ninth slot here is deliberately the highest box under the probe: a
-            // query that read past boxCount would select it.
+            // The motor's own box capacity is 64 since 2026-11-16 (it was 8); this case is
+            // about THIS query's contract instead: the box table is exactly boxCount
+            // entries, so a slot past boxCount can never be read even when the caller hands
+            // over a longer array. The extra slot here is deliberately the highest box under
+            // the probe: a query that read past boxCount would select it.
             Vector3[] minima = new Vector3[9];
             Vector3[] maxima = new Vector3[9];
             for (int i = 0; i < 8; i++)
@@ -469,7 +469,7 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(SupportSurfaceMath.TryResolveSupport(new Vector3(0f, 1f, 0f), 0f, 0.3f,
                 Up, -0.05f, minima, maxima, MaskFor(maxima, 0, 0f, 0.3f), 0,
                 new Vector3[0], new Vector3[0], new Vector3[0], NoFloats(), NoFloats(), 0,
-                NoProps(), NoProps(), 0, out id, out point, out normal, out height,
+                NoProps(), NoProps(), 0, SupportSurfaceMath.NoSurfaceId, 0f, Vector3.zero, out id, out point, out normal, out height,
                 out candidates));
             Assert.AreEqual(-0.05f, height, Tolerance);
         }

@@ -104,12 +104,14 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(0, (int)Invoke(arena, arenaType, "GetObbRefusalCount"));
             Assert.AreEqual(0, (int)Invoke(arena, arenaType, "GetObbOverflowCount"));
 
-            // Surface ids stay in the v1 space: ramps are registered first (10, 11), the box
-            // after them (1). Roles: 1 = slab, 0 = box (CONTACT_MODEL_V2 §2.1).
+            // Surface ids stay in the v1 space: ramps are registered first (500, 501 - the
+            // ramp base moved off 10 when the static box table grew to 64, and off 1000
+            // which the v2 solver's boundary planes own), the box after them (1).
+            // Roles: 1 = slab, 0 = box (CONTACT_MODEL_V2 §2.1).
             int[] surfaceIds = GetArray<int>("staticObbSurfaceId");
             int[] roles = GetArray<int>("staticObbRole");
-            CollectionAssert.AreEqual(new[] { 10, 11, 1 }, surfaceIds,
-                "ramp slabs keep 10+i and boxes keep 1+i");
+            CollectionAssert.AreEqual(new[] { 500, 501, 1 }, surfaceIds,
+                "ramp slabs keep FirstRampSurfaceId+i and boxes keep 1+i");
             CollectionAssert.AreEqual(new[] { 1, 1, 0 }, roles, "slab, slab, box");
 
             // The deck's bake is the bounds box to the last digit (§7.4).

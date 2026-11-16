@@ -1,11 +1,12 @@
 using UnityEngine;
+using VRCKatamari.BallLayers;
 using VRCKatamari.Core;
 
 namespace VRCKatamari.BallContact
 {
     /// <summary>
-    /// Static, chunked terrain mesh queries for the kinematic motor: support under a
-    /// probe and sphere-vs-mesh penetration.
+    /// Static, chunked terrain mesh queries for the kinematic motor: support under the
+    /// ball's footprint and sphere-vs-mesh penetration.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -19,17 +20,18 @@ namespace VRCKatamari.BallContact
     /// <para>
     /// Support is a vertical ray at a probe: the highest upward-facing triangle whose XZ
     /// projection contains the probe and whose plane height is at or below the caller's
-    /// band. The normal is the triangle's face normal, flipped to +Y for a double-sided
+    /// ceiling. The normal is the triangle's face normal, flipped to +Y for a double-sided
     /// floor. Push-out is single-sided: only the front side of a triangle (the side its
     /// winding normal points to) pushes the sphere out, so standing under a roof does not
     /// lift the ball. Degenerate/zero-area triangles are skipped.
     /// </para>
     /// <para>
-    /// The support probe list is the motor's 16 radial directions; each is projected to
-    /// XZ and scaled to the ball's footprint, so a footprint edge on a terrace still finds
-    /// the upper surface. The selected support plane is handed to the existing
-    /// <c>GroundContactMath</c> as a regular <c>(normal, offset)</c> pair, exactly like a
-    /// plane/box/ramp support.
+    /// <see cref="TrySelectSupport"/> is the whole T0 answer for one ball: the probe set is
+    /// the motor's radial directions projected to XZ and scaled to the footprint, plus the
+    /// ball's own XZ, and the selected plane is handed to <c>GroundContactMath</c> as a
+    /// regular <c>(normal, offset)</c> pair, exactly like a plane/box/ramp support. The band
+    /// it applies is anchored on the BALL'S BOTTOM (upward only, <c>0.25 * D</c>); see that
+    /// method for why there is no downward bound.
     /// </para>
     /// <para>
     /// Capacities: 8,192 triangles / 16,384 vertices / 64 chunks / 512 triangles per chunk.
@@ -46,11 +48,23 @@ namespace VRCKatamari.BallContact
         public const int MaxProbes = 16;
 
         /// <summary>
-        /// Terrain surface ids start here, clear of planes (1000 + index), boxes (1 + i),
-        /// ramps (10 + i) and props (100 + i). The id is the chunk's zone id, so a seam
-        /// between two chunks in the same zone keeps one support id.
+        /// Terrain surface ids start here, clear of the support table's other ranges: ground
+        /// 0, static box (1 + i, 1..64), prop (100 + i, 100..105) and ramp
+        /// (<c>SupportSurfaceMath.FirstRampSurfaceId</c> + i, 500..503). The id is the
+        /// chunk's zone id, so a seam between two chunks in the same zone keeps one support
+        /// id.
         /// </summary>
         public const int FirstTerrainSurfaceId = 2000;
+
+        /// <summary>True when <paramref name="surfaceId"/> names a terrain chunk/zone.</summary>
+        /// <remarks>
+        /// The one range test, so a reader that classifies a selected surface (the motor's
+        /// support-kind getter) cannot drift from where the ids are minted.
+        /// </remarks>
+        public static bool IsTerrainSurfaceId(int surfaceId)
+        {
+            return surfaceId >= FirstTerrainSurfaceId;
+        }
 
         /// <summary>A support triangle must face up by at least this much.</summary>
         public const float MinUpwardNormalY = 0.05f;
@@ -221,6 +235,106 @@ namespace VRCKatamari.BallContact
                 }
             }
 
+            return found;
+        }
+
+        /// <summary>
+        /// The T0 support answer for one ball: the highest upward triangle under the ball's
+        /// footprint that is at or below the ball's step ceiling.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// GEOMETRY. Every direction in <paramref name="localDirections"/> is rotated to
+        /// world (the motor passes its radial-proxy set and the visual roll rotation),
+        /// projected to XZ and scaled to <paramref name="ringRadius"/>, and the ball's own XZ
+        /// is probed last, so a flat floor under a stationary ball works even when every ring
+        /// direction misses. Each probe asks <see cref="TrySupportProbe"/> for its highest
+        /// triangle at or below the ceiling; the answer is then re-measured on that
+        /// triangle's PLANE at the ball's XZ, because a slope's height 0.9 r away is not its
+        /// height under the centre. The highest of those centre heights wins.
+        /// </para>
+        /// <para>
+        /// THE BAND IS ANCHORED ON THE BALL'S BOTTOM (<paramref name="ballBottomY"/>), never
+        /// on the previous support and never on the arena ground plane
+        /// (<c>LEVEL_FORMAT_V2</c> §1.3 rule 3, §3.6). Upward it is exactly
+        /// <paramref name="stepLimitM"/>: that is the step gate, and it is deliberately the
+        /// same <see cref="SupportSurfaceMath.IsStepWithinLimit"/> the static-box mask uses.
+        /// Downward there is NO bound at all: a gully, a pit or a tunnel floor any distance
+        /// below the ball is a support, and a real fall is the level's kill plane's decision
+        /// rather than a band's. A triangle above the ceiling is inside the footprint but too
+        /// tall to be a step, so it is a wall (T1 pushes the ball out of it), not a support.
+        /// </para>
+        /// <para>
+        /// The ball's bottom can be below the mesh (a spawn inside geometry, a ball that fell
+        /// through a seam): then every triangle is above the ceiling and this returns false.
+        /// The caller must NOT read that as "no support anywhere" - the arena ground plane is
+        /// still the fallback, which is what <c>ThereIsNoSupportPlaneWhereTheMeshAnswers</c>
+        /// in the support model requires.
+        /// </para>
+        /// <para>
+        /// No allocation: the probe list is caller-owned and the loop reads only the fixed
+        /// buffers. Cost is at most <c>(probeCount) * trianglesInHitChunks</c> triangle tests,
+        /// one more probe than the old ring-only query (the ball's own XZ is no longer a
+        /// fallback that runs only on a miss).
+        /// </para>
+        /// </remarks>
+        public static bool TrySelectSupport(
+            Vector3 center, float ballBottomY, float stepLimitM,
+            Vector3[] localDirections, Quaternion localToWorld, float ringRadius,
+            Vector3[] vertices, int[] indices, int triangleCount,
+            Vector3[] chunkMin, Vector3[] chunkMax,
+            int[] chunkStarts, int[] chunkTriangleCounts, int[] chunkZoneIds, int chunkCount,
+            out Vector3 normal, out float height, out int surfaceId)
+        {
+            normal = Vector3.zero;
+            height = 0f;
+            surfaceId = -1;
+            if (!KatamariMath.IsFiniteVector(center)) return false;
+            if (!KatamariMath.IsFiniteFloat(ballBottomY)) return false;
+            if (!KatamariMath.IsFiniteFloat(stepLimitM) || stepLimitM < 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(ringRadius) || ringRadius < 0f) return false;
+            if (triangleCount <= 0) return false;
+            float ceiling = ballBottomY + stepLimitM;
+            if (!KatamariMath.IsFiniteFloat(ceiling)) return false;
+
+            int directionCount = localDirections == null ? 0 : localDirections.Length;
+            if (directionCount > MaxProbes) directionCount = MaxProbes;
+            int probeCount = directionCount + 1;
+            bool found = false;
+            float bestHeight = -float.MaxValue;
+            for (int i = 0; i < probeCount; i++)
+            {
+                Vector3 probe = center;
+                if (i < directionCount)
+                {
+                    Vector3 direction = localToWorld * localDirections[i];
+                    float horizontal = Mathf.Sqrt(direction.x * direction.x +
+                        direction.z * direction.z);
+                    if (!KatamariMath.IsFiniteFloat(horizontal) || horizontal <= 1e-4f) continue;
+                    probe = new Vector3(center.x + direction.x / horizontal * ringRadius,
+                        center.y, center.z + direction.z / horizontal * ringRadius);
+                }
+                Vector3 candidatePoint;
+                Vector3 candidateNormal;
+                int candidateId;
+                if (!TrySupportProbe(probe, ceiling, vertices, indices, triangleCount, chunkMin,
+                    chunkMax, chunkStarts, chunkTriangleCounts, chunkZoneIds, chunkCount,
+                    out candidatePoint, out candidateNormal, out candidateId)) continue;
+                // The triangle's plane at the BALL's XZ, not at the probe's: a slope tilts
+                // under the centre, and GroundContactMath solves for the centre.
+                float centreHeight = (Dot(candidateNormal, candidatePoint) -
+                    candidateNormal.x * center.x - candidateNormal.z * center.z) /
+                    candidateNormal.y;
+                if (!KatamariMath.IsFiniteFloat(centreHeight)) continue;
+                if (!SupportSurfaceMath.IsStepWithinLimit(centreHeight, ballBottomY,
+                    stepLimitM)) continue;
+                if (found && centreHeight <= bestHeight) continue;
+                found = true;
+                bestHeight = centreHeight;
+                height = centreHeight;
+                normal = candidateNormal;
+                surfaceId = candidateId;
+            }
             return found;
         }
 

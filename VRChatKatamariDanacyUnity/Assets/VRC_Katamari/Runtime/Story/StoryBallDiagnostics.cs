@@ -140,6 +140,7 @@ namespace VRCKatamari.Story
             else if (supportKind == 1) supportName = "box";
             else if (supportKind == 2) supportName = "ramp";
             else if (supportKind == 3) supportName = "prop";
+            else if (supportKind == 6) supportName = "terrain";
             Vector3 axes = motor.GetPlanarVelocity();
             Debug.Log("[story] t=" + (Mathf.Floor(elapsed * 10f) / 10f)
                 + " center=" + center

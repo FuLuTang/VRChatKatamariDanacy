@@ -22,7 +22,7 @@
 ## 0. 结论速览（先看这七条）
 
 1. **21 个格位、84 次运行（21 格 × 4 个球径）、128 条可自动判定判据；本轮落地 9 格 / 59 条，全场压缩到 27×30.5 m。** 四带一中心：北=斜板（6）、东=台阶（6）、南=薄件/贴墙（4）、西=挡路+长杆+台面+组合（4），中央=起点与球径台（1）。
-2. **容量是这张图的硬约束，不是美学。** 电机上限「静态盒 8 / 平面 8 / 斜面 4」装不下 21 格，因此本场采用 **一格一注册**：切格 = `motor.ClearObstacles()` → 目标格 `LevelArenaHost.Reapply()`。这条不是权宜，而是把 `LevelArenaHost.Reapply()` 变成**必须可用**的接口要求（TERRAIN_SUPPORT §7.3 已列，但没写消费方；本场是第一个）。
+2. **容量是这张图的硬约束，不是美学。** 电机上限「静态盒 64（2026-11-16 前是 8）/ 平面 8 / 斜面 4」装不下 21 格，因此本场采用 **一格一注册**：切格 = `motor.ClearObstacles()` → 目标格 `LevelArenaHost.Reapply()`。这条不是权宜，而是把 `LevelArenaHost.Reapply()` 变成**必须可用**的接口要求（TERRAIN_SUPPORT §7.3 已列，但没写消费方；本场是第一个）。
 3. **判据全部落在「已有的 getter」或「每固定步一行的 `[ProxyTrace]` 日志」上**。唯一现在拿不到的是每步成本计数器（`activeSurfaceCount` / 单步耗时），本场把它列成**待加 getter**（§6.4），拿到之前 `readout=counter` 的判据报 `BLOCKED_UNTIL_P4`，而不是假装能测。
 4. **球径设定不改运行时代码**：用现有接缝做闭环——`SubmitCandidate(体积单位)` 喂体积 → `GetSemanticDiameterWorldM()` 读回 → 迭代收敛；**斜率/量子是解析的**（`D/(3·(baseline + confirmed))`，2026-11-15 修，见 §8.3）；回 0.30 用 `TryResetForNewRound`（它会把球重置回 baseline 直径）。三条路线的权衡在 §8.3。
 5. **三处判据落在等号上**，必须写成「含等号」才自洽：0.075 m 台阶 vs `stepLimit(0.30 预设) = 0.075`（注意：0.30 预设被体积单位量化成 D = 0.2997369，实际 `stepLimit = 0.074934`，所以 C09 的 0.30 档落在等号**之上**、应被挡；见 §4.2 与 §8.3.1）；45.0° vs `maxSupportSlopeDegrees = 45`；`collapsed_bench` 的 0.55 m 高 vs `stepLimit(2.20) = 0.55`。比较本身一律按 `≤` 读；**混用会产出互相矛盾的 PASS**（§5.5）。
@@ -107,7 +107,7 @@
 | 容量 | 值 | 来源 |
 |---|---|---|
 | 平面 | 8 | `MaxPlaneCount`（现状） |
-| 静态盒 | 8 | `MaxBoxCount`（现状；地图数据契约，`validate_map.py` 也抄成 8） |
+| 静态盒 | 64 | `MaxBoxCount`（2026-11-16 由 8 提到 64，对齐 v2 的 `budget.boxes`；超出的第 65 个 `AddBox` 显式返回 false 并 latch 原因） |
 | 斜面 | 4 | `MaxRampCount`（P3 已进树：`AddRamp` / `LevelArenaHost.rampBoxes`） |
 | 挡路盒 | 6 | `MaxBlockingBoxCount`（现状） |
 | 道具支撑 | 6 | `MaxSupportPropCount`（P2 已实现） |

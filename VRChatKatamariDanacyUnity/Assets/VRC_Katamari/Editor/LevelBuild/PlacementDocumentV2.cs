@@ -105,6 +105,11 @@ namespace VRCKatamari.Editor.LevelBuild
         public float TimeLimitS;
         public bool HasTimeLimit;
         public float[] PlayerSpawn;
+        /// <summary>
+        /// The VRChat descriptor spawn (<c>meta.playerStart</c>); null when the level declares
+        /// none and the importer keeps the <c>playerSpawn</c> marker only.
+        /// </summary>
+        public PlacementV2PlayerStart PlayerStart;
         /// <summary>The fallback floor. Absent and a declared 0 are the same thing.</summary>
         public float GroundY;
         public bool HasGroundY;
@@ -122,6 +127,18 @@ namespace VRCKatamari.Editor.LevelBuild
         public string MigrationFrom;
         public float MigrationMaxDiameterM;
         public bool HasMigration;
+    }
+
+    /// <summary>
+    /// <c>meta.playerStart</c>: where the player stands when the world starts and which way
+    /// they face. <c>Position</c> is the FEET point (world metres); <c>FacingDeg</c> is the yaw
+    /// in degrees with heading 0 = +Z (<c>Quaternion.Euler(0, FacingDeg, 0)</c>).
+    /// </summary>
+    public sealed class PlacementV2PlayerStart
+    {
+        public float[] Position;
+        public float FacingDeg;
+        public string Source;
     }
 
     public sealed class PlacementV2Ball
@@ -485,9 +502,11 @@ namespace VRCKatamari.Editor.LevelBuild
         private static readonly string[] MetaKeys =
         {
             "id", "scene", "units", "convention", "ball", "timeLimitS", "playerSpawn",
-            "groundY", "bounds", "spawnClearanceM", "zones", "arena", "caps", "budget",
+            "playerStart", "groundY", "bounds", "spawnClearanceM", "zones", "arena", "caps", "budget",
             "expected", "source", "migration"
         };
+
+        private static readonly string[] PlayerStartKeys = { "position", "facingDeg", "source" };
 
         private static readonly string[] BallKeys =
         {
@@ -688,6 +707,7 @@ namespace VRCKatamari.Editor.LevelBuild
             meta.HasTimeLimit = node.Has("timeLimitS");
             meta.TimeLimitS = node.GetFloat("timeLimitS", 0f);
             meta.PlayerSpawn = ReadVector(node, "playerSpawn", 3);
+            meta.PlayerStart = ReadPlayerStart(node.Get("playerStart"), result, document);
             meta.HasGroundY = node.Has("groundY");
             meta.GroundY = node.GetFloat("groundY", 0f);
             meta.SpawnClearanceM = node.GetFloat("spawnClearanceM", 0f);
@@ -730,6 +750,43 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             return meta;
+        }
+
+        private static PlacementV2PlayerStart ReadPlayerStart(LevelJsonNode node,
+            PlacementV2ReadResult result, PlacementV2Document document)
+        {
+            if (node == null) return null;
+            if (node.Kind != LevelJsonKind.Object)
+            {
+                result.Errors.Add("[meta_player_start] meta.playerStart must be an object " +
+                                  "{position, facingDeg}");
+                return null;
+            }
+
+            ReportUnknown(node, "meta.playerStart", PlayerStartKeys, result, document);
+            float[] position = ReadVector(node, "position", 3);
+            if (position == null)
+            {
+                result.Errors.Add("[meta_player_start] meta.playerStart.position must be 3 numbers " +
+                                  "(the feet point, world metres)");
+                return null;
+            }
+
+            LevelJsonNode facing = node.Get("facingDeg");
+            if (facing == null || facing.Kind != LevelJsonKind.Number ||
+                !PlacementV2Rules.IsFacingDegValid(facing.AsFloat()))
+            {
+                result.Errors.Add("[meta_player_start] meta.playerStart.facingDeg must be a number " +
+                                  "in -360..360 (yaw, heading 0 = +Z)");
+                return null;
+            }
+
+            return new PlacementV2PlayerStart
+            {
+                Position = position,
+                FacingDeg = facing.AsFloat(),
+                Source = node.GetString("source")
+            };
         }
 
         private static PlacementV2Ball ReadBall(LevelJsonNode node, PlacementV2ReadResult result,

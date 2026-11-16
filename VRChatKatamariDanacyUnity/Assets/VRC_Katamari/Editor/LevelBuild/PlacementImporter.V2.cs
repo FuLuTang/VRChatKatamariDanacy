@@ -891,7 +891,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 }
             }
 
-            ApplySpawnMarkers(doc, levelRoot, report);
+            Transform playerMarker = ApplySpawnMarkers(doc, levelRoot, report);
+            ApplySceneDescriptor(doc, playerMarker, report);
 
             for (int i = 0; i < behaviours.Count; i++)
             {
@@ -911,17 +912,20 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         /// <summary>
-        /// Creates the spawn markers (<c>Markers/PlayerSpawn</c>, <c>Markers/BallStart</c>).
+        /// Creates or updates the spawn markers (<c>Markers/PlayerSpawn</c>,
+        /// <c>Markers/BallStart</c>) and returns the player's marker (null when there is none).
         /// </summary>
         /// <remarks>
         /// One marker per DISTINCT authored pose, created by one method: the reference level's
-        /// two poses differ by 0.4 m, so collapsing them would move one of them, and a document
-        /// whose two poses coincide gets a single <c>Spawn</c> marker instead of two objects on
-        /// top of each other. The importer never moves the ball or the player - a
-        /// <c>VRC_SceneDescriptor</c> lives outside the managed root and is the operator's to
-        /// point at these markers once.
+        /// two poses differ, so collapsing them would move one of them, and a document without
+        /// <c>meta.playerStart</c> whose two points coincide gets a single <c>Spawn</c> marker
+        /// instead of two objects on top of each other. The player's pose is
+        /// <c>meta.playerStart</c> (feet position, yaw from <c>facingDeg</c>) when the level
+        /// declares one, else <c>meta.playerSpawn</c> with an identity rotation (the old
+        /// behaviour). The importer never moves the ball or the player at runtime;
+        /// <see cref="ApplySceneDescriptor"/> points the world descriptor at the player's marker.
         /// </remarks>
-        private static void ApplySpawnMarkers(PlacementV2Document doc, Transform levelRoot,
+        private static Transform ApplySpawnMarkers(PlacementV2Document doc, Transform levelRoot,
             PlacementImportReport report)
         {
             PlacementV2Meta meta = doc.Meta;
@@ -930,49 +934,77 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 report.Error(V2Tag + "the markers folder collides with an object that is not a " +
                              "folder; the spawn markers were not created");
-                return;
+                return null;
             }
 
             float[] ballStart = meta.Ball == null ? null : meta.Ball.Start;
-            float[] playerSpawn = meta.PlayerSpawn;
-            bool same = SamePoint(ballStart, playerSpawn);
+            PlacementV2PlayerStart start = meta.PlayerStart;
+            float[] playerPosition = start != null ? start.Position : meta.PlayerSpawn;
+            Quaternion playerRotation = start != null
+                ? RotationOfFacing(start.FacingDeg)
+                : Quaternion.identity;
+            bool same = start == null && SamePoint(ballStart, playerPosition);
             var written = new List<string>();
+            Transform playerMarker = null;
             if (same)
             {
-                float[] pose = playerSpawn ?? ballStart;
+                float[] pose = playerPosition ?? ballStart;
                 if (pose != null)
                 {
-                    if (EnsureMarker(markersRoot, SharedSpawnMarkerName, pose, report)) written.Add(
-                        SharedSpawnMarkerName);
+                    playerMarker = EnsureMarker(markersRoot, SharedSpawnMarkerName, pose,
+                        Quaternion.identity, report);
+                    if (playerMarker != null) written.Add(SharedSpawnMarkerName);
                 }
             }
             else
             {
                 if (ballStart != null &&
-                    EnsureMarker(markersRoot, BallStartMarkerName, ballStart, report))
+                    EnsureMarker(markersRoot, BallStartMarkerName, ballStart, Quaternion.identity,
+                        report) != null)
                 {
                     written.Add(BallStartMarkerName);
                 }
 
-                if (playerSpawn != null &&
-                    EnsureMarker(markersRoot, PlayerSpawnMarkerName, playerSpawn, report))
+                if (playerPosition != null)
                 {
-                    written.Add(PlayerSpawnMarkerName);
+                    playerMarker = EnsureMarker(markersRoot, PlayerSpawnMarkerName, playerPosition,
+                        playerRotation, report);
+                    if (playerMarker != null) written.Add(PlayerSpawnMarkerName);
                 }
             }
 
             for (int i = 0; i < written.Count; i++)
             {
                 report.Note(V2Tag + "spawn marker '" + HierarchyPath(markersRoot) + "/" + written[i] +
-                            "' (the importer does not move the ball or the player: point the world's " +
-                            "spawn/round start at this object once)");
+                            "'" + (start != null && written[i] == PlayerSpawnMarkerName
+                                ? " (feet " + FormatPoint(start.Position) + ", facing " +
+                                  start.FacingDeg.ToString("0.###", CultureInfo.InvariantCulture) +
+                                  " deg)"
+                                : ""));
             }
+
+            return playerMarker;
         }
 
-        private static bool EnsureMarker(Transform parent, string name, float[] pose,
-            PlacementImportReport report)
+        /// <summary>The marker's rotation for a <c>facingDeg</c> yaw (heading 0 = +Z).</summary>
+        private static Quaternion RotationOfFacing(float facingDeg)
         {
-            if (pose == null || pose.Length != 3) return false;
+            float[] q = PlacementV2Rules.FacingQuatXyzw(facingDeg);
+            return new Quaternion(q[0], q[1], q[2], q[3]);
+        }
+
+        private static string FormatPoint(float[] point)
+        {
+            if (point == null || point.Length != 3) return "none";
+            return "(" + point[0].ToString("0.####", CultureInfo.InvariantCulture) + ", " +
+                   point[1].ToString("0.####", CultureInfo.InvariantCulture) + ", " +
+                   point[2].ToString("0.####", CultureInfo.InvariantCulture) + ")";
+        }
+
+        private static Transform EnsureMarker(Transform parent, string name, float[] pose,
+            Quaternion rotation, PlacementImportReport report)
+        {
+            if (pose == null || pose.Length != 3) return null;
             var position = new Vector3(pose[0], pose[1], pose[2]);
             Transform marker = FindChild(parent, name);
             bool created = false;
@@ -985,19 +1017,94 @@ namespace VRCKatamari.Editor.LevelBuild
                 created = true;
             }
 
-            bool matches = PoseMatches(marker, position, Quaternion.identity, Vector3.one);
+            bool matches = PoseMatches(marker, position, rotation, Vector3.one);
             if (!matches)
             {
                 Undo.RecordObject(marker, UndoLabel);
                 marker.position = position;
-                marker.rotation = Quaternion.identity;
+                marker.rotation = rotation;
                 marker.localScale = Vector3.one;
             }
 
             if (created) report.V2MarkersCreated++;
             else if (!matches) report.V2MarkersUpdated++;
             else report.V2MarkersSkipped++;
-            return true;
+            return marker;
+        }
+
+        /// <summary>
+        /// Points the world's <c>VRC_SceneDescriptor</c> at the player's marker and derives its
+        /// <c>RespawnHeightY</c> from the level's kill plane.
+        /// </summary>
+        /// <remarks>
+        /// Only for a level that declares <c>meta.playerStart</c>: that block says "this level
+        /// owns where the player starts", so a document without it leaves the descriptor to the
+        /// operator exactly as before. Writes <c>spawns = [marker]</c> and
+        /// <c>RespawnHeightY = </c><see cref="PlacementV2Rules.RespawnHeightY"/> (kill plane
+        /// minus one metre; the rule and its reason live there). The descriptor is the SDK's own
+        /// component (<c>VRC.SDKBase.VRC_SceneDescriptor</c>, which <c>VRCSceneDescriptor</c>
+        /// derives from); it is not an Udon behaviour, so there is no proxy copy. A second
+        /// import compares first and writes nothing.
+        /// </remarks>
+        private static void ApplySceneDescriptor(PlacementV2Document doc, Transform playerMarker,
+            PlacementImportReport report)
+        {
+            if (doc.Meta == null || doc.Meta.PlayerStart == null) return;
+            if (playerMarker == null)
+            {
+                report.Error(V2Tag + "[meta_player_start] no player marker, so the scene " +
+                             "descriptor was not wired");
+                return;
+            }
+
+            VRC.SDKBase.VRC_SceneDescriptor[] descriptors =
+                UnityEngine.Object.FindObjectsOfType<VRC.SDKBase.VRC_SceneDescriptor>();
+            if (descriptors.Length == 0)
+            {
+                report.Note(V2Tag + "no VRC_SceneDescriptor in the scene: spawns and " +
+                            "RespawnHeightY were not written (a lab scene may not have one)");
+                return;
+            }
+
+            if (descriptors.Length > 1)
+            {
+                report.Error(V2Tag + "the scene has " + descriptors.Length + " VRC_SceneDescriptors " +
+                             "(a world has exactly one); spawns and RespawnHeightY were not written");
+                return;
+            }
+
+            VRC.SDKBase.VRC_SceneDescriptor descriptor = descriptors[0];
+            Transform[] spawns = descriptor.spawns;
+            bool spawnsMatch = spawns != null && spawns.Length == 1 && spawns[0] == playerMarker;
+
+            bool hasKill = doc.Activity != null && doc.Activity.KillPlane != null;
+            float respawnY = hasKill
+                ? PlacementV2Rules.RespawnHeightY(doc.Activity.KillPlane.Y)
+                : descriptor.RespawnHeightY;
+            bool respawnMatches = !hasKill ||
+                                  Mathf.Abs(descriptor.RespawnHeightY - respawnY) <= 1e-5f;
+
+            if (!hasKill)
+            {
+                report.Note(V2Tag + "no activityArea.killPlane: RespawnHeightY was left as it is");
+            }
+
+            if (spawnsMatch && respawnMatches) return;
+
+            Undo.RecordObject(descriptor, UndoLabel);
+            if (!spawnsMatch) descriptor.spawns = new[] { playerMarker };
+            if (!respawnMatches) descriptor.RespawnHeightY = respawnY;
+            EditorUtility.SetDirty(descriptor);
+            MarkSceneDirty();
+            report.V2MetaFieldsWritten++;
+            report.Note(V2Tag + "scene descriptor '" + descriptor.name + "': spawns=[" +
+                        HierarchyPath(playerMarker) + "], RespawnHeightY=" +
+                        descriptor.RespawnHeightY.ToString("0.###", CultureInfo.InvariantCulture) +
+                        (hasKill ? " (kill plane " +
+                                   doc.Activity.KillPlane.Y.ToString("0.###",
+                                       CultureInfo.InvariantCulture) + " - " +
+                                   PlacementV2Rules.RespawnBelowKillPlaneM.ToString("0.###",
+                                       CultureInfo.InvariantCulture) + " m)" : ""));
         }
 
         // --------------------------------------------------------- pickup exemption ---

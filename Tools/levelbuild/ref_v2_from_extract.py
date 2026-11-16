@@ -1119,7 +1119,8 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
     level = level_doc.get("level") or {}
     growth_total = sum(entry["growthMm3"] for entry in placements)
     overlap_budget = _overlap_pairs(placements)
-    ball_start, spawn_source, spawn_note = _spawn(level_id, level, terrain, placements)
+    ball_start, spawn_source, spawn_note, player_start = _spawn(level_id, level, terrain,
+                                                                placements)
     notes = ("reference rebuild of the original stage; runtime ball cap is the "
              "project global cap, but this level's own design ceiling is %.2f m "
              "(the original's MAX_DIAMETER) and absorbable/structures are decided "
@@ -1129,7 +1130,7 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
                 _motion_note(motions_summary)))
     if spawn_note is not None:
         notes = notes + ". " + spawn_note
-    return {
+    meta = {
         "id": level_id,
         "scene": _scene_name(level_id, level),
         "units": "m",
@@ -1181,6 +1182,15 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
                       "maxDiameterM": n4(max_diameter_m),
                       "volumePenalty": n4(volume_penalty)},
     }
+    if player_start is not None:
+        # right after playerSpawn, so the two spawn keys read together
+        ordered = {}
+        for key, value in meta.items():
+            ordered[key] = value
+            if key == "playerSpawn":
+                ordered["playerStart"] = player_start
+        meta = ordered
+    return meta
 
 
 #: The importer's menu matches the *active Unity scene name* against ``meta.scene``, so a
@@ -1237,8 +1247,10 @@ def _bounds(placements, margin=0.0):
 #: original's: 2.5 m behind the ball along its initial heading (heading 0 = +z), on a terrain
 #: face, 0.4 m free of walls and of props the start diameter cannot absorb, walkable to the
 #: seat trigger; when 2.5 m back fails, the nearest feasible point 1.8-3.5 m back within
-#: +-30 degrees (``spawn_reach.player_start``).  The importer reads this field later;
-#: ``meta.playerSpawn`` stays ball + 0.4 m until then.
+#: +-30 degrees (``spawn_reach.player_start``).  It is written to the document as
+#: ``meta.playerStart`` (``position`` = feet, ``facingDeg``, ``source``); the importer builds
+#: ``Markers/PlayerSpawn`` and the world descriptor's spawn from it.  ``meta.playerSpawn``
+#: stays ball + 0.4 m: it is the authoring/editor eye point, a different thing.
 AUTHORED_SPAWNS = {
     "_ref_cancer": {
         "start": (-5.00, -0.9990, 2.50),         # x, ball-centre y, z (world metres)
@@ -1270,14 +1282,15 @@ def _terrain_lookup(terrain):
 
 
 def _spawn(level_id, level, terrain, placements):
-    """``(ball_start, spawn_source, note)``: the authored point, else the field-centre guess.
+    """``(ball_start, spawn_source, note, player_start)``: the authored point, else the guess.
 
-    An authored level gets ``spawnSource: "authored"`` and a note for ``meta.arena.notes``;
+    An authored level gets ``spawnSource: "authored"`` and a note for ``meta.arena.notes``,
+    plus its ``playerStart`` block when ``AUTHORED_SPAWNS`` carries one (``None`` otherwise);
     everything else keeps the guessed ``fieldCentreGuess`` and has nothing to add.
     """
     authored = AUTHORED_SPAWNS.get(level_id)
     if authored is None:
-        return _ball_start(level, terrain, placements), "fieldCentreGuess", None
+        return _ball_start(level, terrain, placements), "fieldCentreGuess", None, None
     start = [n4(value) for value in authored["start"]]
     surface = _terrain_lookup(terrain)(
         start[0], start[2], start[1] - START_DIAMETER_M / 2.0 + 1e-4)
@@ -1288,6 +1301,7 @@ def _spawn(level_id, level, terrain, placements):
             "the rules in ORIGINAL_TERRAIN_AND_LAYOUT §2.4 before rebuilding"
             % (level_id, start, authored["ground"], surface))
     player = authored.get("playerStart")
+    player_start = None
     if player is not None:
         feet = player["position"]
         floor = _terrain_lookup(terrain)(feet[0], feet[2], feet[1] + 1e-4)
@@ -1296,8 +1310,11 @@ def _spawn(level_id, level, terrain, placements):
                 "%s: the authored player start %r is not on a terrain face any more (the face "
                 "under it is %r); re-run Tools/levelbuild/spawn_reach.py before rebuilding"
                 % (level_id, feet, floor))
+        player_start = {"position": vec3(feet),
+                        "facingDeg": n4(player["facingDeg"]),
+                        "source": player["source"]}
     return start, "authored", ("Ball spawn: authored, not a field-centre guess -- "
-                               + authored["why"])
+                               + authored["why"]), player_start
 
 
 def _ball_start(level, terrain, placements):

@@ -249,6 +249,126 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(0.8f, PenaltyOf(PropOf(doc, "defaulted"), DefOf(doc, "d_defaulted")));
         }
 
+        // ------------------------------------------------------------ player spawn ---
+
+        [Test]
+        public void RespawnHeightIsTheKillPlaneMinusOneMetre()
+        {
+            Assert.AreEqual(1f, (float)Field(rulesType, "RespawnBelowKillPlaneM"));
+            Assert.AreEqual(-5f, RespawnHeight(-4f), 1e-6f, "Cancer: kill -4 -> respawn -5");
+            Assert.AreEqual(-7f, RespawnHeight(-6f), 1e-6f, "the format's default kill plane");
+            Assert.AreEqual(-1f, RespawnHeight(0f), 1e-6f);
+        }
+
+        [Test]
+        public void RespawnHeightSitsBelowTheKillPlaneAndEveryStandableSurface()
+        {
+            // The validator guarantees killPlane < min(groundY, lowest terrain point); Cancer's
+            // numbers: groundY -3, lowest terrain -1.5918, kill -4.
+            const float lowestTerrainY = -1.5918f;
+            const float groundY = -3f;
+            const float killY = -4f;
+            float respawn = RespawnHeight(killY);
+            Assert.Less(respawn, killY, "the ball is reset before the player is");
+            Assert.Less(respawn, lowestTerrainY, "a player on the lowest terrain is never respawned");
+            Assert.Less(respawn, groundY, "nor one standing on the fallback floor");
+        }
+
+        [Test]
+        public void FacingZeroIsIdentityAndHeadingIsPlusZ()
+        {
+            float[] q = Facing(0f);
+            Assert.AreEqual(0f, q[0], 1e-6f);
+            Assert.AreEqual(0f, q[1], 1e-6f);
+            Assert.AreEqual(0f, q[2], 1e-6f);
+            Assert.AreEqual(1f, q[3], 1e-6f);
+            AssertForward(q, 0f, 1f);
+        }
+
+        [Test]
+        public void FacingIsAYawTowardsPlusXAndAUnitQuaternion()
+        {
+            // heading 0 = +Z, 90 = +X, 180 = -Z, -90 = -X; 15 is Cancer's player start.
+            float[] degrees = { 15f, 90f, 180f, -90f, 30f, -30f, 360f };
+            for (int i = 0; i < degrees.Length; i++)
+            {
+                float[] q = Facing(degrees[i]);
+                Assert.AreEqual(1f, q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3], 1e-5f,
+                    "unit at " + degrees[i]);
+                Assert.AreEqual(0f, q[0], 1e-6f, "pure yaw (x) at " + degrees[i]);
+                Assert.AreEqual(0f, q[2], 1e-6f, "pure yaw (z) at " + degrees[i]);
+                double rad = degrees[i] * Math.PI / 180.0;
+                AssertForward(q, (float)Math.Sin(rad), (float)Math.Cos(rad));
+            }
+        }
+
+        [Test]
+        public void FacingTowardsTheBallRecoversTheAuthoredBearing()
+        {
+            // Cancer: feet (-5.647, 0.0852), ball (-5.0, 2.5) -> bearing atan2(dx, dz) = 15 deg,
+            // and the quaternion's forward points from the feet at the ball.
+            double dx = -5.0 - -5.647;
+            double dz = 2.5 - 0.0852;
+            float bearing = (float)(Math.Atan2(dx, dz) * 180.0 / Math.PI);
+            Assert.AreEqual(15f, bearing, 0.05f);
+            float[] q = Facing(15f);
+            float forwardX = 2f * q[3] * q[1];
+            float forwardZ = 1f - 2f * q[1] * q[1];
+            double length = Math.Sqrt(dx * dx + dz * dz);
+            Assert.AreEqual(dx / length, forwardX, 2e-3);
+            Assert.AreEqual(dz / length, forwardZ, 2e-3);
+        }
+
+        [Test]
+        public void FacingDegreesMustBeFiniteAndWithinOneTurn()
+        {
+            Assert.IsTrue((bool)Invoke(rulesType, "IsFacingDegValid", new object[] { 0f }));
+            Assert.IsTrue((bool)Invoke(rulesType, "IsFacingDegValid", new object[] { -360f }));
+            Assert.IsTrue((bool)Invoke(rulesType, "IsFacingDegValid", new object[] { 360f }));
+            Assert.IsFalse((bool)Invoke(rulesType, "IsFacingDegValid", new object[] { 360.5f }));
+            Assert.IsFalse((bool)Invoke(rulesType, "IsFacingDegValid",
+                new object[] { float.NaN }));
+            Assert.IsFalse((bool)Invoke(rulesType, "IsFacingDegValid",
+                new object[] { float.PositiveInfinity }));
+        }
+
+        [Test]
+        public void TerrainVisualMeshPathFollowsTheLevelKind()
+        {
+            Assert.AreEqual("Assets/_RefUnlicensed/Meshes/RefCancerTerrainVisual.asset",
+                MeshPath("_ref_cancer", "cancer_ground", true));
+            Assert.AreEqual("Assets/VRC_Katamari/Generated/Levels/story_01_bench_size/bench_ground.asset",
+                MeshPath("story_01_bench_size", "bench_ground", false));
+            Assert.AreEqual("Assets/VRC_Katamari/Generated/Levels/C21/tiny_pad.asset",
+                MeshPath("physics_test_field/C21", "tiny_pad", false),
+                "a nested level id uses its leaf, like the managed root");
+            Assert.AreEqual("Assets/VRC_Katamari/Generated/Levels/odd/a_b_c.asset",
+                MeshPath("odd", "a b/c", false), "no path separators or spaces leak into the file name");
+        }
+
+        private float RespawnHeight(float killPlaneY)
+        {
+            return (float)Invoke(rulesType, "RespawnHeightY", new object[] { killPlaneY });
+        }
+
+        private float[] Facing(float degrees)
+        {
+            return (float[])Invoke(rulesType, "FacingQuatXyzw", new object[] { degrees });
+        }
+
+        private string MeshPath(string levelId, string terrainId, bool isReference)
+        {
+            return (string)Invoke(rulesType, "TerrainVisualMeshPath",
+                new object[] { levelId, terrainId, isReference });
+        }
+
+        /// <summary>The quaternion's local +Z axis (a pure yaw has no Y component).</summary>
+        private static void AssertForward(float[] q, float expectedX, float expectedZ)
+        {
+            Assert.AreEqual(expectedX, 2f * q[3] * q[1], 1e-5f, "forward.x");
+            Assert.AreEqual(expectedZ, 1f - 2f * q[1] * q[1], 1e-5f, "forward.z");
+        }
+
         // --------------------------------------------------------------- fixtures ---
 
         /// <summary>
@@ -432,6 +552,14 @@ namespace VRCKatamari.Tests
                                 ? "unknown parse error"
                                 : exception.InnerException.Message) + "):\n" + json);
             }
+        }
+
+        private static object Field(Type type, string name)
+        {
+            FieldInfo field = type.GetField(name, BindingFlags.Public | BindingFlags.NonPublic |
+                                                  BindingFlags.Static);
+            Assert.IsNotNull(field, type.Name + " has no static field '" + name + "'");
+            return field.GetValue(null);
         }
 
         private static object Field(object target, string name)

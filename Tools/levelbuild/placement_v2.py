@@ -91,8 +91,9 @@ STRUCTURE_ROLES = ("box", "ramp", "curve_ramp")
 DOC_ORDER = ("schema", "meta", "terrain", "structures", "activityArea", "props", "defs",
              "motions", "paths", "cameras", "renderPresets", "regions")
 META_KEYS = ("id", "scene", "units", "convention", "ball", "timeLimitS", "playerSpawn",
-             "groundY", "bounds", "spawnClearanceM", "zones", "arena", "caps", "budget",
+             "playerStart", "groundY", "bounds", "spawnClearanceM", "zones", "arena", "caps", "budget",
              "expected", "source", "migration")
+PLAYER_START_KEYS = ("position", "facingDeg", "source")
 BALL_KEYS = ("startDiameterM", "targetDiameterM", "maxDiameterRef", "maxDiameterM", "start",
              "spawnSource")
 CAPS_KEYS = ("props", "terrainTriangles", "terrainVertices", "staticSolids",
@@ -394,6 +395,37 @@ def validate(document, path=None, manifests=None, sidecar_bytes_=None, strict=Fa
 
 
 # -- meta ------------------------------------------------------------------- #
+def _check_player_start(meta, report):
+    """``meta.playerStart``: the descriptor spawn (feet position + yaw), optional.
+
+    ``position`` is the feet point (world metres), ``facingDeg`` the yaw in degrees with
+    heading 0 = +z (Unity ``Quaternion.Euler(0, facingDeg, 0)``), ``source`` an optional note.
+    The importer builds ``Markers/PlayerSpawn`` and the descriptor's spawn from it.
+    """
+    if "playerStart" not in meta:
+        return
+    block = meta["playerStart"]
+    if not isinstance(block, dict):
+        report.err("[meta_player_start] meta.playerStart: expected an object, got %r"
+                   % (type(block).__name__,))
+        return
+    for key in block:
+        if key not in PLAYER_START_KEYS:
+            report.err("[meta_player_start] meta.playerStart: unknown key %r (allowed: %s)"
+                       % (key, ", ".join(PLAYER_START_KEYS)))
+    if not _vec(block.get("position")):
+        report.err("[meta_player_start] meta.playerStart.position: expected 3 numbers, got %r"
+                   % (block.get("position"),))
+    facing = block.get("facingDeg")
+    if not _num(facing) or not -360.0 <= float(facing) <= 360.0:
+        report.err("[meta_player_start] meta.playerStart.facingDeg: expected a number in "
+                   "-360..360 (yaw, heading 0 = +z), got %r" % (facing,))
+    source = block.get("source")
+    if source is not None and not isinstance(source, str):
+        report.err("[meta_player_start] meta.playerStart.source: expected a string, got %r"
+                   % (source,))
+
+
 def _check_meta(document, meta, report, path):
     _unknown(report, meta, META_KEYS, "meta")
     if meta.get("units") != "m":
@@ -451,6 +483,7 @@ def _check_meta(document, meta, report, path):
     if not _vec(meta.get("playerSpawn")):
         report.err("[meta_player_spawn] meta.playerSpawn: expected 3 numbers, got %r"
                    % (meta.get("playerSpawn"),))
+    _check_player_start(meta, report)
     if meta.get("groundY") is not None and not _num(meta.get("groundY")):
         report.err("[meta_ground_y] meta.groundY: expected a number, got %r"
                    % (meta.get("groundY"),))
@@ -1013,6 +1046,12 @@ def _check_activity(document, meta, report, lowest_y=None):
     elif floor is not None and float(y) >= floor:
         report.err("[activity_kill_plane] activityArea.killPlane.y: expected < %r (below "
                    "groundY and the terrain's lowest point), got %r" % (floor, y))
+    start = meta.get("playerStart")
+    if (isinstance(start, dict) and _vec(start.get("position")) and _num(y)
+            and float(start["position"][1]) <= float(y)):
+        report.err("[meta_player_start] meta.playerStart.position: expected y above "
+                   "activityArea.killPlane.y %r (the descriptor's respawn height is derived "
+                   "from it), got %r" % (y, start["position"][1]))
     respawn = kill.get("respawn")
     if respawn != "ballStart" and not _vec(respawn):
         report.err("[activity_kill_plane] activityArea.killPlane.respawn: expected 'ballStart' "

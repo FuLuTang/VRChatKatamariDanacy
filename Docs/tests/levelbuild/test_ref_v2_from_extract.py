@@ -431,6 +431,18 @@ class RealExtractionTests(unittest.TestCase):
         self.assertLess(abs(surface - feet[1]), 0.02)
         self.assertIn("not the original", player["source"])
 
+    def test_the_document_carries_the_player_start_for_the_importer(self):
+        """``meta.playerStart`` is ``AUTHORED_SPAWNS[...]['playerStart']`` (one source), and the
+        document stays valid against the v2 validator that knows the key."""
+        player = build.AUTHORED_SPAWNS[LEVEL]["playerStart"]
+        written = self.document["meta"]["playerStart"]
+        self.assertEqual(written["position"], [round(v, 4) for v in player["position"]])
+        self.assertEqual(written["facingDeg"], player["facingDeg"])
+        self.assertEqual(written["source"], player["source"])
+        self.assertEqual(sorted(written), ["facingDeg", "position", "source"])
+        keys = list(self.document["meta"])
+        self.assertEqual(keys.index("playerStart"), keys.index("playerSpawn") + 1)
+
     def test_chunks_are_spatially_compact(self):
         """A chunk covers a small piece of the map, never an index-order run across it."""
         terrain = self.document["terrain"]

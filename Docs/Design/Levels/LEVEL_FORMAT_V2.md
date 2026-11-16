@@ -110,7 +110,8 @@
 | `ball.start` | 3×number | 是 | 球心出生点（世界米） |
 | `ball.spawnSource` | `"authored"` \| `"fieldCentreGuess"` \| `"reference"` | 是 | **推定值必须标出来**。`authored` = 点是在本关真实地形/道具/结构上量出来的可玩点（可达性模型选点：起始吸不动的道具当障碍，按 3 m 路程内可吸件数排序；参考关卡 `_ref_cancer` 就是），依据写进 `arena.notes`；`fieldCentreGuess` = 没有测量、只能取场心。原作出生点本身不可知，见 ORIGINAL_TERRAIN §2.4 |
 | `timeLimitS` | number | 剧情关必填 | 时限（秒）；`0` 表示不限时（实验/测试关） |
-| `playerSpawn` | 3×number | 是 | 玩家出生点；与球出生点分开。参考关卡暂为球上方 0.4 m；描述符 spawn（脚底）按我们的规则另算，沿球初始朝向反方向 2.5 m、落在地形面上、朝向面向球（非原作），目前存在转换器 `AUTHORED_SPAWNS` 的 `playerStart`，导入器以后读它，见 ORIGINAL_TERRAIN §2.4 |
+| `playerSpawn` | 3×number | 是 | 玩家出生点（作者/编辑器视点）；与球出生点分开。参考关卡为球上方 0.4 m。**不是**描述符 spawn，描述符 spawn 见 `playerStart` |
+| `playerStart` | object | 否 | **描述符 spawn**：`position`（3×number，**脚底**世界坐标）、`facingDeg`（偏航角，度，−360..360，heading 0 = +Z，正向朝 +X，即 `Quaternion.Euler(0, facingDeg, 0)`）、`source`（可选说明字符串）。参考关卡的值按我们的规则算（沿球初始朝向反方向 2.5 m、落在地形面上、朝向面向球，非原作），转换器从 `AUTHORED_SPAWNS` 写出，见 ORIGINAL_TERRAIN §2.4。校验器 `[meta_player_start]`：必须是对象、三键之外的键报错、`position` 3 个数、`facingDeg` 在范围内、脚底 y 高于 `activityArea.killPlane.y`。**导入器行为**：有它时 `Markers/PlayerSpawn` 取其位置和朝向，场景里的 `VRC_SceneDescriptor.spawns` 设为 `[Markers/PlayerSpawn]`，`RespawnHeightY = killPlane.y − 1 m`（球的坠落线先触发、玩家随后；校验保证 kill plane 低于 `groundY` 与地形最低点，所以一米之下永远低于任何可站立面。Cancer：kill −4、地形最低 −1.59 ⇒ −5），并在 `TerrainRoot/TerrainVisual` 上保证一个非 convex、Default 层的 `MeshCollider`（仅玩家站立；球不走 PhysX，Runtime 里没有任何 Physics 查询）。没有它则保持旧行为：只建 `Markers/PlayerSpawn` 于 `playerSpawn`（identity 朝向），不碰描述符与地形碰撞体 |
 | `groundY` | number | 否 | **兜底平面高度**：没有 `terrain` 时它就是地面；有 `terrain` 时它必须**低于地形最低点**（否则兜底平面会顶穿地形），校验器 `[meta_ground_y]` 检查。参考关卡的真实地面主带是 −1.0（§0），但碰撞 AABB 的 y 下限到 −13.85 m，所以兜底取 −20，不是 0 |
 | `bounds` | `[[minX,minZ],[maxX,maxZ]]` | 是 | 轴对齐**作者框**：用来查道具越界、给编辑器画框，**不是**活动范围（活动范围见 §5） |
 | `spawnClearanceM` | number | 是 | 出生点净空半径 |
@@ -974,6 +975,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 | `[meta_zone_code]` | error | `code` 不在 0–255；除 code 0 外重复；code 0 被声明超过一次（0 是默认区，最多一条） |
 | `[meta_unknown_key]` | error | `meta`/`ball`/`caps` 出现未知键 |
 | `[meta_ground_y]` | error | 有 `terrain` 时 `groundY` 不低于地形最低点（兜底平面会顶穿地形） |
+| `[meta_player_start]` | error | `playerStart` 不是对象、含三键之外的键、`position` 不是 3 个数、`facingDeg` 超出 −360..360，或脚底 y 不高于 `killPlane.y` |
 | `[terrain_mesh]` | error | 索引越界/长度为非 3 倍数/退化三角形（面积 < 1e-9 m²）/顶点数超侧车宽度 |
 | `[terrain_winding]` | error | 共享边的两个三角形按同方向遍历该边（说明其中一个绕序反了）；这是「面朝里」的确定性检测 |
 | `[terrain_budget]` | error | 三角形/顶点超 `meta.caps` 或运行时单块上限（512 三/1,536 顶） |
@@ -1026,7 +1028,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 ### 9.3 键白名单（`*_KEYS` 的 v2 等价物）
 
 ```python
-META_KEYS      = ("id","scene","units","convention","ball","timeLimitS","playerSpawn",
+META_KEYS      = ("id","scene","units","convention","ball","timeLimitS","playerSpawn","playerStart",
                   "groundY","bounds","spawnClearanceM","zones","arena","caps","budget",
                   "expected","source","migration")
 BALL_KEYS      = ("startDiameterM","targetDiameterM","maxDiameterRef","maxDiameterM",
@@ -1131,8 +1133,8 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
 
 | JSON | Unity | 说明 |
 |---|---|---|
-| `meta` | `LevelMetaHost`（新，挂在 `LevelContent` 根）+ `LevelArenaHost` | `startDiameterM`、`timeLimitS`、`targetDiameterM`、`maxDiameterRef`（解析到全局 `GlobalBallCap` 资产）；`ball.start`/`playerSpawn` 写场景出生点 |
-| `terrain` | `TerrainRoot`（**新** `TerrainFieldHost`）+ `Chunks/<id>`（**新** `TerrainChunkHost` + `MeshFilter` + `MeshRenderer`） | 地形**永远不是** `MeshCollider`，也不进 `LevelArenaHost.staticBoxes`；`TerrainFieldHost` 持数组与查询，`LevelArenaHost` 只拿一个引用 |
+| `meta` | `LevelMetaHost`（新，挂在 `LevelContent` 根）+ `LevelArenaHost` | `startDiameterM`、`timeLimitS`、`targetDiameterM`、`maxDiameterRef`（解析到全局 `GlobalBallCap` 资产）；`ball.start`/`playerSpawn`/`playerStart` 建 `Markers/*`；有 `playerStart` 时再写场景 `VRC_SceneDescriptor` 的 `spawns` 与 `RespawnHeightY` |
+| `terrain` | `TerrainRoot`（**新** `TerrainFieldHost`）+ `Chunks/<id>`（**新** `TerrainChunkHost` + `MeshFilter` + `MeshRenderer`） | 球的接触里地形**永远不是** `MeshCollider`，也不进 `LevelArenaHost.staticBoxes`（球不走 PhysX）；只有声明了 `meta.playerStart` 的关卡，`TerrainRoot/TerrainVisual`（`MeshFilter` + `MeshRenderer`）上另有一个非 convex、Default 层的 `MeshCollider`，**只给玩家站立**；`TerrainFieldHost` 持数组与查询，`LevelArenaHost` 只拿一个引用 |
 | `structures.solids[role=box]` | `LevelContent/Structures/<id>` + `BoxCollider` → `staticBoxes` | 与今天逐位等价 |
 | `structures.solids[role=ramp/curve_ramp]` | 同上 → `rampBoxes`（弯坡展开成 `<id>_00…` 子物体） | 与今天逐位等价 |
 | `activityArea.walls` | **新** `ActivityAreaHost` + 每段一个 `BoxCollider`（关碰撞、只作注册源） | 跨门槛时重注册；不建 Renderer（`visible` 才建） |
@@ -1145,6 +1147,7 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
 
 ### 11.2 地形网格资产（**我们自己的关卡**）
 
+- 声明了 `meta.playerStart` 的关卡，导入器（`TerrainMeshImporter`，接在地形导入之后）在 `TerrainRoot/TerrainVisual` 上保证网格 + 碰撞体：`MeshFilter` 上已有三角数一致的网格就原样保留，否则按下面的路径生成/原地覆写；`MeshCollider.sharedMesh` 指向该网格，`convex = false`、`isTrigger = false`、Default 层，`TerrainVisual` 世界位姿为单位。参考关卡的网格路径 `Assets/_RefUnlicensed/Meshes/<PascalCase 关卡名>TerrainVisual.asset`（`_ref_cancer` → `RefCancerTerrainVisual`），我们自己的关卡走下面这条。
 - 导入器在 `Assets/VRC_Katamari/Generated/Levels/<levelId>/<terrainId>.asset` 生成一个 `Mesh`：
   - 顶点/索引来自 JSON 或侧车；按 `materialSegments` 切 submesh；
   - 确定性：同一份 JSON 在同一 Unity 版本下生成同样字节；

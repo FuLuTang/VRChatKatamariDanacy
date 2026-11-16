@@ -88,7 +88,7 @@ Cancer 行：`11.0 1.0 1.0 3.0 −157 143 −192 0 0 0 1.90240883827209 0 22.2 8
 
 现行值：`meta.ball.start = [-5.0, -0.999, 2.5]`（球心 = 花园草坪面 −1.11 + 半径 0.111），`meta.playerSpawn = [-5.0, -0.599, 2.5]`（球上方 0.4 m，规则不变）。
 
-**玩家出生点（描述符 spawn，脚底）是我们的规则，不是原作的**：球心水平投影沿球初始朝向反方向退 2.5 m（heading 0 = +z），y = 该点地形面高度，朝向面向球；该点 0.4 m 内无起始吸不动的道具有向盒、无墙，且沿直线走到座位触发器（球心 + (0, 0.966, −0.994)）脚下可达（相邻两步地面落差 ≤ 0.3 m）。2.5 m 处不满足时，取 1.8–3.5 m、朝向 ±30° 内离 2.5 m 最近的可行点。本关实取 **2.5 m、+15°**：脚底 `(-5.647, -1.0398, 0.0852)`，朝向 +15°。该值写在转换器 `AUTHORED_SPAWNS["_ref_cancer"]["playerStart"]`，导入器以后读它；`meta.playerSpawn` 暂时沿用球上方 0.4 m。
+**玩家出生点（描述符 spawn，脚底）是我们的规则，不是原作的**：球心水平投影沿球初始朝向反方向退 2.5 m（heading 0 = +z），y = 该点地形面高度，朝向面向球；该点 0.4 m 内无起始吸不动的道具有向盒、无墙，且沿直线走到座位触发器（球心 + (0, 0.966, −0.994)）脚下可达（相邻两步地面落差 ≤ 0.3 m）。2.5 m 处不满足时，取 1.8–3.5 m、朝向 ±30° 内离 2.5 m 最近的可行点。本关实取 **2.5 m、+15°**：脚底 `(-5.647, -1.0398, 0.0852)`，朝向 +15°。该值写在转换器 `AUTHORED_SPAWNS["_ref_cancer"]["playerStart"]`，并输出为文档的 `meta.playerStart`（`position` 脚底、`facingDeg`、`source`）；导入器读它建 `Markers/PlayerSpawn`、接场景描述符（见 LEVEL_FORMAT_V2 §2.2 `playerStart`）。`meta.playerSpawn` 仍是球上方 0.4 m，它是编辑器/作者视点，不是描述符出生点。
 
 **选点模型**（`Tools/levelbuild/spawn_reach.py`，`python3 Tools/levelbuild/spawn_reach.py Docs/Design/Levels/_ref_cancer scan` 可复算；纯标准库；测试 `Docs/tests/levelbuild/test_spawn_reach.py`）。数据 = `terrain/cancer.katerrain` + `placement.v2.json` 的 props / `structures.solids` / `activityArea`；XZ 0.1 m 栅格，每格多层地面。规则与出处：
 

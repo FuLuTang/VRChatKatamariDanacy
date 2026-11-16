@@ -267,6 +267,80 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(2, ((float[][])Field(paths[0], "Points")).Length);
         }
 
+        // ----------------------------------------------------------- playerStart ---
+
+        private static string DocWithPlayerStart(string playerStartJson)
+        {
+            string meta = MetaJson.Replace(@"""playerSpawn"":[4,5,6],",
+                @"""playerSpawn"":[4,5,6],""playerStart"":" + playerStartJson + ",");
+            Assert.AreNotEqual(MetaJson, meta, "the fixture did not find playerSpawn to follow");
+            string json = @"{""schema"":""katamari.placement/2""," + meta + @",""props"":[]}";
+            AssertFixtureIsJson(json);
+            return json;
+        }
+
+        [Test]
+        public void ReadsThePlayerStartAsFeetAndYaw()
+        {
+            object result = Read(DocWithPlayerStart(
+                @"{""position"":[-5.647,-1.0398,0.0852],""facingDeg"":15.0,""source"":""our rule""}"));
+            Assert.IsNull(FirstError(result), "a well-formed playerStart must parse clean");
+            object start = Field(Field(Field(result, "Document"), "Meta"), "PlayerStart");
+            Assert.IsNotNull(start);
+            var position = (float[])Field(start, "Position");
+            Assert.AreEqual(-5.647f, position[0], 1e-5f);
+            Assert.AreEqual(-1.0398f, position[1], 1e-5f);
+            Assert.AreEqual(0.0852f, position[2], 1e-5f);
+            Assert.AreEqual(15f, (float)Field(start, "FacingDeg"), 1e-5f);
+            Assert.AreEqual("our rule", Field(start, "Source"));
+            // meta.playerSpawn is a different thing and is read as before
+            Assert.AreEqual(5f, ((float[])Field(Field(Field(result, "Document"), "Meta"),
+                "PlayerSpawn"))[1]);
+        }
+
+        [Test]
+        public void AbsentPlayerStartIsNullSoTheOldSpawnPathStays()
+        {
+            object result = Read(DocWith(@"""props"":[]"));
+            Assert.IsNull(FirstError(result));
+            Assert.IsNull(Field(Field(Field(result, "Document"), "Meta"), "PlayerStart"));
+        }
+
+        [Test]
+        public void MalformedPlayerStartIsATaggedError()
+        {
+            string[] bad =
+            {
+                @"{""position"":[1,2],""facingDeg"":0}",              // two numbers
+                @"{""facingDeg"":0}",                                  // no position
+                @"{""position"":[1,2,3]}",                             // no facing
+                @"{""position"":[1,2,3],""facingDeg"":400}",           // outside -360..360
+                @"{""position"":[1,2,3],""facingDeg"":""north""}",     // not a number
+                @"[1,2,3]",                                            // not an object
+            };
+            for (int i = 0; i < bad.Length; i++)
+            {
+                string error = FirstError(Read(DocWithPlayerStart(bad[i])));
+                Assert.IsNotNull(error, "accepted: " + bad[i]);
+                StringAssert.Contains("[meta_player_start]", error);
+            }
+        }
+
+        [Test]
+        public void UnknownPlayerStartKeyIsNamedNotDropped()
+        {
+            object result = Read(DocWithPlayerStart(
+                @"{""position"":[1,2,3],""facingDeg"":0,""eyeHeight"":1.6}"));
+            Assert.IsNull(FirstError(result));
+            bool named = false;
+            foreach (object warning in (IEnumerable)Field(result, "Warnings"))
+            {
+                if (((string)warning).Contains("meta.playerStart.eyeHeight")) named = true;
+            }
+
+            Assert.IsTrue(named, "the unknown key must be reported, not dropped silently");
+        }
+
         // ----------------------------------------------------- the reference level ---
 
         [Test]

@@ -44,6 +44,14 @@ namespace VRCKatamari.Editor.LevelBuild
         public const string MenuPath = "VRC Katamari/Level/Import Terrain Mesh (v2)";
         public const string ManagedRootName = "LevelContent";
         private const string TerrainRootName = "TerrainRoot";
+        /// <summary>The visual child of <c>TerrainRoot</c>; it also carries the player's collider.</summary>
+        public const string TerrainVisualName = "TerrainVisual";
+        /// <summary>
+        /// Placeholder for a terrain material segment that names none (the reference level's
+        /// one segment has no <c>material</c>): the greybox ground the structures already use.
+        /// </summary>
+        private const string FallbackVisualMaterialPath =
+            "Assets/VRC_Katamari/Art/Materials/Mat_PlaygroundGround.mat";
         private const string ReferenceSceneRoot = "Assets/_RefUnlicensed/";
         private const int MaxConsoleRows = 25;
 
@@ -57,6 +65,13 @@ namespace VRCKatamari.Editor.LevelBuild
             public int Created;
             public int Updated;
             public int Skipped;
+            /// <summary>
+            /// The standing surface (<c>TerrainVisual</c> + its collider, mesh asset): objects,
+            /// components or assets this run created / repaired. Zero on the idempotent second
+            /// import, and always zero for a level that declares no <c>meta.playerStart</c>.
+            /// </summary>
+            public int StandingCreated;
+            public int StandingUpdated;
             public int Triangles;
             public int Vertices;
             public int Chunks;
@@ -75,7 +90,8 @@ namespace VRCKatamari.Editor.LevelBuild
 
             public string Headline()
             {
-                return "[terrain] +" + Created + " ~" + Updated + " -0 terrain=" + TerrainId +
+                return "[terrain] +" + (Created + StandingCreated) + " ~" +
+                       (Updated + StandingUpdated) + " -0 terrain=" + TerrainId +
                        " tris=" + Triangles + " verts=" + Vertices + " chunks=" + Chunks +
                        " errors=" + Errors.Count;
             }
@@ -270,7 +286,61 @@ namespace VRCKatamari.Editor.LevelBuild
                 report.Notes.Add("sidecar '" + geometry.SidecarPath + "' sha256 verified");
             }
 
-            return WriteHost(levelId, terrainId, sourceSha, geometry, report);
+            geometry.Segments = ReadVisualSegments(terrain.Get("materialSegments"),
+                geometry.IndexCount, report);
+
+            TerrainImportReport written = WriteHost(levelId, terrainId, sourceSha, geometry, report);
+            // The player's standing surface only exists for a level that declares where the
+            // player starts (meta.playerStart): a lab cell with a terrain keeps today's scene.
+            if (written.Ok && meta != null && meta.Get("playerStart") != null)
+            {
+                EnsureStandingSurface(levelId, terrainId, geometry, isReference, written);
+            }
+
+            return written;
+        }
+
+        private static VisualSegment[] ReadVisualSegments(LevelJsonNode node, int indexCount,
+            TerrainImportReport report)
+        {
+            var segments = new List<VisualSegment>();
+            if (node != null && node.Kind == LevelJsonKind.Array && node.Count > 0)
+            {
+                int coverage = 0;
+                for (int i = 0; i < node.Count; i++)
+                {
+                    LevelJsonNode entry = node.At(i);
+                    int first = entry.GetInt("firstIndex", -1);
+                    int count = entry.GetInt("indexCount", -1);
+                    if (first != coverage || count <= 0 || count % 3 != 0)
+                    {
+                        segments.Clear();
+                        break;
+                    }
+
+                    segments.Add(new VisualSegment
+                    {
+                        FirstIndex = first,
+                        IndexCount = count,
+                        Material = entry.GetString("material")
+                    });
+                    coverage += count;
+                }
+
+                if (segments.Count > 0 && coverage != indexCount) segments.Clear();
+                if (segments.Count == 0)
+                {
+                    report.Notes.Add("terrain.materialSegments do not tile the " + indexCount +
+                                     " indices; the visual uses one submesh");
+                }
+            }
+
+            if (segments.Count == 0)
+            {
+                segments.Add(new VisualSegment { FirstIndex = 0, IndexCount = indexCount });
+            }
+
+            return segments.ToArray();
         }
 
         // ------------------------------------------------------------------ geometry ---
@@ -288,6 +358,15 @@ namespace VRCKatamari.Editor.LevelBuild
             public int ChunkCount;
             public string SidecarPath;
             public string SidecarSha;
+            /// <summary>Visual material segments (first index, index count, material path).</summary>
+            public VisualSegment[] Segments;
+        }
+
+        private struct VisualSegment
+        {
+            public int FirstIndex;
+            public int IndexCount;
+            public string Material;
         }
 
         private static bool TryReadGeometry(string levelDir, LevelJsonNode terrain,
@@ -670,6 +749,285 @@ namespace VRCKatamari.Editor.LevelBuild
             report.Notes.Add("terrain host at " + HierarchyPath(terrainRoot) +
                              "; scene is dirty but NOT saved");
             return report;
+        }
+
+        // ---------------------------------------------------------- standing surface ---
+
+        /// <summary>
+        /// Makes sure <c>TerrainRoot/TerrainVisual</c> exists with a mesh, a renderer and a
+        /// non-convex <see cref="MeshCollider"/>, so a player (VRChat's PhysX capsule) can stand
+        /// on the terrain.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Who uses this collider: ONLY the player. The ball never touches PhysX - its contact
+        /// model reads <see cref="TerrainFieldHost"/>'s arrays - and nothing in Runtime issues a
+        /// Physics query (no Raycast/Overlap/Cast/Check anywhere; no layer or LayerMask is read),
+        /// so a collider on the Default layer cannot disturb the ball, the pickup scan or the
+        /// riding station. It stays on layer 0 (Default) and is not a trigger: the layers the
+        /// player collides with are VRChat's own, and a custom layer would silently remove the
+        /// floor. It is never convex: a convex hull would turn the lawn into a lid.
+        /// </para>
+        /// <para>
+        /// The mesh. The visual mesh is the same triangles as the contact data (unwelded, so each
+        /// face is flat-shaded), one submesh per <c>terrain.materialSegments</c> entry, in an
+        /// asset whose path is <see cref="PlacementV2Rules.TerrainVisualMeshPath"/>. An asset or a
+        /// mesh already on the <c>MeshFilter</c> whose triangle count matches is kept as it is (so
+        /// a hand-dressed visual and its GUID survive); a missing one is created, a stale one is
+        /// overwritten in place. The standing surface follows the terrain's triangle winding as
+        /// is: the sidecar's faces already point up in Unity's frame (checked: every flat lawn
+        /// face has a +Y cross-product normal), which is also PhysX's front side.
+        /// </para>
+        /// </remarks>
+        private static void EnsureStandingSurface(string levelId, string terrainId,
+            TerrainGeometry geometry, bool isReference, TerrainImportReport report)
+        {
+            Transform levelRoot = FindLevelRoot(levelId);
+            Transform terrainRoot = levelRoot == null ? null : levelRoot.Find(TerrainRootName);
+            if (terrainRoot == null)
+            {
+                report.Error("[terrain_visual] no " + TerrainRootName + " under the level root; " +
+                             "the standing surface was not built");
+                return;
+            }
+
+            int created = 0;
+            int updated = 0;
+
+            Transform visual = terrainRoot.Find(TerrainVisualName);
+            if (visual == null)
+            {
+                var go = new GameObject(TerrainVisualName);
+                Undo.RegisterCreatedObjectUndo(go, "Create terrain visual");
+                go.transform.SetParent(terrainRoot, false);
+                visual = go.transform;
+                created++;
+            }
+
+            // World pose identity: the vertices are world metres, so the visual and its collider
+            // must not be moved, turned or scaled by anything above them.
+            if (visual.localPosition != Vector3.zero || visual.localRotation != Quaternion.identity ||
+                visual.localScale != Vector3.one)
+            {
+                Undo.RecordObject(visual, "Reset terrain visual pose");
+                visual.localPosition = Vector3.zero;
+                visual.localRotation = Quaternion.identity;
+                visual.localScale = Vector3.one;
+                updated++;
+            }
+
+            if (Vector3.Distance(visual.position, Vector3.zero) > 1e-4f ||
+                Vector3.Distance(visual.lossyScale, Vector3.one) > 1e-4f)
+            {
+                report.Error("[terrain_visual] " + HierarchyPath(visual) + " is not at the world " +
+                             "origin with unit scale (a parent moves it); the terrain vertices are " +
+                             "world metres, so fix the parent chain");
+                return;
+            }
+
+            if (visual.gameObject.layer != 0)
+            {
+                Undo.RecordObject(visual.gameObject, "Terrain visual layer");
+                visual.gameObject.layer = 0;
+                updated++;
+            }
+
+            if (!visual.gameObject.activeSelf)
+            {
+                Undo.RecordObject(visual.gameObject, "Terrain visual active");
+                visual.gameObject.SetActive(true);
+                updated++;
+            }
+
+            MeshFilter filter = visual.GetComponent<MeshFilter>();
+            if (filter == null)
+            {
+                filter = Undo.AddComponent<MeshFilter>(visual.gameObject);
+                created++;
+            }
+
+            MeshRenderer renderer = visual.GetComponent<MeshRenderer>();
+            if (renderer == null)
+            {
+                renderer = Undo.AddComponent<MeshRenderer>(visual.gameObject);
+                created++;
+            }
+
+            Mesh mesh = filter.sharedMesh;
+            if (mesh == null || MeshTriangleCount(mesh) != geometry.TriangleCount)
+            {
+                string assetPath = PlacementV2Rules.TerrainVisualMeshPath(levelId, terrainId,
+                    isReference);
+                mesh = EnsureVisualMeshAsset(assetPath, geometry, report, ref created, ref updated);
+                if (mesh == null) return;
+                Undo.RecordObject(filter, "Assign terrain visual mesh");
+                filter.sharedMesh = mesh;
+                updated++;
+            }
+
+            if (!MaterialsFit(renderer, mesh))
+            {
+                Undo.RecordObject(renderer, "Assign terrain visual materials");
+                renderer.sharedMaterials = LoadSegmentMaterials(geometry, mesh.subMeshCount, report);
+                updated++;
+            }
+
+            MeshCollider collider = visual.GetComponent<MeshCollider>();
+            if (collider == null)
+            {
+                collider = Undo.AddComponent<MeshCollider>(visual.gameObject);
+                created++;
+            }
+
+            if (collider.sharedMesh != mesh || collider.convex || collider.isTrigger ||
+                !collider.enabled)
+            {
+                Undo.RecordObject(collider, "Terrain visual collider");
+                collider.sharedMesh = mesh;
+                collider.convex = false;
+                collider.isTrigger = false;
+                collider.enabled = true;
+                updated++;
+            }
+
+            report.StandingCreated += created;
+            report.StandingUpdated += updated;
+            if (created > 0 || updated > 0)
+            {
+                EditorUtility.SetDirty(visual.gameObject);
+                UnityEngine.SceneManagement.Scene scene =
+                    UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+                if (scene.IsValid() && scene.isLoaded) EditorSceneManager.MarkSceneDirty(scene);
+            }
+
+            report.Notes.Add("standing surface " + HierarchyPath(visual) + ": MeshCollider " +
+                             "(non-convex, Default layer) on '" + mesh.name + "' (" +
+                             MeshTriangleCount(mesh) + " tris, " + mesh.subMeshCount +
+                             " submesh); +" + created + " ~" + updated +
+                             "; for the player only - the ball never queries PhysX");
+        }
+
+        private static int MeshTriangleCount(Mesh mesh)
+        {
+            long indices = 0;
+            for (int i = 0; i < mesh.subMeshCount; i++) indices += mesh.GetIndexCount(i);
+            return (int)(indices / 3);
+        }
+
+        private static bool MaterialsFit(MeshRenderer renderer, Mesh mesh)
+        {
+            Material[] materials = renderer.sharedMaterials;
+            if (materials == null || materials.Length != mesh.subMeshCount) return false;
+            for (int i = 0; i < materials.Length; i++)
+            {
+                if (materials[i] == null) return false;
+            }
+
+            return true;
+        }
+
+        private static Material[] LoadSegmentMaterials(TerrainGeometry geometry, int count,
+            TerrainImportReport report)
+        {
+            var materials = new Material[count];
+            for (int i = 0; i < count; i++)
+            {
+                string path = geometry.Segments != null && i < geometry.Segments.Length &&
+                              !string.IsNullOrEmpty(geometry.Segments[i].Material)
+                    ? geometry.Segments[i].Material
+                    : FallbackVisualMaterialPath;
+                Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null && path != FallbackVisualMaterialPath)
+                {
+                    report.Notes.Add("terrain material '" + path + "' not found; the greybox ground " +
+                                     "material is used for submesh " + i);
+                    material = AssetDatabase.LoadAssetAtPath<Material>(FallbackVisualMaterialPath);
+                }
+
+                if (material == null)
+                {
+                    report.Notes.Add("no material at " + FallbackVisualMaterialPath +
+                                     "; submesh " + i + " has none (pink)");
+                }
+
+                materials[i] = material;
+            }
+
+            return materials;
+        }
+
+        /// <summary>
+        /// The visual <see cref="Mesh"/> asset at <paramref name="assetPath"/>: kept when its
+        /// triangle count matches, overwritten in place (GUID kept) when stale, created when
+        /// missing. Unwelded vertices (three per face) so each face is flat-shaded.
+        /// </summary>
+        private static Mesh EnsureVisualMeshAsset(string assetPath, TerrainGeometry geometry,
+            TerrainImportReport report, ref int created, ref int updated)
+        {
+            Mesh existing = AssetDatabase.LoadAssetAtPath<Mesh>(assetPath);
+            if (existing != null && MeshTriangleCount(existing) == geometry.TriangleCount)
+            {
+                return existing;
+            }
+
+            Mesh built = BuildVisualMesh(geometry, System.IO.Path.GetFileNameWithoutExtension(assetPath));
+            if (existing != null)
+            {
+                EditorUtility.CopySerialized(built, existing);
+                UnityEngine.Object.DestroyImmediate(built);
+                EditorUtility.SetDirty(existing);
+                AssetDatabase.SaveAssets();
+                updated++;
+                report.Notes.Add("terrain visual mesh " + assetPath + " rebuilt in place (its " +
+                                 "triangle count no longer matched the terrain)");
+                return existing;
+            }
+
+            if (!EnsureAssetFolder(System.IO.Path.GetDirectoryName(assetPath).Replace('\\', '/')))
+            {
+                UnityEngine.Object.DestroyImmediate(built);
+                report.Error("[terrain_visual] cannot create the folder for " + assetPath);
+                return null;
+            }
+
+            AssetDatabase.CreateAsset(built, assetPath);
+            AssetDatabase.SaveAssets();
+            created++;
+            report.Notes.Add("terrain visual mesh created at " + assetPath + " (" +
+                             geometry.TriangleCount + " tris)");
+            return built;
+        }
+
+        private static Mesh BuildVisualMesh(TerrainGeometry geometry, string name)
+        {
+            int indexCount = geometry.IndexCount;
+            var vertices = new Vector3[indexCount];
+            for (int i = 0; i < indexCount; i++) vertices[i] = geometry.Vertices[geometry.Indices[i]];
+
+            var mesh = new Mesh { name = name };
+            mesh.vertices = vertices;
+            VisualSegment[] segments = geometry.Segments;
+            mesh.subMeshCount = segments.Length;
+            for (int s = 0; s < segments.Length; s++)
+            {
+                var triangles = new int[segments[s].IndexCount];
+                for (int i = 0; i < triangles.Length; i++) triangles[i] = segments[s].FirstIndex + i;
+                mesh.SetTriangles(triangles, s, true);
+            }
+
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static bool EnsureAssetFolder(string folder)
+        {
+            if (AssetDatabase.IsValidFolder(folder)) return true;
+            string parent = System.IO.Path.GetDirectoryName(folder).Replace('\\', '/');
+            string leaf = System.IO.Path.GetFileName(folder);
+            if (string.IsNullOrEmpty(parent) || string.IsNullOrEmpty(leaf)) return false;
+            if (!EnsureAssetFolder(parent)) return false;
+            return !string.IsNullOrEmpty(AssetDatabase.CreateFolder(parent, leaf));
         }
 
         // -------------------------------------------------------------------- udon ---

@@ -1053,6 +1053,89 @@ namespace VRCKatamari.Editor.LevelBuild
             return summary;
         }
 
+        // ------------------------------------------------------------ player spawn ---
+
+        /// <summary>
+        /// How far below the level's kill plane the VRChat descriptor's <c>RespawnHeightY</c>
+        /// sits: <c>RespawnHeightY = killPlane.y - 1 m</c>.
+        /// </summary>
+        /// <remarks>
+        /// Why this relation. The ball's kill plane is the level's own fall threshold
+        /// (<c>activityArea.killPlane.y</c>); the player's respawn height must be the SAME fall
+        /// notion, just a little later: the ball is reset first, then a player who walked off
+        /// the island is returned to the descriptor's spawn. The validator guarantees
+        /// <c>killPlane.y &lt; min(groundY, lowest terrain point)</c> (<c>[activity_kill_plane]</c>),
+        /// so one metre further down is always below every standable surface: a player on the
+        /// lowest terrain (Cancer: -1.59 m; kill plane -4 m, respawn -5 m) is never respawned by
+        /// mistake. One constant relation, no per-level number to author or forget.
+        /// </remarks>
+        public const float RespawnBelowKillPlaneM = 1f;
+
+        public static float RespawnHeightY(float killPlaneY)
+        {
+            return killPlaneY - RespawnBelowKillPlaneM;
+        }
+
+        /// <summary>
+        /// Where a level's terrain visual mesh asset lives. A reference level's goes under
+        /// <c>Assets/_RefUnlicensed/Meshes/</c> (git-ignored; named after the level with its
+        /// underscores turned into PascalCase, <c>_ref_cancer</c> -> <c>RefCancerTerrainVisual</c>);
+        /// our own levels' go to <c>Assets/VRC_Katamari/Generated/Levels/&lt;leaf&gt;/&lt;terrainId&gt;.asset</c>
+        /// (LEVEL_FORMAT_V2 §11.2). A nested level id (<c>physics_test_field/C21</c>) uses its leaf.
+        /// </summary>
+        public static string TerrainVisualMeshPath(string levelId, string terrainId,
+            bool isReference)
+        {
+            string leaf = levelId ?? "";
+            int slash = leaf.LastIndexOf('/');
+            if (slash >= 0) leaf = leaf.Substring(slash + 1);
+            if (isReference)
+            {
+                var name = new System.Text.StringBuilder();
+                foreach (string part in leaf.Split(new[] { '_', '-', ' ' },
+                             StringSplitOptions.RemoveEmptyEntries))
+                {
+                    name.Append(char.ToUpperInvariant(part[0])).Append(part.Substring(1));
+                }
+
+                return "Assets/_RefUnlicensed/Meshes/" + name + "TerrainVisual.asset";
+            }
+
+            return "Assets/VRC_Katamari/Generated/Levels/" + SafeFileName(leaf) + "/" +
+                   SafeFileName(terrainId) + ".asset";
+        }
+
+        private static string SafeFileName(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "terrain";
+            var text = new System.Text.StringBuilder(value.Length);
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                text.Append(char.IsLetterOrDigit(c) || c == '_' || c == '-' ? c : '_');
+            }
+
+            return text.ToString();
+        }
+
+        /// <summary><c>meta.playerStart.facingDeg</c>: a finite yaw in -360..360 degrees.</summary>
+        public static bool IsFacingDegValid(float facingDeg)
+        {
+            return IsFinite(facingDeg) && facingDeg >= -360f && facingDeg <= 360f;
+        }
+
+        /// <summary>
+        /// The yaw <paramref name="facingDeg"/> (heading 0 = +Z, positive towards +X) as a unit
+        /// quaternion <c>[x, y, z, w]</c> - the same value as <c>Quaternion.Euler(0, facingDeg, 0)</c>
+        /// in Unity's left-handed Y-up frame, kept as plain floats so the rule stays testable
+        /// without the engine.
+        /// </summary>
+        public static float[] FacingQuatXyzw(float facingDeg)
+        {
+            double half = facingDeg * Math.PI / 360.0;
+            return new[] { 0f, (float)Math.Sin(half), 0f, (float)Math.Cos(half) };
+        }
+
         // ------------------------------------------------------------------ helpers ---
 
         public static bool IsFinite(float value)

@@ -136,6 +136,34 @@ class MetaTags(Base):
         self.doc["meta"]["maxDiameter"] = 2.2
         self.assert_tag("[meta_unknown_key]")
 
+    def test_player_start_is_optional_and_known(self):
+        self.doc["meta"]["playerStart"] = {"position": [0.0, 0.0, -2.4], "facingDeg": 15.0,
+                                           "source": "our rule"}
+        report = self.run_validator()
+        self.assertEqual(report.errors, [], "\n".join(report.errors))
+
+    def test_player_start_is_checked_field_by_field(self):
+        good = {"position": [0.0, 0.0, -2.4], "facingDeg": 15.0}
+        for patch in ({"position": [0.0, 0.0]},            # not 3 numbers
+                      {"position": "feet"},
+                      {"facingDeg": 400.0},                # outside -360..360
+                      {"facingDeg": "north"},
+                      {"source": 3},
+                      {"eyeHeight": 1.6}):                 # unknown key: hard error
+            doc = copy.deepcopy(self.doc)
+            doc["meta"]["playerStart"] = dict(good, **patch)
+            self.assert_tag("[meta_player_start]", doc)
+        doc = copy.deepcopy(self.doc)
+        doc["meta"]["playerStart"] = {"position": [0.0, 0.0, 0.0]}      # facingDeg missing
+        self.assert_tag("[meta_player_start]", doc)
+        doc["meta"]["playerStart"] = [0.0, 0.0, 0.0]                    # not an object
+        self.assert_tag("[meta_player_start]", doc)
+
+    def test_player_start_must_stand_above_the_kill_plane(self):
+        kill = self.doc["activityArea"]["killPlane"]["y"]
+        self.doc["meta"]["playerStart"] = {"position": [0.0, kill - 0.5, 0.0], "facingDeg": 0.0}
+        self.assert_tag("[meta_player_start]")
+
     def test_start_diameter_missing_or_above_the_cap(self):
         del self.doc["meta"]["ball"]["startDiameterM"]
         self.assert_tag("[meta_start_diameter]")

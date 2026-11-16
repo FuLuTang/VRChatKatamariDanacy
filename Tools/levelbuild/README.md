@@ -413,4 +413,4 @@ python3 Tools/levelbuild/spawn_reach.py Docs/Design/Levels/_ref_cancer area X Z 
 python3 Tools/levelbuild/spawn_reach.py Docs/Design/Levels/_ref_cancer grow X Z [--safe]
 ```
 
-结果是估算（不模拟电机冲量、运动件、墙隔视线）；选出的点写进 `ref_v2_from_extract.py` 的 `AUTHORED_SPAWNS`。测试：`Docs/tests/levelbuild/test_spawn_reach.py`。
+结果是估算（不模拟电机冲量、运动件、墙隔视线）；选出的点写进 `ref_v2_from_extract.py` 的 `AUTHORED_SPAWNS`；其中 `playerStart` 由转换器输出为文档的 `meta.playerStart`（校验器 `[meta_player_start]`），导入器据此建 `Markers/PlayerSpawn` 并接场景描述符。测试：`Docs/tests/levelbuild/test_spawn_reach.py`。

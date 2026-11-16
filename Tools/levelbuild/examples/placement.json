@@ -37,7 +37,7 @@
     },
     "expected": {
       "propCount": 16,
-      "valueUnits": 35
+      "growthMm3": 16663803
     },
     "zones": [
       {
@@ -102,7 +102,7 @@
       ],
       "absorbDiameterReq": 0.06,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 9193
     },
     {
       "itemId": "prop_apple_000",
@@ -128,7 +128,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 1,
+      "growthMm3": 275708,
       "notes": "seated on the ramp normal, not lifted straight up"
     },
     {
@@ -154,7 +154,7 @@
       ],
       "absorbDiameterReq": 0.173,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 218696
     },
     {
       "itemId": "prop_bottle_cap_000",
@@ -179,7 +179,7 @@
       ],
       "absorbDiameterReq": 0.046,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 4166
     },
     {
       "itemId": "prop_cookie_000",
@@ -206,7 +206,7 @@
       ],
       "absorbDiameterReq": 0.084,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 25388
     },
     {
       "itemId": "prop_fallen_leaf_000",
@@ -231,7 +231,7 @@
       ],
       "absorbDiameterReq": 0.042,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 3326
     },
     {
       "itemId": "prop_glass_bottle_000",
@@ -257,7 +257,7 @@
       ],
       "absorbDiameterReq": 0.263,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 768320
     },
     {
       "itemId": "prop_orange_000",
@@ -282,7 +282,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 277402
     },
     {
       "itemId": "prop_paper_scrap_000",
@@ -307,7 +307,7 @@
       ],
       "absorbDiameterReq": 0.105,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 48965
     },
     {
       "itemId": "prop_pear_000",
@@ -333,7 +333,7 @@
       ],
       "absorbDiameterReq": 0.152,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 148579
     },
     {
       "itemId": "prop_pebble_000",
@@ -358,7 +358,7 @@
       ],
       "absorbDiameterReq": 0.069,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 13980
     },
     {
       "itemId": "prop_plate_000",
@@ -384,7 +384,7 @@
       ],
       "absorbDiameterReq": 0.268,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 806400
     },
     {
       "itemId": "prop_small_potted_plant_000",
@@ -409,7 +409,7 @@
       ],
       "absorbDiameterReq": 0.382,
       "absorbable": true,
-      "valueUnits": 6
+      "growthMm3": 2350947
     },
     {
       "itemId": "prop_strawberry_000",
@@ -435,7 +435,7 @@
       ],
       "absorbDiameterReq": 0.088,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 29030
     },
     {
       "itemId": "prop_watering_can_000",
@@ -460,7 +460,7 @@
       ],
       "absorbDiameterReq": 0.406,
       "absorbable": true,
-      "valueUnits": 6
+      "growthMm3": 2813303
     },
     {
       "itemId": "prop_watermelon_000",
@@ -486,7 +486,7 @@
       ],
       "absorbDiameterReq": 0.596,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 8870400
     }
   ],
   "structures": [

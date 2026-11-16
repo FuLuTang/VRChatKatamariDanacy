@@ -33,7 +33,7 @@
     },
     "expected": {
       "propCount": 5,
-      "valueUnits": 212,
+      "growthMm3": 186113343,
       "structureCount": 7
     },
     "zones": [
@@ -48,28 +48,23 @@
   "defs": [
     {
       "id": "book_stack",
-      "kind": "furniture",
-      "valueUnits": 8
+      "kind": "furniture"
     },
     {
       "id": "picnic_basket",
-      "kind": "container",
-      "valueUnits": 16
+      "kind": "container"
     },
     {
       "id": "picnic_bench",
-      "kind": "furniture",
-      "valueUnits": 130
+      "kind": "furniture"
     },
     {
       "id": "storage_bin",
-      "kind": "container",
-      "valueUnits": 52
+      "kind": "container"
     },
     {
       "id": "watering_can",
-      "kind": "garden",
-      "valueUnits": 6
+      "kind": "garden"
     }
   ],
   "props": [
@@ -96,7 +91,7 @@
       ],
       "absorbDiameterReq": 0.736,
       "absorbable": false,
-      "valueUnits": 16
+      "growthMm3": 16730280
     },
     {
       "itemId": "bench_hub_01",
@@ -121,7 +116,7 @@
       ],
       "absorbDiameterReq": 1.424,
       "absorbable": false,
-      "valueUnits": 130
+      "growthMm3": 120960000
     },
     {
       "itemId": "bin_hub_01",
@@ -146,7 +141,7 @@
       ],
       "absorbDiameterReq": 1.009,
       "absorbable": false,
-      "valueUnits": 52
+      "growthMm3": 43120000
     },
     {
       "itemId": "books_hub_01",
@@ -171,7 +166,7 @@
       ],
       "absorbDiameterReq": 0.39,
       "absorbable": false,
-      "valueUnits": 8
+      "growthMm3": 2489760
     },
     {
       "itemId": "can_hub_01",
@@ -196,7 +191,7 @@
       ],
       "absorbDiameterReq": 0.406,
       "absorbable": false,
-      "valueUnits": 6
+      "growthMm3": 2813303
     }
   ],
   "structures": [

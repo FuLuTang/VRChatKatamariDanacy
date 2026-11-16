@@ -18,7 +18,8 @@
 | `Editor/LevelBuild/PlacementImporter.cs` | `ColliderEntry` (flat `float[] hull`), `DefEntry.collider`, `TryBuildProxy`, `DeclaredProxy`, `BuildDeclaredProxies`; def validation and the sync declaration map |
 | `Editor/Pickup/PickupFieldSync.cs` | 6-argument `SyncFromChildren` with `declaredProxies`; `PropRow.Proxy`; preservation by item id; 12 new columns in `WriteRows`; `ReadExistingProxies`; read-back verification |
 | `Editor/Pickup/PickupFieldSyncReport.cs` / `Editor/LevelBuild/PlacementImportReport.cs` | `ProxyVerified` |
-| `Tests/EditMode/BallContact/ProxyContactTests.cs` (new) | sphere/capsule/box/convex closest point, contact normal/depth, watermelon capsule floor clearance, box window/collect equivalence, bake equivalence |
+| `Tests/EditMode/BallContact/ProxyContactTests.cs` (new) | sphere/capsule/box/convex closest point, contact normal/depth, watermelon capsule floor clearance, box window/collect equivalence, bake equivalence, sphere-radius-0 vs convex-radius-0 |
+| `Tests/EditMode/LevelBuild/PlacementImporterColliderTests.cs` (new) | real `JsonUtility` parse of an absent `defs[].collider` (materialised but 0 declared proxies), a real block still validates, empty block is refused by the shared predicate |
 
 ## 2. Serialization / scene diff
 
@@ -28,9 +29,9 @@ is separate). A first sync/import after this change is expected to add, per host
 
 | Field | Element type | Size |
 |---|---|---:|
-| `propProxyKinds` | `int[]` | 130 |
+| `propProxyKinds` | `int[]` | 130 (all `0` = box when no def declares a block) |
 | `propProxyCenters` | `Vector3[]` | 130 |
-| `propProxySizes` | `Vector3[]` | 130 |
+| `propProxySizes` | `Vector3[]` | 130 (the row's `propLocalBounds` for those default boxes) |
 | `propProxyRadii` | `float[]` | 130 |
 | `propProxyHalfHeights` | `float[]` | 130 |
 | `propProxyAxes` | `int[]` | 130 |
@@ -43,6 +44,33 @@ is separate). A first sync/import after this change is expected to add, per host
 
 The motor gains `propProxyContactEnabled: 0` (false). No scene was edited here; the diff
 appears only when the Unity operator compiles the scripts and runs the importer/sync.
+For story_01 (no `defs[].collider` anywhere) the re-import should log
+`[level] +0 ~0 -0 props=130 other=0 errors=0` and the 130 `propProxyKinds` rows are all
+`0`; the size column is the row's local edge lengths, so the flag-on path without data is
+the old box world (`SyncFromChildren` no longer leaves the proxy arrays at 0 length).
+
+## 2.1 O6 fixes (2026-11-16)
+
+- **Absent `defs[].collider` is not a declaration.** JsonUtility materialises a default
+  `ColliderEntry` for a missing key, so `collider != null` is always true. The shared
+  content predicate is `PickupFieldAuthoringRules.IsColliderDeclared(string type)`
+  (empty/whitespace type = absent), used by `PlacementImporter` validation/build and by
+  `PickupFieldSync`/`ProxyError`. A block with `type` empty is ignored; a real block still
+  validates.
+- **Default columns are full length.** `PickupFieldSync.WriteRows` writes one row per prop
+  even with no declared block: `kind = 0` (box), `size = propLocalBounds`, all hull/face
+  counts 0. This keeps `propProxy*` row-aligned (130 rows for story_01) instead of empty
+  arrays.
+- **Convex does not use radius.** `ProxyContactMath.IsValidProxy` requires radius > 0 only
+  for sphere/capsule; convex checks finite values, 4..24 points and 1..44 faces. A sphere
+  with radius 0 is still refused. `TryBakeProxy` and the host's `ProxyKindAt` now call the
+  same validity function.
+- Other JsonUtility nested fields audited: `StructureEntry.curve` now uses
+  `HasCurveContent` (absent -> `curve_missing`, not a default arc);
+  `LevelBlock.budget` uses `HasBudgetContent` (absent -> constructed defaults, not a
+  zero-budget object); `level.arena` already tests `arena.id` content;
+  `PhysicsTestFieldCriteriaImporter.V2Entry` keeps `HasV2Override`; `CellEntry.start_pose`
+  / `footprint` use null arrays with explicit fallbacks, not presence decisions.
 
 ## 3. Data decision (why no collider blocks were written)
 

@@ -118,9 +118,19 @@ class VerdictTest(unittest.TestCase):
         self.assertEqual(run_parity.CONSISTENT, self._row(rows, "G07").klass)
 
     def test_growth_fraction_uses_the_curve(self):
+        # The corpus curve starts at 0.8 and our default is now 0.8 too (steps C+D), so
+        # the row is consistent; a different corpus value is a parameter gap.
         _, rows = render_synthetic()
         row = self._row(rows, "G06")
         self.assertAlmostEqual(0.8, row.original)
+        self.assertEqual(run_parity.CONSISTENT, row.klass)
+
+        corpus = synthetic_corpus()
+        corpus["parameters"]["growth_curve"] = [
+            {"diameter_m": 0.30, "fraction": 0.5}]
+        _, rows = render_synthetic(corpus)
+        row = self._row(rows, "G06")
+        self.assertAlmostEqual(0.5, row.original)
         self.assertEqual(run_parity.PARAM, row.klass)
 
     def test_unknown_original_is_not_a_number(self):

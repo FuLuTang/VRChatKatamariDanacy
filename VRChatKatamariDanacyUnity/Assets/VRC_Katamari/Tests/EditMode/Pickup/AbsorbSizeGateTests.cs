@@ -355,27 +355,33 @@ namespace VRCKatamari.Tests
         public void TheGainGateStillRunsAfterTheSizeGate()
         {
             Vector3 item = new Vector3(0.1f, 0.1f, 0.1f);
-            // Too large for the ball AND worth less than one unit: the geometry verdict
-            // wins (1068 mm requirement vs a 300 mm ball).
+            // Too large for the ball AND no gain: the geometry verdict wins, so a
+            // "no gain" reading can never explain away a size refusal.
             Assert.AreEqual(AbsorbOutcome.RejectItemTooLarge,
                 PickupAbsorbMath.EvaluateAbsorbWithValue(true, "stone", Allowed,
                     Allowed.Length, new Vector3(0.45f, 0.45f, 0.45f), AtBall, AtBall, 0.15f,
-                    ContactRadiusM, K, 0.30f, MaxGrowthRadiusM, 0.3f));
-            // Inside the gate (237 mm requirement vs a 300 mm ball) and worth two units.
+                    ContactRadiusM, K, 0.30f, MaxGrowthRadiusM, 0L));
+            // Inside the gate (237 mm requirement vs a 300 mm ball) and a real gain.
             Assert.AreEqual(AbsorbOutcome.Absorb,
                 PickupAbsorbMath.EvaluateAbsorbWithValue(true, "stone", Allowed,
                     Allowed.Length, item, AtBall, AtBall, 0.15f, ContactRadiusM,
-                    K, 0.30f, MaxGrowthRadiusM, 2f));
-            // In reach, inside the gate, but below one unit: the gain gate reports it.
+                    K, 0.30f, MaxGrowthRadiusM, 2L));
+            // In reach, inside the gate, but no growth: the gain gate reports it.
             Assert.AreEqual(AbsorbOutcome.RejectNoGain,
                 PickupAbsorbMath.EvaluateAbsorbWithValue(true, "stone", Allowed,
                     Allowed.Length, item, AtBall, AtBall, 0.15f, ContactRadiusM,
-                    K, 0.30f, MaxGrowthRadiusM, 0.3f));
+                    K, 0.30f, MaxGrowthRadiusM, 0L));
             // An illegal k outranks every later gate, including the gain gate.
             Assert.AreEqual(AbsorbOutcome.RejectInvalidInput,
                 PickupAbsorbMath.EvaluateAbsorbWithValue(true, "stone", Allowed,
                     Allowed.Length, item, AtBall, AtBall, 0.15f, ContactRadiusM,
-                    0f, 0.30f, MaxGrowthRadiusM, 0.3f));
+                    0f, 0.30f, MaxGrowthRadiusM, 0L));
+            // A gain above int.MaxValue is a real gain (the ledger is 64-bit); this is the
+            // step that would have been refused before steps C/D.
+            Assert.AreEqual(AbsorbOutcome.Absorb,
+                PickupAbsorbMath.EvaluateAbsorbWithValue(true, "stone", Allowed,
+                    Allowed.Length, item, AtBall, AtBall, 0.15f, ContactRadiusM,
+                    K, 0.30f, MaxGrowthRadiusM, 3000000000L));
         }
 
         private static float ReqMm(Vector3 bounds, float volumeK)

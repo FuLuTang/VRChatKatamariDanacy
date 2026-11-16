@@ -492,8 +492,10 @@ class WebEditor:
                    "updated": len(result[kind]["updated"]),
                    "removed": len(result[kind]["removed"])}
             for kind in ("props", "structures", "defs", "cameras")}
-        result["valueUnits"] = (core.value_units_total(after)
-                                - core.value_units_total(before))
+        # Both deltas are shown during the migration: growthMm3 is the live currency,
+        # valueUnits is the deprecated one (0 once files are regenerated).
+        result["growthMm3"] = core.growth_mm3_total(after) - core.growth_mm3_total(before)
+        result["valueUnits"] = core.value_units_total(after) - core.value_units_total(before)
         return result
 
     def _record(self, label, before, after, export=None):
@@ -728,6 +730,9 @@ class WebEditor:
                 "dReqMm": core.absorb_diameter_req_mm(size, volume_k),
                 "volumeK": volume_k,
                 "worldAabb": [_round_seq(low), _round_seq(high)],
+                "growthMm3": core.growth_mm3(prop, catalog) or 0,
+                "volumePenalty": core.effective_volume_penalty(prop, catalog),
+                # Legacy (deprecated) display value; never used for growth.
                 "valueUnits": core.effective_value_units(prop, catalog) or 0,
                 "kind": core.effective_kind(prop, catalog,
                                             self.editor.manifests) or "",
@@ -766,6 +771,10 @@ class WebEditor:
                               if isinstance(material, dict)},
                 "valueUnits": (catalog.get(def_id) or {}).get("valueUnits"),
                 "volumeK": core.effective_volume_k({"def": def_id}, catalog),
+                "volumePenalty": core.effective_volume_penalty({"def": def_id}, catalog),
+                "growthMm3": core.item_growth_mm3(
+                    entry["aabb"], core.effective_volume_k({"def": def_id}, catalog),
+                    core.effective_volume_penalty({"def": def_id}, catalog)),
                 "dReq": round(core.absorb_diameter_req(
                     entry["aabb"], core.effective_volume_k({"def": def_id}, catalog)), 3),
                 "dReqMm": core.absorb_diameter_req_mm(

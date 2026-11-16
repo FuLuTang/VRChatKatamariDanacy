@@ -6,24 +6,21 @@ using UnityEngine;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins the level-level start size (parity D6): a level's start diameter is authoritative
-    /// and the baseline volume is derived from it in one place, while a level that does not set
-    /// one keeps the calibration's 0.30 m start ball.
+    /// Pins the level-level start size (parity D6) in the fixed-point model: a level's start
+    /// diameter is authoritative and becomes <c>startVolumeMm3</c> in ONE conversion, while a
+    /// level that does not set one keeps the serialized calibration start volume.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The defect this pins (F4, reference level run): <c>level.ballDiameterStart = 0.05</c> in
-    /// the placement document reached only the importer's chord budget, because the motor had
-    /// no start-size input at all. The ball started at
-    /// <c>baselineVolumeUnits 3.4390244 * cubicMetersPerVolumeUnit 0.0041</c> = 0.0141 m^3,
-    /// i.e. at 0.2997 m, which is six times the original first level's 5 cm ball.
+    /// Steps C+D retired <c>baselineVolumeUnits</c> (3.4390244 units) and
+    /// <c>cubicMetersPerVolumeUnit</c> (0.0041 m^3/unit). The start ball is now a fixed-point
+    /// volume, and the level input is still a diameter (parity D6).
     /// </para>
     /// <para>
-    /// The numbers are hand calculations, not copies of the implementation: a sphere of
-    /// diameter d has volume <c>pi/6 * d^3</c>, and one volume unit is 0.0041 m^3, so a 0.05 m
-    /// ball is <c>pi/6 * 0.05^3 / 0.0041</c> = 0.015963 units. Continuous volume is NOT
-    /// approved (PARITY_AUDIT 5.3), so the unit count stays an integer ledger unit and only the
-    /// baseline (a volume) is derived.
+    /// Numbers are hand calculations: <c>V = pi/6 * d^3 * 1e9</c> mm^3, so 0.2997 m ->
+    /// 14,094,798 mm^3, 0.05 m -> 65,450 mm^3 and 0.55 m -> 87,113,746 mm^3. The tests read
+    /// the private field by reflection because the motor's UdonSharp fields are not public
+    /// API; they assert the DERIVED volume, never a re-implementation of the formula.
     /// </para>
     /// </remarks>
     public class StartSizeTests
@@ -31,8 +28,7 @@ namespace VRCKatamari.Tests
         private const BindingFlags Any = BindingFlags.Instance | BindingFlags.NonPublic |
             BindingFlags.Public;
 
-        private const float CubicMetersPerUnit = 0.0041f;
-        private const float CalibrationStartDiameterM = 0.2997f;
+        private const long CalibrationStartMm3 = 14094798L;
 
         private Type motorType;
         private GameObject motorHost;
@@ -66,74 +62,60 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(0.05f, diameter, 0.001f,
                 "the level's start diameter is the ball's start diameter");
 
-            // The baseline is derived, not authored: one sphere of that diameter in the
-            // ledger's volume unit. pi/6 * 0.05^3 = 6.544985e-5 m^3, / 0.0041 = 0.0159634.
-            float baseline = (float)GetField("baselineVolumeUnits");
-            Assert.AreEqual(0.0159634f, baseline, 1e-5f,
-                "the baseline volume is the 0.05 m ball expressed in volume units");
-            Assert.AreEqual(0.05f, DiameterOfBaseline(baseline), 0.001f,
-                "the derived baseline maps back to the same diameter");
+            // pi/6 * 0.05^3 * 1e9 = 65,449.8 -> 65,450 mm^3 (rounded once).
+            long startMm3 = (long)GetField("startVolumeMm3");
+            Assert.AreEqual(65450L, startMm3,
+                "the start volume is the 0.05 m ball expressed in mm^3");
+            Assert.AreEqual(0.05f, DiameterOf(startMm3), 0.001f,
+                "the derived start volume maps back to the same diameter");
         }
 
         [Test]
-        public void ALegacyLevelKeepsTheCalibrationStartBall()
+        public void ALegacyLevelKeepsTheCalibrationStartVolume()
         {
-            // Nothing set: the scene predates the field, so its authored baseline volume is
-            // the start size. This is the value the StoryMode run measured (0.2997369 m).
+            // startDiameterWorldM = 0 (unset): the serialized start volume is the start ball.
+            Assert.AreEqual(0L, (float)GetField("startDiameterWorldM"), 0f);
+            Assert.AreEqual(CalibrationStartMm3, (long)GetField("startVolumeMm3"));
             Invoke("Start");
+            Assert.AreEqual(0.2997f, (float)Call("GetSemanticDiameterWorldM"), 0.001f);
 
-            Assert.AreEqual(0f, (float)GetField("startDiameterWorldM"));
-            Assert.AreEqual(CalibrationStartDiameterM, (float)Call("GetSemanticDiameterWorldM"),
-                0.001f, "a legacy level must not move");
-            Assert.AreEqual(3.4390244f, (float)GetField("baselineVolumeUnits"), 1e-6f,
-                "the authored baseline is untouched");
+            // And it says so in the ready line's startSize marker.
+            Assert.AreEqual(CalibrationStartMm3, (long)GetField("startVolumeMm3"),
+                "a scene with no level start keeps the authored start volume");
         }
 
         [Test]
-        public void AStartDiameterTheCapCannotHoldKeepsTheAuthoredBaseline()
+        public void AStartDiameterAboveTheGlobalCapIsRefusedAndTheStartKept()
         {
-            // 10 m start: the core radius would be 5 m, far above maxCoreRadiusWorldM (1.1).
-            // Writing that baseline would make every derivation fail and the ball would stay
-            // at 0 m, so the refusal keeps the calibrated start ball with a warning instead.
-            SetField("startDiameterWorldM", 10f);
+            SetField("startDiameterWorldM", 100f);   // above the 30 m cap
             Invoke("Start");
 
-            Assert.AreEqual(3.4390244f, (float)GetField("baselineVolumeUnits"), 1e-6f,
-                "the authored baseline survives a refused derivation");
-            Assert.AreEqual(CalibrationStartDiameterM, (float)Call("GetSemanticDiameterWorldM"),
-                0.001f, "the ball still has a usable start size");
+            Assert.AreEqual(CalibrationStartMm3, (long)GetField("startVolumeMm3"),
+                "an over-cap start must not be written: the ball would start at the cap");
+            Assert.AreEqual(0.2997f, (float)Call("GetSemanticDiameterWorldM"), 0.001f);
         }
 
         [Test]
-        public void TheDerivedBaselineScalesWithTheCubeOfTheDiameter()
+        public void TheStartVolumeIsRecomputedOnEveryStartNotAccumulated()
         {
-            // Two levels, one at 5 cm and one at 22.2 cm (the original's first and second
-            // stars): the baseline volumes must differ by (22.2/5)^3 = 87.6, which is the
-            // property the size model consumes. This pins "one derivation, no second scale".
-            SetField("startDiameterWorldM", 0.05f);
+            SetField("startDiameterWorldM", 0.55f);
             Invoke("Start");
-            float smallBaseline = (float)GetField("baselineVolumeUnits");
+            long first = (long)GetField("startVolumeMm3");
+            Assert.AreEqual(87113746L, first, "pi/6 * 0.55^3 * 1e9");
 
-            UnityEngine.Object.DestroyImmediate(motorHost);
-            motorHost = new GameObject("StartSizeTestsMotor22");
-            motor = motorHost.AddComponent(motorType);
-            SetField("startDiameterWorldM", 0.222f);
+            // Start again with a different level value: the conversion is a pure function of
+            // the current field, so the second number must not be first * something.
+            SetField("startDiameterWorldM", 0.30f);
             Invoke("Start");
-            float largeBaseline = (float)GetField("baselineVolumeUnits");
-
-            float expectedRatio = (0.222f / 0.05f) * (0.222f / 0.05f) * (0.222f / 0.05f);
-            Assert.AreEqual(expectedRatio, largeBaseline / smallBaseline, expectedRatio * 0.001f,
-                "baseline volume is a cube of the diameter, so the two levels' balls agree");
+            long second = (long)GetField("startVolumeMm3");
+            Assert.AreEqual(14137167L, second, "pi/6 * 0.30^3 * 1e9");
+            Assert.AreNotEqual(first, second);
         }
 
-        // ---- helpers -----------------------------------------------------------
-
-        /// <summary>The sphere-volume inverse the size model consumes, from first principles.</summary>
-        private static float DiameterOfBaseline(float baselineUnits)
+        /// <summary>The equivalent-sphere diameter in metres for a total volume in mm^3.</summary>
+        private static float DiameterOf(long volumeMm3)
         {
-            float volume = baselineUnits * CubicMetersPerUnit;
-            float radius = Mathf.Pow(volume * 3f / (4f * Mathf.PI), 1f / 3f);
-            return 2f * radius;
+            return (float)Math.Pow(6.0 * volumeMm3 / 1e9 / Math.PI, 1.0 / 3.0);
         }
 
         private static Type FindType(string fullName)

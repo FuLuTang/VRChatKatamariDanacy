@@ -4,348 +4,223 @@ using VRCKatamari.Core;
 namespace VRCKatamari.BallLayers
 {
     /// <summary>
-    /// Maps a caller-confirmed volume to the three separate ball dimensions,
-    /// with the presentation cap applied only to this mapping.
+    /// Maps a caller-confirmed fixed-point volume to the three separate ball dimensions.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Lengths are metres in the project's single world space (+Y up); volumes
-    /// are in the caller's volume units and cubicMetersPerVolumeUnit converts
-    /// them to cubic metres. Every parameter is supplied by the caller: this
-    /// class has no product defaults and does not decide the world scale.
+    /// Docs/OPEN_DECISIONS.md (r) steps C+D: volume is a fixed-point <c>long</c> in cubic
+    /// millimetres (1 LSB = 1 mm^3 = 1e-9 m^3). The ball's TOTAL volume is
+    /// <c>startVolumeMm3 + confirmedVolumeMm3</c>; the confirmed part is the ledger's
+    /// growth (absorbed gains minus banked), and the start is the per-level start ball.
+    /// The equivalent-sphere diameter is <c>(6V/pi)^(1/3)</c>; the original's HUD adds
+    /// +0.02 cm to the DISPLAYED value only (parity G09), which
+    /// <see cref="HudDiameterWorldM"/> does and the gate never reads.
     /// </para>
     /// <para>
-    /// The three dimensions are distinct out values on purpose, because one
-    /// field must never carry both a radius and a diameter, and the quantities
-    /// are not interchangeable:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>
-    /// coreRadiusWorldM is the visual core radius: it scales CoreMesh and
-    /// satisfies the sphere-equivalent relation V = 4*pi*r^3/3.
-    /// </description></item>
-    /// <item><description>
-    /// collisionRadiusWorldM is the only collision quantity: the simplified
-    /// PVP and environment test radius.
-    /// </description></item>
-    /// <item><description>
-    /// semanticDiameter is the narrative size: UI readouts and the size-tier
-    /// comparison the player sees. It is a diameter, it may differ from the
-    /// physical metres, and it is never an input to collision or to a gameplay
-    /// gate; the pickup threshold follows the confirmed volume, not this value.
-    /// </description></item>
-    /// </list>
-    /// <para>
-    /// The cap is display policy only. The confirmed volume is read by value,
-    /// so there is no ledger this class could truncate, zero or rewrite; the
-    /// effective presentation volume returned here is a finite diagnostic and
-    /// never a balance. Because the call is stateless, a reset or a
-    /// post-collapse rebuild is simply another call with the new confirmed
-    /// value: nothing remembers a previous display size.
+    /// The cap is one GLOBAL parameter (<c>maxBallDiameterM</c>, default 30 m), not a
+    /// per-level core radius: the per-level 2.20 m cap was a coupling of the map's content
+    /// ladder to the engine's size limit, and the owner decision replaces it. A total volume
+    /// at or above the cap's volume saturates EXACTLY on the cap diameter (no float compare
+    /// of two huge volumes decides it), so two different over-cap totals cannot produce two
+    /// display sizes.
     /// </para>
     /// <para>
-    /// The mapping runs in the log domain, so a finite volume and a finite
-    /// scale never overflow through the intermediate product, cube or sum.
-    /// The presentation diagnostic saturates at float.MaxValue once its log
-    /// passes the float range; the three dimensions do not saturate - their
-    /// final multiplications are checked one by one and an unrepresentable
-    /// result is rejected. This port uses the runtime's float (not the
-    /// reference model's double), so the accepted input domain is every finite
-    /// non-negative float and the cap saturates exactly. A cap radius below the
-    /// baseline radius is a parameter conflict and is rejected rather than
-    /// silently shrinking the baseline.
+    /// FLOAT32 HAZARD, deliberate and documented: Udon has no first-class double, so the
+    /// cube root runs in float. Converting a <c>long</c> volume to float rounds the low bits
+    /// above 2^24 mm^3 (0.0168 m^3); the relative error is at most 2^-24, i.e. ~2e-8 on the
+    /// diameter (0.6 micrometres on a 30 m ball). That is far below the millimetre the gate
+    /// and the HUD floor to, so it cannot move a threshold. The rule that follows: NEVER
+    /// accumulate volume in float - only the ledger's integer sum is authoritative, and this
+    /// class is a stateless read of it. The editor and Python compute growth in double and
+    /// store an exact <c>long</c> in the host column, so the runtime never re-prices.
     /// </para>
     /// <para>
-    /// The map also runs backwards. <see cref="TryVolumeUnitsForSemanticDiameter"/>
-    /// recovers the confirmed volume units that produce a requested semantic
-    /// diameter, which is what a rule written in diameter space needs: a
-    /// banking residual applied to a diameter cannot be applied to the volume
-    /// units that happen to be in flight, because the map between them is a
-    /// cube, not a proportion. Both directions share the same constants and the
-    /// same log-domain radius expression, so the two cannot drift apart: the
-    /// forward map's numbers are not copied into the inverse, they are the
-    /// parameters of one equation solved for its other unknown.
+    /// The three dimensions stay distinct out values: <c>coreRadiusWorldM</c> (visual core,
+    /// sphere-equivalent), <c>collisionRadiusWorldM</c> (the only collision quantity) and
+    /// <c>semanticDiameter</c> (the narrative size the gate and the HUD use as a diameter).
+    /// <c>semanticDiameterPerCoreDiameter</c> and <c>collisionToCoreRadiusRatio</c> keep
+    /// their old meaning; both default to 1.
     /// </para>
     /// <para>
-    /// The call allocates nothing and keeps no state. On false every out value
-    /// is zero and must not be applied.
+    /// The call allocates nothing, keeps no state, and on false every out value is zero.
     /// </para>
     /// </remarks>
     public static class SizeModelMath
     {
-        // ln(3/(4*pi)) and ln(4*pi/3): the sphere-volume constant enters the
-        // radius mapping as a log offset, so the product/cube never materialize.
-        private const float LnThreeOverFourPi = -1.4324119583f;
-        private const float LnFourPiOverThree = 1.4324119583f;
+        /// <summary>One cubic metre in the ledger's quantum (1 LSB = 1 mm^3).</summary>
+        public const long Mm3PerCubicMetre = 1000000000L;
 
-        // ln(2): the radius-to-diameter doubling the forward map applies as
-        // "2f * core". The inverse needs it inside the log domain so a huge
-        // semanticDiameterPerCoreDiameter cannot overflow an intermediate
-        // 2*ratio product. It is the same factor, not a second convention.
-        private const float LnTwo = 0.6931472f;
-
-        // ln(float.MaxValue): a log-domain value at or above this would
-        // exponentiate to infinity, so it saturates the diagnostic instead.
-        private const float LnFloatMax = 88.722839f;
+        /// <summary>The original's HUD fudge: +0.02 cm on the displayed diameter (G09).</summary>
+        public const float HudDiameterOffsetM = 0.0002f;
 
         /// <summary>
-        /// Derives the presented dimensions from a confirmed volume.
+        /// The equivalent-sphere diameter in metres for a TOTAL volume in mm^3.
         /// </summary>
         /// <remarks>
-        /// confirmedVolumeUnits is the caller's read-only ledger reading and
-        /// must be non-negative and finite; the five parameters must be
-        /// positive and finite. baselineVolumeUnits is the volume the ball has
-        /// before any confirmed growth, cubicMetersPerVolumeUnit converts one
-        /// volume unit to cubic metres, maxCoreRadiusWorldM caps only this
-        /// mapping, and the two ratios derive the collision radius and the
-        /// semantic diameter from the core. All lengths are metres, radius and
-        /// diameter are never the same quantity, and effectiveVolumeUnits is
-        /// the presentation diagnostic in volume units (not cubic metres, not
-        /// a balance). Returns false for invalid input, a cap below the
-        /// baseline radius, or a non-finite result; no partial output is
-        /// written in that case.
+        /// Returns 0 for a non-positive volume. Callers that need a rejection use
+        /// <see cref="TryDerive"/>; this helper exists for diagnostics and for the HUD, and
+        /// it saturates at the float range rather than returning infinity.
         /// </remarks>
-        public static bool TryDerive(
-            float confirmedVolumeUnits,
-            float baselineVolumeUnits,
-            float cubicMetersPerVolumeUnit,
-            float maxCoreRadiusWorldM,
-            float collisionToCoreRadiusRatio,
-            float semanticDiameterPerCoreDiameter,
-            out float coreRadiusWorldM,
-            out float collisionRadiusWorldM,
-            out float semanticDiameter,
-            out float effectiveVolumeUnits)
+        public static float DiameterFromVolumeMm3(long volumeMm3)
+        {
+            if (volumeMm3 <= 0L) return 0f;
+            float volumeM3 = (float)volumeMm3 * 1e-9f;
+            float diameter = Mathf.Pow(6f * volumeM3 / Mathf.PI, 1f / 3f);
+            return KatamariMath.IsFiniteFloat(diameter) ? diameter : 0f;
+        }
+
+        /// <summary>
+        /// The TOTAL sphere volume of a ball with the given semantic diameter, in mm^3.
+        /// </summary>
+        /// <remarks>
+        /// <c>V = pi/6 * (D / semanticDiameterPerCoreDiameter)^3</c>: the semantic diameter
+        /// is the core diameter times the ratio, and the sphere is sized by the core. The
+        /// cap is NOT applied here (this is the raw sphere); <see cref="TryDerive"/> clamps
+        /// the total it is given to the cap, so a start/bank volume can be computed first and
+        /// judged there.
+        /// </remarks>
+        public static bool TrySphereVolumeMm3(float semanticDiameterM,
+            float semanticDiameterPerCoreDiameter, out long volumeMm3)
+        {
+            volumeMm3 = 0L;
+            if (!KatamariMath.IsFiniteFloat(semanticDiameterM) || semanticDiameterM <= 0f)
+                return false;
+            if (!IsPositiveFinite(semanticDiameterPerCoreDiameter)) return false;
+            float coreDiameterM = semanticDiameterM / semanticDiameterPerCoreDiameter;
+            if (!IsPositiveFinite(coreDiameterM)) return false;
+
+            float cubicMetres = Mathf.PI / 6f * coreDiameterM * coreDiameterM * coreDiameterM;
+            if (!KatamariMath.IsFiniteFloat(cubicMetres) || cubicMetres <= 0f) return false;
+            float mm3 = cubicMetres * (float)Mm3PerCubicMetre;
+            if (!KatamariMath.IsFiniteFloat(mm3)) return false;
+            volumeMm3 = (long)Mathf.Round(mm3);
+            return volumeMm3 > 0L;
+        }
+
+        /// <summary>
+        /// The CONFIRMED volume (above the start ball) that produces a requested semantic
+        /// diameter. This is the inverse the bank-shrink rule needs.
+        /// </summary>
+        public static bool TryConfirmedVolumeMm3ForSemanticDiameter(float semanticDiameterM,
+            long startVolumeMm3, float semanticDiameterPerCoreDiameter,
+            out long confirmedVolumeMm3)
+        {
+            confirmedVolumeMm3 = 0L;
+            if (startVolumeMm3 <= 0L) return false;
+            long totalMm3;
+            if (!TrySphereVolumeMm3(semanticDiameterM, semanticDiameterPerCoreDiameter,
+                out totalMm3))
+            {
+                return false;
+            }
+            confirmedVolumeMm3 = totalMm3 > startVolumeMm3 ? totalMm3 - startVolumeMm3 : 0L;
+            return true;
+        }
+
+        /// <summary>
+        /// Derives the presented dimensions from the ball's start and confirmed volumes.
+        /// </summary>
+        /// <param name="startVolumeMm3">The per-level start ball's volume (positive).</param>
+        /// <param name="confirmedVolumeMm3">
+        /// The ledger's growth above the start (>= 0; unbanked + carried).
+        /// </param>
+        /// <param name="maxBallDiameterM">The one global cap (semantic diameter, metres).</param>
+        /// <param name="collisionToCoreRadiusRatio">Collision radius / core radius.</param>
+        /// <param name="semanticDiameterPerCoreDiameter">Semantic diameter / core diameter.</param>
+        /// <param name="coreRadiusWorldM">Visual core radius.</param>
+        /// <param name="collisionRadiusWorldM">The only collision quantity.</param>
+        /// <param name="semanticDiameter">Narrative diameter (gate + HUD input).</param>
+        /// <param name="effectiveConfirmedMm3">
+        /// The presentation diagnostic: the confirmed volume that fits under the cap.
+        /// </param>
+        public static bool TryDerive(long startVolumeMm3, long confirmedVolumeMm3,
+            float maxBallDiameterM, float collisionToCoreRadiusRatio,
+            float semanticDiameterPerCoreDiameter, out float coreRadiusWorldM,
+            out float collisionRadiusWorldM, out float semanticDiameter,
+            out long effectiveConfirmedMm3)
         {
             coreRadiusWorldM = 0f;
             collisionRadiusWorldM = 0f;
             semanticDiameter = 0f;
-            effectiveVolumeUnits = 0f;
+            effectiveConfirmedMm3 = 0L;
 
-            if (!KatamariMath.IsFiniteFloat(confirmedVolumeUnits) || confirmedVolumeUnits < 0f) return false;
-            if (!IsPositiveFinite(baselineVolumeUnits)) return false;
-            if (!IsPositiveFinite(cubicMetersPerVolumeUnit)) return false;
-            if (!IsPositiveFinite(maxCoreRadiusWorldM)) return false;
+            if (startVolumeMm3 <= 0L) return false;
+            if (confirmedVolumeMm3 < 0L) return false;
+            if (!IsPositiveFinite(maxBallDiameterM)) return false;
             if (!IsPositiveFinite(collisionToCoreRadiusRatio)) return false;
             if (!IsPositiveFinite(semanticDiameterPerCoreDiameter)) return false;
 
-            float logScale = Mathf.Log(cubicMetersPerVolumeUnit);
-            if (!KatamariMath.IsFiniteFloat(logScale)) return false;
-
-            // Baseline and cap are compared in the log domain for the same
-            // reason the mapping runs there: no baseline-volume cube.
-            float logBaselineRadius = LogCoreRadiusFromLogVolume(Mathf.Log(baselineVolumeUnits), logScale);
-            float logCapRadius = Mathf.Log(maxCoreRadiusWorldM);
-            if (!KatamariMath.IsFiniteFloat(logBaselineRadius)) return false;
-            if (!KatamariMath.IsFiniteFloat(logCapRadius)) return false;
-            if (logCapRadius < logBaselineRadius) return false;
-
-            // log(baseline + confirmed) without materializing a sum that can
-            // overflow, although both addends are finite.
-            float logTotal = AddLogs(baselineVolumeUnits, confirmedVolumeUnits);
-            if (!KatamariMath.IsFiniteFloat(logTotal)) return false;
-
-            // The cap expressed as a volume: the effective volume is the
-            // smaller of the confirmed total and the volume the cap can hold.
-            float logCappedVolume = LnFourPiOverThree + 3f * logCapRadius - logScale;
-            if (!KatamariMath.IsFiniteFloat(logCappedVolume)) return false;
-            float logEffectiveVolume = Mathf.Min(logTotal, logCappedVolume);
-            if (!KatamariMath.IsFiniteFloat(logEffectiveVolume)) return false;
-
-            float effective = logEffectiveVolume >= LnFloatMax
-                ? float.MaxValue
-                : Mathf.Exp(logEffectiveVolume);
-            if (!IsPositiveFinite(effective)) return false;
-
-            // Saturation is exact: once the confirmed total reaches the cap
-            // volume the core radius is the cap parameter itself, so two
-            // different large confirmed values cannot produce two display
-            // sizes that differ by float rounding.
-            float core;
-            if (logTotal > logCappedVolume)
+            long capVolumeMm3;
+            if (!TrySphereVolumeMm3(maxBallDiameterM, semanticDiameterPerCoreDiameter,
+                out capVolumeMm3))
             {
-                core = maxCoreRadiusWorldM;
+                return false;
+            }
+
+            // Integer compare first: saturation is a property of the LEDGER quantity, not of
+            // two floats that a rounding could order differently.
+            long totalMm3 = startVolumeMm3 + confirmedVolumeMm3;
+            if (totalMm3 < 0L) return false;                 // long overflow, refuse
+
+            bool atCap = totalMm3 >= capVolumeMm3;
+            long effectiveTotalMm3 = atCap ? capVolumeMm3 : totalMm3;
+            long effectiveConfirmed = effectiveTotalMm3 - startVolumeMm3;
+            if (effectiveConfirmed < 0L) effectiveConfirmed = 0L;
+
+            float measuredDiameter;
+            if (atCap)
+            {
+                measuredDiameter = maxBallDiameterM;
             }
             else
             {
-                float logCoreRadius = LogCoreRadiusFromLogVolume(logEffectiveVolume, logScale);
-                if (!KatamariMath.IsFiniteFloat(logCoreRadius)) return false;
-                core = Mathf.Exp(logCoreRadius);
-                if (!IsPositiveFinite(core)) return false;
+                measuredDiameter = DiameterFromVolumeMm3(effectiveTotalMm3);
+                if (!IsPositiveFinite(measuredDiameter)) return false;
             }
 
-            // Final per-quantity checks: a finite core can still overflow once
-            // the ratio is applied, and that must be rejected, not clamped.
+            // The semantic diameter is the core diameter times the ratio; the core is
+            // measured by the sphere, so D_core = D_semantic / ratio.
+            float coreDiameter = measuredDiameter / semanticDiameterPerCoreDiameter;
+            if (!IsPositiveFinite(coreDiameter)) return false;
+            float core = coreDiameter * 0.5f;
             float collision = core * collisionToCoreRadiusRatio;
             float semantic = (2f * core) * semanticDiameterPerCoreDiameter;
-            if (!IsPositiveFinite(collision)) return false;
-            if (!IsPositiveFinite(semantic)) return false;
+            if (!IsPositiveFinite(core) || !IsPositiveFinite(collision) ||
+                !IsPositiveFinite(semantic))
+            {
+                return false;
+            }
+
+            if (atCap)
+            {
+                // Exact saturation: report the cap's own numbers, not cbrt round-trips.
+                semantic = maxBallDiameterM;
+                core = (semantic * 0.5f) / semanticDiameterPerCoreDiameter;
+                collision = core * collisionToCoreRadiusRatio;
+                if (!IsPositiveFinite(core) || !IsPositiveFinite(collision)) return false;
+            }
 
             coreRadiusWorldM = core;
             collisionRadiusWorldM = collision;
             semanticDiameter = semantic;
-            effectiveVolumeUnits = effective;
+            effectiveConfirmedMm3 = effectiveConfirmed;
             return true;
         }
 
-        /// <summary>
-        /// Converts a core radius to the core diameter in metres.
-        /// </summary>
-        /// <remarks>
-        /// This is the module's only radius-to-diameter conversion, so a
-        /// readout asks for a diameter by name instead of doubling whichever
-        /// quantity it happens to hold. The input must be the positive finite
-        /// core radius; a collision radius or a semantic diameter is not a
-        /// core radius and has no way to be passed here by type, which is why
-        /// the caller must keep the out values apart. False means the input is
-        /// not a positive finite radius or the doubled value is not finite.
-        /// </remarks>
-        public static bool TryCoreDiameter(float coreRadiusWorldM, out float coreDiameterWorldM)
+        /// <summary>The HUD diameter: the semantic diameter plus the original's +0.02 cm.</summary>
+        public static float HudDiameterWorldM(float semanticDiameterWorldM)
         {
-            coreDiameterWorldM = 0f;
-            if (!IsPositiveFinite(coreRadiusWorldM)) return false;
-            float diameter = coreRadiusWorldM * 2f;
-            if (!IsPositiveFinite(diameter)) return false;
-            coreDiameterWorldM = diameter;
-            return true;
-        }
-
-        /// <summary>
-        /// Recovers the confirmed volume units whose forward mapping reports
-        /// the requested semantic diameter.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// This is the inverse of <see cref="TryDerive"/> restricted to the
-        /// quantity a diameter-space rule can name. It answers "how many units
-        /// is this narrative diameter worth", which is how a rule that shrinks
-        /// the ball by a fraction of a diameter (the banking residual) can
-        /// express its result as a ledger value.
-        /// </para>
-        /// <para>
-        /// Formula, and why it is exact rather than fitted. The forward map is
-        /// semanticDiameter = 2 * ratio * cbrt(3 * (baseline + units) * c / 4*pi).
-        /// Solving that equation for units is pure algebra - no series, no
-        /// approximation, no second curve: coreRadius = semanticDiameter /
-        /// (2 * ratio), total units = (4*pi/3) * coreRadius^3 / c, units = total
-        /// - baseline. The cube and the sphere constant are not new numbers
-        /// here: the same LnThreeOverFourPi / LnFourPiOverThree pair and the
-        /// same LogCoreRadiusFromLogVolume expression feed both directions, so
-        /// the two maps are one equation read in two directions. The only
-        /// inexactness is float rounding, roughly one unit in the last place of
-        /// the returned diameter (measured round trip over 0.30..2.20 m: worst
-        /// 1.9e-7 m).
-        /// </para>
-        /// <para>
-        /// Domain. The forward map cannot report a diameter below its baseline
-        /// (the ball at zero confirmed units is already that big) or above its
-        /// cap. Like the reference model's units_for_diameter, this method
-        /// clamps instead of failing there: a diameter at or below the baseline
-        /// returns zero confirmed units, a diameter above the cap returns the
-        /// cap's volume. Clamping is the honest answer for a residual - a
-        /// shrink that lands below the baseline means "no growth survived", not
-        /// "the parameters are wrong" - while the caller's own start clamp keeps
-        /// the range in practice. An unrepresentable volume (log total at or
-        /// beyond the float range) is rejected rather than saturated, because
-        /// no float input could then reproduce the diameter.
-        /// </para>
-        /// <para>
-        /// semanticDiameter must be positive and finite, and the four
-        /// parameters must be positive and finite with a cap radius at or above
-        /// the baseline radius, exactly as in the forward map.
-        /// collisionToCoreRadiusRatio is absent on purpose: the collision radius
-        /// is a sibling of the core, not an input to the semantic diameter, so
-        /// there is no value of it that changes this answer.
-        /// </para>
-        /// <para>
-        /// On false the out value is zero and must not be applied. The call
-        /// allocates nothing and keeps no state; it is a pure function of its
-        /// arguments, so re-deriving a size after a bank, a reset or a
-        /// post-collapse rebuild is simply another call.
-        /// </para>
-        /// </remarks>
-        public static bool TryVolumeUnitsForSemanticDiameter(
-            float semanticDiameter,
-            float baselineVolumeUnits,
-            float cubicMetersPerVolumeUnit,
-            float maxCoreRadiusWorldM,
-            float semanticDiameterPerCoreDiameter,
-            out float confirmedVolumeUnits)
-        {
-            confirmedVolumeUnits = 0f;
-
-            if (!IsPositiveFinite(semanticDiameter)) return false;
-            if (!IsPositiveFinite(baselineVolumeUnits)) return false;
-            if (!IsPositiveFinite(cubicMetersPerVolumeUnit)) return false;
-            if (!IsPositiveFinite(maxCoreRadiusWorldM)) return false;
-            if (!IsPositiveFinite(semanticDiameterPerCoreDiameter)) return false;
-
-            float logScale = Mathf.Log(cubicMetersPerVolumeUnit);
-            if (!KatamariMath.IsFiniteFloat(logScale)) return false;
-
-            // The same two radius bounds the forward map compares, built by the
-            // same helper, so an inverse answer can never sit outside the range
-            // the forward map can actually produce.
-            float logBaselineRadius = LogCoreRadiusFromLogVolume(Mathf.Log(baselineVolumeUnits), logScale);
-            float logCapRadius = Mathf.Log(maxCoreRadiusWorldM);
-            if (!KatamariMath.IsFiniteFloat(logBaselineRadius)) return false;
-            if (!KatamariMath.IsFiniteFloat(logCapRadius)) return false;
-            if (logCapRadius < logBaselineRadius) return false;
-
-            // Invert "semantic = 2 * core * ratio" without materializing
-            // 2 * ratio: a huge ratio would otherwise divide by infinity and
-            // quietly answer zero.
-            float logCoreRadius = Mathf.Log(semanticDiameter) -
-                Mathf.Log(semanticDiameterPerCoreDiameter) - LnTwo;
-            if (!KatamariMath.IsFiniteFloat(logCoreRadius)) return false;
-
-            // Below the baseline the forward map cannot go smaller: zero
-            // confirmed units is the whole of that branch, and 0f is a valid
-            // answer rather than a failure.
-            if (logCoreRadius <= logBaselineRadius) return true;
-            if (logCoreRadius > logCapRadius) logCoreRadius = logCapRadius;
-
-            // Total units, not confirmed units: the volume the whole mapping
-            // reads, before the baseline is subtracted below.
-            float logTotalUnits = LnFourPiOverThree + 3f * logCoreRadius - logScale;
-            if (!KatamariMath.IsFiniteFloat(logTotalUnits)) return false;
-            if (logTotalUnits >= LnFloatMax) return false;
-            float totalUnits = Mathf.Exp(logTotalUnits);
-            if (!IsPositiveFinite(totalUnits)) return false;
-
-            float confirmed = totalUnits - baselineVolumeUnits;
-            if (!KatamariMath.IsFiniteFloat(confirmed)) return false;
-            if (confirmed < 0f) confirmed = 0f;
-            confirmedVolumeUnits = confirmed;
-            return true;
+            if (!KatamariMath.IsFiniteFloat(semanticDiameterWorldM) ||
+                semanticDiameterWorldM <= 0f)
+            {
+                return 0f;
+            }
+            return semanticDiameterWorldM + HudDiameterOffsetM;
         }
 
         private static bool IsPositiveFinite(float value)
         {
             return KatamariMath.IsFiniteFloat(value) && value > 0f;
-        }
-
-        // log of the core radius a log-volume in volume units maps to under
-        // V = 4*pi*r^3/3 with a metres-per-unit scale. One expression, used by
-        // the forward map for the baseline and for the mapped core, and by the
-        // inverse for the bounds it must stay between, so the two directions
-        // cannot disagree about where a volume sits.
-        private static float LogCoreRadiusFromLogVolume(float logVolumeUnits, float logScale)
-        {
-            return (logVolumeUnits + logScale + LnThreeOverFourPi) / 3f;
-        }
-
-        // log(a + b) with a stable log-sum: the larger log leads, so the
-        // exponential only ever sees a non-positive exponent. A zero second
-        // addend is the baseline-only case and never reaches log(0).
-        private static float AddLogs(float a, float b)
-        {
-            float logA = Mathf.Log(a);
-            if (b <= 0f) return logA;
-            float logB = Mathf.Log(b);
-            float high = Mathf.Max(logA, logB);
-            float low = Mathf.Min(logA, logB);
-            return high + Mathf.Log(1f + Mathf.Exp(low - high));
         }
     }
 }

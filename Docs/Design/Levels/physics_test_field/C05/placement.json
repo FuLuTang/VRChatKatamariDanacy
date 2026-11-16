@@ -27,7 +27,7 @@
     },
     "expected": {
       "propCount": 0,
-      "valueUnits": 0
+      "growthMm3": 0
     },
     "arena": {
       "id": "C05",

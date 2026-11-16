@@ -67,14 +67,13 @@ namespace VRCKatamari.Editor.LevelBuild
         public int SyncCollidersCreated;
 
         /// <summary>
-        /// The level's declared value-unit total. 64-bit because the host column is
-        /// (Docs/OPEN_DECISIONS.md (r) step B), so a total past <c>int.MaxValue</c> prints
-        /// exactly; the other two counters are row counts and stay 32-bit.
+        /// The level's total growth in mm^3, derived from each prop's aabb x k x penalty.
+        /// 64-bit because the ledger is; the other two counters are row counts.
         /// </summary>
-        public long ValueUnitsDeclared;
-        public int ValueUnitsPreserved;
-        public int ValueUnitsUndeclared;
-        public bool ValueUnitsVerified;
+        public long GrowthMm3Declared;
+        public int GrowthPreservedRows;
+        public int GrowthUndeclaredRows;
+        public bool GrowthVerified;
         /// <summary>Every declared collider proxy read back bit-identically.</summary>
         public bool ProxyVerified;
 
@@ -89,7 +88,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
         public readonly List<string> Notes = new List<string>();
         public readonly List<string> Errors = new List<string>();
-        public readonly List<string> ValueUnitProblems = new List<string>();
+        public readonly List<string> GrowthProblems = new List<string>();
 
         public void Fail(string reason)
         {
@@ -169,20 +168,20 @@ namespace VRCKatamari.Editor.LevelBuild
             text.Append("  propColliders: created=").Append(SyncCollidersCreated)
                 .Append(SyncCollidersCreated > 0 ? " (from each prop's visual local AABB)" : "");
             text.AppendLine();
-            text.Append("  valueUnits: declared=").Append(ValueUnitsDeclared)
-                .Append(", preserved=").Append(ValueUnitsPreserved)
-                .Append(", undeclared=").Append(ValueUnitsUndeclared)
-                .Append(", read-back: ").Append(ValueUnitsVerified ? "verified" : "NOT verified");
+            text.Append("  growthMm3: declared=").Append(GrowthMm3Declared)
+                .Append(", preservedRows=").Append(GrowthPreservedRows)
+                .Append(", unpricedRows=").Append(GrowthUndeclaredRows)
+                .Append(", read-back: ").Append(GrowthVerified ? "verified" : "NOT verified");
             text.AppendLine();
             text.Append("  arena: ").Append(ArenaWired ? "wired" : "not wired")
                 .Append(" (boxes=").Append(ArenaBoxes).Append(", walls=").Append(ArenaPlanes)
                 .Append(", ramps=").Append(ArenaRamps).Append(", kinds=")
                 .Append(ArenaKinds).Append(")");
 
-            for (int i = 0; i < ValueUnitProblems.Count; i++)
+            for (int i = 0; i < GrowthProblems.Count; i++)
             {
                 text.AppendLine();
-                text.Append("  valueUnits: ").Append(ValueUnitProblems[i]);
+                text.Append("  growthMm3: ").Append(GrowthProblems[i]);
             }
 
             for (int i = 0; i < Notes.Count; i++)

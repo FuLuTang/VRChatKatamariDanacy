@@ -164,7 +164,10 @@ class SurfaceTests(WebServerCase):
         derived = state["derived"]["props"]["prop_acorn_000"]
         # k=0.70 -> 60 mm (was 68 mm under the k-less gate), still whole millimetres.
         self.assertAlmostEqual(derived["dReq"], 0.06, places=3)
-        self.assertEqual(derived["valueUnits"], 1)
+        # Growth is derived from aabb x 0.70 x 0.8 (steps C+D), not a stored "unit".
+        self.assertEqual(derived["growthMm3"],
+                         core.item_growth_mm3(
+                             core.load_manifests()["acorn"]["aabb"], 0.70, 0.8))
         self.assertEqual(len(derived["worldAabb"]), 2)
         self.assertIn("tiers", state["check"]["tables"])
         self.assertEqual(state["check"]["tables"]["tiers"][1]["diameter"], 0.5)
@@ -226,7 +229,7 @@ class WriteTests(WebServerCase):
         before = sha(self.placement)
         status, payload = self.call("/api/op", {"ops": [
             {"op": "move", "args": {"id": "prop_acorn_000", "to": [1.3, 0.015, 2.1]}},
-            {"op": "set", "args": {"id": "prop_acorn_000", "valueUnits": 99999}},
+            {"op": "set", "args": {"id": "prop_acorn_000", "volumeK": 2.0}},
         ]})
         self.assertEqual(status, 200)
         self.assertFalse(payload["ok"])
@@ -427,7 +430,8 @@ class VolumeKApiTests(WebServerCase):
         status, payload = self.op("add_def", id="apple", valueUnits=1, kind="fruit")
         self.assertTrue(payload["ok"], payload["error"])
         before = self.state()["derived"]["props"]["prop_apple_000"]
-        status, payload = self.op("set_def", id="apple", volumeK=2.0)
+        status, payload = self.op("set_def", id="apple", volumeK=2.0,
+                                  updateExpected=True)
         self.assertTrue(payload["ok"], payload["error"])
         after = self.state()["derived"]["props"]["prop_apple_000"]
         self.assertEqual(after["volumeK"], 2.0)

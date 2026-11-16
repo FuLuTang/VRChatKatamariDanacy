@@ -808,7 +808,10 @@ namespace VRCKatamari.Story
                 return;
             }
             if (motor == null) return;
-            float diameterM = motor.GetCollisionRadiusWorldM() * 2f;
+            // The player-facing diameter carries the original's +0.02 cm display fudge
+            // (parity G09). It is a DISPLAY reading: the gate and the size model use the
+            // un-offset semantic diameter, so this cannot move a threshold.
+            float diameterM = motor.GetHudDiameterWorldM();
             int hundredths = Mathf.FloorToInt(diameterM * 100f);
             if (hundredths == lastCurrentShown) return;
             lastCurrentShown = hundredths;

@@ -25,29 +25,25 @@ namespace VRCKatamari.Editor.Pickup
         public int PropCount;
 
         /// <summary>
-        /// Sum of every written row's value units. 64-bit: the host column is
-        /// (Docs/OPEN_DECISIONS.md (r) step B), so a level total past <c>int.MaxValue</c>
-        /// prints the same number the ledger will see.
+        /// Sum of every written row's growth, in mm^3 (the ledger gain). 64-bit because the
+        /// ledger is; the value is derived at sync time from the row's bounds x k x penalty.
         /// </summary>
-        public long TotalValueUnits;
+        public long TotalGrowthMm3;
 
-        /// <summary>
-        /// True when the caller supplied a non-empty declaration map. False means no values
-        /// were verified because none were declared (the un-migrated scene path).
-        /// </summary>
-        public bool ValueUnitsRequested;
+        /// <summary>True when this run derived and wrote the growth column.</summary>
+        public bool GrowthPriced;
 
-        /// <summary>Sum of the units taken from the caller's declarations.</summary>
-        public long ValueUnitsDeclared;
+        /// <summary>Sum of the derived growth of the rows this run priced.</summary>
+        public long GrowthMm3Priced;
 
-        /// <summary>Rows whose value was read back from the host and preserved unchanged.</summary>
-        public int ValueUnitsPreserved;
+        /// <summary>Rows whose growth was priced from the declared/effective k (not a default).</summary>
+        public int GrowthPreservedRows;
 
-        /// <summary>Rows written as 0 because they had neither a declaration nor an existing value.</summary>
-        public int ValueUnitsUndeclared;
+        /// <summary>Rows the run could not price (illegal bounds/k/penalty); written as 0.</summary>
+        public int GrowthUndeclaredRows;
 
-        /// <summary>True when every declared value read back from the host exactly.</summary>
-        public bool ValueUnitsVerified;
+        /// <summary>True when every written row's growth read back from the host exactly.</summary>
+        public bool GrowthVerified;
         /// <summary>Every declared collider proxy read back bit-identically.</summary>
         public bool ProxyVerified;
 
@@ -59,7 +55,7 @@ namespace VRCKatamari.Editor.Pickup
         public int CollidersCreated;
 
         /// <summary>Declared values that did not land, and declared ids with no row.</summary>
-        public readonly List<string> ValueUnitMismatches = new List<string>();
+        public readonly List<string> GrowthMismatches = new List<string>();
 
         /// <summary>True when the UdonSharp compile + proxy copy was issued without throwing.</summary>
         public bool UdonCopyIssued;
@@ -88,14 +84,14 @@ namespace VRCKatamari.Editor.Pickup
                 }
 
                 Kinds[i].Props++;
-                Kinds[i].ValueUnits += valueUnits;
+                Kinds[i].GrowthMm3 += valueUnits;
                 return;
             }
 
             var entry = new PickupFieldKindCount();
             entry.Kind = kind;
             entry.Props = 1;
-            entry.ValueUnits = valueUnits;
+            entry.GrowthMm3 = valueUnits;
             Kinds.Add(entry);
         }
 
@@ -119,7 +115,7 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             text.Append(PropCount).Append(" prop(s), ").Append(Kinds.Count).Append(" kind(s), ")
-                .Append(TotalValueUnits).Append(" value unit(s), ").Append(Rejected.Count)
+                .Append(TotalGrowthMm3).Append(" growth mm^3, ").Append(Rejected.Count)
                 .Append(" rejected");
 
             if (CollidersCreated > 0)
@@ -130,12 +126,12 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             text.AppendLine();
-            text.Append("  valueUnits: declared=").Append(ValueUnitsDeclared)
-                .Append(", preserved=").Append(ValueUnitsPreserved)
-                .Append(", undeclared=").Append(ValueUnitsUndeclared)
-                .Append(", read-back: ").Append(!ValueUnitsRequested
-                    ? "n/a (no declarations)"
-                    : (ValueUnitsVerified ? "verified" : "NOT verified"));
+            text.Append("  growthMm3: priced=").Append(GrowthMm3Priced)
+                .Append(", preservedRows=").Append(GrowthPreservedRows)
+                .Append(", unpricedRows=").Append(GrowthUndeclaredRows)
+                .Append(", read-back: ").Append(!GrowthPriced
+                    ? "n/a (no rows)"
+                    : (GrowthVerified ? "verified" : "NOT verified"));
 
             if (!string.IsNullOrEmpty(FieldRootPath))
             {
@@ -147,7 +143,7 @@ namespace VRCKatamari.Editor.Pickup
             {
                 text.AppendLine();
                 text.Append("  kind ").Append(Kinds[i].Kind).Append(": ").Append(Kinds[i].Props)
-                    .Append(" prop(s), ").Append(Kinds[i].ValueUnits).Append(" unit(s)");
+                    .Append(" prop(s), ").Append(Kinds[i].GrowthMm3).Append(" mm^3");
             }
 
             int printed = 0;
@@ -164,16 +160,16 @@ namespace VRCKatamari.Editor.Pickup
                     .Append(" more rejected row(s) in the returned report");
             }
 
-            for (int i = 0; i < ValueUnitMismatches.Count && i < ConsoleRejectionLimit; i++)
+            for (int i = 0; i < GrowthMismatches.Count && i < ConsoleRejectionLimit; i++)
             {
                 text.AppendLine();
-                text.Append("  valueUnits ").Append(ValueUnitMismatches[i]);
+                text.Append("  growthMm3 ").Append(GrowthMismatches[i]);
             }
 
-            if (ValueUnitMismatches.Count > ConsoleRejectionLimit)
+            if (GrowthMismatches.Count > ConsoleRejectionLimit)
             {
                 text.AppendLine();
-                text.Append("  ... ").Append(ValueUnitMismatches.Count - ConsoleRejectionLimit)
+                text.Append("  ... ").Append(GrowthMismatches.Count - ConsoleRejectionLimit)
                     .Append(" more valueUnits problem(s) in the returned report");
             }
 
@@ -218,12 +214,12 @@ namespace VRCKatamari.Editor.Pickup
         }
     }
 
-    /// <summary>Accepted prop rows per kind, and the value units they carry.</summary>
+    /// <summary>Accepted prop rows per kind, and the growth in mm^3 they carry.</summary>
     public sealed class PickupFieldKindCount
     {
         public string Kind;
         public int Props;
-        public long ValueUnits;
+        public long GrowthMm3;
     }
 
     /// <summary>One row the sync refused to write, with the reason it refused.</summary>

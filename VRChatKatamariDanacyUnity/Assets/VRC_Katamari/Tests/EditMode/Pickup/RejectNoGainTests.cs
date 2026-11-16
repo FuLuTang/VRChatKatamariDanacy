@@ -29,7 +29,7 @@ namespace VRCKatamari.Tests
         private const float BallDiameterM = 0.30f;
         private const float MaxGrowthRadiusM = 1.1f;
 
-        private static AbsorbOutcome Evaluate(Vector3 position, float value)
+        private static AbsorbOutcome Evaluate(Vector3 position, long value)
         {
             return PickupAbsorbMath.EvaluateAbsorbWithValue(true, "small", Allowed, Allowed.Length,
                 Bounds, position, Ball, CollisionRadiusM, ContactRadiusM,
@@ -39,13 +39,13 @@ namespace VRCKatamari.Tests
         [Test]
         public void InReachButWorthLessThanOneUnitIsRefusedAsNoGain()
         {
-            Assert.AreEqual(AbsorbOutcome.RejectNoGain, Evaluate(InReach, 0.3f));
+            Assert.AreEqual(AbsorbOutcome.RejectNoGain, Evaluate(InReach, 0L));
         }
 
         [Test]
         public void InReachAndWorthExactlyOneUnitIsAbsorbed()
         {
-            Assert.AreEqual(AbsorbOutcome.Absorb, Evaluate(InReach, 1f));
+            Assert.AreEqual(AbsorbOutcome.Absorb, Evaluate(InReach, 1L));
         }
 
         [Test]
@@ -53,12 +53,12 @@ namespace VRCKatamari.Tests
         {
             // Out of reach AND worth zero units: the geometry reason must win, so a
             // "no gain" verdict can never explain away a distance failure.
-            Assert.AreEqual(AbsorbOutcome.RejectOutOfReach, Evaluate(FarAway, 0.3f));
+            Assert.AreEqual(AbsorbOutcome.RejectOutOfReach, Evaluate(FarAway, 0L));
             // Zero gain is also irrelevant when the kind is not allowed.
             AbsorbOutcome kindRefused = PickupAbsorbMath.EvaluateAbsorbWithValue(true,
                 "forbidden", Allowed, Allowed.Length, Bounds, InReach, Ball, CollisionRadiusM,
                 ContactRadiusM, PickupAbsorbMath.DefaultVolumeK, BallDiameterM,
-                MaxGrowthRadiusM, 0.3f);
+                MaxGrowthRadiusM, 0L);
             Assert.AreEqual(AbsorbOutcome.RejectKindNotAllowed, kindRefused);
         }
     }

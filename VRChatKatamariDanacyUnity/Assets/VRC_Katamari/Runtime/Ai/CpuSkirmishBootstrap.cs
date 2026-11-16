@@ -131,7 +131,7 @@ namespace VRCKatamari.Ai
                     + " |v|=" + (Mathf.Floor(v.magnitude * 100f) / 100f)
                     + " d=" + (Mathf.Floor(m.GetSemanticDiameterWorldM() * 1000f) / 1000f)
                     + " absorbed=" + m.GetAbsorbedCount()
-                    + " confirmed=" + m.GetConfirmedVolumeUnits()
+                    + " confirmedMm3=" + m.GetConfirmedVolumeMm3()
                     + " banked=" + m.GetBankedLedgerScoreUnits()
                     + " events=" + m.GetAbsorbedEventCount()
                     + " rejects=" + m.GetRejectEventCount());
@@ -265,24 +265,26 @@ namespace VRCKatamari.Ai
                 KatamariBallMotor m = motors[i];
                 if (m == null) continue;
                 float before = m.GetSemanticDiameterWorldM();
-                float volume = m.GetConfirmedVolumeUnits();
+                long volumeMm3 = m.GetConfirmedVolumeMm3();
 
-                // These six numbers are hand-copied copies of KatamariBallMotor's
-                // serialized defaults (baselineVolumeUnits 3.4390244,
-                // cubicMetersPerVolumeUnit 0.0041, maxCoreRadiusWorldM 1.1,
-                // collisionToCoreRadiusRatio 1, semanticDiameterPerCoreDiameter 1,
-                // bankResidualFraction 0.25), not readings from the motor: the motor
-                // publishes radii, never its own sizing inputs. They agree today, so
-                // expected= is the rule's answer; a scene that tunes the motor turns it
-                // into a number with no rule behind it, and nothing fails. Merging the
-                // copy needs a motor-side seam, so it is left documented here instead.
+                // These five numbers are hand-copied copies of KatamariBallMotor's current
+                // serialized defaults (startVolumeMm3 14,094,798 = the 0.2997 m ball,
+                // maxBallDiameterM 30, collisionToCoreRadiusRatio 1,
+                // semanticDiameterPerCoreDiameter 1, bankResidualFraction 0.25), not
+                // readings from the motor: the motor publishes radii and the confirmed
+                // volume, never its own sizing inputs. They agree today, so expected= is
+                // the rule's answer; a scene that tunes the motor turns it into a number
+                // with no rule behind it, and nothing fails. Merging the copy needs a
+                // motor-side seam, so it is left documented here instead.
                 float residual = 0.25f;
 
                 // Expected shrink, computed from the same public math the motor uses.
-                float startCore, startCollision, startDiameter, startEffective;
+                float startCore, startCollision, startDiameter;
+                long startEffectiveMm3;
                 float expected = -1f;
-                bool sized = SizeModelMath.TryDerive(0f, 3.4390244f, 0.0041f, 1.1f, 1f, 1f,
-                    out startCore, out startCollision, out startDiameter, out startEffective);
+                bool sized = SizeModelMath.TryDerive(14094798L, 0L, 30f, 1f, 1f,
+                    out startCore, out startCollision, out startDiameter,
+                    out startEffectiveMm3);
                 if (sized && BankShrinkMath.TryPostBankDiameter(startDiameter, before, residual, out expected))
                 {
                     // expected is the rule's answer; kept only for the log line
@@ -295,7 +297,7 @@ namespace VRCKatamari.Ai
                     + " before=" + (Mathf.Floor(before * 10000f) / 10000f)
                     + " after=" + (Mathf.Floor(after * 10000f) / 10000f)
                     + " expected=" + (expected < 0f ? "-" : (Mathf.Floor(expected * 10000f) / 10000f).ToString())
-                    + " volume=" + (Mathf.Floor(volume * 100f) / 100f)
+                    + " volumeMm3=" + volumeMm3
                     + " residual=" + residual
                     + " reason=" + reason + (ok ? "(ok)" : ""));
             }
@@ -432,13 +434,13 @@ namespace VRCKatamari.Ai
             }
 
             int slots = m.GetPendingCandidateCount();
-            float value = -1f;
+            long value = -1L;
             for (int i = 0; i < slots; i++)
             {
                 string id = m.GetPendingCandidateItemId(i);
-                if (id != null && id == targetName) value = m.GetPendingCandidateValue(i);
+                if (id != null && id == targetName) value = m.GetPendingCandidateGrowthMm3(i);
             }
-            return " rejTarget=" + reasonText + " pv=" + (Mathf.Floor(value * 1000f) / 1000f);
+            return " rejTarget=" + reasonText + " pvMm3=" + value;
         }
 
         private string ReasonName(int reason)

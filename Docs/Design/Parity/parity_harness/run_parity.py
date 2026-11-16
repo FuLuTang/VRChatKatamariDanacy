@@ -139,7 +139,7 @@ OURS: Dict[str, Constant] = {
     "growth_push_per_step_m": Constant(0.05, "CONTACT_MODEL_V2.md §4.2"),
     "stack_tolerance_m": Constant(placement_core.STACK_TOLERANCE_M,
                                   "placement_core.py:71"),
-    "hud_offset_m": Constant(0.0, "HUD prints semanticDiameter directly (no fudge)"),
+    "hud_offset_m": Constant(0.0002, "KatamariBallMotor.GetHudDiameterWorldM (+0.02 cm)"),
     "clear_target_m": Constant(1.25,
                                "Docs/Design/GameModes/Levels/story_01_bench_size.json"),
     "star_span_m": Constant(0.35, "repricing_proposal.md §1（1.60 − 1.25）"),
@@ -181,10 +181,13 @@ class OursLevel:
         self.max_d = float(level["ballDiameterMax"])
         self.ground_y = float(level.get("groundY", 0.0))
         self.zones = [z.get("id") for z in (level.get("zones") or [])]
-        self.declared_units = None
+        # Content total in the new currency (derived growth, mm^3); the deprecated
+        # valueUnits total is only kept for the migration cross-check.
         expected = level.get("expected") or {}
-        if expected.get("valueUnits") is not None:
-            self.declared_units = int(expected["valueUnits"])
+        self.declared_growth_mm3 = (int(expected["growthMm3"])
+                                    if expected.get("growthMm3") is not None else None)
+        self.declared_units = (int(expected["valueUnits"])
+                               if expected.get("valueUnits") is not None else None)
         self.props = list(data.get("props") or [])
         self.defs = list(data.get("defs") or [])
         self.structures = list(data.get("structures") or [])
@@ -208,6 +211,11 @@ class OursLevel:
                 "d_req_mm": placement_core.absorb_diameter_req_mm(aabb, volume_k),
                 # Unrounded, for "how far past the boundary" diagnostics only.
                 "d_req_exact_m": placement_core.absorb_diameter_req_exact(aabb, volume_k),
+                "volume_penalty": placement_core.effective_volume_penalty(prop, catalog),
+                # The ledger gain one absorb is worth, mm^3 (original form penalty*k*bbox).
+                "growth_mm3": placement_core.item_growth_mm3(
+                    aabb, volume_k, placement_core.effective_volume_penalty(prop, catalog)),
+                # Deprecated (0 once the data is regenerated); cross-check only.
                 "value_units": int(prop.get("valueUnits", 0)),
             })
 
@@ -234,8 +242,13 @@ class OursLevel:
         """
         return sum(i["original_volume_m3"] for i in self.absorbable_at(diameter_m))
 
-    def value_volume(self) -> float:
-        return sum(i["value_units"] for i in self.items) * _v("c_per_unit")
+    def growth_total_mm3(self) -> int:
+        """Σ growth of every prop (the content total the ledger would receive)."""
+        return sum(i["growth_mm3"] for i in self.items)
+
+    def growth_volume_m3(self) -> float:
+        """Σ growth in cubic metres (display/analysis only; never accumulated)."""
+        return self.growth_total_mm3() / placement_core.MM3_PER_M3
 
     def ball_volume(self, diameter_m: float) -> float:
         return math.pi / 6.0 * diameter_m ** 3
@@ -329,15 +342,16 @@ def corpus_starvation(corpus: Corpus, default_penalty: float = 0.8):
 
 
 def ours_supply(level: "OursLevel"):
-    """Our side at the *current* rule (penalty 1.0 until D2 lands)."""
+    """Our side at the SAME rule as the corpus: Σ(penalty·k·bbox) over absorbable items."""
     need = _ball_volume(level.max_d) - _ball_volume(level.start_d)
-    # V = k·bbox, the original's volume (G13); credit is still 1.0 until D2 lands.
-    credited = level.original_volume_absorbable_at(level.max_d) * 1.0
+    credited = sum(item["original_volume_m3"] * item["volume_penalty"]
+                   for item in level.absorbable_at(level.max_d))
     return (credited / need if need > 0 else float("inf"))
 
 
 def ours_starvation(level: "OursLevel"):
-    pairs = [(item["d_req_m"], item["original_volume_m3"]) for item in level.items]
+    pairs = [(item["d_req_m"], item["original_volume_m3"] * item["volume_penalty"])
+             for item in level.items]
     return _runway(pairs, level.start_d, level.max_d)
 
 
@@ -622,18 +636,29 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
 
     volume_curve = "D=(6V/π)^(1/3)"
     add("G05", "体积→直径曲线", "—", volume_curve + "（+0.02 cm）",
-        volume_curve + "（无偏置）", CONSISTENT,
+        volume_curve + "（显示 +0.02 cm；门/尺寸模型用未偏置值）", CONSISTENT,
         "raw_growth_mechanism.txt §1（+0.02 cm fudge）",
         "SizeModelMath.TryDerive（D=2·cbrt(3V/4π)）",
         "换算同形；只差一个 0.2 mm 的显示偏置（见 G09）")
 
     fraction = corpus.growth_fraction(start_d)
+    # Ours is the default 0.8; the corpus curve is the original's.  An absent curve is
+    # "unknown", not 0.8, so the status is derived instead of hard-coded.
+    if fraction is None:
+        g06_klass = UNKNOWN
+    elif abs(float(fraction) - placement_core.DEFAULT_VOLUME_PENALTY) < 1e-9:
+        g06_klass = CONSISTENT
+    else:
+        g06_klass = PARAM
     add("G06", "单件吸收比例（起始处）", "×V_item",
-        None if fraction is None else round(fraction, 4), 1.0, PARAM,
+        None if fraction is None else round(fraction, 4),
+        placement_core.DEFAULT_VOLUME_PENALTY, g06_klass,
         "corpus.parameters.growth_curve ← raw_growth_mechanism.txt §3.1",
-        "KatamariBallMotor.CommitAcceptedAbsorbs（ΔV=V_box，无损耗）",
-        "原作只回收 80%，靠近目标降到 16%；我们 100% 回收。同一次吸收我们多得 25%，"
-        "末段差距更大（原作拖尾，我们加速）")
+        "PickupFieldAuthoringRules.TryComputeGrowthMm3（round(penalty·k·a·b·c·1e9)，"
+        "penalty 缺省 0.8，逐件 volumePenalty 可覆盖）",
+        "已还原（2026-11-16 C+D）：一件的成长 = penalty·k·bbox，缺省 0.8。"
+        "原作按球径分段（起点 0.8，末端更低）仍未落，本轮只落缺省值",
+        note="原作分段曲线（按球径）尚未实现；本行只比缺省 0.8")
 
     add("G07", "10× 体积门", "×V_item", float(params["gate_volume_ratio"]),
         _v("absorb_volume_ratio"), CONSISTENT,
@@ -642,7 +667,9 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
         "门 = 10 倍体积，两边同形同值；体积的定义也已经是原作的 k·bbox（G13）")
 
     add("G08", "门槛取整", "m", float(params["gate_floor_m"]),
-        float(_v("gate_floor_m")), PARAM,
+        float(_v("gate_floor_m")),
+        CONSISTENT if abs(float(params["gate_floor_m"]) - float(_v("gate_floor_m"))) < 1e-12
+        else PARAM,
         "raw_growth_mechanism.txt §2：门槛向下取整到 mm（蚂蚁实际只需 ~8.8×）",
         "placement_core.absorb_diameter_req_mm / PickupAbsorbMath.MmFloorEpsilon"
         "（Req 与球径都取整到整 mm，ε 只修浮点误差）",
@@ -655,24 +682,33 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
                if e.get("volume_factor")]
     median_k = (sorted(stage_k)[len(stage_k) // 2] if stage_k
                 else vf.get("median_k") or vf.get("default_k"))
+    if median_k is None:
+        g13_klass = UNKNOWN
+    elif abs(float(median_k) - placement_core.DEFAULT_VOLUME_K) < 1e-9:
+        g13_klass = CONSISTENT
+    else:
+        g13_klass = PARAM
     add("G13", "体积系数 k（Volume = k·bbox）", "×bbox",
         None if median_k is None else round(float(median_k), 4),
-        placement_core.DEFAULT_VOLUME_K, PARAM,
+        placement_core.DEFAULT_VOLUME_K, g13_klass,
         "corpus.volume_factor / catalogue[].volume_factor ← meta/solid_volume/"
         "fill_factors.csv（默认 0.70；薄片抬到 8–16、蓬松压到 0.05–0.07、镂空家具 0.3–0.5）",
         "placement_core.DEFAULT_VOLUME_K / defs[].volumeK（缺省 0.70）"
         " / PickupAbsorbMath.DefaultVolumeK",
-        "原作者手调的系数，不是任何几何体积：默认 k=0.70。门已按 k·bbox 算 Req，"
-        "长度当量上不再偏严（此前偏严 (1/0.70)^(1/3)=1.126，与 gateRatio 中位 1.13 吻合）；"
-        "成长侧（G06）仍要用同一个 k·bbox，那是后续步骤",
+        "原作者手调的系数，不是任何几何体积：默认 k=0.70。门与成长现在都按 k·bbox 算"
+        "（成长再乘 penalty 0.8，G06），同一件在两边是同一个体积，长度当量上不再偏严"
+        "（此前偏严 (1/0.70)^(1/3)=1.126，与 gateRatio 中位 1.13 吻合）",
         note="原作类型里 %.1f%% 恰好等于 k=0.70（README 报的是 70.7%%；本文用本语料能连上的 %d 型算中位）"
              % (100.0 * (vf.get("exact_default_share") or 0.0), len(stage_k)))
 
     add("G09", "HUD 直径偏置", "m", float(params["hud_diameter_offset_m"]),
-        _v("hud_offset_m"), MISSING,
+        _v("hud_offset_m"),
+        CONSISTENT if abs(float(params["hud_diameter_offset_m"]) - _v("hud_offset_m")) < 1e-12
+        else PARAM,
         "raw_growth_mechanism.txt §1：换算后 +0.02 cm（MAS1 显示 5.02）",
-        "StoryRoundController 直接打印语义直径",
-        "0.2 mm 的显示 fudge；原作有，我们没有。纯表现层，但它是‘HUD 读数=原作’的证明点")
+        "KatamariBallMotor.GetHudDiameterWorldM（语义直径 + 0.0002 m）",
+        "已还原（2026-11-16 C+D）：显示读数 +0.02 cm；门与尺寸模型用未偏置的语义直径，"
+        "所以偏置不会移动门槛")
 
     bands = ours.octave_bands()
     ours_per_octave = ours.count / max(1e-9, math.log(max(ours.max_d / ours.start_d, 2.0), 2.0))
@@ -698,11 +734,11 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
         round(supply_ours, 3), PARAM,
         "corpus：Σ(penalty·V) for D_req≤%.4g m ÷ (V(%.4g)−V(%.4g))"
         % (max_d, max_d, start_d),
-        "placement.json：Σ(k·bbox) for Req≤%.4g ÷ 同一分母（k 取 defs[].volumeK，缺省 0.70；"
-        "我方惩罚=1.0，尚未采纳 0.8）"
+        "placement.json：Σ(penalty·k·bbox) for Req≤%.4g ÷ 同一分母（k 取 defs[].volumeK，"
+        "缺省 0.70；penalty 缺省 0.8，逐件 volumePenalty 可覆盖）"
         % ours.max_d,
         "道具供给 / 通关所需。原作 %.2f×（远远多于所需，不可能卡）；我们 %.2f×"
-        "（<1 意味着物理上到不了上限）。采纳 D2 的 0.8 惩罚后我方再乘 0.8，缺口更大"
+        "（<1 意味着物理上到不了上限）。两边现在同一口径（0.8 惩罚 + k·bbox）"
         % (supply_orig, supply_ours),
         note="原作有 %d 个实例的类型缺 penalty，按文档默认 0.8 计" % missing_penalty
         if missing_penalty else "")
@@ -712,7 +748,7 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
     add("G12", "饥饿检查（最紧档的余量）", "×", round(starve_orig, 2),
         round(starve_ours, 2), PARAM,
         "corpus：每翻倍档「可吸件数 ÷ 走完该档所需件数」，取最紧档",
-        "placement.json：同一算法，惩罚按 1.0",
+        "placement.json：同一算法，惩罚按 0.8 / 逐件覆盖",
         "供给比是全局平均；这一条看**每一档**够不够。原作最紧档仍有 %.1f× 余量，"
         "我们最紧档 %.2f× —— 后者 <1 就是「走到这里卡住」"
         % (starve_orig, starve_ours),

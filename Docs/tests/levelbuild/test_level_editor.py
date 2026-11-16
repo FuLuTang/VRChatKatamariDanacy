@@ -175,10 +175,16 @@ class MutationTests(EditorCase):
         self.assertIn("unknown argument", self.refused("set", id="prop_acorn_000",
                                                        postion=[0, 0, 0])["error"])
 
-    def test_changing_a_value_is_refused_by_the_design_total(self):
-        response = self.refused("set", id="prop_acorn_000", valueUnits=2)
+    def test_changing_the_volume_k_is_refused_by_the_design_total(self):
+        # Growth is derived from aabb/k/penalty (steps C+D), so volumeK -- not the retired
+        # valueUnits -- is what moves the design total.
+        response = self.refused("set", id="prop_acorn_000", volumeK=2.0)
         self.assertTrue(any("level.expected" in error for error in response["details"]))
-        self.assertEqual(self.prop("prop_acorn_000")["valueUnits"], 1)
+        self.assertEqual(self.prop("prop_acorn_000").get("volumeK"), None)
+        # The deprecated key is accepted from old callers but is dropped by the canonical
+        # writer, so it cannot become a second growth currency.
+        self.ok("set", id="prop_acorn_000", valueUnits=2)
+        self.assertNotIn("valueUnits", self.prop("prop_acorn_000"))
 
     def test_rotate_yaw_sets_a_canonical_unit_quaternion(self):
         self.ok("rotate", id="prop_acorn_000", yaw=90)
@@ -188,7 +194,7 @@ class MutationTests(EditorCase):
 
     def test_add_prop_uses_the_manifest_aabb_and_seats_on_the_ground(self):
         result = self.ok("add_prop", **{"def": "apple", "position": [3.2, 0.0, 3.2],
-                                        "valueUnits": 4, "zone": "lawn", "seat": True,
+                                        "zone": "lawn", "seat": True,
                                         "updateExpected": True})
         item_id = result["itemId"]
         prop = self.prop(item_id)
@@ -197,30 +203,40 @@ class MutationTests(EditorCase):
                                round(MANIFESTS["apple"]["aabb"][1] / 2.0, 4), places=4)
         self.assertEqual(self.ok("check")["errorCount"], 0)
 
-    def test_add_prop_without_a_value_is_refused(self):
-        response = self.refused("add_prop", **{"def": "apple", "position": [3.2, 0.0, 3.2]})
-        self.assertIn("valueUnits", response["error"])
+    def test_add_prop_needs_no_value_because_growth_is_derived(self):
+        # No valueUnits / volumeK / volumePenalty argument: growth still comes out of
+        # aabb x 0.70 x 0.8, so the op needs only the design-total acknowledgement.
+        response = self.refused("add_prop", **{"def": "apple", "position": [3.2, 0.0, 3.2],
+                                               "seat": True})
+        self.assertIn("updateExpected", response["error"])
+        result = self.ok("add_prop", **{"def": "apple", "position": [3.2, 0.0, 3.2],
+                                        "seat": True, "updateExpected": True})
+        prop = self.prop(result["itemId"])
+        self.assertNotIn("valueUnits", prop)
+        self.assertGreater(core.growth_mm3(prop), 0)
 
     def test_add_prop_point_out_the_design_total(self):
         response = self.refused("add_prop", **{"def": "apple", "position": [3.2, 0.0, 3.2],
-                                               "valueUnits": 4, "seat": True})
+                                               "seat": True})
         self.assertIn("updateExpected", response["error"])
         self.assertTrue(any("level.expected" in error for error in response["details"]))
 
     def test_add_prop_refuses_an_unknown_def(self):
         self.assertIn("manifest", self.refused("add_prop", **{"def": "unicorn"})["error"])
 
-    def test_add_def_then_add_prop_without_an_explicit_value(self):
-        self.ok("add_def", id="apple", valueUnits=9, kind="fruit")
+    def test_add_def_needs_no_value_and_the_prop_derives_growth(self):
+        self.ok("add_def", id="apple", kind="fruit")
         result = self.ok("add_prop", **{"def": "apple", "position": [3.2, 0.0, 3.2],
                                         "seat": True, "updateExpected": True})
-        self.assertEqual(self.prop(result["itemId"])["valueUnits"], 9)
+        prop = self.prop(result["itemId"])
+        self.assertNotIn("valueUnits", prop)
+        self.assertEqual(core.growth_mm3(prop), core.item_growth_mm3(prop["aabb"]))
 
     def test_remove_prop_and_structure(self):
         self.ok("remove", id="prop_acorn_000", updateExpected=True)
         self.assertIsNone(self.prop("prop_acorn_000"))
-        self.assertEqual(self.ok("status")["counts"]["valueUnits"],
-                         core.value_units_total(core.load_doc(EXAMPLE)) - 1)
+        self.assertEqual(self.ok("status")["counts"]["growthMm3"],
+                         core.growth_mm3_total(self.editor.doc))
         self.ok("remove", id="crate")
         self.assertIsNone(editor_core._structure_by_id(self.editor.doc, "crate"))
         self.assertEqual(self.ok("list")["total"], 15)
@@ -233,7 +249,8 @@ class MutationTests(EditorCase):
         ]})
         self.assertTrue(result["ok"], result["error"])
         self.assertEqual(self.editor.doc["level"]["expected"]["propCount"], 15)
-        self.assertEqual(self.editor.doc["level"]["expected"]["valueUnits"], 34)
+        self.assertEqual(self.editor.doc["level"]["expected"]["growthMm3"],
+                         core.growth_mm3_total(self.editor.doc))
         self.assertEqual(self.ok("check")["errorCount"], 0)
 
     def test_add_structure_and_resize_it(self):
@@ -367,7 +384,7 @@ class VolumeKTests(EditorCase):
         self.ok("add_def", id="apple", valueUnits=1, kind="fruit")
         # A def with no volumeK must not gain the key: the file keeps the 0.70 default.
         self.assertNotIn("volumeK", self.path.read_text(encoding="utf-8"))
-        self.ok("set_def", id="apple", volumeK=32)
+        self.ok("set_def", id="apple", volumeK=32, updateExpected=True)
         apple = self.prop("prop_apple_000")
         self.assertEqual(apple["absorbDiameterReq"],
                          core.absorb_diameter_req(tuple(apple["aabb"]), 32.0))
@@ -385,7 +402,7 @@ class VolumeKTests(EditorCase):
         self.ok("add_def", id="watermelon", valueUnits=1, kind="fruit")
         watermelon = self.prop("prop_watermelon_000")
         self.assertFalse(core.is_absorbable(tuple(watermelon["aabb"]), 0.30, 0.70))
-        self.ok("set_def", id="watermelon", volumeK=0.05)
+        self.ok("set_def", id="watermelon", volumeK=0.05, updateExpected=True)
         body = tuple(self.prop("prop_watermelon_000")["aabb"])
         self.assertTrue(core.is_absorbable(body, 0.30, 0.05))
         self.assertEqual(self.prop("prop_watermelon_000")["absorbDiameterReq"],
@@ -394,9 +411,9 @@ class VolumeKTests(EditorCase):
     def test_clearing_volume_k_restores_the_default_without_writing_a_key(self):
         self.ok("add_def", id="apple", valueUnits=1, kind="fruit")
         with_def = self.path.read_bytes()
-        self.ok("set_def", id="apple", volumeK=2.0)
+        self.ok("set_def", id="apple", volumeK=2.0, updateExpected=True)
         self.assertNotEqual(self.path.read_bytes(), with_def)
-        self.ok("set_def", id="apple", volumeK=None)
+        self.ok("set_def", id="apple", volumeK=None, updateExpected=True)
         self.assertNotIn("volumeK", self.path.read_text(encoding="utf-8"))
         self.assertEqual(self.path.read_bytes(), with_def)
 
@@ -413,7 +430,7 @@ class VolumeKTests(EditorCase):
 
     def test_a_prop_may_override_its_def_factor(self):
         self.ok("add_def", id="apple", valueUnits=1, kind="fruit")
-        self.ok("set", id="prop_apple_000", volumeK=1.0)
+        self.ok("set", id="prop_apple_000", volumeK=1.0, updateExpected=True)
         self.assertEqual(self.prop("prop_apple_000")["volumeK"], 1.0)
         self.assertEqual(self.prop("prop_apple_000")["absorbDiameterReq"],
                          core.absorb_diameter_req(
@@ -521,13 +538,12 @@ class RealLevelExportTests(unittest.TestCase):
         self.assertEqual(len(document["props"]), len(source["props"]))
         self.assertEqual(len(document["defs"]), len(source["defs"]),
                          "defs[] must survive the export")
-        self.assertEqual(core.value_units_total(document),
-                         sum(prop["valueUnits"] for prop in document["props"]))
-        self.assertEqual(core.value_units_total(document), core.value_units_total(source))
+        self.assertEqual(core.value_units_total(document), 0,
+                         "the canonical writer drops the deprecated valueUnits keys")
         self.assertEqual(document["cameras"], source["cameras"])
         self.assertEqual(document["level"]["expected"],
                          {"propCount": len(document["props"]),
-                          "valueUnits": core.value_units_total(document)})
+                          "growthMm3": core.growth_mm3_total(document)})
         self.assertEqual(target.read_bytes(), self.LEVEL.read_bytes(),
                          "export -> bytes must equal the committed file")
 

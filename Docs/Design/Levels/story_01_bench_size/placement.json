@@ -38,7 +38,7 @@
     },
     "expected": {
       "propCount": 130,
-      "valueUnits": 1522
+      "growthMm3": 1417085102
     },
     "zones": [
       {
@@ -82,223 +82,179 @@
   "defs": [
     {
       "id": "acorn",
-      "kind": "nature",
-      "valueUnits": 1
+      "kind": "nature"
     },
     {
       "id": "apple",
-      "kind": "fruit",
-      "valueUnits": 4
+      "kind": "fruit"
     },
     {
       "id": "banana",
-      "kind": "fruit",
-      "valueUnits": 4
+      "kind": "fruit"
     },
     {
       "id": "beer_crate",
-      "kind": "container",
-      "valueUnits": 36
+      "kind": "container"
     },
     {
       "id": "book_stack",
-      "kind": "furniture",
-      "valueUnits": 8
+      "kind": "furniture"
     },
     {
       "id": "bottle_cap",
-      "kind": "debris",
-      "valueUnits": 1
+      "kind": "debris"
     },
     {
       "id": "bowl",
-      "kind": "tableware",
-      "valueUnits": 4
+      "kind": "tableware"
     },
     {
       "id": "bread_slice",
-      "kind": "food",
-      "valueUnits": 4
+      "kind": "food"
     },
     {
       "id": "cheese_slice",
-      "kind": "food",
-      "valueUnits": 1
+      "kind": "food"
     },
     {
       "id": "cookie",
-      "kind": "food",
-      "valueUnits": 1
+      "kind": "food"
     },
     {
       "id": "cooler_box",
-      "kind": "container",
-      "valueUnits": 16
+      "kind": "container"
     },
     {
       "id": "cooler_box_large",
-      "kind": "container",
-      "valueUnits": 90
+      "kind": "container"
     },
     {
       "id": "crate",
-      "kind": "container",
-      "valueUnits": 64
+      "kind": "container"
     },
     {
       "id": "crate_large",
-      "kind": "container",
-      "valueUnits": 120
+      "kind": "container"
     },
     {
       "id": "croissant",
-      "kind": "food",
-      "valueUnits": 4
+      "kind": "food"
     },
     {
       "id": "cup",
-      "kind": "tableware",
-      "valueUnits": 4
+      "kind": "tableware"
     },
     {
       "id": "fallen_leaf",
-      "kind": "nature",
-      "valueUnits": 1
+      "kind": "nature"
     },
     {
       "id": "folding_stool",
-      "kind": "furniture",
-      "valueUnits": 38
+      "kind": "furniture"
     },
     {
       "id": "folding_table",
-      "kind": "furniture",
-      "valueUnits": 212
+      "kind": "furniture"
     },
     {
       "id": "glass_bottle",
-      "kind": "drink",
-      "valueUnits": 4
+      "kind": "drink"
     },
     {
       "id": "grapes",
-      "kind": "fruit",
-      "valueUnits": 1
+      "kind": "fruit"
     },
     {
       "id": "juice_carton",
-      "kind": "drink",
-      "valueUnits": 4
+      "kind": "drink"
     },
     {
       "id": "lounge_chair",
-      "kind": "furniture",
-      "valueUnits": 150
+      "kind": "furniture"
     },
     {
       "id": "napkin",
-      "kind": "tableware",
-      "valueUnits": 4
+      "kind": "tableware"
     },
     {
       "id": "orange",
-      "kind": "fruit",
-      "valueUnits": 4
+      "kind": "fruit"
     },
     {
       "id": "paper_scrap",
-      "kind": "debris",
-      "valueUnits": 1
+      "kind": "debris"
     },
     {
       "id": "pear",
-      "kind": "fruit",
-      "valueUnits": 4
+      "kind": "fruit"
     },
     {
       "id": "pebble",
-      "kind": "nature",
-      "valueUnits": 1
+      "kind": "nature"
     },
     {
       "id": "picnic_basket",
-      "kind": "container",
-      "valueUnits": 16
+      "kind": "container"
     },
     {
       "id": "picnic_bench",
-      "kind": "furniture",
-      "valueUnits": 130
+      "kind": "furniture"
     },
     {
       "id": "plate",
-      "kind": "tableware",
-      "valueUnits": 4
+      "kind": "tableware"
     },
     {
       "id": "sandwich",
-      "kind": "food",
-      "valueUnits": 4
+      "kind": "food"
     },
     {
       "id": "seed",
-      "kind": "nature",
-      "valueUnits": 1
+      "kind": "nature"
     },
     {
       "id": "serving_tray",
-      "kind": "structure",
-      "valueUnits": 12
+      "kind": "structure"
     },
     {
       "id": "small_potted_plant",
-      "kind": "garden",
-      "valueUnits": 6
+      "kind": "garden"
     },
     {
       "id": "soda_can",
-      "kind": "drink",
-      "valueUnits": 4
+      "kind": "drink"
     },
     {
       "id": "spoon",
-      "kind": "tableware",
-      "valueUnits": 4
+      "kind": "tableware"
     },
     {
       "id": "storage_bin",
-      "kind": "container",
-      "valueUnits": 52
+      "kind": "container"
     },
     {
       "id": "strawberry",
-      "kind": "fruit",
-      "valueUnits": 1
+      "kind": "fruit"
     },
     {
       "id": "stroller",
-      "kind": "furniture",
-      "valueUnits": 32
+      "kind": "furniture"
     },
     {
       "id": "toy_ball",
-      "kind": "toy",
-      "valueUnits": 4
+      "kind": "toy"
     },
     {
       "id": "watering_can",
-      "kind": "garden",
-      "valueUnits": 6
+      "kind": "garden"
     },
     {
       "id": "watermelon",
-      "kind": "fruit",
-      "valueUnits": 4
+      "kind": "fruit"
     },
     {
       "id": "wood_plank",
-      "kind": "structure",
-      "valueUnits": 16
+      "kind": "structure"
     }
   ],
   "props": [
@@ -325,7 +281,7 @@
       ],
       "absorbDiameterReq": 0.06,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 9193
     },
     {
       "itemId": "acorn_02",
@@ -350,7 +306,7 @@
       ],
       "absorbDiameterReq": 0.06,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 9193
     },
     {
       "itemId": "apple_01",
@@ -375,7 +331,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 275708
     },
     {
       "itemId": "apple_02",
@@ -400,7 +356,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 275708
     },
     {
       "itemId": "apple_03",
@@ -425,7 +381,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 275708
     },
     {
       "itemId": "apple_04",
@@ -451,7 +407,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 275708
     },
     {
       "itemId": "apple_05",
@@ -477,7 +433,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 275708
     },
     {
       "itemId": "apple_06",
@@ -503,7 +459,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 275708
     },
     {
       "itemId": "banana_01",
@@ -528,7 +484,7 @@
       ],
       "absorbDiameterReq": 0.173,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 218696
     },
     {
       "itemId": "banana_02",
@@ -553,7 +509,7 @@
       ],
       "absorbDiameterReq": 0.173,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 218696
     },
     {
       "itemId": "banana_03",
@@ -579,7 +535,7 @@
       ],
       "absorbDiameterReq": 0.173,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 218696
     },
     {
       "itemId": "banana_04",
@@ -605,7 +561,7 @@
       ],
       "absorbDiameterReq": 0.173,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 218696
     },
     {
       "itemId": "bottle_cap_01",
@@ -630,7 +586,7 @@
       ],
       "absorbDiameterReq": 0.046,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 4166
     },
     {
       "itemId": "bowl_01",
@@ -656,7 +612,7 @@
       ],
       "absorbDiameterReq": 0.273,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 860160
     },
     {
       "itemId": "bowl_02",
@@ -682,7 +638,7 @@
       ],
       "absorbDiameterReq": 0.273,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 860160
     },
     {
       "itemId": "bowl_03",
@@ -707,7 +663,7 @@
       ],
       "absorbDiameterReq": 0.273,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 860160
     },
     {
       "itemId": "bowl_04",
@@ -732,7 +688,7 @@
       ],
       "absorbDiameterReq": 0.273,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 860160
     },
     {
       "itemId": "bread_slice_01",
@@ -758,7 +714,7 @@
       ],
       "absorbDiameterReq": 0.123,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 79760
     },
     {
       "itemId": "bread_slice_02",
@@ -783,7 +739,7 @@
       ],
       "absorbDiameterReq": 0.123,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 79760
     },
     {
       "itemId": "bread_slice_03",
@@ -808,7 +764,7 @@
       ],
       "absorbDiameterReq": 0.123,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 79760
     },
     {
       "itemId": "bread_slice_04",
@@ -833,7 +789,7 @@
       ],
       "absorbDiameterReq": 0.123,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 79760
     },
     {
       "itemId": "bread_slice_05",
@@ -858,7 +814,7 @@
       ],
       "absorbDiameterReq": 0.123,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 79760
     },
     {
       "itemId": "cheese_slice_01",
@@ -883,7 +839,7 @@
       ],
       "absorbDiameterReq": 0.068,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 13440
     },
     {
       "itemId": "cookie_01",
@@ -908,7 +864,7 @@
       ],
       "absorbDiameterReq": 0.084,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 25388
     },
     {
       "itemId": "cookie_02",
@@ -933,7 +889,7 @@
       ],
       "absorbDiameterReq": 0.084,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 25388
     },
     {
       "itemId": "croissant_01",
@@ -959,7 +915,7 @@
       ],
       "absorbDiameterReq": 0.19,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 289422
     },
     {
       "itemId": "croissant_02",
@@ -984,7 +940,7 @@
       ],
       "absorbDiameterReq": 0.19,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 289422
     },
     {
       "itemId": "croissant_03",
@@ -1009,7 +965,7 @@
       ],
       "absorbDiameterReq": 0.19,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 289422
     },
     {
       "itemId": "croissant_04",
@@ -1034,7 +990,7 @@
       ],
       "absorbDiameterReq": 0.19,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 289422
     },
     {
       "itemId": "croissant_05",
@@ -1059,7 +1015,7 @@
       ],
       "absorbDiameterReq": 0.19,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 289422
     },
     {
       "itemId": "cup_01",
@@ -1085,7 +1041,7 @@
       ],
       "absorbDiameterReq": 0.189,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 283500
     },
     {
       "itemId": "cup_02",
@@ -1111,7 +1067,7 @@
       ],
       "absorbDiameterReq": 0.189,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 283500
     },
     {
       "itemId": "cup_03",
@@ -1137,7 +1093,7 @@
       ],
       "absorbDiameterReq": 0.189,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 283500
     },
     {
       "itemId": "cup_04",
@@ -1162,7 +1118,7 @@
       ],
       "absorbDiameterReq": 0.189,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 283500
     },
     {
       "itemId": "cup_05",
@@ -1187,7 +1143,7 @@
       ],
       "absorbDiameterReq": 0.189,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 283500
     },
     {
       "itemId": "fallen_leaf_01",
@@ -1212,7 +1168,7 @@
       ],
       "absorbDiameterReq": 0.042,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 3326
     },
     {
       "itemId": "gate_basket_01",
@@ -1237,7 +1193,7 @@
       ],
       "absorbDiameterReq": 0.736,
       "absorbable": true,
-      "valueUnits": 16
+      "growthMm3": 16730280
     },
     {
       "itemId": "gate_basket_02",
@@ -1262,7 +1218,7 @@
       ],
       "absorbDiameterReq": 0.736,
       "absorbable": true,
-      "valueUnits": 16
+      "growthMm3": 16730280
     },
     {
       "itemId": "gate_basket_03",
@@ -1287,7 +1243,7 @@
       ],
       "absorbDiameterReq": 0.736,
       "absorbable": true,
-      "valueUnits": 16
+      "growthMm3": 16730280
     },
     {
       "itemId": "gate_cooler_01",
@@ -1312,7 +1268,7 @@
       ],
       "absorbDiameterReq": 0.917,
       "absorbable": true,
-      "valueUnits": 16
+      "growthMm3": 32340000
     },
     {
       "itemId": "glass_bottle_01",
@@ -1337,7 +1293,7 @@
       ],
       "absorbDiameterReq": 0.263,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 768320
     },
     {
       "itemId": "grapes_01",
@@ -1362,7 +1318,7 @@
       ],
       "absorbDiameterReq": 0.101,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 44130
     },
     {
       "itemId": "grapes_02",
@@ -1387,7 +1343,7 @@
       ],
       "absorbDiameterReq": 0.101,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 44130
     },
     {
       "itemId": "grapes_03",
@@ -1412,7 +1368,7 @@
       ],
       "absorbDiameterReq": 0.101,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 44130
     },
     {
       "itemId": "grapes_04",
@@ -1437,7 +1393,7 @@
       ],
       "absorbDiameterReq": 0.101,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 44130
     },
     {
       "itemId": "grapes_05",
@@ -1463,7 +1419,7 @@
       ],
       "absorbDiameterReq": 0.101,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 44130
     },
     {
       "itemId": "grapes_06",
@@ -1489,7 +1445,7 @@
       ],
       "absorbDiameterReq": 0.101,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 44130
     },
     {
       "itemId": "grapes_07",
@@ -1515,7 +1471,7 @@
       ],
       "absorbDiameterReq": 0.101,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 44130
     },
     {
       "itemId": "grapes_08",
@@ -1541,7 +1497,7 @@
       ],
       "absorbDiameterReq": 0.101,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 44130
     },
     {
       "itemId": "juice_carton_01",
@@ -1567,7 +1523,7 @@
       ],
       "absorbDiameterReq": 0.168,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 201600
     },
     {
       "itemId": "juice_carton_02",
@@ -1592,7 +1548,7 @@
       ],
       "absorbDiameterReq": 0.168,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 201600
     },
     {
       "itemId": "juice_carton_03",
@@ -1617,7 +1573,7 @@
       ],
       "absorbDiameterReq": 0.168,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 201600
     },
     {
       "itemId": "juice_carton_04",
@@ -1642,7 +1598,7 @@
       ],
       "absorbDiameterReq": 0.168,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 201600
     },
     {
       "itemId": "napkin_01",
@@ -1667,7 +1623,7 @@
       ],
       "absorbDiameterReq": 0.161,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 176400
     },
     {
       "itemId": "napkin_02",
@@ -1692,7 +1648,7 @@
       ],
       "absorbDiameterReq": 0.161,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 176400
     },
     {
       "itemId": "napkin_03",
@@ -1717,7 +1673,7 @@
       ],
       "absorbDiameterReq": 0.161,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 176400
     },
     {
       "itemId": "napkin_04",
@@ -1742,7 +1698,7 @@
       ],
       "absorbDiameterReq": 0.161,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 176400
     },
     {
       "itemId": "napkin_05",
@@ -1767,7 +1723,7 @@
       ],
       "absorbDiameterReq": 0.161,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 176400
     },
     {
       "itemId": "orange_01",
@@ -1792,7 +1748,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 277402
     },
     {
       "itemId": "orange_02",
@@ -1817,7 +1773,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 277402
     },
     {
       "itemId": "orange_03",
@@ -1842,7 +1798,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 277402
     },
     {
       "itemId": "orange_04",
@@ -1868,7 +1824,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 277402
     },
     {
       "itemId": "orange_05",
@@ -1894,7 +1850,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 277402
     },
     {
       "itemId": "orange_06",
@@ -1920,7 +1876,7 @@
       ],
       "absorbDiameterReq": 0.187,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 277402
     },
     {
       "itemId": "paper_scrap_01",
@@ -1945,7 +1901,7 @@
       ],
       "absorbDiameterReq": 0.105,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 48965
     },
     {
       "itemId": "pear_01",
@@ -1970,7 +1926,7 @@
       ],
       "absorbDiameterReq": 0.152,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 148579
     },
     {
       "itemId": "pear_02",
@@ -1995,7 +1951,7 @@
       ],
       "absorbDiameterReq": 0.152,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 148579
     },
     {
       "itemId": "pear_03",
@@ -2021,7 +1977,7 @@
       ],
       "absorbDiameterReq": 0.152,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 148579
     },
     {
       "itemId": "pear_04",
@@ -2047,7 +2003,7 @@
       ],
       "absorbDiameterReq": 0.152,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 148579
     },
     {
       "itemId": "pear_05",
@@ -2073,7 +2029,7 @@
       ],
       "absorbDiameterReq": 0.152,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 148579
     },
     {
       "itemId": "pebble_01",
@@ -2098,7 +2054,7 @@
       ],
       "absorbDiameterReq": 0.069,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 13980
     },
     {
       "itemId": "plate_01",
@@ -2124,7 +2080,7 @@
       ],
       "absorbDiameterReq": 0.268,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 806400
     },
     {
       "itemId": "plate_02",
@@ -2149,7 +2105,7 @@
       ],
       "absorbDiameterReq": 0.268,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 806400
     },
     {
       "itemId": "plate_03",
@@ -2174,7 +2130,7 @@
       ],
       "absorbDiameterReq": 0.268,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 806400
     },
     {
       "itemId": "plate_04",
@@ -2199,7 +2155,7 @@
       ],
       "absorbDiameterReq": 0.268,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 806400
     },
     {
       "itemId": "plate_05",
@@ -2223,7 +2179,7 @@
       ],
       "absorbDiameterReq": 0.268,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 806400
     },
     {
       "itemId": "sandwich_01",
@@ -2249,7 +2205,7 @@
       ],
       "absorbDiameterReq": 0.179,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 241920
     },
     {
       "itemId": "sandwich_02",
@@ -2274,7 +2230,7 @@
       ],
       "absorbDiameterReq": 0.179,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 241920
     },
     {
       "itemId": "sandwich_03",
@@ -2299,7 +2255,7 @@
       ],
       "absorbDiameterReq": 0.179,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 241920
     },
     {
       "itemId": "sandwich_04",
@@ -2324,7 +2280,7 @@
       ],
       "absorbDiameterReq": 0.179,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 241920
     },
     {
       "itemId": "seed_01",
@@ -2349,7 +2305,7 @@
       ],
       "absorbDiameterReq": 0.028,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 1004
     },
     {
       "itemId": "seed_02",
@@ -2374,7 +2330,7 @@
       ],
       "absorbDiameterReq": 0.028,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 1004
     },
     {
       "itemId": "seed_03",
@@ -2399,7 +2355,7 @@
       ],
       "absorbDiameterReq": 0.028,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 1004
     },
     {
       "itemId": "serving_tray_01",
@@ -2424,7 +2380,7 @@
       ],
       "absorbDiameterReq": 0.468,
       "absorbable": true,
-      "valueUnits": 12
+      "growthMm3": 4312000
     },
     {
       "itemId": "small_potted_plant_01",
@@ -2449,7 +2405,7 @@
       ],
       "absorbDiameterReq": 0.382,
       "absorbable": true,
-      "valueUnits": 6
+      "growthMm3": 2350947
     },
     {
       "itemId": "small_potted_plant_02",
@@ -2474,7 +2430,7 @@
       ],
       "absorbDiameterReq": 0.382,
       "absorbable": true,
-      "valueUnits": 6
+      "growthMm3": 2350947
     },
     {
       "itemId": "small_potted_plant_03",
@@ -2499,7 +2455,7 @@
       ],
       "absorbDiameterReq": 0.382,
       "absorbable": true,
-      "valueUnits": 6
+      "growthMm3": 2350947
     },
     {
       "itemId": "soda_can_01",
@@ -2525,7 +2481,7 @@
       ],
       "absorbDiameterReq": 0.191,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 293611
     },
     {
       "itemId": "soda_can_02",
@@ -2550,7 +2506,7 @@
       ],
       "absorbDiameterReq": 0.191,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 293611
     },
     {
       "itemId": "soda_can_03",
@@ -2575,7 +2531,7 @@
       ],
       "absorbDiameterReq": 0.191,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 293611
     },
     {
       "itemId": "soda_can_04",
@@ -2600,7 +2556,7 @@
       ],
       "absorbDiameterReq": 0.191,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 293611
     },
     {
       "itemId": "soda_can_05",
@@ -2625,7 +2581,7 @@
       ],
       "absorbDiameterReq": 0.191,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 293611
     },
     {
       "itemId": "spoon_01",
@@ -2651,7 +2607,7 @@
       ],
       "absorbDiameterReq": 0.108,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 52920
     },
     {
       "itemId": "spoon_02",
@@ -2676,7 +2632,7 @@
       ],
       "absorbDiameterReq": 0.108,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 52920
     },
     {
       "itemId": "spoon_03",
@@ -2701,7 +2657,7 @@
       ],
       "absorbDiameterReq": 0.108,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 52920
     },
     {
       "itemId": "spoon_04",
@@ -2726,7 +2682,7 @@
       ],
       "absorbDiameterReq": 0.108,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 52920
     },
     {
       "itemId": "strawberry_01",
@@ -2751,7 +2707,7 @@
       ],
       "absorbDiameterReq": 0.088,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 29030
     },
     {
       "itemId": "strawberry_02",
@@ -2776,7 +2732,7 @@
       ],
       "absorbDiameterReq": 0.088,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 29030
     },
     {
       "itemId": "strawberry_03",
@@ -2801,7 +2757,7 @@
       ],
       "absorbDiameterReq": 0.088,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 29030
     },
     {
       "itemId": "strawberry_04",
@@ -2826,7 +2782,7 @@
       ],
       "absorbDiameterReq": 0.088,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 29030
     },
     {
       "itemId": "strawberry_05",
@@ -2852,7 +2808,7 @@
       ],
       "absorbDiameterReq": 0.088,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 29030
     },
     {
       "itemId": "strawberry_06",
@@ -2878,7 +2834,7 @@
       ],
       "absorbDiameterReq": 0.088,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 29030
     },
     {
       "itemId": "strawberry_07",
@@ -2904,7 +2860,7 @@
       ],
       "absorbDiameterReq": 0.088,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 29030
     },
     {
       "itemId": "strawberry_08",
@@ -2930,7 +2886,7 @@
       ],
       "absorbDiameterReq": 0.088,
       "absorbable": true,
-      "valueUnits": 1
+      "growthMm3": 29030
     },
     {
       "itemId": "struct_beer_crate_01",
@@ -2955,7 +2911,7 @@
       ],
       "absorbDiameterReq": 0.765,
       "absorbable": true,
-      "valueUnits": 36
+      "growthMm3": 18816000
     },
     {
       "itemId": "struct_beer_crate_02",
@@ -2980,7 +2936,7 @@
       ],
       "absorbDiameterReq": 0.765,
       "absorbable": true,
-      "valueUnits": 36
+      "growthMm3": 18816000
     },
     {
       "itemId": "struct_bench_01",
@@ -3005,7 +2961,7 @@
       ],
       "absorbDiameterReq": 1.424,
       "absorbable": true,
-      "valueUnits": 130
+      "growthMm3": 120960000
     },
     {
       "itemId": "struct_book_stack_01",
@@ -3030,7 +2986,7 @@
       ],
       "absorbDiameterReq": 0.39,
       "absorbable": true,
-      "valueUnits": 8
+      "growthMm3": 2489760
     },
     {
       "itemId": "struct_cooler_large_01",
@@ -3055,7 +3011,7 @@
       ],
       "absorbDiameterReq": 1.189,
       "absorbable": true,
-      "valueUnits": 90
+      "growthMm3": 70560000
     },
     {
       "itemId": "struct_crate_01",
@@ -3080,7 +3036,7 @@
       ],
       "absorbDiameterReq": 1.086,
       "absorbable": true,
-      "valueUnits": 64
+      "growthMm3": 53760000
     },
     {
       "itemId": "struct_crate_02",
@@ -3105,7 +3061,7 @@
       ],
       "absorbDiameterReq": 1.086,
       "absorbable": true,
-      "valueUnits": 64
+      "growthMm3": 53760000
     },
     {
       "itemId": "struct_crate_large_01",
@@ -3130,7 +3086,7 @@
       ],
       "absorbDiameterReq": 1.34,
       "absorbable": true,
-      "valueUnits": 120
+      "growthMm3": 100800000
     },
     {
       "itemId": "struct_folding_table_01",
@@ -3155,7 +3111,7 @@
       ],
       "absorbDiameterReq": 1.777,
       "absorbable": true,
-      "valueUnits": 212
+      "growthMm3": 235200000
     },
     {
       "itemId": "struct_lounge_chair_01",
@@ -3180,7 +3136,7 @@
       ],
       "absorbDiameterReq": 1.649,
       "absorbable": true,
-      "valueUnits": 150
+      "growthMm3": 188160000
     },
     {
       "itemId": "struct_plank_01",
@@ -3205,7 +3161,7 @@
       ],
       "absorbDiameterReq": 0.547,
       "absorbable": true,
-      "valueUnits": 16
+      "growthMm3": 6860000
     },
     {
       "itemId": "struct_plank_02",
@@ -3231,7 +3187,7 @@
       ],
       "absorbDiameterReq": 0.547,
       "absorbable": true,
-      "valueUnits": 16
+      "growthMm3": 6860000
     },
     {
       "itemId": "struct_stool_01",
@@ -3256,7 +3212,7 @@
       ],
       "absorbDiameterReq": 0.842,
       "absorbable": true,
-      "valueUnits": 38
+      "growthMm3": 25088000
     },
     {
       "itemId": "struct_storage_01",
@@ -3281,7 +3237,7 @@
       ],
       "absorbDiameterReq": 1.009,
       "absorbable": true,
-      "valueUnits": 52
+      "growthMm3": 43120000
     },
     {
       "itemId": "struct_stroller_01",
@@ -3306,7 +3262,7 @@
       ],
       "absorbDiameterReq": 1.944,
       "absorbable": true,
-      "valueUnits": 32
+      "growthMm3": 308000000
     },
     {
       "itemId": "struct_tray_01",
@@ -3331,7 +3287,7 @@
       ],
       "absorbDiameterReq": 0.468,
       "absorbable": true,
-      "valueUnits": 12
+      "growthMm3": 4312000
     },
     {
       "itemId": "struct_tray_02",
@@ -3357,7 +3313,7 @@
       ],
       "absorbDiameterReq": 0.468,
       "absorbable": true,
-      "valueUnits": 12
+      "growthMm3": 4312000
     },
     {
       "itemId": "toy_ball_01",
@@ -3382,7 +3338,7 @@
       ],
       "absorbDiameterReq": 0.356,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 1890000
     },
     {
       "itemId": "toy_ball_02",
@@ -3407,7 +3363,7 @@
       ],
       "absorbDiameterReq": 0.356,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 1890000
     },
     {
       "itemId": "toy_ball_03",
@@ -3432,7 +3388,7 @@
       ],
       "absorbDiameterReq": 0.356,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 1890000
     },
     {
       "itemId": "toy_ball_04",
@@ -3457,7 +3413,7 @@
       ],
       "absorbDiameterReq": 0.356,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 1890000
     },
     {
       "itemId": "watering_can_01",
@@ -3482,7 +3438,7 @@
       ],
       "absorbDiameterReq": 0.406,
       "absorbable": true,
-      "valueUnits": 6
+      "growthMm3": 2813303
     },
     {
       "itemId": "watering_can_02",
@@ -3507,7 +3463,7 @@
       ],
       "absorbDiameterReq": 0.406,
       "absorbable": true,
-      "valueUnits": 6
+      "growthMm3": 2813303
     },
     {
       "itemId": "watermelon_01",
@@ -3532,7 +3488,7 @@
       ],
       "absorbDiameterReq": 0.596,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 8870400
     },
     {
       "itemId": "watermelon_02",
@@ -3557,7 +3513,7 @@
       ],
       "absorbDiameterReq": 0.596,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 8870400
     },
     {
       "itemId": "watermelon_03",
@@ -3583,7 +3539,7 @@
       ],
       "absorbDiameterReq": 0.596,
       "absorbable": true,
-      "valueUnits": 4
+      "growthMm3": 8870400
     }
   ],
   "structures": [

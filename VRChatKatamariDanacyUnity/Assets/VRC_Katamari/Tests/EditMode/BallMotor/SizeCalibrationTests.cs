@@ -4,107 +4,87 @@ using VRCKatamari.BallLayers;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins the runtime sizing calibration to the offline model every level's
-    /// star targets are built on.
+    /// Pins the fixed-point sizing calibration (Docs/OPEN_DECISIONS.md (r) steps C+D) to the
+    /// volumes the design note records, replacing the retired 1356-unit oracle.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The oracle is <c>Docs/Design/Gameplay/round_model.py</c>: a round runs from
-    /// the 0.30 m start ball to the 2.20 m cap, the cap is reached at 1356
-    /// confirmed units, and eating a whole 1284-unit map leaves the ball at
-    /// 2.16 m. Those are the numbers the star thresholds and target times were
-    /// derived from, so the runtime must reproduce them exactly; a runtime whose
-    /// unit is a different size silently rescales the whole game's pacing.
+    /// The old oracle (round_model.py's 1356 confirmed units from 0.30 m to 2.20 m) was a
+    /// UNIT calibration: it only made sense while one unit was 0.0041 m^3. Steps C+D make the
+    /// ledger quantity cubic millimetres, so the anchors become sphere volumes, all hand
+    /// calculations: <c>V = pi/6 * d^3 * 1e9</c>.
     /// </para>
+    /// <list type="bullet">
+    /// <item>start 0.2997 m -> 14,094,798 mm^3 (the motor's serialized
+    /// <c>startVolumeMm3</c>);</item>
+    /// <item>0.30 m -> 14,137,167 mm^3 and 2.20 m -> 5,575,279,763 mm^3 (the map's content
+    /// ladder top, still the analysis ceiling);</item>
+    /// <item>30 m -> 14,137,166,941,154 mm^3 (the ONE global cap,
+    /// <c>maxBallDiameterM</c>).</item>
+    /// </list>
     /// <para>
-    /// These are the three nails. They are deliberately written against
-    /// <see cref="SizeModelMath.TryDerive"/> with the constants the motor
-    /// serializes, not against a helper of this file, so a change to either
-    /// default breaks this test rather than drifting quietly.
-    /// </para>
-    /// <para>
-    /// Why the baseline is 3.4390244 rather than 1: the baseline is a VOLUME (the
-    /// 0.30 m start ball, 0.0141 m^3), not a unit count. When the unit shrank to
-    /// 0.0041 m^3 the same volume became 0.0141 / 0.0041 = 3.439 units. Holding
-    /// the baseline at 1 unit would start the ball at 0.199 m instead of 0.30 m.
+    /// The tests call <see cref="SizeModelMath.TryDerive"/> with the motor's current defaults
+    /// rather than a helper of this file, so a default change breaks here instead of drifting.
+    /// Diameters are compared with 1 mm tolerance and volumes exactly, because the model's
+    /// cube root runs in float (documented in the class remarks).
     /// </para>
     /// </remarks>
     public class SizeCalibrationTests
     {
-        // The constants KatamariBallMotor serializes (Runtime/BallMotor/KatamariBallMotor.cs).
-        private const float BaselineUnits = 3.4390244f;
-        private const float CubicMetersPerUnit = 0.0041f;
-        private const float MaxCoreRadiusM = 1.1f;
-        private const float UnionRatio = 1f;
+        private const long StartMm3 = 14094798L;
+        private const float MaxBallDiameterM = 30f;
+        private const float Ratio = 1f;
+        private const float DiameterToleranceM = 0.001f;
 
-        // 1 mm is far below a gameplay band but far above float noise here.
-        private const float DiameterToleranceM = 0.005f;
-
-        private static float DiameterForUnits(float confirmedUnits)
+        private static float DiameterForConfirmed(long confirmedMm3)
         {
-            float core, collision, semantic, effective;
-            Assert.IsTrue(SizeModelMath.TryDerive(confirmedUnits, BaselineUnits,
-                CubicMetersPerUnit, MaxCoreRadiusM, UnionRatio, UnionRatio,
-                out core, out collision, out semantic, out effective),
-                "TryDerive rejected " + confirmedUnits + " units");
+            float core, collision, semantic;
+            long effective;
+            Assert.IsTrue(SizeModelMath.TryDerive(StartMm3, confirmedMm3, MaxBallDiameterM,
+                Ratio, Ratio, out core, out collision, out semantic, out effective),
+                "TryDerive rejected " + confirmedMm3 + " mm^3");
             return semantic;
         }
 
         [Test]
-        public void BaselineIsTheThreeHundredMillimetreStartBall()
+        public void TheStartBallIsTheCalibrationVolume()
         {
-            float diameter = DiameterForUnits(0f);
-            Assert.AreEqual(0.29974f, diameter, DiameterToleranceM);
+            Assert.AreEqual(0.2997f, DiameterForConfirmed(0L), DiameterToleranceM);
+            Assert.IsTrue(SizeModelMath.TrySphereVolumeMm3(0.2997f, Ratio, out long volume));
+            Assert.AreEqual(StartMm3, volume);
         }
 
         [Test]
-        public void OneMapOfGrowthEndsAtTwoPointOneSixMetres()
+        public void TheDesignLadderVolumesMapBackToTheirDiameters()
         {
-            // 1284 units is what the decided round's map is worth; the model says
-            // a full clear leaves the ball at 2.16 m, not at the cap.
-            float diameter = DiameterForUnits(1284f);
-            Assert.AreEqual(2.160f, diameter, DiameterToleranceM);
-            Assert.Less(diameter, 2.20f, "a full map must not already be capped");
+            Assert.IsTrue(SizeModelMath.TrySphereVolumeMm3(0.30f, Ratio, out long v030));
+            Assert.AreEqual(14137167L, v030);
+            Assert.AreEqual(0.30f, DiameterForConfirmed(v030 - StartMm3), DiameterToleranceM);
+
+            Assert.IsTrue(SizeModelMath.TrySphereVolumeMm3(2.20f, Ratio, out long v220));
+            Assert.AreEqual(5575279763L, v220);
+            Assert.AreEqual(2.20f, DiameterForConfirmed(v220 - StartMm3), DiameterToleranceM);
         }
 
         [Test]
-        public void TheCapIsReachedAtThirteenHundredFiftySixUnits()
+        public void TheGlobalThirtyMetreCapIsOneVolumeConstant()
         {
-            float diameter = DiameterForUnits(1356f);
-            Assert.AreEqual(2.200f, diameter, DiameterToleranceM);
+            Assert.IsTrue(SizeModelMath.TrySphereVolumeMm3(MaxBallDiameterM, Ratio, out long cap));
+            Assert.AreEqual(14137166941154L, cap, "pi/6 * 30^3 * 1e9");
+            // A confirmed total far past the cap still reads the cap diameter exactly.
+            Assert.AreEqual(30f, DiameterForConfirmed(cap), 0f);
+            Assert.AreEqual(30f, DiameterForConfirmed(cap * 3L), 0f);
         }
 
         [Test]
-        public void TheOldCalibrationWouldHaveCappedFourTimesTooEarly()
+        public void DiameterAndVolumeAreOneSphereRelation()
         {
-            // The regression this file exists for: under the retired 0.0141 m^3
-            // per unit, ~394 units (30% of a 1284-unit map) already hit the cap,
-            // so growth ran 3.44x faster than the model. At the model's
-            // calibration those same 394 units must be well below the cap.
-            float diameter = DiameterForUnits(394.4f);
-            Assert.Less(diameter, 1.50f,
-                "394 units must be mid-round, not capped; the unit is too large again");
-        }
-
-        [Test]
-        public void TierDiametersPriceIntoTheUnitsTheDesignUses()
-        {
-            // The inverse of the calibration, for the design side: how many
-            // confirmed units each decided tier diameter costs. Values from
-            // round_model.py's units_for_diameter at this calibration.
-            Assert.AreEqual(17.8f, UnitsForDiameter(0.55f), 0.2f);
-            Assert.AreEqual(106.1f, UnitsForDiameter(0.95f), 0.3f);
-            Assert.AreEqual(385.9f, UnitsForDiameter(1.45f), 0.6f);
-            Assert.AreEqual(1356.4f, UnitsForDiameter(2.20f), 1.0f);
-        }
-
-        private static float UnitsForDiameter(float diameter)
-        {
-            float units;
-            Assert.IsTrue(SizeModelMath.TryVolumeUnitsForSemanticDiameter(diameter,
-                BaselineUnits, CubicMetersPerUnit, MaxCoreRadiusM, UnionRatio, out units),
-                "inverse rejected " + diameter + " m");
-            return units;
+            // 1 m -> 523,598,776 mm^3; doubling the diameter multiplies the volume by 8.
+            Assert.IsTrue(SizeModelMath.TrySphereVolumeMm3(1f, Ratio, out long one));
+            Assert.AreEqual(523598776L, one);
+            Assert.IsTrue(SizeModelMath.TrySphereVolumeMm3(2f, Ratio, out long two));
+            Assert.AreEqual(one * 8L, two, "volume scales with the cube of the diameter");
+            Assert.AreEqual(0.5f, SizeModelMath.HudDiameterWorldM(0.4998f), 0.001f);
         }
     }
 }

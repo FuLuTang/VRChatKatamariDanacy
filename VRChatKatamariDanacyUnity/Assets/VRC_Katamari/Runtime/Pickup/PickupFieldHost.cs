@@ -118,14 +118,6 @@ namespace VRCKatamari.Pickup
         // Ceiling on the "could not attach" console lines, so a data error cannot flood.
         private const int HiddenLogLimit = 8;
 
-        // The value unit the ledger consumes must be a whole number at least 1
-        // (Docs/OPEN_DECISIONS.md (j)). The column is an integer since (r) step B, so the
-        // only bad value the host can see here is 0 or a negative number. The motor still
-        // decides what commits: it receives the value through its float candidate slot and
-        // refuses anything at or past 2^63 as RejectNoGain, which is indistinguishable from
-        // "never touched" from outside. The host therefore reports bad rows once at start-up.
-        private const long MinValueUnits = 1L;
-
         private const float DefaultScanIntervalSeconds = 0.05f;
         private const float DefaultActivationRadiusM = 1.6f;
         private const float DefaultReleaseRadiusM = 2.5f;
@@ -184,17 +176,19 @@ namespace VRCKatamari.Pickup
         // index-aligned with propTransforms. OPTIONAL: a scene synced before this column
         // existed has an empty/shorter array and every one of its props plays at
         // PickupAbsorbMath.DefaultVolumeK, so no re-sync is needed to stay playable. The
-        // value is the GATE's input (Req = floor(1000*cbrt(60*k*a*b*c/pi))) and nothing else
-        // - it is not the growth side's volume, which is a later step.
+        // value is the GATE's input (Req = floor(1000*cbrt(60*k*a*b*c/pi))). The growth
+        // side reads the finished `propGrowthMm3` column below, which the importer prices
+        // with the same k (penalty * k * a*b*c), so the two are the same volume per item.
         [SerializeField] private float[] propVolumeK;
-        // Value units per prop, from the level's declared data. `long[]` since
-        // Docs/OPEN_DECISIONS.md (r) migration step B: the unit and every stored number are
-        // unchanged, only the serialized element width doubled (int32 -> int64, 8 -> 16 hex
-        // characters per element in scene YAML). Unity proved `long[]` in a serialized field
-        // and `SerializedProperty.longValue` on its elements before this step
-        // (Docs/Research/ContentVolume/UNITY_PROBES_FOR_LONG.md section 6), so the column
-        // carries the ledger's own 64-bit range instead of narrowing at the read site.
-        [SerializeField] private long[] valueUnits;
+        // Growth per prop: the ledger gain one absorb of this row is worth, in mm^3.
+        // DERIVED at import/sync (`round(penalty * k * a*b*c * 1e9)`) and never authored
+        // (Docs/OPEN_DECISIONS.md (r) C+D; Docs/Research/ContentVolume/FIXED_POINT_STEP_CD.md
+        // section 3). `long[]` because the ledger is 64-bit and the value is the gain itself:
+        // the runtime does no pricing, no unit conversion and no float hop. A scene synced
+        // before this column existed has an empty/short array and the host derives each row
+        // once at Start from propBounds + propVolumeK + the default 0.8 penalty, which is the
+        // same formula, so an un-reimported lab stays playable.
+        [SerializeField] private long[] propGrowthMm3;
         // Optional: wired colliders are disabled on attach so an absorbed prop cannot block
         // anything. Leave the array empty to skip that.
         [SerializeField] private Collider[] propColliders;
@@ -251,6 +245,10 @@ namespace VRCKatamari.Pickup
         // candidate), starving the props the ball is actually touching. Fixed at start-up so
         // the scan costs one array read per prop.
         private bool[] submittable;
+        // The growth actually offered to the motor: the serialized column when it is valid,
+        // otherwise the Start-time fallback (propBounds x k x 0.8). Filled once in Start.
+        private long[] growthMm3;
+        private int growthFallbackRows;
 
         // Bounded nearest-first selection for one scan.
         private int[] nearestIndices;
@@ -392,6 +390,7 @@ namespace VRCKatamari.Pickup
             ResolvePropCount();
             AllocatePropStore();
             RecordOriginalPoses();
+            ResolveGrowthMm3();
             MarkSubmittable();
             PreparePropRows();
             ReportPropDataProblems();
@@ -714,7 +713,12 @@ namespace VRCKatamari.Pickup
             propCount = Smaller(propCount, LengthOfIds());
             propCount = Smaller(propCount, LengthOfKinds());
             propCount = Smaller(propCount, LengthOfBounds());
-            propCount = Smaller(propCount, LengthOfValues());
+            // The growth column is OPTIONAL (a pre-C+D scene has none), so it does not cap
+            // propCount: a row without a serialized value gets the Start-time fallback.
+            if (propGrowthMm3 != null && propGrowthMm3.Length < propCount)
+            {
+                growthFallbackRows = propCount - propGrowthMm3.Length;
+            }
         }
 
         private int LengthOfIds()
@@ -758,10 +762,10 @@ namespace VRCKatamari.Pickup
             return value;
         }
 
-        private int LengthOfValues()
+        private int LengthOfGrowth()
         {
-            if (valueUnits == null) return 0;
-            return valueUnits.Length;
+            if (propGrowthMm3 == null) return 0;
+            return propGrowthMm3.Length;
         }
 
         // Two tiny comparators rather than Mathf calls, because the prop count is fixed by
@@ -786,6 +790,8 @@ namespace VRCKatamari.Pickup
             originalLocalRotations = new Quaternion[propCount];
             originalActiveStates = new bool[propCount];
             submittable = new bool[propCount];
+            growthMm3 = new long[propCount];
+            growthFallbackRows = 0;
             nearestIndices = new int[SelectionCapacity];
             nearestDistSq = new float[SelectionCapacity];
             propUsable = new bool[propCount];
@@ -907,6 +913,51 @@ namespace VRCKatamari.Pickup
             }
         }
 
+        /// <summary>
+        /// Resolves each row's ledger growth once: the serialized <c>propGrowthMm3</c> column
+        /// when present and positive, else the same formula priced here from the row's
+        /// gameplay bounds, its k and the default 0.8 penalty.
+        /// </summary>
+        /// <remarks>
+        /// The serialized column is the truth (the importer computed it in double and wrote an
+        /// exact long). The fallback exists for a scene synced before the column existed, so an
+        /// un-reimported lab is still playable; it is priced in float, so a huge row can differ
+        /// from the imported number by a millilitre - reported once, never silently trusted as
+        /// the imported value.
+        /// </remarks>
+        private void ResolveGrowthMm3()
+        {
+            growthFallbackRows = 0;
+            for (int i = 0; i < propCount; i++)
+            {
+                if (propGrowthMm3 != null && i < propGrowthMm3.Length && propGrowthMm3[i] > 0L)
+                {
+                    growthMm3[i] = propGrowthMm3[i];
+                    continue;
+                }
+
+                long derived;
+                if (PickupAbsorbMath.TryComputeGrowthMm3(propBounds[i], EffectiveVolumeK(i),
+                    PickupAbsorbMath.DefaultVolumePenalty, out derived))
+                {
+                    growthMm3[i] = derived;
+                }
+                else
+                {
+                    growthMm3[i] = 0L;
+                }
+                growthFallbackRows = growthFallbackRows + 1;
+            }
+
+            if (growthFallbackRows > 0)
+            {
+                Debug.LogWarning("[PickupFieldHost] " + growthFallbackRows + " row(s) have no"
+                    + " usable serialized propGrowthMm3; the host priced them once at Start"
+                    + " from propBounds x k x 0.80. Re-import the level so the derived column"
+                    + " is written (the imported value is exact; this fallback is float).");
+            }
+        }
+
         private bool IsSubmittable(int index)
         {
             if (propTransforms[index] == null) return false;
@@ -915,10 +966,9 @@ namespace VRCKatamari.Pickup
             if (itemIds[index].Length == 0) return false;
             if (kinds[index] == null) return false;
             if (kinds[index].Length == 0) return false;
-            // A value the ledger gain mapping refuses (zero or negative here; the float slot it
-            // travels through can also lose a huge value past the 64-bit guard) is RejectNoGain
-            // at commit time, which is also "stays queued": never offer it.
-            if (valueUnits[index] < MinValueUnits) return false;
+            // A row whose growth is not a positive mm^3 gain would be RejectNoGain at commit
+            // time, which is also "stays queued": never offer it.
+            if (growthMm3[index] <= 0L) return false;
             Vector3 bounds = propBounds[index];
             if (!KatamariMath.IsFiniteVector(bounds)) return false;
             if (bounds.x < 0f || bounds.y < 0f || bounds.z < 0f) return false;
@@ -978,14 +1028,14 @@ namespace VRCKatamari.Pickup
             int missingTransforms = 0;
             int emptyIds = 0;
             int emptyKinds = 0;
-            int badValues = 0;
+            int badGrowth = 0;
             int degenerateBounds = 0;
             for (int i = 0; i < propCount; i++)
             {
                 if (propTransforms[i] == null) missingTransforms++;
                 if (itemIds[i] == null || itemIds[i].Length == 0) emptyIds++;
                 if (kinds[i] == null || kinds[i].Length == 0) emptyKinds++;
-                if (valueUnits[i] < MinValueUnits) badValues++;
+                if (growthMm3[i] <= 0L) badGrowth++;
                 Vector3 bounds = propBounds[i];
                 if (!KatamariMath.IsFiniteVector(bounds)) degenerateBounds++;
                 else if (bounds.x <= 0f || bounds.y <= 0f || bounds.z <= 0f) degenerateBounds++;
@@ -996,11 +1046,11 @@ namespace VRCKatamari.Pickup
             if (itemIds != null) longest = Larger(longest, itemIds.Length);
             if (kinds != null) longest = Larger(longest, kinds.Length);
             if (propBounds != null) longest = Larger(longest, propBounds.Length);
-            if (valueUnits != null) longest = Larger(longest, valueUnits.Length);
+            if (propGrowthMm3 != null) longest = Larger(longest, propGrowthMm3.Length);
             int ignored = longest - propCount;
 
             if (propTransforms == null || itemIds == null || kinds == null ||
-                propBounds == null || valueUnits == null)
+                propBounds == null)
             {
                 Debug.LogWarning("[PickupFieldHost] a prop array is null; props=" + propCount);
             }
@@ -1015,12 +1065,13 @@ namespace VRCKatamari.Pickup
                 Debug.LogWarning("[PickupFieldHost] prop data: missingTransforms=" + missingTransforms
                     + " emptyIds=" + emptyIds
                     + " emptyKinds=" + emptyKinds
-                    + " valueUnitsBelowMin=" + badValues
+                    + " growthMm3NotPositive=" + badGrowth
                     + " zeroOrNegativeBounds=" + degenerateBounds
                     + " - these rows are never offered to the motor, so they can never be"
-                    + " absorbed (valueUnits must be >= 1; the column is a 64-bit integer since"
-                    + " Docs/OPEN_DECISIONS.md (r) step B, so only 0 or a negative number can"
-                    + " fail here - see (j) for the ledger's whole-unit rule)");
+                    + " absorbed (growthMm3 must be a positive number of mm^3; the column is"
+                    + " derived at import as round(penalty*k*a*b*c*1e9), so a non-positive value"
+                    + " means bad bounds/k/penalty data - see"
+                    + " Docs/Research/ContentVolume/FIXED_POINT_STEP_CD.md)");
             }
             if (propColliders == null || propColliders.Length < propCount)
             {
@@ -1439,17 +1490,11 @@ namespace VRCKatamari.Pickup
         private void SubmitProp(int index)
         {
             Vector3 itemPosition = propTransforms[index].position;
-            // The column is the ledger's own 64-bit quantity (Docs/OPEN_DECISIONS.md (r) step
-            // B), so there is no widening at the read site any more. The candidate queue is
-            // NOT widened here: KatamariBallMotor.SubmitCandidateWithVolumeK takes the
-            // value as a float
-            // because that slot belongs to the size-model domain, which this step leaves
-            // alone. `(float)valueUnits[index]` is exactly what the motor received before
-            // (an int widened to long and then to float is the same float an int->float
-            // conversion produced); PickupAbsorbMath.TryAbsorbValueToLedgerGain converts it
-            // back to a 64-bit gain, where the range guard is the long one.
-            motor.SubmitCandidateWithVolumeK(true, kinds[index], propBounds[index],
-                itemPosition, (float)valueUnits[index], itemIds[index], 0,
+            // Two per-item quantities travel together: k for the gate (the original's
+            // Req = floor(1000*cbrt(60*k*a*b*c/pi))) and the finished growth in mm^3 for the
+            // ledger. Neither is derived here; the host resolved both once in Start.
+            motor.SubmitCandidateWithVolumeKMm3(true, kinds[index], propBounds[index],
+                itemPosition, growthMm3[index], itemIds[index], 0,
                 EffectiveVolumeK(index));
             // Stamped even when the motor answered "already queued": both cases leave this
             // host willing to withdraw the id later if the ball leaves.
@@ -2062,22 +2107,30 @@ namespace VRCKatamari.Pickup
             {
                 if (propProxySizes == null || index >= propProxySizes.Length) return -1;
                 Vector3 size = propProxySizes[index];
-                return KatamariMath.IsFiniteVector(size) && size.x >= 0f && size.y >= 0f &&
-                    size.z >= 0f ? kind : -1;
+                // A zero default array is not a box: it is the un-synced/absent row, and must
+                // fall back to the old OBB. A real box has three positive edges.
+                if (!KatamariMath.IsFiniteVector(size) || size.x <= 0f || size.y <= 0f ||
+                    size.z <= 0f) return -1;
+                Vector3 half = new Vector3(size.x * 0.5f, size.y * 0.5f, size.z * 0.5f);
+                return ProxyContactMath.IsValidProxy(kind, propProxyCenters[index],
+                    Vector3.right, Vector3.up, Vector3.forward, half, 0f, 0f, 0, 0, 0)
+                    ? kind : -1;
             }
             if (kind == ProxyContactMath.KindSphere)
             {
                 float radius = ProxyFloatAt(propProxyRadii, index, -1f);
-                return KatamariMath.IsFiniteFloat(radius) && radius > 0f ? kind : -1;
+                return ProxyContactMath.IsValidProxy(kind, propProxyCenters[index],
+                    Vector3.right, Vector3.up, Vector3.forward, Vector3.zero, radius, 0f,
+                    0, 0, 0) ? kind : -1;
             }
             if (kind == ProxyContactMath.KindCapsule)
             {
                 float radius = ProxyFloatAt(propProxyRadii, index, -1f);
                 float halfHeight = ProxyFloatAt(propProxyHalfHeights, index, -1f);
                 int axis = ProxyIntAt(propProxyAxes, index, -1);
-                return KatamariMath.IsFiniteFloat(radius) && radius > 0f &&
-                    KatamariMath.IsFiniteFloat(halfHeight) && halfHeight >= 0f &&
-                    axis >= ProxyContactMath.AxisX && axis <= ProxyContactMath.AxisZ ? kind : -1;
+                return ProxyContactMath.IsValidProxy(kind, propProxyCenters[index],
+                    Vector3.right, Vector3.up, Vector3.forward, Vector3.zero, radius,
+                    halfHeight, axis, 0, 0) ? kind : -1;
             }
 
             int hullStart = ProxyIntAt(propProxyHullStarts, index, -1);
@@ -2089,7 +2142,11 @@ namespace VRCKatamari.Pickup
                 hullStart + hullCount > propProxyHullPoints.Length) return -1;
             if (faceStart < 0 || faceCount < 1 || faceCount > ProxyContactMath.MaxHullFaces ||
                 faceStart + faceCount * 3 > propProxyHullFaces.Length) return -1;
-            return kind;
+            return ProxyContactMath.IsValidProxy(kind, propProxyCenters[index], Vector3.right,
+                Vector3.up, Vector3.forward, Vector3.zero,
+                ProxyFloatAt(propProxyRadii, index, 0f),
+                ProxyFloatAt(propProxyHalfHeights, index, 0f),
+                ProxyIntAt(propProxyAxes, index, 0), hullCount, faceCount) ? kind : -1;
         }
 
         private static Vector3 ProxyVectorAt(Vector3[] values, int index, Vector3 fallback)

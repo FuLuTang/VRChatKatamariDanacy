@@ -1,5 +1,6 @@
 using UdonSharp;
 using UnityEngine;
+using VRCKatamari.BallLayers;
 using VRCKatamari.BallMotor;
 
 namespace VRCKatamari.Labs.PhysicsTestField
@@ -11,20 +12,19 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The diameter is a pure function of the confirmed volume (<c>SizeModelMath.TryDerive</c>), so
-    /// the only thing a size setter can own is "how many volume units". Feeding is done by the
+    /// The diameter is a pure function of the total volume (<c>SizeModelMath.TryDerive</c>), so
+    /// the only thing a size setter can own is "how many mm^3 to feed". Feeding is done by the
     /// motor's own pickup stage, which is why nothing in <c>Runtime/</c> changes.
     /// </para>
     /// <para>
-    /// <b>The slope is analytic, not measured and not hard-coded.</b> The core radius is
-    /// <c>cbrt(3 * cubicMetersPerVolumeUnit * (baseline + confirmed) / 4pi)</c> and the semantic
-    /// diameter is proportional to the core radius, so <c>D^3</c> is exactly linear in the TOTAL
-    /// volume units. That makes <c>slope = d(D^3)/d(unit) = D^3 / (baseline + confirmed)</c> at the
-    /// current size, so the feeds are exact: <c>units = (target^3 - D^3) / slope</c>. Both
-    /// <c>cubicMetersPerVolumeUnit</c> and the semantic/core ratio cancel out of that expression,
-    /// which is why the formula needs exactly one motor number - <c>baselineVolumeUnits</c> - and
-    /// not the pricing constant. That number has no getter, so the criteria importer mirrors it
-    /// from the scene motor into <see cref="sizeModelBaselineVolumeUnits"/>.
+    /// <b>The slope is analytic, not measured and not hard-coded.</b> The diameter is
+    /// <c>cbrt(6 * (start + confirmed) / 1e9 / pi)</c> and proportional to <c>cbrt(V)</c>, so
+    /// <c>D^3</c> is exactly linear in the TOTAL volume (steps C+D: mm^3). That makes
+    /// <c>slope = d(D^3)/d(mm^3) = D^3 / (start + confirmed)</c> at the current size, so the feeds
+    /// are exact: <c>mm^3 = (target^3 - D^3) / slope</c>. The sphere constant cancels out of that
+    /// expression, which is why the formula needs exactly one motor number - <c>startVolumeMm3</c>
+    /// - and not a pricing constant. That number has no getter, so the criteria importer mirrors
+    /// it from the scene motor into <see cref="sizeModelStartVolumeMm3"/>.
     /// </para>
     /// <para>
     /// <b>Why not a measured slope (the previous design).</b> Measuring <c>d(D^3)/dV</c> needs two
@@ -46,9 +46,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// that was already at the target).
     /// </para>
     /// <para>
-    /// <b>The resolution floor is one volume unit, and it is a real limit.</b> One unit is
-    /// <c>0.0041 m^3</c>, so the diameter grid is ~29 mm at D = 0.30, ~7.3 mm at 0.60, ~2.2 mm at
-    /// 1.10 and ~0.54 mm at 2.20. "Within 2 mm" is therefore NOT reachable at the small presets -
+    /// <b>The resolution floor is one mm^3, and it is effectively invisible.</b> One mm^3 moves
+    /// the diameter by ~7 nm at D = 0.30, so the loop's tolerance (not the quantum) is the limit. "Within 2 mm" is therefore NOT reachable at the small presets -
     /// the loop stops when the next whole unit would move the diameter further away, and reports
     /// the error in quanta (<see cref="GetLastErrorM"/> / <see cref="GetQuantumM"/>) so the
     /// criterion can be honest.
@@ -91,11 +90,11 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private string[] presetLabels;
 
         [Header("Size model (filled by the criteria importer from the scene motor)")]
-        [Tooltip("KatamariBallMotor.baselineVolumeUnits, in volume units. The analytic quantum " +
-                 "needs this one number: D^3 is linear in (baseline + confirmed) and the pricing " +
-                 "constant cancels. 0 = not baked, so the quantum reads 0 and the driver reports " +
-                 "the metric as unavailable instead of guessing.")]
-        [SerializeField] private float sizeModelBaselineVolumeUnits;
+        [Tooltip("KatamariBallMotor.startVolumeMm3, in mm^3. The analytic quantum needs this one " +
+                 "number: D^3 is linear in (start + confirmed) and the sphere constant cancels. " +
+                 "0 = not baked, so the quantum reads 0 and the driver reports the metric as " +
+                 "unavailable instead of guessing.")]
+        [SerializeField] private long sizeModelStartVolumeMm3;
 
         [Header("Feeder candidate")]
         [Tooltip("Kind the motor's whitelist must contain, or the absorb gate refuses the feed.")]
@@ -128,10 +127,10 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
         public void Start()
         {
-            // baselineVolumeUnits is the one input the setter cannot read from a getter, so print
+            // The start volume is the one input the setter cannot read from a getter, so print
             // the baked value: 0 here means the criteria importer did not bake it.
             Debug.Log("[ptf] setter build=" + SetterRevision
-                + " baselineVolumeUnits=" + sizeModelBaselineVolumeUnits);
+                + " startVolumeMm3=" + sizeModelStartVolumeMm3);
         }
 
         public void Update()
@@ -278,34 +277,34 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
         public bool IsCalibrated()
         {
-            return sizeModelBaselineVolumeUnits > 0f && motor != null;
+            return sizeModelStartVolumeMm3 > 0L && motor != null;
         }
 
         /// <summary>
         /// The two size-model readings at the CURRENT ball size, derived from one expression.
         /// </summary>
         /// <remarks>
-        /// The core radius is <c>cbrt(3 * cubic * total / 4pi)</c> and the semantic diameter is
-        /// proportional to it, so <c>D^3</c> is linear in the total volume units: the slope is
-        /// <c>D^3 / total</c> and one unit is <c>D / (3 * total)</c>. Computed on every read, so a
-        /// cached quantum from the previous request can never leak into a new run.
+        /// The semantic diameter is proportional to <c>cbrt(total mm^3)</c>, so <c>D^3</c> is
+        /// linear in the total volume: the slope is <c>D^3 / totalMm3</c> and one mm^3 is
+        /// <c>D / (3 * totalMm3)</c>. Computed on every read, so a cached quantum from the
+        /// previous request can never leak into a new run.
         /// </remarks>
-        private void ReadSizeModel(out float slopeCubedPerUnit, out float quantumM)
+        private void ReadSizeModel(out float slopeCubedPerMm3, out float quantumM)
         {
-            slopeCubedPerUnit = 0f;
+            slopeCubedPerMm3 = 0f;
             quantumM = 0f;
             if (motor == null) return;
-            if (sizeModelBaselineVolumeUnits <= 0f) return;
+            if (sizeModelStartVolumeMm3 <= 0L) return;
 
             float diameter = motor.GetSemanticDiameterWorldM();
             if (diameter <= 0f) return;
-            float totalUnits = sizeModelBaselineVolumeUnits + motor.GetConfirmedVolumeUnits();
-            if (totalUnits <= 0f) return;
+            long totalMm3 = sizeModelStartVolumeMm3 + motor.GetConfirmedVolumeMm3();
+            if (totalMm3 <= 0L) return;
 
             float cubed = diameter * diameter * diameter;
             if (cubed <= 0f) return;
-            slopeCubedPerUnit = cubed / totalUnits;
-            quantumM = diameter / (3f * totalUnits);
+            slopeCubedPerMm3 = cubed / (float)totalMm3;
+            quantumM = diameter / (3f * (float)totalMm3);
         }
 
         // ---- the loop ----------------------------------------------------------
@@ -325,9 +324,9 @@ namespace VRCKatamari.Labs.PhysicsTestField
             // The same one derivation the getters use, read fresh every frame: no cached slope and
             // no cached quantum, so a new run (whose round reset moved the ball back to the
             // baseline) can never inherit the previous run's numbers.
-            float slopeCubedPerUnit;
+            float slopeCubedPerMm3;
             float quantum;
-            ReadSizeModel(out slopeCubedPerUnit, out quantum);
+            ReadSizeModel(out slopeCubedPerMm3, out quantum);
 
             float error = diameter - targetM;
             lastErrorM = error;
@@ -350,9 +349,9 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return;
             }
 
-            if (slopeCubedPerUnit <= 0f)
+            if (slopeCubedPerMm3 <= 0f)
             {
-                // No size model: a one-unit-at-a-time crawl would spend the whole absorb budget
+                // No size model: a one-mm^3-at-a-time crawl would spend the whole absorb budget
                 // and still miss the target, so name the missing input instead of trying.
                 Fail("noSizeModel");
                 return;
@@ -368,11 +367,11 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
             float targetCubed = targetM * targetM * targetM;
             float remaining = targetCubed - cubed;
-            float wanted = remaining / slopeCubedPerUnit;
-            int units = (int)(wanted + 0.5f);
-            if (units < 1)
+            float wanted = remaining / slopeCubedPerMm3;
+            long units = (long)Mathf.Round(wanted);
+            if (units < 1L)
             {
-                // The next whole unit lands further from the target than the current size:
+                // The next whole mm^3 lands further from the target than the current size:
                 // this is the resolution floor, not a failure.
                 converged = true;
                 lastFailure = "";
@@ -381,7 +380,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
             // Refuse a feed that would move away from the target even though it is "one
             // unit": cbrt is compared in the cube domain to avoid a root.
-            float afterCubed = cubed + (float)units * slopeCubedPerUnit;
+            float afterCubed = cubed + (float)units * slopeCubedPerMm3;
             float beforeGap = targetCubed - cubed;
             float afterGap = targetCubed - afterCubed;
             if (beforeGap < 0f) beforeGap = -beforeGap;
@@ -395,8 +394,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
             generationSequence = generationSequence + 1;
             string itemId = "ptf-feeder-" + generationSequence.ToString();
-            bool queued = motor.SubmitCandidate(true, feederKind, feederBounds,
-                motor.GetCenterWorld(), (float)units, itemId, generationSequence);
+            bool queued = motor.SubmitCandidateMm3(true, feederKind, feederBounds,
+                motor.GetCenterWorld(), units, itemId, generationSequence);
             if (!queued)
             {
                 Fail("submitRefused");

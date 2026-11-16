@@ -40,12 +40,12 @@ MISSING = object()
 #: Fields an op may set on a prop (``aabb``/``absorb*`` follow from ``def``).
 PROP_SETTABLE = ("def", "kind", "zone", "group", "groupId", "position", "rotationQuat", "yaw",
                  "support", "stackedOn", "parent", "parentDerived", "valueUnits", "volumeK",
-                 "notes")
+                 "volumePenalty", "notes")
 
 #: Fields an op may set on a ``defs[]`` entry.  ``volumeK`` is the original's per-item
 #: volume factor (``Volume = k * a * b * c``, default 0.70); it is authored on the DEF so a
 #: whole type shares one number, and a ``props[].volumeK`` override exists for one-offs.
-DEF_SETTABLE = ("kind", "valueUnits", "model", "volumeK", "notes")
+DEF_SETTABLE = ("kind", "valueUnits", "model", "volumeK", "volumePenalty", "notes")
 
 #: Fields an op may set on a structure.
 STRUCTURE_SETTABLE = ("kind", "role", "shape", "center", "size", "rotationQuat", "yaw",
@@ -246,7 +246,9 @@ def refresh_expected(doc):
     expected = dict(level.get("expected") or {})
     totals = core.expected_totals(doc)
     expected["propCount"] = totals["propCount"]
-    expected["valueUnits"] = totals["valueUnits"]
+    # The content total is DERIVED growth in mm^3; the retired valueUnits total is dropped.
+    expected["growthMm3"] = totals["growthMm3"]
+    expected.pop("valueUnits", None)
     # The structure side is optional; refresh it only where the level declares it (a curve
     # ramp counts once in structureCount and by its segments in staticObbs).
     for key in ("structureCount", "staticObbs"):
@@ -530,6 +532,9 @@ class Editor:
             "cameras": len(doc.get("cameras") or []),
             "presets": len(doc.get("renderPresets") or []),
             "defs": len(doc.get("defs") or []),
+            "growthMm3": core.growth_mm3_total(doc),
+            # Legacy key kept so an older web client does not read `undefined`; it is the
+            # deprecated valueUnits total and reads 0 once the file is regenerated.
             "valueUnits": core.value_units_total(doc),
             "supportsDerived": support_geometry.count_derived(doc),
         }
@@ -867,7 +872,7 @@ class Editor:
     def op_add_prop(self, args, defer=False):
         _known(args, ("itemId", "def", "position", "yaw", "rotationQuat", "kind", "zone",
                       "group", "groupId", "support", "stackedOn", "parent", "valueUnits",
-                      "notes", "seat", "updateExpected"))
+                      "volumeK", "volumePenalty", "notes", "seat", "updateExpected"))
         self._require_open()
         new_doc = _deepcopy(self.doc)
         def_id = _string(args, "def")
@@ -918,13 +923,11 @@ class Editor:
             prop["parent"] = _string(args, "parent")
         if "notes" in args:
             prop["notes"] = _string(args, "notes")
-        value = args.get("valueUnits")
-        if value is None:
-            value = core.effective_value_units({"def": def_id}, catalog)
-        if value is None:
-            raise OpError("def %r declares no valueUnits; pass valueUnits or add a "
-                          "defs[] entry with `add_def`" % def_id)
-        prop["valueUnits"] = _integer({"valueUnits": value}, "valueUnits", minimum=1)
+        # `valueUnits` is DEPRECATED: growth is derived from aabb x k x penalty, so a prop
+        # needs no value argument at all.  An old caller may still pass one; it is kept on
+        # the row (and dropped by the canonical writer) but never used for growth.
+        if "valueUnits" in args:
+            prop["valueUnits"] = _integer(args, "valueUnits", minimum=1)
         new_doc.setdefault("props", []).append(prop)
         if args.get("seat"):
             seat_props(new_doc, {item_id})
@@ -981,7 +984,7 @@ class Editor:
                             extra={"id": structure_id, "structure": structure})
 
     def op_set(self, args, defer=False):
-        _known(args, ("id",) + PROP_SETTABLE + STRUCTURE_SETTABLE)
+        _known(args, ("id", "updateExpected") + PROP_SETTABLE + STRUCTURE_SETTABLE)
         self._require_open()
         entity_id = _string(args, "id")
         kind, _entry = find_entity(self.doc, entity_id)
@@ -997,6 +1000,8 @@ class Editor:
             self._set_structure(entry, args)
             fields = sorted(set(args) - {"id"})
             label = "set %s (%s)" % (entity_id, ",".join(fields))
+        if args.get("updateExpected"):
+            refresh_expected(new_doc)
         return self._mutate(new_doc, label, defer=defer,
                             extra={"type": kind, "entry": entry})
 
@@ -1038,9 +1043,12 @@ class Editor:
             else:
                 prop["parentDerived"] = _bool(args["parentDerived"], "parentDerived")
         if "valueUnits" in args:
+            # DEPRECATED: accepted for old callers, kept on the row, never used for growth.
             prop["valueUnits"] = _integer(args, "valueUnits", minimum=1)
         if "volumeK" in args:
             prop["volumeK"] = self._volume_k_field(args["volumeK"])
+        if "volumePenalty" in args:
+            prop["volumePenalty"] = self._volume_penalty_field(args["volumePenalty"])
 
     def _volume_k_field(self, value):
         """A validated ``volumeK``: finite, ``0 < k <= 32`` (core.volume_k_error)."""
@@ -1050,6 +1058,16 @@ class Editor:
         reason = core.volume_k_error(value)
         if reason is not None:
             raise OpError("volumeK %r %s" % (value, reason))
+        return core.rounded(float(value), 4)
+
+    def _volume_penalty_field(self, value):
+        """A validated ``volumePenalty``: finite, ``0 < penalty <= 1`` (core rule)."""
+        if value is None:
+            raise OpError("volumePenalty cannot be cleared to null; delete the key to "
+                          "restore the 0.80 default")
+        reason = core.volume_penalty_error(value)
+        if reason is not None:
+            raise OpError("volumePenalty %r %s" % (value, reason))
         return core.rounded(float(value), 4)
 
     def _set_structure(self, structure, args):
@@ -1228,7 +1246,8 @@ class Editor:
                             defer=defer, extra=diff)
 
     def op_add_def(self, args, defer=False):
-        _known(args, ("id", "kind", "valueUnits", "model", "volumeK", "notes"))
+        _known(args, ("id", "kind", "valueUnits", "model", "volumeK", "volumePenalty",
+                      "notes"))
         self._require_open()
         def_id = _string(args, "id")
         new_doc = _deepcopy(self.doc)
@@ -1248,16 +1267,18 @@ class Editor:
                 entry["model"] = _string(args, "model")
         if "volumeK" in args:
             entry["volumeK"] = self._volume_k_field(args["volumeK"])
+        if "volumePenalty" in args:
+            entry["volumePenalty"] = self._volume_penalty_field(args["volumePenalty"])
         if "notes" in args:
             entry["notes"] = _string(args, "notes")
-        if "valueUnits" not in entry:
-            raise OpError("def %r needs valueUnits (it is what the def is worth)" % def_id)
+        # `valueUnits` is no longer required: growth is DERIVED from aabb/k/penalty, and
+        # the deprecated key is only kept when a caller still passes it (old scripts).
         return self._mutate(new_doc, "add_def %s" % def_id, defer=defer,
                             extra={"def": entry})
 
     def op_set_def(self, args, defer=False):
-        """Set one ``defs[]`` row's fields, ``volumeK`` included (undoable, canonical write)."""
-        _known(args, ("id",) + DEF_SETTABLE)
+        """Set one ``defs[]`` row's fields, ``volumeK``/``volumePenalty`` included."""
+        _known(args, ("id", "updateExpected") + DEF_SETTABLE)
         self._require_open()
         def_id = _string(args, "id")
         new_doc = _deepcopy(self.doc)
@@ -1284,11 +1305,13 @@ class Editor:
         if "notes" in args:
             entry["notes"] = _string(args, "notes")
         fields = sorted(set(args) - {"id"})
+        if args.get("updateExpected"):
+            refresh_expected(new_doc)
         return self._mutate(new_doc, "set_def %s (%s)" % (def_id, ",".join(fields)),
                             defer=defer, extra={"def": entry})
 
     def op_expected(self, args, defer=False):
-        _known(args, ("propCount", "valueUnits", "structureCount", "staticObbs",
+        _known(args, ("propCount", "growthMm3", "valueUnits", "structureCount", "staticObbs",
                       "overlapBudget", "fromDocument"))
         self._require_open()
         new_doc = _deepcopy(self.doc)
@@ -1297,14 +1320,16 @@ class Editor:
         if args.get("fromDocument", True):
             totals = core.expected_totals(new_doc)
             expected["propCount"] = totals["propCount"]
-            expected["valueUnits"] = totals["valueUnits"]
+            expected["growthMm3"] = totals["growthMm3"]
+            expected.pop("valueUnits", None)
             for key in ("structureCount", "staticObbs"):
                 if key in expected:
                     expected[key] = totals[key]
         if "propCount" in args:
             expected["propCount"] = _integer(args, "propCount", minimum=0)
-        if "valueUnits" in args:
-            expected["valueUnits"] = _integer(args, "valueUnits", minimum=0)
+        if "growthMm3" in args:
+            # Informational: canonical_doc always re-derives it from the props.
+            expected["growthMm3"] = _integer(args, "growthMm3", minimum=0)
         if "structureCount" in args:
             expected["structureCount"] = _integer(args, "structureCount", minimum=0)
         if "staticObbs" in args:

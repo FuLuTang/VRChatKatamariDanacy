@@ -90,24 +90,28 @@ namespace VRCKatamari.Tests
             return (float)f.GetValue(motor);
         }
 
-        /// <summary>Baseline units that put the start ball at a chosen semantic diameter.</summary>
-        private void SetStartDiameter(float diameterM, float cubicPerUnit)
+        /// <summary>
+        /// The fixed-point start volume that puts the start ball at a chosen semantic
+        /// diameter (steps C+D: <c>V = pi/6 * d^3 * 1e9</c> mm^3; there is no per-unit
+        /// constant left to set).
+        /// </summary>
+        private void SetStartDiameter(float diameterM)
         {
-            float volume = (4f / 3f) * Mathf.PI * Mathf.Pow(diameterM * 0.5f, 3f);
-            SetField("cubicMetersPerVolumeUnit", cubicPerUnit);
-            SetField("baselineVolumeUnits", volume / cubicPerUnit);
+            float volumeM3 = (4f / 3f) * Mathf.PI * Mathf.Pow(diameterM * 0.5f, 3f);
+            SetField("startVolumeMm3", (long)Mathf.Round(volumeM3 * 1e9f));
             Invoke("RecomputeConfirmedAndSize");
         }
 
         /// <summary>
         /// The ledger validates against its own confirmed array, not against the motor's
-        /// cached field, so a unit test has to set both to describe "5 units confirmed".
+        /// cached field, so a unit test has to set both. The quantity is mm^3 now (steps
+        /// C+D); these tests use a few mm^3 as "some confirmed volume", which is all the
+        /// bank rule needs (it refuses only zero).
         /// </summary>
         private void SetConfirmedUnits(int units)
         {
             // The motor's ledger mirror and its confirmed column are 64-bit
-            // (Docs/OPEN_DECISIONS.md (r) step A), so both writes box a long; the unit and
-            // the numbers in these tests are unchanged.
+            // (Docs/OPEN_DECISIONS.md (r)), so both writes box a long.
             SetField("unbankedVolumeUnits", (long)units);
             FieldInfo f = motorType.GetField("confirmedVolumes", Any);
             Assert.IsNotNull(f, "confirmedVolumes field not found");
@@ -127,7 +131,7 @@ namespace VRCKatamari.Tests
         [Test]
         public void ATinyBallRefusesWithTooSmall()
         {
-            SetStartDiameter(0.53f, 0.0041f);
+            SetStartDiameter(0.53f);
             Assert.Less(GetField("semanticDiameterWorldM"), 0.55f, "the probe ball must start under the gate");
             Assert.AreEqual(4, BankReason("r-too-small", 5),
                 "a ball under minConversionDiameterWorldM must report tooSmall(4)");
@@ -136,7 +140,7 @@ namespace VRCKatamari.Tests
         [Test]
         public void ABigEnoughBallWithVolumeSucceeds()
         {
-            SetStartDiameter(0.57f, 0.0041f);
+            SetStartDiameter(0.57f);
             Assert.Greater(GetField("semanticDiameterWorldM"), 0.55f, "the probe ball must start over the gate");
             Assert.AreEqual(0, BankReason("r-ok", 5), "a bank attempt with volume must report ok(0)");
         }
@@ -144,7 +148,7 @@ namespace VRCKatamari.Tests
         [Test]
         public void ANonFiniteNowRefusesAsInvalidInput()
         {
-            SetStartDiameter(0.57f, 0.0041f);
+            SetStartDiameter(0.57f);
             SetConfirmedUnits(5);
             object[] args = new object[] { float.NaN, "r-nan", 0 };
             Invoke("TryBankWithReason", args);
@@ -154,14 +158,14 @@ namespace VRCKatamari.Tests
         [Test]
         public void AnEmptyRequestIdRefuses()
         {
-            SetStartDiameter(0.57f, 0.0041f);
+            SetStartDiameter(0.57f);
             Assert.AreEqual(2, BankReason("", 5), "an empty request id must report invalidRequestId(2)");
         }
 
         [Test]
         public void WithNothingUnbankedTheRefusalIsNothingToBank()
         {
-            SetStartDiameter(0.57f, 0.0041f);
+            SetStartDiameter(0.57f);
             Assert.AreEqual(5, BankReason("r-empty", 0),
                 "a finished conversion leaves nothing to bank, which is nothingToBank(5)");
         }

@@ -624,14 +624,14 @@ namespace VRCKatamari.Editor.PhysicsTestField
         /// Mirrors the one motor number the setter's analytic diameter quantum needs.
         /// </summary>
         /// <remarks>
-        /// The quantum is <c>D / (3 * (baseline + confirmed))</c>: <c>D^3</c> is linear in the total
-        /// volume units, so the pricing constant and the semantic/core ratio cancel and
-        /// <c>baselineVolumeUnits</c> is the only input left. The motor has no getter for it, so it
-        /// is read from the SCENE motor's serialized field here - not typed as a literal - which
-        /// keeps one copy and makes "change the motor, re-import" the whole maintenance story. When
-        /// the driver has no motor link, the setter is left at 0 and the driver reports
-        /// <c>size_accuracy</c> as unavailable with <c>reason=sizeModelMissing</c> instead of
-        /// dividing by a guess.
+        /// The quantum is <c>D / (3 * totalMm3)</c>: <c>D^3</c> is linear in the total volume, so
+        /// the sphere constant and the semantic/core ratio cancel and the START volume is the
+        /// only input left. Since steps C+D that input is <c>startVolumeMm3</c> (fixed-point
+        /// mm^3), and a level's <c>startDiameterWorldM</c> is the authoritative per-level form:
+        /// this reads the diameter when it is set and otherwise the serialized start volume, so
+        /// one conversion (the size model's) decides the baked number. When the driver has no
+        /// motor link, the setter is left at 0 and the driver reports <c>size_accuracy</c> as
+        /// unavailable with <c>reason=sizeModelMissing</c> instead of dividing by a guess.
         /// </remarks>
         private static int WriteSizeModel(LabBallSizeSetter setter, PhysicsTestFieldDriver driver,
             Report report)
@@ -647,25 +647,41 @@ namespace VRCKatamari.Editor.PhysicsTestField
                 return 0;
             }
 
-            SerializedProperty baseline = new SerializedObject(motor).FindProperty("baselineVolumeUnits");
-            if (baseline == null || baseline.floatValue <= 0f)
+            var motorSerialized = new SerializedObject(motor);
+            SerializedProperty startDiameter = motorSerialized.FindProperty("startDiameterWorldM");
+            SerializedProperty startVolume = motorSerialized.FindProperty("startVolumeMm3");
+            long startVolumeMm3 = 0L;
+            float diameter = startDiameter == null ? 0f : startDiameter.floatValue;
+            if (diameter > 0f)
             {
-                report.Note("cannot read a positive baselineVolumeUnits from '" + motor.name +
-                            "': the size model was not baked, so size_accuracy reports " +
-                            "reason=sizeModelMissing");
+                if (!SizeModelMath.TrySphereVolumeMm3(diameter, 1f, out startVolumeMm3))
+                {
+                    startVolumeMm3 = 0L;
+                }
+            }
+            else if (startVolume != null)
+            {
+                startVolumeMm3 = startVolume.longValue;
+            }
+            if (startVolumeMm3 <= 0L)
+            {
+                report.Note("cannot read a positive start volume (startDiameterWorldM / " +
+                            "startVolumeMm3) from '" + motor.name + "': the size model was not " +
+                            "baked, so size_accuracy reports reason=sizeModelMissing");
                 return 0;
             }
 
             var serialized = new SerializedObject(setter);
-            SerializedProperty target = RequireProperty(serialized, "sizeModelBaselineVolumeUnits",
+            SerializedProperty target = RequireProperty(serialized, "sizeModelStartVolumeMm3",
                 report);
             if (target == null) return 0;
-            target.floatValue = baseline.floatValue;
+            target.longValue = startVolumeMm3;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(setter);
-            report.Note("size model: baselineVolumeUnits=" + baseline.floatValue.ToString("0.####") +
-                        " read from the scene motor; re-import after changing the motor's size " +
-                        "fields (baselineVolumeUnits / cubicMetersPerVolumeUnit)");
+            report.Note("size model: startVolumeMm3=" + startVolumeMm3 +
+                        " (read from the scene motor" +
+                        (diameter > 0f ? " startDiameterWorldM=" + diameter.ToString("0.####") : "") +
+                        "); re-import after changing the motor's start size or the global cap");
             return 1;
         }
 

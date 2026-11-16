@@ -147,28 +147,26 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void AbsorbValueBecomesExactlyOneLedgerGain()
+        public void AbsorbGrowthBecomesExactlyTheSameLedgerGain()
         {
+            // Since steps C+D the item's growth IS the gain: round(penalty*k*a*b*c*1e9) mm^3,
+            // priced once at import. There is no unit scaling, no rounding and no float
+            // truncation left on this path; the only refusal is a non-positive gain.
             long gain;
-            Assert.IsTrue(PickupAbsorbMath.TryAbsorbValueToLedgerGain(2f, out gain));
-            Assert.AreEqual(2, gain);
+            Assert.IsTrue(PickupAbsorbMath.TryAbsorbGrowthToLedgerGain(2L, out gain));
+            Assert.AreEqual(2L, gain);
 
-            // Neither model defines a rounding rule, so a fractional value is refused
-            // rather than rounded into a total. A rejected call zeroes its out value.
             long rejected;
-            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(2.5f, out rejected));
-            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(-1f, out rejected));
-            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(float.NaN, out rejected));
-            // The ledger's gain is a 64-bit quantity (Docs/OPEN_DECISIONS.md (r) step A),
-            // so the representable-range bound moved from 2^31 to 2^63. The same probe
-            // value (2147483648) is a real gain now, and the refusal sits at the value the
-            // ledger genuinely cannot hold - stronger than before, not weaker: it pins
-            // both sides of the new bound.
-            Assert.IsTrue(PickupAbsorbMath.TryAbsorbValueToLedgerGain(3000000000f, out rejected));
+            Assert.IsFalse(PickupAbsorbMath.TryAbsorbGrowthToLedgerGain(0L, out rejected));
+            Assert.AreEqual(0L, rejected);
+            Assert.IsFalse(PickupAbsorbMath.TryAbsorbGrowthToLedgerGain(-1L, out rejected));
+
+            // 64-bit exactness, both sides: a gain past int.MaxValue and one at long.MaxValue
+            // pass through unchanged (the retired float path would have rounded the first).
+            Assert.IsTrue(PickupAbsorbMath.TryAbsorbGrowthToLedgerGain(3000000000L, out rejected));
             Assert.AreEqual(3000000000L, rejected);
-            Assert.IsFalse(PickupAbsorbMath.TryAbsorbValueToLedgerGain(9223372036854775808f,
-                out rejected));
-            Assert.AreEqual(0, rejected);
+            Assert.IsTrue(PickupAbsorbMath.TryAbsorbGrowthToLedgerGain(long.MaxValue, out rejected));
+            Assert.AreEqual(long.MaxValue, rejected);
 
             LedgerTestHost ledger = PlayingLedger();
             Assert.IsTrue(ledger.SubmitClaim("rock", 1, "p1", 0, 1));

@@ -7,30 +7,19 @@ using VRCKatamari.Pickup;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins the motor side of the ORIGINAL absorb gate (owner decision 2026-11-16): the
-    /// ball's semantic diameter becomes a whole-millimetre number, the retired per-config
-    /// ratio/ceiling fields are gone, and the gate's constants are the original's.
+    /// Pins the motor side of the ORIGINAL absorb gate with the fixed-point size model
+    /// (Docs/OPEN_DECISIONS.md (r) C+D): the ball's diameter floors to whole millimetres, the
+    /// retired per-config ratio/ceiling fields stay gone, and the sanity bound is derived from
+    /// the ONE global cap.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Like CandidateQueueIdempotencyTests, the motor is reached through reflection: this
-    /// test assembly does not reference UdonSharp.Runtime, so constructing the behaviour
-    /// directly would drag the SDK in. Only public getters and the ledger mirror field are
-    /// touched.
-    /// </para>
-    /// <para>
-    /// What this file is for: the retired gate was first an absolute 1 m comparison, then a
-    /// linear `diameter * ratio` one, then a ball-relative volume limit with a serialized
-    /// 512 m^3 ceiling - and every one of them was undone by a serialized default at least
-    /// once. The facts below are what keep the original rule from being undone the same
-    /// way: the ball side is a whole-millimetre DIAMETER (not a volume limit, not a
-    /// serialized knob), the rule constants are constants, and the retired fields are
-    /// asserted absent so a reintroduced default fails here first.
-    /// </para>
-    /// <para>
-    /// Every expected number is derived in the comment from the original's formula
-    /// (`Req = floor(1000*cbrt(60*k*a*b*c/pi))`) and the project's size calibration, never
-    /// copied from the implementation.
+    /// Since steps C+D the motor's size inputs are <c>startVolumeMm3</c> and
+    /// <c>maxBallDiameterM</c>; the retired fields this file guards are
+    /// <c>maxItemVolumeWorldM3</c>, <c>absorbVolumeRatio</c> and the per-level
+    /// <c>maxCoreRadiusWorldM</c>. Numbers are hand calculations from the original's formula
+    /// (<c>Req = floor(1000*cbrt(60*k*a*b*c/pi))</c>) and the sphere relation, never copied
+    /// from the implementation.
     /// </para>
     /// </remarks>
     public class AbsorbSizeLimitTests
@@ -38,15 +27,8 @@ namespace VRCKatamari.Tests
         private const string MotorTypeName =
             "VRCKatamari.BallMotor.KatamariBallMotor, VRCKatamari.Runtime";
 
-        // 1356 confirmed units is the 2.20 m cap (SizeCalibrationTests, round_model.py).
-        private const float UnitsAtCap = 1356f;
-
-        // The ball's volume is (baselineVolumeUnits + units) * cubicMetersPerVolumeUnit,
-        // i.e. 3.4390244 + units, times 0.0041 m^3. Zero units is the 0.29974 m start
-        // ball: 3.4390244 * 0.0041 = 0.0141 m^3. At the cap: 1359.4390244 * 0.0041 =
-        // 5.5737 m^3, and (pi/6) * 2.20^3 = 5.5752 m^3 agrees to four digits.
-        private const float StartBallVolumeWorldM3 = 0.0141f;
-        private const float CapBallVolumeWorldM3 = 5.5737f;
+        // pi/6 * 0.2997^3 * 1e9 mm^3, the serialized start volume.
+        private const long StartMm3 = 14094798L;
 
         private GameObject host;
         private Component motor;
@@ -58,60 +40,43 @@ namespace VRCKatamari.Tests
             motorType = Type.GetType(MotorTypeName);
             if (motorType == null)
             {
-                foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+                foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
                 {
-                    Type found = a.GetType("VRCKatamari.BallMotor.KatamariBallMotor");
-                    if (found != null) { motorType = found; break; }
+                    motorType = assembly.GetType("VRCKatamari.BallMotor.KatamariBallMotor");
+                    if (motorType != null) break;
                 }
             }
-            Assert.IsNotNull(motorType, "KatamariBallMotor type not loaded");
 
-            host = new GameObject("AbsorbSizeLimitTests");
+            Assert.IsNotNull(motorType, "KatamariBallMotor type not loaded");
+            host = new GameObject("AbsorbSizeLimitTestsMotor");
             motor = host.AddComponent(motorType);
             Assert.IsNotNull(motor, "AddComponent(KatamariBallMotor) returned null");
-
-            MethodInfo start = motorType.GetMethod("Start",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            Assert.IsNotNull(start, "Start not found; sizes would stay uninitialised");
-            start.Invoke(motor, null);
+            Invoke("Start");
         }
 
         [TearDown]
         public void TearDown()
         {
             if (host != null) UnityEngine.Object.DestroyImmediate(host);
+            host = null;
+            motor = null;
         }
 
         [Test]
-        public void TheGateConstantsAreTheOriginals()
+        public void TheRetiredSizeFieldsAreGone()
         {
-            // 0.70 default factor and k <= 32 (PARITY_AUDIT G13), 10x the ball's volume
-            // (G07), and a sanity ceiling that is NOT the retired 512 m^3 item cap.
-            Assert.AreEqual(0.70f, PickupAbsorbMath.DefaultVolumeK, 1e-6f);
-            Assert.AreEqual(32f, PickupAbsorbMath.MaxVolumeK, 1e-6f);
-            Assert.AreEqual(10f, PickupAbsorbMath.AbsorbVolumeRatio, 1e-6f);
-            Assert.AreEqual(1000f, PickupAbsorbMath.MaxItemVolumeSanityWorldM3, 1e-6f);
-
-            // The ceiling is far above the largest item the ball cap can absorb:
-            // (pi/6) * 2.20^3 / 10 = 0.5575 m^3, so 1000 m^3 is ~1,792x that. A ceiling at
-            // or below the cap ball's item limit would re-create the retired coupling.
-            float capItemLimit = CapBallVolumeWorldM3 / PickupAbsorbMath.AbsorbVolumeRatio;
-            Assert.Greater(PickupAbsorbMath.MaxItemVolumeSanityWorldM3, capItemLimit * 500f,
-                "the sanity ceiling must not bind a legal ball");
-        }
-
-        [Test]
-        public void TheRetiredRatioAndCeilingFieldsAreGone()
-        {
-            // A scene or prefab may still serialize these names; Unity ignores dead keys.
-            // A reintroduced FIELD would mean a config can silently stop being the
-            // original's gate, which is exactly what the owner decision forbids.
-            Assert.IsNull(motorType.GetField("maxItemVolumeWorldM3",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public),
+            // A scene or prefab may still serialize these names; Unity ignores dead keys. A
+            // reintroduced FIELD would let a config silently stop being the original's gate.
+            Assert.IsNull(FieldOrNull("maxItemVolumeWorldM3"),
                 "the 512 m^3 item ceiling must stay retired");
-            Assert.IsNull(motorType.GetField("absorbVolumeRatio",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public),
+            Assert.IsNull(FieldOrNull("absorbVolumeRatio"),
                 "the serialized ratio must stay retired (PickupAbsorbMath.AbsorbVolumeRatio)");
+            Assert.IsNull(FieldOrNull("maxCoreRadiusWorldM"),
+                "the per-level 1.1 m core cap is replaced by the global maxBallDiameterM");
+            Assert.IsNull(FieldOrNull("baselineVolumeUnits"),
+                "the integer-unit baseline is retired (step C)");
+            Assert.IsNull(FieldOrNull("cubicMetersPerVolumeUnit"),
+                "the per-unit volume constant is retired (step C)");
             Assert.IsNull(motorType.GetMethod("GetAbsorbVolumeLimitWorldM3",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public),
                 "the per-step volume limit is not the gate's quantity any more");
@@ -122,13 +87,14 @@ namespace VRCKatamari.Tests
         {
             float diameter = Getter("GetSemanticDiameterWorldM");
             float ballMm = Getter("GetAbsorbGateDiameterMm");
-            Assert.AreEqual(0.29974f, diameter, 0.005f);
-            // 0.29974 m * 1000 = 299.74 mm -> 299 mm (floored, as the original does).
-            Assert.AreEqual(299f, ballMm, 1e-6f);
+            Assert.AreEqual(0.2997f, diameter, 0.005f);
+            // floor(1000 * 0.2997 + 1e-3) = 300 for the exact 0.2997 sphere; the stored start
+            // volume rounds to 0.2997 m, so the reading is 299 or 300 depending on the last
+            // float bit - assert the FLOOR, not a guessed integer.
+            Assert.AreEqual(Mathf.Floor(diameter * 1000f + 1e-3f), ballMm, 1e-6f);
 
-            // The start ball therefore eats a 0.10 m cube (Req 237 mm) and not a 0.30 m
-            // cube (Req 712 mm) at k=0.70; both numbers come from
-            // Req = floor(1000*cbrt(60*0.70*a*b*c/pi)).
+            // At k=0.70 a 0.10 m cube is Req 237 mm (eaten by the start ball) and a 0.30 m
+            // cube is Req 712 mm (not). Both hand-calculated from the original formula.
             Vector3 small = new Vector3(0.10f, 0.10f, 0.10f);
             Vector3 large = new Vector3(0.30f, 0.30f, 0.30f);
             Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(small,
@@ -136,131 +102,95 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(large,
                 PickupAbsorbMath.DefaultVolumeK, diameter));
 
-            // The ball's own volume is still the calibrated 0.0141 m^3 - the gate no longer
-            // reads it, but the size model that produces the diameter does. The ball's volume
-            // is (baseline + confirmed) * cubicMetersPerVolumeUnit, NOT confirmed alone: the
-            // baseline is 3.4390244 units of the same 0.0041 m^3 unit (0.0141 m^3), so a
-            // zero-confirmed ball still has a volume. LabBallSizeSetter is the other reader
-            // that adds the two, and this assertion is the one that would catch a dropped
-            // baseline in the size model.
-            SetField("unbankedVolumeUnits", 0L);
-            Invoke("RecomputeConfirmedAndSize");
-            float ballVolumeWorldM3 = (Field("baselineVolumeUnits") +
-                (float)InvokeGetter("GetConfirmedVolumeUnits")) * Field("cubicMetersPerVolumeUnit");
-            Assert.AreEqual(StartBallVolumeWorldM3, ballVolumeWorldM3, 1e-4f);
+            // The ball's total volume is start + confirmed in mm^3 (never a float sum).
+            Assert.AreEqual(StartMm3, (long)GetField("startVolumeMm3"));
+            Assert.AreEqual(StartMm3, (long)InvokeGetter("GetConfirmedVolumeMm3"),
+                "with nothing absorbed the ledger growth is zero");
+            Assert.AreEqual((float)(StartMm3 / 1e9),
+                (float)InvokeGetter("GetConfirmedVolumeCubicMetres"), 1e-6f);
         }
 
         [Test]
-        public void AFullyGrownBallCanTakeAOnePointTwoMetrePlank()
+        public void TheCapIsTwoPointTwoMetresOnDemandAndThirtyMetresByDefault()
         {
-            // Drive the size stage to the cap the way a round would: confirmed units are
-            // the only input, so writing the unbanked total and recomputing is exactly
-            // what a committed absorb does.
-            SetField("unbankedVolumeUnits", (long)UnitsAtCap);
+            // The motor's default cap is the ONE global parameter (30 m).
+            Assert.AreEqual(30f, (float)FieldOrNull("maxBallDiameterM"), 1e-6f);
+
+            // A level may pin a smaller cap through that same field; the 2.20 m content
+            // ladder is then a data choice, not a second code path.
+            SetField("maxBallDiameterM", 2.2f);
+            // Drive the size stage to the cap: pi/6 * 2.2^3 = 5,575,279,763 mm^3 total, minus
+            // the start volume. Writing the ledger growth and recomputing is exactly what a
+            // committed absorb does.
+            SetField("unbankedVolumeUnits", 5575279763L - StartMm3);
             Invoke("RecomputeConfirmedAndSize");
 
             float diameter = Getter("GetSemanticDiameterWorldM");
-            float ballMm = Getter("GetAbsorbGateDiameterMm");
-            // SizeCalibrationTests pins 1356 units at 2.20 m to a CENTIMETRE, but the derived
-            // diameter there is 2.199792 m: the cap is a core-RADIUS cap (1.1 m), and the cap
-            // VOLUME (4*pi/3 * 1.1^3 = 5.575280 m^3) is only reached at V = (3.4390244 + 1356)
-            // * 0.0041 = 5.573700 m^3 + 0.385 volume units. The gate's ball side floors the
-            // REAL diameter (floor(1000*2.199792 + 1e-3) = 2199), so 2199 is the correct
-            // reading - 2200 would mean it rounded a length the original floors. The
-            // micrometre guard cannot and must not close a 0.2 mm gap.
-            Assert.AreEqual(2.20f, diameter, 0.01f);
-            Assert.AreEqual(2199f, ballMm, 1e-6f);
-
-            // A 1.2 x 0.1 x 0.1 m plank is 0.012 m^3 of bbox, 0.0084 m^3 at k=0.70, so
-            // Req = floor(1000*cbrt(60*0.0084/pi)) = 543 mm, i.e. 4x inside the cap ball.
-            Vector3 plank = new Vector3(1.2f, 0.1f, 0.1f);
-            float reqMm;
-            Assert.IsTrue(PickupAbsorbMath.TryComputePickupReqDiameterMm(plank,
-                PickupAbsorbMath.DefaultVolumeK, out reqMm));
-            Assert.AreEqual(543f, reqMm, 1e-6f);
-            Assert.Less(reqMm, ballMm, "a 1.2 m plank must be within a full ball's gate");
-            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(plank,
-                PickupAbsorbMath.DefaultVolumeK, diameter));
-
-            // Saturate the cap the way a round's last commit can: one absorb may land above
-            // the cap volume, and the mapping then returns the cap parameter itself. That is
-            // the only place the ball's diameter is exactly 2.20 m and its whole-mm reading
-            // exactly 2200 (2.2f * 1000f is exactly 2200.0f, so here the floor is decided by
-            // the saturation, not by the boundary guard).
-            SetField("unbankedVolumeUnits", (long)UnitsAtCap + 1L);
-            Invoke("RecomputeConfirmedAndSize");
-            Assert.AreEqual(2.20f, Getter("GetSemanticDiameterWorldM"), 1e-6f);
+            Assert.AreEqual(2.2f, diameter, 0f, "saturation is exact, not approximate");
             Assert.AreEqual(2200f, Getter("GetAbsorbGateDiameterMm"), 1e-6f);
         }
 
         [Test]
-        public void AnInvalidRadiusStillReportsMinusOne()
+        public void AFullyGrownBallCanTakeAnObjectTheOldCeilingWouldHaveRefused()
         {
-            // A broken size reading (zero diameter) is not a throw: the gate's ball side
-            // reports -1 so a reader cannot mistake it for "a very small ball".
+            // A 5 m cube is 125 m^3 of bbox; at k=0.70 the item volume is 87.5 m^3 and the
+            // 30 m ball's gate allows up to (pi/6*30^3)/10 = 1,413.7 m^3, so it is food. The
+            // retired 512 m^3 ceiling would also have passed this one, but the SANITY bound
+            // must not: a broken 100 m cube (1,000,000 m^3) is beyond it and reads blocking.
+            SetField("unbankedVolumeUnits", 0L);
             Invoke("RecomputeConfirmedAndSize");
-            SetField("semanticDiameterWorldM", float.NaN);
-            Assert.AreEqual(-1f, Getter("GetAbsorbGateDiameterMm"), 1e-6f);
-            SetField("semanticDiameterWorldM", -1f);
-            Assert.AreEqual(-1f, Getter("GetAbsorbGateDiameterMm"), 1e-6f);
+            float diameter = Getter("GetSemanticDiameterWorldM");
+            Vector3 huge = new Vector3(5f, 5f, 5f);
+            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(huge,
+                PickupAbsorbMath.DefaultVolumeK, diameter),
+                "a 5 m cube is absorbable by a 30 m ball");
+            Vector3 broken = new Vector3(100f, 100f, 100f);
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(broken,
+                PickupAbsorbMath.DefaultVolumeK, diameter),
+                "the sanity bound must refuse a broken bounds triple, not call it infinite");
         }
 
-        private float Field(string name)
+        // -- reflection helpers -------------------------------------------------
+
+        private FieldInfo FieldOrNull(string name)
         {
-            FieldInfo field = motorType.GetField(name,
+            return motorType.GetField(name,
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            Assert.IsNotNull(field, "field " + name + " not found");
-            return (float)field.GetValue(motor);
         }
 
-        private void SetField(string name, float value)
+        private object GetField(string name)
         {
-            FieldInfo field = motorType.GetField(name,
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            Assert.IsNotNull(field, "field " + name + " not found");
-            field.SetValue(motor, value);
+            FieldInfo fieldInfo = FieldOrNull(name);
+            Assert.IsNotNull(fieldInfo, name + " field not found on KatamariBallMotor");
+            return fieldInfo.GetValue(motor);
         }
 
-        private void SetField(string name, int value)
+        private void SetField(string name, object value)
         {
-            FieldInfo field = motorType.GetField(name,
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            Assert.IsNotNull(field, "field " + name + " not found");
-            field.SetValue(motor, value);
-        }
-
-        // The ledger mirror is 64-bit (Docs/OPEN_DECISIONS.md (r) step A): reflection
-        // assigns a boxed long to it, never a boxed int, which would throw.
-        private void SetField(string name, long value)
-        {
-            FieldInfo field = motorType.GetField(name,
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            Assert.IsNotNull(field, "field " + name + " not found");
-            field.SetValue(motor, value);
-        }
-
-        private float Getter(string name)
-        {
-            MethodInfo method = motorType.GetMethod(name,
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            Assert.IsNotNull(method, "getter " + name + " not found");
-            return (float)method.Invoke(motor, null);
-        }
-
-        private object InvokeGetter(string name)
-        {
-            MethodInfo method = motorType.GetMethod(name,
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            Assert.IsNotNull(method, "getter " + name + " not found");
-            return method.Invoke(motor, null);
+            FieldInfo fieldInfo = FieldOrNull(name);
+            Assert.IsNotNull(fieldInfo, name + " field not found on KatamariBallMotor");
+            fieldInfo.SetValue(motor, value);
         }
 
         private void Invoke(string name)
         {
-            MethodInfo method = motorType.GetMethod(name,
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            Assert.IsNotNull(method, "method " + name + " not found");
+            MethodInfo method = motorType.GetMethod(name, BindingFlags.Instance |
+                BindingFlags.NonPublic | BindingFlags.Public);
+            Assert.IsNotNull(method, name + " method not found on KatamariBallMotor");
             method.Invoke(motor, null);
+        }
+
+        private float Getter(string name)
+        {
+            return (float)InvokeGetter(name);
+        }
+
+        private object InvokeGetter(string name)
+        {
+            MethodInfo method = motorType.GetMethod(name, BindingFlags.Instance |
+                BindingFlags.NonPublic | BindingFlags.Public);
+            Assert.IsNotNull(method, name + " getter not found on KatamariBallMotor");
+            return method.Invoke(motor, null);
         }
     }
 }

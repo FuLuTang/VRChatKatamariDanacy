@@ -193,12 +193,10 @@ namespace VRCKatamari.Tests
             CollectionAssert.IsEmpty(Mismatches(new[] { "huge_rock" }, hostRows, written),
                 "the host row must read back as declared");
 
-            // 3. The ledger. The motor's candidate slot is still the size-model float (step B
-            //    deliberately leaves that domain alone), and this value is handed over exactly
-            //    as PickupFieldHost.SubmitProp hands it over. 3,000,000,000 is representable in
-            //    float32 (it is a multiple of 256), which is why the ledger sees the declaration
-            //    itself and not a rounded neighbour.
-            Assert.IsTrue(PickupAbsorbMath.TryAbsorbValueToLedgerGain(hostRows[0], out long gain),
+            // 3. The ledger. Since steps C+D the host hands the motor a `long` growth
+            //    (`propGrowthMm3`), so there is no float hop left on this path: the gain is
+            //    the column's number, exactly.
+            Assert.IsTrue(PickupAbsorbMath.TryAbsorbGrowthToLedgerGain(hostRows[0], out long gain),
                 "a 64-bit declaration must map to a ledger gain");
             Assert.AreEqual(pastIntMax, gain, "the gain must be the declared number");
 
@@ -217,19 +215,14 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void TheMotorCandidateSlotStaysFloatSoOnlyFloatExactValuesArriveUnchanged()
+        public void ALongGrowthPassesThroughUnchangedAtAnyMagnitude()
         {
-            // Step B's boundary, recorded rather than hidden: the host column, the importer and
-            // the read-back are 64-bit, but the motor's candidate slot (pendingValues, the size
-            // model's domain) is still a float. A declared value above 2^24 therefore reaches
-            // the ledger unchanged only when it is representable in float32. 2,147,483,649 is
-            // not (float32's spacing there is 256), so it arrives as 2,147,483,648; step C, which
-            // replaces the unit and this hop, is where that disappears. This is not a step-B
-            // regression: before step B such a declaration was refused by the editor guard, so
-            // no shipped row can carry one.
-            Assert.IsTrue(PickupAbsorbMath.TryAbsorbValueToLedgerGain(2147483649L, out long rounded));
-            Assert.AreEqual(2147483648L, rounded,
-                "the float candidate slot is unchanged by step B; 2^31+1 is not float-exact");
+            // The candidate queue carries a long now (steps C+D), so the retired float-slot
+            // rounding is gone: 2^31+1 and long.MaxValue both arrive unchanged.
+            Assert.IsTrue(PickupAbsorbMath.TryAbsorbGrowthToLedgerGain(2147483649L, out long odd));
+            Assert.AreEqual(2147483649L, odd);
+            Assert.IsTrue(PickupAbsorbMath.TryAbsorbGrowthToLedgerGain(long.MaxValue, out long top));
+            Assert.AreEqual(long.MaxValue, top);
         }
 
         // ------------------------------------------------------------- reflection ---

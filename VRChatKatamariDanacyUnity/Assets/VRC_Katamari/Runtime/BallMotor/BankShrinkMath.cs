@@ -70,50 +70,42 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Prices a post-conversion diameter back into the confirmed volume
-        /// units the size model consumes.
+        /// Prices the post-shrink CONFIRMED volume (above the start ball) from the
+        /// post-shrink diameter, in the ledger's mm^3 quantum.
         /// </summary>
         /// <remarks>
-        /// This is the size model's inverse, called by name at the one place the
-        /// bank rule needs it, so the conversion cannot pick up a second
-        /// volume-to-diameter convention. Returns false when the inverse fails
-        /// (invalid diameter or parameters, or a cap radius below the baseline
-        /// radius); the caller then refuses the conversion before the ledger is
-        /// touched.
+        /// The diameter rule and the ledger live in different spaces (a cube apart), so the
+        /// caller computes the post diameter first and this is the one conversion into
+        /// volume. Since steps C+D the quantum is mm^3 (Docs/OPEN_DECISIONS.md (r)); this
+        /// delegates to the size model's inverse, so there is one conversion on the path.
         /// </remarks>
-        public static bool TryBankVolumeUnits(float postBankDiameterM,
-            float baselineVolumeUnits, float cubicMetersPerVolumeUnit,
-            float maxCoreRadiusWorldM, float semanticDiameterPerCoreDiameter,
-            out float postBankVolumeUnits)
+        public static bool TryBankVolumeMm3(float postBankDiameterM, long startVolumeMm3,
+            float semanticDiameterPerCoreDiameter, out long postBankConfirmedMm3)
         {
-            return SizeModelMath.TryVolumeUnitsForSemanticDiameter(postBankDiameterM,
-                baselineVolumeUnits, cubicMetersPerVolumeUnit, maxCoreRadiusWorldM,
-                semanticDiameterPerCoreDiameter, out postBankVolumeUnits);
+            return SizeModelMath.TryConfirmedVolumeMm3ForSemanticDiameter(postBankDiameterM,
+                startVolumeMm3, semanticDiameterPerCoreDiameter, out postBankConfirmedMm3);
         }
 
         /// <summary>
-        /// Prices the carried residual the ball keeps after a conversion.
+        /// Prices the carried residual the ball keeps after a conversion, in mm^3.
         /// </summary>
         /// <remarks>
-        /// stillUnbankedVolumeUnits is the ledger's read-back of what remains
-        /// bankable after the transaction (normally zero, because a bank moves
-        /// the whole unbanked amount). carried = post - stillUnbanked, clamped
-        /// to zero: a residual that prices below the still-unbanked amount is
-        /// not a carried value at all. The result is already scored and must
-        /// never be banked again. Returns false when the difference is not
-        /// finite; the caller keeps its previous size.
+        /// carried = max(0, postBankConfirmed - stillUnbanked): the part of the post-bank
+        /// confirmed volume that the ledger did NOT move into the score. Integer subtraction
+        /// only - the whole point of the fixed-point step is that this quantity never passes
+        /// through a float. Returns false for a negative input; the caller keeps its previous
+        /// size.
         /// </remarks>
-        public static bool TryCarriedVolumeUnits(float postBankVolumeUnits,
-            float stillUnbankedVolumeUnits, out float carriedVolumeUnits)
+        public static bool TryCarriedVolumeMm3(long postBankConfirmedMm3,
+            long stillUnbankedMm3, out long carriedVolumeMm3)
         {
-            carriedVolumeUnits = 0f;
-            if (!KatamariMath.IsFiniteFloat(postBankVolumeUnits)) return false;
-            if (!KatamariMath.IsFiniteFloat(stillUnbankedVolumeUnits)) return false;
+            carriedVolumeMm3 = 0L;
+            if (postBankConfirmedMm3 < 0L) return false;
+            if (stillUnbankedMm3 < 0L) return false;
 
-            float carried = postBankVolumeUnits - stillUnbankedVolumeUnits;
-            if (!KatamariMath.IsFiniteFloat(carried)) return false;
-            if (carried < 0f) carried = 0f;
-            carriedVolumeUnits = carried;
+            long carried = postBankConfirmedMm3 - stillUnbankedMm3;
+            if (carried < 0L) carried = 0L;
+            carriedVolumeMm3 = carried;
             return true;
         }
     }

@@ -237,7 +237,7 @@ namespace VRCKatamari.Tests
             SetField(fieldType, field, "kinds", new[] { "furniture" });
             SetField(fieldType, field, "propBounds", new[] { FixturePropBounds });
             SetField(fieldType, field, "propLocalBounds", new[] { FixturePropBounds });
-            SetField(fieldType, field, "valueUnits", new[] { 1L });
+            SetField(fieldType, field, "propGrowthMm3", new[] { 1000000L });
             Invoke(field, fieldType, "Start");
         }
 

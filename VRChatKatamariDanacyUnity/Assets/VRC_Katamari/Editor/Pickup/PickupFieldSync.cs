@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -117,7 +118,7 @@ namespace VRCKatamari.Editor.Pickup
         private const string KindsField = "kinds";
         private const string PropBoundsField = "propBounds";
         private const string PropLocalBoundsField = "propLocalBounds";
-        private const string ValueUnitsField = "valueUnits";
+        private const string GrowthMm3Field = "propGrowthMm3";
         private const string VolumeKField = "propVolumeK";
         private const string PropCollidersField = "propColliders";
         private const string PropProxyKindsField = "propProxyKinds";
@@ -234,7 +235,7 @@ namespace VRCKatamari.Editor.Pickup
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
             IDictionary<string, long> declaredValueUnits, bool createMissingColliders)
         {
-            return SyncFromChildren(host, fieldRoot, declaredValueUnits, null, null,
+            return SyncFromChildren(host, fieldRoot, declaredValueUnits, null, null, null,
                 createMissingColliders);
         }
 
@@ -245,11 +246,14 @@ namespace VRCKatamari.Editor.Pickup
         /// </summary>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
             IDictionary<string, long> declaredValueUnits, IDictionary<string, float> declaredVolumeK,
+            IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
             bool createMissingColliders)
         {
             var report = new PickupFieldSyncReport();
-            report.ValueUnitsRequested = declaredValueUnits != null && declaredValueUnits.Count > 0;
+            // Every run prices and verifies the growth column from bounds x k x penalty; the
+            // deprecated declaredValueUnits map is accepted and ignored.
+            report.GrowthPriced = true;
 
             if (host == null)
             {
@@ -286,15 +290,15 @@ namespace VRCKatamari.Editor.Pickup
             // Read the host's current values before any array is resized: this is the whole
             // un-migrated-scene contract. A row whose item id is already present keeps its
             // serialized value unless the caller declared a different one.
-            Dictionary<string, long> existingValueUnits = ReadExistingValueUnits(host);
             // Same rule for k: a re-sync without a declaration must not reprice a field.
             Dictionary<string, float> existingVolumeK = ReadExistingVolumeK(host);
             Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> existingProxies =
                 ReadExistingProxies(host);
 
             List<PropCandidate> candidates = CollectCandidates(fieldRoot);
-            List<PropRow> rows = ValidateCandidates(candidates, declaredValueUnits, existingValueUnits,
-                declaredVolumeK, existingVolumeK, declaredProxies, existingProxies,
+            List<PropRow> rows = ValidateCandidates(candidates, declaredValueUnits,
+                declaredVolumeK, existingVolumeK, declaredVolumePenalty,
+                declaredProxies, existingProxies,
                 createMissingColliders, report);
 
             if (rows.Count == 0 && report.Rejected.Count > 0)
@@ -328,10 +332,10 @@ namespace VRCKatamari.Editor.Pickup
             }
             else
             {
-                report.ValueUnitsVerified = VerifyDeclaredValueUnits(host, declaredValueUnits, report);
-                if (!report.ValueUnitsVerified && string.IsNullOrEmpty(report.Failure))
+                report.GrowthVerified = VerifyGrowthMm3(host, rows, report);
+                if (!report.GrowthVerified && string.IsNullOrEmpty(report.Failure))
                 {
-                    report.Fail(report.ValueUnitMismatches.Count + " declared valueUnits row(s) did not " +
+                    report.Fail(report.GrowthMismatches.Count + " declared valueUnits row(s) did not " +
                                 "read back as declared; treat the host arrays as wrong until this is fixed");
                 }
 
@@ -396,7 +400,7 @@ namespace VRCKatamari.Editor.Pickup
             public string ItemId;
             public Vector3 BoundsSize;
             public Vector3 LocalBoundsSize;
-            public long ValueUnits;
+            public long GrowthMm3;
             /// <summary>The per-item volume factor k the gate will use (0.70 default).</summary>
             public float VolumeK;
             /// <summary>The def's collider proxy; null means the row keeps its OBB shape.</summary>
@@ -789,8 +793,9 @@ namespace VRCKatamari.Editor.Pickup
         // -------------------------------------------------------------- validation ---
 
         private static List<PropRow> ValidateCandidates(List<PropCandidate> candidates,
-            IDictionary<string, long> declaredValueUnits, Dictionary<string, long> existingValueUnits,
+            IDictionary<string, long> declaredValueUnits,
             IDictionary<string, float> declaredVolumeK, Dictionary<string, float> existingVolumeK,
+            IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
             Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> existingProxies,
             bool createMissingColliders, PickupFieldSyncReport report)
@@ -900,28 +905,6 @@ namespace VRCKatamari.Editor.Pickup
                     localBoundsFallbacks++;
                 }
 
-                // The value is content data, never a price. The declaration wins; without
-                // one the host's existing row is preserved; with neither the row is still
-                // written (0) and named in the notes, because dropping it would lose the
-                // prop's geometry and pickup wiring over a missing number.
-                long declaredValue = 0L;
-                bool hasDeclaredValue = declaredValueUnits != null &&
-                                        declaredValueUnits.TryGetValue(candidate.ItemId, out declaredValue);
-                long existingValue = 0L;
-                bool hasExistingValue = existingValueUnits != null &&
-                                        existingValueUnits.TryGetValue(candidate.ItemId, out existingValue);
-
-                long valueUnits;
-                string valueSource;
-                if (!PickupFieldAuthoringRules.TryResolveValueUnits(declaredValue, hasDeclaredValue,
-                        existingValue, hasExistingValue, out valueUnits, out valueSource))
-                {
-                    report.Reject(candidate.Path, candidate.ItemId,
-                        "declared valueUnits " + declaredValue + " is not a whole number >= 1 " +
-                        "(Docs/OPEN_DECISIONS.md (j)); the row was left out rather than priced");
-                    continue;
-                }
-
                 // The per-item volume factor k: the declaration wins, else the row already
                 // serialized on the host, else the original's 0.70. A declaration outside
                 // 0 < k <= 32 refuses the row (it would silently change the gate).
@@ -947,16 +930,48 @@ namespace VRCKatamari.Editor.Pickup
                     volumeKDefaulted++;
                 }
 
+                // GROWTH: one absorb credits round(penalty * k * a*b*c * 1e9) mm^3
+                // (Docs/OPEN_DECISIONS.md (r) C+D). k comes from the declaration/host/default
+                // above; the penalty from the same three-step rule, defaulting to 0.80. A row
+                // that cannot be priced is refused here, never written as a silent zero.
+                float volumePenalty;
+                string volumePenaltySource;
+                if (!PickupFieldAuthoringRules.TryResolveVolumePenalty(candidate.ItemId,
+                        declaredVolumePenalty, out volumePenalty, out volumePenaltySource))
+                {
+                    report.Reject(candidate.Path, candidate.ItemId,
+                        "declared volumePenalty is outside the legal range (0 < p <= 1; 0.80 is " +
+                        "the original's default)");
+                    continue;
+                }
+                long growthMm3;
+                if (!PickupAbsorbMath.TryComputeGrowthMm3(pickSize, volumeK, volumePenalty,
+                        out growthMm3))
+                {
+                    report.Reject(candidate.Path, candidate.ItemId,
+                        "growth cannot be priced from bounds " + FormatVector(pickSize) +
+                        ", k=" + volumeK.ToString("0.###", CultureInfo.InvariantCulture) +
+                        ", penalty=" +
+                        volumePenalty.ToString("0.###", CultureInfo.InvariantCulture));
+                    continue;
+                }
+
                 // Collider proxy: declaration wins, else the row already on the host, else
                 // null (kind -1 = keep the OBB shape). A declared block that cannot be
                 // validated refuses the row instead of silently falling back to a box.
                 PickupFieldAuthoringRules.PickupProxyDefinition proxy = null;
-                PickupFieldAuthoringRules.PickupProxyDefinition declaredProxy;
-                if (declaredProxies != null &&
-                    declaredProxies.TryGetValue(candidate.ItemId, out declaredProxy))
+                if (declaredProxies != null)
                 {
-                    proxy = declaredProxy;
-                    proxyDeclared++;
+                    // The level declaration is authoritative: an id with no block means
+                    // "box default", not "keep whatever the host had" (removing a block must
+                    // remove the proxy). A null map is the menu/un-migrated path and preserves
+                    // the existing row.
+                    PickupFieldAuthoringRules.PickupProxyDefinition declaredProxy;
+                    if (declaredProxies.TryGetValue(candidate.ItemId, out declaredProxy))
+                    {
+                        proxy = declaredProxy;
+                        proxyDeclared++;
+                    }
                 }
                 else
                 {
@@ -985,7 +1000,7 @@ namespace VRCKatamari.Editor.Pickup
                 row.ItemId = candidate.ItemId;
                 row.BoundsSize = pickSize;
                 row.LocalBoundsSize = pickLocalSize;
-                row.ValueUnits = valueUnits;
+                row.GrowthMm3 = growthMm3;
                 row.VolumeK = volumeK;
                 row.Proxy = proxy;
                 row.PrimaryCollider = candidate.PrimaryCollider;
@@ -1016,23 +1031,9 @@ namespace VRCKatamari.Editor.Pickup
 
                 rows.Add(row);
 
-                if (string.Equals(valueSource, PickupFieldAuthoringRules.ValueSourceDeclared,
-                        StringComparison.Ordinal))
-                {
-                    report.ValueUnitsDeclared += valueUnits;
-                }
-                else if (string.Equals(valueSource, PickupFieldAuthoringRules.ValueSourceExisting,
-                             StringComparison.Ordinal))
-                {
-                    report.ValueUnitsPreserved++;
-                }
-                else
-                {
-                    report.ValueUnitsUndeclared++;
-                }
-
-                report.CountRow(row.Kind, row.ValueUnits);
-                report.TotalValueUnits += row.ValueUnits;
+                report.GrowthMm3Priced += growthMm3;
+                report.CountRow(row.Kind, row.GrowthMm3);
+                report.TotalGrowthMm3 += row.GrowthMm3;
 
                 if (declaredSizeNote != null)
                 {
@@ -1066,13 +1067,6 @@ namespace VRCKatamari.Editor.Pickup
                                  "keeps the pre-fix double-rotated radial shell");
             }
 
-            if (report.ValueUnitsPreserved > 0)
-            {
-                report.Notes.Add(report.ValueUnitsPreserved + " row(s) kept the valueUnits already serialized " +
-                                 "on the host (no declaration was supplied). This is the pre-U2 scene path and " +
-                                 "is intentionally not repriced");
-            }
-
             if (volumeKDefaulted > 0)
             {
                 report.Notes.Add(volumeKDefaulted + " row(s) got the default volume factor k=0.70 " +
@@ -1085,14 +1079,6 @@ namespace VRCKatamari.Editor.Pickup
                 report.Notes.Add("collider proxies: " + proxyDeclared + " row(s) from the level's " +
                                  "defs[].collider, " + proxyPreserved + " preserved from the host. " +
                                  "Rows without a proxy keep their OBB shape.");
-            }
-
-            if (report.ValueUnitsUndeclared > 0)
-            {
-                report.Notes.Add(report.ValueUnitsUndeclared + " row(s) have no declared value and no " +
-                                 "existing serialized value; valueUnits was written as 0 and the host will " +
-                                 "ignore those rows at runtime until a value is declared " +
-                                 "(Docs/OPEN_DECISIONS.md (q) U2)");
             }
 
             report.PropCount = rows.Count;
@@ -1121,7 +1107,7 @@ namespace VRCKatamari.Editor.Pickup
             string[] fieldNames =
             {
                 PropTransformsField, ItemIdsField, KindsField, PropBoundsField, PropLocalBoundsField,
-                ValueUnitsField, VolumeKField, PropCollidersField,
+                GrowthMm3Field, VolumeKField, PropCollidersField,
                 PropProxyKindsField, PropProxyCentersField, PropProxySizesField,
                 PropProxyRadiiField, PropProxyHalfHeightsField, PropProxyAxesField,
                 PropProxyHullStartsField, PropProxyHullCountsField, PropProxyHullPointsField,
@@ -1216,7 +1202,7 @@ namespace VRCKatamari.Editor.Pickup
                 kinds.GetArrayElementAtIndex(i).stringValue = row.Kind;
                 bounds.GetArrayElementAtIndex(i).vector3Value = row.BoundsSize;
                 localBounds.GetArrayElementAtIndex(i).vector3Value = row.LocalBoundsSize;
-                values.GetArrayElementAtIndex(i).longValue = row.ValueUnits;
+                values.GetArrayElementAtIndex(i).longValue = row.GrowthMm3;
                 volumeKs.GetArrayElementAtIndex(i).floatValue = row.VolumeK;
                 if (anyCollider)
                 {
@@ -1224,12 +1210,25 @@ namespace VRCKatamari.Editor.Pickup
                 }
 
                 PickupFieldAuthoringRules.PickupProxyDefinition proxy = row.Proxy;
-                int kind = proxy == null ? -1 : proxy.Kind;
+                // A row with no declared block is still a full row: kind 0 (box) with the
+                // prop's local edge lengths, which is exactly the old OBB shape. Keeping the
+                // columns row-aligned is the writer-allocates contract; an empty/short array
+                // would make the host fall back per row and look like "0 rows" to the importer.
+                Vector3 defaultSize = row.LocalBoundsSize;
+                if (!PickupFieldAuthoringRules.HasUsableBounds(defaultSize.x, defaultSize.y,
+                        defaultSize.z))
+                {
+                    defaultSize = row.BoundsSize;
+                }
+                bool hasDefaultBox = PickupFieldAuthoringRules.HasUsableBounds(defaultSize.x,
+                    defaultSize.y, defaultSize.z);
+                int kind = proxy != null ? proxy.Kind
+                    : (hasDefaultBox ? PickupFieldAuthoringRules.ProxyKindBox : -1);
                 proxyKinds.GetArrayElementAtIndex(i).intValue = kind;
                 proxyCenters.GetArrayElementAtIndex(i).vector3Value =
                     proxy == null ? Vector3.zero : proxy.Center;
                 proxySizes.GetArrayElementAtIndex(i).vector3Value =
-                    proxy == null ? Vector3.zero : proxy.Size;
+                    proxy == null ? defaultSize : proxy.Size;
                 proxyRadii.GetArrayElementAtIndex(i).floatValue =
                     proxy == null ? 0f : proxy.Radius;
                 proxyHalfHeights.GetArrayElementAtIndex(i).floatValue =
@@ -1341,7 +1340,7 @@ namespace VRCKatamari.Editor.Pickup
             string[] fields =
             {
                 PropTransformsField, ItemIdsField, KindsField, PropBoundsField,
-                PropLocalBoundsField, ValueUnitsField, VolumeKField,
+                PropLocalBoundsField, GrowthMm3Field, VolumeKField,
                 PropProxyKindsField, PropProxyCentersField, PropProxySizesField,
                 PropProxyRadiiField, PropProxyHalfHeightsField, PropProxyAxesField,
                 PropProxyHullStartsField, PropProxyHullCountsField,
@@ -1401,44 +1400,10 @@ namespace VRCKatamari.Editor.Pickup
         }
 
         /// <summary>
-        /// Reads the host's current <c>itemIds</c>/<c>valueUnits</c> into an id-keyed map
-        /// before the sync resizes anything.
-        /// </summary>
-        /// <remarks>
-        /// Keyed by item id rather than array index on purpose: the sync is allowed to
-        /// reorder rows (props sort by hierarchy path), and moving a row must not move its
-        /// value to a different prop. A host with no arrays yields an empty map; an unaligned
-        /// pair contributes only its overlapping prefix, so the write never invents a value.
-        /// </remarks>
-        private static Dictionary<string, long> ReadExistingValueUnits(PickupFieldHost host)
-        {
-            var existing = new Dictionary<string, long>(StringComparer.Ordinal);
-            var serialized = new SerializedObject(host);
-            SerializedProperty ids = serialized.FindProperty(ItemIdsField);
-            SerializedProperty values = serialized.FindProperty(ValueUnitsField);
-            if (ids == null || values == null || !ids.isArray || !values.isArray)
-            {
-                return existing;
-            }
-
-            int rows = ids.arraySize < values.arraySize ? ids.arraySize : values.arraySize;
-            for (int i = 0; i < rows; i++)
-            {
-                string itemId = ids.GetArrayElementAtIndex(i).stringValue;
-                if (!string.IsNullOrEmpty(itemId) && !existing.ContainsKey(itemId))
-                {
-                    existing.Add(itemId, values.GetArrayElementAtIndex(i).longValue);
-                }
-            }
-
-            return existing;
-        }
-
-        /// <summary>
         /// Reads the host's current <c>itemIds</c>/<c>propVolumeK</c> into an id-keyed map.
         /// </summary>
         /// <remarks>
-        /// Same contract as <see cref="ReadExistingValueUnits"/>: keyed by item id, because a
+        /// Same contract as the old value-units map was: keyed by item id, because a
         /// sync may reorder rows, and a short/absent column simply contributes nothing (a
         /// scene synced before the k column existed therefore keeps the 0.70 default).
         /// </remarks>
@@ -1546,6 +1511,9 @@ namespace VRCKatamari.Editor.Pickup
                     kind > PickupFieldAuthoringRules.ProxyKindConvex) continue;
 
                 var proxy = new PickupFieldAuthoringRules.PickupProxyDefinition();
+                proxy.TypeName = kind == PickupFieldAuthoringRules.ProxyKindBox ? "box"
+                    : kind == PickupFieldAuthoringRules.ProxyKindSphere ? "sphere"
+                    : kind == PickupFieldAuthoringRules.ProxyKindCapsule ? "capsule" : "convex";
                 proxy.Kind = kind;
                 proxy.Center = centers.GetArrayElementAtIndex(i).vector3Value;
                 proxy.Size = sizes.GetArrayElementAtIndex(i).vector3Value;
@@ -1633,60 +1601,56 @@ namespace VRCKatamari.Editor.Pickup
         }
 
         /// <summary>
-        /// Re-reads the host after the write and reports every declared value that did not
-        /// land, plus every declared id that has no row.
+        /// Re-reads the written growth column and compares it with the rows this run wrote.
         /// </summary>
         /// <remarks>
-        /// This is the U2 guard: the importer never touches the arrays itself, so this
-        /// read-back is the only place a declaration can be proven to have reached the host.
-        /// A mismatch is a ledger bug that nothing later in the pipeline would notice, so the
-        /// run is failed with the details in <see cref="PickupFieldSyncReport.ValueUnitMismatches"/>.
+        /// The growth is derived at sync time, so the declaration cannot be compared against
+        /// it directly (there is no authored growth to compare with). What must hold is that
+        /// the number this run priced is the number serialized on the host: a truncated
+        /// <c>longValue</c> write, a wrong column or a resized array is a ledger bug that
+        /// nothing later would notice, so the run fails and names the first rows that differ.
         /// </remarks>
-        private static bool VerifyDeclaredValueUnits(PickupFieldHost host,
-            IDictionary<string, long> declaredValueUnits, PickupFieldSyncReport report)
+        private static bool VerifyGrowthMm3(PickupFieldHost host, List<PropRow> rows,
+            PickupFieldSyncReport report)
         {
-            if (declaredValueUnits == null || declaredValueUnits.Count == 0)
-            {
-                // Nothing was declared, so there is nothing to verify; preserved values are
-                // the contract for this path.
-                return true;
-            }
-
             var serialized = new SerializedObject(host);
             SerializedProperty ids = serialized.FindProperty(ItemIdsField);
-            SerializedProperty values = serialized.FindProperty(ValueUnitsField);
+            SerializedProperty values = serialized.FindProperty(GrowthMm3Field);
             if (ids == null || values == null || !ids.isArray || !values.isArray ||
-                ids.arraySize != values.arraySize)
+                ids.arraySize != values.arraySize || ids.arraySize != rows.Count)
             {
-                report.ValueUnitMismatches.Add("the host's " + ItemIdsField + "/" + ValueUnitsField +
-                                               " arrays could not be read back index-aligned");
+                report.GrowthMismatches.Add("the host's " + ItemIdsField + "/" + GrowthMm3Field +
+                                            " arrays could not be read back at the written length (" +
+                                            rows.Count + ")");
                 return false;
             }
 
-            var readIds = new string[ids.arraySize];
-            var readValues = new long[values.arraySize];
-            for (int i = 0; i < ids.arraySize; i++)
+            int reported = 0;
+            bool ok = true;
+            for (int i = 0; i < rows.Count; i++)
             {
-                readIds[i] = ids.GetArrayElementAtIndex(i).stringValue;
-                readValues[i] = values.GetArrayElementAtIndex(i).longValue;
+                string hostId = ids.GetArrayElementAtIndex(i).stringValue;
+                long hostGrowth = values.GetArrayElementAtIndex(i).longValue;
+                if (string.Equals(hostId, rows[i].ItemId, StringComparison.Ordinal) &&
+                    hostGrowth == rows[i].GrowthMm3)
+                {
+                    continue;
+                }
+                ok = false;
+                if (reported < 20)
+                {
+                    report.GrowthMismatches.Add("read-back mismatch at row " + i + ": written " +
+                        rows[i].ItemId + "=" + rows[i].GrowthMm3 + " mm^3, host says " +
+                        hostId + "=" + hostGrowth + " mm^3");
+                    reported++;
+                }
             }
 
-            string[] mismatches = PickupFieldAuthoringRules.FindValueUnitMismatches(readIds, readValues,
-                declaredValueUnits);
-            string[] missingRows = PickupFieldAuthoringRules.FindDeclaredIdsWithoutRows(readIds,
-                declaredValueUnits);
-
-            for (int i = 0; i < mismatches.Length; i++)
+            if (!ok && reported == 20)
             {
-                report.ValueUnitMismatches.Add("read-back mismatch: " + mismatches[i]);
+                report.GrowthMismatches.Add("... more growthMm3 read-back mismatch(es)");
             }
-
-            for (int i = 0; i < missingRows.Length; i++)
-            {
-                report.ValueUnitMismatches.Add("declared itemId has no host row: " + missingRows[i]);
-            }
-
-            return mismatches.Length == 0 && missingRows.Length == 0;
+            return ok;
         }
 
         // ------------------------------------------------------------------ utilities ---

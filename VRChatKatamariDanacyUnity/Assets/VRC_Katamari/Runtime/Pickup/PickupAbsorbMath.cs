@@ -155,6 +155,19 @@ namespace VRCKatamari.Pickup
         public const float DefaultVolumeK = 0.70f;
 
         /// <summary>
+        /// The original's per-item growth penalty: one absorb credits
+        /// <c>penalty * k * a*b*c</c> to the ledger, and 0.8 covers 1,198 of 1,436 types
+        /// (PARITY_AUDIT G06/F5). A per-item override travels in placement data
+        /// (<c>volumePenalty</c>) and is priced into the host's growth column at import, so
+        /// the runtime normally reads the finished number; this constant is the default the
+        /// importer, the editor rule and the host fallback all agree on.
+        /// </summary>
+        public const float DefaultVolumePenalty = 0.8f;
+
+        /// <summary>Smallest legal penalty: above 0, at most 1 (never recover more than the item).</summary>
+        public const float MaxVolumePenalty = 1.0f;
+
+        /// <summary>
         /// The upper bound of the one authoring rule for `k`: `0 &lt; k &lt;= 32`.
         /// </summary>
         /// <remarks>
@@ -191,7 +204,14 @@ namespace VRCKatamari.Pickup
         /// triple can reach it; the constant keeps such a product from producing an
         /// infinity or a nonsense Req that a reader would trust.
         /// </remarks>
-        public const float MaxItemVolumeSanityWorldM3 = 1000f;
+        /// <summary>
+        /// Numerical sanity bound on one item's AABB volume, NOT a gate. With the global
+        /// 30 m ball cap the largest legal item is <c>V_cap / 10 = 1,413.7 m^3</c>, so the
+        /// old 1,000 m^3 sat BELOW a legal item; this is that bound with a 10x margin
+        /// (14,137 m^3). A bounds triple that reaches it is broken data, and the verdict is
+        /// "too large / blocking", never "infinite".
+        /// </summary>
+        public const float MaxItemVolumeSanityWorldM3 = 14137f;
 
         /// <summary>
         /// The boundary guard for the whole-millimetre floor: one micrometre, in mm.
@@ -618,61 +638,90 @@ namespace VRCKatamari.Pickup
             float itemVolumeK,
             float ballSemanticDiameterWorldM,
             float maxGrowthRadiusWorldM,
-            float itemValue)
+            long itemGrowthMm3)
         {
             AbsorbOutcome geometry = EvaluateAbsorb(itemAbsorbable, itemKind, allowedKinds,
                 allowedKindCount, itemBounds, itemPosition, ballPosition, collisionRadiusWorldM,
                 contactRadiusWorldM, itemVolumeK, ballSemanticDiameterWorldM,
                 maxGrowthRadiusWorldM);
-            return ApplyValueGate(geometry, itemValue);
+            return ApplyGrowthGate(geometry, itemGrowthMm3);
         }
 
-        // The gain precondition both value entry points share, written once so the two
-        // cannot drift about which refusal wins.
-        private static AbsorbOutcome ApplyValueGate(AbsorbOutcome geometry, float itemValue)
+        // The gain precondition both entry points share, written once so the two cannot
+        // drift about which refusal wins. Since steps C+D the item's growth is a finished
+        // mm^3 integer (priced once at import), so the only rule left is "a real gain".
+        private static AbsorbOutcome ApplyGrowthGate(AbsorbOutcome geometry, long itemGrowthMm3)
         {
             if (geometry != AbsorbOutcome.Absorb) return geometry;
             long gain;
-            if (!TryAbsorbValueToLedgerGain(itemValue, out gain)) return AbsorbOutcome.RejectNoGain;
-            if (gain <= 0) return AbsorbOutcome.RejectNoGain;
+            if (!TryAbsorbGrowthToLedgerGain(itemGrowthMm3, out gain))
+                return AbsorbOutcome.RejectNoGain;
+            if (gain <= 0L) return AbsorbOutcome.RejectNoGain;
             return AbsorbOutcome.Absorb;
         }
 
         /// <summary>
-        /// Converts one absorbed item's float value into the ledger's integer gain.
+        /// Prices one item's growth exactly as the original does: <c>penalty * k * a*b*c</c>
+        /// in mm^3, rounded half-to-even.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The two DRAFT models use different numeric domains: the pickup model's
-        /// `Item.value` is a float and the ledger's event gain is a whole number of the
-        /// same volume unit. Neither model defines a rounding rule, and inventing one
-        /// would silently change a total, so a non-integral value, a negative value, a
-        /// non-finite value and a value outside the ledger's integer range are all
-        /// rejected. An accepted value maps 1:1 with no scaling and no rounding, and the
-        /// result is only the accounting input: it becomes real value only once
-        /// <see cref="VRCKatamari.Economy.GrowthLedgerMath.TryResolveClaims"/> or
-        /// <see cref="VRCKatamari.Economy.GrowthLedgerMath.TryApplyCommit"/> commits the
-        /// matching event key.
+        /// This is the runtime twin of the editor's import-time pricing
+        /// (<c>PickupFieldAuthoringRules</c> / <c>placement_core.item_growth_mm3</c>); the
+        /// imported scene carries the result in <c>PickupFieldHost.propGrowthMm3</c>, so this
+        /// fallback exists only for a host without that column. Float32 note: the editor
+        /// computes in double and stores an exact long; this fallback multiplies in float, so
+        /// a huge item's value can differ by a few thousand mm^3 (a millilitre) from the
+        /// imported number. That is below the ledger's ability to matter and is documented
+        /// rather than hidden.
         /// </para>
         /// <para>
-        /// The gain is a 64-bit <c>long</c> because the ledger's volume columns are
-        /// (Docs/OPEN_DECISIONS.md (r), migration step A), so the range guard is the
-        /// 64-bit one instead of the retired 2^31 bound. The unit is unchanged: a value
-        /// of 2 still becomes a gain of 2. The refusal itself is unchanged (false, out
-        /// value zero), so every caller's "no gain" branch keeps its meaning.
+        /// Refuses a non-finite/negative bounds triple, a non-positive volume, and a value
+        /// outside the 64-bit quantum range; the caller reports RejectNoGain (never a silent
+        /// zero).
         /// </para>
         /// </remarks>
-        public static bool TryAbsorbValueToLedgerGain(float itemValue, out long gain)
+        public static bool TryComputeGrowthMm3(Vector3 bounds, float volumeK,
+            float volumePenalty, out long growthMm3)
+        {
+            growthMm3 = 0L;
+            if (!KatamariMath.IsFiniteVector(bounds)) return false;
+            if (bounds.x < 0f || bounds.y < 0f || bounds.z < 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(volumeK) || volumeK <= 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(volumePenalty) || volumePenalty <= 0f ||
+                volumePenalty > MaxVolumePenalty)
+            {
+                return false;
+            }
+
+            float volumeM3 = bounds.x * bounds.y * bounds.z * volumeK * volumePenalty;
+            if (!KatamariMath.IsFiniteFloat(volumeM3) || volumeM3 <= 0f) return false;
+            float mm3 = volumeM3 * 1000000000f;
+            if (!KatamariMath.IsFiniteFloat(mm3) || mm3 >= 9223372036854775808f) return false;
+            long rounded = (long)Mathf.Round(mm3);
+            if (rounded <= 0L) return false;
+            growthMm3 = rounded;
+            return true;
+        }
+
+        /// <summary>
+        /// Accepts one item's already-priced growth (mm^3) as the ledger gain.
+        /// </summary>
+        /// <remarks>
+        /// The gain IS the growth: since steps C+D the item's value is computed once, at
+        /// import, as <c>round(penalty * k * a*b*c * 1e9)</c> and stored in the host's
+        /// <c>long[] propGrowthMm3</c>. There is no unit conversion, no float truncation and
+        /// no rounding left here; the only refusal is a non-positive gain (zero would pass
+        /// the geometry gate, take a claim and vanish without a score), which the caller
+        /// reports as <see cref="AbsorbOutcome.RejectNoGain"/>. The result is 64-bit because
+        /// the ledger's columns are (Docs/OPEN_DECISIONS.md (r)); it becomes real value only
+        /// when the ledger commits the matching event key.
+        /// </remarks>
+        public static bool TryAbsorbGrowthToLedgerGain(long itemGrowthMm3, out long gain)
         {
             gain = 0L;
-            if (!KatamariMath.IsFiniteFloat(itemValue) || itemValue < 0f) return false;
-            // 2^63 is exactly representable as a float; comparing against it first keeps
-            // the integer cast below inside the representable range.
-            if (itemValue >= 9223372036854775808f) return false;
-            long truncated = (long)itemValue;
-            // A fractional value has no defined rounding policy in either model.
-            if ((float)truncated != itemValue) return false;
-            gain = truncated;
+            if (itemGrowthMm3 <= 0L) return false;
+            gain = itemGrowthMm3;
             return true;
         }
 

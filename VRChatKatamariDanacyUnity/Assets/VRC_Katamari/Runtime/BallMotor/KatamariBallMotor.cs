@@ -180,20 +180,24 @@ namespace VRCKatamari.BallMotor
         // ---- SweepMath inputs ----
         [SerializeField] private float separationEpsilon = 0.001f;
 
-        // ---- SizeModelMath inputs (dimensionless volume scale, not a world scale decision) ----
-        // Calibration must match Docs/Design/Gameplay/round_model.py, which every
-        // level's star targets are built on: 1356 confirmed units take the ball from
-        // the 0.30 m start to the 2.20 m cap, and eating a whole 1284-unit map leaves
-        // it at 2.16 m. The previous 0.0141 m^3 per unit reached the cap at ~394 units,
-        // i.e. 30% of a map, so growth ran 3.44x too fast against the model.
+        // ---- SizeModelMath inputs: fixed-point mm^3 (Docs/OPEN_DECISIONS.md (r) C+D) ----
+        // The ledger quantity is now the ball's GROWTH in cubic millimetres (1 LSB = 1 mm^3),
+        // and the ball's total volume is startVolumeMm3 + confirmed. The old calibration
+        // constants are DELETED, not renamed: `cubicMetersPerVolumeUnit` (0.0041 m^3/unit)
+        // and `baselineVolumeUnits` (3.4390244 units) made "one unit" the growth currency,
+        // which is exactly the 29%-of-the-start-ball quantum WHY_OUR_GROWTH_IS_BIG.md
+        // diagnoses. A scene still serializing the old names has those dead keys ignored
+        // (Unity's field-name contract), and the C# defaults below take over.
         //
-        // The unit got 3.44x larger, but the baseline is a VOLUME (0.0141 m^3 = the
-        // 0.30 m start ball) and must not change with it. Expressing that same volume
-        // in the new unit is 0.0141 / 0.0041 = 3.439 units; leaving it at 1 would drop
-        // the start diameter to 0.199 m and break the 0.30 m -> 2.20 m round.
-        [SerializeField] private float baselineVolumeUnits = 3.4390244f;
-        [SerializeField] private float cubicMetersPerVolumeUnit = 0.0041f;
-        [SerializeField] private float maxCoreRadiusWorldM = 1.1f;
+        // startVolumeMm3 is the START BALL: pi/6 * D0^3 * 1e9. 14,094,798 = the 0.2997 m
+        // calibration ball. A level that sets startDiameterWorldM has this recomputed in
+        // Start (the one conversion), so the per-level start stays a diameter in the data.
+        [SerializeField] private long startVolumeMm3 = 14094798L;
+        // The ONE global size cap, replacing the per-level maxCoreRadiusWorldM (1.1 m, i.e.
+        // the 2.20 m ball). The original's cap is 30 cm for MAS1; ours is a 30 m engineering
+        // ceiling so the same code serves the reference levels (Cancer's 1.2 m cap, a 30 m
+        // sandbox) without a second per-level radius gate. V_cap = pi/6 * 30^3 = 14,137 m^3.
+        [SerializeField] private float maxBallDiameterM = 30f;
         [SerializeField] private float collisionToCoreRadiusRatio = 1f;
         [SerializeField] private float semanticDiameterPerCoreDiameter = 1f;
 
@@ -204,12 +208,12 @@ namespace VRCKatamari.BallMotor
         // baselineVolumeUnits, so "the level wants a 5 cm ball" could not be expressed and
         // every level started at the calibration's 0.2997 m.
         //
-        // 0 means NOT SET: the level keeps baselineVolumeUnits as authored, which is every
+        // 0 means NOT SET: the level keeps startVolumeMm3 as authored, which is every
         // scene written before this field existed, so existing levels do not move. A
-        // positive value is authoritative: ApplyStartDiameterWorldM rewrites the baseline
-        // volume from it in Start, once, and from then on every consumer reads one
-        // baseline. The diameter is the SEMANTIC diameter (the narrative size a player
-        // reads, see SizeModelMath.TryDerive), not the collision diameter.
+        // positive value is authoritative: ApplyStartDiameterWorldM rewrites startVolumeMm3
+        // from it in Start, once, and from then on every consumer reads one start volume.
+        // The diameter is the SEMANTIC diameter (the narrative size a player reads, see
+        // SizeModelMath.TryDerive), not the collision diameter.
         [SerializeField] private float startDiameterWorldM = 0f;
 
         // ---- PickupAbsorbMath inputs ----
@@ -249,10 +253,13 @@ namespace VRCKatamari.BallMotor
         [SerializeField] private float eyeBaseUpMeters = 0.55f;
         [SerializeField] private float eyeUpPerRadius = 2.4f;
         [SerializeField] private float eyeUpMinMeters = 0.1f;
-        [SerializeField] private float eyeUpMaxMeters = 8f;
+        // 64 m, not 8: the eye is base + perRadius*radius, so a 15 m radius (the 30 m
+        // cap) needs 0.55 + 2.4*15 = 36.55 m of lift and 0.75 + 2.2*15 = 33.75 m of back.
+        // 8 m was sized for the retired 2.20 m ball and would pin the eye inside a big ball.
+        [SerializeField] private float eyeUpMaxMeters = 64f;
         [SerializeField] private float eyeBaseBackMeters = 0.75f;
         [SerializeField] private float eyeBackPerRadius = 2.2f;
-        [SerializeField] private float eyeMaxBackM = 8f;
+        [SerializeField] private float eyeMaxBackM = 64f;
 
         // ---- VisualRollMath inputs ----
         [SerializeField] private float maxRollDisplacementM = 0.5f;
@@ -300,9 +307,12 @@ namespace VRCKatamari.BallMotor
         // confirmedVolumeUnits stay float because they are the SIZE MODEL's quantities
         // (a display input), not ledger sums - they are recomputed from the mirrors, they
         // never accumulate, and step C re-derives them from a mm^3 ledger.
+        // All three are the ledger's fixed-point mm^3. `unbanked` is the ledger read-back,
+        // `carried` is already-scored residual volume, and `confirmed` is their integer sum
+        // (never accumulated in float - that is why this step exists).
         private long unbankedVolumeUnits;
-        private float carriedVolumeUnits;
-        private float confirmedVolumeUnits;
+        private long carriedVolumeMm3;
+        private long confirmedVolumeMm3;
         private long bankedScoreUnits;
         private int absorbedCount;
 
@@ -537,7 +547,9 @@ namespace VRCKatamari.BallMotor
         private string[] pendingKinds;
         private Vector3[] pendingBounds;
         private Vector3[] pendingPositions;
-        private float[] pendingValues;
+        // The item's finished growth in mm^3 (penalty * k * a*b*c, priced once at import or
+        // by the host fallback), not a float "value". This is the ledger gain.
+        private long[] pendingGrowthMm3;
         // The item's per-item volume factor k (the original's `Volume = k*bbox`). It rides
         // with the candidate because the gate is a per-item comparison: the same ball, two
         // items of the same AABB, different k -> different Req. Defaults to
@@ -1073,7 +1085,11 @@ namespace VRCKatamari.BallMotor
             if (ballVisualRollRoot != null) visualRollRotation = ballVisualRollRoot.rotation;
             discontinuous = true;
 
-            maxCollisionRadiusWorldM = maxCoreRadiusWorldM * collisionToCoreRadiusRatio;
+            // The cap's collision radius, for the reach clamp: the cap is a SEMANTIC
+            // diameter, and the collision radius is derived through the same ratios as
+            // every other size, so the two cannot disagree at the top end.
+            maxCollisionRadiusWorldM = (0.5f * maxBallDiameterM / semanticDiameterPerCoreDiameter)
+                * collisionToCoreRadiusRatio;
 
             if (GrowthLedgerMath.TryJoin(roundState, playerIds, confirmedVolumes, bankedScores,
                 lifeStates, respawnAtSet, respawnAt, playerGenerations, ref playerCount,
@@ -1085,24 +1101,24 @@ namespace VRCKatamari.BallMotor
             if (autoStartPlaying) TryBeginPlaying(0f);
 
             // Parity D6: the start diameter is a per-level parameter. A level that sets
-            // startDiameterWorldM rewrites the baseline VOLUME from it here, before any
-            // consumer reads the baseline; a level that does not keeps the serialized
-            // baselineVolumeUnits (every scene authored before the field existed, i.e. the
-            // 0.2997 m start ball). Continuous volume is NOT approved (PARITY_AUDIT 5.3),
-            // so the ledger unit stays integer and only the baseline changes.
+            // startDiameterWorldM rewrites startVolumeMm3 from it here, before any consumer
+            // reads the start volume; a level that does not keeps the serialized
+            // startVolumeMm3 (every scene authored before the field existed, i.e. the
+            // 0.2997 m start ball). Since steps C+D the ledger quantity is mm^3; there is
+            // no per-unit calibration left to change.
             ApplyStartDiameterWorldM();
 
-            // The zero-volume mapping is the ball's start size: it is the baseline
-            // for the growth fraction the motion layer consumes, and the floor the
-            // conversion shrink clamps to.
+            // The start-volume mapping is the ball's start size: it is the baseline for the
+            // growth fraction the motion layer consumes, and the floor the conversion
+            // shrink clamps to.
             float coreRadius;
             float collisionRadius;
             float semanticDiameter;
-            float effectiveVolumeUnits;
-            if (SizeModelMath.TryDerive(0f, baselineVolumeUnits, cubicMetersPerVolumeUnit,
-                maxCoreRadiusWorldM, collisionToCoreRadiusRatio,
-                semanticDiameterPerCoreDiameter, out coreRadius, out collisionRadius,
-                out semanticDiameter, out effectiveVolumeUnits))
+            long effectiveConfirmedMm3;
+            if (SizeModelMath.TryDerive(startVolumeMm3, 0L, maxBallDiameterM,
+                collisionToCoreRadiusRatio, semanticDiameterPerCoreDiameter,
+                out coreRadius, out collisionRadius, out semanticDiameter,
+                out effectiveConfirmedMm3))
             {
                 baseCoreRadiusWorldM = coreRadius;
                 coreRadiusWorldM = coreRadius;
@@ -1124,35 +1140,29 @@ namespace VRCKatamari.BallMotor
 
             Debug.Log("[BallMotor] Start ready diameter=" + semanticDiameterWorldM
                 + " collisionRadius=" + collisionRadiusWorldM
-                + " baselineUnits=" + baselineVolumeUnits
+                + " startVolumeMm3=" + startVolumeMm3
                 + " startSize=" + (startDiameterWorldM > 0f ? "level" : "calibration")
                 + " hasLocalRow=" + hasLocalRow
                 + " terrainSupport=" + terrainSupportEnabled);
         }
 
         /// <summary>
-        /// Makes the level's start diameter the ball's baseline, or keeps the serialized
-        /// baseline volume when the level does not set one.
+        /// Makes the level's start diameter the ball's start volume, or keeps the serialized
+        /// <see cref="startVolumeMm3"/> when the level does not set one.
         /// </summary>
         /// <remarks>
         /// <para>
         /// Parity D6: the original's start diameter is a per-level value (5 cm for MAS1,
-        /// 22.2 cm for Cancer, 30 cm for our first level), not a global constant, while the
-        /// growth calibration is expressed against a baseline VOLUME. This method is the
-        /// single conversion between the two: <c>baselineVolumeUnits</c> is rewritten to the
-        /// volume of the requested start sphere and every consumer (the zero-volume mapping
-        /// in Start, the growth mapping, the round reset and the bank shrink) then reads
-        /// one baseline.
+        /// 22.2 cm for Cancer, 0.2997 m for our first level). Since steps C+D the growth
+        /// quantity is a fixed-point mm^3 volume, so this is the ONE conversion from the
+        /// human-facing diameter to that volume: <c>V = pi/6 * (D/ratio)^3 * 1e9</c>, rounded
+        /// once. 0 means unset, so a scene written before the field existed keeps the
+        /// serialized start volume (14,094,798 mm^3 = the 0.2997 m ball).
         /// </para>
         /// <para>
-        /// The inverse has to agree with <see cref="SizeModelMath.TryDerive"/>: the core
-        /// radius is the sphere radius of baseline * cubicMetersPerVolumeUnit, and the
-        /// semantic diameter is that radius doubled times
-        /// semanticDiameterPerCoreDiameter. 0 means unset, so a scene written before the
-        /// field existed keeps its authored baseline (3.4390244 units = the 0.2997 m start
-        /// ball). A start diameter the core cap cannot hold is refused and the authored
-        /// baseline is kept: writing a baseline above the cap would make every derivation
-        /// fail and the ball would silently stay at 0 diameter.
+        /// A start ball above the global cap is refused and the authored start volume kept:
+        /// writing a start above the cap would make the derive saturate at the cap and the
+        /// level would silently start smaller than it asked for.
         /// </para>
         /// </remarks>
         private void ApplyStartDiameterWorldM()
@@ -1161,53 +1171,27 @@ namespace VRCKatamari.BallMotor
             {
                 return;
             }
-
-            float startCoreRadius = startDiameterWorldM * 0.5f / semanticDiameterPerCoreDiameter;
-            // V = 4/3 * pi * r^3 with r the CORE radius (the semantic diameter is
-            // 2 * core * semanticDiameterPerCoreDiameter), and one volume unit is
-            // cubicMetersPerVolumeUnit. This is the zero-volume branch of
-            // SizeModelMath.TryDerive solved for the baseline; it cannot call that method
-            // because the baseline is its input, and it is not
-            // TryVolumeUnitsForSemanticDiameter because that answers "confirmed units ABOVE a
-            // baseline", not the baseline itself.
-            float unitVolumeWorldM3 = (4f / 3f) * Mathf.PI * startCoreRadius
-                * startCoreRadius * startCoreRadius;
-            float units = unitVolumeWorldM3 / cubicMetersPerVolumeUnit;
-            if (!KatamariMath.IsFiniteFloat(startCoreRadius) || startCoreRadius <= 0f ||
-                !KatamariMath.IsFiniteFloat(units) || units <= 0f)
+            if (!KatamariMath.IsFiniteFloat(maxBallDiameterM) || maxBallDiameterM <= 0f)
             {
-                Debug.LogWarning("[BallMotor] startDiameterWorldM=" + startDiameterWorldM
-                    + " is not usable; keeping baselineVolumeUnits=" + baselineVolumeUnits);
                 return;
             }
 
-            // Verified through the forward map instead of assumed: the candidate baseline must
-            // map back to the requested diameter. A start ball the core cap cannot hold (or a
-            // ratio that makes the round trip disagree) keeps the authored baseline, because
-            // an out-of-range baseline would make every later derivation fail and the ball
-            // would silently stay at 0 m.
-            float coreRadius;
-            float collisionRadius;
-            float semanticDiameter;
-            float effectiveVolumeUnits;
-            if (!SizeModelMath.TryDerive(0f, units, cubicMetersPerVolumeUnit,
-                maxCoreRadiusWorldM, collisionToCoreRadiusRatio,
-                semanticDiameterPerCoreDiameter, out coreRadius, out collisionRadius,
-                out semanticDiameter, out effectiveVolumeUnits))
+            long volumeMm3;
+            if (!SizeModelMath.TrySphereVolumeMm3(startDiameterWorldM,
+                semanticDiameterPerCoreDiameter, out volumeMm3))
             {
                 Debug.LogWarning("[BallMotor] startDiameterWorldM=" + startDiameterWorldM
-                    + " cannot be a baseline (the core cap is " + maxCoreRadiusWorldM
-                    + "); keeping baselineVolumeUnits=" + baselineVolumeUnits);
+                    + " is not usable; keeping startVolumeMm3=" + startVolumeMm3);
                 return;
             }
-            if (Mathf.Abs(semanticDiameter - startDiameterWorldM) > startDiameterWorldM * 0.001f)
+            if (startDiameterWorldM > maxBallDiameterM)
             {
                 Debug.LogWarning("[BallMotor] startDiameterWorldM=" + startDiameterWorldM
-                    + " does not round-trip through the size model (" + semanticDiameter
-                    + "); keeping baselineVolumeUnits=" + baselineVolumeUnits);
+                    + " is above the global cap " + maxBallDiameterM
+                    + "; keeping startVolumeMm3=" + startVolumeMm3);
                 return;
             }
-            baselineVolumeUnits = units;
+            startVolumeMm3 = volumeMm3;
         }
 
         /// <summary>
@@ -1338,7 +1322,7 @@ namespace VRCKatamari.BallMotor
                 pendingKinds = new string[PendingCandidateCapacity];
                 pendingBounds = new Vector3[PendingCandidateCapacity];
                 pendingPositions = new Vector3[PendingCandidateCapacity];
-                pendingValues = new float[PendingCandidateCapacity];
+                pendingGrowthMm3 = new long[PendingCandidateCapacity];
                 pendingVolumeK = new float[PendingCandidateCapacity];
                 pendingItemIds = new string[PendingCandidateCapacity];
                 pendingGenerations = new int[PendingCandidateCapacity];
@@ -1362,7 +1346,7 @@ namespace VRCKatamari.BallMotor
         {
             if (pendingAbsorbable == null || pendingKinds == null) return false;
             if (pendingBounds == null || pendingPositions == null) return false;
-            if (pendingValues == null || pendingVolumeK == null) return false;
+            if (pendingGrowthMm3 == null || pendingVolumeK == null) return false;
             if (pendingItemIds == null) return false;
             if (pendingGenerations == null || pendingAccepted == null) return false;
             if (pendingSubmitTimes == null) return false;
@@ -1370,7 +1354,7 @@ namespace VRCKatamari.BallMotor
             if (pendingKinds.Length < PendingCandidateCapacity) return false;
             if (pendingBounds.Length < PendingCandidateCapacity) return false;
             if (pendingPositions.Length < PendingCandidateCapacity) return false;
-            if (pendingValues.Length < PendingCandidateCapacity) return false;
+            if (pendingGrowthMm3.Length < PendingCandidateCapacity) return false;
             if (pendingVolumeK.Length < PendingCandidateCapacity) return false;
             if (pendingItemIds.Length < PendingCandidateCapacity) return false;
             if (pendingGenerations.Length < PendingCandidateCapacity) return false;
@@ -3379,7 +3363,7 @@ namespace VRCKatamari.BallMotor
                     pendingAbsorbable[i], pendingKinds[i], allowedKinds, allowedKindCount,
                     pendingBounds[i], pendingPositions[i], center, reachRadius,
                     contactRadiusWorldM, pendingVolumeK[i], semanticDiameterWorldM,
-                    maxCollisionRadiusWorldM, pendingValues[i]);
+                    maxCollisionRadiusWorldM, pendingGrowthMm3[i]);
                 float evaluatedDistance = Vector3.Distance(pendingPositions[i], center);
 
                 if (debugTraceItemId != null && debugTraceItemId.Length > 0
@@ -3444,7 +3428,7 @@ namespace VRCKatamari.BallMotor
                 if (pendingAccepted[read])
                 {
                     long gain;
-                    if (PickupAbsorbMath.TryAbsorbValueToLedgerGain(pendingValues[read],
+                    if (PickupAbsorbMath.TryAbsorbGrowthToLedgerGain(pendingGrowthMm3[read],
                         out gain))
                     {
                         absorbed = TryCommitAbsorb(pendingItemIds[read],
@@ -3492,7 +3476,7 @@ namespace VRCKatamari.BallMotor
             pendingKinds[write] = pendingKinds[read];
             pendingBounds[write] = pendingBounds[read];
             pendingPositions[write] = pendingPositions[read];
-            pendingValues[write] = pendingValues[read];
+            pendingGrowthMm3[write] = pendingGrowthMm3[read];
             pendingVolumeK[write] = pendingVolumeK[read];
             pendingItemIds[write] = pendingItemIds[read];
             pendingGenerations[write] = pendingGenerations[read];
@@ -3556,12 +3540,11 @@ namespace VRCKatamari.BallMotor
             float coreRadius;
             float collisionRadius;
             float semanticDiameter;
-            float effectiveVolumeUnits;
-            if (!SizeModelMath.TryDerive(confirmedVolumeUnits, baselineVolumeUnits,
-                cubicMetersPerVolumeUnit, maxCoreRadiusWorldM,
-                collisionToCoreRadiusRatio, semanticDiameterPerCoreDiameter,
-                out coreRadius, out collisionRadius, out semanticDiameter,
-                out effectiveVolumeUnits))
+            long effectiveConfirmedMm3;
+            if (!SizeModelMath.TryDerive(startVolumeMm3, confirmedVolumeMm3,
+                maxBallDiameterM, collisionToCoreRadiusRatio,
+                semanticDiameterPerCoreDiameter, out coreRadius, out collisionRadius,
+                out semanticDiameter, out effectiveConfirmedMm3))
             {
                 return;
             }
@@ -3593,7 +3576,8 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         private void RecomputeConfirmedAndSize()
         {
-            confirmedVolumeUnits = (float)unbankedVolumeUnits + carriedVolumeUnits;
+            // Integer addition, exactly: the ledger mirror plus the already-scored carry.
+            confirmedVolumeMm3 = unbankedVolumeUnits + carriedVolumeMm3;
             DeriveSize();
         }
 
@@ -3605,7 +3589,8 @@ namespace VRCKatamari.BallMotor
         /// </summary>
         private void DeriveGrowthFraction()
         {
-            float span = maxCoreRadiusWorldM - baseCoreRadiusWorldM;
+            float capCoreRadius = (0.5f * maxBallDiameterM) / semanticDiameterPerCoreDiameter;
+            float span = capCoreRadius - baseCoreRadiusWorldM;
             if (span <= 0f)
             {
                 growthFraction = 0f;
@@ -3736,12 +3721,11 @@ namespace VRCKatamari.BallMotor
             float resetCoreRadius;
             float resetCollisionRadius;
             float resetSemanticDiameter;
-            float resetEffectiveVolumeUnits;
-            if (!SizeModelMath.TryDerive(0f, baselineVolumeUnits, cubicMetersPerVolumeUnit,
-                maxCoreRadiusWorldM, collisionToCoreRadiusRatio,
-                semanticDiameterPerCoreDiameter, out resetCoreRadius,
-                out resetCollisionRadius, out resetSemanticDiameter,
-                out resetEffectiveVolumeUnits))
+            long resetEffectiveConfirmedMm3;
+            if (!SizeModelMath.TryDerive(startVolumeMm3, 0L, maxBallDiameterM,
+                collisionToCoreRadiusRatio, semanticDiameterPerCoreDiameter,
+                out resetCoreRadius, out resetCollisionRadius, out resetSemanticDiameter,
+                out resetEffectiveConfirmedMm3))
             {
                 reason = 5;
                 return false;
@@ -3778,9 +3762,9 @@ namespace VRCKatamari.BallMotor
             absorbedEventRingCount = 0;
             rejectEventCount = 0;
             absorbedCount = 0;
-            unbankedVolumeUnits = 0;
-            carriedVolumeUnits = 0f;
-            confirmedVolumeUnits = 0f;
+            unbankedVolumeUnits = 0L;
+            carriedVolumeMm3 = 0L;
+            confirmedVolumeMm3 = 0L;
             bankedScoreUnits = 0;
             lastAwardFailure = 0;
             // awardedKeys / awardedPoints / awardedCount were cleared by the ledger rule.
@@ -3869,35 +3853,80 @@ namespace VRCKatamari.BallMotor
         public bool SubmitCandidate(bool absorbable, string kind, Vector3 bounds,
             Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration)
         {
-            // The un-factored form: the item plays at the original's default k (0.70). A
-            // host that knows its per-item factor (the level importer fills
-            // PickupFieldHost.propVolumeK) calls SubmitCandidateWithVolumeK instead.
+            // LEGACY BRIDGE, Lab/tests only: `valueUnits` is the retired integer unit
+            // (1 unit = 4,100,000 mm^3). The shipped path is
+            // SubmitCandidateWithVolumeKMm3 with the host's pre-priced growth; this bridge
+            // exists so a lab scene (CpuSkirmish's PlaygroundProp) keeps its authored number
+            // without re-importing the scene this round.
+            long growthMm3 = LegacyUnitsToGrowthMm3(valueUnits);
+            if (growthMm3 <= 0L) return false;
             return SubmitCandidateWithVolumeK(absorbable, kind, bounds, worldPosition,
-                valueUnits, itemInstanceId, itemGeneration,
+                growthMm3, itemInstanceId, itemGeneration,
                 PickupAbsorbMath.DefaultVolumeK);
         }
 
+        /// <summary>One retired integer unit in mm^3 (4,100,000), rounded; -1 when illegal.</summary>
+        /// <remarks>
+        /// The old calibration was 1 unit = 0.0041 m^3 = 4,100,000 mm^3, so the conversion
+        /// is exact for every integer unit. Kept in ONE place so the Lab bridge cannot drift
+        /// from the history it bridges.
+        /// </remarks>
+        private static long LegacyUnitsToGrowthMm3(float valueUnits)
+        {
+            if (!KatamariMath.IsFiniteFloat(valueUnits) || valueUnits <= 0f) return -1L;
+            float mm3 = valueUnits * 4100000f;
+            if (!KatamariMath.IsFiniteFloat(mm3)) return -1L;
+            long rounded = (long)Mathf.Round(mm3);
+            return rounded > 0L ? rounded : -1L;
+        }
+
         /// <summary>
-        /// <see cref="SubmitCandidate"/> plus the item's per-item volume factor k.
+        /// LEGACY BRIDGE (Lab/tests): <see cref="SubmitCandidate"/> plus the item's k.
+        /// </summary>
+        /// <remarks>
+        /// Converts the retired integer unit to mm^3 through
+        /// <see cref="LegacyUnitsToGrowthMm3"/> and then uses the real entry point
+        /// <see cref="SubmitCandidateWithVolumeKMm3"/>. The shipped host no longer calls this.
+        /// </remarks>
+        public bool SubmitCandidateWithVolumeK(bool absorbable, string kind, Vector3 bounds,
+            Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration,
+            float volumeK)
+        {
+            long growthMm3 = LegacyUnitsToGrowthMm3(valueUnits);
+            if (growthMm3 <= 0L) return false;
+            return SubmitCandidateWithVolumeKMm3(absorbable, kind, bounds, worldPosition,
+                growthMm3, itemInstanceId, itemGeneration, volumeK);
+        }
+
+        /// <summary>
+        /// Queues one candidate whose growth is already priced in mm^3, at the default k.
+        /// </summary>
+        public bool SubmitCandidateMm3(bool absorbable, string kind, Vector3 bounds,
+            Vector3 worldPosition, long growthMm3, string itemInstanceId, int itemGeneration)
+        {
+            return SubmitCandidateWithVolumeKMm3(absorbable, kind, bounds, worldPosition,
+                growthMm3, itemInstanceId, itemGeneration, PickupAbsorbMath.DefaultVolumeK);
+        }
+
+        /// <summary>
+        /// The one queue writer: k for the gate, growth for the ledger, both per item.
         /// </summary>
         /// <remarks>
         /// <para>
         /// `volumeK` is the original's `Volume = k * bbox` factor for THIS item: the gate's
         /// Req depends on it (`Req = floor(1000*cbrt(60*k*a*b*c/pi))`), so two items with
-        /// the same bounds but different k are not equally absorbable. It is validated here
-        /// against the one authoring range (`0 &lt; k &lt;= MaxVolumeK`) so a bad value is
-        /// refused at the queue instead of silently becoming "blocking" in the gate; a
-        /// refused submit returns false and the host logs it once (a data error).
+        /// the same bounds but different k are not equally absorbable. `growthMm3` is the
+        /// ledger gain the same item is worth (penalty * k * bbox, priced once). They travel
+        /// together because they are the same underlying volume seen by two consumers.
         /// </para>
         /// <para>
-        /// Kept as a separate entry point rather than an optional parameter because
-        /// UdonSharp does not support default arguments, and because the labs that submit a
-        /// hand-authored prop (the physics test field, the CPU-skirmish playground) should
-        /// not have to name a k they do not have.
+        /// Kept as separate entry points rather than optional parameters because UdonSharp
+        /// does not support default arguments, and because a lab that submits a hand-authored
+        /// prop should not have to name a k it does not have.
         /// </para>
         /// </remarks>
-        public bool SubmitCandidateWithVolumeK(bool absorbable, string kind, Vector3 bounds,
-            Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration,
+        public bool SubmitCandidateWithVolumeKMm3(bool absorbable, string kind, Vector3 bounds,
+            Vector3 worldPosition, long growthMm3, string itemInstanceId, int itemGeneration,
             float volumeK)
         {
             // Same ownership rule as the scene sets: the queue allocates on first use, so
@@ -3916,6 +3945,7 @@ namespace VRCKatamari.BallMotor
             if (itemGeneration < 0) return false;
             if (!KatamariMath.IsFiniteFloat(volumeK)) return false;
             if (volumeK <= 0f || volumeK > PickupAbsorbMath.MaxVolumeK) return false;
+            if (growthMm3 <= 0L) return false;
 
             // Idempotent by item id: re-submitting something already queued is a no-op
             // that returns true. The queue is the single owner of "is this queued", so a
@@ -3935,7 +3965,7 @@ namespace VRCKatamari.BallMotor
             pendingKinds[index] = kind;
             pendingBounds[index] = bounds;
             pendingPositions[index] = worldPosition;
-            pendingValues[index] = valueUnits;
+            pendingGrowthMm3[index] = growthMm3;
             pendingVolumeK[index] = volumeK;
             pendingItemIds[index] = itemInstanceId;
             pendingGenerations[index] = itemGeneration;
@@ -5752,11 +5782,11 @@ namespace VRCKatamari.BallMotor
             float startCoreRadius;
             float startCollisionRadius;
             float startDiameter;
-            float startEffectiveVolumeUnits;
-            if (!SizeModelMath.TryDerive(0f, baselineVolumeUnits, cubicMetersPerVolumeUnit,
-                maxCoreRadiusWorldM, collisionToCoreRadiusRatio,
-                semanticDiameterPerCoreDiameter, out startCoreRadius,
-                out startCollisionRadius, out startDiameter, out startEffectiveVolumeUnits))
+            long startEffectiveConfirmedMm3;
+            if (!SizeModelMath.TryDerive(startVolumeMm3, 0L, maxBallDiameterM,
+                collisionToCoreRadiusRatio, semanticDiameterPerCoreDiameter,
+                out startCoreRadius, out startCollisionRadius, out startDiameter,
+                out startEffectiveConfirmedMm3))
             {
                 reason = 6;
                 return false;
@@ -5770,10 +5800,9 @@ namespace VRCKatamari.BallMotor
                 return false;
             }
 
-            float postBankVolumeUnits;
-            if (!BankShrinkMath.TryBankVolumeUnits(postBankDiameter, baselineVolumeUnits,
-                cubicMetersPerVolumeUnit, maxCoreRadiusWorldM,
-                semanticDiameterPerCoreDiameter, out postBankVolumeUnits))
+            long postBankConfirmedMm3;
+            if (!BankShrinkMath.TryBankVolumeMm3(postBankDiameter, startVolumeMm3,
+                semanticDiameterPerCoreDiameter, out postBankConfirmedMm3))
             {
                 reason = 6;
                 return false;
@@ -5793,7 +5822,7 @@ namespace VRCKatamari.BallMotor
             if (confirmed < 0 || banked < 0) { reason = 7; return false; }
             unbankedVolumeUnits = confirmed;
             bankedScoreUnits = banked;
-            if (!ApplyBankShrink(postBankVolumeUnits)) { reason = 8; return false; }
+            if (!ApplyBankShrink(postBankConfirmedMm3)) { reason = 8; return false; }
             return true;
         }
 
@@ -5817,15 +5846,15 @@ namespace VRCKatamari.BallMotor
         /// cannot double count.
         /// </para>
         /// </remarks>
-        private bool ApplyBankShrink(float postBankVolumeUnits)
+        private bool ApplyBankShrink(long postBankConfirmedMm3)
         {
-            float carried;
-            if (!BankShrinkMath.TryCarriedVolumeUnits(postBankVolumeUnits,
-                (float)unbankedVolumeUnits, out carried))
+            long carried;
+            if (!BankShrinkMath.TryCarriedVolumeMm3(postBankConfirmedMm3,
+                unbankedVolumeUnits, out carried))
             {
                 return false;
             }
-            carriedVolumeUnits = carried;
+            carriedVolumeMm3 = carried;
             RecomputeConfirmedAndSize();
             // A conversion can shrink the core a long way. The endpoint pool is unchanged,
             // but the contract asks for a whole-ledger rebuild after a large shrink, so the
@@ -6348,7 +6377,39 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         public float GetConfirmedVolumeUnits()
         {
-            return confirmedVolumeUnits;
+            // DEPRECATED name kept for one migration round: the value is now CUBIC METRES of
+            // the confirmed growth (not integer units), which is what every reader wanted.
+            return GetConfirmedVolumeCubicMetres();
+        }
+
+        /// <summary>The ledger's confirmed growth for the local row, exactly, in mm^3.</summary>
+        public long GetConfirmedVolumeMm3()
+        {
+            return unbankedVolumeUnits;
+        }
+
+        /// <summary>The ball's TOTAL volume in cubic metres (start + confirmed + carried).</summary>
+        /// <remarks>
+        /// A display/analysis reading only: it is recomputed from the integer columns, never
+        /// accumulated, so no float drift can reach the ledger.
+        /// </remarks>
+        public float GetConfirmedVolumeCubicMetres()
+        {
+            long totalMm3 = startVolumeMm3 + unbankedVolumeUnits + carriedVolumeMm3;
+            if (totalMm3 < 0L) return 0f;
+            return (float)totalMm3 * 1e-9f;
+        }
+
+        /// <summary>
+        /// The HUD diameter: the semantic diameter plus the original's +0.02 cm (parity G09).
+        /// </summary>
+        /// <remarks>
+        /// A DISPLAY reading only. The gate and the size model use the un-offset semantic
+        /// diameter, so the fudge can never move a threshold.
+        /// </remarks>
+        public float GetHudDiameterWorldM()
+        {
+            return SizeModelMath.HudDiameterWorldM(semanticDiameterWorldM);
         }
 
         /// <summary>
@@ -6666,11 +6727,11 @@ namespace VRCKatamari.BallMotor
         /// submission carries the value, and a wrong field at the call site would show up
         /// only here. Read-only.
         /// </remarks>
-        public float GetPendingCandidateValue(int index)
+        public long GetPendingCandidateGrowthMm3(int index)
         {
-            if (pendingValues == null) return -1f;
-            if (index < 0 || index >= pendingCandidateCount) return -1f;
-            return pendingValues[index];
+            if (pendingGrowthMm3 == null) return -1L;
+            if (index < 0 || index >= pendingCandidateCount) return -1L;
+            return pendingGrowthMm3[index];
         }
 
         /// <summary>

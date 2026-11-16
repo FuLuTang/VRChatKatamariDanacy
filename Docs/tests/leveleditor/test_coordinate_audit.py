@@ -105,8 +105,9 @@ class StoryLevelCoordinateAudit(unittest.TestCase):
         # match what is actually placed.
         expected = self.doc["level"]["expected"]
         self.assertEqual(expected["propCount"], len(self.doc["props"]))
-        self.assertEqual(expected["valueUnits"],
-                         sum(prop["valueUnits"] for prop in self.doc["props"]))
+        # Steps C+D: the content total is DERIVED growth in mm^3; the legacy valueUnits
+        # total is gone from the written file.
+        self.assertEqual(expected["growthMm3"], core.growth_mm3_total(self.doc))
         for entry in self.doc["props"]:
             self.assertAlmostEqual(entry["absorbDiameterReq"],
                                    core.absorb_diameter_req(entry["aabb"]), places=3)

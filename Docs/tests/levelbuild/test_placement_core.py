@@ -335,66 +335,110 @@ class DeterminismTests(unittest.TestCase):
         self.assertEqual(core.validate(doc).errors, [])
 
 
-class ValueUnitsRangeTests(unittest.TestCase):
-    """valueUnits is a JSON integer with no float conversion, past int32.
+class GrowthMm3Tests(unittest.TestCase):
+    """Steps C+D's data half: growth is a derived mm^3 integer, not a picked "unit".
 
-    The Unity half of Docs/OPEN_DECISIONS.md (r) step B widened the host column to
-    ``long[]``; Python's ``int`` was already unbounded, so the only way this side can
-    regress is a float creeping into the emitted JSON or into a total. A value past
-    int32's 2,147,483,647 is used so the retired 32-bit ceiling cannot come back
-    unnoticed. The unit and every stored number are unchanged by step B, so the fixture's
-    other values stay as they are.
+    Docs/OPEN_DECISIONS.md (r) + Docs/Research/ContentVolume/FIXED_POINT_STEP_CD.md: the
+    one growth number is ``round(penalty * k * a*b*c * 1e9)`` (penalty 0.8, k 0.70 by
+    default, both per-item overridable), DERIVED by the writer like absorbDiameterReq.  The
+    deprecated ``valueUnits`` input is accepted and dropped, never used.
     """
 
-    PAST_INT_MAX = 3000000000
+    def test_growth_is_the_original_formula_in_integer_mm3(self):
+        # A 0.05 m cube: 0.8 * 0.70 * 1.25e-4 m^3 = 7.0e-5 m^3 = 70,000 mm^3.
+        self.assertEqual(core.item_growth_mm3((0.05, 0.05, 0.05)), 70000)
+        self.assertEqual(core.item_growth_mm3((0.05, 0.05, 0.05), 1.0), 100000)
+        # k and penalty multiply linearly, and the result is a plain int.
+        self.assertIs(type(core.item_growth_mm3((0.05, 0.05, 0.05))), int)
 
-    def big_doc(self):
+    def test_ball_volume_and_diameter_are_the_same_curve(self):
+        # 0.2997 m start ball: pi/6 * d^3 = 0.0140948 m^3 = 14,094,798 mm^3.
+        self.assertEqual(core.ball_volume_mm3(0.2997), 14094798)
+        self.assertAlmostEqual(core.diameter_for_volume_mm3(14094798), 0.2997, places=6)
+        # 2.20 m: pi/6 * 2.2^3 = 5.5753 m^3 = 5,575,279,763 mm^3.
+        self.assertEqual(core.ball_volume_mm3(2.20), 5575279763)
+        self.assertAlmostEqual(core.diameter_for_volume_mm3(5575279763), 2.20, places=6)
+        # The global 30 m cap from step D: 14,137.17 m^3.
+        self.assertEqual(core.ball_volume_mm3(core.MAX_BALL_DIAMETER_M), 14137166941154)
+
+    def test_a_growth_total_stays_an_exact_integer_past_int32(self):
         doc = valid_doc()
-        doc["defs"][0]["valueUnits"] = self.PAST_INT_MAX
-        doc["props"][0]["valueUnits"] = self.PAST_INT_MAX
-        # prop_apple_000 overrides its def, so the total is 3e9 + 1 (orange) + 4 (plate).
-        doc["level"]["expected"]["valueUnits"] = self.PAST_INT_MAX + 1 + 4
-        return doc
-
-    def test_a_value_past_int32_stays_an_integer_in_the_json(self):
-        doc = self.big_doc()
+        doc["props"][0]["aabb"] = [1.5, 1.5, 1.5]  # a big prop, so the gain is past int32
+        doc["props"][0]["volumeK"] = 32.0           # a legal hand-tuned thin-sheet factor
+        doc["props"][0]["volumePenalty"] = 1.0
         canonical = core.canonical_doc(doc)
-        self.assertIs(type(canonical["defs"][0]["valueUnits"]), int)
-        self.assertIs(type(canonical["props"][0]["valueUnits"]), int)
-        self.assertEqual(canonical["defs"][0]["valueUnits"], self.PAST_INT_MAX)
-        self.assertEqual(canonical["props"][0]["valueUnits"], self.PAST_INT_MAX)
+        growth = canonical["props"][0]["growthMm3"]
+        self.assertIs(type(growth), int)
+        self.assertGreater(growth, 2 ** 31 - 1)
 
         text = core.dump_doc(doc)
-        self.assertIn('"valueUnits": %d' % self.PAST_INT_MAX, text)
-        self.assertNotIn("%d.0" % self.PAST_INT_MAX, text)
-        self.assertNotIn("3e+09", text.lower())
+        self.assertIn('"growthMm3": %d' % growth, text)
+        self.assertNotIn("%d.0" % growth, text)
+        self.assertNotIn("e+", text.lower())
 
         back = json.loads(text)
-        self.assertIs(type(back["defs"][0]["valueUnits"]), int)
-        self.assertIs(type(back["props"][0]["valueUnits"]), int)
-        self.assertEqual(back["props"][0]["valueUnits"], self.PAST_INT_MAX)
-
-    def test_totals_stay_exact_past_int32(self):
-        doc = self.big_doc()
-        expected = self.PAST_INT_MAX + 1 + 4
-        total = core.value_units_total(doc)
+        self.assertIs(type(back["props"][0]["growthMm3"]), int)
+        total = core.growth_mm3_total(doc)
         self.assertIs(type(total), int)
-        self.assertEqual(total, expected)
-        self.assertEqual(core.expected_totals(doc)["valueUnits"], expected)
-        self.assertIs(type(core.expected_totals(doc)["valueUnits"]), int)
+        self.assertEqual(core.expected_totals(doc)["growthMm3"], total)
+        self.assertIs(type(core.expected_totals(doc)["growthMm3"]), int)
 
-        report = core.validate(doc)
-        self.assertEqual(report.errors, [])
-        self.assertEqual(report.warnings, [])
+    def test_value_units_is_a_deprecated_input_the_writer_drops(self):
+        doc = valid_doc()
+        doc["defs"][0]["valueUnits"] = 3000000000
+        doc["props"][0]["valueUnits"] = 3000000000
+        canonical = core.canonical_doc(doc)
+        self.assertNotIn("valueUnits", canonical["defs"][0])
+        self.assertNotIn("valueUnits", canonical["props"][0])
+        # A huge legacy value must not leak into growth: growth ignores it entirely.
+        self.assertEqual(canonical["props"][0]["growthMm3"], core.growth_mm3(doc["props"][0]))
+        self.assertEqual(core.validate(doc).errors, [])
 
-    def test_a_fractional_value_is_refused_not_rounded(self):
-        # The mirror of the editor's whole-unit rule (Docs/OPEN_DECISIONS.md (j)): a float
-        # in the file is a data error, not something to truncate on the way to the host.
+    def test_expected_growth_is_the_authored_design_total(self):
+        # `expected.growthMm3` is the GATE, so the writer keeps it (it must not silently
+        # re-pin a design total); the validator compares it with the derived content.
+        doc = valid_doc()
+        total = core.growth_mm3_total(doc)
+        doc["level"]["expected"] = {"propCount": 3, "growthMm3": total}
+        self.assertEqual(core.validate(doc).errors, [])
+        canonical = core.canonical_doc(doc)
+        self.assertEqual(canonical["level"]["expected"]["growthMm3"], total)
+
+        # Legacy-only expected blocks stay VALID input; the valueUnits key is dropped and
+        # no growthMm3 is invented (that would be a silent design gate).
+        legacy = valid_doc()
+        legacy["level"]["expected"] = {"propCount": 3, "valueUnits": 6}
+        self.assertEqual(core.validate(legacy).errors, [])
+        legacy_out = core.canonical_doc(legacy)
+        self.assertNotIn("valueUnits", legacy_out["level"]["expected"])
+        self.assertNotIn("growthMm3", legacy_out["level"]["expected"])
+
+    def test_a_stale_expected_growth_is_red(self):
+        stale = valid_doc()
+        stale["level"]["expected"] = {"propCount": 3,
+                                      "growthMm3": core.growth_mm3_total(stale) + 1}
+        errors = core.validate(stale).errors
+        self.assertTrue(any("growthMm3" in error and "does not match" in error
+                            for error in errors), errors)
+
+    def test_a_fractional_volume_unit_is_still_refused(self):
         doc = valid_doc()
         doc["props"][0]["valueUnits"] = 1.5
         report = core.validate(doc)
         self.assertTrue(any("valueUnits must be a whole number" in error
                             for error in report.errors), report.errors)
+
+    def test_a_bad_penalty_is_refused_not_clamped(self):
+        for bad in (0.0, -0.5, 1.5, float("nan")):
+            doc = valid_doc()
+            doc["props"][0]["volumePenalty"] = bad
+            errors = core.validate(doc).errors
+            self.assertTrue(any("volumePenalty" in error for error in errors),
+                            (bad, errors))
+        doc = valid_doc()
+        doc["props"][0]["volumePenalty"] = 0.5
+        self.assertEqual(core.validate(doc).errors, [])
+        self.assertEqual(core.canonical_doc(doc)["props"][0]["volumePenalty"], 0.5)
 
 
 if __name__ == "__main__":

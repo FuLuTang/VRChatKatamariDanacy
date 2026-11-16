@@ -395,7 +395,7 @@ namespace VRCKatamari.Tests
             object def = Activator.CreateInstance(defType);
             SetMember(defType, def, "id", "acorn");
             SetMember(defType, def, "kind", "food");
-            SetMember(defType, def, "valueUnits", 1L);
+            SetMember(defType, def, "valueUnits", 1L);   // deprecated input, still accepted
             defs.SetValue(def, 0);
             SetMember(docType, doc, "defs", defs);
             return doc;

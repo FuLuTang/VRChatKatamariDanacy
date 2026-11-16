@@ -113,6 +113,34 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void TheGrowthPenaltyMustBePositiveAndAtMostOne()
+        {
+            // Docs/OPEN_DECISIONS.md (r) C+D: gain = round(penalty * k * a*b*c * 1e9), and
+            // penalty is 0.80 unless a row declares an override in (0, 1].
+            Assert.IsNull(Invoke("VolumePenaltyError", 0.8f));
+            Assert.IsNull(Invoke("VolumePenaltyError", 1f));
+            Assert.IsNotNull(Invoke("VolumePenaltyError", 0f));
+            Assert.IsNotNull(Invoke("VolumePenaltyError", -0.1f));
+            Assert.IsNotNull(Invoke("VolumePenaltyError", 1.01f));
+            Assert.IsNotNull(Invoke("VolumePenaltyError", float.NaN));
+
+            // Resolution: declared wins; absent falls back to the original's 0.80 default.
+            var declared = new System.Collections.Generic.Dictionary<string, float>
+            {
+                { "half", 0.5f },
+                { "bad", 2f },
+            };
+            object[] withValue = { "half", declared, 0f, null };
+            Assert.AreEqual(true, InvokeArgs("TryResolveVolumePenalty", withValue));
+            Assert.AreEqual(0.5f, (float)withValue[2], 1e-6f);
+            object[] fallback = { "absent", declared, 0f, null };
+            Assert.AreEqual(true, InvokeArgs("TryResolveVolumePenalty", fallback));
+            Assert.AreEqual(0.80f, (float)fallback[2], 1e-6f);
+            object[] refused = { "bad", declared, 0f, null };
+            Assert.AreEqual(false, InvokeArgs("TryResolveVolumePenalty", refused));
+        }
+
+        [Test]
         public void DeclaredSizeSuffixIsParsedAndStripped()
         {
             // The gate-prop convention: "prop_bench_01@size=1.25" means the bench's absorb
@@ -450,6 +478,14 @@ namespace VRCKatamari.Tests
         }
 
         private static object Invoke(string methodName, params object[] arguments)
+        {
+            MethodInfo method = RulesType().GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
+            Assert.IsNotNull(method, RulesTypeName + "." + methodName + " is missing");
+            return method.Invoke(null, arguments);
+        }
+
+        /// <summary>Invokes a method with a caller-owned argument array (out params survive).</summary>
+        private static object InvokeArgs(string methodName, object[] arguments)
         {
             MethodInfo method = RulesType().GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
             Assert.IsNotNull(method, RulesTypeName + "." + methodName + " is missing");

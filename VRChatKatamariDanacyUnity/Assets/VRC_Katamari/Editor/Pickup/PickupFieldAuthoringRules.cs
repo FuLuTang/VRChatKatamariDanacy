@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
+using VRCKatamari.Pickup;
 
 namespace VRCKatamari.Editor.Pickup
 {
@@ -157,6 +158,55 @@ namespace VRCKatamari.Editor.Pickup
                 volumeK = existingVolumeK;
                 source = ValueSourceExisting;
                 return true;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Why a declared growth <c>volumePenalty</c> is unusable, or null when legal.
+        /// </summary>
+        /// <remarks>
+        /// The range is <c>0 &lt; p &lt;= 1</c>: above 1 recovers more volume than the item
+        /// occupies, which neither the original nor the ledger has a rule for. The default
+        /// 0.80 lives in <see cref="PickupAbsorbMath.DefaultVolumePenalty"/> and is never
+        /// written to the JSON, so an absent key and a declared 0 are both "default".
+        /// </remarks>
+        public static string VolumePenaltyError(float volumePenalty)
+        {
+            if (float.IsNaN(volumePenalty) || float.IsInfinity(volumePenalty))
+                return "must be finite";
+            if (volumePenalty <= 0f)
+                return "must be > 0 (0 would make an absorb grow the ball by nothing)";
+            if (volumePenalty > PickupAbsorbMath.MaxVolumePenalty)
+                return "must be <= 1 (recovering more than the item's own volume has no rule)";
+            return null;
+        }
+
+        /// <summary>
+        /// The growth penalty a row is priced with: the declared override, else the
+        /// original's default 0.80.
+        /// </summary>
+        /// <remarks>
+        /// There is intentionally no "preserved from the host" step: penalty is authoring
+        /// data used once, at sync time, to price <c>propGrowthMm3</c>; the runtime needs only
+        /// the finished gain. A declaration outside the legal range returns false (a refused
+        /// row, never a silent fallback).
+        /// </remarks>
+        public static bool TryResolveVolumePenalty(string itemId,
+            IDictionary<string, float> declaredVolumePenalty, out float volumePenalty,
+            out string source)
+        {
+            volumePenalty = PickupAbsorbMath.DefaultVolumePenalty;
+            source = ValueSourceNone;
+
+            float declared;
+            if (declaredVolumePenalty != null &&
+                declaredVolumePenalty.TryGetValue(itemId, out declared))
+            {
+                if (VolumePenaltyError(declared) != null) return false;
+                volumePenalty = declared;
+                source = ValueSourceDeclared;
             }
 
             return true;
@@ -726,6 +776,8 @@ namespace VRCKatamari.Editor.Pickup
         /// </summary>
         public sealed class PickupProxyDefinition
         {
+            /// <summary>The JSON <c>type</c> string; empty means "no block was declared".</summary>
+            public string TypeName;
             public int Kind;                 // 0 box, 1 sphere, 2 capsule, 3 convex
             public Vector3 Center;
             public Vector3 Size;             // box: full edge lengths
@@ -752,6 +804,18 @@ namespace VRCKatamari.Editor.Pickup
         public const int MaxProxyHullFaces = 44;
 
         /// <summary>
+        /// The ONE presence predicate for a deserialized collider block. JsonUtility fills a
+        /// nested <c>[Serializable]</c> field with a default instance even when the JSON key is
+        /// absent, so <c>collider != null</c> always says "declared" (the same trap as
+        /// <c>PhysicsTestFieldCriteriaImporter.HasV2Override</c>). A real block always has a
+        /// non-empty <c>type</c>; absence is that string being empty.
+        /// </summary>
+        public static bool IsColliderDeclared(string type)
+        {
+            return type != null && type.Trim().Length > 0;
+        }
+
+        /// <summary>
         /// The one range/shape check for a collider block. Returns null when the block is
         /// usable, else a human-readable reason. The runtime twin is
         /// <c>ProxyContactMath.IsValidProxy</c>; this side adds the hull/face contents that
@@ -759,7 +823,8 @@ namespace VRCKatamari.Editor.Pickup
         /// </summary>
         public static string ProxyError(PickupProxyDefinition proxy)
         {
-            if (proxy == null) return "collider block is missing";
+            if (proxy == null || !IsColliderDeclared(proxy.TypeName))
+                return "collider block is not declared";
             if (proxy.Kind < ProxyKindBox || proxy.Kind > ProxyKindConvex)
                 return "collider.type must be box/sphere/capsule/convex (got " + proxy.Kind + ")";
             if (!IsFinite(proxy.Center)) return "collider.center must be finite";

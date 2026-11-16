@@ -261,6 +261,11 @@ namespace VRCKatamari.Editor.LevelBuild
             /// </summary>
             public float volumeK;
             /// <summary>
+            /// The per-def growth penalty (absent/0 = 0.80). Original per-item values exist;
+            /// only the default is used this round (FIXED_POINT_STEP_CD section 8).
+            /// </summary>
+            public float volumePenalty;
+            /// <summary>
             /// Optional collider proxy (COLLIDER_PROXY.md). JsonUtility has no polymorphic
             /// object support and no jagged arrays, so the hull is a FLAT list of 3N numbers
             /// (`[x0,y0,z0, x1,y1,z1, ...]`), not an array of [x,y,z] points.
@@ -303,6 +308,8 @@ namespace VRCKatamari.Editor.LevelBuild
             /// override exists for the one instance whose authored body differs.
             /// </summary>
             public float volumeK;
+            /// <summary>Per-prop growth penalty override (0 = not declared, use 0.80).</summary>
+            public float volumePenalty;
             public string notes;
         }
 
@@ -592,13 +599,14 @@ namespace VRCKatamari.Editor.LevelBuild
             // pass as the other arrays and reads it back, so there is no second write here.
             Dictionary<string, long> declaredValueUnits = BuildDeclaredValueUnits(doc);
             Dictionary<string, float> declaredVolumeK = BuildDeclaredVolumeK(doc);
+            Dictionary<string, float> declaredVolumePenalty = BuildDeclaredVolumePenalty(doc);
             Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies =
                 BuildDeclaredProxies(doc);
-            report.ValueUnitsDeclared = SumDeclaredValueUnits(doc);
+            report.GrowthMm3Declared = SumDeclaredGrowthMm3(doc);
             if (propsOk)
             {
                 TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredValueUnits,
-                    declaredVolumeK, declaredProxies, report);
+                    declaredVolumeK, declaredVolumePenalty, declaredProxies, report);
             }
 
             BindArenaHost(doc, levelRoot, structuresRoot, report);
@@ -682,11 +690,19 @@ namespace VRCKatamari.Editor.LevelBuild
                     ok = false;
                 }
 
-                if (DeclaredValueUnits(doc, prop) < 1)
+                // `valueUnits` is DEPRECATED and no longer required: growth is derived from
+                // aabb x k x penalty (Docs/OPEN_DECISIONS.md (r) C+D), so a prop with no value
+                // is a normal prop. A declared penalty, if any, must be inside 0 < p <= 1.
+                if (prop.volumePenalty > 0f)
                 {
-                    report.Error(prop.itemId + " has no valueUnits (neither props[].valueUnits nor " +
-                                 "defs[].valueUnits for '" + prop.def + "')");
-                    ok = false;
+                    string penaltyProblem =
+                        PickupFieldAuthoringRules.VolumePenaltyError(prop.volumePenalty);
+                    if (penaltyProblem != null)
+                    {
+                        report.Error(prop.itemId + " volumePenalty " + prop.volumePenalty + " " +
+                                     penaltyProblem);
+                        ok = false;
+                    }
                 }
 
                 // k is optional (default 0.70), but a DECLARED one must be inside the one
@@ -735,7 +751,20 @@ namespace VRCKatamari.Editor.LevelBuild
                         }
                     }
 
-                    if (def.collider != null)
+                    if (def.volumePenalty != 0f)
+                    {
+                        string defPenaltyProblem =
+                            PickupFieldAuthoringRules.VolumePenaltyError(def.volumePenalty);
+                        if (defPenaltyProblem != null)
+                        {
+                            report.Error("defs[" + i + "] def '" + def.id + "' volumePenalty " +
+                                         def.volumePenalty + " " + defPenaltyProblem);
+                            ok = false;
+                        }
+                    }
+
+                    if (def.collider != null &&
+                        PickupFieldAuthoringRules.IsColliderDeclared(def.collider.type))
                     {
                         PickupFieldAuthoringRules.PickupProxyDefinition proxy;
                         string proxyError;
@@ -832,7 +861,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 ok = false;
             }
 
-            BudgetBlock budget = (doc.level != null && doc.level.budget != null)
+            BudgetBlock budget = (doc.level != null && HasBudgetContent(doc.level.budget))
                 ? doc.level.budget
                 : new BudgetBlock();
             if (planes > budget.planes)
@@ -902,7 +931,7 @@ namespace VRCKatamari.Editor.LevelBuild
         {
             segments = 0;
             CurveEntry curve = structure.curve;
-            if (curve == null)
+            if (!HasCurveContent(curve))
             {
                 report.Error("structure '" + structure.id + "' [curve_missing]: a role=curve_ramp " +
                              "needs a curve block (radius_m, arc_deg, width_m, thickness_m)");
@@ -1060,6 +1089,12 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             string type = entry.type == null ? "" : entry.type.Trim().ToLowerInvariant();
+            if (!PickupFieldAuthoringRules.IsColliderDeclared(type))
+            {
+                error = "collider.type is empty; the block is not declared";
+                return false;
+            }
+            proxy.TypeName = type;
             if (type == "box") proxy.Kind = PickupFieldAuthoringRules.ProxyKindBox;
             else if (type == "sphere") proxy.Kind = PickupFieldAuthoringRules.ProxyKindSphere;
             else if (type == "capsule") proxy.Kind = PickupFieldAuthoringRules.ProxyKindCapsule;
@@ -1183,6 +1218,7 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 DefEntry entry = doc.defs[i];
                 if (entry == null || entry.collider == null) continue;
+                if (!PickupFieldAuthoringRules.IsColliderDeclared(entry.collider.type)) continue;
                 if (!string.Equals(entry.id, prop.def, StringComparison.Ordinal)) continue;
                 PickupFieldAuthoringRules.PickupProxyDefinition proxy;
                 string error;
@@ -1319,8 +1355,61 @@ namespace VRCKatamari.Editor.LevelBuild
             return 0f;
         }
 
-        /// <summary>The level's declared total, for the one-line report.</summary>
-        private static long SumDeclaredValueUnits(PlacementDocument doc)
+        /// <summary>
+        /// Item id to the growth penalty the level declares (absent = 0.80 default).
+        /// </summary>
+        private static Dictionary<string, float> BuildDeclaredVolumePenalty(PlacementDocument doc)
+        {
+            var declared = new Dictionary<string, float>(StringComparer.Ordinal);
+            if (doc.props == null)
+            {
+                return declared;
+            }
+
+            for (int i = 0; i < doc.props.Length; i++)
+            {
+                PropEntry prop = doc.props[i];
+                if (prop == null || string.IsNullOrEmpty(prop.itemId))
+                {
+                    continue;
+                }
+
+                float penalty = DeclaredVolumePenalty(doc, prop);
+                if (penalty > 0f)
+                {
+                    declared[prop.itemId] = penalty;
+                }
+            }
+
+            return declared;
+        }
+
+        /// <summary>One prop's declared penalty: its own, else its def's, else 0 (not declared).</summary>
+        private static float DeclaredVolumePenalty(PlacementDocument doc, PropEntry prop)
+        {
+            if (prop.volumePenalty > 0f) return prop.volumePenalty;
+            if (doc.defs == null || prop.def == null) return 0f;
+            for (int i = 0; i < doc.defs.Length; i++)
+            {
+                DefEntry entry = doc.defs[i];
+                if (entry != null && string.Equals(entry.id, prop.def, StringComparison.Ordinal))
+                {
+                    return entry.volumePenalty;
+                }
+            }
+
+            return 0f;
+        }
+
+        /// <summary>
+        /// The level's total growth in mm^3, for the one-line report.
+        /// </summary>
+        /// <remarks>
+        /// The same formula the sync uses (<c>penalty * k * a*b*c</c>, mm^3), priced from the
+        /// JSON aabb. A row whose data cannot be priced contributes 0 here and is named by the
+        /// sync's refusal.
+        /// </remarks>
+        private static long SumDeclaredGrowthMm3(PlacementDocument doc)
         {
             long total = 0L;
             if (doc.props == null)
@@ -1331,9 +1420,20 @@ namespace VRCKatamari.Editor.LevelBuild
             for (int i = 0; i < doc.props.Length; i++)
             {
                 PropEntry prop = doc.props[i];
-                if (prop != null)
+                if (prop == null || prop.aabb == null || prop.aabb.Length != 3)
                 {
-                    total += DeclaredValueUnits(doc, prop);
+                    continue;
+                }
+
+                float volumeK = DeclaredVolumeK(doc, prop);
+                if (volumeK <= 0f) volumeK = PickupAbsorbMath.DefaultVolumeK;
+                float penalty = DeclaredVolumePenalty(doc, prop);
+                if (penalty <= 0f) penalty = PickupAbsorbMath.DefaultVolumePenalty;
+                Vector3 bounds = new Vector3(prop.aabb[0], prop.aabb[1], prop.aabb[2]);
+                long growth;
+                if (PickupAbsorbMath.TryComputeGrowthMm3(bounds, volumeK, penalty, out growth))
+                {
+                    total += growth;
                 }
             }
 
@@ -2193,11 +2293,12 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             CurveEntry curve = structure.curve;
-            string bend = curve == null || string.IsNullOrEmpty(curve.bend) ? "up" : curve.bend;
+            bool hasCurve = HasCurveContent(curve);
+            string bend = !hasCurve || string.IsNullOrEmpty(curve.bend) ? "up" : curve.bend;
             Vector3[] centers;
             Quaternion[] rotations;
             Vector3[] sizes;
-            if (curve == null || !TryExpandCurveRamp(curve.radius_m, curve.arc_deg, curve.segments,
+            if (!hasCurve || !TryExpandCurveRamp(curve.radius_m, curve.arc_deg, curve.segments,
                     curve.width_m, curve.thickness_m, bend, ToVector(structure.center),
                     ToQuaternion(structure.rotationQuat),
                     doc != null && doc.level != null ? doc.level.ballDiameterStart : 0.3f,
@@ -2759,6 +2860,26 @@ namespace VRCKatamari.Editor.LevelBuild
                    Mathf.Abs(Quaternion.Dot(body.localRotation, localRotation)) >= RotationDotTolerance;
         }
 
+        /// <summary>
+        /// Content predicates for JsonUtility nested blocks. An absent nested [Serializable]
+        /// field is materialised as a default instance, so `field != null` is always true;
+        /// presence must be judged by content.
+        /// </summary>
+        private static bool HasCurveContent(CurveEntry curve)
+        {
+            if (curve == null) return false;
+            return curve.radius_m != 0f || curve.arc_deg != 0f || curve.segments != 0 ||
+                   curve.width_m != 0f || curve.thickness_m != 0f ||
+                   !string.IsNullOrEmpty(curve.bend);
+        }
+
+        private static bool HasBudgetContent(BudgetBlock budget)
+        {
+            if (budget == null) return false;
+            return budget.planes != 0 || budget.boxes != 0 || budget.ramps != 0 ||
+                   budget.blocking != 0;
+        }
+
         private static bool IsPositiveFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value) && value > 0f;
@@ -2776,6 +2897,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
         private static bool TrySyncPickupField(Transform levelRoot, string arenaId, Transform propsRoot,
             IDictionary<string, long> declaredValueUnits, IDictionary<string, float> declaredVolumeK,
+            IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
             PlacementImportReport report)
         {
@@ -2843,20 +2965,21 @@ namespace VRCKatamari.Editor.LevelBuild
             // the old "wire what is already there" behaviour.
             bool createMissingColliders = string.IsNullOrEmpty(arenaId);
             PickupFieldSyncReport sync = PickupFieldSync.SyncFromChildren(host, propsRoot,
-                declaredValueUnits, declaredVolumeK, declaredProxies, createMissingColliders);
+                declaredValueUnits, declaredVolumeK, declaredVolumePenalty, declaredProxies,
+                createMissingColliders);
             report.SyncRan = true;
             report.SyncPropCount = sync.PropCount;
             report.SyncRejected = sync.Rejected.Count;
             report.UdonCopyIssued = sync.UdonCopyIssued;
-            report.ValueUnitsPreserved = sync.ValueUnitsPreserved;
-            report.ValueUnitsUndeclared = sync.ValueUnitsUndeclared;
-            report.ValueUnitsVerified = sync.ValueUnitsVerified;
+            report.GrowthPreservedRows = sync.GrowthPreservedRows;
+            report.GrowthUndeclaredRows = sync.GrowthUndeclaredRows;
+            report.GrowthVerified = sync.GrowthVerified;
             report.ProxyVerified = sync.ProxyVerified;
             report.SyncCollidersCreated = sync.CollidersCreated;
 
-            for (int i = 0; i < sync.ValueUnitMismatches.Count && i < 20; i++)
+            for (int i = 0; i < sync.GrowthMismatches.Count && i < 20; i++)
             {
-                report.ValueUnitProblems.Add(sync.ValueUnitMismatches[i]);
+                report.GrowthProblems.Add(sync.GrowthMismatches[i]);
             }
 
             if (!sync.Success)

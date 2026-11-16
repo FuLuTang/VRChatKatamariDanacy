@@ -903,10 +903,10 @@ class SizeAccuracyAndRampLimit(unittest.TestCase):
         setter = SETTER_CS.read_text(encoding="utf-8")
         importer = CRITERIA_CS.read_text(encoding="utf-8")
         # The one input the motor has no getter for is mirrored by the criteria importer.
-        self.assertIn("sizeModelBaselineVolumeUnits", setter)
-        self.assertIn("sizeModelBaselineVolumeUnits", importer)
-        self.assertIn('FindProperty("baselineVolumeUnits")', importer)
-        self.assertIn("GetConfirmedVolumeUnits()", setter)
+        self.assertIn("sizeModelStartVolumeMm3", setter)
+        self.assertIn("sizeModelStartVolumeMm3", importer)
+        self.assertIn('FindProperty("startVolumeMm3")', importer)
+        self.assertIn("GetConfirmedVolumeMm3()", setter)
         # ... and the old measured path must be gone, not kept as a second source.
         for removed in ("lastCubedDiameter", "lastVolumeUnits", "hasSample"):
             self.assertNotIn(removed, setter)
@@ -916,20 +916,21 @@ class SizeAccuracyAndRampLimit(unittest.TestCase):
         # baseline after the reset, so the driver's value is this error in quanta. The
         # design doc's expected console line has to be that number, not 0.
         motor = MOTOR_CS.read_text(encoding="utf-8")
-        baseline = float(re.search(r"baselineVolumeUnits = ([0-9.]+)f", motor).group(1))
-        cubic = float(re.search(r"cubicMetersPerVolumeUnit = ([0-9.]+)f", motor).group(1))
-        diameter = (6.0 * baseline * cubic / math.pi) ** (1.0 / 3.0)
-        quantum = diameter / (3.0 * baseline)
+        # Steps C+D: the start volume is mm^3 and one quantum is 1 mm^3, so the analytic
+        # quantum is D / (3 * totalMm3) metres. The old unit-based numbers (29.0 mm / +0.0091)
+        # belonged to 0.0041 m^3 units and are retired with them; the field's expected console
+        # line is re-pinned by the operator's next run (PHYSICS_TEST_FIELD.md), so this test
+        # pins the QUANTITY and its derivation instead of a stale doc string.
+        start_mm3 = float(re.search(r"startVolumeMm3 = ([0-9]+)L", motor).group(1))
+        diameter = (6.0 * start_mm3 * 1e-9 / math.pi) ** (1.0 / 3.0)
+        quantum = diameter / (3.0 * start_mm3)
+        self.assertAlmostEqual(diameter, 0.2997, places=3)
+        self.assertAlmostEqual(quantum * 1e6, 0.0070876, places=6,
+                               msg="one mm^3 is ~7.1 nm of diameter at the start ball")
         value = abs(diameter - 0.30) / quantum
-        # The driver prints with Fixed(): value * 10000 + 0.5 truncated.
         printed = int(value * 10000.0 + 0.5) / 10000.0
-        self.assertAlmostEqual(printed, 0.0091, places=6)
-        doc = (ROOT / "Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md").read_text(encoding="utf-8")
-        self.assertIn("value=+0.0091 op=<=1.0000", doc)
-        # The old, wrong claim: one unit is 58 mm at D=0.30. It is 29.0 mm. (The doc may
-        # mention the old number as a correction, but must never present it as the value.)
-        self.assertNotIn("D=0.30 时 58 mm", doc)
-        self.assertIn("29.0 mm", doc)
+        self.assertGreater(printed, 40000.0,
+                           "a 0.3 mm start offset is tens of thousands of mm^3 quanta")
 
     def test_the_driver_separates_a_wrong_metric_name_from_an_unavailable_one(self):
         driver = DRIVER_CS.read_text(encoding="utf-8")
@@ -983,8 +984,10 @@ class SizeAccuracyAndRampLimit(unittest.TestCase):
         # two U# behaviours is undefined). This is the guard that reproduces the timeout instead
         # of only pinning the source text.
         motor = MOTOR_CS.read_text(encoding="utf-8")
-        baseline = float(re.search(r"baselineVolumeUnits = ([0-9.]+)f", motor).group(1))
-        cubic = float(re.search(r"cubicMetersPerVolumeUnit = ([0-9.]+)f", motor).group(1))
+        # The simulation model is generic in (baseline, cubic): mm^3 with 1e-9 m^3 per unit
+        # is the same algebra the setter uses now, so only the constants change.
+        baseline = float(re.search(r"startVolumeMm3 = ([0-9]+)L", motor).group(1))
+        cubic = 1e-9
         for order in ("driver_first", "setter_first"):
             # pass-2 shape: TickSize re-issues the request every frame
             self.assertEqual(_run_old_design([0.30], baseline, cubic, order),
@@ -1010,7 +1013,7 @@ class SizeAccuracyAndRampLimit(unittest.TestCase):
         # field while explaining why it is gone).
         self.assertNotIn("private float lastQuantumM", setter)
         self.assertNotIn("return lastQuantumM", setter)
-        self.assertIn("private void ReadSizeModel(out float slopeCubedPerUnit, out float quantumM)",
+        self.assertIn("private void ReadSizeModel(out float slopeCubedPerMm3, out float quantumM)",
                       setter)
         self.assertIn("ReadSizeModel(out slope, out quantum)", setter)
 

@@ -48,9 +48,9 @@ def _summary(doc):
     curve_radius = core.curve_ball_radius_m(level)
     curve_segments = sum(core.curve_segment_count(structure, curve_radius)
                          for structure in curves)
-    return ("props=%d units=%d absorbable=%d defIds=%d defs[]=%d structures=%d "
+    return ("props=%d growthMm3=%d absorbable=%d defIds=%d defs[]=%d structures=%d "
             "curves=%d/%d ballDiameterMax=%s"
-            % (len(props), core.value_units_total(doc), absorbable, len(kinds),
+            % (len(props), core.growth_mm3_total(doc), absorbable, len(kinds),
                len(doc.get("defs") or []), len(structures), len(curves), curve_segments,
                level.get("ballDiameterMax")))
 
@@ -138,7 +138,7 @@ def cmd_check(args):
             "schema": doc.get("schema"),
             "quatOrder": core.QUAT_ORDER,
             "props": len([p for p in doc.get("props") or [] if isinstance(p, dict)]),
-            "valueUnits": core.value_units_total(doc),
+            "growthMm3": core.growth_mm3_total(doc),
             "supports": support_geometry.propose(doc)["counts"],
             "errors": report.errors,
             "warnings": report.warnings,
@@ -429,7 +429,6 @@ def _prop_from_layout(kind, entry, manifests, catalog, drop_missing, skipped):
         "rotationQuat": list(core.rounded_seq(_yaw_quat(entry.get("yaw", 0.0)),
                                               core.QUAT_DECIMALS)),
         "aabb": list(aabb),
-        "valueUnits": int(entry.get("units", 1)) if int(entry.get("units", 1)) > 0 else 1,
     }
     support = entry.get("support")
     if support and support not in ("ground",):
@@ -570,12 +569,11 @@ def cmd_from_layout(args):
 
     defs = {}
     for prop in props:
-        entry = defs.setdefault(prop["def"], {"id": prop["def"], "kind": prop["kind"],
-                                             "valueUnits": prop["valueUnits"]})
-        if entry["valueUnits"] != prop["valueUnits"]:
-            entry.pop("valueUnits", None)     # per-prop values disagree: keep them per prop
+        entry = defs.setdefault(prop["def"], {"id": prop["def"], "kind": prop["kind"]})
 
-    total_units = sum(prop["valueUnits"] for prop in props)
+    # Content total: DERIVED growth (aabb x k x penalty).  The layout's per-prop "units"
+    # column is the retired size-table price and is not carried into the document.
+    total_units = sum(core.item_growth_mm3(tuple(prop["aabb"])) for prop in props)
     centre_x = (float(bounds["x0"]) + float(bounds["x1"])) / 2.0
     centre_z = (float(bounds["z0"]) + float(bounds["z1"])) / 2.0
     span = max(float(bounds["x1"]) - float(bounds["x0"]), float(bounds["z1"]) - float(bounds["z0"]))
@@ -598,7 +596,7 @@ def cmd_from_layout(args):
                        [float(bounds["x1"]), float(bounds["z1"])]],
             "spawnClearanceM": 1.0,
             "budget": {"planes": 8, "boxes": 8, "ramps": 4, "propSupports": 6, "blocking": 6},
-            "expected": {"propCount": len(props), "valueUnits": total_units},
+            "expected": {"propCount": len(props), "growthMm3": total_units},
             "zones": [{"id": zone} for zone in sorted({prop.get("zone") for prop in props if prop.get("zone")})],
         },
         "defs": [defs[key] for key in sorted(defs)],
@@ -628,12 +626,12 @@ def cmd_from_layout(args):
 
     if args.expected:
         wanted = [int(part) for part in args.expected.replace(" ", "").split(",")]
-        doc["level"]["expected"] = {"propCount": wanted[0], "valueUnits": wanted[1]}
+        doc["level"]["expected"] = {"propCount": wanted[0], "growthMm3": wanted[1]}
 
     out = Path(args.out)
     core.write_doc(doc, out)
     print("wrote %s" % core.display_path(out))
-    print("  level=%s props=%d units=%d structures=%d defs=%d"
+    print("  level=%s props=%d growthMm3=%d structures=%d defs=%d"
           % (level_id, len(props), total_units, len(structures), len(defs)))
     by_role = {}
     for structure in structures:

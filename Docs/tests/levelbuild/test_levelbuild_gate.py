@@ -70,9 +70,11 @@ class NegativeFixtureTests(unittest.TestCase):
 
     # 5 -- the value total disagrees with the level's expected block
     def test_expected_total_mismatch_is_red(self):
+        # The content total is DERIVED growth in mm^3 since steps C+D; the legacy
+        # valueUnits total is ignored, so the gate must be pinned on growthMm3.
         def mutate(doc):
-            doc["level"]["expected"] = {"propCount": 3, "valueUnits": 412}
-        self.assert_red("does not match level.expected.valueUnits", mutate)
+            doc["level"]["expected"] = {"propCount": 3, "growthMm3": 412}
+        self.assert_red("does not match level.expected.growthMm3", mutate)
 
     def test_missing_prop_count_is_red(self):
         def mutate(doc):
@@ -170,8 +172,9 @@ class CliTests(unittest.TestCase):
             "itemId": "prop_apple_001", "def": "apple", "zone": "ramp",
             "position": [0.0, 0.2, 0.0], "rotationQuat": [0.0, 0.0, 0.0, 1.0],
             "aabb": list(core.load_manifests()["apple"]["aabb"]),
-            "support": "plank", "valueUnits": 1})
-        doc["level"]["expected"] = {"propCount": 4, "valueUnits": 7}
+            "support": "plank"})
+        doc["level"]["expected"] = {"propCount": 4,
+                                    "growthMm3": core.growth_mm3_total(doc)}
         self.assertTrue(errors_of(doc))
 
         with tempfile.TemporaryDirectory() as folder:

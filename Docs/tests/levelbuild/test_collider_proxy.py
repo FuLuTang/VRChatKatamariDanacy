@@ -353,31 +353,34 @@ class NoColliderBlockCompatibilityTests(unittest.TestCase):
             self.skipTest("cannot read %s from git HEAD" % relative)
         return done.stdout
 
-    def test_head_levels_are_byte_identical_after_the_new_field(self):
+    def test_head_levels_still_validate_and_migrate_cleanly(self):
+        # The C+D format bump (valueUnits -> derived growthMm3) means HEAD's bytes are no
+        # longer the writer's output, so byte equality with HEAD is retired. What must
+        # still hold: every old file is VALID INPUT, and running it through the writer
+        # gives a document the validator accepts with exactly the disk file's errors.
         for relative in COMPATIBILITY_LEVELS:
             if not (ROOT / relative).exists():
                 continue
             head_text = self._head_text(relative)
             disk_text = (ROOT / relative).read_text(encoding="utf-8")
-            # The checked-in file is canonical under the current writer.  HEAD predates
-            # the k-aware absorb gate, so its derived absorbDiameterReq/absorbable rows are
-            # the only thing the writer now recomputes: re-canonicalising both the HEAD
-            # bytes and the disk bytes must agree exactly, which proves the optional
-            # `collider` block moved nothing else.
-            self.assertEqual(core.dump_doc(json.loads(head_text)),
-                             core.dump_doc(json.loads(disk_text)), relative)
-            self.assertEqual(core.dump_doc(json.loads(disk_text)), disk_text, relative)
+            disk_doc = json.loads(disk_text)
+            self.assertEqual(core.dump_doc(disk_doc), disk_text, relative)
+
             head_doc = json.loads(head_text)
-            self.assertFalse(any("collider" in entry for entry in head_doc.get("defs", [])))
-            head_errors = core.validate(head_doc).errors
-            disk_errors = core.validate(json.loads(disk_text)).errors
-            # HEAD's stored absorbDiameterReq/absorbable predate the k-aware gate, so they
-            # are the one class of error HEAD may still have.  Everything else - in
-            # particular every [collider] error - must be identical.
-            head_other = [error for error in head_errors
-                          if "absorbDiameterReq" not in error and "absorbable=" not in error]
-            self.assertEqual(head_other, disk_errors, relative)
-            self.assertFalse(any("[collider]" in error for error in head_errors), relative)
+            self.assertFalse(any("collider" in entry for entry in head_doc.get("defs", [])),
+                             relative)
+            migrated_text = core.dump_doc(head_doc)
+            self.assertEqual(core.dump_doc(json.loads(migrated_text)), migrated_text,
+                             "the migration itself must be deterministic: " + relative)
+            migrated = json.loads(migrated_text)
+            self.assertNotIn("valueUnits", migrated.get("level", {}).get("expected", {}),
+                             "the deprecated total is dropped: " + relative)
+            self.assertFalse(any("valueUnits" in entry for entry in migrated["props"]),
+                             "the deprecated per-prop key is dropped: " + relative)
+            self.assertEqual(core.validate(migrated).errors,
+                             core.validate(disk_doc).errors, relative)
+            self.assertFalse(any("[collider]" in error for error in core.validate(migrated).errors),
+                             relative)
 
 
 if __name__ == "__main__":

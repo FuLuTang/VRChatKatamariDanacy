@@ -76,6 +76,31 @@ VOLUME_GATE_FACTOR = 60.0
 #: ``Docs/Research/ContentVolume/FIXED_POINT_VOLUME_IMPACT.md`` §2 O3.
 DEFAULT_VOLUME_K = 0.70
 
+#: The original's per-item growth penalty: ``dV = penalty * k * a*b*c`` with penalty 0.8
+#: for 1,198 of 1,436 types (``PARITY_AUDIT.md`` G06/F5).  Absent from a row means this
+#: value; like ``volumeK`` the canonical writer never inserts it, so an existing file that
+#: authored no penalty stays clean.
+DEFAULT_VOLUME_PENALTY = 0.8
+
+#: ``0 < penalty <= 1``: above 1 would grow the ball by more volume than the item occupies,
+#: which neither the original nor the ledger has a rule for.
+VOLUME_PENALTY_MAX = 1.0
+
+#: One cubic metre in the ledger's quantum (1 LSB = 1 mm^3, Docs/OPEN_DECISIONS.md (r)).
+MM3_PER_M3 = 1_000_000_000
+
+#: The one GLOBAL ball-size cap (Docs/OPEN_DECISIONS.md (r), step D; parity D6).  It is a
+#: motor serialized field at runtime (``KatamariBallMotor.maxBallDiameterM``); the data
+#: layer only uses it for the analysis ladders, never to gate the runtime.  A level's
+#: ``ballDiameterMax`` stays the LADDER TOP for analysis/supply ratios (2.20 m for story 1),
+#: not the runtime cap.
+MAX_BALL_DIAMETER_M = 30.0
+
+#: The original's start ball for MAS1 is 5 cm; ours is 0.2997 m (calibration baseline).  The
+#: per-level value still travels as ``level.ballDiameterStart`` / the motor's
+#: ``startDiameterWorldM``; this constant is only the fallback for an absent field.
+DEFAULT_START_DIAMETER_M = 0.2997
+
 #: The one range a declared ``volumeK`` must fall in: ``0 < k <= 32``.  0 (or a negative)
 #: would give every item volume 0 and let a pinhead absorb a house; the ceiling is well
 #: past the widest hand-tuned factor in the original (thin sheets reach 16.8) and is there
@@ -177,14 +202,21 @@ PROPS_EXPORTS_DIR = PROPS_DIR / "exports"
 PROP_CATALOG = ROOT / "Docs/Design/Maps/PicnicLawn/prop_catalog.csv"
 LEVELS_DIR = ROOT / "Docs/Design/Levels"
 
+# `valueUnits` is deliberately absent: it is a DEPRECATED input only (api: reads keep it
+# valid, the writer drops it) because it was a size-table price rounded into "integer
+# units", the second growth currency Steps C+D retire (WHY_OUR_GROWTH_IS_BIG.md section 2).
+# `growthMm3` is DERIVED (like absorbDiameterReq/absorbable) and is the one growth number.
 PROP_KEYS = ("itemId", "def", "kind", "zone", "group", "groupId", "position", "rotationQuat",
              "support", "stackedOn", "parent", "parentDerived", "aabb", "absorbDiameterReq",
-             "absorbable", "valueUnits", "volumeK", "notes")
+             "absorbable", "growthMm3", "volumeK", "volumePenalty", "notes")
 STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
                   "collision", "absorbable", "support", "meets", "material", "notes")
 CAMERA_KEYS = ("id", "type", "location", "target", "lens", "coverage_m")
 PRESET_KEYS = ("id", "camera", "engine", "res", "samples")
-DEF_KEYS = ("id", "kind", "model", "valueUnits", "collider", "volumeK", "notes")
+# `valueUnits` deprecated as an input only; `volumePenalty` is the per-item growth
+# penalty override (default 0.8, never written when absent).
+DEF_KEYS = ("id", "kind", "model", "collider", "volumeK", "volumePenalty", "notes")
+EXPECTED_KEYS = ("propCount", "growthMm3", "structureCount", "staticObbs", "overlapBudget")
 LEVEL_KEYS = ("id", "scene", "units", "convention", "ballStart", "playerSpawn",
               "ballDiameterStart", "ballDiameterMax", "groundY", "bounds",
               "spawnClearanceM", "budget", "expected", "zones", "arena")
@@ -861,6 +893,96 @@ def effective_volume_k(prop, catalog=None):
     return DEFAULT_VOLUME_K
 
 
+def volume_penalty_error(volume_penalty):
+    """Why a declared ``volumePenalty`` is unusable, or ``None`` when it is legal."""
+    if isinstance(volume_penalty, bool) or not isinstance(volume_penalty, (int, float)):
+        return "must be a number (the original's default is %.2f)" % DEFAULT_VOLUME_PENALTY
+    value = float(volume_penalty)
+    if not math.isfinite(value):
+        return "must be finite"
+    if value <= 0.0:
+        return "must be > 0 (0 would make every absorb grow the ball by nothing)"
+    if value > VOLUME_PENALTY_MAX:
+        return ("must be <= %g (1.0 means the item's whole volume; the original never "
+                "recovers more than that)" % VOLUME_PENALTY_MAX)
+    return None
+
+
+def effective_volume_penalty(prop, catalog=None):
+    """The ``penalty`` of one prop: its own field, else its def's, else 0.8."""
+    catalog = catalog or {}
+    value = prop.get("volumePenalty")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    entry = catalog.get(prop.get("def")) or {}
+    value = entry.get("volumePenalty")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return DEFAULT_VOLUME_PENALTY
+
+
+def item_growth_mm3(size, volume_k=DEFAULT_VOLUME_K,
+                    volume_penalty=DEFAULT_VOLUME_PENALTY):
+    """One absorb's ledger gain in mm^3: ``round(penalty * k * a*b*c * 1e9)``.
+
+    This is the original's ONE growth rule (``PARITY_AUDIT.md`` G06/G13): the item volume
+    ``V = k*a*b*c`` the gate already uses, times the recovery penalty 0.8.  Rounding is
+    half-to-even (Python's ``round`` and C#'s default ``Math.Round`` are the same), and the
+    result is a plain ``int`` - the ledger quantum (Docs/OPEN_DECISIONS.md (r)).
+    """
+    a, b, c = size
+    if a <= 0.0 or b <= 0.0 or c <= 0.0:
+        raise ValueError("item_growth_mm3 needs a positive box size, got %r" % (size,))
+    return int(round(float(volume_penalty) * float(volume_k) * a * b * c * MM3_PER_M3))
+
+
+def growth_mm3(prop, catalog=None):
+    """The derived growth of one prop: ``item_growth_mm3(aabb, k, penalty)``.
+
+    ``None`` when the prop has no usable ``aabb`` (a zero side is legal for a flat sheet,
+    so a zero *volume* is not an error - it just cannot grow the ball).
+    """
+    aabb = prop.get("aabb")
+    if not isinstance(aabb, (list, tuple)) or len(aabb) != 3:
+        return None
+    try:
+        size = tuple(float(v) for v in aabb)
+    except (TypeError, ValueError):
+        return None
+    if any(v < 0.0 for v in size) or any(not math.isfinite(v) for v in size):
+        return None
+    catalog = catalog if catalog is not None else {}
+    volume_k = effective_volume_k(prop, catalog)
+    penalty = effective_volume_penalty(prop, catalog)
+    # A bad k/penalty is reported by the validators (volume_k_error / volume_penalty_error);
+    # the derived column simply has no value, so it is omitted rather than crashing.
+    if volume_k_error(volume_k) is not None or volume_penalty_error(penalty) is not None:
+        return None
+    return item_growth_mm3(size, volume_k, penalty)
+
+
+def ball_volume_mm3(diameter_m):
+    """The sphere volume of a ball of diameter ``diameter_m``, in mm^3 (rounded)."""
+    diameter = float(diameter_m)
+    if not math.isfinite(diameter) or diameter <= 0.0:
+        raise ValueError("ball_volume_mm3 needs a positive diameter, got %r" % (diameter_m,))
+    return int(round(math.pi / 6.0 * diameter ** 3 * MM3_PER_M3))
+
+
+def diameter_for_volume_mm3(volume_mm3):
+    """The equivalent-sphere diameter in metres for a volume in mm^3."""
+    volume = float(volume_mm3)
+    if not math.isfinite(volume) or volume <= 0.0:
+        raise ValueError("diameter_for_volume_mm3 needs a positive volume, got %r"
+                         % (volume_mm3,))
+    return (6.0 * volume / MM3_PER_M3 / math.pi) ** (1.0 / 3.0)
+
+
+def volume_m3(volume_mm3):
+    """Display helper: mm^3 back to cubic metres (never accumulated)."""
+    return float(volume_mm3) / MM3_PER_M3
+
+
 def absorb_diameter_req_exact(size, volume_k=DEFAULT_VOLUME_K):
     """``D_req`` in metres, unrounded: ``(60 * k * a * b * c / pi) ** (1/3)``.
 
@@ -1079,6 +1201,25 @@ def _canonical_curve(curve):
     return out
 
 
+def _canonical_expected(doc, expected):
+    """``level.expected`` in canonical form: legacy ``valueUnits`` out, ``growthMm3`` kept.
+
+    ``expected.growthMm3`` is the DESIGN TOTAL (the gate), so the writer must NOT recompute
+    it: silently rewriting it on every save would make the design gate mean nothing (the
+    same reason ``propCount`` is authored).  The validator compares it with the derived
+    per-prop growth; ``editor_core.refresh_expected`` is the one place an op may re-pin it.
+    A legacy ``valueUnits`` total is accepted on input and dropped: it cannot be compared
+    with the new currency.
+    """
+    if not isinstance(expected, dict):
+        return expected
+    out = {}
+    for key in EXPECTED_KEYS:
+        if key in expected:
+            out[key] = expected[key]
+    return out
+
+
 def canonical_doc(doc, manifests=None):
     """The document in canonical form: sorted, rounded, ``-0.0`` cleaned.
 
@@ -1108,6 +1249,8 @@ def canonical_doc(doc, manifests=None):
                 value, key=lambda zone: str(zone.get("id", "")))]
         elif key == "arena":
             value = _ordered(value, ARENA_KEYS)
+        elif key == "expected":
+            value = _canonical_expected(doc, value)
         level_out[key] = value
 
     props_out = []
@@ -1127,12 +1270,13 @@ def canonical_doc(doc, manifests=None):
                 continue      # recomputed below
             elif key == "absorbable":
                 continue      # recomputed below
+            elif key == "growthMm3":
+                continue      # recomputed below (derived growth, never authored)
             elif key == "valueUnits":
-                # A JSON integer, never a float (Docs/OPEN_DECISIONS.md (j)). Python ints are
-                # unbounded, so a declared value past int32 - the widened host column's range,
-                # (r) step B - is stored and re-emitted verbatim; int() is the identity for it.
-                value = int(value)
+                continue      # DEPRECATED input: read for compatibility, never re-emitted
             elif key == "volumeK":
+                value = rounded(value, 4)
+            elif key == "volumePenalty":
                 value = rounded(value, 4)
             out[key] = value
         aabb = out.get("aabb")
@@ -1141,6 +1285,7 @@ def canonical_doc(doc, manifests=None):
             out["absorbDiameterReq"] = rounded(absorb_diameter_req(aabb, volume_k),
                                                DIAMETER_DECIMALS)
             out["absorbable"] = is_absorbable(aabb, ball_max, volume_k)
+            out["growthMm3"] = growth_mm3(prop, catalog)
         props_out.append(_ordered(out, PROP_KEYS))
 
     structures_out = []
@@ -1208,11 +1353,12 @@ def canonical_doc(doc, manifests=None):
                 continue
             value = entry[key]
             if key == "valueUnits":
-                # Same rule as props[].valueUnits above: an integer, unbounded, no float hop.
-                value = int(value)
+                continue      # DEPRECATED input: never re-emitted (props[].valueUnits rule)
             elif key == "collider" and isinstance(value, dict):
                 value = collider_proxy.canonical_collider(value)
             elif key == "volumeK":
+                value = rounded(value, 4)
+            elif key == "volumePenalty":
                 value = rounded(value, 4)
             out[key] = value
         defs_out.append(_ordered(out, DEF_KEYS))
@@ -1478,10 +1624,11 @@ def _check_defs(doc, report, manifests, catalog):
                     report.err("%s [def_model] def %r model %r must not contain '..'"
                                % (label, def_id, model))
         value = entry.get("valueUnits")
-        if value is None:
-            report.err("%s.valueUnits is required (it is what the def is worth)" % label)
-        elif not isinstance(value, int) or isinstance(value, bool) or value < 1:
-            report.err("%s.valueUnits must be a whole number >= 1 (got %r)" % (label, value))
+        if value is not None and (not isinstance(value, int) or isinstance(value, bool)
+                                  or value < 1):
+            report.err("%s.valueUnits must be a whole number >= 1 (got %r) when present; "
+                       "the key is DEPRECATED (growth is derived from aabb/k/penalty and "
+                       "the writer drops it)" % (label, value))
         kind = entry.get("kind")
         if kind is not None and (not isinstance(kind, str) or not kind.strip()):
             report.err("%s.kind must be a non-empty string when present" % label)
@@ -1489,6 +1636,10 @@ def _check_defs(doc, report, manifests, catalog):
             reason = volume_k_error(entry["volumeK"])
             if reason is not None:
                 report.err("%s.volumeK %r %s" % (label, entry["volumeK"], reason))
+        if "volumePenalty" in entry:
+            reason = volume_penalty_error(entry["volumePenalty"])
+            if reason is not None:
+                report.err("%s.volumePenalty %r %s" % (label, entry["volumePenalty"], reason))
         _check_collider(entry, label, def_id, manifests, report)
 
 
@@ -1615,10 +1766,25 @@ def _check_props(doc, report, manifests, catalog):
         value_units = prop.get("valueUnits")
         if value_units is not None:
             if not isinstance(value_units, int) or isinstance(value_units, bool) or value_units < 1:
-                report.err("%s.valueUnits must be a whole number >= 1 (got %r)" % (label, value_units))
-        elif effective_value_units(prop, catalog) is None:
-            report.err("%s has no valueUnits and def %r has no defs[].valueUnits entry"
-                       % (label, prop.get("def")))
+                report.err("%s.valueUnits must be a whole number >= 1 (got %r) when present; "
+                           "the key is DEPRECATED and ignored for growth (got %r)"
+                           % (label, value_units, value_units))
+        if "volumePenalty" in prop:
+            reason = volume_penalty_error(prop["volumePenalty"])
+            if reason is not None:
+                report.err("%s.volumePenalty %r %s" % (label, prop["volumePenalty"], reason))
+
+        derived_growth = growth_mm3(prop, catalog)
+        if "growthMm3" in prop:
+            declared_growth = prop.get("growthMm3")
+            if isinstance(declared_growth, bool) or not isinstance(declared_growth, int):
+                report.err("%s.growthMm3 must be a whole number of mm^3 (got %r); it is a "
+                           "DERIVED column - delete it and re-run the writer"
+                           % (label, declared_growth))
+            elif derived_growth is not None and declared_growth != derived_growth:
+                report.err("%s growthMm3 %d is stale; aabb with k=%.2f, penalty=%.2f gives %d"
+                           % (label, declared_growth, effective_volume_k(prop, catalog),
+                              effective_volume_penalty(prop, catalog), derived_growth))
 
         boxes[item_id] = world_aabb(position, aabb, quat)
 
@@ -2362,7 +2528,7 @@ def _check_expected(doc, report):
     level = doc.get("level") or {}
     expected = level.get("expected")
     if not isinstance(expected, dict):
-        report.err("level.expected must be an object with propCount and valueUnits")
+        report.err("level.expected must be an object with propCount and growthMm3")
         return
     overlap = expected.get("overlapBudget")
     if overlap is not None:
@@ -2372,25 +2538,25 @@ def _check_expected(doc, report):
                        "have" % (overlap,))
     props = [prop for prop in doc.get("props") or [] if isinstance(prop, dict)]
     count = len(props)
-    units = 0
-    missing = 0
-    catalog = def_catalog(doc)
-    for prop in props:
-        value = effective_value_units(prop, catalog)
-        if value is not None:
-            units += value
-        else:
-            missing += 1
-    if missing:
-        report.warn("%d prop(s) have no valueUnits; the total cannot match level.expected" % missing)
     wanted_count = expected.get("propCount")
     if wanted_count is not None and count != int(wanted_count):
         report.err("propCount %d does not match level.expected.propCount %d (%+d)"
                    % (count, int(wanted_count), count - int(wanted_count)))
-    wanted_units = expected.get("valueUnits")
-    if wanted_units is not None and not missing and units != int(wanted_units):
-        report.err("valueUnits %d does not match level.expected.valueUnits %d (%+d)"
-                   % (units, int(wanted_units), units - int(wanted_units)))
+
+    # The content total is DERIVED growth (aabb x k x penalty), the same number the props
+    # carry.  `valueUnits` is a deprecated input and is ignored here on purpose.
+    try:
+        growth = growth_mm3_total(doc)
+    except (TypeError, ValueError):
+        growth = None
+    wanted_growth = expected.get("growthMm3")
+    if wanted_growth is not None:
+        if isinstance(wanted_growth, bool) or not isinstance(wanted_growth, int):
+            report.err("level.expected.growthMm3 must be a whole number of mm^3 (got %r)"
+                       % (wanted_growth,))
+        elif growth is not None and growth != wanted_growth:
+            report.err("growthMm3 %d does not match level.expected.growthMm3 %d (%+d)"
+                       % (growth, wanted_growth, growth - wanted_growth))
 
     # Optional design totals for the structure side. They exist because a curve_ramp makes
     # "how many structures" ambiguous: it is ONE logical ramp but N static OBBs. So the two
@@ -2515,20 +2681,21 @@ def population_tables(doc, manifests=None):
     defs = {}
     for prop in props:
         zone = prop.get("zone") or "(none)"
-        entry = zones.setdefault(zone, {"zone": zone, "props": 0, "valueUnits": 0, "absorbable": 0})
+        entry = zones.setdefault(zone, {"zone": zone, "props": 0, "growthMm3": 0,
+                                         "absorbable": 0})
         entry["props"] += 1
-        value = effective_value_units(prop, catalog)
+        value = growth_mm3(prop, catalog)
         if value is not None:
-            entry["valueUnits"] += value
+            entry["growthMm3"] += value
         if prop.get("absorbable") is True:
             entry["absorbable"] += 1
         def_id = prop.get("def") or "(none)"
-        definition = defs.setdefault(def_id, {"def": def_id, "props": 0, "valueUnits": 0,
+        definition = defs.setdefault(def_id, {"def": def_id, "props": 0, "growthMm3": 0,
                                              "volumeK": effective_volume_k({"def": def_id},
                                                                            catalog)})
         definition["props"] += 1
         if value is not None:
-            definition["valueUnits"] += value
+            definition["growthMm3"] += value
 
     tiers = []
     seen_absorbable = set()
@@ -2536,7 +2703,7 @@ def population_tables(doc, manifests=None):
         step = STEP_RATIO * diameter
         ball_mm = floor_mm(diameter)
         row = {"diameter": diameter, "ballMm": ball_mm, "absorbableProps": 0,
-               "absorbableUnits": 0, "newProps": 0, "newUnits": 0, "terrain": 0,
+               "absorbableGrowthMm3": 0, "newProps": 0, "newGrowthMm3": 0, "terrain": 0,
                "blocking": 0, "food": 0}
         for prop in props:
             try:
@@ -2544,15 +2711,15 @@ def population_tables(doc, manifests=None):
             except (KeyError, TypeError, ValueError):
                 continue
             req_mm = absorb_diameter_req_mm(aabb, effective_volume_k(prop, catalog))
-            value = effective_value_units(prop, catalog) or 0
+            value = growth_mm3(prop, catalog) or 0
             if req_mm <= ball_mm:
                 row["food"] += 1
                 row["absorbableProps"] += 1
-                row["absorbableUnits"] += value
+                row["absorbableGrowthMm3"] += value
                 item_id = prop.get("itemId")
                 if item_id not in seen_absorbable:
                     row["newProps"] += 1
-                    row["newUnits"] += value
+                    row["newGrowthMm3"] += value
             else:
                 box = prop_box(prop)
                 rise = prop_rise(prop, box) if box is not None else 0.0
@@ -2614,23 +2781,24 @@ def population_tables(doc, manifests=None):
 def format_report_tables(tables, expected=None):
     """Render the tables as plain text (the CLI prints this; no third-party deps)."""
     lines = []
-    lines.append("%-14s %5s %6s %10s" % ("zone", "props", "units", "absorbable"))
+    lines.append("%-14s %5s %12s %10s" % ("zone", "props", "growthMm3", "absorbable"))
     for row in tables.get("zones", []):
-        lines.append("%-12s %5d %6d %10d" % (row["zone"], row["props"], row["valueUnits"],
-                                             row["absorbable"]))
+        lines.append("%-12s %5d %12d %10d" % (row["zone"], row["props"], row["growthMm3"],
+                                              row["absorbable"]))
     lines.append("")
-    lines.append("%-22s %5s %6s %7s" % ("def", "props", "units", "k"))
+    lines.append("%-22s %5s %12s %7s" % ("def", "props", "growthMm3", "k"))
     for row in tables.get("defs", []):
-        lines.append("%-22s %5d %6d %7.2f" % (row["def"], row["props"], row["valueUnits"],
-                                             row.get("volumeK", DEFAULT_VOLUME_K)))
+        lines.append("%-22s %5d %12d %7.2f" % (row["def"], row["props"], row["growthMm3"],
+                                               row.get("volumeK", DEFAULT_VOLUME_K)))
     lines.append("")
-    lines.append("%-6s %6s %5s %6s %5s %5s %7s %8s"
-                 % ("tier D", "ball mm", "food", "units", "new", "newU", "terrain", "blocking"))
+    lines.append("%-6s %6s %5s %12s %5s %12s %7s %8s"
+                 % ("tier D", "ball mm", "food", "growthMm3", "new", "newG", "terrain",
+                    "blocking"))
     for row in tables.get("tiers", []):
-        lines.append("%.2f %7d %6d %6d %5d %5d %8d %9d"
+        lines.append("%.2f %7d %6d %12d %5d %12d %8d %9d"
                      % (row["diameter"], row.get("ballMm", floor_mm(row["diameter"])),
-                        row["food"], row["absorbableUnits"], row["newProps"],
-                        row["newUnits"], row["terrain"], row["blocking"]))
+                        row["food"], row["absorbableGrowthMm3"], row["newProps"],
+                        row["newGrowthMm3"], row["terrain"], row["blocking"]))
     lines.append("")
     lines.append("%-16s %-9s %6s %7s %10s %6s"
                  % ("structure", "role", "top", "rise", "terrain@D", "slope"))
@@ -2728,7 +2896,12 @@ def sorted_prop_ids(doc):
 
 
 def value_units_total(doc):
-    """Sum of the effective value units (per-prop field, else ``defs[].valueUnits``)."""
+    """LEGACY: sum of the deprecated ``valueUnits`` input fields (0 when none remain).
+
+    Kept for migration accounting only (``Docs/Research/ContentVolume/FIXED_POINT_STEP_CD.md``
+    section 2).  Nothing in the game consumes this total any more; it must never be used as
+    a growth quantity.
+    """
     catalog = def_catalog(doc)
     total = 0
     for prop in doc.get("props") or []:
@@ -2740,10 +2913,23 @@ def value_units_total(doc):
     return total
 
 
+def growth_mm3_total(doc):
+    """Sum of the derived growth of every prop, in mm^3 (the one content total)."""
+    catalog = def_catalog(doc)
+    total = 0
+    for prop in doc.get("props") or []:
+        if not isinstance(prop, dict):
+            continue
+        value = growth_mm3(prop, catalog)
+        if value is not None:
+            total += value
+    return total
+
+
 def expected_totals(doc):
     """The counters ``level.expected`` may declare, derived from the document.
 
-    ``propCount``/``valueUnits`` are the content totals; ``structureCount`` counts
+    ``propCount``/``growthMm3`` are the content totals; ``structureCount`` counts
     ``structures[]`` entries (a curve_ramp is ONE) and ``staticObbs`` counts the solids the
     motor bakes (a curve contributes its N segments).  Keeping the pair separate is what
     lets a level say "4 ramps, 3 of them curves with 12 segments each" without the curve
@@ -2751,7 +2937,7 @@ def expected_totals(doc):
     """
     return {
         "propCount": len([prop for prop in doc.get("props") or [] if isinstance(prop, dict)]),
-        "valueUnits": value_units_total(doc),
+        "growthMm3": growth_mm3_total(doc),
         "structureCount": len([structure for structure in doc.get("structures") or []
                                if isinstance(structure, dict)]),
         "staticObbs": static_obb_count(doc),

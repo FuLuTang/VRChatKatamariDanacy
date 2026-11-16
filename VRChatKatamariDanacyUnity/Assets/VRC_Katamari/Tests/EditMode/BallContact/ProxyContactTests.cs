@@ -313,5 +313,17 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(3.741657f, bounding, Tolerance);
         }
 
+
+        [Test]
+        public void RadiusIsRequiredForSpheresButNotForConvex()
+        {
+            Assert.IsFalse(ProxyContactMath.IsValidProxy(ProxyContactMath.KindSphere,
+                Vector3.zero, UnitX, UnitY, UnitZ, Vector3.zero, 0f, 0f, 0, 0, 0),
+                "a sphere with radius 0 is not a solid");
+            Assert.IsTrue(ProxyContactMath.IsValidProxy(ProxyContactMath.KindConvex,
+                Vector3.zero, UnitX, UnitY, UnitZ, Vector3.zero, 0f, 0f, 0, 4, 4),
+                "a convex hull does not use radius; 0 is normal");
+        }
+
     }
 }

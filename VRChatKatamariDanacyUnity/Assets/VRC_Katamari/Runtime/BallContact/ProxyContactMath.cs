@@ -71,16 +71,23 @@ namespace VRCKatamari.BallContact
                 return ObbContactMath.IsValidObb(center, axisX, axisY, axisZ, halfExtents);
             }
 
-            if (!KatamariMath.IsFiniteFloat(radius) || radius <= 0f) return false;
-            if (kind == KindSphere) return true;
+            if (kind == KindSphere)
+            {
+                // Only a sphere/capsule uses the radius; a convex block legitimately carries
+                // 0 there, and requiring > 0 for every non-box kind made ConvexTetra fail.
+                return KatamariMath.IsFiniteFloat(radius) && radius > 0f;
+            }
             if (kind == KindCapsule)
             {
+                if (!KatamariMath.IsFiniteFloat(radius) || radius <= 0f) return false;
                 if (!KatamariMath.IsFiniteFloat(halfHeight) || halfHeight < 0f) return false;
                 if (axis < AxisX || axis > AxisZ) return false;
                 return IsUnitAxis(AxisVector(axis, axisX, axisY, axisZ));
             }
 
             // Convex: the point/face budget is fixed and a degenerate hull cannot collide.
+            // Radius is unused, so it only has to be finite (a 0 is normal).
+            if (!KatamariMath.IsFiniteFloat(radius)) return false;
             if (hullCount < 4 || hullCount > MaxHullPoints) return false;
             if (faceCount < 1 || faceCount > MaxHullFaces) return false;
             return true;
@@ -193,7 +200,8 @@ namespace VRCKatamari.BallContact
                 halfExtents = new Vector3(localSize.x * 0.5f, localSize.y * 0.5f,
                     localSize.z * 0.5f);
                 boundingRadius = BoundingRadius(kind, halfExtents, 0f, 0f, null, 0, 0, center);
-                return KatamariMath.IsFiniteFloat(boundingRadius);
+                return IsValidProxy(kind, center, axisX, axisY, axisZ, halfExtents, 0f, 0f,
+                    0, 0, 0) && KatamariMath.IsFiniteFloat(boundingRadius);
             }
 
             if (!KatamariMath.IsFiniteFloat(localRadius) || localRadius <= 0f) return false;
@@ -201,7 +209,8 @@ namespace VRCKatamari.BallContact
             if (kind == KindSphere)
             {
                 boundingRadius = radius;
-                return true;
+                return IsValidProxy(kind, center, axisX, axisY, axisZ, halfExtents, radius,
+                    0f, 0, 0, 0);
             }
 
             if (kind == KindCapsule)
@@ -212,7 +221,8 @@ namespace VRCKatamari.BallContact
                 halfHeight = localHalfHeight;
                 axis = localAxis;
                 boundingRadius = radius + halfHeight;
-                return KatamariMath.IsFiniteFloat(boundingRadius);
+                return IsValidProxy(kind, center, axisX, axisY, axisZ, halfExtents, radius,
+                    halfHeight, axis, 0, 0) && KatamariMath.IsFiniteFloat(boundingRadius);
             }
 
             // Convex.
@@ -267,7 +277,9 @@ namespace VRCKatamari.BallContact
 
             boundingRadius = BoundingRadius(kind, halfExtents, radius, halfHeight, hullWorld,
                 hullWorldStart, hullCount, center);
-            return KatamariMath.IsFiniteFloat(boundingRadius);
+            return IsValidProxy(kind, center, axisX, axisY, axisZ, halfExtents, radius,
+                halfHeight, axis, hullCount, faceCount) &&
+                KatamariMath.IsFiniteFloat(boundingRadius);
         }
 
         // ---------------------------------------------------------------- closest point ---

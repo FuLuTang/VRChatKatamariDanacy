@@ -201,6 +201,34 @@ class RuleTests(unittest.TestCase):
         self.assertNotIn("-0.0", text)
 
 
+class PathSimplificationTests(unittest.TestCase):
+    def test_a_short_polyline_is_untouched(self):
+        points = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+        kept, tolerance, deviation = build.simplify_polyline(points)
+        self.assertEqual(kept, points)
+        self.assertEqual(tolerance, 0.0)
+        self.assertEqual(deviation, 0.0)
+
+    def test_a_dense_polyline_fits_the_budget_with_a_measured_deviation(self):
+        dense = [(index * 0.05, 0.0, 0.0) for index in range(200)]
+        kept, tolerance, deviation = build.simplify_polyline(dense, max_points=62)
+        self.assertLessEqual(len(kept), 62)
+        self.assertEqual(kept[0], dense[0])
+        self.assertEqual(kept[-1], dense[-1])
+        self.assertLess(deviation, 0.02)          # a straight line survives almost exactly
+        # determinism: same input, same output
+        again = build.simplify_polyline(dense, max_points=62)
+        self.assertEqual(kept, again[0])
+        self.assertEqual(tolerance, again[1])
+
+    def test_a_bend_is_kept(self):
+        points = [(0.0, 0.0, 0.0)] * 1 + [(index * 0.05, 0.0, 0.0) for index in range(1, 60)] \
+            + [(3.0, 0.0, index * 0.05) for index in range(1, 60)]
+        kept, _tolerance, deviation = build.simplify_polyline(points, max_points=62)
+        self.assertIn((points[59][0], points[59][1], points[59][2]), kept)
+        self.assertLess(deviation, 0.05)
+
+
 class V1ViewTests(unittest.TestCase):
     def test_the_view_maps_the_layers_the_validator_reads(self):
         document = {
@@ -287,6 +315,35 @@ class RealExtractionTests(unittest.TestCase):
                                            self.sidecar)
         self.assertEqual(problems, [])
 
+    def test_every_behaviour_is_backed_by_the_motion_table(self):
+        """The behaviour column and the motion table must agree, prop by prop."""
+        document = self.document
+        by_id = {motion["id"]: motion for motion in document["motions"]}
+        total = 0
+        for prop in document["props"]:
+            total += 1
+            behaviour = prop["behaviour"]
+            if behaviour == "static":
+                self.assertNotIn("motion", prop)
+                continue
+            if behaviour in ("motion", "ambient"):
+                self.assertIn(prop["motion"], by_id, prop["itemId"])
+                self.assertIn(by_id[prop["motion"]]["class"],
+                              set(build.MOTION_CLASS_NAMES.values()))
+            elif behaviour == "attached":
+                self.assertNotIn("motion", prop)          # §6.7.3
+                self.assertIn("motionClass=dragged_along", prop.get("notes", ""))
+            else:
+                self.fail("%s has an unknown behaviour %r" % (prop["itemId"], behaviour))
+        # the behaviours partition the props: nothing is counted twice or lost
+        counts = {}
+        for prop in document["props"]:
+            counts[prop["behaviour"]] = counts.get(prop["behaviour"], 0) + 1
+        self.assertEqual(sum(counts.values()), total)
+        self.assertEqual(counts["static"] + counts.get("motion", 0) + counts.get("ambient", 0)
+                         + counts.get("attached", 0), total)
+        self.assertEqual(counts, {"static": 383, "motion": 108, "ambient": 5, "attached": 15})
+
     def test_the_shape_of_the_level(self):
         document = self.document
         terrain = document["terrain"]
@@ -299,7 +356,13 @@ class RealExtractionTests(unittest.TestCase):
         self.assertEqual(len(document["structures"]["solids"]), 35)
         parents = [prop for prop in document["props"] if prop.get("parent")]
         self.assertEqual(len(parents), 83)
-        self.assertTrue(all(prop["behaviour"] == "static" for prop in document["props"]))
+        behaviours = {}
+        for prop in document["props"]:
+            behaviours[prop["behaviour"]] = behaviours.get(prop["behaviour"], 0) + 1
+        self.assertEqual(behaviours.get("static", 0), 383)
+        self.assertEqual(behaviours.get("attached", 0), 15)      # dragged_along
+        self.assertEqual(behaviours.get("ambient", 0), 5)        # clouds
+        self.assertEqual(behaviours.get("motion", 0), 108)
         self.assertTrue(all("rotationQuat" in prop for prop in document["props"]))
         chunks = terrain["chunks"]
         self.assertEqual(len(chunks), math.ceil(3455 / build.CHUNK_TRIANGLES))
@@ -321,6 +384,117 @@ class RealExtractionTests(unittest.TestCase):
                          self.document["terrain"]["meshRef"]["sha256"])
         self.assertEqual(report["props"]["total"], len(self.document["props"]))
         self.assertEqual(report["expected"]["propCount"], len(self.document["props"]))
+
+    def test_motions_are_one_entry_per_move_type_and_are_well_formed(self):
+        document = self.document
+        motions = document["motions"]
+        self.assertEqual(len(motions), 14)          # 15 moveTypes minus dragged_along
+        self.assertEqual([motion["id"] for motion in motions], sorted(m["id"] for m in motions))
+        classes = {motion["class"] for motion in motions}
+        self.assertTrue(classes <= set(build.MOTION_CLASS_NAMES.values()))
+        for motion in motions:
+            self.assertIn(motion["class"], classes)
+            self.assertIn(motion["speed"]["source"], ("explicit", "path", "type", "none"))
+            self.assertIsInstance(motion["updatesPerSecond"], int)
+            self.assertGreater(motion["updatesPerSecond"], 0)
+            self.assertIsInstance(motion["loop"], bool)
+            provenance = motion["provenance"]
+            self.assertIsInstance(provenance["moveType"], int)
+            if motion["class"] in build.PATH_CLASSES:
+                self.assertEqual(motion["speed"]["source"], "path")
+                self.assertIn(motion["path"], [path["id"] for path in document["paths"]])
+            else:
+                self.assertNotIn("path", motion)
+        hop = [motion for motion in motions if motion["class"] == "hop"][0]
+        self.assertEqual(hop["updatesPerSecond"], 30)     # §6.7.5: displacement decides
+        whack = [motion for motion in motions if motion["class"] == "whack_a_mole"][0]
+        self.assertEqual(whack["updatesPerSecond"], 30)
+        self.assertFalse(whack["loop"])                   # "stop at the top"
+
+    def test_paths_keep_their_shape_and_speed(self):
+        paths = self.document["paths"]
+        self.assertEqual([path["id"] for path in paths], ["p00", "p15", "p22", "p23"])
+        for path in paths:
+            points = path["points"]
+            self.assertGreaterEqual(len(points), 2)
+            self.assertLessEqual(len(points), 64)         # §12.2 per-path budget
+            for index in range(1, len(points)):
+                gap = math.dist(points[index - 1], points[index])
+                self.assertGreaterEqual(gap, 0.05, path["id"])
+            if "speedCmPerSec" in path:
+                self.assertGreater(path["speedCmPerSec"], 0.0)
+                self.assertLess(path["speedCmPerSec"], 500.0)
+        by_id = {path["id"]: path for path in paths}
+        self.assertNotIn("speedCmPerSec", by_id["p00"])    # the -1 sentinel
+        self.assertAlmostEqual(by_id["p15"]["speedCmPerSec"], 36.6, places=1)
+        self.assertIn("simplified", by_id["p15"]["notes"])  # the reduction is stated
+        self.assertIn("137 original point(s)", by_id["p15"]["notes"])
+
+    def test_every_moving_prop_resolves_through_its_own_instance_index(self):
+        """129 records with a program: 128 rendered props (113 motion + 15 attached), 1 anchor."""
+        document = self.document
+        sidecar = self.sidecar
+        motion_document = build.ref_stage.read_json(
+            build.guard_read(Path.home() / "KatamariRef/noclip_export/kse_out/motion_table.json"))
+        records = {record["instanceIndex"]: record for record in motion_document["instances"]}
+        by_index = {prop["instanceIndex"]: prop for prop in document["props"]}
+        self.assertEqual(len(by_index), 511)
+        moving_records = {index: record for index, record in records.items()
+                          if record.get("motionClass") != "static"}
+        self.assertEqual(len(moving_records), 129)          # counts.byClass
+        rendered = {index: record for index, record in moving_records.items()
+                    if index in by_index}
+        self.assertEqual(len(rendered), 128)                # counts.byClassRendered
+        self.assertEqual(set(moving_records) - set(rendered), {497})   # Dummy Hit 01, no prop
+        with_motion = [index for index, record in rendered.items()
+                       if record["motionClass"] in ("Clouds", "SporadicWalk", "Hop", "Sway",
+                                                    "WhackAMole", "PathCollision", "Spin",
+                                                    "Flip", "Bob", "SlopingPath",
+                                                    "BackAndForthNoYaw", "WaitForPlayer")]
+        self.assertEqual(len(with_motion), 113)
+        for index in with_motion:
+            prop = by_index[index]
+            self.assertIn(prop["behaviour"], ("motion", "ambient"), prop["itemId"])
+            self.assertTrue(prop.get("motion"), prop["itemId"])
+            self.assertIn(prop["motion"], [motion["id"] for motion in document["motions"]])
+        attached = [index for index, record in rendered.items()
+                    if record["motionClass"] == "DraggedAlong"]
+        self.assertEqual(len(attached), 15)
+        for index in attached:
+            prop = by_index[index]
+            self.assertEqual(prop["behaviour"], "attached")
+            self.assertNotIn("motion", prop)                # §6.7.3: no motions[] entry
+            self.assertIn("dragged_along", prop.get("notes", ""))
+        # the 8 moveType-10 props carry the unverified trigger note, not guessed params
+        unverified = [by_index[index] for index, record in rendered.items()
+                      if record["moveType"] == 10]
+        self.assertEqual(len(unverified), 8)
+        for prop in unverified:
+            self.assertIn("triggerUnknown", prop.get("notes", ""))
+            self.assertNotIn("params", json.dumps(prop))
+
+    def test_the_motion_split_is_recorded_in_the_banner_facts(self):
+        notes = self.document["meta"]["arena"]["notes"]
+        self.assertIn("129 records with a program", notes)
+        self.assertIn("128 rendered props", notes)
+        self.assertIn("113 carry props[].motion", notes)
+        caps = self.document["meta"]["caps"]
+        self.assertEqual(caps["movingProps"], 128)
+        self.assertLessEqual(caps["movingProps"], caps["props"])
+
+    def test_a_missing_motion_table_degrades_to_no_motions_at_all(self):
+        with mock.patch.object(build, "load_motion_tables",
+                               return_value=(None, None, "motion_table.json not in the activation")):
+            document, sidecar, report = build.build_document(
+                LEVEL, ROOT / "Docs/Design/Levels" / LEVEL, with_colliders=False)
+        self.assertEqual(document["motions"], [])
+        self.assertEqual(document["paths"], [])
+        self.assertFalse(report["motions"]["available"])
+        self.assertIn("not in the activation", report["motions"]["reason"])
+        self.assertIn("none (", document["meta"]["arena"]["notes"])
+        self.assertEqual(document["meta"]["caps"]["movingProps"], 0)
+        self.assertTrue(all(prop["behaviour"] == "static" for prop in document["props"]))
+        self.assertEqual(build.structural_errors(document, sidecar), [])
 
     def test_the_sidecar_matches_its_declared_hash(self):
         import hashlib

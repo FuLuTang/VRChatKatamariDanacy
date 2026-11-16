@@ -68,9 +68,12 @@ MOTION_CLASSES = ("sporadic_walk", "hop", "sway", "dragged_along", "wait_for_pla
                   "whack_a_mole", "path_collision", "spin", "clouds", "flip", "bob",
                   "sloping_path", "back_and_forth")
 PATH_CLASSES = ("path_collision", "sloping_path", "back_and_forth")
-MOTION_RATE_HINT = {"sporadic_walk": 15.0, "hop": 10.0, "sway": 10.0, "dragged_along": 0.0,
-                    "wait_for_player": 10.0, "whack_a_mole": 10.0, "path_collision": 15.0,
-                    "spin": 10.0, "clouds": 10.0, "flip": 10.0, "bob": 10.0,
+#: The §6.7.3/§6.7.5 guidance: ``hop`` and ``whack_a_mole`` must be 30 Hz (their whole
+#: displacement lasts a few frames), ``sway``/path classes 15, ``wait_for_player`` checks at
+#: 5 Hz, the slow presentation classes 5-10.
+MOTION_RATE_HINT = {"sporadic_walk": 15.0, "hop": 30.0, "sway": 15.0, "dragged_along": 0.0,
+                    "wait_for_player": 5.0, "whack_a_mole": 30.0, "path_collision": 15.0,
+                    "spin": 5.0, "clouds": 10.0, "flip": 5.0, "bob": 10.0,
                     "sloping_path": 15.0, "back_and_forth": 15.0}
 SPEED_SOURCES = ("explicit", "path", "type", "none")
 BEHAVIOURS = ("static", "motion", "attached", "ambient", "stacked")
@@ -125,7 +128,7 @@ PROP_KEYS = ("itemId", "def", "kind", "behaviour", "motion", "inherit", "phase",
              "shakeOff", "zone", "position", "rotationQuat", "scale", "aabb", "volumeK",
              "volumePenalty", "volumeMm3", "absorbDiameterReqMm", "growthMm3", "absorbable",
              "valueUnits", "parent", "rigidGroup", "support", "stackedOn", "floatingOk",
-             "notes")
+             "notes", "instanceIndex")
 DEF_KEYS = ("id", "kind", "model", "valueUnits", "volumeK", "volumePenalty", "collider",
             "scalePolicy", "speedIndex", "clips", "notes")
 MOTION_KEYS = ("id", "class", "speed", "path", "params", "updatesPerSecond", "loop",
@@ -1282,6 +1285,7 @@ def _check_props(document, report, catalog, motion_ids):
         by_id[item_id] = prop
 
     boxes = {}
+    instance_indices = {}
     structures = {solid.get("id") for solid in
                   (document.get("structures") or {}).get("solids") or []
                   if isinstance(solid, dict)}
@@ -1385,6 +1389,24 @@ def _check_props(document, report, catalog, motion_ids):
                         report.note("%s: non-uniform scale with no collider proxy (D-5: kept "
                                     "out of contact and out of the absorb gate, information "
                                     "only)" % item_id)
+        # ``instanceIndex`` is reference-import provenance: the original's spawn-record index.
+        # It must be a distinct non-negative integer; there is deliberately **no upper bound**
+        # (a level may reference records the extractor no longer lists) - see the importer's
+        # ``[prop_instance_index]`` rule.
+        if "instanceIndex" in prop:
+            index_value = prop["instanceIndex"]
+            if not isinstance(index_value, int) or isinstance(index_value, bool) \
+                    or index_value < 0:
+                report.err("[prop_instance_index] %s.instanceIndex: expected a whole number "
+                           ">= 0 (the original's spawn-record index), got %r"
+                           % (where, index_value))
+            else:
+                owner = instance_indices.get(index_value)
+                if owner is not None:
+                    report.err("[prop_instance_index] %s.instanceIndex: expected a unique "
+                               "index, got %r (already used by %r)" % (where, index_value, owner))
+                else:
+                    instance_indices[index_value] = item_id
         if prop.get("phase") is not None and not (_num(prop["phase"])
                                                   and 0.0 <= float(prop["phase"]) <= 1.0):
             report.err("[prop_phase] %s.phase: expected 0..1, got %r" % (where, prop.get("phase")))

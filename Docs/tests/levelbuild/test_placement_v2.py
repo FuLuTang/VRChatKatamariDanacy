@@ -366,6 +366,28 @@ class PropTags(Base):
         self.doc["props"][0]["rotationQuat"] = [0.0, 0.0, 0.0, -1.0]
         self.assert_tag("[prop_rotation]")
 
+    def test_instance_index_is_a_distinct_non_negative_integer(self):
+        self.doc["props"][0]["instanceIndex"] = 7
+        report = self.run_validator()
+        self.assertNotIn("[prop_instance_index]", self.tags(report))
+        for value in (-1, 1.5, True, "7"):
+            broken = copy.deepcopy(self.doc)
+            broken["props"][0]["instanceIndex"] = value
+            self.assertIn("[prop_instance_index]",
+                          self.tags(self.run_validator(broken)), value)
+        # duplicates are an error (two props cannot be the same spawn record)
+        duplicate = copy.deepcopy(self.doc)
+        duplicate["props"].append(dict(copy.deepcopy(duplicate["props"][0]),
+                                       itemId="acorn_02", instanceIndex=7,
+                                       position=[1.5, 0.02, 1.5]))
+        duplicate["meta"]["expected"]["propCount"] = 2
+        duplicate["meta"]["expected"]["growthMm3"] = 2 * duplicate["props"][0]["growthMm3"]
+        self.assertIn("[prop_instance_index]", self.tags(self.run_validator(duplicate)))
+        # no upper bound: an index past the extractor's record count is provenance, not an error
+        far = copy.deepcopy(self.doc)
+        far["props"][0]["instanceIndex"] = 4000
+        self.assertNotIn("[prop_instance_index]", self.tags(self.run_validator(far)))
+
     def test_phase_range(self):
         self.doc["props"][0]["phase"] = 1.5
         self.assert_tag("[prop_phase]")

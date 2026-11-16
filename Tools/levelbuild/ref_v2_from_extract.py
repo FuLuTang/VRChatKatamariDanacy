@@ -319,6 +319,262 @@ def grid_for(boxes, cell=GRID_CELL_M):
 # the .katerrain sidecar (LEVEL_FORMAT_V2 §8.3)
 # --------------------------------------------------------------------------- #
 # --------------------------------------------------------------------------- #
+# the original's motion programs and paths (ORIGINAL_MOTION_PROGRAM §11-§14)
+# --------------------------------------------------------------------------- #
+#: Motion-table class name -> the v2 ``motions[].class`` name (LEVEL_FORMAT_V2 §6.7.3).
+MOTION_CLASS_NAMES = {
+    "SporadicWalk": "sporadic_walk", "Hop": "hop", "Sway": "sway",
+    "DraggedAlong": "dragged_along", "WaitForPlayer": "wait_for_player",
+    "WhackAMole": "whack_a_mole", "PathCollision": "path_collision", "Spin": "spin",
+    "Clouds": "clouds", "Flip": "flip", "Bob": "bob", "SlopingPath": "sloping_path",
+    "BackAndForthNoYaw": "back_and_forth",
+}
+
+#: Per-class update rate (§6.7.5: displacement decides the rate, not the class).
+MOTION_RATES = {"sporadic_walk": 15, "hop": 30, "sway": 15, "dragged_along": 0,
+                "wait_for_player": 5, "whack_a_mole": 30, "path_collision": 15, "spin": 5,
+                "clouds": 10, "flip": 5, "bob": 10, "sloping_path": 15,
+                "back_and_forth": 15}
+
+#: Classes that only exist as ``behaviour:"attached"`` in v2 (§6.7.3: it is the parent
+#: relation expressed as data, so it gets no ``motions[]`` entry of its own).
+ATTACHED_CLASSES = ("dragged_along",)
+
+#: Classes whose motion rides a ``paths[]`` entry.
+PATH_CLASSES = ("path_collision", "sloping_path", "back_and_forth")
+
+#: 1 cm/frame = 0.305 m/s at the game's 30 Hz (measured, motion_table.units).
+CM_PER_SEC_PER_CM_PER_FRAME = 30.5
+
+
+def load_motion_tables(stage_dir):
+    """``(motion_document, path_document, reason)`` — both files or neither.
+
+    A missing table is not an error: the level simply has no motion data, and the caller
+    records *why* instead of writing half a table (a motion that references a path which was
+    not loaded would be worse than no motion at all).
+    """
+    directory = Path(stage_dir)
+    motion_path = directory / "motion_table.json"
+    path_path = directory / "path_table.json"
+    if not motion_path.is_file() or not path_path.is_file():
+        missing = [name for name in ("motion_table.json", "path_table.json")
+                   if not (directory / name).is_file()]
+        return None, None, ("%s not in the extraction" % ", ".join(missing))
+    motion = ref_stage.read_json(guard_read(motion_path))
+    paths = ref_stage.read_json(guard_read(path_path))
+    if motion.get("decodedLevel") != paths.get("decodedLevel"):
+        return None, None, ("the two tables describe different levels (%r vs %r)"
+                            % (motion.get("decodedLevel"), paths.get("decodedLevel")))
+    return motion, paths, None
+
+
+#: The v2 budget: one path is at most 64 points (§12.2), and it is an engine capacity (the
+#: import bakes fixed-length arrays), so a denser original polyline is simplified, never
+#: silently truncated.
+MAX_PATH_POINTS = 62
+
+
+def _segment_distance(point, start, end):
+    ax, ay, az = start
+    bx, by, bz = end
+    px, py, pz = point
+    dx, dy, dz = bx - ax, by - ay, bz - az
+    length_sq = dx * dx + dy * dy + dz * dz
+    if length_sq <= 1e-12:
+        return math.dist(point, start)
+    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy + (pz - az) * dz) / length_sq))
+    return math.dist(point, (ax + t * dx, ay + t * dy, az + t * dz))
+
+
+def simplify_polyline(points, max_points=MAX_PATH_POINTS, start_tolerance=0.005):
+    """Douglas-Peucker until the polyline fits ``max_points``; deterministic.
+
+    Returns ``(points, tolerance, deviation)``: the kept points, the tolerance that achieved
+    it, and the largest deviation of the original points from the simplified line (so the
+    report can say exactly how much shape was traded for the budget).
+    """
+    if len(points) <= max_points:
+        return points, 0.0, 0.0
+
+    def reduce(tolerance):
+        keep = [False] * len(points)
+        keep[0] = keep[-1] = True
+        stack = [(0, len(points) - 1)]
+        while stack:
+            first, last = stack.pop()
+            worst = -1.0
+            worst_index = None
+            for index in range(first + 1, last):
+                distance = _segment_distance(points[index], points[first], points[last])
+                if distance > worst:
+                    worst, worst_index = distance, index
+            if worst_index is not None and worst > tolerance:
+                keep[worst_index] = True
+                stack.append((first, worst_index))
+                stack.append((worst_index, last))
+        return [point for point, flag in zip(points, keep) if flag]
+
+    tolerance = start_tolerance
+    simplified = reduce(tolerance)
+    while len(simplified) > max_points:
+        tolerance *= 1.6
+        simplified = reduce(tolerance)
+    # the largest distance from any original point to the simplified polyline
+    deviation = 0.0
+    for point in points:
+        best = math.inf
+        for index in range(1, len(simplified)):
+            best = min(best, _segment_distance(point, simplified[index - 1], simplified[index]))
+        deviation = max(deviation, best)
+    return simplified, tolerance, deviation
+
+
+def _level_entry(document, level_index, key):
+    for entry in document.get("levels") or []:
+        if isinstance(entry, dict) and entry.get("levelIndex") == level_index:
+            return entry.get(key) or []
+    return []
+
+
+def build_motions(motion_document, path_document, level_index, orders_by_item):
+    """``(motions, paths, props_by_order, summary)`` for one level.
+
+    ``orders_by_item`` maps itemId -> the extractor's spawn-record index (``instanceIndex``),
+    which is also the motion table's key.  Nothing is matched by name.
+    """
+    if motion_document is None or path_document is None:
+        return [], [], {}, {"available": False}
+    entries = _level_entry(motion_document, level_index, "motionEntries")
+    raw_paths = _level_entry(path_document, level_index, "paths")
+
+    paths = []
+    path_ids = {}
+    for path in raw_paths:
+        index = path.get("pathIndex")
+        raw_points = [[-float(value) / 100.0 for value in point]
+                      for point in path.get("points") or []]
+        points, tolerance, deviation = simplify_polyline(raw_points)
+        points = [vec3(point) for point in points]
+        speed_cm_per_frame = path.get("pathSpeedCmPerFrame")
+        entry = {"id": "p%02d" % index, "points": points}
+        if isinstance(speed_cm_per_frame, (int, float)) and speed_cm_per_frame > 0:
+            cm_per_sec = round(float(speed_cm_per_frame) * CM_PER_SEC_PER_CM_PER_FRAME, 1)
+            entry["speedCmPerSec"] = cm_per_sec
+            entry["notes"] = ("%g cm/frame x 30.5 = %g cm/s = %g m/s (motion_table units)"
+                              % (speed_cm_per_frame, cm_per_sec, round(cm_per_sec / 100.0, 3)))
+        else:
+            entry["notes"] = ("speed sentinel %r: the object's speedIndex picks the speed "
+                              "(no path speed)" % (speed_cm_per_frame,))
+        entry["notes"] += ("; %d original point(s)%s"
+                           % (len(raw_points),
+                              (", Douglas-Peucker simplified to %d at %.3f m (max deviation "
+                               "%.4f m) for the 64-point budget" % (len(points), tolerance,
+                                                                    deviation))
+                              if len(raw_points) > len(points) else ""))
+        path_ids[index] = entry["id"]
+        paths.append(entry)
+    paths.sort(key=lambda item: item["id"])
+
+    motions = []
+    motion_by_move_type = {}
+    for entry in entries:
+        move_type = entry.get("moveType")
+        motion_class = MOTION_CLASS_NAMES.get(entry.get("motionClass"))
+        if motion_class is None:
+            continue
+        if motion_class in ATTACHED_CLASSES:
+            motion_by_move_type[move_type] = {"class": motion_class, "attached": True}
+            continue
+        motion_id = "mt%02d_%s" % (move_type, motion_class)
+        motion = {"id": motion_id, "class": motion_class}
+        if motion_class in PATH_CLASSES:
+            motion["speed"] = {"source": "path"}
+            reference = path_ids.get(entry.get("pathIndex"))
+            if reference:
+                motion["path"] = reference
+        elif motion_class in ("sporadic_walk", "clouds"):
+            motion["speed"] = {"source": "type"}
+        else:
+            motion["speed"] = {"source": "none"}
+        motion["updatesPerSecond"] = MOTION_RATES[motion_class]
+        motion["loop"] = motion_class != "whack_a_mole"
+        provenance = {"moveType": move_type, "action": (entry.get("mainAction") or {}).get("name"),
+                      "backupIndex": entry.get("backupIndex"),
+                      "pathIndex": entry.get("pathIndex")}
+        if entry.get("motionID") is not None:
+            provenance["motionID"] = entry["motionID"]
+        motion["provenance"] = provenance
+        notes = ["%s (motionName %r, main action %r)"
+                 % (entry.get("motionClass"), entry.get("motionName"),
+                    (entry.get("mainAction") or {}).get("name"))]
+        if motion_class == "wait_for_player":
+            notes.append("triggerUnknown: the trigger condition is not measured "
+                         "(inZone && parentRolled for 0x04, walk-up radius for the others); "
+                         "params stay unset, the runtime uses PROVISIONAL defaults")
+        if motion_class == "path_collision" and entry.get("motionID") == -1:
+            notes.append("motionID -1: the action is backupIndex+1 (legacy escape)")
+        motion["notes"] = "; ".join(notes)
+        motion_by_move_type[move_type] = {"class": motion_class, "attached": False,
+                                          "id": motion_id}
+        motions.append(motion)
+    motions.sort(key=lambda item: item["id"])
+
+    # per prop: which motion (or attached class) the instance's own record says
+    per_order = {}
+    records = motion_document.get("instances") or []
+    for record in records:
+        index = record.get("instanceIndex")
+        motion_class = MOTION_CLASS_NAMES.get(record.get("motionClass"))
+        if motion_class is None:
+            continue
+        resolved = motion_by_move_type.get(record.get("moveType")) or {}
+        per_order[index] = {"class": motion_class, "moveType": record.get("moveType"),
+                            "motionId": resolved.get("id"),
+                            "motionID": record.get("motionID"),
+                            "pathIndex": record.get("pathIndex"),
+                            "speedIndex": record.get("speedIndex"),
+                            "speedCmPerFrame": record.get("speedCmPerFrame"),
+                            "speedMps": record.get("speedMps"),
+                            "animated": bool(record.get("animated")),
+                            "inLevelProps": bool(record.get("inLevelProps"))}
+    by_item = {}
+    for item_id, order in orders_by_item.items():
+        if order in per_order:
+            by_item[item_id] = per_order[order]
+    summary = {
+        "available": True,
+        "motions": len(motions),
+        "paths": len(paths),
+        "pathPoints": sum(len(path["points"]) for path in paths),
+        "movingRecords": len(per_order),
+        "movingProps": len(by_item),
+        "withMotionField": sum(1 for info in by_item.values()
+                               if not info["class"] in ATTACHED_CLASSES),
+        "attached": sum(1 for info in by_item.values() if info["class"] in ATTACHED_CLASSES),
+        "moveTypes": sorted(motion_by_move_type),
+        "nonPropRecords": sorted(set(per_order) - set(orders_by_item.values())),
+        "byClass": {},
+    }
+    for info in by_item.values():
+        summary["byClass"][info["class"]] = summary["byClass"].get(info["class"], 0) + 1
+    return motions, paths, by_item, summary
+
+
+def motion_notes(info):
+    """The per-prop notes a motion record contributes (class, unverified triggers)."""
+    notes = ["motionClass=%s" % info["class"]]
+    if info["class"] in ATTACHED_CLASSES:
+        notes.append("dragged_along: expressed as behaviour 'attached' (no motions[] entry)")
+    if info.get("moveType") == 10:
+        notes.append("triggerUnknown: moveType 10 (0x04) needs inZone && parentRolled, "
+                     "unverified - no parameters guessed")
+    if info.get("motionID") is not None and info["class"] == "path_collision":
+        notes.append("motionID=%s" % info["motionID"])
+    return notes
+
+
+# --------------------------------------------------------------------------- #
 # props / defs / structures
 # --------------------------------------------------------------------------- #
 def animated_instances(stage_dir, props):
@@ -591,6 +847,28 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
     prepared = ref_stage.prepare(directory, folder, level_doc)
     transforms = (prepared.get("transforms") or {}).get("byItemId") or {}
 
+    # The original's motion programs and paths are a per-level table; a prop's entry is
+    # resolved by its OWN spawn-record index (never by name).
+    motion_document, path_document, motion_reason = load_motion_tables(directory)
+    motions, paths, motion_by_item, motion_summary = build_motions(
+        motion_document, path_document,
+        (motion_document or {}).get("decodedLevel"),
+        {item_id: info["order"] for item_id, info in transforms.items()})
+    motion_summary["reason"] = motion_reason
+    speed_index_by_def = {}
+    if motion_document:
+        seen = {}
+        for record in motion_document.get("instances") or []:
+            if MOTION_CLASS_NAMES.get(record.get("motionClass")) is None:
+                continue
+            name_id = record.get("nameIdx")
+            seen.setdefault(name_id, set()).add(record.get("speedIndex"))
+        for prop in level_doc.get("props") or []:
+            definition = defs_by_id.get(prop.get("def")) or {}
+            values = seen.get(definition.get("mono"))
+            if values and len(values) == 1:
+                speed_index_by_def[prop["def"]] = int(next(iter(values)))
+
     placements = []
     scavenged = {"positionMoved": 0, "positionMaxShift": 0.0, "scaleApplied": 0,
                  "nonUniform": [], "missingInstance": [], "zoneUnknown": 0}
@@ -664,9 +942,11 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
             "nonUniform": non_uniform,
             "zone": zone,
             "collider": colliders_by_def.get(prop.get("def")),
+            "motion": motion_by_item.get(prop.get("itemId")),
             "worldAabb": world,
             "notes": notes,
             "instance": instance,
+            "instanceOrder": int(instance.get("order") or 0),
             "positionSource": position_source,
             "v1Position": [float(value) for value in prop["position"]],
         })
@@ -682,7 +962,8 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
         "schema": SCHEMA_V2,
         "meta": _meta(level_id, level_doc, placements, terrain, solids, rectangle,
                       ground_y, kill_y, max_diameter_m, volume_penalty, time_limit_s,
-                      scenery, area_info, zones, animators, animator_source),
+                      scenery, area_info, zones, animators, animator_source,
+                      motion_summary),
         "terrain": None,          # filled below (needs the sidecar hash)
         "structures": {"solids": solids},
         "activityArea": {
@@ -703,9 +984,9 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
         "props": [_prop_block(entry) for entry in sorted(placements, key=lambda item: item["itemId"])],
         "defs": _defs(level_doc, original, models_root, model_table, with_colliders,
                       {entry["def"] for entry in placements if entry.get("nonUniform")},
-                      colliders_by_def),
-        "motions": [],
-        "paths": [],
+                      colliders_by_def, speed_index_by_def),
+        "motions": motions,
+        "paths": paths,
         "cameras": [],
         "renderPresets": [],
         "regions": [],
@@ -736,13 +1017,14 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
                     "max": max(entry["volumeK"] for entry in placements)},
         "expected": document["meta"]["expected"],
         "animators": {"count": animators, "source": animator_source},
+        "motions": motion_summary,
     }
     return document, sidecar, report
 
 
 def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y, kill_y,
           max_diameter_m, volume_penalty, time_limit_s, scenery, area_info, zones,
-          animators=0, animator_source="none"):
+          animators=0, animator_source="none", motions_summary=None):
     level = level_doc.get("level") or {}
     growth_total = sum(entry["growthMm3"] for entry in placements)
     overlap_budget = _overlap_pairs(placements)
@@ -773,8 +1055,9 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
                       "project global cap, but this level's own design ceiling is %.2f m "
                       "(the original's MAX_DIAMETER) and absorbable/structures are decided "
                       "against it. caps.animators = %d, source: %s (D-11: one Animator per "
-                      "animated instance, no VAT)"
-                      % (max_diameter_m, int(animators), animator_source)),
+                      "animated instance, no VAT). motions: %s"
+                      % (max_diameter_m, int(animators), animator_source,
+                         _motion_note(motions_summary))),
         },
         "caps": {
             "props": 512,
@@ -782,7 +1065,7 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
             "terrainVertices": 8192,
             "staticSolids": 256,
             "activityWalls": 8,
-            "movingProps": 0,
+            "movingProps": int((motions_summary or {}).get("movingProps") or 0),
             "animators": int(animators),
         },
         "budget": {"planes": 8, "boxes": 64, "ramps": 4, "blocking": 6,
@@ -804,6 +1087,16 @@ def _meta(level_id, level_doc, placements, terrain, solids, rectangle, ground_y,
                       "maxDiameterM": n4(max_diameter_m),
                       "volumePenalty": n4(volume_penalty)},
     }
+
+
+def _motion_note(summary):
+    """One sentence for ``meta.arena.notes``: the 129/128 split, kept visible."""
+    if not summary or not summary.get("available"):
+        return "none (%s)" % (summary or {}).get("reason", "no motion table")
+    return ("%d records with a program, %d rendered props (%d carry props[].motion, %d are "
+            "behaviour 'attached'); %d motions[], %d paths[]"
+            % (summary["movingRecords"], summary["movingProps"], summary["withMotionField"],
+               summary["attached"], summary["motions"], summary["paths"]))
 
 
 def _bounds(placements, margin=0.0):
@@ -911,7 +1204,7 @@ def _prop_block(entry):
         "itemId": entry["itemId"],
         "def": entry["def"],
         "kind": "reference",
-        "behaviour": "static",
+        "behaviour": "static",          # overwritten below when the instance has a program
         "zone": entry["zone"],
         "position": vec3(entry["position"]),
         "rotationQuat": entry["rotationQuat"],
@@ -927,8 +1220,25 @@ def _prop_block(entry):
     block["inherit"] = "full" if entry["parent"] else "none"
     if entry["parent"]:
         block["parent"] = entry["parent"]
-    if entry["notes"]:
-        block["notes"] = "; ".join(entry["notes"])
+    motion = entry.get("motion") or {}
+    motion_class = motion.get("class")
+    if motion_class in ATTACHED_CLASSES:
+        # §6.7.3: dragged_along is the parent relation as data, not a program of its own.
+        block["behaviour"] = "attached"
+    elif motion_class == "clouds":
+        block["behaviour"] = "ambient"
+        if motion.get("motionId"):
+            block["motion"] = motion["motionId"]
+    elif motion_class:
+        block["behaviour"] = "motion"
+        if motion.get("motionId"):
+            block["motion"] = motion["motionId"]
+    block["instanceIndex"] = int(entry["instanceOrder"])
+    notes = list(entry["notes"])
+    if motion_class:
+        notes.extend(motion_notes(motion))
+    if notes:
+        block["notes"] = "; ".join(notes)
     return block
 
 
@@ -958,7 +1268,7 @@ def _terrain_block(terrain, boxes, chunks, index_width, digest):
 
 
 def _defs(level_doc, original, models_root, model_table, with_colliders,
-          non_uniform_defs=(), colliders=None):
+          non_uniform_defs=(), colliders=None, speed_index=None):
     defs = {entry["id"]: entry for entry in original.get("defs") or []}
     models = {entry.get("id"): entry.get("model") for entry in level_doc.get("defs") or []}
     blocks = []
@@ -975,6 +1285,8 @@ def _defs(level_doc, original, models_root, model_table, with_colliders,
                 source.get("bboxOverSolidVolume") if source.get("bboxOverSolidVolume")
                 else "default 0.70"),
         }
+        if speed_index and def_id in speed_index:
+            block["speedIndex"] = speed_index[def_id]
         collider = (colliders or {}).get(def_id)
         if not with_colliders or def_id in non_uniform_defs:
             collider = None

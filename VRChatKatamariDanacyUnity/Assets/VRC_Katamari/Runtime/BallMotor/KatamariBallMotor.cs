@@ -104,6 +104,12 @@ namespace VRCKatamari.BallMotor
         // and ledges are static boxes; a lab that predates the step rule must call
         // SetTerrainSupportEnabled(false).
         [SerializeField] private bool terrainSupportEnabled = true;
+
+        // T0/T1 terrain mesh contact (LEVEL_FORMAT_V2 §13). Default FALSE: with it off
+        // no terrain array is queried and the v1 position path is exactly the pre-mesh
+        // one. The mesh is the extra 3D-ground source; it does not replace the ground
+        // plane, boxes or ramps.
+        [SerializeField] private bool terrainMeshContactEnabled = false;
         // The RATIO, never a height: stepLimit = ratio * semantic diameter. 0.25 is the
         // value already in Docs/Design/Maps/PicnicLawn/layout.json and in the map
         // validator's climb_step rule; runtime read it nowhere before P1. The radius
@@ -539,6 +545,20 @@ namespace VRCKatamari.BallMotor
         // is losing support, and arriving at a surface is the only way out.
         private bool isFalling;
         private float fallSpeedMps;
+
+        // ---- Terrain mesh (T0/T1; caller-owned fixed arrays, copied in once) ----
+        private Vector3[] terrainVertices;
+        private int[] terrainIndices;
+        private int terrainVertexCount;
+        private int terrainTriangleCount;
+        private int[] terrainChunkStarts;
+        private int[] terrainChunkTriangleCounts;
+        private int[] terrainChunkZoneIds;
+        private Vector3[] terrainChunkMin;
+        private Vector3[] terrainChunkMax;
+        private int terrainChunkCount;
+        private bool terrainMeshReady;
+        private float lastTerrainQueryMicros;
 
         // ---- Pending absorb candidates; candidate collection is host-side ----
         private const int PendingCandidateCapacity = 4;
@@ -1509,6 +1529,7 @@ namespace VRCKatamari.BallMotor
             groundedCenter = Vector3.zero;
             followCenter = Vector3.zero;
             supportNormal = groundPlaneNormal;
+            lastTerrainQueryMicros = 0f;
             // 2.5 Terrain support mask (P1): decide which static boxes are steps and
             //     rebuild the sweep obstacle arrays without them. This runs BEFORE the
             //     sweep because entering a step means being allowed inside the box's
@@ -1550,6 +1571,13 @@ namespace VRCKatamari.BallMotor
                 // RebuildObstacles.
                 if (contactCount >= ContactCapacity) contactBufferSaturated = true;
             }
+            // T1 terrain push-out runs after the sweep and before support selection, so
+            // the support solve sees the corrected centre. Off => no call.
+            if (terrainMeshContactEnabled)
+            {
+                ResolveTerrainPenetration(ref sweptCenter, ref planarVelocity);
+            }
+
             // Wall response: the sweep only stops the POSITION at the wall. Without
             // this the planar velocity keeps its full speed into the wall, so the
             // ball sticks instead of sliding and carries a stale velocity after it
@@ -3277,6 +3305,27 @@ namespace VRCKatamari.BallMotor
                 supportCandidateCount = 0;
             }
 
+            // T0: the mesh is an additional support source. It may only raise the selected
+            // support (a lower mesh triangle loses to the arena plane/box/ramp), and the
+            // band is the SAME SupportSurfaceMath predicate the other sources use.
+            if (terrainMeshContactEnabled && terrainMeshReady && terrainTriangleCount > 0)
+            {
+                int terrainId;
+                Vector3 terrainPoint;
+                Vector3 terrainNormal;
+                float terrainHeight;
+                if (TryQueryTerrainSupport(center, bandReference, limit, out terrainId,
+                    out terrainPoint, out terrainNormal, out terrainHeight) &&
+                    terrainHeight > supportSurfaceHeightWorldM)
+                {
+                    supportSurfaceId = terrainId;
+                    supportSurfacePointWorld = terrainPoint;
+                    supportSurfaceNormalWorld = terrainNormal;
+                    supportSurfaceHeightWorldM = terrainHeight;
+                    supportCandidateCount = supportCandidateCount + 1;
+                }
+            }
+
             bool dropped;
             // A drop only counts when the SELECTED SURFACE changed. A continuous ramp (or
             // a tilted ground plane) lowers the height under the moving probe as the ball
@@ -3296,6 +3345,144 @@ namespace VRCKatamari.BallMotor
                 fallSpeedMps = 0f;
             }
             lastSupportHeightWorldM = supportSurfaceHeightWorldM;
+        }
+
+        /// <summary>
+        /// T0 support query: 16 radial directions projected to XZ, each probe asking the
+        /// mesh for the highest upward triangle in the step band; the highest probe wins.
+        /// The returned point is on that triangle's plane at the ball's XZ, so
+        /// <c>GroundContactMath</c> consumes it exactly like a plane/box/ramp support.
+        /// </summary>
+        private bool TryQueryTerrainSupport(Vector3 center, float bandReference,
+            float stepLimit, out int surfaceId, out Vector3 point, out Vector3 normal,
+            out float height)
+        {
+            surfaceId = SupportSurfaceMath.NoSurfaceId;
+            point = Vector3.zero;
+            normal = Vector3.zero;
+            height = 0f;
+            if (!terrainMeshReady || terrainTriangleCount <= 0) return false;
+            float start = Time.time;
+            float maxHeight = bandReference + stepLimit;
+            if (!KatamariMath.IsFiniteFloat(maxHeight)) return false;
+
+            float ring = collisionRadiusWorldM * 0.9f;
+            float bestHeight = -float.MaxValue;
+            bool found = false;
+            if (proxyDirections != null && proxyDirections.Length > 0)
+            {
+                int count = proxyDirections.Length;
+                if (count > TerrainMeshMath.MaxProbes) count = TerrainMeshMath.MaxProbes;
+                for (int i = 0; i < count; i++)
+                {
+                    // proxyDirections is the local 16-direction set; the probe ring is
+                    // world-space, so rotate exactly like the needle path does.
+                    Vector3 direction = visualRollRotation * proxyDirections[i];
+                    float horizontal = Mathf.Sqrt(direction.x * direction.x +
+                        direction.z * direction.z);
+                    if (!KatamariMath.IsFiniteFloat(horizontal) || horizontal <= 1e-4f)
+                        continue;
+                    Vector3 probe = new Vector3(center.x + direction.x / horizontal * ring,
+                        center.y, center.z + direction.z / horizontal * ring);
+                    Vector3 candidatePoint;
+                    Vector3 candidateNormal;
+                    int candidateId;
+                    if (!TerrainMeshMath.TrySupportProbe(probe, maxHeight, terrainVertices,
+                        terrainIndices, terrainTriangleCount, terrainChunkMin, terrainChunkMax,
+                        terrainChunkStarts, terrainChunkTriangleCounts, terrainChunkZoneIds,
+                        terrainChunkCount, out candidatePoint, out candidateNormal,
+                        out candidateId))
+                        continue;
+                    float centerHeight = (candidateNormal.x * candidatePoint.x +
+                        candidateNormal.y * candidatePoint.y +
+                        candidateNormal.z * candidatePoint.z -
+                        candidateNormal.x * center.x - candidateNormal.z * center.z) /
+                        candidateNormal.y;
+                    if (!KatamariMath.IsFiniteFloat(centerHeight)) continue;
+                    if (!SupportSurfaceMath.IsStepWithinLimit(centerHeight, bandReference,
+                        stepLimit)) continue;
+                    if (!found || centerHeight > bestHeight)
+                    {
+                        found = true;
+                        bestHeight = centerHeight;
+                        surfaceId = candidateId;
+                        normal = candidateNormal;
+                    }
+                }
+            }
+            if (!found)
+            {
+                // No radial direction (unlikely) or every ring probe missed: one centre
+                // probe keeps a flat mesh under a stationary ball working.
+                Vector3 candidatePoint;
+                Vector3 candidateNormal;
+                int candidateId;
+                if (!TerrainMeshMath.TrySupportProbe(center, maxHeight, terrainVertices,
+                    terrainIndices, terrainTriangleCount, terrainChunkMin, terrainChunkMax,
+                    terrainChunkStarts, terrainChunkTriangleCounts, terrainChunkZoneIds,
+                    terrainChunkCount, out candidatePoint, out candidateNormal,
+                    out candidateId))
+                {
+                    lastTerrainQueryMicros = lastTerrainQueryMicros +
+                        (Time.time - start) * 1000000f;
+                    return false;
+                }
+                float centerHeight = (candidateNormal.x * candidatePoint.x +
+                    candidateNormal.y * candidatePoint.y +
+                    candidateNormal.z * candidatePoint.z -
+                    candidateNormal.x * center.x - candidateNormal.z * center.z) /
+                    candidateNormal.y;
+                if (!KatamariMath.IsFiniteFloat(centerHeight) ||
+                    !SupportSurfaceMath.IsStepWithinLimit(centerHeight, bandReference,
+                        stepLimit))
+                {
+                    lastTerrainQueryMicros = lastTerrainQueryMicros +
+                        (Time.time - start) * 1000000f;
+                    return false;
+                }
+                found = true;
+                bestHeight = centerHeight;
+                surfaceId = candidateId;
+                normal = candidateNormal;
+            }
+
+            point = new Vector3(center.x, bestHeight, center.z);
+            height = bestHeight;
+            lastTerrainQueryMicros = lastTerrainQueryMicros +
+                        (Time.time - start) * 1000000f;
+            return true;
+        }
+
+        /// <summary>
+        /// T1: push the sphere out of the terrain along the closest triangle's normal, up
+        /// to two times. Single-sided (the triangle's winding side) so a roof pushes down
+        /// and a floor does not push a ball that is already below it. Planar inward speed
+        /// is removed; no classification/climb response (that is T2).
+        /// </summary>
+        private void ResolveTerrainPenetration(ref Vector3 center, ref Vector3 planarVelocity)
+        {
+            if (!terrainMeshReady || terrainTriangleCount <= 0) return;
+            float start = Time.time;
+            for (int iteration = 0; iteration < 2; iteration++)
+            {
+                Vector3 point;
+                Vector3 normal;
+                float depth;
+                if (!TerrainMeshMath.TryDeepestPenetration(center, collisionRadiusWorldM,
+                    terrainVertices, terrainIndices, terrainTriangleCount, terrainChunkMin,
+                    terrainChunkMax, terrainChunkStarts, terrainChunkTriangleCounts,
+                    terrainChunkCount, out point, out normal, out depth)) break;
+                if (!KatamariMath.IsFiniteFloat(depth) || depth <= 0f) break;
+                center = center + normal * (depth + separationEpsilon);
+                float inward = planarVelocity.x * normal.x + planarVelocity.z * normal.z;
+                if (inward < 0f)
+                {
+                    planarVelocity = new Vector3(planarVelocity.x - normal.x * inward,
+                        0f, planarVelocity.z - normal.z * inward);
+                }
+            }
+            lastTerrainQueryMicros = lastTerrainQueryMicros +
+                (Time.time - start) * 1000000f;
         }
 
         /// <summary>
@@ -4620,6 +4807,100 @@ namespace VRCKatamari.BallMotor
             if (contactModelV2Enabled == enabled) return;
             contactModelV2Enabled = enabled;
             contactHasPreviousFrame = false;
+        }
+
+        // ------------------------------------------------------------------
+        // Terrain mesh (T0/T1; LEVEL_FORMAT_V2 §13)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Copies one baked terrain mesh into the motor's fixed buffers. The writer owns
+        /// the source arrays; this call allocates the motor buffers once (writer-allocates
+        /// rule), validates/copies them and computes the chunk AABBs. Chunks must be
+        /// contiguous, cover every triangle once, and hold at most 512 triangles.
+        /// </summary>
+        public bool SetTerrainMesh(
+            Vector3[] vertices, int vertexCount,
+            int[] indices, int indexCount,
+            int[] chunkStarts, int[] chunkTriangleCounts, int[] chunkZoneIds,
+            int chunkCount)
+        {
+            EnsureTerrainMeshBuffers();
+            terrainMeshReady = false;
+            int triangles;
+            int chunks;
+            if (!TerrainMeshMath.TryBuildMesh(vertices, vertexCount, indices, indexCount,
+                chunkStarts, chunkTriangleCounts, chunkZoneIds, chunkCount,
+                terrainVertices, terrainIndices, terrainChunkStarts,
+                terrainChunkTriangleCounts, terrainChunkZoneIds, terrainChunkMin,
+                terrainChunkMax, out triangles, out chunks))
+            {
+                terrainVertexCount = 0;
+                terrainTriangleCount = 0;
+                terrainChunkCount = 0;
+                return false;
+            }
+
+            terrainVertexCount = vertexCount;
+            terrainTriangleCount = triangles;
+            terrainChunkCount = chunks;
+            terrainMeshReady = true;
+            lastTerrainQueryMicros = 0f;
+            return true;
+        }
+
+        /// <summary>Drops the terrain mesh; the plane/box/ramp support world stays.</summary>
+        public void ClearTerrainMesh()
+        {
+            terrainVertexCount = 0;
+            terrainTriangleCount = 0;
+            terrainChunkCount = 0;
+            terrainMeshReady = false;
+            lastTerrainQueryMicros = 0f;
+        }
+
+        public bool IsTerrainMeshContactEnabled()
+        {
+            return terrainMeshContactEnabled;
+        }
+
+        /// <summary>Runtime flag flip for the lab/EditMode; serialized default is false.</summary>
+        public void SetTerrainMeshContactEnabled(bool enabled)
+        {
+            terrainMeshContactEnabled = enabled;
+        }
+
+        public int GetTerrainMeshTriangleCount()
+        {
+            return terrainTriangleCount;
+        }
+
+        public int GetTerrainMeshChunkCount()
+        {
+            return terrainChunkCount;
+        }
+
+        /// <summary>Last step's terrain support + penetration query time, microseconds.</summary>
+        public float GetLastTerrainQueryMicros()
+        {
+            return lastTerrainQueryMicros;
+        }
+
+        private void EnsureTerrainMeshBuffers()
+        {
+            if (terrainVertices != null) return;
+            terrainVertices = new Vector3[TerrainMeshMath.MaxVertices];
+            terrainIndices = new int[TerrainMeshMath.MaxTriangles * 3];
+            terrainChunkStarts = new int[TerrainMeshMath.MaxChunks];
+            terrainChunkTriangleCounts = new int[TerrainMeshMath.MaxChunks];
+            terrainChunkZoneIds = new int[TerrainMeshMath.MaxChunks];
+            terrainChunkMin = new Vector3[TerrainMeshMath.MaxChunks];
+            terrainChunkMax = new Vector3[TerrainMeshMath.MaxChunks];
+            terrainVertexCount = 0;
+            terrainTriangleCount = 0;
+            terrainChunkCount = 0;
+            terrainMeshReady = false;
+            lastTerrainQueryMicros = 0f;
         }
 
         // ------------------------------------------------------------------

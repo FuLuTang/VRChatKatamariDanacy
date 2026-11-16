@@ -37,6 +37,7 @@ Some data structures and behaviours take priority for restoration to the origina
 - Gameplay invariants: one shared world coordinate system; avatars and remote decorations never decide gameplay collision; only confirmed ledger values affect scores, banking or PvP; item generations and requests are idempotent.
 - **C# compile gate:** before delivering any C# change, the implementer runs `python3 Tools/csharp_check/check.py` — local Roslyn 4.3.1 mirroring Unity 2022.3, covering `VRCKatamari.Runtime`, `VRCKatamari.Editor`, `Assembly-CSharp-Editor` and `VRCKatamari.Tests.EditMode` in about 15 s ([usage](<Tools/csharp_check/README.md>)); 0 errors is the bar, and the report pastes the last output.
 - It checks C# compilation only: the UdonSharp language subset, U# program compilation, EditMode test runs and scene/serialization behaviour still need a Unity round.
+- **Local test run:** `python3 Tools/csharp_check/run_tests.py [--filter TEXT]` executes the EditMode tests that need no engine on .NET 8 and reports passed / failed / known difference from Unity / not runnable here against the discovered total ([usage](<Tools/csharp_check/README.md>)). A failure it reports is real; tests that need `GameObject`s or other engine natives stay "not runnable", and local green is not Unity green — the Unity round remains the verdict.
 - Every "checked / 0 issues" claim names the scope scanned and its denominator; a claim without a denominator counts as not checked.
 
 ## Delegation and Git

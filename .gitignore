@@ -194,3 +194,9 @@ Thumbs.db
 
 # Parity corpora are exports of unlicensed data mines of a commercial game: local only.
 /Docs/Design/Parity/parity_harness/corpus_*.json
+
+# csharp_check/test_runner is a hand-written source project (the NUnit host behind
+# Tools/csharp_check/run_tests.py): same exception as motion_sim.
+!/Tools/csharp_check/test_runner/test_runner.csproj
+/Tools/csharp_check/test_runner/bin/
+/Tools/csharp_check/test_runner/obj/

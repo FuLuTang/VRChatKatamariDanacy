@@ -195,7 +195,12 @@ def reference_paths(manifest: dict, unit: Unit, built: dict[str, Path]) -> list[
 
 
 def response_file(
-    manifest: dict, unit: Unit, project: Path, refs: list[Path], output: Path
+    manifest: dict,
+    unit: Unit,
+    project: Path,
+    refs: list[Path],
+    output: Path,
+    debug_symbols: bool = False,
 ) -> str:
     settings = manifest["assemblies"][unit.name]
     defines = settings.get("defines") or []
@@ -211,6 +216,9 @@ def response_file(
         f'-out:"{output}"',
         f'-define:{";".join(defines)}',
     ]
+    if debug_symbols:
+        # Portable PDBs next to the DLL, so a runner can report file:line for a stack frame.
+        lines.append("-debug:portable")
     lines += [f'-r:"{path}"' for path in refs]
     lines += [f'"{path.relative_to(project).as_posix()}"' for path in unit.sources]
     # csc response files are UTF-8; every path here is ASCII on this project.
@@ -308,6 +316,11 @@ def run_local(ordered, project: Path, manifest: dict, args, dotnet: Path, csc_pa
     read-only, so that is safe.
     """
     workdir = Path(tempfile.mkdtemp(prefix="vrck-csharp-check-"))
+    # With --output-dir the DLLs (and PDBs) are kept there instead of in the throw-away
+    # workdir; the compile itself is identical.
+    outdir = args.output_dir.resolve() if getattr(args, "output_dir", None) else None
+    if outdir is not None:
+        outdir.mkdir(parents=True, exist_ok=True)
     built: dict[str, Path] = {}
     failed: set[str] = set()
     unit_names = {u.name for u in ordered}
@@ -321,9 +334,12 @@ def run_local(ordered, project: Path, manifest: dict, args, dotnet: Path, csc_pa
 
     def compile_one(unit):
         refs = reference_paths(manifest, unit, built)
-        output = workdir / f"{unit.name}.dll"
+        output = (outdir or workdir) / f"{unit.name}.dll"
         rsp = workdir / f"{unit.name}.rsp"
-        rsp.write_text(response_file(manifest, unit, project, refs, output), encoding="utf-8")
+        rsp.write_text(
+            response_file(manifest, unit, project, refs, output, debug_symbols=outdir is not None),
+            encoding="utf-8",
+        )
         unit_started = time.perf_counter()
         returncode, output_text = run_csc(str(dotnet), csc_path, rsp, project)
         unit_elapsed = time.perf_counter() - unit_started
@@ -417,6 +433,13 @@ def main(argv: list[str] | None = None) -> int:
         help="csc.dll to run (default: the Unity-matching Roslyn from the cache, else the .NET SDK)",
     )
     parser.add_argument("--keep-workdir", action="store_true", help="keep the temporary compile directory")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="local backend only: write the compiled assemblies (with portable PDBs) here "
+        "instead of discarding them (used by run_tests.py)",
+    )
     parser.add_argument("--timings", action="store_true", help="print per-assembly compile times")
     parser.add_argument(
         "--backend",
@@ -467,6 +490,8 @@ def main(argv: list[str] | None = None) -> int:
             units = list(UNITS)
         ordered = topological(units)
 
+        if args.output_dir is not None and args.backend != "local":
+            raise CheckError("--output-dir needs --backend local")
         if args.backend == "windows":
             import windows_backend
 

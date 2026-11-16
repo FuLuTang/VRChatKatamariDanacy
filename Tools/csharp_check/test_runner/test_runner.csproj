@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    test_runner: runs Unity's NUnit EditMode tests on .NET 8 (Tools/csharp_check/README.md).
+
+    It contains no test and no engine stub.  The tests are the DLLs check.py compiled from
+    the repository's own sources (its output-dir option); this project is only the loader that hosts
+    NUnit's NUnitTestAssemblyRunner around them.
+
+    nunit.framework.dll is NUnit 3.5.0 (lib/dotnet) from the NuGet package, fetched into the
+    cache by run_tests.py.  Unity's own nunit.framework.dll has the same 3.5.0.0 identity
+    but is a net35 build that cannot load on .NET 8, so the tests are compiled against
+    Unity's and run against this one.  Not a NuGet PackageReference: run_tests.py keeps the
+    package in the same offline cache as the Unity reference DLLs.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>9.0</LangVersion>
+    <AssemblyName>test_runner</AssemblyName>
+    <RootNamespace>TestRunner</RootNamespace>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- 3.5 (default): the faithful run.  3.14: the continue-after-failure build. -->
+    <NUnitFlavor Condition="'$(NUnitFlavor)' == ''">3.5</NUnitFlavor>
+    <DefineConstants Condition="'$(NUnitFlavor)' == '3.14'">$(DefineConstants);NUNIT_CONTINUE</DefineConstants>
+    <NUnitFrameworkDll Condition="'$(NUnitFrameworkDll)' == ''">$(HOME)/.cache/vrc-katamari-refasm/nunit/nunit.framework.dll</NUnitFrameworkDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="nunit.framework">
+      <HintPath>$(NUnitFrameworkDll)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

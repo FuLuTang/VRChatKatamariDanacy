@@ -84,7 +84,7 @@ namespace VRCKatamari.Tests
             GameObject containerProp = Track(NewPropWithRenderer("caramel_018", kindFolder));
 
             Transform folder = (Transform)CallImporter("EnsurePropFolder", propsRoot.transform,
-                "food", null, "caramel_018", report);
+                "food", null, "caramel_018", null, report);
 
             Assert.IsNotNull(folder, "the group gets a container");
             Assert.AreNotSame(containerProp.transform, folder,
@@ -108,11 +108,11 @@ namespace VRCKatamari.Tests
             Track(NewPropWithRenderer("caramel_018", kindFolder));
 
             Transform first = (Transform)CallImporter("EnsurePropFolder", propsRoot.transform,
-                "food", null, "caramel_018", report);
+                "food", null, "caramel_018", null, report);
             int childCountAfterFirst = CountDescendants(propsRoot.transform);
 
             Transform second = (Transform)CallImporter("EnsurePropFolder", propsRoot.transform,
-                "food", null, "caramel_018", report);
+                "food", null, "caramel_018", null, report);
 
             Assert.AreSame(first, second, "the container's identity is stable across imports");
             Assert.AreEqual(childCountAfterFirst, CountDescendants(propsRoot.transform),
@@ -128,7 +128,7 @@ namespace VRCKatamari.Tests
             GameObject zoneNamedProp = Track(NewPropWithRenderer("dining", kindFolder));
 
             Transform folder = (Transform)CallImporter("EnsurePropFolder", propsRoot.transform,
-                "food", "dining", null, report);
+                "food", "dining", null, null, report);
 
             Assert.IsNull(folder, "a prop cannot be a container, so the folder is refused");
             Assert.AreEqual(1, Errors(report).Count, "the collision is reported, not swallowed");
@@ -139,7 +139,7 @@ namespace VRCKatamari.Tests
             // A refusal is stable: the next run refuses too, and still creates nothing.
             object secondReport = NewReport();
             Assert.IsNull(CallImporter("EnsurePropFolder", propsRoot.transform, "food", "dining",
-                    null, secondReport));
+                    null, null, secondReport));
             Assert.AreEqual(1, Errors(secondReport).Count);
         }
 
@@ -158,7 +158,7 @@ namespace VRCKatamari.Tests
 
             object report = NewReport();
             Transform groupFolder = (Transform)CallImporter("EnsurePropFolder", propsRoot.transform,
-                "food", null, "caramel_018", report);
+                "food", null, "caramel_018", null, report);
             Assert.IsNotNull(groupFolder);
 
             GameObject parentProp = Track(PrefabUtility.InstantiatePrefab(model, groupFolder) as GameObject);
@@ -429,7 +429,21 @@ namespace VRCKatamari.Tests
                 break;
             }
 
-            Assert.IsNotNull(method, name + " with " + args.Length + " parameters not found");
+            if (method == null)
+            {
+                var arities = new System.Text.StringBuilder();
+                for (int i = 0; i < candidates.Length; i++)
+                {
+                    if (candidates[i].Name != name) continue;
+                    if (arities.Length > 0) arities.Append(", ");
+                    arities.Append(candidates[i].GetParameters().Length);
+                }
+
+                Assert.Fail(name + " with " + args.Length + " argument(s) not found; " +
+                            "PlacementImporter declares it with: " +
+                            (arities.Length == 0 ? "no such method" : arities.ToString()));
+            }
+
             return method.Invoke(null, args);
         }
 

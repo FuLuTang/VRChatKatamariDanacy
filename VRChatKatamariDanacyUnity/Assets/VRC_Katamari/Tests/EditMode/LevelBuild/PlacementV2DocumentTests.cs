@@ -41,7 +41,9 @@ namespace VRCKatamari.Tests
             @"""arena"":{""id"":""probe""}," +
             @"""caps"":{""props"":512,""staticSolids"":256}," +
             @"""budget"":{""planes"":8,""boxes"":64,""ramps"":4}," +
-            @"""expected"":{""propCount"":0},""source"":{""kind"":""authored""}";
+            // NOTE the TWO closing braces: the first closes `source`, the second closes `meta`.
+            // Missing the second one made every DocWith(...) fixture an unterminated object.
+            @"""expected"":{""propCount"":0},""source"":{""kind"":""authored""}}";
 
         private Type readerType;
         private Type pathsType;
@@ -59,8 +61,10 @@ namespace VRCKatamari.Tests
 
         private static string DocWith(string blocks)
         {
-            return @"{""schema"":""katamari.placement/2""," + MetaJson +
-                   (string.IsNullOrEmpty(blocks) ? "" : "," + blocks) + "}";
+            string json = @"{""schema"":""katamari.placement/2""," + MetaJson +
+                          (string.IsNullOrEmpty(blocks) ? "" : "," + blocks) + "}";
+            AssertFixtureIsJson(json);
+            return json;
         }
 
         private static string PropJson(string body)
@@ -339,6 +343,35 @@ namespace VRCKatamari.Tests
             var items = new object[array.Length];
             for (int i = 0; i < array.Length; i++) items[i] = array.GetValue(i);
             return items;
+        }
+
+        /// <summary>
+        /// Fails with the fixture text when the fixture is not valid JSON.
+        /// </summary>
+        /// <remarks>
+        /// This exists because a missing brace in a fixture helper surfaced as
+        /// "[v2_source] not valid JSON: unterminated object" INSIDE the reader - i.e. the test
+        /// looked like a reader bug. Parsing the fixture with the production parser first makes
+        /// a broken fixture say so, and prints the text that is wrong.
+        /// </remarks>
+        private static void AssertFixtureIsJson(string json)
+        {
+            Type parserType = FindType("VRCKatamari.Editor.LevelBuild.LevelJsonParser");
+            Assert.IsNotNull(parserType, "LevelJsonParser not loaded");
+            MethodInfo parse = parserType.GetMethod("ParseText",
+                BindingFlags.Public | BindingFlags.Static);
+            Assert.IsNotNull(parse, "LevelJsonParser.ParseText not found");
+            try
+            {
+                parse.Invoke(null, new object[] { json });
+            }
+            catch (TargetInvocationException exception)
+            {
+                Assert.Fail("the test fixture is not valid JSON (" +
+                            (exception.InnerException == null
+                                ? "unknown parse error"
+                                : exception.InnerException.Message) + "):\n" + json);
+            }
         }
 
         private static object Field(object target, string name)

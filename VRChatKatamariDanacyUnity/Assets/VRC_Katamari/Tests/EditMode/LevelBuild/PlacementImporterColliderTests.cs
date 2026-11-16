@@ -109,12 +109,37 @@ namespace VRCKatamari.Tests
             StringAssert.Contains("not declared", error);
         }
 
+        /// <summary>
+        /// The number of declared proxies, through the importer's own builder.
+        /// </summary>
+        /// <remarks>
+        /// Found by NAME and arity instead of a hard-coded parameter count: the builder gained a
+        /// report argument, and a count-based lookup turned that into a
+        /// <c>TargetParameterCountException</c> that said nothing about the cause.
+        /// </remarks>
         private int DeclaredProxyCount(object doc)
         {
-            MethodInfo method = importerType.GetMethod("BuildDeclaredProxies",
-                BindingFlags.Static | BindingFlags.NonPublic);
-            Assert.IsNotNull(method, "BuildDeclaredProxies");
-            object result = method.Invoke(null, new object[] { doc });
+            Type reportType = FindType("VRCKatamari.Editor.LevelBuild.PlacementImportReport");
+            Assert.IsNotNull(reportType, "PlacementImportReport type not loaded");
+            object report = Activator.CreateInstance(reportType);
+
+            MethodInfo method = null;
+            MethodInfo[] candidates = importerType.GetMethods(BindingFlags.Static |
+                BindingFlags.Public | BindingFlags.NonPublic);
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                if (!string.Equals(candidates[i].Name, "BuildDeclaredProxies", StringComparison.Ordinal))
+                    continue;
+                ParameterInfo[] parameters = candidates[i].GetParameters();
+                if (parameters.Length != 2) continue;
+                if (!parameters[1].ParameterType.IsInstanceOfType(report)) continue;
+                method = candidates[i];
+                break;
+            }
+
+            Assert.IsNotNull(method,
+                "BuildDeclaredProxies(PlacementDocument, PlacementImportReport) not found");
+            object result = method.Invoke(null, new object[] { doc, report });
             return ((IDictionary)result).Count;
         }
 

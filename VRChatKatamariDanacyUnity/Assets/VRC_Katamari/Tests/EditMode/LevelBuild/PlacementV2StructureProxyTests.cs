@@ -364,6 +364,7 @@ namespace VRCKatamari.Tests
                           @"""ball"":{""startDiameterM"":0.3,""maxDiameterRef"":""global""," +
                           @"""start"":[0,0,0],""spawnSource"":""authored""}}," +
                           @"""props"":[],""structures"":{""solids"":[" + solids + "]}}";
+            AssertFixtureIsJson(json);
             object result = Invoke(readerType, "Read", new object[] { json });
             Assert.IsNull(FirstError(result), "the fixture must parse clean");
             return Field(result, "Document");
@@ -399,6 +400,35 @@ namespace VRCKatamari.Tests
             var items = new object[array.Length];
             for (int i = 0; i < array.Length; i++) items[i] = array.GetValue(i);
             return items;
+        }
+
+        /// <summary>
+        /// Fails with the fixture text when the fixture is not valid JSON.
+        /// </summary>
+        /// <remarks>
+        /// This exists because a missing brace in a fixture helper surfaced as
+        /// "[v2_source] not valid JSON: unterminated object" INSIDE the reader - i.e. the test
+        /// looked like a reader bug. Parsing the fixture with the production parser first makes
+        /// a broken fixture say so, and prints the text that is wrong.
+        /// </remarks>
+        private static void AssertFixtureIsJson(string json)
+        {
+            Type parserType = FindType("VRCKatamari.Editor.LevelBuild.LevelJsonParser");
+            Assert.IsNotNull(parserType, "LevelJsonParser not loaded");
+            MethodInfo parse = parserType.GetMethod("ParseText",
+                BindingFlags.Public | BindingFlags.Static);
+            Assert.IsNotNull(parse, "LevelJsonParser.ParseText not found");
+            try
+            {
+                parse.Invoke(null, new object[] { json });
+            }
+            catch (TargetInvocationException exception)
+            {
+                Assert.Fail("the test fixture is not valid JSON (" +
+                            (exception.InnerException == null
+                                ? "unknown parse error"
+                                : exception.InnerException.Message) + "):\n" + json);
+            }
         }
 
         private static object Field(object target, string name)

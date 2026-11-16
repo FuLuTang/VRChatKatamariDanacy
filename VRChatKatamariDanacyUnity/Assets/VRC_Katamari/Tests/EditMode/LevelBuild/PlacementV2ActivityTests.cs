@@ -198,15 +198,22 @@ namespace VRCKatamari.Tests
         [Test]
         public void SegmentsOfEveryWallAreFlattenedInDocumentOrder()
         {
+            // Wall "a" must be OPEN: a closed 2-point polygon is degenerate and the wall rule
+            // refuses it (fewer than 3 points cannot be convex), so it would contribute nothing
+            // and the total would be 3 instead of 5 - which is exactly what a red run showed.
             object doc = Parse(@"""activityArea"":{""walls"":[" +
-                               @"{""id"":""a"",""points"":[[0,0],[4,0]],""closed"":true," +
+                               @"{""id"":""a"",""points"":[[0,0],[4,0],[4,4]],""closed"":false," +
                                @"""heightM"":3.0}," +
                                @"{""id"":""b"",""points"":[[0,10],[4,10],[4,14]],""closed"":true," +
                                @"""heightM"":2.0}]}");
             object[] all = (object[])Invoke(rulesType, "AllWallSegments", new object[] { doc, null });
-            // 2 + 3 edges; the second call's `error` is an out parameter and is reported through
-            // the args array by the caller below.
-            Assert.AreEqual(5, all.Length);
+            Assert.AreEqual(5, all.Length, "2 open edges from wall a + 3 closed edges from wall b");
+            // Document order, wall by wall, edge by edge: the arena bakes this order.
+            string[] expectedIds = { "a_seg00", "a_seg01", "b_seg00", "b_seg01", "b_seg02" };
+            for (int i = 0; i < expectedIds.Length && i < all.Length; i++)
+            {
+                Assert.AreEqual(expectedIds[i], (string)Field(all[i], "Id"));
+            }
         }
 
         // ------------------------------------------------------------ idempotence ---
@@ -329,6 +336,7 @@ namespace VRCKatamari.Tests
                           @"""ball"":{""startDiameterM"":0.3,""maxDiameterRef"":""global""," +
                           @"""start"":[0,0,0],""spawnSource"":""authored""}}," +
                           @"""props"":[]," + blocks + "}";
+            AssertFixtureIsJson(json);
             object result = Invoke(readerType, "Read", new object[] { json });
             Assert.IsNull(FirstError(result), "the fixture must parse clean");
             return Field(result, "Document");
@@ -350,6 +358,35 @@ namespace VRCKatamari.Tests
             }
 
             return text.ToString();
+        }
+
+        /// <summary>
+        /// Fails with the fixture text when the fixture is not valid JSON.
+        /// </summary>
+        /// <remarks>
+        /// This exists because a missing brace in a fixture helper surfaced as
+        /// "[v2_source] not valid JSON: unterminated object" INSIDE the reader - i.e. the test
+        /// looked like a reader bug. Parsing the fixture with the production parser first makes
+        /// a broken fixture say so, and prints the text that is wrong.
+        /// </remarks>
+        private static void AssertFixtureIsJson(string json)
+        {
+            Type parserType = FindType("VRCKatamari.Editor.LevelBuild.LevelJsonParser");
+            Assert.IsNotNull(parserType, "LevelJsonParser not loaded");
+            MethodInfo parse = parserType.GetMethod("ParseText",
+                BindingFlags.Public | BindingFlags.Static);
+            Assert.IsNotNull(parse, "LevelJsonParser.ParseText not found");
+            try
+            {
+                parse.Invoke(null, new object[] { json });
+            }
+            catch (TargetInvocationException exception)
+            {
+                Assert.Fail("the test fixture is not valid JSON (" +
+                            (exception.InnerException == null
+                                ? "unknown parse error"
+                                : exception.InnerException.Message) + "):\n" + json);
+            }
         }
 
         private static object Field(object target, string name)

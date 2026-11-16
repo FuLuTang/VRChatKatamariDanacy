@@ -47,7 +47,10 @@ namespace VRCKatamari.Editor.LevelBuild
             string levels;
             if (TryFindLevelsFolder(projectRoot, out levels))
             {
-                return Path.GetFullPath(Path.Combine(levels, "..", ".."));
+                // `levels` is <repo>/Docs/Design/Levels, so the repository root is THREE
+                // levels up: Docs/Design/Levels -> Docs/Design -> Docs -> <repo>. (Two levels
+                // lands on <repo>/Docs, which is what a probe caught on Windows.)
+                return Path.GetFullPath(Path.Combine(levels, "..", "..", ".."));
             }
 
             return null;
@@ -149,6 +152,33 @@ namespace VRCKatamari.Editor.LevelBuild
                 }
             }
 
+            // A level one folder deeper than the id says: `C21` -> `<field>/C21`. This is a
+            // PATH test, not a document test, so it works even when the document is unreadable,
+            // and it is what makes `Import("C21")` resolve without parsing anything. `leaf`
+            // never contains a separator (LeafOf strips both kinds), so one folder of depth is
+            // exactly the case a bare id can be missing.
+            string[] children;
+            try
+            {
+                children = Directory.GetDirectories(levels);
+            }
+            catch (Exception)
+            {
+                children = new string[0];
+            }
+
+            Array.Sort(children, StringComparer.Ordinal);
+            for (int i = 0; i < children.Length; i++)
+            {
+                string candidate = Path.GetFullPath(Path.Combine(children[i], leaf));
+                tried.Add(candidate);
+                if (Directory.Exists(candidate))
+                {
+                    directory = candidate;
+                    return true;
+                }
+            }
+
             // Last resort: scan two levels of folders and match the DECLARED id, which is the
             // authority (the folder name is a convention, meta.id is the contract).
             string found = ScanDeclaredId(levels, trimmed, leaf, tried);
@@ -204,9 +234,11 @@ namespace VRCKatamari.Editor.LevelBuild
             tried.Add(canonical);
             if (File.Exists(canonical))
             {
+                // Preference is decided by the document's PARSED schema, not by whether the
+                // text mentions "katamari.placement/2" somewhere: a v1 file with that string in
+                // a note must not win the canonical name.
                 string text = TryReadText(canonical);
-                if (text != null &&
-                    text.IndexOf(PlacementV2Reader.SchemaName, StringComparison.Ordinal) >= 0)
+                if (text != null && IsV2Document(text))
                 {
                     path = canonical;
                     return true;
@@ -229,6 +261,30 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             return false;
+        }
+
+        /// <summary>True when a document's own <c>schema</c> value is <c>katamari.placement/2</c>.</summary>
+        /// <remarks>
+        /// Parsed, not grepped: the filename preference must not be decided by a substring that
+        /// could appear in a note, a path or a legacy field. A document that does not parse is
+        /// not a v2 document here - the import itself will report why.
+        /// </remarks>
+        public static bool IsV2Document(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            LevelJsonNode root;
+            try
+            {
+                root = LevelJsonParser.ParseText(text);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+
+            return root != null && root.Kind == LevelJsonKind.Object &&
+                   string.Equals(root.GetString("schema"), PlacementV2Reader.SchemaName,
+                       StringComparison.Ordinal);
         }
 
         /// <summary>Every direct child directory of a level whose document is a level document.</summary>

@@ -346,7 +346,15 @@ speedTable = [0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0]   // cm/帧
 
 最可能的解释是**观测口径而非实现差异**【推断，强】：观景器在 `prepareToRender` 开头就 `if (!this.visible) return`，**不可见对象根本不跑运动**，我导出的位置是它最后一次可见时的残值。同类现象也能解释"每类只有少数几件在动"（例如 Sway 的 15 件里只有 4 件向日葵有明显位移）。若成立，则本文所有"动了多少件"都是**下界**。
 
-因此：`Hop` 的周期只能按【常量】写（0–8.5 s 均布），**不能**用这组数据反推；要验证必须用能覆盖整个院子的全景相机 + 更长序列。最低点 6.0–6.6 cm 也同样是欠采样（谷底只持续 `speed=4` 帧 = 0.13 s，采样 0.23 s 必然错过），理论值 `v²/2g = 8 cm` 无法被这组数据确认或否定。
+因此：`Hop` 的周期只能按【常量】写（0–8.5 s 均布），**不能**用这组数据反推；要验证必须用能覆盖整个院子的全景相机 + 更长序列。
+
+最低点这一项**已经能解释，不需要再测**：参考实现的积分是「先加 g、再位移」的半隐式欧拉，dt=1 时
+
+```
+y_n = −v·n + g·n(n+1)/2          v=4, g=1 ⇒ −3, −5, −6, −6, −5, −3, 0
+```
+
+谷底是 **6 cm**（n=3、4 两帧），不是连续解 `v²/2g = 8 cm`——离散化让深度少了 25%，谷底只持续 2 帧（0.067 s）。实测 6.60 / 6.05 cm 正好落在 6 cm 上，两件都是同一档 `size`，所以这组数据**确认**了「dt=1 + 半隐式」这个积分口径（原先写的「欠采样、8 cm 无法确认」是拿连续解当预期，错的预期）。要看跳的次数仍然需要全景长序列。
 
 ### 5.6 Spin / Flip：未逐帧测
 
@@ -721,12 +729,12 @@ update(state, dt, ctx):
 ### 12.5 `WhackAMole`（motionID 0x22，8 件）
 
 ```text
-state: { timer = -1, angle = 0, state = 0, step = PI/45 }   // 4 个 float
+state: { timer = -1, angle = 0, state = -1, step = PI/45 }  // 4 个 float，state 初值必须是 -1
 update(state, dt, ctx):
     if timer == -1:
         timer = rand() * 150 + 60            // 2–7 s 停在这个端点
         angle = PI / 2
-        state = (state + 1) % 2              // 0=上升段, 1=下沉段
+        state = (state + 1) % 2              // -1→0；0=上升段, 1=下沉段
         step  = PI / 45                      // 22.5 帧 = 0.75 s
     if timer < dt:
         angle += step * dt
@@ -739,8 +747,9 @@ update(state, dt, ctx):
     else:
         timer -= dt
 每帧读: 无
-注意: state 初值 0，第一段一定是下沉段（state 变 1），起点在最高点 → 第一次"上升"
-      是一次瞬移。原作如此，要复刻就照做；要修就是主动偏离，需记 parity 行。
+注意: state 初值 **-1**（原作 MotionState 的初值），第一次 `(state+1)%2` 得 0 ⇒ **首段是上升**，
+      从出生高度往上升，没有瞬移。（初值若写成 0，首段会变成下沉且第一帧从最高点起跳 —— 
+      这是 §15 里已裁定的一处实现差异。）
 碰撞: 垂直行程 1.5·modelBboxM[1]（旗杆实测 165 cm = 1.5×110），0.75 s 走完 → 均值 2.2 m/s、峰值 3.46 m/s
 中断: 冻结在当下高度；若球此时压在它上方，恢复后从同一高度继续
 ```
@@ -770,7 +779,8 @@ update(state, dt, ctx):
         if landedOnGround(pos, ctx):             // 见下
             timer = -1; setAnimation(IDLE)
 每帧读: 1 次地面射线（无 supporter 时）或 1 次对 supporter 的落点判定
-碰撞: 只是在原地上下；8 cm 下陷 / 8 帧
+碰撞: 只是在原地上下；dt=1 时下陷 6 cm、谷底 2 帧、7 帧回地面（连续解是 8 cm/8 帧，
+      离散解才是真值，见 §5.5）
 中断: 冻结；timer 不推进 → 不会在球走开后立刻补跳
 ```
 
@@ -828,7 +838,7 @@ ChooseDirection:
 Turn:       angle += angleStep * dt
             if (angleTarget - angle) * angleStep <= 0: angleStep = 0; angle = angleTarget; phase = Walk
             velocity = rotateY(axis, angle)
-            euler.y = PI + atan2(velocity.x, velocity.z)
+            euler.y = PI + atan2(velocity.x, velocity.z)   // 与 attemptForwardStep 同一式
 每帧读: 1 次地面射线 + 1 次 zone 射线（attemptForwardStep 内部），Turn 结束再 1 次候选 zone 射线
 碰撞: 0.3 m/s，15 Hz 下每 tick 2 cm
 中断: 冻结在 phase 上（Walk 中途冻结就是原地站着，不补 Pause）
@@ -855,7 +865,7 @@ if not valid and z < 0:                        // 穿地了，找回交点
     valid = ground(prevPos, pos + dir*halfDepth + (0, halfHeight, 0))
 if valid: pos = hit.contact - (0, halfHeight, 0)
 else:     pos = prevPos; return true           // 越界 = true，调用方转 ChooseDirection
-if not ignoreYaw: euler.y = PI/2 + atan2(newVel.x, newVel.z)
+if not ignoreYaw: euler.y = PI + atan2(newVel.x, newVel.z)   // 与 Turn 分支同一个公式，见 §15.1
 return false
 ```
 
@@ -949,8 +959,9 @@ conditionMet:
 
 ```text
 state: {}
-init:  zone = zoneAt(spawnPos, 2 * r)
-update: 什么都不做（原作的 SetZone 分支直接 return true）
+init:  原作不给 DraggedAlong 初始化 zone（zone 初值留 -1；只有 WaitForPlayer/RandomWalk/
+       SporadicWalk/Clouds 在初始化时取 zone）
+update: 什么都不做（原作的 SetZone 分支直接落到最后的 `return true`，不写变换）
 位置:   完全由父件变换给出（spawn 相对父件的局部位姿 × 父件当前矩阵）
 中断:   父件被吸附/坠落 → 本件随之（这是唯一"跟着走"的类，其余类是挂起）
 ```
@@ -982,7 +993,7 @@ for obj in activeSet(radius = wake_radius):
 |---|---|---|---|---|---|---|
 | M1 | `WaitForPlayer` 的触发门（200/300 cm）与触发后的行为 | 两种 `motionID` 的条件不同，`0x04` 的条件在原作里被写死 false；触发后跑的两个 alt 动作在观景器里是空实现 | 实机：走向 7 件 `moveType 7` 的道具，记录"开始动的距离"和动起来后的表现（是否转向/位移/播动画） | ≥3 件 × 2 个方向 = 6 次 | 触发距离落在 200±20 cm；能写下触发后 3 个可观察量 | 否（需实机） |
 | M2 | `0x04` 那 8 件的真实触发条件 | 观景器写死 `parentRolled=false`，所以这 8 件永不触发，原作不知道 | 实机：把球滚到这些件旁边（全是 `size=2` 的小蟹/蜘蛛），看是否动、何时动 | ≥2 件 × 2 次 | 能判定"与父件有关/与 zone 有关/恒定触发"三者之一 | 否（需实机） |
-| M3 | `Hop` 的下陷深度与周期 | 理论 8 cm、相位 8 帧；我抓到 6.60/6.05 cm，是采样不足还是真值不是 8 都不确定 | 观景器：虚拟时钟改成 STEP=16.667 ms（每渲染 1 帧 = 1 游戏帧），单只小蟹特写，连续抓 ≥20 次跳 | 1 件 × 1 次 60 s 录制 | 下陷深度 8.0±1.0 cm；单次下陷 8±1 帧；间隔 0–8.5 s 均匀 | 是 |
+| M3 | `Hop` 的下陷深度 | ~~理论 8 cm~~ 已解释：离散解（dt=1 半隐式）谷底 6 cm、2 帧，7 帧回地面；实测 6.60/6.05 正落其上（§5.5） | 原预期 8 cm 是连续解，用错了基准 | —（已结案，只剩跳的间隔分布，见 §15 H1） | 下陷 6.0±0.7 cm | 已结案 |
 | M4 | `Spin`/`Flip` 的角速度（0.05 rad/帧 = 4.19 s/圈） | 只验证了"位置不变"，速率从未测过 | 观景器：单件特写 + 16.667 ms 时钟，标记一个不对称特征点，数 1 圈用几帧 | 2 件 × 1 次 10 s | 圈周期 126±6 帧（4.19 s ±5%）；两件方向相反 | 是 |
 | M5 | `animated=true` 的动画 clip 帧率与 IDLE/MOVING 切换点 | 31 件 SporadicWalk 走起来"像不像"全在这一条；观景器播的是烘焙好的 clip，我们没有 | 观景器：单只蟹走 5 s，逐帧截图数步频；再对照 state（Walk/Pause）看切换 | 3 件 × 1 次 5 s | 步频与位移速度匹配（不滑步）误差 ≤10%；Pause 时确实切 IDLE | 是 |
 | M6 | 被球吸附那一帧的语义 | 决定"道具消失的瞬间是否保留残余速度/姿态"，也决定挂起恢复 | 实机：球滚向 1 件 SporadicWalk 与 1 件 Sway，录 60 fps | 2 件 × 2 次 | 接触→消失 ≤1 帧；消失前无"被推开"位移 | 否（需实机） |
@@ -993,7 +1004,7 @@ for obj in activeSet(radius = wake_radius):
 - **M8**：挑 1 件"极端长宽比"的道具（旗杆已验 `1.5×`，再补 1 件扁平的，例如荷叶/圆桌）做 Sway 或 WhackAMole，确认 `partBBox.max[1] = modelBboxM[1]/2` 在非直立件上仍成立。判据：幅度系数偏差 ≤10%。
 - **M9**：zone 语义只能做几何验证，不能靠看行为——触发后跑的 alt 动作是空实现，观感上只是“冻结”。做法：把 `zones.json` 的 7 块 zone 网格与我们自己的 zone 判定（向上射线取三角形第 4 个浮点）逐点对照。判据：20 个随机点的 zone 号两边完全一致；不一致时以三角形数据为准。
 
-优先级：**M3 → M4 → M5 → M7**（都能在观景器里做，且直接决定第一版的手感），M1/M2/M6 等实机窗口。M8/M9 顺手。
+优先级：**S1 → M4 → W1 → S2 → M5 → M7**（都能在观景器里做，且直接决定第一版的手感），M1/M2/M6 等实机窗口。M3 已结案（§5.5 的离散解）。
 
 要强调的一句：这些是"把参考实现里的常量变成实测值"，不是"再研究一遍原作"。参考实现给的常量本身可能已经是近似（`panicRadii` 的注释就写着"每个 size 其实有四个值，这里做了映射"），所以 M1 的结论有可能是"200/300 是错的"，那时以实测为准并记 parity 行。
 
@@ -1034,6 +1045,99 @@ for obj in activeSet(radius = wake_radius):
 - **不要把 12 当触发门**：`WaitForPlayer` 的触发门应单独实现，取 200/300 cm（`sizeGroup` 0–1），与 `wake_radius` 完全解耦。这样"远处一直在动"和"近了才怕人"两件事同时成立，也正好对上原作的组合。
 - 需要 lead 拍板的只有一件事：**是给 `WaitForPlayer` 单独加一个 `trigger_radius_m`（默认 2.0/3.0，按 sizeGroup），还是先让它永远走 alt（即不实现触发）**。前者更接近原作，代价是多一个参数与一次距离判定；后者零成本但 15 件全部变成"站着不动的蟹"。
 - 这条分歧应记进 parity 表（`Docs/Design/Parity/PARITY_AUDIT.md` 的 Divergences）：原作的触发门 200/300 cm vs 我们的"无触发门"；决策待定，owner = lead。**本轮不动我们的值**。
+
+---
+
+---
+
+## 15. 实现与伪码的差异 + 仍是 PROVISIONAL 的常量
+
+运动库（`Runtime/Pickup/MotionMath.cs`）报了四处与 §12 不一致。逐条回参考实现读代码，结论是 **3 处实现是对的（我伪码写错或实现更精确），1 处必须改**。
+
+### 15.1 四处差异的逐条裁定
+
+#### ① SporadicWalk 的 yaw：**必须改回 `π + atan2`**
+
+伪码里两处不一致，全是我抄写错误。参考实现里只有**一个**式子，出现两次：
+
+```
+object.euler[1] = MathConstants.TAU / 2 + Math.atan2(<速度>.x, <速度>.z)
+```
+
+- `motion_attemptForwardStep` 末行（`objects.ts:2144`）：`forwardScratch` 是**贴地后的速度**（`transformVec3Mat4w0(newVel, alignScratch, motion.velocity)`），在写完 `pos` 之后用来定朝向 ⇒ 这是**前进**用的那次。
+- `motion_RandomWalk_update` 的 `Turn` 分支（`objects.ts:2233`）：`motion.velocity` 经 `rotateY(axis, angle)` 之后的当前速度 ⇒ 这是**转向**用的那次。
+
+`TAU/2` 是 **π**，不是 π/2；两处喂进去的都是"速度方向"，不是位移，也不存在两个不同的角。所以只有一式：
+
+```
+yaw = π + atan2(vx, vz)        // 前进与转向共用
+```
+
+伪码 `attemptForwardStep` 那行的 `PI/2` 是错的，请改成 `π`（伪码已同步修正）。实现者的"两者不能都对"判断正确，但结论应落在 π 而不是 π/2。
+
+**与它绑定的朝向约定**：`v = (0,0,−1)` 时该式给 `atan2(0,−1) + π = 2π ≡ 0`，即**模型的 0 偏航必须面向 −Z**。参考实现的模型按这个约定导入；我们的 prefab 若沿用 Unity 常见的 +Z 朝前，会整体差 180°。
+
+**选错的观感**：
+
+| 错法 | 表现 | 这关里最先露馅的地方 |
+|---|---|---|
+| 用 `π/2`（差 90°） | 所有用 `euler.y` 定朝向的走类道具**横着走**，朝向与行进方向垂直 | 31 件 SporadicWalk 全是蟹，横着走反而"看着正常"；破绽在 `SlopingPath` 的**书立会侧着滑**、招潮蟹的**大螯指向行进方向**而不是垂直 |
+| 差 180°（模型朝 +Z） | **倒着走**：螯拖在后、书立正面朝后 | 一眼可见，尤其书立与云（云不写 yaw，不受影响） |
+
+**一个不要复刻的 quirk**：`motion_SlopingPath_Follow`（`objects.ts:1637`）里 `object.euler[1] = Math.atan2(axisZ.x, axisZ.z)` 读的是"当前 modelMatrix 的 +Z 轴"，少了 π，与紧接其后的 `eulerTarget[1] = π + atan2(v)` 不同系。它只当插值起点用（`angleDist` 会绕回），效果是拐点处多绕 180°。我们统一 `π + atan2` 即可，不要照抄。
+
+#### ② Hop 闭式：**等价，确认**（附 dt≠1 的坑）
+
+原作顺序是"先加 g，再位移"，逐帧递推为
+
+```
+vy_k = −v + g·d·k
+y_n  = −v·d·n + g·d²·n(n+1)/2
+```
+
+`d = 1` 时 `y_n = −v·n + g·n(n+1)/2`，与实现的 `−vt + g·t(t+1)/2` 完全一致；`v=4, g=1` 得 −3, −5, −6, −6, −5, −3, 0。**等价成立**。
+
+顺手一个副产品：这串数说明谷底是 **6 cm / 2 帧 / 7 帧回地面**，不是连续解的 8 cm——而实测 6.60 / 6.05 cm 正落在 6 上（§5.5）。所以实现者打印的这串序列本身就是「离散解 = 真值」的证据，也把 §13 的 M3 从必测降成已结案。
+
+但闭式**只在 d = 1 时**等于逐帧累加：`d = 2` 时原作自己的算术是 `vy += 2g; y += vy·2`，而两次 dt=1 迭代是 `(−v+g)` 再 `(−v+2g)`，两者差 g。所以：按 30 Hz 固定 dt=1 调用时闭式精确；若上层合并帧（66 ms 一次），必须换成 `y = −v·d·n + g·d²·n(n+1)/2` 或退回递推。**建议在库入口断言 `dt == 1`**。
+
+另：闭式把"求 t 时刻姿态"变成 O(1)，但 Hop 的**落地检测不能跳帧**——下陷只有 8 帧，落地要么每帧判，要么解析求 `y(t)=0` 那一帧；落地后 `timer=-1`，闭式 t 归零。
+
+#### ③ WhackAMole 首段上升：**实现是对的，我伪码错了**
+
+`MotionState` 初值是 `state: -1`（`objects.ts:259` 一带），`motion_MiscWhackAMole_Update` 第一句 `state = (state+1) % 2` ⇒ 首段 `0` = **上升**。我伪码写"初值 0、首段下沉、第一帧瞬移"，把初值记错了又据此编了段注释，已改。这也与 §5.4 实测（0.7 s 升 12.4 cm 停在顶）和 v2 的 `loop:false` 一致。常量未动，确认。
+
+#### ④ PathCollision 的 `adjustPitch`：**分工成立**
+
+`adjustPitch = !def.stayLevel`（`objects.ts:240`），本关道具 `stayLevel` 基本为 false ⇒ 这个开关几乎全开。原作在 `motion_SlopingPath_Update` 末尾调 `pathCollisionAdjustBasePitch` / `slopingPathAdjustBasePitch`，把**俯仰**写进 `baseMatrix`：`PathCollision` 从地形法线取目标角、`SlopingPath` 从路径坡度取。两者都是宿主查询（射线/法线），库不该碰 ⇒ **库只出 yaw、宿主写 pitch** 正确。
+
+一个记账用的细节（P1，不阻塞）：原作在到达拐点那帧用 `getMatrixAxisZ(modelMatrix)` 取"当前前向"再算 yaw 起点——**俯仰参与了 yaw 的计算**。若宿主把 pitch 写在另一层、库里拿不到，拐点处 yaw 起点会与参考实现差一点（同帧内被 `angleDist` 修正，观感无差，但不是逐位一致）。
+
+### 15.2 PROVISIONAL 账本
+
+这一节就是"还原度还差多少"的账本：每条实测完，把状态从 PROVISIONAL 改成实测，并填证据路径。
+
+| # | 项 | 现状 | 为什么定不了 | 用什么测 | 优先级 |
+|---|---|---|---|---|---|
+| S1 | yaw 公式 + 模型朝向约定 | 公式已定 `π+atan2(vx,vz)`；模型 0 偏航须面向 −Z | 公式有代码依据，但**我们 prefab 的朝向**没验证过（差 180° = 倒着走） | 观景器：1 件 SporadicWalk（蟹）+ 1 件 SlopingPath（书立），比"行进方向 vs 模型长轴/正面" | **P0**（15 分钟，观景器） |
+| M1 | `WaitForPlayer` 触发门与触发后行为 | 门 200/300 cm（仅 7 件）；触发后空实现 | alt 动作 `0x05`/`0x08` 未实现，观景器里触发 = 冻结 | 实机 3 件 × 2 方向 | **P0**（需实机） |
+| M2 | `moveType 10` 那 8 件的真实条件 | `inZone && parentRolled`，`parentRolled` 写死 false ⇒ 永不触发 | 参考实现没实现，原作条件未知 | 实机 2 件 × 2 次 | **P0**（需实机） |
+| M3 | Hop 下陷深度/单次帧数 | **已结案**：离散解 6 cm / 2 帧谷底 / 7 帧回地，实测 6.60 / 6.05 吻合 | —（原预期 8 cm 是连续解，基准用错） | 只剩跳的间隔分布（见 H1） | — |
+| M4 | Spin/Flip 角速度 | `0.05 rad/帧` = 126 帧/圈 | 只验了"位置不变" | 观景器 dt=1，数 1 圈帧数 | P1 |
+| M5 | 动画 clip 速率 + IDLE/MOVING 切换 | 数据有 clip 索引，无 fps | 动画表未解 | 观景器 3 件 × 5 s 数步频 | P1 |
+| M6 | 被吸附那一帧的语义 | 冻结、不保留速度（推断） | 观景器无吸附 | 实机 2 件 × 2 次，60 fps | P1（需实机） |
+| W1 | WhackAMole 驻留与端点 | 2–7 s 均匀、停在端点（首段上升已定） | 只在一件上见过 7 s 不动 | 观景器 2 件 × 30 s，记"上升/停/下沉/停"四段时长 | P1 |
+| S2 | SporadicWalk 四阶段时序 | 走 4–23 s、停 1–2 s、随机转 90° 用 31 帧、回正 12 帧 | 四处随机区间叠加，样本少时分不清 | 观景器 3 件 × 60 s，统计 Walk/Pause 时长分布 | P1 |
+| A1 | 拐点 yaw 起点受 pitch 影响 | 库只出 yaw（见 15.1④） | 宿主/库分工的必然结果 | 观景器 1 件 PathCollision 拐点朝向 | P1 |
+| M7 | 路径拐点转向缓动 = `d/speed` 帧 | 按公式实现，未验证 | 观景器拐点小、帧率低 | 观景器 2 件 × 2 拐点 | P2 |
+| M8 | 非直立件的 `halfHeight` | 5 件都符合 `modelBboxM[1]/2` | 样本全是直立/矮胖件 | 观景器 1 件扁件（圆桌/荷叶） | P2 |
+| M9 | zone 语义 | 向上射线取三角形第 4 浮点 | 行为层不可观测（alt 空实现） | 几何对照 20 个点 vs `zones.json` | P2 |
+| C1 | Clouds 转向区间 | 3–23 s、无 Pause | 只有 5 件、间隔长 | 观景器 2 件 × 60 s | P2 |
+| H1 | Hop 待机分布 | `255*rand` 帧 = 0–8.5 s 均匀 | 样本少 | 观景器统计 20 次间隔 | P2 |
+
+**不在账本里的**（已在正文锁死，来源明确）：运动表分配与 `pathIndex`/`backupIndex`（数据）、路径点与路径速度（数据）、`speedTable`/`sizeGrouping`/`hopSpeeds`（常量表）、幅度系数与 `halfHeight` 关系（5 件实测，§5.7）、周期常量（3.0 s / 0.75 s / 126 帧，§5.7）、WhackAMole 首段方向与 Hop 闭式（本节裁定）。
+
+建议顺序：**S1（15 分钟）→ M4 → W1 → S2 → M5 → M7 → M8 → C1 → H1**，M1/M2/M6 等实机窗口，M9 随手。
 
 ---
 

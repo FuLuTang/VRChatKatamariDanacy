@@ -109,7 +109,7 @@ C 不是 FIRST_PLAYABLE 的 20×20 m 切片（`FIRST_PLAYABLE_PLAN.md:94`），�
 | # | 缺口（代码事实） | 最小修法 | 挡第一版？ |
 |---|---|---|---|
 | G1 | **尺寸门是绝对 1 m**：只比 `largestExtent > maxItemSizeWorldM`（`Runtime/Pickup/PickupAbsorbMath.cs:140-141`），默认 1 m（`KatamariBallMotor.cs:113`）；决定 (h) 未落地（`Docs/OPEN_DECISIONS.md:39`） | 上限改成 `min(maxItemSizeWorldM, 当前直径 × 1.0)`，安全上界提到 2.2 m；EditMode 测试覆盖 0.30/0.64/1.25 m 三档；门物件提交的是声明的拾取尺寸 | **挡**：不修就没有尺寸带，G3 永远开不了 |
-| G2 | 修了 G1 之后，**太大的候选会占死队列**：队列 4 格（`KatamariBallMotor.cs:261`），被拒的候选不会被丢（`Runtime/Pickup/PickupFieldHost.cs:136-139`），而 `IsSubmittable` 不看尺寸（`:499-514`） | `ScanProps` 每次读一次当前直径，跳过「拾取尺寸 > 直径 × 1.0」的行（每件一次比较） | **挡**（与 G1 一起做） |
+| G2 | **太大的候选会占死队列**：队列 4 格，电机里被拒的候选不会被丢 | 已落地：`ScanProps` 每次读当前直径，只让过得了尺寸门（`IsBeyondAbsorbLimit`）的最近 4 件参与候选选择，并撤回不在选择里的（`PickupCandidateSelection`） | 已解决 |
 | G3 | 障碍上限 8 平面 + 8 盒，超出静默丢弃并 latch（`KatamariBallMotor.cs:235-236`、`:1289-1321`），地面占 1 个平面 | 第一版按 §2.3 账本设计在上限内；校验器加「碰撞物 ≤ 上限」检查（G10）。扩容或空间分块留到 PicnicLawn | 不挡（已绕开） |
 | G4 | **门吃掉后挡路盒不会消失**：电机只有 `ClearObstacles()`（`:1323-1328`），没有删单个；宿主也没有「某 id 是否已附着」的读数（公开方法只有总数/按 kind 计数，`PickupFieldHost.cs:322-331`） | 宿主加 `IsAttached(itemId)` getter；新 `Runtime/Maps/MapObstacleHost.cs`（独占物体）持有平面/盒列表和门 id，门附着后 `ClearObstacles()` 再重注册其余；`ResetField`（`:276`）重试时全部重注册 | **挡**（门是本图的咽喉） |
 | G5 | 没有坡与台阶：一张解析地面（`KatamariBallMotor.cs:86-89`），坡道/台阶「还需实现和测试」（`Docs/02_TECHNICAL_CONTRACTS.md:54`） | 第一版全平；毯面等贴地件 ≤0.02 m（低于 `max_route_step_m` 0.05，`Tools/mapbuild/validate_map.py:107`）；不用 `climb` 门 | 不挡（已绕开）；P8 延后 |

@@ -192,16 +192,17 @@ itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
 | 判定为拒 | 记一条拒绝事件（原因 + 中心距），候选**留在队里** | `:656-661` |
 | 判定为吸 | 走账本提交；只有提交成功才真正移除 | `:673-716` |
 | 账本提交失败 | 候选**留在队里**，下一帧重新判定（包括再次通过判定再失败） | `:669-670`、`:702-713` |
-| 宿主 `WithdrawCandidate(id)` | 按 id 删除（就地压缩），可再提交 | `:953-982` |
+| 宿主 `WithdrawCandidate(id)` | 按 id 删除（就地压缩），可再提交；回合结束/场地复位的“全部释放”用它 | `:953-982` |
+| 宿主 `WithdrawCandidateUnlessAccepted(id)` | 同上，但**不删**本步判定为吸、尚未提交的条目（`pendingAccepted`），此时返回 `false`；`IsCandidateQueued(id)` 区分“已不在队”与“因已接受而保留”。宿主按最近重排候选时用它 | `KatamariBallMotor.cs` 的 `RemovePendingById` |
 | 宿主 `ClearCandidates()` | 全清，不触碰账本 | `:984-987` |
 
 关键点，逐条：
 
 1. **位置是入队快照，不会刷新**。`SubmitCandidate` 存的是传入的 `worldPosition`（`:928`），判定每步都用这个旧值（`:650`）。所以球一旦离开，候选的距离只会越算越大——宿主必须在 reach 内提交，并在离开时撤回，这不是优化建议而是契约（第 6 节）。
 2. **每步都重判**。`pendingAccepted[i]` 每步先清零（`:647`），上一帧的结论不复用。好处是物件被推开又推回来能自动恢复；坏处是每条在队候选每步都产生一条拒绝事件：4 条在队 + 8 槽环（`:292`），**两次固定步就把环写满，从第三步起开始淘汰**，`GetRejectEventDroppedCount()`（`:1519-1523`）随之持续增长。看拒绝原因要看最新的几条，不是最早的。
-3. **没有 TTL、没有过期、没有老化**。代码里没有任何时间或帧数上限与候选相关；唯一的移除条件是“提交成功”、“宿主撤回”、“宿主全清”。因此**系统性拒绝会把队列永久冻在 4 槽**：白名单错（第 3 门）、尺寸上限太小（第 4 门）、球到成长上限（第 5 门）、`valueUnits` 非整数或账本不在 Playing（提交失败）——任何一种都会让队列再也进不来更近的物件。
-4. **这条冻结是实测过的症状**：候选按“离球近”就入队、球随后滚走，于是 4 个远处的道具把队列占满，每步都以“超出 reach”被拒，中心距随球离开单调增大，吸收数始终为 0，任何更近的道具都进不来。记录在 `KatamariBallMotor.cs:941-946` 与 `PlaygroundProp.cs:96-102`（那里的修法是：只在激活半径内提交 `:104-113`，离开释放半径就撤回 `:124-129`）。**逐帧数值没有入库的运行日志**，我找不到可引用的数字记录，所以这里只记机制与症状定性；引用这段时不要编造具体距离。
-5. **重复提交同一个 id 没有去重**。第二次提交照样入队（`:914-935` 不查重），但该事件一旦提交过，账本会以“键已提交”拒绝（`GrowthLedgerMath.cs:440-444`），于是这条候选永远提交失败、永远占着槽——比“白占槽”更隐蔽，因为拒绝环里一条记录都不会有（判定是通过的）。
+3. **没有 TTL、没有过期、没有老化**。代码里没有任何时间或帧数上限与候选相关；唯一的移除条件是“提交成功”、“宿主撤回”、“宿主全清”。因此**系统性拒绝会把队列永久冻在 4 槽**（`PickupFieldHost` 靠只提交能过尺寸门的最近 4 件来避免，见第 6 节第 9 条）：白名单错（第 3 门）、尺寸上限太小（第 4 门）、球到成长上限（第 5 门）、`valueUnits` 非整数或账本不在 Playing（提交失败）——任何一种都会让队列再也进不来更近的物件。
+4. **这条冻结是实测过的症状，有两种形状**：(a) 候选按“离球近”就入队、球随后滚走，于是远处的道具把队列占满，每步都以“超出 reach”被拒，中心距随球离开单调增大；(b) 候选在 reach 内但**球永远吃不下**（`RejectItemTooLarge`），每步被拒、也不会自己离开，更近的小件进不来（Unity 实测 R28：0.222 m 球，60 s 路线 34 件只吸 12 件，其中 20 件曾到 0.3 m 内；4 个槽被 1.76 m 的饭团、246 mm 门槛的钱包、397 mm 的招潮蟹占住）。两种都表现为吸收数不涨、任何更近的道具进不来。`PickupFieldHost` 对 (a) 只在激活半径内提交并撤回离开的，对 (b) 在选择阶段就用尺寸门预筛（第 6 节第 9 条）；lab 宿主 `PlaygroundProp` 只处理了 (a)。
+5. **重复提交同一个 id 是幂等的**：按 item id 查重，已在队列里就直接返回 `true`、不占新槽，所以宿主不需要“已入队”闩锁。但一件**已提交进账本**的事件再次入队时，账本会以“键已提交”拒绝（`GrowthLedgerMath.cs:440-444`），那条候选永远提交失败、永远占槽，而且拒绝环里没有记录（判定是通过的）——所以已吸收的道具不能再提交。
 6. **队满时丢弃会点亮溢出信号**（`:917-921`），这是数据错误信号而不是玩法规则：宿主每次提交前应读 `GetPendingCandidateCount()` / `GetPendingCandidateCapacity()`（`:1313`、`:1326`）。
 
 ### 6. 宿主欠本层什么
@@ -210,12 +211,13 @@ itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
 
 1. **在本层 `Start()` 之后、第一个固定步之前**调 `SetAllowedKinds(...)`，并读回 `GetAllowedKindCount() > 0`。传序列化数组，不要传运行时新建的数组；不要让本层持有后又被改写的数组。
 2. **只在 reach 内提交**。判定用入队时的位置快照，不刷新；先算 `碰撞半径 + contactRadius + itemRadius`（可用 `GetCollisionRadiusWorldM()`，`KatamariBallMotor.cs:1243`），再决定提交。
-3. **物件离开就 `WithdrawCandidate(id)`**；关卡换段落或重开就 `ClearCandidates()`。没有 TTL 替你兜底。
+3. **物件离开就 `WithdrawCandidate(id)`**；关卡换段落或重开就 `ClearCandidates()`。没有 TTL 替你兜底。若宿主会在球滚动中按“最近”重排候选，撤回用 `WithdrawCandidateUnlessAccepted(id)`，别吞掉已判定为吸的那一条。
 4. **同一个 `itemInstanceId` 只提交一次**。提交成功后它进入账本；再提一次会永久卡住一个槽（`GrowthLedgerMath.cs:440-444`）。
 5. **`valueUnits` 必须是整数**。`TryAbsorbValueToLedgerGain` 对小数、负数、非有限值、超出 int32 的值一律返回 `false`（`PickupAbsorbMath.cs:411-422`），两个模型都没定义取整规则，所以它不四舍五入。非整数价值的后果不是“少加一点”，而是这件道具永远提交不了、永久占槽。
 6. **障碍注册与吸收判定无关**。`AddPlane` / `AddBox` 喂的是 `SweepMath`（`KatamariBallMotor.cs:989-1028`），本层的接触判定没有遮挡项（`PickupAbsorbMath.cs:80-84` 明说“models no occlusion”）。所以隔着一面已注册的墙，只要中心距够近，照样能吸——想让墙挡住吸收，本层没有这个能力，只能在宿主侧不提交。
 7. **账本必须已在 `Playing`**：`TrySubmitClaim` 的阶段门在 `GrowthLedgerMath.cs:435`。否则每个候选都判定为“可吸”却提交失败，表现为“零拒绝、零吸收、队列满”（第 7 节用它区分账本问题）。
 8. **候选收集、空间索引、道具生命周期不在本层**：本层不扫场景，只判定宿主递进来的一条。
+9. **队列里只放“眼下可能吸到的”，且是其中最近的**（`PickupFieldHost.ScanProps`，选择逻辑在纯函数 `PickupCandidateSelection.OfferProp`）。每次扫描：激活半径内的自由道具，先过尺寸门——就是 `PickupAbsorbMath.IsBeyondAbsorbLimit(物件自身尺寸, k, 电机当前语义直径)`，与电机判定和挡路分类同一个函数，不复制门的数学——过了的才参与“最近 4 件”（4 = 电机容量）；然后**先撤回**本宿主已入队但不在本次选择里的（被更近的挤掉、球滚远、门已不过），**再提交**选中的。已判定为吸、尚未提交的条目不撤回。球长大后每次扫描都用当前直径，先前吸不了的自然进入。吸不了的大件不进队列，仍由 `UpdatePropObstacles` 当墙/台阶（那条路径只读同一个尺寸门，不读队列），所以它们不再产生 `RejectItemTooLarge` 拒绝事件；队列里剩下的拒绝基本只有 `RejectOutOfReach`（在激活半径内、过了门、还没到 reach）。激活半径用球心到物件中心的距离，不随球径缩放。
 
 ### 7. 静默零吸收的排查顺序
 
@@ -237,6 +239,7 @@ itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
 
 5. 距离**单调增大**且队列停在 4 → 就是第 5 节的冻结：宿主没有撤回。不是 reach 变紧。
 6. 只看控制台不够：拒绝诊断日志全程只有 3 行（`KatamariBallMotor.cs:294`、`:1464-1485`，每次打印 `d`、`reach`、`itemR`、`ballR`、`contactR`、`allowedKindCount`），用完之后就不再输出。持续通道是拒绝环（8 槽，`:292`）加 `GetRejectEventDroppedCount()`（`:1519-1523`）。
+7. 看宿主的队列是否健康：控制台 `[PickupFieldHost] scan inRange=N withinLimit=M selected=S queued=K ballMm=B`（计数变化时、至多每 2 s 一行），或读 `GetScanInRangeCount()` / `GetScanWithinLimitCount()` / `GetScanSelectedCount()` / `GetQueuedCount()`。N = 激活半径内的自由道具数，M = 其中过了尺寸门的，S = 选进队列的（≤ 4），K = 扫描后本宿主在电机队列里的条数；`queued` 长期 < `selected` 才是提交被拒。电机侧 `GetPendingCandidateItemId(i)` 读出的槽里，不应再出现 `Req_mm` 大于 `ballMm` 的道具。
 
 ### 与 `pickup_absorb.py` 的已知分歧
 
@@ -256,11 +259,10 @@ itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
 1. **`contactRadiusWorldM = 0` 是承重的决定值**：它是“能不能吸到”的全部额外余量，改它直接等于改手感，而没有任何一处要求关卡必须给值。0 是决定 (i) 的口径（必须实质接触），不是占位；`maxItemVolumeWorldM3` 是安全上界，两者性质不同：前者是手感契约，后者是防误配的上界。
 2. ~~**`maxItemSizeWorldM` 绝对值 + 不随球长大**~~ **已解决两次**：先是 (h) 让上限随球长大，再是 (l) 把量换成体积。**残余风险换了个形状**：(l) 删掉了旧字段，所以场景里残留的 `maxItemSizeWorldM: 8` / `absorbSizeRatio: 1` 是死键、会被忽略，组件取新默认值 512 / 10——**这正好是想要的**，但也意味着「某关卡曾经用场景覆盖把门槛调松/调紧」这件事再也不会生效，谁想按关卡调整现在只能改组件（或未来改成体积字段的覆盖）。`absorbVolumeRatio = 10` 本身仍是研究结论（证据等级中，常数 10 只有一份独立来源），不是实测。
 3. **`size` 由宿主给、与 Collider 无关联**：改 Collider 不改 reach；实验室把 `semanticDiameterM` 当三边填（`PlaygroundProp.cs:110`），那是立方体近似。
-4. **4 槽 + 无 TTL**：任何系统性拒绝都会永久冻结队列，而信号只有“拒绝环”（几何类）或**什么都没有**（账本类）。
-5. ~~**重复 id 无去重**~~ **已修（2026-11-14）**：`SubmitCandidate` 现在按 item id 幂等，重复提交返回 `true` 不占新槽；宿主因此不再需要本地闩锁。
-6. **`SetAllowedKinds` 存引用不拷贝**（`KatamariBallMotor.cs:894`），且被 `Start()` 无条件重置（`:399-400`）——两个静默失效源。
-7. **成长上限门的边界**：门用 `≥`（`PickupAbsorbMath.cs:165`），而 `SizeModelMath` 在“确认体积恰好等于上限体积”时走 `exp` 路径（`SizeModelMath.cs:165` 的 `logTotal > logCappedVolume` 是严格大于），理论上可能返回比上限小 1 ulp 的半径，那样满级球还能再吸一件。**这是读代码的推断，未实测。**
-8. **`WithdrawCandidate` 用 `==` 比较字符串**（`KatamariBallMotor.cs:962`）。C# 语义是按值比较，UdonSharp 下是否同样按值**未验证**；若不按值，撤回会静默失效，退化成第 5 节的冻结。
+4. **4 槽 + 无 TTL**：任何系统性拒绝都会永久冻结队列，而信号只有“拒绝环”（几何类）或**什么都没有**（账本类）。宿主已排除尺寸门这一类；白名单、成长上限、账本类仍靠接线保证。
+5. **`SetAllowedKinds` 存引用不拷贝**（`KatamariBallMotor.cs:894`），且被 `Start()` 无条件重置（`:399-400`）——两个静默失效源。
+6. **成长上限门的边界**：门用 `≥`（`PickupAbsorbMath.cs:165`），而 `SizeModelMath` 在“确认体积恰好等于上限体积”时走 `exp` 路径（`SizeModelMath.cs:165` 的 `logTotal > logCappedVolume` 是严格大于），理论上可能返回比上限小 1 ulp 的半径，那样满级球还能再吸一件。**这是读代码的推断，未实测。**
+7. **`WithdrawCandidate` 用 `==` 比较字符串**（`KatamariBallMotor.cs:962`）。C# 语义是按值比较，UdonSharp 下是否同样按值**未验证**；若不按值，撤回会静默失效，退化成第 5 节的冻结。
 
 **整数单位契约（有意为之，不是缺陷）**：`TryAbsorbValueToLedgerGain` 只接受整数单位（`(float)(int)v != v` 即返回 `false`）。小数值视为作者数据错误，由 `RejectNoGain` 大声拒绝并进入拒绝环/日志，**不要去"修"成四舍五入**——取舍是"数据必须整数"，让错误可见。
 

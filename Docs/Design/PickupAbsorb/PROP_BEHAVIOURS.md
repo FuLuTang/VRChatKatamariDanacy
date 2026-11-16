@@ -54,7 +54,7 @@
 | 吸收门只认体积：`V = k·a·b·c`，整 mm 比较 `floor(1000·D) ≥ Req_mm` | `PickupAbsorbMath.TryComputePickupReqDiameterMm`、`IsBeyondAbsorbLimit`（口径见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)） | 坠落只改 y、不改尺寸 ⇒ `Req_mm` 不变；能不能吸只看体积，不看位置 |
 | 一件道具要么是**阻挡盒**、要么是**支撑面**，由一个分类器二选一 | `PickupFieldHost.cs:1305`（`UpdatePropObstacles`）、`:198`（`blockingDisabled`） | 坠落中的件既不该挡路也不该当台阶 → 从两个集合里都摘掉 |
 | 阻挡和支撑各只有 6 个槽（电机侧），host 侧缓冲 8 | `PickupFieldHost.cs:129-134`（"six boxes … six tops"、`BlockingSelectionCapacity = 8`）、`KatamariBallMotor.cs:365` | 球附近**同时**能当阻挡或支撑的件 ≤6；堆叠不能靠"全都注册成支撑" |
-| 扫描是定时的，0.05 s 一次，激活半径 1.6 m / 释放 2.5 m | `PickupFieldHost.cs:125-127` | 行为宿主沿用同一套节流哲学：定时、定半径、滞回 |
+| 扫描是定时的，0.05 s 一次，激活半径 1.6 m | `PickupFieldHost.cs` 的 `DefaultScanIntervalSeconds`、`DefaultActivationRadiusM` | 行为宿主沿用同一套节流哲学：定时、定半径 |
 | 球本身有重力坠落，`gravityMps2 = 9.81f` 是电机上的序列化字段 | `KatamariBallMotor.cs:127`、`:470`（`isFalling`） | 道具坠落**复用同一个重力数**，不新开第二个"重力"旋钮 |
 | 全仓 `Runtime/` 没有任何 `Animator` 引用 | `grep -rln Animator Runtime/` 无结果 | 自循环动画是全新的东西，要单独定约定（§3.2） |
 | `support` / `stackedOn` / `parent` / `parentDerived` / `pinned` 已进 `PROP_KEYS`，但只在 `placement_core` 里被读 | `placement_core.py:210`（`PROP_KEYS`）、`:1543`（`prop_parent`）、`:2758`（`_check_parents`） | 校验与几何已经有一份实现，**不要写第二份**：运行时只消费烘焙产物 |

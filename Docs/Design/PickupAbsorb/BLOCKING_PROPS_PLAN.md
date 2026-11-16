@@ -30,8 +30,8 @@
 | F3 | 静态障碍**没有删单个的 API**，只有整表清空；挡路切片是**整批替换**（`SetBlockingBoxes`） | `ClearObstacles()`、`SetBlockingBoxes()`、`ClearBlockingBoxes()` |
 | F4 | 扫掠数组按注册长度重建；**总盒数不变时复用同一对数组**，只有长度变化才 `new` | `RebuildObstacles()` |
 | F5 | **（已过期，此处改掉）** 「太大」不看最长边，看**AABB 体积**：`a·b·c > min(maxItemVolumeWorldM3, (π/6)·D³ / absorbVolumeRatio)` 才算吸不动 | `PickupAbsorbMath.TryComputeItemVolume` / `IsVolumeBeyondLimit` / `TryComputeAbsorbVolumeLimit` / `IsBeyondAbsorbVolumeLimit`；决定见 `Docs/OPEN_DECISIONS.md` (l) |
-| F6 | 被拒的候选**留在队列里不丢**（队列 4 格） | `CandidateQueueIdempotencyTests`；`Docs/Design/Maps/REGION_MAP_PLAN.md` |
-| F7 | 宿主每 0.05 s 全表扫一遍，按距离取最近若干件提交 | `PickupFieldHost.ScanProps` / `InsertNearest` |
+| F6 | 电机里被拒的候选**留在队列里不丢**（队列 4 格）；所以宿主只提交过得了尺寸门的 | `CandidateQueueIdempotencyTests`；`PickupCandidateQueueTests` |
+| F7 | 宿主每 0.05 s 全表扫一遍，按距离取最近若干件、且过得了尺寸门的提交 | `PickupFieldHost.ScanProps` / `PickupCandidateSelection.OfferProp` |
 | F8 | 宿主持有每件的 pickup 尺寸（`propBounds`）与可选的 collider 数组；**挡路只用 `propBounds`，collider 数组与挡路无关** | `PickupFieldHost` 的序列化平行数组 |
 | F9 | 球是**纯 kinematic**：全仓 C# 无 `Rigidbody`/`CharacterController`，位置只由扫掠写 | `KatamariBallMotor.StepBall` |
 | F10 | 现有 lab 的静态盒占用：StoryLevel 4 盒、CpuSkirmish 4 盒、BallPlayground **7 盒**（BallPlayground 已于 2026-11-15 退役、场景已删）。挡路盒有自己的 6 格，所以这些数字不受影响 | 三个 lab 的 `.unity` 里 `obstacleBoxes` |

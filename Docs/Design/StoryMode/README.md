@@ -175,15 +175,15 @@
 | `propBounds[]` | 全尺寸 AABB（米，非半尺寸） | 负值/非有限值不提交 |
 | `valueUnits[]` | 账本整数单位 | **必须是 ≥1 的整数**（`Docs/OPEN_DECISIONS.md` (j)）；<1 的行宿主不提交，并在启动时用一行日志统计 |
 | `propColliders[]` | 可选，吸收时关掉 | 可以留空 |
-| `activationRadiusM` / `releaseRadiusM` / `scanIntervalSeconds` | 1.6 / 2.5 / 0.05 起 | 释放半径必须大于激活半径，`Start` 会强制 |
+| `activationRadiusM` / `scanIntervalSeconds` | 1.6 / 0.05 起 | 激活半径是球心到物件中心的距离，候选选择只看它之内的物件 |
 
 每件道具的运行期状态只有三种：`0` 自由、`1` 已附着、`2` 已隐藏（附着失败的后备）。`1`/`2` 都是终态，永不再提交——和 `PlaygroundProp` 的 `consumed` 同一语义，只是从“每件一个 Bool”变成“宿主一个 int 数组”。
 
 ### 每帧做什么
 
 1. **先消费事件环**（无论是否在收集）：用自己的绝对游标从上次读数读到 `GetAbsorbedEventCount()`。环容量 16、按绝对下标读（`KatamariBallMotor.cs:1523-1531`、`:1542-1545`、`:1567-1574`）；游标落后超过容量时**明确记一行**丢了多少事件（本次读数与上次读数的差 > 容量即溢出），而不是假装没丢。
-2. **再每 0.05 s 扫一次邻近**：一次遍历同时做两件事——超出 `releaseRadiusM` 的道具 `WithdrawCandidate`；`activationRadiusM` 内的自由道具按**距离从近到远**插入一个 8 格缓冲，只在 `GetPendingCandidateCount() < GetPendingCandidateCapacity()` 时提交前几个。最近优先不是微优化：先到先得会把 4 格给数组下标最小的 4 件，球正碰上的那件反而排不进去；而往满队列里提交会被拒并**latch motor 的数据丢失信号**（`KatamariBallMotor.cs:1015-1019`），那是“宿主丢了一个候选”的告警，宿主不该自己造成它。
-3. 道具离开释放半径时，只有“这个宿主提交过它”（`lastSubmitTimes[] > 0`）才值得再调一次 `WithdrawCandidate`：队列的真相由 motor 持有，宿主不另存一份“有没有排队”。
+2. **再每 0.05 s 扫一次邻近**：一次遍历里，`activationRadiusM` 内的自由道具先过尺寸门（`PickupAbsorbMath.IsBeyondAbsorbLimit`，用电机当前语义直径；吸不了的大件不进队列，仍由挡路路径当墙），过了的按**距离从近到远**插入一个 8 格缓冲，取前 `GetPendingCandidateCapacity()`（4）件；随后先撤回本宿主已入队但不在选择里的（`WithdrawCandidateUnlessAccepted`），再在 `GetPendingCandidateCount() < GetPendingCandidateCapacity()` 时提交选中的。最近优先不是微优化：先到先得会把 4 格给数组下标最小的 4 件，球正碰上的那件反而排不进去；而往满队列里提交会被拒并**latch motor 的数据丢失信号**（`KatamariBallMotor.cs:1015-1019`），那是“宿主丢了一个候选”的告警，宿主不该自己造成它。选择逻辑见 [PickupAbsorb README](../PickupAbsorb/README.md) 第 6 节第 9 条。
+3. 宿主只记“我提交过哪些行”（`queuedIndices[]`，容量 16）这一份撤回清单：它只决定“撤回谁”，不参与“要不要提交”（提交幂等，直接调）；电机已不持有的行（已吸收、被电机清空）下次扫描自行脱落。队列的真相由 motor 持有。
 
 ### 吸收之后怎么贴上去
 
@@ -232,7 +232,7 @@ S4 的 `Runtime/Story/StoryRoundController.cs` 已经在按这些方法接线（
 | 对照：lab 的每件道具宿主“查到自己的 id 就隐藏” | `Labs/CpuSkirmish/PlaygroundProp.cs:144-169` |
 | 对照：lab 的激活/释放半径（1.6 / 1.0，释放更小） | `PlaygroundProp.cs:50`、`:57` |
 
-lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就撤回）。本宿主没有照抄：`releaseRadiusM` 必须大于 `activationRadiusM`，`Start` 里不满足就按 1.25 倍往上调，留出迟滞。
+lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就撤回）。本宿主没有释放半径：候选队列跟着每次扫描的选择走，离开激活半径、被更近的挤掉或过不了尺寸门的候选都在下一次扫描被撤回。
 
 ### 未验证（不要当成已验证）
 
@@ -251,7 +251,6 @@ lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就�
 
 - 计划 §7 S3 写“`absorbed` 与按 definition 的计数 +5”。本实现按 **kind** 计数（`GetAttachedCountForKind`），没有单独的 definition 计数列：`kinds[]` 现在就是定义类别的文本，接第二关时把过滤集合换成 `categories.json` 的 definition 集合即可（计划 §4 尾段同义）。要按 definition 精确计数就得再加一列 `definitionIds[]` 和一个按 definition 的计数——那属于第二关的数据，本次没加。
 - 计划 §3 写“每件道具 state 0/1”，本实现多了 `2 = 隐藏`（附着失败），并把这个数量单独暴露，不混进 `attached`。
-- 计划没写“释放半径必须大于激活半径”；这是 lab 设置反了之后总结的约束，写进了 `Start` 的 clamp。
 - 计划 §7 S3 的文件清单只有这一个脚本；`Labs/StoryLevel/StoryLevel.unity` 的道具数组接线仍是 Unity 操作者的活（那批道具现在还没有 `PickupFieldHost` 组件）。
 
 ### 已处理的既有文件
@@ -363,10 +362,10 @@ S4 表格里「不重试（S6）」一句已被本节取代：控制器现在只
 
 `ResetField()` 的语义：
 
-- 先把本宿主提交过、还在队列里的 id 撤回（`WithdrawSubmitted()`）；调用约定是 motor 重置已接受、motor 自己已清空候选，所以这里多为无害的 no-op。
+- 先把本宿主提交过、还在队列里的 id 撤回（`WithdrawSubmitted()`，无条件 `WithdrawCandidate`）；调用约定是 motor 重置已接受、motor 自己已清空候选，所以这里多为无害的 no-op。
 - 只动状态为 `1`（已附着）或 `2`（已隐藏）的道具：`SetParent(original)` → 写 `localPosition`/`localRotation`（与 attach 同一顺序）→ `SetActive(原始激活态)`。隐藏的道具因此重新出现；原本激活的道具保持激活。
 - 接了 collider 的行无条件 `enabled = true`。attach/hide 只关不开，所以复位必须开；代价是“authoring 时就关着的 collider”会被复位打开，没有为它再存一个标志。
-- 状态回 `0`（自由），所有 `lastSubmitTimes` 清零（motor 已清队列，提交记录没有意义）。
+- 状态回 `0`（自由），撤回清单清空（motor 已清队列，提交记录没有意义）。
 - `attachedCount`、`hiddenCount`、`lastHiddenReason`、`lastHiddenItemId`、`kindTallyCount` 归零；`nextScanTime = 0` 让下一帧立刻重新扫描。
 - **不回退** `seenEvents`：motor 的绝对吸收计数跨重置单调（`absorbedEventCount` 只增不减，[BallMotor README](../BallMotor/README.md) 的「吸收事件环的绝对计数保持单调」），保留游标就不会重放旧事件，新回合的事件从同一绝对号继续。重置后 `absorbedEventRingCount = 0`，旧绝对下标一律返回 `""`，宿主跳过即可。
 - 保留 `loggedLostEvents`、`hiddenLogCount` 这类整会话诊断闩锁，理由与 motor 保留日志上限相同：无限重试不能把控制台刷爆。

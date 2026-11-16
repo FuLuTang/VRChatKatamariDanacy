@@ -152,5 +152,62 @@ namespace VRCKatamari.Tests
             Assert.AreEqual("a", ItemIdAt(0));
             Assert.AreEqual("d", ItemIdAt(1));
         }
+
+        // pendingAccepted is the gate stage's own flag (set in the gate stage, consumed by the
+        // commit stage of the same step), so a test that wants "accepted and not yet
+        // committed" without stepping the motor writes it directly.
+        private void MarkAccepted(string id)
+        {
+            FieldInfo field = motorType.GetField("pendingAccepted",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            Assert.IsNotNull(field, "pendingAccepted not found");
+            bool[] accepted = (bool[])field.GetValue(motor);
+            for (int i = 0; i < Count(); i++)
+            {
+                if (ItemIdAt(i) == id) accepted[i] = true;
+            }
+        }
+
+        [Test]
+        public void WithdrawUnlessAcceptedRemovesAnOrdinaryCandidate()
+        {
+            Assert.IsTrue(Submit("a"));
+            Assert.IsTrue(Submit("b"));
+
+            Assert.IsTrue((bool)Call("WithdrawCandidateUnlessAccepted", "a"));
+            Assert.AreEqual(1, Count());
+            Assert.AreEqual("b", ItemIdAt(0));
+            Assert.IsFalse((bool)Call("IsCandidateQueued", "a"));
+        }
+
+        [Test]
+        public void WithdrawUnlessAcceptedKeepsAnAcceptedCandidateAndSaysItIsStillQueued()
+        {
+            Assert.IsTrue(Submit("a"));
+            Assert.IsTrue(Submit("b"));
+            Assert.IsTrue(Submit("c"));
+            MarkAccepted("b");
+
+            Assert.IsFalse((bool)Call("WithdrawCandidateUnlessAccepted", "b"),
+                "an accepted candidate is a pending claim and is not removed");
+            Assert.IsTrue((bool)Call("IsCandidateQueued", "b"),
+                "false-but-queued is how a host tells 'held' from 'gone'");
+            Assert.AreEqual(3, Count());
+            Assert.AreEqual("b", ItemIdAt(1), "the order is untouched");
+
+            // The round-end release is stronger: nothing may absorb once the round stops.
+            Assert.IsTrue((bool)Call("WithdrawCandidate", "b"));
+            Assert.AreEqual(2, Count());
+            Assert.IsFalse((bool)Call("IsCandidateQueued", "b"));
+        }
+
+        [Test]
+        public void WithdrawUnlessAcceptedOnAnAbsentIdIsAHarmlessNoOp()
+        {
+            Assert.IsTrue(Submit("a"));
+            Assert.IsFalse((bool)Call("WithdrawCandidateUnlessAccepted", "absent"));
+            Assert.IsFalse((bool)Call("IsCandidateQueued", "absent"));
+            Assert.AreEqual(1, Count());
+        }
     }
 }

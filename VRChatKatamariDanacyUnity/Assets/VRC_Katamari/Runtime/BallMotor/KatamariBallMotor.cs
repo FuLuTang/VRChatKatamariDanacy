@@ -4434,6 +4434,50 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         public bool WithdrawCandidate(string itemInstanceId)
         {
+            return RemovePendingById(itemInstanceId, false);
+        }
+
+        /// <summary>
+        /// <see cref="WithdrawCandidate"/> for a host that re-ranks its candidates while the
+        /// ball is rolling: it leaves a candidate that this step's gate already accepted.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <c>pendingAccepted</c> is written by the gate stage (<see cref="EvaluatePendingCandidates"/>)
+        /// and consumed by the commit stage (<see cref="CommitAcceptedAbsorbs"/>) of the SAME
+        /// step; a successful commit removes the entry, so between steps a true flag survives
+        /// only a commit that failed (no local ledger row, or the ledger refused the key), and
+        /// the next gate stage rewrites it. An accepted entry is a pending claim, not a
+        /// proximity guess: removing it would swallow the absorption the gate just granted, so
+        /// a re-ranking host must not do it. A round-end release
+        /// (<c>SetCollecting(false)</c>, a field reset) uses <see cref="WithdrawCandidate"/>
+        /// instead, because there "nothing may absorb any more" outranks the pending claim.
+        /// </para>
+        /// <para>
+        /// True when an entry was removed; false when the id is not queued OR is held because
+        /// it is accepted - <see cref="IsCandidateQueued"/> tells the two apart.
+        /// </para>
+        /// </remarks>
+        public bool WithdrawCandidateUnlessAccepted(string itemInstanceId)
+        {
+            return RemovePendingById(itemInstanceId, true);
+        }
+
+        /// <summary>True when an entry with this item id is in the pending queue.</summary>
+        public bool IsCandidateQueued(string itemInstanceId)
+        {
+            if (itemInstanceId == null || itemInstanceId.Length == 0) return false;
+            for (int i = 0; i < pendingCandidateCount; i++)
+            {
+                if (pendingItemIds[i] == itemInstanceId) return true;
+            }
+            return false;
+        }
+
+        // The one remover both public withdraws share. keepAccepted keeps an entry whose
+        // gate verdict is Absorb and that has not committed yet (see the remarks above).
+        private bool RemovePendingById(string itemInstanceId, bool keepAccepted)
+        {
             if (itemInstanceId == null || itemInstanceId.Length == 0) return false;
             if (pendingCandidateCount <= 0) return false;
 
@@ -4441,7 +4485,8 @@ namespace VRCKatamari.BallMotor
             bool removed = false;
             for (int read = 0; read < pendingCandidateCount; read++)
             {
-                if (pendingItemIds[read] == itemInstanceId)
+                if (pendingItemIds[read] == itemInstanceId
+                    && !(keepAccepted && pendingAccepted[read]))
                 {
                     removed = true;
                     continue;

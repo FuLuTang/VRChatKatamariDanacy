@@ -41,14 +41,18 @@ namespace VRCKatamari.Pickup
     /// </para>
     /// <para>
     /// Queue etiquette. The motor never removes a queued candidate except on a successful
-    /// commit, so a host that queues on proximity can pin all four slots with props the
-    /// ball has already rolled past. This host therefore (a) submits only props inside
-    /// <c>activationRadiusM</c>, nearest first and only while the queue has a free slot,
-    /// so it never causes the motor's data-loss overflow latch, and (b) withdraws a prop
-    /// once it is beyond <c>releaseRadiusM</c>. The queue stays the single owner of "is
-    /// this queued": the per-prop submit time is only a cheap filter on whether it is
-    /// worth calling <c>WithdrawCandidate</c> again, and it is cleared whenever that call
-    /// reports it removed something.
+    /// commit or a host withdraw, and its four slots refuse what they cannot hold, so the
+    /// queue must hold only what the ball can take now, and always the nearest of those.
+    /// Every scan therefore picks, among the free props inside <c>activationRadiusM</c>
+    /// that pass the absorb gate's size test at the ball's CURRENT diameter, the nearest
+    /// few (<see cref="PickupCandidateSelection"/>), withdraws the queued props of this
+    /// host that are no longer in that selection (a farther prop displaced by a nearer one,
+    /// a prop the ball rolled away from, one the size test no longer passes) and then
+    /// queues the selected ones. A candidate the gate already accepted but the commit has
+    /// not yet taken is never withdrawn (<c>WithdrawCandidateUnlessAccepted</c>). The host
+    /// keeps a short list of the ids it queued, only so it knows what to withdraw: the
+    /// motor stays the owner of "is this queued" (submitting twice is a no-op, and an id
+    /// the motor no longer holds simply falls out of the list).
     /// </para>
     /// <para>
     /// Attach or hide, never both. A prop whose pose the math refuses is hidden
@@ -120,7 +124,14 @@ namespace VRCKatamari.Pickup
 
         private const float DefaultScanIntervalSeconds = 0.05f;
         private const float DefaultActivationRadiusM = 1.6f;
-        private const float DefaultReleaseRadiusM = 2.5f;
+
+        // The ids this host has in the motor's queue, remembered only to know what to
+        // withdraw. Two selections' worth: a scan can hold the nearest few plus the few
+        // candidates that were accepted and are waiting for their commit.
+        private const int QueuedCapacity = SelectionCapacity * 2;
+
+        // One "scan" console line at most this often, and only when its counts changed.
+        private const float ScanLogIntervalSeconds = 2f;
 
         // The motor's blocking capacity is six boxes and its support capacity is six
         // tops. This buffer is deliberately larger, same reason as SelectionCapacity: a
@@ -216,7 +227,6 @@ namespace VRCKatamari.Pickup
 
         [Header("Radii and cadence")]
         [SerializeField] private float activationRadiusM = DefaultActivationRadiusM;
-        [SerializeField] private float releaseRadiusM = DefaultReleaseRadiusM;
         [SerializeField] private float scanIntervalSeconds = DefaultScanIntervalSeconds;
 
         [Header("Prop obstacles (absorb-proof props block or support the ball)")]
@@ -236,7 +246,9 @@ namespace VRCKatamari.Pickup
 
         // ---- Per-prop store (allocated in Start, never serialized) ----
         private int[] propStates;
-        private float[] lastSubmitTimes;
+        // The rows this host has queued in the motor (see QueuedCapacity): the withdraw list.
+        private int[] queuedIndices;
+        private int queuedCount;
         // Where each prop started, recorded once in Start before anything can attach:
         // parent, local pose and active flag. ResetField is the only reader.
         private Transform[] originalParents;
@@ -255,11 +267,25 @@ namespace VRCKatamari.Pickup
         // the row is usable, else the world box. The gate, the blocking predicate, the
         // growth fallback and the radial proxy all read this one array.
         private Vector3[] propOwnSizes;
+        // EffectiveVolumeK per row, resolved once in Start, so the scan's size test reads an
+        // array instead of re-resolving k for every prop.
+        private float[] propGateK;
         private int growthFallbackRows;
 
         // Bounded nearest-first selection for one scan.
         private int[] nearestIndices;
         private float[] nearestDistSq;
+        // What the last scan saw, for the diagnostics getters and the throttled scan line:
+        // props inside the activation radius, those of them that pass the size test, and the
+        // rows chosen for the queue.
+        private int lastScanInRange;
+        private int lastScanWithinLimit;
+        private int lastScanSelected;
+        private int lastScanQueued;
+        private int loggedScanInRange;
+        private int loggedScanWithinLimit;
+        private int loggedScanQueued;
+        private float nextScanLogTime;
 
         // ---- Prop-obstacle store (allocated in Start, never serialized) ----
         // One row per prop, indexed like every other parallel array. propUsable and
@@ -398,6 +424,7 @@ namespace VRCKatamari.Pickup
             AllocatePropStore();
             RecordOriginalPoses();
             ResolveOwnSizes();
+            ResolveGateK();
             ResolveGrowthMm3();
             MarkSubmittable();
             PreparePropRows();
@@ -411,7 +438,6 @@ namespace VRCKatamari.Pickup
                 + " propObstacles=" + (blockingDisabled ? "off" : "on")
                 + " ownSize=" + (ownSizeFallbackRows > 0 ? "fallback" : "local")
                 + " activationR=" + activationRadiusM
-                + " releaseR=" + releaseRadiusM
                 + " scanInterval=" + scanIntervalSeconds);
         }
 
@@ -558,10 +584,10 @@ namespace VRCKatamari.Pickup
                 propStates[i] = StateFree;
                 restored = restored + 1;
             }
-            // Every submit stamp goes, not just the moved rows: the caller has already had
-            // the motor clear its candidate queue, so no id this host stamped is queued
-            // anywhere and the next scan starts from a clean "did I submit" filter.
-            for (int i = 0; i < propCount; i++) lastSubmitTimes[i] = 0f;
+            // The withdraw list goes too: the caller has already had the motor clear its
+            // candidate queue, so nothing this host listed is queued any more and the next
+            // scan starts from an empty list.
+            queuedCount = 0;
 
             // Both prop sets are a function of where the ball is, so nothing about them
             // survives a reset; static planes and boxes stay in the motor (the map did not
@@ -700,13 +726,6 @@ namespace VRCKatamari.Pickup
         {
             if (!KatamariMath.IsFiniteFloat(activationRadiusM) || activationRadiusM <= 0f)
                 activationRadiusM = DefaultActivationRadiusM;
-            if (!KatamariMath.IsFiniteFloat(releaseRadiusM) || releaseRadiusM <= 0f)
-                releaseRadiusM = DefaultReleaseRadiusM;
-            // Release must be the outer ring; the lab's per-prop host has it inverted
-            // (submit at 1.6 m, release past 1.0 m), which withdraws a prop in the same
-            // frame it was queued. That is a lab setting, not a contract, so it is not
-            // copied: here the gap is the hysteresis that keeps a queued prop queued.
-            if (releaseRadiusM <= activationRadiusM) releaseRadiusM = activationRadiusM * 1.25f;
             if (!KatamariMath.IsFiniteFloat(scanIntervalSeconds) || scanIntervalSeconds <= 0f)
                 scanIntervalSeconds = DefaultScanIntervalSeconds;
             if (!KatamariMath.IsFiniteFloat(blockingMarginM) || blockingMarginM < 0f)
@@ -778,6 +797,12 @@ namespace VRCKatamari.Pickup
             return value;
         }
 
+        // Fills propGateK once: EffectiveVolumeK is the only resolver of a row's k.
+        private void ResolveGateK()
+        {
+            for (int i = 0; i < propCount; i++) propGateK[i] = EffectiveVolumeK(i);
+        }
+
         private int LengthOfGrowth()
         {
             if (propGrowthMm3 == null) return 0;
@@ -800,7 +825,17 @@ namespace VRCKatamari.Pickup
         private void AllocatePropStore()
         {
             propStates = new int[propCount];
-            lastSubmitTimes = new float[propCount];
+            queuedIndices = new int[QueuedCapacity];
+            queuedCount = 0;
+            propGateK = new float[propCount];
+            lastScanInRange = 0;
+            lastScanWithinLimit = 0;
+            lastScanSelected = 0;
+            lastScanQueued = 0;
+            loggedScanInRange = -1;
+            loggedScanWithinLimit = -1;
+            loggedScanQueued = -1;
+            nextScanLogTime = 0f;
             originalParents = new Transform[propCount];
             originalLocalPositions = new Vector3[propCount];
             originalLocalRotations = new Quaternion[propCount];
@@ -1281,7 +1316,7 @@ namespace VRCKatamari.Pickup
                 localRotation);
 
             propStates[index] = StateAttached;
-            lastSubmitTimes[index] = 0f;
+            ForgetQueued(index);
             // The prop may have been supporting the ball or blocking it a moment ago. The
             // obstacle refresh runs later in this same Update, before the collecting gate,
             // so pulling the next scan forward makes the absorbed prop lose both roles in
@@ -1314,7 +1349,7 @@ namespace VRCKatamari.Pickup
         private void HideProp(int index, int reason)
         {
             propStates[index] = StateHidden;
-            lastSubmitTimes[index] = 0f;
+            ForgetQueued(index);
             // Same reason as AttachProp: a hidden prop must lose its wall/floor role in
             // the scan that follows this event, not one scan interval later.
             nextBlockingScanTime = 0f;
@@ -1377,20 +1412,35 @@ namespace VRCKatamari.Pickup
         }
 
         // ------------------------------------------------------------------
-        // One proximity scan: release, then offer the nearest props to the queue.
+        // One proximity scan: choose the nearest absorbable props, make the queue match.
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Withdraws props that left the release radius and queues the nearest free props
-        /// inside the activation radius, nearest first and only while the queue has room.
+        /// Chooses the nearest free props the ball can absorb at its current size, withdraws
+        /// the queued props of this host that are not among them, and queues the chosen ones.
         /// </summary>
         /// <remarks>
-        /// One pass over the props does both jobs, so the cost per scan is one distance per
-        /// prop rather than one per prop per queue slot. Nearest-first matters: the motor's
-        /// queue is four slots, and filling them with the four lowest array indices is how a
-        /// host starves the item the ball is actually touching. Submitting into a full queue
-        /// is refused and latches the motor's overflow signal, which means "the host lost a
-        /// candidate", so the slot count is checked before every submit.
+        /// <para>
+        /// One pass over the props does the choosing, so the cost per scan is one distance
+        /// per prop; the size test (the absorb gate's own
+        /// <see cref="PickupAbsorbMath.IsBeyondAbsorbLimit"/>, inside
+        /// <see cref="PickupCandidateSelection.OfferProp"/>) runs only for the few props
+        /// inside the activation radius. Absorbability, not just proximity, decides who gets
+        /// one of the motor's four slots: a prop the ball is too small for would be refused
+        /// on every step and, never leaving the queue by itself, would keep the small props
+        /// the ball is actually rolling over out of it. Those big props are not forgotten -
+        /// <see cref="UpdatePropObstacles"/> runs the same predicate and makes them walls or
+        /// steps, a separate path that never reads the queue - and the next scan after the
+        /// ball grows past their requirement selects them like any other prop.
+        /// </para>
+        /// <para>
+        /// Order matters for the queue: withdraw first, then submit, so the freed slots are
+        /// available to the nearer props in the same scan. Submitting into a full queue is
+        /// refused and latches the motor's overflow signal, which means "the host lost a
+        /// candidate", so the slot count is checked before every submit. Held-accepted
+        /// candidates (see <c>WithdrawCandidateUnlessAccepted</c>) keep their slot until the
+        /// commit takes them, which happens within the motor's own step.
+        /// </para>
         /// </remarks>
         private void ScanProps()
         {
@@ -1415,10 +1465,13 @@ namespace VRCKatamari.Pickup
             }
             if (slotCount <= 0) return;
 
-            float activationSq = activationRadiusM * activationRadiusM;
-            float releaseSq = releaseRadiusM * releaseRadiusM;
+            // The ball side of the size test: the same reading the motor's gate and
+            // UpdatePropObstacles use, so the three agree on what "too big" means.
+            float ballDiameterM = motor.GetSemanticDiameterWorldM();
 
             int selected = 0;
+            int inRange = 0;
+            int withinLimit = 0;
             for (int i = 0; i < propCount; i++)
             {
                 if (propStates[i] != StateFree) continue;
@@ -1426,69 +1479,66 @@ namespace VRCKatamari.Pickup
                 Transform prop = propTransforms[i];
                 if (prop == null) continue;
 
-                Vector3 delta = prop.position - center;
-                float distSq = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
-                if (!KatamariMath.IsFiniteFloat(distSq)) continue;
-
-                if (distSq > releaseSq)
-                {
-                    // Only worth a call if this host ever queued it; the motor holds the
-                    // truth, this is only a "did I submit once" filter.
-                    if (lastSubmitTimes[i] > 0f)
-                    {
-                        if (motor.WithdrawCandidate(itemIds[i])) lastSubmitTimes[i] = 0f;
-                    }
-                    continue;
-                }
-                if (distSq > activationSq) continue;
-
-                selected = InsertNearest(i, distSq, selected, slotCount);
+                int selectedAfter;
+                int offer = PickupCandidateSelection.OfferProp(i, prop.position, center,
+                    activationRadiusM, propOwnSizes, propGateK, ballDiameterM,
+                    nearestIndices, nearestDistSq, selected, slotCount, out selectedAfter);
+                selected = selectedAfter;
+                if (offer == PickupCandidateSelection.OfferOutOfRange) continue;
+                inRange = inRange + 1;
+                if (offer == PickupCandidateSelection.OfferWithinLimit)
+                    withinLimit = withinLimit + 1;
             }
+
+            WithdrawUnselected(selected);
 
             for (int i = 0; i < selected; i++)
             {
                 if (motor.GetPendingCandidateCount() >= slotCount) break;
                 SubmitProp(nearestIndices[i]);
             }
+
+            lastScanInRange = inRange;
+            lastScanWithinLimit = withinLimit;
+            lastScanSelected = selected;
+            lastScanQueued = queuedCount;
+            LogScanOnce(now, ballDiameterM);
         }
 
         /// <summary>
-        /// Keeps the nearest props seen so far, ascending by squared distance.
+        /// Withdraws every queued prop of this host that the scan did not select, keeping
+        /// the ones the gate has accepted and the commit has not taken yet.
         /// </summary>
         /// <remarks>
-        /// Insertion into two small caller-owned arrays, no allocation and no sort of the
-        /// whole prop list. Returns the new number of selected entries.
+        /// A row leaves the list when it was withdrawn, when the motor no longer holds its
+        /// id (committed, or a motor-side clear), or when its state is no longer free. A
+        /// row the motor refused to withdraw because it is accepted stays listed and is
+        /// looked at again next scan.
         /// </remarks>
-        private int InsertNearest(int index, float distSq, int selected, int limit)
+        private void WithdrawUnselected(int selected)
         {
-            if (limit <= 0) return selected;
-            if (limit > SelectionCapacity) limit = SelectionCapacity;
-
-            if (selected < limit)
+            int write = 0;
+            for (int read = 0; read < queuedCount; read++)
             {
-                int at = selected;
-                while (at > 0 && nearestDistSq[at - 1] > distSq)
+                int index = queuedIndices[read];
+                bool keep = false;
+                if (propStates[index] == StateFree)
                 {
-                    nearestDistSq[at] = nearestDistSq[at - 1];
-                    nearestIndices[at] = nearestIndices[at - 1];
-                    at--;
+                    if (PickupCandidateSelection.IsSelected(index, nearestIndices, selected))
+                    {
+                        keep = true;
+                    }
+                    else if (!motor.WithdrawCandidateUnlessAccepted(itemIds[index])
+                        && motor.IsCandidateQueued(itemIds[index]))
+                    {
+                        keep = true;
+                    }
                 }
-                nearestDistSq[at] = distSq;
-                nearestIndices[at] = index;
-                return selected + 1;
+                if (!keep) continue;
+                queuedIndices[write] = index;
+                write = write + 1;
             }
-
-            if (distSq >= nearestDistSq[limit - 1]) return selected;
-            int pos = limit - 1;
-            while (pos > 0 && nearestDistSq[pos - 1] > distSq)
-            {
-                nearestDistSq[pos] = nearestDistSq[pos - 1];
-                nearestIndices[pos] = nearestIndices[pos - 1];
-                pos--;
-            }
-            nearestDistSq[pos] = distSq;
-            nearestIndices[pos] = index;
-            return selected;
+            queuedCount = write;
         }
 
         /// <summary>
@@ -1503,22 +1553,94 @@ namespace VRCKatamari.Pickup
             // edges, never its turned world box) and for the contact reach (the size's
             // circumscribed sphere), and the finished growth in mm^3 for the ledger. None is
             // derived here; the host resolved them once in Start.
-            motor.SubmitCandidateWithVolumeKMm3(true, kinds[index], propOwnSizes[index],
-                itemPosition, growthMm3[index], itemIds[index], 0, EffectiveVolumeK(index));
-            // Stamped even when the motor answered "already queued": both cases leave this
-            // host willing to withdraw the id later if the ball leaves.
-            lastSubmitTimes[index] = Time.time;
+            bool queued = motor.SubmitCandidateWithVolumeKMm3(true, kinds[index], propOwnSizes[index],
+                itemPosition, growthMm3[index], itemIds[index], 0, propGateK[index]);
+            // Listed even when the motor answered "already queued": both cases leave this
+            // host responsible for withdrawing the id once it is no longer selected.
+            if (queued) RememberQueued(index);
         }
 
+        private void RememberQueued(int index)
+        {
+            for (int i = 0; i < queuedCount; i++)
+            {
+                if (queuedIndices[i] == index) return;
+            }
+            if (queuedCount >= QueuedCapacity) return;
+            queuedIndices[queuedCount] = index;
+            queuedCount = queuedCount + 1;
+        }
+
+        private void ForgetQueued(int index)
+        {
+            int write = 0;
+            for (int read = 0; read < queuedCount; read++)
+            {
+                if (queuedIndices[read] == index) continue;
+                queuedIndices[write] = queuedIndices[read];
+                write = write + 1;
+            }
+            queuedCount = write;
+        }
+
+        /// <summary>
+        /// Releases every candidate this host queued, accepted or not: a stopped round or a
+        /// field reset means nothing may absorb any more.
+        /// </summary>
         private void WithdrawSubmitted()
         {
             if (motor == null) return;
-            for (int i = 0; i < propCount; i++)
+            for (int i = 0; i < queuedCount; i++)
             {
-                if (propStates[i] != StateFree) continue;
-                if (lastSubmitTimes[i] <= 0f) continue;
-                if (motor.WithdrawCandidate(itemIds[i])) lastSubmitTimes[i] = 0f;
+                motor.WithdrawCandidate(itemIds[queuedIndices[i]]);
             }
+            queuedCount = 0;
+        }
+
+        /// <summary>
+        /// One console line per scan-count change, at most every
+        /// <see cref="ScanLogIntervalSeconds"/>: the counts an operator needs to see
+        /// whether the queue holds what the ball can take.
+        /// </summary>
+        private void LogScanOnce(float now, float ballDiameterM)
+        {
+            if (now < nextScanLogTime) return;
+            if (lastScanInRange == loggedScanInRange
+                && lastScanWithinLimit == loggedScanWithinLimit
+                && lastScanQueued == loggedScanQueued) return;
+            nextScanLogTime = now + ScanLogIntervalSeconds;
+            loggedScanInRange = lastScanInRange;
+            loggedScanWithinLimit = lastScanWithinLimit;
+            loggedScanQueued = lastScanQueued;
+            Debug.Log("[PickupFieldHost] scan inRange=" + lastScanInRange
+                + " withinLimit=" + lastScanWithinLimit
+                + " selected=" + lastScanSelected
+                + " queued=" + lastScanQueued
+                + " ballMm=" + motor.GetAbsorbGateDiameterMm());
+        }
+
+        /// <summary>Props inside the activation radius at the last scan (any size).</summary>
+        public int GetScanInRangeCount()
+        {
+            return lastScanInRange;
+        }
+
+        /// <summary>Of those, the props that passed the size gate at the ball's diameter.</summary>
+        public int GetScanWithinLimitCount()
+        {
+            return lastScanWithinLimit;
+        }
+
+        /// <summary>Rows chosen for the queue by the last scan (nearest of the within-limit props).</summary>
+        public int GetScanSelectedCount()
+        {
+            return lastScanSelected;
+        }
+
+        /// <summary>Candidates this host has in the motor's queue after the last scan.</summary>
+        public int GetQueuedCount()
+        {
+            return queuedCount;
         }
 
         // ------------------------------------------------------------------

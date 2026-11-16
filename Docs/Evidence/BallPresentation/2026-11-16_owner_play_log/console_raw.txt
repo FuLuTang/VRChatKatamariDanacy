@@ -1,0 +1,248 @@
+# polls: poll1=257, poll2=257, poll3=257 console entries (identical => session already over)
+# editor state poll1..3: play_mode.is_playing=false, active scene=StoryMode
+
+[seat] ready
+[BallMotor] Start begin center=(-12.50, 0.15, -12.50)
+[BallMotor] Start ready diameter=0.2997369 collisionRadius=0.1498684 baselineUnits=3.439024 startSize=calibration hasLocalRow=True terrainSupport=True
+[arena] planes=4/4 boxes=4/4 ramps=2/2 supports=7 refused=0 kinds=11 obbs=0/0 obbRefused=0 obbOverflow=0 obbBake=mirror doubleBake=0/0
+[ballview] mesh=0.2847 d_motor=0.2997
+[shell] core=0.1423 shell=0.1423 swallowed=0 attached=0
+[eye] app=0.0807 d_core=0.2847 dist=3.527
+[PickupFieldHost] ready props=130 submittable=130 propRows=130 propObstacles=on proxyBounds=local activationR=1.6 releaseR=2.5 scanInterval=0.05
+[story-lab] t=0.1 center=(-12.50, 0.15, -12.50) heading=0 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=1 stepLimit=0.074 falling=False axes=0,0 absorbed=0 rejects=0
+[story-lab] t=1.1 center=(-12.50, 0.15, -12.50) heading=0 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.074 falling=False axes=0,0 absorbed=0 rejects=0
+[story-lab] t=2.1 center=(-12.50, 0.15, -12.50) heading=0 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.074 falling=False axes=0,0 absorbed=0 rejects=0
+[seat] measuring: settleFrames=12 sampleFrames=8 verticalOnly=False
+[ride] seated entered
+[BallMotor] reject#1 id=cup_04 kind=tableware outcome=5 d=1.058642 reach=0.2194206 itemR=0.06955214 ballR=0.1498684 contactR=0 allowedKinds=11 ballCenter=(-12.50, 0.15, -12.50) itemPos=(-11.96, 0.05, -13.41)
+[BallMotor] reject#2 id=spoon_03 kind=tableware outcome=5 d=1.13512 reach=0.2418582 itemR=0.09198973 ballR=0.1498684 contactR=0 allowedKinds=11 ballCenter=(-12.50, 0.15, -12.50) itemPos=(-11.93, 0.01, -11.53)
+[BallMotor] reject#3 id=croissant_02 kind=food outcome=5 d=1.139679 reach=0.2257778 itemR=0.07590938 ballR=0.1498684 contactR=0 allowedKinds=11 ballCenter=(-12.50, 0.15, -12.50) itemPos=(-12.00, 0.03, -11.48)
+[seat] locked: eyeAboveSeat=1.2m offset=(0,-1.19917,-0.09993122) left=0m eyeError=0.001447613m frames=13
+[eye] app=0.2016 d_core=0.2847 dist=1.412
+[story-lab] t=3.1 center=(-12.50, 0.15, -12.50) heading=0 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.074 falling=False axes=0,0 absorbed=0 rejects=132
+[story-lab] t=4.2 center=(-12.50, 0.15, -12.50) heading=0 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.074 falling=False axes=0,0 absorbed=0 rejects=336
+[eye] app=0.2078 d_core=0.2847 dist=1.37
+[eye] app=0.2018 d_core=0.2847 dist=1.411
+[story-lab] t=5.2 center=(-12.50, 0.15, -13.01) heading=307.1 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.074 falling=False axes=0,0 absorbed=0 rejects=536
+[eye] app=0.2004 d_core=0.2847 dist=1.42
+[story-lab] t=6.2 center=(-12.52, 0.15, -13.02) heading=245.5 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.074 falling=False axes=0,0 absorbed=0 rejects=740
+[eye] app=0.1987 d_core=0.2847 dist=1.432
+[PickupFieldHost] support props=1 candidates=2 supportY=0 stepLimit=0.07493421 capacity=6
+[eye] app=0.1977 d_core=0.2847 dist=1.439
+[story-lab] t=7.2 center=(-13.62, 0.15, -13.65) heading=282.9 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=5 stepLimit=0.074 falling=False axes=-0.08,-0.05 absorbed=0 rejects=940
+[eye] app=0.2018 d_core=0.2847 dist=1.41
+[eye] app=0.1932 d_core=0.2847 dist=1.473
+[PickupFieldHost] blocking boxes=1 candidates=1 limitM3=0.00141 radiusM=0.9498684 capacity=6
+[story-lab] t=8.2 center=(-14.20, 0.15, -12.95) heading=320.3 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=7 stepLimit=0.074 falling=False axes=-1.47,1.76 absorbed=0 rejects=1144
+[eye] app=0.1969 d_core=0.2847 dist=1.445
+[eye] app=0.2017 d_core=0.2847 dist=1.411
+[story-lab] t=9.2 center=(-14.65, 0.17, -12.40) heading=346.7 diameter=0.2997 bottom=0.025 gap=0 support=prop supportId=100 supportY=0.025 supports=7 stepLimit=0.074 falling=False axes=0,0 absorbed=0 rejects=1344
+[eye] app=0.1972 d_core=0.2847 dist=1.443
+[story-lab] t=10.2 center=(-14.44, 0.15, -12.02) heading=41.8 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=5 stepLimit=0.074 falling=False axes=0.06,0.07 absorbed=0 rejects=1544
+[eye] app=0.1991 d_core=0.2847 dist=1.43
+[eye] app=0.2008 d_core=0.2847 dist=1.417
+[story-lab] t=11.2 center=(-13.93, 0.15, -11.63) heading=70.4 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.074 falling=False axes=0,0 absorbed=0 rejects=1748
+[eye] app=0.1989 d_core=0.2847 dist=1.431
+[story-lab] t=12.2 center=(-13.65, 0.15, -11.85) heading=129.7 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.074 falling=False axes=1.2,-1.01 absorbed=0 rejects=1948
+[eye] app=0.2013 d_core=0.2847 dist=1.414
+[eye] app=0.197 d_core=0.2847 dist=1.444
+[story-lab] t=13.2 center=(-12.84, 0.15, -12.53) heading=136.3 diameter=0.2997 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.074 falling=False axes=1.64,-1.4 absorbed=0 rejects=2148
+[eye] app=0.1888 d_core=0.2847 dist=1.508
+[grow] units=1 D=0.2997 -> 0.3263 (+8.8%)
+[PickupFieldHost] attached id=cheese_slice_01 kind=food attached=1
+[ballview] mesh=0.31 d_motor=0.3263
+[shell] core=0.155 shell=0.1865 swallowed=0 attached=1
+[eye] app=0.213 d_core=0.31 dist=1.455
+[story-lab] t=14.2 center=(-11.59, 0.16, -13.81) heading=125.3 diameter=0.3263 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.081 falling=False axes=0,0 absorbed=1 rejects=2345
+[eye] app=0.2156 d_core=0.31 dist=1.437
+[grow] units=4 D=0.3263 -> 0.4042 (+23.8%)
+[PickupFieldHost] attached id=cup_04 kind=tableware attached=2
+[ballview] mesh=0.3839 d_motor=0.4042
+[shell] core=0.192 shell=0.2233 swallowed=1 attached=2
+[eye] app=0.2431 d_core=0.384 dist=1.579
+[story-lab] t=15.2 center=(-12.20, 0.20, -13.38) heading=114.6 diameter=0.4042 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.101 falling=False axes=0,0 absorbed=2 rejects=2548
+[ballview] mesh=0.384 d_motor=0.4042
+[eye] app=0.2405 d_core=0.384 dist=1.596
+[eye] app=0.243 d_core=0.384 dist=1.58
+[story-lab] t=16.3 center=(-11.64, 0.20, -13.62) heading=75.7 diameter=0.4042 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.101 falling=False axes=0.27,0.07 absorbed=2 rejects=2752
+[eye] app=0.2383 d_core=0.384 dist=1.611
+[grow] units=1 D=0.4042 -> 0.4196 (+3.8%)
+[PickupFieldHost] attached id=paper_scrap_01 kind=debris attached=3
+[grow] units=4 D=0.4196 -> 0.4721 (+12.4%)
+[PickupFieldHost] attached id=juice_carton_02 kind=drink attached=4
+[ballview] mesh=0.4483 d_motor=0.4721
+[shell] core=0.2242 shell=0.2629 swallowed=2 attached=4
+[eye] app=0.2534 d_core=0.4485 dist=1.769
+[story-lab] t=17.3 center=(-9.80, 0.24, -13.37) heading=129.1 diameter=0.4721 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.118 falling=False axes=2.58,-0.56 absorbed=4 rejects=2949
+[ballview] mesh=0.4485 d_motor=0.4721
+[eye] app=0.2585 d_core=0.4485 dist=1.734
+[eye] app=0.2566 d_core=0.4485 dist=1.747
+[story-lab] t=18.3 center=(-7.97, 0.24, -15.55) heading=171.7 diameter=0.4721 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.118 falling=False axes=1.25,-2.58 absorbed=4 rejects=3153
+[eye] app=0.2601 d_core=0.4485 dist=1.723
+[eye] app=0.2627 d_core=0.4485 dist=1.707
+[story-lab] t=19.3 center=(-8.08, 0.24, -16.83) heading=186.6 diameter=0.4721 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.118 falling=False axes=-0.1,-0.25 absorbed=4 rejects=3353
+[eye] app=0.2652 d_core=0.4485 dist=1.69
+[grow] units=4 D=0.4721 -> 0.5149 (+9%)
+[PickupFieldHost] attached id=apple_01 kind=fruit attached=5
+[ballview] mesh=0.4794 d_motor=0.5149
+[shell] core=0.2446 shell=0.2921 swallowed=3 attached=5
+[eye] app=0.277 d_core=0.4892 dist=1.765
+[story-lab] t=20.3 center=(-7.95, 0.26, -17.13) heading=156.8 diameter=0.5149 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.128 falling=False axes=0,0 absorbed=5 rejects=3551
+[ballview] mesh=0.4892 d_motor=0.5149
+[eye] app=0.2781 d_core=0.4892 dist=1.758
+[eye] app=0.2738 d_core=0.4892 dist=1.786
+[story-lab] t=21.3 center=(-8.10, 0.26, -17.24) heading=247.6 diameter=0.5149 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=3 stepLimit=0.128 falling=False axes=-0.99,-0.63 absorbed=5 rejects=3755
+[grow] units=1 D=0.5149 -> 0.5246 (+1.8%)
+[PickupFieldHost] attached id=strawberry_01 kind=fruit attached=6
+[ballview] mesh=0.4976 d_motor=0.5246
+[shell] core=0.2491 shell=0.2921 swallowed=3 attached=6
+[eye] app=0.269 d_core=0.4983 dist=1.852
+[grow] units=8 D=0.5246 -> 0.5915 (+12.7%)
+[PickupFieldHost] attached id=pear_02 kind=fruit attached=7
+[PickupFieldHost] attached id=pear_01 kind=fruit attached=8
+[ballview] mesh=0.5569 d_motor=0.5915
+[shell] core=0.2809 shell=0.301 swallowed=4 attached=8
+[eye] app=0.2837 d_core=0.5619 dist=1.98
+[story-lab] t=22.3 center=(-10.29, 0.30, -18.23) heading=274.8 diameter=0.5915 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.147 falling=False axes=-3.02,-0.95 absorbed=8 rejects=3952
+[ballview] mesh=0.5619 d_motor=0.5915
+[eye] app=0.2944 d_core=0.5619 dist=1.908
+[eye] app=0.2922 d_core=0.5619 dist=1.923
+[story-lab] t=23.3 center=(-11.85, 0.30, -18.62) heading=276.9 diameter=0.5915 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.147 falling=False axes=-2.45,0.02 absorbed=8 rejects=4156
+[grow] units=4 D=0.5915 -> 0.62 (+4.8%)
+[PickupFieldHost] attached id=soda_can_05 kind=drink attached=9
+[grow] units=4 D=0.62 -> 0.646 (+4.2%)
+[PickupFieldHost] attached id=juice_carton_04 kind=drink attached=10
+[ballview] mesh=0.599 d_motor=0.646
+[shell] core=0.3068 shell=0.3068 swallowed=10 attached=10
+[eye] app=0.2981 d_core=0.6137 dist=2.058
+[grow] units=4 D=0.646 -> 0.6701 (+3.7%)
+[PickupFieldHost] attached id=soda_can_04 kind=drink attached=11
+[ballview] mesh=0.6348 d_motor=0.6701
+[shell] core=0.3183 shell=0.3792 swallowed=10 attached=11
+[eye] app=0.3073 d_core=0.6366 dist=2.071
+[story-lab] t=24.3 center=(-14.97, 0.34, -18.79) heading=274.7 diameter=0.6701 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.167 falling=False axes=-3.57,-0.23 absorbed=11 rejects=4342
+[grow] units=4 D=0.6701 -> 0.6926 (+3.3%)
+[PickupFieldHost] attached id=croissant_05 kind=food attached=12
+[grow] units=4 D=0.6926 -> 0.7137 (+3%)
+[PickupFieldHost] attached id=bread_slice_05 kind=food attached=13
+[ballview] mesh=0.6772 d_motor=0.7137
+[shell] core=0.339 shell=0.3918 swallowed=10 attached=13
+[eye] app=0.3076 d_core=0.678 dist=2.204
+[grow] units=4 D=0.7137 -> 0.7336 (+2.7%)
+[PickupFieldHost] attached id=sandwich_04 kind=food attached=14
+[ballview] mesh=0.697 d_motor=0.7336
+[shell] core=0.3485 shell=0.4013 swallowed=10 attached=14
+[eye] app=0.3297 d_core=0.697 dist=2.113
+[story-lab] t=25.3 center=(-17.66, 0.51, -18.82) heading=301 diameter=0.7336 bottom=0.139 gap=0 support=box supportId=3 supportY=0.14 supports=5 stepLimit=0.183 falling=False axes=0,0 absorbed=14 rejects=4395
+[eye] app=0.3298 d_core=0.697 dist=2.113
+[eye] app=0.3256 d_core=0.697 dist=2.14
+[story-lab] t=26.3 center=(-17.60, 0.51, -18.72) heading=42.2 diameter=0.7336 bottom=0.139 gap=0 support=box supportId=3 supportY=0.14 supports=5 stepLimit=0.183 falling=False axes=0.51,0.79 absorbed=14 rejects=4395
+[eye] app=0.3248 d_core=0.697 dist=2.145
+[story-lab] t=27.3 center=(-15.71, 0.37, -17.94) heading=102.9 diameter=0.7336 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.183 falling=False axes=2.88,0.09 absorbed=14 rejects=4395
+[eye] app=0.3161 d_core=0.697 dist=2.204
+[eye] app=0.3228 d_core=0.697 dist=2.158
+[grow] units=4 D=0.7336 -> 0.7526 (+2.5%)
+[PickupFieldHost] attached id=juice_carton_03 kind=drink attached=15
+[story-lab] t=28.4 center=(-13.46, 0.38, -19.02) heading=147.5 diameter=0.7526 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.188 falling=False axes=0.22,0 absorbed=15 rejects=4438
+[ballview] mesh=0.7149 d_motor=0.7526
+[shell] core=0.3574 shell=0.4063 swallowed=10 attached=15
+[eye] app=0.3328 d_core=0.7149 dist=2.148
+[eye] app=0.3319 d_core=0.7149 dist=2.154
+[grow] units=4 D=0.7526 -> 0.7706 (+2.3%)
+[PickupFieldHost] attached id=plate_05 kind=tableware attached=16
+[story-lab] t=29.4 center=(-12.67, 0.39, -18.92) heading=64.8 diameter=0.7706 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.192 falling=False axes=2.08,0.54 absorbed=16 rejects=4476
+[ballview] mesh=0.7319 d_motor=0.7706
+[shell] core=0.366 shell=0.5246 swallowed=10 attached=16
+[eye] app=0.3262 d_core=0.732 dist=2.243
+[grow] units=4 D=0.7706 -> 0.7877 (+2.2%)
+[PickupFieldHost] attached id=cup_05 kind=tableware attached=17
+[grow] units=4 D=0.7877 -> 0.8042 (+2%)
+[PickupFieldHost] attached id=watermelon_01 kind=fruit attached=18
+[ballview] mesh=0.7501 d_motor=0.8042
+[shell] core=0.382 shell=0.5815 swallowed=11 attached=18
+[eye] app=0.3367 d_core=0.764 dist=2.268
+[story-lab] t=30.4 center=(-10.97, 0.40, -18.11) heading=348.9 diameter=0.8042 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.201 falling=False axes=-0.06,0.63 absorbed=18 rejects=4610
+[ballview] mesh=0.764 d_motor=0.8042
+[eye] app=0.3392 d_core=0.764 dist=2.252
+[eye] app=0.3368 d_core=0.764 dist=2.267
+[grow] units=4 D=0.8042 -> 0.82 (+1.9%)
+[PickupFieldHost] attached id=apple_03 kind=fruit attached=19
+[grow] units=4 D=0.82 -> 0.8353 (+1.8%)
+[PickupFieldHost] attached id=banana_01 kind=fruit attached=20
+[story-lab] t=31.4 center=(-11.39, 0.42, -16.06) heading=12.7 diameter=0.8353 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.208 falling=False axes=-0.23,2.98 absorbed=20 rejects=4807
+[ballview] mesh=0.7935 d_motor=0.8353
+[shell] core=0.3967 shell=0.5815 swallowed=13 attached=20
+[eye] app=0.3342 d_core=0.7935 dist=2.374
+[grow] units=4 D=0.8353 -> 0.85 (+1.7%)
+[PickupFieldHost] attached id=orange_01 kind=fruit attached=21
+[ballview] mesh=0.8075 d_motor=0.85
+[shell] core=0.4037 shell=0.5815 swallowed=14 attached=21
+[eye] app=0.3344 d_core=0.8075 dist=2.414
+[grow] units=8 D=0.85 -> 0.878 (+3.2%)
+[PickupFieldHost] attached id=struct_book_stack_01 kind=furniture attached=22
+[grow] units=4 D=0.878 -> 0.8913 (+1.5%)
+[PickupFieldHost] attached id=soda_can_02 kind=drink attached=23
+[grow] units=4 D=0.8913 -> 0.9042 (+1.4%)
+[PickupFieldHost] attached id=bread_slice_03 kind=food attached=24
+[story-lab] t=32.4 center=(-11.05, 0.45, -12.60) heading=42.1 diameter=0.9042 bottom=0 gap=0 support=ground supportId=0 supportY=0 supports=4 stepLimit=0.226 falling=False axes=1.32,3.25 absorbed=24 rejects=5001
+[grow] units=1 D=0.9042 -> 0.9074 (+0.3%)
+[PickupFieldHost] attached id=cookie_01 kind=food attached=25
+[ballview] mesh=0.859 d_motor=0.9074
+[shell] core=0.431 shell=0.5815 swallowed=15 attached=25
+[eye] app=0.3449 d_core=0.8621 dist=2.499
+[grow] units=4 D=0.9074 -> 0.9199 (+1.3%)
+[PickupFieldHost] attached id=napkin_02 kind=tableware attached=26
+[grow] units=36 D=0.9199 -> 1.0197 (+10.8%)
+[PickupFieldHost] attached id=struct_beer_crate_02 kind=container attached=27
+[ballview] mesh=0.9657 d_motor=1.0197
+[shell] core=0.4843 shell=0.742 swallowed=19 attached=27
+[eye] app=0.372 d_core=0.9687 dist=2.603
+[grow] units=4 D=1.0197 -> 1.0297 (+0.9%)
+[PickupFieldHost] attached id=napkin_01 kind=tableware attached=28
+[story-lab] t=33.4 center=(-9.55, 0.70, -11.43) heading=4 diameter=1.0297 bottom=0.187 gap=-0.001 support=ramp supportId=10 supportY=0.178 supports=6 stepLimit=0.257 falling=False axes=1.05,1.83 absorbed=28 rejects=5192
+[ballview] mesh=0.9782 d_motor=1.0297
+[shell] core=0.4891 shell=0.742 swallowed=19 attached=28
+[eye] app=0.3722 d_core=0.9782 dist=2.627
+[grow] units=4 D=1.0297 -> 1.0394 (+0.9%)
+[PickupFieldHost] attached id=orange_06 kind=fruit attached=29
+[ballview] mesh=0.982 d_motor=1.0394
+[shell] core=0.4937 shell=0.742 swallowed=21 attached=29
+[eye] app=0.3681 d_core=0.9875 dist=2.682
+[story-lab] t=34.4 center=(-9.70, 0.78, -8.95) heading=314.5 diameter=1.0394 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.259 falling=False axes=-1.53,2.64 absorbed=29 rejects=5390
+[ballview] mesh=0.9875 d_motor=1.0394
+[eye] app=0.3709 d_core=0.9875 dist=2.661
+[grow] units=1 D=1.0394 -> 1.0418 (+0.2%)
+[PickupFieldHost] attached id=grapes_07 kind=fruit attached=30
+[ballview] mesh=0.9897 d_motor=1.0418
+[shell] core=0.4948 shell=0.742 swallowed=22 attached=30
+[eye] app=0.3718 d_core=0.9897 dist=2.661
+[story-lab] t=35.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=5588
+[eye] app=0.3784 d_core=0.9897 dist=2.615
+[story-lab] t=36.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=5792
+[story-lab] t=37.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=5992
+[story-lab] t=38.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=6192
+[story-lab] t=39.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=6392
+[story-lab] t=40.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=6592
+[story-lab] t=41.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=6792
+[story-lab] t=42.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=6996
+[story-lab] t=43.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=7196
+[story-lab] t=44.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=7400
+[story-lab] t=45.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=7600
+[story-lab] t=46.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=7800
+[story-lab] t=47.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=8000
+[story-lab] t=48.4 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=8200
+[story-lab] t=49.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=8404
+[story-lab] t=50.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=8604
+[story-lab] t=51.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=8808
+[story-lab] t=52.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=9008
+[story-lab] t=53.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=9212
+[story-lab] t=54.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=9412
+[story-lab] t=55.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=9612
+[story-lab] t=56.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=9816
+[story-lab] t=57.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=10016
+[story-lab] t=58.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=10220
+[story-lab] t=59.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=10420
+[story-lab] t=60.5 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=10620
+[story-lab] t=61.6 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=10824
+[story-lab] t=62.6 center=(-10.97, 0.78, -7.17) heading=314.5 diameter=1.0418 bottom=0.26 gap=0 support=box supportId=1 supportY=0.26 supports=3 stepLimit=0.26 falling=False axes=0,0 absorbed=30 rejects=11024
+NullReferenceException: Object reference not set to an instance of an object

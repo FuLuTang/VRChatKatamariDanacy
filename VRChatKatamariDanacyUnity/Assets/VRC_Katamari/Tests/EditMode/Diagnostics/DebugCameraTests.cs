@@ -62,10 +62,17 @@ namespace VRCKatamari.Tests
             // with Z negated. A bare TRS(...).inverse is the object-space matrix, so every point
             // in front of the camera would get clip.w = -distance (negative) and the perspective
             // divide would mirror x and y as well.
+            // Matrix4x4.Perspective takes the field of view in DEGREES (the same unit as
+            // Camera.fieldOfView); passing FieldOfViewDegrees * Mathf.Deg2Rad, as this helper
+            // once did, turns 60 degrees into a 1.047 degree cone - a projection 63x too narrow
+            // (m11 109.4 instead of 1.732) that pushes every radius to viewport.y = -6.47.
             Matrix4x4 worldToLocal = Matrix4x4.TRS(position, rotation, Vector3.one).inverse;
             Matrix4x4 view = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * worldToLocal;
-            Matrix4x4 projection = Matrix4x4.Perspective(FieldOfViewDegrees * Mathf.Deg2Rad,
-                Aspect, nearM, farM);
+            Matrix4x4 projection = Matrix4x4.Perspective(FieldOfViewDegrees, Aspect, nearM, farM);
+            // Pin the unit contract where it is cheapest to see: a 60 degree vertical field of
+            // view has m11 = 1/tan(30 deg) = 1.7320508. A degree/radian mix-up makes it 109.4,
+            // which otherwise only shows up as a ball projected far off screen.
+            Assert.AreEqual(1.7320508f, projection.m11, 1e-4f);
             return projection * view;
         }
 

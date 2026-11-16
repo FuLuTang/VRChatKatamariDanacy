@@ -121,7 +121,8 @@ def request_for(args):
             body["position"] = args.pos
         if args.yaw is not None:
             body["yaw"] = args.yaw
-        for key in ("zone", "kind", "support", "stacked_on", "value", "group", "notes"):
+        for key in ("zone", "kind", "support", "stacked_on", "parent", "pinned", "value",
+                    "group", "notes"):
             value = getattr(args, key)
             if value is not None:
                 body["stackedOn" if key == "stacked_on" else
@@ -157,8 +158,8 @@ def request_for(args):
             body["rotationQuat"] = args.quat
         elif args.yaw is not None:
             body["yaw"] = args.yaw
-        for key in ("zone", "kind", "group", "support", "stacked_on", "value", "notes",
-                    "role", "shape", "collision", "meets"):
+        for key in ("zone", "kind", "group", "support", "stacked_on", "parent", "pinned",
+                    "value", "notes", "role", "shape", "collision", "meets"):
             value = getattr(args, key)
             if value is not None:
                 body["stackedOn" if key == "stacked_on" else
@@ -447,6 +448,9 @@ def build_parser():
     add_prop.add_argument("--group")
     add_prop.add_argument("--support")
     add_prop.add_argument("--stacked-on", dest="stacked_on")
+    add_prop.add_argument("--parent", help="itemId of the prop this one belongs to")
+    add_prop.add_argument("--pinned", dest="pinned", action="store_true", default=None,
+                          help="this prop stands on its own and must never fall")
     add_prop.add_argument("--value", type=int, help="valueUnits")
     add_prop.add_argument("--notes")
     add_prop.add_argument("--seat", action="store_true",
@@ -482,6 +486,11 @@ def build_parser():
     set_cmd.add_argument("--group")
     set_cmd.add_argument("--support")
     set_cmd.add_argument("--stacked-on", dest="stacked_on")
+    set_cmd.add_argument("--parent", help="itemId of the prop this one belongs to")
+    set_cmd.add_argument("--pinned", dest="pinned", action="store_true", default=None,
+                         help="this prop stands on its own and must never fall")
+    set_cmd.add_argument("--unpin", dest="pinned", action="store_false",
+                         help="clear pinned (back to the normal floating rule)")
     set_cmd.add_argument("--value", type=int)
     set_cmd.add_argument("--notes")
     set_cmd.add_argument("--role")

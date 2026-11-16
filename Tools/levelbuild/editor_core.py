@@ -39,8 +39,8 @@ MISSING = object()
 
 #: Fields an op may set on a prop (``aabb``/``absorb*`` follow from ``def``).
 PROP_SETTABLE = ("def", "kind", "zone", "group", "groupId", "position", "rotationQuat", "yaw",
-                 "support", "stackedOn", "parent", "parentDerived", "valueUnits", "volumeK",
-                 "volumePenalty", "notes")
+                 "support", "stackedOn", "parent", "parentDerived", "pinned", "valueUnits",
+                 "volumeK", "volumePenalty", "notes")
 
 #: Fields an op may set on a ``defs[]`` entry.  ``volumeK`` is the original's per-item
 #: volume factor (``Volume = k * a * b * c``, default 0.70); it is authored on the DEF so a
@@ -537,10 +537,11 @@ class Editor:
             # deprecated valueUnits total and reads 0 once the file is regenerated.
             "valueUnits": core.value_units_total(doc),
             "supportsDerived": support_geometry.count_derived(doc),
+            "pinned": len(core.seating_report(doc)["pinned"]),
         }
 
-    def _validate(self, doc):
-        return core.validate(doc, manifests=self.manifests)
+    def _validate(self, doc, strict_parents=False):
+        return core.validate(doc, manifests=self.manifests, strict_parents=strict_parents)
 
     def _flush_pending(self):
         """Export work that only lives in memory before the document is replaced.
@@ -768,8 +769,8 @@ class Editor:
     # ops: reading
     # ------------------------------------------------------------------ #
     def op_list(self, args):
-        _known(args, ("zone", "def", "kind", "support", "stackedOn", "parent", "text", "near",
-                      "radius", "limit"))
+        _known(args, ("zone", "def", "kind", "support", "stackedOn", "parent", "pinned", "text",
+                      "near", "radius", "limit"))
         self._require_open()
         items = _props(self.doc)
         if "zone" in args:
@@ -784,6 +785,8 @@ class Editor:
             items = [prop for prop in items if prop.get("stackedOn") == args["stackedOn"]]
         if "parent" in args:
             items = [prop for prop in items if core.prop_parent(prop) == args["parent"]]
+        if "pinned" in args:
+            items = [prop for prop in items if bool(prop.get("pinned")) is bool(args["pinned"])]
         if "text" in args:
             needle = str(args["text"]).lower()
             items = [prop for prop in items
@@ -819,7 +822,8 @@ class Editor:
                        "support": prop.get("support"),
                        "stackedOn": prop.get("stackedOn"),
                        "parent": prop.get("parent"),
-                       "parentDerived": prop.get("parentDerived")}
+                       "parentDerived": prop.get("parentDerived"),
+                       "pinned": prop.get("pinned")}
                       for prop in items[:limit]],
         }
 
@@ -839,9 +843,9 @@ class Editor:
         raise OpError("%r is not a prop, structure, camera or preset id" % entity_id)
 
     def op_check(self, args):
-        _known(args, ("report", "strict"))
+        _known(args, ("report", "strict", "strict_parents"))
         self._require_open()
-        report = self._validate(self.doc)
+        report = self._validate(self.doc, strict_parents=bool(args.get("strict_parents")))
         out = summarize(report)
         if args.get("strict"):
             out["ok"] = out["ok"] and not report.warnings
@@ -921,6 +925,8 @@ class Editor:
             prop["stackedOn"] = _string(args, "stackedOn")
         if "parent" in args:
             prop["parent"] = _string(args, "parent")
+        if args.get("pinned") is not None and _bool(args["pinned"], "pinned"):
+            prop["pinned"] = True
         if "notes" in args:
             prop["notes"] = _string(args, "notes")
         # `valueUnits` is DEPRECATED: growth is derived from aabb x k x penalty, so a prop
@@ -1036,6 +1042,13 @@ class Editor:
                 prop.pop(key, None)
             else:
                 prop[key] = _string(args, key)
+        if "pinned" in args:
+            # ``false`` is the default and therefore absent, so a cleared pin does not
+            # leave ``"pinned": false`` in the file.
+            if args["pinned"] is None or _bool(args["pinned"], "pinned") is False:
+                prop.pop("pinned", None)
+            else:
+                prop["pinned"] = True
         if "parentDerived" in args:
             # Only meaningful next to a `parent`; clearing it restores "hand-authored".
             if args["parentDerived"] is None:
@@ -1573,11 +1586,13 @@ OP_HELP = {
     "status": "the open level, counts, gate, dirty flag, undo depth, scene facts",
     "open": "open a level (level=<id> or path=<placement.json>) and build the scene",
     "reload": "re-read placement.json from disk and re-sync the scene",
-    "list": "props, filtered by zone/def/kind/support/stackedOn/text/near+radius",
+    "list": "props, filtered by zone/def/kind/support/stackedOn/parent/pinned/text/near+radius",
     "get": "one prop, structure, camera or preset by id",
-    "add_prop": "def + optional itemId/position/yaw/kind/zone/support/stackedOn/valueUnits/seat",
+    "add_prop": "def + optional itemId/position/yaw/kind/zone/support/stackedOn/parent/pinned/"
+                "valueUnits/seat",
     "add_structure": "role + center + size + rotationQuat/yaw (+kind/shape/collision/…)",
-    "set": "set fields on a prop or structure (position, rotationQuat, yaw, zone, …)",
+    "set": "set fields on a prop or structure (position, rotationQuat, yaw, zone, …); "
+           "set pinned=true for a prop that stands on its own and must never fall",
     "move": "move a prop/structure: to=[x,y,z] or delta=[dx,dy,dz]",
     "rotate": "rotate: yaw=<deg>, quat=[x,y,z,w], or axis=[..] + degrees",
     "remove": "remove by id (or ids=[...])",
@@ -1587,7 +1602,8 @@ OP_HELP = {
     "expected": "set level.expected (defaults to the document's own totals)",
     "camera": "camera presets: action=set/remove/list",
     "preset": "render presets: action=set/remove/list",
-    "check": "validate the resident document (report=true adds the tables)",
+    "check": "validate the resident document (report=true adds the tables; "
+             "strict_parents=true fails a derived pointer that no longer seats)",
     "export": "validate + write canonical placement.json (to=<path> for a copy, force=true)",
     "render": "render: preset=<id> or camera={…}; engine/res/samples/out/name",
     "undo": "undo the last N committed operations (steps=1)",

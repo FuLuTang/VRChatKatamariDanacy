@@ -1,12 +1,18 @@
 """支撑图参考模型：几何推导「谁托着谁」，再传播「失去支撑就坠落」。
 
+> **⚠️ 本文件是被取代的设计的参考实现**（活支撑计数 + CSR 反向边 + 工作队列，
+> 2026-11-16 第二轮标为过度设计）。**现行 v1 的参考实现是同目录的
+> ``floating_requeue.py``**：单父指针 + 每 tick 复检 + 子件坠落，没有计数、没有上限。
+> 留在这里是给 `PROP_BEHAVIOURS.md` §5 的旧设计做对照，不要照它实现。
+
 这不是运行时本身，而是运行时的**参考实现**——它故意按 Udon 的数据形状来写：
 
 - 推导（``derive_supports``）只在烘焙期跑一次，产出 CSR 邻接表（``dependent_start``
   / ``dependent_count`` / ``dependent_list``），运行时不存字典、不建 ``List``；
 - 运行期只有三样东西：每件道具的「活支撑计数」、一个定长工作队列、以及一次坠落积分；
 - 全部浮点比较带容差，容差只在本文件定义（与 ``Tools/levelbuild/placement_core.py``
-  的 ``SINK_TOLERANCE_M`` / ``STACK_TOLERANCE_M`` 同量级）。
+  的 ``SINK_TOLERANCE_M`` / ``parent_gap_window`` 同量级；旧的 `STACK_TOLERANCE_M`
+  已在 2026-11-16 取消）。
 
 术语（全文一致）：
 

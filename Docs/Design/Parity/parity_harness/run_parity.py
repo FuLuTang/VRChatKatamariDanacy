@@ -137,8 +137,10 @@ OURS: Dict[str, Constant] = {
     "climb_cap_margin_m": Constant(contact_v2.CLIMB_CAP_MARGIN_M, "contact_v2.py:75"),
     "protrusion_cap_m": Constant(shapes.NEEDLE_PROTRUSION_WORLD_M, "shapes.py:36"),
     "growth_push_per_step_m": Constant(0.05, "CONTACT_MODEL_V2.md §4.2"),
-    "stack_tolerance_m": Constant(placement_core.STACK_TOLERANCE_M,
-                                  "placement_core.py:71"),
+    # `STACK_TOLERANCE_M` (10 mm) is gone: the owner ruled it out on 2026-11-16 - an
+    # authored parent pointer is a report, not a geometry gate, and the contact window is
+    # now dimensionless (`parent_gap_window`, a fraction of the smaller height), so it is
+    # not a metre constant to compare against the ball.  See PARITY_AUDIT divergences row 3.
     "hud_offset_m": Constant(0.0002, "KatamariBallMotor.GetHudDiameterWorldM (+0.02 cm)"),
     "clear_target_m": Constant(1.25,
                                "Docs/Design/GameModes/Levels/story_01_bench_size.json"),
@@ -154,7 +156,6 @@ OURS: Dict[str, Constant] = {
 ABSOLUTE_CONSTANTS: Tuple[Tuple[str, str, Constant], ...] = (
     ("contact_skin", "接触注册 skin", OURS["contact_skin_m"]),
     ("contact_slop", "解算 slop", OURS["contact_slop_m"]),
-    ("stack_tolerance", "叠放对齐容差", OURS["stack_tolerance_m"]),
     ("growth_push", "逐帧长大推挤上限", OURS["growth_push_per_step_m"]),
     ("protrusion_cap", "长杆突出 cap", OURS["protrusion_cap_m"]),
     ("climb_cap_margin", "到顶判定带宽", OURS["climb_cap_margin_m"]),
@@ -923,7 +924,8 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
            _v("protrusion_cap_m") / start_d))
 
     homog = ("体积门、D(V)、h<r 滚越、H_cap∝D、0.25D 台阶")
-    nonhomog = "skin/slop/叠放 10 mm/推挤 50 mm/突出 cap 300 mm/到顶 20 mm + 时基 30 vs 50 Hz + g=9.81"
+    nonhomog = ("skin/slop/推挤 50 mm/突出 cap 300 mm/到顶 20 mm + 时基 30 vs 50 Hz + g=9.81"
+                "（叠放 10 mm 已取消，见 divergences 第 3 行）")
     add("S04", "尺度不变性（长度×6）", "—",
         "未知（原作没有缩放实验）",
         "同构 5 条 / 非齐次 6 条 + 时基与重力", DIFFERENT,

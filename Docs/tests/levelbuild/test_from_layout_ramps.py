@@ -110,7 +110,12 @@ class ValidatorAllowanceTests(unittest.TestCase):
     def test_the_shipped_level_is_green_with_its_lowered_ramps(self):
         report = core.validate(core.load_doc(PLACEMENT), path=PLACEMENT)
         self.assertEqual(report.errors, [])
-        self.assertEqual(report.warnings, [])
+        # The level carries two authored pointers that do not touch (`serving_tray_01` on
+        # the bench, `small_potted_plant_03` on the cooler).  Since the owner's 2026-11-16
+        # ruling those are warnings, never errors; this test is about the ramps, so it
+        # only requires that nothing *else* warns.
+        self.assertEqual([warning for warning in report.warnings
+                          if "[parent_not_seated]" not in warning], [])
 
 
 class ShippedLevelTests(unittest.TestCase):

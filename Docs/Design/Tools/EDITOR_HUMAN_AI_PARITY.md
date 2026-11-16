@@ -371,7 +371,7 @@ python3 Tools/leveleditor/ed.py --ops --json
 - 同一 op 的同一 JSON 分别走：`ed.py`、`POST /api/op`、GUI 的 `sendOp`（用浏览器冒烟或
   直接构造同一 payload）；比较 `result`（去掉 timings/paths）、`diff`、落盘 `sha256`。
 - 用临时关卡副本（`--levels-dir`）和临时 state/token；不碰仓库 `placement.json`。
-- 覆盖：move/rotate/set/set_def/remove/seat/expected/camera/undo/batch。
+- 覆盖：move/rotate/set/set_def/remove/seat/expected/camera/undo/batch/derive_supports/check（`derive_supports` 是把几何推导写成 `parent` 指针的 op，`parentDerived` 标记由它写；`check` 的 `strict_parents` 只把机推导链的几何失配判红，见 `PROP_BEHAVIOURS` §10.9「校验与 `pinned`」）。
 
 ## 3.5 dry-run == commit
 

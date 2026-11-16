@@ -52,13 +52,13 @@ python3 Tools/levelbuild/levelbuild.py check Tools/levelbuild/examples/placement
 
 | 子命令 | 作用 | 退出码 |
 |---|---|---|
-| `check <placement.json> [--report] [--json] [--strict]` | 全部硬规则；`--report` 打分区/定义/分档/三态表；`--strict` 把 warning 也当错 | 0 通过 / 1 有硬错误 / 2 读不到 |
+| `check <placement.json> [--report] [--json] [--strict] [--strict-parents]` | 全部硬规则；`--report` 打分区/定义/分档/三态表 + 父指针逐件表；`--strict` 把 warning 也当错；`--strict-parents` 只把**机推导**（`parentDerived`）的未接触链升成错 | 0 通过 / 1 有硬错误 / 2 读不到 |
 | `format <placement.json> [--check]` | 写成规范形（排序、取整、`-0.0→0.0`、2 空格、末尾换行、无 BOM）；`--check` 只判断 | 0 / 1（非规范） |
 | `seat <placement.json> [--write] [--item ID]` | 按**支撑面法线**重新坐好（默认 dry-run） | 0 |
 | `from-layout <layout.json> --out <placement.json> [--expected COUNT,UNITS]` | 把 `Docs/Design/StoryMode/picnic_corner_layout.json` 转成本格式（见 §5） | 0 / 2 |
-| `check` 的第二行组 | `supports derived: N` / `supports declared: N` / `supports derivable, not stored: N` / `supports unreproduced: N`（父指针的存量与漂移，见 §2.1） | — |
+| `check` 的第二行组 | `supports derived: N` / `supports declared: N` / `declared parent not seated: N` / `derived parent not seated: N` / `pinned (never falls): N` / `supports derivable, not stored: N`（父指针的存量、存疑与豁免，见 §2.1） | — |
 
-`check` 的硬规则（设计 §8 的 1–12、14 条）：schema/必填/未知 def/重复 `itemId`、`aabb` 与模型 manifest 一致、`absorbDiameterReq`/`absorbable` 不自相矛盾、越界、出生净空、**穿地**、**悬空**、叠放、道具互穿、穿入实体、预算（`planes/boxes/ramps/ground/blocking`）、斜面几何（坡度/坡脚/顶边）、`box` 与 `ramp` 同 id、总量与 `level.expected` 一致、**弯坡**（`curve_ramp` 的半径/弧角/宽厚/段数/弦高/重叠）；另外“文件不是规范形”是 **warning**（不是错）。
+`check` 的硬规则（设计 §8 的 1–12、14 条）：schema/必填/未知 def/重复 `itemId`、`aabb` 与模型 manifest 一致、`absorbDiameterReq`/`absorbable` 不自相矛盾、越界、出生净空、**穿地**、**悬空**（`pinned` 的除外）、父指针（`parent`/`stackedOn`：不存在/自环/环/两字段矛盾是错，几何不接触只是 warning）、道具互穿、穿入实体、预算（`planes/boxes/ramps/ground/blocking`）、斜面几何（坡度/坡脚/顶边）、`box` 与 `ramp` 同 id、总量与 `level.expected` 一致、**弯坡**（`curve_ramp` 的半径/弧角/宽厚/段数/弦高/重叠）；另外“文件不是规范形”是 **warning**（不是错）。
 
 > **坡度 > 45° 现在只是 warning**（2026-11-15，S4）：v2 能慢爬陡坡（`CONTACT_MODEL_V2` 3.10）。硬错误只剩物理上不可能的值——板面朝下（inverted）、90°（侧立就是墙）、零厚度、NaN。`--strict` 仍可把 warning 当错。
 
@@ -95,6 +95,7 @@ python3 Tools/levelbuild/levelbuild.py seat level.json --write
       "rotationQuat": [0, 0, 0, 1],             // Unity 顺序 (x,y,z,w)，规范符号
       "support": "picnic_table",                // 结构 id；或 "stackedOn": "<另一件 itemId>"
       // "parent": "<另一件 itemId>" 与此同义，是运行期要读的那一列（§2.1）
+      // "parentDerived": true  = 机推导写的；"pinned": true = 自己站着、永不落
       "aabb": [0.24, 0.025, 0.24],              // 未旋转的模型 AABB，Unity 轴向（y=高）
       "absorbDiameterReq": 0.302, "absorbable": true,   // 派生：check/format 会重算
       "valueUnits": 4
@@ -146,7 +147,11 @@ python3 Tools/levelbuild/levelctl.py derive-supports --apply           # 只写�
 * 竖直间隙 `bottom(子) - top(父)` 落在 `[-0.30, +0.50] × 较小世界高度`（`parent_gap_window`，校验器与推导共用这一个函数）；
 * 取**最高的那个顶面**；地面与结构永远不是父件；断环（`_break_cycles`）。
 
-`parentDerived: true` 只加在**机器推导**出来的链接上：它有上面那条间隙窗口；作者手写的 `parent`（旗子挂在杆上）不受窗口约束，也不会被 `--apply` 覆盖。`--apply` 对已有指针只报 `conflict` / `orphaned`，不静默改写——把一条错误的支撑改对是人的活，静默丢掉只会把堆叠 bug 变成悬空件。
+`parentDerived: true` 只加在**机器推导**出来的链接上，也不会被 `--apply` 覆盖。`--apply` 对已有指针只报 `conflict` / `orphaned`，不静默改写——把一条错误的支撑改对是人的活，静默丢掉只会把堆叠 bug 变成悬空件。
+
+**几何是报告，不是门**（owner 2026-11-16 裁定，`OPEN_DECISIONS` (t)）：作者的 `parent`/`stackedOn` 可以完全不接触——`serving_tray_01` 就摆在长凳左边 7.5 cm，`check` 说 `declared parent not seated: 2` 并给两条 `[parent_not_seated]` **warning**，关卡照样 PASS。运行期每 tick 复检「脚下有没有东西」（`PROP_BEHAVIOURS` §10.9），一条落空的指针只多一次检查。只有机推导的链在 `--strict-parents` 下才变红（那意味着文件过期，重跑 `derive-supports --apply`）。
+
+`pinned: true` 是显式的「这件自己站着，别让它掉」（装饰、挂着的招牌、云）：校验器不再报它悬空，运行期永不入队、永不下落，但**仍然是支撑面**，所以它是坠落传播的终点。`pinned` 与 `parent` 可以并存（挂在横梁上的招牌）。`false` 不写进文件；编辑器里 `set pinned=true` / `set pinned=null`。
 
 ## 3. 价值单位：按 def 声明，导入器照写（Lead 2026-11-15 决定）
 

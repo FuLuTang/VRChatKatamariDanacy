@@ -190,14 +190,17 @@ class ProposalTests(unittest.TestCase):
 class ValidatorTests(unittest.TestCase):
     """The codes the gate raises for a bad pointer, and silence for a good one."""
 
-    def report(self, document):
-        report = core.Report()
+    def boxes(self, document):
         boxes = {}
         for entry in document["props"]:
             world = supports.prop_box(entry)
             if world is not None:
                 boxes[entry["itemId"]] = world
-        core._check_parents(document, report, boxes)
+        return boxes
+
+    def report(self, document):
+        report = core.Report()
+        core._check_parents(document, report, self.boxes(document))
         return report
 
     def test_a_derived_link_in_contact_is_silent(self):
@@ -222,17 +225,36 @@ class ValidatorTests(unittest.TestCase):
         self.assertEqual(len(errors), 1, errors)
         self.assertIn("a -> b -> a", errors[0])
 
-    def test_a_derived_link_out_of_the_window_is_reported(self):
+    def test_a_derived_link_out_of_the_window_is_a_warning_until_strict(self):
+        """Owner ruling 2026-11-16: geometry is a report; ``strict_parents`` is the opt-in."""
         document = doc(box("plate", 0.0, [1.0, 0.2, 1.0]),
                        dict(box("cup", 0.9, [0.1, 0.1, 0.1]),
                             parent="plate", parentDerived=True))
-        errors = self.report(document).errors
-        self.assertTrue(any("[parent_seat]" in line for line in errors), errors)
+        plain = self.report(document)
+        self.assertEqual(plain.errors, [])
+        self.assertTrue(any("[parent_not_seated]" in line for line in plain.warnings),
+                        plain.warnings)
+        report = core.Report()
+        core._check_parents(document, report, self.boxes(document), strict_parents=True)
+        self.assertTrue(any("[parent_not_seated]" in line for line in report.errors),
+                        report.errors)
 
     def test_an_authored_attachment_is_not_held_to_the_window(self):
         document = doc(box("mast", 0.0, [0.1, 2.0, 0.1]),
                        dict(box("flag", 1.9, [0.4, 0.2, 0.02]), parent="mast"))
-        self.assertEqual(self.report(document).errors, [])
+        report = self.report(document)
+        self.assertEqual(report.errors, [])
+        self.assertTrue(any("[parent_not_seated]" in line for line in report.warnings),
+                        "the flag is beside the mast, not on it: worth saying, never blocking")
+
+    def test_an_authored_link_never_becomes_an_error_even_in_strict_mode(self):
+        document = doc(box("plate", 0.0, [1.0, 0.2, 1.0]),
+                       dict(box("tray", 0.9, [0.1, 0.1, 0.1]), parent="plate"))
+        report = core.Report()
+        core._check_parents(document, report, self.boxes(document), strict_parents=True)
+        self.assertEqual(report.errors, [])
+        self.assertTrue(any("[parent_not_seated]" in line for line in report.warnings),
+                        report.warnings)
 
     def test_parent_and_stacked_on_must_agree(self):
         document = doc(box("plate", 0.0, [1.0, 0.2, 1.0]), box("other", 0.0, [1.0, 0.2, 1.0]),
@@ -241,10 +263,44 @@ class ValidatorTests(unittest.TestCase):
         errors = self.report(document).errors
         self.assertTrue(any("[parent_conflict]" in line for line in errors), errors)
 
-    def test_parent_derived_without_a_parent_is_reported(self):
+    def test_parent_derived_without_a_parent_is_a_warning(self):
+        # A tool artifact (someone cleared the pointer by hand), not a broken level.
         document = doc(dict(box("cup", 0.0, [0.1, 0.1, 0.1]), parentDerived=True))
-        errors = self.report(document).errors
-        self.assertTrue(any("[parent_derived_orphan]" in line for line in errors), errors)
+        report = self.report(document)
+        self.assertEqual(report.errors, [])
+        self.assertTrue(any("[parent_derived_orphan]" in line for line in report.warnings),
+                        report.warnings)
+
+    def test_pinned_is_exempt_from_the_floating_rule(self):
+        document = core.load_doc(EXAMPLE)
+        acorn = next(prop for prop in document["props"] if prop["itemId"] == "prop_acorn_000")
+        acorn["position"] = [acorn["position"][0], 3.0, acorn["position"][2]]
+        floating = [line for line in core.validate(document, manifests=MANIFESTS).errors
+                    if "floats" in line]
+        self.assertTrue(floating, "an unpinned prop 3 m up must still be an error")
+        acorn["pinned"] = True
+        report = core.validate(document, manifests=MANIFESTS)
+        self.assertEqual([line for line in report.errors if "floats" in line], [])
+
+    def test_pinned_must_be_a_boolean(self):
+        document = core.load_doc(EXAMPLE)
+        acorn = next(prop for prop in document["props"] if prop["itemId"] == "prop_acorn_000")
+        acorn["pinned"] = "yes"
+        report = core.validate(document, manifests=MANIFESTS)
+        self.assertTrue(any("pinned must be true or false" in line for line in report.errors),
+                        report.errors)
+
+    def test_pinned_with_a_parent_is_the_hanging_sign_case(self):
+        """Pinned says "never drop me"; the pointer says "I belong to that".  Both at once."""
+        document = doc(box("mast", 0.0, [0.1, 2.0, 0.1]),
+                       dict(box("sign", 1.9, [0.4, 0.2, 0.02]), parent="mast", pinned=True))
+        report = self.report(document)
+        self.assertEqual(report.errors, [])
+        self.assertTrue(any("[parent_not_seated]" in line for line in report.warnings),
+                        report.warnings)
+        seats = core.seating_report(document)
+        self.assertEqual(seats["pinned"], ["sign"])
+        self.assertEqual([entry["itemId"] for entry in seats["notSeated"]], ["sign"])
 
     def test_the_code_shows_up_in_a_full_validate_run(self):
         document = core.load_doc(EXAMPLE)
@@ -288,6 +344,17 @@ class BenchSizeTests(unittest.TestCase):
                          ["serving_tray_01", "small_potted_plant_03"])
         self.assertEqual(diff["counts"]["new"], 0)
         self.assertEqual(diff["counts"]["conflict"], 0)
+
+    def test_the_level_passes_with_both_unseated_authored_links(self):
+        """The owner's ruling in one assertion: 0 errors, 2 native warnings, no promotion."""
+        report = core.validate(self.document, path=self.path)
+        self.assertEqual(report.errors, [])
+        unseated = [line for line in report.warnings if "[parent_not_seated]" in line]
+        self.assertEqual(len(unseated), 2, report.warnings)
+        self.assertTrue(any("serving_tray_01" in line for line in unseated))
+        self.assertTrue(any("small_potted_plant_03" in line for line in unseated))
+        strict = core.validate(self.document, path=self.path, strict_parents=True)
+        self.assertEqual(strict.errors, [])
 
     def test_structures_are_never_parents(self):
         links = supports.derive_supports(self.document)

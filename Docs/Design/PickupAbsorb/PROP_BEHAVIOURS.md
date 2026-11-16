@@ -721,6 +721,32 @@ int     pendingHead, pendingCount;
 - **容量**：约 14 个 `n` 长数组（int/float 各半）+ `childList` ≤ n。3,000 件的图 ≈ 4.2 万个数，Udon 堆上放得下；`pending` 取 n 一定够（每件同一时刻最多入队一次）。
 - **不进数组的**：`rests_on` / `liveSupporters` / 组 id / 组内序号 / 群组表。组 = 沿 `propParent` 往上走 + `childStart` 往下取，都能从这三个数组现算，所以「组表」不是第四份数据。
 - **导出侧**：`placement.json` 只多 `parent`（和 `parentDerived` 标记），CSR 与状态数组都是烘焙产物、不入库。列的顺序和索引即契约，Unity 侧按行号绑定，改名/重排等价于换数据格式。
+- **落点要用「步前」的底面比**：`top <= 步前底面` 才是「这一步踩到了它」。一步 1/30 s、初速 0 时只走 ~1 mm，但已经有速度的件一步能跨 10 cm 以上；拿**步后**底面去比 `top <= bottom` 会直接穿过薄桌面（1.8 m 下坠穿过 24 mm 薄板只需 2 步）。参考模型 `floating_requeue._landing_top(i, from_bottom)` 的 `from_bottom` 就是步前底面，§5.6 的旧模型同参数——C# 侧照抄这个参数形状。
+
+#### 校验与 `pinned`（2026-11-16 第五轮，所有者裁定）：几何是报告，不是门
+
+所有者当日的裁定：「engine 不能禁止这个」——`serving_tray_01` 就摆在长凳左边 7.5 cm、`small_potted_plant_03` 离冰柜 88 cm，作者要的就是这个摆法，**不要动它们，也不要让作者改**。所以校验器里那条「声明了 `stackedOn` 就必须顶底对齐 ±1 cm」是错的思路，拆成三条：
+
+1. **作者的指针不是几何断言**。`parent` / `stackedOn` 说「这东西属于那件、被那件带着」，可以完全不接触（挂在杆上的招牌、摆在旁边的托盘）。校验器只把它当**报告**：`levelbuild.py check` 每次都打 `declared parent not seated: N`，`--report` 打逐件表格（哪件、指着谁、差多少、为什么不接触）。代码 `[parent_not_seated]`，默认 **warning**，**任何模式下都不会因它变红**。
+2. **只有机器推导的链接受几何约束**。`parentDerived: true` 的边是 `supports.derive_supports` 按几何写进去的；它不再成立 ⇒ 文件过期 ⇒ `--strict-parents` 下是 **error**（并提示重跑 `levelctl.py derive-supports --apply`）。默认模式仍是 warning，因为运行期每 tick 复检，一条错指针的代价只多一次检查。
+3. **`pinned: true`**：作者声明「这件自己站着，别让它掉」——装饰、挂着的招牌、云。校验器不再报它「悬空」（陷地、越界、穿结构照旧报）。`pinned` 在 `PROP_KEYS` 里紧跟 `parentDerived`，`false` 不写进文件。
+
+**`pinned` 在 v1 运行期里的语义**（参考实现 `prop_behaviours/floating_requeue.py`，14 个用例在 `Docs/tests/prop_behaviours/test_floating_requeue.py`；同目录的 `support_graph.py` 是**被取代**的计数模型的参考实现，只作对照）：
+
+| 规则 | 后果 |
+|---|---|
+| 永不入队 | 父件被吃、父件开始落时 `enqueue` 直接跳过它 ⇒ 它**永远进不了 FALLING** |
+| 永远是支撑面 | 状态一直是 RESTING / SETTLED，别人照样能放在它上面，它的顶面参与别人的浮空测试 |
+| 是传播的终点 | A 上钉着 P、P 上放着 C：吃掉 A，P 不动 ⇒ C 复检时仍看见 P 的顶面 ⇒ C 也不动 |
+| 可以同时有 `parent` | 「挂在横梁上的招牌」：指针说明它属于谁（记账、被吃时一起处理），`pinned` 说明梁没了也别掉；两者同时存在时 `pinned` 只管「别掉」 |
+| 被吃掉时孩子照落 | `pinned` 只保护自己；`absorb(p)` 仍然把 p 的子件入队 |
+
+「pinned 挡住传播」与「pinned 被吃时孩子照落」不矛盾：前者是**几何事件**（脚下没了），后者是**显式事件**（东西被拿走了）。
+
+三种「不掉」的来源各管一段，互不重叠：`support: <结构 id>` = 站在不会被吸走的东西上；`parent`（作者的）=「我属于它」，不保证接触、运行期自己复检；`pinned` =「我自己站着」，运行期**根本不问**。`pinned` 不会让坏指针变成好数据：存在性、自环、环、两个字段互相矛盾仍然是 error。
+
+**实测（2026-11-16，本仓）**：`story_01_bench_size`（130 件 / 8 条作者指针）在默认模式 `PASS (0 error(s), 2 warning(s))`，两条 warning 就是上面那两件（`serving_tray_01` 足迹不重叠、`small_potted_plant_03` 足迹不重叠）；`--strict-parents` 下同样 0 错（它们是作者写的，不是机推导的）。`--strict`（把**所有** warning 当错）会红成 2 错——这是通用开关，不是父指针的规则。所有已提交关卡复查：`hub` / `physics_test_field` 全部 PASS，只有 story 这两条父指针 warning（另有 C06 一条与本题无关的「斜 box」warning）。
+
 
 **支撑指针从哪来（本轮已落地的 Python 侧）**：`Tools/levelbuild/supports.py` 在导入时按几何推导（旋转感知的世界 AABB、足迹相交、`gap ∈ [-0.30, +0.50] × 较小高度`、取最高顶面、断环），`parentDerived: true` 标记它是机器给的；作者手写的 `parent` 不标。依据 `Docs/Research/KatamariBallRules/STACKS_IN_ORIGINAL.md`：原版 987 个接触里只有 28% 有指针、322 摞里 72% 完全没有指针 —— 所以「谁压着谁」在原版是**几何算出来的**，我们的指针只是把它缓存下来，运行期仍按本节每 tick 复检。
 

@@ -263,15 +263,20 @@ class MutationTests(EditorCase):
         self.assertEqual(self.ok("check")["errorCount"], 0)
 
     def test_seat_repairs_a_displaced_stacked_prop(self):
-        # A prop 5 cm off its plate is a "stacked" error, so it cannot go through `set`
-        # (the gate refuses it); that is exactly the file a human hands to `seat`.
+        # A prop 5 cm off its plate is a *warning* since the owner's 2026-11-16 ruling (an
+        # authored pointer is never a geometric claim that must hold), so the file opens
+        # green - and `seat` is still what repairs it.
         document = json.loads(self.path.read_text(encoding="utf-8"))
         cookie = next(prop for prop in document["props"]
                       if prop["itemId"] == "prop_cookie_000")
         cookie["position"][1] += 0.05
         self.path.write_text(core.dump_doc(document, MANIFESTS), encoding="utf-8")
         editor = editor_core.Editor(FakeScene(), manifests=MANIFESTS)
-        self.assertFalse(editor.open(None, self.path)["gate"]["ok"])
+        gate = editor.open(None, self.path)["gate"]
+        self.assertTrue(gate["ok"], gate["errors"])
+        self.assertEqual(gate["errorCount"], 0)
+        self.assertTrue(any("[parent_not_seated]" in warning for warning in gate["warnings"]),
+                        gate["warnings"])
 
         result = editor.handle({"op": "seat", "args": {}})
         self.assertTrue(result["ok"], result["error"])
@@ -597,6 +602,38 @@ class DeriveSupportsTests(EditorCase):
         cookie = self.prop("prop_cookie_000")
         self.assertEqual(cookie["stackedOn"], "prop_plate_000")
         self.assertNotIn("parent", cookie)
+
+    def test_a_stale_derived_link_only_fails_under_strict_parents(self):
+        # Apply, then move the prop off its supporter: the pointer is now machine-stale.
+        self.ok("derive_supports", apply=True)
+        self.ok("move", id="prop_acorn_000", delta=[0.0, 0.5, 0.0])
+        self.ok("set", id="prop_acorn_000", pinned=True)      # stands on its own: no float error
+        plain = self.ok("check")
+        self.assertEqual(plain["errorCount"], 0)
+        self.assertTrue(any("[parent_not_seated]" in warning
+                            for warning in plain["warnings"]), plain["warnings"])
+        strict = self.ok("check", strict_parents=True)
+        self.assertFalse(strict["ok"])
+        self.assertTrue(any("[parent_not_seated]" in error for error in strict["errors"]),
+                        strict["errors"])
+
+    def test_pinned_is_settable_and_clears_cleanly(self):
+        self.ok("set", id="prop_plate_000", pinned=True)
+        self.assertIs(self.prop("prop_plate_000")["pinned"], True)
+        self.assertEqual(self.ok("status")["counts"]["pinned"], 1)
+        self.ok("set", id="prop_plate_000", pinned=False)
+        self.assertNotIn("pinned", self.prop("prop_plate_000"), "false must not be written")
+        self.assertEqual(self.ok("status")["counts"]["pinned"], 0)
+
+    def test_pinning_is_what_makes_a_floating_prop_legal(self):
+        # The acorn floats in this fixture; `pinned` is the author's "it stands on its own".
+        self.ok("set", id="prop_acorn_000", pinned=True)
+        self.assertEqual(self.ok("status")["gate"]["errorCount"], 0)
+        # Unpinning re-arms the floating rule, so the same document is refused again.
+        refused = self.refused("set", id="prop_acorn_000", pinned=False)
+        self.assertTrue(any("floats" in detail for detail in refused["details"]),
+                        refused["details"])
+        self.assertIs(self.prop("prop_acorn_000")["pinned"], True)
 
     def test_a_second_apply_is_nothing_to_do(self):
         self.ok("derive_supports", apply=True)

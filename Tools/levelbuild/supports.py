@@ -59,19 +59,10 @@ GRID_CELL_M = 1.0
 GRID_MAX_CELLS = 1024
 
 
-def prop_box(prop):
-    """Rotation-aware world AABB of one prop, or ``None`` when its fields do not parse."""
-    try:
-        position = tuple(float(value) for value in prop["position"])
-        size = tuple(float(value) for value in prop["aabb"])
-        quat = tuple(float(value) for value in prop["rotationQuat"])
-    except (KeyError, TypeError, ValueError):
-        return None
-    if len(position) != 3 or len(size) != 3 or len(quat) != 4:
-        return None
-    if any(value <= 0.0 for value in size):
-        return None
-    return core.world_aabb(position, size, quat)
+#: Rotation-aware world AABB of one prop, or ``None`` when its fields do not parse.
+#: It lives in ``placement_core`` because the validator, the derivation and the runtime
+#: reference model all need the same box; this name is kept for the existing callers.
+prop_box = core.prop_box
 
 
 def _footprint_overlap(child, supporter):

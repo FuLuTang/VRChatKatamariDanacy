@@ -60,7 +60,7 @@ README、`Docs/Research/ContentVolume/`、`Tools/levelbuild/placement_core.py` �
 |---|---|---|
 | R20 | 一件可吸物要么「贴地」，要么「踩在结构上」(`support`)，要么「叠在另一件上」(`stackedOn`)。三者互斥 | `placement_core.py:1268`（`_support_surface`）；`LEVEL_AUTHORING.md` §4.2 |
 | R21 | `stackedOn` 是**单支撑者**：校验器只认一个。多支撑（桌面搭两条腿）今天**表达不出来** | `placement_core.py:1268`；`LEVEL_AUTHORING.md` §4.2 |
-| R22 | 叠放必须顶/底对齐：上下两件的高度差 ≤ **1 cm**（`STACK_TOLERANCE_M`）；陷进 ≤1 cm 算接触，浮起 >2 cm 算悬空 | `placement_core.py:71-74` |
+| R22 | ~~叠放必须顶/底对齐 ≤ **1 cm**（`STACK_TOLERANCE_M`）~~ **已废（2026-11-16 owner 裁定，见 `OPEN_DECISIONS` (t)）**：作者声明的关系不要求接触，几何只出 `declared parent not seated` 的 warning；接触窗口改为 `[-0.30, +0.50] × min(两件世界高度)`，机推导链在 `--strict-parents` 下才错 | `placement_core.py` 的 `parent_gap_window` / `_check_parents` |
 | R23 | 重叠：除声明过的叠放关系外，两件道具的水平重叠不得超过 **5%**；道具穿结构 ≤2 cm | `placement_core.py:76-79` |
 | R24 | 容器/支架是**两段式**：球小的时候它是地形（挡路/可绕/当掩体），球大了整件可吞，且**上面/里面先有小件**（先清小件再吃支架） | `DungBeetleMeadow/README.md` §3.4；`MessyRoom/README.md` §3.4 |
 | R25 | 一个结构的身份有三种（地形 / 可吞 / 可吞+其上小件），由校验器预测、运行期自行判定；**同一个 box 不能既是斜坡又是墙** | `LEVEL_AUTHORING.md` §10.3、§10.4 |

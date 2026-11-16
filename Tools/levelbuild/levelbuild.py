@@ -55,26 +55,55 @@ def _summary(doc):
                level.get("ballDiameterMax")))
 
 
+def _seating(doc):
+    return core.seating_report(doc)
+
+
 def _supports_text(doc):
     """Support pointers: what is stored, and what the geometry would say right now.
 
-    The stored count is the one number the runtime depends on; the derivable / unreproduced
-    numbers are the drift check - a level whose import ran with an older item size, or a
-    hand edit that moved a prop off its supporter, shows up here without failing the gate
-    (a parent pointer is an optimisation, not a rule).
+    The stored count is the one number the runtime depends on.  ``declared parent not
+    seated`` is a *report*: an author's pointer is never a claim that must geometrically
+    hold (owner ruling 2026-11-16 - a tray may be declared on a bench it does not touch,
+    a sign may hang off a mast), so it never fails the gate; ``--strict-parents`` is what
+    turns it into an error, and only for machine-derived links.
     """
     diff = support_geometry.propose(doc)
     counts = diff["counts"]
+    seats = _seating(doc)
     derived = support_geometry.count_derived(doc)
+    authored_not = [entry for entry in seats["notSeated"] if not entry["derived"]]
+    derived_not = [entry for entry in seats["notSeated"] if entry["derived"]]
     lines = ["supports derived: %d" % derived]
     if counts["declared"] != derived:
         lines.append("supports declared: %d" % counts["declared"])
+    lines.append("declared parent not seated: %d" % len(authored_not))
+    if derived_not:
+        lines.append("derived parent not seated: %d" % len(derived_not))
+    if seats["pinned"]:
+        lines.append("pinned (never falls): %d" % len(seats["pinned"]))
     if diff["new"]:
         lines.append("supports derivable, not stored: %d" % len(diff["new"]))
-    if diff["orphaned"] or diff["conflict"]:
-        lines.append("supports unreproduced: %d (%d conflicting, %d not found by geometry)"
-                     % (len(diff["conflict"]) + len(diff["orphaned"]),
-                        len(diff["conflict"]), len(diff["orphaned"])))
+    return "\n".join(lines)
+
+
+def _pointer_report_text(doc):
+    """One row per stored pointer: is it seated, and if not, why (``check --report``)."""
+    seats = _seating(doc)
+    if not seats["seated"] and not seats["notSeated"]:
+        return ""
+    lines = ["%-24s %-24s %-8s %6s  %s" % ("prop", "parent", "kind", "gap", "geometry")]
+    for entry in seats["seated"] + seats["notSeated"]:
+        # `+ 0.0` turns a rounded -0.0 into 0.0: `-0.000` in a report reads as a bug.
+        gap = round(float(entry["gap"]), 3) + 0.0
+        lines.append("%-24s %-24s %-8s %6.3f  %s"
+                     % (entry["itemId"], entry["parent"],
+                        "derived" if entry["derived"] else "authored", gap,
+                        entry.get("reason") or "seated"))
+    if seats["pinned"]:
+        lines.append("")
+        lines.append("pinned (never falls, exempt from the floating rule): %s"
+                     % ", ".join(seats["pinned"]))
     return "\n".join(lines)
 
 
@@ -124,7 +153,8 @@ def cmd_check(args):
             return 2
         manifests = core.load_manifests(directory)
 
-    report = core.validate(doc, path=path, manifests=manifests)
+    report = core.validate(doc, path=path, manifests=manifests,
+                           strict_parents=args.strict_parents)
     if args.strict:
         report.errors.extend(report.warnings)
         report.warnings = []
@@ -140,6 +170,16 @@ def cmd_check(args):
             "props": len([p for p in doc.get("props") or [] if isinstance(p, dict)]),
             "growthMm3": core.growth_mm3_total(doc),
             "supports": support_geometry.propose(doc)["counts"],
+            "seating": {
+                "seated": len(_seating(doc)["seated"]),
+                "notSeated": len(_seating(doc)["notSeated"]),
+                "authoredNotSeated": len([entry for entry in _seating(doc)["notSeated"]
+                                          if not entry["derived"]]),
+                "derivedNotSeated": len([entry for entry in _seating(doc)["notSeated"]
+                                         if entry["derived"]]),
+                "pinned": len(_seating(doc)["pinned"]),
+                "notSeatedParents": _seating(doc)["notSeated"],
+            },
             "errors": report.errors,
             "warnings": report.warnings,
             "notes": report.notes,
@@ -156,6 +196,10 @@ def cmd_check(args):
         print(core.format_report_tables(report.tables,
                                         expected=(doc.get("level") or {}).get("expected")))
         print("")
+        pointers = _pointer_report_text(doc)
+        if pointers:
+            print(pointers)
+            print("")
 
     text = _report_text(report, doc)
     if text:
@@ -668,6 +712,9 @@ def build_parser():
                        help="print the zone / def / tier / three-state tables")
     check.add_argument("--json", action="store_true", help="print the report as JSON")
     check.add_argument("--strict", action="store_true", help="treat warnings as errors")
+    check.add_argument("--strict-parents", action="store_true", dest="strict_parents",
+                       help="a *derived* parent pointer whose geometry no longer contacts "
+                            "becomes an error (an authored pointer never does)")
     check.set_defaults(func=cmd_check)
 
     fmt = sub.add_parser("format", help="rewrite the file in canonical (deterministic) form")

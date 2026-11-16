@@ -128,15 +128,16 @@ BOUNDS_MARGIN_M = 0.05
 #: "Not sunk / not floating" tolerance against the declared support surface.
 SINK_TOLERANCE_M = 0.01
 FLOAT_TOLERANCE_M = 0.02
-#: Stacked props: the upper one's bottom against the lower one's top.
-STACK_TOLERANCE_M = 0.01
-#: A *derived* support link (``parent`` + ``parentDerived``) is allowed to be embedded in
-#: its supporter, or to hover above it, by a fraction of the smaller of the two heights:
-#: ``bottom_child - top_parent`` in ``[-0.30, +0.50] * min(height_child, height_parent)``.
+#: A support link - authored ``parent``/``stackedOn`` or derived ``parent`` - is allowed to
+#: be embedded in its supporter, or to hover above it, by a fraction of the smaller of the
+#: two heights: ``bottom_child - top_parent`` in
+#: ``[-0.30, +0.50] * min(height_child, height_parent)``.
 #: Calibrated on 1,259 parent links of the retail dump (median gap -0.03 m, 82% within
 #: +-0.25 of a min height); evidence ``Docs/Research/KatamariBallRules/STACKS_IN_ORIGINAL.md``
-#: sections 2.1/2.2.  ``stackedOn`` keeps the tighter, absolute ``STACK_TOLERANCE_M``: it is
-#: a hand-authored seating claim, not a machine guess.
+#: sections 2.1/2.2.  The old absolute ``STACK_TOLERANCE_M`` (10 mm) is gone: it was the
+#: strictest rule in the file and the owner ruled it wrong (2026-11-16) - an author's
+#: declaration is never a geometric claim that must hold, so being off the top is a
+#: *report* (warning), not an error.  ``PARITY_AUDIT`` row 3.
 PARENT_EMBED_FRACTION = 0.30
 PARENT_GAP_FRACTION = 0.50
 #: A prop penetrating a solid structure deeper than this is an error.
@@ -207,8 +208,9 @@ LEVELS_DIR = ROOT / "Docs/Design/Levels"
 # units", the second growth currency Steps C+D retire (WHY_OUR_GROWTH_IS_BIG.md section 2).
 # `growthMm3` is DERIVED (like absorbDiameterReq/absorbable) and is the one growth number.
 PROP_KEYS = ("itemId", "def", "kind", "zone", "group", "groupId", "position", "rotationQuat",
-             "support", "stackedOn", "parent", "parentDerived", "aabb", "absorbDiameterReq",
-             "absorbable", "growthMm3", "volumeK", "volumePenalty", "notes")
+             "support", "stackedOn", "parent", "parentDerived", "pinned", "aabb",
+             "absorbDiameterReq", "absorbable", "growthMm3", "volumeK", "volumePenalty",
+             "notes")
 STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
                   "collision", "absorbable", "support", "meets", "material", "notes")
 CAMERA_KEYS = ("id", "type", "location", "target", "lens", "coverage_m")
@@ -484,6 +486,106 @@ def world_aabb(position, size, quat_xyzw):
     """``((minx, miny, minz), (maxx, maxy, maxz))`` of a rotated box."""
     half = world_half_extents(size, quat_xyzw)
     return (sub(position, half), add(position, half))
+
+
+def prop_box(prop):
+    """Rotation-aware world AABB of one prop, or ``None`` when its fields do not parse."""
+    try:
+        position = tuple(float(value) for value in prop["position"])
+        size = tuple(float(value) for value in prop["aabb"])
+        quat = tuple(float(value) for value in prop["rotationQuat"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if len(position) != 3 or len(size) != 3 or len(quat) != 4:
+        return None
+    if any(value <= 0.0 for value in size):
+        return None
+    return world_aabb(position, size, quat)
+
+
+def contact(child_box, supporter_box):
+    """Does ``child_box`` rest on ``supporter_box``?  ``(ok, gap, overlap)``.
+
+    The one predicate behind derivation, the validator's seating warning and the runtime
+    reference model, so the three cannot drift: the footprints must touch (an overlap of
+    exactly 0 counts, a gap does not) and the vertical gap must be inside
+    :func:`parent_gap_window`.  ``ok`` also requires the supporter's top to be *below* the
+    child's top, because a support below the item is what "rests on" means; the caller
+    decides whether a failure is an error, a warning or irrelevant.
+    """
+    gap = child_box[0][1] - supporter_box[1][1]
+    overlap = footprint_overlap(child_box, supporter_box)
+    if overlap is None:
+        return (False, gap, None)
+    low, high = parent_gap_window(child_box, supporter_box)
+    return (low <= gap <= high and supporter_box[1][1] < child_box[1][1], gap, overlap)
+
+
+def footprint_overlap(child_box, supporter_box):
+    """Overlap area of two world-AABB footprints on XZ; ``None`` when they do not touch."""
+    dx = min(child_box[1][0], supporter_box[1][0]) - max(child_box[0][0], supporter_box[0][0])
+    dz = min(child_box[1][2], supporter_box[1][2]) - max(child_box[0][2], supporter_box[0][2])
+    if dx < -1e-9 or dz < -1e-9:
+        return None
+    return dx * dz
+
+
+def seat_verdict(child_box, parent_box):
+    """``(seated, gap, overlap, reason)`` for a declared/derived link, reason in prose.
+
+    One place builds the sentence, so the validator's warning and the CLI report agree.
+    """
+    seated, gap, overlap = contact(child_box, parent_box)
+    if seated:
+        return (True, gap, overlap, "")
+    if overlap is None:
+        return (False, gap, None, "the footprints do not overlap")
+    if parent_box[1][1] >= child_box[1][1]:
+        return (False, gap, overlap, "the declared supporter's top is not below this prop")
+    low, high = parent_gap_window(child_box, parent_box)
+    return (False, gap, overlap,
+            "the bottom is %+.3f m from the top (the contact window is %+.3f .. %+.3f m)"
+            % (gap, low, high))
+
+
+def seating_report(doc):
+    """Every stored pointer, split by whether its geometry actually contacts.
+
+    The author-facing half of the rule: a pointer that does not hold is *reported* here and
+    never blocks the gate, because the runtime re-checks the geometry per tick anyway
+    (``PROP_BEHAVIOURS`` 10.9).  Returns::
+
+        {"seated": [{"itemId","parent","derived","gap","overlap"}],
+         "notSeated": [{"itemId","parent","derived","gap","overlap","reason"}],
+         "pinned": [itemId, ...]}
+    """
+    props = [prop for prop in doc.get("props") or [] if isinstance(prop, dict)]
+    by_id = {}
+    for prop in props:
+        if isinstance(prop.get("itemId"), str):
+            by_id.setdefault(prop["itemId"], prop)
+    seated, not_seated, pinned = [], [], []
+    for prop in props:
+        item_id = prop.get("itemId")
+        if prop.get("pinned") is True and isinstance(item_id, str):
+            pinned.append(item_id)
+        parent = prop_parent(prop)
+        if not parent or not isinstance(item_id, str):
+            continue
+        child_box = prop_box(prop)
+        parent_box = prop_box(by_id[parent]) if parent in by_id else None
+        if child_box is None or parent_box is None:
+            continue
+        ok, gap, overlap, reason = seat_verdict(child_box, parent_box)
+        entry = {"itemId": item_id, "parent": parent,
+                 "derived": prop.get("parentDerived") is True,
+                 "gap": round(gap, 4), "overlap": None if overlap is None else round(overlap, 6)}
+        if ok:
+            seated.append(entry)
+        else:
+            entry["reason"] = reason
+            not_seated.append(entry)
+    return {"seated": seated, "notSeated": not_seated, "pinned": sorted(pinned)}
 
 
 def box_corners(position, size, quat_xyzw):
@@ -2310,23 +2412,10 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
                            % (item_id, "stackedOn" if prop.get("stackedOn") else "parent",
                               payload))
                 continue
-            expected = boxes[payload][1][1]
-            gap = bottom - expected
-            if prop.get("stackedOn") == payload:
-                # A hand-authored seating claim: tight, absolute.
-                if abs(gap) > STACK_TOLERANCE_M:
-                    report.err("%s sits %.3f m off the top of %r (its bottom %.3f, that top "
-                               "%.3f)" % (item_id, gap, payload, bottom, expected))
-            elif prop.get("parentDerived"):
-                # A machine-derived link: the calibrated contact window (same numbers as
-                # `_check_parents`, one shared function).
-                low, high = parent_gap_window(box, boxes[payload])
-                if gap < low or gap > high:
-                    report.err("%s [parent_seat]: bottom is %+.3f m from the top of parent %r "
-                               "(a derived link must stay within %+.3f .. %+.3f m)"
-                               % (item_id, gap, payload, low, high))
-            # A hand-authored attachment (`parent` without `parentDerived`) is not a
-            # seating claim: a flag on a mast is legitimately off the top, so no check.
+            # Whether the claim *holds* is a report, not a gate (`_check_parents`): an
+            # authored pointer may be an attachment, and the runtime re-checks geometry
+            # every tick.  Here we only need the target to exist so the rest of this pass
+            # has a surface to measure against.
             continue
 
         if kind == "floor":
@@ -2351,7 +2440,13 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
             report.err("%s is sunk %.3f m into %s (its lowest corner is under the surface)"
                        % (item_id, -worst, label))
         elif worst > FLOAT_TOLERANCE_M:
-            report.err("%s floats %.3f m above %s" % (item_id, worst, label))
+            if prop.get("pinned") is True:
+                # The author says this thing stands on its own (decor, a hanging sign, a
+                # cloud).  Pinned props are never enqueued for the floating re-check, so
+                # there is nothing to complain about - and nothing to fix.
+                pass
+            else:
+                report.err("%s floats %.3f m above %s" % (item_id, worst, label))
         if bottom < -SINK_TOLERANCE_M:
             report.err("%s reaches %.3f m below y=0" % (item_id, bottom))
 
@@ -2438,14 +2533,23 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
         report.err("... %d more prop/structure penetration(s)" % (printed - DETAIL_LIMIT))
 
 
-def _check_parents(doc, report, boxes):
-    """``parent`` / ``parentDerived``: existence, self, cycles and the seat window.
+def _check_parents(doc, report, boxes, strict_parents=False):
+    """``parent`` / ``parentDerived`` / ``pinned``: broken data is an error, geometry is a report.
 
-    ``parent`` is the *runtime* pointer (eat the parent and the children come down with
-    it), not a seating claim like ``stackedOn``.  A **derived** link must sit inside the
-    calibrated contact window, because derivation looked at geometry and nothing else; an
-    authored link may be a rigid attachment (a flag on a mast, a fish in a school) and is
-    not held to it.
+    The owner's ruling (2026-11-16): an **author's** pointer is never a claim that must
+    geometrically hold.  A prop may be declared to hang off a mast, to be carried by
+    something it does not touch, or to stand on its own (``pinned``); the engine must not
+    forbid that.  So there are two severities inside one pass:
+
+    * **broken data** (error, always): the pointer names something that does not exist, is
+      the prop itself, forms a cycle, or contradicts ``stackedOn``.  The runtime cannot
+      resolve any of those, so the level is not importable.
+    * **geometry** (``parent_not_seated``): feet and top are not in contact.  A *warning*
+      normally - the runtime re-checks the geometry every tick (``PROP_BEHAVIOURS`` 10.9),
+      so a pointer that does not hold costs one wasted check, not a broken level.  With
+      ``strict_parents`` a **derived** link (``parentDerived``) becomes an error, because
+      derivation looked at geometry and nothing else: if it no longer holds, the file is
+      stale and a tool should be re-run.  An *authored* link stays a warning even there.
     """
     props = [prop for prop in doc.get("props") or [] if isinstance(prop, dict)]
     by_id = {}
@@ -2454,19 +2558,27 @@ def _check_parents(doc, report, boxes):
         if isinstance(item_id, str) and item_id:
             by_id.setdefault(item_id, prop)
 
+    for prop in props:
+        if prop.get("pinned") is not None and not isinstance(prop.get("pinned"), bool):
+            report.err("%s.pinned must be true or false (got %r)"
+                       % (prop.get("itemId"), prop.get("pinned")))
+
     links = {}
     for prop in props:
         item_id = prop.get("itemId")
         if not isinstance(item_id, str) or not item_id:
             continue
-        parent = prop.get("parent")
+        # The relation has two spellings (``parent`` is the runtime pointer, ``stackedOn``
+        # the older author word); `prop_parent` is the one resolution point.
+        parent = prop_parent(prop)
         derived = prop.get("parentDerived")
         if derived is not None and not isinstance(derived, bool):
             report.err("%s.parentDerived must be true or false (got %r)" % (item_id, derived))
         if parent is None:
             if derived:
-                report.err("%s [parent_derived_orphan]: parentDerived is true but the prop has "
-                           "no parent" % item_id)
+                # A tool artifact (the pointer was cleared by hand), not a broken level.
+                report.warn("%s [parent_derived_orphan]: parentDerived is true but the prop has "
+                            "no parent; drop the flag or name the parent" % item_id)
             continue
         if not isinstance(parent, str) or not parent.strip():
             report.err("%s [parent_missing]: parent must be a prop itemId (got %r)"
@@ -2481,7 +2593,7 @@ def _check_parents(doc, report, boxes):
         stack = prop.get("stackedOn")
         if isinstance(stack, str) and stack and stack != parent:
             report.err("%s [parent_conflict]: parent %r and stackedOn %r name different props"
-                       % (item_id, parent, stack))
+                       % (item_id, prop.get("parent"), stack))
             continue
         links[item_id] = parent
 
@@ -2506,22 +2618,26 @@ def _check_parents(doc, report, boxes):
 
     for item_id in sorted(links):
         prop = by_id.get(item_id) or {}
-        if not prop.get("parentDerived"):
-            continue
         child_box, parent_box = boxes.get(item_id), boxes.get(links[item_id])
         if child_box is None or parent_box is None:
             continue
-        gap = child_box[0][1] - parent_box[1][1]
-        low, high = parent_gap_window(child_box, parent_box)
-        if low == 0.0 and high == 0.0:
+        seated, gap, overlap, reason = seat_verdict(child_box, parent_box)
+        if seated:
             continue
-        smallest = min(child_box[1][1] - child_box[0][1], parent_box[1][1] - parent_box[0][1])
-        if gap < low or gap > high:
-            report.err("%s [parent_seat]: bottom is %+.3f m from the top of parent %r "
-                       "(a derived link must stay within %+.3f .. %+.3f m, i.e. %.0f%%/%.0f%% "
-                       "of the smaller height %.3f m)"
-                       % (item_id, gap, links[item_id], low, high,
-                          PARENT_EMBED_FRACTION * 100.0, PARENT_GAP_FRACTION * 100.0, smallest))
+        derived = prop.get("parentDerived") is True
+        message = ("%s [parent_not_seated]: %s %r - %s"
+                   % (item_id, "derived parent" if derived else "declared parent",
+                      links[item_id], reason))
+        if derived:
+            message += ("; re-run the derivation (levelctl.py derive-supports --apply)"
+                        if strict_parents else "; -strict-parents makes this an error")
+            if strict_parents:
+                report.err(message)
+            else:
+                report.warn(message)
+        else:
+            # Authored links never fail the gate, in any mode.
+            report.warn(message + "; the runtime re-checks it per tick")
 
 
 def _check_expected(doc, report):
@@ -2607,8 +2723,13 @@ def _check_determinism(path, doc, report):
         report.err("%s starts with a UTF-8 BOM" % path)
 
 
-def validate(doc, path=None, manifests=None):
-    """Run every hard rule; returns a :class:`Report` (``report.ok`` is the gate)."""
+def validate(doc, path=None, manifests=None, strict_parents=False):
+    """Run every hard rule; returns a :class:`Report` (``report.ok`` is the gate).
+
+    ``strict_parents`` promotes a *derived* pointer whose geometry no longer contacts
+    (``parent_not_seated``) from a warning to an error; an authored pointer stays a warning
+    (owner ruling 2026-11-16, see ``_check_parents``).
+    """
     report = Report()
     manifests = manifests if manifests is not None else load_manifests()
     report.manifests = manifests
@@ -2630,7 +2751,7 @@ def validate(doc, path=None, manifests=None):
     _check_arena(doc, report, structures_by_id, path)
     _check_bounds_and_spawn(doc, report, boxes)
     _check_support_and_overlap(doc, report, boxes, structures_by_id)
-    _check_parents(doc, report, boxes)
+    _check_parents(doc, report, boxes, strict_parents=strict_parents)
     _check_expected(doc, report)
     _check_determinism(path, doc, report)
     report.tables.update(population_tables(doc, manifests))
@@ -2647,14 +2768,8 @@ def population_tables(doc, manifests=None):
     floor = ground_level(doc)
     structures_by_id = _index_structures(doc)
 
-    def prop_box(prop):
-        """World AABB of a prop, or ``None`` when its fields do not parse."""
-        try:
-            return world_aabb(tuple(float(v) for v in prop["position"]),
-                              tuple(float(v) for v in prop["aabb"]),
-                              tuple(float(v) for v in prop["rotationQuat"]))
-        except (KeyError, TypeError, ValueError):
-            return None
+    # `prop_box` is the module-level one: the strict version that also rejects a
+    # non-positive aabb, so the tables and the seating check agree on what "a box" is.
 
     def support_height(prop, box):
         """Height of the surface under the prop (its declared support's top)."""

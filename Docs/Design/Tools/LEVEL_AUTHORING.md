@@ -168,7 +168,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 1. **真源是 JSON，不是 `.blend`**。`.blend` 是草稿（可以进 `Docs/Design/Levels/<id>/work/` 或者根本不进仓库）；`.blend` 里的手工改动**不会**自动变成数据，必须走导出。
 2. **导入是单向的**。导入器从不反向写 JSON；在受管子树里手改的位移会在下次导入被覆盖（§7.2 有明确的「怎么让人知道」）。
 3. **受管子树是硬边界**。导入器只创建/更新/删除 `LevelContent` 根之下、由它自己命名的节点；球、回合、HUD、Station、房间接线一律不碰（§7.1）。
-4. **校验器是关卡的门**。`placement.json` 进仓库前必须过 `levelbuild check`；超过 motor 容量、穿地、悬空、越界、价值对不上都是**硬错误**，不是警告（§8）。
+4. **校验器是关卡的门，但只在「数据坏了」时关**。`placement.json` 进仓库前必须过 `levelbuild check`；超过 motor 容量、穿地、悬空（**没有** `pinned` 也没有声明父件的那一种）、越界、价值对不上都是**硬错误**（§8）。**几何上「按不按得住」是报告不是门**：作者的 `parent`/`stackedOn` 可以完全不接触（§4.2 的关系字段），`pinned: true` 可以自己站在半空（§8 规则 5c），这两类只出 warning / 报告行，永远不让关卡变红——所有者 2026-11-16 的裁定（本文件 §8 规则 5b/5c，背景见 `PROP_BEHAVIOURS` §10.9「校验与 pinned」）。
 
 ---
 
@@ -216,9 +216,13 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 | `absorbDiameterReq` | ✓ | `D_req = 2.673 · (a·b·c)^(1/3)`，来自 aabb；**同一个函数只在校验器里实现**（§8） | 校验器回填 |
 | `absorbable` | ✓ | `D_req ≤ level.ballDiameterMax`；**派生**，写进文件只为「一眼看」 | 校验器回填 |
 | `valueUnits` | ○ | 分数单位。**2026-11-15 Lead 拍板**：按 **def** 由关卡数据声明（`defs[].valueUnits`，`props[].valueUnits` 可逐件覆盖）；导入器把声明值传给 `PickupFieldSync` **一次写入并回读**（§7.4），不再由同步工具按最长边定价 | 关卡数据（`defs[]`）/ 逐件覆盖 |
-| `support` / `stackedOn` | ○ | 「它踩在谁上面」——`support` 是结构 id，`stackedOn` 是另一件道具的 `itemId`。**引擎不读它**，校验器用它判「悬空/穿模」并把责任指到具体那一件 | 导出器 |
+| `support` / `stackedOn` / `parent` | ○ | 「它跟谁有关」——`support` 是结构 id（站在它上面），`stackedOn` 是另一件道具的 `itemId`，`parent` 是同一个关系的现行拼写（运行时指针）。**导入器不读它们摆位置**，校验器用它判「悬空/穿模」并把责任指到具体那一件 | 导出器 |
+| `parentDerived` | ○ | `true` = 这条 `parent` 是 `supports.derive_supports` 按几何写的，不是人写的。只有带这个标记的链在 `--strict-parents` 下会被几何判红 | `levelctl.py derive-supports --apply` |
+| `pinned` | ○ | `true` = 作者声明「这件自己站着，别让它掉」：装饰、挂着的招牌、云。校验器不报它悬空；运行期**永不入队、永不下落**，但仍是支撑面（别人可以放在它上面） | 作者 / 编辑器 |
 
-> `support`/`stackedOn` 是**关系**不是坐标：导入器只用 `position/rotationQuat` 摆东西。这样「逻辑」和「画面」不会互相打架；关系字段只喂校验器。
+> `support`/`stackedOn`/`parent` 是**关系**不是坐标：导入器只用 `position/rotationQuat` 摆东西。这样「逻辑」和「画面」不会互相打架；关系字段只喂校验器与运行期的「脚下还有没有东西」。
+>
+> **关系不要求接触**。`stackedOn: struct_bench_01` 的托盘可以摆在长凳左边 7.5 cm —— 校验器会说 `declared parent not seated`（warning），关卡照样绿。只有 `parentDerived: true` 的链是「几何说了算」，`--strict-parents` 时才红。
 
 ### 4.3 `structures[]`：地面 / 墙 / 台面 / 斜板
 
@@ -400,7 +404,7 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_s
 | 词 | 数据形态 | 谁来保证对 |
 |---|---|---|
 | **seat（贴地/贴面）** | `position.y = 支撑面高 + aabb.y/2`（旋转过就用**世界 AABB** 的下沿） | 导出器算，校验器复核（穿地/悬空 ≤ 1 cm） |
-| **stack（叠放）** | 上层件的 `position.y = 下层件的顶面 + 自身半高`；关系写 `stackedOn` | 导出器算，校验器查「有没有真的落在下面那件的顶面上」 |
+| **stack（叠放）** | 上层件的 `position.y = 下层件的顶面 + 自身半高`；关系写 `stackedOn` | 导出器算；校验器只**报告**「到底接没接触」（`declared parent not seated`），不拦——摆歪了是作者的选择，运行期每 tick 自己复检 |
 | **lean（斜搭）** | 一块 `role=ramp` 的板 + 板上道具（`support=<ramp id>`）；道具按板法线摆正 | 校验器查坡度 ≤45°、**行走面底边**与地面齐平（板底可低一个板厚）、顶边齐平台面（§10.2） |
 | **group（成组）** | 一组件的 `zone` 相同 + `group` 字段相同；Blender 里是集合实例 | 导入器把 `group` 变成一层父节点（`LevelContent/<zone>/<group>/`），**只为可读与人手排查**，不影响坐标 |
 
@@ -592,8 +596,9 @@ LevelContent/Props/<kind>/[<zone>/][Groups/<group>/]<itemId>
 | 2 | 场地边界 | 每件的世界 AABB 在 `level.bounds` 内（含 0.05 m 余量） | `prop_044 越界 0.32 m（x=+2.1）` |
 | 3 | 出生净空 | 距 `ballStart` ≥ `spawnClearanceM`；距 `playerSpawn` ≥ 1.0 m | `5 件在球起点 1.0 m 内` |
 | 4 | **穿地** | 世界 AABB 下沿 ≥ 支撑面 − 0.01 m | `plate 埋入 0.012 m` |
-| 5 | **悬空** | 无 `support` 且下沿 > 地面 + 0.02 m | `cup 悬空 0.41 m`（实测第一次跑就出现：桌面没腿） |
-| 6 | 叠放 | `stackedOn` 指向的件的顶面 = 本件底面（±1 cm） | `cookie 与 plate 顶面差 0.06` |
+| 5 | **悬空** | 无 `support`、无 `parent`/`stackedOn`、且 `pinned` 不为真，而下沿 > 支撑面 + 0.02 m | `cup 悬空 0.41 m`（实测第一次跑就出现：桌面没腿） |
+| 5b | 声明未接触 | `parent`/`stackedOn` 的几何不接触（足迹不重叠或高低差超窗口） | **warning**，不是错误：`serving_tray_01 [parent_not_seated]: declared parent 'struct_bench_01' - the footprints do not overlap`。`--strict-parents` 只把 `parentDerived` 的那一类升成 error；`check --report` 另打成表格 |
+| 5c | `pinned` | `true` 的件不参与规则 5（自己站着）；陷地/越界/穿结构照旧 | `pinned (never falls): 3` |
 | 7 | **道具互穿** | AABB 两两相交体积 > 较小者 5% 且无 `stackedOn/support` 关系 | `apple 与 bowl 交叠 38%` |
 | 8 | **结构互穿** | 道具 AABB 不得穿入 `role=box` 的实体（桌面除外：桌面之下的件必须显式 `support`） | `thermos 穿进 crate 0.08 m` |
 | 9 | **预算** | `planes ≤8 / boxes ≤8 / ramps ≤4 / ground =1`；`props` 里「不可吸且挡路」的件数 ≤ `blocking` 6 | `boxes=11 超 3（zone=table 多放了 2 个台面）` |
@@ -899,10 +904,10 @@ curl -s -X POST "http://$(python3 -c "import json;d=json.load(open('/tmp/levelbu
 | `status` | 关卡、计数、gate、dirty、undo 深度、场景事实（Blender 版本、对象数） | `levelctl.py status` |
 | `open` | 打开一份关卡并建场景（`level=<id>` 或 `path=...`） | `levelctl.py open story_01_bench_size` |
 | `reload` | 从磁盘重读并重新同步（人手改过 JSON 之后） | `levelctl.py reload` |
-| `list` | 过滤道具：`zone/def/kind/support/stackedOn/text/near+radius/limit` | `levelctl.py list --near=-13,-9 --radius=1.5` |
+| `list` | 过滤道具：`zone/def/kind/support/stackedOn/parent/pinned/text/near+radius/limit` | `levelctl.py list --near=-13,-9 --radius=1.5` |
 | `get` | 一件道具/结构/相机/预设 | `levelctl.py get apple_01` |
-| `add_prop` | 加一件：`def` + 可选 `itemId/position/yaw/kind/zone/support/stackedOn/valueUnits/seat/updateExpected` | `levelctl.py add-prop --def apple --pos=3.2,0,3.2 --seat --update-expected` |
-| `set` | 改字段（`position/rotationQuat/yaw/zone/kind/support/stackedOn/valueUnits/notes` 或结构字段） | `levelctl.py set apple_01 --zone table_top` |
+| `add_prop` | 加一件：`def` + 可选 `itemId/position/yaw/kind/zone/support/stackedOn/parent/pinned/valueUnits/seat/updateExpected` | `levelctl.py add-prop --def apple --pos=3.2,0,3.2 --seat --update-expected` |
+| `set` | 改字段（`position/rotationQuat/yaw/zone/kind/support/stackedOn/parent/pinned/valueUnits/notes` 或结构字段） | `levelctl.py set apple_01 --zone table_top` |
 | `move` | `to=[x,y,z]` 或 `delta=[dx,dy,dz]`（道具与结构都行） | `levelctl.py move apple_01 --delta=0,0.02,0` |
 | `rotate` | `yaw=<度>` / `quat=[x,y,z,w]` / `axis` + `degrees` | `levelctl.py rotate acorn_01 --yaw 90` |
 | `remove` | 按 id（或 `ids=[...]`）删道具/结构；`updateExpected` 可选 | `levelctl.py remove acorn_01 --update-expected` |

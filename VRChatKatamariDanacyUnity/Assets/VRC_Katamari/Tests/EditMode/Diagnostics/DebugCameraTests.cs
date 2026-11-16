@@ -45,7 +45,8 @@ namespace VRCKatamari.Tests
         }
 
         // NDC -> viewport, with the perspective divide done here so the test does not depend on
-        // which Unity multiply overload divides by w.
+        // which Unity multiply overload divides by w. For this view matrix clip.w is the
+        // distance in front of the camera, so it is positive exactly when the point is visible.
         private static Vector2 Project(Matrix4x4 viewProjection, Vector3 world)
         {
             Vector4 clip = viewProjection * new Vector4(world.x, world.y, world.z, 1f);
@@ -56,7 +57,13 @@ namespace VRCKatamari.Tests
         private static Matrix4x4 ViewProjection(Vector3 position, Quaternion rotation,
             float nearM, float farM)
         {
-            Matrix4x4 view = Matrix4x4.TRS(position, rotation, Vector3.one).inverse;
+            // Unity's camera space is OpenGL's: a camera looks down -Z, while a transform's
+            // forward is +Z. Camera.worldToCameraMatrix is therefore the world-to-local matrix
+            // with Z negated. A bare TRS(...).inverse is the object-space matrix, so every point
+            // in front of the camera would get clip.w = -distance (negative) and the perspective
+            // divide would mirror x and y as well.
+            Matrix4x4 worldToLocal = Matrix4x4.TRS(position, rotation, Vector3.one).inverse;
+            Matrix4x4 view = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * worldToLocal;
             Matrix4x4 projection = Matrix4x4.Perspective(FieldOfViewDegrees * Mathf.Deg2Rad,
                 Aspect, nearM, farM);
             return projection * view;
@@ -151,7 +158,9 @@ namespace VRCKatamari.Tests
 
                 // Hand calculation for the centre: the aim lift is 0.4 r and the camera is
                 // 2.6 r back / 1.4 r up, so the centre is 7.2 degrees below the axis and lands
-                // at about 0.391 of the viewport height - inside the lower-middle third.
+                // at about 0.391 of the viewport height - inside the lower-middle third. The
+                // ball's top lands at about 0.689 and its bottom at about 0.156, at every
+                // radius, because the pose scales with r.
                 Vector2 centerViewport = Project(viewProjection, center);
                 Assert.AreEqual(0.5f, centerViewport.x, 1e-3f, "radius " + radius);
                 Assert.GreaterOrEqual(centerViewport.y, 1f / 3f, "radius " + radius);

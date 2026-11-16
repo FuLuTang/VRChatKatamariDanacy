@@ -97,7 +97,11 @@ namespace VRCKatamari.Tests
                 2, 3, 7, 2, 7, 6,       // south slope
                 3, 0, 4, 3, 4, 7,       // west slope
             };
-            Mesh mesh = Build(vertices, indices, new[] { 0, 5, 10, 15 }, new[] { 0 });
+            // 10 triangles (5 quads), one chunk per quad: the starts are triangle indices
+            // 0,2,4,6,8. Chunks must be contiguous and cover every triangle exactly once, so a
+            // table that describes more triangles than the index buffer has (e.g. 0,5,10,15)
+            // is refused by TryBuildMesh, not silently trimmed.
+            Mesh mesh = Build(vertices, indices, new[] { 0, 2, 4, 6, 8 }, new[] { 0 });
             Vector3 point;
             Vector3 normal;
             int surfaceId;
@@ -250,10 +254,14 @@ namespace VRCKatamari.Tests
             var chunkMax = new Vector3[TerrainMeshMath.MaxChunks];
             int triangleCount;
             int chunkCount;
+            // The message carries the shape the chunk table has to match, because "build mesh"
+            // alone does not say whether the fixture or the mesh validator is wrong.
             Assert.IsTrue(TerrainMeshMath.TryBuildMesh(vertices, vertices.Length, indices,
                 indices.Length, starts, counts, zones, starts.Length, meshVertices,
                 meshIndices, chunkStarts, chunkCounts, chunkZones, chunkMin, chunkMax,
-                out triangleCount, out chunkCount), "build mesh");
+                out triangleCount, out chunkCount),
+                "build mesh: " + (indices.Length / 3) + " triangles, " + starts.Length +
+                " chunks");
             return new Mesh
             {
                 Vertices = meshVertices,

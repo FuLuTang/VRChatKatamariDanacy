@@ -1,6 +1,6 @@
 # 关卡数据格式 v2（最终提案）
 
-> 状态：**`FINAL_PROPOSAL`，2026-11-16（第 2 版：吸收动画研究）**（原 `DRAFT_BLOCKED_ON_RESEARCH` 已解除）。触发：owner 2026-11-16「整体升级地图数据结构 + 网页编辑器一起升」；研究先于设计，三份研究均已落地：
+> 状态：**`FINAL_PROPOSAL`，2026-11-16（第 3 版：owner 拍板 + 场景结构/缩放问答）**（原 `DRAFT_BLOCKED_ON_RESEARCH` 已解除）。触发：owner 2026-11-16「整体升级地图数据结构 + 网页编辑器一起升」；研究先于设计，三份研究均已落地：
 > [ORIGINAL_TERRAIN_AND_LAYOUT](../../Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)（REROLL 导出表能推出什么）、
 > [NOCLIP_KATAMARI_FORMAT](../../Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)（PS2 舞台包/任务包的字节布局）与
 > [ORIGINAL_ANIMATION_OBSERVATIONS](../../Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)（逐帧观察：多少东西在动、怎么动、预算多少）。
@@ -23,7 +23,7 @@
 | **Q-T3 / Q-N4** 活动区机制 | 12 个 `DummyProps` 是**大件命中外壳**（全在 r<12 m 核心，19 关共 277 个），不是隐形墙；关卡包与任务表里**没有** bounds/radius/kill-plane 字段；社区 `barrier` 是按球径开门的**可见墙**。 | `activityArea` 由**我们作者化**：多边形墙段 + 球径门 + kill plane（§5）；不照抄 DummyProps |
 | **Q-T6/Q-T7** 尺度与坐标帧 | 1 原始单位 = 1 cm；**REROLL `position` = −0.01 × PS2 平移**（三轴全取反，无平移），524 件中 360 件误差 <1 µm；因此两套数据**同一世界坐标系**。三轴取反是**点反射**（det −1），网格并进来要**翻转三角形绕序**。真实地面主带 **y ≈ −1.0 m**（946 m² 上表面里 55% 落在 −1.2…−0.6），我们的假地板 y=0 **高了约 1 m**。 | 导入直接使用原作高度，不再 re-seat 到 0；`windingFix:"flip"` 是参考导入的必填项 |
 | **Q-M1** 原作的动件有多少、怎么动 | Make Cancer 524 个实例里 **129 个（24.6%）有运动程序**、**153 个（29.2%）有骨骼动画，只来自 19 个类型**；13 类运动（SporadicWalk 31、Hop 18、Sway 15、DraggedAlong 15、WaitForPlayer 15、WhackAMole 8、PathCollision 8、Spin 7、Clouds 5、Flip 2、Bob 2、SlopingPath 2、BackAndForth 1）；**1 速度单位 = 30.3 cm/s**；Sway 周期 ≈1.5 s、Bob ≈2.8 s、Hop 5–6 cm + 3.4–5 s 驻留、WhackAMole 0.7 s 升 12.4 cm；**43/90 条父子是静止子件随动父件**；noclip 不渲染舞台动画，5 朵云是 `moveType 16` 的道具。【实测】 | 新增 `motions[]`/`paths[]` 逐关表 + `props[].motion` 引用 + `defs[].speedIndex/clips` + `props[].phase/clipStart/inherit`；Udon 10–15 Hz 分档、共享剪辑 + 8 相位桶（§6.7） |
-| **Q-N6** 许可边界 | noclip 仓库的 LICENSE 是 **MIT + 一段反编译说明**（GitHub 因该说明报 `NOASSERTION`），**不是 GPL-3**。原假设有误。 | 见 §17 与 AGENTS/OPEN_DECISIONS 的更正；解析器仍是「照规格重实现」，仓库许可仍待 owner |
+| **Q-N6** 许可边界 | noclip 仓库的 LICENSE 是 **MIT + 一段反编译说明**（GitHub 因该说明报 `NOASSERTION`），**不是 GPL-3**。原假设有误。 | 见 §19 与 AGENTS/OPEN_DECISIONS 的更正；解析器仍是「照规格重实现」，仓库许可仍待 owner |
 
 **仍未解决、本文不假装解决的**：缩放字段的语义（那 1 件可能是贴花尺寸/碰撞盒尺寸）；zone id 的**玩法含义**（只有「逐三角形带标签」这一个事实）；7 个任务级体积的确切作用（其中第一个是 y=−1,691.5 cm 的巨大平面，像掉出判定面）；**逐实例相位从哪来**（原作可能是种子，noclip 用 `Math.random()`，我们暂用确定性哈希）、`locPosType` 是否表示随机摆放、`shakeOffFlag` 是否等于「可甩脱」、舞台模型有没有动画（noclip 没做，证不了）；REROLL 523 与 PS2 524 差的那 1 件。
 
@@ -104,7 +104,7 @@
 | `units` / `convention` | string | 是 | 固定 `"m"` / `"unity-y-up-left-handed-quat-xyzw"`；别的值直接报错 |
 | `ball.startDiameterM` | number | 是 | 起始**语义直径**（米，3 位小数） |
 | `ball.targetDiameterM` | number | 否 | 目标直径；剧情关必填，实验/测试关可省 |
-| `ball.maxDiameterRef` | `"global"` \| `"level"` | 是 | **已定**：全项目一个全局上限（引擎护栏，远高于 2.20 m，按试玩调）。`"level"` 只给实验关/测试关用，且必须同时给 `maxDiameterM` |
+| `ball.maxDiameterRef` | `"global"` \| `"level"` | 是 | **已定**：全项目一个全局上限 = **20 m**（owner 2026-11-16；引擎护栏，正常游玩很少摸到）。`"level"` 只给实验关/测试关用，且必须同时给 `maxDiameterM` |
 | `ball.maxDiameterM` | number | 条件 | `maxDiameterRef == "level"` 时必填；剧情关用它会被校验器记 `[meta_cap_override]` warning |
 | `ball.start` | 3×number | 是 | 球心出生点（世界米） |
 | `ball.spawnSource` | `"authored"` \| `"fieldCentreGuess"` \| `"reference"` | 是 | **推定值必须标出来**。参考关卡是 `fieldCentreGuess`（原作出生点不可知，见 ORIGINAL_TERRAIN §2.4） |
@@ -371,17 +371,32 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 
 **校验器不重算四元数**（拿不到原作轴角），只校验单位长、规范符号、以及「`aabb × scale` 旋转后的世界 OBB 不与支撑面矛盾」（§9）。参考导入的逐件四元数由本地转换器写入，**仓库只存结果**。
 
-### 6.4 缩放策略（已定原则，未定细节 → D-5）
+### 6.4 缩放策略（已定 → D-5）
 
-| 情况 | 规则 | 理由 |
+原作的逐件缩放是**真实存在的**，不是可选项：Cancer 524 件里 6 件不是单位缩放（`instances.json`，见 §0 的 Q-T2）。
+
+| 值 | 件数 | 父件 | 备注 |
+|---|---|---|---|
+| `(1,1,1)` | 518 | — | 98.9% |
+| `(0.9,0.9,0.9)` | 4 | 无 | tableIndex 2/9/12/16，`nameIdx` 246/248/250（同类三型四件） |
+| `(0.1,0.1,0.1)` | 1 | **有**（tableIndex 411，父 410、祖父 409） | 10× 小，挂接链上的最内一层 |
+| `(0.0741,0.0291,0.0197)` | 1 | 无 | 非均匀，语义未验证（§16.1、NOCLIP §12.1） |
+
+规则分三**层**，别混成一句「不缩放」：
+
+| 层 | 规则 | 落点 |
 |---|---|---|
-| 默认 | `scale` 省略 = `[1,1,1]`；写出来也必须是 1，否则校验器要求真实理由 | 518/524 件是单位缩放 |
-| **挂在父件下的子件** | **永远不缩放**：`parent != null` 时 `scale` 必须缺省或 `[1,1,1]`，否则 `[prop_scale_attached]` 硬错误 | 已定「attached props 不缩放」：挂接件的位姿由父件决定，缩放子件会破坏接触面 |
-| 均匀缩放（`sx=sy=sz`） | 允许，任意 `behaviour` | 等价于换一个尺寸的同一件 |
-| 非均匀缩放 | 只允许 **`parent == null` 且 `behaviour == "static"` 且 def.collider.type ∈ {box,sphere}**；否则 `[prop_scale_nonuniform]` | 胶囊/凸包在非均匀缩放下不再是同类形状；动态件的接触与吸收门会随姿态变，不可解释 |
-| 原作的 1 件非均匀 `(0.0741, 0.0291, 0.0197)` | 转换器照写 `scale`，但标 `absorbable:false`、`behaviour:"static"`、不写 `collider`（按无碰撞处理），并记进迁移报告的 `divergences` | 语义未验证（NOCLIP §12.1）；不拿它去赌接触或体积 |
+| **① 运行时** | **任何件在运行时都不按 `scale` 缩放**（挂接件尤其）：导入期已把 `scale` 乘进 `aabb`，运行时只读 `aabb`；父件带走子件时只搬位姿、不搬尺寸 | 运行时契约；`[prop_volume_stale]` 间接守住 |
+| **② 作者态：均匀**（`sx=sy=sz`） | 允许，**任意 `behaviour`、任意 `parent`** | 原作的 4 件 0.9 + 1 件 0.1 都靠这条 |
+| **③ 作者态：非均匀** | 只允许 **`parent == null` 且 `behaviour == "static"` 且 def.collider.type ∈ {box,sphere}**；否则 `[prop_scale_nonuniform]` | 胶囊/凸包非均匀缩放下不再是同类形状；动态件的接触与吸收门会随姿态变 |
 
-`aabb` 一律是**已乘 scale** 的尺寸，`volumeMm3` 由它和 `volumeK` 推出。**不要**在运行时再乘一次 scale。
+- **「挂接件永不缩放」保留为①（运行时），不再是②的禁令**：原作那件 `(0.1,0.1,0.1)` 就挂在父件下。若照旧写成「`parent != null` 时 `scale` 必须为 1」，参考导入会拒掉一件真实数据。`[prop_scale_attached]` 因此改成「挂接件带**非均匀** scale」。
+- **②的 `scale` 是静态列的一部分**：导入器把它乘进 `aabb` / `volumeMm3` / `absorbDiameterReqMm`，原值留在 `scale` 供审计；下游（电机、吸收门、拾取、编辑器）**不再乘第二次**，也不需要知道它存在。
+- **这不是「可以把道具改大改小去凑档」**：③仍禁止非均匀，②只允许原值照抄或作者写明理由；调体积只能用 `volumeK`（PARITY_AUDIT G13），不是改 `scale`。
+- **忽略缩放会错多少**（所以不能省这个字段）：`0.9` 体积差 1.37×、门差 1.11×；`0.1` 体积差 1000×、门差 10×（门槛会要求 10 倍大的球）；非均匀体积差 23,547×、门差 28.7×。渲染上忽略非均匀那件会每轴大 13.5 / 34.4 / 50.8 倍（一块 23×10×15 cm 的实心片，而不是 1.7×0.3×0.3 cm 的薄片）。
+- **原作的 1 件非均匀** 转换方式照旧：照写 `scale`，但标 `absorbable:false`、`behaviour:"static"`、不写 `collider`（按无碰撞处理），并记进迁移报告的 `divergences`。
+
+`aabb` 一律是**已乘 scale** 的尺寸，`volumeMm3` 由它和 `volumeK` 推出。**不要**在运行时再乘一次 scale。为什么允许逐件缩放、以及它和旧口径「不缩放」的关系，见 §18。
 
 ### 6.5 父指针与刚性组
 
@@ -541,11 +556,11 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 
 #### 6.7.6 骨骼动画：逐类型、共享剪辑、相位桶
 
-- 原作 Cancer 的 **153 个带动画实例只来自 19 个类型**（每类型 4–6 段剪辑）；Town 97 个来自 33 个类型【实测】。逐实例挂 153 个 Animator 不可接受（状态机开销 + 同帧同步像机械）。
+- 原作 Cancer 的 **153 个带动画实例只来自 19 个类型**（每类型 4–6 段剪辑）；Town 97 个来自 33 个类型【实测】。153 个逐实例 Animator 不是崩，而是 **153 次 skinned draw call + 每帧几千个骨骼 Transform**，且 3 型螃蟹（120 件，占 78%）完全没必要用骨骼——数字见 §16.2。
 - v2 的数据形状：`defs[].clips[]`（类型级）+ `props[].clipStart`（逐实例起始段）+ `props[].phase`（相位）。运行时策略（建议，D-11）：
   1. **按类型 × 8 相位桶** 共享**控制器/剪辑**（不是共享 Animator 组件——每个被动画的实例仍要自己的 Animator）；同桶实例同帧同相，8 桶足以掩盖大部分机械感；
-  2. 硬上限 **64 个被动画实例/关**（`caps.animators`）；超了按「离球近 / 有 `clipStart`」优先，其余降级为静态网格；
-  3. 若不想付 Animator 成本：v1 **只播 CPU 运动、不播骨骼**（数据仍保留），或把常用剪辑烘成顶点/材质动画（C）——这是产品取舍，不是数据缺失。
+  2. **Animator 预算 64 个实例/关**（`caps.animators`）；超出的被动画实例必须走顶点/材质动画（C）或降级为静态网格，**不是数据错误**（`[anim_budget]` 只是 warning）；按「离球近 / 有 `clipStart`」决定谁拿 Animator；
+  3. 若不想付 Animator 成本：v1 **只播 CPU 运动、不播骨骼**（数据仍保留，A 降级），或把常用剪辑烘成顶点/材质动画（C，推荐给螃蟹三型）——这是产品取舍，不是数据缺失。
 - 原作的剪辑选择看运行时状态（`AnimationType` + 置换），**不是**数据字段；v2 的 `clipStart` 只是「开局放哪段」（对应 `playAnimNo`，152/153 吻合，【推断，强】）。运行时何时切 `MOVING/WRIGGLE/PANIC` 是**我们的行为模型**，标 PROVISIONAL。
 
 #### 6.7.7 移动件被吸收：用当前位姿，父链一起处理
@@ -954,8 +969,8 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 | `[prop_id]` | error | `itemId` 缺失/重复/前后空白 |
 | `[prop_parent]` | error | 父不存在、自指、成环、与 `rigidGroup` 同时出现 |
 | `[prop_scale]` | error | 非正、非有限 |
-| `[prop_scale_attached]` | error | `parent != null` 且 scale 非单位 |
-| `[prop_scale_nonuniform]` | error | 非均匀但违反 §6.4 的三个条件 |
+| `[prop_scale_attached]` | error | `parent != null` 且 scale **非均匀**（均匀 scale 合法：原作有 1 件 0.1 的挂接件，§6.4 ②） |
+| `[prop_scale_nonuniform]` | error | 非均匀但违反 §6.4 ③ 的三个条件 |
 | `[prop_volume_stale]` | error | `volumeMm3` 与 `k·a·b·c` 差 >1 mm³；例外：`absorbable:false` 且体积 <1 mm³ 时允许 0 |
 | `[prop_absorb_req_stale]` | error | `absorbDiameterReqMm` ≠ 由 `volumeMm3` 推出的整毫米 |
 | `[prop_behaviour]` | error | 未知 behaviour；`behaviour:"motion"`/`"ambient"` 没有 `motion`；`static`/`attached`/`stacked` 却带 `motion`；`ambient` 且 `absorbable:true` |
@@ -975,7 +990,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 | `[paths_id]` / `[path_points]` / `[path_speed]` | error | 路径 id 重复；点数不在 2–64、点非 3 数、相邻点 <0.05 m；速度不在 0–500 |
 | `[def_speed_index]` | error | `speedIndex` 不在 0–11 |
 | `[def_clips]` | error/warning | 剪辑数 >6、`id` 重复、`fps` ≤0（error）；我们的关卡有 `clips` 但 `asset` 缺失（warning） |
-| `[anim_budget]` | warning | 该关 `behaviour:"motion"` 且 `clipStart ≥ 0` 的实例 > `caps.animators`（每个被动画实例仍需一个 Animator） |
+| `[anim_budget]` | warning | 该关 `behaviour:"motion"` 且 `clipStart ≥ 0` 的实例 > `caps.animators`（每个真 Animator 实例仍需一个组件；超出部分应由顶点/材质动画承担，见 §16.2） |
 | `[prop_key]` | error | `props[]` 出现未知键（不得静默丢弃） |
 | `[prop_support]` / `[prop_overlap]` | error | 声明支撑不存在/悬空；两件 AABB 互穿且无父子/摞放关系 |
 | `[prop_bounds]` | error | 道具离开 `meta.bounds` 超过 5 cm |
@@ -1047,7 +1062,7 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
 | C5 | **会改语义的字段必须报告**：`absorbDiameterReq` 从 bbox 门改成 `k·bbox` 门（已定），新值可能不同；转换器输出 `gate_changes.csv`（itemId、旧 mm、新 mm、`absorbable` 变化），**先看报告再提交** | 报告条数与人工复核 |
 | C6 | **上限迁移**：`ballDiameterMax` 不再作为每关玩法上限；写进 `meta.migration.maxDiameterM` 供审计，运行时读全局 | 转换后 `meta.ball.maxDiameterRef == "global"` |
 | C7 | **边界迁移**：4 张矩形 `boundary` 平面 → `activityArea.walls` 的闭合矩形；非矩形/非轴对齐保留 `role:"boundary"` + warning | 9 个测试场 + hub + story_01 的边界逐份核对 |
-| C8 | **ground 迁移**：`role=ground` 的平面不再进 `structures`，`meta.groundY` 取其平面高度；没有 terrain 的关卡保持平地 |
+| C8 | **ground 迁移**：`role=ground` 的平面不再进 `structures`，`meta.groundY` 取其平面高度；没有 terrain 的关卡保持平地 | 13 份的 `meta.groundY` 逐份核对；平地关卡重导入后仍是平地 |
 | C11 | **运动数据不伪造**：v1 的 13 份文件没有 `motions`/`paths`，转换器写空表并把 `behaviour` 设为 `static`；参考关卡的 129 个动件由 §11.5 的参考导入器从 `instances.json` 的 `motion{id,action,speed,pathIndex}` 生成，**不能**用「看起来像」猜 class | 参考导入报告列出每个未映射的 `motionID` |
 | C9 | **参考关卡**：转换产物仍在 `_ref_*/` 目录，被 `.gitignore` 排除；转换器不把任何网格/坐标写进仓库内其他路径 | `git status` 干净 |
 | C10 | **可回滚**：转换在 git 分支上做；v1 文件在转换器验证通过前不被覆盖（先写 `.v2.json` 草稿，人工确认后 `--apply`） | 转换器有 `--dry-run` |
@@ -1141,7 +1156,7 @@ Docs/Design/Levels/_ref_cancer/placement.model.json + terrain/*.katerrain
 Assets/_RefUnlicensed/Levels/_ref_cancer/…
 ```
 
-- 适配器**不解析游戏二进制**（那件事在仓库外，见 §17 许可更正）；它只读提取器已经导出的 JSON/GLB 并做坐标/绕序/字段映射。代码可以进仓库，因为它不衍生自 noclip 源码，也不含游戏数据。
+- 适配器**不解析游戏二进制**（那件事在仓库外，见 §19 许可更正）；它只读提取器已经导出的 JSON/GLB 并做坐标/绕序/字段映射。代码可以进仓库，因为它不衍生自 noclip 源码，也不含游戏数据。
 - 映射校验（导入器自检，不通过就拒绝）：`524` 实例、`90` 条真父子、`129` 个带运动程序、`153` 个带动画、`68` 个 AABB、`3,456` 三角形、`7,154` 顶点、3 个有效图形扇区、`7` 个模型。数字对不上说明提取器版本变了，**不猜**。
 - **运动映射**：`instances.json` 的 `motion{id,action,speed,pathIndex}` → `motions[]`；`motionID/action` 到 13 类的映射表来自 `motionActionTable`，**未识别的一律写 `null` 并进报告**，不按名字猜。`playAnimNo` → `clipStart`（提取器若没带这个字段，`clipStart` 留 −1 并在报告里记 `missing_playAnim`）；骨骼剪辑本身没有导出（noclip 不导出动画数据），所以 `defs[].clips` 只写段数与 id，**没有 `asset`**，运行时不能播，只能作为后续重建的规格。
 - **路径映射**：`pathIndex ≥ 0` 的 11 个 Cancer 实例目前**没有点表**；导入报告写 `paths_missing`，这些实例临时降级为 `behaviour:"static"` 或 `sporadic_walk`（二选一必须在报告里逐件列出，不能静默）。
@@ -1177,7 +1192,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 |---|---:|---|
 | `caps.movingProps` | 每关动件数（Cancer 129） | 运动宿主并行数组的容量；`props` 仍是总件数 |
 | 运动更新 | 15 Hz（路径/随机游走）、10 Hz（其余程序化）、0 Hz（attached/static/纯表现） | §6.7.5 的 12,420 次/秒基线；Cancer 10–15 Hz 占 10–16% |
-| `caps.animators` | **64 个被动画实例**（硬上限） | 153 个原作动画实例来自 19 个类型；类型 × 8 相位桶只共享控制器/剪辑，不减少 Animator 组件；超过 64 就降级为静态网格或烘顶点动画 |
+| `caps.animators` | **64 个 Animator 实例**（运行时预算，不是「只播 64 件」） | 153 个原作动画实例来自 19 个类型；类型 × 8 相位桶只共享控制器/剪辑，不减少 Animator 组件。3 型螃蟹（120 件）走顶点/材质动画后，剩下的 33 件在 64 以内（§16.2） |
 | 相位桶 | 8 | `floor(phase × 8) % 8`；桶内同步是可接受的产品取舍（原作相位来源未知） |
 | 每关 `motions`/`paths` | ≤64 / ≤32 条，每条路径 ≤64 点 | 129 个动件只有 16 个 `moveType`；Cancer 真路径 11 条 |
 
@@ -1310,26 +1325,28 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 ---
 
-## 16. Owner 决策清单（需要拍板）
+## 16. Owner 决策清单（2026-11-16 拍板记录）
 
 > 已定、不再问的输入：地形支持 3D 表面（三角网 + 空间加速，高度场只作优化）、解析器照规格重实现在仓库外、吸收门按原作 `k × bbox`、`volumeMm3` 定点、父件被吃子件坠落（单父指针）、每件四元数、碰撞代理按型、不做击飞/甩脱。下面只列**研究回答不了的产品/工程取舍**。
+>
+> **状态（2026-11-16）**：owner 已拍板 **D-1 / D-4 / D-5 / D-6 / D-10 / D-11 / D-12 / D-13 / D-14**（行内的「建议」已改成决定，带日期）；**D-2 / D-3 / D-7 / D-8 / D-9 仍是我方建议**，等 owner 一句话确认。
 
 | # | 决定 | 选项 | 建议 | 影响面 |
 |---|---|---|---|---|
-| **D-1** | 全局球径上限的落点 | A 单一全局资产（已定方向）；B 每关可覆盖 | **A**，`meta.ball.maxDiameterRef:"global"`；实验关才允许 `"level"` 并打 warning | `meta`、电机、编辑器 |
+| **D-1** | 全局球径上限的落点 | A 单一全局资产（已定方向）；B 每关可覆盖 | **A，20 m**（owner 2026-11-16 定；正常游玩很少摸到，护栏不是目标），`meta.ball.maxDiameterRef:"global"`；实验关才允许 `"level"` 并打 warning | `meta`、电机、编辑器 |
 | **D-2** | 地形存哪 | A 全内联；B >512 三角形走 `.katerrain` 侧车 + sha256 | **B**：内联保可读，大网格走二进制并钉哈希；参考关卡也用同一格式 | JSON/侧车、编辑器、导入器 |
 | **D-3** | 地形要不要水平阻挡 | A 只支撑；B 支撑 + 陡面挡（θ 分类） | **B**，但**分阶段**：T0/T1 只做支撑/推出/去法向速度，T2 才做滚/爬分类与爬升；在 T2 前用 `structures` slab 补关键阻挡 | 电机、测试场、关卡设计 |
-| **D-4** | 活动区越界后果 | A 硬墙；B 硬墙 + 软边距（减速/提示）；C 只提示 | **A + kill plane**：没有原作软边距证据，先做硬墙 + 球径门 + 掉出重生；软边距留给试玩（HUD 是另一个模块） | `activityArea`、电机、HUD |
-| **D-5** | 逐件缩放策略 | A 视觉-only；B 全量参与几何/体积；C 只允许均匀 | **C + 例外**：均匀全允许；非均匀只允许无父、static、box/sphere；挂接件永不缩放。原作仅 1 件非均匀且语义未验证 | props、导入器、吸收门 |
-| **D-6** | zone id 的用法 | A 不透明标签；B 现在映射成玩法区（8=void 等） | **A**：只做标签/统计，kill plane 单独字段；等有规则证据再映射 | 地形、活动区、统计 |
+| **D-4** | 活动区越界后果 | A 硬墙；B 硬墙 + 软边距（减速/提示）；C 只提示 | **A + 每关 kill plane**（owner 2026-11-16）：硬墙 + 球径门，**玩法范围主要靠地图布局限制**（参考关就是这么限制的，不只靠墙）；掉出用逐关 Y 的重启阈值，不做软边距（HUD 是另一个模块） | `activityArea`、电机、关卡设计、HUD |
+| **D-5** | 逐件缩放策略 | A 视觉-only；B 全量参与几何/体积；C 只允许均匀 | **②+③**（§6.4 三层）：①运行时永不缩放（旧口径，不变）；②作者态均匀全允许（含挂接件）；③非均匀只允许无父、static、box/sphere。原作 6 件非单位：4×0.9、1×0.1（**挂接件**）、1 非均匀（语义未验证） | props、导入器、吸收门 |
+| **D-6** | zone id 的用法 | A 不透明标签；B 现在映射成玩法区（8=void 等） | **A**：只做标签/统计（`killPlane.zoneId` 只记诊断）；kill plane 是独立字段、**取逐关 Y**，运行时由**回合状态机**当「重启阈值」执行（不是全局地板），没有回合状态机的世界退回 `ActivityAreaHost` 兜底 | 地形、活动区、回合状态机、统计 |
 | **D-7** | 现有 ramp/curve_ramp/box 是否迁进地形 | A 保留解析体；B 全烘进网格 | **A**：能解析体表达的就不进网格；只有曲面/悬垂才用地形 | 引擎、数据、编辑器 |
 | **D-8** | 参考关卡数据保留 | A 只留 `~/KatamariRef`；B 允许进仓库 | **A**（现行规则）：导入器只写 `_ref_*` 与 `_RefUnlicensed`；任何网格/贴图/BIN 永不入库 | 导入器、git 守卫 |
-| **D-9** | 仓库许可（与 noclip 的 MIT 无关，见 §17） | A 暂不决定；B 现在选 MIT/Apache；C 现在选 copyleft（GPL 兼容） | **A**（LICENSING 未定）：不 vendor 第三方代码；若将来移植 MIT 代码，保留版权与许可声明；首选「照规格重实现」 | 全仓库 |
-| **D-10** | 运动保真度：13 类全做，还是先做子集 | A 数据模型收全 13 类、运行时先实现位移类 + 表现类；B 只做 `static`/`attached`；C 13 类全部第一版实现 | **A**：数据不丢（参考导入能存下全部 129 个动件），运行时按 §6.7.5 分档逐步补齐；`wait_for_player`/`spin`/`flip`/`clouds` 可后置 | schema、`MotionHost`、编辑器 |
-| **D-11** | 骨骼动画路线 | A v1 不播骨骼（只保数据）；B 类型 × 8 相位桶、≤64 个被动画实例；C 烘成顶点/材质动画 | **B**，并保留 A 作为超预算降级；**153 个逐实例 Animator 不可接受**（19 个类型也救不了组件数） | 导入器、`MotionHost`、美术 |
-| **D-12** | 逐实例相位从哪来 | A 确定性哈希 + 作者 `phase` 覆盖；B 运行时随机；C 等原作种子证据 | **A**：账本/双端一致要求确定性；原作相位来源未知，`phase` 字段留作以后覆盖 | 导入器、运行时 |
-| **D-13** | 舞台动画（水面/招牌/霓虹） | A v1 不做；B 以后用材质/Shader 做；C 现在查证据 | **A**：本轮只证明「noclip 没做」，不能证明原作没有；5 朵云是 `moveType 16` 的道具（不是舞台），参考实现的风车/转灯是手写补的、不是数据给的 | 美术、舞台 |
-| **D-14** | 移动件被吸后，带自己 motion 的子件怎么办 | A 挂起，`SETTLED` 后恢复；B 立即恢复；C 随父一起吸（carry） | **A**；C 与已定「子件坠落、不 carry」冲突 | `MotionHost`、行为宿主 |
+| **D-9** | 仓库许可（与 noclip 的 MIT 无关，见 §19） | A 暂不决定；B 现在选 MIT/Apache；C 现在选 copyleft（GPL 兼容） | **A**（LICENSING 未定）：不 vendor 第三方代码；若将来移植 MIT 代码，保留版权与许可声明；首选「照规格重实现」 | 全仓库 |
+| **D-10** | 运动保真度：13 类全做，还是先做子集 | A 数据模型收全 13 类、运行时先实现位移类 + 表现类；B 只做 `static`/`attached`；C 13 类全部第一版实现 | **C（owner 2026-11-16：全加）**：13 类数据与运行时都进第一版；没测到参数的类（`wait_for_player`/`whack_a_mole`/`clouds`/`spin`）用 PROVISIONAL 默认并在诊断里标记（U9），不用「先做子集」拖到后面 | schema、`MotionHost`、编辑器、测试 |
+| **D-11** | 骨骼动画路线 | A v1 不播骨骼（只保数据）；B 类型 × 8 相位桶、≤64 个被动画实例；C 烘成顶点/材质动画 | **B + C 混合**：153 个动画实例里 **120 个（78%）是 3 个螃蟹型**，走顶点/材质动画（C）；**≤64 个真 Animator** 留给其余 16 型 33 件（B）；A 作超预算降级。**64 当 Animator 上限成立，当「只播 64 件」的上限不成立**——数字与代价见 §16.2 | 导入器、`MotionHost`、美术 |
+| **D-12** | 逐实例相位从哪来 | A 确定性哈希 + 作者 `phase` 覆盖；B 运行时随机；C 等原作种子证据 | **A（owner 2026-11-16）**：相位 = 「这件从周期的哪一刻开始动」；不读原作种子，用 `itemId + level.id` 的确定性哈希，作者可用 `phase` 覆盖。白话解释与为什么不用随机见 §16.2 | 导入器、运行时 |
+| **D-13** | 舞台动画（水面/招牌/霓虹） | A v1 不做；B 以后用材质/Shader 做；C 现在查证据 | **A（owner 2026-11-16：现在不做）**：本轮只证明「noclip 没做」，不能证明原作没有；5 朵云是 `moveType 16` 的道具（不是舞台），参考实现的风车/转灯是手写补的、不是数据给的 | 美术、舞台 |
+| **D-14** | 移动件被吸后，带自己 motion 的子件怎么办 | A 挂起，`SETTLED` 后恢复；B 立即恢复；C 随父一起吸（carry） | **A（owner 2026-11-16 确认）**：下落期间挂起子件自己的运动，落定后恢复；C 与已定「子件坠落、不 carry」冲突 | `MotionHost`、行为宿主 |
 
 ### 16.1 未验证项（不因本文定稿而变成已验证）
 
@@ -1347,10 +1364,156 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 **对这些开放问题的建议**：`phase` 用确定性哈希并允许作者覆盖（D-12）；`locPosType` 先按**固定摆放**导入，保留原值到 `notes`，不实现「每局随机」（等证据）；`shakeOff` 只存证、v1 不读（已定不做击飞）；舞台动画 v1 不做（D-13）；Spin/Whack/Clouds/触发半径用 PROVISIONAL 默认并在诊断中标记，试玩后再调。
 
+### 16.2 D-11 / D-12 的回答（研究回填 + 白话）
+
+**D-12：什么是「相位」，从哪来**。一件摇摆的风铃、一只蹦的螃蟹，动作按周期重复；**相位 = 这件从周期的哪一刻开始**。两只一模一样的螃蟹，相位 0 与 0.5 会一只抬左腿、一只抬右腿。原作逐件记录里没有这个值（`playAnimNo` 是「开局放第几段剪辑」，不是相位），所以我们不能照抄，只能选一个：
+
+- 用 `itemId + level.id` 做**确定性哈希**派生 → 同一关卡、同一件道具每次进世界都是同一个值（账本、双端、重放/截图一致），不同件之间看起来是散的；
+- 作者觉得不好看，就写 `phase` 覆盖；
+- **不用 `Math.random()`**：每次进世界都不同，同一件道具两次加载动作不同步，回放与对拍都会飘。原作的种子来源仍是 U5（未验证）。
+
+**D-11：64 个被动画实例（Animator）够不够？不够——但也不是把上限提到 153 就对了。**
+
+| 事实 | 数 |
+|---|---|
+| 带骨骼动画的实例 | **153**（Cancer 524 的 29.2%） |
+| 来自多少型 | **19**（每型 4–6 段剪辑，按运行时 `AnimationType` 切换） |
+| 其中 3 个螃蟹型 | 小招潮蟹 66 + 招潮蟹 43 + 椰子蟹 11 = **120 件（78%）**；每型 **140 三角**、256² 贴图、1 材质 |
+| 剩下 | **33 件 / 16 型** |
+| 整关规模 | 511 件、**59,056 三角**（实例加权；最大单型 356） |
+
+两条路的账（我方估算；「idle Animator 在 100–200 个时可忽略」有社区实测，[SO 74951690](https://stackoverflow.com/questions/74951690)，但那只算 Animator 状态机、不算蒙皮与 draw call）：
+
+| 路线 | 每帧的账 | 结论 |
+|---|---|---|
+| 153 个逐实例 Animator | 153 个状态机 + **153 次 skinned draw call**（SkinnedMeshRenderer 不参与批处理/实例化）+ 约 1.5–3 千个骨骼 Transform 每帧更新（按每型 10–20 骨估，未验） | 桌面端不至于崩，但这是 153 次 draw call + 几千个 Transform；Quest（世界 100 MB 上限、移动 GPU）下 153 个带骨网格是真实风险 |
+| 3 型螃蟹改 VAT（顶点动画贴图） | 140 三角 ≈ 100 顶点；4–6 段 × 60 帧 ≈ 0.1–0.4 MB/型，**3 型 ≈ 0.3–1.2 MB**（8 相位桶再 ×8 ≈ 2.4–9 MB）；**0 个 Animator、0 次蒙皮** | 螃蟹占 78% 的实例，一次解决；剩下 33 件/16 型塞进 64 个 Animator 绰绰有余 |
+
+**建议（D-11 = B + C）**：`caps.animators` 保持 **64**，但它约束的是**真 Animator 组件**，不是「只播 64 件」；数据侧 153 件的 `defs[].clips` 与 `props[].clipStart` 全部保留。螃蟹三型走 VAT（C），其余 16 型 33 件走真 Animator（B）；VAT 没做出来之前用 A（不播骨骼）降级，并把这 153 件的动画记一条 `PARITY_AUDIT` 分歧——**不要用「只播 64 件」蒙过去**。判断标准：换关时先重算这张表（3 型是否仍占多数、每型三角数是否仍 <400），再决定 64 够不够。
+
 
 ---
 
-## 17. 许可与来源更正（noclip 是 MIT，不是 GPL-3）
+## 17. 世界与场景结构：一个世界 = 一张场景（多地图怎么放）
+
+> 本节回答 owner 2026-11-16 的问题：「VRChat 的 Unity SDK 能不能一张世界多张场景？我们的地图是不是都得塞进主场景、按需加载？」结论：**上传的世界只有一张场景；运行时不能加载第二张；「按需」只能是启用/停用同一张场景里的根物体，或者换世界。** 事实按出处分级，推断标【推断，强】。
+
+### 17.1 事实
+
+| 问题 | 结论 | 出处 |
+|---|---|---|
+| 上传的是哪张场景 | **Unity 当前打开（活动）的那张**。SDK 的世界构建入口是 `VRC_SdkBuilder.ExportSceneToV3()` → `RunExportSceneToV3` / `RunExportAndUploadSceneBlueprint`，内部按 `GetActiveScene()` 取场景；一张场景一个 `VRC_SceneDescriptor`，出现第二个就报 `A Unity scene containing a VRChat Scene Descriptor should only contain one Scene Descriptor.` | SDK 3.10.5：`worlds/Editor/VRCSDK/SDK3/VRCSdkControlPanelWorldBuilder.cs`、`VRCSdkControlPanelWorldBuilderV3.cs`；`worlds/Runtime/VRCSDK/SDK3/` 的 `VRC_SceneDescriptor`；[VRC_SceneDescriptor 文档](https://creators.vrchat.com/worlds/components/vrc_scenedescriptor/) |
+| 能不能在编辑器里叠加（additive）第二张场景 | 编辑器里能打开，但**导出的是活动场景那一份 bundle**，叠加进来的场景内容不进世界【推断，强：导出 API 只接收活动场景，构建产物是一份 bundle】 | 同上；官方「一张场景一个 descriptor」 |
+| Udon 能不能运行时 `LoadScene` | **不能**。Udon 的 API 是白名单（UdonSharp 编译器 `CompilerUdonInterface.IsExposedToUdon` 只放行 node definition 表里的签名；官方 [Class Exposure Tree](https://creators.vrchat.com/worlds/udon/udonsharp/class-exposure-tree/) 就是这张表），白名单组件里没有场景加载器；客户端加载世界是**单场景**加载（`UdonManager.OnSceneLoaded` 遇 `LoadSceneMode.Single` 会清空 Udon 目录再注册），加载世界是客户端的事、不是脚本的事 | SDK 3.10.5：`worlds/Runtime/Udon/UdonManager.cs`、`worlds/Integrations/UdonSharp/Editor/Compiler/Udon/CompilerUdonInterface.cs`；[白名单世界组件](https://creators.vrchat.com/worlds/whitelisted-world-components/) |
+| 能不能运行时下载资源（Addressables / AssetBundle / 模型 / 预制体） | **不能**。允许的运行时外部内容只有**图片、字符串、视频、音频串流**（`VRCUrl` + 域名白名单）；UdonSharp 的 `Instantiate` 只能传 `GameObject`，文档明说传 `Material`/`ScriptableObject` 编译失败。官方文档里没有 Addressables 这一路 | [External URLs](https://creators.vrchat.com/worlds/udon/external-urls/)、[Image Loading](https://creators.vrchat.com/worlds/udon/image-loading/)、[UdonSharp](https://creators.vrchat.com/worlds/udon/udonsharp/) |
+| 世界能多大 | 官方建议 **<200 MB**；**Android 硬上限 100 MB**（构建压缩后）；SDK 上传前有 `CheckIfAssetBundleFileTooLarge` 按平台限额硬检查（限额值在 DLL 里，本轮没解出来，只确认检查存在） | [Submitting a world](https://creators.vrchat.com/worlds/submitting-a-world-to-be-made-public/)、[Quest 内容优化](https://creators.vrchat.com/platforms/android/quest-content-optimization/)、`VRCSdkControlPanelWorldBuilder.cs` 的上传校验 |
+| 多张地图之间怎么跳 | **传送门**：`VRC_PortalMarker`（Udon 可写 `roomId` 再 `RefreshPortal()`），或世界的「World 链接」。跳过去是**另一个世界实例**，不共享任何运行时状态 | [VRC_PortalMarker](https://creators.vrchat.com/worlds/components/vrc_portalmarker/) |
+| 对象池 | `VRC Object Pool` 同步的是对象的 **active 状态**，对象仍在同一场景里；省 `Instantiate`/`Destroy`，不省包体 | [Network Components](https://creators.vrchat.com/worlds/udon/networking/network-components/) |
+
+### 17.2 于是只有四种做法（不是五种）
+
+| 做法 | 能做到 | 代价 | 什么时候用 |
+|---|---|---|---|
+| **(a) 全部塞进一张场景** | 一次加载、零切换、状态随便传 | 包体 = 所有图之和；进世界加载时间 = 所有图之和；远处内容仍然被加载（只是不渲染） | 地图总量在 200 MB 内、都要从房间直达 |
+| **(b) 一张场景 + 每个区域一个根物体，按需 `SetActive`** | 「按需」的唯一形式：省 Update/渲染/物理，不省内存、不省加载时间 | 需要在状态机里管「谁能被启用」；禁用中的道具不会被复位逻辑跑到，容易留下脏状态；本项目还有三条硬阻断（§17.4） | **v1 不做**（见 §17.4 的落地顺序）；多张图同场景、只想让当前图跑脚本时才值得 |
+| **(c) 上传成多个世界，用传送门/World 链接跳** | 每张图单独发布、单独审核、单独算包体 | 跨世界状态全丢（分数、球大小、库存）；每张图都要单独上传与验收；portal 有加载 | 某张图单独超 100 MB、或发布节奏不同 |
+| **(d) 对象池（`VRC Object Pool` / 自建池）** | 省运行时 `Instantiate`/`Destroy` 峰值 | 仍在同一场景，包体不变；池本身要预热 | 大量同类件（碎屑、小蟹）反复生成 |
+
+**没有第五条**：没有 additive 流式加载、没有运行时 AssetBundle、没有「按需下载地图」。
+
+### 17.3 我们今天的做法（事实，不是提案）
+
+`StoryMode` 是**一张场景**：23 个根物体、一个 `VRC_SceneDescriptor`、一个 `PipelineManager`、一个回合状态机 `StoryRound`。
+
+| 岛 | 位置 | 内容 |
+|---|---|---|
+| **关卡岛（野餐草坪）** | 原点附近，地面 `(-12.7, 0, -12.7)`，结构边界 x∈[−19.4, −6]、z∈[−19.4, −6] | `LevelContent/Props`（11 个 `kind` 分组）+ `LevelContent/Structures`（边界、地面、坡道、树桩…）；入口 `LevelEntry`(−12.5, 0.15, −10.4) |
+| **房间岛** | **(1200, 0, 0)** | `HubCenter`、`hub_floor`（8×8 m）、`HubSpawn`(1200, 0.1, −2.8)、选关垫 `select_picnic_corner`(1200, 0.01, 1.2)、`result_board`(1200, 1.45, 3.95)、四面边界 x/z ∈ ±4 m |
+
+- 两岛中心相距 **约 1213 m**（X 方向 1200 m），**超过 Unity 默认远裁剪（约 1000 m）**，所以互相看不见、听不见；这是「看不见」的经验值，不是性能测量（[HUB_ROOM §11](../StoryMode/HUB_ROOM.md) 未验证第 8 条已写明）。
+- 切换 = `VRCPlayerApi.TeleportTo` + 回合状态，由 `HubLevelLauncher` 独占（`Runtime/Hub/HubLevelLauncher.cs`）。**没有 additive 加载、没有加载屏、没有整块 `LevelContent` 的启用/停用**——[HUB_ROOM §7.1](../StoryMode/HUB_ROOM.md) 明确不做，三条理由是：导入器一个场景只有一个受管根 `LevelContent`、`PickupFieldHost.RecordOriginalPoses()` 在 `Start` 里捕获原始位姿（关着就永远捕获不到）、`LevelArenaHost` 一次性注册障碍且没有按岛切换的接口；再加上「关掉没有收益」（同一张场景已经全部加载，1200 m 外本来就不渲染）。
+- 玩家跑出关卡岛时不是靠墙拦，而是「回合在跑就必须在岛上」的 hold 逻辑（`holdAttemptLimit` 次修正），这是**比关卡墙更强**的约束，也正是 owner 说的「活动范围靠地图设计」。
+
+### 17.4 建议：多张地图这样放
+
+**推荐 A：一张场景 + 一个关卡一个岛 + 根物体级按需启用**，把 (c) 留成出口。
+
+| 方案 | 适用 | 成本 | 风险 |
+|---|---|---|---|
+| **A 一张场景，每关一个岛**（推荐 v1） | 房间 + 若干张 10–20 m 见方的图；总量 <200 MB（Android <100 MB） | 包体与加载时间是所有图之和；岛间距 ≥1200 m 时 **float 精度足够**（1200 m 处约 0.1 mm，10 km 处才掉到 ~1 mm） | 导入器要多受管根（现在只有一个，§17.5）；同一材质/贴图要在图之间共享（省包体）；将来要按需停用还要另两条前置（§17.4） |
+| B 每张图一个独立世界 + 传送门 | 单图超 100 MB、要单独发布/审核、或内容风格完全不同的图 | 跨世界状态全丢；每张图单独上传、单独验收；portal 有加载 | 房间与图之间的「回合」要跨世界重建（球大小、分数都得重算或走存档），玩家体验切成两段 |
+| C 混合：房间图 + 大图独立世界 | 只有 1–2 张图真的很大 | 只有在需要时才付 B 的代价 | 两套切换路径（teleport 与 portal）都要测 |
+
+**为什么推荐 A**：(1) 我们的房间/关卡切换已经是 teleport + 状态机，A 不需要新机制；(2) 1200 m 的间距已经验证过「互相看不见」，再加岛就是复制这段距离，模式不变；(3) B 的跨世界状态重建是全新工程，而现在没有任何一张图接近 100 MB（参考关 511 件、59,056 三角）。**B 的触发条件写死**：某张图单独构建后仍 >100 MB（Android）或 >200 MB（PC 建议值），或它需要独立发布节奏。
+
+**A 的落地顺序（别一步跨到 `SetActive`）**，因为 HUB_ROOM §7.1 已经把「整块启用/禁用」挡在三件事前面：
+
+1. **v1：所有岛都保持启用，只用回合状态机隔离**——只有当前岛在跑回合（`StoryRound` 的相位与 `HubLevelLauncher` 的闸门），其它岛就是「摆在那儿、没人碰」。这一版不需要新机制，也不碰 HUB_ROOM 的三条阻断。
+2. **要省那点 `Update` 时才考虑按需启用**，前置三条缺一不可：① `LevelContent/<levelId>` 多根（导入器现在只有一个受管根）；② `PickupFieldHost.CaptureOriginalPoses()` 变成公开接缝，并在启用后立即调用（否则重试时道具留在地上）；③ 每岛一个 arena host，或一个显式的「当前岛」切换接口（现在 `LevelArenaHost` 一次性注册 8 平面/8 盒，两个岛会抢同一张表）。
+3. 启用前必须先复位再开（`ResetField()`），否则再进就是脏的。
+
+### 17.5 对格式与编辑器的要求（本轮只写要求，不改实现）
+
+- `meta.scene` 已经是字段（这张关卡属于哪张 Unity 场景）；`meta.id` 已经是目录名 → 建议导入器用它当**场景内根物体名**（`LevelContent/<id>`），这样一张场景放多关不会互相覆盖。**今天导入器只认一个 `LevelContent`（`PlacementImporter.ManagedRootName`），多根尚未实现**——这是 A 方案的代码前置条件（不管启用/停用都需要）；若还要按需启用/停用，再加 §17.4 的另两条。
+- 每关自带世界偏移：`meta.ball.start`/`playerSpawn` 已是世界坐标，岛的偏移就是这些坐标的一部分，导入器**不重算、不归一化**。
+- 编辑器：一次只编辑一关，但要显示「这关在世界里的偏移」；`meta.bounds` 是作者框（查越界、画框），**不是**活动范围（§5）。多图时编辑器需要「岛列表」（读场景根），本轮不做。
+- 被禁用的图不参与复位：`SetActive(false)` 的根下，Udon `Update` 不会跑、道具不会复位。**关之前先在状态机里复位**，否则再开是脏的。**v1 因此不做启用/停用**（§17.4 的落地顺序 1）。
+
+### 17.6 不要做的
+
+- 不要指望 additive 场景加载：导出不带第二张场景。
+- 不要用 `SceneManager` / Addressables / AssetBundle / 运行时模型下载：Udon 白名单外（图片/字符串/视频/音频除外）。
+- 不要把两张图放得互相可见：默认远裁剪约 1000 m，1200 m 是「看不见」的最小经验值；两个岛各放 8×8 m 房间时，改成 X/Z 排开也一样。
+- 不要用 `SetActive` 来「省内存」：省不到，只会省 Update/渲染/物理。
+
+---
+
+## 18. Q&A：为什么允许逐件缩放
+
+> owner 2026-11-16 的问题：「以前说『不缩放』，现在怎么又允许逐件缩放了？」短的答案：**旧的「不缩放」说的是两件事——运行时不许缩放、作者不许改尺寸凑档——这两条都还在；新的只是承认原作数据里本来就有 6 件不是单位缩放，照抄它。** 下面把这三件事分开。
+
+### 18.1 旧口径到底说了什么
+
+| 旧句子 | 出处 | 它当时的意思 |
+|---|---|---|
+| 「物件一律真实尺寸，绝不缩放凑档」 | [PROP_SET_PLAN 文首前提](../StoryMode/PROP_SET_PLAN.md) | 作者不许把模型改大改小去够某个档位/门槛 |
+| 「本项目**不缩放**、真实尺寸、轴心在几何中心」 | [PROP_BEHAVIOURS §2](../PickupAbsorb/PROP_BEHAVIOURS.md) | 同上 + 运行时不改道具尺寸 |
+| 「吸附物冻结，不缩放、不随球长大外移」 | [PARITY_AUDIT 的 `C06` 行](../Parity/PARITY_AUDIT.md) | 吸上去之后不许再缩放（原作专利行为） |
+| 「挂在父件下的子件永远不缩放」 | 本文旧 §6.4 | 挂接件的位姿由父件决定，缩子件会破坏接触面 |
+
+这四句在当时**都对**，而且都还在（§6.4 的①）。它们为什么会看起来像「一刀切不许缩放」：**v1 的数据源里根本没有缩放字段**——REROLL 导出表只有 `position`（[ORIGINAL_TERRAIN_AND_LAYOUT §0](../../Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)、[STACKS_IN_ORIGINAL §0](../../Research/KatamariBallRules/STACKS_IN_ORIGINAL.md)），所以 13 份 `placement.json` 里每一件都是 1:1，规则写成「不缩放」也不会漏掉任何东西。
+
+### 18.2 新数据说了什么
+
+PS2 的实例记录是 0x40 字节，`+0x30..+0x38` 三个 f32 就是缩放（[NOCLIP_KATAMARI_FORMAT §3.2](../../Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)）。Cancer 524 件里 **6 件不是 1**：
+
+- **4 件 `0.9`**（无父、同类小尺寸）：忽略 → 体积差 1.37×，吸收门差 1.11×；
+- **1 件 `0.1`**（**挂在父件下**，chain 409→410→411）：忽略 → 体积差 1000×，门会要求 10 倍大的球，渲染大 10 倍；
+- **1 件非均匀 `(0.0741, 0.0291, 0.0197)`**（无父，语义未验证）：忽略 → 体积差 23,547×，门差 28.7×，每轴大 13.5 / 34.4 / 50.8 倍。
+
+**如果不允许逐件缩放，这三类件只能二选一：要么按 1:1 导入（渲染、体积、门槛全错），要么丢掉（参考关卡少 6 件，其中 1 件是挂接链上的）。** 前者会让「参考关卡与原作对拍」这件事直接不成立，后者是数据丢失——两样都比「多一个 `scale` 字段」贵。
+
+### 18.3 所以现在是三层（不是「放开了」）
+
+| 层 | 旧口径 | 现在 |
+|---|---|---|
+| ① 运行时缩放 | 不许 | **不许**（不变）：`scale` 已在导入期乘进 `aabb`，运行时只读 `aabb`；父件带子件只搬位姿 |
+| ② 作者态均匀缩放 | 没有这个字段 | **允许**（新）：任何 `behaviour`、任何 `parent`，因为原作就有 4 件 0.9 和 1 件 0.1 |
+| ③ 作者态非均匀缩放 | 没有这个字段 | **仍限制**：只允许无父、static、box/sphere；原作那 1 件照写但标不可吸、无碰撞、记 `divergences` |
+
+**没有放开的两条**：不许把道具改大改小去凑体积档（②只能照抄原值或写明理由，调体积只能用 `volumeK`）；挂接件在运行时仍然永不缩放（①）。
+
+### 18.4 代价与风险（写清楚，免得以后再解释一遍）
+
+- **挂接件的那件 0.1**：旧规则会把它判成 `[prop_scale_attached]` 硬错误，参考导入就拒掉一件真实数据。所以 `[prop_scale_attached]` 收窄成「挂接件带**非均匀** scale」。
+- **碰撞代理**：`aabb` 已经是乘过 scale 的尺寸，但逐型 `collider` 代理（`COLLIDER_PROXY`）的半径/半高是**模型空间**写的；导入器必须把 `scale` 也乘进代理参数（均匀时三个轴同一个数，非均匀时只允许 box/sphere 所以仍可乘），否则 0.1 那件会带着 10 倍大的胶囊。**这一条是导入器实现要求，未实现。**
+- **AABB 与支撑推导**：`aabb` 变了，支撑面/叠放推导跟着变——已经在 §9 的「已乘 scale」约定里，不需要额外规则。
+- **U4 的影响**：校验器的 OBB 互穿筛选用世界 AABB；接进 scale 后 0.9/0.1 那几件的误报会变化，`Docs/tests/levelbuild` 要加用例。
+- **别把 `scale` 当动画**：缩放是静态列，不参与 `motions[]`，运行时也不会插值。
+
+---
+
+## 19. 许可与来源更正（noclip 是 MIT，不是 GPL-3）
 
 | 事实 | 依据 |
 |---|---|
@@ -1362,10 +1525,11 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 **本轮同步更正的地方**：`AGENTS.md` 的旧规则（把 noclip 列为 GPL 工具）改为「派生自第三方代码的解析器在 owner 选定仓库许可前留在仓库外；移植/衍生必须保留原版权与许可声明（MIT 允许）；首选照规格重实现」；`OPEN_DECISIONS.md` 的 noclip 条与「Still open 仓库许可」同步改写；本文件旧稿中「noclip 是 GPL-3」的断言全部替换为上面的更正，仍保留「不是 GPL-3」这句本身作为纠正记录。**其余许可判断（素材 CC-BY-SA/GPL 不混用等）不受影响，保持原文。**
 
-## 18. 变更记录
+## 20. 变更记录
 
 | 日期 | 变更 | 说明 |
 |---|---|---|
 | 2026-11-16 | 建立骨架 | 需求/约束、研究问题、引擎事实、NOW/WAIT；schema 标 `DRAFT_BLOCKED_ON_RESEARCH` |
 | 2026-11-16 | **本版：最终提案** | 两份研究落地后按研究结论改写：五层 schema 定稿、terrain/structures/activityArea/props 字段、两个 JSON 例子、规范形与侧车、错误码、v1→v2 转换器、Unity 映射、容量预算、地形接触分阶段计划与 4 个新测试格、编辑器升级、迁移阶段、owner 决策；许可前提更正为 MIT（非 GPL-3） |
 | 2026-11-16 | **第 2 版：运动/动画** | 吸收 `ORIGINAL_ANIMATION_OBSERVATIONS`：`motions[]`/`paths[]` 逐关表、`props[].motion/inherit/phase/clipStart/shakeOff`、`defs[].speedIndex/clips`、13 类运动与速度档、10/15 Hz 更新预算、共享剪辑×8 相位桶、移动件吸收/父链规则、三个运动 JSON 例子、错误码、编辑器 E9/E10、D-10–D-14 与 U5–U9 |
+| 2026-11-16 | **第 3 版：owner 拍板 + 两个问答** | 记录 owner 2026-11-16 的裁定（球径 20 m、活动区靠布局、逐关 kill plane、D-10 全加、D-11 研究结论、D-12 相位、D-13 不做、D-14 挂起）；新增 §17「一个世界 = 一张场景」（多地图架构、我们今天的 StoryMode 两岛结构、A/B/C 建议、格式与编辑器要求）、§18「为什么允许逐件缩放」（旧口径四句 → 新数据 6 件非单位 → 三层规则）；§6.4 改写为三层并收窄 `[prop_scale_attached]`；`caps.animators` 明确为「Animator 组件预算」而非「只播 64 件」；原许可/变更记录顺延为 §19/§20 |

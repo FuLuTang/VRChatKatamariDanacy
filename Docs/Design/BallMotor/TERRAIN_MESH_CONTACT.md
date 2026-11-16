@@ -101,3 +101,19 @@ float GetLastTerrainQueryMicros();
 - 与真实 3,456 三角形 Cancer 网格的接缝/绕序/法线；导入器尚不存在。
 - v2 接触求解器里的地形（T2）、连续扫掠防隧穿（T2）、爬升/台阶分类（T2）。
 - 场景/预制体接线（只写 `SetTerrainMesh` 接口，不碰场景）。
+
+## 7. 导入与 PTF 地形单元（2026-11-16）
+
+- **Editor**：`Editor/LevelBuild/TerrainMeshImporter.cs` 读 v2 的 `terrain`（内联 ≤512 tri，
+  否则 `meshRef` + `.katerrain`），校验 sha256、索引/计数/chunk 连续性，然后写
+  `TerrainFieldHost` 的序列化数组。参考关卡的 `_ref_*` 只允许在 `Assets/_RefUnlicensed/`
+  的自己的场景里写；否则 `[terrain_scene_guard]`，绝不写 StoryMode。导入不 SaveScene。
+- **Runtime**：`TerrainFieldHost.Start()` 把数组交给 `motor.SetTerrainMesh`（writer-allocates），
+  并用序列化 bool 打开 motor 的 `terrainMeshContactEnabled`；runtime 不读磁盘。
+- **容量拒绝码**：`[terrain_capacity]` 超过 8192 tri / 16384 vert / 64 chunk / 512 tri·chunk；
+  `[terrain_sidecar]` sha/计数/路径；`[terrain_mesh]` 索引/计数；`[terrain_zone]` zoneIds；
+  `[terrain_scene_guard]` 参考场景。
+- **PTF C21–C24**（`Tools/levelbuild/physics_test_terrain.py`，v2 inline）：
+  C21 stairs 16 tri / 32 vert；C22 gully 14 / 28；C23 tunnel-overhang 8 / 16；
+  C24 curb 12 / 24。四格都是 `terrain_pending` 的 `planned_cells`，`PhysicsTestField.unity`
+  未编辑；操作员建好场景后再把它们 wired 并加 `penetration_max` driver 读数。

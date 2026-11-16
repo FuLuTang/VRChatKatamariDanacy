@@ -1,4 +1,4 @@
-"""The physics test field's data contract: 9 cells, their placements and their criteria.
+"""The physics test field's data contract: 9 wired cells, 4 terrain design cells, their placements and criteria.
 
 Run from the repository root:
 
@@ -131,19 +131,27 @@ class FieldJsonShape(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual(len(planned), len(set(planned)))
         self.assertFalse(set(ids) & set(planned), "a cell is both wired and planned")
-        # 9 wired + 12 planned C-cells = the 21-cell field. The v2-only design rows (W1-W6,
-        # R1/R2, S1, X1) describe scenes that do not exist yet, so they are not part of that
-        # count - they are inert data until someone authors their placement.
+        # 9 wired + 12 planned C-cells + 4 terrain design cells = the 25-cell field.
+        # The v2-only design rows (W1-W6, R1/R2, S1, X1) describe scenes that do not exist
+        # yet, so they are not part of that count - they are inert data until someone
+        # authors their placement.
         design_only = [cell for cell in self.doc["planned_cells"]
                        if cell.get("status") == "pending_scene"]
         self.assertEqual(len(design_only), 10)
-        self.assertEqual(len(ids) + len(planned) - len(design_only), 21)
+        self.assertEqual(len(ids) + len(planned) - len(design_only), 25)
 
     def test_planned_cells_carry_no_geometry(self):
         for cell in self.doc["planned_cells"]:
             self.assertFalse(cell.get("wired"), cell["id"])
-            self.assertIsNone(cell.get("placement"), cell["id"])
             self.assertNotIn("registration", cell, cell["id"])
+            if cell.get("status") == "terrain_pending":
+                # C21-C24 are authored as v2 terrain placements now; they stay unwired
+                # until the operator builds/imports the cell into PhysicsTestField.unity.
+                self.assertIsNotNone(cell.get("placement"), cell["id"])
+                self.assertTrue(cell["placement"].endswith("/placement.json"), cell["id"])
+                self.assertIn("design_checks", cell, cell["id"])
+            else:
+                self.assertIsNone(cell.get("placement"), cell["id"])
 
     def test_expect_rows_follow_the_diameter_presets(self):
         presets = len(self.doc["diameters"])

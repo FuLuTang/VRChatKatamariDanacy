@@ -1,0 +1,284 @@
+{
+  "schema": "katamari.placement/2",
+  "meta": {
+    "id": "C23",
+    "scene": "PhysicsTestField",
+    "units": "m",
+    "convention": "unity-y-up-left-handed-quat-xyzw",
+    "ball": {
+      "startDiameterM": 0.3,
+      "targetDiameterM": 0.6,
+      "maxDiameterRef": "level",
+      "maxDiameterM": 2.2,
+      "start": [
+        3.5,
+        0.15,
+        -25.0
+      ],
+      "spawnSource": "authored"
+    },
+    "timeLimitS": 0,
+    "playerSpawn": [
+      3.5,
+      0.5,
+      -25.0
+    ],
+    "groundY": -2.0,
+    "bounds": [
+      [
+        0.5,
+        -26.5
+      ],
+      [
+        6.5,
+        -17.5
+      ]
+    ],
+    "spawnClearanceM": 0.2,
+    "zones": [
+      {
+        "id": "C23",
+        "code": 0,
+        "kind": "ground"
+      }
+    ],
+    "arena": {
+      "id": "C23"
+    },
+    "caps": {
+      "props": 0,
+      "terrainTriangles": 512,
+      "terrainVertices": 1024,
+      "staticSolids": 0,
+      "activityWalls": 0,
+      "movingProps": 0,
+      "animators": 0
+    },
+    "budget": {
+      "planes": 8,
+      "boxes": 8,
+      "ramps": 4,
+      "blocking": 6,
+      "propSupports": 6
+    },
+    "expected": {
+      "propCount": 0,
+      "valueUnits": 0,
+      "terrainTriangles": 8
+    },
+    "source": {
+      "kind": "authored"
+    }
+  },
+  "terrain": {
+    "id": "C23",
+    "kind": "mesh",
+    "winding": "ccw",
+    "vertices": [
+      [
+        0.5,
+        0.0,
+        -25.0
+      ],
+      [
+        0.5,
+        0.0,
+        -19.0
+      ],
+      [
+        6.5,
+        0.0,
+        -19.0
+      ],
+      [
+        6.5,
+        0.0,
+        -25.0
+      ],
+      [
+        2.0,
+        1.2,
+        -23.5
+      ],
+      [
+        5.0,
+        1.2,
+        -23.5
+      ],
+      [
+        5.0,
+        1.2,
+        -20.5
+      ],
+      [
+        2.0,
+        1.2,
+        -20.5
+      ],
+      [
+        2.0,
+        0.0,
+        -23.5
+      ],
+      [
+        2.0,
+        1.2,
+        -23.5
+      ],
+      [
+        2.0,
+        1.2,
+        -20.5
+      ],
+      [
+        2.0,
+        0.0,
+        -20.5
+      ],
+      [
+        5.0,
+        0.0,
+        -23.5
+      ],
+      [
+        5.0,
+        0.0,
+        -20.5
+      ],
+      [
+        5.0,
+        1.2,
+        -20.5
+      ],
+      [
+        5.0,
+        1.2,
+        -23.5
+      ]
+    ],
+    "indices": [
+      0,
+      1,
+      2,
+      0,
+      2,
+      3,
+      4,
+      5,
+      6,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      8,
+      10,
+      11,
+      12,
+      13,
+      14,
+      12,
+      14,
+      15
+    ],
+    "triangles": {
+      "count": 8,
+      "zoneIds": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "classes": [
+        1,
+        1,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ]
+    },
+    "broadPhase": {
+      "kind": "aabb",
+      "boxes": [
+        {
+          "id": "C23_0",
+          "min": [
+            0.499,
+            -0.001,
+            -25.001
+          ],
+          "max": [
+            6.501,
+            1.201,
+            -18.999
+          ],
+          "triangleRange": [
+            0,
+            8
+          ]
+        }
+      ]
+    },
+    "chunks": [
+      {
+        "id": "C23_chunk_0",
+        "boxRange": [
+          0,
+          1
+        ],
+        "triangleRange": [
+          0,
+          8
+        ]
+      }
+    ],
+    "grid": {
+      "cellM": 4.0,
+      "origin": [
+        0.5,
+        -26.5
+      ],
+      "cellsX": 2,
+      "cellsZ": 3
+    },
+    "materialSegments": [
+      {
+        "id": "terrain",
+        "firstIndex": 0,
+        "indexCount": 24,
+        "material": "Assets/VRC_Katamari/Art/Materials/Mat_PlaygroundGround.mat"
+      }
+    ],
+    "source": {
+      "kind": "authored"
+    }
+  },
+  "structures": {
+    "solids": []
+  },
+  "activityArea": {
+    "walls": [],
+    "killPlane": {
+      "y": -4.0,
+      "respawn": "ballStart",
+      "zoneId": 0
+    },
+    "softMarginM": 0.0,
+    "source": "authored"
+  },
+  "props": [],
+  "defs": [],
+  "motions": [],
+  "paths": [],
+  "cameras": [],
+  "renderPresets": [],
+  "regions": []
+}

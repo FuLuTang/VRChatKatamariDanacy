@@ -1,0 +1,404 @@
+{
+  "schema": "katamari.placement/2",
+  "meta": {
+    "id": "C21",
+    "scene": "PhysicsTestField",
+    "units": "m",
+    "convention": "unity-y-up-left-handed-quat-xyzw",
+    "ball": {
+      "startDiameterM": 0.3,
+      "targetDiameterM": 0.6,
+      "maxDiameterRef": "level",
+      "maxDiameterM": 2.2,
+      "start": [
+        -10.5,
+        0.15,
+        -25.0
+      ],
+      "spawnSource": "authored"
+    },
+    "timeLimitS": 0,
+    "playerSpawn": [
+      -10.5,
+      0.5,
+      -25.0
+    ],
+    "groundY": -2.0,
+    "bounds": [
+      [
+        -13.5,
+        -26.5
+      ],
+      [
+        -7.5,
+        -17.5
+      ]
+    ],
+    "spawnClearanceM": 0.2,
+    "zones": [
+      {
+        "id": "C21",
+        "code": 0,
+        "kind": "ground"
+      }
+    ],
+    "arena": {
+      "id": "C21"
+    },
+    "caps": {
+      "props": 0,
+      "terrainTriangles": 512,
+      "terrainVertices": 1024,
+      "staticSolids": 0,
+      "activityWalls": 0,
+      "movingProps": 0,
+      "animators": 0
+    },
+    "budget": {
+      "planes": 8,
+      "boxes": 8,
+      "ramps": 4,
+      "blocking": 6,
+      "propSupports": 6
+    },
+    "expected": {
+      "propCount": 0,
+      "valueUnits": 0,
+      "terrainTriangles": 16
+    },
+    "source": {
+      "kind": "authored"
+    }
+  },
+  "terrain": {
+    "id": "C21",
+    "kind": "mesh",
+    "winding": "ccw",
+    "vertices": [
+      [
+        -12.0,
+        0.0,
+        -26.0
+      ],
+      [
+        -12.0,
+        0.0,
+        -23.5
+      ],
+      [
+        -9.0,
+        0.0,
+        -23.5
+      ],
+      [
+        -9.0,
+        0.0,
+        -26.0
+      ],
+      [
+        -12.0,
+        0.3,
+        -23.5
+      ],
+      [
+        -12.0,
+        0.3,
+        -22.9
+      ],
+      [
+        -9.0,
+        0.3,
+        -22.9
+      ],
+      [
+        -9.0,
+        0.3,
+        -23.5
+      ],
+      [
+        -12.0,
+        0.0,
+        -23.5
+      ],
+      [
+        -12.0,
+        0.3,
+        -23.5
+      ],
+      [
+        -9.0,
+        0.3,
+        -23.5
+      ],
+      [
+        -9.0,
+        0.0,
+        -23.5
+      ],
+      [
+        -12.0,
+        0.6,
+        -22.9
+      ],
+      [
+        -12.0,
+        0.6,
+        -22.3
+      ],
+      [
+        -9.0,
+        0.6,
+        -22.3
+      ],
+      [
+        -9.0,
+        0.6,
+        -22.9
+      ],
+      [
+        -12.0,
+        0.3,
+        -22.9
+      ],
+      [
+        -12.0,
+        0.6,
+        -22.9
+      ],
+      [
+        -9.0,
+        0.6,
+        -22.9
+      ],
+      [
+        -9.0,
+        0.3,
+        -22.9
+      ],
+      [
+        -12.0,
+        0.9,
+        -22.3
+      ],
+      [
+        -12.0,
+        0.9,
+        -21.7
+      ],
+      [
+        -9.0,
+        0.9,
+        -21.7
+      ],
+      [
+        -9.0,
+        0.9,
+        -22.3
+      ],
+      [
+        -12.0,
+        0.6,
+        -22.3
+      ],
+      [
+        -12.0,
+        0.9,
+        -22.3
+      ],
+      [
+        -9.0,
+        0.9,
+        -22.3
+      ],
+      [
+        -9.0,
+        0.6,
+        -22.3
+      ],
+      [
+        -12.0,
+        0.9,
+        -21.7
+      ],
+      [
+        -12.0,
+        0.9,
+        -19.0
+      ],
+      [
+        -9.0,
+        0.9,
+        -19.0
+      ],
+      [
+        -9.0,
+        0.9,
+        -21.7
+      ]
+    ],
+    "indices": [
+      0,
+      1,
+      2,
+      0,
+      2,
+      3,
+      4,
+      5,
+      6,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      8,
+      10,
+      11,
+      12,
+      13,
+      14,
+      12,
+      14,
+      15,
+      16,
+      17,
+      18,
+      16,
+      18,
+      19,
+      20,
+      21,
+      22,
+      20,
+      22,
+      23,
+      24,
+      25,
+      26,
+      24,
+      26,
+      27,
+      28,
+      29,
+      30,
+      28,
+      30,
+      31
+    ],
+    "triangles": {
+      "count": 16,
+      "zoneIds": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "classes": [
+        1,
+        1,
+        1,
+        1,
+        3,
+        3,
+        1,
+        1,
+        3,
+        3,
+        1,
+        1,
+        3,
+        3,
+        1,
+        1
+      ]
+    },
+    "broadPhase": {
+      "kind": "aabb",
+      "boxes": [
+        {
+          "id": "C21_0",
+          "min": [
+            -12.001,
+            -0.001,
+            -26.001
+          ],
+          "max": [
+            -8.999,
+            0.901,
+            -18.999
+          ],
+          "triangleRange": [
+            0,
+            16
+          ]
+        }
+      ]
+    },
+    "chunks": [
+      {
+        "id": "C21_chunk_0",
+        "boxRange": [
+          0,
+          1
+        ],
+        "triangleRange": [
+          0,
+          16
+        ]
+      }
+    ],
+    "grid": {
+      "cellM": 4.0,
+      "origin": [
+        -13.5,
+        -26.5
+      ],
+      "cellsX": 2,
+      "cellsZ": 3
+    },
+    "materialSegments": [
+      {
+        "id": "terrain",
+        "firstIndex": 0,
+        "indexCount": 48,
+        "material": "Assets/VRC_Katamari/Art/Materials/Mat_PlaygroundGround.mat"
+      }
+    ],
+    "source": {
+      "kind": "authored"
+    }
+  },
+  "structures": {
+    "solids": []
+  },
+  "activityArea": {
+    "walls": [],
+    "killPlane": {
+      "y": -4.0,
+      "respawn": "ballStart",
+      "zoneId": 0
+    },
+    "softMarginM": 0.0,
+    "source": "authored"
+  },
+  "props": [],
+  "defs": [],
+  "motions": [],
+  "paths": [],
+  "cameras": [],
+  "renderPresets": [],
+  "regions": []
+}

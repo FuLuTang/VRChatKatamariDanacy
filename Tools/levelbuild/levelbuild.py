@@ -27,6 +27,10 @@ if str(ROOT) not in sys.path:
 from Tools.levelbuild import editor_core  # noqa: E402
 from Tools.levelbuild import placement_core as core
 from Tools.levelbuild import supports as support_geometry  # noqa: E402
+from Tools.levelbuild import ref_v2_from_extract  # noqa: E402
+
+#: The v2 schema string; a v2 document is checked through the v1 rule set (see cmd_check).
+V2_SCHEMA = "katamari.placement/2" 
 
 
 def _print_banner(doc):
@@ -145,6 +149,16 @@ def cmd_check(args):
         print("levelbuild: %s is not readable JSON: %s" % (path, error), file=sys.stderr)
         return 2
 
+    # A v2 document is checked through the v1 rule set: one validator, one set of geometric
+    # rules (overlap, seating, bounds, budgets, expected totals).  The v2-only layer rules of
+    # LEVEL_FORMAT_V2.md section 9 are not implemented yet, so the translation is spelled out
+    # in ref_v2_from_extract.to_v1_view instead of adding a second validator here.
+    if isinstance(doc, dict) and doc.get("schema") == V2_SCHEMA:
+        print("v2: %s is a %s document; checked through the v1 rules (v2-only layer rules "
+              "are not implemented yet)" % (core.display_path(path), V2_SCHEMA),
+              file=sys.stderr)
+        doc = ref_v2_from_extract.to_v1_view(doc)
+
     manifests = None
     if args.manifests:
         directory = Path(args.manifests)
@@ -222,6 +236,16 @@ def cmd_format(args):
     except (OSError, json.JSONDecodeError) as error:
         print("levelbuild: %s is not readable JSON: %s" % (path, error), file=sys.stderr)
         return 2
+
+    # A v2 document is checked through the v1 rule set: one validator, one set of geometric
+    # rules (overlap, seating, bounds, budgets, expected totals).  The v2-only layer rules of
+    # LEVEL_FORMAT_V2.md section 9 are not implemented yet, so the translation is spelled out
+    # in ref_v2_from_extract.to_v1_view instead of adding a second validator here.
+    if isinstance(doc, dict) and doc.get("schema") == V2_SCHEMA:
+        print("v2: %s is a %s document; checked through the v1 rules (v2-only layer rules "
+              "are not implemented yet)" % (core.display_path(path), V2_SCHEMA),
+              file=sys.stderr)
+        doc = ref_v2_from_extract.to_v1_view(doc)
 
     canonical = core.dump_doc(doc)
     current = path.read_text(encoding="utf-8")

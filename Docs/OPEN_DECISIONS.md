@@ -135,7 +135,7 @@
 - **只重建一关原作关卡来暴露引擎差异，地图定为 Make Cancer（不是 Make a Star 1）** — Cancer 的 22.2→80 cm 落在引擎舒适区，MAS1 的 5→10 cm 低于起始球、只留作下限探针；重建里原作球芯只当占位。见 [_ref_cancer README](Design/Levels/_ref_cancer/README.md)、[_ref_mas1 README](Design/Levels/_ref_mas1/README.md)。
 - **不做爬升按钮** — 原作是推墙即爬、没有按键，加按钮等于新造第三种输入。见 [PARITY_AUDIT 的 `M07` 行](Design/Parity/PARITY_AUDIT.md)。
 - **定步暂留 50 Hz，计划切 30 Hz** — 现有接触/子步参数按 0.02 s 标定过，切换单独立项；原作是 30 Hz。见 [PARITY_AUDIT 的 `T01` 行](Design/Parity/PARITY_AUDIT.md)。
-- **全项目只留一个全局球径上限，数值远高于 2.20 m，按试玩调** — 上限是引擎护栏、不是玩法目标；取代 (n) 的「每关一个上限」形态。见 [PARITY_AUDIT 的「球径上限」行](Design/Parity/PARITY_AUDIT.md)、[LEVEL_FORMAT_V2 的 D-1](Design/Levels/LEVEL_FORMAT_V2.md)。
+- **全项目只留一个全局球径上限 = 20 m**（2026-11-16 定为 20 m，不是 30；正常游玩很少摸到，按试玩复核） — 上限是引擎护栏、不是玩法目标；取代 (n) 的「每关一个上限」形态。见 [PARITY_AUDIT 的「球径上限」行](Design/Parity/PARITY_AUDIT.md)、[LEVEL_FORMAT_V2 的 D-1](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **几何校验是报告、`pinned` 是显式豁免** — 作者的 `parent`/`stackedOn` 不接触只报 warning，只有 `parentDerived` 的链在 `--strict-parents` 下红；新增 `pinned: true` 表示「自己站着、永不落」，校验器免检悬空、运行期不入队但仍是支撑面（传播终点）。理由是所有者要的摆法（托盘离长凳 7.5 cm、盆栽离冰柜 88 cm）不该被校验器禁止。见 [PROP_BEHAVIOURS §10.9「校验与 `pinned`」](Design/PickupAbsorb/PROP_BEHAVIOURS.md)、[LEVEL_AUTHORING §8 规则 5b/5c](Design/Tools/LEVEL_AUTHORING.md)、[PARITY_AUDIT 的「叠放公差」行](Design/Parity/PARITY_AUDIT.md)。
 - **吸收门按原作算式，不单独调常数** — 物件体积 = 逐型 `k` × AABB 体积（默认 `k = 0.70`，薄片/蓬松/镂空按原作手调），门槛 `Req = floor_mm(∛(10·V·6/π))`；这是把 `k` 与取整接进同一条门，不是改 10×，实现为体积迁移 C 步之前的一个独立小步。见 [PARITY_AUDIT 的「体积定义（`k` 系数）」与「门槛取整」行](Design/Parity/PARITY_AUDIT.md)、[§5.3.2](Design/Parity/PARITY_AUDIT.md)；实现、口径与前后实测（`_ref_cancer` 0.222 m 球 91 → 184 件，与原作 184 件相同）见 [ABSORB_GATE_ORIGINAL.md](Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 - **体积表示与迁移** — 定点 `long volumeMm3`（1 LSB = 1 mm³），A→B→C→D 四步各自独立验收；细节不在此重复，见上方 (r) 条。
@@ -150,10 +150,25 @@
 - **贴图：法线不得来自噪声，UV 必须有效** — fbm 噪声法线会把釉面/金属打成「湿报纸」；重叠或零面积 UV 不进 Unity。见 [TEXTURE_PBR_SPEC §10、§10.1](Art/OriginalModels/props/TEXTURE_PBR_SPEC.md)。
 - **关卡格式与编辑器整体升级：研究已落地，v2 进入最终提案** — 地形/碰撞/旋转/缩放/父表/许可都已查清，字段与分层见 [LEVEL_FORMAT_V2](Design/Levels/LEVEL_FORMAT_V2.md)（`FINAL_PROPOSAL`）；Unity 侧尚未验证。仍然有效的原则：新键与校验器同批落地、未知键硬错误、不静默丢弃。
 - **地形必须支持真正的三维表面，纯 heightfield 不够** — 原作有洞、隧道和悬挑，所以碰撞至少要三角网 + 空间加速结构（大片简单区域可以再用 heightfield 当优化）。数据侧形态已定：静态三角网 + 碰撞 AABB broad phase + 烘焙网格；运行时接触分 T0–T4，每步成本与 Udon 传参仍待 Unity 实测。见 [ORIGINAL_TERRAIN_AND_LAYOUT](Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)、[NOCLIP_KATAMARI_FORMAT](Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)、[LEVEL_FORMAT_V2 §3/§13](Design/Levels/LEVEL_FORMAT_V2.md)。
-- **noclip.website：不 vendor 它的代码，自己写解析器、出我们自己的格式** — **许可更正（2026-11-16）**：noclip 的 LICENSE 是 **MIT + 一段反编译说明**（GitHub 因此报 `NOASSERTION`），**不是 GPL-3**；原「GPL-3」前提有误。即便如此，逐行翻译仍属衍生作品，MIT 允许再分发但必须保留版权与许可声明。首选照规格重实现（已完成，981 行解析器在 `~/KatamariRef/`，仓库外）；仓库许可仍未定。见 [NOCLIP_KATAMARI_FORMAT §10](Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)、[LEVEL_FORMAT_V2 §17](Design/Levels/LEVEL_FORMAT_V2.md)。
+- **noclip.website：不 vendor 它的代码，自己写解析器、出我们自己的格式** — **许可更正（2026-11-16）**：noclip 的 LICENSE 是 **MIT + 一段反编译说明**（GitHub 因此报 `NOASSERTION`），**不是 GPL-3**；原「GPL-3」前提有误。即便如此，逐行翻译仍属衍生作品，MIT 允许再分发但必须保留版权与许可声明。首选照规格重实现（已完成，981 行解析器在 `~/KatamariRef/`，仓库外）；仓库许可仍未定。见 [NOCLIP_KATAMARI_FORMAT §10](Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)、[LEVEL_FORMAT_V2 §19](Design/Levels/LEVEL_FORMAT_V2.md)。
 - **关卡编辑器：Unity 式鼠标操作 + 区域统计（件数与总体积）** — 复用玩家/作者已经会的手感；区域统计用来验内容密度与供给。见 [LEVEL_EDITOR_WEB §7.1 与飞行/操作节](Design/Tools/LEVEL_EDITOR_WEB.md)。
 - **VR 验收后置，不着急** — 先把桌面闭环与灰盒跑通，VR 放在 Build & Test 有内容之后。
 - **每次派 subagent 前重查模型路由** — 本地/文档/代码走 `dsh-opencode-go` + `deepseek-v4.1-flash`；需要联网或操作 Unity 走 `deepseek-official` + `deepseek-flash`。见 [AGENTS.md 委派与 Git](<../AGENTS.md>)。
+
+### Owner decisions 2026-11-16（球径、活动区、坠落重生、动画与相位、缩放、命名）
+
+> 与上面 2026-11-15/16 同一天的第二批裁定：一行一条，细节在指针里，不在此重复。凡与旧条目冲突处（如 2.20 m 包线、D-10 的「先做子集」、D-11 的「≤64 个被动画实例」），以本节为准。
+
+- **球径上限 = 全局 20 m（不是 30）** — 上限是引擎护栏、不是玩法目标，正常游玩很少摸到；仍是单一全局资产，实验/测试关才可覆盖并打 warning。见 [LEVEL_FORMAT_V2 的 D-1](Design/Levels/LEVEL_FORMAT_V2.md)、[PARITY_AUDIT 的「球径上限」行](Design/Parity/PARITY_AUDIT.md)。
+- **活动区 = 硬墙 + 地图设计** — 参考关本来就是靠布局限制玩法范围的，不只是靠墙；越界后果 = 硬墙 + 球径门 + 掉出重生，软边距（减速/提示）不做。见 [LEVEL_FORMAT_V2 §5 与 D-4](Design/Levels/LEVEL_FORMAT_V2.md)、[HUB_ROOM](Design/StoryMode/HUB_ROOM.md)。
+- **掉出重生 = 逐关 Y 的重启阈值，由回合状态机执行（不是全局地板）** — `activityArea.killPlane.y` 逐关写，运行时由 `StoryRound` 读它当重启阈值；没有回合状态机的世界才退回 `ActivityAreaHost` 兜底。见 [LEVEL_FORMAT_V2 §5.5 与 D-6](Design/Levels/LEVEL_FORMAT_V2.md)。
+- **D-10：13 类运动全加** — 数据与运行时都进第一版，不先做子集；没测到参数的类（`wait_for_player`/`whack_a_mole`/`clouds`/`spin`）用 PROVISIONAL 默认并在诊断里标记，不用「先做位移类」拖后。见 [LEVEL_FORMAT_V2 §6.7 与 D-10](Design/Levels/LEVEL_FORMAT_V2.md)、[ORIGINAL_ANIMATION_OBSERVATIONS](Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)。
+- **D-11：64 是 Animator 预算，不是「只播 64 件」** — Cancer 的 153 个动画实例里 **120 个（78%）是 3 型螃蟹**（各 140 三角、256² 贴图），走顶点/材质动画（VAT）；剩下 33 件/16 型才用真 Animator（≤64 够）；VAT 做出来之前用「不播骨骼」降级，并把这 153 件记一条 `PARITY_AUDIT` 分歧。**153 个逐实例 Animator 的账**：153 次 skinned draw call + 约 1.5–3 千骨骼 Transform/帧，桌面端不至于崩、Quest 有风险。见 [LEVEL_FORMAT_V2 §16.2 与 D-11](Design/Levels/LEVEL_FORMAT_V2.md)。
+- **D-12：相位 = 确定性哈希 + 作者覆盖** — 「相位」= 这件从周期的哪一刻开始动；用 `itemId + level.id` 哈希派生，同一件每次进世界一致（账本/双端/回放不飘），作者可用 `phase` 覆盖；不用 `Math.random()`，原作种子来源仍未验证（U5）。见 [LEVEL_FORMAT_V2 §16.2 与 D-12](Design/Levels/LEVEL_FORMAT_V2.md)。
+- **D-13：舞台动画现在不做** — noclip 没做舞台动画，不能反证原作没有；等原机证据，或用材质/Shader 另立项。见 [LEVEL_FORMAT_V2 的 D-13](Design/Levels/LEVEL_FORMAT_V2.md)。
+- **D-14：下落期间挂起子件自己的运动，落定后恢复** — 与已定「子件坠落、不 carry」一致。见 [LEVEL_FORMAT_V2 的 D-14](Design/Levels/LEVEL_FORMAT_V2.md)。
+- **逐件缩放 = 三层，不是放开** — ①运行时永不缩放（旧规则不变）；②作者态均匀缩放全允许（含挂接件：原作就有 1 件 0.1 挂在父件下）；③非均匀只允许无父、static、box/sphere。原作 524 件里 6 件非单位（4×0.9、1×0.1、1 非均匀），忽略会让体积/门槛/渲染全错（0.1 那件门差 10×、非均匀差 28.7×）。「不许改尺寸凑档」仍然有效。见 [LEVEL_FORMAT_V2 §6.4、§18 与 D-5](Design/Levels/LEVEL_FORMAT_V2.md)。
+- **参考关卡的对外工作名：蟹座小院 / Cancer Courtyard**（提议，待 owner 确认） — 现在的叫法是 "Make Cancer rebuild / `_ref_cancer`"；`_ref_cancer` 作为**内部参考 id** 保留到换皮完成，换皮（换成我们自己的贴图/模型）后再用工作名建正式关卡，不在 `_ref_*` 上直接改成正式内容。见 [_ref_cancer README](Design/Levels/_ref_cancer/README.md)、[原作优先原则](../AGENTS.md)。
 
 ### Still open
 

@@ -120,7 +120,11 @@ namespace VRCKatamari.Tests
             SetField("startDiameterWorldM", 0.30f);
             Invoke("Start");
             long second = (long)GetField("startVolumeMm3");
-            Assert.AreEqual(14137167L, second, "pi/6 * 0.30^3 * 1e9");
+            // The file's float32 budget (AssertVolume, 2e-6 relative) is the right comparison
+            // here too: 0.30 m through Mathf.Pow is 14,137,169 in float (the exact double value
+            // is 14,137,167), a 1.4e-7 relative difference - inside the documented budget, not
+            // a wrong conversion.
+            AssertVolume(14137167L, second);
             Assert.AreNotEqual(first, second);
         }
 

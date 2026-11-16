@@ -3030,6 +3030,12 @@ namespace VRCKatamari.Editor.LevelBuild
             PickupFieldSyncReport sync = PickupFieldSync.SyncFromChildren(host, propsRoot,
                 declaredGrowthMm3, declaredVolumeK, declaredVolumePenalty, declaredProxies,
                 createMissingColliders);
+            // The sync's own one-block summary is one of the design's expected console lines
+            // and it carries the authoritative growth read-back:
+            //   growthMm3: written=<sum>, fromFile=<n>, fromBounds=<n>, read-back: verified
+            // The menu path logs it itself; this headless path used to swallow it, so the
+            // operator saw only the note below (O8 finding).
+            sync.Log();
             report.SyncRan = true;
             report.SyncPropCount = sync.PropCount;
             report.SyncRejected = sync.Rejected.Count;
@@ -3051,8 +3057,9 @@ namespace VRCKatamari.Editor.LevelBuild
                 return false;
             }
 
-            report.Note("pickup sync wrote " + sync.PropCount + " row(s) into 8 columns, including " +
-                        "propVolumeK (per-item volume factor): " +
+            report.Note("pickup sync wrote " + sync.PropCount + " row(s) into 8 base columns " +
+                        "(+ the optional proxy columns), including propGrowthMm3 (the authored " +
+                        "growth, verified above) and propVolumeK (per-item volume factor): " +
                         (declaredVolumeK == null ? 0 : declaredVolumeK.Count) +
                         " row(s) declared a k, the rest play at the original's 0.70 default");
 

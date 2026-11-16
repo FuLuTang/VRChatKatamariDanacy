@@ -49,6 +49,15 @@ D_m(V)             = (6·V/π)^(1/3)（m）；D_mm = floor(1000·D + ε)
 - **penalty 不单独立宿主列**：它只在导入/同步定价时用一次；运行时要的是已经算好的 `propGrowthMm3`。这与 `k` 不同——`k` 运行时还要用于门，所以留在 `propVolumeK`。
 - **旧场景**（没有 `propGrowthMm3` 列）：宿主按 `propVolumeK`（缺列→0.70）与 `propBounds` 在 `Start` 里**自算一次**成长，规则与同步同一公式，保证未重导入的实验室场景不是 0 收益。老 `valueUnits` 列读到就忽略。
 - 回读校验：同步写完后按 itemId 比对 `propGrowthMm3`，与现有 `propVolumeK` 回读同一个机制；不符即 run 失败。
+- **导入时控制台应有的两行**（导入器路径也调用 `PickupFieldSyncReport.Log()`，2026-11-16 O8 修：此前只有菜单路径会打）：
+  ```text
+  [PickupFieldSync] <host>: 130 prop(s), N kind(s), 1417085102 growth mm^3, 0 rejected
+    growthMm3: written=1417085102, fromFile=130, fromBounds=0, read-back: verified
+  [level] +0 ~0 -0 props=130 other=0 errors=0
+    growthMm3: declared=1417085102, fromFile=130, fromBounds=0, read-back: verified
+    pickup sync wrote 130 row(s) into 8 base columns (+ the optional proxy columns), including propGrowthMm3 ... and propVolumeK ...
+  ```
+  `written` 与 `declared` 都必须等于 `placement.json` 的 `level.expected.growthMm3`；`fromBounds` 非 0 表示有行缺 `growthMm3`（旧文件）走了实测 bounds 兜底，`read-back: NOT verified` 表示宿主没写进去。
 
 ## 4. 账本 / 尺寸模型 / 交分
 

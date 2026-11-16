@@ -136,8 +136,9 @@ PY
    字段表变化重编译（签名/dirty 噪声），`CopyProxyToUdon` 后 `UdonBehaviour` 的 public
    variables 也会多一项。这是生成物，审 diff 时按批忽略。
 3. **重跑命令**：Unity 菜单里按 `VRC Katamari/Level Build/Import ...`（导入器会自动调
-   `PickupFieldSync.SyncFromChildren(..., declaredVolumeUnits, declaredVolumeK, createMissingColliders)`），
-   控制台应出现 "pickup sync wrote N row(s) into 8 columns, including propVolumeK ..."。
+   `PickupFieldSync.SyncFromChildren(..., declaredGrowthMm3, declaredVolumeK, declaredVolumePenalty, declaredProxies, createMissingColliders)`），
+   控制台应出现同步自己的汇总（steps C+D 后含 `growthMm3: written=…, fromFile=…, fromBounds=…, read-back: verified`）
+   以及 "pickup sync wrote N row(s) into 8 base columns …, including propGrowthMm3 … and propVolumeK …"。
    关卡里没人声明 k 时这一行会说 "0 row(s) declared a k, the rest ... 0.70 default"。
 4. 若某 def 的 k 越界：导入器报 **error**（`defs[i] ... volumeK ... must be <= 32`），
    sync 报 **reject**（`declared volumeK ... is outside the legal range`），不写该行。

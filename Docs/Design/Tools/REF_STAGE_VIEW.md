@@ -178,8 +178,124 @@ Cancer 结果：524 实例 = **511 道具 + 13 哑锚点**，511/511 全部配�
 8. `stage.glb` 直读时绕序与法线相反（§2）——提取器侧值得修一条"reroll 空间要翻绕序"，
    但那不在本仓库。
 
-## 8. 测试与复现
+## 8. v2 数据（`placement.v2.json` + `.katerrain`）
 
+参考关卡现在还有一份 **`katamari.placement/2`** 文档，按
+[LEVEL_FORMAT_V2](../Levels/LEVEL_FORMAT_V2.md) 的五层写的，由
+`Tools/levelbuild/ref_v2_from_extract.py` 从提取结果**确定性**生成（同输入两次运行字节相同）。
+它和 §1-§7 的视图共用 `ref_stage`（帧/四元数/实例配对/碰撞展开），不另写一套坐标换算。
+
+```bash
+python3 Tools/levelbuild/ref_v2_from_extract.py --level _ref_cancer --write
+python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/_ref_cancer/placement.v2.json
+```
+
+产物（都在 git-ignored 的 `_ref_cancer/` 里）：
+
+| 文件 | 大小 | sha256 |
+|---|---|---|
+| `placement.v2.json` | 551,201 B | — |
+| `terrain/cancer.katerrain` | 113,508 B | `6a2a1264cad8a776f1681050f0afccc998b5317f1ed74141dbd1702feab6e5ff` |
+
+转换器只读 `~/KatamariRef`（`guard_read` 拒绝仓库内路径）、只写 `_ref_*` 关卡目录
+（`guard_write` 同时拒绝 `..` 与非 `_ref_` 目录），测试里用 patch 过的根验这两条。
+
+### 8.1 文件里是什么
+
+| 层 | 内容 |
+|---|---|
+| `meta` | 起始 **0.222 m**、目标 **0.80 m**、`maxDiameterRef:"global"`、时限 **420 s**（原作 GAME_TIME 7 分钟）、出生点 `fieldCentreGuess`（场心，向下打地形取面，再找 0.5 m 净空的点）、`groundY −3.0`（地形最低 −1.59 m 再低 1.4 m）、`bounds` 覆盖 511 件道具、`caps` 511/4096/8192/256/8 |
+| `terrain` | 提取器的**碰撞网格**（不是视觉 `stage.glb`）：**7,154 顶点 / 3,455 三角形**（原 3,456，1 个零面积三角形按 `[terrain_mesh]` 删掉），世界米、绕序翻一次；**7 个 chunk**，每个 ≤512 三角形并且就是一条 broad-phase AABB（`triangleRange` 首尾相接、无洞）；`grid` 1 m / 19×15 |
+| `triangles` | `count 3455` + `zoneCounts`（0:2727, 1:23, 3:244, 5:21, 8:73, 24:367）；逐三角形 zone 取三顶点多数票（平票取小），逐三角形 `classes` 在侧车里（ride 1698 / climb 503 / wall 1254） |
+| `structures.solids` | **35 条**：规则见 §8.2 |
+| `activityArea` | 一条闭合矩形墙（碰撞足迹并集 + 1 m，x −11.81…8.57 / z −7.54…8.99，高 3.0 m、厚 0.2 m、不可见）+ kill plane `y −4.0` |
+| `props` | **511 件全部保留**：原作位置/旋转/缩放、`parent` 83 条、`volumeK`（原作 `1/bboxOverSolidVolume`，0.1…14.7）、`volumePenalty 0.8`、`growthMm3` 与 `absorbDiameterReqMm` 派生、`absorbable` 426 件（按 1.20 m 门；唯一非均匀缩放的 `sparrow_001` 按 D-5 标 false）、`zone` 按脚下碰撞三角 |
+| `defs` | 145 条，`collider` **144 条**（`sparrow` 只有那件非均匀缩放的实例，按 D-5「不写 collider」；代理拟合见 §8.3） |
+| `motions`/`paths`/`cameras` | 空：提取器只给 `moveType`，没有程序表，按 C11「不伪造运动」只把 `moveType` 记进 `notes` |
+
+### 8.2 三条派生规则（写进文件、也写进这里，便于复核）
+
+1. **地形 = 碰撞网格**，不是 `stage.glb`：视觉网格只用于浏览（§5），碰撞网格才是原作的
+   可走面。世界化 `-0.01 × ps2` 后绕序必须翻一次（det −1）；翻完地面法线朝上
+   1,704 : 319，`classes` 才有意义。
+2. **structures = 这一关永远吸不动的大件**：`gate > 1200 mm`（原作 `MAX_DIAMETER`，本关
+   设计上限）**且** 其 AABB ≥50% 落在提取器 68 个碰撞 AABB 之一的内部。84 件永远吸不动，
+   其中 **35 件**在碰撞覆盖的核心区内 → 给解析盒（`role:box`，可支撑）；另外 49 件（街区外
+   的民宿、餐馆、樱花树）是背景，活动墙把球挡在外面，不需要固体。**碰撞 AABB 本身不是
+   固体**（它们是舞台网格的 broad phase，和地形三角形重复），只作为「这里确实是实心」的
+   证据。判据、阈值、两侧件数都写在转换器报告里。
+3. **activityArea 是我们作者化的**：原作没有边界字段（§5.1），但它有碰撞几何，碰撞几何的
+   XZ 足迹就是球能去的地方。所以多边形 = 68 个碰撞 AABB 的并集足迹（含地形三角形）外扩
+   1 m。kill plane 放在兜底地面 `groundY` 再低 1 m（校验器要求它低于地形与 `groundY`）。
+
+### 8.3 每类道具的 collider 代理
+
+`defs[].collider` 由 `Tools/levelbuild/collider_proxy.py` 的 `fit_proxy` 拟合，输入是
+该 def 在 `~/KatamariRef/models/glb-pack/` 的 GLB（145/145 都有）：顶点/三角形从 GLB 读，
+按**一个统一缩放**塞进该 def 声明 AABB，`bounds` 交给拟合器保证代理不超过视觉盒。
+不做逐轴缩放，因为提取器没记录 GLB 的轴向；结果是保守的（可能比模型略小），
+`collider_schema_errors` 逐条过了，145 条都合法。`scalePolicy` 一律 `uniform`。
+
+### 8.4 校验结果（v1 vs v2）
+
+`levelbuild.py check` 目前只实现了 v1 规则（`katamari.placement/0`）。v2 文档由
+`to_v1_view()` 翻成 v1 形状后跑**同一套规则**（不写第二个校验器），所以下面的数字可比：
+
+| | v1 `placement.model.json` | v2 `placement.v2.json` |
+|---|---|---|
+| 旋转 | 全部单位（`[0,0,0,1]`） | 原作 392 件非零 |
+| 高度 | 全部压平到底面 y=0 | 原作高度（511 件） |
+| 错误 | **544** | **818** |
+| 警告 | 146 | 229 |
+| prop/prop 重叠对（>5% 小者） | **367**（25 行 + "…341 more"） | **216**（不计父件豁免）/ **153**（计豁免，已声明为 `expected.overlapBudget`） |
+| 浮空/入地 | 0（都在 y=0） | **790** |
+| 道具穿结构 | — | 25 |
+| D-5 声明（非均匀那件 `absorbable:false`） | — | 1（v1 规则要求 absorbable 跟随门，v2 里它是作者声明） |
+| 派生值过期（`absorbDiameterReq`/`growthMm3`） | 511（v1 文件用的是旧口径） | **0** |
+
+读法：
+
+- **重叠对 367 → 216（−41%）**，再按原作 83 条父链豁免（子件本来就该在父件里）→ **153**，
+  写成 `expected.overlapBudget`（这个字段就是为「一件密集的真实房间」准备的），于是重叠从
+  367 条错误变成 0 条错误。注意：**只加旋转、仍把 y 压平**时 AABB 重叠反而升到 **440**——
+  旋转后的盒子 AABB 变大，压平又把 511 件挤进同一层；真正让重叠掉下来的是「原作高度」。
+  这条要按 AABB 口径理解，v1 校验器没有 OBB 相交。
+- **790 条浮空/入地是 v1 规则的产物，不是数据问题**：v1 的规则拿固定平面 `y=0` 量每个道具的
+  底面（`floats … above the ground` / `reaches … below y=0`），而参考关卡的地面在 **−1.0 m**
+  且有 1.6 m 起伏；v2 的支撑查询是「球底以下最高的地形面」（§3.6），必须由 v2 校验器来量。
+  实测：按原作高度摆放后，510/511 件脚下有地形，**272 件（53.3%）底面离地 ≤10 cm**，
+  中位 **−0.0001 m**；按 v1 的压平高度则只有 7 件（1.4%）、中位 +0.775 m（见 §6）。
+- **25 条「道具穿结构」**是真发现：螃蟹/筷子/小狗与树、招牌、睡着的妈妈这些 35 个解析盒
+  相交。密集的真实关卡必然有；v2 校验器要按 `[prop_overlap]` 的规则（父子/摞放豁免）来判。
+- **6 件缩放**：5 件均匀（4×0.9 的房子 + 1×0.1 的 `rc_controller_001`，后者**挂在 `cubby_001` 下**——
+  这正是 2026-11-16 的 D-5 ②「均匀缩放对挂接件也合法」），1 件非均匀 `sparrow_001` 按 D-5 照写
+  `scale`、标 `absorbable:false`、其 def 不写 collider，并进 notes。v1 视图会为它报 1 条
+  「absorbable=False 但门说 True」——v2 里 `absorbable` 是作者声明，不是门的函数。
+- **警告 229 条里 214 条是「参考模型没有 manifest」**（原型资产没有提交 manifest，属预期），
+  其余是 v1 的 canonical 形状提示（v2 的规范字节由转换器保证，不要跑 `levelbuild.py format`）。
+
+### 8.5 还缺什么（Unity 导入前）
+
+1. **v2 校验器**（`LEVEL_FORMAT_V2 §9` 的 50 多个 tag）没有实现；现在只有 §8.4 的 v1 视图。
+   `ref_v2_from_extract.structural_errors()` 覆盖了**结构**（键白名单、顺序、单位四元数、
+   chunk/broad-phase 账、侧车计数与 sha256、`groundY`/`killPlane` 相对地形），不覆盖设计数值。
+2. **`PlacementImporter` 的 v2 分支**（`TerrainFieldHost`/`ActivityAreaHost`/`LevelMetaHost`/
+   `MotionHost`）不在本轮；地形网格资产路径按 §11.3 应落在
+   `Assets/_RefUnlicensed/Levels/_ref_cancer/Terrain.asset`。
+3. **`motions[]`/`paths[]` 空**：提取器没有运动程序表与路径点表（C11），所以 129 个动件在 v2 里
+   都是 `static`，`moveType` 只在 `notes` 里存证。
+4. **贴图/材质**：地形仍是无贴图的纯色块（`materialSegments` 只有一段、无 `material`）。
+5. **`props[].kind` 全是 `reference`**：提取器没有「动物/餐具/建筑」这类内容分类（v1 文件也没有），
+   要等 collection 表接入。
+6. 6 件缩放按 D-5（2026-11-16 三层规则）处理：5 件均匀照写（含 1 件挂接件），1 件非均匀
+   `sparrow_001` 标 `absorbable:false` + 无 collider；非均匀的**语义**仍未验证。
+
+## 9. 测试与复现
+
+- `Docs/tests/levelbuild/test_ref_v2_from_extract.py`（18 个用例）：读写路径守卫、碰撞列表→
+  CCW 三角形（含 1 个零面积被删）、chunk 铺满且 AABB 包住自己的三角形、侧车往返、
+  `volumeK`/覆盖度/背景件规则、活动多边形、规范文字（−0.0 清掉）、v1 视图映射，以及
+  （装了提取结果时）两次构建字节相同 + `structural_errors()` 为空 + 侧车 sha256 一致。
 - `Docs/tests/leveleditor/test_ref_stage.py`（28 个用例）：目录解析/仓库内拒绝/旧目录
   备选、帧检测（镜像假设不能赢）、实例配对与哑锚点、轴角→四元数（负角）、碰撞组的局部
   索引 → 世界三角形、AABB 反射、GLB 转换（z 取反、索引不翻、min/max 重算）、

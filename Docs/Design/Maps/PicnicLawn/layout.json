@@ -61,7 +61,7 @@
       ]
     },
     "max_traversable_slope_percent": 12.0,
-    "max_step_height_over_ball_diameter": 0.25,
+    "max_step_height_over_ball_diameter": 1.5,
     "max_route_step_m": 0.05,
     "boundary_hedge_height_m": 1.1,
     "boundary_hedge_depth_m": 0.8,

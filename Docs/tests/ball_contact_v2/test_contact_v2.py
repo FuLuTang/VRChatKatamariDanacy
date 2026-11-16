@@ -26,6 +26,7 @@ from Docs.Design.BallMotor.contact_v2.contact_v2 import (
     World,
     classify_contact,
     climb_height_cap,
+    ledge_exit_speed,
     climb_speed,
     closest_point_on_obb,
     curve_chord_budget,
@@ -238,10 +239,25 @@ class SeamTests(unittest.TestCase):
 
 
 class ClimbTests(unittest.TestCase):
-    def test_height_cap_is_one_diameter_and_adds_protrusion(self):
+    def test_height_cap_is_fifteen_diameters_and_adds_protrusion(self):
+        # k_h = 1.5 (OUR PROVISIONAL value; no original-game cap is published - see
+        # ORIGINAL_CLIMB_OBSERVATIONS.md). The shape stays H_cap = k_h * (2r + L).
         for radius in (0.15, 0.30, 0.55, 1.10):
-            self.assertAlmostEqual(climb_height_cap(radius), 2.0 * radius)
-        self.assertAlmostEqual(climb_height_cap(0.30, protrusion_m=0.2), 0.8)
+            self.assertAlmostEqual(climb_height_cap(radius), 3.0 * radius)
+        self.assertAlmostEqual(climb_height_cap(0.30, protrusion_m=0.2), 1.2)
+
+    def test_ledge_exit_speed_is_ten_per_second_times_radius(self):
+        # v = 10 (1/s) * r (m) = m/s: 1.11 for the reference ball, NOT 90 (10 / 0.111).
+        # The drive speed clamps it, and the floor keeps a tiny ball moving.
+        self.assertAlmostEqual(ledge_exit_speed(0.111, 4.0), 1.11, places=6)
+        self.assertAlmostEqual(ledge_exit_speed(0.30, 4.0), 3.0, places=6)
+        self.assertAlmostEqual(ledge_exit_speed(1.10, 4.0), 4.0, places=6)
+        self.assertAlmostEqual(ledge_exit_speed(1.10, 3.0), 3.0, places=6)
+        self.assertAlmostEqual(ledge_exit_speed(0.01, 4.0), 0.5, places=6)
+        for radius in (0.111, 0.30, 0.55, 1.10):
+            speed = ledge_exit_speed(radius, 4.0)
+            self.assertLessEqual(speed * 0.02, 0.08)      # a 50 Hz step
+            self.assertLessEqual(speed * 0.02, radius)    # stays inside one radius
 
     def test_gate_is_continuous_and_steeper_means_more_speed(self):
         self.assertLess(required_speed(50.0), required_speed(70.0))

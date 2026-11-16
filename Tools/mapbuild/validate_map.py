@@ -67,6 +67,7 @@
       对照，与算出来的不符就报错（不许手写一个坡度过关）。
     - `climb_step`（爬升台阶）：`step_height_m` 必填且必须等于几何高度，并与对应的
       `climb` 尺寸门阈值相容——可翻越上限 = `scale.max_step_height_over_ball_diameter`
+      （1.5，PROVISIONAL：推墙连续爬的上限，TERRAIN_CLIMB 7）
       × 球径。台阶的爬升面（`run_m`）**不受 12% 约束**：能不能上去由球径决定，
       这正是原作 C3 的门槛语义。
     - `obstacle`（障碍）：树篱、树、道具、墙。不可走，不参与坡度判据。
@@ -121,7 +122,7 @@ SURFACE_CLASSES = ("drivable_grade", "climb_step", "obstacle")
 TRAVERSABILITY_SCHEMA_VERSION = 2
 # 台阶可翻越上限占球径的比例：台阶 ≤ 0.25 × 球径（球径 ≥ 4 × 台阶高）。
 # 这是作者层常量，v1 的图没在 scale 里声明它时用这个默认值。
-DEFAULT_STEP_HEIGHT_OVER_DIAMETER = 0.25
+DEFAULT_STEP_HEIGHT_OVER_DIAMETER = 1.5
 DEFAULT_MAX_ROUTE_STEP_M = 0.05
 SLOPE_TOLERANCE_PERCENT = 0.1   # 声明值 vs 现算值的容差（百分点）
 STEP_TOLERANCE_M = 0.01         # step_height_m vs 几何高度的容差
@@ -931,8 +932,10 @@ def validate(layout: dict, catalog: dict) -> Report:
         max_slope = 0.0
     step_ratio = as_float(scale.get("max_step_height_over_ball_diameter"),
                           DEFAULT_STEP_HEIGHT_OVER_DIAMETER)
-    if step_ratio is None or not 0 < step_ratio < 1:
-        rep.err(f"scale.max_step_height_over_ball_diameter 必须在 (0, 1)，实际 {step_ratio!r}"
+    # The ratio is a CLIMB cap (> 1 since 2026-11-16): a ball can climb a face up to
+    # ratio x its diameter (TERRAIN_CLIMB 6.3), so the old (0, 1) range is gone.
+    if step_ratio is None or step_ratio <= 0:
+        rep.err(f"scale.max_step_height_over_ball_diameter 必须为正，实际 {step_ratio!r}"
                 f"（默认 {DEFAULT_STEP_HEIGHT_OVER_DIAMETER}：可翻越台阶高 = 比例 × 球径）")
         step_ratio = DEFAULT_STEP_HEIGHT_OVER_DIAMETER
     bump = as_float(scale.get("max_route_step_m"), DEFAULT_MAX_ROUTE_STEP_M)

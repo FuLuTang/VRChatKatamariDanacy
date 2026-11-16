@@ -68,11 +68,15 @@ CLIMB_V_GATE_REF = 2.0         # the gate speed that gives rate factor 1.0
 CLIMB_RATE_MIN = 0.75
 CLIMB_RATE_MAX = 1.5
 M0 = 0.15                      # creep floor shape: m(theta) = cos + M0*sin
-K_H = 1.0                      # H_cap = k_h * (2r + lambda*L)
+K_H = 1.5                      # H_cap = k_h * (2r + lambda*L); OUR PROVISIONAL
+                               # (no original-game cap is published, see
+                               # ORIGINAL_CLIMB_OBSERVATIONS.md; owner 2026-11-16)
 LAMBDA_PROTRUSION = 1.0
 CLIMB_RATE_LIMIT = 3.0          # m/s^2, v_y approaches the target no faster
 CLIMB_COOLDOWN_S = 0.35
 CLIMB_CAP_MARGIN_M = 0.02
+LEDGE_DRIVE_PER_RADIUS = 10.0  # 1/s: v_exit = 10 * r (m/s), NOT 10 / r
+LEDGE_DRIVE_MIN_MPS = 0.5
 V_SLIDE_MAX = 1.0              # m/s, slow slide-back while a wall is touched
 GRAVITY = 9.81
 MIN_UPWARD_NORMAL_Y = 0.05      # n.y < -this is a ceiling (CLASS_NONE)
@@ -291,8 +295,24 @@ def max_substeps(displacement: Vec3, radius: float,
 # ------------------------------------------------------------------ climb ---
 def climb_height_cap(radius: float, protrusion_m: float = 0.0,
                      k_h: float = K_H, lam: float = LAMBDA_PROTRUSION) -> float:
-    """Centre-rise cap, H_cap = k_h * (2r + lambda*L).  k_h=1 is the manual anchor."""
+    """Centre-rise cap, H_cap = k_h * (2r + lambda*L).  k_h=1.5 is OUR PROVISIONAL value."""
     return k_h * (2.0 * radius + lam * max(0.0, protrusion_m))
+
+
+def ledge_exit_speed(radius: float, drive_speed: float,
+                     per_radius: float = LEDGE_DRIVE_PER_RADIUS,
+                     minimum: float = LEDGE_DRIVE_MIN_MPS) -> float:
+    """Ledge exit speed, m/s: clamp(per_radius * radius, minimum, drive_speed).
+
+    per_radius is 10 1/s, so the expression is 10 * r (1/s * m = m/s), NOT 10 / r:
+    t = r / v and drop = g t^2 / 2, so a 5 cm drop budget gives v = r * 9.9.
+    """
+    speed = per_radius * radius
+    if speed < minimum:
+        speed = minimum
+    if speed > drive_speed:
+        speed = drive_speed
+    return speed
 
 
 def required_speed(theta_deg: float, v_min: float = V_MIN_GATE,

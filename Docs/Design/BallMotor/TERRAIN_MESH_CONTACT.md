@@ -124,9 +124,32 @@ float GetLastTerrainQueryMicros();
   均匀 XZ 网格（默认 1 m，`terrainGridCellM` 可调 0.25–16 m），CSR 表
   （`cellStart[]` + 扁平的 `cellTriangles[]`）、逐三角形 XZ 包围盒（4 个 float 数组）、
   逐三角形面 id（`2000+zone`，与全量扫描同一处铸造）。帧内零分配。
-- **每步**：按球心 ± 一个碰撞半径的方形查格子，去重后得到一个候选表
+- **每步**：按球心 ± 调用方给的**窗口**查格子，去重后得到一个候选表
   （`TerrainGridMath.CollectCandidates`），17 个 probe 与 T1 都只走这张表。
-  支撑与穿透各自在自己那个中心收集一次（支撑在 T1 之后，T1 的推出会移动球心）。
+  支撑与穿透各自在自己那个中心收集一次（支撑在 T1 之后，T1 的推出会移动球心）；v2 的接触
+  收集按**扫掠窗口**（`r + 半步长 + skin`）收集一次。
+- **窗口过滤（R24 修）**：查格子之后、去重之前，**按逐三角形预存 bbox 与窗口方形相交**
+  过滤一次（4 次比较），容差 1e-6 与几何查询的 bbox 容差一致，所以边界/skin 命中不会被误删。
+  不过滤的话「一格」= 整格三角形（R24 实测 114–443 个），17 个 probe 再把整格重扫 17 遍。
+- **候选集 = 窗口，不是格子**：格子只决定「在哪里被提供」，窗口决定「留不留」，所以结果
+  恒等于「bbox 与窗口相交的三角形集合」，**与 cellM 无关**（R24 看到的 13 vs 14、7 vs 12
+  是因为 oversized 三角形当时没走窗口过滤；现在两者都过滤，跨 cellM 的集合必须逐一相等，
+  `TerrainGridTests.TheWindowFilterMakesTheCandidateSetIndependentOfTheCellSize` 钉这个）。
+- **超大三角形（oversized）**：span 超过 `MaxCellsPerTriangle = 64` 的三角形**不写进格子**，
+  而是进一个小的「每个查询都提供」的列表（同样走窗口过滤）；列表上限
+  `MaxOversizedTriangles = 256`，**列表溢出才拒绝网格**。参考关卡 1 m 下有 5 个这样的面
+  （最大 132 格）；R24 之前它们是 `code 3 / detail 72` 的拒绝来源。
+- **两遍必须同规则**：`TryBuild` 的计数遍与填充遍都调用同一个 `IsOversized`。计数遍不给
+  oversized 预留格子容量，填充遍若仍把它写进格子，就会把 cell 游标推过预留区、覆盖相邻格
+  的条目甚至写出引用表尾（R24 集成缺陷：混合网格在 1 m 下 CSR 被破坏）。回归：
+  `TerrainGridTests.AMixedMeshKeepsTheCsrIntactAndMatchesTheBruteForceCandidates`
+  用「18 个 1 m 三角形 + 1 个 12×12 m 超大面」逐格与逐条暴力对照。
+- **v2 的收集顺序**：v2 的支持查询与接触窗口**共用同一个 `terrainCandidates`**，
+  `ContactSolveMath.TryStep` 把 (数组, 计数) 当一对读。所以顺序是**先支持、最后收接触窗口**，
+  两者之间不得再有任何收集（`StepContactV2` 里接触收集紧贴 `TryStep` 之前）。顺序反了会让
+  solver 拿到支持列表配扫掠计数：两表不同处丢候选、旧尾巴留下重复。回归：
+  `TerrainSupportStepTests.TheV2SolverReadsTheContactListItCollectedLast`（−Z 方向一条
+  只有接触窗口能看到的薄边 + 朝 −X/−Z 的真实驱动）。
 - **不变式**：候选是「任何 probe 可能落在其中的三角形」的**超集**——probe 点在三角形内
   ⇒ 二者同格，而三角形在其包围盒覆盖的每个格子里都登记过。所以候选查询与全量扫描
   **必须给出同一个支撑面/穿透**；`TerrainSupportModelTests.TheGridCandidatesSelectTheSameSupportAsTheFullScan`
@@ -140,12 +163,23 @@ float GetLastTerrainQueryMicros();
 - **内存**（8,192 三角形容量下的上界）：逐三角形 AABB 4×32 KB + 面 id 32 KB + CSR
   （16 KB 起点 + 128 KB 引用 + 16 KB 游标）+ 候选表 32 KB + 去重标记 8 KB ≈ **370 KB**，
   全部在 `EnsureTerrainMeshBuffers` 一次性分配。
-- **读数**：`cands=` 是这一步的候选数，`triTests` 应恒等于 `17 × cands`（现有一条用例
-  就钉这个等式）。**注意 `triTests` 只统计支撑查询**（穿透不重复计数）。
-- **预期**：蟹座小院上 `cands` 应是「几到几十」，`triTests` 从 4,080–8,160 降到
-  **几百以内**；`fullEvals` 基本不变（它衡量真实候选面数，网格不该改变它）。
-  若 `triTests` 没降，先看 `grid=` 是否为 0（网格被拒）和 `cands=`（1 m 格里三角过多，
-  说明数据侧 chunk 切得还不够细或 cell 太大）。
+- **收集器的失败契约**：`CollectCandidates` 返回 **-1 = 这次给不出候选**（候选缓冲或标记数组
+  装不下整张网格、`oversizedCount` 超出它自己的数组、参数非法、或走到容量上限）。此时调用方
+  **必须全扫兜底**（查询把负的候选数读成全扫），**绝不把部分集当成功**；一次失败**不留下任何
+  标记**（标记只在写进候选表的同一步设置，容量检查在标记之前）。`oversizedTriangles` 传 **null
+  是合法的空列表**。生产上电机传的是按 8192 容量分配的固定缓冲，所以这些是防御路径；诊断里
+  `cands=-1` 就是这个状态。
+- **读数（三个口径，都是「最后一个固定步」，不是帧累积）**：`cands=` 支撑查询的候选数、
+  `candsPen=` T1 推挤的候选数、`candsContact=` v2 扫掠窗口的候选数（v1 下为 0）、
+  `overs=` oversized 三角形的个数。`triTests` 应恒等于 `17 × cands`，且**只统计支撑查询**。
+  三者分字段保存，任何一次收集都不会覆盖另一次的数字——测试不得拿穿透候选数当支撑候选数。
+- **预期（按 R24 实测 1.8–2.1 µs/triTest 推算，不是实测）**：蟹座小院（3,452 个非退化
+  三角形，XZ 18.4×14.5 m）上，`cands` 从整格时代的 114/42/442（起点/测量点/最坏点）
+  降到 **14/15/12**（窗口 = r）或 18/17/14（窗口 = r+0.11），且 1 m 与 2 m 格给出**同一组**候选；
+  `triTests ≈ 17 × cands`
+  ≈ 200–500；`tqSup` 预计 **0.4–1.0 ms**，最坏点 ~0.4 ms（现在是 13.5 ms）。
+  `fullEvals` 基本不变（真实候选面数）；若 `triTests` 没降，先看 `grid=`（是否 code 3）、
+  `overs=`、`cands=`。
 
 ## 5. 测试
 
@@ -218,7 +252,9 @@ float GetLastTerrainQueryMicros();
 
 > **2026-11-16 T2 分工**：本条的 `ceiling` 只服务 T0/T1 的支撑筛选（v1 口径、诊断）；T2 的「能不能上去」由
 > [TERRAIN_CLIMB](TERRAIN_CLIMB.md) §6 的连续爬升决定（`H_cap = 1.5·D`、球底到达顶面才翻上），`0.25·D` 不再是
-> 任何路径的物理判据。
+> 任何路径的物理判据。v2 里地面平面是一个**接触源**，所以 LEVEL_FORMAT_V2 §1.3 的「地形答得出 ⇒ 平面
+> 不参与」由电机在 `StepContactV2` 里每步先问一次 T0（带只作诊断）后关掉 `hasGround` 实现——否则坑里/
+> 沟里的球会把 y=0 的平面读成米级穿透，被弹回平面高度。
 
 **新的采纳判据（一句话，写文档用）**：**支撑是球底以下、且不超过「球底 + 0.25·D」的那个最高面，
 候选来自地形三角面、静态盒、斜面与道具顶——凡地形在球的足迹下答得出，竞技场地面平面就不参与

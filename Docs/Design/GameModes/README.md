@@ -25,7 +25,7 @@
 
 | 文件 | sha256（**现算，不手抄**） | 采样时间（UTC） |
 |---|---|---|
-| `Docs/Design/Maps/PicnicLawn/layout.json` | `328d2d6f…fa69` | 2026-11-14 06:12 UTC |
+| `Docs/Design/Maps/PicnicLawn/layout.json` | `75340524…6765` | 2026-11-16 15:15 UTC |
 | `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` | `6e9b0811…9b37` | 2026-11-14 06:15 UTC |
 
 **规则：hash 现算，永不手抄。** 上表只是给人看的缩写副本；被机器校验的是 `Levels/*.json` 的 `map_snapshot`（`validate_levels.py` 与 `Docs/tests/test_levels.py` 逐字节比对磁盘文件）。手抄一定会过期——本文初稿抄过两版，两版都旧了：地图负责人把树根土丘从 0.18 m 降到 0.14 m 之后 `layout.json` 的 sha256 就变了，正文里的缩写还停在前一版。要当前值就跑：
@@ -397,7 +397,7 @@ Docs/Design/GameModes/
   "map_id": "picnic_lawn",
   "ruleset_id": "prototype_defaults_v0_3",
   "map_snapshot": {
-    "layout_sha256": "328d2d6f85bbddda9722434c127b18bb85d28b788266b4f87312b7c27619fa69",
+    "layout_sha256": "7534052468ed5a8f702e47568262f07fbcd899dbe5b36414196a44e25ed96765",
     "catalog_sha256": "6e9b0811c8fa0aab0e1412ebb83c4e44394bf96e93efd97e96ccad24503d9b37"
   },
   "quest": {

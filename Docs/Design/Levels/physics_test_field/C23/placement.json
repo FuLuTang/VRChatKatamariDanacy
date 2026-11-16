@@ -243,11 +243,11 @@
     "grid": {
       "cellM": 4.0,
       "origin": [
-        0.5,
-        -26.5
+        0.499,
+        -25.001
       ],
       "cellsX": 2,
-      "cellsZ": 3
+      "cellsZ": 2
     },
     "materialSegments": [
       {

@@ -1258,7 +1258,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 |---|---|---|
 | 地形不进水平扫掠 | 陡三角形必须挡球 | T0/T1 只做推出（不把地形塞进 `SweepMath`）；T2 用接触求解器统一处理，**仍不进扫掠** |
 | 支撑只取球心附近最高面 | 悬垂下会把天花板当地板 | T0 起改成「球底以下」；T1 起头顶单独推出 |
-| `stepLimit = 0.25D` 决定台阶是墙还是路 | 三角形没有「盒」可标掩码 | T0 保留 `stepLimit` 只做筛选（诊断）；T2 用几何 `h<r` 滚越 / `h<D` 爬升，不再用 `stepLimit` |
+| `stepLimit = 0.25D` 决定台阶是墙还是路 | 三角形没有「盒」可标掩码 | T0 保留 `stepLimit` 只做筛选（诊断）；T2 用一条接触驱动的连续爬升：`h<r` 棱滚越、`h<H_cap` 连续爬（`H_cap = 1.5·D`）、`h≥H_cap` 墙，不再用 `stepLimit`（TERRAIN_CLIMB §6） |
 | 面 id 稳定 | 三角形每帧不同 | 面 id = broad box；同一框内三角形共享 |
 
 ### 13.3 每步成本模型（基线：8 平面 / 8 盒 / 4 坡 / 256 OBB）
@@ -1284,12 +1284,12 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 | 格 | 名称 | 几何 | 判据（D = 0.30/0.60/1.10/2.20） |
 |---|---|---|---|
-| **C21** | `stairs` | 4 级台阶：0.10 / 0.20 / 0.35 / 0.60 m，踏面 0.4 m，宽 3 m；末端 0.8 m 平台 | `support_gap ≤ 5 mm`；`max_single_frame_rise ≤ 0.05 m`；不穿模；**T0 只判站得住**，T1/T2 再判：0.30 球被 0.10 m 台阶挡（h > 0.25D）、1.10 球滚上 0.20 m（h < r）、2.20 球滚上 0.60 m |
-| **C22** | `gully` | 6×3 m 沟，深 1.0 m；两侧 30° 土坡；南侧 0.6 m 竖直护岸；沟底 2 个薄片 | 球从北坡下到 −1.0 m（`centre.y = −1.0 + r ± 1 cm`）；30° 坡可滚下不可滑（切向重力默认 0）；0.6 m 护岸在 D ≤ 1.2 时挡、D=2.2 时爬越；沟底不穿、不抖 |
+| **C21** | `stairs` | 3 级台阶：踢面 0.30 / 0.60 / 0.95 m，踏面 2.0 m，宽 3 m，台面 1.85 m | `climbed`（`progress ≥ 4.7`）：0.30 球停在第一级、0.60 球停在第二级（0.95 > 0.90 = 它的 H_cap）、1.10 / 2.20 上台面；`support_gap ≤ 5 mm`；`grounded_frame_dy ≤ 60 mm`（不是一帧弹上去）；`support_kind == 6`（地形） |
+| **C22** | `gully` | 6×3 m 沟，深 1.0 m，四周直壁，台唇延伸到单元边缘 | 0.30 / 0.60 顶在远壁（`progress ≈ 4.35`、`max_center_y ≤ 0`）；1.10 爬出（H_cap 1.65 > 1.0，约 2 s 爬 + 行程）；2.20 的 `h<r` 直接滚过；`rest_gap ≤ 5 mm`、`grounded_frame_dy ≤ 60 mm` |
 | **C23** | `tunnel_overhang` | 3 m 宽 × 1.2 m 高隧道穿过 1.5 m 厚土堤；堤顶可站；旁挂 2 m 长悬垂檐（底面 0.8 m） | 球从隧道下过：不被顶起（`centre.y` 变化 < 2 cm）；头顶不穿（`max_penetration ≤ 0`）；站上堤顶 `y = 1.2 + r`；从檐边掉下时 `fall_frames > 0` 且落点 = `r`；面 id 在顶/底切换时 `support_id` 变化，不触发传送 |
-| **C24** | `curb` | 0.15 m 路缘 + 0.15 m 宽排水沟 + 2 cm 磨圆唇口；一段 0.08 m 高的盲道砖 | 沿路缘走 10 s 不抖（`support_id` 稳定）、落到 `r`；T1/T2 再判：0.30 球被 0.15 m 路缘挡（h = 0.5D > 0.25D）、0.60 球滚上去（h < r）、2 cm 唇口不产生「隐形墙」（`blocked=false`） |
+| **C24** | `curb` | 0.60 m 路缘，宽 0.90 m；地面延伸到单元边缘 | `stopped`（`progress ≤ 2.6`）：0.30 球被挡（H_cap 0.45 < 0.60）；`climbed_curb`（`max_center_y ≥ 0.80`）：0.60（0.90）/1.10（1.65）爬过、2.20 的 `h<r` 直接滚过；`rest_gap ≤ 5 mm`、`grounded_frame_dy ≤ 60 mm` |
 
-**共同要求**：每格 4 个球径档、判据可自动判定、失败要有具体读数（`support_gap_m`/`penetration_m`/`max_single_frame_rise_m`/`blocked`），并进 `Docs/Evidence/PhysicsTestField/`。四格要同时进 `physics_test_field.json` 的 `cells`/`planned_cells`（几何、激活矩形、判据、驱动时间线各一份），并沿用现有跨文件一致性测试；只写 `placement.json` 不算落地。**C23 是「地形必须三角网」的活证据**：高度场做不出隧道。
+**共同要求**：每格 4 个球径档、判据可自动判定、失败要有具体读数（`support_gap_m`/`max_center_y_m`/`progress_m`/`grounded_frame_dy_m`），并进 `Docs/Evidence/PhysicsTestField/`。四格要同时进 `physics_test_field.json` 的 `cells`/`planned_cells`（几何、激活矩形、判据、驱动时间线各一份），并沿用现有跨文件一致性测试；只写 `placement.json` 不算落地。**C23 是「地形必须三角网」的活证据**：高度场做不出隧道。
 
 ### 13.5 现有 ramp / curve_ramp / box 怎么办
 

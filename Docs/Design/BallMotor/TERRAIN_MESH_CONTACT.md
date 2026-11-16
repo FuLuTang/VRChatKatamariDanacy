@@ -67,7 +67,7 @@ float GetLastTerrainQueryMicros();
    `|n.y| > MinUpwardNormalY (0.05)` 的面，法线翻到 +Y（double-sided，地面无论绕序都能支撑）。
 3. probe 的 XZ 必须在三角形 XZ 投影内（重心坐标，边 -1e-4 容差）。
 4. 只取 `height <= ceiling`，`ceiling = 球底 + stepLimit`（**参照是球当前位姿**，
-   不是上一帧支撑也不是 groundY/平面；阈值仍是 `0.25·D` 的台阶门）。**向下没有下界**：
+   不是上一帧支撑也不是 groundY/平面；T0/T1 阶段阈值仍是 `0.25·D` 的台阶门）。**向下没有下界**：
    沟/坑/隧道底无论多深都是候选，真正的坠落由每关的 kill plane 判定。
 5. 取到三角形后，把它在**球心 XZ** 上的平面高度作为候选（斜面上 probe 高度 ≠ 球心高度）；
    `IsStepWithinLimit(球心高度, 球底, stepLimit)` 再过一次，取最高。
@@ -94,7 +94,9 @@ float GetLastTerrainQueryMicros();
 | 合计 | ≈62,208 | ≈9k–18k | ≈0.6k |
 
 - chunk 粗筛把 3,456 压到 1–2 chunk 的因子是 **3.4–6.7×**（3456/512 = 6.75；实际命中 1–2 个）。
-- 上表是三角形**测试次数**，不是 flop；每个三角形 AABB ≈6 次比较，平面/重心 ≈20 flops，
+- 上表是**没有网格索引**时的三角形测试次数（§4.1 的候选集把「16/17 probe × 命中 chunk 的
+  全部三角形」换成「17 × 候选数」，蟹座小院实测 `cands` 十几到几十）。
+- 表内数字是三角形**测试次数**，不是 flop；每个三角形 AABB ≈6 次比较，平面/重心 ≈20 flops，
   worst ≈1.2 Mflop/step（50 Hz ≈60 Mflop/s），Udon 解释器开销另计。**T3 的 1 m 网格才是 2–6k 目标**；
   当前 512-triangle chunk 只是上限，导入器应按空间切小（Cancer 3456/68 AABB ≈51 tri/AABB）。
 - 每步读数（**全部是「最后一个固定步」的值**，不是一帧的和）：
@@ -112,6 +114,39 @@ float GetLastTerrainQueryMicros();
   contact v2 之后读数会是**上一次 v1 步的陈旧值**——v2 权威不查地形，现在如实报 0。
 - 容量 8192 tri / 16384 vert / 64 chunk；数组约 300 KB（运行时，不序列化）。
 
+### 4.1 候选三角形：每步一次收集（2026-11-16 蟹座小院实测后加）
+
+真机实测（58 chunk、3,455 三角形、蟹座小院）：`triTests` 4,080–8,160/步、`tq` 12–24 ms，
+其中 96–98% 的三角形迭代只是被逐三角形 AABB 拒掉——**同一批三角形被 17 个 probe 各扫一遍**。
+现在改成一个每步一次的候选集合：
+
+- **索引在 `SetTerrainMesh` 建一次**（`TerrainGridMath.TryBuild`，加载期，不在帧内）：
+  均匀 XZ 网格（默认 1 m，`terrainGridCellM` 可调 0.25–16 m），CSR 表
+  （`cellStart[]` + 扁平的 `cellTriangles[]`）、逐三角形 XZ 包围盒（4 个 float 数组）、
+  逐三角形面 id（`2000+zone`，与全量扫描同一处铸造）。帧内零分配。
+- **每步**：按球心 ± 一个碰撞半径的方形查格子，去重后得到一个候选表
+  （`TerrainGridMath.CollectCandidates`），17 个 probe 与 T1 都只走这张表。
+  支撑与穿透各自在自己那个中心收集一次（支撑在 T1 之后，T1 的推出会移动球心）。
+- **不变式**：候选是「任何 probe 可能落在其中的三角形」的**超集**——probe 点在三角形内
+  ⇒ 二者同格，而三角形在其包围盒覆盖的每个格子里都登记过。所以候选查询与全量扫描
+  **必须给出同一个支撑面/穿透**；`TerrainSupportModelTests.TheGridCandidatesSelectTheSameSupportAsTheFullScan`
+  用真实多级网格在 200 个位姿上对拍。
+- **容量与显式失败（不许静默丢三角形）**：`MaxGridCells = 4096`、
+  `MaxGridReferences = 32768`、`MaxCellsPerTriangle = 64`（见 `TerrainGridMath`）。
+  超限时**网格构建失败并给出原因码**：`[cells]` / `[triangle span]` / `[references]`，
+  `GetTerrainGridRefusalCode()` + `GetTerrainGridRefusalDetail()`（破坏上限的那个数）+
+  `GetTerrainGridRefusalReason()`。**网格失败不拒绝网格数据**：电机保留网格、回落到全量
+  扫描（正确但慢），`TerrainFieldHost` 会打一条 warning——碰撞永远不依赖索引结构。
+- **内存**（8,192 三角形容量下的上界）：逐三角形 AABB 4×32 KB + 面 id 32 KB + CSR
+  （16 KB 起点 + 128 KB 引用 + 16 KB 游标）+ 候选表 32 KB + 去重标记 8 KB ≈ **370 KB**，
+  全部在 `EnsureTerrainMeshBuffers` 一次性分配。
+- **读数**：`cands=` 是这一步的候选数，`triTests` 应恒等于 `17 × cands`（现有一条用例
+  就钉这个等式）。**注意 `triTests` 只统计支撑查询**（穿透不重复计数）。
+- **预期**：蟹座小院上 `cands` 应是「几到几十」，`triTests` 从 4,080–8,160 降到
+  **几百以内**；`fullEvals` 基本不变（它衡量真实候选面数，网格不该改变它）。
+  若 `triTests` 没降，先看 `grid=` 是否为 0（网格被拒）和 `cands=`（1 m 格里三角过多，
+  说明数据侧 chunk 切得还不够细或 cell 太大）。
+
 ## 5. 测试
 
 `Tests/EditMode/BallContact/TerrainMeshContactTests.cs`（几何层）：平网格 = 平面；10° 坡；
@@ -128,6 +163,15 @@ float GetLastTerrainQueryMicros();
 `APitFloorTenMetresDownIsStillASupport`（向下无界）、
 `ABoxTopInsideTheBandBeatsTheMeshAndOneOutsideDoesNot`（盒 vs 地形的最高者胜）、
 以及平面兜底。
+
+`Tests/EditMode/BallContact/TerrainGridTests.cs`（网格索引）：真实网格可建 + 每个三角形都能
+从至少一个格子到达（不许静默丢）、格数超限/单三角形跨格超限/引用缓冲过短的**显式拒绝**、
+`CellIndex` 钳位与非有限输入、足迹在网格外时 0 候选且标记被清干净、候选去重。
+`TerrainSupportModelTests.TheGridCandidatesSelectTheSameSupportAsTheFullScan`：多级真实网格
+（平地 + 1 m 沟 + 2×0.25·D 台阶 + 10° 坡 + 屋顶）在 200 个位姿上，候选与全量扫描的支撑面
+（id/高度/法线）与穿透（深度/法线）逐一相等；`TheCandidateListIsDedupedAndStaysSmall` 钉去重。
+`TerrainSupportStepTests.TheGridCutsTheTrianglesTheSupportQueryWalks`：电机级
+`triTests == 17 × cands` 且不到全量的一半。
 
 `Tests/EditMode/BallMotor/TerrainSupportStepTests.cs`（电机级，同一轮新增）：地形把支撑从
 「压在它上面的平面」手里拿走（`GetSupportKind() == 6`、`GetSupportSurfaceHeightWorldM() == −1`）、
@@ -171,6 +215,10 @@ float GetLastTerrainQueryMicros();
 | C22 1.0 m 沟：球沿 y=0.150 直接开过去 | 旧代码「地形只在比已选支撑**更高**时才采纳」（`terrainHeight > supportSurfaceHeightWorldM`），而竞技场平面在 0、沟底在 −1，地形永远赢不了平面 | 平面**不再是竞争者**：地形在足迹下有候选时，选面从地形起算（§3.1 第 6 条） |
 | 平面压到 −1000：球直接掉穿（−13.5 → −26 → −38.7） | 采纳带以「上一个支撑 / 平面」为参照，且平面是初始赢家：球一旦落到平面或台阶内部，`ceiling = bandReference + stepLimit` 把 y=0 的网格判成「太高」全部拒绝，且越掉越拒绝 | 带**只以球底为参照**（`ballBottom + 0.25·D`），**向下无界**；向上仍是台阶门 |
 | `GetLastTerrainQueryMicros` 四格恒为 0 | 两端都取 `Time.time`（帧时间戳），同一帧差值恒 0，结构上只能是 0 | 换 `Time.realtimeSinceStartupAsDouble`，单位微秒 |
+
+> **2026-11-16 T2 分工**：本条的 `ceiling` 只服务 T0/T1 的支撑筛选（v1 口径、诊断）；T2 的「能不能上去」由
+> [TERRAIN_CLIMB](TERRAIN_CLIMB.md) §6 的连续爬升决定（`H_cap = 1.5·D`、球底到达顶面才翻上），`0.25·D` 不再是
+> 任何路径的物理判据。
 
 **新的采纳判据（一句话，写文档用）**：**支撑是球底以下、且不超过「球底 + 0.25·D」的那个最高面，
 候选来自地形三角面、静态盒、斜面与道具顶——凡地形在球的足迹下答得出，竞技场地面平面就不参与

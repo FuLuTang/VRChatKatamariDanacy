@@ -601,7 +601,7 @@ gap = (center.y − GetSupportSurfaceHeightWorldM()) * GetSupportNormalWorld().y
 | C01/C03/C05/C13 `ramp_registered` | `ramp_count == 1`，四档 pass | **指标换成 `static_obb_count >= 1`**，四档 pass | v2 把 `role=ramp` 烘成静态 OBB（`[arena] obbBake=obb`），`GetRampCount()` 天然 0；坡仍然存在，只是换了表 |
 | C06 `no_ramp_registered` | `ramp_count == 0`，四档 pass | **`not_applicable`**（四档 skip） | 同一件事的 v1 措辞；v2 下 `ramp_count` 恒 0，这条不再测任何东西 |
 | C06 `ramp_refused` / `refusal_slope` | 拒绝 + 坡度 ≥ 49°，四档 pass | **不变（不加 v2 块）** | §7.7.2 预测「v2 不拒绝任何坡」，但**探针走的是 `motor.AddRamp`，45° 护栏是 v1 侧、与 flag 无关**：pass6/pass8 都记到 `refused=1 slope=50.00 reason=36 chars`。**证据压过预测**，两档保持同一条判据 |
-| C06 `no_climb` | `max_bottom_rise_m <= 0.05`（「不许爬」） | **`<=` 符号阈值 `climb_cap_bound`**，四档 pass | 50° 在爬升带（`θ_ride=45`），v2 的正确答案是**慢爬**：D0.30/0.60 爬到 cap 后滑回（pass8 +0.3068/+0.5999）、D1.10 爬完 0.6 板顶（+0.6000）、D2.20 直接滚过去 |
+| C06 `no_climb` | `max_bottom_rise_m <= 0.05`（「不许爬」） | **`<=` 符号阈值 `climb_cap_bound`**，四档 pass | 这块 0.60 m 板以盒落库（D5：50° 的 `AddRamp` 门不动），v2 的正确答案是**慢爬**：`k_h=1.0` 时 D0.30/0.60 爬到 cap 后滑回（pass8 +0.3068/+0.5999）；`k_h=1.5` 后上界抬到 0.479，D0.30 会爬到 ~0.43 再滑回，D1.10 爬完板顶（+0.6000）、D2.20 直接滚过去 |
 | C06 `stopped_by_wall` | `abs(blocked_gap_m) <= 0.03`（停在板前） | **`blocked_gap_m <= 0`**，四档 pass | v2 下这块板不是墙，球越过板面继续走（pass8 −0.0817/−0.9843/−2.1042/−2.9522） |
 | C09/C10 `on_step` | 0.30 档 `fail`（`stepLimit` 台阶规则） | **`expect` 四档全 pass** | v2 §2.5：`h < r` 就滚过去，与 `stepLimit` 无关（0.075/0.100 都 < r(0.30)=0.1499） |
 | C10 `blocked_gap` | `abs <= 0.01`，0.30 pass、其余 n/a | **`<= 0` + 四档 pass** | 0.10 挡板在 v2 下不是墙；`<= 0` = 球心至少推进到板面（pass8 −4.3338） |
@@ -611,7 +611,7 @@ gap = (center.y − GetSupportSurfaceHeightWorldM()) * GetSupportNormalWorld().y
 
 **门与阈值的数从哪来（没有魔法数）**：
 
-- `climb_cap_bound = 1.02 · H_cap + ContactTuning.ClimbCapMarginM`，`H_cap = ContactTuning.KHeight · D`（`KHeight = 1.0`，本场的球不带凸出长杆 ⇒ `λ·L_eff = 0`，所以 `H_cap = 2r = D`）。`1.02` 是 CONTACT_MODEL_V2 §6.3 的 fade 浮点余量（`V2CapFloatMargin`），`cap_margin = 0.02 m` 直接取电机常数。**每档的 0.326 / 0.632 / 1.142 / 2.264 都是驱动算出来的，不写进 JSON**。
+- `climb_cap_bound = 1.02 · H_cap + ContactTuning.ClimbCapMarginM`，`H_cap = ContactTuning.KHeight · D`（**`KHeight = 1.5`**，2026-11-16 owner 拍板、PROVISIONAL；本场的球不带凸出长杆 ⇒ `λ·L_eff = 0`，所以 `H_cap = 1.5·D`）。`1.02` 是 CONTACT_MODEL_V2 §6.3 的 fade 浮点余量（`V2CapFloatMargin`），`cap_margin = 0.02 m` 直接取电机常数。**每档的 0.479 / 0.938 / 1.703 / 3.383 都是驱动算出来的，不写进 JSON**。
 - `lift_over_nominal_in_deck_m` 的门：导入器从 **arena 的 `staticBoxes`** 沿 heading 找到第一个盒（就是 `approach_m` 用的那一个），把它在世界里的 XZ 矩形烘进 `PhysicsTestCell.deckCenterXZ / deckHalfSizeM`；驱动用 `cell.IsInDeckGate(center.x, center.z, radius)` 判门。**足印来自场景碰撞体、外扩量来自球自己的碰撞半径**，判据文件里一个数都没有。
 - `static_obb_count` 读 `motor.GetStaticObbCount()`。Play 内用诊断脚本读它之前要先 `UdonSharpEditorUtility.CopyUdonToProxy`（pass6 的「读 0」就是这个测量错误）；驱动本身在 Udon 里跑，直接读 getter。
 

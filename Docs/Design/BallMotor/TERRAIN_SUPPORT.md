@@ -237,6 +237,10 @@ GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation, localProxyPoint
 
 ## 4. 台阶规则（step-up）
 
+> **2026-11-16 起本条只描述 v1 的静态盒台阶（回滚口径）。** 台阶/爬升的当前决定是
+> [TERRAIN_CLIMB.md](TERRAIN_CLIMB.md) §6：连续爬升 `H_cap = 1.5·D`、`h<r` 棱滚越、超限掉落；
+> `0.25·D` 在 T2 里只剩诊断。改任何与「上台阶」有关的实现或判据前先读那篇。
+
 ### 4.1 公式与来源
 
 ```

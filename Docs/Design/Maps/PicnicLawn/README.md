@@ -69,7 +69,7 @@ respawn / player_count_plans / performance_budget
 | `class` | 含义 | 必填字段 | 校验判据（`Tools/mapbuild/validate_map.py`） |
 |---|---|---|---|
 | `drivable_grade` | 可走坡（野餐毯边、树根丘） | `run_m`（斜坡水平长度） | 坡度 = rise ÷ run **现算**，必须 ≤ `scale.max_traversable_slope_percent`；可选的 `slope_percent` 只能用来交叉对照，与算出来的不符就报错 |
-| `climb_step` | 爬升台阶（花圃台面），能不能上去由球径门决定 | `step_height_m`（球要爬上的高差） | `step_height_m` 必须等于几何高度；且必须落在对应 `climb` 门的 **[0.25 × 阻挡球径, 0.25 × 开启球径]** 区间内（`scale.max_step_height_over_ball_diameter = 0.25`，即「球径 ≥ 4 × 台阶高」才翻得上去）。爬升面可带 `run_m`，其坡度**不计入 12% 上限**——判据是台阶高 ÷ 球径 |
+| `climb_step` | 爬升台阶（花圃台面），能不能上去由球径门决定 | `step_height_m`（球要爬上的高差） | `step_height_m` 必须等于几何高度；可翻越上限 = **1.5 × 球径**（`k_h = 1.5`，PROVISIONAL，[TERRAIN_CLIMB](../../BallMotor/TERRAIN_CLIMB.md) §7：推墙连续爬、上限 `H_cap = 1.5·D`，球底越过墙顶才翻上）。所以一个台阶要同时「挡住小球 / 放过大球」就必须落在 **[1.5 × 阻挡球径, 1.5 × 开启球径]** 区间内。爬升面可带 `run_m`，其坡度**不计入 12% 上限** |
 | `obstacle` | 不可走立面（树篱、树、道具、墙、边界外地标） | 无 | 不参与坡度判据；若还声明了 `run_m`/`step_height_m`/`slope_percent` 就是自相矛盾，报错 |
 
 - **rise 由几何现算**：`rise = position_y + size_m[1] / 2`（本目录的约定是「物体坐在 y=0 的地面上，`size_m[1]` 是整体高度」）。作者不能靠写一个好看的 `slope_percent` 把陡坡说成缓坡。
@@ -343,7 +343,7 @@ respawn / player_count_plans / performance_budget
 | 小路 / 草地 | 0 | — | 0% | 全部 |
 | 中央矮篱 / 边界树篱 | 1.00 / 1.10 m | 垂直 | — | 谁都不能翻，只能走 8 个开口 / 不能出界 |
 
-- 全图**没有需要跳跃的高差**：四条主路与两条出生出路都是 0% 平地，只有横穿野餐毯时走 7.5% 毯缘（`traversability.class = drivable_grade`，≤12%）；树根丘 0.14 m / 1.25 m 半径 = 平均 11.2%，同样在角落可选项上（`drivable_grade`，≤12%，见 §16 风险 12）。花圃台面 0.26 m 的斜面是 **28.9%**，但它是**爬升台阶**（`climb_step`）而不是可走坡：能不能上去由 `gate_bed_*` 的球径门（0.95→1.10 m）判，校验器按「台阶 ≤ 0.25 × 球径」检查（0.26 ≤ 0.275 m ✓，且 0.26 > 0.2375 m 才挡得住 0.95 m 的球）。所以它既不是超限的可走坡，也不是没人管的例外——它是本图唯一一处**声明过的**陡立面，且只在可选近道上（03 §5 的「没有跳跃」针对必经路线）。
+- 全图**没有需要跳跃的高差**：四条主路与两条出生出路都是 0% 平地，只有横穿野餐毯时走 7.5% 毯缘（`traversability.class = drivable_grade`，≤12%）；树根丘 0.14 m / 1.25 m 半径 = 平均 11.2%，同样在角落可选项上（`drivable_grade`，≤12%，见 §16 风险 12）。花圃台面 0.26 m 的斜面是 **28.9%**，但它是**爬升台阶**（`climb_step`）而不是可走坡。**2026-11-16 起这条门的算术变了**：可翻上限 = 1.5 × 球径，0.26 m 的框对任何 ≥0.17 m 的球都可爬，`gate_bed_*` 的 0.95→1.10 m 尺寸门**不再有物理支撑**（要挡住 0.95 m 的球需要 >1.43 m 的立面，不现实）。第一关的选择：接受早开（与 U5「斜板早开」同向、把它当近道），或把花圃边改成 `obstacle`/可走坡；处置见 §16 风险 12。所以它既不是超限的可走坡，也不是没人管的例外——它是本图唯一一处**声明过的**陡立面，且只在可选近道上（03 §5 的「没有跳跃」针对必经路线）。
 - **依赖未验收的运动层**：02 §3.2 明确「扫掠、坡道、台阶、多接触、滚动角速度还需实现和测试」；0.26 m 台 + 0.9 m 斜面能否被 1.10 m 球（半径 0.55 m）稳定翻越**未验证**。T21 若测不通，降级**不能只压低台面**：原先写的「台面降到 0.18 m、斜面拉到 1.2 m（15%）」两头都不成立——15% 若按可走坡算仍超过 12%；而 0.18 m ≤ 0.25 × 0.95 m = 0.2375 m，0.95 m 的球也翻得上去，`gate_bed_*` 就不再是门（校验器的台阶判据会直接报错）。合规的降级只有两条：① **台阶与门槛一起降**（例：台面 0.22 m + 门槛 0.80→0.95 m：0.20 < 0.22 ≤ 0.2375 m，代价是 t1 球开始能进花圃）；② **改成可走坡**，则 0.26 m 需要 ≥2.17 m 的斜面（0.26 ÷ 12%），会压掉 2.0 m 的 `bed_gap_*` 小球道。本图选 ①。改动只动 `layout.json` 的 `flower_bed_*`、`gate_bed_*` 与结构高度，改完必须重跑校验器（它会重算台阶与门槛的相容性）。
 - 地面接触按 02 §3.2 的支持高度公式（`h(−n)=max(r, max_i dot(−n, Q·p_i))`）估算球心离地；本文不假设任何具体求解器，也不把「球能爬」当成已实现能力。
 
@@ -462,7 +462,7 @@ respawn / player_count_plans / performance_budget
 10. **消费方只有一个 per-region 标量间距**：payload 里没有「按件/按对间距」，所以大小件混放的区域必须按最大两件取 S，小件的密度余量被浪费。要让篮子区同时保留 26 件和 1.6 m 大件，只能给 `scatter_regions` 加 per-pair/per-definition 间距字段——那是 schema 变更，需要 Unity 侧同时改 `TryFindSpot` 与 DTO；本次为不打断灰盒重建**不做**。若以后要做，应先改 schema 再改数据（§3.3）。
 11. **价值目标被下调**：452 件保留，但价值从 1356 降到 1284（§3.3/§12）。若 T20/T21 认定 1284 不足以支撑 180 s 的成长曲线，补的是**每件价值**或**补货预算**（T22），不是把件数塞回篮子区——那会重新违反放置门槛。
 12. **树根丘坡度（已解决）**：结构数据曾是 Ø2.5 m × 0.18 m（`tree_root_mound`），平均坡度 0.18 ÷ 1.25 = **14.4%**，高于 `scale.max_traversable_slope_percent = 12`（当时 README 与 `layout.json` 的 purpose 还错写成「11%」，算术不成立）。现已把丘高压到 **0.14 m（0.14 ÷ 1.25 = 11.2%）**，并在 `layout.json` 里标成 `traversability.class = drivable_grade` + `run_m: 1.25`——坡度由校验器按几何现算并卡 ≤12%，不再有手写数字可以对不上。仍未实测：T21 翻越实测前不要声称「全部尺寸可翻」。
-    **同一类审阅还发现花圃的 28.9%**：`flower_bed_frame` 0.26 m 台 + 0.9 m 斜面若当「可走坡」看就是超限的面，但它的门槛语义是「球够不够大」（原作同样按球径判爬坡），属于**爬升台阶**而不是坡。现在它被显式声明为 `climb_step`（`step_height_m: 0.26`），由校验器按「台阶高 ≤ 0.25 × 球径」与 `gate_bed_*` 的 0.95→1.10 m 门槛互锁检查：0.26 ≤ 0.275 m（1.10 m 球能上）且 0.26 > 0.2375 m（0.95 m 球上不去）。**不许**用「压低台面」来消掉这个数字，那会同时毁掉门（见 §8 的合规降级方案）。
+    **同一类审阅还发现花圃的 28.9%**：`flower_bed_frame` 0.26 m 台 + 0.9 m 斜面若当「可走坡」看就是超限的面，但它的门槛语义是「球够不够大」（原作同样按球径判爬坡），属于**爬升台阶**而不是坡。现在它被显式声明为 `climb_step`（`step_height_m: 0.26`），按 [TERRAIN_CLIMB](../../BallMotor/TERRAIN_CLIMB.md) 的 1.5 倍口径：0.26 ÷ 1.5 ≈ 0.17 m 是最小可翻球径，**0.95 m 与 1.10 m 的球都能爬上去**，`gate_bed_*` 的尺寸门因此只剩作者意图、没有物理支撑（要真挡住 0.95 m 的球，立面要 >1.43 m）。**不许**用「压低台面」来消掉这个数字（那会同时毁掉门，见 §8 的合规降级方案）；要恢复门只能改立面形态（`obstacle`，或 >1.43 m 的墙），这是第一关 owner 的后续决定。
 13. **地图快照 sha256 不要手抄**：本目录不写死任何哈希，一律用 `sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 现算。`Docs/Design/GameModes/Levels/*.json` 的 `map_snapshot` 由 `Docs/Design/GameModes/validate_levels.py` 逐字节比对，地图一改就报「地图已变更，请复核」——**改完地图必须重跑它并重钉两个 hash，而不是改 README**。`Docs/Design/GameModes/README.md` §0.2 的 `catalog_sha256` 已不再是 `eb1a1742…`（现为 `01d01418…`，且该节写明「hash 现算，永不手抄」）——本节原先关于它的那句话已过期，已删。**§0.2 那张表只是缩写副本、不参与机器校验**（机器校验的是 `Levels/*.json`）。本次把 `layout.json` 升到 schema v2 之后，§0.2 里的 `layout_sha256` 缩写在它被重算之前会显示旧值；重算是 GameModes 负责人的动作，权威值以本次同步过的两个关卡文件为准。
 14. **地图数据里的缩小规则没有 Unity 消费方**：`GreyboxPayload.GreyboxBankRotation` 只声明了 `max_concurrent_bankers` / `occupancy_lock` / `bank_resets_ball_to_start_size`（int）三个字段，`PicnicLawnGreyboxBuilder` 从头到尾没读过它们中的任何一个；它只读 `bank_rotation.order` 做锚点校验。`unity_greybox.json` 新增的 `bank_size_rule` / `bank_residual_fraction` / `bank_min_conversion_diameter_m` / `bank_shrink_dimension` / `bank_shrink_formula` 会被 `JsonUtility` 安静地忽略。运行时侧另有 `Runtime/BallMotor/BankShrinkMath.cs` 按同一条公式实现（不读这份 JSON），所以现在是「数据写一份、代码写一份、`round_model.py` 再一份」；要做到单一真源，得让 DTO 加字段并由运行时从 payload 读 `residual` / 最小兑换球径，或明确接受三处同步。改 Unity 代码不在本次范围。
 
@@ -549,7 +549,7 @@ T21 在 Unity 里要做的（灰盒）：
 
 1. 第 11 条：把 `clamp(game_longest_dim_m, 档窗口)` 换成 `a_eq`（或目录新增 `aabb_m` / `volume_m3` 列）判 `D_req ≤ D_cap`；长度档位退化为"价值分档"，与可吸性脱钩。
 2. 第 14 条：`pickup_dim_m ≤ max_pickup_diameter_m` 换成体积上界；`pickup_dim_m` 通道退役。
-3. 第 13 条：`climb_step` 与运行时对齐——motor **没有 step-up**（`KatamariBallMotor` 只有一张解析地面 + 实心盒），所以本图的 `climb` 门目前只能是设计意图，不能当成"已验证可翻越"。
+3. 第 13 条：`climb_step` 与运行时对齐——运行时已有台阶（P1 静态盒 `rise ≤ 0.25·D`）与 T2 的连续爬升（`H_cap = 1.5·D`，[TERRAIN_CLIMB](../../BallMotor/TERRAIN_CLIMB.md)），所以 0.26 m 的框**在物理上真的能爬**；这意味着本图的 `climb` 门不能再当尺寸门用（见 §16 风险 12），除非改立面形态。
 4. 目录 schema：可选列 `aabb_m`（"x;y;z"）或 `volume_m3`，**由建模清单生成，禁止手抄**。
 
 ### 18.5 与本图相关的迁移方案

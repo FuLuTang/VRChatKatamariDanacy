@@ -8,15 +8,20 @@ cells are still unwired (no PhysicsTestField.unity edit in this change).
 
 import json
 import math
+import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from Tools.levelbuild import placement_v2 as v2  # noqa: E402
 FIELD = ROOT / "Docs/Design/BallMotor/physics_test_field.json"
 LEVELS = ROOT / "Docs/Design/Levels/physics_test_field"
 CELL_IDS = ("C21", "C22", "C23", "C24")
-EXPECTED_TRIANGLES = {"C21": 16, "C22": 14, "C23": 8, "C24": 12}
-EXPECTED_VERTICES = {"C21": 32, "C22": 28, "C23": 16, "C24": 24}
+EXPECTED_TRIANGLES = {"C21": 14, "C22": 14, "C23": 8, "C24": 12}
+EXPECTED_VERTICES = {"C21": 28, "C22": 28, "C23": 16, "C24": 24}
 
 
 def field():
@@ -94,6 +99,18 @@ class TerrainCellData(unittest.TestCase):
             self.assertEqual(segments[0]["firstIndex"], 0)
             self.assertEqual(segments[-1]["firstIndex"] + segments[-1]["indexCount"],
                              len(terrain["indices"]))
+
+    def test_every_terrain_placement_passes_the_gate(self):
+        # These four cells are unwired, so the wired-cell gate test never sees them. They are
+        # real v2 placements all the same, and the [terrain_grid] rule in particular was only
+        # ever exercised here by accident: the generator's grid origin sat 1 mm inside the
+        # broad-phase minimum. Validate them explicitly.
+        for cell_id in CELL_IDS:
+            path = LEVELS / cell_id / "placement.json"
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            report = v2.validate(doc, path=path)
+            self.assertTrue(report.ok, "%s: %s" % (path, report.errors))
+            self.assertEqual(report.warnings, [], path)
 
     def test_criteria_use_four_diameter_rows_and_known_ops(self):
         rows = [cell for cell in field()["planned_cells"]

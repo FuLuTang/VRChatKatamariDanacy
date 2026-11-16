@@ -20,13 +20,13 @@ COS45 = math.cos(math.radians(45.0))
 # Cell centres are a second row below the existing nine cells (z = -22).
 CELLS = {
     "C21": {"slug": "terrain_stairs", "center": (-10.5, -22.0), "size": (6.0, 9.0),
-            "name_zh": "地形台阶 0.3/0.6/0.9 m（T0/T1）"},
+            "name_zh": "地形台阶 踢面 0.30/0.60/0.95、台面 1.85 m（T2 爬升）"},
     "C22": {"slug": "terrain_gully", "center": (-3.5, -22.0), "size": (6.0, 9.0),
-            "name_zh": "地形沟 6×3 m、深 1.0 m（T0/T1）"},
+            "name_zh": "地形沟 6×3 m、深 1.0 m（T2 爬升）"},
     "C23": {"slug": "terrain_tunnel", "center": (3.5, -22.0), "size": (6.0, 9.0),
             "name_zh": "地形隧道/悬垂、净高 1.2 m（T0/T1）"},
     "C24": {"slug": "terrain_curb", "center": (10.5, -22.0), "size": (6.0, 9.0),
-            "name_zh": "地形路缘 0.15 m（T0/T1）"},
+            "name_zh": "地形路缘 0.60 m（T2 爬升）"},
 }
 
 
@@ -94,24 +94,33 @@ def _wall_z(mesh, z, x0, x1, y0, y1, normal):
 
 
 def build_stairs():
+    """Three graded risers 0.30 / 0.60 / 0.95 m with 2 m treads, plateau 1.85 m.
+
+    ``TERRAIN_CLIMB.md`` 6.3 (2026-11-16): a riser is climbable when its height is below
+    ``H_cap = 1.5 * D``, i.e. 0.45 / 0.90 / 1.65 / 3.30 m at the four preset diameters.
+    The ladder therefore stops the 0.30 ball at the first riser and the 0.60 ball at the
+    second, and only the 1.10 / 2.20 balls reach the plateau. The plateau runs to the cell
+    edge: a ball that clears it keeps rolling onto the arena plane, which is why the cell's
+    ``climbed`` row is a progress threshold (a run-off is not a stall).
+    """
     mesh = Mesh()
-    _flat(mesh, -1.5, 1.5, -4.0, -1.5, 0.0)
-    previous = 0.0
-    for i, height in enumerate((0.3, 0.6, 0.9)):
-        z0 = -1.5 + i * 0.6
-        z1 = z0 + 0.6
-        _flat(mesh, -1.5, 1.5, z0, z1, height)
-        _riser(mesh, -1.5, 1.5, z0, previous, height, (0.0, 0.0, -1.0))
-        previous = height
-    _flat(mesh, -1.5, 1.5, 0.3, 3.0, 0.9)
+    _flat(mesh, -1.5, 1.5, -4.4, -2.5, 0.0)
+    _riser(mesh, -1.5, 1.5, -2.5, 0.0, 0.30, (0.0, 0.0, -1.0))
+    _flat(mesh, -1.5, 1.5, -2.5, -0.5, 0.30)
+    _riser(mesh, -1.5, 1.5, -0.5, 0.30, 0.90, (0.0, 0.0, -1.0))
+    _flat(mesh, -1.5, 1.5, -0.5, 1.5, 0.90)
+    _riser(mesh, -1.5, 1.5, 1.5, 0.90, 1.85, (0.0, 0.0, -1.0))
+    _flat(mesh, -1.5, 1.5, 1.5, 4.4, 1.85)
     return mesh
 
 
 def build_gully():
     mesh = Mesh()
     # 6 x 3 m gully: 1.0 m deep, vertical walls, approach/exit lips at y=0.
-    _flat(mesh, -3.0, 3.0, -3.0, -1.5, 0.0)
-    _flat(mesh, -3.0, 3.0, 1.5, 3.0, 0.0)
+    # The lips run to the cell edge so the exit has room to roll out (TERRAIN_CLIMB 7:
+    # the 1.10 ball climbs out in ~2 s and needs a place to land).
+    _flat(mesh, -3.0, 3.0, -4.4, -1.5, 0.0)
+    _flat(mesh, -3.0, 3.0, 1.5, 4.4, 0.0)
     _flat(mesh, -3.0, 3.0, -1.5, 1.5, -1.0)
     _wall_z(mesh, -1.5, -3.0, 3.0, 0.0, -1.0, (0.0, 0.0, 1.0))
     _wall_z(mesh, 1.5, -3.0, 3.0, 0.0, -1.0, (0.0, 0.0, -1.0))
@@ -132,13 +141,18 @@ def build_tunnel():
 
 
 def build_curb():
+    """0.60 m curb, 0.90 m wide, on ground that runs to the cell edge.
+
+    ``TERRAIN_CLIMB.md`` 6.3: the 0.30 m ball (H_cap 0.45) is stopped, the 0.60 (0.90) and
+    1.10 (1.65) balls climb it, and the 2.20 ball rolls over it (h < r).
+    """
     mesh = Mesh()
-    _flat(mesh, -3.0, 3.0, -3.0, 3.0, 0.0)
-    _flat(mesh, -3.0, 3.0, -0.15, 0.15, 0.15)
-    _wall_z(mesh, -0.15, -3.0, 3.0, 0.0, 0.15, (0.0, 0.0, -1.0))
-    _wall_z(mesh, 0.15, -3.0, 3.0, 0.0, 0.15, (0.0, 0.0, 1.0))
-    _wall_x(mesh, -3.0, -0.15, 0.15, 0.0, 0.15, (-1.0, 0.0, 0.0))
-    _wall_x(mesh, 3.0, -0.15, 0.15, 0.0, 0.15, (1.0, 0.0, 0.0))
+    _flat(mesh, -3.0, 3.0, -4.4, 4.4, 0.0)
+    _flat(mesh, -3.0, 3.0, -0.45, 0.45, 0.60)
+    _wall_z(mesh, -0.45, -3.0, 3.0, 0.0, 0.60, (0.0, 0.0, -1.0))
+    _wall_z(mesh, 0.45, -3.0, 3.0, 0.0, 0.60, (0.0, 0.0, 1.0))
+    _wall_x(mesh, -3.0, -0.45, 0.45, 0.0, 0.60, (-1.0, 0.0, 0.0))
+    _wall_x(mesh, 3.0, -0.45, 0.45, 0.0, 0.60, (1.0, 0.0, 0.0))
     return mesh
 
 
@@ -160,6 +174,13 @@ def _doc(cell_id, mesh):
     count = len(mesh.indices) // 3
     minimum = [min(p[i] for p in mesh.vertices) for i in range(3)]
     maximum = [max(p[i] for p in mesh.vertices) for i in range(3)]
+    # The sampling grid must COVER the broad-phase box (placement_v2 [terrain_grid]): its
+    # origin is the box's inflated minimum, not the cell footprint corner - the two differ
+    # by the 1 mm inflation and by any mesh that does not reach the footprint edge.
+    grid_cell = 4.0
+    grid_origin = [round(minimum[0] - 0.001, 4), round(minimum[2] - 0.001, 4)]
+    grid_cells_x = max(1, int(math.ceil((maximum[0] + 0.001 - grid_origin[0]) / grid_cell)))
+    grid_cells_z = max(1, int(math.ceil((maximum[2] + 0.001 - grid_origin[1]) / grid_cell)))
     boxes = [{"id": cell_id + "_0", "min": [round(minimum[0] - 0.001, 4), round(minimum[1] - 0.001, 4), round(minimum[2] - 0.001, 4)],
               "max": [round(maximum[0] + 0.001, 4), round(maximum[1] + 0.001, 4), round(maximum[2] + 0.001, 4)],
               "triangleRange": [0, count]}]
@@ -198,10 +219,8 @@ def _doc(cell_id, mesh):
             "broadPhase": {"kind": "aabb", "boxes": boxes},
             "chunks": [{"id": cell_id + "_chunk_0", "boxRange": [0, 1],
                         "triangleRange": [0, count]}],
-            "grid": {"cellM": 4.0,
-                     "origin": [round(spec["center"][0] - 3.0, 4),
-                                round(spec["center"][1] - 4.5, 4)],
-                     "cellsX": 2, "cellsZ": 3},
+            "grid": {"cellM": grid_cell, "origin": grid_origin,
+                     "cellsX": grid_cells_x, "cellsZ": grid_cells_z},
             "materialSegments": [{"id": "terrain", "firstIndex": 0,
                                   "indexCount": len(mesh.indices), "material": MATERIAL}],
             "source": {"kind": "authored"},

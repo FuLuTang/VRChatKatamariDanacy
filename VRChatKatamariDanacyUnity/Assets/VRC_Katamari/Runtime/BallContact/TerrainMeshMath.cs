@@ -543,7 +543,7 @@ namespace VRCKatamari.BallContact
                     Vector3 closest;
                     Vector3 outward;
                     float candidateDepth;
-                    if (!TryTrianglePenetration(t, center, radius, vertices, indices,
+                    if (!TryTrianglePenetration(t, center, radius, vertices, indices, 0f,
                         out closest, out outward, out candidateDepth)) continue;
                     if (!found || candidateDepth > bestDepth)
                     {
@@ -582,7 +582,7 @@ namespace VRCKatamari.BallContact
                         Vector3 closest;
                         Vector3 outward;
                         float candidateDepth;
-                        if (!TryTrianglePenetration(t, center, radius, vertices, indices,
+                        if (!TryTrianglePenetration(t, center, radius, vertices, indices, 0f,
                             out closest, out outward, out candidateDepth)) continue;
                         if (!found || candidateDepth > bestDepth)
                         {
@@ -612,12 +612,13 @@ namespace VRCKatamari.BallContact
         /// the candidate path relies on this body's distance test for the Y axis.
         /// </remarks>
         private static bool TryTrianglePenetration(int triangle, Vector3 center, float radius,
-            Vector3[] vertices, int[] indices,
+            Vector3[] vertices, int[] indices, float skin,
             out Vector3 point, out Vector3 normal, out float depth)
         {
             point = Vector3.zero;
             normal = Vector3.zero;
             depth = 0f;
+            if (!KatamariMath.IsFiniteFloat(skin) || skin < 0f) return false;
             int at = triangle * 3;
             Vector3 a = vertices[indices[at]];
             Vector3 b = vertices[indices[at + 1]];
@@ -633,7 +634,10 @@ namespace VRCKatamari.BallContact
             if (!TryClosestPointOnTriangle(center, a, b, d, out closest)) return false;
             Vector3 delta = center - closest;
             float distance = delta.magnitude;
-            if (!KatamariMath.IsFiniteFloat(distance) || distance >= radius) return false;
+            // skin = 0 is the push-out-only test (T1). The v2 collector passes the solver's
+            // contact skin, so a resting surface registers with a NEGATIVE depth instead of
+            // vanishing - "near" is a contact for support, never for push-out.
+            if (!KatamariMath.IsFiniteFloat(distance) || distance >= radius + skin) return false;
             Vector3 outward;
             if (distance > Epsilon) outward = delta * (1f / distance);
             else outward = face;
@@ -642,6 +646,160 @@ namespace VRCKatamari.BallContact
             normal = outward;
             depth = radius - distance;
             return true;
+        }
+
+        /// <summary>
+        /// v2 contact source: appends one contact per terrain triangle the sphere touches
+        /// or is within <paramref name="skin"/> of, to the solver's parallel contact arrays.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is <see cref="TryDeepestPenetration"/>'s body, not a second one: every
+        /// triangle goes through <see cref="TryTrianglePenetration"/> (the same nearest-point
+        /// and single-sided rule), the per-triangle XZ reject reuses the grid's precomputed
+        /// floats (or the vertices when the grid is not built), and the surface id comes from
+        /// the grid's per-triangle table (<c>2000+zone</c>). "Deepest" and "all of them" are
+        /// two readings of one query, so the solver and T1 can never disagree about whether
+        /// the ball touches a triangle.
+        /// </para>
+        /// <para>
+        /// <paramref name="contactTopY"/> gets the triangle's highest vertex: that is the
+        /// ledge the climb's exit compares the ball's bottom against (TERRAIN_CLIMB 6.3).
+        /// Contacts are appended in candidate order; the solver's capacity is the bound, and
+        /// running past it returns false instead of dropping geometry, the same fail-closed
+        /// shape the OBB collection uses.
+        /// </para>
+        /// </remarks>
+        public static bool TryAppendContacts(
+            Vector3 center, float radius, float skin,
+            int[] candidates, int candidateCount,
+            float[] triangleMinX, float[] triangleMaxX, float[] triangleMinZ,
+            float[] triangleMaxZ, int[] triangleSurfaceId,
+            Vector3[] vertices, int[] indices, int triangleCount,
+            Vector3[] chunkMin, Vector3[] chunkMax,
+            int[] chunkStarts, int[] chunkTriangleCounts, int[] chunkZoneIds, int chunkCount,
+            Vector3[] contactNormals, Vector3[] contactPoints, float[] contactDepths,
+            float[] contactAngles, int[] contactSurfaceIds, int[] contactRoles,
+            int[] contactFeatures, int[] contactClasses, float[] contactTopY,
+            int capacity, int startCount, out int newCount)
+        {
+            newCount = startCount;
+            if (!KatamariMath.IsFiniteVector(center)) return false;
+            if (!KatamariMath.IsFiniteFloat(radius) || radius <= 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(skin) || skin < 0f) return false;
+            if (vertices == null || indices == null) return false;
+            if (contactNormals == null || contactPoints == null || contactDepths == null ||
+                contactAngles == null || contactSurfaceIds == null || contactRoles == null ||
+                contactFeatures == null || contactClasses == null || contactTopY == null)
+                return false;
+            if (capacity < 0 || startCount < 0 || startCount > capacity) return false;
+            if (capacity > contactNormals.Length || capacity > contactPoints.Length ||
+                capacity > contactDepths.Length || capacity > contactAngles.Length ||
+                capacity > contactSurfaceIds.Length || capacity > contactRoles.Length ||
+                capacity > contactFeatures.Length || capacity > contactClasses.Length ||
+                capacity > contactTopY.Length) return false;
+
+            Vector3 minimum = new Vector3(center.x - radius - skin, center.y - radius - skin,
+                center.z - radius - skin);
+            Vector3 maximum = new Vector3(center.x + radius + skin, center.y + radius + skin,
+                center.z + radius + skin);
+
+            if (candidateCount >= 0)
+            {
+                if (candidates == null || triangleMinX == null || triangleMaxX == null ||
+                    triangleMinZ == null || triangleMaxZ == null ||
+                    triangleSurfaceId == null) return false;
+                if (candidateCount > candidates.Length ||
+                    candidateCount > triangleMinX.Length ||
+                    candidateCount > triangleMaxX.Length ||
+                    candidateCount > triangleMinZ.Length ||
+                    candidateCount > triangleMaxZ.Length) return false;
+                for (int k = 0; k < candidateCount; k++)
+                {
+                    int t = candidates[k];
+                    if (t < 0 || t >= triangleMinX.Length) continue;
+                    if (maximum.x < triangleMinX[t] || minimum.x > triangleMaxX[t]) continue;
+                    if (maximum.z < triangleMinZ[t] || minimum.z > triangleMaxZ[t]) continue;
+                    Vector3 closest;
+                    Vector3 outward;
+                    float depth;
+                    if (!TryTrianglePenetration(t, center, radius, vertices, indices, skin,
+                        out closest, out outward, out depth)) continue;
+                    if (newCount >= capacity) return false;
+                    WriteContact(t, triangleSurfaceId[t], closest, outward, depth, vertices,
+                        indices, contactNormals, contactPoints, contactDepths, contactAngles,
+                        contactSurfaceIds, contactRoles, contactFeatures, contactClasses,
+                        contactTopY, newCount);
+                    newCount = newCount + 1;
+                }
+                return true;
+            }
+
+            if (chunkMin == null || chunkMax == null || chunkStarts == null ||
+                chunkTriangleCounts == null || chunkZoneIds == null) return false;
+            if (triangleCount <= 0 || chunkCount <= 0) return false;
+            for (int c = 0; c < chunkCount; c++)
+            {
+                if (chunkMax[c].x < minimum.x || chunkMin[c].x > maximum.x) continue;
+                if (chunkMax[c].y < minimum.y || chunkMin[c].y > maximum.y) continue;
+                if (chunkMax[c].z < minimum.z || chunkMin[c].z > maximum.z) continue;
+                int start = chunkStarts[c];
+                int end = start + chunkTriangleCounts[c];
+                int zone = chunkZoneIds[c];
+                int chunkSurfaceId = FirstTerrainSurfaceId + (zone >= 0 ? zone : c);
+                for (int t = start; t < end; t++)
+                {
+                    int at = t * 3;
+                    Vector3 a = vertices[indices[at]];
+                    Vector3 b = vertices[indices[at + 1]];
+                    Vector3 d = vertices[indices[at + 2]];
+                    if (maximum.x < Mathf.Min(a.x, Mathf.Min(b.x, d.x)) ||
+                        minimum.x > Mathf.Max(a.x, Mathf.Max(b.x, d.x))) continue;
+                    if (maximum.y < Mathf.Min(a.y, Mathf.Min(b.y, d.y)) ||
+                        minimum.y > Mathf.Max(a.y, Mathf.Max(b.y, d.y))) continue;
+                    if (maximum.z < Mathf.Min(a.z, Mathf.Min(b.z, d.z)) ||
+                        minimum.z > Mathf.Max(a.z, Mathf.Max(b.z, d.z))) continue;
+                    Vector3 closest;
+                    Vector3 outward;
+                    float depth;
+                    if (!TryTrianglePenetration(t, center, radius, vertices, indices, skin,
+                        out closest, out outward, out depth)) continue;
+                    if (newCount >= capacity) return false;
+                    WriteContact(t, chunkSurfaceId, closest, outward, depth, vertices,
+                        indices, contactNormals, contactPoints, contactDepths, contactAngles,
+                        contactSurfaceIds, contactRoles, contactFeatures, contactClasses,
+                        contactTopY, newCount);
+                    newCount = newCount + 1;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// One contact record at <paramref name="index"/>: angle and class from the same
+        /// <see cref="ContactClassificationMath"/> every other source uses, and the ledge
+        /// height from the triangle's highest vertex.
+        /// </summary>
+        private static void WriteContact(int triangle, int surfaceId, Vector3 point,
+            Vector3 normal, float depth, Vector3[] vertices, int[] indices,
+            Vector3[] contactNormals, Vector3[] contactPoints, float[] contactDepths,
+            float[] contactAngles, int[] contactSurfaceIds, int[] contactRoles,
+            int[] contactFeatures, int[] contactClasses, float[] contactTopY, int index)
+        {
+            int at = triangle * 3;
+            Vector3 a = vertices[indices[at]];
+            Vector3 b = vertices[indices[at + 1]];
+            Vector3 d = vertices[indices[at + 2]];
+            float top = Mathf.Max(a.y, Mathf.Max(b.y, d.y));
+            contactNormals[index] = normal;
+            contactPoints[index] = point;
+            contactDepths[index] = depth;
+            contactAngles[index] = ObbContactMath.ContactAngleDeg(normal);
+            contactSurfaceIds[index] = surfaceId;
+            contactRoles[index] = ContactCodes.RoleBlocking;
+            contactFeatures[index] = ContactCodes.FeatureFace;
+            contactClasses[index] = ContactClassificationMath.ClassifyContact(normal);
+            contactTopY[index] = top;
         }
 
         /// <summary>Closest point on one triangle; false for a degenerate triangle.</summary>

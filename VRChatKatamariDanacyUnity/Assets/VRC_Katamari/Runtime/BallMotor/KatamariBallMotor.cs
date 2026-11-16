@@ -596,9 +596,20 @@ namespace VRCKatamari.BallMotor
         // One candidate list per step, shared by the support ring and the T1 push-out.
         private int[] terrainCandidates;
         private bool[] terrainCandidateMark;
-        // Count of the list currently marked (0 when the marks are clear). Also the number the
-        // support/penetration queries are handed, and the diagnostic's candidate count.
+        // Triangles too big for the cells: offered to every query (window filtered), so a
+        // few huge faces neither refuse the grid nor need to be stamped into 72+ cells.
+        private int[] terrainOversizedTriangles;
+        private int terrainOversizedCount;
+        // Book-keeping: how many marks are currently set (0 when clear). NOT a diagnostic
+        // reading - see the three per-query counters below.
         private int terrainCandidateCount;
+        // ---- Per-query candidate counts (LAST step; the reading is not frame-accumulated) ----
+        // Support and penetration collect separately (at different centres, and in v2 with
+        // different windows), so one shared number would misreport whichever query ran last.
+        private int terrainSupportCandidateCount;
+        private int terrainPenetrationCandidateCount;
+        // The v2 contact sweep window (r + half the step travel + skin); 0 in the v1 path.
+        private int terrainContactCandidateCount;
         // ---- Terrain cost diagnostics (per LAST fixed step; see ResetTerrainCostCounters) ----
         // The total is kept for existing readers; the split says whether the support ring or
         // the T1 push-out is the expensive half, and the two work counters say whether the
@@ -906,6 +917,7 @@ namespace VRCKatamari.BallMotor
         private int[] contactRolesV2;
         private int[] contactFeaturesV2;
         private int[] contactClassesV2;
+        private float[] contactTopYV2;
         private int[] contactShapesV2;
         private int v2ContactCount;
         private int v2CoreContactCount;
@@ -945,6 +957,11 @@ namespace VRCKatamari.BallMotor
         private float climbAlongSpeed;
         private float climbHeightWorldM;
         private float climbSpeedWorldMps;
+        // The climb surface's own top and plane, remembered across steps so the climb can
+        // finish the last radius above a low face (TERRAIN_CLIMB 6.3). TryStep owns them.
+        private float climbTopYWorldM;
+        private Vector3 climbSurfaceNormalWorld;
+        private Vector3 climbSurfacePointWorld;
         // The wall the climb channel is holding on to. TryStep reports the climb through
         // the state refs but not the wall normal, so WriteContactSupport records it (and
         // its theta) for the standing-gate check of the next step.
@@ -1993,6 +2010,7 @@ namespace VRCKatamari.BallMotor
             contactRolesV2 = new int[ContactTuning.ContactCapacity];
             contactFeaturesV2 = new int[ContactTuning.ContactCapacity];
             contactClassesV2 = new int[ContactTuning.ContactCapacity];
+            contactTopYV2 = new float[ContactTuning.ContactCapacity];
             contactShapesV2 = new int[ContactTuning.ContactCapacity];
             v2ContactCount = 0;
             v2CoreContactCount = 0;
@@ -2028,6 +2046,9 @@ namespace VRCKatamari.BallMotor
             climbAlongSpeed = 0f;
             climbHeightWorldM = 0f;
             climbSpeedWorldMps = 0f;
+            climbTopYWorldM = 0f;
+            climbSurfaceNormalWorld = new Vector3(0f, 0f, 1f);
+            climbSurfacePointWorld = Vector3.zero;
             climbWallNormalWorld = new Vector3(0f, 0f, 1f);
             climbContactAngleDeg = 90f;
             contactVerticalVelocity = 0f;
@@ -2154,6 +2175,11 @@ namespace VRCKatamari.BallMotor
             float residual;
             bool airborne;
             Vector3 reportNormal;
+            // The terrain contact source (TERRAIN_CLIMB 6.3) is collected LAST, after the
+            // support query below: both write the SAME per-step candidate array, so the list
+            // the solver reads must be the last one written. See the collection site.
+            bool terrainContacts = terrainMeshContactEnabled && terrainMeshReady &&
+                terrainTriangleCount > 0;
             bool proxyActive = ProxyContactActive();
             int[] proxyKinds = proxyActive ? nearObbKind : null;
             float[] proxyRadii = proxyActive ? nearObbRadius : null;
@@ -2163,12 +2189,58 @@ namespace VRCKatamari.BallMotor
             int[] proxyHullCounts = proxyActive ? nearObbHullCount : null;
             int[] proxyFaceStarts = proxyActive ? nearObbFaceStart : null;
             int[] proxyFaceCounts = proxyActive ? nearObbFaceCount : null;
-            bool solved = ContactSolveMath.TryStep(true, groundPlaneNormal, groundPlaneOffset,
+            // "There is no support plane where there is terrain" (LEVEL_FORMAT_V2 1.3): the
+            // arena ground plane is a CONTACT SOURCE in v2, and a ball standing in a pit
+            // below that plane would read the plane as a metre-deep penetration and be
+            // pushed up out of the terrain. So the same rule the v1 support selection
+            // applies is applied to the contact set: where the mesh answers under the
+            // ball's footprint for THIS step, the plane is not a source; where it does not
+            // (a seam, the edge of the mesh, a level without terrain) it is the fallback.
+            bool meshAnswersHere = false;
+            if (terrainContacts)
+            {
+                float supportLimit;
+                if (!SupportSurfaceMath.TryStepHeightLimit(semanticDiameterWorldM,
+                    stepHeightOverBallDiameter, out supportLimit)) supportLimit = 0f;
+                terrainSupportCandidateCount = CollectTerrainCandidates(ballCenterWorld,
+                    collisionRadiusWorldM);
+                int supportCandidates = terrainSupportCandidateCount;
+                int terrainSupportId;
+                Vector3 terrainSupportNormal;
+                float terrainSupportHeight;
+                meshAnswersHere = TryQueryTerrainSupport(ballCenterWorld,
+                    ballCenterWorld.y - collisionRadiusWorldM, supportLimit, supportCandidates,
+                    out terrainSupportId, out terrainSupportNormal, out terrainSupportHeight);
+            }
+            // THE TERRAIN CONTACT LIST, collected NOW: the ball's footprint plus half of this
+            // step's travel plus the contact skin, so a contact at the end of the step is
+            // still covered. This is the LAST write to terrainCandidates before the solver
+            // below - the support query (above) used the same array, and TryStep reads
+            // (array, count) as one pair, so collecting here is what keeps them together.
+            // Re-collecting anything between this and TryStep would hand the solver the
+            // support list with the sweep count (dropped and duplicated candidates).
+            int terrainContactCandidates = -1;
+            if (terrainContacts)
+            {
+                float terrainTravel = Mathf.Sqrt(requestedDisplacement.x *
+                    requestedDisplacement.x + requestedDisplacement.y *
+                    requestedDisplacement.y + requestedDisplacement.z *
+                    requestedDisplacement.z);
+                Vector3 terrainWindowCenter = new Vector3(
+                    ballCenterWorld.x + requestedDisplacement.x * 0.5f,
+                    ballCenterWorld.y + requestedDisplacement.y * 0.5f,
+                    ballCenterWorld.z + requestedDisplacement.z * 0.5f);
+                terrainContactCandidateCount = CollectTerrainCandidates(terrainWindowCenter,
+                    radius + terrainTravel * 0.5f + ContactTuning.ContactSkinM);
+                terrainContactCandidates = terrainContactCandidateCount;
+            }
+            bool solved = ContactSolveMath.TryStep(!meshAnswersHere, groundPlaneNormal, groundPlaneOffset,
                 planeNormals, planeOffsets, planeCount, nearObbCenter, nearObbAxisX,
                 nearObbAxisY, nearObbAxisZ, nearObbHalfExtents, nearObbSurfaceId, nearObbRole,
                 nearObbCount, ref center, radius, ref planar, ref vertical, ref climbActive,
                 ref climbAnchorY, ref climbSurfaceId, ref climbCooldown, ref climbLocked,
-                ref climbAlongSpeed, contactDriveDirection, driveSpeed, dt, protrusion,
+                ref climbAlongSpeed, ref climbTopYWorldM, ref climbSurfaceNormalWorld,
+                ref climbSurfacePointWorld, contactDriveDirection, driveSpeed, dt, protrusion,
                 contactNormalsV2, contactPointsV2, contactDepthsV2, contactAnglesV2,
                 contactSurfaceIdsV2, contactRolesV2, contactFeaturesV2, contactClassesV2,
                 ContactTuning.ContactCapacity, out contactCount, out dominantSurfaceId,
@@ -2177,7 +2249,23 @@ namespace VRCKatamari.BallMotor
                 ContactTuning.MaxSubsteps, 0f, ContactTuning.ContactSkinM, proxyKinds,
                 proxyRadii, proxyHalfHeights, proxyAxes, proxyHullStarts, proxyHullCounts,
                 proxyFaceStarts, proxyFaceCounts, propProxyHullPoints, propProxyFaceNormals,
-                propProxyFaceOffsets, propProxyFaceA, propProxyFaceB, propProxyFaceC);
+                propProxyFaceOffsets, propProxyFaceA, propProxyFaceB, propProxyFaceC,
+                contactTopYV2,
+                terrainContacts ? terrainCandidates : null, terrainContactCandidates,
+                terrainContacts ? terrainTriangleMinX : null,
+                terrainContacts ? terrainTriangleMaxX : null,
+                terrainContacts ? terrainTriangleMinZ : null,
+                terrainContacts ? terrainTriangleMaxZ : null,
+                terrainContacts ? terrainTriangleSurfaceId : null,
+                terrainContacts ? terrainVertices : null,
+                terrainContacts ? terrainIndices : null,
+                terrainContacts ? terrainTriangleCount : 0,
+                terrainContacts ? terrainChunkMin : null,
+                terrainContacts ? terrainChunkMax : null,
+                terrainContacts ? terrainChunkStarts : null,
+                terrainContacts ? terrainChunkTriangleCounts : null,
+                terrainContacts ? terrainChunkZoneIds : null,
+                terrainContacts ? terrainChunkCount : 0);
             if (!solved)
             {
                 // Fail closed (design §2.8): keep the previous position, drop the velocity
@@ -3349,9 +3437,11 @@ namespace VRCKatamari.BallMotor
             if (terrainSupportEnabled && terrainMeshContactEnabled && terrainMeshReady &&
                 terrainTriangleCount > 0)
             {
-                int candidateCount = CollectTerrainCandidates(center);
-                TryQueryTerrainSupport(center, ballBottom, limit, candidateCount, out terrainId,
-                    out terrainNormal, out terrainHeight);
+                terrainSupportCandidateCount = CollectTerrainCandidates(center,
+                    collisionRadiusWorldM);
+                TryQueryTerrainSupport(center, ballBottom, limit,
+                    terrainSupportCandidateCount, out terrainId, out terrainNormal,
+                    out terrainHeight);
             }
 
             int id;
@@ -3429,16 +3519,22 @@ namespace VRCKatamari.BallMotor
         /// cell lookups and a few mark writes, far below the triangle scan it replaces.
         /// Nothing allocates: the buffers are the motor's fixed arrays.
         /// </remarks>
-        private int CollectTerrainCandidates(Vector3 center)
+        private int CollectTerrainCandidates(Vector3 center, float halfExtent)
         {
             if (!terrainGridReady || terrainGridCellCount <= 0) return -1;
             TerrainGridMath.ClearCandidates(terrainCandidates, terrainCandidateCount,
                 terrainCandidateMark);
+            // -1 means "no candidate list": the build's buffers are sized to the mesh so the
+            // collector's rejection paths cannot fire in production, but if they ever do the
+            // queries read the negative count as the full scan, and the diagnostic shows -1
+            // rather than a partial set that would silently change which surface supports.
             terrainCandidateCount = TerrainGridMath.CollectCandidates(center.x, center.z,
-                collisionRadiusWorldM, terrainGridCellM, terrainGridOriginX,
+                halfExtent, terrainGridCellM, terrainGridOriginX,
                 terrainGridOriginZ, terrainGridCellsX, terrainGridCellsZ,
                 terrainGridCellCount, terrainCellStart, terrainCellTriangles,
-                terrainCandidates, terrainCandidateMark);
+                terrainTriangleMinX, terrainTriangleMaxX, terrainTriangleMinZ,
+                terrainTriangleMaxZ, terrainOversizedTriangles, terrainOversizedCount,
+                terrainTriangleCount, terrainCandidates, terrainCandidateMark);
             return terrainCandidateCount;
         }
 
@@ -3521,7 +3617,9 @@ namespace VRCKatamari.BallMotor
             // T1's own candidate set, collected at the pre-push centre: the support query runs
             // after this and re-collects at the corrected centre, so neither query ever tests
             // a footprint the other's list did not cover.
-            int candidates = CollectTerrainCandidates(center);
+            terrainPenetrationCandidateCount = CollectTerrainCandidates(center,
+                collisionRadiusWorldM);
+            int candidates = terrainPenetrationCandidateCount;
             double start = WallClockSeconds();
             for (int iteration = 0; iteration < 2; iteration++)
             {
@@ -4973,6 +5071,7 @@ namespace VRCKatamari.BallMotor
             int cellsZ;
             int cellCount;
             int referenceCount;
+            int oversizedCount;
             float originX;
             float originZ;
             if (!TerrainGridMath.TryBuild(minX, minZ, maxX, maxZ, cellM,
@@ -4980,12 +5079,17 @@ namespace VRCKatamari.BallMotor
                 terrainChunkTriangleCounts, terrainChunkZoneIds, chunkCount,
                 terrainTriangleMinX, terrainTriangleMaxX, terrainTriangleMinZ,
                 terrainTriangleMaxZ, terrainTriangleSurfaceId, terrainCellStart,
-                terrainCellTriangles, terrainCellCursor, out originX, out originZ,
-                out cellsX, out cellsZ, out cellCount, out referenceCount, out refusalCode,
-                out refusalDetail))
+                terrainCellTriangles, terrainCellCursor, terrainOversizedTriangles,
+                out originX, out originZ, out cellsX, out cellsZ, out cellCount,
+                out referenceCount, out oversizedCount, out refusalCode, out refusalDetail))
             {
+                // A refused grid leaves NO grid behind (the build zeroes its geometry outs):
+                // the mesh keeps its collision through the full scan and the code names why.
                 terrainGridRefusalCode = refusalCode;
                 terrainGridRefusalDetail = refusalDetail;
+                terrainGridReady = false;
+                terrainGridCellCount = 0;
+                terrainOversizedCount = 0;
                 return;
             }
 
@@ -4995,6 +5099,7 @@ namespace VRCKatamari.BallMotor
             terrainGridCellsX = cellsX;
             terrainGridCellsZ = cellsZ;
             terrainGridCellCount = cellCount;
+            terrainOversizedCount = oversizedCount;
             terrainGridReady = true;
         }
 
@@ -5089,8 +5194,35 @@ namespace VRCKatamari.BallMotor
         /// </summary>
         public int GetTerrainCandidates()
         {
-            if (terrainCandidateCount < 0) return 0;
-            return terrainCandidateCount;
+            // -1 = no candidate list (road the full scan), 0 = an empty window.
+            return terrainSupportCandidateCount;
+        }
+
+        /// <summary>
+        /// Candidates the last T1 push-out walked. T1 collects at its own (pre-push) centre,
+        /// so this is NOT the support number; a test that needs the support count reads
+        /// <see cref="GetTerrainCandidates"/>.
+        /// </summary>
+        public int GetTerrainPenetrationCandidates()
+        {
+            // -1 = no candidate list (the push-out ran the full scan).
+            return terrainPenetrationCandidateCount;
+        }
+
+        /// <summary>
+        /// Candidates the last v2 contact collection walked, over the sweep window
+        /// (radius + half the step travel + contact skin). 0 when the v2 authority is off.
+        /// </summary>
+        public int GetTerrainContactCandidates()
+        {
+            // -1 = no candidate list (the contact collection ran the full scan).
+            return terrainContactCandidateCount;
+        }
+
+        /// <summary>Triangles too big for the cells, offered to every query (0 without a grid).</summary>
+        public int GetTerrainOversizedTriangles()
+        {
+            return terrainOversizedCount;
         }
 
         /// <summary>True when the terrain grid built and the candidate path is in use.</summary>
@@ -5196,13 +5328,18 @@ namespace VRCKatamari.BallMotor
             terrainCellCursor = new int[TerrainGridMath.MaxGridCells];
             terrainCandidates = new int[TerrainMeshMath.MaxTriangles];
             terrainCandidateMark = new bool[TerrainMeshMath.MaxTriangles];
+            terrainOversizedTriangles = new int[TerrainGridMath.MaxOversizedTriangles];
             terrainVertexCount = 0;
             terrainTriangleCount = 0;
             terrainChunkCount = 0;
             terrainMeshReady = false;
             terrainGridReady = false;
             terrainGridCellCount = 0;
+            terrainOversizedCount = 0;
             terrainCandidateCount = 0;
+            terrainSupportCandidateCount = 0;
+            terrainPenetrationCandidateCount = 0;
+            terrainContactCandidateCount = 0;
             lastTerrainQueryMicros = 0f;
         }
 
@@ -6054,6 +6191,27 @@ namespace VRCKatamari.BallMotor
         public float GetClimbSpeedMps()
         {
             return climbSpeedWorldMps;
+        }
+
+        /// <summary>
+        /// Top of the face the climb is holding (metres), or 0 when no climb has started.
+        /// The ledge exit compares the ball's bottom against it (TERRAIN_CLIMB 6.3).
+        /// </summary>
+        public float GetClimbTopYWorldM()
+        {
+            return climbTopYWorldM;
+        }
+
+        /// <summary>Normal of the face the climb is holding (unit, from the solid to the ball).</summary>
+        public Vector3 GetClimbSurfaceNormalWorld()
+        {
+            return climbSurfaceNormalWorld;
+        }
+
+        /// <summary>A point on the face the climb is holding.</summary>
+        public Vector3 GetClimbSurfacePointWorld()
+        {
+            return climbSurfacePointWorld;
         }
 
         /// <summary>True when the last climb reached the cap and only a release clears it.</summary>

@@ -60,6 +60,9 @@ namespace VRCKatamari.Tests
         public float ClimbCooldown;
         public bool ClimbLocked;
         public float ClimbAlongSpeed;
+        public float ClimbTopY;
+        public Vector3 ClimbNormal;
+        public Vector3 ClimbPoint;
 
         public readonly Vector3[] ContactNormals =
             new Vector3[ContactTuning.ContactCapacity];
@@ -70,6 +73,31 @@ namespace VRCKatamari.Tests
         public readonly int[] ContactRoles = new int[ContactTuning.ContactCapacity];
         public readonly int[] ContactFeatures = new int[ContactTuning.ContactCapacity];
         public readonly int[] ContactClasses = new int[ContactTuning.ContactCapacity];
+
+        // The terrain contact source (TERRAIN_CLIMB 6.3). Null means "no terrain": the
+        // solver then treats every contact as having no ledge (cap-only climbs).
+        public float[] ContactTopY = new float[ContactTuning.ContactCapacity];
+        public int[] TerrainCandidates;
+        public int TerrainCandidateCount = -1;
+        public float[] TriangleMinX;
+        public float[] TriangleMaxX;
+        public float[] TriangleMinZ;
+        public float[] TriangleMaxZ;
+        public int[] TriangleSurfaceIds;
+        public Vector3[] TerrainVertices;
+        public int[] TerrainIndices;
+        public int TerrainTriangleCount;
+        public Vector3[] ChunkMin;
+        public Vector3[] ChunkMax;
+        public int[] ChunkStarts;
+        public int[] ChunkTriangleCounts;
+        public int[] ChunkZoneIds;
+        public int ChunkCount;
+
+        // The ledge/top height is a C# addition to the model (TERRAIN_CLIMB 6.3); the Python
+        // reference model has no ledge exit yet, so a scenario that must match the model
+        // verbatim switches the tops off (contactTopY = null) and behaves cap-only.
+        public bool UseContactTops = true;
 
         public int ContactCount;
         public int DominantSurfaceId;
@@ -90,14 +118,26 @@ namespace VRCKatamari.Tests
                 world.SurfaceIds, world.Roles, world.Count,
                 ref Center, Radius, ref PlanarVelocity, ref VerticalVelocity,
                 ref ClimbActive, ref ClimbAnchorY, ref ClimbSurfaceId, ref ClimbCooldown,
-                ref ClimbLocked, ref ClimbAlongSpeed,
+                ref ClimbLocked, ref ClimbAlongSpeed, ref ClimbTopY, ref ClimbNormal,
+                ref ClimbPoint,
                 driveDirection, driveSpeed, dt, 0f,
                 ContactNormals, ContactPoints, ContactDepths, ContactAngles,
                 ContactSurfaceIds, ContactRoles, ContactFeatures, ContactClasses,
                 ContactTuning.ContactCapacity,
                 out ContactCount, out DominantSurfaceId, out DominantClass, out ClimbHeight,
                 out ClimbSpeed, out Substeps, out Residual, out Airborne, out ReportNormal,
-                driveAccel: driveAccel);
+                driveAccel: driveAccel,
+                contactTopY: UseContactTops ? ContactTopY : null,
+                terrainCandidates: TerrainCandidates,
+                terrainCandidateCount: TerrainCandidateCount,
+                terrainTriangleMinX: TriangleMinX, terrainTriangleMaxX: TriangleMaxX,
+                terrainTriangleMinZ: TriangleMinZ, terrainTriangleMaxZ: TriangleMaxZ,
+                terrainTriangleSurfaceId: TriangleSurfaceIds,
+                terrainVertices: TerrainVertices, terrainIndices: TerrainIndices,
+                terrainTriangleCount: TerrainTriangleCount, terrainChunkMin: ChunkMin,
+                terrainChunkMax: ChunkMax, terrainChunkStarts: ChunkStarts,
+                terrainChunkTriangleCounts: ChunkTriangleCounts,
+                terrainChunkZoneIds: ChunkZoneIds, terrainChunkCount: ChunkCount);
         }
     }
 
@@ -341,17 +381,30 @@ namespace VRCKatamari.Tests
             ball.Radius = 0.30f;
             ball.PlanarVelocity = new Vector3(0f, 0f, -4f);
             float highest = 0f;
-            for (int i = 0; i < 500; i++)
+            bool sawLocked = false;
+            for (int i = 0; i < 250; i++)
             {
                 Assert.IsTrue(ball.Step(world, new Vector3(0f, 0f, -1f), 4f, 0.02f));
                 if (ball.Center.y > highest) highest = ball.Center.y;
+                sawLocked = sawLocked || ball.ClimbLocked;
             }
             float cap = ClimbMath.ClimbHeightCap(0.30f);
+            // The first attempt climbs to the face cap (0.30 + 0.88 = 1.18) and peels off;
+            // a held push retries from the same anchor (owner D2: "climbs up and drops"), so
+            // the peak is bounded by the cap and the end state is only deterministic once the
+            // push is released.
             Assert.LessOrEqual(highest - 0.30f, cap + 0.02f);
-            Assert.Greater(highest - 0.30f, 0.45f);       // it really did climb
-            Assert.Less(ball.Center.y, 0.35f);            // and it fell back down
-            Assert.IsTrue(ball.ClimbLocked);              // no silent climb loop
-            Assert.AreEqual(0.30f, ball.Center.z, 0.01f); // stayed on the face
+            Assert.Greater(highest - 0.30f, 0.80f);       // it really did climb to the cap
+            Assert.IsTrue(sawLocked);                     // the cap ended the first attempt
+            for (int i = 0; i < 300; i++)
+            {
+                Assert.IsTrue(ball.Step(world, new Vector3(0f, 0f, -1f), 0f, 0.02f));
+            }
+            Assert.Less(ball.Center.y, 0.32f);            // slid back down
+            Assert.IsFalse(ball.ClimbActive);
+            // The cap release's peel is C#-only: the rest can sit a few mm off the face, but
+            // never inside it.
+            Assert.GreaterOrEqual(ball.Center.z, 0.30f - 0.01f);
         }
 
         [Test]
@@ -387,14 +440,27 @@ namespace VRCKatamari.Tests
             smallBall.Radius = 0.15f;
             smallBall.PlanarVelocity = new Vector3(0f, 0f, 4f);
             float smallHighest = 0f;
+            bool smallSawLocked = false;
             for (int i = 0; i < 250; i++)
             {
                 Assert.IsTrue(smallBall.Step(small, new Vector3(0f, 0f, 1f), 4f, 0.02f, 5f));
                 if (smallBall.Center.y > smallHighest) smallHighest = smallBall.Center.y;
+                smallSawLocked = smallSawLocked || smallBall.ClimbLocked;
             }
+            // The cap is the height above the FACE: the first attempt's anchor is the start
+            // centre, so the peak is `anchor + H_cap` (0.15 + 0.45 = 0.60) within the
+            // one-substep overshoot, and a retry on the same face keeps that anchor.
             Assert.LessOrEqual(smallHighest - 0.15f, ClimbMath.ClimbHeightCap(0.15f) + 0.02f);
-            Assert.Less(smallBall.Center.y - 0.15f, 0.05f);   // slid back down
-            Assert.IsTrue(smallBall.ClimbLocked);
+            Assert.Less(smallHighest - 0.15f, 0.6f - 0.05f);  // never the 0.6 m deck
+            Assert.IsTrue(smallSawLocked);                    // the cap was reached once
+            // A held push retries after the fall (owner D2), so the end state of the cycle is
+            // not asserted; releasing is the deterministic form (see the golden test).
+            for (int i = 0; i < 200; i++)
+            {
+                Assert.IsTrue(smallBall.Step(small, new Vector3(0f, 0f, 1f), 0f, 0.02f, 5f));
+            }
+            Assert.Less(smallBall.Center.y - 0.15f, 0.05f);   // slid back down once released
+            Assert.IsFalse(smallBall.ClimbActive);
 
             ContactWorld big = ContactScenes.SlopeWorld(50f, 0.6f, 3f);
             ContactBall bigBall = new ContactBall();
@@ -425,18 +491,27 @@ namespace VRCKatamari.Tests
                 Assert.IsTrue(ball.Step(world, new Vector3(0f, 0f, -1f), 4f, 0.02f, 5f));
                 if (ball.Center.y > highest) highest = ball.Center.y;
             }
-            Assert.AreEqual(0.30f, highest, 0.01f);  // r above the wall top
+            // The 0.5 D wall's edge normal is CLIMB-class at h = r (n.y = (r-h)/r = 0), so
+            // the climb channel also engages on top of the edge roll-over. The ledge exit
+            // settles the bottom onto the wall top (<= ClimbLedgeSlopM) and zeroes the
+            // climb's vertical speed, so the peak is wallTop + r plus at most the push-out
+            // slop: 0.15 + 0.15 + 0.005. (The Python model has no ledge exit and peaks at
+            // exactly 0.30 - see the golden test's note.)
+            Assert.GreaterOrEqual(highest, 0.30f - 0.01f);
+            Assert.LessOrEqual(highest, 0.15f + 0.15f + ContactTuning.ClimbLedgeSlopM);
             Assert.Less(ball.Center.z, -2f);         // crossed to the far side
         }
 
         [Test]
-        public void TheHeightCapIsOneDiameterAndAddsProtrusion()
+        public void TheHeightCapIsOneAndAHalfDiametersAndAddsProtrusion()
         {
-            Assert.AreEqual(0.30f, ClimbMath.ClimbHeightCap(0.15f), Tolerance);
-            Assert.AreEqual(0.60f, ClimbMath.ClimbHeightCap(0.30f), Tolerance);
-            Assert.AreEqual(1.10f, ClimbMath.ClimbHeightCap(0.55f), Tolerance);
-            Assert.AreEqual(2.20f, ClimbMath.ClimbHeightCap(1.10f), Tolerance);
-            Assert.AreEqual(0.80f, ClimbMath.ClimbHeightCap(0.30f, 0.2f), Tolerance);
+            // k_h = 1.5 (owner 2026-11-16, PROVISIONAL): H_cap = 1.5 * (2r + L). The old
+            // 2r (k_h = 1) contract is gone with the constant.
+            Assert.AreEqual(0.45f, ClimbMath.ClimbHeightCap(0.15f), Tolerance);
+            Assert.AreEqual(0.90f, ClimbMath.ClimbHeightCap(0.30f), Tolerance);
+            Assert.AreEqual(1.65f, ClimbMath.ClimbHeightCap(0.55f), Tolerance);
+            Assert.AreEqual(3.30f, ClimbMath.ClimbHeightCap(1.10f), Tolerance);
+            Assert.AreEqual(1.20f, ClimbMath.ClimbHeightCap(0.30f, 0.2f), Tolerance);
         }
 
         [Test]

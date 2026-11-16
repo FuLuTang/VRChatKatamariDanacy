@@ -83,6 +83,21 @@ namespace VRCKatamari.Tests
             field.SetValue(motor, value);
         }
 
+        private object GetField(string name)
+        {
+            FieldInfo field = motorType.GetField(name, Any);
+            Assert.IsNotNull(field, name + " field not found");
+            return field.GetValue(motor);
+        }
+
+        private void RegisterMesh(Vector3[] vertices, int[] indices, int[] starts, int[] counts,
+            int[] zones, int chunkCount)
+        {
+            Invoke("SetTerrainMeshContactEnabled", true);
+            Assert.IsTrue((bool)Invoke("SetTerrainMesh", vertices, vertices.Length, indices,
+                indices.Length, starts, counts, zones, chunkCount), "the mesh registered");
+        }
+
         [TearDown]
         public void TearDown()
         {
@@ -203,13 +218,18 @@ namespace VRCKatamari.Tests
             Assert.That(support, Is.GreaterThan(penetration),
                 "the 17-probe ring dominates an empty push-out scan");
 
-            // Explainable work: every probe visits every triangle of the single chunk that
-            // contains it, so 17 probes x 512 triangles is EXACT, not an estimate.
-            Assert.AreEqual(17 * 512, tested,
-                "17 probes x 512 triangles: one chunk contains every probe");
+            // Explainable work: all 17 probes walk the SAME candidate list, so
+            // trianglesTested == 17 x candidates is EXACT (it was 17 x 512 before the grid,
+            // when every probe walked the whole chunk).
+            int candidates = (int)Invoke("GetTerrainCandidates");
+            Assert.That(candidates, Is.GreaterThan(0), "the grid offered a candidate list");
+            Assert.AreEqual(17 * candidates, tested,
+                "17 probes x the support candidate list, no per-probe re-scan");
+            Assert.That(tested, Is.LessThan(17 * 512),
+                "and that is strictly less than the pre-grid full scan");
             Assert.That(fullEvals, Is.GreaterThan(0), "at least the triangle under the ball");
-            Assert.That(fullEvals, Is.LessThan(tested / 10),
-                "the per-triangle AABB rejects almost everything, which is why the split matters");
+            Assert.That(fullEvals, Is.LessThan(tested),
+                "the per-triangle AABB rejects some of what the window kept");
 
             // A penetration case: drop the ball's centre to 0.10 m so its sphere is 0.05 m
             // INTO the floor from the front side (T1 is single-sided; a ball under a +Y face
@@ -224,6 +244,16 @@ namespace VRCKatamari.Tests
                 "a sphere 0.05 m inside the floor pays for the T1 scan");
             Assert.That(buriedPenetration, Is.GreaterThan(penetration),
                 "and strictly more than the empty scan above");
+            // The two candidate counts are separate readings, not one overwritten number:
+            // T1 collected at its own centre (which the push then moved), the support query
+            // recollected after it.
+            Assert.That((int)Invoke("GetTerrainPenetrationCandidates"), Is.GreaterThan(0),
+                "the penetration count is its own reading");
+            Assert.That((int)Invoke("GetTerrainCandidates"), Is.GreaterThan(0),
+                "and the support count is too, read from its own field");
+            Assert.That((float)Invoke("GetLastTerrainQueryMicros"),
+                Is.EqualTo((float)Invoke("GetLastTerrainSupportMicros") +
+                    (float)Invoke("GetLastTerrainPenetrationMicros")).Within(1e-3f));
             Assert.That(GetCenterY(), Is.GreaterThan(0.14f),
                 "T1 pushed it back out and the ground solve put it on the surface");
         }
@@ -237,16 +267,18 @@ namespace VRCKatamari.Tests
         [Test]
         public void TheV2AuthorityDoesNotLeaveAStaleTerrainReading()
         {
-            // The bug this pins: the counters were reset inside StepPositionV1, so with the
-            // contact v2 authority on (which never enters that method) every reading was a
-            // stale value from the last v1 step. Reset now lives in StepBall, which BOTH
-            // authorities pass through.
+            // The bug this pins: the counters were reset inside StepPositionV1, so a step that
+            // did not enter that method (the v2 authority) kept the previous v1 reading. Reset
+            // now lives in StepBall, which BOTH authorities pass through. The v2 step here has
+            // the terrain contact switched OFF, so "no terrain query happened" is guaranteed
+            // and the assertion is about the RESET, not about what v2 happens to query.
             RegisterFlatMesh(0f, 16);
             Step(1);
             Assert.That((float)Invoke("GetLastTerrainQueryMicros"), Is.GreaterThan(1f),
                 "the v1 step measured something");
             Assert.That((int)Invoke("GetTerrainTrianglesTested"), Is.GreaterThan(0));
 
+            Invoke("SetTerrainMeshContactEnabled", false);
             Invoke("SetContactModelV2Enabled", true);
             Assert.IsTrue((bool)Invoke("IsContactModelV2"));
             Step(1);
@@ -282,6 +314,74 @@ namespace VRCKatamari.Tests
                 "17 probes walk exactly the candidate list; the full scan would walk 17 x 512");
             Assert.That(tested, Is.LessThan(17 * 512 / 2),
                 "the grid at least halves the per-step triangle iterations on this fixture");
+        }
+
+        [Test]
+        public void TheV2SolverReadsTheContactListItCollectedLast()
+        {
+            // THE ORDER CONTRACT. Both the v2 support query and the v2 contact collection
+            // write the SAME terrainCandidates array; the solver reads (array, count) as one
+            // pair. If the support collection runs last, the solver reads the support list
+            // with the sweep count: candidates lost where the two lists differ, duplicates
+            // where the old tail survives.
+            //
+            // The lip makes that observable: a thin quad toward -Z at z in [-0.1545,
+            // -0.1535] is OUTSIDE the support window (r = 0.14985, plus the 1e-6 slack) but
+            // INSIDE the contact window (r + half the step travel + the 5 mm contact skin =
+            // 0.15485). It is registered FIRST, so it sits at the front of the candidate list
+            // - exactly the part a later support collection would overwrite.
+            Vector3[] vertices =
+            {
+                new Vector3(-0.2f, 0f, -0.1545f), new Vector3(-0.2f, 0f, -0.1535f),
+                new Vector3(0.2f, 0f, -0.1535f), new Vector3(0.2f, 0f, -0.1545f),
+                new Vector3(-2f, 0f, -2f), new Vector3(-2f, 0f, 2f),
+                new Vector3(2f, 0f, 2f), new Vector3(2f, 0f, -2f),
+            };
+            int[] indices = { 0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7 };
+            RegisterMesh(vertices, indices, new[] { 0 }, new[] { 4 }, new[] { 0 }, 1);
+            Assert.IsTrue((bool)Invoke("IsTerrainGridReady"), "the 4-triangle mesh is grid-able");
+            Invoke("SetContactModelV2Enabled", true);
+            Assert.IsTrue((bool)Invoke("IsContactModelV2"));
+
+            // Drive toward -X and -Z (heading 0 faces +Z; forward -1 and lateral -1 give the
+            // negative quadrant).
+            SetField("debugForward", -1f);
+            SetField("debugLateral", -1f);
+            Vector3 before = (Vector3)Invoke("GetCenterWorld");
+            Step(1);
+
+            int contactCandidates = (int)Invoke("GetTerrainContactCandidates");
+            int supportCandidates = (int)Invoke("GetTerrainCandidates");
+            Assert.That(supportCandidates, Is.GreaterThan(0), "the support query ran first");
+            Assert.That(contactCandidates, Is.GreaterThan(supportCandidates),
+                "the contact window (r + travel/2 + skin) holds the support set AND the lip");
+            int[] array = (int[])GetField("terrainCandidates");
+            Assert.IsNotNull(array);
+            bool lipPresent = false;
+            for (int i = 0; i < contactCandidates; i++)
+            {
+                if (array[i] == 0 || array[i] == 1) lipPresent = true;
+            }
+            Assert.IsTrue(lipPresent,
+                "the contact list still holds the lip (triangles 0/1): the support collection " +
+                "must not have overwritten the list the solver reads");
+            for (int i = 0; i < contactCandidates; i++)
+            {
+                for (int j = i + 1; j < contactCandidates; j++)
+                {
+                    Assert.AreNotEqual(array[i], array[j],
+                        "the contact list has no duplicate triangles");
+                }
+            }
+            Assert.That((int)Invoke("GetContactCount"), Is.GreaterThan(0),
+                "the solver received terrain contacts, not an empty list");
+
+            // And the ball really travels toward -X/-Z on the mesh without falling through.
+            Step(10);
+            Vector3 after = (Vector3)Invoke("GetCenterWorld");
+            Assert.That(after.x, Is.LessThan(before.x - 0.005f), "moved toward -X");
+            Assert.That(after.z, Is.LessThan(before.z - 0.005f), "moved toward -Z");
+            Assert.That(after.y, Is.GreaterThan(0.13f), "still standing on the terrain mesh");
         }
 
         [Test]

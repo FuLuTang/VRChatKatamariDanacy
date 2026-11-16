@@ -136,7 +136,24 @@ namespace VRCKatamari.BallContact
             float[] faceOffsets = null,
             int[] faceA = null,
             int[] faceB = null,
-            int[] faceC = null)
+            int[] faceC = null,
+            float[] contactTopY = null,
+            int[] terrainCandidates = null,
+            int terrainCandidateCount = 0,
+            float[] terrainTriangleMinX = null,
+            float[] terrainTriangleMaxX = null,
+            float[] terrainTriangleMinZ = null,
+            float[] terrainTriangleMaxZ = null,
+            int[] terrainTriangleSurfaceId = null,
+            Vector3[] terrainVertices = null,
+            int[] terrainIndices = null,
+            int terrainTriangleCount = 0,
+            Vector3[] terrainChunkMin = null,
+            Vector3[] terrainChunkMax = null,
+            int[] terrainChunkStarts = null,
+            int[] terrainChunkTriangleCounts = null,
+            int[] terrainChunkZoneIds = null,
+            int terrainChunkCount = 0)
         {
             contactCount = 0;
             if (!KatamariMath.IsFiniteVector(sphereCenter)) return false;
@@ -201,6 +218,8 @@ namespace VRCKatamari.BallContact
                     contactRoles[contactCount] = ContactCodes.RoleBlocking;
                     contactFeatures[contactCount] = ContactCodes.FeatureFace;
                     contactClasses[contactCount] = contactClass;
+                    // The ground plane has no top: a plane cannot be climbed over.
+                    if (contactTopY != null) contactTopY[contactCount] = float.MaxValue;
                     contactCount++;
                 }
             }
@@ -226,6 +245,7 @@ namespace VRCKatamari.BallContact
                 contactRoles[contactCount] = ContactCodes.RoleBlocking;
                 contactFeatures[contactCount] = ContactCodes.FeatureFace;
                 contactClasses[contactCount] = contactClass;
+                if (contactTopY != null) contactTopY[contactCount] = float.MaxValue;
                 contactCount++;
             }
 
@@ -264,7 +284,45 @@ namespace VRCKatamari.BallContact
                 contactRoles[contactCount] = obbRoles[i];
                 contactFeatures[contactCount] = feature;
                 contactClasses[contactCount] = contactClass;
+                if (contactTopY != null)
+                {
+                    // A plain OBB is a wall with a top: "bottom reached the top" is the
+                    // climb's successful exit (the same rule terrain uses). A proxy shape
+                    // (prop hull/capsule/sphere) has no single top, so it never exits by
+                    // ledge - the cap still ends it.
+                    float top = float.MaxValue;
+                    if (kind == ProxyContactMath.KindBox)
+                    {
+                        top = obbCenters[i].y +
+                            Mathf.Abs(obbAxisX[i].y) * obbHalfExtents[i].x +
+                            Mathf.Abs(obbAxisY[i].y) * obbHalfExtents[i].y +
+                            Mathf.Abs(obbAxisZ[i].y) * obbHalfExtents[i].z;
+                        if (!KatamariMath.IsFiniteFloat(top)) top = float.MaxValue;
+                    }
+                    contactTopY[contactCount] = top;
+                }
                 contactCount++;
+            }
+
+            // The terrain mesh is one more contact SOURCE, not a second solver: the
+            // collector walks the motor's per-step candidate table and appends records in
+            // exactly this format (TerrainMeshMath.TryAppendContacts). It runs last so the
+            // analytic bodies keep their indices, and it fails closed on capacity overflow
+            // like every other source.
+            if (terrainVertices != null && terrainIndices != null)
+            {
+                int extended;
+                if (!TerrainMeshMath.TryAppendContacts(sphereCenter, radius, skin,
+                    terrainCandidates, terrainCandidateCount, terrainTriangleMinX,
+                    terrainTriangleMaxX, terrainTriangleMinZ, terrainTriangleMaxZ,
+                    terrainTriangleSurfaceId, terrainVertices, terrainIndices,
+                    terrainTriangleCount, terrainChunkMin, terrainChunkMax,
+                    terrainChunkStarts, terrainChunkTriangleCounts, terrainChunkZoneIds,
+                    terrainChunkCount, contactNormals, contactPoints, contactDepths,
+                    contactAngles, contactSurfaceIds, contactRoles, contactFeatures,
+                    contactClasses, contactTopY, limit, contactCount, out extended))
+                    return false;
+                contactCount = extended;
             }
             return true;
         }
@@ -326,7 +384,24 @@ namespace VRCKatamari.BallContact
             float[] faceOffsets = null,
             int[] faceA = null,
             int[] faceB = null,
-            int[] faceC = null)
+            int[] faceC = null,
+            float[] contactTopY = null,
+            int[] terrainCandidates = null,
+            int terrainCandidateCount = 0,
+            float[] terrainTriangleMinX = null,
+            float[] terrainTriangleMaxX = null,
+            float[] terrainTriangleMinZ = null,
+            float[] terrainTriangleMaxZ = null,
+            int[] terrainTriangleSurfaceId = null,
+            Vector3[] terrainVertices = null,
+            int[] terrainIndices = null,
+            int terrainTriangleCount = 0,
+            Vector3[] terrainChunkMin = null,
+            Vector3[] terrainChunkMax = null,
+            int[] terrainChunkStarts = null,
+            int[] terrainChunkTriangleCounts = null,
+            int[] terrainChunkZoneIds = null,
+            int terrainChunkCount = 0)
         {
             correctedCenter = center;
             contactCount = 0;
@@ -341,7 +416,12 @@ namespace VRCKatamari.BallContact
                 contactRoles, contactFeatures, contactClasses, capacity, out count, skin,
                 obbKinds, obbRadii, obbHalfHeights, obbAxes, hullStarts, hullCounts,
                 faceStarts, faceCounts, hullPoints, faceNormals, faceOffsets, faceA, faceB,
-                faceC))
+                faceC, contactTopY, terrainCandidates, terrainCandidateCount,
+                terrainTriangleMinX, terrainTriangleMaxX, terrainTriangleMinZ,
+                terrainTriangleMaxZ, terrainTriangleSurfaceId, terrainVertices,
+                terrainIndices, terrainTriangleCount, terrainChunkMin, terrainChunkMax,
+                terrainChunkStarts, terrainChunkTriangleCounts, terrainChunkZoneIds,
+                terrainChunkCount))
             {
                 contactCount = count;
                 return false;
@@ -373,7 +453,12 @@ namespace VRCKatamari.BallContact
                     contactSurfaceIds, contactRoles, contactFeatures, contactClasses, capacity,
                     out count, skin, obbKinds, obbRadii, obbHalfHeights, obbAxes, hullStarts,
                     hullCounts, faceStarts, faceCounts, hullPoints, faceNormals, faceOffsets,
-                    faceA, faceB, faceC))
+                    faceA, faceB, faceC, contactTopY, terrainCandidates, terrainCandidateCount,
+                    terrainTriangleMinX, terrainTriangleMaxX, terrainTriangleMinZ,
+                    terrainTriangleMaxZ, terrainTriangleSurfaceId, terrainVertices,
+                    terrainIndices, terrainTriangleCount, terrainChunkMin, terrainChunkMax,
+                    terrainChunkStarts, terrainChunkTriangleCounts, terrainChunkZoneIds,
+                    terrainChunkCount))
                 {
                     contactCount = count;
                     return false;
@@ -429,6 +514,9 @@ namespace VRCKatamari.BallContact
             ref float climbCooldown,
             ref bool climbLocked,
             ref float climbAlongSpeed,
+            ref float climbTopY,
+            ref Vector3 climbNormal,
+            ref Vector3 climbPoint,
             Vector3 driveDirection,
             float driveSpeed,
             float dt,
@@ -468,7 +556,24 @@ namespace VRCKatamari.BallContact
             float[] faceOffsets = null,
             int[] faceA = null,
             int[] faceB = null,
-            int[] faceC = null)
+            int[] faceC = null,
+            float[] contactTopY = null,
+            int[] terrainCandidates = null,
+            int terrainCandidateCount = 0,
+            float[] terrainTriangleMinX = null,
+            float[] terrainTriangleMaxX = null,
+            float[] terrainTriangleMinZ = null,
+            float[] terrainTriangleMaxZ = null,
+            int[] terrainTriangleSurfaceId = null,
+            Vector3[] terrainVertices = null,
+            int[] terrainIndices = null,
+            int terrainTriangleCount = 0,
+            Vector3[] terrainChunkMin = null,
+            Vector3[] terrainChunkMax = null,
+            int[] terrainChunkStarts = null,
+            int[] terrainChunkTriangleCounts = null,
+            int[] terrainChunkZoneIds = null,
+            int terrainChunkCount = 0)
         {
             contactCount = 0;
             dominantSurfaceId = -1;
@@ -496,6 +601,9 @@ namespace VRCKatamari.BallContact
             if (!KatamariMath.IsFiniteFloat(climbAnchorY)) return false;
             if (!KatamariMath.IsFiniteFloat(climbCooldown)) return false;
             if (!KatamariMath.IsFiniteFloat(climbAlongSpeed)) return false;
+            if (!KatamariMath.IsFiniteFloat(climbTopY)) return false;
+            if (!KatamariMath.IsFiniteVector(climbNormal)) return false;
+            if (!KatamariMath.IsFiniteVector(climbPoint)) return false;
 
             Vector3 position = center;
             Vector3 vPlanar = planarVelocity;
@@ -506,6 +614,9 @@ namespace VRCKatamari.BallContact
             float cooldown = Mathf.Max(0f, climbCooldown - dt);
             bool locked = climbLocked;
             float along = climbAlongSpeed;
+            float topY = climbTopY;
+            Vector3 surfaceNormal = climbNormal;
+            Vector3 surfacePoint = climbPoint;
             float hCap = ClimbMath.ClimbHeightCap(radius, protrusionM);
 
             // The substep count covers the pre-step velocity PLUS the largest velocity a
@@ -542,7 +653,13 @@ namespace VRCKatamari.BallContact
                     out pushedCenter, out pushedCount, out pushedResidual,
                     ContactTuning.SolverIterations, skin, obbKinds, obbRadii, obbHalfHeights,
                     obbAxes, hullStarts, hullCounts, faceStarts, faceCounts, hullPoints,
-                    faceNormals, faceOffsets, faceA, faceB, faceC))
+                    faceNormals, faceOffsets, faceA, faceB, faceC, contactTopY,
+                    terrainCandidates, terrainCandidateCount, terrainTriangleMinX,
+                    terrainTriangleMaxX, terrainTriangleMinZ, terrainTriangleMaxZ,
+                    terrainTriangleSurfaceId, terrainVertices, terrainIndices,
+                    terrainTriangleCount, terrainChunkMin, terrainChunkMax,
+                    terrainChunkStarts, terrainChunkTriangleCounts, terrainChunkZoneIds,
+                    terrainChunkCount))
                     return false;
                 position = pushedCenter;
                 count = pushedCount;
@@ -562,62 +679,128 @@ namespace VRCKatamari.BallContact
                     !ContactClassificationMath.IsClimbSteeperThanSupport(
                         contactAngles[wallIndex], supportTheta)) wallIndex = -1;
 
-                float theta = 0f;
-                float pushIn = 0f;
-                float vGate = 0f;
-                if (wallIndex >= 0)
+                // While a climb is alive its surface is REMEMBERED: above a low face the
+                // contact ends before the ball's bottom clears the top, and the climb has to
+                // finish that last radius (TERRAIN_CLIMB 6.3). A dead hug ends the climb.
+                if (active && wallIndex >= 0)
                 {
-                    theta = contactAngles[wallIndex];
-                    float wallX = contactNormals[wallIndex].x;
-                    float wallZ = contactNormals[wallIndex].z;
-                    float horizontalLength = Mathf.Sqrt(wallX * wallX + wallZ * wallZ);
-                    if (horizontalLength <= 0f) return false;
-                    float inverse = 1f / horizontalLength;
-                    pushIn = Mathf.Max(0f, -(drive.x * wallX * inverse
-                        + drive.z * wallZ * inverse));
-                    float planarSpeed = Mathf.Sqrt(vPlanar.x * vPlanar.x
-                        + vPlanar.z * vPlanar.z);
-                    vGate = Mathf.Max(planarSpeed, ContactTuning.KIntent * driveSpeed);
-                    if (pushIn < ContactTuning.PMin)
-                    {
-                        // Releasing the push is the only way to clear a cap lock: holding
-                        // into a wall taller than H_cap must not loop climb/fall silently.
-                        locked = false;
-                    }
-                    if (active && pushIn < ContactTuning.PMin)
-                    {
-                        active = false;
-                        cooldown = ContactTuning.ClimbCooldownS;
-                        along = 0f;
-                    }
-                    if (!active && !locked && pushIn >= ContactTuning.PMin &&
-                        cooldown <= 0f && vGate >= ClimbMath.RequiredSpeed(theta) &&
-                        hCap > 0f)
-                    {
-                        active = true;
-                        anchorY = position.y;
-                        surfaceId = contactSurfaceIds[wallIndex];
-                        along = 0f;
-                    }
+                    surfaceNormal = contactNormals[wallIndex];
+                    surfacePoint = contactPoints[wallIndex];
+                    topY = ContactTopAt(contactTopY, wallIndex);
                 }
-                else
+                Vector3 pushNormal = wallIndex >= 0 ? contactNormals[wallIndex] : surfaceNormal;
+                float theta = wallIndex >= 0 ? contactAngles[wallIndex]
+                    : ObbContactMath.ContactAngleDeg(pushNormal);
+                float pushIn = 0f;
+                if (!TryPushIn(pushNormal, drive, out pushIn)) pushIn = 0f;
+                float planarSpeed = Mathf.Sqrt(vPlanar.x * vPlanar.x + vPlanar.z * vPlanar.z);
+                float vGate = Mathf.Max(planarSpeed, ContactTuning.KIntent * driveSpeed);
+
+                // A cap lock releases itself once the ball has slid halfway back, so a player
+                // holding into a wall taller than H_cap sees climb-fall-retry instead of a
+                // dead stick (owner 2026-11-16: it "climbs up and drops"). Releasing the push
+                // still clears it immediately.
+                if (locked && hCap > 0f && (position.y - anchorY) < 0.5f * hCap) locked = false;
+                if (!active && pushIn < ContactTuning.PMin) locked = false;
+
+                if (!active && wallIndex >= 0 && !locked && cooldown <= 0f &&
+                    pushIn >= ContactTuning.PMin &&
+                    vGate >= ClimbMath.RequiredSpeed(theta) && hCap > 0f)
+                {
+                    // The cap is a height above the FACE, not above wherever the previous
+                    // attempt ended. A retry on the SAME face (same normal, same plane, same
+                    // top) keeps the original anchor; re-anchoring would ratchet the ball up
+                    // one H_cap per attempt - the 50 deg slab's D=0.30 ball reached the 0.6 m
+                    // deck that way (0.755 m centre against a 0.45 m cap). A different face
+                    // re-anchors, which is what a new wall/step should do.
+                    float faceTop = ContactTopAt(contactTopY, wallIndex);
+                    float normalDot = surfaceNormal.x * contactNormals[wallIndex].x
+                        + surfaceNormal.y * contactNormals[wallIndex].y
+                        + surfaceNormal.z * contactNormals[wallIndex].z;
+                    float planeGap = surfaceNormal.x *
+                        (contactPoints[wallIndex].x - surfacePoint.x)
+                        + surfaceNormal.y * (contactPoints[wallIndex].y - surfacePoint.y)
+                        + surfaceNormal.z * (contactPoints[wallIndex].z - surfacePoint.z);
+                    bool sameFace = surfaceId >= 0 && normalDot > 0.99f &&
+                        Mathf.Abs(planeGap) < 0.02f && Mathf.Abs(faceTop - topY) < 0.002f;
+                    if (!sameFace) anchorY = position.y;
+                    active = true;
+                    surfaceId = contactSurfaceIds[wallIndex];
+                    along = 0f;
+                    surfaceNormal = contactNormals[wallIndex];
+                    surfacePoint = contactPoints[wallIndex];
+                    topY = faceTop;
+                }
+
+                // The climb's endings, in priority order: release, ledge, cap, lost hug.
+                if (active && pushIn < ContactTuning.PMin)
                 {
                     active = false;
+                    cooldown = ContactTuning.ClimbCooldownS;
+                    along = 0f;
+                    locked = false;
+                }
+                if (active && position.y - radius >= topY - ContactTuning.ClimbLedgeSlopM)
+                {
+                    // The bottom reached the climb face's top. Hand the climb's speed to the
+                    // drive so the ball crosses its own radius onto the ledge, and end the
+                    // climb's vertical motion HERE: the exit is a hand-over, not a leap. The
+                    // climb may arrive up to ClimbLedgeSlopM (5 mm) below the top - within the
+                    // contact skin - so the bottom is settled onto it (<= 5 mm, the same order
+                    // as the skin) and vY is zeroed. R25b: without the settle the residual
+                    // climb rate (0.36 m/s on the 70 deg slope) carried the ball +4.6 mm over
+                    // the deck rest, and without the zeroed vY a lip push-out would have to
+                    // pop it the rest of the way.
+                    active = false;
+                    cooldown = 0f;
+                    locked = false;
+                    along = 0f;
+                    if (topY < float.MaxValue)
+                    {
+                        float remaining = (topY + radius) - position.y;
+                        if (remaining > 0f && remaining <= ContactTuning.ClimbLedgeSlopM)
+                        {
+                            position.y = position.y + remaining;
+                        }
+                    }
+                    vY = 0f;
+                    vPlanar = LedgeExitVelocity(vPlanar, surfaceNormal, driveSpeed, radius);
+                }
+                if (active && hCap > 0f &&
+                    position.y - anchorY >= hCap - ContactTuning.ClimbCapMarginM)
+                {
+                    active = false;
+                    cooldown = ContactTuning.ClimbCooldownS;
+                    locked = true;
+                    along = 0f;
+                    vPlanar = PeelVelocity(vPlanar, surfaceNormal);
+                }
+                // A hang (climbing on with no live contact) exists ONLY to finish the last
+                // radius above a KNOWN ledge. Without a top there is nothing to finish, and
+                // carrying on would lift the ball to the cap above a wall it already cleared
+                // (R25c: a 0.15 m wall peaked at 0.581 = 0.15 + H_cap - margin). End it.
+                if (active && wallIndex < 0 && !(topY < float.MaxValue))
+                {
+                    active = false;
+                    cooldown = ContactTuning.ClimbCooldownS;
+                    along = 0f;
+                }
+                if (active && !Hugging(position, surfaceNormal, surfacePoint, radius))
+                {
+                    active = false;
+                    cooldown = ContactTuning.ClimbCooldownS;
                     along = 0f;
                 }
 
-                if (active && wallIndex >= 0)
+                if (active)
                 {
                     // The climb channel OWNS the velocity and drives it along the uphill
-                    // tangent: +Y for a wall, up-the-hill for a steep slope. Setting the
-                    // tangent (instead of clipping the inward part) is what lets a 70 deg
-                    // slope be climbed at all - the small into-surface component is what
-                    // keeps the contact alive and the push-out turns it into ascent.
-                    float cosTheta = Mathf.Clamp(contactNormals[wallIndex].y, -1f, 1f);
-                    Vector3 tangent = new Vector3(
-                        -contactNormals[wallIndex].x * cosTheta,
-                        1f - contactNormals[wallIndex].y * cosTheta,
-                        -contactNormals[wallIndex].z * cosTheta);
+                    // tangent: +Y for a wall, up-the-hill for a steep slope. Without a live
+                    // wall (the last radius above a low face) the remembered normal gives a
+                    // vertical lift, and the ledge exit above is what ends it.
+                    float cosTheta = Mathf.Clamp(pushNormal.y, -1f, 1f);
+                    Vector3 tangent = new Vector3(-pushNormal.x * cosTheta,
+                        1f - pushNormal.y * cosTheta, -pushNormal.z * cosTheta);
                     Vector3 tangentUnit;
                     float tangentLength;
                     if (!KatamariMath.TryNormalize(tangent, out tangentUnit, out tangentLength))
@@ -631,6 +814,23 @@ namespace VRCKatamari.BallContact
                     float rate = ContactTuning.ClimbRateLimit * dt / substeps;
                     if (alongTarget > along) along = Mathf.Min(along + rate, alongTarget);
                     else along = Mathf.Max(along - rate, alongTarget);
+                    // The climb may never lift the bottom PAST the ledge: clamp this substep's
+                    // vertical travel to the distance that is left (topY < +inf means the ledge
+                    // is known). Without it a step of the climb's own rate lands the ball above
+                    // the top - R25c measured a 0.15 m wall peaking 5.3 mm over its rest - and
+                    // the exit's settle can only move it DOWN to the ledge, never back.
+                    if (topY < float.MaxValue)
+                    {
+                        float substepSeconds = dt / substeps;
+                        float room = (topY + radius) - position.y;
+                        if (room < 0f) room = 0f;
+                        float verticalCap = substepSeconds > 0f ? room / substepSeconds : 0f;
+                        if (!KatamariMath.IsFiniteFloat(verticalCap)) verticalCap = 0f;
+                        if (tangentUnit.y > 0f && verticalCap < tangentUnit.y * along)
+                        {
+                            along = verticalCap / tangentUnit.y;
+                        }
+                    }
                     vPlanar = new Vector3(tangentUnit.x * along, 0f, tangentUnit.z * along);
                     vY = tangentUnit.y * along;
                     climbSpeedValue = vY;
@@ -640,12 +840,7 @@ namespace VRCKatamari.BallContact
                         cooldown = ContactTuning.ClimbCooldownS;
                         locked = true;
                         along = 0f;
-                    }
-                    else if (pushIn < ContactTuning.PMin)
-                    {
-                        active = false;
-                        cooldown = ContactTuning.ClimbCooldownS;
-                        along = 0f;
+                        vPlanar = PeelVelocity(vPlanar, surfaceNormal);
                     }
                 }
                 else
@@ -719,6 +914,9 @@ namespace VRCKatamari.BallContact
             climbCooldown = cooldown;
             climbLocked = locked;
             climbAlongSpeed = along;
+            climbTopY = topY;
+            climbNormal = surfaceNormal;
+            climbPoint = surfacePoint;
 
             contactCount = count;
             residual = lastResidual;
@@ -745,6 +943,69 @@ namespace VRCKatamari.BallContact
                 airborne = true;
             }
             return true;
+        }
+
+        /// <summary>The drive's push into a normal's horizontal direction, 0..1.</summary>
+        private static bool TryPushIn(Vector3 normal, Vector3 unitDrive, out float pushIn)
+        {
+            pushIn = 0f;
+            float x = normal.x;
+            float z = normal.z;
+            float length = Mathf.Sqrt(x * x + z * z);
+            if (!KatamariMath.IsFiniteFloat(length) || length <= 0f) return false;
+            float inverse = 1f / length;
+            float value = Mathf.Max(0f,
+                -(unitDrive.x * x * inverse + unitDrive.z * z * inverse));
+            if (!KatamariMath.IsFiniteFloat(value)) return false;
+            pushIn = value;
+            return true;
+        }
+
+        /// <summary>The climb face's top, or +inf when the source has none.</summary>
+        private static float ContactTopAt(float[] contactTopY, int index)
+        {
+            if (contactTopY == null || index < 0 || index >= contactTopY.Length)
+                return float.MaxValue;
+            float top = contactTopY[index];
+            return KatamariMath.IsFiniteFloat(top) ? top : float.MaxValue;
+        }
+
+        /// <summary>True while the ball is still within a hand's width of the climb plane.</summary>
+        private static bool Hugging(Vector3 center, Vector3 normal, Vector3 point, float radius)
+        {
+            float distance = normal.x * (center.x - point.x) + normal.y * (center.y - point.y)
+                + normal.z * (center.z - point.z);
+            if (!KatamariMath.IsFiniteFloat(distance)) return false;
+            return Mathf.Abs(distance) <= radius + ContactTuning.ClimbHugSlopM;
+        }
+
+        /// <summary>
+        /// The ledge exit: the drive's inward speed, scaled so crossing one radius takes
+        /// short enough that the drop stays a few cm.
+        /// </summary>
+        private static Vector3 LedgeExitVelocity(Vector3 planar, Vector3 normal,
+            float driveSpeed, float radius)
+        {
+            float x = normal.x;
+            float z = normal.z;
+            float length = Mathf.Sqrt(x * x + z * z);
+            if (!KatamariMath.IsFiniteFloat(length) || length <= 0f) return planar;
+            float inverse = 1f / length;
+            float speed = ClimbMath.LedgeExitSpeed(radius, driveSpeed);
+            if (!KatamariMath.IsFiniteFloat(speed) || speed < 0f) return planar;
+            return new Vector3(planar.x - x * inverse * speed, planar.y,
+                planar.z - z * inverse * speed);
+        }
+
+        /// <summary>Cap release: a small outward push along the wall normal.</summary>
+        private static Vector3 PeelVelocity(Vector3 planar, Vector3 normal)
+        {
+            float x = normal.x;
+            float z = normal.z;
+            float length = Mathf.Sqrt(x * x + z * z);
+            if (!KatamariMath.IsFiniteFloat(length) || length <= 0f) return planar;
+            float inverse = ContactTuning.ClimbPeelSpeedMps / length;
+            return new Vector3(planar.x + x * inverse, planar.y, planar.z + z * inverse);
         }
     }
 }

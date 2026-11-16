@@ -32,6 +32,23 @@ namespace VRCKatamari.BallContact
     /// full scan, so collision never depends on the grid.
     /// </para>
     /// <para>
+    /// THE CANDIDATE SET IS THE WINDOW, NOT THE CELL. <see cref="CollectCandidates"/> drops
+    /// every triangle whose precomputed XZ AABB misses the caller's window (the ball's
+    /// footprint, or the v2 sweep window). Because the cells only decide where a triangle is
+    /// OFFERED, and the window decides whether it is KEPT, the resulting list is exactly
+    /// "triangles whose bbox overlaps the window" - INDEPENDENT of the cell size, and a
+    /// superset of everything any probe or sphere in that window can touch. That is the
+    /// property the equivalence tests pin: the same pose must give the same support and the
+    /// same penetration whether the cells are 1 m, 2 m, or absent (full scan).
+    /// </para>
+    /// <para>
+    /// OVERSIZED TRIANGLES. A triangle bigger than <see cref="MaxCellsPerTriangle"/> cells is
+    /// not stamped into its cells; it goes to a small always-offered list (still window
+    /// filtered). A handful of huge terrain faces therefore cannot refuse the grid or explode
+    /// the reference table, and a mesh with more such faces than the list holds refuses the
+    /// grid explicitly instead of dropping one.
+    /// </para>
+    /// <para>
     /// UdonSharp: static methods, caller-owned arrays, no allocation, no static fields.
     /// </para>
     /// </remarks>
@@ -53,13 +70,30 @@ namespace VRCKatamari.BallContact
         /// </remarks>
         public const int MaxGridReferences = 32768;
 
-        /// <summary>Most cells a single triangle may span before the build refuses.</summary>
+        /// <summary>
+        /// Most cells a single triangle may span before it is treated as OVERSIZED.
+        /// </summary>
         /// <remarks>
         /// A huge triangle (one quad covering the whole level) would otherwise stamp itself
         /// into thousands of cells: 8,192 triangles x 1,600 cells is 13M references. 64 means
         /// "no bigger than 8 x 8 cells", which any reasonably tessellated terrain satisfies.
+        /// Oversized triangles are NOT dropped and do NOT refuse the grid: they go to the
+        /// always-offered list (see <see cref="MaxOversizedTriangles"/>) and every query
+        /// window-filters them like any other. Only overflowing THAT list refuses the grid.
         /// </remarks>
         public const int MaxCellsPerTriangle = 64;
+
+        /// <summary>
+        /// Most triangles that may be too big for the cells before the grid refuses.
+        /// </summary>
+        /// <remarks>
+        /// A triangle spanning more than <see cref="MaxCellsPerTriangle"/> cells is not
+        /// stamped into them: it goes to a small "always offered" list instead, so a handful
+        /// of huge terrain faces (the reference level has 5 at 1 m) cannot blow the reference
+        /// cap or force the whole grid to be refused. Overflowing THIS list is what refuses
+        /// the grid; the mesh then keeps its collision through the full scan.
+        /// </remarks>
+        public const int MaxOversizedTriangles = 256;
 
         /// <summary>Default cell size, metres (matches the v2 <c>terrain.grid</c> unit).</summary>
         public const float DefaultCellM = 1f;
@@ -74,6 +108,14 @@ namespace VRCKatamari.BallContact
         public const int RefusalCellCount = 2;
         public const int RefusalCellsPerTriangle = 3;
         public const int RefusalReferences = 4;
+        public const int RefusalOversizedList = 5;
+
+        /// <summary>
+        /// Boundary slack of the candidate window, metres. The same 1e-6 the geometry queries
+        /// use on their per-triangle bbox, so a triangle that a query still accepts at the
+        /// window edge can never be filtered out from under it.
+        /// </summary>
+        private const float WindowSlack = 1e-6f;
 
         /// <summary>Outward slack when a triangle's cell range is derived from its bbox.</summary>
         private const float CellSlack = 1e-6f;
@@ -94,6 +136,8 @@ namespace VRCKatamari.BallContact
                 return "a triangle spans more cells than the cap; raise the cell size";
             if (refusalCode == RefusalReferences)
                 return "grid references exceed the cap; raise the cell size";
+            if (refusalCode == RefusalOversizedList)
+                return "more oversized triangles than the list holds; tessellate or raise the cell size";
             return "unknown grid refusal";
         }
 
@@ -132,16 +176,22 @@ namespace VRCKatamari.BallContact
             float[] triangleMinX, float[] triangleMaxX, float[] triangleMinZ,
             float[] triangleMaxZ, int[] triangleSurfaceId,
             int[] cellStart, int[] cellTriangles, int[] cellCursor,
+            int[] oversizedTriangles,
             out float originX, out float originZ, out int cellsX, out int cellsZ,
-            out int cellCount, out int referenceCount, out int refusalCode,
-            out int refusalDetail)
+            out int cellCount, out int referenceCount, out int oversizedCount,
+            out int refusalCode, out int refusalDetail)
         {
+            // GEOMETRY OUTS ARE WRITTEN ON SUCCESS ONLY. Every refusal leaves them zeroed, so a
+            // caller that ignores the result can never read a half-built grid (the 2026-11-16
+            // R24 run had a refusal leak cellCount = 441). The failure outs are the two
+            // refusal values, which are always written.
             originX = 0f;
             originZ = 0f;
             cellsX = 0;
             cellsZ = 0;
             cellCount = 0;
             referenceCount = 0;
+            oversizedCount = 0;
             refusalCode = RefusalNone;
             refusalDetail = 0;
 
@@ -157,24 +207,27 @@ namespace VRCKatamari.BallContact
                 chunkTriangleCounts == null || chunkZoneIds == null ||
                 triangleMinX == null || triangleMaxX == null || triangleMinZ == null ||
                 triangleMaxZ == null || triangleSurfaceId == null || cellStart == null ||
-                cellTriangles == null || cellCursor == null || chunkCount < 1)
+                cellTriangles == null || cellCursor == null || oversizedTriangles == null ||
+                chunkCount < 1)
             {
                 refusalCode = RefusalInvalidInput;
                 return false;
             }
+            // The caller's reference buffer is a hard bound and is checked with the count it
+            // must hold, not with the triangle count: a mesh can need more references than
+            // triangles (a triangle spanning a cell boundary is referenced twice).
             if (triangleCount < 1 || triangleCount > triangleMinX.Length ||
                 triangleCount > triangleMaxX.Length || triangleCount > triangleMinZ.Length ||
                 triangleCount > triangleMaxZ.Length ||
-                triangleCount > triangleSurfaceId.Length ||
-                triangleCount > cellTriangles.Length)
+                triangleCount > triangleSurfaceId.Length)
             {
                 refusalCode = RefusalInvalidInput;
                 refusalDetail = triangleCount;
                 return false;
             }
 
-            originX = minX;
-            originZ = minZ;
+            float localOriginX = minX;
+            float localOriginZ = minZ;
             float extentX = maxX - minX;
             float extentZ = maxZ - minZ;
             if (!KatamariMath.IsFiniteFloat(extentX) || !KatamariMath.IsFiniteFloat(extentZ))
@@ -183,22 +236,23 @@ namespace VRCKatamari.BallContact
                 return false;
             }
             // +1 so a coordinate exactly on the far edge still has a cell.
-            cellsX = Mathf.FloorToInt(extentX / cellM) + 1;
-            cellsZ = Mathf.FloorToInt(extentZ / cellM) + 1;
-            if (cellsX < 1) cellsX = 1;
-            if (cellsZ < 1) cellsZ = 1;
-            if (cellsX > MaxGridCells || cellsZ > MaxGridCells ||
-                cellsX * cellsZ > MaxGridCells)
+            int localCellsX = Mathf.FloorToInt(extentX / cellM) + 1;
+            int localCellsZ = Mathf.FloorToInt(extentZ / cellM) + 1;
+            if (localCellsX < 1) localCellsX = 1;
+            if (localCellsZ < 1) localCellsZ = 1;
+            if (localCellsX > MaxGridCells || localCellsZ > MaxGridCells ||
+                localCellsX * localCellsZ > MaxGridCells)
             {
                 refusalCode = RefusalCellCount;
-                refusalDetail = cellsX * cellsZ;
+                refusalDetail = localCellsX * localCellsZ;
                 return false;
             }
-            cellCount = cellsX * cellsZ;
-            if (cellStart.Length < cellCount + 1 || cellCursor.Length < cellCount)
+            int localCellCount = localCellsX * localCellsZ;
+            if (cellStart.Length < localCellCount + 1 ||
+                cellCursor.Length < localCellCount)
             {
                 refusalCode = RefusalInvalidInput;
-                refusalDetail = cellCount;
+                refusalDetail = localCellCount;
                 return false;
             }
 
@@ -248,58 +302,76 @@ namespace VRCKatamari.BallContact
             }
 
             // Count pass. cellStart[k + 1] holds cell k's count, then becomes its start.
-            for (int k = 0; k <= cellCount; k++) cellStart[k] = 0;
+            for (int k = 0; k <= localCellCount; k++) cellStart[k] = 0;
+            int localOversized = 0;
             for (int t = 0; t < triangleCount; t++)
             {
                 int i0;
                 int i1;
                 int j0;
                 int j1;
-                CellRange(triangleMinX[t], triangleMaxX[t], triangleMinZ[t], triangleMaxZ[t],
-                    originX, originZ, cellsX, cellsZ, cellM, out i0, out i1, out j0, out j1);
-                int span = (i1 - i0 + 1) * (j1 - j0 + 1);
-                if (span > MaxCellsPerTriangle)
+                if (IsOversized(triangleMinX[t], triangleMaxX[t], triangleMinZ[t],
+                    triangleMaxZ[t], localOriginX, localOriginZ, localCellsX, localCellsZ,
+                    cellM, out i0, out i1, out j0, out j1))
                 {
-                    refusalCode = RefusalCellsPerTriangle;
-                    refusalDetail = span;
-                    return false;
+                    // A triangle bigger than the cell budget is NOT a reason to refuse the
+                    // mesh: it goes to the oversized list, which every query offers and the
+                    // window filter still narrows. Stamping it into its 72+ cells instead is
+                    // what made the 1 m grid impossible on the reference level (R24: code 3,
+                    // detail 72) and what would blow the reference cap.
+                    if (localOversized >= MaxOversizedTriangles ||
+                        localOversized >= oversizedTriangles.Length)
+                    {
+                        refusalCode = RefusalOversizedList;
+                        refusalDetail = localOversized;
+                        return false;
+                    }
+                    oversizedTriangles[localOversized] = t;
+                    localOversized = localOversized + 1;
+                    continue;
                 }
                 for (int j = j0; j <= j1; j++)
                 {
-                    int row = j * cellsX;
+                    int row = j * localCellsX;
                     for (int i = i0; i <= i1; i++)
                     {
                         cellStart[row + i + 1] = cellStart[row + i + 1] + 1;
                     }
                 }
             }
-            for (int k = 0; k < cellCount; k++)
+            for (int k = 0; k < localCellCount; k++)
             {
                 cellStart[k + 1] = cellStart[k + 1] + cellStart[k];
             }
-            int total = cellStart[cellCount];
+            int localReferences = cellStart[localCellCount];
             // The caller's reference buffer is a hard bound too: writing past it would be the
             // silent triangle loss this cap exists to prevent.
-            if (total > MaxGridReferences || total > cellTriangles.Length)
+            if (localReferences > MaxGridReferences ||
+                localReferences > cellTriangles.Length)
             {
                 refusalCode = RefusalReferences;
-                refusalDetail = total;
+                refusalDetail = localReferences;
                 return false;
             }
 
-            // Fill pass.
-            for (int k = 0; k < cellCount; k++) cellCursor[k] = cellStart[k];
+            // Fill pass. It MUST apply the same oversized decision as the count pass: the
+            // counts only reserved room for the non-oversized triangles, so writing an
+            // oversized one here would run the cell cursor past its reservation, overwrite the
+            // next cell's entries and can write past the reference table. Both passes call
+            // IsOversized, so they cannot disagree.
+            for (int k = 0; k < localCellCount; k++) cellCursor[k] = cellStart[k];
             for (int t = 0; t < triangleCount; t++)
             {
                 int i0;
                 int i1;
                 int j0;
                 int j1;
-                CellRange(triangleMinX[t], triangleMaxX[t], triangleMinZ[t], triangleMaxZ[t],
-                    originX, originZ, cellsX, cellsZ, cellM, out i0, out i1, out j0, out j1);
+                if (IsOversized(triangleMinX[t], triangleMaxX[t], triangleMinZ[t],
+                    triangleMaxZ[t], localOriginX, localOriginZ, localCellsX, localCellsZ,
+                    cellM, out i0, out i1, out j0, out j1)) continue;
                 for (int j = j0; j <= j1; j++)
                 {
-                    int row = j * cellsX;
+                    int row = j * localCellsX;
                     for (int i = i0; i <= i1; i++)
                     {
                         int k = row + i;
@@ -310,51 +382,135 @@ namespace VRCKatamari.BallContact
                 }
             }
 
-            referenceCount = total;
+            originX = localOriginX;
+            originZ = localOriginZ;
+            cellsX = localCellsX;
+            cellsZ = localCellsZ;
+            cellCount = localCellCount;
+            referenceCount = localReferences;
+            oversizedCount = localOversized;
             return true;
         }
 
         /// <summary>
-        /// The deduplicated triangles whose cells overlap the ball's footprint square.
+        /// The deduplicated mesh triangles whose precomputed XZ bbox overlaps the caller's
+        /// window (the ball's footprint, or the v2 sweep window).
         /// </summary>
+        /// <param name="oversizedTriangles">
+        /// The build's oversized list, or null for "none" (a legal empty list).
+        /// </param>
+        /// <param name="triangleCount">
+        /// Triangles in the mesh. The candidate and mark buffers are checked against it
+        /// up front, because a buffer that cannot hold the whole mesh cannot be allowed to
+        /// return a partial set (see the return contract).
+        /// </param>
+        /// <returns>
+        /// The candidate count (&gt;= 0), or <b>-1 when the call cannot be satisfied</b>:
+        /// a required array is null, the candidate buffer or the mark array cannot hold
+        /// <paramref name="triangleCount"/> triangles, the oversized list is longer than the
+        /// mesh, or the buffer somehow runs out mid-walk. -1 means "no candidate list": the
+        /// caller MUST fall back to the full scan (the queries already read a negative count
+        /// that way) and must never treat a partial set as success. A failed call leaves
+        /// EVERY mark clear, so the next call starts from a clean state.
+        /// </returns>
         /// <remarks>
         /// <para>
-        /// The candidate set is a SUPERSET of every triangle any probe can be inside: a probe
-        /// point inside a triangle puts both in the same cell, and the triangle is registered
-        /// in every cell its XZ AABB overlaps, so a candidate query and the full scan see the
-        /// same triangles. That is what makes the two paths interchangeable, and what the
-        /// cross-check test pins.
+        /// The candidate set is a SUPERSET of every triangle any probe or sphere in the window
+        /// can touch: a probe point inside a triangle puts both in the same cell, the triangle
+        /// is registered in every cell its bbox overlaps, and the window filter only drops
+        /// triangles whose bbox misses the window entirely. That is what makes the candidate
+        /// path and the full scan interchangeable (and the set independent of the cell size).
         /// </para>
         /// <para>
-        /// Dedupe is a caller-owned bool per triangle (cleared again by
-        /// <see cref="ClearCandidates"/>, so no stamp wraparound exists to get wrong). The
-        /// candidate buffer cannot overflow in practice: it is sized to the whole mesh and a
-        /// triangle is written once, which is also why the caps live in <see cref="TryBuild"/>
-        /// and not here.
+        /// Dedupe is a caller-owned bool per triangle, cleared again by
+        /// <see cref="ClearCandidates"/>. A mark is only ever set for a triangle that is
+        /// written into <paramref name="candidates"/> in the same step, so the marks and the
+        /// list can never disagree: that is why the capacity check comes BEFORE the mark.
+        /// </para>
+        /// <para>
+        /// Production always passes the motor's fixed buffers (candidates and marks sized to
+        /// the 8,192-triangle capacity), so the rejection paths are defensive. They are still
+        /// explicit, because "return a partial set" would silently change which surface
+        /// supports the ball, and a stale mark would silently remove a triangle from every
+        /// later query.
         /// </para>
         /// </remarks>
         public static int CollectCandidates(
             float centerX, float centerZ, float halfExtent,
             float cellM, float originX, float originZ, int cellsX, int cellsZ, int cellCount,
             int[] cellStart, int[] cellTriangles,
+            float[] triangleMinX, float[] triangleMaxX, float[] triangleMinZ,
+            float[] triangleMaxZ,
+            int[] oversizedTriangles, int oversizedCount,
+            int triangleCount,
             int[] candidates, bool[] candidateMark)
         {
             if (!KatamariMath.IsFiniteFloat(centerX) || !KatamariMath.IsFiniteFloat(centerZ) ||
                 !KatamariMath.IsFiniteFloat(halfExtent) || !KatamariMath.IsFiniteFloat(cellM))
-                return 0;
-            if (cellM <= 0f || cellsX < 1 || cellsZ < 1 || cellCount < 1) return 0;
+                return -1;
+            if (cellM <= 0f || cellsX < 1 || cellsZ < 1 || cellCount < 1) return -1;
             if (cellStart == null || cellTriangles == null || candidates == null ||
-                candidateMark == null) return 0;
-            if (candidateMark.Length < candidates.Length) return 0;
+                candidateMark == null || triangleMinX == null || triangleMaxX == null ||
+                triangleMinZ == null || triangleMaxZ == null) return -1;
+            if (triangleCount < 1 || triangleCount > candidateMark.Length ||
+                triangleCount > candidates.Length || triangleCount > triangleMinX.Length ||
+                triangleCount > triangleMaxX.Length || triangleCount > triangleMinZ.Length ||
+                triangleCount > triangleMaxZ.Length) return -1;
+            if (oversizedCount < 0) return -1;
+            // Null oversized is the legal "no oversized triangles" case; the length is only
+            // read when the list exists. A count past its own array is a caller bug, not
+            // something to clamp silently.
+            int oversized = 0;
+            if (oversizedTriangles != null)
+            {
+                if (oversizedCount > oversizedTriangles.Length) return -1;
+                oversized = oversizedCount;
+            }
             if (halfExtent < 0f) halfExtent = 0f;
 
-            int i0 = CellIndex(centerX - halfExtent, originX, cellM, cellsX);
-            int i1 = CellIndex(centerX + halfExtent, originX, cellM, cellsX);
-            int j0 = CellIndex(centerZ - halfExtent, originZ, cellM, cellsZ);
-            int j1 = CellIndex(centerZ + halfExtent, originZ, cellM, cellsZ);
+            // THE FOOTPRINT FILTER. The cell lookup only says "these triangles are somewhere
+            // in these 1-2 m cells"; a dense cell holds 100-400 of them (R24 measured 114-443
+            // candidates, i.e. whole cells), and 17 probes then re-walked every one. A
+            // triangle that cannot overlap the caller's window cannot contain any probe or
+            // touch the sphere, so dropping it here is exact, not a heuristic - and it makes
+            // the candidate set independent of the cell size (see the class remarks).
+            //
+            // The tolerance matches the geometry queries' boundary slack (TerrainMeshMath's
+            // Epsilon): a triangle whose bbox touches the window edge to within 1e-6 stays in,
+            // so a boundary or skin hit is never filtered out from under the query.
+            float lowX = centerX - halfExtent - WindowSlack;
+            float highX = centerX + halfExtent + WindowSlack;
+            float lowZ = centerZ - halfExtent - WindowSlack;
+            float highZ = centerZ + halfExtent + WindowSlack;
 
             int count = 0;
             int capacity = candidates.Length;
+
+            // Oversized triangles are in no cell, so they are offered to every query; the
+            // window filter still applies to them.
+            for (int k = 0; k < oversized; k++)
+            {
+                int triangle = oversizedTriangles[k];
+                if (triangle < 0 || triangle >= triangleCount) continue;
+                if (candidateMark[triangle]) continue;
+                if (!OverlapsWindow(triangle, triangleMinX, triangleMaxX, triangleMinZ,
+                    triangleMaxZ, lowX, highX, lowZ, highZ)) continue;
+                if (count >= capacity)
+                {
+                    // Unreachable with a buffer sized to the mesh, but never a silent
+                    // truncation: undo what this call marked and refuse.
+                    ClearCandidates(candidates, count, candidateMark);
+                    return -1;
+                }
+                candidateMark[triangle] = true;
+                candidates[count] = triangle;
+                count = count + 1;
+            }
+
+            int i0 = CellIndex(lowX, originX, cellM, cellsX);
+            int i1 = CellIndex(highX, originX, cellM, cellsX);
+            int j0 = CellIndex(lowZ, originZ, cellM, cellsZ);
+            int j1 = CellIndex(highZ, originZ, cellM, cellsZ);
             for (int j = j0; j <= j1; j++)
             {
                 int row = j * cellsX;
@@ -367,16 +523,33 @@ namespace VRCKatamari.BallContact
                     for (int at = start; at < end; at++)
                     {
                         int triangle = cellTriangles[at];
-                        if (triangle < 0 || triangle >= candidateMark.Length) continue;
+                        if (triangle < 0 || triangle >= triangleCount) continue;
                         if (candidateMark[triangle]) continue;
+                        if (!OverlapsWindow(triangle, triangleMinX, triangleMaxX, triangleMinZ,
+                            triangleMaxZ, lowX, highX, lowZ, highZ)) continue;
+                        if (count >= capacity)
+                        {
+                            ClearCandidates(candidates, count, candidateMark);
+                            return -1;
+                        }
                         candidateMark[triangle] = true;
-                        if (count >= capacity) return count;
                         candidates[count] = triangle;
                         count = count + 1;
                     }
                 }
             }
             return count;
+        }
+
+        /// <summary>Does this triangle's precomputed XZ bbox overlap the query window?</summary>
+        private static bool OverlapsWindow(int triangle,
+            float[] triangleMinX, float[] triangleMaxX, float[] triangleMinZ,
+            float[] triangleMaxZ,
+            float lowX, float highX, float lowZ, float highZ)
+        {
+            if (triangleMaxX[triangle] < lowX || triangleMinX[triangle] > highX) return false;
+            if (triangleMaxZ[triangle] < lowZ || triangleMinZ[triangle] > highZ) return false;
+            return true;
         }
 
         /// <summary>Clears the dedupe marks a collection set, so the next step starts clean.</summary>
@@ -403,6 +576,22 @@ namespace VRCKatamari.BallContact
             if (index < 0) return 0;
             if (index >= cells) return cells - 1;
             return index;
+        }
+
+        /// <summary>
+        /// The ONE oversized decision: does this triangle's XZ bbox span more cells than
+        /// <see cref="MaxCellsPerTriangle"/>? Both the count pass and the fill pass of
+        /// <see cref="TryBuild"/> call it, so a triangle that the counts left out of the cells
+        /// can never be written into them (that was the R24 integration defect: the fill pass
+        /// ran the cell cursor past its reservation and clobbered neighbouring cells).
+        /// </summary>
+        private static bool IsOversized(float minX, float maxX, float minZ, float maxZ,
+            float originX, float originZ, int cellsX, int cellsZ, float cellM,
+            out int i0, out int i1, out int j0, out int j1)
+        {
+            CellRange(minX, maxX, minZ, maxZ, originX, originZ, cellsX, cellsZ, cellM,
+                out i0, out i1, out j0, out j1);
+            return (i1 - i0 + 1) * (j1 - j0 + 1) > MaxCellsPerTriangle;
         }
 
         private static void CellRange(float minX, float maxX, float minZ, float maxZ,

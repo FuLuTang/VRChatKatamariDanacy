@@ -166,7 +166,12 @@ namespace VRCKatamari.Story
                 + " terrain=" + motor.GetTerrainMeshTriangleCount() + "/"
                 + motor.GetTerrainMeshChunkCount()
                 + " grid=" + motor.GetTerrainGridCellCount()
+                + " overs=" + motor.GetTerrainOversizedTriangles()
+                // Candidate counts are PER QUERY, PER LAST STEP (not frame-accumulated):
+                // cands = support, candsPen = T1 push-out, candsContact = v2 sweep window.
                 + " cands=" + motor.GetTerrainCandidates()
+                + " candsPen=" + motor.GetTerrainPenetrationCandidates()
+                + " candsContact=" + motor.GetTerrainContactCandidates()
                 + " tq=" + (Mathf.Floor(motor.GetLastTerrainQueryMicros() * 10f) / 10f)
                 + " tqSup=" + (Mathf.Floor(motor.GetLastTerrainSupportMicros() * 10f) / 10f)
                 + " tqPen=" + (Mathf.Floor(motor.GetLastTerrainPenetrationMicros() * 10f) / 10f)

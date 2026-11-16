@@ -1,4 +1,5 @@
 using UnityEngine;
+using VRCKatamari.Core;
 
 namespace VRCKatamari.BallContact
 {
@@ -18,8 +19,9 @@ namespace VRCKatamari.BallContact
     /// arrive.
     /// </para>
     /// <para>
-    /// Every number is OUR design (PROVISIONAL, see <see cref="ContactTuning"/>); the
-    /// only anchored one is k_h. These are total functions of finite inputs: the guards
+    /// Every number is OUR design (PROVISIONAL, see <see cref="ContactTuning"/>); NONE is
+    /// an original-game value (see ContactTuning's remarks). These are total functions of
+    /// finite inputs: the guards
     /// that the model has are kept (a non-positive push/gate/cap gives zero speed, a
     /// non-positive cap gives no fade), and the solver validates radius/dt once per step
     /// instead of each helper repeating it.
@@ -96,6 +98,41 @@ namespace VRCKatamari.BallContact
             return Mathf.Clamp(pushIn, 0f, 1f) * rateFactor
                 * (ClimbShape(thetaDeg) / ClimbShape(90f))
                 * vUp0 * ClimbFade(heightM, hCapM);
+        }
+
+        /// <summary>
+        /// The ledge exit speed, m/s: k * radius, clamped to [min, driveSpeed].
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// When the climb's bottom reaches the face's top, the ball is beside the ledge
+        /// with nothing under it; the climb hands its speed to the drive and the ball has
+        /// to cross its own radius before gravity drops it back against the wall. The
+        /// crossing takes t = r / v and drops g*t^2/2, so a drop budget c gives
+        /// v = r * sqrt(g / (2c)). With c = 5 cm that is r * sqrt(9.81 / 0.1) =
+        /// <b>9.9 * r</b>, which is why the rate constant is 10 per second and the
+        /// expression is v = 10 * r (1/s * m), NOT 10 / r.
+        /// </para>
+        /// <para>
+        /// Units are SI throughout: <paramref name="radius"/> and
+        /// <paramref name="driveSpeed"/> in m and m/s, the result in m/s. A big ball is
+        /// clamped to what the player actually pushes (the drive), so it drops a little
+        /// more and the ledge face's push-out catches it - "clamber over", not a teleport.
+        /// </para>
+        /// </remarks>
+        public static float LedgeExitSpeed(float radius, float driveSpeed,
+            float perRadius = ContactTuning.ClimbLedgeDrivePerRadius,
+            float minimum = ContactTuning.ClimbLedgeDriveMinMps)
+        {
+            if (!KatamariMath.IsFiniteFloat(radius) || radius < 0f) return 0f;
+            if (!KatamariMath.IsFiniteFloat(driveSpeed) || driveSpeed < 0f) return 0f;
+            if (!KatamariMath.IsFiniteFloat(perRadius) || perRadius < 0f) return 0f;
+            float speed = perRadius * radius;
+            if (!KatamariMath.IsFiniteFloat(speed)) return 0f;
+            if (speed < minimum) speed = minimum;
+            if (speed > driveSpeed) speed = driveSpeed;
+            if (!KatamariMath.IsFiniteFloat(speed) || speed < 0f) return 0f;
+            return speed;
         }
 
         /// <summary>

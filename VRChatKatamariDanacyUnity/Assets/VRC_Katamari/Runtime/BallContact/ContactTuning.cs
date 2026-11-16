@@ -12,13 +12,19 @@ namespace VRCKatamari.BallContact
     /// measured values of the original game and none of them has been play-tested.
     /// </para>
     /// <para>
-    /// Exactly one value is evidence-anchored: <see cref="KHeight"/>. The We Love
-    /// Katamari manual says a katamari "can climb over walls that are about the same
-    /// size as your katamari", which the design reads as "the centre may rise about
-    /// one diameter", so H_cap = k_h * 2r with k_h = 1.0. Every other number -
-    /// angles, speeds, times, caps, margins, capacities - is a placeholder the
-    /// design marks as needing play-testing; the owner decisions in section 8 accepted
-    /// the recommended values, which is why they are the defaults here.
+    /// NO value here is an original-game constant. The cross-series check
+    /// (Docs/Research/KatamariBallRules/ORIGINAL_CLIMB_OBSERVATIONS.md, 2026-11-16)
+    /// found no source for a normal-wall height cap, a climb rate or a time-to-top in
+    /// the first game or in REROLL: the manual paraphrases only say the ball can climb
+    /// a wall to reach a higher area (no size ratio), the "1-2x ball height" numbers are
+    /// weak, mutually contradictory sequel/community claims, and the one concrete
+    /// long-climb anecdote (the factory chimney) is a LADDER, not a wall. So
+    /// <see cref="KHeight"/> = 1.5 and <see cref="ClimbTimeS"/> = 4.5 s are OUR
+    /// PROVISIONAL values (owner decision 2026-11-16), chosen so the reference level's
+    /// 0.222 m ball can clear its 0.19 m spawn pit and the observed ~0.30 m step
+    /// (Docs/Design/BallMotor/TERRAIN_CLIMB.md section 7), and are to be tuned in
+    /// play-testing. Every other number - angles, speeds, caps, margins, capacities -
+    /// is likewise ours.
     /// </para>
     /// <para>
     /// UdonSharp forbids static fields, so everything is a compile-time constant and
@@ -121,10 +127,13 @@ namespace VRCKatamari.BallContact
         public const float M0 = 0.15f;
 
         /// <summary>
-        /// k_h = 1.0: H_cap = k_h * (2r + lambda * L_eff). The ONLY evidence-anchored
-        /// number in this file (the manual's "about the same size as your katamari").
+        /// k_h = 1.5: H_cap = k_h * (2r + lambda * L_eff). OUR PROVISIONAL value (no
+        /// original-game cap is published; see the class remarks). It sits inside the
+        /// weakest community range (1-2x ball height) and is the smallest value that
+        /// clears the 0.222 m ball's 0.30 m step with the 0.02 m cap margin
+        /// (TERRAIN_CLIMB section 7); owner decision 2026-11-16, tune in play-testing.
         /// </summary>
-        public const float KHeight = 1f;
+        public const float KHeight = 1.5f;
 
         /// <summary>lambda = 1.0: how much a protruding object adds to H_cap.</summary>
         public const float LambdaProtrusion = 1f;
@@ -137,6 +146,37 @@ namespace VRCKatamari.BallContact
 
         /// <summary>cap_margin = 0.02 m: the band below H_cap where the climb is done.</summary>
         public const float ClimbCapMarginM = 0.02f;
+
+        /// <summary>
+        /// 5 mm: the ball's bottom counts as "on the ledge" within this of the climb
+        /// surface's top, which is the successful way out of a climb (TERRAIN_CLIMB 6.3).
+        /// </summary>
+        public const float ClimbLedgeSlopM = 0.005f;
+
+        /// <summary>
+        /// 0.3 m/s: the outward speed a cap release gives along the wall normal. It makes
+        /// "too tall" read as "thrown off" and stops the ball hovering at the cap; a
+        /// release by the player does NOT peel (the ball slides down instead).
+        /// </summary>
+        public const float ClimbPeelSpeedMps = 0.3f;
+
+        /// <summary>
+        /// 10 per second: the ledge exit speed is <c>ClimbMath.LedgeExitSpeed</c> =
+        /// clamp(10 * radius, min, driveSpeed) m/s. t = r / v and drop = g t^2 / 2, so a
+        /// 5 cm drop budget gives v = r * sqrt(9.81 / 0.1) = 9.9 * r. Units: 1/s times m =
+        /// m/s (for r = 0.111 that is 1.11 m/s, not 10 / 0.111).
+        /// </summary>
+        public const float ClimbLedgeDrivePerRadius = 10f;
+
+        /// <summary>Floor of the ledge exit speed, m/s (a full push always clears).</summary>
+        public const float ClimbLedgeDriveMinMps = 0.5f;
+
+        /// <summary>
+        /// 3 cm: how far the ball may drift off the climb plane while the climb is still
+        /// alive (the last radius above a low face has no contact; this keeps the hang tied
+        /// to the wall it started on instead of lifting anywhere).
+        /// </summary>
+        public const float ClimbHugSlopM = 0.03f;
 
         /// <summary>v_slide_max = 1.0 m/s: the slow slide back down a touched wall.</summary>
         public const float VSlideMax = 1f;

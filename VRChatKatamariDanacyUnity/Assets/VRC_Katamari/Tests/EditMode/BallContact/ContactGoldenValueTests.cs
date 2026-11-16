@@ -193,13 +193,22 @@ namespace VRCKatamari.Tests
                 Assert.IsTrue(wallBall.Step(wallWorld, new Vector3(0f, 0f, -1f), 4f, 0.02f));
                 if (wallBall.Center.y > wallHighest) wallHighest = wallBall.Center.y;
             }
-            // Python: highest centre y = 0.881094802 (0.581 m of rise against H_cap 0.60),
-            // final centre (0, 0.30, 0.30), climb locked.
-            // The peak overshoots the cap by about 2 mm and is therefore trajectory-shaped.
-            Assert.AreEqual(0.881094802f, wallHighest, TrajectoryTolerance);
+            // Python (K_H = 1.5): highest centre y = 1.181719009 (0.882 m of rise against
+            // H_cap 0.90; the peak overshoots by ~2 mm and is trajectory-shaped).
+            Assert.AreEqual(1.181719009f, wallHighest, TrajectoryTolerance);
+            // A held push retries after the cap (owner D2), which the Python model does not
+            // do; the deterministic comparison is the peak above plus the rest after a
+            // release. 300 steps at drive 0 leaves both models on the floor at z = 0.30.
+            for (int i = 0; i < 300; i++)
+            {
+                Assert.IsTrue(wallBall.Step(wallWorld, new Vector3(0f, 0f, -1f), 0f, 0.02f,
+                    20f));
+            }
             Assert.AreEqual(0.30f, wallBall.Center.y, IntegratorTolerance);
-            Assert.AreEqual(0.30f, wallBall.Center.z, IntegratorTolerance);
-            Assert.IsTrue(wallBall.ClimbLocked);
+            // The C# caps a release with a 0.3 m/s outward peel (a C#-only addition), so the
+            // rest can sit a few mm off the face; it never enters the wall.
+            Assert.GreaterOrEqual(wallBall.Center.z, 0.30f - 0.01f);
+            Assert.IsFalse(wallBall.ClimbActive);
 
             ContactWorld slope70 = ContactScenes.SlopeWorld(70f, 0.24f, 2f);
             ContactBall slope70Ball = new ContactBall();
@@ -213,8 +222,8 @@ namespace VRCKatamari.Tests
                     5f));
                 if (slope70Ball.Center.y > slope70Highest) slope70Highest = slope70Ball.Center.y;
             }
-            // Python: y = 0.389952512 (the 0.24 m deck plus r).
-            Assert.AreEqual(0.389952512f, slope70Highest, IntegratorTolerance);
+            // Python (K_H = 1.5): y = 0.390000000 (the 0.24 m deck plus r).
+            Assert.AreEqual(0.390000000f, slope70Highest, IntegratorTolerance);
 
             ContactWorld slope50 = ContactScenes.SlopeWorld(50f, 0.6f, 3f);
             ContactBall smallBall = new ContactBall();
@@ -227,23 +236,24 @@ namespace VRCKatamari.Tests
                 Assert.IsTrue(smallBall.Step(slope50, new Vector3(0f, 0f, 1f), 4f, 0.02f, 5f));
                 if (smallBall.Center.y > smallHighest) smallHighest = smallBall.Center.y;
             }
-            // Python: highest y = 0.448744607, climb locked. At step 250 the settled centre
-            // is NOT an equilibrium: it is a slide/settle limit cycle (y alternates
-            // 0.15298 .. 0.15724 with v_y 0 / -0.392), and a 1e-6 change of the start moves
-            // the step-250 y by 6.5e-4 (650x amplification), a 1e-9 change by 9.8e-4. The
-            // model's own case therefore asserts a band (rise < 0.05 m), not this value; the
-            // float run's 0.15571 lies inside the model's cycle band, which is the real
-            // cross-check.
-            Assert.AreEqual(0.448744607f, smallHighest, TrajectoryTolerance);
-            Assert.Less(smallBall.Center.y - 0.15f, 0.05f);  // slid back down (model's claim)
-            Assert.Less(smallBall.Center.z, 7f);             // back outside the foot at z = 7
-            Assert.IsTrue(smallBall.ClimbLocked);
+            // Python (K_H = 1.5): highest y = 0.599468688 (the first face cap: 0.15 + 0.45
+            // plus the one-substep overshoot). The cap is now anchored on the face, so a
+            // retry cannot ratchet above it - the old 0.755 m deck excursion is gone.
+            Assert.AreEqual(0.599468688f, smallHighest, TrajectoryTolerance);
+            // Release for the deterministic ending (the C# retries while the push is held).
+            for (int i = 0; i < 300; i++)
+            {
+                Assert.IsTrue(smallBall.Step(slope50, new Vector3(0f, 0f, 1f), 0f, 0.02f));
+            }
+            Assert.Less(smallBall.Center.y - 0.15f, 0.05f);  // slid back down once released
+            Assert.IsFalse(smallBall.ClimbActive);
 
             ContactWorld lowWall = ContactScenes.LowWallWorld();
             ContactBall lowWallBall = new ContactBall();
             lowWallBall.Center = new Vector3(0f, 0.15f, 0.8f);
             lowWallBall.Radius = 0.15f;
             lowWallBall.PlanarVelocity = new Vector3(0f, 0f, -4f);
+            lowWallBall.UseContactTops = false;
             float lowWallHighest = 0f;
             for (int i = 0; i < 150; i++)
             {
@@ -251,9 +261,12 @@ namespace VRCKatamari.Tests
                     5f));
                 if (lowWallBall.Center.y > lowWallHighest) lowWallHighest = lowWallBall.Center.y;
             }
-            // Python: highest y = 0.30 (r above the 0.15 m wall top), final z = -8.287761259.
+            // Python (K_H = 1.5): highest y = 0.30 (r above the 0.15 m wall top), final
+            // z = -8.791471. Tops are OFF for this scenario because the Python model has no
+            // ledge exit yet; with them on the C# peaks 2.6 cm higher (C#-only mechanics,
+            // bounded in ContactSolveTests.ALowWallIsRolledOver).
             Assert.AreEqual(0.30f, lowWallHighest, IntegratorTolerance);
-            Assert.AreEqual(-8.287761259f, lowWallBall.Center.z, IntegratorTolerance);
+            Assert.AreEqual(-8.791471f, lowWallBall.Center.z, IntegratorTolerance);
         }
     }
 }

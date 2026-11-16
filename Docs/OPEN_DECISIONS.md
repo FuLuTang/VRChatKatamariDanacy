@@ -169,7 +169,7 @@
 
 ### Owner decisions 2026-11-16（追加：子代理模型路由）
 
-- **子代理模型：一律 Claude Sonnet 5.5，搜索类调研同样走这条路由（owner 2026-11-16）** — 默认且唯一的子代理路由是 `pi-anthropic` + `claude-sonnet-5-5`，包括需要联网、搜索、无头浏览器、下载的工作。`provider` 与 `model` 必须同时传。见 [AGENTS.md 委派与 Git](<../AGENTS.md>)。
+- **子代理模型：一律 Claude Sonnet 5.5、思考等级 high，搜索类调研同样走这条路由（owner 2026-11-16）** — 默认且唯一的子代理路由是 `pi-anthropic` + `claude-sonnet-5-5`，`reasoning_effort` 为 `high`，包括需要联网、搜索、无头浏览器、下载的工作。`provider`、`model`、`reasoning_effort` 三项同时传。见 [AGENTS.md 委派与 Git](<../AGENTS.md>)。
 
 ### Lead decisions 2026-11-16（触发门、判定体、运动更新率）
 

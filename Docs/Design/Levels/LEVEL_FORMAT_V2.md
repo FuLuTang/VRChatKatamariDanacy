@@ -1015,7 +1015,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 | `[prop_support]` / `[prop_overlap]` | error | 声明支撑不存在/悬空；两件 AABB 互穿且无父子/摞放关系 |
 | `[prop_bounds]` | error | 道具离开 `meta.bounds` 超过 5 cm |
 | `[caps_props]` | error | 件数 > `caps.props`（每关按 130/511/4000 档自己声明） |
-| `[caps_motion]` | error | `caps.movingProps` > `caps.props`，或 `caps.animators` > `caps.props`（Cancer 有 153 个动画实例但只有 129 个动件，旧规则会把正常数据判错） |
+| `[caps_motion]` | error | `caps.movingProps > caps.props`，或 `caps.animators > caps.props`（**动画与运动是两回事**：D-11 下动画件可以多于运动件——Cancer 是 153 个骨骼动画实例、129 个有运动的实例，所以 `animators` 只能对 `props`，**不能**对 `movingProps`；旧口径 `animators ≤ movingProps` 会把原作自己的数据判错，2026-11-16 已改） |
 | `[canonical]` | warning | 文件不是规范字节（现有行为） |
 | `[schema_legacy]` | error | 读到 v1 文件：提示先跑转换器 |
 

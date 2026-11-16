@@ -218,6 +218,181 @@ namespace VRCKatamari.BallContact
             return true;
         }
 
+        /// <summary>
+        /// The proxy-table twin of <see cref="TrySelectWindow"/>: same scan, hysteresis,
+        /// ordering and overflow verdict, but the exact distance comes from
+        /// <see cref="ProxyContactMath.TryClosestPointOnProxy"/> for a slot whose kind is
+        /// not <see cref="ProxyContactMath.KindBox"/>. Box slots (the 256 static prefix and a
+        /// prop without a collider block) still use <see cref="ObbContactMath"/>, so a scene
+        /// with no proxy is bit-for-bit the old selection.
+        /// </summary>
+        public static bool TrySelectProxyWindow(
+            int obbCount,
+            Vector3[] obbCenters,
+            Vector3[] obbAxisX,
+            Vector3[] obbAxisY,
+            Vector3[] obbAxisZ,
+            Vector3[] obbHalfExtents,
+            float[] obbBoundingRadii,
+            int[] obbSurfaceIds,
+            int[] obbKinds,
+            float[] obbRadii,
+            float[] obbHalfHeights,
+            int[] obbAxes,
+            int[] hullStarts,
+            int[] hullCounts,
+            int[] faceStarts,
+            int[] faceCounts,
+            Vector3[] hullPoints,
+            Vector3[] faceNormals,
+            float[] faceOffsets,
+            int[] faceA,
+            int[] faceB,
+            int[] faceC,
+            Vector3 center,
+            float radius,
+            float maxTravel,
+            int[] previousSurfaceIds,
+            int previousCount,
+            int capacity,
+            int[] scratchIndices,
+            float[] scratchDistances,
+            int[] selectedIndices,
+            out int selectedCount,
+            out int dropped,
+            out bool complete,
+            out bool rebuilt,
+            float enterMargin = ContactTuning.WindowEnterMarginM,
+            float exitMargin = ContactTuning.WindowExitMarginM,
+            float completeMargin = ContactTuning.WindowCompleteMarginM)
+        {
+            selectedCount = 0;
+            dropped = 0;
+            complete = true;
+            rebuilt = false;
+
+            if (!KatamariMath.IsFiniteVector(center)) return false;
+            if (!KatamariMath.IsFiniteFloat(radius) || radius < 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(maxTravel) || maxTravel < 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(enterMargin) || enterMargin < 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(exitMargin) || exitMargin < 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(completeMargin) || completeMargin < 0f)
+                return false;
+            if (capacity < 0) return false;
+            if (obbCenters == null || obbAxisX == null || obbAxisY == null ||
+                obbAxisZ == null || obbHalfExtents == null || obbBoundingRadii == null ||
+                obbSurfaceIds == null || obbKinds == null || obbRadii == null ||
+                obbHalfHeights == null || obbAxes == null || hullStarts == null ||
+                hullCounts == null || faceStarts == null || faceCounts == null ||
+                hullPoints == null || faceNormals == null || faceOffsets == null ||
+                faceA == null || faceB == null || faceC == null) return false;
+            if (previousSurfaceIds == null || scratchIndices == null ||
+                scratchDistances == null || selectedIndices == null) return false;
+            if (obbCount < 0 || obbCount > obbCenters.Length ||
+                obbCount > obbAxisX.Length || obbCount > obbAxisY.Length ||
+                obbCount > obbAxisZ.Length || obbCount > obbHalfExtents.Length ||
+                obbCount > obbBoundingRadii.Length || obbCount > obbSurfaceIds.Length ||
+                obbCount > obbKinds.Length || obbCount > obbRadii.Length ||
+                obbCount > obbHalfHeights.Length || obbCount > obbAxes.Length ||
+                obbCount > hullStarts.Length || obbCount > hullCounts.Length ||
+                obbCount > faceStarts.Length || obbCount > faceCounts.Length)
+                return false;
+            if (scratchIndices.Length < obbCount || scratchDistances.Length < obbCount)
+                return false;
+            if (selectedIndices.Length < capacity) return false;
+            if (previousCount < 0 || previousCount > previousSurfaceIds.Length) return false;
+
+            float radiusIn = WindowRadiusIn(radius, maxTravel, enterMargin);
+            float radiusOut = radiusIn + exitMargin;
+
+            int candidateCount = 0;
+            for (int i = 0; i < obbCount; i++)
+            {
+                float dx = center.x - obbCenters[i].x;
+                float dy = center.y - obbCenters[i].y;
+                float dz = center.z - obbCenters[i].z;
+                float approximate = Mathf.Sqrt(dx * dx + dy * dy + dz * dz)
+                    - obbBoundingRadii[i];
+                if (!KatamariMath.IsFiniteFloat(approximate)) return false;
+                if (approximate > radiusOut) continue;
+                bool wasSelected = ContainsSurfaceId(previousSurfaceIds, previousCount,
+                    obbSurfaceIds[i]);
+
+                int kind = obbKinds[i];
+                Vector3 closestPoint;
+                float distance;
+                Vector3 normal;
+                int feature;
+                if (kind == ProxyContactMath.KindBox)
+                {
+                    if (!ObbContactMath.TryClosestPointOnObb(obbCenters[i], obbAxisX[i],
+                        obbAxisY[i], obbAxisZ[i], obbHalfExtents[i], center, out closestPoint,
+                        out distance, out normal, out feature)) return false;
+                }
+                else if (!ProxyContactMath.TryClosestPointOnProxy(kind, obbCenters[i],
+                    obbAxisX[i], obbAxisY[i], obbAxisZ[i], obbHalfExtents[i], obbRadii[i],
+                    obbHalfHeights[i], obbAxes[i], hullPoints, hullStarts[i], hullCounts[i],
+                    faceNormals, faceOffsets, faceA, faceB, faceC, faceStarts[i],
+                    faceCounts[i], center, out closestPoint, out distance, out normal,
+                    out feature))
+                {
+                    return false;
+                }
+
+                if (distance <= radiusIn || (wasSelected && distance <= radiusOut))
+                {
+                    scratchIndices[candidateCount] = i;
+                    scratchDistances[candidateCount] = distance;
+                    candidateCount++;
+                }
+            }
+
+            int keep = Mathf.Min(capacity, candidateCount);
+            for (int slot = 0; slot < keep; slot++)
+            {
+                int bestSlot = slot;
+                for (int k = slot + 1; k < candidateCount; k++)
+                {
+                    float candidateDistance = scratchDistances[k];
+                    float bestDistance = scratchDistances[bestSlot];
+                    if (candidateDistance < bestDistance ||
+                        (candidateDistance == bestDistance &&
+                            obbSurfaceIds[scratchIndices[k]] <
+                            obbSurfaceIds[scratchIndices[bestSlot]]))
+                    {
+                        bestSlot = k;
+                    }
+                }
+                if (bestSlot != slot)
+                {
+                    int swapIndex = scratchIndices[slot];
+                    scratchIndices[slot] = scratchIndices[bestSlot];
+                    scratchIndices[bestSlot] = swapIndex;
+                    float swapDistance = scratchDistances[slot];
+                    scratchDistances[slot] = scratchDistances[bestSlot];
+                    scratchDistances[bestSlot] = swapDistance;
+                }
+                selectedIndices[slot] = scratchIndices[slot];
+            }
+            selectedCount = keep;
+
+            dropped = Mathf.Max(0, candidateCount - capacity);
+            if (dropped > 0)
+            {
+                float nearestDropped = scratchDistances[keep];
+                for (int k = keep + 1; k < candidateCount; k++)
+                {
+                    if (scratchDistances[k] < nearestDropped)
+                        nearestDropped = scratchDistances[k];
+                }
+                complete = nearestDropped > radius + completeMargin;
+            }
+
+            rebuilt = !SameSurfaceIds(selectedIndices, selectedCount, previousSurfaceIds,
+                previousCount, obbSurfaceIds);
+            return true;
+        }
+
         private static bool ContainsSurfaceId(int[] surfaceIds, int count, int surfaceId)
         {
             for (int i = 0; i < count; i++)

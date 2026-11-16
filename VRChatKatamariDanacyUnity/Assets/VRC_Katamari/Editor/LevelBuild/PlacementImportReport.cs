@@ -75,6 +75,8 @@ namespace VRCKatamari.Editor.LevelBuild
         public int ValueUnitsPreserved;
         public int ValueUnitsUndeclared;
         public bool ValueUnitsVerified;
+        /// <summary>Every declared collider proxy read back bit-identically.</summary>
+        public bool ProxyVerified;
 
         public int ArenaBoxes;
         public int ArenaRamps;

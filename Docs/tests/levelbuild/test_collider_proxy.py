@@ -242,6 +242,18 @@ class ColliderSchemaTests(unittest.TestCase):
             self.assertAlmostEqual(low[axis], block["center"][axis] - 0.05, places=9)
             self.assertAlmostEqual(high[axis], block["center"][axis] + 0.05, places=9)
 
+    def test_hull_canonicalises_to_flat_for_jsonutility(self):
+        # Unity's JsonUtility cannot deserialize an array of arrays, so the on-disk
+        # `hull` is flat; the readable nested form is accepted on input.
+        block = {"type": "convex", "center": [0.1, 0.2, 0.3],
+                 "hull": [[-0.05, -0.05, -0.05], [0.05, -0.05, -0.05],
+                          [-0.05, 0.05, -0.05], [-0.05, -0.05, 0.05]]}
+        canonical = proxies.canonical_collider(block)
+        self.assertEqual(len(canonical["hull"]), 12)
+        self.assertTrue(all(isinstance(value, float) for value in canonical["hull"]))
+        self.assertEqual(proxies.collider_schema_errors(canonical), [])
+        self.assertEqual(canonical, proxies.canonical_collider(canonical))
+
     def test_canonical_field_order_is_fixed(self):
         block = {"fit_error": 0.02, "source": "manual", "hull": [[1, 0, 0], [0, 1, 0],
                                                                  [0, 0, 1], [0, 0, 0]],

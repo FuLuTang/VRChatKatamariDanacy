@@ -56,6 +56,7 @@ python3 Tools/levelbuild/levelbuild.py check Tools/levelbuild/examples/placement
 | `format <placement.json> [--check]` | 写成规范形（排序、取整、`-0.0→0.0`、2 空格、末尾换行、无 BOM）；`--check` 只判断 | 0 / 1（非规范） |
 | `seat <placement.json> [--write] [--item ID]` | 按**支撑面法线**重新坐好（默认 dry-run） | 0 |
 | `from-layout <layout.json> --out <placement.json> [--expected COUNT,UNITS]` | 把 `Docs/Design/StoryMode/picnic_corner_layout.json` 转成本格式（见 §5） | 0 / 2 |
+| `check` 的第二行组 | `supports derived: N` / `supports declared: N` / `supports derivable, not stored: N` / `supports unreproduced: N`（父指针的存量与漂移，见 §2.1） | — |
 
 `check` 的硬规则（设计 §8 的 1–12、14 条）：schema/必填/未知 def/重复 `itemId`、`aabb` 与模型 manifest 一致、`absorbDiameterReq`/`absorbable` 不自相矛盾、越界、出生净空、**穿地**、**悬空**、叠放、道具互穿、穿入实体、预算（`planes/boxes/ramps/ground/blocking`）、斜面几何（坡度/坡脚/顶边）、`box` 与 `ramp` 同 id、总量与 `level.expected` 一致、**弯坡**（`curve_ramp` 的半径/弧角/宽厚/段数/弦高/重叠）；另外“文件不是规范形”是 **warning**（不是错）。
 
@@ -92,7 +93,8 @@ python3 Tools/levelbuild/levelbuild.py seat level.json --write
       "itemId": "prop_plate_000", "def": "plate", "kind": "tableware", "zone": "table",
       "position": [-1.78, 0.4575, -1.18],       // Unity 世界坐标，米；枢轴 = AABB 中心
       "rotationQuat": [0, 0, 0, 1],             // Unity 顺序 (x,y,z,w)，规范符号
-      "support": "picnic_table",                // 或 "stackedOn": "<另一件 itemId>"
+      "support": "picnic_table",                // 结构 id；或 "stackedOn": "<另一件 itemId>"
+      // "parent": "<另一件 itemId>" 与此同义，是运行期要读的那一列（§2.1）
       "aabb": [0.24, 0.025, 0.24],              // 未旋转的模型 AABB，Unity 轴向（y=高）
       "absorbDiameterReq": 0.302, "absorbable": true,   // 派生：check/format 会重算
       "valueUnits": 4
@@ -125,6 +127,26 @@ python3 Tools/levelbuild/levelbuild.py seat level.json --write
 `position` 是枢轴（= AABB 中心），所以贴地是 `y = 地面高 + aabb.y/2`；在斜面上则要**同时**按法线转正（`levelbuild.py seat` 或 `placement_core.seat_pose`）。
 
 ---
+
+### 2.1 `parent`：谁压着谁，由几何推导（2026-11-16）
+
+一件**最多一个**父件。运行期只读这一列（父件被吃掉 ⇒ 子件落，见
+`Docs/Design/PickupAbsorb/PROP_BEHAVIOURS.md` §10.9），编辑器/校验器把 `stackedOn` 当同一个关系的旧写法读（`placement_core.prop_parent()`，一处解析），两者同时出现且不一致 ⇒ `[parent_conflict]`。
+
+```bash
+python3 Tools/levelbuild/levelbuild.py check <level>/placement.json     # 第二行组：derived / declared / 漂移
+python3 Tools/levelbuild/levelctl.py derive-supports                   # dry-run：列出会写什么、哪些对不上
+python3 Tools/levelbuild/levelctl.py derive-supports --apply           # 只写缺失的，不覆盖、不清空
+```
+
+规则（`Tools/levelbuild/supports.py`，口径见 `Docs/Research/KatamariBallRules/STACKS_IN_ORIGINAL.md`）：
+
+* 用**旋转后**的世界 AABB（`position` + 四元数 + 模型 `aabb`），所以躺倒的件按它真实的高度算；
+* 足迹水平相交（贴合也算，`0` 相交不算）；
+* 竖直间隙 `bottom(子) - top(父)` 落在 `[-0.30, +0.50] × 较小世界高度`（`parent_gap_window`，校验器与推导共用这一个函数）；
+* 取**最高的那个顶面**；地面与结构永远不是父件；断环（`_break_cycles`）。
+
+`parentDerived: true` 只加在**机器推导**出来的链接上：它有上面那条间隙窗口；作者手写的 `parent`（旗子挂在杆上）不受窗口约束，也不会被 `--apply` 覆盖。`--apply` 对已有指针只报 `conflict` / `orphaned`，不静默改写——把一条错误的支撑改对是人的活，静默丢掉只会把堆叠 bug 变成悬空件。
 
 ## 3. 价值单位：按 def 声明，导入器照写（Lead 2026-11-15 决定）
 
@@ -206,7 +228,7 @@ python3 -m unittest discover -s Docs/tests -p 'test_*.py'   # 全仓
 python3 Docs/tools/validate_plan.py
 ```
 
-`Docs/tests/levelbuild/` 覆盖：常驻编辑器的 48 + 11 个用例（§9.5 另外列）；坐标/四元数往返、旋转后 AABB、`D_req` 数值（含体积门等价）、斜面上坐正（含“半埋”反例）、确定性（排序/取整/`-0.0`/逐字节）、`defs[]` 价值回退、**5 个负向用例**（穿地/悬空/越界/预算超/总量不符）以及未知 def、重复 id、互穿、`box`+`ramp` 同 id、缺地面、过期 `absorbDiameterReq`；CLI 的 0/1/2 退出码与 `format`/`seat` 的行为。`test_curve_ramp.py` 另覆盖弯坡：schema 的 18 个原因码、段数与设计表一致（§5.7 的 2→10 / 3→12 / 5→15 / 10→21 / 20→29）、弦高预算、法线连续、`down` 是 `up` 的镜像、`dump-load-dump` 逐字节、总量口径（一条=1 ramp / N 段=staticObbs）、以及 45° 门：50°/89° 只 warning、90°/inverted/零厚度/NaN 仍红。
+`Docs/tests/levelbuild/` 覆盖：常驻编辑器的 48 + 11 个用例（§9.5 另外列）；坐标/四元数往返、旋转后 AABB、`D_req` 数值（含体积门等价）、斜面上坐正（含“半埋”反例）、确定性（排序/取整/`-0.0`/逐字节）、`defs[]` 价值回退、**5 个负向用例**（穿地/悬空/越界/预算超/总量不符）以及未知 def、重复 id、互穿、`box`+`ramp` 同 id、缺地面、过期 `absorbDiameterReq`；CLI 的 0/1/2 退出码与 `format`/`seat` 的行为。`test_curve_ramp.py` 另覆盖弯坡：schema 的 18 个原因码、段数与设计表一致（§5.7 的 2→10 / 3→12 / 5→15 / 10→21 / 20→29）、弦高预算、法线连续、`down` 是 `up` 的镜像、`dump-load-dump` 逐字节、总量口径（一条=1 ramp / N 段=staticObbs）、以及 45° 门：50°/89° 只 warning、90°/inverted/零厚度/NaN 仍红。`test_supports.py` 另覆盖父指针：窗口随较小件缩放（2 mm 叶子没有 6 cm 的松弛）、旋转后按真实高度判、贴合算相交、结果与 `props[]` 顺序无关、`apply` 只写缺失且第二次是 no-op、六个校验码、`story_01_bench_size` 的 6 条复现 + 2 条悬空声明，以及 `_ref_cancer` 与原版导出表 90 条父记录的对照（0 复现，原因写在用例 docstring 里）。
 
 ---
 
@@ -266,6 +288,7 @@ levelctl.py move apple_01 --to=-7.9,0.05,-17.3        # 或 --delta=0,0.02,0
 levelctl.py rotate acorn_01 --yaw 90                  # 或 --quat=x,y,z,w
 levelctl.py remove acorn_01 --update-expected
 levelctl.py seat [id …]
+levelctl.py derive-supports [id …] [--apply]   # 父指针：默认 dry-run，--apply 才写
 levelctl.py check --report
 levelctl.py export [--to /tmp/handoff.json] [--force]
 levelctl.py render --preset plan [--engine WORKBENCH] [--res 1280x720] [--out DIR] [--name x]

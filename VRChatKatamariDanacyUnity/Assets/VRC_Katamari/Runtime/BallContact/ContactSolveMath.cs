@@ -122,7 +122,21 @@ namespace VRCKatamari.BallContact
             int[] contactClasses,
             int capacity,
             out int contactCount,
-            float skin = ContactTuning.ContactSkinM)
+            float skin = ContactTuning.ContactSkinM,
+            int[] obbKinds = null,
+            float[] obbRadii = null,
+            float[] obbHalfHeights = null,
+            int[] obbAxes = null,
+            int[] hullStarts = null,
+            int[] hullCounts = null,
+            int[] faceStarts = null,
+            int[] faceCounts = null,
+            Vector3[] hullPoints = null,
+            Vector3[] faceNormals = null,
+            float[] faceOffsets = null,
+            int[] faceA = null,
+            int[] faceB = null,
+            int[] faceC = null)
         {
             contactCount = 0;
             if (!KatamariMath.IsFiniteVector(sphereCenter)) return false;
@@ -151,6 +165,19 @@ namespace VRCKatamari.BallContact
                 obbCount > obbAxisY.Length || obbCount > obbAxisZ.Length ||
                 obbCount > obbHalfExtents.Length || obbCount > obbSurfaceIds.Length ||
                 obbCount > obbRoles.Length) return false;
+            if (obbKinds != null)
+            {
+                if (obbRadii == null || obbHalfHeights == null || obbAxes == null ||
+                    hullStarts == null || hullCounts == null || faceStarts == null ||
+                    faceCounts == null || hullPoints == null || faceNormals == null ||
+                    faceOffsets == null || faceA == null || faceB == null || faceC == null)
+                    return false;
+                if (obbCount > obbKinds.Length || obbCount > obbRadii.Length ||
+                    obbCount > obbHalfHeights.Length || obbCount > obbAxes.Length ||
+                    obbCount > hullStarts.Length || obbCount > hullCounts.Length ||
+                    obbCount > faceStarts.Length || obbCount > faceCounts.Length)
+                    return false;
+            }
 
             if (hasGround)
             {
@@ -210,10 +237,24 @@ namespace VRCKatamari.BallContact
                 int feature;
                 float angleDeg;
                 int contactClass;
-                if (!ObbContactMath.TrySphereObbContact(obbCenters[i], obbAxisX[i],
-                    obbAxisY[i], obbAxisZ[i], obbHalfExtents[i], sphereCenter, radius,
-                    out normal, out point, out depth, out feature, out angleDeg,
-                    out contactClass, skin)) continue;
+                int kind = obbKinds == null ? ProxyContactMath.KindBox : obbKinds[i];
+                if (kind == ProxyContactMath.KindBox)
+                {
+                    if (!ObbContactMath.TrySphereObbContact(obbCenters[i], obbAxisX[i],
+                        obbAxisY[i], obbAxisZ[i], obbHalfExtents[i], sphereCenter, radius,
+                        out normal, out point, out depth, out feature, out angleDeg,
+                        out contactClass, skin)) continue;
+                }
+                else if (!ProxyContactMath.TrySphereProxyContact(kind, obbCenters[i],
+                    obbAxisX[i], obbAxisY[i], obbAxisZ[i], obbHalfExtents[i], obbRadii[i],
+                    obbHalfHeights[i], obbAxes[i], hullPoints, hullStarts[i], hullCounts[i],
+                    faceNormals, faceOffsets, faceA, faceB, faceC, faceStarts[i],
+                    faceCounts[i], sphereCenter, radius, out normal, out point, out depth,
+                    out feature, out angleDeg, out contactClass, skin))
+                {
+                    continue;
+                }
+
                 if (contactCount >= limit) return false;
                 contactNormals[contactCount] = normal;
                 contactPoints[contactCount] = point;
@@ -271,7 +312,21 @@ namespace VRCKatamari.BallContact
             out int contactCount,
             out float residual,
             int iterations = ContactTuning.SolverIterations,
-            float skin = ContactTuning.ContactSkinM)
+            float skin = ContactTuning.ContactSkinM,
+            int[] obbKinds = null,
+            float[] obbRadii = null,
+            float[] obbHalfHeights = null,
+            int[] obbAxes = null,
+            int[] hullStarts = null,
+            int[] hullCounts = null,
+            int[] faceStarts = null,
+            int[] faceCounts = null,
+            Vector3[] hullPoints = null,
+            Vector3[] faceNormals = null,
+            float[] faceOffsets = null,
+            int[] faceA = null,
+            int[] faceB = null,
+            int[] faceC = null)
         {
             correctedCenter = center;
             contactCount = 0;
@@ -283,7 +338,10 @@ namespace VRCKatamari.BallContact
                 planeOffsets, planeCount, obbCenters, obbAxisX, obbAxisY, obbAxisZ,
                 obbHalfExtents, obbSurfaceIds, obbRoles, obbCount, position, radius,
                 contactNormals, contactPoints, contactDepths, contactAngles, contactSurfaceIds,
-                contactRoles, contactFeatures, contactClasses, capacity, out count, skin))
+                contactRoles, contactFeatures, contactClasses, capacity, out count, skin,
+                obbKinds, obbRadii, obbHalfHeights, obbAxes, hullStarts, hullCounts,
+                faceStarts, faceCounts, hullPoints, faceNormals, faceOffsets, faceA, faceB,
+                faceC))
             {
                 contactCount = count;
                 return false;
@@ -313,7 +371,9 @@ namespace VRCKatamari.BallContact
                     obbHalfExtents, obbSurfaceIds, obbRoles, obbCount, position, radius,
                     contactNormals, contactPoints, contactDepths, contactAngles,
                     contactSurfaceIds, contactRoles, contactFeatures, contactClasses, capacity,
-                    out count, skin))
+                    out count, skin, obbKinds, obbRadii, obbHalfHeights, obbAxes, hullStarts,
+                    hullCounts, faceStarts, faceCounts, hullPoints, faceNormals, faceOffsets,
+                    faceA, faceB, faceC))
                 {
                     contactCount = count;
                     return false;
@@ -394,7 +454,21 @@ namespace VRCKatamari.BallContact
             float kappa = ContactTuning.KappaSubstep,
             int maxSubstepCap = ContactTuning.MaxSubsteps,
             float driveAccel = 0f,
-            float skin = ContactTuning.ContactSkinM)
+            float skin = ContactTuning.ContactSkinM,
+            int[] obbKinds = null,
+            float[] obbRadii = null,
+            float[] obbHalfHeights = null,
+            int[] obbAxes = null,
+            int[] hullStarts = null,
+            int[] hullCounts = null,
+            int[] faceStarts = null,
+            int[] faceCounts = null,
+            Vector3[] hullPoints = null,
+            Vector3[] faceNormals = null,
+            float[] faceOffsets = null,
+            int[] faceA = null,
+            int[] faceB = null,
+            int[] faceC = null)
         {
             contactCount = 0;
             dominantSurfaceId = -1;
@@ -465,7 +539,10 @@ namespace VRCKatamari.BallContact
                     obbHalfExtents, obbSurfaceIds, obbRoles, obbCount, position, radius,
                     contactNormals, contactPoints, contactDepths, contactAngles,
                     contactSurfaceIds, contactRoles, contactFeatures, contactClasses, capacity,
-                    out pushedCenter, out pushedCount, out pushedResidual, ContactTuning.SolverIterations, skin))
+                    out pushedCenter, out pushedCount, out pushedResidual,
+                    ContactTuning.SolverIterations, skin, obbKinds, obbRadii, obbHalfHeights,
+                    obbAxes, hullStarts, hullCounts, faceStarts, faceCounts, hullPoints,
+                    faceNormals, faceOffsets, faceA, faceB, faceC))
                     return false;
                 position = pushedCenter;
                 count = pushedCount;

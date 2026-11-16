@@ -198,6 +198,24 @@ namespace VRCKatamari.Pickup
         // Optional: wired colliders are disabled on attach so an absorbed prop cannot block
         // anything. Leave the array empty to skip that.
         [SerializeField] private Collider[] propColliders;
+        // ---- Optional per-prop collider proxy columns (COLLIDER_PROXY.md §6) ----
+        // Index-aligned with propTransforms. kind: -1 = no block (the prop falls back to
+        // its OBB, exactly today's collision shape), 0 box, 1 sphere, 2 capsule,
+        // 3 convex. All shape numbers are in the prop's LOCAL space; the host bakes them
+        // with the prop's world pose once per scan. An un-synced scene has null/short
+        // columns and every row reads -1, so the flag-on path still keeps the old boxes.
+        [SerializeField] private int[] propProxyKinds;
+        [SerializeField] private Vector3[] propProxyCenters;
+        [SerializeField] private Vector3[] propProxySizes;
+        [SerializeField] private float[] propProxyRadii;
+        [SerializeField] private float[] propProxyHalfHeights;
+        [SerializeField] private int[] propProxyAxes;
+        [SerializeField] private int[] propProxyHullStarts;
+        [SerializeField] private int[] propProxyHullCounts;
+        [SerializeField] private Vector3[] propProxyHullPoints;
+        [SerializeField] private int[] propProxyFaceStarts;
+        [SerializeField] private int[] propProxyFaceCounts;
+        [SerializeField] private int[] propProxyHullFaces;
 
         [Header("Radii and cadence")]
         [SerializeField] private float activationRadiusM = DefaultActivationRadiusM;
@@ -309,6 +327,34 @@ namespace VRCKatamari.Pickup
         // replace; 0 means "cleared"), and the refusal-log counter.
         private int propObbAppliedCount;
         private int propObbLogCount;
+
+        // ---- Contact v2 collider proxies (COLLIDER_PROXY.md §6) ----
+        private Vector3[] proxyCenter;
+        private Vector3[] proxyAxisX;
+        private Vector3[] proxyAxisY;
+        private Vector3[] proxyAxisZ;
+        private Vector3[] proxyHalfExtents;
+        private float[] proxyRadii;
+        private float[] proxyHalfHeights;
+        private int[] proxyAxes;
+        private int[] proxyKinds;
+        private int[] proxySurfaceIds;
+        private int[] proxyRoles;
+        private Vector3[] proxyHullPoints;
+        private int[] proxyHullStarts;
+        private int[] proxyHullCounts;
+        private Vector3[] proxyFaceNormals;
+        private float[] proxyFaceOffsets;
+        private int[] proxyFaceA;
+        private int[] proxyFaceB;
+        private int[] proxyFaceC;
+        private int[] proxyFaceStarts;
+        private int[] proxyFaceCounts;
+        private int proxyCount;
+        private int proxyCandidateCount;
+        private int proxyFallbackRows;
+        private int proxyAppliedCount;
+        private int proxyLogCount;
 
         // Attached count by kind, grown in place; capacity is the prop count.
         private string[] kindTallyNames;
@@ -528,6 +574,7 @@ namespace VRCKatamari.Pickup
             supportCandidateCount = 0;
             previousSupportCount = 0;
             ClearPropObbs();
+            ClearPropProxies();
             nextBlockingScanTime = 0f;
 
             attachedCount = 0;
@@ -591,6 +638,25 @@ namespace VRCKatamari.Pickup
         {
             if (propLocalBounds == null) return 0;
             return propLocalBounds.Length;
+        }
+
+        /// <summary>Rows in the optional collider-proxy kind column (0 when absent).</summary>
+        public int GetPropProxyRowCount()
+        {
+            if (propProxyKinds == null) return 0;
+            return propProxyKinds.Length;
+        }
+
+        /// <summary>The authored proxy kind for one row (-1 = no block / OBB fallback).</summary>
+        public int GetPropProxyKind(int index)
+        {
+            return ProxyKindAt(index);
+        }
+
+        /// <summary>Declared proxies that had to fall back to the OBB on the last scan.</summary>
+        public int GetPropProxyFallbackRows()
+        {
+            return proxyFallbackRows;
         }
 
         /// <summary>
@@ -768,6 +834,34 @@ namespace VRCKatamari.Pickup
             propObbOverflowCount = 0;
             propObbAppliedCount = 0;
             propObbLogCount = 0;
+
+            int proxyCapacity = PropObbBakeMath.PropObbCapacity;
+            proxyCenter = new Vector3[proxyCapacity];
+            proxyAxisX = new Vector3[proxyCapacity];
+            proxyAxisY = new Vector3[proxyCapacity];
+            proxyAxisZ = new Vector3[proxyCapacity];
+            proxyHalfExtents = new Vector3[proxyCapacity];
+            proxyRadii = new float[proxyCapacity];
+            proxyHalfHeights = new float[proxyCapacity];
+            proxyAxes = new int[proxyCapacity];
+            proxyKinds = new int[proxyCapacity];
+            proxySurfaceIds = new int[proxyCapacity];
+            proxyRoles = new int[proxyCapacity];
+            proxyHullPoints = new Vector3[proxyCapacity * ProxyContactMath.MaxHullPoints];
+            proxyHullStarts = new int[proxyCapacity];
+            proxyHullCounts = new int[proxyCapacity];
+            proxyFaceNormals = new Vector3[proxyCapacity * ProxyContactMath.MaxHullFaces];
+            proxyFaceOffsets = new float[proxyCapacity * ProxyContactMath.MaxHullFaces];
+            proxyFaceA = new int[proxyCapacity * ProxyContactMath.MaxHullFaces];
+            proxyFaceB = new int[proxyCapacity * ProxyContactMath.MaxHullFaces];
+            proxyFaceC = new int[proxyCapacity * ProxyContactMath.MaxHullFaces];
+            proxyFaceStarts = new int[proxyCapacity];
+            proxyFaceCounts = new int[proxyCapacity];
+            proxyCount = 0;
+            proxyCandidateCount = 0;
+            proxyFallbackRows = 0;
+            proxyAppliedCount = 0;
+            proxyLogCount = 0;
             kindTallyNames = new string[propCount];
             kindTallyCounts = new int[propCount];
             kindTallyCount = 0;
@@ -1765,6 +1859,7 @@ namespace VRCKatamari.Pickup
                 // v1: the v1 tables are the whole world, and a block this host registered
                 // while the flag was on must not survive the flip.
                 ClearPropObbs();
+                ClearPropProxies();
                 return;
             }
 
@@ -1773,7 +1868,7 @@ namespace VRCKatamari.Pickup
             // a batch it can only refuse.
             int capacity = motor.GetPropObbsCapacity();
             if (capacity > PropObbBakeMath.PropObbCapacity) capacity = PropObbBakeMath.PropObbCapacity;
-            if (capacity <= 0) { ClearPropObbs(); return; }
+            if (capacity <= 0) { ClearPropObbs(); ClearPropProxies(); return; }
 
             int candidates = 0;
             for (int i = 0; i < propCount; i++)
@@ -1797,6 +1892,27 @@ namespace VRCKatamari.Pickup
                 // that are registered and say nothing per scan (the v1 selection does the same).
                 return;
             }
+
+            if (motor.IsPropProxyContactEnabled())
+            {
+                proxyCandidateCount = candidates;
+                int proxyBaked = BakeProxyRows(written);
+                ApplyPropProxySet(proxyBaked);
+                // A switch from the OBB path must not leave an old prop block behind,
+                // even when this scan selected no prop (the proxy block is then empty and
+                // the old OBB block would otherwise come back as the contact authority).
+                if (propObbAppliedCount > 0)
+                {
+                    motor.ClearPropObbs();
+                    propObbAppliedCount = 0;
+                }
+                int[] proxySwap = propObbPreviousIndices;
+                propObbPreviousIndices = propObbSelectedIndices;
+                propObbSelectedIndices = proxySwap;
+                propObbPreviousCount = written;
+                return;
+            }
+            if (proxyAppliedCount > 0) ClearPropProxies();
 
             int baked = 0;
             int fallenBack = 0;
@@ -1837,6 +1953,205 @@ namespace VRCKatamari.Pickup
             propObbPreviousIndices = propObbSelectedIndices;
             propObbSelectedIndices = swap;
             propObbPreviousCount = written;
+        }
+
+        /// <summary>
+        /// Bakes this scan's selected props into the host's 12 proxy rows. A prop with no
+        /// collider block (kind -1) uses the same local-OBB bake as today, so flag-on with
+        /// no authored proxy data is the old box shape.
+        /// </summary>
+        private int BakeProxyRows(int written)
+        {
+            int baked = 0;
+            int fallenBack = 0;
+            for (int i = 0; i < written; i++)
+            {
+                int index = propObbSelectedIndices[i];
+                if (index < 0 || index >= propCount) continue;
+                Transform prop = propTransforms[index];
+                if (prop == null) continue;
+                int kind = ProxyKindAt(index);
+                bool ok = false;
+                Vector3 center = Vector3.zero;
+                Vector3 axisX = Vector3.zero;
+                Vector3 axisY = Vector3.zero;
+                Vector3 axisZ = Vector3.zero;
+                Vector3 halfExtents = Vector3.zero;
+                float radius = 0f;
+                float halfHeight = 0f;
+                int axis = ProxyContactMath.AxisX;
+                int hullCount = 0;
+                int faceCount = 0;
+                float boundingRadius = 0f;
+
+                if (kind >= 0)
+                {
+                    int hullStart = ProxyIntAt(propProxyHullStarts, index, 0);
+                    int hullCountRow = ProxyIntAt(propProxyHullCounts, index, 0);
+                    int faceStart = ProxyIntAt(propProxyFaceStarts, index, 0);
+                    int faceCountRow = ProxyIntAt(propProxyFaceCounts, index, 0);
+                    ok = ProxyContactMath.TryBakeProxy(kind, prop.position, prop.rotation,
+                        ProxyVectorAt(propProxyCenters, index, Vector3.zero),
+                        ProxyVectorAt(propProxySizes, index, Vector3.zero),
+                        ProxyFloatAt(propProxyRadii, index, 0f),
+                        ProxyFloatAt(propProxyHalfHeights, index, 0f),
+                        ProxyIntAt(propProxyAxes, index, ProxyContactMath.AxisX),
+                        propProxyHullPoints, hullStart, hullCountRow,
+                        propProxyHullFaces, faceStart, faceCountRow,
+                        proxyHullPoints, baked * ProxyContactMath.MaxHullPoints,
+                        ProxyContactMath.MaxHullPoints, proxyFaceNormals, proxyFaceOffsets,
+                        proxyFaceA, proxyFaceB, proxyFaceC,
+                        baked * ProxyContactMath.MaxHullFaces, ProxyContactMath.MaxHullFaces,
+                        out center, out axisX, out axisY, out axisZ, out halfExtents,
+                        out radius, out halfHeight, out axis, out hullCount, out faceCount,
+                        out boundingRadius);
+                    if (!ok && kind != ProxyContactMath.KindBox) fallenBack++;
+                }
+
+                if (!ok)
+                {
+                    bool hasLocalRow = propLocalBounds != null && index < propLocalBounds.Length;
+                    Vector3 localRow = hasLocalRow ? propLocalBounds[index] : Vector3.zero;
+                    int source = PropObbBakeMath.TryBakeProp(prop.position, prop.rotation,
+                        hasLocalRow, localRow, propBounds[index], out axisX, out axisY,
+                        out axisZ, out halfExtents);
+                    if (source == PropObbBakeMath.SourceNone) continue;
+                    kind = ProxyContactMath.KindBox;
+                    center = prop.position;
+                    radius = 0f;
+                    halfHeight = 0f;
+                    axis = ProxyContactMath.AxisX;
+                    hullCount = 0;
+                    faceCount = 0;
+                    boundingRadius = ObbContactMath.BoundingRadius(halfExtents);
+                }
+
+                proxyKinds[baked] = kind;
+                proxyCenter[baked] = center;
+                proxyAxisX[baked] = axisX;
+                proxyAxisY[baked] = axisY;
+                proxyAxisZ[baked] = axisZ;
+                proxyHalfExtents[baked] = halfExtents;
+                proxyRadii[baked] = radius;
+                proxyHalfHeights[baked] = halfHeight;
+                proxyAxes[baked] = axis;
+                proxyHullStarts[baked] = baked * ProxyContactMath.MaxHullPoints;
+                proxyHullCounts[baked] = hullCount;
+                proxyFaceStarts[baked] = baked * ProxyContactMath.MaxHullFaces;
+                proxyFaceCounts[baked] = faceCount;
+                proxySurfaceIds[baked] = SupportSurfaceMath.FirstPropSurfaceId + baked;
+                proxyRoles[baked] = supportCandidate[index]
+                    ? ContactCodes.RoleProp : ContactCodes.RoleBlocking;
+                baked = baked + 1;
+            }
+
+            proxyFallbackRows = fallenBack;
+            return baked;
+        }
+
+        private int ProxyKindAt(int index)
+        {
+            if (propProxyKinds == null || index < 0 || index >= propProxyKinds.Length)
+                return -1;
+            int kind = propProxyKinds[index];
+            if (kind < ProxyContactMath.KindBox || kind > ProxyContactMath.KindConvex)
+                return -1;
+            if (propProxyCenters == null || index >= propProxyCenters.Length ||
+                !KatamariMath.IsFiniteVector(propProxyCenters[index])) return -1;
+            if (kind == ProxyContactMath.KindBox)
+            {
+                if (propProxySizes == null || index >= propProxySizes.Length) return -1;
+                Vector3 size = propProxySizes[index];
+                return KatamariMath.IsFiniteVector(size) && size.x >= 0f && size.y >= 0f &&
+                    size.z >= 0f ? kind : -1;
+            }
+            if (kind == ProxyContactMath.KindSphere)
+            {
+                float radius = ProxyFloatAt(propProxyRadii, index, -1f);
+                return KatamariMath.IsFiniteFloat(radius) && radius > 0f ? kind : -1;
+            }
+            if (kind == ProxyContactMath.KindCapsule)
+            {
+                float radius = ProxyFloatAt(propProxyRadii, index, -1f);
+                float halfHeight = ProxyFloatAt(propProxyHalfHeights, index, -1f);
+                int axis = ProxyIntAt(propProxyAxes, index, -1);
+                return KatamariMath.IsFiniteFloat(radius) && radius > 0f &&
+                    KatamariMath.IsFiniteFloat(halfHeight) && halfHeight >= 0f &&
+                    axis >= ProxyContactMath.AxisX && axis <= ProxyContactMath.AxisZ ? kind : -1;
+            }
+
+            int hullStart = ProxyIntAt(propProxyHullStarts, index, -1);
+            int hullCount = ProxyIntAt(propProxyHullCounts, index, 0);
+            int faceStart = ProxyIntAt(propProxyFaceStarts, index, -1);
+            int faceCount = ProxyIntAt(propProxyFaceCounts, index, 0);
+            if (propProxyHullPoints == null || propProxyHullFaces == null) return -1;
+            if (hullStart < 0 || hullCount < 4 || hullCount > ProxyContactMath.MaxHullPoints ||
+                hullStart + hullCount > propProxyHullPoints.Length) return -1;
+            if (faceStart < 0 || faceCount < 1 || faceCount > ProxyContactMath.MaxHullFaces ||
+                faceStart + faceCount * 3 > propProxyHullFaces.Length) return -1;
+            return kind;
+        }
+
+        private static Vector3 ProxyVectorAt(Vector3[] values, int index, Vector3 fallback)
+        {
+            if (values == null || index < 0 || index >= values.Length) return fallback;
+            return values[index];
+        }
+
+        private static float ProxyFloatAt(float[] values, int index, float fallback)
+        {
+            if (values == null || index < 0 || index >= values.Length) return fallback;
+            return values[index];
+        }
+
+        private static int ProxyIntAt(int[] values, int index, int fallback)
+        {
+            if (values == null || index < 0 || index >= values.Length) return fallback;
+            return values[index];
+        }
+
+        /// <summary>
+        /// Hands this scan's 12 proxies to the motor, or clears the block when there is none.
+        /// </summary>
+        private void ApplyPropProxySet(int count)
+        {
+            proxyCount = count;
+            if (motor == null) return;
+            if (count <= 0)
+            {
+                if (proxyAppliedCount == 0) return;
+                motor.ClearPropProxies();
+                proxyAppliedCount = 0;
+                return;
+            }
+            if (!motor.IsPropProxyContactEnabled()) return;
+            if (motor.SetPropProxies(count, proxyKinds, proxyCenter, proxyAxisX, proxyAxisY,
+                proxyAxisZ, proxyHalfExtents, proxyRadii, proxyHalfHeights, proxyAxes,
+                proxyHullPoints, proxyHullStarts, proxyHullCounts, proxyFaceNormals,
+                proxyFaceOffsets, proxyFaceA, proxyFaceB, proxyFaceC, proxyFaceStarts,
+                proxyFaceCounts, proxySurfaceIds, proxyRoles))
+            {
+                proxyAppliedCount = count;
+                return;
+            }
+            if (proxyLogCount >= BlockingLogLimit) return;
+            proxyLogCount = proxyLogCount + 1;
+            Debug.LogWarning("[PickupFieldHost] the motor refused the v2 prop proxies ("
+                + motor.GetPropProxyRefusalReason() + "); keeping the previous set of "
+                + motor.GetPropProxiesCount() + ".");
+        }
+
+        private void ClearPropProxies()
+        {
+            if (proxyAppliedCount > 0 && motor != null)
+            {
+                motor.ClearPropProxies();
+                proxyAppliedCount = 0;
+            }
+            if (proxyCount == 0 && proxyFallbackRows == 0) return;
+            proxyCount = 0;
+            proxyCandidateCount = 0;
+            proxyFallbackRows = 0;
         }
 
         /// <summary>
@@ -1921,6 +2236,7 @@ namespace VRCKatamari.Pickup
             supportCandidateCount = 0;
             previousSupportCount = 0;
             ClearPropObbs();
+            ClearPropProxies();
         }
 
         // One warning per category, ever: a field with a bad capacity must not flood the

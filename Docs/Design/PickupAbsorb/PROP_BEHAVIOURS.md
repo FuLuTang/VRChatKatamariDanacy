@@ -695,13 +695,46 @@ float[] propPhase;      // ambient/path/orbit 的相位
 | 落定后 | 补一条新边 | 不重建、不补边 |
 | 判定 | 计数归零 | 几何浮空测试 |
 
+#### Udon 运行期列（2026-11-16 第四轮）：CSR 子表 + 逐件几何列
+
+上面的形状够跑，但有两处会在真实的件数上变慢，本轮把**列**定下来（Udon 实现仍在后面，这里只定数据）：
+
+1. 「我的子件是谁」在 `propParent` 上只能扫全表（O(n)）。每次吃掉一件都扫一遍 n，30 件的兄弟组连续被吃就是 30n。
+2. 每 tick 的浮空测试要读**每个件当前的**底/顶面和水平范围；原版坐标只来自烘焙期，落过、被吃过之后必须有一份运行期的世界 AABB。
+
+```
+// 每件一行，行索引 = host 行索引（烘焙期一次定好，运行期不重排）
+int[]   propParent;      // n    父件行索引；-1 = 无父件（地面 / 结构 / 顶部件）
+int[]   childStart;      // n+1  CSR 前缀和：第 p 件的子件 = childList[childStart[p] .. childStart[p+1])
+int[]   childList;       // m    m = 有父件的件数 <= n-1
+int[]   propState;       // n    0 RESTING / 1 FALLING / 2 SETTLED / 3 ABSORBED
+float[] fallVelocityY;   // n    只在 FALLING 时非 0
+float[] propMinX, propMinY, propMinZ, propMaxX, propMaxY, propMaxZ;  // n each，世界 AABB
+int[]   pending;         // n    待复检队列（定长环形）
+bool[]  pendingFlag;     // n    去重
+int     pendingHead, pendingCount;
+```
+
+- **CSR 在烘焙期或 `Start` 现算，O(n) 两趟、只用 int 数组**：第一趟数 `childStart[propParent[i] + 1]++`，前缀和，第二趟按行序填 `childList`（子件顺序 = 行序，**稳定**，所以同一份数据每次构建的 `childList` 逐元素相同 —— 幂等的要求）。「吃掉父件 p ⇒ 入队它的子件」于是是一次下标切片，不扫表。
+- **`propParent` 的来源是唯一的**：导入器用 `placement_core.prop_parent(prop)` 取（`parent`，没有就退回旧的 `stackedOn`），不读第二份。烘焙期要断环（`supports._break_cycles`）、要保证 `propParent[i] < n` 且 `!= i`；运行期不再校验。
+- **六个 float 列就是浮空测试的输入**，也是坠落落点的来源：脚在 `propMinY`，顶面在 `propMaxY`，水平重叠用 `propMinX/MaxX/MinZ/MaxZ`（§5.4 的「任意重叠」口径；阈值问题见下面第 1 条）。`FALLING` 件仍要更新自己六列（它要落给下面看），但**不进别人的落点候选**（§4）。
+- **容量**：约 14 个 `n` 长数组（int/float 各半）+ `childList` ≤ n。3,000 件的图 ≈ 4.2 万个数，Udon 堆上放得下；`pending` 取 n 一定够（每件同一时刻最多入队一次）。
+- **不进数组的**：`rests_on` / `liveSupporters` / 组 id / 组内序号 / 群组表。组 = 沿 `propParent` 往上走 + `childStart` 往下取，都能从这三个数组现算，所以「组表」不是第四份数据。
+- **导出侧**：`placement.json` 只多 `parent`（和 `parentDerived` 标记），CSR 与状态数组都是烘焙产物、不入库。列的顺序和索引即契约，Unity 侧按行号绑定，改名/重排等价于换数据格式。
+
+**支撑指针从哪来（本轮已落地的 Python 侧）**：`Tools/levelbuild/supports.py` 在导入时按几何推导（旋转感知的世界 AABB、足迹相交、`gap ∈ [-0.30, +0.50] × 较小高度`、取最高顶面、断环），`parentDerived: true` 标记它是机器给的；作者手写的 `parent` 不标。依据 `Docs/Research/KatamariBallRules/STACKS_IN_ORIGINAL.md`：原版 987 个接触里只有 28% 有指针、322 摞里 72% 完全没有指针 —— 所以「谁压着谁」在原版是**几何算出来的**，我们的指针只是把它缓存下来，运行期仍按本节每 tick 复检。
+
+**不要照抄原版的指针**（2026-11-16 实测）：`_ref_cancer` 的 90 条父记录里，只有 5 条子件高出父件 5 cm 以上，50 条子件**低于**父件（螃蟹举着水枪、螃蟹站在旗杆旁边），中位水平距 19.9 cm ≈ 一个身位。原版 `parentProp` 的意思是「跟着它动 / 一起进账」，不是「压在它上面」；把它直接当 `rests_on` 会让大多数边指错方向。
+
+**回归位（本轮）**：`story_01_bench_size` 的 8 条 `stackedOn` 里，`serving_tray_01`（比 `struct_bench_01` 左 7.5 cm）与 `small_potted_plant_03`（离 `struct_cooler_large_01` 88 cm）水平上完全不压、是悬空的；校验器只查竖直间距所以一直是绿的，推导把它们报成 `orphaned`（**本轮只做 dry-run，没改这两个件**）。`_ref_*` 关卡被导入器**摊平**了（511 / 648 件的底面都在 y=0.000 m），不能当堆叠的回归样本。
+
 #### 还不定的实现问题（要 owner 或实测拍板，按优先级）
 
 1. **浮空测试的精确形式**：脚下「有没有东西」是 AABB 投影**任意重叠**就够，还是要重叠面积 / 轴向宽度阈值（沿用 §5.4 的「20% 较小者」）？参照用**当前**位置还是上一 tick 的位置（坠落中的支撑者下方一帧后就空了）？哪些状态算「有东西」（`FALLING` 肯定不算，`ABSORBED` 当然不算）？
 2. **复检的 tick 频率**：30 Hz（与坠落同频、与 §5.6 一致，13 层链 ≈ 0.43 s 落完）还是 10–15 Hz（省，但链明显变慢、看起来像「一件一件掉」）？
 3. **每 tick 预算**：一次复检多少件（`kPerTick`）、超了怎么排（FIFO / 按高度 / 按下落速度）？一个 30 件的兄弟组被一次吃光时会不会在同一帧全排上。
 4. **坠落件被球碰到算哪种**：按 §6.5 的既有门（过体积门 ⇒ 吃掉；不过 ⇒ 当阻挡）？但 §4 说 `FALLING` 不当阻挡，两者要合成一条——当前默认口径是**坠落中可被吃、但不挡路**，owner 未拍板。
-5. **`placement_core` 与 `PROP_KEYS`**：`parent` 要进白名单 + 校验器（作者写父件索引、工具回读校验），否则今天填了会被静默丢掉（§0.6）；`rests_on` 的 4 上限何时放宽（要动 `PROP_KEYS` 数组宽度）。
+5. **已办（2026-11-16 第四轮）**：`parent` / `parentDerived` 已进 `PROP_KEYS`，校验器码 `parent_missing` / `parent_self` / `parent_cycle` / `parent_seat`（仅 `parentDerived` 的链接查这条容差）/ `parent_conflict` / `parent_derived_orphan`；导入期由 `Tools/levelbuild/supports.py` 推导，编辑器 op `derive_supports`（默认 dry-run）。`rests_on` 的 4 上限按 §10.9 作废（v1 一件只有一个父件）；`PROP_KEYS` 没有数组宽度问题，键是字符串。
 6. **`floating_ok` 与父指针冲突**（挂饰、气球）：声明为悬浮的件永不落；两者同时出现时谁优先，校验器要不要报矛盾。
 
 参考模型 `support_graph.py` 仍然钉着旧设计（§10.7）。按本节写的复检模型要**新写**（组 = 父指针派生、每 tick 浮空复检），不要在 `support_graph.py` 上打补丁。

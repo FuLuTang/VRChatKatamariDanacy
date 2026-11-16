@@ -260,6 +260,26 @@ namespace VRCKatamari.Editor.LevelBuild
             /// and never writes a default back to the JSON.
             /// </summary>
             public float volumeK;
+            /// <summary>
+            /// Optional collider proxy (COLLIDER_PROXY.md). JsonUtility has no polymorphic
+            /// object support and no jagged arrays, so the hull is a FLAT list of 3N numbers
+            /// (`[x0,y0,z0, x1,y1,z1, ...]`), not an array of [x,y,z] points.
+            /// </summary>
+            public ColliderEntry collider;
+        }
+
+        [Serializable]
+        public class ColliderEntry
+        {
+            public string type;
+            public float[] center;
+            public float[] size;
+            public float radius;
+            public float halfHeight;
+            public string axis;
+            public float[] hull;
+            public string source;
+            public float fit_error;
         }
 
         [Serializable]
@@ -572,11 +592,13 @@ namespace VRCKatamari.Editor.LevelBuild
             // pass as the other arrays and reads it back, so there is no second write here.
             Dictionary<string, long> declaredValueUnits = BuildDeclaredValueUnits(doc);
             Dictionary<string, float> declaredVolumeK = BuildDeclaredVolumeK(doc);
+            Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies =
+                BuildDeclaredProxies(doc);
             report.ValueUnitsDeclared = SumDeclaredValueUnits(doc);
             if (propsOk)
             {
                 TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredValueUnits,
-                    declaredVolumeK, report);
+                    declaredVolumeK, declaredProxies, report);
             }
 
             BindArenaHost(doc, levelRoot, structuresRoot, report);
@@ -709,6 +731,18 @@ namespace VRCKatamari.Editor.LevelBuild
                         {
                             report.Error("defs[" + i + "] def '" + def.id + "' volumeK " +
                                          def.volumeK + " " + defKProblem);
+                            ok = false;
+                        }
+                    }
+
+                    if (def.collider != null)
+                    {
+                        PickupFieldAuthoringRules.PickupProxyDefinition proxy;
+                        string proxyError;
+                        if (!TryBuildProxy(def.collider, out proxy, out proxyError))
+                        {
+                            report.Error("defs[" + i + "] def '" + def.id +
+                                         "' [collider]: " + proxyError);
                             ok = false;
                         }
                     }
@@ -1007,6 +1041,171 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             return StaticObbCapacity;
+        }
+
+        /// <summary>
+        /// Converts the flat JSON letter into the shared editor shape and triangulates a
+        /// convex hull. The importer validates every def once, then builds the per-item map
+        /// the sync consumes; an invalid block is an import error, not a silent box fallback.
+        /// </summary>
+        private static bool TryBuildProxy(ColliderEntry entry,
+            out PickupFieldAuthoringRules.PickupProxyDefinition proxy, out string error)
+        {
+            proxy = new PickupFieldAuthoringRules.PickupProxyDefinition();
+            error = null;
+            if (entry == null)
+            {
+                error = "collider block is missing";
+                return false;
+            }
+
+            string type = entry.type == null ? "" : entry.type.Trim().ToLowerInvariant();
+            if (type == "box") proxy.Kind = PickupFieldAuthoringRules.ProxyKindBox;
+            else if (type == "sphere") proxy.Kind = PickupFieldAuthoringRules.ProxyKindSphere;
+            else if (type == "capsule") proxy.Kind = PickupFieldAuthoringRules.ProxyKindCapsule;
+            else if (type == "convex") proxy.Kind = PickupFieldAuthoringRules.ProxyKindConvex;
+            else
+            {
+                error = "collider.type must be box/sphere/capsule/convex (got '" + entry.type + "')";
+                return false;
+            }
+
+            Vector3 center;
+            if (!TryVec3(entry.center, "collider.center", out center, out error)) return false;
+            proxy.Center = center;
+            proxy.Radius = entry.radius;
+            proxy.HalfHeight = entry.halfHeight;
+            proxy.FitError = entry.fit_error;
+
+            if (proxy.Kind == PickupFieldAuthoringRules.ProxyKindBox)
+            {
+                Vector3 size;
+                if (!TryVec3(entry.size, "collider.size", out size, out error)) return false;
+                proxy.Size = size;
+            }
+            else if (proxy.Kind == PickupFieldAuthoringRules.ProxyKindSphere)
+            {
+                // radius is checked by ProxyError.
+            }
+            else if (proxy.Kind == PickupFieldAuthoringRules.ProxyKindCapsule)
+            {
+                string axis = entry.axis == null ? "" : entry.axis.Trim().ToLowerInvariant();
+                if (axis == "x") proxy.Axis = 0;
+                else if (axis == "y") proxy.Axis = 1;
+                else if (axis == "z") proxy.Axis = 2;
+                else
+                {
+                    error = "collider.axis must be x/y/z (got '" + entry.axis + "')";
+                    return false;
+                }
+            }
+            else
+            {
+                if (entry.hull == null || entry.hull.Length < 12 ||
+                    entry.hull.Length > PickupFieldAuthoringRules.MaxProxyHullPoints * 3 ||
+                    entry.hull.Length % 3 != 0)
+                {
+                    error = "collider.hull must be a flat list of 3N numbers (4..24 points)";
+                    return false;
+                }
+                int count = entry.hull.Length / 3;
+                Vector3[] points = new Vector3[count];
+                for (int i = 0; i < count; i++)
+                {
+                    Vector3 point = new Vector3(entry.hull[i * 3], entry.hull[i * 3 + 1],
+                        entry.hull[i * 3 + 2]);
+                    if (!IsFinite(point))
+                    {
+                        error = "collider.hull[" + i + "] must be finite";
+                        return false;
+                    }
+                    points[i] = point;
+                }
+                int[] faces;
+                int faceCount;
+                string faceError;
+                if (!PickupFieldAuthoringRules.TryBuildHullFaces(points, count, out faces,
+                    out faceCount, out faceError))
+                {
+                    error = faceError;
+                    return false;
+                }
+                proxy.Hull = points;
+                proxy.HullCount = count;
+                proxy.Faces = faces;
+                proxy.FaceCount = faceCount;
+            }
+
+            string problem = PickupFieldAuthoringRules.ProxyError(proxy);
+            if (problem != null)
+            {
+                error = problem;
+                return false;
+            }
+            return true;
+        }
+
+        private static bool TryVec3(float[] values, string what, out Vector3 result,
+            out string error)
+        {
+            result = Vector3.zero;
+            error = null;
+            if (values == null || values.Length != 3)
+            {
+                error = what + " must be a list of 3 numbers";
+                return false;
+            }
+            result = new Vector3(values[0], values[1], values[2]);
+            if (!IsFinite(result))
+            {
+                error = what + " must be finite";
+                return false;
+            }
+            return true;
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static PickupFieldAuthoringRules.PickupProxyDefinition DeclaredProxy(
+            PlacementDocument doc, PropEntry prop)
+        {
+            if (doc == null || prop == null || doc.defs == null || prop.def == null)
+                return null;
+            for (int i = 0; i < doc.defs.Length; i++)
+            {
+                DefEntry entry = doc.defs[i];
+                if (entry == null || entry.collider == null) continue;
+                if (!string.Equals(entry.id, prop.def, StringComparison.Ordinal)) continue;
+                PickupFieldAuthoringRules.PickupProxyDefinition proxy;
+                string error;
+                if (TryBuildProxy(entry.collider, out proxy, out error)) return proxy;
+                return null;
+            }
+            return null;
+        }
+
+        private static Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition>
+            BuildDeclaredProxies(PlacementDocument doc)
+        {
+            var declared = new Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition>(
+                StringComparer.Ordinal);
+            if (doc == null || doc.props == null) return declared;
+            for (int i = 0; i < doc.props.Length; i++)
+            {
+                PropEntry prop = doc.props[i];
+                if (prop == null || string.IsNullOrEmpty(prop.itemId)) continue;
+                PickupFieldAuthoringRules.PickupProxyDefinition proxy = DeclaredProxy(doc, prop);
+                if (proxy != null) declared[prop.itemId] = proxy;
+            }
+            return declared;
         }
 
         private static long DeclaredValueUnits(PlacementDocument doc, PropEntry prop)
@@ -2577,6 +2776,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
         private static bool TrySyncPickupField(Transform levelRoot, string arenaId, Transform propsRoot,
             IDictionary<string, long> declaredValueUnits, IDictionary<string, float> declaredVolumeK,
+            IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
             PlacementImportReport report)
         {
             PickupFieldHost[] hosts;
@@ -2643,7 +2843,7 @@ namespace VRCKatamari.Editor.LevelBuild
             // the old "wire what is already there" behaviour.
             bool createMissingColliders = string.IsNullOrEmpty(arenaId);
             PickupFieldSyncReport sync = PickupFieldSync.SyncFromChildren(host, propsRoot,
-                declaredValueUnits, declaredVolumeK, createMissingColliders);
+                declaredValueUnits, declaredVolumeK, declaredProxies, createMissingColliders);
             report.SyncRan = true;
             report.SyncPropCount = sync.PropCount;
             report.SyncRejected = sync.Rejected.Count;
@@ -2651,6 +2851,7 @@ namespace VRCKatamari.Editor.LevelBuild
             report.ValueUnitsPreserved = sync.ValueUnitsPreserved;
             report.ValueUnitsUndeclared = sync.ValueUnitsUndeclared;
             report.ValueUnitsVerified = sync.ValueUnitsVerified;
+            report.ProxyVerified = sync.ProxyVerified;
             report.SyncCollidersCreated = sync.CollidersCreated;
 
             for (int i = 0; i < sync.ValueUnitMismatches.Count && i < 20; i++)

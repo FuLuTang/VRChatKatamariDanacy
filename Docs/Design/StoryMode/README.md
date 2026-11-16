@@ -701,9 +701,9 @@ AABB 取 **3.6 × 0.55 × 0.80 = 1.584 m³**（`Docs/Design/Maps/PicnicLawn/prop
 
 > 状态：`SOURCE_WRITTEN_NOT_COMPILED`；数据侧 `levelbuild check --level hub` **PASS**；Unity 编译/Play Mode/Build & Test 全部 `NOT_RUN`。设计、房间布局、操作员步骤、未验证项见 [HUB_ROOM](<HUB_ROOM.md>)。
 
-- **开始不再只靠“坐上球”**：主房间里走进选关圈 0.35 s 自动开始；读 `GetPosition()`，ClientSim 与真机同一条路径，不需要 VRC_Station，也不选“按 E”（`InputUse` 是全局事件，没有“看着某物体按 E”）。圈有 re-arm 与 dwell，出生点在圈外。
+- **开始不再只靠“坐上球”**：主房间里走进选关圈 0.35 s 自动开始；读 `GetPosition()`，ClientSim 与真机同一条路径，不需要点球/Station 触发器，也不选“按 E”（`InputUse` 是全局事件，没有“看着某物体按 E”）。圈有 re-arm 与 dwell，出生点在圈外；传送到球旁后 `HubLevelLauncher` 直接调 `VRCStation.UseStation` 自动入座（O4 修复）。
 - **结算后自动回房**：`HubLevelLauncher` 在 `Presenting` 先退座、再传送回房；`StoryResultPresenter` 的结果卡搬到房间北墙，就是“上一局结果板”（星/直径/评语），房间侧不打印第二份。
 - **没有第二套状态机**：`StoryRoundController` **未改**，回合/计时/冻结/重试仍归它；新代码只拥有房间相位与提示。输入仍是 `DesktopMoveInput` 的骑乘/回合两把闸门，没有第三把。
 - **单场景方案 b**：房间岛 `(1200,0,0)` + 关卡岛原点，玩家传送，不做整块 `LevelContent` 启用/禁用（导入器单受管根 + `PickupFieldHost` 的 `Start` 捕获会挡住，理由见 HUB_ROOM §7）。
-- 新增 `Runtime/Story/Hub/{HubRoomMath,HubRoomHost}.cs`、`Editor/Story/*` 两个编辑器工具、`Tests/EditMode/Story/HubRoomMathTests.cs`（26 条，`NOT_RUN`）、`Docs/Design/Levels/hub/placement.json`。`Docs/tests` 的 1 条 C14 失败是先前就存在的，与本次文件无关（HUB_ROOM §12 有证据）。
+- 新增 `Runtime/Story/Hub/{HubRoomMath,HubRoomHost}.cs`、`Editor/Story/*` 两个编辑器工具、`Tests/EditMode/Story/HubRoomMathTests.cs`（26 条）与 `Tests/EditMode/Hub/HubLoopMathTests.cs`（30 条），都 `NOT_RUN`；`Docs/Design/Levels/hub/placement.json`。O4 修复另改 `Runtime/Hub/{HubLevelLauncher,HubLoopMath}.cs` 与 `Runtime/Riding/BallRideStation.cs`（自动入座 + seated/grace 纠偏，见 HUB_ROOM §8）。`Docs/tests` 当前 899 条 OK（2026-11-15 的 C14 失败已由另一条线修好）。
 

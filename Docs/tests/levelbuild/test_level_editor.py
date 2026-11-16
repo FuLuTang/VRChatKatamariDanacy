@@ -532,6 +532,71 @@ class RealLevelExportTests(unittest.TestCase):
                          "export -> bytes must equal the committed file")
 
 
+class DeriveSupportsTests(EditorCase):
+    """The reviewable half of support derivation: dry run, then an explicit write.
+
+    The fixture is a level as an import leaves it - the acorn sits on the plate with no
+    pointer, so the gate reports it as floating.  ``derive_supports`` is what turns that
+    into a green level, and the dry run is what a human reviews before that happens.
+    """
+
+    def setUp(self):
+        super().setUp()
+        document = core.load_doc(EXAMPLE)
+        acorn = next(prop for prop in document["props"] if prop["itemId"] == "prop_acorn_000")
+        acorn["position"] = [-1.70, 0.485, -1.10]
+        self.path.write_text(json.dumps(document, indent=1) + "\n", encoding="utf-8")
+        self.opened = self.editor.open(None, self.path)
+        self.assertFalse(self.opened["gate"]["ok"], "the acorn should be floating on open")
+
+    def test_the_dry_run_reports_the_link_and_writes_nothing(self):
+        before = self.path.read_bytes()
+        syncs = len(self.scene.syncs)
+        result = self.ok("derive_supports")
+        self.assertFalse(result["applied"])
+        self.assertEqual([entry["itemId"] for entry in result["new"]], ["prop_acorn_000"])
+        self.assertEqual(result["new"][0]["parent"], "prop_plate_000")
+        self.assertEqual(result["new"][0]["gap"], 0.0)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertNotIn("parent", self.prop("prop_acorn_000"))
+        self.assertEqual(len(self.scene.syncs), syncs, "a dry run must not touch the scene")
+        self.assertFalse(self.ok("status")["gate"]["ok"])
+
+    def test_apply_writes_the_pointer_and_greens_the_gate(self):
+        result = self.ok("derive_supports", apply=True)
+        self.assertTrue(result["applied"])
+        self.assertEqual(result["written"], ["prop_acorn_000"])
+        prop = self.prop("prop_acorn_000")
+        self.assertEqual(prop["parent"], "prop_plate_000")
+        self.assertIs(prop["parentDerived"], True)
+        self.assertEqual(self.path.read_text(encoding="utf-8"),
+                         core.dump_doc(self.editor.doc, self.editor.manifests))
+        status = self.ok("status")
+        self.assertTrue(status["gate"]["ok"])
+        self.assertFalse(status["dirty"])
+        self.assertEqual(status["counts"]["supportsDerived"], 1)
+
+    def test_a_hand_authored_pointer_survives(self):
+        self.ok("derive_supports", apply=True)
+        cookie = self.prop("prop_cookie_000")
+        self.assertEqual(cookie["stackedOn"], "prop_plate_000")
+        self.assertNotIn("parent", cookie)
+
+    def test_a_second_apply_is_nothing_to_do(self):
+        self.ok("derive_supports", apply=True)
+        result = self.ok("derive_supports", apply=True)
+        self.assertEqual(result["written"], [])
+        self.assertFalse(result["changed"])
+        self.assertFalse(self.ok("status")["dirty"])
+
+    def test_scope_limits_which_props_are_linked(self):
+        result = self.ok("derive_supports", ids=["prop_apple_000"])
+        self.assertEqual(result["new"], [])
+
+    def test_unknown_argument_is_refused(self):
+        self.assertIn("unknown argument", self.refused("derive_supports", bogus=1)["error"])
+
+
 class BatchTests(EditorCase):
     def test_batch_applies_every_op_with_one_export_and_one_sync(self):
         before_syncs = len(self.scene.syncs)

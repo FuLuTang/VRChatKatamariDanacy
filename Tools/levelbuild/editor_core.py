@@ -33,12 +33,14 @@ import traceback
 from pathlib import Path
 
 from Tools.levelbuild import placement_core as core
+from Tools.levelbuild import supports as support_geometry
 
 MISSING = object()
 
 #: Fields an op may set on a prop (``aabb``/``absorb*`` follow from ``def``).
 PROP_SETTABLE = ("def", "kind", "zone", "group", "groupId", "position", "rotationQuat", "yaw",
-                 "support", "stackedOn", "valueUnits", "volumeK", "notes")
+                 "support", "stackedOn", "parent", "parentDerived", "valueUnits", "volumeK",
+                 "notes")
 
 #: Fields an op may set on a ``defs[]`` entry.  ``volumeK`` is the original's per-item
 #: volume factor (``Volume = k * a * b * c``, default 0.70); it is authored on the DEF so a
@@ -51,7 +53,7 @@ STRUCTURE_SETTABLE = ("kind", "role", "shape", "center", "size", "rotationQuat",
 
 #: Ops that mutate the document and may therefore appear inside ``batch``.
 MUTATING_OPS = ("add_prop", "add_structure", "set", "set_def", "move", "rotate", "remove",
-                "seat", "add_def", "camera", "preset", "expected")
+                "seat", "derive_supports", "add_def", "camera", "preset", "expected")
 
 
 class OpError(Exception):
@@ -393,6 +395,7 @@ class Editor:
             "rotate": self.op_rotate,
             "remove": self.op_remove,
             "seat": self.op_seat,
+            "derive_supports": self.op_derive_supports,
             "add_def": self.op_add_def,
             "set_def": self.op_set_def,
             "expected": self.op_expected,
@@ -528,6 +531,7 @@ class Editor:
             "presets": len(doc.get("renderPresets") or []),
             "defs": len(doc.get("defs") or []),
             "valueUnits": core.value_units_total(doc),
+            "supportsDerived": support_geometry.count_derived(doc),
         }
 
     def _validate(self, doc):
@@ -759,7 +763,7 @@ class Editor:
     # ops: reading
     # ------------------------------------------------------------------ #
     def op_list(self, args):
-        _known(args, ("zone", "def", "kind", "support", "stackedOn", "text", "near",
+        _known(args, ("zone", "def", "kind", "support", "stackedOn", "parent", "text", "near",
                       "radius", "limit"))
         self._require_open()
         items = _props(self.doc)
@@ -773,6 +777,8 @@ class Editor:
             items = [prop for prop in items if prop.get("support") == args["support"]]
         if "stackedOn" in args:
             items = [prop for prop in items if prop.get("stackedOn") == args["stackedOn"]]
+        if "parent" in args:
+            items = [prop for prop in items if core.prop_parent(prop) == args["parent"]]
         if "text" in args:
             needle = str(args["text"]).lower()
             items = [prop for prop in items
@@ -806,7 +812,9 @@ class Editor:
                        "zone": prop.get("zone"), "kind": prop.get("kind"),
                        "position": prop.get("position"),
                        "support": prop.get("support"),
-                       "stackedOn": prop.get("stackedOn")}
+                       "stackedOn": prop.get("stackedOn"),
+                       "parent": prop.get("parent"),
+                       "parentDerived": prop.get("parentDerived")}
                       for prop in items[:limit]],
         }
 
@@ -858,8 +866,8 @@ class Editor:
     # ------------------------------------------------------------------ #
     def op_add_prop(self, args, defer=False):
         _known(args, ("itemId", "def", "position", "yaw", "rotationQuat", "kind", "zone",
-                      "group", "groupId", "support", "stackedOn", "valueUnits", "notes", "seat",
-                      "updateExpected"))
+                      "group", "groupId", "support", "stackedOn", "parent", "valueUnits",
+                      "notes", "seat", "updateExpected"))
         self._require_open()
         new_doc = _deepcopy(self.doc)
         def_id = _string(args, "def")
@@ -906,6 +914,8 @@ class Editor:
             prop["support"] = _string(args, "support")
         if "stackedOn" in args:
             prop["stackedOn"] = _string(args, "stackedOn")
+        if "parent" in args:
+            prop["parent"] = _string(args, "parent")
         if "notes" in args:
             prop["notes"] = _string(args, "notes")
         value = args.get("valueUnits")
@@ -1014,13 +1024,19 @@ class Editor:
                 prop.pop("groupId", None)
             else:
                 prop["groupId"] = _string(args, "groupId")
-        for key in ("support", "stackedOn"):
+        for key in ("support", "stackedOn", "parent"):
             if key not in args:
                 continue
             if args[key] is None:
                 prop.pop(key, None)
             else:
                 prop[key] = _string(args, key)
+        if "parentDerived" in args:
+            # Only meaningful next to a `parent`; clearing it restores "hand-authored".
+            if args["parentDerived"] is None:
+                prop.pop("parentDerived", None)
+            else:
+                prop["parentDerived"] = _bool(args["parentDerived"], "parentDerived")
         if "valueUnits" in args:
             prop["valueUnits"] = _integer(args, "valueUnits", minimum=1)
         if "volumeK" in args:
@@ -1176,6 +1192,40 @@ class Editor:
         moved = seat_props(new_doc, set(ids) if ids else None)
         return self._mutate(new_doc, "seat %d prop(s)" % len(moved["moved"]),
                             defer=defer, extra=moved)
+
+    def op_derive_supports(self, args, defer=False):
+        """Derive ``parent`` pointers from geometry; dry run by default.
+
+        ``apply=false`` (the default) answers "what would change": the links the geometry
+        finds that the file does not declare yet (``new``), the ones it already agrees
+        with, the declarations it cannot reproduce (``conflict`` / ``orphaned``) and the
+        props that rest on nothing but the ground or a structure (``noSupport``).  It
+        writes nothing.  ``apply=true`` writes only ``new`` links, as ``parent`` +
+        ``parentDerived``; it never rewrites or clears an existing pointer.
+        """
+        _known(args, ("id", "ids", "apply"))
+        self._require_open()
+        ids = args.get("ids")
+        if ids is None and "id" in args:
+            ids = [args["id"]]
+        if ids is not None:
+            if not isinstance(ids, list):
+                raise OpError("ids must be a list")
+            ids = [str(item) for item in ids]
+        scope = set(ids) if ids else None
+        if not _bool(args.get("apply", False), "apply"):
+            diff = support_geometry.propose(self.doc, scope)
+            diff["applied"] = False
+            return diff
+        new_doc = _deepcopy(self.doc)
+        diff = support_geometry.apply_supports(new_doc, scope)
+        diff["applied"] = True
+        if not diff["written"]:
+            # Nothing to write: do not commit, do not export, do not push an undo entry.
+            diff["changed"] = False
+            return diff
+        return self._mutate(new_doc, "derive_supports %d link(s)" % len(diff["written"]),
+                            defer=defer, extra=diff)
 
     def op_add_def(self, args, defer=False):
         _known(args, ("id", "kind", "valueUnits", "model", "volumeK", "notes"))
@@ -1507,6 +1557,7 @@ OP_HELP = {
     "rotate": "rotate: yaw=<deg>, quat=[x,y,z,w], or axis=[..] + degrees",
     "remove": "remove by id (or ids=[...])",
     "seat": "re-seat props on their declared support (id/ids, or all)",
+    "derive_supports": "derive parent pointers from geometry: dry run, or apply=true to write",
     "add_def": "add or update a defs[] entry (valueUnits is required)",
     "expected": "set level.expected (defaults to the document's own totals)",
     "camera": "camera presets: action=set/remove/list",

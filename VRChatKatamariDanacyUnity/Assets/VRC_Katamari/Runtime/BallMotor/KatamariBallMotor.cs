@@ -706,6 +706,12 @@ namespace VRCKatamari.BallMotor
         // this region is measured or play-tested; the values come from ContactTuning.
         [SerializeField] private bool contactModelV2Enabled = false;
 
+        // Collider proxies (Docs/Design/PickupAbsorb/COLLIDER_PROXY.md §6): when true the
+        // prop block is read from the proxy columns instead of the prop OBB columns. FALSE
+        // is the v1/v2-box path and must keep every byte-identical behaviour it had; the
+        // proxy buffers are allocated anyway so a runtime flip finds them.
+        [SerializeField] private bool propProxyContactEnabled = false;
+
         /// <summary>
         /// Slab thickness an AddRamp becomes in v2, metres (design §1.5 default 0.04).
         /// The walking face is the slab's +local-Y face, so the body hangs below the
@@ -749,6 +755,28 @@ namespace VRCKatamari.BallMotor
         private int propObbOverflowCount;
         private int propObbRefusalCount;
         private string propObbRefusalReason;
+        private int propProxyCount;
+        private int propProxyOverflowCount;
+        private int propProxyRefusalCount;
+        private string propProxyRefusalReason;
+
+        // Proxy shape data for the 12-slot prop block. Kind/radius/half-height/axis and the
+        // hull/face start/count are per LOGICAL slot (static prefix + prop block), while the
+        // hull points and faces live in the compact 12-entry arrays indexed by the start.
+        private int[] staticProxyKind;
+        private float[] staticProxyRadius;
+        private float[] staticProxyHalfHeight;
+        private int[] staticProxyAxis;
+        private int[] staticProxyHullStart;
+        private int[] staticProxyHullCount;
+        private int[] staticProxyFaceStart;
+        private int[] staticProxyFaceCount;
+        private Vector3[] propProxyHullPoints;
+        private Vector3[] propProxyFaceNormals;
+        private float[] propProxyFaceOffsets;
+        private int[] propProxyFaceA;
+        private int[] propProxyFaceB;
+        private int[] propProxyFaceC;
 
         // Per-step near set, its scratch buffers and the hysteresis state (design §5.2).
         private Vector3[] nearObbCenter;
@@ -759,6 +787,17 @@ namespace VRCKatamari.BallMotor
         private float[] nearObbBoundingRadius;
         private int[] nearObbSurfaceId;
         private int[] nearObbRole;
+        // Per-near proxy shape columns; box entries keep kind 0 and the zero counts, so the
+        // old OBB path reads exactly the same numbers.
+        private int[] nearObbKind;
+        private float[] nearObbRadius;
+        private float[] nearObbHalfHeight;
+        private int[] nearObbAxis;
+        private int[] nearObbHullStart;
+        private int[] nearObbHullCount;
+        private int[] nearObbFaceStart;
+        private int[] nearObbFaceCount;
+        private int[] nearObbSlot;
         private int nearObbCount;
         private int[] windowScratchIndices;
         private float[] windowScratchDistances;
@@ -1819,7 +1858,39 @@ namespace VRCKatamari.BallMotor
             nearObbBoundingRadius = new float[ContactTuning.MaxNearObbCount];
             nearObbSurfaceId = new int[ContactTuning.MaxNearObbCount];
             nearObbRole = new int[ContactTuning.MaxNearObbCount];
+            nearObbKind = new int[ContactTuning.MaxNearObbCount];
+            nearObbRadius = new float[ContactTuning.MaxNearObbCount];
+            nearObbHalfHeight = new float[ContactTuning.MaxNearObbCount];
+            nearObbAxis = new int[ContactTuning.MaxNearObbCount];
+            nearObbHullStart = new int[ContactTuning.MaxNearObbCount];
+            nearObbHullCount = new int[ContactTuning.MaxNearObbCount];
+            nearObbFaceStart = new int[ContactTuning.MaxNearObbCount];
+            nearObbFaceCount = new int[ContactTuning.MaxNearObbCount];
+            nearObbSlot = new int[ContactTuning.MaxNearObbCount];
             nearObbCount = 0;
+
+            int proxySlots = ContactTuning.MaxStaticObbCount + MaxPropObbCount;
+            staticProxyKind = new int[proxySlots];
+            staticProxyRadius = new float[proxySlots];
+            staticProxyHalfHeight = new float[proxySlots];
+            staticProxyAxis = new int[proxySlots];
+            staticProxyHullStart = new int[proxySlots];
+            staticProxyHullCount = new int[proxySlots];
+            staticProxyFaceStart = new int[proxySlots];
+            staticProxyFaceCount = new int[proxySlots];
+            propProxyHullPoints =
+                new Vector3[MaxPropObbCount * ProxyContactMath.MaxHullPoints];
+            propProxyFaceNormals =
+                new Vector3[MaxPropObbCount * ProxyContactMath.MaxHullFaces];
+            propProxyFaceOffsets =
+                new float[MaxPropObbCount * ProxyContactMath.MaxHullFaces];
+            propProxyFaceA = new int[MaxPropObbCount * ProxyContactMath.MaxHullFaces];
+            propProxyFaceB = new int[MaxPropObbCount * ProxyContactMath.MaxHullFaces];
+            propProxyFaceC = new int[MaxPropObbCount * ProxyContactMath.MaxHullFaces];
+            propProxyCount = 0;
+            propProxyOverflowCount = 0;
+            propProxyRefusalCount = 0;
+            propProxyRefusalReason = "";
             // One scratch slot per entry of the LOGICAL table (static prefix + prop
             // block): TrySelectWindow refuses a table longer than its scratch buffers.
             windowScratchIndices = new int[ContactTuning.MaxStaticObbCount + MaxPropObbCount];
@@ -2005,6 +2076,15 @@ namespace VRCKatamari.BallMotor
             float residual;
             bool airborne;
             Vector3 reportNormal;
+            bool proxyActive = ProxyContactActive();
+            int[] proxyKinds = proxyActive ? nearObbKind : null;
+            float[] proxyRadii = proxyActive ? nearObbRadius : null;
+            float[] proxyHalfHeights = proxyActive ? nearObbHalfHeight : null;
+            int[] proxyAxes = proxyActive ? nearObbAxis : null;
+            int[] proxyHullStarts = proxyActive ? nearObbHullStart : null;
+            int[] proxyHullCounts = proxyActive ? nearObbHullCount : null;
+            int[] proxyFaceStarts = proxyActive ? nearObbFaceStart : null;
+            int[] proxyFaceCounts = proxyActive ? nearObbFaceCount : null;
             bool solved = ContactSolveMath.TryStep(true, groundPlaneNormal, groundPlaneOffset,
                 planeNormals, planeOffsets, planeCount, nearObbCenter, nearObbAxisX,
                 nearObbAxisY, nearObbAxisZ, nearObbHalfExtents, nearObbSurfaceId, nearObbRole,
@@ -2015,7 +2095,11 @@ namespace VRCKatamari.BallMotor
                 contactSurfaceIdsV2, contactRolesV2, contactFeaturesV2, contactClassesV2,
                 ContactTuning.ContactCapacity, out contactCount, out dominantSurfaceId,
                 out dominantClass, out climbHeight, out climbSpeed, out substepCount,
-                out residual, out airborne, out reportNormal);
+                out residual, out airborne, out reportNormal, ContactTuning.KappaSubstep,
+                ContactTuning.MaxSubsteps, 0f, ContactTuning.ContactSkinM, proxyKinds,
+                proxyRadii, proxyHalfHeights, proxyAxes, proxyHullStarts, proxyHullCounts,
+                proxyFaceStarts, proxyFaceCounts, propProxyHullPoints, propProxyFaceNormals,
+                propProxyFaceOffsets, propProxyFaceA, propProxyFaceB, propProxyFaceC);
             if (!solved)
             {
                 // Fail closed (design §2.8): keep the previous position, drop the velocity
@@ -2107,7 +2191,8 @@ namespace VRCKatamari.BallMotor
             // The logical table is the static prefix followed by the prop block, so one
             // selection call sees both kinds and the 24-entry budget is shared: the
             // nearest solids win regardless of which table they came from (design §5.2).
-            int totalObbCount = staticObbCount + propObbCount;
+            bool proxyMode = ProxyContactActive();
+            int totalObbCount = staticObbCount + (proxyMode ? propProxyCount : propObbCount);
             if (totalObbCount <= 0)
             {
                 nearObbCount = 0;
@@ -2122,13 +2207,33 @@ namespace VRCKatamari.BallMotor
             int dropped;
             bool complete;
             bool rebuilt;
-            if (!ContactWindowMath.TrySelectWindow(totalObbCount, staticObbCenter,
-                staticObbAxisX, staticObbAxisY, staticObbAxisZ, staticObbHalfExtents,
-                staticObbBoundingRadius, staticObbSurfaceId, ballCenterWorld, windowRadius,
-                maxTravel, windowPreviousSurfaceIds, windowPreviousCount,
-                ContactTuning.MaxNearObbCount, windowScratchIndices, windowScratchDistances,
-                windowSelectedIndices, out selectedCount, out dropped, out complete,
-                out rebuilt))
+            bool selectedOk;
+            if (proxyMode)
+            {
+                selectedOk = ContactWindowMath.TrySelectProxyWindow(totalObbCount,
+                    staticObbCenter, staticObbAxisX, staticObbAxisY, staticObbAxisZ,
+                    staticObbHalfExtents, staticObbBoundingRadius, staticObbSurfaceId,
+                    staticProxyKind, staticProxyRadius, staticProxyHalfHeight,
+                    staticProxyAxis, staticProxyHullStart, staticProxyHullCount,
+                    staticProxyFaceStart, staticProxyFaceCount, propProxyHullPoints,
+                    propProxyFaceNormals, propProxyFaceOffsets, propProxyFaceA,
+                    propProxyFaceB, propProxyFaceC, ballCenterWorld, windowRadius,
+                    maxTravel, windowPreviousSurfaceIds, windowPreviousCount,
+                    ContactTuning.MaxNearObbCount, windowScratchIndices,
+                    windowScratchDistances, windowSelectedIndices, out selectedCount,
+                    out dropped, out complete, out rebuilt);
+            }
+            else
+            {
+                selectedOk = ContactWindowMath.TrySelectWindow(totalObbCount, staticObbCenter,
+                    staticObbAxisX, staticObbAxisY, staticObbAxisZ, staticObbHalfExtents,
+                    staticObbBoundingRadius, staticObbSurfaceId, ballCenterWorld,
+                    windowRadius, maxTravel, windowPreviousSurfaceIds, windowPreviousCount,
+                    ContactTuning.MaxNearObbCount, windowScratchIndices,
+                    windowScratchDistances, windowSelectedIndices, out selectedCount,
+                    out dropped, out complete, out rebuilt);
+            }
+            if (!selectedOk)
             {
                 // A window that cannot be built is a fail-closed cell: no near set, the
                 // incomplete flag, and the solver then only sees planes and the ground.
@@ -2170,6 +2275,15 @@ namespace VRCKatamari.BallMotor
                 nearObbBoundingRadius[i] = staticObbBoundingRadius[source];
                 nearObbSurfaceId[i] = staticObbSurfaceId[source];
                 nearObbRole[i] = staticObbRole[source];
+                nearObbKind[i] = staticProxyKind[source];
+                nearObbRadius[i] = staticProxyRadius[source];
+                nearObbHalfHeight[i] = staticProxyHalfHeight[source];
+                nearObbAxis[i] = staticProxyAxis[source];
+                nearObbHullStart[i] = staticProxyHullStart[source];
+                nearObbHullCount[i] = staticProxyHullCount[source];
+                nearObbFaceStart[i] = staticProxyFaceStart[source];
+                nearObbFaceCount[i] = staticProxyFaceCount[source];
+                nearObbSlot[i] = source;
                 windowPreviousSurfaceIds[i] = staticObbSurfaceId[source];
             }
             nearObbCount = selectedCount;
@@ -2185,7 +2299,7 @@ namespace VRCKatamari.BallMotor
             Debug.Log("[ContactV2] window overflow cell=" + ballCenterWorld.x + ","
                 + ballCenterWorld.y + "," + ballCenterWorld.z + " dropped="
                 + windowDroppedCount + " near=" + nearObbCount + " static="
-                + (staticObbCount + propObbCount));
+                + (staticObbCount + propObbCount + propProxyCount));
         }
 
         /// <summary>
@@ -2870,6 +2984,15 @@ namespace VRCKatamari.BallMotor
 
             Vector3 before = groundedCenter;
             Vector3 center = groundedCenter;
+            bool proxyActive = ProxyContactActive();
+            int[] proxyKinds = proxyActive ? nearObbKind : null;
+            float[] proxyRadii = proxyActive ? nearObbRadius : null;
+            float[] proxyHalfHeights = proxyActive ? nearObbHalfHeight : null;
+            int[] proxyAxes = proxyActive ? nearObbAxis : null;
+            int[] proxyHullStarts = proxyActive ? nearObbHullStart : null;
+            int[] proxyHullCounts = proxyActive ? nearObbHullCount : null;
+            int[] proxyFaceStarts = proxyActive ? nearObbFaceStart : null;
+            int[] proxyFaceCounts = proxyActive ? nearObbFaceCount : null;
             int count = 0;
             for (int iteration = 0; iteration < 2; iteration++)
             {
@@ -2881,7 +3004,11 @@ namespace VRCKatamari.BallMotor
                     radius, growthContactNormals, growthContactPoints, growthContactDepths,
                     growthContactAngles, growthContactSurfaceIds, growthContactRoles,
                     growthContactFeatures, growthContactClasses,
-                    ContactTuning.ContactCapacity, out collected))
+                    ContactTuning.ContactCapacity, out collected,
+                    ContactTuning.ContactSkinM, proxyKinds, proxyRadii, proxyHalfHeights,
+                    proxyAxes, proxyHullStarts, proxyHullCounts, proxyFaceStarts,
+                    proxyFaceCounts, propProxyHullPoints, propProxyFaceNormals,
+                    propProxyFaceOffsets, propProxyFaceA, propProxyFaceB, propProxyFaceC))
                 {
                     sizeApplyDeferred = true;
                     sizeApplyDeferredCount = sizeApplyDeferredCount + 1;
@@ -2915,7 +3042,11 @@ namespace VRCKatamari.BallMotor
                 growthContactNormals, growthContactPoints, growthContactDepths,
                 growthContactAngles, growthContactSurfaceIds, growthContactRoles,
                 growthContactFeatures, growthContactClasses, ContactTuning.ContactCapacity,
-                out finalCount))
+                out finalCount, ContactTuning.ContactSkinM, proxyKinds, proxyRadii,
+                proxyHalfHeights, proxyAxes, proxyHullStarts, proxyHullCounts,
+                proxyFaceStarts, proxyFaceCounts, propProxyHullPoints,
+                propProxyFaceNormals, propProxyFaceOffsets, propProxyFaceA, propProxyFaceB,
+                propProxyFaceC))
             {
                 sizeApplyDeferred = true;
                 sizeApplyDeferredCount = sizeApplyDeferredCount + 1;
@@ -4667,6 +4798,11 @@ namespace VRCKatamari.BallMotor
                 staticObbRole[slot] = roles[i];
                 staticObbBoundingRadius[slot] = ObbContactMath.BoundingRadius(halfExtents[i]);
             }
+            // The OBB block and the proxy block are mutually exclusive views of the same
+            // 12 slots. Switching back to OBBs must reset the proxy kind/count columns, or a
+            // later proxy-mode window would read a stale convex shape.
+            ResetPropProxySlots();
+            propProxyCount = 0;
             propObbCount = count;
             // The union changed: the hysteresis must forget the previous selection.
             windowPreviousCount = 0;
@@ -4679,6 +4815,274 @@ namespace VRCKatamari.BallMotor
             if (propObbCount == 0) return;
             propObbCount = 0;
             windowPreviousCount = 0;
+        }
+
+        /// <summary>
+        /// Registers this scan's 12 prop proxies (world-space, already baked). The block is a
+        /// whole-block replace like <see cref="SetPropObbs"/>; a box entry is the exact OBB
+        /// the old path would have registered, so a prop without a collider block keeps the
+        /// same shape.
+        /// </summary>
+        /// <remarks>
+        /// Every entry is validated before the first write, and a refused call changes
+        /// nothing. The proxy block and the OBB block are mutually exclusive: this method
+        /// sets <c>propObbCount</c> to 0, so the near window cannot see the same prop twice.
+        /// </remarks>
+        public bool SetPropProxies(
+            int count,
+            int[] kinds,
+            Vector3[] centers,
+            Vector3[] axisX,
+            Vector3[] axisY,
+            Vector3[] axisZ,
+            Vector3[] halfExtents,
+            float[] radii,
+            float[] halfHeights,
+            int[] axes,
+            Vector3[] hullPoints,
+            int[] hullStarts,
+            int[] hullCounts,
+            Vector3[] faceNormals,
+            float[] faceOffsets,
+            int[] faceA,
+            int[] faceB,
+            int[] faceC,
+            int[] faceStarts,
+            int[] faceCounts,
+            int[] surfaceIds,
+            int[] roles)
+        {
+            if (!EnsureContactV2Buffers())
+            {
+                RefusePropProxies("contact v2 buffers could not be allocated");
+                return false;
+            }
+            if (count < 0)
+            {
+                RefusePropProxies("negative count");
+                return false;
+            }
+            if (count > MaxPropObbCount)
+            {
+                propProxyOverflowCount = propProxyOverflowCount + 1;
+                RefusePropProxies("prop proxy capacity 12 exceeded");
+                return false;
+            }
+            if (count == 0)
+            {
+                ClearPropProxies();
+                return true;
+            }
+            if (kinds == null || centers == null || axisX == null || axisY == null ||
+                axisZ == null || halfExtents == null || radii == null ||
+                halfHeights == null || axes == null || hullPoints == null ||
+                hullStarts == null || hullCounts == null || faceNormals == null ||
+                faceOffsets == null || faceA == null || faceB == null || faceC == null ||
+                faceStarts == null || faceCounts == null || surfaceIds == null ||
+                roles == null)
+            {
+                RefusePropProxies("null prop proxy buffer");
+                return false;
+            }
+            if (count > kinds.Length || count > centers.Length || count > axisX.Length ||
+                count > axisY.Length || count > axisZ.Length || count > halfExtents.Length ||
+                count > radii.Length || count > halfHeights.Length || count > axes.Length ||
+                count > hullStarts.Length || count > hullCounts.Length ||
+                count > faceStarts.Length || count > faceCounts.Length ||
+                count > surfaceIds.Length || count > roles.Length)
+            {
+                RefusePropProxies("count exceeds a buffer length");
+                return false;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                if (surfaceIds[i] < 0)
+                {
+                    RefusePropProxies("negative surface id");
+                    return false;
+                }
+                int kind = kinds[i];
+                int hullCount = hullCounts[i];
+                int faceCount = faceCounts[i];
+                if (!ProxyContactMath.IsValidProxy(kind, centers[i], axisX[i], axisY[i],
+                    axisZ[i], halfExtents[i], radii[i], halfHeights[i], axes[i], hullCount,
+                    faceCount))
+                {
+                    RefusePropProxies("invalid proxy shape");
+                    return false;
+                }
+                if (kind == ProxyContactMath.KindConvex)
+                {
+                    if (hullStarts[i] < 0 || hullCounts[i] < 4 ||
+                        hullStarts[i] + hullCounts[i] > hullPoints.Length)
+                    {
+                        RefusePropProxies("convex hull points out of range");
+                        return false;
+                    }
+                    if (faceStarts[i] < 0 || faceCounts[i] < 1 ||
+                        faceStarts[i] + faceCounts[i] > faceNormals.Length ||
+                        faceStarts[i] + faceCounts[i] > faceOffsets.Length ||
+                        faceStarts[i] + faceCounts[i] > faceA.Length ||
+                        faceStarts[i] + faceCounts[i] > faceB.Length ||
+                        faceStarts[i] + faceCounts[i] > faceC.Length)
+                    {
+                        RefusePropProxies("convex face arrays out of range");
+                        return false;
+                    }
+                    for (int face = 0; face < faceCount; face++)
+                    {
+                        int at = faceStarts[i] + face;
+                        if (faceA[at] < 0 || faceB[at] < 0 || faceC[at] < 0 ||
+                            faceA[at] >= hullCount || faceB[at] >= hullCount ||
+                            faceC[at] >= hullCount)
+                        {
+                            RefusePropProxies("convex face index out of range");
+                            return false;
+                        }
+                        if (!KatamariMath.IsFiniteVector(faceNormals[at]) ||
+                            !KatamariMath.IsFiniteFloat(faceOffsets[at]))
+                        {
+                            RefusePropProxies("non-finite convex face plane");
+                            return false;
+                        }
+                    }
+                }
+                else if (hullCount != 0 || faceCount != 0)
+                {
+                    RefusePropProxies("non-convex proxy carries hull/face counts");
+                    return false;
+                }
+            }
+
+            int baseIndex = staticObbCount;
+            for (int i = 0; i < count; i++)
+            {
+                int slot = baseIndex + i;
+                int kind = kinds[i];
+                int hullStart = kind == ProxyContactMath.KindConvex ? i * ProxyContactMath.MaxHullPoints : 0;
+                int faceStart = kind == ProxyContactMath.KindConvex ? i * ProxyContactMath.MaxHullFaces : 0;
+                int hullCount = kind == ProxyContactMath.KindConvex ? hullCounts[i] : 0;
+                int faceCount = kind == ProxyContactMath.KindConvex ? faceCounts[i] : 0;
+
+                staticObbCenter[slot] = centers[i];
+                staticObbAxisX[slot] = axisX[i];
+                staticObbAxisY[slot] = axisY[i];
+                staticObbAxisZ[slot] = axisZ[i];
+                staticObbHalfExtents[slot] = halfExtents[i];
+                staticObbSurfaceId[slot] = surfaceIds[i];
+                staticObbRole[slot] = roles[i];
+                staticObbBoundingRadius[slot] = ProxyContactMath.BoundingRadius(kind,
+                    halfExtents[i], radii[i], halfHeights[i], hullPoints, hullStarts[i],
+                    hullCount, centers[i]);
+
+                staticProxyKind[slot] = kind;
+                staticProxyRadius[slot] = radii[i];
+                staticProxyHalfHeight[slot] = halfHeights[i];
+                staticProxyAxis[slot] = axes[i];
+                staticProxyHullStart[slot] = hullStart;
+                staticProxyHullCount[slot] = hullCount;
+                staticProxyFaceStart[slot] = faceStart;
+                staticProxyFaceCount[slot] = faceCount;
+
+                for (int point = 0; point < hullCount; point++)
+                {
+                    propProxyHullPoints[hullStart + point] =
+                        hullPoints[hullStarts[i] + point];
+                }
+                for (int face = 0; face < faceCount; face++)
+                {
+                    int at = faceStarts[i] + face;
+                    propProxyFaceNormals[faceStart + face] = faceNormals[at];
+                    propProxyFaceOffsets[faceStart + face] = faceOffsets[at];
+                    propProxyFaceA[faceStart + face] = faceA[at];
+                    propProxyFaceB[faceStart + face] = faceB[at];
+                    propProxyFaceC[faceStart + face] = faceC[at];
+                }
+            }
+
+            propProxyCount = count;
+            propObbCount = 0;
+            windowPreviousCount = 0;
+            return true;
+        }
+
+        /// <summary>Empties the prop proxy block (the static table stays).</summary>
+        public void ClearPropProxies()
+        {
+            ResetPropProxySlots();
+            if (propProxyCount == 0) return;
+            propProxyCount = 0;
+            windowPreviousCount = 0;
+        }
+
+        private void ResetPropProxySlots()
+        {
+            if (staticProxyKind == null) return;
+            for (int i = 0; i < MaxPropObbCount; i++)
+            {
+                int slot = staticObbCount + i;
+                if (slot < 0 || slot >= staticProxyKind.Length) continue;
+                staticProxyKind[slot] = ProxyContactMath.KindBox;
+                staticProxyRadius[slot] = 0f;
+                staticProxyHalfHeight[slot] = 0f;
+                staticProxyAxis[slot] = ProxyContactMath.AxisX;
+                staticProxyHullStart[slot] = 0;
+                staticProxyHullCount[slot] = 0;
+                staticProxyFaceStart[slot] = 0;
+                staticProxyFaceCount[slot] = 0;
+            }
+        }
+
+        /// <summary>Prop proxies currently registered (0..12).</summary>
+        public int GetPropProxiesCount()
+        {
+            return propProxyCount;
+        }
+
+        /// <summary>Prop proxy capacity (12).</summary>
+        public int GetPropProxiesCapacity()
+        {
+            return MaxPropObbCount;
+        }
+
+        /// <summary>Proxy block overflow refusals (monotonic).</summary>
+        public int GetPropProxyOverflowCount()
+        {
+            return propProxyOverflowCount;
+        }
+
+        /// <summary>The last proxy refusal as a literal, or "".</summary>
+        public string GetPropProxyRefusalReason()
+        {
+            if (propProxyRefusalReason == null) return "";
+            return propProxyRefusalReason;
+        }
+
+        private void RefusePropProxies(string reason)
+        {
+            propProxyRefusalCount = propProxyRefusalCount + 1;
+            propProxyRefusalReason = reason;
+            Debug.LogWarning("[ContactV2] prop proxy refused: " + reason);
+        }
+
+        /// <summary>True when the proxy prop block is the contact authority.</summary>
+        public bool IsPropProxyContactEnabled()
+        {
+            return propProxyContactEnabled;
+        }
+
+        /// <summary>Runtime flag flip for a lab / EditMode test (serialized default false).</summary>
+        public void SetPropProxyContactEnabled(bool enabled)
+        {
+            if (propProxyContactEnabled == enabled) return;
+            propProxyContactEnabled = enabled;
+            windowPreviousCount = 0;
+        }
+
+        private bool ProxyContactActive()
+        {
+            return propProxyContactEnabled && propProxyCount > 0;
         }
 
         /// <summary>Prop OBBs currently registered (0..12).</summary>

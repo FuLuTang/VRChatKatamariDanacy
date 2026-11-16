@@ -105,6 +105,15 @@ SINK_TOLERANCE_M = 0.01
 FLOAT_TOLERANCE_M = 0.02
 #: Stacked props: the upper one's bottom against the lower one's top.
 STACK_TOLERANCE_M = 0.01
+#: A *derived* support link (``parent`` + ``parentDerived``) is allowed to be embedded in
+#: its supporter, or to hover above it, by a fraction of the smaller of the two heights:
+#: ``bottom_child - top_parent`` in ``[-0.30, +0.50] * min(height_child, height_parent)``.
+#: Calibrated on 1,259 parent links of the retail dump (median gap -0.03 m, 82% within
+#: +-0.25 of a min height); evidence ``Docs/Research/KatamariBallRules/STACKS_IN_ORIGINAL.md``
+#: sections 2.1/2.2.  ``stackedOn`` keeps the tighter, absolute ``STACK_TOLERANCE_M``: it is
+#: a hand-authored seating claim, not a machine guess.
+PARENT_EMBED_FRACTION = 0.30
+PARENT_GAP_FRACTION = 0.50
 #: A prop penetrating a solid structure deeper than this is an error.
 STRUCTURE_PENETRATION_M = 0.02
 #: Two props whose AABBs overlap by more than this fraction of the smaller
@@ -169,8 +178,8 @@ PROP_CATALOG = ROOT / "Docs/Design/Maps/PicnicLawn/prop_catalog.csv"
 LEVELS_DIR = ROOT / "Docs/Design/Levels"
 
 PROP_KEYS = ("itemId", "def", "kind", "zone", "group", "groupId", "position", "rotationQuat",
-             "support", "stackedOn", "aabb", "absorbDiameterReq", "absorbable",
-             "valueUnits", "volumeK", "notes")
+             "support", "stackedOn", "parent", "parentDerived", "aabb", "absorbDiameterReq",
+             "absorbable", "valueUnits", "volumeK", "notes")
 STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
                   "collision", "absorbable", "support", "meets", "material", "notes")
 CAMERA_KEYS = ("id", "type", "location", "target", "lens", "coverage_m")
@@ -1281,6 +1290,40 @@ def effective_value_units(prop, catalog):
     return None
 
 
+#: The one place "what is this prop's parent" is answered, so the runtime field and the
+#: older authoring spelling can never disagree in a consumer that uses this helper.
+def prop_parent(prop):
+    """ItemId of the prop this one is carried by, or ``None``.
+
+    ``parent`` is the field the runtime reads (fall propagation: eat the parent and the
+    children come down with it).  ``stackedOn`` predates it and means the same relation
+    for the only case it was ever used for ("this prop sits on that prop's top"), so it is
+    read as the same pointer when ``parent`` is absent.  A document that carries both must
+    have them agree (``_check_parents``), and ``derive_supports`` never proposes a link
+    where ``stackedOn`` already says the same thing.
+    """
+    if not isinstance(prop, dict):
+        return None
+    parent = prop.get("parent")
+    if isinstance(parent, str) and parent:
+        return parent
+    stack = prop.get("stackedOn")
+    if isinstance(stack, str) and stack:
+        return stack
+    return None
+
+
+def parent_gap_window(child_box, parent_box):
+    """Allowed ``bottom(child) - top(parent)`` of a *derived* support link.
+
+    One implementation for the validator, the derivation and the report: the window
+    scales with the smaller of the two **world** heights, so a 3 cm eraser is not allowed
+    the slack of a 2 m crate.  Returns ``(low, high)`` in metres.
+    """
+    smallest = min(child_box[1][1] - child_box[0][1], parent_box[1][1] - parent_box[0][1])
+    return (-PARENT_EMBED_FRACTION * smallest, PARENT_GAP_FRACTION * smallest)
+
+
 # --------------------------------------------------------------------------- #
 # validation
 # --------------------------------------------------------------------------- #
@@ -2056,7 +2099,7 @@ def _support_surface(doc, prop, structures_by_id, report):
     or ``(None, None)`` when the declaration points at something that does not
     exist (already reported).
     """
-    stack = prop.get("stackedOn")
+    stack = prop_parent(prop)
     if stack:
         return ("stack", stack)
     support = prop.get("support")
@@ -2097,12 +2140,27 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
         if kind == "stack":
             other = by_id.get(payload)
             if other is None or other.get("itemId") not in boxes:
-                report.err("%s.stackedOn %r is not a prop itemId" % (item_id, payload))
+                report.err("%s.%s %r is not a prop itemId"
+                           % (item_id, "stackedOn" if prop.get("stackedOn") else "parent",
+                              payload))
                 continue
             expected = boxes[payload][1][1]
-            if abs(bottom - expected) > STACK_TOLERANCE_M:
-                report.err("%s sits %.3f m off the top of %r (its bottom %.3f, that top %.3f)"
-                           % (item_id, bottom - expected, payload, bottom, expected))
+            gap = bottom - expected
+            if prop.get("stackedOn") == payload:
+                # A hand-authored seating claim: tight, absolute.
+                if abs(gap) > STACK_TOLERANCE_M:
+                    report.err("%s sits %.3f m off the top of %r (its bottom %.3f, that top "
+                               "%.3f)" % (item_id, gap, payload, bottom, expected))
+            elif prop.get("parentDerived"):
+                # A machine-derived link: the calibrated contact window (same numbers as
+                # `_check_parents`, one shared function).
+                low, high = parent_gap_window(box, boxes[payload])
+                if gap < low or gap > high:
+                    report.err("%s [parent_seat]: bottom is %+.3f m from the top of parent %r "
+                               "(a derived link must stay within %+.3f .. %+.3f m)"
+                               % (item_id, gap, payload, low, high))
+            # A hand-authored attachment (`parent` without `parentDerived`) is not a
+            # seating claim: a flag on a mast is legitimately off the top, so no check.
             continue
 
         if kind == "floor":
@@ -2154,7 +2212,7 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
                 continue
             left = by_id.get(left_id) or {}
             right = by_id.get(right_id) or {}
-            if left.get("stackedOn") == right_id or right.get("stackedOn") == left_id:
+            if prop_parent(left) == right_id or prop_parent(right) == left_id:
                 continue
             group = left.get("groupId")
             if isinstance(group, str) and group and group == right.get("groupId"):
@@ -2212,6 +2270,92 @@ def _check_support_and_overlap(doc, report, boxes, structures_by_id):
                 printed += 1
     if printed > DETAIL_LIMIT:
         report.err("... %d more prop/structure penetration(s)" % (printed - DETAIL_LIMIT))
+
+
+def _check_parents(doc, report, boxes):
+    """``parent`` / ``parentDerived``: existence, self, cycles and the seat window.
+
+    ``parent`` is the *runtime* pointer (eat the parent and the children come down with
+    it), not a seating claim like ``stackedOn``.  A **derived** link must sit inside the
+    calibrated contact window, because derivation looked at geometry and nothing else; an
+    authored link may be a rigid attachment (a flag on a mast, a fish in a school) and is
+    not held to it.
+    """
+    props = [prop for prop in doc.get("props") or [] if isinstance(prop, dict)]
+    by_id = {}
+    for prop in props:
+        item_id = prop.get("itemId")
+        if isinstance(item_id, str) and item_id:
+            by_id.setdefault(item_id, prop)
+
+    links = {}
+    for prop in props:
+        item_id = prop.get("itemId")
+        if not isinstance(item_id, str) or not item_id:
+            continue
+        parent = prop.get("parent")
+        derived = prop.get("parentDerived")
+        if derived is not None and not isinstance(derived, bool):
+            report.err("%s.parentDerived must be true or false (got %r)" % (item_id, derived))
+        if parent is None:
+            if derived:
+                report.err("%s [parent_derived_orphan]: parentDerived is true but the prop has "
+                           "no parent" % item_id)
+            continue
+        if not isinstance(parent, str) or not parent.strip():
+            report.err("%s [parent_missing]: parent must be a prop itemId (got %r)"
+                       % (item_id, parent))
+            continue
+        if parent == item_id:
+            report.err("%s [parent_self]: a prop cannot be its own parent" % item_id)
+            continue
+        if parent not in by_id:
+            report.err("%s [parent_missing]: parent %r is not a prop itemId" % (item_id, parent))
+            continue
+        stack = prop.get("stackedOn")
+        if isinstance(stack, str) and stack and stack != parent:
+            report.err("%s [parent_conflict]: parent %r and stackedOn %r name different props"
+                       % (item_id, parent, stack))
+            continue
+        links[item_id] = parent
+
+    # A cycle is a ring in the parent chain; report each ring once, at its smallest id.
+    reported = set()
+    for item_id in sorted(links):
+        chain, seen = [item_id], {item_id}
+        while True:
+            nxt = links.get(chain[-1])
+            if nxt is None:
+                break
+            if nxt in seen:
+                ring = chain[chain.index(nxt):]
+                smallest = min(ring)
+                if smallest not in reported:
+                    reported.add(smallest)
+                    report.err("%s [parent_cycle]: the parent chain loops (%s)"
+                               % (smallest, " -> ".join(ring + [nxt])))
+                break
+            chain.append(nxt)
+            seen.add(nxt)
+
+    for item_id in sorted(links):
+        prop = by_id.get(item_id) or {}
+        if not prop.get("parentDerived"):
+            continue
+        child_box, parent_box = boxes.get(item_id), boxes.get(links[item_id])
+        if child_box is None or parent_box is None:
+            continue
+        gap = child_box[0][1] - parent_box[1][1]
+        low, high = parent_gap_window(child_box, parent_box)
+        if low == 0.0 and high == 0.0:
+            continue
+        smallest = min(child_box[1][1] - child_box[0][1], parent_box[1][1] - parent_box[0][1])
+        if gap < low or gap > high:
+            report.err("%s [parent_seat]: bottom is %+.3f m from the top of parent %r "
+                       "(a derived link must stay within %+.3f .. %+.3f m, i.e. %.0f%%/%.0f%% "
+                       "of the smaller height %.3f m)"
+                       % (item_id, gap, links[item_id], low, high,
+                          PARENT_EMBED_FRACTION * 100.0, PARENT_GAP_FRACTION * 100.0, smallest))
 
 
 def _check_expected(doc, report):
@@ -2320,6 +2464,7 @@ def validate(doc, path=None, manifests=None):
     _check_arena(doc, report, structures_by_id, path)
     _check_bounds_and_spawn(doc, report, boxes)
     _check_support_and_overlap(doc, report, boxes, structures_by_id)
+    _check_parents(doc, report, boxes)
     _check_expected(doc, report)
     _check_determinism(path, doc, report)
     report.tables.update(population_tables(doc, manifests))

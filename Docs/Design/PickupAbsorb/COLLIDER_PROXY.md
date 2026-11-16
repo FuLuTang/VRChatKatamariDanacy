@@ -3,7 +3,8 @@
 > **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 
 
-> 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15。
+> 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15（2026-11-16 增补运行期实现）。
+> 运行期落点、序列化字段与场景 diff 见 [COLLIDER_PROXY_RUNTIME.md](COLLIDER_PROXY_RUNTIME.md)；C# 编译/EditMode/PlayMode **仍未验证**。
 > 写入范围：本文件新建；`Tools/levelbuild/collider_proxy.py`（新）、`Tools/levelbuild/placement_core.py`（只加可选字段）、`Tools/levelbuild/blender/fit_collider_proxy.py`（新）、`Docs/tests/levelbuild/test_collider_proxy.py`（新）、[collider_proxy_report.md](collider_proxy_report.md) 与 [collider_proxy.csv](collider_proxy.csv)。
 > **没有**改 `PlacementImporter.cs`、`PickupFieldSync.cs`、`Runtime/**`、`Tools/leveleditor/**`、任何场景/预制体，也没有开 Unity。运行期契约在第 6 节，只有签名和成本估计，不声称已编译或已实测。
 
@@ -38,7 +39,7 @@
 // box:     {"type": "box", "center": [0,0,0], "size": [1.2, 0.45, 0.4]}
 // sphere:  {"type": "sphere", "center": [0,0,0], "radius": 0.074}
 // convex:  {"type": "convex", "center": [0,0,0],
-//           "hull": [[-0.12,0.0125,0.0], ... 4..24 点 ...]}
+//           "hull": [-0.12,0.0125,0.0, ... 4..24 点，扁平 3N 数字 ...]}
 ```
 
 ### 2.1 字段与语义
@@ -51,7 +52,7 @@
 | `radius` | number | sphere/capsule | 米，> 0 |
 | `halfHeight` | number | capsule | 轴段半长，≥ 0；0 等价于球 |
 | `axis` | `"x"`/`"y"`/`"z"` | capsule | 轴段方向（道具局部轴） |
-| `hull` | 4..24 × 3×number | convex | **相对 `center` 的局部偏移**；世界点 = `propPos + propRot * (center + hull[i])` |
+| `hull` | 4..24 × 3×number | convex | **扁平数组** `[x0,y0,z0, x1,y1,z1, ...]`（JsonUtility 不支持数组的数组）；**相对 `center` 的局部偏移**；世界点 = `propPos + propRot * (center + hull[i])`。Python 校验器也接受可读的 `[[x,y,z], ...]` 并规范化成扁平 |
 | `source` | `"auto"`/`"manual"` | 否 | 拟合来源；缺省按 `auto` 处理 |
 | `fit_error` | number [0,1] | 否 | 拟合误差；`manual` 可不填 |
 
@@ -189,10 +190,11 @@ namespace VRCKatamari.BallContact
             Vector3 propPosition, Quaternion propRotation,
             Vector3 localCenter, Vector3 localSize,
             float localRadius, float localHalfHeight, int localAxis,
-            Vector3[] localHull, int localHullCount,
-            Vector3[] hullWorld, int hullCapacity,
+            Vector3[] localHull, int localHullStart, int localHullCount,
+            int[] localFaces, int localFaceStart, int localFaceCount,
+            Vector3[] hullWorld, int hullWorldStart, int hullCapacity,
             Vector3[] faceNormals, float[] faceOffsets,
-            int[] faceA, int[] faceB, int[] faceC, int faceCapacity,
+            int[] faceA, int[] faceB, int[] faceC, int faceOutputStart, int faceCapacity,
             out Vector3 worldCenter, out Vector3 axisX, out Vector3 axisY,
             out Vector3 axisZ, out Vector3 halfExtents,
             out float radius, out float halfHeight, out int axis,
@@ -224,9 +226,9 @@ namespace VRCKatamari.BallContact
             int kind,
             Vector3 center, Vector3 axisX, Vector3 axisY, Vector3 axisZ,
             Vector3 halfExtents, float radius, float halfHeight, int axis,
-            Vector3[] hullWorld, int hullCount,
+            Vector3[] hullWorld, int hullStart, int hullCount,
             Vector3[] faceNormals, float[] faceOffsets,
-            int[] faceA, int[] faceB, int[] faceC, int faceCount,
+            int[] faceA, int[] faceB, int[] faceC, int faceStart, int faceCount,
             Vector3 point,
             out Vector3 closestPoint, out float distance, out Vector3 normal,
             out int feature)
@@ -254,9 +256,9 @@ namespace VRCKatamari.BallContact
             int kind,
             Vector3 center, Vector3 axisX, Vector3 axisY, Vector3 axisZ,
             Vector3 halfExtents, float radius, float halfHeight, int axis,
-            Vector3[] hullWorld, int hullCount,
+            Vector3[] hullWorld, int hullStart, int hullCount,
             Vector3[] faceNormals, float[] faceOffsets,
-            int[] faceA, int[] faceB, int[] faceC, int faceCount,
+            int[] faceA, int[] faceB, int[] faceC, int faceStart, int faceCount,
             Vector3 sphereCenter, float sphereRadius,
             out Vector3 normal, out Vector3 point, out float depth, out int feature,
             out float angleDeg, out int contactClass,

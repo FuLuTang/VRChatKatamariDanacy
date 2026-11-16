@@ -593,7 +593,7 @@ class Fit:
             out["halfHeight"] = _round(self.half_height)
             out["axis"] = self.axis
         elif self.kind == "convex":
-            out["hull"] = [[_round(c) for c in point] for point in self.hull]
+            out["hull"] = [_round(c) for point in self.hull for c in point]
         out["source"] = source
         out["fit_error"] = _round(self.fit_error)
         return {"collider": out}
@@ -1194,6 +1194,33 @@ def _as_vector3(value):
     return numbers
 
 
+def hull_points(block):
+    """The hull as a list of ``(x, y, z)`` tuples, or ``None`` when malformed.
+
+    The on-disk encoding is **flat** (``[x0,y0,z0, x1,y1,z1, ...]``) because
+    ``JsonUtility`` cannot deserialize an array of arrays.  The nested
+    ``[[x,y,z], ...]`` form is accepted on input (the report/fitter used it first)
+    and canonicalised to flat, so old hand-edited files keep loading.
+    """
+    value = block.get("hull") if isinstance(block, dict) else None
+    if not isinstance(value, list) or not value:
+        return None
+    if all(isinstance(item, (list, tuple)) for item in value):
+        points = []
+        for item in value:
+            if len(item) != 3:
+                return None
+            points.append(tuple(float(c) for c in item))
+        return points
+    if all(isinstance(item, (int, float)) and not isinstance(item, bool)
+           for item in value):
+        if len(value) % 3 != 0:
+            return None
+        return [tuple(float(value[i + j]) for j in range(3))
+                for i in range(0, len(value), 3)]
+    return None
+
+
 def collider_schema_errors(block):
     """Every schema problem in one ``collider`` block, as human-readable strings."""
     errors = []
@@ -1251,22 +1278,17 @@ def collider_schema_errors(block):
         if block.get("axis") not in CAPSULE_AXES:
             errors.append("collider.axis must be x/y/z (capsule)")
     elif kind == "convex":
-        hull = block.get("hull")
-        if not isinstance(hull, list):
-            errors.append("collider.hull must be a list of points (convex)")
-        elif not (HULL_MIN_POINTS <= len(hull) <= HULL_MAX_POINTS):
+        points = hull_points(block)
+        if points is None:
+            errors.append("collider.hull must be a flat list of 3N finite numbers "
+                          "(or an array of [x,y,z] points)")
+        elif not (HULL_MIN_POINTS <= len(points) <= HULL_MAX_POINTS):
             errors.append("collider.hull needs %d..%d points, got %d"
-                          % (HULL_MIN_POINTS, HULL_MAX_POINTS, len(hull)))
+                          % (HULL_MIN_POINTS, HULL_MAX_POINTS, len(points)))
+        elif any(not all(math.isfinite(c) for c in point) for point in points):
+            errors.append("collider.hull has a non-finite coordinate")
         else:
-            points = []
-            for index, point in enumerate(hull):
-                vector = _as_vector3(point)
-                if vector is None:
-                    errors.append("collider.hull[%d] must be 3 finite numbers" % index)
-                else:
-                    points.append(vector)
-            if len(points) == len(hull):
-                errors.extend(_convexity_errors(points))
+            errors.extend(_convexity_errors([list(point) for point in points]))
     return errors
 
 
@@ -1322,12 +1344,9 @@ def collider_bounds(block):
         return ([center[i] - half[i] for i in range(3)],
                 [center[i] + half[i] for i in range(3)])
     if kind == "convex":
-        hull = block.get("hull")
         center = _as_vector3(block.get("center"))
-        if not isinstance(hull, list) or not hull or center is None:
-            return None
-        points = [_as_vector3(point) for point in hull]
-        if any(point is None for point in points):
+        points = hull_points(block)
+        if points is None or center is None:
             return None
         low, high = _aabb(points)
         return ([low[i] + center[i] for i in range(3)],
@@ -1347,7 +1366,11 @@ def canonical_collider(block):
         elif key in ("radius", "halfHeight", "fit_error"):
             value = _round(value)
         elif key == "hull":
-            value = [[_round(c) for c in point] for point in value]
+            points = hull_points(block)
+            if points is None:
+                value = []
+            else:
+                value = [_round(c) for point in points for c in point]
         out[key] = value
     return out
 

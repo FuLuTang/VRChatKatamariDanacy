@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using UnityEngine;
 
 namespace VRCKatamari.Editor.Pickup
 {
@@ -714,5 +715,286 @@ namespace VRCKatamari.Editor.Pickup
         {
             return !float.IsNaN(value) && !float.IsInfinity(value) && value >= 0f;
         }
+
+
+        // ------------------------------------------------------------------ collider proxies ---
+
+        /// <summary>
+        /// One def's collider block, detached from the placement DTO so the importer, the
+        /// sync and the tests share one shape. All numbers are in the prop's local space;
+        /// <see cref="Hull"/> is relative to <see cref="Center"/>.
+        /// </summary>
+        public sealed class PickupProxyDefinition
+        {
+            public int Kind;                 // 0 box, 1 sphere, 2 capsule, 3 convex
+            public Vector3 Center;
+            public Vector3 Size;             // box: full edge lengths
+            public float Radius;             // sphere / capsule
+            public float HalfHeight;         // capsule
+            public int Axis;                 // capsule: 0 x, 1 y, 2 z
+            public Vector3[] Hull;           // convex: <= 24 points, relative to Center
+            public int HullCount;
+            public int[] Faces;              // convex: 3 hull indices per face
+            public int FaceCount;
+            public float FitError;
+
+            public bool IsConvex()
+            {
+                return Kind == ProxyKindConvex;
+            }
+        }
+
+        public const int ProxyKindBox = 0;
+        public const int ProxyKindSphere = 1;
+        public const int ProxyKindCapsule = 2;
+        public const int ProxyKindConvex = 3;
+        public const int MaxProxyHullPoints = 24;
+        public const int MaxProxyHullFaces = 44;
+
+        /// <summary>
+        /// The one range/shape check for a collider block. Returns null when the block is
+        /// usable, else a human-readable reason. The runtime twin is
+        /// <c>ProxyContactMath.IsValidProxy</c>; this side adds the hull/face contents that
+        /// only an editor can build.
+        /// </summary>
+        public static string ProxyError(PickupProxyDefinition proxy)
+        {
+            if (proxy == null) return "collider block is missing";
+            if (proxy.Kind < ProxyKindBox || proxy.Kind > ProxyKindConvex)
+                return "collider.type must be box/sphere/capsule/convex (got " + proxy.Kind + ")";
+            if (!IsFinite(proxy.Center)) return "collider.center must be finite";
+            if (!IsFinite(proxy.FitError) || proxy.FitError < 0f || proxy.FitError > 1f)
+                return "collider.fit_error must be in [0, 1]";
+            if (proxy.Kind == ProxyKindBox)
+            {
+                if (!IsFinite(proxy.Size)) return "collider.size must be finite";
+                if (proxy.Size.x <= 0f || proxy.Size.y <= 0f || proxy.Size.z <= 0f)
+                    return "collider.size must be positive on every axis";
+                return null;
+            }
+            if (!IsFinite(proxy.Radius) || proxy.Radius <= 0f)
+                return "collider.radius must be a positive finite number";
+            if (proxy.Kind == ProxyKindSphere) return null;
+            if (proxy.Kind == ProxyKindCapsule)
+            {
+                if (!IsFinite(proxy.HalfHeight) || proxy.HalfHeight < 0f)
+                    return "collider.halfHeight must be finite and >= 0";
+                if (proxy.Axis < 0 || proxy.Axis > 2)
+                    return "collider.axis must be x/y/z";
+                return null;
+            }
+
+            if (proxy.Hull == null) return "collider.hull is missing";
+            if (proxy.HullCount < 4 || proxy.HullCount > MaxProxyHullPoints)
+                return "collider.hull needs 4..24 points (got " + proxy.HullCount + ")";
+            if (proxy.HullCount > proxy.Hull.Length)
+                return "collider.hull count exceeds the point array";
+            for (int i = 0; i < proxy.HullCount; i++)
+            {
+                if (!IsFinite(proxy.Hull[i]))
+                    return "collider.hull[" + i + "] must be finite";
+            }
+            if (proxy.Faces == null) return "collider faces are missing";
+            if (proxy.FaceCount < 4 || proxy.FaceCount > MaxProxyHullFaces)
+                return "collider hull needs 4..44 faces (got " + proxy.FaceCount + ")";
+            if (proxy.FaceCount * 3 > proxy.Faces.Length)
+                return "collider face count exceeds the index array";
+            for (int i = 0; i < proxy.FaceCount; i++)
+            {
+                int a = proxy.Faces[i * 3];
+                int b = proxy.Faces[i * 3 + 1];
+                int c = proxy.Faces[i * 3 + 2];
+                if (a < 0 || b < 0 || c < 0 || a >= proxy.HullCount ||
+                    b >= proxy.HullCount || c >= proxy.HullCount)
+                    return "collider face " + i + " has an out-of-range hull index";
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Triangulates a convex point set for the runtime's face-plane query. A 24-point
+        /// hull has at most 44 triangular faces; this is a small brute-force hull (2024
+        /// triples x 24 points at worst) run once per def by the importer/sync, never at
+        /// runtime. Returns false with a reason for a degenerate or non-convex set.
+        /// </summary>
+        public static bool TryBuildHullFaces(Vector3[] points, int count,
+            out int[] faces, out int faceCount, out string error)
+        {
+            faces = new int[MaxProxyHullFaces * 3];
+            faceCount = 0;
+            error = null;
+            if (points == null || count < 4 || count > MaxProxyHullPoints)
+            {
+                error = "a convex hull needs 4..24 points";
+                return false;
+            }
+            float extent = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                if (!IsFinite(points[i]))
+                {
+                    error = "hull point " + i + " is not finite";
+                    return false;
+                }
+                extent = Mathf.Max(extent, Mathf.Abs(points[i].x));
+                extent = Mathf.Max(extent, Mathf.Abs(points[i].y));
+                extent = Mathf.Max(extent, Mathf.Abs(points[i].z));
+            }
+            float tolerance = Mathf.Max(1e-5f, extent * 1e-5f);
+
+            // 1. Find every supporting plane once. A plane is supporting when all points
+            // are on one side; a triple of coplanar points is skipped (it has no side).
+            var planeNormals = new List<Vector3>();
+            var planeOffsets = new List<float>();
+            for (int a = 0; a < count - 2; a++)
+            {
+                for (int b = a + 1; b < count - 1; b++)
+                {
+                    for (int c = b + 1; c < count; c++)
+                    {
+                        Vector3 normal = Cross(points[b] - points[a], points[c] - points[a]);
+                        float length = normal.magnitude;
+                        if (!IsFinite(length) ||
+                            length <= tolerance * Mathf.Max(extent, 1e-6f)) continue;
+                        normal = normal * (1f / length);
+                        float offset = Vector3.Dot(normal, points[a]);
+                        int positive = 0;
+                        int negative = 0;
+                        for (int p = 0; p < count; p++)
+                        {
+                            if (p == a || p == b || p == c) continue;
+                            float signed = Vector3.Dot(normal, points[p]) - offset;
+                            if (signed > tolerance) positive++;
+                            else if (signed < -tolerance) negative++;
+                        }
+                        if (positive > 0 && negative > 0) continue;
+                        if (positive == 0 && negative == 0) continue;
+                        if (positive > 0)
+                        {
+                            normal = normal * -1f;
+                            offset = -offset;
+                        }
+
+                        bool duplicate = false;
+                        for (int p = 0; p < planeNormals.Count; p++)
+                        {
+                            if (Vector3.Dot(normal, planeNormals[p]) > 1f - 1e-4f &&
+                                Mathf.Abs(offset - planeOffsets[p]) <= tolerance)
+                            {
+                                duplicate = true;
+                                break;
+                            }
+                        }
+                        if (duplicate) continue;
+                        planeNormals.Add(normal);
+                        planeOffsets.Add(offset);
+                    }
+                }
+            }
+            if (planeNormals.Count < 4)
+            {
+                error = "the hull has fewer than 4 supporting planes (degenerate or coplanar)";
+                return false;
+            }
+
+            // 2. Each supporting plane's coplanar points are one convex polygon. Sort
+            // them around the plane centroid and fan-triangulate, so a square face is 2
+            // triangles (not the 4 three-vertex combinations a raw triple scan emits).
+            int written = 0;
+            for (int plane = 0; plane < planeNormals.Count; plane++)
+            {
+                Vector3 normal = planeNormals[plane];
+                float offset = planeOffsets[plane];
+                var indices = new List<int>();
+                for (int p = 0; p < count; p++)
+                {
+                    if (Mathf.Abs(Vector3.Dot(normal, points[p]) - offset) <= tolerance)
+                        indices.Add(p);
+                }
+                if (indices.Count < 3) continue;
+
+                Vector3 centroid = Vector3.zero;
+                for (int i = 0; i < indices.Count; i++)
+                    centroid += points[indices[i]];
+                centroid = centroid * (1f / indices.Count);
+
+                Vector3 helper = Mathf.Abs(normal.x) < 0.9f
+                    ? new Vector3(1f, 0f, 0f) : new Vector3(0f, 1f, 0f);
+                Vector3 u = Vector3.Cross(normal, helper).normalized;
+                Vector3 v = Vector3.Cross(normal, u);
+                var angles = new float[indices.Count];
+                for (int i = 0; i < indices.Count; i++)
+                {
+                    Vector3 delta = points[indices[i]] - centroid;
+                    angles[i] = Mathf.Atan2(Vector3.Dot(delta, v), Vector3.Dot(delta, u));
+                }
+                // Sort the index list by angle (insertion sort: <=24 points, editor time).
+                for (int i = 1; i < indices.Count; i++)
+                {
+                    int index = indices[i];
+                    float angle = angles[i];
+                    int j = i - 1;
+                    while (j >= 0 && angles[j] > angle)
+                    {
+                        indices[j + 1] = indices[j];
+                        angles[j + 1] = angles[j];
+                        j--;
+                    }
+                    indices[j + 1] = index;
+                    angles[j + 1] = angle;
+                }
+
+                for (int i = 1; i < indices.Count - 1; i++)
+                {
+                    int a = indices[0];
+                    int b = indices[i];
+                    int c = indices[i + 1];
+                    Vector3 triangle = Cross(points[b] - points[a], points[c] - points[a]);
+                    if (!IsFinite(triangle.magnitude) ||
+                        triangle.magnitude <= tolerance * Mathf.Max(extent, 1e-6f)) continue;
+                    if (Vector3.Dot(triangle, normal) < 0f)
+                    {
+                        int swap = b;
+                        b = c;
+                        c = swap;
+                    }
+                    if (written + 3 > faces.Length)
+                    {
+                        error = "a convex hull needs more than " + MaxProxyHullFaces +
+                                " faces";
+                        return false;
+                    }
+                    faces[written] = a;
+                    faces[written + 1] = b;
+                    faces[written + 2] = c;
+                    written += 3;
+                }
+            }
+            faceCount = written / 3;
+            if (faceCount < 4)
+            {
+                error = "the hull has fewer than 4 faces (degenerate or coplanar)";
+                return false;
+            }
+            return true;
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static Vector3 Cross(Vector3 left, Vector3 right)
+        {
+            return new Vector3(left.y * right.z - left.z * right.y,
+                left.z * right.x - left.x * right.z,
+                left.x * right.y - left.y * right.x);
+        }
+
     }
 }

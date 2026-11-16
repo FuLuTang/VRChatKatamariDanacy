@@ -48,6 +48,8 @@ namespace VRCKatamari.Editor.Pickup
 
         /// <summary>True when every declared value read back from the host exactly.</summary>
         public bool ValueUnitsVerified;
+        /// <summary>Every declared collider proxy read back bit-identically.</summary>
+        public bool ProxyVerified;
 
         /// <summary>
         /// Rows that had no Collider and were given a <c>BoxCollider</c> on the prop root by

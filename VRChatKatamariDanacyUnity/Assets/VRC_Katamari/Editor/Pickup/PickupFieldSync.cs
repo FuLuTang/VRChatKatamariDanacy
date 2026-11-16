@@ -120,6 +120,18 @@ namespace VRCKatamari.Editor.Pickup
         private const string ValueUnitsField = "valueUnits";
         private const string VolumeKField = "propVolumeK";
         private const string PropCollidersField = "propColliders";
+        private const string PropProxyKindsField = "propProxyKinds";
+        private const string PropProxyCentersField = "propProxyCenters";
+        private const string PropProxySizesField = "propProxySizes";
+        private const string PropProxyRadiiField = "propProxyRadii";
+        private const string PropProxyHalfHeightsField = "propProxyHalfHeights";
+        private const string PropProxyAxesField = "propProxyAxes";
+        private const string PropProxyHullStartsField = "propProxyHullStarts";
+        private const string PropProxyHullCountsField = "propProxyHullCounts";
+        private const string PropProxyHullPointsField = "propProxyHullPoints";
+        private const string PropProxyFaceStartsField = "propProxyFaceStarts";
+        private const string PropProxyFaceCountsField = "propProxyFaceCounts";
+        private const string PropProxyHullFacesField = "propProxyHullFaces";
 
         // A BoxCollider with a zero side never collides. A visual can legitimately have a
         // zero-thickness side (paper), so the created box is given a 1 mm floor instead of
@@ -202,7 +214,7 @@ namespace VRCKatamari.Editor.Pickup
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
             IDictionary<string, long> declaredValueUnits)
         {
-            return SyncFromChildren(host, fieldRoot, declaredValueUnits, null, false);
+            return SyncFromChildren(host, fieldRoot, declaredValueUnits, false);
         }
 
         /// <summary>
@@ -222,22 +234,18 @@ namespace VRCKatamari.Editor.Pickup
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
             IDictionary<string, long> declaredValueUnits, bool createMissingColliders)
         {
-            return SyncFromChildren(host, fieldRoot, declaredValueUnits, null, createMissingColliders);
+            return SyncFromChildren(host, fieldRoot, declaredValueUnits, null, null,
+                createMissingColliders);
         }
 
         /// <summary>
-        /// The full entry point: declared value units AND the declared per-item volume factor.
+        /// The full entry point with declared collider proxies: a level's
+        /// <c>defs[].collider</c> mapped to item ids. A null map is the menu path and
+        /// preserves every row already serialized on the host.
         /// </summary>
-        /// <param name="declaredVolumeK">
-        /// Item id to the original's per-item volume factor k (<c>Volume = k * a*b*c</c>),
-        /// supplied by the level importer from <c>defs[].volumeK</c> (a prop's own
-        /// <c>volumeK</c> wins). When an id is absent, the row's already-serialized k is
-        /// preserved; with neither, the original's default 0.70 is written. Pass <c>null</c>
-        /// when no declaration exists - the menu/un-migrated path - and every row keeps its
-        /// serialized k or gets 0.70.
-        /// </param>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
             IDictionary<string, long> declaredValueUnits, IDictionary<string, float> declaredVolumeK,
+            IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
             bool createMissingColliders)
         {
             var report = new PickupFieldSyncReport();
@@ -281,10 +289,13 @@ namespace VRCKatamari.Editor.Pickup
             Dictionary<string, long> existingValueUnits = ReadExistingValueUnits(host);
             // Same rule for k: a re-sync without a declaration must not reprice a field.
             Dictionary<string, float> existingVolumeK = ReadExistingVolumeK(host);
+            Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> existingProxies =
+                ReadExistingProxies(host);
 
             List<PropCandidate> candidates = CollectCandidates(fieldRoot);
             List<PropRow> rows = ValidateCandidates(candidates, declaredValueUnits, existingValueUnits,
-                declaredVolumeK, existingVolumeK, createMissingColliders, report);
+                declaredVolumeK, existingVolumeK, declaredProxies, existingProxies,
+                createMissingColliders, report);
 
             if (rows.Count == 0 && report.Rejected.Count > 0)
             {
@@ -338,6 +349,16 @@ namespace VRCKatamari.Editor.Pickup
                                     "arrays as wrong until this is fixed");
                     }
                 }
+
+                if (string.IsNullOrEmpty(report.Failure))
+                {
+                    report.ProxyVerified = VerifyDeclaredProxies(host, declaredProxies);
+                    if (!report.ProxyVerified)
+                    {
+                        report.Fail("one or more declared collider proxy row(s) did not read back as " +
+                                    "declared; treat the host proxy columns as wrong until this is fixed");
+                    }
+                }
             }
 
             if (string.IsNullOrEmpty(report.Failure))
@@ -378,6 +399,8 @@ namespace VRCKatamari.Editor.Pickup
             public long ValueUnits;
             /// <summary>The per-item volume factor k the gate will use (0.70 default).</summary>
             public float VolumeK;
+            /// <summary>The def's collider proxy; null means the row keeps its OBB shape.</summary>
+            public PickupFieldAuthoringRules.PickupProxyDefinition Proxy;
             public Collider PrimaryCollider;
         }
 
@@ -768,6 +791,8 @@ namespace VRCKatamari.Editor.Pickup
         private static List<PropRow> ValidateCandidates(List<PropCandidate> candidates,
             IDictionary<string, long> declaredValueUnits, Dictionary<string, long> existingValueUnits,
             IDictionary<string, float> declaredVolumeK, Dictionary<string, float> existingVolumeK,
+            IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
+            Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> existingProxies,
             bool createMissingColliders, PickupFieldSyncReport report)
         {
             var ids = new List<string>();
@@ -789,6 +814,8 @@ namespace VRCKatamari.Editor.Pickup
             int localBoundsFallbacks = 0;
             int collidersCreated = 0;
             int volumeKDefaulted = 0;
+            int proxyDeclared = 0;
+            int proxyPreserved = 0;
             for (int i = 0; i < candidates.Count; i++)
             {
                 PropCandidate candidate = candidates[i];
@@ -920,6 +947,38 @@ namespace VRCKatamari.Editor.Pickup
                     volumeKDefaulted++;
                 }
 
+                // Collider proxy: declaration wins, else the row already on the host, else
+                // null (kind -1 = keep the OBB shape). A declared block that cannot be
+                // validated refuses the row instead of silently falling back to a box.
+                PickupFieldAuthoringRules.PickupProxyDefinition proxy = null;
+                PickupFieldAuthoringRules.PickupProxyDefinition declaredProxy;
+                if (declaredProxies != null &&
+                    declaredProxies.TryGetValue(candidate.ItemId, out declaredProxy))
+                {
+                    proxy = declaredProxy;
+                    proxyDeclared++;
+                }
+                else
+                {
+                    PickupFieldAuthoringRules.PickupProxyDefinition existingProxy;
+                    if (existingProxies != null &&
+                        existingProxies.TryGetValue(candidate.ItemId, out existingProxy))
+                    {
+                        proxy = existingProxy;
+                        proxyPreserved++;
+                    }
+                }
+                if (proxy != null)
+                {
+                    string proxyProblem = PickupFieldAuthoringRules.ProxyError(proxy);
+                    if (proxyProblem != null)
+                    {
+                        report.Reject(candidate.Path, candidate.ItemId,
+                            "declared collider " + proxyProblem);
+                        continue;
+                    }
+                }
+
                 var row = new PropRow();
                 row.Root = candidate.Root;
                 row.Kind = candidate.Kind;
@@ -928,6 +987,7 @@ namespace VRCKatamari.Editor.Pickup
                 row.LocalBoundsSize = pickLocalSize;
                 row.ValueUnits = valueUnits;
                 row.VolumeK = volumeK;
+                row.Proxy = proxy;
                 row.PrimaryCollider = candidate.PrimaryCollider;
                 if (createMissingColliders && row.PrimaryCollider == null)
                 {
@@ -1020,6 +1080,13 @@ namespace VRCKatamari.Editor.Pickup
                                  "declared one for them");
             }
 
+            if (proxyDeclared > 0 || proxyPreserved > 0)
+            {
+                report.Notes.Add("collider proxies: " + proxyDeclared + " row(s) from the level's " +
+                                 "defs[].collider, " + proxyPreserved + " preserved from the host. " +
+                                 "Rows without a proxy keep their OBB shape.");
+            }
+
             if (report.ValueUnitsUndeclared > 0)
             {
                 report.Notes.Add(report.ValueUnitsUndeclared + " row(s) have no declared value and no " +
@@ -1050,11 +1117,15 @@ namespace VRCKatamari.Editor.Pickup
         private static bool WriteRows(PickupFieldHost host, List<PropRow> rows, PickupFieldSyncReport report)
         {
             var serialized = new SerializedObject(host);
-            var properties = new SerializedProperty[8];
+            var properties = new SerializedProperty[20];
             string[] fieldNames =
             {
                 PropTransformsField, ItemIdsField, KindsField, PropBoundsField, PropLocalBoundsField,
                 ValueUnitsField, VolumeKField, PropCollidersField,
+                PropProxyKindsField, PropProxyCentersField, PropProxySizesField,
+                PropProxyRadiiField, PropProxyHalfHeightsField, PropProxyAxesField,
+                PropProxyHullStartsField, PropProxyHullCountsField, PropProxyHullPointsField,
+                PropProxyFaceStartsField, PropProxyFaceCountsField, PropProxyHullFacesField,
             };
 
             for (int i = 0; i < fieldNames.Length; i++)
@@ -1076,6 +1147,18 @@ namespace VRCKatamari.Editor.Pickup
             SerializedProperty values = properties[5];
             SerializedProperty volumeKs = properties[6];
             SerializedProperty colliders = properties[7];
+            SerializedProperty proxyKinds = properties[8];
+            SerializedProperty proxyCenters = properties[9];
+            SerializedProperty proxySizes = properties[10];
+            SerializedProperty proxyRadii = properties[11];
+            SerializedProperty proxyHalfHeights = properties[12];
+            SerializedProperty proxyAxes = properties[13];
+            SerializedProperty proxyHullStarts = properties[14];
+            SerializedProperty proxyHullCounts = properties[15];
+            SerializedProperty proxyHullPoints = properties[16];
+            SerializedProperty proxyFaceStarts = properties[17];
+            SerializedProperty proxyFaceCounts = properties[18];
+            SerializedProperty proxyHullFaces = properties[19];
 
             // Registered only after the contract fields were found, so a failed lookup leaves
             // no empty undo step behind.
@@ -1091,6 +1174,17 @@ namespace VRCKatamari.Editor.Pickup
                 }
             }
 
+            int totalHullPoints = 0;
+            int totalFaces = 0;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                PickupFieldAuthoringRules.PickupProxyDefinition proxy = rows[i].Proxy;
+                if (proxy == null || proxy.Kind != PickupFieldAuthoringRules.ProxyKindConvex)
+                    continue;
+                totalHullPoints += proxy.HullCount;
+                totalFaces += proxy.FaceCount;
+            }
+
             transforms.arraySize = rows.Count;
             ids.arraySize = rows.Count;
             kinds.arraySize = rows.Count;
@@ -1099,7 +1193,21 @@ namespace VRCKatamari.Editor.Pickup
             values.arraySize = rows.Count;
             volumeKs.arraySize = rows.Count;
             colliders.arraySize = anyCollider ? rows.Count : 0;
+            proxyKinds.arraySize = rows.Count;
+            proxyCenters.arraySize = rows.Count;
+            proxySizes.arraySize = rows.Count;
+            proxyRadii.arraySize = rows.Count;
+            proxyHalfHeights.arraySize = rows.Count;
+            proxyAxes.arraySize = rows.Count;
+            proxyHullStarts.arraySize = rows.Count;
+            proxyHullCounts.arraySize = rows.Count;
+            proxyHullPoints.arraySize = totalHullPoints;
+            proxyFaceStarts.arraySize = rows.Count;
+            proxyFaceCounts.arraySize = rows.Count;
+            proxyHullFaces.arraySize = totalFaces * 3;
 
+            int hullCursor = 0;
+            int faceCursor = 0;
             for (int i = 0; i < rows.Count; i++)
             {
                 PropRow row = rows[i];
@@ -1114,6 +1222,49 @@ namespace VRCKatamari.Editor.Pickup
                 {
                     colliders.GetArrayElementAtIndex(i).objectReferenceValue = row.PrimaryCollider;
                 }
+
+                PickupFieldAuthoringRules.PickupProxyDefinition proxy = row.Proxy;
+                int kind = proxy == null ? -1 : proxy.Kind;
+                proxyKinds.GetArrayElementAtIndex(i).intValue = kind;
+                proxyCenters.GetArrayElementAtIndex(i).vector3Value =
+                    proxy == null ? Vector3.zero : proxy.Center;
+                proxySizes.GetArrayElementAtIndex(i).vector3Value =
+                    proxy == null ? Vector3.zero : proxy.Size;
+                proxyRadii.GetArrayElementAtIndex(i).floatValue =
+                    proxy == null ? 0f : proxy.Radius;
+                proxyHalfHeights.GetArrayElementAtIndex(i).floatValue =
+                    proxy == null ? 0f : proxy.HalfHeight;
+                proxyAxes.GetArrayElementAtIndex(i).intValue =
+                    proxy == null ? 0 : proxy.Axis;
+
+                int hullStart = 0;
+                int hullCount = 0;
+                int faceStart = 0;
+                int faceCount = 0;
+                if (proxy != null && proxy.Kind == PickupFieldAuthoringRules.ProxyKindConvex)
+                {
+                    hullStart = hullCursor;
+                    hullCount = proxy.HullCount;
+                    faceStart = faceCursor * 3;
+                    faceCount = proxy.FaceCount;
+                    for (int p = 0; p < hullCount; p++)
+                    {
+                        proxyHullPoints.GetArrayElementAtIndex(hullCursor + p).vector3Value =
+                            proxy.Hull[p];
+                    }
+                    for (int f = 0; f < faceCount * 3; f++)
+                    {
+                        proxyHullFaces.GetArrayElementAtIndex(faceStart + f).intValue =
+                            proxy.Faces[f];
+                    }
+                    hullCursor += hullCount;
+                    faceCursor += faceCount;
+                }
+
+                proxyHullStarts.GetArrayElementAtIndex(i).intValue = hullStart;
+                proxyHullCounts.GetArrayElementAtIndex(i).intValue = hullCount;
+                proxyFaceStarts.GetArrayElementAtIndex(i).intValue = faceStart;
+                proxyFaceCounts.GetArrayElementAtIndex(i).intValue = faceCount;
             }
 
             serialized.ApplyModifiedPropertiesWithoutUndo();
@@ -1191,6 +1342,10 @@ namespace VRCKatamari.Editor.Pickup
             {
                 PropTransformsField, ItemIdsField, KindsField, PropBoundsField,
                 PropLocalBoundsField, ValueUnitsField, VolumeKField,
+                PropProxyKindsField, PropProxyCentersField, PropProxySizesField,
+                PropProxyRadiiField, PropProxyHalfHeightsField, PropProxyAxesField,
+                PropProxyHullStartsField, PropProxyHullCountsField,
+                PropProxyFaceStartsField, PropProxyFaceCountsField,
             };
 
             for (int i = 0; i < fields.Length; i++)
@@ -1204,6 +1359,13 @@ namespace VRCKatamari.Editor.Pickup
 
             SerializedProperty colliders = serialized.FindProperty(PropCollidersField);
             if (colliders == null || !colliders.isArray)
+            {
+                return false;
+            }
+            SerializedProperty hullPoints = serialized.FindProperty(PropProxyHullPointsField);
+            SerializedProperty hullFaces = serialized.FindProperty(PropProxyHullFacesField);
+            if (hullPoints == null || !hullPoints.isArray ||
+                hullFaces == null || !hullFaces.isArray)
             {
                 return false;
             }
@@ -1330,6 +1492,144 @@ namespace VRCKatamari.Editor.Pickup
             {
                 values[i] = kProperty.GetArrayElementAtIndex(i).floatValue;
             }
+        }
+
+        /// <summary>
+        /// Reads the host's current proxy columns into id-keyed definitions, the same
+        /// preserve-by-id rule as <c>valueUnits</c>/<c>propVolumeK</c>. A host with no
+        /// columns yields an empty map.
+        /// </summary>
+        private static Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition>
+            ReadExistingProxies(PickupFieldHost host)
+        {
+            var existing = new Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition>(
+                StringComparer.Ordinal);
+            var serialized = new SerializedObject(host);
+            SerializedProperty ids = serialized.FindProperty(ItemIdsField);
+            SerializedProperty kinds = serialized.FindProperty(PropProxyKindsField);
+            SerializedProperty centers = serialized.FindProperty(PropProxyCentersField);
+            SerializedProperty sizes = serialized.FindProperty(PropProxySizesField);
+            SerializedProperty radii = serialized.FindProperty(PropProxyRadiiField);
+            SerializedProperty halfHeights = serialized.FindProperty(PropProxyHalfHeightsField);
+            SerializedProperty axes = serialized.FindProperty(PropProxyAxesField);
+            SerializedProperty hullStarts = serialized.FindProperty(PropProxyHullStartsField);
+            SerializedProperty hullCounts = serialized.FindProperty(PropProxyHullCountsField);
+            SerializedProperty hullPoints = serialized.FindProperty(PropProxyHullPointsField);
+            SerializedProperty faceStarts = serialized.FindProperty(PropProxyFaceStartsField);
+            SerializedProperty faceCounts = serialized.FindProperty(PropProxyFaceCountsField);
+            SerializedProperty faces = serialized.FindProperty(PropProxyHullFacesField);
+            if (ids == null || kinds == null || centers == null || sizes == null ||
+                radii == null || halfHeights == null || axes == null || hullStarts == null ||
+                hullCounts == null || hullPoints == null || faceStarts == null ||
+                faceCounts == null || faces == null)
+            {
+                return existing;
+            }
+
+            int count = ids.arraySize;
+            if (kinds.arraySize < count) count = kinds.arraySize;
+            if (centers.arraySize < count) count = centers.arraySize;
+            if (sizes.arraySize < count) count = sizes.arraySize;
+            if (radii.arraySize < count) count = radii.arraySize;
+            if (halfHeights.arraySize < count) count = halfHeights.arraySize;
+            if (axes.arraySize < count) count = axes.arraySize;
+            if (hullStarts.arraySize < count) count = hullStarts.arraySize;
+            if (hullCounts.arraySize < count) count = hullCounts.arraySize;
+            if (faceStarts.arraySize < count) count = faceStarts.arraySize;
+            if (faceCounts.arraySize < count) count = faceCounts.arraySize;
+
+            for (int i = 0; i < count; i++)
+            {
+                string id = ids.GetArrayElementAtIndex(i).stringValue;
+                int kind = kinds.GetArrayElementAtIndex(i).intValue;
+                if (string.IsNullOrEmpty(id) || kind < 0 ||
+                    kind > PickupFieldAuthoringRules.ProxyKindConvex) continue;
+
+                var proxy = new PickupFieldAuthoringRules.PickupProxyDefinition();
+                proxy.Kind = kind;
+                proxy.Center = centers.GetArrayElementAtIndex(i).vector3Value;
+                proxy.Size = sizes.GetArrayElementAtIndex(i).vector3Value;
+                proxy.Radius = radii.GetArrayElementAtIndex(i).floatValue;
+                proxy.HalfHeight = halfHeights.GetArrayElementAtIndex(i).floatValue;
+                proxy.Axis = axes.GetArrayElementAtIndex(i).intValue;
+
+                if (kind == PickupFieldAuthoringRules.ProxyKindConvex)
+                {
+                    int hullStart = hullStarts.GetArrayElementAtIndex(i).intValue;
+                    int hullCount = hullCounts.GetArrayElementAtIndex(i).intValue;
+                    int faceStart = faceStarts.GetArrayElementAtIndex(i).intValue;
+                    int faceCount = faceCounts.GetArrayElementAtIndex(i).intValue;
+                    if (hullStart < 0 || hullCount < 0 ||
+                        hullCount > PickupFieldAuthoringRules.MaxProxyHullPoints ||
+                        hullStart + hullCount > hullPoints.arraySize ||
+                        faceStart < 0 || faceCount < 0 ||
+                        faceCount > PickupFieldAuthoringRules.MaxProxyHullFaces ||
+                        faceStart + faceCount * 3 > faces.arraySize) continue;
+                    proxy.Hull = new Vector3[hullCount];
+                    for (int p = 0; p < hullCount; p++)
+                    {
+                        proxy.Hull[p] = hullPoints.GetArrayElementAtIndex(hullStart + p).vector3Value;
+                    }
+                    proxy.HullCount = hullCount;
+                    proxy.Faces = new int[faceCount * 3];
+                    for (int f = 0; f < faceCount * 3; f++)
+                    {
+                        proxy.Faces[f] = faces.GetArrayElementAtIndex(faceStart + f).intValue;
+                    }
+                    proxy.FaceCount = faceCount;
+                }
+
+                existing[id] = proxy;
+            }
+            return existing;
+        }
+
+        /// <summary>
+        /// Compares every declared collider block with the host's read-back row. Bit equality
+        /// is the contract: the sync just wrote these numbers, so a difference means the
+        /// SerializedObject write did not land or was overwritten.
+        /// </summary>
+        private static bool VerifyDeclaredProxies(PickupFieldHost host,
+            IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declared)
+        {
+            if (declared == null || declared.Count == 0) return true;
+            Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> actual =
+                ReadExistingProxies(host);
+            foreach (KeyValuePair<string, PickupFieldAuthoringRules.PickupProxyDefinition> pair in declared)
+            {
+                PickupFieldAuthoringRules.PickupProxyDefinition got;
+                if (!actual.TryGetValue(pair.Key, out got)) return false;
+                if (!ProxyEquals(pair.Value, got)) return false;
+            }
+            return true;
+        }
+
+        private static bool ProxyEquals(PickupFieldAuthoringRules.PickupProxyDefinition left,
+            PickupFieldAuthoringRules.PickupProxyDefinition right)
+        {
+            if (left == null || right == null) return left == right;
+            if (left.Kind != right.Kind) return false;
+            if (left.Center != right.Center || left.Size != right.Size) return false;
+            if (left.Radius != right.Radius || left.HalfHeight != right.HalfHeight) return false;
+            if (left.Axis != right.Axis) return false;
+            if (left.Kind != PickupFieldAuthoringRules.ProxyKindConvex) return true;
+            if (left.HullCount != right.HullCount || left.FaceCount != right.FaceCount)
+                return false;
+            if (left.HullCount > 0)
+            {
+                for (int i = 0; i < left.HullCount; i++)
+                {
+                    if (left.Hull[i] != right.Hull[i]) return false;
+                }
+            }
+            if (left.FaceCount > 0)
+            {
+                for (int i = 0; i < left.FaceCount * 3; i++)
+                {
+                    if (left.Faces[i] != right.Faces[i]) return false;
+                }
+            }
+            return true;
         }
 
         /// <summary>

@@ -25,7 +25,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from Tools.levelbuild import editor_core  # noqa: E402
-from Tools.levelbuild import placement_core as core  # noqa: E402
+from Tools.levelbuild import placement_core as core
+from Tools.levelbuild import supports as support_geometry  # noqa: E402
 
 
 def _print_banner(doc):
@@ -52,6 +53,29 @@ def _summary(doc):
             % (len(props), core.value_units_total(doc), absorbable, len(kinds),
                len(doc.get("defs") or []), len(structures), len(curves), curve_segments,
                level.get("ballDiameterMax")))
+
+
+def _supports_text(doc):
+    """Support pointers: what is stored, and what the geometry would say right now.
+
+    The stored count is the one number the runtime depends on; the derivable / unreproduced
+    numbers are the drift check - a level whose import ran with an older item size, or a
+    hand edit that moved a prop off its supporter, shows up here without failing the gate
+    (a parent pointer is an optimisation, not a rule).
+    """
+    diff = support_geometry.propose(doc)
+    counts = diff["counts"]
+    derived = support_geometry.count_derived(doc)
+    lines = ["supports derived: %d" % derived]
+    if counts["declared"] != derived:
+        lines.append("supports declared: %d" % counts["declared"])
+    if diff["new"]:
+        lines.append("supports derivable, not stored: %d" % len(diff["new"]))
+    if diff["orphaned"] or diff["conflict"]:
+        lines.append("supports unreproduced: %d (%d conflicting, %d not found by geometry)"
+                     % (len(diff["conflict"]) + len(diff["orphaned"]),
+                        len(diff["conflict"]), len(diff["orphaned"])))
+    return "\n".join(lines)
 
 
 def _report_text(report, doc):
@@ -115,6 +139,7 @@ def cmd_check(args):
             "quatOrder": core.QUAT_ORDER,
             "props": len([p for p in doc.get("props") or [] if isinstance(p, dict)]),
             "valueUnits": core.value_units_total(doc),
+            "supports": support_geometry.propose(doc)["counts"],
             "errors": report.errors,
             "warnings": report.warnings,
             "notes": report.notes,
@@ -124,6 +149,7 @@ def cmd_check(args):
 
     _print_banner(doc)
     print(_summary(doc))
+    print(_supports_text(doc))
     print("")
 
     if args.report:

@@ -184,6 +184,11 @@ def request_for(args):
     if op == "seat":
         body = {"ids": args.ids} if args.ids else {}
         return {"op": "seat", "args": body}
+    if op == "derive-supports":
+        body = {"ids": args.ids} if args.ids else {}
+        if args.apply:
+            body["apply"] = True
+        return {"op": "derive_supports", "args": body}
     if op == "add-def":
         body = {"id": args.id}
         for key in ("kind", "notes"):
@@ -350,6 +355,23 @@ def print_summary(response):
         print("seated %d prop(s)%s" % (len(result.get("moved") or []),
                                        (": " + ", ".join(result["moved"]))
                                        if result.get("moved") else ""))
+    elif op == "derive-supports":
+        counts = result.get("counts") or {}
+        print("%s: proposed %s, would write %s, agreed %s, conflicting %s, orphaned %s"
+              % ("applied" if result.get("applied") else "dry run",
+                 counts.get("supports"), len(result.get("new") or []),
+                 counts.get("agreed"), counts.get("conflict"), counts.get("orphaned")))
+        for entry in result.get("new") or []:
+            print("  + %s -> %s (gap %s m)" % (entry["itemId"], entry["parent"], entry["gap"]))
+        for entry in result.get("conflict") or []:
+            print("  ! %s: file says %s, geometry says %s"
+                  % (entry["itemId"], entry["declared"], entry["proposed"]))
+        for entry in result.get("orphaned") or []:
+            print("  ? %s: file says %s, geometry finds nothing"
+                  % (entry["itemId"], entry["declared"]))
+        if result.get("written"):
+            print("wrote %d pointer(s): %s"
+                  % (len(result["written"]), ", ".join(result["written"])))
     elif op in ("move", "set", "rotate"):
         print("%s %s" % (op, result.get("id") or result.get("entry", {}).get("itemId")))
         for key in ("position", "center", "rotationQuat"):
@@ -489,6 +511,11 @@ def build_parser():
                             help="also recompute level.expected (the design total)")
     seat_cmd = sub.add_parser("seat", help="re-seat props on their support")
     seat_cmd.add_argument("ids", nargs="*")
+
+    derive_cmd = sub.add_parser("derive-supports",
+                                help="derive parent pointers from geometry (dry run by default)")
+    derive_cmd.add_argument("ids", nargs="*")
+    derive_cmd.add_argument("--apply", action="store_true", help="write the missing pointers")
 
     check_cmd = sub.add_parser("check", help="validate the resident document")
     check_cmd.add_argument("--report", action="store_true")

@@ -41,6 +41,13 @@ namespace VRCKatamari.Editor.LevelBuild
         public int PropsSkipped;
         public int PropErrors;
 
+        /// <summary>
+        /// Props whose authored scale had to be divided by a non-1 parent scale so the WORLD size
+        /// matches the document. Zero on a clean managed tree; a non-zero value names a container
+        /// that is not identity (the notes name it, prop by prop).
+        /// </summary>
+        public int PoseScaleCompensated;
+
         public int StructuresCreated;
         public int StructuresUpdated;
         public int StructuresDeleted;

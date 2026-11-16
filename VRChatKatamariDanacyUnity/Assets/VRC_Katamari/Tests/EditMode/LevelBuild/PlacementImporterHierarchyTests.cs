@@ -37,6 +37,7 @@ namespace VRCKatamari.Tests
 
         private Type importerType;
         private Type reportType;
+        private Type propType;
         private GameObject root;
         private object report;
         private Transform propsRoot;
@@ -48,6 +49,8 @@ namespace VRCKatamari.Tests
             reportType = FindType(ReportTypeName);
             Assert.IsNotNull(importerType, ImporterTypeName + " not loaded");
             Assert.IsNotNull(reportType, ReportTypeName + " not loaded");
+            propType = importerType.GetNestedType("PropEntry", BindingFlags.Public);
+            Assert.IsNotNull(propType, "PlacementImporter.PropEntry not found");
 
             root = new GameObject("PlacementImporterHierarchyTests");
             root.hideFlags = HideFlags.DontSave;
@@ -143,6 +146,105 @@ namespace VRCKatamari.Tests
                 "no duplicate Hierarchy folder");
             Assert.AreEqual(1, CountNamed(first.parent, "table_01"),
                 "no duplicate parent folder");
+        }
+
+        // ------------------------------------------------------------ world scale ---
+        // The contract: a prop's authored scale produces that WORLD size, whatever container it
+        // ends up under (`aabb` is in metres and already contains the scale). These pin the bug
+        // class behind 18 reference-level child props whose local scale was 1 while their world
+        // bounds were ~1/100th of the document's aabb.
+
+        [Test]
+        public void AChildUnderAScaledContainerKeepsItsAuthoredWorldSize()
+        {
+            Transform folder = FolderFor("tableware", "porch", null, "table_01");
+            var child = new GameObject("teacup_12");
+            child.hideFlags = HideFlags.DontSave;
+            child.transform.SetParent(folder, false);
+
+            // A container that is NOT identity - an older layout that nested children inside a
+            // scaled prop, or a hand-edited folder. The authored scale must still be the WORLD one.
+            folder.localScale = new Vector3(0.5f, 0.25f, 2f);
+            var authored = new Vector3(0.5f, 0.25f, 2f);
+            object prop = NewProp("teacup_12", authored.x, authored.y, authored.z);
+
+            bool compensated = (bool)InvokeImporter("ApplyPose", child, prop);
+
+            Assert.IsTrue(compensated, "the importer must notice and report the parent's scale");
+            Assert.AreEqual(0f, Vector3.Distance(authored, child.transform.lossyScale), 1e-4f,
+                "world scale must be the authored one; tolerance 1e-4 (float division by the parent)");
+            Assert.IsTrue((bool)InvokeImporter("PoseMatches", child, prop),
+                "a compensated prop must read back as settled, or every import would rewrite it");
+        }
+
+        [Test]
+        public void AChildUnderAnIdentityContainerKeepsTheAuthoredLocalScale()
+        {
+            // The clean path: three levels of identity folders, so local == world and nothing is
+            // rewritten (this is what every prop in a freshly imported level looks like).
+            Transform folder = FolderFor("tableware", "porch", null, "table_01");
+            var child = new GameObject("teacup_13");
+            child.hideFlags = HideFlags.DontSave;
+            child.transform.SetParent(folder, false);
+            object prop = NewProp("teacup_13", 1f, 1f, 1f);
+
+            bool compensated = (bool)InvokeImporter("ApplyPose", child, prop);
+
+            Assert.IsFalse(compensated, "an identity container needs no compensation");
+            Assert.AreEqual(Vector3.one, child.transform.localScale);
+            Assert.AreEqual(0f, Vector3.Distance(Vector3.one, child.transform.lossyScale), 1e-5f);
+            Assert.IsTrue((bool)InvokeImporter("PoseMatches", child, prop));
+        }
+
+        [Test]
+        public void ANonUniformAuthoredScaleSurvivesANonUniformContainer()
+        {
+            // Per-axis compensation, not a single factor: the container squeezes x and stretches z.
+            Transform folder = FolderFor("tableware", "porch", null, "table_01");
+            var child = new GameObject("teacup_14");
+            child.hideFlags = HideFlags.DontSave;
+            child.transform.SetParent(folder, false);
+            folder.localScale = new Vector3(0.5f, 1f, 2f);
+            var authored = new Vector3(0.0741f, 0.0291f, 0.0197f);
+            object prop = NewProp("teacup_14", authored.x, authored.y, authored.z);
+
+            Assert.IsTrue((bool)InvokeImporter("ApplyPose", child, prop));
+            Assert.AreEqual(0f, Vector3.Distance(authored, child.transform.lossyScale), 1e-4f,
+                "each axis is compensated separately (the D-5 non-uniform case)");
+        }
+
+        private object NewProp(string itemId, float sx, float sy, float sz)
+        {
+            object prop = Activator.CreateInstance(propType);
+            SetField(prop, "itemId", itemId);
+            SetField(prop, "position", new[] { 0f, 0f, 0f });
+            SetField(prop, "rotationQuat", new[] { 0f, 0f, 0f, 1f });
+            SetField(prop, "scale", new[] { sx, sy, sz });
+            return prop;
+        }
+
+        /// <summary>Invokes one private static PlacementImporter method by name and arity.</summary>
+        private object InvokeImporter(string name, params object[] args)
+        {
+            MethodInfo[] methods = importerType.GetMethods(BindingFlags.Static |
+                BindingFlags.Public | BindingFlags.NonPublic);
+            for (int i = 0; i < methods.Length; i++)
+            {
+                if (!string.Equals(methods[i].Name, name, StringComparison.Ordinal)) continue;
+                if (methods[i].GetParameters().Length != args.Length) continue;
+                return methods[i].Invoke(null, args);
+            }
+
+            Assert.Fail(name + " with " + args.Length + " argument(s) not found");
+            return null;
+        }
+
+        private static void SetField(object target, string name, object value)
+        {
+            FieldInfo field = target.GetType().GetField(name,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsNotNull(field, target.GetType().Name + " has no field '" + name + "'");
+            field.SetValue(target, value);
         }
 
         // --------------------------------------------------------------- helpers ---

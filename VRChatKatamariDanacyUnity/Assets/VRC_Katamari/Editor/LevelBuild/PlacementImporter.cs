@@ -691,6 +691,14 @@ namespace VRCKatamari.Editor.LevelBuild
             // Only the prop tree owns empty folders (kind/zone/group). A structure child is a
             // deliberate object - a boundary marker has no renderer and no collider, so a
             // folder cleanup over Structures would delete every wall.
+            if (report.PoseScaleCompensated > 0)
+            {
+                report.Note(report.PoseScaleCompensated + " prop(s) sit under a container whose scale " +
+                            "is not 1: their local scale was compensated so every prop's WORLD size " +
+                            "is the document's aabb. The containers are named in the notes above; a " +
+                            "clean managed tree has none");
+            }
+
             DeleteEmptyFolders(propsRoot);
 
             MarkSceneDirty();
@@ -1852,7 +1860,16 @@ namespace VRCKatamari.Editor.LevelBuild
 
                 if (!PoseMatches(current, prop))
                 {
-                    ApplyPose(current, prop);
+                    if (ApplyPose(current, prop))
+                    {
+                        report.PoseScaleCompensated++;
+                        report.Note(prop.itemId + ": its container \"" +
+                                    HierarchyPath(current.transform.parent) + "\" has scale " +
+                                    Format(current.transform.parent.lossyScale) + ", so the authored " +
+                                    "scale " + Format(ScaleOf(prop)) + " was written as the LOCAL " +
+                                    "scale that keeps the WORLD size at the document's aabb");
+                    }
+
                     moved = true;
                 }
 
@@ -1988,21 +2005,46 @@ namespace VRCKatamari.Editor.LevelBuild
                 return null;
             }
 
-            ApplyPose(instance, prop);
+            if (ApplyPose(instance, prop))
+            {
+                report.PoseScaleCompensated++;
+                report.Note(prop.itemId + ": its container \"" +
+                            HierarchyPath(instance.transform.parent) + "\" has scale " +
+                            Format(instance.transform.parent.lossyScale) + ", so the authored scale " +
+                            Format(ScaleOf(prop)) + " was compensated to keep the world size");
+            }
+
             return instance;
         }
 
         /// <summary>
-        /// Writes the authored world pose. The scale is the AUTHORED one (§6.4 layer 2/3): the
-        /// importer never scales at runtime, and a prop's <c>aabb</c> already contains it, so
-        /// this is the only place the number reaches the scene.
+        /// Writes the authored WORLD pose: position, rotation and the WORLD scale.
         /// </summary>
-        private static void ApplyPose(GameObject instance, PropEntry prop)
+        /// <remarks>
+        /// A prop's authored <c>position</c>/<c>rotationQuat</c>/<c>scale</c> are world quantities
+        /// (<c>aabb</c> is in metres and already contains the scale), so the pose is written and
+        /// compared in WORLD terms. The scale is the one value that a parent can multiply behind
+        /// our back: writing the authored number into <c>localScale</c> under a container whose
+        /// <c>lossyScale</c> is not 1 makes the object the wrong SIZE while its local numbers look
+        /// perfect - and a `PoseMatches` that compares local scale then reports "already correct"
+        /// forever. The reference level's 18 shrunken child props are exactly that shape of bug
+        /// (their local scale was 1 while their world bounds were 1/100th of the document's aabb).
+        /// The parent is compensated here, once, so the world size is always the authored one.
+        /// </remarks>
+        /// <returns>
+        /// True when the parent container forced a non-authored LOCAL scale, i.e. when the
+        /// scene's container tree is not identity for this prop (the importer compensates the
+        /// world size and the caller reports it, so the cause is visible instead of silent).
+        /// </returns>
+        private static bool ApplyPose(GameObject instance, PropEntry prop)
         {
+            Vector3 authored = ScaleOf(prop);
+            Vector3 local = LocalScaleFor(instance.transform.parent, authored);
             Undo.RecordObject(instance.transform, UndoLabel);
             instance.transform.position = ToVector(prop.position);
             instance.transform.rotation = ToQuaternion(prop.rotationQuat);
-            instance.transform.localScale = ScaleOf(prop);
+            instance.transform.localScale = local;
+            return Vector3.Distance(local, authored) > PositionToleranceM;
         }
 
         private static bool PoseMatches(GameObject instance, PropEntry prop)
@@ -2010,9 +2052,37 @@ namespace VRCKatamari.Editor.LevelBuild
             Vector3 position = ToVector(prop.position);
             Quaternion rotation = ToQuaternion(prop.rotationQuat);
             Transform transform = instance.transform;
+            // WORLD scale, not local: see ApplyPose. A parent that scales must not make a wrong
+            // prop look settled.
             return Vector3.Distance(transform.position, position) <= PositionToleranceM &&
                    Mathf.Abs(Quaternion.Dot(transform.rotation, rotation)) >= RotationDotTolerance &&
-                   Vector3.Distance(transform.localScale, ScaleOf(prop)) <= PositionToleranceM;
+                   Vector3.Distance(transform.lossyScale, ScaleOf(prop)) <= PositionToleranceM;
+        }
+
+        /// <summary>
+        /// The local scale that makes an object's WORLD scale the authored one under
+        /// <paramref name="parent"/>.
+        /// </summary>
+        /// <remarks>
+        /// Under the managed folder tree (all containers at identity) this is the authored scale
+        /// unchanged, so nothing moves for a clean scene. A zero-scale parent axis is left
+        /// uncompensated instead of producing an infinite local scale; such a container is a data
+        /// error the arena reports with its own reason code.
+        /// </remarks>
+        private static Vector3 LocalScaleFor(Transform parent, Vector3 authored)
+        {
+            if (parent == null) return authored;
+            Vector3 parentScale = parent.lossyScale;
+            return new Vector3(
+                DivideByParentScale(authored.x, parentScale.x),
+                DivideByParentScale(authored.y, parentScale.y),
+                DivideByParentScale(authored.z, parentScale.z));
+        }
+
+        private static float DivideByParentScale(float value, float parentScale)
+        {
+            if (Mathf.Abs(parentScale) <= 1e-6f) return value;
+            return value / parentScale;
         }
 
         /// <summary>The authored scale, or one when the document did not write one.</summary>

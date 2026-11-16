@@ -15,8 +15,9 @@ namespace VRCKatamari.BallLayers
     /// the whole support decision here (selection, the step decision, gravity fall
     /// state, and P2's prop role/support table) and the motor only orders calls and
     /// carries the result. The absorb gate stays where it was
-    /// (<see cref="VRCKatamari.Pickup.PickupAbsorbMath.IsBeyondAbsorbVolumeLimit"/>);
-    /// nothing here reads a prop - the host passes the gate's answer in.
+    /// (<see cref="VRCKatamari.Pickup.PickupAbsorbMath.IsBeyondAbsorbLimit"/>, the
+    /// original's whole-millimetre Req comparison); nothing here reads a prop - the host
+    /// passes the gate's answer in.
     /// </para>
     /// <para>
     /// Geometry. Lengths are metres in the project's single world space (+Y up).
@@ -652,9 +653,9 @@ namespace VRCKatamari.BallLayers
         /// This is the <b>only</b> place the prop role is computed, and it uses the same
         /// <see cref="IsStepWithinLimit"/> comparison the static-box mask uses.
         /// <paramref name="beyondAbsorbVolumeLimit"/> is the absorb gate's
-        /// own answer (<c>PickupAbsorbMath.IsBeyondAbsorbVolumeLimit</c> with the
-        /// motor's limit), passed in so this layer never reads a prop and so the
-        /// three identities share one predicate with no second threshold.
+        /// own answer (<c>PickupAbsorbMath.IsBeyondAbsorbLimit</c> with the prop's k and
+        /// the motor's semantic diameter), passed in so this layer never reads a prop and
+        /// so the three identities share one predicate with no second threshold.
         /// </para>
         /// <para>
         /// Absorbable wins first: a prop the ball can eat is neither a wall nor a

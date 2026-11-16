@@ -1,5 +1,8 @@
 # 道具行为与堆叠：五种 kind、状态机、支撑图
 
+> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+
+
 **本文回答四件事（B / C / D 三份交付合并在这里）：**
 
 1. 原作道具的**五种类型**分别是什么，我们怎么把它们变成可序列化的字段、状态机和更新预算；

@@ -131,34 +131,115 @@ class CoordinateTests(unittest.TestCase):
 
 
 class AbsorbGateTests(unittest.TestCase):
-    def test_formula_matches_the_design(self):
+    """The absorb gate: the ORIGINAL numbers (k x bbox, 10x volume, floor to mm).
+
+    Two quantities are tested separately on purpose: the continuous D_req
+    (``absorb_diameter_req_exact``) is the physics, and the whole-millimetre ``Req``
+    (``absorb_diameter_req``) is what the original compares.  Every number here is
+    recomputed from the formula in the test, not copied from the implementation.
+    """
+
+    def test_formula_matches_the_original_rule(self):
         size = (0.08, 0.078, 0.0789)
-        expected = (60.0 * size[0] * size[1] * size[2] / math.pi) ** (1.0 / 3.0)
-        self.assertAlmostEqual(core.absorb_diameter_req(size), expected, places=12)
-        # The design's rounded form: 2.673 * cbrt(a*b*c).
+        for k in (core.DEFAULT_VOLUME_K, 0.5, 1.0, 2.0, 8.0):
+            expected = (60.0 * k * size[0] * size[1] * size[2] / math.pi) ** (1.0 / 3.0)
+            self.assertAlmostEqual(core.absorb_diameter_req_exact(size, k), expected, places=12)
+        # The default is the original's 0.70, so an undeclared def gets k=0.70.
+        self.assertEqual(core.DEFAULT_VOLUME_K, 0.70)
+
+    def test_req_is_floored_to_whole_millimetres(self):
+        size = (0.08, 0.078, 0.0789)
+        exact_mm = core.absorb_diameter_req_exact(size) * 1000.0
+        self.assertEqual(core.absorb_diameter_req_mm(size), int(math.floor(exact_mm)))
         self.assertAlmostEqual(core.absorb_diameter_req(size),
-                               round(2.6727 * (size[0] * size[1] * size[2]) ** (1 / 3), 3), places=2)
+                               core.absorb_diameter_req_mm(size) / 1000.0, places=12)
+        # The stored value is exactly three decimals (that is why the field is 0.187,
+        # not 0.1874): a floored mm is a whole number of millimetres.
+        self.assertAlmostEqual(core.absorb_diameter_req(size) * 1000.0,
+                               round(core.absorb_diameter_req(size) * 1000.0), places=9)
 
     def test_known_values(self):
-        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("apple")), 0.211, places=3)
-        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("thermos")), 0.403, places=3)
-        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("watermelon")), 0.671, places=3)
-        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("plate")), 0.302, places=3)
-        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("napkin")), 0.182, places=3)
+        # apple: k=0.70 gives 187.4 mm -> 187 mm (was 211 mm under the k-less gate).
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("apple")), 0.187, places=3)
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("banana")), 0.173, places=3)
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("thermos")), 0.358, places=3)
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("plate")), 0.268, places=3)
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("watermelon")), 0.596, places=3)
+        self.assertAlmostEqual(core.absorb_diameter_req(manifest_aabb("napkin")), 0.161, places=3)
+
+    def test_the_shared_numeric_contract(self):
+        # 60 = 6 * 10 (the 10x gate), 0.70 the original default factor, 1e-3 mm the boundary
+        # guard the C# twin (PickupAbsorbMath.MmFloorEpsilon) uses. These are the three
+        # numbers the two implementations must agree on; the C# file spells them in its own
+        # constants and this assertion is the Python half of that contract.
+        self.assertEqual(60.0, core.VOLUME_GATE_FACTOR)
+        self.assertEqual(0.70, core.DEFAULT_VOLUME_K)
+        self.assertEqual(1e-3, core.MM_EPSILON)
+        self.assertEqual(32.0, core.VOLUME_K_MAX)
+
+    def test_k_multiplies_the_volume_not_the_length(self):
+        size = manifest_aabb("watermelon")
+        base = core.absorb_diameter_req_exact(size, 1.0)
+        for k in (0.70, 0.5, 2.0):
+            self.assertAlmostEqual(core.absorb_diameter_req_exact(size, k) / base,
+                                   k ** (1.0 / 3.0), places=9)
 
     def test_gate_is_the_volume_rule(self):
         for def_id in ("apple", "banana", "thermos", "plate", "watermelon", "napkin"):
             size = manifest_aabb(def_id)
-            diameter = core.absorb_diameter_req(size)
-            volume = size[0] * size[1] * size[2]
-            # volume <= (pi/6) * D^3 / 10
-            self.assertLessEqual(volume, (math.pi / 6.0) * diameter ** 3 / 10.0 + 1e-12)
+            req_m = core.absorb_diameter_req(size)
+            volume = core.DEFAULT_VOLUME_K * size[0] * size[1] * size[2]
+            # The original FLOORS Req, so the accepted ball is up to 1 mm smaller than the
+            # exact 10x requirement ("the required pickup size is generally a little bit
+            # less than 10 times bigger"): volume is at or above the 10x volume of Req and
+            # strictly below the 10x volume of Req + 1 mm.
+            self.assertGreaterEqual(volume, (math.pi / 6.0) * req_m ** 3 / 10.0 - 1e-12)
+            above = (core.absorb_diameter_req_mm(size) + 1) / 1000.0
+            self.assertLess(volume, (math.pi / 6.0) * above ** 3 / 10.0)
 
-    def test_absorbable_flips_at_the_ceiling(self):
+    def test_absorbable_flips_on_the_whole_millimetre_boundary(self):
         size = manifest_aabb("watermelon")
-        diameter = core.absorb_diameter_req(size)
-        self.assertFalse(core.is_absorbable(size, diameter - 1e-6))
-        self.assertTrue(core.is_absorbable(size, diameter + 1e-6))
+        req_m = core.absorb_diameter_req(size)
+        self.assertTrue(core.is_absorbable(size, req_m))
+        self.assertFalse(core.is_absorbable(size, req_m - 0.001))
+        # A ball diameter that is only float-noise above the boundary still passes.
+        self.assertTrue(core.is_absorbable(size, req_m + 1e-9))
+
+    def test_epsilon_lifts_an_exact_boundary_back_onto_its_millimetre(self):
+        # A 0.3 m cube scaled by the gate's own constants lands on an exact 300 mm
+        # boundary; the product of three floats lands a few ulps below it.
+        side = (300.0 / 1000.0) * (math.pi / (60.0 * core.DEFAULT_VOLUME_K)) ** (1.0 / 3.0)
+        exact_mm = core.absorb_diameter_req_exact((side, side, side)) * 1000.0
+        self.assertAlmostEqual(exact_mm, 300.0, places=6)
+        self.assertEqual(core.absorb_diameter_req_mm((side, side, side)), 300)
+        self.assertTrue(core.is_absorbable((side, side, side), 0.300))
+
+    def test_volume_k_defaults_and_overrides(self):
+        catalog = {"apple": {"id": "apple", "volumeK": 2.0}}
+        self.assertEqual(core.effective_volume_k({"def": "apple"}, catalog), 2.0)
+        self.assertEqual(core.effective_volume_k({"def": "apple", "volumeK": 0.5}, catalog), 0.5)
+        self.assertEqual(core.effective_volume_k({"def": "unknown"}, catalog),
+                         core.DEFAULT_VOLUME_K)
+
+    def test_volume_k_range_is_the_one_authoring_rule(self):
+        for bad in (0, -1, 33, 70, float("nan"), float("inf"), "0.7", True):
+            self.assertIsNotNone(core.volume_k_error(bad), bad)
+        for good in (0.01, 0.5, 0.7, 1.0, 16.0, 32.0):
+            self.assertIsNone(core.volume_k_error(good), good)
+
+    def test_default_k_is_never_written_into_a_document(self):
+        doc = valid_doc()
+        text = core.dump_doc(doc)
+        self.assertNotIn("volumeK", text)
+        doc["defs"][0]["volumeK"] = 0.5
+        text = core.dump_doc(doc)
+        self.assertIn('"volumeK": 0.5', text)
+        # A prop override is emitted too, and the def-level value prices the gate.
+        doc["defs"][0]["volumeK"] = 2.0
+        doc["props"][0]["volumeK"] = 0.5
+        text = core.dump_doc(doc)
+        self.assertIn('"volumeK": 2.0', text)
+        self.assertEqual(core.dump_doc(json.loads(text)), text)
 
 
 class SeatingTests(unittest.TestCase):
@@ -224,7 +305,8 @@ class DeterminismTests(unittest.TestCase):
         doc["props"][0]["absorbDiameterReq"] = 9.999
         text = core.dump_doc(doc)
         self.assertNotIn("9.999", text)
-        self.assertIn('"absorbDiameterReq": 0.211', text)
+        # apple: k=0.70 prices it at 187 mm, so the stale 9.999 cannot survive.
+        self.assertIn('"absorbDiameterReq": 0.187', text)
         self.assertIn('"absorbable": true', text)
 
     def test_dump_is_byte_stable_through_a_round_trip(self):

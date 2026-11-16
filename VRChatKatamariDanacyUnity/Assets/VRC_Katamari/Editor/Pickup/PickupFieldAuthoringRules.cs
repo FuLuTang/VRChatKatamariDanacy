@@ -18,7 +18,7 @@ namespace VRCKatamari.Editor.Pickup
     /// <see cref="PickupFieldSync"/>; this type only answers questions about values.
     /// </para>
     /// <para>
-    /// Why these rules exist at all. <c>Runtime/Pickup/PickupFieldHost.cs</c> holds seven
+    /// Why these rules exist at all. <c>Runtime/Pickup/PickupFieldHost.cs</c> holds eight
     /// index-aligned serialized arrays, and the host is the only runtime owner of that data.
     /// An editor-only MonoBehaviour cannot carry the authoring data instead: a component
     /// whose script lives in an Editor assembly has no runtime type, so Unity cannot
@@ -91,6 +91,75 @@ namespace VRCKatamari.Editor.Pickup
         public const string ValueSourceDeclared = "declared";
         public const string ValueSourceExisting = "existing";
         public const string ValueSourceNone = "none";
+
+        /// <summary>
+        /// The per-item volume factor's default and its one legal range: `0 &lt; k &lt;= 32`.
+        /// </summary>
+        /// <remarks>
+        /// Runtime twin: <c>PickupAbsorbMath.DefaultVolumeK</c>/<c>MaxVolumeK</c>. The
+        /// authoring side spells the same numbers because this assembly cannot reference the
+        /// runtime one, and one test pins them equal so the two cannot drift. 0.70 is the
+        /// original's default factor (`Volume = k * bbox`, 1,008/1,425 types) and the
+        /// ceiling catches a typo like `70`; see PARITY_AUDIT G13.
+        /// </remarks>
+        public const float DefaultVolumeK = 0.70f;
+
+        /// <summary>The upper bound of the legal `volumeK` range, exclusive of 0.</summary>
+        public const float MaxVolumeK = 32f;
+
+        /// <summary>
+        /// Why a declared <c>volumeK</c> is unusable, or null when it is a legal factor.
+        /// </summary>
+        /// <remarks>
+        /// The single statement of the range. A non-finite value, `k &lt;= 0` and
+        /// `k &gt; MaxVolumeK` are refused rather than clamped: 0 would price every item at
+        /// zero volume and 70 (a typo for 0.70) would make a chair absorbable by a pinhead,
+        /// so silently "fixing" either would hide a data error that changes gameplay.
+        /// </remarks>
+        public static string VolumeKError(float volumeK)
+        {
+            if (float.IsNaN(volumeK) || float.IsInfinity(volumeK)) return "must be finite";
+            if (volumeK <= 0f) return "must be > 0 (0 would price every item at zero volume)";
+            if (volumeK > MaxVolumeK)
+                return "must be <= 32 (0.70 is the original default; a typo like 70 is refused)";
+            return null;
+        }
+
+        /// <summary>
+        /// The value k a row is written with: the declaration, else the row already on the
+        /// host, else <see cref="DefaultVolumeK"/>.
+        /// </summary>
+        /// <remarks>
+        /// Unlike <see cref="TryResolveValueUnits"/> there is no "none" outcome: k always has
+        /// the original's default, so a row can never be left with an unusable factor. A
+        /// declaration that fails <see cref="VolumeKError"/> returns false (a refused row,
+        /// never a silent fallback), while an existing-but-invalid host value is replaced by
+        /// the default and reported through <c>source</c> as
+        /// <see cref="ValueSourceNone"/>.
+        /// </remarks>
+        public static bool TryResolveVolumeK(float declaredVolumeK, bool hasDeclaredVolumeK,
+            float existingVolumeK, bool hasExistingVolumeK, out float volumeK, out string source)
+        {
+            volumeK = DefaultVolumeK;
+            source = ValueSourceNone;
+
+            if (hasDeclaredVolumeK)
+            {
+                if (VolumeKError(declaredVolumeK) != null) return false;
+                volumeK = declaredVolumeK;
+                source = ValueSourceDeclared;
+                return true;
+            }
+
+            if (hasExistingVolumeK && VolumeKError(existingVolumeK) == null)
+            {
+                volumeK = existingVolumeK;
+                source = ValueSourceExisting;
+                return true;
+            }
+
+            return true;
+        }
 
         /// <summary>
         /// True when a full-size AABB can size a prop: every side finite and >= 0, and the
@@ -194,6 +263,55 @@ namespace VRCKatamari.Editor.Pickup
 
             source = ValueSourceNone;
             return true;
+        }
+
+        /// <summary>
+        /// Returns one line per row whose host k differs from the declared k.
+        /// </summary>
+        /// <remarks>
+        /// The k twin of <see cref="FindValueUnitMismatches"/>, and it exists for the same
+        /// reason: the sync writes through a SerializedObject, so a re-read is the only proof
+        /// that the value the importer declared reached the host. Comparison is exact (both
+        /// sides are a float written and read back through the same property, so anything
+        /// but bit equality means the write did not land). Rows without a declaration are
+        /// not compared: preserving them is the intended behaviour.
+        /// </remarks>
+        public static string[] FindVolumeKMismatches(string[] itemIds, float[] hostVolumeK,
+            IDictionary<string, float> declaredVolumeK)
+        {
+            if (itemIds == null || hostVolumeK == null || declaredVolumeK == null ||
+                declaredVolumeK.Count == 0)
+            {
+                return new string[0];
+            }
+
+            int rows = itemIds.Length < hostVolumeK.Length ? itemIds.Length : hostVolumeK.Length;
+            var mismatches = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < rows; i++)
+            {
+                string itemId = itemIds[i];
+                if (string.IsNullOrEmpty(itemId) || seen.Contains(itemId)) continue;
+                seen.Add(itemId);
+                float declared;
+                if (!declaredVolumeK.TryGetValue(itemId, out declared)) continue;
+                if (hostVolumeK[i] != declared)
+                {
+                    mismatches.Add(itemId + ": declared " + declared + ", host " + hostVolumeK[i]);
+                }
+            }
+
+            for (int i = 0; i < itemIds.Length; i++)
+            {
+                string itemId = itemIds[i];
+                if (!string.IsNullOrEmpty(itemId) && declaredVolumeK.ContainsKey(itemId) &&
+                    !seen.Contains(itemId))
+                {
+                    mismatches.Add(itemId + ": declared " + declaredVolumeK[itemId] + ", no row");
+                }
+            }
+
+            return mismatches.ToArray();
         }
 
         /// <summary>

@@ -64,11 +64,12 @@ namespace VRCKatamari.Pickup
     /// blocking boxes. A prop whose top is within the motor's step limit is instead a step
     /// and a floor, and is registered through <c>SetSupportProps</c>; both roles come from
     /// ONE classification of the same scan, so a prop is never a wall and a floor at once.
-    /// The predicate is the absorb gate's own volume limit
-    /// (<see cref="PickupAbsorbMath.IsBeyondAbsorbVolumeLimit"/> with the motor's
-    /// <c>GetAbsorbVolumeLimitWorldM3</c>), never a second threshold: the instant the ball
-    /// grows past a prop's volume, the same function stops calling it "too big", the next
-    /// scan drops it from both sets, and the prop becomes absorbable. Boxes come from the
+    /// The predicate is the absorb gate's OWN whole-millimetre rule
+    /// (<see cref="PickupAbsorbMath.IsBeyondAbsorbLimit"/> with the prop's
+    /// <c>propVolumeK</c> and the motor's semantic diameter), never a second threshold: the
+    /// instant the ball's whole-mm diameter reaches the prop's Req, the same function stops
+    /// calling it "too big", the next scan drops it from both sets, and the prop becomes
+    /// absorbable. Boxes come from the
     /// gameplay volume <c>propBounds</c> around the prop's world position - not from a
     /// <c>BoxCollider</c> and not from the visual mesh - because the three layers are
     /// separate and most scene props are authored without a collider at all
@@ -178,6 +179,14 @@ namespace VRCKatamari.Pickup
         // would rotate a yawed prop twice. Optional: an un-synced scene has no column
         // and the host falls back to propBounds with one reason-coded warning.
         [SerializeField] private Vector3[] propLocalBounds;
+        // Per-item volume factor k (the original's `Volume = k * a*b*c`; 0.70 default).
+        // Filled by the level importer from `defs[].volumeK` (a prop's own `volumeK` wins),
+        // index-aligned with propTransforms. OPTIONAL: a scene synced before this column
+        // existed has an empty/shorter array and every one of its props plays at
+        // PickupAbsorbMath.DefaultVolumeK, so no re-sync is needed to stay playable. The
+        // value is the GATE's input (Req = floor(1000*cbrt(60*k*a*b*c/pi))) and nothing else
+        // - it is not the growth side's volume, which is a later step.
+        [SerializeField] private float[] propVolumeK;
         // Value units per prop, from the level's declared data. `long[]` since
         // Docs/OPEN_DECISIONS.md (r) migration step B: the unit and every stored number are
         // unchanged, only the serialized element width doubled (int32 -> int64, 8 -> 16 hex
@@ -386,8 +395,8 @@ namespace VRCKatamari.Pickup
             // A positive semantic diameter is this motor's colour of readiness: it is what its
             // Start derives, and LevelArenaHost gates its registration on the same test.
             // Until then the motor's tables describe a zero-diameter ball at the world origin
-            // - the volume limit is 0 ("every prop is too big"), nothing can be a support - so
-            // a set built here would describe a ball that does not exist. Waiting is the
+            // - its gate diameter is 0 mm ("every prop is too big"), nothing can be a support
+            // - so a set built here would describe a ball that does not exist. Waiting is the
             // host's half of the readiness contract; that alone is NOT what fixes F1 (there
             // the motor had derived a size in its own step while its Start had never run, so
             // the set still had to arrive): the motor's entry points allocate on first use,
@@ -660,6 +669,29 @@ namespace VRCKatamari.Pickup
             return propBounds.Length;
         }
 
+        /// <summary>
+        /// The per-item volume factor k the gate must use for one row.
+        /// </summary>
+        /// <remarks>
+        /// The importer/sync writes <c>propVolumeK</c>; a scene without the column, a short
+        /// array or a row the authoring rule refuses falls back to
+        /// <see cref="PickupAbsorbMath.DefaultVolumeK"/>. The fallback is silent at run time
+        /// on purpose: a missing column is the documented pre-field state, and the reason a
+        /// scene can be re-synced later without becoming unplayable in the meantime. The
+        /// authoring side is where a half-filled column is made visible - the sync refuses
+        /// an out-of-range k and reports how many rows got the default.
+        /// </remarks>
+        private float EffectiveVolumeK(int index)
+        {
+            if (propVolumeK == null || index < 0 || index >= propVolumeK.Length)
+                return PickupAbsorbMath.DefaultVolumeK;
+            float value = propVolumeK[index];
+            if (!KatamariMath.IsFiniteFloat(value)) return PickupAbsorbMath.DefaultVolumeK;
+            if (value <= 0f || value > PickupAbsorbMath.MaxVolumeK)
+                return PickupAbsorbMath.DefaultVolumeK;
+            return value;
+        }
+
         private int LengthOfValues()
         {
             if (valueUnits == null) return 0;
@@ -827,9 +859,9 @@ namespace VRCKatamari.Pickup
                 if (propTransforms[i] == null) continue;
                 Vector3 bounds = propBounds[i];
                 if (!KatamariMath.IsFiniteVector(bounds)) continue;
-                // A zero-volume prop can never exceed any volume limit, so it can never
-                // block; requiring strictly positive sizes keeps this row's box out of the
-                // maths entirely instead of relying on that fact downstream.
+                // A zero-volume prop has Req 0 mm, so it can never block; requiring strictly
+                // positive sizes keeps this row's box out of the maths entirely instead of
+                // relying on that fact downstream.
                 if (bounds.x <= 0f || bounds.y <= 0f || bounds.z <= 0f) continue;
 
                 float halfX = bounds.x * 0.5f;
@@ -1315,14 +1347,16 @@ namespace VRCKatamari.Pickup
             Vector3 itemPosition = propTransforms[index].position;
             // The column is the ledger's own 64-bit quantity (Docs/OPEN_DECISIONS.md (r) step
             // B), so there is no widening at the read site any more. The candidate queue is
-            // NOT widened here: KatamariBallMotor.SubmitCandidate takes the value as a float
+            // NOT widened here: KatamariBallMotor.SubmitCandidateWithVolumeK takes the
+            // value as a float
             // because that slot belongs to the size-model domain, which this step leaves
             // alone. `(float)valueUnits[index]` is exactly what the motor received before
             // (an int widened to long and then to float is the same float an int->float
             // conversion produced); PickupAbsorbMath.TryAbsorbValueToLedgerGain converts it
             // back to a 64-bit gain, where the range guard is the long one.
-            motor.SubmitCandidate(true, kinds[index], propBounds[index],
-                itemPosition, (float)valueUnits[index], itemIds[index], 0);
+            motor.SubmitCandidateWithVolumeK(true, kinds[index], propBounds[index],
+                itemPosition, (float)valueUnits[index], itemIds[index], 0,
+                EffectiveVolumeK(index));
             // Stamped even when the motor answered "already queued": both cases leave this
             // host willing to withdraw the id later if the ball leaves.
             lastSubmitTimes[index] = Time.time;
@@ -1359,9 +1393,11 @@ namespace VRCKatamari.Pickup
         /// stops a crowded wall set from evicting the step the ball is climbing.
         /// </para>
         /// <para>
-        /// The predicate is the absorb gate's, not a copy of it: the limit comes from the
-        /// motor (<c>GetAbsorbVolumeLimitWorldM3</c> - the same value the gate prices) and
-        /// the test is <see cref="PickupAbsorbMath.IsBeyondAbsorbVolumeLimit"/>. The
+        /// The predicate is the absorb gate's, not a copy of it: the ball side comes from
+        /// the motor (<c>GetSemanticDiameterWorldM</c>) and each prop carries its own
+        /// <c>propVolumeK</c>, and the test is
+        /// <see cref="PickupAbsorbMath.IsBeyondAbsorbLimit"/> - the same whole-millimetre
+        /// comparison <see cref="PickupAbsorbMath.EvaluateAbsorb"/> makes. The
         /// classification then splits only on <c>rise = topY - supportY</c> against the
         /// motor's <c>GetStepHeightLimitWorldM()</c> - the same step limit the static-box
         /// mask uses, so props and scene geometry cannot disagree about what a step is.
@@ -1443,12 +1479,15 @@ namespace VRCKatamari.Pickup
                 supportCapacityNow = BlockingSelectionCapacity;
             }
 
-            float limit = motor.GetAbsorbVolumeLimitWorldM3();
-            if (!KatamariMath.IsFiniteFloat(limit) || limit < 0f)
+            float ballDiameterM = motor.GetSemanticDiameterWorldM();
+            float ballMm;
+            if (!KatamariMath.IsFiniteFloat(ballDiameterM) || ballDiameterM < 0f ||
+                !PickupAbsorbMath.TryFloorMillimetres(ballDiameterM, out ballMm))
             {
-                // The motor could not price its own limit. Registering nothing matches what
-                // the gate does with a non-finite limit (it refuses every item), so the two
-                // answers stay identical; the motor already reports the refused derive.
+                // The motor could not price its own diameter. Registering nothing matches
+                // what the gate does with a non-finite diameter (it refuses every item), so
+                // the two answers stay identical; the motor already reports the refused
+                // derive.
                 ClearPropSets();
                 return;
             }
@@ -1507,7 +1546,8 @@ namespace VRCKatamari.Pickup
                 float pruneLimit = pruneRadius + propHalfDiagonal[i];
                 if (distanceSq > pruneLimit * pruneLimit) continue;
 
-                if (!PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(propBounds[i], limit)) continue;
+                if (!PickupAbsorbMath.IsBeyondAbsorbLimit(propBounds[i], EffectiveVolumeK(i),
+                    ballDiameterM)) continue;
 
                 Vector3 minimum;
                 Vector3 maximum;
@@ -1552,7 +1592,7 @@ namespace VRCKatamari.Pickup
             // important fact for this step. A refused selection keeps that set's previous
             // batch and leaves the other set free to update, exactly as before P2.
             UpdateSupportSelection(center, radius, supportCapacityNow);
-            UpdateBlockingSelection(center, radius, blockingCapacityNow, limit);
+            UpdateBlockingSelection(center, radius, blockingCapacityNow, ballMm);
             // The v2 solids are refreshed from the same scan, the same classifier and the
             // same candidate flags: one predicate decides all four sets (v1 blocking, v1
             // support, v2 blocking, v2 support), which is the property the design asks for.
@@ -1635,7 +1675,7 @@ namespace VRCKatamari.Pickup
 
         /// <summary>Builds, validates and registers the blocking selection of this scan.</summary>
         private void UpdateBlockingSelection(Vector3 center, float radius, int capacity,
-            float limit)
+            float ballMm)
         {
             if (capacity <= 0) return;
             int written = BlockingPropMath.SelectNearest(center, radius,
@@ -1678,7 +1718,7 @@ namespace VRCKatamari.Pickup
                 loggedBlockingSet = true;
                 Debug.Log("[PickupFieldHost] blocking boxes=" + written
                     + " candidates=" + blockingCandidateCount
-                    + " limitM3=" + limit
+                    + " ballMm=" + ballMm
                     + " radiusM=" + radius
                     + " capacity=" + capacity);
             }
@@ -1696,7 +1736,7 @@ namespace VRCKatamari.Pickup
         /// <para>
         /// One predicate, four sets. The candidate flags are the ones
         /// <see cref="UpdatePropObstacles"/> already computed with the absorb gate's own
-        /// volume limit (<see cref="PickupAbsorbMath.IsBeyondAbsorbVolumeLimit"/>) and the
+        /// predicate (<see cref="PickupAbsorbMath.IsBeyondAbsorbLimit"/>) and the
         /// motor's step limit, so a prop cannot be a wall in one model and a floor in the
         /// other. The selection reuses <see cref="BlockingPropMath.SelectNearest"/> - the
         /// same nearest-first plus stickiness rule the v1 sets use - over the merged

@@ -1,5 +1,8 @@
 # 挡路道具方案：吸不动的物件要挡住球
 
+> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+
+
 > 状态：`IMPLEMENTED_NOT_COMPILED`，2026-11-15。运行期代码已按本方案写完（§5），**没有编译、没有 Play Mode、没有 Build & Test**：作者不是 Unity 操作者。能离线验的只有纯数学（NUnit 与 `Docs/tests`），手感与帧时间仍要 Unity（§6）。
 > 触发：2026-11-15 试玩——「太大吸不动的道具没有碰撞，球直接穿过去」。需求：**吸不动 = 挡（或弹），吸得动 = 不挡**。
 > 行号口径：**新增与修改的实现说明一律按符号名**，不写行号。§2 B、§4 里保留的少量旧行号是当时核查的记录（`SweepMath.cs` 本轮未改，`KatamariBallMotor.cs` / `PickupFieldHost.cs` / `PickupAbsorbMath.cs` 都已改过，其旧行号失效）。§0.6 是实现后的现状，其余章节保留决策理由，与现状不一致处以 §0.6 与 §5 为准。

@@ -251,6 +251,15 @@ namespace VRCKatamari.Editor.LevelBuild
             /// column is (r) step B, so a level may declare a value past <c>int.MaxValue</c>.
             /// </summary>
             public long valueUnits;
+            /// <summary>
+            /// The original's per-item volume factor k (<c>Volume = k * bbox</c>), absent
+            /// (0) means the default 0.70. JSON <c>defs[].volumeK</c>; the gate prices the
+            /// item with it (<c>Req = floor(1000*cbrt(60*k*a*b*c/pi))</c>). Absent and a
+            /// declared 0 are the same thing here because 0 is outside the legal range, so
+            /// the importer fills <c>PickupFieldAuthoringRules.DefaultVolumeK</c> for both
+            /// and never writes a default back to the JSON.
+            /// </summary>
+            public float volumeK;
         }
 
         [Serializable]
@@ -268,6 +277,12 @@ namespace VRCKatamari.Editor.LevelBuild
             public string stackedOn;
             /// <summary>Per-prop override of the def's value units; 64-bit, like the host column.</summary>
             public long valueUnits;
+            /// <summary>
+            /// Per-prop override of the def's <c>volumeK</c> (0 = not declared). Rare by
+            /// design: the factor is a property of the TYPE, so the def carries it; the
+            /// override exists for the one instance whose authored body differs.
+            /// </summary>
+            public float volumeK;
             public string notes;
         }
 
@@ -556,10 +571,12 @@ namespace VRCKatamari.Editor.LevelBuild
             // The declaration map is the only value input: the sync writes it in the same
             // pass as the other arrays and reads it back, so there is no second write here.
             Dictionary<string, long> declaredValueUnits = BuildDeclaredValueUnits(doc);
+            Dictionary<string, float> declaredVolumeK = BuildDeclaredVolumeK(doc);
             report.ValueUnitsDeclared = SumDeclaredValueUnits(doc);
             if (propsOk)
             {
-                TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredValueUnits, report);
+                TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredValueUnits,
+                    declaredVolumeK, report);
             }
 
             BindArenaHost(doc, levelRoot, structuresRoot, report);
@@ -649,6 +666,19 @@ namespace VRCKatamari.Editor.LevelBuild
                                  "defs[].valueUnits for '" + prop.def + "')");
                     ok = false;
                 }
+
+                // k is optional (default 0.70), but a DECLARED one must be inside the one
+                // legal range. Same rule the sync applies when it writes the column.
+                if (prop.volumeK != 0f)
+                {
+                    string volumeKProblem =
+                        PickupFieldAuthoringRules.VolumeKError(prop.volumeK);
+                    if (volumeKProblem != null)
+                    {
+                        report.Error(prop.itemId + " volumeK " + prop.volumeK + " " + volumeKProblem);
+                        ok = false;
+                    }
+                }
             }
 
             if (doc.defs != null)
@@ -656,17 +686,31 @@ namespace VRCKatamari.Editor.LevelBuild
                 for (int i = 0; i < doc.defs.Length; i++)
                 {
                     DefEntry def = doc.defs[i];
-                    if (def == null || string.IsNullOrEmpty(def.model))
+                    if (def == null)
                     {
                         continue;
                     }
 
-                    if (!IsValidModelPath(def.model))
+                    if (!string.IsNullOrEmpty(def.model) && !IsValidModelPath(def.model))
                     {
                         report.Error("defs[" + i + "] def '" + def.id + "' [def_model]: model '" +
                                      def.model + "' must be a Unity-relative .fbx path under " +
                                      "Assets/ and must not contain '..'");
                         ok = false;
+                    }
+
+                    // k is optional (0 = not declared, default 0.70), but a declared one
+                    // must be inside the one legal range; the sync applies the same rule.
+                    if (def.volumeK != 0f)
+                    {
+                        string defKProblem =
+                            PickupFieldAuthoringRules.VolumeKError(def.volumeK);
+                        if (defKProblem != null)
+                        {
+                            report.Error("defs[" + i + "] def '" + def.id + "' volumeK " +
+                                         def.volumeK + " " + defKProblem);
+                            ok = false;
+                        }
                     }
                 }
             }
@@ -1016,6 +1060,64 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             return declared;
+        }
+
+        /// <summary>
+        /// Item id to the per-item volume factor k the level declares.
+        /// </summary>
+        /// <remarks>
+        /// The prop's own <c>volumeK</c> wins over its def's, exactly like valueUnits; a def
+        /// that declares neither contributes nothing, and the sync then falls back to the
+        /// row already serialized on the host or to
+        /// <c>PickupFieldAuthoringRules.DefaultVolumeK</c> (0.70). A declared value outside
+        /// <c>0 &lt; k &lt;= 32</c> is NOT filtered here: the sync refuses that row with a
+        /// report line naming the item, because silently replacing it would play a different
+        /// gate than the file states.
+        /// </remarks>
+        private static Dictionary<string, float> BuildDeclaredVolumeK(PlacementDocument doc)
+        {
+            var declared = new Dictionary<string, float>(StringComparer.Ordinal);
+            if (doc.props == null)
+            {
+                return declared;
+            }
+
+            for (int i = 0; i < doc.props.Length; i++)
+            {
+                PropEntry prop = doc.props[i];
+                if (prop == null || string.IsNullOrEmpty(prop.itemId))
+                {
+                    continue;
+                }
+
+                float volumeK = DeclaredVolumeK(doc, prop);
+                if (volumeK > 0f)
+                {
+                    declared[prop.itemId] = volumeK;
+                }
+            }
+
+            return declared;
+        }
+
+        /// <summary>
+        /// One prop's declared k: its own <c>volumeK</c>, else its def's, else 0 (not
+        /// declared). 0 is a sentinel here, never a legal factor.
+        /// </summary>
+        private static float DeclaredVolumeK(PlacementDocument doc, PropEntry prop)
+        {
+            if (prop.volumeK > 0f) return prop.volumeK;
+            if (doc.defs == null || prop.def == null) return 0f;
+            for (int i = 0; i < doc.defs.Length; i++)
+            {
+                DefEntry entry = doc.defs[i];
+                if (entry != null && string.Equals(entry.id, prop.def, StringComparison.Ordinal))
+                {
+                    return entry.volumeK;
+                }
+            }
+
+            return 0f;
         }
 
         /// <summary>The level's declared total, for the one-line report.</summary>
@@ -2474,7 +2576,8 @@ namespace VRCKatamari.Editor.LevelBuild
         // ---------------------------------------------------------------- sync ---
 
         private static bool TrySyncPickupField(Transform levelRoot, string arenaId, Transform propsRoot,
-            IDictionary<string, long> declaredValueUnits, PlacementImportReport report)
+            IDictionary<string, long> declaredValueUnits, IDictionary<string, float> declaredVolumeK,
+            PlacementImportReport report)
         {
             PickupFieldHost[] hosts;
             if (!string.IsNullOrEmpty(arenaId))
@@ -2540,7 +2643,7 @@ namespace VRCKatamari.Editor.LevelBuild
             // the old "wire what is already there" behaviour.
             bool createMissingColliders = string.IsNullOrEmpty(arenaId);
             PickupFieldSyncReport sync = PickupFieldSync.SyncFromChildren(host, propsRoot,
-                declaredValueUnits, createMissingColliders);
+                declaredValueUnits, declaredVolumeK, createMissingColliders);
             report.SyncRan = true;
             report.SyncPropCount = sync.PropCount;
             report.SyncRejected = sync.Rejected.Count;
@@ -2560,6 +2663,11 @@ namespace VRCKatamari.Editor.LevelBuild
                 report.Error("PickupFieldSync failed: " + sync.Failure);
                 return false;
             }
+
+            report.Note("pickup sync wrote " + sync.PropCount + " row(s) into 8 columns, including " +
+                        "propVolumeK (per-item volume factor): " +
+                        (declaredVolumeK == null ? 0 : declaredVolumeK.Count) +
+                        " row(s) declared a k, the rest play at the original's 0.70 default");
 
             if (sync.CollidersCreated > 0)
             {

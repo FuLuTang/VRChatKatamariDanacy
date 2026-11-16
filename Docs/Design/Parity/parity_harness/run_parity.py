@@ -119,7 +119,7 @@ OURS: Dict[str, Constant] = {
     "baseline_units": Constant(3.4390244, "KatamariBallMotor.cs:193-197"),
     "c_per_unit": Constant(0.0041, "KatamariBallMotor.cs:193-197"),
     "max_core_radius_m": Constant(1.1, "KatamariBallMotor.cs:195"),
-    "absorb_volume_ratio": Constant(10.0, "KatamariBallMotor.cs:218"),
+    "absorb_volume_ratio": Constant(10.0, "PickupAbsorbMath.cs AbsorbVolumeRatio（原作的 10×）"),
     "step_ratio": Constant(0.25, "KatamariBallMotor.cs:110"),
     "support_slope_limit_deg": Constant(45.0, "SupportSurfaceMath.cs:480"),
     "theta_ride_deg": Constant(contact_v2.THETA_RIDE_DEG,
@@ -144,7 +144,9 @@ OURS: Dict[str, Constant] = {
                                "Docs/Design/GameModes/Levels/story_01_bench_size.json"),
     "star_span_m": Constant(0.35, "repricing_proposal.md §1（1.60 − 1.25）"),
     "ramp_tangential_scale": Constant(0.0, "Docs/Design/BallMotor/TERRAIN_SUPPORT.md §11 U3"),
-    "gate_floor_m": Constant(0.0, "placement_core.absorb_diameter_req（浮点，不取整）"),
+    "gate_floor_m": Constant(0.001,
+                             "placement_core.floor_mm / PickupAbsorbMath.MmFloorEpsilon"
+                             "（Req 与球径都向下取整到整 mm）"),
 }
 
 #: Absolute-metre constants of our engine whose *ratio to the ball* changes with
@@ -187,17 +189,25 @@ class OursLevel:
         self.defs = list(data.get("defs") or [])
         self.structures = list(data.get("structures") or [])
         self.items: List[Dict[str, Any]] = []
+        catalog = placement_core.def_catalog(data)
         for prop in self.props:
             aabb = tuple(float(x) for x in prop["aabb"])
             volume = aabb[0] * aabb[1] * aabb[2]
+            volume_k = placement_core.effective_volume_k(prop, catalog)
             self.items.append({
                 "item_id": prop.get("itemId"),
                 "def": prop.get("def"),
                 "kind": prop.get("kind"),
                 "zone": prop.get("zone"),
                 "aabb": aabb,
+                # The ORIGINAL quantity: V = k * a*b*c (k defaults to 0.70).
+                "volume_k": volume_k,
                 "volume_m3": volume,
-                "d_req_m": placement_core.absorb_diameter_req(aabb),
+                "original_volume_m3": volume_k * volume,
+                "d_req_m": placement_core.absorb_diameter_req(aabb, volume_k),
+                "d_req_mm": placement_core.absorb_diameter_req_mm(aabb, volume_k),
+                # Unrounded, for "how far past the boundary" diagnostics only.
+                "d_req_exact_m": placement_core.absorb_diameter_req_exact(aabb, volume_k),
                 "value_units": int(prop.get("valueUnits", 0)),
             })
 
@@ -211,10 +221,18 @@ class OursLevel:
         return len({item["def"] for item in self.items})
 
     def absorbable_at(self, diameter_m: float) -> List[Dict[str, Any]]:
-        return [i for i in self.items if i["d_req_m"] <= diameter_m + 1e-12]
+        # The original's comparison: whole-millimetre ball vs whole-millimetre Req.
+        ball_mm = placement_core.floor_mm(diameter_m)
+        return [i for i in self.items if i["d_req_mm"] <= ball_mm]
 
-    def volume_absorbable_at(self, diameter_m: float) -> float:
-        return sum(i["volume_m3"] for i in self.absorbable_at(diameter_m))
+    def original_volume_absorbable_at(self, diameter_m: float) -> float:
+        """Σ V of the absorbable items in the ORIGINAL's volume definition (k·bbox).
+
+        The gate and every content/supply comparison must use the same volume on both
+        sides; ``volume_m3`` (the raw bbox) is kept for cross-checks and for the ledger
+        side, which is still unit-based until steps C/D.
+        """
+        return sum(i["original_volume_m3"] for i in self.absorbable_at(diameter_m))
 
     def value_volume(self) -> float:
         return sum(i["value_units"] for i in self.items) * _v("c_per_unit")
@@ -313,12 +331,13 @@ def corpus_starvation(corpus: Corpus, default_penalty: float = 0.8):
 def ours_supply(level: "OursLevel"):
     """Our side at the *current* rule (penalty 1.0 until D2 lands)."""
     need = _ball_volume(level.max_d) - _ball_volume(level.start_d)
-    credited = level.volume_absorbable_at(level.max_d) * 1.0
+    # V = k·bbox, the original's volume (G13); credit is still 1.0 until D2 lands.
+    credited = level.original_volume_absorbable_at(level.max_d) * 1.0
     return (credited / need if need > 0 else float("inf"))
 
 
 def ours_starvation(level: "OursLevel"):
-    pairs = [(item["d_req_m"], item["volume_m3"]) for item in level.items]
+    pairs = [(item["d_req_m"], item["original_volume_m3"]) for item in level.items]
     return _runway(pairs, level.start_d, level.max_d)
 
 
@@ -619,16 +638,17 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
     add("G07", "10× 体积门", "×V_item", float(params["gate_volume_ratio"]),
         _v("absorb_volume_ratio"), CONSISTENT,
         "missions 类型表自洽：πD³/6≈10V（1,449/1,450 行 1 mm 内）；raw_growth §2",
-        "PickupAbsorbMath.cs:350 / KatamariBallMotor.cs:218（absorbVolumeRatio=10）",
-        "唯一一条完全对上的硬规则：门 = 10 倍体积，两边同形同值；但**体积的定义**差一个 k（见 G13）")
+        "PickupAbsorbMath.AbsorbVolumeRatio=10（Req=cbrt(60·k·a·b·c/π)）",
+        "门 = 10 倍体积，两边同形同值；体积的定义也已经是原作的 k·bbox（G13）")
 
     add("G08", "门槛取整", "m", float(params["gate_floor_m"]),
-        float(_v("gate_floor_m")), MISSING,
+        float(_v("gate_floor_m")), PARAM,
         "raw_growth_mechanism.txt §2：门槛向下取整到 mm（蚂蚁实际只需 ~8.8×）",
-        "placement_core.absorb_diameter_req（浮点，不取整）",
-        "我们用浮点比体积；原作按 mm 取整后比较。差不到 1 mm，"
-        "但在 %.4g m 的球上 1 mm 就是 %.1f%% 的直径"
-        % (start_d, 0.1 / start_d))
+        "placement_core.absorb_diameter_req_mm / PickupAbsorbMath.MmFloorEpsilon"
+        "（Req 与球径都取整到整 mm，ε 只修浮点误差）",
+        "两边同一口径：Req_mm = floor(1000·cbrt(60·k·abc/π))，可吸 iff "
+        "floor(1000·D) ≥ Req_mm。1 mm 在起始球上是 %.1f%% 的直径，只有最小件受它影响"
+        % (0.1 / start_d))
 
     vf = corpus.data.get("volume_factor") or {}
     stage_k = [e.get("volume_factor") for e in corpus.catalogue.values()
@@ -636,13 +656,15 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
     median_k = (sorted(stage_k)[len(stage_k) // 2] if stage_k
                 else vf.get("median_k") or vf.get("default_k"))
     add("G13", "体积系数 k（Volume = k·bbox）", "×bbox",
-        None if median_k is None else round(float(median_k), 4), 1.0, MISSING,
+        None if median_k is None else round(float(median_k), 4),
+        placement_core.DEFAULT_VOLUME_K, PARAM,
         "corpus.volume_factor / catalogue[].volume_factor ← meta/solid_volume/"
         "fill_factors.csv（默认 0.70；薄片抬到 8–16、蓬松压到 0.05–0.07、镂空家具 0.3–0.5）",
-        "placement_core.absorb_diameter_req 直接用 a·b·c（k=1）",
-        "原作者手调的系数，不是任何几何体积：默认 k=0.70 让我们在长度当量上偏严 "
-        "(1/0.70)^(1/3)=1.126（与 gateRatio 中位 1.13 吻合）。加了 k 之后门与成长都要乘它，"
-        "我方供给比再 ×%.2f" % (float(median_k) if median_k else 0.7),
+        "placement_core.DEFAULT_VOLUME_K / defs[].volumeK（缺省 0.70）"
+        " / PickupAbsorbMath.DefaultVolumeK",
+        "原作者手调的系数，不是任何几何体积：默认 k=0.70。门已按 k·bbox 算 Req，"
+        "长度当量上不再偏严（此前偏严 (1/0.70)^(1/3)=1.126，与 gateRatio 中位 1.13 吻合）；"
+        "成长侧（G06）仍要用同一个 k·bbox，那是后续步骤",
         note="原作类型里 %.1f%% 恰好等于 k=0.70（README 报的是 70.7%%；本文用本语料能连上的 %d 型算中位）"
              % (100.0 * (vf.get("exact_default_share") or 0.0), len(stage_k)))
 
@@ -676,7 +698,8 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
         round(supply_ours, 3), PARAM,
         "corpus：Σ(penalty·V) for D_req≤%.4g m ÷ (V(%.4g)−V(%.4g))"
         % (max_d, max_d, start_d),
-        "placement.json：ΣV_box for D_req≤%.4g ÷ 同一分母（我方惩罚=1.0，尚未采纳 0.8）"
+        "placement.json：Σ(k·bbox) for Req≤%.4g ÷ 同一分母（k 取 defs[].volumeK，缺省 0.70；"
+        "我方惩罚=1.0，尚未采纳 0.8）"
         % ours.max_d,
         "道具供给 / 通关所需。原作 %.2f×（远远多于所需，不可能卡）；我们 %.2f×"
         "（<1 意味着物理上到不了上限）。采纳 D2 的 0.8 惩罚后我方再乘 0.8，缺口更大"
@@ -713,13 +736,13 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
     orig_absorbable = corpus.absorbable_at(max_d)
     orig_vol = sum(corpus.volume_m3(i) for i in orig_absorbable)
     orig_ratio = orig_vol / (math.pi / 6.0 * max_d ** 3)
-    ours_ratio = ours.volume_absorbable_at(ours.max_d) / ours.ball_volume(ours.max_d)
+    ours_ratio = ours.original_volume_absorbable_at(ours.max_d) / ours.ball_volume(ours.max_d)
     add("C03", "可吸内容体积 / 满径球体积", "×", round(orig_ratio, 3),
         round(ours_ratio, 3), PARAM,
         "corpus：D_req≤%.4g m 的 %d 件合计 %.4g m³ / V=%.4g m³"
         % (max_d, len(orig_absorbable), orig_vol, math.pi / 6.0 * max_d ** 3),
         "placement.json：D_req≤%.4g 的件合计 %.4g m³ / V=%.4g m³"
-        % (ours.max_d, ours.volume_absorbable_at(ours.max_d),
+        % (ours.max_d, ours.original_volume_absorbable_at(ours.max_d),
            ours.ball_volume(ours.max_d)),
         "原作可吸内容体积是满径球的 %.2f 倍，我们只有 %.2f 倍。"
         "即使按 k·bbox 口径重算，我们整关内容也不够走到上限（repricing_proposal.md §0）"

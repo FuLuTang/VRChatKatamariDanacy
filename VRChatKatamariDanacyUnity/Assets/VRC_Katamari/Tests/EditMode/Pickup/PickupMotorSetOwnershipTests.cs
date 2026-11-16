@@ -243,14 +243,16 @@ namespace VRCKatamari.Tests
 
         /// <summary>
         /// Asserts the fixture prop really is a wall under the gate's own definition, using the
-        /// motor's own limit. Only callable once the motor has a size (its limit is 0 before).
+        /// motor's own whole-millimetre diameter. Only callable once the motor has a size (its
+        /// diameter is 0 before).
         /// </summary>
         private void AssertFixturePropIsAWall()
         {
-            float limit = (float)Call(motorType, motor, "GetAbsorbVolumeLimitWorldM3");
-            Assert.Greater(limit, 0f, "the motor must have a size, so its absorb limit is priced");
-            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(FixturePropBounds, limit),
-                "the fixture prop must be beyond the ball's absorb volume limit; an absorbable "
+            float ballMm = (float)Call(motorType, motor, "GetAbsorbGateDiameterMm");
+            Assert.Greater(ballMm, 0f, "the motor must have a size, so its gate diameter is priced");
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(FixturePropBounds,
+                PickupAbsorbMath.DefaultVolumeK, ballMm / 1000f),
+                "the fixture prop must be beyond the ball's absorb requirement; an absorbable "
                 + "prop is food, and the host is right to register nothing for it");
         }
 

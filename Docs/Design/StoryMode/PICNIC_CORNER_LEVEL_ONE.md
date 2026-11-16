@@ -68,12 +68,12 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 | 数据项 | 位置 | 现状 | 新口径 | 这次动不动 | 为什么 |
 |---|---|---|---|---|---|
-| `scale.item_tier_pickup_diameter_m`（s 0.08–0.30 / m 0.32–0.95 / l 1.00–1.95） | `layout.json:49` | **长度**档位：`clamp(game_longest_dim_m, 档窗口)` 当"拾取门槛" | 体积门 `a·b·c ≤ (π/6)·D³/10`；等价边长 `a_eq = (abc)^(1/3)`，`D_req = 2.673·a_eq` | **不动** | 它是内容侧分档、也是校验器第 11 条唯一的判据；改它必须同时改校验器与声明值（值表已删），而校验器不在写范围 |
+| `scale.item_tier_pickup_diameter_m`（s 0.08–0.30 / m 0.32–0.95 / l 1.00–1.95） | `layout.json:49` | **长度**档位：`clamp(game_longest_dim_m, 档窗口)` 当"拾取门槛" | ~~体积门 `a·b·c ≤ (π/6)·D³/10`；`D_req = 2.673·a_eq`~~ **2026-11-16**：`Req_mm = floor(1000·cbrt(60·k·abc/π))`，`k` 缺省 0.70 | **不动** | 它是内容侧分档、也是校验器第 11 条唯一的判据；改它必须同时改校验器与声明值（值表已删），而校验器不在写范围 |
 | `game_longest_dim_m`（目录列） | `prop_catalog.csv` | 「游戏尺寸」（比真实尺寸放大，例：`apple` 0.08→0.30） | 真实尺寸建模、`localScale = 1`、`propBounds` = 模型 AABB | **不动** | 同一列同时喂校验器与生成器的脚印/间距模型；改它会让 `build_greybox --check` 与 README §3.3 的可行性表一起失效（那张表被 `ReadmeFeasibilityTableTests` 逐字比对） |
 | `real_longest_dim_m`（目录列） | `prop_catalog.csv` | 真实最长边，只有一列、没有三轴 | 需要三轴或 `volume_m3` | **不动** | 缺第三轴，任何 `a_eq` 都是估的；按「不手抄推导数字」的规矩不写 |
 | `@size=<米>` 立方体写法 | 场景道具命名（`Editor/Pickup/PickupFieldAuthoringRules.TryParseDeclaredSize`） | 「挡路 3.6 m、拾取 1.25 m」→ 把 `propBounds` 记成 1.25³ = 1.95 m³ | 体积门下 1.95 m³ 需要 **2.60 m** 球，比 2.20 上限还大 —— 这个通道**已经把门件写成死件**（(l) 原文点名） | **不动（旧编号 C6；现行改动清单见 §5.8 的 K1–K7）** | 正确做法是「`propBounds` 说真话（模型 AABB）+ 挡路盒另立」（挡路接线那条线在做）；改 `PickupFieldAuthoringRules` 属代码，不在写范围 |
 | `maxItemSizeWorldM` / `absorbSizeRatio` | `Labs/CpuSkirmish/CpuSkirmish.unity`（**`StoryLevel.unity` 已 0 命中**，本轮 grep 实测；`Labs/BallPlayground` 的 `.unity`/`.prefab` 已于 2026-11-15 随该 lab 退役删除） | 死键，Unity 忽略、回落 512 / 10 | 已删字段 | **不动** | 在场景/prefab 里，属编辑器产物；删死键是 Unity 侧顺手活（(l) 已列为"仍待做：7 处场景序列化覆盖"），且不属于本关场地 |
-| `maxItemVolumeWorldM3` / `absorbVolumeRatio` | 同上（场景 `512` / `10`） | 已是新口径 | 同左 | **不改** | 值就是契约默认值，不需要覆盖 |
+| `maxItemVolumeWorldM3` / `absorbVolumeRatio` | 同上（场景 `512` / `10`） | **2026-11-16 起两个字段已删除**：门用 `k·a·b·c` + 整 mm，比率/上限是 `PickupAbsorbMath` 的常量；场景里的残留键是 Unity 忽略的死键 | — | **不改场景** | 见 [`ABSORB_GATE_ORIGINAL.md`](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)；本关 `defs[]` 不写 `volumeK`，全部按缺省 0.70 |
 | `pickup_dim_m`（可选列） | 目录 schema | 故事图专用「声明拾取尺寸 ≠ 外形」通道 | 体积门不需要它；需要的是真实 AABB + 挡路盒 | **不动** | PicnicLawn 目录里没有这一列；它有在故事图 fixture 里，与本次无关 |
 | 障碍/平面的 `collision` 声明 | `layout.json` 结构 | 无（0/8、0/8） | 第 14 条运行时预算 | **不动** | PicnicLawn 是全图 PvP 图，不是这一关的关卡数据；这一关的边界账在本文 §4 |
 
@@ -143,7 +143,7 @@ Docs/Design/Maps/PicnicLawn/prop_catalog.csv ─┴─► Tools/mapbuild/build_g
 
 ### 3.3 角内 PicnicLawn 目录道具的 2.20 m 判定表
 
-判据：`D_req = 2.673 · a_eq`，`a_eq = (a·b·c)^(1/3)`；`D_cap = 2.20 m` ⇒ 能吸的上界是 `V ≤ 0.5575 m³` / `a_eq ≤ 0.823 m`（(l)(n)）。**AABB 来源**：`M` = 模型 `exports/<id>.manifest.json` 实测（`Docs/Art/OriginalModels/props/exports/`）；`D` = `PROP_CATALOG.md` §2.1 的设计三轴；`估` = 只有最长边、按立方体上界（最保守）算。
+判据：~~`D_req = 2.673 · a_eq`，`a_eq = (a·b·c)^(1/3)`~~ **2026-11-16 起**：`Req_mm = floor(1000·cbrt(60·k·(a·b·c)/π))`（`k` 缺省 0.70），可吸 ⇔ `floor(1000·D) ≥ Req_mm`；`D_cap = 2.20 m` ⇒ `k=0.70` 时能吸的 bbox 上界是 `V_box ≤ 0.5575/0.70 = 0.7965 m³`（等价边长 0.927 m）。旧式见 [`ABSORB_GATE_ORIGINAL.md`](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。**AABB 来源**：`M` = 模型 `exports/<id>.manifest.json` 实测（`Docs/Art/OriginalModels/props/exports/`）；`D` = `PROP_CATALOG.md` §2.1 的设计三轴；`估` = 只有最长边、按立方体上界（最保守）算。
 
 | 目录 id | AABB m | 来源 | `a_eq` | `D_req` m | 2.20 判定 | 角内角色 |
 |---|---|---:|---:|---:|---|---|

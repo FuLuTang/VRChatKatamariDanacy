@@ -1,5 +1,8 @@
 # 野餐一角 · 第一关完整布局（按「场景用可吸物搭出来」重做）
 
+> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+
+
 > 状态：**`PROVISIONAL_NOT_TESTED`**，2026-11-15（Asia/Shanghai）。**只有设计与数据**：本轮没有编译、没有 Play Mode、没有 Build & Test、没有跑任何 Unity/NUnit 测试，也没有碰任何场景/代码/git。
 > 主依据：[`LEVEL_CONSTRUCTION.md`](../../Research/KatamariMaps/LEVEL_CONSTRUCTION.md)（原作实机的 8 条搭建规则 + §3.2 的 11 件结构骨架）、[`PICNIC_CORNER_LEVEL_ONE.md`](PICNIC_CORNER_LEVEL_ONE.md)（场地与迁移）、[`TERRAIN_SUPPORT.md`](../BallMotor/TERRAIN_SUPPORT.md)（支撑/台阶/斜面与 P1–P3）。
 > 机器可读的同一份数据：[`picnic_corner_layout.json`](picnic_corner_layout.json)（129 条记录：110 件道具 + 17 件可吸家具 + 2 块静态斜板；字段与本文表格一一对应）。

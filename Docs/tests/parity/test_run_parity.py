@@ -282,7 +282,7 @@ class RefLevelComparisonTest(unittest.TestCase):
 
 
 class VolumeFactorTest(unittest.TestCase):
-    """G13: the original's volume is k x bbox — we ship k = 1."""
+    """G13: the original's volume is k x bbox, and our gate now uses the same k."""
 
     def test_factor_is_unknown_without_the_block(self):
         _, rows = render_synthetic()
@@ -300,8 +300,24 @@ class VolumeFactorTest(unittest.TestCase):
         _, rows = render_synthetic(corpus)
         row = [r for r in rows if r.id == "G13"][0]
         self.assertAlmostEqual(0.7, row.original)
-        self.assertEqual(run_parity.MISSING, row.klass)
-        self.assertAlmostEqual(1.4286, row.ratio, places=3)
+        # We ship the original's default, so the two numbers agree and the declared
+        # parameter gap collapses to "consistent" instead of "missing".
+        self.assertAlmostEqual(run_parity.placement_core.DEFAULT_VOLUME_K, row.ours)
+        self.assertEqual(run_parity.CONSISTENT, row.klass)
+        self.assertAlmostEqual(1.0, row.ratio, places=3)
+
+    def test_a_corpus_with_another_factor_is_a_parameter_gap(self):
+        corpus = synthetic_corpus()
+        for entry in corpus["catalogue"].values():
+            entry["volume_factor"] = 0.5
+        corpus["evidence"]["catalogue.*.volume_factor"] = {
+            "source": "fixture", "level": "数据挖掘"}
+        validate_corpus(corpus)
+        _, rows = render_synthetic(corpus)
+        row = [r for r in rows if r.id == "G13"][0]
+        self.assertAlmostEqual(0.5, row.original)
+        self.assertEqual(run_parity.PARAM, row.klass)
+        self.assertAlmostEqual(run_parity.placement_core.DEFAULT_VOLUME_K / 0.5, row.ratio, places=3)
 
 
 class ZoneProfileTest(unittest.TestCase):

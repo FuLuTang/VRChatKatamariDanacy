@@ -23,16 +23,17 @@ namespace VRCKatamari.Tests
         private static readonly Vector3 Bounds = new Vector3(0.10f, 0.10f, 0.10f);
         private const float CollisionRadiusM = 0.15f;
         private const float ContactRadiusM = 0f;
-        // The size gate's limit is an AABB volume in cubic metres; 1 m^3 is far above
-        // this 0.001 m^3 item's volume, so the size gate never decides these cases.
-        private const float MaxItemVolumeM3 = 1f;
+        // The size gate is the original's whole-millimetre rule: this 0.10 m cube at
+        // k=0.70 needs 237 mm, and the 0.30 m ball (300 mm) takes it, so the size gate
+        // never decides these cases.
+        private const float BallDiameterM = 0.30f;
         private const float MaxGrowthRadiusM = 1.1f;
 
         private static AbsorbOutcome Evaluate(Vector3 position, float value)
         {
             return PickupAbsorbMath.EvaluateAbsorbWithValue(true, "small", Allowed, Allowed.Length,
-                Bounds, position, Ball, CollisionRadiusM, ContactRadiusM, MaxItemVolumeM3,
-                MaxGrowthRadiusM, value);
+                Bounds, position, Ball, CollisionRadiusM, ContactRadiusM,
+                PickupAbsorbMath.DefaultVolumeK, BallDiameterM, MaxGrowthRadiusM, value);
         }
 
         [Test]
@@ -56,7 +57,8 @@ namespace VRCKatamari.Tests
             // Zero gain is also irrelevant when the kind is not allowed.
             AbsorbOutcome kindRefused = PickupAbsorbMath.EvaluateAbsorbWithValue(true,
                 "forbidden", Allowed, Allowed.Length, Bounds, InReach, Ball, CollisionRadiusM,
-                ContactRadiusM, MaxItemVolumeM3, MaxGrowthRadiusM, 0.3f);
+                ContactRadiusM, PickupAbsorbMath.DefaultVolumeK, BallDiameterM,
+                MaxGrowthRadiusM, 0.3f);
             Assert.AreEqual(AbsorbOutcome.RejectKindNotAllowed, kindRefused);
         }
     }

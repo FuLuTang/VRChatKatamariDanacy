@@ -22,13 +22,13 @@
 
 | 区域 area | 原作行为（数据来源路径） | 我方 | 保留我方的理由（或 `none -> restore`） | 决定 | owner |
 |---|---|---|---|---|---|
-| 体积定义（`k` 系数） | `Volume = k · bbox`，默认 `k = 0.70`；薄片件 8–16、蓬松件 0.05–0.07、镂空家具 0.3–0.5；门与成长用同一个体积（`/home/fulutang/KatamariRef/meta/` 的 `raw_growth_mechanism.txt` §2、`solid_volume/README.md`、`DATAMODEL_NOTES.md` §3） | 直接用 `a·b·c`（`k=1`，`PickupAbsorbMath.TryComputeItemVolume`） | `none -> restore`（§5.3.2 已给 `pickupVolumeFactor`，默认 0.70） | restore | owner 2026-11-15 |
+| 体积定义（`k` 系数） | `Volume = k · bbox`，默认 `k = 0.70`；薄片件 8–16、蓬松件 0.05–0.07、镂空家具 0.3–0.5；门与成长用同一个体积（`/home/fulutang/KatamariRef/meta/` 的 `raw_growth_mechanism.txt` §2、`solid_volume/README.md`、`DATAMODEL_NOTES.md` §3） | **门已用** `k·a·b·c`（`defs[].volumeK`，缺省 0.70；`PickupAbsorbMath.TryComputeOriginalItemVolume`）；**成长仍用** `V_box` | `partially restored`：门已还原，成长侧待步骤 C/D | restore（门 2026-11-16 完成） | owner 2026-11-15（门 2026-11-16） |
 | 体积口径 | 连续浮点体积；门槛按 mm 取整（`Req Pickup Size` 整 mm，同上来源） | 整数 units × 0.0041 m³（`baselineVolumeUnits` / `cubicMetersPerVolumeUnit`） | `none -> restore`（§5.2 推荐 1 mm³ `long` 定点） | restore (owner confirmed 2026-11-16, scale 1 mm³) | owner 2026-11-15（D5；2026-11-16 确认） |
 | 单件回收比例 | `ΔV = penalty · V_item`，默认 `penalty = 0.8`（1198/1436 型），另有 0.01–1.0 逐件值（`collectible objects` 表、`raw_growth_mechanism.txt` §3） | `ΔV = V_item`（100%） | `none -> restore`（§5.1 `G06`） | restore | owner 2026-11-15（D2） |
 | 逐件回收惩罚（`pickupVolumePenalty`） | 逐件 penalty 0.01–1.0，默认 0.8（1198/1436 型）（`meta/collectible objects`、`meta/raw_growth_mechanism.txt` §3） | 没有逐件字段，一律 100%（`PickupAbsorbMath.TryAbsorbValueToLedgerGain`） | `none -> restore`（§10 R5：此前只被「单件回收比例」一行笼统覆盖，无独立行） | restore | owner |
-| 门槛取整 | 门槛直径向下取整到 mm（同上） | 浮点比较、不取整（`placement_core.absorb_diameter_req`） | `none -> restore`（§5.1 `G08`） | restore | owner 2026-11-15（D2） |
+| 门槛取整 | 门槛直径向下取整到 mm（同上） | **已一致**：`Req` 与球径都取整到整 mm，ε=1e-3 mm 只修浮点（`PickupAbsorbMath.TryFloorMillimetres`、`placement_core.absorb_diameter_req_mm`） | 已还原（§5.1 `G08`） | restore（2026-11-16 完成） | owner 2026-11-15（D2） |
 | HUD 直径偏置 | 显示直径 = `(6V/π)^(1/3)` **再平加 +0.02 cm**（MAS1 的精确起始尺寸是 5.02 cm 而不是 5 cm）（`meta/raw_growth_mechanism.txt` Note to 1、`G05`/`G09`） | 直出语义直径，偏置 0（`SizeModelMath.TryDerive`） | `none -> restore`（§10 R8：指标表有 `G09`，分歧表此前没有行） | restore | owner |
-| 10 倍体积门 | `πD³/6 ≥ 10·V`（`raw_growth_mechanism.txt` §2、`DATAMODEL_NOTES.md` §3） | 同一条（`absorbVolumeRatio = 10`，`PickupAbsorbMath.cs:350`） | 已一致，无分歧（`G07`） | keep | — |
+| 10 倍体积门 | `πD³/6 ≥ 10·V`（`raw_growth_mechanism.txt` §2、`DATAMODEL_NOTES.md` §3） | 同一条（`PickupAbsorbMath.AbsorbVolumeRatio = 10`，常量） | 已一致，无分歧（`G07`） | keep | — |
 | 定步频率 | 逻辑 30 Hz 定步 `DoTick(1/30f)`，画面另插值（`/tmp/orig_physics/reroll_datamodel.md` §0，KatamariMods FramerateUncap 的 IL） | 50 Hz（`fixedStepSeconds = 0.02`，`Docs/Design/BallMotor/README.md:295`） | 性能预算 + 现有接触/子步参数按 0.02 s 标定过；切换单独立项 | keep（owner 计划切到 30 Hz，先留 50 Hz） | owner 2026-11-16 |
 | 每关分段回收曲线 | 按尺寸分段线性，按关给：MAS1 5 cm .8 → 15 cm .4 → 20 cm .16（`raw_growth_mechanism.txt` §3 的关卡曲线表） | 全局常数 100% | `none -> restore`（§5.1） | restore | owner 2026-11-15（D2） |
 | 群组物件体积 | 拾取父件时**连带子件体积一起入账**（解释高侧离群点）（`meta/raw_growth_mechanism.txt` §4、`meta/DATAMODEL_NOTES.md`；`parentProp` 单父指针实测 **1,970 条子件 / 1,082 个父件**，口径见 `PROP_BEHAVIOURS.md` §10.4，不是旧写的「38 件群组」） | `group` / `groupId` 只存不读，没有价值聚合（`PickupFieldHost`、`placement_core` 的 `PROP_KEYS`） | `none -> restore`（§10 R9：「移动件/行为字段」行讲的是 `parentProp` 行为字段，不是体积规则） | restore（**延后到 v2**：owner 2026-11-16 拍板 v1 子件坠落、不带，见下「支撑图（`rests_on`）」行与 `OPEN_DECISIONS` (s)） | owner 2026-11-16 |
@@ -55,6 +55,7 @@
 3. **三个最大的 suspect gap**（详见 §3）：**供给不足**——`G11` 供给比原作 **1.65×**、我们 **0.46×**（<1 = 单靠本关内容走不到上限）；把原作真实布局跑进我们规则（`_ref_mas1`，648 件、5 cm 起）供给比 **2.42×**、最紧档仍有 2.4× 余量，而 story_01 在 1.2 m 档就掉到 0.57×；**内容密度差 5–6×**（每翻一倍直径 253 件 vs 44 件，内容体积/满径球 2.46× vs 0.45×）；**成长不守恒**（原作只回收 80% 并随尺寸降到 16%，我们 100%）。运行时还缺"行为/支撑/换档"三件套（`pathSpeedIndex`/vault 点/尺寸阈值表都没有消费者）。
 4. **尺度是这个项目的隐藏主线，而且已经拍板**：原作第一关起始 5 cm，我们 30 cm，正好 6×。我们引擎里 7 个"米制常数"（skin 5 mm、叠放 10 mm、推挤 50 mm、突出 cap 300 mm、到顶 20 mm、掉走 10 mm、slop 0.5 mm）在 5 cm 球上会有 5 个超过球径的 10%，在 30 cm 球上只有 2 个。**owner 决定（D3，2026-11-15）：不乘 6，全案用真实尺寸**——于是每一个被 5 cm 球暴露出来的米制常数都是一条审计发现，逐条列在 §5.3，并归纳成一个可独立验收的主题（§5.4）。
 5. **一条硬规则已经完全对上，但"体积"的定义差一个系数**：吸收门 = 10 倍体积（`πD³/6 ≥ 10V`），原作门槛向下取整到 mm。**更正（2026-11-15）**：此前"原作用实体体积、我们用包围盒"的说法**已被数据推翻**——原作的 `Volume` = **包围盒体积 × 作者手调的 k**，默认 `k = 0.70`（1425 个既有模型又有可信 Volume 的类型里 70.7% 精确等于 0.70，`bbox/Volume` 的 q25/中位/q75 全是 10/7）。所以我们的门与成长**缺的是 k 系数**（`G13`），不是"换实体体积"：默认 k=0.70 让我们在长度当量上偏严 `(1/0.70)^(1/3)=1.126`，与 gateRatio 中位 1.13 吻合；薄片件被作者抬到 k=8–16、蓬松件压到 0.05–0.07、镂空家具 0.3–0.5。
+   **更新（2026-11-16，owner 决定：门按原作数字）**：门已经改成 `V = k·a·b·c`、`Req = floor(1000·cbrt(60V/π))`、`floor(1000·D) ≥ Req`，`G07/G08/G13` 三条现在都是「一致」。实测见 [`ABSORB_GATE_ORIGINAL.md`](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)：`_ref_cancer` 0.222 m 球从 91 件变 **184** 件，与原作 184 件相同；145 个类型的 `Req` 比值中位/最小/最大都是 1.0000。**成长侧仍是 1.0 回收**（`G06`，步骤 C/D），所以门与成长对同一件还不同源。
 6. 本文的指标表就是审计协议：任何人改了参数或参考模型，重跑 `run_parity.py` 就能看到哪些行变了。
 
 ---
@@ -149,10 +150,10 @@
 | `G04` 目标/上限 | 余量比 | 0.333（10/30） | 0.568（1.25/2.20） | — | 原作用 3× 余量，我们 1.76×，"冲上限"更容易 |
 | `G05` 体积→直径 | D(V) 的形状 | `D=(6V/π)^(1/3)` + 0.02 cm | `SizeModelMath.TryDerive` 同形、无偏置 | — | **一致**；只差显示 fudge |
 | `G06` 单件回收比例 | 吸收一件给多少体积 | 0.8（MAS1 起始），随尺寸降到 0.16（F5） | ΔV = V_box（100%） | ×V_item | 同一次吸收我们多得 25%；末段差距更大（原作拖尾、我们加速） |
-| `G07` 10× 体积门 | 能不能吸的判据 | `πD³/6 ≥ 10V`（F4） | `PickupAbsorbMath.cs:350` / `absorbVolumeRatio=10` | ×V_item | **完全一致**，唯一一条硬对齐 |
-| `G08` 门槛取整 | 门槛怎么落到 mm | 向下取整到 mm（蚂蚁实际 8.8×） | 浮点比较，不取整（`placement_core.absorb_diameter_req`） | m | 差 <1 mm；在 5 cm 球上是 2% 的直径 |
+| `G07` 10× 体积门 | 能不能吸的判据 | `πD³/6 ≥ 10V`（F4） | `PickupAbsorbMath.AbsorbVolumeRatio = 10`（`Req = cbrt(60·k·a·b·c/π)`） | ×V_item | **完全一致**；比率是常量，不再是逐场景序列化字段 |
+| `G08` 门槛取整 | 门槛怎么落到 mm | 向下取整到 mm（蚂蚁实际 8.8×） | **一致**：`Req_mm = floor(1000·cbrt(60V/π))`，球侧也取整 `floor(1000·D)`，ε=1e-3 mm 只修浮点（`PickupAbsorbMath.TryFloorMillimetres`、`placement_core.absorb_diameter_req_mm`） | m | 已无差距；1 mm 在 22.2 cm 球上是 0.45% 的直径 |
 | `G09` HUD 偏置 | 显示直径的 fudge | +0.02 cm（MAS1 显示 5.02） | 0（直接打印语义直径） | m | 纯表现层，但它是"HUD 读数=原作"的证明点 |
-| `G13` 体积系数 k | `Volume = k·bbox` 里的作者手调系数（门与成长都用它算体积） | 0.70（1425 型中 70.7% 精确等于；薄片 8–16、蓬松 0.05–0.07、镂空家具 0.3–0.5） | 1.0（直接用 `a·b·c`） | ×bbox | **缺机制**：不是"实体 vs 包围盒"，是缺 k。默认 0.70 使门在长度上偏严 1.126×；成长同样要乘 k（等效回收率 0.8×0.70=0.56，只采纳 0.8 仍会多 1.43×） |
+| `G13` 体积系数 k | `Volume = k·bbox` 里的作者手调系数（门与成长都用它算体积） | 0.70（1425 型中 70.7% 精确等于；薄片 8–16、蓬松 0.05–0.07、镂空家具 0.3–0.5） | **门已一致**：`defs[].volumeK`/`props[].volumeK`，缺省 0.70（`PickupAbsorbMath.DefaultVolumeK`、`placement_core.DEFAULT_VOLUME_K`）；**成长仍按 1.0** | ×bbox | 门侧差距已消除：`_ref_cancer` 145/145 类型的 Req 比值 = 1.0000（`ABSORB_GATE_ORIGINAL.md`）。成长侧仍缺 k（等效回收率 0.8×0.70=0.56，只采纳 0.8 仍会多 1.43×），属步骤 C/D |
 | `G10` 每档实例数 | 每个"直径翻倍"档有多少可吸件 | 253 件/octave（654 件 / 2.58 档） | 44 件/octave（127 件 / 2.87 档） | 件/octave | 同尺寸跨度下原作密 5.7× |
 | `G11` 供给比 | 可吸总体积（**已乘回收惩罚**）÷ 从起点到上限所需体积 | 1.65×（598 件 Σ`penalty·V`=0.0232 m³ ÷ 0.01407 m³） | 0.46×（ΣV_box 2.53 m³ ÷ 5.56 m³；我方惩罚仍 1.0） | × | **owner 的底线**：原作远多于所需，不可能卡；我们 <1，物理上到不了上限。采纳 D2 的 0.8 惩罚后我方再 ×0.8 |
 | `G12` 饥饿检查 | 每个球径档「可吸且未吃件数 ÷ 继续成长所需件数」，取最紧档 | 1.65×（各档 500/105、581/188、598/363） | 0.45×（各档 109/106、122/213、130/286） | × | 供给比是总量；这一条看**每一档**：我们 1.2 m 档就 0.57×，等于"走到那里就卡"；原作最紧档仍 >1 |
@@ -236,7 +237,7 @@
 | 类 | 判据 | 例子（本表） | 处置 |
 |---|---|---|---|
 | **参数差** | 机制相同，数值不同 | `G01` 起始球径、`G06` 回收比例、`L05` 星级档 | 决定要不要采纳原值（§5 D2） |
-| **缺机制** | 原作有、我们没有 | `C04` 行为字段、`C05` 堆叠、`C07` 埋没、`L01` 换档、`G08` 取整 | 立项；先看 `PROP_BEHAVIOURS.md` 的提案成本 |
+| **缺机制** | 原作有、我们没有 | `C04` 行为字段、`C05` 堆叠、`C07` 埋没、`L01` 换档（`G08` 取整已于 2026-11-16 还原） | 立项；先看 `PROP_BEHAVIOURS.md` 的提案成本 |
 | **不同机制** | 两边都有，但形状不同 | `T03` 防穿模、`T04` 碰撞形状、`T05` 触发体、`S03`/`S04` 尺度 | 记录差异，**不许**写成"还原原作" |
 | **可接受偏差** | 差异存在但无玩法影响 | `M05` `H_cap`（锚点同量级）、`L04` HUD 单位 | 写进 evidence，不再追 |
 
@@ -276,7 +277,7 @@
 | 指标 | 现在 | 照抄原版后 |
 |---|---|---|
 | `G06` 单件回收比例 | 1.0（100%） | `penalty`（默认 0.8）+ 每关分段曲线（MAS1：5 cm .8 → 15 cm .4 → 20 cm .16） |
-| `G08` 门槛取整 | 0（浮点） | 0.001 m（向下取整到 mm） |
+| `G08` 门槛取整 | ~~0（浮点）~~ **已做（2026-11-16）** | 0.001 m（向下取整到 mm） |
 | `G09` HUD 偏置 | 0 | 0.0002 m（+0.02 cm） |
 | `G05`/`G07` | 已一致 | 不动 |
 

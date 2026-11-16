@@ -1,5 +1,8 @@
 # 地形支撑（Terrain Support）：局部支撑面、台阶、斜面，与关卡场地接口
 
+> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+
+
 > 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15（Asia/Shanghai）。**只读调查 + 设计；作者不是 Unity 操作者**：没有编译、没有 Play Mode、没有 Build & Test、没有跑任何 Unity/NUnit 测试。文中所有米数、角度、倍数都是**本项目暂定值**（逐条标 `PROVISIONAL`），不是原作测量值；凡「原作」结论都带出处或标 `unconfirmed`。
 > 触发：用户 2026-11-15 的地图原则原话——「一个场景，除了墙壁楼梯地板，整个全是靠可吸附物品搭出来的，比如台球桌上有杂物，有个长条木板搭在地板到桌上。那前期就是用户从木板滚上去去粘杂物，中期木板都能粘起来了，后期台球桌都能粘起来了。」迁移方案 [PICNIC_CORNER_LEVEL_ONE](../../StoryMode/PICNIC_CORNER_LEVEL_ONE.md) §3.5/§4.3（G1/G8/G9）查实：motor 只有「一张解析地面 + ≤8 平面 + ≤8 轴对齐盒 + ≤6 动态挡路盒」，**没有 step-up、没有坡、盒是实心墙**，所以花圃 0.26 m、树根丘 0.14 m、毯缘 0.06 m 全都只能是墙，「沿木板上桌」做不到。
 > 范围：设计「球正下方最高的有效支撑」模型、台阶规则、斜面表示、可吸结构的三种身份、`LevelArenaHost` 接口、分阶段实施与验收。**本轮只写这一个文件**：不改代码、不改其它文档、不碰 Unity、不跑 git 写命令。

@@ -1,5 +1,8 @@
 # 剧情模式切片：输入、球视图、骑球、吸附宿主与剧情回合
 
+> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+
+
 > 状态：`PARTIALLY_COMPILED`，2026-11-14。五个模块的源码都已写；只有 `DesktopMoveInput` 与 `BallView` 的**旧版本**在 `Labs/StoryLevel` 里编译并实跑过（commit `e74ff8c`，对应 U# 编译产物 `Runtime/Input/DesktopMoveInput.asset`、`Runtime/BallPresentation/BallView.asset`，见 `Docs/Evidence/StoryLevel/windows_assets_manifest.txt`）。`DesktopMoveInput` 后来改成两把闸门（见“输入闸门”），**这一版未编译**；骑球/吸附/回合也从没有编译、没有 Play Mode、没有 Build & Test、没有真机。
 > 计划与判据见 [第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §1–§4、§7 S1–S4。
 

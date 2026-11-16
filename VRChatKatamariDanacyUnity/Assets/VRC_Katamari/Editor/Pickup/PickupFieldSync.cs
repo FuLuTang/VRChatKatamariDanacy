@@ -11,7 +11,7 @@ using VRCKatamari.Pickup;
 namespace VRCKatamari.Editor.Pickup
 {
     /// <summary>
-    /// The one authoring path that fills <see cref="PickupFieldHost"/>'s seven index-aligned
+    /// The one authoring path that fills <see cref="PickupFieldHost"/>'s eight index-aligned
     /// serialized arrays from the props already placed in the scene.
     /// </summary>
     /// <remarks>
@@ -61,6 +61,12 @@ namespace VRCKatamari.Editor.Pickup
     /// (Docs/OPEN_DECISIONS.md (r) step B), so the write and the read-back use
     /// <see cref="SerializedProperty.longValue"/> and a declared value past
     /// <c>int.MaxValue</c> survives both.</description></item>
+    /// <item><description>volume factor k = the caller's declaration for that item id (the
+    /// level importer passes the def's <c>volumeK</c>, default 0.70; a prop's own
+    /// <c>volumeK</c> wins), else the k already serialized on the host, else the original's
+    /// default 0.70. The column is <c>propVolumeK</c> and it is what the absorb gate prices
+    /// (<c>Req = floor(1000*cbrt(60*k*a*b*c/pi))</c>), so a row outside
+    /// <c>0 &lt; k &lt;= 32</c> is refused rather than clamped.</description></item>
     /// </list>
     /// <para>
     /// The value-units rule is intentionally not a price. Before U2 this class derived
@@ -112,6 +118,7 @@ namespace VRCKatamari.Editor.Pickup
         private const string PropBoundsField = "propBounds";
         private const string PropLocalBoundsField = "propLocalBounds";
         private const string ValueUnitsField = "valueUnits";
+        private const string VolumeKField = "propVolumeK";
         private const string PropCollidersField = "propColliders";
 
         // A BoxCollider with a zero side never collides. A visual can legitimately have a
@@ -176,7 +183,7 @@ namespace VRCKatamari.Editor.Pickup
         }
 
         /// <summary>
-        /// Reads the props under <paramref name="fieldRoot"/> and writes the host's seven
+        /// Reads the props under <paramref name="fieldRoot"/> and writes the host's eight
         /// index-aligned arrays.
         /// </summary>
         /// <param name="host">The field host to fill; its backing UdonBehaviour must already exist.</param>
@@ -195,7 +202,7 @@ namespace VRCKatamari.Editor.Pickup
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
             IDictionary<string, long> declaredValueUnits)
         {
-            return SyncFromChildren(host, fieldRoot, declaredValueUnits, false);
+            return SyncFromChildren(host, fieldRoot, declaredValueUnits, null, false);
         }
 
         /// <summary>
@@ -214,6 +221,24 @@ namespace VRCKatamari.Editor.Pickup
         /// </remarks>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
             IDictionary<string, long> declaredValueUnits, bool createMissingColliders)
+        {
+            return SyncFromChildren(host, fieldRoot, declaredValueUnits, null, createMissingColliders);
+        }
+
+        /// <summary>
+        /// The full entry point: declared value units AND the declared per-item volume factor.
+        /// </summary>
+        /// <param name="declaredVolumeK">
+        /// Item id to the original's per-item volume factor k (<c>Volume = k * a*b*c</c>),
+        /// supplied by the level importer from <c>defs[].volumeK</c> (a prop's own
+        /// <c>volumeK</c> wins). When an id is absent, the row's already-serialized k is
+        /// preserved; with neither, the original's default 0.70 is written. Pass <c>null</c>
+        /// when no declaration exists - the menu/un-migrated path - and every row keeps its
+        /// serialized k or gets 0.70.
+        /// </param>
+        public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
+            IDictionary<string, long> declaredValueUnits, IDictionary<string, float> declaredVolumeK,
+            bool createMissingColliders)
         {
             var report = new PickupFieldSyncReport();
             report.ValueUnitsRequested = declaredValueUnits != null && declaredValueUnits.Count > 0;
@@ -254,10 +279,12 @@ namespace VRCKatamari.Editor.Pickup
             // un-migrated-scene contract. A row whose item id is already present keeps its
             // serialized value unless the caller declared a different one.
             Dictionary<string, long> existingValueUnits = ReadExistingValueUnits(host);
+            // Same rule for k: a re-sync without a declaration must not reprice a field.
+            Dictionary<string, float> existingVolumeK = ReadExistingVolumeK(host);
 
             List<PropCandidate> candidates = CollectCandidates(fieldRoot);
             List<PropRow> rows = ValidateCandidates(candidates, declaredValueUnits, existingValueUnits,
-                createMissingColliders, report);
+                declaredVolumeK, existingVolumeK, createMissingColliders, report);
 
             if (rows.Count == 0 && report.Rejected.Count > 0)
             {
@@ -284,7 +311,7 @@ namespace VRCKatamari.Editor.Pickup
             {
                 if (string.IsNullOrEmpty(report.Failure))
                 {
-                    report.Fail("the seven arrays did not read back at the expected length (" + rows.Count +
+                    report.Fail("the eight arrays did not read back at the expected length (" + rows.Count +
                                 ") or a propColliders slot was empty; the write did not persist");
                 }
             }
@@ -295,6 +322,21 @@ namespace VRCKatamari.Editor.Pickup
                 {
                     report.Fail(report.ValueUnitMismatches.Count + " declared valueUnits row(s) did not " +
                                 "read back as declared; treat the host arrays as wrong until this is fixed");
+                }
+
+                if (string.IsNullOrEmpty(report.Failure))
+                {
+                    string[] hostIds;
+                    float[] hostVolumeK;
+                    ReadHostVolumeKColumns(host, out hostIds, out hostVolumeK);
+                    string[] kMismatches = PickupFieldAuthoringRules.FindVolumeKMismatches(
+                        hostIds ?? new string[0], hostVolumeK ?? new float[0], declaredVolumeK);
+                    if (kMismatches.Length > 0)
+                    {
+                        report.Fail(kMismatches.Length + " declared volumeK row(s) did not read back as " +
+                                    "declared (" + string.Join("; ", kMismatches) + "); treat the host " +
+                                    "arrays as wrong until this is fixed");
+                    }
                 }
             }
 
@@ -334,6 +376,8 @@ namespace VRCKatamari.Editor.Pickup
             public Vector3 BoundsSize;
             public Vector3 LocalBoundsSize;
             public long ValueUnits;
+            /// <summary>The per-item volume factor k the gate will use (0.70 default).</summary>
+            public float VolumeK;
             public Collider PrimaryCollider;
         }
 
@@ -723,6 +767,7 @@ namespace VRCKatamari.Editor.Pickup
 
         private static List<PropRow> ValidateCandidates(List<PropCandidate> candidates,
             IDictionary<string, long> declaredValueUnits, Dictionary<string, long> existingValueUnits,
+            IDictionary<string, float> declaredVolumeK, Dictionary<string, float> existingVolumeK,
             bool createMissingColliders, PickupFieldSyncReport report)
         {
             var ids = new List<string>();
@@ -743,6 +788,7 @@ namespace VRCKatamari.Editor.Pickup
             int multiColliderProps = 0;
             int localBoundsFallbacks = 0;
             int collidersCreated = 0;
+            int volumeKDefaulted = 0;
             for (int i = 0; i < candidates.Count; i++)
             {
                 PropCandidate candidate = candidates[i];
@@ -849,6 +895,31 @@ namespace VRCKatamari.Editor.Pickup
                     continue;
                 }
 
+                // The per-item volume factor k: the declaration wins, else the row already
+                // serialized on the host, else the original's 0.70. A declaration outside
+                // 0 < k <= 32 refuses the row (it would silently change the gate).
+                float declaredK = 0f;
+                bool hasDeclaredK = declaredVolumeK != null &&
+                                    declaredVolumeK.TryGetValue(candidate.ItemId, out declaredK);
+                float existingK = 0f;
+                bool hasExistingK = existingVolumeK != null &&
+                                    existingVolumeK.TryGetValue(candidate.ItemId, out existingK);
+                float volumeK;
+                string volumeKSource;
+                if (!PickupFieldAuthoringRules.TryResolveVolumeK(declaredK, hasDeclaredK,
+                        existingK, hasExistingK, out volumeK, out volumeKSource))
+                {
+                    report.Reject(candidate.Path, candidate.ItemId,
+                        "declared volumeK " + declaredK + " is outside the legal range " +
+                        "(0 < k <= 32; 0.70 is the original's default)");
+                    continue;
+                }
+                if (string.Equals(volumeKSource, PickupFieldAuthoringRules.ValueSourceNone,
+                        StringComparison.Ordinal))
+                {
+                    volumeKDefaulted++;
+                }
+
                 var row = new PropRow();
                 row.Root = candidate.Root;
                 row.Kind = candidate.Kind;
@@ -856,6 +927,7 @@ namespace VRCKatamari.Editor.Pickup
                 row.BoundsSize = pickSize;
                 row.LocalBoundsSize = pickLocalSize;
                 row.ValueUnits = valueUnits;
+                row.VolumeK = volumeK;
                 row.PrimaryCollider = candidate.PrimaryCollider;
                 if (createMissingColliders && row.PrimaryCollider == null)
                 {
@@ -941,6 +1013,13 @@ namespace VRCKatamari.Editor.Pickup
                                  "is intentionally not repriced");
             }
 
+            if (volumeKDefaulted > 0)
+            {
+                report.Notes.Add(volumeKDefaulted + " row(s) got the default volume factor k=0.70 " +
+                                 "(PickupAbsorbMath.DefaultVolumeK): neither the level nor the host " +
+                                 "declared one for them");
+            }
+
             if (report.ValueUnitsUndeclared > 0)
             {
                 report.Notes.Add(report.ValueUnitsUndeclared + " row(s) have no declared value and no " +
@@ -971,11 +1050,11 @@ namespace VRCKatamari.Editor.Pickup
         private static bool WriteRows(PickupFieldHost host, List<PropRow> rows, PickupFieldSyncReport report)
         {
             var serialized = new SerializedObject(host);
-            var properties = new SerializedProperty[7];
+            var properties = new SerializedProperty[8];
             string[] fieldNames =
             {
                 PropTransformsField, ItemIdsField, KindsField, PropBoundsField, PropLocalBoundsField,
-                ValueUnitsField, PropCollidersField,
+                ValueUnitsField, VolumeKField, PropCollidersField,
             };
 
             for (int i = 0; i < fieldNames.Length; i++)
@@ -995,7 +1074,8 @@ namespace VRCKatamari.Editor.Pickup
             SerializedProperty bounds = properties[3];
             SerializedProperty localBounds = properties[4];
             SerializedProperty values = properties[5];
-            SerializedProperty colliders = properties[6];
+            SerializedProperty volumeKs = properties[6];
+            SerializedProperty colliders = properties[7];
 
             // Registered only after the contract fields were found, so a failed lookup leaves
             // no empty undo step behind.
@@ -1017,6 +1097,7 @@ namespace VRCKatamari.Editor.Pickup
             bounds.arraySize = rows.Count;
             localBounds.arraySize = rows.Count;
             values.arraySize = rows.Count;
+            volumeKs.arraySize = rows.Count;
             colliders.arraySize = anyCollider ? rows.Count : 0;
 
             for (int i = 0; i < rows.Count; i++)
@@ -1028,6 +1109,7 @@ namespace VRCKatamari.Editor.Pickup
                 bounds.GetArrayElementAtIndex(i).vector3Value = row.BoundsSize;
                 localBounds.GetArrayElementAtIndex(i).vector3Value = row.LocalBoundsSize;
                 values.GetArrayElementAtIndex(i).longValue = row.ValueUnits;
+                volumeKs.GetArrayElementAtIndex(i).floatValue = row.VolumeK;
                 if (anyCollider)
                 {
                     colliders.GetArrayElementAtIndex(i).objectReferenceValue = row.PrimaryCollider;
@@ -1108,7 +1190,7 @@ namespace VRCKatamari.Editor.Pickup
             string[] fields =
             {
                 PropTransformsField, ItemIdsField, KindsField, PropBoundsField,
-                PropLocalBoundsField, ValueUnitsField,
+                PropLocalBoundsField, ValueUnitsField, VolumeKField,
             };
 
             for (int i = 0; i < fields.Length; i++)
@@ -1188,6 +1270,66 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             return existing;
+        }
+
+        /// <summary>
+        /// Reads the host's current <c>itemIds</c>/<c>propVolumeK</c> into an id-keyed map.
+        /// </summary>
+        /// <remarks>
+        /// Same contract as <see cref="ReadExistingValueUnits"/>: keyed by item id, because a
+        /// sync may reorder rows, and a short/absent column simply contributes nothing (a
+        /// scene synced before the k column existed therefore keeps the 0.70 default).
+        /// </remarks>
+        private static Dictionary<string, float> ReadExistingVolumeK(PickupFieldHost host)
+        {
+            var existing = new Dictionary<string, float>(StringComparer.Ordinal);
+            string[] ids;
+            float[] values;
+            ReadHostVolumeKColumns(host, out ids, out values);
+            if (ids == null || values == null)
+            {
+                return existing;
+            }
+
+            int rows = ids.Length < values.Length ? ids.Length : values.Length;
+            for (int i = 0; i < rows; i++)
+            {
+                string itemId = ids[i];
+                if (!string.IsNullOrEmpty(itemId) && !existing.ContainsKey(itemId))
+                {
+                    existing.Add(itemId, values[i]);
+                }
+            }
+
+            return existing;
+        }
+
+        private static void ReadHostVolumeKColumns(PickupFieldHost host, out string[] ids,
+            out float[] values)
+        {
+            var serialized = new SerializedObject(host);
+            SerializedProperty idsProperty = serialized.FindProperty(ItemIdsField);
+            SerializedProperty kProperty = serialized.FindProperty(VolumeKField);
+            if (idsProperty == null || kProperty == null || !idsProperty.isArray || !kProperty.isArray)
+            {
+                ids = null;
+                values = null;
+                return;
+            }
+
+            int count = idsProperty.arraySize;
+            ids = new string[count];
+            for (int i = 0; i < count; i++)
+            {
+                ids[i] = idsProperty.GetArrayElementAtIndex(i).stringValue;
+            }
+
+            int kCount = kProperty.arraySize;
+            values = new float[kCount];
+            for (int i = 0; i < kCount; i++)
+            {
+                values[i] = kProperty.GetArrayElementAtIndex(i).floatValue;
+            }
         }
 
         /// <summary>

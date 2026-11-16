@@ -464,7 +464,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 
 | 模型的 | 运行时的 | 为什么不能合并 |
 |---|---|---|
-| `absorb_size_ratio = 1.0`（线性：pickup 尺寸 ≤ 球直径 × 1.0） | `absorbVolumeRatio = 10f` + `maxItemVolumeWorldM3 = 512f`（体积：AABB 体积 ≤ `min(512, (π/6)·D³/10)`） | 决定 (l) 把判定量从“最长边”换成“AABB 体积”，旧的 `maxItemSizeWorldM` / `absorbSizeRatio` 两个线性字段已删除，不是没移植。长度比与体积比量纲不同，不能当成同一个数互相换算；口径与测试见 `OPEN_DECISIONS.md` (l) 与 [`PickupAbsorb/README.md`](../PickupAbsorb/README.md) 1.1 节 |
+| `absorb_size_ratio = 1.0`（线性：pickup 尺寸 ≤ 球直径 × 1.0） | **2026-11-16 起**：`V = k·a·b·c`，`Req_mm = floor(1000·cbrt(60V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`；`k` 来自 `defs[].volumeK`（缺省 0.70），比率 10 与整 mm 是常量，`maxItemVolumeWorldM3`/`absorbVolumeRatio` 已删除 | 决定 (l) 先换掉了判定量（最长边 → AABB 体积），2026-11-16 的 owner 决定再把**系数 k 与整 mm 取整**补回原作口径。旧的 `maxItemSizeWorldM`/`absorbSizeRatio`/`absorbVolumeRatio`/`maxItemVolumeWorldM3` 四个字段全部删除，不是没移植。长度比与体积比量纲不同，不能互相换算；口径与测试见 [`PickupAbsorb/README.md`](../PickupAbsorb/README.md) 1.1 节与 [`ABSORB_GATE_ORIGINAL.md`](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md) |
 | `base_speed_mps = 3.0`（区域间走路速度） | `maxSpeedMps = 4f`（物理速度上限） | 模型用它算路程时间，运行时用它算速度上限。把它们当成同一个数，会同时改坏模型结论和手感 |
 | `units_to_max_diameter = 1356` | 体积标定 `0.0141 m³/单位` | §0.2 实例二：差 3.44 倍。**两边都标 PROVISIONAL，但没有任何一处说明它们必须一致** |
 

@@ -64,10 +64,32 @@ SIZE_DECIMALS = 4
 DIAMETER_DECIMALS = 3
 CAMERA_DECIMALS = 3
 
-#: ``D_req = (60 * a * b * c / pi) ** (1/3)`` -- the equivalent sphere diameter
-#: whose volume is ten times the prop's box volume
-#: (``a*b*c <= (pi/6) * D**3 / 10``).  The design quotes it as ``2.673 * cbrt(abc)``.
+#: ``D_req = (60 * k * a * b * c / pi) ** (1/3)`` -- the equivalent sphere diameter whose
+#: volume is ten times the prop's ORIGINAL volume ``V = k * a * b * c``
+#: (``k*a*b*c <= (pi/6) * D**3 / 10``).  60 = 6 * 10, the 10x gate constant.
 VOLUME_GATE_FACTOR = 60.0
+
+#: The original's per-item volume factor: ``Volume = k * (a*b*c)`` with k = 0.70 for
+#: 1,008 of 1,425 types (70.7%).  Absent from a ``defs[]``/``props[]`` row means this
+#: value, and the canonical writer never inserts it (an existing file stays byte-identical).
+#: Evidence: ``PARITY_AUDIT.md`` G13, ``meta/solid_volume/README.md``,
+#: ``Docs/Research/ContentVolume/FIXED_POINT_VOLUME_IMPACT.md`` §2 O3.
+DEFAULT_VOLUME_K = 0.70
+
+#: The one range a declared ``volumeK`` must fall in: ``0 < k <= 32``.  0 (or a negative)
+#: would give every item volume 0 and let a pinhead absorb a house; the ceiling is well
+#: past the widest hand-tuned factor in the original (thin sheets reach 16.8) and is there
+#: to catch a typo (``70`` for ``0.70``), not to reject a real author value.
+VOLUME_K_MAX = 32.0
+
+#: ``D_req`` and the ball diameter are compared as WHOLE MILLIMETRES (the original's
+#: ``Req Pickup Size``), so a value that float error places a hair below an exact boundary
+#: is lifted back onto it.  One micrometre (1e-3 mm) is ~4x the float32 ulp at a 2.2 m
+#: diameter (2.4e-4 mm), i.e. large enough to repair the arithmetic, and 1/1000 of the
+#: quantum, i.e. far below the 0.1 mm resolution of an authored AABB.  The C# twin
+#: (``PickupAbsorbMath.MmFloorEpsilon``) uses this same value so the two gates cannot
+#: disagree on a knife-edge item.
+MM_EPSILON = 1e-3
 
 #: ``rise <= step_limit(= STEP_RATIO * D)`` is terrain, above it is blocking
 #: (``Docs/Design/BallMotor/TERRAIN_SUPPORT.md`` section 6.1).
@@ -148,12 +170,12 @@ LEVELS_DIR = ROOT / "Docs/Design/Levels"
 
 PROP_KEYS = ("itemId", "def", "kind", "zone", "group", "groupId", "position", "rotationQuat",
              "support", "stackedOn", "aabb", "absorbDiameterReq", "absorbable",
-             "valueUnits", "notes")
+             "valueUnits", "volumeK", "notes")
 STRUCTURE_KEYS = ("id", "kind", "role", "shape", "center", "size", "curve", "rotationQuat",
                   "collision", "absorbable", "support", "meets", "material", "notes")
 CAMERA_KEYS = ("id", "type", "location", "target", "lens", "coverage_m")
 PRESET_KEYS = ("id", "camera", "engine", "res", "samples")
-DEF_KEYS = ("id", "kind", "model", "valueUnits", "collider", "notes")
+DEF_KEYS = ("id", "kind", "model", "valueUnits", "collider", "volumeK", "notes")
 LEVEL_KEYS = ("id", "scene", "units", "convention", "ballStart", "playerSpawn",
               "ballDiameterStart", "ballDiameterMax", "groundY", "bounds",
               "spawnClearanceM", "budget", "expected", "zones", "arena")
@@ -798,16 +820,73 @@ def reseat(position, size, quat_xyzw, normal, point):
     return seat_position(position, size, normal, point), new_quat
 
 
-def absorb_diameter_req(size):
-    """``D_req = (60 * a * b * c / pi) ** (1/3)``: the ball that may absorb this box."""
+def floor_mm(meters):
+    """Length in WHOLE millimetres, floored with :data:`MM_EPSILON` on the boundary."""
+    return int(math.floor(float(meters) * 1000.0 + MM_EPSILON))
+
+
+def volume_k_error(volume_k):
+    """Why a declared ``volumeK`` is unusable, or ``None`` when it is a legal factor."""
+    if isinstance(volume_k, bool) or not isinstance(volume_k, (int, float)):
+        return "must be a number (the original's default is %.2f)" % DEFAULT_VOLUME_K
+    value = float(volume_k)
+    if not math.isfinite(value):
+        return "must be finite"
+    if value <= 0.0:
+        return "must be > 0 (0 would price every item at zero volume)"
+    if value > VOLUME_K_MAX:
+        return "must be <= %g (0.70 is the original default; a typo like 70 is refused)" % VOLUME_K_MAX
+    return None
+
+
+def effective_volume_k(prop, catalog=None):
+    """The ``k`` of one prop: its own ``volumeK``, else its def's, else 0.70."""
+    catalog = catalog or {}
+    value = prop.get("volumeK")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    entry = catalog.get(prop.get("def")) or {}
+    value = entry.get("volumeK")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return DEFAULT_VOLUME_K
+
+
+def absorb_diameter_req_exact(size, volume_k=DEFAULT_VOLUME_K):
+    """``D_req`` in metres, unrounded: ``(60 * k * a * b * c / pi) ** (1/3)``.
+
+    ``V = k * a * b * c`` is the original's item volume (``PARITY_AUDIT.md`` G13), so this is
+    the smallest ball whose own volume is ten of the item's.  Only the comparison quantity
+    (:func:`absorb_diameter_req`) is floored; this one exists for callers that want the
+    continuous number (the parity harness's "distance to the boundary").
+    """
     a, b, c = size
     if a <= 0.0 or b <= 0.0 or c <= 0.0:
         raise ValueError("absorb_diameter_req needs a positive box size, got %r" % (size,))
-    return (VOLUME_GATE_FACTOR * a * b * c / math.pi) ** (1.0 / 3.0)
+    if volume_k is None:
+        volume_k = DEFAULT_VOLUME_K
+    return (VOLUME_GATE_FACTOR * float(volume_k) * a * b * c / math.pi) ** (1.0 / 3.0)
 
 
-def is_absorbable(size, ball_diameter_max):
-    return absorb_diameter_req(size) <= ball_diameter_max + 1e-9
+def absorb_diameter_req_mm(size, volume_k=DEFAULT_VOLUME_K):
+    """The original's ``Req Pickup Size``: ``D_req`` FLOORED to whole millimetres."""
+    return floor_mm(absorb_diameter_req_exact(size, volume_k))
+
+
+def absorb_diameter_req(size, volume_k=DEFAULT_VOLUME_K):
+    """``Req`` in metres as an exact whole-millimetre value (0.176, not 0.1762...).
+
+    One comparison quantity for the data side: a prop is absorbable by a ball of diameter
+    ``D`` iff ``floor(1000*D) >= absorb_diameter_req_mm(size, k)`` (the runtime's
+    ``PickupAbsorbMath.IsBeyondAbsorbLimit``).  Because it is floors to mm, the value is
+    exactly representable with three decimals, which is what ``absorbDiameterReq`` stores.
+    """
+    return absorb_diameter_req_mm(size, volume_k) / 1000.0
+
+
+def is_absorbable(size, ball_diameter_max, volume_k=DEFAULT_VOLUME_K):
+    """Whole-mm comparison, the same one the runtime gate makes."""
+    return absorb_diameter_req_mm(size, volume_k) <= floor_mm(ball_diameter_max)
 
 
 # --------------------------------------------------------------------------- #
@@ -999,6 +1078,7 @@ def canonical_doc(doc, manifests=None):
     stale gate.
     """
     manifests = manifests if manifests is not None else load_manifests()
+    catalog = def_catalog(doc)
     level = dict(doc.get("level") or {})
     ball_max = level.get("ballDiameterMax")
     ball_max = 0.0 if ball_max is None else float(ball_max)
@@ -1043,11 +1123,15 @@ def canonical_doc(doc, manifests=None):
                 # unbounded, so a declared value past int32 - the widened host column's range,
                 # (r) step B - is stored and re-emitted verbatim; int() is the identity for it.
                 value = int(value)
+            elif key == "volumeK":
+                value = rounded(value, 4)
             out[key] = value
         aabb = out.get("aabb")
         if aabb and all(v > 0 for v in aabb):
-            out["absorbDiameterReq"] = rounded(absorb_diameter_req(aabb), DIAMETER_DECIMALS)
-            out["absorbable"] = bool(absorb_diameter_req(aabb) <= ball_max + 1e-9)
+            volume_k = effective_volume_k(prop, catalog)
+            out["absorbDiameterReq"] = rounded(absorb_diameter_req(aabb, volume_k),
+                                               DIAMETER_DECIMALS)
+            out["absorbable"] = is_absorbable(aabb, ball_max, volume_k)
         props_out.append(_ordered(out, PROP_KEYS))
 
     structures_out = []
@@ -1119,6 +1203,8 @@ def canonical_doc(doc, manifests=None):
                 value = int(value)
             elif key == "collider" and isinstance(value, dict):
                 value = collider_proxy.canonical_collider(value)
+            elif key == "volumeK":
+                value = rounded(value, 4)
             out[key] = value
         defs_out.append(_ordered(out, DEF_KEYS))
 
@@ -1356,6 +1442,10 @@ def _check_defs(doc, report, manifests, catalog):
         kind = entry.get("kind")
         if kind is not None and (not isinstance(kind, str) or not kind.strip()):
             report.err("%s.kind must be a non-empty string when present" % label)
+        if "volumeK" in entry:
+            reason = volume_k_error(entry["volumeK"])
+            if reason is not None:
+                report.err("%s.volumeK %r %s" % (label, entry["volumeK"], reason))
         _check_collider(entry, label, def_id, manifests, report)
 
 
@@ -1455,12 +1545,17 @@ def _check_props(doc, report, manifests, catalog):
         if aabb is None or position is None or quat is None:
             continue
 
+        if "volumeK" in prop:
+            reason = volume_k_error(prop["volumeK"])
+            if reason is not None:
+                report.err("%s.volumeK %r %s" % (label, prop["volumeK"], reason))
+        volume_k = effective_volume_k(prop, catalog)
         if "absorbDiameterReq" in prop:
-            dreq = absorb_diameter_req(aabb)
+            dreq = absorb_diameter_req(aabb, volume_k)
             declared = as_float(prop.get("absorbDiameterReq"), "%s.absorbDiameterReq" % label, report)
-            if declared is not None and abs(declared - dreq) > 1e-3:
-                report.err("%s absorbDiameterReq %.3f is stale; the aabb gives %.3f"
-                           % (label, declared, dreq))
+            if declared is not None and abs(declared - dreq) > 5e-4:
+                report.err("%s absorbDiameterReq %.3f is stale; the aabb (with k=%.2f) gives %.3f"
+                           % (label, declared, volume_k, dreq))
         ball_max = level.get("ballDiameterMax")
         if ball_max is not None:
             try:
@@ -1468,10 +1563,11 @@ def _check_props(doc, report, manifests, catalog):
             except (TypeError, ValueError):
                 ball_max = None
         if ball_max is not None:
-            derived = absorb_diameter_req(aabb) <= ball_max + 1e-9
+            derived = is_absorbable(aabb, ball_max, volume_k)
             if "absorbable" in prop and bool(prop.get("absorbable")) != derived:
-                report.err("%s absorbable=%r but D_req=%.3f vs ballDiameterMax=%.2f says %r"
-                           % (label, prop.get("absorbable"), absorb_diameter_req(aabb), ball_max, derived))
+                report.err("%s absorbable=%r but D_req=%.3f m (k=%.2f) vs ballDiameterMax=%.2f says %r"
+                           % (label, prop.get("absorbable"), absorb_diameter_req(aabb, volume_k),
+                              volume_k, ball_max, derived))
 
         value_units = prop.get("valueUnits")
         if value_units is not None:
@@ -2282,7 +2378,9 @@ def population_tables(doc, manifests=None):
         if prop.get("absorbable") is True:
             entry["absorbable"] += 1
         def_id = prop.get("def") or "(none)"
-        definition = defs.setdefault(def_id, {"def": def_id, "props": 0, "valueUnits": 0})
+        definition = defs.setdefault(def_id, {"def": def_id, "props": 0, "valueUnits": 0,
+                                             "volumeK": effective_volume_k({"def": def_id},
+                                                                           catalog)})
         definition["props"] += 1
         if value is not None:
             definition["valueUnits"] += value
@@ -2291,16 +2389,18 @@ def population_tables(doc, manifests=None):
     seen_absorbable = set()
     for diameter in TIER_DIAMETERS:
         step = STEP_RATIO * diameter
-        row = {"diameter": diameter, "absorbableProps": 0, "absorbableUnits": 0,
-               "newProps": 0, "newUnits": 0, "terrain": 0, "blocking": 0, "food": 0}
+        ball_mm = floor_mm(diameter)
+        row = {"diameter": diameter, "ballMm": ball_mm, "absorbableProps": 0,
+               "absorbableUnits": 0, "newProps": 0, "newUnits": 0, "terrain": 0,
+               "blocking": 0, "food": 0}
         for prop in props:
             try:
                 aabb = tuple(float(v) for v in prop["aabb"])
             except (KeyError, TypeError, ValueError):
                 continue
-            dreq = absorb_diameter_req(aabb)
+            req_mm = absorb_diameter_req_mm(aabb, effective_volume_k(prop, catalog))
             value = effective_value_units(prop, catalog) or 0
-            if dreq <= diameter + 1e-9:
+            if req_mm <= ball_mm:
                 row["food"] += 1
                 row["absorbableProps"] += 1
                 row["absorbableUnits"] += value
@@ -2321,7 +2421,7 @@ def population_tables(doc, manifests=None):
                 aabb = tuple(float(v) for v in prop["aabb"])
             except (KeyError, TypeError, ValueError):
                 continue
-            if absorb_diameter_req(aabb) <= diameter + 1e-9:
+            if absorb_diameter_req_mm(aabb, effective_volume_k(prop, catalog)) <= ball_mm:
                 seen_absorbable.add(prop.get("itemId"))
 
     structure_rows = []
@@ -2374,15 +2474,17 @@ def format_report_tables(tables, expected=None):
         lines.append("%-12s %5d %6d %10d" % (row["zone"], row["props"], row["valueUnits"],
                                              row["absorbable"]))
     lines.append("")
-    lines.append("%-22s %5s %6s" % ("def", "props", "units"))
+    lines.append("%-22s %5s %6s %7s" % ("def", "props", "units", "k"))
     for row in tables.get("defs", []):
-        lines.append("%-22s %5d %6d" % (row["def"], row["props"], row["valueUnits"]))
+        lines.append("%-22s %5d %6d %7.2f" % (row["def"], row["props"], row["valueUnits"],
+                                             row.get("volumeK", DEFAULT_VOLUME_K)))
     lines.append("")
-    lines.append("%-6s %5s %6s %5s %5s %7s %8s"
-                 % ("tier D", "food", "units", "new", "newU", "terrain", "blocking"))
+    lines.append("%-6s %6s %5s %6s %5s %5s %7s %8s"
+                 % ("tier D", "ball mm", "food", "units", "new", "newU", "terrain", "blocking"))
     for row in tables.get("tiers", []):
-        lines.append("%.2f %7d %6d %5d %5d %8d %9d"
-                     % (row["diameter"], row["food"], row["absorbableUnits"], row["newProps"],
+        lines.append("%.2f %7d %6d %6d %5d %5d %8d %9d"
+                     % (row["diameter"], row.get("ballMm", floor_mm(row["diameter"])),
+                        row["food"], row["absorbableUnits"], row["newProps"],
                         row["newUnits"], row["terrain"], row["blocking"]))
     lines.append("")
     lines.append("%-16s %-9s %6s %7s %10s %6s"

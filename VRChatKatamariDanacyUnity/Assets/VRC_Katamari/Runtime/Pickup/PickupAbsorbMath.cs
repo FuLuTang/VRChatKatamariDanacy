@@ -55,29 +55,45 @@ namespace VRCKatamari.Pickup
     /// <see cref="TryAbsorbValueToLedgerGain"/>).
     /// </para>
     /// <para>
-    /// The size gate is a VOLUME gate relative to the ball (Docs/OPEN_DECISIONS.md (l),
-    /// which supersedes (h)): an item is absorbable when its AABB volume `x*y*z` is at
-    /// most the ball's own volume `(pi/6) * semanticDiameter^3` divided by the absorb
-    /// volume ratio (10 - the ball must be ten times the item's volume), bounded above
-    /// by a serialized safety ceiling in cubic metres.
-    /// <see cref="TryComputeAbsorbVolumeLimit"/> resolves that one number;
-    /// <see cref="EvaluateAbsorbWithBallSize"/> and
-    /// <see cref="EvaluateAbsorbWithValueAndBallSize"/> are the gameplay entry points
-    /// that use it. "Too large" has exactly one definition here: the gate and the
-    /// host-side blocking predicate both ask <see cref="IsVolumeBeyondLimit"/>.
+    /// The size gate is the ORIGINAL's, in the original's own quantities (owner decision
+    /// 2026-11-16, Docs/OPEN_DECISIONS.md; PARITY_AUDIT G07/G08/G13). An item's volume is
+    /// `V = k * a*b*c`, where `k` is the per-item factor the original authors per type
+    /// (default 0.70 for 70.7% of its 1,425 types, thin sheets 8-16, fluffy 0.05-0.07).
+    /// Its required ball diameter is `Req = cbrt(60 * V / pi)` - 60 = 6 * 10, the "ball is
+    /// ten times the item's volume" rule - FLOORED to whole millimetres, and the item is
+    /// absorbable iff the ball's whole-millimetre diameter is at least Req:
+    /// `floor(1000*D) >= floor(1000*cbrt(60*k*a*b*c/pi))`.
+    /// <see cref="TryComputePickupReqDiameterMm"/> and
+    /// <see cref="TryFloorMillimetres"/> are the two halves of that rule;
+    /// <see cref="IsBeyondAbsorbLimit"/> is its single predicate - the gate and every
+    /// host-side blocking/support classification ask that one function. There is no
+    /// serialized ratio and no serialized per-item volume ceiling any more; the retired
+    /// fields are described where they used to live (KatamariBallMotor's pickup inputs).
     /// </para>
     /// <para>
     /// Why volume and not the longest edge. The original's gate is
-    /// `V_ball &gt;= 10 * V_item`, i.e. `a*b*c &lt;= (pi/6) * D^3 / 10` with D the ball's
-    /// semantic diameter (Docs/Research/KatamariBallRules/ABSORB_SIZE_RATIO.md, evidence
-    /// level: medium - one community data-mining statement of the 10x constant, nine
-    /// back-solved item volumes, three independent side observations). A linear ratio
-    /// cannot express that quantity: edges that differ by 6x differ in volume by 216x, so
-    /// one 0.30 m cube weighs as much as 216 of the 0.05 m ones, and a slender prop (a
-    /// bat, a pencil) passes a volume gate that a longest-edge gate refuses. The AABB
-    /// volume is the original's own quantity and it counts empty space, so a sphere-like
-    /// prop is over-counted by `6/pi` (~1.91x) and needs a ball ~1.24x larger - faithful
-    /// to the original, not a bug.
+    /// `V_ball &gt;= 10 * V_item` with `V_item = k*a*b*c` (Docs/Research/KatamariBallRules/
+    /// ABSORB_SIZE_RATIO.md; PARITY_AUDIT G07/G08/G13). A linear ratio cannot express that
+    /// quantity: edges that differ by 6x differ in volume by 216x, so one 0.30 m cube
+    /// weighs as much as 216 of the 0.05 m ones, and a slender prop (a bat, a pencil)
+    /// passes a volume gate that a longest-edge gate refuses. The AABB volume is the
+    /// original's own base quantity (it counts empty space, which is exactly why the
+    /// authors hand-tune `k` down to 0.3-0.7 for hollow furniture), so a sphere-like prop
+    /// is over-counted by `6/pi` (~1.91x) and needs a ball ~1.24x larger - faithful to the
+    /// original, not a bug.
+    /// </para>
+    /// <para>
+    /// Why the comparison is in whole millimetres. The original quantizes the REQUIRED
+    /// SIZE, not the volume (`Req Pickup Size` is an integer millimetre; 1,449/1,450 data
+    /// rows are self-consistent within 1 mm), so the gate the player feels is
+    /// "my displayed size is at least that many mm". Comparing volumes in float would
+    /// reintroduce the rounding the original does not have, and would make the boundary
+    /// depend on the order of two multiplications. <see cref="MmFloorEpsilon"/> is 1e-3 mm
+    /// (one micrometre): float32's ulp at a 2.2 m diameter is 2.4e-4 mm, so the guard is
+    /// large enough to repair the arithmetic and 1/1000 of the quantum, i.e. far below the
+    /// 0.1 mm resolution of an authored AABB. The Python twin
+    /// (placement_core.MM_EPSILON) uses the same value, so the two gates cannot disagree
+    /// on an item that sits exactly on a boundary.
     /// </para>
     /// <para>
     /// Two size quantities are still not interchangeable: the round model compares the
@@ -92,8 +108,9 @@ namespace VRCKatamari.Pickup
     /// player reads, it may differ from the physical metres, and the model's `eligible`
     /// is called with the ball radius. Reach has no diameter parameter, so a caller
     /// cannot pass a diameter as if it were a radius. The size gate is the one place a
-    /// semantic diameter appears, and it is consumed there as a diameter (cubed, inside
-    /// <see cref="TryComputeAbsorbVolumeLimit"/>) and never added to reach. The item's
+    /// semantic diameter appears, and it is consumed there as a DIAMETER (converted to
+    /// whole millimetres inside <see cref="TryFloorMillimetres"/>) and never added to
+    /// reach. The item's
     /// bounding-sphere radius used by reach and its AABB volume used by the size gate are
     /// also two different quantities, read from the same `bounds`: a slender prop can have
     /// a large radius and a tiny volume.
@@ -104,9 +121,9 @@ namespace VRCKatamari.Pickup
     /// loose bounds proxy: it grants contact when the bounding sphere overlaps the ball's
     /// reach. It models no occlusion, no velocity plausibility and no item state machine,
     /// and the model's README says the same. Comparisons keep the model's strictness:
-    /// the size gate rejects only a strictly larger AABB volume, the growth cap rejects a
-    /// radius that has already reached the cap, and a distance exactly equal to the reach
-    /// is contact.
+    /// the size gate accepts `ballMm == ReqMm` and rejects one millimetre less, the growth
+    /// cap rejects a radius that has already reached the cap, and a distance exactly equal
+    /// to the reach is contact.
     /// </para>
     /// <para>
     /// This layer owns no state and allocates nothing. It deliberately does not port the
@@ -126,13 +143,77 @@ namespace VRCKatamari.Pickup
     public static class PickupAbsorbMath
     {
         /// <summary>
+        /// The per-item volume factor's default: the original's 0.70
+        /// (`Volume = k * bbox`, 1,008 of 1,425 types).
+        /// </summary>
+        /// <remarks>
+        /// A level's `defs[].volumeK` (or a prop's override) is authoritative; this value is
+        /// what the authoring path writes when a type declares nothing and what a host
+        /// falls back to for a scene synced before the column existed. It is never written
+        /// into `placement.json`, so an existing file stays byte-identical.
+        /// </remarks>
+        public const float DefaultVolumeK = 0.70f;
+
+        /// <summary>
+        /// The upper bound of the one authoring rule for `k`: `0 &lt; k &lt;= 32`.
+        /// </summary>
+        /// <remarks>
+        /// The original's hand-tuned factors reach 16.8 (thin sheets), so 32 is a ceiling
+        /// with headroom, not a tuning knob: it catches the typo `70` for `0.70`, which
+        /// would otherwise make a chair absorbable by a pinhead. Zero or negative is refused
+        /// because it would price every item at zero volume.
+        /// </remarks>
+        public const float MaxVolumeK = 32f;
+
+        /// <summary>
+        /// The original's volume rule constant: the ball must be TEN times the item's
+        /// volume, i.e. `(pi/6) * D^3 = ratio * V`, and `Req = cbrt(6 * ratio * V / pi)`.
+        /// </summary>
+        /// <remarks>
+        /// 10 is the original's number (PARITY_AUDIT G07; raw_growth_mechanism §2). It is a
+        /// constant, not a serialized field, because the owner decision of 2026-11-16 is
+        /// "the absorb gate follows the original numbers exactly": a per-scene ratio would
+        /// let a config silently stop being the original's gate.
+        /// </remarks>
+        public const float AbsorbVolumeRatio = 10f;
+
+        /// <summary>
+        /// A numerical sanity ceiling for one item's ORIGINAL volume, 1000 m3. Not a gate.
+        /// </summary>
+        /// <remarks>
+        /// The retired field was `maxItemVolumeWorldM3 = 512` (an 8 m cube) used as
+        /// `min(ceiling, ballVolume / ratio)` - a hard cap coupled to the ball's own size,
+        /// which is exactly the coupling the original does not have. With the gate compared
+        /// in whole millimetres the cap is unnecessary: an item bigger than the ball simply
+        /// has a larger Req. 1000 m3 is ~1,792x the largest item the 2.20 m ball cap can
+        /// absorb (`pi/6 * 2.2^3 / 10 = 0.558 m3`) and above any single prop in the content
+        /// (the biggest level totals ~3,022 m3 ACROSS all props), so only a corrupt bounds
+        /// triple can reach it; the constant keeps such a product from producing an
+        /// infinity or a nonsense Req that a reader would trust.
+        /// </remarks>
+        public const float MaxItemVolumeSanityWorldM3 = 1000f;
+
+        /// <summary>
+        /// The boundary guard for the whole-millimetre floor: one micrometre, in mm.
+        /// </summary>
+        /// <remarks>
+        /// Added before `floor`, so an exact millimetre boundary that float error places a
+        /// hair below it still lands on the integer. 1e-3 mm is ~4x float32's ulp at a 2.2 m
+        /// diameter, and 1/1000 of the quantum - far below the 0.1 mm resolution of authored
+        /// AABB data - so it repairs arithmetic without promoting a genuinely smaller item.
+        /// `placement_core.MM_EPSILON` is the same number, which keeps the data gate and the
+        /// runtime gate identical on a knife-edge.
+        /// </remarks>
+        public const float MmFloorEpsilon = 0.001f;
+
+        /// <summary>
         /// Decides whether one item may be absorbed by the ball right now.
         /// </summary>
         /// <remarks>
         /// The gates run in the model's order, so the returned value is the model's first
-        /// failing condition: not absorbable; kind outside the allowed set; AABB volume
-        /// strictly greater than the volume limit; collision radius already at or
-        /// above maxGrowthRadiusWorldM; contact distance strictly greater than the reach.
+        /// failing condition: not absorbable; kind outside the allowed set; required
+        /// diameter above the ball's whole-millimetre diameter; collision radius already at
+        /// or above maxGrowthRadiusWorldM; contact distance strictly greater than the reach.
         /// Absorb is the model's `eligible` returning true. Allowed kinds are an ordinal
         /// text set supplied by the caller; the model uses a frozenset and no default
         /// tuning is invented here. `collisionRadiusWorldM` is the ball's collision
@@ -143,14 +224,11 @@ namespace VRCKatamari.Pickup
         /// overflows float is also RejectInvalidInput: it is an unrepresentable volume,
         /// not a large item.
         /// <para>
-        /// `maxItemVolumeWorldM3` is the volume limit the caller has already resolved for
-        /// this step, and it is the only size limit this method applies. The gameplay path
-        /// resolves it with <see cref="TryComputeAbsorbVolumeLimit"/> (the ball's own
-        /// volume divided by the absorb volume ratio, bounded by the serialized ceiling)
-        /// and calls <see cref="EvaluateAbsorbWithBallSize"/>; calling this method
-        /// directly with the serialized ceiling is the absolute-gate behaviour and is what
-        /// a caller who deliberately wants a fixed cap uses. Passing the resolved limit
-        /// here keeps the gate itself in one place.
+        /// The size gate is <see cref="IsBeyondAbsorbLimit"/> and nothing else: the item's
+        /// `k * a*b*c` priced at `k`, the ball's semantic diameter, both floored to whole
+        /// millimetres. `itemVolumeK` is the per-item factor (the original's `Volume =
+        /// k * bbox`; 0.70 is the default the authoring path fills in, and the range
+        /// 0 &lt; k &lt;= <see cref="MaxVolumeK"/> is validated here as an input).
         /// </para>
         /// <para>
         /// The contact geometry (the item's bounding-sphere radius and the reach sum) is
@@ -169,7 +247,8 @@ namespace VRCKatamari.Pickup
             Vector3 ballPosition,
             float collisionRadiusWorldM,
             float contactRadiusWorldM,
-            float maxItemVolumeWorldM3,
+            float itemVolumeK,
+            float ballSemanticDiameterWorldM,
             float maxGrowthRadiusWorldM)
         {
             if (itemKind == null || allowedKinds == null) return AbsorbOutcome.RejectInvalidInput;
@@ -180,23 +259,36 @@ namespace VRCKatamari.Pickup
                 return AbsorbOutcome.RejectInvalidInput;
             if (!KatamariMath.IsFiniteFloat(collisionRadiusWorldM) ||
                 !KatamariMath.IsFiniteFloat(contactRadiusWorldM) ||
-                !KatamariMath.IsFiniteFloat(maxItemVolumeWorldM3) ||
+                !KatamariMath.IsFiniteFloat(itemVolumeK) ||
+                !KatamariMath.IsFiniteFloat(ballSemanticDiameterWorldM) ||
                 !KatamariMath.IsFiniteFloat(maxGrowthRadiusWorldM))
                 return AbsorbOutcome.RejectInvalidInput;
             if (itemBounds.x < 0f || itemBounds.y < 0f || itemBounds.z < 0f)
                 return AbsorbOutcome.RejectInvalidInput;
             if (collisionRadiusWorldM < 0f) return AbsorbOutcome.RejectInvalidInput;
-
-            float itemVolumeWorldM3;
-            if (!TryComputeItemVolume(itemBounds, out itemVolumeWorldM3))
+            if (itemVolumeK <= 0f || itemVolumeK > MaxVolumeK)
                 return AbsorbOutcome.RejectInvalidInput;
+            if (ballSemanticDiameterWorldM < 0f) return AbsorbOutcome.RejectInvalidInput;
+
+            // An unrepresentable product is an invalid input, not a large item: 1e20^3 is
+            // infinity, and letting the gate below answer "too large" would describe broken
+            // bounds as a legitimate wall.
+            float itemVolumeWorldM3;
+            if (!TryComputeOriginalItemVolume(itemBounds, itemVolumeK, out itemVolumeWorldM3))
+                return AbsorbOutcome.RejectInvalidInput;
+
+            // One size gate: the gate and every host-side wall/floor classification call
+            // this same predicate, so "beyond the absorb limit" cannot mean two things.
+            bool beyondLimit = IsBeyondAbsorbLimit(itemBounds, itemVolumeK,
+                ballSemanticDiameterWorldM);
 
             if (!itemAbsorbable) return AbsorbOutcome.RejectNotAbsorbable;
             if (!IsKindAllowed(allowedKinds, allowedKindCount, itemKind))
                 return AbsorbOutcome.RejectKindNotAllowed;
 
-            if (IsVolumeBeyondLimit(itemVolumeWorldM3, maxItemVolumeWorldM3))
-                return AbsorbOutcome.RejectItemTooLarge;
+            // Invalid geometry already returned above; what is left here is a legal item
+            // that is either too large for this ball or beyond the sanity ceiling.
+            if (beyondLimit) return AbsorbOutcome.RejectItemTooLarge;
             if (collisionRadiusWorldM >= maxGrowthRadiusWorldM)
                 return AbsorbOutcome.RejectBallAtGrowthCap;
 
@@ -278,9 +370,11 @@ namespace VRCKatamari.Pickup
         /// sum of infinities decide.
         /// </para>
         /// <para>
-        /// This is the only place the item's volume is derived. The gate and
-        /// <see cref="IsBeyondAbsorbVolumeLimit"/> both call it, so the blocking set and
-        /// the absorb gate cannot disagree about how big an item is.
+        /// This is the only place the raw AABB volume is derived. The gate and every
+        /// blocking/support classification reach it through one path - the raw product
+        /// here, multiplied by the item's `k` in
+        /// <see cref="TryComputeOriginalItemVolume"/> - so the blocking set and the absorb
+        /// gate cannot disagree about how big an item is.
         /// </para>
         /// </remarks>
         public static bool TryComputeItemVolume(Vector3 itemBounds, out float volumeWorldM3)
@@ -295,141 +389,164 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
-        /// The size gate's comparison itself: an item volume strictly above the limit is
-        /// too large. The one comparison in this project.
-        /// </summary>
-        /// <remarks>
-        /// Inclusive at equality, matching the model's `&lt;=`: an item whose volume is
-        /// exactly the limit is absorbable. No epsilon is added, so a boundary value that
-        /// differs only in the last bit may still fall on the other side.
-        /// </remarks>
-        public static bool IsVolumeBeyondLimit(float itemVolumeWorldM3, float limitVolumeWorldM3)
-        {
-            return itemVolumeWorldM3 > limitVolumeWorldM3;
-        }
-
-        /// <summary>
-        /// Resolves the size limit for one step: the ball's own volume divided by the
-        /// absorb volume ratio, bounded above by the serialized safety ceiling.
+        /// The original's item volume: `V = k * a * b * c`.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Docs/OPEN_DECISIONS.md (l). The original's gate is `V_ball &gt;= ratio *
-        /// V_item` (Docs/Research/KatamariBallRules/ABSORB_SIZE_RATIO.md), so the runtime
-        /// compares volumes and the ball side of the comparison is
-        /// `ballVolume = (pi/6) * D^3` with `D = ballSemanticDiameterWorldM`. That is the
-        /// same semantic diameter the motor reports as the ball's size and derives from
-        /// the confirmed volume (SizeModelMath.TryDerive), never the collision radius.
-        /// `maxItemVolumeWorldM3` survives only as a ceiling: it is the serialized
-        /// field's absolute bound in cubic metres, and the effective limit is
-        /// `min(ceiling, ballVolume / ratio)`, so a config keeps one obviously-too-large
-        /// item from being eaten by a tiny ball even if the ratio is mis-set low.
+        /// `k` is the per-item factor the original stores as `Volume / bbox`: 0.70 for
+        /// 1,008 of its 1,425 types (70.7%), hand-tuned elsewhere - thin sheets 8-16,
+        /// fluffy things 0.05-0.07, hollow furniture 0.3-0.5 (PARITY_AUDIT G13,
+        /// `meta/solid_volume`, FIXED_POINT_VOLUME_IMPACT §2 O3). The authoring path fills
+        /// <see cref="DefaultVolumeK"/> when a type declares nothing, so a scene written
+        /// before this field existed plays at 0.70 without being re-synced.
         /// </para>
         /// <para>
-        /// The retired fields were a length ratio (`absorbSizeRatio`) and a length
-        /// ceiling (`maxItemSizeWorldM = 8 m`); a length ceiling next to a volume gate
-        /// would truncate at 8 m of longest edge, which is not the same statement as any
-        /// volume bound. The defaults are now `absorbVolumeRatio = 10` and
-        /// `maxItemVolumeWorldM3 = 512` (an 8 m cube).
-        /// </para>
-        /// <para>
-        /// A ratio at or below zero, a non-finite ratio, diameter or ceiling, and a
-        /// negative diameter are refused rather than clamped: ratio 0 would silently
-        /// disable every absorb, and the round model's constructor rejects a
-        /// non-positive ratio for the same reason (round_model.py:1405-1409).
-        /// A zero diameter is accepted and yields a zero limit, which refuses every
-        /// item that has any volume at all.
-        /// </para>
-        /// <para>
-        /// The cube and the division are checked for finiteness, so an overflowing
-        /// intermediate is a refusal instead of an infinity that would absorb everything.
+        /// `false` for a non-finite or non-positive `k`, for `k` above
+        /// <see cref="MaxVolumeK"/>, and for any bounds the raw product refuses. The range
+        /// check is deliberate rather than a clamp: `k = 0` would price every item at zero
+        /// volume, and a typo like 70 would make a chair absorbable by a pinhead.
         /// </para>
         /// </remarks>
-        public static bool TryComputeAbsorbVolumeLimit(
-            float ballSemanticDiameterWorldM,
-            float absorbVolumeRatio,
-            float maxItemVolumeWorldM3,
-            out float limitWorldM3)
+        public static bool TryComputeOriginalItemVolume(Vector3 itemBounds, float volumeK,
+            out float volumeWorldM3)
         {
-            limitWorldM3 = 0f;
-            if (!KatamariMath.IsFiniteFloat(ballSemanticDiameterWorldM)) return false;
-            if (!KatamariMath.IsFiniteFloat(absorbVolumeRatio)) return false;
-            if (!KatamariMath.IsFiniteFloat(maxItemVolumeWorldM3)) return false;
-            if (ballSemanticDiameterWorldM < 0f) return false;
-            if (absorbVolumeRatio <= 0f) return false;
-
-            float ballVolumeWorldM3 = Mathf.PI / 6f * ballSemanticDiameterWorldM
-                * ballSemanticDiameterWorldM * ballSemanticDiameterWorldM;
-            if (!KatamariMath.IsFiniteFloat(ballVolumeWorldM3)) return false;
-            float relative = ballVolumeWorldM3 / absorbVolumeRatio;
-            if (!KatamariMath.IsFiniteFloat(relative)) return false;
-            limitWorldM3 = relative < maxItemVolumeWorldM3 ? relative : maxItemVolumeWorldM3;
+            volumeWorldM3 = 0f;
+            if (!KatamariMath.IsFiniteFloat(volumeK)) return false;
+            if (volumeK <= 0f || volumeK > MaxVolumeK) return false;
+            float boxVolumeWorldM3;
+            if (!TryComputeItemVolume(itemBounds, out boxVolumeWorldM3)) return false;
+            float volume = volumeK * boxVolumeWorldM3;
+            if (!KatamariMath.IsFiniteFloat(volume)) return false;
+            volumeWorldM3 = volume;
             return true;
         }
 
         /// <summary>
-        /// 物件是否"太大"到吸不进，也就是是否应当挡路。
+        /// Whole millimetres of a length, FLOORED with <see cref="MmFloorEpsilon"/>.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// 这是 <see cref="EvaluateAbsorb"/> 尺寸门的同一个比较：取 bounds 的 AABB 体积，
-        /// 只有严格更大才算超出，`volume == limit` 仍然可吸（门的 `&gt;` 与 round model
-        /// 的 `&lt;=` 是同一边界）。宿主用它筛挡路集，与门共用
-        /// <see cref="TryComputeItemVolume"/> 与 <see cref="IsVolumeBeyondLimit"/> 这一处
-        /// 定义、不会漂移。
+        /// The original quantizes the required size, not the volume: its `Req Pickup Size`
+        /// is an integer millimetre, and the player-facing rule is "my displayed size (in
+        /// whole mm) is at least that many mm". This is the only place a length becomes
+        /// millimetres, used for both sides of the comparison.
         /// </para>
         /// <para>
-        /// 非有限 bounds、负尺寸、体积溢出和非有限 limit 一律返回 true。门上这些输入的
-        /// 结论是 <see cref="AbsorbOutcome.RejectInvalidInput"/> 而不是 Absorb，而 NaN 与
-        /// 任何数比较都是假：若在这里返回 false，坏数据的道具会既不挡也吸不动，正是挡路
-        /// 方案要修的那个症状。limit 为负是合法输入（直径 0 的球给 0，再小就是负数），
-        /// 此时任何非负体积都超出。
+        /// The epsilon is added BEFORE the floor so an exact boundary that float error
+        /// places a hair below it is repaired: `floor(1000*0.3 + 1e-3)` is 300 even when
+        /// the product lands at 299.99997. It is 1e-3 mm (one micrometre), about four times
+        /// float32's ulp at a 2.2 m diameter (2.4e-4 mm) and a thousandth of the quantum,
+        /// i.e. far below the 0.1 mm resolution of an authored AABB - it cannot promote an
+        /// item that is genuinely smaller. It is also the exact value of
+        /// `MM_EPSILON` in `Tools/levelbuild/placement_core.py`, so the data gate and this
+        /// one agree on a knife-edge item.
+        /// </para>
+        /// <para>
+        /// `false` for a non-finite or negative length, or a product that overflows float:
+        /// those are invalid inputs, not "zero millimetres".
         /// </para>
         /// </remarks>
-        public static bool IsBeyondAbsorbVolumeLimit(Vector3 itemBounds, float limitVolumeWorldM3)
+        public static bool TryFloorMillimetres(float metres, out float millimetres)
         {
-            if (!KatamariMath.IsFiniteFloat(limitVolumeWorldM3)) return true;
-            float itemVolumeWorldM3;
-            if (!TryComputeItemVolume(itemBounds, out itemVolumeWorldM3)) return true;
-            return IsVolumeBeyondLimit(itemVolumeWorldM3, limitVolumeWorldM3);
+            millimetres = 0f;
+            if (!KatamariMath.IsFiniteFloat(metres)) return false;
+            if (metres < 0f) return false;
+            float scaled = metres * 1000f;
+            if (!KatamariMath.IsFiniteFloat(scaled)) return false;
+            millimetres = Mathf.Floor(scaled + MmFloorEpsilon);
+            return true;
         }
 
         /// <summary>
-        /// <see cref="EvaluateAbsorb"/> with the volume limit resolved from the ball's own
-        /// size (relative gate, Docs/OPEN_DECISIONS.md (l)).
+        /// The original's `Req Pickup Size`: `floor(1000 * cbrt(60 * k * a*b*c / pi))` mm.
         /// </summary>
         /// <remarks>
-        /// The gate order is unchanged: an invalid ratio, diameter, ceiling or geometry
-        /// is RejectInvalidInput before any gate runs, then not absorbable, kind, size,
-        /// growth cap and reach, first failure wins. The item-too-large outcome keeps its
-        /// code (<see cref="AbsorbOutcome.RejectItemTooLarge"/>); what it is compared
-        /// against is now a volume. The comparison is inclusive at equality: an item whose
-        /// AABB volume equals `min(ceiling, ballVolume / ratio)` is absorbable, matching
-        /// the model's `&lt;=` (this port adds no epsilon, so a boundary value that differs
-        /// only in the last bit may still fall on the other side).
+        /// <para>
+        /// `60 = 6 * 10`: the ball's own volume `(pi/6) * D^3` must be ten times the item's
+        /// `k * a*b*c`, solved for D. The result is the FLOORED whole-millimetre diameter,
+        /// which is what the original stores and compares - so the accepted ball is up to
+        /// one millimetre smaller than the exact ten-times rule ("the required pickup size
+        /// is generally a little bit less than 10 times bigger", raw_growth_mechanism §2;
+        /// the Ant is the extreme case at ~8.8x).
+        /// </para>
+        /// <para>
+        /// `false` for illegal bounds or `k` (see
+        /// <see cref="TryComputeOriginalItemVolume"/>) and for a volume above
+        /// <see cref="MaxItemVolumeSanityWorldM3"/>. That ceiling is a numerical sanity
+        /// bound, not a gameplay gate: at the 2.20 m ball cap the gate allows at most
+        /// 0.558 m3 (pi/6 * 2.2^3 / 10), so 1000 m3 is ~1,792x the largest item a legal
+        /// ball can absorb; it exists so a corrupt bounds triple (a 100 m "pebble") cannot
+        /// produce an infinity or a nonsense Req that a reader would trust. A caller that
+        /// sees `false` here must treat the item as NOT absorbable (blocking), never as
+        /// absorbable.
+        /// </para>
         /// </remarks>
-        public static AbsorbOutcome EvaluateAbsorbWithBallSize(
-            bool itemAbsorbable,
-            string itemKind,
-            string[] allowedKinds,
-            int allowedKindCount,
-            Vector3 itemBounds,
-            Vector3 itemPosition,
-            Vector3 ballPosition,
-            float collisionRadiusWorldM,
-            float contactRadiusWorldM,
-            float maxItemVolumeWorldM3,
-            float maxGrowthRadiusWorldM,
-            float ballSemanticDiameterWorldM,
-            float absorbVolumeRatio)
+        public static bool TryComputePickupReqDiameterMm(Vector3 itemBounds, float volumeK,
+            out float reqMm)
         {
-            float limitWorldM3;
-            if (!TryComputeAbsorbVolumeLimit(ballSemanticDiameterWorldM, absorbVolumeRatio,
-                maxItemVolumeWorldM3, out limitWorldM3))
-                return AbsorbOutcome.RejectInvalidInput;
-            return EvaluateAbsorb(itemAbsorbable, itemKind, allowedKinds, allowedKindCount,
-                itemBounds, itemPosition, ballPosition, collisionRadiusWorldM,
-                contactRadiusWorldM, limitWorldM3, maxGrowthRadiusWorldM);
+            reqMm = 0f;
+            float volumeWorldM3;
+            if (!TryComputeOriginalItemVolume(itemBounds, volumeK, out volumeWorldM3)) return false;
+            if (volumeWorldM3 > MaxItemVolumeSanityWorldM3) return false;
+            float exactDiameterM = Mathf.Pow(60f * volumeWorldM3 / Mathf.PI, 1f / 3f);
+            if (!KatamariMath.IsFiniteFloat(exactDiameterM)) return false;
+            return TryFloorMillimetres(exactDiameterM, out reqMm);
+        }
+
+        /// <summary>
+        /// 物件是否"太大"到吸不进，也就是是否应当挡路。The ONE size predicate.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// `reqMm &gt; ballMm` is exactly the refusal
+        /// <see cref="EvaluateAbsorb"/> reports as
+        /// <see cref="AbsorbOutcome.RejectItemTooLarge"/>: the item's
+        /// `floor(1000*cbrt(60*k*a*b*c/pi))` against the ball's `floor(1000*D)`. The gate
+        /// and the host-side blocking/support classification both call this function, so
+        /// "beyond the absorb limit" has one definition. Equality is absorbable: an item
+        /// whose Req is exactly the ball's whole-millimetre diameter is food.
+        /// </para>
+        /// <para>
+        /// `true` (beyond) for every input the gate refuses as invalid: non-finite bounds,
+        /// negative extents, an overflowing product, illegal `k`, a non-finite or negative
+        /// diameter, and a volume above the sanity ceiling. The gate reports those as
+        /// <see cref="AbsorbOutcome.RejectInvalidInput"/> (or RejectItemTooLarge for the
+        /// ceiling) rather than Absorb, and a NaN compares false with everything - returning
+        /// false here would leave bad-data props neither blocking nor absorbable, which is
+        /// the symptom the blocking feature exists to remove.
+        /// </para>
+        /// </remarks>
+        public static bool IsBeyondAbsorbLimit(Vector3 itemBounds, float volumeK,
+            float ballSemanticDiameterWorldM)
+        {
+            float reqMm;
+            if (!TryComputePickupReqDiameterMm(itemBounds, volumeK, out reqMm)) return true;
+            float ballMm;
+            if (!TryFloorMillimetres(ballSemanticDiameterWorldM, out ballMm)) return true;
+            return reqMm > ballMm;
+        }
+
+        /// <summary>
+        /// Everything the size gate accepts at this ball: the item's Req in whole mm and the
+        /// ball's whole-mm diameter, resolved once for a caller that reports them.
+        /// </summary>
+        /// <remarks>
+        /// Read-only diagnostics/probe partner of
+        /// <see cref="IsBeyondAbsorbLimit"/>: it answers "what numbers did the gate compare"
+        /// with the same two functions the gate uses, so a HUD or a test never re-derives a
+        /// second copy. `false` means one of the inputs is illegal, in which case the
+        /// predicate above answers "beyond".
+        /// </remarks>
+        public static bool TryResolveAbsorbGate(Vector3 itemBounds, float volumeK,
+            float ballSemanticDiameterWorldM, out float reqMm, out float ballMm, out bool within)
+        {
+            reqMm = 0f;
+            ballMm = 0f;
+            within = false;
+            if (!TryComputePickupReqDiameterMm(itemBounds, volumeK, out reqMm)) return false;
+            if (!TryFloorMillimetres(ballSemanticDiameterWorldM, out ballMm)) return false;
+            within = reqMm <= ballMm;
+            return true;
         }
 
         /// <summary>
@@ -484,8 +601,9 @@ namespace VRCKatamari.Pickup
         /// <see cref="AbsorbOutcome.RejectNoGain"/> instead of being swallowed.
         /// The geometry verdict is returned unchanged when it is already a refusal, so a
         /// gain problem never masks a geometry refusal and a geometry refusal is never
-        /// reported as a gain problem. `maxItemVolumeWorldM3` here is the
-        /// already-resolved volume limit, exactly as in <see cref="EvaluateAbsorb"/>.
+        /// reported as a gain problem. The other arguments are exactly
+        /// <see cref="EvaluateAbsorb"/>'s, including the per-item factor and the ball's
+        /// semantic diameter, so the gameplay path can use this one entry point.
         /// </remarks>
         public static AbsorbOutcome EvaluateAbsorbWithValue(
             bool itemAbsorbable,
@@ -497,45 +615,15 @@ namespace VRCKatamari.Pickup
             Vector3 ballPosition,
             float collisionRadiusWorldM,
             float contactRadiusWorldM,
-            float maxItemVolumeWorldM3,
+            float itemVolumeK,
+            float ballSemanticDiameterWorldM,
             float maxGrowthRadiusWorldM,
             float itemValue)
         {
             AbsorbOutcome geometry = EvaluateAbsorb(itemAbsorbable, itemKind, allowedKinds,
                 allowedKindCount, itemBounds, itemPosition, ballPosition, collisionRadiusWorldM,
-                contactRadiusWorldM, maxItemVolumeWorldM3, maxGrowthRadiusWorldM);
-            return ApplyValueGate(geometry, itemValue);
-        }
-
-        /// <summary>
-        /// <see cref="EvaluateAbsorbWithBallSize"/> plus the ledger's gain precondition.
-        /// </summary>
-        /// <remarks>
-        /// The gameplay entry point: the volume limit comes from the ball's current
-        /// semantic diameter (Docs/OPEN_DECISIONS.md (l)) and the gain check runs only after the
-        /// geometry gate has already returned Absorb, so the two concerns keep the order
-        /// pinned by <see cref="EvaluateAbsorbWithValue"/>.
-        /// </remarks>
-        public static AbsorbOutcome EvaluateAbsorbWithValueAndBallSize(
-            bool itemAbsorbable,
-            string itemKind,
-            string[] allowedKinds,
-            int allowedKindCount,
-            Vector3 itemBounds,
-            Vector3 itemPosition,
-            Vector3 ballPosition,
-            float collisionRadiusWorldM,
-            float contactRadiusWorldM,
-            float maxItemVolumeWorldM3,
-            float maxGrowthRadiusWorldM,
-            float ballSemanticDiameterWorldM,
-            float absorbVolumeRatio,
-            float itemValue)
-        {
-            AbsorbOutcome geometry = EvaluateAbsorbWithBallSize(itemAbsorbable, itemKind,
-                allowedKinds, allowedKindCount, itemBounds, itemPosition, ballPosition,
-                collisionRadiusWorldM, contactRadiusWorldM, maxItemVolumeWorldM3,
-                maxGrowthRadiusWorldM, ballSemanticDiameterWorldM, absorbVolumeRatio);
+                contactRadiusWorldM, itemVolumeK, ballSemanticDiameterWorldM,
+                maxGrowthRadiusWorldM);
             return ApplyValueGate(geometry, itemValue);
         }
 

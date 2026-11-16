@@ -347,15 +347,24 @@ class NoColliderBlockCompatibilityTests(unittest.TestCase):
                 continue
             head_text = self._head_text(relative)
             disk_text = (ROOT / relative).read_text(encoding="utf-8")
-            # The checked-in file is canonical under the OLD code; re-canonicalising
-            # it with the new field must not move a byte.
-            self.assertEqual(core.dump_doc(json.loads(head_text)), head_text, relative)
+            # The checked-in file is canonical under the current writer.  HEAD predates
+            # the k-aware absorb gate, so its derived absorbDiameterReq/absorbable rows are
+            # the only thing the writer now recomputes: re-canonicalising both the HEAD
+            # bytes and the disk bytes must agree exactly, which proves the optional
+            # `collider` block moved nothing else.
+            self.assertEqual(core.dump_doc(json.loads(head_text)),
+                             core.dump_doc(json.loads(disk_text)), relative)
             self.assertEqual(core.dump_doc(json.loads(disk_text)), disk_text, relative)
             head_doc = json.loads(head_text)
             self.assertFalse(any("collider" in entry for entry in head_doc.get("defs", [])))
             head_errors = core.validate(head_doc).errors
             disk_errors = core.validate(json.loads(disk_text)).errors
-            self.assertEqual(head_errors, disk_errors, relative)
+            # HEAD's stored absorbDiameterReq/absorbable predate the k-aware gate, so they
+            # are the one class of error HEAD may still have.  Everything else - in
+            # particular every [collider] error - must be identical.
+            head_other = [error for error in head_errors
+                          if "absorbDiameterReq" not in error and "absorbable=" not in error]
+            self.assertEqual(head_other, disk_errors, relative)
             self.assertFalse(any("[collider]" in error for error in head_errors), relative)
 
 

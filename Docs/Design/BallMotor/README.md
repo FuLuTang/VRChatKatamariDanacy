@@ -1,5 +1,8 @@
 # 球体每帧装配（BallMotor）接口契约
 
+> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+
+
 **状态：`PROVISIONAL_NOT_TESTED`。** 本文定义各层之间的**数据边界与调用顺序**，并记录装配层唯一自带的交分换算规则与固定容量信号；不定义调参值，也不是对原作行为的声明。世界尺度与公共接口仍未冻结（T06）。
 
 ## 为什么需要这一层

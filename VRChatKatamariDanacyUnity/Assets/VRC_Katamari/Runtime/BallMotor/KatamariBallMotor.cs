@@ -214,24 +214,23 @@ namespace VRCKatamari.BallMotor
 
         // ---- PickupAbsorbMath inputs ----
         [SerializeField] private float contactRadiusWorldM = 0f;
-        // The size gate is a VOLUME gate relative to the ball (Docs/OPEN_DECISIONS.md
-        // (l)): an item is absorbable when its AABB volume a*b*c is at most
-        // min(maxItemVolumeWorldM3, (pi/6) * semanticDiameter^3 / absorbVolumeRatio).
-        // absorbVolumeRatio is the gameplay number: the ball's volume must be that many
-        // times the item's, and 10 is the original's ratio. maxItemVolumeWorldM3 is only
-        // a safety ceiling so a mis-set ratio cannot let a tiny ball eat a house; 512 m^3
-        // is an 8 m cube, the retired 8 m length ceiling read as a cube.
+        // The size gate's per-item factor and the ball's diameter are the ONLY gate inputs,
+        // and neither is serialized here: k travels with the candidate
+        // (PickupFieldHost.propVolumeK -> SubmitCandidateWithVolumeK), and the diameter is
+        // this motor's own semanticDiameterWorldM. The gate itself lives in
+        // PickupAbsorbMath.IsBeyondAbsorbLimit, in the original's quantities (k * bbox,
+        // Req floored to whole mm, ball floor(1000*D) >= Req) - owner decision 2026-11-16.
         //
-        // The retired fields were `maxItemSizeWorldM` (8f, a LENGTH ceiling) and
-        // `absorbSizeRatio` (1f, item longest edge / ball diameter). They are deleted, not
-        // deprecated: a length ceiling next to a volume gate truncates at 8 m of longest
-        // edge, which is not a volume statement, and a linear ratio cannot express a
-        // quantity where edges differing 6x differ 216x in volume. A scene or prefab
-        // still serializing the old names just has its dead keys ignored and falls back to
-        // these defaults; deleting them is editor cleanup, not a behaviour prerequisite
-        // (see Docs/Design/PickupAbsorb/README.md 1.1).
-        [SerializeField] private float maxItemVolumeWorldM3 = 512f;
-        [SerializeField] private float absorbVolumeRatio = 10f;
+        // Retired fields, deleted and deliberately not replaced:
+        // `maxItemVolumeWorldM3` (512f, a per-config cubic-metre ceiling coupled to the
+        // ball's own volume) and `absorbVolumeRatio` (10f, the ratio as a knob). The owner
+        // decision says the gate follows the original's numbers exactly, so the ratio is
+        // PickupAbsorbMath.AbsorbVolumeRatio (a constant) and the ceiling is that file's
+        // MaxItemVolumeSanityWorldM3 (a sanity bound far above any ball cap, not a gate).
+        // A scene still serializing the old names just has its dead keys ignored (the same
+        // rule the earlier `maxItemSizeWorldM`/`absorbSizeRatio` retirement used); deleting
+        // them from a scene is editor cleanup, not a behaviour prerequisite
+        // (Docs/Design/PickupAbsorb/README.md 1.1).
 
         // ---- FollowRigMath inputs (PROVISIONAL) ----
         [SerializeField] private float heightFilterHz = 5f;
@@ -539,6 +538,11 @@ namespace VRCKatamari.BallMotor
         private Vector3[] pendingBounds;
         private Vector3[] pendingPositions;
         private float[] pendingValues;
+        // The item's per-item volume factor k (the original's `Volume = k*bbox`). It rides
+        // with the candidate because the gate is a per-item comparison: the same ball, two
+        // items of the same AABB, different k -> different Req. Defaults to
+        // PickupAbsorbMath.DefaultVolumeK for a submitter that does not supply one.
+        private float[] pendingVolumeK;
         private string[] pendingItemIds;
         private int[] pendingGenerations;
         private bool[] pendingAccepted;
@@ -1296,6 +1300,7 @@ namespace VRCKatamari.BallMotor
                 pendingBounds = new Vector3[PendingCandidateCapacity];
                 pendingPositions = new Vector3[PendingCandidateCapacity];
                 pendingValues = new float[PendingCandidateCapacity];
+                pendingVolumeK = new float[PendingCandidateCapacity];
                 pendingItemIds = new string[PendingCandidateCapacity];
                 pendingGenerations = new int[PendingCandidateCapacity];
                 pendingAccepted = new bool[PendingCandidateCapacity];
@@ -1318,7 +1323,8 @@ namespace VRCKatamari.BallMotor
         {
             if (pendingAbsorbable == null || pendingKinds == null) return false;
             if (pendingBounds == null || pendingPositions == null) return false;
-            if (pendingValues == null || pendingItemIds == null) return false;
+            if (pendingValues == null || pendingVolumeK == null) return false;
+            if (pendingItemIds == null) return false;
             if (pendingGenerations == null || pendingAccepted == null) return false;
             if (pendingSubmitTimes == null) return false;
             if (pendingAbsorbable.Length < PendingCandidateCapacity) return false;
@@ -1326,6 +1332,7 @@ namespace VRCKatamari.BallMotor
             if (pendingBounds.Length < PendingCandidateCapacity) return false;
             if (pendingPositions.Length < PendingCandidateCapacity) return false;
             if (pendingValues.Length < PendingCandidateCapacity) return false;
+            if (pendingVolumeK.Length < PendingCandidateCapacity) return false;
             if (pendingItemIds.Length < PendingCandidateCapacity) return false;
             if (pendingGenerations.Length < PendingCandidateCapacity) return false;
             if (pendingAccepted.Length < PendingCandidateCapacity) return false;
@@ -3214,9 +3221,9 @@ namespace VRCKatamari.BallMotor
             for (int i = 0; i < pendingCandidateCount; i++)
             {
                 pendingAccepted[i] = false;
-                // The volume limit is resolved inside the pickup layer from this step's
-                // semantic diameter, so the gate grows with the ball; maxItemVolumeWorldM3
-                // is passed as the ceiling only. semanticDiameterWorldM is the same
+                // The size gate is the original's whole-millimetre rule, resolved inside the
+                // pickup layer from this candidate's own k and this step's semantic
+                // diameter, so it grows with the ball. semanticDiameterWorldM is the same
                 // reading the size stage derives and GetSemanticDiameterWorldM reports,
                 // while reach keeps using collisionRadiusWorldM.
                 //
@@ -3237,11 +3244,11 @@ namespace VRCKatamari.BallMotor
                         reachRadius = pickupReach;
                     }
                 }
-                AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorbWithValueAndBallSize(
+                AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorbWithValue(
                     pendingAbsorbable[i], pendingKinds[i], allowedKinds, allowedKindCount,
                     pendingBounds[i], pendingPositions[i], center, reachRadius,
-                    contactRadiusWorldM, maxItemVolumeWorldM3, maxCollisionRadiusWorldM,
-                    semanticDiameterWorldM, absorbVolumeRatio, pendingValues[i]);
+                    contactRadiusWorldM, pendingVolumeK[i], semanticDiameterWorldM,
+                    maxCollisionRadiusWorldM, pendingValues[i]);
                 float evaluatedDistance = Vector3.Distance(pendingPositions[i], center);
 
                 if (debugTraceItemId != null && debugTraceItemId.Length > 0
@@ -3355,6 +3362,7 @@ namespace VRCKatamari.BallMotor
             pendingBounds[write] = pendingBounds[read];
             pendingPositions[write] = pendingPositions[read];
             pendingValues[write] = pendingValues[read];
+            pendingVolumeK[write] = pendingVolumeK[read];
             pendingItemIds[write] = pendingItemIds[read];
             pendingGenerations[write] = pendingGenerations[read];
             pendingAccepted[write] = pendingAccepted[read];
@@ -3730,6 +3738,37 @@ namespace VRCKatamari.BallMotor
         public bool SubmitCandidate(bool absorbable, string kind, Vector3 bounds,
             Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration)
         {
+            // The un-factored form: the item plays at the original's default k (0.70). A
+            // host that knows its per-item factor (the level importer fills
+            // PickupFieldHost.propVolumeK) calls SubmitCandidateWithVolumeK instead.
+            return SubmitCandidateWithVolumeK(absorbable, kind, bounds, worldPosition,
+                valueUnits, itemInstanceId, itemGeneration,
+                PickupAbsorbMath.DefaultVolumeK);
+        }
+
+        /// <summary>
+        /// <see cref="SubmitCandidate"/> plus the item's per-item volume factor k.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// `volumeK` is the original's `Volume = k * bbox` factor for THIS item: the gate's
+        /// Req depends on it (`Req = floor(1000*cbrt(60*k*a*b*c/pi))`), so two items with
+        /// the same bounds but different k are not equally absorbable. It is validated here
+        /// against the one authoring range (`0 &lt; k &lt;= MaxVolumeK`) so a bad value is
+        /// refused at the queue instead of silently becoming "blocking" in the gate; a
+        /// refused submit returns false and the host logs it once (a data error).
+        /// </para>
+        /// <para>
+        /// Kept as a separate entry point rather than an optional parameter because
+        /// UdonSharp does not support default arguments, and because the labs that submit a
+        /// hand-authored prop (the physics test field, the CPU-skirmish playground) should
+        /// not have to name a k they do not have.
+        /// </para>
+        /// </remarks>
+        public bool SubmitCandidateWithVolumeK(bool absorbable, string kind, Vector3 bounds,
+            Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration,
+            float volumeK)
+        {
             // Same ownership rule as the scene sets: the queue allocates on first use, so
             // a submit that arrives before Start is queued instead of throwing.
             if (!EnsureCandidateBuffers())
@@ -3744,6 +3783,8 @@ namespace VRCKatamari.BallMotor
             }
             if (itemInstanceId == null || itemInstanceId.Length == 0) return false;
             if (itemGeneration < 0) return false;
+            if (!KatamariMath.IsFiniteFloat(volumeK)) return false;
+            if (volumeK <= 0f || volumeK > PickupAbsorbMath.MaxVolumeK) return false;
 
             // Idempotent by item id: re-submitting something already queued is a no-op
             // that returns true. The queue is the single owner of "is this queued", so a
@@ -3764,6 +3805,7 @@ namespace VRCKatamari.BallMotor
             pendingBounds[index] = bounds;
             pendingPositions[index] = worldPosition;
             pendingValues[index] = valueUnits;
+            pendingVolumeK[index] = volumeK;
             pendingItemIds[index] = itemInstanceId;
             pendingGenerations[index] = itemGeneration;
             pendingAccepted[index] = false;
@@ -5965,24 +6007,30 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// The volume limit the absorb gate compares an item's AABB volume against: the
-        /// ball's current volume divided by <c>absorbVolumeRatio</c>, capped by
-        /// <c>maxItemVolumeWorldM3</c>. Cubic metres; -1 when the inputs are invalid.
+        /// The ball side of the size gate: this step's semantic diameter in WHOLE
+        /// MILLIMETRES (<c>floor(1000*D + 1e-3)</c>). -1 when the diameter is invalid.
         /// </summary>
         /// <remarks>
-        /// Read-only, for diagnostics and for a host that decides whether an item is
-        /// worth submitting. Reason 3 (RejectItemTooLarge) used to be a constant, so
-        /// "the item is over the limit" could be answered from the serialized field
-        /// alone; now the answer moves with the ball, and a reader should show this
-        /// number next to the item's AABB volume (its three bounds multiplied), never
-        /// next to its longest edge.
+        /// <para>
+        /// Read-only, for diagnostics, tests and a host that shows "ball 300 mm vs item
+        /// Req 268 mm". It is the exact number the gate compares
+        /// (<see cref="PickupAbsorbMath.IsBeyondAbsorbLimit"/> floors the same diameter the
+        /// same way) - there is no per-step volume limit to report any more, because the
+        /// original quantizes the diameter, not the volume.
+        /// </para>
+        /// <para>
+        /// The item side is
+        /// <see cref="PickupAbsorbMath.TryComputePickupReqDiameterMm"/>, also in whole mm;
+        /// a reader should print the two next to each other and never print an AABB volume
+        /// as if it were the gate's quantity.
+        /// </para>
         /// </remarks>
-        public float GetAbsorbVolumeLimitWorldM3()
+        public float GetAbsorbGateDiameterMm()
         {
-            float limit;
-            if (!PickupAbsorbMath.TryComputeAbsorbVolumeLimit(semanticDiameterWorldM,
-                absorbVolumeRatio, maxItemVolumeWorldM3, out limit)) return -1f;
-            return limit;
+            float millimetres;
+            if (!PickupAbsorbMath.TryFloorMillimetres(semanticDiameterWorldM, out millimetres))
+                return -1f;
+            return millimetres;
         }
 
         /// <summary>

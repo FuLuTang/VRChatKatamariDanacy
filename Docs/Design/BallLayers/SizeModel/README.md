@@ -1,5 +1,8 @@
 # T52 球层：确认体积到尺寸映射（DRAFT）
 
+> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+
+
 状态：离线源码准备；接口未冻结。保留等效球体映射、显式半径/直径/碰撞/语义类型和caller-supplied参数。
 
 ## 职责与数值安全

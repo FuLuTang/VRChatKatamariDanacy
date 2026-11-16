@@ -127,7 +127,7 @@
 - **不做爬升按钮** — 原作是推墙即爬、没有按键，加按钮等于新造第三种输入。见 [PARITY_AUDIT 的 `M07` 行](Design/Parity/PARITY_AUDIT.md)。
 - **定步暂留 50 Hz，计划切 30 Hz** — 现有接触/子步参数按 0.02 s 标定过，切换单独立项；原作是 30 Hz。见 [PARITY_AUDIT 的 `T01` 行](Design/Parity/PARITY_AUDIT.md)。
 - **全项目只留一个全局球径上限，数值远高于 2.20 m，按试玩调** — 上限是引擎护栏、不是玩法目标；取代 (n) 的「每关一个上限」形态。见 [PARITY_AUDIT 的「球径上限」行](Design/Parity/PARITY_AUDIT.md)、[LEVEL_FORMAT_V2 的 D-1](Design/Levels/LEVEL_FORMAT_V2.md)。
-- **吸收门按原作算式，不单独调常数** — 物件体积 = 逐型 `k` × AABB 体积（默认 `k = 0.70`，薄片/蓬松/镂空按原作手调），门槛 `Req = floor_mm(∛(10·V·6/π))`；这是把 `k` 与取整接进同一条门，不是改 10×，实现为体积迁移 C 步之前的一个独立小步。见 [PARITY_AUDIT 的「体积定义（`k` 系数）」与「门槛取整」行](Design/Parity/PARITY_AUDIT.md)、[§5.3.2](Design/Parity/PARITY_AUDIT.md)。
+- **吸收门按原作算式，不单独调常数** — 物件体积 = 逐型 `k` × AABB 体积（默认 `k = 0.70`，薄片/蓬松/镂空按原作手调），门槛 `Req = floor_mm(∛(10·V·6/π))`；这是把 `k` 与取整接进同一条门，不是改 10×，实现为体积迁移 C 步之前的一个独立小步。见 [PARITY_AUDIT 的「体积定义（`k` 系数）」与「门槛取整」行](Design/Parity/PARITY_AUDIT.md)、[§5.3.2](Design/Parity/PARITY_AUDIT.md)；实现、口径与前后实测（`_ref_cancer` 0.222 m 球 91 → 184 件，与原作 184 件相同）见 [ABSORB_GATE_ORIGINAL.md](Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 - **体积表示与迁移** — 定点 `long volumeMm3`（1 LSB = 1 mm³），A→B→C→D 四步各自独立验收；细节不在此重复，见上方 (r) 条。
 - **Hub 流程 = 选关 → 开始 → 传送并直接入座** — 座位触发器不再是开始条件，省掉「走到球边再点球」的断点（[HUB_ROOM](Design/StoryMode/HUB_ROOM.md) 的入座步骤按本条改）。见 [HUB_LOOP_PLAN](Design/StoryMode/HUB_LOOP_PLAN.md)。
 - **骑乘/取景几何不大改，`RIDE_GEOMETRY.md` 只留作备选** — 之前看到的错位来自宽扁的编辑器窗口，不是几何模型错，α/β 那套补丁暂不采用。见 [RIDE_GEOMETRY](Design/BallLayers/FollowRig/RIDE_GEOMETRY.md)。

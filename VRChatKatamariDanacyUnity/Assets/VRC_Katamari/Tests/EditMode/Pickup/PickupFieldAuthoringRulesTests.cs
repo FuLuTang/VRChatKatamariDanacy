@@ -310,6 +310,125 @@ namespace VRCKatamari.Tests
             Assert.IsFalse(IsValidKind("food "));
         }
 
+        // ------------------------------------------------------ volume factor k ---
+
+        // k is the original's per-item volume factor (Volume = k * bbox, default 0.70);
+        // the gate prices the item with it, so a declared k is gameplay data.
+        [Test]
+        public void VolumeKDefaultsAndRangeAreTheRuntimeConstants()
+        {
+            // The authoring assembly cannot reference the runtime one, so the two spell the
+            // numbers twice; this is the assertion that keeps them equal.
+            Assert.AreEqual(VRCKatamari.Pickup.PickupAbsorbMath.DefaultVolumeK,
+                (float)StaticField("DefaultVolumeK"), 1e-6f);
+            Assert.AreEqual(VRCKatamari.Pickup.PickupAbsorbMath.MaxVolumeK,
+                (float)StaticField("MaxVolumeK"), 1e-6f);
+            Assert.AreEqual(0.70f, (float)StaticField("DefaultVolumeK"), 1e-6f);
+            Assert.AreEqual(32f, (float)StaticField("MaxVolumeK"), 1e-6f);
+        }
+
+        [Test]
+        public void VolumeKRangeIsFiniteAndZeroToThirtyTwo()
+        {
+            Assert.IsNull(VolumeKError(0.01f));
+            Assert.IsNull(VolumeKError(0.5f));
+            Assert.IsNull(VolumeKError(0.70f));
+            Assert.IsNull(VolumeKError(16f));
+            Assert.IsNull(VolumeKError(32f));
+
+            Assert.IsNotNull(VolumeKError(0f));
+            Assert.IsNotNull(VolumeKError(-1f));
+            Assert.IsNotNull(VolumeKError(32.5f));
+            // The typo this range exists to catch: 70 for 0.70.
+            Assert.IsNotNull(VolumeKError(70f));
+            Assert.IsNotNull(VolumeKError(float.NaN));
+            Assert.IsNotNull(VolumeKError(float.PositiveInfinity));
+        }
+
+        [Test]
+        public void VolumeKResolvesDeclaredThenExistingThenTheDefault()
+        {
+            float volumeK;
+            string source;
+
+            Assert.IsTrue(ResolveVolumeK(2.0f, true, 0f, false, out volumeK, out source));
+            Assert.AreEqual(2.0f, volumeK, 1e-6f);
+            Assert.AreEqual("declared", source);
+
+            // No declaration: the row already on the host is preserved (a re-sync must not
+            // reprice a field).
+            Assert.IsTrue(ResolveVolumeK(0f, false, 0.5f, true, out volumeK, out source));
+            Assert.AreEqual(0.5f, volumeK, 1e-6f);
+            Assert.AreEqual("existing", source);
+
+            // Neither: the original's default, reported as "none" so the sync can count it.
+            Assert.IsTrue(ResolveVolumeK(0f, false, 0f, false, out volumeK, out source));
+            Assert.AreEqual(0.70f, volumeK, 1e-6f);
+            Assert.AreEqual("none", source);
+
+            // An existing value outside the range is not preserved: it falls back to 0.70.
+            Assert.IsTrue(ResolveVolumeK(0f, false, 70f, true, out volumeK, out source));
+            Assert.AreEqual(0.70f, volumeK, 1e-6f);
+            Assert.AreEqual("none", source);
+
+            // A DECLARED value outside the range refuses the row instead of falling back:
+            // silently playing a different gate than the file states is the bug.
+            Assert.IsFalse(ResolveVolumeK(70f, true, 0f, false, out volumeK, out source));
+            Assert.IsFalse(ResolveVolumeK(0f, true, 0f, false, out volumeK, out source));
+        }
+
+        [Test]
+        public void DeclaredVolumeKMismatchesAreReportedById()
+        {
+            var declared = new System.Collections.Generic.Dictionary<string, float>();
+            declared["a"] = 0.70f;
+            declared["b"] = 2.0f;
+            declared["c"] = 16f;
+
+            string[] clean = FindVolumeKMismatches(
+                new string[] { "a", "b", "c" }, new float[] { 0.70f, 2.0f, 16f }, declared);
+            Assert.AreEqual(0, clean.Length);
+
+            string[] mismatched = FindVolumeKMismatches(
+                new string[] { "a", "b" }, new float[] { 0.70f, 0.70f }, declared);
+            Assert.AreEqual(2, mismatched.Length);
+            Assert.IsTrue(mismatched[0].StartsWith("b:", StringComparison.Ordinal));
+            Assert.IsTrue(mismatched[1].StartsWith("c:", StringComparison.Ordinal));
+            Assert.IsTrue(mismatched[1].Contains("no row"));
+        }
+
+        private static object StaticField(string name)
+        {
+            FieldInfo field = RulesType().GetField(name,
+                BindingFlags.Public | BindingFlags.Static);
+            Assert.IsNotNull(field, RulesTypeName + "." + name + " is missing");
+            return field.GetValue(null);
+        }
+
+        private static string VolumeKError(float volumeK)
+        {
+            return (string)Invoke("VolumeKError", volumeK);
+        }
+
+        private static bool ResolveVolumeK(float declared, bool hasDeclared, float existing,
+            bool hasExisting, out float volumeK, out string source)
+        {
+            object[] arguments = { declared, hasDeclared, existing, hasExisting, 0f, null };
+            bool accepted = (bool)Invoke("TryResolveVolumeK", arguments);
+            volumeK = arguments[4] is float value ? value : 0f;
+            source = arguments[5] as string;
+            return accepted;
+        }
+
+        private static string[] FindVolumeKMismatches(string[] itemIds, float[] hostVolumeK,
+            System.Collections.Generic.Dictionary<string, float> declared)
+        {
+            return (string[])Invoke("FindVolumeKMismatches", new object[]
+            {
+                itemIds, hostVolumeK, (System.Collections.Generic.IDictionary<string, float>)declared
+            });
+        }
+
         // ------------------------------------------------------------- reflection ---
 
         private static Type RulesType()

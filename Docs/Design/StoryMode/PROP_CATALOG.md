@@ -1,5 +1,8 @@
 # 道具目录表（PROP_CATALOG）
 
+> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+
+
 > 状态：`SCENE_SYNCED`，2026-11-15 第 2 版。一张**按场景现有 `itemId` 索引**的表，真值来源是场景文件本身：`StoryLevel.unity` 里 `PickupField` 的 `itemIds` / `propBounds` / `valueUnits` 与各道具物体的 `MeshFilter` 引用。**不改 id、不重新命名、不推断**：`PROP_SET_PLAN.md` 里没有的尺寸一律写 `未知`。
 >
 > 本版改了什么：场景里 61/110 件已换成真实模型（`localScale = 1`、`propBounds` = 网格 AABB、`propColliders` 为空），第 1 版主表对这 61 行记的还是方块时代的 `视觉模型文件` / `当前 propBounds` / `体积` / 三档可吸。这次**逐行从场景重读**（`/tmp` 里的只读解析脚本生成，不手抄），并把依赖这些数的分析段落一起重算。**未改 Unity、未改场景文件、未改任何 `.fbx`、未执行任何 git 写命令。**

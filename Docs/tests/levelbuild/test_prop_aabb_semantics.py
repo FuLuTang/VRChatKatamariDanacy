@@ -132,8 +132,10 @@ class WorldFootprintTests(unittest.TestCase):
         self.assertAlmostEqual(twice[2], 0.3, delta=TOLERANCE_M)
 
     def test_the_gate_is_the_same_whichever_footprint_is_read(self):
-        # A quarter turn keeps the volume, so the design table's D_req 1.858 is
-        # consistent with both the stored aabb and the world footprint.  A non-90
+        # A quarter turn keeps the volume, so the gate's D_req is consistent with both
+        # the stored aabb and the world footprint.  With the original's k=0.70 the
+        # requirement is 1.650 m (the k-less 1.858 m folded by 0.70^(1/3) and floored
+        # to whole millimetres).  A non-90
         # yaw would make the world footprint fatter (45 deg: +41 %), which is why
         # the level keeps every other prop at yaw 0.
         chair = find_prop(load_level(), LOUNGE_CHAIR)
@@ -141,7 +143,7 @@ class WorldFootprintTests(unittest.TestCase):
         self.assertAlmostEqual(core.absorb_diameter_req(tuple(chair["aabb"])),
                                core.absorb_diameter_req(world_size), delta=1e-5)
         self.assertAlmostEqual(core.absorb_diameter_req(tuple(chair["aabb"])),
-                               1.858, delta=1e-3)
+                               1.650, delta=1e-3)
 
     def test_the_p2_chain_props_touch_only_on_one_plane(self):
         # E7: chair x in [-12.6, -12.0] and table x in [-13.6, -12.6] meet exactly

@@ -198,9 +198,16 @@ rotation:  (x, y, z, w)   →  (-x, -y, z, w)
 
 - 被拒绝也是 **HTTP 200 + `ok:false`**（`details` 里是规则原文），和
   `levelctl.py` 的约定一致；缺/错 token 是 403，坏 JSON 是 400。
-- 复用 op：`status/list/get/add_prop/add_structure/set/move/rotate/remove/seat/
+- 复用 op：`status/list/get/add_prop/add_structure/set/set_def/move/rotate/remove/seat/
   add_def/expected/camera/preset/check/export/undo`（undo 由 WebEditor 实现）/
   `batch`（原子）。
+  - `set_def`（2026-11-16 新增）：改一个 `defs[]` 行的字段，含原作的逐件体积系数
+    `volumeK`。合法区间 `0 < k <= 32`（`placement_core.volume_k_error`，与运行时
+    `PickupAbsorbMath.MaxVolumeK` 同值）；`volumeK: null` = **删键**、回到缺省 0.70。
+    写盘走 canonical writer，所以只有 `k != 0.70` 时文件里才出现该键——没声明 k 的关卡
+    保持字节不变。`set` 也接受 `props[].volumeK`（单件覆盖，罕见）。
+    改动会让该 def 的 `absorbDiameterReq`/`absorbable` 立刻按新 k 重算
+    （`editor_core._commit` 先把文档过一遍 writer 再校验，所以不会留下 stale 行）。
 - Web 端额外/不同：
   - `open`：换关卡（重新取锁、清历史）；
   - `reload`：从磁盘重读（人手改过文件后用）；
@@ -333,7 +340,11 @@ rotation:  (x, y, z, w)   →  (-x, -y, z, w)
 
 `GET /api/stats?scope=all|region|ids|box&region=<name>&ids=a,b&mode=center|bbox&metric=count|volume|units&bin=0.05&diameter=0.5&compare=1`
 （token；`box=minx,miny,minz,maxx,maxy,maxz` 用于临时盒）。返回 `totals/tiers/bins/
-cumulative/dReqMedian/absorbable*Ratio/includedIds`；`compare=1` 返回所有区域的并排摘要。
+cumulative/ballMm/dReqMedian/dReqMedianMm/absorbable*Ratio/includedIds`；`compare=1` 返回所有区域的并排摘要。
+**判定量是原作的整 mm 门槛**（2026-11-16）：每件 `dReqMm = floor(1000·cbrt(60·k·a·b·c/π))`
+（k 取 `props[]/defs[].volumeK`，缺省 0.70），`green`/`yellow`/`grey` 用
+`dReqMm <= floor(1000·diameter)` 之类**整数**比较；`bins` 的边界也是整 mm。前端只显示
+服务端给的 `dReqMm`/`dReqMedianMm`，不再自己乘除。
 `GET/POST /api/regions`（token；POST body `{regions:[…]}`）读写旁文件，POST 校验后原子写。
 **统计只在服务端算**：前端只渲染服务端返回的 bins/tiers/cumulative，CSV 也只是把同一份
 结果格式化；没有第二套统计实现。

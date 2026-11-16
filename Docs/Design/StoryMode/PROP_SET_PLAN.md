@@ -1,5 +1,8 @@
 # 野餐草坪道具集与球成长区间（真实尺寸）
 
+> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+
+
 > 逐件道具的目录表（按场景 `itemId` 索引 110 件的设计三轴 / 模型文件 / `propBounds` / 体积 / 可吸球径，含四类异常）见 [`PROP_CATALOG.md`](PROP_CATALOG.md)。
 
 > 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15。本文只写**内容需求**（要哪些真实物件、各自多大、球要多大才吃得到），不改 Unity、不改 `.cs`、不改场景、不改 `generate.py`、不改 `LEVEL_CONTENT_PLAN.md`、不碰 `tasks.json`。**不含逐件价值单位、星级阈值或任何平衡数值**——那几件事在用户明确搁置后，等模型落地再统一重算。（§2.3/§2.4 里出现的"单位"数是 `c` 换掉后的算术结果，只用来证明档与档之间隔着多大一段，**不是价值建议**。）

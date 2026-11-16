@@ -1,5 +1,8 @@
 # 道具碰撞体层（COLLIDER LAYER）
 
+> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+
+
 > 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15（同日第二轮：写入 Lead 决定）。
 > 写入范围：本文件新建，另在 [PROP_CATALOG](../StoryMode/PROP_CATALOG.md) 填「碰撞体方案」列并改掉「另一条线在做」的旁注。**没有写运行时代码、没有改 Blender 脚本、没有开 Unity、没有 Play Mode。**
 > 2026-11-15 第二轮只做一件事：把 §10 的 7 个未决问题里 **Lead 已拍板的 1–4、6、7 逐条写成「已定」**（正文相应位置同步改措辞），**第 5 条保持未决、标注「待用户决定」**。已定方案本身**没有实现**——`PickupFieldSync` 的扩展、manifest 的 `collision` 块、任何 `BoxCollider` 都还没写；本轮只落文字。

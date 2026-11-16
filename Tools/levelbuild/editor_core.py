@@ -38,15 +38,20 @@ MISSING = object()
 
 #: Fields an op may set on a prop (``aabb``/``absorb*`` follow from ``def``).
 PROP_SETTABLE = ("def", "kind", "zone", "group", "groupId", "position", "rotationQuat", "yaw",
-                 "support", "stackedOn", "valueUnits", "notes")
+                 "support", "stackedOn", "valueUnits", "volumeK", "notes")
+
+#: Fields an op may set on a ``defs[]`` entry.  ``volumeK`` is the original's per-item
+#: volume factor (``Volume = k * a * b * c``, default 0.70); it is authored on the DEF so a
+#: whole type shares one number, and a ``props[].volumeK`` override exists for one-offs.
+DEF_SETTABLE = ("kind", "valueUnits", "model", "volumeK", "notes")
 
 #: Fields an op may set on a structure.
 STRUCTURE_SETTABLE = ("kind", "role", "shape", "center", "size", "rotationQuat", "yaw",
                       "collision", "absorbable", "support", "meets", "material", "notes")
 
 #: Ops that mutate the document and may therefore appear inside ``batch``.
-MUTATING_OPS = ("add_prop", "add_structure", "set", "move", "rotate", "remove", "seat",
-                "add_def", "camera", "preset", "expected")
+MUTATING_OPS = ("add_prop", "add_structure", "set", "set_def", "move", "rotate", "remove",
+                "seat", "add_def", "camera", "preset", "expected")
 
 
 class OpError(Exception):
@@ -389,6 +394,7 @@ class Editor:
             "remove": self.op_remove,
             "seat": self.op_seat,
             "add_def": self.op_add_def,
+            "set_def": self.op_set_def,
             "expected": self.op_expected,
             "camera": self.op_camera,
             "preset": self.op_preset,
@@ -598,6 +604,12 @@ class Editor:
         previous = self.doc if previous is None else previous
         if new_doc == previous:
             return {"changed": False, "gate": summarize(self._validate(new_doc))}
+        # The absorb gate is DERIVED data (``absorbDiameterReq``/``absorbable`` come from the
+        # prop's aabb and its def's ``volumeK``), so the document is put through the writer
+        # before it is validated: the same call the export makes, which means an op that
+        # changes a def's k - or a prop's aabb through its def - can never leave a stale row
+        # behind for the validator to reject. One implementation, no second formula.
+        new_doc = core.canonical_doc(new_doc, self.manifests)
         report = self._validate(new_doc)
         fresh = [error for error in report.errors if error not in self.known_errors]
         if fresh and not force:
@@ -1011,6 +1023,18 @@ class Editor:
                 prop[key] = _string(args, key)
         if "valueUnits" in args:
             prop["valueUnits"] = _integer(args, "valueUnits", minimum=1)
+        if "volumeK" in args:
+            prop["volumeK"] = self._volume_k_field(args["volumeK"])
+
+    def _volume_k_field(self, value):
+        """A validated ``volumeK``: finite, ``0 < k <= 32`` (core.volume_k_error)."""
+        if value is None:
+            raise OpError("volumeK cannot be cleared to null; delete the key to restore the "
+                          "0.70 default")
+        reason = core.volume_k_error(value)
+        if reason is not None:
+            raise OpError("volumeK %r %s" % (value, reason))
+        return core.rounded(float(value), 4)
 
     def _set_structure(self, structure, args):
         if "center" in args:
@@ -1154,7 +1178,7 @@ class Editor:
                             defer=defer, extra=moved)
 
     def op_add_def(self, args, defer=False):
-        _known(args, ("id", "kind", "valueUnits", "model", "notes"))
+        _known(args, ("id", "kind", "valueUnits", "model", "volumeK", "notes"))
         self._require_open()
         def_id = _string(args, "id")
         new_doc = _deepcopy(self.doc)
@@ -1172,12 +1196,46 @@ class Editor:
                 entry.pop("model", None)
             else:
                 entry["model"] = _string(args, "model")
+        if "volumeK" in args:
+            entry["volumeK"] = self._volume_k_field(args["volumeK"])
         if "notes" in args:
             entry["notes"] = _string(args, "notes")
         if "valueUnits" not in entry:
             raise OpError("def %r needs valueUnits (it is what the def is worth)" % def_id)
         return self._mutate(new_doc, "add_def %s" % def_id, defer=defer,
                             extra={"def": entry})
+
+    def op_set_def(self, args, defer=False):
+        """Set one ``defs[]`` row's fields, ``volumeK`` included (undoable, canonical write)."""
+        _known(args, ("id",) + DEF_SETTABLE)
+        self._require_open()
+        def_id = _string(args, "id")
+        new_doc = _deepcopy(self.doc)
+        entries = new_doc.setdefault("defs", [])
+        entry = next((item for item in entries if item.get("id") == def_id), None)
+        if entry is None:
+            raise OpError("def %r is not declared in this document; use add_def" % def_id)
+        if "kind" in args:
+            entry["kind"] = _string(args, "kind")
+        if "valueUnits" in args:
+            entry["valueUnits"] = _integer(args, "valueUnits", minimum=1)
+        if "model" in args:
+            if args["model"] is None:
+                entry.pop("model", None)
+            else:
+                entry["model"] = _string(args, "model")
+        if "volumeK" in args:
+            if args["volumeK"] is None:
+                # Clearing is the documented way back to the 0.70 default: the key is
+                # removed, so the canonical file is byte-identical to a never-authored one.
+                entry.pop("volumeK", None)
+            else:
+                entry["volumeK"] = self._volume_k_field(args["volumeK"])
+        if "notes" in args:
+            entry["notes"] = _string(args, "notes")
+        fields = sorted(set(args) - {"id"})
+        return self._mutate(new_doc, "set_def %s (%s)" % (def_id, ",".join(fields)),
+                            defer=defer, extra={"def": entry})
 
     def op_expected(self, args, defer=False):
         _known(args, ("propCount", "valueUnits", "structureCount", "staticObbs",

@@ -350,6 +350,76 @@ class GateTests(EditorCase):
         self.assertFalse(editor.state_summary()["unexported"])
 
 
+class VolumeKTests(EditorCase):
+    """The per-item volume factor k (the original's `Volume = k * a*b*c`, default 0.70).
+
+    The rule is one number with three consequences: it prices the gate (Req in whole mm),
+    it is written only when authored (so an existing file stays byte-identical), and it is
+    undoable like any other authored field.
+    """
+
+    def def_entry(self, def_id):
+        return next((entry for entry in self.editor.doc.get("defs") or []
+                     if entry.get("id") == def_id), None)
+
+    def test_set_def_volume_k_reprices_the_gate_and_undo_restores_the_bytes(self):
+        before = self.path.read_bytes()
+        self.ok("add_def", id="apple", valueUnits=1, kind="fruit")
+        # A def with no volumeK must not gain the key: the file keeps the 0.70 default.
+        self.assertNotIn("volumeK", self.path.read_text(encoding="utf-8"))
+        self.ok("set_def", id="apple", volumeK=32)
+        apple = self.prop("prop_apple_000")
+        self.assertEqual(apple["absorbDiameterReq"],
+                         core.absorb_diameter_req(tuple(apple["aabb"]), 32.0))
+        # k multiplies the volume, so Req grows by k^(1/3): the apple is food at the
+        # 0.30 m start ball with k=0.70 and an obstacle once k=32.
+        self.assertTrue(core.is_absorbable(tuple(apple["aabb"]), 0.30, 0.70))
+        self.assertFalse(core.is_absorbable(tuple(apple["aabb"]), 0.30, 32.0))
+        self.assertEqual(self.def_entry("apple")["volumeK"], 32)
+        self.assertIn('"volumeK": 32', self.path.read_text(encoding="utf-8"))
+        self.assertEqual(self.ok("check")["errorCount"], 0)
+        self.ok("undo", steps=2)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_a_small_k_makes_a_large_prop_absorbable(self):
+        self.ok("add_def", id="watermelon", valueUnits=1, kind="fruit")
+        watermelon = self.prop("prop_watermelon_000")
+        self.assertFalse(core.is_absorbable(tuple(watermelon["aabb"]), 0.30, 0.70))
+        self.ok("set_def", id="watermelon", volumeK=0.05)
+        body = tuple(self.prop("prop_watermelon_000")["aabb"])
+        self.assertTrue(core.is_absorbable(body, 0.30, 0.05))
+        self.assertEqual(self.prop("prop_watermelon_000")["absorbDiameterReq"],
+                         core.absorb_diameter_req(body, 0.05))
+
+    def test_clearing_volume_k_restores_the_default_without_writing_a_key(self):
+        self.ok("add_def", id="apple", valueUnits=1, kind="fruit")
+        with_def = self.path.read_bytes()
+        self.ok("set_def", id="apple", volumeK=2.0)
+        self.assertNotEqual(self.path.read_bytes(), with_def)
+        self.ok("set_def", id="apple", volumeK=None)
+        self.assertNotIn("volumeK", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(self.path.read_bytes(), with_def)
+
+    def test_volume_k_range_is_enforced_by_the_op(self):
+        self.ok("add_def", id="apple", valueUnits=1, kind="fruit")
+        for bad in (0, -1, 33, 70, float("nan"), float("inf"), "0.7", True):
+            response = self.refused("set_def", id="apple", volumeK=bad)
+            self.assertIn("volumeK", response["error"], bad)
+        self.assertIsNone(self.def_entry("apple").get("volumeK"))
+
+    def test_set_def_refuses_an_undeclared_def(self):
+        self.assertIn("not declared", self.refused("set_def", id="unicorn",
+                                                   volumeK=0.7)["error"])
+
+    def test_a_prop_may_override_its_def_factor(self):
+        self.ok("add_def", id="apple", valueUnits=1, kind="fruit")
+        self.ok("set", id="prop_apple_000", volumeK=1.0)
+        self.assertEqual(self.prop("prop_apple_000")["volumeK"], 1.0)
+        self.assertEqual(self.prop("prop_apple_000")["absorbDiameterReq"],
+                         core.absorb_diameter_req(
+                             tuple(self.prop("prop_apple_000")["aabb"]), 1.0))
+
+
 class UndoTests(EditorCase):
     def test_undo_restores_document_and_file_byte_for_byte(self):
         before = self.path.read_bytes()

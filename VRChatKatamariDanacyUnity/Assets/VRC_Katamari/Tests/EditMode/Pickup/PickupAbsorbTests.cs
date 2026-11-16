@@ -32,10 +32,10 @@ namespace VRCKatamari.Tests
     /// Expected values are hand calculations: itemRadius = sqrt(3) * halfExtent for a cube,
     /// reach = collisionRadius + contactRadius + itemRadius, and radius = min(cap,
     /// base + growthPerValue * confirmedValue). Lengths are metres, volumes are cubic
-    /// metres, values are ledger units. The size limit this file passes to
-    /// <see cref="PickupAbsorbMath.EvaluateAbsorb"/> is an ALREADY-RESOLVED VOLUME in cubic
-    /// metres (Docs/OPEN_DECISIONS.md (l)), so "too large" here means `x*y*z` over that
-    /// number. <c>ReachTableMatchesTheWorkedExample</c> is the one case whose expected
+    /// metres, values are ledger units. The size gate this file exercises is the original's
+    /// whole-millimetre rule (owner decision 2026-11-16): the helper passes the item's
+    /// per-item factor k and the ball's semantic DIAMETER, and "too large" means
+    /// `floor(1000*cbrt(60*k*a*b*c/pi)) > floor(1000*D)`. <c>ReachTableMatchesTheWorkedExample</c> is the one case whose expected
     /// values come from a document instead: the worked reach table in
     /// Docs/Design/PickupAbsorb/README.md, so a formula change has to disagree with the
     /// doc rather than with a copy of itself.
@@ -50,32 +50,33 @@ namespace VRCKatamari.Tests
         {
             string[] allowed = { "stone" };
 
-            // Reference case: 0.2 m cube at 0.5 m from the ball, 0.3 m collision radius,
-            // 0.1 m contact margin. itemRadius = 0.1 * sqrt(3) = 0.17320508, so the reach
-            // is 0.57320508 and 0.5 m is contact.
+            // Reference case: 0.2 m cube at 0.5 m from the ball, 0.3 m collision radius
+            // (a 0.60 m semantic ball), 0.1 m contact margin. itemRadius = 0.1 * sqrt(3) =
+            // 0.17320508, so the reach is 0.57320508 and 0.5 m is contact; the cube's Req
+            // is 474 mm, inside the 600 mm ball.
             Assert.AreEqual(AbsorbOutcome.Absorb, Evaluate(true, "stone", allowed,
                 new Vector3(0.2f, 0.2f, 0.2f), new Vector3(0.5f, 0f, 0f), Vector3.zero,
-                0.3f, 0.1f, 0.5f, 5f));
+                0.3f, 0.1f, 0.60f, 5f));
 
-            // AABB volume 1 * 1 * 1 = 1 m^3 is over the 0.5 m^3 volume limit.
+            // A 1 m cube at k=0.70 needs 2,373 mm, so a 2.00 m ball (2000 mm) refuses it.
             Assert.AreEqual(AbsorbOutcome.RejectItemTooLarge, Evaluate(true, "stone", allowed,
-                Vector3.one, Vector3.zero, Vector3.zero, 1f, 0.1f, 0.5f, 5f));
+                Vector3.one, Vector3.zero, Vector3.zero, 1f, 0.1f, 2.00f, 5f));
 
             // Kind is outside the allowed set.
             Assert.AreEqual(AbsorbOutcome.RejectKindNotAllowed, Evaluate(true, "wood", allowed,
-                Vector3.zero, Vector3.zero, Vector3.zero, 1f, 0.1f, 0.5f, 5f));
+                Vector3.zero, Vector3.zero, Vector3.zero, 1f, 0.1f, 2.00f, 5f));
 
             // The ball has already reached the growth cap (5 >= 5).
             Assert.AreEqual(AbsorbOutcome.RejectBallAtGrowthCap, Evaluate(true, "stone", allowed,
-                Vector3.zero, Vector3.zero, Vector3.zero, 5f, 0.1f, 0.5f, 5f));
+                Vector3.zero, Vector3.zero, Vector3.zero, 5f, 0.1f, 10f, 5f));
 
             // Not absorbable wins over every later gate, as in the model's first condition.
             Assert.AreEqual(AbsorbOutcome.RejectNotAbsorbable, Evaluate(false, "stone", allowed,
-                Vector3.zero, Vector3.zero, Vector3.zero, 0f, 0f, 5f, 5f));
+                Vector3.zero, Vector3.zero, Vector3.zero, 0f, 0f, 1f, 5f));
 
             // 2 m away with a 0.2 m reach is not contact.
             Assert.AreEqual(AbsorbOutcome.RejectOutOfReach, Evaluate(true, "stone", allowed,
-                Vector3.zero, new Vector3(2f, 0f, 0f), Vector3.zero, 0.2f, 0f, 1f, 5f));
+                Vector3.zero, new Vector3(2f, 0f, 0f), Vector3.zero, 0.2f, 0f, 0.4f, 5f));
         }
 
         [Test]
@@ -83,19 +84,20 @@ namespace VRCKatamari.Tests
         {
             string[] allowed = { "stone" };
 
-            // The size gate is strict: an AABB volume exactly at the limit is allowed.
-            // 0.5 * 1 * 1 = 0.5 m^3 is exact in binary, and so is 0.5001 * 1 * 1 being
-            // above it; a volume of 0 (a flat prop) is legal and always inside.
+            // The size gate is inclusive on the ORIGINAL quantity: Req == ball diameter is
+            // absorbable, one millimetre less is not. 0.5 * 1 * 1 m at k=0.70 is
+            // V = 0.35 m^3, so Req = 1,883 mm and a 1.883 m ball just passes.
             Assert.AreEqual(AbsorbOutcome.Absorb, Evaluate(true, "stone", allowed,
-                new Vector3(0.5f, 1f, 1f), Vector3.zero, Vector3.zero, 0f, 0f, 0.5f, 5f));
+                new Vector3(0.5f, 1f, 1f), Vector3.zero, Vector3.zero, 0f, 0f, 1.883f, 5f));
             Assert.AreEqual(AbsorbOutcome.RejectItemTooLarge, Evaluate(true, "stone", allowed,
-                new Vector3(0.5001f, 1f, 1f), Vector3.zero, Vector3.zero, 0f, 0f, 0.5f, 5f));
+                new Vector3(0.5f, 1f, 1f), Vector3.zero, Vector3.zero, 0f, 0f, 1.882f, 5f));
+            // A volume of 0 (a flat prop) has Req 0 and is always inside.
             Assert.AreEqual(AbsorbOutcome.Absorb, Evaluate(true, "stone", allowed,
-                new Vector3(0.5f, 0f, 0f), Vector3.zero, Vector3.zero, 0f, 0f, 0.5f, 5f));
+                new Vector3(0.5f, 0f, 0f), Vector3.zero, Vector3.zero, 0f, 0f, 0.001f, 5f));
 
             // The growth cap is inclusive: a radius exactly at the cap is refused.
             Assert.AreEqual(AbsorbOutcome.RejectBallAtGrowthCap, Evaluate(true, "stone", allowed,
-                Vector3.zero, Vector3.zero, Vector3.zero, 5f, 0f, 1f, 5f));
+                Vector3.zero, Vector3.zero, Vector3.zero, 5f, 0f, 10f, 5f));
 
             // The contact test is inclusive: distance == reach is contact, one tenth of a
             // millimetre more is not.
@@ -118,13 +120,16 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(AbsorbOutcome.RejectInvalidInput, Evaluate(true, "stone", allowed,
                 Vector3.one, Vector3.zero, Vector3.zero, -0.2f, 0f, 1f, 5f));
             Assert.AreEqual(AbsorbOutcome.RejectInvalidInput, Evaluate(true, "stone", allowed,
-                Vector3.one, Vector3.zero, Vector3.zero, 0.2f, 0f, float.PositiveInfinity, 5f));
+                Vector3.one, Vector3.zero, Vector3.zero, 0.2f, 0f, float.NaN, 5f));
             Assert.AreEqual(AbsorbOutcome.RejectInvalidInput, Evaluate(true, null, allowed,
                 Vector3.zero, Vector3.zero, Vector3.zero, 0.2f, 0f, 1f, 5f));
+            // A negative ball diameter is invalid input, not "a zero-millimetre ball".
+            Assert.AreEqual(AbsorbOutcome.RejectInvalidInput, Evaluate(true, "stone", allowed,
+                Vector3.zero, Vector3.zero, Vector3.zero, 0f, 0f, -1f, 5f));
             // An AABB volume that overflows float is an unrepresentable input, not a large
             // item: 1e20 * 1e20 * 1e20 is infinity, and comparing it would silently absorb.
             Assert.AreEqual(AbsorbOutcome.RejectInvalidInput, Evaluate(true, "stone", allowed,
-                new Vector3(1e20f, 1e20f, 1e20f), Vector3.zero, Vector3.zero, 0.2f, 0f, 1e30f,
+                new Vector3(1e20f, 1e20f, 1e20f), Vector3.zero, Vector3.zero, 0.2f, 0f, 1f,
                 5f));
 
             // Growth parameters follow the model's constructor checks.
@@ -350,11 +355,13 @@ namespace VRCKatamari.Tests
 
         private static AbsorbOutcome Evaluate(bool absorbable, string kind, string[] allowed,
             Vector3 bounds, Vector3 itemPosition, Vector3 ballPosition, float collisionRadius,
-            float contactRadius, float maxItemVolumeWorldM3, float maxGrowthRadius)
+            float contactRadius, float ballDiameterM, float maxGrowthRadius)
         {
+            // The item plays at the original's default factor; the k-specific cases live in
+            // AbsorbSizeGateTests.
             return PickupAbsorbMath.EvaluateAbsorb(absorbable, kind, allowed, allowed.Length,
                 bounds, itemPosition, ballPosition, collisionRadius, contactRadius,
-                maxItemVolumeWorldM3, maxGrowthRadius);
+                PickupAbsorbMath.DefaultVolumeK, ballDiameterM, maxGrowthRadius);
         }
 
         private static float RadiusFor(float confirmedValue, float baseRadius, float growth,

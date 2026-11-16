@@ -47,9 +47,11 @@ namespace VRCKatamari.Pickup
     /// the host multiplies by the spawn transform.
     /// </description></item>
     /// <item><description>
-    /// WORLD-AXIS offset from spawnPos with world yaw: SporadicWalk, Clouds. The original
-    /// walks along world -X and its yaw is a world atan2, so its offset lives in world
-    /// axes, not in the spawn frame.
+    /// WORLD-AXIS offset from spawnPos with world yaw: SporadicWalk, and Clouds (which
+    /// passes ignoreYaw and so keeps its spawn orientation). The original walks along world
+    /// -X and its facing is yaw = pi + atan2(vx, vz), so its offset lives in world axes, not
+    /// in the spawn frame. That formula binds model yaw 0 to facing -Z (section 15.1 item 1;
+    /// item S1 is the prefab check that a +Z-forward prefab would fail).
     /// </description></item>
     /// <item><description>
     /// ABSOLUTE world position with world yaw/pitch: PathCollision, SlopingPath,
@@ -69,7 +71,8 @@ namespace VRCKatamari.Pickup
     /// <item><description>Bob 2: clock, idleFrames.</description></item>
     /// <item><description>Sway 1: clock.</description></item>
     /// <item><description>WhackAMole 6: clock, sweepStart, holdFrames, rising, done, segmentIndex.</description></item>
-    /// <item><description>Hop 4: clock, cycleStart, idleFrames, cycleIndex.</description></item>
+    /// <item><description>Hop 7: clock, cycleStart, idleFrames, cycleIndex, offsetY, velocityY,
+    /// airborne.</description></item>
     /// <item><description>SporadicWalk / Clouds 15: clock, phase, timer, extraTimer, axisX, axisZ,
     /// angle, angleStep, angleTarget, offsetX, offsetZ, lastStepX, lastStepZ, drawCount, yaw.</description></item>
     /// <item><description>WaitForPlayer 1: useAlt. DraggedAlong 0: no state at all.</description></item>
@@ -80,9 +83,13 @@ namespace VRCKatamari.Pickup
     /// Drift. Position is recomputed from state (and, for paths, from spawnPos once at
     /// init) on every call; nothing accumulates into the world transform. That is section
     /// 12.0's rule, and it is what makes one large step equal many small steps and what
-    /// keeps freeze/resume from moving anything: the tests check both. The two integrating
-    /// classes (SporadicWalk, Clouds) accumulate in state, which is the original's own
-    /// model and the reason they cannot be one-shot - their event schedule is per frame.
+    /// keeps freeze/resume from moving anything: the tests check both. Three classes
+    /// integrate in state because the original does: SporadicWalk and Clouds keep their
+    /// walked offset, and Hop keeps its height and vertical velocity. Hop is therefore the
+    /// one class whose batched step is NOT equal to the same number of one-frame steps -
+    /// that is the original's own semi-implicit arithmetic (section 15.1 item 2: at speed 4
+    /// one dt = 2 step drops 4 cm where two dt = 1 steps drop 5 cm, one g apart), not an
+    /// implementation shortcut. Step it at its 30 Hz tier, dt = 1.
     /// </para>
     /// <para>
     /// Phase (D-12). Seeded classes derive every random draw from (phaseSeed, drawIndex)
@@ -101,9 +108,9 @@ namespace VRCKatamari.Pickup
     /// never measured - section 13 item M4. PROVISIONAL, pending M4.
     /// </description></item>
     /// <item><description>
-    /// Hop idle 0-255 frames (0-8.5 s uniform) and the 1 cm/frame^2 gravity: the dip was
-    /// measured at 6.0-6.6 cm but the interval only as "3.4-5 s or more" - section 13
-    /// item M3. PROVISIONAL, pending M3.
+    /// Hop idle 0-255 frames (0-8.5 s uniform): the dip is settled (6 cm, item M3 closed),
+    /// but the interval was only measured as "3.4-5 s or more" and the uniform draw is a
+    /// reference constant. PROVISIONAL, the spacing half of item M3 / H1.
     /// </description></item>
     /// <item><description>
     /// WhackAMole hold 60-210 frames (2-7 s): reference constant; the settle/descent half
@@ -130,14 +137,13 @@ namespace VRCKatamari.Pickup
     /// </description></item>
     /// </list>
     /// <para>
-    /// Deliberate deviations from the section 12 pseudocode, each local to one class:
-    /// (a) the hop flight is the closed form of the dt = 1 semi-implicit recurrence the
-    /// original runs at 30 Hz, so a hitched frame or a batched step cannot bend the arc;
-    /// (b) WhackAMole's first segment rises (the pseudocode's initial state flip makes it
-    /// sink, which contradicts the measured "0.7 s rise, then sits at the top"); (c)
-    /// SporadicWalk turns are a Turn phase rather than an angle advanced inside Walk, same
-    /// timing, and its facings use section 12.7's PI/2 + atan2 rather than the Turn
-    /// branch's PI + atan2 (the two disagree in the pseudocode); (d) a refused forward step
+    /// Deliberate deviations from the section 12 pseudocode, each local to one class
+    /// (section 15.1 is the research's ruling on all of them):
+    /// (a) the hop keeps the original's semi-implicit recurrence and order (vy += g * dt,
+    /// then y += vy * dt) instead of its closed form, because the closed form only equals the
+    /// recurrence at dt = 1; (b) WhackAMole's first segment rises, which section 15.1 item 3
+    /// confirms is what the original does; (c) SporadicWalk turns are a Turn phase rather
+    /// than an angle advanced inside Walk, same timing; (d) a refused forward step
     /// is reverted and the next direction is chosen from the per-frame mask instead of the
     /// in-line zone rays. Where a class ignores its phase the remarks say so.
     /// </para>
@@ -185,7 +191,10 @@ namespace VRCKatamari.Pickup
         public const float WhackHoldRangeFrames = 150f;
 
         // Hop: gravity is 1 cm per frame per frame, and the speed table is per size group.
-        // PROVISIONAL: the dip is measured, the spacing is not (section 13 M3).
+        // The dip is settled: the dt = 1 recurrence is -3, -5, -6, -6, -5, -3, 0 cm, i.e.
+        // 6.0 cm deep over 7 frames, and the measured 6.05 / 6.60 cm match it (section 15.1
+        // item 2 closed item M3; the old 8 cm "theory" was the continuous solution). Only the
+        // 0-8.5 s spacing stays PROVISIONAL.
         public const float HopGravityMetresPerFrame2 = MetresPerCentimetre;
         public const float HopIdleMaxFrames = 255f;
 
@@ -226,8 +235,11 @@ namespace VRCKatamari.Pickup
         // [4] done (1/0), [5] segmentIndex
         public const int WhackAMoleStateFloats = 6;
 
-        // [0] clockFrames, [1] cycleStartFrames, [2] idleFrames, [3] cycleIndex
-        public const int HopStateFloats = 4;
+        // [0] clockFrames, [1] cycleStartFrames, [2] idleFrames, [3] cycleIndex,
+        // [4] offsetY (metres, negative while airborne), [5] velocityY (metres per frame),
+        // [6] airborne (1/0). The flag is explicit because velocityY passes through exactly
+        // zero at the top of the arc (float32: -0.01 + 0.01), so it cannot double as the flag.
+        public const int HopStateFloats = 7;
 
         // [0] clockFrames, [1] phase (0 walk / 1 pause / 2 turn), [2] timerFrames,
         // [3] extraTimerFrames, [4] axisX, [5] axisZ, [6] angleRad, [7] angleStepRad,
@@ -639,7 +651,8 @@ namespace VRCKatamari.Pickup
 
         /// <summary>
         /// Initialises Hop's state: [0] clock, [1] cycle start, [2] idle frames 0-8.5 s
-        /// drawn from the seed, [3] cycle index.
+        /// drawn from the seed, [3] cycle index, [4] height offset 0, [5] vertical velocity 0,
+        /// [6] airborne 0.
         /// </summary>
         public static void ResetHop(float[] state, int phaseSeed)
         {
@@ -648,31 +661,38 @@ namespace VRCKatamari.Pickup
             state[1] = 0f;
             state[2] = HopIdleMaxFrames * Draw01(phaseSeed, 0);
             state[3] = 0f;
+            state[4] = 0f;
+            state[5] = 0f;
+            state[6] = 0f;
         }
 
         /// <summary>
-        /// Hop (motionID 0x19, 18 props): wait 0-8.5 s, drop by 2h and fall back to the
-        /// start under the original's gravity. Vertical only, no rotation.
+        /// Hop (motionID 0x19, 18 props): wait 0-8.5 s, drop and fall back to the spawn
+        /// height under the original's gravity. Vertical only, no rotation.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Section 12.6: vy starts at -speed (the size group's 4/6/7/12/15 cm per frame),
-        /// then vy += g * dt with g = 1 cm/frame^2, y += vy * dt, and the hop ends when the
-        /// prop lands. Flight length is therefore 2 * speed - 1 frames (7 frames at
-        /// speed 4), and at speed 4 the recurrence's trajectory is -3, -5, -6, -6, -5, -3,
-        /// 0 cm: 6.0 cm deep at whole frames (6.125 cm at its vertex, t = 3.5), which is
-        /// the 6.0-6.6 cm the research observed (section 5.5). The continuous
-        /// v^2/2g = 8 cm is NOT what the 30 Hz recurrence produces; this function uses the
-        /// recurrence's closed form
+        /// Section 12.6 and section 15.1 item 2: the original adds gravity first, then moves
+        /// (vy += g * dt, then y += vy * dt), with vy starting at -speed (the size group's
+        /// 4/6/7/12/15 cm per frame) and g = 1 cm/frame^2. At speed 4 and dt = 1 the height
+        /// is -3, -5, -6, -6, -5, -3, 0 cm: 6.0 cm deep, two frames at the bottom, back at the
+        /// spawn height after seven frames. That is what item M3 settled (measured 6.05 /
+        /// 6.60 cm); the older 8 cm "theory" was the continuous v^2/2g and the wrong baseline.
         /// </para>
-        /// <code>
-        /// y(t) = -v * t + g * t * (t + 1) / 2
-        /// </code>
         /// <para>
-        /// with t in frames from the hop's start and v, g in metres, so batching or a
-        /// hitched frame cannot bend the arc. PROVISIONAL: the 0-8.5 s idle uniform is a
-        /// reference constant; the measured spacing is only "3.4-5 s or more" and a real
-        /// distribution needs section 13 item M3.
+        /// The recurrence is kept instead of its closed form - v * t + g * t * (t + 1) / 2,
+        /// because the two are only equal at dt = 1. One dt = 2 step is vy += 2g then
+        /// y += 2vy, which sits 4 cm below the spawn after two game frames where two dt = 1
+        /// steps sit 5 cm: exactly one g apart, as section 15.1 records. Hop's update tier is
+        /// 30 Hz (LEVEL_FORMAT_V2 6.7.3), so its host step is dt = 1; a batched frame then
+        /// reproduces the original's own hitched arithmetic instead of silently quantising it.
+        /// </para>
+        /// <para>
+        /// The height and the vertical velocity live in state, so freeze/resume continues the
+        /// arc without a jump; this is the one class whose batched step is not equal to the
+        /// same number of one-frame steps (see the class remarks). PROVISIONAL: only the
+        /// 0-8.5 s spacing (255 * draw frames) is a reference constant - the measured spacing
+        /// is "3.4-5 s or more" (section 15.2, the spacing half of M3 / H1).
         /// </para>
         /// </remarks>
         public static bool TryStepHop(float[] state, float dtFrames, int phaseSeed,
@@ -684,29 +704,56 @@ namespace VRCKatamari.Pickup
             if (!IsValidStep(dtFrames)) return false;
             if (!IsPositiveFinite(hopSpeedCmPerFrame)) return false;
 
-            float speedM = hopSpeedCmPerFrame * MetresPerCentimetre;
-            // The recurrence lands back at the start after 2v - 1 frames: at speed 4 that is
-            // 7 frames, and 2v frames would already be climbing again.
-            float flightFrames = 2f * hopSpeedCmPerFrame - 1f;
-            if (flightFrames <= 0f) return false;
-
-            state[0] = state[0] + dtFrames;
+            // Everything is computed in locals and committed once, so a refusal (a non-finite
+            // clock or trajectory) leaves the caller's row untouched.
+            float clock = state[0] + dtFrames;
+            if (!KatamariMath.IsFiniteFloat(clock)) return false;
             float cycleStart = state[1];
             float idle = state[2];
-            while (state[0] >= cycleStart + idle + flightFrames)
+            float cycleIndex = state[3];
+            float y = state[4];
+            float vy = state[5];
+            bool airborne = state[6] >= 0.5f;
+
+            if (!airborne)
             {
-                cycleStart = cycleStart + idle + flightFrames;
-                state[3] = state[3] + 1f;
-                idle = HopIdleMaxFrames * Draw01(phaseSeed, (int)state[3]);
+                // Resting: no time passed, or the idle has not run out yet. The clock still
+                // advances, because the idle is counted from it.
+                if (dtFrames <= 0f || clock - cycleStart < idle)
+                {
+                    state[0] = clock;
+                    return true;
+                }
+                airborne = true;
+                vy = -(hopSpeedCmPerFrame * MetresPerCentimetre);
             }
+
+            // The original's order and its own arithmetic for any dt: velocity first, then
+            // displacement. A dt = 2 step therefore behaves like the original's hitched frame
+            // (section 15.1 item 2), not like two quantised dt = 1 steps.
+            vy = vy + HopGravityMetresPerFrame2 * dtFrames;
+            y = y + vy * dtFrames;
+            if (!KatamariMath.IsFiniteFloat(y) || !KatamariMath.IsFiniteFloat(vy)) return false;
+
+            if (y >= 0f)
+            {
+                // Back at the spawn height (or a batched step overshot it): land and draw the
+                // next idle from the seed. The landing frame itself reports height 0.
+                y = 0f;
+                vy = 0f;
+                airborne = false;
+                cycleStart = clock;
+                cycleIndex = cycleIndex + 1f;
+                idle = HopIdleMaxFrames * Draw01(phaseSeed, (int)cycleIndex);
+            }
+
+            state[0] = clock;
             state[1] = cycleStart;
             state[2] = idle;
-
-            float t = state[0] - cycleStart - idle;
-            if (t <= 0f) return true;
-            if (t > flightFrames) t = flightFrames;
-            float y = -(speedM * t) + HopGravityMetresPerFrame2 * t * (t + 1f) * 0.5f;
-            if (!KatamariMath.IsFiniteFloat(y)) return false;
+            state[3] = cycleIndex;
+            state[4] = y;
+            state[5] = vy;
+            state[6] = airborne ? 1f : 0f;
             offsetM = new Vector3(0f, y, 0f);
             return true;
         }
@@ -780,8 +827,14 @@ namespace VRCKatamari.Pickup
         /// <para>
         /// PROVISIONAL: the timers and the turn table are reference constants; what was
         /// observed is the net speed of 20-25 cm/s and the instantaneous 30.3 (section 4.1).
-        /// The yaw uses section 12.7's PI/2 + atan2 form; the Turn branch of the same
-        /// pseudocode writes PI + atan2, and the two cannot both be right.
+        /// </para>
+        /// <para>
+        /// Facing is the formula section 15.1 item 1 settled: yaw = pi + atan2(vx, vz) with v
+        /// the velocity direction, for walking and turning alike (the reference implementation
+        /// writes TAU/2 + atan2 and uses it in both places). The binding convention that comes
+        /// with it: v = (0, 0, -1) gives atan2(0, -1) + pi = 2*pi, so MODEL ZERO YAW MUST FACE
+        /// -Z. A prefab authored +Z forward walks backwards; that binding is item S1 in
+        /// section 15.2, and the tests pin it.
         /// </para>
         /// </remarks>
         public static bool TryStepSporadicWalk(float[] state, float dtFrames, int phaseSeed,
@@ -800,7 +853,10 @@ namespace VRCKatamari.Pickup
         /// Section 12.8: ignoreYaw, timer 90 + 600 * draw (3-23 s), no Pause phase and no
         /// extra timer. offsetM is a world-axis offset from spawnPos, which for a cloud at
         /// a fixed altitude means y stays 0. PROVISIONAL: the turn interval is a reference
-        /// constant; only the speed was measured.
+        /// constant; only the speed was measured. Clouds shares the walking machine but
+        /// passes ignoreYaw, so it never evaluates the walk facing formula of section 15.1
+        /// item 1 - a cloud keeps its spawn orientation, which is why the 180-degree
+        /// prefab-axis risk (item S1) does not apply to it.
         /// </remarks>
         public static bool TryStepClouds(float[] state, float dtFrames, int phaseSeed,
             float speedMps, int allowedTurnMask,
@@ -907,7 +963,9 @@ namespace VRCKatamari.Pickup
 
             if (!ignoreYaw)
             {
-                float yaw = (Mathf.PI / 2f) + Mathf.Atan2(velocityX, velocityZ);
+                // Section 15.1 item 1: pi + atan2(vx, vz), one formula for walking and
+                // turning alike. v = (0, 0, -1) gives 2*pi, i.e. model zero yaw faces -Z.
+                float yaw = Mathf.PI + Mathf.Atan2(velocityX, velocityZ);
                 if (!KatamariMath.IsFiniteFloat(yaw)) return false;
                 state[14] = yaw;
                 eulerRad = new Vector3(0f, yaw, 0f);

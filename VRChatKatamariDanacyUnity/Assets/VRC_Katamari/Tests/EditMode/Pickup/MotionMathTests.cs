@@ -324,43 +324,96 @@ namespace VRCKatamari.Tests
         // --- Hop ----------------------------------------------------------------
 
         [Test]
-        public void HopDipsSixCentimetresThenRests()
+        public void HopDipsSixCentimetresInTheOriginalsSevenFrameArc()
         {
-            // Section 12.6 with the 30 Hz recurrence vy += g*dt, y += vy*dt, g = 1 cm/frame^2
-            // and v = 4 cm/frame (the Cancer speed). Per frame the height is
-            //   y(t) = -0.04 t + 0.01 t (t + 1) / 2:
-            //   t = 0..7 -> 0, -3, -5, -6, -6, -5, -3, 0 cm,
-            // i.e. 6.0 cm deep over 7 frames = 2v - 1. The continuous v^2/2g = 8 cm is not
-            // what the recurrence produces; the measured dip was 6.0-6.6 cm (section 5.5),
-            // matching the recurrence.
+            // Sections 12.6 and 15.1 item 2: the original adds gravity first, then moves
+            // (vy += g * dt; y += vy * dt) with vy starting at -4 cm/frame and g = 1
+            // cm/frame^2, so at dt = 1 the height is -3, -5, -6, -6, -5, -3, 0 cm: 6.0 cm
+            // deep, two frames at the bottom, back at the spawn height after 7 frames.
+            // Item M3 settled this: 6 cm is the truth (measured 6.05 / 6.60 cm match it) and
+            // the older 8 cm was the continuous v^2/2g solution, i.e. the wrong baseline.
             int seed = 0;
             float[] state = new float[MotionMath.HopStateFloats];
             MotionMath.ResetHop(state, seed);
-            float idle = MotionMath.HopIdleMaxFrames * MotionMath.Phase01(seed);
-
             Vector3 offset;
             Vector3 euler;
-            Assert.IsTrue(MotionMath.TryStepHop(state, idle * 0.5f, seed, CancerHopSpeedCmPerFrame,
-                out offset, out euler));
-            AssertOffset(NoOffset, offset, "hop rests while idle");
+
+            // Walk the 0-8.5 s idle out one frame at a time.
+            int frames = 0;
+            while (true)
+            {
+                Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
+                    out offset, out euler));
+                frames = frames + 1;
+                if (offset.y < 0f) break;
+                AssertOffset(NoOffset, offset, "hop rests while idle");
+                Assert.Less(frames, 300);
+            }
             AssertOffset(NoRotation, euler, "hop has no rotation");
+            Assert.AreEqual(-0.03f, offset.y, 1e-6f);   // vy = -4 + 1 = -3 cm/frame
 
-            Assert.IsTrue(MotionMath.TryStepHop(state, idle * 0.5f + 3f, seed,
-                CancerHopSpeedCmPerFrame, out offset, out euler));
-            Assert.AreEqual(-0.06f, offset.y, 1e-6f);
-
-            // The parabola's vertex sits between frames 3 and 4: -0.06125 m.
-            Assert.IsTrue(MotionMath.TryStepHop(state, 0.5f, seed, CancerHopSpeedCmPerFrame,
+            Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
-            Assert.AreEqual(-0.06125f, offset.y, 1e-6f);
-            Assert.GreaterOrEqual(offset.y, -0.066f);
-            Assert.LessOrEqual(offset.y, -0.054f);
-
-            // 2v - 1 = 7 frames after the hop starts it is back at the spawn height and the
-            // next idle has begun.
-            Assert.IsTrue(MotionMath.TryStepHop(state, 3.5f, seed, CancerHopSpeedCmPerFrame,
+            Assert.AreEqual(-0.05f, offset.y, 1e-6f);
+            Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
                 out offset, out euler));
-            Assert.AreEqual(0f, offset.y, 1e-6f);
+            Assert.AreEqual(-0.06f, offset.y, 1e-6f);   // the 6 cm dip
+            Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
+                out offset, out euler));
+            Assert.AreEqual(-0.06f, offset.y, 1e-6f);   // two frames at the bottom
+            Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
+                out offset, out euler));
+            Assert.AreEqual(-0.05f, offset.y, 1e-6f);
+            Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
+                out offset, out euler));
+            Assert.AreEqual(-0.03f, offset.y, 1e-6f);
+            Assert.IsTrue(MotionMath.TryStepHop(state, Dt, seed, CancerHopSpeedCmPerFrame,
+                out offset, out euler));
+            Assert.AreEqual(0f, offset.y, 1e-6f);       // back at the spawn height
+            // Landing moves the cycle start to this frame and draws the next idle.
+            Assert.AreEqual(state[0], state[1], 0f);
+            Assert.LessOrEqual(state[2], MotionMath.HopIdleMaxFrames);
+        }
+
+        [Test]
+        public void HopTwoFrameStepUsesTheOriginalsOwnArithmetic()
+        {
+            // Section 15.1 item 2: the recurrence is not dt-quantised. One dt = 2 step is
+            // vy += 2g then y += 2vy, i.e. -4 cm after two game frames, while two dt = 1
+            // steps are -3 then -5 cm: exactly one g (1 cm) apart. Hop is therefore the one
+            // class whose batched step differs from many small steps - by design, because it
+            // reproduces the original's hitched arithmetic instead of quantising it.
+            int seed = 0;
+            float[] two = new float[MotionMath.HopStateFloats];
+            float[] ones = new float[MotionMath.HopStateFloats];
+            MotionMath.ResetHop(two, seed);
+            MotionMath.ResetHop(ones, seed);
+            Vector3 offset;
+            Vector3 euler;
+
+            // The first flight frame is the first frame whose clock reaches the idle.
+            int idleTicks = Mathf.CeilToInt(two[2]);
+            for (int i = 0; i < idleTicks - 1; i++)
+            {
+                Assert.IsTrue(MotionMath.TryStepHop(two, Dt, seed, CancerHopSpeedCmPerFrame,
+                    out offset, out euler));
+                AssertOffset(NoOffset, offset, "still resting");
+            }
+            Assert.IsTrue(MotionMath.TryStepHop(two, 2f, seed, CancerHopSpeedCmPerFrame,
+                out offset, out euler));
+            Assert.AreEqual(-0.04f, offset.y, 1e-6f);
+
+            for (int i = 0; i < idleTicks - 1; i++)
+            {
+                Assert.IsTrue(MotionMath.TryStepHop(ones, Dt, seed, CancerHopSpeedCmPerFrame,
+                    out offset, out euler));
+            }
+            Assert.IsTrue(MotionMath.TryStepHop(ones, Dt, seed, CancerHopSpeedCmPerFrame,
+                out offset, out euler));
+            Assert.AreEqual(-0.03f, offset.y, 1e-6f);
+            Assert.IsTrue(MotionMath.TryStepHop(ones, Dt, seed, CancerHopSpeedCmPerFrame,
+                out offset, out euler));
+            Assert.AreEqual(-0.05f, offset.y, 1e-6f);
         }
 
         [Test]
@@ -384,10 +437,12 @@ namespace VRCKatamari.Tests
                     out offset, out euler));
                 if (state[1] > previousCycleStart)
                 {
-                    float idleFrames = (state[1] - previousCycleStart) -
-                        (2f * CancerHopSpeedCmPerFrame - 1f);
+                    // On landing, state[1] becomes the landing frame and state[2] the idle
+                    // that just started, so this samples the drawn idle directly.
+                    float idleFrames = state[2];
                     Assert.GreaterOrEqual(idleFrames, 0f);
                     Assert.LessOrEqual(idleFrames, MotionMath.HopIdleMaxFrames);
+                    Assert.GreaterOrEqual(state[1] - previousCycleStart, 7f);   // the flight
                     cycles = cycles + 1;
                     if (idleFrames >= 3.4f * 30f && idleFrames <= 5f * 30f) cyclesInMeasuredBand++;
                     previousCycleStart = state[1];
@@ -404,7 +459,8 @@ namespace VRCKatamari.Tests
         {
             // Section 12.7: the initial direction is world -X (not "forward"), at the type
             // speed. speedTable 1 = 1 cm/frame = 30.3 cm/s measured, so one frame at
-            // 0.303 m/s covers 0.303 / 30 = 0.0101 m. The yaw is PI/2 + atan2(-1, 0) = 0.
+            // 0.303 m/s covers 0.303 / 30 = 0.0101 m. The yaw is pi + atan2(-1, 0) = pi/2
+            // (section 15.1 item 1).
             float[] state = new float[MotionMath.WanderStateFloats];
             MotionMath.ResetSporadicWalk(state, 12345);
             Vector3 offset;
@@ -414,7 +470,7 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(-0.303f / 30f, offset.x, 1e-6f);
             Assert.AreEqual(0f, offset.z, 0f);
             Assert.AreEqual(0f, offset.y, 0f);
-            Assert.AreEqual(0f, euler.y, 1e-6f);
+            Assert.AreEqual(Mathf.PI / 2f, euler.y, 1e-5f);
         }
 
         [Test]
@@ -542,6 +598,38 @@ namespace VRCKatamari.Tests
                 out offset, out euler));
             Assert.AreEqual(0f, offset.x - previous.x, 1e-4f);
             Assert.AreEqual(-0.303f / 30f, offset.z - previous.z, 1e-4f);
+            // Section 15.1 item 1: walking -Z is model yaw 0 (pi + atan2(0, -1) = 2*pi).
+            Assert.AreEqual(0f, Mathf.Repeat(euler.y, 2f * Mathf.PI), 1e-4f);
+        }
+
+        [Test]
+        public void WalkFacingIsPiPlusAtan2AndZeroYawFacesMinusZ()
+        {
+            // Section 15.1 item 1: the reference implementation has ONE facing formula,
+            // euler.y = TAU/2 + atan2(vx, vz) = pi + atan2(vx, vz), used for walking and
+            // turning alike and fed the velocity direction. Its binding convention is that
+            // v = (0, 0, -1) gives atan2(0, -1) + pi = 2*pi, i.e. MODEL ZERO YAW FACES -Z;
+            // a prefab authored +Z forward would walk backwards (section 15.2 item S1).
+            float[] state = new float[MotionMath.WanderStateFloats];
+            MotionMath.ResetSporadicWalk(state, 12345);
+            Vector3 offset;
+            Vector3 euler;
+
+            // World -X gives pi + atan2(-1, 0) = pi/2.
+            Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 0x7F, false,
+                out offset, out euler));
+            Assert.AreEqual(Mathf.PI / 2f, euler.y, 1e-5f);
+
+            // Force the +90 degree candidate (bit 2); from -X that heads +Z, so the facing
+            // must be pi + atan2(0, 1) = pi.
+            Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 1 << 2, true,
+                out offset, out euler));
+            for (int i = 0; i < 14; i++)
+            {
+                Assert.IsTrue(MotionMath.TryStepSporadicWalk(state, Dt, 12345, 0.303f, 0x7F, false,
+                    out offset, out euler));
+            }
+            Assert.AreEqual(Mathf.PI, Mathf.Repeat(euler.y, 2f * Mathf.PI), 1e-4f);
         }
 
         // --- Clouds -------------------------------------------------------------
@@ -820,7 +908,7 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(MotionMath.TryStepSporadicWalk(walk, 0f, seed, 0.303f, 0x7F, false,
                 out offset, out euler));
             AssertOffset(NoOffset, offset, "a zero step leaves the walk at its spawn offset");
-            Assert.AreEqual(0f, euler.y, 1e-6f);
+            Assert.AreEqual(Mathf.PI / 2f, euler.y, 1e-5f);   // pi + atan2(-1, 0): facing -X
             Assert.IsTrue(MotionMath.TryStepSporadicWalk(walk, 0f, seed, 0.303f, 0x7F, false,
                 out offset, out euler));
             AssertOffset(NoOffset, offset, "a zero step keeps the walk pose");
@@ -883,13 +971,10 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(MotionMath.TryStepWhackAMole(whackBig, frames, seed, 0.05f, true, out offset, out euler));
             AssertOffset(smallOffset, offset, "whack-a-mole batches without drift");
 
-            float[] hopSmall = new float[MotionMath.HopStateFloats];
-            float[] hopBig = new float[MotionMath.HopStateFloats];
-            MotionMath.ResetHop(hopSmall, seed);
-            MotionMath.ResetHop(hopBig, seed);
-            for (int i = 0; i < frames; i++) Assert.IsTrue(MotionMath.TryStepHop(hopSmall, Dt, seed, CancerHopSpeedCmPerFrame, out smallOffset, out smallEuler));
-            Assert.IsTrue(MotionMath.TryStepHop(hopBig, frames, seed, CancerHopSpeedCmPerFrame, out offset, out euler));
-            AssertOffset(smallOffset, offset, "hop batches without drift");
+            // Hop is deliberately NOT in this list: it keeps the original's semi-implicit
+            // recurrence, so a 2-frame step drops 4 cm where two 1-frame steps drop 5 cm
+            // (section 15.1 item 2). HopTwoFrameStepUsesTheOriginalsOwnArithmetic pins that
+            // difference; Hop is stepped at its 30 Hz tier with dt = 1.
 
             // Paths are a function of travelled distance: a batched step lands on the same
             // point as many small ones (float rounding of the distance sum is the only gap).
@@ -989,7 +1074,7 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(2, MotionMath.BobStateFloats);
             Assert.AreEqual(1, MotionMath.SwayStateFloats);
             Assert.AreEqual(6, MotionMath.WhackAMoleStateFloats);
-            Assert.AreEqual(4, MotionMath.HopStateFloats);
+            Assert.AreEqual(7, MotionMath.HopStateFloats);
             Assert.AreEqual(15, MotionMath.WanderStateFloats);
             Assert.AreEqual(1, MotionMath.WaitForPlayerStateFloats);
             Assert.AreEqual(0, MotionMath.DraggedAlongStateFloats);

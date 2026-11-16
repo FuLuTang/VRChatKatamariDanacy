@@ -32,7 +32,7 @@ Some data structures and behaviours take priority for restoration to the origina
 
 - UdonSharp runtime code under `Assets/VRC_Katamari/Runtime/<Module>/`, editor-only code under `Assets/VRC_Katamari/Editor/`, NUnit EditMode tests under `Assets/VRC_Katamari/Tests/`, hand-inspectable lab scenes under `Assets/VRC_Katamari/Labs/`. Run tests with MCP `run_tests`.
 - No editor APIs or disk JSON in Udon runtime. Respect UdonSharp's language limits (no user structs or non-behaviour classes).
-- Game-file parsers derived from GPL-licensed tools (e.g. noclip.website) stay outside the repository until the owner chooses the repo licence; do not vendor their code or commit a line-by-line port.
+- Game-file parsers derived from third-party code (e.g. noclip.website, whose LICENSE is MIT plus a decompilation note) stay outside the repository until the owner chooses the repo licence; do not vendor their code or commit a line-by-line port. A port or derivative must keep the original copyright and licence notice (MIT allows this). The preferred route is a reimplementation from the format spec, which is what we did: that parser lives outside the repo.
 - Gameplay invariants: one shared world coordinate system; avatars and remote decorations never decide gameplay collision; only confirmed ledger values affect scores, banking or PvP; item generations and requests are idempotent.
 
 ## Delegation and Git

@@ -1,9 +1,10 @@
 # 关卡数据格式 v2（最终提案）
 
-> 状态：**`FINAL_PROPOSAL`，2026-11-16（第 4 版：性能口径 + 命名定稿）**（原 `DRAFT_BLOCKED_ON_RESEARCH` 已解除）。触发：owner 2026-11-16「整体升级地图数据结构 + 网页编辑器一起升」；研究先于设计，三份研究均已落地：
+> 状态：**`FINAL_PROPOSAL`，2026-11-16（第 4 版：性能口径 + 命名定稿）**（原 `DRAFT_BLOCKED_ON_RESEARCH` 已解除）。触发：owner 2026-11-16「整体升级地图数据结构 + 网页编辑器一起升」；研究先于设计，四份研究均已落地：
 > [ORIGINAL_TERRAIN_AND_LAYOUT](../../Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)（REROLL 导出表能推出什么）、
 > [NOCLIP_KATAMARI_FORMAT](../../Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)（PS2 舞台包/任务包的字节布局）与
-> [ORIGINAL_ANIMATION_OBSERVATIONS](../../Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)（逐帧观察：多少东西在动、怎么动、预算多少）。
+> [ORIGINAL_ANIMATION_OBSERVATIONS](../../Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)（逐帧观察：多少东西在动、怎么动、预算多少）与
+> [ORIGINAL_MOTION_PROGRAM](../../Research/KatamariBallRules/ORIGINAL_MOTION_PROGRAM.md)（13 类运动：参数来源、周期、触发半径、幅度换算与每帧成本）。
 > **本文是设计定稿，不是 owner 决定清单**：字段名、代码与本项目的写入方式是提案；凡 owner 已拍板的，逐条标「已定」。
 > 本轮**只写 Docs**：没有改代码、场景、`placement.json`、`Tools/`、Unity，没有跑 git 写命令、没有开 Unity。
 > 引用约定：`Runtime/…`、`Editor/…`、`Labs/…`、`Tests/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；其余相对仓库根。**按符号名与节号引用，不写行号**（相关文件正被并行修改）。
@@ -474,7 +475,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 | `speed` | object | 是 | `{"source":"none"}`（该类没有线速度：Sway/Hop/Whack/Spin/Flip/Bob/WaitForPlayer/拖挂）／`{"source":"type"}`（逐类型档，默认）／`{"source":"path"}`（用路径记录速度）／`{"source":"explicit","cmPerSec":30.3}`。`cmPerSec` 有限、0–500 |
 | `path` | string \| null | 条件 | 路径型 class 必填，引用 `paths[].id`；其他 class 必须 null（否则 `[motion_path]`） |
 | `params` | object | 否 | 按 class 校验的键值；未知键报错（§6.7.3） |
-| `updatesPerSecond` | int | 是 | `0/10/15/30`；`0` 只允许没有位移的 class（如 `sway` 走共享剪辑/表现层）。默认按 §6.7.5 的档位 |
+| `updatesPerSecond` | int | 是 | `0/5/10/15/30`（按 §6.7.3 的逐类档位，理由见 §6.7.5）；`0` 只允许交给表现层/剪辑的件。默认按 class 的档位 |
 | `loop` | bool | 是 | `false` = 播放一次后停在末态（WhackAMole 的「停顶」用这个，而不是循环） |
 | `provenance` | object | 否 | 原作的 `moveType` / `motionID` / `action` / `backupIndex` / `pathIndex` 原值，只由参考导入写；用于对拍，不参与运行 |
 | `notes` | string | 否 | 存证/作者说明 |
@@ -486,18 +487,22 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 | class | Cancer 实例 | 观测（强度） | `params`（键名/单位） | 速度来源 | 建议更新档 |
 |---|---:|---|---|---|---|
 | `sporadic_walk` | 31 | 随机游走，净 20–25 cm/s、瞬时 30.3【实测】 | `turnDegPerSec`、`pauseFraction`、`wanderRadiusM`（后三个是**我们的实现参数**，原作未公开） | `type` | **15 Hz** |
-| `hop` | 18 | 单跳 5.4–6.6 cm，随后停 3.4–5 s【实测】 | `heightM`、`restSecMin`、`restSecMax` | `none` | 10 Hz（或共享剪辑） |
-| `sway` | 15 | 竖直 ±3.6 cm，周期 1.4–1.6 s【实测】 | `amplitudeM`、`periodSec`、`axis`（`x/y/z`） | `none` | 10 Hz 或表现层 |
+| `hop` | 18 | 最低点 6.0–6.6 cm；**周期没测出来**（参考实现 0–8.5 s 均布）【实测/常量】 | `heightM`、`restSecMin`、`restSecMax` | `none` | **30 Hz** |
+| `sway` | 15 | 水平峰峰 82.0 cm、竖直峰峰 7.19 cm，周期 1.50 s【实测】 | `amplitudeM`、`periodSec`、`axis`（`x/y/z`） | `none` | **15 Hz**（或表现层） |
 | `dragged_along` | 15 | 自己不动，跟父件【实测】 | 无（用 `parent` + `inherit`） | `none`（继承父） | **0 Hz** |
-| `wait_for_player` | 15 | 球靠近前完全静止【实测；触发半径未验证】 | `wakeRadiusM`（默认 12，沿用项目值，**不是原作测量**）、`wakeMotion`（可选：另一条 `motions[].id`） | `none` | 10 Hz 唤醒检查 |
-| `whack_a_mole` | 8 | 0.7 s 升 12.4 cm，之后 ≥2.5 s 停在顶【实测；回落未测】 | `riseM`、`riseSec`、`holdSec` | `none` | 10 Hz（或共享剪辑） |
+| `wait_for_player` | 15 | 球靠近前静止；**7 件**有走近触发门（本关 `size=2` ⇒ **200 cm**），另 **8 件**的条件是 `inZone && parentRolled`、参考实现写死 false、原作未知（M2）【常量/数据】 | `triggerRadiusM`（默认 2.0 / 3.0；原作常量表按 `sizeGroup` 是 200/300/500/700/900 cm **五档**，小件实际只落到前两档；**与全局 `wake_radius_m = 12` 无关**，见 §7 与 `OPEN_DECISIONS`）、`triggerMotion`（可选：另一条 `motions[].id`） | `none` | 5 Hz 检测 |
+| `whack_a_mole` | 8 | 0.7 s 升 12.4 cm、行程 = 1.5×全高，之后停在顶【实测；回落未测】 | `riseM`、`riseSec`、`holdSec` | `none` | **30 Hz**（10 Hz 每 tick 错 35 cm） |
 | `path_collision` | 8 | 真折线，恒速 24.5 cm/s【实测】 | 无（路径给点） | `path` | **15 Hz** |
-| `spin` | 7 | 匀速自转【实测；角速度未量化】 | `degPerSec`（我们的参数，未测） | `none`（角速度） | 10 Hz |
+| `spin` | 7 | 匀速自转【实测；角速度未量化】 | `degPerSec`（我们的参数，未测） | `none`（角速度） | 5 Hz |
 | `clouds` | 5 | 固定高度 y≈17.4 m，303 cm/s，绕圈【实测】 | `altitudeM`、`turnRadiusM`（未测） | `type`（10 单位） | 10 Hz |
-| `flip` | 2 | 周期性翻转【实测；周期未测】 | `periodSec` | `none` | 10 Hz |
+| `flip` | 2 | 周期性翻转【实测；周期未测】 | `periodSec` | `none` | 5 Hz |
 | `bob` | 2 | ±0.8 cm，周期 ≈2.8 s【实测】 | `amplitudeM`、`periodSec` | `none` | 10 Hz |
 | `sloping_path` | 2 | 沿路径 1.2 档 = 37 cm/s【实测】 | 无 | `path` | **15 Hz** |
 | `back_and_forth` | 1 | 沿路径 0.6 档 = 18.2 cm/s 来回【实测】 | 无 | `path` | **15 Hz** |
+
+**更新率由位移决定，不由类决定**（碰撞体每 tick 跟着变换走，滞后 = 速度 × 1/Hz，依据 `ORIGINAL_MOTION_PROGRAM` §12.0 与 §6.3）：`hop` 峰值 450 cm/s，10 Hz 下每 tick 45 cm，而整个下陷只持续 8 帧（0.13 s）——10 Hz 会把它整段漏掉；`whack_a_mole` 峰值 346 cm/s，每 tick 35 cm 的穿插会被看见。这两类必须 **30 Hz**；`sway` 峰值 88 cm/s ⇒ 15 Hz；其余按上表。全量 128 件按这张表 = **1,810 次/秒**（预算的 14.6%）。
+
+**幅度已定稿（2026-11-16）**：换算因子 **`partBBox.max[1] = modelBboxM[1] / 2`**（即 `h` = 全高的一半），5 件道具（旗杆、蜘蛛、小蟹、石灯笼、向日葵）全部吻合。Sway 的水平位移是 **`h·sin 2θ`**（峰峰 `2h·sin 20°` = **0.342×全高**）、竖直位移 `h(1−cos 2θ)`（峰峰 **0.030×全高**）——**不是** `2h·sin θ`；向日葵代回 **82.2 / 7.25 cm**，与实测 **82.0 / 7.19** 两个通道同时吻合。WhackAMole 行程 `1.5×全高`、Bob `0.075–0.086×全高`。见 `ORIGINAL_MOTION_PROGRAM` §5.7（推导）与 §4.0 结论 4；`params` 的 `amplitudeM` 直接按「全高 × 系数」填，不再标「待标定」。
 
 **速度档**：`defs[].speedIndex` 0–11 映射到原作 11 档 + 哨兵：
 `MOTION_SPEED_UNITS = (0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0)`；
@@ -530,7 +535,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 #### 6.7.5 相位、更新率与运行时调度（Udon）
 
 - **相位**：`props[].phase ∈ [0,1]`（1 与 0 等价）。省略时导入器派生 `phase = frac(hash32(level.id + "/" + itemId) / 2^32)`；**确定性**，同一份数据每次一样。周期运动的相位偏移 = `phase × period`；动画桶 = `floor(phase × 8) % 8`。**禁止 `Math.random()`**（账本/重放/双端一致性的前提）。
-- **更新率分档**：路径型 + 随机游走 **15 Hz**；其余程序化动作 **10 Hz**；纯表现（Sway/Bob/Flip）可交给共享剪辑/材质，CPU **0 Hz**；`attached`/`static` **0 Hz**。10 Hz 下 30 cm/s 的件每步 3 cm，配合表现层插值足够；15 Hz 是 2 cm/步。
+- **更新率分档**（按位移定，不按类定；依据 `ORIGINAL_MOTION_PROGRAM` §12.0 的碰撞需求表）：`hop` / `whack_a_mole` **30 Hz**（10 Hz 会把 Hop 8 帧的下陷整段漏掉、Whack 每 tick 错 35 cm）；`sway`、路径三兄弟、`sporadic_walk` **15 Hz**；`bob`、`clouds` **10 Hz**；`spin`/`flip`/`wait_for_player` 检测 **5 Hz**；纯表现可交给共享剪辑/材质、`attached`/`static` **0 Hz**。全量 128 件 = **1,810 次/秒 = 14.6%** 预算。**我们的定步是 50 Hz（`fixedStepSeconds = 0.02`），承载 30 Hz 的运动更新绰绰有余——不需要为运动加速**；30 Hz 是「碰撞体每 tick 跟着走」的要求，不是画面要求。
 - **`MotionHost` 形状**（UdonSharp，全定长并行数组，不逐件 `Update`）：
   ```
   int[]  motionIndex;      // -1 = 不更新（static/attached）
@@ -551,8 +556,9 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用 
 | Make Cancer（524 件，129 动） | 129 | 1,290/s（**10%**） | 1,935/s（16%） | 3,870/s（31%） |
 | 1,381 件、25% 在动 | 345 | 3,450/s（**28%**） | 5,175/s（42%） | 10,350/s（83%） |
 | 同上，只给路径+随机游走（≈1/3） | 115 | 1,150/s（9%） | 1,725/s（14%） | 3,450/s（28%） |
+| **按原作实测需求取频率**（§6.7.3：Hop/Whack 30 Hz、Sway/路径 15 Hz、其余 5–10 Hz） | 128 | — | — | **1,810/s（14.6%）** |
 
-  结论【实测数字 + 我方换算】：**逐实例 CPU 变换在 10–15 Hz 完全够**；Animator 数量不由这条决定（2026-11-16：不预先优化，见 §6.7.6）。
+  结论【实测数字 + 我方换算】：**按原作实测需求取频率比「统一 10 Hz 省预算」更对**——全量只要 1,810 次/秒（14.6%），而统一 10 Hz 对 Hop/Whack 是不够的；我们的 50 Hz 定步能直接承载 30 Hz，**不需要为运动加速**（不要再拿「迁到 30 Hz」重算）。Animator 数量不由这条决定（2026-11-16：不预先优化，见 §6.7.6）。
 
 #### 6.7.6 骨骼动画：153 个实例直接挂 Animator（不预先优化）
 
@@ -1192,7 +1198,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | 项 | 容量 | 依据 |
 |---|---:|---|
 | `caps.movingProps` | 每关动件数（Cancer 129） | 运动宿主并行数组的容量；`props` 仍是总件数 |
-| 运动更新 | 15 Hz（路径/随机游走）、10 Hz（其余程序化）、0 Hz（attached/static/纯表现） | §6.7.5 的 12,420 次/秒基线；Cancer 10–15 Hz 占 10–16% |
+| 运动更新 | 30 Hz（`hop`/`whack_a_mole`）、15 Hz（`sway`/路径/随机游走）、10 Hz（`bob`/`clouds`）、5 Hz（`spin`/`flip`/触发检测）、0 Hz（attached/static/纯表现） | 按位移定（`ORIGINAL_MOTION_PROGRAM` §12.0）；全量 1,810 次/秒 = 12,420 基线的 14.6%，50 Hz 定步可直接承载 |
 | `caps.animators` | **统计字段**（Cancer = 153），不是 64 硬预算 | 2026-11-16 拍板：153 个骨骼实例直接挂普通 Animator/蒙皮，不预先优化；`caps.animators` 只记录数量，供 `[anim_budget]` 对账 |
 | 相位桶 | 8 | `floor(phase × 8) % 8`；桶内同步是可接受的产品取舍（原作相位来源未知） |
 | 每关 `motions`/`paths` | ≤64 / ≤32 条，每条路径 ≤64 点 | 129 个动件只有 16 个 `moveType`；Cancer 真路径 11 条 |
@@ -1361,9 +1367,9 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | **U6** | `locPosType` 是否表示随机摆放 | 若是，固定摆放就差一条「每局位置随机」的规则 | 参考实现源码 + 同关卡多次加载对比 |
 | **U7** | `shakeOffFlag` 是否等于「可甩脱」 | Cancer 只有 3 个为 1；不能拿它实现击飞 | 查原机/攻略；在证实前只存证 |
 | **U8** | 舞台动画是否存在 | noclip 没做舞台动画，不能反证原作没有 | 原机录像；在证实前不做 |
-| **U9** | Spin 角速度、WhackAMole 回落、Clouds 绕圈半径、`wait_for_player` 触发半径 | 这些数值没测到，运行时只能用 PROVISIONAL 默认 | 拉长细步序列到完整周期；用球位标测触发半径 |
+| **U9** | Spin 角速度、WhackAMole 回落、Clouds 绕圈半径 | 这些数值没测到，运行时只能用 PROVISIONAL 默认 | 拉长细步序列到完整周期 |
 
-**对这些开放问题的建议**：`phase` 用确定性哈希并允许作者覆盖（D-12）；`locPosType` 先按**固定摆放**导入，保留原值到 `notes`，不实现「每局随机」（等证据）；`shakeOff` 只存证、v1 不读（已定不做击飞）；舞台动画 v1 不做（D-13）；Spin/Whack/Clouds/触发半径用 PROVISIONAL 默认并在诊断中标记，试玩后再调。
+**对这些开放问题的建议**：`phase` 用确定性哈希并允许作者覆盖（D-12）；`locPosType` 先按**固定摆放**导入，保留原值到 `notes`，不实现「每局随机」（等证据）；`shakeOff` 只存证、v1 不读（已定不做击飞）；舞台动画 v1 不做（D-13）；Spin/Whack/Clouds 用 PROVISIONAL 默认并在诊断中标记，试玩后再调；`wait_for_player` 的触发半径已定（2.0/3.0，见 §6.7.3 与 `OPEN_DECISIONS`），不用再测。
 
 ### 16.2 D-11 / D-12 的记录（研究回填 + 白话）
 

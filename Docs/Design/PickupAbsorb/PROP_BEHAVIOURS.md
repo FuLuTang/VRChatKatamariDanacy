@@ -99,7 +99,7 @@
 | `behaviour_axis` | string | ambient | `up` / `x` / `z`，缺省 `up` |
 | `support_policy` | string | stacked | `fall`（默认）/ `fixed`（永远不动）；`carry`（跟支撑者一起被吸）**不在 v1**，见 §10.3 |
 | `rests_on` | string[] ≤4 | stacked | **作者显式**支撑者；空则由烘焙派生 |
-| `wake_radius_m` | float | 全部 | 活跃半径，缺省 12 m；超出即冻结（§7.3） |
+| `wake_radius_m` | float | 全部 | 活跃半径（距离剔除），缺省 12 m；超出即冻结（§7.3）。**不是触发门**：`WaitForPlayer` 的 `triggerRadiusM` 是 `motions[]` 的参数（2.0/3.0），两者互不改 |
 | `floating_ok` | bool | 全部 | 悬空是设计（气球、挂饰）。缺省 `false` |
 
 三个 `support_policy` 直接对齐 `Docs/02_TECHNICAL_CONTRACTS.md` §6 已经写下的三条出路：「支撑物被卷走时按策略**一起收取、坠落或固定展示**」。这是一次命名对齐，不是新发明。
@@ -365,7 +365,7 @@ FALL(i):
 |---|---|---|
 | 同区域 `path` + `orbit` 活跃件 | ≤ 12 | 12 件 15 Hz = 每帧 2 次更新，远离 138 的预算；真正的理由是可读性（球边上超过 12 个动的，玩家看不出哪件能吃） |
 | 同区域 `ambient` | ≤ 24 | 可读性 + 大致 DC 预算（作者指南，不是实测上限；Animator 数量已不设上限，见 §7.1） |
-| `wake_radius_m` | 12 m（缺省） | 比 host 的激活半径 1.6 m 大得多：动画要在球到达之前就动着，否则玩家会看到"走近才启动" |
+| `wake_radius_m` | 12 m（缺省） | 比 host 的激活半径 1.6 m 大得多：动画要在球到达之前就动着，否则玩家会看到"走近才启动"。**这是距离剔除半径，不是 `WaitForPlayer` 的触发门**——触发门是 `motions[].params.triggerRadiusM`（2.0/3.0，按 `sizeGroup`），2026-11-16 lead 拍板两概念分离 |
 | 扫描间隔 | 0.2 s | 比 host 的 0.05 s 粗 4 倍，行为不需要那么细 |
 | 坠落步长 | 1/30 s | §5.6 |
 
@@ -373,7 +373,7 @@ FALL(i):
 
 - 进：`dist ≤ wake_radius`；出：`dist > wake_radius + 3`（滞回 3 m，避免边界抖动）。
 - 出了范围：`path`/`orbit` **冻结**（记相位，不重置），`Animator` **关组件**（不是 `SetActive(false)`——关整个对象会把阴影和碰撞一起处理掉，语义太重）。
-- 视觉上看不出差别，因为球在 12 m 外时这些件本来就只是几个像素。**原作有同类做法**：PS2 版把视野外被撞倒的移动件暂停（`[社区]`）。
+- 视觉上看不出差别，因为球在 12 m 外时这些件本来就只是几个像素。（旧稿说「原作也有同类暂停」，2026-11-16 已证伪：那是参考实现的渲染优化，不是游戏逻辑——见 `ORIGINAL_MOTION_PROGRAM` §14.2；12 m 的依据是我们自己的观感需求，不假装是还原。）
 
 ### 7.4 分帧（stagger）
 

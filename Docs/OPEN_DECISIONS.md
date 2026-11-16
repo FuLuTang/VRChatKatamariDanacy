@@ -173,6 +173,14 @@
 - **性能口径：现阶段不预先优化（D-11 重写）** — 参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求本身极低，现阶段完全不必担心 Animator 数量、顶点数、骨骼数；**153 个骨骼动画实例直接挂普通 Animator/蒙皮，不做顶点动画纹理（VAT）**，「64 Animators 不够」的论证与 VAT 方案降级为「以后真测出瓶颈再看」，`caps.animators` 退成统计字段。**只放松「不预先优化」**：后续真实测量（P5 合成场景、真机帧率、Quest 实机）照旧要做。见 [LEVEL_FORMAT_V2 §6.7.6 / §16.2 / D-11](Design/Levels/LEVEL_FORMAT_V2.md)、[PARITY_AUDIT 的「骨骼动画的呈现（Animator 数量）」行](Design/Parity/PARITY_AUDIT.md)、[ORIGINAL_ANIMATION_OBSERVATIONS §5.4](Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)。
 - **怀旧关正式名：怀旧关：蟹座小院 / Cancer Courtyard**（工作名 Nostalgia 可作别名） — 这个定名是给以后换皮发布的版本用的；内部 id 在换皮前仍是 `_ref_cancer`，不在 `_ref_*` 上直接改成正式内容（先换成我们自己的贴图/模型，再用正式名建关）。见 [_ref_cancer README](Design/Levels/_ref_cancer/README.md)、[原作优先原则](../AGENTS.md)。
 
+### Lead decisions 2026-11-16（触发门、判定体、运动更新率）
+
+> 同日由 lead 代主人拍的三条技术裁定；不与上面 owner 的拍板冲突。
+
+- **`WaitForPlayer` 的触发门与 `wake_radius_m = 12` 是两个概念，两者都保留、互不改**（owner = lead，2026-11-16） — 12 m 是**距离剔除半径**（[PROP_BEHAVIOURS](Design/PickupAbsorb/PROP_BEHAVIOURS.md) §7.2/§7.3，滞回 +3 m、出圈冻结但记相位），作用是别让 128 件全时跑动画；原作 200/300 cm（按 `sizeGroup`）是它的**行为触发门**。实现：给这一类单独加 `triggerRadiusM`（2.0 / 3.0；原作五档 200/300/500/700/900 cm，小件只用前两档），**12 不动**。两条后果一并写清：拿 12 当触发门 → 球在 12 m 外就把蟹惊跑（覆盖 452 m² vs 12.6/28 m²）；把更新半径压到 2–3 m → 院子里 128 件全冻、远处蟹全静止，比原作更假。另 8 件 `moveType 10`（`0x04`）的条件是 `inZone && parentRolled`，参考实现写死 false、原作真实条件未知（M2），**测量前保持静止、别猜**。见 [LEVEL_FORMAT_V2 §6.7.3/§6.7.5](Design/Levels/LEVEL_FORMAT_V2.md)、[PARITY_AUDIT](Design/Parity/PARITY_AUDIT.md)、[ORIGINAL_MOTION_PROGRAM §4.5/§14](Research/KatamariBallRules/ORIGINAL_MOTION_PROGRAM.md)。
+- **运动更新率按「位移」分档：`hop` / `whack_a_mole` 必须 30 Hz**（owner = lead，2026-11-16） — 10 Hz 会把 Hop 只持续 8 帧的下陷整段漏掉、Whack 每 tick 错 35 cm；`sway` 15 Hz、其余 5–15 Hz，全量 1,810 次/秒只占 14.6%，我们的 50 Hz 定步直接够，**不需要为运动加速**（也别再拿「迁到 30 Hz 步长」去重算）。见 [LEVEL_FORMAT_V2 §6.7.3/§6.7.5](Design/Levels/LEVEL_FORMAT_V2.md)、[ORIGINAL_MOTION_PROGRAM §12.0/§6.3](Research/KatamariBallRules/ORIGINAL_MOTION_PROGRAM.md)。
+- **原作 12 条 `Dummy Hit` 命中判定体 + 1 条 `Lalala` 不是可收集道具，v1 不建**（owner = lead，2026-11-16） — 524 条 spawn = 511 道具 + 12 判定体 + 1 精灵；判定体的原作用途未测，等实机测量后再定是否需要。见 [ORIGINAL_MOTION_PROGRAM §11.3](Research/KatamariBallRules/ORIGINAL_MOTION_PROGRAM.md)、[PARITY_AUDIT](Design/Parity/PARITY_AUDIT.md)。
+
 ### Still open
 
 - **地形接触的运行时成本**：数据侧（三角网 + AABB broad phase + 网格 + 侧车）已定；T0–T4 的每步成本、Udon 行为间数组传参、3,456 三角形实测未做（[LEVEL_FORMAT_V2 §13/§16.1](Design/Levels/LEVEL_FORMAT_V2.md)）。

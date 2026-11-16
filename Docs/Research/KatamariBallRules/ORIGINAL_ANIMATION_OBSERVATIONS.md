@@ -375,7 +375,9 @@
 - **未验证**：Spin 的角速度、WhackAMole 的完整回落周期（7 s 窗口不够）、云绕圈的半径与周期。
 - **下一步（如果要继续）**：把细步序列拉到 30 s 覆盖一个完整 WhackAMole 循环；用"球位标"（把
   `cameraGameState.pos` 放到鸟/螃蟹附近）测触发式运动（`WaitForPlayer` / `ScaredBird`）的触发半径——
-  这一条直接对得上我们 `wake_radius_m = 12` 的取值。
+  测出来的是 `WaitForPlayer` 的**行为触发门**（原作 200/300 cm，按 `sizeGroup`），**不要和我们的
+  `wake_radius_m = 12` 混谈**——那是距离剔除半径，两者互不改（lead 2026-11-16 拍板，见 `OPEN_DECISIONS`、
+  `LEVEL_FORMAT_V2` §6.7.3、`ORIGINAL_MOTION_PROGRAM` §14）。
 
 ---
 

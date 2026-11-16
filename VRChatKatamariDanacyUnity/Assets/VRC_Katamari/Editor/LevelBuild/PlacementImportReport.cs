@@ -66,7 +66,12 @@ namespace VRCKatamari.Editor.LevelBuild
         /// </summary>
         public int SyncCollidersCreated;
 
-        public int ValueUnitsDeclared;
+        /// <summary>
+        /// The level's declared value-unit total. 64-bit because the host column is
+        /// (Docs/OPEN_DECISIONS.md (r) step B), so a total past <c>int.MaxValue</c> prints
+        /// exactly; the other two counters are row counts and stay 32-bit.
+        /// </summary>
+        public long ValueUnitsDeclared;
         public int ValueUnitsPreserved;
         public int ValueUnitsUndeclared;
         public bool ValueUnitsVerified;

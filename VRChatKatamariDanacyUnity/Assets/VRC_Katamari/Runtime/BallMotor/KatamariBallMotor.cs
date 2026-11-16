@@ -5920,23 +5920,13 @@ namespace VRCKatamari.BallMotor
             return unbankedVolumeUnits;
         }
 
-        /// <summary>
-        /// The banked score, projected onto int for the existing 32-bit callers.
-        /// </summary>
-        /// <remarks>
-        /// The ledger's banked score is 64-bit (Docs/OPEN_DECISIONS.md (r) step A). This
-        /// projection saturates at int.MaxValue instead of wrapping, so a score above it
-        /// can never read as negative; a caller that needs the exact value reads
-        /// <see cref="GetBankedLedgerScoreUnits"/>. It exists because the debug harness in
-        /// Runtime/Ai consumes an int and is not part of this migration step.
-        /// </remarks>
-        public int GetBankedScoreUnits()
-        {
-            if (bankedScoreUnits > int.MaxValue) return int.MaxValue;
-            return (int)bankedScoreUnits;
-        }
-
         /// <summary>The ledger's banked score for the local row, exactly, as a long.</summary>
+        /// <remarks>
+        /// The only banked-score accessor: it returns the ledger quantity itself (64-bit since
+        /// Docs/OPEN_DECISIONS.md (r) step A), so a score past <c>int.MaxValue</c> reads back
+        /// exactly instead of saturating. Step B retired the 32-bit saturating projection and
+        /// moved the one caller that used it (the CPU-skirmish debug harness) here.
+        /// </remarks>
         public long GetBankedLedgerScoreUnits()
         {
             return bankedScoreUnits;

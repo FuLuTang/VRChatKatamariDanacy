@@ -246,7 +246,11 @@ namespace VRCKatamari.Editor.LevelBuild
             /// ours).
             /// </summary>
             public string model;
-            public int valueUnits;
+            /// <summary>
+            /// This def's declared value units (Docs/OPEN_DECISIONS.md (q) U2). 64-bit: the host
+            /// column is (r) step B, so a level may declare a value past <c>int.MaxValue</c>.
+            /// </summary>
+            public long valueUnits;
         }
 
         [Serializable]
@@ -262,7 +266,8 @@ namespace VRCKatamari.Editor.LevelBuild
             public float[] aabb;
             public string support;
             public string stackedOn;
-            public int valueUnits;
+            /// <summary>Per-prop override of the def's value units; 64-bit, like the host column.</summary>
+            public long valueUnits;
             public string notes;
         }
 
@@ -550,7 +555,7 @@ namespace VRCKatamari.Editor.LevelBuild
             // The pickup sync runs after the props exist, because it derives rows from them.
             // The declaration map is the only value input: the sync writes it in the same
             // pass as the other arrays and reads it back, so there is no second write here.
-            Dictionary<string, int> declaredValueUnits = BuildDeclaredValueUnits(doc);
+            Dictionary<string, long> declaredValueUnits = BuildDeclaredValueUnits(doc);
             report.ValueUnitsDeclared = SumDeclaredValueUnits(doc);
             if (propsOk)
             {
@@ -960,7 +965,7 @@ namespace VRCKatamari.Editor.LevelBuild
             return StaticObbCapacity;
         }
 
-        private static int DeclaredValueUnits(PlacementDocument doc, PropEntry prop)
+        private static long DeclaredValueUnits(PlacementDocument doc, PropEntry prop)
         {
             if (prop.valueUnits >= 1)
             {
@@ -993,9 +998,9 @@ namespace VRCKatamari.Editor.LevelBuild
         /// double-write, and it made the sync's write and the declaration disagree whenever
         /// the read-back guard was skipped.
         /// </remarks>
-        private static Dictionary<string, int> BuildDeclaredValueUnits(PlacementDocument doc)
+        private static Dictionary<string, long> BuildDeclaredValueUnits(PlacementDocument doc)
         {
-            var declared = new Dictionary<string, int>(StringComparer.Ordinal);
+            var declared = new Dictionary<string, long>(StringComparer.Ordinal);
             if (doc.props == null)
             {
                 return declared;
@@ -1014,9 +1019,9 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         /// <summary>The level's declared total, for the one-line report.</summary>
-        private static int SumDeclaredValueUnits(PlacementDocument doc)
+        private static long SumDeclaredValueUnits(PlacementDocument doc)
         {
-            int total = 0;
+            long total = 0L;
             if (doc.props == null)
             {
                 return total;
@@ -2469,7 +2474,7 @@ namespace VRCKatamari.Editor.LevelBuild
         // ---------------------------------------------------------------- sync ---
 
         private static bool TrySyncPickupField(Transform levelRoot, string arenaId, Transform propsRoot,
-            IDictionary<string, int> declaredValueUnits, PlacementImportReport report)
+            IDictionary<string, long> declaredValueUnits, PlacementImportReport report)
         {
             PickupFieldHost[] hosts;
             if (!string.IsNullOrEmpty(arenaId))

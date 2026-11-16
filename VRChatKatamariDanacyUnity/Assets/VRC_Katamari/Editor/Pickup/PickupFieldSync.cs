@@ -57,7 +57,10 @@ namespace VRCKatamari.Editor.Pickup
     /// importer passes <c>placement.json</c>'s <c>defs[].valueUnits</c>/<c>props[].valueUnits</c>),
     /// else the value already serialized on the host for that id, else 0 with a report note.
     /// A missing declaration or an old value-table row never drops a prop
-    /// (Docs/OPEN_DECISIONS.md (q) U2).</description></item>
+    /// (Docs/OPEN_DECISIONS.md (q) U2). The column and every number on this path are 64-bit
+    /// (Docs/OPEN_DECISIONS.md (r) step B), so the write and the read-back use
+    /// <see cref="SerializedProperty.longValue"/> and a declared value past
+    /// <c>int.MaxValue</c> survives both.</description></item>
     /// </list>
     /// <para>
     /// The value-units rule is intentionally not a price. Before U2 this class derived
@@ -183,14 +186,14 @@ namespace VRCKatamari.Editor.Pickup
         /// </param>
         /// <param name="declaredValueUnits">
         /// Item id to value units, supplied by the level importer from
-        /// <c>placement.json</c>. When an id is absent, the value already serialized on the
-        /// host is preserved; a row with neither is written as 0 and reported. Pass
-        /// <c>null</c> when no declaration exists - that is the un-migrated scene path, and
-        /// it must not change any existing value.
+        /// <c>placement.json</c>; 64-bit, like the host column it is written into. When an id
+        /// is absent, the value already serialized on the host is preserved; a row with
+        /// neither is written as 0 and reported. Pass <c>null</c> when no declaration exists
+        /// - that is the un-migrated scene path, and it must not change any existing value.
         /// </param>
         /// <returns>What was written, and every row that was refused and why.</returns>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
-            IDictionary<string, int> declaredValueUnits)
+            IDictionary<string, long> declaredValueUnits)
         {
             return SyncFromChildren(host, fieldRoot, declaredValueUnits, false);
         }
@@ -210,7 +213,7 @@ namespace VRCKatamari.Editor.Pickup
         /// hand-authored scenery and the importer must not add physics to them.
         /// </remarks>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
-            IDictionary<string, int> declaredValueUnits, bool createMissingColliders)
+            IDictionary<string, long> declaredValueUnits, bool createMissingColliders)
         {
             var report = new PickupFieldSyncReport();
             report.ValueUnitsRequested = declaredValueUnits != null && declaredValueUnits.Count > 0;
@@ -250,7 +253,7 @@ namespace VRCKatamari.Editor.Pickup
             // Read the host's current values before any array is resized: this is the whole
             // un-migrated-scene contract. A row whose item id is already present keeps its
             // serialized value unless the caller declared a different one.
-            Dictionary<string, int> existingValueUnits = ReadExistingValueUnits(host);
+            Dictionary<string, long> existingValueUnits = ReadExistingValueUnits(host);
 
             List<PropCandidate> candidates = CollectCandidates(fieldRoot);
             List<PropRow> rows = ValidateCandidates(candidates, declaredValueUnits, existingValueUnits,
@@ -330,7 +333,7 @@ namespace VRCKatamari.Editor.Pickup
             public string ItemId;
             public Vector3 BoundsSize;
             public Vector3 LocalBoundsSize;
-            public int ValueUnits;
+            public long ValueUnits;
             public Collider PrimaryCollider;
         }
 
@@ -719,7 +722,7 @@ namespace VRCKatamari.Editor.Pickup
         // -------------------------------------------------------------- validation ---
 
         private static List<PropRow> ValidateCandidates(List<PropCandidate> candidates,
-            IDictionary<string, int> declaredValueUnits, Dictionary<string, int> existingValueUnits,
+            IDictionary<string, long> declaredValueUnits, Dictionary<string, long> existingValueUnits,
             bool createMissingColliders, PickupFieldSyncReport report)
         {
             var ids = new List<string>();
@@ -828,14 +831,14 @@ namespace VRCKatamari.Editor.Pickup
                 // one the host's existing row is preserved; with neither the row is still
                 // written (0) and named in the notes, because dropping it would lose the
                 // prop's geometry and pickup wiring over a missing number.
-                int declaredValue = 0;
+                long declaredValue = 0L;
                 bool hasDeclaredValue = declaredValueUnits != null &&
                                         declaredValueUnits.TryGetValue(candidate.ItemId, out declaredValue);
-                int existingValue = 0;
+                long existingValue = 0L;
                 bool hasExistingValue = existingValueUnits != null &&
                                         existingValueUnits.TryGetValue(candidate.ItemId, out existingValue);
 
-                int valueUnits;
+                long valueUnits;
                 string valueSource;
                 if (!PickupFieldAuthoringRules.TryResolveValueUnits(declaredValue, hasDeclaredValue,
                         existingValue, hasExistingValue, out valueUnits, out valueSource))
@@ -1024,7 +1027,7 @@ namespace VRCKatamari.Editor.Pickup
                 kinds.GetArrayElementAtIndex(i).stringValue = row.Kind;
                 bounds.GetArrayElementAtIndex(i).vector3Value = row.BoundsSize;
                 localBounds.GetArrayElementAtIndex(i).vector3Value = row.LocalBoundsSize;
-                values.GetArrayElementAtIndex(i).intValue = row.ValueUnits;
+                values.GetArrayElementAtIndex(i).longValue = row.ValueUnits;
                 if (anyCollider)
                 {
                     colliders.GetArrayElementAtIndex(i).objectReferenceValue = row.PrimaryCollider;
@@ -1163,9 +1166,9 @@ namespace VRCKatamari.Editor.Pickup
         /// value to a different prop. A host with no arrays yields an empty map; an unaligned
         /// pair contributes only its overlapping prefix, so the write never invents a value.
         /// </remarks>
-        private static Dictionary<string, int> ReadExistingValueUnits(PickupFieldHost host)
+        private static Dictionary<string, long> ReadExistingValueUnits(PickupFieldHost host)
         {
-            var existing = new Dictionary<string, int>(StringComparer.Ordinal);
+            var existing = new Dictionary<string, long>(StringComparer.Ordinal);
             var serialized = new SerializedObject(host);
             SerializedProperty ids = serialized.FindProperty(ItemIdsField);
             SerializedProperty values = serialized.FindProperty(ValueUnitsField);
@@ -1180,7 +1183,7 @@ namespace VRCKatamari.Editor.Pickup
                 string itemId = ids.GetArrayElementAtIndex(i).stringValue;
                 if (!string.IsNullOrEmpty(itemId) && !existing.ContainsKey(itemId))
                 {
-                    existing.Add(itemId, values.GetArrayElementAtIndex(i).intValue);
+                    existing.Add(itemId, values.GetArrayElementAtIndex(i).longValue);
                 }
             }
 
@@ -1198,7 +1201,7 @@ namespace VRCKatamari.Editor.Pickup
         /// run is failed with the details in <see cref="PickupFieldSyncReport.ValueUnitMismatches"/>.
         /// </remarks>
         private static bool VerifyDeclaredValueUnits(PickupFieldHost host,
-            IDictionary<string, int> declaredValueUnits, PickupFieldSyncReport report)
+            IDictionary<string, long> declaredValueUnits, PickupFieldSyncReport report)
         {
             if (declaredValueUnits == null || declaredValueUnits.Count == 0)
             {
@@ -1219,11 +1222,11 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             var readIds = new string[ids.arraySize];
-            var readValues = new int[values.arraySize];
+            var readValues = new long[values.arraySize];
             for (int i = 0; i < ids.arraySize; i++)
             {
                 readIds[i] = ids.GetArrayElementAtIndex(i).stringValue;
-                readValues[i] = values.GetArrayElementAtIndex(i).intValue;
+                readValues[i] = values.GetArrayElementAtIndex(i).longValue;
             }
 
             string[] mismatches = PickupFieldAuthoringRules.FindValueUnitMismatches(readIds, readValues,

@@ -132,7 +132,7 @@ namespace VRCKatamari.Ai
                     + " d=" + (Mathf.Floor(m.GetSemanticDiameterWorldM() * 1000f) / 1000f)
                     + " absorbed=" + m.GetAbsorbedCount()
                     + " confirmed=" + m.GetConfirmedVolumeUnits()
-                    + " banked=" + m.GetBankedScoreUnits()
+                    + " banked=" + m.GetBankedLedgerScoreUnits()
                     + " events=" + m.GetAbsorbedEventCount()
                     + " rejects=" + m.GetRejectEventCount());
             }
@@ -185,7 +185,8 @@ namespace VRCKatamari.Ai
             {
                 for (int b = a + 1; b < count; b++)
                 {
-                    if (motors[order[b]].GetBankedScoreUnits() > motors[order[a]].GetBankedScoreUnits())
+                    if (motors[order[b]].GetBankedLedgerScoreUnits() >
+                        motors[order[a]].GetBankedLedgerScoreUnits())
                     {
                         int swap = order[a];
                         order[a] = order[b];
@@ -202,9 +203,9 @@ namespace VRCKatamari.Ai
             for (int r = 0; r < count && r < 3; r++)
             {
                 KatamariBallMotor m = motors[order[r]];
-                int bankedBefore = m.GetBankedScoreUnits();
+                long bankedBefore = m.GetBankedLedgerScoreUnits();
                 bool ok = m.TryAwardScore(keys[r], 50);
-                int total = m.GetBankedScoreUnits();
+                long total = m.GetBankedLedgerScoreUnits();
                 if (ok)
                 {
                     Debug.Log("[settle] ball=" + order[r] + " banked=" + bankedBefore

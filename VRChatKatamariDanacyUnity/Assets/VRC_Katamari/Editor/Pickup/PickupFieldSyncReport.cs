@@ -23,7 +23,13 @@ namespace VRCKatamari.Editor.Pickup
         public string HostPath;
         public string FieldRootPath;
         public int PropCount;
-        public int TotalValueUnits;
+
+        /// <summary>
+        /// Sum of every written row's value units. 64-bit: the host column is
+        /// (Docs/OPEN_DECISIONS.md (r) step B), so a level total past <c>int.MaxValue</c>
+        /// prints the same number the ledger will see.
+        /// </summary>
+        public long TotalValueUnits;
 
         /// <summary>
         /// True when the caller supplied a non-empty declaration map. False means no values
@@ -32,7 +38,7 @@ namespace VRCKatamari.Editor.Pickup
         public bool ValueUnitsRequested;
 
         /// <summary>Sum of the units taken from the caller's declarations.</summary>
-        public int ValueUnitsDeclared;
+        public long ValueUnitsDeclared;
 
         /// <summary>Rows whose value was read back from the host and preserved unchanged.</summary>
         public int ValueUnitsPreserved;
@@ -70,7 +76,7 @@ namespace VRCKatamari.Editor.Pickup
         }
 
         /// <summary>Adds or updates the per-kind tally for one accepted row.</summary>
-        public void CountRow(string kind, int valueUnits)
+        public void CountRow(string kind, long valueUnits)
         {
             for (int i = 0; i < Kinds.Count; i++)
             {
@@ -215,7 +221,7 @@ namespace VRCKatamari.Editor.Pickup
     {
         public string Kind;
         public int Props;
-        public int ValueUnits;
+        public long ValueUnits;
     }
 
     /// <summary>One row the sync refused to write, with the reason it refused.</summary>

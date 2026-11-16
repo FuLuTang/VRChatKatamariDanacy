@@ -118,10 +118,12 @@ namespace VRCKatamari.Pickup
         private const int HiddenLogLimit = 8;
 
         // The value unit the ledger consumes must be a whole number at least 1
-        // (Docs/OPEN_DECISIONS.md (j)); a fractional or zero value is refused at commit
-        // time as RejectNoGain, which is indistinguishable from "never touched" from
-        // outside. The host therefore reports such rows once at start-up.
-        private const int MinValueUnits = 1;
+        // (Docs/OPEN_DECISIONS.md (j)). The column is an integer since (r) step B, so the
+        // only bad value the host can see here is 0 or a negative number. The motor still
+        // decides what commits: it receives the value through its float candidate slot and
+        // refuses anything at or past 2^63 as RejectNoGain, which is indistinguishable from
+        // "never touched" from outside. The host therefore reports bad rows once at start-up.
+        private const long MinValueUnits = 1L;
 
         private const float DefaultScanIntervalSeconds = 0.05f;
         private const float DefaultActivationRadiusM = 1.6f;
@@ -176,13 +178,14 @@ namespace VRCKatamari.Pickup
         // would rotate a yawed prop twice. Optional: an un-synced scene has no column
         // and the host falls back to propBounds with one reason-coded warning.
         [SerializeField] private Vector3[] propLocalBounds;
-        // Value units per prop, from the level's declared data. DELIBERATELY still
-        // int[]: this column is serialized into every level scene and prefab, and
-        // `long[]` has no precedent in a serialized field (Docs/OPEN_DECISIONS.md (r),
-        // unverified item 1). The fixed-point migration therefore widens the read site
-        // (SubmitProp) and the ledger, never this array's shape, until Step B re-imports
-        // every scene with the widened column and the value's own type.
-        [SerializeField] private int[] valueUnits;
+        // Value units per prop, from the level's declared data. `long[]` since
+        // Docs/OPEN_DECISIONS.md (r) migration step B: the unit and every stored number are
+        // unchanged, only the serialized element width doubled (int32 -> int64, 8 -> 16 hex
+        // characters per element in scene YAML). Unity proved `long[]` in a serialized field
+        // and `SerializedProperty.longValue` on its elements before this step
+        // (Docs/Research/ContentVolume/UNITY_PROBES_FOR_LONG.md section 6), so the column
+        // carries the ledger's own 64-bit range instead of narrowing at the read site.
+        [SerializeField] private long[] valueUnits;
         // Optional: wired colliders are disabled on attach so an absorbed prop cannot block
         // anything. Leave the array empty to skip that.
         [SerializeField] private Collider[] propColliders;
@@ -786,8 +789,9 @@ namespace VRCKatamari.Pickup
             if (itemIds[index].Length == 0) return false;
             if (kinds[index] == null) return false;
             if (kinds[index].Length == 0) return false;
-            // A value the ledger gain mapping refuses (zero, fractional, negative, huge) is
-            // RejectNoGain at commit time, which is also "stays queued": never offer it.
+            // A value the ledger gain mapping refuses (zero or negative here; the float slot it
+            // travels through can also lose a huge value past the 64-bit guard) is RejectNoGain
+            // at commit time, which is also "stays queued": never offer it.
             if (valueUnits[index] < MinValueUnits) return false;
             Vector3 bounds = propBounds[index];
             if (!KatamariMath.IsFiniteVector(bounds)) return false;
@@ -888,8 +892,9 @@ namespace VRCKatamari.Pickup
                     + " valueUnitsBelowMin=" + badValues
                     + " zeroOrNegativeBounds=" + degenerateBounds
                     + " - these rows are never offered to the motor, so they can never be"
-                    + " absorbed (valueUnits must be a whole number >= 1, see"
-                    + " Docs/OPEN_DECISIONS.md (j))");
+                    + " absorbed (valueUnits must be >= 1; the column is a 64-bit integer since"
+                    + " Docs/OPEN_DECISIONS.md (r) step B, so only 0 or a negative number can"
+                    + " fail here - see (j) for the ledger's whole-unit rule)");
             }
             if (propColliders == null || propColliders.Length < propCount)
             {
@@ -1308,16 +1313,16 @@ namespace VRCKatamari.Pickup
         private void SubmitProp(int index)
         {
             Vector3 itemPosition = propTransforms[index].position;
-            // The column stays int[] and is widened HERE, at the read site. Step A of the
-            // fixed-point volume migration (Docs/OPEN_DECISIONS.md (r)) widens ledger
-            // quantities to long, but a serialized array must not change shape until
-            // Unity has proven long[] in a serialized field; valueUnits is scene and
-            // placement data, so it keeps its int[] and every consumer widens the read.
-            // (float)(long)value == (float)value for every int, so this is the same
-            // number the motor received before.
-            long itemValueUnits = (long)valueUnits[index];
+            // The column is the ledger's own 64-bit quantity (Docs/OPEN_DECISIONS.md (r) step
+            // B), so there is no widening at the read site any more. The candidate queue is
+            // NOT widened here: KatamariBallMotor.SubmitCandidate takes the value as a float
+            // because that slot belongs to the size-model domain, which this step leaves
+            // alone. `(float)valueUnits[index]` is exactly what the motor received before
+            // (an int widened to long and then to float is the same float an int->float
+            // conversion produced); PickupAbsorbMath.TryAbsorbValueToLedgerGain converts it
+            // back to a 64-bit gain, where the range guard is the long one.
             motor.SubmitCandidate(true, kinds[index], propBounds[index],
-                itemPosition, (float)itemValueUnits, itemIds[index], 0);
+                itemPosition, (float)valueUnits[index], itemIds[index], 0);
             // Stamped even when the motor answered "already queued": both cases leave this
             // host willing to withdraw the id later if the ball leaves.
             lastSubmitTimes[index] = Time.time;

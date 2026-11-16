@@ -76,11 +76,11 @@ namespace VRCKatamari.Tests
         {
             // Mirrors the ledger rule in Docs/OPEN_DECISIONS.md (j): 1.0125 and 0 are refused,
             // not rounded; both would make the prop unabsorbable at runtime as RejectNoGain.
-            Assert.IsTrue(Validate(1f, out int one));
-            Assert.AreEqual(1, one);
+            Assert.IsTrue(Validate(1f, out long one));
+            Assert.AreEqual(1L, one);
 
-            Assert.IsTrue(Validate(16f, out int sixteen));
-            Assert.AreEqual(16, sixteen);
+            Assert.IsTrue(Validate(16f, out long sixteen));
+            Assert.AreEqual(16L, sixteen);
 
             Assert.IsFalse(Validate(0f, out _));
             Assert.IsFalse(Validate(-3f, out _));
@@ -88,7 +88,28 @@ namespace VRCKatamari.Tests
             Assert.IsFalse(Validate(1.0125f, out _));
             Assert.IsFalse(Validate(float.NaN, out _));
             Assert.IsFalse(Validate(float.PositiveInfinity, out _));
-            Assert.IsFalse(Validate(2147483648f, out _));
+
+            // 2^63 is the first value a long cannot hold; it is refused before the cast.
+            Assert.IsFalse(Validate(9223372036854775808f, out _));
+        }
+
+        [Test]
+        public void ValueUnitsPastIntMaxAreAccepted()
+        {
+            // Docs/OPEN_DECISIONS.md (r) step B widened the host column to long[], so the old
+            // 2^31 refusal is gone: 2^31 itself and a total past it are ordinary declarations,
+            // not data errors. Only values a long cannot carry remain refused (above).
+            Assert.IsTrue(Validate(2147483648f, out long twoPow31));
+            Assert.AreEqual(2147483648L, twoPow31);
+
+            // The JSON-integer path (the importer's own type) is exact at the same magnitude.
+            Assert.IsTrue(Validate(3000000000L, out long threeBillion));
+            Assert.AreEqual(3000000000L, threeBillion);
+
+            Assert.IsFalse(Validate(0L, out _));
+            Assert.IsFalse(Validate(-1L, out _));
+            Assert.IsTrue(Validate(long.MaxValue, out long largest));
+            Assert.AreEqual(long.MaxValue, largest);
         }
 
         [Test]
@@ -321,12 +342,48 @@ namespace VRCKatamari.Tests
             return (bool)Invoke("HasUsableBounds", sizeX, sizeY, sizeZ);
         }
 
-        private static bool Validate(float rawValueUnits, out int valueUnits)
+        /// <summary>
+        /// The float-shaped overload: a declaration that arrived through a float value.
+        /// </summary>
+        private static bool Validate(float rawValueUnits, out long valueUnits)
         {
-            object[] arguments = { rawValueUnits, 0 };
-            bool accepted = (bool)Invoke("TryValidateValueUnits", arguments);
-            valueUnits = arguments[1] is int units ? units : 0;
+            object[] arguments = { rawValueUnits, 0L };
+            bool accepted = (bool)ValidateMethod(typeof(float)).Invoke(null, arguments);
+            valueUnits = arguments[1] is long units ? units : 0L;
             return accepted;
+        }
+
+        /// <summary>
+        /// The exact-integer overload: the type the level importer's JSON integer arrives as.
+        /// </summary>
+        private static bool Validate(long rawValueUnits, out long valueUnits)
+        {
+            object[] arguments = { rawValueUnits, 0L };
+            bool accepted = (bool)ValidateMethod(typeof(long)).Invoke(null, arguments);
+            valueUnits = arguments[1] is long units ? units : 0L;
+            return accepted;
+        }
+
+        /// <summary>
+        /// Selects one overload by its first parameter type: the rule now has a 64-bit entry
+        /// point and a float-shaped one, and <c>GetMethod(name, flags)</c> would be ambiguous.
+        /// </summary>
+        private static MethodInfo ValidateMethod(Type parameterType)
+        {
+            MethodInfo[] methods = RulesType().GetMethods(BindingFlags.Public | BindingFlags.Static);
+            for (int i = 0; i < methods.Length; i++)
+            {
+                ParameterInfo[] parameters = methods[i].GetParameters();
+                if (string.Equals(methods[i].Name, "TryValidateValueUnits", StringComparison.Ordinal) &&
+                    parameters.Length == 2 && parameters[0].ParameterType == parameterType)
+                {
+                    return methods[i];
+                }
+            }
+
+            Assert.Fail(RulesTypeName + ".TryValidateValueUnits(" + parameterType.Name +
+                        ", out long) is missing");
+            return null;
         }
 
         private static string[] Duplicates(string[] itemIds)

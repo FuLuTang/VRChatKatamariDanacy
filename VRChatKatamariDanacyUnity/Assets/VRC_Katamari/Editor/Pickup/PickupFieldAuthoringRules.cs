@@ -50,7 +50,10 @@ namespace VRCKatamari.Editor.Pickup
     /// <c>RejectNoGain</c> (Docs/OPEN_DECISIONS.md (j); the runtime mirror is
     /// <c>PickupAbsorbMath.TryAbsorbValueToLedgerGain</c>). <see cref="TryValidateValueUnits"/>
     /// is still the one place that rule is spelled out, so the declaration path and the
-    /// ledger cannot drift apart.
+    /// ledger cannot drift apart. It is 64-bit since Docs/OPEN_DECISIONS.md (r) step B, the
+    /// width of the host column; the float-shaped overload only adds "must be exactly a whole
+    /// number" and delegates to the integer entry point, so the two cannot disagree on the
+    /// range either.
     /// </para>
     /// <para>
     /// An explicit absorb size for a prop whose visual is much longer than its pickup size
@@ -68,8 +71,10 @@ namespace VRCKatamari.Editor.Pickup
     public static class PickupFieldAuthoringRules
     {
         // The ledger consumes whole units and refuses anything below 1
-        // (Docs/OPEN_DECISIONS.md (j), Runtime/Pickup/PickupAbsorbMath.cs:259-271).
-        public const int MinValueUnits = 1;
+        // (Docs/OPEN_DECISIONS.md (j), Runtime/Pickup/PickupAbsorbMath.cs:259-271). 64-bit
+        // since (r) step B so the comparison against a declared long is long-to-long, with no
+        // conversion on the way in.
+        public const long MinValueUnits = 1L;
 
         // A prop whose longest renderer extent is below this has no usable size: an AABB
         // that small is a missing renderer or a degenerate mesh, not a tiny prop. Only the
@@ -153,16 +158,20 @@ namespace VRCKatamari.Editor.Pickup
         /// scene path); a new row with neither is written as 0, which the host notices at
         /// run time, rather than being dropped from the arrays or given a rule-derived
         /// number.
+        /// <para>
+        /// Every parameter and the result are 64-bit (Docs/OPEN_DECISIONS.md (r) step B), the
+        /// width of the host column, so preserving an existing row cannot narrow it either.
+        /// </para>
         /// </remarks>
-        public static bool TryResolveValueUnits(int declaredValueUnits, bool hasDeclaredValueUnits,
-            int existingValueUnits, bool hasExistingValueUnits, out int valueUnits, out string source)
+        public static bool TryResolveValueUnits(long declaredValueUnits, bool hasDeclaredValueUnits,
+            long existingValueUnits, bool hasExistingValueUnits, out long valueUnits, out string source)
         {
-            valueUnits = 0;
+            valueUnits = 0L;
             source = null;
 
             if (hasDeclaredValueUnits)
             {
-                int validated;
+                long validated;
                 if (!TryValidateValueUnits(declaredValueUnits, out validated))
                 {
                     return false;
@@ -196,8 +205,8 @@ namespace VRCKatamari.Editor.Pickup
         /// if the row order changed. Rows without a declaration are not compared: preserving
         /// them is the intended behaviour.
         /// </remarks>
-        public static string[] FindValueUnitMismatches(string[] itemIds, int[] hostValueUnits,
-            IDictionary<string, int> declaredValueUnits)
+        public static string[] FindValueUnitMismatches(string[] itemIds, long[] hostValueUnits,
+            IDictionary<string, long> declaredValueUnits)
         {
             if (itemIds == null || hostValueUnits == null || declaredValueUnits == null ||
                 declaredValueUnits.Count == 0)
@@ -215,7 +224,7 @@ namespace VRCKatamari.Editor.Pickup
                     continue;
                 }
 
-                int declared;
+                long declared;
                 if (!declaredValueUnits.TryGetValue(itemId, out declared))
                 {
                     continue;
@@ -241,7 +250,7 @@ namespace VRCKatamari.Editor.Pickup
         /// disagree, so the run must not be accepted as verified.
         /// </remarks>
         public static string[] FindDeclaredIdsWithoutRows(string[] itemIds,
-            IDictionary<string, int> declaredValueUnits)
+            IDictionary<string, long> declaredValueUnits)
         {
             if (declaredValueUnits == null || declaredValueUnits.Count == 0)
             {
@@ -261,7 +270,7 @@ namespace VRCKatamari.Editor.Pickup
             }
 
             var missing = new List<string>();
-            foreach (KeyValuePair<string, int> pair in declaredValueUnits)
+            foreach (KeyValuePair<string, long> pair in declaredValueUnits)
             {
                 if (!present.Contains(pair.Key))
                 {
@@ -416,42 +425,67 @@ namespace VRCKatamari.Editor.Pickup
         }
 
         /// <summary>
-        /// Applies the ledger's value rule to a raw number: whole units, at least 1.
+        /// Applies the ledger's value rule to a declaration that is already an exact integer:
+        /// whole units, at least 1.
         /// </summary>
         /// <remarks>
-        /// Declarations arrive as integers today, so no shipped row fails this; the check
-        /// exists because a hand-edited declaration (0, or a fractional literal in a caller's
-        /// map) must be reported as a value error instead of being rounded, and because the
-        /// ledger's rule must live in one place rather than being assumed from the field's
-        /// type.
+        /// <para>
+        /// This is the rule, once. It is 64-bit because the host column is
+        /// (<c>PickupFieldHost.valueUnits</c>, Docs/OPEN_DECISIONS.md (r) step B), so a level
+        /// may declare a value past <c>int.MaxValue</c> and it survives to the ledger: the
+        /// old 2^31 ceiling here would have refused such a row even though every layer below
+        /// it can hold the number.
+        /// </para>
+        /// <para>
+        /// The unit is untouched: the minimum is still 1 whole unit, and no number is scaled
+        /// or rounded. The float overload below exists only because a caller may hold the
+        /// declaration in a float-shaped value; it rejects anything that is not exactly a
+        /// whole number and then delegates here, so there is still one range rule.
+        /// </para>
         /// </remarks>
-        public static bool TryValidateValueUnits(float rawValueUnits, out int valueUnits)
+        public static bool TryValidateValueUnits(long rawValueUnits, out long valueUnits)
         {
-            valueUnits = 0;
-            if (float.IsNaN(rawValueUnits) || float.IsInfinity(rawValueUnits))
-            {
-                return false;
-            }
-
+            valueUnits = 0L;
             if (rawValueUnits < MinValueUnits)
             {
                 return false;
             }
 
-            // 2^31 is the first value an int cannot hold; refuse it before the cast.
-            if (rawValueUnits >= 2147483648f)
+            valueUnits = rawValueUnits;
+            return true;
+        }
+
+        /// <summary>
+        /// Applies the ledger's whole-unit rule to a float-shaped declaration.
+        /// </summary>
+        /// <remarks>
+        /// Declarations arrive as JSON integers, so no shipped row goes through this overload;
+        /// it exists because a hand-edited declaration (0, or a fractional literal in a
+        /// caller's map) must be reported as a value error instead of being rounded, and
+        /// because the ledger's rule must live in one place rather than being assumed from the
+        /// field's type. 2^63 is exactly representable as a float, so comparing against it
+        /// before the cast keeps the conversion inside the 64-bit range.
+        /// </remarks>
+        public static bool TryValidateValueUnits(float rawValueUnits, out long valueUnits)
+        {
+            valueUnits = 0L;
+            if (float.IsNaN(rawValueUnits) || float.IsInfinity(rawValueUnits))
             {
                 return false;
             }
 
-            int truncated = (int)rawValueUnits;
+            if (rawValueUnits >= 9223372036854775808f)
+            {
+                return false;
+            }
+
+            long truncated = (long)rawValueUnits;
             if ((float)truncated != rawValueUnits)
             {
                 return false;
             }
 
-            valueUnits = truncated;
-            return true;
+            return TryValidateValueUnits(truncated, out valueUnits);
         }
 
         /// <summary>True for a non-empty name with no leading or trailing whitespace.</summary>

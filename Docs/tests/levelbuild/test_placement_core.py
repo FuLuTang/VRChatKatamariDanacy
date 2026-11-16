@@ -245,5 +245,67 @@ class DeterminismTests(unittest.TestCase):
         self.assertEqual(core.validate(doc).errors, [])
 
 
+class ValueUnitsRangeTests(unittest.TestCase):
+    """valueUnits is a JSON integer with no float conversion, past int32.
+
+    The Unity half of Docs/OPEN_DECISIONS.md (r) step B widened the host column to
+    ``long[]``; Python's ``int`` was already unbounded, so the only way this side can
+    regress is a float creeping into the emitted JSON or into a total. A value past
+    int32's 2,147,483,647 is used so the retired 32-bit ceiling cannot come back
+    unnoticed. The unit and every stored number are unchanged by step B, so the fixture's
+    other values stay as they are.
+    """
+
+    PAST_INT_MAX = 3000000000
+
+    def big_doc(self):
+        doc = valid_doc()
+        doc["defs"][0]["valueUnits"] = self.PAST_INT_MAX
+        doc["props"][0]["valueUnits"] = self.PAST_INT_MAX
+        # prop_apple_000 overrides its def, so the total is 3e9 + 1 (orange) + 4 (plate).
+        doc["level"]["expected"]["valueUnits"] = self.PAST_INT_MAX + 1 + 4
+        return doc
+
+    def test_a_value_past_int32_stays_an_integer_in_the_json(self):
+        doc = self.big_doc()
+        canonical = core.canonical_doc(doc)
+        self.assertIs(type(canonical["defs"][0]["valueUnits"]), int)
+        self.assertIs(type(canonical["props"][0]["valueUnits"]), int)
+        self.assertEqual(canonical["defs"][0]["valueUnits"], self.PAST_INT_MAX)
+        self.assertEqual(canonical["props"][0]["valueUnits"], self.PAST_INT_MAX)
+
+        text = core.dump_doc(doc)
+        self.assertIn('"valueUnits": %d' % self.PAST_INT_MAX, text)
+        self.assertNotIn("%d.0" % self.PAST_INT_MAX, text)
+        self.assertNotIn("3e+09", text.lower())
+
+        back = json.loads(text)
+        self.assertIs(type(back["defs"][0]["valueUnits"]), int)
+        self.assertIs(type(back["props"][0]["valueUnits"]), int)
+        self.assertEqual(back["props"][0]["valueUnits"], self.PAST_INT_MAX)
+
+    def test_totals_stay_exact_past_int32(self):
+        doc = self.big_doc()
+        expected = self.PAST_INT_MAX + 1 + 4
+        total = core.value_units_total(doc)
+        self.assertIs(type(total), int)
+        self.assertEqual(total, expected)
+        self.assertEqual(core.expected_totals(doc)["valueUnits"], expected)
+        self.assertIs(type(core.expected_totals(doc)["valueUnits"]), int)
+
+        report = core.validate(doc)
+        self.assertEqual(report.errors, [])
+        self.assertEqual(report.warnings, [])
+
+    def test_a_fractional_value_is_refused_not_rounded(self):
+        # The mirror of the editor's whole-unit rule (Docs/OPEN_DECISIONS.md (j)): a float
+        # in the file is a data error, not something to truncate on the way to the host.
+        doc = valid_doc()
+        doc["props"][0]["valueUnits"] = 1.5
+        report = core.validate(doc)
+        self.assertTrue(any("valueUnits must be a whole number" in error
+                            for error in report.errors), report.errors)
+
+
 if __name__ == "__main__":
     unittest.main()

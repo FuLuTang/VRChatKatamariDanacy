@@ -1039,6 +1039,9 @@ def canonical_doc(doc, manifests=None):
             elif key == "absorbable":
                 continue      # recomputed below
             elif key == "valueUnits":
+                # A JSON integer, never a float (Docs/OPEN_DECISIONS.md (j)). Python ints are
+                # unbounded, so a declared value past int32 - the widened host column's range,
+                # (r) step B - is stored and re-emitted verbatim; int() is the identity for it.
                 value = int(value)
             out[key] = value
         aabb = out.get("aabb")
@@ -1112,6 +1115,7 @@ def canonical_doc(doc, manifests=None):
                 continue
             value = entry[key]
             if key == "valueUnits":
+                # Same rule as props[].valueUnits above: an integer, unbounded, no float hop.
                 value = int(value)
             elif key == "collider" and isinstance(value, dict):
                 value = collider_proxy.canonical_collider(value)

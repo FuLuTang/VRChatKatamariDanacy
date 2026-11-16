@@ -1118,6 +1118,25 @@ namespace VRCKatamari.Editor.LevelBuild
             return text.ToString();
         }
 
+        /// <summary>
+        /// True when <paramref name="current"/> is not within <paramref name="toleranceM"/> of
+        /// <paramref name="target"/> on every axis (or either is not a 3-vector). The one
+        /// comparison behind "write only when different" for the ball's start, so a second
+        /// import changes nothing.
+        /// </summary>
+        public static bool NeedsAlignment(float[] current, float[] target, float toleranceM)
+        {
+            if (target == null || target.Length != 3) return false;
+            if (current == null || current.Length != 3) return true;
+            for (int i = 0; i < 3; i++)
+            {
+                if (!IsFinite(current[i])) return true;
+                if (Math.Abs(current[i] - target[i]) > toleranceM) return true;
+            }
+
+            return false;
+        }
+
         /// <summary><c>meta.playerStart.facingDeg</c>: a finite yaw in -360..360 degrees.</summary>
         public static bool IsFacingDegValid(float facingDeg)
         {

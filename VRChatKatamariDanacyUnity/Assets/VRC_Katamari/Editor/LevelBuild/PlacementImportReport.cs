@@ -114,6 +114,12 @@ namespace VRCKatamari.Editor.LevelBuild
         public int V2MarkersUpdated;
         public int V2MarkersSkipped;
         public int V2MetaFieldsWritten;
+        /// <summary>
+        /// Writes to scene objects outside the managed tree that the importer owns for a level
+        /// with <c>meta.playerStart</c> (the descriptor's spawn and respawn height, the ball's
+        /// start). Counted in the headline's <c>other=</c> so the idempotency gate sees them.
+        /// </summary>
+        public int V2SceneWiringWrites;
         public int V2TerrainTriangles;
         public int V2TerrainChunks;
 
@@ -152,7 +158,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 : "";
             return "[level]" + arena + " +" + PropsCreated + " ~" + PropsUpdated + " -" + PropsDeleted +
                    " props=" + (PropsCreated + PropsUpdated + PropsSkipped) +
-                   " other=" + (StructuresCreated + StructuresUpdated + StructuresDeleted) +
+                   " other=" + (StructuresCreated + StructuresUpdated + StructuresDeleted +
+                                      V2SceneWiringWrites) +
                    " errors=" + PropErrors + v2;
         }
 
@@ -227,6 +234,7 @@ namespace VRCKatamari.Editor.LevelBuild
                     .Append(" skip=").Append(V2WallsSkipped);
                 text.AppendLine();
                 text.Append("  v2 meta: fields written=").Append(V2MetaFieldsWritten)
+                    .Append(", scene wiring writes=").Append(V2SceneWiringWrites)
                     .Append(", markers: +").Append(V2MarkersCreated).Append(" ~")
                     .Append(V2MarkersUpdated).Append(" skip=").Append(V2MarkersSkipped)
                     .Append(", terrain=").Append(V2TerrainTriangles).Append(" tri/")

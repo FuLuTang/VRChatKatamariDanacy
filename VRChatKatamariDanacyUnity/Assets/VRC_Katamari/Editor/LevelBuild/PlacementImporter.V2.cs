@@ -851,6 +851,8 @@ namespace VRCKatamari.Editor.LevelBuild
                 }
             }
 
+            if (motor != null) AlignBallToStart(doc, motor, behaviours, report);
+
             StoryRoundController round = UnityEngine.Object.FindObjectOfType<StoryRoundController>();
             if (round == null)
             {
@@ -908,6 +910,88 @@ namespace VRCKatamari.Editor.LevelBuild
                                  "the backing UdonBehaviour; re-run the import once the compile has " +
                                  "finished");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Puts the ball where the level says it starts: the motor's <c>startCenterWorld</c>
+        /// (serialized U# field) and the <c>MotorHost</c> object's world position are set to
+        /// <c>meta.ball.start</c>.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Same gate as the player's standing surface: only a level that declares
+        /// <c>meta.playerStart</c> owns where its players and its ball begin, so a lab cell or
+        /// a story level without it keeps whatever the operator placed. No motor in the scene is
+        /// a note, never an error.
+        /// </para>
+        /// <para>
+        /// The U# field is written the project's way (see <see cref="BindLevelMeta"/>): through
+        /// the proxy's <see cref="SerializedObject"/>, then the caller copies every touched
+        /// proxy to its backing <c>UdonBehaviour</c> with <c>CopyProxyToUdon</c> after one
+        /// compile; the behaviour is never destroyed or re-created. Values are compared first
+        /// (<see cref="PlacementV2Rules.NeedsAlignment"/>, 1 mm), so a second import writes
+        /// nothing and counts nothing.
+        /// </para>
+        /// <para>
+        /// There is no ball heading to align: the document carries none and the motor has no
+        /// serialized start heading (it starts at heading 0 = +Z and is turned by input), so the
+        /// importer only writes the position. The <c>MotorHost</c> rotation is left alone.
+        /// </para>
+        /// </remarks>
+        private static void AlignBallToStart(PlacementV2Document doc, KatamariBallMotor motor,
+            List<UdonSharpBehaviour> behaviours, PlacementImportReport report)
+        {
+            PlacementV2Meta meta = doc.Meta;
+            if (meta == null || meta.PlayerStart == null || meta.Ball == null ||
+                meta.Ball.Start == null || meta.Ball.Start.Length != 3)
+            {
+                return;
+            }
+
+            float[] target = meta.Ball.Start;
+            bool changed = false;
+
+            var serialized = new SerializedObject(motor);
+            SerializedProperty field = serialized.FindProperty("startCenterWorld");
+            if (field == null)
+            {
+                report.Error(V2Tag + "KatamariBallMotor has no startCenterWorld field; the ball's " +
+                             "start was not aligned");
+            }
+            else
+            {
+                Vector3 current = field.vector3Value;
+                if (PlacementV2Rules.NeedsAlignment(new[] { current.x, current.y, current.z },
+                        target, PositionToleranceM))
+                {
+                    field.vector3Value = new Vector3(target[0], target[1], target[2]);
+                    serialized.ApplyModifiedPropertiesWithoutUndo();
+                    EditorUtility.SetDirty(motor);
+                    if (!behaviours.Contains(motor)) behaviours.Add(motor);
+                    changed = true;
+                }
+            }
+
+            Transform host = motor.transform;
+            Vector3 position = host.position;
+            if (PlacementV2Rules.NeedsAlignment(new[] { position.x, position.y, position.z },
+                    target, PositionToleranceM))
+            {
+                Undo.RecordObject(host, UndoLabel);
+                host.position = new Vector3(target[0], target[1], target[2]);
+                EditorUtility.SetDirty(host);
+                changed = true;
+            }
+
+            if (changed)
+            {
+                MarkSceneDirty();
+                report.V2MetaFieldsWritten++;
+                report.V2SceneWiringWrites++;
+                report.Note(V2Tag + "ball aligned to meta.ball.start " + FormatPoint(target) +
+                            ": startCenterWorld and " + HierarchyPath(host) +
+                            " (the document carries no ball heading; the motor starts at +Z)");
             }
         }
 
@@ -1097,6 +1181,7 @@ namespace VRCKatamari.Editor.LevelBuild
             EditorUtility.SetDirty(descriptor);
             MarkSceneDirty();
             report.V2MetaFieldsWritten++;
+            report.V2SceneWiringWrites++;
             report.Note(V2Tag + "scene descriptor '" + descriptor.name + "': spawns=[" +
                         HierarchyPath(playerMarker) + "], RespawnHeightY=" +
                         descriptor.RespawnHeightY.ToString("0.###", CultureInfo.InvariantCulture) +

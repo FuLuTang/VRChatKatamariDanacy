@@ -346,6 +346,28 @@ namespace VRCKatamari.Tests
                 MeshPath("odd", "a b/c", false), "no path separators or spaces leak into the file name");
         }
 
+        [Test]
+        public void BallAlignmentIsNeededOnlyBeyondTheTolerance()
+        {
+            float[] target = { -5f, -0.999f, 2.5f };
+            Assert.IsFalse(Aligns(new[] { -5f, -0.999f, 2.5f }, target), "identical: write nothing");
+            Assert.IsFalse(Aligns(new[] { -5.0004f, -0.999f, 2.4996f }, target),
+                "within 1 mm on every axis: the second import stays +0");
+            Assert.IsTrue(Aligns(new[] { -5.002f, -0.999f, 2.5f }, target), "2 mm off in x");
+            Assert.IsTrue(Aligns(new[] { 0f, 0.15f, 0f }, target), "the motor's default start");
+            Assert.IsTrue(Aligns(new[] { -5f, -0.999f, float.NaN }, target), "a NaN is repaired");
+            Assert.IsTrue(Aligns(null, target), "no current value");
+            Assert.IsTrue(Aligns(new[] { 1f, 2f }, target), "wrong length");
+            Assert.IsFalse(Aligns(new[] { 1f, 2f, 3f }, null), "no target: nothing to align to");
+            Assert.IsFalse(Aligns(new[] { 1f, 2f, 3f }, new[] { 1f, 2f }), "malformed target");
+        }
+
+        private static bool Aligns(float[] current, float[] target)
+        {
+            return (bool)Invoke(FindType("VRCKatamari.Editor.LevelBuild.PlacementV2Rules"),
+                "NeedsAlignment", new object[] { current, target, 0.001f });
+        }
+
         private float RespawnHeight(float killPlaneY)
         {
             return (float)Invoke(rulesType, "RespawnHeightY", new object[] { killPlaneY });

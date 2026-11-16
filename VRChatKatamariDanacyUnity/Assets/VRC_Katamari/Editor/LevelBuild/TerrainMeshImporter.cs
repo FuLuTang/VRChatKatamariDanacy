@@ -30,8 +30,10 @@ namespace VRCKatamari.Editor.LevelBuild
     /// that) and does not introduce a second terrain format.
     /// </para>
     /// <para>
-    /// Idempotent by source sha256 + counts: a second import of the same file writes
-    /// nothing and logs <c>+0 ~0 -0</c>. It never saves a scene. A reference level
+    /// Idempotent by source sha256 + counts: a second import writes nothing and logs
+    /// <c>+0 ~0 -0</c> - but only after the UDON side is confirmed too (see
+    /// <see cref="EnsureUdonSide"/>; the arrays live twice and a host added in this session
+    /// starts with an empty U# variable table). It never saves a scene. A reference level
     /// (<c>meta.source.kind == "reference"</c>) is only accepted when the active scene is
     /// under <c>Assets/_RefUnlicensed/</c> and the level folder is <c>_ref_*</c>; this keeps
     /// terrain arrays out of <c>StoryMode.unity</c> and out of git (D-8).
@@ -58,6 +60,14 @@ namespace VRCKatamari.Editor.LevelBuild
             public int Triangles;
             public int Vertices;
             public int Chunks;
+            /// <summary>
+            /// True only when <c>CopyProxyToUdon</c> succeeded on this run. The terrain arrays
+            /// live in TWO places (the proxy's serialized fields and the backing UdonBehaviour),
+            /// and "already imported" is only honest when both are written.
+            /// </summary>
+            public bool UdonCopyIssued;
+            /// <summary>Why the Udon copy failed, when it did (for the error line).</summary>
+            public string UdonCopyError;
             public readonly List<string> Errors = new List<string>();
             public readonly List<string> Notes = new List<string>();
 
@@ -620,13 +630,19 @@ namespace VRCKatamari.Editor.LevelBuild
             SerializedProperty tri = serialized.FindProperty("triangleCount");
             SerializedProperty verts = serialized.FindProperty("vertexCount");
             SerializedProperty chunks = serialized.FindProperty("chunkCount");
-            if (sha != null && tri != null && verts != null && chunks != null &&
+            bool unchanged = sha != null && tri != null && verts != null && chunks != null &&
                 sha.stringValue == sourceSha && tri.intValue == geometry.TriangleCount &&
                 verts.intValue == geometry.VertexCount && chunks.intValue == geometry.ChunkCount &&
-                !created)
+                !created;
+            if (unchanged)
             {
+                // "Already imported" means BOTH sides are written: the proxy's arrays AND the
+                // backing UdonBehaviour's copy. Verifying only the proxy is what let a failed
+                // copy look like a no-op and never get repaired (see EnsureUdonSide).
+                if (!EnsureUdonSide(host, created, report)) return report;
                 report.Skipped = 1;
-                report.Notes.Add("already imported (sha256 and counts unchanged): +0 ~0 -0");
+                report.Notes.Add("already imported (sha256 and counts unchanged): +0 ~0 -0; " +
+                                 "the Udon side was re-copied and verified");
                 return report;
             }
 
@@ -650,18 +666,76 @@ namespace VRCKatamari.Editor.LevelBuild
             if (scene.IsValid() && scene.isLoaded) EditorSceneManager.MarkSceneDirty(scene);
             if (created) report.Created = 1; else report.Updated = 1;
 
-            try
-            {
-                UdonSharpProgramAsset.CompileAllCsPrograms(false, false);
-                UdonSharpEditorUtility.CopyProxyToUdon(host);
-            }
-            catch (Exception exception)
-            {
-                report.Error("[terrain_udon] CopyProxyToUdon threw: " + exception.Message);
-            }
+            if (!EnsureUdonSide(host, created, report)) return report;
             report.Notes.Add("terrain host at " + HierarchyPath(terrainRoot) +
                              "; scene is dirty but NOT saved");
             return report;
+        }
+
+        // -------------------------------------------------------------------- udon ---
+
+        /// <summary>
+        /// Writes the proxy's serialized fields into the backing UdonBehaviour, retrying once
+        /// after an asset refresh.
+        /// </summary>
+        /// <remarks>
+        /// THE TRAP THIS EXISTS FOR (measured 2026-11-16): a <see cref="TerrainFieldHost"/> this
+        /// importer ADDS has no U# program asset yet in that session, so <c>CopyProxyToUdon</c>
+        /// throws <c>Value cannot be null. Parameter name: key</c> and the arrays land on the
+        /// PROXY only. The next run then answered "already imported (+0 ~0 -0)" from the
+        /// sha256/counts and never repaired the Udon side. A newly added U# behaviour has an EMPTY
+        /// variable table for the rest of that session; a forced recompile (or save + reopen) is
+        /// what fills it. This method never claims success without a successful copy.
+        /// </remarks>
+        private static bool TryCopyProxyToUdon(TerrainFieldHost host, bool forceCompile,
+            TerrainImportReport report)
+        {
+            try
+            {
+                UdonSharpProgramAsset.CompileAllCsPrograms(forceCompile, false);
+                UdonSharpEditorUtility.CopyProxyToUdon(host);
+                report.UdonCopyIssued = true;
+                report.UdonCopyError = null;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                report.UdonCopyIssued = false;
+                report.UdonCopyError = exception.Message;
+                return false;
+            }
+        }
+
+        private static bool EnsureUdonSide(TerrainFieldHost host, bool createdHost,
+            TerrainImportReport report)
+        {
+            if (TryCopyProxyToUdon(host, false, report))
+            {
+                if (createdHost)
+                {
+                    report.Notes.Add("U# program compiled and copied on the first attempt");
+                }
+
+                return true;
+            }
+
+            // FORCE the compile on the second attempt: CompileAllCsPrograms' first parameter is
+            // forceCompile, and the non-forced call above is what CREATES the program asset for a
+            // component added in this session; the forced one is what makes the copy able to land.
+            if (TryCopyProxyToUdon(host, true, report))
+            {
+                report.Notes.Add("the Udon copy needed a second, force-compiled attempt (a host " +
+                                 "added in this session starts with an empty U# variable table); " +
+                                 "it succeeded now");
+                return true;
+            }
+
+            report.Error("[terrain_udon] CopyProxyToUdon failed twice (" + report.UdonCopyError +
+                         "). The arrays are on the proxy but NOT on the UdonBehaviour, so this run " +
+                         "is deliberately NOT counted as imported. A TerrainFieldHost added in this " +
+                         "session has an empty U# variable table until its program exists: save the " +
+                         "scene, reopen it, then run the terrain import again");
+            return false;
         }
 
         // -------------------------------------------------------------------- helpers ---

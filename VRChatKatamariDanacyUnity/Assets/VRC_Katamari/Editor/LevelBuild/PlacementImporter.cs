@@ -700,7 +700,8 @@ namespace VRCKatamari.Editor.LevelBuild
             // pass as the other arrays and reads it back, so there is no second write here.
             if (propsOk)
             {
-                TrySyncDeclaredFields(doc, levelRoot, propsRoot, report);
+                // v1 has no declaration for "this prop is a decal", so nothing is exempt.
+                TrySyncDeclaredFields(doc, levelRoot, propsRoot, report, null);
             }
 
             BindArenaHost(doc, levelRoot, structuresRoot, report, null, false, 0f);
@@ -3208,7 +3209,7 @@ namespace VRCKatamari.Editor.LevelBuild
         /// The sync is the only writer of the host arrays (OPEN_DECISIONS (q) U2).
         /// </remarks>
         private static void TrySyncDeclaredFields(PlacementDocument doc, Transform levelRoot,
-            Transform propsRoot, PlacementImportReport report)
+            Transform propsRoot, PlacementImportReport report, ISet<string> exemptFromField)
         {
             Dictionary<string, long> declaredGrowthMm3 = BuildDeclaredGrowthMm3(doc);
             Dictionary<string, float> declaredVolumeK = BuildDeclaredVolumeK(doc);
@@ -3217,14 +3218,14 @@ namespace VRCKatamari.Editor.LevelBuild
                 BuildDeclaredProxies(doc, report);
             report.GrowthMm3Declared = SumDeclaredGrowthMm3(doc);
             TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredGrowthMm3,
-                declaredVolumeK, declaredVolumePenalty, declaredProxies, report);
+                declaredVolumeK, declaredVolumePenalty, declaredProxies, exemptFromField, report);
         }
 
         private static bool TrySyncPickupField(Transform levelRoot, string arenaId, Transform propsRoot,
             IDictionary<string, long> declaredGrowthMm3, IDictionary<string, float> declaredVolumeK,
             IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
-            PlacementImportReport report)
+            ISet<string> exemptFromField, PlacementImportReport report)
         {
             PickupFieldHost[] hosts;
             if (!string.IsNullOrEmpty(arenaId))
@@ -3291,7 +3292,7 @@ namespace VRCKatamari.Editor.LevelBuild
             bool createMissingColliders = string.IsNullOrEmpty(arenaId);
             PickupFieldSyncReport sync = PickupFieldSync.SyncFromChildren(host, propsRoot,
                 declaredGrowthMm3, declaredVolumeK, declaredVolumePenalty, declaredProxies,
-                createMissingColliders);
+                createMissingColliders, exemptFromField);
             // The sync's own one-block summary is one of the design's expected console lines
             // and it carries the authoritative growth read-back:
             //   growthMm3: written=<sum>, fromFile=<n>, fromBounds=<n>, read-back: verified
@@ -3313,9 +3314,26 @@ namespace VRCKatamari.Editor.LevelBuild
                 report.GrowthProblems.Add(sync.GrowthMismatches[i]);
             }
 
+            // Rejections are the CAUSE of a failed sync, so they are printed BEFORE the
+            // failure line. The early return below used to skip them, which is why a dropped
+            // row showed up as "declared X, no row" with no reason anywhere in the log.
+            for (int i = 0; i < sync.Rejected.Count && i < 10; i++)
+            {
+                report.Error("sync rejected " + sync.Rejected[i].Path + ": " +
+                             sync.Rejected[i].Reason);
+            }
+
+            if (sync.Rejected.Count > 10)
+            {
+                report.Error("... " + (sync.Rejected.Count - 10) + " more sync rejection(s)");
+            }
+
             if (!sync.Success)
             {
-                report.Error("PickupFieldSync failed: " + sync.Failure);
+                report.Error("PickupFieldSync failed" +
+                             (sync.Rejected.Count > 0
+                                 ? " (" + sync.Rejected.Count + " rejected row(s), listed above)"
+                                 : "") + ": " + sync.Failure);
                 return false;
             }
 
@@ -3330,11 +3348,6 @@ namespace VRCKatamari.Editor.LevelBuild
                 report.Note("pickup sync added " + sync.CollidersCreated +
                             " BoxCollider(s) on props that had none, from each prop's visual local " +
                             "AABB; propColliders is now wired for every row");
-            }
-
-            for (int i = 0; i < sync.Rejected.Count && i < 10; i++)
-            {
-                report.Error("sync rejected " + sync.Rejected[i].Path + ": " + sync.Rejected[i].Reason);
             }
 
             return true;

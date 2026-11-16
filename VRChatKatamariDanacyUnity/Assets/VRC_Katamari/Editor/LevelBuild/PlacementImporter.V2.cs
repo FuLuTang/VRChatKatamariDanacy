@@ -182,7 +182,8 @@ namespace VRCKatamari.Editor.LevelBuild
 
             if (propsOk)
             {
-                TrySyncDeclaredFields(view, levelRoot, propsRoot, report);
+                TrySyncDeclaredFields(view, levelRoot, propsRoot, report,
+                    BuildNonFieldProps(doc, report));
             }
 
             BindArenaHost(view, levelRoot, structuresRoot, report,
@@ -997,6 +998,47 @@ namespace VRCKatamari.Editor.LevelBuild
             else if (!matches) report.V2MarkersUpdated++;
             else report.V2MarkersSkipped++;
             return true;
+        }
+
+        // --------------------------------------------------------- pickup exemption ---
+
+        /// <summary>
+        /// The props this document declares as NOT participating in the pickup field.
+        /// </summary>
+        /// <remarks>
+        /// D-5's fourth layer (§18.3 ③), and nothing else: non-uniformly scaled, no collider in
+        /// its def, not absorbable - the reference level's <c>sparrow_001</c> (a 1.7 cm decal). It
+        /// has no contact shape and cannot be absorbed, so a gameplay row would be a row nothing
+        /// can use. Saying so here beats a size threshold that drops it silently and then fails its
+        /// own read-back with "declared k, no row". A non-uniform prop WITH a collider, an
+        /// absorbable one, or a uniform decal all keep their rows: no general rule is loosened.
+        /// </remarks>
+        private static ISet<string> BuildNonFieldProps(PlacementV2Document doc,
+            PlacementImportReport report)
+        {
+            var exempt = new HashSet<string>(StringComparer.Ordinal);
+            if (doc == null || doc.Props == null) return exempt;
+            for (int i = 0; i < doc.Props.Length; i++)
+            {
+                PlacementV2Prop prop = doc.Props[i];
+                if (prop == null || string.IsNullOrEmpty(prop.ItemId)) continue;
+                if (!prop.HasScale || PlacementV2Rules.IsUniformScale(prop.Scale)) continue;
+                if (prop.Absorbable) continue;
+                PlacementV2Def def = PlacementV2Rules.DefOf(doc, prop);
+                if (def != null && def.Collider != null) continue;
+                exempt.Add(prop.ItemId);
+            }
+
+            if (exempt.Count > 0)
+            {
+                var ids = new List<string>(exempt);
+                ids.Sort(StringComparer.Ordinal);
+                report.Note(V2Tag + exempt.Count + " prop(s) declared as non-participating decals " +
+                            "(non-uniform scale, no collider, not absorbable), exempt from the pickup " +
+                            "field by design: " + string.Join(", ", ids.ToArray()));
+            }
+
+            return exempt;
         }
 
         // --------------------------------------------------------------- terrain ---

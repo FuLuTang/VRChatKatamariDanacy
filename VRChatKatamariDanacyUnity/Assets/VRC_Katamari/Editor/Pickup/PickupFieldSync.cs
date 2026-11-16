@@ -255,11 +255,18 @@ namespace VRCKatamari.Editor.Pickup
         /// <c>defs[].collider</c> mapped to item ids. A null map is the menu path and
         /// preserves every row already serialized on the host.
         /// </summary>
+        /// <param name="exemptFromField">
+        /// Item ids that must NOT get a pickup row even though the level declares them: D-5's
+        /// fourth layer (§18.3 ③), a non-uniformly scaled, collider-less, non-absorbable decal.
+        /// Exempt ids are removed before validation (no row, no rejection) and dropped from the
+        /// declaration maps the read-back compares against, so "declared k, no row" cannot fire
+        /// for them. Null means "nothing is exempt" - the v1 and menu path.
+        /// </param>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
             IDictionary<string, long> declaredGrowthMm3, IDictionary<string, float> declaredVolumeK,
             IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
-            bool createMissingColliders)
+            bool createMissingColliders, ISet<string> exemptFromField = null)
         {
             var report = new PickupFieldSyncReport();
             // The growth column is written from the authored file values when present, and
@@ -307,6 +314,31 @@ namespace VRCKatamari.Editor.Pickup
                 ReadExistingProxies(host);
 
             List<PropCandidate> candidates = CollectCandidates(fieldRoot);
+            if (exemptFromField != null && exemptFromField.Count > 0)
+            {
+                int removed = 0;
+                for (int i = candidates.Count - 1; i >= 0; i--)
+                {
+                    if (candidates[i].ItemId != null && exemptFromField.Contains(candidates[i].ItemId))
+                    {
+                        candidates.RemoveAt(i);
+                        removed++;
+                    }
+                }
+
+                if (removed > 0)
+                {
+                    report.Notes.Add(removed + " prop(s) are declared as NOT participating in the " +
+                                     "pickup field (D-5 decal: non-uniform scale, no collider, not " +
+                                     "absorbable), so no row is written for them by design");
+                }
+
+                // The read-back checks compare against the declaration maps, so an exempt id has
+                // to leave those maps too - otherwise "declared k, no row" reports a prop that
+                // was deliberately left out.
+                declaredVolumeK = DropExempt(declaredVolumeK, exemptFromField);
+                declaredProxies = DropExemptProxies(declaredProxies, exemptFromField);
+            }
             List<PropRow> rows = ValidateCandidates(candidates, declaredGrowthMm3,
                 declaredVolumeK, existingVolumeK, declaredVolumePenalty,
                 declaredProxies, existingProxies,
@@ -417,6 +449,36 @@ namespace VRCKatamari.Editor.Pickup
             /// <summary>The def's collider proxy; null means the row keeps its OBB shape.</summary>
             public PickupFieldAuthoringRules.PickupProxyDefinition Proxy;
             public Collider PrimaryCollider;
+        }
+
+        private static IDictionary<string, float> DropExempt(IDictionary<string, float> declared,
+            ISet<string> exempt)
+        {
+            if (declared == null || exempt == null || exempt.Count == 0) return declared;
+            var kept = new Dictionary<string, float>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, float> pair in declared)
+            {
+                if (!exempt.Contains(pair.Key)) kept[pair.Key] = pair.Value;
+            }
+
+            return kept;
+        }
+
+        private static IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition>
+            DropExemptProxies(
+                IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declared,
+                ISet<string> exempt)
+        {
+            if (declared == null || exempt == null || exempt.Count == 0) return declared;
+            var kept = new Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition>(
+                StringComparer.Ordinal);
+            foreach (KeyValuePair<string, PickupFieldAuthoringRules.PickupProxyDefinition> pair in
+                     declared)
+            {
+                if (!exempt.Contains(pair.Key)) kept[pair.Key] = pair.Value;
+            }
+
+            return kept;
         }
 
         private static List<PropCandidate> CollectCandidates(Transform fieldRoot)

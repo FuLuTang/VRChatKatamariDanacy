@@ -1,0 +1,14 @@
+diff --git a/VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity b/VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity
+index 6693f8b..4bc4991 100644
+--- a/VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity
++++ b/VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity
+@@ -1337,2 +1337,2 @@ Transform:
+-  m_LocalRotation: {x: -0.03403166, y: 0, z: 0, w: 0.99942076}
+-  m_LocalPosition: {x: 0, y: 0.15, z: -2.2}
++  m_LocalRotation: {x: 0, y: 1, z: 0, w: -0.00000004371139}
++  m_LocalPosition: {x: -12.5, y: 0.15, z: -10.4}
+@@ -14257,0 +14258,2 @@ MonoBehaviour:
++  disableAutoSeat: 0
++  seatCheckFrames: 30
+@@ -14267,0 +14270 @@ MonoBehaviour:
++  holdGraceSeconds: 2.5

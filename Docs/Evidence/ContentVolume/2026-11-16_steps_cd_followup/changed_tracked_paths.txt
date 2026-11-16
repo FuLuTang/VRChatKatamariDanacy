@@ -1,0 +1,2 @@
+VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Pickup/PickupFieldSync.cs
+VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity

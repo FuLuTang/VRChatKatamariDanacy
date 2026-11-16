@@ -961,7 +961,7 @@ namespace VRCKatamari.Editor.Pickup
                 // AUTHORITY: the placement file's authored growthMm3 (the canonical writer's
                 // double-precision number). The bounds-priced value is computed only to verify
                 // it; see GrowthAgreementFraction for why they cannot match exactly.
-                long declaredGrowth;
+                long declaredGrowth = 0L;
                 bool hasDeclaredGrowth = declaredGrowthMm3 != null &&
                     declaredGrowthMm3.TryGetValue(candidate.ItemId, out declaredGrowth) &&
                     declaredGrowth > 0L;

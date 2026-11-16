@@ -1,0 +1,7 @@
+{
+  "success": true,
+  "message": "Retrieved 1 log entries.",
+  "data": [
+    "[level] +0 ~0 -0 props=130 other=0 errors=0  level=story_01_bench_size  scene=StoryMode\n  placement: D:\\VRChatKatamariDanacy\\Docs\\Design\\Levels\\story_01_bench_size\\placement.json\n  managed root: LevelContent\n  props: 130 unchanged, 0 error(s)\n  structures: +0 ~0 -0\n  pickup sync: ran, rows=130, rejected=0; udon copy: issued\n  propColliders: created=0\n  growthMm3: declared=1417085102, fromFile=130, fromBounds=0, read-back: verified\n  arena: wired (boxes=4, walls=4, ramps=2, kinds=11)\n  note: found 2 PickupFieldHost in the scene; syncing LevelContent (the first in hierarchy order). A cell must own exactly one host\n  note: pickup sync wrote 130 row(s) into 8 columns, including propVolumeK (per-item volume factor): 0 row(s) declared a k, the rest play at the original's 0.70 default\n  note: level.ballDiameterStart=0.2997 m: set KatamariBallMotor.startDiameterWorldM to that value to start the ball at this level's size (leave it at 0 for the calibration's 0.2997 m)\n  the scene is left dirty on purpose: this tool never saves (save when you have checked it)"
+  ]
+}

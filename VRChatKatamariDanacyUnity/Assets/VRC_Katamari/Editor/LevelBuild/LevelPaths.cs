@@ -294,11 +294,25 @@ namespace VRCKatamari.Editor.LevelBuild
                    File.Exists(Path.Combine(directory, PlacementV2FileName));
         }
 
-        /// <summary>True when the id names an unlicensed reference level (<c>_ref_*</c>).</summary>
+        /// <summary>
+        /// True when ANY segment of the id names an unlicensed reference level (<c>_ref_*</c>).
+        /// </summary>
+        /// <remarks>
+        /// Any segment, not just the last one: a nested id such as <c>_ref_cancer/area2</c> is
+        /// still reference data, and checking only the leaf let it slip through the
+        /// "never write reference content into a tracked scene" guard.
+        /// </remarks>
         public static bool IsReferenceLevelId(string levelId)
         {
-            return !string.IsNullOrEmpty(levelId) &&
-                   LeafOf(levelId).StartsWith("_ref_", StringComparison.Ordinal);
+            if (string.IsNullOrEmpty(levelId)) return false;
+            string[] segments = levelId.Split(new[] { '/', '\\' },
+                StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < segments.Length; i++)
+            {
+                if (segments[i].StartsWith("_ref_", StringComparison.Ordinal)) return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -352,10 +366,15 @@ namespace VRCKatamari.Editor.LevelBuild
             if (IsLevelDirectory(directory))
             {
                 string declared = DeclaredIdOf(directory);
+                // TWO comparisons, both about the QUERY: the full id the caller asked for, or
+                // its last segment (so "C21" and "physics_test_field/C21" both reach the same
+                // level). There used to be a third one, `declared == RelativeIdOf(directory)`,
+                // which for a top-level level compares the document's own id with the folder it
+                // sits in - always equal - so EVERY query matched the first level directory it
+                // walked into (`no_such_level_anywhere` resolved to _ref_cancer).
                 if (declared != null &&
                     (string.Equals(declared, fullId, StringComparison.Ordinal) ||
-                     string.Equals(declared, leaf, StringComparison.Ordinal) ||
-                     string.Equals(declared, RelativeIdOf(directory), StringComparison.Ordinal)))
+                     string.Equals(declared, leaf, StringComparison.Ordinal)))
                 {
                     return directory;
                 }
@@ -419,7 +438,10 @@ namespace VRCKatamari.Editor.LevelBuild
             string text = null;
             string canonical = Path.Combine(levelDirectory, PlacementFileName);
             if (File.Exists(canonical)) text = TryReadText(canonical);
-            if (text == null || text.IndexOf(PlacementV2Reader.SchemaName, StringComparison.Ordinal) < 0)
+            // Same rule as the filename preference: parsed schema, not a substring. A v1
+            // document that merely MENTIONS "katamari.placement/2" must not keep us from
+            // reading the side file's declared id.
+            if (text == null || !IsV2Document(text))
             {
                 string side = Path.Combine(levelDirectory, PlacementV2FileName);
                 if (File.Exists(side)) text = TryReadText(side);
@@ -441,16 +463,6 @@ namespace VRCKatamari.Editor.LevelBuild
             if (meta != null && meta.Kind == LevelJsonKind.Object) return meta;
             LevelJsonNode level = root.Get("level");
             return level != null && level.Kind == LevelJsonKind.Object ? level : null;
-        }
-
-        private static string RelativeIdOf(string directory)
-        {
-            string levels = LevelsFolder();
-            if (levels == null) return null;
-            string full = Path.GetFullPath(directory);
-            string prefix = Path.GetFullPath(levels) + Path.DirectorySeparatorChar;
-            if (!full.StartsWith(prefix, StringComparison.Ordinal)) return Path.GetFileName(full);
-            return full.Substring(prefix.Length).Replace(Path.DirectorySeparatorChar, '/');
         }
 
         private static string TryReadText(string path)

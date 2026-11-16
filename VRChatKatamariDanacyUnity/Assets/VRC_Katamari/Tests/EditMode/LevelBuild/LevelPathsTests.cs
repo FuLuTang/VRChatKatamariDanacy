@@ -149,6 +149,88 @@ namespace VRCKatamari.Tests
             Assert.IsFalse((bool)Invoke("IsReferenceLevelId", new object[] { "story_01_bench_size" }));
         }
 
+        // ------------------------------------------------------- resolution guards ---
+
+        [Test]
+        public void AnUnknownIdMustNotResolve()
+        {
+            // The regression this pins: the declared-id scan had a third comparison
+            // (`declared == the folder's own relative path`) that is TRUE for every top-level
+            // level, so any unknown id "resolved" to the first level directory walked into -
+            // _ref_cancer, alphabetically first. `no_such_level_anywhere` resolved successfully
+            // and this fixture only noticed because it also asserted the diagnostics.
+            AssertUnknown("no_such_level_anywhere");
+            AssertUnknown("_ref_cancer/nope");
+            AssertUnknown("physics_test_field/nope");
+            AssertUnknown("nope");
+        }
+
+        [Test]
+        public void EveryRealLevelResolvesToItself()
+        {
+            // One test that catches "every id resolves to the first level" for good: walk the
+            // real level tree, and require each id to come back to its OWN directory.
+            string levels = (string)Invoke("LevelsFolder", new object[0]);
+            if (string.IsNullOrEmpty(levels))
+            {
+                Assert.Ignore("no Docs/Design/Levels above this project; skipped");
+            }
+
+            var ids = new List<string>();
+            CollectLevelIds(levels, "", ids, false);
+            Assert.Greater(ids.Count, 0, "no level directories found under " + levels);
+
+            var wrong = new List<string>();
+            for (int i = 0; i < ids.Count; i++)
+            {
+                string expected = System.IO.Path.GetFullPath(System.IO.Path.Combine(levels,
+                    ids[i].Replace('/', System.IO.Path.DirectorySeparatorChar)));
+                var args = new object[] { ids[i], null, new List<string>() };
+                bool found = (bool)Invoke("TryResolveLevelDirectory", args);
+                string actual = args[1] == null
+                    ? "(null)"
+                    : System.IO.Path.GetFullPath((string)args[1]);
+                if (!found || !string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+                {
+                    wrong.Add(ids[i] + " -> " + actual + " (expected " + expected + ")");
+                }
+            }
+
+            Assert.AreEqual(0, wrong.Count,
+                "level ids that do not resolve to their own directory:\n  " +
+                string.Join("\n  ", wrong.ToArray()));
+        }
+
+        private void AssertUnknown(string levelId)
+        {
+            var tried = new List<string>();
+            var args = new object[] { levelId, null, tried };
+            bool found = (bool)Invoke("TryResolveLevelDirectory", args);
+            Assert.IsFalse(found, "'" + levelId + "' must not resolve; it returned " + args[1]);
+            Assert.IsNull(args[1], "a failed resolution must leave the directory null");
+            Assert.Greater(tried.Count, 0, "'" + levelId + "' failed without naming a candidate; " +
+                                          "the tried list is the only way to debug a miss");
+        }
+
+        /// <summary>Relative ids of every level directory, one folder of nesting (like the resolver).</summary>
+        private void CollectLevelIds(string directory, string prefix, List<string> ids, bool nested)
+        {
+            string[] children = System.IO.Directory.GetDirectories(directory);
+            Array.Sort(children, StringComparer.Ordinal);
+            for (int i = 0; i < children.Length; i++)
+            {
+                string name = System.IO.Path.GetFileName(children[i]);
+                string id = string.IsNullOrEmpty(prefix) ? name : prefix + "/" + name;
+                if ((bool)Invoke("IsLevelDirectory", new object[] { children[i] }))
+                {
+                    ids.Add(id);
+                    continue;
+                }
+
+                if (!nested) CollectLevelIds(children[i], id, ids, true);
+            }
+        }
+
         // ------------------------------------------------- placement-document order ---
         // These pin the rule without the git-ignored reference tree: build the two candidate
         // files in a temp directory and read which one the resolver picks.

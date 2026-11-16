@@ -83,6 +83,33 @@ namespace VRCKatamari.Editor.LevelBuild
         public int ArenaKinds;
         public bool ArenaWired;
 
+        // ---- v2 layers (a v1 document leaves every one of these at its default) ----
+        /// <summary>True when the run read a <c>katamari.placement/2</c> document.</summary>
+        public bool V2Document;
+        /// <summary>How long the v2 reader took, for the operator's "is this slow" question.</summary>
+        public double V2ParseMilliseconds;
+        public int V2Props;
+        public int V2Defs;
+        public int V2Solids;
+        public int V2ParentEdges;
+        public int V2NonUniformScales;
+        public int V2WallSegments;
+        public long V2GrowthMm3Declared;
+        /// <summary>A prop priced its growth from the <c>volumeMm3</c> alias (growth was absent).</summary>
+        public bool V2GrowthAliasUsed;
+        /// <summary>The document declared at least one <c>absorbable:false</c> prop (not enforced).</summary>
+        public bool V2AbsorbableDeclarations;
+        public int V2WallsCreated;
+        public int V2WallsUpdated;
+        public int V2WallsDeleted;
+        public int V2WallsSkipped;
+        public int V2MarkersCreated;
+        public int V2MarkersUpdated;
+        public int V2MarkersSkipped;
+        public int V2MetaFieldsWritten;
+        public int V2TerrainTriangles;
+        public int V2TerrainChunks;
+
         public bool Success;
         public string Failure;
 
@@ -113,10 +140,13 @@ namespace VRCKatamari.Editor.LevelBuild
         public string Headline()
         {
             string arena = string.IsNullOrEmpty(ArenaId) ? "" : " cell=" + ArenaId;
+            string v2 = V2Document
+                ? " v2=" + V2Props + "/" + V2Defs + "/" + V2Solids + "/" + V2WallSegments
+                : "";
             return "[level]" + arena + " +" + PropsCreated + " ~" + PropsUpdated + " -" + PropsDeleted +
                    " props=" + (PropsCreated + PropsUpdated + PropsSkipped) +
                    " other=" + (StructuresCreated + StructuresUpdated + StructuresDeleted) +
-                   " errors=" + PropErrors;
+                   " errors=" + PropErrors + v2;
         }
 
         public string BuildSummary()
@@ -177,6 +207,33 @@ namespace VRCKatamari.Editor.LevelBuild
                 .Append(" (boxes=").Append(ArenaBoxes).Append(", walls=").Append(ArenaPlanes)
                 .Append(", ramps=").Append(ArenaRamps).Append(", kinds=")
                 .Append(ArenaKinds).Append(")");
+
+            if (V2Document)
+            {
+                text.AppendLine();
+                text.Append("  v2 layers: solids=").Append(V2Solids)
+                    .Append(", parents=").Append(V2ParentEdges)
+                    .Append(", nonUniformScales=").Append(V2NonUniformScales)
+                    .Append(", motions/paths parsed only; walls=").Append(V2WallSegments)
+                    .Append(" segment(s): +").Append(V2WallsCreated).Append(" ~")
+                    .Append(V2WallsUpdated).Append(" -").Append(V2WallsDeleted)
+                    .Append(" skip=").Append(V2WallsSkipped);
+                text.AppendLine();
+                text.Append("  v2 meta: fields written=").Append(V2MetaFieldsWritten)
+                    .Append(", markers: +").Append(V2MarkersCreated).Append(" ~")
+                    .Append(V2MarkersUpdated).Append(" skip=").Append(V2MarkersSkipped)
+                    .Append(", terrain=").Append(V2TerrainTriangles).Append(" tri/")
+                    .Append(V2TerrainChunks).Append(" chunk");
+                text.AppendLine();
+                text.Append("  v2 read: ").Append(V2Props).Append(" props, ").Append(V2Defs)
+                    .Append(" defs, ").Append(V2Solids).Append(" solids, growthMm3=")
+                    .Append(V2GrowthMm3Declared)
+                    .Append(V2GrowthAliasUsed ? " (alias used for >=1 prop)" : "")
+                    .Append(", parsed in ")
+                    .Append(V2ParseMilliseconds.ToString("0.0",
+                        System.Globalization.CultureInfo.InvariantCulture))
+                    .Append(" ms");
+            }
 
             for (int i = 0; i < GrowthProblems.Count; i++)
             {

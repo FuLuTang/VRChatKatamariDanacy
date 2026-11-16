@@ -115,12 +115,26 @@ namespace VRCKatamari.Editor.LevelBuild
         public static TerrainImportReport Import(string levelId)
         {
             var report = new TerrainImportReport { LevelId = levelId };
-            string levelDir = Path.Combine(ProjectRoot(), "Docs/Design/Levels", levelId);
-            string path = FindPlacementV2Path(levelDir);
-            if (path == null)
+            // The repository root, a nested level id ("physics_test_field/C21") and the
+            // canonical-vs-side filename order all come from LevelPaths: the importer and this
+            // tool must not answer "where is Docs/Design/Levels" in two different ways (that
+            // was the measured defect: ProjectRoot() is the UNITY project directory).
+            string levelDir;
+            List<string> tried;
+            if (!LevelPaths.TryResolveLevelDirectory(levelId, out levelDir, out tried))
             {
-                report.Error("[terrain_source] no placement.v2.json (or v2 placement.json) under " +
-                             levelDir);
+                report.Error("[terrain_source] no level directory for '" + levelId +
+                             "'. Searched:\n  " + string.Join("\n  ", tried.ToArray()));
+                return report;
+            }
+
+            string path;
+            var placementTried = new List<string>();
+            if (!LevelPaths.TryResolvePlacementIn(levelDir, out path, out placementTried))
+            {
+                report.Error("[terrain_source] no placement.json / placement.v2.json in " +
+                             levelDir + ". Searched:\n  " +
+                             string.Join("\n  ", placementTried.ToArray()));
                 return report;
             }
 
@@ -128,7 +142,7 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 string json = File.ReadAllText(path, Encoding.UTF8);
                 if (json.Length > 0 && json[0] == '\uFEFF') json = json.Substring(1);
-                Node root = new JsonParser(json).Parse();
+                LevelJsonNode root = new LevelJsonParser(json).Parse();
                 return ImportDocument(levelId, levelDir, path, json, root, report);
             }
             catch (Exception exception)
@@ -139,9 +153,9 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         private static TerrainImportReport ImportDocument(string levelId, string levelDir,
-            string path, string json, Node root, TerrainImportReport report)
+            string path, string json, LevelJsonNode root, TerrainImportReport report)
         {
-            if (root == null || root.Kind != NodeKind.Object)
+            if (root == null || root.Kind != LevelJsonKind.Object)
             {
                 report.Error("[terrain_source] the document is not a JSON object");
                 return report;
@@ -154,9 +168,9 @@ namespace VRCKatamari.Editor.LevelBuild
                 return report;
             }
 
-            Node meta = root.Get("meta");
-            Node terrain = root.Get("terrain");
-            if (terrain == null || terrain.Kind != NodeKind.Object)
+            LevelJsonNode meta = root.Get("meta");
+            LevelJsonNode terrain = root.Get("terrain");
+            if (terrain == null || terrain.Kind != LevelJsonKind.Object)
             {
                 report.Error("[terrain_source] no terrain block");
                 return report;
@@ -266,12 +280,12 @@ namespace VRCKatamari.Editor.LevelBuild
             public string SidecarSha;
         }
 
-        private static bool TryReadGeometry(string levelDir, Node terrain,
+        private static bool TryReadGeometry(string levelDir, LevelJsonNode terrain,
             out TerrainGeometry geometry, out string error)
         {
             geometry = null;
             error = null;
-            Node meshRef = terrain.Get("meshRef");
+            LevelJsonNode meshRef = terrain.Get("meshRef");
             Vector3[] vertices;
             int[] indices;
             int[] zoneIds;
@@ -297,7 +311,7 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 if (!TryReadVertices(terrain.Get("vertices"), out vertices, out error)) return false;
                 if (!TryReadInts(terrain.Get("indices"), out indices, out error)) return false;
-                Node triangles = terrain.Get("triangles");
+                LevelJsonNode triangles = terrain.Get("triangles");
                 if (triangles == null)
                 {
                     error = "[terrain_mesh] inline terrain needs a triangles block";
@@ -311,7 +325,7 @@ namespace VRCKatamari.Editor.LevelBuild
                     return false;
                 }
                 zoneIds = null;
-                Node zoneNode = triangles.Get("zoneIds");
+                LevelJsonNode zoneNode = triangles.Get("zoneIds");
                 if (zoneNode != null && !TryReadInts(zoneNode, out zoneIds, out error)) return false;
             }
 
@@ -322,7 +336,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 return false;
             }
             if (vertices.Length == 0) { error = "[terrain_mesh] no vertices"; return false; }
-            Node trianglesBlock = terrain.Get("triangles");
+            LevelJsonNode trianglesBlock = terrain.Get("triangles");
             int declaredCount = trianglesBlock != null
                 ? trianglesBlock.GetInt("count", -1) : -1;
             if (declaredCount >= 0 && declaredCount != triangleCount2)
@@ -370,19 +384,19 @@ namespace VRCKatamari.Editor.LevelBuild
             return true;
         }
 
-        private static bool TryReadChunks(Node chunks, int triangleCount, int[] zoneIds,
+        private static bool TryReadChunks(LevelJsonNode chunks, int triangleCount, int[] zoneIds,
             out int[] starts, out int[] counts, out int[] zones, out string error)
         {
             error = null;
             var startList = new List<int>();
             var countList = new List<int>();
             var zoneList = new List<int>();
-            if (chunks != null && chunks.Kind == NodeKind.Array && chunks.Count > 0)
+            if (chunks != null && chunks.Kind == LevelJsonKind.Array && chunks.Count > 0)
             {
                 int expected = 0;
                 for (int i = 0; i < chunks.Count; i++)
                 {
-                    Node range = chunks.At(i).Get("triangleRange");
+                    LevelJsonNode range = chunks.At(i).Get("triangleRange");
                     if (range == null || range.Count != 2)
                     {
                         error = "[terrain_broadphase] chunks[" + i + "].triangleRange must be [start,count]";
@@ -663,26 +677,10 @@ namespace VRCKatamari.Editor.LevelBuild
         {
             GameObject root = GameObject.Find(ManagedRootName);
             if (root == null) return null;
-            Transform child = root.transform.Find(levelId);
+            // A nested id ("physics_test_field/C21") names a DIRECTORY, not a hierarchy: the
+            // managed root is always LevelContent/<meta.id>, so only the leaf can match.
+            Transform child = root.transform.Find(LevelPaths.LeafOf(levelId));
             return child;
-        }
-
-        private static string FindPlacementV2Path(string levelDir)
-        {
-            string v2 = Path.Combine(levelDir, "placement.v2.json");
-            if (File.Exists(v2)) return v2;
-            string fallback = Path.Combine(levelDir, "placement.json");
-            if (File.Exists(fallback))
-            {
-                string text = File.ReadAllText(fallback, Encoding.UTF8);
-                if (text.Contains("\"katamari.placement/2\"")) return fallback;
-            }
-            return null;
-        }
-
-        private static string ProjectRoot()
-        {
-            return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
         }
 
         private static string Sha256Hex(byte[] bytes)
@@ -751,11 +749,11 @@ namespace VRCKatamari.Editor.LevelBuild
                 property.GetArrayElementAtIndex(i).intValue = values[i];
         }
 
-        private static bool TryReadVertices(Node node, out Vector3[] values, out string error)
+        private static bool TryReadVertices(LevelJsonNode node, out Vector3[] values, out string error)
         {
             values = null;
             error = null;
-            if (node == null || node.Kind != NodeKind.Array)
+            if (node == null || node.Kind != LevelJsonKind.Array)
             {
                 error = "[terrain_mesh] vertices must be an array";
                 return false;
@@ -763,8 +761,8 @@ namespace VRCKatamari.Editor.LevelBuild
             values = new Vector3[node.Count];
             for (int i = 0; i < node.Count; i++)
             {
-                Node point = node.At(i);
-                if (point == null || point.Kind != NodeKind.Array || point.Count != 3)
+                LevelJsonNode point = node.At(i);
+                if (point == null || point.Kind != LevelJsonKind.Array || point.Count != 3)
                 {
                     error = "[terrain_mesh] vertices[" + i + "] must be [x,y,z]";
                     return false;
@@ -775,11 +773,11 @@ namespace VRCKatamari.Editor.LevelBuild
             return true;
         }
 
-        private static bool TryReadInts(Node node, out int[] values, out string error)
+        private static bool TryReadInts(LevelJsonNode node, out int[] values, out string error)
         {
             values = null;
             error = null;
-            if (node == null || node.Kind != NodeKind.Array)
+            if (node == null || node.Kind != LevelJsonKind.Array)
             {
                 error = "[terrain_mesh] expected an integer array";
                 return false;
@@ -790,178 +788,9 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         // ----------------------------------------------------------------------- JSON ---
-
-        private enum NodeKind { Null, Bool, Number, String, Array, Object }
-
-        private sealed class Node
-        {
-            public NodeKind Kind;
-            public bool BoolValue;
-            public double NumberValue;
-            public string StringValue;
-            public List<Node> Items;
-            public Dictionary<string, Node> Fields;
-
-            public int Count { get { return Items == null ? 0 : Items.Count; } }
-            public Node At(int index)
-            {
-                return Items != null && index >= 0 && index < Items.Count ? Items[index] : null;
-            }
-            public Node Get(string name)
-            {
-                return Fields != null && Fields.ContainsKey(name) ? Fields[name] : null;
-            }
-            public string GetString(string name)
-            {
-                Node node = Get(name);
-                return node == null ? null : node.StringValue;
-            }
-            public int GetInt(string name, int fallback)
-            {
-                Node node = Get(name);
-                return node == null ? fallback : node.AsInt();
-            }
-            public int AsInt()
-            {
-                return Kind == NodeKind.Number ? (int)Math.Round(NumberValue) : 0;
-            }
-            public float AsFloat()
-            {
-                return Kind == NodeKind.Number ? (float)NumberValue : 0f;
-            }
-        }
-
-        private sealed class JsonParser
-        {
-            private readonly string text;
-            private int index;
-
-            public JsonParser(string text) { this.text = text; }
-
-            public Node Parse()
-            {
-                Node node = ParseValue();
-                SkipWhitespace();
-                if (index != text.Length) throw new FormatException("trailing JSON at " + index);
-                return node;
-            }
-
-            private Node ParseValue()
-            {
-                SkipWhitespace();
-                if (index >= text.Length) throw new FormatException("unexpected end of JSON");
-                char c = text[index];
-                if (c == '{') return ParseObject();
-                if (c == '[') return ParseArray();
-                if (c == '"') return new Node { Kind = NodeKind.String, StringValue = ParseString() };
-                if (c == 't' || c == 'f')
-                {
-                    bool value = c == 't';
-                    Expect(value ? "true" : "false");
-                    return new Node { Kind = NodeKind.Bool, BoolValue = value };
-                }
-                if (c == 'n') { Expect("null"); return new Node { Kind = NodeKind.Null }; }
-                return new Node { Kind = NodeKind.Number, NumberValue = ParseNumber() };
-            }
-
-            private Node ParseObject()
-            {
-                index++; // {
-                var fields = new Dictionary<string, Node>(StringComparer.Ordinal);
-                SkipWhitespace();
-                if (index < text.Length && text[index] == '}') { index++; return new Node { Kind = NodeKind.Object, Fields = fields }; }
-                while (true)
-                {
-                    SkipWhitespace();
-                    string key = ParseString();
-                    SkipWhitespace();
-                    if (index >= text.Length || text[index] != ':')
-                        throw new FormatException("expected ':' at " + index);
-                    index++;
-                    fields[key] = ParseValue();
-                    SkipWhitespace();
-                    if (index >= text.Length) throw new FormatException("unterminated object");
-                    if (text[index] == ',') { index++; continue; }
-                    if (text[index] == '}') { index++; break; }
-                    throw new FormatException("expected ',' or '}' at " + index);
-                }
-                return new Node { Kind = NodeKind.Object, Fields = fields };
-            }
-
-            private Node ParseArray()
-            {
-                index++; // [
-                var items = new List<Node>();
-                SkipWhitespace();
-                if (index < text.Length && text[index] == ']') { index++; return new Node { Kind = NodeKind.Array, Items = items }; }
-                while (true)
-                {
-                    items.Add(ParseValue());
-                    SkipWhitespace();
-                    if (index >= text.Length) throw new FormatException("unterminated array");
-                    if (text[index] == ',') { index++; continue; }
-                    if (text[index] == ']') { index++; break; }
-                    throw new FormatException("expected ',' or ']' at " + index);
-                }
-                return new Node { Kind = NodeKind.Array, Items = items };
-            }
-
-            private string ParseString()
-            {
-                if (index >= text.Length || text[index] != '"')
-                    throw new FormatException("expected string at " + index);
-                index++;
-                var value = new StringBuilder();
-                while (index < text.Length)
-                {
-                    char c = text[index++];
-                    if (c == '"') return value.ToString();
-                    if (c != '\\') { value.Append(c); continue; }
-                    if (index >= text.Length) break;
-                    char escape = text[index++];
-                    switch (escape)
-                    {
-                        case '"': value.Append('"'); break;
-                        case '\\': value.Append('\\'); break;
-                        case '/': value.Append('/'); break;
-                        case 'b': value.Append('\b'); break;
-                        case 'f': value.Append('\f'); break;
-                        case 'n': value.Append('\n'); break;
-                        case 'r': value.Append('\r'); break;
-                        case 't': value.Append('\t'); break;
-                        case 'u':
-                            if (index + 4 > text.Length) throw new FormatException("bad \\u escape");
-                            value.Append((char)int.Parse(text.Substring(index, 4),
-                                NumberStyles.HexNumber, CultureInfo.InvariantCulture));
-                            index += 4;
-                            break;
-                        default: throw new FormatException("bad escape \\" + escape);
-                    }
-                }
-                throw new FormatException("unterminated string");
-            }
-
-            private double ParseNumber()
-            {
-                int start = index;
-                while (index < text.Length && "-+.eE0123456789".IndexOf(text[index]) >= 0) index++;
-                if (start == index) throw new FormatException("expected number at " + index);
-                return double.Parse(text.Substring(start, index - start),
-                    NumberStyles.Float, CultureInfo.InvariantCulture);
-            }
-
-            private void Expect(string literal)
-            {
-                if (index + literal.Length > text.Length ||
-                    string.CompareOrdinal(text, index, literal, 0, literal.Length) != 0)
-                    throw new FormatException("expected " + literal + " at " + index);
-                index += literal.Length;
-            }
-
-            private void SkipWhitespace()
-            {
-                while (index < text.Length && char.IsWhiteSpace(text[index])) index++;
-            }
-        }
+        //
+        // The reader itself lives in LevelJson.cs: one implementation for every v2 document,
+        // including the jagged arrays (meta.bounds, walls[].points) that JsonUtility cannot
+        // read. This file used to carry a private copy; it does not any more.
     }
 }

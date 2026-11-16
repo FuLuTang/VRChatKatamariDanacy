@@ -176,6 +176,16 @@ namespace VRCKatamari.Story
         // time_limit_s.
         [SerializeField] private float timeLimitSeconds = 120f;
 
+        // ---- Per-level kill plane (LEVEL_FORMAT_V2 5.2/5.3) ----
+        // A ball whose CENTRE is below this world height is put back at the round's start
+        // pose with its velocity cleared, and the event is counted. Off by default: a level
+        // authored before this field existed has no such plane, and a plane at y=0 would fire
+        // immediately on a level whose floor is 0. The importer writes both fields from
+        // meta.activityArea.killPlane; the respawn target is the retry start pose the round
+        // already captured, so there is no second copy of the level's start here.
+        [SerializeField] private bool killPlaneEnabled = false;
+        [SerializeField] private float killPlaneY = 0f;
+
         // quest.objective.category_id. The host counts by ordinal text match against
         // each prop row's own kind label (PickupFieldHost.GetAttachedCountForKind), so
         // the scene must label every prop of the category with this same string, and
@@ -232,6 +242,10 @@ namespace VRCKatamari.Story
         // 1-based number of the retry in progress; 0 is the first round. It is both the
         // round-id suffix (levelId + ":" + retryAttempt) and the number on the HUD.
         private int retryAttempt;
+
+        // How many times the per-level kill plane has fired this round attempt. Diagnostics
+        // only: it changes no score, no goal and no visibility.
+        private int killCount;
 
         // Upper bound on the "skip round ids already in use" walk. The motor refuses an
         // unchanged id, and a level whose serialized roundId happens to collide must not
@@ -458,6 +472,12 @@ namespace VRCKatamari.Story
             return targetCount;
         }
 
+        /// <summary>How many times the per-level kill plane has fired this attempt.</summary>
+        public int GetKillCount()
+        {
+            return killCount;
+        }
+
         /// <summary>The settled collision diameter in metres; 0 for a count level.</summary>
         public float GetResultDiameterM()
         {
@@ -642,8 +662,52 @@ namespace VRCKatamari.Story
                 + retryStartPosition + " heading=" + retryStartHeadingDegrees);
         }
 
+        /// <summary>
+        /// Puts the ball back at the round's start pose when its centre has fallen below the
+        /// level's kill plane (LEVEL_FORMAT_V2 5.2/5.3).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The plane is per level and the round owns it: <c>killPlaneEnabled</c> and
+        /// <c>killPlaneY</c> are serialized, the importer writes them from
+        /// <c>activityArea.killPlane</c>, and this method is the only reader. The motor is
+        /// untouched by design - it only supplies its existing <c>TeleportTo</c> and
+        /// <c>GetCenterWorld</c> entry points, so a level without a round controller keeps
+        /// the old no-kill behaviour.
+        /// </para>
+        /// <para>
+        /// The respawn target is the pose the round already captures for retry, which is the
+        /// ball's own start pose as the motor reported it; nothing here re-derives it from
+        /// the level data, so there is one start pose in the scene and not two.
+        /// </para>
+        /// <para>
+        /// Speed is cleared by <c>TeleportTo</c> itself (it zeroes the planar and vertical
+        /// velocity and resets the contact state, exactly like a retry). The clock keeps
+        /// running: a fall costs time, which is what makes the plane a rule rather than a
+        /// free reset.
+        /// </para>
+        /// </remarks>
+        private void ApplyKillPlaneIfNeeded()
+        {
+            if (!killPlaneEnabled) return;
+            if (motor == null) return;
+            if (!KatamariMath.IsFiniteFloat(killPlaneY)) return;
+            if (!retryStartPoseCaptured) CaptureRetryStartPoseIfReady();
+            if (!retryStartPoseCaptured) return;
+
+            Vector3 center = motor.GetCenterWorld();
+            if (!KatamariMath.IsFiniteVector(center)) return;
+            if (center.y >= killPlaneY) return;
+
+            motor.TeleportTo(retryStartPosition);
+            killCount = killCount + 1;
+            Debug.Log("[StoryRoundController] kill plane: y=" + center.y + " below "
+                + killPlaneY + "; ball returned to the round start (kills=" + killCount + ")");
+        }
+
         private void UpdateRunning()
         {
+            ApplyKillPlaneIfNeeded();
             float remainingSeconds;
             if (!StoryRoundMath.TryRemainingSeconds(startTimeSeconds, Time.time,
                 timeLimitSeconds, out remainingSeconds))

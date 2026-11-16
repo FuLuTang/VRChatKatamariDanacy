@@ -113,8 +113,16 @@ namespace VRCKatamari.Editor.LevelBuild
     /// <c>Assembly-CSharp-Editor</c> (see the remark in <c>PickupFieldSync.cs</c>), which is
     /// why the UdonSharp editor usings below resolve without an asmdef.
     /// </para>
+    /// <para>
+    /// Two files, two schemas. <c>PlacementImporter.V2.cs</c> is the other half of this
+    /// partial class: v1's document shape, scene builder and identity rules stay here, and the
+    /// v2 branch (schema sniffing, the v2-to-v1 view adapter, the activity-wall layer, the
+    /// meta wiring and the terrain hand-off) lives there. Both halves call the SAME build
+    /// steps - props, structures, colliders, pickup sync, arena binding - so no layer has a
+    /// second implementation.
+    /// </para>
     /// </remarks>
-    public static class PlacementImporter
+    public static partial class PlacementImporter
     {
         public const string MenuPath = "VRC Katamari/Level/Import Placement (LevelContent)";
 
@@ -125,11 +133,16 @@ namespace VRCKatamari.Editor.LevelBuild
         // never a child of this folder, so a group id can never resolve to a prop, even when
         // the id equals another prop's itemId.
         public const string GroupsFolderName = "Groups";
+        // v2's parent pointer fills this reserved container (owner ruling A): a folder per
+        // parent id, so the hierarchy is visible in the scene while the prop itself stays a
+        // top-level row for PickupFieldSync. Never a prop name, for the same reason Groups is
+        // reserved.
+        public const string HierarchyFolderName = "Hierarchy";
 
         // Repo-relative, like the greybox builder's payload: the JSON lives next to the
         // Unity project, not inside Assets/, so it can be diffed and validated by the CLI.
-        public const string LevelsRepoRelativeFolder = "Docs/Design/Levels";
-        public const string PlacementFileName = "placement.json";
+        public const string LevelsRepoRelativeFolder = LevelPaths.LevelsRepoRelativeFolder;
+        public const string PlacementFileName = LevelPaths.PlacementFileName;
 
         private const string UndoLabel = "Import Level Placement";
         private const float PositionToleranceM = 0.001f;
@@ -294,7 +307,37 @@ namespace VRCKatamari.Editor.LevelBuild
             public string def;
             public string kind;
             public string zone;
+            /// <summary>
+            /// v1's visual attachment group (<c>Props/&lt;kind&gt;/&lt;zone&gt;/Groups/&lt;group&gt;/</c>).
+            /// v2 has no such key: its <c>rigidGroup</c> is mapped onto this slot, and its
+            /// <c>parent</c> gets the reserved <c>Hierarchy/</c> folder instead (see
+            /// <see cref="EnsurePropFolder"/>).
+            /// </summary>
             public string group;
+            /// <summary>
+            /// v2's single parent pointer (owner ruling A). The importer builds a
+            /// <c>Hierarchy/&lt;parent&gt;/</c> FOLDER and keeps the prop a top-level row:
+            /// parenting one prop's GameObject under another prop's GameObject would hide the
+            /// child from the pickup sync's "topmost Renderer is one row" rule and lose its row.
+            /// The edge itself is preserved for the future <c>propParent</c> column.
+            /// </summary>
+            public string parent;
+            /// <summary>v2's <c>behaviour</c> (null for a v1 document, i.e. static).</summary>
+            public string behaviour;
+            /// <summary>v2's <c>inherit</c> (how a parent's motion reaches this prop).</summary>
+            public string inherit;
+            /// <summary>
+            /// v2's authored <c>scale</c> (null = 1,1,1). It is <b>already</b> multiplied into
+            /// <see cref="aabb"/> by the writer (§6.2/§18), so the importer applies it to the
+            /// Transform (rendering) and to the collider proxy only - never to the box again.
+            /// </summary>
+            public float[] scale;
+            /// <summary>
+            /// v2's <c>absorbable</c> declaration. Stored and reported, not enforced: the
+            /// pickup host has no absorbable column and the gate decides absorbability from
+            /// k * aabb, so honouring it would need a runtime column (deferred, owner ruling D).
+            /// </summary>
+            public bool absorbable = true;
             public float[] position;
             public float[] rotationQuat;
             public float[] aabb;
@@ -526,17 +569,45 @@ namespace VRCKatamari.Editor.LevelBuild
             List<string> tried;
             if (!TryResolvePlacementPath(levelId, out path, out tried))
             {
-                report.Fail("placement.json not found for level '" + levelId + "'. Tried:\n  " +
+                // The list of paths actually tried is the difference between a one-line fix
+                // and a round trip: the nested-id and repository-root defects both presented
+                // as "not found" with a single, plausible-looking path.
+                report.Fail("no placement document for level '" + levelId + "'. Searched:\n  " +
                             string.Join("\n  ", tried.ToArray()));
                 return false;
             }
 
             report.PlacementPath = path;
 
+            string text;
+            try
+            {
+                text = File.ReadAllText(path);
+            }
+            catch (Exception exception)
+            {
+                report.Fail("cannot read " + path + ": " + exception.Message);
+                return false;
+            }
+
+            // Schema sniff on the text we already have: a v2 document goes through the v2
+            // reader and its own branch, a v1 document keeps the JsonUtility path it always
+            // had (so the v1 import stays byte-for-byte what it was).
+            if (PlacementV2Reader.LooksLikeV2(text))
+            {
+                PlacementV2ReadResult v2 = PlacementV2Reader.Read(text);
+                if (v2.Document != null &&
+                    string.Equals(v2.Document.Schema, PlacementV2Reader.SchemaName,
+                        StringComparison.Ordinal))
+                {
+                    return ImportV2(levelId, path, v2, report);
+                }
+            }
+
             PlacementDocument doc;
             try
             {
-                doc = JsonUtility.FromJson<PlacementDocument>(File.ReadAllText(path));
+                doc = JsonUtility.FromJson<PlacementDocument>(text);
             }
             catch (Exception exception)
             {
@@ -609,19 +680,12 @@ namespace VRCKatamari.Editor.LevelBuild
             // The pickup sync runs after the props exist, because it derives rows from them.
             // The declaration map is the only value input: the sync writes it in the same
             // pass as the other arrays and reads it back, so there is no second write here.
-            Dictionary<string, long> declaredGrowthMm3 = BuildDeclaredGrowthMm3(doc);
-            Dictionary<string, float> declaredVolumeK = BuildDeclaredVolumeK(doc);
-            Dictionary<string, float> declaredVolumePenalty = BuildDeclaredVolumePenalty(doc);
-            Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies =
-                BuildDeclaredProxies(doc);
-            report.GrowthMm3Declared = SumDeclaredGrowthMm3(doc);
             if (propsOk)
             {
-                TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredGrowthMm3,
-                    declaredVolumeK, declaredVolumePenalty, declaredProxies, report);
+                TrySyncDeclaredFields(doc, levelRoot, propsRoot, report);
             }
 
-            BindArenaHost(doc, levelRoot, structuresRoot, report);
+            BindArenaHost(doc, levelRoot, structuresRoot, report, null, false, 0f);
             ReportStartSize(doc, report);
 
             return propsOk && structuresOk;
@@ -1240,8 +1304,93 @@ namespace VRCKatamari.Editor.LevelBuild
             return null;
         }
 
+        /// <summary>
+        /// Multiplies a prop's authored <c>scale</c> into its def's collider proxy parameters
+        /// (§18.4's outstanding importer requirement).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Why this is needed: the proxy numbers are MODEL space and
+        /// <c>PickupFieldHost</c> bakes them with the prop's position and rotation but NOT its
+        /// lossy scale (the attach path preserves the scale, the bake does not apply it), so a
+        /// prop rendered at 0.1 would otherwise carry a 10x capsule. The scale is applied here,
+        /// once, at import - the runtime still never scales anything by the authored value.
+        /// </para>
+        /// <para>
+        /// Uniform scale multiplies every parameter by the one factor, including a convex
+        /// hull's points (the five 0.9/0.1 reference props all have convex proxies). Non-uniform
+        /// scale is per-axis, and only meaningful for a box or a sphere (D-5 layer 3); a sphere
+        /// cannot become an ellipsoid, so it takes the LARGEST axis - conservative, never
+        /// smaller than the visual. Anything else is refused rather than scaled into a shape
+        /// the gate did not intend.
+        /// </para>
+        /// </remarks>
+        private static bool TryApplyAuthorScale(
+            PickupFieldAuthoringRules.PickupProxyDefinition proxy, PropEntry prop,
+            PlacementImportReport report)
+        {
+            if (proxy == null || prop == null || prop.scale == null || prop.scale.Length != 3)
+            {
+                return true;
+            }
+
+            float sx = prop.scale[0];
+            float sy = prop.scale[1];
+            float sz = prop.scale[2];
+            bool uniform = Mathf.Abs(sx - sy) <= 1e-4f && Mathf.Abs(sy - sz) <= 1e-4f;
+            bool unit = Mathf.Abs(sx - 1f) <= 1e-4f && Mathf.Abs(sy - 1f) <= 1e-4f &&
+                        Mathf.Abs(sz - 1f) <= 1e-4f;
+            if (unit) return true;
+
+            if (!uniform)
+            {
+                if (proxy.Kind == PickupFieldAuthoringRules.ProxyKindBox)
+                {
+                    proxy.Center = Vector3.Scale(proxy.Center, new Vector3(sx, sy, sz));
+                    proxy.Size = Vector3.Scale(proxy.Size, new Vector3(sx, sy, sz));
+                }
+                else if (proxy.Kind == PickupFieldAuthoringRules.ProxyKindSphere)
+                {
+                    float largest = Mathf.Max(sx, Mathf.Max(sy, sz));
+                    proxy.Center = Vector3.Scale(proxy.Center, new Vector3(sx, sy, sz));
+                    proxy.Radius *= largest;
+                }
+                else
+                {
+                    report.Error(prop.itemId + " [prop_scale_nonuniform] a non-uniform scale on a '" +
+                                 proxy.TypeName + "' proxy cannot be applied; scale is a box/sphere " +
+                                 "authoring feature (D-5 layer 3)");
+                    return false;
+                }
+            }
+            else
+            {
+                proxy.Center = Vector3.Scale(proxy.Center, new Vector3(sx, sy, sz));
+                proxy.Size = Vector3.Scale(proxy.Size, new Vector3(sx, sy, sz));
+                proxy.Radius *= sx;
+                proxy.HalfHeight *= sx;
+                if (proxy.Hull != null)
+                {
+                    for (int i = 0; i < proxy.Hull.Length; i++)
+                    {
+                        proxy.Hull[i] = Vector3.Scale(proxy.Hull[i], new Vector3(sx, sy, sz));
+                    }
+                }
+            }
+
+            string problem = PickupFieldAuthoringRules.ProxyError(proxy);
+            if (problem != null)
+            {
+                report.Error(prop.itemId + " [collider] the proxy scaled by " + Format(new Vector3(sx, sy, sz)) +
+                             " is no longer legal: " + problem);
+                return false;
+            }
+
+            return true;
+        }
+
         private static Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition>
-            BuildDeclaredProxies(PlacementDocument doc)
+            BuildDeclaredProxies(PlacementDocument doc, PlacementImportReport report)
         {
             var declared = new Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition>(
                 StringComparer.Ordinal);
@@ -1251,7 +1400,9 @@ namespace VRCKatamari.Editor.LevelBuild
                 PropEntry prop = doc.props[i];
                 if (prop == null || string.IsNullOrEmpty(prop.itemId)) continue;
                 PickupFieldAuthoringRules.PickupProxyDefinition proxy = DeclaredProxy(doc, prop);
-                if (proxy != null) declared[prop.itemId] = proxy;
+                if (proxy == null) continue;
+                if (!TryApplyAuthorScale(proxy, prop, report)) continue;
+                declared[prop.itemId] = proxy;
             }
             return declared;
         }
@@ -1648,7 +1799,8 @@ namespace VRCKatamari.Editor.LevelBuild
                     current = null;
                 }
 
-                Transform folder = EnsurePropFolder(propsRoot, kind, prop.zone, prop.group, report);
+                Transform folder = EnsurePropFolder(propsRoot, kind, prop.zone, prop.group,
+                    prop.parent, report);
                 if (folder == null)
                 {
                     // EnsurePropFolder already named the colliding container. Nothing is
@@ -1734,13 +1886,28 @@ namespace VRCKatamari.Editor.LevelBuild
         /// the grouped props once.
         /// </remarks>
         private static Transform EnsurePropFolder(Transform propsRoot, string kind, string zone,
-                                                 string group, PlacementImportReport report)
+                                                 string group, string parentId,
+                                                 PlacementImportReport report)
         {
             Transform folder = EnsureFolder(propsRoot, kind, report);
             if (folder == null) return null;
             if (!string.IsNullOrEmpty(zone))
             {
                 folder = EnsureFolder(folder, zone, report);
+                if (folder == null) return null;
+            }
+
+            // v2's parent: a FOLDER named after the parent prop, not the prop itself (owner
+            // ruling A). Parenting the child's GameObject under the parent's GameObject would
+            // put it below a Renderer, and PickupFieldSync stops at the topmost Renderer, so
+            // the child would never become a row (the F2/F3 defect class). The world pose is
+            // untouched either way: the folder is at identity and the child keeps its authored
+            // world position, so no blend of two transforms can double it.
+            if (!string.IsNullOrEmpty(parentId))
+            {
+                folder = EnsureFolder(folder, HierarchyFolderName, report);
+                if (folder == null) return null;
+                folder = EnsureFolder(folder, parentId, report);
                 if (folder == null) return null;
             }
 
@@ -1806,11 +1973,17 @@ namespace VRCKatamari.Editor.LevelBuild
             return instance;
         }
 
+        /// <summary>
+        /// Writes the authored world pose. The scale is the AUTHORED one (§6.4 layer 2/3): the
+        /// importer never scales at runtime, and a prop's <c>aabb</c> already contains it, so
+        /// this is the only place the number reaches the scene.
+        /// </summary>
         private static void ApplyPose(GameObject instance, PropEntry prop)
         {
             Undo.RecordObject(instance.transform, UndoLabel);
             instance.transform.position = ToVector(prop.position);
             instance.transform.rotation = ToQuaternion(prop.rotationQuat);
+            instance.transform.localScale = ScaleOf(prop);
         }
 
         private static bool PoseMatches(GameObject instance, PropEntry prop)
@@ -1819,7 +1992,15 @@ namespace VRCKatamari.Editor.LevelBuild
             Quaternion rotation = ToQuaternion(prop.rotationQuat);
             Transform transform = instance.transform;
             return Vector3.Distance(transform.position, position) <= PositionToleranceM &&
-                   Mathf.Abs(Quaternion.Dot(transform.rotation, rotation)) >= RotationDotTolerance;
+                   Mathf.Abs(Quaternion.Dot(transform.rotation, rotation)) >= RotationDotTolerance &&
+                   Vector3.Distance(transform.localScale, ScaleOf(prop)) <= PositionToleranceM;
+        }
+
+        /// <summary>The authored scale, or one when the document did not write one.</summary>
+        private static Vector3 ScaleOf(PropEntry prop)
+        {
+            if (prop == null || prop.scale == null || prop.scale.Length != 3) return Vector3.one;
+            return new Vector3(prop.scale[0], prop.scale[1], prop.scale[2]);
         }
 
         /// <summary>
@@ -2958,6 +3139,28 @@ namespace VRCKatamari.Editor.LevelBuild
 
         // ---------------------------------------------------------------- sync ---
 
+        /// <summary>
+        /// Hands the document's declared per-prop columns to the pickup sync: growth (the
+        /// authority), the volume factor, the penalty and the collider proxies.
+        /// </summary>
+        /// <remarks>
+        /// One method because the v1 and v2 documents both reach it - the v2 adapter fills the
+        /// same DTO fields, so "how a declared prop reaches the host" has one implementation.
+        /// The sync is the only writer of the host arrays (OPEN_DECISIONS (q) U2).
+        /// </remarks>
+        private static void TrySyncDeclaredFields(PlacementDocument doc, Transform levelRoot,
+            Transform propsRoot, PlacementImportReport report)
+        {
+            Dictionary<string, long> declaredGrowthMm3 = BuildDeclaredGrowthMm3(doc);
+            Dictionary<string, float> declaredVolumeK = BuildDeclaredVolumeK(doc);
+            Dictionary<string, float> declaredVolumePenalty = BuildDeclaredVolumePenalty(doc);
+            Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies =
+                BuildDeclaredProxies(doc, report);
+            report.GrowthMm3Declared = SumDeclaredGrowthMm3(doc);
+            TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredGrowthMm3,
+                declaredVolumeK, declaredVolumePenalty, declaredProxies, report);
+        }
+
         private static bool TrySyncPickupField(Transform levelRoot, string arenaId, Transform propsRoot,
             IDictionary<string, long> declaredGrowthMm3, IDictionary<string, float> declaredVolumeK,
             IDictionary<string, float> declaredVolumePenalty,
@@ -3101,7 +3304,8 @@ namespace VRCKatamari.Editor.LevelBuild
         /// </para>
         /// </remarks>
         private static void BindArenaHost(PlacementDocument doc, Transform levelRoot,
-            Transform structuresRoot, PlacementImportReport report)
+            Transform structuresRoot, PlacementImportReport report, Transform[] activityWalls,
+            bool hasGroundY, float groundY)
         {
             string arenaId = ArenaIdOf(doc);
             LevelArenaHost host;
@@ -3226,6 +3430,26 @@ namespace VRCKatamari.Editor.LevelBuild
                 }
             }
 
+            if (activityWalls != null)
+            {
+                // v2's activityArea walls are separate objects from structures (they are a
+                // rule, not a body): same plane bake, no box, no support, no visual.
+                for (int i = 0; i < activityWalls.Length; i++)
+                {
+                    if (activityWalls[i] != null) wallList.Add(activityWalls[i]);
+                }
+            }
+
+            if (!hasGround && hasGroundY)
+            {
+                // v2 has no role=ground structure: the fallback plane is meta.groundY (§2.2),
+                // already checked to sit below the terrain's lowest point. The arena bakes the
+                // number the same way it bakes a ground marker's.
+                floorNormal = Vector3.up;
+                floorOffset = groundY;
+                hasGround = true;
+            }
+
             if (doc.props != null)
             {
                 for (int i = 0; i < doc.props.Length; i++)
@@ -3310,46 +3534,16 @@ namespace VRCKatamari.Editor.LevelBuild
         /// <c>&lt;repo&gt;/Docs/Design/Levels/&lt;levelId&gt;/placement.json</c>, found by walking
         /// up from the project folder so the checkout layout stays free.
         /// </summary>
-        private static bool TryResolvePlacementPath(string levelId, out string path, out List<string> tried)
+        /// <summary>
+        /// Resolves the level's placement document through <see cref="LevelPaths"/>, so the
+        /// repository root, a nested level id (<c>physics_test_field/C21</c>) and the
+        /// "canonical name with v2 content vs placement.v2.json" order are all decided in ONE
+        /// place (the terrain importer uses the same resolution).
+        /// </summary>
+        private static bool TryResolvePlacementPath(string levelId, out string path,
+            out List<string> tried)
         {
-            tried = new List<string>();
-            path = null;
-            if (string.IsNullOrEmpty(levelId))
-            {
-                return false;
-            }
-
-            string relative = LevelsRepoRelativeFolder + "/" + levelId + "/" + PlacementFileName;
-            string projectRoot = Path.GetDirectoryName(Application.dataPath) ?? Directory.GetCurrentDirectory();
-            var candidates = new List<string>
-            {
-                Path.GetFullPath(Path.Combine(projectRoot, "..", relative)),
-                Path.GetFullPath(Path.Combine(projectRoot, "..", "..", relative)),
-                Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), relative)),
-            };
-
-            string directory = projectRoot;
-            for (int i = 0; i < 5 && !string.IsNullOrEmpty(directory); i++)
-            {
-                candidates.Add(Path.GetFullPath(Path.Combine(directory, "..", relative)));
-                directory = Path.GetDirectoryName(directory);
-            }
-
-            for (int i = 0; i < candidates.Count; i++)
-            {
-                string candidate = candidates[i];
-                if (!tried.Contains(candidate))
-                {
-                    tried.Add(candidate);
-                    if (File.Exists(candidate))
-                    {
-                        path = candidate;
-                        return true;
-                    }
-                }
-            }
-
-            return false;
+            return LevelPaths.TryResolvePlacementPath(levelId, out path, out tried);
         }
 
         /// <summary>
@@ -3397,12 +3591,11 @@ namespace VRCKatamari.Editor.LevelBuild
             for (int i = 0; i < directories.Length; i++)
             {
                 string name = Path.GetFileName(directories[i]);
-                string placement = Path.Combine(directories[i], PlacementFileName);
                 string id = string.IsNullOrEmpty(prefix) ? name : prefix + "/" + name;
-                if (File.Exists(placement))
+                if (LevelPaths.IsLevelDirectory(directories[i]))
                 {
                     seen.Add(id);
-                    string scene = ReadSceneOf(placement);
+                    string scene = LevelPaths.DeclaredSceneOf(directories[i]);
                     if (string.Equals(scene, active, StringComparison.Ordinal) ||
                         (string.IsNullOrEmpty(scene) && string.Equals(name, active, StringComparison.Ordinal)))
                     {
@@ -3420,6 +3613,15 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         /// <summary>True when that level's document declares one arena cell.</summary>
+        /// <summary>
+        /// True when that level's document is imported into its OWN managed root.
+        /// </summary>
+        /// <remarks>
+        /// A v1 cell declares <c>level.arena</c>; a v2 document ALWAYS gets its own root
+        /// (<c>LevelContent/&lt;meta.id&gt;</c>, §17.5), so several v2 documents may share one
+        /// scene without registering each other's geometry - which is exactly what the menu's
+        /// "several documents name this scene" branch needs to know.
+        /// </remarks>
         private static bool IsArenaLevel(string levelId)
         {
             string path;
@@ -3431,7 +3633,18 @@ namespace VRCKatamari.Editor.LevelBuild
 
             try
             {
-                var doc = JsonUtility.FromJson<PlacementDocument>(File.ReadAllText(path));
+                string text = File.ReadAllText(path);
+                if (PlacementV2Reader.LooksLikeV2(text))
+                {
+                    PlacementV2ReadResult v2 = PlacementV2Reader.Read(text);
+                    if (v2.Document != null && string.Equals(v2.Document.Schema,
+                        PlacementV2Reader.SchemaName, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+
+                var doc = JsonUtility.FromJson<PlacementDocument>(text);
                 return doc != null && doc.level != null && doc.level.arena != null &&
                        !string.IsNullOrEmpty(doc.level.arena.id);
             }
@@ -3441,46 +3654,16 @@ namespace VRCKatamari.Editor.LevelBuild
             }
         }
 
+        /// <summary>The scene a level document declares, wherever the level lives.</summary>
         private static string ReadSceneOf(string placementPath)
         {
-            try
-            {
-                var doc = JsonUtility.FromJson<PlacementDocument>(File.ReadAllText(placementPath));
-                if (doc != null && doc.level != null)
-                {
-                    return doc.level.scene;
-                }
-            }
-            catch (Exception)
-            {
-                // A broken file is the CLI's problem; the menu only needs the level list.
-            }
-
-            return null;
+            string directory = Path.GetDirectoryName(placementPath);
+            return directory == null ? null : LevelPaths.DeclaredSceneOf(directory);
         }
 
         private static string ResolveLevelsFolder()
         {
-            string projectRoot = Path.GetDirectoryName(Application.dataPath) ?? Directory.GetCurrentDirectory();
-            string directory = projectRoot;
-            for (int i = 0; i < 6 && !string.IsNullOrEmpty(directory); i++)
-            {
-                string candidate = Path.GetFullPath(Path.Combine(directory, "..", LevelsRepoRelativeFolder));
-                if (Directory.Exists(candidate))
-                {
-                    return candidate;
-                }
-
-                candidate = Path.GetFullPath(Path.Combine(directory, LevelsRepoRelativeFolder));
-                if (Directory.Exists(candidate))
-                {
-                    return candidate;
-                }
-
-                directory = Path.GetDirectoryName(directory);
-            }
-
-            return null;
+            return LevelPaths.LevelsFolder();
         }
 
         // ------------------------------------------------------------ managed ---

@@ -3590,24 +3590,23 @@ namespace VRCKatamari.Editor.LevelBuild
         // --------------------------------------------------------------- paths ---
 
         /// <summary>
-        /// <c>&lt;repo&gt;/Docs/Design/Levels/&lt;levelId&gt;/placement.json</c>, found by walking
-        /// up from the project folder so the checkout layout stays free.
-        /// </summary>
-        /// <summary>
-        /// Resolves the level's placement document through <see cref="LevelPaths"/>, so the
+        /// Resolves the level's placement document through <see cref="LevelPaths"/>: the
         /// repository root, a nested level id (<c>physics_test_field/C21</c>) and the
         /// "canonical name with v2 content vs placement.v2.json" order are all decided in ONE
-        /// place (the terrain importer uses the same resolution).
+        /// place, which the terrain importer uses too.
         /// </summary>
+        /// <param name="path">The document's full path.</param>
+        /// <param name="tried">
+        /// <c>out</c>, exactly like <see cref="LevelPaths.TryResolvePlacementPath"/>: it is
+        /// REPLACED by the list that call built, and the importer's callers read it for their
+        /// "Searched:" failure message. Nothing is pre-initialised here on purpose - an
+        /// <c>out</c> argument discards the caller's list, so a "preserve the caller's
+        /// diagnostics" comment would be a lie, and pre-filling it would be dead code.
+        /// </param>
         private static bool TryResolvePlacementPath(string levelId, out string path,
             out List<string> tried)
         {
-            path = null;
-            // The importer's callers read `tried` for their failure message, so this wrapper
-            // keeps the out parameter and hands LevelPaths a list it already owns (LevelPaths
-            // APPENDS to the caller's list; see its signature for why that is not `out`).
-            tried = new List<string>();
-            return LevelPaths.TryResolvePlacementPath(levelId, out path, tried);
+            return LevelPaths.TryResolvePlacementPath(levelId, out path, out tried);
         }
 
         /// <summary>

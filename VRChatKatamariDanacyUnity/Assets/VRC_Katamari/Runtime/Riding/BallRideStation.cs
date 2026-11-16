@@ -137,14 +137,20 @@ namespace VRCKatamari.Riding
         public override void OnStationExited(VRCPlayerApi player)
         {
             if (player == null || !player.isLocal) return;
-            // Another exit path may already have dropped the local seated state;
-            // the state cleanup below is unconditional, only the log is guarded.
+            // Another exit path may already have dropped the local seated state, so the
+            // cleanup below runs unconditionally and the log reports what it found.
             bool wasSeated = seated;
             seated = false;
             DisableInteractive = false;
             SetRideGate(false);
             if (seatEye != null) seatEye.EndSeated();
-            if (wasSeated) Debug.Log("[ride] seated exited");
+            // Unconditional and reason-coded. It used to log only when `wasSeated`, and that
+            // asymmetry made a real incident unattributable: a ClientSim exit left no line
+            // here at all, and "this callback never ran" was indistinguishable from "another
+            // path had already cleared the flag". One line per exit, and it names the links
+            // it just used, so an unwired field is visible in the same line as the exit.
+            Debug.Log("[ride] station exit reason=station-exit wasSeated=" + wasSeated
+                + " inputWired=" + (input != null) + " seatEyeWired=" + (seatEye != null));
         }
 
         public override void OnPlayerRespawn(VRCPlayerApi player)

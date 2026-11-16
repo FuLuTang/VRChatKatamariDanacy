@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using VRCKatamari.BallLayers;
 
 namespace VRCKatamari.Tests
@@ -43,27 +45,70 @@ namespace VRCKatamari.Tests
     /// <see cref="HideFlags.DontSave"/>: a run that is aborted before TearDown still cannot
     /// serialize the leftover into the scene.
     /// </para>
+    /// <para>
+    /// One round still found a childless <c>test_prop</c> in the open scene after a full run
+    /// even with that teardown, so cleanup does not trust the tracked list either.
+    /// <see cref="SweepStrayFixtureRoots"/> removes any root carrying this fixture's name and
+    /// <see cref="HideFlags.DontSave"/> in every loaded scene, at SetUp, TearDown and
+    /// OneTimeTearDown, plus once more on the next editor tick (the undo system flushes after
+    /// OneTimeTearDown), and a teardown that had to use the net fails the test instead of
+    /// passing silently. Undo records are cleared before the root is destroyed as well:
+    /// <c>PickupFieldSync.EnsurePropCollider</c> registers its BoxCollider through
+    /// <c>Undo.AddComponent</c>, which is the one plausible handle on the root that outlives
+    /// this list (the leftover seen after a full run was childless: the child was gone, the
+    /// root was not).
+    /// </para>
     /// </remarks>
     public class RadialProxyLocalBoundsTests
     {
         private const string SyncTypeName = "VRCKatamari.Editor.Pickup.PickupFieldSync";
         private const float Tolerance = 1e-4f;
 
-        // Creation order; destroyed in reverse order in TearDown.
+        // The fixture's signature in the operator's open scene. Only this fixture creates
+        // objects with these names and HideFlags.DontSave (grep DontSave finds no other
+        // creator), so the cleanup net can find a leftover without trusting this fixture
+        // instance's list: an object was still found in the open scene after TearDown had
+        // run on this list, and a leaked object must never wait for the next run that
+        // happens to reuse the instance.
+        private const string FixtureRootName = "test_prop";
+        private const string FixtureChildName = "visual";
+
+        // Creation order; destroyed in reverse order by CleanUp.
         private readonly List<GameObject> created = new List<GameObject>();
+
+        [SetUp]
+        public void SetUp()
+        {
+            created.Clear();
+            // An aborted run (or an undo record published after a teardown) can leave one
+            // behind; remove it before the first test asserts anything.
+            SweepStrayFixtureRoots();
+        }
 
         [TearDown]
         public void TearDown()
         {
-            for (int i = created.Count - 1; i >= 0; i--)
-            {
-                if (created[i] != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(created[i]);
-                }
-            }
+            int rescued = CleanUp();
+            Assert.AreEqual(0, rescued, "TearDown: the tracked list must cover every object this " +
+                "fixture created; the cleanup net had to sweep a stray '" + FixtureRootName +
+                "' root instead (its shape is in the warning above), which is exactly the leak " +
+                "this fixture must not have");
+            AssertSceneIsClean("TearDown");
+        }
 
-            created.Clear();
+        [OneTimeTearDown]
+        public void OneTimeTearDown()
+        {
+            int rescued = CleanUp();
+            Assert.AreEqual(0, rescued, "OneTimeTearDown: a '" + FixtureRootName + "' root was " +
+                "still in the open scenes after the last test and had to be swept");
+            AssertSceneIsClean("OneTimeTearDown");
+
+            // The editor's undo system flushes at the end of its frame, which is after this
+            // method. Undo.AddComponent (called by the sync code under test) registered the
+            // throw-away root there, so sweep once more on the next editor tick: whatever
+            // that flush publishes is destroyed when it appears, not on the next test run.
+            EditorApplication.delayCall += SweepStrayFixtureRootsOnNextTick;
         }
 
         [Test]
@@ -251,6 +296,25 @@ namespace VRCKatamari.Tests
                 "still one collider per prop");
         }
 
+        [Test]
+        public void TheCleanupNetRemovesAFixtureRootItDidNotTrack()
+        {
+            // One round cleaned the tracked list up and still left a childless 'test_prop'
+            // (HideFlags.DontSave) in the operator's open scene. Cleanup therefore may not
+            // depend on this fixture instance's list: the net must find the object by its
+            // signature alone. This test takes the root out of the list on purpose, the way
+            // an aborted run or a re-created object would leave it.
+            GameObject root = CreateProp(Vector3.one, Quaternion.identity);
+            Assert.IsTrue(created.Remove(root), "the fixture root is tracked before the removal");
+
+            SweepStrayFixtureRoots();
+
+            Assert.IsTrue(root == null,
+                "the net must destroy an untracked DontSave '" + FixtureRootName + "' root");
+            Assert.AreEqual(0, SweepStrayFixtureRoots(),
+                "and nothing of that signature may remain in the open scenes");
+        }
+
         // ------------------------------------------------------------- fixtures ---
 
         private GameObject CreateProp(Vector3 localSize, Quaternion rootRotation)
@@ -278,6 +342,116 @@ namespace VRCKatamari.Tests
             }
 
             return root;
+        }
+
+        // ------------------------------------------------------- cleanup net ---
+
+        /// <summary>
+        /// Destroys everything the fixture created and returns how many objects the net had
+        /// to rescue beyond that list (0 in a healthy run).
+        /// </summary>
+        private int CleanUp()
+        {
+            for (int i = created.Count - 1; i >= 0; i--)
+            {
+                DestroyFixtureObject(created[i]);
+            }
+
+            created.Clear();
+            return SweepStrayFixtureRoots();
+        }
+
+        private static void SweepStrayFixtureRootsOnNextTick()
+        {
+            SweepStrayFixtureRoots();
+        }
+
+        /// <summary>
+        /// Destroys every root of this fixture's signature in every loaded scene and returns
+        /// how many it found. The tracked list is the fast path; this is the net that does not
+        /// depend on it (an aborted run, an object re-created after teardown, a fixture
+        /// instance that never saw the creation).
+        /// </summary>
+        private static int SweepStrayFixtureRoots()
+        {
+            int swept = 0;
+            for (int s = 0; s < SceneManager.sceneCount; s++)
+            {
+                Scene scene = SceneManager.GetSceneAt(s);
+                if (!scene.IsValid() || !scene.isLoaded)
+                {
+                    continue;
+                }
+
+                GameObject[] roots = scene.GetRootGameObjects();
+                for (int r = roots.Length - 1; r >= 0; r--)
+                {
+                    GameObject root = roots[r];
+                    if (!IsFixtureObject(root))
+                    {
+                        continue;
+                    }
+
+                    // A leftover means a test did not end cleanly. The shape says which:
+                    // a childless root points at a re-created object, a root that still has
+                    // its child at a teardown that never ran.
+                    Debug.LogWarning("[RadialProxyLocalBoundsTests] sweeping a stray fixture root '" +
+                        root.name + "' (children=" + root.transform.childCount + ", scene='" +
+                        scene.name + "')");
+                    DestroyFixtureObject(root);
+                    swept++;
+                }
+            }
+
+            return swept;
+        }
+
+        private static void AssertSceneIsClean(string where)
+        {
+            Assert.AreEqual(0, SweepStrayFixtureRoots(), where + ": the open scenes must hold no '" +
+                FixtureRootName + "' root after cleanup; a scene save would commit it to the " +
+                "repository");
+        }
+
+        private static bool IsFixtureObject(GameObject go)
+        {
+            // DontSave is the fixture's signature: real scene content is never flagged with
+            // it, so an unrelated object that happens to be called "visual" cannot be hit.
+            if (go == null || (go.hideFlags & HideFlags.DontSave) == 0)
+            {
+                return false;
+            }
+
+            return string.Equals(go.name, FixtureRootName, StringComparison.Ordinal) ||
+                   string.Equals(go.name, FixtureChildName, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Destroys one throw-away object and drops the undo records the editor keeps for it.
+        /// <c>PickupFieldSync.EnsurePropCollider</c> (the code under test) adds its
+        /// BoxCollider through <c>Undo.AddComponent</c>, so the root is also in the undo
+        /// system — the one handle on it that can outlive this fixture's own list. Clearing
+        /// the records is not a guarantee (the net below is), but it removes the plausible
+        /// way a destroyed root is published again as a childless object.
+        /// </summary>
+        private static void DestroyFixtureObject(GameObject go)
+        {
+            if (go == null)
+            {
+                return;
+            }
+
+            Undo.ClearUndo(go);
+            Component[] components = go.GetComponents<Component>();
+            for (int i = 0; i < components.Length; i++)
+            {
+                if (components[i] != null)
+                {
+                    Undo.ClearUndo(components[i]);
+                }
+            }
+
+            UnityEngine.Object.DestroyImmediate(go);
         }
 
         private static Vector3 MeasureLocalBounds(Transform root, Renderer[] renderers)

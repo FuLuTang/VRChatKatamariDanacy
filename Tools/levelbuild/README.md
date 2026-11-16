@@ -402,3 +402,15 @@ python3 Tools/levelbuild/levelbuild.py check --level <id> --manifests Docs/Desig
 `--manifests` 的 0/1/2 退出码与默认输出一致、`model` 的逐字节往返与五类非法路径、def 无 repo
 资产但声明 model、`prop_fbx` 优先级、模型旁 manifest、`overlapBudget` 缺省/内/超/非法、
 `groupId` 同组豁免与异组不放行、`spawnClearanceM 0.15`。
+
+## 11. 出生点可达性模型（`spawn_reach.py`）
+
+给 `katamari.placement/2` 关卡（含参考关卡）选球出生点并预演成长：起始吸不动的道具当障碍的 0.1 m 栅格可达图（台阶 1.35·D、任意落差、多层地面、主强连通区），按路程 3 m / 8 m 内可吸件数排序，再做贪心成长预演（每吸一件重算直径、可吸集合、障碍与台阶限）。纯标准库；规则与出处见模块文档串和 [ORIGINAL_TERRAIN §2.4](../../Docs/Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)。
+
+```bash
+python3 Tools/levelbuild/spawn_reach.py Docs/Design/Levels/_ref_cancer scan          # 前 5 名
+python3 Tools/levelbuild/spawn_reach.py Docs/Design/Levels/_ref_cancer area X Z [--old-rules]
+python3 Tools/levelbuild/spawn_reach.py Docs/Design/Levels/_ref_cancer grow X Z [--safe]
+```
+
+结果是估算（不模拟电机冲量、运动件、墙隔视线）；选出的点写进 `ref_v2_from_extract.py` 的 `AUTHORED_SPAWNS`。测试：`Docs/tests/levelbuild/test_spawn_reach.py`。

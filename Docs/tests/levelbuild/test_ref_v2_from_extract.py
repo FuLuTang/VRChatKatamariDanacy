@@ -406,6 +406,31 @@ class RealExtractionTests(unittest.TestCase):
         self.assertIsNotNone(surface, "no terrain face under the authored spawn")
         self.assertLess(abs(surface + radius - ball["start"][1]), 1e-3)
 
+    def test_the_player_start_follows_our_rule_and_rests_on_the_terrain(self):
+        """``AUTHORED_SPAWNS[...]['playerStart']``: behind the ball, on a face, facing it.
+
+        The player's descriptor spawn is OUR rule (not the original's): 1.8-3.5 m behind the
+        ball along heading 0 (+z) within +-30 degrees, feet on a terrain face, facing the
+        ball.  The builder itself refuses a start that is no longer on a terrain face.
+        """
+        authored = build.AUTHORED_SPAWNS[LEVEL]
+        player = authored["playerStart"]
+        ball = self.document["meta"]["ball"]["start"]
+        feet = player["position"]
+        dx, dz = ball[0] - feet[0], ball[2] - feet[2]
+        distance = math.hypot(dx, dz)
+        self.assertGreaterEqual(distance, 1.8 - 1e-3)
+        self.assertLessEqual(distance, 3.5 + 1e-3)
+        bearing = math.degrees(math.atan2(dx, dz))        # heading 0 = +z
+        self.assertAlmostEqual(bearing, player["facingDeg"], delta=0.5)
+        self.assertLessEqual(abs(player["facingDeg"]), 30.0 + 1e-6)
+        self.assertAlmostEqual(distance, player["distanceM"], delta=0.01)
+        lookup = build._terrain_lookup(build.read_sidecar(self.sidecar))
+        surface = lookup(feet[0], feet[2], feet[1] + 1e-4)
+        self.assertIsNotNone(surface)
+        self.assertLess(abs(surface - feet[1]), 0.02)
+        self.assertIn("not the original", player["source"])
+
     def test_chunks_are_spatially_compact(self):
         """A chunk covers a small piece of the map, never an index-order run across it."""
         terrain = self.document["terrain"]

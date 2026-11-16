@@ -108,9 +108,9 @@
 | `ball.maxDiameterRef` | `"global"` \| `"level"` | 是 | **已定**：全项目一个全局上限 = **20 m**（owner 2026-11-16；引擎护栏，正常游玩很少摸到）。`"level"` 只给实验关/测试关用，且必须同时给 `maxDiameterM` |
 | `ball.maxDiameterM` | number | 条件 | `maxDiameterRef == "level"` 时必填；剧情关用它会被校验器记 `[meta_cap_override]` warning |
 | `ball.start` | 3×number | 是 | 球心出生点（世界米） |
-| `ball.spawnSource` | `"authored"` \| `"fieldCentreGuess"` \| `"reference"` | 是 | **推定值必须标出来**。`authored` = 点是在本关真实地形/道具/结构上量出来的可玩点，依据写进 `arena.notes`（参考关卡 `_ref_cancer` 就是）；`fieldCentreGuess` = 没有测量、只能取场心。原作出生点本身不可知，见 ORIGINAL_TERRAIN §2.4 |
+| `ball.spawnSource` | `"authored"` \| `"fieldCentreGuess"` \| `"reference"` | 是 | **推定值必须标出来**。`authored` = 点是在本关真实地形/道具/结构上量出来的可玩点（可达性模型选点：起始吸不动的道具当障碍，按 3 m 路程内可吸件数排序；参考关卡 `_ref_cancer` 就是），依据写进 `arena.notes`；`fieldCentreGuess` = 没有测量、只能取场心。原作出生点本身不可知，见 ORIGINAL_TERRAIN §2.4 |
 | `timeLimitS` | number | 剧情关必填 | 时限（秒）；`0` 表示不限时（实验/测试关） |
-| `playerSpawn` | 3×number | 是 | 玩家出生点；与球出生点分开 |
+| `playerSpawn` | 3×number | 是 | 玩家出生点；与球出生点分开。参考关卡暂为球上方 0.4 m；描述符 spawn（脚底）按我们的规则另算，沿球初始朝向反方向 2.5 m、落在地形面上、朝向面向球（非原作），目前存在转换器 `AUTHORED_SPAWNS` 的 `playerStart`，导入器以后读它，见 ORIGINAL_TERRAIN §2.4 |
 | `groundY` | number | 否 | **兜底平面高度**：没有 `terrain` 时它就是地面；有 `terrain` 时它必须**低于地形最低点**（否则兜底平面会顶穿地形），校验器 `[meta_ground_y]` 检查。参考关卡的真实地面主带是 −1.0（§0），但碰撞 AABB 的 y 下限到 −13.85 m，所以兜底取 −20，不是 0 |
 | `bounds` | `[[minX,minZ],[maxX,maxZ]]` | 是 | 轴对齐**作者框**：用来查道具越界、给编辑器画框，**不是**活动范围（活动范围见 §5） |
 | `spawnClearanceM` | number | 是 | 出生点净空半径 |
@@ -690,9 +690,9 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
     "convention": "unity-y-up-left-handed-quat-xyzw",
     "ball": {"startDiameterM": 0.222, "targetDiameterM": 0.80,
              "maxDiameterRef": "level", "maxDiameterM": 1.20,
-             "start": [3.1, -0.5313, -0.7], "spawnSource": "authored"},
+             "start": [-5.0, -0.999, 2.5], "spawnSource": "authored"},
     "timeLimitS": 0,
-    "playerSpawn": [3.1, -0.1313, -0.7],
+    "playerSpawn": [-5.0, -0.599, 2.5],
     "groundY": -20.0,
     "bounds": [[-26.41, -32.36], [32.47, 47.92]],
     "spawnClearanceM": 0.5,
@@ -1189,7 +1189,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 - 映射校验（导入器自检，不通过就拒绝）：`524` 实例、`90` 条真父子、`129` 个带运动程序、`153` 个带动画、`68` 个 AABB、`3,456` 三角形、`7,154` 顶点、3 个有效图形扇区、`7` 个模型。数字对不上说明提取器版本变了，**不猜**。
 - **运动映射**：`instances.json` 的 `motion{id,action,speed,pathIndex}` → `motions[]`；`motionID/action` 到 13 类的映射表来自 `motionActionTable`，**未识别的一律写 `null` 并进报告**，不按名字猜。`playAnimNo` → `clipStart`（提取器若没带这个字段，`clipStart` 留 −1 并在报告里记 `missing_playAnim`）；骨骼剪辑本身没有导出（noclip 不导出动画数据），所以 `defs[].clips` 只写段数与 id，**没有 `asset`**，运行时不能播，只能作为后续重建的规格。
 - **路径映射**：`pathIndex ≥ 0` 的 11 个 Cancer 实例目前**没有点表**；导入报告写 `paths_missing`，这些实例临时降级为 `behaviour:"static"` 或 `sporadic_walk`（二选一必须在报告里逐件列出，不能静默）。
-- 参考导入的出生点：能在本关地形/道具上量出可玩点就写 `spawnSource: "authored"`，量法与数值写进 `arena.notes`（`_ref_cancer` 如此，见 ORIGINAL_TERRAIN §2.4）；只能取场心才写 `fieldCentreGuess`。`notes` 保留 `src_y`。
+- 参考导入的出生点：能在本关地形/道具上量出可玩点就写 `spawnSource: "authored"`，量法与数值写进 `arena.notes`（`_ref_cancer` 如此，选点工具 `Tools/levelbuild/spawn_reach.py`，规则见 ORIGINAL_TERRAIN §2.4）；只能取场心才写 `fieldCentreGuess`。`notes` 保留 `src_y`。
 
 ---
 

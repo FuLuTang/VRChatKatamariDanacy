@@ -1222,27 +1222,40 @@ def _bounds(placements, margin=0.0):
 #: happens to be open ground; ``_ref_cancer``'s is not.  Its field centre lands at the edge
 #: of a 1.2 x 0.9 m floor slot -- vertical faces 0.006-0.08 m from the ball centre to the
 #: sides and behind, a 15 m building wall 0.09 m ahead on the default +z heading, a platform
-#: 1.53 m overhead -- so a 0.222 m ball has no free 0.1 m step in any direction (reachable
-#: ground at the start diameter: 0.01 m2).  A field-centre guess would repeat that trap for
-#: any level whose centre is not open.
+#: 1.53 m overhead -- so a 0.222 m ball has no free 0.1 m step in any direction.  A
+#: field-centre guess would repeat that trap for any level whose centre is not open.
 #:
-#: The replacement is measured against the built document (terrain sidecar + props +
-#: ``structures.solids`` + ``activityArea``), not drawn by eye.  The five rules and the
-#: measured values are in ORIGINAL_TERRAIN_AND_LAYOUT §2.4 and LEVEL_FORMAT_V2 §ball;
-#: ``ground`` pins the terrain face the point was measured on, so a terrain rebuild that
-#: moves it fails the build instead of spawning the ball in mid-air or inside a step.
+#: The replacement is chosen on the built document (terrain sidecar + props +
+#: ``structures.solids`` + ``activityArea``) by ``Tools/levelbuild/spawn_reach.py`` (``scan``):
+#: reachability with the props the start diameter cannot absorb as obstacles, ranked by how
+#: many absorbable props the ball reaches within 3 m of path.  The rules are in
+#: ORIGINAL_TERRAIN_AND_LAYOUT §2.4 and LEVEL_FORMAT_V2 §ball.  ``ground`` pins the terrain
+#: face the ball point was chosen on, so a terrain rebuild that moves it fails the build
+#: instead of spawning the ball in mid-air or inside a step.
+#:
+#: ``playerStart`` is the VRChat descriptor spawn (feet position) under OUR rule, not the
+#: original's: 2.5 m behind the ball along its initial heading (heading 0 = +z), on a terrain
+#: face, 0.4 m free of walls and of props the start diameter cannot absorb, walkable to the
+#: seat trigger; when 2.5 m back fails, the nearest feasible point 1.8-3.5 m back within
+#: +-30 degrees (``spawn_reach.player_start``).  The importer reads this field later;
+#: ``meta.playerSpawn`` stays ball + 0.4 m until then.
 AUTHORED_SPAWNS = {
     "_ref_cancer": {
-        "start": (3.10, -0.5313, -0.70),         # x, ball-centre y, z (world metres)
-        "ground": -0.6423,                       # the flat face under it (veranda floor)
-        "why": ("flat veranda face (0.6 m footprint all RIDE, 1 m height range 0.029 m), "
-                "4.00 m of clear walkable ground on the default +z heading, 9 props "
-                "absorbable at the 0.222 m start diameter on the same layer 2.2-4.1 m "
-                "ahead, 5.47 m inside the activity boundary, 35.6 m2 of ground reachable "
-                "at the start diameter, nearest wall/solid 1.10 m (the house wall the "
-                "sliding doors sit in) -- the 1.5 m clearance rule is the one rule this "
-                "level cannot meet anywhere it still has 8 start-absorbable props in "
-                "front of the ball"),
+        "start": (-5.00, -0.9990, 2.50),         # x, ball-centre y, z (world metres)
+        "ground": -1.1100,                       # the flat face under it (garden lawn)
+        "why": ("flat garden-lawn face (n.y >= 0.94, 0.6 m disc within 0.05 m of its height) "
+                "in the main strongly connected region of the start-diameter graph; "
+                "43 props absorbable at the start diameter within 3 m of rolling path and 135 "
+                "within 8 m (nearest 0.48 m), the route needs a 0.105 m step at most, nearest "
+                "wall/solid 0.54 m, nearest prop box 0.51 m, 6.49 m inside the activity "
+                "boundary, 1.5 m of headroom, 67.4 m2 of ground reachable at the start "
+                "diameter"),
+        "playerStart": {
+            "position": (-5.647, -1.0398, 0.0852),   # feet
+            "facingDeg": 15.0,                       # towards the ball (heading 0 = +z)
+            "distanceM": 2.5,                        # behind the ball; found at +15 degrees
+            "source": "our rule (spawn_reach.player_start), not the original's",
+        },
     },
 }
 
@@ -1274,6 +1287,15 @@ def _spawn(level_id, level, terrain, placements):
             "under it is now %r -- a terrain change moved the point; re-measure it against "
             "the rules in ORIGINAL_TERRAIN_AND_LAYOUT §2.4 before rebuilding"
             % (level_id, start, authored["ground"], surface))
+    player = authored.get("playerStart")
+    if player is not None:
+        feet = player["position"]
+        floor = _terrain_lookup(terrain)(feet[0], feet[2], feet[1] + 1e-4)
+        if floor is None or abs(floor - feet[1]) > 0.02:
+            raise RefV2Error(
+                "%s: the authored player start %r is not on a terrain face any more (the face "
+                "under it is %r); re-run Tools/levelbuild/spawn_reach.py before rebuilding"
+                % (level_id, feet, floor))
     return start, "authored", ("Ball spawn: authored, not a field-centre guess -- "
                                + authored["why"])
 

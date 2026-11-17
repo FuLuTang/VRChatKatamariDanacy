@@ -838,6 +838,10 @@ namespace VRCKatamari.BallMotor
         // carry them between steps and are what the getters report.
         [SerializeField] private bool climbDiagnosticsEnabled;
         private float nextClimbDiagnosticsSeconds;
+        private float slopeStamina = ContactTuning.SlopeStaminaMax;
+        private float slopeUphillSeconds;
+        private float slopeRestSeconds;
+        private bool slopeSliding;
         private bool climbActive;
         private float climbAnchorY;
         private int climbSurfaceId;
@@ -1531,6 +1535,10 @@ namespace VRCKatamari.BallMotor
             contactPreviousRotation = Quaternion.identity;
             contactHasPreviousFrame = false;
 
+            slopeStamina = ContactTuning.SlopeStaminaMax;
+            slopeUphillSeconds = 0f;
+            slopeRestSeconds = 0f;
+            slopeSliding = false;
             climbActive = false;
             climbAnchorY = 0f;
             climbSurfaceId = -1;
@@ -1736,7 +1744,8 @@ namespace VRCKatamari.BallMotor
                 nearObbCount, ref center, radius, ref planar, ref vertical, ref climbActive,
                 ref climbAnchorY, ref climbSurfaceId, ref climbCooldown, ref climbLocked,
                 ref climbAlongSpeed, ref climbTopYWorldM, ref climbSurfaceNormalWorld,
-                ref climbSurfacePointWorld, contactDriveDirection, driveSpeed, dt, protrusion,
+                ref climbSurfacePointWorld, ref slopeStamina, ref slopeUphillSeconds,
+                ref slopeRestSeconds, ref slopeSliding, contactDriveDirection, driveSpeed, dt, protrusion,
                 contactNormalsV2, contactPointsV2, contactDepthsV2, contactAnglesV2,
                 contactSurfaceIdsV2, contactRolesV2, contactFeaturesV2, contactClassesV2,
                 ContactTuning.ContactCapacity, out contactCount, out dominantSurfaceId,
@@ -1762,7 +1771,7 @@ namespace VRCKatamari.BallMotor
                 terrainContacts ? terrainChunkTriangleCounts : null,
                 terrainContacts ? terrainChunkZoneIds : null,
                 terrainContacts ? terrainChunkCount : 0,
-                CurrentSizeScale());
+                CurrentSizeScale(), rampRestSeconds, rampRestSpeedMps * CurrentSizeScale());
             if (!solved)
             {
                 // Fail closed (design §2.8): keep the previous position, drop the velocity
@@ -1847,7 +1856,8 @@ namespace VRCKatamari.BallMotor
                     + " id=" + climbSurfaceId + " height=" + climbHeightWorldM
                     + " climbV=" + climbSpeedWorldMps + " planarV=" + planarVelocity.magnitude
                     + " actualSpeed=" + (acceptedMove.magnitude / dt)
-                    + " resid=" + contactResidualMax);
+                    + " stamina=" + slopeStamina + " uphillS=" + slopeUphillSeconds
+                    + " slopeSliding=" + slopeSliding + " resid=" + contactResidualMax);
             }
 
             groundedCenter = center;
@@ -2595,6 +2605,9 @@ namespace VRCKatamari.BallMotor
         private void RefreshClimbGate(float driveSpeed)
         {
             if (!climbActive) return;
+            // Slopes keep their channel for stop/rest/slide, even after effective drive
+            // vanishes. The solver, not this wall-release gate, owns that transition.
+            if (SlopeClimbMath.IsSlope(ObbContactMath.ContactAngleDeg(climbSurfaceNormalWorld))) return;
             // The gate is checked against the face the SOLVER is climbing (the remembered
             // climb surface, kept stable by the selection hysteresis), not against
             // "whichever wall the velocity pointed at last step" (climbWallNormalWorld):
@@ -2770,6 +2783,10 @@ namespace VRCKatamari.BallMotor
 
         private void ClearClimbState()
         {
+            slopeStamina = ContactTuning.SlopeStaminaMax;
+            slopeUphillSeconds = 0f;
+            slopeRestSeconds = 0f;
+            slopeSliding = false;
             climbActive = false;
             climbAnchorY = 0f;
             climbSurfaceId = -1;

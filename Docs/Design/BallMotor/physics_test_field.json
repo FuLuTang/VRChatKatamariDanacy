@@ -1347,7 +1347,7 @@
       "id": "C06",
       "slug": "ramp_500",
       "sandbox_label": "C06\nboard 50 deg (refused)",
-      "name_zh": "50° 斜板（应爬不上：拒绝注册）",
+      "name_zh": "50° 斜板（体力坡爬，无固定高度上限）",
       "kind": "ramp",
       "stage": "P3",
       "wired": true,
@@ -1385,7 +1385,7 @@
           "forward": 0.0,
           "turn": 0.0,
           "lateral": 0.0,
-          "note": "顶住兜底墙 2 s：球应停在板前，不穿过去"
+          "note": "推进 2 s 后松手；体力足够时应爬完 0.60 m 板"
         }
       ],
       "checks": [
@@ -1424,10 +1424,10 @@
           "note": "motor 报出的被拒斜面实测坡度 >= 49°：拒绝的是这块 50° 板，不是别的输入"
         },
         {
-          "id": "no_climb",
+          "id": "slope_top_reached",
           "metric": "max_bottom_rise_m",
-          "op": "<=",
-          "limit": 0.0,
+          "op": ">=",
+          "limit": 0.58,
           "unit": "m",
           "readout": "frame",
           "gate": null,
@@ -1438,11 +1438,7 @@
             "pass",
             "pass"
           ],
-          "v2": {
-            "threshold": "climb_cap_bound",
-            "op": "<="
-          },
-          "note": "v2：50° 板没被登记成斜面（D5：AddRamp 的 45° 门不动），球爬的是它 0.60 m 高的世界 AABB 盒面，所以「50° 在爬升带」只是旁证。阈值不写常数：驱动算 1.02·H_cap + cap_margin，H_cap = ContactTuning.KHeight · D = 1.5·D（裸球无线尖，2026-11-16 owner 拍板 k_h=1.5）。四档：D0.30 到 cap 后滑回（+0.3068 是 pass8 在 k_h=1.0 时的实测），D0.60 爬完 0.60 板顶（+0.5999），D1.10 也爬完（+0.6000），D2.20 直接滚过去。上界成立；下界（真的爬了 ≥0.5·H_cap）仍由 W2 建好后补。"
+          "note": "满推体力足够，球底峰值应达到 0.60 m 板顶（允许 2 cm 采样/棱容差），所有四档均适用；不以墙的 1.5D cap 判陡坡。"
         },
         {
           "id": "stopped_by_wall",
@@ -1509,7 +1505,7 @@
         "p2": "BLOCKED_UNTIL_P3",
         "p3": "PASS"
       },
-      "notes": "紧凑格：50° 板升 0.60、宽 4、厚 0.20，世界 AABB 顶 0.60。作者门在 45° 之上拒绝 role=ramp（LEVEL_AUTHORING 4.3「改成 box」），所以板以 box 落库：AABB 进 staticBoxes 当兜底墙；判据导入器把同一块板的 +Y 面烘给驱动，驱动运行时调 motor.AddRamp 取证拒绝原因。arena 行是 ramps=0/0，被拒的 0/1 由驱动的 probe 行给出（PHYSICS_TEST_FIELD.md §4.1.2）"
+      "notes": "50° 板升 0.60 m，以 box 登记真实旋转 OBB；AddRamp 的 45° 作者探针门不变，不把拒绝 probe 当作运行时阻挡。45–60° 走体力坡爬，四档满推均应到顶，0.30 m 球不再受 1.5D 高度预算限制。"
     },
     {
       "id": "C13",

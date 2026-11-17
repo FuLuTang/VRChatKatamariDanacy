@@ -32,7 +32,7 @@ Docs/Design/Levels/physics_test_field/
 ├── C01/placement.json       5° 斜板（升 0.60，水平 6.86，宽 4）
 ├── C03/placement.json       25° 斜板（升 0.60，水平 1.29，宽 4）
 ├── C05/placement.json       45° 斜板（等号边界，必须被接受）
-├── C06/placement.json       50° 斜板（必须被拒绝；板以 box 落库，AABB 当兜底墙）
+├── C06/placement.json       50°斜板（AddRamp探针仍拒绝；旋转box走体力坡爬，满推可到顶）
 └── C13/placement.json       0.6 m 台面（5×4）+ 南侧 11.31° 坡（接缝与直角边掉落同格）
 
 C25/placement.json       墙 + 顶棚（爬坡卡死复现，只诊断；顶棚底 0.50 m）
@@ -76,10 +76,10 @@ C21/ C22/ C23/ C24/            地形格（台阶 / 沟 / 隧道 / 路缘）：p
 - `role=ramp` 的盒：**本地 +Y 面是行走面**（作者线 = 球滚的面），4 cm 板体挂在它下面；本地
   +X 是宽度，本地 +Z 是上坡方向。`AddRamp` 的 center 取 +Y 面中心，不是盒中心。
 - `meets` 指向坡顶到达的台面；两者行走面同高（δ = 0），`levelbuild check` 会核对。
-- 坡度**含等号**：45.0° 必须被接受（C05），50.0° 必须被拒绝（C06）。紧凑化后升程统一 0.60 m。
-- **超过 45° 的作者门在 `levelbuild check` 里**：`role=ramp` 超过 45° 直接报错，并要求改成
+- 坡度**含等号**：45.0° 必须被接受（C05），50.0°的AddRamp探针仍须拒绝（C06），但box接触按体力坡爬通过。紧凑化后升程统一 0.60 m。
+- **超过 45° 的作者门在 `levelbuild check` 里**：`role=ramp`超过45°按当前LEVEL_AUTHORING为warning；C06有意保留
   `box`（`LEVEL_AUTHORING` §4.3）。所以 C06 的 50° 板以 `role=box` + `kind=ramp_probe` 落库：
-  它的世界 AABB 正好是这块 0.20 厚板的兜底墙（顶 0.60 > 2.20 档 stepLimit 0.55；底 −0.129），
+  板顶0.60m；v2按Collider的真实旋转登记OBB，不把它压成AABB竖墙，
   导入器把它接进 `staticBoxes`；判据导入器再从同一块板的 +Y 面烘出 probe 平面，驱动在运行时
   调 `motor.AddRamp` 取证拒绝原因。**它不是 role=ramp，所以 `ramps` 计数是 0/0；被拒的
   0/1 由驱动的 `[ptf] rampProbe ... refused=1 slope=50.00 reason=...` 行给出。** 这一格的

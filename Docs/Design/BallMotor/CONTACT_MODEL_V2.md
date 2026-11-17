@@ -14,7 +14,8 @@
 **球对一组定向盒（OBB）做精确最近点接触；接触法线与竖直的夹角 θ 连续地决定“滚、爬、挡”三件事。**
 
 - **滚**（θ ≤ 45°，`ride`）：球在这张面上滚，位置被推出到相切，水平速度**一分不减**（等于今天坡的手感）。
-- **爬**（45° < θ，`climb`）：接触法线接管速度，球沿**上坡切线**以受限速度前进；有速度门、有高度上限、到顶回滑。
+- **坡爬**（45°<θ≤60°）：速度门通过后沿上坡切线慢爬；耗体力、持续越久越难、大球耗得慢；**无固定高度上限**，耗尽后静止0.3 s再滑回，平地立即回满。
+- **爬墙**（θ>60°）：保留速度门、`H_cap=1.5·(2r+λL)`与到顶掉落；60°是工程试验值，不是原作阈值。
 - **挡**：不满足“爬”的门（推入太浅、速度不够、已在回滑冷却）时，只做非穿透 + 去法向速度，就是墙。
 
 台阶、坡顶接缝、低台面、斜面从侧面/下面穿过、爬墙，**全部是这一条规则的几何后果**，没有第二种几何表示、没有台阶级别阈值。
@@ -36,7 +37,7 @@
 | 类别 | 内容 |
 |---|---|
 | **已推导（几何/数值，参考模型覆盖）** | 球–OBB 最近点与法线（面/棱/角/内部）；隧穿下界（采样间距 ≤ r 时接触区 ≥ 2r）；45° 接缝差 = 0；`h < r` 的棱滚越条件；0.30 球 4 m/s 需 2 子步；弯坡弦高与法线跳变 |
-| **有锚点但数值是我方的** | `H_cap` 的比例：**没有原作数值**（手册转述不含比例；跨系列核查见 `ORIGINAL_CLIMB_OBSERVATIONS.md`）。取的 **1.5 是我们的 PROVISIONAL**，用来让参考关卡的 0.19 m 凹槽与约 0.30 m 台阶都过得去（[TERRAIN_CLIMB](TERRAIN_CLIMB.md) §7）。角度、速度、时间同样无公开数值 |
+| **有锚点但数值是我方的** | `H_cap` 的比例：**没有原作数值**（WLK USA手册印刷p.23/PDF25有约1D定性描述；非初代精确值，见 `ORIGINAL_CLIMB_OBSERVATIONS.md`）。取的 **1.5 是我们的 PROVISIONAL**，用来让参考关卡的 0.19 m 凹槽与约 0.30 m 台阶都过得去（[TERRAIN_CLIMB](TERRAIN_CLIMB.md) §7）。原作坡墙分界与精确速度/时间仍未知；REROLL逆向补丁已提供独立坡体力/时间/尺寸结构线索（C） |
 | **纯我方设计（必须试玩）** | `θ_ride=45°`、15° 爬升余量、`v_min=1.5 m/s`、`k_intent=0.5`、`T_climb=2.8125 s`、`m0=0.15`、`v_slide_max=1.0`、冷却/锁定、dash 1.6×/0.45 s、窗口边距、全部容量；**形状层**：`r_visual=0.95r_phys`、pickup 盒支撑函数、针尖 16 根与 `r_tip=0.01`、`k_grip=0.5`、针尖参与横向阻挡（§4A） |
 | **完全没测** | 任何 Unity/Udon 编译、EditMode、Play Mode、帧时间、手感；本文的所有“每步成本”都是 flop 与调用次数的**估算**，不是测量 |
 
@@ -252,11 +253,11 @@ N = clamp( ceil( (|Δ| + (g + a_climb)·dt²) / (κ·r) ), 1, N_max )      κ = 
 ```
 classify(n):
     if n.y < −0.05:            return NONE     # 天花板/底面：只挡，不滚不爬
-    if n.y ≥ cos(θ_ride):      return RIDE     # θ ≤ 50°：可滚
-    return CLIMB                              # 50° < θ < 90°+：可爬/挡
+    if n.y ≥ cos(θ_ride):      return RIDE     # θ ≤ 45°（+既有0.5°容差）
+    return CLIMB                              # 内部分45–60°坡 / >60°墙；天花板仍NONE
 ```
 
-**θ_ride = 45°（OUR）+ 0.5° 等号容差**：45° 的坡必须能滚（C05，且 `AddRamp` 的作者门就是 45°），50° 的板（C06）**必须离开“滚”**、进入“慢慢爬”，60° 以上更不用说（否则 60° 坡会以 4 m/s 冲上去，等于没有重力感）。45° 同时是 `maxSupportSlopeDegrees`，也是“硬上限 51.3°”（由单步钳位反推）之下的保守值。**这条让 C06 的语义从“拒绝”变成“爬”**（Lead 的补充要求）。
+**θ_ride = 45°（OUR）+ 0.5° 等号容差**：45° 的坡必须能滚（C05，且 `AddRamp` 的作者门就是 45°），50° 的板（C06）**必须离开“滚”**、进入“慢慢爬”，更陡表面也走受限通道；冲刺通过同一v_gate增速减耗，不把陡坡当平地速度滚。45° 同时是 `maxSupportSlopeDegrees`，也是“硬上限 51.3°”（由单步钳位反推）之下的保守值。**这条让 C06 的语义从“拒绝”变成“爬”**（Lead 的补充要求）。
 等号按 `θ ≤ 45.5°` 判 ride（0.5° 容差）：45° 的板正好在线上，浮点噪声不能让它在“滚/爬”之间翻。同一条纪律也适用于 §2.5 的 `h<r`（用 `h ≤ r − 0.5 mm` 判滚越），三处等号一次改完，不要只改一处。
 
 **15° 爬升余量（OUR，防“坡顶把爬升通道骗开”）**：
@@ -406,32 +407,36 @@ C05：坡 45°、台面顶 0.6、台面南面 z=8.2、球 r=0.1499。
 | 结论 | 级别 | 来源 | 我们怎么用 |
 |---|---|---|---|
 | 面朝墙、双摇杆前推 ⇒ 向上翻越 | `[官方]` | We Love Katamari 英文手册 “CLIMB OVER OBSTACLES!!” | **输入语义**：不需要按钮，推入即爬（§8 拍板项） |
-| 可翻越的墙：手册转述只说“climb it in order to reach higher areas”，**不含尺寸比例**（原引文「about the same size…」在 `ORIGINAL_CLIMB_OBSERVATIONS.md` 里未找到出处，已删） | `[官方转述]` | 维基 We Love Katamari（注 3 = 手册） | **没有原作比例**：`H_cap = k_h·2r` 的形状是模型，`k_h = 1.5` 是 **OUR PROVISIONAL** |
-| 上坡需要“predetermined velocity”；Vmax 随体积增大 | `[专利]` | US7402104B2 | **速度门** `v_req(θ)`；本工程速度随 D/D0 缩放，爬升门读 `vGate/s`（`BALL_INERTIA.md` §3，大小球一致），所以“大球能上更陡的坡”**不由速度复现**，由 `H_cap ∝ D` 与 `h<r` 复现 |
+| 可翻越的墙约与块魂同大 | `[官方]` A、定性近似 | We Love Katamari USA 手册印刷p.23 / PDF第25页，“Climb Over Obstacles!!”（ORIGINAL_CLIMB_OBSERVATIONS S18） | 约1D量级锚，**非初代精确球心升程**；`k_h=1.5`仍是owner PROVISIONAL |
+| 上坡需要“predetermined velocity”；Vmax 随体积增大 | `[专利]` | US7402104B2 | **速度门** `v_req(θ)`；本工程速度随 D/D0 缩放，爬升门读 `vGate/s`（`BALL_INERTIA.md` §3，大小球一致），所以“大球能上更陡的坡”**不由速度复现**，坡上由体力消耗的尺寸因子复现，墙/棱由 `H_cap ∝ D` 与 `h<r` 复现 |
 | 70°/90° 的具体角度、爬升速度、时间上限 | **无任何公开数值** | — | 全部标 **OUR design**，见 §3.5 的试玩清单 |
 | 原作碰撞是**单个等效体积盒**，凸出物只改接地点 | `[专利]` | US7402104B2 | 碰撞仍是**一个球**；凸出物只进 `H_cap` 的 `λL` 项（§3.7），不做逐物件碰撞 |
 
-### 3.2 三个带，不是白名单
+### 3.2 滚、体力坡爬、爬墙、挡
 
 | 带 | 条件 | 谁驱动速度 | 有高度上限吗 |
 |---|---|---|---|
 | **滚** | θ ≤ 45° | `BallMotionMath` 的水平速度（坡上不减速） | 无（坡多长都能滚） |
-| **爬** | θ > 45° 且比支撑陡 ≥ 15° | 爬升通道（沿上坡切线，受限） | **有**：`H_cap = 1.5·(2r + λL)` |
+| **坡爬** | 45°<θ≤60°，且比支撑陡≥15° | 同一通道、`SlopeClimbMath`；速度门+体力/时长/尺寸 | **无**；体力耗尽静止后滑回 |
+| **爬墙** | θ>60°，且比支撑陡≥15° | `ClimbMath` 的墙速率与高度fade | **有**：`H_cap = 1.5·(2r + λL)` |
 | **挡** | 不满足爬的门（推入 < 0.2 / 速度 < `v_req` / 冷却 / 已锁） | 只做非穿透 + 去法向分量 | — |
 
-**为什么不是角度白名单**：白名单会写 `θ ≤ 70 才可爬`，在 70.1° 产生硬边。这里“能不能爬”是**连续门**：
-
+**分界是工程试验，不是原作角度白名单**：60°只分流到体力坡爬与有限高度爬墙；两者都可在推入/速度门满足时开始。
+完整状态、体力公式、参数来源与可信度见 [TERRAIN_CLIMB §0.1](TERRAIN_CLIMB.md#01-体力坡爬2026-11-17-当前决定)。
 ```
 v_req(θ) = v_min · sin^α(θ)            # v_min = 1.5 m/s, α = 1.0
 v_gate   = max(|v_planar|, k_intent · v_drive)   # k_intent = 0.5, v_drive = 输入目标速度
-可爬 ⇔ p ≥ 0.2  且  v_gate ≥ v_req(θ)  且  h < H_cap  且  冷却 = 0  且  未锁
+起坡 ⇔ p ≥ 0.2 且 v_gate ≥ v_req(θ)；S>0才有上坡推进，否则等静止后滑回
+起墙 ⇔ p ≥ 0.2 且 v_gate ≥ v_req(θ) 且 h < H_cap 且 冷却 = 0 且 未锁
 ```
 
 - `v_drive` 是 `BallMotionMath` 的**目标速度**（`|forward|·maxSpeed`），不是接触削剩下的实际速度。**为什么**：球顶住墙时实际水平速度 ≈ 0，若用实际速度做门，永远起不了步（“推墙不动”）；用目标速度表达“你有多用力推”。
 - 全推（4 m/s）：`v_gate = 2.0` ⇒ 90° 也过（`v_req(90)=1.5`）；半推（2 m/s）：`v_gate = 1.0`，连 50° 都不过（`v_req(50)=1.15`）。所以“轻推不爬、重推才爬”，且这个门随 θ 连续收紧。
 - `p = max(0, −dot(û, n_h))`：`û` = 朝向，`n_h` = 法线水平投影的单位向量。斜面侧擦（p 小）不爬。
 
-### 3.3 速度与高度公式（全部 OUR design，除 `k_h`）
+### 3.3 爬墙速度与高度公式（θ>60°，全部 OUR design）
+
+45–60°坡爬不读这里的h/H_cap；只复用h=0、H=1.5D的初始速率，再乘时长阻力（TERRAIN_CLIMB §0.1）。
 
 **高度上限**
 
@@ -469,24 +474,26 @@ v        = v_along · t_up                                  # 爬升通道“拥
     climbActive = false; along = 0; cooldown = 0.35 s
     若因到顶：climbLocked = true
     然后：v_y ← max(v_y − g·dt, −v_slide_max)      # v_slide_max = 1.0 m/s，墙面接触时
-climbLocked 只在 p < 0.2（松开）时清除
+墙的climbLocked在p<0.2或降回h<0.5H_cap时清除；重爬保留本段最低锚点
 ```
 
-- **为什么锁定**：不锁定的话，球到顶→滑下→再次满足门→再爬，会在 `H_cap` 附近形成**看不见的无限循环**（参考模型在加锁前就是每 4 s 一次）。锁定 = “一次推入只给一次机会”，要再爬必须松手再推。
+- **墙锁**：到cap后必须先滑回半高才可再爬，或松手清锁；沿用最低锚点，持续推不会棘轮上升（TERRAIN_CLIMB §6.6）。坡体力与墙锁独立，不靠墙冷却补体力。
 - **为什么回滑限速 1.0 m/s**：`g` 自由落体从 0.6 m 只要 0.35 s，观感是“掉下来”；1.0 m/s 是“慢慢滑回来”，且不会触发卡死计时（有位移）。
 
 ### 3.4 状态与每步更新顺序（精确到公式）
 
-**每球状态（UdonSharp 标量；单球版 7 个字段，其中 `climbHeight` 是派生量）**
+**每球状态（UdonSharp标量；climbHeight为派生量，坡状态与墙状态分开持久化）**
 
 | 字段 | 类型 | 含义 |
 |---|---|---|
-| `climbActive` | bool | 本步是否在爬 |
+| `climbActive` | bool | 接触速度通道存活；坡通道也含静止等待与滑回，不等于上升中 |
 | `climbAnchorY` | float | `h` 的原点 = 本次贴墙段的底：站立（有 RIDE 支撑且不在爬）的子步取球心 y，爬升开始取 `min(已有锚点, 球心 y)`；**与面无关**（[TERRAIN_CLIMB](TERRAIN_CLIMB.md) §6.6） |
 | `climbSurfaceId` | int | 诊断用（**不参与退出判断**，见下） |
-| `climbAlong` | float | 沿切线的速率（速率限制的状态） |
+| `climbAlong` | float | 沿切线的有符号速率；坡上负值为滑回 |
+| `slopeStamina` / `slopeUphillSeconds` | float / float | 体力量与累计有效上坡时长；平地立即满/归零 |
+| `slopeRestSeconds` / `slopeSliding` | float / bool | 既有RampSlideMath静止闩锁的坡通道状态；不和RIDE重复加速 |
 | `climbCooldown` | float | 回滑/退出的冷却 |
-| `climbLocked` | bool | 到顶锁：松开才清 |
+| `climbLocked` | bool | 墙到顶锁：松手或降回半高才清 |
 | `climbHeight` | float | 只读派生量 `h`（诊断/getter） |
 
 **每步顺序**（嵌进 v2 的新阶段 3–4，完整 9 阶段见 §7.3）：
@@ -580,7 +587,9 @@ climbLocked 只在 p < 0.2（松开）时清除
 | **W2** 90° 高墙 | 墙高 3.0 m（≫ H_cap=0.60，D=0.60） | 爬到 `h≈0.58` → 锁定 → 以 ≤1.0 m/s 滑回地面 → 停在地面（不再爬） | `max_bottom_rise ≤ 1.02·H_cap`，`slide_back_m ≥ 0.3`，`recovery == 0`，`reclimb_count == 0` |
 | **W3** 70° 坡 | 坡升 0.24 m（< H_cap=0.30，D=0.30），坡顶接 0.24 m 台面 | 贴坡 → 沿切线爬（0.369 m/s）→ 球心越过台面棱 → RIDE → 站上台面 | `deck_gap abs ≤ 0.01`，`climb_time ≤ 2.0 s`，`support_kind==4` 至少一帧 |
 
-**一个必须写进作者指南的后果**：`H_cap` 是**高度**上限，不是长度上限。一条 70° 的坡如果升程 > `H_cap`（例如 D=0.60 的球遇到 1.0 m 高的 70° 坡），球只能爬到 0.6 m 然后滑回——**这是设计行为**，不是 bug。作者要么把陡坡的升程控制在 `H_cap` 以内，要么把坡度降到 ≤50°（可滚、无上限）。`levelbuild` 应在 S4 加一条 warning：`role=ramp` 且 `slope>50` 且 `rise > 2·(ball diameter)` ⇒ 提示“只能爬到约一个直径”。
+**作者后果**：>60°走墙高度预算，升程超过`1.5D`不能一次爬完；45–60°没有高度cap，
+能否通过看推进门、长度/时长、尺寸与体力，冲刺有帮助。≤45°继续RIDE；不能把50°误写成平地速度无限滚。
+具体新验收见TERRAIN_CLIMB §0.1，现有70° W3仍按墙通道处理。
 
 ### 3.7 凸出长物件（径向代理）的贡献
 
@@ -604,7 +613,7 @@ capProxy = min(maxProxyProtrusionPerCoreRadius·r, maxProxyProtrusionWorldM)   #
 | 触发 | 输入层的一个动作（`ControlIntentMath` 的 action），桌面 = 按住左键 + 前进？ | **需拍板**：键盘/手柄映射由输入适配层定；本设计只要求“一个离散动作 + 一个持续时间” |
 | 速度倍率 | 1.6×（4.0 → 6.4 m/s；2.20 档 3.0 → 4.8） | 子步仍 N=2（0.128 m/步 = 0.854r） |
 | 时长 / 冷却 | 0.45 s / 1.2 s | |
-| 爬升 | `rate` 从 1.0 抬到 1.5（封顶）⇒ 爬升快 50% | 不改变 `H_cap` |
+| 爬升 | `rate`从1.0至1.5；坡耗体力最少0.625×（同一v_gate导出） | 墙H_cap不变；坡本来就无高度cap，耗尽不被dash恢复 |
 | 用途 | ① 冲过 0.5D–1.0D 的台阶（更快到顶）；② 短距离加速；③ 勉强过速度门 | |
 
 **dash 不改变几何**：它不能让球爬上 > `H_cap` 的墙，也不能让 `h>r` 的棱变成可滚。W5 因此测“更快”，不是“能/不能”（§6.2）。
@@ -612,7 +621,7 @@ capProxy = min(maxProxyProtrusionPerCoreRadius·r, maxProxyProtrusionWorldM)   #
 ### 3.9 坡面切向重力：静止后才有
 
 - RIDE 带：位置推挤只做相切；球停下后才开始下滑（见下）。
-- CLIMB 带在“不爬”时用 `v_y` 的重力 + `v_slide_max` 回滑，**但不动 `v_planar`**。所以：
+- >60°墙在“不爬”时用`v_y`重力与`v_slide_max`；45–60°坡通道静止/耗尽时调用同一个RampSlideMath闩锁，0.3 s后沿负切线滑回（同时写平面与竖直速度），不能套墙的纯竖直掉落。所以：
   - 45° 坡（RIDE）松手 = 停 0.3 s 后顺坡滑；
   - 70° 坡（CLIMB）松手 = 慢慢滑回（符合“陡坡站不住”的直觉）。
 - RIDE 带内的“静止后下滑”：球静止满 0.3 s 后才加沿坡下坡的 `g·sinθ·rampTangentialGravityScale`（`RampSlideMath` 锁存，`UpdateRampSlide`，见 [BALL_INERTIA.md](BALL_INERTIA.md) §4）；运动中和有推力时不加，平地不滑。
@@ -1128,7 +1137,7 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 | C04 35° | pass | pass | — | — |
 | **C05 45°** | **`climbed` 全档 fail（死锁）** | **`climbed` 全档 pass** | **翻转** | `climbed deck_gap abs ≤ 0.01`（不变，变的是结果）；`ramp_support == 1` 全档（2.20 仍 n/a，见下） |
 | **C05 @2.20** | `ramp_support/ramp_entered` 不适用 | 仍不适用（r=1.1 > 坡长 0.6，球不“站在坡面上”） | — | 保留 R1/R2 的 n/a，但**球会滚过去**：新增 `passed_over == 1` |
-| **C06 50°** | `ramp_refused` / `no_climb` / 墙 | **没有拒绝**；这块板以 0.60 m 的盒落库（D5：50° 的 `AddRamp` 门不动），升程 vs `H_cap = 1.5·D`：**D=0.30 爬到 cap 0.43 后滑回**（到不了 0.6 的板顶）；D=0.60（cap 0.90）爬完板顶；D=1.10 爬完；D=2.20 直接滚过 | **重定义（每档不同）** | 删 `ramp_refusal_*` / `no_climb`；`support_slope_deg ∈ [49,51]`；D=0.30/0.60 判 `max_bottom_rise ≤ 1.02·H_cap` + `slide_back ≥ 0.2`；D=1.10 判 `climbed` pass（窗口 ≥ 3 s）；D=2.20 判 `passed_over` |
+| **C06 50°** | AddRamp拒绝probe保留 | box真实旋转OBB走体力坡爬；D0.30满推可到0.60m板顶，四档均可通过 | **体力坡爬** | `slope_top_reached`: `max_bottom_rise_m≥0.58`；不以墙cap判坡 |
 | C07 0.02 | pass 全档 | pass 全档 | — | — |
 | C08 0.05 | pass 全档 | pass 全档 | — | — |
 | **C09 0.075** | 0.30 **fail**（墙），其余 pass | 0.30 **pass**（0.075 < r=0.15） | **翻转 0.30** | `expect` 0.30 改 pass |
@@ -1486,7 +1495,7 @@ motor.SetPropObbs(propObbCenter, propObbAxisX, propObbAxisY, propObbAxisZ,
 | `ramp_support` | `ramp_support_seen` | 全 PASS | 保持 | 保持（坡顶仍是 RIDE 接触） |
 | `ramp_entered` | `ramp_entry_progress_m` | 7.3–8.3 m PASS | 保持 | 保持 |
 | `ramp_refused` / `refusal_slope` | `ramp_refusal_reason_len` / `ramp_refusal_slope_deg` | C06 四档无拒绝 | **翻转**：v2 不拒绝任何坡（§1.5、§8 拍板 9） | 改成 warning 或 n/a（S4 已在 levelbuild 改成 warning） |
-| `no_climb` | `max_bottom_rise_m` | C06 四档 +0.3068/+0.5999/+0.6000/… | **替换**：50° 在 v2 必须**慢爬**，不是“不许爬” | 新判据：`max_bottom_rise ∈ [0.5·H_cap, 1.02·H_cap+0.02]` 且 `slide_back ≥ 0.2`（D=0.30/0.60）；D=1.10 判 `climbed`；D=2.20 判 `passed_over`（§6.1 C06 行） |
+| `slope_top_reached` | `max_bottom_rise_m` | C06四档满推 | **体力足够时到板顶**，不是墙高度预算 | `>=0.58 m`（0.60 m顶，2cm采样容差） |
 | `stopped_by_wall` | `blocked_gap_m` | C06 四档 −0.0809/−1.0264/−2.1663/−2.8897 | **替换**：v2 越过挡板继续走 | 改判 `blocked_gap > 0`（越过了）或换 `passed_over` |
 | `crossed` / `no_speed_loss` / `not_blocking` / `no_overflow` / `no_saturation` / `size_accuracy` | 各自 | 全 PASS（C14 的 speed_ratio 1.62/1.61/1.48/1.24） | 保持 | 保持 |
 | `fall_frames` / `landed_on_ground` / `landing_gap` / `no_slip_back` | 各自 | C13 2.20 由 n/a 恢复为 applicable（球真落回地面） | 保持；2.20 的 `landed_on_ground`（读 `support_kind`）在取值域扩到 4/5 后仍成立（落地是 0，不是 4/5） | 保持，注意 `support_kind` 现在可能是 4/5 |
@@ -1521,7 +1530,7 @@ pass8 中 C14 的 `lift_bounded` 为红：+0.0189/+0.0721/+0.1346/+0.2133（≈0
 | 3 | **爬墙要不要按钮** | ① 只推入（官方） ② 额外按键 | **①**：官方手册就是“双摇杆前推”；② 会让 VR 输入更复杂 | 输入层 |
 | 4 | **dash** | ① 1.6×/0.45 s/冷却 1.2 s ② 不做 ③ 更强 | **①**；dash 只加速/提速爬升，不改 H_cap | 输入层 + 手感 |
 | 5 | **台阶阈值变成 ~1.0D 是否接受** | ① 接受（滚/爬/墙三段） ② 把爬升限制在墙（台阶不爬） | **①**，但用 `k_h` 调；若嫌“什么都能上”，降 `k_h` 到 0.6–0.75 | 所有台阶格的重定义（§6.1） |
-| 6 | **`θ_ride = 45°`** | 45 / 50 / 55 | **45**（45 坡必须滚、50 坡必须慢爬、60 坡必须不能冲） | C05/C06 的语义 |
+| 6 | **`θ_ride=45°`、坡墙60°** | 60°为试验值 | RIDE不变；45–60°体力慢坡爬；>60°墙cap | TERRAIN_CLIMB §0.1 / C05 / C06 |
 | 7 | **弯坡表示** | ① 薄片 OBB 链 ② 解析圆柱 | **①**；② 只在 R≥20 m 半管时单独立项 | 导入器/关卡数据/容量 |
 | 8 | **大地图与 9 格的关系** | ① 并存（小格判据、沙盒手感） ② 替换 | **①**（Lead 已明确“9 格留作自动化回归”） | 测试场工作量 |
 | 9 | **45° 作者门何时改 warning** | S4 立即 / 更晚 | **S4**（否则 60/70 坡没法入库） | `levelbuild` + 既有 level 数据 |
@@ -1578,7 +1587,7 @@ required_speed_with_grip(theta_deg, protrusion, r_core) -> float
 
 ### 9.3 参考模型的验收场景
 
-- 45° 接缝到 0.750 m；90° 墙上限 0.581 m（cap 0.60）后滑回；70° 坡上到 0.39 m 台面；0.5D 低墙翻过；50° 板 D=0.30 爬到 0.299 后滑回、D=1.10 上台面。
+- 45° 接缝到 0.750 m；90° 墙上限 0.581 m（cap 0.60）后滑回；70° 坡上到 0.39 m 台面；0.5D 低墙翻过；50°板D=0.30/D=1.10体力足够均到0.60m板顶；50°/58°长坡耗尽后静止0.3s再滑回，平地立即满。
 - 形状层（`shapes.py`）：视觉核心 = 当前碰撞半径；pickup 盒 1.0/1.41/1.73 r 且 ≥ 滚动 reach；针尖支撑被 cap 夹住；只有突出的针进接触；针尖随球旋转；针尖 point 接触的深度/法线；grip 在半个 r 的突出时把 90° 门槛减半。
 
 ### 9.4 与其它文档的交叉引用

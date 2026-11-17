@@ -11,12 +11,12 @@ namespace VRCKatamari.Tests
 {
     /// <summary>
     /// Pins the criteria importer's override encoding, the cell fields it writes into, and
-    /// the bake that must tag exactly the file's one override row (C06 no_climb), never all 90.
+    /// the bake that tags only authored override rows (currently none), never all 90.
     /// </summary>
     /// <remarks>
     /// <para>
     /// A criterion may carry an optional <c>v2</c> override block that replaces its base row
-    /// (design <c>PHYSICS_TEST_FIELD.md</c> section 5.6); today only C06 no_climb has one. The JSON side is checked in
+    /// (design <c>PHYSICS_TEST_FIELD.md</c> section 5.6); C06 now uses a base slope-top criterion, not a wall cap. The JSON side is checked in
     /// <c>Docs/tests/levelbuild/test_physics_test_field_cells.py</c>; what only EditMode can
     /// check is the C# half - the cell really has the six arrays the importer writes through
     /// <c>SerializedObject</c>, and the encoder turns the JSON's v2 block into the masks the
@@ -146,13 +146,13 @@ namespace VRCKatamari.Tests
 
             // The file's own count is assertable now that the SAME predicate the importer bakes
             // with is what this test counts (see IsV2Override). It is the number the JSON guard
-            // pins too: Docs/tests/levelbuild/test_physics_test_field_cells.py counts the one
-            // real "v2" key in the file. If the importer ever regresses to `v2 != null` again,
+            // pins too: Docs/tests/levelbuild/test_physics_test_field_cells.py counts the
+            // real "v2" keys in the file. If the importer ever regresses to `v2 != null` again,
             // TheImporterBakesExactlyTheFilesOverrideRows fails before this one does.
-            const int DesignOverrideRowCount = 1;
+            const int DesignOverrideRowCount = 0;
             Assert.AreEqual(DesignOverrideRowCount, rows,
-                "the criteria file's override rows changed: only C06 no_climb (the symbolic " +
-                "climb_cap_bound threshold) carries one. The exact count is pinned by " +
+                "C06 slope-top is a base row; no wired criterion needs a symbolic wall cap. " +
+                "The exact count is pinned by " +
                 "Docs/tests/levelbuild/test_physics_test_field_cells.py");
         }
 
@@ -224,7 +224,7 @@ namespace VRCKatamari.Tests
 
             Assert.AreEqual(90, total,
                 "the criteria file's wired check count moved; update this test");
-            Assert.AreEqual(1, v2Rows, "the importer must bake the file's one override row; 90 " +
+            Assert.AreEqual(0, v2Rows, "the importer must bake no unrequested overrides; 90 " +
                 "means every default V2Entry was tagged (the pass10 regression)");
             Assert.Less(v2Rows, total, "override rows sit on top of base rows: all rows tagged is the bug");
 
@@ -245,8 +245,7 @@ namespace VRCKatamari.Tests
                 Assert.AreEqual(0, baked[baseRows[i]], baseRows[i] + " must stay a base row");
             }
 
-            Assert.AreEqual(1, baked["C06/no_climb"], "C06/no_climb carries the climb_cap_bound " +
-                "threshold override");
+            Assert.AreEqual(0, baked["C06/slope_top_reached"], "C06 uses its authored top, not a wall-cap override");
         }
 
         /// <summary>
@@ -267,11 +266,12 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void TheSymbolicClimbBoundIsEncodedAsWritten()
+        public void TheC06SlopeTopIsABaseRowNotASymbolicWallCap()
         {
-            // The one override row: JSON -> encoder -> the mask/op/threshold the driver reads.
-            // The block carries only the threshold and op, so the expectation is inherited (-1).
-            AssertRow("C06", "no_climb", -1, 1, 1);                  // <= climb_cap_bound
+            object row = FindCheck("C06", "slope_top_reached");
+            Assert.IsFalse(IsV2Override(Field(row.GetType(), row, "v2")));
+            Assert.AreEqual(">=", (string)Field(row.GetType(), row, "op"));
+            Assert.AreEqual(0.58f, (float)Field(row.GetType(), row, "limit"), 1e-6f);
         }
 
         [Test]

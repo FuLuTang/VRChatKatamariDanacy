@@ -444,9 +444,8 @@ def override_rows(doc):
 class CriteriaRows(unittest.TestCase):
     """The criteria rows: one judge, one optional override block, record-only diagnostics.
 
-    Every row is the criterion as written. The one override block left is C06 ``no_climb``,
-    whose bound is symbolic (``climb_cap_bound``: the driver derives it from the motor's own
-    constants), so it cannot be written as a metre value in the row.
+    Every row is the criterion as written. C06 is slope stamina, not a wall-height
+    budget. Symbolic wall-cap vocabulary remains available for the planned wall cells.
     """
 
     def setUp(self):
@@ -456,7 +455,7 @@ class CriteriaRows(unittest.TestCase):
 
     def test_override_blocks_use_a_closed_vocabulary(self):
         rows = list(override_rows(self.doc))
-        self.assertEqual([(c["id"], k["id"]) for c, k, _ in rows], [("C06", "no_climb")])
+        self.assertEqual([(c["id"], k["id"]) for c, k, _ in rows], [])
         for cell, check, block in rows:
             where = "%s/%s" % (cell["id"], check["id"])
             self.assertTrue(set(block) <= V2_KEYS, "%s: %s" % (where, set(block) - V2_KEYS))
@@ -469,11 +468,12 @@ class CriteriaRows(unittest.TestCase):
             self.assertNotIn(word, text)
         self.assertNotIn("criteria_models", self.doc)
 
-    def test_the_c06_climb_bound_is_symbolic(self):
-        no_climb = [c for c in self.cells["C06"]["checks"] if c["id"] == "no_climb"][0]
-        self.assertEqual(no_climb["v2"]["threshold"], "climb_cap_bound")
-        self.assertEqual(no_climb["op"], "<=")
-        self.assertEqual(no_climb["expect"], ["pass"] * 4)
+    def test_c06_reaches_the_board_top_instead_of_the_wall_cap(self):
+        reached = [c for c in self.cells["C06"]["checks"] if c["id"] == "slope_top_reached"][0]
+        self.assertNotIn("v2", reached)
+        self.assertEqual((reached["metric"], reached["op"], reached["limit"]),
+                         ("max_bottom_rise_m", ">=", .58))
+        self.assertEqual(reached["expect"], ["pass"] * 4)
 
     def test_the_folded_rows_match_the_design(self):
         for cell_id in ("C01", "C03", "C05", "C13"):

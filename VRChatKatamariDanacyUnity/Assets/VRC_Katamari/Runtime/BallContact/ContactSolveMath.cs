@@ -534,6 +534,10 @@ namespace VRCKatamari.BallContact
             ref float climbTopY,
             ref Vector3 climbNormal,
             ref Vector3 climbPoint,
+            ref float slopeStamina,
+            ref float slopeUphillSeconds,
+            ref float slopeRestSeconds,
+            ref bool slopeSliding,
             Vector3 driveDirection,
             float driveSpeed,
             float dt,
@@ -591,7 +595,9 @@ namespace VRCKatamari.BallContact
             int[] terrainChunkTriangleCounts = null,
             int[] terrainChunkZoneIds = null,
             int terrainChunkCount = 0,
-            float gateSizeScale = 1f)
+            float gateSizeScale = 1f,
+            float slopeRestHoldSeconds = ContactTuning.SlopeRestSeconds,
+            float slopeRestSpeedMps = ContactTuning.SlopeRestSpeedMps)
         {
             contactCount = 0;
             dominantSurfaceId = -1;
@@ -623,6 +629,16 @@ namespace VRCKatamari.BallContact
             if (!KatamariMath.IsFiniteVector(climbNormal)) return false;
             if (!KatamariMath.IsFiniteVector(climbPoint)) return false;
 
+            if (!KatamariMath.IsFiniteFloat(slopeStamina) || slopeStamina < 0f ||
+                slopeStamina > ContactTuning.SlopeStaminaMax) return false;
+            if (!KatamariMath.IsFiniteFloat(slopeUphillSeconds) || slopeUphillSeconds < 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(slopeRestSeconds) || slopeRestSeconds < 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(slopeRestHoldSeconds) || slopeRestHoldSeconds < 0f) return false;
+            if (!KatamariMath.IsFiniteFloat(slopeRestSpeedMps) || slopeRestSpeedMps < 0f) return false;
+            float stamina = slopeStamina;
+            float uphillSeconds = slopeUphillSeconds;
+            float restSeconds = slopeRestSeconds;
+            bool sliding = slopeSliding;
             Vector3 position = center;
             Vector3 vPlanar = planarVelocity;
             float vY = verticalVelocity;
@@ -654,6 +670,20 @@ namespace VRCKatamari.BallContact
 
             for (int substep = 0; substep < substeps; substep++)
             {
+                // A slope channel owns signed tangent motion, including its rest/slide.
+                // Discard newly accumulated uphill thrust before integration when exhausted.
+                bool previousSlope = SlopeClimbMath.IsSlope(ObbContactMath.ContactAngleDeg(surfaceNormal));
+                if (active && previousSlope)
+                {
+                    Vector3 tangent = Vector3.up - surfaceNormal * surfaceNormal.y;
+                    float length = tangent.magnitude;
+                    if (length > 0f)
+                    {
+                        tangent = tangent / length;
+                        vPlanar = new Vector3(tangent.x * along, 0f, tangent.z * along);
+                        vY = tangent.y * along;
+                    }
+                }
                 // The substep moves with the CURRENT velocity, so a velocity the contact
                 // adds (climb, gravity) acts in this step instead of one step later.
                 position = new Vector3(
@@ -731,6 +761,15 @@ namespace VRCKatamari.BallContact
                 Vector3 pushNormal = wallIndex >= 0 ? contactNormals[wallIndex] : surfaceNormal;
                 float theta = wallIndex >= 0 ? contactAngles[wallIndex]
                     : ObbContactMath.ContactAngleDeg(pushNormal);
+                bool slope = SlopeClimbMath.IsSlope(theta);
+                // Reaching a wall from a slope starts a WALL budget at that contact,
+                // never at the distant slope foot. Stamina itself survives either handoff.
+                if (surfaceId >= 0 && wallIndex >= 0 && previousSlope != slope)
+                {
+                    anchorY = position.y;
+                    locked = false;
+                    cooldown = 0f;
+                }
                 float pushIn = 0f;
                 if (!TryPushIn(pushNormal, drive, out pushIn)) pushIn = 0f;
                 float planarSpeed = Mathf.Sqrt(vPlanar.x * vPlanar.x + vPlanar.z * vPlanar.z);
@@ -750,7 +789,16 @@ namespace VRCKatamari.BallContact
                 // same wall-hugging stretch instead of beginning a new one.
                 if (!active && supportIndex >= 0) anchorY = position.y;
 
-                if (!active && wallIndex >= 0 && !locked && cooldown <= 0f &&
+                // Only genuinely level support refills. A face change, input release or
+                // wall retry must not manufacture fresh slope stamina.
+                if (supportIndex >= 0 && supportTheta <= ContactTuning.SlopeRefillMaxDeg)
+                {
+                    stamina = ContactTuning.SlopeStaminaMax;
+                    uphillSeconds = 0f;
+                    restSeconds = 0f;
+                    sliding = false;
+                }
+                if (!active && wallIndex >= 0 && (slope || (!locked && cooldown <= 0f)) &&
                     pushIn >= ContactTuning.PMin &&
                     vGate >= ClimbMath.RequiredSpeed(theta) && hCap > 0f)
                 {
@@ -774,7 +822,7 @@ namespace VRCKatamari.BallContact
                 }
 
                 // The climb's endings, in priority order: release, ledge, cap, lost hug.
-                if (active && pushIn < ContactTuning.PMin)
+                if (active && !slope && pushIn < ContactTuning.PMin)
                 {
                     active = false;
                     cooldown = ContactTuning.ClimbCooldownS;
@@ -807,7 +855,7 @@ namespace VRCKatamari.BallContact
                     vY = 0f;
                     vPlanar = LedgeExitVelocity(vPlanar, surfaceNormal, driveSpeed, radius);
                 }
-                if (active && hCap > 0f &&
+                if (active && !slope && hCap > 0f &&
                     position.y - anchorY >= hCap - ContactTuning.ClimbCapMarginM)
                 {
                     active = false;
@@ -847,14 +895,23 @@ namespace VRCKatamari.BallContact
                     if (!KatamariMath.TryNormalize(tangent, out tangentUnit, out tangentLength))
                         return false;
                     float height = position.y - anchorY;
-                    float verticalTarget = ClimbMath.ClimbSpeed(pushIn, vGate, theta, height,
-                        hCap);
-                    float sinTheta = Mathf.Sin(theta * Mathf.Deg2Rad);
-                    float alongTarget = verticalTarget / Mathf.Max(sinTheta,
-                        ContactTuning.MinClimbSinTheta);
-                    float rate = ContactTuning.ClimbRateLimit * dt / substeps;
-                    if (alongTarget > along) along = Mathf.Min(along + rate, alongTarget);
-                    else along = Mathf.Max(along - rate, alongTarget);
+                    if (slope)
+                    {
+                        SlopeClimbMath.Step(theta, 2f * radius,
+                            driveSpeed > 0f ? pushIn : 0f, vGate, dt / substeps,
+                            slopeRestHoldSeconds, slopeRestSpeedMps, ref stamina, ref uphillSeconds,
+                            ref restSeconds, ref sliding, ref along);
+                    }
+                    else
+                    {
+                        float verticalTarget = ClimbMath.ClimbSpeed(pushIn, vGate, theta, height, hCap);
+                        float sinTheta = Mathf.Sin(theta * Mathf.Deg2Rad);
+                        float alongTarget = verticalTarget / Mathf.Max(sinTheta,
+                            ContactTuning.MinClimbSinTheta);
+                        float rate = ContactTuning.ClimbRateLimit * dt / substeps;
+                        if (alongTarget > along) along = Mathf.Min(along + rate, alongTarget);
+                        else along = Mathf.Max(along - rate, alongTarget);
+                    }
                     // The climb may never lift the bottom PAST the ledge: clamp this substep's
                     // vertical travel to the distance that is left (topY < +inf means the ledge
                     // is known). Without it a step of the climb's own rate lands the ball above
@@ -875,7 +932,7 @@ namespace VRCKatamari.BallContact
                     vPlanar = new Vector3(tangentUnit.x * along, 0f, tangentUnit.z * along);
                     vY = tangentUnit.y * along;
                     climbSpeedValue = vY;
-                    if (height >= hCap - ContactTuning.ClimbCapMarginM)
+                    if (!slope && height >= hCap - ContactTuning.ClimbCapMarginM)
                     {
                         active = false;
                         cooldown = ContactTuning.ClimbCooldownS;
@@ -947,6 +1004,10 @@ namespace VRCKatamari.BallContact
                 }
             }
 
+            slopeStamina = stamina;
+            slopeUphillSeconds = uphillSeconds;
+            slopeRestSeconds = restSeconds;
+            slopeSliding = sliding;
             center = position;
             planarVelocity = vPlanar;
             verticalVelocity = vY;

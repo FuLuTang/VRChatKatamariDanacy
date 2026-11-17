@@ -236,16 +236,16 @@ namespace VRCKatamari.Tests
                 Assert.IsTrue(smallBall.Step(slope50, new Vector3(0f, 0f, 1f), 4f, 0.02f, 5f));
                 if (smallBall.Center.y > smallHighest) smallHighest = smallBall.Center.y;
             }
-            // Python (K_H = 1.5): highest y = 0.599468688 (the first face cap: 0.15 + 0.45
-            // plus the one-substep overshoot). The cap is now anchored on the face, so a
-            // retry cannot ratchet above it - the old 0.755 m deck excursion is gone.
-            Assert.AreEqual(0.599468688f, smallHighest, TrajectoryTolerance);
-            // Release for the deterministic ending (the C# retries while the push is held).
+            // Python stamina slope: highest y = 0.749584362 (deck 0.6 + radius).
+            // The C# top-settle reaches 0.75; the existing 5 mm trajectory tolerance
+            // covers its <= 5 mm ledge settle, not a difference in slope stamina logic.
+            Assert.AreEqual(0.749584362f, smallHighest, TrajectoryTolerance);
+            // After crossing the finite deck, release and settle on the floor.
             for (int i = 0; i < 300; i++)
             {
                 Assert.IsTrue(smallBall.Step(slope50, new Vector3(0f, 0f, 1f), 0f, 0.02f));
             }
-            Assert.Less(smallBall.Center.y - 0.15f, 0.05f);  // slid back down once released
+            Assert.Less(smallBall.Center.y - 0.15f, 0.05f);  // crossed the deck and landed
             Assert.IsFalse(smallBall.ClimbActive);
 
             ContactWorld lowWall = ContactScenes.LowWallWorld();

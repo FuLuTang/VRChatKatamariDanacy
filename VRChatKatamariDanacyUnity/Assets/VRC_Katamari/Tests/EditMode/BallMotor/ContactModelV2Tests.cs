@@ -143,6 +143,64 @@ namespace VRCKatamari.Tests
                 new Vector3(halfWidth, halfHeight, halfDepth), surfaceId, 0);
         }
 
+        [TestCase(50f)]
+        [TestCase(58f)]
+        public void SlopeStaminaExhaustionReturnsToTheFootWithoutRecovery(float theta)
+        {
+            float angle = theta * Mathf.Deg2Rad;
+            Vector3 normal = new Vector3(0f, Mathf.Cos(angle), -Mathf.Sin(angle));
+            Vector3 tangent = new Vector3(0f, Mathf.Sin(angle), Mathf.Cos(angle));
+            float rise = 20f;
+            float run = rise / Mathf.Tan(angle);
+            Vector3 mid = new Vector3(0f, rise * 0.5f, 7f + run * 0.5f);
+            Assert.IsTrue((bool)Invoke("AddObb", mid - normal * 0.05f, Vector3.right,
+                normal, tangent, new Vector3(2f, 0.05f, rise / Mathf.Sin(angle) * 0.5f), 20, 0));
+            float radius = Radius();
+            Invoke("TeleportTo", new Vector3(0f, radius, 6.7f));
+            Invoke("SetMoveAxes", 1f, 0f, 0f);
+            bool exhausted = false, slid = false, returned = false;
+            for (int i = 0; i < 1500; i++)
+            {
+                Step(1);
+                exhausted |= GetFloat("slopeStamina") <= 0f;
+                slid |= GetFloat("climbAlongSpeed") < -0.1f;
+                if (exhausted && slid && GetCenter().y < radius + 0.02f)
+                { returned = true; break; }
+            }
+            Assert.IsTrue(exhausted);
+            Assert.IsTrue(returned, "held input must not hover on an exhausted slope");
+            Assert.AreEqual(0, (int)Invoke("GetRecoveryCount"));
+        }
+
+        [Test]
+        public void SlopeStaminaTeleportStartsAFreshEpisode()
+        {
+            SetField("slopeStamina", 0f);
+            SetField("slopeUphillSeconds", 5f);
+            SetField("slopeRestSeconds", 0.3f);
+            SetField("slopeSliding", true);
+            Invoke("TeleportTo", new Vector3(0f, Radius(), 0f));
+            Assert.AreEqual(100f, GetFloat("slopeStamina"));
+            Assert.AreEqual(0f, GetFloat("slopeUphillSeconds"));
+            Assert.AreEqual(0f, GetFloat("slopeRestSeconds"));
+        }
+
+        [Test]
+        public void SlopeStaminaC06FullPushReachesThePointSixMetreTop()
+        {
+            ContactWorld world = ContactScenes.SlopeWorld(50f, 0.6f, 4f);
+            for (int i = 0; i < world.Count; i++)
+                Assert.IsTrue((bool)Invoke("AddObb", world.Centers[i], world.AxisX[i],
+                    world.AxisY[i], world.AxisZ[i], world.HalfExtents[i], world.SurfaceIds[i], world.Roles[i]));
+            float radius = Radius();
+            Invoke("TeleportTo", new Vector3(0f, radius, 6f));
+            Invoke("SetMoveAxes", 1f, 0f, 0f);
+            float highest = 0f;
+            for (int i = 0; i < 200; i++) { Step(1); highest = Mathf.Max(highest, GetCenter().y - radius); }
+            Assert.Greater(highest, 0.59f);
+            Assert.AreEqual(0, (int)Invoke("GetRecoveryCount"));
+        }
+
         [Test]
         public void AddBoxAlsoRegistersAnAxisAlignedObb()
         {

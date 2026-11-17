@@ -55,6 +55,10 @@ namespace VRCKatamari.Tests
         public float Radius;
         public Vector3 PlanarVelocity;
         public float VerticalVelocity;
+        public float SlopeStamina = ContactTuning.SlopeStaminaMax;
+        public float SlopeUphillSeconds;
+        public float SlopeRestSeconds;
+        public bool SlopeSliding;
         public bool ClimbActive;
         public float ClimbAnchorY;
         public int ClimbSurfaceId = -1;
@@ -120,7 +124,8 @@ namespace VRCKatamari.Tests
                 ref Center, Radius, ref PlanarVelocity, ref VerticalVelocity,
                 ref ClimbActive, ref ClimbAnchorY, ref ClimbSurfaceId, ref ClimbCooldown,
                 ref ClimbLocked, ref ClimbAlongSpeed, ref ClimbTopY, ref ClimbNormal,
-                ref ClimbPoint,
+                ref ClimbPoint, ref SlopeStamina, ref SlopeUphillSeconds,
+                ref SlopeRestSeconds, ref SlopeSliding,
                 driveDirection, driveSpeed, dt, 0f,
                 ContactNormals, ContactPoints, ContactDepths, ContactAngles,
                 ContactSurfaceIds, ContactRoles, ContactFeatures, ContactClasses,
@@ -572,11 +577,9 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void A50DegreeSlabIsClimbedOnlyWithinTheCap()
+        public void A50DegreeSlabHasStaminaInsteadOfTheWallHeightCap()
         {
-            // C06 redesigned: 50 deg is in the climb band, and a 0.6 m rise against
-            // H_cap = D separates the sizes. D = 0.30 caps at 0.30 and slides back;
-            // D = 1.10 reaches the 0.6 deck.
+            // C06 is a stamina slope. Both sizes can finish this short 0.6 m rise.
             ContactWorld small = ContactScenes.SlopeWorld(50f, 0.6f, 3f);
             ContactBall smallBall = new ContactBall();
             smallBall.Center = new Vector3(0f, 0.15f, 6.4f);
@@ -590,20 +593,8 @@ namespace VRCKatamari.Tests
                 if (smallBall.Center.y > smallHighest) smallHighest = smallBall.Center.y;
                 smallSawLocked = smallSawLocked || smallBall.ClimbLocked;
             }
-            // The cap is the height above the FACE: the first attempt's anchor is the start
-            // centre, so the peak is `anchor + H_cap` (0.15 + 0.45 = 0.60) within the
-            // one-substep overshoot, and a retry on the same face keeps that anchor.
-            Assert.LessOrEqual(smallHighest - 0.15f, ClimbMath.ClimbHeightCap(0.15f) + 0.02f);
-            Assert.Less(smallHighest - 0.15f, 0.6f - 0.05f);  // never the 0.6 m deck
-            Assert.IsTrue(smallSawLocked);                    // the cap was reached once
-            // A held push retries after the fall (owner D2), so the end state of the cycle is
-            // not asserted; releasing is the deterministic form (see the golden test).
-            for (int i = 0; i < 200; i++)
-            {
-                Assert.IsTrue(smallBall.Step(small, new Vector3(0f, 0f, 1f), 0f, 0.02f, 5f));
-            }
-            Assert.Less(smallBall.Center.y - 0.15f, 0.05f);   // slid back down once released
-            Assert.IsFalse(smallBall.ClimbActive);
+            Assert.Greater(smallHighest - 0.15f, 0.59f);
+            Assert.IsFalse(smallSawLocked, "slope ascent never sets the wall cap lock");
 
             ContactWorld big = ContactScenes.SlopeWorld(50f, 0.6f, 3f);
             ContactBall bigBall = new ContactBall();

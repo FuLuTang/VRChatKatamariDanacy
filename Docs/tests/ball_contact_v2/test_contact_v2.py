@@ -319,10 +319,8 @@ class ClimbTests(unittest.TestCase):
         self.assertLess(climb_speed(1.0, 2.0, 70.0, 0.0, 0.3), 1.0)
         self.assertGreater(climb_speed(1.0, 2.0, 70.0, 0.0, 0.3), 0.2)
 
-    def test_50_degree_slab_is_climbed_only_within_the_cap(self):
-        # C06 redesigned: 50 deg is in the climb band, and a 0.6 m rise against
-        # H_cap = D separates the sizes.  D=0.30 caps at 0.30 and slides back;
-        # D=1.10 reaches the 0.6 deck.
+    def test_50_degree_slab_has_stamina_instead_of_the_wall_cap(self):
+        # C06: both sizes have enough stamina for the short 0.6 m slope.
         small = slope_world(50.0, 0.6, width_m=3.0)
         small_state = State(center=(0.0, 0.15, 6.4), radius=0.15,
                             v_planar=(0.0, 0.0, 4.0))
@@ -330,9 +328,8 @@ class ClimbTests(unittest.TestCase):
         for _ in range(250):
             step(small, small_state, (0.0, 0.0, 1.0), 4.0, 0.02, drive_accel=5.0)
             small_highest = max(small_highest, small_state.center[1])
-        self.assertLessEqual(small_highest - 0.15, climb_height_cap(0.15) + 0.02)
-        self.assertLess(small_state.center[1] - 0.15, 0.05)   # slid back down
-        self.assertTrue(small_state.climb_locked)
+        self.assertGreater(small_highest - 0.15, .59)
+        self.assertFalse(small_state.climb_locked)
 
         big = slope_world(50.0, 0.6, width_m=3.0)
         big_state = State(center=(0.0, 0.55, 6.4), radius=0.55, v_planar=(0.0, 0.0, 4.0))

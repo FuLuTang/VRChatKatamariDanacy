@@ -1,21 +1,41 @@
 # 原作「推墙即爬」跨系列公开资料核查（初代 / REROLL / We Love / Beautiful / Forever / ノ・ビ～タ / Once Upon）
 
-**调研日期：2026-11-16 UTC（项目时区 Asia/Shanghai）。** 本文是**文献核查**，不是录像量测：
+**调研日期：2026-11-16；补证2026-11-17 UTC（项目时区 Asia/Shanghai）。** 本文是**文献核查**，不是录像量测：
 用各作攻略、手册转述、官方页与直接讨论机制的帖子，把「贴墙爬升」这条机制的**存在性、操作条件、
 上限、时长**逐条钉到来源上，并明确哪些数字**至今没有任何来源**。
 
 **结论先说**
 
 1. **机制存在，且跨作都在**：推着墙滚就能沿竖墙往上爬。REROLL 有明确的操作描述（慢贴、别弹开、再往前推）；
-   We Love Katamari 的手册（经维基转述）直接说「rolling against a wall allows the katamari to "climb" it」。
+   We Love Katamari USA 手册已取得原文（印刷p.23/PDF25，S18），确认推入与约同球大小的墙。
 2. **梯子/绳是另一套**：墙上有梯子（或台阶/绳）时可以**无限爬**；这是**多个独立来源一致**的说法。
    传说里「初代能爬半分钟上工厂烟囱」的那个烟囱，**日文攻略两处都写明烟囱上有ハシゴ（梯子）**——
    所以它是**梯子案例，不是普通墙案例**。这一条直接推翻了「初代普通墙能无限爬」的主要论据。
 3. **初代普通墙有没有上限：仍然未知。** 唯一正面主张（初代可无限爬）的作者在同一帖里自认「十多年没玩、
    只是印象」；反方（封顶 ≈2 倍球高）说的是**续作/新作**，同样无来源。
-4. **没有任何来源给出初代/REROLL 的爬升上限倍数、爬升速度、到顶时长。** 只出现过「1–2 倍球高」
+4. **初代/REROLL精确爬升上限、速率、总时长仍未确认**。WLK手册约1D是官方定性描述，Jones论文有画面比例估算；REROLL补丁已公开独立坡体力/时间/尺寸结构线索（C），不是完整原作参数。 只出现过「1–2 倍球高」
    （续作/新作、社区、帖内被反驳）与「约 3 秒后被弹开」（新作、玩家观察）。
    ⇒ 设计里 `k_h = 1.5` / `T_climb = 2.8125 s`（原 4.5 s，所有者 2026-11-17 试玩后提速 60%）**落在传言区间内不等于被证实**，两者仍是我们自己的暂定值。
+
+### 0.1 新证据：坡与墙分开（2026-11-17）
+
+| # | 来源 / 短语 | 可得 / 不可得 | 可信度与核对边界 |
+|---|---|---|---|
+| S18 | [We Love Katamari USA 手册馆藏](https://archive.org/details/kirklands-manual-labor-sony-playstation-2-usa-4k-version)，印刷p.23/PDF25，“Climb Over Obstacles!!”；“about the same size as your katamari” | 墙与球同量级；**不是**初代精确cap或球心升程 | A：研究报告已逐图核实原文，非维基转述；官方定性近似 |
+| S19 | [The0x539/katamari-fps-patch，固定提交196497482b538527f749dca9fbd2718b7f1b045a](https://github.com/The0x539/katamari-fps-patch/tree/196497482b538527f749dca9fbd2718b7f1b045a)，movement.rs:47–88 / types.rs:418–419 | 独立uphill/slope_state，累计时长、尺寸质量因子、坡体力，平地立即回满；66.6°是消耗饱和、**不是**坡墙分界；100与0.76?仅注释 | C：单一逆向作者补丁，本轮读了本地只读源码，不是原生DLL全函数验证；许可未确认（固定提交根树无LICENSE，LICENSE请求404），不得vendor或逐行翻译 |
+| S20 | [初代官方动作页](https://www.bandainamcoent.co.jp/cs/list/katamari_damacy/action/index.html)，“急な坂道…一挙に駆け上がる” | 冲刺能帮助上陡坡；无θ/速度/普通推必失败断言 | A：主人提供外部检索摘要，实施者未另行打开原页 |
+| S21 | [US7402104B2 FIG.12 / S28](https://patents.google.com/patent/US7402104B2/en)，“A predetermined velocity is necessary” | 坡段速度门、体积增长提高最高速与加速度 | A：专利实施例，不等于商业版完整实现；主人摘要与既有专利研究同向 |
+| S22 | [Whistance-Smith硕士论文p.130图4.19](https://www.gregws.ca/wp-content/uploads/downloads/Whistance-Smith_Gregory_M_201907_MA.pdf)，初代HOP提示“up small steps” | 推小台阶与相对球尺寸有关；不是普通墙最大高度 | A：教程截图经论文呈现，主人检索摘要，实施者未逐页重测 |
+| S23 | [Ian Bryce Jones, Enough of a World Ch.3 pp.210–212](https://www.academia.edu/29374662/) | 看台1.31D未上/0.73D可上，栅栏0.53D持续推可翻，路锥0.48D仍挡；不能平均成通用cap | C：NTSC画面像素估算，主人提供摘要，不是受控量测；作品/几何条件不能混为同一门 |
+| S24 | [CritPoints 2016](https://critpoints.net/2016/07/06/katamari-damacy-the-greatest-collectathon/)，“slowly climb…relative to you”；WLK Tutorial / 初代GameFAQs MAS7持续推墙 | 慢爬、相对尺寸、持续输入 | C：媒体/攻略定性；主人摘要未附后二项精确页面，不升级为新数值证据 |
+| S25 | WLKR+Royal Reverie Steam 2025-11-18 #12/#13（主人摘要） | 4.5s与“某墙无限”互相矛盾 | C：社区记忆，未提供精确串URL，不作为工程时长依据 |
+| S26 | Takahashi 2004 Game Developer postmortem（主人摘要）；REROLL评测 | 撞不可过物可能掉吸附件（A）；攀爬中被碰撞判掉回地面（C） | 不是cap失败处理的证据；缺精确页URL的摘要保留为补证线索 |
+
+补充逆向线索：KatamariMods 的 PS2KatamariSimulation.dll 可核模块存在；cympfh size地址与 Katamari Dreams
+内存实践没有给出坡/墙常数，**不据模块存在推定机制数值**。本轮坡墙分界、初代精确cap的独立量测样本仍为0。
+
+**项目决定**：owner2026-11-17已定45–60°体力慢坡爬、无固定高度上限，平地补满、大球更易；>60°墙保持1.5D。
+60°是PROVISIONAL工程试验；保留速度门，dash通过同一门速度增加坡速率并减耗。见[TERRAIN_CLIMB §0.1](../../Design/BallMotor/TERRAIN_CLIMB.md#01-体力坡爬2026-11-17-当前决定)。
 
 ---
 
@@ -42,7 +62,7 @@
 | S3 | REROLL | "items only fly off whenever there's multiple attempts at either rolling on something too big or is **too steep a wall to climb**" | [Steam REROLL「Do items fly off more easily…」2018-12-11, Lenky Lad](https://steamcommunity.com/app/848350/discussions/0/1741102632991672789/) / **D** | 存在**「太陡 ⇒ 爬不上去」**的坡/壁阈值（未给角度） |
 | S4 | REROLL | "You had items fall off for doing simple things like **just trying to climb**." | 同上串 2018-12-14, UNBREAKABLE / **D** | 尝试爬 = 碰撞 = 掉件（对应本作「脆」的观感） |
 | S5 | **初代 2004** | "None of the tutorials or hints in the first game let you know that the katamari can climb walls… if a wall has a **ladder or steps** on it, you can climb it **indefinitely**" | [TV Tropes 条目（搜索摘要，2025-10-28）](https://tvtropes.org/pmwiki/pmwiki.php/Sandbox/KatamariGames) / **E** | 初代**没有任何教学**教你爬墙（所以「原作没这功能」的印象很常见）；梯子/台阶可无限爬；同段还说「碰墙即算碰撞」 |
-| S6 | **We Love**（2005） | "Rolling against a wall allows the player katamari to **\"climb\"** it in order to reach higher areas." | [维基 We Love Katamari, Gameplay 段，注 3 = 手册](https://en.wikipedia.org/wiki/We_Love_Katamari) / **B** | 手册级来源确认「贴墙→爬→到高处」；**注意：这句里没有任何尺寸比例** |
+| S6 | **We Love**（2005） | "Rolling against a wall allows the player katamari to **\"climb\"** it in order to reach higher areas." | [维基 We Love Katamari, Gameplay 段，注 3 = 手册](https://en.wikipedia.org/wiki/We_Love_Katamari) / **B** | 维基转述支持「贴墙→爬→到高处」；手册原文的约同球大小描述与精确页码见S18 |
 | S7 | **We Love / Forever** | "you are able to roll, or climb, up the wall if you held **both the analog sticks forward**… In… Katamari Forever… the tutorial, after learning all the basic controls, you have to hold both joysticks forward the climb up a wall." | [Unreal Engine 论坛 2016-07-06](https://forums.unrealengine.com/t/help-with-remaking-katamari-damacy-in-hd/68356) / **D** | 双摇杆前推 = 推墙；**Forever 的教程强制你爬一次墙**（说明是官方承认的正式机制，不是隐藏技巧） |
 | S8 | **ノ・ビ～タ**（Vita, 2011） | 「乗り越えたい壁に向かって**3回ほどフリック**すれば、壁を越えていくことができる」 | [Gamer.ne.jp 2011-10-27](https://www.gamer.ne.jp/news/201110270001/) / **C** | Vita 版把「越墙」做成独立动作（3 次甩动）；同一机制在不同作上换了输入 |
 | S9 | **Forever**（2009） | "the Prince Hop… makes it a lot easier to get out of tight spots, and also increases the maneuverability of the Katamari to **reach higher places**" | [trophyunlocked 评测 2025-10-22](https://trophyunlocked.blogspot.com/2025/10/katamari-forever.html) / **C** | Forever 增加了**跳**（Prince Hop）来解决「上不去」，与「爬」并存 |
@@ -98,12 +118,12 @@ S13/S14 出处（同一帖的两方）：
 | 机制存在 | **有**（S1、S5 的默认前提） | 有（S6-S11） | 高（多来源） |
 | 操作条件 | 慢贴 + 不弹开 + 持续前推（S1）；太陡/太高 ⇒ 爬不上（S3） | 双摇杆前推（S7）/ 三连甩（S8） | 中-高 |
 | **上限倍数** | **未知** | 「1–2×」/「2×」（S13/S14，互相矛盾） | 低 |
-| **爬升速度 / 到顶秒数** | **未知**（无任何来源） | 「约 3 秒后被弹开」（S10，新作，单条玩家观察） | 极低 |
+| **爬升速度 / 到顶秒数** | **精确速率未知**（S19阶段计时不是总时长） | 「约 3 秒后被弹开」（S10，新作，单条玩家观察） | 极低 |
 | 掉落语义 | 未知（无来源描述「到顶掉落是否带离墙速度」） | 未知 | — |
 | 梯子/绳 | **无限**（S2/S5） | 无限（S13） | 中-高 |
 | 掉件代价 | 尝试爬也算碰撞、会掉件（S4、S5） | 续作起大幅减轻（同串多人口径） | 中 |
 
-**明确未知（本轮没有任何来源）**：初代/REROLL 的 `H_cap ÷ 球径`、爬升速率（m/s）、`T_climb`、
+**明确仍未确认的精确量**：初代/REROLL 的 `H_cap ÷ 球径`、爬升速率（m/s）、`T_climb`、
 上限处的离墙速度、可爬墙的坡度上限（只有「太陡」这一定性词）、球径是否影响可否起爬。
 
 ---
@@ -112,11 +132,11 @@ S13/S14 出处（同一帖的两方）：
 
 | 设计项 | 现在的依据 | 本轮核查后 |
 |---|---|---|
-| `k_h = 1.5`（上限 1.5·D） | 手册「约一个球径」+ 0.222 球上 0.30 m 台阶（E4，低可信） | **仍无来源支持**。唯一的手册级转述（S6）**不含尺寸比例**；「1–2×」是续作/新作的社区说法且帖内自相矛盾。1.5 落在该区间内**不构成证实** |
+| `k_h = 1.5`（上限 1.5·D） | 手册「约一个球径」+ 0.222 球上 0.30 m 台阶（E4，低可信） | **没有来源确认精确1.5D**。WLK手册原文S18支持约1D的定性量级，不是初代精确值；「1–2×」是续作/新作的社区说法且帖内自相矛盾。1.5 落在该区间内**不构成证实** |
 | `T_climb = 2.8125 s` | 手感旋钮 | **仍无来源**。文献里唯一的时间数字是「约 3 秒后被弹开」，且属于 2025 新作、单条玩家观察，不能移植 |
 | 「上限之下能翻上去」 | 一手手感 + E4 | 方向有支持（S1 的 short walls、S17 的塀→高台），**比例仍未知** |
 | 「梯子可无限爬」 | 之前只有社区传闻 | **可升级为工作假设**（S2/S5/S13/S15/S16），并**必须与普通墙分开实现**（若我们要做梯子） |
-| 手册引文的措辞 | `ContactTuning.cs` 头注写的是「can climb over walls that are about the same size as your katamari」 | ⚠ **需要复核**：维基对该手册句的转述是「climb it in order to reach higher areas」，**没有**「about the same size」。原文可能存在于手册别处，但目前**没有**可引的出处 |
+| 手册引文的措辞 | WLK USA印刷p.23/PDF25 “Climb Over Obstacles!!” | **已找到原句**（S18）；“about the same size”定性近似，不能直接设成精确1.000D球心升程 |
 
 > 一句话：机制存在是硬的，**数字全是软的**。`k_h = 1.5` / `T_climb = 2.8125 s` 应继续标 PROVISIONAL，
 > 并且不要在任何地方写成「原作实测」。
@@ -141,8 +161,7 @@ S13/S14 出处（同一帖的两方）：
 
 ## 8. 若要继续（不需要模拟器、不需要自录）
 
-1. **手册原文**：找 We Love Katamari 手册 PDF 的「How to Play」页，核实 S6 那句手册原文里到底有没有尺寸词
-   ——这是唯一可能把 `k_h` 钉在**官方文字**上的入口，也直接决定 D1。
+1. **原生DLL只读核对**：S19已给出uphill与climb状态/函数地址；若有合法同版本DLL，核对完整坡墙比较与高度函数，不执行补丁、不用摘要猜常量。
 2. **Beautiful Katamari**（S12 空缺）：找它的说明书/攻略里有没有「climb」条目，补齐跨作一致性。
 3. **梯子与普通墙的分野**：把「梯子/绳/台阶 = 无限」当工作假设，但要在实现上作为**独立类别**，
    不要用普通墙的 `k_h` 去套。

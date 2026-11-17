@@ -27,7 +27,7 @@
 6. 纵向钳到 `[-0.5·cap, cap]`（`cap = maxSpeed·s`）；再把平面总速度按比例压到 `cap`。
 7. 位移 `v·dt`，不分步、不裁剪（扫掠归接触层）。
 
-不变：`ComputeDrive`（目标速度 = `cap × 意图`）、`DesktopMoveInput`（二值）、接触 v2、爬升其它逻辑（`T_climb`、高度上限 ∝ D）、恢复判据。
+不变：`ComputeDrive`（目标速度 = `cap × 意图`）、`DesktopMoveInput`（二值）、RIDE接触、墙爬（`T_climb`、高度上限∝D）、恢复判据。45–60°坡爬的体力分流见§4.1。
 
 ### 现行参数（D0 下的值，全部 PROVISIONAL）
 
@@ -58,6 +58,15 @@
 **当前决定（owner 2026-11-17，地图 0 沙盒亲测）：方案 A，滚动阻力照常作用。** C26 2°、C27 5° 顺坡朝向时松手不滑，保持现状；主人原话「26 27不滑动，不错，有点阻力也行」。静止闩锁开启不等于必然有可见下滑，缓坡无需绕过滚动阻力，也不为这两格调整参数。脚本把球转成横向后的坡滑读数是另一朝向的诊断，不是顺坡朝向必须滑动的要求。
 
 `RampSlideMath.TryStepRestLatch`：平面速度 < `rampRestSpeedMps·s` 且无推动（`|forward|+|lateral| ≤ 0.05`）时累计静止时间，否则清零；站在可走坡（`2° < 坡角 ≤ maxSupportSlopeDegrees`，非墙、非爬升、非坠落）上且静止满 0.3 s 时锁存「滑动」，之后只要仍在坡上且没有推动就保持（滑动本身是运动，不能靠静止计时维持），任何推动或离开坡面即关闭。滑动期间每步经 `SupportSurfaceMath.TryApplyRampTangentialGravity(重力 g·s，速度上限 maxSpeed·s)` 加沿水平下坡方向的加速度；**运动中（未锁存）不额外加下坡加速**，平地不滑。滑动速度由滚动阻力/阻力/抓地限制：10° 坡朝向垂直坡向时漂移终速约 0.59 m/s·s；坡太缓（`g·sinθ` 小于滚动阻力与阻力平衡）时会慢到几乎不滑。实现位置：`StepContactV2` 里 `RefreshClimbGate` 之后、接触求解之前调 `UpdateRampSlide`；坡面取上一步 `WriteContactSupport` 写下的支撑法线，不在坡上的情形还包括针尖支撑、爬升接触和无支撑（下落）。加进 `planarVelocity` 的下坡速度随同一步的接触求解一起积分；有支撑的子步里求解器把下坡速度投影到支撑面的切平面（`ContactSolveMath.SupportTangentVerticalSpeed`），球顺坡走时贴着坡面、不丢支撑，所以闩锁不会因离开坡面而关；上一步被整步拒绝（残差 > 2 cm）时本步不加（拒绝步的速度本来就被清零），`TeleportTo` 清闩锁与静止计时。覆盖范围：任何给出支撑法线的表面（解析坡、OBB 斜板与地形网格）。
+
+### 4.1 45–60°体力坡爬的耗尽滑回
+
+坡/墙分流见[TERRAIN_CLIMB §0.1](TERRAIN_CLIMB.md#01-体力坡爬2026-11-17-当前决定)。`UpdateRampSlide`的RIDE支撑筛选保持≤45°，
+不把新陡坡伪装成RIDE。坡通道自己给`RampSlideMath.TryStepRestLatch`传`onSlope=true`，共享motor的0.3s/0.05m/s·s参数；
+它存活时`UpdateRampSlide`因climbActive排除，不重复加重力。耗尽→有效推进归零/along置零→静止0.3s→沿负切线滑回，
+持推也不能把耗尽体力再当新起爬。积分前由坡通道接管速度，防止运动层每步加的新推力把等待变成向上蠕动。
+RIDE缓坡仍受滚动阻力，C26/C27的认可不变；耗尽陡坡在接触通道用重力与1m/s滑回上限，不让缓坡的静摩擦阻住它。
+这是**同一个静止闩锁、不同角度通道的速度归属**，不是另加一个计时器算法。恢复判据不变；真motor有50°/58°回坡脚且recovery=0测试，待Unity执行。
 
 ## 5. 契约更正（相对惯性改动前）
 

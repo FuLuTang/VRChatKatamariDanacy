@@ -12,13 +12,12 @@ namespace VRCKatamari.BallContact
     /// measured values of the original game and none of them has been play-tested.
     /// </para>
     /// <para>
-    /// NO value here is an original-game constant. The cross-series check
-    /// (Docs/Research/KatamariBallRules/ORIGINAL_CLIMB_OBSERVATIONS.md, 2026-11-16)
-    /// found no source for a normal-wall height cap, a climb rate or a time-to-top in
-    /// the first game or in REROLL: the manual paraphrases only say the ball can climb
-    /// a wall to reach a higher area (no size ratio), the "1-2x ball height" numbers are
-    /// weak, mutually contradictory sequel/community claims, and the one concrete
-    /// long-climb anecdote (the factory chimney) is a LADDER, not a wall. So
+    /// These are not confirmed original-game constants. We Love Katamari (USA),
+    /// printed p.23 / PDF p.25, describes walls about the same size as the katamari:
+    /// an approximate sequel description, not the first game's exact height cap.
+    /// The REROLL reverse-engineering clue supports separate slope stamina, duration
+    /// and size effects (confidence C); its 100 and 0.76? comments are uncertain.
+    /// See ORIGINAL_CLIMB_OBSERVATIONS and TERRAIN_CLIMB 0.1. Therefore
     /// <see cref="KHeight"/> = 1.5 and <see cref="ClimbTimeS"/> = 2.8125 s are OUR
     /// PROVISIONAL values (owner decision 2026-11-16), chosen so the reference level's
     /// 0.222 m ball can clear its 0.19 m spawn pit and the observed ~0.30 m step
@@ -91,7 +90,21 @@ namespace VRCKatamari.BallContact
         /// <summary>Fall-speed clamp the model writes as a literal (-40 m/s).</summary>
         public const float MaxFallSpeedMps = 40f;
 
-        // ---- Climb (sections 3.2, 3.3, 3.5) ----
+        // ---- Slope stamina (TERRAIN_CLIMB 0.1; all PROVISIONAL) ----
+        public const float ThetaSlopeMaxDeg = 60f;
+        public const float SlopeRefillMaxDeg = 2f;
+        public const float SlopeStaminaMax = 100f;
+        // 66.6 is the reverse-engineering clue's drain saturation, NOT a wall boundary.
+        public const float SlopeDrainSaturationDeg = 66.6f;
+        // 0.76? per tick * assumed 30 ticks/s; our seconds-based tuning, not a measured rate.
+        public const float SlopeDrainPerSecond = 22.8f;
+        public const float SlopeReferenceDiameterM = 0.30f;
+        public const float SlopeFatiguePerSecond = 0.15f;
+        public const float SlopeMinimumSpeedFactor = 0.35f;
+        public const float SlopeRestSeconds = 0.3f;
+        public const float SlopeRestSpeedMps = 0.05f;
+
+        // ---- Wall climb (sections 3.2, 3.3, 3.5) ----
 
         /// <summary>p_min: a push-in weaker than this never climbs and never keeps a climb.</summary>
         public const float PMin = 0.2f;

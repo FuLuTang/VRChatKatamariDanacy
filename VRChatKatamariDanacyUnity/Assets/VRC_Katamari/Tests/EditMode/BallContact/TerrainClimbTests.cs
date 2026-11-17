@@ -206,7 +206,7 @@ namespace VRCKatamari.Tests
             float driveSpeed = MaxSpeedMps * Mathf.Abs(Forward);
 
             // RefreshClimbGate: a climb whose push or gate speed has fallen leaves the channel.
-            if (Ball.ClimbActive)
+            if (Ball.ClimbActive && !SlopeClimbMath.IsSlope(ObbContactMath.ContactAngleDeg(Ball.ClimbNormal)))
             {
                 Vector3 normal = Ball.ClimbNormal;
                 float horizontal = Mathf.Sqrt(normal.x * normal.x + normal.z * normal.z);

@@ -1259,9 +1259,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
                     }
                 }
 
-                // v2's symbolic thresholds (CONTACT_MODEL_V2 6.3/7.7.2). The 50-degree board must
-                // SLOW CLIMB, so the bound is the model's own cap rather than a baked metre value
-                // that would only be right at one diameter.
+                // Symbolic WALL height thresholds. C06 is a stamina slope and uses its
+                // authored top-height criterion instead, never this wall cap.
                 if (v2Row && threshold == ThresholdClimbCapBound)
                 {
                     limit = ClimbCapBoundM();

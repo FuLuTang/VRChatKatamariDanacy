@@ -49,7 +49,19 @@ CLASS_CLIMB = 2  # the ball pushes against it; inward speed is removed, ascent i
 # ---------------------------------------------------------------- OUR design ---
 # Every number below is OUR design/provisional.  k_h is the only one anchored on
 # a source: We Love Katamari's manual, "climb over walls that are about the same
-# size as your katamari" -> the centre rises about one diameter.
+# size as your katamari" (printed p.23 / PDF p.25); qualitative sequel evidence,
+# not an exact first-game cap or centre-displacement measurement.
+THETA_SLOPE_MAX_DEG = 60.0
+SLOPE_REFILL_MAX_DEG = 2.0
+SLOPE_STAMINA_MAX = 100.0
+SLOPE_DRAIN_SATURATION_DEG = 66.6
+SLOPE_DRAIN_PER_SECOND = 22.8
+SLOPE_REFERENCE_DIAMETER_M = 0.30
+SLOPE_FATIGUE_PER_SECOND = 0.15
+SLOPE_MINIMUM_SPEED_FACTOR = 0.35
+SLOPE_REST_SECONDS = 0.3
+SLOPE_REST_SPEED_MPS = 0.05
+DASH_SPEED_SCALE = 1.6
 THETA_RIDE_DEG = 45.0          # <= this: rideable surface (v1 ramp feel)
 THETA_RIDE_TOLERANCE_DEG = 0.5  # equality discipline: 45.5 deg is still a ride
 CLIMB_STEEPER_MARGIN_DEG = 15.0  # a climb must be clearly steeper than the support
@@ -360,6 +372,53 @@ def climb_eligible(push_in: float, v_gate: float, theta_deg: float, height_m: fl
             and v_gate >= required_speed(theta_deg))
 
 
+# Slope-only formulas mirror SlopeClimbMath (all project PROVISIONAL).
+def is_slope(theta):
+    return THETA_RIDE_DEG + THETA_RIDE_TOLERANCE_DEG < theta <= THETA_SLOPE_MAX_DEG
+
+
+def slope_drain_rate(theta, diameter, uphill_seconds, gate_speed):
+    size = math.sqrt(max(diameter / SLOPE_REFERENCE_DIAMETER_M, 0.01))
+    steepness = _clamp(theta / SLOPE_DRAIN_SATURATION_DEG, 0.0, 1.0)
+    fatigue = 1.0 + max(0.0, uphill_seconds) * SLOPE_FATIGUE_PER_SECOND
+    effort = _clamp(CLIMB_V_GATE_REF / max(gate_speed, CLIMB_V_GATE_REF),
+                    1.0 / DASH_SPEED_SCALE, 1.0)
+    return SLOPE_DRAIN_PER_SECOND * steepness * fatigue * effort / size
+
+
+def slope_uphill_vertical_speed(push_in, gate_speed, theta, diameter, uphill_seconds):
+    fatigue = max(SLOPE_MINIMUM_SPEED_FACTOR,
+                  1.0 / (1.0 + max(0.0, uphill_seconds) * SLOPE_FATIGUE_PER_SECOND))
+    return climb_speed(push_in, gate_speed, theta, 0.0, K_H * diameter) * fatigue
+
+
+def slope_motion(theta, diameter, push_in, gate_speed, dt, stamina, uphill_seconds,
+                 rest_seconds, sliding, along, rest_hold=SLOPE_REST_SECONDS,
+                 rest_speed=SLOPE_REST_SPEED_MPS):
+    pushing = push_in >= P_MIN and gate_speed >= required_speed(theta)
+    sin_theta = math.sin(math.radians(theta))
+    if pushing and stamina > 0.0:
+        drain = slope_drain_rate(theta, diameter, uphill_seconds + dt * 0.5, gate_speed) * dt
+        uphill_seconds += dt
+        stamina = max(0.0, stamina - drain)
+        rest_seconds, sliding = 0.0, False
+        if stamina > 0.0:
+            target = slope_uphill_vertical_speed(push_in, gate_speed, theta, diameter,
+                                                  uphill_seconds) / max(sin_theta, 0.2)
+            rate = CLIMB_RATE_LIMIT * dt
+            along = min(along + rate, target) if target > along else max(along - rate, target)
+            return stamina, uphill_seconds, rest_seconds, sliding, along
+        along = 0.0
+    if along > 0.0:
+        along = max(0.0, along - CLIMB_RATE_LIMIT * dt)
+    # RampSlideMath.TryStepRestLatch with effective drive=0 and onSlope=True.
+    rest_seconds = rest_seconds + dt if abs(along) < rest_speed else 0.0
+    sliding = sliding or rest_seconds >= rest_hold
+    if sliding:
+        along = max(along - GRAVITY * sin_theta * dt, -V_SLIDE_MAX)
+    return stamina, uphill_seconds, rest_seconds, sliding, along
+
+
 # ------------------------------------------------------------------ solver ---
 @dataclass
 class World:
@@ -416,6 +475,11 @@ class State:
     radius: float
     v_planar: Vec3 = (0.0, 0.0, 0.0)
     v_y: float = 0.0
+    slope_stamina: float = SLOPE_STAMINA_MAX
+    slope_uphill_seconds: float = 0.0
+    slope_rest_seconds: float = 0.0
+    slope_sliding: bool = False
+    climb_normal: Vec3 = (0.0, 1.0, 0.0)
     climb_active: bool = False
     climb_anchor_y: float = 0.0
     climb_surface_id: int = -1
@@ -519,6 +583,11 @@ def step(world: World, state: State, drive_dir: Vec3, drive_speed: float,
     want = _mul(drive, drive_speed)
 
     for _ in range(substeps):
+        previous_slope = is_slope(contact_angle_deg(state.climb_normal))
+        if climb_active and previous_slope:
+            tangent = _unit(_sub((0.0, 1.0, 0.0), _mul(state.climb_normal, state.climb_normal[1])))
+            v_planar = (tangent[0] * along, 0.0, tangent[2] * along)
+            v_y = tangent[1] * along
         # The substep uses the CURRENT velocity, so a velocity the contact adds
         # (climb, gravity) acts in the same step instead of one step later.
         position = _add(position, (v_planar[0] * dt / substeps,
@@ -540,7 +609,14 @@ def step(world: World, state: State, drive_dir: Vec3, drive_speed: float,
             if wall.angle_deg < support_theta + CLIMB_STEEPER_MARGIN_DEG:
                 wall = None
 
+        if support is not None and support_theta <= SLOPE_REFILL_MAX_DEG:
+            state.slope_stamina, state.slope_uphill_seconds = SLOPE_STAMINA_MAX, 0.0
+            state.slope_rest_seconds, state.slope_sliding = 0.0, False
+        slope = wall is not None and is_slope(wall.angle_deg)
+        if climb_surface_id >= 0 and wall is not None and previous_slope != slope:
+            climb_anchor_y, locked, cooldown = position[1], False, 0.0
         if wall is not None:
+            state.climb_normal = wall.normal
             theta = wall.angle_deg
             horizontal = _unit((wall.normal[0], 0.0, wall.normal[2]), "contact horizontal")
             push_in = max(0.0, -_dot(drive, horizontal))
@@ -554,11 +630,11 @@ def step(world: World, state: State, drive_dir: Vec3, drive_speed: float,
             # meets a deck hand the ball from one surface to another with the
             # same normal, and treating that as a new surface would abort the
             # climb at every seam.  The id is recorded for diagnostics only.
-            if climb_active and push_in < P_MIN:
+            if climb_active and not slope and push_in < P_MIN:
                 climb_active = False
                 cooldown = CLIMB_COOLDOWN_S
                 along = 0.0
-            if (not climb_active and not locked and push_in >= P_MIN and cooldown <= 0.0
+            if (not climb_active and (slope or (not locked and cooldown <= 0.0)) and push_in >= P_MIN
                     and v_gate >= required_speed(theta) and h_cap > 0.0):
                 climb_active = True
                 climb_anchor_y = position[1]
@@ -580,22 +656,26 @@ def step(world: World, state: State, drive_dir: Vec3, drive_speed: float,
             tangent = _sub(up, _mul(wall.normal, cos_theta))
             tangent = _unit(tangent, "climb tangent")
             height = position[1] - climb_anchor_y
-            vertical_target = climb_speed(push_in, v_gate, theta, height, h_cap)
-            along_target = vertical_target / max(math.sin(math.radians(theta)), 0.2)
-            rate = CLIMB_RATE_LIMIT * dt / substeps
-            if along_target > along:
-                along = min(along + rate, along_target)
+            if slope:
+                (state.slope_stamina, state.slope_uphill_seconds, state.slope_rest_seconds,
+                 state.slope_sliding, along) = slope_motion(theta, 2 * radius,
+                    push_in if drive_speed > 0.0 else 0.0, v_gate, dt / substeps,
+                    state.slope_stamina, state.slope_uphill_seconds, state.slope_rest_seconds,
+                    state.slope_sliding, along)
             else:
-                along = max(along - rate, along_target)
+                vertical_target = climb_speed(push_in, v_gate, theta, height, h_cap)
+                along_target = vertical_target / max(math.sin(math.radians(theta)), 0.2)
+                rate = CLIMB_RATE_LIMIT * dt / substeps
+                along = min(along + rate, along_target) if along_target > along else max(along - rate, along_target)
             v_planar = (tangent[0] * along, 0.0, tangent[2] * along)
             v_y = tangent[1] * along
             climb_speed_value = v_y
-            if height >= h_cap - CLIMB_CAP_MARGIN_M:
+            if not slope and height >= h_cap - CLIMB_CAP_MARGIN_M:
                 climb_active = False
                 cooldown = CLIMB_COOLDOWN_S
                 locked = True
                 along = 0.0
-            elif push_in < P_MIN:
+            elif not slope and push_in < P_MIN:
                 climb_active = False
                 cooldown = CLIMB_COOLDOWN_S
                 along = 0.0

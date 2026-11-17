@@ -209,7 +209,7 @@ def solve_touch_stops(document,out,level_path=LEVEL):
     return stops,detail
 
 
-def render_all(document,out,level_path=LEVEL,core_mode='fixed'):
+def render_all(document,out,level_path=LEVEL,core_mode='fixed',span_overrides=None):
     if core_mode not in ('fixed','grow'):raise ValueError('core_mode must be fixed or grow')
     out=Path(out).expanduser().resolve()
     doc,_=load_assets(level_path)
@@ -222,7 +222,7 @@ def render_all(document,out,level_path=LEVEL,core_mode='fixed'):
         montage_rows=[]
         for run in document['runs']:
             seed=run['seed'];folder=out/f'seed_{seed}';folder.mkdir(exist_ok=True)
-            span=span_for(run['snapshots'][-1]['items'],run['startDiameterM'])
+            span=(span_overrides or {}).get(seed,span_for(run['snapshots'][-1]['items'],run['startDiameterM']))
             results=[]
             for snap in run['snapshots']:
                 missing=sorted({p['def'] for p in snap['items']}-assets.keys())

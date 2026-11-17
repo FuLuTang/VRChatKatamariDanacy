@@ -61,14 +61,28 @@ internal sealed class Simulation
     readonly bool touchAttached;
     // Hypothetical control: stop distances solved elsewhere (real-mesh contact), replayed through the same runtime steps.
     readonly float[] givenStops;
+    // Offline-only growth controls. Ratios replace the default 0.8 trend, not multiply it twice.
+    readonly float[] recoveryDiameters, recoveryRatios;
+    readonly JsonArray drawItems;
+    public static double RecoveryRatio(float diameter, float[] diameters, float[] ratios)
+    {
+        if (diameters == null) return .8;
+        if (diameter <= diameters[0]) return ratios[0];
+        for (int i = 1; i < diameters.Length; i++)
+            if (diameter <= diameters[i]) return ratios[i-1] +
+                (ratios[i]-ratios[i-1]) * (double)(diameter-diameters[i-1]) / (diameters[i]-diameters[i-1]);
+        return ratios[ratios.Length-1]; // explicit endpoint clamp: experiment assumption, not original evidence
+    }
     readonly List<(Vector3 position,Quaternion rotation,Vector3 size)> attachedBoxes = new();
     public readonly float StartDiameter;
     public readonly List<JsonObject> Items = new();
     public readonly List<object> Events = new();
 
-    public Simulation(int seed, float startDiameter, bool touchAttached = false, float[] givenStops = null)
+    public Simulation(int seed, float startDiameter, bool touchAttached = false, float[] givenStops = null,
+        float[] recoveryDiameters = null, float[] recoveryRatios = null, JsonArray drawItems = null)
     {
         random = new Random(seed); this.touchAttached = touchAttached; this.givenStops = givenStops;
+        this.recoveryDiameters = recoveryDiameters; this.recoveryRatios = recoveryRatios; this.drawItems = drawItems;
         roundState[GrowthLedgerMath.RoundPhaseState] = (int)LedgerPhase.Playing;
         players[0] = "offline-player"; lives[0] = (int)PlayerLifecycle.Active;
         Check(SizeModelMath.TrySphereVolumeMm3(startDiameter,1f,out startVolume),"start volume");
@@ -143,12 +157,20 @@ internal sealed class Simulation
     {
         var eligible=remaining.Where(p=>Evaluate(p,Vector3.zero,Quaternion.identity)==AbsorbOutcome.Absorb).ToList();
         if(eligible.Count==0)throw new InvalidOperationException("no remaining runtime-eligible reference props");
-        var prop=eligible[random.Next(eligible.Count)];remaining.Remove(prop);
+        int sampledIndex = random.Next(eligible.Count); // consume the same PRNG draw even with a paired item stream
+        var prop = drawItems == null ? eligible[sampledIndex] : eligible.SingleOrDefault(p =>
+            p["itemId"].GetValue<string>() == drawItems[Items.Count]["itemId"].GetValue<string>());
+        if (prop == null) throw new InvalidOperationException("paired draw is not runtime-eligible");
+        remaining.Remove(prop);
         var direction=RandomDirection();var rotation=RandomRotation();var size=Vec(prop["aabb"]);
         var position=givenStops!=null?direction*givenStops[Items.Count]:FlyToContact(size,rotation,direction);
         absorbable[0]=prop["absorbable"].GetValue<bool>();kinds[0]=prop["kind"].GetValue<string>();
         sizes[0]=size;rotations[0]=rotation;positions[0]=position;
-        growth[0]=prop["growthMm3"].GetValue<long>();volumeK[0]=prop["volumeK"].GetValue<float>();
+        long baseGrowthMm3 = prop["growthMm3"].GetValue<long>();
+        double recoveryRatio = RecoveryRatio(diameter, recoveryDiameters, recoveryRatios);
+        growth[0] = recoveryDiameters == null ? baseGrowthMm3 :
+            checked((long)Math.Round(baseGrowthMm3 * recoveryRatio / .8, MidpointRounding.AwayFromZero));
+        volumeK[0]=prop["volumeK"].GetValue<float>();
         ids[0]=prop["itemId"].GetValue<string>();generations[0]=0;int count=1;
         PickupAbsorbStepMath.EvaluatePendingCandidates(absorbable,kinds,sizes,rotations,positions,growth,
             volumeK,count,allowed,allowed.Length,Vector3.zero,collisionRadius,0,diameter,MaxDiameter/2,
@@ -195,7 +217,8 @@ internal sealed class Simulation
             direction=Array(direction),preDiameterM=beforeDiameter,preCollisionRadiusM=beforeRadius,
             postDiameterM=diameter,gateGapMm=gateGap*1000,attachmentGapMm=gap*1000,
             gapDeltaMm=(gap-gateGap)*1000,delaySteps=delay,proxyAccepted=proxy,proxySkip=skip,
-            touchedBallGate=gateAccepted,stopDistanceM=position.magnitude});
+            touchedBallGate=gateAccepted,stopDistanceM=position.magnitude,
+            baseGrowthMm3,recoveryRatio,appliedGrowthMm3=gains[0]});
     }
     public object Snapshot()
     {
@@ -224,10 +247,24 @@ internal static class Program
             var stopsDoc=stopsArg==null?null:JsonNode.Parse(File.ReadAllText(stopsArg.Substring(8)));
             var nsArg=args.FirstOrDefault(a=>a.StartsWith("--ns="));
             var snapshotAt=(nsArg==null?"10,20,30,40":nsArg.Substring(5)).Split(',').Select(int.Parse).ToHashSet();
+            var curveArg=args.FirstOrDefault(a=>a.StartsWith("--growth-curve="));
+            var curve=curveArg==null?null:JsonNode.Parse(File.ReadAllText(curveArg.Substring(15)));
+            float[] curveDiameters=curve?["diameterM"]?.AsArray().Select(x=>x.GetValue<float>()).ToArray();
+            float[] curveRatios=curve?["ratio"]?.AsArray().Select(x=>x.GetValue<float>()).ToArray();
+            if (curve != null && (curveDiameters == null || curveRatios == null || curveDiameters.Length == 0 ||
+                curveDiameters.Length != curveRatios.Length ||
+                curveDiameters.Any(x=>!float.IsFinite(x)||x<=0) || curveRatios.Any(x=>!float.IsFinite(x)||x<=0||x>1) ||
+                curveDiameters.Skip(1).Where((x,i)=>x<=curveDiameters[i]).Any()))
+                throw new ArgumentException("growth curve requires strictly increasing positive diameters and ratios in (0,1]");
+            var drawsArg=args.FirstOrDefault(a=>a.StartsWith("--draws="));
+            var draws=drawsArg==null?null:JsonNode.Parse(File.ReadAllText(drawsArg.Substring(8)));
             var runs=new List<object>();
             foreach(int seed in seeds)
             {
-                var sim=new Simulation(seed,start,touchAttached,stopsDoc?[seed.ToString()]?.AsArray().Select(x=>x.GetValue<float>()).ToArray());
+                JsonArray drawItems=draws?["runs"]?.AsArray().Single(r=>r["seed"].GetValue<int>()==seed)
+                    ["snapshots"].AsArray().Last()["items"].AsArray();
+                var sim=new Simulation(seed,start,touchAttached,stopsDoc?[seed.ToString()]?.AsArray().Select(x=>x.GetValue<float>()).ToArray(),
+                    curveDiameters,curveRatios,drawItems);
                 var remaining=level["props"].AsArray().Select(x=>(JsonObject)x.DeepClone()).ToList();
                 var snapshots=new List<object>();
                 for(int n=1;n<=snapshotAt.Max();n++) { sim.AbsorbOne(remaining);if(snapshotAt.Contains(n))snapshots.Add(sim.Snapshot()); }

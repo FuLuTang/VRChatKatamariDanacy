@@ -7,7 +7,8 @@ namespace VRCKatamari.Tests
 {
     /// <summary>
     /// Pins the skin/static size comparison of the skeletal-animation assembler: both sides are a
-    /// mesh-local box carried through a transform, the ratio is per axis, and the tolerance is 0.25.
+    /// mesh-local box carried through a transform, the ratio is per axis, and the tolerance is 0.25;
+    /// and its source tracking: the stamp, the clip-length check and the stray-instance rules.
     /// </summary>
     public class SkeletalSizeFitTests
     {
@@ -89,6 +90,40 @@ namespace VRCKatamari.Tests
             var ratio = (Vector3)Call("SizeRatio", new Vector3(0f, 1f, 1f), new Vector3(1f, 1f, 1f));
             Assert.AreEqual(0f, ratio.x);
             Assert.IsFalse((bool)Call("FitsTolerance", ratio));
+        }
+
+        [Test]
+        public void SourceStampChangesWithEitherFile()
+        {
+            byte[] fbx = { 1, 2, 3 };
+            byte[] defs = { 9, 8 };
+            string stamp = (string)Call("SourceStamp", fbx, defs);
+            Assert.AreEqual(stamp, (string)Call("SourceStamp", new byte[] { 1, 2, 3 }, new byte[] { 9, 8 }));
+            Assert.AreNotEqual(stamp, (string)Call("SourceStamp", new byte[] { 1, 2, 4 }, defs));
+            Assert.AreNotEqual(stamp, (string)Call("SourceStamp", fbx, new byte[] { 9, 7 }));
+            StringAssert.StartsWith("fbx=", stamp);
+            StringAssert.Contains(";defs=", stamp);
+        }
+
+        [Test]
+        public void ClipLengthIsCheckedAgainstTheSourceSeconds()
+        {
+            Assert.IsTrue((bool)Call("ClipLengthMatches", 0.96667f, 0.9667f));
+            // At 24 fps Unity read 23 frames = 0.9583 s and 11 frames = 0.4583 s.
+            Assert.IsFalse((bool)Call("ClipLengthMatches", 0.9583f, 0.9667f));
+            Assert.IsFalse((bool)Call("ClipLengthMatches", 0.4583f, 0.4833f));
+        }
+
+        [Test]
+        public void StrayInstancesAreRecognisedByNameOrAssetFolder()
+        {
+            Assert.IsTrue((bool)Call("IsSkeletalInstanceName", "type_480"));
+            Assert.IsFalse((bool)Call("IsSkeletalInstanceName", "type_"));
+            Assert.IsFalse((bool)Call("IsSkeletalInstanceName", "type_480b"));
+            Assert.IsFalse((bool)Call("IsSkeletalInstanceName", "Skin"));
+            Assert.IsTrue((bool)Call("IsUnderAnimationRoot", "Assets/_RefUnlicensed/Animation/type_480/type_480.fbx"));
+            Assert.IsFalse((bool)Call("IsUnderAnimationRoot", "Assets/_RefUnlicensed/Models/small_fiddler_crab/small_fiddler_crab.fbx"));
+            Assert.IsFalse((bool)Call("IsUnderAnimationRoot", ""));
         }
     }
 }

@@ -192,6 +192,20 @@ namespace VRCKatamari.Pickup
         }
 
         /// <summary>
+        /// Puts a path class's position on the path in our y-up frame. The program's
+        /// <c>point - (0, b, 0)</c> is the original's own y convention; here the path points lie on
+        /// the ground (Cancer p23: within 3 mm of the contact mesh) and the props' spawn centres sit
+        /// one half height above them (nine of ten path props, 0.5-1.1 cm), so the centre belongs at
+        /// <c>point + (0, b, 0)</c>: the result of the program is lifted by <c>2 b</c>. Left alone, a
+        /// walking crab's body would be entirely below the ground.
+        /// </summary>
+        private static bool PathStep(bool stepped, float halfHeightM, ref Vector3 positionM)
+        {
+            if (stepped) positionM.y += 2f * halfHeightM;
+            return stepped;
+        }
+
+        /// <summary>
         /// One step of one row's program. <paramref name="offsetOrPositionM"/> is an offset in
         /// the class's space, or the absolute world position for a path class (see
         /// <see cref="SpaceOf"/>); <paramref name="eulerRad"/> is the matching euler.
@@ -236,17 +250,17 @@ namespace VRCKatamari.Pickup
                 return MotionMath.TryStepClouds(state, dtFrames, phaseSeed, speedMps, 0x7F,
                     out offsetOrPositionM, out eulerRad);
             if (motionClass == ClassPathCollision)
-                return MotionMath.TryStepPathCollision(state, dtFrames, spawnPositionM, pathPointsM,
-                    pointCount, speedMps, halfHeightM, pathClosed, out offsetOrPositionM,
-                    out eulerRad);
+                return PathStep(MotionMath.TryStepPathCollision(state, dtFrames, spawnPositionM,
+                    pathPointsM, pointCount, speedMps, halfHeightM, pathClosed,
+                    out offsetOrPositionM, out eulerRad), halfHeightM, ref offsetOrPositionM);
             if (motionClass == ClassSlopingPath)
-                return MotionMath.TryStepSlopingPath(state, dtFrames, spawnPositionM, pathPointsM,
-                    pointCount, speedMps, halfHeightM, pathClosed, out offsetOrPositionM,
-                    out eulerRad);
+                return PathStep(MotionMath.TryStepSlopingPath(state, dtFrames, spawnPositionM,
+                    pathPointsM, pointCount, speedMps, halfHeightM, pathClosed,
+                    out offsetOrPositionM, out eulerRad), halfHeightM, ref offsetOrPositionM);
             if (motionClass == ClassBackAndForth)
-                return MotionMath.TryStepBackAndForthNoYaw(state, dtFrames, spawnPositionM,
+                return PathStep(MotionMath.TryStepBackAndForthNoYaw(state, dtFrames, spawnPositionM,
                     pathPointsM, pointCount, speedMps, halfHeightM, out offsetOrPositionM,
-                    out eulerRad);
+                    out eulerRad), halfHeightM, ref offsetOrPositionM);
             // WaitForPlayer, DraggedAlong and ClassNone have no pose of their own.
             return false;
         }

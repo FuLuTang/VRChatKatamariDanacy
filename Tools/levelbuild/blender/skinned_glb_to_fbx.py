@@ -30,6 +30,12 @@ DEF_TYPES = {
 
 ACTION_SUFFIX = "_root"
 DURATION_TOLERANCE_S = 1e-3
+# Scene frame rates tried in order; the first at which every clip lasts a whole number of frames
+# wins.  The importer turns glTF seconds into frames at the scene rate and the FBX exporter
+# writes that rate as the file's TimeMode, so a rate that cuts a clip mid-frame makes Unity round
+# the take to whole frames at that rate (the default 24 read 0.9667 s as 23 frames = 0.9583 s).
+SCENE_FPS_CANDIDATES = (24, 25, 30, 48, 50, 60, 90, 120, 180)
+WHOLE_FRAME_TOLERANCE = 0.01
 
 
 def clip_name_of(action_name):
@@ -69,6 +75,15 @@ def check_durations(takes, clips, fps):
             raise RuntimeError("take %r lasts %.4f s, the report says %.4f s" % (name, got, seconds[name]))
 
 
+def scene_fps(clips):
+    """The lowest candidate frame rate at which every clip spans a whole number of frames."""
+    for fps in SCENE_FPS_CANDIDATES:
+        if all(abs(c["seconds"] * fps - round(c["seconds"] * fps)) <= WHOLE_FRAME_TOLERANCE for c in clips):
+            return fps
+    raise RuntimeError("no frame rate in %s gives whole-frame clips for %s"
+                       % (SCENE_FPS_CANDIDATES, [(c["name"], c["seconds"]) for c in clips]))
+
+
 def parse():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     p = argparse.ArgumentParser()
@@ -89,6 +104,9 @@ def reset():
 def convert(glb, out_dir, clips):
     import bpy
     reset()
+    fps = scene_fps(clips)
+    bpy.context.scene.render.fps = fps
+    bpy.context.scene.render.fps_base = 1.0
     bpy.ops.import_scene.gltf(filepath=glb)
     armatures = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
     if not armatures:
@@ -98,7 +116,6 @@ def convert(glb, out_dir, clips):
     # name (looked up by name) so Unity's takes read walk / idle / ...
     actions = list(bpy.data.actions)
     mapping = take_names([a.name for a in actions], clips)
-    fps = bpy.context.scene.render.fps / bpy.context.scene.render.fps_base
     spans = {mapping[a.name]: tuple(a.frame_range) for a in actions}
     check_durations(spans, clips, fps)
     renamed = []
@@ -123,7 +140,7 @@ def convert(glb, out_dir, clips):
         bake_anim=True, bake_anim_use_all_actions=True, bake_anim_use_nla_strips=False,
         bake_anim_force_startend_keying=True, bake_anim_simplify_factor=0.0,
         bake_anim_step=1.0, path_mode="COPY", embed_textures=False)
-    return path, renamed
+    return path, renamed, fps
 
 
 def main():
@@ -138,9 +155,10 @@ def main():
         glb = os.path.join(args.src, name + ".glb")
         if not os.path.isfile(glb):
             continue
-        path, takes = convert(glb, os.path.join(args.out, name), entry["clips"])
-        print("OUT", path, takes)
+        path, takes, fps = convert(glb, os.path.join(args.out, name), entry["clips"])
+        print("OUT", path, takes, "fps", fps)
         written.append({"type": name, "objectId": entry["objectId"], "fbx": name + "/" + name + ".fbx",
+                        "fps": fps,
                         "clips": [{"name": c["name"], "seconds": c["seconds"], "speed": c["speed"],
                                    "slot": c["slot"]} for c in entry["clips"]]})
     defs = {d: "type_%d" % t for d, t in DEF_TYPES.items()

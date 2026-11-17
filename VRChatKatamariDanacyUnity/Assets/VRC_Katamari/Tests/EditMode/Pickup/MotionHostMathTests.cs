@@ -130,7 +130,7 @@ namespace VRCKatamari.Tests
         public void PathClassStepsAlongItsPolylineAtTheResolvedSpeed()
         {
             // 2-point path along +X; 0.3 m/s for 30 frames = 0.3 m. The prop starts at the
-            // nearest point (x = 0) and sinks by half height 0.05.
+            // nearest point (x = 0) with its centre half a height (0.05) above the path point.
             float[] points = { 0f, 1f, 0f, 2f, 1f, 0f };
             float[] state = new float[MotionMath.BackAndForthNoYawStateFloats];
             MotionHostMath.ResetState(MotionHostMath.ClassBackAndForth, state, 0);
@@ -141,7 +141,28 @@ namespace VRCKatamari.Tests
                     true, true, 0.3f, 4f, points, 2, false, new Vector3(0f, 1f, 0f), out position, out euler));
             }
             Assert.AreEqual(0.3f, position.x, 1e-3f);
-            Assert.AreEqual(0.95f, position.y, Tol);
+            Assert.AreEqual(1.05f, position.y, Tol);
+        }
+
+        [Test]
+        public void PathClassesPutTheBodyOnThePathNotUnderIt()
+        {
+            // Ground-level path points at y = -0.6563 (Cancer p23): a prop with half height 0.11 has its
+            // centre 0.11 above them, so its bottom rests on the path. MotionMath alone returns
+            // point - b, which would bury the body.
+            float[] points = { 0f, -0.6563f, 0f, 2f, -0.6563f, 0f };
+            int[] classes = { MotionHostMath.ClassPathCollision, MotionHostMath.ClassSlopingPath,
+                              MotionHostMath.ClassBackAndForth };
+            for (int c = 0; c < classes.Length; c++)
+            {
+                float[] state = new float[MotionHostMath.StateFloats(classes[c])];
+                MotionHostMath.ResetState(classes[c], state, 0);
+                Vector3 position; Vector3 euler;
+                Assert.IsTrue(MotionHostMath.TryStep(classes[c], state, 2f, 0, 0.11f, true, true,
+                    0.244f, 4f, points, 2, false, new Vector3(0.5f, -0.5f, 0f), out position, out euler),
+                    "class " + classes[c]);
+                Assert.AreEqual(-0.6563f + 0.11f, position.y, 1e-4f, "class " + classes[c]);
+            }
         }
 
         // --- trigger gate vs wake radius ----------------------------------------

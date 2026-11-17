@@ -22,7 +22,7 @@ namespace VRCKatamari.BallMotor
     /// different ball than applying it to the diameter. At the motor's default
     /// sizing (1 baseline unit, 0.0141 m^3 per unit, 2.20 m display cap) a
     /// 1.49 m ball is about 121.8 confirmed units; the diameter rule keeps
-    /// 0.597 m / about 6.9 units, while the old volume-space rule kept about
+    /// 0.597 m / about 6.9 units, while applying the residual to volume units keeps about
     /// 31.2 units / 0.954 m. The arithmetic is written once, here, so it is
     /// testable without a UdonSharpBehaviour and stays in the UdonSharp
     /// language subset: static methods only, no state, no allocation.
@@ -43,7 +43,7 @@ namespace VRCKatamari.BallMotor
         /// </summary>
         /// <remarks>
         /// post = max(start, start + (pre - start) * residual), with residual
-        /// clamped to [0, 1]: 0 reproduces the old reset-to-start rule, 1 leaves
+        /// clamped to [0, 1]: 0 resets to the start diameter, 1 leaves
         /// the ball unchanged. startDiameterM is the forward size map's own
         /// diameter at zero confirmed volume (the caller derives it; it is not a
         /// hardcoded 0.30). Returns false for a non-positive or non-finite

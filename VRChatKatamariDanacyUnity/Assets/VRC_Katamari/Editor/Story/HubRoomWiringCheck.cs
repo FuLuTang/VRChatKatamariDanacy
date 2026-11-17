@@ -113,9 +113,9 @@ namespace VRCKatamari.Editor.Story
                 Report("launcher.levelEntries[0] is empty", ref problems);
             }
             // The entry is the fallback destination when auto-seat is off or no station is
-            // wired, so it still has to be on the level floor next to the ball. O4 placed
-            // it at (0, -2.2) while the ball is at (-12.5, -12.5); the player arrived in
-            // the void, fell, and ClientSim respawned them in the room.
+            // wired, so it still has to be on the level floor next to the ball. An entry far from the
+            // ball puts the player in the void, where they fall and ClientSim respawns them
+            // in the room.
             var motor = Object.FindObjectOfType<KatamariBallMotor>();
             if (motor != null && firstEntry != null)
             {

@@ -87,6 +87,35 @@ async function waitForEditorReady(timeoutMs = 120000) {
 // --------------------------------------------------------------------------- //
 // scene helpers
 // --------------------------------------------------------------------------- //
+/**
+ * The level's own footprint (+2 m) in three.js space, or null.  The textured stage reaches
+ * 100 m past the props (town, roads, a sky shell); framing a shot on it would shrink the
+ * level to a dot, so terrain geometry only counts where it overlaps the level.
+ */
+function levelClip(view) {
+  const bounds = view.state?.bounds;
+  if (!view.v2Mode || !bounds) return null;
+  return new THREE.Box3(
+    new THREE.Vector3(bounds[0][0] - 2, -1000, -bounds[1][1] - 2),
+    new THREE.Vector3(bounds[1][0] + 2, 1000, -bounds[0][1] + 2));
+}
+
+function addTerrainBox(box, object, clip) {
+  if (!object || !object.visible) return;
+  if (object.isMesh || object.isLine || object.isPoints || object.isSprite) {
+    if (object.userData?.refBackdrop) return;
+    if (!clip) {
+      box.expandByObject(object);
+      return;
+    }
+    const own = new THREE.Box3().setFromObject(object);
+    own.intersect(clip);
+    if (!own.isEmpty()) box.union(own);
+    return;
+  }
+  for (const child of object.children || []) addTerrainBox(box, child, clip);
+}
+
 function visibleBox(view) {
   const box = new THREE.Box3();
   // Recurse, do not Box3.setFromObject a group: the reference stage keeps its sky
@@ -102,8 +131,8 @@ function visibleBox(view) {
   };
   for (const group of view.propObjects.values()) add(group);
   for (const group of view.structureObjects.values()) add(group);
-  add(view.terrainGroup);
-  add(view.collisionGroup);
+  addTerrainBox(box, view.terrainGroup, levelClip(view));
+  addTerrainBox(box, view.collisionGroup, levelClip(view));
   add(view.parentLines);
   add(view.ballGhost);
   for (const highlight of view.highlightHelpers?.values?.() || []) add(highlight);
@@ -125,8 +154,8 @@ function framedBox(view, camera) {
   };
   for (const group of view.propObjects.values()) add(group);
   for (const group of view.structureObjects.values()) add(group);
-  add(view.terrainGroup);
-  add(view.collisionGroup);
+  addTerrainBox(box, view.terrainGroup, levelClip(view));
+  addTerrainBox(box, view.collisionGroup, levelClip(view));
   add(view.parentLines);
   add(view.ballGhost);
   return box;
@@ -285,24 +314,27 @@ function applyLayers(view, layers, warnings) {
     }
   }
 
+  const terrainCapable = view.refMode || view.v2Mode;
   if (has("terrain")) {
-    if (view.refMode && typeof view.setTerrain === "function") {
+    if (terrainCapable && typeof view.setTerrain === "function") {
       const ok = view.setTerrain(true);
       (ok ? applied : unavailable).push(ok ? "terrain" : "terrain (no stage extraction)");
     } else {
-      unavailable.push("terrain (only _ref_* levels carry a stage extraction)");
+      unavailable.push("terrain (only v2 and _ref_* levels carry a terrain)");
     }
-  } else if (view.refMode) {
+  } else if (terrainCapable) {
     view.setTerrain(false);
   }
 
   if (has("collision")) {
-    if (view.refMode && typeof view.setCollision === "function") {
+    if (terrainCapable && typeof view.setCollision === "function") {
       // setCollision is async (it fetches the collision payload the first time).
       applied.push("collision(pending)");
     } else {
-      unavailable.push("collision (only _ref_* levels carry a stage extraction)");
+      unavailable.push("collision (only v2 and _ref_* levels carry collision data)");
     }
+  } else if (view.v2Mode && view.collisionGroup) {
+    view.setCollision(false);
   }
 
   if (has("parents")) {
@@ -749,7 +781,7 @@ async function render(spec) {
 
 async function applyLayersBefore(view, layers, warnings) {
   const result = applyLayers(view, layers, warnings);
-  if (layers.collision === true && view.refMode
+  if (layers.collision === true && (view.refMode || view.v2Mode)
       && typeof view.setCollision === "function") {
     // Report what actually got built, not just that it was requested.
     await view.setCollision(true);

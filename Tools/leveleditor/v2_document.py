@@ -24,10 +24,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import struct
 from pathlib import Path
 
 from Tools.levelbuild import placement_core as core
 from Tools.levelbuild import placement_v2
+from Tools.levelbuild import ref_stage
 from Tools.levelbuild import ref_v2_from_extract as ref_v2
 from Tools.motion_sim import motion_cli
 
@@ -146,6 +148,101 @@ def _class_counts(classes):
     for value in classes or []:
         counts[value] = counts.get(value, 0) + 1
     return {str(key): counts[key] for key in sorted(counts)}
+
+
+def build_visual_glb(block, payload, files):
+    """The editor's GLB of ``terrain.visual``: one node per part, one primitive per submesh.
+
+    The document's frame is Unity's; the page draws in three.js, whose frame is ours with z
+    negated.  A mirror reverses winding, so every triangle's corners 2 and 3 swap on the way
+    (a floor that faces up in the file faces up on screen).  UVs are written as they are: the
+    file's origin is the PNG's top-left, which is glTF's too.  Blend, filter and wrap come
+    from the block (``cutout`` = ``alphaMode MASK``, ``alpha`` = ``BLEND``); faces are
+    single-sided like the original's back-face culling.
+    """
+    glb = {"asset": {"version": "2.0", "generator": "vrc-katamari leveleditor"},
+           "scene": 0, "scenes": [{"nodes": []}], "nodes": [], "meshes": [], "materials": [],
+           "textures": [], "images": [], "accessors": [], "bufferViews": [], "buffers": []}
+    point = block.get("filter") == "point"
+    glb["samplers"] = [{"magFilter": 9728 if point else 9729,
+                        "minFilter": 9728 if point else 9729, "wrapS": 10497, "wrapT": 10497}]
+    binary = bytearray()
+
+    def add_view(data, target=None):
+        while len(binary) % 4:
+            binary.append(0)
+        view = {"buffer": 0, "byteOffset": len(binary), "byteLength": len(data)}
+        if target:
+            view["target"] = target
+        glb["bufferViews"].append(view)
+        binary.extend(data)
+        return len(glb["bufferViews"]) - 1
+
+    def add_accessor(data, component, count, kind, target, low=None, high=None):
+        accessor = {"bufferView": add_view(data, target), "componentType": component,
+                    "count": count, "type": kind}
+        if low is not None:
+            accessor["min"], accessor["max"] = low, high
+        glb["accessors"].append(accessor)
+        return len(glb["accessors"]) - 1
+
+    material_index = {}
+    for material in block.get("materials") or []:
+        image = {"bufferView": add_view(files[material["texture"]]), "mimeType": "image/png",
+                 "name": material["id"]}
+        glb["images"].append(image)
+        glb["textures"].append({"source": len(glb["images"]) - 1, "sampler": 0})
+        entry = {"name": material["id"], "doubleSided": False,
+                 "pbrMetallicRoughness": {"baseColorTexture": {"index": len(glb["textures"]) - 1},
+                                          "metallicFactor": 0.0, "roughnessFactor": 1.0}}
+        if material.get("blend") == "cutout":
+            entry["alphaMode"], entry["alphaCutoff"] = "MASK", 0.5
+        elif material.get("blend") == "alpha":
+            entry["alphaMode"] = "BLEND"
+        glb["materials"].append(entry)
+        material_index[material["id"]] = len(glb["materials"]) - 1
+
+    vertices, normals, uvs = payload["vertices"], payload["normals"], payload["uvs"]
+    indices = payload["indices"]
+    for part in block.get("parts") or []:
+        v0, vcount = part["vertexRange"]
+        i0, _icount = part["indexRange"]
+        positions = [(p[0], p[1], -p[2]) for p in vertices[v0:v0 + vcount]]
+        low = [min(p[a] for p in positions) for a in range(3)]
+        high = [max(p[a] for p in positions) for a in range(3)]
+        attributes = {
+            "POSITION": add_accessor(b"".join(struct.pack("<3f", *p) for p in positions),
+                                     5126, vcount, "VEC3", 34962, low, high)}
+        if normals:
+            attributes["NORMAL"] = add_accessor(
+                b"".join(struct.pack("<3f", n[0], n[1], -n[2]) for n in normals[v0:v0 + vcount]),
+                5126, vcount, "VEC3", 34962)
+        if uvs:
+            attributes["TEXCOORD_0"] = add_accessor(
+                b"".join(struct.pack("<2f", *u) for u in uvs[v0:v0 + vcount]),
+                5126, vcount, "VEC2", 34962)
+        primitives = []
+        for submesh in part["submeshes"]:
+            first = i0 + submesh["firstIndex"]
+            flat = indices[first:first + submesh["indexCount"]]
+            swapped = []
+            for offset in range(0, len(flat), 3):
+                swapped.extend((flat[offset], flat[offset + 2], flat[offset + 1]))
+            wide = vcount > 65535
+            data = struct.pack("<%d%s" % (len(swapped), "I" if wide else "H"), *swapped)
+            primitives.append({
+                "attributes": attributes,
+                "indices": add_accessor(data, 5125 if wide else 5123, len(swapped), "SCALAR",
+                                        34963),
+                "material": material_index[submesh["material"]], "mode": 4})
+        glb["meshes"].append({"name": part["id"], "primitives": primitives})
+        glb["nodes"].append({"mesh": len(glb["meshes"]) - 1, "name": part["id"],
+                             "extras": {"role": part["role"], "partId": part["id"]}})
+        glb["scenes"][0]["nodes"].append(len(glb["nodes"]) - 1)
+    # write_glb serialises the JSON before it fills ``buffers`` in; a loader needs the entry
+    # (with the padded length) to be in the text already.
+    glb["buffers"] = [{"byteLength": (len(binary) + 3) // 4 * 4}]
+    return ref_stage.write_glb(glb, binary)
 
 
 class TerrainHeight:
@@ -286,7 +383,11 @@ class V2Document:
         self._motion_error = None
         self._motion_error_code = None
         self._terrain_height = None
+        self.visual_files = None
+        self.visual_sidecar = None
+        self._visual_glb = None
         self._load_sidecar()
+        self._load_visual()
         self.errors = self._structural_errors()
         self.summary = self._build_summary()
         self.view_doc = self._build_view_doc()
@@ -315,6 +416,59 @@ class V2Document:
             self.sidecar = None
             self.sidecar_bytes = None
 
+    def _load_visual(self):
+        """``terrain.visual``'s sidecar and PNGs (read once; the shared checker verifies them)."""
+        block = (self.document.get("terrain") or {}).get("visual")
+        if not isinstance(block, dict):
+            return
+        try:
+            names = [(block.get("meshRef") or {}).get("path")]
+            names += [material.get("texture") for material in block.get("materials") or []
+                      if isinstance(material, dict)]
+            root = self.level_dir.resolve()
+            files = {}
+            for relative in names:
+                if not placement_v2._relative_inside(relative):
+                    raise V2LoadError("%r is not a relative path inside the level directory"
+                                      % (relative,))
+                target = (root / relative).resolve()
+                target.relative_to(root)
+                files[relative] = target.read_bytes()
+            payload = placement_v2.read_visual_sidecar(files[names[0]])
+        except (OSError, ValueError, V2LoadError, placement_v2.SidecarError) as error:
+            self.errors.append("terrain.visual cannot be read: %s" % error)
+            return
+        self.visual_files = files
+        self.visual_sidecar = payload
+
+    def _visual_summary(self, block):
+        """What the page needs to know about ``terrain.visual`` without fetching the GLB."""
+        if not isinstance(block, dict):
+            return {"available": False, "declared": False}
+        sidecar = self.visual_sidecar
+        parts = [part for part in block.get("parts") or [] if isinstance(part, dict)]
+        return {
+            "declared": True,
+            "available": sidecar is not None,
+            "filter": block.get("filter"),
+            "parts": [{"id": part.get("id"), "role": part.get("role"),
+                       "triangles": (part.get("indexRange") or [0, 0])[1] // 3,
+                       "bounds": part.get("bounds")} for part in parts],
+            "materials": len(block.get("materials") or []),
+            "vertices": ((sidecar or {}).get("counts") or {}).get("vertices"),
+            "triangles": ((sidecar or {}).get("counts") or {}).get("triangles"),
+            "glb": "/api/v2/visual.glb",
+        }
+
+    def visual_glb(self):
+        """The GLB of ``terrain.visual`` for the page (cached), or ``None`` without one."""
+        if self.visual_sidecar is None:
+            return None
+        if self._visual_glb is None:
+            self._visual_glb = build_visual_glb(self.document["terrain"]["visual"],
+                                                self.visual_sidecar, self.visual_files)
+        return self._visual_glb
+
     def _structural_errors(self):
         """The shared checker's shape errors, with a compatibility fallback.
 
@@ -329,7 +483,8 @@ class V2Document:
         """
         if self.sidecar_bytes is not None:
             try:
-                return list(ref_v2.structural_errors(self.document, self.sidecar_bytes))
+                return list(ref_v2.structural_errors(self.document, self.sidecar_bytes,
+                                                     self.visual_files))
             except TypeError as error:
                 if "byte indices must be integers" not in str(error):
                     raise
@@ -371,6 +526,8 @@ class V2Document:
             "parentLinks": len(parents),
             "growthMm3": sum(int(prop.get("growthMm3") or 0) for prop in props),
             "walls": len(activity.get("walls") or []),
+            "visualParts": len(((terrain.get("visual") or {}).get("parts")) or []),
+            "visualTriangles": ((self.visual_sidecar or {}).get("counts") or {}).get("triangles"),
             "terrainVertices": (self.sidecar or {}).get("counts", {}).get("vertices"),
             "terrainTriangles": (self.sidecar or {}).get("counts", {}).get("triangles"),
             "terrainChunks": len(terrain.get("chunks") or []),
@@ -414,6 +571,7 @@ class V2Document:
                 "source": meta.get("source") or {},
             },
             "counts": counts,
+            "visual": self._visual_summary(terrain.get("visual")),
             "terrain": {
                 "id": terrain.get("id"),
                 "kind": terrain.get("kind"),
@@ -875,6 +1033,7 @@ class V2Document:
             "meta": self.summary["meta"],
             "counts": self.summary["counts"],
             "terrain": self.terrain_payload() if terrain else None,
+            "visual": self.summary["visual"],
             "solids": self.summary["solids"] if solids else None,
             "activity": (self.summary["activity"] if (walls or kill) else None),
             "parents": self.summary["parents"] if parents else None,
@@ -898,12 +1057,21 @@ class V2Document:
 def layer_map(document):
     """The view toggles and their HTTP spellings (used by GUI, docs and tests)."""
     counts = document.summary["counts"] if document else {}
+    has_visual = bool(document and document.summary["visual"].get("available"))
     return {
         "v2Terrain": {
             "id": "show-v2-terrain", "default": True,
+            "http": "/api/v2/visual.glb" if has_visual else "/api/v2/terrain",
+            "count": counts.get("visualTriangles") if has_visual
+            else counts.get("terrainTriangles"),
+            "label": "v2 地形（terrain.visual 原作视觉网格 + 贴图）" if has_visual
+            else "v2 地形（.katerrain 碰撞网格）",
+        },
+        "v2Collision": {
+            "id": "show-v2-collision", "default": False,
             "http": "/api/v2/terrain",
             "count": counts.get("terrainTriangles"),
-            "label": "v2 地形（.katerrain 碰撞网格）",
+            "label": "碰撞线框（.katerrain：球的接触数据 + 玩家站立面，含 15 m 挡球墙；从不渲染实体）",
         },
         "v2Solids": {
             "id": "show-v2-solids", "default": True,

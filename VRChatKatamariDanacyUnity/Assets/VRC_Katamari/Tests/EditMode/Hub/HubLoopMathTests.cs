@@ -474,5 +474,83 @@ namespace VRCKatamari.Tests
             Assert.IsFalse(HubLoopMath.IsRoundState(-1));
             Assert.IsFalse(HubLoopMath.IsRoundState(4));
         }
+
+        // ------------------------------------------------------------------ arrival choice
+
+        [Test]
+        public void ArrivalPrefersTheAuthoredEntryWhenItIsNearTheBall()
+        {
+            // The player start sits about 2.5 m behind the ball (the reference level's is
+            // 2.47 m): well inside the 12 m default trust radius.
+            Assert.AreEqual(HubLoopMath.ArrivalEntry,
+                HubLoopMath.ChooseArrival(true, true, 2.5f, 12f));
+        }
+
+        [Test]
+        public void ArrivalFallsBackToTheSeatWhenTheEntryIsFarFromTheBall()
+        {
+            // The 2026-11-16 run: an entry 14.5 m from the ball, in the void. The seat is
+            // the safe answer there.
+            Assert.AreEqual(HubLoopMath.ArrivalSeat,
+                HubLoopMath.ChooseArrival(true, true, 14.5f, 12f));
+        }
+
+        [Test]
+        public void ArrivalTrustRadiusIsInclusive()
+        {
+            Assert.AreEqual(HubLoopMath.ArrivalEntry,
+                HubLoopMath.ChooseArrival(true, true, 12f, 12f));
+            Assert.AreEqual(HubLoopMath.ArrivalSeat,
+                HubLoopMath.ChooseArrival(true, true, 12.01f, 12f));
+        }
+
+        [Test]
+        public void ArrivalUsesTheEntryAloneWhenThereIsNoSeat()
+        {
+            // Nothing to compare the entry with: it is what the scene says, whatever the
+            // distance reading.
+            Assert.AreEqual(HubLoopMath.ArrivalEntry,
+                HubLoopMath.ChooseArrival(false, true, -1f, 12f));
+            Assert.AreEqual(HubLoopMath.ArrivalEntry,
+                HubLoopMath.ChooseArrival(false, true, 500f, 12f));
+        }
+
+        [Test]
+        public void ArrivalUsesTheSeatAloneWhenThereIsNoEntry()
+        {
+            Assert.AreEqual(HubLoopMath.ArrivalSeat,
+                HubLoopMath.ChooseArrival(true, false, -1f, 12f));
+        }
+
+        [Test]
+        public void ArrivalIsNoneWhenNeitherPointExists()
+        {
+            Assert.AreEqual(HubLoopMath.ArrivalNone,
+                HubLoopMath.ChooseArrival(false, false, -1f, 12f));
+        }
+
+        [Test]
+        public void ArrivalWithAnUnmeasurableDistanceUsesTheSeat()
+        {
+            Assert.AreEqual(HubLoopMath.ArrivalSeat,
+                HubLoopMath.ChooseArrival(true, true, -1f, 12f));
+            Assert.AreEqual(HubLoopMath.ArrivalSeat,
+                HubLoopMath.ChooseArrival(true, true, float.NaN, 12f));
+            Assert.AreEqual(HubLoopMath.ArrivalSeat,
+                HubLoopMath.ChooseArrival(true, true, float.PositiveInfinity, 12f));
+        }
+
+        [Test]
+        public void ArrivalWithANonPositiveTrustRadiusUsesTheDefault()
+        {
+            // A scene saved before the launcher had the field deserializes it as 0.
+            Assert.AreEqual(HubLoopMath.ArrivalEntry,
+                HubLoopMath.ChooseArrival(true, true, 5f, 0f));
+            Assert.AreEqual(HubLoopMath.ArrivalSeat,
+                HubLoopMath.ChooseArrival(true, true, HubLoopMath.DefaultEntryTrustMeters + 1f,
+                    -3f));
+            Assert.AreEqual(HubLoopMath.ArrivalEntry,
+                HubLoopMath.ChooseArrival(true, true, 5f, float.NaN));
+        }
     }
 }

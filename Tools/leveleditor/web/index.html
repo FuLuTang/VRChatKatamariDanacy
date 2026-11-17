@@ -64,8 +64,11 @@
 
     <div class="group v2-tools hidden" id="v2-tools"
          title="katamari.placement/2 图层（UNLICENSED 本地参考数据，只显示、不分发）">
-      <label class="toggle" title="v2 地形：从 terrain/cancer.katerrain 侧车读取的碰撞三角网">
+      <label class="toggle" title="v2 地形：有 terrain.visual 时是原作视觉网格 + 贴图（.katvisual 侧车），否则是 .katerrain 碰撞三角网">
         <input id="show-v2-terrain" type="checkbox" checked> v2 地形
+      </label>
+      <label class="toggle" title="碰撞线框：.katerrain（球的接触数据与玩家站立面，含原作 15 m 的不可见挡球墙）；绿 ride / 黄 climb / 红 wall；从不画成实体">
+        <input id="show-v2-collision" type="checkbox"> 碰撞线框
       </label>
       <label class="toggle" title="v2 固体：structures.solids（35 条解析盒）">
         <input id="show-v2-solids" type="checkbox" checked> 固体

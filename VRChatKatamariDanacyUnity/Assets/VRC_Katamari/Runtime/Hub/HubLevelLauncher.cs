@@ -10,9 +10,11 @@ namespace VRCKatamari.Hub
 {
     /// <summary>
     /// The room/level loop for one local player: a press in the room sends the player
-    /// into a level and opens the round, the settled round (or a press) sends the
-    /// player back to the room, and while a round is running the player is kept in the
-    /// level.
+    /// into a level and opens the round, a press on a "back to the room" button (the
+    /// level's own, or the one on the result card) sends the player back, and while a
+    /// round is running the player is kept in the level. A settled round does not move
+    /// anyone: the player decides between "try again" (the round's own in-place retry)
+    /// and going back to the room.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -162,6 +164,11 @@ namespace VRCKatamari.Hub
         // or is nudged by a collider can settle a little off the mark.
         [SerializeField] private float arrivalToleranceMeters = 1f;
 
+        // The level entry is used as the landing spot only while it is within this many
+        // metres of the ball's seat; farther, the seat is used. Zero or less means the
+        // default (a scene saved before the field existed deserializes it as 0).
+        [SerializeField] private float entryTrustMeters = 12f;
+
         // Frames waited before the arrival is read: one frame applies the move, the
         // second lets the capsule depenetrate. Verified by the probe's two readings.
         [SerializeField] private int arrivalCheckFrames = 2;
@@ -275,6 +282,10 @@ namespace VRCKatamari.Hub
                 arrivalTimeoutFrames = arrivalCheckFrames;
             }
             if (exitStationTimeoutFrames < 1) exitStationTimeoutFrames = 1;
+            if (!KatamariMath.IsFiniteFloat(entryTrustMeters) || entryTrustMeters <= 0f)
+            {
+                entryTrustMeters = HubLoopMath.DefaultEntryTrustMeters;
+            }
 
             if (!KatamariMath.IsFiniteFloat(transferCooldownSeconds)
                 || transferCooldownSeconds < 0f)
@@ -324,6 +335,7 @@ namespace VRCKatamari.Hub
 
             Debug.Log("[hub] ready levels=" + LevelCount() + " state=" + StateText()
                 + " holdInLevel=" + holdPlayerInLevel
+                + " entryTrust=" + entryTrustMeters
                 + " autoSeat=" + (!disableAutoSeat && rideStation != null && rideSeat != null)
                 + " holdGrace=" + holdGraceSeconds
                 + " lift=" + arrivalLiftMeters
@@ -485,17 +497,26 @@ namespace VRCKatamari.Hub
                 return false;
             }
 
-            // Where the player is sent. With a station wired, the room flow seats the
-            // player on the ball, so the arrival is the seat's own transform: the station
-            // carries them from there and a seat that fails still leaves the player on the
-            // level floor next to the ball instead of at a hand-placed point that can be
-            // metres off (the 2026-11-16 run put LevelEntry in the void, the player fell,
-            // and ClientSim respawned them at the room). The level entry stays as the
-            // no-station fallback and as the destination when auto-seat is off.
+            // Where the player is sent (HubLoopMath.ChooseArrival). The level's authored
+            // entry is its player start: on the floor, behind the ball, facing it, and it
+            // does not move when a retry puts the ball back. It is trusted only while it is
+            // near the ball's seat; an entry far from the ball is a wiring mistake (the
+            // 2026-11-16 run had it in the void: the player fell and ClientSim respawned
+            // them in the room), and then the seat is the destination. The station carries
+            // the player from either point once the seat is taken.
             Transform entry = LevelEntry(levelIndex);
-            bool seatArrival = !disableAutoSeat && rideStation != null && rideSeat != null;
-            Transform arrivalPoint = entry;
-            if (seatArrival) arrivalPoint = rideStation.transform;
+            bool seatAvailable = !disableAutoSeat && rideStation != null && rideSeat != null;
+            float entryToSeat = -1f;
+            if (entry != null && seatAvailable)
+            {
+                entryToSeat = Vector3.Distance(entry.position, rideStation.transform.position);
+            }
+            int arrivalSource = HubLoopMath.ChooseArrival(seatAvailable, entry != null,
+                entryToSeat, entryTrustMeters);
+
+            Transform arrivalPoint = null;
+            if (arrivalSource == HubLoopMath.ArrivalEntry) arrivalPoint = entry;
+            if (arrivalSource == HubLoopMath.ArrivalSeat) arrivalPoint = rideStation.transform;
             if (arrivalPoint == null)
             {
                 reason = HubLoopMath.ReasonLevelEntryUnwired;
@@ -536,7 +557,8 @@ namespace VRCKatamari.Hub
                 + " name=" + LevelName(levelIndex)
                 + " mode=" + mode
                 + " state=" + state
-                + " arrivalSource=" + (seatArrival ? "seat" : "entry"));
+                + " arrivalSource=" + (arrivalSource == HubLoopMath.ArrivalEntry ? "entry" : "seat")
+                + " entryToSeat=" + entryToSeat);
             return true;
         }
 
@@ -604,47 +626,6 @@ namespace VRCKatamari.Hub
                 + " level=" + controller.GetLevelId()
                 + " attempt=" + controller.GetAttemptNumber()
                 + " activeLevelIndex=" + activeLevelIndex);
-
-            // The settled round sends the player back: Presenting is the beat the plan
-            // puts "return to the room" in (section 5, step 6). The facts are frozen
-            // inside the same call that set this state, so the move cannot outrun them.
-            if (state == StoryRoundController.StatePresenting && !returnPending && !startPending)
-            {
-                BeginReturn("round-settled");
-                return;
-            }
-
-            // Fallback for a round that reaches Result without this behaviour having seen
-            // Presenting: two states can pass between two polls when presentingSeconds is
-            // 0 or very small. Only acts when the player is demonstrably not at the room
-            // point, so a normal round (already returned during Presenting) stays silent
-            // instead of logging a skipped return every time.
-            if (state == StoryRoundController.StateResult && !returnPending && !startPending
-                && IsPlayerAwayFromRoom())
-            {
-                BeginReturn("result-outside-room");
-            }
-        }
-
-        /// <summary>
-        /// Whether the local player is measurably away from the room point. Same lifted
-        /// point and tolerance as the return itself, so "away" and "arrived" cannot
-        /// disagree.
-        /// </summary>
-        private bool IsPlayerAwayFromRoom()
-        {
-            if (roomSpawn == null) return false;
-
-            VRCPlayerApi player = Networking.LocalPlayer;
-            if (player == null) return false;
-
-            Vector3 arrival;
-            if (!HubLoopMath.TryLiftedPoint(roomSpawn.position, arrivalLiftMeters, out arrival))
-            {
-                return false;
-            }
-
-            return !HubLoopMath.IsWithin(player.GetPosition(), arrival, arrivalToleranceMeters);
         }
 
         // ------------------------------------------------------------------ start transfer
@@ -1110,7 +1091,7 @@ namespace VRCKatamari.Hub
             }
             if (state == StoryRoundController.StatePresenting)
             {
-                statusText.text = "结算中，正在回房";
+                statusText.text = "结算中";
                 return;
             }
             if (state == StoryRoundController.StateResult)
@@ -1137,6 +1118,12 @@ namespace VRCKatamari.Hub
             if (levelIndex < 0) return null;
             if (levelIndex >= levelEntries.Length) return null;
             return levelEntries[levelIndex];
+        }
+
+        /// <summary>The display name of level <paramref name="levelIndex"/> (never empty).</summary>
+        public string GetLevelName(int levelIndex)
+        {
+            return LevelName(levelIndex);
         }
 
         private string LevelName(int levelIndex)

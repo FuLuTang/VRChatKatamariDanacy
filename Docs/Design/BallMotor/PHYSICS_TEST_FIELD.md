@@ -500,7 +500,7 @@ per-tier 结果（`r` = D/2，`stepLimit` = 0.25·D）：
 | `escape_displacement_m` | 倒车后相对卡点的位移 | 能出来 | A | `≥ 0.40` / `≥ 0.50` |
 | `stuck_max_s` | 窗口内 `GetStuckSeconds()` 的最大值 | 卡住时长 | A | `≤ 0.50`（薄墙）；`≥ 0.20`（夹缝：证明真的卡过） |
 | `protrusion_ratio` | `GetGroundProxyLiftWorldM() / GetProxyProtrusionCapWorldM()` | 突出是否被夹住 | A | `≤ 1.001`；负对照 `≤ 0.02` |
-| `proxy_points` / `proxy_candidates` | `GetProxyPointCount()` / `GetProxyCandidateCount()` | 长物件进没进壳 | A | `≥ 8` |
+| `proxy_points` / `proxy_items` | `GetProxyPointCount()` / `GetProxyItemCount()` | 吸附物进没进针（每件 8 点；不再只收长物件） | A | `≥ 8` |
 | `roll_distance_ratio` | `abs(滚动角 × r − 位移) / 位移` | 无滑滚 | A | `≤ 0.10` |
 | `diameter_error_m` | `motor.GetSemanticDiameterWorldM() − presetDiametersM[diameterIndex]`（米，带符号；判据用 `abs<=`） | 设定器是否把球放到了预设直径。步骤 C+D 后成长量子是 1 mm³（约 7 nm 直径当量），所以 1 mm 是判据限，不是物理下限（§8.3） | A | `abs<= 0.001` |
 | `max_center_y_m` | 整段窗口内 `center.y` 的最大值 | 「最高只到 r + 一点」= 没爬上去 | A | 按格 |
@@ -694,7 +694,7 @@ CONTACT_MODEL_V2 §6.2 的十个格（W1–W6、R1/R2、S1、X1）已经以**设
 |---|---|---|
 | 位置 | `center`（逐帧）、`traj`（每 0.5 s）、`heading` | 轨迹、位移、绕行 |
 | 支撑 | `support_gap`、`lift`、`cap`、`support_kind`（P1+）、`support_normal`（P1+） | 贴地、凹凸、法线是否朝上、滚动法线是否正确 |
-| 接触 | `saturated_delta`、`stuck_max_s`、`proxy_points`、`proxy_candidates` | 卡住、饱和、长物件进壳 |
+| 接触 | `saturated_delta`、`stuck_max_s`、`proxy_points`、`proxy_items` | 卡住、饱和、吸附物进针 |
 | 吸收/挡路 | `absorbed_delta`、`attached_delta`、`blocking_max`、`blocking_candidates`、`absorbed_event` 的 id | 门与分类是否原子翻转 |
 | 成本 | `active_surface_max`、`mask_rebuild`、`step_micros`（**待加**） | P4 的帧时间与分配 |
 | 几何 | 该格的 `expected_ramp_count` / `GetRampCount()`（P3）、`GetLastRampRefusalReason()`（P3） | 斜面注册是否被正确拒绝 |

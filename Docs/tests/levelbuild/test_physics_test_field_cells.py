@@ -1208,16 +1208,17 @@ class RampApplicability(unittest.TestCase):
         for needle in ("### 4.1.4", "### 4.1.5", "### 4.1.6", "SKIPPED_NOT_APPLICABLE"):
             self.assertIn(needle, doc)
 
-    def test_the_c01_timeline_covers_the_growth_derated_speed(self):
-        # B-class fix: at D=2.2 growthSpeedFactor=0.25 caps the ball at 3.0 m/s, so the 6.86 m
-        # ramp needs ~0.75 s more than the 4 m/s assumption allowed.
+    def test_the_c01_timeline_keeps_its_second_forward_window(self):
+        # B-class fix: the 6.86 m ramp needs a second forward window of at least 8.75 s. Since
+        # 2026-11-17 the ball's speed scales with its diameter (BALL_INERTIA.md), so a large
+        # ball is faster, not slower, and the same window is a safe upper bound.
         c01 = self.cells["C01"]
         drive = c01["drive"]
         # The last row releases the second forward window; the row before it starts that window.
         self.assertGreaterEqual(drive[-1]["t"], 8.75)
         self.assertGreater(drive[-2]["forward"], 0.5)
         motor = MOTOR_CS.read_text(encoding="utf-8")
-        self.assertIn("growthSpeedFactor = 0.25f", motor)
+        self.assertNotIn("growthSpeedFactor", motor)
 
 
 class ArenaRules(unittest.TestCase):

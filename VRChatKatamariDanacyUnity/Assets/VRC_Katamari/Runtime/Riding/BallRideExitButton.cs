@@ -1,46 +1,84 @@
 using UdonSharp;
 using UnityEngine;
-using VRC.SDKBase;
+using UnityEngine.UI;
 
 namespace VRCKatamari.Riding
 {
     /// <summary>
-    /// The in-world "leave the ride" button: one Interact, the local player stands up.
+    /// The rider's "get off" button, on the panel that hangs in their view: press twice
+    /// within a few seconds and the ride ends.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// It exists because the station is configured with Disable Station Exit on, so
-    /// jumping or menu movement cannot end the ride; the only way out is a click on
-    /// something. It owns no state: <see cref="BallRideStation.OnStationExited"/> is
-    /// what re-enables the ball's interact and closes the ride gate, so this script
-    /// cannot leave the ride half-finished by forgetting to clear a flag. The lab's
-    /// exit button had to clear the driver's flags itself and therefore needed a
-    /// duplicate-exit guard; this one deliberately does not.
+    /// Why twice. The station keeps Disable Station Exit on so that movement and jumping
+    /// cannot stand the rider up mid-ride, and a single click on a button that sits in the
+    /// view is exactly the accident that setting guards against. The first press arms the
+    /// button and changes its label; a second press inside <c>confirmSeconds</c> asks
+    /// <see cref="BallRideStation.RequestExit"/> to leave. A press after the window starts
+    /// over. The other route out, holding the jump input, needs no button.
     /// </para>
     /// <para>
-    /// Object layout: its own GameObject with a collider and this behaviour, so the
-    /// click has a surface of its own; one behaviour per object is the project
-    /// convention (clear ownership and a readable self-check), not an engine rule -
-    /// sharing is legal (Docs/Design/BallMotor/README.md, assembly constraints). It
-    /// must be clickable from the seat. Interact fires only for the local client, so
-    /// <c>Networking.LocalPlayer</c> is the player who pressed it.
-    /// </para>
-    /// <para>
-    /// Pressing it while nobody is seated calls <c>ExitStation</c> with nothing to
-    /// leave; that is expected to be a no-op and is unverified.
+    /// It owns no ride state: <see cref="BallRideStation.OnStationExited"/> still clears the
+    /// seated flag, the ride gate and the prompts, and <c>RequestExit</c> places the exit
+    /// location on walkable ground first. Object layout: its own GameObject under the
+    /// rider's panel with a collider and this behaviour (Interact is delivered to the
+    /// behaviour on the collider's object). Interact fires only for the local client.
+    /// Local state only (<c>BehaviourSyncMode.None</c>).
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class BallRideExitButton : UdonSharpBehaviour
     {
-        [SerializeField] private VRC.SDK3.Components.VRCStation station;
+        [SerializeField] private BallRideStation ride;
+
+        // Optional. The button's face; it shows the armed state.
+        [SerializeField] private Text label;
+
+        // Seconds the second press may follow the first.
+        [SerializeField] private float confirmSeconds = 3f;
+
+        private const string IdleLabel = "下车（点两次）";
+        private const string ArmedLabel = "再点一次确认下车";
+
+        private bool armed;
+        private float armedAt;
 
         public override void Interact()
         {
-            VRCPlayerApi player = Networking.LocalPlayer;
-            if (player == null || station == null) return;
-            station.ExitStation(player);
-            Debug.Log("[ride] exit requested");
+            if (ride == null)
+            {
+                Debug.LogWarning("[ride] exit press ignored: BallRideExitButton.ride is not wired");
+                return;
+            }
+            if (!ride.IsLocalPlayerSeated()) return;
+            if (armed && Time.time - armedAt <= confirmSeconds)
+            {
+                Disarm();
+                ride.RequestExit();
+                return;
+            }
+            armed = true;
+            armedAt = Time.time;
+            WriteLabel(ArmedLabel);
+        }
+
+        private void Update()
+        {
+            if (!armed) return;
+            if (Time.time - armedAt <= confirmSeconds) return;
+            Disarm();
+        }
+
+        private void Disarm()
+        {
+            armed = false;
+            WriteLabel(IdleLabel);
+        }
+
+        private void WriteLabel(string text)
+        {
+            if (label == null) return;
+            label.text = text;
         }
     }
 }

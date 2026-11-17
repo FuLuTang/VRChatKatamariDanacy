@@ -106,9 +106,20 @@ ZONE_KEYS = ("id", "code", "kind")
 ARENA_KEYS = ("id", "notes")
 MIGRATION_KEYS = ("from", "maxDiameterM", "volumePenalty")
 TERRAIN_KEYS = ("id", "kind", "winding", "vertices", "indices", "meshRef", "triangles",
-                "broadPhase", "chunks", "grid", "materialSegments", "source")
+                "broadPhase", "chunks", "grid", "materialSegments", "visual", "source")
 MESHREF_KEYS = ("path", "sha256", "vertexCount", "indexCount", "triangleCount",
                 "indexWidth", "zoneIds", "classes")
+#: ``terrain.visual`` (LEVEL_FORMAT_V2 §3.8): the rendered surface, apart from the contact mesh.
+VISUAL_KEYS = ("meshRef", "parts", "materials", "filter", "source")
+VISUAL_MESHREF_KEYS = ("path", "sha256", "vertexCount", "indexCount", "triangleCount",
+                       "indexWidth", "normals", "uvs")
+VISUAL_PART_KEYS = ("id", "role", "vertexRange", "indexRange", "bounds", "submeshes")
+VISUAL_BOUNDS_KEYS = ("min", "max")
+VISUAL_SUBMESH_KEYS = ("material", "firstIndex", "indexCount")
+VISUAL_MATERIAL_KEYS = ("id", "texture", "sha256", "width", "height", "blend")
+VISUAL_ROLES = ("stage", "sky")
+VISUAL_BLENDS = ("opaque", "cutout", "alpha")
+VISUAL_FILTERS = ("point", "bilinear")
 TRI_KEYS = ("count", "zoneIds", "classes", "zoneCounts")
 BROAD_KEYS = ("kind", "boxes")
 BROAD_BOX_KEYS = ("id", "min", "max", "triangleRange")
@@ -201,8 +212,86 @@ def sidecar_bytes(terrain):
     return bytes(out), index_width
 
 
+#: The ``.katvisual`` sidecar (§8.4): ``terrain.visual``'s vertices.
+VISUAL_SIDECAR_NAME = "cancer.katvisual"
+KATVISUAL_MAGIC = b"KVIS"
+KATVISUAL_VERSION = 1
+KATVISUAL_FLAG_NORMALS = 0x1
+KATVISUAL_FLAG_UVS = 0x2
+
+
+def visual_sidecar_bytes(vertices, normals, uvs, indices, part_count, index_width):
+    """The ``.katvisual`` payload (§8.4): positions, optional normals/uvs, part-local indices.
+
+    ``vertices``/``normals`` are ``(x, y, z)`` triples, ``uvs`` ``(u, v)`` pairs with the PNG's
+    top-left as the origin; ``indices`` are local to the part that owns them (the document's
+    ``parts[]`` say which vertex/index ranges belong together).
+    """
+    flags = 0
+    if normals:
+        flags |= KATVISUAL_FLAG_NORMALS
+    if uvs:
+        flags |= KATVISUAL_FLAG_UVS
+    out = bytearray()
+    out += KATVISUAL_MAGIC
+    out += struct.pack("<H", KATVISUAL_VERSION)
+    out += struct.pack("<B", index_width)
+    out += struct.pack("<B", flags)
+    out += struct.pack("<III", len(vertices), len(indices), part_count)
+    for point in vertices:
+        out += struct.pack("<3f", *(float(value) for value in point))
+    for point in normals or ():
+        out += struct.pack("<3f", *(float(value) for value in point))
+    for pair in uvs or ():
+        out += struct.pack("<2f", *(float(value) for value in pair))
+    out += struct.pack("<%d%s" % (len(indices), "H" if index_width == 2 else "I"), *indices)
+    return bytes(out)
+
+
+def read_visual_sidecar(data):
+    """Parse a ``.katvisual`` payload into its sections (and their counts)."""
+    data = bytes(data)
+    if len(data) < 20 or data[:4] != KATVISUAL_MAGIC:
+        raise SidecarError("magic is not KVIS")
+    version, index_width, flags = struct.unpack_from("<HBB", data, 4)
+    if version != KATVISUAL_VERSION:
+        raise SidecarError("version %d is not %d" % (version, KATVISUAL_VERSION))
+    if index_width not in (2, 4):
+        raise SidecarError("indexWidth %d is not 2 or 4" % index_width)
+    vertex_count, index_count, part_count = struct.unpack_from("<III", data, 8)
+    offset = 20
+    width = 12 * vertex_count
+    if flags & KATVISUAL_FLAG_NORMALS:
+        width += 12 * vertex_count
+    if flags & KATVISUAL_FLAG_UVS:
+        width += 8 * vertex_count
+    needed = offset + width + index_count * index_width
+    if len(data) < needed:
+        raise SidecarError("truncated: %d bytes, the counts need %d" % (len(data), needed))
+    vertices = [struct.unpack_from("<3f", data, offset + 12 * index)
+                for index in range(vertex_count)]
+    offset += 12 * vertex_count
+    normals = []
+    if flags & KATVISUAL_FLAG_NORMALS:
+        normals = [struct.unpack_from("<3f", data, offset + 12 * index)
+                   for index in range(vertex_count)]
+        offset += 12 * vertex_count
+    uvs = []
+    if flags & KATVISUAL_FLAG_UVS:
+        uvs = [struct.unpack_from("<2f", data, offset + 8 * index)
+               for index in range(vertex_count)]
+        offset += 8 * vertex_count
+    indices = list(struct.unpack_from("<%d%s" % (index_count, "H" if index_width == 2 else "I"),
+                                      data, offset))
+    offset += index_count * index_width
+    return {"vertices": vertices, "normals": normals, "uvs": uvs, "indices": indices,
+            "indexWidth": index_width, "flags": flags, "trailing": len(data) - offset,
+            "counts": {"vertices": vertex_count, "indices": index_count,
+                       "triangles": index_count // 3, "parts": part_count}}
+
+
 class SidecarError(RuntimeError):
-    """A ``.katerrain`` payload that cannot be parsed."""
+    """A ``.katerrain`` / ``.katvisual`` payload that cannot be parsed."""
 
 
 def read_sidecar(data):
@@ -309,6 +398,10 @@ def _unknown(report, block, allowed, where):
            "meshRef": "[terrain_sidecar]", "broadPhase": "[terrain_broadphase]",
            "broadBoxes": "[terrain_broadphase]", "chunks": "[terrain_budget]",
            "grid": "[terrain_grid]", "segments": "[terrain_segment]",
+           "visual": "[terrain_visual_key]", "visualMeshRef": "[terrain_visual_key]",
+           "visualParts": "[terrain_visual_key]", "visualBounds": "[terrain_visual_key]",
+           "visualSubmeshes": "[terrain_visual_key]", "visualMaterials": "[terrain_visual_key]",
+           "visualSource": "[terrain_visual_key]",
            "props": "[prop_key]", "defs": "[def_key]", "clips": "[def_clips]",
            "motions": "[motion_key]", "speed": "[motion_speed]",
            "provenance": "[motion_key]", "paths": "[path_key]",
@@ -347,12 +440,13 @@ def _def_catalog(document):
 # the validator
 # --------------------------------------------------------------------------- #
 def validate(document, path=None, manifests=None, sidecar_bytes_=None, strict=False,
-             rel_tolerance=1e-9):
+             rel_tolerance=1e-9, visual_files=None):
     """Run every v2 rule; returns a :class:`placement_core.Report`.
 
     ``path`` is the document's file (used for the sidecar's relative path and the canonical
     byte check); ``sidecar_bytes_`` lets a caller hand over the sidecar directly (tests, or a
-    document that is not on disk yet).
+    document that is not on disk yet); ``visual_files`` does the same for the ``terrain.visual``
+    sidecar and textures (``{relative path: bytes}``).
     """
     report = core.Report()
     if not isinstance(document, dict):
@@ -375,7 +469,7 @@ def validate(document, path=None, manifests=None, sidecar_bytes_=None, strict=Fa
     lowest_y = None
     if isinstance(terrain, dict):
         lowest_y = _check_terrain(document, terrain, meta, report, path, sidecar_bytes_,
-                                  rel_tolerance)
+                                  rel_tolerance, visual_files)
     else:
         report.err("[terrain_mesh] terrain: expected an object, got %r"
                    % (type(terrain).__name__,))
@@ -588,8 +682,11 @@ def _check_meta(document, meta, report, path):
 
 
 # -- terrain ---------------------------------------------------------------- #
-def _check_terrain(document, terrain, meta, report, path, given_sidecar, rel_tolerance):
+def _check_terrain(document, terrain, meta, report, path, given_sidecar, rel_tolerance,
+                   visual_files=None):
     _unknown(report, terrain, TERRAIN_KEYS, "terrain")
+    if "visual" in terrain:
+        _check_visual(terrain["visual"], report, path, visual_files)
     if terrain.get("kind") != "mesh":
         report.err("[terrain_mesh] terrain.kind: expected 'mesh', got %r" % (terrain.get("kind"),))
     if terrain.get("winding") != "ccw":
@@ -823,6 +920,308 @@ def _load_sidecar(terrain, mesh_ref, path, report, given):
     for problem in problems:
         report.err(problem)
     return payload
+
+
+# -- terrain.visual (§3.8) ---------------------------------------------------- #
+_HEX = frozenset("0123456789abcdef")
+
+
+def _relative_inside(relative):
+    return (isinstance(relative, str) and bool(relative) and not relative.startswith("/")
+            and ".." not in Path(relative).parts and "\\" not in relative)
+
+
+def _visual_bytes(relative, path, visual_files):
+    """The bytes of one file the visual block names (given map first, else next to the doc)."""
+    if visual_files is not None:
+        return visual_files.get(relative)
+    if path is None:
+        return None
+    candidate = Path(path).resolve().parent / relative
+    return candidate.read_bytes() if candidate.is_file() else None
+
+
+def _is_int(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _pair(value):
+    return (isinstance(value, list) and len(value) == 2 and all(_is_int(v) for v in value)
+            and value[0] >= 0 and value[1] >= 0)
+
+
+def _check_visual(visual, report, path, visual_files):
+    """``terrain.visual``: the rendered surface, separate from the contact mesh (§3.8)."""
+    if not isinstance(visual, dict):
+        report.err("[terrain_visual] terrain.visual: expected an object, got %r"
+                   % (type(visual).__name__,))
+        return
+    _unknown(report, visual, VISUAL_KEYS, "visual")
+    if visual.get("filter") not in VISUAL_FILTERS:
+        report.err("[terrain_visual] terrain.visual.filter: expected one of %s, got %r"
+                   % (", ".join(VISUAL_FILTERS), visual.get("filter")))
+    if "source" in visual:
+        _unknown(report, visual["source"], SOURCE_KEYS, "visualSource")
+
+    materials = visual.get("materials")
+    material_ids = set()
+    if not isinstance(materials, list) or not materials:
+        report.err("[terrain_visual_material] terrain.visual.materials: expected a non-empty "
+                   "array, got %r" % (type(materials).__name__,))
+        materials = []
+    for index, material in enumerate(materials):
+        where = "terrain.visual.materials[%d]" % index
+        if not isinstance(material, dict):
+            report.err("[terrain_visual_material] %s: expected an object" % where)
+            continue
+        _unknown(report, material, VISUAL_MATERIAL_KEYS, "visualMaterials")
+        identity = material.get("id")
+        if not isinstance(identity, str) or not identity.strip() or identity in material_ids:
+            report.err("[terrain_visual_material] %s.id: expected a unique non-empty string, "
+                       "got %r" % (where, identity))
+        else:
+            material_ids.add(identity)
+        if material.get("blend") not in VISUAL_BLENDS:
+            report.err("[terrain_visual_material] %s.blend: expected one of %s, got %r"
+                       % (where, ", ".join(VISUAL_BLENDS), material.get("blend")))
+        width, height = material.get("width"), material.get("height")
+        if not (_is_int(width) and _is_int(height) and width > 0 and height > 0):
+            report.err("[terrain_visual_material] %s.width/height: expected positive "
+                       "integers, got %r/%r" % (where, width, height))
+        digest = material.get("sha256")
+        if not (isinstance(digest, str) and len(digest) == 64 and set(digest) <= _HEX):
+            report.err("[terrain_visual_texture] %s.sha256: expected 64 lowercase hex "
+                       "characters, got %r" % (where, digest))
+        relative = material.get("texture")
+        if not _relative_inside(relative):
+            report.err("[terrain_visual_texture] %s.texture: expected a relative path inside "
+                       "the level directory, got %r" % (where, relative))
+            continue
+        data = _visual_bytes(relative, path, visual_files)
+        if data is None:
+            if path is not None or visual_files is not None:
+                report.err("[terrain_visual_texture] %s.texture: expected the PNG file %s, got "
+                           "nothing" % (where, relative))
+            continue
+        if hashlib.sha256(data).hexdigest() != digest:
+            report.err("[terrain_visual_texture] %s.sha256: expected %r, got %r"
+                       % (where, digest, hashlib.sha256(data).hexdigest()))
+        if data[:8] != b"\x89PNG\r\n\x1a\n" or len(data) < 24:
+            report.err("[terrain_visual_texture] %s.texture: expected a PNG, got other bytes"
+                       % where)
+        else:
+            size = struct.unpack(">II", data[16:24])
+            if size != (width, height):
+                report.err("[terrain_visual_texture] %s.width/height: expected %r, got %r"
+                           % (where, size, (width, height)))
+
+    mesh_ref = visual.get("meshRef")
+    payload = None
+    if not isinstance(mesh_ref, dict):
+        report.err("[terrain_visual_sidecar] terrain.visual.meshRef: expected an object, got %r"
+                   % (type(mesh_ref).__name__,))
+    else:
+        _unknown(report, mesh_ref, VISUAL_MESHREF_KEYS, "visualMeshRef")
+        relative = mesh_ref.get("path")
+        if not _relative_inside(relative):
+            report.err("[terrain_visual_sidecar] terrain.visual.meshRef.path: expected a "
+                       "relative path inside the level directory, got %r" % (relative,))
+        else:
+            raw = _visual_bytes(relative, path, visual_files)
+            if raw is None:
+                if path is not None or visual_files is not None:
+                    report.err("[terrain_visual_sidecar] %s: expected the sidecar file, got "
+                               "nothing" % relative)
+            else:
+                payload = _visual_sidecar_payload(raw, mesh_ref, visual.get("parts"), report)
+
+    parts = visual.get("parts")
+    if not isinstance(parts, list) or not parts:
+        report.err("[terrain_visual_part] terrain.visual.parts: expected a non-empty array, "
+                   "got %r" % (type(parts).__name__,))
+        return
+    _check_visual_parts(parts, material_ids, mesh_ref if isinstance(mesh_ref, dict) else {},
+                        payload, report)
+
+
+def _visual_sidecar_payload(raw, mesh_ref, parts, report):
+    try:
+        payload = read_visual_sidecar(raw)
+    except SidecarError as error:
+        report.err("[terrain_visual_sidecar] %s: expected a KVIS v%d payload, got %s"
+                   % (mesh_ref.get("path"), KATVISUAL_VERSION, error))
+        return None
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != mesh_ref.get("sha256"):
+        report.err("[terrain_visual_sidecar] terrain.visual.meshRef.sha256: expected %r, got %r"
+                   % (mesh_ref.get("sha256"), digest))
+    for key, got in (("vertexCount", payload["counts"]["vertices"]),
+                     ("indexCount", payload["counts"]["indices"]),
+                     ("triangleCount", payload["counts"]["triangles"])):
+        if mesh_ref.get(key) is not None and mesh_ref.get(key) != got:
+            report.err("[terrain_visual_sidecar] terrain.visual.meshRef.%s: expected %r, got %d"
+                       % (key, mesh_ref.get(key), got))
+    if payload["counts"]["indices"] % 3:
+        report.err("[terrain_visual_sidecar] sidecar.indices: expected a multiple of 3, got %d"
+                   % payload["counts"]["indices"])
+    if payload["trailing"]:
+        report.err("[terrain_visual_sidecar] sidecar: expected no trailing bytes, got %d"
+                   % payload["trailing"])
+    if mesh_ref.get("indexWidth") is not None and payload["indexWidth"] != mesh_ref["indexWidth"]:
+        report.err("[terrain_visual_sidecar] terrain.visual.meshRef.indexWidth: expected %r, "
+                   "got %d" % (mesh_ref["indexWidth"], payload["indexWidth"]))
+    for key, flag in (("normals", KATVISUAL_FLAG_NORMALS), ("uvs", KATVISUAL_FLAG_UVS)):
+        has = bool(payload["flags"] & flag)
+        if mesh_ref.get(key) is not None and bool(mesh_ref[key]) != has:
+            report.err("[terrain_visual_sidecar] terrain.visual.meshRef.%s: expected %r, got %r"
+                       % (key, bool(mesh_ref[key]), has))
+    if isinstance(parts, list) and payload["counts"]["parts"] != len(parts):
+        report.err("[terrain_visual_sidecar] sidecar.parts: expected %d (terrain.visual.parts), "
+                   "got %d" % (len(parts), payload["counts"]["parts"]))
+    return payload
+
+
+def _check_visual_parts(parts, material_ids, mesh_ref, payload, report):
+    seen = set()
+    vertex_cursor = 0
+    index_cursor = 0
+    agree = 0
+    measured = 0
+    for index, part in enumerate(parts):
+        where = "terrain.visual.parts[%d]" % index
+        if not isinstance(part, dict):
+            report.err("[terrain_visual_part] %s: expected an object" % where)
+            return
+        _unknown(report, part, VISUAL_PART_KEYS, "visualParts")
+        identity = part.get("id")
+        if not isinstance(identity, str) or not identity.strip() or identity in seen:
+            report.err("[terrain_visual_part] %s.id: expected a unique non-empty string, got %r"
+                       % (where, identity))
+        else:
+            seen.add(identity)
+        if part.get("role") not in VISUAL_ROLES:
+            report.err("[terrain_visual_part] %s.role: expected one of %s, got %r"
+                       % (where, ", ".join(VISUAL_ROLES), part.get("role")))
+        vrange, irange = part.get("vertexRange"), part.get("indexRange")
+        if not _pair(vrange) or not _pair(irange):
+            report.err("[terrain_visual_part] %s.vertexRange/indexRange: expected [start,count] "
+                       "integers, got %r/%r" % (where, vrange, irange))
+            return
+        if vrange[0] != vertex_cursor or irange[0] != index_cursor:
+            report.err("[terrain_visual_part] %s: expected ranges starting at %d/%d (parts tile "
+                       "the sidecar in order), got %d/%d"
+                       % (where, vertex_cursor, index_cursor, vrange[0], irange[0]))
+        vertex_cursor = vrange[0] + vrange[1]
+        index_cursor = irange[0] + irange[1]
+        if irange[1] == 0 or irange[1] % 3:
+            report.err("[terrain_visual_part] %s.indexRange: expected a positive multiple of 3, "
+                       "got %d" % (where, irange[1]))
+
+        submeshes = part.get("submeshes")
+        covered = 0
+        if not isinstance(submeshes, list) or not submeshes:
+            report.err("[terrain_visual_part] %s.submeshes: expected a non-empty array, got %r"
+                       % (where, type(submeshes).__name__))
+            submeshes = []
+        for sub_index, submesh in enumerate(submeshes):
+            at = "%s.submeshes[%d]" % (where, sub_index)
+            if not isinstance(submesh, dict):
+                report.err("[terrain_visual_part] %s: expected an object" % at)
+                continue
+            _unknown(report, submesh, VISUAL_SUBMESH_KEYS, "visualSubmeshes")
+            if submesh.get("material") not in material_ids:
+                report.err("[terrain_visual_material] %s.material: expected one of "
+                           "terrain.visual.materials, got %r" % (at, submesh.get("material")))
+            first, count = submesh.get("firstIndex"), submesh.get("indexCount")
+            if first != covered:
+                report.err("[terrain_visual_part] %s.firstIndex: expected %d, got %r"
+                           % (at, covered, first))
+            if not _is_int(count) or count <= 0 or count % 3:
+                report.err("[terrain_visual_part] %s.indexCount: expected a positive multiple "
+                           "of 3, got %r" % (at, count))
+            else:
+                covered += count
+        if covered != irange[1]:
+            report.err("[terrain_visual_part] %s.submeshes: expected to cover %d indices, got %d"
+                       % (where, irange[1], covered))
+
+        bounds = part.get("bounds")
+        declared = None
+        if not isinstance(bounds, dict):
+            report.err("[terrain_visual_part] %s.bounds: expected {min,max}, got %r"
+                       % (where, bounds))
+        else:
+            _unknown(report, bounds, VISUAL_BOUNDS_KEYS, "visualBounds")
+            if _vec(bounds.get("min")) and _vec(bounds.get("max")) \
+                    and all(bounds["min"][a] <= bounds["max"][a] for a in range(3)):
+                declared = bounds
+            else:
+                report.err("[terrain_visual_part] %s.bounds: expected min <= max 3-vectors, got "
+                           "%r" % (where, bounds))
+        if payload is None:
+            continue
+        stats = _visual_part_stats(payload, vrange, irange)
+        if stats["error"]:
+            report.err("[terrain_visual_part] %s: %s" % (where, stats["error"]))
+            continue
+        if stats["degenerate"]:
+            report.err("[terrain_visual_part] %s: expected no degenerate triangles (area < "
+                       "1e-9 m2), got %d" % (where, stats["degenerate"]))
+        if declared is not None:
+            for axis in range(3):
+                if abs(stats["min"][axis] - float(declared["min"][axis])) > 1e-3 \
+                        or abs(stats["max"][axis] - float(declared["max"][axis])) > 1e-3:
+                    report.err("[terrain_visual_part] %s.bounds: expected %r..%r (the vertices), "
+                               "got %r..%r" % (where, [round(v, 4) for v in stats["min"]],
+                                               [round(v, 4) for v in stats["max"]],
+                                               declared["min"], declared["max"]))
+                    break
+        agree += stats["agree"]
+        measured += stats["measured"]
+    for key, total in (("vertexCount", vertex_cursor), ("indexCount", index_cursor)):
+        if mesh_ref.get(key) is not None and mesh_ref[key] != total:
+            report.err("[terrain_visual_part] terrain.visual.parts: expected the ranges to "
+                       "cover meshRef.%s %r, got %d" % (key, mesh_ref[key], total))
+    if payload is not None and payload["normals"] and measured and agree * 2 < measured:
+        report.err("[terrain_visual_winding] terrain.visual: expected the triangle winding to "
+                   "agree with the vertex normals, got %d of %d triangles agreeing (the "
+                   "winding is reversed)" % (agree, measured))
+
+
+def _visual_part_stats(payload, vrange, irange):
+    """Bounds, degenerate count and winding/normal agreement of one part."""
+    vertices = payload["vertices"][vrange[0]:vrange[0] + vrange[1]]
+    normals = payload["normals"][vrange[0]:vrange[0] + vrange[1]] if payload["normals"] else []
+    indices = payload["indices"][irange[0]:irange[0] + irange[1]]
+    result = {"error": None, "degenerate": 0, "agree": 0, "measured": 0, "min": None,
+              "max": None}
+    if len(vertices) != vrange[1] or len(indices) != irange[1]:
+        result["error"] = ("expected the ranges inside the sidecar (%d vertices, %d indices), "
+                           "got %r/%r" % (len(payload["vertices"]), len(payload["indices"]),
+                                          vrange, irange))
+        return result
+    if indices and (min(indices) < 0 or max(indices) >= len(vertices)):
+        result["error"] = ("expected part-local indices in 0..%d, got %d..%d"
+                           % (len(vertices) - 1, min(indices), max(indices)))
+        return result
+    if not all(math.isfinite(value) for point in vertices for value in point):
+        result["error"] = "expected finite positions"
+        return result
+    result["min"] = [min(point[a] for point in vertices) for a in range(3)]
+    result["max"] = [max(point[a] for point in vertices) for a in range(3)]
+    for offset in range(0, len(indices) - 2, 3):
+        a, b, c = indices[offset:offset + 3]
+        cross = _normal(vertices[a], vertices[b], vertices[c])
+        if 0.5 * math.sqrt(sum(value * value for value in cross)) < 1e-9:
+            result["degenerate"] += 1
+            continue
+        if normals:
+            dot = sum(cross[axis] * (normals[a][axis] + normals[b][axis] + normals[c][axis])
+                      for axis in range(3))
+            result["measured"] += 1
+            if dot > 0:
+                result["agree"] += 1
+    return result
 
 
 def _check_broadphase(terrain, vertices, indices, count, report):

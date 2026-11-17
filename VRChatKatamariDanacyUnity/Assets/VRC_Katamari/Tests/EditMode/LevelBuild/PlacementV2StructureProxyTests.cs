@@ -20,7 +20,7 @@ namespace VRCKatamari.Tests
     /// </para>
     /// <para>
     /// The motor's static table holds OBBs only, so a sphere/capsule/convex proxy reaches the
-    /// scene as its local AABB box - the documented interim ("先用盒包住代理做过渡"). These tests
+    /// scene as its local AABB box - the documented interim (a box around the proxy). These tests
     /// pin that the loss is REPORTED (a note on the derived box, an aggregate
     /// <c>[structure_proxy]</c> line from the importer) rather than silent, and that a scene
     /// import of the same document twice writes nothing the second time.

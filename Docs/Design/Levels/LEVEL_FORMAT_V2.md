@@ -189,7 +189,8 @@ Make Cancer 的规模（3,456 三角形 / 7,154 顶点 / 10,368 索引）必然�
 | `broadPhase.boxes[].triangleRange` | `[start,count]` | 是 | 该 box 内的三角形**索引区间**（不是字节偏移）；区间按 start 升序、首尾相接、覆盖 0..count |
 | `chunks` | array | 否 | 流式加载分组：`boxRange` 是 broadPhase 的 box 下标区间，`triangleRange` 是三角形区间；缺省由导入器按「≤512 三角形/块」自动分组 |
 | `grid` | object | 否 | 烘焙网格参数（`cellM` 0.5–4、`origin`、`cellsX/cellsZ`）。**只存参数**，cell→triangle 的 CSR 表由导入器确定性生成到 `TerrainFieldHost`，不进 JSON（省字节、避免两份真值） |
-| `materialSegments` | array | 是 | 视觉材质段：`firstIndex`/`indexCount` 必须首尾相接覆盖全部索引；`material` 是 Unity 资源路径。参考关卡可省（纯色块） |
+| `materialSegments` | array | 是 | **接触网格**的材质段：`firstIndex`/`indexCount` 必须首尾相接覆盖全部索引；`material` 是 Unity 资源路径。**有 `visual` 时只是碰撞网格的分段，不渲染**（参考关卡一段 `collision`） |
+| `visual` | object | 否 | **渲染用的网格 + 贴图**，与上面的接触网格是两套几何（§3.8）。没有它 = 接触网格就是你看到的地面（我们自己的关卡）；参考关卡必须有，否则只能把原作的碰撞网格（含 15 m 不可见挡球墙）画出来 |
 | `source` | object | 是 | `kind` ∈ `authored`/`reference`/`imported`；`reference` 必须带 `windingFix:"flip"` 与 `provenance`（仓库外的路径字符串） |
 
 ### 3.4 为什么 broad phase 用 AABB、网格只做加速
@@ -229,6 +230,53 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 - **不是什么**：**不是**我们已经知道含义的玩法区。没有名字、没有规则表、没有「站在 zone 8 会怎样」的证据；任务级第一个体积是 y=−16.9 m 的巨大平面，**像**掉出判定面，但未证实。
 - 因此 v2 把 zone id 定为**作者标签 + 统计维度**：`meta.zones[].code` 是唯一真源，地形只存 code；运行时除诊断（`killPlane.zoneId` 只记录）外**不读**它。将来若证实「换区/掉出」规则，再加 `zones[].rule`，不改三角形字段。
 - **碰撞 AABB 的编号没有玩法语义**：它只是 broad-phase 分组（原作 4 个碰撞扇区是文件布局，不是 4 个区）。v2 的 `broadPhase.boxes[].id` 由导入器按源顺序生成，作者不要拿它当 zone id。
+
+### 3.8 `terrain.visual`：原作的视觉网格（与接触网格分家）
+
+**为什么是两套几何。** 原作的关卡模型包有互相独立的两张表：4 个**图形扇区**（有 UV、材质、贴图）和 4 个**碰撞扇区**（只有 AABB + 三角形，无 UV、无材质）。碰撞表里含一圈 15 m 高、朝内、只用来挡球的不可见围墙；图形表在院内最高只到 3.63 m。两者在 5 cm 内大体重合（碰撞三角形重心到视觉网格 ≤5 cm 的占 93.5%），但不是同一份数据。研究见 [REF_STAGE_VIEW §10](../Tools/REF_STAGE_VIEW.md)。我们的接触（球读 `TerrainFieldHost` 数组、玩家站立 `MeshCollider`）照旧用碰撞网格（原作优先：球在原作里同样被那圈墙挡住）；**画面**用 `visual`。
+
+```json
+"visual": {
+  "meshRef": {"path": "terrain/cancer.katvisual", "sha256": "…",
+              "vertexCount": 29846, "indexCount": 44199, "triangleCount": 14733,
+              "indexWidth": 2, "normals": true, "uvs": true},
+  "parts": [
+    {"id": "area2_sector0_model4", "role": "stage",
+     "vertexRange": [20000, 23394], "indexRange": [30000, 34566],
+     "bounds": {"min": [-22.0889, -1.5918, -13.7620], "max": [8.3719, 3.5774, 10.6734]},
+     "submeshes": [{"material": "t000", "firstIndex": 0, "indexCount": 300}]},
+    {"id": "area2_sector1_model0", "role": "sky", "…": "…"}
+  ],
+  "materials": [
+    {"id": "t000", "texture": "terrain/textures/11_area2_2f75_33ea.png", "sha256": "…",
+     "width": 64, "height": 64, "blend": "opaque"}
+  ],
+  "filter": "point",
+  "source": {"kind": "reference", "windingFix": "flip",
+             "provenance": "PS2 stage graphics sectors -> noclip_export/out/stage.glb"}
+}
+```
+
+（结构示例，数字不闭合；可校验的完整文件由 `Tools/levelbuild/ref_stage_visual.py` 生成。）
+
+| 字段 | 语义 |
+|---|---|
+| `meshRef` | `.katvisual` 侧车（§8.4）：路径（相对关卡目录，禁 `..`）、sha256、顶点/索引/三角形数、索引宽度、是否带法线/UV。**视觉网格永远走侧车**，不内联 |
+| `parts[]` | 一块 = 一个 Unity 网格/渲染器。`vertexRange`/`indexRange` = `[start,count]`，按序首尾相接铺满侧车；**索引是部件局部的**（相对 `vertexRange.start`），所以 29,846 个顶点里每块只带自己那份。`role`：`stage`（舞台几何）/`sky`（天空壳：背景，不参与取景与深度写入）。`bounds` = 该块顶点的 AABB（米，工具写、校验器复算，1 mm 容差） |
+| `parts[].submeshes[]` | 一块内按材质分段：`firstIndex` 相对该块 `indexRange`，首尾相接覆盖它；`material` 引用 `materials[].id` |
+| `materials[]` | 一张贴图 = 一个材质（原作 232 个材质部件只在贴图上不同，158 张）。`texture` = PNG 的相对路径 + `sha256` + 像素尺寸（校验器读文件头对账）。`blend`：`opaque`（alpha 全 255）、`cutout`（alpha 只有 0/255，丢弃 0）、`alpha`（有中间值，`src_alpha, 1−src_alpha`）——由 PNG 的 alpha 通道推出；GS 状态 232 个部件完全一致（见研究文档），所以混合模式不需要逐材质存 |
+| `filter` | `point` / `bilinear`：贴图过滤。原作 GS 的 TEX1 是**放大最近邻、缩小线性、无 mip**，Unity 只能二选一，我们取放大侧的 `point`（游戏镜头多数时候在放大）。**这是判断，不是数据**，需 Unity 里看一眼 |
+| `source` | 同 §3.3；`reference` 必须带 `windingFix:"flip"`（原作 noclip 帧 → 我们的帧镜像了 x，绕序翻一次）与 `provenance` |
+
+**约定（每条都实测过）**
+
+- 帧：Unity 世界米，`(x, y, z) = (−0.01·x_导出, 0.01·y_导出, 0.01·z_导出)`（导出 = noclip 帧厘米）。这是 x 镜像，所以**绕序翻一次**（三角形 2、3 号角互换）；顶点法线（提取器写在 PS2 帧）取 `−n`。翻完后 99.5–100% 的三角形与其法线一致，地面朝上，天空壳从里面看正面。
+- 绕序在文件里就是 Unity 的：正面 = 数值叉积 `(b−a)×(c−a)` 的方向（地面叉积 +Y）。Unity 导入不再翻；three.js（z 取反的镜像）读取时再互换一次。
+- UV 原点是**PNG 左上角**（glTF 约定，导出就是这么写的）；Unity 导入时 `v → 1−v`。贴图重复（wrap = repeat），无 mip，不模糊。
+- 背面剔除（原作每个部件都是 `Cull Back`）；`doubleSided` 是导出器自己写的 `true`，不是原作的数据。
+- 光照：原作逐顶点用法线 + 关卡光照文件照亮（所有部件 `lit`），我们用场景光 + Legacy Diffuse 系；漫反射色全是白，不写顶点色。
+
+**与接触网格的关系**：互不引用。`terrain.meshRef`/`broadPhase`/`chunks`/`grid`/`triangles` 只描述接触；`visual` 只描述画面。有 `visual` 时 Unity 里接触网格对象**只留 `MeshCollider`、不渲染**（§11.2）。校验器的 tag：`[terrain_visual]`（块形状/`filter`）、`[terrain_visual_key]`（未知键）、`[terrain_visual_sidecar]`（侧车缺失/sha/计数/索引宽度/标志/部件数）、`[terrain_visual_part]`（部件铺满、子网格铺满、局部索引、bounds、退化三角形、role）、`[terrain_visual_material]`（id/`blend`/引用）、`[terrain_visual_texture]`（PNG 缺失/sha/尺寸/路径）、`[terrain_visual_winding]`（绕序与法线对不上，说明整张网格是反的）。
 
 ---
 
@@ -589,11 +637,11 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 #### 6.7.7 移动件被吸收：用当前位姿，父链一起处理
 
 - **吸收判定用当前位姿**：球心到道具**此刻**世界 AABB 的最近点距离 ≤ `collisionRadius + itemRadius`（原有 reach），再走 `volumeMm3` 体积门；不是用 `placement.json` 里的摆放位置。移动件没有豁免，也不额外加难度。
-- **动态 AABB**：移动件的世界 AABB 在同一调度里写回 `PickupFieldHost`，不是每步读 Transform（Udon 读 Transform 太贵）。吸收最多滞后一步：10 Hz 时 10 cm 的件在 30 cm/s 下移动 3 cm，reach 的包围球余量足以覆盖。OBB 近似用「AABB + 当前 yaw」即可（PROVISIONAL）；`collider` 逐型代理仍用于静态件与落地/支撑查询。
+- **实现口径**：`MotionHost` 直接写道具 transform，`PickupFieldHost` 读实时 transform 位置/朝向（吸收、挡路/支撑 OBB 都是），不另写回 AABB；详见 [MOTION_HOST](../PickupAbsorb/MOTION_HOST.md) §5。（原设计：移动件的世界 AABB 在同一调度里写回宿主。）吸收最多滞后一步：10 Hz 时 10 cm 的件在 30 cm/s 下移动 3 cm，reach 的包围球余量足以覆盖。OBB 近似用「AABB + 当前 yaw」即可（PROVISIONAL）；`collider` 逐型代理仍用于静态件与落地/支撑查询。
 - **父件被吸**（已定 (s)）：立刻停父件的运动程序；子件 `parent = null`，保留**当前**世界位姿，进入 `FALLING`，脚下没东西就落；**不 carry、不随父进账**。子件自己的 `motion` 在 `FALLING` 期间挂起，`SETTLED` 后可恢复（建议；D-14）。
 - **刚体组**：吸收其中一件只处理那一件；组不整组进账（与 `carry` 无关）。组根被吸时，成员先摘组、保留当前位姿、进入 `FALLING`；成员自己若有 `motion`，按 D-14 挂起。
 - **`shakeOff`**：Cancer 仅 3 个实例为 1，语义未验证；v2 只存证，v1 运行时不读。已定「不做击飞」，所以不要用这个字段实现甩脱。
-- **不做的事**：不因为道具在动就把它当「障碍/敌人」；**移动件不注册为支撑面或挡路盒**（它们的位置每 10/15 Hz 才更新，当静态碰撞体会抖/穿），只参与吸收（这是我们的实现取舍；原作里球撞到移动件会怎样，noclip 观察不到，见 §16.1）；停下来的 `hold`/`done` 也不改变这个分类（按 `behaviour` 判，不按运行时状态判）。
+- **不做的事**：不因为道具在动就把它当「障碍/敌人」；**现状是吃不下的移动件会被 `PickupFieldHost` 按球径注册成挡路盒/支撑面**（位姿读实时 transform，最多滞后一个 0.05 s 扫描间隔；`MotionHost` 对 <30 Hz 的件做了插值，所以不再是 10/15 Hz 的阶梯），移动件没有豁免（这是我们的实现取舍；原作里球撞到移动件会怎样，noclip 观察不到，见 §16.1）；停下来的 `hold`/`done` 同样按球径判，不按运行时状态判。
 
 
 ---
@@ -954,6 +1002,22 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 - 侧车可以提交（我们自己的关卡）；参考关卡的侧车在 `_ref_*` 目录里，被 `.gitignore` 排除。
 - 侧车与 JSON 的重叠规则：有 `meshRef` 时 JSON **不得**再写 `vertices`/`indices`/逐三角形数组；只写 `triangles.count` 和（可选的）`zoneCounts` 摘要。
 
+### 8.4 侧车 `.katvisual`（`terrain.visual` 的顶点）
+
+| 段 | 类型 | 说明 |
+|---|---|---|
+| magic | 4 B | ASCII `KVIS` |
+| version | u16 | `1` |
+| indexWidth | u8 | `2` 或 `4`；**每块**顶点数 < 65,536 时用 2 |
+| flags | u8 | bit0 = 带法线，bit1 = 带 UV |
+| vertexCount / indexCount / partCount | u32×3 | 与 JSON `meshRef`、`parts.length` 逐项相等 |
+| positions | f32 LE × 3 × vertexCount | 世界米（Unity 帧），各块顶点首尾相接 |
+| normals | f32 LE × 3 × vertexCount | 可选 |
+| uvs | f32 LE × 2 × vertexCount | 可选；原点 = PNG 左上角 |
+| indices | u16/u32 LE × indexCount | **块局部**索引，每 3 个一个三角形；各块的索引首尾相接 |
+
+路径/sha256 规则同 §8.3；PNG 贴图放 `terrain/textures/`，JSON 里逐张钉 sha256。跨语言黄金字节（一个三角形）在 Python 与 C# 两边的测试里是同一串十六进制。参考关卡的侧车与 PNG 在 `_ref_*` 目录里，被 `.gitignore` 排除（贴图是 UNLICENSED 原作素材）。
+
 ---
 
 ## 9. 校验器：错误码与键白名单
@@ -983,6 +1047,12 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 | `[terrain_broadphase]` | error | 区间有洞/重叠/乱序，或 AABB 未包住其三角形（容差 1 mm） |
 | `[terrain_grid]` | error | `cellM` 越界、`origin` 不覆盖 broad phase |
 | `[terrain_sidecar]` | error | 文件缺失、sha256 不符、计数不符、路径越界 |
+| `[terrain_visual]` / `[terrain_visual_key]` | error | `terrain.visual` 不是对象、`filter` 不在 `point/bilinear`；任一层（`visual`/`meshRef`/`parts[]`/`bounds`/`submeshes[]`/`materials[]`）出现未知键 |
+| `[terrain_visual_sidecar]` | error | `.katvisual` 缺失/魔数或版本错/截断/有尾字节、sha256 不符、顶点/索引/三角形数、索引宽度、法线/UV 标志与 `meshRef` 不符、`partCount` ≠ `parts.length`、路径越界 |
+| `[terrain_visual_part]` | error | `id` 重复、`role` 不在 `stage/sky`、`vertexRange`/`indexRange` 不按序首尾相接或不铺满 `meshRef` 计数、索引数不是 3 的正整数倍、子网格不首尾相接或不铺满本块、局部索引越界、`bounds` 与顶点 AABB 差 >1 mm、退化三角形（面积 <1e-9 m²） |
+| `[terrain_visual_material]` | error | `id` 缺失/重复、`blend` 不在 `opaque/cutout/alpha`、`width`/`height` 非正整数、子网格引用不存在的材质 |
+| `[terrain_visual_texture]` | error | PNG 路径越界/文件缺失、sha256 不符、不是 PNG、像素尺寸与声明不符 |
+| `[terrain_visual_winding]` | error | 少于一半的三角形与其顶点法线一致（整张网格绕序是反的：背面剔除后只剩「洞」） |
 | `[structure_role]` | error | v2 新文件写 `role:"boundary"`/`"ground"`（迁移产物允许并 warning） |
 | `[structure_proxy]` | error | `shape:"proxy"` 缺 `collider`/`collider` 不合法/`proxySource` 不在枚举；`shape:"box"` 却带 `collider` |
 | `[structure_capacity]` | error | 静态固体 > `caps.staticSolids`（256）或 v2 关闭时 `ramps` >4、`boxes` >8 |
@@ -1041,7 +1111,14 @@ EXPECTED_KEYS  = ("propCount","growthMm3","structureCount","staticObbs","overlap
 SOURCE_KEYS    = ("kind","provenance","windingFix","licence")
 ZONE_KEYS      = ("id","code","kind")
 TERRAIN_KEYS   = ("id","kind","winding","vertices","indices","meshRef","triangles",
-                  "broadPhase","chunks","grid","materialSegments","source")
+                  "broadPhase","chunks","grid","materialSegments","visual","source")
+VISUAL_KEYS    = ("meshRef","parts","materials","filter","source")
+VISUAL_MESHREF_KEYS = ("path","sha256","vertexCount","indexCount","triangleCount",
+                       "indexWidth","normals","uvs")
+VISUAL_PART_KEYS    = ("id","role","vertexRange","indexRange","bounds","submeshes")
+VISUAL_BOUNDS_KEYS  = ("min","max")
+VISUAL_SUBMESH_KEYS = ("material","firstIndex","indexCount")
+VISUAL_MATERIAL_KEYS = ("id","texture","sha256","width","height","blend")
 TRI_KEYS       = ("count","zoneIds","classes","zoneCounts")
 BROAD_KEYS     = ("kind","boxes")
 BROAD_BOX_KEYS = ("id","min","max","triangleRange")
@@ -1134,7 +1211,7 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
 | JSON | Unity | 说明 |
 |---|---|---|
 | `meta` | `LevelMetaHost`（新，挂在 `LevelContent` 根）+ `LevelArenaHost` | `startDiameterM`、`timeLimitS`、`targetDiameterM`、`maxDiameterRef`（解析到全局 `GlobalBallCap` 资产）；`ball.start`/`playerSpawn`/`playerStart` 建 `Markers/*`；有 `playerStart` 时再写场景 `VRC_SceneDescriptor` 的 `spawns` 与 `RespawnHeightY` |
-| `terrain` | `TerrainRoot`（**新** `TerrainFieldHost`）+ `Chunks/<id>`（**新** `TerrainChunkHost` + `MeshFilter` + `MeshRenderer`） | 球的接触里地形**永远不是** `MeshCollider`，也不进 `LevelArenaHost.staticBoxes`（球不走 PhysX）；只有声明了 `meta.playerStart` 的关卡，`TerrainRoot/TerrainVisual`（`MeshFilter` + `MeshRenderer`）上另有一个非 convex、Default 层的 `MeshCollider`，**只给玩家站立**；`TerrainFieldHost` 持数组与查询，`LevelArenaHost` 只拿一个引用 |
+| `terrain` | `TerrainRoot`（**新** `TerrainFieldHost`）+ `Chunks/<id>`（**新** `TerrainChunkHost` + `MeshFilter` + `MeshRenderer`） | 球的接触里地形**永远不是** `MeshCollider`，也不进 `LevelArenaHost.staticBoxes`（球不走 PhysX）；只有声明了 `meta.playerStart` 的关卡，才另有一个非 convex、Default 层的 `MeshCollider`，**只给玩家站立**——没有 `visual` 时它与渲染同在 `TerrainRoot/TerrainVisual`，有 `visual` 时在**不渲染**的 `TerrainRoot/TerrainCollision` 上，`TerrainVisual/<part id>` 各一个 `MeshFilter` + `MeshRenderer`（§11.2）；`TerrainFieldHost` 持数组与查询，`LevelArenaHost` 只拿一个引用 |
 | `structures.solids[role=box]` | `LevelContent/Structures/<id>` + `BoxCollider` → `staticBoxes` | 与今天逐位等价 |
 | `structures.solids[role=ramp/curve_ramp]` | 同上 → `rampBoxes`（弯坡展开成 `<id>_00…` 子物体） | 与今天逐位等价 |
 | `activityArea.walls` | **新** `ActivityAreaHost` + 每段一个 `BoxCollider`（关碰撞、只作注册源） | 跨门槛时重注册；不建 Renderer（`visible` 才建） |
@@ -1154,6 +1231,14 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
   - **只在文件不存在时 `CreateAsset`，存在时覆写**，绝不删除重建（保住 GUID 与场景引用）；
   - `.meta` 随资产提交；`Generated/` 下的资产是产物，但**提交**（否则别人打开场景是空网格）。
 - `TerrainChunkHost` 的数组是**序列化在场景/预制体里的数据**，不是运行时从磁盘读；Udon 运行时不碰 JSON/磁盘（AGENTS 规则）。
+
+**有 `terrain.visual` 的关卡（拆分）**——`TerrainMeshImporter` 把「画的」和「站的」做成两组对象/资产：
+
+- `TerrainRoot/TerrainVisual`（空父物体，单位位姿）下每个 `parts[]` 一个子物体 `<part id>`：`MeshFilter` + `MeshRenderer`，**无碰撞体**。`sky` 块不投/不收阴影。网格资产 `Assets/_RefUnlicensed/Meshes/<Name>Visual_<part id>.asset`（我们自己的关卡走 `Generated/Levels/<leaf>/visual_<part id>.asset`），名字是 `<level>_<part id>@<侧车 sha256 前 8 位>`，**名字、顶点数、三角形数、子网格数都对得上才保留**，否则原地覆写（GUID 不变）。顶点/法线原样，UV 的 `v → 1−v`，索引原样（绕序已是 Unity 的）。
+- 贴图：把 PNG 逐字节复制到 `Assets/_RefUnlicensed/Textures/<Name>/<file>.png`（sha256 先对账，不符拒绝），`TextureImporter` 设为 Default、**无 mip、wrap Repeat、filter = `visual.filter`、sRGB、Uncompressed**、`alphaIsTransparency = blend≠opaque`。材质 `Assets/_RefUnlicensed/Materials/<Name>Visual_<id>.mat`：`opaque` → `Legacy Shaders/Diffuse`，`cutout` → `Legacy Shaders/Transparent/Cutout/Diffuse`（`_Cutoff 0.5`），`alpha` → `Legacy Shaders/Transparent/Diffuse`；内建 shader、背面剔除，和原作一样。缺失才建、不一致才原地改，绝不删了重建。
+- 接触网格资产保留：旧的 `…TerrainVisual.asset`（拆分前它既画又站）用 `AssetDatabase.MoveAsset` **移到** `…TerrainCollision.asset`（GUID 不变）；`TerrainRoot/TerrainCollision` 上只有 `MeshCollider`（非 convex、Default 层、非 trigger），**从不渲染**。旧场景里 `TerrainVisual` 自己身上的 `MeshFilter`/`MeshRenderer`/`MeshCollider` 被摘掉。接触网格与视觉网格的「保留 / 覆写」判据**各比各的**：接触网格比三角形数，视觉块比名字 + 顶点/三角形/子网格数。
+- 没有 `visual` 的关卡行为完全不变（上一条的单网格路径）。没有 `meta.playerStart` 的关卡有 `visual` 时只建视觉、不建 `TerrainCollision`。
+- 第二次导入必须 `+0 ~0 -0`（视觉对象、网格、贴图、材质、接触网格逐项比较，不同才写）。
 
 ### 11.3 参考关卡的地形（**未授权**）
 
@@ -1177,7 +1262,7 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
 ```
 ~/KatamariRef/noclip_export/kse_out/
   instances.json     → props[]（平移/轴角→四元数/缩放/父/显示区）
-  stage.glb          → 视觉网格（只作参考渲染；不参与碰撞）
+  out/stage.glb      → terrain.visual（视觉网格 + 贴图，`Tools/levelbuild/ref_stage_visual.py`；不参与碰撞）
   collision_area2.json → terrain（顶点/索引/AABB/zone）
   zones.json         → meta.zones / killPlane 候选
         │
@@ -1469,7 +1554,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 | 岛 | 位置 | 内容 |
 |---|---|---|
 | **关卡岛（野餐草坪）** | 原点附近，地面 `(-12.7, 0, -12.7)`，结构边界 x∈[−19.4, −6]、z∈[−19.4, −6] | `LevelContent/Props`（11 个 `kind` 分组）+ `LevelContent/Structures`（边界、地面、坡道、树桩…）；入口 `LevelEntry`(−12.5, 0.15, −10.4) |
-| **房间岛** | **(1200, 0, 0)** | `HubCenter`、`hub_floor`（8×8 m）、`HubSpawn`(1200, 0.1, −2.8)、选关垫 `select_picnic_corner`(1200, 0.01, 1.2)、`result_board`(1200, 1.45, 3.95)、四面边界 x/z ∈ ±4 m |
+| **房间岛** | **(1200, 0, 0)** | `HubCenter`、`hub_floor`（8×8 m）、`HubSpawn`(1200, 0.1, −2.8)、每个提供的关卡一块选关垫 `HubPad_<levelId>`（沿 X 居中成排，z=+1.2，由 `Editor/Hub/HubAssembler` 按 [hub_levels.json](../StoryMode/hub_levels.json) 生成，不在 hub 文档里）、四面边界 x/z ∈ ±4 m |
 
 - 两岛中心相距 **约 1213 m**（X 方向 1200 m），**超过 Unity 默认远裁剪（约 1000 m）**，所以互相看不见、听不见；这是「看不见」的经验值，不是性能测量（[HUB_ROOM §11](../StoryMode/HUB_ROOM.md) 未验证第 8 条已写明）。
 - 切换 = `VRCPlayerApi.TeleportTo` + 回合状态，由 `HubLevelLauncher` 独占（`Runtime/Hub/HubLevelLauncher.cs`）。**没有 additive 加载、没有加载屏、没有整块 `LevelContent` 的启用/停用**——[HUB_ROOM §7.1](../StoryMode/HUB_ROOM.md) 明确不做，三条理由是：导入器一个场景只有一个受管根 `LevelContent`、`PickupFieldHost.RecordOriginalPoses()` 在 `Start` 里捕获原始位姿（关着就永远捕获不到）、`LevelArenaHost` 一次性注册障碍且没有按岛切换的接口；再加上「关掉没有收益」（同一张场景已经全部加载，1200 m 外本来就不渲染）。
@@ -1565,3 +1650,4 @@ PS2 的实例记录是 0x40 字节，`+0x30..+0x38` 三个 f32 就是缩放（[N
 | 2026-11-16 | **第 2 版：运动/动画** | 吸收 `ORIGINAL_ANIMATION_OBSERVATIONS`：`motions[]`/`paths[]` 逐关表、`props[].motion/inherit/phase/clipStart/shakeOff`、`defs[].speedIndex/clips`、13 类运动与速度档、10/15 Hz 更新预算、共享剪辑×8 相位桶、移动件吸收/父链规则、三个运动 JSON 例子、错误码、编辑器 E9/E10、D-10–D-14 与 U5–U9 |
 | 2026-11-16 | **第 3 版：owner 拍板 + 两个问答** | 记录 owner 2026-11-16 的裁定（球径 20 m、活动区靠布局、逐关 kill plane、D-10 全加、D-11 研究结论、D-12 相位、D-13 不做、D-14 挂起）；新增 §17「一个世界 = 一张场景」（多地图架构、我们今天的 StoryMode 两岛结构、A/B/C 建议、格式与编辑器要求）、§18「为什么允许逐件缩放」（新数据 6 件非单位 → 四层规则）；§6.4 改写为三层并收窄 `[prop_scale_attached]`；`caps.animators` 明确为「Animator 组件预算」而非「只播 64 件」；原许可/变更记录顺延为 §19/§20 |
 | 2026-11-16 | **第 4 版：性能口径 + 命名定稿** | owner 两条补充拍板：①**性能不预先优化**——D-11 重写为「153 个骨骼实例直接挂普通 Animator/蒙皮，不做 VAT」，`caps.animators` 退成统计字段（`[anim_budget]` 只对账、`[caps_motion]` 改 `animators ≤ props`），「64 不够」与 VAT 降级为「以后真测出瓶颈再看」，同时写明后续**真实测量**照旧要做；②怀旧关正式名 **「怀旧关：蟹座小院 / Cancer Courtyard」**（Nostalgia 作别名，内部 id 仍是 `_ref_cancer`） |
+| 2026-11-17 | **第 5 版：`terrain.visual`** | 研究确认参考关卡的视觉网格与碰撞网格是两套几何（碰撞含 15 m 不可见围墙）：新增 `terrain.visual`（§3.8：部件/子网格/材质/过滤）、`.katvisual` 侧车（§8.4）、7 个 `[terrain_visual*]` tag 与键白名单、Unity 拆分导入（§11.2：`TerrainVisual/<part>` 渲染 + `TerrainCollision` 只留碰撞体） |

@@ -522,7 +522,7 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(1.5f, ClimbMath.RequiredSpeed(90f), Tolerance);
             Assert.Less(ClimbMath.ClimbSpeed(1f, 2f, 70f, 0f, 0.6f),
                 ClimbMath.ClimbSpeed(1f, 2f, 50f, 0f, 0.6f));
-            Assert.Less(ClimbMath.ClimbSpeed(1f, 2f, 90f, 0f, 0.6f), 0.25f);
+            Assert.Less(ClimbMath.ClimbSpeed(1f, 2f, 90f, 0f, 0.6f), 0.40f);
             // A light push and a cap that is already reached both give no climb at all.
             Assert.AreEqual(0f, ClimbMath.ClimbSpeed(0f, 2f, 70f, 0f, 0.6f), Tolerance);
             Assert.AreEqual(0f, ClimbMath.ClimbSpeed(1f, 2f, 70f, 0.6f, 0.6f), Tolerance);

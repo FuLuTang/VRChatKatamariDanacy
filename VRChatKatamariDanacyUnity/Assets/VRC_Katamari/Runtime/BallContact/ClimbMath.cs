@@ -60,6 +60,23 @@ namespace VRCKatamari.BallContact
         }
 
         /// <summary>
+        /// The gate speed the climb predicate and the climb rate read, in D0 units: the
+        /// larger of the actual planar speed and k_intent times the target speed, divided
+        /// by <paramref name="sizeScale"/> = D / D0.
+        /// </summary>
+        /// <remarks>
+        /// The motion layer's speeds scale with D / D0 (BALL_INERTIA.md), so the thresholds
+        /// (v_min, the 2 m/s rate reference) keep their D0 values and the measured speed is
+        /// divided instead: a full push climbs and a half push does not, at any ball size.
+        /// A non-finite or non-positive scale is read as 1.
+        /// </remarks>
+        public static float GateSpeed(float planarSpeed, float driveSpeed, float sizeScale)
+        {
+            float scale = (KatamariMath.IsFiniteFloat(sizeScale) && sizeScale > 0f) ? sizeScale : 1f;
+            return Mathf.Max(planarSpeed, ContactTuning.KIntent * driveSpeed) / scale;
+        }
+
+        /// <summary>
         /// m(theta) = cos(theta) + m0 * sin(theta): 1 at 0 deg, m0 at 90 deg.
         /// </summary>
         public static float ClimbShape(float thetaDeg, float m0 = ContactTuning.M0)

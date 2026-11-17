@@ -84,6 +84,38 @@ namespace VRCKatamari.Riding
         /// </remarks>
         public const float MaxPlausibleHeadAboveSeatMeters = 1.35f;
 
+        /// <summary>
+        /// The standing eye height, metres, the absolute limits in this layer were measured at
+        /// (ClientSim 1.204 m and real hardware 0.85 m seated heads were taken on ordinary
+        /// avatars; the British adult median eye height is 1.64 m). A rider scaled to another
+        /// size has every seated distance scaled by the same factor, so the limits scale with it.
+        /// </summary>
+        public const float ReferenceEyeHeightMeters = 1.64f;
+
+        /// <summary>
+        /// The factor that carries a limit measured at <see cref="ReferenceEyeHeightMeters"/> to
+        /// an avatar of this eye height: <c>eyeHeight / reference</c>. One for a bad eye height,
+        /// i.e. the absolute limits as authored.
+        /// </summary>
+        public static float LimitScaleForEyeHeight(float eyeHeightMeters)
+        {
+            if (!KatamariMath.IsFiniteFloat(eyeHeightMeters) || eyeHeightMeters <= 0f) return 1f;
+            return eyeHeightMeters / ReferenceEyeHeightMeters;
+        }
+
+        /// <summary>
+        /// <see cref="IsPlausibleHeadDistance"/> for an avatar of this eye height: the rail is
+        /// <see cref="MaxPlausibleHeadAboveSeatMeters"/> times
+        /// <see cref="LimitScaleForEyeHeight"/>, so a 23 m rider is not refused for a seated head
+        /// 11 m above the seat, and a 0.26 m rider's standing-height datum is still refused.
+        /// </summary>
+        public static bool IsPlausibleHeadDistanceForEyeHeight(float distanceMeters,
+            float eyeHeightMeters)
+        {
+            return distanceMeters <= MaxPlausibleHeadAboveSeatMeters *
+                LimitScaleForEyeHeight(eyeHeightMeters);
+        }
+
         // A quaternion shorter than this cannot be inverted into usable numbers. The
         // threshold is on the squared length, so a slightly denormalised rotation still
         // normalises through Quaternion.Inverse instead of being refused.

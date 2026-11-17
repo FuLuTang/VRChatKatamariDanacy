@@ -1043,8 +1043,6 @@ MonoBehaviour:
   maxProxyProtrusionPerCoreRadius: 0.35
   maxProxyProtrusionWorldM: 0.3
   maxProxyNormalSpeedPerturbation: 0.15
-  longObjectMinLongestEdgePerCoreDiameter: 0.5
-  longObjectMinElongation: 2.5
   minProxyProtrusionM: 0.01
   separationEpsilon: 0.001
   startVolumeMm3: 14094798
@@ -1667,9 +1665,6 @@ MonoBehaviour:
   _udonSharpBackingUdonBehaviour: {fileID: 1875452170}
   motor: {fileID: 1524211376}
   coreMesh: {fileID: 2109846803}
-  useVisualCoreRadius: 1
-  smoothCoreGrowth: 0
-  smoothTimeSeconds: 0.08
 --- !u!4 &1875452169
 Transform:
   m_ObjectHideFlags: 0

@@ -10,7 +10,7 @@
 |---|---|---|
 | 输入 | `Runtime/Input/DesktopMoveInput.cs` | 源码已写；单个开关的旧版已在 `Labs/StoryLevel` 编译实跑（commit `e74ff8c`），两把闸门这版未编译 |
 | 球视图 | `Runtime/BallPresentation/BallView.cs` | 源码已写；已在 `Labs/StoryLevel` 编译并实跑（commit `e74ff8c`） |
-| 骑球 | `Runtime/Riding/BallRideStation.cs`、`Runtime/Riding/BallRideExitButton.cs` | 源码已写，未编译 |
+| 骑球 | `Runtime/Riding/BallRideStation.cs`、`BallSeatInteract.cs`、`BallRideExitButton.cs`、`RideViewMath.cs`、`RideExitMath.cs`；装配 `Editor/Story/RideUxAssembler.cs`（菜单 `VRC Katamari/Ride/Assemble Ride UX`，可重复执行） | 源码已写；纯函数本机已测，Unity 未跑 |
 | 吸附宿主 | `Runtime/Pickup/PickupFieldHost.cs` | 源码已写，未编译 |
 | 剧情回合 | `Runtime/Story/StoryRoundController.cs` | 源码已写，未编译 |
 
@@ -89,8 +89,9 @@
 
 | 文件 | 职责 | 明确不做 |
 |---|---|---|
-| `Runtime/Riding/BallRideStation.cs` | 与 VRCStation 同物体的骑乘宿主：未入座时 `Interact` → `station.UseStation(localPlayer)`；本地球员入座/离座时开关 ride 闸门、开关交互提示；`IsLocalPlayerSeated()` 给探针读 | 不移动任何 Transform（带人的是 Station，位置由 motor 的 rig 帧给）、不写 motor、不抢账本/回合状态、不同步任何变量 |
-| `Runtime/Riding/BallRideExitButton.cs` | 世界内退出的唯一出口：`Interact` → `station.ExitStation(localPlayer)` | 不持有 seated 状态、不碰 motor；状态复位由 `BallRideStation.OnStationExited` 一处负责（实验里的退出按钮要自己清 driver 的标记，所以需要防重复退出；这里不需要） |
+| `Runtime/Riding/BallRideStation.cs` | 与 VRCStation 同物体的骑乘宿主：`TrySeatLocalPlayer()` → `station.UseStation(localPlayer)`；本地球员入座/离座时开关 ride 闸门、球上点击球的提示、骑乘者面板；按住跳跃键 `exitHoldSeconds`（1.5 s）或面板按钮 → `RequestExit()`：先把 exit location 放到球旁可站立地面，再 `ExitStation`；`IsLocalPlayerSeated()` 给探针读 | 不移动 rig/球、不写 motor（只读球心、半径、朝向）、不抢账本/回合状态、不同步任何变量 |
+| `Runtime/Riding/BallSeatInteract.cs` | 球上的点击球：挂 `ballPhysicsRoot` 下的单位球 trigger，按 `RideViewMath.SeatTriggerRadius` 随球缩放；`Interact` → `BallRideStation.TrySeatLocalPlayer()` | 不持有 seated 状态 |
+| `Runtime/Riding/BallRideExitButton.cs` | 骑乘者面板上的下车按钮：点两次（3 s 内）→ `BallRideStation.RequestExit()` | 不持有 seated 状态、不碰 motor；状态复位由 `BallRideStation.OnStationExited` 一处负责 |
 | `Labs/StationPlatform/SeatedAxisProbe.cs` | 只为回答计划风险 1 的只读探针：每个 `InputMoveVertical`/`InputMoveHorizontal`/`InputJump` 打一行 `[seated-axis]`，带 `seated=` | 不是产品代码，没有任何别的文件引用它；答案写进本文后连文件、`.meta`、组件一起删 |
 
 三个都 `BehaviourSyncMode.None`，没有 static、属性、struct、接口、泛型、LINQ 或每帧分配。
@@ -98,13 +99,19 @@
 ### 必需的物体布局（少一条就不成立）
 
 1. **FollowRig** 必须是 motor 的 `followRigRoot`（`KatamariBallMotor.cs:160`；每帧只写它的 `position` 与 yaw，`:1026-1032`）。不接的话 rig 帧没有落点，载人整段不生效。
-2. **rig 根就是取景眼点**：`followRigRoot` 收到的是 `eye = 球心 − forward·back + up·height`，`height = 0.55 + 2.4·r`、`back = 0.75 + 2.2·r`（`BallMotor/README.md` 的「跟随架」）。旧的 `eyeHeightMeters` 常量（默认 1.6）已在 2026-11-15 删除，**不要再把 rig 根调成贴球心**：这个式子给 0.30 m 球 1.06 m、1.43 m 球 2.98 m 的地面视高，正是“球越大视角越高”。
-3. **一个 GameObject 同时挂 VRCStation + 交互 Collider + `BallRideStation`**。三样必须同物体，不是风格：`Interact` 送到被点到的 Collider 所在物体的 UdonBehaviour；`OnStationEntered`/`OnStationExited` 送到 VRCStation 所在物体的 Behaviour。实验场景就是这个布局（`Labs/StationPlatform/StationPlatformLab.unity:157` driver、`:198` VRCStation、`:277` BoxCollider 全在 `Station` 物体上），并在 T04 的 PC Build & Test 里实测过。
+2. **rig 根就是取景眼点**：`followRigRoot` 收到的是 `eye = 球心 − forward·back + up·height`，`height = 1.779558·r`、`back = 5.476916·r`（无加性底座）（`RideViewMath` 推出，`RideUxAssembler` 写进 motor 的四个眼点字段；取景推导见 [RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md)）：球心恒在视轴下 18°。**不要再把 rig 根调成贴球心。**
+3. **VRCStation + `BallRideStation` 同物体**：`OnStationEntered`/`OnStationExited` 送到 VRCStation 所在物体的 Behaviour。座位上**没有**点击 Collider（座位在眼点上，不在球上，点它等于点空中）；点击由球上的 `BallSeatInteract` 承担（第 6 条）。
 4. **Station 是 rig 根的子物体**，`localPosition` 起始 `(0, 0, 0)`。「球后上方」已经由 rig 根本身给出（0.5 m 球时后方 1.85 m、上方 1.75 m），**不要再叠进 Station 的局部偏移**；坐着的人由 Station 承载，跟随靠 motor 写 rig 根，不靠任何脚本搬人。坐姿视点补偿（VRCStation 把人的眼睛放在座位上方的某个高度，本仓未实测）在首次 Build & Test 里量，本文不编数。
-5. **VRCStation 打开 Disable Station Exit**（实验场景 `disableStationExit: 1`，`StationPlatformLab.unity:204`）。Player Mobility 先保持实验文件里的序列化值 `0`，含义未在本仓核实（VRChat 组件文档的枚举是 Mobile / Immobilize / ImmobilizeForVehicle，文档建议会动的载具用 Immobilize For Vehicle）。
-6. **Collider 要覆盖球的可见位置**：座位现在随 rig 根后退/抬高（0.5 m 球时球心在 Station 的 `(0, −1.75, +1.85)`），固定的局部 `center`/`size` 只在一档球径上对准球；起始按 0.5 m 球试 `center (0, −1.75, +1.85)`、`size 1.2³`，再在 Build & Test 里按实际球径重定。否则点的是空中的座位，用户会说“点球没反应”。
+5. **VRCStation 保持 Disable Station Exit 开**：移动轴驱球，跳跃是物品/退出输入，若允许移动或一次跳跃就离座，一次误触就结束骑乘（T04 实测：关掉退出后 Jump 不退座，且 `InputJump` 仍送达）。下车改为有意识的两条路：按住跳跃键 1.5 s，或面板上的按钮点两次。场景里 Player Mobility 是 `1`（Immobilize）；实验场景是 `0`，**Immobilize 下 `InputJump` 是否仍送达没有实测**，是真实客户端验收项。
+6. **点击目标在球上**：`BallPhysicsRoot/BallSeatTrigger`（单位球 `SphereCollider`、trigger、`BallSeatInteract`），半径 = `1.25 ×` 碰撞半径、下限 0.25 m，由 `BallSeatInteract.Update` 写 scale，所以随球径变；交互提示「骑上去」，距离 4 m。
 7. **`DesktopInput` 物体**：独占 `DesktopMoveInput`，把 `BallRideStation.input` 指过去。项目惯例是分开挂：motor、Station、输入各占一个对象，职责和自检都清楚（同物体本身合法，见 [BallMotor README](../BallMotor/README.md) 的「装配约束」）。
-8. **退出按钮**：独立 GameObject + Collider + `BallRideExitButton`，`station` 指同一个 Station；放在坐姿视野前方、不被球的 Collider 挡住。坐姿下鼠标左键仍可交互（T04 PC 实测的退出按钮路径）。
+8. **骑乘者面板**（rig 根下的世界空间 Canvas，不用屏幕叠加：VRChat 客户端不绘制 Screen Space Overlay）：`StoryHud`（左上）、`RideResultCard`（正前，含「再试一次」，`StoryRetryButton` 的触发盒在按钮上）、`RideExitPanel`（右下，含 `BallRideExitButton` 与按住跳跃提示，仅入座时显示）。位置规则见 RIDE_GEOMETRY §6；坐姿下鼠标左键仍可交互。下车时 `RideExitMath` 现算落点（球旁 0.9 m 的可站立地面），因为座位本身在地下。
+
+### 骑乘 UX 装配（可重复执行）
+
+菜单 `VRC Katamari/Ride/Assemble Ride UX`（`Editor/Story/RideUxAssembler.cs`）对打开的场景做：写 motor 的四个眼点系数与两个上限；建 `PlayerBall/BallPhysicsRoot/BallSeatTrigger`；删座位上的点击 Collider；把 `StoryHud` 改成世界空间并挂到 `FollowRigRoot` 下；建 `FollowRigRoot/RideResultCard`（结果文字、卡面、`RetryButton` 进来，`StoryRetryButton` 移到按钮下并加触发盒、`StoryResultPresenter.resultCardRoot` 指向它，初始隐藏）与 `FollowRigRoot/RideExitPanel`（`BallRideExitButton` 移进来）；写 `BallRideStation` 的 `motor`/`exitPoint`/`ballInteract`/`exitPanelRoot`/`exitHintText`。结果行以 `[ride-ux] done: +N ~M problems=K` 开头；第二次运行应为 `+0 ~0`。
+
+前置与已知坑：`BallSeatInteract` 是新行为，先让 Unity 为它生成 U# program asset（选中 `BallSeatInteract.cs`，Inspector 的 Create 按钮，或先用 `Assets/Create/U# Script` 同名流程；资产连 `.meta` 一起提交）；给**已存在**的行为（`BallRideStation`、`BallRideExitButton`）新增了字段，旧实例的变量表里没有，装配器读回会报「Udon variable table lacks …」，按 `Labs/README.md`：编译 → 存盘 → 重开场景 → 再跑一次装配。
 
 ### 驱动门：谁能用 WASD
 
@@ -144,7 +151,7 @@
 
 ### 与计划的差异
 
-- 计划 §1 只写“Station 作为 RideRoot 子物体”。本节把 **Collider 的 center/size** 和**退出按钮的可达性**写成硬要求：不写的话“点球入座”在几何上根本点不到。
+- 计划 §1 只写“Station 作为 RideRoot 子物体”。本节把**点击目标在球上**和**退出路径不依赖座位位置**写成硬要求：否则“点球入座”点到的是空中，下车按钮在 7 m 外。
 - 计划 §7 S2 的文件清单里没有探针；本节按 S2 的风险 1 加了一个可删的 Labs 探针，让这条风险一次 Build & Test 就有答案。
 - `BallRideStation.Start()` 先把驱动门关上；计划没写这一条，但不写就挡不住站着的玩家用 WASD 遥控球。
 - 输入拆成 `SetRideGate` / `SetRoundGate` 两把闸门后，计划 §4 的输入关闭示例已同步改写为 `SetRoundGate(false)`（与 S1 那节的记录一致）。
@@ -384,11 +391,11 @@ S4 表格里「不重试（S6）」一句已被本节取代：控制器现在只
 3. 函数选 `UdonBehaviour.SendCustomEvent`。
 4. 参数字符串填 `OnRetryPressed`（大小写一致，没有别的参数）。
 
-`SendCustomEvent` 是按字符串分发到这个行为上的公开方法，所以入口是 `public void OnRetryPressed()` 而不是属性或带参方法。**在本仓未验证**：`Docs/` 里没有 UI 事件白名单的本地副本，本节只引官方文档；这个仓库也还没在 Unity 里连过 Canvas 按钮、没按过。世界内 `Interact` 的路径与 `BallRideExitButton` 同形，但那个脚本本身也还没编译。
+`SendCustomEvent` 是按字符串分发到这个行为上的公开方法，所以入口是 `public void OnRetryPressed()` 而不是属性或带参方法。**在本仓未验证**：`Docs/` 里没有 UI 事件白名单的本地副本，本节只引官方文档；这个仓库也还没在 Unity 里连过 Canvas 按钮、没按过。世界内 `Interact` 的路径与 `BallRideExitButton` 同形（结果卡上的按钮现在就是这条路径，不是 uGUI `Button`）。
 
 ### 场景怎么接（Unity 操作者）
 
-1. 结果卡所在 Canvas（或世界空间面板）加一个 `Button`；世界内按钮则新建独立 GameObject + Collider + `StoryRetryButton`，放在可点到的地方。
+1. 结果卡是 rig 根下的世界空间 Canvas（`RideUxAssembler` 建）；`StoryRetryButton` 挂在 `RetryButton` 下，带一个 trigger `BoxCollider`，点它即 `Interact`。uGUI `Button` 的路径保留但不用。
 2. `controller` 拖场景里的 `StoryRoundController`。
 3. uGUI 按上一节的四步接 `SendCustomEvent("OnRetryPressed")`；世界内按钮不用再接线。
 4. 不需要改 `StoryRoundController` 的既有字段：`motor`、`input`、`pickupHost`、四个 Text、关卡数据与评语全部保持原名（本次只加私有字段与方法，没有加序列化字段）。
@@ -428,11 +435,11 @@ python3 -m unittest discover -s Docs/tests
 旧版 `StoryRoundController.Start()` 直接 `BeginRound()`：没有门厅、没有开始动作，进世界即计时；场景里没有 Station 时 `DesktopMoveInput` 的两把闸门都是默认开，所以站着的人也能开球。改法是把“开始”交给坐上球这一个动作：
 
 1. `Start()` 只在 `startOnLoad = true`（无 Station 的无头实验）时立刻开局；默认 `false` 时进入 **Idle**：HUD 写目标行与提示行，回合闸门关、收集关，计时不动。
-2. 玩家站到球边，准星对着球按**鼠标左键**（桌面交互是左键）→ `BallRideStation.Interact()` → `station.UseStation(localPlayer)`。
+2. 玩家准星对着球按**鼠标左键**（桌面交互是左键；VR 扳机）→ `BallSeatInteract.Interact()` → `BallRideStation.TrySeatLocalPlayer()` → `station.UseStation(localPlayer)`。
 3. `OnStationEntered`（本地球员）→ 先开骑乘闸门，再调 `roundController.NotifyRiderSeated()`（站上 `roundController` 字段有接线才调）。
 4. `NotifyRiderSeated()` 只在 `Idle` 接受：`BeginRound()` 开回合闸门与收集、记 `Time.time` 起点 → **Running**，这时两把闸门都开，WASD 才驱球。
 5. 到点 `SettleRound()`：先关回合闸门、再关收集、再清候选，读冻结值 → **Presenting**（“呈给国王”）→ **Result**（星/测量值/评语）。
-6. 结果卡上“再试一次”走 `RequestRetry()`（见上一节），世界内退出按钮是 `BallRideExitButton`（离座 → 骑乘闸门关）。
+6. 结果卡上“再试一次”走 `RequestRetry()`（见上一节；重试后仍在座位上，球回起点）。下车是 `BallRideStation.RequestExit()`（按住跳跃键，或面板按钮点两次）→ 离座 → 骑乘闸门关。
 
 ### 每状态的闸门（生效输入 = 两把都开）
 
@@ -696,13 +703,13 @@ AABB 取 **3.6 × 0.55 × 0.80 = 1.584 m³**（`Docs/Design/Maps/PicnicLawn/prop
 - **第二大风险：`@size=` 是按立方体写 `propBounds` 的**（本文件「显式拾取尺寸」节）。在体积门下，`@size=1.25` 的体积是 1.953 m³，比 3.6×0.55×0.80 的 1.584 m³ **更大**——它不能把长凳变"小"，反而更贵；`@size=1.25` 需要 `D=3.341`、`U=4,760`，比真实 AABB 的 `D=3.116`、`U=3,860` 还多，连 3.20 的上限都不够。长度门时代的 `@size` 口径必须按体积重设计，不能直接沿用。
 - **第三大风险：PicnicLawn 的 3.6 m 长凳在 1,284 u 下不可吸**；3.20 的上限只解决"直径够不够"，不解决"单位够不够"。要么把 PicnicLawn 的内容/价值提到 ~4,181 u，要么把长凳的拾取 AABB 压到 ≤0.526 m³（横截面 ~0.38×0.38），要么把它改成可绕过的装饰而不是门。
 
-## 主房间闭环（HUB_ROOM，2026-11-15 追加）
+## 主房间闭环（HUB_ROOM）
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`；数据侧 `levelbuild check --level hub` **PASS**；Unity 编译/Play Mode/Build & Test 全部 `NOT_RUN`。设计、房间布局、操作员步骤、未验证项见 [HUB_ROOM](<HUB_ROOM.md>)。
+> 状态：`SOURCE_WRITTEN_NOT_COMPILED`（装配器与选关数据 2026-11-17）；StoryMode 场景里的第一版大厅 2026-11-16 在 ClientSim 走通“走圈 → 传送 → 开局 → 自动入座”，回房/结果卡/重试尚无证据。设计、装配步骤、验收清单见 [HUB_ROOM](<HUB_ROOM.md>)。
 
-- **开始不再只靠“坐上球”**：主房间里走进选关圈 0.35 s 自动开始；读 `GetPosition()`，ClientSim 与真机同一条路径，不需要点球/Station 触发器，也不选“按 E”（`InputUse` 是全局事件，没有“看着某物体按 E”）。圈有 re-arm 与 dwell，出生点在圈外；传送到球旁后 `HubLevelLauncher` 直接调 `VRCStation.UseStation` 自动入座（O4 修复）。
-- **结算后自动回房**：`HubLevelLauncher` 在 `Presenting` 先退座、再传送回房；`StoryResultPresenter` 的结果卡搬到房间北墙，就是“上一局结果板”（星/直径/评语），房间侧不打印第二份。
-- **没有第二套状态机**：`StoryRoundController` **未改**，回合/计时/冻结/重试仍归它；新代码只拥有房间相位与提示。输入仍是 `DesktopMoveInput` 的骑乘/回合两把闸门，没有第三把。
-- **单场景方案 b**：房间岛 `(1200,0,0)` + 关卡岛原点，玩家传送，不做整块 `LevelContent` 启用/禁用（导入器单受管根 + `PickupFieldHost` 的 `Start` 捕获会挡住，理由见 HUB_ROOM §7）。
-- 新增 `Runtime/Story/Hub/{HubRoomMath,HubRoomHost}.cs`、`Editor/Story/*` 两个编辑器工具、`Tests/EditMode/Story/HubRoomMathTests.cs`（26 条）与 `Tests/EditMode/Hub/HubLoopMathTests.cs`（30 条），都 `NOT_RUN`；`Docs/Design/Levels/hub/placement.json`。O4 修复另改 `Runtime/Hub/{HubLevelLauncher,HubLoopMath}.cs` 与 `Runtime/Riding/BallRideStation.cs`（自动入座 + seated/grace 纠偏，见 HUB_ROOM §8）。`Docs/tests` 当前 899 条 OK（2026-11-15 的 C14 失败已由另一条线修好）。
-
+- **选关数据驱动**：[`hub_levels.json`](<hub_levels.json>) 列出大厅能提供的关卡（id、名称、所在场景、关卡内容与玩家出生点的层级路径）；菜单 `VRC Katamari/Hub/Assemble Hub`（`Editor/Hub/HubAssembler.cs`，可重复执行）把当前场景放得下的关卡变成选关垫、启动器入口与名字。加关卡 = 加一条数据 + 把关卡导入该场景。
+- **开始**：走进一块选关垫 0.35 s 自动开始（不选“按 E”：`InputUse` 是全局事件）。**进关落点 = 关卡自己的玩家出生点**（导入器的 `Markers/PlayerSpawn`，球后 2.5 m、贴地、面向球），离球太远（>12 m）才退回座位；传送后 `HubLevelLauncher` 直接 `UseStation` 自动入座。
+- **结算后不自动回房**：结果卡在骑乘者眼前（`RideResultCard`，归骑乘装配），两个按钮——「再试一次」（原地重开，`StoryRetryButton`）与「回大厅」（`HubReturnButton`，下车并传送到 `HubSpawn`，回合进行中被拒绝）；`HubAssembler` 只在「再试一次」下挂「回大厅」，不移动结果卡。
+- **没有第二套状态机**：`StoryRoundController` 只被调用 `BeginRound()`/`RequestRetry()`。一张场景一个球一个回合控制器，所以 v1 每个场景只提供一关。
+- **单场景**：房间岛 `(1200,0,0)` + 关卡岛，玩家传送，不换场景、不整块启用/停用（理由见 HUB_ROOM §7）。
+- 运行时代码 `Runtime/Hub/{HubLevelLauncher,HubLoopMath,HubSelectMath,HubStartButton,HubReturnButton}.cs`、`Runtime/Story/Hub/{HubRoomMath,HubRoomHost}.cs`；测试 `Tests/EditMode/Hub/{HubLoopMathTests,HubSelectMathTests}.cs`、`Tests/EditMode/Story/HubRoomMathTests.cs`、`Docs/tests/hub_levels/`。

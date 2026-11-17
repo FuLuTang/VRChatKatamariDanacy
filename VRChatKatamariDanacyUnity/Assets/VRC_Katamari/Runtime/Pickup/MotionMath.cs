@@ -300,6 +300,45 @@ namespace VRCKatamari.Pickup
             return Draw01(phaseSeed, 0);
         }
 
+        /// <summary>
+        /// The seed whose <see cref="Phase01"/> is the given author phase: the inverse of the
+        /// mix below, so an author's <c>props[].phase</c> override (D-12) travels through the
+        /// same one-integer API as the derived hash seed.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Every Reset* takes a seed, not a phase. An override therefore cannot be a separate
+        /// path: it is turned into the seed that yields exactly that draw-0 value, and every
+        /// later draw of the class (idle lengths, turn timers) stays a deterministic function
+        /// of that seed, as it is for a hashed one. The mix is a bijection on 32 bits (each
+        /// step is an xor-shift or a multiply by an odd constant), so the inverse is exact
+        /// up to the 24-bit float output: <c>Phase01(SeedForPhase01(p))</c> is p within
+        /// 2^-23. A phase of 1 is the same as 0 (a fraction of a period); NaN and negatives
+        /// read as 0.
+        /// </para>
+        /// <para>
+        /// Pure, no allocation; the editor importer calls it, the runtime never needs to.
+        /// </para>
+        /// </remarks>
+        public static int SeedForPhase01(float phase01)
+        {
+            float clamped = phase01;
+            if (!(clamped >= 0f)) clamped = 0f;
+            if (clamped > 1f) clamped = 1f;
+            long target = ((long)((double)clamped * 4294967296.0)) & 0xFFFFFFFFL;
+
+            long mixed = target ^ (target >> 16);
+            mixed = ((mixed - 12345L) * DrawMultiplierInverse) & 0xFFFFFFFFL;
+            mixed = mixed ^ (mixed >> 13) ^ (mixed >> 26);
+            mixed = (mixed * DrawMultiplierInverse) & 0xFFFFFFFFL;
+            mixed = mixed ^ (mixed >> 16);
+            long seed = (mixed - 0x9E3779B9L) & 0xFFFFFFFFL;
+            return unchecked((int)seed);
+        }
+
+        // 1099511627 * 2612402787 = 1 (mod 2^32): the multiplier of the mix and its inverse.
+        private const long DrawMultiplierInverse = 2612402787L;
+
         // 32-bit mix built from long arithmetic only: no float in the mixing step, so the
         // value is bit-identical everywhere. Every product stays below 2^32 * 2^31, i.e.
         // inside long range, and each step is masked back to 32 bits. Draw index 0 is the

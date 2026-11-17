@@ -620,7 +620,11 @@ namespace MotionSim
                 prop.SpawnPose = PoseMath.FromSpawn(prop.Position, prop.RotationQuat);
                 prop.SizeGroup = AssumedSizeGroup;
                 prop.HalfHeightM = Mathf.Abs(prop.Aabb[1]) * 0.5f;
-                prop.PhaseSeed = PhaseSeed.From(document.LevelId, prop.ItemId);
+                // D-12: an author's props[].phase becomes the seed that yields exactly that
+                // phase (MotionMath.SeedForPhase01), the same rule the Unity importer applies.
+                prop.PhaseSeed = prop.HasDocumentPhase
+                    ? MotionMath.SeedForPhase01((float)prop.DocumentPhase)
+                    : PhaseSeed.From(document.LevelId, prop.ItemId);
                 prop.Phase = MotionMath.Phase01(prop.PhaseSeed);
                 prop.SpeedIndex = document.SpeedIndexByDef.ContainsKey(prop.Def ?? "")
                     ? document.SpeedIndexByDef[prop.Def ?? ""]
@@ -741,12 +745,6 @@ namespace MotionSim
                     prop.Assumptions.Add("def looks like the original's BALANCEDOLL01_C: Sway's "
                         + "translation is skipped (12.4)");
                 }
-            }
-            if (prop.HasDocumentPhase)
-            {
-                prop.Assumptions.Add("props[].phase = " + Number((float)prop.DocumentPhase)
-                    + " is declared but MotionMath's Reset* API takes only a seed; the D-12 hash "
-                    + "seed is used and the declared phase is ignored");
             }
             if (prop.Space == OutputSpace.AbsoluteWorld && !string.IsNullOrEmpty(prop.ParentId))
             {

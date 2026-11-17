@@ -184,6 +184,7 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 TrySyncDeclaredFields(view, levelRoot, propsRoot, report,
                     BuildNonFieldProps(doc, report));
+                ApplyMotionHost(doc, levelRoot, propsRoot, report);
             }
 
             BindArenaHost(view, levelRoot, structuresRoot, report,
@@ -1128,7 +1129,9 @@ namespace VRCKatamari.Editor.LevelBuild
         /// minus one metre; the rule and its reason live there). The descriptor is the SDK's own
         /// component (<c>VRC.SDKBase.VRC_SceneDescriptor</c>, which <c>VRCSceneDescriptor</c>
         /// derives from); it is not an Udon behaviour, so there is no proxy copy. A second
-        /// import compares first and writes nothing.
+        /// import compares first and writes nothing. A scene that already has a <c>HubSpawn</c>
+        /// root object keeps its <c>spawns</c> (the player is born in the hub); only
+        /// <c>RespawnHeightY</c> is written then.
         /// </remarks>
         private static void ApplySceneDescriptor(PlacementV2Document doc, Transform playerMarker,
             PlacementImportReport report)
@@ -1161,6 +1164,19 @@ namespace VRCKatamari.Editor.LevelBuild
             Transform[] spawns = descriptor.spawns;
             bool spawnsMatch = spawns != null && spawns.Length == 1 && spawns[0] == playerMarker;
 
+            // A scene with a hub spawns the player in the hub; this level's spawn marker is
+            // only where a start sends them (VRCKatamari.Hub.HubLoopMath.ChooseArrival), so
+            // the descriptor's spawns are left alone. RespawnHeightY is still written.
+            bool hubOwnsSpawn = !VRCKatamari.Hub.HubSelectMath.LevelMayOwnWorldSpawn(
+                SceneHasRoot(VRCKatamari.Editor.Hub.HubAssembler.HubSpawnName));
+            if (hubOwnsSpawn)
+            {
+                spawnsMatch = true;
+                report.Note(V2Tag + "the scene has a '" +
+                            VRCKatamari.Editor.Hub.HubAssembler.HubSpawnName + "': the world " +
+                            "spawn stays in the hub, spawns were not written");
+            }
+
             bool hasKill = doc.Activity != null && doc.Activity.KillPlane != null;
             float respawnY = hasKill
                 ? PlacementV2Rules.RespawnHeightY(doc.Activity.KillPlane.Y)
@@ -1190,6 +1206,17 @@ namespace VRCKatamari.Editor.LevelBuild
                                        CultureInfo.InvariantCulture) + " - " +
                                    PlacementV2Rules.RespawnBelowKillPlaneM.ToString("0.###",
                                        CultureInfo.InvariantCulture) + " m)" : ""));
+        }
+
+        private static bool SceneHasRoot(string name)
+        {
+            GameObject[] roots =
+                UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects();
+            for (int i = 0; i < roots.Length; i++)
+            {
+                if (string.Equals(roots[i].name, name, StringComparison.Ordinal)) return true;
+            }
+            return false;
         }
 
         // --------------------------------------------------------- pickup exemption ---

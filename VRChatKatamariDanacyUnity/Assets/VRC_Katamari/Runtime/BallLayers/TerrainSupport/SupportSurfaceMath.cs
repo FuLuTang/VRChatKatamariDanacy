@@ -103,9 +103,9 @@ namespace VRCKatamari.BallLayers
         /// <see cref="FirstPropSurfaceId"/> + i (100..105), ramp 500 + i, boundary plane
         /// (<see cref="VRCKatamari.BallContact.ContactCodes.PlaneSurfaceId"/>,
         /// 1000..1007) and terrain 2000 +.
-        /// It used to be 10 + i, which collided with box <c>1 + i</c> once the static box
-        /// table grew past 9 (2026-11-16: 8 -> 64); 1000 + i was the first choice and is
-        /// already taken by the v2 solver's boundary planes. Like a prop slot it is a
+        /// 10 + i would collide with box <c>1 + i</c> once the static box table grows past 9
+        /// (the table holds 64), and 1000 + i is taken by the v2 solver's boundary planes.
+        /// Like a prop slot it is a
         /// diagnostic and a switch key, not a durable identity; registration order is fixed
         /// for the scene's lifetime.
         /// </summary>
@@ -210,15 +210,14 @@ namespace VRCKatamari.BallLayers
         /// </summary>
         /// <remarks>
         /// <para>
-        /// POLICY CHANGE 2026-11-16: this used to be the band reference the sweep mask and
-        /// the support table both compared against - "the previous support or the ball's
-        /// bottom, whichever is higher". The terrain run showed what a stale anchor does: a
-        /// support that is higher than the ball's own bottom widens the band upward and lets
-        /// a surface the ball is falling past be adopted, and a support below the ball (an
-        /// arena plane at -1000) makes the mesh look unreachable. The band is now anchored on
-        /// the BALL'S BOTTOM alone (<c>LEVEL_FORMAT_V2</c> §1.3 rule 3, §3.6), and the
-        /// motor passes that number. The function stays as the plain max utility the C09
-        /// post-mortem's "already above the top" argument was written in terms of.
+        /// The sweep mask and the support table do NOT compare against this function: a
+        /// stale anchor is wrong. A support that is higher than the ball's own bottom widens
+        /// the band upward and lets a surface the ball is falling past be adopted, and a
+        /// support below the ball (an arena plane at -1000) makes the mesh look unreachable.
+        /// The band is anchored on the BALL'S BOTTOM alone (<c>LEVEL_FORMAT_V2</c> §1.3
+        /// rule 3, §3.6), and the motor passes that number. The function is the plain max
+        /// utility the C09 post-mortem's "already above the top" argument is written in
+        /// terms of.
         /// </para>
         /// <para>
         /// A non-finite <paramref name="ballBottomM"/> is ignored rather than poisoning the

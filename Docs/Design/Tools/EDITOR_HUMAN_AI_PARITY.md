@@ -90,7 +90,8 @@ HTTP 入口共用同一份 Python 数据（`Tools/leveleditor/v2_document.py`；
 
 | 开关 | GUI id | HTTP（同一实现） | 数据/状态 |
 |---|---|---|---|
-| v2 地形 | `show-v2-terrain` | `GET /api/v2/terrain`；`/api/v2/view?terrain=1` | 3,455 三角 / 7,154 顶点，来自 `.katerrain`；✅ |
+| v2 地形（有 `terrain.visual` 时是视觉网格 + 贴图） | `show-v2-terrain` | `GET /api/v2/visual.glb`（`/api/v2/view` 的 `visual` 摘要）；`shot.py --layers terrain` | 14,733 三角 / 158 贴图，来自 `.katvisual`；无 `visual` 的文档退回 `.katerrain` 实体面；✅ |
+| 碰撞线框（叠加层，默认关） | `show-v2-collision` | `GET /api/v2/terrain`；`shot.py --layers collision` | 3,455 三角 / 7,154 顶点的边，来自 `.katerrain`，按 ride/climb/wall 着色（含 15 m 挡球墙）；✅ |
 | v2 固体 | `show-v2-solids` | `GET /api/v2/solids`；`/api/v2/view?solids=1` | `structures.solids` 35 条；GUI 紫色盒；✅ |
 | v2 活动墙 | `show-v2-walls` | `GET /api/v2/activity`；`/api/v2/view?walls=1` | `activityArea.walls` 1 面；✅ |
 | v2 kill plane | `show-v2-kill-plane` | `GET /api/v2/activity`；`/api/v2/view?kill=1` | `activityArea.killPlane`（y −4.0）；✅ |

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>disable</Nullable>
+    <UnityRefs Condition="'$(UnityRefs)' == ''">$(HOME)/.cache/vrc-katamari-refasm/refs</UnityRefs>
+    <RuntimeRoot>../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime</RuntimeRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(UnityRefs)/UnityEngine.CoreModule.dll</HintPath></Reference>
+    <Compile Include="$(RuntimeRoot)/Core/KatamariMath.cs" Link="Runtime/KatamariMath.cs" />
+    <Compile Include="$(RuntimeRoot)/Pickup/PickupAbsorbMath.cs" Link="Runtime/PickupAbsorbMath.cs" />
+    <Compile Include="$(RuntimeRoot)/Pickup/PickupAbsorbStepMath.cs" Link="Runtime/PickupAbsorbStepMath.cs" />
+    <Compile Include="$(RuntimeRoot)/BallLayers/Attachment/*Math.cs" Link="Runtime/%(Filename).cs" />
+    <Compile Include="$(RuntimeRoot)/BallLayers/VisualRoll/VisualRollMath.cs" Link="Runtime/VisualRollMath.cs" />
+    <Compile Include="$(RuntimeRoot)/BallLayers/SizeModel/SizeModelMath.cs" Link="Runtime/SizeModelMath.cs" />
+    <Compile Include="$(RuntimeRoot)/BallLayers/RadialProxy/*Math.cs" Link="Runtime/%(Filename).cs" />
+    <Compile Include="$(RuntimeRoot)/BallContact/BallShapeMath.cs" Link="Runtime/BallShapeMath.cs" />
+    <Compile Include="$(RuntimeRoot)/BallContact/ContactTuning.cs" Link="Runtime/ContactTuning.cs" />
+    <Compile Include="$(RuntimeRoot)/BallContact/ContactCodes.cs" Link="Runtime/ContactCodes.cs" />
+    <Compile Include="$(RuntimeRoot)/BallContact/ClimbMath.cs" Link="Runtime/ClimbMath.cs" />
+    <Compile Include="$(RuntimeRoot)/BallContact/ContactClassificationMath.cs" Link="Runtime/ContactClassificationMath.cs" />
+    <Compile Include="$(RuntimeRoot)/BallContact/ObbContactMath.cs" Link="Runtime/ObbContactMath.cs" />
+    <Compile Include="$(RuntimeRoot)/Economy/GrowthLedgerMath.cs" Link="Runtime/GrowthLedgerMath.cs" />
+  </ItemGroup>
+</Project>

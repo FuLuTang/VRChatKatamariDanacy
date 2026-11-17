@@ -75,6 +75,51 @@ namespace VRCKatamari.BallLayers
         private const long HashMask = 0xFFFFFFFFL;
 
         /// <summary>
+        /// Captures the gate's contact pose before growth/push-out. The motor has moved
+        /// its centre but stage 8 has not advanced its roll yet, so use the existing roll
+        /// math to reach this contact centre with the PRE-growth radius. Refused roll
+        /// updates hold the previous rotation, exactly as stage 8 does. All later motion
+        /// carries the returned local pose; event consumption never reprojects it.
+        /// </summary>
+        public static bool TryCaptureContactPose(Vector3 previousBallPosition,
+            Quaternion previousBallRotation, Vector3 contactBallPosition, Vector3 supportNormal,
+            float coreRadiusWorldM, bool discontinuous, float maxRollDisplacementM,
+            Vector3 objectPosition, Quaternion objectRotation, Vector3 objectScale,
+            out Vector3 localPosition, out Quaternion localRotation)
+        {
+            Quaternion contactRotation = previousBallRotation;
+            Quaternion advancedRotation;
+            if (VisualRollMath.TryAdvanceRotation(previousBallRotation,
+                contactBallPosition - previousBallPosition, supportNormal, coreRadiusWorldM,
+                discontinuous, true, maxRollDisplacementM, out advancedRotation))
+            {
+                contactRotation = advancedRotation;
+            }
+            return TryWorldPoseToLocal(contactBallPosition, contactRotation, objectPosition,
+                objectRotation, objectScale, out localPosition, out localRotation);
+        }
+
+        /// <summary>
+        /// Signed gap to the pickup contact limit, in metres. Both motor and attachment
+        /// diagnostics call this adapter over the gate's ONE geometry implementation.
+        /// Use the gate's captured collision radius and margin, never the visual core or
+        /// a later grown radius. Any common rigid coordinate frame is equivalent.
+        /// </summary>
+        public static bool TryComputeBoxGap(Vector3 itemSize, Quaternion itemRotation,
+            Vector3 itemPosition, Vector3 ballPosition, float collisionRadiusWorldM,
+            float contactRadiusWorldM, out float gapWorldM)
+        {
+            gapWorldM = 0f;
+            float boxDistance;
+            float contactLimit;
+            if (!VRCKatamari.Pickup.PickupAbsorbMath.TryComputeContact(itemSize, itemRotation,
+                itemPosition, ballPosition, collisionRadiusWorldM, contactRadiusWorldM,
+                out boxDistance, out contactLimit)) return false;
+            gapWorldM = boxDistance - contactLimit;
+            return KatamariMath.IsFiniteFloat(gapWorldM);
+        }
+
+        /// <summary>
         /// Converts one confirmed world pose into the ball-relative local pose.
         /// </summary>
         /// <remarks>
@@ -107,9 +152,12 @@ namespace VRCKatamari.BallLayers
             if (!TryNormalizeRotation(objectRotation, out objectUnit)) return false;
             Vector3 delta = objectPosition - ballPosition;
             if (!KatamariMath.IsFiniteVector(delta)) return false;
-            Vector3 position = Quaternion.Inverse(ballUnit) * delta;
+            // ballUnit is normalized above, so its conjugate IS its inverse. Keep this
+            // pure value math (Quaternion.Inverse is a Unity native call), and compute it once.
+            Quaternion inverse = new Quaternion(-ballUnit.x, -ballUnit.y, -ballUnit.z, ballUnit.w);
+            Vector3 position = inverse * delta;
             if (!KatamariMath.IsFiniteVector(position)) return false;
-            Quaternion relative = Quaternion.Inverse(ballUnit) * objectUnit;
+            Quaternion relative = inverse * objectUnit;
             Quaternion rotation;
             if (!TryNormalizeRotation(relative, out rotation)) return false;
             localPosition = position;
@@ -599,7 +647,8 @@ namespace VRCKatamari.BallLayers
             return true;
         }
 
-        private static bool IsValidObjectScale(Vector3 scale)
+        /// <summary>Accepts finite, strictly positive object scale on every axis.</summary>
+        public static bool IsValidObjectScale(Vector3 scale)
         {
             if (!KatamariMath.IsFiniteVector(scale)) return false;
             return scale.x > 0f && scale.y > 0f && scale.z > 0f;

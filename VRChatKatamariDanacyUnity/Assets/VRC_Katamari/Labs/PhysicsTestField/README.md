@@ -1,9 +1,7 @@
 # Labs/PhysicsTestField · 球体物理回归场（场景宿主）
 
-> 状态：**代码已写，未编译**（2026-11-15）。Unity/U# 编译、场景、Play Mode、Build & Test 全部 `NOT_RUN`。
-> 场景**尚未创建**：本目录只有 4 个 `.cs`，没有 `.meta`（Unity 首次聚焦会用当前程序集补上）。
-> 设计与数据：[`Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md`](../../../../Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md)、
-> 几何：[`Docs/Design/Levels/physics_test_field/`](../../../../Docs/Design/Levels/physics_test_field/README.md)。
+> 设计与数据：[`Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md`](../../../../../Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md)、
+> 几何：[`Docs/Design/Levels/physics_test_field/`](../../../../../Docs/Design/Levels/physics_test_field/README.md)。
 
 ## 这个目录里的东西
 

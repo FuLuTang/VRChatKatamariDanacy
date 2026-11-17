@@ -174,7 +174,8 @@ python3 Tools/leveleditor/server.py --level _ref_mas1 --ref-models-dir ~/Katamar
 `Tools/leveleditor/v2_document.py` 读取，侧车解析复用 `placement_v2.read_sidecar`，结构检查
 复用 `ref_v2_from_extract.structural_errors`；**不**把 v2 翻成 v1 再跑 v1 校验器。
 
-- 顶部工具条变成 v2 图层：`v2 地形`/`固体`/`活动墙`/`kill plane`/`父子`/`旋转`/`缩放`。
+- 顶部工具条变成 v2 图层：`v2 地形`/`碰撞线框`/`固体`/`活动墙`/`kill plane`/`父子`/`旋转`/`缩放`。
+  文档有 `terrain.visual` 时 `v2 地形` 画的是原作视觉网格 + 贴图（`/api/v2/visual.glb`，Python `v2_document.build_visual_glb` 生成：z 取反并换绕序、贴图 repeat/点过滤、镂空/半透明按 `blend`），`碰撞线框`（默认关）才是 `.katerrain` 的边；没有 `visual` 时 `v2 地形` 退回碰撞实体面（绕序已随镜像互换）。`shot.py --layers terrain,collision` 与这两个开关同一实现。
   v2 地形来自 `terrain/*.katerrain`（3,455 三角 / 7,154 顶点），固体 35 条，活动墙 1 面，
   kill plane `y=-4.0`，`props[].parent` 83 条，旋转 392 件、缩放 6 件。
 - 校验面板明确写「结构检查（v2）」：只跑 `structural_errors()`，不再显示 v1 的 544 个错误；

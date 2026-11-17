@@ -34,7 +34,7 @@
     "expected": {
       "propCount": 5,
       "growthMm3": 186113343,
-      "structureCount": 7
+      "structureCount": 5
     },
     "zones": [
       {
@@ -324,58 +324,6 @@
       "absorbable": false,
       "support": true,
       "notes": "8 x 8 m room floor; top face at y = 0"
-    },
-    {
-      "id": "result_board",
-      "kind": "board",
-      "role": "box",
-      "shape": "box",
-      "center": [
-        1200.0,
-        1.45,
-        3.95
-      ],
-      "size": [
-        2.6,
-        1.5,
-        0.06
-      ],
-      "rotationQuat": [
-        0.0,
-        0.0,
-        0.0,
-        1.0
-      ],
-      "collision": "box",
-      "absorbable": false,
-      "support": false,
-      "notes": "the previous run's result card (StoryResultPresenter's panel) hangs in front of this board; the room does not print the numbers twice"
-    },
-    {
-      "id": "select_picnic_corner",
-      "kind": "select",
-      "role": "box",
-      "shape": "box",
-      "center": [
-        1200.0,
-        0.01,
-        1.2
-      ],
-      "size": [
-        2.8,
-        0.02,
-        2.8
-      ],
-      "rotationQuat": [
-        0.0,
-        0.0,
-        0.0,
-        1.0
-      ],
-      "collision": "none",
-      "absorbable": false,
-      "support": false,
-      "notes": "level-select pad for the picnic corner; collision none so walking onto it cannot block; the host's circle is centred on this object"
     }
   ]
 }

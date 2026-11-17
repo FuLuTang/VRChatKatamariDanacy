@@ -544,10 +544,11 @@ def build_rows(corpus: Corpus, ours: OursLevel) -> List[Row]:
     reach_axis = shapes.pickup_reach((1.0, 0.0, 0.0), radius) / radius
     reach_corner = shapes.pickup_reach((1.0, 1.0, 1.0), radius) / radius
     add("T05", "拾取触发体（轴/角，×r）", "r",
-        "仅体积门（无独立触发体）", round(reach_corner, 4), DIFFERENT,
-        "ABSORB/10× 门；reroll_numbers.md §3.1 无 reach 概念",
-        "shapes.py:374 pickup_reach（盒支撑函数 ∪ 针尖）",
-        "原作只用体积门决定‘能不能吸’，判定发生在接触时；我们额外有一个方向相关的触发体"
+        "Mh 包围盒（实形/朝向未知）+ 体积门", round(reach_corner, 4), DIFFERENT,
+        "US7402104B2 Mh；ABSORB/10× 门；PARITY_AUDIT 吸收触发几何行",
+        "shapes.pickup_reach / KatamariBallMotor.GetPickupReachWorldM（碰撞球）",
+        "我们采用内接等效球，道具侧是自身有向盒；不并入针尖、不随方向扩大。"
+        "原作 Mh 实形未知，本项目选择球以保证接触处冻结"
         "（轴 %.2fr、角 %.2fr）" % (reach_axis, reach_corner))
 
     # ------------------------------------------------------------------ M --

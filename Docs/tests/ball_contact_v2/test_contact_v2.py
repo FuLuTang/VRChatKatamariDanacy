@@ -265,7 +265,7 @@ class ClimbTests(unittest.TestCase):
         self.assertAlmostEqual(required_speed(90.0), 1.5)
         self.assertLess(climb_speed(1.0, 2.0, 70.0, 0.0, 0.6),
                         climb_speed(1.0, 2.0, 50.0, 0.0, 0.6))
-        self.assertLess(climb_speed(1.0, 2.0, 90.0, 0.0, 0.6), 0.25)
+        self.assertLess(climb_speed(1.0, 2.0, 90.0, 0.0, 0.6), 0.40)
 
     def test_90_degree_wall_climbs_to_the_cap_then_slides_back(self):
         wall = Obb((0.0, 1.5, -0.5), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0),

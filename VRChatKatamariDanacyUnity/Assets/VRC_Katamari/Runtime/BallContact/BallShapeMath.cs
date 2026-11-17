@@ -5,28 +5,23 @@ using VRCKatamari.Core;
 namespace VRCKatamari.BallContact
 {
     /// <summary>
-    /// The three shape layers of section 4A: the visual core, the rolling shape (core
-    /// sphere plus ball-local needle supports) and the pickup shape (the bounding-box
-    /// support function unioned with the pins).
+    /// The rolling shape of section 4A: core sphere plus ball-local needle supports.
+    /// Pickup uses the equal-volume collision sphere through PickupAbsorbMath, not the
+    /// support function of a cube and not this rolling shell.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Invariants this file must keep (and the tests pin):
     /// <c>r_roll = 1.00 * r_phys</c>,
-    /// <c>rollReach(u) = max(r_roll, max_i support_i * dot(dir_i, u))</c>,
-    /// <c>pickupReach(u) = max(r_phys * (|ux| + |uy| + |uz|), rollReach(u))</c>, so
-    /// <c>r_roll &lt;= rollReach(u) &lt;= pickupReach(u)</c> for every u. The visual core
-    /// is not computed here: it is the level's start radius, fixed
+    /// <c>rollReach(u) = max(r_roll, max_i support_i * dot(dir_i, u))</c>, so
+    /// <c>pickupRadius = r_phys = r_roll &lt;= rollReach(u)</c> for every u. The visual
+    /// core is not computed here: it is the level's start radius, fixed
     /// (<c>KatamariBallMotor.GetVisualCoreRadiusWorldM</c>), and never larger than r_roll.
-    /// The union with the pins is what keeps the user-facing ordering "pickup reaches
-    /// further than rolling" true even when a long object sticks out past the box corner.
     /// </para>
     /// <para>
-    /// Consumers are separated on purpose. The pickup reach is a trigger volume: it only
-    /// answers "can this be absorbed" and must never block, push or support. The rolling
-    /// shape is the contact solver's shape. The visual core is presentation only. This
-    /// file computes all three from one physical radius and never stores state, so a
-    /// caller cannot accidentally feed a pickup reach into a contact query.
+    /// Consumers are separated on purpose. PickupAbsorbMath answers "can this be
+    /// absorbed". This rolling shape feeds contact solving; the visual core is presentation
+    /// only. No alternative pickup radius is computed here.
     /// </para>
     /// <para>
     /// Needle supports are ball-local support lengths (>= core radius, clamped to the
@@ -506,26 +501,6 @@ namespace VRCKatamari.BallContact
         }
 
         /// <summary>
-        /// Support function of the cube that bounds the equal-volume sphere:
-        /// <c>r * (|ux| + |uy| + |uz|)</c>, i.e. 1.0 r on an axis, 1.41 r on a face
-        /// diagonal and 1.73 r at a corner.
-        /// </summary>
-        public static bool TryPickupBoxReach(Vector3 direction, float physicalRadius,
-            out float reach)
-        {
-            reach = 0f;
-            if (!KatamariMath.IsFiniteFloat(physicalRadius) || physicalRadius < 0f) return false;
-            Vector3 unit;
-            float length;
-            if (!KatamariMath.TryNormalize(direction, out unit, out length)) return false;
-            float value = physicalRadius * (Mathf.Abs(unit.x) + Mathf.Abs(unit.y) +
-                Mathf.Abs(unit.z));
-            if (!KatamariMath.IsFiniteFloat(value)) return false;
-            reach = value;
-            return true;
-        }
-
-        /// <summary>
         /// How far the rolling shape reaches along a world direction: the core radius or
         /// the longest projecting pin, whichever is larger.
         /// </summary>
@@ -555,36 +530,6 @@ namespace VRCKatamari.BallContact
             }
             if (!KatamariMath.IsFiniteFloat(best)) return false;
             reach = best;
-            return true;
-        }
-
-        /// <summary>
-        /// The pickup/trigger reach: the box support function unioned with the pins, so it
-        /// is never smaller than the rolling reach.
-        /// </summary>
-        /// <remarks>
-        /// A caller with no rolling shape passes a zero needle count and gets the box
-        /// alone. The rolling shape's core radius is the physical radius here because the
-        /// section 4A invariant fixes <c>r_roll = 1.00 * r_phys</c>; there is no second
-        /// radius to pass. This value must never reach a contact query: pickup answers "can
-        /// this be absorbed", never "does this block".
-        /// </remarks>
-        public static bool TryPickupReach(Vector3 direction, float physicalRadius,
-            Vector3[] needleDirections, float[] needleSupports, int needleCount,
-            out float reach)
-        {
-            reach = 0f;
-            float boxReach;
-            if (!TryPickupBoxReach(direction, physicalRadius, out boxReach)) return false;
-            if (needleCount <= 0)
-            {
-                reach = boxReach;
-                return true;
-            }
-            float rollingReach;
-            if (!TryRollingReach(direction, physicalRadius, needleDirections, needleSupports,
-                needleCount, out rollingReach)) return false;
-            reach = Mathf.Max(boxReach, rollingReach);
             return true;
         }
 

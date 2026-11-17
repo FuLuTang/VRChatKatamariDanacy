@@ -194,7 +194,7 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void BoxProxyContactCollectionMatchesTheOldObbCollection()
+        public void BoxProxyContactCollectionMatchesTheObbCollection()
         {
             Vector3[] centers = { Vector3.zero };
             Vector3[] axisX = { UnitX };
@@ -237,7 +237,7 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void BoxProxyWindowMatchesTheOldWindow()
+        public void BoxProxyWindowMatchesTheObbWindow()
         {
             Vector3[] centers = { Vector3.zero, new Vector3(3f, 0f, 0f) };
             Vector3[] axisX = { UnitX, UnitX };

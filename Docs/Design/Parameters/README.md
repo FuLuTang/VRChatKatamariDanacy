@@ -77,7 +77,7 @@
 | **地图** | `Docs/Design/Maps/<map_id>/layout.json` | 几何、球径包线 `scale.ball_*`、档位门槛 `item_tier_pickup_diameter_m`、`size_gates`、交分锚点与轮换 `bank.anchors` / `bank.rotation`、`bank.rules.*`（残差/最小兑换门槛——它们已经是该文件里的既有字段，见 §5 步骤 1 的取舍） | 对局时长、PvP 比例、道具时长、运动/跟随调参 |
 | **规则集** | `Docs/config/rulesets/<ruleset_id>.json`（新，见 §3.1） | 按 `ruleset_id` 共享的规则：交分周期、对局时长、PvP 吞噬/重生、道具时长与倍率、吸收比、成长标定、运动/跟随调参、形状常量 | 任何地图几何；任何每关开关 |
 | **关卡** | `Docs/Design/GameModes/Levels/*.json` | **开关与限时**：`time_limit_s`、`quest.objective`、`spawn_id`、`bank.enabled`、`powerups.enabled` | 规则数值——[`GameModes/README.md`](../GameModes/README.md) §4.3 字段表已经写明 `ruleset_id` 是“引用共享规则集，**关卡不复制这些数字**” |
-| **运行时派生** | 代码里算出来的量 | 起始球径（由体积基线算出 = **0.29974 m**，见 [`BallMotor/README.md`](../BallMotor/README.md)「交分」节的「`start` 必须和体积映射同源」条）、三尺寸、`growthFraction`、交分后直径、`carried`、确认体积 | 任何作者可调的数 |
+| **运行时派生** | 代码里算出来的量 | 起始球径（由体积基线算出 = **0.29974 m**，见 [`BallMotor/README.md`](../BallMotor/README.md)「交分」节的「`start` 必须和体积映射同源」条）、三尺寸、`sizeScale`（D/D0）、交分后直径、`carried`、确认体积 | 任何作者可调的数 |
 | **运行时独有** | 代码里的 `const` / 缓冲容量 / 容差 | 结构容量、ε 容差、`fixedStepSeconds`、`stuckTimeoutSeconds` 一类**没有作者数据来源**的实现值 | 设计旋钮 |
 
 规则：**每个参数只属于一个域。** 跨域引用必须走“读那个域的文件”，不得复制值。
@@ -430,7 +430,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 - **起始球径**：由 `baselineVolumeUnits` + `cubicMetersPerVolumeUnit` 算出 **0.29974 m**（`BallMotor/README.md`「交分」节）。把 0.30 烘成一个字段会立刻产生第二个“起始尺寸”，而那条「`start` 必须和体积映射同源」就是防这个的；
 - 三个尺寸（`SizeModelMath.TryDerive` 输出）、`growthFraction`（`KatamariBallMotor.DeriveGrowthFraction`）、`post` 交分直径与单位（`BankShrinkMath`）、`carried`（`TryCarriedVolumeUnits`）、`confirmed = unbanked + carried`（`KatamariBallMotor.RecomputeConfirmedAndSize`）；
 - 当前激活的交分锚点下标：由 `(roundStartClock + t) / period` 算，`activate_at_s`（`layout.json` 的 `bank.rotation.activate_at_s`）是它的**人类可读展开**，不是第二个真源；
-- `BallMotionMath` 的 `growthFraction` 降额结果。
+- `BallMotionMath` 的 `sizeScale`（D/D0）缩放结果。
 
 ### 6.4 结构容量、编译期常量与只属于运行时的标量（不进载荷）
 
@@ -511,13 +511,13 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 | # | 参数 | 机器可读副本 | 份数 | 应交真源 |
 |---|---|---|---|---|
 | 8 | `max_speed_mps` 4.0 | `BallMotion/README.md`「参数单位表」、`ball_motion.py` `MotionConfig.max_speed_mps`、`KatamariBallMotor.maxSpeedMps` | 3 | 规则集 |
-| 9 | `acceleration_mps2` 5.0 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.acceleration_mps2`、`KatamariBallMotor.accelerationMps2` | 3 | 规则集 |
-| 10 | `braking_mps2` 8.0 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.braking_mps2`、`KatamariBallMotor.brakingMps2` | 3 | 规则集 |
-| 11 | `friction_per_s` 1.2 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.friction_per_s`、`KatamariBallMotor.frictionPerSecond` | 3 | 规则集 |
+| 9 | `acceleration_mps2` 7.5（D0 下，× D/D0） | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.acceleration_mps2`、`KatamariBallMotor.accelerationMps2` | 3 | 规则集 |
+| 10 | `braking_mps2` 6.0（只给反推） | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.braking_mps2`、`KatamariBallMotor.brakingMps2` | 3 | 规则集 |
+| 11 | `friction_per_s` 0.9 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.friction_per_s`、`KatamariBallMotor.frictionPerSecond` | 3 | 规则集 |
 | 12 | `turn_rate_degps` 110 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.turn_rate_degps`、`KatamariBallMotor.turnRateDegreesPerSecond` | 3 | 规则集 |
 | 13 | `max_lateral_mps` 1.2 | `README.md`「参数单位表」、`ball_motion.py` `MotionConfig.max_lateral_mps`、`KatamariBallMotor.maxLateralMps` | 3 | 规则集 |
-| 14 | `growth_speed_factor` 0.25 | `ball_motion.py` `MotionConfig.growth_speed_factor`、`KatamariBallMotor.growthSpeedFactor` | 2 | 规则集 |
-| 15 | `growth_turn_factor` 0.35 | `ball_motion.py` `MotionConfig.growth_turn_factor`、`KatamariBallMotor.growthTurnFactor` | 2 | 规则集 |
+| 14 | `rolling_resistance_mps2` 1.3 | `ball_motion.py` `MotionConfig.rolling_resistance_mps2`、`KatamariBallMotor.rollingResistanceMps2` | 2 | 规则集 |
+| 15 | `lateral_grip_per_s` 2.0 | `ball_motion.py` `MotionConfig.lateral_grip_per_s`、`KatamariBallMotor.lateralGripPerSecond` | 2 | 规则集 |
 | 16 | 眼点几何 `eyeBaseUpMeters` 0.55 / `eyeUpPerRadius` 2.4 / `eyeBaseBackMeters` 0.75 / `eyeBackPerRadius` 2.2（2026-11-15 取代 `eye_height_m` 1.6） | `KatamariBallMotor.eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeBaseBackMeters` / `eyeBackPerRadius` | 1 | 规则集 |
 | 17 | `height_filter_hz` 5.0 | `follow_rig.py` `FollowRig.height_filter_hz` 默认值、`KatamariBallMotor.heightFilterHz` | 2 | 规则集 |
 | 18 | `yaw_filter_hz` 8.0 | `follow_rig.py` `FollowRig.yaw_filter_hz` 默认值、`KatamariBallMotor.yawFilterHz` | 2 | 规则集 |

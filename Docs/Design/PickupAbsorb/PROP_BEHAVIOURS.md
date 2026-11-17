@@ -22,7 +22,7 @@
 
 0.3 **「它怎么知道是链在一起的」——它不知道，也不需要知道。** 每件道具只记**一个父件**；某件被吃掉或开始落时，把 `propParent == 它` 的子件放进待复检队列，每个定步 tick 问一次「脚下有没有东西」——没有就落，有就等。「整摞塌下来」是这个规则的**几何后果**，不是任何一处代码在识别链。
 0.4 **v1 是「单父指针 + 每 tick 浮空复检」，不是物理。** 运行时只有：每件一个父索引、一个定长待复检队列、一次固定步长的坠落积分。没有 `List`、没有字典、没有 `Rigidbody`、没有逐件 `Update`。
-0.5 **`support` / `stackedOn` / `parent` / `parentDerived` / `pinned` 今天都只是数据与校验器的字段**，引擎不读（`Tools/levelbuild/placement_core.py:210` 的 `PROP_KEYS`、`Docs/Design/Tools/LEVEL_AUTHORING.md` §4.2）。所以「上面的东西会掉」这件事**在本仓库里今天完全不存在**，不是配置没填。
+0.5 **`support` / `stackedOn` / `parent` / `parentDerived` / `pinned` 今天都只是数据与校验器的字段**，引擎不读（`Tools/levelbuild/placement_core.py:210` 的 `PROP_KEYS`、`Docs/Design/Tools/LEVEL_AUTHORING.md` §4.2）。`parent` 另有一份运行时副本：`PickupFieldSync` 把它写成 `PickupFieldHost.propParentIndex`（行索引，-1 = 无），`PropFallHost` 读它——「上面的东西会掉」的实现见 §10.10；`support` / `stackedOn`（旧写法）/ `pinned` 运行时仍不读。
 
 0.6 **一个必须同时改的数据陷阱**：`placement_core` 的规范化只保留 `PROP_KEYS` 里的键（`placement_core.py:626`），**新加的 `behaviour*` 字段会被校验器静默忽略、被任何一次 rewrite 静默丢弃**。所以字段提案必须和校验器改动同一批落地，否则作者会以为填了。
 
@@ -483,6 +483,16 @@
 
 - **行为字段（`playAnimNo` / `pathSpeedIndex` 搬进 `behaviour`）** — 属行为字段落地那一轮（`PARITY_AUDIT.md`「移动件/行为字段」行）。
 - 原作的**逻辑**仍未公开（P18），所以 v1 的堆叠规则是我们自己的设计，不写成「原版就是这样」；数据侧只能证明「有父指针、有链」。
+
+### 10.10 现行实现（已写，未在 Unity 验证）
+
+- **文件**：`Runtime/Pickup/PropFallMath.cs`（纯静态：父列清洗与断环、CSR 子表、入队与复检一步、坠落积分、支撑几何、XZ 网格）；`PropFallHost.cs`（行为宿主：状态数组、读 Transform、竖直移动）；`TerrainFieldHost.SampleSupportHeight`（地形高度查询）；`PickupFieldHost` 只加了父索引列、四个只读访问器和三个调用点（吸收事件后 `OnPropAbsorbed`、障碍扫描里跳过坠落件、`ResetField` 里 `ResetFalls`）。
+- **数据**：`placement` 的 `parent` →（导入器 `BuildDeclaredParents`）→ `PickupFieldSync` 按 itemId 解析成行索引写入 `propParentIndex`；找不到父件的边与环记 note 并置 -1；不传声明时按 id 保留原值（幂等）。运行时再用 `PropFallMath.SanitizeParents` 清洗一次。没有新 JSON 键。
+- **行为**：父件被吃 ⇒ 直接子件入队，**下一个 30 Hz tick** 复检（脚下没有 `RESTING/SETTLED` 的道具、也没有地形/兜底地面落在 §5.2 窗口内 ⇒ `FALLING`），孙件在它开始落的同一 tick 入下一轮队列，所以整摞逐层塌下来。坠落是 §5.3 的纯重力，落点用**步前**底面，落地 2 mm 内贴面、`SETTLED`、不倾斜；落定后就是普通道具（障碍扫描读新位置；吸收判定读 `transform.position`）。落地面 = 下方有重叠足迹的 `RESTING/SETTLED` 道具的最高顶面与地形的较高者；地形取足迹中心 + 四角五点的最高值，入队时采一次并缓存；没有地形数据则落到 `floorY`（默认 −100）。
+- **坠落期间**：可以被吸（§0 默认口径，未拍板）、不当障碍也不当台阶；被吸时从坠落列表摘掉，它的子件照常复检。
+- **两个实现选择（owner 可改）**：① 仍被支撑的子件只复检 `maxRecheckSeconds`（默认 3 s）后退队，而不是永远复检——换来「没有坠落件时宿主完全空闲」，代价是之后才失去的**非父**支撑不再触发它落；② 判落用世界 AABB，不看网格。`pinned` 运行时未实现（数据里也没有）。
+- **只读状态查询（给运动宿主）**：`PropFallHost.IsPropFalling(index)`、`GetPropFallState(index)`（`PropFallMath.StateResting/Falling/Settled/Absorbed`）、`GetFallingCount()`。约定：`FALLING` 或 `ABSORBED` 的道具不被运动宿主驱动；`SETTLED` 后可恢复（D-14）。
+- **Unity 里还要做**（需 Unity 生成，不能手写）：`PropFallHost` 的 U# 程序资产与 `.meta`；场景里放一个 `PropFallHost`，接 `pickupField`（必填）、`terrain`（可选）；`PickupFieldHost.fallHost` 接回；重跑一次导入/同步写入 `propParentIndex`。
 
 ### 10.9 v1 设计（2026-11-16 第三轮拍板）：单父指针 + 每 tick 复检 + 子件坠落
 

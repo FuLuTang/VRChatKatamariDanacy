@@ -1581,6 +1581,7 @@ class WebEditor:
             "meta": loaded.summary["meta"],
             "counts": loaded.summary["counts"],
             "terrain": loaded.summary["terrain"],
+            "visual": loaded.summary["visual"],
             "activity": loaded.summary["activity"],
             "solids": loaded.summary["solids"],
             "parents": loaded.summary["parents"],
@@ -2075,6 +2076,14 @@ class Handler(BaseHTTPRequestHandler):
             if name == "terrain":
                 self._json(200, {"ok": True, "terrain": app.v2_terrain_payload()},
                            headers)
+                return
+            if name == "visual.glb":
+                data = app.v2_document.visual_glb()
+                if data is None:
+                    self._error(404, "this v2 document has no readable terrain.visual: %s"
+                                % ("; ".join(app.v2_document.errors) or "not declared"))
+                    return
+                self._send_bytes(data, "model/gltf-binary")
                 return
             if name == "solids":
                 solids = app.v2_document.summary["solids"]

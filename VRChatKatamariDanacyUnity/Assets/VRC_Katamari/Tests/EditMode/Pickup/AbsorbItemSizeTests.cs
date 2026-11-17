@@ -87,7 +87,7 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void ThePriceOfTheWorldBoxIsTheBugThisContractRemoved()
+        public void TheItemsOwnSizeIsPricedNotItsYawedWorldBox()
         {
             // At 45 degrees the 0.20 x 0.12 footprint becomes 0.2263 x 0.2263 m: pricing
             // that box instead of the item's own size asks for a larger ball.

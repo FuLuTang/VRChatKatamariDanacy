@@ -75,13 +75,17 @@ namespace VRCKatamari.BallMotor
 
         // ---- BallMotionMath inputs (DRAFT placeholders from Docs/Design/BallMotion/README.md) ----
         [SerializeField] private float maxSpeedMps = 4f;
-        [SerializeField] private float accelerationMps2 = 5f;
-        [SerializeField] private float brakingMps2 = 8f;
-        [SerializeField] private float frictionPerSecond = 1.2f;
+        // Inertia, owner 2026-11-17, all PROVISIONAL (Docs/Design/BallMotor/BALL_INERTIA.md).
+        // The m/s and m/s^2 values are given AT THE START DIAMETER D0 and are multiplied by
+        // s = D / D0 (CurrentSizeScale); friction, grip and turn rate are time constants
+        // and are not scaled.
+        [SerializeField] private float accelerationMps2 = 7.5f;
+        [SerializeField] private float brakingMps2 = 6f;            // forward input opposing the velocity only
+        [SerializeField] private float frictionPerSecond = 0.9f;
+        [SerializeField] private float rollingResistanceMps2 = 1.3f; // coast-down, only with no forward input
+        [SerializeField] private float lateralGripPerSecond = 2.0f;  // sideways-velocity decay (turn drift)
         [SerializeField] private float turnRateDegreesPerSecond = 110f;
         [SerializeField] private float maxLateralMps = 1.2f;
-        [SerializeField] private float growthSpeedFactor = 0.25f;
-        [SerializeField] private float growthTurnFactor = 0.35f;
 
         // ---- GroundContactMath inputs: one analytic plane + the radial proxy shell ----
         [SerializeField] private Vector3 groundPlaneNormal = new Vector3(0f, 1f, 0f);
@@ -168,7 +172,15 @@ namespace VRCKatamari.BallMotor
         // channel, the ball does not slide down by itself", and the P1 motion contract is
         // planar velocity only. A pilot can raise this without touching the motion layer;
         // at 0 the step is bit-for-bit the P1 behaviour.
-        [SerializeField] private float rampTangentialGravityScale = 0f;
+        [SerializeField] private float rampTangentialGravityScale = 1f;
+        // Rest-then-slide (BALL_INERTIA.md section 4), PROVISIONAL: the downhill component
+        // starts only after the ball has been below rampRestSpeedMps * s for
+        // rampRestSeconds with no push, and never applies to a moving ball. The slope must
+        // be steeper than rampSlideMinSlopeDegrees (flat ground never slides) and within
+        // maxSupportSlopeDegrees (a steeper face is a wall, not a slope).
+        [SerializeField] private float rampRestSpeedMps = 0.05f;
+        [SerializeField] private float rampRestSeconds = 0.3f;
+        [SerializeField] private float rampSlideMinSlopeDegrees = 2f;
 
         // ---- Radial proxy (pin) caps and admission (PROVISIONAL, unmeasured) ----
         // The protrusion cap is relative to the core radius (the contract's rule) and also
@@ -307,7 +319,8 @@ namespace VRCKatamari.BallMotor
         // "motor not ready, draw nothing yet". Neither a round reset nor a bank changes it:
         // startVolumeMm3 is the level's, not the round's.
         private float startSemanticDiameterWorldM;
-        private float growthFraction;
+        private float rampRestTimerSeconds;
+        private bool rampSliding;
         private float fixedStepAccumulator;
         private float localClockSeconds;
         private float stuckSeconds;
@@ -652,6 +665,15 @@ namespace VRCKatamari.BallMotor
         // snapshot from a fresh one. Feeds no decision.
         private float[] pendingSubmitTimes;
         private int pendingCandidateCount;
+        private int[] pendingOutcomes;
+        private float[] pendingBoxDistances;
+        private float[] pendingContactLimits;
+        private bool[] pendingCommitted;
+        private long[] pendingCommitGains;
+        private bool[] pendingCommitLogFailures;
+        private int[] pendingClaimFailures;
+        private int[] pendingResolveFailures;
+        private int[] pendingClaimCountsAtFailure;
 
         // ---- Absorbed-event ring: the only "which item was eaten" exit ----
         // The pickup stage and the ledger know an item was consumed, but until this
@@ -661,10 +683,19 @@ namespace VRCKatamari.BallMotor
         // eaten, so the commit path appends one event per committed absorb.
         // Purely additive: no stage of the pipeline reads the ring, and a full ring
         // evicts the oldest event instead of failing (the absorb already committed).
-        private const int AbsorbedEventCapacity = 16;
+        private const int AbsorbedEventCapacity = AttachmentStepMath.EventCapacity;
 
         private string[] absorbedEventItemIds;
         private Vector3[] absorbedEventPositions;
+        // Attachment payload is captured at the gate, never reconstructed from a later
+        // Update's moving ball/item transforms. Parallel, fixed-capacity Udon buffers.
+        private Vector3[] absorbedEventLocalPositions;
+        private Quaternion[] absorbedEventLocalRotations;
+        private Vector3[] absorbedEventBallCenters;
+        private float[] absorbedEventCollisionRadii;
+        private float[] absorbedEventContactRadii;
+        private int[] absorbedEventSteps;
+        private bool[] absorbedEventPoseValid;
         private int absorbedEventCount;
 
         // Occupancy of the ring, 0..AbsorbedEventCapacity. It is separate from
@@ -765,8 +796,8 @@ namespace VRCKatamari.BallMotor
         // is a max over the corners, so one attach is an incremental merge, never a rescan.
         // Capacity: ProxyItemCapacity props (256: the 0.80 m ball of the offline estimate
         // carries about 190); a prop past it is refused and counted (ProxySkipPoolFull).
-        private const int ProxyItemCapacity = 256;
-        private const int ProxyEndpointCapacity = ProxyItemCapacity * RadialProxyShellMath.AabbCornerCount;
+        private const int ProxyItemCapacity = AttachmentStepMath.ProxyItemCapacity;
+        private const int ProxyEndpointCapacity = AttachmentStepMath.ProxyEndpointCapacity;
 
         private Vector3[] proxyDirections;
         private float[] proxySupports;
@@ -802,11 +833,11 @@ namespace VRCKatamari.BallMotor
         // Why AttachRadialProxy did not register a prop. 2 is an ordinary skip (the prop
         // does not clear the core, so it cannot lengthen any pin); 4..6 are capacity and
         // scene/data problems.
-        private const int ProxySkipNone = 0;
-        private const int ProxySkipInsideCore = 2;
-        private const int ProxySkipPoolFull = 4;
-        private const int ProxySkipInvalidInput = 5;
-        private const int ProxySkipShellRefused = 6;
+        private const int ProxySkipNone = AttachmentStepMath.ProxySkipNone;
+        private const int ProxySkipInsideCore = AttachmentStepMath.ProxySkipInsideCore;
+        private const int ProxySkipPoolFull = AttachmentStepMath.ProxySkipPoolFull;
+        private const int ProxySkipInvalidInput = AttachmentStepMath.ProxySkipInvalidInput;
+        private const int ProxySkipShellRefused = AttachmentStepMath.ProxySkipShellRefused;
 
 
         // ---- Ball contact v2 (Docs/Design/BallMotor/CONTACT_MODEL_V2.md; S3) ----
@@ -1087,6 +1118,13 @@ namespace VRCKatamari.BallMotor
 
             absorbedEventItemIds = new string[AbsorbedEventCapacity];
             absorbedEventPositions = new Vector3[AbsorbedEventCapacity];
+            absorbedEventLocalPositions = new Vector3[AbsorbedEventCapacity];
+            absorbedEventLocalRotations = new Quaternion[AbsorbedEventCapacity];
+            absorbedEventBallCenters = new Vector3[AbsorbedEventCapacity];
+            absorbedEventCollisionRadii = new float[AbsorbedEventCapacity];
+            absorbedEventContactRadii = new float[AbsorbedEventCapacity];
+            absorbedEventSteps = new int[AbsorbedEventCapacity];
+            absorbedEventPoseValid = new bool[AbsorbedEventCapacity];
             absorbedEventCount = 0;
             absorbedEventRingCount = 0;
 
@@ -1446,6 +1484,15 @@ namespace VRCKatamari.BallMotor
                 pendingGenerations = new int[PendingCandidateCapacity];
                 pendingAccepted = new bool[PendingCandidateCapacity];
                 pendingSubmitTimes = new float[PendingCandidateCapacity];
+                pendingOutcomes = new int[PendingCandidateCapacity];
+                pendingBoxDistances = new float[PendingCandidateCapacity];
+                pendingContactLimits = new float[PendingCandidateCapacity];
+                pendingCommitted = new bool[PendingCandidateCapacity];
+                pendingCommitGains = new long[PendingCandidateCapacity];
+                pendingCommitLogFailures = new bool[PendingCandidateCapacity];
+                pendingClaimFailures = new int[PendingCandidateCapacity];
+                pendingResolveFailures = new int[PendingCandidateCapacity];
+                pendingClaimCountsAtFailure = new int[PendingCandidateCapacity];
                 pendingCandidateCount = 0;
                 candidateBuffersReady = true;
             }
@@ -1547,10 +1594,9 @@ namespace VRCKatamari.BallMotor
             Vector3 nextVelocity;
             Vector3 stepDisplacement;
             if (BallMotionMath.TryStep(inputForward, inputTurn, inputLateral,
-                headingDegrees, planarVelocity, dt, growthFraction, maxSpeedMps,
+                headingDegrees, planarVelocity, dt, CurrentSizeScale(), maxSpeedMps,
                 accelerationMps2, brakingMps2, frictionPerSecond,
-                turnRateDegreesPerSecond, maxLateralMps, growthSpeedFactor,
-                growthTurnFactor, out nextHeading, out nextVelocity, out stepDisplacement))
+                rollingResistanceMps2, lateralGripPerSecond, turnRateDegreesPerSecond, maxLateralMps, out nextHeading, out nextVelocity, out stepDisplacement))
             {
                 headingDegrees = nextHeading;
                 planarVelocity = nextVelocity;
@@ -1580,7 +1626,7 @@ namespace VRCKatamari.BallMotor
             EvaluatePendingCandidates(groundedCenter);
 
             // 6. GrowthLedgerMath: a decision becomes volume only through a commit.
-            CommitAcceptedAbsorbs();
+            CommitAcceptedAbsorbs(groundedCenter, supportNormal);
 
             // 7. SizeModelMath: the three sizes are a function of the confirmed
             //    volume, never an accumulation of it. The confirmed total is
@@ -1726,23 +1772,16 @@ namespace VRCKatamari.BallMotor
             //     carries the surface pair into stage 4 and the gravity state.
             ResolveTerrainSupport(sweptCenter);
 
-            // 3.6 Optional ramp downhill acceleration (PROVISIONAL, off by default).
-            //     The motion layer produced this step's displacement already, so a
-            //     non-zero scale takes effect from the next step (a 20 ms lag). At the
-            //     default scale 0 this block is skipped and the step is bit-for-bit the
-            //     P1 behaviour. The decision math lives in SupportSurfaceMath; this layer
-            //     only carries the velocity back.
-            if (terrainSupportEnabled && !isFalling && rampTangentialGravityScale > 0f &&
-                SupportSurfaceMath.IsRampSurfaceId(supportSurfaceId))
-            {
-                Vector3 slopeVelocity;
-                if (SupportSurfaceMath.TryApplyRampTangentialGravity(planarVelocity,
-                    supportSurfaceNormalWorld, gravityMps2, rampTangentialGravityScale, dt,
-                    maxSpeedMps, out slopeVelocity))
-                {
-                    planarVelocity = slopeVelocity;
-                }
-            }
+            // 3.6 Rest-then-slide downhill component (PROVISIONAL, BALL_INERTIA.md section 4).
+            //     The motion layer produced this step's displacement already, so the
+            //     added speed takes effect from the next step (a 20 ms lag). The latch
+            //     (RampSlideMath) opens only after the ball has been still for a moment on
+            //     a walkable slope with no push, and shuts on any push or when the ball
+            //     leaves the slope; a moving ball gets no extra downhill acceleration. The
+            //     acceleration is g * sin(slope) * scale * s (s = D / D0), the same in
+            //     diameters per second squared at every size. The decision math lives in
+            //     SupportSurfaceMath; this layer only carries the velocity back.
+            UpdateRampSlide(dt);
 
             // 4. GroundContactMath: support height and the normal-only correction.
             //
@@ -2298,7 +2337,8 @@ namespace VRCKatamari.BallMotor
                 terrainContacts ? terrainChunkStarts : null,
                 terrainContacts ? terrainChunkTriangleCounts : null,
                 terrainContacts ? terrainChunkZoneIds : null,
-                terrainContacts ? terrainChunkCount : 0);
+                terrainContacts ? terrainChunkCount : 0,
+                CurrentSizeScale());
             if (!solved)
             {
                 // Fail closed (design §2.8): keep the previous position, drop the velocity
@@ -2506,6 +2546,58 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// s = D / D0: the current semantic diameter over the START diameter. Every
+        /// length-type motion value, the climb gate and the slope slide acceleration scale
+        /// with it. 1 until the start size is known.
+        /// </summary>
+        private float CurrentSizeScale()
+        {
+            if (!KatamariMath.IsFiniteFloat(startSemanticDiameterWorldM) ||
+                startSemanticDiameterWorldM <= 0f) return 1f;
+            if (!KatamariMath.IsFiniteFloat(semanticDiameterWorldM) ||
+                semanticDiameterWorldM <= 0f) return 1f;
+            return semanticDiameterWorldM / startSemanticDiameterWorldM;
+        }
+
+        private void UpdateRampSlide(float dt)
+        {
+            float scale = CurrentSizeScale();
+            bool onSlope = false;
+            if (terrainSupportEnabled && !isFalling && !climbActive &&
+                supportSurfaceId != SupportSurfaceMath.NoSurfaceId)
+            {
+                float normalY = Mathf.Clamp(supportSurfaceNormalWorld.y, -1f, 1f);
+                float slopeDegrees = Mathf.Acos(normalY) * Mathf.Rad2Deg;
+                onSlope = slopeDegrees > rampSlideMinSlopeDegrees &&
+                    slopeDegrees <= maxSupportSlopeDegrees;
+            }
+            float planarSpeed = Mathf.Sqrt(planarVelocity.x * planarVelocity.x
+                + planarVelocity.z * planarVelocity.z);
+            float driveIntent = Mathf.Abs(inputForward) + Mathf.Abs(inputLateral);
+            float nextRest;
+            bool nextSliding;
+            if (!RampSlideMath.TryStepRestLatch(rampRestTimerSeconds, rampSliding,
+                planarSpeed, rampRestSpeedMps * scale, driveIntent, onSlope, dt,
+                rampRestSeconds, out nextRest, out nextSliding))
+            {
+                rampRestTimerSeconds = 0f;
+                rampSliding = false;
+                return;
+            }
+            rampRestTimerSeconds = nextRest;
+            rampSliding = nextSliding;
+            if (!rampSliding || rampTangentialGravityScale <= 0f) return;
+
+            Vector3 slopeVelocity;
+            if (SupportSurfaceMath.TryApplyRampTangentialGravity(planarVelocity,
+                supportSurfaceNormalWorld, gravityMps2 * scale, rampTangentialGravityScale, dt,
+                maxSpeedMps * scale, out slopeVelocity))
+            {
+                planarVelocity = slopeVelocity;
+            }
+        }
+
+        /// <summary>
         /// The motion layer's target speed and the direction the driver pushes in
         /// (design §3.2). The target speed is recomputed from the motion layer's own
         /// three inputs because BallMotionMath does not export it; the expression is its
@@ -2538,8 +2630,7 @@ namespace VRCKatamari.BallMotor
                 intentDirection = Vector3.zero;
             }
 
-            float growth = Mathf.Clamp(growthFraction, 0f, 1f);
-            float speedCap = maxSpeedMps * (1f - growthSpeedFactor * growth);
+            float speedCap = maxSpeedMps * CurrentSizeScale();
             float intent = Mathf.Abs(Mathf.Clamp(inputForward, -1f, 1f));
             speed = speedCap * intent;
             if (!KatamariMath.IsFiniteFloat(speed) || speed < 0f) speed = 0f;
@@ -3064,7 +3155,7 @@ namespace VRCKatamari.BallMotor
                 + contactDriveDirection.z * normalZ * inverse));
             float planarSpeed = Mathf.Sqrt(planarVelocity.x * planarVelocity.x
                 + planarVelocity.z * planarVelocity.z);
-            float vGate = Mathf.Max(planarSpeed, ContactTuning.KIntent * driveSpeed);
+            float vGate = ClimbMath.GateSpeed(planarSpeed, driveSpeed, CurrentSizeScale());
             if (pushIn >= ContactTuning.PMin &&
                 vGate >= ClimbMath.RequiredSpeed(
                     ObbContactMath.ContactAngleDeg(climbSurfaceNormalWorld))) return;
@@ -3795,70 +3886,27 @@ namespace VRCKatamari.BallMotor
 
         private void EvaluatePendingCandidates(Vector3 center)
         {
+            PickupAbsorbStepMath.EvaluatePendingCandidates(pendingAbsorbable, pendingKinds,
+                pendingSizes, pendingRotations, pendingPositions, pendingGrowthMm3,
+                pendingVolumeK, pendingCandidateCount, allowedKinds, allowedKindCount,
+                center, collisionRadiusWorldM, contactRadiusWorldM, semanticDiameterWorldM,
+                maxCollisionRadiusWorldM, pendingAccepted, pendingOutcomes,
+                pendingBoxDistances, pendingContactLimits);
             for (int i = 0; i < pendingCandidateCount; i++)
             {
-                pendingAccepted[i] = false;
-                // The size gate is the original's whole-millimetre rule, resolved inside the
-                // pickup layer from this candidate's own k and this step's semantic
-                // diameter, so it grows with the ball. semanticDiameterWorldM is the same
-                // reading the size stage derives and GetSemanticDiameterWorldM reports,
-                // while reach keeps using collisionRadiusWorldM.
-                //
-                // Ball contact v2 (design §4A.4): the pickup shape is a TRIGGER, so its
-                // reach along this candidate's direction replaces the sphere radius in the
-                // gate's reach and in nothing else. With the flag off the value is exactly
-                // collisionRadiusWorldM, i.e. the pre-v2 gate.
-                float reachRadius = collisionRadiusWorldM;
-                if (contactModelV2Enabled)
-                {
-                    Vector3 toCandidate = new Vector3(pendingPositions[i].x - center.x,
-                        pendingPositions[i].y - center.y, pendingPositions[i].z - center.z);
-                    float pickupReach;
-                    if (BallShapeMath.TryPickupReach(toCandidate, collisionRadiusWorldM,
-                        proxyDirections, contactNeedleSupports, RadialProxyMath.DirectionCount,
-                        out pickupReach))
-                    {
-                        reachRadius = pickupReach;
-                    }
-                }
-                AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorbWithValue(
-                    pendingAbsorbable[i], pendingKinds[i], allowedKinds, allowedKindCount,
-                    pendingSizes[i], pendingRotations[i], pendingPositions[i], center,
-                    reachRadius, contactRadiusWorldM, pendingVolumeK[i],
-                    semanticDiameterWorldM, maxCollisionRadiusWorldM, pendingGrowthMm3[i]);
-                // What the gate compared: the distance from the ball's centre to the item's
-                // box and its limit, from the pickup layer's own function (the same call the
-                // gate decides with). -1 is this file's invalid marker for geometry the gate
-                // refused as invalid input.
-                float boxDistance;
-                float contactLimit;
-                if (!PickupAbsorbMath.TryComputeContact(pendingSizes[i], pendingRotations[i],
-                    pendingPositions[i], center, reachRadius, contactRadiusWorldM,
-                    out boxDistance, out contactLimit))
-                {
-                    boxDistance = -1f;
-                    contactLimit = -1f;
-                }
-
+                AbsorbOutcome outcome = (AbsorbOutcome)pendingOutcomes[i];
+                float boxDistance = pendingBoxDistances[i];
                 if (debugTraceItemId != null && debugTraceItemId.Length > 0
                     && pendingItemIds[i] == debugTraceItemId
                     && traceLinesLogged < TraceLineLimit)
                 {
-                    // Data only. The host decides whether and how to print it: the box
-                    // distance and the limit the gate compared, for the traced item only.
                     traceLinesLogged = traceLinesLogged + 1;
                     traceLastBoxDistance = boxDistance;
-                    traceLastContactLimit = contactLimit;
+                    traceLastContactLimit = pendingContactLimits[i];
                     traceLastBallZ = center.z;
                     traceLastOutcome = (int)outcome;
                 }
-
-                if (outcome == AbsorbOutcome.Absorb)
-                {
-                    pendingAccepted[i] = true;
-                    LogAbsorbGapOnce(i, boxDistance, reachRadius);
-                }
-                else
+                if (!pendingAccepted[i])
                 {
                     RecordReject(pendingItemIds[i], (int)outcome, boxDistance);
                     LogRejectDiagnosticsOnce(i, outcome, center);
@@ -3874,48 +3922,36 @@ namespace VRCKatamari.BallMotor
         /// and a failed commit leaves every total untouched. The queue is compacted
         /// in place so no list or allocation is needed per step.
         /// </remarks>
-        private void CommitAcceptedAbsorbs()
+        private void CommitAcceptedAbsorbs(Vector3 contactCenter, Vector3 supportNormal)
         {
-            if (!hasLocalRow)
+            if (!PickupAbsorbStepMath.CommitAcceptedAbsorbs(hasLocalRow, pendingAccepted,
+                pendingItemIds, pendingGenerations, pendingGrowthMm3, pendingCandidateCount,
+                roundState, playerIds, confirmedVolumes, bankedScores, lifeStates,
+                respawnAtSet, respawnAt, playerGenerations, playerCount, commitItemIds,
+                commitGenerations, commitWinners, commitSequences, commitGains, ref commitCount,
+                claimItemIds, claimGenerations, claimPlayerIds, claimFrames,
+                claimRequestSequences, ref claimCount, predictedPlayerIds, predictedItemIds,
+                predictedGenerations, predictedGains, ref predictedCount, roundId,
+                localPlayerId, localRow, authorityFrame, ref absorbRequestSequence,
+                ref unbankedVolumeUnits, ref bankedScoreUnits, ref absorbedCount,
+                pendingCommitted, pendingCommitGains, pendingCommitLogFailures,
+                pendingClaimFailures, pendingResolveFailures, pendingClaimCountsAtFailure))
             {
-                // Silent before: with no local ledger row every accepted candidate is
-                // dropped without a commit, a reject or an absorb event.
-                LogCommitFailureOnce("(none)", 0, 0, 0, -1);
+                LogCommitFailureOnce("(none)", 0, 0, 0, -1, claimCount);
                 return;
             }
-            int write = 0;
-            for (int read = 0; read < pendingCandidateCount; read++)
+            for (int i = 0; i < pendingCandidateCount; i++)
             {
-                bool absorbed = false;
-                if (pendingAccepted[read])
-                {
-                    long gain;
-                    if (PickupAbsorbMath.TryAbsorbGrowthToLedgerGain(pendingGrowthMm3[read],
-                        out gain))
-                    {
-                        absorbed = TryCommitAbsorb(pendingItemIds[read],
-                            pendingGenerations[read], gain);
-                    }
-                    else
-                    {
-                        // Also silent before: a value the gain mapping refuses leaves
-                        // the candidate accepted-but-uncommitted forever.
-                        LogCommitFailureOnce(pendingItemIds[read], 0, 0, 0, -1);
-                    }
-                }
-                if (absorbed)
-                {
-                    absorbedCount = absorbedCount + 1;
-                    // Recorded only here, inside the branch where the ledger commit
-                    // returned true, so an event always corresponds to a total that
-                    // actually moved.
-                    RecordAbsorbedEvent(pendingItemIds[read], pendingPositions[read]);
-                    continue;
-                }
-                CompactPending(write, read);
-                write = write + 1;
+                if (pendingCommitLogFailures[i])
+                    LogCommitFailureOnce(pendingItemIds[i], pendingCommitGains[i],
+                        pendingClaimFailures[i], pendingResolveFailures[i], -1,
+                        pendingClaimCountsAtFailure[i]);
+                if (pendingCommitted[i]) RecordAbsorbedEvent(i, contactCenter, supportNormal);
             }
-            pendingCandidateCount = write;
+            PickupAbsorbStepMath.CompactPendingCandidates(pendingCommitted,
+                ref pendingCandidateCount, pendingAbsorbable, pendingKinds, pendingSizes,
+                pendingRotations, pendingPositions, pendingGrowthMm3, pendingVolumeK,
+                pendingItemIds, pendingGenerations, pendingAccepted, pendingSubmitTimes);
         }
 
         /// <summary>
@@ -3933,63 +3969,13 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         private void CompactPending(int write, int read)
         {
-            if (write == read) return;
-            pendingAbsorbable[write] = pendingAbsorbable[read];
-            pendingKinds[write] = pendingKinds[read];
-            pendingSizes[write] = pendingSizes[read];
-            pendingRotations[write] = pendingRotations[read];
-            pendingPositions[write] = pendingPositions[read];
-            pendingGrowthMm3[write] = pendingGrowthMm3[read];
-            pendingVolumeK[write] = pendingVolumeK[read];
-            pendingItemIds[write] = pendingItemIds[read];
-            pendingGenerations[write] = pendingGenerations[read];
-            pendingAccepted[write] = pendingAccepted[read];
-            pendingSubmitTimes[write] = pendingSubmitTimes[read];
+            PickupAbsorbStepMath.CopyPendingCandidate(write, read, pendingAbsorbable,
+                pendingKinds, pendingSizes, pendingRotations, pendingPositions, pendingGrowthMm3,
+                pendingVolumeK, pendingItemIds, pendingGenerations, pendingAccepted,
+                pendingSubmitTimes);
         }
 
-        private bool TryCommitAbsorb(string itemInstanceId, int generation, long gain)
-        {
-            absorbRequestSequence = absorbRequestSequence + 1;
-            int claimFailure;
-            if (!GrowthLedgerMath.TrySubmitClaimWithFailure(roundState, playerIds, lifeStates,
-                playerCount, commitItemIds, commitGenerations, commitCount, claimItemIds,
-                claimGenerations, claimPlayerIds, claimFrames, claimRequestSequences,
-                ref claimCount, roundId, roundId, itemInstanceId, generation,
-                localPlayerId, authorityFrame, absorbRequestSequence, out claimFailure))
-            {
-                LogCommitFailureOnce(itemInstanceId, gain, claimFailure, 0, -1);
-                return false;
-            }
 
-            int commitRow;
-            if (!GrowthLedgerMath.TryResolveClaims(roundState, playerIds, confirmedVolumes,
-                bankedScores, lifeStates, respawnAtSet, respawnAt, playerGenerations,
-                playerCount, commitItemIds, commitGenerations, commitWinners,
-                commitSequences, commitGains, ref commitCount, claimItemIds,
-                claimGenerations, claimPlayerIds, claimFrames, claimRequestSequences,
-                ref claimCount, predictedPlayerIds, predictedItemIds,
-                predictedGenerations, predictedGains, ref predictedCount, roundId, roundId,
-                itemInstanceId, generation, gain, out commitRow))
-            {
-                LogCommitFailureOnce(itemInstanceId, gain, 0, 1, -1);
-                return false;
-            }
-            if (commitRow == GrowthLedgerMath.NoRow)
-            {
-                // TryResolveClaims reports success with NoRow when no claim matched the
-                // event. Treating that as a commit would be a silent non-absorb: no
-                // event, no reject, candidate stays queued. Logged as commitRow=-1.
-                LogCommitFailureOnce(itemInstanceId, gain, 0, 0, -1);
-                return false;
-            }
-
-            long confirmed = confirmedVolumes[localRow];
-            long banked = bankedScores[localRow];
-            if (confirmed < 0 || banked < 0) return false;
-            unbankedVolumeUnits = confirmed;
-            bankedScoreUnits = banked;
-            return true;
-        }
 
         /// <summary>
         /// Stage 7: re-derives the three sizes and the growth fraction.
@@ -4000,21 +3986,9 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         private void DeriveSize()
         {
-            float coreRadius;
-            float collisionRadius;
-            float semanticDiameter;
-            long effectiveConfirmedMm3;
-            if (!SizeModelMath.TryDerive(startVolumeMm3, confirmedVolumeMm3,
-                maxBallDiameterM, collisionToCoreRadiusRatio,
-                semanticDiameterPerCoreDiameter, out coreRadius, out collisionRadius,
-                out semanticDiameter, out effectiveConfirmedMm3))
-            {
-                return;
-            }
-            coreRadiusWorldM = coreRadius;
-            collisionRadiusWorldM = collisionRadius;
-            semanticDiameterWorldM = semanticDiameter;
-            DeriveGrowthFraction();
+            PickupAbsorbStepMath.DeriveSize(startVolumeMm3, confirmedVolumeMm3,
+                maxBallDiameterM, collisionToCoreRadiusRatio, semanticDiameterPerCoreDiameter,
+                ref coreRadiusWorldM, ref collisionRadiusWorldM, ref semanticDiameterWorldM);
         }
 
         /// <summary>
@@ -4039,31 +4013,10 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         private void RecomputeConfirmedAndSize()
         {
-            // Integer addition, exactly: the ledger mirror plus the already-scored carry.
-            confirmedVolumeMm3 = unbankedVolumeUnits + carriedVolumeMm3;
-            DeriveSize();
-        }
-
-        /// <summary>
-        /// The one feedback value Docs/Design/BallMotion/README.md assigns to the
-        /// assembly layer: the already-clamped growth fraction the motion layer
-        /// derates its caps with. The mapping itself stays its own helper so the
-        /// radius relationship exists in exactly one place.
-        /// </summary>
-        private void DeriveGrowthFraction()
-        {
-            float capCoreRadius = (0.5f * maxBallDiameterM) / semanticDiameterPerCoreDiameter;
-            float span = capCoreRadius - baseCoreRadiusWorldM;
-            if (span <= 0f)
-            {
-                growthFraction = 0f;
-                return;
-            }
-            float fraction = (coreRadiusWorldM - baseCoreRadiusWorldM) / span;
-            if (!KatamariMath.IsFiniteFloat(fraction)) return;
-            if (fraction < 0f) fraction = 0f;
-            if (fraction > 1f) fraction = 1f;
-            growthFraction = fraction;
+            PickupAbsorbStepMath.RecomputeConfirmedAndSize(unbankedVolumeUnits, carriedVolumeMm3,
+                startVolumeMm3, maxBallDiameterM, collisionToCoreRadiusRatio,
+                semanticDiameterPerCoreDiameter, ref confirmedVolumeMm3, ref coreRadiusWorldM,
+                ref collisionRadiusWorldM, ref semanticDiameterWorldM);
         }
 
         private void UpdateFollowRig(Vector3 center, float dt)
@@ -4235,7 +4188,6 @@ namespace VRCKatamari.BallMotor
             coreRadiusWorldM = resetCoreRadius;
             collisionRadiusWorldM = resetCollisionRadius;
             semanticDiameterWorldM = resetSemanticDiameter;
-            DeriveGrowthFraction();
 
             inputForward = 0f;
             inputTurn = 0f;
@@ -6498,17 +6450,12 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// How far the pickup trigger reaches along the heading, metres. This is a TRIGGER
-        /// reach only: it never blocks, pushes or supports (design §4A.4).
+        /// The pickup sphere's radius, metres, independent of heading and rolling pins.
+        /// The contact margin is reported separately by GetContactRadiusWorldM.
         /// </summary>
         public float GetPickupReachWorldM()
         {
-            Vector3 direction = HeadingDirection();
-            float reach;
-            if (!BallShapeMath.TryPickupReach(direction, collisionRadiusWorldM,
-                proxyDirections, contactNeedleSupports, RadialProxyMath.DirectionCount,
-                out reach)) return collisionRadiusWorldM;
-            return reach;
+            return collisionRadiusWorldM;
         }
 
         /// <summary>True when the last growth push-out could not be applied (design §4.2).</summary>
@@ -6910,72 +6857,15 @@ namespace VRCKatamari.BallMotor
         public bool AttachRadialProxy(string itemInstanceId, Vector3 bounds,
             Vector3 ballLocalCenter, Quaternion ballLocalRotation)
         {
-            if (proxyEndpointPool == null)
-            {
-                RecordProxySkip(ProxySkipInvalidInput);
-                return false;
-            }
-            if (itemInstanceId == null || itemInstanceId.Length == 0)
-            {
-                RecordProxySkip(ProxySkipInvalidInput);
-                return false;
-            }
-            for (int i = 0; i < proxyItemCount; i++)
-            {
-                if (string.CompareOrdinal(proxyItemKeys[i], itemInstanceId) == 0) return true;
-            }
-            if (!KatamariMath.IsFiniteVector(bounds) || bounds.x < 0f || bounds.y < 0f ||
-                bounds.z < 0f)
-            {
-                RecordProxySkip(ProxySkipInvalidInput);
-                return false;
-            }
-            if (!KatamariMath.IsFiniteVector(ballLocalCenter) ||
-                !RadialProxyMath.IsUnitRotation(ballLocalRotation))
-            {
-                RecordProxySkip(ProxySkipInvalidInput);
-                return false;
-            }
-            if (!KatamariMath.IsFiniteFloat(coreRadiusWorldM) || coreRadiusWorldM < 0f)
-            {
-                RecordProxySkip(ProxySkipInvalidInput);
-                return false;
-            }
-
-            float farthestDistance;
-            if (!RadialProxyShellMath.TryBuildAabbCorners(ballLocalCenter, ballLocalRotation,
-                bounds, proxyCorners, out farthestDistance))
-            {
-                RecordProxySkip(ProxySkipInvalidInput);
-                return false;
-            }
-            float minProtrusion = minProxyProtrusionM;
-            if (!KatamariMath.IsFiniteFloat(minProtrusion) || minProtrusion < 0f) minProtrusion = 0f;
-            if (farthestDistance <= coreRadiusWorldM + minProtrusion)
-            {
-                RecordProxySkip(ProxySkipInsideCore);
-                return false;
-            }
-            if (proxyItemCount >= ProxyItemCapacity)
-            {
-                RecordProxySkip(ProxySkipPoolFull);
-                return false;
-            }
-            if (proxyEndpointCount > ProxyEndpointCapacity - RadialProxyShellMath.AabbCornerCount)
-            {
-                RecordProxySkip(ProxySkipPoolFull);
-                return false;
-            }
-            if (!RadialProxyShellMath.TryAttachItem(proxyDirections, proxySupports,
-                proxyEndpointPool, ref proxyEndpointCount, proxyItemStarts, proxyItemLengths,
-                proxyItemKeys, proxyItemIsCandidate, ref proxyItemCount, proxyCandidateKeys,
-                ref proxyCandidateCount, proxyAffectedIndices, proxySolveScratch, itemInstanceId,
-                proxyCorners, RadialProxyShellMath.AabbCornerCount, false))
-            {
-                RecordProxySkip(ProxySkipShellRefused);
-                return false;
-            }
-            return true;
+            int skipReason;
+            bool attached = AttachmentStepMath.TryAttachRadialProxy(itemInstanceId, bounds,
+                ballLocalCenter, ballLocalRotation, coreRadiusWorldM, minProxyProtrusionM,
+                proxyDirections, proxySupports, proxyEndpointPool, ref proxyEndpointCount,
+                proxyItemStarts, proxyItemLengths, proxyItemKeys, proxyItemIsCandidate,
+                ref proxyItemCount, proxyCandidateKeys, ref proxyCandidateCount,
+                proxyAffectedIndices, proxySolveScratch, proxyCorners, out skipReason);
+            if (!attached) RecordProxySkip(skipReason);
+            return attached;
         }
 
         /// <summary>
@@ -7562,17 +7452,19 @@ namespace VRCKatamari.BallMotor
         /// time the event is read (Docs/Design/StoryMode/README.md).
         /// </para>
         /// </remarks>
-        private void RecordAbsorbedEvent(string itemId, Vector3 position)
+        private void RecordAbsorbedEvent(int pendingIndex, Vector3 contactCenter,
+            Vector3 supportNormal)
         {
-            if (absorbedEventItemIds == null) return;
-            int slot = absorbedEventCount % AbsorbedEventCapacity;
-            absorbedEventItemIds[slot] = itemId;
-            absorbedEventPositions[slot] = position;
-            absorbedEventCount = absorbedEventCount + 1;
-            if (absorbedEventRingCount < AbsorbedEventCapacity)
-            {
-                absorbedEventRingCount = absorbedEventRingCount + 1;
-            }
+            int eventIndex = absorbedEventCount;
+            AttachmentStepMath.RecordAbsorbedEvent(pendingItemIds[pendingIndex],
+                pendingPositions[pendingIndex], pendingRotations[pendingIndex], ballCenterWorld,
+                visualRollRotation, contactCenter, supportNormal, coreRadiusWorldM,
+                collisionRadiusWorldM, contactRadiusWorldM, discontinuous, maxRollDisplacementM,
+                authorityFrame, absorbedEventItemIds, absorbedEventPositions,
+                absorbedEventLocalPositions, absorbedEventLocalRotations, absorbedEventBallCenters,
+                absorbedEventCollisionRadii, absorbedEventContactRadii, absorbedEventSteps,
+                absorbedEventPoseValid, ref absorbedEventCount, ref absorbedEventRingCount);
+            if (absorbedEventItemIds != null) LogAbsorbGapOnce(pendingIndex, contactCenter, eventIndex);
         }
 
         /// <summary>
@@ -7622,6 +7514,22 @@ namespace VRCKatamari.BallMotor
             return id;
         }
 
+        /// <summary>
+        /// Reads one retained contact-frame payload atomically. Invalid/evicted events
+        /// fail closed: no caller may fall back to the ball's current pose.
+        /// </summary>
+        public bool TryGetAbsorbedEventAttachment(int absoluteIndex, out Vector3 localPosition,
+            out Quaternion localRotation, out Vector3 contactCenter, out float collisionRadius,
+            out float contactRadius, out int delaySteps)
+        {
+            return AttachmentStepMath.TryReadAbsorbedEventAttachment(absoluteIndex, authorityFrame,
+                absorbedEventItemIds, absorbedEventLocalPositions, absorbedEventLocalRotations,
+                absorbedEventBallCenters, absorbedEventCollisionRadii, absorbedEventContactRadii,
+                absorbedEventSteps, absorbedEventPoseValid, absorbedEventCount, absorbedEventRingCount,
+                out localPosition, out localRotation, out contactCenter, out collisionRadius,
+                out contactRadius, out delaySteps);
+        }
+
         public Vector3 GetAbsorbedEventPosition(int absoluteIndex)
         {
             int slot = AbsorbedEventSlot(absoluteIndex);
@@ -7630,25 +7538,30 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Prints, for the first <c>AbsorbGapLogLimit</c> accepted candidates, how far the
-        /// item's box was from the ball's surface when the gate accepted it.
+        /// Prints, for the first <c>AbsorbGapLogLimit</c> committed events, the item's
+        /// signed gap to the accepting step's collision sphere plus contact margin.
         /// </summary>
         /// <remarks>
-        /// <c>boxGapMm = (boxDistance - contact radius) * 1000</c>: the gate accepts iff it is
-        /// at most <c>contactRadiusWorldM</c> (0 by default), so a positive number here is a
-        /// bug and a negative one is how far the ball had already travelled into the box
-        /// since the previous step. Rate-limited for the whole run so a long round cannot
-        /// flood the console.
+        /// <c>boxGapMm = (boxDistance - collisionRadius - contactRadius) * 1000</c>.
+        /// The shared AttachmentMath adapter evaluates the gate's geometry. A committed
+        /// event must report a non-positive gap; the host measures the frozen local pose
+        /// against these same captured radii and pairs it by event index. Rate-limited
+        /// for the whole run so a long round cannot flood the console.
         /// </remarks>
-        private void LogAbsorbGapOnce(int index, float boxDistance, float ballRadius)
+        private void LogAbsorbGapOnce(int index, Vector3 contactCenter, int eventIndex)
         {
             if (absorbGapLogged >= AbsorbGapLogLimit) return;
+            float gap;
+            if (!AttachmentMath.TryComputeBoxGap(pendingSizes[index], pendingRotations[index],
+                pendingPositions[index], contactCenter, collisionRadiusWorldM,
+                contactRadiusWorldM, out gap)) return;
             absorbGapLogged = absorbGapLogged + 1;
             Debug.Log("[BallMotor] absorb-gap#" + absorbGapLogged
                 + " id=" + pendingItemIds[index]
-                + " boxGapMm=" + ((boxDistance - ballRadius) * 1000f).ToString("F1")
+                + " event=" + eventIndex + " absorbStep=" + authorityFrame
+                + " boxGapMm=" + (gap * 1000f).ToString("F1")
                 + " contactMm=" + (contactRadiusWorldM * 1000f).ToString("F1")
-                + " ballR=" + ballRadius);
+                + " ballR=" + collisionRadiusWorldM);
         }
 
         /// <summary>
@@ -7841,10 +7754,11 @@ namespace VRCKatamari.BallMotor
         /// props in range". claimFailure is the failure code from
         /// GrowthLedgerMath.TrySubmitClaimWithFailure (1..11, 0 when the claim was
         /// accepted); resolveFailure is 1 when TryResolveClaims itself refused, and
-        /// commitRow -1 marks the "success but no commit row" case.
+        /// commitRow -1 marks the "success but no commit row" case; claimCountAtFailure
+        /// is the claim count when the refused row failed.
         /// </remarks>
         private void LogCommitFailureOnce(string itemId, long gain, int claimFailure,
-            int resolveFailure, int commitRow)
+            int resolveFailure, int commitRow, int claimCountAtFailure)
         {
             if (commitDiagnosticsLogged >= commitDiagnosticsLimit) return;
             commitDiagnosticsLogged = commitDiagnosticsLogged + 1;
@@ -7861,7 +7775,7 @@ namespace VRCKatamari.BallMotor
                 + " commitRow=" + commitRow
                 + " phase=" + phase
                 + " life=" + life
-                + " claimCount=" + claimCount);
+                + " claimCount=" + claimCountAtFailure);
         }
 
         /// <summary>
@@ -7965,13 +7879,8 @@ namespace VRCKatamari.BallMotor
         /// </summary>
         private int AbsorbedEventSlot(int absoluteIndex)
         {
-            if (absorbedEventItemIds == null) return -1;
-            if (absoluteIndex < 0) return -1;
-            if (absoluteIndex >= absorbedEventCount) return -1;
-            int retained = absorbedEventRingCount;
-            int firstRetained = absorbedEventCount - retained;
-            if (absoluteIndex < firstRetained) return -1;
-            return absoluteIndex % AbsorbedEventCapacity;
+            return AttachmentStepMath.AbsorbedEventSlot(absoluteIndex, absorbedEventItemIds,
+                absorbedEventCount, absorbedEventRingCount);
         }
     }
 }

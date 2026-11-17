@@ -49,6 +49,18 @@ namespace VRCKatamari.Riding
     /// Resets restore the seat's authored local position, so a refused or unmeasured ride
     /// leaves the scene exactly as authored rather than at a half-applied offset.
     /// </para>
+    /// <para>
+    /// A rider whose size follows the ball (<see cref="BallRideStation"/>, RIDE_GEOMETRY.md
+    /// section 3) is measured ONCE, at the eye height it had then, and from then on the seat
+    /// is computed, not measured: VRChat scales the avatar uniformly about its root, so the
+    /// seated head offset is that one measurement per metre of eye height times the current
+    /// eye height (<see cref="ApplyEyeHeight"/>). That keeps the "measure once, then frozen"
+    /// rule that makes VR comfortable (a seat that chased the head every frame would drag the
+    /// world around) while the person grows. The limits and the plausibility rail are
+    /// scaled by the same factor, because a 23 m rider's seated head is 11 m above the seat.
+    /// The uniform-scaling assumption is the one thing to verify on a real client
+    /// (<see cref="GetCurrentEyeErrorMeters"/> reads the live error).
+    /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class SeatEyeCompensation : UdonSharpBehaviour
@@ -141,6 +153,14 @@ namespace VRCKatamari.Riding
         private int lastRefusal;
         private int startRefusal;
 
+        // Rider size. currentEyeHeight is what the station last told us the avatar's eye height
+        // is (zero: unscaled, absolute limits). The measurement is taken at measureEyeHeight and
+        // yields headPerEyeHeight, the rig-frame head offset per metre of eye height.
+        private float currentEyeHeight;
+        private float measureEyeHeight;
+        private Vector3 headPerEyeHeight;
+        private bool hasUnitHead;
+
         private VRCPlayerApi localPlayer;
 
         private void Start()
@@ -156,6 +176,10 @@ namespace VRCKatamari.Riding
             measuredEyeAboveSeatMeters = 0f;
             uncompensatedMeters = 0f;
             lastEyeErrorMeters = 0f;
+            currentEyeHeight = 0f;
+            measureEyeHeight = 0f;
+            headPerEyeHeight = Vector3.zero;
+            hasUnitHead = false;
             lastRefusal = RefusalNone;
             startRefusal = RefusalNone;
             localPlayer = Networking.LocalPlayer;
@@ -221,6 +245,7 @@ namespace VRCKatamari.Riding
             measuredEyeAboveSeatMeters = 0f;
             uncompensatedMeters = 0f;
             lastEyeErrorMeters = 0f;
+            hasUnitHead = false;
             state = StateSettling;
 
             if (logResults)
@@ -248,6 +273,10 @@ namespace VRCKatamari.Riding
             sampleSum = Vector3.zero;
             measuredHeadInRigMeters = Vector3.zero;
             seatOffsetMeters = Vector3.zero;
+            currentEyeHeight = 0f;
+            measureEyeHeight = 0f;
+            headPerEyeHeight = Vector3.zero;
+            hasUnitHead = false;
             if (seatAnchor != null && startRefusal == RefusalNone)
             {
                 seatAnchor.localPosition = authoredLocalPosition;
@@ -302,6 +331,86 @@ namespace VRCKatamari.Riding
             return lastRefusal;
         }
 
+        /// <summary>
+        /// Tells the seat the avatar's eye height, metres (zero: the avatar is not scaled by
+        /// this world, absolute limits). Call it BEFORE <see cref="BeginSeated"/> so the
+        /// measurement knows what size it was taken at, and do not change the eye height while
+        /// <see cref="IsMeasuring"/>: a measurement across a size change is meaningless.
+        /// </summary>
+        public void SetEyeHeight(float eyeHeightMeters)
+        {
+            if (!KatamariMath.IsFiniteFloat(eyeHeightMeters) || eyeHeightMeters <= 0f)
+            {
+                currentEyeHeight = 0f;
+                return;
+            }
+            currentEyeHeight = eyeHeightMeters;
+        }
+
+        /// <summary>True from <see cref="BeginSeated"/> until the seat has locked (or refused).</summary>
+        public bool IsMeasuring()
+        {
+            return state == StateSettling || state == StateSampling || state == StateApplying;
+        }
+
+        /// <summary>True once a measurement has locked and the seat can follow the eye height.</summary>
+        public bool IsTracking()
+        {
+            return state == StateLocked && hasUnitHead;
+        }
+
+        /// <summary>
+        /// The measured seated head height above the seat over the eye height it was measured
+        /// at, i.e. this avatar's own seated-eye ratio. Zero until a measurement locked with a
+        /// known eye height.
+        /// </summary>
+        public float GetSeatedEyeRatio()
+        {
+            return hasUnitHead ? headPerEyeHeight.y : 0f;
+        }
+
+        /// <summary>
+        /// The avatar's eye height changed (the station just asked VRChat for it): move the
+        /// seat to where the one measurement says the seat must be at this size, immediately.
+        /// False when there is no measurement yet to scale.
+        /// </summary>
+        public bool ApplyEyeHeight(float eyeHeightMeters)
+        {
+            if (!IsTracking()) return false;
+            if (!KatamariMath.IsFiniteFloat(eyeHeightMeters) || eyeHeightMeters <= 0f) return false;
+            currentEyeHeight = eyeHeightMeters;
+            Vector3 head = headPerEyeHeight * eyeHeightMeters;
+            float scale = SeatEyeMath.LimitScaleForEyeHeight(eyeHeightMeters);
+            Vector3 applied;
+            float uncompensated;
+            float residual;
+            int reason;
+            if (!SeatEyeMath.TryComputeSeatOffset(head, seatOffsetMeters,
+                verticalLimitMeters * scale, horizontalLimitMeters * scale, verticalOnly, 0f,
+                0f, true, out applied, out uncompensated, out residual, out reason))
+            {
+                Refuse(RefusalMath, "scale:" + reason);
+                return false;
+            }
+            seatOffsetMeters = applied;
+            uncompensatedMeters = uncompensated;
+            WriteSeat();
+            return true;
+        }
+
+        /// <summary>
+        /// The distance from the local head to the eye point right now, metres; negative when
+        /// the head datum cannot be read. The live check of the uniform-scaling assumption: it
+        /// should stay near zero while the rider grows, and the number an acceptance run logs.
+        /// </summary>
+        public float GetCurrentEyeErrorMeters()
+        {
+            if (startRefusal != RefusalNone || followRigRoot == null) return -1f;
+            Vector3 headWorld;
+            if (!TryReadHeadPosition(out headWorld)) return -1f;
+            return Vector3.Distance(headWorld, followRigRoot.position);
+        }
+
         // LateUpdate, not Update: the motor writes the rig pose in Update, so the rig is at
         // this frame's eye point before the seat is placed relative to it.
         private void LateUpdate()
@@ -354,7 +463,7 @@ namespace VRCKatamari.Riding
 
             float plausibility = Mathf.Sqrt(headInRig.x * headInRig.x +
                 headInRig.y * headInRig.y + headInRig.z * headInRig.z);
-            if (!SeatEyeMath.IsPlausibleHeadDistance(plausibility))
+            if (!SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(plausibility, currentEyeHeight))
             {
                 // Refused instead of clamped: this is the wrong datum, and a clamped offset
                 // from a wrong datum is still a wrong offset.
@@ -374,6 +483,9 @@ namespace VRCKatamari.Riding
                 return;
             }
             measuredHeadInRigMeters = mean;
+            measureEyeHeight = currentEyeHeight;
+            hasUnitHead = measureEyeHeight > 0f;
+            headPerEyeHeight = hasUnitHead ? mean * (1f / measureEyeHeight) : Vector3.zero;
             applyFrames = 0;
             state = StateApplying;
         }
@@ -390,8 +502,10 @@ namespace VRCKatamari.Riding
             bool snap = filterHz <= 0f;
             // Sampling is over: the measurement is frozen, so a VR head that keeps moving
             // cannot drag the seat (and the world) around every frame.
+            float limitScale = SeatEyeMath.LimitScaleForEyeHeight(measureEyeHeight);
             if (!SeatEyeMath.TryComputeSeatOffset(measuredHeadInRigMeters, seatOffsetMeters,
-                verticalLimitMeters, horizontalLimitMeters, verticalOnly, filterHz,
+                verticalLimitMeters * limitScale, horizontalLimitMeters * limitScale,
+                verticalOnly, filterHz,
                 Time.deltaTime, snap, out applied, out uncompensated, out residual, out reason))
             {
                 Refuse(RefusalMath, "apply:" + reason);

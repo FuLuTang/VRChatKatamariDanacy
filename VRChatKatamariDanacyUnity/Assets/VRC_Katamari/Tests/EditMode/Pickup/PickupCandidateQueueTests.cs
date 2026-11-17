@@ -12,7 +12,7 @@ namespace VRCKatamari.Tests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The defect (reference run R28, 0.222 m start ball): the four slots were held by props
+    /// The defect (0.222 m start ball): the four slots were held by props
     /// the size gate refused on every step (a 1.76 m onigiri, a wallet needing 246 mm, a
     /// 397 mm crab) while smaller props lying inside the same radius could not get in, so
     /// 20 props the ball had touched were never absorbed. The selection must therefore skip a
@@ -101,7 +101,7 @@ namespace VRCKatamari.Tests
         [Test]
         public void TheNearestFourBeingTooBigDoNotKeepASmallPropOutOfTheSelection()
         {
-            // R28: four near props the ball cannot take, small ones further out.
+            // Four near props the ball cannot take, small ones further out.
             float[] distances = { 0.3f, 0.4f, 0.5f, 0.6f, 0.9f, 1.1f, 1.3f };
             Vector3[] sizes = { BigProp, BigProp, BigProp, BigProp, SmallProp, SmallProp, SmallProp };
 

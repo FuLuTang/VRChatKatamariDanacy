@@ -445,6 +445,59 @@ namespace VRCKatamari.Hub
             return framesSinceRequest >= retryIntervalFrames;
         }
 
+        /// <summary>No usable arrival point: neither the seat nor the level entry.</summary>
+        public const int ArrivalNone = 0;
+
+        /// <summary>The player is sent to the ball's seat transform.</summary>
+        public const int ArrivalSeat = 1;
+
+        /// <summary>The player is sent to the level's authored entry (its player start).</summary>
+        public const int ArrivalEntry = 2;
+
+        /// <summary>
+        /// How far the authored entry may be from the ball's seat and still be trusted.
+        /// A player start sits a couple of metres behind the ball; the 2026-11-16 run had an
+        /// entry 14.5 m from the ball, in the void.
+        /// </summary>
+        public const float DefaultEntryTrustMeters = 12f;
+
+        /// <summary>
+        /// Where a start sends the player: the level's authored entry when it is near the
+        /// ball, else the ball's seat, else nothing.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The entry is the level's player start (the importer's <c>Markers/PlayerSpawn</c>:
+        /// on the floor, behind the ball, facing it), so it is the right landing spot and it
+        /// does not move when a retry puts the ball back. The seat is kept as the fallback
+        /// because it is always next to the ball. The guard is the distance between the two:
+        /// an entry that is far from the ball it belongs to is a wiring mistake, and the seat
+        /// is the safe answer then. A negative or non-finite distance (no way to measure it)
+        /// also falls back to the seat. A non-positive trust radius means "use the default".
+        /// </para>
+        /// <para>
+        /// With no seat at all (no station wired, or auto-seat off) the entry is the only
+        /// destination and is used without a distance check - there is nothing to compare it
+        /// with, and it is what the scene says.
+        /// </para>
+        /// </remarks>
+        public static int ChooseArrival(bool seatAvailable, bool entryAvailable,
+            float entryToSeatMeters, float trustMeters)
+        {
+            if (!entryAvailable) return seatAvailable ? ArrivalSeat : ArrivalNone;
+            if (!seatAvailable) return ArrivalEntry;
+
+            if (!KatamariMath.IsFiniteFloat(entryToSeatMeters) || entryToSeatMeters < 0f)
+            {
+                return ArrivalSeat;
+            }
+            if (!KatamariMath.IsFiniteFloat(trustMeters) || trustMeters <= 0f)
+            {
+                trustMeters = DefaultEntryTrustMeters;
+            }
+            return entryToSeatMeters <= trustMeters ? ArrivalEntry : ArrivalSeat;
+        }
+
         /// <summary>One English phrase per reason code, for the launcher's log lines.</summary>
         public static string DescribeReason(int reason)
         {

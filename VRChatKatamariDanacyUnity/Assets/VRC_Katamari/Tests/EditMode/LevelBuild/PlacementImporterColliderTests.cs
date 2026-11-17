@@ -9,9 +9,9 @@ namespace VRCKatamari.Tests
     /// <summary>
     /// Pins the JsonUtility presence rule for <c>defs[].collider</c>: an absent block is
     /// materialised as a default <c>ColliderEntry</c> with an empty type, and must NOT be
-    /// treated as declared. The O6 re-import produced 44
-    /// <c>collider.type must be box/sphere/capsule/convex (got '')</c> errors because the
-    /// importer tested <c>collider != null</c>.
+    /// treated as declared. Testing <c>collider != null</c> would report
+    /// <c>collider.type must be box/sphere/capsule/convex (got '')</c> for every def without
+    /// a collider.
     /// </summary>
     /// <remarks>
     /// Reflection, like the other importer tests: <c>PlacementImporter</c> lives in the

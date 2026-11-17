@@ -49,7 +49,7 @@
 
 | # | 判据 | A（自写扫掠） | B（PhysX 查询） |
 |---|---|---|---|
-| 1 | **球的形状能不能表达** | 能。球的碰撞外形是 16 方向径向壳 + 最多 4 个长物件角点（`RadialProxyShellMath`；16 向表只是摘要，端点云才是精确输入），球长大时外形跟着变 | **不能**。`SphereCast` 只能投一个**球**（或胶囊/盒）。合同 §3.3 的 C 阶段（「代理实际影响运动」）在 B 下**永远做不到**，只能退化回球形 —— 这正是用户说的「球体物理本身就是核心技术」要保住的东西 |
+| 1 | **球的形状能不能表达** | 能。球的滚动外形是 16 根针（径向壳：每件吸附物的角点在各针方向取 max；`RadialProxyShellMath`），v1 取针尖进接地求解，球长大时外形跟着变 | **不能**。`SphereCast` 只能投一个**球**（或胶囊/盒）。合同 §3.3 的 C 阶段（「代理实际影响运动」）在 B 下**永远做不到**，只能退化回球形 —— 这正是用户说的「球体物理本身就是核心技术」要保住的东西 |
 | 2 | **一次查询能拿到多少信息** | TOI、最终位置、剩余位移、滑向、卡住、`stuck`、每条接触的**中心/法线/时间/障碍下标/穿透深度**；墙面去速只吃这些 | 命中点、法线、距离。**多接触同时求解**（墙角楔住、`ProjectionPasses = 4` 的迭代投影）没有对应物 —— 要的话得在 PhysX 命中之上**再写一个求解器**，等于两份权威 |
 | 3 | **确定性 / 权威** | 自有固定步（`fixedStepSeconds = 0.02`、`maxStepsPerFrame = 5`）+ 纯函数 + float32；同一起始状态与同一 dt 序列可复现（README 已声明不承诺跨平台逐位一致） | 结果是 PhysX 场景状态的函数：物理步长不是我们的、`autoSyncTransforms` 由**工程设置**决定（不是我们能改的），而我们**用写 Transform 的方式移动球**——查询要么看到上一物理步的位置，要么依赖 `Physics.SyncTransforms()`（暴露未验）。跨端（PC/Quest）一致性更无法承诺 |
 | 4 | **与「吸附物只是视觉、不做刚体外壳」** | 一致：吸附物只喂径向壳端点，**不产生 Collider**（合同 §2「不要让动态 MeshCollider 成为所有附着物的真实刚体外壳」） | 冲突：要让吸附物影响碰撞就得给它 Collider（合同明令反对），或者继续用径向壳 → 于是 B 只覆盖「地形」，球与地形的接触又变成两套几何 |
@@ -122,7 +122,7 @@
 | F8 | 视觉滚动吃**地面法线**：`VisualRollMath.TryAdvanceRotation(rotation, displacement, groundNormal, …)` —— 坡上必须换成支撑面法线，否则滚轴是错的 | `StepBall` 第 8 段 |
 | F9 | **P1 之前**没有重力、没有切向加速度：`planarVelocity` 是 XZ，`y` 恒 0；「下落」只是 `GroundContactMath` 的 `maxDropPerStep = 0.1` 钳位。**P1 起竖直重力生效**（9.81 m/s²，只在失去支撑时作用；§8.1）。**P3 起切向重力是可配置字段 `rampTangentialGravityScale`，默认 0（= 不存在）** | `BallMotionMath.TryStep`、`maxDropPerStep`、`SupportSurfaceMath.TryApplyRampTangentialGravity`、§8.1 |
 | F10 | 挡路盒由宿主**整批替换**，来源是玩法体积 `propBounds`，谓词是 `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bounds, limit)`；`limit` 由电机 `GetAbsorbVolumeLimitWorldM3()` 给 | `PickupFieldHost.UpdateBlockingProps`、`SetBlockingBoxes` |
-| F11 | 球的「最低点」由径向壳决定：`RadialProxyShellMath.TryBuildContactPoints(coreRadius, protrusionCap, endpointPool, endpointCount, localProxyPoints)`，点是从球心出发的**局部偏移**，世界点 = `center + Q·p` | 同上（并行代理在改这一带） |
+| F11 | 球的「最低点」由径向壳决定：`RadialProxyShellMath.TryBuildPinTips(coreRadius, protrusionCap, directions, supports, localProxyPoints, out count)`（16 根针的针尖），点是从球心出发的**局部偏移**，世界点 = `center + Q·p` | 同上（并行代理在改这一带） |
 | F12 | 全仓运行时代码 **0 处** `Physics.` / `Rigidbody`（唯一 `SphereCollider` 在 `Labs/StationPlatform/StationPlatformLab.unity`） | `grep -rn "Physics\.\|Rigidbody" Runtime/ Labs/` = 0 命中 |
 | F13 | 台阶数据**已经在数据侧**：`scale.max_step_height_over_ball_diameter = 0.25`、`scale.max_route_step_m = 0.05`、`scale.max_traversable_slope_percent = 12.0`；校验器按「台阶高 ≤ 0.25 × 球径」判 `climb_step` | `Docs/Design/Maps/PicnicLawn/layout.json`、`Tools/mapbuild/validate_map.py` |
 | F14 | 但运行时**没有任何一处读 0.25**：`climb_step` 今天只是作者注记（PICNIC §3.5.1、§4.3 G1） | 全文 0 处消费方；本文是第一个 |

@@ -535,6 +535,7 @@ boxes + 直线坡 + 弯坡段数 ≤ 256（motor 的静态 OBB 表，CONTACT_MOD
 | 碰撞 | 同尺寸 `BoxCollider`，**只给玩家胶囊**；球的墙/地面仍是解析平面，这块 cube **不进** `staticBoxes`（否则吃掉盒预算，还在墙顶造出可站的窄条） |
 | 地面覆盖 | 结构 `size` 若小于场地，按**四面 boundary 平面的位置**把地面板长出去（就近取「墙脚」当边界：`level.bounds` 是 `[[minX,minZ],[maxX,maxZ]]` 的嵌套数组，`JsonUtility` 不读锯齿数组，为一个字段再写一个 JSON 解析器不值当；平面已经解析好了，而且它才是玩家看得见的那道边） |
 | 材质 | `ground` → `Art/Materials/Mat_PlaygroundGround.mat`，`boundary` → `Mat_PlaygroundWall.mat`，`box` / `ramp` 的 cube **若还是内置默认材质** → `Mat_PlaygroundProp.mat`；找不到资产时 `report.Error` 带路径，不静默。**人手指定的材质不覆盖**（占位材质是默认值，不是美术覆盖）；要按结构单独指定材质，得等 schema 加 `structures[].material`——那是 schema 变动，归 §8 那条线，导入器这侧不改 |
+| 边界墙不可见 | `boundary` 的 `Visual` 保留 `BoxCollider`，但 `MeshRenderer.enabled = false`（原作活动边界不可见；`ground` 仍可见）。所有关卡一律如此，没有开关键；旧场景重导一次计 `~N`（每面墙一次），再导 `+0 ~0 -0`。球的接触读解析平面，与渲染无关 |
 | 幂等 | 位姿/碰撞体形状/材质逐项比较后才写；旧场景（只有标记）重导一次即补上 `Visual`，计为 `~N`（结构更新），再导一次仍是 `+0 ~0 -0`、`other=0` |
 
 ### 7.7 失败模式（写下来是为了「下次一眼认出来」）

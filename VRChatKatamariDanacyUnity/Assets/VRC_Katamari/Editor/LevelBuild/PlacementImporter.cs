@@ -3025,6 +3025,17 @@ namespace VRCKatamari.Editor.LevelBuild
                 changed = true;
             }
 
+            // The original game's activity boundary is invisible: a boundary keeps its body
+            // collider (player geometry; the ball reads the analytic plane) but is never drawn.
+            // The ground stays visible. Owner 2026-11-17 (a tall wall ring around the play area).
+            bool shouldRender = !string.Equals(structure.role, "boundary", StringComparison.Ordinal);
+            if (renderer.enabled != shouldRender)
+            {
+                Undo.RecordObject(renderer, UndoLabel);
+                renderer.enabled = shouldRender;
+                changed = true;
+            }
+
             // Reported only when the growth actually wrote something: a settled scene's report
             // stays free of "and also it grew" lines that changed nothing.
             if (changed && floorGrown)
@@ -3287,15 +3298,47 @@ namespace VRCKatamari.Editor.LevelBuild
             Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies =
                 BuildDeclaredProxies(doc, report);
             report.GrowthMm3Declared = SumDeclaredGrowthMm3(doc);
+            Dictionary<string, string> declaredParents = BuildDeclaredParents(doc);
             TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredGrowthMm3,
-                declaredVolumeK, declaredVolumePenalty, declaredProxies, exemptFromField, report);
+                declaredVolumeK, declaredVolumePenalty, declaredProxies, exemptFromField,
+                declaredParents, report);
+        }
+
+        /// <summary>
+        /// Child item id to parent item id for every prop that declares a <c>parent</c>:
+        /// the single-parent pointer the sync turns into the host's <c>propParentIndex</c>
+        /// column (PROP_BEHAVIOURS 10.9). The document is authoritative: an empty map means
+        /// "no prop has a parent" and clears the column.
+        /// </summary>
+        private static Dictionary<string, string> BuildDeclaredParents(PlacementDocument doc)
+        {
+            var declared = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (doc.props == null)
+            {
+                return declared;
+            }
+
+            for (int i = 0; i < doc.props.Length; i++)
+            {
+                PropEntry prop = doc.props[i];
+                if (prop == null || string.IsNullOrEmpty(prop.itemId) ||
+                    string.IsNullOrEmpty(prop.parent))
+                {
+                    continue;
+                }
+
+                declared[prop.itemId] = prop.parent;
+            }
+
+            return declared;
         }
 
         private static bool TrySyncPickupField(Transform levelRoot, string arenaId, Transform propsRoot,
             IDictionary<string, long> declaredGrowthMm3, IDictionary<string, float> declaredVolumeK,
             IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
-            ISet<string> exemptFromField, PlacementImportReport report)
+            ISet<string> exemptFromField, IDictionary<string, string> declaredParents,
+            PlacementImportReport report)
         {
             PickupFieldHost[] hosts;
             if (!string.IsNullOrEmpty(arenaId))
@@ -3362,7 +3405,7 @@ namespace VRCKatamari.Editor.LevelBuild
             bool createMissingColliders = string.IsNullOrEmpty(arenaId);
             PickupFieldSyncReport sync = PickupFieldSync.SyncFromChildren(host, propsRoot,
                 declaredGrowthMm3, declaredVolumeK, declaredVolumePenalty, declaredProxies,
-                createMissingColliders, exemptFromField);
+                createMissingColliders, exemptFromField, declaredParents);
             // The sync's own one-block summary is one of the design's expected console lines
             // and it carries the authoritative growth read-back:
             //   growthMm3: written=<sum>, fromFile=<n>, fromBounds=<n>, read-back: verified

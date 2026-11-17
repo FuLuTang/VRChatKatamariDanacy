@@ -1,0 +1,27 @@
+{
+  "schema": "katamari.hub-levels/0",
+  "room": {
+    "padSizeM": 2.8,
+    "padGapM": 0.6,
+    "padForwardM": 1.2,
+    "marginM": 0.5
+  },
+  "levels": [
+    {
+      "id": "story_01_bench_size",
+      "name": "野餐一角",
+      "scenes": ["StoryMode"],
+      "content": "LevelContent/Props",
+      "entry": "LevelEntry",
+      "roundFromPlacement": false
+    },
+    {
+      "id": "_ref_cancer",
+      "name": "怀旧关：蟹座小院",
+      "scenes": ["RefCancer"],
+      "content": "LevelContent/_ref_cancer",
+      "entry": "LevelContent/_ref_cancer/Markers/PlayerSpawn",
+      "roundFromPlacement": true
+    }
+  ]
+}

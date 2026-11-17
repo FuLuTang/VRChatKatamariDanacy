@@ -62,7 +62,7 @@ P_MIN = 0.2                    # push-in below this never climbs
 V_MIN_GATE = 1.5               # m/s, required drive at 90 deg
 GATE_ALPHA = 1.0               # v_req = v_min * sin(theta)^alpha
 K_INTENT = 0.5                 # the motion layer's target speed counts half
-CLIMB_TIME_S = 4.5             # time to climb 98% of H_cap at full push (OUR)
+CLIMB_TIME_S = 2.8125         # time to climb 98% of H_cap at full push (OUR, PROVISIONAL; owner 2026-11-17 +60% speed, was 4.5)
 CLIMB_TIME_NORM = 1.718        # sqrt-fade normalisation: t(0.98H) = 2H/v0 * 0.859
 CLIMB_V_GATE_REF = 2.0         # the gate speed that gives rate factor 1.0
 CLIMB_RATE_MIN = 0.75

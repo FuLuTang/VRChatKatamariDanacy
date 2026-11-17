@@ -368,10 +368,9 @@ namespace VRCKatamari.Editor.LevelBuild
                 string declared = DeclaredIdOf(directory);
                 // TWO comparisons, both about the QUERY: the full id the caller asked for, or
                 // its last segment (so "C21" and "physics_test_field/C21" both reach the same
-                // level). There used to be a third one, `declared == RelativeIdOf(directory)`,
-                // which for a top-level level compares the document's own id with the folder it
-                // sits in - always equal - so EVERY query matched the first level directory it
-                // walked into (`no_such_level_anywhere` resolved to _ref_cancer).
+                // level). Comparing `declared` with the directory's own relative id is NOT a
+                // query comparison: for a top-level level it is always equal, so every query
+                // would match the first level directory walked into.
                 if (declared != null &&
                     (string.Equals(declared, fullId, StringComparison.Ordinal) ||
                      string.Equals(declared, leaf, StringComparison.Ordinal)))

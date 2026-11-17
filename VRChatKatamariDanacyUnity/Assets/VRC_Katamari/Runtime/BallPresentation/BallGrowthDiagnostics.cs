@@ -14,10 +14,9 @@ namespace VRCKatamari.BallPresentation
     /// <para>
     /// Written for the question in Docs/Design/BallPresentation/VISUAL_GROWTH_AUDIT.md
     /// section 4: the ledger provably grows the ball, the mesh is provably scaled from it,
-    /// and yet the silhouette does not seem to change. The O6 full round then produced the
-    /// opposite kind of confusion - a "0.11 m disagreement" between two lines that are in
-    /// fact the same number read at two different times, plus a radius compared against a
-    /// diameter - so every line below now says which quantity it carries.
+    /// and yet the silhouette does not seem to change. Two lines read at different times, or a
+    /// radius compared against a diameter, look like a disagreement, so every line below
+    /// says which quantity it carries.
     /// </para>
     /// <para>
     /// <b>The three diameters, and who reads them.</b>
@@ -37,8 +36,8 @@ namespace VRCKatamari.BallPresentation
     /// once. It equals <c>d_motor</c> only before the first absorb; afterwards <c>d_motor</c>
     /// grows and <c>d_vis</c> does not.</item>
     /// <item><c>r_core</c> and <c>r_shell</c> are RADII. Mixing them with the diameters above
-    /// is exactly how the O6 "0.11 m" reading happened (a reported <c>core=0.6232</c> is a
-    /// 1.312 m ball), so the keys now carry their unit: <c>r_</c> for radii, <c>d_</c> for
+    /// reads as a false disagreement (a reported <c>core=0.6232</c> is a
+    /// 1.312 m ball), so the keys carry their unit: <c>r_</c> for radii, <c>d_</c> for
     /// diameters.</item>
     /// </list>
     /// </para>
@@ -59,10 +58,10 @@ namespace VRCKatamari.BallPresentation
     /// props are frozen at their contact pose and never pushed outward, so this measures
     /// whether the visible outer layer still sticks out of the core. <c>r_shell</c> is the
     /// furthest attached prop CENTRE, not an outer surface: one long object absorbed at its
-    /// end keeps its world pose and sits far out (O6: 1.2211 m on a 0.656 m ball), so
+    /// end keeps its world pose and sits far out (e.g. 1.2211 m on a 0.656 m ball), so
     /// <c>r_core / r_shell</c> is a LOWER bound on the visible fraction, dominated by the
-    /// longest prop. <c>swallowed</c> counts prop centres inside the visual core, which was the
-    /// audit's number (O6: 33 of 45) while the core grew with the ball. The core is now the
+    /// longest prop. <c>swallowed</c> counts prop centres inside the visual core, which counted most props
+    /// (33 of 45 in the audit) while the core still grew with the ball. The core is now the
     /// fixed start diameter and absorbed props sit on the physical sphere outside it, so this
     /// stays near 0 and is kept as a regression sentinel. A centre distance needs no renderer lookup, and this
     /// project's runtime code never calls GetComponent.</item>

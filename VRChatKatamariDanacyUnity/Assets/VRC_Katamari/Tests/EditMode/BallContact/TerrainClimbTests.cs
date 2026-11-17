@@ -186,7 +186,8 @@ namespace VRCKatamari.Tests
             Vector3 nextVelocity;
             Vector3 displacement;
             if (BallMotionMath.TryStep(Forward, 0f, 0f, HeadingDegrees, Ball.PlanarVelocity,
-                Dt, 0f, MaxSpeedMps, 5f, 8f, 1.2f, 110f, 1.2f, 0.25f, 0.35f, out nextHeading,
+                Dt, 1f, MaxSpeedMps, 7.5f, 6f, 0.9f, 1.3f, 2f, 110f, 1.2f,
+                out nextHeading,
                 out nextVelocity, out displacement))
             {
                 HeadingDegrees = nextHeading;

@@ -9,19 +9,14 @@ namespace VRCKatamari.Story
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This is the permanent replacement for the acceptance readout that used to live in
-    /// <c>Labs/StoryLevel/StoryLevelLabBootstrap.Report()</c>. The formal scene no longer
-    /// carries the lab script, but P1/P2 Play acceptance still has no other source for
-    /// <c>gap</c>, <c>support</c> / <c>supportId</c>, <c>stepLimit</c> and <c>falling</c>
-    /// (Docs/Design/StoryMode/PICNIC_CORNER_LEVEL_ONE.md section 5.8 K1;
-    /// Docs/Design/BallMotor/TERRAIN_SUPPORT.md section 3.6 item 3 and section 9 R11).
+    /// This is the acceptance readout for terrain support in the formal scene: it is the
+    /// only source of <c>gap</c>, <c>support</c> / <c>supportId</c>, <c>stepLimit</c> and
+    /// <c>falling</c> (Docs/Design/BallMotor/TERRAIN_SUPPORT.md section 3.6 item 3).
     /// </para>
     /// <para>
-    /// The field set is the lab line's with ONE addition, and the order is otherwise
-    /// unchanged: <c>t / center / heading / diameter / d_vis / bottom / gap / support /
+    /// The field order is fixed: <c>t / center / heading / diameter / d_vis / bottom / gap / support /
     /// supportId / supportY / supports / stepLimit / falling / axes / absorbed / rejects</c>.
-    /// Only the prefix differs (<c>[story]</c> instead of <c>[story-lab]</c>), because the
-    /// scene tag says which scene produced the line, not which script. Keeping the order
+    /// The <c>[story]</c> prefix says which scene produced the line. Keeping the order
     /// fixed matters: the acceptance notes quote these numbers field by field.
     /// </para>
     /// <para>
@@ -30,8 +25,8 @@ namespace VRCKatamari.Story
     /// <c>d_vis</c> is <c>2 * GetVisualCoreRadiusWorldM()</c>, the design's visual core
     /// (the level's fixed start diameter, CONTACT_MODEL_V2 4A.2) that the core mesh is drawn at; it
     /// does not change as the ball grows. Both are
-    /// on the same line, read in the same frame, because the O6 full round compared a visual
-    /// radius against a semantic diameter and read the 2x difference as a disagreement. The
+    /// on the same line, read in the same frame, because a visual
+    /// radius compared against a semantic diameter reads as a 2x disagreement. The
     /// result board and the star targets evaluate the collision diameter
     /// (<c>2 * GetCollisionRadiusWorldM()</c>, frozen at the bell by
     /// <c>StoryRoundController.MeasureSettledRound</c>); it equals <c>diameter</c> today
@@ -42,13 +37,6 @@ namespace VRCKatamari.Story
     /// state. The only reference is the motor. A positive semantic diameter is the motor's
     /// public "started" proof, so reporting waits for it in <c>Update</c> rather than
     /// touching the motor in <c>Start</c>, where its stores may not exist yet.
-    /// </para>
-    /// <para>
-    /// There is deliberately no shared formatter with the lab script. That script is
-    /// scheduled for deletion once this component is attached (K2), so a static helper
-    /// would add permanent API for two callers that are about to become one, and every
-    /// shared-code change would need a Unity reimport of a component nobody will keep.
-    /// The duplicated part is one format string that lives here from now on.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
@@ -108,7 +96,7 @@ namespace VRCKatamari.Story
         /// the selected support plane along that plane's normal, minus the radius. Both are
         /// reported because one proves the height and the other proves the ball actually sits on
         /// the surface (0.000 +/-0.005) and goes positive while it falls. The normal form matters
-        /// on ramps: the vertical form reads <c>r(1/n.y - 1)</c> there (design R11).
+        /// on ramps: the vertical form reads <c>r(1/n.y - 1)</c> there.
         /// </remarks>
         private void Report()
         {
@@ -116,13 +104,12 @@ namespace VRCKatamari.Story
             float diameter = motor.GetSemanticDiameterWorldM();
             // The drawn core's design diameter, in the same frame as the gameplay diameter:
             // a visual radius and a semantic diameter on one line cannot be read as agreeing
-            // or disagreeing by accident (O6 round, Docs/Evidence/StoryMode/
-            // 2026-11-16_first_full_round).
+            // or disagreeing by accident.
             float visualDiameter = 2f * motor.GetVisualCoreRadiusWorldM();
             float supportHeight = motor.GetSupportSurfaceHeightWorldM();
             Vector3 supportNormal = motor.GetSupportNormalWorld();
             // Gap is measured ALONG THE SUPPORT NORMAL: "ball centre to the support plane,
-            // minus the radius". The design's R11 case is a ramp: the vertical
+            // minus the radius". On a ramp the vertical
             // (centre.y - supportHeight - r) would read r(1/n.y - 1), i.e. 0.455 m for a
             // 45-degree board and a 2.20 m ball, and look like the ball floats. Projecting by
             // n.y turns that into exactly 0 on any plane. Flat ground has n.y = 1, so its

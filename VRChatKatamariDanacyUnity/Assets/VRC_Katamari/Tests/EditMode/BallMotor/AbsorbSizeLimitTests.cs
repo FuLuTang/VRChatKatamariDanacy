@@ -135,15 +135,13 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void AFullyGrownBallCanTakeAnObjectTheOldCeilingWouldHaveRefused()
+        public void AFullyGrownBallCanTakeALargeObjectWhileTheSanityBoundStillRefusesABrokenOne()
         {
             // A 5 m cube is 125 m^3 of bbox; at k=0.70 the item volume is 87.5 m^3 and the
             // 30 m ball's gate allows up to (pi/6*30^3)/10 = 1,413.7 m^3, so it is food. The
-            // retired 512 m^3 ceiling would also have passed this one, but the SANITY bound
-            // must not: a broken 100 m cube (1,000,000 m^3) is beyond it and reads blocking.
-            // The ball must actually BE at the 30 m cap: this test's first version left the
-            // ledger at zero and then judged a 5 m cube with a 0.30 m ball, which flipped the
-            // verdict for the right reason (0.3 m ball, huge cube).
+            // SANITY bound must still refuse: a broken 100 m cube (1,000,000 m^3) is beyond it and reads blocking.
+            // The ball must actually BE at the 30 m cap: a ledger at zero would judge a 5 m
+            // cube with a 0.30 m ball.
             const long Cap30Mm3 = 14137166941154L;
             SetField("unbankedVolumeUnits", Cap30Mm3 - StartMm3);
             Invoke("RecomputeConfirmedAndSize");

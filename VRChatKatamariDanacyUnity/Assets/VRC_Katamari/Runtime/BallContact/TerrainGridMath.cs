@@ -182,8 +182,8 @@ namespace VRCKatamari.BallContact
             out int refusalCode, out int refusalDetail)
         {
             // GEOMETRY OUTS ARE WRITTEN ON SUCCESS ONLY. Every refusal leaves them zeroed, so a
-            // caller that ignores the result can never read a half-built grid (the 2026-11-16
-            // R24 run had a refusal leak cellCount = 441). The failure outs are the two
+            // caller that ignores the result can never read a half-built grid (a refusal must
+            // not leak a cell count). The failure outs are the two
             // refusal values, which are always written.
             originX = 0f;
             originZ = 0f;
@@ -317,8 +317,8 @@ namespace VRCKatamari.BallContact
                     // A triangle bigger than the cell budget is NOT a reason to refuse the
                     // mesh: it goes to the oversized list, which every query offers and the
                     // window filter still narrows. Stamping it into its 72+ cells instead is
-                    // what made the 1 m grid impossible on the reference level (R24: code 3,
-                    // detail 72) and what would blow the reference cap.
+                    // what made the 1 m grid impossible on a dense reference level (refusal code 3,
+                    // 72 cells for one triangle) and what would blow the reference cap.
                     if (localOversized >= MaxOversizedTriangles ||
                         localOversized >= oversizedTriangles.Length)
                     {
@@ -429,7 +429,7 @@ namespace VRCKatamari.BallContact
         /// </para>
         /// <para>
         /// Production always passes the motor's fixed buffers (candidates and marks sized to
-        /// the 8,192-triangle capacity), so the rejection paths are defensive. They are still
+        /// the 8,192-triangle capacity), so the rejection paths are not reached in production. They are
         /// explicit, because "return a partial set" would silently change which surface
         /// supports the ball, and a stale mark would silently remove a triangle from every
         /// later query.
@@ -469,8 +469,8 @@ namespace VRCKatamari.BallContact
             if (halfExtent < 0f) halfExtent = 0f;
 
             // THE FOOTPRINT FILTER. The cell lookup only says "these triangles are somewhere
-            // in these 1-2 m cells"; a dense cell holds 100-400 of them (R24 measured 114-443
-            // candidates, i.e. whole cells), and 17 probes then re-walked every one. A
+            // in these 1-2 m cells"; a dense cell holds 100-400 of them (measured 114-443
+            // candidates on a dense level, i.e. whole cells), and 17 probes then re-walked every one. A
             // triangle that cannot overlap the caller's window cannot contain any probe or
             // touch the sphere, so dropping it here is exact, not a heuristic - and it makes
             // the candidate set independent of the cell size (see the class remarks).
@@ -497,7 +497,7 @@ namespace VRCKatamari.BallContact
                     triangleMaxZ, lowX, highX, lowZ, highZ)) continue;
                 if (count >= capacity)
                 {
-                    // Unreachable with a buffer sized to the mesh, but never a silent
+                    // Not reached with a buffer sized to the mesh, and never a silent
                     // truncation: undo what this call marked and refuse.
                     ClearCandidates(candidates, count, candidateMark);
                     return -1;
@@ -582,8 +582,8 @@ namespace VRCKatamari.BallContact
         /// The ONE oversized decision: does this triangle's XZ bbox span more cells than
         /// <see cref="MaxCellsPerTriangle"/>? Both the count pass and the fill pass of
         /// <see cref="TryBuild"/> call it, so a triangle that the counts left out of the cells
-        /// can never be written into them (that was the R24 integration defect: the fill pass
-        /// ran the cell cursor past its reservation and clobbered neighbouring cells).
+        /// can never be written into them (otherwise the fill pass would run the cell cursor
+        /// past its reservation and clobber neighbouring cells).
         /// </summary>
         private static bool IsOversized(float minX, float maxX, float minZ, float maxZ,
             float originX, float originZ, int cellsX, int cellsZ, float cellM,

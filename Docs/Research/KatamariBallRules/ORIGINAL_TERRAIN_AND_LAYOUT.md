@@ -95,7 +95,7 @@ Cancer 行：`11.0 1.0 1.0 3.0 −157 143 −192 0 0 0 1.90240883827209 0 22.2 8
 | 规则 | 公式 / 取值 | 出处 |
 |---|---|---|
 | 吸收门 | `absorbDiameterReqMm ≤ floor_mm(D)` | `placement_core.floor_mm`（= `PickupAbsorbMath.IsBeyondAbsorbLimit`、`MmFloorEpsilon`） |
-| 接触 | 球心到道具中心的 3D 距离 ≤ r + contactRadius(0) + aabb 半对角线 | `PickupAbsorbMath.TryComputeReach` |
+| 接触 | 球心到道具有向盒（`aabb` 尺寸 + 旋转）的最短距离 ≤ r + contactRadius(0) | `PickupAbsorbMath.TryComputeContact` |
 | 成长 | V = V起始 + Σ`growthMm3`，D = (6V/π)^(1/3)，V起始 = π/6·222³ mm³ | 数据 `growthMm3` |
 | 地面 | 三角形法线 y ≥ 0.707；球心在面上方 r / n.y；其余三角形是墙/天花板 | 本任务简报 |
 | 台阶 | 竖直上升 ≤ 1.35·D 可翻（上限暂定 1.5·D，留余量）；更高当墙；落差不限（单向边） | 本任务简报 |

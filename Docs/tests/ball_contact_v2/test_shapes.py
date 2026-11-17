@@ -2,8 +2,8 @@
 
 They pin the numbers and the ordering the design claims: the rolling shape is the
 core union the pin tips (the visual core is the level's fixed start diameter and is
-not computed by this module), the pickup reach is the patent's box support function (1.0 r on an axis to
-1.73 r at a corner) unioned with the pins, and a pin can only protrude within the
+not computed by this module), pickup uses the same collision radius on every axis
+and diagonal independently of rolling pins, and a pin can only protrude within the
 same cap the radial proxy already uses.
 
 Run with ``python3 -m unittest discover -s Docs/tests`` from the repo root.
@@ -23,9 +23,6 @@ from Docs.Design.BallMotor.contact_v2.shapes import (
     required_speed_with_grip,
 )
 
-ROOT3 = math.sqrt(3.0)
-
-
 def fib_directions(count):
     """The same golden-angle set the radial proxy uses (ball-local, unit)."""
     directions = []
@@ -43,23 +40,28 @@ def shape_with(supports, core=0.30):
 
 
 class PickupShapeTests(unittest.TestCase):
-    def test_box_reach_is_direction_dependent(self):
-        # Axis 1.0 r, face diagonal sqrt(2) r, corner sqrt(3) r.
-        self.assertAlmostEqual(pickup_reach((1.0, 0.0, 0.0), 0.30), 0.30)
-        face = (1.0 / math.sqrt(2.0), 1.0 / math.sqrt(2.0), 0.0)
-        self.assertAlmostEqual(pickup_reach(face, 0.30), 0.30 * math.sqrt(2.0))
-        corner = (1.0 / ROOT3, 1.0 / ROOT3, 1.0 / ROOT3)
-        self.assertAlmostEqual(pickup_reach(corner, 0.30), 0.30 * math.sqrt(3.0))
+    def test_pickup_is_the_collision_sphere_in_every_direction(self):
+        for direction in ((1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (1.0, 1.0, 1.0),
+                          (0.0, 0.0, 0.0)):
+            with self.subTest(direction=direction):
+                self.assertEqual(pickup_reach(direction, 0.30), 0.30)
 
-    def test_pickup_is_never_smaller_than_the_rolling_shape(self):
+    def test_pickup_does_not_expand_with_the_rolling_pins(self):
         supports = [0.30] * NEEDLE_DIRECTION_COUNT
         # One needle protrudes through the cap (clamped to 0.405 for r=0.30).
         supports[0] = 1.0
         rolling = shape_with(supports)
         direction = rolling.directions[0]
         pickup = pickup_reach(direction, 0.30, rolling)
-        self.assertGreaterEqual(pickup, rolling.reach_along(direction) - 1e-12)
+        self.assertEqual(pickup, 0.30)
+        self.assertGreater(rolling.reach_along(direction), pickup)
         self.assertLessEqual(rolling.reach_along(direction), 0.405 + 1e-9)
+
+    def test_pickup_radius_rejects_invalid_geometry(self):
+        for radius in (-1.0, math.nan, math.inf):
+            with self.subTest(radius=radius):
+                with self.assertRaises(ValueError):
+                    pickup_reach((1.0, 0.0, 0.0), radius)
 
 
 class RollingShapeTests(unittest.TestCase):

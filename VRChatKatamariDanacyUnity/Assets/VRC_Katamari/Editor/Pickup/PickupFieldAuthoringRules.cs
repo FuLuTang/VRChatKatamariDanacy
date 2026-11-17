@@ -1145,6 +1145,63 @@ namespace VRCKatamari.Editor.Pickup
             return true;
         }
 
+        // ------------------------------------------------------------- parent column ---
+
+        /// <summary>
+        /// Resolves "item id -> parent item id" into the host's row-index column
+        /// <c>propParentIndex</c> (-1 = no parent). A parent that has no row (exempt,
+        /// rejected or not in the field), a self edge and a cycle all become -1 instead of
+        /// an error, and are counted so the caller can report them; the result is the same
+        /// for the same inputs (idempotent, order of the map does not matter).
+        /// </summary>
+        /// <param name="rowIds">The host's item ids in row order.</param>
+        /// <param name="parentOf">Child id to parent id; null or empty = no parents.</param>
+        /// <param name="unresolved">Edges whose parent has no row, plus self edges.</param>
+        /// <param name="cut">Edges removed to break cycles.</param>
+        public static int[] ResolveParentColumn(string[] rowIds, IDictionary<string, string> parentOf,
+            out int unresolved, out int cut)
+        {
+            unresolved = 0;
+            cut = 0;
+            int count = rowIds == null ? 0 : rowIds.Length;
+            var column = new int[count];
+            if (count == 0) return column;
+
+            var rowOf = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (int i = 0; i < count; i++)
+            {
+                if (!string.IsNullOrEmpty(rowIds[i]) && !rowOf.ContainsKey(rowIds[i]))
+                {
+                    rowOf.Add(rowIds[i], i);
+                }
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                column[i] = -1;
+                string parentId;
+                if (parentOf == null || string.IsNullOrEmpty(rowIds[i]) ||
+                    !parentOf.TryGetValue(rowIds[i], out parentId) || string.IsNullOrEmpty(parentId))
+                {
+                    continue;
+                }
+
+                int parentRow;
+                if (!rowOf.TryGetValue(parentId, out parentRow) || parentRow == i)
+                {
+                    unresolved++;
+                    continue;
+                }
+
+                column[i] = parentRow;
+            }
+
+            // Cycles are cut by the same routine the runtime uses, so the two cannot disagree.
+            var sanitized = new int[count];
+            cut = PropFallMath.SanitizeParents(column, count, sanitized);
+            return sanitized;
+        }
+
         private static bool IsFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);

@@ -1,25 +1,22 @@
 # 吸附放置与球芯显示：触发即接触、原地冻结、核心固定、全部吸附件进针（设计；核心固定与针覆盖已写入代码，待 Unity 验证）
 
-状态：**现行设计，Lead 2026-11-17 已定方向。触发几何由 absorb-gate-dims 承担；§3.2 的球芯固定与 §3.4 的“针覆盖全部吸附件”已由 core-needles 写入代码（C# 门与本地 EditMode 通过，Unity 未验证，见 §6 的 U 判据）。** 起因：所有者两次提出“当前的球，粘东西感觉不对劲”。原作侧证据与逐条级别见 [`ORIGINAL_ATTACH_LOOK.md`](../../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md)（含初代 PS2 录像实测）；观感对照图见 [证据目录](../../../Evidence/BallPresentation/2026-11-15_attached_props_vs_original/README.md)。
+状态：**现行设计；R33 根因复核与接触位姿事件修复已写入代码，待 Unity/Udon 验证。Lead 2026-11-17 已定方向。触发几何由 absorb-gate-dims 承担；§3.2 的球芯固定与 §3.4 的“针覆盖全部吸附件”已由 core-needles 写入代码（C# 门与本地 EditMode 通过，Unity 未验证，见 §6 的 U 判据）。** 起因：所有者两次提出“当前的球，粘东西感觉不对劲”。原作侧证据与逐条级别见 [`ORIGINAL_ATTACH_LOOK.md`](../../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md)（含初代 PS2 录像实测）；观感对照图见 [证据目录](../../../Evidence/BallPresentation/2026-11-15_attached_props_vs_original/README.md)。
 
 标记：**(代码)** 读代码；**(离线模拟)** 本文作者的 Python 模拟（蟹座小院数据，脚本在 `/tmp/attach_look/`，不入库，见 §8）；**(读图)** 看截图；**(原作)** 引 `ORIGINAL_ATTACH_LOOK.md`；**PROVISIONAL** = 本项目暂定值，没有原作数。公式里的符号不是序列化字段名，字段名在实现时再定。
 
 ## 1. 现象与根因
 
-所有者看到两件事，机制不同。
+### R33：盒门已接通，但球侧半径与事件时序仍错（2026-11-17）
 
-| 现象 | 机制 | 位置 |
-|---|---|---|
-| **A. 道具悬在球面外一段距离** | 吸收触发的距离是球心到道具**枢轴**，阈值 `reach = 碰撞半径 + contactRadius(0) + 道具自身盒的外接球半径`；放置是原样冻结触发那一刻的世界位姿。外接球比细长/扁平的盒子大得多，盒子的实体没碰到球就已触发 | `PickupAbsorbMath.TryComputeReach`（`Runtime/Pickup/PickupAbsorbMath.cs:364-387`）；`KatamariBallMotor` 吸收评估（`:3797-3801`）；`PickupFieldHost.AttachProp`（`Runtime/Pickup/PickupFieldHost.cs:1266-1331`） |
-| **B. 红球芯大片可见** | 视觉球按 0.95·r_phys 画并**随体积长大**，先吸的道具被包进红球，没有任何重定位；件数少、件小/薄 | `BallView.cs:93-145`（`useVisualCoreRadius` 默认开）；`BallShapeMath.TryVisualCoreRadius` |
+证据亲读：`/tmp/r33_notes.md`、`/tmp/r33_play.log` / `r33_play2.log` / `r33_play3.log`、`/tmp/shots/r33_10.png` / `r33_30.png`。两图可见红芯周围若干件与芯有明显间隔；截图不能独自证明每件已挂载，也不能用固定核心当物理球尺。
 
-**A 的量化 (离线模拟)。** 蟹座小院 432 件可吸道具，球沿随机水平方位逼近、首次进入 reach 的那一步放置（道具按文件里的原朝向），量道具盒表面到物理球面的距离：
+1. **主因是门被放大，不是仅日志错字。** R33 的 `EvaluatePendingCandidates` 在 v2 打开时把 `collisionRadiusWorldM` 换成 `TryPickupReach`：`max(r·(|ûx|+|ûy|+|ûz|), 针支撑)`，立方体角向最多 1.73r。电机打印 `boxDistance − reachRadius`，宿主打印 `boxDistance − 当前collisionRadius`；宿主没有使用固定视觉核心 0.111 m。旧电机 70/70 非正只证明碰到了放大的触发壳，不能证明碰到了物理等效球。首件还没有吸附件时已经 `reach=.1867125 m`，而起始物理球半径约 `.111 m`。
+2. **按 id 配对全部 70 对**：电机 gap 中位 −8.65 mm；宿主 69/70 正（唯一 −9.2 mm），范围 −9.2～117.5 mm；宿主减电机的差中位 **77.2 mm**。三日志分别 33 / 25 / 12 对，最后一份延续第二份。题述“宿主全正/+87 上限”并非完整原始日志统计。
+3. **可直接量化的 36 对**（宿主之后到下一条 story 之间无吸收）：用 story 的 `diameter/2` 作为吸收后物理半径，分解 `Δgap = 1000·(reach − r_after) + ΔboxDistance`。29/36 的 `ΔboxDistance` 绝对值 ≤0.2 mm，5/36 为 0.35～1.15 mm，2/36 为 **36.90 / 42.78 mm**；半径项累计解释这 36 对总差的 **97.0%**，几何残差中位约 −0.006 mm。其余 34 对没有足够紧邻半径日志，**不外推分摊**。story 直径保留四位小数、gap 一位小数，分解约有 0.125 mm 舍入误差。
+4. **例子**：`r33_play3.log` 55–59 行，牙膏电机 gap −3.4 mm、reach .2684886 m，宿主 +109.7 mm，story D=.311 m；半径项 112.99 mm，余量约 +0.11 mm。`r33_play.log` 100–102 行的风铃余量 +36.90 mm、`r33_play2.log` 92–94 行 +42.78 mm 则证明确有几何漂移，不能只改日志。
+5. **时序缺陷独立成立**：电机自己的 `Update` 累加器一次可跑多步（不是 Unity `FixedUpdate`）；阶段 5 判门 → 6 提交事件 → 7 成长 → 7.5 推出 → 8 更新滚转 → 最后应用显示，宿主另一个 `Update` 才消费环。旧环仅存 id/道具位置，宿主用消费时球心和滚转算 local。漂移可来自同一步成长推出或后续步，方向可内陷也可悬外。旧日志没有接触球心/步号，**不能把 36.9/42.8 mm 说成若干完整 8 cm 步**；4 m/s×.02 s=.08 m 只是上限量级。现行实现见 §3.1，新增步延迟与中心位移分开记录。
 
-- D=0.222 m（起始球）：中位 **1.2 cm**，p90 **5.2 cm**，最大 **8.4 cm**；>1 cm 占 56%，>3 cm 占 20%，>5 cm 占 11%。D=0.28 m：p90 5.3 cm，最大 9.9 cm。
-- 按种类的中位：牙刷 4.4 cm、筷子 4.1 cm、抹布 3.7 cm、牙膏 2.7 cm、剪刀 2.6 cm（起始球）；0.28 m 球下风铃 8.6 cm。这就是所有者图里牙膏管、小物件离球面一段距离。
-- 另有两项同方向的误差：视觉核心只有 0.95·r，相对**看得见**的球面还要多悬一截；`AttachProp` 在吸收事件之后的 `Update` 才跑，期间球继续推进，一部分件反向陷进去（定步 0.02 s，球速 1–2 m/s 时每步 2–4 cm；R30 全程平均约 0.35 m/s，峰值没有记录）。两个方向的误差都留在冻结位姿里。
-- **R30 数据的局限**：R30 日志（`/tmp/r30_autopilot_log.txt`）记直径/累计件数和待吸槽的中心距 `d`，**没有吸附瞬间的盒到球面距离**；`PEND@15` 里 `toothbrush_001 d=0.62` 等是待吸槽，不是吸附点。所以悬空幅度目前**只有离线模拟，没有 Unity 实测**。
-- 所有者图里不是每个道具都已吸附：左下的螃蟹、牙膏管、剪刀不少躺在地上（道具运动程序还没有运行时宿主，见 `CANCER_COURTYARD_DIFFERENCES` D04）。球附近哪些在 `AttachmentRoot` 下，要在 Unity 里看层级才能判断（O1）。
+**B：红芯可见**是另一个显示机制问题，核心固定/针覆盖的决定见 §3.2/§3.4；下列为改造前对照，不是 R33 当前核心尺寸：
 
 **B 的量化 (读图 + 离线模拟)。** 所有者今天的图（球径约 0.28 m，目视 ~20 件）：红色像素约 1976 px，红色区域包围盒 61×72 px，按竖向直径估圆盘红可见约 49%，按横向估约 68%（遮挡使圆盘直径不确定，只当量级）。离线模拟（现状放置、随机朝向、就近吸收、真实 `growthMm3` 定价、3 个随机种子均值）吸 10/20/30 件时红可见 72% / 51% / 41%，量级与所有者的图一致。**起因不是“视觉球比碰撞球大”**（视觉球 0.95·r，不大于物理球）。
 
@@ -40,9 +37,10 @@
 
 ### 3.1 吸附位置：触发即接触，原地冻结
 
-- **触发改为“道具盒碰到球的碰撞体”**（`CANCER_COURTYARD_DIFFERENCES` D08，absorb-gate-dims 在做）。触发时道具实体已贴着球的碰撞面，所以**不需要放置修正**：`AttachProp` 继续“原样冻结吸附瞬间的世界位姿”（换算成球局部位姿、写局部位姿、登记径向代理），朝向不动，**不加埋入偏移**，不拉入，不重定位，不缩放，允许与已吸附件互相穿插。A 的根因随 D08 消失。
-- 本项不改 `AttachProp` 的放置语义；它只在 D08 落地后才与原作一致。D08 之前观感 A 仍在。
-- **冻结的是触发那一刻的相对位姿**：现状 `AttachProp` 在事件环消费时才读球心（见 §1），球在事件到消费之间继续推进，会让件相对触发时多陷 `v × 延迟`。若 Unity 日志（§6 U1）显示这一项超过 5 mm，应在吸收提交时记下球位姿快照随事件一起给宿主（小改动，属实现者）。
+- **触发 = 道具自身有向盒到球心的最短距离 ≤ 碰撞半径 + contactRadius（默认 0）**，v1/v2 完全同一口径；不读视觉核心，不把立方体方向支撑半径或滚动针壳传入吸收门。采用等效球而非推断的原作 `Mh` 盒，是明确的工程取舍（原作盒形状/朝向未知，见 [`PARITY_AUDIT.md`](../../Parity/PARITY_AUDIT.md) 的“吸收触发的几何”行）。
+- **冻结的是触发那一步的相对位姿，不是宿主消费事件时的位姿**：`PickupAbsorbStepMath.CommitAcceptedAbsorbs` 输出成功行后，`AttachmentStepMath.RecordAbsorbedEvent` 在成长前调用 `AttachmentMath.TryCaptureContactPose`，用阶段 5 的接触球心、上一球心/滚转和本步支撑法线，经同一份 `VisualRollMath` 算到接触点的滚转（使用吸收前半径），再经 `TryWorldPoseToLocal` 转出局部位置/朝向写入固定 16 槽事件环。只有账本提交成功才记事件；道具位置/旋转使用门实际判过的候选快照。之后的成长推出与任意 N 步运动只携带此局部位姿。
+- `PickupFieldHost.AttachProp` 经 `AttachmentStepMath.TryReadAbsorbedEventAttachment` 只读取事件局部位姿、写入 `AttachmentRoot`，再经 `AttachmentStepMath.TryAttachRadialProxy` 登记相同局部位姿的径向代理；**不读消费时的自由道具世界位姿来重算，也不回退到当前球姿态**。保留原朝向、原尺寸，不加埋入偏移，不拉入，不径向重定位，允许互穿。
+- **诊断一份实现**：两端 `boxGapMm` 都调用 `AttachmentMath.TryComputeBoxGap` → `PickupAbsorbMath.TryComputeContact`，定义为 `1000 × [boxDistance − (吸收时碰撞半径 + 吸收时contactRadius)]`。电机量世界接触位姿，宿主量实际写入的局部位姿（球心为零）；同一个球面在刚体变换下不变。通过 `event` 配对，两端差应 ≤0.2 mm，附着值应 ≤0（允许浮点/一位小数打印造成 ≤0.2 mm 正值；这不是门的玩法余量）。`delaySteps` 与 `centerDeltaMm` 单列，不掺进 gap。成长只会使当前物理球更贴近道具；固定视觉核心之外的外壳空洞不等于物理接触悬空。
 - **吸附瞬间的星爆特效**（原作约 0.07–0.13 s，接触点处）：记为**需求**，属以后的美术/特效项，本轮不做。
 
 ### 3.2 球芯显示尺寸：固定为起始球径
@@ -122,16 +120,17 @@
 ## 6. 测试与验收
 
 **EditMode / 本地（实现者，C# 门 `python3 Tools/csharp_check/check.py` 0 错误）**
-1. `GetVisualCoreRadiusWorldM` 在吸收前后相等（= 起始球径 / 2），`GetSemanticDiameterWorldM` 照常增长；起始球径不同的两个关卡各一例。
-2. `BallView`：未就绪（直径 0）不写；就绪后写一次；吸收后 `coreMesh.localScale` 不变；`attachmentRoot` 缩放不被写。
-3. 诊断读数 `d_vis` 常量、`swallowedCount` 近 0。
-4. 删除 0.95 相关代码后全量 EditMode 编译与既有用例（含 `ContactModelV2Tests`、`BallShapeTests`、`BallPresentationTests` 的同步改动）。
+1. `PickupAttachmentPoseTests`：纯值测试模拟吸收后再走 0/1/3/8 步（每步 8 cm），局部位置/朝向与吸收时一致；同一步滚转按手算四分之一圈断言，gap 与门一致。`PickupAttachmentIntegrationTests`：**需 Unity/GameObject**，预览场景隔离，覆盖真实事件环、宿主延迟 0/1/4 步消费、自由道具已移动、后续半径成长、幂等与 v1/v2 角向门。
+2. `GetVisualCoreRadiusWorldM` 在吸收前后相等（= 起始球径 / 2），`GetSemanticDiameterWorldM` 照常增长；起始球径不同的两个关卡各一例。
+3. `BallView`：未就绪（直径 0）不写；就绪后写一次；吸收后 `coreMesh.localScale` 不变；`attachmentRoot` 缩放不被写。
+4. 诊断读数 `d_vis` 常量、`swallowedCount` 近 0。
+5. 删除 0.95 相关代码后全量 EditMode 编译与既有用例（含 `ContactModelV2Tests`、`BallShapeTests`、`BallPresentationTests` 的同步改动）。
 
 **Unity 验收（一轮操作员，R30 同路线 145 航点，驾驶器 `/tmp/r30_run.sh`；与 D08 的验收合并或在其后）**
 | # | 判据 | 数 | 基线 |
 |---|---|---|---|
-| U1 | 每件吸附后，盒到物理球面的距离（宿主新增一条日志，D08 前后各跑一轮） | D08 后全部 ≤ 5 mm（含事件到消费的延迟）；D08 前的基线即悬空的 Unity 实测 | 离线：起始球下 p90 5.2 cm、最大 8.4 cm；**无 Unity 实测** |
-| U2 | 吸附后悬空 >5 mm 的件数 | D08 后 0 | 离线：起始球下 11% 的件 >5 cm |
+| U1 | 用 `event` 配对电机/宿主 `boxGapMm`（同一吸收时半径+余量）；另记录 `delaySteps/centerDeltaMm` | 全部 ≤0.2 mm；配对差绝对值 ≤0.2 mm；延迟增加不能改变局部位姿 | R33：70 对，宿主 69 正，最高 +117.5 mm；主因是放大的 v2 reach |
+| U2 | 已挂载件相对物理等效球面悬空 >5 mm 的件数；同路线截图，固定核心之外的成长外壳除外 | 0；`AttachmentRoot` 单位缩放且对齐球心/滚转；无 pose-refused/lost-event | R33 10/30 件截图有明显离芯件，须分清物理球与固定核心 |
 | U3 | 核心直径不变：吸 0/10/20/30 件时 `coreMesh` 世界直径 | 全程 = 起始球径 ±1 mm；物理直径照常长（R30：0.222→0.3065 m） | 现状核心随物理球长大 |
 | U4 | 核心可见度（固定调试相机 4 个方位，核心材质用与背景可分的纯色，投影圆盘内核心色像素占比）；在 D≈0.30 / 0.50 / 0.80 m 各测 | 约 30% / ≤10% / ≈0%（离线 30 / 4 / 0，容许 +10 点） | 所有者图约 49–68%（现状，球径 0.28 m） |
 | U5 | 外轮廓半径 / `r_phys`（同相机）与插地深度（物件最低点相对地面） | **只记录**，对照 §3.4 表（轮廓 1.4–1.6、插地 7 / 14 / 25 cm 量级）；若插地肉眼不可接受，转 O8 | 无 |
@@ -153,13 +152,11 @@
 | O10 | 交分缩小后已吸附件怎么处理 | 交分把球缩小到不低于起始球径（`OPEN_DECISIONS` (a)）；核心不受影响，但外壳件是否随之脱落/保留未定，不在本项 |
 | O11 | 吸附前后同一件的朝向、嵌入深度 | 录像被遮挡，只有弱证据；若 Unity 验收看出与原作差距明显再回补 |
 
-## 8. 给实现者的拆分建议（顺序）
+## 8. 实现与剩余验收
 
-1. **日志基线**（小，宿主）：`AttachProp` 记每件吸附前后的盒到球面距离与延迟位移；不改行为；D08 前跑一轮得悬空与延迟的 Unity 实测（U1）。可与 D08 并行。
-2. **D08 触发几何**（absorb-gate-dims）：`PickupAbsorbMath.TryComputeReach` 与 3 个调用点；本文不重复。
-3. **核心固定**（BallView + 马达一个只读 getter）：§3.2 的改动表；删 0.95 常量与 `TryVisualCoreRadius`；同步 `shapes.py` 与测试；同步 `BallGrowthDiagnostics`/`StoryBallDiagnostics` 读数。与 2 互不依赖，可并行。
-4. **Unity 验收轮**：U1–U9 一次做完，截图入证据目录。
-5. **针模型覆盖全部吸附件**：已实现（见 §3.4 对策）；cap 是否放宽视 U5 与所有者。
+接触几何唯一实现是 `PickupAbsorbMath.TryComputeContact`；两端诊断经 `AttachmentMath.TryComputeBoxGap`。候选判门、提交、队列压紧与尺寸重算入口在 `PickupAbsorbStepMath`；冻结位姿事件环与针登记入口在 `AttachmentStepMath`，供电机、宿主和离线工具共用。接触局部位姿经 `TryCaptureContactPose` 在成功提交同一步存入环。C# 与 Python 的球侧 pickup 半径都等于物理碰撞半径；无立方体支撑/针壳替换分支。核心固定与全件针覆盖见 §3.2/§3.4，未为修复悬空调整 cap、成长、惯性或驱动。
+
+剩余交给 Unity 操作员：编译 UdonSharp、运行新增纯值与 preview-scene 集成 NUnit、同路线重跑 U1/U2/U8 并观察全部 `event` 配对（含非零 delaySteps）、复核既有 U3–U9。未经这轮不得宣称截图、Unity 行为或 Udon 编译通过。
 
 ## 9. 离线模拟说明
 

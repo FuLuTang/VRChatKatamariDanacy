@@ -6,8 +6,7 @@ using VRCKatamari.BallLayers;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// EditMode port of Docs/tests/ball_contact_v2/test_shapes.py: the pickup reach is the
-    /// patent's box support function unioned with the pins, a pin can only protrude within
+    /// EditMode rolling-shape tests: a pin can only protrude within
     /// the radial proxy's cap, only protruding pins enter the contact set (all 16 may), and
     /// a half-radius protrusion halves the climb gate. The visual core is not here: it is the
     /// level's fixed start diameter (ContactModelV2Tests).
@@ -32,48 +31,6 @@ namespace VRCKatamari.Tests
             float[] supports = new float[NeedleCount];
             for (int i = 0; i < supports.Length; i++) supports[i] = value;
             return supports;
-        }
-
-        [Test]
-        public void ThePickupBoxReachIsDirectionDependent()
-        {
-            float reach;
-            // Axis 1.0 r, face diagonal sqrt(2) r, corner sqrt(3) r.
-            Assert.IsTrue(BallShapeMath.TryPickupBoxReach(new Vector3(1f, 0f, 0f), 0.30f,
-                out reach));
-            Assert.AreEqual(0.30f, reach, Tolerance);
-            Assert.IsTrue(BallShapeMath.TryPickupBoxReach(
-                new Vector3(0.70710678f, 0.70710678f, 0f), 0.30f, out reach));
-            Assert.AreEqual(0.42426407f, reach, Tolerance);
-            Assert.IsTrue(BallShapeMath.TryPickupBoxReach(
-                new Vector3(0.57735027f, 0.57735027f, 0.57735027f), 0.30f, out reach));
-            Assert.AreEqual(0.51961524f, reach, Tolerance);
-        }
-
-        [Test]
-        public void ThePickupIsNeverSmallerThanTheRollingShape()
-        {
-            float[] supports = Supports(0.30f);
-            // One needle protrudes through the cap (clamped to 0.405 for r = 0.30).
-            supports[0] = 1f;
-            Vector3[] directions = Directions();
-            float clamped;
-            Assert.IsTrue(BallShapeMath.TryClampNeedleSupport(supports[0], 0.30f, out clamped));
-            supports[0] = clamped;
-            float rolling;
-            Assert.IsTrue(BallShapeMath.TryRollingReach(directions[0], 0.30f, directions,
-                supports, NeedleCount, out rolling));
-            float pickup;
-            Assert.IsTrue(BallShapeMath.TryPickupReach(directions[0], 0.30f, directions,
-                supports, NeedleCount, out pickup));
-            Assert.GreaterOrEqual(pickup, rolling - 1e-6f);
-            Assert.LessOrEqual(rolling, 0.405f + 1e-6f);
-            // With no pins the pickup reach is the box alone.
-            float boxOnly;
-            Assert.IsTrue(BallShapeMath.TryPickupReach(directions[0], 0.30f, directions,
-                supports, 0, out boxOnly));
-            Assert.AreEqual(0.30f * Mathf.Abs(directions[0].x) + 0.30f * Mathf.Abs(directions[0].y)
-                + 0.30f * Mathf.Abs(directions[0].z), boxOnly, Tolerance);
         }
 
         [Test]

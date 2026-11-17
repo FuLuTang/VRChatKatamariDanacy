@@ -120,6 +120,12 @@ namespace VRCKatamari.Editor.LevelBuild
         /// start). Counted in the headline's <c>other=</c> so the idempotency gate sees them.
         /// </summary>
         public int V2SceneWiringWrites;
+        /// <summary>Rows the MotionHost carries (own program + riders + animation-only).</summary>
+        public int V2MotionRows;
+        public int V2MotionPaths;
+        public int V2MotionAnimators;
+        /// <summary>Host components created plus columns rewritten; 0 on a second import.</summary>
+        public int V2MotionHostWrites;
         public int V2TerrainTriangles;
         public int V2TerrainChunks;
 
@@ -159,7 +165,7 @@ namespace VRCKatamari.Editor.LevelBuild
             return "[level]" + arena + " +" + PropsCreated + " ~" + PropsUpdated + " -" + PropsDeleted +
                    " props=" + (PropsCreated + PropsUpdated + PropsSkipped) +
                    " other=" + (StructuresCreated + StructuresUpdated + StructuresDeleted +
-                                      V2SceneWiringWrites) +
+                                      V2SceneWiringWrites + V2MotionHostWrites) +
                    " errors=" + PropErrors + v2;
         }
 
@@ -228,7 +234,9 @@ namespace VRCKatamari.Editor.LevelBuild
                 text.Append("  v2 layers: solids=").Append(V2Solids)
                     .Append(", parents=").Append(V2ParentEdges)
                     .Append(", nonUniformScales=").Append(V2NonUniformScales)
-                    .Append(", motions/paths parsed only; walls=").Append(V2WallSegments)
+                    .Append(", motion host rows=").Append(V2MotionRows).Append(" (paths=")
+                    .Append(V2MotionPaths).Append(", animators=").Append(V2MotionAnimators)
+                    .Append(", writes=").Append(V2MotionHostWrites).Append("); walls=").Append(V2WallSegments)
                     .Append(" segment(s): +").Append(V2WallsCreated).Append(" ~")
                     .Append(V2WallsUpdated).Append(" -").Append(V2WallsDeleted)
                     .Append(" skip=").Append(V2WallsSkipped);

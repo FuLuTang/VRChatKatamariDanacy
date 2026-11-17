@@ -42,12 +42,12 @@
 |---|---|
 | **已推导（几何/数值，参考模型覆盖）** | 球–OBB 最近点与法线（面/棱/角/内部）；隧穿下界（采样间距 ≤ r 时接触区 ≥ 2r）；45° 接缝差 = 0；`h < r` 的棱滚越条件；0.30 球 4 m/s 需 2 子步；弯坡弦高与法线跳变 |
 | **有锚点但数值是我方的** | `H_cap` 的比例：**没有原作数值**（手册转述不含比例；跨系列核查见 `ORIGINAL_CLIMB_OBSERVATIONS.md`）。取的 **1.5 是我们的 PROVISIONAL**，用来让参考关卡的 0.19 m 凹槽与约 0.30 m 台阶都过得去（[TERRAIN_CLIMB](TERRAIN_CLIMB.md) §7）。角度、速度、时间同样无公开数值 |
-| **纯我方设计（必须试玩）** | `θ_ride=45°`、15° 爬升余量、`v_min=1.5 m/s`、`k_intent=0.5`、`T_climb=4.5 s`、`m0=0.15`、`v_slide_max=1.0`、冷却/锁定、dash 1.6×/0.45 s、窗口边距、全部容量；**形状层**：`r_visual=0.95r_phys`、pickup 盒支撑函数、针尖 16 根与 `r_tip=0.01`、`k_grip=0.5`、针尖参与横向阻挡（§4A） |
+| **纯我方设计（必须试玩）** | `θ_ride=45°`、15° 爬升余量、`v_min=1.5 m/s`、`k_intent=0.5`、`T_climb=2.8125 s`、`m0=0.15`、`v_slide_max=1.0`、冷却/锁定、dash 1.6×/0.45 s、窗口边距、全部容量；**形状层**：`r_visual=0.95r_phys`、pickup 盒支撑函数、针尖 16 根与 `r_tip=0.01`、`k_grip=0.5`、针尖参与横向阻挡（§4A） |
 | **完全没测** | 任何 Unity/Udon 编译、EditMode、Play Mode、帧时间、手感；本文的所有“每步成本”都是 flop 与调用次数的**估算**，不是测量 |
 
 ### 0.5 三条必须记住的口径
 
-1. **`r` 默认指 `r_phys`（物理等效球半径，`cbrt(3V/4π)`）**。视觉核心是 `0.95·r_phys`，滚动是 `r_phys` + 16 根针尖，拾取是更大的方向相关触发体——**三个形状，各有名字与消费者**（§4A）。本文没写形状名的 `r`/`D=2r` 都是物理口径。
+1. **`r` 默认指 `r_phys`（物理等效球半径，`cbrt(3V/4π)`）**。视觉核心是固定的 `r_start`（起始球径的一半，不随吸收长大），滚动是 `r_phys` + 16 根针尖，拾取是更大的方向相关触发体——**三个形状，各有名字与消费者**（§4A）。本文没写形状名的 `r`/`D=2r` 都是物理口径。
 2. **θ 是接触法线与 +Y 的夹角**：0° 地板、45° 坡、90° 竖墙。分类只用 θ，不看 surface 类型、不看 `role`。
 3. **所有容量都是固定数组**：UdonSharp 没有 `List`/struct/泛型/属性，运行期数据一律并行数组（§1.4、§5.2）。
 
@@ -222,7 +222,7 @@ N = clamp( ceil( (|Δ| + (g + a_climb)·dt²) / (κ·r) ), 1, N_max )      κ = 
 | 窗口扫描（200 条静态） | 200 × 8 flops = 1.6k | 同 | 每条一次包围球距离 |
 | 近集查询（24 条 × 2 子步） | 48 × 30 = 1.4k（无接触早退） | 12 条 → 0.7k | 有接触的条目 ≈ 60 flops |
 | 接触迭代（≤12 条 × 3 次） | 36 × 40 = 1.4k | 2 条 → 80 | 每次重查该条目 |
-| 针尖段 vs OBB（§4A.3） | 8×12×2 × 40 = 7.7k | 4×3×2×40 = 1.0k | 只遍历 compact 针；典型 2–6 根 |
+| 针尖段 vs OBB（§4A.3） | 16×12×2 × 40 = 15.4k | 10×3×2×40 = 2.4k | 只遍历 compact 针（全部 16 根可入；每件吸附物都登记后，球有一定件数时典型 8–12 根突出） |
 | 分类/支撑/爬升 | ≈ 0.2k（+ 爬升时 32 端点 ≈ 0.1k） | 0.1k | |
 | **合计** | **≈ 13k flops/步**（含针尖最坏） | **≈ 2.5–3.5k** | v1 的扫掠同量级（≤14 障碍 × 4 投影 × ≤4 接触 ≈ 1.6k）；针尖是 v2 的主要增量 |
 
@@ -418,7 +418,7 @@ C05：坡 45°、台面顶 0.6、台面南面 z=8.2、球 r=0.1499。
 | 接触容量 | 4 | 8 |
 | 静态几何容量 | 8 盒 + 4 坡 | 256 OBB（每步近集 ≤24） |
 | 每步几何成本 | ≈1.6k flops | ≈1.5–4.2k flops（§1.8） |
-| 尺寸耦合 | 接触用 core、扫掠用 collision、reach 用 collision | 三形状：`r_visual` / `r_roll`(+针尖) / `pickupReach(û)`（§4A） |
+| 尺寸耦合 | 接触用 core、扫掠用 collision、reach 用 collision | 三形状：`r_visual` / `r_roll`(+针尖) / `pickupRadius = r_phys`（§4A） |
 
 ---
 
@@ -430,7 +430,7 @@ C05：坡 45°、台面顶 0.6、台面南面 z=8.2、球 r=0.1499。
 |---|---|---|---|
 | 面朝墙、双摇杆前推 ⇒ 向上翻越 | `[官方]` | We Love Katamari 英文手册 “CLIMB OVER OBSTACLES!!” | **输入语义**：不需要按钮，推入即爬（§8 拍板项） |
 | 可翻越的墙：手册转述只说“climb it in order to reach higher areas”，**不含尺寸比例**（原引文「about the same size…」在 `ORIGINAL_CLIMB_OBSERVATIONS.md` 里未找到出处，已删） | `[官方转述]` | 维基 We Love Katamari（注 3 = 手册） | **没有原作比例**：`H_cap = k_h·2r` 的形状是模型，`k_h = 1.5` 是 **OUR PROVISIONAL** |
-| 上坡需要“predetermined velocity”；Vmax 随体积增大 | `[专利]` | US7402104B2 | **速度门** `v_req(θ)`；但本工程大球更慢（`growthSpeedFactor=0.25` ⇒ 2.20 档 3.0 m/s），所以“大球能上更陡的坡”**不由速度复现**，由 `H_cap ∝ D` 与 `h<r` 复现 |
+| 上坡需要“predetermined velocity”；Vmax 随体积增大 | `[专利]` | US7402104B2 | **速度门** `v_req(θ)`；本工程速度随 D/D0 缩放，爬升门读 `vGate/s`（`BALL_INERTIA.md` §3，大小球一致），所以“大球能上更陡的坡”**不由速度复现**，由 `H_cap ∝ D` 与 `h<r` 复现 |
 | 70°/90° 的具体角度、爬升速度、时间上限 | **无任何公开数值** | — | 全部标 **OUR design**，见 §3.5 的试玩清单 |
 | 原作碰撞是**单个等效体积盒**，凸出物只改接地点 | `[专利]` | US7402104B2 | 碰撞仍是**一个球**；凸出物只进 `H_cap` 的 `λL` 项（§3.7），不做逐物件碰撞 |
 
@@ -467,7 +467,7 @@ h     = C.y − climbAnchorY            # climbAnchorY = 本次贴墙段的底�
 **爬升速度（按“到顶时间”参数化，而不是按速度）**
 
 ```
-v_up0    = 1.718 · H_cap / T_climb            # T_climb = 4.5 s
+v_up0    = 1.718 · H_cap / T_climb            # T_climb = 2.8125 s（所有者 2026-11-17 试玩后提速 60%，PROVISIONAL）
                                               # 1.718 = 1/(1−√0.02)：「爬满 98% H_cap」需要的时间
                                               # 由 t(h)=2H/v0·(1−√(1−h/H)) 反解
 rate     = clamp(v_gate / 2.0, 0.75, 1.5)     # 推得越狠越快，dash 到 1.5 上限
@@ -479,8 +479,8 @@ t_up     = normalize(up − (up·n)·n)                        # 上坡切线；
 v        = v_along · t_up                                  # 爬升通道“拥有”速度向量
 ```
 
-- **为什么按时间参数化**：`H_cap ∝ r`，若用固定速度，2.20 球爬 2.2 m 要 15 s；按 `T_climb` 后**所有球径都是 ~4.5 s 到顶**（`v_up0 ∝ H_cap`）。大球在 m/s 上更快、在“几个身位”上一致——这是手感决定，需试玩。
-- **为什么 `m(θ)/m(90°)`**：70° 比 90° 快 3.2×（0.738 vs 0.229 m/s @D=0.60），满足“70° 能爬但慢、90° 极慢地蹭”。
+- **为什么按时间参数化**：`H_cap ∝ r`，若用固定速度，2.20 球爬 2.2 m 要 15 s；按 `T_climb` 后**所有球径都是 ~2.8 s 到顶**（`v_up0 ∝ H_cap`）。大球在 m/s 上更快、在“几个身位”上一致——这是手感决定，需试玩。
+- **为什么 `m(θ)/m(90°)`**：70° 比 90° 快 3.2×（1.180 vs 0.367 m/s @D=0.60），满足“70° 能爬但慢、90° 极慢地蹭”。
 - **`fade` 用 sqrt**：线性 fade 会让球在 0.9H 时只剩 10% 速度、永远到不了顶；sqrt 在 0.9H 还有 32%。
 - **`v_along` 与 `t_up`**：这是让 70° 坡“能爬”的关键。若只给竖直速度，球会**离开**坡面（坡在前进方向升高）；沿切线同时给水平与竖直分量，球才贴着坡走。90° 时 `t_up = +Y`、水平分量为 0，退化成“贴墙直上”。
 - **速率限制**：`a_climb = 3 m/s²`，`v_along` 每子步最多变 `a_climb·dt/N`；避免接触瞬间速度阶跃。
@@ -562,7 +562,7 @@ climbLocked 只在 p < 0.2（松开）时清除
 | `v_min` | 1.5 m/s | 90° 的速度门 | 是（1.0/1.5/2.0） |
 | `α` | 1.0 | `sin^α` | 否（1.0 已够） |
 | `k_intent` | 0.5 | 目标速度折算成“推入速度” | 是（0.3/0.5/0.8） |
-| `T_climb` | 4.5 s | 到 `H_cap` 的时间（决定所有球径的爬升速度） | **是（3/4.5/6）** |
+| `T_climb` | 2.8125 s（所有者 2026-11-17 试玩后提速 60%，PROVISIONAL） | 到 `H_cap` 的时间（决定所有球径的爬升速度） | **是** |
 | `m0` | 0.15 | 90° 的 creep 下限 | 是（0.05/0.15/0.25） |
 | `p_min` | 0.2 | 最小推入 | 是 |
 | `a_climb` | 3 m/s² | 爬升速度的速率限制 | 是 |
@@ -584,16 +584,16 @@ climbLocked 只在 p < 0.2（松开）时清除
 
 | θ | m(θ) | D=0.30 | D=0.60 | D=1.10 | D=2.20 |
 |---:|---:|---:|---:|---:|---:|
-| 50° | 0.758 | 0.579 | 1.157 | 2.121 | 4.243 |
-| 55° | 0.696 | 0.532 | 1.064 | 1.950 | 3.900 |
-| 60° | 0.630 | 0.481 | 0.962 | 1.764 | 3.527 |
-| 70° | 0.483 | 0.369 | 0.738 | 1.352 | 2.704 |
-| 80° | 0.321 | 0.245 | 0.491 | 0.900 | 1.799 |
-| 90° | 0.150 | **0.115** | **0.229** | **0.420** | **0.840** |
+| 50° | 0.758 | 0.926 | 1.851 | 3.394 | 6.789 |
+| 55° | 0.696 | 0.851 | 1.702 | 3.120 | 6.240 |
+| 60° | 0.630 | 0.770 | 1.539 | 2.822 | 5.643 |
+| 70° | 0.483 | 0.590 | 1.181 | 2.163 | 4.326 |
+| 80° | 0.321 | 0.392 | 0.786 | 1.440 | 2.878 |
+| 90° | 0.150 | **0.184** | **0.366** | **0.672** | **1.344** |
 
-- 到顶时间（90°，到 0.98H）：**四档都是 ≈4.5 s**（这就是 `T_climb` 的意义）。
+- 到顶时间（90°，到 0.98H）：**四档都是 ≈2.8 s**（这就是 `T_climb` 的意义）。
 - 同一个 90° 墙，半推（`v_gate=1.0 < 1.5`）⇒ **不爬**；全推 ⇒ 爬。`rate` 在 `v_gate=2.0` 时为 1.0，dash（`v_gate=3.2`）时封顶 1.5。
-- 70° 比 90° 快 3.2×，但仍只有平地速度的 18%（0.738 vs 4.0）。
+- 70° 比 90° 快 3.2×，但仍只有平地速度的 30%（1.180 vs 4.0）。
 
 **三个验收场景的走法**：
 
@@ -644,7 +644,7 @@ capProxy = min(maxProxyProtrusionPerCoreRadius·r, maxProxyProtrusionWorldM)   #
 ### 3.10 需要试玩才能定的五件事
 
 1. `k_h = 1.5` 是否让**普通台阶**太容易上（0.5D–1.5D 的台阶现在“慢慢也能上”）——若太宽松，只能降到 1.45；低于 1.44 就翻不上 0.222 m 球的 0.30 m 台阶（TERRAIN_CLIMB §7）。
-2. `T_climb = 4.5 s` 是不是“爬墙”的正确节奏（4.5 s 爬一个身位）。
+2. `T_climb = 2.8125 s` 是不是“爬墙”的正确节奏（2.8 s 爬一个身位）。
 3. 45° 的滚/爬分界：45° 坡必须能滚（C05）、50° 必须慢爬（C06）；如果 45/46 的手感跳变太大，考虑把 `T_climb` 在 45–55° 之间做一段混合，而不是移动分界。
 4. 90° 的 creep 下限 `m0=0.15`（0.229 m/s @D=0.60）是否“极慢但可感知”。
 5. dash 的 1.6×/0.45 s 是否够“冲一下”，又不至于让所有墙都变容易。
@@ -655,15 +655,15 @@ capProxy = min(maxProxyProtrusionPerCoreRadius·r, maxProxyProtrusionWorldM)   #
 
 ### 4.1 三个形状：见 §4A
 
-今天 `collisionRadius`、`coreRadius`、`semanticDiameter` 是同一个球的三个名字（两个 ratio 都是 1），而 `semanticDiameter` 同时被视觉、相机、`stepLimit`、吸收门四个消费者读。v2 **不再保持 1:1**，而是按用户体感拆成 **Visual / Rolling / Pickup** 三个对象（§4A）：
+今天 `collisionRadius`、`coreRadius`、`semanticDiameter` 是同一个球的三个名字（两个 ratio 都是 1），而 `semanticDiameter` 同时被视觉、相机、`stepLimit`、吸收门四个消费者读。v2 **不再保持 1:1**，而是拆成 **Visual / Rolling / Pickup** 三个对象（§4A）；视觉核心固定为起始球径（原作录像：核心不随吸收长大，[`ORIGINAL_ATTACH_LOOK.md`](../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md) b1），随体积长大的只有物理等效球：
 
 ```
-r_visual = 0.95·r_phys      # 核心网格/相机/cull
+r_visual = r_start         # 核心网格：本关起始球径的一半，固定，不随吸收长大
 r_roll   = 1.00·r_phys      # 接触核心（+ 16 根针尖）
-pickupReach(û) = max(r_phys·(|ûx|+|ûy|+|ûz|), rollReach(û))   # 触发体
+pickupRadius = r_phys      # 接触门：道具自身盒到球心距离 ≤ r_phys + contactRadius
 ```
 
-本节以下只保留**长大/缩小/埋没**的规则（§4.2/§4.3）；形状定义、数据、消费者、以及 `collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` 的重新定义全部在 **§4A**。任何在 §4.2/§4.3 里出现 `r` 的地方，**默认指 `r_phys`**；涉及“看得见/看不见”的地方用 `r_visual`。
+本节以下只保留**长大/缩小**的规则（§4.2）和埋没的现行决定（§4.3）；形状定义、数据、消费者、以及 `collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter`的重新定义全部在 **§4A**。任何在 §4.2/§4.3 里出现 `r` 的地方，**默认指 `r_phys`**。
 
 ### 4.2 长大与正在进行的接触
 
@@ -690,33 +690,14 @@ pickupReach(û) = max(r_phys·(|ûx|+|ûy|+|ûz|), rollReach(û))   # 触发体
 - **推挤后要重算支撑**：中心动了，`supportHeight/normal` 必须用新位置重查一次（否则视觉滚转的法线是旧的）。这一步复用 §3.4 第 4 步的同一个接触查询。
 - **视觉滚转**：长大推挤的位移**不进** `VisualRollMath`（它不是滚动）；若推挤 > 0.02 m 置 `discontinuous` 一帧，避免球“自己转一下”。
 
-### 4.3 埋没的吸附物：显示层 cull，数据保留
+### 4.3 埋没的吸附物：不做隐藏，数据保留
 
-**原作口径**（`[专利]`）：吸附时记录位姿、父子挂接、**不缩放**；球长大后比球小得多的物件**不显示**，但体积仍算。社区侧（日文 wiki / 5ch）也记“小物件很快消失”。
+**原作口径**（`[专利原文]` + `[录像实测]`，[`ORIGINAL_ATTACH_LOOK.md`](../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md) a5/d1–d3）：吸附位姿冻结、不缩放、不外推；核心不长大，后吸的件在外层、先吸的被压在里面；专利的消隐键是摄像机档位上的物件**相对大小**，不是埋多深，阈值没有数。
 
-**v2 设计（只写设计，不改代码）**：
+**现行决定：不做任何埋没隐藏。** 核心固定为起始球径（§4.1、§4A.2），吸附发生在物理等效球的接触面上，永远在固定核心**之外**，所以“整个件被核心包住”的情形不存在，没有可隐藏的东西；被后吸的件盖住的先吸件仍然画出（原作也如此，录像里看到的是外壳 + 空洞）。体积、账本、吸附列表、径向代理端点都不动。
 
-```
-吸附时（每次一件）：
-    localCenter = 球局部坐标下的道具中心
-    localHalf   = 道具局部 AABB 半长（已有 propLocalBounds）
-    farRadius   = |localCenter| + |localHalf|          # 最远角点的保守上界
-    buried[i]   = false
-
-尺寸变化 > 2 mm 时（吸收/交分后，最多几次/秒）：
-    for each attached prop i:
-        buried[i] = (farRadius[i] ≤ r_core − buriedMargin)     # buriedMargin = 0.02 m
-        if buried[i] != lastBuried[i]:
-            prop.SetActive(!buried[i])                          # 只切显示
-            buriedCount += ±1
-交分缩小后：用同一判据反向恢复显示
-```
-
-- **判据用 `r_visual` 而不是 `r_roll`**：cull 是“看不见”，可见性由视觉核心（0.95 r_phys）决定；用滚动半径会把“已经戳出视觉球、其实看得见”的物件藏掉。
-- **数据全保留**：体积、分数、吸附列表、径向代理端点都不动；埋没的物件 `L_eff ≤ 0`（它在核内），所以对 `H_cap` 无贡献——**数据与物理自洽**。
-- **成本**：只在尺寸变化时 O(已吸附件数)（≤110 × 4 flops）；不是每步。
-- **不做**：不做淡出动画、不做 LOD 分级、不删除（原作也不删）。视觉细节交给表现层。
-- **反向的坑**（审计 E 节 #9）：`CheckAttachmentRootOnce` 只查距离，若 `AttachmentRoot` 被误挂到 `CoreMesh` 下，`localScale` 会跟着球长大。v2 要求吸附宿主同时断言“父节点是 AttachmentRoot、其 lossyScale=1”，这条与 cull 无关但必须一起修。
+- **开放**：原作按相对大小的显示层级消隐（d1–d3）。默认不做，因为它会让球更秃；只在 Quest 上已吸附渲染器数超预算时再启用，阈值没有原作数，届时单独测。
+- **反向的坑**（审计 E 节 #9）：`CheckAttachmentRootOnce` 只查距离，若 `AttachmentRoot` 被误挂到 `CoreMesh` 下，`localScale` 会跟着核心缩放。吸附宿主应同时断言“父节点是 AttachmentRoot、其 lossyScale=1”。核心现在是常量缩放，此坑的后果变小，但断言仍然该有。
 
 ### 4.4 边界
 
@@ -733,17 +714,17 @@ pickupReach(û) = max(r_phys·(|ûx|+|ûy|+|ûz|), rollReach(û))   # 触发体
 ## 4A. 球的三层形状（Visual / Rolling / Pickup）
 
 > 本章按用户 2026-11-15 的实机体感补充，并**修正 §4.1**：不再说“只有一个物理球”。
-> 结论：**三个明确分开的对象**，各有名字、数据、使用者与禁令；它们之间是**有序**的（§4A.2 的不变量），不是三个可以互相代用的半径。
+> 结论：**三个明确分开的对象**，各有名字、数据、使用者与禁令；各自遵守 §4A.2 的不变量（拾取半径不保证覆盖突出针尖），不是三个可以互相代用的半径。
 
 ### 4A.1 证据与体感
 
 | 证据 | 级别 | 内容 | 我们怎么用 |
 |---|---|---|---|
-| US7402104B2 图 4A/4C、S4/S54 | `[专利]` | 三个模型：显示 `Mp`、碰撞 `Mh`（等体积球的**外接盒**）、滚动 `Mr`（16 固定针 + 4 可选针，针尖是接地点） | 本章三个对象的**原型**；但专利的 `Mr` 只用于滚动/贴地（见 §4A.3 的偏离声明） |
+| US7402104B2 图 4A/4C、S4/S54 | `[专利]` | 三个模型：显示 `Mp`、碰撞 `Mh`（等体积球的**外接盒**）、滚动 `Mr`（16 固定针 + 4 可选针，针尖是接地点） | 本章三个对象的**原型**；`Mh` 实际盒形状/朝向未知，本项目拾取采用内接等效球（§4A.4 的有意偏离）；专利 `Mr` 只用于滚动/贴地（§4A.3） |
 | 原作手册 “current diameter of the katamari” | `[官方]` | HUD 报的是**直径** | HUD 口径 = 物理等效球直径 `2·r_phys` |
 | REROLL 资产 `core_01 … core_21` + KF 的 CORE 文件夹 | `[数据挖掘]` | 视觉核心是**低模“杂物团”**，按尺寸换 21 档模型，不是纯色球 | 视觉层：核心网格可非球形、按档换模型 |
-| `/tmp/orig_physics` §10.3 | `[推断]`（置信度中） | `D_vis ≈ D_HUD`，核心半径 ≈ `0.9–1.1 r_phys`，最佳猜测 **0.95** | `r_visual = 0.95·r_phys`（OUR 初值） |
-| 同 §10.6 | `[推断]` | “粘附圈不要单独设半径；用碰撞代理 + 10% 体积门；若必须留，取 `1.0 r`（盒角最多 `1.7 r`）” | 拾取层用**外接盒支撑函数**（§4A.4），不另拍一个常数 |
+| 录像实测（PS2 美版，480p，[`ORIGINAL_ATTACH_LOOK.md`](../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md) b1–b4） | `[录像实测]` | 核心**不随吸收长大**（5.0 cm 与 6.9 cm 时核心同像素宽，≈4.8±0.7 cm）；12.7 cm 起核心被完全盖住；外轮廓约 1.15×HUD 直径（0.9–1.3） | `r_visual = r_start` 固定；碰撞/接地/吸收门所用等效体积球照旧随体积长大 |
+| 同 §10.6 | `[推断]` | “粘附圈不要单独设半径；用碰撞代理 + 10% 体积门；若必须留，取 `1.0 r`（盒角最多 `1.7 r`）” | 该推断不能证明 Mh 的实形/朝向；现行拾取用等效球（§4A.4），不另加触发壳 |
 | 用户实机体感 | 用户 | ① 粘贴/拾取范围 > 视觉球、也 > 滚动碰撞球；② 大多数时候是小棍撑出来的滚动体在“撑着滚”，不是核心球；③ 视觉球本体甚至不是球 | 三个对象 + 针尖进入接触求解 + 视觉层独立 |
 | 现有审计 | 代码事实 | 针尖只抬高接地高度；扫掠只用 `collisionRadius`，不含突出；C 阶段（针进墙/挡路）没做 | **本设计要修的差异**（§4A.3） |
 
@@ -751,22 +732,22 @@ pickupReach(û) = max(r_phys·(|ûx|+|ûy|+|ûz|), rollReach(û))   # 触发体
 
 | 对象 | 定义 | 数据（UdonSharp，并行数组/标量） | 使用者 | **禁止** |
 |---|---|---|---|---|
-| **VisualShape** | 核心网格（低模杂物团，21 档）+ 粘附物挂载点（`AttachmentRoot`） | `visualCoreRadius`、`visualTier`(1..21)、`coreMesh` 引用、挂载 `Transform` | `BallView`（缩放/换档）、跟随架相机半径、埋没 cull（§4.3） | 不进接触、不进拾取、不进 `stepLimit`、不进吸收门 |
+| **VisualShape** | 核心网格（固定为起始球径；原作按档换低模“杂物团”，我们先用占位球）+ 粘附物挂载点（`AttachmentRoot`） | `visualCoreRadius`（= 本关起始球径 / 2，只读常量）、`coreMesh` 引用、挂载 `Transform` | `BallView`（只在起始时写一次缩放）、诊断读数 | 不进接触、不进拾取、不进 `stepLimit`、不进吸收门；**不随体积长大** |
 | **RollingShape** | 核心球 `r_roll` + 16（可选 +4）根**球局部**针的支撑长度；针尖随球滚动旋转 | `rollCoreRadius`、`needleDirLocal[16]`、`needleSupport[16]`、`needleCompact[]`+count、`needleTipRadius`、`needleProtrusionCap` | `ContactSolveMath`（核心接触 + 针尖接触合并）、支撑选择、`VisualRollMath` 法线、爬升的 `L_eff`/grip | 不进拾取 reach、不进吸收门、不写账本 |
-| **PickupShape** | 触发体：等体积球的**外接盒支撑函数** ∪ 滚动形状（针尖也算“能粘”） | 无状态；由 `r_phys` + `RollingShape` 现算 | **只有** `PickupAbsorbMath` 的候选 reach（能不能粘） | **绝不**做阻挡、推挤、去速、支撑；不进 `ContactSolve` |
+| **PickupShape** | 触发体：半径 `r_phys` 的等效体积球；道具用自身有向盒 | 无状态；读吸收前 `collisionRadiusWorldM` 与 contactRadius（默认 0） | **只有** `PickupAbsorbMath.TryComputeContact`（能不能粘） | 不用立方体方向支撑半径、不并入针；不做阻挡/支撑、不进 `ContactSolve` |
 
 **不变量（必须写进代码注释并测）**：
 
 ```
-r_visual = 0.95·r_phys
-r_roll   = 1.00·r_phys
+r_visual = r_start                         # 固定；r_start = 本关起始球径 / 2
+r_roll   = 1.00·r_phys                     # 随体积长大
 rollReach(û) = max(r_roll, max_i needleSupport[i]·dot(dir_i, û))     ≤ r_roll + cap
-pickupReach(û) = max( r_phys·(|ûx|+|ûy|+|ûz|), rollReach(û) )       # 盒 ∪ 针
-⇒ r_visual < r_roll ≤ rollReach(û) ≤ pickupReach(û)                   ∀û
+pickupRadius = r_phys
+⇒ r_visual ≤ r_phys = r_roll = pickupRadius ≤ rollReach(û)          ∀û   （交分缩小不低于起始球径）
 ```
 
-- **为什么 pickup 要 ∪ 针尖**：一根 1.5 m 的杆伸出去 0.3 m 时，`rollReach` 可以超过盒的**轴向上限** `r_phys`。如果拾取只取盒，就会出现“杆能撑住墙、却粘不到杆尖前面的东西”——违反用户的“拾取 > 滚动”。取并集后，不变量由构造保证。
-- **为什么 visual 可以比 roll 小**：视觉核心只是“被吸附物盖住的那颗杂物团”。它小 5%，物理球仍按 `r_phys` 接触，视觉上不会出现“球悬空 5%”，因为吸附物本来就在外表；这是原作的估计值（§10.3），不是硬证据。
+- **拾取不并入针尖**：针负责受控接地/滚动碰撞，不是扩大吸收壳的理由。吸收只在道具盒接触等效球时触发，避免把球面之外的道具冻结成悬空外壳。
+- **为什么 visual 是常量**：原作录像里核心在 5.0→6.9 cm 同像素宽，球变大靠外层物件累加；吸附物按接触面挂在等效球上，大球时形成外壳、中间留空洞（30 cm 时空洞约占轮廓 30–45%）。视觉核心因此不能随体积长大，否则就是把先吸的件吞进红球里（本项目 2026-11-15 的观感问题）。代价：大球时核心远小于物理球，接地与轮廓由凸出物决定（见 [`ATTACH_PLACEMENT.md`](../BallLayers/Attachment/ATTACH_PLACEMENT.md) §3.4）。
 - **三个半径都从同一个体积来**：`r_phys = cbrt(3V/4π)`，V = 初始 + Σ 已确认吸附体积。视觉与拾取都是它的**确定函数**，不是第二套账本。
 
 ### 4A.3 Rolling：16 根针尖怎么进入接触求解
@@ -786,9 +767,8 @@ float     needleTipRadius  = 0.01f;
 float     needleProtrusionCap;                  // = min(0.35·r_roll, 0.30)
 ```
 
-**支撑长度从哪来**：沿用径向代理的**精确端点云**（≤4 个长物件 × 8 个 AABB 角点 = 32 点），对每根针方向取 `max_i dot(p_i, dir_i)`，再 `clamp(·, r_roll, r_roll + cap)`。
-- 今天 `proxySupports[32]` 就是这张表，但**没有物理消费者**（只被 attach/detach/诊断读）；v2 让它第一次进入接触。
-- **32 → 16 是另一个 agent 的范围**：本设计按 16 写；在它落地前，物理侧取 32 张表里“16 个方向”的子集（或直接 32 也成立，容量翻倍而已）。**不要**为了这件事改径向代理文件。
+**支撑长度从哪来**：径向代理的 16 向表。**每件**已吸附物都登记（不再只收长物件）：把它的 8 个 AABB 角点放进球局部系，对每根针方向取 `max_i dot(p_i, dir)`（盒的支撑函数，精确），跨所有吸附物取 max，再 `clamp(·, r_roll, r_roll + cap)`；`cap = min(0.35·r_roll, 0.30)` 仍是 PROVISIONAL。吸附时只对新件做 8 角点 × 16 方向的增量 max 合并（约 128 次点积）；表是球局部的绝对长度，球长大时不需要改表（突出量 `support − r` 自然变小，cap 随 r 放宽）。
+- `proxySupports[16]` 就是这张表；v1 把它的针尖喂 `GroundContactMath`，v2 把针尖当扫掠段进入接触（本节）。
 - 视觉杆可以比 `cap` 伸得更长（美术自由），**物理针尖到 cap 为止**；这个差异必须显示在调试读数里（`GetNeedleProtrusionCapWorldM()`），否则又会出现“看起来撑着、物理没撑”。
 
 **每步算法**（在核心接触的同一次子步里）：
@@ -814,13 +794,13 @@ float     needleProtrusionCap;                  // = min(0.35·r_roll, 0.30)
 
 | 项 | 最坏 | 典型 |
 |---|---:|---:|
-| 16 方向旋转（四元数×向量） | 16×18 = 0.3k | 只算 compact：2–6 根 → 0.1k |
-| 针尖段 vs OBB（≤8 compact × ≤12 near × 2 子步） | 8×12×2 × 40 = 7.7k | 4×3×2×40 = 1.0k |
-| 段包围球早退 | 8×12×2×6 = 1.2k | 0.3k |
+| 16 方向旋转（四元数×向量） | 16×18 = 0.3k | 只算 compact：8–12 根 → 0.2k |
+| 针尖段 vs OBB（≤16 compact × ≤12 near × 2 子步） | 16×12×2 × 40 = 15.4k | 10×3×2×40 = 2.4k |
+| 段包围球早退 | 16×12×2×6 = 2.3k | 0.4k |
 | 平面（16 dot） | 0.1k | 0.1k |
-| **合计（相对 §1.8 的核心接触）** | **≈ +9k flops/步** | **≈ +1.5k** |
+| **合计（相对 §1.8 的核心接触）** | **≈ +18k flops/步** | **≈ +3k** |
 
-> 最坏情形（4 个长物件把 16 根针都撑出来 + 12 个 near OBB + 2 子步）是 **≈1.3 万 flops/步**（§1.8 的 4.2k 核心 + 这里 9k），比只有核心时高 3–4×。**这是“针尖参与墙/台阶”的代价**；如果 profiler 说不行，降级路径是“针尖只对支撑面与最近 4 个盒”，代价是丢“杆挡墙”。先按上限实现，用 `GetNeedleContactCount()` / `GetLastStepMicros()` 实测再决定。
+> 最坏情形（已吸附物把 16 根针都撑出来 + 12 个 near OBB + 2 子步）是 **≈2.2 万 flops/步**（§1.8 的 4.2k 核心 + 这里 18k），比只有核心时高约 5×；球上有一定件数后这是常态而不是最坏（所有吸附物都登记进针，`CompactNeedleCap` 为 16）。**这是“针尖参与墙/台阶”的代价**；如果 profiler 说不行，降级路径是“针尖只对支撑面与最近 4 个盒”，代价是丢“杆挡墙”。先按上限实现，用 `GetNeedleContactCount()` / `GetLastStepMicros()` 实测再决定。
 
 **针尖进墙是“偏离专利”的**：专利的 `Mr` 只用于滚动/贴地，`Mh`（球盒）才做碰撞。用户要的体感是“杆撑出来的东西也挡墙”。所以 v2 **有意**让针尖参与所有接触（地面/坡/墙/台阶/道具）。后果要写进关卡规则：
 - 门洞/夹缝的有效净宽从 `2r` 变成 `2(r + cap)`（D=0.60 时 +0.21 m）；
@@ -842,57 +822,46 @@ v_req(θ) ← v_req(θ) · (1 − grip)                                         
 
 ### 4A.4 Pickup：触发体，永远不是阻挡体
 
-**表示**（方向相关，专利 `Mh` 的盒支撑函数）：
+**现行表示（2026-11-17）：等效体积球，v1/v2 相同。** 原作专利 `Mh` 是包围盒，但实形/朝向没有实证；本项目刻意采用其内接等效球，理由与 owner 决定见 [`PARITY_AUDIT.md`](../Parity/PARITY_AUDIT.md)“吸收触发的几何”行。这不是声称原作 Mh 是球。
 
 ```
-pickupReach(û) = max( r_phys · (|ûx| + |ûy| + |ûz|) , rollReach(û) )
-                   轴向 1.00 r_phys
-                   面对角 1.41 r_phys
-                   体对角 1.73 r_phys
+pickupRadius = collisionRadiusWorldM = r_phys
+boxDistance = 球心到道具自身有向盒的最短距离
+可吸 ⇔ boxDistance ≤ pickupRadius + contactRadiusWorldM   # 默认 0
+         且通过原作整 mm 体积门、种类/成长/账本门
 ```
 
-**消费者只有一处**：`PickupAbsorbMath` 的候选 reach：
-
-```
-reach = pickupReach(û_ball→prop) + contactRadiusWorldM + propBoundingRadius   # contactR 仍默认 0
-可吸 ⇔ 距离 ≤ reach 且 propVolume ≤ min(512, (π/6)·(2·r_phys)³/10)
-```
-
-- **与今天的差别**：今天 `reach = collisionRadius + contactR + propBoundingRadius`，轴向等价；v2 在斜方向上把 reach 放大到 1.41/1.73 倍。**这正是“拾取范围 > 滚动范围”**，且不需要新常数。
-- **与挡路的关系**：挡路是**另一条**判定（`propBounds` 与滚动形状的接触/支撑分类），不是 pickup。pickup 只回答“能不能粘”，不回答“挡不挡”。**代码上必须分开**：`ContactSolve` 拿不到 `pickupReach`，`PickupAbsorbMath` 拿不到接触法线。
-- **“隔墙吸”的危险**：reach 变大后，墙后的道具可能进候选。今天的候选收集本来就不做视锥/遮挡（`SubmitCandidate` 由宿主收集），所以这不是新问题，但会放大。三个选项：
-  - ① 接受（原作也基本如此：吸附判定用球盒 + 体积门，没有遮挡）；
-  - ② 加一次 `Physics.Linecast`——**Udon 里没有**，不能用；
-  - ③ 用接触集做一次“中间是否有面”的判定（用 `supportSurfaceId` 与距离的粗略检查）——不可靠。
-  **推荐 ①**，并在 evidence 里记录“隔墙可吸”的已知行为；如果试玩觉得穿墙吸太假，再单独设计（不在 v2 范围内）。
-- **候选容量 4 不变**：pickup 变大只改变“谁进候选”，不改变容量；满了仍然丢并计数。
+- **唯一接触实现**：`PickupAbsorbMath.TryComputeContact`。道具盒由 `itemSize + itemRotation + itemPosition` 确定，不加 `propBoundingRadius`；两端 gap 经 `AttachmentMath.TryComputeBoxGap` 调同一函数，减同一个吸收时半径/余量。
+- **不使用方向支撑函数**：`r·(|ûx|+|ûy|+|ûz|)` 是立方体**投影支撑**，不是“道具盒到球心 ≤ 球半径”的半径，也不是球到立方体的射线距离；更不能用 `max(盒支撑, 针)` 代替球。R33 的 70/70 电机负 gap 正是以这个放大半径量的；宿主相对物理球 69/70 为正。可量化的 36 对中半径口径项解释总差的 97%，见 [`ATTACH_PLACEMENT.md`](../BallLayers/Attachment/ATTACH_PLACEMENT.md) §1。
+- **冻结触发时姿态**：阶段 6 成功提交时，用阶段 5 的球心和同一步接触滚转算出 local pose 写事件环（成长前半径，经同一 `VisualRollMath`）；宿主 `Update` 只消费 local pose，不拿延迟后的球心/旋转重算。任意 N 个后续物理步、同一步成长推出都携带冻结姿态。
+- **与挡路分离**：`ContactSolve` 不拿拾取半径；滚动针可以接触墙/地面但不扩吸收门。体积门仍是 `PickupAbsorbMath.IsBeyondAbsorbLimit` 的原作整 mm 口径。
+- **候选容量 4、无遮挡/TTL 的边界不变**：候选由宿主收集；本层只判断已提交盒的几何与资格，不新增隔墙测试。详见 PickupAbsorb README，不能因本修复声称隔墙收集已解决。
 
 ### 4A.5 两个旧比例怎么重新定义
 
 | 旧量 | 今天 | v2 | 消费者怎么改 |
 |---|---|---|---|
-| `collisionToCoreRadiusRatio` | 1，`collisionRadius = coreRadius` | **删除**；换成两个显式常数：`rollingCoreToPhysicalRadius = 1.0`、`visualCoreToPhysicalRadius = 0.95` | 接触用 `r_phys`；视觉用 `r_visual`；**不要**再有一个“collisionRadius”同时喂扫掠和 reach |
+| `collisionToCoreRadiusRatio` | 1，`collisionRadius = coreRadius` | **删除**；换成显式量：`rollingCoreToPhysicalRadius = 1.0`；视觉核心半径不是比例而是常量 `r_start` | 接触用 `r_phys`；视觉用 `r_visual`；拾取与核心碰撞读同一 `r_phys`；滚动针保持分离 |
 | `semanticDiameterPerCoreDiameter` | 1，`semanticDiameter = 2·coreRadius` | **删除**；拆成三个量（见下表） | 每个消费者只读自己那个量 |
-| `collisionRadiusWorldM` | 扫掠 + reach + 重生高度 | **降级为 `r_phys` 的别名**（兼容 getter），**禁止**用于 reach | 重生高度继续用它（= r_phys，对的） |
-| `semanticDiameterWorldM` | 视觉、相机、`stepLimit`、吸收门 | **拆**：`physicalDiameter = 2·r_phys`、`visualDiameter = 2·r_visual`、`pickupReach(û)` | 见下表 |
+| `collisionRadiusWorldM` | 扫掠 + reach + 重生高度 | `r_phys` 的实现字段；**同时**用于球侧吸收接触半径 | 重生高度继续用它（= r_phys，对的） |
+| `semanticDiameterWorldM` | 视觉、相机、`stepLimit`、吸收门 | **拆**：`physicalDiameter = 2·r_phys`、`visualDiameter = 2·r_visual`；拾取半径 = `r_phys` | 见下表 |
 
 | 消费者 | 应该读 | 理由 |
 |---|---|---|
 | HUD “直径” | `physicalDiameter` | 官方手册口径；与吸收门同一个标量（§10.6） |
-| `CoreMesh` 缩放 | `visualDiameter` | 视觉核心 0.95 r；只在表现层 |
-| 跟随架相机半径 | `r_visual` | 眼点公式按“玩家看到的球”取；差 5%，可接受 |
+| `CoreMesh` 缩放 | `visualDiameter = 2·r_start` | 固定；只在表现层，起始时写一次 |
+| 跟随架相机半径 | `physicalDiameter` | 玩家看到的是随体积长大的物件外形（外轮廓约 1.15×等效直径），不是固定核心 |
 | `stepLimit`（仅诊断） | `0.25·physicalDiameter` | 物理已不用它；测试场旧判据还要读 |
 | 吸收体积门 | `physicalDiameter` | 体积 = 物理等效球；与账本同源 |
-| 拾取 reach | `pickupReach(û)` | §4A.4 |
+| 拾取半径 | `collisionRadiusWorldM = r_phys`（余量另加） | §4A.4；不读视觉核心或针 |
 | 接触/推挤/爬升 | `r_roll = r_phys` + 针尖 | §4A.3 |
 | 视觉滚转的半径 | `r_roll` | 无滑动滚动按物理半径，否则转速看起来会差 5% |
-| 埋没 cull | `r_visual` | 可见性由视觉核心决定（§4.3） |
 | PVP/远端摘要 | `physicalDiameter`（主）+ `visualDiameter`（只显示） | 玩法判定只认物理 |
 
 **迁移时的硬检查**（S4）：
 1. 全仓 `grep semanticDiameter`：每一个消费者必须落到上表的一行；出现第四个新用途就停下来问。
 2. `collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` 的序列化字段**保留但忽略**（读出来只打 warning），避免旧场景反序列化丢字段；代码里不再有这两个乘法。
-3. 调试面板同时打 `r_phys / r_visual / rollReachMax / pickupReachMax`，四个数一起看。
+3. 调试面板同时打 `r_phys / r_visual / rollReachMax / pickupRadius`，四个数一起看。
 
 ### 4A.6 与前面章节的冲突清单（本章落地时要一起改）
 
@@ -905,11 +874,11 @@ reach = pickupReach(û_ball→prop) + contactRadiusWorldM + propBoundingRadius  
 | §2.5 支撑 | 只有核心接触 | 允许“只有针尖支撑”：`supportKind=4`，`supportHeight` 用针尖处切平面，`support_gap` = 突出量 |
 | §2.9 尺寸耦合 | “只用一个 r” | 改为三形状（§4A.5） |
 | §3.7 凸出物 | “可选，只加 H_cap” | 针尖是**一等接触**；`L_eff` 仍加 H_cap，另加 grip（§4A.3） |
-| §4.1 | 三个半径 1:1，保持 | 改为“三层对象 + 0.95 视觉”，指向 §4A |
-| §4.3 埋没 cull | 用 `r_core` | 用 `r_visual` |
+| §4.1 | 三个半径 1:1，保持 | 改为“三层对象 + 固定起始视觉核心”，指向 §4A |
+| §4.3 埋没 cull | 用 `r_core` | 不做（核心固定，没有“核内”情形） |
 | §5.2 窗口半径 | `r + travel` | `r_phys + cap + travel`（针尖能比核心先碰到） |
 | §6 测试 | 无形状格 | 加 W7/W8/P1（§6.2） |
-| §8 拍板 | 无形状项 | 加视觉 0.95、pickup 盒、针尖挡墙、隔墙吸 |
+| §8 拍板 | 无形状项 | 加视觉核心固定为起始球径、pickup 盒、针尖挡墙、隔墙吸 |
 
 ### 4A.7 新增测试格（与 §6.2 同一张表）
 
@@ -1209,8 +1178,8 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 | 0.100 | 滚 | 滚 | 滚 | 滚 |
 | 0.200 | **爬**（2 s） | 滚 | 滚 | 滚 |
 | 0.400 | **墙** | **爬**（3 s） | 滚 | 滚 |
-| 0.600 | 墙 | 墙（h = Hcap） | **爬**（4.5 s） | 滚 |
-| 0.800 | 墙 | 墙 | **爬**（4.5 s） | 滚 |
+| 0.600 | 墙 | 墙（h = Hcap） | **爬**（2.8 s） | 滚 |
+| 0.800 | 墙 | 墙 | **爬**（2.8 s） | 滚 |
 
 > 这张表是**设计值**，需要 Unity 实跑确认；它说明“台阶阈值从 0.25D 变成约 1.0D”，**是本设计最大的玩法变化**（§8 拍板项 5）。
 
@@ -1222,7 +1191,7 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 | 格 | 几何 | 起点 / drive | 判据（容差从几何来） |
 |---|---|---|---|
 | **W1** 90° 低墙 | 墙 0.15 高（0.5D @0.30）、4 长、0.4 厚；墙后是地面 | 起点墙前 1.0 m，`(0,0.15+,…)`，朝向 +z；t=0..3 s 全推，3..4 s 松手 | `max_bottom_rise ≥ 0.14`（= 0.5D − 1 cm）；`passed_over == 1`（球心 z > 墙背 + r）；`support_kind==4` 至少一帧；`fall_frames` 不判 |
-| **W2** 90° 高墙 | 墙 3.0 高（≫ Hcap）、4 长、0.4 厚 | 起点墙前 1.0 m；t=0..8 s 全推（**必须覆盖 4.5 s 爬升 + 回滑**） | `max_bottom_rise ≤ 1.02·H_cap + 0.02`（D=0.60：≤ 0.632）；`max_bottom_rise ≥ 0.5·H_cap`（确实爬了）；`final_bottom_rise ≤ 0.1`（滑回）；`reclimb_count == 0`；`recovery == 0` |
+| **W2** 90° 高墙 | 墙 3.0 高（≫ Hcap）、4 长、0.4 厚 | 起点墙前 1.0 m；t=0..8 s 全推（**必须覆盖 2.8125 s 爬升 + 回滑**） | `max_bottom_rise ≤ 1.02·H_cap + 0.02`（D=0.60：≤ 0.632）；`max_bottom_rise ≥ 0.5·H_cap`（确实爬了）；`final_bottom_rise ≤ 0.1`（滑回）；`reclimb_count == 0`；`recovery == 0` |
 | **W3** 70° 坡 | 坡升 0.24（< Hcap 0.30 @0.30），坡顶接 0.24 台面，宽 3 | 起点坡脚前 0.8 m；t=0..4 s 全推 | `deck_gap abs ≤ 0.01`；`climb_time ≤ 2.0 s`（0.24 m / 0.369 m/s + 余量）；`support_kind==4` ≥ 1 帧；`no_slip_back` 不适用（爬升带允许回滑） |
 | **W4** 墙 + 凸出长杆 | W2 的墙 + 球先吸一根 1.5×0.06×0.06 杆（`ptf_rod_1500`），杆朝墙 | 同 W2 | `h_max(W4) − h_max(W2) = λ·L_eff ± 0.02`（D=0.60：0.105 ± 0.02）；`h_max(W4) ≤ 1.2·H_cap` |
 | **W5** dash 上台阶 | 台阶高 = 0.8·H_cap（D=0.30：0.24；D=0.60：0.48），宽 4 | 两次子运行：① 不 dash；② 起跑同时 dash | `t_to_deck(dash) ≤ 0.7·t_to_deck(nodash)`；两次都 `deck_gap abs ≤ 0.01` |
@@ -1467,7 +1436,7 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 8. **AddBox 容量 64**（2026-11-16 由 8 提到 64）：现有场景（≤64 盒 + ≤4 坡）可以直接开 flag；地图 0 的 118 条要等 S4 把宿主改成 `AddObb`。`AddRamp` 的 45° 作者门仍在（S4 改 warning），更陡的坡本轮只能用 `AddObb` 直接登记。
 9. **挡路道具 / 支撑道具：缺口已填（S4b 宿主 + 本轮 `SetPropObbs`）**。宿主在它的 20 Hz 扫描里把近邻道具作为真 OBB 交给 `SetPropObbs`（12 槽，surface id 100+i，role 2/3），它们与静态盒走**同一份**接触/分类/推挤，窗口里按距离与静态混排。**v1 的 `SetBlockingBoxes` / `SetSupportProps` 没有自动转换**（它们仍只喂 v1 的 sweep/支撑表，flag 关时行为逐字不变）；`TeleportTo`/`ClearObstacles` 清道具块，下一次宿主扫描重登记，与 v1 清挡路盒的策略一致。§7.6.5 记的宿主侧实现已按这个签名接通（S4b 后续提交）。
 10. **三形状拆分（§4A.5）未落到尺寸层**：`r_phys = collisionRadiusWorldM`，`collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` 语义未变；只提供 `GetPhysicalRadiusWorldM` / `GetVisualCoreRadiusWorldM` / `GetRollReachWorldM` / `GetPickupReachWorldM` 四个读数。
-    **pickup 已按 §4A.4 接成 trigger**：`EvaluatePendingCandidates` 在 flag 开时把“球心→该候选”方向上的 `pickupReach(û)` 作为 `PickupAbsorbMath` 的球半径参数（reach = pickupReach + contactR + propBoundingRadius），**只影响“能不能粘”**，不进接触、不挡、不支撑；flag 关时该参数逐字仍是 `collisionRadiusWorldM`。`PickupAbsorbMath` 本身一行未改。隔墙吸（§4A.4 的选项①）行为不变。
+    **pickup 按 §4A.4 用等效球触发**：`EvaluatePendingCandidates` 无论 flag 都传 `collisionRadiusWorldM`；`GetPickupReachWorldM` 返回同一物理半径，contactRadius 另读。道具侧是自身有向盒，不是外接球；局部位姿在成功提交同一步写入事件环，宿主不重投影。
 11. **针尖可能漏掉亚毫米的擦角**（`BallShapeMath.TryNeedleSegmentContact` 的 5 采样 + 12 次二分）：面/棱命中精确，角上极浅的擦过可能漏。
 12. **爬升门的“持续条件”在电机里，而不是在 `TryStep`/参考模型里**（首跑修复）：§3.2 的 `v_gate ≥ v_req(θ)` 被当作**持续**条件，`RefreshClimbGate` 在每步求解前检查；`p < p_min`、到达上限、以及“门已关闭”三者任一成立就离开爬升通道并给 0.35 s 冷却。`ContactSolveMath.TryStep` 与 `contact_v2.py` 只实现“到达上限 / `p < p_min`”两种退出，参考模型的夹具全是全推时间线，所以这一条留在电机层，`step()` 的两份实现仍然一致。
 13. **v2 表在需要时惰性分配**：`AddObb`/`SetPropObbs` 会先 `EnsureContactV2Buffers()`，`Start` 只在表不存在时分配。Unity 跨 GameObject 的 `Start` 顺序是任意的，宿主可能先登记；首跑读到 `GetStaticObbCount == 0` 而 `[arena]` 报 `obbs=1/1` 就是这一类时序窗口（登记被拒/被 Start 覆盖），现在两条路径都不会丢几何。
@@ -1617,7 +1586,7 @@ pass8 把 rest_gap 全清、悬停消失，但 C14 的 `lift_bounded` 仍红：+
 | 10 | **凸出物是否加 H_cap** | ① 加（λ=1.0，受 0.105–0.30 cap） ② 不加 | **①**，但效果很小；要明显就单独抬 `L_climb` 上限（另立项） | W4 的判据 |
 | 11 | **埋没道具的边距** | 0.01 / 0.02 / 0.05 m | **0.02**（≈1.3% 的 1.10 球） | 视觉“什么时候消失” |
 | 12 | **窗口容量 24 / 静态 256** | — | **24 / 256**（沙盒峰值 16 / 118） | 内存 ~25 KB；溢出显式失败 |
-| 13 | **视觉核心 0.95 r_phys** | 0.90 / 0.95 / 1.00 | **0.95**（原作估计，§10.3） | 只影响外观与相机；物理不动 |
+| 13 | **视觉核心半径** | 随体积 0.95 r_phys / 固定起始球径 | **固定起始球径**（原作录像：核心不长大，ORIGINAL_ATTACH_LOOK b1） | 只影响外观；物理不动 |
 | 14 | **pickup 用外接盒（方向相关）还是球** | ① 盒（1.0–1.73 r） ② 球 k=1.4 ③ 球 k=1.73 | **①**（专利口径、无新常数）；广相用 k=1.5 的球兜底 | 吸附距离在斜方向变大；可能“隔墙吸” |
 | 15 | **针尖是否参与横向阻挡** | ① 全参与（支撑+爬升+挡墙） ② 只支撑+爬升 | **①**（用户体感“撑出来的东西在碰”），但门洞净宽按 `2(r+cap)` 校验 | 关卡门宽、长杆手感 |
 | 16 | **隔墙吸是否处理** | ① 接受（原作也没有遮挡） ② 另立项 | **①**，写进 evidence；Udon 没有 Linecast，②的代价高 | 吸附手感 |
@@ -1672,7 +1641,7 @@ required_speed_with_grip(theta_deg, protrusion, r_core) -> float
 | `python3 -m unittest discover -s Docs/tests` | **534 例全过**（含 `ball_contact_v2` 的 32 例：24 接触 + 8 形状） |
 | `python3 Docs/tools/validate_plan.py` | PASS（61 tasks，DAG 无环，source hashes 通过） |
 | 参考模型的验收场景 | 45° 接缝到 0.750 m；90° 墙上限 0.581 m（cap 0.60）后滑回；70° 坡上到 0.39 m 台面；0.5D 低墙翻过；50° 板 D=0.30 爬到 0.299 后滑回、D=1.10 上台面 |
-| 形状层（`shapes.py`，8 例） | 视觉核心 0.95 r；pickup 盒 1.0/1.41/1.73 r 且 ≥ 滚动 reach；针尖支撑被 cap 夹住；只有突出的针进接触；针尖随球旋转；针尖 point 接触的深度/法线；grip 在半个 r 的突出时把 90° 门槛减半 |
+| 形状层（`shapes.py`，8 例） | 视觉核心 = 起始球径的一半（固定）；pickup 盒 1.0/1.41/1.73 r 且 ≥ 滚动 reach；针尖支撑被 cap 夹住；只有突出的针进接触；针尖随球旋转；针尖 point 接触的深度/法线；grip 在半个 r 的突出时把 90° 门槛减半 |
 | **没跑** | Unity 编译、U# 全量编译、EditMode、Play Mode、profiler、任何帧时间/手感；**本文所有 Unity 侧结论都是设计，不是证据** |
 
 ### 9.4 与其它文档的交叉引用

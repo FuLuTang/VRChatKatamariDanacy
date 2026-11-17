@@ -486,6 +486,7 @@ namespace VRCKatamari.BallContact
         /// direction the motion layer pushes in; <paramref name="driveSpeed"/> is its TARGET
         /// speed, not what the contacts left over - that is what makes "push hard to climb"
         /// work while the ball is standing still against a wall.
+        /// <paramref name="gateSizeScale"/> is D / D0: the climb gate reads its speed divided by it (ClimbMath.GateSpeed), so full and half pushes behave the same at every ball size.
         /// <paramref name="driveAccel"/> exists only for the reference scenarios (it stands
         /// in for the motion layer); 0 leaves the planar velocity untouched.
         /// </remarks>
@@ -573,7 +574,8 @@ namespace VRCKatamari.BallContact
             int[] terrainChunkStarts = null,
             int[] terrainChunkTriangleCounts = null,
             int[] terrainChunkZoneIds = null,
-            int terrainChunkCount = 0)
+            int terrainChunkCount = 0,
+            float gateSizeScale = 1f)
         {
             contactCount = 0;
             dominantSurfaceId = -1;
@@ -716,7 +718,7 @@ namespace VRCKatamari.BallContact
                 float pushIn = 0f;
                 if (!TryPushIn(pushNormal, drive, out pushIn)) pushIn = 0f;
                 float planarSpeed = Mathf.Sqrt(vPlanar.x * vPlanar.x + vPlanar.z * vPlanar.z);
-                float vGate = Mathf.Max(planarSpeed, ContactTuning.KIntent * driveSpeed);
+                float vGate = ClimbMath.GateSpeed(planarSpeed, driveSpeed, gateSizeScale);
 
                 // A cap lock releases itself once the ball has slid halfway back, so a player
                 // holding into a wall taller than H_cap sees climb-fall-retry instead of a

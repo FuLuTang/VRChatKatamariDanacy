@@ -253,8 +253,8 @@ namespace VRCKatamari.Tests
         [Test]
         public void TheWindowFilterMakesTheCandidateSetIndependentOfTheCellSize()
         {
-            // R24 saw 13 vs 14 and 7 vs 12 candidates for the same pose at different cell sizes
-            // and asked why. The cause was NOT the grid: the collector added the oversized
+            // The same pose must give the same candidates at different cell sizes (a reference
+            // level once gave 13 vs 14 and 7 vs 12). The cause was NOT the grid: the collector added the oversized
             // triangles WITHOUT the window filter, so a 1 m grid (5 oversized faces) and a 2 m
             // grid (0 oversized) handed the queries different sets. This case pins the fix:
             // the window filter applies to oversized triangles too, so the candidate set is
@@ -356,7 +356,7 @@ namespace VRCKatamari.Tests
             // A MIXED mesh: 3 x 3 m of 1 m quads (18 triangles) plus ONE 12 x 12 m quad
             // (2 triangles) that is oversized at 1 m (13 x 13 = 169 cells > 64). The count
             // pass reserves no room for the oversized quad, so the fill pass MUST skip it
-            // too: the R24 integration defect wrote it into every cell it touched, running
+            // too: filling it would write it into every cell it touches, running
             // the cell cursor past its reservation and clobbering the following cells'
             // entries (and the reference table's tail).
             Vector3[] vertices = new Vector3[TerrainMeshMath.MaxVertices];

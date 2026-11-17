@@ -347,6 +347,58 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void TheSplitSurfaceAssetsFollowTheLevelKind()
+        {
+            // The contact mesh keeps its asset (the pre-split path is where the importer moves it
+            // from) and the drawn surface gets its own names, all under _RefUnlicensed for a
+            // reference level.
+            Assert.AreEqual("Assets/_RefUnlicensed/Meshes/RefCancerTerrainCollision.asset",
+                Text("TerrainCollisionMeshPath", "_ref_cancer", "cancer_ground", true));
+            Assert.AreEqual("Assets/_RefUnlicensed/Meshes/RefCancerVisual_area2_sector0_model4.asset",
+                Text("TerrainVisualPartMeshPath", "_ref_cancer", "area2_sector0_model4", true));
+            Assert.AreEqual("Assets/_RefUnlicensed/Textures/RefCancer/11_area2_2f75_33ea.png",
+                Text("TerrainVisualTexturePath", "_ref_cancer",
+                    "terrain/textures/11_area2_2f75_33ea.png", true));
+            Assert.AreEqual("Assets/_RefUnlicensed/Materials/RefCancerVisual_t012.mat",
+                Text("TerrainVisualMaterialPath", "_ref_cancer", "t012", true));
+            Assert.AreEqual("Assets/VRC_Katamari/Generated/Levels/C21/tiny_pad_collision.asset",
+                Text("TerrainCollisionMeshPath", "physics_test_field/C21", "tiny_pad", false));
+            Assert.AreEqual("Assets/VRC_Katamari/Generated/Levels/C21/visual_a_b.asset",
+                Text("TerrainVisualPartMeshPath", "physics_test_field/C21", "a b", false));
+            Assert.AreEqual("Assets/VRC_Katamari/Generated/Levels/C21/Textures/x.png",
+                Text("TerrainVisualTexturePath", "physics_test_field/C21", "terrain/t/x.png", false));
+            Assert.AreEqual("Assets/_RefUnlicensed/Meshes/RefCancerTerrainVisual.asset",
+                MeshPath("_ref_cancer", "cancer_ground", true),
+                "the pre-split name stays what a level WITHOUT terrain.visual uses");
+        }
+
+        [Test]
+        public void VisualBlendMapsToTheLitLegacyShaders()
+        {
+            Assert.AreEqual("Legacy Shaders/Diffuse", Text("VisualShaderName", "opaque"));
+            Assert.AreEqual("Legacy Shaders/Transparent/Cutout/Diffuse",
+                Text("VisualShaderName", "cutout"));
+            Assert.AreEqual("Legacy Shaders/Transparent/Diffuse", Text("VisualShaderName", "alpha"));
+            Assert.IsNull(Text("VisualShaderName", "additive"), "an undefined blend has no shader");
+            Assert.IsNull(Text("VisualShaderName", (object)null));
+        }
+
+        [Test]
+        public void ThePartMeshNameCarriesTheSidecarHash()
+        {
+            string name = Text("VisualMeshName", "_ref_cancer", "area2_sector1_model0",
+                "988C7ADC92047ED911339E46D60BD84512E9667A92595192456597D9F4A27FC1");
+            Assert.AreEqual("_ref_cancer_area2_sector1_model0@988c7adc", name,
+                "other sidecar bytes -> another name -> the importer rebuilds the asset in place");
+            Assert.AreEqual("a_p@", Text("VisualMeshName", "a", "p", ""));
+        }
+
+        private string Text(string method, params object[] args)
+        {
+            return (string)Invoke(rulesType, method, args);
+        }
+
+        [Test]
         public void BallAlignmentIsNeededOnlyBeyondTheTolerance()
         {
             float[] target = { -5f, -0.999f, 2.5f };

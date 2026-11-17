@@ -14,9 +14,8 @@ namespace VRCKatamari.Story
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Why this exists. The only registration a level had was the lab script
-    /// (<c>Labs/StoryLevel/StoryLevelLabBootstrap</c>), which mixed scene wiring with
-    /// a self-test drive, a camera trail and a log line. A shipped scene must not carry
+    /// Why this exists. Scene wiring, a self-test drive, a camera trail and a log line
+    /// must not live in one lab script. A shipped scene must not carry
     /// a component named "lab", and the level-authoring tool emits one
     /// <c>LevelContent</c> subtree whose structures need exactly this wiring
     /// (Docs/Design/Tools/LEVEL_AUTHORING.md §4.3). This component owns the wiring

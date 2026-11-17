@@ -61,6 +61,7 @@ from Tools.levelbuild import placement_core as core  # noqa: E402
 from Tools.levelbuild import placement_v2  # noqa: E402
 from Tools.levelbuild import ref_models  # noqa: E402
 from Tools.levelbuild import ref_stage  # noqa: E402
+from Tools.levelbuild import ref_stage_visual  # noqa: E402
 
 SCHEMA_V2 = placement_v2.SCHEMA
 
@@ -900,8 +901,12 @@ def load_level_inputs(level_dir):
 
 def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
                    max_diameter_m=DESIGN_MAX_DIAMETER_M, volume_penalty=DEFAULT_VOLUME_PENALTY,
-                   time_limit_s=420.0, position_source="instance"):
-    """Build ``(document, sidecar, report)`` for one reference level."""
+                   time_limit_s=420.0, position_source="instance", visual=None):
+    """Build ``(document, sidecar, report)`` for one reference level.
+
+    ``visual`` is :func:`ref_stage_visual.load`'s result: when given, its ``terrain.visual``
+    block is put in the document (the contact terrain is unchanged either way).
+    """
     folder = Path(level_dir)
     level_doc, original, models_root, model_table = load_level_inputs(folder)
     if not ref_models.is_ref_level(level_id):
@@ -1079,6 +1084,13 @@ def build_document(level_id, level_dir, *, stage_dir=None, with_colliders=True,
     sidecar, index_width = sidecar_bytes(terrain)
     digest = hashlib.sha256(sidecar).hexdigest()
     document["terrain"] = _terrain_block(terrain, boxes, chunks, index_width, digest)
+    if visual is not None:
+        with_visual = {}
+        for key, value in document["terrain"].items():
+            if key == "source":
+                with_visual["visual"] = visual["block"]
+            with_visual[key] = value
+        document["terrain"] = with_visual
     report = {
         "level": level_id,
         "document": DOCUMENT_NAME,
@@ -1512,7 +1524,10 @@ STRUCTURAL_TAGS = ("[schema]", "[schema_legacy]", "[meta_unknown_key]", "[meta_u
                    "[meta_zone_code]", "[meta_bounds]", "[terrain_key]", "[terrain_mesh]",
                    "[terrain_winding]", "[terrain_budget]", "[terrain_zone]",
                    "[terrain_classes]", "[terrain_broadphase]", "[terrain_grid]",
-                   "[terrain_segment]", "[terrain_sidecar]", "[structure_key]",
+                   "[terrain_segment]", "[terrain_sidecar]", "[terrain_visual]",
+                   "[terrain_visual_key]", "[terrain_visual_sidecar]",
+                   "[terrain_visual_part]", "[terrain_visual_material]",
+                   "[terrain_visual_texture]", "[terrain_visual_winding]", "[structure_key]",
                    "[structure_role]", "[structure_shape]", "[structure_rotation]",
                    "[structure_collision]", "[activity_wall]", "[activity_kill_plane]",
                    "[prop_key]", "[prop_id]", "[prop_def]", "[prop_kind]",
@@ -1522,13 +1537,14 @@ STRUCTURAL_TAGS = ("[schema]", "[schema_legacy]", "[meta_unknown_key]", "[meta_u
                    "[path_points]", "[path_speed]", "[unknown_key]")
 
 
-def structural_errors(document, sidecar_data=None):
+def structural_errors(document, sidecar_data=None, visual_files=None):
     """Every *shape* problem in a v2 document (no design numbers).
 
     A thin filter over :func:`placement_v2.validate` so there is exactly one implementation
     of each shape rule; the model, terrain, prop and def checks all live in the format module.
     """
-    report = placement_v2.validate(document, path=None, sidecar_bytes_=sidecar_data)
+    report = placement_v2.validate(document, path=None, sidecar_bytes_=sidecar_data,
+                                   visual_files=visual_files)
     problems = []
     for message in report.errors:
         if any(message.startswith(tag) for tag in STRUCTURAL_TAGS):
@@ -1539,17 +1555,22 @@ def structural_errors(document, sidecar_data=None):
 # --------------------------------------------------------------------------- #
 # writing the pair of files (guarded)
 # --------------------------------------------------------------------------- #
-def write_outputs(folder, document, sidecar, *, dry_run=False):
-    """Write ``placement.v2.json`` + ``terrain/<name>.katerrain`` (both path-guarded)."""
+def write_outputs(folder, document, sidecar, *, dry_run=False, visual=None):
+    """Write ``placement.v2.json`` + ``terrain/<name>.katerrain`` (both path-guarded), and,
+    with ``visual``, the ``.katvisual`` sidecar and its PNGs (:func:`ref_stage_visual.write`)."""
     folder = Path(folder)
     document_path = guard_write(folder / DOCUMENT_NAME)
     sidecar_path = guard_write(folder / "terrain" / SIDECAR_NAME)
     text = canonical_text(document)
+    if visual is not None:
+        ref_stage_visual.write(folder, visual, dry_run=True)       # guard the paths either way
     if dry_run:
         return {"document": document_path, "sidecar": sidecar_path, "written": False,
                 "bytes": len(text.encode("utf-8")), "sidecarBytes": len(sidecar)}
     sidecar_path.parent.mkdir(parents=True, exist_ok=True)
     sidecar_path.write_bytes(sidecar)
+    if visual is not None:
+        ref_stage_visual.write(folder, visual)
     document_path.write_text(text, encoding="utf-8")
     return {"document": document_path, "sidecar": sidecar_path, "written": True,
             "bytes": len(text.encode("utf-8")), "sidecarBytes": len(sidecar),
@@ -1690,6 +1711,11 @@ def build_parser():
                         help="the extraction directory (default $VRC_KATAMARI_REF_STAGE or "
                              "~/KatamariRef/noclip_export/kse_out)")
     parser.add_argument("--write", action="store_true", help="write the files (default: dry run)")
+    parser.add_argument("--visual-source", default=None,
+                        help="the textured stage.glb for terrain.visual (default %s)"
+                             % ref_stage_visual.DEFAULT_SOURCE)
+    parser.add_argument("--no-visual", action="store_true",
+                        help="leave terrain.visual out (the contact terrain is unaffected)")
     parser.add_argument("--no-colliders", action="store_true",
                         help="skip the per-def collider fit (faster; the fields stay absent)")
     parser.add_argument("--json", action="store_true", help="print the report as JSON")
@@ -1703,11 +1729,22 @@ def main(argv=None):
     levels_dir = Path(args.levels_dir) if args.levels_dir else LEVELS_ROOT
     folder = levels_dir / args.level
     try:
+        visual = None
+        if not args.no_visual:
+            source = Path(args.visual_source) if args.visual_source \
+                else ref_stage_visual.DEFAULT_SOURCE
+            if args.visual_source or source.is_file():
+                visual = ref_stage_visual.load(source)
+            else:
+                print("ref_v2_from_extract: no textured stage.glb at %s; terrain.visual is "
+                      "left out" % source, file=sys.stderr)
         document, sidecar, report = build_document(
             args.level, folder, stage_dir=args.stage_dir,
-            with_colliders=not args.no_colliders)
-        written = write_outputs(folder, document, sidecar, dry_run=not args.write)
-    except (RefV2Error, ref_stage.RefStageError, ref_models.RefAssetError, OSError) as error:
+            with_colliders=not args.no_colliders, visual=visual)
+        written = write_outputs(folder, document, sidecar, dry_run=not args.write,
+                                visual=visual)
+    except (RefV2Error, ref_stage.RefStageError, ref_models.RefAssetError, OSError,
+            ref_stage_visual.RefVisualError) as error:
         print("ref_v2_from_extract: %s" % error, file=sys.stderr)
         return 2
     report["written"] = {"document": core.display_path(written["document"]),
@@ -1749,6 +1786,13 @@ def main(argv=None):
               % (report["activityArea"]["polygon"][0], report["activityArea"]["polygon"][2],
                  report["activityArea"]["groundY"], report["activityArea"]["killPlaneY"]))
         print("  sidecar sha256: %s" % report["sidecar"]["sha256"])
+        if visual is not None:
+            summary = visual["report"]
+            print("  terrain.visual: %d parts (%d stage), %d vertices, %d triangles, %d "
+                  "materials %s; sidecar sha256 %s"
+                  % (summary["parts"], summary["stageParts"], summary["vertices"],
+                     summary["triangles"], summary["materials"], summary["blends"],
+                     summary["sidecarSha256"]))
     if args.check:
         view = to_v1_view(document)
         result = core.validate(view, path=None)

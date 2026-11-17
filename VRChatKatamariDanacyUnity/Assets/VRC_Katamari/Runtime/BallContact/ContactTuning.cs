@@ -19,7 +19,7 @@ namespace VRCKatamari.BallContact
     /// a wall to reach a higher area (no size ratio), the "1-2x ball height" numbers are
     /// weak, mutually contradictory sequel/community claims, and the one concrete
     /// long-climb anecdote (the factory chimney) is a LADDER, not a wall. So
-    /// <see cref="KHeight"/> = 1.5 and <see cref="ClimbTimeS"/> = 4.5 s are OUR
+    /// <see cref="KHeight"/> = 1.5 and <see cref="ClimbTimeS"/> = 2.8125 s are OUR
     /// PROVISIONAL values (owner decision 2026-11-16), chosen so the reference level's
     /// 0.222 m ball can clear its 0.19 m spawn pit and the observed ~0.30 m step
     /// (Docs/Design/BallMotor/TERRAIN_CLIMB.md section 7), and are to be tuned in
@@ -105,8 +105,8 @@ namespace VRCKatamari.BallContact
         /// <summary>k_intent: the motion layer's target speed counts half as push-in speed.</summary>
         public const float KIntent = 0.5f;
 
-        /// <summary>T_climb = 4.5 s: the time every ball size takes to reach H_cap.</summary>
-        public const float ClimbTimeS = 4.5f;
+        /// <summary>T_climb = 2.8125 s (owner 2026-11-17 playtest: climb speed +60%, was 4.5 s; PROVISIONAL): the time every ball size takes to reach H_cap.</summary>
+        public const float ClimbTimeS = 2.8125f;
 
         /// <summary>
         /// 1.718 = 1 / (1 - sqrt(0.02)): the sqrt-fade normalisation, i.e. v_up0 is the

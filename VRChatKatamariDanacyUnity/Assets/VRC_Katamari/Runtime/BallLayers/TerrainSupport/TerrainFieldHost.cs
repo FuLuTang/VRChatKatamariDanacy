@@ -1,5 +1,6 @@
 using UdonSharp;
 using UnityEngine;
+using VRCKatamari.BallContact;
 using VRCKatamari.BallMotor;
 
 namespace VRCKatamari.BallLayers
@@ -42,6 +43,75 @@ namespace VRCKatamari.BallLayers
 
         [SerializeField] private string terrainId;
         [SerializeField] private string sourceSha256;
+
+        /// <summary>Returned by <see cref="SampleSupportHeight"/> when nothing is under the probe.</summary>
+        public const float NoSupportHeight = -1.0e9f;
+
+        // Chunk AABBs for the height query below, built once on first use from the same
+        // serialized arrays the motor was given (the motor's own copy is not readable).
+        private Vector3[] queryChunkMin;
+        private Vector3[] queryChunkMax;
+        private bool queryReady;
+
+        /// <summary>
+        /// Height of the highest upward-facing terrain triangle under (x, z) whose plane is at
+        /// or below <paramref name="ceilingY"/>; <see cref="NoSupportHeight"/> when there is
+        /// none (or the terrain has no data). Read-only and allocation-free after the first
+        /// call; it is the stack-fall behaviour's ground query, not a ball-contact query.
+        /// </summary>
+        /// <remarks>
+        /// A full chunk scan (no grid): fine for the handful of props a stack drops, wrong
+        /// for per-frame ball sampling, which stays in the motor.
+        /// </remarks>
+        public float SampleSupportHeight(float x, float z, float ceilingY)
+        {
+            if (!EnsureQueryBounds()) return NoSupportHeight;
+            Vector3 point;
+            Vector3 normal;
+            int surfaceId;
+            if (!TerrainMeshMath.TrySupportProbe(new Vector3(x, ceilingY, z), ceilingY, vertices,
+                indices, triangleCount, queryChunkMin, queryChunkMax, chunkStarts,
+                chunkTriangleCounts, chunkZoneIds, chunkCount, out point, out normal,
+                out surfaceId)) return NoSupportHeight;
+            return point.y;
+        }
+
+        /// <summary>True when this host carries terrain triangles to sample.</summary>
+        public bool HasTerrainData()
+        {
+            return terrainMeshContactEnabled && triangleCount > 0 && chunkCount > 0 &&
+                   vertices != null && indices != null;
+        }
+
+        private bool EnsureQueryBounds()
+        {
+            if (queryReady) return true;
+            if (!HasTerrainData() || chunkStarts == null || chunkTriangleCounts == null ||
+                chunkZoneIds == null) return false;
+            if (chunkStarts.Length < chunkCount || chunkTriangleCounts.Length < chunkCount)
+                return false;
+            queryChunkMin = new Vector3[chunkCount];
+            queryChunkMax = new Vector3[chunkCount];
+            for (int c = 0; c < chunkCount; c++)
+            {
+                Vector3 low = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+                Vector3 high = new Vector3(-float.MaxValue, -float.MaxValue, -float.MaxValue);
+                int end = chunkStarts[c] + chunkTriangleCounts[c];
+                for (int t = chunkStarts[c]; t < end; t++)
+                {
+                    for (int corner = 0; corner < 3; corner++)
+                    {
+                        Vector3 v = vertices[indices[t * 3 + corner]];
+                        low = Vector3.Min(low, v);
+                        high = Vector3.Max(high, v);
+                    }
+                }
+                queryChunkMin[c] = low;
+                queryChunkMax[c] = high;
+            }
+            queryReady = true;
+            return true;
+        }
 
         private void Start()
         {

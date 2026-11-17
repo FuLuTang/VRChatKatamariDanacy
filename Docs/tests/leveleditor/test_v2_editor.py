@@ -31,6 +31,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from Docs.tests.levelbuild.test_placement_v2 import tiny_document  # noqa: E402
+from Docs.tests.levelbuild.test_ref_stage_visual import synthetic_glb  # noqa: E402
+from Tools.levelbuild import ref_stage  # noqa: E402
+from Tools.levelbuild import ref_stage_visual  # noqa: E402
 from Tools.levelbuild import placement_v2  # noqa: E402
 from Tools.leveleditor import server as web  # noqa: E402
 from Tools.leveleditor import v2_document  # noqa: E402
@@ -136,7 +139,7 @@ class V2LoadTests(V2Fixture):
         self.assertEqual(v2["activity"]["killPlane"]["y"], -3.0)
         self.assertEqual(v2["parents"], [])
         self.assertEqual(set(v2["layers"]), {
-            "v2Terrain", "v2Solids", "v2Walls", "v2KillPlane",
+            "v2Terrain", "v2Collision", "v2Solids", "v2Walls", "v2KillPlane",
             "v2Parents", "v2Rotation", "v2Scale"})
         # The view document keeps the existing client's list shape, but it is not a
         # v1 document: no v1 schema, and no v1 validator ever runs on it.
@@ -229,7 +232,9 @@ class V2LoadTests(V2Fixture):
         self.assertIsNone(app.legacy_state())
 
 
-class V2HTTPTests(V2Fixture):
+class V2Server(V2Fixture):
+    """A fixture with a running editor HTTP server and a JSON GET helper."""
+
     def start(self, app):
         httpd = web.make_http_server(app, "127.0.0.1", 0, token=TOKEN,
                                      token_path=self.state_dir / "token")
@@ -256,6 +261,8 @@ class V2HTTPTests(V2Fixture):
         except urllib.error.HTTPError as error:
             return error.code, json.loads(error.read())
 
+
+class V2HTTPTests(V2Server):
     def test_v2_endpoints_return_each_layer(self):
         app = self.open_v2()
         base = self.start(app)
@@ -303,6 +310,103 @@ class V2HTTPTests(V2Fixture):
         base = self.start(app)
         status, _payload = self.get(base, "/api/v2/terrain")
         self.assertEqual(status, 404)
+
+
+
+class V2VisualTests(V2Server):
+    """``terrain.visual``: the page gets the textured stage as a GLB, the collision as an overlay."""
+
+    def setUp(self):
+        super().setUp()
+        folder = self.levels / self.level_id
+        self.built = ref_stage_visual.convert(synthetic_glb())
+        terrain = {}
+        for key, value in self.document["terrain"].items():
+            if key == "source":
+                terrain["visual"] = self.built["block"]
+            terrain[key] = value
+        self.document["terrain"] = terrain
+        write_json(folder / "placement.v2.json", self.document)
+        (folder / "terrain").mkdir(parents=True, exist_ok=True)
+        (folder / self.built["block"]["meshRef"]["path"]).write_bytes(self.built["sidecar"])
+        for relative, blob in self.built["textures"].items():
+            target = folder / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(blob)
+
+    def test_the_visual_is_loaded_summarised_and_valid(self):
+        app = self.open_v2()
+        self.addCleanup(app.close)
+        v2 = app.state()["v2"]
+        self.assertEqual([e for e in app.v2_document.errors if "visual" in e], [])
+        self.assertTrue(v2["visual"]["available"])
+        self.assertEqual([part["role"] for part in v2["visual"]["parts"]],
+                         ["stage", "stage", "sky"])
+        self.assertEqual(v2["counts"]["visualParts"], 3)
+        layers = v2["layers"]
+        self.assertEqual(layers["v2Terrain"]["http"], "/api/v2/visual.glb")
+        self.assertEqual(layers["v2Collision"]["http"], "/api/v2/terrain")
+        self.assertFalse(layers["v2Collision"]["default"])
+
+    def test_the_glb_is_mirrored_with_the_winding_reversed(self):
+        app = self.open_v2()
+        self.addCleanup(app.close)
+        glb = app.v2_document.visual_glb()
+        document, binary = ref_stage.read_glb(glb)
+        self.assertEqual([node["name"] for node in document["nodes"]],
+                         ["area2_sector0_model0", "area2_sector0_model1",
+                          "area2_sector1_model0"])
+        self.assertEqual(document["nodes"][2]["extras"]["role"], "sky")
+        self.assertEqual(document["buffers"], [{"byteLength": len(binary)}],
+                         "a GLB loader needs the buffer entry in the JSON chunk")
+        self.assertEqual(len(document["textures"]), 3)
+        modes = {m["name"]: m.get("alphaMode", "OPAQUE") for m in document["materials"]}
+        self.assertEqual(modes, {"t000": "OPAQUE", "t001": "MASK", "t002": "BLEND"})
+        self.assertFalse(any(m["doubleSided"] for m in document["materials"]))
+        primitive = document["meshes"][0]["primitives"][0]
+        positions = ref_stage.accessor_values(document, binary,
+                                              primitive["attributes"]["POSITION"])
+        indices = [v[0] for v in ref_stage.accessor_values(document, binary,
+                                                           primitive["indices"])]
+        # the file's z is negated for three.js ...
+        file_vertices = app.v2_document.visual_sidecar["vertices"]
+        self.assertAlmostEqual(positions[2][2], -file_vertices[2][2], places=6)
+        # ... so the winding is reversed and a floor that faces up in the file still faces up
+        a, b, c = (positions[i] for i in indices[:3])
+        cross_y = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2])
+        self.assertGreater(cross_y, 0.0)
+
+    def test_the_endpoint_serves_the_glb_and_a_level_without_visual_has_none(self):
+        app = self.open_v2()
+        base = self.start(app)
+        request = urllib.request.Request(base + "/api/v2/visual.glb")
+        request.add_header(web.TOKEN_HEADER, TOKEN)
+        with urllib.request.urlopen(request, timeout=10) as response:
+            self.assertEqual(response.headers["Content-Type"], "model/gltf-binary")
+            self.assertEqual(response.read()[:4], b"glTF")
+        self.assertEqual(self.get(base, "/api/v2/layers")[1]["layers"]["v2Terrain"]["http"],
+                         "/api/v2/visual.glb")
+
+    def test_a_visual_whose_sidecar_hash_is_wrong_is_reported(self):
+        folder = self.levels / self.level_id
+        document = json.loads((folder / "placement.v2.json").read_text(encoding="utf-8"))
+        document["terrain"]["visual"]["meshRef"]["sha256"] = "0" * 64
+        write_json(folder / "placement.v2.json", document)
+        app = self.open_v2()
+        self.addCleanup(app.close)
+        self.assertTrue(any("[terrain_visual_sidecar]" in e for e in app.v2_document.errors))
+
+
+class V2NoVisualTests(V2Server):
+    def test_a_document_without_visual_has_no_glb(self):
+        app = self.open_v2()
+        base = self.start(app)
+        request = urllib.request.Request(base + "/api/v2/visual.glb")
+        request.add_header(web.TOKEN_HEADER, TOKEN)
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(request, timeout=10)
+        self.assertEqual(caught.exception.code, 404)
+        self.assertFalse(app.state()["v2"]["visual"]["available"])
 
 
 if __name__ == "__main__":

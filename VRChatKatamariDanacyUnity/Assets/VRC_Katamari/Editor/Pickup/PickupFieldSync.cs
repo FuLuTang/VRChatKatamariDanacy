@@ -120,6 +120,7 @@ namespace VRCKatamari.Editor.Pickup
         private const string PropLocalBoundsField = "propLocalBounds";
         private const string GrowthMm3Field = "propGrowthMm3";
         private const string VolumeKField = "propVolumeK";
+        private const string ParentIndexField = "propParentIndex";
         private const string PropCollidersField = "propColliders";
         private const string PropProxyKindsField = "propProxyKinds";
         private const string PropProxyCentersField = "propProxyCenters";
@@ -262,11 +263,17 @@ namespace VRCKatamari.Editor.Pickup
         /// declaration maps the read-back compares against, so "declared k, no row" cannot fire
         /// for them. Null means "nothing is exempt" - the v1 and menu path.
         /// </param>
+        /// <param name="declaredParents">
+        /// Child item id to parent item id (the level's <c>props[].parent</c>), written as the
+        /// host's <c>propParentIndex</c> column by id lookup. Null means "no declaration": the
+        /// parents already serialized on the host are preserved by id, like k.
+        /// </param>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot,
             IDictionary<string, long> declaredGrowthMm3, IDictionary<string, float> declaredVolumeK,
             IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
-            bool createMissingColliders, ISet<string> exemptFromField = null)
+            bool createMissingColliders, ISet<string> exemptFromField = null,
+            IDictionary<string, string> declaredParents = null)
         {
             var report = new PickupFieldSyncReport();
             // The growth column is written from the authored file values when present, and
@@ -310,6 +317,7 @@ namespace VRCKatamari.Editor.Pickup
             // serialized value unless the caller declared a different one.
             // Same rule for k: a re-sync without a declaration must not reprice a field.
             Dictionary<string, float> existingVolumeK = ReadExistingVolumeK(host);
+            Dictionary<string, string> existingParents = ReadExistingParents(host);
             Dictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> existingProxies =
                 ReadExistingProxies(host);
 
@@ -357,14 +365,29 @@ namespace VRCKatamari.Editor.Pickup
                 report.Notes.Add("no prop objects were found under the field root; the host's arrays are cleared");
             }
 
-            if (!WriteRows(host, rows, report))
+            var rowIds = new string[rows.Count];
+            for (int i = 0; i < rows.Count; i++) rowIds[i] = rows[i].ItemId;
+            int parentsUnresolved;
+            int parentsCut;
+            int[] parentColumn = PickupFieldAuthoringRules.ResolveParentColumn(rowIds,
+                declaredParents ?? (IDictionary<string, string>)existingParents,
+                out parentsUnresolved, out parentsCut);
+            if (parentsUnresolved > 0 || parentsCut > 0)
+            {
+                report.Notes.Add("parent column: " + parentsUnresolved + " edge(s) name a parent with no " +
+                                 "pickup row (exempt or rejected) and " + parentsCut + " edge(s) were cut " +
+                                 "to break a cycle; those rows have no parent (-1)");
+            }
+
+            if (!WriteRows(host, rows, parentColumn, report))
             {
                 return report;
             }
 
             MarkDirty(host);
             CopyProxy(host, report);
-            report.ReadBackVerified = VerifyReadBack(host, rows.Count, createMissingColliders);
+            report.ReadBackVerified = VerifyReadBack(host, rows.Count, createMissingColliders) &&
+                                      VerifyParentColumn(host, parentColumn);
             if (!report.ReadBackVerified)
             {
                 if (string.IsNullOrEmpty(report.Failure))
@@ -1243,7 +1266,8 @@ namespace VRCKatamari.Editor.Pickup
 
         // ------------------------------------------------------------------- write ---
 
-        private static bool WriteRows(PickupFieldHost host, List<PropRow> rows, PickupFieldSyncReport report)
+        private static bool WriteRows(PickupFieldHost host, List<PropRow> rows, int[] parentColumn,
+            PickupFieldSyncReport report)
         {
             var serialized = new SerializedObject(host);
             var properties = new SerializedProperty[20];
@@ -1291,6 +1315,15 @@ namespace VRCKatamari.Editor.Pickup
 
             // Registered only after the contract fields were found, so a failed lookup leaves
             // no empty undo step behind.
+            string parentFailure;
+            SerializedProperty parentIndices = RequireArray(serialized, ParentIndexField,
+                out parentFailure);
+            if (parentIndices == null)
+            {
+                report.Fail(parentFailure);
+                return false;
+            }
+
             Undo.RegisterCompleteObjectUndo(host, UndoLabel);
 
             bool anyCollider = false;
@@ -1321,6 +1354,7 @@ namespace VRCKatamari.Editor.Pickup
             localBounds.arraySize = rows.Count;
             values.arraySize = rows.Count;
             volumeKs.arraySize = rows.Count;
+            parentIndices.arraySize = rows.Count;
             colliders.arraySize = anyCollider ? rows.Count : 0;
             proxyKinds.arraySize = rows.Count;
             proxyCenters.arraySize = rows.Count;
@@ -1347,6 +1381,7 @@ namespace VRCKatamari.Editor.Pickup
                 localBounds.GetArrayElementAtIndex(i).vector3Value = row.LocalBoundsSize;
                 values.GetArrayElementAtIndex(i).longValue = row.GrowthMm3;
                 volumeKs.GetArrayElementAtIndex(i).floatValue = row.VolumeK;
+                parentIndices.GetArrayElementAtIndex(i).intValue = parentColumn[i];
                 if (anyCollider)
                 {
                     colliders.GetArrayElementAtIndex(i).objectReferenceValue = row.PrimaryCollider;
@@ -1411,6 +1446,55 @@ namespace VRCKatamari.Editor.Pickup
 
             serialized.ApplyModifiedPropertiesWithoutUndo();
             return true;
+        }
+
+        /// <summary>Reads <c>propParentIndex</c> back and compares it with what was written.</summary>
+        private static bool VerifyParentColumn(PickupFieldHost host, int[] expected)
+        {
+            SerializedProperty property = new SerializedObject(host).FindProperty(ParentIndexField);
+            if (property == null || !property.isArray || property.arraySize != expected.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < expected.Length; i++)
+            {
+                if (property.GetArrayElementAtIndex(i).intValue != expected[i]) return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Reads the host's current parent column into child id to parent id. A host without
+        /// the column (or with a short one) contributes nothing, so a scene synced before the
+        /// column existed simply has no parents.
+        /// </summary>
+        private static Dictionary<string, string> ReadExistingParents(PickupFieldHost host)
+        {
+            var existing = new Dictionary<string, string>(StringComparer.Ordinal);
+            var serialized = new SerializedObject(host);
+            SerializedProperty ids = serialized.FindProperty(ItemIdsField);
+            SerializedProperty parents = serialized.FindProperty(ParentIndexField);
+            if (ids == null || parents == null || !ids.isArray || !parents.isArray)
+            {
+                return existing;
+            }
+
+            int rows = Math.Min(ids.arraySize, parents.arraySize);
+            for (int i = 0; i < rows; i++)
+            {
+                int parentRow = parents.GetArrayElementAtIndex(i).intValue;
+                string childId = ids.GetArrayElementAtIndex(i).stringValue;
+                if (parentRow < 0 || parentRow >= ids.arraySize || string.IsNullOrEmpty(childId)) continue;
+                string parentId = ids.GetArrayElementAtIndex(parentRow).stringValue;
+                if (!string.IsNullOrEmpty(parentId) && !existing.ContainsKey(childId))
+                {
+                    existing.Add(childId, parentId);
+                }
+            }
+
+            return existing;
         }
 
         private static SerializedProperty RequireArray(SerializedObject serialized, string fieldName,

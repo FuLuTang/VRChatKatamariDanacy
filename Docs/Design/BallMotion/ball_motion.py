@@ -8,6 +8,10 @@ from dataclasses import dataclass
 import math
 
 
+# Reverse speed cap as a fraction of the (size-scaled) forward cap (PROVISIONAL).
+REVERSE_SPEED_FRACTION = 0.5
+
+
 def clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
@@ -33,14 +37,17 @@ class MotionConfig:
     fixed_dt_s: float = 1.0 / 120.0
     base_radius_m: float = 0.5
     max_radius_m: float = 2.0
+    # Length-type values below are at the START diameter D0 and scale with
+    # s = D / D0 (= radius / base_radius_m); time constants do not scale.
+    # Owner 2026-11-17, Docs/Design/BallMotor/BALL_INERTIA.md; all PROVISIONAL.
     max_speed_mps: float = 4.0
-    acceleration_mps2: float = 5.0
-    braking_mps2: float = 8.0
-    friction_per_s: float = 1.2
+    acceleration_mps2: float = 7.5
+    braking_mps2: float = 6.0  # thrust opposing the forward velocity only
+    friction_per_s: float = 0.9
+    rolling_resistance_mps2: float = 1.3  # linear coast-down, only with no forward input
+    lateral_grip_per_s: float = 2.0  # extra exponential decay of sideways velocity
     turn_rate_degps: float = 110.0
     max_lateral_mps: float = 1.2
-    growth_speed_factor: float = 0.25
-    growth_turn_factor: float = 0.35
     stuck_timeout_s: float = 2.0
     bounds_half_extent_m: float = 1000.0
 
@@ -115,37 +122,40 @@ class BallSimulator:
         dt = c.fixed_dt_s
         r = clamp(s.radius_m, c.base_radius_m, c.max_radius_m)
         s.radius_m = r
-        size = (r-c.base_radius_m) / max(c.max_radius_m-c.base_radius_m, 1e-12)
-        speed_cap = c.max_speed_mps * (1.0-c.growth_speed_factor*size)
-        turn_cap = c.turn_rate_degps * (1.0-c.growth_turn_factor*size)
-        s.heading_deg = (s.heading_deg + clamp(turn, -1, 1)*turn_cap*dt) % 360.0
+        k = r / c.base_radius_m  # s = D / D0
+        speed_cap = c.max_speed_mps * k
+        s.heading_deg = (s.heading_deg + clamp(turn, -1, 1)*c.turn_rate_degps*dt) % 360.0
         rad = math.radians(s.heading_deg)
         fx, fz = math.sin(rad), math.cos(rad)
         lx, lz = math.cos(rad), -math.sin(rad)
         fwd = clamp(forward, -1, 1)
-        desired_ax, desired_az = fx*fwd*c.acceleration_mps2, fz*fwd*c.acceleration_mps2
-        s.vx += desired_ax*dt
-        s.vz += desired_az*dt
-        # Exponential speed-independent friction, then bounded lateral velocity.
-        damp = math.exp(-c.friction_per_s*dt)
-        s.vx *= damp
-        s.vz *= damp
-        side = s.vx*lx + s.vz*lz
-        side = clamp(side + clamp(lateral, -1, 1)*c.max_lateral_mps*dt, -c.max_lateral_mps, c.max_lateral_mps)
-        forward_speed = s.vx*fx + s.vz*fz
-        planar_speed = math.hypot(forward_speed, side)
+        # Split the world velocity along the heading the step ENDED with, so a turn
+        # leaves the old direction behind as lateral velocity (drift).
+        vf = s.vx*fx + s.vz*fz
+        vl = s.vx*lx + s.vz*lz
+        has_input = abs(fwd) >= 1e-9
+        if has_input:
+            # Input against the current forward velocity uses the brake rate.
+            rate = (c.braking_mps2 if vf*fwd < 0 else c.acceleration_mps2) * k
+            vf += fwd*rate*dt
+        vf *= math.exp(-c.friction_per_s*dt)
+        vl *= math.exp(-(c.friction_per_s + c.lateral_grip_per_s)*dt)
+        # Strafe input adds sideways speed but never pushes it past max_lateral.
+        side_in = clamp(lateral, -1, 1)
+        if side_in > 0:
+            vl = max(vl, min(vl + side_in*c.max_lateral_mps*k*dt, c.max_lateral_mps*k))
+        elif side_in < 0:
+            vl = min(vl, max(vl + side_in*c.max_lateral_mps*k*dt, -c.max_lateral_mps*k))
+        if not has_input:
+            # Rolling resistance: linear, floors at zero, never reverses.
+            vf = math.copysign(max(0.0, abs(vf)-c.rolling_resistance_mps2*k*dt), vf)
+        vf = clamp(vf, -REVERSE_SPEED_FRACTION*speed_cap, speed_cap)
+        planar_speed = math.hypot(vf, vl)
         if planar_speed > speed_cap:
             scale = speed_cap / planar_speed
-            forward_speed *= scale
-            side *= scale
-        s.vx, s.vz = forward_speed*fx + side*lx, forward_speed*fz + side*lz
-        if abs(fwd) < 1e-9:
-            # braking bound applies to coasting speed without reversing it
-            v = math.hypot(s.vx, s.vz)
-            new_v = max(0.0, v-c.braking_mps2*dt)
-            if v:
-                s.vx *= new_v/v
-                s.vz *= new_v/v
+            vf *= scale
+            vl *= scale
+        s.vx, s.vz = vf*fx + vl*lx, vf*fz + vl*lz
         start = (s.x, s.y, s.z)
         end = (s.x+s.vx*dt, s.y+s.vy*dt, s.z+s.vz*dt)
         for wall in walls:

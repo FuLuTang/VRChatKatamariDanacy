@@ -463,7 +463,10 @@ function renderRefMode() {
       const terrain = v2.terrain || {};
       $("ref-banner-text").textContent = `[v2] ${ref.banner} `
         + `${state.file?.path || ""} · `
-        + `地形 ${terrain.counts?.triangles ?? "?"} 三角 / ${terrain.counts?.vertices ?? "?"} 顶点 · `
+        + (v2.visual?.available
+          ? `视觉 ${v2.visual.parts?.length ?? "?"} 块 ${v2.visual.triangles ?? "?"} 三角 / ${v2.visual.materials ?? "?"} 材质 · `
+          : "")
+        + `碰撞地形 ${terrain.counts?.triangles ?? "?"} 三角 / ${terrain.counts?.vertices ?? "?"} 顶点 · `
         + `固体 ${c.solids ?? "?"} · 活动墙 ${c.walls ?? "?"} · 道具 ${c.props ?? "?"}`
         + `（旋转 ${c.rotatedProps ?? 0} / 缩放 ${c.scaledProps ?? 0} / 父子 ${c.parentLinks ?? 0}）· `
         + `本地网格 ${counts.resolved ?? 0}/${counts.total ?? 0} · 只读`;
@@ -485,6 +488,7 @@ function renderRefMode() {
   v2tools.classList.toggle("hidden", !v2);
   if (v2) {
     $("show-v2-terrain").checked = view?.showTerrain ?? true;
+    $("show-v2-collision").checked = view?.showCollision ?? false;
     $("show-v2-solids").checked = view?.v2ShowSolids ?? true;
     $("show-v2-walls").checked = view?.v2ShowWalls ?? true;
     $("show-v2-kill-plane").checked = view?.v2ShowKill ?? true;
@@ -1957,6 +1961,14 @@ function bindUI() {
   $("show-v2-terrain").addEventListener("change", () => {
     view.setV2Terrain($("show-v2-terrain").checked);
   });
+  $("show-v2-collision").addEventListener("change", async () => {
+    const enabled = $("show-v2-collision").checked;
+    const built = await view.setCollision(enabled);
+    if (enabled && !built) {
+      toast("这个 v2 文档没有可画的碰撞三角", "ok", 2400);
+      $("show-v2-collision").checked = false;
+    }
+  });
   $("show-v2-solids").addEventListener("change", () => {
     const count = view.setV2Solids($("show-v2-solids").checked);
     if ($("show-v2-solids").checked && !count) toast("这个 v2 文档没有固体", "ok", 2400);
@@ -2326,6 +2338,7 @@ async function boot() {
     setV2Layer(name, visible = true) {
       const methods = {
         terrain: () => view.setV2Terrain(visible),
+        collision: () => view.setCollision(visible),
         solids: () => view.setV2Solids(visible),
         walls: () => view.setV2Walls(visible),
         kill: () => view.setV2KillPlane(visible),

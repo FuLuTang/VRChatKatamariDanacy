@@ -38,8 +38,15 @@ namespace VRCKatamari.Editor.LevelBuild
     /// under <c>Assets/_RefUnlicensed/</c> and the level folder is <c>_ref_*</c>; this keeps
     /// terrain arrays out of <c>StoryMode.unity</c> and out of git (D-8).
     /// </para>
+    /// <para>
+    /// A level whose terrain declares <c>terrain.visual</c> (LEVEL_FORMAT_V2 §3.8) gets a SPLIT
+    /// surface instead of the single standing mesh: the drawn surface (original graphic
+    /// sectors + textures) under <c>TerrainVisual/&lt;part&gt;</c>, and the contact mesh only as
+    /// a never-drawn <c>MeshCollider</c> on <c>TerrainCollision</c>. That half lives in
+    /// <c>TerrainMeshImporter.Visual.cs</c>; a level without <c>visual</c> is untouched.
+    /// </para>
     /// </remarks>
-    public static class TerrainMeshImporter
+    public static partial class TerrainMeshImporter
     {
         public const string MenuPath = "VRC Katamari/Level/Import Terrain Mesh (v2)";
         public const string ManagedRootName = "LevelContent";
@@ -289,10 +296,36 @@ namespace VRCKatamari.Editor.LevelBuild
             geometry.Segments = ReadVisualSegments(terrain.Get("materialSegments"),
                 geometry.IndexCount, report);
 
+            // terrain.visual (§3.8): the drawn surface is its own asset set, apart from the
+            // contact mesh. Parse and verify it BEFORE anything is written, like the sidecar.
+            TerrainVisualDocument visualDocument = null;
+            TerrainVisualSidecar visualSidecar = null;
+            LevelJsonNode visualNode = terrain.Get("visual");
+            if (visualNode != null)
+            {
+                string visualError;
+                if (!TerrainVisualDocument.TryParse(visualNode, out visualDocument, out visualError) ||
+                    !visualDocument.TryLoadSidecar(levelDir, out visualSidecar, out visualError))
+                {
+                    report.Error(visualError);
+                    return report;
+                }
+
+                report.Notes.Add("visual sidecar '" + visualDocument.SidecarPath + "' sha256 verified (" +
+                                 visualDocument.Parts.Length + " parts, " +
+                                 visualDocument.Materials.Length + " materials)");
+            }
+
             TerrainImportReport written = WriteHost(levelId, terrainId, sourceSha, geometry, report);
             // The player's standing surface only exists for a level that declares where the
             // player starts (meta.playerStart): a lab cell with a terrain keeps today's scene.
-            if (written.Ok && meta != null && meta.Get("playerStart") != null)
+            bool withCollider = meta != null && meta.Get("playerStart") != null;
+            if (written.Ok && visualDocument != null)
+            {
+                EnsureSplitSurface(levelId, terrainId, geometry, isReference, withCollider,
+                    levelDir, visualDocument, visualSidecar, written);
+            }
+            else if (written.Ok && withCollider)
             {
                 EnsureStandingSurface(levelId, terrainId, geometry, isReference, written);
             }

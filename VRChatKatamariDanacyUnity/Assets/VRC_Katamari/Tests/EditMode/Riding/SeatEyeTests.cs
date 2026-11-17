@@ -518,5 +518,51 @@ namespace VRCKatamari.Tests
             // The refused call handed the caller's own (illegal) offset straight back.
             Assert.IsTrue(offset.x > 1e30f);
         }
+
+        // A rider scaled by the world: the limits and the plausibility rail scale with the eye
+        // height (1.35 m at the 1.64 m reference). Hand values: 0.258 / 1.64 = 0.1573 gives a
+        // 0.2124 m rail; 23.245 / 1.64 = 14.17 gives 19.13 m.
+        [Test]
+        public void LimitScale_FollowsTheEyeHeightAndFallsBackToOne()
+        {
+            Assert.AreEqual(1f, SeatEyeMath.LimitScaleForEyeHeight(1.64f), 1e-6f);
+            Assert.AreEqual(0.1573f, SeatEyeMath.LimitScaleForEyeHeight(0.258f), 1e-3f);
+            Assert.AreEqual(14.173f, SeatEyeMath.LimitScaleForEyeHeight(23.245f), 1e-2f);
+            Assert.AreEqual(1f, SeatEyeMath.LimitScaleForEyeHeight(0f));
+            Assert.AreEqual(1f, SeatEyeMath.LimitScaleForEyeHeight(float.NaN));
+        }
+
+        [Test]
+        public void PlausibleHeadDistance_ScalesWithTheRider()
+        {
+            // A 23 m rider's seated head 11.3 m above the seat is fine, and a small rider's
+            // standing-height datum (1.2 m for a 0.26 m rider) is still refused.
+            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(11.3f, 23.245f));
+            Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(1.2f, 0.258f));
+            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(0.13f, 0.258f));
+            // Unscaled (eye height unknown): the absolute rail.
+            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(1.25f, 0f));
+            Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(1.40f, 0f));
+        }
+
+        [Test]
+        public void SeatFollowsTheEyeHeight_OffsetPerEyeHeightTimesTheNewHeight()
+        {
+            // Measured at E = 0.258: a head 0.129 m above the seat, i.e. 0.5 m per metre of eye
+            // height (an arbitrary avatar); at E = 2.3245 it is 1.16225 m, so the seat sits
+            // 1.16225 m below the eye point.
+            Vector3 perEye = new Vector3(0f, 0.129f / 0.258f, 0f);
+            Vector3 head = perEye * 2.3245f;
+            float scale = SeatEyeMath.LimitScaleForEyeHeight(2.3245f);
+            Vector3 offset;
+            float uncompensated;
+            float residual;
+            int reason;
+            Assert.IsTrue(SeatEyeMath.TryComputeSeatOffset(head, Vector3.zero, 1.3f * scale,
+                0.35f * scale, false, 0f, 0f, true, out offset, out uncompensated, out residual,
+                out reason));
+            Assert.AreEqual(-1.16225f, offset.y, 2e-3f);
+            Assert.AreEqual(0f, uncompensated, 1e-5f);
+        }
     }
 }

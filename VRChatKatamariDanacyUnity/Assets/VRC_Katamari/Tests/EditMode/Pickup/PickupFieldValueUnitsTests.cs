@@ -64,8 +64,7 @@ namespace VRCKatamari.Tests
         [Test]
         public void ExistingSerializedValueIsPreservedWithoutADeclaration()
         {
-            // The un-migrated scene path: StoryLevel's 110 props and CpuSkirmish have no
-            // placement.json yet, so a menu sync must leave every value alone.
+            // The scene path without a placement.json (CpuSkirmish), so a menu sync must leave every value alone.
             ValueResolution preserved = Resolve(0L, false, 16L, true);
             Assert.IsTrue(preserved.Accepted);
             Assert.AreEqual(16L, preserved.ValueUnits);
@@ -92,10 +91,9 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void AKindTierWithoutAnOldTableRowStillResolves()
+        public void AnyKindAndTierResolvesFromTheDeclaredNumber()
         {
-            // container m is the pair the old ValueTable never had (PICNIC_CORNER_LEVEL_ONE
-            // C5). The resolver has no kind or tier parameter at all, so such a pair cannot
+            // container m is a (kind, tier) pair that has no table row. The resolver has no kind or tier parameter at all, so such a pair cannot
             // be refused or dropped any more: the declared number is the whole input.
             ValueResolution containerMedium = Resolve(16L, true, 0L, false);
             Assert.IsTrue(containerMedium.Accepted);

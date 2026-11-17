@@ -5,8 +5,8 @@ namespace VRCKatamari.Motion
 {
     /// <summary>
     /// One fixed-step planar motion solve for the ball: heading turn, forward
-    /// acceleration, exponential friction, bounded lateral assist, the
-    /// growth-derated speed and turn caps, the no-input braking bound, and the
+    /// acceleration or brake push, forward/lateral drag with lateral grip, rolling
+    /// resistance, strafe assist, the size-scaled speed cap, and the
     /// planar displacement that step produces.
     /// </summary>
     /// <remarks>
@@ -39,25 +39,33 @@ namespace VRCKatamari.Motion
     /// while a non-finite one is still rejected as corrupt input.
     /// </para>
     /// <para>
-    /// Per step, in the model's order: growthFraction is clamped to [0, 1] (the
-    /// caller derives it from the radius it owns - this layer never maps volume
-    /// or radius); the speed and turn caps are derated by 1 - factor * growth;
-    /// the heading advances by clamp(turn) * turnCap * deltaTime and is wrapped
-    /// into [0, 360); acceleration is applied along the heading the step ENDED
-    /// with; the whole planar velocity is scaled by exp(-friction * deltaTime);
-    /// the lateral component is clamped to +-maxLateralMps; the planar speed is
-    /// scaled down to the cap, keeping its direction; and when the clamped
-    /// forward input is below 1e-9 the planar speed is reduced by
-    /// braking * deltaTime without ever reversing. Position is the new velocity
+    /// Per step, in the model's order: every length-type tune value (max speed,
+    /// acceleration, braking, rolling resistance, strafe cap) is multiplied by
+    /// sizeScale = D / D0, the current semantic diameter over the START diameter
+    /// (the caller owns it; this layer never maps volume or radius), so the
+    /// feel in diameters per second is the same at every size; the time-type
+    /// values (friction, lateral grip, turn rate) are not scaled and there is no
+    /// growth derating; the heading advances by clamp(turn) * turnRate *
+    /// deltaTime and is wrapped into [0, 360); the velocity is split along the
+    /// NEW heading into forward
+    /// and lateral parts; forward input adds acceleration, or brakingMps2 when it
+    /// opposes the forward velocity; forward drag is exp(-friction * deltaTime)
+    /// and lateral drag exp(-(friction + lateralGrip) * deltaTime); strafe input
+    /// adds up to maxLateralMps of lateral speed; with no forward input the
+    /// forward speed loses rollingResistance * deltaTime, floored at zero;
+    /// forward speed is clamped to [-0.5 * cap, cap]; the planar speed is scaled
+    /// down to the cap, keeping its direction. Position is the new velocity
     /// times deltaTime, so travel is never sub-stepped or clipped: keeping a
     /// fast ball out of a thin wall is the sweep layer's job.
     /// </para>
     /// <para>
-    /// Consequence worth knowing before tuning: because the braking bound is a
-    /// speed decrement, one step of braking can exceed one step of lateral
-    /// buildup (the model's lateral assist is smaller than its braking rate), so
-    /// lateral input with no forward input does not sustain sideways travel.
-    /// That is the model's behaviour, not an omission here.
+    /// Inertia (BALL_INERTIA.md): all tune values are PROVISIONAL. The values are
+    /// given at D0; the KatamariBallMotor defaults are acceleration 7.5, friction 0.9, rolling
+    /// resistance 1.3, lateral grip 2.0, braking 6, max speed 4. The old behaviour is
+    /// approximated by sizeScale 1, acceleration 5, braking 8, friction 1.2, rolling
+    /// resistance 8, lateral grip 1000 (comparison only; not bit-identical,
+    /// because the old clamp acted on the lateral part and the old brake on the
+    /// total speed).
     /// </para>
     /// <para>
     /// Deviations from the reference: the model rejects a non-positive fixed
@@ -65,11 +73,10 @@ namespace VRCKatamari.Motion
     /// whereas this port returns false for every non-finite input and for a
     /// deltaTime of zero or less (a zero-length step would otherwise let the
     /// speed cap clamp velocity with no time passing); the
-    /// model takes a radius and derives the growth term itself, while
-    /// growthFraction arrives as an input here so the radius mapping stays in
+    /// model takes a radius and derives the scale itself, while sizeScale
+    /// arrives as an input here so the radius mapping stays in
     /// SizeModelMath; and the arithmetic is float, not double. All tune values
-    /// are caller arguments - the model's defaults are DRAFT placeholders and
-    /// are deliberately not baked in as project constants.
+    /// are caller arguments and are deliberately not baked in as project constants.
     /// </para>
     /// <para>
     /// Validation is atomic: false means no value was consumed and every out
@@ -80,13 +87,13 @@ namespace VRCKatamari.Motion
     /// </remarks>
     public static class BallMotionMath
     {
-        // Below this a clamped forward input is "no forward intent", so the
-        // model applies its braking bound instead of acceleration.
+        // Below this a clamped forward input is "no forward intent": no thrust,
+        // and rolling resistance applies instead.
         private const float NoForwardIntent = 1e-9f;
 
-        // Largest growth derating factor the model's cap formula can carry
-        // without driving a cap negative.
-        private const float MaximumGrowthFactor = 1f;
+        // Reverse speed cap as a fraction of the size-scaled forward cap
+        // (PROVISIONAL, BALL_INERTIA.md section 3).
+        private const float ReverseSpeedFraction = 0.5f;
 
         /// <summary>
         /// Solves one fixed step of planar ball motion.
@@ -96,11 +103,10 @@ namespace VRCKatamari.Motion
         /// are clamped to [-1, 1]; headingDegrees is the stored heading and is
         /// wrapped, not clamped; velocity is the current planar velocity in
         /// metres per second (its y is ignored); deltaTime is this fixed step in
-        /// seconds and must be positive; growthFraction is the model's
-        /// dimensionless growth term, clamped to [0, 1]. The remaining eight
-        /// arguments are the caller's tuning inputs in metres, seconds, degrees
-        /// and their per-second forms, and must be finite and non-negative;
-        /// growthSpeedFactor and growthTurnFactor must also be at most 1.
+        /// seconds and must be positive; sizeScale = D / D0 must be finite and
+        /// positive. The remaining nine arguments are the caller's tuning inputs
+        /// at D0 in metres, seconds, degrees and their per-second forms, and
+        /// must be finite and non-negative.
         ///
         /// On success nextHeadingDegrees is in [0, 360), nextVelocity is the
         /// planar velocity after the step with y = 0, and displacement is the
@@ -114,15 +120,15 @@ namespace VRCKatamari.Motion
             float headingDegrees,
             Vector3 velocity,
             float deltaTime,
-            float growthFraction,
+            float sizeScale,
             float maxSpeedMps,
             float accelerationMps2,
             float brakingMps2,
             float frictionPerSecond,
+            float rollingResistanceMps2,
+            float lateralGripPerSecond,
             float turnRateDegreesPerSecond,
             float maxLateralMps,
-            float growthSpeedFactor,
-            float growthTurnFactor,
             out float nextHeadingDegrees,
             out Vector3 nextVelocity,
             out Vector3 displacement)
@@ -137,29 +143,35 @@ namespace VRCKatamari.Motion
             if (!KatamariMath.IsFiniteFloat(headingDegrees)) return false;
             if (!KatamariMath.IsFiniteVector(velocity)) return false;
             if (!KatamariMath.IsFiniteFloat(deltaTime) || deltaTime <= 0f) return false;
-            if (!KatamariMath.IsFiniteFloat(growthFraction)) return false;
+            if (!KatamariMath.IsFiniteFloat(sizeScale) || sizeScale <= 0f) return false;
             if (!IsNonNegativeFinite(maxSpeedMps)) return false;
             if (!IsNonNegativeFinite(accelerationMps2)) return false;
             if (!IsNonNegativeFinite(brakingMps2)) return false;
             if (!IsNonNegativeFinite(frictionPerSecond)) return false;
+            if (!IsNonNegativeFinite(rollingResistanceMps2)) return false;
+            if (!IsNonNegativeFinite(lateralGripPerSecond)) return false;
             if (!IsNonNegativeFinite(turnRateDegreesPerSecond)) return false;
             if (!IsNonNegativeFinite(maxLateralMps)) return false;
-            if (!IsGrowthFactor(growthSpeedFactor)) return false;
-            if (!IsGrowthFactor(growthTurnFactor)) return false;
 
-            // The model reaches this term through a radius already clamped into
-            // [radiusMin, radiusMax]; the fraction arrives already normalized, so
-            // only its own bound is enforced here.
-            float growth = Mathf.Clamp(growthFraction, 0f, 1f);
-            float speedCap = maxSpeedMps * (1f - growthSpeedFactor * growth);
-            float turnCap = turnRateDegreesPerSecond * (1f - growthTurnFactor * growth);
-            if (!KatamariMath.IsFiniteFloat(speedCap) || speedCap < 0f) return false;
-            if (!KatamariMath.IsFiniteFloat(turnCap) || turnCap < 0f) return false;
+            // Every length-type tune value is given at the START diameter D0 and
+            // scales with sizeScale = D / D0, so speed in diameters per second,
+            // glide in diameters and every start/stop time are the same at any
+            // size. Time constants (friction, grip, turn rate) do not scale.
+            float speedCap = maxSpeedMps * sizeScale;
+            float scaledAcceleration = accelerationMps2 * sizeScale;
+            float scaledBraking = brakingMps2 * sizeScale;
+            float scaledRolling = rollingResistanceMps2 * sizeScale;
+            float scaledLateral = maxLateralMps * sizeScale;
+            if (!KatamariMath.IsFiniteFloat(speedCap)) return false;
+            if (!KatamariMath.IsFiniteFloat(scaledAcceleration)) return false;
+            if (!KatamariMath.IsFiniteFloat(scaledBraking)) return false;
+            if (!KatamariMath.IsFiniteFloat(scaledRolling)) return false;
+            if (!KatamariMath.IsFiniteFloat(scaledLateral)) return false;
 
             float forwardIntent = Mathf.Clamp(forward, -1f, 1f);
             float turnIntent = Mathf.Clamp(turn, -1f, 1f);
             float lateralIntent = Mathf.Clamp(lateral, -1f, 1f);
-            float heading = Wrap360(headingDegrees + turnIntent * turnCap * deltaTime);
+            float heading = Wrap360(headingDegrees + turnIntent * turnRateDegreesPerSecond * deltaTime);
             if (!KatamariMath.IsFiniteFloat(heading)) return false;
 
             // Spelled from Mathf.PI, the one Mathf constant the Udon runtime
@@ -171,26 +183,53 @@ namespace VRCKatamari.Motion
             float lateralX = Mathf.Cos(radians);
             float lateralZ = -Mathf.Sin(radians);
 
-            // Acceleration points along the heading this step ended with, not the
-            // one it started from: the model turns first, then accelerates.
-            float velocityX = velocity.x +
-                forwardX * forwardIntent * accelerationMps2 * deltaTime;
-            float velocityZ = velocity.z +
-                forwardZ * forwardIntent * accelerationMps2 * deltaTime;
-            float damping;
-            if (!TryDamping(frictionPerSecond, deltaTime, out damping)) return false;
-            velocityX *= damping;
-            velocityZ *= damping;
-            if (!KatamariMath.IsFiniteFloat(velocityX) ||
-                !KatamariMath.IsFiniteFloat(velocityZ)) return false;
+            // The world velocity is split along the heading this step ENDED with
+            // (the model turns first), so a turn leaves the old direction behind as
+            // lateral velocity: that is the drift.
+            float forwardSpeed = velocity.x * forwardX + velocity.z * forwardZ;
+            float lateralSpeed = velocity.x * lateralX + velocity.z * lateralZ;
 
-            // Lateral assist is a bounded speed addition, not an acceleration
-            // that can accumulate without limit.
-            float lateralSpeed = velocityX * lateralX + velocityZ * lateralZ;
-            lateralSpeed = Mathf.Clamp(
-                lateralSpeed + lateralIntent * maxLateralMps * deltaTime,
-                -maxLateralMps, maxLateralMps);
-            float forwardSpeed = velocityX * forwardX + velocityZ * forwardZ;
+            // Thrust. Input against the current forward velocity is a brake push
+            // and uses brakingMps2; otherwise accelerationMps2.
+            bool hasForwardIntent = Mathf.Abs(forwardIntent) >= NoForwardIntent;
+            if (hasForwardIntent)
+            {
+                float rate = (forwardSpeed * forwardIntent < 0f) ? scaledBraking : scaledAcceleration;
+                forwardSpeed += forwardIntent * rate * deltaTime;
+            }
+
+            // Viscous drag; the lateral axis adds lateralGripPerSecond, which
+            // replaces the old hard lateral clamp.
+            float forwardDamping;
+            float lateralDamping;
+            if (!TryDamping(frictionPerSecond, deltaTime, out forwardDamping)) return false;
+            if (!TryDamping(frictionPerSecond + lateralGripPerSecond, deltaTime,
+                out lateralDamping)) return false;
+            forwardSpeed *= forwardDamping;
+            lateralSpeed *= lateralDamping;
+
+            // Strafe input adds sideways speed but never pushes it past
+            // maxLateralMps; speed already beyond it (drift) is left to the grip.
+            if (lateralIntent > 0f)
+            {
+                lateralSpeed = Mathf.Max(lateralSpeed, Mathf.Min(
+                    lateralSpeed + lateralIntent * scaledLateral * deltaTime, scaledLateral));
+            }
+            else if (lateralIntent < 0f)
+            {
+                lateralSpeed = Mathf.Min(lateralSpeed, Mathf.Max(
+                    lateralSpeed + lateralIntent * scaledLateral * deltaTime, -scaledLateral));
+            }
+
+            // Rolling resistance: linear, only with no forward input, floors at
+            // zero so coasting never oscillates through a stop.
+            if (!hasForwardIntent)
+            {
+                float coasted = Mathf.Max(0f, Mathf.Abs(forwardSpeed) - scaledRolling * deltaTime);
+                forwardSpeed = forwardSpeed < 0f ? -coasted : coasted;
+            }
+
+            forwardSpeed = Mathf.Clamp(forwardSpeed, -ReverseSpeedFraction * speedCap, speedCap);
 
             float planarSpeed;
             if (!TryPlanarSpeed(forwardSpeed, lateralSpeed, out planarSpeed)) return false;
@@ -203,24 +242,10 @@ namespace VRCKatamari.Motion
                 lateralSpeed *= scale;
             }
 
-            velocityX = forwardSpeed * forwardX + lateralSpeed * lateralX;
-            velocityZ = forwardSpeed * forwardZ + lateralSpeed * lateralZ;
-
-            // No forward intent is a braking bound, not a reverse thrust: the
-            // reduction is applied to the recovered velocity and floors at zero,
-            // so coasting never oscillates through a stop.
-            if (Mathf.Abs(forwardIntent) < NoForwardIntent)
-            {
-                float speed;
-                if (!TryPlanarSpeed(velocityX, velocityZ, out speed)) return false;
-                if (speed > 0f)
-                {
-                    float reduced = Mathf.Max(0f, speed - brakingMps2 * deltaTime);
-                    float scale = reduced / speed;
-                    velocityX *= scale;
-                    velocityZ *= scale;
-                }
-            }
+            float velocityX = forwardSpeed * forwardX + lateralSpeed * lateralX;
+            float velocityZ = forwardSpeed * forwardZ + lateralSpeed * lateralZ;
+            if (!KatamariMath.IsFiniteFloat(velocityX) ||
+                !KatamariMath.IsFiniteFloat(velocityZ)) return false;
 
             float stepX = velocityX * deltaTime;
             float stepZ = velocityZ * deltaTime;
@@ -238,12 +263,6 @@ namespace VRCKatamari.Motion
         private static bool IsNonNegativeFinite(float value)
         {
             return KatamariMath.IsFiniteFloat(value) && value >= 0f;
-        }
-
-        private static bool IsGrowthFactor(float value)
-        {
-            return KatamariMath.IsFiniteFloat(value) &&
-                value >= 0f && value <= MaximumGrowthFactor;
         }
 
         private static bool TryDamping(float frictionPerSecond, float deltaTime, out float damping)

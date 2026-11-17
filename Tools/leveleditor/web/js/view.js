@@ -1293,6 +1293,7 @@ export class EditorView {
       this.v2ShowWalls = true;
       this.v2ShowKill = true;
       this.showTerrain = true;
+      this.showCollision = false;
       this.terrainWireframe = false;
     }
     this.defBoxes.clear();
@@ -1405,7 +1406,8 @@ export class EditorView {
       if (this.terrainGroup) {
         const probe = new THREE.Box3();
         this.terrainGroup.traverse((object) => {
-          if (object.isMesh) probe.expandByObject(object);
+          // the sky shell reaches 35 m below the ground; it is a backdrop, not the floor
+          if (object.isMesh && !object.userData.refBackdrop) probe.expandByObject(object);
         });
         if (!probe.isEmpty()) low = probe.min.y;
       }
@@ -1714,7 +1716,8 @@ export class EditorView {
       this.v2View = payload;
       this.v2Summary = state.v2 || this.v2Summary;
       this.v2ParentLinks = payload.parents || [];
-      this._buildV2Terrain(payload.terrain);
+      this._buildV2Terrain(payload.terrain, Boolean(payload.visual?.available));
+      await this._buildV2Visual(payload.visual);
       this._buildV2Walls(payload.activity);
       this._buildV2KillPlane(payload.activity);
       this._applyV2LayerVisibility();
@@ -1726,42 +1729,70 @@ export class EditorView {
     }
   }
 
-  _buildV2Terrain(terrain) {
+  /**
+   * The contact mesh (``.katerrain``).  With ``terrain.visual`` it is only an overlay - the
+   * collision wireframe, off by default: it carries the original's invisible 15 m wall ring,
+   * so drawing it as a solid is what painted the red walls in Unity and hid the ground here.
+   * Without a visual block the mesh is also the terrain you see (our own levels).
+   */
+  _buildV2Terrain(terrain, hasVisual = false) {
     if (!terrain || !Array.isArray(terrain.vertices) || !Array.isArray(terrain.indices)) return;
     const zoneColors = {
       0: 0x6f8c63, 1: 0x9a7b4f, 3: 0x7d8a96, 5: 0xb08968,
       8: 0x8aa6a0, 24: 0xc2a878,
     };
+    const classColors = { 1: 0x4caf50, 2: 0xffc107, 3: 0xe57373 };
     const fallback = new THREE.Color(0x8a8f83);
     const positions = [];
     const colors = [];
+    const lineColors = [];
+    const solidPositions = [];
     const vertices = terrain.vertices;
     const indices = terrain.indices;
     const zones = terrain.zoneIds || [];
     const classes = terrain.classes || [];
     for (let triangle = 0; triangle < indices.length / 3; triangle += 1) {
-      // class 3 is the collision "wall" band; the activity-wall layer already shows
-      // the rule walls, and drawing every collision wall here turns the core into a
-      // green box that hides the floor.  Ride/climb surfaces are the visible terrain.
-      if (classes[triangle] === 3) continue;
-      const color = zoneColors[zones[triangle]] !== undefined
+      const zoneColor = zoneColors[zones[triangle]] !== undefined
         ? new THREE.Color(zoneColors[zones[triangle]]) : fallback;
-      for (let corner = 0; corner < 3; corner += 1) {
+      const classColor = new THREE.Color(classColors[classes[triangle]] ?? 0x9e9e9e);
+      // The file is in Unity's frame; three.js is that with z negated.  A mirror reverses
+      // winding, so corners 2 and 3 swap (otherwise FrontSide culls every upward face).
+      for (const corner of [0, 2, 1]) {
         const point = vertices[indices[triangle * 3 + corner]];
         if (!point) continue;
         positions.push(point[0], point[1], -point[2]);
-        colors.push(color.r, color.g, color.b);
+        lineColors.push(classColor.r, classColor.g, classColor.b);
+        // class 3 is the collision "wall" band (incl. the 15 m ring): not terrain you see
+        if (classes[triangle] !== 3) {
+          solidPositions.push(point[0], point[1], -point[2]);
+          colors.push(zoneColor.r, zoneColor.g, zoneColor.b);
+        }
       }
     }
     if (!positions.length) return;
+
+    // collision overlay: every triangle's edges, coloured by contact class
+    const overlay = new THREE.LineSegments(
+      this._collisionEdges(positions, lineColors),
+      new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6 }),
+    );
+    overlay.name = "v2-collision-edges";
+    const overlayGroup = new THREE.Group();
+    overlayGroup.name = "v2-collision";
+    overlayGroup.add(overlay);
+    overlayGroup.visible = this.showCollision;
+    this.collisionGroup = overlayGroup;
+    this.scene.add(overlayGroup);
+
+    if (hasVisual || !solidPositions.length) return;
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(solidPositions, 3));
     geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     geometry.computeVertexNormals();
     this.terrainMaterial = new THREE.MeshStandardMaterial({
       vertexColors: true, roughness: 0.96, metalness: 0,
-      // The sidecar is CCW; FrontSide is the correct culling mode.  DoubleSide would
-      // show the inside of every collision wall and turn the core into a green box.
+      // FrontSide is right now that the winding is reversed with the mirror; DoubleSide
+      // would show the inside of every collision wall.
       side: THREE.FrontSide, wireframe: this.terrainWireframe,
     });
     const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
@@ -1775,6 +1806,63 @@ export class EditorView {
     this.terrainGroup = group;
     this.scene.add(group);
     this._applyLegacyPlaneVisibility();
+  }
+
+  /** Edge segments (3 per triangle) of a triangle soup, one colour per vertex. */
+  _collisionEdges(positions, colors) {
+    const edges = [];
+    const edgeColors = [];
+    for (let base = 0; base + 8 < positions.length; base += 9) {
+      for (const [from, to] of [[0, 1], [1, 2], [2, 0]]) {
+        for (const corner of [from, to]) {
+          const at = base + corner * 3;
+          edges.push(positions[at], positions[at + 1], positions[at + 2]);
+          edgeColors.push(colors[at], colors[at + 1], colors[at + 2]);
+        }
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(edges, 3));
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(edgeColors, 3));
+    return geometry;
+  }
+
+  /**
+   * ``terrain.visual``: the original's graphic stage, textured (``/api/v2/visual.glb``).
+   * The sky shell stays loaded but is a backdrop (never drives framing, never writes depth).
+   */
+  async _buildV2Visual(visual) {
+    if (!visual?.available) return;
+    const token = this.apiToken ? `?token=${encodeURIComponent(this.apiToken)}` : "";
+    try {
+      const gltf = await this.loader.loadAsync(`/api/v2/visual.glb${token}`);
+      const group = new THREE.Group();
+      group.name = "v2-visual";
+      gltf.scene.traverse((object) => {
+        if (!object.isMesh) return;
+        let role = null;
+        for (let node = object; node && !role; node = node.parent) role = node.userData?.role;
+        object.castShadow = false;
+        object.receiveShadow = true;
+        object.userData.visualRole = role;
+        if (role === "sky") {
+          object.userData.refBackdrop = true;
+          object.renderOrder = -100;
+          for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+            material.depthWrite = false;
+          }
+        }
+      });
+      group.add(gltf.scene);
+      group.visible = this.showTerrain;
+      this.terrainGroup = group;
+      this.scene.add(group);
+      this._applyLegacyPlaneVisibility();
+      this.needsRender = true;
+    } catch (error) {
+      console.warn("v2 visual failed", error);
+      this.callbacks.onError?.(`terrain.visual 加载失败：${error.message}`);
+    }
   }
 
   _buildV2Walls(activity) {
@@ -2709,7 +2797,9 @@ export class EditorView {
 
   async setCollision(visible) {
     this.showCollision = Boolean(visible);
-    if (this.showCollision) await this._ensureCollision();
+    // v2: the overlay is the .katerrain triangles, built with the document; the old
+    // stage-extraction overlay (68 AABBs, zone boxes) only exists on the v1 reference path.
+    if (this.showCollision && !this.v2Mode) await this._ensureCollision();
     if (this.collisionGroup) this.collisionGroup.visible = this.showCollision;
     this.needsRender = true;
     return Boolean(this.collisionGroup);

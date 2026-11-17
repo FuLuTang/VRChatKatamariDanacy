@@ -72,7 +72,7 @@ absorb ⇔ boxDistance ≤ contactLimit
 |---|---|---|---|
 | `itemSize` | 参数 | 物件**自身**三边（全长，米），与朝向无关 | 宿主 `propOwnSizes`（`propLocalBounds`），见 1.1 节 |
 | `itemRotation`、`itemPosition` | 参数 | 物件入队时的世界旋转与位置（**入队快照，不刷新**） | 宿主 `SubmitProp` 传 `propTransforms[i].rotation/position`，随候选存进电机队列（`pendingRotations`） |
-| `collisionRadiusWorldM` | 参数 | 球当前**碰撞半径**（米），不是语义直径、不是核心半径 | 装配层在判定调用处传 `collisionRadiusWorldM`（`KatamariBallMotor.cs:749-753`），该字段每步由 `SizeModelMath.TryDerive` 从确认体积重算（`KatamariBallMotor.cs:905` 的 `DeriveSize`，公式在 `SizeModelMath.cs:179`：`collision = core × collisionToCoreRadiusRatio`） |
+| `collisionRadiusWorldM` | 参数 | 球当前**碰撞半径**（米），不是语义直径、不是核心半径 | 装配层在判定调用处传 `collisionRadiusWorldM`（`KatamariBallMotor.cs:749-753`），该字段每步由 `PickupAbsorbStepMath.RecomputeConfirmedAndSize` → `DeriveSize` → `SizeModelMath.TryDerive` 从确认体积重算（`collision = core × collisionToCoreRadiusRatio`） |
 | `contactRadiusWorldM` | 参数 | 纯附加接触余量（米）。不是物件半径、不是容差、不随球长大 | 序列化字段，默认 `0f`（`KatamariBallMotor.cs:112`） |
 | 尺寸门的物件侧（参数 `itemSize`、`itemVolumeK`） | `EvaluateAbsorb` 的参数，用在尺寸门 | `itemSize` 同上（原作每类型的 `a, b, c`）；`itemVolumeK` 是原作的每件体积系数 `k`（`V = k·a·b·c`），**不参与接触** | 序列化列 `PickupFieldHost.propVolumeK`（导入器从 `defs[].volumeK` 填，缺省 0.70）与 `propLocalBounds`（物件自身尺寸），随候选 `SubmitCandidateWithVolumeKMm3` 进电机；比较在 `IsBeyondAbsorbLimit`（见 1.1 节） |
 | `maxGrowthRadiusWorldM` | 参数 | 成长上限门：碰撞半径到这个值就整体拒收，**不参与接触** | 装配层传 `maxCollisionRadiusWorldM`（`KatamariBallMotor.cs:752`），该值 = `maxCoreRadiusWorldM × collisionToCoreRadiusRatio`（`KatamariBallMotor.cs:485`），默认为 `1.1 × 1 = 1.1` |
@@ -130,6 +130,18 @@ absorb ⇔ boxDistance ≤ contactLimit
 - `maxItemVolumeWorldM3 = 512f`。**这是安全上界**，不是玩法阈值：512 m³ 是「8 m 立方体」的读法，与 (h) 时代的 8 m 长度上界同量级、但换成了体积口径。长度上界配体积门会在 8 m 处硬截断，语义错——一条 0.02 m 见方、8 m 长的杆体积只有 0.0032 m³，却会被「8 m」钉死。
 - **删掉的字段**：`absorbSizeRatio`（物件最长边 / 球直径 = 1.0）与 `maxItemSizeWorldM`（8 m 长度上界）。删而不是留兼容，理由有两条：长度上界与体积门拼在一起语义错（上一条），以及留一条旧字段等于留一条「能悄悄把闸门压回线性」的配置路径——(h) 已经因为场景里的残留覆盖值踩过一次。**迁移后果**：现存 lab 场景/prefab 里的 `maxItemSizeWorldM: 8` / `absorbSizeRatio: 1` 变成 Unity 忽略的死键，组件回落到新字段的 C# 默认值（512 / 10），所以**不改场景行为也已经是新口径**；清理死键是 Unity 侧的顺手活。
 - `contactRadiusWorldM = 0f`。见下面第 1 节末与决定 (i)：0 是「必须实质接触」，不是「还没接」。
+
+### 1.2 接触时刻的局部位姿与 gap 诊断（R33 修复）
+
+**球侧一律用 `collisionRadiusWorldM`（等效体积球），v1/v2 相同**；不读固定视觉核心，也不把立方体方向支撑函数/滚动针壳 `reach` 代入本层。原作专利 `Mh` 是盒、实际形状/朝向未测，本项目采用其内接等效球是有记录的取舍，见 [`PARITY_AUDIT.md`](../Parity/PARITY_AUDIT.md)“吸收触发的几何”行。
+
+电机不是 Unity `FixedUpdate`：它在自身 `Update` 内用累加器跑若干定步。每步阶段 5 判门 → 6 成功提交 → 7 成长 → 7.5 成长推出 → 8 滚转；宿主另一个 `Update` 消费环，因此**不得到消费时再用当前球心/当前滚转换算**。现行纯值入口为 `PickupAbsorbStepMath.EvaluatePendingCandidates` → `CommitAcceptedAbsorbs` → 成功行的 `AttachmentStepMath.RecordAbsorbedEvent` → `PickupAbsorbStepMath.CompactPendingCandidates` → `RecomputeConfirmedAndSize`；事件 payload：`AttachmentStepMath.RecordAbsorbedEvent` 用门判断的球心和候选位置/旋转，调用 `AttachmentMath.TryCaptureContactPose`（用同一 `VisualRollMath` 算到本步接触位置的滚转、吸收前半径），当步转出 local position/rotation，与碰撞半径、contactRadius、球心、步号一起写固定 16 槽并行数组。只有账本提交成功才记事件。宿主 `TryGetAbsorbedEventAttachment` 经 `AttachmentStepMath.TryReadAbsorbedEventAttachment` 读取保留槽，直接把 local pose 写 `AttachmentRoot`，再经 `AttachmentStepMath.TryAttachRadialProxy` 给径向代理；缺失/过期 payload 不用当前姿态兜底。此后的 N 步运动或同一步成长推出，都携带已冻结局部位姿。原有 `GetAbsorbedEventPosition` 仍是门使用的道具世界位置，供其它事件读者使用。
+
+**唯一 gap 口径**：电机与宿主都调 `AttachmentMath.TryComputeBoxGap` → `PickupAbsorbMath.TryComputeContact`，`boxGapMm = 1000 × [boxDistance − (吸收时碰撞半径 + 吸收时contactRadius)]`。电机量接触世界位姿，宿主量将写入的局部位姿；球面在刚体变换下不变，两个值可按 `event` 配对。门不加 epsilon；验收允许浮点与打印误差 **0.2 mm**（两端 gap 差绝对值 ≤0.2 mm，宿主 gap ≤0.2 mm），不是 5 mm 手感窗口。日志另打 `ballR/contactMm`、`delaySteps`（接触后已走的定步数）、`centerDeltaMm`（含同一步推出），不要把时延位移混进 gap，也不要拿固定视觉核心边缘当当前物理球面。
+
+**R33 证据（修复前）**：亲读三份 play 日志共 70 对；motor 70/70 非正，host 69/70 正（−9.2～117.5 mm），两端差中位 77.2 mm。原因主要是电机日志减 v2 放大的方向 `reach`，宿主减物理半径；可用紧邻 story 直径直接分解的 36 对中，半径项解释总差的 97%，29 对几何残差 ≤0.2 mm，但两对有 +36.9/+42.8 mm 真几何漂移（旧日志不能区分后续步与同一步成长推出）。不是“触发已正确，全部差都是延迟”。完整例子、截图边界与复验表在 [`ATTACH_PLACEMENT.md`](../BallLayers/Attachment/ATTACH_PLACEMENT.md) §1、§6。
+
+**NUnit**：`PickupAttachmentPoseTests` 是无 GameObject 的纯值回归（0/1/3/8 步、四分之一圈接触滚转、同口径 gap、轴/面对角/体对角球门）；`PickupAttachmentIntegrationTests` **需 Unity**，在一次性 preview scene 测实际事件环与宿主消费、物件已移动/球已成长、游标幂等，以及 v1/v2 均拒球外角向物。部分 Unity Quaternion 纯数学 API 是 native extern，本地 .NET runner 不可执行时不算通过；UdonSharp 编译/Unity 场景复验仍由操作员做。
 
 ### 2. 接触量的是盒，不是外接球（对照表）
 

@@ -621,8 +621,8 @@ namespace VRCKatamari.Tests
                 "r_visual = half the start diameter");
             Assert.AreEqual(physical, visual, 1e-4f, "at the start the core fills the sphere");
             Assert.GreaterOrEqual(rolling, physical - 1e-4f);
-            Assert.GreaterOrEqual(pickup, rolling - 1e-4f,
-                "the pickup trigger reaches at least as far as the rolling shape");
+            Assert.AreEqual(physical, pickup, 1e-6f,
+                "pickup uses the collision sphere, never a cube support radius or pins");
             float expectedCap = Mathf.Min(0.35f * physical, 0.3f);
             Assert.AreEqual(expectedCap, (float)Invoke("GetNeedleProtrusionCapWorldM"),
                 1e-5f, "the pin cap is min(0.35 r, 0.30)");

@@ -204,6 +204,53 @@ namespace VRCKatamari.Tests
             Assert.IsNull(Field(doc, "Terrain"), "an absent terrain block is null");
         }
 
+        [Test]
+        public void ReadsTheTerrainVisualBlockShapeAndWarnsOnUnknownKeys()
+        {
+            // terrain.visual (LEVEL_FORMAT_V2 3.8): the reader checks the shape and counts; the
+            // geometry/texture verification belongs to TerrainVisualDocument.
+            string visual = @"""visual"":{""meshRef"":{""path"":""terrain/v.katvisual""," +
+                @"""sha256"":""00"",""vertexCount"":3,""indexCount"":3,""triangleCount"":1," +
+                @"""indexWidth"":2,""normals"":true,""uvs"":true,""bogusRef"":1}," +
+                @"""parts"":[{""id"":""p0"",""role"":""stage"",""vertexRange"":[0,3]," +
+                @"""indexRange"":[0,3],""bounds"":{""min"":[0,0,0],""max"":[1,0,1]}," +
+                @"""submeshes"":[{""material"":""t000"",""firstIndex"":0,""indexCount"":3}]," +
+                @"""bogusPart"":1}],""materials"":[{""id"":""t000""," +
+                @"""texture"":""terrain/textures/a.png"",""sha256"":""00"",""width"":4," +
+                @"""height"":4,""blend"":""opaque"",""bogusMaterial"":1}],""filter"":""point""," +
+                @"""bogusVisual"":1}";
+            string json = DocWith(PropJson("") + @",""terrain"":{""id"":""t"",""kind"":""mesh""," +
+                @"""winding"":""ccw"",""triangles"":{""count"":1}," + visual + @",""bogusTerrain"":1}");
+
+            object result = Read(json);
+            Assert.IsNull(FirstError(result), "a visual block must not make the reader refuse");
+            object terrain = Field(Field(result, "Document"), "Terrain");
+            Assert.AreEqual(true, Field(terrain, "HasVisual"));
+            Assert.AreEqual(1, Field(terrain, "VisualPartCount"));
+            Assert.AreEqual(1, Field(terrain, "VisualMaterialCount"));
+            string warnings = string.Join("\n",
+                (System.Collections.Generic.IEnumerable<string>)Field(result, "Warnings"));
+            foreach (string path in new[]
+                     {
+                         "terrain.bogusTerrain", "terrain.visual.bogusVisual",
+                         "terrain.visual.meshRef.bogusRef", "terrain.visual.parts[0].bogusPart",
+                         "terrain.visual.materials[0].bogusMaterial"
+                     })
+            {
+                StringAssert.Contains(path, warnings, "unknown key at " + path + " must warn");
+            }
+        }
+
+        [Test]
+        public void ATerrainWithoutVisualDeclaresNone()
+        {
+            string json = DocWith(PropJson("") + @",""terrain"":{""id"":""t"",""kind"":""mesh""," +
+                                  @"""winding"":""ccw"",""triangles"":{""count"":1}}");
+            object terrain = Field(Field(Read(json), "Document"), "Terrain");
+            Assert.AreEqual(false, Field(terrain, "HasVisual"));
+            Assert.AreEqual(0, Field(terrain, "VisualPartCount"));
+        }
+
         // -------------------------------------------------------- structural rules ---
 
         [Test]

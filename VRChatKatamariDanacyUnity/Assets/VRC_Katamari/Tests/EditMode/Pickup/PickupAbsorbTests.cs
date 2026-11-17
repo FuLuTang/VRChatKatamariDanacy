@@ -282,7 +282,7 @@ namespace VRCKatamari.Tests
         public void ContactTableMatchesTheWorkedExample()
         {
             // Source of the expected values: Docs/Design/PickupAbsorb/README.md, section
-            // "接触距离 vs 物件尺寸（工作算例）". The ball sits at its calibrated start diameter
+            // 2 (the contact distance against the item's box). The ball sits at its calibrated start diameter
             // (0.29974 m), so the collision radius is 0.14987 m; contactRadiusWorldM is 0
             // and the item is a cube of side s. Centre distance at which the cube is just
             // touched: straight at a face, r + s/2; straight at a corner (along the cube's

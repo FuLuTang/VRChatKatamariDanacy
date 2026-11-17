@@ -152,3 +152,10 @@
 | — | [_blocked-and-unusable.md](sources/_blocked-and-unusable.md) | — | 取不到正文的来源登记（不作为证据） |
 
 引用 URL 仅用于核查，不代表版权、品牌授权或对原作实现的背书。本轮未运行游戏、未录制实机、未测量数值。主管已据此更新 [T01 矩阵](../ReferenceRules/rules_matrix.md) 与 [P09 决策](../Preparation/RuleDecisions/README.md)（含 `decisions.json`，提交 `b4cb62f`）：矩阵的「交分 / 兑换」「吞噬 / 对手交互」「KO 与重生」「道具」等行与决策表的对应项已按 C1–C22 改写；仍未解的问题见本文 §3。
+
+## 6. 球与吸附物的原作研究（本目录其它文档）
+
+- [`ORIGINAL_ATTACH_LOOK.md`](ORIGINAL_ATTACH_LOOK.md)：吸附物放哪、嵌多深、朝向、球芯长不长、叠压、消隐、吸附瞬间的表现；专利原文 + 初代 PS2 录像实测，逐条带级别与时间码。现行设计见 [`Design/BallLayers/Attachment/ATTACH_PLACEMENT.md`](../../Design/BallLayers/Attachment/ATTACH_PLACEMENT.md)。
+- [`BALL_PHYSICS_IMPLEMENTATIONS.md`](BALL_PHYSICS_IMPLEMENTATIONS.md)：球的三模型（显示 / 碰撞 / 滚动）与同类实现。
+- [`ORIGINAL_CLIMB_OBSERVATIONS.md`](ORIGINAL_CLIMB_OBSERVATIONS.md)：推墙爬升的跨系列文献核查。
+- [`ORIGINAL_BALL_INERTIA.md`](ORIGINAL_BALL_INERTIA.md)：球的惯性（松手滑行、起步、刹车、冲刺）：专利、手册、REROLL 源码与速通笔记、5 cm 球录像起停读数；结论是没有公开数值。

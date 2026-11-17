@@ -121,6 +121,7 @@ namespace VRCKatamari.Story.Hub
         private bool startFailed;
 
         private int lastPromptId = -1;
+        private int lastPromptZone = -2;
         private int lastRefusalReason;
 
         // The world positions of the circles, refreshed once per frame from the Transforms.
@@ -315,10 +316,13 @@ namespace VRCKatamari.Story.Hub
 
             int promptId = HubRoomMath.PromptFor(phase, nearZone, insideZone, armed,
                 startReady, inHub);
-            if (promptId != lastPromptId)
+            // The prompt names the pad the player stands on, so a change of pad is a change
+            // of prompt even when the prompt kind is the same.
+            if (promptId != lastPromptId || zoneIndex != lastPromptZone)
             {
                 lastPromptId = promptId;
-                WritePrompt(promptId);
+                lastPromptZone = zoneIndex;
+                WritePrompt(promptId, zoneIndex);
             }
         }
 
@@ -376,28 +380,28 @@ namespace VRCKatamari.Story.Hub
 
         // ------------------------------------------------------------------ prompt
 
-        private void WritePrompt(int promptId)
+        private void WritePrompt(int promptId, int zoneIndex)
         {
             if (promptText == null) return;
 
             if (promptId == HubRoomMath.PromptApproach)
             {
-                promptText.text = "走进房间中央的野餐垫自动开始";
+                promptText.text = "走进一块选关垫，自动进入对应关卡";
                 return;
             }
             if (promptId == HubRoomMath.PromptRetryApproach)
             {
-                promptText.text = "走进野餐垫再来一局";
+                promptText.text = "走进一块选关垫再来一局";
                 return;
             }
             if (promptId == HubRoomMath.PromptStandIn)
             {
-                promptText.text = "站住别动，马上开始…";
+                promptText.text = PadName(zoneIndex) + "：站住别动，马上开始…";
                 return;
             }
             if (promptId == HubRoomMath.PromptStarting)
             {
-                promptText.text = "开始！";
+                promptText.text = PadName(zoneIndex) + "：开始！";
                 return;
             }
             if (promptId == HubRoomMath.PromptReArm)
@@ -417,12 +421,12 @@ namespace VRCKatamari.Story.Hub
             }
             if (promptId == HubRoomMath.PromptResult)
             {
-                promptText.text = "上一局已结算，走进野餐垫再来一局";
+                promptText.text = "上一局已结算，走进一块选关垫再来一局";
                 return;
             }
             if (promptId == HubRoomMath.PromptResultAway)
             {
-                promptText.text = "本局已结算，按关卡里的「回房」按钮返回";
+                promptText.text = "本局已结算：点结果卡上的「再试一次」，或「回大厅」";
                 return;
             }
 
@@ -430,6 +434,13 @@ namespace VRCKatamari.Story.Hub
         }
 
         // ------------------------------------------------------------------ small helpers
+
+        // The launcher owns the level names; the pad index is the launcher's level index.
+        private string PadName(int zoneIndex)
+        {
+            if (launcher == null || zoneIndex < 0) return "";
+            return launcher.GetLevelName(zoneIndex);
+        }
 
         private string StateText()
         {

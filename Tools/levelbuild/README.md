@@ -414,3 +414,20 @@ python3 Tools/levelbuild/spawn_reach.py Docs/Design/Levels/_ref_cancer grow X Z 
 ```
 
 结果是估算（不模拟电机冲量、运动件、墙隔视线）；选出的点写进 `ref_v2_from_extract.py` 的 `AUTHORED_SPAWNS`；其中 `playerStart` 由转换器输出为文档的 `meta.playerStart`（校验器 `[meta_player_start]`），导入器据此建 `Markers/PlayerSpawn` 并接场景描述符。测试：`Docs/tests/levelbuild/test_spawn_reach.py`。
+
+## `ref_stage_visual.py`：参考关卡的视觉舞台（`terrain.visual`）
+
+把原作图形扇区（带贴图的 `~/KatamariRef/noclip_export/out/stage.glb`，不是剥贴图的 `kse_out` 版）转成
+`terrain/cancer.katvisual`（顶点/法线/UV/部件局部索引）+ `terrain/textures/*.png`（原样复制）+ `terrain.visual` JSON 块。
+规则（x 镜像 → 绕序翻一次、法线取 `−n`、按贴图合并子网格、PNG alpha → `opaque/cutout/alpha`）与研究见
+[REF_STAGE_VIEW §10](../../Docs/Design/Tools/REF_STAGE_VIEW.md)，格式见 [LEVEL_FORMAT_V2 §3.8/§8.4](../../Docs/Design/Levels/LEVEL_FORMAT_V2.md)。
+
+```bash
+python3 Tools/levelbuild/ref_stage_visual.py                  # 干跑：数字与哈希
+python3 Tools/levelbuild/ref_stage_visual.py --write          # 只写侧车 + PNG
+python3 Tools/levelbuild/ref_v2_from_extract.py --write       # 同时把 terrain.visual 写进 placement.v2.json
+python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/_ref_cancer/placement.v2.json
+```
+
+只读 `~/KatamariRef`、只写 `_ref_*` 关卡目录（与 `ref_v2_from_extract.py` 同一套 `guard_read`/`guard_write`）；同输入逐字节相同。
+测试：`Docs/tests/levelbuild/test_ref_stage_visual.py`。

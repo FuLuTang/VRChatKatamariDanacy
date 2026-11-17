@@ -12,12 +12,14 @@ data and consumers:
   level's start diameter, fixed for the whole level (it is not computed here).
 * ``RollingShape`` — core sphere + needle support lengths; the contact solver's
   shape.  Needles are ball-local, so they rotate with the visual roll.
-* ``PickupShape``  — the stick/trigger volume; larger than the rolling core and
-  never a blocker.
+* ``PickupShape``  — the equal-volume collision sphere's radius; independent of
+  direction and protruding pins, never a blocker. The item side is its own OBB.
 
-Numbers are OUR design/provisional.  The original only anchors the *ordering*
-(display body, equal-volume collision box, pin rolling) and the video finding that the
-core does not grow (Docs/Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md b1).
+Numbers are OUR design/provisional. The patent anchors separate models, not our
+chosen spherical pickup shape: Mh's actual box shape/orientation is unknown. Our
+sphere is a documented decision (PARITY_AUDIT, pickup contact row, 2026-11-17).
+The video finding that the core does not grow is documented in
+Docs/Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md b1.
 """
 from dataclasses import dataclass, field
 import math
@@ -58,18 +60,6 @@ def needle_protrusion_cap(physical_radius: float) -> float:
     """Physics clamp on how far a pin may stick out (matches the proxy cap)."""
     return min(NEEDLE_PROTRUSION_PER_RADIUS * physical_radius,
                NEEDLE_PROTRUSION_WORLD_M)
-
-
-def pickup_box_reach(direction: Vec3, physical_radius: float) -> float:
-    """Support function of the cube that bounds the equal-volume sphere.
-
-    The patent's collision/pickup model is the *bounding box* of the equivalent
-    sphere, so its reach along a direction is ``r * (|x|+|y|+|z|)``: 1.0 r on an
-    axis, 1.41 r on a face diagonal, 1.73 r at a corner.  Direction dependent by
-    construction, no extra constant.
-    """
-    unit = _unit(direction, "direction")
-    return physical_radius * (abs(unit[0]) + abs(unit[1]) + abs(unit[2]))
 
 
 # --------------------------------------------------------------- rotations ---
@@ -365,15 +355,14 @@ def needle_segment_plane_contact(plane_normal: Vec3, plane_offset: float,
 # -------------------------------------------------------------- pickup shape ---
 def pickup_reach(direction: Vec3, physical_radius: float,
                  shape: Optional[RollingShape] = None) -> float:
-    """The pickup/trigger reach: the box support function, unioned with the pins.
+    """The equal-volume collision sphere's pickup radius, independent of direction/pins.
 
-    The union is what keeps the user-facing ordering "pickup >= rolling" true
-    even when a long object protrudes further than the box corner.
+    ``direction`` and ``shape`` remain accepted for callers reporting shape metrics;
+    neither changes the gate. C# GetPickupReachWorldM reports this same scalar.
     """
-    reach = pickup_box_reach(direction, physical_radius)
-    if shape is not None:
-        reach = max(reach, shape.reach_along(direction))
-    return reach
+    if not math.isfinite(physical_radius) or physical_radius < 0.0:
+        raise ValueError("physical_radius must be finite and non-negative")
+    return physical_radius
 
 
 def rolling_reach(direction: Vec3, shape: RollingShape) -> float:

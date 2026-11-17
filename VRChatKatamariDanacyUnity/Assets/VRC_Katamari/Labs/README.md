@@ -28,22 +28,16 @@
 | 需要 `ReferenceCamera` | 是（否则警告，视角可能不对） | 否 |
 | 缺组件的表现 | 一切正常，最多一条警告 | 构建失败，Play Mode 里毫无征兆 |
 
-### 给下一个搭场景的人
-
-> 用 SDK 向导建世界会自动补 `PipelineManager` 和 `ReferenceCamera`；**用脚本搭场景必须手动补**，否则 Play Mode 一切正常、构建必挂。
-
-原来的 `Labs/BallPlayground` 里这两件是补过的（`PipelineManager` 挂在根上，`ReferenceCamera` 指向 `PlaygroundCamera`）；该场景已于 2026-11-15 退役（由 `Labs/PhysicsTestField` 取代），搭新场景时同样必须自己补。
-
 ## 用编辑器脚本搭 UdonSharp 场景（MCP / execute_code）
 
-2026-11-15 用 `execute_code` 直接搭场景时逐条撞出来的（Unity 2022.3.22f1、VRChat Worlds SDK 3.10.5 自带 UdonSharp）。核心结论：**编辑器脚本给对象加 UdonSharpBehaviour 不是 `AddComponent<T>()` 一句话的事**——朴素 `AddComponent<T>()` 只建出 proxy 组件，背后没有 `UdonBehaviour`、也没有 program asset。它在 Inspector 里看得见，游戏里永远不跑。当时 `Labs/StoryLevel` 的 10 个行为里有 5 个是这么来的，这也是前几次「它就是不动」事故的真因。
+用 `execute_code` 直接搭场景的要点（Unity 2022.3.22f1、VRChat Worlds SDK 3.10.5 自带 UdonSharp）。核心结论：**编辑器脚本给对象加 UdonSharpBehaviour 不是 `AddComponent<T>()` 一句话的事**——朴素 `AddComponent<T>()` 只建出 proxy 组件，背后没有 `UdonBehaviour`、也没有 program asset。它在 Inspector 里看得见，游戏里永远不跑。
 
 ### 必做序列
 
 1. **program asset 先就位**：`.cs` 旁边同名 `UdonSharpProgramAsset`（`.asset`），并和它的 `.meta` 一起提交。脚本写了、asset 没生成或没提交，后面全部白搭。
 2. **先编译，再拷贝**：`UdonSharpEditorUtility.CompileAllCsPrograms(true, false)` 必须在任何拷贝之前跑。否则报 `Cannot run serialization on U# behaviour … with outdated behaviour version`。
 3. **建 backing 组件**：同一个 GameObject 上 `AddComponent<UdonBehaviour>()`，再用 `SerializedObject` 写两个**字段**（不是属性）：`programSource` = 该 program asset；`serializedProgramAsset` = `programAsset.SerializedProgramAsset`。
-4. **把 proxy 接到 backing 上（2026-11-15 实测）**：手工 `AddComponent<UdonBehaviour>()` 并设好 `programSource` / `serializedProgramAsset` 之后，U# 代理组件上的 `_udonSharpBackingUdonBehaviour` 仍是 0。U# 下次打开场景时会把这种代理当成未挂接，**再生成一套代理 + UdonBehaviour**，并用 `CopyUdonToProxy` 把代理上的引用清空（现象：同一物体上出现 2+2 甚至 5 个组件，引用全空）。修法：用 `SerializedObject` 把代理的 `_udonSharpBackingUdonBehaviour` 指向同物体的那个 `UdonBehaviour`，再调 `UdonSharpEditorUtility.SetBehaviourVersion(ub, UdonSharpBehaviourVersion.V1)`（否则加载时按 V0 升级又会清空变量表）；这之后再 `CopyProxyToUdon`，它会用 `TryAddVariable` 补上缺失的符号。
+4. **把 proxy 接到 backing 上**：手工 `AddComponent<UdonBehaviour>()` 并设好 `programSource` / `serializedProgramAsset` 之后，U# 代理组件上的 `_udonSharpBackingUdonBehaviour` 仍是 0。U# 下次打开场景时会把这种代理当成未挂接，**再生成一套代理 + UdonBehaviour**，并用 `CopyUdonToProxy` 把代理上的引用清空（现象：同一物体上出现 2+2 甚至 5 个组件，引用全空）。修法：用 `SerializedObject` 把代理的 `_udonSharpBackingUdonBehaviour` 指向同物体的那个 `UdonBehaviour`，再调 `UdonSharpEditorUtility.SetBehaviourVersion(ub, UdonSharpBehaviourVersion.V1)`（否则加载时按 V0 升级又会清空变量表）；这之后再 `CopyProxyToUdon`，它会用 `TryAddVariable` 补上缺失的符号。
 5. **先填引用，再回写**：proxy 上的 `[SerializeField]` 引用全部设好，再 `UdonSharpEditorUtility.CopyProxyToUdon(proxy)`。
 6. **改过字段就重开场景**：源脚本新增或改名序列化字段之后，`CopyProxyToUdon` **不会**给已经存在的实例补符号（实例变量表是建实例时的快照）。必须存盘、`EditorSceneManager.OpenScene(path)` 重载场景 —— U# 在场景加载时按当前 program 重建实例变量表 —— 再 `CopyProxyToUdon` 一次。完整顺序：**编译 → 存盘 → 重开场景 → `CopyProxyToUdon` → 读回验证**。
 7. **从 Udon 侧读回验证**：读 backing `UdonBehaviour` 的 `publicVariables`，用 `TryGetVariableValue(string, out object)`。**按参数类型选重载**——只按名字反射会 `AmbiguousMatchException`。
@@ -93,14 +87,10 @@ var pv = typeof(UdonBehaviour).GetField("publicVariables", BindingFlags.NonPubli
 
 - **层级固定**：`BallPhysicsRoot` → `BallVisualRollRoot` → `CoreMesh` / `AttachmentRoot`。位置与旋转是两个不同的宿主，缺一个就是表格里「视觉球停在作者高度」那一行。
 - **uGUI Button → Udon**：`Button.onClick` 的 persistent listener 指向 `UdonBehaviour.SendCustomEvent`，参数是方法名字符串；编辑器里用 `UnityEventTools.AddStringPersistentListener`（或 `Delegate.CreateDelegate`）绑定，lambda 会被拒（`does not derive from UnityEngine.Object`）。
-- **回仓库清单**：每个 program asset（`.asset` + `.meta`），以及 `Assets/SerializedUdonPrograms/` 下每个新文件（+ `.meta`）。曾经 5 个 program asset 没提交，后来一次 merge 把它们静默抹掉，留下一批 `programSource = null` 的行为。
+- **回仓库清单**：每个 program asset（`.asset` + `.meta`），以及 `Assets/SerializedUdonPrograms/` 下每个新文件（+ `.meta`）。漏提交的 program asset 会在 merge 时被静默抹掉，留下 `programSource = null` 的行为。
 - **验证规则**：看渲染结果（`CoreMesh` 的 scale 与 renderer bounds），不要只看 motor 报的数；真实按键输入必须由人试。
 
-## 已退役：BallPlayground 与 Bootstrap（2026-11-15）
+## 共用资产
 
-`Labs/BallPlayground/`（`BallPlayground.unity`、`BallPlayground.prefab`、`BallPlaygroundBootstrap`、`PlaygroundProp`、4 个材质）与 `Labs/Bootstrap/`（`BootstrapLab.unity`）已于 2026-11-15 退役，由 `Labs/PhysicsTestField` 取代：场景、prefab、`BallPlaygroundBootstrap` 及其 UdonSharp program asset / serialized program 已删除。
-
-`Labs/BallPlayground/` 目录**本身已删除**。只有下面这些资产被在用的场景引用，所以它们在退役时搬到了新位置（连 `.meta` 一起搬、GUID 不变），不能按旧路径去删：
-
-- `Mat_PlaygroundBall/Ground/Prop/Wall` 四个材质 → `Assets/VRC_Katamari/Art/Materials/`：`Labs/StoryLevel/StoryLevel.unity`（`Ground`、4 面墙、`CoreMesh`、`SceneDescriptor.DynamicMaterials`）与 `Labs/CpuSkirmish/CpuSkirmish.unity` 都在用。
-- `PlaygroundProp.cs` + `PlaygroundProp.asset`（+ `Assets/SerializedUdonPrograms/bb940408ec3999040829cf3d16ca2ec1.asset`）→ `Labs/CpuSkirmish/`：`CpuSkirmish.unity` 的 24 个 `P0_0..P3_5` 道具挂的就是它。
+- `Assets/VRC_Katamari/Art/Materials/Mat_PlaygroundBall / Ground / Prop / Wall`：`Worlds/StoryMode/StoryMode.unity`（`Ground`、4 面墙、`CoreMesh`、`SceneDescriptor.DynamicMaterials`）与 `Labs/CpuSkirmish/CpuSkirmish.unity` 在用。
+- `Labs/CpuSkirmish/PlaygroundProp.cs` + `PlaygroundProp.asset`（+ `Assets/SerializedUdonPrograms/bb940408ec3999040829cf3d16ca2ec1.asset`）：`CpuSkirmish.unity` 的 24 个 `P0_0..P3_5` 道具挂的就是它。

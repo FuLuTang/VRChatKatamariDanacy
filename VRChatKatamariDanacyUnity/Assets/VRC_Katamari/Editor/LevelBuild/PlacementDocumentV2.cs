@@ -214,6 +214,14 @@ namespace VRCKatamari.Editor.LevelBuild
         public int TriangleCount = -1;
         public int BroadPhaseBoxCount;
         public int ChunkCount;
+        /// <summary>
+        /// <c>terrain.visual</c> (LEVEL_FORMAT_V2 §3.8) is present: the rendered surface is a
+        /// separate asset from the contact mesh, and <see cref="TerrainMeshImporter"/> imports
+        /// it (the contact mesh then carries only the player's <c>MeshCollider</c>).
+        /// </summary>
+        public bool HasVisual;
+        public int VisualPartCount;
+        public int VisualMaterialCount;
     }
 
     /// <summary>One <c>structures.solids[]</c> entry: a large, never-absorbable analytic body.</summary>
@@ -414,11 +422,10 @@ namespace VRCKatamari.Editor.LevelBuild
     /// <c>props[].motion</c> (§6.7.2).
     /// </summary>
     /// <remarks>
-    /// Parsed and preserved, NOT executed: there is no <c>MotionHost</c> yet (P4), and the
-    /// reference document's table is empty today. The model keeps the documented keys plus the
-    /// raw <c>params</c> object so a later round reads the data instead of re-parsing the file,
-    /// and the reader records unknown keys as warnings rather than errors - a non-empty table
-    /// must never make a level fail to import.
+    /// Consumed by <c>PlacementMotionRows</c>, which resolves it into <c>MotionHost</c>'s
+    /// columns. The model keeps the documented keys plus the <c>params</c> keys and values, and
+    /// the reader records unknown keys as warnings rather than errors - a non-empty table must
+    /// never make a level fail to import.
     /// </remarks>
     public sealed class PlacementV2Motion
     {
@@ -432,6 +439,8 @@ namespace VRCKatamari.Editor.LevelBuild
         public float UpdatesPerSecond;
         public int ParamCount;
         public string[] ParamKeys = new string[0];
+        /// <summary>The numeric values of <see cref="ParamKeys"/>, same order (non-numbers read 0).</summary>
+        public float[] ParamValues = new float[0];
         public string ProvenanceMoveType;
         public string ProvenanceAction;
         public int ProvenanceBackupIndex = -1;
@@ -446,6 +455,8 @@ namespace VRCKatamari.Editor.LevelBuild
         public string Id;
         public float[][] Points = new float[0][];
         public bool Loop;
+        /// <summary>The raw <c>loop</c> text (<c>loop</c>/<c>ping_pong</c>/<c>once</c>), null when absent.</summary>
+        public string LoopMode;
         public float SpeedCmPerSec;
         public bool HasSpeedCmPerSec;
         public string Notes;
@@ -671,7 +682,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
             ReportUnknown(root, "", DocumentKeys, result, document);
             document.Meta = ReadMeta(root.Get("meta"), result, document);
-            document.Terrain = ReadTerrainRef(root.Get("terrain"), result);
+            document.Terrain = ReadTerrainRef(root.Get("terrain"), result, document);
             document.Solids = ReadSolids(root.Get("structures"), result, document);
             document.Activity = ReadActivity(root.Get("activityArea"), result, document);
             document.Props = ReadProps(root.Get("props"), result, document);
@@ -898,10 +909,32 @@ namespace VRCKatamari.Editor.LevelBuild
             return expected;
         }
 
+        private static readonly string[] TerrainKeys =
+        {
+            "id", "kind", "winding", "vertices", "indices", "meshRef", "triangles", "broadPhase",
+            "chunks", "grid", "materialSegments", "visual", "source"
+        };
+
+        private static readonly string[] VisualKeys =
+            { "meshRef", "parts", "materials", "filter", "source" };
+
+        private static readonly string[] VisualMeshRefKeys =
+        {
+            "path", "sha256", "vertexCount", "indexCount", "triangleCount", "indexWidth",
+            "normals", "uvs"
+        };
+
+        private static readonly string[] VisualPartKeys =
+            { "id", "role", "vertexRange", "indexRange", "bounds", "submeshes" };
+
+        private static readonly string[] VisualMaterialKeys =
+            { "id", "texture", "sha256", "width", "height", "blend" };
+
         private static PlacementV2TerrainRef ReadTerrainRef(LevelJsonNode node,
-            PlacementV2ReadResult result)
+            PlacementV2ReadResult result, PlacementV2Document document)
         {
             if (node == null || node.Kind != LevelJsonKind.Object) return null;
+            ReportUnknown(node, "terrain", TerrainKeys, result, document);
             var terrain = new PlacementV2TerrainRef();
             terrain.Id = node.GetString("id");
             terrain.Kind = node.GetString("kind");
@@ -921,7 +954,46 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             terrain.ChunkCount = ArrayLength(node.Get("chunks"));
+            ReadVisualRef(node.Get("visual"), terrain, result, document);
             return terrain;
+        }
+
+        /// <summary>
+        /// <c>terrain.visual</c>: only its shape is checked here (unknown keys, counts); the
+        /// geometry, the textures and the sidecar are read - and verified - by
+        /// <see cref="TerrainVisualDocument"/> when <see cref="TerrainMeshImporter"/> imports.
+        /// </summary>
+        private static void ReadVisualRef(LevelJsonNode visual, PlacementV2TerrainRef terrain,
+            PlacementV2ReadResult result, PlacementV2Document document)
+        {
+            if (visual == null) return;
+            if (visual.Kind != LevelJsonKind.Object)
+            {
+                result.Errors.Add("[terrain_visual] terrain.visual must be an object");
+                return;
+            }
+
+            terrain.HasVisual = true;
+            ReportUnknown(visual, "terrain.visual", VisualKeys, result, document);
+            ReportUnknown(visual.Get("meshRef"), "terrain.visual.meshRef", VisualMeshRefKeys,
+                result, document);
+            LevelJsonNode parts = visual.Get("parts");
+            terrain.VisualPartCount = ArrayLength(parts);
+            for (int i = 0; parts != null && parts.Kind == LevelJsonKind.Array && i < parts.Count;
+                 i++)
+            {
+                ReportUnknown(parts.At(i), "terrain.visual.parts[" + i + "]", VisualPartKeys,
+                    result, document);
+            }
+
+            LevelJsonNode materials = visual.Get("materials");
+            terrain.VisualMaterialCount = ArrayLength(materials);
+            for (int i = 0; materials != null && materials.Kind == LevelJsonKind.Array &&
+                            i < materials.Count; i++)
+            {
+                ReportUnknown(materials.At(i), "terrain.visual.materials[" + i + "]",
+                    VisualMaterialKeys, result, document);
+            }
         }
 
         private static PlacementV2Solid[] ReadSolids(LevelJsonNode structures,
@@ -1306,6 +1378,11 @@ namespace VRCKatamari.Editor.LevelBuild
                 {
                     motion.ParamKeys = parameters.KeyArray();
                     motion.ParamCount = motion.ParamKeys.Length;
+                    motion.ParamValues = new float[motion.ParamCount];
+                    for (int k = 0; k < motion.ParamCount; k++)
+                    {
+                        motion.ParamValues[k] = parameters.GetFloat(motion.ParamKeys[k], 0f);
+                    }
                 }
 
                 LevelJsonNode provenance = item.Get("provenance");
@@ -1351,6 +1428,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 {
                     Id = item.GetString("id"),
                     Loop = item.GetBool("loop", false),
+                    LoopMode = item.GetString("loop"),
                     HasSpeedCmPerSec = item.Has("speedCmPerSec"),
                     SpeedCmPerSec = item.GetFloat("speedCmPerSec", 0f),
                     Notes = item.GetString("notes")

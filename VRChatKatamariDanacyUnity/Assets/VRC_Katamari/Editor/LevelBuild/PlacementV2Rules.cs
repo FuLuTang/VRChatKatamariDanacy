@@ -1077,32 +1077,147 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         /// <summary>
-        /// Where a level's terrain visual mesh asset lives. A reference level's goes under
-        /// <c>Assets/_RefUnlicensed/Meshes/</c> (git-ignored; named after the level with its
-        /// underscores turned into PascalCase, <c>_ref_cancer</c> -> <c>RefCancerTerrainVisual</c>);
-        /// our own levels' go to <c>Assets/VRC_Katamari/Generated/Levels/&lt;leaf&gt;/&lt;terrainId&gt;.asset</c>
+        /// Where a level's single terrain mesh asset lives - the standing surface of a level
+        /// WITHOUT <c>terrain.visual</c>, where one mesh is both what is drawn and what the
+        /// player stands on. A reference level's goes under <c>Assets/_RefUnlicensed/Meshes/</c>
+        /// (git-ignored; named after the level with its underscores turned into PascalCase,
+        /// <c>_ref_cancer</c> -> <c>RefCancerTerrainVisual</c>); our own levels' go to
+        /// <c>Assets/VRC_Katamari/Generated/Levels/&lt;leaf&gt;/&lt;terrainId&gt;.asset</c>
         /// (LEVEL_FORMAT_V2 §11.2). A nested level id (<c>physics_test_field/C21</c>) uses its leaf.
+        /// With <c>terrain.visual</c> that path is the PRE-split name of the contact mesh:
+        /// <see cref="TerrainCollisionMeshPath"/> is where it lives now and the importer moves
+        /// the old asset there (the GUID survives a move).
         /// </summary>
         public static string TerrainVisualMeshPath(string levelId, string terrainId,
             bool isReference)
         {
-            string leaf = levelId ?? "";
-            int slash = leaf.LastIndexOf('/');
-            if (slash >= 0) leaf = leaf.Substring(slash + 1);
+            string leaf = LevelLeaf(levelId);
             if (isReference)
             {
-                var name = new System.Text.StringBuilder();
-                foreach (string part in leaf.Split(new[] { '_', '-', ' ' },
-                             StringSplitOptions.RemoveEmptyEntries))
-                {
-                    name.Append(char.ToUpperInvariant(part[0])).Append(part.Substring(1));
-                }
-
-                return "Assets/_RefUnlicensed/Meshes/" + name + "TerrainVisual.asset";
+                return "Assets/_RefUnlicensed/Meshes/" + ReferenceLevelName(leaf) +
+                       "TerrainVisual.asset";
             }
 
             return "Assets/VRC_Katamari/Generated/Levels/" + SafeFileName(leaf) + "/" +
                    SafeFileName(terrainId) + ".asset";
+        }
+
+        /// <summary>
+        /// The contact mesh asset of a level WITH <c>terrain.visual</c>: the triangles the
+        /// player's <c>MeshCollider</c> stands on (the original's collision mesh), never
+        /// rendered. A reference level's is <c>Meshes/&lt;Name&gt;TerrainCollision.asset</c>.
+        /// </summary>
+        public static string TerrainCollisionMeshPath(string levelId, string terrainId,
+            bool isReference)
+        {
+            string leaf = LevelLeaf(levelId);
+            if (isReference)
+            {
+                return "Assets/_RefUnlicensed/Meshes/" + ReferenceLevelName(leaf) +
+                       "TerrainCollision.asset";
+            }
+
+            return "Assets/VRC_Katamari/Generated/Levels/" + SafeFileName(leaf) + "/" +
+                   SafeFileName(terrainId) + "_collision.asset";
+        }
+
+        /// <summary>The mesh asset of one <c>terrain.visual.parts[]</c> entry.</summary>
+        public static string TerrainVisualPartMeshPath(string levelId, string partId,
+            bool isReference)
+        {
+            string leaf = LevelLeaf(levelId);
+            if (isReference)
+            {
+                return "Assets/_RefUnlicensed/Meshes/" + ReferenceLevelName(leaf) + "Visual_" +
+                       SafeFileName(partId) + ".asset";
+            }
+
+            return "Assets/VRC_Katamari/Generated/Levels/" + SafeFileName(leaf) + "/visual_" +
+                   SafeFileName(partId) + ".asset";
+        }
+
+        /// <summary>
+        /// The imported copy of one visual texture (the PNG the document's
+        /// <c>materials[].texture</c> names; only its file name is used).
+        /// </summary>
+        public static string TerrainVisualTexturePath(string levelId, string textureRelativePath,
+            bool isReference)
+        {
+            string leaf = LevelLeaf(levelId);
+            string file = SafeFileName(System.IO.Path.GetFileNameWithoutExtension(
+                textureRelativePath ?? "")) + ".png";
+            if (isReference)
+            {
+                return "Assets/_RefUnlicensed/Textures/" + ReferenceLevelName(leaf) + "/" + file;
+            }
+
+            return "Assets/VRC_Katamari/Generated/Levels/" + SafeFileName(leaf) + "/Textures/" +
+                   file;
+        }
+
+        /// <summary>The material of one <c>terrain.visual.materials[]</c> entry.</summary>
+        public static string TerrainVisualMaterialPath(string levelId, string materialId,
+            bool isReference)
+        {
+            string leaf = LevelLeaf(levelId);
+            if (isReference)
+            {
+                return "Assets/_RefUnlicensed/Materials/" + ReferenceLevelName(leaf) + "Visual_" +
+                       SafeFileName(materialId) + ".mat";
+            }
+
+            return "Assets/VRC_Katamari/Generated/Levels/" + SafeFileName(leaf) +
+                   "/Materials/visual_" + SafeFileName(materialId) + ".mat";
+        }
+
+        /// <summary>
+        /// The built-in shader a <c>terrain.visual.materials[].blend</c> maps to, or null for a
+        /// value the format does not define. The original blends every part with
+        /// <c>src_alpha, 1 - src_alpha</c> and discards alpha 0, lit by its level lighting; the
+        /// legacy diffuse family is the lit, no-specular equivalent that culls back faces like
+        /// the original (and, being built in, needs no keyword juggling to create from code).
+        /// </summary>
+        public static string VisualShaderName(string blend)
+        {
+            switch (blend)
+            {
+                case "opaque": return "Legacy Shaders/Diffuse";
+                case "cutout": return "Legacy Shaders/Transparent/Cutout/Diffuse";
+                case "alpha": return "Legacy Shaders/Transparent/Diffuse";
+                default: return null;
+            }
+        }
+
+        /// <summary>
+        /// The mesh name a part's asset carries: the part id plus the first 8 hex digits of the
+        /// <c>.katvisual</c> sha256. An asset whose name differs was built from other bytes, so
+        /// the importer rebuilds it in place (same GUID) instead of trusting the triangle count.
+        /// </summary>
+        public static string VisualMeshName(string levelId, string partId, string sidecarSha256)
+        {
+            string sha = sidecarSha256 ?? "";
+            if (sha.Length > 8) sha = sha.Substring(0, 8);
+            return SafeFileName(LevelLeaf(levelId)) + "_" + SafeFileName(partId) + "@" +
+                   sha.ToLowerInvariant();
+        }
+
+        private static string LevelLeaf(string levelId)
+        {
+            string leaf = levelId ?? "";
+            int slash = leaf.LastIndexOf('/');
+            return slash >= 0 ? leaf.Substring(slash + 1) : leaf;
+        }
+
+        private static string ReferenceLevelName(string leaf)
+        {
+            var name = new System.Text.StringBuilder();
+            foreach (string part in leaf.Split(new[] { '_', '-', ' ' },
+                         StringSplitOptions.RemoveEmptyEntries))
+            {
+                name.Append(char.ToUpperInvariant(part[0])).Append(part.Substring(1));
+            }
+
+            return name.ToString();
         }
 
         private static string SafeFileName(string value)

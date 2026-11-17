@@ -58,34 +58,34 @@ namespace VRCKatamari.Tests
         public void TheClimbSpeedTableMatchesTheDesignsSection36()
         {
             // Full push (v_gate = 2 m/s), h = 0, so rate = 1.0. D = 0.30 (H_cap 0.30):
-            // the design's own table prints 0.579 / 0.532 / 0.481 / 0.369 / 0.245 / 0.115.
-            Assert.AreEqual(0.5785416740f, ClimbMath.ClimbSpeed(1f, 2f, 50f, 0f, 0.30f),
+            // the design table (T_climb 4.5 s: 0.579 / 0.532 / 0.481 / 0.369 / 0.245 / 0.115) x 1.6 for T_climb = 2.8125 s (owner 2026-11-17).
+            Assert.AreEqual(0.9256666784f, ClimbMath.ClimbSpeed(1f, 2f, 50f, 0f, 0.30f),
                 PureTolerance);
-            Assert.AreEqual(0.5317776887f, ClimbMath.ClimbSpeed(1f, 2f, 55f, 0f, 0.30f),
+            Assert.AreEqual(0.8508443019f, ClimbMath.ClimbSpeed(1f, 2f, 55f, 0f, 0.30f),
                 PureTolerance);
-            Assert.AreEqual(0.4809665540f, ClimbMath.ClimbSpeed(1f, 2f, 60f, 0f, 0.30f),
+            Assert.AreEqual(0.7695464864f, ClimbMath.ClimbSpeed(1f, 2f, 60f, 0f, 0.30f),
                 PureTolerance);
-            Assert.AreEqual(0.3687775087f, ClimbMath.ClimbSpeed(1f, 2f, 70f, 0f, 0.30f),
+            Assert.AreEqual(0.5900440139f, ClimbMath.ClimbSpeed(1f, 2f, 70f, 0f, 0.30f),
                 PureTolerance);
-            Assert.AreEqual(0.2453833454f, ClimbMath.ClimbSpeed(1f, 2f, 80f, 0f, 0.30f),
+            Assert.AreEqual(0.3926133526f, ClimbMath.ClimbSpeed(1f, 2f, 80f, 0f, 0.30f),
                 PureTolerance);
-            Assert.AreEqual(0.1145333333f, ClimbMath.ClimbSpeed(1f, 2f, 90f, 0f, 0.30f),
+            Assert.AreEqual(0.1832533333f, ClimbMath.ClimbSpeed(1f, 2f, 90f, 0f, 0.30f),
                 PureTolerance);
-            // D = 0.60 (H_cap 0.60): 1.157 / 1.064 / 0.962 / 0.738 / 0.491 / 0.229.
-            Assert.AreEqual(1.1570833479f, ClimbMath.ClimbSpeed(1f, 2f, 50f, 0f, 0.60f),
+            // D = 0.60 (H_cap 0.60): x 1.6 of 1.157 / 1.064 / 0.962 / 0.738 / 0.491 / 0.229.
+            Assert.AreEqual(1.8513333566f, ClimbMath.ClimbSpeed(1f, 2f, 50f, 0f, 0.60f),
                 PureTolerance);
-            Assert.AreEqual(1.0635553773f, ClimbMath.ClimbSpeed(1f, 2f, 55f, 0f, 0.60f),
+            Assert.AreEqual(1.7016886037f, ClimbMath.ClimbSpeed(1f, 2f, 55f, 0f, 0.60f),
                 PureTolerance);
-            Assert.AreEqual(0.9619331080f, ClimbMath.ClimbSpeed(1f, 2f, 60f, 0f, 0.60f),
+            Assert.AreEqual(1.5390929728f, ClimbMath.ClimbSpeed(1f, 2f, 60f, 0f, 0.60f),
                 PureTolerance);
-            Assert.AreEqual(0.7375550174f, ClimbMath.ClimbSpeed(1f, 2f, 70f, 0f, 0.60f),
+            Assert.AreEqual(1.1800880278f, ClimbMath.ClimbSpeed(1f, 2f, 70f, 0f, 0.60f),
                 PureTolerance);
-            Assert.AreEqual(0.4907666908f, ClimbMath.ClimbSpeed(1f, 2f, 80f, 0f, 0.60f),
+            Assert.AreEqual(0.7852267053f, ClimbMath.ClimbSpeed(1f, 2f, 80f, 0f, 0.60f),
                 PureTolerance);
-            Assert.AreEqual(0.2290666667f, ClimbMath.ClimbSpeed(1f, 2f, 90f, 0f, 0.60f),
+            Assert.AreEqual(0.3665066667f, ClimbMath.ClimbSpeed(1f, 2f, 90f, 0f, 0.60f),
                 PureTolerance);
             // The dash gate (3.2 m/s) hits the 1.5 rate ceiling.
-            Assert.AreEqual(0.3436f, ClimbMath.ClimbSpeed(1f, 3.2f, 90f, 0f, 0.60f),
+            Assert.AreEqual(0.5497600000f, ClimbMath.ClimbSpeed(1f, 3.2f, 90f, 0f, 0.60f),
                 PureTolerance);
             // The grip discount: a 0.075 m protrusion on a 0.30 m core halves v_req.
             Assert.AreEqual(0.7954951288f,
@@ -262,11 +262,11 @@ namespace VRCKatamari.Tests
                 if (lowWallBall.Center.y > lowWallHighest) lowWallHighest = lowWallBall.Center.y;
             }
             // Python (K_H = 1.5): highest y = 0.30 (r above the 0.15 m wall top), final
-            // z = -8.791471. Tops are OFF for this scenario because the Python model has no
+            // z = -8.887189. Tops are OFF for this scenario because the Python model has no
             // ledge exit yet; with them on the C# peaks 2.6 cm higher (C#-only mechanics,
             // bounded in ContactSolveTests.ALowWallIsRolledOver).
             Assert.AreEqual(0.30f, lowWallHighest, IntegratorTolerance);
-            Assert.AreEqual(-8.791471f, lowWallBall.Center.z, IntegratorTolerance);
+            Assert.AreEqual(-8.887189f, lowWallBall.Center.z, IntegratorTolerance);
         }
     }
 }

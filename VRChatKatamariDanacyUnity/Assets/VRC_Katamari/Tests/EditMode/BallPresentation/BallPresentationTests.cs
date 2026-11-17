@@ -17,9 +17,8 @@ namespace VRCKatamari.Tests
     /// deleted with that decision (Docs/Design/BallLayers/Attachment/ATTACH_PLACEMENT.md 3.2).
     /// </para>
     /// <para>
-    /// The apparent-size case is pinned against the O6 full round's own sample
-    /// (Docs/Evidence/StoryMode/2026-11-16_first_full_round), so a printed line can be checked
-    /// against the evidence folder by hand.
+    /// The apparent-size case is pinned against a sample taken from a full round, so a
+    /// printed line can be checked against it by hand.
     /// </para>
     /// </remarks>
     public class BallPresentationTests
@@ -27,9 +26,8 @@ namespace VRCKatamari.Tests
         // ---------------------------------------------------------------- log quantities
         /// <summary>
         /// The apparent size the <c>[eye]</c> line prints is the core diameter over the eye
-        /// distance. The first case is the O6 full round's own sample (0.7863 m core at
-        /// 2.297 m reads 0.3423 rad), so the printed line can be checked against the evidence
-        /// folder by hand.
+        /// distance. The first case is a sample from a full round (0.7863 m core at
+        /// 2.297 m reads 0.3423 rad), so the printed line can be checked by hand.
         /// </summary>
         [Test]
         public void ApparentSizeIsCoreDiameterOverEyeDistance()

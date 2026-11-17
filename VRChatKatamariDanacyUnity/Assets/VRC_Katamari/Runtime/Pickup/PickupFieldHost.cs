@@ -34,10 +34,10 @@ namespace VRCKatamari.Pickup
     /// with the core (Docs/02_TECHNICAL_CONTRACTS.md section 2).
     /// </para>
     /// <para>
-    /// The pose comes from the prop's CURRENT transform, never from the event snapshot.
-    /// The motor records the position the candidate had when it was queued
-    /// (<c>pendingPositions</c>), so at high speed that snapshot can be tens of centimetres
-    /// behind where the prop actually is. The event is only used for its item id.
+    /// The pose comes from the event's FROZEN contact-local payload. The motor records
+    /// the same candidate world pose the gate judged, relative to that accepting step's
+    /// ball centre and rolling rotation. Recomputing from current world transforms here
+    /// would bake later steps or a same-step growth push-out into the attachment offset.
     /// </para>
     /// <para>
     /// Queue etiquette. The motor never removes a queued candidate except on a successful
@@ -224,6 +224,17 @@ namespace VRCKatamari.Pickup
         [SerializeField] private int[] propProxyFaceStarts;
         [SerializeField] private int[] propProxyFaceCounts;
         [SerializeField] private int[] propProxyHullFaces;
+
+        [Header("Stack fall (optional, PROP_BEHAVIOURS 10.9)")]
+        // Single parent pointer per row: the HOST ROW index of the prop this one stands on
+        // or belongs to, -1 = none. Written by PickupFieldSync from the level's `parent`
+        // (idempotent, by item id); an absent or short array reads as -1. Only the stack-fall
+        // host reads it, through GetPropParentIndex.
+        [SerializeField] private int[] propParentIndex;
+        // Optional. When wired, this host tells it about every absorbed row and asks it to
+        // restore moved props on a field reset; it is also asked whether a row is falling so
+        // a falling prop is neither a wall nor a floor. Null = no stack fall (old behaviour).
+        [SerializeField] private PropFallHost fallHost;
 
         [Header("Radii and cadence")]
         [SerializeField] private float activationRadiusM = DefaultActivationRadiusM;
@@ -584,6 +595,10 @@ namespace VRCKatamari.Pickup
                 propStates[i] = StateFree;
                 restored = restored + 1;
             }
+            // Props the stack fall moved while they were free go back to where they started
+            // (attached ones were restored by the loop above).
+            if (fallHost != null) fallHost.ResetFalls();
+
             // The withdraw list goes too: the caller has already had the motor clear its
             // candidate queue, so nothing this host listed is queued any more and the next
             // scan starts from an empty list.
@@ -621,6 +636,37 @@ namespace VRCKatamari.Pickup
             Debug.Log("[PickupFieldHost] field reset restored=" + restored
                 + " props=" + propCount);
             return true;
+        }
+
+        /// <summary>The prop's Transform, or null for a bad index (read-only accessor).</summary>
+        public Transform GetPropTransform(int index)
+        {
+            if (propTransforms == null || index < 0 || index >= propCount) return null;
+            return propTransforms[index];
+        }
+
+        /// <summary>The prop's world AABB full edge lengths (propBounds), or zero.</summary>
+        public Vector3 GetPropBounds(int index)
+        {
+            if (propBounds == null || index < 0 || index >= propCount) return Vector3.zero;
+            return propBounds[index];
+        }
+
+        /// <summary>
+        /// Host row index of the prop's parent, -1 when it has none or the column is absent
+        /// or short. Not validated here: the stack-fall host sanitizes the whole column once.
+        /// </summary>
+        public int GetPropParentIndex(int index)
+        {
+            if (propParentIndex == null || index < 0 || index >= propParentIndex.Length) return -1;
+            return propParentIndex[index];
+        }
+
+        /// <summary>True while the row is neither attached nor hidden (still in the world).</summary>
+        public bool IsPropFree(int index)
+        {
+            if (propStates == null || index < 0 || index >= propCount) return false;
+            return propStates[index] == StateFree;
         }
 
         /// <summary>Total props attached to the ball by this host.</summary>
@@ -1244,7 +1290,8 @@ namespace VRCKatamari.Pickup
                 if (absorbedId.Length == 0) continue;
                 int index = FindPropIndex(absorbedId);
                 if (index < 0) continue;
-                AttachProp(index);
+                AttachProp(index, i);
+                if (fallHost != null) fallHost.OnPropAbsorbed(index);
             }
             seenEvents = total;
         }
@@ -1263,7 +1310,7 @@ namespace VRCKatamari.Pickup
         // Attach: ball-frame local pose, then parent under the attachment root.
         // ------------------------------------------------------------------
 
-        private void AttachProp(int index)
+        private void AttachProp(int index, int eventIndex)
         {
             if (propStates[index] != StateFree) return;
             Transform prop = propTransforms[index];
@@ -1278,39 +1325,39 @@ namespace VRCKatamari.Pickup
                 return;
             }
 
-            Vector3 worldPosition = prop.position;
-            Quaternion worldRotation = prop.rotation;
             Vector3 worldScale = prop.lossyScale;
-            if (!IsUsableScale(worldScale))
+            if (!AttachmentMath.IsValidObjectScale(worldScale))
             {
                 HideProp(index, HiddenReasonScaleInvalid);
                 return;
             }
 
-            // The ball's rigid frame, as the motor reports it: centre, and the visual roll
-            // rotation that actually carries the props around.
-            Vector3 ballCenter = motor.GetCenterWorld();
+            // The event already contains the local contact pose from the accepting step.
+            // Neither the ball nor a moving/free prop's current world pose can reconstruct
+            // that pose here: the motor may have run several more fixed steps in Update.
             Vector3 localPosition;
             Quaternion localRotation;
-            if (!AttachmentMath.TryWorldPoseToLocal(ballCenter,
-                motor.GetVisualRollRotation(), worldPosition, worldRotation, worldScale,
-                out localPosition, out localRotation))
+            Vector3 contactCenter;
+            float contactCollisionRadius;
+            float contactRadius;
+            int delaySteps;
+            if (!motor.TryGetAbsorbedEventAttachment(eventIndex, out localPosition,
+                out localRotation, out contactCenter, out contactCollisionRadius,
+                out contactRadius, out delaySteps))
             {
                 HideProp(index, HiddenReasonPoseRefused);
                 return;
             }
 
-            // Diagnostic: how far the prop's box is from the ball's surface at the moment it
-            // is attached (the pose is frozen as it stands, so this is also the gap after).
-            // Negative = the box is inside the ball. The gate's own gap was <= 0 when it
-            // fired; the difference is how far the ball rolled before this event was read.
+            // Measure the pose actually assigned below, in the ball's rigid local frame.
+            // A sphere is rotation-invariant; the event's pre-growth radius and margin
+            // make this directly comparable with the motor line for the SAME event.
             string boxGapText = "n/a";
-            float boxDistanceM;
-            if (PickupAbsorbMath.TryComputeBoxDistance(propOwnSizes[index], worldRotation,
-                worldPosition, ballCenter, out boxDistanceM))
+            float boxGap;
+            if (AttachmentMath.TryComputeBoxGap(propOwnSizes[index], localRotation,
+                localPosition, Vector3.zero, contactCollisionRadius, contactRadius, out boxGap))
             {
-                boxGapText = ((boxDistanceM - motor.GetCollisionRadiusWorldM()) * 1000f)
-                    .ToString("F1");
+                boxGapText = (boxGap * 1000f).ToString("F1");
             }
 
             prop.SetParent(attachmentRoot);
@@ -1337,19 +1384,16 @@ namespace VRCKatamari.Pickup
             nextBlockingScanTime = 0f;
             attachedCount = attachedCount + 1;
             TallyKind(kinds[index]);
+            Vector3 ballCenter = motor.GetCenterWorld();
             CheckAttachmentRootOnce(ballCenter);
             Debug.Log("[PickupFieldHost] attached id=" + itemIds[index]
-                + " kind=" + kinds[index]
+                + " kind=" + kinds[index] + " event=" + eventIndex
                 + " boxGapMm=" + boxGapText
+                + " ballR=" + contactCollisionRadius
+                + " contactMm=" + (contactRadius * 1000f).ToString("F1")
+                + " delaySteps=" + delaySteps
+                + " centerDeltaMm=" + (Vector3.Distance(ballCenter, contactCenter) * 1000f).ToString("F1")
                 + " attached=" + attachedCount);
-        }
-
-        private bool IsUsableScale(Vector3 scale)
-        {
-            if (!KatamariMath.IsFiniteVector(scale)) return false;
-            // AttachmentMath rejects a non-positive scale; the reason is recorded separately
-            // here so a zero-scaled prefab is not reported as an invalid rotation.
-            return scale.x > 0f && scale.y > 0f && scale.z > 0f;
         }
 
         /// <summary>
@@ -1807,6 +1851,8 @@ namespace VRCKatamari.Pickup
             float pruneRadius = radius + pruneStickiness;
             if (!KatamariMath.IsFiniteFloat(pruneRadius)) return;
 
+            // One cross-behaviour read per scan; the per-row query only runs while something falls.
+            bool anyFalling = fallHost != null && fallHost.GetFallingCount() > 0;
             int blockingCandidateCountNow = 0;
             int supportCandidateCountNow = 0;
             for (int i = 0; i < propCount; i++)
@@ -1819,6 +1865,8 @@ namespace VRCKatamari.Pickup
                 // candidate is still a solid object, and PreparePropRows keeps it).
                 if (propStates[i] != StateFree) continue;
                 if (!propUsable[i]) continue;
+                // A falling prop is neither a wall nor a floor (PROP_BEHAVIOURS section 4).
+                if (anyFalling && fallHost.IsPropFalling(i)) continue;
 
                 Vector3 position = propTransforms[i].position;
                 float dx = position.x - center.x;

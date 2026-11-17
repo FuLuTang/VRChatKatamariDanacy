@@ -525,8 +525,9 @@ MonoBehaviour:
       Data: 37|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: Stop when the error is this small - unless one volume unit is coarser
-        than this.
+      Data: Stop when the error is this small. 1 mm = the size_accuracy criterion's
+        limit; the mm^3 growth quantum is ~7 nm of diameter, so it never coarsens
+        this.
     - Name: 
       Entry: 8
       Data: 

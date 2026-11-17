@@ -294,5 +294,6 @@ GLB 要做什么；速率到底知不知道；Unity 端怎么进。
   `cmp_noclip_vs_ours.png`（上排 noclip 3 帧 / 下排我们 3 相位）。**腿在动、身体没炸、朝向与静态包里同种螃蟹一致、
   三种螃蟹比例各自正确、相对模式没弄反**（弄反会双倍旋转）。`check_prop_glb.py` 三文件全 ok
   （骨索引合法、权重和 =1、IBM 非奇异、时间轴单调、只用 LINEAR）。
+- **FBX 转换【实测】**：`Tools/levelbuild/blender/skinned_glb_to_fbx.py` 出的 FBX 静止姿态尺寸与静态模型一致（单位、轴向、bind 姿态都对，三型差 ≤0.0001 m）；take 名按 Blender 导入后的动作名（`<clip>_root`）去后缀后查剪辑表，三型的 `walk/walk_fast/slot2/idle/slot4` 时长为 0.9667/0.4833/0.1/0.9667/0.9667 s，与 `report.json` 一致。`SkinnedMeshRenderer.bounds` 覆盖全部剪辑姿态且处于倾斜约 8° 的根骨坐标系中，约为静止模型的 1.17×1.27×1.17，不能当模型尺寸用。
 - **局限**：与 noclip 的对比是**姿态级**（现成截图里螃蟹仅约 90 px）。逐姿态对比要起 noclip dev server + 装
   `playwright-core`（都在仓库外），没做，是可选的验证项。

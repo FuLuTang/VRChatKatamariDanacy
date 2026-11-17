@@ -7,6 +7,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UdonSharp;
 using UdonSharpEditor;
+using VRCKatamari.Editor.LevelBuild;
 using VRCKatamari.Pickup;
 
 namespace VRCKatamari.Editor.Pickup
@@ -555,6 +556,33 @@ namespace VRCKatamari.Editor.Pickup
             }
         }
 
+        /// <summary>
+        /// The renderers whose extents define a prop's size: its whole subtree except the
+        /// skeletal-animation <c>Skin</c> child. A SkinnedMeshRenderer's bounds cover every clip
+        /// pose in the root bone's frame and are larger than the model, so the static visual
+        /// (kept disabled under the prop) is what is measured.
+        /// </summary>
+        public static Renderer[] MeasuredRenderers(Transform root)
+        {
+            Renderer[] all = root.GetComponentsInChildren<Renderer>(true);
+            Transform skin = root.Find(SkeletalAnimationAssembler.SkinChildName);
+            if (skin == null)
+            {
+                return all;
+            }
+
+            var kept = new List<Renderer>(all.Length);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (!all[i].transform.IsChildOf(skin))
+                {
+                    kept.Add(all[i]);
+                }
+            }
+
+            return kept.ToArray();
+        }
+
         private static PropCandidate Candidate(Transform root, string kind, Transform fieldRoot)
         {
             var candidate = new PropCandidate();
@@ -565,7 +593,7 @@ namespace VRCKatamari.Editor.Pickup
             ReadDeclaredSize(candidate);
             candidate.HasRenderer = true;
 
-            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            Renderer[] renderers = MeasuredRenderers(root);
             if (renderers.Length == 0)
             {
                 candidate.HasRenderer = false;
@@ -723,7 +751,7 @@ namespace VRCKatamari.Editor.Pickup
 
             Vector3 localCenter = Vector3.zero;
             Vector3 localSize = fallbackSize;
-            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            Renderer[] renderers = MeasuredRenderers(root);
             Vector3 measured = MeasureLocalBoundsAndCenter(root, renderers, out localCenter);
             if (PickupFieldAuthoringRules.HasUsableBounds(measured.x, measured.y, measured.z))
             {

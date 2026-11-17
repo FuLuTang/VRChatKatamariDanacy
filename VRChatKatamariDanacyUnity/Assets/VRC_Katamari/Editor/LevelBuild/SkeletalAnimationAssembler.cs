@@ -25,8 +25,8 @@ namespace VRCKatamari.Editor.LevelBuild
     /// <c>AnimatorController</c> is created (parameters <c>Moving</c>, <c>Panic</c>; states
     /// <c>idle</c> default, <c>walk</c>, <c>walk_fast</c>). Per prop whose def is a skinned
     /// type: a child <c>Skin</c> (the FBX instance) carrying the Animator, aligned to the static
-    /// model by bounds centre, the static renderers switched off (kept, so the pickup sync still
-    /// measures the prop). <see cref="MotionHost"/> then starts each Animator at its phase,
+    /// model by mesh-bounds centre, the static renderers switched off (kept in place; the pickup sync
+    /// measures only them and skips the <c>Skin</c> subtree). <see cref="MotionHost"/> then starts each Animator at its phase,
     /// sets <c>Moving</c>/<c>Panic</c> and disables the component when the prop is culled.
     /// </para>
     /// <para>
@@ -315,7 +315,10 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         // The skin is moved so its bounds centre sits on the static model's; the size ratio per axis
-        // is the orientation/scale check (a 90 degree error swaps two axes).
+        // is the orientation/scale check (a 90 degree error swaps two axes). Both sides are measured
+        // the same way: the mesh's own bounds (bind pose for a skinned mesh) carried through the
+        // renderer's transform. SkinnedMeshRenderer.bounds is not used: it covers every clip pose in
+        // the root bone's tilted frame and is always larger than the model.
         private static void AlignToStatic(Transform prop, Transform skin, Result result)
         {
             Bounds staticBounds;
@@ -329,16 +332,42 @@ namespace VRCKatamari.Editor.LevelBuild
                 return;
             }
             skin.position += staticBounds.center - skinBounds.center;
-            Vector3 a = staticBounds.size;
-            Vector3 b = skinBounds.size;
-            float rx = a.x > 1e-6f ? b.x / a.x : 0f;
-            float ry = a.y > 1e-6f ? b.y / a.y : 0f;
-            float rz = a.z > 1e-6f ? b.z / a.z : 0f;
-            bool fits = Mathf.Abs(rx - 1f) <= FitTolerance && Mathf.Abs(ry - 1f) <= FitTolerance &&
-                        Mathf.Abs(rz - 1f) <= FitTolerance;
+            Vector3 ratio = SizeRatio(staticBounds.size, skinBounds.size);
+            bool fits = FitsTolerance(ratio);
             if (!fits) result.Problems++;
-            result.Lines.Add("[anim_fit] " + prop.name + ": skin/static size ratio (" + rx.ToString("0.00") + ", " +
-                             ry.ToString("0.00") + ", " + rz.ToString("0.00") + ")" + (fits ? "" : " OUT OF TOLERANCE: check FBX axes"));
+            result.Lines.Add("[anim_fit] " + prop.name + ": skin/static size ratio (" + ratio.x.ToString("0.00") + ", " +
+                             ratio.y.ToString("0.00") + ", " + ratio.z.ToString("0.00") + ")" + (fits ? "" : " OUT OF TOLERANCE: check FBX axes"));
+        }
+
+        /// <summary>Per-axis <c>measured / reference</c>; an axis whose reference is degenerate reads 0.</summary>
+        public static Vector3 SizeRatio(Vector3 reference, Vector3 measured)
+        {
+            return new Vector3(
+                reference.x > 1e-6f ? measured.x / reference.x : 0f,
+                reference.y > 1e-6f ? measured.y / reference.y : 0f,
+                reference.z > 1e-6f ? measured.z / reference.z : 0f);
+        }
+
+        /// <summary>True when every axis of the ratio is within <see cref="FitTolerance"/> of 1.</summary>
+        public static bool FitsTolerance(Vector3 ratio)
+        {
+            return Mathf.Abs(ratio.x - 1f) <= FitTolerance && Mathf.Abs(ratio.y - 1f) <= FitTolerance &&
+                   Mathf.Abs(ratio.z - 1f) <= FitTolerance;
+        }
+
+        /// <summary>The world-space AABB of a mesh-local box carried through <paramref name="localToWorld"/> (8 corners).</summary>
+        public static Bounds MeshBoundsInWorld(Bounds meshBounds, Matrix4x4 localToWorld)
+        {
+            Vector3 c = meshBounds.center;
+            Vector3 e = meshBounds.extents;
+            Vector3 first = localToWorld.MultiplyPoint3x4(c + new Vector3(-e.x, -e.y, -e.z));
+            var result = new Bounds(first, Vector3.zero);
+            for (int i = 1; i < 8; i++)
+            {
+                var sign = new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f);
+                result.Encapsulate(localToWorld.MultiplyPoint3x4(c + Vector3.Scale(e, sign)));
+            }
+            return result;
         }
 
         private static bool TryBounds(Transform root, Transform exclude, bool onlyUnder, out Bounds bounds)
@@ -349,10 +378,21 @@ namespace VRCKatamari.Editor.LevelBuild
             for (int i = 0; i < renderers.Length; i++)
             {
                 if (!onlyUnder && exclude != null && renderers[i].transform.IsChildOf(exclude)) continue;
-                if (!any) { bounds = renderers[i].bounds; any = true; }
-                else bounds.Encapsulate(renderers[i].bounds);
+                Mesh mesh = SharedMeshOf(renderers[i]);
+                if (mesh == null) continue;
+                Bounds world = MeshBoundsInWorld(mesh.bounds, renderers[i].transform.localToWorldMatrix);
+                if (!any) { bounds = world; any = true; }
+                else bounds.Encapsulate(world);
             }
             return any;
+        }
+
+        private static Mesh SharedMeshOf(Renderer renderer)
+        {
+            var skinned = renderer as SkinnedMeshRenderer;
+            if (skinned != null) return skinned.sharedMesh;
+            MeshFilter filter = renderer.GetComponent<MeshFilter>();
+            return filter != null ? filter.sharedMesh : null;
         }
     }
 }

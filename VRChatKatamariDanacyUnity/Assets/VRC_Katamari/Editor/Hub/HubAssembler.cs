@@ -474,15 +474,19 @@ namespace VRCKatamari.Editor.Hub
                 Mathf.Abs(p.z) < 1e-6f ? world.z : world.z / p.z);
         }
 
-        // The room's width along X, read from the imported floor; a missing floor reads as
-        // a very wide room so the missing import is reported by the import, not twice.
+        // The room's width along X, read from the imported floor's body. The structure marker
+        // (hub_floor) stays at scale 1; the authored size lives on its Visual child, whose
+        // lossy scale is the document's size x. A missing floor or body reads as a very wide
+        // room so the missing import is reported by the import, not twice.
         private static float RoomWidth(Transform center)
         {
             Scene scene = SceneManager.GetActiveScene();
             Transform floor = HubLevelCatalog.FindPath(scene,
                 PlacementImporter.ManagedRootName + "/" + HubLevelId + "/Structures/hub_floor");
             if (floor == null) return 1000f;
-            return Mathf.Abs(floor.lossyScale.x);
+            Transform body = floor.Find("Visual");
+            if (body == null) return 1000f;
+            return Mathf.Abs(body.lossyScale.x);
         }
 
         // ------------------------------------------------------------ prompt ---

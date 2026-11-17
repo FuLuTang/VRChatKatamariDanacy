@@ -310,7 +310,7 @@ EditMode（NUnit）：`VRCKatamari.Tests.HubRoomMathTests` **26 条**（相位�
 **装配器 `HubAssembler`（`VRC Katamari/Hub/Assemble Hub`，幂等）。** 导入 hub 房间文档（cell，先补惰性 `PickupFieldHost`）→ `HubCenter`/`HubSpawn` → 场景描述符 `spawns` 指向 `HubSpawn`（玩家**出生在大厅**）→ 每关一块选关垫 + 名字牌（多余的垫子删除）→ `HubRoom`（`HubRoomHost`）与世界空间提示行（屏幕叠加画布 VRChat 不绘制，旧的被替换）→ `HubLevel`（`HubLevelLauncher`）→ 第一关入口旁的 `HubReturnButton` → 结果卡上的「回大厅」按钮（`HubReturnCardButton`，挂在「再试一次」按钮下，同一个 launcher 回房逻辑）→ 回合控制器 `startOnLoad=false`，以及 `roundFromPlacement` 的关卡把 `levelId`/时限/目标直径/kill plane 从自己的 placement 文档写入控制器。找得到就沿用，所以对已装过的 StoryMode 场景是接管而不是重建。
 - **不动结果卡**：结果卡归骑乘装配（`RideUxAssembler`，`FollowRigRoot/RideResultCard`）；大厅装配器不移动它、不改它的重试按钮。两个装配器共用一个按钮布局函数（`HubAssembler.LayoutRetryForReturn`：重试在左、回大厅在右，各 300×80），所以先后任意顺序运行结果一致，第二次 `+0 ~0`。
 - **出生点顺序**：导入器 `ApplySceneDescriptor` 在场景里已有 `HubSpawn` 根物体时不再改写 `spawns`（只写 `RespawnHeightY`）；场景里还没有 `HubSpawn`（还没装过大厅）时仍按旧行为指向关卡出生点，装配器随后把它放回 `HubSpawn`。
-- **房间宽度**：8 m 的房间放两块垫；第三关起要加宽 hub 文档的地面和墙，装配器按 `HubSelectMath.RoomWidthNeeded` 报 PROBLEM。
+- **房间宽度**：8 m 的房间放两块垫；第三关起要加宽 hub 文档的地面和墙，装配器拿 `hub_floor/Visual`（地面的实体子物体，缩放即文档里的 size）的 X 向宽度与 `HubSelectMath.RoomWidthNeeded` 比较，不够就报 PROBLEM（标记物 `hub_floor` 本身缩放恒为 1，不能当宽度读）。`Docs/tests/hub_levels` 用同一公式校验每个场景提供的垫数：地面 size.x 与东西墙间距都不小于所需宽度（1 块垫 3.8 m，2 块 7.2 m，当前 8 m）。
 - **重生高度**：房间地面必须高于场景的 `RespawnHeightY + 1`，否则出生即重生；装配器检查。
 
 **进关落点与“出生点在球后 2.5 m”。** 该规则不变，只是责任换了位置：关卡的玩家出生点（`Markers/PlayerSpawn`，`_ref_cancer` 是花园草坪的 (−5.647, −1.0398, 0.0852)，离球 (−5, −0.999, 2.5) 约 2.4 m）不再是世界出生点，而是**每次开始时启动器的传送目的地**（`HubLoopMath.ChooseArrival`：入口离球座 ≤12 m 用入口，否则用座位，再否则无）；传送后立即自动入座。

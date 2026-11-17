@@ -10,4 +10,4 @@
 - 滤波：`alpha = 1 − exp(−2π·hz·dt)`（C# 是 `1f - Mathf.Exp(-exponent)`；Python 用同一式子而不是 `-expm1`，因为要以 C# 的 float 行为为准）。x/z 与高度共用 height alpha，yaw 用 yaw alpha 并走最短弧；高度先夹到调用方给的 `[min,max]`，滤波后再夹一次，所以换 bounds 不会让存下来的高度非法。**唯一有意的精度差异**：C# 是 float32，`2π·hz·dt` 超过约 `3.4e38` 就溢出并拒绝；Python 是 double，要到约 `1.8e308` 才溢出。拒绝路径同一条，测试用真正 double 溢出的输入覆盖（见 `follow_rig.py` 模块 docstring）。
 - 测试：`Tests/EditMode/BallLayers/FollowRigTests.cs` 与 `Docs/tests/ball_follow_rig/test_follow_rig.py`共同覆盖（9 例）短弧双向、滤波有界不超调、瞬移吸附并重置基线、高度/后退护栏、球后上方形（四档直径的手算期望值）、非法输入原子拒绝、巨大滤波积拒绝、接口形状只有位置+yaw、1000 步有限序列；C# 另有「平视时球在画面下缘的角度」「原地旋转球不改变帧」「瞬移后保持有界」。其中纯几何检查为：`back` 与 `height` 都随半径增长、且球面净空（height − radius）单调增。未在 Unity、UdonSharp 或 VR 中运行，5Hz/8Hz 仍只是起始值。
 
-**取景几何的推导与迁移提案**：`RIDE_GEOMETRY.md` + `ride_geometry.py`（2026-11-15，未编译）。它给出α / β / 眼点下限三个数的来源（"球心恒在地平线下 18°"、"球直径 = 画面 1/3"、"眼点下限 = 座位平台 + 实测坐姿头高"），并列出把本文件的四个线性系数换成它们的补丁；在补丁落地前，本文件与 motor 的描述仍是现状。
+**取景几何与骑手尺度**：`RIDE_GEOMETRY.md` + `ride_geometry.py`。给出α / β 两个数的来源（"球心恒在地平线下 18°"、"球直径 = 画面 1/3"）、眼点系数（`RideViewMath`，装配器写进 motor 的四个字段，加性底座为 0）、骑手眼高按实测 κ 反解使腰落在球顶（`RideScaleMath`、`RideWaistMath`）、座位与平台事实。本文件与 motor 的描述（上面的线性系数）仍是跟随架本身的现状。

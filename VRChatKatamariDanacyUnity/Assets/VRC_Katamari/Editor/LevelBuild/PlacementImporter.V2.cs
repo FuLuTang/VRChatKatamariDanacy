@@ -191,6 +191,7 @@ namespace VRCKatamari.Editor.LevelBuild
                 CollectWallMarkers(levelRoot, doc), meta.HasGroundY, meta.GroundY);
             BindLevelMeta(doc, levelRoot, report);
             ChainTerrainImport(doc, report);
+            if (propsOk) ApplyPropFallHost(doc, levelRoot, report);
 
             return structureOk && propsOk && structuresOk && wallsOk;
         }

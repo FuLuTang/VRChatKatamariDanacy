@@ -89,16 +89,20 @@ namespace VRCKatamari.Riding
     /// </para>
     /// <para>
     /// Rider size. With <c>scaleRiderWithBall</c> the avatar's eye height follows the ball's
-    /// semantic diameter (<see cref="RideScaleMath"/>: the seated waist is level with the top of
-    /// the ball), so the whole arrangement is one picture at every ball size. Sequence: on sitting
-    /// down the nominal height for the current diameter is requested and the seat is measured once
-    /// when VRChat announces it; the measurement also yields this avatar's real seated-eye ratio,
-    /// which replaces the nominal one; from then on each frame the requested height is low-passed
-    /// and debounced (a request only when it moved by half a percent, at most ten times a second)
-    /// and the seat is moved to match without measuring again
-    /// (<see cref="SeatEyeCompensation.ApplyEyeHeight"/>). Requests the avatar does not follow for
-    /// about three seconds (avatar scaling off on the website) are abandoned and the seat is
-    /// measured as it is. The original eye height is read first and restored on every exit path.
+    /// semantic diameter so that this avatar's own hips sit on the top of the ball at every size
+    /// (<see cref="RideScaleMath"/>, <see cref="RideWaistMath"/>). No body proportion is assumed.
+    /// Sequence: on sitting down the original eye height is read and kept, and the seat is
+    /// measured once at it; the measurement yields <c>kappa</c> (the head-to-hips height per metre
+    /// of eye height). Without a usable waist (<see cref="SeatEyeCompensation.HasWaist"/>) the
+    /// rider's size is left alone and the seat only aligns the eye. With one, each frame the
+    /// requested height <c>(up - r) / kappa</c> is low-passed and rate limited (a request only
+    /// when it moved by half a percent, at most ten times a second) and the seat is moved to match
+    /// without measuring again (<see cref="SeatEyeCompensation.ApplyEyeHeight"/>). VRChat says
+    /// Udon must apply a size again whenever the eye height changes, so an eye-height event whose
+    /// size is not the one sent is answered by sending it again (at most three times in a row,
+    /// then the seat is measured as it is). Requests the avatar does not follow for about three
+    /// seconds (avatar scaling off on the website) are abandoned and the seat is measured as it
+    /// is. The original eye height is restored on every exit path.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
@@ -142,8 +146,8 @@ namespace VRCKatamari.Riding
         [SerializeField] private GameObject exitPanelRoot;
 
         // Whether the rider's size follows the ball while seated (RideScaleMath, RIDE_GEOMETRY.md
-        // section 3): the avatar's eye height is set to the value that puts the seated waist level
-        // with the top of the ball, kept there as the ball grows, and put back on leaving. False
+        // section 3): the avatar's eye height is set to the value that puts its measured hips on
+        // the top of the ball, kept there as the ball grows, and put back on leaving. False
         // leaves the player's size alone (the one switch for a world that cannot scale avatars).
         [SerializeField] private bool scaleRiderWithBall = false;
 
@@ -157,7 +161,7 @@ namespace VRCKatamari.Riding
         [SerializeField] private float eyeHeightStepFraction = 0.005f;
         [SerializeField] private float eyeHeightMinIntervalSeconds = 0.1f;
 
-        // How long to wait for VRChat to announce the new eye height before measuring the
+        // How long to wait for VRChat to announce a re-applied eye height before measuring the
         // seat anyway (a world with avatar scaling switched off on the website ignores the
         // request and never announces anything), seconds.
         [SerializeField] private float scaleWaitSeconds = 2f;
@@ -181,9 +185,10 @@ namespace VRCKatamari.Riding
         private float eyeHeightSent;
         private float eyeHeightSmooth;
         private float lastSendTime;
-        private float seatedEyeRatio;
+        private float waistKappa;
         private bool scaleCalibrated;
         private bool scaleGivenUp;
+        private bool scaleEyeOnly;
         private int scaleMismatchChecks;
         private float scaleNextCheck;
         private float lastLoggedEyeHeight;
@@ -277,9 +282,10 @@ namespace VRCKatamari.Riding
             // In any state but Idle the controller ignores the call, so sitting down
             // after the round ended or mid-round cannot restart it.
             if (roundController != null) roundController.NotifyRiderSeated();
-            // Size first, then measure: the measurement is of the seated head, which moves
-            // with the avatar's size, so it starts when VRChat announces the new eye height.
-            if (!BeginRideScale(player)) StartSeatMeasurement(player);
+            // Measure first, then size: the size comes from the measurement (kappa), taken at the
+            // eye height the avatar has.
+            BeginRideScale(player);
+            StartSeatMeasurement(player);
             Debug.Log("[ride] seated entered");
         }
 
@@ -339,11 +345,8 @@ namespace VRCKatamari.Riding
         {
             if (player == null || !player.isLocal) return;
             if (!seated) return;
-            // A new avatar comes with its own size: ask for the ride's size again, and
-            // calibrate the seat on the new body.
-            scaleCalibrated = false;
+            // A new avatar is a new body: kappa is measured again, at whatever size it has.
             scaleReapplyCount = 0;
-            if (ReapplyRideScale(player)) return;
             scalePending = false;
             StartSeatMeasurement(player);
         }
@@ -357,11 +360,14 @@ namespace VRCKatamari.Riding
         {
             if (player == null || !player.isLocal) return;
             if (!seated) return;
-            if (scaleApplied && !scaleGivenUp)
+            if (scaleApplied && scaleCalibrated && !scaleGivenUp && !scaleEyeOnly)
             {
-                // Within tolerance of what was last sent: our own change, or the one we were
-                // waiting for. Only the awaited one starts the first measurement.
-                if (RideScaleMath.IsApplied(player.GetAvatarEyeHeightAsMeters(), eyeHeightSent))
+                // A size is being held. Within tolerance of what was last sent: our own change, or
+                // the one we were waiting for. Anything else (another avatar, the player's own dial)
+                // is answered by applying ours again, as VRChat's avatar-scaling page requires.
+                int kind = RideScaleMath.ClassifyEyeHeightEvent(player.GetAvatarEyeHeightAsMeters(),
+                    eyeHeightSent, scaleReapplyCount);
+                if (kind == RideScaleMath.EventOurs)
                 {
                     scaleReapplyCount = 0;
                     if (!scalePending) return;
@@ -369,10 +375,14 @@ namespace VRCKatamari.Riding
                     StartSeatMeasurement(player);
                     return;
                 }
-                // Not ours (another avatar, the player's own dial): VRChat's avatar-scaling page
-                // says Udon must apply the size again on this event.
-                if (ReapplyRideScale(player)) return;
+                if (kind == RideScaleMath.EventReapply)
+                {
+                    ReapplyRideScale(player);
+                    return;
+                }
             }
+            // No size to hold yet (measuring) or one that cannot be held: measure the seat again
+            // at the size the avatar has now.
             scalePending = false;
             StartSeatMeasurement(player);
         }
@@ -419,7 +429,7 @@ namespace VRCKatamari.Riding
                     + " s: measuring the seat as it is");
                 if (seated) StartSeatMeasurement(Networking.LocalPlayer);
             }
-            if (seated && scaleApplied && !scaleGivenUp && !scalePending) UpdateRideScale();
+            if (seated && scaleApplied && !scaleGivenUp && !scaleEyeOnly && !scalePending) UpdateRideScale();
             if (!seated || !jumpHeld) return;
             float held = Time.time - jumpHeldSince;
             if (exitHoldSeconds <= 0f || held >= exitHoldSeconds)
@@ -480,10 +490,11 @@ namespace VRCKatamari.Riding
                 {
                     continue;
                 }
-                Vector3 stand = hit.point + new Vector3(0f, RideExitMath.StandLiftMeters, 0f);
+                Vector3 stand;
+                float yaw;
+                if (!RideExitMath.TryStandPose(hit.point, center, out stand, out yaw)) continue;
                 exitPoint.position = stand;
-                exitPoint.rotation = Quaternion.Euler(0f,
-                    RideExitMath.FacingYawDegrees(stand, center), 0f);
+                exitPoint.rotation = Quaternion.Euler(0f, yaw, 0f);
                 Debug.Log("[ride] exit point candidate=" + index + " y=" + stand.y);
                 return;
             }
@@ -492,7 +503,8 @@ namespace VRCKatamari.Riding
         }
 
         // Starts the one seat measurement, at the eye height the avatar has right now (zero
-        // when this behaviour is not scaling the rider: the seat then keeps absolute limits).
+        // when this behaviour is not scaling the rider: the seat then keeps absolute limits and
+        // has no waist).
         private void StartSeatMeasurement(VRCPlayerApi player)
         {
             if (seatEye == null) return;
@@ -505,44 +517,30 @@ namespace VRCKatamari.Riding
                 eyeHeightSmooth = eyeHeight;
             }
             scaleCalibrated = false;
+            scaleEyeOnly = false;
             seatEye.SetEyeHeight(eyeHeight);
             seatEye.BeginSeated();
         }
 
-        // Sets the rider's size for the ride. True when a change was requested, so the seat
-        // measurement waits for the announcement; false when there is nothing to wait for
-        // (feature off, already at that size, avatar not loaded, or no change possible).
-        private bool BeginRideScale(VRCPlayerApi player)
+        // Prepares the size for the ride: the original eye height is read and kept, nothing is
+        // requested yet (the first request needs kappa, which the seat measurement gives).
+        private void BeginRideScale(VRCPlayerApi player)
         {
             scaleGivenUp = false;
             scaleCalibrated = false;
-            if (!scaleRiderWithBall) return false;
-            float diameter = CurrentDiameter();
-            float target;
-            bool clamped;
-            if (!RideScaleMath.TryEyeHeightForDiameter(diameter, RideScaleMath.SeatedEyeToEyeHeightRatio,
-                out target, out clamped))
-            {
-                return false;
-            }
+            scaleEyeOnly = false;
+            if (!scaleRiderWithBall) return;
             float current = player.GetAvatarEyeHeightAsMeters();
             if (!scaleApplied) savedEyeHeight = current;
             scaleApplied = true;
             scaleReapplyCount = 0;
             scaleMismatchChecks = 0;
             scaleNextCheck = Time.time + 1f;
-            eyeHeightSent = target;
-            eyeHeightSmooth = target;
             lastSendTime = Time.time;
-            lastLoggedEyeHeight = target;
-            if (RideScaleMath.IsApplied(current, target)) return false;
-            // Pending before the call: a client may announce the change from inside it.
-            scalePending = true;
-            scalePendingSince = Time.time;
-            player.SetAvatarEyeHeightByMeters(target);
-            Debug.Log("[ride] eye height " + current + " -> " + target + " for diameter " + diameter
-                + (clamped ? " (clamped to the platform range)" : ""));
-            return true;
+            eyeHeightSent = current;
+            eyeHeightSmooth = current;
+            lastLoggedEyeHeight = current;
+            Debug.Log("[ride] eye height " + current + " kept until the seat is measured");
         }
 
         // The ball's gameplay diameter, or the starting diameter before the motor has one.
@@ -557,8 +555,8 @@ namespace VRCKatamari.Riding
         }
 
         // Each frame while seated with a size to keep: calibrate on the measurement, then follow
-        // the ball's diameter with the debounced, low-passed eye height. Nothing is sent while the
-        // seat is being measured (a measurement across a size change would be meaningless).
+        // the ball's diameter with the rate-limited, low-passed eye height. Nothing is sent while
+        // the seat is being measured (a measurement across a size change would be meaningless).
         private void UpdateRideScale()
         {
             if (seatEye == null || !seatEye.IsTracking()) return;
@@ -566,12 +564,22 @@ namespace VRCKatamari.Riding
             if (player == null) return;
             if (!scaleCalibrated)
             {
-                seatedEyeRatio = RideScaleMath.ResolveSeatedEyeRatio(seatEye.GetSeatedEyeRatio());
+                if (!seatEye.HasWaist())
+                {
+                    // The hips cannot be read: the seat aligns the eye and the size is left alone.
+                    scaleEyeOnly = true;
+                    Debug.Log("[ride] no usable waist (reason " + seatEye.GetWaistReason()
+                        + "): the rider keeps its size, the seat aligns the eye only");
+                    return;
+                }
+                waistKappa = seatEye.GetKappa();
                 scaleCalibrated = true;
+                scaleReapplyCount = 0;
                 scaleMismatchChecks = 0;
                 scaleNextCheck = Time.time + 1f;
-                Debug.Log("[ride] seat calibrated: seated eye ratio " + seatEye.GetSeatedEyeRatio()
-                    + " -> using " + seatedEyeRatio);
+                eyeHeightSmooth = eyeHeightSent;
+                Debug.Log("[ride] seat calibrated: kappa " + waistKappa + " at eye height "
+                    + eyeHeightSent);
             }
             if (Time.time >= scaleNextCheck)
             {
@@ -580,19 +588,18 @@ namespace VRCKatamari.Riding
             }
             float target;
             bool clamped;
-            if (!RideScaleMath.TryEyeHeightForDiameter(CurrentDiameter(), seatedEyeRatio, out target,
+            if (!RideScaleMath.TryEyeHeightForDiameter(CurrentDiameter(), waistKappa, out target,
                 out clamped))
             {
                 return;
             }
             eyeHeightSmooth = RideScaleMath.SmoothEyeHeight(eyeHeightSmooth, target, Time.deltaTime,
                 eyeHeightFilterHz);
-            if (!RideScaleMath.ShouldApplyEyeHeight(eyeHeightSent, eyeHeightSmooth,
-                eyeHeightStepFraction))
+            if (!RideScaleMath.ShouldSendEyeHeight(eyeHeightSent, eyeHeightSmooth,
+                eyeHeightStepFraction, Time.time - lastSendTime, eyeHeightMinIntervalSeconds))
             {
                 return;
             }
-            if (Time.time - lastSendTime < eyeHeightMinIntervalSeconds) return;
             float send;
             if (!RideScaleMath.TryResolveTarget(eyeHeightSmooth, out send)) return;
             player.SetAvatarEyeHeightByMeters(send);
@@ -602,7 +609,8 @@ namespace VRCKatamari.Riding
             if (Mathf.Abs(send - lastLoggedEyeHeight) >= 0.25f * lastLoggedEyeHeight)
             {
                 lastLoggedEyeHeight = send;
-                Debug.Log("[ride] eye height " + send + " diameter " + CurrentDiameter() + " eyeError "
+                Debug.Log("[ride] eye height " + send + " diameter " + CurrentDiameter()
+                    + (clamped ? " (target clamped to the platform range)" : "") + " eyeError "
                     + seatEye.GetCurrentEyeErrorMeters());
             }
         }
@@ -626,21 +634,23 @@ namespace VRCKatamari.Riding
             return true;
         }
 
-        // True when the size had drifted from the ride's target and was asked for again (the
-        // measurement then waits for the next announcement). At most three times in a row, so an
-        // avatar that cannot reach the target cannot loop the request.
-        private bool ReapplyRideScale(VRCPlayerApi player)
+        // Applies the size that was last sent again, after an eye-height event that was not ours;
+        // the measurement then waits for the next announcement. The caller has already counted
+        // this against RideScaleMath.MaxConsecutiveReapply through ClassifyEyeHeightEvent.
+        private void ReapplyRideScale(VRCPlayerApi player)
         {
-            if (!scaleApplied || scaleGivenUp || scaleReapplyCount >= 3) return false;
             float target;
-            if (!RideScaleMath.TryResolveTarget(eyeHeightSent, out target)) return false;
-            if (RideScaleMath.IsApplied(player.GetAvatarEyeHeightAsMeters(), target)) return false;
+            if (!RideScaleMath.TryResolveTarget(eyeHeightSent, out target))
+            {
+                scalePending = false;
+                StartSeatMeasurement(player);
+                return;
+            }
             scaleReapplyCount++;
             scalePending = true;
             scalePendingSince = Time.time;
             player.SetAvatarEyeHeightByMeters(target);
             Debug.Log("[ride] eye height re-applied (" + scaleReapplyCount + ")");
-            return true;
         }
 
         // Puts the size back to what it was before the ride. Runs on every exit path and
@@ -649,6 +659,7 @@ namespace VRCKatamari.Riding
         {
             scalePending = false;
             scaleCalibrated = false;
+            scaleEyeOnly = false;
             if (!scaleApplied) return;
             scaleApplied = false;
             scaleGivenUp = false;

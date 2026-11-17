@@ -85,10 +85,9 @@ namespace VRCKatamari.Riding
         public const float MaxPlausibleHeadAboveSeatMeters = 1.35f;
 
         /// <summary>
-        /// The standing eye height, metres, the absolute limits in this layer were measured at
-        /// (ClientSim 1.204 m and real hardware 0.85 m seated heads were taken on ordinary
-        /// avatars; the British adult median eye height is 1.64 m). A rider scaled to another
-        /// size has every seated distance scaled by the same factor, so the limits scale with it.
+        /// The eye height, metres, at which the absolute limits in this layer are authored. A
+        /// rider scaled to another size has every seated distance scaled by the same factor, so
+        /// the limits scale with it (<see cref="LimitScaleForEyeHeight"/>).
         /// </summary>
         public const float ReferenceEyeHeightMeters = 1.64f;
 

@@ -26,9 +26,9 @@ namespace VRCKatamari.Riding
     /// <para>
     /// What the proportionality implies for the rider: the eye is <c>up</c> above the ball
     /// centre and a seated body hangs below it, so the rider's size is not free - it is
-    /// <see cref="RideScaleMath"/>'s job to size the avatar so that the seated waist is level
-    /// with the ball's reference height. This class only gives the eye point; the seat and the
-    /// avatar size follow from it.
+    /// <see cref="RideScaleMath"/>'s job to size the avatar so that its measured hips are level
+    /// with the top of the ball (<see cref="RideWaistMath"/>). This class only gives the eye
+    /// point; the seat and the avatar size follow from it.
     /// </para>
     /// <para>
     /// The HUD and the cards are world-space panels parented to the follow frame, not screen

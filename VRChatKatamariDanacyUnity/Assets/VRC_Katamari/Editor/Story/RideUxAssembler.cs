@@ -40,9 +40,14 @@ namespace VRCKatamari.Editor.Story
     /// world-space canvas. The hub's "back to the hub" button is a child of the retry button
     /// (HubAssembler), so it moves with it.</description></item>
     /// <item><description>The rider's size: <c>BallRideStation.scaleRiderWithBall</c> is
-    /// switched on and its filter and debounce fields are written from
-    /// <see cref="RideScaleMath"/> (the seated waist level with the top of the ball, at every
-    /// ball size).</description></item>
+    /// switched on and its filter and rate-limit fields are written from
+    /// <see cref="RideScaleMath"/> (the avatar's measured hips level with the top of the ball,
+    /// at every ball size), and <c>SeatEyeCompensation.motor</c> is wired to the motor whose
+    /// ball top the seat places the hips on.</description></item>
+    /// <item><description>The VRCStation's exit location (<c>stationExitPlayerLocation</c>),
+    /// created as a child <c>RideExitPoint</c> when the station has none, placed by
+    /// <see cref="RideExitMath"/> beside the ball on flat ground; the station moves it again on
+    /// every exit.</description></item>
     /// <item><description><c>RideExitPanel</c>: the exit button (press twice) and the hold-jump
     /// hint, active only while seated, wired to the station.</description></item>
     /// </list>
@@ -65,6 +70,10 @@ namespace VRCKatamari.Editor.Story
         public const string MenuPath = "VRC Katamari/Ride/Assemble Ride UX";
 
         public const string SeatTriggerName = "BallSeatTrigger";
+
+        /// <summary>The exit location object the assembler creates under the VRCStation.</summary>
+        public const string ExitPointName = "RideExitPoint";
+
         public const string ResultCardName = "RideResultCard";
         public const string ExitPanelName = "RideExitPanel";
 
@@ -156,6 +165,7 @@ namespace VRCKatamari.Editor.Story
                 GameObject card = AssembleResultCard(round, presenter, retry, font, rigRoot, c);
                 GameObject panel = AssembleExitPanel(station, exit, font, rigRoot, c,
                     out Text hint);
+                AssembleExitLocation(station, ballRoot, motor, c);
                 AssembleStationLinks(station, motor, ballInteract, panel, hint, c);
             }
 
@@ -525,7 +535,11 @@ namespace VRCKatamari.Editor.Story
             bool changed = SetObject(so, "motor", motor, c);
             if (ballInteract != null) changed |= SetObject(so, "ballInteract", ballInteract, c);
             SeatEyeCompensation seatEye = FindOptional<SeatEyeCompensation>();
-            if (seatEye != null) changed |= SetObject(so, "seatEye", seatEye, c);
+            if (seatEye != null)
+            {
+                changed |= SetObject(so, "seatEye", seatEye, c);
+                AssembleSeatLinks(seatEye, motor, c);
+            }
             else c.Problems.Add("no SeatEyeCompensation in the scene: the seat stays on the eye point"
                 + " and the rider cannot be sized");
             // The rider's size follows the ball; RideScaleMath is the one source of the numbers.
@@ -551,15 +565,96 @@ namespace VRCKatamari.Editor.Story
             c.Proxies.Add(station);
         }
 
+        // The seat places the rider's hips on the ball's top, so it needs the ball.
+        private static void AssembleSeatLinks(SeatEyeCompensation seatEye, KatamariBallMotor motor,
+            Counters c)
+        {
+            var so = new SerializedObject(seatEye);
+            if (SetObject(so, "motor", motor, c)) so.ApplyModifiedPropertiesWithoutUndo();
+            c.Proxies.Add(seatEye);
+        }
+
         private static Transform ReadStationExitPoint(BallRideStation station)
         {
-            var stationSo = new SerializedObject(station);
-            SerializedProperty linked = stationSo.FindProperty("station");
-            if (linked == null || linked.objectReferenceValue == null) return null;
-            var vrcSo = new SerializedObject(linked.objectReferenceValue);
-            SerializedProperty exitProperty = vrcSo.FindProperty("stationExitPlayerLocation");
+            UnityEngine.Object linked = ReadLinkedStation(station);
+            if (linked == null) return null;
+            SerializedProperty exitProperty =
+                new SerializedObject(linked).FindProperty("stationExitPlayerLocation");
             if (exitProperty == null) return null;
             return exitProperty.objectReferenceValue as Transform;
+        }
+
+        private static UnityEngine.Object ReadLinkedStation(BallRideStation station)
+        {
+            SerializedProperty linked = new SerializedObject(station).FindProperty("station");
+            return linked == null ? null : linked.objectReferenceValue;
+        }
+
+        // The VRCStation needs an exit location for BallRideStation.RequestExit to move: a
+        // child object of the station placed where the first landing candidate beside the ball
+        // would be on flat ground (RideExitMath, the same rule the exit uses at run time, which
+        // moves it again on every exit). Created once; a station that already has one is left
+        // alone, so running the assembly again changes nothing.
+        private static void AssembleExitLocation(BallRideStation station, Transform ballRoot,
+            KatamariBallMotor motor, Counters c)
+        {
+            UnityEngine.Object linked = ReadLinkedStation(station);
+            if (linked == null)
+            {
+                c.Problems.Add("BallRideStation.station is not wired: there is no VRCStation to give"
+                    + " an exit location");
+                return;
+            }
+            var vrcSo = new SerializedObject(linked);
+            SerializedProperty exitProperty = vrcSo.FindProperty("stationExitPlayerLocation");
+            if (exitProperty == null)
+            {
+                c.Problems.Add("the VRCStation has no stationExitPlayerLocation field");
+                return;
+            }
+            if (exitProperty.objectReferenceValue != null) return;
+            var stationComponent = linked as Component;
+            if (stationComponent == null || ballRoot == null)
+            {
+                c.Problems.Add("cannot place the exit location: no station transform or ball root");
+                return;
+            }
+
+            float diameter = RideScaleMath.FallbackBallDiameterMeters;
+            var motorSo = new SerializedObject(motor);
+            SerializedProperty start = motorSo.FindProperty("startDiameterWorldM");
+            if (start != null && start.floatValue > 0f) diameter = start.floatValue;
+            Vector3 center = ballRoot.position;
+            Vector3 origin;
+            float length;
+            float groundY;
+            Vector3 position;
+            float yaw;
+            if (!RideExitMath.TryExitProbe(center, diameter * 0.5f, 0f, 0, out origin, out length,
+                out groundY)
+                || !RideExitMath.TryStandPose(new Vector3(origin.x, groundY, origin.z), center,
+                    out position, out yaw))
+            {
+                c.Problems.Add("cannot place the exit location: the ball position is not finite");
+                return;
+            }
+
+            Transform point = stationComponent.transform.Find(ExitPointName);
+            if (point == null)
+            {
+                var go = new GameObject(ExitPointName);
+                Undo.RegisterCreatedObjectUndo(go, "Create " + ExitPointName);
+                go.transform.SetParent(stationComponent.transform, true);
+                point = go.transform;
+                c.Created++;
+            }
+            point.position = position;
+            point.rotation = Quaternion.Euler(0f, yaw, 0f);
+            if (SetObject(vrcSo, "stationExitPlayerLocation", point, c))
+            {
+                vrcSo.ApplyModifiedPropertiesWithoutUndo();
+            }
+            c.Notes.Add("exit location created at " + position);
         }
 
         // ------------------------------------------------------------ udon plumbing ---
@@ -629,6 +724,8 @@ namespace VRCKatamari.Editor.Story
                 "ballInteract", "exitHoldSeconds", "exitProbeLayers", "scaleRiderWithBall",
                 "eyeHeightFilterHz", "eyeHeightStepFraction", "eyeHeightMinIntervalSeconds",
                 "scaleWaitSeconds" }, c);
+            SeatEyeCompensation seatEye = FindOptional<SeatEyeCompensation>();
+            if (seatEye != null) VerifyTable(seatEye, new[] { "motor" }, c);
             BallRideExitButton exit = FindOptional<BallRideExitButton>();
             if (exit != null) VerifyTable(exit, new[] { "ride", "label", "confirmSeconds" }, c);
         }

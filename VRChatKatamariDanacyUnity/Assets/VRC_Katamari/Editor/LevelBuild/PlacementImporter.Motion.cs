@@ -247,7 +247,7 @@ namespace VRCKatamari.Editor.LevelBuild
             SerializedProperty property = serialized.FindProperty(name);
             if (property == null)
             {
-                report.Error(V2Tag + "MotionHost has no field '" + name + "'");
+                report.Error(V2Tag + serialized.targetObject.GetType().Name + " has no field '" + name + "'");
                 return 0;
             }
             if (value == null) return 0;

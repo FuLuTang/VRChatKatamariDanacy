@@ -492,7 +492,7 @@
 - **坠落期间**：可以被吸（§0 默认口径，未拍板）、不当障碍也不当台阶；被吸时从坠落列表摘掉，它的子件照常复检。
 - **两个实现选择（owner 可改）**：① 仍被支撑的子件只复检 `maxRecheckSeconds`（默认 3 s）后退队，而不是永远复检——换来「没有坠落件时宿主完全空闲」，代价是之后才失去的**非父**支撑不再触发它落；② 判落用世界 AABB，不看网格。`pinned` 运行时未实现（数据里也没有）。
 - **只读状态查询（给运动宿主）**：`PropFallHost.IsPropFalling(index)`、`GetPropFallState(index)`（`PropFallMath.StateResting/Falling/Settled/Absorbed`）、`GetFallingCount()`。约定：`FALLING` 或 `ABSORBED` 的道具不被运动宿主驱动；`SETTLED` 后可恢复（D-14）。
-- **Unity 里还要做**（需 Unity 生成，不能手写）：`PropFallHost` 的 U# 程序资产与 `.meta`；场景里放一个 `PropFallHost`，接 `pickupField`（必填）、`terrain`（可选）；`PickupFieldHost.fallHost` 接回；重跑一次导入/同步写入 `propParentIndex`。
+- **接线由导入器负责**（`PlacementImporter.PropFall.cs`，在地形导入之后运行）：文档里至少有一条父边（`parent` 指向同文档的另一件）时，在 `LevelContent/<level>/PropFallHost` 创建组件，`pickupField` 接该关的 `PickupFieldHost`，`terrain` 接 `TerrainRoot` 上的 `TerrainFieldHost`（没有地形则留空），`PickupFieldHost.fallHost` 接回；已有的引用不覆盖。没有父边的关卡不创建宿主，已存在的宿主原样保留。第二次导入不写任何东西（`scene wiring writes` 不增加）。`propParentIndex` 仍由拾取同步写入。`PropFallHost` 的 U# 程序资产由 Unity 生成。
 
 ### 10.9 v1 设计（2026-11-16 第三轮拍板）：单父指针 + 每 tick 复检 + 子件坠落
 

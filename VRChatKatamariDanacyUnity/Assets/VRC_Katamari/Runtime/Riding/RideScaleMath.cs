@@ -4,41 +4,29 @@ using VRCKatamari.Core;
 namespace VRCKatamari.Riding
 {
     /// <summary>
-    /// How big the rider is: the eye height to ask VRChat for so that, whatever the ball's
-    /// size, the seated waist is level with the ball's reference height, plus the smoothing
-    /// and debounce that keep the request from fighting the seat measurement.
+    /// How big the rider is: the eye height to ask VRChat for so that the seated waist is level
+    /// with the top of the ball at every ball size, plus the clamp, the smoothing, the rate limit
+    /// and the "is that still our size" decision that keep the request from fighting the seat.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The rule (owner 2026-11-17): the ball is small and the rider small, the ball large and
-    /// the rider large, and in the seated view the rider's waist is exactly as high as the
-    /// ball. "The ball's height" is read as the height of the ball's top above its lowest
-    /// point (<see cref="WaistBallHeightFraction"/> = 1: the waist is level with the top of
-    /// the ball); 0.5 would be the centre. The seat floats, so the waist is not measured from
-    /// the ground but from the seat: with the eye <c>up</c> above the ball centre
-    /// (<see cref="RideViewMath"/>), a seated eye <c>m</c> above the seat and the waist
-    /// <c>w = WaistToSeatedEyeRatio * m</c> above the seat, the waist is at
-    /// <c>up - m + w</c> above the ball centre. Setting that equal to
-    /// <c>(2 * fraction - 1) * r</c> (the reference height over the centre) gives
-    /// <c>m = (up - (2 * fraction - 1) * r) / (1 - WaistToSeatedEyeRatio)</c>, and the avatar's
-    /// eye height is <c>E = m / seatedEyeRatio</c>. Every term is proportional to the radius,
-    /// so <c>E</c> is a constant times the ball diameter: the whole arrangement is one picture
-    /// at every size.
+    /// The rule (owner 2026-11-17): the ball small and the rider small, the ball large and the
+    /// rider large, and in the seated view the rider's waist is exactly as high as the top of the
+    /// ball. Body proportions differ between avatars, so no proportion is assumed: the seat
+    /// measurement (<see cref="RideWaistMath"/>) reports <c>kappa</c>, this avatar's own
+    /// vertical distance from the viewpoint down to the hips divided by its eye height. The eye
+    /// point is <c>up</c> above the ball centre (<see cref="RideViewMath"/>) and the ball's top
+    /// is one radius above the centre, so a waist on the ball's top is
+    /// <c>up - r = (EyeUpPerRadius - 1) * r</c> below the eye, and the eye height that puts it
+    /// there is <c>E = (up - r) / kappa</c>. Every term is proportional to the radius, so
+    /// <c>E</c> is a constant (per avatar) times the ball diameter: one picture at every size.
     /// </para>
     /// <para>
-    /// The body proportions are PROVISIONAL human values (<see cref="SeatedEyeToEyeHeightRatio"/>
-    /// and <see cref="WaistToSeatedEyeRatio"/>, sources in RIDE_GEOMETRY.md). The seated eye
-    /// ratio is the one that varies between avatars, so the seat measurement reports the real
-    /// one (<c>SeatEyeCompensation.GetSeatedEyeRatio</c>) and
-    /// <see cref="ResolveSeatedEyeRatio"/> keeps a sane value of it; the waist ratio cannot be
-    /// measured (there is no hip tracking datum) and stays nominal.
-    /// </para>
-    /// <para>
-    /// Platform limits (RIDE_GEOMETRY.md section 3.1 says which are confirmed): where the world
-    /// has avatar scaling switched off on the website the Set functions have no effect, so the
-    /// real eye height is read back instead of assuming the request took effect. NOT confirmed
-    /// against the official page: the 0.1..100 m clamp (the local library page says
-    /// 0.2..5 m for the player's own range) and that scaling is uniform.
+    /// Platform limits (RIDE_GEOMETRY.md section 3.1 gives the sources): Udon's target eye
+    /// height is clamped to 0.1 to 100 m, and VRChat supports nothing outside that range. Where
+    /// the world has avatar scaling switched off on the website the Set functions have no
+    /// effect, so the real eye height is read back instead of assuming the request took effect,
+    /// and Udon has to apply its size again whenever the avatar's eye height changes.
     /// </para>
     /// </remarks>
     public static class RideScaleMath
@@ -48,33 +36,6 @@ namespace VRCKatamari.Riding
 
         /// <summary>Largest eye height Udon can set, metres.</summary>
         public const float MaxSupportedEyeHeightMeters = 100f;
-
-        /// <summary>
-        /// Seated eye height above the seat over the standing eye height, nominal: 800 mm over
-        /// 1640 mm (remembered anthropometric values, not re-checked online). Only the first guess: the
-        /// seat measurement replaces it with the avatar's real ratio.
-        /// </summary>
-        public const float SeatedEyeToEyeHeightRatio = 0.4878f;
-
-        /// <summary>The measured ratio is trusted only inside this band; outside it the nominal one is used.</summary>
-        public const float MinSeatedEyeRatio = 0.25f;
-
-        /// <summary>See <see cref="MinSeatedEyeRatio"/>.</summary>
-        public const float MaxSeatedEyeRatio = 0.9f;
-
-        /// <summary>
-        /// Waist (belt line) above the seat over the seated eye height above the seat: sitting
-        /// elbow height 250 mm over sitting eye height 800 mm (same source). Not measurable at
-        /// runtime.
-        /// </summary>
-        public const float WaistToSeatedEyeRatio = 0.3125f;
-
-        /// <summary>
-        /// The waist's height above the ball's lowest point, in ball diameters: 1 is the top of
-        /// the ball, 0.5 its centre. The scene's one switch for the owner's "waist is the
-        /// ball's height" reading.
-        /// </summary>
-        public const float WaistBallHeightFraction = 1f;
 
         /// <summary>The diameter assumed before the motor has derived one (the story's starting ball), metres.</summary>
         public const float FallbackBallDiameterMeters = 0.222f;
@@ -88,12 +49,24 @@ namespace VRCKatamari.Riding
         /// <summary>
         /// A new eye height is sent only when it differs from the last one sent by this fraction.
         /// Each send makes VRChat raise an avatar-eye-height event and rescales the avatar, so
-        /// the step is the debounce: 0.5 % of the eye height is half a degree of nothing.
+        /// the step is the debounce.
         /// </summary>
         public const float DefaultStepFraction = 0.005f;
 
         /// <summary>No two sends are closer than this, seconds.</summary>
         public const float DefaultMinIntervalSeconds = 0.1f;
+
+        /// <summary>The size changed by someone else this many times in a row is re-applied at most this often.</summary>
+        public const int MaxConsecutiveReapply = 3;
+
+        /// <summary>An eye-height event whose read-back is the size we sent: our own change.</summary>
+        public const int EventOurs = 0;
+
+        /// <summary>An eye-height event with another size: apply ours again.</summary>
+        public const int EventReapply = 1;
+
+        /// <summary>Another size again and again: stop fighting and measure the seat as it is.</summary>
+        public const int EventGiveUp = 2;
 
         /// <summary>
         /// The eye height to ask VRChat for. False (and zero) when the request is zero,
@@ -121,76 +94,66 @@ namespace VRCKatamari.Riding
         }
 
         /// <summary>
-        /// The seated eye height above the seat, metres, that puts the seated waist at
-        /// <see cref="WaistBallHeightFraction"/> ball diameters above the ball's lowest point,
-        /// for a ball of this radius with the eye where <see cref="RideViewMath"/> puts it.
-        /// Zero for a bad radius.
+        /// What an avatar-eye-height event means for a rider whose size is being held: our own
+        /// change (<see cref="EventOurs"/>), someone else's (the player's own dial, another
+        /// avatar), to be re-applied (<see cref="EventReapply"/>), or the same again too many
+        /// times in a row (<see cref="EventGiveUp"/>). <paramref name="reapplyCount"/> is how many
+        /// re-applications were already made since the last event that was ours.
         /// </summary>
-        public static float EyeAboveSeatForRadius(float radiusMeters)
+        public static int ClassifyEyeHeightEvent(float readBackMeters, float sentMeters,
+            int reapplyCount)
+        {
+            if (IsApplied(readBackMeters, sentMeters)) return EventOurs;
+            if (reapplyCount < MaxConsecutiveReapply) return EventReapply;
+            return EventGiveUp;
+        }
+
+        /// <summary>
+        /// The eye height above the ball's top, metres, that a waist on the ball's top needs:
+        /// the eye point's height over the ball centre minus one radius. Zero for a bad radius.
+        /// </summary>
+        public static float EyeAboveWaistForRadius(float radiusMeters)
         {
             float up;
             float back;
             if (!RideViewMath.TryEyeOffset(radiusMeters, out up, out back)) return 0f;
-            float referenceAboveCentre = (2f * WaistBallHeightFraction - 1f) * radiusMeters;
-            float m = (up - referenceAboveCentre) / (1f - WaistToSeatedEyeRatio);
-            return m > 0f ? m : 0f;
-        }
-
-        /// <summary>The waist's height above the seat for a seated eye this far above it, metres.</summary>
-        public static float WaistAboveSeat(float eyeAboveSeatMeters)
-        {
-            return eyeAboveSeatMeters * WaistToSeatedEyeRatio;
+            float above = up - radiusMeters;
+            return above > 0f ? above : 0f;
         }
 
         /// <summary>
         /// The waist's height above the ball's lowest point, metres, for an eye
-        /// <paramref name="upMeters"/> above the ball centre and a seated eye
-        /// <paramref name="eyeAboveSeatMeters"/> above the seat: the check of the rule above.
+        /// <paramref name="upMeters"/> above the ball centre and a waist
+        /// <paramref name="eyeAboveWaistMeters"/> below the eye: the check of the rule above.
         /// </summary>
         public static float WaistAboveBallBottom(float radiusMeters, float upMeters,
-            float eyeAboveSeatMeters)
+            float eyeAboveWaistMeters)
         {
-            return radiusMeters + upMeters - eyeAboveSeatMeters + WaistAboveSeat(eyeAboveSeatMeters);
+            return radiusMeters + upMeters - eyeAboveWaistMeters;
         }
 
         /// <summary>
-        /// The eye height (standing, as VRChat measures it) that makes the seated waist level
-        /// with the ball for a ball of this semantic diameter, clamped to the platform range;
-        /// <paramref name="clamped"/> says whether the clamp changed it (below about 0.09 m
-        /// the platform cannot make the rider small enough). False (and zero) for a bad
-        /// diameter or ratio.
+        /// The eye height (as VRChat measures it) that puts this avatar's hips on the top of a
+        /// ball of this semantic diameter, clamped to the platform range;
+        /// <paramref name="clamped"/> says whether the clamp changed it. False (and zero) for a
+        /// bad diameter or <paramref name="kappa"/> (the measured viewpoint-to-hips distance per
+        /// metre of eye height).
         /// </summary>
-        public static bool TryEyeHeightForDiameter(float ballDiameterMeters,
-            float seatedEyeRatio, out float eyeHeightMeters, out bool clamped)
+        public static bool TryEyeHeightForDiameter(float ballDiameterMeters, float kappa,
+            out float eyeHeightMeters, out bool clamped)
         {
             eyeHeightMeters = 0f;
             clamped = false;
             if (!KatamariMath.IsFiniteFloat(ballDiameterMeters) || ballDiameterMeters <= 0f) return false;
-            if (!KatamariMath.IsFiniteFloat(seatedEyeRatio) || seatedEyeRatio <= 0f) return false;
-            float m = EyeAboveSeatForRadius(ballDiameterMeters * 0.5f);
-            if (m <= 0f) return false;
-            float wanted = m / seatedEyeRatio;
+            if (!KatamariMath.IsFiniteFloat(kappa) || kappa <= 0f) return false;
+            float eyeAboveWaist = EyeAboveWaistForRadius(ballDiameterMeters * 0.5f);
+            if (eyeAboveWaist <= 0f) return false;
+            float wanted = eyeAboveWaist / kappa;
             if (!KatamariMath.IsFiniteFloat(wanted)) return false;
             eyeHeightMeters = Mathf.Clamp(wanted, MinSupportedEyeHeightMeters,
                 MaxSupportedEyeHeightMeters);
             clamped = !Mathf.Approximately(eyeHeightMeters, wanted);
             return true;
-        }
-
-        /// <summary>
-        /// The seated eye ratio to use: the measured one when it is inside
-        /// [<see cref="MinSeatedEyeRatio"/>, <see cref="MaxSeatedEyeRatio"/>], otherwise the
-        /// nominal <see cref="SeatedEyeToEyeHeightRatio"/> (no measurement yet, or a datum that
-        /// is not a seated head).
-        /// </summary>
-        public static float ResolveSeatedEyeRatio(float measuredRatio)
-        {
-            if (!KatamariMath.IsFiniteFloat(measuredRatio)) return SeatedEyeToEyeHeightRatio;
-            if (measuredRatio < MinSeatedEyeRatio || measuredRatio > MaxSeatedEyeRatio)
-            {
-                return SeatedEyeToEyeHeightRatio;
-            }
-            return measuredRatio;
         }
 
         /// <summary>
@@ -220,6 +183,20 @@ namespace VRCKatamari.Riding
             if (!KatamariMath.IsFiniteFloat(sentMeters) || sentMeters <= 0f) return true;
             if (!KatamariMath.IsFiniteFloat(stepFraction) || stepFraction < 0f) return false;
             return Mathf.Abs(candidateMeters - sentMeters) >= sentMeters * stepFraction;
+        }
+
+        /// <summary>
+        /// The rate limit: <see cref="ShouldApplyEyeHeight"/> and at least
+        /// <paramref name="minIntervalSeconds"/> since the last send. A non-finite interval or
+        /// elapsed time refuses.
+        /// </summary>
+        public static bool ShouldSendEyeHeight(float sentMeters, float candidateMeters,
+            float stepFraction, float secondsSinceLastSend, float minIntervalSeconds)
+        {
+            if (!KatamariMath.IsFiniteFloat(secondsSinceLastSend)) return false;
+            if (!KatamariMath.IsFiniteFloat(minIntervalSeconds) || minIntervalSeconds < 0f) return false;
+            if (secondsSinceLastSend < minIntervalSeconds) return false;
+            return ShouldApplyEyeHeight(sentMeters, candidateMeters, stepFraction);
         }
 
         /// <summary>

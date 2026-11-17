@@ -4,55 +4,63 @@ using VRCKatamari.Riding;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins the rider-size rules: the seated waist is level with the top of the ball at every
-    /// ball size, the eye height that gives it is proportional to the diameter, requests are
-    /// clamped to what VRChat supports, and the smoothing and debounce behave. Hand values: with
-    /// the eye <c>up = 1.779558 r</c> above the centre (sin 18 / sin 10), the waist ratio 0.3125 and
-    /// the seated-eye ratio 0.4878, the seated eye above the seat is
-    /// <c>m = (up - r) / 0.6875 = 1.133902 r</c> and the eye height <c>E = m / 0.4878 =
-    /// 1.16225 D</c>.
+    /// Pins the rider-size rules: the eye height that puts the measured hips on the top of the
+    /// ball is proportional to the diameter and inversely proportional to kappa, requests are
+    /// clamped to what VRChat supports, a size changed from outside is recovered, and the
+    /// smoothing and the rate limit behave. Hand values: with the eye <c>up = 1.779558 r</c>
+    /// above the centre (sin 18 / sin 10) the eye is <c>0.779558 r</c> above the ball's top, so
+    /// the eye height is <c>E = 0.779558 r / kappa</c>.
     /// </summary>
     public class RideScaleTests
     {
-        private const float Ratio = RideScaleMath.SeatedEyeToEyeHeightRatio;
-
-        // D, expected E (hand: 1.16225 D), seat height over the ground (hand: (up - m + r), 0.8228 D).
-        [TestCase(0.222f, 0.2580f, 0.1827f)]
-        [TestCase(0.5f, 0.5811f, 0.4114f)]
-        [TestCase(0.8f, 0.9298f, 0.6583f)]
-        [TestCase(2f, 2.3245f, 1.6457f)]
-        [TestCase(20f, 23.245f, 16.457f)]
-        public void EyeHeight_IsProportionalToTheDiameter(float diameter, float expectedEye,
-            float expectedSeatHeight)
+        // D, kappa, expected E = 0.779558 * D / 2 / kappa.
+        [TestCase(0.222f, 0.4f, 0.21633f)]
+        [TestCase(0.5f, 0.35f, 0.55683f)]
+        [TestCase(2f, 0.2f, 3.89779f)]
+        [TestCase(2f, 0.35f, 2.22731f)]
+        [TestCase(2f, 0.5f, 1.55912f)]
+        [TestCase(20f, 0.35f, 22.2731f)]
+        public void EyeHeight_IsTheEyeAboveTheBallTopOverKappa(float diameter, float kappa,
+            float expectedEye)
         {
             float eye;
             bool clamped;
-            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(diameter, Ratio, out eye,
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(diameter, kappa, out eye,
                 out clamped));
             Assert.IsFalse(clamped);
             Assert.AreEqual(expectedEye, eye, expectedEye * 1e-3f);
 
+            // With the hips kappa * E below the eye, they are one diameter above the ball's lowest
+            // point: the ball's top.
             float radius = diameter * 0.5f;
             float up;
             float back;
             Assert.IsTrue(RideViewMath.TryEyeOffset(radius, out up, out back));
-            float eyeAboveSeat = Ratio * eye;
-            // The waist (0.3125 of the seated eye above the seat) is level with the ball's top:
-            // exactly one diameter above the ball's lowest point.
-            float waist = RideScaleMath.WaistAboveBallBottom(radius, up, eyeAboveSeat);
+            float waist = RideScaleMath.WaistAboveBallBottom(radius, up, kappa * eye);
             Assert.AreEqual(diameter, waist, diameter * 1e-3f);
-            // The seat floats above the ground by 0.8228 D.
-            float seatHeight = radius + up - eyeAboveSeat;
-            Assert.AreEqual(expectedSeatHeight, seatHeight, expectedSeatHeight * 1e-3f);
-            Assert.Greater(seatHeight, 0f);
         }
 
         [Test]
-        public void EyeAboveSeat_HandValueAtUnitRadius()
+        public void EyeAboveWaist_HandValueAtUnitRadius()
         {
-            Assert.AreEqual(1.133902f, RideScaleMath.EyeAboveSeatForRadius(1f), 1e-4f);
-            Assert.AreEqual(0f, RideScaleMath.EyeAboveSeatForRadius(float.NaN));
-            Assert.AreEqual(0f, RideScaleMath.EyeAboveSeatForRadius(-1f));
+            Assert.AreEqual(0.779558f, RideScaleMath.EyeAboveWaistForRadius(1f), 1e-4f);
+            Assert.AreEqual(0f, RideScaleMath.EyeAboveWaistForRadius(float.NaN));
+            Assert.AreEqual(0f, RideScaleMath.EyeAboveWaistForRadius(-1f));
+        }
+
+        [Test]
+        public void EyeHeight_IsLinearInTheDiameterAtAnyKappa()
+        {
+            float unit;
+            float other;
+            bool clamped;
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(1f, 0.3f, out unit, out clamped));
+            foreach (float diameter in new[] { 0.222f, 0.5f, 0.8f, 2f, 20f })
+            {
+                Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(diameter, 0.3f, out other,
+                    out clamped));
+                Assert.AreEqual(unit * diameter, other, unit * diameter * 1e-4f);
+            }
         }
 
         [Test]
@@ -60,62 +68,34 @@ namespace VRCKatamari.Tests
         {
             float eye;
             bool clamped;
-            // 0.1 / 1.16225 = 0.086 m is the smallest ball the platform can match.
-            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(0.05f, Ratio, out eye,
+            // kappa 0.35: 0.779558 * 0.025 / 0.35 = 0.0557 m, under the 0.1 m floor.
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(0.05f, 0.35f, out eye,
                 out clamped));
-            Assert.AreEqual(0.1f, eye, 1e-6f);
+            Assert.AreEqual(RideScaleMath.MinSupportedEyeHeightMeters, eye, 1e-6f);
             Assert.IsTrue(clamped);
-            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(0.09f, Ratio, out eye,
+            // 0.779558 * 100 / 0.35 = 222.7 m, over the 100 m ceiling.
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(200f, 0.35f, out eye,
                 out clamped));
+            Assert.AreEqual(RideScaleMath.MaxSupportedEyeHeightMeters, eye, 1e-4f);
+            Assert.IsTrue(clamped);
+            // Inside the range nothing is clamped.
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(20f, 0.35f, out eye, out clamped));
             Assert.IsFalse(clamped);
-            // The 20 m ball cap needs 23 m, a quarter of the 100 m ceiling.
-            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(200f, Ratio, out eye,
-                out clamped));
-            Assert.AreEqual(100f, eye, 1e-4f);
-            Assert.IsTrue(clamped);
         }
 
-        [TestCase(0f)]
-        [TestCase(-1f)]
-        [TestCase(float.NaN)]
-        public void EyeHeight_RefusesBadDiameters(float diameter)
+        [TestCase(0f, 0.35f)]
+        [TestCase(-1f, 0.35f)]
+        [TestCase(float.NaN, 0.35f)]
+        [TestCase(2f, 0f)]
+        [TestCase(2f, -0.2f)]
+        [TestCase(2f, float.NaN)]
+        public void EyeHeight_RefusesBadInputs(float diameter, float kappa)
         {
             float eye;
             bool clamped;
-            Assert.IsFalse(RideScaleMath.TryEyeHeightForDiameter(diameter, Ratio, out eye,
+            Assert.IsFalse(RideScaleMath.TryEyeHeightForDiameter(diameter, kappa, out eye,
                 out clamped));
             Assert.AreEqual(0f, eye);
-        }
-
-        [Test]
-        public void EyeHeight_FollowsAMeasuredSeatedEyeRatio()
-        {
-            // An avatar whose seated head is 0.7 of its eye height needs a smaller avatar for the
-            // same seated eye above the seat: E = m / ratio = 1.133902 r / 0.7 at r = 1.
-            float eye;
-            bool clamped;
-            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(2f, 0.7f, out eye, out clamped));
-            Assert.AreEqual(1.133902f / 0.7f, eye, 1e-3f);
-            Assert.IsFalse(RideScaleMath.TryEyeHeightForDiameter(2f, 0f, out eye, out clamped));
-        }
-
-        [Test]
-        public void SeatedEyeRatio_FallsBackToNominalOutsideTheBand()
-        {
-            Assert.AreEqual(0.7f, RideScaleMath.ResolveSeatedEyeRatio(0.7f), 1e-6f);
-            Assert.AreEqual(RideScaleMath.SeatedEyeToEyeHeightRatio,
-                RideScaleMath.ResolveSeatedEyeRatio(0f), 1e-6f);
-            Assert.AreEqual(RideScaleMath.SeatedEyeToEyeHeightRatio,
-                RideScaleMath.ResolveSeatedEyeRatio(1.4f), 1e-6f);
-            Assert.AreEqual(RideScaleMath.SeatedEyeToEyeHeightRatio,
-                RideScaleMath.ResolveSeatedEyeRatio(float.NaN), 1e-6f);
-        }
-
-        [Test]
-        public void WaistReferenceIsTheTopOfTheBall()
-        {
-            // The scene's one switch: 1 is the top, 0.5 the centre.
-            Assert.AreEqual(1f, RideScaleMath.WaistBallHeightFraction);
         }
 
         [TestCase(0.178f, 0.178f)]
@@ -151,6 +131,44 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void ForeignEyeHeight_IsReappliedUntilItIsOursAgain()
+        {
+            // We sent 0.8; the player's own dial (or another avatar) makes it 1.7.
+            Assert.AreEqual(RideScaleMath.EventOurs,
+                RideScaleMath.ClassifyEyeHeightEvent(0.8f, 0.8f, 0));
+            Assert.AreEqual(RideScaleMath.EventOurs,
+                RideScaleMath.ClassifyEyeHeightEvent(0.81f, 0.8f, 2));
+            Assert.AreEqual(RideScaleMath.EventReapply,
+                RideScaleMath.ClassifyEyeHeightEvent(1.7f, 0.8f, 0));
+            Assert.AreEqual(RideScaleMath.EventReapply,
+                RideScaleMath.ClassifyEyeHeightEvent(1.7f, 0.8f, 2));
+            // Not a number or not loaded: not ours either.
+            Assert.AreEqual(RideScaleMath.EventReapply,
+                RideScaleMath.ClassifyEyeHeightEvent(float.NaN, 0.8f, 0));
+            Assert.AreEqual(RideScaleMath.EventReapply,
+                RideScaleMath.ClassifyEyeHeightEvent(0f, 0.8f, 0));
+            // The same again too many times in a row: stop fighting.
+            Assert.AreEqual(RideScaleMath.EventGiveUp,
+                RideScaleMath.ClassifyEyeHeightEvent(1.7f, 0.8f,
+                    RideScaleMath.MaxConsecutiveReapply));
+
+            // The whole exchange: the platform takes the re-applied size, the next event is ours.
+            float platform = 1.7f;
+            const float Sent = 0.8f;
+            int reapplied = 0;
+            for (int i = 0; i < 10; i++)
+            {
+                int kind = RideScaleMath.ClassifyEyeHeightEvent(platform, Sent, reapplied);
+                if (kind == RideScaleMath.EventOurs) break;
+                Assert.AreEqual(RideScaleMath.EventReapply, kind);
+                reapplied++;
+                platform = Sent;
+            }
+            Assert.AreEqual(1, reapplied);
+            Assert.IsTrue(RideScaleMath.IsApplied(platform, Sent));
+        }
+
+        [Test]
         public void Smoothing_FollowsTheUsualLowPass()
         {
             // alpha = 1 - exp(-2 pi * 5 * 0.02) = 1 - exp(-0.62832) = 0.46651.
@@ -161,7 +179,11 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(1f, RideScaleMath.SmoothEyeHeight(1f, float.NaN, 0.02f, 5f));
             // It converges and never overshoots.
             float value = 1f;
-            for (int i = 0; i < 100; i++) value = RideScaleMath.SmoothEyeHeight(value, 2f, 0.02f, 5f);
+            for (int i = 0; i < 100; i++)
+            {
+                value = RideScaleMath.SmoothEyeHeight(value, 2f, 0.02f, 5f);
+                Assert.LessOrEqual(value, 2f);
+            }
             Assert.AreEqual(2f, value, 1e-3f);
         }
 
@@ -178,14 +200,64 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void RateLimit_NeedsBothTheStepAndTheInterval()
+        {
+            const float Step = RideScaleMath.DefaultStepFraction;
+            const float Interval = RideScaleMath.DefaultMinIntervalSeconds;
+            Assert.IsFalse(RideScaleMath.ShouldSendEyeHeight(10f, 11f, Step, 0.05f, Interval));
+            Assert.IsTrue(RideScaleMath.ShouldSendEyeHeight(10f, 11f, Step, 0.1f, Interval));
+            Assert.IsFalse(RideScaleMath.ShouldSendEyeHeight(10f, 10.01f, Step, 5f, Interval));
+            Assert.IsFalse(RideScaleMath.ShouldSendEyeHeight(10f, 11f, Step, float.NaN, Interval));
+            Assert.IsFalse(RideScaleMath.ShouldSendEyeHeight(10f, 11f, Step, 1f, -1f));
+        }
+
+        [Test]
+        public void SmoothedFollow_SendsAtMostTenTimesASecondAndSettlesWithoutOvershoot()
+        {
+            // The ball jumps: the target eye height goes from 1 to 2 and stays. 60 frames a second
+            // for 10 seconds, the station's own loop.
+            const float Dt = 1f / 60f;
+            float sent = 1f;
+            float smooth = 1f;
+            float lastSend = -10f;
+            int sends = 0;
+            float previous = sent;
+            for (int frame = 0; frame < 600; frame++)
+            {
+                float time = frame * Dt;
+                smooth = RideScaleMath.SmoothEyeHeight(smooth, 2f, Dt,
+                    RideScaleMath.DefaultFilterHz);
+                if (!RideScaleMath.ShouldSendEyeHeight(sent, smooth,
+                    RideScaleMath.DefaultStepFraction, time - lastSend,
+                    RideScaleMath.DefaultMinIntervalSeconds))
+                {
+                    continue;
+                }
+                sent = smooth;
+                lastSend = time;
+                sends++;
+                Assert.GreaterOrEqual(sent, previous);
+                Assert.LessOrEqual(sent, 2f);
+                previous = sent;
+            }
+            Assert.LessOrEqual(sends, 101);
+            Assert.AreEqual(2f, sent, 2f * RideScaleMath.DefaultStepFraction * 1.01f);
+        }
+
+        [Test]
         public void Growth_FromTheStartingBallToTheCap_NeedsAboutNineHundredSteps()
         {
-            // ln(20 / 0.222) / ln(1.005) = 4.50 / 0.004988 = 902 steps of half a percent for the
-            // whole growth, so each send is a barely visible change.
-            float sent = 0.258f;
+            // The eye height is linear in the diameter, so the ratio is 20 / 0.222 = 90.09:
+            // ln(90.09) / ln(1.005) = 4.50 / 0.004988 = 902 steps of half a percent for the whole
+            // growth, so each send is a barely visible change.
+            float start;
+            float end;
+            bool clamped;
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(0.222f, 0.4f, out start, out clamped));
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(20f, 0.4f, out end, out clamped));
+            float sent = start;
             int steps = 0;
-            float target = 23.245f;
-            while (sent < target)
+            while (sent < end)
             {
                 float next = sent * (1f + RideScaleMath.DefaultStepFraction * 1.0001f);
                 Assert.IsTrue(RideScaleMath.ShouldApplyEyeHeight(sent, next,

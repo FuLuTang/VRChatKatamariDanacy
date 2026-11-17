@@ -128,5 +128,59 @@ namespace VRCKatamari.Tests
             // With no support (support angle 0) any climb contact counts as a wall.
             Assert.IsTrue(ContactClassificationMath.IsClimbSteeperThanSupport(20f, 0f));
         }
+
+        [Test]
+        public void TheRememberedClimbFaceIsFoundByItsPlaneNotByItsIndex()
+        {
+            // The selection hysteresis (TERRAIN_CLIMB 6.6): contact 0 is a face of a narrow V,
+            // contact 1 the other, contact 2 the floor, contact 3 a SECOND triangle of the
+            // remembered plane (a split wall). The remembered plane is face 1's.
+            float a = 65f * Mathf.Deg2Rad;
+            Vector3 faceA = new Vector3(Mathf.Sin(a), 0f, -Mathf.Cos(a));
+            Vector3 faceB = new Vector3(-Mathf.Sin(a), 0f, -Mathf.Cos(a));
+            Vector3[] normals = { faceA, faceB, new Vector3(0f, 1f, 0f), faceB };
+            Vector3[] points =
+            {
+                new Vector3(0.1f, 0.3f, 2.9f), new Vector3(-0.1f, 0.3f, 2.9f),
+                new Vector3(0f, 0f, 2.5f), new Vector3(-0.1f, 0.9f, 2.9f)
+            };
+            float[] depths = { 0.002f, 0.001f, 0f, 0.003f };
+            int[] classes =
+            {
+                ContactCodes.ClassClimb, ContactCodes.ClassClimb, ContactCodes.ClassRide,
+                ContactCodes.ClassClimb
+            };
+            Vector3 planePoint = new Vector3(-0.1f, 0.5f, 2.9f);
+
+            // Both of the remembered plane's contacts match; the DEEPER one (index 3) wins.
+            Assert.AreEqual(3, ContactClassificationMath.FindClimbContactOnPlane(normals,
+                points, depths, classes, 4, faceB, planePoint));
+            // Equal depths: the first match.
+            float[] flat = { 0.002f, 0.001f, 0f, 0.001f };
+            Assert.AreEqual(1, ContactClassificationMath.FindClimbContactOnPlane(normals,
+                points, flat, classes, 4, faceB, planePoint));
+            // The other face is a different plane (normal dot -0.64), the floor is not a
+            // climb contact, and a plane point 5 cm off every contact finds nothing.
+            Assert.AreEqual(0, ContactClassificationMath.FindClimbContactOnPlane(normals,
+                points, depths, classes, 3, faceA, new Vector3(0.1f, 0.5f, 2.9f)));
+            Assert.AreEqual(-1, ContactClassificationMath.FindClimbContactOnPlane(normals,
+                points, depths, classes, 4, new Vector3(0f, 1f, 0f), planePoint));
+            Assert.AreEqual(-1, ContactClassificationMath.FindClimbContactOnPlane(normals,
+                points, depths, classes, 4, faceB,
+                new Vector3(-0.1f + faceB.x * 0.05f, 0.5f, 2.9f + faceB.z * 0.05f)));
+            // A tilted normal outside the 0.99 dot (10 deg: cos = 0.985) is another face.
+            float tilt = 10f * Mathf.Deg2Rad;
+            Vector3 tilted = new Vector3(faceB.x * Mathf.Cos(tilt), Mathf.Sin(tilt),
+                faceB.z * Mathf.Cos(tilt));
+            Assert.AreEqual(-1, ContactClassificationMath.FindClimbContactOnPlane(normals,
+                points, depths, classes, 4, tilted, planePoint));
+            // Unusable arguments are refused, never guessed.
+            Assert.AreEqual(-1, ContactClassificationMath.FindClimbContactOnPlane(normals,
+                points, depths, classes, 5, faceB, planePoint));
+            Assert.AreEqual(-1, ContactClassificationMath.FindClimbContactOnPlane(normals,
+                points, depths, classes, 4, Vector3.zero, planePoint));
+            Assert.AreEqual(-1, ContactClassificationMath.FindClimbContactOnPlane(null,
+                points, depths, classes, 4, faceB, planePoint));
+        }
     }
 }

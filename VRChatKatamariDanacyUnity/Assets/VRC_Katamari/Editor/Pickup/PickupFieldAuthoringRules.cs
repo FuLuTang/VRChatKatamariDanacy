@@ -245,6 +245,107 @@ namespace VRCKatamari.Editor.Pickup
         }
 
         /// <summary>
+        /// The relative budget of the authored-vs-measured growth check: 2% of the authored
+        /// value. Measured renderer bounds and the authored aabb differ by rounding, so an
+        /// exact match is not a property of the world; a stale authored value (a size, k or
+        /// penalty edit) moves the number by far more than this.
+        /// </summary>
+        public const double GrowthAgreementFraction = 0.02;
+
+        /// <summary>The absolute floor of the budget: 1 cm^3 = 1000 mm^3 (small rows).</summary>
+        public const long GrowthAgreementFloorMm3 = 1000L;
+
+        /// <summary>Outcome of <see cref="CheckDeclaredGrowth"/>.</summary>
+        public enum GrowthCheck
+        {
+            /// <summary>The measured size prices the authored growth within the budget.</summary>
+            Agrees = 0,
+
+            /// <summary>It does not: the authored growth, k, penalty or the model size is stale.</summary>
+            Disagrees = 1,
+
+            /// <summary>
+            /// There is nothing comparable: the measured size is not in the prop's own axes, or
+            /// the row cannot be priced at all. Never a mismatch, never silently counted as one.
+            /// </summary>
+            NotComparable = 2,
+        }
+
+        /// <summary>True when the priced growth is within the budget of the authored one.</summary>
+        /// <remarks>
+        /// The budget is <c>max(2% of the authored value, 1000 mm^3)</c>
+        /// (<see cref="GrowthAgreementFraction"/>, <see cref="GrowthAgreementFloorMm3"/>).
+        /// </remarks>
+        public static bool GrowthAgrees(long declaredMm3, long boundsMm3, out long differenceMm3)
+        {
+            differenceMm3 = declaredMm3 > boundsMm3 ? declaredMm3 - boundsMm3 : boundsMm3 - declaredMm3;
+            double budget = Math.Abs((double)declaredMm3) * GrowthAgreementFraction;
+            if (budget < (double)GrowthAgreementFloorMm3)
+            {
+                budget = GrowthAgreementFloorMm3;
+            }
+
+            return (double)differenceMm3 <= budget;
+        }
+
+        /// <summary>
+        /// Verifies a row's authored growth against the size measured in the scene, in ONE
+        /// frame: the prop's own axes.
+        /// </summary>
+        /// <param name="declaredMm3">The placement file's authored <c>growthMm3</c>.</param>
+        /// <param name="sizeX">The measured full size, metres, along the prop's own X.</param>
+        /// <param name="sizeY">Along its own Y.</param>
+        /// <param name="sizeZ">Along its own Z.</param>
+        /// <param name="sizeIsPropLocal">
+        /// True when the size was measured along the prop's own axes (root rotation removed).
+        /// False means only the world AABB was available (the local measurement failed).
+        /// </param>
+        /// <param name="volumeK">The row's volume factor k.</param>
+        /// <param name="volumePenalty">The row's volume penalty.</param>
+        /// <param name="boundsMm3">The growth priced from the measured size, or 0.</param>
+        /// <param name="differenceMm3">|declared - priced|, or 0 when not comparable.</param>
+        /// <remarks>
+        /// <para>
+        /// The authored aabb in <c>placement.json</c> is the model's UNROTATED extents and
+        /// <c>growthMm3</c> prices exactly those. A world AABB of a prop that is turned about
+        /// anything but a right-angle axis swap is larger than that box (a 45 degree yaw makes
+        /// a 1 x 0.05 x 0.2 board a 0.88 x 0.05 x 0.88 one), so pricing a world AABB against
+        /// the authored growth reports a mismatch for every turned prop even though nothing is
+        /// wrong (the reference level: 271 of 511 rows, all rotated). Comparing the prop's own
+        /// size with the authored aabb is the same frame on both sides, so only a real
+        /// disagreement - a stale growth, a k or penalty edit, a model that no longer has the
+        /// authored size - is reported.
+        /// </para>
+        /// <para>
+        /// When only the world AABB is available the rows are not comparable and the caller's
+        /// own fallback note says so; they are not reported as mismatches here.
+        /// </para>
+        /// </remarks>
+        public static GrowthCheck CheckDeclaredGrowth(long declaredMm3, float sizeX, float sizeY,
+            float sizeZ, bool sizeIsPropLocal, float volumeK, float volumePenalty,
+            out long boundsMm3, out long differenceMm3)
+        {
+            boundsMm3 = 0L;
+            differenceMm3 = 0L;
+            if (!sizeIsPropLocal)
+            {
+                return GrowthCheck.NotComparable;
+            }
+
+            long priced;
+            if (!PickupAbsorbMath.TryComputeGrowthMm3(new Vector3(sizeX, sizeY, sizeZ), volumeK,
+                    volumePenalty, out priced))
+            {
+                return GrowthCheck.NotComparable;
+            }
+
+            boundsMm3 = priced;
+            return GrowthAgrees(declaredMm3, priced, out differenceMm3)
+                ? GrowthCheck.Agrees
+                : GrowthCheck.Disagrees;
+        }
+
+        /// <summary>
         /// Decides the value units to write for one row.
         /// </summary>
         /// <param name="declaredValueUnits">

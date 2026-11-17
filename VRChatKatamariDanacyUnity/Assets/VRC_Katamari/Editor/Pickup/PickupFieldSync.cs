@@ -142,11 +142,11 @@ namespace VRCKatamari.Editor.Pickup
         // The authored growth is the authority; the measured bounds are a VERIFICATION. They
         // cannot agree to the millimetre because Unity's renderer bounds and the authored aabb
         // round differently (O7 samples: 9203 vs 9193 mm^3), so a disagreement is a WARNING
-        // with the item id when it exceeds max(2%, 1 cm^3 = 1000 mm^3). The 2% is large
-        // enough to absorb measured-vs-authored bounds and small enough to catch a stale
-        // growthMm3 (a size or k edit moves the value by far more).
-        private const double GrowthAgreementFraction = 0.02;
-        private const long GrowthAgreementFloorMm3 = 1000L;
+        // with the item id when it exceeds the budget in
+        // PickupFieldAuthoringRules.GrowthAgrees (max(2%, 1 cm^3)). The verification is made
+        // in the prop's OWN axes against the authored (unrotated) aabb, never against the
+        // world AABB of a turned prop: see PickupFieldAuthoringRules.CheckDeclaredGrowth.
+        // Only this many mismatches are written out; the total is always counted.
         private const int GrowthMismatchNoteLimit = 20;
 
         // ------------------------------------------------------------------ menu ---
@@ -895,6 +895,7 @@ namespace VRCKatamari.Editor.Pickup
             int growthFromFile = 0;
             int growthFromBounds = 0;
             int growthBoundsMismatches = 0;
+            int growthNotComparable = 0;
             int proxyDeclared = 0;
             int proxyPreserved = 0;
             for (int i = 0; i < candidates.Count; i++)
@@ -958,6 +959,10 @@ namespace VRCKatamari.Editor.Pickup
                 // behaviour for that one row) instead of dropping the prop; it is reported
                 // below so a rotated prop among them is not silently wrong.
                 Vector3 pickLocalSize = candidate.LocalBoundsSize;
+                // True while pickLocalSize really is the prop's own-axes size (measured, or a
+                // declared cube, which has no orientation). False only for the world-AABB
+                // fallback below, which the growth verification must not compare.
+                bool pickSizeIsPropLocal = true;
 
                 string declaredSizeNote = null;
                 if (candidate.DeclaredSizeM > 0f)
@@ -979,6 +984,7 @@ namespace VRCKatamari.Editor.Pickup
                              pickLocalSize.y, pickLocalSize.z))
                 {
                     pickLocalSize = pickSize;
+                    pickSizeIsPropLocal = false;
                     localBoundsFallbacks++;
                 }
 
@@ -1036,17 +1042,27 @@ namespace VRCKatamari.Editor.Pickup
                 {
                     growthMm3 = declaredGrowth;
                     growthFromFile++;
-                    if (boundsPriced && !GrowthAgrees(declaredGrowth, boundsGrowth,
-                            out long difference))
+                    long checkedBoundsGrowth;
+                    long difference;
+                    PickupFieldAuthoringRules.GrowthCheck check =
+                        PickupFieldAuthoringRules.CheckDeclaredGrowth(declaredGrowth,
+                            pickLocalSize.x, pickLocalSize.y, pickLocalSize.z, pickSizeIsPropLocal,
+                            volumeK, volumePenalty, out checkedBoundsGrowth, out difference);
+                    if (check == PickupFieldAuthoringRules.GrowthCheck.Disagrees)
                     {
                         growthBoundsMismatches++;
                         if (growthBoundsMismatches <= GrowthMismatchNoteLimit)
                         {
-                            report.GrowthMismatches.Add("bounds disagree with the file for '" +
+                            report.GrowthMismatches.Add("prop-local bounds " +
+                                FormatVector(pickLocalSize) + " disagree with the file for '" +
                                 candidate.ItemId + "': file=" + declaredGrowth + " mm^3, bounds "
-                                + boundsGrowth + " mm^3 (diff " + difference + "); the FILE wins,"
+                                + checkedBoundsGrowth + " mm^3 (diff " + difference + "); the FILE wins,"
                                 + " re-check volumeK/penalty/aabb if this is unexpected");
                         }
+                    }
+                    else if (check == PickupFieldAuthoringRules.GrowthCheck.NotComparable)
+                    {
+                        growthNotComparable++;
                     }
                 }
                 else if (boundsPriced)
@@ -1179,6 +1195,14 @@ namespace VRCKatamari.Editor.Pickup
 
             report.GrowthFileRows = growthFromFile;
             report.GrowthBoundsRows = growthFromBounds;
+            if (growthNotComparable > 0)
+            {
+                report.Notes.Add(growthNotComparable + " row(s) with an authored growthMm3 could not " +
+                                 "be verified against the scene (no prop-local measurement or the " +
+                                 "measured size cannot be priced); they were not counted as " +
+                                 "mismatches and the file still wins for them");
+            }
+
             if (growthBoundsMismatches > GrowthMismatchNoteLimit)
             {
                 report.GrowthMismatches.Add("... " +
@@ -1202,21 +1226,6 @@ namespace VRCKatamari.Editor.Pickup
 
             report.PropCount = rows.Count;
             return rows;
-        }
-
-        /// <summary>True when the measured-bounds growth is within the stated budget.</summary>
-        /// <remarks>
-        /// The budget is <c>max(2% of the authored value, 1000 mm^3 = 1 cm^3)</c>. Measured
-        /// renderer bounds and the authored aabb differ by rounding, so an exact match is not
-        /// a property of the world; a stale authored value (a size/k/penalty edit) is far
-        /// outside 2%, which is what this catches.
-        /// </remarks>
-        private static bool GrowthAgrees(long declared, long bounds, out long difference)
-        {
-            difference = declared > bounds ? declared - bounds : bounds - declared;
-            double budget = System.Math.Abs((double)declared) * GrowthAgreementFraction;
-            if (budget < (double)GrowthAgreementFloorMm3) budget = GrowthAgreementFloorMm3;
-            return (double)difference <= budget;
         }
 
         private static bool IsDuplicate(string[] duplicates, string itemId)

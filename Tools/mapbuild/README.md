@@ -39,7 +39,8 @@ prop_catalog.csv       （禁止手改，提交进仓库）          （[Seriali
 python3 Tools/mapbuild/build_greybox.py             # 生成/覆盖 Docs/Design/Maps/PicnicLawn/unity_greybox.json
 python3 Tools/mapbuild/build_greybox.py --check     # 过期退出 1（不写文件），打印差异摘要
 python3 Tools/mapbuild/build_greybox.py --summary   # 额外打印各集合记录数
-python3 Tools/mapbuild/build_greybox.py --feasibility   # 打印每个散布区的 2-D 放置容量表
+python3 Tools/mapbuild/build_greybox.py --feasibility   # 先打印每个散布区的 2-D 放置容量表，然后照常生成并写 --out（不写盘用 --out 指到临时文件）
+python3 Tools/mapbuild/build_greybox.py --feasibility-markdown   # 只读：打印 PicnicLawn README §3.3 的 Markdown 表格体，不生成、不写文件
 python3 Tools/mapbuild/build_greybox.py --layout a.json --catalog a.csv --out out.json
 python3 -m unittest discover -s Tools/mapbuild/tests
 ```
@@ -96,7 +97,7 @@ python3 -m unittest discover -s Tools/mapbuild/tests                      # 两�
 
 它**不重复实现**容量模型：`min_spacing_m` 能否摆下由 `build_greybox.scatter_feasibility()`
 判定（RSA 0.547 覆盖率、脚印下限、消费方上限），`validate_map.py` 只调用它并把数字整理成表。
-检查项见该文件头注释的 13 组；额外规则三条值得单独记：**窄于最大球径的咽喉必须标
+检查项见该文件头注释的 15 组（含第 14 条运行时预算、第 15 条 story 模式）；额外规则三条值得单独记：**窄于最大球径的咽喉必须标
 `narrow_small_ball_lane` 且不能落在任何散布区内**（否则小球会在缝里吃到东西长大、把「能进的缝」
 变成「出不去」），**`climb` 门槛必须落在抬高地形上**（`ground_y_m > 0`），以及下面这条
 **立面分类**。
@@ -110,7 +111,7 @@ python3 -m unittest discover -s Tools/mapbuild/tests                      # 两�
 | `class` | 判据（全部由数据现算，不读文字） | 负例（`tests/test_validate_map.py`） |
 |---|---|---|
 | `drivable_grade` | 坡度 = rise ÷ run ≤ `max_traversable_slope_percent`；声明的 `slope_percent` 与现算值不符即错误 | 把毯缘 `run_m` 改小 → 超 12% |
-| `climb_step` | `step_height_m` = 几何高度，且落在 [0.25 × 阻挡球径, 0.25 × 开启球径] 内 | 台面压到 0.18 m（Lead 已否决的降级）→ 门挡不住 |
+| `climb_step` | `step_height_m` = 几何高度，且落在 (1.5 × 阻挡球径, 1.5 × 开启球径] 内（比例 = `scale.max_step_height_over_ball_diameter`，缺省 1.5，v2 爬升上限，PROVISIONAL） | 台面压低到阻挡球径 × 1.5 以内（测试里是 0.18 m）→ 门挡不住；台面高于开启球径 × 1.5 → 几何却上不去 |
 | `obstacle` | 不可走；不得再声明 `run_m`/`step_height_m`/`slope_percent` | 给树篱写坡度 → 自相矛盾 |
 
 - **rise 的算法**：`position_y + size_m[1] / 2`（本 schema 的约定是物体坐在 y=0 的地面上）。
@@ -120,8 +121,11 @@ python3 -m unittest discover -s Tools/mapbuild/tests                      # 两�
   `traversability`——升版就是同意让校验器管这件事。
 - 报告里会打印**立面审计表**（surface / class / rise / run / slope / 判定）与障碍汇总；
   `--json` 里对应 `surfaces` 与 `obstacles` 两个键。
-- 常量：`DEFAULT_STEP_HEIGHT_OVER_DIAMETER = 0.25`（图里没写 `scale.max_step_height_over_ball_diameter`
-  时用这个默认值）、`TRAVERSABILITY_SCHEMA_VERSION = 2`。改常量前先看 `TraversabilityTests`。
+- 常量：`DEFAULT_STEP_HEIGHT_OVER_DIAMETER = 1.5`（图里没写 `scale.max_step_height_over_ball_diameter`
+  时用这个默认值；它是**球能连续爬上的台阶高 ÷ 球径**，即 `H_cap = 1.5·D`，不再是 v1 的
+  「低台阶带 0.25·D」）、`TRAVERSABILITY_SCHEMA_VERSION = 2`。改常量前先看 `TraversabilityTests`。
+- 现状：PicnicLawn 与 ToyRoom 的 `climb` 门数据还按旧的 0.25 带写（台阶 0.26 m、门 0.95→1.10 m），
+  在 1.5 口径下 `validate_map.py` 对它们各报 4 条「门挡不住」，属于待作者数据跟进，不是校验器的错。
 
 ### 为什么不再有「每图一份的专用校验器」
 
@@ -129,25 +133,25 @@ python3 -m unittest discover -s Tools/mapbuild/tests                      # 两�
 （硬编码路径、边界外白名单、单图常量），是同一套逻辑的第二份实现。它已于 2026-11-14 随通用
 校验器落地而**删除**（提交信息即退役记录）——
 
-**逐条覆盖对照**（59 条断言 → `validate_map.py` 的行号；「更强」= 旧版是 warning、新版是 error）：
+**逐条覆盖对照**（59 条断言 → `validate_map.py` 文件头的检查组编号；「更强」= 旧版是 warning、新版是 error）：
 
-| 旧专用校验器的检查 | 新 `validate_map.py` |
+| 旧专用校验器的检查 | 新 `validate_map.py` 的检查组 |
 |---|---|
-| 目录必填列、空 id / 重复 id、size_tier/priority/role 枚举、count/value 非负 | 421–467 |
-| `schema_version`、顶层键齐全 | 276–284 |
-| 区域：重复 id、只认 rect、矩形退化、面积与矩形一致、在边界内、`tier_band` 长度与档位、`name_zh`/`purpose` 非空 | 346–396 |
-| 区域：两两不重叠、面积和 ≤ 地图面积 | 405–415（重叠支持 `zone_overlap_exemptions` 显式豁免） |
-| 结构：目录 id、`zone_id`、边界内外（旧版是 `OUTSIDE_OK` 白名单） | 473–509（**换成地图无关的两条规则**：有归属区域必须在场内；无归属且 `role=absorbable` 在场外=错误；固定装饰放行并记账） |
-| 出生点：重复 id、未知区域、在场内、在自己区域内、`yaw`、`y` 与地面差 | 514–543（y 偏差 warning → **更强** error） |
-| 出生点：至少 2 条出路 | 1176–1180 |
-| 交分台：在场内/在区域内、半径>0、`approach_route_ids`/`entrances` 引用、圆盘不重叠、`rotation.order` 排列 | 547–591 |
-| 尺寸门：类型、目录 id、在场内、`block<open`、`open>max`、`climb→fixed`/`absorb→absorbable`、`opens_path` | 685–762（`open>max` 与 `climb→fixed` warning → **更强** error） |
-| 散布：未知区域/重复记录、`definitions` 非空、`min_spacing>0`、条目 id/role/count 关系 | 941–980 |
-| 目录数量 = 散布 + 可吸门 / 结构实例 | 1025–1040 |
-| 路线：≥2 点、点形状、点在边界内、宽>0、净宽 ≥ 最大球径、余量不足警告、`gate/bank/spawn` 引用、`closed` 末点重复警告 | 630–680 + 758–761 |
-| 咽喉：净宽 < 最大球径且未标 `narrow_small_ball_lane`、`gate_id` 引用 | 1054–1080 |
-| 道具：类型/区域/在场内/距出生点 8 m | 1096–1119 |
-| 目录：有实例却无人引用、count=0 却有引用、`zone_ids` 与实际落点一致 | 1035–1049 |
+| 目录必填列、空 id / 重复 id、size_tier/priority/role 枚举、count/value 非负 | 第 2 组 |
+| `schema_version`、顶层键齐全 | 第 1 组 |
+| 区域：重复 id、只认 rect、矩形退化、面积与矩形一致、在边界内、`tier_band` 长度与档位、`name_zh`/`purpose` 非空 | 第 3 组 |
+| 区域：两两不重叠、面积和 ≤ 地图面积 | 第 3 组（重叠支持 `zone_overlap_exemptions` 显式豁免） |
+| 结构：目录 id、`zone_id`、边界内外（旧版是 `OUTSIDE_OK` 白名单） | 第 4 组 + 结构段（**换成地图无关的两条规则**：有归属区域必须在场内；无归属且 `role=absorbable` 在场外=错误；固定装饰放行并记账） |
+| 出生点：重复 id、未知区域、在场内、在自己区域内、`yaw`、`y` 与地面差 | 第 5 组（y 偏差 warning → **更强** error） |
+| 出生点：至少 2 条出路 | 第 5 组 |
+| 交分台：在场内/在区域内、半径>0、`approach_route_ids`/`entrances` 引用、圆盘不重叠、`rotation.order` 排列 | 第 6 组 |
+| 尺寸门：类型、目录 id、在场内、`block<open`、`open>max`、`climb→fixed`/`absorb→absorbable`、`opens_path` | 第 7 组（`open>max` 与 `climb→fixed` warning → **更强** error） |
+| 散布：未知区域/重复记录、`definitions` 非空、`min_spacing>0`、条目 id/role/count 关系 | 第 8 组 |
+| 目录数量 = 散布 + 可吸门 / 结构实例 | 第 2 组 |
+| 路线：≥2 点、点形状、点在边界内、宽>0、净宽 ≥ 最大球径、余量不足警告、`gate/bank/spawn` 引用、`closed` 末点重复警告 | 第 9 组（引用在第 4 组） |
+| 咽喉：净宽 < 最大球径且未标 `narrow_small_ball_lane`、`gate_id` 引用 | 第 10 组 |
+| 道具：类型/区域/在场内/距出生点 8 m | 第 12 组 |
+| 目录：有实例却无人引用、count=0 却有引用、`zone_ids` 与实际落点一致 | 第 2 组 |
 
 **新版多出来的 13 类**（旧版完全没有）：区域重叠豁免机制（强制写理由）；`surface` 非空；
 出生→交分设计路程（四角互差 >1 m 直接报错）；窄道不得落在散布区内；`climb` 门必须落在

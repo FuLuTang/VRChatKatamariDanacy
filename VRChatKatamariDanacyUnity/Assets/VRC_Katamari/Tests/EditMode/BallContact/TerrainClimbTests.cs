@@ -1,6 +1,8 @@
 using NUnit.Framework;
 using UnityEngine;
 using VRCKatamari.BallContact;
+using VRCKatamari.Core;
+using VRCKatamari.Motion;
 
 namespace VRCKatamari.Tests
 {
@@ -144,6 +146,90 @@ namespace VRCKatamari.Tests
             ball.TriangleMinZ = MinZ;
             ball.TriangleMaxZ = MaxZ;
             ball.TriangleSurfaceIds = SurfaceIds;
+        }
+    }
+
+    /// <summary>
+    /// The motor's per-step order for a core-only ball (no needles, no stuck recovery),
+    /// as pure math: <c>BallMotionMath.TryStep</c> (the motion layer's velocity), the
+    /// motor's <c>ComputeDrive</c> (the drive direction is the VELOCITY direction, the
+    /// facing only when at rest), <c>RefreshClimbGate</c> (the standing climb gate, read
+    /// against the solver's remembered climb face) and <c>ContactSolveMath.TryStep</c>.
+    /// The Unity-side twin of every test that uses it is in ContactModelV2Tests, which
+    /// runs the real motor.
+    /// </summary>
+    internal sealed class ClimbMotorLoop
+    {
+        public const float Dt = 0.02f;
+        public readonly ContactBall Ball = new ContactBall();
+        public readonly ContactWorld World;
+        public float HeadingDegrees;
+        public float Forward = 1f;
+        public float MaxSpeedMps = 4f;
+        public float HighestCenterY;
+        public int Steps;
+
+        public ClimbMotorLoop(ContactWorld world, Vector3 center, float radius,
+            float headingDegrees)
+        {
+            World = world;
+            Ball.Center = center;
+            Ball.Radius = radius;
+            Ball.ClimbSurfaceId = -1;
+            HeadingDegrees = headingDegrees;
+            HighestCenterY = center.y;
+        }
+
+        public bool Step()
+        {
+            float nextHeading;
+            Vector3 nextVelocity;
+            Vector3 displacement;
+            if (BallMotionMath.TryStep(Forward, 0f, 0f, HeadingDegrees, Ball.PlanarVelocity,
+                Dt, 0f, MaxSpeedMps, 5f, 8f, 1.2f, 110f, 1.2f, 0.25f, 0.35f, out nextHeading,
+                out nextVelocity, out displacement))
+            {
+                HeadingDegrees = nextHeading;
+                Ball.PlanarVelocity = new Vector3(nextVelocity.x, 0f, nextVelocity.z);
+            }
+
+            // ComputeDrive: the way the ball MOVES, else the way it faces.
+            Vector3 planar = new Vector3(Ball.PlanarVelocity.x, 0f, Ball.PlanarVelocity.z);
+            Vector3 direction;
+            float length;
+            if (!KatamariMath.TryNormalize(planar, out direction, out length))
+            {
+                float radians = HeadingDegrees * Mathf.Deg2Rad;
+                direction = new Vector3(Mathf.Sin(radians), 0f, Mathf.Cos(radians));
+            }
+            float driveSpeed = MaxSpeedMps * Mathf.Abs(Forward);
+
+            // RefreshClimbGate: a climb whose push or gate speed has fallen leaves the channel.
+            if (Ball.ClimbActive)
+            {
+                Vector3 normal = Ball.ClimbNormal;
+                float horizontal = Mathf.Sqrt(normal.x * normal.x + normal.z * normal.z);
+                if (horizontal > 0f)
+                {
+                    float pushIn = Mathf.Max(0f,
+                        -(direction.x * normal.x / horizontal + direction.z * normal.z / horizontal));
+                    float speed = Mathf.Sqrt(Ball.PlanarVelocity.x * Ball.PlanarVelocity.x
+                        + Ball.PlanarVelocity.z * Ball.PlanarVelocity.z);
+                    float vGate = Mathf.Max(speed, ContactTuning.KIntent * driveSpeed);
+                    if (!(pushIn >= ContactTuning.PMin &&
+                        vGate >= ClimbMath.RequiredSpeed(ObbContactMath.ContactAngleDeg(normal))))
+                    {
+                        Ball.ClimbActive = false;
+                        Ball.ClimbCooldown = ContactTuning.ClimbCooldownS;
+                        Ball.ClimbAlongSpeed = 0f;
+                    }
+                }
+            }
+
+            bool solved = Ball.Step(World, direction, driveSpeed, Dt);
+            Steps++;
+            if (Ball.Center.y > HighestCenterY) HighestCenterY = Ball.Center.y;
+            return solved;
         }
     }
 
@@ -404,6 +490,189 @@ namespace VRCKatamari.Tests
             Assert.GreaterOrEqual(maxBottom, 0.10f, "it does climb before the cap");
             Assert.LessOrEqual(maxBottom, cap + 0.03f,
                 "H_cap must bound the climb even when the wall keeps going");
+        }
+        // ---- The cap is a budget of the wall-hugging stretch, not of one face ----
+        // (TERRAIN_CLIMB 6.6: the narrow-V ratchet, 0.69 m on a 0.60 m cap in the field.)
+
+        private const float VRadius = 0.15f;
+
+        /// <summary>
+        /// Two 3 m tall vertical faces whose normals are <paramref name="halfAngleDeg"/>
+        /// either side of -Z (the inner angle is 180 - 2 x that), apex at z = 3. The same
+        /// geometry as ContactModelV2Tests' narrow wedge.
+        /// </summary>
+        private static ContactWorld NarrowV(float halfAngleDeg)
+        {
+            float angle = halfAngleDeg * Mathf.Deg2Rad;
+            Vector3 normalA = new Vector3(Mathf.Sin(angle), 0f, -Mathf.Cos(angle));
+            Vector3 normalB = new Vector3(-Mathf.Sin(angle), 0f, -Mathf.Cos(angle));
+            Vector3 apex = new Vector3(0f, 1.5f, 3f);
+            ContactWorld world = new ContactWorld();
+            AddFace(world, apex - normalA * 0.5f, normalA, 2);
+            AddFace(world, apex - normalB * 0.5f, normalB, 3);
+            return world;
+        }
+
+        private static void AddFace(ContactWorld world, Vector3 center, Vector3 normal,
+            int surfaceId)
+        {
+            Vector3 axisY = new Vector3(0f, 1f, 0f);
+            Vector3 axisX = Vector3.Cross(axisY, normal).normalized;
+            world.Add(center, axisX, axisY, normal, new Vector3(3f, 1.5f, 0.5f), surfaceId,
+                ContactCodes.RoleBox);
+        }
+
+        [TestCase(55f)]
+        [TestCase(65f)]
+        [TestCase(72f)]
+        public void AHeldPushIntoANarrowVNeverClimbsPastTheCap(float halfAngleDeg)
+        {
+            // 40 s of full push into a V (65 deg: the 50 deg wedge), over the facings and
+            // lateral offsets that make the velocity swing between the faces. Rest + H_cap is
+            // the budget of the whole stretch; before the fix the face the climb started on
+            // changed, each change re-anchored at the current height, and the peak ratcheted
+            // to 0.69-1.0 m. The 5 mm is the contact skin.
+            float cap = ClimbMath.ClimbHeightCap(VRadius, 0f);
+            float[] headings = { 0f, 2f, 5f, 8f, 12f, 18f, 30f };
+            float[] offsets = { 0f, 0.07f };
+            float highest = 0f;
+            for (int o = 0; o < offsets.Length; o++)
+            {
+                for (int h = 0; h < headings.Length; h++)
+                {
+                    ClimbMotorLoop loop = new ClimbMotorLoop(NarrowV(halfAngleDeg),
+                        new Vector3(offsets[o], VRadius, 2.6f), VRadius, headings[h]);
+                    bool everClimbed = false;
+                    for (int step = 0; step < 2000; step++)
+                    {
+                        Assert.IsTrue(loop.Step());
+                        everClimbed = everClimbed || loop.Ball.ClimbActive;
+                    }
+                    Assert.LessOrEqual(loop.HighestCenterY, VRadius + cap + 0.005f,
+                        "half angle " + halfAngleDeg + " heading " + headings[h] + " offset "
+                        + offsets[o] + ": the centre peaked at " + loop.HighestCenterY
+                        + " against rest + H_cap = " + (VRadius + cap));
+                    Assert.IsTrue(everClimbed, "the push must open the climb, heading "
+                        + headings[h]);
+                    if (loop.HighestCenterY > highest) highest = loop.HighestCenterY;
+                }
+            }
+            Assert.GreaterOrEqual(highest, VRadius + 0.5f * cap,
+                "the cap must be REACHED somewhere: a bound nothing approaches proves nothing");
+        }
+
+        [Test]
+        public void AClimbThatStartsOnAnotherFaceKeepsTheAnchorOfTheStretch()
+        {
+            // The ball hangs at y = 0.40 against a wall, not standing, and remembers a
+            // DIFFERENT face (normal +X, another surface) from a climb whose base was y = 0.15.
+            // The new climb is the same wall-hugging stretch: the anchor stays 0.15 (a face
+            // change used to re-anchor at 0.40, which is how the cap ratcheted).
+            ContactWorld world = ContactScenes.WallWorld();
+            ContactBall ball = new ContactBall();
+            ball.Radius = VRadius;
+            ball.Center = new Vector3(0f, 0.40f, 0.15f);
+            ball.PlanarVelocity = new Vector3(0f, 0f, -4f);
+            ball.ClimbSurfaceId = 7;
+            ball.ClimbAnchorY = 0.15f;
+            ball.ClimbNormal = new Vector3(1f, 0f, 0f);
+            ball.ClimbPoint = new Vector3(0.5f, 0.2f, 0f);
+            ball.ClimbTopY = float.MaxValue;
+            Assert.IsTrue(ball.Step(world, new Vector3(0f, 0f, -1f), 4f, Dt));
+            Assert.IsTrue(ball.ClimbActive, "the push into the wall must open a climb");
+            Assert.AreEqual(0f, ball.Center.z - VRadius - 0f, 0.05f,
+                "the ball is against the wall's face (z = 0)");
+            Assert.AreEqual(0.15f, ball.ClimbAnchorY, 1e-5f,
+                "the cap budget belongs to the stretch, not to a face");
+
+            // A start LOWER than the old anchor (it fell below its base, still on a wall)
+            // lowers the anchor: the cap is measured from the lowest point.
+            ContactBall lower = new ContactBall();
+            lower.Radius = VRadius;
+            lower.Center = new Vector3(0f, 0.40f, 0.15f);
+            lower.PlanarVelocity = new Vector3(0f, 0f, -4f);
+            lower.ClimbSurfaceId = 7;
+            lower.ClimbAnchorY = 0.90f;
+            lower.ClimbNormal = new Vector3(1f, 0f, 0f);
+            lower.ClimbPoint = new Vector3(0.5f, 0.9f, 0f);
+            lower.ClimbTopY = float.MaxValue;
+            Assert.IsTrue(lower.Step(world, new Vector3(0f, 0f, -1f), 4f, Dt));
+            Assert.IsTrue(lower.ClimbActive);
+            Assert.AreEqual(0.40f, lower.ClimbAnchorY, 0.01f,
+                "an anchor above the ball is replaced by the lower start");
+        }
+
+        [Test]
+        public void StandingOnSomethingMovesTheAnchorToWhereTheBallStands()
+        {
+            // The anchor follows where the ball STANDS. A ball resting on a 0.30 m deck whose
+            // anchor is still the floor's 0.15 (the climb that put it there ended on the
+            // ledge) gets the deck as its base, so the next wall it meets has its own budget.
+            ContactWorld world = new ContactWorld();
+            world.HasGround = true;
+            world.Add(new Vector3(0f, 0.15f, 5f), new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f), new Vector3(0f, 0f, 1f),
+                new Vector3(3f, 0.15f, 3f), 5, ContactCodes.RoleBox);
+            ContactBall ball = new ContactBall();
+            ball.Radius = VRadius;
+            ball.Center = new Vector3(0f, 0.30f + VRadius, 5f);
+            ball.ClimbSurfaceId = 3;
+            ball.ClimbAnchorY = 0.15f;
+            Assert.IsTrue(ball.Step(world, new Vector3(0f, 0f, 1f), 0f, Dt));
+            Assert.AreEqual(ContactCodes.ClassRide, ball.DominantClass);
+            Assert.AreEqual(0.30f + VRadius, ball.ClimbAnchorY, 0.01f);
+        }
+
+        [Test]
+        public void ARememberedClimbFaceIsKeptWhileThePushStillHoldsIt()
+        {
+            // A 65 deg V. The climb opens on face A (the drive points at A's side), then the
+            // velocity direction swings to the other side: B is now the face the drive
+            // "pushes into most", but A's push-in is still 0.26 (>= p_min), so the solver
+            // keeps reading A. Without the hysteresis the remembered face flips to B.
+            ContactWorld world = NarrowV(65f);
+            ContactBall ball = new ContactBall();
+            ball.Radius = VRadius;
+            ball.Center = new Vector3(0f, VRadius, 2.6f);
+            ball.PlanarVelocity = new Vector3(0f, 0f, 3f);
+            ball.ClimbSurfaceId = -1;
+            float toA = -10f * Mathf.Deg2Rad;
+            Vector3 driveToA = new Vector3(Mathf.Sin(toA), 0f, Mathf.Cos(toA));
+            for (int i = 0; i < 40 && !ball.ClimbActive; i++)
+            {
+                Assert.IsTrue(ball.Step(world, driveToA, 4f, Dt));
+            }
+            Assert.IsTrue(ball.ClimbActive, "the climb must open in the V");
+            Assert.Greater(ball.ClimbNormal.x, 0.5f, "the drive's side picked face A (+X normal)");
+
+            float toB = 10f * Mathf.Deg2Rad;
+            Vector3 driveToB = new Vector3(Mathf.Sin(toB), 0f, Mathf.Cos(toB));
+            for (int i = 0; i < 25; i++)
+            {
+                Assert.IsTrue(ball.Step(world, driveToB, 4f, Dt));
+                Assert.IsTrue(ball.ClimbActive, "the push still holds face A, step " + i);
+                Assert.Greater(ball.ClimbNormal.x, 0.5f,
+                    "the remembered face stays A while its push-in holds, step " + i);
+            }
+
+            // Turn all the way to B's side (A's push-in < p_min): the face hands over to B in
+            // the SAME step, with no release in between.
+            float farB = 40f * Mathf.Deg2Rad;
+            Vector3 driveFarB = new Vector3(Mathf.Sin(farB), 0f, Mathf.Cos(farB));
+            Assert.IsTrue(ball.Step(world, driveFarB, 4f, Dt));
+            Assert.IsTrue(ball.ClimbActive, "a hand-over to the other face is not a release");
+            Assert.Less(ball.ClimbNormal.x, -0.5f, "and the climb now reads face B");
+        }
+
+        [Test]
+        public void TheClimbAnchorIsTheLowestCentreOfTheStretch()
+        {
+            // ClimbMath.ClimbAnchorAtStart: unknown anchor -> the centre; a known anchor
+            // stands for any face and only a LOWER start moves it down.
+            Assert.AreEqual(0.40f, ClimbMath.ClimbAnchorAtStart(false, 9f, 0.40f), 1e-6f);
+            Assert.AreEqual(0.15f, ClimbMath.ClimbAnchorAtStart(true, 0.15f, 0.40f), 1e-6f);
+            Assert.AreEqual(0.40f, ClimbMath.ClimbAnchorAtStart(true, 0.90f, 0.40f), 1e-6f);
+            Assert.AreEqual(0.40f, ClimbMath.ClimbAnchorAtStart(true, 0.40f, 0.40f), 1e-6f);
         }
     }
 }

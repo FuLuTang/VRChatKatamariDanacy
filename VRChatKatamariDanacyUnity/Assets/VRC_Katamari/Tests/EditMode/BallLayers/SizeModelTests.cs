@@ -101,6 +101,34 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void SaturationDoesNotDependOnHowTheCapVolumeWasRounded()
+        {
+            // The cap volume is a float result (Mono and .NET differ by ~1e6 mm^3 at 30 m), so
+            // saturation holds for any total within its 1 ppm rounding budget of the cap
+            // volume the model itself reports, and not for a total clearly below it. The cap
+            // volume is read back through the same function, so this holds on every runtime.
+            Assert.IsTrue(SizeModelMath.TrySphereVolumeMm3(30f, 1f, out long cap));
+            long budget = cap / SizeModelMath.CapVolumeToleranceDivisor;
+            Assert.Greater(budget, 0L);
+
+            // The exact double-precision cap volume (what a golden or a ledger would hold)
+            // is inside the budget of the float one, on both rounding behaviours.
+            Assert.LessOrEqual(Math.Abs(cap - Cap30Mm3), budget);
+            Assert.IsTrue(Derive(StartMm3, Cap30Mm3 - StartMm3, 30f, out _, out _,
+                out float exact, out _));
+            Assert.AreEqual(30f, exact, 0f, "the exact cap volume saturates exactly");
+
+            // Just inside the budget: saturated. Just outside: still the cbrt of the total.
+            Assert.IsTrue(Derive(StartMm3, cap - budget - StartMm3, 30f, out _, out _,
+                out float inside, out _));
+            Assert.AreEqual(30f, inside, 0f);
+            Assert.IsTrue(Derive(StartMm3, cap - 2L * budget - StartMm3, 30f, out _, out _,
+                out float outside, out _));
+            Assert.Less(outside, 30f);
+            Assert.AreEqual(30f, outside, 1e-4f, "the swallowed diameter is far below a millimetre");
+        }
+
+        [Test]
         public void TheInverseIsTheForwardMapSolvedForDiameter()
         {
             // D = 1.00 m -> V_total = pi/6 * 1e9 = 523,598,776 mm^3 (rounded); confirmed is

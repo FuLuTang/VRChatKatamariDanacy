@@ -197,25 +197,27 @@ runner 崩溃或超时）。
 
 登记在 [`known_differences.json`](known_differences.json)，每条是“测试全名 + 那一处失败的消息片段”；
 同一条测试以别的方式失败不会被它盖住，会照常报成失败。输出里它们单独成一类，不混进失败，也不改测试或 Runtime。
-三条都已查到原因：
+现在只剩一条，已查到原因：
 
-1. **`SizeModelTests.TheCapSaturatesExactlyAndReportsTheCapVolume`、
-   `RampSupportTests.TheRampFootMeetsTheFloorWithoutAStep`：浮点表达式的中间精度。**
-   Unity 编辑器跑在 Mono 上；从两条测试的期望值反推，Mono 把一个 `float` 表达式的中间结果保留在
-   double 精度里，只在存回 `float` 变量时舍入一次。这里的 .NET 每做一次 float 运算就舍入一次（本机 ARM64 上观测到的行为；x64 的 RyuJIT 同样用单精度 SSE 指令）。
-   用同一份代码手算两种模式，只有“双精度中间值”能得到 Unity 绿的结果：
-   - `SizeModelMath.TrySphereVolumeMm3(30 m)`：`PI/6f * d * d * d`，Mono 存回得 14137.1669921875，
-     上限体积 14137166921728 mm³ ≤ 测试里的 `Cap30Mm3`，球正好在上限、直径精确 30；.NET 逐步舍入得
-     14137.16796875 → 14137167970304 mm³ > `Cap30Mm3`，走立方根分支，得 30.0000019（超容差 1e-6）。
-   - `SupportSurfaceMath.TryResolveSupport` 的斜坡平面偏移 `ny*cy + nz*cz`：双精度中间值留下 8e-10，
-     斜坡高度 9.2e-10 > 地面 0，斜坡胜出（id 500，测试期望）；严格 float 恰好得 0.0，地面胜出（id 0，本地实得）。
-
-   这是**推断**，没有在 Mono 上直接运行验证（Windows 上我们只读不执行），但上述两处的数值都能逐位复现本地和 Unity 的两种结果。
-   .NET 没有切换这种行为的开关，所以只能登记。以后任何依赖“float 中间值在边界上”的测试都可能出现同类差异。
-2. **`CriteriaModelOverrideTests.TheCellSerializesTheV2RowAndTheDeckFootprint`：程序集没编译。**
+1. **`CriteriaModelOverrideTests.TheCellSerializesTheV2RowAndTheDeckFootprint`：程序集没编译。**
    测试在已加载的 assembly 里按名字找实验场的 `PhysicsTestCell`，它在 `Assets/VRC_Katamari/Labs/`
    （Unity 的 `Assembly-CSharp`），`check.py` 不编译这个 assembly，所以类型不存在、用例在 `Assert.Fail`。
    这不是行为差异；这条用例即便补上类型也需要引擎（`JsonUtility`、`MonoBehaviour`）。
+
+**曾经登记、现已消除的一类：浮点表达式的中间精度。** Unity 的 Mono 把 `float` 表达式的中间结果留在 double 精度、
+只在存回变量时舍入一次，.NET 每步都舍入；两种结果在“恰好踩在边界上”的断言里会不一样。
+`SizeModelTests.TheCapSaturatesExactlyAndReportsTheCapVolume` 与 `RampSupportTests.TheRampFootMeetsTheFloorWithoutAStep`
+就是这样，已经分别改掉，不再登记：
+
+- 30 m 上限饱和：`SizeModelMath.TryDerive` 原先用 `total >= capVolume` 判饱和，而 `capVolume` 本身是 float 表达式
+  `PI/6f*d*d*d` 的结果（30 m 处 Mono 与 .NET 相差约 1e6 mm³）。运行时改为整数域、带 1 ppm 舍入预算的比较
+  （`total >= capVolume - capVolume/CapVolumeToleranceDivisor`），所以“恰好等于数学上限”在任何舍入下都是上限。
+  新增 `SaturationDoesNotDependOnHowTheCapVolumeWasRounded` 钉住预算边界。
+- 斜坡脚与地面并列：脚线上平面高度是 `0` 还是 `~1e-9` 取决于舍入，选择规则“严格更高者胜”下谁拿到 id 随之变化；
+  但高度处处连续（两者差 1e-9 m），所以这只是个标签。运行时不动，测试改为：脚线上只钉“高度≈地面”（id 可为地面或斜坡），
+  上移 1 mm（高于舍入噪声约 6 个数量级）处钉斜坡胜出。
+
+写以后依赖“float 中间值落在边界上”的断言时，同样要么用容差，要么把被比较的量放到整数域。
 
 另外两个环境决定会影响结果，已固定：runner 把当前文化设为 `InvariantCulture`（主机的 `LANG` 不能决定测试怎么格式化/解析；
 测试自己切文化的地方照常生效）；不开 `InvariantGlobalization`（`de-DE` 之类的文化要能创建）。前任的 `CultureNotFoundException`
@@ -229,17 +231,17 @@ runner 在运行时给每个已加载的测试方法挂一个 `IApplyToContext`�
 等价于整个测试体都在 `Assert.Multiple` 里；失败的每条断言带各自的 `文件:行` 和原文一起列出。注意：
 
 - 这是**诊断视图**，不是 Unity 的行为：框架版本不同（3.14，不是 3.5），并且第一条之后的失败可能只是被第一条连带出来的。
-- 已知差异条目只覆盖它登记的断言：继续执行后多出来的失败断言（如 `SizeModelTests` 第 89 行）要在条目的 `assertions`
+- 已知差异条目只覆盖它登记的断言：继续执行后多出来的失败断言要在条目的 `assertions`
   里逐条登记，否则这条用例回到“失败”。
 - 异常（含引擎原生调用）依然是抛出，不是记录，“不可执行”的判定不变。
-- 实测对 HEAD 快照：失败 0、已知差异 3、不可执行 169，通过 613，与默认模式相同，也就是说那 613 条在“继续执行”下也没有被藏起来的后续失败。
+- 实测（本次改动后）：失败 0、已知差异 1、不可执行 183，通过 640，与默认模式相同，也就是说那 640 条在“继续执行”下也没有被藏起来的后续失败。
 
 ### 不覆盖什么（本地绿 ≠ Unity 绿）
 
 - **UdonSharp**：语言子集、U# 程序编译、Udon 虚拟机里的行为，都只能在 Unity 验证。这里跑的是 Roslyn 编出来的普通 C#。
 - **需要引擎对象的测试**（`GameObject`、场景、`MonoBehaviour` 生命周期、物理、`Quaternion` 的原生实现、`JsonUtility`、
-  `Application.dataPath`……）：HEAD 上 169 条，全部归“本地不可执行”，没有被算作通过。
-- **Mono 与 .NET 的运行时差异**：浮点中间精度（上节）、`Math.Pow/Tan` 等 libm 实现（glibc 与 Windows 的 CRT 末位可能不同）、
+  `Application.dataPath`……）：当前 183 条（共发现 824），全部归“本地不可执行”，没有被算作通过。
+- **Mono 与 .NET 的运行时差异**：浮点中间精度（上节：测试别踩在它的刀口上）、`Math.Pow/Tan` 等 libm 实现（glibc 与 Windows 的 CRT 末位可能不同）、
   集合/哈希顺序、`Random` 序列；这些只能靠 Unity 暴露。
 - **运行平台**：本地是 Linux/ARM64 上的 .NET 8，不是 Windows 上的 Mono；IL2CPP / Player 不涉及。
 - **SDK 自带测试**（191 条）和 `Assembly-CSharp`（Labs、UdonSharp 工具脚本）不编译、不运行。

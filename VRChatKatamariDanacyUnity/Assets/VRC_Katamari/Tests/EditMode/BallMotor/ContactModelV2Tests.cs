@@ -401,6 +401,48 @@ namespace VRCKatamari.Tests
             }
         }
 
+        [Test]
+        public void AHeldFullPushIntoAFiftyDegreeWedgeNeverClimbsPastTheCap()
+        {
+            // TERRAIN_CLIMB 6.6. The same 50 deg V as the recovery test above, pushed at full
+            // stick for 40 s from a few facings. The climb opens, reaches H_cap, peels, falls
+            // and retries; the face the velocity points at flips on the way, and each flip
+            // used to re-anchor the cap at the current height (field peak 0.69 m against the
+            // 0.60 m budget, 1.0 m from some facings). The budget belongs to the whole
+            // wall-hugging stretch: rest + H_cap + the 5 mm contact skin, at every facing.
+            float[] headings = { 0f, 3f, 10f };
+            for (int i = 0; i < headings.Length; i++)
+            {
+                RecreateMotor();
+                EnableV2();
+                float radius = Radius();
+                float cap = ClimbMath.ClimbHeightCap(radius, 0f);
+                float angle = 65f * Mathf.Deg2Rad;
+                Vector3 normalA = new Vector3(Mathf.Sin(angle), 0f, -Mathf.Cos(angle));
+                Vector3 normalB = new Vector3(-Mathf.Sin(angle), 0f, -Mathf.Cos(angle));
+                Vector3 apex = new Vector3(0f, 1.5f, 3f);
+                Assert.IsTrue(AddWall(apex - normalA * 0.5f, normalA, 3f, 1.5f, 0.5f, 2));
+                Assert.IsTrue(AddWall(apex - normalB * 0.5f, normalB, 3f, 1.5f, 0.5f, 3));
+                Invoke("TeleportTo", new Vector3(0f, radius, 2.6f));
+                SetField("headingDegrees", headings[i]);
+                Invoke("SetMoveAxes", 1f, 0f, 0f);
+                float highest = 0f;
+                bool climbed = false;
+                for (int step = 0; step < 2000; step++)
+                {
+                    Step(1);
+                    float y = GetCenter().y;
+                    if (y > highest) highest = y;
+                    if ((int)Invoke("GetClimbState") == 1) climbed = true;
+                }
+                Assert.IsTrue(climbed, "the full push must open a climb, heading=" + headings[i]);
+                Assert.LessOrEqual(highest, radius + cap + 0.005f,
+                    "the centre peaked at " + highest + " against rest + H_cap = "
+                    + (radius + cap) + ", heading=" + headings[i]);
+                Assert.IsFalse(float.IsNaN(GetCenter().y), "the state stays finite");
+            }
+        }
+
         private Vector3[] ContactNormals()
         {
             return (Vector3[])motorType.GetField("contactNormalsV2", Any).GetValue(motor);

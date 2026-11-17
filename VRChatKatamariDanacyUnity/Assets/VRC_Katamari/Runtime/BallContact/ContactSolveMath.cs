@@ -670,6 +670,28 @@ namespace VRCKatamari.BallContact
                 wallIndex = ContactClassificationMath.SelectClimbContact(contactNormals,
                     contactClasses, count, drive);
 
+                // Selection hysteresis (TERRAIN_CLIMB 6.6). The drive is the VELOCITY
+                // direction, and in a narrow V the solver strips each face's normal in
+                // turn, so the velocity swings and the face "the drive pushes into most"
+                // flips between two faces. While a climb is alive the face it started on
+                // keeps being the face the solver reads (normal, angle, top), for as long
+                // as that plane is touched and the push into it still holds the climb
+                // (pushIn >= p_min): a push turning TOWARDS the other face of a corner
+                // hands over to it at once instead of releasing the climb. Once the plane
+                // is lost, or the push has left it, the ordinary selection stands.
+                if (active && surfaceId >= 0 && wallIndex >= 0)
+                {
+                    int keptFace = ContactClassificationMath.FindClimbContactOnPlane(
+                        contactNormals, contactPoints, contactDepths, contactClasses, count,
+                        surfaceNormal, surfacePoint);
+                    if (keptFace >= 0 && keptFace != wallIndex)
+                    {
+                        float keptPushIn;
+                        if (TryPushIn(contactNormals[keptFace], drive, out keptPushIn) &&
+                            keptPushIn >= ContactTuning.PMin) wallIndex = keptFace;
+                    }
+                }
+
                 float supportTheta = 0f;
                 if (supportIndex >= 0) supportTheta = contactAngles[supportIndex];
                 // A contact that is only a little steeper than the surface the ball rolls
@@ -703,27 +725,28 @@ namespace VRCKatamari.BallContact
                 if (locked && hCap > 0f && (position.y - anchorY) < 0.5f * hCap) locked = false;
                 if (!active && pushIn < ContactTuning.PMin) locked = false;
 
+                // The anchor of the height cap follows where the ball STANDS: a supported,
+                // non-climbing substep puts it at the centre (a RIDE contact is a base).
+                // Only a ball that is not standing - sliding down a wall, falling past it -
+                // keeps the anchor it had, so a climb that starts from there continues the
+                // same wall-hugging stretch instead of beginning a new one.
+                if (!active && supportIndex >= 0) anchorY = position.y;
+
                 if (!active && wallIndex >= 0 && !locked && cooldown <= 0f &&
                     pushIn >= ContactTuning.PMin &&
                     vGate >= ClimbMath.RequiredSpeed(theta) && hCap > 0f)
                 {
-                    // The cap is a height above the FACE, not above wherever the previous
-                    // attempt ended. A retry on the SAME face (same normal, same plane, same
-                    // top) keeps the original anchor; re-anchoring would ratchet the ball up
-                    // one H_cap per attempt - the 50 deg slab's D=0.30 ball reached the 0.6 m
-                    // deck that way (0.755 m centre against a 0.45 m cap). A different face
-                    // re-anchors, which is what a new wall/step should do.
+                    // The cap is a height above the BASE of this wall-hugging stretch: the
+                    // lowest centre height since the ball last stood on something (see
+                    // ClimbMath.ClimbAnchorAtStart). It does not depend on WHICH face the
+                    // climb starts on. It used to: a retry on the same face (normal, plane
+                    // and top equal) kept the anchor and any other face re-anchored at the
+                    // current height. In a narrow V the selected face flips, so every
+                    // cap-fall-retry cycle re-anchored higher - a held push reached 0.92 m
+                    // on a 0.60 m cap (TERRAIN_CLIMB 6.6); the 50 deg slab's D=0.30 ball
+                    // had the same ratchet on split triangles.
                     float faceTop = ContactTopAt(contactTopY, wallIndex);
-                    float normalDot = surfaceNormal.x * contactNormals[wallIndex].x
-                        + surfaceNormal.y * contactNormals[wallIndex].y
-                        + surfaceNormal.z * contactNormals[wallIndex].z;
-                    float planeGap = surfaceNormal.x *
-                        (contactPoints[wallIndex].x - surfacePoint.x)
-                        + surfaceNormal.y * (contactPoints[wallIndex].y - surfacePoint.y)
-                        + surfaceNormal.z * (contactPoints[wallIndex].z - surfacePoint.z);
-                    bool sameFace = surfaceId >= 0 && normalDot > 0.99f &&
-                        Mathf.Abs(planeGap) < 0.02f && Mathf.Abs(faceTop - topY) < 0.002f;
-                    if (!sameFace) anchorY = position.y;
+                    anchorY = ClimbMath.ClimbAnchorAtStart(surfaceId >= 0, anchorY, position.y);
                     active = true;
                     surfaceId = contactSurfaceIds[wallIndex];
                     along = 0f;

@@ -461,7 +461,7 @@ v_gate   = max(|v_planar|, k_intent · v_drive)   # k_intent = 0.5, v_drive = �
 ```
 H_cap = k_h · (2r + λ·L_eff)          k_h = 1.5（OUR PROVISIONAL，TERRAIN_CLIMB §7），λ = 1.0（OUR）
 L_eff = clamp( max_i dot(R·p_i, −n) − r , 0, maxProxyProtrusion )   # 见 §3.7
-h     = C.y − climbAnchorY            # climbAnchorY = 进入爬升时的球心 y
+h     = C.y − climbAnchorY            # climbAnchorY = 本次贴墙段的底（§3.4、TERRAIN_CLIMB §6.6）
 ```
 
 **爬升速度（按“到顶时间”参数化，而不是按速度）**
@@ -505,7 +505,7 @@ climbLocked 只在 p < 0.2（松开）时清除
 | 字段 | 类型 | 含义 |
 |---|---|---|
 | `climbActive` | bool | 本步是否在爬 |
-| `climbAnchorY` | float | 进入爬升时的球心 y（`h` 的原点） |
+| `climbAnchorY` | float | `h` 的原点 = 本次贴墙段的底：站立（有 RIDE 支撑且不在爬）的子步取球心 y，爬升开始取 `min(已有锚点, 球心 y)`；**与面无关**（[TERRAIN_CLIMB](TERRAIN_CLIMB.md) §6.6） |
 | `climbSurfaceId` | int | 诊断用（**不参与退出判断**，见下） |
 | `climbAlong` | float | 沿切线的速率（速率限制的状态） |
 | `climbCooldown` | float | 回滑/退出的冷却 |
@@ -522,7 +522,9 @@ climbLocked 只在 p < 0.2（松开）时清除
    b. contacts = Query(C)                      # 近集：OBB + 平面
    c. (C, contacts, residual) = PushOut(C, contacts, 3 次)
    d. support = argmax n.y among RIDE; wall = argmax push among CLIMB
+      # 迟滞：爬升存活且记住的平面仍被接触、对它的 push ≥ p_min 时，wall = 该平面的接触（TERRAIN_CLIMB §6.6）
       if wall and support and wall.θ < support.θ + 15°: wall = None
+      # 锚点：not climbing 且 support → climbAnchorY = C.y（站立处即底）
    e. if wall: 计算 p、v_gate、进入/退出/锁定（§3.3）
    f. if climbActive and wall:
           up = (0,1,0); t_up = normalize(up − (up·n)n)

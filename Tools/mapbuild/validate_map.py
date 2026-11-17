@@ -120,7 +120,7 @@ POWERUP_TYPES = ("magnet", "rocket")
 #   obstacle       — 障碍，不可走
 SURFACE_CLASSES = ("drivable_grade", "climb_step", "obstacle")
 TRAVERSABILITY_SCHEMA_VERSION = 2
-# 台阶可翻越上限占球径的比例：台阶 ≤ 0.25 × 球径（球径 ≥ 4 × 台阶高）。
+# 台阶可翻越上限占球径的比例：球能连续爬上的台阶高 ≤ 1.5 × 球径（H_cap = 1.5·D，暂定）。
 # 这是作者层常量，v1 的图没在 scale 里声明它时用这个默认值。
 DEFAULT_STEP_HEIGHT_OVER_DIAMETER = 1.5
 DEFAULT_MAX_ROUTE_STEP_M = 0.05

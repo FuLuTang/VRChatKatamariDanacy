@@ -157,5 +157,53 @@ namespace VRCKatamari.BallContact
             }
             return best;
         }
+
+        /// <summary>
+        /// Index of the climb-class contact that lies on the remembered plane
+        /// (<paramref name="planeNormal"/> through <paramref name="planePoint"/>), or -1.
+        /// </summary>
+        /// <remarks>
+        /// The selection hysteresis of TERRAIN_CLIMB 6.6: while a climb is alive its face
+        /// stays the face the solver reads, however the velocity direction swings. The
+        /// plane test (normal dot above 0.99, plane distance under 2 cm) is the one the
+        /// climb used to anchor with; split triangles of one wall all match. Of several
+        /// matches the deepest one wins (the one the ball presses on), the first on ties.
+        /// An unusable argument gives -1, never a guess.
+        /// </remarks>
+        public static int FindClimbContactOnPlane(Vector3[] contactNormals,
+            Vector3[] contactPoints, float[] contactDepths, int[] contactClasses,
+            int contactCount, Vector3 planeNormal, Vector3 planePoint)
+        {
+            if (contactNormals == null || contactPoints == null || contactDepths == null ||
+                contactClasses == null) return -1;
+            if (contactCount < 0 || contactCount > contactNormals.Length ||
+                contactCount > contactPoints.Length || contactCount > contactDepths.Length ||
+                contactCount > contactClasses.Length) return -1;
+            Vector3 unitPlane;
+            float planeLength;
+            if (!KatamariMath.TryNormalize(planeNormal, out unitPlane, out planeLength))
+                return -1;
+
+            int best = -1;
+            float bestDepth = 0f;
+            for (int i = 0; i < contactCount; i++)
+            {
+                if (contactClasses[i] != ContactCodes.ClassClimb) continue;
+                float normalDot = unitPlane.x * contactNormals[i].x
+                    + unitPlane.y * contactNormals[i].y + unitPlane.z * contactNormals[i].z;
+                if (normalDot <= ContactTuning.ClimbFaceNormalDot) continue;
+                float planeGap = unitPlane.x * (contactPoints[i].x - planePoint.x)
+                    + unitPlane.y * (contactPoints[i].y - planePoint.y)
+                    + unitPlane.z * (contactPoints[i].z - planePoint.z);
+                if (!KatamariMath.IsFiniteFloat(planeGap) ||
+                    Mathf.Abs(planeGap) >= ContactTuning.ClimbFacePlaneM) continue;
+                if (best < 0 || contactDepths[i] > bestDepth)
+                {
+                    best = i;
+                    bestDepth = contactDepths[i];
+                }
+            }
+            return best;
+        }
     }
 }

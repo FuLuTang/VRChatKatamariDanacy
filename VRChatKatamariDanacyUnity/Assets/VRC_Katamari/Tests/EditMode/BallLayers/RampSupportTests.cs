@@ -381,8 +381,20 @@ namespace VRCKatamari.Tests
 
             Surface atFoot = QueryOneRamp(new Vector3(0f, 2f, 0f), 0f, 10f,
                 center, normal, new Vector3(1f, 0f, 0f), 0.175f, halfRun);
-            Assert.AreEqual(SupportSurfaceMath.FirstRampSurfaceId, atFoot.Id);
+            // Exactly at the foot the plane and the floor are the same height up to float
+            // rounding (the plane offset is a sum of products: 0, or ~1e-9 depending on
+            // whether the runtime keeps float intermediates in double), and the selection is
+            // "strictly higher wins". Either label is correct; what is pinned is that the
+            // answer is the floor's height. Which surface owns a 1e-9 m sliver is not.
+            Assert.IsTrue(atFoot.Id == SupportSurfaceMath.FirstRampSurfaceId ||
+                atFoot.Id == SupportSurfaceMath.GroundSurfaceId, "foot id " + atFoot.Id);
             Assert.AreEqual(0f, atFoot.Height, 0.001f, "the foot lands on the floor");
+
+            // A millimetre up the board the plane is 0.58 mm above the floor, far above any
+            // rounding, so the ramp owns the point on every runtime.
+            Surface aboveNoise = QueryOneRamp(new Vector3(0f, 2f, 0.001f), 0f, 10f,
+                center, normal, new Vector3(1f, 0f, 0f), 0.175f, halfRun);
+            Assert.AreEqual(SupportSurfaceMath.FirstRampSurfaceId, aboveNoise.Id);
 
             Surface justInside = QueryOneRamp(new Vector3(0f, 2f, 0.005f), 0f, 10f,
                 center, normal, new Vector3(1f, 0f, 0f), 0.175f, halfRun);

@@ -3029,8 +3029,14 @@ namespace VRCKatamari.BallMotor
         private void RefreshClimbGate(float driveSpeed)
         {
             if (!climbActive) return;
-            float normalX = climbWallNormalWorld.x;
-            float normalZ = climbWallNormalWorld.z;
+            // The gate is checked against the face the SOLVER is climbing (the remembered
+            // climb surface, kept stable by the selection hysteresis), not against
+            // "whichever wall the velocity pointed at last step" (climbWallNormalWorld):
+            // in a narrow V that record flips between the two faces with the velocity, and
+            // a face the push has turned away from would release a climb the solver is
+            // still entitled to (TERRAIN_CLIMB 6.6).
+            float normalX = climbSurfaceNormalWorld.x;
+            float normalZ = climbSurfaceNormalWorld.z;
             float horizontal = Mathf.Sqrt(normalX * normalX + normalZ * normalZ);
             if (horizontal <= 0f) return;
             float inverse = 1f / horizontal;
@@ -3040,7 +3046,8 @@ namespace VRCKatamari.BallMotor
                 + planarVelocity.z * planarVelocity.z);
             float vGate = Mathf.Max(planarSpeed, ContactTuning.KIntent * driveSpeed);
             if (pushIn >= ContactTuning.PMin &&
-                vGate >= ClimbMath.RequiredSpeed(climbContactAngleDeg)) return;
+                vGate >= ClimbMath.RequiredSpeed(
+                    ObbContactMath.ContactAngleDeg(climbSurfaceNormalWorld))) return;
             climbActive = false;
             climbCooldown = ContactTuning.ClimbCooldownS;
             climbAlongSpeed = 0f;

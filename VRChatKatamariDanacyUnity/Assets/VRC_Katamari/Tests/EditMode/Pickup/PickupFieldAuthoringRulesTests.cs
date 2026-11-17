@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Threading;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace VRCKatamari.Tests
 {
@@ -41,6 +42,115 @@ namespace VRCKatamari.Tests
         // The published minimum, kept as a literal so a change to either the rule or the
         // test shows up as a failing assertion instead of silently agreeing.
         private const float MinBoundsExtent = 0.0001f;
+
+        // ---- growth verification: authored growth vs the size measured in the scene ----
+
+        // k = 0.7, penalty = 0.8 as in the reference level's defaults.
+        private const float GrowthK = 0.7f;
+        private const float GrowthPenalty = 0.8f;
+
+        private static string CheckGrowth(long declaredMm3, float x, float y, float z,
+            bool sizeIsPropLocal, out long boundsMm3, out long differenceMm3)
+        {
+            object[] arguments = { declaredMm3, x, y, z, sizeIsPropLocal, GrowthK, GrowthPenalty, 0L, 0L };
+            object result = InvokeArgs("CheckDeclaredGrowth", arguments);
+            boundsMm3 = (long)arguments[7];
+            differenceMm3 = (long)arguments[8];
+            return result.ToString();
+        }
+
+        /// <summary>
+        /// round(0.7 * 0.8 * a*b*c * 1e9) by hand for a 1.00 x 0.20 x 0.05 m board:
+        /// 0.01 m^3 * 0.56 = 0.0056 m^3 = 5,600,000 mm^3.
+        /// </summary>
+        private const long BoardGrowthMm3 = 5600000L;
+
+        [Test]
+        public void ThePropsOwnSizeAgreesWithTheAuthoredGrowth()
+        {
+            string outcome = CheckGrowth(BoardGrowthMm3, 1.00f, 0.20f, 0.05f, true,
+                out long priced, out long difference);
+            Assert.AreEqual("Agrees", outcome);
+            Assert.That(Math.Abs(priced - BoardGrowthMm3), Is.LessThanOrEqualTo(1L));
+            Assert.That(difference, Is.LessThanOrEqualTo(1L));
+        }
+
+        [Test]
+        public void ATurnedPropsWorldBoxIsNotTheFrameTheAuthoredGrowthWasPricedIn()
+        {
+            // The same board yawed 45 degrees: its world AABB is (|cos|*1.00 + |sin|*0.05) by
+            // 0.20 by (|sin|*1.00 + |cos|*0.05) = 0.7425 x 0.20 x 0.7425 m, a 0.0307 m^3 box
+            // (5.5x the board). Compared against the authored growth it is a "mismatch" for a
+            // prop that is exactly as authored; compared in the prop's own axes it agrees.
+            float cos = Mathf.Cos(45f * Mathf.Deg2Rad);
+            float sin = Mathf.Sin(45f * Mathf.Deg2Rad);
+            float worldX = cos * 1.00f + sin * 0.05f;
+            float worldZ = sin * 1.00f + cos * 0.05f;
+            Assert.AreEqual(0.7425f, worldX, 1e-3f, "hand-computed world extent");
+
+            string world = CheckGrowth(BoardGrowthMm3, worldX, 0.20f, worldZ, true,
+                out long worldPriced, out long worldDiff);
+            Assert.AreEqual("Disagrees", world, "the world box would raise a false alarm");
+            Assert.Greater(worldPriced, BoardGrowthMm3 * 5L);
+            Assert.AreEqual(worldPriced - BoardGrowthMm3, worldDiff);
+
+            string local = CheckGrowth(BoardGrowthMm3, 1.00f, 0.20f, 0.05f, true, out _, out _);
+            Assert.AreEqual("Agrees", local, "the prop's own size is the same frame as the aabb");
+        }
+
+        [Test]
+        public void AWorldBoxFallbackIsNotComparableInsteadOfAMismatch()
+        {
+            // The sync copies the world AABB into the local column only when the local
+            // measurement failed. That size is not in the authored frame, so the check says so
+            // (and the caller's own fallback note names the rows) rather than guess.
+            string outcome = CheckGrowth(BoardGrowthMm3, 0.7425f, 0.20f, 0.7425f, false,
+                out long priced, out long difference);
+            Assert.AreEqual("NotComparable", outcome);
+            Assert.AreEqual(0L, priced);
+            Assert.AreEqual(0L, difference);
+        }
+
+        [Test]
+        public void AStaleAuthoredGrowthIsStillCaught()
+        {
+            // A k or size edit that the file did not follow: 3x the authored growth.
+            string outcome = CheckGrowth(BoardGrowthMm3 * 3L, 1.00f, 0.20f, 0.05f, true,
+                out long priced, out long difference);
+            Assert.AreEqual("Disagrees", outcome);
+            Assert.That(difference, Is.EqualTo(BoardGrowthMm3 * 2L).Within(2L));
+        }
+
+        [Test]
+        public void ARowThatCannotBePricedIsNotComparable()
+        {
+            Assert.AreEqual("NotComparable", CheckGrowth(BoardGrowthMm3, 0f, 0.20f, 0.05f, true,
+                out _, out _), "a zero side prices to 0, which the ledger refuses");
+            Assert.AreEqual("NotComparable", CheckGrowth(BoardGrowthMm3, -1f, 0.20f, 0.05f, true,
+                out _, out _));
+        }
+
+        [Test]
+        public void TheAgreementBudgetIsTwoPercentWithAOneCubicCentimetreFloor()
+        {
+            // Hand values: 2% of 5,600,000 is 112,000 mm^3, so a 112,000 difference agrees and
+            // 112,001 does not; 2% of a 40,000 mm^3 row is 800, below the 1000 floor, so the
+            // floor decides there.
+            Assert.IsTrue(GrowthAgrees(5600000L, 5600000L + 112000L, out long d1));
+            Assert.AreEqual(112000L, d1);
+            Assert.IsFalse(GrowthAgrees(5600000L, 5600000L - 112001L, out long d2));
+            Assert.AreEqual(112001L, d2);
+            Assert.IsTrue(GrowthAgrees(40000L, 40000L + 1000L, out _), "the floor, not 2%");
+            Assert.IsFalse(GrowthAgrees(40000L, 40000L + 1001L, out _));
+        }
+
+        private static bool GrowthAgrees(long declared, long bounds, out long difference)
+        {
+            object[] arguments = { declared, bounds, 0L };
+            bool agrees = (bool)InvokeArgs("GrowthAgrees", arguments);
+            difference = (long)arguments[2];
+            return agrees;
+        }
 
         [Test]
         public void BoundsAreUsableOnlyWithAUsableLongestSide()

@@ -291,8 +291,51 @@ m(θ)    = cosθ + 0.15·sinθ
 
 **（c）上限之后的再爬**：一手描述只说「掉下来」。用**「掉到 `h < 0.5·H_cap` 才能再爬」**替代
 「锁定到松手」：玩家一直推着墙会看到「爬—掉—再爬」。**关键补充（R25a 实测后）**：重爬必须沿用
-**同一个面的锚点**，否则每次重爬都把上限抬一整段 `H_cap`——50°、0.6 m 台面上 D=0.30 的球就是这样
-爬到 0.755 m（`H_cap` 只有 0.45）的。
+**本次贴墙段的锚点**，否则每次重爬都把上限抬一整段 `H_cap`——50°、0.6 m 台面上 D=0.30 的球就是这样
+爬到 0.755 m（`H_cap` 只有 0.45）的。锚点的口径见 §6.6（它不绑定某一个面）。
+
+### 6.6 上限是「贴墙段」的预算：锚点与选面迟滞（2026-11-17）
+
+**缺陷**：窄 V 楔（两个竖直面、法线各偏 −Z 65°，内角 50°）里，爬升锚点按「同一个面」判定（法线点积 > 0.99、
+平面距 < 2 cm、顶差 < 2 mm），不同面就把锚点重设为当前球心高度。楔里求解器逐面去掉法向分量，速度方向左右翻转，
+`SelectClimbContact`（读速度方向）选作「墙」的面也随之翻转，所以每一轮「爬到上限—掉落—重爬」都换一个面、锚点上抬一截：
+满推 40 s 的峰值在 D=0.30（rest 0.15 + `H_cap` 0.45 = 0.60）上是 0.69 m，换几个朝向（偏离角平分线 3°–12°、半角 55°–72°）离线复算（pure math，胶水照抄电机，非 Unity 执行）球心峰值 0.81–1.15 m；修后同一批 ≤ 0.585 m。
+平墙不翻面，峰值 ≤ 0.58 m。后果是楔里像烟囱一样「爬—掉—再爬」，不冻结、不进恢复（爬升让球离开起点 1 cm 圆盘，
+卡住计时器清零）。
+
+**规则（一处实现：`ContactSolveMath.TryStep`，纯数学）：**
+
+1. **锚点是「站立处」，不是「面」**。`h = 球心.y − climbAnchorY`，`H_cap` 的预算属于一段连续的贴墙过程：
+   * 每个**有 RIDE 支撑、且不在爬**的子步，锚点 = 当前球心 y（站在任何东西上，那里就是新的底）；
+   * 爬升开始时 `anchor = min(已有锚点, 球心 y)`（`ClimbMath.ClimbAnchorAtStart`；从未爬过/被重置则就是球心 y）。
+     没有站立的球——顺墙滑下、掉过墙边——保留原锚点，所以**换面（含楔里两面、墙角转弯、被切成两段的墙）不重置预算**；
+     比原锚点更低的起点（掉到旧底之下仍贴着墙）把锚点降下来，上限从最低点量起；
+   * 翻上台沿（出口）后球站在台面上，锚点随即跟到台面；落回地面同理。`sameFace`（含「顶差 2 mm」）从锚点判定里删除。
+2. **选面迟滞（爬升中）**。爬升存活时，求解器读的面保持为它记住的那个面（`surfaceNormal/surfacePoint`），只要该平面
+   仍被接触（`ContactClassificationMath.FindClimbContactOnPlane`：同一平面的接触，取最深者）**且**对它的推入 `pushIn ≥ p_min`。
+   推进转向另一个面使它的推入跌破 `p_min` 时，**同一步直接交给另一个面**（不松手、不进冷却）。平面丢失（接触消失）则回到
+   `SelectClimbContact` 的常规选择。作用：爬升中的法线 / 角度 / 台沿高度 / 切线不在两面间抖动。
+3. **站立门读同一个面**。电机的 `RefreshClimbGate` 改读求解器记住的爬升面（`climbSurfaceNormalWorld`），不再读「上一步按速度方向选到的墙」
+   （`climbWallNormalWorld`，楔里随速度翻转，会用一个推进已转开的面松掉求解器仍有资格继续的爬升）。
+   `climbWallNormalWorld` 仍保留，给「无接触悬停」时的支撑法线用。
+4. **选面读速度还是读意图？** 保持读**速度**。读意图的利弊：稳定（楔里不翻），但爬升门要的是「实际在往墙里去」——
+   贴墙 60°/75° 滑行时意图一直指向墙，读意图会让球反复起爬而掉速（v 1.97→0.82 m/s），读速度则一路滑过；
+   且意图读法并不能保护上限（峰值是锚点问题，不是选面问题）。结论：高度上限由规则 1 担保，选面只做迟滞（规则 2），
+   爬升门继续读速度方向。
+
+**为什么不是「爬升中保持已选面直到失去接触」的字面版本**：楔里这样没问题，但墙角里（90° 内角，沿角平分线推进，
+两面各 0.71）玩家转向另一面时，粘住旧面会让旧面的推入跌破 `p_min` 而松手 → 0.35 s 冷却 → 重爬，是体验倒退。
+带 `pushIn ≥ p_min` 条件的迟滞在楔里同样稳定，在墙角里则无缝交接。
+
+**测试**：`TerrainClimbTests`（纯数学，本地可跑）`AHeldPushIntoANarrowVNeverClimbsPastTheCap`（55°/65°/72° 半角 ×
+7 个朝向 × 2 个偏移，每组 40 s，峰值 ≤ rest + `H_cap` + 5 mm，且上限确实被摸到）、
+`AClimbThatStartsOnAnotherFaceKeepsTheAnchorOfTheStretch`、`StandingOnSomethingMovesTheAnchorToWhereTheBallStands`、
+`ARememberedClimbFaceIsKeptWhileThePushStillHoldsIt`、`TheClimbAnchorIsTheLowestCentreOfTheStretch`；
+`ContactClassificationTests.TheRememberedClimbFaceIsFoundByItsPlaneNotByItsIndex`；
+Unity 侧（需要 GameObject，本地不可执行）`ContactModelV2Tests.AHeldFullPushIntoAFiftyDegreeWedgeNeverClimbsPastTheCap`
+（真电机，0°/3°/10° 朝向满推 2000 步）。修前同样的纯数学测试在旧求解器上全部红（楔峰值 0.88–1.15 m）。
+**Unity 执行前，电机级上限不算验证**；电机级还带着卡住恢复（软恢复 `ClearClimbState` 会合法地重置锚点，因为那是一次「重新开始」），
+所以若 Unity 里该测试红且 `GetRecoveryCount() > 0`，先看恢复有没有触发，再看上限。
 
 ---
 
@@ -428,13 +471,4 @@ hard 3 s（回最后稳定点，soft 不重新武装）、再 3 s 的第二次 h
 且需要建网格期的邻接表 + 一个明确的「局部」定义 ⇒ **BLOCKED**，等有真实的长三角带出局部台沿的样本再做。
 
 **证据缺口**：E9（3,455 三角形 + 0.19 m 凹槽）只在对话里、**没落盘**；下次跑请在 `Docs/Evidence/ReferenceLevels/` 补一份。
-
-**待办（2026-11-16，只读评估；不在本次实现）**：爬升门（`ContactSolveMath` 的 pushIn、`RefreshClimbGate`）、针尖突出量估计、
-`SelectClimbContact` 仍读**速度**方向 `contactDriveDirection`。离线复算（胶水照抄，非 Unity 执行）：贴墙 60°/75° 滑行时若把爬升门改读意图，
-球会反复起爬而掉速（v 1.97→0.82 m/s），读速度则一路滑过——速度方向对爬升门是对的，别改。针尖突出量按速度方向投影，
-楔里偏转 ≤ 20° 只差 ≤ 6% × cap（r=0.15 时 ≤ 3 mm），无害。**有风险的是 `SelectClimbContact`**：50° 楔里速度方向每步左右翻转，被选作「墙」的面
-也每步在两面间切换；爬升在 cap 锁定后重新起爬时落到另一面，`sameFace` 判假而重新锚定 `anchorY`，于是满推 40 s 的峰值是
-0.69 m（rest 0.15 + H_cap 0.45 = 0.60，超出约 0.09 m），而同一时间平墙的峰值 ≤ 0.57 m。后果是楔里像烟囱一样「爬—掉—再爬」，
-不冻结、不进恢复。修法方向：爬升中保持已选面（迟滞）直到该面失去接触，由下一位带 Unity 的实现者设计并加测试；
-在那之前不要把爬升门改读意图（会更糟：峰值 0.80 m）。
 

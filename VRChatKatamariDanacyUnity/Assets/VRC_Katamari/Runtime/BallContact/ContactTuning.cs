@@ -178,6 +178,18 @@ namespace VRCKatamari.BallContact
         /// </summary>
         public const float ClimbHugSlopM = 0.03f;
 
+        /// <summary>
+        /// 0.99: two climb contacts are the SAME face (one plane) when their normals agree
+        /// to this dot product and the plane distance is within
+        /// <see cref="ClimbFacePlaneM"/>. Used only by the selection hysteresis: while a
+        /// climb is alive its face keeps being the face the solver reads
+        /// (TERRAIN_CLIMB 6.6). It is NOT an anchor identity any more.
+        /// </summary>
+        public const float ClimbFaceNormalDot = 0.99f;
+
+        /// <summary>2 cm: the plane distance of "the same face" (see <see cref="ClimbFaceNormalDot"/>).</summary>
+        public const float ClimbFacePlaneM = 0.02f;
+
         /// <summary>v_slide_max = 1.0 m/s: the slow slide back down a touched wall.</summary>
         public const float VSlideMax = 1f;
 

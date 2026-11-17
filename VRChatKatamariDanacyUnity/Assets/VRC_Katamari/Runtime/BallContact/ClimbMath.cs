@@ -136,6 +136,34 @@ namespace VRCKatamari.BallContact
         }
 
         /// <summary>
+        /// The height H_cap is measured from when a climb starts: the LOWEST centre height
+        /// of this wall-hugging stretch, not wherever the previous attempt ended.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <paramref name="anchorKnown"/> is false before the first climb (and after a
+        /// reset): the anchor is then the centre itself. Otherwise the earlier anchor
+        /// stands - for ANY face, because the cap bounds the stretch, not one plane - and
+        /// only a start LOWER than it (the ball slid or fell below its old base, still
+        /// against a wall) moves it down. Standing on something (a RIDE support) is what
+        /// moves the anchor up: the motor-side rule lives in
+        /// <c>ContactSolveMath.TryStep</c>, which sets the anchor to the centre on every
+        /// supported, non-climbing substep. Without that the held anchor of one wall would
+        /// bind the next wall the ball stands in front of.
+        /// </para>
+        /// <para>
+        /// Re-anchoring on every face change is the ratchet this replaces: in a narrow V
+        /// the face the velocity points at flips, each flip took the anchor to the current
+        /// height, and a held push reached 0.92 m on a 0.60 m cap (TERRAIN_CLIMB 6.6).
+        /// </para>
+        /// </remarks>
+        public static float ClimbAnchorAtStart(bool anchorKnown, float anchorY, float centerY)
+        {
+            if (!anchorKnown) return centerY;
+            return Mathf.Min(anchorY, centerY);
+        }
+
+        /// <summary>
         /// The complete climb predicate: enough push, gate speed, below the cap, no
         /// cooldown. Lock state is the caller's, because "one attempt per push" is state.
         /// </summary>

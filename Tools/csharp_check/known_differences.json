@@ -15,35 +15,6 @@
   },
   "differences": [
     {
-      "test": "VRCKatamari.Tests.SizeModelTests.TheCapSaturatesExactlyAndReportsTheCapVolume",
-      "cause": "float-intermediate-precision",
-      "message_contains": [
-        "Expected: 30.0d",
-        "But was:  30.000001907348633d"
-      ],
-      "explanation": "Unity's Mono keeps the intermediates of a float expression in double precision, .NET rounds every float operation. TrySphereVolumeMm3(30 m) multiplies pi/6 * 30 * 30 * 30 in float: Mono rounds once (14137.1669921875, cap volume 14137166921728 mm3 <= Cap30Mm3, so the ball is exactly at the cap and reports 30 m); .NET rounds after each step (14137.16796875, cap volume 14137167970304 mm3 > Cap30Mm3), takes the cube-root branch and gets 30.0000019. With --continue-after-failure the next assertion (diameterA == diameterB) fails too, for the same reason: diameterB (4x the cap) is at the cap and exactly 30.",
-      "assertions": [
-        [
-          "Expected: 30.0d",
-          "But was:  30.000001907348633d"
-        ],
-        [
-          "saturation is exact, not approximate",
-          "Expected: 30.000001907348633d",
-          "But was:  30.0d"
-        ]
-      ]
-    },
-    {
-      "test": "VRCKatamari.Tests.RampSupportTests.TheRampFootMeetsTheFloorWithoutAStep",
-      "cause": "float-intermediate-precision",
-      "message_contains": [
-        "Expected: 500",
-        "But was:  0"
-      ],
-      "explanation": "The ramp plane offset n.y*0.35 + n.z*z is computed in float. Strict float gives exactly 0 at the foot (ramp height 0.0, not strictly above the ground, so the ground wins: id 0); Mono's double intermediates leave 8e-10 (ramp height 9.2e-10 > 0, the ramp wins: id 500, which is what the test expects)."
-    },
-    {
       "test": "VRCKatamari.Tests.CriteriaModelOverrideTests.TheCellSerializesTheV2RowAndTheDeckFootprint",
       "cause": "assembly-not-compiled",
       "message_contains": [

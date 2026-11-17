@@ -50,6 +50,13 @@ namespace VRCKatamari.BallLayers
         /// <summary>One cubic metre in the ledger's quantum (1 LSB = 1 mm^3).</summary>
         public const long Mm3PerCubicMetre = 1000000000L;
 
+        /// <summary>
+        /// Cap saturation tolerance as a divisor of the cap volume: 1,000,000 = 1 ppm. See
+        /// <see cref="TryDerive"/>; an integer divisor keeps the comparison in the ledger's
+        /// own integer domain.
+        /// </summary>
+        public const long CapVolumeToleranceDivisor = 1000000L;
+
         /// <summary>The original's HUD fudge: +0.02 cm on the displayed diameter (G09).</summary>
         public const float HudDiameterOffsetM = 0.0002f;
 
@@ -162,7 +169,16 @@ namespace VRCKatamari.BallLayers
             long totalMm3 = startVolumeMm3 + confirmedVolumeMm3;
             if (totalMm3 < 0L) return false;                 // long overflow, refuse
 
-            bool atCap = totalMm3 >= capVolumeMm3;
+            // The cap volume itself comes out of a float expression (pi/6 * d * d * d), whose
+            // rounding depends on whether the runtime keeps float intermediates in double
+            // (Unity's Mono) or rounds every step (.NET; Udon is not guaranteed to match
+            // either): at 30 m the two answers differ by ~1e6 mm^3. A strict `>=` against it
+            // would make "exactly the cap" depend on that. The saturation threshold is
+            // therefore the cap volume minus its own rounding budget (1 ppm, ~4x the worst
+            // float chain error), in integer arithmetic. A total inside the budget is the
+            // cap; the diameter that this swallows is below 1e-5 m at 30 m.
+            long capRoundingBudgetMm3 = capVolumeMm3 / CapVolumeToleranceDivisor;
+            bool atCap = totalMm3 >= capVolumeMm3 - capRoundingBudgetMm3;
             long effectiveTotalMm3 = atCap ? capVolumeMm3 : totalMm3;
             long effectiveConfirmed = effectiveTotalMm3 - startVolumeMm3;
             if (effectiveConfirmed < 0L) effectiveConfirmed = 0L;

@@ -222,7 +222,7 @@ EXPECTED_KEYS = ("propCount", "growthMm3", "structureCount", "staticObbs", "over
 LEVEL_KEYS = ("id", "scene", "units", "convention", "ballStart", "playerSpawn",
               "ballDiameterStart", "ballDiameterMax", "groundY", "bounds",
               "spawnClearanceM", "budget", "expected", "zones", "arena")
-ARENA_KEYS = ("id", "notes")
+ARENA_KEYS = ("id", "frame", "notes")
 BUDGET_KEYS = ("planes", "boxes", "ramps", "blocking", "propSupports")
 ENGINES = ("WORKBENCH", "EEVEE", "CYCLES")
 
@@ -1598,6 +1598,20 @@ class Report:
         return not self.errors
 
 
+#: ``level.arena.frame``: absent / "own" = the document carries its own ground + boundary
+#: (one role=ground, any boundaries); "shared" = a cell on a shared frame, no ground, no boundary.
+ARENA_FRAME_OWN = "own"
+ARENA_FRAME_SHARED = "shared"
+
+
+def arena_frame(doc):
+    """The document's ``level.arena.frame`` ("own" when absent or not an object)."""
+    arena = (doc.get("level") or {}).get("arena")
+    if not isinstance(arena, dict):
+        return ARENA_FRAME_OWN
+    return arena.get("frame", ARENA_FRAME_OWN)
+
+
 def _index_structures(doc):
     return {structure.get("id"): structure for structure in doc.get("structures") or []
             if isinstance(structure, dict)}
@@ -2175,7 +2189,16 @@ def _check_structures(doc, report):
                         "AABB in the motor - author it as a ramp instead"
                         % (label, structure_id, slope))
 
-    if len(ground) != 1:
+    if arena_frame(doc) == ARENA_FRAME_SHARED:
+        # A cell that stands on a shared frame (the physics test field's sandbox) has no floor
+        # or wall of its own: the frame arena registers one ground plane and the outer walls,
+        # and a pad or wall here would be drawn but never collide.
+        boundaries = [sid for sid, row in seen.items() if row.get("role") == "boundary"]
+        if ground or boundaries:
+            report.err("level.arena.frame is %r: this cell must not carry role=ground or "
+                       "role=boundary (found ground=%s boundary=%s); the shared frame owns them"
+                       % (ARENA_FRAME_SHARED, ground or "none", boundaries or "none"))
+    elif len(ground) != 1:
         report.err("structures must contain exactly one role=ground (found %d: %s)"
                    % (len(ground), ground if ground else "none"))
     # One row per logical curve ramp, its expanded segment count beside it (the "one logical
@@ -2278,6 +2301,10 @@ def _check_arena(doc, report, structures_by_id, path=None):
         if folder and folder != arena_id:
             report.err("level.arena.id is %r but the file lives in %r; a copied cell file "
                        "must be renamed together with its arena id" % (arena_id, folder))
+
+    frame = arena.get("frame", ARENA_FRAME_OWN)
+    if frame not in (ARENA_FRAME_OWN, ARENA_FRAME_SHARED):
+        report.err("level.arena.frame %r must be %r or %r" % (frame, ARENA_FRAME_OWN, ARENA_FRAME_SHARED))
 
     bounds = level.get("bounds")
     if not (isinstance(bounds, list) and len(bounds) == 2):

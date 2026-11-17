@@ -29,7 +29,8 @@ namespace VRCKatamari.Editor.PhysicsTestField
     /// <c>physics_test_field.json</c> and writes the serialized arrays.
     /// </para>
     /// <para>
-    /// What it does <b>not</b> do: create components. A UdonSharpBehaviour in a scene needs its
+    /// What it does <b>not</b> do: create U# components (the one object it does create is each
+    /// cell's sandbox sign, a plain <c>TextMesh</c>). A UdonSharpBehaviour in a scene needs its
     /// program asset, its backing <c>UdonBehaviour</c> and the proxy-to-Udon copy, which is the
     /// seven-step sequence in <c>Labs/README.md</c>; doing it from a script and getting it wrong
     /// would produce a component that looks wired and runs nothing. So the operator adds
@@ -57,7 +58,20 @@ namespace VRCKatamari.Editor.PhysicsTestField
             public string status;
             public DiameterEntry[] diameters;
             public DriverEntry driver;
+            public SandboxEntry sandbox;
             public CellEntry[] cells;
+        }
+
+        /// <summary>
+        /// The manual sandbox (PHYSICS_TEST_FIELD section 0.2): the frame arena's id (its
+        /// geometry is that cell's placement, not this file) and where the ball is put.
+        /// </summary>
+        [Serializable]
+        public class SandboxEntry
+        {
+            public string arena_id;
+            public float[] spawn;
+            public float spawn_heading_deg;
         }
 
         [Serializable]
@@ -85,6 +99,9 @@ namespace VRCKatamari.Editor.PhysicsTestField
             public bool wired;
             public float nominal_m;
             public float stop_seconds;
+            // The sandbox's world-space sign at this cell's start mark (ASCII: the built-in font
+            // has no CJK glyphs); absent = no sign.
+            public string sandbox_label;
             // Which preset diameters the cell is driven at, in diameters[] order; absent = all.
             public bool[] run_at_d;
             public StartPoseEntry start_pose;
@@ -206,6 +223,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
             public int CellsMissing;
             public int ArenasMissing;
             public int DriverFields;
+            public int LabelsWritten;
             public readonly List<string> Errors = new List<string>();
             public readonly List<string> Notes = new List<string>();
 
@@ -233,6 +251,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
                     .Append(" missingCells=").Append(CellsMissing)
                     .Append(" missingArenas=").Append(ArenasMissing)
                     .Append(" driverFields=").Append(DriverFields)
+                    .Append(" labels=").Append(LabelsWritten)
                     .Append(" errors=").Append(Errors.Count);
                 for (int i = 0; i < Notes.Count; i++) text.AppendLine().Append("  note: ").Append(Notes[i]);
                 for (int i = 0; i < Errors.Count; i++) text.AppendLine().Append("  error: ").Append(Errors[i]);
@@ -338,6 +357,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
                     geometry, report);
                 if (checks >= 0)
                 {
+                    EnsureSandboxLabel(component, cell, report);
                     report.CellsWritten++;
                     report.ChecksWritten += checks;
                     written.Add(component);
@@ -347,6 +367,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
             if (driver != null)
             {
                 report.DriverFields = WriteDriver(driver, doc, written, report);
+                report.DriverFields += WriteSandbox(driver, doc, report);
             }
 
             if (report.V2Rows > 0)
@@ -574,6 +595,111 @@ namespace VRCKatamari.Editor.PhysicsTestField
             }
 
             return written;
+        }
+
+        /// <summary>
+        /// Links the driver to the sandbox frame arena (<c>LevelContent/&lt;sandbox.arena_id&gt;</c>)
+        /// and bakes the spawn pose. The frame is an arena like any cell's: its geometry (the big
+        /// floor, the 4 outer planes) is <c>Levels/physics_test_field/SANDBOX/placement.json</c>.
+        /// </summary>
+        private static int WriteSandbox(PhysicsTestFieldDriver driver, FieldDocument doc, Report report)
+        {
+            if (doc.sandbox == null || string.IsNullOrEmpty(doc.sandbox.arena_id))
+            {
+                report.Note("the criteria file has no sandbox block: the driver's sandbox frame and " +
+                            "spawn were not written");
+                return 0;
+            }
+
+            var serialized = new SerializedObject(driver);
+            int written = 0;
+            LevelArenaHost frame = FindArena(doc.sandbox.arena_id);
+            if (frame == null)
+            {
+                report.Note("no LevelArenaHost on " + ManagedRootName + "/" + doc.sandbox.arena_id +
+                            ": import that placement, add the component to that object, then import " +
+                            "again (the sandbox opens without an outer wall until then)");
+            }
+
+            SerializedProperty frameProperty = RequireProperty(serialized, "sandboxFrame", report);
+            if (frameProperty != null)
+            {
+                frameProperty.objectReferenceValue = frame;
+                written++;
+            }
+
+            SetVector3(serialized, "sandboxSpawn",
+                ToVector3(doc.sandbox.spawn, new Vector3(0f, 0.15f, 0f)), report);
+            SetFloat(serialized, "sandboxSpawnHeadingDegrees", doc.sandbox.spawn_heading_deg, report);
+            written += 2;
+
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(driver);
+            return written;
+        }
+
+        private const string SandboxLabelName = "SandboxLabel";
+        private const float SandboxLabelHeightM = 1.4f;
+        // fontSize 64 at characterSize 1 is about 4 world units tall (the greybox builder's
+        // measurement); 0.1 makes a 0.4 m line.
+        private const float SandboxLabelScale = 0.1f;
+
+        /// <summary>
+        /// Creates or refreshes the cell's world-space sign: a legacy <c>TextMesh</c> (the same
+        /// component and built-in font the greybox builder's labels use) standing upright at the
+        /// cell's start mark, readable from the south, where the sandbox spawn is. Position is
+        /// derived (footprint x, start z), text is the criteria file's.
+        /// </summary>
+        private static void EnsureSandboxLabel(PhysicsTestCell component, CellEntry cell, Report report)
+        {
+            if (string.IsNullOrEmpty(cell.sandbox_label)) return;
+            Font font = null;
+            try
+            {
+                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            }
+            catch (Exception)
+            {
+                font = null;
+            }
+
+            if (font == null)
+            {
+                report.Note("built-in font 'LegacyRuntime.ttf' unavailable; the sandbox signs were skipped");
+                return;
+            }
+
+            Transform existing = component.transform.Find(SandboxLabelName);
+            GameObject go;
+            if (existing == null)
+            {
+                go = new GameObject(SandboxLabelName);
+                Undo.RegisterCreatedObjectUndo(go, "Create sandbox label");
+                go.transform.SetParent(component.transform, false);
+            }
+            else
+            {
+                go = existing.gameObject;
+            }
+
+            Vector3 start = ToVector3(cell.start_pose == null ? null : cell.start_pose.center, Vector3.zero);
+            Vector2 center = ToVector2(cell.footprint == null ? null : cell.footprint.center, Vector2.zero);
+            go.transform.position = new Vector3(center.x, SandboxLabelHeightM, start.z);
+            go.transform.rotation = Quaternion.identity;
+            go.transform.localScale = Vector3.one * SandboxLabelScale;
+
+            TextMesh mesh = go.GetComponent<TextMesh>();
+            if (mesh == null) mesh = go.AddComponent<TextMesh>();
+            mesh.font = font;
+            mesh.fontSize = 64;
+            mesh.characterSize = 1f;
+            mesh.anchor = TextAnchor.MiddleCenter;
+            mesh.alignment = TextAlignment.Center;
+            mesh.text = cell.sandbox_label;
+            mesh.color = Color.white;
+            MeshRenderer renderer = go.GetComponent<MeshRenderer>();
+            if (renderer != null && font.material != null) renderer.sharedMaterial = font.material;
+            report.LabelsWritten++;
         }
 
         /// <summary>

@@ -24,13 +24,13 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// trying to measure.
     /// </para>
     /// <para>
-    /// Every cell's arena object stays ACTIVE, deliberately: the compact field is meant to be
-    /// seen as a whole (its pads sit on a grid with 1 m walkways). Registration is a separate
-    /// switch: <see cref="LevelArenaHost"/> registers itself in its own <c>Update</c>, and the
-    /// motor's obstacle tables are global, so the driver calls <see cref="ReleaseArena"/> on
-    /// every cell but the first at load. That suspends the host's self-registration while
-    /// leaving the floor, low walls and boxes visible; one active arena can never overflow the
-    /// motor. <see cref="ApplyRegistration"/> resumes exactly one cell for a switch.
+    /// Every cell's arena object stays ACTIVE, deliberately: the field is meant to be seen as a
+    /// whole. Registration is a separate switch: <see cref="LevelArenaHost"/> registers itself in
+    /// its own <c>Update</c>, and the motor's obstacle tables are global, so the driver calls
+    /// <see cref="ReleaseArena"/> on every cell at load and registers them all in one pass with
+    /// <see cref="ApplySandboxRegistration"/>: the manual sandbox, every cell's boards on one big
+    /// floor inside one outer wall (the frame host). A cell document carries no floor and no wall
+    /// of its own (<c>level.arena.frame = "shared"</c>).
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
@@ -40,7 +40,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // running" is checkable. This component gained the deck footprint, the six per-check
         // override arrays and (2026-11-17a) the per-diameter run mask and the record-only op, and
         // a scene baked by an older program would not have them at all.
-        private const string CellRevision = "2026-11-17a";
+        private const string CellRevision = "2026-11-17b";
 
         // ---- identity and arena ------------------------------------------------
 
@@ -59,7 +59,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private Vector3 startCenter;
         [SerializeField] private float startHeadingDegrees;
 
-        [Header("Activation rect (from placement level.bounds = this cell's footprint)")]
+        [Header("Footprint (the cell's pad rect; from the criteria file)")]
         [SerializeField] private Vector2 footprintCenter;
         [SerializeField] private Vector2 footprintSize;
 
@@ -164,40 +164,39 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // ---- operator seams ----------------------------------------------------
 
         /// <summary>
-        /// Makes this cell the registered arena: allows its host to register and re-applies it
-        /// (clear the motor's obstacle tables, then register ground + walls + boxes/ramps).
+        /// Appends this cell's boards to what the motor already holds (the manual sandbox):
+        /// <c>LevelArenaHost.Register</c> with no clear and surface ids offset by what earlier
+        /// cells registered.
         /// </summary>
-        /// <remarks>
-        /// The GameObject is already active: the compact field shows every cell at once, and
-        /// visibility is not the registration switch. The switch is the host's
-        /// <c>SuspendRegistration</c> flag, so activating here is only a safety net for a scene
-        /// that was saved with an inactive object.
-        /// </remarks>
-        public void ApplyRegistration()
+        public void ApplySandboxRegistration(int boxSurfaceIdOffset, int rampSurfaceIdOffset)
         {
             if (arena == null) return;
             arena.gameObject.SetActive(true);
-            arena.ResumeRegistration();
-            arena.Reapply();
+            arena.Register(false, boxSurfaceIdOffset, rampSurfaceIdOffset);
+        }
+
+        /// <summary>Static boxes this cell's arena registered in its last registration.</summary>
+        public int GetRegisteredBoxCount()
+        {
+            if (arena == null) return 0;
+            return arena.GetRegisteredBoxCount();
+        }
+
+        /// <summary>Static ramps this cell's arena registered in its last registration.</summary>
+        public int GetRegisteredRampCount()
+        {
+            if (arena == null) return 0;
+            return arena.GetRegisteredRampCount();
         }
 
         /// <summary>
-        /// Stops this cell's arena from registering while keeping its floor, walls and boxes
-        /// visible. The host's own Update is the only self-registration path, so suspending it
+        /// Stops this cell's arena from registering itself while keeping its boards visible. The host's own Update is the only self-registration path, so suspending it
         /// is exactly "visible but not registered".
         /// </summary>
         public void ReleaseArena()
         {
             if (arena == null) return;
             arena.SuspendRegistration();
-        }
-
-        /// <summary>True when the arena is visible AND allowed to register.</summary>
-        public bool IsArenaActive()
-        {
-            if (arena == null) return false;
-            if (!arena.gameObject.activeSelf) return false;
-            return !arena.IsRegistrationSuspended();
         }
 
         // ---- identity / spatial getters ---------------------------------------
@@ -326,22 +325,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
         }
 
         /// <summary>
-        /// True when (x, z) is inside the cell's rect grown by <paramref name="marginM"/>.
-        /// </summary>
-        /// <remarks>
-        /// With <see cref="DistanceToFootprint"/> this is the design's activation rule
-        /// (PHYSICS_TEST_FIELD section 3.3): nearest cell, grown by radius + margin, debounced.
-        /// This batch's driver starts a cell explicitly instead, so these two are the executable
-        /// form of the rect the importer bakes - not an unused copy of it.
-        /// </remarks>
-        public bool ContainsPoint(float x, float z, float marginM)
-        {
-            return ContainsRect(footprintCenter, footprintSize, x, z, marginM);
-        }
-
-        /// <summary>
-        /// Inside (centre, size) grown by marginM, where size is the FULL extent. One
-        /// implementation for the activation rect and the deck gate.
+        /// Inside (centre, size) grown by marginM, where size is the FULL extent. The deck gate's
+        /// implementation.
         /// </summary>
         private bool ContainsRect(Vector2 center, Vector2 size, float x, float z, float marginM)
         {
@@ -349,20 +334,6 @@ namespace VRCKatamari.Labs.PhysicsTestField
             float halfZ = size.y * 0.5f + marginM;
             return x >= center.x - halfX && x <= center.x + halfX &&
                    z >= center.y - halfZ && z <= center.y + halfZ;
-        }
-
-        /// <summary>Distance from (x, z) to the rect, 0 inside. Sorting key for "nearest cell".</summary>
-        public float DistanceToFootprint(float x, float z)
-        {
-            float halfX = footprintSize.x * 0.5f;
-            float halfZ = footprintSize.y * 0.5f;
-            float dx = 0f;
-            float dz = 0f;
-            if (x < footprintCenter.x - halfX) dx = footprintCenter.x - halfX - x;
-            else if (x > footprintCenter.x + halfX) dx = x - footprintCenter.x - halfX;
-            if (z < footprintCenter.y - halfZ) dz = footprintCenter.y - halfZ - z;
-            else if (z > footprintCenter.y + halfZ) dz = z - footprintCenter.y - halfZ;
-            return Mathf.Sqrt(dx * dx + dz * dz);
         }
 
         // ---- drive timeline getters -------------------------------------------

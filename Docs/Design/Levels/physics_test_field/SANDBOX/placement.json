@@ -1,0 +1,170 @@
+{
+  "schema": "katamari.placement/0",
+  "level": {
+    "id": "physics_test_field/SANDBOX",
+    "scene": "PhysicsTestField",
+    "units": "m",
+    "convention": "unity-y-up-left-handed-quat-xyzw",
+    "ballDiameterStart": 0.3,
+    "ballDiameterMax": 2.2,
+    "bounds": [
+      [
+        -16.0,
+        -42.0
+      ],
+      [
+        16.0,
+        19.0
+      ]
+    ],
+    "spawnClearanceM": 0.5,
+    "budget": {
+      "planes": 8,
+      "boxes": 8,
+      "ramps": 4,
+      "blocking": 6,
+      "propSupports": 6
+    },
+    "expected": {
+      "propCount": 0,
+      "growthMm3": 0
+    },
+    "arena": {
+      "id": "SANDBOX",
+      "notes": "the manual sandbox frame: one big floor + 4 outer boundary planes, no boxes. The test cells' own boards register with it; their own pad walls do not (PHYSICS_TEST_FIELD.md section 0.2)"
+    }
+  },
+  "props": [],
+  "structures": [
+    {
+      "id": "ground",
+      "kind": "ground",
+      "role": "ground",
+      "shape": "plane",
+      "center": [
+        0.0,
+        0.0,
+        -11.5
+      ],
+      "size": [
+        32.0,
+        0.04,
+        61.0
+      ],
+      "rotationQuat": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": true,
+      "notes": "the one big floor of the manual sandbox; every cell pad's plane (y=0) is on it"
+    },
+    {
+      "id": "wall_x_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        16.0,
+        0.2,
+        -11.5
+      ],
+      "size": [
+        61.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-X); the sandbox's outer wall, an infinite half-space to the motor"
+    },
+    {
+      "id": "wall_x_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        -16.0,
+        0.2,
+        -11.5
+      ],
+      "size": [
+        61.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.5,
+        -0.5,
+        -0.5,
+        0.5
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+X); the sandbox's outer wall, an infinite half-space to the motor"
+    },
+    {
+      "id": "wall_z_max",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        0.0,
+        0.2,
+        19.0
+      ],
+      "size": [
+        32.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        -0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (-Z); the sandbox's outer wall, an infinite half-space to the motor"
+    },
+    {
+      "id": "wall_z_min",
+      "kind": "boundary",
+      "role": "boundary",
+      "shape": "plane",
+      "center": [
+        0.0,
+        0.2,
+        -42.0
+      ],
+      "size": [
+        32.0,
+        0.04,
+        0.4
+      ],
+      "rotationQuat": [
+        0.0,
+        0.707107,
+        0.707107,
+        0.0
+      ],
+      "collision": "none",
+      "absorbable": false,
+      "support": false,
+      "notes": "local +Y is the inward normal (+Z); the sandbox's outer wall, an infinite half-space to the motor"
+    }
+  ]
+}

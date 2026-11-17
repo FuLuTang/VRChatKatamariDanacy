@@ -1,4 +1,5 @@
-"""The physics test field's data contract: 13 wired cells, 4 terrain design cells, their placements and criteria.
+"""The physics test field's data contract: 13 wired cells, 4 terrain design cells, their placements and criteria,
+and the manual sandbox layout that registers all of them at once.
 
 Run from the repository root:
 
@@ -208,47 +209,34 @@ class CellPlacements(unittest.TestCase):
             self.assertEqual(doc["level"]["arena"]["id"], cell["id"])
             self.assertEqual(Path(cell["placement"]).parent.name, cell["id"])
 
-    def test_every_cell_is_a_complete_arena(self):
-        # ClearObstacles zeroes the motor's global plane table, so every cell carries its own
-        # floor and its own four boundary planes; a borrowed wall would leave the ball with no
-        # boundary after a switch.
+    def test_every_cell_is_boards_only_on_the_shared_frame(self):
+        # The sandbox registers every cell at once under ONE frame (SANDBOX: the floor and the
+        # outer walls), so a cell document carries only its test boards: a floor or a wall here
+        # would be drawn by the importer but never collide.
         for cell in self.cells:
             doc = load_cell(cell["placement"])
             roles = [structure["role"] for structure in doc["structures"]]
-            self.assertEqual(roles.count("ground"), 1, cell["id"])
-            self.assertEqual(roles.count("boundary"), 4, cell["id"])
-            self.assertIn(roles.count("box"), (0, 1, 2, 8), cell["id"])
+            self.assertEqual(doc["level"]["arena"]["frame"], "shared", cell["id"])
+            self.assertEqual(roles.count("ground"), 0, cell["id"])
+            self.assertEqual(roles.count("boundary"), 0, cell["id"])
+            self.assertEqual(doc["level"]["budget"]["planes"], 0, cell["id"])
+            self.assertIn(roles.count("box"), (1, 2), cell["id"])
             self.assertIn(roles.count("ramp"), (0, 1), cell["id"])
+            self.assertEqual(set(roles), {"box", "ramp"} & set(roles), cell["id"])
             self.assertEqual(doc["props"], [], cell["id"])
-            self.assertGreaterEqual(roles.count("box") + roles.count("ramp"), 1, cell["id"])
 
-    def test_every_cell_has_its_own_compact_pad(self):
-        # The compact field (2026-11-15): one pad per cell, the ground is exactly the cell's
-        # footprint, four low boundary markers sit on its edges, and the whole field fits in
-        # 28 x 53.5 m (the first three rows are 31.5 m deep, the 2026-11-17 row of climb and
-        # slope cells sits 17 m further south).
+    def test_every_cell_has_a_compact_footprint(self):
+        # A cell's footprint is its area of the sandbox (the run-up is inside it): at most
+        # 6 x 10 m, and the whole field of footprints fits in 28 x 53.5 m.
         xs, zs = [], []
         for cell in self.cells:
-            doc = load_cell(cell["placement"])
-            ground = [s for s in doc["structures"] if s["role"] == "ground"][0]
             footprint = cell["footprint"]
-            self.assertAlmostEqual(ground["center"][0], footprint["center"][0], places=4,
-                                   msg=cell["id"])
-            self.assertAlmostEqual(ground["center"][2], footprint["center"][1], places=4,
-                                   msg=cell["id"])
-            self.assertAlmostEqual(ground["size"][0], footprint["size"][0], places=4,
-                                   msg=cell["id"])
-            self.assertAlmostEqual(ground["size"][2], footprint["size"][1], places=4,
-                                   msg=cell["id"])
-            self.assertLessEqual(ground["size"][0], 6.001, cell["id"])
-            self.assertLessEqual(ground["size"][2], 10.001, cell["id"])
-            walls = [s for s in doc["structures"] if s["role"] == "boundary"]
-            self.assertEqual(len(walls), 4, cell["id"])
-            for wall in walls:
-                self.assertAlmostEqual(wall["size"][2], 0.4, places=6, msg=cell["id"])
-            low, high = structure_aabb(ground)
-            xs.extend([low[0], high[0]])
-            zs.extend([low[2], high[2]])
+            self.assertLessEqual(footprint["size"][0], 6.001, cell["id"])
+            self.assertLessEqual(footprint["size"][1], 10.001, cell["id"])
+            xs.extend([footprint["center"][0] - footprint["size"][0] / 2.0,
+                       footprint["center"][0] + footprint["size"][0] / 2.0])
+            zs.extend([footprint["center"][1] - footprint["size"][1] / 2.0,
+                       footprint["center"][1] + footprint["size"][1] / 2.0])
         self.assertLessEqual(max(xs) - min(xs), 28.001, "field is wider than the compact target")
         self.assertLessEqual(max(zs) - min(zs), 53.501, "field is deeper than the compact target")
 
@@ -578,14 +566,16 @@ class CriteriaRows(unittest.TestCase):
 
     def test_the_driver_judges_rows_and_records_diagnostics(self):
         driver = DRIVER_CS.read_text(encoding="utf-8")
-        self.assertIn('DriverRevision = "2026-11-17a"', driver)
+        self.assertIn('DriverRevision = "2026-11-17b"', driver)
         self.assertNotIn("ModelText", driver)
         self.assertNotIn("modelIsV2", driver)
         self.assertNotIn("IsContactModelV2", driver)
         self.assertIn("OpRecord", driver)
         self.assertIn("verdict=DIAGNOSTIC", driver)
         self.assertIn("RunsAtDiameter", driver)
-        self.assertIn("walkAroundActivation", driver)
+        # one mechanism: the sandbox is the only registration (no walk-around, no isolated cell)
+        self.assertNotIn("isolatedCellMode", driver)
+        self.assertNotIn("walkAround", driver)
         self.assertIn("cell.HasCheckV2(i)", driver)
         self.assertIn("GetCheckV2Threshold", driver)
         # the climb bound is derived from the motor's own constants, not from a metre value
@@ -605,7 +595,7 @@ class CriteriaRows(unittest.TestCase):
                       "checkV2ExpectMasks", "checkV2Thresholds", "deckCenterXZ",
                       "deckHalfSizeM", "skipDiameterMask"):
             self.assertIn(field, cell)
-        self.assertIn('CellRevision = "2026-11-17a"', cell)
+        self.assertIn('CellRevision = "2026-11-17b"', cell)
         importer = CRITERIA_CS.read_text(encoding="utf-8")
         for symbol in ("V2ExpectMask", "V2OpCode", "V2ThresholdCode", "climb_cap_bound",
                        "checkV2ExpectMasks", "checkV2Thresholds", "V2Rows", "run_at_d",
@@ -625,6 +615,229 @@ class CriteriaRows(unittest.TestCase):
         constants = self.doc["motor_constants"]
         for retired in ("absorb_volume_ratio", "max_item_volume_m3", "max_core_radius_world_m"):
             self.assertNotIn(retired, constants)
+
+
+ARENA_CS = (ROOT / "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Story/LevelArenaHost.cs")
+SANDBOX_TESTS_CS = (ROOT / "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/"
+                           "PhysicsTestField/SandboxRegistrationTests.cs")
+LARGEST_BALL_M = 2.2           # the biggest preset diameter: lanes and margins must pass it
+OBB_CAPACITY = 256
+PLANE_CAPACITY = 8
+
+
+def aabb_xz_gap(a, b):
+    """Gap in metres between two world AABBs seen from above (0 when they overlap)."""
+    dx = max(a[0][0] - b[1][0], b[0][0] - a[1][0], 0.0)
+    dz = max(a[0][2] - b[1][2], b[0][2] - a[1][2], 0.0)
+    return math.hypot(dx, dz)
+
+
+class SandboxLayout(unittest.TestCase):
+    """The manual sandbox (design section 0.2): every wired cell's boards on one big floor.
+
+    Geometry checks are recomputed from the placements, not trusted from the prose: the
+    sandbox registers all cells at once, so a board that crowds another cell's board, a pad
+    that sticks out of the frame, or a spawn inside a board is a defect only this test sees.
+    """
+
+    def setUp(self):
+        self.field = load_field()
+        self.sandbox = self.field["sandbox"]
+        self.frame = load_cell(self.sandbox["placement"])
+        self.cells = [c for c in self.field["cells"] if c.get("wired")]
+        self.solids = []          # (cell id, structure id, aabb)
+        for cell in self.cells:
+            doc = load_cell(cell["placement"])
+            for structure in doc["structures"]:
+                if structure["role"] in ("box", "ramp"):
+                    self.solids.append((cell["id"], structure["id"], structure_aabb(structure)))
+        self.walls = [s for s in self.frame["structures"] if s["role"] == "boundary"]
+        self.ground = [s for s in self.frame["structures"] if s["role"] == "ground"][0]
+
+    def frame_rect(self):
+        low, high = structure_aabb(self.ground)
+        return low[0], low[2], high[0], high[2]
+
+    def test_the_frame_is_one_floor_and_four_outer_planes(self):
+        path = ROOT / "Docs/Design/Levels" / self.sandbox["placement"]
+        report = core.validate(core.load_doc(path), path=path)
+        self.assertTrue(report.ok, report.errors)
+        self.assertEqual(report.warnings, [])
+        roles = [s["role"] for s in self.frame["structures"]]
+        self.assertEqual(roles.count("ground"), 1)
+        self.assertEqual(roles.count("boundary"), 4)
+        self.assertEqual(len(roles), 5, "no boxes, ramps or props in the frame")
+        self.assertEqual(self.frame["props"], [])
+        self.assertEqual(self.frame["level"]["arena"]["id"], self.sandbox["arena_id"])
+        self.assertEqual(Path(self.sandbox["placement"]).parent.name, self.sandbox["arena_id"])
+        self.assertEqual(self.sandbox["arena_id"], "SANDBOX")
+
+    def footprints(self):
+        out = []
+        for cell in self.cells:
+            center, size = cell["footprint"]["center"], cell["footprint"]["size"]
+            out.append((cell["id"], ((center[0] - size[0] / 2.0, 0.0, center[1] - size[1] / 2.0),
+                                     (center[0] + size[0] / 2.0, 0.0, center[1] + size[1] / 2.0))))
+        return out
+
+    def test_the_one_floor_is_the_only_floor_and_the_only_walls(self):
+        # nothing but the frame has a role=ground or role=boundary, so nothing is drawn that
+        # the ball cannot touch; the floor plane is y = 0 for every board
+        self.assertAlmostEqual(self.ground["center"][1], 0.0)
+        self.assertEqual(self.ground["rotationQuat"], [0.0, 0.0, 0.0, 1.0])
+        for cell in self.cells:
+            doc = load_cell(cell["placement"])
+            self.assertEqual([s["id"] for s in doc["structures"]
+                              if s["role"] in ("ground", "boundary")], [], cell["id"])
+            self.assertAlmostEqual(core.ground_level(doc), 0.0, msg=cell["id"])
+        # every board stands on that floor (a ramp board may hang one thickness below it)
+        for cell_id, structure_id, box in self.solids:
+            self.assertGreaterEqual(box[0][1], -0.2, "%s/%s" % (cell_id, structure_id))
+
+    def test_the_floor_covers_every_footprint_with_room_for_the_largest_ball(self):
+        x0, z0, x1, z1 = self.frame_rect()
+        for cell_id, (low, high) in self.footprints():
+            for margin in (low[0] - x0, x1 - high[0], low[2] - z0, z1 - high[2]):
+                self.assertGreaterEqual(margin, LARGEST_BALL_M, cell_id)
+
+    def test_the_outer_planes_face_inward_and_sit_on_the_floor_edge(self):
+        x0, z0, x1, z1 = self.frame_rect()
+        cx, cz = (x0 + x1) / 2.0, (z0 + z1) / 2.0
+        edges = set()
+        for wall in self.walls:
+            normal = rotate_quat(wall["rotationQuat"], (0.0, 1.0, 0.0))
+            to_center = (cx - wall["center"][0], cz - wall["center"][2])
+            self.assertGreater(normal[0] * to_center[0] + normal[2] * to_center[1], 0.0, wall["id"])
+            self.assertAlmostEqual(abs(normal[0]) + abs(normal[2]), 1.0, places=4, msg=wall["id"])
+            edges.add((round(wall["center"][0], 3), round(wall["center"][2], 3)))
+        self.assertEqual(len(edges), 4)
+        self.assertEqual({round(w["center"][0], 3) for w in self.walls} - {round(cx, 3)},
+                         {round(x0, 3), round(x1, 3)})
+        self.assertEqual({round(w["center"][2], 3) for w in self.walls} - {round(cz, 3)},
+                         {round(z0, 3), round(z1, 3)})
+        self.assertEqual(self.frame["level"]["bounds"], [[x0, z0], [x1, z1]])
+
+    def test_boards_of_different_cells_leave_a_lane_for_the_largest_ball(self):
+        worst = None
+        for i, (cell_a, id_a, box_a) in enumerate(self.solids):
+            for cell_b, id_b, box_b in self.solids[i + 1:]:
+                if cell_a == cell_b:
+                    continue
+                gap = aabb_xz_gap(box_a, box_b)
+                if worst is None or gap < worst[0]:
+                    worst = (gap, id_a, id_b)
+                self.assertGreaterEqual(gap, LARGEST_BALL_M, "%s vs %s" % (id_a, id_b))
+        self.assertIsNotNone(worst)
+
+    def test_footprints_do_not_overlap(self):
+        pads = self.footprints()
+        for i, (id_a, box_a) in enumerate(pads):
+            for id_b, box_b in pads[i + 1:]:
+                self.assertGreater(aabb_xz_gap(box_a, box_b), 0.0, "%s overlaps %s" % (id_a, id_b))
+
+    def test_the_spawn_is_inside_the_floor_clear_of_every_board_and_faces_north(self):
+        spawn = self.sandbox["spawn"]
+        self.assertEqual(self.sandbox["spawn_heading_deg"], 0.0)
+        self.assertAlmostEqual(spawn[1], 0.15)
+        x0, z0, x1, z1 = self.frame_rect()
+        for margin in (spawn[0] - x0, x1 - spawn[0], spawn[2] - z0, z1 - spawn[2]):
+            self.assertGreaterEqual(margin, LARGEST_BALL_M)
+        point = ((spawn[0], 0.0, spawn[2]), (spawn[0], 0.0, spawn[2]))
+        for cell_id, structure_id, box in self.solids:
+            self.assertGreaterEqual(aabb_xz_gap(point, box), LARGEST_BALL_M,
+                                    "%s/%s" % (cell_id, structure_id))
+        # in front of the south row: south of every cell's start mark
+        for cell in self.cells:
+            self.assertLess(spawn[2], cell["start_pose"]["center"][2], cell["id"])
+
+    def test_every_board_stays_inside_the_frame(self):
+        x0, z0, x1, z1 = self.frame_rect()
+        for _cell, _structure, box in self.solids:
+            self.assertGreaterEqual(box[0][0], x0)
+            self.assertLessEqual(box[1][0], x1)
+            self.assertGreaterEqual(box[0][2], z0)
+            self.assertLessEqual(box[1][2], z1)
+
+    def test_the_whole_sandbox_fits_the_motor_tables(self):
+        obbs = len(self.solids)
+        self.assertEqual(obbs, 21, "13 wired cells: %s" % [s[1] for s in self.solids])
+        self.assertLessEqual(obbs, OBB_CAPACITY)
+        # even if the outer wall were solids, and the floor one more, it would still fit
+        self.assertLessEqual(obbs + len(self.walls) + 1, OBB_CAPACITY)
+        self.assertEqual(len(self.walls), 4)
+        self.assertLessEqual(len(self.walls), PLANE_CAPACITY, "the cells' own walls are not registered")
+        self.assertEqual(self.sandbox["obb_capacity"], OBB_CAPACITY)
+
+    def test_every_cell_has_an_ascii_sign_naming_its_id(self):
+        for cell in self.cells:
+            label = cell["sandbox_label"]
+            self.assertTrue(label.isascii(), cell["id"])
+            self.assertEqual(label.split("\n")[0], cell["id"])
+            self.assertGreaterEqual(len(label.split("\n")), 2, cell["id"])
+
+    def test_the_sandbox_uses_the_one_registration(self):
+        arena = ARENA_CS.read_text(encoding="utf-8")
+        driver = DRIVER_CS.read_text(encoding="utf-8")
+        cell = CELL_CS.read_text(encoding="utf-8")
+        self.assertEqual(arena.count("public void Register("), 1)
+        body = method_body(arena, "public void Reapply()")
+        self.assertIn("Register(true, 0, 0)", body)
+        # the sandbox is Register with other parameters: no clear, offset ids
+        self.assertIn("arena.Register(false, boxSurfaceIdOffset, rampSurfaceIdOffset)", cell)
+        self.assertIn("sandboxFrame.Register(true, 0, 0)", driver)
+        self.assertIn("ApplySandboxRegistration(boxes, ramps)", driver)
+        # the island paths are gone: no wall switch in the host, no one-cell registration
+        self.assertNotIn("skipBoundaryWalls", arena)
+        self.assertNotIn("includeBoundaryWalls", arena + driver + cell)
+        self.assertNotIn("ApplyRegistration", driver + cell)
+        self.assertNotIn(".Reapply()", driver + cell)
+        # no second registration in the driver
+        for forbidden in ("AddObb(", "AddPlane(", "AddBox(", "SetGroundPlane("):
+            self.assertNotIn(forbidden, driver, forbidden)
+        # the parameters have defaults that keep every other scene unchanged
+        self.assertIn("boxSurfaceIdBase + 1 + registeredBoxCount", arena)
+
+    def test_a_scripted_run_moves_the_ball_and_never_changes_the_registration(self):
+        driver = DRIVER_CS.read_text(encoding="utf-8")
+        switch = method_body(driver, "private void TickSwitch()")
+        self.assertIn("if (!sandboxActive) EnterSandbox();", switch)
+        self.assertNotIn("ClearObstacles", switch)
+        self.assertNotIn("Register", switch)
+        update = method_body(driver, "public void Update()")
+        self.assertIn("if (!sandboxActive) TickSandboxEnter();", update)
+
+    def test_the_shared_frame_rule_is_in_the_validator_and_the_importer(self):
+        arena = [s for s in self.frame["structures"]]
+        self.assertEqual(core.arena_frame(self.frame), "own")      # the frame carries its own floor
+        cell = load_cell("physics_test_field/C09/placement.json")
+        self.assertEqual(core.arena_frame(cell), "shared")
+        import copy
+        doc = copy.deepcopy(cell)
+        doc["structures"].append(copy.deepcopy(arena[0]))            # a ground in a shared cell
+        report = core.validate(doc)
+        self.assertTrue(any("must not carry role=ground" in e for e in report.errors), report.errors)
+        doc = copy.deepcopy(cell)
+        doc["structures"].append(copy.deepcopy([s for s in arena if s["role"] == "boundary"][0]))
+        report = core.validate(doc)
+        self.assertTrue(any("must not carry role=ground" in e for e in report.errors), report.errors)
+        doc = copy.deepcopy(cell)
+        doc["level"]["arena"]["frame"] = "own"                       # an own-frame cell needs a floor
+        report = core.validate(doc)
+        self.assertTrue(any("exactly one role=ground" in e for e in report.errors), report.errors)
+        doc = copy.deepcopy(cell)
+        doc["level"]["arena"]["frame"] = "nope"
+        report = core.validate(doc)
+        self.assertTrue(any("must be 'own' or 'shared'" in e for e in report.errors), report.errors)
+        importer = (ROOT / "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/LevelBuild/"
+                           "PlacementImporter.cs").read_text(encoding="utf-8")
+        self.assertIn("FrameRuleViolation(", importer)
+        self.assertIn("public string frame;", importer)
+
+    def test_the_csharp_budget_test_lists_exactly_the_wired_cells(self):
+        source = SANDBOX_TESTS_CS.read_text(encoding="utf-8")
+        listed = re.findall(r'"(C\d\d)"', source[source.index("WiredCells"):
+                                                  source.index("LevelsRepoRelative")])
+        self.assertEqual(sorted(listed), sorted(c["id"] for c in self.cells))
 
 
 def method_body(source, signature):

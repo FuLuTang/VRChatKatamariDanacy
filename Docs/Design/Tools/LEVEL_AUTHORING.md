@@ -334,7 +334,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 
 | 键 | 必填 | 含义 |
 |---|---|---|
-| `arena` | ○ | `{"id": "<格名>"}`：声明这份文档是**一格 arena**（多格测试场一次只注册一格）；`id` 必须等于所在目录名，Unity 导入器据此把几何放进 `LevelContent/<id>/` 并绑定该对象上的 `LevelArenaHost`；该格的 `box`/`ramp` 必须落在 `level.bounds` 内。 |
+| `arena` | ○ | `{"id": "<格名>"}`：声明这份文档是**一格 arena**（多格测试场一次只注册一格）；`id` 必须等于所在目录名，Unity 导入器据此把几何放进 `LevelContent/<id>/` 并绑定该对象上的 `LevelArenaHost`；该格的 `box`/`ramp` 必须落在 `level.bounds` 内。可选 `"frame": "shared"`：这一格站在共享外框上（物理测试场的沙盒），文档里**不得**有 `role=ground` / `role=boundary`（地面和外围墙由外框那份文档提供）；不写或写 `"own"` 仍是「恰好一个 `role=ground`」。 |
 
 `arena` 只用于多格测试场的单格文档（见 [physics_test_field/README.md](../Levels/physics_test_field/README.md) 与 `placement_core._check_arena`）；单关文档不写。
 

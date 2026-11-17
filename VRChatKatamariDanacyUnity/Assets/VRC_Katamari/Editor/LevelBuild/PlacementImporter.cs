@@ -239,6 +239,43 @@ namespace VRCKatamari.Editor.LevelBuild
         public class ArenaBlock
         {
             public string id;
+            /// <summary>
+            /// "own" (or absent): the document carries its own floor, exactly one role=ground.
+            /// "shared": the cell stands on a shared frame (the physics test field's sandbox) and
+            /// carries no role=ground and no role=boundary; see <see cref="FrameRuleViolation"/>.
+            /// </summary>
+            public string frame;
+        }
+
+        public const string FrameOwn = "own";
+        public const string FrameShared = "shared";
+
+        /// <summary>
+        /// The ground/boundary rule for a document's <c>level.arena.frame</c>, or null when it
+        /// holds. Pure (no scene, no asset), so the EditMode test can pin it, and the same rule
+        /// as <c>placement_core._check_structures</c>.
+        /// </summary>
+        public static string FrameRuleViolation(string frame, int grounds, int boundaries)
+        {
+            if (string.Equals(frame, FrameShared, StringComparison.Ordinal))
+            {
+                if (grounds == 0 && boundaries == 0) return null;
+                return "level.arena.frame is 'shared': this cell must not carry role=ground or " +
+                       "role=boundary (found ground=" + grounds + " boundary=" + boundaries +
+                       "); the shared frame owns them";
+            }
+
+            if (!string.IsNullOrEmpty(frame) && !string.Equals(frame, FrameOwn, StringComparison.Ordinal))
+            {
+                return "level.arena.frame '" + frame + "' must be 'own' or 'shared'";
+            }
+
+            if (grounds != 1)
+            {
+                return "structures must contain exactly one role=ground (found " + grounds + ")";
+            }
+
+            return null;
         }
 
         [Serializable]
@@ -970,9 +1007,12 @@ namespace VRCKatamari.Editor.LevelBuild
                 }
             }
 
-            if (grounds != 1)
+            string frameProblem = FrameRuleViolation(
+                doc.level != null && doc.level.arena != null ? doc.level.arena.frame : null,
+                grounds, planes);
+            if (frameProblem != null)
             {
-                report.Error("structures must contain exactly one role=ground (found " + grounds + ")");
+                report.Error(frameProblem);
                 ok = false;
             }
 

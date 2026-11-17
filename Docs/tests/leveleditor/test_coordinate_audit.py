@@ -116,19 +116,19 @@ class StoryLevelCoordinateAudit(unittest.TestCase):
 
 
 class PhysicsCellCoordinateAudit(unittest.TestCase):
-    def test_c01_is_a_cell_with_its_own_ground_and_walls(self):
+    def test_c01_is_a_cell_on_the_shared_frame(self):
         doc = doc_at(CELL)
         self.assertEqual(doc["level"]["id"], "physics_test_field/C01")
         self.assertEqual(doc["level"]["arena"]["id"], "C01")
+        self.assertEqual(doc["level"]["arena"]["frame"], "shared")
         self.assertEqual(len(doc["props"]), 0)
+        # no floor of its own: the floor is the shared frame's (y = 0), found by the fallback
         self.assertEqual(core.ground_level(doc), 0.0)
-        ground = structure(doc, "ground")
-        self.assertAlmostEqual(ground["center"][0], -10.5, places=6)
-        self.assertAlmostEqual(ground["center"][2], 11.0, places=6)
+        self.assertEqual([s for s in doc["structures"] if s["role"] in ("ground", "boundary")], [])
         ramp = structure(doc, "C01_ramp")
         self.assertAlmostEqual(core.structure_slope_deg(ramp), 5.0, delta=0.05)
         self.assertAlmostEqual(core.structure_top_plane(ramp)[0][1], 0.9962, places=3)
-        self.assertEqual(len(doc["structures"]), 7)  # ground + 4 walls + ramp + landing
+        self.assertEqual(len(doc["structures"]), 2)  # ramp + landing
 
 
 if __name__ == "__main__":

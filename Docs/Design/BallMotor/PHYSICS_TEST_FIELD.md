@@ -2,17 +2,17 @@
 
 > 状态：`PROVISIONAL_NOT_TESTED`（文中所有米数、角度、容量都是本项目暂定值，不是原作测量值）。
 > **地图 0 就是手感测试场**：`Labs/PhysicsTestField/PhysicsTestField.unity`。以后坡滑、撞墙、爬坡卡死这类手感问题都在这里测，owner 也在这里自己试（§0.2）。接触模型只有一条（StepContactV2），本场只有这一套判据。
-> 它有两种用法：① **脚本 run**：驱动器切格、设球径、按时间线开球、自动判 PASS/FAIL 或只记录诊断读数；② **自己滚**：打开 walk-around 后球在哪一格的 pad 上，哪一格就变成实心（§6.7）。
+> 地图 0 只有一种用法的场地：**手动沙盒**。一大块平地上摆着所有测试板，球出生在南排前方，自由滚到任意一块去试（§0.2、§6.7）；板之间没有墙、没有台垫，只有最外面一圈边界。驱动器还能按时间线对某一格跑**脚本 run**：设球径、开球、自动判 PASS/FAIL 或只记录诊断读数（§6.1），脚本 run 不改变注册，只把球传到那一格的起点。
 > 数据分两份，各管一件事：**几何**在 `Docs/Design/Levels/physics_test_field/<cell>/placement.json`（每格一份，`levelbuild check` 是门）；**判据 / 驱动时间线 / 球径 / 起点 / 激活矩形**在 [physics_test_field.json](physics_test_field.json)（schema_version=2）。跨文件的一致性由 `Docs/tests/levelbuild/test_physics_test_field_cells.py` 守。
-> 已入库：13 个已接线格（C01 C03 C05 C06 C08 C09 C10 C13 C14 + 2026-11-17 的 C25 C26 C27 C28，共 90 条判据）、4 个地形设计格（C21–C24，未接线）、`Labs/PhysicsTestField/` 三个运行时组件、编辑器判据导入器。
+> 已入库：13 个已接线格（C01 C03 C05 C06 C08 C09 C10 C13 C14 + 2026-11-17 的 C25 C26 C27 C28，共 90 条判据）、沙盒外框 `SANDBOX`（一块大地面 + 4 张外围边界平面）、4 个地形设计格（C21–C24，未接线）、`Labs/PhysicsTestField/` 三个运行时组件、编辑器判据导入器。
 > 引用约定：`Runtime/…`、`Labs/…`、`Editor/…`、`Tests/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；`Docs/…`、`Tools/…` 相对仓库根。
 
 ---
 
 ## 0. 现状
 
-1. **13 个已接线格、4 个地形设计格、12 个待迁格、10 条仅设计行。** 已接线格分四行摆在场景里：北排（z≈11）C01 5° / C03 25° / C05 45° / C13 台面；中排（z≈0）C08 / C09 / C10 台阶 + C06 50° 板；南排（z≈-10）C14 薄板；最南的 2026-11-17 一行（z=-33）C25 墙 + 顶棚 / C26 / C27 / C28 缓坡。C21–C24 地形格排在 z=-22，尚未接线。
-2. **容量决定了一格一注册。** 电机上限静态盒 64 / 平面 8 / 斜面 4，一整场放不下，所以切格 = `motor.ClearObstacles()` → 目标格 `LevelArenaHost.Reapply()`（§3）。
+1. **13 个已接线格、4 个地形设计格、12 个待迁格、10 条仅设计行。** 已接线格摆成 4 排（§2.2）：北排（z≈11）C01 5° / C03 25° / C05 45° / C13 台面；中排（z≈0）C08 / C09 / C10 台阶 + C06 50° 板；C14 薄板（z=-10）；南排（z=-33）C25 墙 + 顶棚 / C26 / C27 / C28 缓坡。C21–C24 地形格的位置（z=-22）留空，尚未接线。
+2. **一种注册、一份代码。** 电机静态 OBB 容量 256、平面 8。13 格的板合计 **21 个 OBB**，沙盒另加 1 个地面平面 + 4 张外围平面，一次放得下（§3）。格的 placement 里只有测试板（没有台垫、没有围墙，`level.arena.frame = "shared"`）；地面和外围墙只在 `SANDBOX` 那份文档里。注册入口是 `LevelArenaHost.Register(clearFirst, boxIdOffset, rampIdOffset)`：外框清表并登记，每格追加。
 3. **判据落在已有 getter 上。** 读数是电机的公开 getter 加驱动自己每帧的采样；每步成本计数器没有，`readout=counter` 的判据报 `BLOCKED_UNTIL_P4`（§6.4）。
 4. **球径设定不改运行时代码**：喂体积 → 读直径 → 收敛（§8）。
 5. **三种判据**：判 PASS/FAIL 的、按球径给期望的、**只记录**的诊断（`op=record`，§5.3）。爬坡卡死这类还没定论的现象用诊断行，不在没有结论时判红绿。
@@ -21,27 +21,31 @@
 
 ### 0.1 编辑器与运行时组件
 
-`Labs/PhysicsTestField/` 的 `PhysicsTestCell` / `PhysicsTestFieldDriver` / `LabBallSizeSetter` 与 `Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs`；`LevelArenaHost` 有注册挂起接缝（`SuspendRegistration` / `ResumeRegistration`）。电机读数 getter 见 §6.4。
+`Labs/PhysicsTestField/` 的 `PhysicsTestCell` / `PhysicsTestFieldDriver` / `LabBallSizeSetter` 与 `Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs`；`LevelArenaHost` 有注册挂起接缝（`SuspendRegistration` / `ResumeRegistration`）和参数化的注册入口 `Register`（`Reapply()` 就是 `Register(true, 0, 0)`，其他关卡照旧用它）。电机读数 getter 见 §6.4。
 
 ### 0.2 怎么在地图 0 里试（给 owner）
 
-**前提**（Unity 操作员已装配，见 §9.5）：球是场景里的起始球（约 0.30 m），驱动器的 `walkAroundActivation` 打开，电机的 `rampTangentialGravityScale = 1`。**球站在哪一格的 pad 上，哪一格才是实心的**（站稳 0.25 s 后切换）；别的 pad 看得见但摸不到，球会从它们里面穿过去，这是设计，不是坏了。每格的地面都是无限平面，球不会掉出场。
+**前提**（Unity 操作员已装配，见 §9.5）：电机的 `rampTangentialGravityScale = 1`。Play 之后球出生在**南排前方** (0, -39.5)，朝北（+Z）。脚下是一整块 32 × 61 m 的大平地（x -16…16，z -42…19），所有测试板都立在上面，**平地上除了测试板什么都没有**；外围一圈边界（看不见，物理上拦得住球）。**所有板同时是实心的**，球在板与板之间可以连续滚。每块板的起跑标记处立着一块文字牌（`C09 / step 0.075 m`，ASCII，1.4 m 高），从南面读，牌在板前 1–3 m。起始球径约 0.30 m；要看 0.60 / 1.10 / 2.20 的球，让操作员用脚本 run（`BeginCellAtDiameter("C14", 0.60f)`；球会被传到那一格的起点，run 结束后停在原地）。
 
-格的坐标：列 x = -10.5 / -3.5 / 3.5 / 10.5，每格 pad 6 × 9 m（C01 和 C03 那一行 10 m）。
+出生视角（面朝北）：左前方是 C25 的墙和顶棚，前方左右各一条坡 C26 / C27（你站在它们之间 3 m 宽的通道里），右前方是 C28，再往北隔着一大片空地，一排排板依次排开：C14 薄板、C08–C10 台阶 + C06 斜板、最远一排 C01–C13 四个坡 / 台面。
 
-| 格 | 位置（x, z） | 做什么 | 看什么 |
-|---|---|---|---|
-| C25 墙 + 顶棚 | (-10.5, -33) | 朝 +Z 满推，让球进顶棚下、顶住墙；顶几秒后松手；再拉后退 | 球贴墙往上蹭、被顶棚（离地 0.5 m）压住：**会不会一直挂着不动**（卡死复现）？松手后能不能自己落下来？倒着推能不能退出来？要看精确数字，让操作员开 `climbDiagnosticsEnabled`（§9.5.2），Console 每秒一行 `[BallMotor] climb`：`climbActive=True` + `actualSpeed≈0` 就是「通道在爬但球没动」 |
-| C26 缓坡 2° | (-3.5, -33) | 先在平地停住，再推上坡，松手停下 | 2° 是坡滑规则的下限，**不该明显下滑**；平地上绝对不动 |
-| C27 缓坡 5° | (3.5, -33) | 同上，上坡后松手，再把球转成**横着对坡**（原地转 90°） | 停住约 0.3 s 后开始往坡下滑；推着不动时不额外下滑；平地不滑。朝向沿坡时 5° 滑不动（前向滚动阻力 1.3 m/s² 比 g·sin5°=0.86 大），横着才看得到，这是现行参数的结果 |
-| C28 缓坡 10° | (10.5, -33) | 同 C27 | 停住约 0.3 s 后开始下滑，横向终速约 0.6 m/s；沿坡朝向时也会慢慢滑（g·sin10°=1.70 > 1.3） |
-| C03 25° 斜板 | (-3.5, 11) | 推上坡中间松手 | 静止 0.3 s 后顺坡滑下（旧「停在坡上不动」已不是目标） |
-| C01 5° / C05 45° / C13 台面 | (-10.5, 11) / (3.5, 11) / (10.5, 12) | 沿 +Z 满推上坡 | 坡脚没有隐形墙；45° 接缝能不能上台面；C13 从北缘掉下去是逐帧落地不是瞬移 |
-| C08 / C09 / C10 台阶 | (-10.5 / -3.5 / 3.5, 0) | 沿 +Z 满推 | 0.05 / 0.075 / 0.10 m 都低于球半径 0.15 m，应当直接滚上去，不被挡 |
-| C06 50° 板 | (10.5, 0) | 满推 | 慢爬到上限后滑回，不卡死；越过板面 |
-| C14 薄板 | (-10.5, -10) | 满推 | 0.028 m 薄板直接碾过，不减速 |
+**走法**：每块板的朝向都是 +Z（北），所以从南面的牌走近、朝北满推。坐标是牌的位置（板在牌北面）；列 x = -10.5 / -3.5 / 3.5 / 10.5。
 
-只有起始球径可手动试；要看 0.60 / 1.10 / 2.20 的球，让操作员用脚本 run（`BeginCellAtDiameter("C14", 0.60f)`）。
+| 排（z） | 格 | 位置（x, z） | 做什么 | 看什么 |
+|---|---|---|---|---|
+| 南排 z=-37（板 z -35…-28.5） | C25 墙 + 顶棚 | (-10.5, -35.2) | 朝 +Z 满推，让球进顶棚下、顶住墙；顶几秒后松手；再拉后退 | 球贴墙往上蹭、被顶棚（离地 0.5 m）压住：**会不会一直挂着不动**（卡死复现）？松手后能不能自己落下来？倒着推能不能退出来？要看精确数字，让操作员开 `climbDiagnosticsEnabled`（§9.5.2），Console 每秒一行 `[BallMotor] climb`：`climbActive=True` + `actualSpeed≈0` 就是「通道在爬但球没动」 |
+| | C26 缓坡 2° | (-3.5, -37) | 先在平地停住，再推上坡，松手停下 | 2° 是坡滑规则的下限，**不该明显下滑**；平地上绝对不动 |
+| | C27 缓坡 5° | (3.5, -37) | 同上，上坡后松手，再把球转成**横着对坡**（原地转 90°） | 停住约 0.3 s 后开始往坡下滑；推着不动时不额外下滑；平地不滑。朝向沿坡时 5° 滑不动（前向滚动阻力 1.3 m/s² 比 g·sin5°=0.86 大），横着才看得到，这是现行参数的结果 |
+| | C28 缓坡 10° | (10.5, -37) | 同 C27 | 停住约 0.3 s 后开始下滑，横向终速约 0.6 m/s；沿坡朝向时也会慢慢滑（g·sin10°=1.70 > 1.3） |
+| 薄板 z=-13 | C14 薄板 | (-10.5, -13) | 满推 | 0.028 m 薄板直接碾过，不减速 |
+| 中排 z=-3.5（板 z≈0） | C08 / C09 / C10 台阶 | (-10.5 / -3.5 / 3.5, -3.5) | 沿 +Z 满推 | 0.05 / 0.075 / 0.10 m 都低于球半径 0.15 m，应当直接滚上去，不被挡 |
+| | C06 50° 板 | (10.5, -3.5) | 满推（板在 z=-2…-1.3） | 慢爬到上限后滑回，不卡死；越过板面 |
+| 北排 z≈7（坡脚 z=7…7.6） | C01 5° / C03 25° / C05 45° | (-10.5 / -3.5 / 3.5, 6.8–7.1) | 沿 +Z 满推上坡；C03 在坡中间松手 | 坡脚没有隐形墙；45° 接缝能不能上台面；C03 静止 0.3 s 后顺坡滑下 |
+| | C13 台面 | (10.5, 6.5) | 满推上 11.31° 坡、过台面、从北缘（z=14）掉下去 | 从北缘掉下去是逐帧落地不是瞬移 |
+
+沙盒里不同格的板之间的通道至少 2.5 m（最宽的预设球径 2.2 m 也过得去），最近的一对是 C05 与 C13（2.5 m）；板与外围墙至少 3.0 m；出生点离最近的板 4.5 m。这三个数由 Python 守卫（`SandboxLayout`）按 placement 重算。
+
+**注意**：大球（0.60 以上）进不了 C25 的顶棚下（净高 0.5 m），那一格只对 0.30 球有意义。
 
 ---
 
@@ -72,26 +76,37 @@
 |---|---|
 | 引擎/单位 | Unity 2022.3.22f1；米；左手系；`+Y` 上、`+Z` 北、`+X` 东 |
 | 地面 | 一张解析平面 `n = (0,1,0)`、`offset = 0`（`motor.SetGroundPlane` 后的等价物） |
-| 边界 | 4 张平面 `x = ∓44`、`z = ∓44`（`AddPlane`，只当墙、永不当支撑） |
-| 场界 | **紧凑网格 27 m × 30.5 m**（4 列 × 3 行，1–1.5 m 走道）；`level.bounds = [[-14,-15],[14,16.5]]` |
+| 边界 | 沙盒：4 张外围平面 `x = ∓16`、`z = -42 / 19`（`SANDBOX` 的 `AddPlane`，只当墙、永不当支撑）；格自己没有墙 |
+| 场界 | 格的足迹占 x -13.5…13.5、z -37.5…16；沙盒外框 x -16…16、z -42…19（32 × 61 m）；单格 `level.bounds = [[-14,-15],[14,16.5]]`（C25–C28 为 [[-14,-40],[14,16.5]]） |
 | 朝向 | `heading 0 = +Z`，`90 = +X`，`180 = -Z`，`-90 = -X`。**依据代码**：`BallMotionMath.TryStep` 里 `forwardX = sin(h)`、`forwardZ = cos(h)`，`lateral = (cos h, 0, -sin h)` |
-| 起点 | `(0, 0.15, 0)`、`heading 0`、`D = 0.30`（0.15 = 起始球半径） |
+| 起点 | 沙盒出生点 `(0, 0.15, -39.5)`、`heading 0`（朝北）、`D = 0.30`（0.15 = 起始球半径）；每格另有自己的起点（脚本 run 用） |
 
 
 ### 2.2 布局（俯视图）
 
-> 俯视图（不入库）由 `Tools/levelbuild/blender/render_views.py` 从各格 placement 渲染。**placement 才是权威**；下表是排布。每格有自己的 pad（6×9 或 6×10 m）+ 4 面 0.4 m 矮边界，相邻 pad 留 1–1.5 m 走道（最南一行与地形行之间留 2 m）。
+> 俯视图（不入库）由 `Tools/levelbuild/blender/render_views.py` 从各格 placement 渲染。**placement 才是权威**；下表是排布。每格的足迹（`footprint`，6×9 或 6×10 m）是它在沙盒里的区域，相邻足迹留 1–1.5 m；足迹不画出来，场上只有测试板。
 
 | 排（z） | 列（x） | 内容 | 进深 |
 |---|---|---|---|
 | 北 `z ∈ [6, 16]` | -10.5 / -3.5 / 3.5 / 10.5 | C01 5°、C03 25°、C05 45°、C13 台面 + 11.31° 坡 | 10 m（C01 的 6.86 m 水平坡长最深） |
 | 中 `z ∈ [-4.5, 4.5]` | -10.5 / -3.5 / 3.5 / 10.5 | C08 0.05、C09 0.075、C10 0.10、C06 50° 板 | 9 m |
 | 南 `z ∈ [-14.5, -5.5]` | -10.5（其余预留） | C14 0.028 薄板 | 9 m |
-| 地形 `z ∈ [-26.5, -17.5]` | -10.5 / -3.5 / 3.5 / 10.5 | C21 台阶 / C22 沟 / C23 隧道 / C24 路缘（未接线） | 9 m |
+| 地形 `z ∈ [-26.5, -17.5]` | -10.5 / -3.5 / 3.5 / 10.5 | C21 台阶 / C22 沟 / C23 隧道 / C24 路缘（未接线；沙盒里这一带是空地） | 9 m |
 | 最南 `z ∈ [-37.5, -28.5]` | -10.5 / -3.5 / 3.5 / 10.5 | C25 墙 + 顶棚、C26 2°、C27 5°、C28 10° | 9 m |
 
-全场已接线部分 28 m × 53.5 m。**格与格是真的分开的**：只有当前格向 motor 注册（`LevelArenaHost.SuspendRegistration`），别的格看得见但物理上不存在。
+沙盒（`SANDBOX`）：大地面 x -16…16、z -42…19，外围 4 张平面在它的边上；出生点 (0, -39.5) 朝北。各板的位置：
 
+| 板 | x 范围 | z 范围 | 顶高 |
+|---|---|---|---|
+| C25 顶棚 / 墙 | -12.5…-8.5 | -34…-32 / -32…-31.6 | 0.70（底 0.50）/ 2.00 |
+| C26 / C27 / C28 坡 + 平台 | -5.5…-1.5 / 1.5…5.5 / 8.5…12.5 | -35…-28.5 | 0.19 / 0.48 / 0.97 |
+| C14 薄板 | -12…-9 | -11.5…-8.5 | 0.028 |
+| C08 / C09 / C10 台阶 | -12.5…-8.5 / -5.5…-1.5 / 1.5…5.5 | -0.75…0.75 | 0.05 / 0.075 / 0.10 |
+| C06 50° 板 | 8.5…12.5 | -2.0…-1.34 | 0.60 |
+| C01 / C03 / C05 坡 + 台面 | -12.5…-8.5 / -5.5…-1.5 / 1.5…5.5 | 7.6…15.96 / 7.6…10.39 / 7.6…9.70 | 0.60 |
+| C13 坡 + 台面 | 8…13 | 7…14 | 0.60 |
+
+全场已接线部分 27 × 53.5 m。**所有板同时是实心的**，没有任何只看得见、摸不到的东西：每格 placement 没有台垫和围墙，`PlacementImporter` 就不会为它们建可见物体。
 
 ### 2.3 场景对象
 
@@ -103,6 +118,8 @@
 | `Input` | `DesktopMoveInput`（人玩）；脚本运行时由驱动器直接 `SetMoveAxes` | `PhysicsTestField.unity` |
 | `PickupField` | `PickupFieldHost`：**唯一**的挡路写入者，也是道具行宿主（C18/C19 才需要；`PhysicsTestField.unity` 当前没有挂） | 待加 |
 | `LevelContent/<cellId>` | 受管根（由 `PlacementImporter` 建）：该格的 `Props/`、`Structures/`，**并挂该格唯一的 `LevelArenaHost`** | 新（工具建） |
+| `LevelContent/SANDBOX` | 沙盒外框（`SANDBOX/placement.json`）：大地面的可见网格由 `PlacementImporter` 自动生成（`ground` 的 `Visual` 子物体，尺寸撑到外围平面），4 张外围平面是 `wall_*` 标记；**挂一个 `LevelArenaHost`**，驱动器的 `sandboxFrame` 指向它 | 新（工具建 + 操作员加组件） |
+| `Cells/<cellId>/SandboxLabel` | 每格的世界空间文字牌（`TextMesh`，判据导入器建） | 新（工具建） |
 | `Cells/C14` … | 每格一个空物体，挂 `PhysicsTestCell`（引用上面那个 `LevelArenaHost`）。**它不放进 `LevelContent`**：受管子树每次导入都可能被删改，而组件不能跟着消失 | 新（手工加组件） |
 | `Driver` | `PhysicsTestFieldDriver`（§7） | 新（手工加组件） |
 | `SizeConsole` | `LabBallSizeSetter`（§8）+ 4 个 uGUI 按钮（可选） | 新 |
@@ -111,57 +128,45 @@
 
 ---
 
-## 3. 容量预算：为什么必须「一格一注册」
+## 3. 注册与容量：一次放下
 
 ### 3.1 电机的上限
 
 | 容量 | 值 | 来源 |
 |---|---|---|
-| 平面 | 8 | `MaxPlaneCount`（现状） |
-| 静态盒 | 64 | `MaxBoxCount`（对齐 v2 的 `budget.boxes`；超出的第 65 个 `AddBox` 显式返回 false 并 latch 原因） |
-| 斜面 | 4 | `MaxRampCount`（P3 已进树：`AddRamp` / `LevelArenaHost.rampBoxes`） |
-| 挡路盒 | 6 | `MaxBlockingBoxCount`（现状） |
-| 道具支撑 | 6 | `MaxSupportPropCount`（P2 已实现） |
-| 每步接触 | 4 | `ContactCapacity`（现状） |
+| 静态 OBB（盒、坡板、弯坡段） | 256 | `ContactTuning.MaxStaticObbCount`；`LevelArenaHost` 全部用 `AddObb` 登记，超出显式拒绝并计数（`obbOverflow`） |
+| 平面（边界墙） | 8 | `MaxPlaneCount`；超出 latch `overflowCount`，只有 `Start` 能清 |
+| 地面 | 1 张解析平面 | `SetGroundPlane`，重复设置同一张是幂等的 |
+| 挡路盒 / 道具支撑 / 每步接触 | 6 / 6 / 4 | 现状 |
 
-### 3.2 一张图装不下的算术
+### 3.2 全场的算术
 
-| 资源 | 全场合计（同时注册） | 上限 | 结论 |
-|---|---|---|---|
-| 斜面 | **8 次登记**（C01–C06 六条 + C13 + C20；其中 C06 应被拒 → 实际登记 7 条） | 4 | **超 100%**（7 > 4） |
-| 静态盒 | **24**（6 坡顶台 + C06 兜底 1 + 6 台阶 + C13 1 + C14 1 + C15 1 + C16 2 + C17 4 + C20 2） | 8 | **超 200%**（24 > 8） |
-| 平面 | 4 | 8 | 够 |
-
-**超容量不是「小一点」而是「坏掉」**：`AddBox` / `AddPlane` 超容量会**丢弃并 latch** `overflowCount`，而这个 latch 只有 `Start` 能清（`SignalOverflow`）。所以「先全注册、超了再说」会得到一个**永久带病的会话**，后面所有格的判据都不可信。
-
-### 3.3 结论：一格一注册
-
-```
-切格（driver）：
-  1. motor.ClearObstacles()            // 清平面/盒/斜面 + 连带清挡路集（现状语义）
-  2. targetCell.ApplyRegistration()    // = levelArenaHost.Reapply()：地面 + 目标格的盒/斜面
-  3. pickupHost.ResetField()           // 道具回原位；清候选、挡路、径向代理
-  4. 记基线：overflow / saturated / absorbed / blockingCount
-```
-
-- **base 只留「地面平面 + 4 面边界墙」**（1 平面表项 + 4 平面 = 5/8；盒 0/8）。切到任何格时预算都够：最坏的已建格 C01/C03/C05/C13 用 1 盒 + 1 斜面，C06 用 1 盒（50° 板当兜底墙）。
-- **切换触发**：`active = argmin 到各格足迹的距离`，外扩 `activate_margin_m = r + 2.0`（球在几何出现前 2 m 就已经看见它），并要求连续 0.25 s 稳定（去抖）。球离开所有足迹 1.0 s 后回落到 base。
-- **这就是「球可以从中央起点滚到任一格」的实现方式**：中央起点在 C00 足迹内，滚出 6 m 后进入 base，接近某格 2 m 时该格激活。**代价**：任意时刻只有正在接近的那一格是实心的——这一条要写进「怎么用这张图」的说明里，不然第一次用的人会以为别的格坏了。
-- **已知成本**：每次切格 `ClearObstacles` + `Reapply` 各重建一次扫掠数组（`new Vector3[]` 一对，TERRAIN_SUPPORT §3.5 已列这个 GC 风险）。本场一个完整 pass 的切格 / 重置，正好是**测这个成本的最小场景**：把它变成 P4 的 profiler 项，而不是猜。
-- **已知风险**：切格瞬间新格的盒出现在球脚下 → 走 `SweepMath` 的初始穿透分支，可能被推一下。两个缓解：① 预激活带 2 m；② 传送到格起点时**先切格、再传送**（顺序不能反）。
-
-### 3.4 一格一注册已经落地：每个 arena 必须自带地面 + 边界
-
-`LevelArenaHost.Reapply()` 的实现是 `motor.ClearObstacles()` → `Setup()`，而 `ClearObstacles` 会把**全局**的平面表清零。所以切格那一刻，上一个 arena 的地面与 4 面边界墙一起消失，新的 arena 必须把它们重新登记上。这不是「多花 5 个槽位」，而是**每个格必须是一份完整 arena**：
-
-| 每个 cell 的 placement 里必须有 | 数量 | 原因 |
+| 资源 | 沙盒（全部同时注册） | 上限 |
 |---|---|---|
-| `role=ground` | 1 | `SetGroundPlane` 是支撑兜底；不登记就没有地面 |
-| `role=boundary` | 4 | 切格清空平面表；少一面球就能滚出这一格的 pad |
-| `role=box` | 该格 0–8 | 9 格各 1（C06 的 50° 板也是这 1 个盒） |
-| `role=ramp` | 该格 0–4 | C01/C03/C05/C13 各 1 |
+| 静态 OBB | **21**（C01 2、C03 2、C05 2、C13 2、C06 1、C08 1、C09 1、C10 1、C14 1、C25 2、C26 2、C27 2、C28 2；每个有坡的格 = 坡板 + 平台，C25 = 墙 + 顶棚） | 256 |
+| 外围平面 | 4（`SANDBOX` 的 4 张） | 8 |
+| 格自己的地面 / 围墙 | 0（格的 placement 里没有） | — |
 
-代价写在明处：4 面墙的**标记对象**在场景里按格重复（9 格 36 个空物体），它们是 `Transform` 不是碰撞体，所以只为「每个 arena 自洽」付一点层级噪音。**不要**试图让某格引用 `base` 的地面/墙——那只在「最后注册的那个 host 拥有所有平面」的规则下看起来能用，一旦切格就自相矛盾。
+就算把外围墙和地面都当成 OBB 登记，也只有 21 + 4 + 1 = 26。Python 守卫 `SandboxLayout.test_the_whole_sandbox_fits_the_motor_tables` 按 placement 重算，EditMode `SandboxRegistrationTests.TheWholeSandboxFitsTheObbTableAndThePlaneTable` 在 Unity 里再数一遍。
+
+### 3.3 一份注册
+
+```
+LevelArenaHost.Register(clearFirst, boxIdOffset, rampIdOffset)
+  Reapply()  ==  Register(true, 0, 0)        （其他关卡照旧用它）
+
+手动沙盒（驱动器 EnterSandbox，唯一的注册）：
+  1. 外框 SANDBOX.Register(true, 0, 0)：ClearObstacles → 地面 + 4 张外围平面
+  2. 每格 ApplySandboxRegistration(盒偏移, 坡偏移) == Register(false, 已登记的盒数, 已登记的坡数)：
+     不清、surface id 向后错开（格里没有地面、没有墙）
+  3. 重发 kind 白名单；球复位到出生点
+```
+
+- **格里没有台垫和围墙**：每格的 placement 只有测试板（`level.arena.frame = "shared"`，校验器要求这种文档**没有** `role=ground` / `role=boundary`）。导入器只给 placement 里有的结构建可见物体，所以场上不会有「看得见、摸不到」的墙或台垫；地面是 `SANDBOX` 的那一块。
+- **为什么 surface id 要错开**：接触求解按 surface id 去重，两个格各有一个 `1 + 0` 的盒，会被当成同一个实体。偏移后盒是 1…n、坡是 500…（`GetSupportKind()` 只认 500…503 为坡，沙盒里第 5 个以后的坡读数会是 1：纯诊断读数，不影响物理）。
+- **脚本 run**：不改注册，只把球传到那一格的起点（别格的板在 2.5 m 以外，仍然是实心的）。判据最初是在每格带围墙的隔离 pad 里写的，沙盒里它们的读数可能变，见 §9.5.3。
+- **容量检查**：`LevelArenaHost` 的上限检查按「电机里已有的 + 这个宿主要登记的」算，追加的宿主共用 256 个位置。
+- **已知成本**：进沙盒一次 `ClearObstacles` + 登记，重建一对扫掠数组（TERRAIN_SUPPORT §3.5 已列这个 GC 风险）。
 
 ---
 
@@ -578,8 +583,9 @@ gap = (center.y − GetSupportSurfaceHeightWorldM()) * GetSupportNormalWorld().y
 **实现方式**（`PhysicsTestFieldDriver`）：每个阶段占一帧段，在 `Update` 里推进，不阻塞。
 
 ```
-1. 切格：前一个格 arena.ReleaseArena()（SetActive(false)）→ 本格 ApplyRegistration()
-        （= SetActive(true) + LevelArenaHost.Reapply()：ClearObstacles → 地面 + 4 墙 + 本格盒）
+1. 注册：沙盒已经注册（所有格的板同时在电机里）；脚本 run 不切格、不清表，只把球传到本格起点（`TeleportTo`）。run 开始时若沙盒还没注册（`autoBeginAllOnStart`），先 `EnterSandbox()`
+
+
 2. 白名单：motor.SetAllowedKinds(kindWhitelist)（arena 自己那份只有本格道具的 kind，见 §9.5）
 3. 记基线：baseOverflow / baseSaturated / baseAbsorbed / baseAttached（latch 量只能读差）
 4. 复位球：motor.TryResetForNewRound("ptf-<cell>-<run>", (x, 碰撞半径+0.02, z), heading, out reason)
@@ -643,7 +649,7 @@ gap = (center.y − GetSupportSurfaceHeightWorldM()) * GetSupportNormalWorld().y
 | `GetLastRampRefusalSlopeDegrees()` | `public float GetLastRampRefusalSlopeDegrees()` | `…/KatamariBallMotor.cs:2261` | `ramp_refusal_slope_deg`（C06 `>=49`） |
 | `GetLastRampRefusalCode()` | `public int GetLastRampRefusalCode()` | `…/KatamariBallMotor.cs:2249` | 供人读（4 = slope too steep） |
 | `GetRampCapacity()` / `GetMaxSupportSlopeDegrees()` | `int` / `float` | `…/KatamariBallMotor.cs:2234, 2267` | 45° 等号的证据 |
-| `SuspendRegistration()` / `ResumeRegistration()` / `IsRegistrationSuspended()` | `void` / `void` / `bool` | `Runtime/Story/LevelArenaHost.cs:255, 261, 267` | 紧凑场的"可见但不注册"开关；`Update` 在 suspended 时返回，显式 `Reapply` 不受影响。EditMode 用例在 `Tests/EditMode/Story/StoryRoundControllerTests.cs` |
+| `SuspendRegistration()` / `ResumeRegistration()` / `IsRegistrationSuspended()` | `void` / `void` / `bool` | `Runtime/Story/LevelArenaHost.cs` | 沙盒里所有宿主启动时挂起（不自注册），由驱动器统一 `Register`；`Update` 在 suspended 时返回，显式 `Register` / `Reapply` 不受影响。EditMode 用例在 `Tests/EditMode/Story/StoryRoundControllerTests.cs` |
 
 仍然缺的（只有这些会报 `BLOCKED_UNTIL_*`）：
 
@@ -685,10 +691,17 @@ Docs/Evidence/PhysicsTestField/
 
 命名：`<cell>_D<3 位小数>_<camera>.png`，例如 `C10_D0.300_cam_steps.png`。日期目录：`Docs/Evidence/PhysicsTestField/<date>_pass<N>/`（一次完整 pass 一个目录，不覆盖上一次）。
 
-### 6.7 Walk-around：自己滚球（不是脚本 run）
+### 6.7 手动沙盒：自己滚球（不是脚本 run）
 
-驱动器在 `walkAroundActivation = true` 且没有脚本 run 时，每帧检查球心落在哪一格的 pad（足迹矩形）里，连续 `walkAroundDebounceSeconds`（0.25 s）稳定后：其余格 `ReleaseArena()`、该格 `ApplyRegistration()`（= `ClearObstacles` → `Reapply`）、重发 kind 白名单，打一行 `[ptf] walkAround cell=C27 registered`。球不会被挪动（新格的几何出现在它脚下，可能被推一下）；球不在任何 pad 里时保持上一格。脚本 run 显式切格，不受影响。
+驱动器 `Start` 把所有格和外框挂起（它们的宿主不得自注册），第一个电机就绪的 `Update` 里 `EnterSandbox()`：外框 `Register(true, 0, 0)`，再逐格 `ApplySandboxRegistration`，重发 kind 白名单，`TryResetForNewRound("ptf-sandbox-<n>", spawn, heading)` + `TeleportTo` 把球放到出生点（y = 半径 + 0.02），打一行：
 
+```
+[ptf] sandbox cells=13 boxes=14 ramps=7 obbs=21/256 obbOverflow=0 framePlanes=4 reset=ok spawn=(0.00,-39.50) hdg=0.0
+```
+
+（`boxes + ramps = 21`：7 个坡 + 14 个盒。）之后没有任何每帧工作：不再按球的位置切格，也没有第二种注册。脚本 run（`BeginAll` / `BeginCell` / `BeginCellAtDiameter`）不改注册，只把球传到那一格的起点再开跑，跑完球停在原地。
+
+出生点、外框链接和每格文字牌由判据导入器从判据文件的 `sandbox` 块和各格的 `sandbox_label` 写进场景（§9.3）。
 
 ---
 
@@ -714,7 +727,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private LabBallSizeSetter ballSize;
         [SerializeField] private PhysicsTestCell[] cells;        // 按 cells[] 顺序，index 稳定
         [SerializeField] private float[] presetDiametersM;      // 0.30/0.60/1.10/2.20
-        [SerializeField] private string[] kindWhitelist;        // 每次 Reapply 之后重发
+        [SerializeField] private string[] kindWhitelist;        // 沙盒注册之后重发
         [SerializeField] private Transform chaseCamera;         // 可选；null = 不动相机
         [SerializeField] private Vector3 chaseOffset;
 
@@ -775,7 +788,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         public float GetApproachM();
         public bool ContainsPoint(float x, float z, float marginM);
         public float DistanceToFootprint(float x, float z);
-        public void ApplyRegistration();                         // SetActive(true) + arena.Reapply()
+        // （没有 ApplyRegistration：沙盒是唯一的注册，见 ApplySandboxRegistration）
         public void ReleaseArena();                              // SetActive(false)
         public bool IsArenaActive();
         public int GetDriveCount();                              // + 每行 getter
@@ -789,7 +802,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
 **和草案不一样的三处，都是实现逼出来的**：
 
 1. **`checkReadouts[]` 是新增的数组**。草案只有 `readout` 这个字符串字段在 JSON 里；运行时每次判据都做一次字符串比较是没必要的，所以导入器把它烘成整数，驱动只按整数分支。
-2. **`Start()` 只允许第 0 格注册，其余 `ReleaseArena()` = `SuspendRegistration()`**。`LevelArenaHost` 在自己 `Update` 里注册，而电机的平面表是全局的——九个 arena 同时注册会在第一帧登记 9 个地面 + 36 面墙（8 个平面槽）并且 latch overflow。紧凑版让**所有格常显**（4×3 网格、1–1.5 m 走道），所以注册开关必须与可见性分开：`ReleaseArena()` 不再 `SetActive(false)`，而是 `arena.SuspendRegistration()`；`LevelArenaHost.Update` 在 suspended 时直接返回，**显式 `Reapply()` 不受影响**。第 0 格（pass 顺序首格，C14）不挂起，motor 就绪后由它自己的 `Update` 注册；切格时驱动先挂起其余格，再对目标格 `ResumeRegistration() + Reapply()`。`registrationSuspended` 默认 false，所以所有旧场景行为逐字节不变。
+2. **注册开关与可见性分开。** `LevelArenaHost` 在自己 `Update` 里注册，而电机的表是全局的——十三个 arena 同时自注册会让 surface id 全从 1 开始、地面重复登记。所有格常显，所以 `ReleaseArena()` 不 `SetActive(false)`，而是 `arena.SuspendRegistration()`；`LevelArenaHost.Update` 在 suspended 时直接返回，**显式 `Register` / `Reapply()` 不受影响**。`Start` 把所有格和外框挂起，由驱动器一次 `EnterSandbox()`。`registrationSuspended` 默认 false，所以所有旧场景行为逐字节不变。
 3. **没有 `fixedCameras[]` / `hudText` / `SelectNextCell()`**。不做相机切换与 HUD；证据靠日志和操作员截图（§9.5 的接线清单）。加它们是纯增量，不影响判据。
 
 ### 7.3 为什么判据是**并行数组**而不是「一个检查对象」
@@ -804,7 +817,7 @@ Idle → Switch(cell) → Size(D) → Settle → Drive → Report → (next D | 
 
 | 状态 | 做什么 | 失败时 |
 |---|---|---|
-| `Switch` | 关掉上一个 arena、开本格 arena 并 `Reapply()`、重发 kind 白名单、记 `ramp_count`、有 `rampProbe` 的格调 `motor.AddRamp` 取证拒绝、记基线、`TryResetForNewRound`、`ResetField`、`ballSize.SetDiameterM(D)` **一次**（本 run **唯一**的球径请求；复位已经把球重定价回基线，所以每 run 必须重新发请求，但只发一次）、打 `run=` 行 | `TryResetForNewRound` 的 reason ≠ 0 → `BLOCKED_UNTIL_reset` 并跳过本 run（换下一径/下一格） |
+| `Switch` | 沙盒还没注册则先注册；记 `ramp_count`、有 `rampProbe` 的格调 `motor.AddRamp` 取证拒绝、记基线、`TryResetForNewRound`、`TeleportTo` 本格起点、`ResetField`、`ballSize.SetDiameterM(D)` **一次**（本 run **唯一**的球径请求；复位已经把球重定价回基线，所以每 run 必须重新发请求，但只发一次）、打 `run=` 行 | `TryResetForNewRound` 的 reason ≠ 0 → `BLOCKED_UNTIL_reset` 并跳过本 run（换下一径/下一格） |
 | `Size` | `ballSize.SetDiameterM(D)`，每帧问 `IsConverged()`；**收敛后还要校验收敛是真的**：`abs(实测 D − 目标) ≤ SizeAppliedToleranceM`（常量 20 mm） | `HasFailed()` → `BLOCKED_UNTIL_size`（reason 来自设定器）；收敛但球不在目标径 → `reason=sizeNotApplied`；超 `sizeTimeoutSeconds` → `reason=timeout` |
 | `Settle` | 等 `settleSeconds` | —— |
 | `Drive` | 按 `drive[]` 的阶段推 axes，每帧采样，每 0.5 s 一条 `traj` | —— |
@@ -1015,8 +1028,8 @@ ALERT 行因此变成：
 
 **为什么是「每格一份 placement」，不是「一份 placement 按 zone 分格」**：
 
-1. **容量门就是按文件算的**。`levelbuild check` 的硬规则是 `planes ≤ 8 / boxes ≤ 8 / ramps ≤ 4`（`level.budget`）。一份文件装整场的格 = 二十多个盒，**天生红**；要让一份文件通过，就必须把预算改成「按 zone 数」，那等于把这条硬约束在第二个地方重新实现一遍——而它正是「一格一注册」存在的理由。
-2. **导入器是「一份文档 = 一个 arena host」**。`LevelArenaHost` 一次只能注册一组地面/墙/盒；每格一个 host 是需求（`Reapply()` 单格重注册）。一份文件 = 一份几何 = 一个 host，导入器不需要「按 zone 分组」这一层逻辑（分组一旦要按 `zone` 字段做，又得规定 zone 与 host 的命名规则、props 的归属……每一条都是新格式）。
+1. **容量门就是按文件算的**。`levelbuild check` 的硬规则是 `planes ≤ 8 / boxes ≤ 8 / ramps ≤ 4`（`level.budget`）。一份文件装整场的格 = 二十多个盒，**天生红**；要让一份文件通过，就必须把预算改成「按 zone 数」，那等于把这条硬约束在第二个地方重新实现一遍——所以一格一份文档。
+2. **导入器是「一份文档 = 一个 arena host」**。每格一个 host 是需求（沙盒逐格追加登记，各自有 `approach_m` / 台面足印 / 坡脚的烘焙）。一份文件 = 一份几何 = 一个 host，导入器不需要「按 zone 分组」这一层逻辑（分组一旦要按 `zone` 字段做，又得规定 zone 与 host 的命名规则、props 的归属……每一条都是新格式）。
 3. **schema 早就留好了位置**。`LEVEL_AUTHORING` §15.4 的原话就是「本 schema 是『一格一份 placement』（`level.id` + 目录），没有假设一场景一份」；`physics_test_field` 直接用这个位置。
 
 **为此对工具做的最小改动**（`Tools/levelbuild/` + `Editor/LevelBuild/`，都不是新格式）：
@@ -1040,7 +1053,7 @@ ALERT 行因此变成：
 | `motor_constants` | 全部常量 + 容量表（引用代码，不重定义） |
 | `diameters[]` | 4 档：`diameter_m / radius_m / step_limit_m / protrusion_cap_m / absorb_volume_limit_m3` |
 | `start` | 全场默认起点与起始球径（每格自己的起点在 `cells[].start_pose`） |
-| `registration_model` | `mode = one_cell_at_a_time`、切换规则、去抖、**`per_cell_arena`**、成本说明 |
+| `registration_model` | `mode = manual_sandbox`、唯一的注册、**`per_cell_arena`**、成本说明 |
 | `cells[]` | **已接线**的格（九个：C14/C09/C08/C10/C01/C03/C05/C06/C13），见下 |
 | `planned_cells[]` | 未迁移的格（含 C21–C24 地形格与 10 条仅设计行）：只有 `id/slug/name_zh/kind/stage/expectation/note`，**没有任何几何**，`wired=false` |
 | `cameras[]` | 8 个机位（数据） |
@@ -1069,7 +1082,7 @@ ALERT 行因此变成：
 | 工具 | 位置 | 做什么 | 不做什么 |
 |---|---|---|---|
 | `PlacementImporter`（含 cell 模式） | `Editor/LevelBuild/PlacementImporter.cs` | 把 `Levels/<field>/<cell>/placement.json` 变成 `LevelContent/<cell>/{Props,Structures}`，并填该格 arena host 的 `groundNormal/groundOffset`、`boundaryWalls`、`staticBoxes`、`allowedKinds` | 不建 `LevelArenaHost` 组件（U# 组件要 program asset + backing UdonBehaviour + `CopyProxyToUdon` 的 7 步，脚本硬建只会得到一个「看着接好、其实不跑」的组件）；不 `SaveScene` |
-| `PhysicsTestFieldCriteriaImporter` | `Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs`，菜单 `VRC Katamari/Level/Import Physics Test Field Criteria` | 读 `physics_test_field.json`，把 `start_pose / footprint / nominal_m / drive[] / checks[]` 烘进 `PhysicsTestCell` 的并行数组，把 `cells[] / presetDiametersM / kindWhitelist` 填进驱动；`approach_m` 由它**读 arena 的 `staticBoxes`** 算（起点沿 heading 第一个进入的盒），不是抄 JSON | 不建组件、不建场景、不 `SaveScene`；找不到组件时打印「该给哪个对象加什么」并跳过 |
+| `PhysicsTestFieldCriteriaImporter` | `Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs`，菜单 `VRC Katamari/Level/Import Physics Test Field Criteria` | 读 `physics_test_field.json`，把 `start_pose / footprint / nominal_m / drive[] / checks[]` 烘进 `PhysicsTestCell` 的并行数组，把 `cells[] / presetDiametersM / kindWhitelist` 填进驱动；`approach_m` 由它**读 arena 的 `staticBoxes`** 算（起点沿 heading 第一个进入的盒），不是抄 JSON；`sandbox` 块写进驱动（`sandboxFrame` ← `LevelContent/<arena_id>` 上的 `LevelArenaHost`、出生点与朝向）；每格 `sandbox_label` 建成 `Cells/<id>/SandboxLabel`（`TextMesh`，位置 = 格的 pad x + 起点 z，高 1.4 m） | 不建 U# 组件、不建场景、不 `SaveScene`（`TextMesh` 是原生组件，文字牌是它唯一建的对象）；找不到组件时打印「该给哪个对象加什么」并跳过 |
 
 > 这一层是**工具**，不是运行时。作用是「改 JSON/placement 一个数字 → 重跑两个导入 → 场景与文档与数据三者一致」，而 Udon 运行时永远只读序列化数组（`02_TECHNICAL_CONTRACTS.md` §4）。
 
@@ -1077,22 +1090,26 @@ ALERT 行因此变成：
 
 本场的几何单元（静态盒 + 斜面 + 平面）与 `Docs/Design/Maps/*/layout.json` 的 `structures[]`/`collision` 是**同一组概念**（`Tools/mapbuild/validate_map.py` 已经在数 8 盒 / 8 平面）。**没有**把测试场塞进 `layout.json`：测试场不是地图、不参与 `map_snapshot` 哈希、不跑 `validate_map.py`。但**几何格式现在是同一个** `katamari.placement/0`，所以 `levelbuild.py check/format/seat` 与 Blender 出图对测试场直接可用。
 
-### 9.5 给 Unity 操作员的装配清单（2026-11-17）
+### 9.5 给 Unity 操作员的装配清单（2026-11-17b：手动沙盒）
 
-> 每一步都是「操作员在 Windows 的 Unity 里做」，产物是场景与 U# 组件实例；场景 `.unity` 不手改。`PhysicsTestField.unity` 已有九格；本批新增 C25–C28 四格，并清理上一批删除 v1 / 惯性改动后的场景字段。
+> 每一步都是「操作员在 Windows 的 Unity 里做」，产物是场景与 U# 组件实例；场景 `.unity` 不手改。`PhysicsTestField.unity` 已有九格 + C25–C28 的装配（按上一版清单）；本批新增沙盒外框 `SANDBOX`，驱动器新增 `sandboxFrame` / `sandboxSpawn`，删除 `walkAroundActivation`；13 格的 placement 删掉了各自的台垫和围墙（**重导会自动把场景里旧的台垫和围墙删掉**，见步骤 2）。
 
 #### 9.5.1 装配步骤
 
-1. **拉到最新并等 U# 重编**。驱动与格的指纹是 `2026-11-17a`；Play 后第一行 `[ptf] build=2026-11-17a … cellRev=2026-11-17a` 才可信。
-2. **导入新格几何**：菜单 `VRC Katamari/Level/Import Placement (LevelContent)`（场景是 PhysicsTestField；菜单会认出 13 份 cell 文档并全部导入）。认成功：`[level] cell=C25 …`、`C26`、`C27`、`C28` 各一份报告，arena 那行说 "not wired"（`LevelContent/<cell>` 上还没有 `LevelArenaHost`，第一次属正常）。
-3. **给 `LevelContent/C25`、`/C26`、`/C27`、`/C28` 各加 `LevelArenaHost`**（U# 组件，按 [Labs/README.md](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/README.md) 的 7 步建；`motor` 手填 `MotorHost` 上的电机），再跑一次第 2 步，报告应变成：C25 `boxes=2, walls=4, ramps=0`；C26 / C27 / C28 `boxes=1, walls=4, ramps=1`。
-4. **加四个 `PhysicsTestCell`**：`Cells/C25`、`Cells/C26`、`Cells/C27`、`Cells/C28`（空物体 + 组件，物体名即 cellId）。
-5. **电机参数**（选 `MotorHost` 的 `KatamariBallMotor`）：
-   - **`rampTangentialGravityScale` 设为 1**（场景里现在是显式 0，坡滑规则不生效）；
-   - 场景里还有惯性改动前的显式旧值，必须一并改成现行默认，否则 C26–C28 读数不是现行手感：`accelerationMps2` 5 → 7.5、`brakingMps2` 8 → 6、`frictionPerSecond` 1.2 → 0.9（Inspector 里对这三项和 `rampTangentialGravityScale` 用「Revert to default」或直接填值；`rollingResistanceMps2` 1.3 / `lateralGripPerSecond` 2.0 / `rampRestSpeedMps` 0.05 / `rampRestSeconds` 0.3 / `rampSlideMinSlopeDegrees` 2 本来就是默认）。
-6. **驱动参数**（选 `Driver`）：`walkAroundActivation` 设为 true（owner 自己滚球用；跑矩阵时 `autoBeginAllOnStart` 另行决定）。
-7. **重导判据**：菜单 `VRC Katamari/Level/Import Physics Test Field Criteria`。认成功：`[ptf] criteria: cells=13 checks=90 missingCells=0 missingArenas=0 errors=0`，override 行数为 1（C06 `no_climb`）。没有 `skipDiameterMask` 相关报错（旧 cell 组件缺这个字段时先让 U# 重编）。
-8. **存场景，清理已删字段**：编辑器重新序列化后，场景里已删除的字段（电机上的 `growthSpeedFactor` / `growthTurnFactor` / `cubicMetersPerVolumeUnit` / `baselineVolumeUnits` / `maxCoreRadiusWorldM` / `absorbVolumeRatio` / `maxItemVolumeWorldM3` / `terrainSupportEnabled` 等，以及 `contactModelV2Enabled` 若还在）会在保存后消失；保存后看 `PhysicsTestField.unity` 的 diff 只应是这些字段被去掉、四个新格与 `skipDiameterMask` / `walkAroundActivation` 被加上，其余不动。
+1. **拉到最新并等 U# 重编**。驱动与格的指纹是 `2026-11-17b`；Play 后第一行 `[ptf] build=2026-11-17b … cellRev=2026-11-17b` 才可信。
+2. **导入沙盒外框几何**：菜单 `VRC Katamari/Level/Import Placement (LevelContent)`（场景是 PhysicsTestField；菜单会认出 14 份 cell 文档：13 格 + `SANDBOX`，全部导入）。认成功：新增一份 `[level] cell=SANDBOX …` 报告，arena 那行说 "not wired"（`LevelContent/SANDBOX` 上还没有 `LevelArenaHost`，第一次属正常）。**大地面的可见网格由这一步自动生成**：`LevelContent/SANDBOX/ground/Visual` 是一块撑到外围平面的 32 × 0.04 × 61 m 立方体（顶面 y=0）；4 张外围平面是 `wall_x_min / wall_x_max / wall_z_min / wall_z_max` 标记，按项目约定其 `Visual` 渲染器关着（边界不画，只拦球），手工不用建任何网格。
+   **这一步同时会把旧的台垫和围墙从场景里删掉**：13 格的 placement 已经没有 `ground` 和 `wall_*` 四面墙，`PlacementImporter` 对 `LevelContent/<cell>/Structures` 下「文档里已经没有」的子物体做 `Undo.DestroyObjectImmediate`（`PlacementImporter.cs` 的 stale 清扫，计入 `StructuresDeleted`；其 `Visual` 子物体随父物体一起删）。**预期 13 格合计 `StructuresDeleted=65`（13 × 5：一个 `ground` + 四面 `wall_*`）**；各格 `LevelArenaHost` 的 `boundaryWalls` 数组被改写成空，`groundNormal/groundOffset` 保持默认。操作员不用手删，只需看报告里这个数；第二次导入应回到 `+0 ~0 -0`。沙盒的每格 placement 也不再需要 `ground`，是因为导入器和 `levelbuild check` 都认 `level.arena.frame = "shared"`（见 LEVEL_AUTHORING §4.3 的 `arena` 行）。
+3. **给 `LevelContent/SANDBOX` 加 `LevelArenaHost`**（U# 组件，按 [Labs/README.md](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/README.md) 的 7 步建；`motor` 手填 `MotorHost` 上的电机；`autoBeginPlaying` 保持默认），再跑一次第 2 步，报告应变成：SANDBOX `boxes=0, walls=4, ramps=0`。
+4. **电机参数**（选 `MotorHost` 的 `KatamariBallMotor`，沿用上一版）：`rampTangentialGravityScale = 1`；`accelerationMps2` 7.5、`brakingMps2` 6、`frictionPerSecond` 0.9。
+5. **驱动参数**（选 `Driver`）：没有模式开关要设（`walkAroundActivation` / `walkAroundDebounceSeconds` 已删，场景保存后消失）。`autoBeginAllOnStart` 另行决定。
+6. **重导判据**：菜单 `VRC Katamari/Level/Import Physics Test Field Criteria`。认成功：`[ptf] criteria: cells=13 checks=90 v2Rows=1 missingCells=0 missingArenas=0 driverFields=… labels=13 errors=0`，driverFields 比上一版多 3（`sandboxFrame` / `sandboxSpawn` / `sandboxSpawnHeadingDegrees`），`labels=13` 说明 13 块文字牌建好了（`Cells/<id>/SandboxLabel`，`TextMesh`，1.4 m 高，在每格起跑标记处）。若报 "no LevelArenaHost on LevelContent/SANDBOX"，回到第 3 步。
+7. **存场景**。保存后的 diff 应只有：`LevelContent/SANDBOX` 子树、它的 `LevelArenaHost`、13 个 `SandboxLabel`、驱动器的 3 个新字段（`sandboxFrame` / `sandboxSpawn` / `sandboxSpawnHeadingDegrees`），被删掉的 `walkAroundActivation` / `walkAroundDebounceSeconds`，以及 13 格 `Structures` 下被删掉的 65 个旧结构（`ground` 和 `wall_*`）。
+8. **进 Play 看**：不用动手，Console 应出现：
+   `[ptf] build=2026-11-17b mode=sandbox cells=13 presets=4 cellRev=2026-11-17b v2Rows=1`
+   `[arena] planes=4/4 boxes=0/0 ramps=0/0 supports=1 refused=0 kinds=0 obbs=0/0 …`（SANDBOX 外框）
+   `[arena] planes=0/0 boxes=… ramps=… …` × 13（每格一行，没有 `planes`，`obbRefused=0 obbOverflow=0`）
+   `[ptf] sandbox cells=13 boxes=14 ramps=7 obbs=21/256 obbOverflow=0 framePlanes=4 reset=ok spawn=(0.00,-39.50) hdg=0.0`
+   然后球在 (0, 0.17, -39.5) 静止；推到任一块板上试（§0.2）。`obbs=` 不是 21 或 `obbOverflow` 非 0，就是有格没登记上，先看那一行 `[arena]` 的 `refusal=`。
 
 #### 9.5.2 打开 `climbDiagnosticsEnabled`
 
@@ -1106,7 +1123,7 @@ ALERT 行因此变成：
 
 #### 9.5.3 跑与预期读数
 
-驱动 `Start` 后第一行应有 `[ptf] build=2026-11-17a cells=13 presets=4 cellRev=2026-11-17a v2Rows=1`。用 MCP / UnityEvent 调 `driver.BeginCellAtDiameter("C25", 0.30f)` 等；`BeginAll()` 跑全部格 × 4 档（C25–C28 在后三档各记一行 `SKIPPED_NOT_RUN`）。D=0.30 的 summary 预期（**设计预期，不是实测**）：
+驱动 `Start` 后第一行应有 `[ptf] build=2026-11-17b cells=13 presets=4 cellRev=2026-11-17b v2Rows=1`。脚本 run 不需要先做任何切换（沙盒已注册，run 只传球）。用 MCP / UnityEvent 调 `driver.BeginCellAtDiameter("C25", 0.30f)` 等；`BeginAll()` 跑全部格 × 4 档（C25–C28 在后三档各记一行 `SKIPPED_NOT_RUN`）。**判据是在每格带 pad 围墙的孤岛里写的，沙盒里没有围墙：脚本 run 的后段球会越过原来的 pad 北缘，往下一排的板滚。** 红的判据先看是不是球越界了，再决定缩短时间线。D=0.30 的 summary 预期（**设计预期，不是实测**）：
 
 | 格 | checks | pass | unexpected | skipped | diag | 说明 |
 |---|---|---|---|---|---|---|
@@ -1131,11 +1148,12 @@ C27 / C28 红了先看三件事：`rampTangentialGravityScale` 是不是 1（0 �
 |---|---|
 | 几何（13 格 placement） | 已入库；`levelbuild check` 全部 PASS（C06 一条预期的 tilted-box warning，见 §4.1.2） |
 | 判据 JSON v2 | 已入库；13 格 90 条判据 + planned 格 |
-| Labs 三个组件 | 已入库；2026-11-17a 新增 record 行、run mask、walk-around、爬升/坡滑读数 |
+| Labs 三个组件 | 已入库；2026-11-17a 新增 record 行、run mask、爬升/坡滑读数；2026-11-17b 新增手动沙盒，删除 walk-around 与逐格隔离注册 |
+| 沙盒外框 | `SANDBOX/placement.json` 已入库、`levelbuild check` PASS；场景里的 `LevelArenaHost` 待操作员装配（§9.5） |
 | 判据导入器 | 已入库；`approach_m` / `rampFootM` / C06 probe 的几何读取只在编辑器跑 |
-| 场景 | `Labs/PhysicsTestField/PhysicsTestField.unity` 有 C01–C14 的九格；C25–C28 待操作员装配（§9.5） |
+| 场景 | `Labs/PhysicsTestField/PhysicsTestField.unity`；沙盒外框与文字牌待操作员装配（§9.5） |
 | 跨文件一致性 | `Docs/tests/levelbuild/test_physics_test_field_cells.py` |
-| 未验证 | 全部判据都没有在 Unity 里跑过 2026-11-17a 的驱动；C25 的读数、C26–C28 的坡滑时间是设计预期 |
+| 未验证 | 全部判据都没有在 Unity 里跑过 2026-11-17b 的驱动；沙盒注册、文字牌、出生点都没有在 Unity 里跑过；C25 的读数、C26–C28 的坡滑时间是设计预期 |
 
 ---
 
@@ -1147,13 +1165,13 @@ C27 / C28 红了先看三件事：`rampTangentialGravityScale` 是不是 1（0 �
 | **U4** | **球径设定走闭环喂体积还是测试接缝** | 已定：闭环喂体积，已实现。副作用：吸收计数/账本被污染（判据读基线差）、只能长大（复位负责回 0.30） |
 | **U5** | **挡路容量 6 的正向夹取在本场构造不出来** | 场内只做负向判据（`blocking_max ≤ 6` 且不 latch），正向夹取交给 NUnit |
 | **U6** | **切格重建扫掠数组的 GC 是否可见** | 未测；一次完整 pass 的切格 / 重置正好是量它的最小场景 |
-| **U9** | **`allowedKinds` 的两份名单** | 驱动在每次 `Reapply()` 之后重发 `kindWhitelist`，arena 那份是它的子集 |
+| **U9** | **`allowedKinds` 的两份名单** | 驱动在沙盒注册之后重发 `kindWhitelist`，arena 那份是它的子集 |
 | **U10** | **C06 的「ramps=0/1」字面值与工具链冲突** | 板以 `role=box`+`kind=ramp_probe` 落库，导入器烘 probe 面，驱动调 `motor.AddRamp` 取证（§4.1.2） |
 | **U12** | **C13 的 `seam_no_step` 用 `grounded_frame_dy`** | 0.6 m 自由落体单帧位移远大于接缝，所以只在非下落帧累计，阈值 0.05 |
 | **U15** | **解析量子要的那一个电机数字没有 getter** | 判据导入器读场景 motor 的 `startVolumeMm3`，烘进设定器；改电机的定价字段后必须重新导入判据 |
 | **U16** | **「跑的到底是哪份 U# 程序」是盲区** | 两个组件在 `Start` 打 build 指纹（§8.3.3）；`Size` 状态对「收敛但球没到目标径」报 `sizeNotApplied` |
 | **U17** | **「每帧都调的方法」是这条链上最危险的面** | 请求只在 `Switch` 发一次；`TickSize` 只读；`Feed` 是唯一在每个 `Update` 里写 setter 状态的函数（§8.3.4） |
-| **U18** | **缓坡格只跑 D=0.30** | pad 只有 9 m，装不下按 s 缩放的速度；若要看大球的坡滑，要给这三格做加长 pad 的版本 |
+| **U18** | **缓坡格只跑 D=0.30** | 足迹只有 9 m，装不下按 s 缩放的速度；若要看大球的坡滑，要给这三格做加长足迹的版本 |
 | **U19** | **C25 的 H_cap 关系** | 顶棚底 0.50 m 略大于 `1.5·D = 0.45`，但在「休息高度 + H_cap = 0.75」之内；球顶在 h=0.20 时顶到顶棚。若释放规则落地（TERRAIN_CLIMB §6.7 提案），这一格就是它的回归格，诊断行再改成判据 |
 | **U20** | **C18 的 `ptf_support_crate` 已改尺寸** | 旧 1.2×0.5×1.0 在现行吸收门下 2.20 球可吸（Req 2001 mm），不再有「吸不动但矮」的件；提议改成 1.6×1.05×0.5（abc 0.84，Req 2239 mm > 2200），高度仍 0.5 < 爬升上限。C18 迁入时按这个尺寸 |
 
@@ -1161,4 +1179,4 @@ C27 / C28 红了先看三件事：`rampTangentialGravityScale` 是不是 1（0 �
 
 ## 14. 一句话总结
 
-**这张图是一台仪器，也是 owner 的手感测试场**：一格一注册，是因为电机容量装不下一个测试场；一份数据只写一次，几何只在 `<cell>/placement.json`，判据只认本格的 `nominal_m`；没有定论的现象（爬坡卡死）先记录诊断读数，不抢着判红绿。
+**这张图是一台仪器，也是 owner 的手感测试场**：一块大平地、所有板同时是实心的；一份数据只写一次，几何只在 `<cell>/placement.json`（格里只有测试板），判据只认本格的 `nominal_m`；没有定论的现象（爬坡卡死）先记录诊断读数，不抢着判红绿。

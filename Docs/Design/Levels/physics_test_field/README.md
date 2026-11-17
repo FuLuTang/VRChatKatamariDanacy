@@ -1,30 +1,31 @@
 # 球体物理测试场 · 关卡数据（physics test field）
 
-> 状态：`PROVISIONAL_NOT_TESTED`。十三个已接线的格见下面的布局：九个老格排在 **27 m × 30.5 m** 的网格（4 列 × 3 行，1–1.5 m 走道），最南一行（z=-33）是 2026-11-17 的 C25–C28；每格自带一块 6×9 或 6×10 的小地面 + 4 面 **0.4 m 矮边界**。
+> 状态：`PROVISIONAL_NOT_TESTED`。十三个已接线的格见下面的布局：九个老格排在 **27 m × 30.5 m** 的网格（4 列 × 3 行，1–1.5 m 走道），最南一行（z=-33）是 2026-11-17 的 C25–C28，另有沙盒外框 `SANDBOX`；格里只有测试板，地面和外围墙只在 `SANDBOX`。
 > 尚未接线的格（含 C21–C24 地形格）在 `Docs/Design/BallMotor/physics_test_field.json` 的 `planned_cells[]` 里。
 > 设计文档：[../../BallMotor/PHYSICS_TEST_FIELD.md](../../BallMotor/PHYSICS_TEST_FIELD.md)（§9 是本目录的规矩）。
 
 ## 这个目录是什么
 
 一台**仪器**的几何，不是一个关卡：整个测试场由多个互相独立的格位（cell）组成，每格测一件事
-（薄片能不能碾过、0.075 的台阶算不算台阶、薄墙撞不撞得穿……）。因为电机的静态容量只有
-**8 平面 / 8 盒 / 4 斜面**，整场不能同时注册，所以：
+（薄片能不能碾过、0.075 的台阶算不算台阶、薄墙撞不撞得穿……）。它只有一种用法，**手动沙盒**：
 
-- **一格 = 一个 arena = 一份 `placement.json`**；
-- 切格 = `motor.ClearObstacles()` → 目标格的 `LevelArenaHost.Reapply()`；
-- 因为 `ClearObstacles` 清的是**全局**平面表，**每一格必须自带地面 + 4 面边界墙**（不是偷
-  base 的，见设计 §3.4）。紧凑化后各格文件的 `ground` / `wall_*` **不再逐字节相同**：每格的地面
-  正好是它 6×9 / 6×10 的 pad，4 面墙在 pad 边上、高 0.4 m（视觉与挡人；motor 里仍是无限半空间）。
-- **所有格常显，只有当前格注册**：`PhysicsTestCell.ReleaseArena()` = `arena.SuspendRegistration()`
-  （**不** `SetActive(false)`），`ApplyRegistration()` = `ResumeRegistration() + Reapply()`。
-  `LevelArenaHost.Update` 在 suspended 时不写 motor；显式 `Reapply` 不受影响。
+- `SANDBOX/` 是外框：一块 32 × 61 m 的大地面 + 4 张外围边界平面，没有板。**地面和墙只在这里。**
+- 每格的 `placement.json` **只有测试板**（台阶、坡板 + 平台、薄板、墙 + 顶棚……），没有 `role=ground`、
+  没有 `role=boundary`，并在 `level.arena` 里写 `"frame": "shared"`（校验器和导入器都认：这种文档不得有地面和墙，
+  不写则仍是「恰好一个地面」）。所以导入器不会为格造台垫和围墙，场上没有任何只看得见、摸不到的东西。
+- 所有格的板同时注册：外框 `LevelArenaHost.Register(true, 0, 0)` 清表并登记地面与外围平面，每格再
+  `Register(false, 已登记的盒数, 已登记的坡数)` 追加（surface id 向后错开）。13 格合计 21 个静态 OBB（容量 256），
+  外围平面 4（容量 8）。
+- 所有格常显，`PhysicsTestCell.ReleaseArena()` = `arena.SuspendRegistration()`（**不** `SetActive(false)`），
+  所有宿主由驱动器统一登记。
 
 ## 布局
 
 ```
 Docs/Design/Levels/physics_test_field/
 ├── README.md                ← 本文件
-├── C14/placement.json       0.028 m 薄片（3×3 板，6×9 pad）
+├── SANDBOX/placement.json   手动沙盒外框：大地面 32×61 m + 4 张外围边界平面，没有板（出生点 (0, -39.5) 朝北）
+├── C14/placement.json       0.028 m 薄片（3×3 板）
 ├── C08/placement.json       台阶 0.050（4×0.05×1.5）
 ├── C09/placement.json       台阶 0.075（== stepLimit(0.30)，等号语义）
 ├── C10/placement.json       台阶 0.100（0.30 是墙、0.60 起可上）
@@ -53,19 +54,19 @@ C21/ C22/ C23/ C24/            地形格（台阶 / 沟 / 隧道 / 路缘）：p
     "id": "physics_test_field/C09",
     "scene": "PhysicsTestField",
     "ballDiameterStart": 0.3, "ballDiameterMax": 2.2,
-    "bounds": [[-44.0, -44.0], [44.0, 44.0]],
-    "budget": {"planes": 8, "boxes": 8, "ramps": 4, "blocking": 6, "propSupports": 6},
-    "expected": {"propCount": 0, "valueUnits": 0},
-    "arena": {"id": "C09", "notes": "..."}
+    "bounds": [[-14.0, -15.0], [14.0, 16.5]],
+    "budget": {"planes": 0, "boxes": 8, "ramps": 4, "blocking": 6, "propSupports": 6},
+    "expected": {"propCount": 0, "growthMm3": 0},
+    "arena": {"id": "C09", "frame": "shared", "notes": "..."}
   },
   "props": [],
-  "structures": [ ground, wall_x_min, wall_x_max, wall_z_min, wall_z_max, C09_step ]
+  "structures": [ C09_step ]
 }
 ```
 
 - **`level.arena`** 是这套数据唯一为「多格」加的东西：它声明「这份文档是一个 arena 格」。Unity 的
   导入器用它把几何放进 `LevelContent/<id>/`，并绑定那个对象上的 `LevelArenaHost`；`levelbuild check`
-  要求它的 `id` 等于**所在目录名**（复制一份文件却忘了改 id 会红）。
+  要求它的 `id` 等于**所在目录名**（复制一份文件却忘了改 id 会红）；`frame: "shared"` 见上。
 - **`level.bounds`** 现在是整场紧凑范围 `[[-14,-15],[14,16.5]]`，不是 88 m 场；跑道/激活矩形在判据文件里
   （`cells[].footprint`），因为它只属于运行器。盒子跑出 `bounds` 会被 `check` 拒（粗错拦截）。
 - **`level.expected`** 是 0 件道具：这九格只测几何，道具在 C18/C19。

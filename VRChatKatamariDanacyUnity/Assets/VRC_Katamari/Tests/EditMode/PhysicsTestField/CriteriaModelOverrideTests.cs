@@ -81,8 +81,14 @@ namespace VRCKatamari.Tests
             FieldInfo revision = cellType.GetField("CellRevision",
                 BindingFlags.Static | BindingFlags.NonPublic);
             Assert.IsNotNull(revision, CellTypeName + ".CellRevision is missing");
-            Assert.AreEqual("2026-11-17a", revision.GetRawConstantValue(),
-                "the cell's build stamp must match the driver's (both 2026-11-17a)");
+            // Compared against the driver's own constant, not a date typed here: the two stamps
+            // move together, and a literal in this test would go stale with every bump.
+            Type driverType = DriverType();
+            FieldInfo driverRevision = driverType.GetField("DriverRevision",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.IsNotNull(driverRevision, driverType.Name + ".DriverRevision is missing");
+            Assert.AreEqual(driverRevision.GetRawConstantValue(), revision.GetRawConstantValue(),
+                "the cell's build stamp must match the driver's");
             Assert.IsNotNull(cellType.GetField("skipDiameterMask",
                     BindingFlags.Instance | BindingFlags.NonPublic),
                 CellTypeName + ".skipDiameterMask is missing (the per-diameter run mask)");
@@ -538,6 +544,20 @@ namespace VRCKatamari.Tests
             Assert.Fail("type '" + CellTypeName + "' is not loaded. It lives in " +
                         "Assets/VRC_Katamari/Labs/PhysicsTestField and compiles with the scene " +
                         "assembly.");
+            return null;
+        }
+
+        private static Type DriverType()
+        {
+            const string driverTypeName = "VRCKatamari.Labs.PhysicsTestField.PhysicsTestFieldDriver";
+            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            for (int i = 0; i < assemblies.Length; i++)
+            {
+                Type found = assemblies[i].GetType(driverTypeName, false);
+                if (found != null) return found;
+            }
+
+            Assert.Fail("type '" + driverTypeName + "' is not loaded.");
             return null;
         }
 

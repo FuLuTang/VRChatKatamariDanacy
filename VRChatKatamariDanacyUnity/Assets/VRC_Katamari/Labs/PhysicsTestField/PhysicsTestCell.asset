@@ -374,7 +374,7 @@ MonoBehaviour:
       Data: 26|UnityEngine.HeaderAttribute, UnityEngine.CoreModule
     - Name: header
       Entry: 1
-      Data: Activation rect (from placement level.bounds = this cell's footprint)
+      Data: Footprint (the cell's pad rect; from the criteria file)
     - Name: 
       Entry: 8
       Data: 

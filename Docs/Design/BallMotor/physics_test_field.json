@@ -12,7 +12,7 @@
     "model": "one_placement_per_cell",
     "folder": "Docs/Design/Levels/physics_test_field",
     "file": "placement.json",
-    "why": "the motor's static capacity (8 planes / 8 boxes / 4 ramps) is smaller than the whole field, so the field registers one arena at a time (registration_model.mode). A cell is therefore exactly one arena, and one arena is exactly one placement document: the validator's hard budget then applies per cell, and the Unity importer binds one LevelArenaHost per document with no grouping logic to invent.",
+    "why": "one document per arena: a cell is exactly one arena, so the validator's hard budget applies per cell and the Unity importer binds one LevelArenaHost per document with no grouping logic to invent. The sandbox registers all of them together under the SANDBOX frame (registration_model).",
     "fields_from_placement": [
       "structures[] (ground / boundary / box / ramp: the ONLY geometry)",
       "level.arena.id (the managed-root child and the cell's identity)",
@@ -45,7 +45,7 @@
       },
       "heading_convention": "heading 0 = +Z；heading 90 = +X；heading 180 = -Z；heading -90 = -X"
     },
-    "bounds_note": "the compact field is a 27 m x 30.5 m grid (4 columns x 3 rows, 1-1.5 m walkways). Each cell placement carries its OWN 6x9 or 6x10 ground plane and 4 low (0.4 m) boundary planes because ClearObstacles empties the motor's global plane table on every switch; level.bounds is [[-14,-15],[14,16.5]]."
+    "bounds_note": "the cells sit on a compact grid (4 columns x 4 rows, 1-3 m between footprints; x -13.5..13.5, z -37.5..16). A cell placement has only its boards; the one big floor and the outer wall (x -16..16, z -42..19) are the SANDBOX placement."
   },
   "motor_constants": {
     "fixed_step_seconds": 0.02,
@@ -123,23 +123,37 @@
     "note": "motor 默认 startCenterWorld = (0, 0.15, 0)，这里的 0.15 = 起始球半径"
   },
   "registration_model": {
-    "mode": "one_cell_at_a_time",
-    "why": "motor 的静态盒上限 8、斜面上限 4；一个 21 格的场同时注册必然超容量并 latch overflow。所以每格自带一组 BoxCollider，切格时 motor.ClearObstacles() → 目标格 LevelArenaHost.Reapply()",
-    "switch_rule": "walk-around 模式（driver.walkAroundActivation=true、没有脚本 run 时）：球心落在哪一格的 pad（足迹矩形）里，哪一格注册，换格需连续 walkAroundDebounceSeconds（0.25 s）稳定；球不被挪动。脚本 run 由 driver 显式切格。球不在任何 pad 里时保持上一格。",
-    "per_cell_arena": "every placement.json is a COMPLETE arena: ground + 4 boundary planes + that cell's boxes. motor.ClearObstacles() zeroes the global plane table, so the host that registers last owns every plane; a cell cannot borrow the field's walls from another host. The 4 wall objects are therefore duplicated per cell in the scene (they are markers, not colliders).",
+    "mode": "manual_sandbox",
+    "why": "motor 的静态 OBB 容量 256、平面 8。13 个已接线格的板合计 21 个 OBB，外加地面 + 4 张外围边界平面，一次放得下：所有格的板同时注册在一大块地面上，球自由滚。格的 placement 里只有测试板（level.arena.frame = shared，没有地面、没有围墙）。",
+    "switch_rule": "唯一的注册：EnterSandbox。外框 SANDBOX.Register(true, 0, 0)（清表 + 地面 + 4 张外围平面），再逐格 Register(false, 已登记的盒数, 已登记的坡数)。脚本 run（BeginAll / BeginCell…）不改注册，只把球传到那一格的起点。",
+    "per_cell_arena": "a cell placement carries only its test boards (level.arena.frame = shared: no role=ground, no role=boundary; the validator and the importer both refuse them). The one floor and the 4 outer boundary planes are the SANDBOX document's.",
     "base_registration": {
       "ground_plane": true,
       "planes": 4,
       "boxes": 0,
       "ramps": 0
     },
-    "switch_debounce_s": 0.25,
-    "cost_note": "每次切格一次 ClearObstacles + Reapply（分配一对 Vector3[]，见 TERRAIN_SUPPORT §3.5 的 GC 风险）"
+    "cost_note": "进沙盒一次 ClearObstacles + 登记（分配一对 Vector3[]，见 TERRAIN_SUPPORT §3.5 的 GC 风险）"
+  },
+  "sandbox": {
+    "arena_id": "SANDBOX",
+    "placement": "physics_test_field/SANDBOX/placement.json",
+    "note": "the frame arena of the manual sandbox: the one big floor (x -16..16, z -42..19, y=0) + 4 outer boundary planes, no boxes. Cells carry only their boards. Its geometry is that placement; this block carries only what the runner needs.",
+    "spawn": [
+      0.0,
+      0.15,
+      -39.5
+    ],
+    "spawn_heading_deg": 0.0,
+    "spawn_note": "in front of the south row, facing +Z (north): the four boards of the south row are 4.5-5.5 m ahead and the other rows line up beyond them. y is replaced by the ball's radius + 0.02 at run time.",
+    "obb_capacity": 256,
+    "min_clearance_m": 2.2
   },
   "cells": [
     {
       "id": "C14",
       "slug": "thin_plate_028",
+      "sandbox_label": "C14\nthin plate 0.028 m",
       "name_zh": "0.028 m 薄片（餐巾级）",
       "kind": "thin",
       "stage": "P1",
@@ -320,6 +334,7 @@
     {
       "id": "C09",
       "slug": "step_075",
+      "sandbox_label": "C09\nstep 0.075 m",
       "name_zh": "台阶 0.075 m（边界）",
       "kind": "step",
       "stage": "P1",
@@ -466,6 +481,7 @@
     {
       "id": "C08",
       "slug": "step_050",
+      "sandbox_label": "C08\nstep 0.050 m",
       "name_zh": "台阶 0.050 m",
       "kind": "step",
       "stage": "P1",
@@ -612,6 +628,7 @@
     {
       "id": "C10",
       "slug": "step_100",
+      "sandbox_label": "C10\nstep 0.100 m",
       "name_zh": "台阶 0.100 m",
       "kind": "step",
       "stage": "P1",
@@ -775,6 +792,7 @@
     {
       "id": "C01",
       "slug": "ramp_050",
+      "sandbox_label": "C01\nramp 5 deg",
       "name_zh": "5° 斜板",
       "kind": "ramp",
       "stage": "P3",
@@ -953,6 +971,7 @@
     {
       "id": "C03",
       "slug": "ramp_250",
+      "sandbox_label": "C03\nramp 25 deg",
       "name_zh": "25° 斜板",
       "kind": "ramp",
       "stage": "P3",
@@ -1149,6 +1168,7 @@
     {
       "id": "C05",
       "slug": "ramp_450",
+      "sandbox_label": "C05\nramp 45 deg",
       "name_zh": "45° 斜板",
       "kind": "ramp",
       "stage": "P3",
@@ -1326,6 +1346,7 @@
     {
       "id": "C06",
       "slug": "ramp_500",
+      "sandbox_label": "C06\nboard 50 deg (refused)",
       "name_zh": "50° 斜板（应爬不上：拒绝注册）",
       "kind": "ramp",
       "stage": "P3",
@@ -1493,6 +1514,7 @@
     {
       "id": "C13",
       "slug": "plateau_edge",
+      "sandbox_label": "C13\n0.6 m deck + edge",
       "name_zh": "0.6 m 台面：一侧斜坡上、一侧直角边下",
       "kind": "plateau",
       "stage": "P1",
@@ -1740,6 +1762,7 @@
     {
       "id": "C25",
       "slug": "wall_ceiling",
+      "sandbox_label": "C25\nwall + ceiling 0.5 m",
       "name_zh": "墙 + 顶棚（爬坡卡死复现，只诊断）",
       "kind": "climb_diagnostic",
       "stage": "now",
@@ -2019,6 +2042,7 @@
     {
       "id": "C26",
       "slug": "slope_2deg",
+      "sandbox_label": "C26\nslope 2 deg",
       "name_zh": "缓坡 2°（静止后下滑 / 平地不滑 / 推着不额外下滑）",
       "kind": "slope_slide",
       "stage": "now",
@@ -2196,6 +2220,7 @@
     {
       "id": "C27",
       "slug": "slope_5deg",
+      "sandbox_label": "C27\nslope 5 deg",
       "name_zh": "缓坡 5°（静止后下滑 / 平地不滑 / 推着不额外下滑）",
       "kind": "slope_slide",
       "stage": "now",
@@ -2390,6 +2415,7 @@
     {
       "id": "C28",
       "slug": "slope_10deg",
+      "sandbox_label": "C28\nslope 10 deg",
       "name_zh": "缓坡 10°（静止后下滑 / 平地不滑 / 推着不额外下滑）",
       "kind": "slope_slide",
       "stage": "now",

@@ -1,7 +1,9 @@
 using System;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace VRCKatamari.Tests
 {
@@ -210,6 +212,10 @@ namespace VRCKatamari.Tests
             BoxCollider deck = CreateBox("deck", new Vector3(0f, 0.5f, 0f),
                 new Vector3(1f, 1f, 1f), Quaternion.identity);
             ConfigureArena(new BoxCollider[] { deck }, null);
+            // The up-front capacity check counts what the motor already holds (a full table plus
+            // one box is 257 > 256), so it names the overflow with one error line before the
+            // per-entry refusal below.
+            LogAssert.Expect(LogType.Error, new Regex(@"\[arena\] static OBB table overflow: 256 already held \+ 1 from this host .* > 256 slots"));
             Invoke(arena, arenaType, "Setup");
 
             Assert.AreEqual(0, (int)Invoke(arena, arenaType, "GetRegisteredObbCount"),

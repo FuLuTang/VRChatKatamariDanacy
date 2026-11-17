@@ -14,8 +14,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// <remarks>
     /// <para>
     /// This is the laboratory's only driver. It introduces no second physics and no second input
-    /// path: switching cells is <see cref="PhysicsTestCell.ApplyRegistration"/> (which is
-    /// <c>LevelArenaHost.Reapply</c>), sizing is <see cref="LabBallSizeSetter"/>, driving is
+    /// path: registering the field is <c>LevelArenaHost.Register</c> (the sandbox, below), sizing is <see cref="LabBallSizeSetter"/>, driving is
     /// <c>motor.SetMoveAxes</c>, and every reading is a motor getter a shipped HUD would read too.
     /// <c>Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md</c> is the design; this file is its section 7.
     /// </para>
@@ -77,13 +76,15 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private bool logTrajectory = true;
         [SerializeField] private float trajectoryIntervalSeconds = 0.5f;
 
-        [Header("Walk-around (a person drives the ball; no scripted run)")]
-        [Tooltip("When on and no scripted run is active, the cell whose pad the ball is on becomes " +
-                 "the registered arena (one at a time, because the motor's tables are global). The " +
-                 "ball is not moved. Off = only the first cell registers until a run starts.")]
-        [SerializeField] private bool walkAroundActivation = false;
-        [Tooltip("A pad must hold the ball this long before its arena registers, seconds.")]
-        [SerializeField] private float walkAroundDebounceSeconds = 0.25f;
+        [Header("Manual sandbox (the one registration: every cell on one floor, one outer wall)")]
+        [Tooltip("The sandbox's own arena: the big floor and the 4 outer boundary planes, no " +
+                 "boxes. Filled by the criteria importer from LevelContent/SANDBOX. Null = the " +
+                 "sandbox has no outer wall.")]
+        [SerializeField] private LevelArenaHost sandboxFrame;
+        [Tooltip("Where the ball is put when the sandbox opens (y is replaced by radius + 0.02). " +
+                 "Filled by the criteria importer from the sandbox block of the criteria file.")]
+        [SerializeField] private Vector3 sandboxSpawn;
+        [SerializeField] private float sandboxSpawnHeadingDegrees;
 
         // A converged setter must also have actually resized the ball. A constant, not a serialized
         // field: a field added to an already-serialized UdonBehaviour reads 0 until the criteria are
@@ -94,8 +95,10 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // 2026-11-15 matrix ran a pre-P3 driver against post-P3 data and nobody could tell from
         // the log; the build line and the reason= vocabulary make that impossible to repeat.
         // 2026-11-17a: record-only criteria (op "record"), the climb / slope readings, the
-        // per-diameter run mask and the walk-around activation.
-        private const string DriverRevision = "2026-11-17a";
+        // per-diameter run mask.
+        // 2026-11-17b: the manual sandbox (every cell registered at once, one outer frame);
+        // the walk-around activation and the one-isolated-cell registration are gone.
+        private const string DriverRevision = "2026-11-17b";
         // Op code of a diagnostic: the value is logged, never judged (the cell's op array).
         private const int OpRecord = 5;
 
@@ -228,10 +231,9 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private float pushSpeedOnSlope;
         private float pushSpeedOnFlat;
 
-        // Walk-around activation state.
-        private int walkActiveIndex = -1;
-        private int walkCandidateIndex = -1;
-        private float walkCandidateSeconds;
+        // Sandbox state: true once the sandbox (frame + every cell) is what the motor holds.
+        private bool sandboxActive;
+        private int sandboxEnterCount;
 
         // ---- per-run result ----------------------------------------------------
 
@@ -253,28 +255,17 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 + " presets=" + (presetDiametersM == null ? 0 : presetDiametersM.Length).ToString()
                 + " cellRev=" + CellRevisionText()
                 + " v2Rows=" + V2RowsText());
+            // Every host starts SUSPENDED: its geometry stays visible, but it may not
+            // self-register. LevelArenaHost registers in its own Update and the motor's tables are
+            // global, so thirteen self-registering hosts would all start their surface ids at 1.
+            // The driver registers the frame and then every cell once, with offset ids
+            // (EnterSandbox).
+            if (sandboxFrame != null) sandboxFrame.SuspendRegistration();
             if (cells != null)
             {
                 for (int i = 0; i < cells.Length; i++)
                 {
-                    if (cells[i] == null) continue;
-                    if (i == 0)
-                    {
-                        // The first cell's arena is the only one allowed to register at load.
-                        // Every cell stays visible (compact field), so this is about the motor's
-                        // global tables, not about the floor: one registrant cannot overflow.
-                        // It registers itself in LevelArenaHost.Update once the motor is ready,
-                        // and a later switch re-applies it rather than adding a second one.
-                        cells[i].ApplyRegistration();
-                        continue;
-                    }
-
-                    // Every other arena starts SUSPENDED: its geometry stays visible, but its
-                    // host may not self-register. LevelArenaHost registers in its own Update and
-                    // the motor's tables are global, so nine registrants would put nine floors
-                    // and thirty-six walls into eight plane slots on frame one and latch the
-                    // overflow counter for the whole session.
-                    cells[i].ReleaseArena();
+                    if (cells[i] != null) cells[i].ReleaseArena();
                 }
             }
 
@@ -291,7 +282,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
             if (state == StateIdle)
             {
-                if (walkAroundActivation) TickWalkAround();
+                if (!sandboxActive) TickSandboxEnter();
                 return;
             }
 
@@ -518,62 +509,72 @@ namespace VRCKatamari.Labs.PhysicsTestField
         }
 
         /// <summary>
-        /// Walk-around mode: registers the arena of the pad the ball stands on, so a person can
-        /// roll from cell to cell. The motor's obstacle tables are global, so exactly one arena
-        /// registers; switching is debounced so a ball clipping a pad corner does not thrash the
-        /// tables, and the ball is never moved (the new arena appears under it).
+        /// Manual sandbox: waits for the motor, then registers every cell's boards at once.
         /// </summary>
-        private void TickWalkAround()
+        private void TickSandboxEnter()
         {
             if (motor == null || cells == null) return;
+            // Same readiness proof as the scripted runs: the motor builds its stores in Start.
             if (motor.GetSemanticDiameterWorldM() <= 0f) return;
+            EnterSandbox();
+        }
 
-            Vector3 center = motor.GetCenterWorld();
-            int found = -1;
-            for (int i = 0; i < cells.Length; i++)
+        /// <summary>
+        /// The one registration: the frame host (<c>LevelArenaHost.Register</c>) clears the motor
+        /// and registers the big floor and the 4 outer planes, then every cell appends its boards
+        /// (a cell has no floor and no wall of its own) with surface ids offset by what the cells
+        /// before it registered (the contact solver de-duplicates by surface id).
+        /// </summary>
+        private void EnterSandbox()
+        {
+            int boxes = 0;
+            int ramps = 0;
+            if (sandboxFrame != null)
             {
-                if (cells[i] == null) continue;
-                if (cells[i].ContainsPoint(center.x, center.z, 0f))
-                {
-                    found = i;
-                    break;
-                }
+                sandboxFrame.Register(true, 0, 0);
             }
-
-            if (found < 0 || found == walkActiveIndex)
+            else
             {
-                walkCandidateIndex = -1;
-                walkCandidateSeconds = 0f;
-                return;
+                motor.ClearObstacles();
+                Debug.LogWarning("[ptf] sandbox has no frame host: no outer boundary wall");
             }
-
-            if (found != walkCandidateIndex)
-            {
-                walkCandidateIndex = found;
-                walkCandidateSeconds = 0f;
-                return;
-            }
-
-            walkCandidateSeconds = walkCandidateSeconds + Time.deltaTime;
-            if (walkCandidateSeconds < walkAroundDebounceSeconds) return;
 
             for (int i = 0; i < cells.Length; i++)
             {
                 if (cells[i] == null) continue;
-                if (i == found) continue;
-                cells[i].ReleaseArena();
+                cells[i].ApplySandboxRegistration(boxes, ramps);
+                boxes = boxes + cells[i].GetRegisteredBoxCount();
+                ramps = ramps + cells[i].GetRegisteredRampCount();
             }
 
-            cells[found].ApplyRegistration();
             if (kindWhitelist != null)
             {
                 motor.SetAllowedKinds(kindWhitelist, kindWhitelist.Length);
             }
 
-            walkActiveIndex = found;
-            walkCandidateIndex = -1;
-            walkCandidateSeconds = 0f;
-            Log("[ptf] walkAround cell=" + cells[found].GetCellId() + " registered");
+            // Reset first, then read the radius (the order TickSwitch documents), then place.
+            sandboxEnterCount = sandboxEnterCount + 1;
+            int reason = -1;
+            string roundId = "ptf-sandbox-" + sandboxEnterCount.ToString();
+            bool reset = motor.TryResetForNewRound(roundId, sandboxSpawn, sandboxSpawnHeadingDegrees,
+                out reason);
+            float radius = motor.GetCollisionRadiusWorldM();
+            if (radius <= 0f) radius = 0.15f;
+            motor.TeleportTo(new Vector3(sandboxSpawn.x, radius + 0.02f, sandboxSpawn.z));
+            motor.SetMoveAxes(0f, 0f, 0f);
+            if (pickupHost != null) pickupHost.ResetField();
+
+            sandboxActive = true;
+            int framePlanes = sandboxFrame == null ? 0 : sandboxFrame.GetRegisteredPlaneCount();
+            Log("[ptf] sandbox cells=" + cells.Length.ToString()
+                + " boxes=" + boxes.ToString() + " ramps=" + ramps.ToString()
+                + " obbs=" + motor.GetStaticObbCount().ToString()
+                + "/" + motor.GetStaticObbCapacity().ToString()
+                + " obbOverflow=" + motor.GetStaticObbOverflowCount().ToString()
+                + " framePlanes=" + framePlanes.ToString()
+                + " reset=" + (reset ? "ok" : reason.ToString())
+                + " spawn=(" + Fixed(sandboxSpawn.x, 2) + "," + Fixed(sandboxSpawn.z, 2) + ")"
+                + " hdg=" + Fixed(sandboxSpawnHeadingDegrees, 1));
         }
 
         private void TickSwitch()
@@ -618,28 +619,13 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return;
             }
 
-            // Exactly one arena may be REGISTERED; all of them stay visible. ReleaseArena now
-            // means "suspend self-registration", not "hide", so this loop is safe to run on
-            // every switch and on Start without turning the field into a set of empty pads.
-            // It does not trust "the previous cell": Start leaves cell 0 allowed to register
-            // without ever having run a switch, so the first switch must still suspend it.
-            for (int i = 0; i < cells.Length; i++)
-            {
-                if (cells[i] == null) continue;
-                if (cells[i] == cell) continue;
-                cells[i].ReleaseArena();
-            }
+            // A scripted run does not change the registration: every cell is already in the
+            // motor (the sandbox). It only moves the ball to this cell's start. The first run of
+            // a session that began before the sandbox opened registers it here.
+            if (!sandboxActive) EnterSandbox();
 
-            cell.ApplyRegistration();
-            walkActiveIndex = cellIndex;
-
-            if (kindWhitelist != null)
-            {
-                motor.SetAllowedKinds(kindWhitelist, kindWhitelist.Length);
-            }
-
-            // The arena has registered its own ramps (or refused them at bake time); read that
-            // count before the probe so it describes what the ARENA put in the motor. Then, for
+            // The sandbox has registered the ramps (or refused them at bake time); read that
+            // count before the probe so it describes what the ARENAS put in the motor. Then, for
             // a cell that authors an over-limit board (C06), ask the motor to register the
             // board's walking face directly: the refusal IS the criterion, and it is the only
             // way the motor's refusal getters can be exercised, because LevelArenaHost's bake
@@ -749,7 +735,6 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 // exactly the arena's, then re-apply the arena (the ClearRamps call is
                 // deliberately narrower than ClearObstacles).
                 motor.ClearRamps();
-                cell.ApplyRegistration();
                 rampCountAtSwitch = motor.GetRampCount();
                 Debug.LogError("[ptf] rampProbe cell=" + cell.GetCellId()
                     + " accepted but should be refused; the board and the slope guard disagree");
@@ -1893,7 +1878,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
             if (arena == null) return "none";
             // obbs= is the evidence the ramp cells rest on (design 7.7.2): an arena bakes its ramp
             // into a static OBB, so the motor's ramp table is legitimately 0.
-            return "planes=" + arena.GetRegisteredPlaneCount().ToString()
+            int planes = sandboxFrame == null ? 0 : sandboxFrame.GetRegisteredPlaneCount();
+            return "planes=" + planes.ToString()
                 + "/boxes=" + arena.GetRegisteredBoxCount().ToString()
                 + "/supports=" + arena.GetRegisteredSupportCount().ToString()
                 + "/ramps=" + motor.GetRampCount().ToString()

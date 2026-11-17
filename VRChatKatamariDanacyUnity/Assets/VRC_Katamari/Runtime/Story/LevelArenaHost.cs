@@ -80,6 +80,16 @@ namespace VRCKatamari.Story
     /// motor's, and the motor allocates its stores in Start. A positive diameter is the
     /// public proof that the motor is ready.
     /// </para>
+    /// <para>
+    /// One registration, two questions. <see cref="Register"/> is the only registration entry;
+    /// "register the whole thing" (<see cref="Reapply"/>) is one answer to its parameters, not a
+    /// second code path. A host can be asked to clear the motor first or to append to what is
+    /// already there, and to offset its surface ids so several hosts registered into one motor
+    /// never share an id (the contact solver de-duplicates by surface id, so two solids with one
+    /// id would be one solid). The physics test field's manual sandbox is the only caller that
+    /// asks for anything but the defaults: one frame host (floor + outer walls), then every
+    /// cell's boards appended.
+    /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class LevelArenaHost : UdonSharpBehaviour
@@ -135,6 +145,10 @@ namespace VRCKatamari.Story
 
         private bool ready;
         private bool registrationSuspended;
+        // Registration parameters (see Register). Zero by default so a scene that never calls
+        // Register behaves exactly as before.
+        private int boxSurfaceIdBase;
+        private int rampSurfaceIdBase;
         private bool beganPlaying;
         private bool groundRegistered;
         private int registeredPlaneCount;
@@ -315,9 +329,38 @@ namespace VRCKatamari.Story
         /// </remarks>
         public void Reapply()
         {
+            Register(true, 0, 0);
+        }
+
+        /// <summary>
+        /// The registration entry: optionally clears the motor's obstacle tables, then runs
+        /// <see cref="Setup"/> again with the given parameters. <see cref="Reapply"/> is
+        /// <c>Register(true, 0, 0)</c>.
+        /// </summary>
+        /// <param name="clearFirst">
+        /// True = <c>ClearObstacles</c> first (the cell-switch behaviour). False = append to
+        /// whatever the motor already holds, which is how several hosts share one motor.
+        /// </param>
+        /// <param name="boxSurfaceIdOffset">
+        /// Added to every box surface id (<c>1 + i</c>). The caller passes the number of boxes
+        /// the motor already holds from earlier hosts, so ids stay unique.
+        /// </param>
+        /// <param name="rampSurfaceIdOffset">
+        /// Added to every ramp surface id (<c>FirstRampSurfaceId + i</c>), for the same reason.
+        /// </param>
+        /// <remarks>
+        /// The parameters persist until the next call, which is deliberate: the host's
+        /// own <see cref="Update"/> only ever registers a host that has never been ready, and
+        /// that path runs with the defaults. Clear-then-register stays the only correct order
+        /// when the table is not meant to be shared (AddPlane/AddObb are additive).
+        /// </remarks>
+        public void Register(bool clearFirst, int boxSurfaceIdOffset, int rampSurfaceIdOffset)
+        {
             if (motor == null) return;
             if (motor.GetSemanticDiameterWorldM() <= 0f) return;
-            motor.ClearObstacles();
+            if (clearFirst) motor.ClearObstacles();
+            boxSurfaceIdBase = boxSurfaceIdOffset;
+            rampSurfaceIdBase = rampSurfaceIdOffset;
             ready = false;
             Setup();
         }
@@ -448,7 +491,8 @@ namespace VRCKatamari.Story
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Registers one static box as a true OBB under box surface id <c>1 + i</c>.
+        /// Registers one static box as a true OBB under box surface id <c>1 + i</c> (plus
+        /// the registration's box offset).
         /// </summary>
         private bool RegisterBoxObb(BoxCollider box)
         {
@@ -471,7 +515,7 @@ namespace VRCKatamari.Story
             // The surface id is 1 + the box's registration order, so a diagnostic that
             // prints an id still names the same geometry.
             return AddSolidObb(center, axisX, axisY, axisZ, halfExtents,
-                1 + registeredBoxCount, ContactCodes.RoleBox, box.gameObject.name);
+                boxSurfaceIdBase + 1 + registeredBoxCount, ContactCodes.RoleBox, box.gameObject.name);
         }
 
         /// <summary>
@@ -506,7 +550,7 @@ namespace VRCKatamari.Story
             }
             if (!usable) return false;
             return AddSolidObb(center, axisX, axisY, axisZ, halfExtents,
-                SupportSurfaceMath.FirstRampSurfaceId + registeredRampCount,
+                SupportSurfaceMath.FirstRampSurfaceId + rampSurfaceIdBase + registeredRampCount,
                 ContactCodes.RoleSlab, box.gameObject.name);
         }
 
@@ -843,15 +887,20 @@ namespace VRCKatamari.Story
                     requested = requested + 1;
                 }
             }
+            // Counted against what the motor already holds: an appended host (Register with
+            // clearFirst = false) shares the table with the hosts before it. After a clear, or
+            // for a lone host, the held count is 0 and this is the old per-host check.
+            int held = motor.GetStaticObbCount();
             int capacity = motor.GetStaticObbCapacity();
-            if (requested <= capacity) return;
-            NoteRefusal(RefusalObbCapacity, "scene asks for " + requested + " static OBBs, capacity "
-                + capacity);
+            if (requested + held <= capacity) return;
+            NoteRefusal(RefusalObbCapacity, "scene asks for " + requested + " static OBBs on top of "
+                + held + ", capacity " + capacity);
             if (loggedObbCapacity) return;
             loggedObbCapacity = true;
-            Debug.LogError("[arena] " + requested + " static solids (boxes + ramp slabs + curve "
-                + "segments) exceed the motor's " + capacity + " OBB table; the ones past "
-                + capacity + " are refused and counted, never dropped silently (design §5.4)");
+            Debug.LogError("[arena] static OBB table overflow: " + held + " already held + "
+                + requested + " from this host (boxes + ramp slabs + curve segments) > "
+                + capacity + " slots; the ones past " + capacity + " are refused and counted, "
+                + "never dropped silently (design §5.4)");
         }
 
         private void NoteRefusal(int code, string reason)

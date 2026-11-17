@@ -32,7 +32,7 @@ namespace VRCKatamari.Tests
         private static AbsorbOutcome Evaluate(Vector3 position, long value)
         {
             return PickupAbsorbMath.EvaluateAbsorbWithValue(true, "small", Allowed, Allowed.Length,
-                Bounds, position, Ball, CollisionRadiusM, ContactRadiusM,
+                Bounds, Quaternion.identity, position, Ball, CollisionRadiusM, ContactRadiusM,
                 PickupAbsorbMath.DefaultVolumeK, BallDiameterM, MaxGrowthRadiusM, value);
         }
 
@@ -56,7 +56,8 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(AbsorbOutcome.RejectOutOfReach, Evaluate(FarAway, 0L));
             // Zero gain is also irrelevant when the kind is not allowed.
             AbsorbOutcome kindRefused = PickupAbsorbMath.EvaluateAbsorbWithValue(true,
-                "forbidden", Allowed, Allowed.Length, Bounds, InReach, Ball, CollisionRadiusM,
+                "forbidden", Allowed, Allowed.Length, Bounds, Quaternion.identity, InReach, Ball,
+                CollisionRadiusM,
                 ContactRadiusM, PickupAbsorbMath.DefaultVolumeK, BallDiameterM,
                 MaxGrowthRadiusM, 0L);
             Assert.AreEqual(AbsorbOutcome.RejectKindNotAllowed, kindRefused);

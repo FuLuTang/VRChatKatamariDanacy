@@ -1300,6 +1300,19 @@ namespace VRCKatamari.Pickup
                 return;
             }
 
+            // Diagnostic: how far the prop's box is from the ball's surface at the moment it
+            // is attached (the pose is frozen as it stands, so this is also the gap after).
+            // Negative = the box is inside the ball. The gate's own gap was <= 0 when it
+            // fired; the difference is how far the ball rolled before this event was read.
+            string boxGapText = "n/a";
+            float boxDistanceM;
+            if (PickupAbsorbMath.TryComputeBoxDistance(propOwnSizes[index], worldRotation,
+                worldPosition, ballCenter, out boxDistanceM))
+            {
+                boxGapText = ((boxDistanceM - motor.GetCollisionRadiusWorldM()) * 1000f)
+                    .ToString("F1");
+            }
+
             prop.SetParent(attachmentRoot);
             prop.localPosition = localPosition;
             prop.localRotation = localRotation;
@@ -1309,8 +1322,8 @@ namespace VRCKatamari.Pickup
             // The shell wants the prop's size along ITS OWN local axes, in the same
             // ball-local pose the visual prop just took. localRotation already contains the
             // prop's own rotation, so passing the world AABB (propBounds) would turn a yawed
-            // prop twice. The motor decides whether this item is a long object worth an
-            // endpoint candidate; a small or buried prop is skipped there, and this host
+            // prop twice. EVERY attached prop goes to the motor, which lengthens the ball's
+            // 16 pins with its box (a prop buried in the core is skipped there); this host
             // owns no proxy state.
             motor.AttachRadialProxy(itemIds[index], propOwnSizes[index], localPosition,
                 localRotation);
@@ -1327,6 +1340,7 @@ namespace VRCKatamari.Pickup
             CheckAttachmentRootOnce(ballCenter);
             Debug.Log("[PickupFieldHost] attached id=" + itemIds[index]
                 + " kind=" + kinds[index]
+                + " boxGapMm=" + boxGapText
                 + " attached=" + attachedCount);
         }
 
@@ -1547,14 +1561,16 @@ namespace VRCKatamari.Pickup
         /// </summary>
         private void SubmitProp(int index)
         {
-            Vector3 itemPosition = propTransforms[index].position;
+            Transform prop = propTransforms[index];
             // Per-item quantities travel together: the prop's own size and k for the gate (the
             // original's Req = floor(1000*cbrt(60*k*a*b*c/pi)), a, b, c being the prop's own
-            // edges, never its turned world box) and for the contact reach (the size's
-            // circumscribed sphere), and the finished growth in mm^3 for the ledger. None is
-            // derived here; the host resolved them once in Start.
-            bool queued = motor.SubmitCandidateWithVolumeKMm3(true, kinds[index], propOwnSizes[index],
-                itemPosition, growthMm3[index], itemIds[index], 0, propGateK[index]);
+            // edges, never its turned world box), the same size placed at the prop's position
+            // with its world rotation for the contact test (the prop's box touching the ball),
+            // and the finished growth in mm^3 for the ledger. None is derived here; the host
+            // resolved the size once in Start.
+            bool queued = motor.SubmitCandidateWithVolumeKMm3(true, kinds[index],
+                propOwnSizes[index], prop.rotation, prop.position, growthMm3[index],
+                itemIds[index], 0, propGateK[index]);
             // Listed even when the motor answered "already queued": both cases leave this
             // host responsible for withdrawing the id once it is no longer selected.
             if (queued) RememberQueued(index);

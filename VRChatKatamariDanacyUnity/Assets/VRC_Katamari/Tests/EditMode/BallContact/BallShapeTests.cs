@@ -6,10 +6,11 @@ using VRCKatamari.BallLayers;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// EditMode port of Docs/tests/ball_contact_v2/test_shapes.py: the visual core is inside
-    /// the physical sphere, the pickup reach is the patent's box support function unioned
-    /// with the pins, a pin can only protrude within the radial proxy's cap, only protruding
-    /// pins enter the contact set, and a half-radius protrusion halves the climb gate.
+    /// EditMode port of Docs/tests/ball_contact_v2/test_shapes.py: the pickup reach is the
+    /// patent's box support function unioned with the pins, a pin can only protrude within
+    /// the radial proxy's cap, only protruding pins enter the contact set (all 16 may), and
+    /// a half-radius protrusion halves the climb gate. The visual core is not here: it is the
+    /// level's fixed start diameter (ContactModelV2Tests).
     ///
     /// The needle directions are the radial proxy's own 16-direction Fibonacci set, not a
     /// second copy: the shape layer and the proxy must rotate the same pins.
@@ -31,18 +32,6 @@ namespace VRCKatamari.Tests
             float[] supports = new float[NeedleCount];
             for (int i = 0; i < supports.Length; i++) supports[i] = value;
             return supports;
-        }
-
-        [Test]
-        public void TheVisualCoreIsInsideThePhysicalSphere()
-        {
-            float radius;
-            Assert.IsTrue(BallShapeMath.TryVisualCoreRadius(0.30f, out radius));
-            Assert.AreEqual(0.285f, radius, Tolerance);
-            Assert.IsTrue(BallShapeMath.TryVisualCoreRadius(1.10f, out radius));
-            Assert.AreEqual(1.045f, radius, Tolerance);
-            Assert.Less(radius, 1.10f);
-            Assert.IsFalse(BallShapeMath.TryVisualCoreRadius(0f, out radius));
         }
 
         [Test]
@@ -116,6 +105,22 @@ namespace VRCKatamari.Tests
             // Longest first.
             Assert.AreEqual(5, compact[0]);
             Assert.AreEqual(2, compact[1]);
+        }
+
+        [Test]
+        public void EveryPinCanEnterTheContactSetWhenAllOfThemProtrude()
+        {
+            // Every attached prop registers into the pin table, so all 16 pins may protrude
+            // (many tied at the cap); none of them may be dropped by a smaller compact cap.
+            float[] supports = Supports(0.405f);
+            int[] compact = new int[ContactTuning.CompactNeedleCap];
+            int count;
+            Assert.IsTrue(BallShapeMath.TryCollectProtrudingNeedles(supports, NeedleCount, 0.30f,
+                compact, out count));
+            Assert.AreEqual(NeedleCount, count);
+            Assert.AreEqual(NeedleCount, ContactTuning.CompactNeedleCap);
+            // Ties keep ascending index order, so the selection is deterministic.
+            for (int k = 0; k < count; k++) Assert.AreEqual(k, compact[k]);
         }
 
         [Test]

@@ -12,9 +12,9 @@
 
 - 16 个确定性 Fibonacci 方向（已定；此前 32 是 provisional 选择）。每个方向存一个**端点支持长度**（不是历史 max）：表里只存端点最大值，读取时再与当前核心取 max。帧时间仍未做设备验证。
 - 端点在球局部系里是静态的（随 `BallVisualRollRoot` 旋转），世界端点只在吸附那一刻转换一次。
-- **16 方向表与端点池的关系**：方向表是合同要求的稀疏外壳视图（`supports[d] = max dot(p_i, d)`），用于重建、候选记账、诊断和以后 C 阶段的外形摘要；**接地高度按合同公式直接取端点 `p_i`**（`h(-n)=max(r, max_i dot(-n, Q·p_i))`），不先投影到 16 方向再插值——`GroundContactMath` 的接口本来就是点数组，端点云是同一外壳的精确来源，先采样再插值只会多一次近似。两者不会漂移：每次吸附/删除只用同一批角点更新受影响方向，重建时两者同源。
-- 长物件候选最多 4 个；输入是稳定实例键（`itemId`，重试/世代由宿主保证不重复）和它的 8 个 AABB 角点。吸附时只重算端点外半球方向；移除时按**幸存端点**重算同一批方向，所以两根棍共享方向时去掉一根不会误删另一根。
-- 极值候选最多 4 个（原型值）；满额**明确拒绝**，不驱逐。移除候选后槽位恢复；对外 ID 按字符串稳定排序。
+- **16 方向表与端点池的关系**：方向表就是球的 16 根针（`supports[d] = max dot(p_i, d)`，p_i 是**所有**已吸附物的盒角点）；v1 每步取针尖 `方向 × min(支持, core+cap)` 进 `GroundContactMath`（成本只与 16 有关），v2 把针尖当扫掠段做接触。端点池只是 detach/重建时重新推导针表的账本。
+- 每件吸附物都是一个 item（不再只收长物件）：输入是稳定实例键（`itemId`，重试/世代由宿主保证不重复）和它的 8 个 AABB 角点。吸附时是**增量 max 合并**（只点积新件的 8 个角点）；移除时按**幸存端点**重算受影响方向，所以两件共享方向时去掉一件不会误删另一件。
+- 数学层仍保留“极值候选键”（最多 4 个、满额拒绝不驱逐），马达传长度 0 的候选数组，不使用。
 - `TryRebuild` 先在临时逻辑里校验整个账本，全部成功后才替换支持表与候选表；失败保留旧壳。
 - 本层不实现接触高度（`GroundContactMath`）、Sweep、价值/吸附裁决、Renderer、掉落轨迹、真实 mesh 碰撞或 PVP 外壳。稀疏方向/半球近邻可能漏掉中段或相邻采样峰值；性能及跨平台逐位一致性未测。
 
@@ -64,24 +64,23 @@
 
 | 方法 | 作用 |
 |---|---|
-| `TryClassifyLongObject(bounds, core, minElongation, minLongestEdgePerCoreDiameter, out bool)` | 长物件准入：`bounds` 是**道具局部轴**全长；最长边 ≥ 0.5 × 球直径 **且** ≥ 2.5 × 第二长边（一个轴压过另外两个轴） |
 | `TryBuildAabbCorners(localCenter, localRotation, fullExtents, corners, out farthest)` | 8 个球局部 AABB 角点 + 最远角点距离（相对球心）；`fullExtents` 是道具局部轴全长 |
 | `TryResolvePropExtents(local, world, index, rows, out extents, out source)` | 选列：`propLocalBounds` 可用则用（source 0），否则回退 `propBounds` 并给原因码 1 缺列 / 2 长度不符 / 3 行值非法 |
-| `TryAttachItem(...)` | 追加 8 端点、只重算受影响方向、登记候选键；容量/键/端点全部先校验，失败不动旧表 |
+| `TryAttachItem(...)` | 追加 8 端点，**增量**合并：只把新件的 8 角点对受影响方向点积并对支持表取 max（不重扫整个池）；容量/键/端点全部先校验，失败不动旧表。马达对每件吸附物调用（`isCandidate=false`） |
 | `TryDetachItem(...)` | 复制被删角点 → 压缩池和 item 行 → 按幸存端点重算受影响方向 → 释放候选键 |
 | `TryRebuildShell(...)` | 整账本原子重建（调用 `RadialProxyMath.TryRebuild`） |
 | `TryClearShell(...)` | 重试/整场复位：清空方向支持、端点池、item 行、候选 |
-| `TryBuildContactPoints(core, maxProtrusion, endpoints, count, contactPoints)` | 每步交给 `GroundContactMath` 的数组：长度夹到 `core + maxProtrusion`，未用槽清零 |
+| `TryBuildPinTips(core, maxProtrusion, directions, supports, tips, out count)` | 每步交给 `GroundContactMath` 的 16 个针尖：`方向 × min(支持, core + maxProtrusion)`，没越过核心的针清零 |
 
 ### 归属
 
 外壳状态在 `KatamariBallMotor`：它已经持有球位姿，并且是唯一调用 `GroundContactMath` 的地方。数组在 `Start` 一次分配，运行期不分配：
 
 - `proxyDirections[16]`、`proxySupports[16]`
-- `proxyEndpointPool[32]`（= 4 个候选 × 8 角点）、`proxyEndpointCount`
-- `proxyItemStarts/Lengths/Keys/IsCandidate[4]`、`proxyItemCount`
-- `proxyCandidateKeys[4]`、`proxyCandidateCount`
-- 每步复用的 `localProxyPoints[32]`、`proxyAffectedIndices[16]`、`proxySolveScratch[16]`、`proxyCorners[8]`、`proxyRemovedCorners[8]`、`proxyEmptyPoints[0]`
+- `proxyEndpointPool[2048]`（= 256 件 × 8 角点，**每件吸附物都登记**）、`proxyEndpointCount`
+- `proxyItemStarts/Lengths/Keys/IsCandidate[256]`、`proxyItemCount`
+- `proxyCandidateKeys[0]`、`proxyCandidateCount`（数学层仍支持候选键，马达不用）
+- 每步复用的 `localProxyPoints[16]`（针尖）、`proxyAffectedIndices[16]`、`proxySolveScratch[16]`、`proxyCorners[8]`、`proxyRemovedCorners[8]`、`proxyEmptyPoints[0]`
 
 **没有另起一个 BallLayer 组件**：`RadialProxyMath` 是纯静态的，状态必须由某个 Behaviour 持有；motor 已经持有 `localProxyPoints` 并每步喂 `GroundContactMath`，再把壳状态放到第二个组件会多一次跨组件查找、多一份生命周期同步，而没有任何所有权收益。吸附事件从 `PickupFieldHost` 进入 motor 的公开 seam，宿主不持有代理状态。
 
@@ -127,8 +126,6 @@
 | `maxProxyProtrusionWorldM` | 0.30 m | 绝对护栏（防大球的相对上限绝对值过大） |
 | `maxProxyLiftPerStep` | 0.04 m | 代理引起的单步抬升上限；普通贴地仍用 `maxLiftPerStep = 0.1` |
 | `maxProxyNormalSpeedPerturbation` | 0.15 m/s | 法向速度扰动上限；B 只有位置通道，requested 传 0，留给以后有法向速度时也不能超过 |
-| `longObjectMinLongestEdgePerCoreDiameter` | 0.5 | 准入：最长边 ≥ 0.5 × 球直径 |
-| `longObjectMinElongation` | 2.5 | 准入：最长边 ≥ 2.5 × 第二长边（方片不算长物件） |
 | `minProxyProtrusionM` | 0.01 m | 吸附时最远角点不到 core+1 cm 就不登记 |
 
 突出上限只在**每步生成接触点**时施加，不写回端点池：池里保留原始长度，所以球长大后 `l − r` 自然减小（合同第 4 条），而不会因为吸附时截断过而永远长不回来。
@@ -199,7 +196,7 @@
 
 - **保留物理凹凸**：lift 峰值可见（≥ 1–2 cm）、球不弹跳、镜头不抖、帧率无明显下降。
 - **只当表现/调小**：如果球像被弹起、座位画面明显上下抖，先把 `maxProxyProtrusionPerCoreRadius` 降到 0.15–0.2、`maxProxyLiftPerStep` 降到 0.02 再测；仍不适则把 `maxProxyProtrusionPerCoreRadius = 0`（B 的接线保留，但接地退化回核心球）。
-- **准入**：若 `points` 一直是 0，先看 `GetLastProxySkipReason()`（1 不是长物件、2 没突出、3 候选满、4 端点池满、5 输入非法、6 数学拒绝）；Console 里 `[BallMotor] radial proxy refused` 只在 3–6 时打，最多 3 行。
+- **准入**：每件吸附物都登记；若 `GetProxyItemCount()` 比已吸附件数少，差值是 2（最远角点没越过核心 + `minProxyProtrusionM`，`GetProxySkipCount()`）或 4（256 件账本满）；`GetLastProxySkipReason()`：2 没突出、4 账本满、5 输入非法、6 数学拒绝；Console 里 `[BallMotor] radial proxy refused` 只在 4–6 时打，最多 3 行。
 - 把 `[ProxyTrace]` 原始行、三张截图、球径/杆尺寸、帧率写进 `Docs/Evidence/`（按现有证据目录规则），并在 `Docs/08_SOURCES_AND_OPEN_QUESTIONS.md` Q3 上回填结论；本次 Linux 侧不改那份文档。
 
 ## 未决/风险

@@ -28,7 +28,8 @@ namespace VRCKatamari.Story
     /// <c>diameter</c> is <c>GetSemanticDiameterWorldM()</c>, the gameplay diameter: the
     /// absorb gate and the HUD read it (the HUD adds the original's +0.02 cm display fudge).
     /// <c>d_vis</c> is <c>2 * GetVisualCoreRadiusWorldM()</c>, the design's visual core
-    /// (<c>0.95 r_phys</c>, CONTACT_MODEL_V2 4A.2) that the core mesh is drawn at. Both are
+    /// (the level's fixed start diameter, CONTACT_MODEL_V2 4A.2) that the core mesh is drawn at; it
+    /// does not change as the ball grows. Both are
     /// on the same line, read in the same frame, because the O6 full round compared a visual
     /// radius against a semantic diameter and read the 2x difference as a disagreement. The
     /// result board and the star targets evaluate the collision diameter

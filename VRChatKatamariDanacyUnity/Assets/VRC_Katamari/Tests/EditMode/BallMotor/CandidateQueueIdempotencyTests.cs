@@ -169,6 +169,38 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void EveryCandidateKeepsItsOwnRotationAndSizeThroughACompaction()
+        {
+            // The queue's per-candidate arrays are copied by one shared helper. The contact
+            // test reads a candidate's size and rotation, so a field that is not copied
+            // would judge a survivor with a removed candidate's box.
+            string[] ids = new string[] { "a", "b", "c" };
+            for (int i = 0; i < ids.Length; i++)
+            {
+                float degrees = 30f * (i + 1);
+                float half = degrees * Mathf.PI / 360f;
+                Quaternion rotation = new Quaternion(0f, Mathf.Sin(half), 0f, Mathf.Cos(half));
+                Assert.IsTrue((bool)Call("SubmitCandidateWithVolumeKMm3", true, "small",
+                    new Vector3(0.1f * (i + 1), 0.1f, 0.1f), rotation,
+                    new Vector3(0f, 0.05f, 1f), 3000000L, ids[i], 0, 0.7f));
+            }
+
+            Assert.IsTrue((bool)Call("WithdrawCandidate", "a"));
+            Vector3[] sizes = (Vector3[])motorType.GetField("pendingSizes",
+                BindingFlags.Instance | BindingFlags.NonPublic).GetValue(motor);
+            Quaternion[] rotations = (Quaternion[])motorType.GetField("pendingRotations",
+                BindingFlags.Instance | BindingFlags.NonPublic).GetValue(motor);
+            Assert.AreEqual("b", ItemIdAt(0));
+            Assert.AreEqual(0.2f, sizes[0].x, 1e-6f, "b keeps its own size");
+            Assert.AreEqual(Mathf.Sin(60f * Mathf.PI / 360f), rotations[0].y, 1e-6f,
+                "b keeps its own rotation");
+            Assert.AreEqual("c", ItemIdAt(1));
+            Assert.AreEqual(0.3f, sizes[1].x, 1e-6f, "c keeps its own size");
+            Assert.AreEqual(Mathf.Sin(90f * Mathf.PI / 360f), rotations[1].y, 1e-6f,
+                "c keeps its own rotation");
+        }
+
+        [Test]
         public void WithdrawUnlessAcceptedRemovesAnOrdinaryCandidate()
         {
             Assert.IsTrue(Submit("a"));

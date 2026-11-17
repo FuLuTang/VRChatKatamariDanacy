@@ -8,15 +8,16 @@ the rolling model ``Mr`` (16 fixed pins + 4 optional pins whose tips are the
 ground points).  Our v2 keeps three *explicit* objects with separate names,
 data and consumers:
 
-* ``VisualShape``  — core mesh + attachment mount; never physics.
+* ``VisualShape``  — core mesh + attachment mount; never physics.  The core is the
+  level's start diameter, fixed for the whole level (it is not computed here).
 * ``RollingShape`` — core sphere + needle support lengths; the contact solver's
   shape.  Needles are ball-local, so they rotate with the visual roll.
 * ``PickupShape``  — the stick/trigger volume; larger than the rolling core and
   never a blocker.
 
 Numbers are OUR design/provisional.  The original only anchors the *ordering*
-(display body, equal-volume collision box, pin rolling) and the estimate
-``visual core ~= 0.95 r_phys`` (Docs/Design research, /tmp/orig_physics §10.3).
+(display body, equal-volume collision box, pin rolling) and the video finding that the
+core does not grow (Docs/Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md b1).
 """
 from dataclasses import dataclass, field
 import math
@@ -25,13 +26,12 @@ from typing import List, Optional, Sequence, Tuple
 Vec3 = Tuple[float, float, float]
 
 # OUR design/provisional.
-VISUAL_CORE_TO_PHYSICAL = 0.95     # /tmp/orig_physics §10.3: 0.9-1.0, best 0.95
 NEEDLE_PROTRUSION_PER_RADIUS = 0.35
 NEEDLE_PROTRUSION_WORLD_M = 0.30
 NEEDLE_TIP_RADIUS_M = 0.01
 NEEDLE_DIRECTION_COUNT = 16        # patent: 16 fixed + 4 optional
 OPTIONAL_NEEDLE_COUNT = 4
-COMPACT_NEEDLE_CAP = 8             # only the 8 longest protrusions enter contacts
+COMPACT_NEEDLE_CAP = 16            # every pin may enter contacts (all attached props register)
 NEEDLE_STEEPER_GRIP = 0.5          # k_grip: a half-radius protrusion halves v_req
 
 
@@ -52,14 +52,6 @@ def _unit(a: Vec3, name: str = "vector") -> Vec3:
 
 def _clamp(value: float, low: float, high: float) -> float:
     return low if value < low else (high if value > high else value)
-
-
-def visual_core_radius(physical_radius: float,
-                       scale: float = VISUAL_CORE_TO_PHYSICAL) -> float:
-    """The mesh radius: slightly inside the physical sphere (original estimate)."""
-    if physical_radius <= 0.0:
-        raise ValueError("physical_radius must be positive")
-    return physical_radius * scale
 
 
 def needle_protrusion_cap(physical_radius: float) -> float:

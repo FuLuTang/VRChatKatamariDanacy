@@ -35,8 +35,8 @@ namespace VRCKatamari.Tests
     /// metres, values are ledger units. The size gate this file exercises is the original's
     /// whole-millimetre rule (owner decision 2026-11-16): the helper passes the item's
     /// per-item factor k and the ball's semantic DIAMETER, and "too large" means
-    /// `floor(1000*cbrt(60*k*a*b*c/pi)) > floor(1000*D)`. <c>ReachTableMatchesTheWorkedExample</c> is the one case whose expected
-    /// values come from a document instead: the worked reach table in
+    /// `floor(1000*cbrt(60*k*a*b*c/pi)) > floor(1000*D)`. <c>ContactTableMatchesTheWorkedExample</c> is the one case whose expected
+    /// values come from a document instead: the worked contact table in
     /// Docs/Design/PickupAbsorb/README.md, so a formula change has to disagree with the
     /// doc rather than with a copy of itself.
     /// </para>
@@ -50,12 +50,17 @@ namespace VRCKatamari.Tests
         {
             string[] allowed = { "stone" };
 
-            // Reference case: 0.2 m cube at 0.5 m from the ball, 0.3 m collision radius
-            // (a 0.60 m semantic ball), 0.1 m contact margin. itemRadius = 0.1 * sqrt(3) =
-            // 0.17320508, so the reach is 0.57320508 and 0.5 m is contact; the cube's Req
-            // is 474 mm, inside the 600 mm ball.
+            // Reference case: 0.2 m cube 0.45 m from the ball along x, 0.3 m collision radius
+            // (a 0.60 m semantic ball), 0.1 m contact margin. The cube's near face is 0.35 m
+            // from the ball's centre and the contact limit is 0.4 m, so it is touched; the
+            // cube's Req is 474 mm, inside the 600 mm ball. (The old bounding-sphere reach,
+            // 0.573 m, would have taken it from 0.55 m too; its face is 0.45 m away, which
+            // is not contact.)
             Assert.AreEqual(AbsorbOutcome.Absorb, Evaluate(true, "stone", allowed,
-                new Vector3(0.2f, 0.2f, 0.2f), new Vector3(0.5f, 0f, 0f), Vector3.zero,
+                new Vector3(0.2f, 0.2f, 0.2f), new Vector3(0.45f, 0f, 0f), Vector3.zero,
+                0.3f, 0.1f, 0.60f, 5f));
+            Assert.AreEqual(AbsorbOutcome.RejectOutOfReach, Evaluate(true, "stone", allowed,
+                new Vector3(0.2f, 0.2f, 0.2f), new Vector3(0.55f, 0f, 0f), Vector3.zero,
                 0.3f, 0.1f, 0.60f, 5f));
 
             // A 1 m cube at k=0.70 needs 2,373 mm, so a 2.00 m ball (2000 mm) refuses it.
@@ -123,6 +128,15 @@ namespace VRCKatamari.Tests
                 Vector3.one, Vector3.zero, Vector3.zero, 0.2f, 0f, float.NaN, 5f));
             Assert.AreEqual(AbsorbOutcome.RejectInvalidInput, Evaluate(true, null, allowed,
                 Vector3.zero, Vector3.zero, Vector3.zero, 0.2f, 0f, 1f, 5f));
+            // A rotation that is not a rotation (NaN, or the zero quaternion) is invalid input.
+            Assert.AreEqual(AbsorbOutcome.RejectInvalidInput, PickupAbsorbMath.EvaluateAbsorb(
+                true, "stone", allowed, allowed.Length, Vector3.one,
+                new Quaternion(float.NaN, 0f, 0f, 1f), Vector3.zero, Vector3.zero, 0.2f, 0f,
+                PickupAbsorbMath.DefaultVolumeK, 1f, 5f));
+            Assert.AreEqual(AbsorbOutcome.RejectInvalidInput, PickupAbsorbMath.EvaluateAbsorb(
+                true, "stone", allowed, allowed.Length, Vector3.one,
+                new Quaternion(0f, 0f, 0f, 0f), Vector3.zero, Vector3.zero, 0.2f, 0f,
+                PickupAbsorbMath.DefaultVolumeK, 1f, 5f));
             // A negative ball diameter is invalid input, not "a zero-millimetre ball".
             Assert.AreEqual(AbsorbOutcome.RejectInvalidInput, Evaluate(true, "stone", allowed,
                 Vector3.zero, Vector3.zero, Vector3.zero, 0f, 0f, -1f, 5f));
@@ -265,90 +279,114 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void ReachTableMatchesTheWorkedExample()
+        public void ContactTableMatchesTheWorkedExample()
         {
             // Source of the expected values: Docs/Design/PickupAbsorb/README.md, section
-            // "reach vs 物件尺寸（工作算例）". The ball sits at its calibrated start diameter
-            // (0.29974 m), so the core radius and the collision radius are both 0.14987 m
-            // (baselineVolumeUnits / cubicMetersPerVolumeUnit through SizeModelMath);
-            // contactRadiusWorldM is 0, and the item is a cube of side s, so
-            // itemRadius = sqrt(3) * s / 2 and reach = 0.14987 + contact + itemRadius.
-            // The table is printed to the millimetre, so the tolerance is 1 mm - this test
-            // pins the DOCUMENT's numbers, not a formula copied back out of the code.
+            // "接触距离 vs 物件尺寸（工作算例）". The ball sits at its calibrated start diameter
+            // (0.29974 m), so the collision radius is 0.14987 m; contactRadiusWorldM is 0
+            // and the item is a cube of side s. Centre distance at which the cube is just
+            // touched: straight at a face, r + s/2; straight at a corner (along the cube's
+            // diagonal), r + sqrt(3)*s/2. The table is printed to the millimetre, so the
+            // tolerance is 1 mm - this test pins the DOCUMENT's numbers, not a formula
+            // copied back out of the code.
             float collisionRadius = 0.14987f;
             float[] sides = { 0.10f, 0.25f, 0.35f, 0.50f };
-            float[] expectedItemRadius = { 0.0866f, 0.2165f, 0.3031f, 0.4330f };
-            float[] expectedReach = { 0.236f, 0.366f, 0.453f, 0.583f };
-            float[] expectedReachWithContact = { 0.336f, 0.466f, 0.553f, 0.683f };
+            float[] expectedFaceLimit = { 0.200f, 0.275f, 0.325f, 0.400f };
+            float[] expectedCornerLimit = { 0.236f, 0.366f, 0.453f, 0.583f };
+            float diagonal = 0.57735027f; // 1/sqrt(3)
 
             for (int i = 0; i < sides.Length; i++)
             {
-                Vector3 bounds = new Vector3(sides[i], sides[i], sides[i]);
-                float itemRadius;
-                float reach;
-                Assert.IsTrue(PickupAbsorbMath.TryComputeReach(bounds, collisionRadius, 0f,
-                    out itemRadius, out reach), "a cube and a non-negative radius are legal");
-                Assert.AreEqual(expectedItemRadius[i], itemRadius, 1e-4f,
-                    "itemRadius for a cube of side " + sides[i]);
-                Assert.AreEqual(expectedReach[i], reach, 1e-3f,
-                    "reach for a cube of side " + sides[i]);
-
-                float contactReach;
-                Assert.IsTrue(PickupAbsorbMath.TryComputeReach(bounds, collisionRadius, 0.10f,
-                    out itemRadius, out contactReach));
-                Assert.AreEqual(expectedReachWithContact[i], contactReach, 1e-3f,
-                    "reach with a 0.10 m contact margin for a cube of side " + sides[i]);
+                Vector3 size = new Vector3(sides[i], sides[i], sides[i]);
+                // Bisect the centre distance at which the box distance equals the limit.
+                float face = TouchDistance(size, new Vector3(1f, 0f, 0f), collisionRadius);
+                float corner = TouchDistance(size, new Vector3(diagonal, diagonal, diagonal),
+                    collisionRadius);
+                Assert.AreEqual(expectedFaceLimit[i], face, 1e-3f,
+                    "face-on limit for a cube of side " + sides[i]);
+                Assert.AreEqual(expectedCornerLimit[i], corner, 1e-3f,
+                    "corner-on limit for a cube of side " + sides[i]);
             }
         }
 
+        // Centre distance along `direction` at which the item (identity rotation, at the
+        // origin) is just touched by a ball of this radius: found by bisection on the
+        // contact function itself, so the table is checked through the shipped code.
+        private static float TouchDistance(Vector3 size, Vector3 direction, float radius)
+        {
+            float low = 0f;
+            float high = 5f;
+            for (int i = 0; i < 40; i++)
+            {
+                float mid = 0.5f * (low + high);
+                float boxDistance;
+                float limit;
+                Assert.IsTrue(PickupAbsorbMath.TryComputeContact(size, Quaternion.identity,
+                    Vector3.zero, direction * mid, radius, 0f, out boxDistance, out limit));
+                // Moving the ball farther out only increases the box distance, so the
+                // touching distance is the largest centre distance that is still contact.
+                if (boxDistance <= limit) low = mid; else high = mid;
+            }
+            return 0.5f * (low + high);
+        }
+
         [Test]
-        public void TheGateComparesAgainstTryComputeReach()
+        public void TheGateComparesAgainstTryComputeContact()
         {
             string[] allowed = { "stone" };
-            // A non-cube: a hand copy of the three half extents is exactly where a second
-            // formula drifts, so the gate's threshold is built from the helper's own
-            // number. itemRadius = sqrt(0.2^2 + 0.15^2 + 0.1^2) = sqrt(0.0725).
-            Vector3 bounds = new Vector3(0.4f, 0.3f, 0.2f);
-            float itemRadius;
-            float reach;
-            Assert.IsTrue(PickupAbsorbMath.TryComputeReach(bounds, 0.2f, 0.05f,
-                out itemRadius, out reach));
-            Assert.AreEqual(0.26925824f, itemRadius, 1e-6f);
-            Assert.AreEqual(0.51925824f, reach, 1e-6f);
+            // A non-cube approached along its x axis: the near face is half of 0.4 m from
+            // its centre, so with a 0.2 m collision radius and a 0.05 m contact margin the
+            // face is touched when the centre is 0.45 m away. The gate's threshold is built
+            // from the helper's own numbers, not a hand copy of the formula.
+            Vector3 size = new Vector3(0.4f, 0.3f, 0.2f);
+            float boxDistance;
+            float limit;
+            Assert.IsTrue(PickupAbsorbMath.TryComputeContact(size, Quaternion.identity,
+                new Vector3(0.45f, 0f, 0f), Vector3.zero, 0.2f, 0.05f, out boxDistance,
+                out limit));
+            Assert.AreEqual(0.25f, boxDistance, 1e-6f);
+            Assert.AreEqual(0.25f, limit, 1e-6f);
 
             // One millimetre inside is contact, one millimetre outside is not; the exact
             // equality case is pinned by BoundaryComparisonsMatchTheModel with numbers
             // that survive float rounding, because the README warns not to sit on 1 ulp.
-            Assert.AreEqual(AbsorbOutcome.Absorb, Evaluate(true, "stone", allowed, bounds,
-                new Vector3(reach - 0.001f, 0f, 0f), Vector3.zero, 0.2f, 0.05f, 1f, 5f));
+            Assert.AreEqual(AbsorbOutcome.Absorb, Evaluate(true, "stone", allowed, size,
+                new Vector3(0.449f, 0f, 0f), Vector3.zero, 0.2f, 0.05f, 1f, 5f));
             Assert.AreEqual(AbsorbOutcome.RejectOutOfReach, Evaluate(true, "stone", allowed,
-                bounds, new Vector3(reach + 0.001f, 0f, 0f), Vector3.zero, 0.2f, 0.05f, 1f,
-                5f));
+                size, new Vector3(0.451f, 0f, 0f), Vector3.zero, 0.2f, 0.05f, 1f, 5f));
         }
 
         [Test]
-        public void TryComputeReachRefusesGeometryTheGateCallsInvalid()
+        public void TryComputeContactRefusesGeometryTheGateCallsInvalid()
         {
-            float itemRadius;
-            float reach;
+            float boxDistance;
+            float limit;
+            Quaternion identity = Quaternion.identity;
 
-            // Every input the gate reports as RejectInvalidInput before it has a reach:
-            // a negative extent, a non-finite extent, a non-finite radius or contact
-            // margin, and a negative radius.
-            Assert.IsFalse(PickupAbsorbMath.TryComputeReach(new Vector3(-0.1f, 0f, 0f), 0.2f,
-                0f, out itemRadius, out reach));
-            Assert.IsFalse(PickupAbsorbMath.TryComputeReach(new Vector3(float.NaN, 1f, 1f),
-                0.2f, 0f, out itemRadius, out reach));
-            Assert.IsFalse(PickupAbsorbMath.TryComputeReach(Vector3.one, float.NaN, 0f,
-                out itemRadius, out reach));
-            Assert.IsFalse(PickupAbsorbMath.TryComputeReach(Vector3.one, 0.2f,
-                float.PositiveInfinity, out itemRadius, out reach));
-            Assert.IsFalse(PickupAbsorbMath.TryComputeReach(Vector3.one, -0.2f, 0f,
-                out itemRadius, out reach));
+            // Every input the gate reports as RejectInvalidInput before it has a distance:
+            // a negative or non-finite size, a non-finite position, an unusable rotation, a
+            // non-finite radius or contact margin, and a negative radius.
+            Assert.IsFalse(PickupAbsorbMath.TryComputeContact(new Vector3(-0.1f, 0f, 0f),
+                identity, Vector3.zero, Vector3.zero, 0.2f, 0f, out boxDistance, out limit));
+            Assert.IsFalse(PickupAbsorbMath.TryComputeContact(new Vector3(float.NaN, 1f, 1f),
+                identity, Vector3.zero, Vector3.zero, 0.2f, 0f, out boxDistance, out limit));
+            Assert.IsFalse(PickupAbsorbMath.TryComputeContact(Vector3.one, identity,
+                new Vector3(float.NaN, 0f, 0f), Vector3.zero, 0.2f, 0f, out boxDistance,
+                out limit));
+            Assert.IsFalse(PickupAbsorbMath.TryComputeContact(Vector3.one,
+                new Quaternion(0f, 0f, 0f, 0f), Vector3.zero, Vector3.zero, 0.2f, 0f,
+                out boxDistance, out limit));
+            Assert.IsFalse(PickupAbsorbMath.TryComputeContact(Vector3.one, identity,
+                Vector3.zero, Vector3.zero, float.NaN, 0f, out boxDistance, out limit));
+            Assert.IsFalse(PickupAbsorbMath.TryComputeContact(Vector3.one, identity,
+                Vector3.zero, Vector3.zero, 0.2f, float.PositiveInfinity, out boxDistance,
+                out limit));
+            Assert.IsFalse(PickupAbsorbMath.TryComputeContact(Vector3.one, identity,
+                Vector3.zero, Vector3.zero, -0.2f, 0f, out boxDistance, out limit));
 
             // A refusal zeroes both out values, so a caller cannot report half a number.
-            Assert.AreEqual(0f, itemRadius, 1e-6f);
-            Assert.AreEqual(0f, reach, 1e-6f);
+            Assert.AreEqual(0f, boxDistance, 1e-6f);
+            Assert.AreEqual(0f, limit, 1e-6f);
         }
 
         private static AbsorbOutcome Evaluate(bool absorbable, string kind, string[] allowed,
@@ -358,7 +396,8 @@ namespace VRCKatamari.Tests
             // The item plays at the original's default factor; the k-specific cases live in
             // AbsorbSizeGateTests.
             return PickupAbsorbMath.EvaluateAbsorb(absorbable, kind, allowed, allowed.Length,
-                bounds, itemPosition, ballPosition, collisionRadius, contactRadius,
+                bounds, Quaternion.identity, itemPosition, ballPosition, collisionRadius,
+                contactRadius,
                 PickupAbsorbMath.DefaultVolumeK, ballDiameterM, maxGrowthRadius);
         }
 

@@ -1,8 +1,8 @@
 """Tests for the three shape layers (CONTACT_MODEL_V2.md §4A).
 
-They pin the numbers and the ordering the design claims: the visual core is
-slightly inside the physical sphere, the rolling shape is the core union the pin
-tips, the pickup reach is the patent's box support function (1.0 r on an axis to
+They pin the numbers and the ordering the design claims: the rolling shape is the
+core union the pin tips (the visual core is the level's fixed start diameter and is
+not computed by this module), the pickup reach is the patent's box support function (1.0 r on an axis to
 1.73 r at a corner) unioned with the pins, and a pin can only protrude within the
 same cap the radial proxy already uses.
 
@@ -21,7 +21,6 @@ from Docs.Design.BallMotor.contact_v2.shapes import (
     needle_tip_contact,
     pickup_reach,
     required_speed_with_grip,
-    visual_core_radius,
 )
 
 ROOT3 = math.sqrt(3.0)
@@ -41,13 +40,6 @@ def fib_directions(count):
 def shape_with(supports, core=0.30):
     return RollingShape(core_radius=core, directions=fib_directions(len(supports)),
                         supports=supports)
-
-
-class VisualShapeTests(unittest.TestCase):
-    def test_visual_core_is_inside_the_physical_sphere(self):
-        self.assertAlmostEqual(visual_core_radius(0.30), 0.285)
-        self.assertAlmostEqual(visual_core_radius(1.10), 1.045)
-        self.assertLess(visual_core_radius(1.10), 1.10)
 
 
 class PickupShapeTests(unittest.TestCase):
@@ -87,6 +79,13 @@ class RollingShapeTests(unittest.TestCase):
         rolling = shape_with(supports)
         self.assertEqual(rolling.protruding()[:2], [5, 2])
         self.assertLessEqual(len(rolling.protruding()), COMPACT_NEEDLE_CAP)
+
+    def test_every_pin_may_enter_the_contact_set_when_all_protrude(self):
+        # Every attached prop registers into the pin table, so all 16 pins can protrude (many
+        # tied at the cap); none may be dropped, and ties keep ascending index order.
+        rolling = shape_with([0.405] * NEEDLE_DIRECTION_COUNT)
+        self.assertEqual(COMPACT_NEEDLE_CAP, NEEDLE_DIRECTION_COUNT)
+        self.assertEqual(rolling.protruding(), list(range(NEEDLE_DIRECTION_COUNT)))
 
     def test_tip_offsets_rotate_with_the_ball(self):
         rolling = shape_with([0.30] * NEEDLE_DIRECTION_COUNT)

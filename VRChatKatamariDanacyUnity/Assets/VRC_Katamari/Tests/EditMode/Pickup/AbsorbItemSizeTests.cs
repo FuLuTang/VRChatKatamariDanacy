@@ -5,9 +5,9 @@ using VRCKatamari.Pickup;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins which item quantity the absorb gate and the contact reach read: the item's OWN
-    /// three edge lengths (the original's per-type `a, b, c`), never the axis-aligned box
-    /// of the item as it is turned in the world.
+    /// Pins which item quantity the absorb gate reads: the item's OWN three edge lengths
+    /// (the original's per-type `a, b, c`), never the axis-aligned box of the item as it is
+    /// turned in the world. (Contact is pinned in <c>ItemContactTests</c>.)
     /// </summary>
     /// <remarks>
     /// <para>
@@ -54,7 +54,7 @@ namespace VRCKatamari.Tests
             float volumeK)
         {
             return PickupAbsorbMath.EvaluateAbsorb(true, "stone", Allowed, Allowed.Length,
-                size, Vector3.zero, Vector3.zero, ballDiameterM * 0.5f, 0f, volumeK,
+                size, Quaternion.identity, Vector3.zero, Vector3.zero, ballDiameterM * 0.5f, 0f, volumeK,
                 ballDiameterM, MaxGrowthRadiusM);
         }
 
@@ -139,46 +139,6 @@ namespace VRCKatamari.Tests
                 Assert.AreEqual(AbsorbOutcome.Absorb,
                     EvaluateAtBall(startBallM, sizes[i], referenceK), names[i]);
             }
-        }
-
-        [Test]
-        public void ReachIsTheCircumscribedSphereOfTheItemsOwnBoxWhateverItsTurn()
-        {
-            // The reach's item radius is the half-diagonal of the item's own box: the sphere
-            // that contains the whole item in every orientation, so a turn cannot change it.
-            // The axis-aligned box of a turned item has a larger half-diagonal; that is only
-            // a loose bound caused by the rotation, and it is not an input.
-            Vector3 size = new Vector3(0.20f, 0.04f, 0.12f);
-            float itemRadius;
-            float reach;
-            Assert.IsTrue(PickupAbsorbMath.TryComputeReach(size, 0.1f, 0f, out itemRadius,
-                out reach));
-            Assert.AreEqual(Mathf.Sqrt(0.1f * 0.1f + 0.02f * 0.02f + 0.06f * 0.06f), itemRadius,
-                1e-6f);
-            Assert.AreEqual(0.1f + itemRadius, reach, 1e-6f);
-
-            float[] yaws = new float[] { 0f, 30f, 45f, 90f };
-            for (int i = 0; i < yaws.Length; i++)
-            {
-                Vector3 worldBox = YawedWorldBox(size, yaws[i]);
-                float boxRadius;
-                float boxReach;
-                Assert.IsTrue(PickupAbsorbMath.TryComputeReach(worldBox, 0.1f, 0f,
-                    out boxRadius, out boxReach));
-                Assert.GreaterOrEqual(boxRadius, itemRadius - 1e-6f,
-                    "the world box of yaw " + yaws[i] + " is never tighter than the item");
-            }
-
-            // The gate compares against exactly that reach: just inside absorbs, just
-            // outside is out of reach, at every turn because no turn is an input.
-            float ballDiameterM = 0.5f;
-            Assert.AreEqual(AbsorbOutcome.Absorb, PickupAbsorbMath.EvaluateAbsorb(true, "stone",
-                Allowed, Allowed.Length, size, new Vector3(reach - 0.001f, 0f, 0f),
-                Vector3.zero, 0.1f, 0f, K, ballDiameterM, MaxGrowthRadiusM));
-            Assert.AreEqual(AbsorbOutcome.RejectOutOfReach, PickupAbsorbMath.EvaluateAbsorb(
-                true, "stone", Allowed, Allowed.Length, size,
-                new Vector3(reach + 0.001f, 0f, 0f), Vector3.zero, 0.1f, 0f, K,
-                ballDiameterM, MaxGrowthRadiusM));
         }
 
         [Test]

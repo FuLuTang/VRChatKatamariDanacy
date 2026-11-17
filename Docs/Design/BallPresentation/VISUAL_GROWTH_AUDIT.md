@@ -1,6 +1,8 @@
 # VISUAL_GROWTH_AUDIT — 吸附之后，视觉球到底有没有马上变大
 
-> **2026-11-16 owner 实机记录（此后以此为准）：** 一轮 StoryMode Play，29 次 `[grow]` 的每次吸收直径增幅 min **0.2%** / 中位 **2.5%** / max **23.8%**；D<0.4 档中位 **16.3%**；D>1.0 档连续 3 次 ≤ **0.9%**；`[shell]` 的 swallowed/attached 收敛到 **22/30**。owner 判定：**开了 80 ms 弹簧仍读作「跳一下」**，所以 **80 ms 核心追赶弹簧已从 play 移除**（`BallView.smoothCoreGrowth` 默认关，数学与单测保留、作选项目；场景里的序列化值需 Unity 操作者改成 0）。真因是**价值定价**（整数 unit 的最小增益过大），修复走定点体积与 level-1 重定价，见 `Docs/Research/ContentVolume/WHY_OUR_GROWTH_IS_BIG.md`。测量原文：`Docs/Evidence/BallPresentation/2026-11-16_owner_play_log/summary.md`。
+> **2026-11-16 owner 实机记录（此后以此为准）：** 一轮 StoryMode Play，29 次 `[grow]` 的每次吸收直径增幅 min **0.2%** / 中位 **2.5%** / max **23.8%**；D<0.4 档中位 **16.3%**；D>1.0 档连续 3 次 ≤ **0.9%**；`[shell]` 的 swallowed/attached 收敛到 **22/30**。owner 判定：**开了 80 ms 弹簧仍读作「跳一下」**，所以 **核心追赶弹簧已删除**。真因是**价值定价**（整数 unit 的最小增益过大），修复走定点体积与 level-1 重定价，见 `Docs/Research/ContentVolume/WHY_OUR_GROWTH_IS_BIG.md`。测量原文：`Docs/Evidence/BallPresentation/2026-11-16_owner_play_log/summary.md`。
+>
+> **现行口径（2026-11-17，原作优先）：** 球芯（核心网格）**显示直径固定为本关起始球径**（蟹座 0.222 m），整局不随吸收长大；`BallView` 在马达就绪后写一次，读 `GetStartDiameterWorldM()`。随体积长大的只有物理等效球（碰撞、接地、吸收门、HUD），吸附物冻结在它的接触面上，所以球大了是核心外一层壳。`0.95·r_phys`、`useVisualCoreRadius`、核心弹簧、`TryCoreTargetDiameter`/`TryStepCoreDiameter`/`TryVisualCoreRadius`/`VisualCoreToPhysical` 全部删除。设计见 [`ATTACH_PLACEMENT.md`](../BallLayers/Attachment/ATTACH_PLACEMENT.md) §3.2，原作证据见 [`ORIGINAL_ATTACH_LOOK.md`](../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md) b1。下文 §1–§5 是 2026-11-15 的诊断与离线模型（成长曲线、增量表、吞没率仍是定价问题的证据，其中的“视觉球 = 0.95·r_phys / D_visual”列是当时的假设，不再是目标），§6 的优先级与补丁已按现行口径改写。
 
 - 日期：2026-11-15
 - 范围：只读审计 + 离线模型 + 提案。**没有跑 Unity**（本 agent 不是 Unity 操作者），没有任何 Play Mode 观感结论标 PASS。
@@ -12,7 +14,7 @@
 ## 0. 结论（先看这 7 条）
 
 1. **尺寸是"提交即生效"的，没有任何视觉平滑。** 同一固定步内：第 6 阶段提交账本 → 第 7 阶段重算尺寸（`Runtime/BallMotor/KatamariBallMotor.cs:1339`、`:1345`），`BallView` 当帧就把 `coreMesh.localScale` 写成新直径（`Runtime/BallPresentation/BallView.cs:56-61`）。所以"延迟"不来自成长管线。
-2. **`BallView` 用的是语义直径（= 物理直径），不是 §4A 的 0.95 视觉半径**（`BallView.cs:56`；`GetVisualCoreRadiusWorldM()` 在 `KatamariBallMotor.cs:4998` **全仓无调用者**）。今天视觉球比设计值大 5 %。
+2. **（当时）`BallView` 用的是语义直径（= 物理直径）**，核心随体积一起长，先吸的件被包进红球（`BallView.cs:56`）。现行口径已改为核心固定为起始球径（见文首）。
 3. **每次吸附的直径增量差 40 倍**：1 单位（橡果）在 0.30 m 是 **+8.86 %（+26.6 mm）**，在 1.10 m 只剩 **+0.196 %（+2.15 mm）**，在 2.20 m（上限）是 **0**。按 1 % 可读线算：**1 单位在 0.637 m 以上、4 单位在 1.011 m 以上就看不见**（§2）。
 4. **原作的单件增量比我们小 1–2 个数量级**（门槛件最大 2.6 %，典型件 0.11 %；§3a），它靠"一档 20–180 件、中位 ~90 件"的密度堆出连续感。所以我们的问题**不是成长曲线太小，而是"每件都把轮廓改一点点"这件事没有发生**。
 5. **吸附物被冻在吸附瞬间的球半径上，之后永不外移、永不缩放**（`Runtime/Pickup/PickupFieldHost.cs:1064-1074`，`AttachmentMath` 明确不施加 objectScale）。球长大后它们被核心吞进内部：等级 1 实测（模型）**中位 81 % 已吸附件完全落在核心球内部**。
@@ -33,7 +35,7 @@
 
 `coreMesh` 是 `BallVisualRollRoot` 的子物体 `CoreMesh`，MeshFilter 用内置 Sphere（`StoryMode.unity` 对象 `2109846802/2109846803`，`m_Mesh: 10207`），Unity 内置球直径 1，所以 `localScale = D` 就是直径 D。**马达从不写任何 transform 的 scale**（`ApplyPresentation`，`KatamariBallMotor.cs:3421`，只写位置与旋转）。
 
-结论：`D_visual = D_physical = 2r`。§4A 要求的 `D_visual = 2 × 0.95 r` **没有落地**（`GetVisualCoreRadiusWorldM` 无调用者）。
+结论（当时）：`D_visual = D_physical = 2r`，核心随体积长大。现行：`D_visual` = 起始球径，常量。
 
 ### 1.2 更新频率与时机：立即，不延迟，不插值
 
@@ -189,7 +191,7 @@
 - 测试：`Docs/tests/visual_growth/test_visual_growth_model.py`（17 条，全绿）
 - CSV（不进仓库，按需生成）：`python3 Docs/Design/BallPresentation/visual_growth/visual_growth_model.py --csv /tmp/level1_absorb_growth.csv`
   - 列：`index, item_id, value_units, confirmed_units, diameter_physical_m, diameter_visual_m, delta_diameter_m, relative_growth, apparent_growth, core_radius_m, shell_radius_m, visible_core_fraction, swallowed_props, swallowed_fraction`
-  - `diameter_visual_m` 用 §4A 的 `0.95`；今天代码里它等于 `diameter_physical_m`（§1.1）。
+  - `diameter_visual_m` 是离线模型当时的 `0.95` 假设，现行目标是常量起始球径（该模型不再据此判断）。
 - 贪心顺序（写死在模型里，可复现）：每一步在"当前直径能吸（`absorbDiameterReq ≤ D`）"的件里取 **valueUnits 最小**的一件（同值按 itemId）。这给出**最少件数**下的成长曲线（从不空跑去找吃不了的东西）。
 - 三个 ASCII 摘要（模型直接打印）就是下面三块。统计：130 件里 **56 件（43 %）单件相对增量 <1 %**，**110 件连"相机之后"都 <1 %**，74 件 <0.5 %；中位吞没率 81 %、中位 `core/shell` 0.87。
 
@@ -253,10 +255,9 @@ LEVEL 1 greedy absorb (bucket = every 10 absorbs)
 
 | 优先级 | 改法 | 预期效果 | 成本 | 风险/约束 |
 |---|---|---|---|---|
-| **1** | **把吸附物壳层钉在球面上**：每次尺寸重算后，把 `StateAttached` 的件按方向外移，使 `|localPos| ≈ r_now − h`（保方向、保世界尺寸、保旋转）。位置：`PickupFieldHost` 新增 `ReanchorAttachedProps()`，在 `ConsumeAbsorbedEvents`（`:974`）之后调用 | **把"每件改变轮廓"还回来**：1.10 m 处半径只动 4 mm，但落上来的是 0.1–0.5 m 的可见物体；轮廓方差每件都变。这是最接近原作"一堆东西在滚"的一条 | 中（~40 行 + 每批一次 O(已吸附) 循环，无分配） | 视觉外壳会超出物理外壳：必须夹在 `min(0.35r, 0.30 m)` 的针尖凸出上限内，并对被移动的件重新登记径向代理（`motor.AttachRadialProxy`，`:1084`），否则"看着撑着、物理没撑"（CONTACT_MODEL_V2 §4A.3） |
 | **2** | **换核心网格（低模杂物团）+ 3–5 档 tier**，替掉 Unity 内置球 | 轮廓在档位边界**换形状**，把 2 % 的半径变化藏进一次"换一层"；同时让核心不再是纯红球 | 高（美术 3–21 个 mesh + 一张档位表；原作 21 档，我们 0.30–2.20 m 用 3–5 档够用：0.30/0.55/0.90/1.40/2.20） | 需要 Art 与 Lead 排期；tier 只读 `semanticDiameter`，**不得**进碰撞/拾取/stepLimit（§4A.2 的禁令） |
-| **3** | **视觉半径 = 0.95 r_phys，并加 60–80 ms 弹簧**追上目标 | 修掉今天 5 % 的偏差（§4A.2 的不变量），并把"跳一下"变成"吹起来"；结合 (1) 后道具会自然凸出球面 5 % | 低（`BallView` ~15 行；`GetVisualCoreRadiusWorldM()` 已存在，`:4998`） | 弹簧只影响表现，**不得**喂吸收门/HUD/相机；滞后峰值 ≈ 单件 ΔD（26 mm 开局），不会掩盖真实尺寸 |
-| **4** | **吞入 pop**：每次 `GetAbsorbedCount()` 变化时把核心/外壳乘 1.02–1.03，0.1–0.15 s 回弹 | 给"吸附 → 立刻有反应"一个明确的**时间锚点**；对 0.6 m 以上的小增量最有用（把 0.2 % 的半径变化变成 2–3 % 的可见脉动） | 极低（~10 行 + 一个计时器） | 纯表现，必须与真实尺寸解耦（回弹结束回到 `0.95 r`）；不能参与 `[story] diameter` |
+| **3** | **核心固定为起始球径**（已落地 2026-11-17；弹簧与 0.95 已删） | 核心不长，先吸的件不再被包进红球；大球是核心外的一层物件壳（原作观感机制） | 已完成 | 只改表现层；物理球仍随体积长大，吸附物挂在物理球接触面上 |
+| **4** | **吞入 pop**：每次 `GetAbsorbedCount()` 变化时把外壳乘 1.02–1.03，0.1–0.15 s 回弹 | 给"吸附 → 立刻有反应"一个明确的**时间锚点**；原作是接触点的 0.07–0.13 s 星爆特效，而不是缩放 | 极低 | 纯表现，必须与真实尺寸解耦；不能参与 `[story] diameter`；优先做星爆（`ATTACH_PLACEMENT.md` O9） |
 | **5** | **相机别按比例后退**：`back = 0.75 + 2.2·r` 改成次线性（如 `r^0.75`），或把 `eyeBackPerRadius` 从 2.2 降到 1.4 | 把 0.34–0.64 的"抵消系数"抬到 0.6–0.8，等于整体放大成长观感 | 低（2 个常量） | 改变整局手感与舒适度（站点眼点），**必须所有者拍板**；不是纯表现层的局部改动 |
 
 不建议做的事：**不要为了"看得见"去改 `cubicMetersPerVolumeUnit`/`baselineVolumeUnits`**。它们被星星目标钉住（1356 单位 = 2.20 m 上限，`KatamariBallMotor.cs:184-192` 的注释与 `Docs/Design/Gameplay/round_model.py`），改它等于改关卡难度曲线；而且 §2 已证明开局单件增量**已经过大**（29 %，是原作的 11 倍），问题不在数值大小。
@@ -266,100 +267,30 @@ LEVEL 1 greedy absorb (bucket = every 10 absorbs)
 §4A.2 的三形状与不变量（`Docs/Design/BallMotor/CONTACT_MODEL_V2.md:755-777`）：
 
 ```
-r_visual = 0.95·r_phys
+r_visual = r_start          # 起始球径的一半，常量
 r_roll   = 1.00·r_phys
 rollReach(û) = max(r_roll, max_i needleSupport[i]·dot(dir_i, û))     ≤ r_roll + cap
 pickupReach(û) = max( r_phys·(|ûx|+|ûy|+|ûz|), rollReach(û) )
-⇒ r_visual < r_roll ≤ rollReach(û) ≤ pickupReach(û)
+⇒ r_visual ≤ r_roll ≤ rollReach(û) ≤ pickupReach(û)
 ```
 
 | 项 | 设计 | 今天代码 | 差 |
 |---|---|---|---|
-| `CoreMesh` 缩放 | `visualDiameter = 2·0.95·r_phys`（§4A.5 表） | `2·r_phys`（`BallView.cs:56-61`） | 视觉大 5 %，把"道具凸出球面"这个唯一的外壳线索也吃掉了 |
-| 视觉层读数 | 只读 `visualDiameter`，**不**进接触/拾取/stepLimit | 只读 `semanticDiameter`（就是物理直径）；`GetVisualCoreRadiusWorldM` 存在但无调用者 | 一旦有人把 `semanticDiameterPerCoreDiameter` 调≠1，视觉与物理立刻分家（早期审计已提过） |
+| `CoreMesh` 缩放 | `visualDiameter = 2·r_start`（常量，§4A.5 表） | 已落地：`BallView` 写一次 `GetStartDiameterWorldM()` | 无 |
+| 视觉层读数 | 只读 `visualDiameter`（起始球径），**不**进接触/拾取/stepLimit | `BallView` 读 `GetStartDiameterWorldM()`；`GetVisualCoreRadiusWorldM()` 是它的一半，诊断读它 | 无 |
 | 吸附物挂载 | `AttachmentRoot` 属于 VisualShape，是"粘附物挂载点" | 已是 `BallVisualRollRoot` 的子物体 | 结构对，行为（冻结/吞没）没设计 |
 | 埋没 cull | §4A.2 把"埋没 cull"列为 VisualShape 的消费者；专利 display level | **没有**任何 cull（本地）；`RemoteProxyMath` 的 `buried` 只用于远端摘要 | 缺 |
 | v2 开关 | 三形状拆分属 S4 | 场景 `contactModelV2Enabled: 0`（`StoryMode.unity` 组件 `1524211376`），**v2 未启用** | 本文所有建议都在表现层，**开关两态都成立**；等 v2 打开时 `BallView` 应改读 `GetVisualCoreRadiusWorldM()` |
 
-**视觉层在 §4A 下应该怎么表现**（一句话）：核心网格按 `0.95 r_phys` 缩放、只做表现；吸附物挂在 `AttachmentRoot` 上、**壳层外径不超过 `pickupReach`**（否则会"看得见却吸不到"，违反 §4A.2 的 `r_visual < … ≤ pickupReach`）；埋没的件按 display level 不画（而不是留在里面）；换 tier 只改网格与 tile，不改任何半径。
+**视觉层在 §4A 下应该怎么表现**（一句话）：核心网格固定为起始球径、只做表现；吸附物挂在 `AttachmentRoot` 上、**壳层外径不超过 `pickupReach`**（否则会"看得见却吸不到"，违反 §4A.2 的 `r_visual < … ≤ pickupReach`）；埋没的件按 display level 不画（而不是留在里面）；换 tier 只改网格与 tile，不改任何半径。
 
 ### 6.2 补丁提案（不落地；给其他 agent 的精确位置）
 
-**P1 — `BallView`：0.95 视觉半径 + 80 ms 弹簧（`Runtime/BallPresentation/BallView.cs:44-63`）**
+**P1 — `BallView`：核心固定为起始球径（已落地，2026-11-17）**
 
-```csharp
-// BallView.cs:44 附近
-private const float diameterChangeM = 0.0001f;
-private const float visualCoreToPhysicalRadius = 0.95f;  // CONTACT_MODEL_V2 4A.2
-private const float catchUpSeconds = 0.08f;              // 一个时间常数
+`BallView.Update` 在马达就绪（`GetStartDiameterWorldM() > 0`）后把 `coreMesh.localScale` 写成该直径**一次**，之后只剩一次布尔判断；0.95 开关、`smoothCoreGrowth`、弹簧状态与对应数学全部删除。原提案的 0.95 + 80 ms 弹簧被取代。
 
-// 新增字段（BallView.cs:51 附近）
-private float visualDiameterM = -1f;
-
-// Update（BallView.cs:53-63）改为：
-public void Update()
-{
-    if (motor == null || coreMesh == null) return;
-    float physicalDiameterM = motor.GetSemanticDiameterWorldM();
-    if (!KatamariMath.IsFiniteFloat(physicalDiameterM)) return;
-    if (physicalDiameterM <= 0f) return;
-    float target = physicalDiameterM * visualCoreToPhysicalRadius;
-    if (visualDiameterM < 0f)
-    {
-        visualDiameterM = target;
-        lastDiameterM = target;
-        coreMesh.localScale = Vector3.one * target;
-        return;
-    }
-    float alpha = Mathf.Clamp01(Time.deltaTime / catchUpSeconds);
-    visualDiameterM = visualDiameterM + (target - visualDiameterM) * alpha;
-    if (Mathf.Abs(visualDiameterM - lastDiameterM) <= diameterChangeM) return;
-    coreMesh.localScale = Vector3.one * visualDiameterM;
-    lastDiameterM = visualDiameterM;
-}
-```
-
-预期：视觉球从"每件跳一下"变成"每件吹一下"，并且**任何一帧都不比物理球大**（弹簧只追不超），所以不会掩盖真实尺寸；`0.95` 让吸附物自然凸出 5 %。成本：一个标量 + 一次乘加，无分配。
-
-**P2 — `PickupFieldHost`：壳层外移（`Runtime/Pickup/PickupFieldHost.cs:974` 之后新增方法，`:1084` 之后登记代理）**
-
-```csharp
-// 每帧在 ConsumeAbsorbedEvents() 之后调用一次；尺寸阶段已经在本帧之前跑完。
-private void ReanchorAttachedProps()
-{
-    float coreRadius = 0.5f * motor.GetSemanticDiameterWorldM();
-    if (!KatamariMath.IsFiniteFloat(coreRadius) || coreRadius <= 0f) return;
-    float protrusionCap = BallShapeMath.NeedleProtrusionCap(coreRadius); // min(0.35r, 0.30)
-    for (int i = 0; i < propCount; i++)
-    {
-        if (propStates[i] != StateAttached) continue;
-        Transform prop = propTransforms[i];
-        if (prop == null) continue;
-        Vector3 local = prop.localPosition;
-        float distance = local.magnitude;
-        float half = 0.5f * RadialProxyExtentsFor(i).magnitude;   // 复用同一份尺寸来源
-        if (distance <= 1e-4f) continue;
-        float wanted = coreRadius - half;
-        if (wanted <= distance) continue;                          // 只外移，不回吸
-        float allowed = coreRadius + protrusionCap - half;         // 视觉 ≤ 物理可撑住的外壳
-        if (wanted > allowed) wanted = allowed;
-        if (wanted <= distance) continue;
-        prop.localPosition = local * (wanted / distance);
-    }
-}
-```
-
-预期：外壳跟着球面走，**每件都留在轮廓上**；被移动的件需要用新位姿重新 `motor.AttachRadialProxy`（`:1084`），否则物理支撑不会包含这部分凸出（§4A.3 的"看着撑着、物理没撑"）。成本：每帧一次 O(propCount ≤ 130) 的 Vector3 循环，无分配；可以加"只在直径变化 > 1 mm 时跑"的门。
-
-**P3 — 吞入 pop（`BallView.Update` 内，`visualDiameterM` 写完之后）**
-
-```csharp
-// 需要 motor.GetAbsorbedCount()；计数变化时置 popRemaining = 0.12f。
-// popScale = 1f + 0.03f * Mathf.Sin(Mathf.PI * popRemaining / popSeconds);
-// coreMesh.localScale = Vector3.one * (visualDiameterM * popScale);
-```
-
-预期：给"吸附"一个 0.12 s 的确定反馈；只在表现层，回弹结束严格回到 `0.95 r`。
+**P3 — 吞入反馈**：原作是接触点 0.07–0.13 s 的星爆特效，不是缩放（`ATTACH_PLACEMENT.md` O9）；特效属后续美术项，不在本文提案内。
 
 ## 7. 没验证的、以及边界
 

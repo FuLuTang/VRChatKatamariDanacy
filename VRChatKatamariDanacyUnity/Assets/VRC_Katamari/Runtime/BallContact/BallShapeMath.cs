@@ -12,10 +12,12 @@ namespace VRCKatamari.BallContact
     /// <remarks>
     /// <para>
     /// Invariants this file must keep (and the tests pin):
-    /// <c>r_visual = 0.95 * r_phys</c>, <c>r_roll = 1.00 * r_phys</c>,
+    /// <c>r_roll = 1.00 * r_phys</c>,
     /// <c>rollReach(u) = max(r_roll, max_i support_i * dot(dir_i, u))</c>,
     /// <c>pickupReach(u) = max(r_phys * (|ux| + |uy| + |uz|), rollReach(u))</c>, so
-    /// <c>r_visual &lt; r_roll &lt;= rollReach(u) &lt;= pickupReach(u)</c> for every u.
+    /// <c>r_roll &lt;= rollReach(u) &lt;= pickupReach(u)</c> for every u. The visual core
+    /// is not computed here: it is the level's start radius, fixed
+    /// (<c>KatamariBallMotor.GetVisualCoreRadiusWorldM</c>), and never larger than r_roll.
     /// The union with the pins is what keeps the user-facing ordering "pickup reaches
     /// further than rolling" true even when a long object sticks out past the box corner.
     /// </para>
@@ -29,7 +31,9 @@ namespace VRCKatamari.BallContact
     /// <para>
     /// Needle supports are ball-local support lengths (>= core radius, clamped to the
     /// same protrusion cap the radial proxy already uses). Only pins protruding more than
-    /// 1 mm enter the contact set, longest first, at most 8. Tip offsets rotate with the
+    /// 1 mm enter the contact set, longest first, at most 16 (every pin: every attached
+    /// prop registers into the table, so a short pin facing the ground must not lose its
+    /// slot to a longer one facing the sky). Tip offsets rotate with the
     /// ball's visual roll rotation; the rotation is checked with the radial proxy's own
     /// unit-quaternion rule so both layers accept exactly the same transforms.
     /// </para>
@@ -49,27 +53,6 @@ namespace VRCKatamari.BallContact
         // margin absorbs the float error of the entry parameter. At 1e-5 m it is 1/1000
         // of the 1 cm tip radius, so it cannot invent a contact that is not there.
         private const float SegmentHitMargin = 1e-5f;
-
-        /// <summary>
-        /// r_visual = scale * r_phys (default 0.95): the mesh radius, slightly inside the
-        /// physical sphere.
-        /// </summary>
-        /// <remarks>
-        /// False for a non-positive or non-finite radius or scale; the out value is then
-        /// zero. The model raises instead, because a caller with no radius has no shape.
-        /// </remarks>
-        public static bool TryVisualCoreRadius(float physicalRadius, out float visualRadius,
-            float scale = ContactTuning.VisualCoreToPhysical)
-        {
-            visualRadius = 0f;
-            if (!KatamariMath.IsFiniteFloat(physicalRadius) || physicalRadius <= 0f)
-                return false;
-            if (!KatamariMath.IsFiniteFloat(scale)) return false;
-            float value = physicalRadius * scale;
-            if (!KatamariMath.IsFiniteFloat(value)) return false;
-            visualRadius = value;
-            return true;
-        }
 
         /// <summary>
         /// The physics clamp on how far a pin may protrude:
@@ -110,7 +93,7 @@ namespace VRCKatamari.BallContact
         /// <remarks>
         /// False means an unusable argument: a null or too-short buffer, a count beyond the
         /// arrays, or a non-positive core radius. The needed capacity is
-        /// <c>min(protruding count, 8)</c>, so a caller may size the buffer for the pins it
+        /// <c>min(protruding count, CompactNeedleCap)</c>, so a caller may size the buffer for the pins it
         /// expects and still be told when that is not enough. The supports must already be
         /// clamped by <see cref="TryClampNeedleSupport"/>: the model's shape clamps in its
         /// constructor and this layer has no shape object, so clamping is a separate call

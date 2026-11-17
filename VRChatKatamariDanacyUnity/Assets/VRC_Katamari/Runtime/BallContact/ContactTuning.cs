@@ -231,9 +231,8 @@ namespace VRCKatamari.BallContact
         public const float WindowCompleteMarginM = 0.02f;
 
         // ---- Shapes (section 4A, owner decisions 13, 14, 15) ----
-
-        /// <summary>r_visual = 0.95 * r_phys: the visual core is slightly inside the physical sphere.</summary>
-        public const float VisualCoreToPhysical = 0.95f;
+        // The visual core has no tuning constant: it is the level's start diameter, fixed
+        // (KatamariBallMotor.GetStartDiameterWorldM), not a fraction of the physical radius.
 
         /// <summary>Maximum physical pin protrusion per core radius (matches the radial proxy cap).</summary>
         public const float NeedleProtrusionPerRadius = 0.35f;
@@ -250,8 +249,13 @@ namespace VRCKatamari.BallContact
         /// <summary>The 4 optional extra pins, reported separately.</summary>
         public const int OptionalNeedleCount = 4;
 
-        /// <summary>At most this many protruding pins enter the contact set.</summary>
-        public const int CompactNeedleCap = 8;
+        /// <summary>
+        /// At most this many protruding pins enter the contact set: all 16. Every attached
+        /// prop now registers into the pin table, so most pins protrude and many sit at the
+        /// protrusion cap (ties); a smaller cap would drop pins by index order, and the pin
+        /// that faces the ground could be the one dropped.
+        /// </summary>
+        public const int CompactNeedleCap = NeedleDirectionCount;
 
         /// <summary>A 1 mm protrusion over the core is the threshold for "protruding".</summary>
         public const float NeedleProtrusionThresholdM = 0.001f;

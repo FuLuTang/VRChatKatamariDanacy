@@ -31,4 +31,15 @@
 
 `Tests/EditMode/BallLayers/AttachmentTests.cs` 覆盖 `test_attachment.py` 的 6 项与 `test_growth_attachment_simulation.py` 中属于本层的 2 项；增长模拟里的 `derive_size`/体积累加/交分属于 SizeModel 与确认账本，`test_presentation_cap_does_not_truncate_authority_value` 完全不触及本层，这三处断言未在此移植。尚未在 Unity 编译、未跑 `run_tests`；`ballSeed` 的来源与文本规范、Udon 下的哈希与字符串行为均未验证。
 
-> 观感对照（附着物保持吸附瞬间位姿、不随球芯长大缩放或外推，与原版两帧的实拍差异）：[`Docs/Evidence/BallPresentation/2026-11-15_attached_props_vs_original/`](../../../Evidence/BallPresentation/2026-11-15_attached_props_vs_original/README.md)。
+## 放置与观感（现行口径）
+
+身份与位姿**记录**（上文）与吸附时**放在哪**是两件事。记录层：吸附位姿冻结在球局部系，不缩放、不重投影、不外推（原作确认）。放置层现行决定（Lead 2026-11-17，原作优先）：
+
+- **触发即接触，原地冻结**：触发改为“道具盒碰到球的碰撞体”（`CANCER_COURTYARD_DIFFERENCES` D08），触发时实体已贴着球，`AttachProp` 继续冻结那一刻的世界位姿；保持朝向，不加嵌入偏移，不拉入，允许互相穿插。现状触发按外接球中心距，细长/扁平件会悬在球面外，随 D08 消失。
+- **球芯显示直径固定为本关起始球径，不随吸收长大**（原作录像）；碰撞、接地、吸收门所用的等效体积球照旧随体积长大，吸附在它的接触面上，大球时物件在固定核心之外成外壳。
+- **不做埋没隐藏**（核心固定后没有“被核心包住”的件）；原作按相对大小的消隐是开放问题。
+- 吸附瞬间的星爆特效（约 0.1 s）是以后的美术需求，本轮不做。
+
+公式/数据、离线估算（核心可见度、插地深度、针代理能否托住，D=0.30/0.50/0.80 m）、`BallView` 改动点、验收判据与开放问题全部在 [`ATTACH_PLACEMENT.md`](ATTACH_PLACEMENT.md)；原作证据、级别与录像时间码在 [`ORIGINAL_ATTACH_LOOK.md`](../../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md)。
+
+> 观感对照（附着物保持吸附瞬间位姿、不随球芯长大缩放或外推，与原作两帧的实拍差异）：[`Docs/Evidence/BallPresentation/2026-11-15_attached_props_vs_original/`](../../../Evidence/BallPresentation/2026-11-15_attached_props_vs_original/README.md)。

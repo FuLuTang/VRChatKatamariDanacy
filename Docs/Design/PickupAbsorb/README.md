@@ -8,7 +8,7 @@
 - 共享地图坐标系用于碰撞、拾取和吞噬；成长账本与渲染网格分离。参见 [`Docs/02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md#L6-L21) 与第3节。
 - 同物实例以 `(roundId, spawnId, spawnGeneration)` 辨识；请求幂等、唯一裁决结果；客户端可预测但失败要回滚。远端装饰不能决定玩法碰撞。
 - 远端仅依据确认的状态重建外观摘要；装饰模型、代理凹凸、径向样本都不得决定游戏碰撞或计分。
-- 接触判定与候选生命周期已是运行时契约（下一节「接触判定与候选生命周期」），**本节 Python 模型不是该契约的权威**：reach 的实现、默认值和队列行为以 C# 为准。
+- 接触判定与候选生命周期已是运行时契约（下一节「接触判定与候选生命周期」），**本节 Python 模型不是该契约的权威**：接触判定的实现、默认值和队列行为以 C# 为准。
 - **吸收尺寸门是原作的整 mm 体积口径**（owner 2026-11-16，取代 2026-11-15 的 (l) 初版）：`V = k·a·b·c`，`Req_mm = floor(1000·cbrt(60V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。契约在 1.1 节（含 2026-11-16 的更正块），实现只在 `PickupAbsorbMath` 的 `TryComputeOriginalItemVolume` / `TryFloorMillimetres` / `TryComputePickupReqDiameterMm` / `IsBeyondAbsorbLimit` 四个函数里；`absorbVolumeRatio` / `maxItemVolumeWorldM3` 两个序列化字段与更早的 `absorbSizeRatio` / `maxItemSizeWorldM` 都已删除。实测前后对比见 [`ABSORB_GATE_ORIGINAL.md`](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 
 ### 【DRAFT 草案】
@@ -28,7 +28,7 @@
 
 ## 使用与边界
 
-从仓库根运行 `python3 -m unittest discover -s Docs/tests`。吸附判定采用球半径 + 显式接触余量 + AABB 包围球半径的宽松近似；这只是离线候选模型。它不含遮挡、速度合理性、物件状态机、回合结算、网络传输或反作弊。权威状态应只计确认后的吸附集合；客户端装饰可丢弃并从权威快照重建。**不声称 VR、舒适性、Udon runtime、Unity 或网络实测通过。**
+从仓库根运行 `python3 -m unittest discover -s Docs/tests`。离线 Python 模型的吸附判定仍是球半径 + 显式接触余量 + AABB 包围球半径的宽松近似，运行时（C#）已改为道具有向盒到球心的最短距离，见下一节；这只是离线候选模型。它不含遮挡、速度合理性、物件状态机、回合结算、网络传输或反作弊。权威状态应只计确认后的吸附集合；客户端装饰可丢弃并从权威快照重建。**不声称 VR、舒适性、Udon runtime、Unity 或网络实测通过。**
 
 来源依据：[`Docs/02_TECHNICAL_CONTRACTS.md`](../../02_TECHNICAL_CONTRACTS.md#L32-L110)、[`Docs/01_GAME_DESIGN.md`](../../01_GAME_DESIGN.md#L13-L20)、[`Docs/Archive/Handoffs/Research_ReferenceRules.md`](../../Archive/Handoffs/Research_ReferenceRules.md)。
 
@@ -42,7 +42,7 @@
 
 ## 接触判定与候选生命周期
 
-这一节存在的原因：`reach` 怎么算、`contactRadiusWorldM` 是占位值、空白名单意味着全拒、候选队列没有过期——这些此前只写在代码里。结果两次独立的现场调试（其中一次是 Lead）各自把 reach 算错，然后按“几何上应该吸到了”去改场景，而实际规则是另一条。以下每个结论都标了 `文件:行`。
+这一节存在的原因：接触怎么算、`contactRadiusWorldM` 是占位值、空白名单意味着全拒、候选队列没有过期——这些此前只写在代码里。结果两次独立的现场调试（其中一次是 Lead）各自把 reach 算错，然后按“几何上应该吸到了”去改场景，而实际规则是另一条。以下每个结论都标了 `文件:行`。
 
 **证据等级：** 全部来自代码阅读与手算，本检出没有 Unity/Udon 编译或运行，**未做运行时验证**。
 
@@ -52,28 +52,32 @@
 - [KatamariBallMotor.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/KatamariBallMotor.cs) — 装配层，持有队列、默认值与拒绝环形缓冲。
 - [SizeModelMath.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallLayers/SizeModel/SizeModelMath.cs) — 球的三个尺寸，其中只有碰撞半径进本层。
 
-**行号状态（2026-11-15，决定 (l) 落地时）：** 本节 `PickupAbsorbMath.cs:…` 的行号是在 (h) 落地时逐行核对过的，**体积口径改造后又漂了一次**（文件头与尺寸门相关段落重写过）：引用前请按**符号名**检索确认（`TryComputeItemVolume`、`IsVolumeBeyondLimit`、`TryComputeAbsorbVolumeLimit`、`IsBeyondAbsorbVolumeLimit`、`TryComputeReach`），不要照抄本节任何 `:行号`。`KatamariBallMotor.cs:…` 同样只核对了字段与判定调用两处。这不是新问题：行号在本仓已经漂过至少三次。
+**行号状态（2026-11-15，决定 (l) 落地时）：** 本节 `PickupAbsorbMath.cs:…` 的行号是在 (h) 落地时逐行核对过的，**体积口径改造后又漂了一次**（文件头与尺寸门相关段落重写过）：引用前请按**符号名**检索确认（`TryComputeItemVolume`、`IsVolumeBeyondLimit`、`TryComputeAbsorbVolumeLimit`、`IsBeyondAbsorbVolumeLimit`、`TryComputeContact`），不要照抄本节任何 `:行号`。`KatamariBallMotor.cs:…` 同样只核对了字段与判定调用两处。这不是新问题：行号在本仓已经漂过至少三次。
 
-### 1. reach 公式
+### 1. 接触公式：道具的有向盒碰到球
 
-代码按如下顺序计算（`PickupAbsorbMath.cs:186`），比较在 `PickupAbsorbMath.cs:188`：
+原作的触发是「物件的碰撞模型碰到球的碰撞体」（专利 US7402104B2，见 [`ORIGINAL_ATTACH_LOOK.md`](../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md)），所以接触量的是**盒面到球**，不是道具外接球到球。代码（`PickupAbsorbMath.TryComputeContact`，判定在 `EvaluateAbsorb`）：
 
 ```
-reach = collisionRadiusWorldM + contactRadiusWorldM + itemRadius
-absorb ⇔ distance ≤ reach          // 距离取平方和再开方，中心到中心
+boxDistance  = 球心到「道具有向盒」的最短距离（盒 = 自身尺寸 itemSize，放在 itemPosition，转 itemRotation；球心在盒内为 0）
+contactLimit = collisionRadiusWorldM + contactRadiusWorldM
+absorb ⇔ boxDistance ≤ contactLimit
 ```
 
-`distance` 是球心到物件中心的三维欧氏距离（`PickupAbsorbMath.cs:168-176`），`itemRadius` 是物件的**包围球半径**（见第 2 节），三项全是米、全部相加、没有乘除、没有衰减。
+`boxDistance` 在盒坐标系里算：把球心用逆旋转带进盒的局部系，三个轴各取 `max(|p_i| − size_i/2, 0)`，再求模（面区只有一个轴在外、棱区两个、角区三个，一个公式）。零边是合法的扁盒/线/点；非单位四元数先归一化，零四元数、NaN、非有限位置/尺寸、负尺寸一律 `RejectInvalidInput`。纯 float 运算，不分配，无 `Quaternion` 运算符，Udon 与离线测试跑同一份代码。盒按**以道具位置为中心**处理（预制体根在模型中心；同步只量尺寸，不量盒心偏移）。
+
+接触比较是 `≤`：盒面恰好碰到球面（或接触余量边）算吸附。没有外接球、没有 `itemRadius`：细长/扁平件从侧面逼近时，盒面贴到球面才触发，不再在更远处的外接球壳上触发；沿长轴逼近时它的端面本来就更远，所以也自然更早触发。
 
 | 项 | 代码 | 物理含义 | 谁喂它 |
 |---|---|---|---|
-| `collisionRadiusWorldM` | 参数 `:139`，加在 `:186` | 球当前**碰撞半径**（米），不是语义直径、不是核心半径 | 装配层在判定调用处传 `collisionRadiusWorldM`（`KatamariBallMotor.cs:749-753`），该字段每步由 `SizeModelMath.TryDerive` 从确认体积重算（`KatamariBallMotor.cs:905` 的 `DeriveSize`，公式在 `SizeModelMath.cs:179`：`collision = core × collisionToCoreRadiusRatio`） |
-| `contactRadiusWorldM` | 参数 `:140`，加在 `:186` | 纯附加接触余量（米）。不是物件半径、不是容差、不随球长大 | 序列化字段，默认 `0f`（`KatamariBallMotor.cs:112`） |
-| `itemRadius` | 局部量 `:184` | 物件包围球半径 √((x/2)²+(y/2)²+(z/2)²)，量的是物件**自身尺寸** `itemSize` 的外接球：它与朝向无关，并且在任何朝向下都完整包住物件 | 宿主 `SubmitProp` 把 `propOwnSizes`（`propLocalBounds`）传进电机队列，本层从不读 Collider；转过物件的世界 AABB 半对角线只是旋转带来的松上界，不是输入 |
-| 尺寸门的物件侧（参数 `itemSize`、`itemVolumeK`） | `EvaluateAbsorb` 的参数，用在尺寸门 | `itemSize` 是物件**自身**三边（模型沿自身轴的包围盒，原作每类型的 `a, b, c`，与摆放朝向无关），门和 reach 共用它；`itemVolumeK` 是原作的每件体积系数 `k`（`V = k·a·b·c`），**不参与 reach** | 序列化列 `PickupFieldHost.propVolumeK`（导入器从 `defs[].volumeK` 填，缺省 0.70）与 `propLocalBounds`（物件自身尺寸），随候选 `SubmitCandidateWithVolumeKMm3` 进电机；比较在 `IsBeyondAbsorbLimit`（见 1.1 节） |
-| `maxGrowthRadiusWorldM` | 参数 `:142` | 成长上限门：碰撞半径到这个值就整体拒收，**不参与 reach** | 装配层传 `maxCollisionRadiusWorldM`（`KatamariBallMotor.cs:752`），该值 = `maxCoreRadiusWorldM × collisionToCoreRadiusRatio`（`KatamariBallMotor.cs:485`），默认为 `1.1 × 1 = 1.1` |
+| `itemSize` | 参数 | 物件**自身**三边（全长，米），与朝向无关 | 宿主 `propOwnSizes`（`propLocalBounds`），见 1.1 节 |
+| `itemRotation`、`itemPosition` | 参数 | 物件入队时的世界旋转与位置（**入队快照，不刷新**） | 宿主 `SubmitProp` 传 `propTransforms[i].rotation/position`，随候选存进电机队列（`pendingRotations`） |
+| `collisionRadiusWorldM` | 参数 | 球当前**碰撞半径**（米），不是语义直径、不是核心半径 | 装配层在判定调用处传 `collisionRadiusWorldM`（`KatamariBallMotor.cs:749-753`），该字段每步由 `SizeModelMath.TryDerive` 从确认体积重算（`KatamariBallMotor.cs:905` 的 `DeriveSize`，公式在 `SizeModelMath.cs:179`：`collision = core × collisionToCoreRadiusRatio`） |
+| `contactRadiusWorldM` | 参数 | 纯附加接触余量（米）。不是物件半径、不是容差、不随球长大 | 序列化字段，默认 `0f`（`KatamariBallMotor.cs:112`） |
+| 尺寸门的物件侧（参数 `itemSize`、`itemVolumeK`） | `EvaluateAbsorb` 的参数，用在尺寸门 | `itemSize` 同上（原作每类型的 `a, b, c`）；`itemVolumeK` 是原作的每件体积系数 `k`（`V = k·a·b·c`），**不参与接触** | 序列化列 `PickupFieldHost.propVolumeK`（导入器从 `defs[].volumeK` 填，缺省 0.70）与 `propLocalBounds`（物件自身尺寸），随候选 `SubmitCandidateWithVolumeKMm3` 进电机；比较在 `IsBeyondAbsorbLimit`（见 1.1 节） |
+| `maxGrowthRadiusWorldM` | 参数 | 成长上限门：碰撞半径到这个值就整体拒收，**不参与接触** | 装配层传 `maxCollisionRadiusWorldM`（`KatamariBallMotor.cs:752`），该值 = `maxCoreRadiusWorldM × collisionToCoreRadiusRatio`（`KatamariBallMotor.cs:485`），默认为 `1.1 × 1 = 1.1` |
 
-尺寸门与成长上限门**不是** reach 的项，它们只在 reach 之前把整个候选拒掉；把它们加进 reach 是“球够不够远”那类算错，把它们当同一件事（尺寸门 = reach 门）是另一类算错：尺寸门问的是“球够不够大”，与中心距无关。
+尺寸门与成长上限门**不是**接触的项，它们只在接触之前把整个候选拒掉；把它们加进接触极限是“球够不够远”那类算错，把它们当同一件事（尺寸门 = reach 门）是另一类算错：尺寸门问的是“球够不够大”，与距离无关。
 
 ### 1.1 尺寸门是体积门（决定 (l) 2026-11-15；**2026-11-16 更正为原作的整 mm 口径**）
 
@@ -108,7 +112,7 @@ absorb ⇔ distance ≤ reach          // 距离取平方和再开方，中心�
 | `BallSemanticDiameter → ballMm` | `PickupAbsorbMath.TryFloorMillimetres`（`GetAbsorbGateDiameterMm()` 报告同一个数） | 球的整 mm 直径，门的一侧 |
 | `k·a·b·c` | `PickupAbsorbMath.TryComputeOriginalItemVolume` | 原作的物件体积 `V`；门槛 `Req_mm = floor(1000·cbrt(60V/π))` |
 
-**判定量是物件自身的包围盒体积，不是最长边、不是对角线、也不是包围球。** 与之相邻但**不同**的量是 reach 用的包围球半径 `√((x/2)²+(y/2)²+(z/2)²)`（第 2 节）：那个只决定「够不够近」，与「够不够大」无关，但两边读的是同一个 `itemSize`（物件自身尺寸，与朝向无关）。把转过物件的世界 AABB 当 `a, b, c` 代入会把它算大（参考关卡里牙刷门槛 76 mm 会变成 189 mm），reach 也会被多算一圈：参考关卡 358/511 件带旋转，世界 AABB 半对角线比自身尺寸的大量，全关 511 件中位 0.5 cm、p90 4.5 cm、最大 120.7 cm（房屋）；0.222 m 起始球可吸的 185 件中位 1.3 cm、p90 3.1 cm、最大 5.8 cm（reach 因此统一为自身尺寸的外接球）。细长物件是两者分离的典型——棒球棒 `0.02×0.02×0.85 m` 的 AABB 体积是 `0.00034 m³`，而它的包围球半径是 `0.425 m`。把最长边、对角线或包围球半径中的任何一个当体积代入，都是这里点名的算错。
+**判定量是物件自身的包围盒体积，不是最长边、不是对角线、也不是包围球。** 与之相邻但**不同**的量是接触用的有向盒距离（第 1 节）：那个只决定「够不够近」，与「够不够大」无关，尺寸门读的是物件自身尺寸 `itemSize`，与朝向无关。把转过物件的世界 AABB 当 `a, b, c` 代入会把它算大（参考关卡里牙刷门槛 76 mm 会变成 189 mm）；接触同样不读世界 AABB，而是把自身尺寸的盒放进世界（见第 1 节）。细长物件是两者分离的典型——棒球棒 `0.02×0.02×0.85 m` 的 AABB 体积是 `0.00034 m³`，而它的包围球半径是 `0.425 m`。把最长边、对角线或包围球半径中的任何一个当体积代入，都是这里点名的算错。
 
 **为什么必须换量而不是调系数（用户给的例子）。** 测试场景里黄色小方块边长 **0.05 m**、红色方块 **0.30 m**：**边长只差 6 倍，体积差 `(0.30/0.05)³ = 216` 倍。** 球能吃多少是**体积**账（球体积 ÷ 10），而线性口径只拿「最长边 vs 球直径」比长短——它嗓门里只有那个「6」，说不出 216 倍，也就在结构上无法回答「这个球够不够大」。换成系数语言更清楚：等效线性系数 `k = 可吸物件最长边 / 所需球径` **不是常数**（研究文档 §4：立方体 0.37、3:1 的砖 0.78、5:1 的扫帚级 1.09、10:1 的铅笔级 1.74），所以任何单一 `absorbSizeRatio` 都只能在一个形状比上对：口径错，调系数就只是在两个方向的误差之间挪。真实道具建模后差别更大：方糖 1.6 cm vs 野餐桌 150 cm，边长差约 94 倍，体积差约 `8×10⁵` 倍。这就是决定 (l) 把「判定量」换掉、而不是把 1.0 调成 1.25 或 1.5 的原因（后者的后果清单见 [SIZE_GATE_AUDIT.md](SIZE_GATE_AUDIT.md) §4–§5）。
 
@@ -118,7 +122,7 @@ absorb ⇔ distance ≤ reach          // 距离取平方和再开方，中心�
 
 **边界与非法值。** 比较是 `≤`（含等号）：体积恰好等于上限放行。`absorbVolumeRatio ≤ 0`、ratio / 语义直径 / 上界非有限、语义直径 `< 0` 一律 `RejectInvalidInput`。**ratio 配成 0 不是「谁都吸不到」的正常状态，是配置错误**：它大声拒绝（拒绝环里是 6），而不是悄悄把上限钳成 0。语义直径恰好为 0 会被接受、上限也是 0（什么都吸不到），那是尺寸读数没就绪，不是配置错误。**新增一条比 (h) 更严的守卫**：三轴乘积溢出成 infinity 的物件按 `RejectInvalidInput` 拒（以前比最长边不会溢出）；「装不下的体积」是坏数据，不是「特别大的物件」。
 
-**比较严格性**（2026-11-16 起）：接触是 `≤`，距离恰好等于 reach 算吸附（测试 `PickupAbsorbTests.cs`：0.6 m 对 0.6 m reach 通过，0.6001 m 拒绝）；尺寸门是「**整 mm 相等就放行**」（`Req_mm == ball_mm` 可吸，少 1 mm 就拒）；成长上限门是 `≥`（恰等于上限就拒）。尺寸门的边界是**整数 mm**，所以它可以被精确地测试（`AbsorbSizeGateTests.AnItemExactlyAtReqIsAbsorbableAndOneMillimetreLessIsNot`）；唯一的 epsilon 是整 mm floor 前的 1e-3 mm 守卫，它只把浮点误差压到边界上的值抬回整数，不改变「少 1 mm 就拒」。
+**比较严格性**（2026-11-16 起）：接触是 `≤`，盒距恰好等于 `碰撞半径 + 接触余量` 算吸附（测试 `PickupAbsorbTests.cs`：点状物件 0.6 m 对 0.6 m 极限通过，0.6001 m 拒绝）；尺寸门是「**整 mm 相等就放行**」（`Req_mm == ball_mm` 可吸，少 1 mm 就拒）；成长上限门是 `≥`（恰等于上限就拒）。尺寸门的边界是**整数 mm**，所以它可以被精确地测试（`AbsorbSizeGateTests.AnItemExactlyAtReqIsAbsorbableAndOneMillimetreLessIsNot`）；唯一的 epsilon 是整 mm floor 前的 1e-3 mm 守卫，它只把浮点误差压到边界上的值抬回整数，不改变「少 1 mm 就拒」。
 
 **序列化默认值（2026-11-16 起：门不再有任何序列化旋钮）。** 体积比率是常量 `PickupAbsorbMath.AbsorbVolumeRatio = 10`，物件上限是常量 `MaxItemVolumeSanityWorldM3 = 1000`（数值卫生，非玩法），逐件 `k` 来自关卡数据（缺省 0.70）。下面 2026-11-15 的两个字段已**删除**，场景里的残留键是 Unity 忽略的死键。
 
@@ -127,25 +131,22 @@ absorb ⇔ distance ≤ reach          // 距离取平方和再开方，中心�
 - **删掉的字段**：`absorbSizeRatio`（物件最长边 / 球直径 = 1.0）与 `maxItemSizeWorldM`（8 m 长度上界）。删而不是留兼容，理由有两条：长度上界与体积门拼在一起语义错（上一条），以及留一条旧字段等于留一条「能悄悄把闸门压回线性」的配置路径——(h) 已经因为场景里的残留覆盖值踩过一次。**迁移后果**：现存 lab 场景/prefab 里的 `maxItemSizeWorldM: 8` / `absorbSizeRatio: 1` 变成 Unity 忽略的死键，组件回落到新字段的 C# 默认值（512 / 10），所以**不改场景行为也已经是新口径**；清理死键是 Unity 侧的顺手活。
 - `contactRadiusWorldM = 0f`。见下面第 1 节末与决定 (i)：0 是「必须实质接触」，不是「还没接」。
 
-### 2. `itemRadius` 是包围球半径，不是半边长、也不是整边长
+### 2. 接触量的是盒，不是外接球（对照表）
 
-`PickupAbsorbMath.cs:178-184`：
+立方体边长 `s`，球的碰撞半径 `r = 0.14987 m`（起始球），接触余量 0。「球心到物件中心的距离，小于多少算碰到」：
 
-```
-itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
-```
+| 立方体边长 `s` | 正对面心（`r + s/2`） | 正对角点（`r + √3·s/2`） | 旧外接球口径（处处等于角点值） |
+|---:|---:|---:|---:|
+| 0.10 m | 0.200 m | 0.236 m | 0.236 m |
+| 0.25 m | 0.275 m | 0.366 m | 0.366 m |
+| 0.35 m | 0.325 m | 0.453 m | 0.453 m |
+| 0.50 m | 0.400 m | 0.583 m | 0.583 m |
 
-立方体代入即 `√3·s/2 ≈ 0.8660·s`。三个都不一样的量，别混：
+旧口径（`r + 外接球半径`）在角点方向才是对的，在面心方向多放行 `(√3−1)/2·s ≈ 0.366·s`，细长件更多：牙刷 `0.012×0.0155×0.18 m` 从侧面逼近，旧口径在中心距 `0.111 + 0.0905 = 0.2015 m` 时触发，盒面离球面还有约 9 cm；新口径在 `0.111 + 0.006 = 0.117 m` 时触发。测试 `PickupAbsorbTests.ContactTableMatchesTheWorkedExample` 把上表的数字（1 mm 容差）钉在运行时代码上，`ItemContactTests` 钉盒距离的面/棱/角三区、旋转、球心在盒内和细长件侧向逼近。
 
-| 说法 | 立方体值 | 是不是代码用的 |
-|---|---:|---|
-| 半边长 `s/2` | 0.5·s | 否 |
-| 整边长 `s` | 1.0·s | 否 |
-| 包围球半径 `√3·s/2` | 0.866·s | **是** |
+对吸收节奏的影响见 [`ATTACH_PLACEMENT.md`](../BallLayers/Attachment/ATTACH_PLACEMENT.md) 的 O4：参考关卡路线（模型估算，不是 Unity 实测）里 150 件有 67 件（45%）在旧停靠点盒面碰不到球，需要多靠近的量中位 3.7 cm、p90 8.1 cm、最大 25 cm，总路程约 +4.8%；起始球旋转件的「触发」更晚，这是还原的代价，不是回归。
 
-原因：`bounds` 传的是物件的**全长**（AABB 三个方向的总尺寸），不是半长，`PickupAbsorbMath.cs:46-54` 明确写了“full axis-aligned extents, not half extents”，尺寸门也是拿全长比（`:163-164`）。对全长取包围球，就是把三个半长当分量求模——这正是 Python 模型 `pickup_absorb.py:91` 的 `sqrt(sum((s/2)**2 for s in item.bounds))`，以及 `:92` 的“bounds proxy permits contact when bounding radius overlaps the ball reach”。包围球是**能装下整个盒子的球**，所以除了角点方向，它都比真实接触更早放行；面心方向最松，误差正好 `(√3−1)/2·s ≈ 0.366·s`（表中“多放行的量”）。
-
-装配层实际传什么：宿主 `PickupFieldHost.SubmitProp` 调 `SubmitCandidateWithVolumeKMm3`，把 `propOwnSizes`（物件自身尺寸）存进队列，阶段 5 原样喂给判定，尺寸门和 reach 读同一个量。实验室的宿主（`PlaygroundProp`）用旧桥 `SubmitCandidate`，把 `(semanticDiameterM, semanticDiameterM, semanticDiameterM)` 当 `size`，即立方体近似，**不是** Collider 尺寸。结论：**把道具 Collider 改小不会缩小 reach**，除非同时改 `size`；反过来，`size` 填成大立方体，reach 与尺寸门同时变松/变紧，而画面上看不出任何变化。
+装配层实际传什么：宿主 `PickupFieldHost.SubmitProp` 调 `SubmitCandidateWithVolumeKMm3`，把 `propOwnSizes`（物件自身尺寸）、`propTransforms[i].rotation`、`position` 存进队列（`pendingSizes`/`pendingRotations`/`pendingPositions`，`CompactPending` 同步搬运），阶段 5 把它们和球心一起喂给判定。实验室的宿主（`PlaygroundProp`）用旧桥 `SubmitCandidate`，把 `(semanticDiameterM, semanticDiameterM, semanticDiameterM)` 当 `size`、单位旋转，即立方体近似，**不是** Collider 尺寸。结论：**把道具 Collider 改小不会缩小接触**，除非同时改 `size`。
 
 ### 3. 门序：首个失败者胜（枚举值不是门序）
 
@@ -154,17 +155,16 @@ itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
 | 序 | 判定 | 输入/触发 | 返回 |
 |---:|---|---|---|
 | 0 | 尺寸门的输入守卫（`EvaluateAbsorb`） | `volumeK` 非有限或不在 `0 < k ≤ 32`、语义直径/碰撞半径/接触半径非有限、碰撞半径或直径 `< 0`、`itemSize` 负/非有限/乘积溢出 | `RejectInvalidInput` (6) |
-| 1 | 输入守卫（非模型门，端口自加） | `itemKind == null` 或 `allowedKinds == null`（`:144`）；`allowedKindCount < 0` 或 `> allowedKinds.Length`（`:145-146`）；`itemSize`/`itemPosition`/`ballPosition` 含非有限分量（`:147-149`）；四个标量参数非有限（`:150-154`）；`itemSize` 任一分量为负（`:155-156`）；`collisionRadiusWorldM < 0`（`:157`）；以及计算中途 dx/dy/dz、distanceSquared、itemRadiusSquared、reach 非有限（`:171-175`、`:182-183`、`:187`） | `RejectInvalidInput` (6) |
+| 1 | 输入守卫（非模型门，端口自加） | `itemKind == null` 或 `allowedKinds == null`（`:144`）；`allowedKindCount < 0` 或 `> allowedKinds.Length`（`:145-146`）；`itemSize`/`itemPosition`/`ballPosition` 含非有限分量、`itemRotation` 含非有限分量或为零四元数；四个标量参数非有限（`:150-154`）；`itemSize` 任一分量为负（`:155-156`）；`collisionRadiusWorldM < 0`（`:157`）；以及计算中途的盒距、接触极限非有限（`TryComputeContact`） | `RejectInvalidInput` (6) |
 | 2 | 可吸附标记 | `itemAbsorbable == false` | `RejectNotAbsorbable` (1) |
 | 3 | 种类白名单 | `IsKindAllowed` 走完前 `allowedKindCount` 项都没按序数匹配上（`:160-161`，实现 `:425-433`） | `RejectKindNotAllowed` (2) |
 | 4 | 尺寸门 | `floor(1000·cbrt(60·k·a·b·c/π)) > floor(1000·D)`（整 mm 比较，唯一实现在 `IsBeyondAbsorbLimit`；体积超过 `MaxItemVolumeSanityWorldM3` 也算「太大」） | `RejectItemTooLarge` (3) |
 | 5 | 成长上限门 | `collisionRadiusWorldM ≥ maxGrowthRadiusWorldM`（含等于，`:165-166`） | `RejectBallAtGrowthCap` (4) |
-| 6 | 距离 | 计算中心距（`:168-176`）与包围球半径（`:178-184`） | 仅用于下一步 |
-| 7 | 接触 | `distance > reach` 则拒，否则吸（`:186-188`） | `RejectOutOfReach` (5) / `Absorb` (0) |
+| 6 | 接触 | `boxDistance > collisionRadius + contactRadius` 则拒（球心到道具有向盒的最短距离，`TryComputeContact`），否则吸 | `RejectOutOfReach` (5)「没碰到」/ `Absorb` (0) |
 
 **早门遮蔽后门**——这是排查时最容易白跑的地方：
 
-- 白名单为空或拼错时，每个候选都停在第 3 门，第 6/7 门的距离与 reach **根本没有算**（虽然装配层为了记拒绝事件另算了一次距离，见第 7 节），所以“距离看着在 reach 内”不能作为门序正常的证据。
+- 白名单为空或拼错时，每个候选都停在第 3 门，第 6 门的盒距**根本没有判**（虽然装配层为了记拒绝事件另算了一次盒距，见第 7 节），所以“盒距看着在极限内”不能作为门序正常的证据。
 - `absorbable=false` 的物件在第 2 门就出局，它的种类错误、尺寸超限都看不到。
 - 体积大于**本步上限**（`GetAbsorbVolumeLimitWorldM3()`，m³）的物件停在第 4 门，不会告诉你它同时也够不着（对称地：球到成长上限后，所有候选都停在成长上限门，与几何无关）。第 4 门随球长大而放宽，所以“它以前吸不到”不是证据，要读当前上限——**并且要比的是物件的三轴乘积，不是最长边**。
 - 一个 `bounds` 为负或位置含 NaN 的候选停在第 1 门，会把同类里其他候选的问题一起盖住。
@@ -186,7 +186,7 @@ itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
 
 | 时机 | 发生什么 | 代码 |
 |---|---|---|
-| 宿主 `SubmitCandidateWithVolumeKMm3(...)` | 入队；存下**当时**的 `size`（物件自身尺寸，门和 reach 共用）、`position`、`growthMm3`、`id`、`generation` | `:914-935`（写入 `:924-933`） |
+| 宿主 `SubmitCandidateWithVolumeKMm3(...)` | 入队；存下**当时**的 `size`（物件自身尺寸，门用）、`rotation`、`position`（接触用）、`growthMm3`、`id`、`generation` | `:914-935`（写入 `:924-933`） |
 | 队列已满（4 条） | 该次提交**被丢弃**并 `false`，同时点亮溢出信号 | `:917-921`（`SignalOverflow("pending candidate capacity 4 exceeded")`） |
 | 每个固定步、阶段 5 | 对**在队的每一条**重新跑一次 `EvaluateAbsorb`，判定用的球心是贴地后的最终位置 | `:580`、`:643-663` |
 | 判定为拒 | 记一条拒绝事件（原因 + 中心距），候选**留在队里** | `:656-661` |
@@ -210,7 +210,7 @@ itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
 按上面的机制整理成契约清单，任何一条不满足都不会报错，只会表现为“吸不到”：
 
 1. **在本层 `Start()` 之后、第一个固定步之前**调 `SetAllowedKinds(...)`，并读回 `GetAllowedKindCount() > 0`。传序列化数组，不要传运行时新建的数组；不要让本层持有后又被改写的数组。
-2. **只在 reach 内提交**。判定用入队时的位置快照，不刷新；先算 `碰撞半径 + contactRadius + itemRadius`（可用 `GetCollisionRadiusWorldM()`，`KatamariBallMotor.cs:1243`），再决定提交。
+2. **只在可能碰到时提交**。判定用入队时的位置/旋转快照，不刷新；宿主的候选预筛（激活半径，默认 1.6 m，按球心到道具位置的距离）没有改。新口径能触发的件是旧口径（外接球）能触发的件的子集，所以预筛漏掉的件不比以前多；超大件（半对角线接近激活半径）的预筛盲区仍是旧问题，不是这次引入的。
 3. **物件离开就 `WithdrawCandidate(id)`**；关卡换段落或重开就 `ClearCandidates()`。没有 TTL 替你兜底。若宿主会在球滚动中按“最近”重排候选，撤回用 `WithdrawCandidateUnlessAccepted(id)`，别吞掉已判定为吸的那一条。
 4. **同一个 `itemInstanceId` 只提交一次**。提交成功后它进入账本；再提一次会永久卡住一个槽（`GrowthLedgerMath.cs:440-444`）。
 5. **`valueUnits` 必须是整数**。`TryAbsorbValueToLedgerGain` 对小数、负数、非有限值、超出 int32 的值一律返回 `false`（`PickupAbsorbMath.cs:411-422`），两个模型都没定义取整规则，所以它不四舍五入。非整数价值的后果不是“少加一点”，而是这件道具永远提交不了、永久占槽。
@@ -234,11 +234,11 @@ itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
 | 2 | `RejectKindNotAllowed` | **配置**：白名单为空、拼错、大小写/空格（序数比较） | 读回 `GetAllowedKindCount()`，核对 `kind` 字符串 |
 | 3 | `RejectItemTooLarge` | **数据**：这件物件的 `Req_mm = floor(1000·cbrt(60·k·a·b·c/π))` 大于本步球的 `GetAbsorbGateDiameterMm()`，或它的体积超过 `MaxItemVolumeSanityWorldM3`，或宿主传的 `size` 比以为的大（它是全长；把 Collider 尺寸当半长传就会放大 8 倍体积；把转过物件的世界包围盒当 `size` 传也会放大） | 打印 `GetAbsorbGateDiameterMm()` 与 `PickupAbsorbMath.TryComputePickupReqDiameterMm(size, k)` 两个整数比；球长大时两者都涨。k 配错（0/70）会先被拒为 6。**不要比最长边**：0.85 m 的细杆 Req 只有 165 mm |
 | 4 | `RejectBallAtGrowthCap` | **配置**：球已到 `maxCoreRadiusWorldM × collisionToCoreRadiusRatio`（默认 1.1 m），此后一律不收 | 看 `GetCollisionRadiusWorldM()`；这是尺寸上限，不是几何 |
-| 5 | `RejectOutOfReach` | **几何**：中心距 > reach | 用 `GetRejectEventDistance()` 与手算的 `碰撞半径 + contactR + itemRadius` 比；`GetCollisionRadiusWorldM()` 给第一项，`size` 给第三项。差得多是位置/尺寸错，差一点点是包围球算错或 `contactRadiusWorldM` 与预期不符 |
+| 5 | `RejectOutOfReach` | **几何**：没碰到（盒距 > 碰撞半径 + 接触余量） | `GetRejectEventDistance()` 现在是**盒距**（球心到道具有向盒，-1 = 非法几何），与 `GetCollisionRadiusWorldM() + contactR` 比；拒绝诊断行打印 `boxDist`、`limit`、`size`。差得多是位置/尺寸错，差一点点是 `contactRadiusWorldM` 与预期不符 |
 | 6 | `RejectInvalidInput` | **配置或数据**：`kind` 为 null、`size` 有负分量、位置含 NaN/Inf（未接线的 Transform 会直接给 NaN）、位置或尺寸溢出、count 大于数组长度 | 打印原始输入，先找 NaN |
 
-5. 距离**单调增大**且队列停在 4 → 就是第 5 节的冻结：宿主没有撤回。不是 reach 变紧。
-6. 只看控制台不够：拒绝诊断日志全程只有 3 行（`KatamariBallMotor.cs:294`、`:1464-1485`，每次打印 `d`、`reach`、`itemR`、`ballR`、`contactR`、`allowedKindCount`），用完之后就不再输出。持续通道是拒绝环（8 槽，`:292`）加 `GetRejectEventDroppedCount()`（`:1519-1523`）。
+5. 距离**单调增大**且队列停在 4 → 就是第 5 节的冻结：宿主没有撤回。不是接触变紧。
+6. 只看控制台不够：拒绝诊断日志全程只有 3 行（`KatamariBallMotor.cs:294`、`:1464-1485`，每次打印 `d`、`boxDist`、`limit`、`size`、`ballR`、`contactR`、`allowedKindCount`），用完之后就不再输出。持续通道是拒绝环（8 槽，`:292`）加 `GetRejectEventDroppedCount()`（`:1519-1523`）。
 7. 看宿主的队列是否健康：控制台 `[PickupFieldHost] scan inRange=N withinLimit=M selected=S queued=K ballMm=B`（计数变化时、至多每 2 s 一行），或读 `GetScanInRangeCount()` / `GetScanWithinLimitCount()` / `GetScanSelectedCount()` / `GetQueuedCount()`。N = 激活半径内的自由道具数，M = 其中过了尺寸门的，S = 选进队列的（≤ 4），K = 扫描后本宿主在电机队列里的条数；`queued` 长期 < `selected` 才是提交被拒。电机侧 `GetPendingCandidateItemId(i)` 读出的槽里，不应再出现 `Req_mm` 大于 `ballMm` 的道具。
 
 ### 与 `pickup_absorb.py` 的已知分歧
@@ -251,14 +251,14 @@ itemRadius = √( (bounds.x/2)² + (bounds.y/2)² + (bounds.z/2)² )
 | 2 | 门粒度 | 不可吸附（`:130`）与种类（`:131-132`）是两个 outcome | 合并成一个 `if`（`pickup_absorb.py:83`） | 顺序一致，但模型无法区分这两个原因；“首个失败门即报告原因”对这一条在模型里不成立 |
 | 3 | 非法输入 | 负 `bounds`、非有限值、null kind 一律先拒（`PickupAbsorbMath.cs:144-157`） | `eligible` 不检查；只有 `register` 检查 value/bounds（`pickup_absorb.py:42-43`） | 端口自加的守卫，代码注释 `PickupAbsorbMath.cs:13-16` 已声明；同一份输入两侧结论可能不同（模型放行、代码拒） |
 | 4 | 候选生命周期 | 4 槽队列、每步重判、submit/withdraw/clear、无 TTL（第 5 节） | 完全没有对应物：`nearby()` 只返回候选（`pickup_absorb.py:59-69`） | 第 5 节的规则**没有参考模型**，属实现侧契约，不能拿模型反驳 |
-| 5 | 半径口径 | reach 用 `collisionRadius = core × collisionToCoreRadiusRatio`（`SizeModelMath.cs:179`） | 只有一个 `radius = min(max, base + growth × confirmed)`（`pickup_absorb.py:141-142`），没有碰撞/核心比 | 默认 ratio = 1 时两侧数值一致；ratio ≠ 1 时模型没有对应项 |
+| 5 | 半径口径 | 接触极限用 `collisionRadius = core × collisionToCoreRadiusRatio`（`SizeModelMath.cs:179`） | 只有一个 `radius = min(max, base + growth × confirmed)`（`pickup_absorb.py:141-142`），没有碰撞/核心比 | 默认 ratio = 1 时两侧数值一致；ratio ≠ 1 时模型没有对应项 |
 | 6 | 尺寸门（跨层） | **原作整 mm 口径（2026-11-16）**：`Req_mm = floor(1000·cbrt(60·k·a·b·c/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`（1.1 节） | **仍是旧口径**：`pickup_diameter ≤ ball_diameter × absorb_size_ratio`（`round_model.py:493-502`，默认 ratio 1.0，`:119`），`pickup_absorb.py:85` 仍然是 `max(item.bounds) > max_item_size_world_m`（最长边） | **已不是同构**：模型是线性、运行时是整 mm 体积。两个模型都是 DRAFT/离线参考，本轮**没有**追平。拿模型反驳运行时结论之前先读这一行 |
 
 ### 仍然会坏的地方（读代码看到、未修）
 
 1. **`contactRadiusWorldM = 0` 是承重的决定值**：它是“能不能吸到”的全部额外余量，改它直接等于改手感，而没有任何一处要求关卡必须给值。0 是决定 (i) 的口径（必须实质接触），不是占位；`maxItemVolumeWorldM3` 是安全上界，两者性质不同：前者是手感契约，后者是防误配的上界。
 2. ~~**`maxItemSizeWorldM` 绝对值 + 不随球长大**~~ **已解决两次**：先是 (h) 让上限随球长大，再是 (l) 把量换成体积。**残余风险换了个形状**：(l) 删掉了旧字段，所以场景里残留的 `maxItemSizeWorldM: 8` / `absorbSizeRatio: 1` 是死键、会被忽略，组件取新默认值 512 / 10——**这正好是想要的**，但也意味着「某关卡曾经用场景覆盖把门槛调松/调紧」这件事再也不会生效，谁想按关卡调整现在只能改组件（或未来改成体积字段的覆盖）。`absorbVolumeRatio = 10` 本身仍是研究结论（证据等级中，常数 10 只有一份独立来源），不是实测。
-3. **`size` 由宿主给、与 Collider 无关联**：改 Collider 不改 reach；实验室把 `semanticDiameterM` 当三边填（`PlaygroundProp.cs:110`），那是立方体近似。
+3. **`size` 由宿主给、与 Collider 无关联**：改 Collider 不改接触；实验室把 `semanticDiameterM` 当三边填（`PlaygroundProp.cs:110`），那是立方体近似。
 4. **4 槽 + 无 TTL**：任何系统性拒绝都会永久冻结队列，而信号只有“拒绝环”（几何类）或**什么都没有**（账本类）。宿主已排除尺寸门这一类；白名单、成长上限、账本类仍靠接线保证。
 5. **`SetAllowedKinds` 存引用不拷贝**（`KatamariBallMotor.cs:894`），且被 `Start()` 无条件重置（`:399-400`）——两个静默失效源。
 6. **成长上限门的边界**：门用 `≥`（`PickupAbsorbMath.cs:165`），而 `SizeModelMath` 在“确认体积恰好等于上限体积”时走 `exp` 路径（`SizeModelMath.cs:165` 的 `logTotal > logCappedVolume` 是严格大于），理论上可能返回比上限小 1 ulp 的半径，那样满级球还能再吸一件。**这是读代码的推断，未实测。**

@@ -170,22 +170,18 @@ namespace VRCKatamari.BallMotor
         // at 0 the step is bit-for-bit the P1 behaviour.
         [SerializeField] private float rampTangentialGravityScale = 0f;
 
-        // ---- Radial proxy caps and long-object admission (PROVISIONAL, unmeasured) ----
+        // ---- Radial proxy (pin) caps and admission (PROVISIONAL, unmeasured) ----
         // The protrusion cap is relative to the core radius (the contract's rule) and also
         // has an absolute rail for a large ball. Both are engineering limits against a rod
-        // catapult, not measured product values.
+        // catapult, not measured product values. EVERY attached prop registers into the 16
+        // pins (the original's rolling model); there is no long-object admission test.
         [SerializeField] private float maxProxyProtrusionPerCoreRadius = 0.35f;
         [SerializeField] private float maxProxyProtrusionWorldM = 0.3f;
         // The vertical channel is position-only in this revision, so the requested normal
         // speed perturbation is 0; the cap is still a serialized input so a later revision
         // that does add a normal velocity cannot exceed it.
         [SerializeField] private float maxProxyNormalSpeedPerturbation = 0.15f;
-        // Admission: longest edge >= this many ball diameters, and >= this many times the
-        // SECOND-longest edge (one axis dominates the other two). A rod/plank passes both;
-        // a cup, a box, and a square sheet with one thin axis pass neither.
-        [SerializeField] private float longObjectMinLongestEdgePerCoreDiameter = 0.5f;
-        [SerializeField] private float longObjectMinElongation = 2.5f;
-        // A long item whose farthest corner does not clear the core by this much cannot
+        // A prop whose farthest corner does not clear the core by this much cannot
         // contribute a support above the core, so it is not registered.
         [SerializeField] private float minProxyProtrusionM = 0.01f;
 
@@ -305,6 +301,12 @@ namespace VRCKatamari.BallMotor
         private float collisionRadiusWorldM;
         private float semanticDiameterWorldM;
         private float baseCoreRadiusWorldM;
+        // The level's start diameter as the size model reports it at zero confirmed volume
+        // (TryDerive(startVolumeMm3, 0)): the fixed diameter of the drawn core, which never
+        // grows with absorbs. Written once in Start; 0 until then, which BallView reads as
+        // "motor not ready, draw nothing yet". Neither a round reset nor a bank changes it:
+        // startVolumeMm3 is the level's, not the round's.
+        private float startSemanticDiameterWorldM;
         private float growthFraction;
         private float fixedStepAccumulator;
         private float localClockSeconds;
@@ -629,9 +631,11 @@ namespace VRCKatamari.BallMotor
 
         private bool[] pendingAbsorbable;
         private string[] pendingKinds;
-        // The item's OWN three edge lengths (the original's a, b, c). Both the size gate and
-        // the contact reach read them, so neither depends on how the item is turned.
+        // The item's OWN three edge lengths (the original's a, b, c) and its world rotation
+        // at submission. The size gate reads the size alone; the contact test places that
+        // box in the world with the rotation (the item's collision model touching the ball).
         private Vector3[] pendingSizes;
+        private Quaternion[] pendingRotations;
         private Vector3[] pendingPositions;
         // The item's finished growth in mm^3 (penalty * k * a*b*c, priced once at import or
         // by the host fallback), not a float "value". This is the ledger gain.
@@ -704,10 +708,12 @@ namespace VRCKatamari.BallMotor
         [SerializeField] private bool debugTraceProxySupport = false;
         private int proxyTraceLinesLogged;
         private const int TraceLineLimit = 400;
+        private const int AbsorbGapLogLimit = 400;
+        private int absorbGapLogged;
         private int traceLinesLogged;
 
-        private float traceLastDistance;
-        private float traceLastReach;
+        private float traceLastBoxDistance;
+        private float traceLastContactLimit;
         private float traceLastBallZ;
         private int traceLastOutcome;
         private int rejectDiagnosticsLogged;
@@ -749,12 +755,17 @@ namespace VRCKatamari.BallMotor
         private int blockingRefusalCount;
         private string blockingRefusalReason;
 
-        // ---- Radial proxy shell (one owner; the layers stay stateless) ----
+        // ---- Radial proxy shell: the ball's 16 pins (one owner; the layers stay stateless) ----
         // The shell lives on the motor because the motor already owns the ball pose and
-        // is the only place that feeds GroundContactMath. The arrays are allocated once
-        // in Start and reused: 16 directions, 16 endpoint-only supports, a 32-slot pool
-        // (4 long items x 8 AABB corners), the per-item slices and the 4 candidate keys.
-        private const int ProxyItemCapacity = RadialProxyMath.MaxExtremeCandidates;
+        // is the only place that feeds the ground solve. The arrays are allocated once in
+        // Start and reused: 16 directions, 16 endpoint-only supports (the pins), and a
+        // ledger of every registered prop (8 AABB corners each, per-item slices) so a detach
+        // or a rebuild can re-derive the table. EVERY attached prop registers (original-first:
+        // the original's rolling model is 16 pins that any absorbed prop lengthens); the table
+        // is a max over the corners, so one attach is an incremental merge, never a rescan.
+        // Capacity: ProxyItemCapacity props (256: the 0.80 m ball of the offline estimate
+        // carries about 190); a prop past it is refused and counted (ProxySkipPoolFull).
+        private const int ProxyItemCapacity = 256;
         private const int ProxyEndpointCapacity = ProxyItemCapacity * RadialProxyShellMath.AabbCornerCount;
 
         private Vector3[] proxyDirections;
@@ -766,14 +777,18 @@ namespace VRCKatamari.BallMotor
         private string[] proxyItemKeys;
         private bool[] proxyItemIsCandidate;
         private int proxyItemCount;
+        // The math layer's long-object candidate list, kept at length 0: this shell has no
+        // candidates (every prop is an ordinary item), and a zero-length list is the layer's
+        // documented way to forbid them.
         private string[] proxyCandidateKeys;
         private int proxyCandidateCount;
         private int[] proxyAffectedIndices;
         private float[] proxySolveScratch;
+        // The v1 ground solve's points: the protruding pin tips (direction * clamped support),
+        // rebuilt every step from the 16-entry table, unused slots zeroed. Length is the pin
+        // count, so the per-step solve cost is bounded by 16 however many props are attached.
         private Vector3[] localProxyPoints;
-        // localProxyPoints is the array actually passed to GroundContactMath: rebuilt from
-        // proxyEndpointPool every step with each endpoint's length clamped to core+cap, and
-        // unused slots zeroed (an empty shell keeps it all-zero and support is the core).
+        private int proxyTipCount;
         private Vector3[] proxyCorners;
         private Vector3[] proxyRemovedCorners;
         private Vector3[] proxyEmptyPoints;
@@ -784,12 +799,11 @@ namespace VRCKatamari.BallMotor
         private int proxyRefusalCount;
         private int proxyRefusalLogCount;
 
-        // Why AttachRadialProxy did not register an item. 1 and 2 are ordinary skips
-        // (the prop simply cannot contribute); 3..6 are scene/data problems.
+        // Why AttachRadialProxy did not register a prop. 2 is an ordinary skip (the prop
+        // does not clear the core, so it cannot lengthen any pin); 4..6 are capacity and
+        // scene/data problems.
         private const int ProxySkipNone = 0;
-        private const int ProxySkipNotLongObject = 1;
         private const int ProxySkipInsideCore = 2;
-        private const int ProxySkipCandidateFull = 3;
         private const int ProxySkipPoolFull = 4;
         private const int ProxySkipInvalidInput = 5;
         private const int ProxySkipShellRefused = 6;
@@ -1077,8 +1091,8 @@ namespace VRCKatamari.BallMotor
             absorbedEventRingCount = 0;
 
             traceLinesLogged = 0;
-            traceLastDistance = 0f;
-            traceLastReach = 0f;
+            traceLastBoxDistance = 0f;
+            traceLastContactLimit = 0f;
             traceLastBallZ = 0f;
             traceLastOutcome = 0;
 
@@ -1132,11 +1146,11 @@ namespace VRCKatamari.BallMotor
             isFalling = false;
             fallSpeedMps = 0f;
 
-            // The radial proxy shell is the ball's sparse support shell: 16 fixed
-            // directions plus the endpoints of at most four long objects. State is
-            // owned here; the attach/detach/rebuild protocol is RadialProxyShellMath
-            // and the pure support math stays in RadialProxyMath. An empty shell is
-            // the documented core-sphere case.
+            // The radial proxy shell is the ball's 16 pins: fixed directions whose support
+            // length is the max over every attached prop's box corners. State is owned
+            // here; the attach/detach/rebuild protocol is RadialProxyShellMath and the pure
+            // support math stays in RadialProxyMath. An empty shell is the documented
+            // core-sphere case.
             proxyDirections = new Vector3[RadialProxyMath.DirectionCount];
             if (!RadialProxyMath.TryFillDirections(proxyDirections))
             {
@@ -1151,11 +1165,12 @@ namespace VRCKatamari.BallMotor
             proxyItemKeys = new string[ProxyItemCapacity];
             proxyItemIsCandidate = new bool[ProxyItemCapacity];
             proxyItemCount = 0;
-            proxyCandidateKeys = new string[RadialProxyMath.MaxExtremeCandidates];
+            proxyCandidateKeys = new string[0];
             proxyCandidateCount = 0;
             proxyAffectedIndices = new int[RadialProxyMath.DirectionCount];
             proxySolveScratch = new float[RadialProxyMath.DirectionCount];
-            localProxyPoints = new Vector3[ProxyEndpointCapacity];
+            localProxyPoints = new Vector3[RadialProxyMath.DirectionCount];
+            proxyTipCount = 0;
             proxyCorners = new Vector3[RadialProxyShellMath.AabbCornerCount];
             proxyRemovedCorners = new Vector3[RadialProxyShellMath.AabbCornerCount];
             proxyEmptyPoints = new Vector3[0];
@@ -1222,6 +1237,7 @@ namespace VRCKatamari.BallMotor
                 out effectiveConfirmedMm3))
             {
                 baseCoreRadiusWorldM = coreRadius;
+                startSemanticDiameterWorldM = semanticDiameter;
                 coreRadiusWorldM = coreRadius;
                 collisionRadiusWorldM = collisionRadius;
                 semanticDiameterWorldM = semanticDiameter;
@@ -1422,6 +1438,7 @@ namespace VRCKatamari.BallMotor
                 pendingAbsorbable = new bool[PendingCandidateCapacity];
                 pendingKinds = new string[PendingCandidateCapacity];
                 pendingSizes = new Vector3[PendingCandidateCapacity];
+                pendingRotations = new Quaternion[PendingCandidateCapacity];
                 pendingPositions = new Vector3[PendingCandidateCapacity];
                 pendingGrowthMm3 = new long[PendingCandidateCapacity];
                 pendingVolumeK = new float[PendingCandidateCapacity];
@@ -1447,6 +1464,7 @@ namespace VRCKatamari.BallMotor
         {
             if (pendingAbsorbable == null || pendingKinds == null) return false;
             if (pendingSizes == null || pendingPositions == null) return false;
+            if (pendingRotations == null) return false;
             if (pendingGrowthMm3 == null || pendingVolumeK == null) return false;
             if (pendingItemIds == null) return false;
             if (pendingGenerations == null || pendingAccepted == null) return false;
@@ -1454,6 +1472,7 @@ namespace VRCKatamari.BallMotor
             if (pendingAbsorbable.Length < PendingCandidateCapacity) return false;
             if (pendingKinds.Length < PendingCandidateCapacity) return false;
             if (pendingSizes.Length < PendingCandidateCapacity) return false;
+            if (pendingRotations.Length < PendingCandidateCapacity) return false;
             if (pendingPositions.Length < PendingCandidateCapacity) return false;
             if (pendingGrowthMm3.Length < PendingCandidateCapacity) return false;
             if (pendingVolumeK.Length < PendingCandidateCapacity) return false;
@@ -1728,7 +1747,7 @@ namespace VRCKatamari.BallMotor
             // 4. GroundContactMath: support height and the normal-only correction.
             //
             // Two solves per step, both cheap. The first uses the radial proxy shell's
-            // clamped endpoints, so a long rod pointing at the ground lifts the core by
+            // clamped pin tips, so an attached prop pointing at the ground lifts the core by
             // up to maxProxyProtrusion (and no more); the second uses an empty proxy array
             // and is the same plane solved for the smooth core sphere. Only the first
             // moves the ball; the second is where the follow rig reads the centre, so a
@@ -1762,8 +1781,11 @@ namespace VRCKatamari.BallMotor
                 proxyProtrusionCap = absoluteProtrusionCap;
             }
             proxyProtrusionCapWorldM = proxyProtrusionCap;
+            // The pin tips of this step: direction * support, clamped to core + cap, from the
+            // 16-entry table (bounded by 16 however many props are attached).
+            proxyTipCount = BuildProxyTipPoints(proxyProtrusionCap);
             float proxyLiftCap = maxLiftPerStep;
-            if (proxyEndpointCount > 0 && maxProxyLiftPerStep < proxyLiftCap)
+            if (proxyTipCount > 0 && maxProxyLiftPerStep < proxyLiftCap)
             {
                 proxyLiftCap = maxProxyLiftPerStep;
             }
@@ -1820,9 +1842,7 @@ namespace VRCKatamari.BallMotor
                 }
             }
             bool groundAccepted = false;
-            if (proxyEndpointCount > 0 &&
-                RadialProxyShellMath.TryBuildContactPoints(coreRadiusWorldM, proxyProtrusionCap,
-                    proxyEndpointPool, proxyEndpointCount, localProxyPoints))
+            if (proxyTipCount > 0)
             {
                 groundAccepted = GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation,
                     localProxyPoints, supportNormal, supportOffset, sweptCenter,
@@ -1833,7 +1853,7 @@ namespace VRCKatamari.BallMotor
             }
             if (!groundAccepted)
             {
-                // Empty shell, or a rejected proxy build: keep the core-sphere behaviour
+                // No protruding pin, or a rejected solve: keep the core-sphere behaviour
                 // rather than leaving the ball ungrounded.
                 groundAccepted = GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation,
                     proxyEmptyPoints, supportNormal, supportOffset, sweptCenter,
@@ -1862,8 +1882,8 @@ namespace VRCKatamari.BallMotor
                         + " core=" + coreRadiusWorldM
                         + " lift=" + (supportHeight - coreRadiusWorldM)
                         + " cap=" + proxyProtrusionCap
-                        + " points=" + proxyEndpointCount
-                        + " candidates=" + proxyCandidateCount
+                        + " tips=" + proxyTipCount
+                        + " props=" + proxyItemCount
                         + " centerY=" + correctedCenter.y);
                 }
             }
@@ -3803,33 +3823,32 @@ namespace VRCKatamari.BallMotor
                 }
                 AbsorbOutcome outcome = PickupAbsorbMath.EvaluateAbsorbWithValue(
                     pendingAbsorbable[i], pendingKinds[i], allowedKinds, allowedKindCount,
-                    pendingSizes[i], pendingPositions[i], center, reachRadius,
-                    contactRadiusWorldM, pendingVolumeK[i], semanticDiameterWorldM,
-                    maxCollisionRadiusWorldM, pendingGrowthMm3[i]);
-                float evaluatedDistance = Vector3.Distance(pendingPositions[i], center);
+                    pendingSizes[i], pendingRotations[i], pendingPositions[i], center,
+                    reachRadius, contactRadiusWorldM, pendingVolumeK[i],
+                    semanticDiameterWorldM, maxCollisionRadiusWorldM, pendingGrowthMm3[i]);
+                // What the gate compared: the distance from the ball's centre to the item's
+                // box and its limit, from the pickup layer's own function (the same call the
+                // gate decides with). -1 is this file's invalid marker for geometry the gate
+                // refused as invalid input.
+                float boxDistance;
+                float contactLimit;
+                if (!PickupAbsorbMath.TryComputeContact(pendingSizes[i], pendingRotations[i],
+                    pendingPositions[i], center, reachRadius, contactRadiusWorldM,
+                    out boxDistance, out contactLimit))
+                {
+                    boxDistance = -1f;
+                    contactLimit = -1f;
+                }
 
                 if (debugTraceItemId != null && debugTraceItemId.Length > 0
                     && pendingItemIds[i] == debugTraceItemId
                     && traceLinesLogged < TraceLineLimit)
                 {
-                    // Data only. The host decides whether and how to print it. The reach
-                    // is asked for from the pickup layer's own function - the same call
-                    // the gate decides with - and only for the traced item, so an
-                    // ordinary candidate pays nothing for a number nothing reads. The
-                    // gate refuses illegal bounds before it has a reach; -1 is this
-                    // file's invalid marker.
-                    float tracedItemRadius;
-                    float tracedReach;
-                    if (!PickupAbsorbMath.TryComputeReach(pendingSizes[i],
-                        reachRadius, contactRadiusWorldM, out tracedItemRadius,
-                        out tracedReach))
-                    {
-                        tracedItemRadius = -1f;
-                        tracedReach = -1f;
-                    }
+                    // Data only. The host decides whether and how to print it: the box
+                    // distance and the limit the gate compared, for the traced item only.
                     traceLinesLogged = traceLinesLogged + 1;
-                    traceLastDistance = evaluatedDistance;
-                    traceLastReach = tracedReach;
+                    traceLastBoxDistance = boxDistance;
+                    traceLastContactLimit = contactLimit;
                     traceLastBallZ = center.z;
                     traceLastOutcome = (int)outcome;
                 }
@@ -3837,10 +3856,11 @@ namespace VRCKatamari.BallMotor
                 if (outcome == AbsorbOutcome.Absorb)
                 {
                     pendingAccepted[i] = true;
+                    LogAbsorbGapOnce(i, boxDistance, reachRadius);
                 }
                 else
                 {
-                    RecordReject(pendingItemIds[i], (int)outcome, evaluatedDistance);
+                    RecordReject(pendingItemIds[i], (int)outcome, boxDistance);
                     LogRejectDiagnosticsOnce(i, outcome, center);
                 }
             }
@@ -3917,6 +3937,7 @@ namespace VRCKatamari.BallMotor
             pendingAbsorbable[write] = pendingAbsorbable[read];
             pendingKinds[write] = pendingKinds[read];
             pendingSizes[write] = pendingSizes[read];
+            pendingRotations[write] = pendingRotations[read];
             pendingPositions[write] = pendingPositions[read];
             pendingGrowthMm3[write] = pendingGrowthMm3[read];
             pendingVolumeK[write] = pendingVolumeK[read];
@@ -4336,8 +4357,8 @@ namespace VRCKatamari.BallMotor
         {
             long growthMm3 = LegacyUnitsToGrowthMm3(valueUnits);
             if (growthMm3 <= 0L) return false;
-            return SubmitCandidateWithVolumeKMm3(absorbable, kind, size, worldPosition,
-                growthMm3, itemInstanceId, itemGeneration, volumeK);
+            return SubmitCandidateWithVolumeKMm3(absorbable, kind, size, Quaternion.identity,
+                worldPosition, growthMm3, itemInstanceId, itemGeneration, volumeK);
         }
 
         /// <summary>
@@ -4346,8 +4367,9 @@ namespace VRCKatamari.BallMotor
         public bool SubmitCandidateMm3(bool absorbable, string kind, Vector3 size,
             Vector3 worldPosition, long growthMm3, string itemInstanceId, int itemGeneration)
         {
-            return SubmitCandidateWithVolumeKMm3(absorbable, kind, size, worldPosition,
-                growthMm3, itemInstanceId, itemGeneration, PickupAbsorbMath.DefaultVolumeK);
+            return SubmitCandidateWithVolumeKMm3(absorbable, kind, size, Quaternion.identity,
+                worldPosition, growthMm3, itemInstanceId, itemGeneration,
+                PickupAbsorbMath.DefaultVolumeK);
         }
 
         /// <summary>
@@ -4363,8 +4385,10 @@ namespace VRCKatamari.BallMotor
         /// </para>
         /// <para>
         /// `size` is the item's own three edge lengths, the original's `a, b, c`: the gate
-        /// multiplies them and the reach takes their half-diagonal, so neither depends on how
-        /// the item is turned. A caller must never pass the world AABB of a turned item here.
+        /// multiplies them, so it never depends on how the item is turned. `rotation` is the
+        /// item's world rotation at submission; with the position it places that box in the
+        /// world for the contact test. A caller must never pass the world AABB of a turned
+        /// item as `size`. The bridges above (lab props) pass the identity rotation.
         /// </para>
         /// <para>
         /// Kept as separate entry points rather than optional parameters because UdonSharp
@@ -4373,8 +4397,8 @@ namespace VRCKatamari.BallMotor
         /// </para>
         /// </remarks>
         public bool SubmitCandidateWithVolumeKMm3(bool absorbable, string kind, Vector3 size,
-            Vector3 worldPosition, long growthMm3, string itemInstanceId, int itemGeneration,
-            float volumeK)
+            Quaternion rotation, Vector3 worldPosition, long growthMm3, string itemInstanceId,
+            int itemGeneration, float volumeK)
         {
             // Same ownership rule as the scene sets: the queue allocates on first use, so
             // a submit that arrives before Start is queued instead of throwing.
@@ -4411,6 +4435,7 @@ namespace VRCKatamari.BallMotor
             pendingAbsorbable[index] = absorbable;
             pendingKinds[index] = kind;
             pendingSizes[index] = size;
+            pendingRotations[index] = rotation;
             pendingPositions[index] = worldPosition;
             pendingGrowthMm3[index] = growthMm3;
             pendingVolumeK[index] = volumeK;
@@ -6440,13 +6465,25 @@ namespace VRCKatamari.BallMotor
             return collisionRadiusWorldM;
         }
 
-        /// <summary>r_visual = 0.95 r_phys (design §4A.2).</summary>
+        /// <summary>
+        /// The level's start diameter, metres: the size model's semantic diameter at zero
+        /// confirmed volume (<c>TryDerive(startVolumeMm3, 0)</c>), so it is the number the
+        /// HUD shows when the round begins. Constant for the life of the level: absorbs,
+        /// banks and round resets never change it. 0 before Start has run.
+        /// </summary>
+        public float GetStartDiameterWorldM()
+        {
+            return startSemanticDiameterWorldM;
+        }
+
+        /// <summary>
+        /// r_visual = half the start diameter (design §4A.2): the drawn core's radius. It does
+        /// not grow with absorbs; the physical sphere does, and absorbed props form a shell
+        /// around the fixed core. 0 before Start has run.
+        /// </summary>
         public float GetVisualCoreRadiusWorldM()
         {
-            float visual;
-            if (!BallShapeMath.TryVisualCoreRadius(collisionRadiusWorldM, out visual))
-                return collisionRadiusWorldM;
-            return visual;
+            return 0.5f * startSemanticDiameterWorldM;
         }
 
         /// <summary>How far the rolling shape reaches along the heading, metres.</summary>
@@ -6807,6 +6844,28 @@ namespace VRCKatamari.BallMotor
             RebuildRadialProxies();
         }
 
+        /// <summary>
+        /// Fills <see cref="localProxyPoints"/> with this step's pin tips for the v1 ground
+        /// solve and returns how many protrude (0 on a refused build).
+        /// </summary>
+        /// <remarks>
+        /// <see cref="RadialProxyShellMath.TryBuildPinTips"/> owns the rule. Always 16 slots,
+        /// whatever the number of attached props: the per-step cost does not scale with the
+        /// shell's ledger. Growth needs no table write: the supports are absolute lengths from
+        /// the ball centre, so a growing core simply leaves less protrusion, and the cap (a
+        /// fraction of the core radius) loosens with it.
+        /// </remarks>
+        private int BuildProxyTipPoints(float protrusionCap)
+        {
+            int count;
+            if (!RadialProxyShellMath.TryBuildPinTips(coreRadiusWorldM, protrusionCap,
+                proxyDirections, proxySupports, localProxyPoints, out count))
+            {
+                return 0;
+            }
+            return count;
+        }
+
         // ------------------------------------------------------------------
         // Radial proxy seam: the pickup host registers an absorbed prop's
         // simplified AABB after it attaches the visual prop. The motor owns the
@@ -6814,14 +6873,14 @@ namespace VRCKatamari.BallMotor
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Registers one absorbed prop's simplified AABB as a radial proxy item.
+        /// Registers one absorbed prop's box into the ball's 16 pins (the radial proxy).
         /// </summary>
         /// <returns>
-        /// True when the item is represented (or was already registered); false when it
-        /// was skipped. A skip is normal for a prop that is not a long object or that
-        /// does not clear the core; capacity and invalid-input skips are refusals and
-        /// are counted/logged. The reason of the most recent skip is
-        /// <see cref="GetLastProxySkipReason"/>.
+        /// True when the prop is represented (or was already registered); false when it
+        /// was skipped. A skip is normal for a prop whose box does not clear the core by
+        /// <c>minProxyProtrusionM</c> (it cannot lengthen any pin); capacity and
+        /// invalid-input skips are refusals and are counted/logged. The reason of the most
+        /// recent skip is <see cref="GetLastProxySkipReason"/>.
         /// </returns>
         /// <remarks>
         /// <para>
@@ -6830,12 +6889,21 @@ namespace VRCKatamari.BallMotor
         /// axes. ballLocalCenter and ballLocalRotation are the pose
         /// <c>AttachmentMath.TryWorldPoseToLocal</c> just produced for the visual
         /// attach, so the proxy and the visible prop occupy the same ball-frame box.
-        /// Endpoints are the eight corners, and the item becomes one of the at-most-four
-        /// long-object candidates.
+        /// Endpoints are the eight corners. EVERY attached prop registers, not only long
+        /// ones: each pin's support length is the max, over all registered props, of the
+        /// box's reach along the pin direction (the box support function, exact on the
+        /// corners), which is the original's rolling model (16 pins that absorbed props
+        /// lengthen). Registration is incremental: one attach dots 8 corners against the 16
+        /// directions and max-merges, about 128 products and no rescan of earlier props.
+        /// The box is centred on the prop's pivot (<c>ballLocalCenter</c>); a prop whose
+        /// collider is offset from its pivot is approximated by that pivot-centred box.
         /// </para>
         /// <para>
         /// Idempotent by item id: one call per attached prop, and a retried call cannot
-        /// add the same corners twice. Registered items are removed by a field reset,
+        /// add the same corners twice. The pin cap (<c>maxProxyProtrusionPerCoreRadius</c>,
+        /// <c>maxProxyProtrusionWorldM</c>) is applied when the pins are read, not here, so
+        /// the table keeps raw lengths and a growing ball needs no table write. Registered
+        /// items are removed by a field reset,
         /// by <see cref="DetachRadialProxy"/>, or by <see cref="TryResetForNewRound"/>.
         /// </para>
         /// </remarks>
@@ -6874,20 +6942,6 @@ namespace VRCKatamari.BallMotor
                 return false;
             }
 
-            bool isLongObject;
-            if (!RadialProxyShellMath.TryClassifyLongObject(bounds, coreRadiusWorldM,
-                longObjectMinElongation, longObjectMinLongestEdgePerCoreDiameter,
-                out isLongObject))
-            {
-                RecordProxySkip(ProxySkipInvalidInput);
-                return false;
-            }
-            if (!isLongObject)
-            {
-                RecordProxySkip(ProxySkipNotLongObject);
-                return false;
-            }
-
             float farthestDistance;
             if (!RadialProxyShellMath.TryBuildAabbCorners(ballLocalCenter, ballLocalRotation,
                 bounds, proxyCorners, out farthestDistance))
@@ -6902,10 +6956,9 @@ namespace VRCKatamari.BallMotor
                 RecordProxySkip(ProxySkipInsideCore);
                 return false;
             }
-            if (proxyItemCount >= ProxyItemCapacity ||
-                proxyCandidateCount >= proxyCandidateKeys.Length)
+            if (proxyItemCount >= ProxyItemCapacity)
             {
-                RecordProxySkip(ProxySkipCandidateFull);
+                RecordProxySkip(ProxySkipPoolFull);
                 return false;
             }
             if (proxyEndpointCount > ProxyEndpointCapacity - RadialProxyShellMath.AabbCornerCount)
@@ -6917,7 +6970,7 @@ namespace VRCKatamari.BallMotor
                 proxyEndpointPool, ref proxyEndpointCount, proxyItemStarts, proxyItemLengths,
                 proxyItemKeys, proxyItemIsCandidate, ref proxyItemCount, proxyCandidateKeys,
                 ref proxyCandidateCount, proxyAffectedIndices, proxySolveScratch, itemInstanceId,
-                proxyCorners, RadialProxyShellMath.AabbCornerCount, true))
+                proxyCorners, RadialProxyShellMath.AabbCornerCount, false))
             {
                 RecordProxySkip(ProxySkipShellRefused);
                 return false;
@@ -6991,7 +7044,7 @@ namespace VRCKatamari.BallMotor
         {
             proxySkipCount = proxySkipCount + 1;
             proxySkipReason = reason;
-            if (reason == ProxySkipNotLongObject || reason == ProxySkipInsideCore) return;
+            if (reason == ProxySkipInsideCore) return;
             proxyRefusalCount = proxyRefusalCount + 1;
             if (proxyRefusalLogCount >= 3) return;
             proxyRefusalLogCount = proxyRefusalLogCount + 1;
@@ -7001,25 +7054,43 @@ namespace VRCKatamari.BallMotor
 
         private string ProxySkipText(int reason)
         {
-            if (reason == ProxySkipNotLongObject) return "not a long object";
             if (reason == ProxySkipInsideCore) return "no meaningful protrusion";
-            if (reason == ProxySkipCandidateFull) return "candidate slots full (4)";
-            if (reason == ProxySkipPoolFull) return "endpoint pool full (32)";
+            if (reason == ProxySkipPoolFull) return "prop ledger full (" + ProxyItemCapacity + ")";
             if (reason == ProxySkipInvalidInput) return "invalid item input";
             if (reason == ProxySkipShellRefused) return "shell math refused the ledger";
             return "none";
         }
 
-        /// <summary>Endpoints currently in the shell pool (0..32).</summary>
+        /// <summary>Endpoints (8 corners per prop) currently in the shell ledger.</summary>
         public int GetProxyPointCount()
         {
             return proxyEndpointCount;
         }
 
-        /// <summary>Long-object items currently registered (0..4).</summary>
-        public int GetProxyCandidateCount()
+        /// <summary>
+        /// Props currently registered into the pins (0..ProxyItemCapacity): the number to
+        /// compare with the attached-prop count, the difference being props whose box did
+        /// not clear the core (<see cref="GetProxySkipCount"/>).
+        /// </summary>
+        public int GetProxyItemCount()
         {
-            return proxyCandidateCount;
+            return proxyItemCount;
+        }
+
+        /// <summary>
+        /// Pins that protrude past the core right now (0..16): the tips the v1 ground solve
+        /// sees, the pins the v2 contact pass sweeps. Valid after a step.
+        /// </summary>
+        public int GetProxyProtrudingPinCount()
+        {
+            if (proxySupports == null) return 0;
+            int count = 0;
+            for (int i = 0; i < RadialProxyMath.DirectionCount; i++)
+            {
+                if (proxySupports[i] > coreRadiusWorldM + ContactTuning.NeedleProtrusionThresholdM)
+                    count = count + 1;
+            }
+            return count;
         }
 
         /// <summary>Fixed direction count of the shell (16).</summary>
@@ -7559,11 +7630,33 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// Prints, for the first <c>AbsorbGapLogLimit</c> accepted candidates, how far the
+        /// item's box was from the ball's surface when the gate accepted it.
+        /// </summary>
+        /// <remarks>
+        /// <c>boxGapMm = (boxDistance - contact radius) * 1000</c>: the gate accepts iff it is
+        /// at most <c>contactRadiusWorldM</c> (0 by default), so a positive number here is a
+        /// bug and a negative one is how far the ball had already travelled into the box
+        /// since the previous step. Rate-limited for the whole run so a long round cannot
+        /// flood the console.
+        /// </remarks>
+        private void LogAbsorbGapOnce(int index, float boxDistance, float ballRadius)
+        {
+            if (absorbGapLogged >= AbsorbGapLogLimit) return;
+            absorbGapLogged = absorbGapLogged + 1;
+            Debug.Log("[BallMotor] absorb-gap#" + absorbGapLogged
+                + " id=" + pendingItemIds[index]
+                + " boxGapMm=" + ((boxDistance - ballRadius) * 1000f).ToString("F1")
+                + " contactMm=" + (contactRadiusWorldM * 1000f).ToString("F1")
+                + " ballR=" + ballRadius);
+        }
+
+        /// <summary>
         /// Prints the full input set of the first few refusals, once each.
         /// </summary>
         /// <remarks>
         /// The ring says which branch refused; this says with what numbers, so a
-        /// wrong reach or a wrong item radius is visible without reading coordinates
+        /// a wrong contact limit or a wrong item size is visible without reading coordinates
         /// by hand. Capped at <c>rejectDiagnosticsLimit</c> lines for the whole run so
         /// a persistent refusal cannot flood the console.
         /// </remarks>
@@ -7572,15 +7665,16 @@ namespace VRCKatamari.BallMotor
             if (rejectDiagnosticsLogged >= rejectDiagnosticsLimit) return;
             rejectDiagnosticsLogged = rejectDiagnosticsLogged + 1;
 
-            float itemRadius;
-            float reach;
-            if (!PickupAbsorbMath.TryComputeReach(pendingSizes[index], collisionRadiusWorldM,
-                contactRadiusWorldM, out itemRadius, out reach))
+            float boxDistance;
+            float contactLimit;
+            if (!PickupAbsorbMath.TryComputeContact(pendingSizes[index], pendingRotations[index],
+                pendingPositions[index], center, collisionRadiusWorldM, contactRadiusWorldM,
+                out boxDistance, out contactLimit))
             {
-                // Illegal bounds: the gate refused them as invalid input before it had a
-                // reach, so there is no number to print. -1 is this file's invalid marker.
-                itemRadius = -1f;
-                reach = -1f;
+                // Illegal geometry: the gate refused it as invalid input before it had a
+                // distance, so there is no number to print. -1 is this file's invalid marker.
+                boxDistance = -1f;
+                contactLimit = -1f;
             }
 
             Debug.Log("[BallMotor] reject#" + rejectDiagnosticsLogged
@@ -7588,8 +7682,9 @@ namespace VRCKatamari.BallMotor
                 + " kind=" + pendingKinds[index]
                 + " outcome=" + (int)outcome
                 + " d=" + Vector3.Distance(pendingPositions[index], center)
-                + " reach=" + reach
-                + " itemR=" + itemRadius
+                + " boxDist=" + boxDistance
+                + " limit=" + contactLimit
+                + " size=" + pendingSizes[index]
                 + " ballR=" + collisionRadiusWorldM
                 + " contactR=" + contactRadiusWorldM
                 + " allowedKinds=" + allowedKindCount
@@ -7603,14 +7698,16 @@ namespace VRCKatamari.BallMotor
             return traceLinesLogged;
         }
 
-        public float GetTraceLastDistance()
+        /// <summary>The traced item's box-to-ball-centre distance at its last evaluation (-1 invalid).</summary>
+        public float GetTraceLastBoxDistance()
         {
-            return traceLastDistance;
+            return traceLastBoxDistance;
         }
 
-        public float GetTraceLastReach()
+        /// <summary>The limit that distance is compared with: collision radius + contact margin.</summary>
+        public float GetTraceLastContactLimit()
         {
-            return traceLastReach;
+            return traceLastContactLimit;
         }
 
         public float GetTraceLastBallZ()

@@ -543,7 +543,7 @@ namespace VRCKatamari.Tests
             }
             Assert.IsTrue((bool)Invoke("AttachRadialProxy", "rod", new Vector3(0.02f, 0.02f, 0.8f),
                 Vector3.zero, Quaternion.FromToRotation(Vector3.forward, pin)),
-                "a 0.8 m rod is a long object and must register");
+                "a 0.8 m rod clears the core and must register");
             SetField("visualRollRotation", Quaternion.FromToRotation(pin, Vector3.forward));
             Invoke("SetMoveAxes", 1f, 0f, 0f);
 
@@ -615,14 +615,92 @@ namespace VRCKatamari.Tests
             float rolling = (float)Invoke("GetRollReachWorldM");
             float pickup = (float)Invoke("GetPickupReachWorldM");
             Assert.AreEqual(physical, Radius(), 1e-6f, "r_phys is the v1 collision radius");
-            Assert.AreEqual(0.95f * physical, visual, 1e-4f, "r_visual = 0.95 r_phys");
-            Assert.Less(visual, physical);
+            // The visual core is the level's start radius, fixed; at the start the physical
+            // sphere IS the start ball, so the two are equal here and only here.
+            Assert.AreEqual(0.5f * (float)Invoke("GetStartDiameterWorldM"), visual, 1e-6f,
+                "r_visual = half the start diameter");
+            Assert.AreEqual(physical, visual, 1e-4f, "at the start the core fills the sphere");
             Assert.GreaterOrEqual(rolling, physical - 1e-4f);
             Assert.GreaterOrEqual(pickup, rolling - 1e-4f,
                 "the pickup trigger reaches at least as far as the rolling shape");
             float expectedCap = Mathf.Min(0.35f * physical, 0.3f);
             Assert.AreEqual(expectedCap, (float)Invoke("GetNeedleProtrusionCapWorldM"),
                 1e-5f, "the pin cap is min(0.35 r, 0.30)");
+        }
+
+        [Test]
+        public void EveryAttachedPropRegistersIntoThePinsNotOnlyLongOnes()
+        {
+            // A 10 cm cube sitting on the +Z surface of the start ball (r = 0.15): not a long
+            // object, and it used to be skipped. Its far corners clear the core, so it must
+            // register and lengthen the pins that face it.
+            float radius = Radius();
+            Assert.AreEqual(0, (int)Invoke("GetProxyItemCount"));
+            Assert.IsTrue((bool)Invoke("AttachRadialProxy", "cube#1", new Vector3(0.1f, 0.1f, 0.1f),
+                new Vector3(0f, 0f, radius), Quaternion.identity),
+                "a small prop whose box clears the core registers");
+            Assert.AreEqual(1, (int)Invoke("GetProxyItemCount"));
+            Assert.AreEqual(8, (int)Invoke("GetProxyPointCount"), "one prop = its 8 corners");
+            Assert.Greater((int)Invoke("GetProxyProtrudingPinCount"), 0);
+            // Idempotent by id.
+            Assert.IsTrue((bool)Invoke("AttachRadialProxy", "cube#1", new Vector3(0.1f, 0.1f, 0.1f),
+                new Vector3(0f, 0f, radius), Quaternion.identity));
+            Assert.AreEqual(1, (int)Invoke("GetProxyItemCount"));
+
+            // A prop buried in the core cannot lengthen any pin: skipped, not counted as a refusal.
+            Assert.IsFalse((bool)Invoke("AttachRadialProxy", "pebble#1",
+                new Vector3(0.02f, 0.02f, 0.02f), new Vector3(0f, 0f, 0.05f), Quaternion.identity));
+            Assert.AreEqual(1, (int)Invoke("GetProxyItemCount"));
+            Assert.AreEqual(0, (int)Invoke("GetProxyRefusalCount"));
+
+            // The ledger takes far more than the old four long objects.
+            for (int i = 0; i < 100; i++)
+            {
+                Assert.IsTrue((bool)Invoke("AttachRadialProxy", "cube#" + (i + 2),
+                    new Vector3(0.1f, 0.1f, 0.1f), new Vector3(0f, radius, 0f),
+                    Quaternion.identity));
+            }
+            Assert.AreEqual(101, (int)Invoke("GetProxyItemCount"));
+
+            // A field reset empties the shell.
+            Invoke("ClearRadialProxies");
+            Assert.AreEqual(0, (int)Invoke("GetProxyItemCount"));
+            Assert.AreEqual(0, (int)Invoke("GetProxyProtrudingPinCount"));
+        }
+
+        [Test]
+        public void TheVisualCoreIsTheLevelStartDiameterAndNeverGrows()
+        {
+            // A level that sets its start diameter (Cancer: 0.222 m).
+            if (host != null) UnityEngine.Object.DestroyImmediate(host);
+            host = new GameObject("ContactModelV2Tests");
+            motor = host.AddComponent(motorType);
+            SetField("startDiameterWorldM", 0.222f);
+            Invoke("Start");
+
+            float start = (float)Invoke("GetStartDiameterWorldM");
+            Assert.AreEqual((float)Invoke("GetSemanticDiameterWorldM"), start, 1e-6f,
+                "the start diameter is the size model's diameter at zero confirmed volume");
+            Assert.AreEqual(0.222f, start, 0.002f, "the level's start diameter, to its rounding");
+            Assert.AreEqual(0.5f * start, (float)Invoke("GetVisualCoreRadiusWorldM"), 1e-6f);
+
+            // The ball grows (a committed absorb re-derives these two); the drawn core does not.
+            SetField("collisionRadiusWorldM", 0.5f);
+            SetField("semanticDiameterWorldM", 1.0f);
+            Assert.AreEqual(start, (float)Invoke("GetStartDiameterWorldM"), 0f);
+            Assert.AreEqual(0.5f * start, (float)Invoke("GetVisualCoreRadiusWorldM"), 0f);
+            Assert.AreEqual(0.5f, (float)Invoke("GetPhysicalRadiusWorldM"), 0f,
+                "the physical sphere is the part that grows");
+        }
+
+        [Test]
+        public void TheStartDiameterIsZeroBeforeStartSoTheViewDrawsNothingYet()
+        {
+            if (host != null) UnityEngine.Object.DestroyImmediate(host);
+            host = new GameObject("ContactModelV2Tests");
+            motor = host.AddComponent(motorType);
+            Assert.AreEqual(0f, (float)Invoke("GetStartDiameterWorldM"));
+            Assert.AreEqual(0f, (float)Invoke("GetVisualCoreRadiusWorldM"));
         }
 
         private bool HasContactWithSurfaceIdAtLeast(int minimumSurfaceId)

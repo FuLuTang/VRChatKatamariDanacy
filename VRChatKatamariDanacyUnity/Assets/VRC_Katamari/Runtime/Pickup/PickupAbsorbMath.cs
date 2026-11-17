@@ -41,7 +41,7 @@ namespace VRCKatamari.Pickup
     /// Port of Docs/Design/PickupAbsorb/pickup_absorb.py, the DRAFT offline reference
     /// model. The real-time contact test is a reach comparison, not a sweep or a
     /// physics query: the caller supplies the ball's collision radius in metres, the
-    /// item's size and both world positions.
+    /// item's size, its world rotation and both world positions.
     /// </para>
     /// <para>
     /// Units and quantities. Lengths are metres in the project's single world space
@@ -50,11 +50,9 @@ namespace VRCKatamari.Pickup
     /// of its model along its own axes, the original's per-type `a, b, c`), not half extents.
     /// It does not change when the item is turned, and it is the only item geometry this
     /// layer reads: the size gate multiplies its three edges, so it compares the item's own
-    /// box volume, and the contact reach takes its bounding-sphere radius,
-    /// `sqrt((x/2)^2 + (y/2)^2 + (z/2)^2)`, as the model does. That sphere circumscribes the
-    /// box whatever its orientation, so it still contains the whole item. The axis-aligned
-    /// box of a TURNED item is larger than the item; it is a loose bound caused by the
-    /// rotation, never an input here. Values are in caller-defined value units; the
+    /// box volume, and the contact test places that same box in the world with the item's
+    /// rotation. The axis-aligned box of a TURNED item is larger than the item; it is never
+    /// an input here. Values are in caller-defined value units; the
     /// model's item value is a float, and the ledger's gain is an integer of the same unit
     /// (see <see cref="TryAbsorbValueToLedgerGain"/>).
     /// </para>
@@ -106,28 +104,30 @@ namespace VRCKatamari.Pickup
     /// data fills the size consistently with the declared pickup diameter.
     /// </para>
     /// <para>
-    /// The reach comparison uses the *collision radius* and never the semantic
+    /// The contact comparison uses the *collision radius* and never the semantic
     /// diameter. Those are different quantities in this project (see
     /// <c>SizeModelMath.TryDerive</c>): the semantic diameter is the narrative size a
-    /// player reads, it may differ from the physical metres, and the model's `eligible`
-    /// is called with the ball radius. Reach has no diameter parameter, so a caller
-    /// cannot pass a diameter as if it were a radius. The size gate is the one place a
-    /// semantic diameter appears, and it is consumed there as a DIAMETER (converted to
-    /// whole millimetres inside <see cref="TryFloorMillimetres"/>) and never added to
-    /// reach. The item's
-    /// bounding-sphere radius used by reach and the box volume used by the size gate are
-    /// also two different quantities, both read from the same `itemSize`: a slender prop
-    /// can have a large radius and a tiny volume.
+    /// player reads, it may differ from the physical metres. The contact test has no
+    /// diameter parameter, so a caller cannot pass a diameter as if it were a radius. The
+    /// size gate is the one place a semantic diameter appears, and it is consumed there as
+    /// a DIAMETER (converted to whole millimetres inside <see cref="TryFloorMillimetres"/>)
+    /// and never added to the contact limit. The box volume used by the size gate and the
+    /// box distance used by the contact test are different quantities read from the same
+    /// `itemSize`: a slender prop can reach far and weigh little.
     /// </para>
     /// <para>
-    /// Contact test. `distance &lt;= collisionRadius + contactRadius + itemRadius`, where
-    /// itemRadius is the item's bounding-sphere radius. This is the model's deliberately
-    /// loose bounds proxy: it grants contact when the bounding sphere overlaps the ball's
-    /// reach. It models no occlusion, no velocity plausibility and no item state machine,
-    /// and the model's README says the same. Comparisons keep the model's strictness:
-    /// the size gate accepts `ballMm == ReqMm` and rejects one millimetre less, the growth
-    /// cap rejects a radius that has already reached the cap, and a distance exactly equal
-    /// to the reach is contact.
+    /// Contact test (the original's: the item's collision model touches the ball's).
+    /// `boxDistance &lt;= collisionRadius + contactRadius`, where `boxDistance` is the
+    /// shortest distance from the ball's centre to the item's oriented box (its own size,
+    /// placed at its position with its world rotation), zero when the centre is inside the
+    /// box. So an item is taken when its surface touches the ball, not when a bounding
+    /// sphere around it does; a long thin item approached from the side is taken when its
+    /// face reaches the ball. It models no occlusion, no velocity plausibility and no item
+    /// state machine. Comparisons keep the model's strictness: the size gate accepts
+    /// `ballMm == ReqMm` and rejects one millimetre less, the growth cap rejects a radius
+    /// that has already reached the cap, and a distance exactly equal to the limit is
+    /// contact. The box is assumed centred on the item's position (the prefab root sits at
+    /// the model's centre; the sync measures only sizes).
     /// </para>
     /// <para>
     /// This layer owns no state and allocates nothing. It deliberately does not port the
@@ -257,10 +257,11 @@ namespace VRCKatamari.Pickup
         /// input).
         /// </para>
         /// <para>
-        /// The contact geometry (the item's bounding-sphere radius and the reach sum) is
-        /// <see cref="TryComputeReach"/> over the same `itemSize`; this method only compares
-        /// the centre distance against it, so a caller that needs the number the gate used
-        /// asks for the same function instead of re-deriving it.
+        /// The contact geometry (the box distance and the limit it is compared with) is
+        /// <see cref="TryComputeContact"/> over the same `itemSize` and the item's rotation;
+        /// this method only compares the box distance against the limit it returns, so a
+        /// caller that needs the numbers the gate used asks for the same function instead
+        /// of re-deriving them.
         /// </para>
         /// </remarks>
         public static AbsorbOutcome EvaluateAbsorb(
@@ -269,6 +270,7 @@ namespace VRCKatamari.Pickup
             string[] allowedKinds,
             int allowedKindCount,
             Vector3 itemSize,
+            Quaternion itemRotation,
             Vector3 itemPosition,
             Vector3 ballPosition,
             float collisionRadiusWorldM,
@@ -280,6 +282,7 @@ namespace VRCKatamari.Pickup
             if (itemKind == null || allowedKinds == null) return AbsorbOutcome.RejectInvalidInput;
             if (allowedKindCount < 0 || allowedKindCount > allowedKinds.Length)
                 return AbsorbOutcome.RejectInvalidInput;
+            if (!IsUsableRotation(itemRotation)) return AbsorbOutcome.RejectInvalidInput;
             if (!KatamariMath.IsFiniteVector(itemSize) ||
                 !KatamariMath.IsFiniteVector(itemPosition) ||
                 !KatamariMath.IsFiniteVector(ballPosition))
@@ -319,71 +322,129 @@ namespace VRCKatamari.Pickup
             if (collisionRadiusWorldM >= maxGrowthRadiusWorldM)
                 return AbsorbOutcome.RejectBallAtGrowthCap;
 
-            float dx = itemPosition.x - ballPosition.x;
-            float dy = itemPosition.y - ballPosition.y;
-            float dz = itemPosition.z - ballPosition.z;
-            if (!KatamariMath.IsFiniteFloat(dx) || !KatamariMath.IsFiniteFloat(dy) ||
-                !KatamariMath.IsFiniteFloat(dz))
+            float boxDistance;
+            float contactLimit;
+            if (!TryComputeContact(itemSize, itemRotation, itemPosition, ballPosition,
+                collisionRadiusWorldM, contactRadiusWorldM, out boxDistance, out contactLimit))
                 return AbsorbOutcome.RejectInvalidInput;
-            float distanceSquared = dx * dx + dy * dy + dz * dz;
-            if (!KatamariMath.IsFiniteFloat(distanceSquared)) return AbsorbOutcome.RejectInvalidInput;
-            float distance = Mathf.Sqrt(distanceSquared);
-
-            float itemRadius;
-            float reach;
-            if (!TryComputeReach(itemSize, collisionRadiusWorldM, contactRadiusWorldM,
-                out itemRadius, out reach))
-                return AbsorbOutcome.RejectInvalidInput;
-            return distance <= reach ? AbsorbOutcome.Absorb : AbsorbOutcome.RejectOutOfReach;
+            return boxDistance <= contactLimit ? AbsorbOutcome.Absorb
+                : AbsorbOutcome.RejectOutOfReach;
         }
 
         /// <summary>
         /// The contact geometry both the gate and every report of the gate's threshold use:
-        /// the item's bounding-sphere radius and the ball's reach.
+        /// the distance from the ball's centre to the item's box, and the limit it is
+        /// compared with.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// `itemRadius = sqrt((x/2)^2 + (y/2)^2 + (z/2)^2)` over the item's own FULL edge
-        /// lengths - the circumscribed sphere of its box, whatever the orientation - and
-        /// `reach = collisionRadiusWorldM + contactRadiusWorldM + itemRadius`. Both are
-        /// metres and are only summed: no scaling, no falloff, no epsilon. This is the
-        /// deliberate bounds proxy described in the class remarks, and this method is the
-        /// only place it exists: <see cref="EvaluateAbsorb"/> decides with it, and a caller
-        /// that reports the threshold it refused with (the assembly layer's rejection
-        /// diagnostics) asks for the same number instead of re-deriving a second copy that
-        /// can drift.
+        /// `boxDistanceM` is <see cref="TryComputeBoxDistance"/> of the ball's centre to the
+        /// item's oriented box; `contactLimitM = collisionRadiusWorldM + contactRadiusWorldM`.
+        /// Both are metres and are only compared: no scaling, no falloff, no epsilon. This is
+        /// the only place the contact rule exists: <see cref="EvaluateAbsorb"/> decides with
+        /// it, and a caller that reports the numbers it refused with (the assembly layer's
+        /// rejection diagnostics and trace) asks for the same pair instead of re-deriving a
+        /// second copy that can drift.
         /// </para>
         /// <para>
-        /// False means the inputs are not a legal item geometry at all: a non-finite bounds
-        /// component, radius or contact margin, a negative extent, a negative collision
-        /// radius (all of which the gate reports as invalid input), or a non-representable
-        /// intermediate. Both out values are then zero. Which side of `reach` a candidate
-        /// falls on is NOT decided here; the comparison stays the gate's.
+        /// False means the inputs are not a legal item geometry at all: a non-finite size,
+        /// position, radius or contact margin, an unusable rotation, a negative size or
+        /// collision radius (all of which the gate reports as invalid input), or a
+        /// non-representable intermediate. Both out values are then zero. Which side of the
+        /// limit a candidate falls on is NOT decided here; the comparison stays the gate's.
         /// </para>
         /// </remarks>
-        public static bool TryComputeReach(Vector3 itemSize, float collisionRadiusWorldM,
-            float contactRadiusWorldM, out float itemRadiusM, out float reachM)
+        public static bool TryComputeContact(Vector3 itemSize, Quaternion itemRotation,
+            Vector3 itemPosition, Vector3 ballPosition, float collisionRadiusWorldM,
+            float contactRadiusWorldM, out float boxDistanceM, out float contactLimitM)
         {
-            itemRadiusM = 0f;
-            reachM = 0f;
-            if (!KatamariMath.IsFiniteVector(itemSize)) return false;
+            boxDistanceM = 0f;
+            contactLimitM = 0f;
             if (!KatamariMath.IsFiniteFloat(collisionRadiusWorldM)) return false;
             if (!KatamariMath.IsFiniteFloat(contactRadiusWorldM)) return false;
-            if (itemSize.x < 0f || itemSize.y < 0f || itemSize.z < 0f) return false;
             if (collisionRadiusWorldM < 0f) return false;
-
-            float halfX = itemSize.x * 0.5f;
-            float halfY = itemSize.y * 0.5f;
-            float halfZ = itemSize.z * 0.5f;
-            float itemRadiusSquared = halfX * halfX + halfY * halfY + halfZ * halfZ;
-            if (!KatamariMath.IsFiniteFloat(itemRadiusSquared)) return false;
-            float itemRadius = Mathf.Sqrt(itemRadiusSquared);
-
-            float reach = collisionRadiusWorldM + contactRadiusWorldM + itemRadius;
-            if (!KatamariMath.IsFiniteFloat(reach)) return false;
-            itemRadiusM = itemRadius;
-            reachM = reach;
+            float limit = collisionRadiusWorldM + contactRadiusWorldM;
+            if (!KatamariMath.IsFiniteFloat(limit)) return false;
+            float distance;
+            if (!TryComputeBoxDistance(itemSize, itemRotation, itemPosition, ballPosition,
+                out distance)) return false;
+            boxDistanceM = distance;
+            contactLimitM = limit;
             return true;
+        }
+
+        /// <summary>
+        /// The shortest distance from a world point to an oriented box, 0 when the point is
+        /// inside or on it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The box has full edge lengths `boxSize` along its own axes, is centred on
+        /// `boxCentre`, and is turned by `boxRotation` (a non-unit quaternion is normalised;
+        /// the zero quaternion is not a rotation). The point is taken into the box's frame
+        /// with the inverse rotation, and the distance is the length of what sticks out of
+        /// the box on each axis: `sqrt(sum(max(|p_i| - size_i/2, 0)^2))`. That is exact in
+        /// the face region (one axis out), the edge region (two) and the corner region
+        /// (three). A zero edge is a legal flat or line box.
+        /// </para>
+        /// <para>
+        /// Pure arithmetic over floats - no Quaternion operator and no allocation - so the
+        /// same code runs in the Udon VM and in the offline test runner. False for a
+        /// non-finite input, a negative size, an unusable rotation or an unrepresentable
+        /// result, with <paramref name="distanceM"/> zero.
+        /// </para>
+        /// </remarks>
+        public static bool TryComputeBoxDistance(Vector3 boxSize, Quaternion boxRotation,
+            Vector3 boxCentre, Vector3 point, out float distanceM)
+        {
+            distanceM = 0f;
+            if (!KatamariMath.IsFiniteVector(boxSize)) return false;
+            if (!KatamariMath.IsFiniteVector(boxCentre)) return false;
+            if (!KatamariMath.IsFiniteVector(point)) return false;
+            if (boxSize.x < 0f || boxSize.y < 0f || boxSize.z < 0f) return false;
+            if (!IsUsableRotation(boxRotation)) return false;
+
+            float vx = point.x - boxCentre.x;
+            float vy = point.y - boxCentre.y;
+            float vz = point.z - boxCentre.z;
+            if (!KatamariMath.IsFiniteFloat(vx) || !KatamariMath.IsFiniteFloat(vy) ||
+                !KatamariMath.IsFiniteFloat(vz)) return false;
+
+            // Inverse of the unit rotation (its conjugate): u = -xyz, then
+            // v' = v + w*t + cross(u, t) with t = 2*cross(u, v).
+            float norm = Mathf.Sqrt(boxRotation.x * boxRotation.x + boxRotation.y * boxRotation.y
+                + boxRotation.z * boxRotation.z + boxRotation.w * boxRotation.w);
+            float ux = -boxRotation.x / norm;
+            float uy = -boxRotation.y / norm;
+            float uz = -boxRotation.z / norm;
+            float w = boxRotation.w / norm;
+            float tx = 2f * (uy * vz - uz * vy);
+            float ty = 2f * (uz * vx - ux * vz);
+            float tz = 2f * (ux * vy - uy * vx);
+            float px = vx + w * tx + (uy * tz - uz * ty);
+            float py = vy + w * ty + (uz * tx - ux * tz);
+            float pz = vz + w * tz + (ux * ty - uy * tx);
+
+            float ox = Mathf.Max(Mathf.Abs(px) - boxSize.x * 0.5f, 0f);
+            float oy = Mathf.Max(Mathf.Abs(py) - boxSize.y * 0.5f, 0f);
+            float oz = Mathf.Max(Mathf.Abs(pz) - boxSize.z * 0.5f, 0f);
+            float squared = ox * ox + oy * oy + oz * oz;
+            if (!KatamariMath.IsFiniteFloat(squared)) return false;
+            float distance = Mathf.Sqrt(squared);
+            if (!KatamariMath.IsFiniteFloat(distance)) return false;
+            distanceM = distance;
+            return true;
+        }
+
+        // A rotation the contact maths may normalise: finite components with a non-zero
+        // length. The zero quaternion has no direction, so it is invalid input, not identity.
+        private static bool IsUsableRotation(Quaternion rotation)
+        {
+            if (!KatamariMath.IsFiniteQuaternion(rotation)) return false;
+            float lengthSquared = rotation.x * rotation.x + rotation.y * rotation.y
+                + rotation.z * rotation.z + rotation.w * rotation.w;
+            if (!KatamariMath.IsFiniteFloat(lengthSquared)) return false;
+            return lengthSquared > 1e-12f;
         }
 
         /// <summary>
@@ -639,6 +700,7 @@ namespace VRCKatamari.Pickup
             string[] allowedKinds,
             int allowedKindCount,
             Vector3 itemSize,
+            Quaternion itemRotation,
             Vector3 itemPosition,
             Vector3 ballPosition,
             float collisionRadiusWorldM,
@@ -649,7 +711,7 @@ namespace VRCKatamari.Pickup
             long itemGrowthMm3)
         {
             AbsorbOutcome geometry = EvaluateAbsorb(itemAbsorbable, itemKind, allowedKinds,
-                allowedKindCount, itemSize, itemPosition, ballPosition,
+                allowedKindCount, itemSize, itemRotation, itemPosition, ballPosition,
                 collisionRadiusWorldM, contactRadiusWorldM, itemVolumeK, ballSemanticDiameterWorldM,
                 maxGrowthRadiusWorldM);
             return ApplyGrowthGate(geometry, itemGrowthMm3);

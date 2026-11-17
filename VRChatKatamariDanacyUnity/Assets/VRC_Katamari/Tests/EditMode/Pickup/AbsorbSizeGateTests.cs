@@ -55,7 +55,8 @@ namespace VRCKatamari.Tests
             // The collision radius is half the semantic diameter, the motor's default
             // relationship (collisionToCoreRadiusRatio = 1, semantic = 2 * core).
             return PickupAbsorbMath.EvaluateAbsorb(true, "stone", Allowed, Allowed.Length,
-                bounds, AtBall, AtBall, ballDiameterM * 0.5f, ContactRadiusM, volumeK,
+                bounds, Quaternion.identity, AtBall, AtBall, ballDiameterM * 0.5f,
+                ContactRadiusM, volumeK,
                 ballDiameterM, MaxGrowthRadiusM);
         }
 
@@ -331,19 +332,26 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(165f, ReqMm(bat, K));
             Assert.AreEqual(AbsorbOutcome.Absorb, EvaluateAtBall(0.50f, K, bat));
 
-            // Reach is a separate quantity and still uses the bounding sphere: the bat's
-            // radius is sqrt(0.01^2 + 0.01^2 + 0.425^2) = 0.42523 m, so at 0.6 m from the
-            // ball's centre the gate's reach (0.25 + 0.42523 = 0.67523 m) is satisfied and
-            // the size gate is what lets it through.
-            float itemRadius;
-            float reach;
-            Assert.IsTrue(PickupAbsorbMath.TryComputeReach(bat, 0.25f, ContactRadiusM,
-                out itemRadius, out reach));
-            Assert.AreEqual(0.42523f, itemRadius, 1e-4f);
-            Assert.AreEqual(0.67523f, reach, 1e-4f);
+            // Contact is a separate quantity and follows the bat's box: it lies along z, so
+            // its end face is 0.425 m from its centre. At 0.6 m along z from the ball's centre
+            // the box is 0.175 m away, inside the 0.25 m collision radius, and the size gate
+            // is what lets it through; from the side (0.6 m along x) its flank is 0.59 m
+            // away and the bat is not touched.
+            float boxDistance;
+            float contactLimit;
+            Assert.IsTrue(PickupAbsorbMath.TryComputeContact(bat, Quaternion.identity,
+                new Vector3(0f, 0f, 0.6f), AtBall, 0.25f, ContactRadiusM, out boxDistance,
+                out contactLimit));
+            Assert.AreEqual(0.175f, boxDistance, 1e-4f);
+            Assert.AreEqual(0.25f, contactLimit, 1e-6f);
             Assert.AreEqual(AbsorbOutcome.Absorb, PickupAbsorbMath.EvaluateAbsorb(true,
-                "stone", Allowed, Allowed.Length, bat, new Vector3(0.6f, 0f, 0f), AtBall,
-                0.25f, ContactRadiusM, K, 0.5f, MaxGrowthRadiusM));
+                "stone", Allowed, Allowed.Length, bat, Quaternion.identity,
+                new Vector3(0f, 0f, 0.6f), AtBall, 0.25f, ContactRadiusM, K, 0.5f,
+                MaxGrowthRadiusM));
+            Assert.AreEqual(AbsorbOutcome.RejectOutOfReach, PickupAbsorbMath.EvaluateAbsorb(true,
+                "stone", Allowed, Allowed.Length, bat, Quaternion.identity,
+                new Vector3(0.6f, 0f, 0f), AtBall, 0.25f, ContactRadiusM, K, 0.5f,
+                MaxGrowthRadiusM));
 
             // A 0.85 m CUBE is 0.614 m^3 of bbox, 0.430 m^3 at k=0.70, Req = 2.017 m - i.e.
             // inside the project's 2.20 m envelope but far past a 1.25 m ball.
@@ -361,28 +369,29 @@ namespace VRCKatamari.Tests
             // "no gain" reading can never explain away a size refusal.
             Assert.AreEqual(AbsorbOutcome.RejectItemTooLarge,
                 PickupAbsorbMath.EvaluateAbsorbWithValue(true, "stone", Allowed,
-                    Allowed.Length, new Vector3(0.45f, 0.45f, 0.45f), AtBall, AtBall, 0.15f,
+                    Allowed.Length, new Vector3(0.45f, 0.45f, 0.45f), Quaternion.identity,
+                    AtBall, AtBall, 0.15f,
                     ContactRadiusM, K, 0.30f, MaxGrowthRadiusM, 0L));
             // Inside the gate (237 mm requirement vs a 300 mm ball) and a real gain.
             Assert.AreEqual(AbsorbOutcome.Absorb,
                 PickupAbsorbMath.EvaluateAbsorbWithValue(true, "stone", Allowed,
-                    Allowed.Length, item, AtBall, AtBall, 0.15f, ContactRadiusM,
+                    Allowed.Length, item, Quaternion.identity, AtBall, AtBall, 0.15f, ContactRadiusM,
                     K, 0.30f, MaxGrowthRadiusM, 2L));
             // In reach, inside the gate, but no growth: the gain gate reports it.
             Assert.AreEqual(AbsorbOutcome.RejectNoGain,
                 PickupAbsorbMath.EvaluateAbsorbWithValue(true, "stone", Allowed,
-                    Allowed.Length, item, AtBall, AtBall, 0.15f, ContactRadiusM,
+                    Allowed.Length, item, Quaternion.identity, AtBall, AtBall, 0.15f, ContactRadiusM,
                     K, 0.30f, MaxGrowthRadiusM, 0L));
             // An illegal k outranks every later gate, including the gain gate.
             Assert.AreEqual(AbsorbOutcome.RejectInvalidInput,
                 PickupAbsorbMath.EvaluateAbsorbWithValue(true, "stone", Allowed,
-                    Allowed.Length, item, AtBall, AtBall, 0.15f, ContactRadiusM,
+                    Allowed.Length, item, Quaternion.identity, AtBall, AtBall, 0.15f, ContactRadiusM,
                     0f, 0.30f, MaxGrowthRadiusM, 0L));
             // A gain above int.MaxValue is a real gain (the ledger is 64-bit); this is the
             // step that would have been refused before steps C/D.
             Assert.AreEqual(AbsorbOutcome.Absorb,
                 PickupAbsorbMath.EvaluateAbsorbWithValue(true, "stone", Allowed,
-                    Allowed.Length, item, AtBall, AtBall, 0.15f, ContactRadiusM,
+                    Allowed.Length, item, Quaternion.identity, AtBall, AtBall, 0.15f, ContactRadiusM,
                     K, 0.30f, MaxGrowthRadiusM, 3000000000L));
         }
 

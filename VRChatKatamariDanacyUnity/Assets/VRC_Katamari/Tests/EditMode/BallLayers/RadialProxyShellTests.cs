@@ -5,9 +5,10 @@ using VRCKatamari.BallLayers;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Integration tests for the radial-proxy shell: the caller-owned ledger, the
-    /// AABB endpoint protocol, the incremental attach/detach, the atomic rebuild and
-    /// the protrusion-clamped points that drive GroundContactMath.
+    /// Integration tests for the radial-proxy shell (the ball's 16 pins): the caller-owned
+    /// ledger, the AABB endpoint protocol, the incremental attach/detach, the atomic rebuild
+    /// and the protrusion-clamped pin tips that drive GroundContactMath. Every attached prop
+    /// is an item (no long-object admission), so the ledger holds hundreds of them.
     /// </summary>
     /// <remarks>
     /// Every expected value is a hand calculation or a geometric invariant (a corner
@@ -19,16 +20,20 @@ namespace VRCKatamari.Tests
     {
         private const float Tolerance = 1e-5f;
 
+        // Test-side capacities (the motor owns its own): plenty of items, 8 corners each.
+        private const int ItemCapacity = 300;
+        private const int EndpointCapacity = ItemCapacity * RadialProxyShellMath.AabbCornerCount;
+
         private sealed class Shell
         {
             public readonly Vector3[] Directions = new Vector3[RadialProxyMath.DirectionCount];
             public readonly float[] Supports = new float[RadialProxyMath.DirectionCount];
-            public readonly Vector3[] Pool = new Vector3[RadialProxyShellMath.EndpointCapacity];
-            public readonly Vector3[] Contact = new Vector3[RadialProxyShellMath.EndpointCapacity];
-            public readonly int[] Starts = new int[RadialProxyShellMath.ItemCapacity];
-            public readonly int[] Lengths = new int[RadialProxyShellMath.ItemCapacity];
-            public readonly string[] Keys = new string[RadialProxyShellMath.ItemCapacity];
-            public readonly bool[] IsCandidate = new bool[RadialProxyShellMath.ItemCapacity];
+            public readonly Vector3[] Pool = new Vector3[EndpointCapacity];
+            public readonly Vector3[] Contact = new Vector3[RadialProxyMath.DirectionCount];
+            public readonly int[] Starts = new int[ItemCapacity];
+            public readonly int[] Lengths = new int[ItemCapacity];
+            public readonly string[] Keys = new string[ItemCapacity];
+            public readonly bool[] IsCandidate = new bool[ItemCapacity];
             public readonly string[] CandidateKeys = new string[RadialProxyMath.MaxExtremeCandidates];
             public readonly int[] Affected = new int[RadialProxyMath.DirectionCount];
             public readonly float[] Scratch = new float[RadialProxyMath.DirectionCount];
@@ -78,8 +83,9 @@ namespace VRCKatamari.Tests
 
             public bool BuildContact(float maxProtrusionM)
             {
-                return RadialProxyShellMath.TryBuildContactPoints(CoreRadius, maxProtrusionM,
-                    Pool, PoolCount, Contact);
+                int protruding;
+                return RadialProxyShellMath.TryBuildPinTips(CoreRadius, maxProtrusionM,
+                    Directions, Supports, Contact, out protruding);
             }
 
             /// <summary>Ground support height and the applied correction for this pose.</summary>
@@ -98,6 +104,34 @@ namespace VRCKatamari.Tests
                     out appliedCorrection, out perturbation, out liftClamped, out dropClamped);
                 Assert.IsTrue(accepted);
             }
+        }
+
+        /// <summary>
+        /// Brute-force reference for the pin model: the table is the max over the corners of
+        /// each pin direction, the tip is clamped to core + cap, and with the ball rolled so
+        /// local +Z faces the floor the ground support is the largest tip z (never below the
+        /// core). Independent of the shell's own bookkeeping.
+        /// </summary>
+        private static float ExpectedDownSupport(Shell shell, float cap, params Vector3[][] boxes)
+        {
+            float best = shell.CoreRadius;
+            for (int i = 0; i < RadialProxyMath.DirectionCount; i++)
+            {
+                float raw = 0f;
+                for (int b = 0; b < boxes.Length; b++)
+                {
+                    for (int c = 0; c < boxes[b].Length; c++)
+                    {
+                        float dot = Vector3.Dot(boxes[b][c], shell.Directions[i]);
+                        if (dot > raw) raw = dot;
+                    }
+                }
+                if (!(raw > shell.CoreRadius)) continue;
+                float length = Mathf.Min(raw, shell.CoreRadius + cap);
+                float z = shell.Directions[i].z * length;
+                if (z > best) best = z;
+            }
+            return best;
         }
 
         private static Vector3[] RodCorners(Vector3 fullExtents)
@@ -137,20 +171,14 @@ namespace VRCKatamari.Tests
             float support;
             float correction;
             shell.Solve(down, new Vector3(0f, 0.15f, 0f), 0.04f, out support, out correction);
-            // The clamp is radial (README "夹紧是径向的"): an endpoint longer than core+cap
-            // is scaled along its own ray to that radius, so the along-axis support is the
-            // projection (core+cap) * tipZ / |tip|, not the bare core+cap. Here the cross
-            // section is thin, so the two differ by only ~2.7e-5 m, but the invariant is
-            // the projection.
-            float halfX = rodExtents.x * 0.5f;
-            float halfY = rodExtents.y * 0.5f;
-            float tipZ = rodCenter.z + rodExtents.z * 0.5f;
-            float tipLength = Mathf.Sqrt(halfX * halfX + halfY * halfY + tipZ * tipZ);
-            Assert.AreEqual((0.15f + cap) * (tipZ / tipLength), support, 1e-4f,
-                "support = (core + cap) projected along the tip direction");
-            Assert.LessOrEqual(support, 0.15f + cap, "never beyond the radial clamp");
+            // The ground point is a PIN tip: direction * min(raw support, core + cap). The
+            // expected value is a brute-force max over the rod's corners and the 16 pins, so
+            // it does not depend on how the shell stores them.
+            Assert.AreEqual(ExpectedDownSupport(shell, cap, corners), support, 1e-4f,
+                "support = the best pin tip, clamped to core + cap");
+            Assert.Greater(support, 0.15f + Tolerance, "the rod lifts the ball");
+            Assert.LessOrEqual(support, 0.15f + cap + Tolerance, "never beyond the cap");
             Assert.AreEqual(0.04f, correction, 1e-4f, "one-step lift is clamped");
-            Assert.LessOrEqual(support - 0.15f, cap + Tolerance, "no protrusion beyond the cap");
 
             // The stored support table stays RAW, so the growth path can retract it
             // later; the cap is applied only to the contact points.
@@ -221,30 +249,21 @@ namespace VRCKatamari.Tests
             float support;
             float correction;
             shell.Solve(down, new Vector3(0f, core, 0f), 10f, out support, out correction);
-            // The clamp is radial (README "夹紧是径向的"): an endpoint longer than core+cap
-            // keeps its direction and is scaled to that radius, so a tip slightly off the
-            // axis contributes only the along-axis projection. The long rod's far corner
-            // is (0.015, 0.015, 0.30), so the expected support is
-            //   (core+cap) * hz / |corner| = 0.135 * 0.30 / sqrt(0.015^2+0.015^2+0.30^2)
-            //                               = 0.135 * cos(4.045 deg) = 0.134664 m,
-            // NOT the full clamp radius 0.135 m (that would be the support of a tip
-            // exactly on the axis).
-            float halfX = longExtents.x * 0.5f;
-            float halfY = longExtents.y * 0.5f;
-            float halfZ = longExtents.z * 0.5f;
-            float tipLength = Mathf.Sqrt(halfX * halfX + halfY * halfY + halfZ * halfZ);
-            float clampedSupport = (core + cap) * (halfZ / tipLength);
-            Assert.AreEqual(clampedSupport, support, 1e-4f,
-                "radial clamp keeps (core + cap) * cos(tip tilt) along the axis, not the bare cap");
-            Assert.Less(support, core + cap, "a tilted tip cannot reach the bare clamp radius");
+            Vector3[] longCorners = RodCorners(longExtents);
+            Vector3[] shortCorners = RodCorners(shortExtents);
+            Assert.AreEqual(ExpectedDownSupport(shell, cap, longCorners, shortCorners), support, 1e-4f,
+                "both rods feed the pins; the best tip is the longer rod's, clamped");
+            Assert.LessOrEqual(support, core + cap + Tolerance, "no protrusion beyond the cap");
+            Assert.Greater(support, core + Tolerance);
 
             Assert.IsTrue(shell.Detach("long#1"));
             Assert.AreEqual(1, shell.ItemCount, "only the long rod left");
             Assert.IsTrue(shell.BuildContact(cap));
             shell.Solve(down, new Vector3(0f, core, 0f), 10f, out support, out correction);
-            // The short tip's corner diagonal (0.131719 m) is still inside the clamp
-            // radius, so it is not shortened at all and support is its bare hz = 0.13 m.
-            Assert.AreEqual(shortExtents.z * 0.5f, support, 1e-4f, "short rod's tip takes over");
+            // The surviving short rod's own pins take over: recomputed from the surviving
+            // corners, not left at the removed rod's maximum.
+            Assert.AreEqual(ExpectedDownSupport(shell, cap, shortCorners), support, 1e-4f,
+                "short rod's pins take over");
             Assert.Greater(support, core + Tolerance, "the surviving rod still lifts");
 
             Assert.IsTrue(shell.Detach("short#1"));
@@ -316,53 +335,19 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(shell.Attach("b#1", RodCorners(new Vector3(0.03f, 0.03f, 0.6f)), true));
             Assert.IsTrue(shell.Attach("c#1", RodCorners(new Vector3(0.03f, 0.03f, 0.6f)), true));
             Assert.IsTrue(shell.Attach("d#1", RodCorners(new Vector3(0.03f, 0.03f, 0.6f)), true));
-            Assert.AreEqual(RadialProxyShellMath.EndpointCapacity, shell.PoolCount);
+            Assert.AreEqual(4 * RadialProxyShellMath.AabbCornerCount, shell.PoolCount);
             float[] before = new float[RadialProxyMath.DirectionCount];
             for (int i = 0; i < before.Length; i++) before[i] = shell.Supports[i];
 
             Assert.IsFalse(shell.Attach("e#1", RodCorners(new Vector3(0.03f, 0.03f, 0.6f)), true),
                 "a fifth candidate is refused, not evicting one");
             Assert.AreEqual(4, shell.ItemCount);
-            Assert.AreEqual(RadialProxyShellMath.EndpointCapacity, shell.PoolCount);
+            Assert.AreEqual(4 * RadialProxyShellMath.AabbCornerCount, shell.PoolCount);
             for (int i = 0; i < before.Length; i++)
             {
                 Assert.AreEqual(before[i], shell.Supports[i], Tolerance, "support " + i);
             }
             Assert.AreEqual(4, shell.CandidateCount);
-        }
-
-        [Test]
-        public void LongObjectAdmissionUsesLengthAndSecondLongestEdge()
-        {
-            bool isLong;
-            Assert.IsTrue(RadialProxyShellMath.TryClassifyLongObject(
-                new Vector3(0.03f, 0.02f, 0.18f), 0.1f, 2.5f, 0.5f, out isLong));
-            Assert.IsTrue(isLong, "a spoon is a long object at a 0.1 m core");
-
-            // The real StoryLevel banana row: 0.18 x 0.068 x 0.032 (second longest 0.068).
-            Assert.IsTrue(RadialProxyShellMath.TryClassifyLongObject(
-                new Vector3(0.18f, 0.032f, 0.068f), 0.15f, 2.5f, 0.5f, out isLong));
-            Assert.IsTrue(isLong, "the banana bounds pass at the starting ball");
-
-            // A square sheet with one thin axis is NOT a long object: longest/second = 1.
-            Assert.IsTrue(RadialProxyShellMath.TryClassifyLongObject(
-                new Vector3(0.3f, 0.028f, 0.3f), 0.15f, 2.5f, 0.5f, out isLong));
-            Assert.IsFalse(isLong, "a napkin sheet is wide in two axes");
-
-            Assert.IsTrue(RadialProxyShellMath.TryClassifyLongObject(
-                new Vector3(0.08f, 0.08f, 0.1f), 0.1f, 2.5f, 0.5f, out isLong));
-            Assert.IsFalse(isLong, "a cup is not elongated");
-
-            Assert.IsTrue(RadialProxyShellMath.TryClassifyLongObject(
-                new Vector3(0.02f, 0.02f, 0.08f), 0.5f, 2.5f, 0.5f, out isLong));
-            Assert.IsFalse(isLong, "too short relative to the ball");
-
-            Assert.IsTrue(RadialProxyShellMath.TryClassifyLongObject(
-                new Vector3(0.2f, 0.005f, 1f), 0.3f, 2.5f, 0.5f, out isLong));
-            Assert.IsTrue(isLong, "a flat plank still qualifies");
-
-            Assert.IsFalse(RadialProxyShellMath.TryClassifyLongObject(
-                new Vector3(-0.1f, 0.02f, 0.3f), 0.1f, 2.5f, 0.5f, out isLong));
         }
 
         [Test]
@@ -388,22 +373,113 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void ContactPointsClampLongEndpointsAndZeroUnusedSlots()
+        public void PinTipsClampLongPinsAndZeroTheOnesThatDoNotProtrude()
         {
-            Vector3[] endpoints = new Vector3[RadialProxyShellMath.EndpointCapacity];
-            Vector3[] contact = new Vector3[RadialProxyShellMath.EndpointCapacity];
-            endpoints[0] = new Vector3(0f, 0f, 2f);
-            endpoints[1] = new Vector3(0f, 0f, 0.1f);
-            Assert.IsTrue(RadialProxyShellMath.TryBuildContactPoints(0.5f, 0.1f, endpoints, 2,
-                contact));
-            AssertVector(new Vector3(0f, 0f, 0.6f), contact[0]);
-            AssertVector(new Vector3(0f, 0f, 0.1f), contact[1]);
-            for (int i = 2; i < contact.Length; i++)
+            Vector3[] directions = new Vector3[RadialProxyMath.DirectionCount];
+            Assert.IsTrue(RadialProxyMath.TryFillDirections(directions));
+            float[] supports = new float[RadialProxyMath.DirectionCount];
+            supports[0] = 2f;          // far past the cap: clamped to core + cap
+            supports[1] = 0.55f;       // inside the cap: kept
+            supports[2] = 0.5f;        // exactly the core: no contribution
+            supports[3] = 0.3f;        // below the core: no contribution
+            Vector3[] tips = new Vector3[RadialProxyMath.DirectionCount];
+            int protruding;
+            Assert.IsTrue(RadialProxyShellMath.TryBuildPinTips(0.5f, 0.1f, directions, supports,
+                tips, out protruding));
+            Assert.AreEqual(2, protruding);
+            AssertVector(directions[0] * 0.6f, tips[0]);
+            AssertVector(directions[1] * 0.55f, tips[1]);
+            for (int i = 2; i < tips.Length; i++) AssertVector(Vector3.zero, tips[i]);
+
+            Assert.IsFalse(RadialProxyShellMath.TryBuildPinTips(0.5f, 0.1f, directions, supports,
+                new Vector3[RadialProxyMath.DirectionCount - 1], out protruding),
+                "the tip array must be exactly one slot per pin");
+            Assert.IsFalse(RadialProxyShellMath.TryBuildPinTips(-1f, 0.1f, directions, supports,
+                tips, out protruding));
+        }
+
+        [Test]
+        public void ManyPropsMergeIncrementallyToTheSameTableAsARebuild()
+        {
+            // Every attached prop registers (no long-object test): 150 boxes of mixed sizes in
+            // deterministic pseudo-random ball-local poses. After each attach the table must be
+            // the brute-force max over every corner so far, and a whole-ledger rebuild must
+            // leave it unchanged (the table matches the pool by construction).
+            Shell shell = new Shell(0.25f);
+            System.Collections.Generic.List<Vector3> allCorners =
+                new System.Collections.Generic.List<Vector3>();
+            uint seed = 12345u;
+            for (int n = 0; n < 150; n++)
             {
-                AssertVector(Vector3.zero, contact[i]);
+                Vector3 extents = new Vector3(0.02f + 0.1f * Next(ref seed), 0.02f + 0.1f * Next(ref seed),
+                    0.02f + 0.3f * Next(ref seed));
+                Vector3 dir = new Vector3(Next(ref seed) - 0.5f, Next(ref seed) - 0.5f,
+                    Next(ref seed) - 0.5f).normalized;
+                Quaternion rotation = Quaternion.Euler(360f * Next(ref seed), 360f * Next(ref seed),
+                    360f * Next(ref seed));
+                Vector3[] corners = new Vector3[RadialProxyShellMath.AabbCornerCount];
+                float farthest;
+                Assert.IsTrue(RadialProxyShellMath.TryBuildAabbCorners(dir * 0.25f, rotation,
+                    extents, corners, out farthest));
+                Assert.IsTrue(shell.Attach("prop#" + n, corners, false), "attach " + n);
+                allCorners.AddRange(corners);
+                Assert.AreEqual(n + 1, shell.ItemCount);
+                Assert.AreEqual(0, shell.CandidateCount, "no candidates: every prop is an item");
             }
-            Assert.IsFalse(RadialProxyShellMath.TryBuildContactPoints(0.5f, 0.1f, endpoints, 2,
-                new Vector3[RadialProxyShellMath.EndpointCapacity - 1]));
+            Assert.AreEqual(150 * RadialProxyShellMath.AabbCornerCount, shell.PoolCount);
+
+            float[] expected = new float[RadialProxyMath.DirectionCount];
+            for (int d = 0; d < expected.Length; d++)
+            {
+                float best = 0f;
+                for (int c = 0; c < allCorners.Count; c++)
+                {
+                    float dot = Vector3.Dot(allCorners[c], shell.Directions[d]);
+                    if (dot > best) best = dot;
+                }
+                expected[d] = best;
+                Assert.AreEqual(best, shell.Supports[d], Tolerance, "incremental support " + d);
+            }
+
+            Assert.IsTrue(shell.Rebuild());
+            for (int d = 0; d < expected.Length; d++)
+            {
+                Assert.AreEqual(expected[d], shell.Supports[d], Tolerance, "rebuilt support " + d);
+            }
+        }
+
+        [Test]
+        public void ADetachAmongManyPropsRecomputesFromTheSurvivors()
+        {
+            Shell shell = new Shell(0.2f);
+            Vector3[] big = RodCornersAt(new Vector3(0f, 0f, 0.4f), new Vector3(0.1f, 0.1f, 0.5f));
+            Vector3[] small = RodCornersAt(new Vector3(0f, 0f, 0.25f), new Vector3(0.1f, 0.1f, 0.1f));
+            Assert.IsTrue(shell.Attach("small#1", small, false));
+            Assert.IsTrue(shell.Attach("big#1", big, false));
+            Assert.IsTrue(shell.Attach("small#2", RodCornersAt(new Vector3(0.1f, 0f, 0f),
+                new Vector3(0.05f, 0.05f, 0.05f)), false));
+            Quaternion down = Quaternion.AngleAxis(90f, Vector3.right);
+            float cap = 10f;
+            float support;
+            float correction;
+            Assert.IsTrue(shell.BuildContact(cap));
+            shell.Solve(down, new Vector3(0f, 0.2f, 0f), 10f, out support, out correction);
+            Assert.AreEqual(ExpectedDownSupport(shell, cap, small, big, RodCornersAt(
+                new Vector3(0.1f, 0f, 0f), new Vector3(0.05f, 0.05f, 0.05f))), support, 1e-4f);
+
+            Assert.IsTrue(shell.Detach("big#1"));
+            Assert.AreEqual(2, shell.ItemCount);
+            Assert.IsTrue(shell.BuildContact(cap));
+            shell.Solve(down, new Vector3(0f, 0.2f, 0f), 10f, out support, out correction);
+            Assert.AreEqual(ExpectedDownSupport(shell, cap, small, RodCornersAt(
+                new Vector3(0.1f, 0f, 0f), new Vector3(0.05f, 0.05f, 0.05f))), support, 1e-4f,
+                "the big prop's maximum is gone; the survivors' pins remain");
+        }
+
+        private static float Next(ref uint state)
+        {
+            state = state * 1664525u + 1013904223u;
+            return (state >> 8) / 16777216f;
         }
 
         private static void AssertVector(Vector3 expected, Vector3 actual)

@@ -47,7 +47,7 @@ namespace VRCKatamari.Tests
         private static AbsorbOutcome Gate(float ballDiameterM, Vector3 bounds)
         {
             return PickupAbsorbMath.EvaluateAbsorb(true, "stone", Allowed, Allowed.Length,
-                bounds, Vector3.zero, Vector3.zero, ballDiameterM * 0.5f, 0f,
+                bounds, Quaternion.identity, Vector3.zero, Vector3.zero, ballDiameterM * 0.5f, 0f,
                 PickupAbsorbMath.DefaultVolumeK, ballDiameterM, MaxGrowthRadiusM);
         }
 

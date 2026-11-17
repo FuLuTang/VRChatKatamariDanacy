@@ -348,14 +348,13 @@ namespace VRCKatamari.Ai
         /// comparison is wrong, which cost this project two rounds. d3d is the motor's
         /// stored 3-D distance; reach is recomputed here only for display.
         /// <para>
-        /// TWO RULERS, on purpose and not merged yet. The absorb gate measures the item's
-        /// real AABB half-diagonal (PickupAbsorbMath.TryComputeReach, fed the propBounds
-        /// that PickupFieldSync wrote); this line can only see the pilot's target
-        /// Transform, so it prints a CUBE approximation, sqrt(3) * localScale.x / 2. The
-        /// two agree only for a unit cube with no scaled parent. A 1.2 x 0.4 x 0.5 m
-        /// bench reads ~1.04 m here against the gate's ~0.68 m, so do not read this reach
-        /// as the threshold. Merging them needs the queued candidate's bounds exposed by
-        /// the motor, which is a separate change (cleanup audit D3).
+        /// TWO RULERS, on purpose and not merged yet. The absorb gate measures the distance
+        /// from the ball's centre to the item's oriented box (PickupAbsorbMath.
+        /// TryComputeContact, fed the item's own size from propLocalBounds and its
+        /// rotation); this line can only see the pilot's target Transform, so it prints a
+        /// CUBE-sphere approximation, sqrt(3) * localScale.x / 2. It is only a rough
+        /// upper bound of the distance at which the box is touched, never the threshold:
+        /// read the motor's reject diagnostic (boxDist / limit) for the real numbers.
         /// </para>
         /// </remarks>
         private string QueueFacts(KatamariBallMotor m, CpuBallPilot pilot)
@@ -382,7 +381,7 @@ namespace VRCKatamari.Ai
             if (slot < 0) return text + " d3d=-1 reach=-1";
 
             UnityEngine.Transform target = pilot.GetTargetTransform();
-            // Cube approximation, not the gate's AABB half-diagonal: see the two-rulers
+            // Cube approximation, not the gate's box distance: see the two-rulers
             // note above. Deliberately unchanged, so this printed number cannot move.
             float size = target == null ? 0f : target.localScale.x;
             float itemRadius = Mathf.Sqrt(3f) * size * 0.5f;

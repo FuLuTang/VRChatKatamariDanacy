@@ -5,10 +5,10 @@ namespace VRCKatamari.BallLayers
 {
     /// <summary>
     /// Connects absorbed props' simplified AABB proxies to a caller-owned radial
-    /// shell: builds the box corners in the ball frame, decides which items are
-    /// long-object candidates, and composes the incremental attach/detach and the
-    /// whole-ledger rebuild that <see cref="RadialProxyMath"/> deliberately leaves
-    /// to its caller.
+    /// shell (the ball's 16 pins): builds the box corners in the ball frame and
+    /// composes the incremental attach/detach, the whole-ledger rebuild and the
+    /// per-step pin tips that <see cref="RadialProxyMath"/> deliberately leaves to its
+    /// caller. Every attached prop is an item; there is no long-object admission test.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -16,8 +16,8 @@ namespace VRCKatamari.BallLayers
     /// transforms, affected-direction collection, support solving, candidate keys
     /// and the atomic rebuild are calls into <see cref="RadialProxyMath"/>; what
     /// lives here is the integration protocol that has to exist exactly once:
-    /// which corner of an absorbed prop is an endpoint, when an item is a
-    /// long-object candidate, which array slot it occupies, and how a removal
+    /// which corner of an absorbed prop is an endpoint, which array slot an
+    /// item occupies, and how a removal
     /// compacts the caller's ledger before the affected directions are recomputed.
     /// The state itself stays caller-owned: the motor owns one set of these
     /// arrays, and the EditMode tests own another.
@@ -59,12 +59,6 @@ namespace VRCKatamari.BallLayers
     {
         /// <summary>Corners of one prop's bounding box: the endpoint set of one item.</summary>
         public const int AabbCornerCount = 8;
-
-        /// <summary>Long-object candidates the model allows (the same four as the key list).</summary>
-        public const int ItemCapacity = RadialProxyMath.MaxExtremeCandidates;
-
-        /// <summary>Endpoint pool a full candidate list needs: 4 items x 8 corners.</summary>
-        public const int EndpointCapacity = ItemCapacity * AabbCornerCount;
 
         // Why TryResolvePropExtents fell back from the prop-local column to the
         // legacy world-AABB column. 0 means the prop-local value was used; the host
@@ -127,65 +121,6 @@ namespace VRCKatamari.BallLayers
         }
 
         /// <summary>
-        /// Decides whether an absorbed prop is a long object worth an endpoint
-        /// candidate, from its full extents along the prop's local axes and the ball's
-        /// core radius.
-        /// </summary>
-        /// <remarks>
-        /// Two provisional shape rules, both needed: the longest edge must be at
-        /// least <paramref name="minLongestEdgePerCoreDiameter"/> ball diameters
-        /// (a prop much shorter than the ball cannot dominate the 16-direction
-        /// shell), and the longest edge must be at least
-        /// <paramref name="minElongation"/> times the SECOND-longest edge (one axis
-        /// dominates the other two: a rod or plank, not a cup and not a square
-        /// sheet whose thin axis merely makes longest/shortest large). A zero
-        /// extent is legal, so a flat plank still qualifies. A prop with no
-        /// positive extent returns true with <paramref name="isLongObject"/> false:
-        /// there is nothing to represent, which is not a data error.
-        /// </remarks>
-        public static bool TryClassifyLongObject(Vector3 fullExtents, float coreRadius,
-            float minElongation, float minLongestEdgePerCoreDiameter, out bool isLongObject)
-        {
-            isLongObject = false;
-            if (!KatamariMath.IsFiniteVector(fullExtents)) return false;
-            if (fullExtents.x < 0f || fullExtents.y < 0f || fullExtents.z < 0f) return false;
-            if (!KatamariMath.IsFiniteFloat(coreRadius) || coreRadius < 0f) return false;
-            if (!KatamariMath.IsFiniteFloat(minElongation) || minElongation < 0f) return false;
-            if (!KatamariMath.IsFiniteFloat(minLongestEdgePerCoreDiameter) ||
-                minLongestEdgePerCoreDiameter < 0f) return false;
-
-            float longest = fullExtents.x;
-            float secondLongest = 0f;
-            if (fullExtents.y > longest)
-            {
-                secondLongest = longest;
-                longest = fullExtents.y;
-            }
-            else
-            {
-                secondLongest = fullExtents.y;
-            }
-            if (fullExtents.z > longest)
-            {
-                secondLongest = longest;
-                longest = fullExtents.z;
-            }
-            else if (fullExtents.z > secondLongest)
-            {
-                secondLongest = fullExtents.z;
-            }
-            if (longest <= 0f) return true;
-
-            float diameterBound = 2f * coreRadius * minLongestEdgePerCoreDiameter;
-            if (!KatamariMath.IsFiniteFloat(diameterBound)) return false;
-            float elongationBound = minElongation * secondLongest;
-            if (!KatamariMath.IsFiniteFloat(elongationBound)) return false;
-
-            isLongObject = longest >= diameterBound && longest >= elongationBound;
-            return true;
-        }
-
-        /// <summary>
         /// Builds the eight ball-local corners of one absorbed prop's AABB and
         /// reports the farthest corner's distance from the ball centre.
         /// </summary>
@@ -241,8 +176,9 @@ namespace VRCKatamari.BallLayers
         }
 
         /// <summary>
-        /// Appends one item's endpoints, recomputes only the directions its
-        /// endpoints can affect, and registers its candidate key when asked.
+        /// Appends one item's endpoints, raises only the supports its endpoints can
+        /// affect (an incremental max-merge, not a rescan of the pool), and registers its
+        /// candidate key when asked.
         /// </summary>
         /// <remarks>
         /// The pool, the per-item slices, the item keys and the candidate slots are
@@ -250,10 +186,10 @@ namespace VRCKatamari.BallLayers
         /// protocol. The endpoint array is the item's own corners (not an offset
         /// into the pool), which is why the same array serves attach and detach.
         /// Capacities, key uniqueness and endpoint finiteness are checked before
-        /// the pool is touched; the supports are solved into
-        /// <paramref name="solveScratch"/> first and copied to the affected slots
+        /// the pool is touched; the item's own supports are solved into
+        /// <paramref name="solveScratch"/> first and merged (max) into the affected slots
         /// only after that solve and the candidate insert succeeded, so a refused
-        /// attach leaves the support table as it was.
+        /// attach leaves the pool and the support table as they were.
         /// </remarks>
         public static bool TryAttachItem(
             Vector3[] directions,
@@ -317,38 +253,45 @@ namespace VRCKatamari.BallLayers
                 if (!KatamariMath.IsFiniteVector(endpoints[i])) return false;
             }
 
-            int start = poolCount;
-            for (int i = 0; i < endpointCount; i++)
-            {
-                pool[start + i] = endpoints[i];
-            }
-            poolCount = poolCount + endpointCount;
-
+            // Incremental: the table is a MAX over the endpoint pool, so adding endpoints can
+            // only raise a support, and only in the directions whose hemisphere they enter.
+            // The new item's own 8 corners are all that has to be dotted (<= 16 x 8 products),
+            // never the whole pool: with every attached prop registered the pool is hundreds
+            // of endpoints, and a rescan per attach would be a hitch in Udon. Result is
+            // identical to the rescan whenever the table matches the pool, which every
+            // writer in this class keeps true.
             int affectedCount;
             if (!RadialProxyMath.TryCollectAffectedDirections(endpoints, endpointCount, directions,
                 affectedIndices, out affectedCount))
             {
-                poolCount = start;
                 return false;
             }
-            if (!RadialProxyMath.TrySolveSupports(0f, pool, poolCount, directions, affectedIndices,
-                affectedCount, solveScratch))
+            if (!RadialProxyMath.TrySolveSupports(0f, endpoints, endpointCount, directions,
+                affectedIndices, affectedCount, solveScratch))
             {
-                poolCount = start;
                 return false;
             }
             if (isCandidate)
             {
                 if (!RadialProxyMath.TryInsertCandidateKey(candidateKeys, ref candidateCount, itemKey))
                 {
-                    poolCount = start;
                     return false;
                 }
             }
+
+            int start = poolCount;
+            for (int i = 0; i < endpointCount; i++)
+            {
+                pool[start + i] = endpoints[i];
+            }
+            poolCount = poolCount + endpointCount;
             for (int k = 0; k < affectedCount; k++)
             {
                 int directionIndex = affectedIndices[k];
-                supports[directionIndex] = solveScratch[directionIndex];
+                if (solveScratch[directionIndex] > supports[directionIndex])
+                {
+                    supports[directionIndex] = solveScratch[directionIndex];
+                }
             }
 
             itemStarts[itemCount] = start;
@@ -566,73 +509,66 @@ namespace VRCKatamari.BallLayers
         }
 
         /// <summary>
-        /// Builds the ball-local endpoint array handed to
-        /// <see cref="GroundContactMath.TrySolve"/> each step: the first
-        /// <paramref name="endpointCount"/> slots are the endpoints with their
-        /// length clamped to <paramref name="coreRadius"/> +
-        /// <paramref name="maxProtrusionM"/>, and every unused slot is zero.
+        /// Builds the pin tips handed to <see cref="GroundContactMath.TrySolve"/> each step:
+        /// slot <c>i</c> is <c>directions[i] * min(supports[i], coreRadius + maxProtrusionM)</c>
+        /// when that pin protrudes past the core, and zero otherwise.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The clamp is the hard maximum-protrusion rule: a long rod may not lift
-        /// the ball more than the cap above its core, however far its tip is. It is
-        /// applied here, not when the endpoint is stored, because the stored raw
-        /// length is what lets a growing core retract the relative protrusion
-        /// naturally. The clamped points are the only proxy data the per-step
-        /// contact solve sees, so the cap cannot be bypassed by a stale support
-        /// table.
+        /// This is the original's rolling model: 16 fixed pins whose tips are the ground
+        /// points. The pin table is the max over EVERY registered prop's box corners, so the
+        /// per-step solve cost is bounded by 16 however many props are attached. The clamp is
+        /// the hard maximum-protrusion rule: a prop may not lift the ball more than the cap
+        /// above its core. It is applied here, not when the support is stored, because the
+        /// stored raw length is what lets a growing core retract the relative protrusion
+        /// naturally.
         /// </para>
         /// <para>
-        /// Zero slots are valid input: their projection is zero, which never raises
-        /// a support above the core floor. <paramref name="contactPoints"/> must be
-        /// exactly as long as the pool so the arrays cannot disagree about the
-        /// unused slots.
+        /// A pin that does not clear the core is zeroed, which the ground solve treats as no
+        /// contribution (its projection never exceeds the core floor). A pin-tip is a lower
+        /// bound of the box it came from: the tip sits on the supporting plane of the box
+        /// along its pin direction, so an off-axis corner is represented by the nearest pins'
+        /// cosine falloff, the original's behaviour. <paramref name="tips"/> must have exactly
+        /// <see cref="RadialProxyMath.DirectionCount"/> slots.
         /// </para>
         /// </remarks>
-        public static bool TryBuildContactPoints(float coreRadius, float maxProtrusionM,
-            Vector3[] endpoints, int endpointCount, Vector3[] contactPoints)
+        public static bool TryBuildPinTips(float coreRadius, float maxProtrusionM,
+            Vector3[] directions, float[] supports, Vector3[] tips, out int protrudingCount)
         {
+            protrudingCount = 0;
             if (!KatamariMath.IsFiniteFloat(coreRadius) || coreRadius < 0f) return false;
             if (!KatamariMath.IsFiniteFloat(maxProtrusionM) || maxProtrusionM < 0f) return false;
-            if (endpoints == null || contactPoints == null) return false;
-            if (contactPoints.Length != endpoints.Length) return false;
-            if (endpointCount < 0 || endpointCount > endpoints.Length) return false;
+            if (directions == null || directions.Length != RadialProxyMath.DirectionCount) return false;
+            if (supports == null || supports.Length < RadialProxyMath.DirectionCount) return false;
+            if (tips == null || tips.Length != RadialProxyMath.DirectionCount) return false;
 
             float maxLength = coreRadius + maxProtrusionM;
             if (!KatamariMath.IsFiniteFloat(maxLength)) return false;
-            for (int i = 0; i < endpointCount; i++)
+            for (int i = 0; i < RadialProxyMath.DirectionCount; i++)
             {
-                if (!KatamariMath.IsFiniteVector(endpoints[i])) return false;
+                if (!KatamariMath.IsFiniteFloat(supports[i])) return false;
+                if (!KatamariMath.IsFiniteVector(directions[i])) return false;
             }
 
-            for (int i = 0; i < contactPoints.Length; i++)
+            int count = 0;
+            for (int i = 0; i < RadialProxyMath.DirectionCount; i++)
             {
-                if (i >= endpointCount)
+                float support = supports[i];
+                if (!(support > coreRadius))
                 {
-                    contactPoints[i] = Vector3.zero;
+                    tips[i] = Vector3.zero;
                     continue;
                 }
-                Vector3 point = endpoints[i];
-                float lengthSquared = point.x * point.x + point.y * point.y + point.z * point.z;
-                if (!KatamariMath.IsFiniteFloat(lengthSquared)) return false;
-                float length = Mathf.Sqrt(lengthSquared);
-                if (!KatamariMath.IsFiniteFloat(length)) return false;
-                if (length <= 0f)
+                float length = support < maxLength ? support : maxLength;
+                if (!(length > coreRadius))
                 {
-                    contactPoints[i] = Vector3.zero;
+                    tips[i] = Vector3.zero;
                     continue;
                 }
-                if (length <= maxLength)
-                {
-                    contactPoints[i] = point;
-                    continue;
-                }
-                float scale = maxLength / length;
-                if (!KatamariMath.IsFiniteFloat(scale)) return false;
-                Vector3 clamped = point * scale;
-                if (!KatamariMath.IsFiniteVector(clamped)) return false;
-                contactPoints[i] = clamped;
+                tips[i] = directions[i] * length;
+                count = count + 1;
             }
+            protrudingCount = count;
             return true;
         }
     }

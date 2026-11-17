@@ -24,6 +24,12 @@ namespace VRCKatamari.Story
     public enum StoryGoalType
     {
         ReachTargetDiameter = 0,
-        CollectCategoryCount = 1
+        CollectCategoryCount = 1,
+
+        /// <summary>
+        /// No goal, no clock, no settle: a practice level the player leaves by choice
+        /// (the hub's return button). The round runs but never ends by itself and no card is drawn.
+        /// </summary>
+        FreeRoam = 2
     }
 }

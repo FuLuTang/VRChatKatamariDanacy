@@ -83,6 +83,19 @@ namespace VRCKatamari.Story
         // evaluation.partial_band: the "just barely" line, never a star.
         [SerializeField] private float partialBand = 0.9f;
 
+        // ---- Per-level star table (multi-level scenes; every array is optional) ----
+        // Indexed by the controller's GetLevelIndex(). Empty arrays, or a level index the
+        // arrays do not reach (including -1, "no level selected"), use the single fields
+        // above: today's behaviour. levelHasStars false = this level has no star
+        // thresholds, so the card shows its measurement only and draws no stars or comment.
+        [Header("Per-level star table (optional, parallel arrays)")]
+        [SerializeField] private bool[] levelHasStars;
+        [SerializeField] private float[] levelStar2Diameters;
+        [SerializeField] private float[] levelStar3Diameters;
+        [SerializeField] private int[] levelStar2Counts;
+        [SerializeField] private int[] levelStar3Counts;
+        [SerializeField] private float[] levelPartialBands;
+
         [Header("Presentation")]
         // Shown while the ball is offered; the result card repeats it on its first line.
         [SerializeField] private string presenterLine = "呈给国王";
@@ -112,6 +125,9 @@ namespace VRCKatamari.Story
         private int stars = StoryStarMath.StarsNone;
         private bool insidePartialBand;
 
+        // False when the level has no star thresholds: the card then draws the measurement only.
+        private bool usesStars = true;
+
         // A missing controller is the only wire this behaviour cannot work around, so it
         // is reported once instead of every frame.
         private bool warnedMissingController;
@@ -135,6 +151,20 @@ namespace VRCKatamari.Story
             // the card (and its string building) out of every idle frame.
             if (state == lastObservedState) return;
             lastObservedState = state;
+
+            if (state == StoryRoundController.StatePresenting
+                || state == StoryRoundController.StateResult)
+            {
+                // A practice level has nothing to grade, and an abandoned round has nobody
+                // to show it to: no card. Hidden and cleared like Idle/Running below.
+                if (controller.GetGoalType() == StoryGoalType.FreeRoam || controller.WasAborted())
+                {
+                    SetCardVisible(false);
+                    if (resultText != null) resultText.text = "";
+                    factsCaptured = false;
+                    return;
+                }
+            }
 
             if (state == StoryRoundController.StatePresenting)
             {
@@ -181,11 +211,18 @@ namespace VRCKatamari.Story
             int evaluatedStars;
             bool evaluatedInsidePartialBand;
 
+            int levelIndex = controller.GetLevelIndex();
+            usesStars = StoryLevelMath.LevelUsesStars(levelHasStars, levelIndex);
+            float band = StoryLevelMath.PickFloat(levelPartialBands, levelIndex, partialBand);
+
             if (controller.GetGoalType() == StoryGoalType.CollectCategoryCount)
             {
                 settledCount = controller.GetResultCount();
+                if (!usesStars) return;
                 if (!StoryStarMath.TryEvaluateCountStars(settledCount,
-                    controller.GetTargetCount(), star2Count, star3Count, partialBand,
+                    controller.GetTargetCount(),
+                    StoryLevelMath.PickInt(levelStar2Counts, levelIndex, star2Count),
+                    StoryLevelMath.PickInt(levelStar3Counts, levelIndex, star3Count), band,
                     out evaluatedStars, out evaluatedInsidePartialBand))
                 {
                     return;
@@ -196,8 +233,11 @@ namespace VRCKatamari.Story
             }
 
             settledDiameterM = controller.GetResultDiameterM();
+            if (!usesStars) return;
             if (!StoryStarMath.TryEvaluateSizeStars(settledDiameterM,
-                controller.GetTargetDiameterM(), star2DiameterM, star3DiameterM, partialBand,
+                controller.GetTargetDiameterM(),
+                StoryLevelMath.PickFloat(levelStar2Diameters, levelIndex, star2DiameterM),
+                StoryLevelMath.PickFloat(levelStar3Diameters, levelIndex, star3DiameterM), band,
                 out evaluatedStars, out evaluatedInsidePartialBand))
             {
                 return;
@@ -223,6 +263,12 @@ namespace VRCKatamari.Story
             else
             {
                 measuredLabel = "直径 " + StoryRoundMath.HundredthsText(settledDiameterM) + " m";
+            }
+            if (!usesStars)
+            {
+                // No thresholds for this level: no stars and no grading comment, only what was measured.
+                resultText.text = presenterLine + "\n" + measuredLabel;
+                return;
             }
             resultText.text = presenterLine + "\n" + StarGlyphs(stars) + "  "
                 + measuredLabel + "\n" + CommentLine(stars, insidePartialBand);

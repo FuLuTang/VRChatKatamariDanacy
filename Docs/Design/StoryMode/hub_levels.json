@@ -1,27 +1,170 @@
 {
-  "schema": "katamari.hub-levels/0",
+  "schema": "katamari.hub-levels/1",
   "room": {
     "padSizeM": 2.8,
     "padGapM": 0.6,
     "padForwardM": 1.2,
     "marginM": 0.5
   },
+  "hubs": [
+    {
+      "id": "AllMapsHub",
+      "scene": "Assets/_RefUnlicensed/Scenes/AllMapsHub.unity",
+      "base": "Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity",
+      "levels": [
+        "_ref_cancer",
+        "story_01_bench_size",
+        "physics_test_field",
+        "terrain_contact_lab"
+      ]
+    }
+  ],
   "levels": [
     {
       "id": "story_01_bench_size",
       "name": "野餐一角",
-      "scenes": ["StoryMode"],
+      "scenes": [
+        "StoryMode",
+        "AllMapsHub"
+      ],
       "content": "LevelContent/Props",
       "entry": "LevelEntry",
-      "roundFromPlacement": false
+      "roundFromPlacement": false,
+      "kind": "round",
+      "allowAbort": true,
+      "source": {
+        "scene": "Assets/VRC_Katamari/Worlds/StoryMode/StoryMode.unity",
+        "takeRoots": [
+          "LevelContent",
+          "LevelArena",
+          "LevelEntry"
+        ],
+        "leaveBehind": [
+          "LevelContent/hub"
+        ]
+      },
+      "island": {
+        "offset": [
+          0,
+          0,
+          -1200
+        ]
+      },
+      "start": {
+        "center": [
+          -12.5,
+          0.15,
+          -12.5
+        ],
+        "headingDeg": 0
+      }
     },
     {
       "id": "_ref_cancer",
       "name": "怀旧关：蟹座小院",
-      "scenes": ["RefCancer"],
+      "scenes": [
+        "RefCancer",
+        "AllMapsHub"
+      ],
       "content": "LevelContent/_ref_cancer",
       "entry": "LevelContent/_ref_cancer/Markers/PlayerSpawn",
-      "roundFromPlacement": true
+      "roundFromPlacement": true,
+      "kind": "round",
+      "allowAbort": true,
+      "stars": false,
+      "source": {
+        "scene": "Assets/_RefUnlicensed/Scenes/RefCancer.unity",
+        "takeRoots": [
+          "LevelContent/_ref_cancer"
+        ]
+      },
+      "island": {
+        "offset": [
+          0,
+          0,
+          0
+        ]
+      },
+      "start": {
+        "center": [
+          -5.0,
+          -1.0,
+          2.5
+        ],
+        "headingDeg": 0,
+        "diameterM": 0.222
+      },
+      "round": {
+        "killPlaneY": -4,
+        "timeLimitSeconds": 420,
+        "targetDiameterM": 0.8
+      }
+    },
+    {
+      "id": "physics_test_field",
+      "name": "地图 0：物理测试场",
+      "scenes": [
+        "AllMapsHub"
+      ],
+      "content": "LevelContent",
+      "roundFromPlacement": false,
+      "kind": "freeRoam",
+      "allowAbort": true,
+      "source": {
+        "scene": "Assets/VRC_Katamari/Labs/PhysicsTestField/PhysicsTestField.unity",
+        "takeRoots": [
+          "LevelContent"
+        ]
+      },
+      "island": {
+        "offset": [
+          -1200,
+          0,
+          0
+        ]
+      },
+      "arenaFirst": "LevelContent/SANDBOX",
+      "start": {
+        "center": [
+          0.0,
+          0.15,
+          -39.5
+        ],
+        "headingDeg": 0
+      }
+    },
+    {
+      "id": "terrain_contact_lab",
+      "name": "地形实验室",
+      "scenes": [
+        "AllMapsHub"
+      ],
+      "content": "LevelContent",
+      "roundFromPlacement": false,
+      "kind": "freeRoam",
+      "allowAbort": true,
+      "source": {
+        "scene": "Assets/VRC_Katamari/Labs/TerrainContactLab.unity",
+        "takeRoots": [
+          "LevelContent",
+          "Ground"
+        ]
+      },
+      "island": {
+        "offset": [
+          0,
+          0,
+          1200
+        ]
+      },
+      "start": {
+        "center": [
+          0.0,
+          0.15,
+          0.0
+        ],
+        "headingDeg": 0
+      }
     }
   ]
 }

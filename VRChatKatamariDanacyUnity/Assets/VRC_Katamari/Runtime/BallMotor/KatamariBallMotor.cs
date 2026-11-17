@@ -1164,6 +1164,58 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// Replaces the level's start volume at run time, so one motor can serve levels
+        /// whose start balls differ (a hub that hosts several maps). Returns false and
+        /// changes nothing when the volume is not usable.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This only rewrites the level baseline: <c>startVolumeMm3</c>, the base core
+        /// radius and the start semantic diameter that <see cref="GetStartDiameterWorldM"/>
+        /// reports. It does NOT resize the ball that is on screen and does not touch the
+        /// ledger; the caller follows it with <see cref="TryResetForNewRound"/>, which
+        /// re-derives the round's size from this baseline (Start does the same derive once
+        /// for the serialized value). Calling it mid-round without a reset leaves the live
+        /// size, which was derived from the old start volume, until the next recompute.
+        /// </para>
+        /// <para>
+        /// Priority versus <c>startDiameterWorldM</c>: that serialized field is consumed once,
+        /// in Start (<c>ApplyStartDiameterWorldM</c> rewrites <c>startVolumeMm3</c> from it);
+        /// nothing reads it afterwards. So a value passed here always wins from then on, and
+        /// the authored diameter only decides the size before the first switch.
+        /// </para>
+        /// <para>
+        /// A start at or above the global cap is refused, same as the authored
+        /// <c>startDiameterWorldM</c>: the derive would saturate and the level would start
+        /// smaller than it asked for. Before Start has run the motor has no cap-ready
+        /// state, so the call is refused.
+        /// </para>
+        /// </remarks>
+        public bool SetStartVolumeMm3(long volumeMm3)
+        {
+            if (volumeMm3 <= 0L) return false;
+            if (!hasLocalRow) return false;
+
+            float coreRadius;
+            float collisionRadius;
+            float semanticDiameter;
+            long effectiveConfirmedMm3;
+            if (!SizeModelMath.TryDerive(volumeMm3, 0L, maxBallDiameterM,
+                collisionToCoreRadiusRatio, semanticDiameterPerCoreDiameter,
+                out coreRadius, out collisionRadius, out semanticDiameter,
+                out effectiveConfirmedMm3))
+            {
+                return false;
+            }
+            if (semanticDiameter >= maxBallDiameterM) return false;
+
+            startVolumeMm3 = volumeMm3;
+            baseCoreRadiusWorldM = coreRadius;
+            startSemanticDiameterWorldM = semanticDiameter;
+            return true;
+        }
+
+        /// <summary>
         /// Allocates the set buffers the first time any behaviour writes one, and reports
         /// whether they are usable.
         /// </summary>

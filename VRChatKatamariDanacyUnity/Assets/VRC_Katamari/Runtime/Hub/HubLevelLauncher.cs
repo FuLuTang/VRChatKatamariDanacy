@@ -73,14 +73,12 @@ namespace VRCKatamari.Hub
     /// early from outside.
     /// </para>
     /// <para>
-    /// What it will not do: send the player to the room mid-round. The round controller
-    /// has no public "end/settle now" call, and abandoning the round by walking away is
-    /// exactly what section 2 forbids, so a return press while Running is refused with
-    /// <see cref="HubLoopMath.ReasonRoundStillRunning"/> and a log line. The clock always
-    /// ends the round, and the same button works again in Presenting/Result. Adding a
-    /// public abandon call to the round is the one missing interface this file would use
-    /// if it existed (see the delivery notes); it is not added here because
-    /// <c>Runtime/Story/</c> is out of this task's write scope.
+    /// Leaving mid-round. Walking away from a running round is exactly what section 2
+    /// forbids, so a return press while Running either aborts the round first
+    /// (<c>AbortRound()</c>, when the level allows it) and then moves the player, or is
+    /// refused with <see cref="HubLoopMath.ReasonRoundStillRunning"/> and a log line. The
+    /// clock always ends the round otherwise, and the same button works again in
+    /// Presenting/Result.
     /// </para>
     /// <para>
     /// Ownership, so no two behaviours write the same thing. This behaviour writes
@@ -121,6 +119,12 @@ namespace VRCKatamari.Hub
         // BeginRound()/RequestRetry(); never a second copy of its state here.
         [Header("Round")]
         [SerializeField] private StoryRoundController controller;
+
+        // Optional. When wired, a start into a level that is not the active one first
+        // switches the motor to that level (LevelSwitchHost.TryActivate) and the round
+        // controller to that level's configuration (SelectLevel). Empty = a one-level
+        // scene: no switch, exactly the previous behaviour.
+        [SerializeField] private LevelSwitchHost levelSwitch;
 
         // One entry transform per level, index == the index a start button carries.
         // Level 0 is the ball's start; the arrays are the room panel's future "one row
@@ -497,6 +501,36 @@ namespace VRCKatamari.Hub
                 return false;
             }
 
+            // Multi-level scene: make the requested level the active one before anything
+            // is measured, so the seat (which follows the ball) and the entry are in the
+            // new level. Only when the level changes: a retry of the same level goes
+            // through the round's own reset.
+            if (levelSwitch != null && levelSwitch.GetActiveLevel() != levelIndex)
+            {
+                int switchFailure;
+                if (!levelSwitch.TryActivate(levelIndex, out switchFailure))
+                {
+                    Debug.LogWarning("[hub] level switch failed levelIndex=" + levelIndex
+                        + " failure=" + switchFailure);
+                    reason = HubLoopMath.ReasonLevelSwitchFailed;
+                    return false;
+                }
+                if (!controller.SelectLevel(levelIndex))
+                {
+                    Debug.LogWarning("[hub] round controller refused SelectLevel levelIndex="
+                        + levelIndex + " state=" + controller.GetState());
+                    reason = HubLoopMath.ReasonLevelSwitchFailed;
+                    return false;
+                }
+                // SelectLevel puts the round in Idle, so the start mode is Idle's.
+                if (!HubLoopMath.TryStartMode(controller.GetState(), out mode))
+                {
+                    reason = HubLoopMath.ReasonStartNotInIdleOrResult;
+                    return false;
+                }
+                state = controller.GetState();
+            }
+
             // Where the player is sent (HubLoopMath.ChooseArrival). The level's authored
             // entry is its player start: on the floor, behind the ball, facing it, and it
             // does not move when a retry puts the ball back. It is trusted only while it is
@@ -583,9 +617,10 @@ namespace VRCKatamari.Hub
         /// room, and does it if so.
         /// </summary>
         /// <remarks>
-        /// Refused in Running on purpose: see the class remarks. Allowed in Idle,
-        /// Presenting and Result; in Idle it is a plain "go to the room" press and is
-        /// free because nothing is running.
+        /// In Running it is refused unless the current level allows giving up
+        /// (<c>CanAbortRunning()</c>); then the round is aborted first and the player
+        /// returns. Allowed in Idle, Presenting and Result; in Idle it is a plain "go to
+        /// the room" press and is free because nothing is running.
         /// </remarks>
         public bool TryReturnToRoom(out int reason)
         {
@@ -606,10 +641,25 @@ namespace VRCKatamari.Hub
 
             bool transferPending = startPending || returnPending;
             float nowSeconds = Time.time;
-            if (!HubLoopMath.TryDecideReturn(controller.GetState(), transferPending,
-                nowSeconds, lastTransferSeconds, transferCooldownSeconds, out reason))
+            int returnState = controller.GetState();
+            bool canAbort = returnState == StoryRoundController.StateRunning
+                && controller.CanAbortRunning();
+            if (!HubLoopMath.TryDecideReturn(returnState, transferPending,
+                nowSeconds, lastTransferSeconds, transferCooldownSeconds, canAbort, out reason))
             {
                 return false;
+            }
+
+            // A running round the level lets the player give up: end it first, so that
+            // Running never coexists with the player being in the room.
+            if (returnState == StoryRoundController.StateRunning)
+            {
+                if (!controller.AbortRound())
+                {
+                    reason = HubLoopMath.ReasonRoundStillRunning;
+                    return false;
+                }
+                Debug.Log("[hub] round aborted by return press level=" + controller.GetLevelId());
             }
 
             BeginReturn("button");

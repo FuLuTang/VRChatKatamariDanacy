@@ -212,6 +212,32 @@ namespace VRCKatamari.Story
         // A level rewording it changes this string on its scene instance only.
         [SerializeField] private string startPrompt = "点击球坐上去开始";
 
+        // ---- Per-level table (multi-level scenes; every array is optional) ----
+        // Parallel arrays, one slot per level, indexed by SelectLevel(index). All empty (the
+        // default, and what every scene serialized before these fields existed reads) means
+        // today's single level: the fields above ARE the level and SelectLevel refuses.
+        // A slot a shorter array does not reach leaves the matching field above unchanged.
+        // levelGoalTypes holds StoryGoalType values as ints (0 size, 1 count, 2 free roam).
+        [Header("Per-level table (optional, parallel arrays)")]
+        [SerializeField] private string[] levelIds;
+        [SerializeField] private int[] levelGoalTypes;
+        [SerializeField] private float[] levelTargetDiameters;
+        [SerializeField] private int[] levelTargetCounts;
+        [SerializeField] private float[] levelTimeLimits;
+        [SerializeField] private bool[] levelKillEnabled;
+        [SerializeField] private float[] levelKillY;
+        [SerializeField] private string[] levelCountKinds;
+        [SerializeField] private PickupFieldHost[] levelPickupHosts;
+        // Whether a Running round of the level may be abandoned (AbortRound). Absent = false.
+        [SerializeField] private bool[] levelAllowAbort;
+
+        // The selected level; NoLevel until SelectLevel accepted one.
+        private int levelIndex = StoryLevelMath.NoLevel;
+
+        // True when the round ended through AbortRound rather than the bell: the result
+        // facts are frozen but nobody is there to be shown them, so no card is drawn.
+        private bool roundAborted;
+
         // ---- Round state ----
         private int state = StateIdle;
         private float startTimeSeconds;
@@ -252,6 +278,10 @@ namespace VRCKatamari.Story
         // spin here.
         private const int RetryRoundIdGuard = 8;
 
+        // The remaining line of a free-roam level (no clock). The target line says
+        // "自由练习"; this one says there is no limit, so the two never repeat each other.
+        private const string FreeRoamRemainingLine = "不限时";
+
         /// <summary>
         /// Starts the round at load, or waits in <see cref="StateIdle"/> for the player
         /// to sit in the ball's station.
@@ -290,6 +320,7 @@ namespace VRCKatamari.Story
         private void EnterIdle()
         {
             state = StateIdle;
+            roundAborted = false;
             lastCurrentShown = -1;
             lastRemainingShown = -1;
 
@@ -383,11 +414,20 @@ namespace VRCKatamari.Story
             lastRemainingShown = -1;
             resultDiameterM = 0f;
             resultCount = 0;
+            roundAborted = false;
 
             if (input != null) input.SetRoundGate(true);
             if (pickupHost != null) pickupHost.SetCollecting(true);
 
             WriteTargetText();
+            if (goalType == StoryGoalType.FreeRoam)
+            {
+                // No clock to start: the remaining line says so once and is never rewritten.
+                WriteCurrentHud();
+                if (remainingText != null) remainingText.text = FreeRoamRemainingLine;
+                ApplyStateVisibility();
+                return;
+            }
             float remainingSeconds;
             if (!StoryRoundMath.TryRemainingSeconds(startTimeSeconds, Time.time,
                 timeLimitSeconds, out remainingSeconds))
@@ -510,6 +550,7 @@ namespace VRCKatamari.Story
         /// </remarks>
         public float GetRemainingSeconds()
         {
+            if (goalType == StoryGoalType.FreeRoam) return 0f; // no clock at all
             if (state == StateIdle) return timeLimitSeconds;
             if (state != StateRunning) return 0f;
             float remainingSeconds;
@@ -718,6 +759,13 @@ namespace VRCKatamari.Story
         private void UpdateRunning()
         {
             ApplyKillPlaneIfNeeded();
+            if (goalType == StoryGoalType.FreeRoam)
+            {
+                // Practice level: live progress only. No countdown, and nothing here ever
+                // settles it; the player leaves through AbortRound (the hub's return).
+                WriteCurrentHud();
+                return;
+            }
             float remainingSeconds;
             if (!StoryRoundMath.TryRemainingSeconds(startTimeSeconds, Time.time,
                 timeLimitSeconds, out remainingSeconds))
@@ -749,6 +797,16 @@ namespace VRCKatamari.Story
             lastRemainingShown = 0;
             WriteRemainingText(0);
 
+            FreezeRound();
+            ApplyStateVisibility();
+        }
+
+        /// <summary>
+        /// The freeze shared by the bell and <see cref="AbortRound"/>: round gate, then
+        /// collection, then the candidate queue, then the measurement and its HUD line.
+        /// </summary>
+        private void FreezeRound()
+        {
             if (input != null) input.SetRoundGate(false);
             if (pickupHost != null) pickupHost.SetCollecting(false);
             if (motor != null) motor.ClearCandidates();
@@ -759,8 +817,114 @@ namespace VRCKatamari.Story
             // result reads can never disagree by one frame.
             lastCurrentShown = -1;
             WriteCurrentHud();
+        }
 
+        /// <summary>
+        /// Abandons a Running round: the same freeze as the bell, then straight to
+        /// <see cref="StateResult"/> with <see cref="WasAborted"/> true.
+        /// </summary>
+        /// <returns>True when a Running round was frozen. False (nothing changed) otherwise.</returns>
+        /// <remarks>
+        /// Why Result and not Presenting or Idle. The player is leaving, so the offering
+        /// beat has no audience and Presenting would only make the next entry wait
+        /// <c>presentingSeconds</c> (SelectLevel and RequestRetry refuse it). Idle would
+        /// leave the ball, ledger and props of the abandoned round dirty, and the
+        /// launcher's "enter a level in Idle" path (BeginRound) resets none of them.
+        /// Result is the state every re-entry path already handles: RequestRetry resets
+        /// the ball and the field first, SelectLevel accepts it. The presenter reads
+        /// <see cref="WasAborted"/> and draws no card, so nothing is shown for an
+        /// abandoned round. The caller (the hub launcher) decides whether leaving is
+        /// allowed, through <see cref="CanAbortRunning"/>; this method itself accepts any
+        /// Running round.
+        /// </remarks>
+        public bool AbortRound()
+        {
+            if (state != StateRunning) return false;
+            state = StateResult;
+            roundAborted = true;
+            lastRemainingShown = 0;
+            FreezeRound();
             ApplyStateVisibility();
+            Debug.Log("[StoryRoundController] round aborted level=" + levelId
+                + " attempt=" + retryAttempt);
+            return true;
+        }
+
+        /// <summary>
+        /// Whether the selected level allows <see cref="AbortRound"/> mid-round. False
+        /// when no per-level table exists (today's "Running refuses leaving" rule).
+        /// </summary>
+        public bool CanAbortRunning()
+        {
+            return StoryLevelMath.CanAbortLevel(levelAllowAbort, levelIndex);
+        }
+
+        /// <summary>True when the last round ended through <see cref="AbortRound"/>.</summary>
+        public bool WasAborted()
+        {
+            return roundAborted;
+        }
+
+        /// <summary>The selected level's index, or -1 before <see cref="SelectLevel"/> accepted one.</summary>
+        public int GetLevelIndex()
+        {
+            return levelIndex;
+        }
+
+        /// <summary>
+        /// Switches this controller to level <paramref name="index"/> of its per-level
+        /// table and returns to Idle. Accepted only in Idle or Result.
+        /// </summary>
+        /// <returns>
+        /// True when switched. False (nothing changed) for an empty table, an index out
+        /// of range, or a state that is not Idle or Result.
+        /// </returns>
+        /// <remarks>
+        /// The caller has already put the ball and the registered field in the new level
+        /// (the hub's level switch host): this method re-captures the retry start pose from
+        /// the ball where it now stands, so retry and the kill plane respawn there.
+        /// </remarks>
+        public bool SelectLevel(int index)
+        {
+            if (levelIds == null || !StoryLevelMath.IsIndexValid(index, levelIds.Length))
+            {
+                return false;
+            }
+            if (!StoryLevelMath.CanSelectInState(state)) return false;
+
+            // The old level's host stops queuing before the field changes under it.
+            if (pickupHost != null) pickupHost.SetCollecting(false);
+
+            levelIndex = index;
+            levelId = levelIds[index];
+            int goal = StoryLevelMath.PickInt(levelGoalTypes, index, (int)goalType);
+            if (goal == StoryLevelMath.GoalCollectCount) goalType = StoryGoalType.CollectCategoryCount;
+            else if (goal == StoryLevelMath.GoalFreeRoam) goalType = StoryGoalType.FreeRoam;
+            else goalType = StoryGoalType.ReachTargetDiameter;
+            targetDiameterM = StoryLevelMath.PickFloat(levelTargetDiameters, index, targetDiameterM);
+            targetCount = StoryLevelMath.PickInt(levelTargetCounts, index, targetCount);
+            timeLimitSeconds = StoryLevelMath.PickFloat(levelTimeLimits, index, timeLimitSeconds);
+            killPlaneEnabled = StoryLevelMath.PickBool(levelKillEnabled, index, killPlaneEnabled);
+            killPlaneY = StoryLevelMath.PickFloat(levelKillY, index, killPlaneY);
+            if (levelCountKinds != null && StoryLevelMath.IsIndexValid(index, levelCountKinds.Length))
+            {
+                countGoalKind = levelCountKinds[index];
+            }
+            if (levelPickupHosts != null && StoryLevelMath.IsIndexValid(index, levelPickupHosts.Length))
+            {
+                pickupHost = levelPickupHosts[index];
+            }
+
+            retryAttempt = 0;
+            killCount = 0;
+            resultDiameterM = 0f;
+            resultCount = 0;
+            retryStartPoseCaptured = false;
+            CaptureRetryStartPoseIfReady();
+            EnterIdle();
+            Debug.Log("[StoryRoundController] level selected index=" + index + " id=" + levelId
+                + " goal=" + goalType + " poseCaptured=" + retryStartPoseCaptured);
+            return true;
         }
 
         /// <summary>
@@ -853,6 +1017,11 @@ namespace VRCKatamari.Story
             if (targetText == null) return;
             string attemptSuffix = "";
             if (retryAttempt > 0) attemptSuffix = "（第 " + retryAttempt + " 次重试）";
+            if (goalType == StoryGoalType.FreeRoam)
+            {
+                targetText.text = "自由练习";
+                return;
+            }
             if (goalType == StoryGoalType.CollectCategoryCount)
             {
                 targetText.text = "目标 " + targetCount + " 件（" + countGoalKind + "）" + attemptSuffix;

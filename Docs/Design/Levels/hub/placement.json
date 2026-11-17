@@ -15,11 +15,11 @@
     "groundY": 0.0,
     "bounds": [
       [
-        1195.9,
+        1191.9,
         -4.1
       ],
       [
-        1204.1,
+        1208.1,
         4.1
       ]
     ],
@@ -201,7 +201,7 @@
       "role": "boundary",
       "shape": "plane",
       "center": [
-        1196.0,
+        1192.0,
         1.5,
         0.0
       ],
@@ -227,7 +227,7 @@
       "role": "boundary",
       "shape": "plane",
       "center": [
-        1204.0,
+        1208.0,
         1.5,
         0.0
       ],
@@ -258,7 +258,7 @@
         -4.0
       ],
       "size": [
-        8.0,
+        16.0,
         0.04,
         3.0
       ],
@@ -284,7 +284,7 @@
         4.0
       ],
       "size": [
-        8.0,
+        16.0,
         0.04,
         3.0
       ],
@@ -310,7 +310,7 @@
         0.0
       ],
       "size": [
-        8.0,
+        16.0,
         0.04,
         8.0
       ],
@@ -323,7 +323,7 @@
       "collision": "none",
       "absorbable": false,
       "support": true,
-      "notes": "8 x 8 m room floor; top face at y = 0"
+      "notes": "16 x 8 m room floor (wide enough for 4 select pads, see ALL_MAPS_HUB); top face at y = 0"
     }
   ]
 }

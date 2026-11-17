@@ -217,6 +217,13 @@
 | **生长/碰撞上限与世界尺度** | 语义显示尺寸、碰撞半径、拾取门槛与收益账本必须分开；0.2–5米只是表现工作区间，不是碰撞或技术上限。最终半径、成长段、速度/物理限值仍未定。([技术契约:L15-L21](02_TECHNICAL_CONTRACTS.md#L15-L21)、[决策表](Preparation/RuleDecisions/decisions.json)的`project.item_growth_and_collision`条) | 先保持参数化；测量须由平台、地图和公平/性能证据支持，再由Lead在T01/T05后处理契约。T06未冻结前不得硬编码为公共接口。([T06依赖与范围](../tasks.json#L253-L279)、[契约冻结规则](02_TECHNICAL_CONTRACTS.md#L3-L13)) |
 | **付费外观SKU/价格** | 方向是免费完整玩法与可选纯外观；商品目录、价格、资格、授权和交易恢复均未批准。([决策表](Preparation/RuleDecisions/decisions.json)的`project.commercial_sku`条) | 可暂不决定并保持商店关闭；只有进入相应许可、权益和交易门禁后才需用户选SKU/价格。([发布配置](../tasks.json#L2094-L2105)、[范围排除](00_SCOPE_DECISIONS.md#L38-L42)) |
 
+### 2026-11-17 合集场景 AllMapsHub
+
+- **计时关允许中途回大厅 = 放弃本局；自由练习图随时可回** — 否则主人在沙盒里出不来，也没法中途换关；改掉了“`Running` 中回房一律拒绝”的旧规则。见 [ALL_MAPS_HUB](Design/StoryMode/ALL_MAPS_HUB.md)。
+- **蟹座先不评星** — 蟹座的星级阈值没有数据来源，先只显示球径、吸收件数。见 [ALL_MAPS_HUB](Design/StoryMode/ALL_MAPS_HUB.md)。
+- **合集里的地形实验室用现有 C23 场景** — 不补 C21/C22/C24 的数据。见 [ALL_MAPS_HUB](Design/StoryMode/ALL_MAPS_HUB.md)。
+- **合集场景放 `Assets/_RefUnlicensed/Scenes/AllMapsHub.unity`** — 含原作素材（蟹座），不进 git、不上传。见 [ALL_MAPS_HUB](Design/StoryMode/ALL_MAPS_HUB.md)。
+
 ## 不因本摘要改变的门禁
 
 - P17中的单图方案只是提案；修改任务依赖只能在用户/主管批准后进行，并须运行计划校验。([RFC执行纪律](Archive/Preparation/ReleaseRFC/comparison.md#L36-L38)、[候选DAG声明](Archive/Preparation/ReleaseRFC/proposed_dag.json#L5-L7))

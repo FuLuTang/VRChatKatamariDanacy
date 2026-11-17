@@ -13,7 +13,7 @@
 | 2 | 交互怎么选 | **走进圈里自动开始**，不是“按 E”。Udon 的 `InputUse` 是全局事件，不是“看着这个物体按 E”；圈只用 `GetPosition()`，ClientSim 和真机都答得上来。开始交互不依赖 Station 的 Interact/触发器；入座由 launcher 在到达后直接调 `VRCStation.UseStation`（§4、§8）。 |
 | 3 | 场景怎么切 | **方案 b：一张场景、两个岛、玩家传送**。房间在 `(1200, 0, 0)`，关卡仍在原点；不叠加加载、不换场景、没有加载屏。**不做**“整块 LevelContent 启用/禁用”，原因不是做不到，而是会破坏道具复位与没有收益（§7）。 |
 | 4 | 谁拥有什么 | 回合仍归 `StoryRoundController`，传送/退座仍归 `HubLevelLauncher`，星级/评语/卡面仍归 `StoryResultPresenter`；新代码只拥有**房间导航相位 + 圈 + 一行提示**。`StoryRoundController` 不为闭环增加接口：它已有的 `GetState()` / `BeginRound()` / `RequestRetry()` / 冻结值 getter 就是全部接缝（§6）。 |
-| 5 | 数据与导入 | `Docs/Design/Levels/hub/placement.json`，`level.id = hub`，8×8 m 房间、5 件现有道具、1 地面 + 4 面墙（选关垫不在文档里，由 §12 的装配器按选关列表生成）；用现有 `PlacementImporter` 以 **arena cell** 形式导入到 `LevelContent/hub`（不是第二套机制，理由见 §7.2）。 |
+| 5 | 数据与导入 | `Docs/Design/Levels/hub/placement.json`，`level.id = hub`，16×8 m 房间、5 件现有道具、1 地面 + 4 面墙（选关垫不在文档里，由 §12 的装配器按选关列表生成）；用现有 `PlacementImporter` 以 **arena cell** 形式导入到 `LevelContent/hub`（不是第二套机制，理由见 §7.2）。 |
 | 6 | 验收状态 | 房间相位/圈选择/提示的纯逻辑规则由 `HubRoomMathTests`、`HubLoopMathTests`（EditMode，不碰场景）覆盖；Unity 侧验收清单见 §10，未验证项见 §11。 |
 
 ## 1. 为什么做这个
@@ -50,7 +50,7 @@ flowchart LR
 
 ## 3. 房间布局与数据
 
-房间中心 `(1200, 0, 0)`，8 × 8 m，层高 3 m（墙 3 m，跳不出去）。关卡岛仍在原点，两者相距约 1200 m，超过 Unity 默认远裁剪（约 1000 m），互相看不见。
+房间中心 `(1200, 0, 0)`，16 × 8 m，层高 3 m（墙 3 m，跳不出去）。关卡岛仍在原点，两者相距约 1200 m，超过 Unity 默认远裁剪（约 1000 m），互相看不见。
 
 | 物件 | 坐标 / 尺寸 | 来源 | 说明 |
 |---|---|---|---|
@@ -247,20 +247,20 @@ ClientSim 日志见 `Docs/Evidence/StoryMode/2026-11-16_hub_wiring/{README.md,pl
 
 **现状盘点。** 运行时（启动器、房间宿主、开始/回房按钮、关卡启动）在 StoryMode 场景装配过：2026-11-16 ClientSim 走通“走圈 → 传送 → 开局 → 自动入座”；结算、回大厅、重试、再来一局**没有 Play 证据**。参考关卡场景 RefCancer（只有蟹座小院一关，不入 git）是 2026-11-15 从当时的 StoryMode 复制的，没有大厅；玩家出生在关卡里。
 
-**与“一个世界一张场景”的关系。** 完全一致：一张场景，房间岛 `(1200,0,0)` + 关卡岛，靠传送，见 §7 与 LEVEL_FORMAT_V2 §17。一张场景只有一个球和一个回合控制器，所以 v1 **每个场景提供一关**；一个场景里列出多关时装配器报 PROBLEM，等回合控制器能按关配置再放开。
+**与“一个世界一张场景”的关系。** 完全一致：一张场景，房间岛 `(1200,0,0)` + 关卡岛，靠传送，见 §7 与 LEVEL_FORMAT_V2 §17。一张场景只有一个球和一个回合控制器，一个场景里提供多关的做法（合集场景 AllMapsHub）见 [ALL_MAPS_HUB](<ALL_MAPS_HUB.md>)。
 
 **原作的大厅/选关（参考）。** 原作是“国王的宇宙”：过场里国王给任务，王子在可旋转浏览的星球上选目标，选定即进关，结算后回到选择画面并有国王的评语。我们没有星球选择画面（世界不能换场景），取其结构——选关界面与关卡分离、结算后回到选关——形式换成房间里的选关垫。试玩阶段结算后**不自动回大厅**：原地重试更快，回大厅由玩家点结果卡上的按钮（这是有记录的差异，owner 2026-11-17）。
 
-**选关数据。** [`hub_levels.json`](<hub_levels.json>)：`room`（垫尺寸/间距/前移/边距）与 `levels[]`（`id`、`name`、`scenes`、`content`、`entry`、`roundFromPlacement`）。一条在某场景被提供，当且仅当：场景名在 `scenes` 里，且场景里存在 `content` 与 `entry` 两个物体。提供的条目按目录顺序紧凑编号（`HubSelectMath.CompactOffered`），第 i 项同时是启动器 `levelEntries[i]`、房间 `selectZones[i]`、`HubStartButton.levelIndex`。目前两条：`story_01_bench_size`（StoryMode，入口 `LevelEntry`）、`_ref_cancer`（RefCancer，入口 `LevelContent/_ref_cancer/Markers/PlayerSpawn`，回合设置读自它自己的 placement 文档）。
+**选关数据。** [`hub_levels.json`](<hub_levels.json>)：`room`（垫尺寸/间距/前移/边距）与 `levels[]`（`id`、`name`、`scenes`、`content`、`entry`、`roundFromPlacement`）。一条在某场景被提供，当且仅当：场景名在 `scenes` 里，且场景里存在 `content` 与 `entry` 两个物体。提供的条目按目录顺序紧凑编号（`HubSelectMath.CompactOffered`），第 i 项同时是启动器 `levelEntries[i]`、房间 `selectZones[i]`、`HubStartButton.levelIndex`。清单 schema 为 `katamari.hub-levels/1`（新增字段全部可选），共四关：`story_01_bench_size`、`_ref_cancer`、`physics_test_field`、`terrain_contact_lab`；字段、偏移与合集组装见 [ALL_MAPS_HUB](<ALL_MAPS_HUB.md>)。
 
 **装配器 `HubAssembler`（`VRC Katamari/Hub/Assemble Hub`，幂等）。** 导入 hub 房间文档（cell，先补惰性 `PickupFieldHost`）→ `HubCenter`/`HubSpawn` → 场景描述符 `spawns` 指向 `HubSpawn`（玩家**出生在大厅**）→ 每关一块选关垫 + 名字牌（多余的垫子删除）→ `HubRoom`（`HubRoomHost`）与世界空间提示行（屏幕叠加画布 VRChat 不绘制，旧的被替换）→ `HubLevel`（`HubLevelLauncher`）→ 第一关入口旁的 `HubReturnButton` → 结果卡上的「回大厅」按钮（`HubReturnCardButton`，挂在「再试一次」按钮下，同一个 launcher 回房逻辑）→ 回合控制器 `startOnLoad=false`，以及 `roundFromPlacement` 的关卡把 `levelId`/时限/目标直径/kill plane 从自己的 placement 文档写入控制器。找得到就沿用，所以对已装过的 StoryMode 场景是接管而不是重建。
 - **不动结果卡**：结果卡归骑乘装配（`RideUxAssembler`，`FollowRigRoot/RideResultCard`）；大厅装配器不移动它、不改它的重试按钮。两个装配器共用一个按钮布局函数（`HubAssembler.LayoutRetryForReturn`：重试在左、回大厅在右，各 300×80），所以先后任意顺序运行结果一致，第二次 `+0 ~0`。
 - **出生点顺序**：导入器 `ApplySceneDescriptor` 在场景里已有 `HubSpawn` 根物体时不再改写 `spawns`（只写 `RespawnHeightY`）；场景里还没有 `HubSpawn`（还没装过大厅）时仍按旧行为指向关卡出生点，装配器随后把它放回 `HubSpawn`。
-- **房间宽度**：8 m 的房间放两块垫；第三关起要加宽 hub 文档的地面和墙，装配器拿 `hub_floor/Visual`（地面的实体子物体，缩放即文档里的 size）的 X 向宽度与 `HubSelectMath.RoomWidthNeeded` 比较，不够就报 PROBLEM（标记物 `hub_floor` 本身缩放恒为 1，不能当宽度读）。`Docs/tests/hub_levels` 用同一公式校验每个场景提供的垫数：地面 size.x 与东西墙间距都不小于所需宽度（1 块垫 3.8 m，2 块 7.2 m，当前 8 m）。
+- **房间宽度**：房间宽 16 m，放得下 4 块垫（需 14.0 m）；再多要加宽 hub 文档的地面和墙，装配器拿 `hub_floor/Visual`（地面的实体子物体，缩放即文档里的 size）的 X 向宽度与 `HubSelectMath.RoomWidthNeeded` 比较，不够就报 PROBLEM（标记物 `hub_floor` 本身缩放恒为 1，不能当宽度读）。`Docs/tests/hub_levels` 用同一公式校验每个场景提供的垫数：地面 size.x 与东西墙间距都不小于所需宽度（1 块垫 3.8 m，2 块 7.2 m，4 块 14.0 m，当前 16 m）。
 - **重生高度**：房间地面必须高于场景的 `RespawnHeightY + 1`，否则出生即重生；装配器检查。
 
 **进关落点与“出生点在球后 2.5 m”。** 该规则不变，只是责任换了位置：关卡的玩家出生点（`Markers/PlayerSpawn`，`_ref_cancer` 是花园草坪的 (−5.647, −1.0398, 0.0852)，离球 (−5, −0.999, 2.5) 约 2.4 m）不再是世界出生点，而是**每次开始时启动器的传送目的地**（`HubLoopMath.ChooseArrival`：入口离球座 ≤12 m 用入口，否则用座位，再否则无）；传送后立即自动入座。
 
-**回合、结果卡与回大厅的衔接。** 回合只被调用 `BeginRound()`（Idle）与 `RequestRetry()`（Result）；结算后不移动玩家。结果卡在骑乘者眼前，两个按钮：「再试一次」（`StoryRetryButton`，原地、仍在座位上）与「回大厅」（`HubReturnButton` → `launcher.PressReturnToRoom()`：下车、传送到 `HubSpawn`；回合进行中被拒绝）。回到大厅后走进选关垫就是 `Result` 下的再来一局（`RequestRetry()`）。
+**回合、结果卡与回大厅的衔接。** 回合只被调用 `BeginRound()`（Idle）与 `RequestRetry()`（Result）；结算后不移动玩家。结果卡在骑乘者眼前，两个按钮：「再试一次」（`StoryRetryButton`，原地、仍在座位上）与「回大厅」（`HubReturnButton` → `launcher.PressReturnToRoom()`：下车、传送到 `HubSpawn`；合集里 `allowAbort` 的关在回合进行中也可回大厅，等于放弃本局，见 [ALL_MAPS_HUB](<ALL_MAPS_HUB.md>)）。回到大厅后走进选关垫就是 `Result` 下的再来一局（`RequestRetry()`）。
 
 **未验证。** 装配器没有在 Unity 里跑过（编译只在本地 Roslyn 通过）；RefCancer 上的入口落点、`RespawnHeightY`、世界空间画布的朝向与字号、结果卡上两个按钮的间距、`TeleportTo` 在地形网格上的落地都要 Play 看。

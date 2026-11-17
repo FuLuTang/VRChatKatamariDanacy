@@ -179,11 +179,11 @@ namespace VRCKatamari.Tests
             int reason;
 
             Assert.IsTrue(HubLoopMath.TryDecideReturn(StoryRoundController.StatePresenting,
-                false, 100f, -1f, 1f, out reason));
+                false, 100f, -1f, 1f, false, out reason));
             Assert.AreEqual(HubLoopMath.ReasonNone, reason);
 
             Assert.IsTrue(HubLoopMath.TryDecideReturn(StoryRoundController.StateResult,
-                false, 100f, 50f, 1f, out reason));
+                false, 100f, 50f, 1f, false, out reason));
             Assert.AreEqual(HubLoopMath.ReasonNone, reason);
         }
 
@@ -196,7 +196,7 @@ namespace VRCKatamari.Tests
             // round or unfreeze facts, and it gives the operator one plain "go to the
             // room" press while building the loop.
             Assert.IsTrue(HubLoopMath.TryDecideReturn(StoryRoundController.StateIdle,
-                false, 100f, -1f, 1f, out reason));
+                false, 100f, -1f, 1f, false, out reason));
             Assert.AreEqual(HubLoopMath.ReasonNone, reason);
         }
 
@@ -206,10 +206,10 @@ namespace VRCKatamari.Tests
             int reason;
 
             // The one hard refusal: leaving the level mid-round would leave a running
-            // clock over an empty level (HUB_LOOP_PLAN section 2), and the round has no
-            // public "end now" to abandon it with.
+            // clock over an empty level (HUB_LOOP_PLAN section 2), and unless the level allows
+            // giving up (canAbortRunning), which the next test covers.
             Assert.IsFalse(HubLoopMath.TryDecideReturn(StoryRoundController.StateRunning,
-                false, 100f, -1f, 1f, out reason));
+                false, 100f, -1f, 1f, false, out reason));
             Assert.AreEqual(HubLoopMath.ReasonRoundStillRunning, reason);
         }
 
@@ -218,11 +218,11 @@ namespace VRCKatamari.Tests
         {
             int reason;
 
-            Assert.IsFalse(HubLoopMath.TryDecideReturn(42, false, 100f, -1f, 1f, out reason));
+            Assert.IsFalse(HubLoopMath.TryDecideReturn(42, false, 100f, -1f, 1f, false, out reason));
             Assert.AreEqual(HubLoopMath.ReasonReturnNotAllowedInState, reason);
 
             Assert.IsFalse(HubLoopMath.TryDecideReturn(StoryRoundController.StateResult,
-                true, 100f, -1f, 1f, out reason));
+                true, 100f, -1f, 1f, false, out reason));
             Assert.AreEqual(HubLoopMath.ReasonTransferPending, reason);
         }
 
@@ -232,8 +232,38 @@ namespace VRCKatamari.Tests
             int reason;
 
             Assert.IsFalse(HubLoopMath.TryDecideReturn(StoryRoundController.StateResult,
-                false, 100.2f, 100f, 1f, out reason));
+                false, 100.2f, 100f, 1f, false, out reason));
             Assert.AreEqual(HubLoopMath.ReasonCooldown, reason);
+        }
+
+        [Test]
+        public void ReturnIsAllowedWhileARoundRunsWhenTheLevelAllowsAbort()
+        {
+            int reason;
+
+            Assert.IsTrue(HubLoopMath.TryDecideReturn(StoryRoundController.StateRunning,
+                false, 100f, -1f, 1f, true, out reason));
+            Assert.AreEqual(HubLoopMath.ReasonNone, reason);
+
+            // The abort permission does not bypass the other checks.
+            Assert.IsFalse(HubLoopMath.TryDecideReturn(StoryRoundController.StateRunning,
+                true, 100f, -1f, 1f, true, out reason));
+            Assert.AreEqual(HubLoopMath.ReasonTransferPending, reason);
+            Assert.IsFalse(HubLoopMath.TryDecideReturn(StoryRoundController.StateRunning,
+                false, 100.2f, 100f, 1f, true, out reason));
+            Assert.AreEqual(HubLoopMath.ReasonCooldown, reason);
+        }
+
+        [Test]
+        public void AbortPermissionDoesNotChangeTheOtherStates()
+        {
+            int reason;
+
+            Assert.IsTrue(HubLoopMath.TryDecideReturn(StoryRoundController.StateResult,
+                false, 100f, -1f, 1f, true, out reason));
+            Assert.IsFalse(HubLoopMath.TryDecideReturn(42, false, 100f, -1f, 1f, true,
+                out reason));
+            Assert.AreEqual(HubLoopMath.ReasonReturnNotAllowedInState, reason);
         }
 
         // ------------------------------------------------------------------ cooldown
@@ -451,7 +481,7 @@ namespace VRCKatamari.Tests
                 HubLoopMath.ReasonPositionNotFinite, HubLoopMath.ReasonLevelEntryUnwired,
                 HubLoopMath.ReasonArrivalNotReached, HubLoopMath.ReasonRoundStateChanged,
                 HubLoopMath.ReasonRoundRefusedRestart, HubLoopMath.ReasonNoController,
-                HubLoopMath.ReasonNoRoomPoint };
+                HubLoopMath.ReasonNoRoomPoint, HubLoopMath.ReasonLevelSwitchFailed };
 
             for (int i = 0; i < codes.Length; i++)
             {

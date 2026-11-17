@@ -119,6 +119,12 @@ namespace VRCKatamari.Hub
         public const int ReasonNoRoomPoint = 14;
 
         /// <summary>
+        /// Switching the level (clearing and re-registering the motor's obstacles, placing
+        /// the ball) failed, so the player was not sent anywhere.
+        /// </summary>
+        public const int ReasonLevelSwitchFailed = 15;
+
+        /// <summary>
         /// The state value must be one of the round's four; anything else means a
         /// mis-wired controller reference or a state constant that moved, and a
         /// refusal is safer than guessing.
@@ -209,12 +215,14 @@ namespace VRCKatamari.Hub
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Allowed in Idle, Presenting and Result, refused in Running. The Running refusal
-        /// is the plan's requirement (HUB_LOOP_PLAN section 2: a round that is Running has
-        /// the player in the level) and it is a refusal rather than an abandon because the
-        /// round controller exposes no public "end the round now" call - see the launcher's
-        /// remarks for what that would need. The player is not trapped: the clock always
-        /// ends the round, and the same button works again in Result.
+        /// Allowed in Idle, Presenting and Result. In Running it is refused unless
+        /// <c>canAbortRunning</c> is true (the current level allows giving up), in which
+        /// case the caller must abort the round first (<c>AbortRound()</c>) and then move
+        /// the player, so "Running implies the player is in the level"
+        /// (HUB_LOOP_PLAN section 2) still holds: the round is no longer Running when the
+        /// player leaves. With <c>canAbortRunning</c> false the press is refused and the
+        /// player is not trapped: the clock always ends the round, and the same button
+        /// works again in Result.
         /// </para>
         /// <para>
         /// Idle is allowed because a move to the room cannot break anything there (no
@@ -224,7 +232,8 @@ namespace VRCKatamari.Hub
         /// </para>
         /// </remarks>
         public static bool TryDecideReturn(int roundState, bool transferPending,
-            float nowSeconds, float lastTransferSeconds, float cooldownSeconds, out int reason)
+            float nowSeconds, float lastTransferSeconds, float cooldownSeconds,
+            bool canAbortRunning, out int reason)
         {
             reason = ReasonNone;
 
@@ -234,7 +243,7 @@ namespace VRCKatamari.Hub
                 return false;
             }
 
-            if (roundState == StoryRoundController.StateRunning)
+            if (roundState == StoryRoundController.StateRunning && !canAbortRunning)
             {
                 reason = ReasonRoundStillRunning;
                 return false;
@@ -516,6 +525,7 @@ namespace VRCKatamari.Hub
             if (reason == ReasonRoundRefusedRestart) return "the round refused the restart";
             if (reason == ReasonNoController) return "no round controller is wired";
             if (reason == ReasonNoRoomPoint) return "no room point is wired";
+            if (reason == ReasonLevelSwitchFailed) return "the level switch failed";
             return "unknown reason";
         }
     }

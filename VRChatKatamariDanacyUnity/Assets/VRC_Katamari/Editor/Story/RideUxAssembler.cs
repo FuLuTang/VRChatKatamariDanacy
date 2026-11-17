@@ -730,20 +730,17 @@ namespace VRCKatamari.Editor.Story
             if (exit != null) VerifyTable(exit, new[] { "ride", "label", "confirmSeconds" }, c);
         }
 
+        // Reads the instance variable table back through the one shared reader
+        // (Hub/UdonVariableAccess): a missing symbol means "save, reopen, run again", and a
+        // proxy with no backing behaviour is a problem, not a skip.
         private static void VerifyTable(UdonSharpBehaviour proxy, string[] names, Counters c)
         {
-            UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(proxy);
-            if (backing == null) return;
-            FieldInfo field = typeof(UdonBehaviour).GetField("publicVariables",
-                BindingFlags.NonPublic | BindingFlags.Instance);
-            if (field == null) return;
-            var table = field.GetValue(backing) as IUdonVariableTable;
-            if (table == null) return;
-            var missing = new List<string>();
-            for (int i = 0; i < names.Length; i++)
+            List<string> missing = VRCKatamari.Editor.Hub.UdonVariableAccess.MissingNames(proxy, names);
+            if (missing == null)
             {
-                object value;
-                if (!table.TryGetVariableValue(names[i], out value)) missing.Add(names[i]);
+                c.Problems.Add(proxy.GetType().Name + " has no backing UdonBehaviour, so its Udon"
+                    + " variables could not be checked");
+                return;
             }
             if (missing.Count > 0)
             {

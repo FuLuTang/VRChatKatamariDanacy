@@ -88,13 +88,13 @@ namespace VRCKatamari.Editor.Hub
         public const string ReturnButtonName = "HubReturnButton";
 
         // The room is built around this point (the hub document's coordinates).
-        private static readonly Vector3 HubCenterPosition = new Vector3(1200f, 0f, 0f);
-        private static readonly Vector3 HubSpawnPosition = new Vector3(1200f, 0.1f, -2.8f);
+        internal static readonly Vector3 HubCenterPosition = new Vector3(1200f, 0f, 0f);
+        internal static readonly Vector3 HubSpawnPosition = new Vector3(1200f, 0.1f, -2.8f);
 
         // World-space text: metres per canvas unit, so 0.004 puts a 60-unit glyph at 24 cm.
         private const float PromptScale = 0.004f;
-        private static readonly Vector2 PromptSize = new Vector2(1200f, 120f);
-        private static readonly Vector3 PromptOffset = new Vector3(0f, 2.55f, 3.85f);
+        internal static readonly Vector2 PromptSize = new Vector2(1200f, 120f);
+        internal static readonly Vector3 PromptOffset = new Vector3(0f, 2.55f, 3.85f);
 
         // The result card's two buttons (canvas units): retry on the left, return on the right.
         public static readonly Vector2 CardButtonSize = new Vector2(300f, 80f);
@@ -104,12 +104,12 @@ namespace VRCKatamari.Editor.Hub
 
         private const float PadThicknessM = 0.02f;
         private const float PadLabelScale = 0.004f;
-        private static readonly Vector2 PadLabelSize = new Vector2(640f, 120f);
+        internal static readonly Vector2 PadLabelSize = new Vector2(640f, 120f);
         private const float PadLabelHeightM = 1.6f;
 
         private const float InteractProximity = 5f;
 
-        private sealed class Counters
+        internal sealed class Counters
         {
             public int Created;
             public int Changed;
@@ -131,16 +131,82 @@ namespace VRCKatamari.Editor.Hub
         public static string AssembleOpenScene()
         {
             var c = new Counters();
+            HubRunOutcome outcome = Run(c, null);
+            if (!outcome.Completed) return Finish(c, outcome.Headline);
+
+            CopyAllToUdon(c);
+            VerifyTables(outcome.Launcher, outcome.Host, c);
+            return Finish(c, outcome.Headline);
+        }
+
+        /// <summary>What a <see cref="Run"/> found and built, for the caller's own follow-up.</summary>
+        internal sealed class HubRunOutcome
+        {
+            /// <summary>False when the run stopped early; <see cref="Headline"/> then says why.</summary>
+            public bool Completed;
+            public string Headline;
+            public HubLevelLauncher Launcher;
+            public HubRoomHost Host;
+            public StoryRoundController Round;
+            public List<HubLevelCatalog.Resolved> Offered;
+        }
+
+        /// <summary>
+        /// One level's settings as the round controller and the result card store them
+        /// (parallel arrays, one slot per level). Supplied by the all-maps assembler, which
+        /// reads them from each level's source scene and placement document.
+        /// </summary>
+        internal sealed class HubLevelPlan
+        {
+            public string LevelId;
+            public int GoalType;
+            public float TargetDiameterM;
+            public int TargetCount;
+            public float TimeLimitSeconds;
+            public bool KillEnabled;
+            public float KillPlaneY;
+            public string CountKind;
+            public PickupFieldHost PickupHost;
+            public bool AllowAbort;
+            public bool HasStars;
+        }
+
+        /// <summary>
+        /// Switches the run to a multi-level hub scene: the levels are the ones listed in
+        /// <see cref="LevelOrder"/> (the pad order), their round/result tables come from
+        /// <see cref="Plans"/>, and the caller finishes the Udon sync (it owns more proxies
+        /// than this assembler does). Null options = the single-level behaviour.
+        /// </summary>
+        internal sealed class HubAssembleOptions
+        {
+            public string[] LevelOrder;
+            public Dictionary<string, HubLevelPlan> Plans;
+            /// <summary>Each level's ball start, world metres (return buttons stand beside it).</summary>
+            public Dictionary<string, Vector3> StartCenters;
+            /// <summary>The room geometry was imported by the caller before the levels moved.</summary>
+            public bool SkipRoomGeometry;
+        }
+
+        /// <summary>
+        /// The assembly proper, without the final proxy copy and table check, so a caller that
+        /// adds more behaviours can do both once for everything.
+        /// </summary>
+        internal static HubRunOutcome Run(Counters c, HubAssembleOptions options)
+        {
+            var outcome = new HubRunOutcome();
+            bool hub = options != null;
 
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                return Finish(c, "stopped: exit Play Mode first; the assembly writes scene data");
+                outcome.Headline = "stopped: exit Play Mode first; the assembly writes scene data";
+                return outcome;
             }
 
             Scene scene = SceneManager.GetActiveScene();
             if (!scene.IsValid() || !scene.isLoaded)
             {
-                return Finish(c, "stopped: there is no loaded active scene");
+                outcome.Headline = "stopped: there is no loaded active scene";
+                return outcome;
             }
 
             var catalogErrors = new List<string>();
@@ -148,23 +214,30 @@ namespace VRCKatamari.Editor.Hub
             if (!HubLevelCatalog.TryLoad(out catalog, catalogErrors))
             {
                 for (int i = 0; i < catalogErrors.Count; i++) c.Problems.Add(catalogErrors[i]);
-                return Finish(c, "stopped: the level list is unusable");
+                outcome.Headline = "stopped: the level list is unusable";
+                return outcome;
             }
 
             HubLevelCatalog.Resolved[] resolved = HubLevelCatalog.ResolveAgainst(catalog, scene);
-            List<HubLevelCatalog.Resolved> offered = HubLevelCatalog.Offered(resolved);
+            List<HubLevelCatalog.Resolved> offered = hub
+                ? OfferedInOrder(resolved, options.LevelOrder, c)
+                : HubLevelCatalog.Offered(resolved);
             ReportResolution(scene, resolved, c);
             if (offered.Count == 0)
             {
-                return Finish(c, "stopped: scene '" + scene.name + "' offers no level; import a"
-                    + " level listed for it in " + HubLevelCatalog.RepoRelativePath);
+                outcome.Headline = "stopped: scene '" + scene.name + "' offers no level; import a"
+                    + " level listed for it in " + HubLevelCatalog.RepoRelativePath;
+                return outcome;
             }
+            outcome.Offered = offered;
 
             StoryRoundController round = Single<StoryRoundController>(c);
             if (round == null)
             {
-                return Finish(c, "stopped: the scene needs exactly one round controller");
+                outcome.Headline = "stopped: the scene needs exactly one round controller";
+                return outcome;
             }
+            outcome.Round = round;
             BallRideStation seat = FindOptional<BallRideStation>();
             VRC.SDK3.Components.VRCStation station = seat != null
                 ? seat.GetComponent<VRC.SDK3.Components.VRCStation>() : null;
@@ -183,30 +256,69 @@ namespace VRCKatamari.Editor.Hub
             if (targetText != null) font = targetText.font;
             if (font == null) font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
-            AssembleRoomGeometry(c);
+            if (!hub || !options.SkipRoomGeometry) AssembleRoomGeometry(c);
             Transform center = EnsureAnchor(HubCenterName, HubCenterPosition, Quaternion.identity, c);
             Transform spawn = EnsureAnchor(HubSpawnName, HubSpawnPosition, Quaternion.identity, c);
             AssembleSceneSpawn(spawn, c);
 
             Transform[] pads = AssemblePads(offered, catalog.room, center, font, c);
             Text prompt = AssemblePrompt(center, font, c);
-            HubLevelLauncher launcher = AssembleLauncher(round, offered, spawn, seat, station, c);
+            HubLevelLauncher launcher = AssembleLauncher(round, offered, spawn, seat, station, hub, c);
             HubRoomHost host = AssembleRoomHost(launcher, round, center, pads, catalog.room, prompt, c);
-            AssembleReturnButton(launcher, offered[0].EntryTransform, c);
+            if (hub)
+            {
+                AssembleReturnButtons(launcher, offered, options.StartCenters, c);
+            }
+            else
+            {
+                AssembleReturnButton(launcher, offered[0].EntryTransform, c);
+            }
             AssembleCardReturnButton(round, launcher, font, c);
-            AssembleRound(round, offered, c);
+            if (hub)
+            {
+                AssembleRoundTable(round, offered, options.Plans, c);
+            }
+            else
+            {
+                AssembleRound(round, offered, c);
+            }
 
-            CopyAllToUdon(c);
-            VerifyTables(launcher, host, c);
+            outcome.Launcher = launcher;
+            outcome.Host = host;
+            outcome.Completed = true;
+            outcome.Headline = "scene '" + scene.name + "': " + offered.Count + " level(s) offered";
+            return outcome;
+        }
 
-            string report = Finish(c, "scene '" + scene.name + "': " + offered.Count
-                + " level(s) offered");
-            return report;
+        // The offered levels in the order the hub lists them. A listed level the scene does not
+        // offer is a PROBLEM: the hub's level order is the pad order, so a hole would renumber
+        // every pad after it.
+        private static List<HubLevelCatalog.Resolved> OfferedInOrder(
+            HubLevelCatalog.Resolved[] resolved, string[] order, Counters c)
+        {
+            var list = new List<HubLevelCatalog.Resolved>();
+            if (order == null) return list;
+            for (int k = 0; k < order.Length; k++)
+            {
+                HubLevelCatalog.Resolved match = null;
+                for (int i = 0; i < resolved.Length; i++)
+                {
+                    if (string.Equals(resolved[i].Entry.id, order[k])) match = resolved[i];
+                }
+                if (match == null || !match.Offered)
+                {
+                    c.Problems.Add("the hub lists level '" + order[k] + "' but the scene does not"
+                        + " offer it (see the 'not offered' note)");
+                    continue;
+                }
+                list.Add(match);
+            }
+            return list;
         }
 
         // ------------------------------------------------------------ level list ---
 
-        private static void ReportResolution(Scene scene, HubLevelCatalog.Resolved[] resolved,
+        internal static void ReportResolution(Scene scene, HubLevelCatalog.Resolved[] resolved,
             Counters c)
         {
             for (int i = 0; i < resolved.Length; i++)
@@ -239,7 +351,7 @@ namespace VRCKatamari.Editor.Hub
         // the importer has one managed root per scene and the first level owns it. The cell
         // needs its own inert PickupFieldHost for the five decor props, so the host is added
         // first and the import runs second; a missing host would fail the import.
-        private static void AssembleRoomGeometry(Counters c)
+        internal static void AssembleRoomGeometry(Counters c)
         {
             Scene scene = SceneManager.GetActiveScene();
             Transform content = FindRoot(scene, PlacementImporter.ManagedRootName);
@@ -281,7 +393,7 @@ namespace VRCKatamari.Editor.Hub
             }
         }
 
-        private static Transform EnsureAnchor(string name, Vector3 position, Quaternion rotation,
+        internal static Transform EnsureAnchor(string name, Vector3 position, Quaternion rotation,
             Counters c)
         {
             Scene scene = SceneManager.GetActiveScene();
@@ -304,7 +416,7 @@ namespace VRCKatamari.Editor.Hub
             return go.transform;
         }
 
-        private static void AssembleSceneSpawn(Transform spawn, Counters c)
+        internal static void AssembleSceneSpawn(Transform spawn, Counters c)
         {
             VRC.SDKBase.VRC_SceneDescriptor[] descriptors =
                 UnityEngine.Object.FindObjectsOfType<VRC.SDKBase.VRC_SceneDescriptor>();
@@ -343,7 +455,7 @@ namespace VRCKatamari.Editor.Hub
 
         // ------------------------------------------------------------ pads ---
 
-        private static Transform[] AssemblePads(List<HubLevelCatalog.Resolved> offered,
+        internal static Transform[] AssemblePads(List<HubLevelCatalog.Resolved> offered,
             HubLevelCatalog.RoomBlock room, Transform center, Font font, Counters c)
         {
             var result = new Transform[offered.Count];
@@ -420,7 +532,7 @@ namespace VRCKatamari.Editor.Hub
             return result;
         }
 
-        private static void AssemblePadLabel(Transform pad, string levelName,
+        internal static void AssemblePadLabel(Transform pad, string levelName,
             HubLevelCatalog.RoomBlock room, Font font, Counters c)
         {
             Transform existing = pad.Find("Label");
@@ -465,7 +577,7 @@ namespace VRCKatamari.Editor.Hub
         }
 
         // A child's local scale that gives it the wanted world scale under a scaled parent.
-        private static Vector3 WorldToLocalScale(Transform parent, Vector3 world)
+        internal static Vector3 WorldToLocalScale(Transform parent, Vector3 world)
         {
             Vector3 p = parent.lossyScale;
             return new Vector3(
@@ -478,7 +590,7 @@ namespace VRCKatamari.Editor.Hub
         // (hub_floor) stays at scale 1; the authored size lives on its Visual child, whose
         // lossy scale is the document's size x. A missing floor or body reads as a very wide
         // room so the missing import is reported by the import, not twice.
-        private static float RoomWidth(Transform center)
+        internal static float RoomWidth(Transform center)
         {
             Scene scene = SceneManager.GetActiveScene();
             Transform floor = HubLevelCatalog.FindPath(scene,
@@ -493,7 +605,7 @@ namespace VRCKatamari.Editor.Hub
 
         // The room's instruction line. An overlay canvas is not drawn by the VRChat client,
         // so an existing prompt on one is replaced by a world-space line on the room's wall.
-        private static Text AssemblePrompt(Transform center, Font font, Counters c)
+        internal static Text AssemblePrompt(Transform center, Font font, Counters c)
         {
             HubRoomHost existingHost = FindOptional<HubRoomHost>();
             Text wired = existingHost != null ? ReadObject<Text>(existingHost, "promptText") : null;
@@ -525,9 +637,9 @@ namespace VRCKatamari.Editor.Hub
 
         // ------------------------------------------------------------ launcher / host ---
 
-        private static HubLevelLauncher AssembleLauncher(StoryRoundController round,
+        internal static HubLevelLauncher AssembleLauncher(StoryRoundController round,
             List<HubLevelCatalog.Resolved> offered, Transform spawn, BallRideStation seat,
-            VRC.SDK3.Components.VRCStation station, Counters c)
+            VRC.SDK3.Components.VRCStation station, bool hub, Counters c)
         {
             HubLevelLauncher launcher = FindOptional<HubLevelLauncher>();
             if (launcher == null)
@@ -551,6 +663,20 @@ namespace VRCKatamari.Editor.Hub
             changed |= SetObject(so, "roomSpawn", spawn, c);
             changed |= SetObjectArray(so, "levelEntries", entries, c);
             changed |= SetStringArray(so, "levelNames", names, c);
+            if (hub)
+            {
+                // A multi-level hub switches the motor's world before it starts a level.
+                LevelSwitchHost levelSwitch = FindOptional<LevelSwitchHost>();
+                if (levelSwitch == null)
+                {
+                    c.Problems.Add("a multi-level hub needs a LevelSwitchHost in the scene (the"
+                        + " launcher would start a level without switching to its world)");
+                }
+                else
+                {
+                    changed |= SetObject(so, "levelSwitch", levelSwitch, c);
+                }
+            }
             if (seat != null && station != null)
             {
                 changed |= SetObject(so, "rideSeat", seat, c);
@@ -569,7 +695,7 @@ namespace VRCKatamari.Editor.Hub
             return launcher;
         }
 
-        private static HubRoomHost AssembleRoomHost(HubLevelLauncher launcher,
+        internal static HubRoomHost AssembleRoomHost(HubLevelLauncher launcher,
             StoryRoundController round, Transform center, Transform[] pads,
             HubLevelCatalog.RoomBlock room, Text prompt, Counters c)
         {
@@ -600,7 +726,7 @@ namespace VRCKatamari.Editor.Hub
 
         // The manual way home if the automatic return after a round fails. One per scene,
         // next to the first level's entry; the launcher refuses it while a round runs.
-        private static void AssembleReturnButton(HubLevelLauncher launcher, Transform entry,
+        internal static void AssembleReturnButton(HubLevelLauncher launcher, Transform entry,
             Counters c)
         {
             HubReturnButton button = FindOptional<HubReturnButton>();
@@ -625,6 +751,96 @@ namespace VRCKatamari.Editor.Hub
             }
         }
 
+        // A multi-level hub: one return button per level, standing beside that level's
+        // entry marker (or, with no marker, beside its ball start), so a free roam level -
+        // which has no result card - always has its way out. Named HubReturnButton_<id>; the
+        // base scene's single root HubReturnButton (the first level's old button) is adopted
+        // for the first level instead of being left behind next to nothing.
+        internal static void AssembleReturnButtons(HubLevelLauncher launcher,
+            List<HubLevelCatalog.Resolved> offered, Dictionary<string, Vector3> startCenters,
+            Counters c)
+        {
+            Scene scene = SceneManager.GetActiveScene();
+            for (int k = 0; k < offered.Count; k++)
+            {
+                string id = offered[k].Entry.id;
+                string name = ReturnButtonName + "_" + id;
+
+                Vector3 anchor;
+                Vector3 right = Vector3.right;
+                Transform entry = offered[k].EntryTransform;
+                Vector3 start;
+                if (entry != null)
+                {
+                    anchor = entry.position;
+                    right = entry.right;
+                }
+                else if (startCenters != null && startCenters.TryGetValue(id, out start))
+                {
+                    anchor = start;
+                }
+                else
+                {
+                    c.Problems.Add("level '" + id + "' has no entry marker and no start centre: its"
+                        + " return button has nowhere to stand");
+                    continue;
+                }
+                Vector3 position = anchor + right * 1.2f + Vector3.up * 1.0f;
+
+                Transform existing = FindRoot(scene, name);
+                if (existing == null && k == 0)
+                {
+                    Transform legacy = FindRoot(scene, ReturnButtonName);
+                    if (legacy != null && legacy.GetComponent<HubReturnButton>() != null)
+                    {
+                        Undo.RecordObject(legacy.gameObject, "Rename the return button");
+                        legacy.name = name;
+                        existing = legacy;
+                        c.Changed++;
+                        c.Notes.Add("the base scene's '" + ReturnButtonName + "' is now the return"
+                            + " button of '" + id + "'");
+                    }
+                }
+
+                HubReturnButton button;
+                if (existing == null)
+                {
+                    GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    cube.name = name;
+                    Undo.RegisterCreatedObjectUndo(cube, "Create " + name);
+                    cube.transform.localScale = new Vector3(0.35f, 0.35f, 0.35f);
+                    cube.transform.position = position;
+                    c.Created++;
+                    button = AddUdon<HubReturnButton>(cube, c);
+                    if (button == null) continue;
+                    SetInteractText(button, "回大厅", c);
+                }
+                else
+                {
+                    button = existing.GetComponent<HubReturnButton>();
+                    if (button == null)
+                    {
+                        c.Problems.Add("'" + name + "' exists without a HubReturnButton");
+                        continue;
+                    }
+                    if (Vector3.Distance(existing.position, position) > 1e-3f)
+                    {
+                        Undo.RecordObject(existing, "Place " + name);
+                        existing.position = position;
+                        c.Changed++;
+                        MarkDirty();
+                    }
+                }
+
+                var so = new SerializedObject(button);
+                if (SetObject(so, "launcher", launcher, c))
+                {
+                    so.ApplyModifiedPropertiesWithoutUndo();
+                    c.Proxies.Add(button);
+                }
+            }
+        }
+
         // ------------------------------------------------------------ result card ---
 
         // The result card is the rider's (RideUxAssembler puts it in front of the seat) and
@@ -636,7 +852,7 @@ namespace VRCKatamari.Editor.Hub
         // The two buttons share one layout (LayoutRetryForReturn, which RideUxAssembler
         // also calls when it lays the card out), so the result is the same whichever
         // assembler ran first and a second run changes nothing.
-        private static void AssembleCardReturnButton(StoryRoundController round,
+        internal static void AssembleCardReturnButton(StoryRoundController round,
             HubLevelLauncher launcher, Font font, Counters c)
         {
             GameObject retryRoot = ReadObject<GameObject>(round, "retryButtonRoot");
@@ -737,7 +953,7 @@ namespace VRCKatamari.Editor.Hub
         }
 
         // The return button is a child of the retry button, centred 340 units to its right.
-        private static bool LayoutReturnButton(RectTransform rect)
+        internal static bool LayoutReturnButton(RectTransform rect)
         {
             bool changed = false;
             Vector2 anchor = new Vector2(0.5f, 0.5f);
@@ -754,7 +970,7 @@ namespace VRCKatamari.Editor.Hub
 
         // The retry button's press box follows its (possibly just changed) face, the same
         // rule the ride assembly uses, so neither run leaves it stale.
-        private static void SyncRetryCollider(GameObject retryRoot, Counters c)
+        internal static void SyncRetryCollider(GameObject retryRoot, Counters c)
         {
             StoryRetryButton direct = retryRoot.GetComponentInChildren<StoryRetryButton>(true);
             if (direct == null) return;
@@ -773,7 +989,7 @@ namespace VRCKatamari.Editor.Hub
         // whose list entry says so, its clock, target and kill plane come from that level's
         // own placement document - one source, not a copy in the list. A scene can hold one
         // round controller, so only the first offered level configures it.
-        private static void AssembleRound(StoryRoundController round,
+        internal static void AssembleRound(StoryRoundController round,
             List<HubLevelCatalog.Resolved> offered, Counters c)
         {
             var so = new SerializedObject(round);
@@ -781,11 +997,10 @@ namespace VRCKatamari.Editor.Hub
 
             if (offered.Count > 1)
             {
-                c.Problems.Add(offered.Count + " levels are offered in one scene, but the scene has"
-                    + " one ball and one round controller: only '" + offered[0].Entry.id
-                    + "' is configured, and a start on the others would play it with that"
-                    + " level's clock. List one level per scene until the round can be"
-                    + " configured per level");
+                c.Problems.Add(offered.Count + " levels are offered in one scene, but this menu"
+                    + " configures one: only '" + offered[0].Entry.id + "' would be, and a start"
+                    + " on the others would play it with that level's clock. Several levels in"
+                    + " one scene are assembled by VRC Katamari/Hub/Assemble All-Maps Hub");
             }
 
             HubLevelCatalog.LevelEntry first = offered[0].Entry;
@@ -801,8 +1016,25 @@ namespace VRCKatamari.Editor.Hub
             }
         }
 
-        private static bool ApplyPlacementRound(SerializedObject so, string levelId, Counters c)
+        /// <summary>A level's round settings as its placement document states them.</summary>
+        internal sealed class PlacementRoundData
         {
+            public bool HasTimeLimit;
+            public float TimeLimitS;
+            public bool HasTarget;
+            public float TargetDiameterM;
+            public bool HasKillPlane;
+            public float KillPlaneY;
+        }
+
+        /// <summary>
+        /// Reads a level's round settings from its placement document. False (with a PROBLEM
+        /// or note on <paramref name="c"/>) when there is nothing to read.
+        /// </summary>
+        internal static bool TryReadPlacementRound(string levelId, Counters c,
+            out PlacementRoundData data)
+        {
+            data = null;
             string path;
             List<string> tried;
             if (!LevelPaths.TryResolvePlacementPath(levelId, out path, out tried))
@@ -838,23 +1070,16 @@ namespace VRCKatamari.Editor.Hub
             }
 
             PlacementV2Meta meta = read.Document.Meta;
-            bool changed = false;
-            changed |= SetString(so, "levelId", levelId, c);
-            if (meta.HasTimeLimit && meta.TimeLimitS > 0f)
-            {
-                changed |= SetFloat(so, "timeLimitSeconds", meta.TimeLimitS, c);
-            }
-            if (meta.Ball != null && meta.Ball.HasTargetDiameter && meta.Ball.TargetDiameterM > 0f)
-            {
-                changed |= SetEnum(so, "goalType", (int)StoryGoalType.ReachTargetDiameter, c);
-                changed |= SetFloat(so, "targetDiameterM", meta.Ball.TargetDiameterM, c);
-            }
+            var result = new PlacementRoundData();
+            result.HasTimeLimit = meta.HasTimeLimit && meta.TimeLimitS > 0f;
+            result.TimeLimitS = meta.TimeLimitS;
+            result.HasTarget = meta.Ball != null && meta.Ball.HasTargetDiameter
+                && meta.Ball.TargetDiameterM > 0f;
+            result.TargetDiameterM = meta.Ball != null ? meta.Ball.TargetDiameterM : 0f;
             PlacementV2Activity activity = read.Document.Activity;
-            if (activity != null && activity.KillPlane != null)
-            {
-                changed |= SetBool(so, "killPlaneEnabled", true, c);
-                changed |= SetFloat(so, "killPlaneY", activity.KillPlane.Y, c);
-            }
+            result.HasKillPlane = activity != null && activity.KillPlane != null;
+            result.KillPlaneY = result.HasKillPlane ? activity.KillPlane.Y : 0f;
+
             c.Notes.Add("round settings of '" + levelId + "' read from its placement document:"
                 + " clock " + (meta.HasTimeLimit ? meta.TimeLimitS + " s" : "unchanged")
                 + ", target "
@@ -863,12 +1088,142 @@ namespace VRCKatamari.Editor.Hub
                 + ", kill plane "
                 + (activity != null && activity.KillPlane != null
                     ? "y=" + activity.KillPlane.Y : "unchanged"));
+            data = result;
+            return true;
+        }
+
+        internal static bool ApplyPlacementRound(SerializedObject so, string levelId, Counters c)
+        {
+            PlacementRoundData data;
+            if (!TryReadPlacementRound(levelId, c, out data)) return false;
+
+            bool changed = false;
+            changed |= SetString(so, "levelId", levelId, c);
+            if (data.HasTimeLimit)
+            {
+                changed |= SetFloat(so, "timeLimitSeconds", data.TimeLimitS, c);
+            }
+            if (data.HasTarget)
+            {
+                changed |= SetEnum(so, "goalType", (int)StoryGoalType.ReachTargetDiameter, c);
+                changed |= SetFloat(so, "targetDiameterM", data.TargetDiameterM, c);
+            }
+            if (data.HasKillPlane)
+            {
+                changed |= SetBool(so, "killPlaneEnabled", true, c);
+                changed |= SetFloat(so, "killPlaneY", data.KillPlaneY, c);
+            }
             return changed;
+        }
+
+        // A multi-level hub: the round controller's per-level table and the result card's
+        // per-level star table, one slot per offered level in pad order. The controller's own
+        // single-level fields stay as the base scene has them (SelectLevel copies a slot over
+        // them). The star thresholds are the presenter's own single-level values copied into
+        // every slot (a level without stars ignores them), so the table is complete and the
+        // only per-level decision is whether the card draws stars.
+        internal static void AssembleRoundTable(StoryRoundController round,
+            List<HubLevelCatalog.Resolved> offered, Dictionary<string, HubLevelPlan> plans,
+            Counters c)
+        {
+            int n = offered.Count;
+            var ids = new string[n];
+            var goals = new int[n];
+            var diameters = new float[n];
+            var counts = new int[n];
+            var limits = new float[n];
+            var killEnabled = new bool[n];
+            var killY = new float[n];
+            var kinds = new string[n];
+            var hosts = new UnityEngine.Object[n];
+            var abort = new bool[n];
+            var hasStars = new bool[n];
+            for (int i = 0; i < n; i++)
+            {
+                string id = offered[i].Entry.id;
+                HubLevelPlan plan;
+                if (plans == null || !plans.TryGetValue(id, out plan))
+                {
+                    c.Problems.Add("no round plan for level '" + id + "'");
+                    plan = new HubLevelPlan { LevelId = id, CountKind = "", AllowAbort = false };
+                }
+                ids[i] = id;
+                goals[i] = plan.GoalType;
+                diameters[i] = plan.TargetDiameterM;
+                counts[i] = plan.TargetCount;
+                limits[i] = plan.TimeLimitSeconds;
+                killEnabled[i] = plan.KillEnabled;
+                killY[i] = plan.KillPlaneY;
+                kinds[i] = plan.CountKind ?? "";
+                hosts[i] = plan.PickupHost;
+                abort[i] = plan.AllowAbort;
+                hasStars[i] = plan.HasStars;
+            }
+
+            var so = new SerializedObject(round);
+            bool changed = SetBool(so, "startOnLoad", false, c);
+            changed |= SetStringArray(so, "levelIds", ids, c);
+            changed |= SetIntArray(so, "levelGoalTypes", goals, c);
+            changed |= SetFloatArray(so, "levelTargetDiameters", diameters, c);
+            changed |= SetIntArray(so, "levelTargetCounts", counts, c);
+            changed |= SetFloatArray(so, "levelTimeLimits", limits, c);
+            changed |= SetBoolArray(so, "levelKillEnabled", killEnabled, c);
+            changed |= SetFloatArray(so, "levelKillY", killY, c);
+            changed |= SetStringArray(so, "levelCountKinds", kinds, c);
+            changed |= SetObjectArray(so, "levelPickupHosts", hosts, c);
+            changed |= SetBoolArray(so, "levelAllowAbort", abort, c);
+            if (changed)
+            {
+                so.ApplyModifiedPropertiesWithoutUndo();
+                c.Proxies.Add(round);
+            }
+
+            StoryResultPresenter presenter = FindOptional<StoryResultPresenter>();
+            if (presenter == null)
+            {
+                c.Notes.Add("no StoryResultPresenter: the star table was not written");
+                return;
+            }
+            var pso = new SerializedObject(presenter);
+            SerializedProperty star2D = pso.FindProperty("star2DiameterM");
+            SerializedProperty star3D = pso.FindProperty("star3DiameterM");
+            SerializedProperty star2C = pso.FindProperty("star2Count");
+            SerializedProperty star3C = pso.FindProperty("star3Count");
+            SerializedProperty band = pso.FindProperty("partialBand");
+            if (star2D == null || star3D == null || star2C == null || star3C == null || band == null)
+            {
+                c.Problems.Add("StoryResultPresenter lacks one of its single-level star fields");
+                return;
+            }
+            var s2d = new float[n];
+            var s3d = new float[n];
+            var s2c = new int[n];
+            var s3c = new int[n];
+            var bands = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                s2d[i] = star2D.floatValue;
+                s3d[i] = star3D.floatValue;
+                s2c[i] = star2C.intValue;
+                s3c[i] = star3C.intValue;
+                bands[i] = band.floatValue;
+            }
+            bool pchanged = SetBoolArray(pso, "levelHasStars", hasStars, c);
+            pchanged |= SetFloatArray(pso, "levelStar2Diameters", s2d, c);
+            pchanged |= SetFloatArray(pso, "levelStar3Diameters", s3d, c);
+            pchanged |= SetIntArray(pso, "levelStar2Counts", s2c, c);
+            pchanged |= SetIntArray(pso, "levelStar3Counts", s3c, c);
+            pchanged |= SetFloatArray(pso, "levelPartialBands", bands, c);
+            if (pchanged)
+            {
+                pso.ApplyModifiedPropertiesWithoutUndo();
+                c.Proxies.Add(presenter);
+            }
         }
 
         // ------------------------------------------------------------ udon plumbing ---
 
-        private static T AddUdon<T>(GameObject go, Counters c) where T : UdonSharpBehaviour
+        internal static T AddUdon<T>(GameObject go, Counters c) where T : UdonSharpBehaviour
         {
             try
             {
@@ -888,7 +1243,7 @@ namespace VRCKatamari.Editor.Hub
 
         // The click prompt and its reach are fields of the backing UdonBehaviour, not of the
         // U# proxy.
-        private static void SetInteractText(UdonSharpBehaviour proxy, string text, Counters c)
+        internal static void SetInteractText(UdonSharpBehaviour proxy, string text, Counters c)
         {
             UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(proxy);
             if (backing == null)
@@ -906,7 +1261,7 @@ namespace VRCKatamari.Editor.Hub
             }
         }
 
-        private static void CopyAllToUdon(Counters c)
+        internal static void CopyAllToUdon(Counters c)
         {
             var done = new HashSet<Component>();
             for (int i = 0; i < c.Proxies.Count; i++)
@@ -928,7 +1283,7 @@ namespace VRCKatamari.Editor.Hub
 
         // Reads the instance variable table (a non-public field) for the fields this assembly
         // writes: a missing symbol means "save, reopen, run again".
-        private static void VerifyTables(HubLevelLauncher launcher, HubRoomHost host, Counters c)
+        internal static void VerifyTables(HubLevelLauncher launcher, HubRoomHost host, Counters c)
         {
             if (launcher != null)
             {
@@ -947,20 +1302,16 @@ namespace VRCKatamari.Editor.Hub
             }
         }
 
-        private static void VerifyTable(UdonSharpBehaviour proxy, string[] names, Counters c)
+        // Reads the instance variable table back (UdonVariableAccess): a missing symbol means
+        // "save, reopen, run again". A proxy with no backing behaviour is a problem too, not a skip.
+        internal static void VerifyTable(UdonSharpBehaviour proxy, string[] names, Counters c)
         {
-            UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(proxy);
-            if (backing == null) return;
-            FieldInfo field = typeof(UdonBehaviour).GetField("publicVariables",
-                BindingFlags.NonPublic | BindingFlags.Instance);
-            if (field == null) return;
-            var table = field.GetValue(backing) as IUdonVariableTable;
-            if (table == null) return;
-            var missing = new List<string>();
-            for (int i = 0; i < names.Length; i++)
+            List<string> missing = UdonVariableAccess.MissingNames(proxy, names);
+            if (missing == null)
             {
-                object value;
-                if (!table.TryGetVariableValue(names[i], out value)) missing.Add(names[i]);
+                c.Problems.Add(proxy.GetType().Name + " on '" + proxy.name + "' has no backing"
+                    + " UdonBehaviour, so its Udon variables could not be checked");
+                return;
             }
             if (missing.Count > 0)
             {
@@ -972,7 +1323,7 @@ namespace VRCKatamari.Editor.Hub
 
         // ------------------------------------------------------------ ui plumbing ---
 
-        private static GameObject CreateWorldCanvas(string name, Transform parent, Vector2 size)
+        internal static GameObject CreateWorldCanvas(string name, Transform parent, Vector2 size)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Canvas));
             Undo.RegisterCreatedObjectUndo(go, "Create " + name);
@@ -983,7 +1334,7 @@ namespace VRCKatamari.Editor.Hub
             return go;
         }
 
-        private static Text CreateText(string name, Transform parent, Font font, int size,
+        internal static Text CreateText(string name, Transform parent, Font font, int size,
             TextAnchor alignment)
         {
             var go = new GameObject(name, typeof(RectTransform));
@@ -998,7 +1349,7 @@ namespace VRCKatamari.Editor.Hub
             return text;
         }
 
-        private static void Stretch(RectTransform rect)
+        internal static void Stretch(RectTransform rect)
         {
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
@@ -1008,7 +1359,7 @@ namespace VRCKatamari.Editor.Hub
 
         // ------------------------------------------------------------ scene plumbing ---
 
-        private static Transform FindRoot(Scene scene, string name)
+        internal static Transform FindRoot(Scene scene, string name)
         {
             GameObject[] roots = scene.GetRootGameObjects();
             for (int i = 0; i < roots.Length; i++)
@@ -1018,7 +1369,7 @@ namespace VRCKatamari.Editor.Hub
             return null;
         }
 
-        private static Transform EnsureChild(Transform parent, string name, Counters c)
+        internal static Transform EnsureChild(Transform parent, string name, Counters c)
         {
             Scene scene = SceneManager.GetActiveScene();
             Transform existing = parent == null ? FindRoot(scene, name) : parent.Find(name);
@@ -1031,17 +1382,17 @@ namespace VRCKatamari.Editor.Hub
             return go.transform;
         }
 
-        private static GameObject FindOrCreateRoot(string name, Counters c)
+        internal static GameObject FindOrCreateRoot(string name, Counters c)
         {
             return EnsureChild(null, name, c).gameObject;
         }
 
-        private static void MarkDirty()
+        internal static void MarkDirty()
         {
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         }
 
-        private static string Describe(Transform t)
+        internal static string Describe(Transform t)
         {
             if (t == null) return "none";
             Vector3 p = t.position;
@@ -1051,7 +1402,7 @@ namespace VRCKatamari.Editor.Hub
 
         // ------------------------------------------------------------ serialized access ---
 
-        private static bool SetFloat(SerializedObject so, string field, float value, Counters c)
+        internal static bool SetFloat(SerializedObject so, string field, float value, Counters c)
         {
             SerializedProperty property = so.FindProperty(field);
             if (property == null) return Missing(so, field, c);
@@ -1061,7 +1412,7 @@ namespace VRCKatamari.Editor.Hub
             return true;
         }
 
-        private static bool SetBool(SerializedObject so, string field, bool value, Counters c)
+        internal static bool SetBool(SerializedObject so, string field, bool value, Counters c)
         {
             SerializedProperty property = so.FindProperty(field);
             if (property == null) return Missing(so, field, c);
@@ -1071,7 +1422,7 @@ namespace VRCKatamari.Editor.Hub
             return true;
         }
 
-        private static bool SetEnum(SerializedObject so, string field, int value, Counters c)
+        internal static bool SetEnum(SerializedObject so, string field, int value, Counters c)
         {
             SerializedProperty property = so.FindProperty(field);
             if (property == null) return Missing(so, field, c);
@@ -1081,7 +1432,7 @@ namespace VRCKatamari.Editor.Hub
             return true;
         }
 
-        private static bool SetString(SerializedObject so, string field, string value, Counters c)
+        internal static bool SetString(SerializedObject so, string field, string value, Counters c)
         {
             SerializedProperty property = so.FindProperty(field);
             if (property == null) return Missing(so, field, c);
@@ -1091,7 +1442,7 @@ namespace VRCKatamari.Editor.Hub
             return true;
         }
 
-        private static bool SetObject(SerializedObject so, string field, UnityEngine.Object value,
+        internal static bool SetObject(SerializedObject so, string field, UnityEngine.Object value,
             Counters c)
         {
             SerializedProperty property = so.FindProperty(field);
@@ -1102,7 +1453,7 @@ namespace VRCKatamari.Editor.Hub
             return true;
         }
 
-        private static bool SetObjectArray(SerializedObject so, string field,
+        internal static bool SetObjectArray(SerializedObject so, string field,
             UnityEngine.Object[] values, Counters c)
         {
             SerializedProperty property = so.FindProperty(field);
@@ -1124,7 +1475,7 @@ namespace VRCKatamari.Editor.Hub
             return true;
         }
 
-        private static bool SetStringArray(SerializedObject so, string field, string[] values,
+        internal static bool SetStringArray(SerializedObject so, string field, string[] values,
             Counters c)
         {
             SerializedProperty property = so.FindProperty(field);
@@ -1146,7 +1497,106 @@ namespace VRCKatamari.Editor.Hub
             return true;
         }
 
-        private static bool Missing(SerializedObject so, string field, Counters c)
+        internal static bool SetIntArray(SerializedObject so, string field, int[] values, Counters c)
+        {
+            SerializedProperty property = so.FindProperty(field);
+            if (property == null) return Missing(so, field, c);
+            bool same = property.arraySize == values.Length;
+            for (int i = 0; same && i < values.Length; i++)
+            {
+                same = property.GetArrayElementAtIndex(i).intValue == values[i];
+            }
+            if (same) return false;
+            property.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+            {
+                property.GetArrayElementAtIndex(i).intValue = values[i];
+            }
+            c.Changed++;
+            return true;
+        }
+
+        internal static bool SetLongArray(SerializedObject so, string field, long[] values,
+            Counters c)
+        {
+            SerializedProperty property = so.FindProperty(field);
+            if (property == null) return Missing(so, field, c);
+            bool same = property.arraySize == values.Length;
+            for (int i = 0; same && i < values.Length; i++)
+            {
+                same = property.GetArrayElementAtIndex(i).longValue == values[i];
+            }
+            if (same) return false;
+            property.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+            {
+                property.GetArrayElementAtIndex(i).longValue = values[i];
+            }
+            c.Changed++;
+            return true;
+        }
+
+        internal static bool SetFloatArray(SerializedObject so, string field, float[] values,
+            Counters c)
+        {
+            SerializedProperty property = so.FindProperty(field);
+            if (property == null) return Missing(so, field, c);
+            bool same = property.arraySize == values.Length;
+            for (int i = 0; same && i < values.Length; i++)
+            {
+                same = Mathf.Approximately(property.GetArrayElementAtIndex(i).floatValue, values[i]);
+            }
+            if (same) return false;
+            property.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+            {
+                property.GetArrayElementAtIndex(i).floatValue = values[i];
+            }
+            c.Changed++;
+            return true;
+        }
+
+        internal static bool SetBoolArray(SerializedObject so, string field, bool[] values,
+            Counters c)
+        {
+            SerializedProperty property = so.FindProperty(field);
+            if (property == null) return Missing(so, field, c);
+            bool same = property.arraySize == values.Length;
+            for (int i = 0; same && i < values.Length; i++)
+            {
+                same = property.GetArrayElementAtIndex(i).boolValue == values[i];
+            }
+            if (same) return false;
+            property.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+            {
+                property.GetArrayElementAtIndex(i).boolValue = values[i];
+            }
+            c.Changed++;
+            return true;
+        }
+
+        internal static bool SetVector3Array(SerializedObject so, string field, Vector3[] values,
+            Counters c)
+        {
+            SerializedProperty property = so.FindProperty(field);
+            if (property == null) return Missing(so, field, c);
+            bool same = property.arraySize == values.Length;
+            for (int i = 0; same && i < values.Length; i++)
+            {
+                same = property.GetArrayElementAtIndex(i).vector3Value == values[i];
+            }
+            if (same) return false;
+            property.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+            {
+                property.GetArrayElementAtIndex(i).vector3Value = values[i];
+            }
+            c.Changed++;
+            return true;
+        }
+
+        internal static bool Missing(SerializedObject so, string field, Counters c)
         {
             c.Problems.Add(so.targetObject.GetType().Name + "." + field
                 + " is not a serialized field (renamed? the assembler reads the runtime's"
@@ -1154,7 +1604,7 @@ namespace VRCKatamari.Editor.Hub
             return false;
         }
 
-        private static T ReadObject<T>(UnityEngine.Object owner, string field)
+        internal static T ReadObject<T>(UnityEngine.Object owner, string field)
             where T : UnityEngine.Object
         {
             var so = new SerializedObject(owner);
@@ -1162,7 +1612,7 @@ namespace VRCKatamari.Editor.Hub
             return property == null ? null : property.objectReferenceValue as T;
         }
 
-        private static T Single<T>(Counters c) where T : UnityEngine.Object
+        internal static T Single<T>(Counters c) where T : UnityEngine.Object
         {
             T[] all = UnityEngine.Object.FindObjectsOfType<T>();
             if (all.Length != 1)
@@ -1173,13 +1623,13 @@ namespace VRCKatamari.Editor.Hub
             return all[0];
         }
 
-        private static T FindOptional<T>() where T : UnityEngine.Object
+        internal static T FindOptional<T>() where T : UnityEngine.Object
         {
             T[] all = UnityEngine.Object.FindObjectsOfType<T>();
             return all.Length == 0 ? null : all[0];
         }
 
-        private static string Finish(Counters c, string headline)
+        internal static string Finish(Counters c, string headline)
         {
             string text = "[hub-assemble] " + headline + ": +" + c.Created + " ~" + c.Changed
                 + " problems=" + c.Problems.Count;

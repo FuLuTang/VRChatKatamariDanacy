@@ -29,6 +29,12 @@ namespace VRCKatamari.BallLayers
         [SerializeField] private KatamariBallMotor motor;
         [SerializeField] private bool terrainMeshContactEnabled = true;
 
+        // When true, Start does not hand the terrain to the motor; something else (the hub's
+        // level switch) calls RegisterTerrain() when this terrain's level becomes active.
+        // False is the default and the value an older scene reads, so those scenes still
+        // register in Start exactly as before.
+        [SerializeField] private bool deferRegistration = false;
+
         [Header("Baked terrain (world metres; filled by the editor importer)")]
         [SerializeField] private Vector3[] vertices;
         [SerializeField] private int[] indices;
@@ -115,18 +121,30 @@ namespace VRCKatamari.BallLayers
 
         private void Start()
         {
+            if (deferRegistration) return;
+            RegisterTerrain();
+        }
+
+        /// <summary>
+        /// Hands this host's terrain to the motor, replacing whatever terrain it holds.
+        /// Start calls it unless <c>deferRegistration</c> is set. Returns true when the
+        /// motor accepted the mesh (or when terrain contact is disabled and the motor was
+        /// told so), false when nothing was registered.
+        /// </summary>
+        public bool RegisterTerrain()
+        {
             if (motor == null)
             {
                 Debug.LogWarning("[TerrainFieldHost] no motor linked; terrain '" + terrainId +
                                  "' was not registered");
-                return;
+                return false;
             }
 
             motor.SetTerrainMeshContactEnabled(terrainMeshContactEnabled);
             if (!terrainMeshContactEnabled)
             {
                 motor.ClearTerrainMesh();
-                return;
+                return true;
             }
 
             if (vertices == null || indices == null || chunkStarts == null ||
@@ -135,7 +153,7 @@ namespace VRCKatamari.BallLayers
                 Debug.LogWarning("[TerrainFieldHost] terrain '" + terrainId +
                                  "' has no arrays; clearing the motor mesh");
                 motor.ClearTerrainMesh();
-                return;
+                return false;
             }
 
             // One motor holds ONE terrain mesh: SetTerrainMesh replaces the buffers, so a
@@ -157,7 +175,7 @@ namespace VRCKatamari.BallLayers
                 Debug.LogError("[TerrainFieldHost] motor refused terrain '" + terrainId +
                                "' (triangles=" + triangleCount + ", vertices=" + vertexCount +
                                ", chunks=" + chunkCount + ")");
-                return;
+                return false;
             }
 
             // The grid is a speed structure: if it was refused, the mesh is still registered
@@ -172,6 +190,7 @@ namespace VRCKatamari.BallLayers
                                  ": " + motor.GetTerrainGridRefusalReason() +
                                  "); support queries use the full chunk scan");
             }
+            return true;
         }
     }
 }

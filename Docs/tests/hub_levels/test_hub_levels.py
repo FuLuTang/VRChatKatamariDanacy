@@ -14,7 +14,7 @@ class HubLevelsTest(unittest.TestCase):
         self.data = json.loads(CATALOG.read_text(encoding="utf-8"))
 
     def test_schema_and_room_block(self):
-        self.assertEqual(self.data["schema"], "katamari.hub-levels/0")
+        self.assertEqual(self.data["schema"], "katamari.hub-levels/1")
         room = self.data["room"]
         for key in ("padSizeM", "padGapM", "padForwardM", "marginM"):
             self.assertIn(key, room)
@@ -24,7 +24,10 @@ class HubLevelsTest(unittest.TestCase):
     def test_entries_are_complete_and_ids_unique(self):
         ids = []
         for lv in self.data["levels"]:
-            for key in ("id", "name", "scenes", "content", "entry"):
+            required = ["id", "name", "scenes", "content"]
+            if lv.get("kind", "round") == "round":
+                required.append("entry")  # free-roam levels may omit it: the launcher falls back to the seat
+            for key in required:
                 self.assertTrue(lv.get(key), f"{lv.get('id')}: missing {key}")
             self.assertIsInstance(lv["scenes"], list)
             ids.append(lv["id"])
@@ -34,13 +37,15 @@ class HubLevelsTest(unittest.TestCase):
     def test_entry_lies_under_the_scene_roots_it_names(self):
         for lv in self.data["levels"]:
             self.assertFalse(lv["content"].startswith("/"))
-            self.assertFalse(lv["entry"].startswith("/"))
+            self.assertFalse(lv.get("entry", "").startswith("/"))
 
     def test_committed_levels_have_a_placement_document(self):
         # _ref_* levels are git-ignored and exist only on the operator's machine.
         for lv in self.data["levels"]:
             if lv["id"].startswith("_ref_"):
                 continue
+            if lv.get("kind") == "freeRoam":
+                continue  # hand-built lab scenes have no placement document
             self.assertTrue(
                 any((LEVELS / lv["id"] / n).exists()
                     for n in ("placement.json", "placement.v2.json")),
@@ -71,6 +76,60 @@ class HubLevelsTest(unittest.TestCase):
                       + 2 * room["marginM"])
             self.assertGreaterEqual(floor_width, needed, f"{scene}: floor")
             self.assertGreaterEqual(wall_gap, needed, f"{scene}: walls")
+
+    # ---- schema /1 optional fields (all optional; absent = today's single-level behaviour)
+
+    def test_optional_level_fields_are_well_typed(self):
+        for lv in self.data["levels"]:
+            lid = lv["id"]
+            self.assertIn(lv.get("kind", "round"), ("round", "freeRoam"), lid)
+            for key in ("allowAbort", "stars", "roundFromPlacement"):
+                if key in lv:
+                    self.assertIsInstance(lv[key], bool, f"{lid}: {key}")
+            if "source" in lv:
+                src = lv["source"]
+                self.assertTrue(src.get("scene", "").endswith(".unity"), lid)
+                self.assertTrue(src.get("takeRoots"), f"{lid}: takeRoots empty")
+                for root in src["takeRoots"] + src.get("leaveBehind", []):
+                    self.assertFalse(root.startswith("/"), lid)
+            if "start" in lv:
+                self.assertEqual(len(lv["start"]["center"]), 3, lid)
+            if "island" in lv:
+                off = lv["island"]["offset"]
+                self.assertEqual(len(off), 3, lid)
+                self.assertEqual(off[1], 0, f"{lid}: Y offset must be 0")
+            if lv.get("kind") == "freeRoam":
+                self.assertNotIn("roundFromPlacement", [k for k, v in lv.items() if v is True], lid)
+
+    def test_hub_blocks_reference_known_levels_and_keep_islands_apart(self):
+        ids = {lv["id"] for lv in self.data["levels"]}
+        by_id = {lv["id"]: lv for lv in self.data["levels"]}
+        for hub in self.data.get("hubs", []):
+            self.assertTrue(hub["scene"].startswith("Assets/"), hub["id"])
+            self.assertEqual(len(hub["levels"]), len(set(hub["levels"])), hub["id"])
+            centres = [(1200.0, 0.0)]  # the hub room island
+            for lid in hub["levels"]:
+                self.assertIn(lid, ids)
+                self.assertIn(hub["id"], by_id[lid]["scenes"], f"{lid} must list the hub scene")
+                off = by_id[lid]["island"]["offset"]
+                centres.append((off[0], off[2]))
+            for i, a in enumerate(centres):
+                for b in centres[i + 1:]:
+                    dist = ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+                    self.assertGreaterEqual(dist, 1000.0, f"{hub['id']}: islands {a} {b}")
+
+    def test_unlicensed_sources_only_in_unlicensed_hub_scene(self):
+        for hub in self.data.get("hubs", []):
+            for lid in hub["levels"]:
+                lv = next(x for x in self.data["levels"] if x["id"] == lid)
+                if "_RefUnlicensed/" in lv.get("source", {}).get("scene", ""):
+                    self.assertIn("_RefUnlicensed/", hub["scene"], hub["id"])
+
+    def test_every_all_maps_level_in_a_hub_gets_a_pad(self):
+        # AllMapsHub offers four levels, so the room must fit four pads (>= 14 m).
+        for hub in self.data.get("hubs", []):
+            self.assertGreaterEqual(len(hub["levels"]), 1)
+        self.assertEqual(len(self.data["hubs"][0]["levels"]), 4)
 
 
 if __name__ == "__main__":

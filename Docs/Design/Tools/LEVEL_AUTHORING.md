@@ -7,6 +7,8 @@
 > 需求：摆位顺手、能在本机（Linux）跑、能从不同位置出渲染图、产物能导入带 VRChat SDK 的 Unity 工程；以及 [PICNIC_CORNER_LEVEL_ONE](../StoryMode/PICNIC_CORNER_LEVEL_ONE.md) §2.4 查实的缺口——摆放只活在场景里、没有数据文件是最大回归风险，所以 `placement.json` 是唯一真源。
 > 引用约定：`Runtime/…`、`Editor/…`、`Labs/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；`Docs/…`、`Tools/…` 相对仓库根。**按符号名引用，不写行号**。
 
+> 想让地图进合集场景：见 [ALL_MAPS_HUB](<../StoryMode/ALL_MAPS_HUB.md>)。
+
 ---
 
 ## 0. 六条结论（先看这个）

@@ -108,16 +108,24 @@ namespace VRCKatamari.Editor.Story
                     + " circles; index i of both is the same level, so they must match");
             }
             Transform firstEntry = Element<Transform>(launcher, "levelEntries", 0);
-            if (firstEntry == null && entries > 0)
+            var levelSwitch = Object.FindObjectOfType<LevelSwitchHost>();
+            if (levelSwitch == null)
             {
-                Report("launcher.levelEntries[0] is empty", ref problems);
+                if (firstEntry == null && entries > 0)
+                {
+                    Report("launcher.levelEntries[0] is empty", ref problems);
+                }
+            }
+            else
+            {
+                CheckLevelEntries(launcher, levelSwitch, entries, hubCenter, ref problems);
             }
             // The entry is the fallback destination when auto-seat is off or no station is
             // wired, so it still has to be on the level floor next to the ball. An entry far from the
             // ball puts the player in the void, where they fall and ClientSim respawns them
             // in the room.
             var motor = Object.FindObjectOfType<KatamariBallMotor>();
-            if (motor != null && firstEntry != null)
+            if (levelSwitch == null && motor != null && firstEntry != null)
             {
                 SerializedProperty startPose = new SerializedObject(motor).FindProperty(
                     "startCenterWorld");
@@ -144,7 +152,7 @@ namespace VRCKatamari.Editor.Story
                     }
                 }
             }
-            if (firstEntry != null && hubCenter != null)
+            if (levelSwitch == null && firstEntry != null && hubCenter != null)
             {
                 float islandDistance = Vector3.Distance(firstEntry.position, hubCenter.position);
                 if (islandDistance < 50f)
@@ -205,6 +213,78 @@ namespace VRCKatamari.Editor.Story
         }
 
         // ------------------------------------------------------------------ helpers
+
+        // A multi-level hub: each level's entry is compared with that level's own ball start
+        // (LevelSwitchHost.startCenters[i]); a missing entry is fine for a free roam level
+        // (the launcher lands the player on the ball's seat), a problem for any other.
+        private static void CheckLevelEntries(HubLevelLauncher launcher,
+            LevelSwitchHost levelSwitch, int entries, Transform hubCenter, ref int problems)
+        {
+            SerializedProperty starts = Find(levelSwitch, "startCenters");
+            SerializedProperty ids = Find(levelSwitch, "levelIds");
+            SerializedProperty goals = Find(Object.FindObjectOfType<StoryRoundController>(),
+                "levelGoalTypes");
+            float trust = FloatField(launcher, "entryTrustMeters", 12f);
+            if (starts == null || !starts.isArray)
+            {
+                Report("levelSwitch.startCenters is missing (renamed?): the entries were not"
+                    + " compared with the level starts", ref problems);
+                return;
+            }
+            if (starts.arraySize != entries)
+            {
+                Report("levelSwitch has " + starts.arraySize + " level start(s) but the launcher"
+                    + " has " + entries + " entry/entries; index i of both is the same level",
+                    ref problems);
+            }
+
+            int count = System.Math.Min(entries, starts.arraySize);
+            for (int i = 0; i < count; i++)
+            {
+                string id = ids != null && ids.isArray && i < ids.arraySize
+                    ? ids.GetArrayElementAtIndex(i).stringValue : ("#" + i);
+                Transform entry = Element<Transform>(launcher, "levelEntries", i);
+                bool freeRoam = goals != null && goals.isArray && i < goals.arraySize
+                    && goals.GetArrayElementAtIndex(i).intValue == StoryLevelMath.GoalFreeRoam;
+                if (entry == null)
+                {
+                    if (!freeRoam)
+                    {
+                        Report("launcher.levelEntries[" + i + "] ('" + id + "') is empty and the"
+                            + " level is not free roam", ref problems);
+                    }
+                    continue;
+                }
+
+                float fromStart = Vector3.Distance(entry.position,
+                    starts.GetArrayElementAtIndex(i).vector3Value);
+                if (fromStart > trust)
+                {
+                    Report("launcher.levelEntries[" + i + "] ('" + id + "') is "
+                        + fromStart.ToString("F1") + " m from the level's ball start; the"
+                        + " launcher trusts an entry only within " + trust.ToString("F0")
+                        + " m and would land the player on the seat instead", ref problems);
+                }
+                else if (fromStart > 5f)
+                {
+                    Warn("launcher.levelEntries[" + i + "] ('" + id + "') is "
+                        + fromStart.ToString("F1") + " m from the level's ball start");
+                }
+                else
+                {
+                    Debug.Log("[hub-check] level '" + id + "' entry is " + fromStart.ToString("F1")
+                        + " m from its ball start");
+                }
+
+                if (hubCenter != null
+                    && Vector3.Distance(entry.position, hubCenter.position) < 50f)
+                {
+                    Warn("level '" + id + "' entry is only "
+                        + Vector3.Distance(entry.position, hubCenter.position).ToString("F1")
+                        + " m from the room; the islands would overlap");
+                }
+            }
+        }
 
         private static void Report(string message, ref int problems)
         {

@@ -223,11 +223,9 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(1, (int)Call(host, "GetAttachedCount"), "cursor replay never attaches twice");
         }
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public void MotorRejectsCubeCornerReachForBothContactAuthorities(bool v2)
+        [Test]
+        public void MotorRejectsCubeCornerReach()
         {
-            Call(motor, "SetContactModelV2Enabled", v2);
             Call(motor, "SetAllowedKinds", new[] { "test" }, 1);
             Set(motor, "collisionRadiusWorldM", .1f);
             Set(motor, "semanticDiameterWorldM", .2f);

@@ -57,17 +57,6 @@ namespace VRCKatamari.Editor.LevelBuild
         /// <summary>Prefix of every v2-only report line (see the class remarks).</summary>
         private const string V2Tag = "[level:v2] ";
 
-        /// <summary>The motor's static box table when contact model v2 is active (§12.1).</summary>
-        private const int V2StaticBoxCapacity = StaticObbCapacity;
-
-        /// <summary>
-        /// The motor's static box table on the v1 path: <c>KatamariBallMotor.MaxBoxCount</c>
-        /// (64 since 2026-11-16; it was 8, the pre-v2 authoring contract). Kept as a literal
-        /// here because the editor assembly does not import the motor's private constant; the
-        /// two move together and this comment is the pair.
-        /// </summary>
-        private const int V1StaticBoxCapacity = 64;
-
         // ------------------------------------------------------------------ entry ---
 
         /// <summary>
@@ -441,12 +430,10 @@ namespace VRCKatamari.Editor.LevelBuild
                              "needs an ActivityAreaHost, which does not exist yet)");
             }
 
-            // The motor's static box table: 64 on the v1 path, 256 when contact model v2 bakes
-            // the OBBs. A document whose solids exceed it is an error that names both numbers,
-            // because silently dropping the overflow is the failure mode this check exists for.
-            int boxCapacity = V1StaticBoxCapacity;
-            KatamariBallMotor motor = UnityEngine.Object.FindObjectOfType<KatamariBallMotor>();
-            if (motor != null && motor.IsContactModelV2()) boxCapacity = V2StaticBoxCapacity;
+            // The motor's static OBB table. A document whose solids exceed it is an error that
+            // names both numbers, because silently dropping the overflow is the failure mode
+            // this check exists for.
+            int boxCapacity = StaticObbCapacity;
             int boxes = 0;
             for (int i = 0; i < doc.Solids.Length; i++)
             {
@@ -463,10 +450,7 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 report.Error("[level:v2] [structure_capacity] " + boxes + " > " + boxCapacity +
                              " static solids; the motor's table refuses the overflow. " +
-                             (boxCapacity == V1StaticBoxCapacity
-                                 ? "This scene's motor is running v1 contact: turn on contact model " +
-                                   "v2 with the OBB bake (256 slots), or shrink the level. "
-                                 : "Raise the table or shrink the level. ") +
+                             "Raise the table or shrink the level. " +
                              "The objects are still created so you can inspect them");
             }
 

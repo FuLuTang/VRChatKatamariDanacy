@@ -59,8 +59,7 @@ namespace VRCKatamari.BallLayers
         /// <summary>Fixed direction count of the model; any other length is rejected.</summary>
         /// <remarks>
         /// Sixteen, not thirty-two (the earlier provisional value). This table IS the
-        /// ball's rolling shape: the v1 ground solve takes its pin tips and the v2 contact
-        /// pass sweeps them, so the per-step cost is bounded by 16 however many props are
+        /// ball's rolling shape: the contact pass sweeps its pins, so the per-step cost is bounded by 16 however many props are
         /// attached. Sixteen matches the original game's rolling model (16 fixed pins plus
         /// 4 optional, patent US7402104B2), and the worst-case angular gap grows only from
         /// about 27.4 to 38.9 degrees. The endpoint pool (8 corners per attached prop) is

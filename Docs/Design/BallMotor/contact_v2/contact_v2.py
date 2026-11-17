@@ -625,7 +625,16 @@ def step(world: World, state: State, drive_dir: Vec3, drive_speed: float,
                                     v_planar[2] - contact.normal[2] * inward)
                         v_y = v_y - contact.normal[1] * inward
             if support is not None:
+                # Rolling on a surface: keep the velocity in its tangent plane when that
+                # is downhill (the ball follows the slope instead of walking off it);
+                # flat or uphill motion keeps v_y = 0.
+                ny = support.normal[1]
                 v_y = 0.0
+                if ny > 1e-3:
+                    tangent = -(support.normal[0] * v_planar[0]
+                                + support.normal[2] * v_planar[2]) / ny
+                    if tangent < 0.0:
+                        v_y = tangent
             elif wall is not None:
                 # Touched but not climbing: gravity, with the slide clamped so
                 # the ball slides back slowly instead of free-falling.

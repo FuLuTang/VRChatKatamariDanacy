@@ -298,13 +298,11 @@ namespace VRCKatamari.Tests
             ball.Center = new Vector3(0f, 0.135f, 0f);
             ball.Radius = 0.135f;
             Vector3 start = ball.Center;
-            float rest = 0f;
-            bool sliding = false;
             float largestStoredSpeed = 0f;
             for (int i = 0; i < 100; i++)
             {
                 Vector3 previous = ball.Center;
-                StepRejectedObbMotion(ball, world, 1f, ref rest, ref sliding);
+                StepRejectedObbMotion(ball, world, 1f);
                 float solvedSpeed = ball.PlanarVelocity.magnitude;
                 Assert.Greater(ball.Residual, 0.02f);
                 Assert.IsTrue(ContactSolveMath.RejectUnresolvedMotion(previous,
@@ -318,12 +316,11 @@ namespace VRCKatamari.Tests
             }
             Assert.AreEqual(start, ball.Center);
             Assert.IsFalse(ball.ClimbActive);
-            Assert.IsFalse(sliding);
 
             // Remove the obstruction, then coast or reverse. There must be no banked
             // momentum: coasting stays still; reversing takes effect on the first step.
             world.Count = 0;
-            StepRejectedObbMotion(ball, world, nextForward, ref rest, ref sliding);
+            StepRejectedObbMotion(ball, world, nextForward);
             TestContext.WriteLine("removed forward={0} dx={1:F6} vx={2:F6}",
                 nextForward, ball.Center.x - start.x, ball.PlanarVelocity.x);
             Assert.LessOrEqual(largestStoredSpeed, 1e-6f, "rejected motion banked velocity");
@@ -358,7 +355,7 @@ namespace VRCKatamari.Tests
         }
 
         private static void StepRejectedObbMotion(ContactBall ball, ContactWorld world,
-            float forward, ref float rest, ref bool sliding)
+            float forward)
         {
             float heading;
             Vector3 velocity;
@@ -367,11 +364,60 @@ namespace VRCKatamari.Tests
                 ball.PlanarVelocity, 0.02f, 1f, 5.015f, 7.5f, 6f, 0.9f, 1.3f,
                 2f, 110f, 1.2f, out heading, out velocity, out displacement));
             ball.PlanarVelocity = velocity;
-            Assert.IsTrue(RampSlideMath.TryStepRestLatch(rest, sliding, velocity.magnitude,
-                0.05f, Mathf.Abs(forward), false, 0.02f, 0.3f, out rest, out sliding));
             Vector3 direction = velocity.magnitude > 1e-6f ? velocity.normalized
                 : new Vector3(1f, 0f, 0f);
             Assert.IsTrue(ball.Step(world, direction, 5.015f * Mathf.Abs(forward), 0.02f));
+        }
+
+        [Test]
+        public void SupportedVelocityIsProjectedOntoTheTangentPlaneWhenDownhill()
+        {
+            float radians = 10f * Mathf.Deg2Rad;
+            Vector3 normal = new Vector3(Mathf.Sin(radians), Mathf.Cos(radians), 0f);
+            // Downhill (+X): the vertical speed that puts the velocity in the plane.
+            Assert.AreEqual(-Mathf.Tan(radians), ContactSolveMath.SupportTangentVerticalSpeed(
+                normal, new Vector3(1f, 0f, 0f)), 1e-5f);
+            Assert.AreEqual(-2f * Mathf.Tan(radians), ContactSolveMath.SupportTangentVerticalSpeed(
+                normal, new Vector3(2f, 0f, 0f)), 1e-5f);
+            // Uphill, across the slope, at rest and on flat ground stay 0.
+            Assert.AreEqual(0f, ContactSolveMath.SupportTangentVerticalSpeed(
+                normal, new Vector3(-1f, 0f, 0f)));
+            Assert.AreEqual(0f, ContactSolveMath.SupportTangentVerticalSpeed(
+                normal, new Vector3(0f, 0f, 3f)));
+            Assert.AreEqual(0f, ContactSolveMath.SupportTangentVerticalSpeed(
+                normal, Vector3.zero));
+            Assert.AreEqual(0f, ContactSolveMath.SupportTangentVerticalSpeed(
+                new Vector3(0f, 1f, 0f), new Vector3(4f, 0f, 1f)));
+            // A wall-like normal and non-finite input are refused as 0.
+            Assert.AreEqual(0f, ContactSolveMath.SupportTangentVerticalSpeed(
+                new Vector3(1f, 0f, 0f), new Vector3(1f, 0f, 0f)));
+            Assert.AreEqual(0f, ContactSolveMath.SupportTangentVerticalSpeed(
+                normal, new Vector3(float.NaN, 0f, 0f)));
+        }
+
+        [Test]
+        public void ABallRollingDownASlopeStaysOnItsSurface()
+        {
+            float radians = 10f * Mathf.Deg2Rad;
+            Vector3 normal = new Vector3(Mathf.Sin(radians), Mathf.Cos(radians), 0f);
+            Vector3 axisX = new Vector3(Mathf.Cos(radians), -Mathf.Sin(radians), 0f);
+            Vector3 origin = new Vector3(0f, 5f, 0f);
+            ContactWorld world = new ContactWorld();
+            world.Add(origin - normal * 0.2f, axisX, normal, new Vector3(0f, 0f, 1f),
+                new Vector3(10f, 0.2f, 10f), 1, ContactCodes.RoleSlab);
+            ContactBall ball = new ContactBall();
+            ball.Radius = 0.15f;
+            ball.Center = origin + normal * ball.Radius;
+            ball.PlanarVelocity = new Vector3(1f, 0f, 0f);
+            for (int i = 0; i < 50; i++)
+            {
+                Assert.IsTrue(ball.Step(world, new Vector3(0f, 0f, 1f), 0f, 0.02f));
+                float height = Vector3.Dot(ball.Center - origin, normal);
+                Assert.LessOrEqual(height, ball.Radius + 0.006f,
+                    "step " + i + ": left the plane (support lost, the ball hops)");
+                Assert.IsFalse(ball.Airborne, "step " + i + " keeps its support");
+            }
+            Assert.Greater(ball.Center.x, 0.5f, "and it really travelled downhill");
         }
 
         [Test]

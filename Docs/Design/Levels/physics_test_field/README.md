@@ -1,12 +1,12 @@
 # 球体物理测试场 · 关卡数据（physics test field）
 
-> 状态：`PROVISIONAL_NOT_TESTED`。九个已接线的格见下面的布局，排在 **27 m × 30.5 m** 的网格（4 列 × 3 行，1–1.5 m 走道）；每格自带一块 6×9 或 6×10 的小地面 + 4 面 **0.4 m 矮边界**。
+> 状态：`PROVISIONAL_NOT_TESTED`。十三个已接线的格见下面的布局：九个老格排在 **27 m × 30.5 m** 的网格（4 列 × 3 行，1–1.5 m 走道），最南一行（z=-33）是 2026-11-17 的 C25–C28；每格自带一块 6×9 或 6×10 的小地面 + 4 面 **0.4 m 矮边界**。
 > 尚未接线的格（含 C21–C24 地形格）在 `Docs/Design/BallMotor/physics_test_field.json` 的 `planned_cells[]` 里。
 > 设计文档：[../../BallMotor/PHYSICS_TEST_FIELD.md](../../BallMotor/PHYSICS_TEST_FIELD.md)（§9 是本目录的规矩）。
 
 ## 这个目录是什么
 
-一台**仪器**的几何，不是一个关卡：整个测试场由 21 个互相独立的格位（cell）组成，每格测一件事
+一台**仪器**的几何，不是一个关卡：整个测试场由多个互相独立的格位（cell）组成，每格测一件事
 （薄片能不能碾过、0.075 的台阶算不算台阶、薄墙撞不撞得穿……）。因为电机的静态容量只有
 **8 平面 / 8 盒 / 4 斜面**，整场不能同时注册，所以：
 
@@ -34,9 +34,14 @@ Docs/Design/Levels/physics_test_field/
 ├── C06/placement.json       50° 斜板（必须被拒绝；板以 box 落库，AABB 当兜底墙）
 └── C13/placement.json       0.6 m 台面（5×4）+ 南侧 11.31° 坡（接缝与直角边掉落同格）
 
+C25/placement.json       墙 + 顶棚（爬坡卡死复现，只诊断；顶棚底 0.50 m）
+C26/placement.json       缓坡 2°（升 0.192，水平 5.5 m）
+C27/placement.json       缓坡 5°（升 0.481）
+C28/placement.json       缓坡 10°（升 0.970）
+
 C21/ C22/ C23/ C24/            地形格（台阶 / 沟 / 隧道 / 路缘）：placement 里的地形几何由
                                `Tools/levelbuild/physics_test_terrain.py` 生成；在判据文件里是
-                               `planned_cells[]`（`wired: false`），不在上面九格的 59 条判据之内
+                               `planned_cells[]`（`wired: false`），不在已接线格的判据之内
 ```
 
 一份文件的骨架（节选，完整见 `C09/placement.json`）：

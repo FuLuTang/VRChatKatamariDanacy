@@ -180,6 +180,8 @@
 - **还不能吸的道具挡住球（owner 2026-11-17）** — 可吸收性决定能否穿过道具，球不应穿过当前卷不动的实体；见 [接触与挡路规则](Design/BallLayers/Attachment/ATTACH_PLACEMENT.md#30-可吸收性与挡路)。
 - **不做粘附嵌入：接触处冻结、贴碰撞球面（owner 2026-11-17）** — “浮”的主因是件大而少、空腔未填满，靠件小量多和填充密度解决，不靠沿径向往里压；见 [现行吸附位置](Design/BallLayers/Attachment/ATTACH_PLACEMENT.md#31-吸附位置触发即接触原地冻结)、[核与物件密度研究](Design/BallPresentation/CORE_SKIN.md#研究依据与边界)。
 
+- **删除 v1 位置权威（owner 2026-11-17）** — 统一为一套位置逻辑，避免两份实现。
+
 ### Still open
 
 - **参考关卡：道具嵌进 scenery 固体 —— AABB 代理假阳性，已改用拟合代理（2026-11-16）** — 根因既不是摆放、也不是该不该挡，而是 `structures.solids` 用了**原始 AABB** 当接触形状——一棵树的盒子把整个树冠包进去，螃蟹贴着树根站就必然「嵌进去」。这违反仓库既有口径「碰撞体必须跟视觉形状、按型给代理、不用 AABB」（同文件「拾取层」§(h)/(l) 的同一理由：AABB 角部多出几厘米，玩家会看到「没碰到就被挡」）。改法：`structures.solids[]` 的接触形状改为 **def 的拟合代理**（`collider_proxy.fit_proxy`；schema 加 `shape:"proxy"` + `collider` + `proxySource`，见 [LEVEL_FORMAT_V2 §4](Design/Levels/LEVEL_FORMAT_V2.md)），**`size` 仍写 AABB、只用于支撑面（盒顶面）**——代理是圆/凹/斜的形状，「球能站在上面」仍要水平顶面，两件事分开，理由写在 §4。实测（同一份 `_ref_cancer` 数据、同一判据：8 个 OBB 角点沉进固体 > 2 cm）：**AABB 判据 47 件 / 最深 1.094 m → 拟合代理判据 24 件 / 最深 0.614 m**，21 件是代理粗造成的假阳性、0 件是改用代理后新出现的（树 `medium_tree_002` 从 15 件降到 7 件）。剩下 24 件是真的贴着代理站（`doghouse_001` 9 件、`medium_tree_002` 7 件…），v2 校验器写成 note（§9.2 只把**道具×道具**互穿定为错误），等实机看「球撞上去是否合理」再决定要不要 `meets`/豁免。**影响：C# 侧现在只认盒**，导入器要读 `shape:"proxy"` 的 `collider` 才吃到这个修正；读到之前按 `size` 盒工作。

@@ -91,9 +91,15 @@ namespace VRCKatamari.BallContact
             }
             float scale = 1f / CornerCount;
             center = new Vector3(centerX * scale, centerY * scale, centerZ * scale);
-            axisX = unitX;
-            axisY = unitY;
-            axisZ = unitZ;
+            // The shear gate above is 1e-3, but the solver's IsValidObb wants 1e-5. A thin
+            // plate far from the origin loses that much to world-coordinate rounding, so
+            // the axes are made exactly orthonormal here (the one place every caller shares).
+            Vector3[] units = new Vector3[] { unitX, unitY, unitZ };
+            float[] lengths = new float[] { lengthX, lengthY, lengthZ };
+            if (!Orthonormalize(units, lengths)) return false;
+            axisX = units[0];
+            axisY = units[1];
+            axisZ = units[2];
             halfExtents = new Vector3(lengthX * 0.5f, lengthY * 0.5f, lengthZ * 0.5f);
             if (!KatamariMath.IsFiniteVector(center) || !KatamariMath.IsFiniteVector(halfExtents))
             {
@@ -103,6 +109,48 @@ namespace VRCKatamari.BallContact
                 axisZ = Vector3.zero;
                 halfExtents = Vector3.zero;
                 return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Gram-Schmidt on three near-orthogonal unit axes, in place. The longest edge's
+        /// axis is the anchor (its direction is the best determined) and is kept as is;
+        /// the next longest is made perpendicular to it, the shortest to both. Two passes
+        /// squeeze out float residue. False if an axis collapses.
+        /// </summary>
+        private static bool Orthonormalize(Vector3[] axes, float[] lengths)
+        {
+            int first = 0;
+            if (lengths[1] > lengths[first]) first = 1;
+            if (lengths[2] > lengths[first]) first = 2;
+            int second = first == 0 ? 1 : 0;
+            int third = 3 - first - second;
+            if (lengths[third] > lengths[second])
+            {
+                int swap = second;
+                second = third;
+                third = swap;
+            }
+
+            for (int pass = 0; pass < 2; pass++)
+            {
+                Vector3 a = axes[first];
+                Vector3 b = axes[second];
+                Vector3 c = axes[third];
+                float length;
+                if (!KatamariMath.TryNormalize(a, out a, out length)) return false;
+                float ab = Dot(a, b);
+                b = new Vector3(b.x - ab * a.x, b.y - ab * a.y, b.z - ab * a.z);
+                if (!KatamariMath.TryNormalize(b, out b, out length)) return false;
+                float ac = Dot(a, c);
+                float bc = Dot(b, c);
+                c = new Vector3(c.x - ac * a.x - bc * b.x, c.y - ac * a.y - bc * b.y,
+                    c.z - ac * a.z - bc * b.z);
+                if (!KatamariMath.TryNormalize(c, out c, out length)) return false;
+                axes[first] = a;
+                axes[second] = b;
+                axes[third] = c;
             }
             return true;
         }

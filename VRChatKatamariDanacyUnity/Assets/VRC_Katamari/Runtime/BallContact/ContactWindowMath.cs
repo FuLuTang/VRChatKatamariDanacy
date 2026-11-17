@@ -13,7 +13,7 @@ namespace VRCKatamari.BallContact
     /// querying all of it every step costs ten times what the old twelve-solid map cost,
     /// so the solver only queries the near set (24). The window is recomputed from the
     /// position every step and carries no hidden state except the previous id list the
-    /// hysteresis needs, so a teleport or a rollback reproduces it exactly.
+    /// hysteresis needs, so a teleport reproduces it exactly.
     /// </para>
     /// <para>
     /// The two radii are geometric, not guessed: <c>R_in = r_phys + needleCap +

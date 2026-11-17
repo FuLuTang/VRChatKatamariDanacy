@@ -6,10 +6,9 @@ using UnityEngine;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Motor-level checks for the arena's contact-v2 geometry bake (CONTACT_MODEL_V2
+    /// Motor-level checks for the arena's geometry bake (CONTACT_MODEL_V2
     /// §1.4/§5.7/§7.4, stage S4b): one true OBB per static box, ramp and curved-ramp slab,
-    /// registered through <c>AddObb</c> while the motor reports v2; the pre-S4
-    /// <c>AddBox</c>/<c>AddRamp</c> calls in every other mode; the §7.4 double-bake check;
+    /// registered through <c>AddObb</c>; the §7.4 double-bake check;
     /// the shear fallback; and an explicit, counted refusal when the motor's 256-slot table
     /// is full.
     /// </summary>
@@ -23,8 +22,7 @@ namespace VRCKatamari.Tests
     /// </para>
     /// <para>
     /// What these tests do NOT claim: no scene, no Play Mode, no frame time, no
-    /// levelbuild/import. They pin the migration checkpoint that matters most - the geometry
-    /// count and the box numbers a v1 scene already validated - and the two failure paths
+    /// levelbuild/import. They pin the geometry count and the box numbers, and the two failure paths
     /// (§7.4 mismatch, sheared parent) that are otherwise invisible until a play test.
     /// </para>
     /// </remarks>
@@ -80,13 +78,11 @@ namespace VRCKatamari.Tests
                 30f, 1.2f, 0.04f, 1f);
             BoxCollider slab1 = CreateTiltedBoard("curve_01", new Vector3(0f, 0.6f, 1f),
                 55f, 1.2f, 0.04f, 1f);
-            ConfigureArena(true, new BoxCollider[] { deck }, new BoxCollider[] { slab0, slab1 });
+            ConfigureArena(new BoxCollider[] { deck }, new BoxCollider[] { slab0, slab1 });
 
             Invoke(arena, arenaType, "Setup");
 
-            Assert.IsTrue((bool)Invoke(arena, arenaType, "IsObbBakeActive"),
-                "v2 + useObbBake takes the AddObb path");
-            // One path per mode: the v1 tables are empty and the v2 table is not doubled.
+            // One path: AddObb registers each solid once, and the mirrors stay empty.
             Assert.AreEqual(0, GetIntField("boxCount"),
                 "AddBox is not called in the v2 OBB path");
             Assert.AreEqual(0, (int)Invoke(motor, motorType, "GetRampCount"),
@@ -104,7 +100,7 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(0, (int)Invoke(arena, arenaType, "GetObbRefusalCount"));
             Assert.AreEqual(0, (int)Invoke(arena, arenaType, "GetObbOverflowCount"));
 
-            // Surface ids stay in the v1 space: ramps are registered first (500, 501 - the
+            // Surface ids keep their id space: ramps are registered first (500, 501 - the
             // ramp base moved off 10 when the static box table grew to 64, and off 1000
             // which the v2 solver's boundary planes own), the box after them (1).
             // Roles: 1 = slab, 0 = box (CONTACT_MODEL_V2 §2.1).
@@ -136,57 +132,16 @@ namespace VRCKatamari.Tests
             StringAssert.StartsWith("[arena] planes=0/0 boxes=1/1 ramps=2/2", report,
                 "the prefix the tools and docs parse is unchanged");
             StringAssert.Contains(" obbs=3/3", report);
-            StringAssert.Contains(" obbBake=obb", report);
-        }
-
-        [Test]
-        public void V1AndTheRollbackPathKeepTheOldCallsAndTheMotorMirror()
-        {
-            BoxCollider deck = CreateBox("deck", new Vector3(0f, 0.5f, 0f),
-                new Vector3(2f, 1f, 2f), Quaternion.identity);
-            BoxCollider slab = CreateTiltedBoard("ramp", new Vector3(0f, 0.2f, 3f), 30f, 1.2f,
-                0.04f, 1f);
-
-            // 1) v1 motor: the pre-S4 path, unchanged, and the motor mirrors both into its
-            //    axis-aligned OBB table (S3 §7.5.3) - count 2, never 4.
-            ConfigureArena(false, new BoxCollider[] { deck }, new BoxCollider[] { slab });
-            Invoke(arena, arenaType, "Setup");
-
-            Assert.IsFalse((bool)Invoke(arena, arenaType, "IsObbBakeActive"),
-                "a v1 motor never takes the AddObb path");
-            Assert.AreEqual(1, GetIntField("boxCount"), "AddBox is used");
-            Assert.AreEqual(1, (int)Invoke(motor, motorType, "GetRampCount"), "AddRamp is used");
-            Assert.AreEqual(2, (int)Invoke(motor, motorType, "GetStaticObbCount"),
-                "the motor's mirror registers each solid exactly once");
-            Assert.AreEqual(0, (int)Invoke(arena, arenaType, "GetRegisteredObbCount"),
-                "the arena itself registered no OBB in v1 mode");
-
-            // 2) v2 motor with the bake switched off: the design's rollback (§7.1). Same old
-            //    calls, same mirrored table, no second registration. A fresh arena component,
-            //    because Setup is once per component (that is the shipped contract).
-            NewArena();
-            BoxCollider deck2 = CreateBox("deck2", new Vector3(0f, 0.5f, 0f),
-                new Vector3(2f, 1f, 2f), Quaternion.identity);
-            ConfigureArena(true, new BoxCollider[] { deck2 }, new BoxCollider[] { slab });
-            SetField(arena, "useObbBake", false);
-            Invoke(arena, arenaType, "Setup");
-
-            Assert.IsFalse((bool)Invoke(arena, arenaType, "IsObbBakeActive"),
-                "useObbBake=false is the AABB rollback");
-            Assert.AreEqual(1, GetIntField("boxCount"), "AddBox again");
-            Assert.AreEqual(1, (int)Invoke(motor, motorType, "GetRampCount"), "AddRamp again");
-            Assert.AreEqual(2, (int)Invoke(motor, motorType, "GetStaticObbCount"),
-                "still one OBB per solid, so a scene never registers one twice");
         }
 
         [Test]
         public void RotatedBoxKeepsItsOwnAxesAndItsAuthoredExtents()
         {
             // A 45 deg yawed deck: the eight-corner OBB is the turned box (half extents are
-            // the authored halves), NOT the inflated world AABB a v1 registration would see.
+            // the authored halves), NOT the inflated world AABB.
             BoxCollider deck = CreateBox("turned_deck", new Vector3(0f, 0.5f, 0f),
                 new Vector3(2f, 1f, 4f), Quaternion.AngleAxis(45f, Vector3.up));
-            ConfigureArena(true, new BoxCollider[] { deck }, null);
+            ConfigureArena(new BoxCollider[] { deck }, null);
 
             Invoke(arena, arenaType, "Setup");
 
@@ -214,7 +169,7 @@ namespace VRCKatamari.Tests
             BoxCollider sheared = CreateBox("sheared", Vector3.zero, Vector3.one,
                 Quaternion.AngleAxis(45f, Vector3.forward), parent.transform);
 
-            ConfigureArena(true, new BoxCollider[] { sheared }, null);
+            ConfigureArena(new BoxCollider[] { sheared }, null);
             Invoke(arena, arenaType, "Setup");
 
             Assert.AreEqual(1, (int)Invoke(arena, arenaType, "GetRegisteredObbCount"),
@@ -254,7 +209,7 @@ namespace VRCKatamari.Tests
 
             BoxCollider deck = CreateBox("deck", new Vector3(0f, 0.5f, 0f),
                 new Vector3(1f, 1f, 1f), Quaternion.identity);
-            ConfigureArena(true, new BoxCollider[] { deck }, null);
+            ConfigureArena(new BoxCollider[] { deck }, null);
             Invoke(arena, arenaType, "Setup");
 
             Assert.AreEqual(0, (int)Invoke(arena, arenaType, "GetRegisteredObbCount"),
@@ -279,7 +234,7 @@ namespace VRCKatamari.Tests
                 new Vector3(2f, 1f, 1f), Quaternion.identity);
             BoxCollider slab = CreateTiltedBoard("ramp", new Vector3(0f, 0.2f, 2f), 20f, 1.2f,
                 0.04f, 1f);
-            ConfigureArena(true, new BoxCollider[] { deck }, new BoxCollider[] { slab });
+            ConfigureArena(new BoxCollider[] { deck }, new BoxCollider[] { slab });
             Invoke(arena, arenaType, "Setup");
             Assert.AreEqual(2, (int)Invoke(motor, motorType, "GetStaticObbCount"));
 
@@ -292,9 +247,8 @@ namespace VRCKatamari.Tests
 
         // ---- helpers -----------------------------------------------------------
 
-        private void ConfigureArena(bool v2, BoxCollider[] boxes, BoxCollider[] ramps)
+        private void ConfigureArena(BoxCollider[] boxes, BoxCollider[] ramps)
         {
-            Invoke(motor, motorType, "SetContactModelV2Enabled", v2);
             SetField(arena, "motor", motor);
             SetField(arena, "staticBoxes", boxes);
             SetField(arena, "rampBoxes", ramps);

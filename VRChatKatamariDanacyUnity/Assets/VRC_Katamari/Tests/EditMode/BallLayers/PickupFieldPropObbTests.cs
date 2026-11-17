@@ -6,22 +6,15 @@ using UnityEngine;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins the pickup field's contact-v2 side: one true OBB per selected blocking/support
-    /// prop while the motor reports v2, built from <c>propLocalBounds</c> + the prop's world
-    /// rotation, and nothing at all while it reports v1 (CONTACT_MODEL_V2 §4A.4/§5.2, S4b).
+    /// Pins the pickup field's prop solids: one true OBB per selected blocking/support
+    /// prop, built from <c>propLocalBounds</c> + the prop's world rotation
+    /// (CONTACT_MODEL_V2 §4A.4/§5.2, S4b).
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The v1 sets (<c>SetBlockingBoxes</c>/<c>SetSupportProps</c>) are asserted to keep
-    /// working too: they are the rollback path and they are fed from the same scan, so a
-    /// broken gather that also empties the v1 tables would otherwise pass unnoticed.
-    /// </para>
-    /// <para>
     /// The motor is stepped through reflection exactly like <c>ContactModelV2Tests</c>. What
     /// is asserted is the handover: the host's own build AND the motor's prop block (count,
     /// surface id 100 + slot, role). The motor's block is read through its private arrays,
     /// because the only public readers are count/capacity getters.
-    /// </para>
     /// </remarks>
     public class PickupFieldPropObbTests
     {
@@ -75,15 +68,13 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void V2SendsOnePropSolidToTheMotorAndKeepsTheV1Sets()
+        public void TheHostSendsOnePropSolidToTheMotor()
         {
-            Invoke(motor, motorType, "SetContactModelV2Enabled", true);
             ScanOnce();
 
             Assert.AreEqual(1, (int)Invoke(field, fieldType, "GetPropObbCount"),
-                "one blocking prop is one v2 solid");
-            Assert.AreEqual(1, (int)Invoke(field, fieldType, "GetPropObbCandidateCount"),
-                "the candidate flag comes from the same classifier as the v1 sets");
+                "one blocking prop is one solid");
+            Assert.AreEqual(1, (int)Invoke(field, fieldType, "GetPropObbCandidateCount"));
             Assert.AreEqual(0, (int)Invoke(field, fieldType, "GetPropObbFallbackRows"),
                 "a valid propLocalBounds row is used, so no row falls back");
             Assert.AreEqual(1, (int)Invoke(motor, motorType, "GetPropObbsCount"),
@@ -98,30 +89,8 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(100, surfaceIds[0], "prop surface id 100 + slot");
             Assert.AreEqual(3, roles[0], "a blocking prop is role 3");
 
-            Assert.AreEqual(1, (int)Invoke(field, fieldType, "GetBlockingPropCount"),
-                "the v1 blocking set is still registered (the rollback path)");
-            Assert.AreEqual(1, (int)Invoke(motor, motorType, "GetBlockingBoxCount"),
-                "the motor accepted the v1 blocking box");
-        }
-
-        [Test]
-        public void V1HasNoPropSolidAtAll()
-        {
-            // The flag is off: the host must not keep a stale v2 set around, because the v1
-            // tables are the whole world in that mode.
-            Invoke(motor, motorType, "SetContactModelV2Enabled", true);
-            ScanOnce();
-            Assert.AreEqual(1, (int)Invoke(field, fieldType, "GetPropObbCount"));
-
-            Invoke(motor, motorType, "SetContactModelV2Enabled", false);
-            ScanOnce();
-
-            Assert.AreEqual(0, (int)Invoke(field, fieldType, "GetPropObbCount"),
-                "a v1 motor clears the prop solids");
-            Assert.AreEqual(0, (int)Invoke(motor, motorType, "GetPropObbsCount"),
-                "and the motor's prop block is emptied, so a flag flip cannot resurrect it");
-            Assert.AreEqual(1, (int)Invoke(field, fieldType, "GetBlockingPropCount"),
-                "and the v1 blocking set keeps blocking");
+            Assert.AreEqual(1, (int)Invoke(field, fieldType, "GetBlockingPropCount"));
+            Assert.AreEqual(0, (int)Invoke(field, fieldType, "GetSupportPropCount"));
         }
 
         private void ScanOnce()

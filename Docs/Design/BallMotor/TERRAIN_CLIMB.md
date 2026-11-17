@@ -55,17 +55,13 @@
 
 ### 2.2 T1 只推不爬
 
-* `ResolveTerrainPenetration`（`KatamariBallMotor.cs:3451-3480`，调用点 `:1609`）沿最近三角面的
-  法线推出、去掉水平内向速度，最多 2 次。**竖直踢面的法线水平 ⇒ 只把球推离墙、不抬球**。
-* v2 的爬升通道（`ContactSolveMath.cs:509-660`）**在 v1 权威下不执行**：`contactModelV2Enabled`
-  默认 `false`（`:757`）。
+* 地形穿透由接触求解按最近三角面的法线推挤处理；**竖直踢面的法线水平 ⇒ 只把球推离墙、不抬球**，抬球要靠爬升通道。
+* 爬升通道在 `ContactSolveMath` 里，由 `StepContactV2` 驱动（唯一位置权威）。
 
 ### 2.3 v2 权威不查地形
 
-* v1 路径 `StepPositionV1`（`:1557-1875`）；v2 路径 `StepContactV2`（`:2057-2200`）只喂平面 / OBB /
-  道具代理，**没有任何地形三角面**（`TERRAIN_MESH_CONTACT.md` §1 明写；`KatamariBallMotor.cs:1487`
-  附近注释同义）。
-* 结论：**现在没有任何一条代码路径能爬 0.19 m 台阶**。不是参数没调好，是 T2 没接。
+* `StepContactV2` 把平面 / OBB / 道具代理与地形三角面候选一起喂 `ContactSolveMath.TryStep`（见 `TERRAIN_MESH_CONTACT.md`）。
+* 能不能爬 0.19 m 台阶由 T2（地形接触进爬升通道）的实现决定，不是参数没调好。
 
 ### 2.4 判据定位（一句话）
 
@@ -415,7 +411,7 @@ R34 run3 的 `support=climb, id=109, |v|≈0–0.02` 持续约 35 s **不能仅�
 | `Runtime/BallMotor/KatamariBallMotor.cs` | `StepContactV2` 在 `terrainMeshContactEnabled` 时传入地形数组与容量；新增 `GetClimbLedgeWorldM()` 读数 | +30 |
 | `Runtime/BallContact/ContactTuning.cs` | `KHeight 1f → 1.5f`、`ClimbLedgeSlopM`、`ClimbPeelSpeedMps` | +6 |
 | `Tests/EditMode/BallContact/*` + `Docs/tests/ball_contact_v2` | §8.1 的 1–8 + Python `K_H` 同步 | +260 |
-| 参考场景 | 操作员把 `contactModelV2Enabled` 打开（序列化字段，非代码） | — |
+| 参考场景 | 无需切换位置权威（只有接触求解） | — |
 
 合计 ≈ **550 行**。**这一步就能让参考关卡的 0.222 球爬出 0.19 凹槽**（0.333 上限 vs 0.19 需求，
 1.8 s），并顺手把抖动/滑走的机制移除。（chunk 划分已由导入器做完，58 块，本步不再动导入器。）

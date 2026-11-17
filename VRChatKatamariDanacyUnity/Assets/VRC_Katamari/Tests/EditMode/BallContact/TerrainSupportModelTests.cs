@@ -252,20 +252,6 @@ namespace VRCKatamari.Tests
                 out surfaceId);
         }
 
-        /// <summary>The one selection the motor runs, with no boxes, ramps or props.</summary>
-        private static bool Resolve(Vector3 center, float ballBottom, float stepLimit,
-            float groundOffset, float terrainHeight, Vector3 terrainNormal, int terrainId,
-            out int surfaceId, out float height, out Vector3 normal)
-        {
-            Vector3 point;
-            int candidates;
-            return SupportSurfaceMath.TryResolveSupport(center, ballBottom, stepLimit,
-                new Vector3(0f, 1f, 0f), groundOffset, new Vector3[0], new Vector3[0],
-                new bool[0], 0, new Vector3[0], new Vector3[0], new Vector3[0], new float[0],
-                new float[0], 0, new Vector3[0], new Vector3[0], 0, terrainId, terrainHeight,
-                terrainNormal, out surfaceId, out point, out normal, out height,
-                out candidates);
-        }
 
         /// <summary>The full chunk scan (the reference every candidate answer must match).</summary>
         private static bool SelectFull(Mesh mesh, Vector3 center, float ballBottom, float radius,
@@ -330,74 +316,7 @@ namespace VRCKatamari.Tests
 
         // ------------------------------------------------------------------ cases ---
 
-        [Test]
-        public void ThereIsNoSupportPlaneWhereTheMeshAnswers()
-        {
-            Mesh mesh = new Soup().Floor(0f, -2f, 2f, -2f, 2f).Build();
-            float height;
-            Vector3 normal;
-            int surfaceId;
-            Assert.IsTrue(Select(mesh, new Vector3(0f, Radius, 0f), 0f, StepLimit, out height,
-                out normal, out surfaceId), "the flat floor answers");
-            Assert.AreEqual(0f, height, Tolerance);
-            Assert.AreEqual(1f, normal.y, Tolerance);
-            Assert.AreEqual(TerrainMeshMath.FirstTerrainSurfaceId, surfaceId);
 
-            // The plane is at the same height, and the mesh wins anyway: the plane does not
-            // compete where the mesh answers.
-            int selected;
-            float selectedHeight;
-            Vector3 selectedNormal;
-            Assert.IsTrue(Resolve(new Vector3(0f, Radius, 0f), 0f, StepLimit, 0f, height,
-                normal, surfaceId, out selected, out selectedHeight, out selectedNormal));
-            Assert.AreEqual(TerrainMeshMath.FirstTerrainSurfaceId, selected,
-                "the mesh supports the ball, not the arena plane");
-            Assert.AreEqual(0f, selectedHeight, Tolerance);
-        }
-
-        [Test]
-        public void TheGullyFloorWinsEvenWhenThePlaneSitsAboveIt()
-        {
-            // C22's shape: a 1 m deep, 4 m wide gully through a floor at 0. The copied arena
-            // plane sits at 0 as well, which is the configuration the operator measured.
-            Mesh mesh = new Soup()
-                .Floor(0f, -2f, 2f, -3f, -1f)   // south floor
-                .Floor(0f, -2f, 2f, 1f, 3f)     // north floor
-                .Floor(-1f, -2f, 2f, -1f, 1f)   // gully floor, 1 m down
-                .Wall(0f, -1f, -2f, 2f, 1f, false)    // north face, faces -Z
-                .Wall(0f, -1f, -2f, 2f, -1f, true)    // south face, faces +Z
-                .Build();
-            Vector3 center = new Vector3(0f, Radius, 0f);
-            float terrainHeight;
-            Vector3 terrainNormal;
-            int terrainId;
-            Assert.IsTrue(Select(mesh, center, 0f, StepLimit, out terrainHeight,
-                out terrainNormal, out terrainId), "the gully floor answers");
-            Assert.AreEqual(-1f, terrainHeight, Tolerance);
-            Assert.That(terrainNormal.y, Is.GreaterThan(0.99f));
-
-            int surfaceId;
-            float height;
-            Vector3 normal;
-            // The plane at 0 is ABOVE the gully floor. It must not win: that is exactly the
-            // bug that kept the ball at y=0.15 across the gully.
-            Assert.IsTrue(Resolve(center, 0f, StepLimit, 0f, terrainHeight, terrainNormal,
-                terrainId, out surfaceId, out height, out normal));
-            Assert.AreEqual(-1f, height, Tolerance,
-                "the ball's support is the gully floor, not the plane at 0");
-            Assert.AreEqual(TerrainMeshMath.FirstTerrainSurfaceId, surfaceId);
-
-            // And the plane is still the fallback where the mesh has nothing under the ball.
-            Mesh floorOnly = new Soup().Floor(0f, -1f, 1f, -1f, 1f).Build();
-            Assert.IsFalse(Select(floorOnly, new Vector3(3f, Radius, 0f), 0f, StepLimit,
-                out terrainHeight, out terrainNormal, out terrainId),
-                "outside the footprint the mesh answers nothing");
-            Assert.IsTrue(Resolve(new Vector3(3f, Radius, 0f), 0f, StepLimit, -2f, 0f,
-                Vector3.up, SupportSurfaceMath.NoSurfaceId, out surfaceId, out height,
-                out normal));
-            Assert.AreEqual(SupportSurfaceMath.GroundSurfaceId, surfaceId);
-            Assert.AreEqual(-2f, height, Tolerance, "the plane is the no-terrain answer");
-        }
 
         [Test]
         public void TheGullyRimSupportsUntilTheFootprintLeavesIt()
@@ -689,44 +608,5 @@ namespace VRCKatamari.Tests
             Clear(mesh, count);
         }
 
-        [Test]
-        public void ABoxTopInsideTheBandBeatsTheMeshAndOneOutsideDoesNot()
-        {
-            Mesh mesh = new Soup().Floor(-1f, -2f, 2f, -2f, 2f).Build();
-            Vector3 center = new Vector3(0f, Radius, 0f);
-            float terrainHeight;
-            Vector3 terrainNormal;
-            int terrainId;
-            Assert.IsTrue(Select(mesh, center, 0f, StepLimit, out terrainHeight, out terrainNormal,
-                out terrainId));
-
-            // A box top at -0.5 is inside the ball's band (its mask entry is true), so it is
-            // a higher support than the mesh at -1.
-            Vector3[] minima = { new Vector3(-1f, -2f, -1f) };
-            Vector3[] maxima = { new Vector3(1f, -0.5f, 1f) };
-            int surfaceId;
-            float height;
-            Vector3 normal;
-            int candidates;
-            Vector3 point;
-            Assert.IsTrue(SupportSurfaceMath.TryResolveSupport(center, 0f, StepLimit,
-                Vector3.up, 0f, minima, maxima, new[] { true }, 1, new Vector3[0],
-                new Vector3[0], new Vector3[0], new float[0], new float[0], 0, new Vector3[0],
-                new Vector3[0], 0, terrainId, terrainHeight, terrainNormal, out surfaceId,
-                out point, out normal, out height, out candidates));
-            Assert.AreEqual(1, surfaceId, "the in-band box top is the higher support");
-            Assert.AreEqual(-0.5f, height, Tolerance);
-
-            // The same box with a false mask entry is not a candidate (the motor's mask says
-            // it is a wall), so the mesh wins instead.
-            Assert.IsTrue(SupportSurfaceMath.TryResolveSupport(center, 0f, StepLimit,
-                Vector3.up, 0f, minima, maxima, new[] { false }, 1, new Vector3[0],
-                new Vector3[0], new Vector3[0], new float[0], new float[0], 0, new Vector3[0],
-                new Vector3[0], 0, terrainId, terrainHeight, terrainNormal, out surfaceId,
-                out point, out normal, out height, out candidates));
-            Assert.AreEqual(TerrainMeshMath.FirstTerrainSurfaceId, surfaceId,
-                "a box outside the band cannot support the ball");
-            Assert.AreEqual(-1f, height, Tolerance);
-        }
     }
 }

@@ -7,9 +7,9 @@ using VRCKatamari.BallContact;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Motor-level checks for the ball contact v2 flag (CONTACT_MODEL_V2.md §7.1 S3):
-    /// the geometry registration, the OBB contact authority, the stuck-recovery state
-    /// machine and the null-space the v2 getters must report while the flag is off.
+    /// Motor-level checks for the ball contact solver (CONTACT_MODEL_V2.md §7.1 S3):
+    /// the geometry registration, the OBB contact authority and the stuck-recovery state
+    /// machine.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -113,13 +113,6 @@ namespace VRCKatamari.Tests
             Invoke("Start");
         }
 
-        private void EnableV2()
-        {
-            Invoke("SetContactModelV2Enabled", true);
-            Assert.AreEqual(true, (bool)Invoke("IsContactModelV2"),
-                "the contact model flag must read back");
-        }
-
         private void Step(int count)
         {
             for (int i = 0; i < count; i++)
@@ -151,26 +144,12 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void TheFlagDefaultsToOffAndTheV2ReadingsAreNeutral()
-        {
-            Assert.AreEqual(false, (bool)Invoke("IsContactModelV2"),
-                "the serialized default must keep the v1 path");
-            Step(10);
-            Assert.AreEqual(0, (int)Invoke("GetContactCount"));
-            Assert.AreEqual(0, (int)Invoke("GetNearObbCount"));
-            Assert.AreEqual(0, (int)Invoke("GetSubstepCount"));
-            Assert.AreEqual(0, (int)Invoke("GetClimbState"));
-            Assert.AreEqual(0, (int)Invoke("GetRecoveryState"));
-            Assert.AreEqual(false, (bool)Invoke("WasContactIncomplete"));
-        }
-
-        [Test]
         public void AddBoxAlsoRegistersAnAxisAlignedObb()
         {
             Assert.IsTrue(AddBox(new Vector3(-2f, -1f, -2f), new Vector3(2f, 0f, 2f)),
-                "the v1 box registration must still accept");
+                "the box registration must accept");
             Assert.AreEqual(1, (int)Invoke("GetStaticObbCount"),
-                "the same box must exist in the v2 table, so an old scene runs with the flag on");
+                "the box is registered as an axis-aligned OBB");
             Assert.AreEqual(256, (int)Invoke("GetStaticObbCapacity"));
         }
 
@@ -196,7 +175,6 @@ namespace VRCKatamari.Tests
         [Test]
         public void ARejectedPropGapStepClearsTheMotorsStoredVelocity()
         {
-            EnableV2();
             float radius = Radius();
             float face = radius - 0.035f;
             Assert.IsTrue(AddObb(new Vector3(0f, 1f, -face - 0.04f),
@@ -223,15 +201,132 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(0f, ((Vector3)Invoke("GetPlanarVelocity")).magnitude, 1e-6f);
         }
 
+        /// <summary>
+        /// A slab whose top face is the plane through <see cref="SlopeOrigin"/>, tilted
+        /// <paramref name="degrees"/> so its normal leans toward +X (the downhill side).
+        /// It sits 5 m up: the arena's flat ground plane (y = 0) is a contact source too, and
+        /// a slab that crossed it would let the ground, not the slope, support the ball.
+        /// Returns the unit normal.
+        /// </summary>
+        private Vector3 AddSlope(float degrees)
+        {
+            float radians = degrees * Mathf.Deg2Rad;
+            Vector3 normal = new Vector3(Mathf.Sin(radians), Mathf.Cos(radians), 0f);
+            Vector3 axisX = new Vector3(Mathf.Cos(radians), -Mathf.Sin(radians), 0f);
+            Vector3 axisZ = new Vector3(0f, 0f, 1f);
+            Assert.IsTrue((bool)Invoke("AddObb", SlopeOrigin - normal * 0.2f, axisX, normal,
+                axisZ, new Vector3(10f, 0.2f, 10f), 1, 1));
+            return normal;
+        }
+
+        private static readonly Vector3 SlopeOrigin = new Vector3(0f, 5f, 0f);
+
+        private bool GetBool(string name)
+        {
+            FieldInfo field = motorType.GetField(name, Any);
+            Assert.IsNotNull(field, name + " field not found");
+            return (bool)field.GetValue(motor);
+        }
+
+        private Vector3 GetVector(string name)
+        {
+            FieldInfo field = motorType.GetField(name, Any);
+            Assert.IsNotNull(field, name + " field not found");
+            return (Vector3)field.GetValue(motor);
+        }
+
+        /// <summary>Every state the rest-then-slide gates read, for an assertion message.</summary>
+        private string SlideDiagnostics(int steps, string history)
+        {
+            Vector3 normal = GetVector("supportSurfaceNormalWorld");
+            float slope = Mathf.Acos(Mathf.Clamp(normal.y, -1f, 1f)) * Mathf.Rad2Deg;
+            Vector3 velocity = (Vector3)Invoke("GetPlanarVelocity");
+            Vector3 center = GetCenter();
+            return "dt=0.02 steps=" + steps + " t=" + (steps * 0.02f)
+                + " restTimer=" + GetFloat("rampRestTimerSeconds")
+                + " sliding=" + GetBool("rampSliding")
+                + " prevRejected=" + GetBool("previousStepRejected")
+                + " supportKind=" + Invoke("GetSupportKind")
+                + " supportId=" + Invoke("GetSupportSurfaceId")
+                + " falling=" + Invoke("IsFalling")
+                + " fromNeedle=" + GetBool("supportFromNeedle")
+                + " fromClimb=" + GetBool("supportFromClimb")
+                + " normal=" + normal.ToString("F4") + " slopeDeg=" + slope
+                + " planarSpeed=" + Mathf.Sqrt(velocity.x * velocity.x + velocity.z * velocity.z)
+                + " center=" + center.ToString("F4")
+                + " scale=" + GetFloat("rampTangentialGravityScale")
+                + " minSlopeDeg=" + GetFloat("rampSlideMinSlopeDegrees")
+                + " maxSlopeDeg=" + GetFloat("maxSupportSlopeDegrees")
+                + " restSpeed=" + GetFloat("rampRestSpeedMps")
+                + " restSeconds=" + GetFloat("rampRestSeconds")
+                + " history(per step: S=sliding F=falling .=neither)=" + history;
+        }
+
         [Test]
-        public void TheStaticObbTableTakesFarMoreThanTheV1BoxCapacity()
+        public void ABallAtRestOnATenDegreeSlopeStartsSlidingAfterTheHold()
+        {
+            Vector3 normal = AddSlope(10f);
+            Invoke("TeleportTo", SlopeOrigin + normal * Radius());
+            Step(5);
+            Vector3 settled = GetCenter();
+            Assert.IsFalse(GetBool("rampSliding"), "not before the hold: "
+                + SlideDiagnostics(5, ""));
+
+            Step(10);
+            Assert.Less(Mathf.Abs(GetCenter().x - settled.x), 0.005f,
+                "0.2 s of rest: the ball has not moved downhill yet: " + SlideDiagnostics(15, ""));
+
+            string history = "";
+            for (int i = 0; i < 40; i++)
+            {
+                Step(1);
+                bool sliding = GetBool("rampSliding");
+                history += sliding ? "S" : (bool)Invoke("IsFalling") ? "F" : ".";
+            }
+            int firstSlide = history.IndexOf('S');
+            Assert.GreaterOrEqual(firstSlide, 0, "0.3 s of rest on a slope opens the latch: "
+                + SlideDiagnostics(55, history));
+            Assert.AreEqual(-1, history.Substring(firstSlide).IndexOfAny(new[] { '.', 'F' }),
+                "once open, the latch stays open and the ball never loses its support: "
+                + SlideDiagnostics(55, history));
+            Vector3 velocity = (Vector3)Invoke("GetPlanarVelocity");
+            Assert.Greater(Mathf.Sqrt(velocity.x * velocity.x + velocity.z * velocity.z), 0.2f,
+                "and the ball keeps accelerating downhill: " + SlideDiagnostics(55, history));
+            Assert.Greater(GetCenter().x - settled.x, 0.1f, "toward +X: "
+                + SlideDiagnostics(55, history));
+        }
+
+        [Test]
+        public void ABallAtRestOnFlatGroundNeverSlides()
+        {
+            Step(5);
+            Vector3 settled = GetCenter();
+            Step(60);
+            Assert.IsFalse(GetBool("rampSliding"));
+            Assert.Less(Mathf.Abs(GetCenter().x - settled.x), 0.002f);
+            Assert.Less(Mathf.Abs(GetCenter().z - settled.z), 0.002f);
+        }
+
+        [Test]
+        public void APushOnASlopeAddsNoDownhillComponent()
+        {
+            Vector3 normal = AddSlope(10f);
+            Invoke("TeleportTo", SlopeOrigin + normal * Radius());
+            SetField("debugForward", 1f);
+            Step(60);
+            Assert.IsFalse(GetBool("rampSliding"), "a push keeps the latch shut");
+            Assert.AreEqual(0f, GetFloat("rampRestTimerSeconds"), 1e-6f, "and the rest timer at 0");
+        }
+
+        [Test]
+        public void TheStaticObbTableTakesFarMoreThanSixtyFourSolids()
         {
             for (int i = 0; i < 40; i++)
             {
                 AddObb(new Vector3(100f + i * 3f, 0f, 0f), new Vector3(1f, 1f, 1f), 1 + i);
             }
             Assert.AreEqual(40, (int)Invoke("GetStaticObbCount"),
-                "the v2 table is 256, not the v1 eight");
+                "the table is 256, not 64");
             Invoke("ClearObbs");
             Assert.AreEqual(0, (int)Invoke("GetStaticObbCount"));
         }
@@ -239,7 +334,6 @@ namespace VRCKatamari.Tests
         [Test]
         public void TheBallLandsOnAnObbTopAtOneRadiusAboveIt()
         {
-            EnableV2();
             float radius = Radius();
             AddObb(new Vector3(0f, 0.25f, 0f), new Vector3(1f, 0.25f, 1f), 1);
             Invoke("TeleportTo", new Vector3(0f, 1.2f, 0f));
@@ -256,27 +350,8 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void BothContactModelsRestTheBallAtTheSameHeightOnAFlatFloor()
-        {
-            // The v1 authority solves the ground analytically, the v2 authority treats it
-            // as a plane contact. On a flat floor the two must agree, which is the
-            // cheapest proof that the flag does not silently change the resting state.
-            float radius = Radius();
-            Step(30);
-            float v1Height = GetCenter().y;
-            EnableV2();
-            Invoke("TeleportTo", new Vector3(0f, radius + 0.2f, 0f));
-            Step(30);
-            float v2Height = GetCenter().y;
-            Assert.AreEqual(radius, v1Height, 0.005f);
-            Assert.AreEqual(v1Height, v2Height, 0.01f,
-                "the plane contact and the analytic ground solve agree within a centimetre");
-        }
-
-        [Test]
         public void ABallPushedIntoAWallNeverPenetratesIt()
         {
-            EnableV2();
             float radius = Radius();
             // A 3 m tall, 4 m wide face 1 m in front of the ball.
             AddObb(new Vector3(0f, 1.5f, 2.5f), new Vector3(2f, 1.5f, 0.5f), 1);
@@ -297,10 +372,8 @@ namespace VRCKatamari.Tests
         [Test]
         public void APushIntoATallWallIsBlockedNotStuckAndStaysControllable()
         {
-            // v1's contract (SweepMath: "a clean stop is blocked=true, stuck=false") applies
-            // to v2 too: pressing a wall is not a stuck episode, so the recovery must NOT
-            // fire, clear the climb state or freeze the ball (the 2026-11-16 RefCancer pit).
-            EnableV2();
+            // A clean stop is blocked, not stuck: pressing a wall is not a stuck episode, so
+            // the recovery must NOT fire, clear the climb state or freeze the ball (the 2026-11-16 RefCancer pit).
             float radius = Radius();
             AddObb(new Vector3(0f, 1.5f, 3.4f), new Vector3(2f, 1.5f, 0.4f), 1);
             // Short run-up and half push: the contact speed (sqrt(2*5*0.1) = 1.0 m/s) and
@@ -341,7 +414,6 @@ namespace VRCKatamari.Tests
             // (design 2.8). The gate reads the player's intent, not the velocity: the
             // solver strips each face's normal component in turn, so the velocity swings
             // to +-0.35 of +Z every few steps and would read as pushing into one face.
-            EnableV2();
             float radius = Radius();
             float angle = 65f * Mathf.Deg2Rad;
             Vector3 normalA = new Vector3(Mathf.Sin(angle), 0f, -Mathf.Cos(angle));
@@ -376,7 +448,6 @@ namespace VRCKatamari.Tests
             // The same -sin(beta / 2) rule on the other side of the gate: a 90 deg inner
             // corner pushed along its bisector gives each face -sin(45 deg) = -0.71, so it
             // is blocked and the ball stays in control (TERRAIN_CLIMB 6.3: beta > 60 deg).
-            EnableV2();
             float radius = Radius();
             // Faces z = 3 (normal -Z) and x = 1 (normal -X); the corner is (1, 3).
             AddObb(new Vector3(0f, 1.5f, 3.4f), new Vector3(4f, 1.5f, 0.4f), 2);
@@ -414,7 +485,6 @@ namespace VRCKatamari.Tests
             for (int i = 0; i < headings.Length; i++)
             {
                 RecreateMotor();
-                EnableV2();
                 float radius = Radius();
                 AddObb(new Vector3(0f, 1.5f, 3.4f), new Vector3(8f, 1.5f, 0.4f), 1);
                 Invoke("TeleportTo", new Vector3(-4f, radius, 3f - radius - 0.05f));
@@ -444,7 +514,6 @@ namespace VRCKatamari.Tests
             for (int i = 0; i < headings.Length; i++)
             {
                 RecreateMotor();
-                EnableV2();
                 float radius = Radius();
                 float cap = ClimbMath.ClimbHeightCap(radius, 0f);
                 float angle = 65f * Mathf.Deg2Rad;
@@ -504,7 +573,6 @@ namespace VRCKatamari.Tests
         {
             // CONTACT_MODEL_V2 4A.3 / 7.5: a pin contact removes velocity by class, exactly
             // as the core solver does, and never adds any (no restitution, no rebound).
-            EnableV2();
             Vector3 moving = new Vector3(0.3f, 0f, 2f);
 
             // CLIMB: the horizontal inward component goes, the tangential one and the
@@ -553,7 +621,6 @@ namespace VRCKatamari.Tests
             // first: the ball must stop with the pin tip at the wall (not with the core
             // there, and not with the tip inside the wall), keep no speed into the wall,
             // not bounce, not climb, and leave at once when the push reverses.
-            EnableV2();
             float radius = Radius();
             float tipReach = radius + Mathf.Min(0.35f * radius, 0.3f);
             // The face z = 3 (normal -Z).
@@ -612,7 +679,6 @@ namespace VRCKatamari.Tests
         [Test]
         public void AWindowOverflowIsExplicitInsteadOfSilentlyDroppingSolids()
         {
-            EnableV2();
             float radius = Radius();
             // Far more solids around the ball than the 24-entry near set can hold, all of
             // them inside the window radius.
@@ -639,12 +705,11 @@ namespace VRCKatamari.Tests
         [Test]
         public void TheShapeLayersKeepTheirOrderingAndThePickupReachNeverBlocks()
         {
-            EnableV2();
             float physical = (float)Invoke("GetPhysicalRadiusWorldM");
             float visual = (float)Invoke("GetVisualCoreRadiusWorldM");
             float rolling = (float)Invoke("GetRollReachWorldM");
             float pickup = (float)Invoke("GetPickupReachWorldM");
-            Assert.AreEqual(physical, Radius(), 1e-6f, "r_phys is the v1 collision radius");
+            Assert.AreEqual(physical, Radius(), 1e-6f, "r_phys is the collision radius");
             Assert.AreEqual(physical, visual, 1e-6f,
                 "the visual core fills the current collision sphere");
             Assert.GreaterOrEqual(rolling, physical - 1e-4f);
@@ -763,10 +828,9 @@ namespace VRCKatamari.Tests
         [Test]
         public void APropObbBlocksTheBallLikeAStaticOne()
         {
-            EnableV2();
             float radius = Radius();
             // Teleport FIRST: a teleport clears the prop block (it was chosen for the old
-            // position), exactly like the v1 blocking-box set.
+            // position).
             Invoke("TeleportTo", new Vector3(0f, radius, 0f));
             Assert.IsTrue(SetOnePropObb(new Vector3(0f, 1.5f, 2.5f),
                 new Vector3(2f, 1.5f, 0.5f), 100, ContactCodes.RoleBlocking),
@@ -807,7 +871,6 @@ namespace VRCKatamari.Tests
         [Test]
         public void PropObbsShareTheNearWindowBudgetAndWinByDistance()
         {
-            EnableV2();
             float radius = Radius();
             Invoke("TeleportTo", new Vector3(0f, radius, 0f));
             // Twenty-four statics just inside R_in but out of reach, so they are window
@@ -837,7 +900,6 @@ namespace VRCKatamari.Tests
         [Test]
         public void APropBlockAboveTheCapacityIsRefusedAndCounted()
         {
-            EnableV2();
             Vector3[] centers = new Vector3[13];
             Vector3[] axisX = new Vector3[13];
             Vector3[] axisY = new Vector3[13];
@@ -870,7 +932,6 @@ namespace VRCKatamari.Tests
         [Test]
         public void ClearObstaclesAndTeleportClearThePropBlock()
         {
-            EnableV2();
             float radius = Radius();
             Assert.IsTrue(SetOnePropObb(new Vector3(0f, 0.5f, 3f),
                 new Vector3(0.5f, 0.5f, 0.5f), 100, ContactCodes.RoleProp));
@@ -887,23 +948,6 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void PropObbsAreIgnoredWhileTheFlagIsOff()
-        {
-            float radius = Radius();
-            Invoke("TeleportTo", new Vector3(0f, radius, 0f));
-            Assert.IsTrue(SetOnePropObb(new Vector3(0f, 1.5f, 2.5f),
-                new Vector3(2f, 1.5f, 0.5f), 100, ContactCodes.RoleBlocking),
-                "registration is flag-independent, so the v1 frame can ignore it");
-            Invoke("SetMoveAxes", 1f, 0f, 0f);
-            Step(150);
-            // v1 has no v2 table at all: the ball rolls straight through where the prop is.
-            Assert.Greater(GetCenter().z, 3f,
-                "the v1 path must keep using SetBlockingBoxes/SetSupportProps only");
-            Assert.AreEqual(0, (int)Invoke("GetNearObbCount"));
-            Assert.AreEqual(0, (int)Invoke("GetContactCount"));
-        }
-
-        [Test]
         public void ABallRestingOnABoxTopReportsTheTopAsTheSupportHeight()
         {
             // The pass6 field run failed the test field's rest_gap check on exactly the
@@ -915,7 +959,6 @@ namespace VRCKatamari.Tests
             {
                 float top = tops[i];
                 RecreateMotor();
-                EnableV2();
                 float radius = Radius();
                 AddObb(new Vector3(0f, top * 0.5f, 0f),
                     new Vector3(2f, top * 0.5f, 2f), 1);
@@ -948,7 +991,6 @@ namespace VRCKatamari.Tests
             //
             // This test measures the lift the way a gated criterion should: only while
             // the ball is over the plate (its footprint plus one radius).
-            EnableV2();
             float radius = Radius();
             const float top = 0.028f;
             AddObb(new Vector3(0f, top * 0.5f, 0f), new Vector3(2f, top * 0.5f, 1f), 1);
@@ -977,7 +1019,6 @@ namespace VRCKatamari.Tests
         [Test]
         public void ABallRestingOnTheGroundReportsAZeroGap()
         {
-            EnableV2();
             float radius = Radius();
             Step(40);
             Vector3 center = GetCenter();
@@ -996,7 +1037,6 @@ namespace VRCKatamari.Tests
             // the wall 2-25 cm above the ground. Design §3.2/§3.3: the gate is a standing
             // condition, so releasing the push must leave the climb and let the ball slide
             // back down (v_slide_max), not freeze it mid-air.
-            EnableV2();
             float radius = Radius();
             AddObb(new Vector3(0f, 1.5f, 2.5f), new Vector3(2f, 1.5f, 0.5f), 1);
             Invoke("TeleportTo", new Vector3(0f, radius, 0f));
@@ -1066,7 +1106,6 @@ namespace VRCKatamari.Tests
         [Test]
         public void TheClimbStateGetterSeparatesClimbingSlidingAndLocked()
         {
-            EnableV2();
             Assert.AreEqual(0, (int)Invoke("GetClimbState"));
             SetField("climbActive", true);
             Assert.AreEqual(1, (int)Invoke("GetClimbState"));

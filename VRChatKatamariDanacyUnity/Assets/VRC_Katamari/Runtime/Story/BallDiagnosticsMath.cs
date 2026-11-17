@@ -4,8 +4,8 @@ namespace VRCKatamari.Story
     /// The <c>[story]</c> line's support vocabulary, in one place.
     /// </summary>
     /// <remarks>
-    /// A support KIND is not a surface index. The v1 table knew ground / box / ramp / prop /
-    /// terrain, and the v2 contact model added two kinds of its own: 4 = the ball is held by
+    /// A support KIND is not a surface index. The table knows ground / box / ramp / prop /
+    /// terrain, plus two kinds of the contact model: 4 = the ball is held by
     /// a climb contact (a wall with no floor) and 5 = only a pin is holding it up
     /// (<c>ContactModelV2</c> 2.5). The line printed <c>none</c> for both, which read as
     /// "no support" while the ball was visibly climbing - a display gap, not physics.

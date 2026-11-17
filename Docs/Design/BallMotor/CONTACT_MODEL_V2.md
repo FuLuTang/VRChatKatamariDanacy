@@ -58,9 +58,8 @@
 膨胀 AABB 的球心停点 = 盒面 − r
 真实相切（棱/角）的球心     = 到最近点的距离 = r
 45° 坡顶接缝的高度差        = r·(tanθ + 1 − 1/cosθ) = r·(2 − √2) = 0.5858·r
-台阶预算（v1）              = 0.25·D = 0.5·r
-⇒ 能上坡的条件 0.5858·r ≤ 0.5·r  ⇔  0.5858 ≤ 0.5  ⇔  永不成立
-⇒ v1 的极限角 = asin(0.6) = 36.87°（与球径无关）
+台阶：球心高于棱的相切点，台阶高 h < r 时天然滚过（§2.7）
+⇒ 接缝高差 0.5858·r 超过 0.5·r（0.25·D 的台阶预算）：任何靠“台阶阈值”的做法在 45° 接缝处都会死锁，所以接缝必须由接触几何直接处理
 ```
 
 四档球的实测 gap（审计）：0.0887 / 0.1763 / 0.3234 / 0.6000 m，与 `0.5858r` 逐位吻合。
@@ -104,7 +103,7 @@ Vector3[] obbAxisX       = new Vector3[256];   // 正交单位轴
 Vector3[] obbAxisY       = new Vector3[256];   // 坡的行走面法线 = +Y（作者约定）
 Vector3[] obbAxisZ       = new Vector3[256];
 Vector3[] obbHalfExtents = new Vector3[256];
-int[]     obbSurfaceId   = new int[256];       // 1..N，与 v1 的 id 空间兼容
+int[]     obbSurfaceId   = new int[256];       // 1..N
 int[]     obbRole        = new int[256];       // 0=box 1=slab 2=prop 3=blocking（诊断/作者门）
 int[]     obbFlags       = new int[256];       // bit0 = 已登记，bit1 = 有剪切已回退 AABB
 float[]   obbBoundingRadius = new float[256];  // |halfExtents|，粗筛用
@@ -174,7 +173,7 @@ center = 8 角点的平均
 
 ### 1.6 平面（不变）
 
-`AddPlane(n, offset)` 仍是**单侧半空间**，只用于边界墙；`dot(n,C) − offset ≥ r` 为自由空间。与 v1 唯一的差别：接触记录里它也走同一张 `contact*` 表（`surfaceId` 用 1000+i），所以速度响应与盒一致。**平面不做支撑**（无限平面会变成“天上的地板”），这条 v1 的结论继续有效。
+`AddPlane(n, offset)` 仍是**单侧半空间**，只用于边界墙；`dot(n,C) − offset ≥ r` 为自由空间。接触记录里它也走同一张 `contact*` 表（`surfaceId` 用 1000+i），所以速度响应与盒一致。**平面不做支撑**（无限平面会变成“天上的地板”）。
 
 ### 1.7 隧穿与子步：一个可证的界
 
@@ -219,7 +218,7 @@ N = clamp( ceil( (|Δ| + (g + a_climb)·dt²) / (κ·r) ), 1, N_max )      κ = 
 | 接触迭代（≤12 条 × 3 次） | 36 × 40 = 1.4k | 2 条 → 80 | 每次重查该条目 |
 | 针尖段 vs OBB（§4A.3） | 16×12×2 × 40 = 15.4k | 10×3×2×40 = 2.4k | 只遍历 compact 针（全部 16 根可入；每件吸附物都登记后，球有一定件数时典型 8–12 根突出） |
 | 分类/支撑/爬升 | ≈ 0.2k（+ 爬升时 32 端点 ≈ 0.1k） | 0.1k | |
-| **合计** | **≈ 13k flops/步**（含针尖最坏） | **≈ 2.5–3.5k** | v1 的扫掠同量级（≤14 障碍 × 4 投影 × ≤4 接触 ≈ 1.6k）；针尖是 v2 的主要增量 |
+| **合计** | **≈ 13k flops/步**（含针尖最坏） | **≈ 2.5–3.5k** | 针尖是主要增量 |
 
 **Udon 的真成本是调用，不是 flop**：v2 每步的新增调用是
 `ContactSolve.TryStep(...)`（1 次/子步，**所有障碍在函数内部循环**，不许每条障碍一次 Udon 调用）、
@@ -257,7 +256,7 @@ classify(n):
     return CLIMB                              # 50° < θ < 90°+：可爬/挡
 ```
 
-**θ_ride = 45°（OUR）+ 0.5° 等号容差**：45° 的坡必须能滚（C05，且 v1 的作者门就是 45°），50° 的板（C06）**必须离开“滚”**、进入“慢慢爬”，60° 以上更不用说（否则 60° 坡会以 4 m/s 冲上去，等于没有重力感）。45° 同时是 v1 的 `maxSupportSlopeDegrees`，也是“硬上限 51.3°”（由单步钳位反推）之下的保守值。**这条让 C06 的语义从“拒绝”变成“爬”**（Lead 的补充要求）。
+**θ_ride = 45°（OUR）+ 0.5° 等号容差**：45° 的坡必须能滚（C05，且 `AddRamp` 的作者门就是 45°），50° 的板（C06）**必须离开“滚”**、进入“慢慢爬”，60° 以上更不用说（否则 60° 坡会以 4 m/s 冲上去，等于没有重力感）。45° 同时是 `maxSupportSlopeDegrees`，也是“硬上限 51.3°”（由单步钳位反推）之下的保守值。**这条让 C06 的语义从“拒绝”变成“爬”**（Lead 的补充要求）。
 等号按 `θ ≤ 45.5°` 判 ride（0.5° 容差）：45° 的板正好在线上，浮点噪声不能让它在“滚/爬”之间翻。同一条纪律也适用于 §2.5 的 `h<r`（用 `h ≤ r − 0.5 mm` 判滚越），三处等号一次改完，不要只改一处。
 
 **15° 爬升余量（OUR，防“坡顶把爬升通道骗开”）**：
@@ -287,7 +286,7 @@ for iter in 0..2:                      # SolverIterations = 3
 residual = max(depth)
 ```
 
-- **顺序推挤 + 重查**（不是把所有法线求平均）：凹角里两条法线依次作用，与 v1 的 `ProjectionPasses=4` 同思路；3 次对“盒角 + 地面 + 墙”足够（参考模型 C16 类场景 `residual ≤ 2 mm`）。
+- **顺序推挤 + 重查**（不是把所有法线求平均）：凹角里两条法线依次作用，3 次对“盒角 + 地面 + 墙”足够（参考模型 C16 类场景 `residual ≤ 2 mm`）。
 - **slop = 0.5 mm**：避免浮点噪声每步推一下（抖动）。
 - **不产生“弹开”**：位置推出后不加速度；速度响应在 §2.4 单独做。
 - **推挤量就是自然抬升**：球滚上台阶时，每步的推挤量 ≤ 本步穿透（≤ 子步位移），所以“上台阶”不再需要 `maxStepUpLift` 这种一次性大抬升。C13 2.20 的 0.95 m/帧在结构上不可能发生（0.95 m 需要一次 0.95 m 的穿透，而子步位移 ≤ 0.08 m）。
@@ -296,7 +295,7 @@ residual = max(depth)
 
 | 接触类 | 速度处理 | 为什么 |
 |---|---|---|
-| **RIDE**（θ ≤ 45°） | **不剥任何分量**（只做位置推挤） | 滚动接触不是碰撞。坡上速度不减（v1 的“坡上不减速”手感），坡顶出口不会掉 30% 速度 |
+| **RIDE**（θ ≤ 45°） | **不剥任何分量**（只做位置推挤）；有支撑的子步里，下坡的速度投影到切平面（竖直速度取 `−(n.x·vx+n.z·vz)/n.y`，上坡与平地取 0） | 滚动接触不是碰撞。坡上速度不减（坡上不减速的手感），球顺坡走时贴着坡面而不是走出坡面再掉回来，坡顶出口不会掉 30% 速度 |
 | **CLIMB**（θ > 45°，且满足 §2.2 的余量） | 见 §2.3 的爬升通道：若在爬，**速度由通道接管**（沿上坡切线）；若不在爬，**只剥水平法向分量** | 陡坡上“滚”不成立；水平推入必须被吸收，但竖直分量归爬升/重力管 |
 | **NONE**（天花板/底面） | 剥**三维**法向分量（含 `v_y`） | 撞天花板要掉速，这是唯一需要动 `v_y` 的“硬碰撞” |
 | 任意类但 `depth ≤ 0`（skin 内、未碰） | **不处理** | “靠近”不是“接触”，否则球离开墙面时会被粘一下 |
@@ -311,7 +310,7 @@ support = 本步接触里 n.y 最大的 RIDE 接触（并列取 depth 大的）
 if support:
     supportNormal = support.normal
     supportPoint  = support.point
-    supportHeight = 球心 XZ 处的切平面高度 = C.y − dot(n, C − p) / n.y   # 与 v1 的 getter 同口径
+    supportHeight = 球心 XZ 处的切平面高度 = C.y − dot(n, C − p) / n.y
     v_y = 0                       # 被支撑，没有弹道
     VisualRoll 的法线 = support.normal
 else:
@@ -334,25 +333,24 @@ else:
   - `h < r` ⇒ `n.y > 0` ⇒ 推挤把球**向上**推 ⇒ 球骑上棱、滚过台面。**台阶的门 = h < r = D/2**。
   - `h = r` ⇒ `n.y = 0` ⇒ 法线水平 ⇒ 球停在棱前（纯几何上不去）。
   - `h > r` ⇒ `n.y < 0` ⇒ 推挤向下 ⇒ 球被压住（但接触仍存在，直到 `h ≥ 2r`）。
-- **这就是为什么“0.25D 的台阶”不再需要特判**：0.25D < 0.5D = r，天然在“滚过去”区间。C07–C12 的 0.02/0.05/0.075/0.10 在 D=0.30 时全是 `h < r`（0.10 < 0.1499），v1 里它们是墙（`0.10 > 0.075`），v2 里是**滚过去**（期望翻转，见 §6.1）。
+- **这就是为什么“0.25D 的台阶”不再需要特判**：0.25D < 0.5D = r，天然在“滚过去”区间。C07–C12 的 0.02/0.05/0.075/0.10 在 D=0.30 时全是 `h < r`（0.10 < 0.1499），是**滚过去**（见 §6.1）。
 - **0.5D ≤ h < 1.5D**：几何上“压住”，但 §3 的爬升通道能把球**慢慢**送上去（`H_cap = 1.5·D`）。所以台阶的完整三段是：
   **h < 0.5D 滚过去（快） / 0.5D ≤ h < 1.5D 爬上去（慢） / h ≥ 1.5D 墙**。
   这三段全部来自 `k_h=1.5` 与 `h<r` 两个数，没有第二套阈值。
-- **2.2 m 球 + 0.6 m 台面**：`h=0.6 < r=1.1` ⇒ 滚过去。v1 的“当墙”是膨胀 AABB 的假象，不是尺度问题。
+- **2.2 m 球 + 0.6 m 台面**：`h=0.6 < r=1.1` ⇒ 滚过去。膨胀 AABB 会把它当墙，那是假象，不是尺度问题。
 - **0.35 m 窄坡 + 2.2 m 球**：球可以骑在坡的**棱**上（棱在球心下方），不需要球心落在坡宽内。`GetSupportKind()` 报 2（slab），球心可能远在坡宽外——这是正确的“球压在板上”，不是“球在坡上”。
 
 ### 2.6 45° 接缝：为什么现在过得去（完整算例）
 
 C05：坡 45°、台面顶 0.6、台面南面 z=8.2、球 r=0.1499。
 
-| 量 | v1（膨胀 AABB） | v2（OBB 最近点） |
-|---|---|---|
-| 球心 z 停点 | `8.2 − r = 8.050` | 到棱的距离 = r 的相切点：`8.2 − r·sin45 = 8.094` |
-| 球心 y | 0.661（球底 0.511） | `0.6 + r·cos45 = 0.706`（球底 0.556，仍在台面**前面**） |
-| 滚上台面后 | —（上不去） | 球心 y=0.750，球底 = 0.600 = 台面（`deck_gap = 0`） |
-| 台面是否可踏 | `rise=0.088 > 0.075` ⇒ **墙** | 接触是**棱**，`n.y=0.707` ⇒ RIDE ⇒ 推挤 ⇒ 上 |
-| 结论 | 死锁 | **通过**（参考模型 `test_45_degree_seam_ball_reaches_the_deck`） |
-
+| 量 | 值（OBB 最近点） |
+|---|---|
+| 球心 z 停点 | 到棱的距离 = r 的相切点：`8.2 − r·sin45 = 8.094` |
+| 球心 y | `0.6 + r·cos45 = 0.706`（球底 0.556，仍在台面**前面**） |
+| 滚上台面后 | 球心 y=0.750，球底 = 0.600 = 台面（`deck_gap = 0`） |
+| 台面是否可踏 | 接触是**棱**，`n.y=0.707` ⇒ RIDE ⇒ 推挤 ⇒ 上 |
+| 结论 | **通过**（参考模型 `test_45_degree_seam_ball_reaches_the_deck`） |
 精确算例：坡的顶面方程 `y = z − 7.6`（45°），台面棱在 `(8.2, 0.6)`。球心 `C=(8.094, 0.706)`：
 到坡面距离 `= 0.706 − (8.094 − 7.6) = 0.212 = r/cos45` 的法向距离 `0.1499` ✓；
 到棱距离 `= √(0.106² + 0.106²) = 0.1499` ✓。**两个约束同时满足**，球可以继续向 +z 滚，接触点从坡面平滑换到台面顶面。
@@ -360,7 +358,7 @@ C05：坡 45°、台面顶 0.6、台面南面 z=8.2、球 r=0.1499。
 
 ### 2.7 “大球矮台”与 C13 2.20 的 0.95 m
 
-- **C13 2.20 掉下北缘**：v1 的 `seam_no_step = 0.9499 = min(stepLimit, maxStepUpLift) + 4×maxLiftPerStep`，是“掩码大抬升 + 卡死传送回 `startCenterWorld`（y=0.15 的旧起点）”两段叠加。v2 里：
+- **C13 2.20 掉下北缘**：旧位置权威的 0.9499 是“掩码大抬升 + 卡死传送回 `startCenterWorld`（y=0.15 的旧起点）”两段叠加。现在：
   - 没有掩码 ⇒ 没有一次性大抬升；抬升只来自“穿透的推出”，而穿透 ≤ 本子步位移（4 m/s、D=2.20 时 0.08 m/步；下落时那是下降，不是抬升），所以**每步抬升 ≤ 0.08 m**；
   - 卡死恢复的目标是**最后稳定点**（§2.8），且会先做软恢复（清速度），不会把球塞进地面；
   - 于是“0.95 m/帧”在结构上不可能。判据 `seam_no_step` 保留，**预期从 fail 变 pass**（§6.1）。
@@ -394,26 +392,10 @@ C05：坡 45°、台面顶 0.6、台面南面 z=8.2、球 r=0.1499。
 
 **速度写回的顺序是不变式**：`ContactSolveMath.TryStep` 的速度结果先写回 `planarVelocity` / `contactVerticalVelocity`，**然后**才做针尖推出与针尖速度响应、深嵌恢复、支撑写回和上面的卡死恢复。这些步骤都改成员字段，写回若放在它们之后，会用恢复前的速度覆盖恢复清掉的速度（等于「传送 + 保留速度」，下面第 2 条禁止的事）。
 
-**三条不许做的事**（都是 v1 的教训）：
+**三条不许做的事**：
 1. **不许**用序列化的 `startCenterWorld` 当恢复点（它是场景烘死的 y=0.15，不随球径、不随本回合；C13 的 0.95 m 就是它）。
 2. **不许**“传送 + 保留速度”（会立刻再撞）。
 3. **不许**无限次恢复而不留痕：`GetRecoveryCount()` / `GetRecoveryState()` / `GetLastRecoveryReason()` 三个 getter 必须进树，测试场对除 W6 以外的所有格要求 `recovery_delta == 0`。
-
-### 2.9 v1 / v2 逐项对照
-
-| 项 | v1 | v2 |
-|---|---|---|
-| 位置权威 | 扫掠（平面 + 膨胀 AABB）+ 支撑平面高度 | 接触推挤（OBB + 平面） |
-| 台阶 | `stepLimit = 0.25D` + 掩码 | 几何 `h<r` 滚越 + 爬升 `h<D`；无阈值参数 |
-| 坡 | 高度场，只支撑 | 实体 slab，顶/侧/底都挡 |
-| 坡顶接缝 | 36.87° 死锁 | 同时相切，差 0 |
-| 墙 | 停 + 切向滑 | 停 + 切向滑；可爬（§3） |
-| 爬升 | 无 | 参数化模型，`H_cap=D` |
-| 卡死 | 1.5 s 后传送到旧起点 | 软/硬两段，最后稳定点，3 次后停手并报错 |
-| 接触容量 | 4 | 8 |
-| 静态几何容量 | 8 盒 + 4 坡 | 256 OBB（每步近集 ≤24） |
-| 每步几何成本 | ≈1.6k flops | ≈1.5–4.2k flops（§1.8） |
-| 尺寸耦合 | 接触用 core、扫掠用 collision、reach 用 collision | 三形状：`r_visual` / `r_roll`(+针尖) / `pickupRadius = r_phys`（§4A） |
 
 ---
 
@@ -433,7 +415,7 @@ C05：坡 45°、台面顶 0.6、台面南面 z=8.2、球 r=0.1499。
 
 | 带 | 条件 | 谁驱动速度 | 有高度上限吗 |
 |---|---|---|---|
-| **滚** | θ ≤ 45° | `BallMotionMath` 的水平速度（v1 手感，坡上不减速） | 无（坡多长都能滚） |
+| **滚** | θ ≤ 45° | `BallMotionMath` 的水平速度（坡上不减速） | 无（坡多长都能滚） |
 | **爬** | θ > 45° 且比支撑陡 ≥ 15° | 爬升通道（沿上坡切线，受限） | **有**：`H_cap = 1.5·(2r + λL)` |
 | **挡** | 不满足爬的门（推入 < 0.2 / 速度 < `v_req` / 冷却 / 已锁） | 只做非穿透 + 去法向分量 | — |
 
@@ -602,8 +584,7 @@ climbLocked 只在 p < 0.2（松开）时清除
 
 ### 3.7 凸出长物件（径向代理）的贡献
 
-**今天**：径向代理只喂 `GroundContactMath`，只抬**接地高度**，不参与墙/爬升（审计 D 节；README “C 阶段没做”）。
-**v2**：针尖是**一等接触**（§4A.3），会挡墙/台阶；这里只列它对**爬升高度**的贡献（默认开，`λ=1.0`）。
+针尖是**一等接触**（§4A.3），会挡墙/台阶；这里只列它对**爬升高度**的贡献（默认开，`λ=1.0`）。
 注意这是**有意的偏离专利**：专利的 `Mr`（16+4 针）只用于滚动/贴地，`Mh`（球盒）才做碰撞；我们按用户体感把针尖扩展到了所有接触：
 
 ```
@@ -628,13 +609,13 @@ capProxy = min(maxProxyProtrusionPerCoreRadius·r, maxProxyProtrusionWorldM)   #
 
 **dash 不改变几何**：它不能让球爬上 > `H_cap` 的墙，也不能让 `h>r` 的棱变成可滚。W5 因此测“更快”，不是“能/不能”（§6.2）。
 
-### 3.9 坡面切向重力：默认 0，保持兼容
+### 3.9 坡面切向重力：静止后才有
 
-- 今天 `rampTangentialGravityScale = 0`：球停在 30° 坡上不动（`TERRAIN_SUPPORT` §5.4）。v2 的 **RIDE 带完全保留这个行为**：位置推挤只做相切，不给切向加速度。
-- v2 **新增**：CLIMB 带在“不爬”时用 `v_y` 的重力 + `v_slide_max` 回滑，**但不动 `v_planar`**。所以：
-  - 45° 坡（RIDE）松手 = 停住（与 v1 逐位一致）；
-  - 70° 坡（CLIMB）松手 = 慢慢滑回（新行为，符合“陡坡站不住”的直觉）。
-- 若以后把 `rampTangentialGravityScale` 开到 1：只在 RIDE 带沿下坡方向加 `g·sinθ·cosθ`，CLIMB 带不受影响（它已有自己的回滑）。**默认 0，v2 不需要改这个字段的语义。**
+- RIDE 带：位置推挤只做相切；球停下后才开始下滑（见下）。
+- CLIMB 带在“不爬”时用 `v_y` 的重力 + `v_slide_max` 回滑，**但不动 `v_planar`**。所以：
+  - 45° 坡（RIDE）松手 = 停 0.3 s 后顺坡滑；
+  - 70° 坡（CLIMB）松手 = 慢慢滑回（符合“陡坡站不住”的直觉）。
+- RIDE 带内的“静止后下滑”：球静止满 0.3 s 后才加沿坡下坡的 `g·sinθ·rampTangentialGravityScale`（`RampSlideMath` 锁存，`UpdateRampSlide`，见 [BALL_INERTIA.md](BALL_INERTIA.md) §4）；运动中和有推力时不加，平地不滑。
 
 ### 3.10 需要试玩才能定的五件事
 
@@ -763,7 +744,7 @@ float     needleProtrusionCap;                  // = min(0.35·r_roll, 0.30)
 ```
 
 **支撑长度从哪来**：径向代理的 16 向表。**每件**已吸附物都登记（不再只收长物件）：把它的 8 个 AABB 角点放进球局部系，对每根针方向取 `max_i dot(p_i, dir)`（盒的支撑函数，精确），跨所有吸附物取 max，再 `clamp(·, r_roll, r_roll + cap)`；`cap = min(0.35·r_roll, 0.30)` 仍是 PROVISIONAL。吸附时只对新件做 8 角点 × 16 方向的增量 max 合并（约 128 次点积）；表是球局部的绝对长度，球长大时不需要改表（突出量 `support − r` 自然变小，cap 随 r 放宽）。
-- `proxySupports[16]` 就是这张表；v1 把它的针尖喂 `GroundContactMath`，v2 把针尖当扫掠段进入接触（本节）。
+- `proxySupports[16]` 就是这张表；针尖当扫掠段进入接触（本节）。
 - 视觉杆可以比 `cap` 伸得更长（美术自由），**物理针尖到 cap 为止**；这个差异必须显示在调试读数里（`GetNeedleProtrusionCapWorldM()`），否则又会出现“看起来撑着、物理没撑”。
 
 **每步算法**（在核心接触的同一次子步里）：
@@ -817,7 +798,7 @@ v_req(θ) ← v_req(θ) · (1 − grip)                                         
 
 ### 4A.4 Pickup：触发体，永远不是阻挡体
 
-**现行表示（2026-11-17）：等效体积球，v1/v2 相同。** 原作专利 `Mh` 是包围盒，但实形/朝向没有实证；本项目刻意采用其内接等效球，理由与 owner 决定见 [`PARITY_AUDIT.md`](../Parity/PARITY_AUDIT.md)“吸收触发的几何”行。这不是声称原作 Mh 是球。
+**现行表示（2026-11-17）：等效体积球。** 原作专利 `Mh` 是包围盒，但实形/朝向没有实证；本项目刻意采用其内接等效球，理由与 owner 决定见 [`PARITY_AUDIT.md`](../Parity/PARITY_AUDIT.md)“吸收触发的几何”行。这不是声称原作 Mh 是球。
 
 ```
 pickupRadius = collisionRadiusWorldM = r_phys
@@ -902,7 +883,7 @@ boxDistance = 球心到道具自身有向盒的最短距离
 | 平面 8 / 挡路 6 / 支撑道具 6 | 5 平面 / 12 道具（同时近的 ≤6） | 够 |
 | 单坡 4 段、直坡一条 | 螺旋 32 段、半管 12 段 | 一条弯坡就超容量 |
 
-**不能做的事**：为了装下而“静默丢掉第 13 个坡”（v1 的 `AddBox` 满了就是 `return false` + 计数）。大地图上丢几何 = 球从坡上穿过去，且没人看得见。
+**不能做的事**：为了装下而“静默丢掉第 13 个坡”（`AddBox` 满了就是 `return false` + 计数，不丢进别处）。大地图上丢几何 = 球从坡上穿过去，且没人看得见。
 
 ### 5.2 静态表 + 每步近集（窗）
 
@@ -987,7 +968,7 @@ dropped = max(0, candidateCount − 24)                      # 见 §5.4
 | 近集接触查询（2 子步 × ≤24） | 48 × 30 = 1.4k | 与 §1.8 同 |
 | **合计** | **≈3.5k flops/步**（最坏 ≈4.2k） | 50 Hz ⇒ ≈0.2 Mflop/s |
 
-**对比**：v1 的扫掠是“≤14 障碍 × 8 次 pass”，≈1.6k；v2 的静态扫描把它换成“200 × 6 + 近集查询”，约 2.2×。**这是“200 个几何”的代价，不是“每个几何都参与求解”的代价。**
+**对比**：静态扫描是“200 × 6 + 近集查询”。**这是“200 个几何”的代价，不是“每个几何都参与求解”的代价。**
 如果实测超预算，升级路径见 §5.6（网格把 1.2k 降到 ~0.1k）。
 
 ### 5.6 升级路径：均匀网格（同一份窗口契约）
@@ -1114,9 +1095,9 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 **峰值近集估计**：球在螺旋里时窗内 ≈ 6–10 段 + 2–3 个其它 → **≤ 16 < 24**，有 1.5× 余量。
 **峰值道具近邻**：道具行 2.4 m 间距、球 r≤1.1 → 同时近的 ≤ 3 < 6。
 
-**v1 运动器下根本做不出来的**（所以必须等 v2）：
+**旧的膨胀 AABB 运动器做不出来的沙盒项**：
 
-| 沙盒项 | v1 的结果 |
+| 沙盒项 | 旧运动器的结果 |
 |---|---|
 | 60°/70°/90° 坡 | `AddRamp` 按 45° 拒绝；写成 box 则是膨胀 AABB 墙，`2.2` 球连坡脚都到不了 |
 | 任何爬墙 | 完全没有 |
@@ -1138,7 +1119,7 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 记号：**滚** = `h < r` 直接过去；**爬** = `r ≤ h < H_cap` 慢速上去；**墙** = `h ≥ H_cap`。
 “变化”列只标**与今天 pass2 不同**的格。
 
-| 格 | 今天（v1） | v2 期望 | 变化 | 判据怎么改 |
+| 格 | 旧结果 | 期望 | 变化 | 判据怎么改 |
 |---|---|---|---|---|
 | C00 起点 | 全 pass | 全 pass | — | `rest_gap` 口径不变 |
 | C01 5° | pass（2.20 差 13 mm，时间线问题） | pass | — | 2.20 时间线保留 8.75 s |
@@ -1204,7 +1185,7 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 
 | 判据 | 容差 | 推导 |
 |---|---|---|
-| `deck_gap` | 0.01 m | 台面高 0.6 的 1.7%；v1 已用 0.01 |
+| `deck_gap` | 0.01 m | 台面高 0.6 的 1.7% |
 | `max_bottom_rise ≤ 1.02 H_cap + 0.02` | 2% + 2 cm | `cap_margin=0.02` 是到顶判定带宽；1.02 给 fade 的浮点 |
 | `h_max(W4) − h_max(W2) = λL_eff ± 0.02` | 0.02 m | `L_eff` 由端点云算出，端点精度 = AABB 角点，无拟合 |
 | `t_to_deck(dash) ≤ 0.7·t(nodash)` | 0.7 = 1/1.4 | dash 的 `rate` 上限 1.5、速度 1.6；取 1.4 的保守比 |
@@ -1212,7 +1193,7 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 | 弯坡 `y_jitter ≤ s + 2 mm` | 2 mm | 接触 skin 5 mm、slop 0.5 mm，取 2 mm |
 | `min_distance ≥ r − 2 mm` | 2 mm | 推挤收敛到 `slop=0.5 mm`；子步离散再给 1.5 mm |
 | `climb_time ≤ 2.0 s`（W3） | 2.0 | 0.24 m / 0.369 m/s = 0.65 s；给 3× 余量（起速/进接触） |
-| `blocked_gap = r ± 0.01` | 0.01 | v1 已有 |
+| `blocked_gap = r ± 0.01` | 0.01 | |
 | W7 有杆/无杆的核心间距差 | ±0.02 | 端点云是 AABB 角点（无拟合）；0.02 = cap 0.105 的 19% |
 | W8 台阶高 0.65 | 边界 ±0.05 | `H_cap` 无杆 0.60 / 有杆 0.705，取中间 ±0.05 避开边界抖动 |
 | P1 可吸件距离 1.2·r_phys | — | 盒轴 1.0 / 面对角 1.41 之间：只有拾取能到、滚动到不了 |
@@ -1246,11 +1227,11 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 | 驱动 | 脚本时间线 + 四档球径 | 人 |
 | 判据 | 每条带 `expect` | 无判据；只有“能不能过/手感如何”的记录表 |
 | 容量 | 一格一注册（8+4 够） | 118 条一次注册（靠 §5 的窗） |
-| 何时建 | 现在 | S5（v2 flag 打开、矩阵通过之后） |
+| 何时建 | 现在 | S5（矩阵通过之后） |
 
 ---
 
-## 7. 分阶段迁移（每步独立可发、可回滚）
+## 7. 分阶段迁移（每步独立可发）
 
 ### 7.1 阶段表
 
@@ -1258,14 +1239,13 @@ q_inf = (R·x/ρ, clamp(y, −h, h), R·z/ρ)            # 无限圆柱
 |---|---|---|---|---|---|
 | **S1** | Python 参考模型 + 单测 | `Docs/Design/BallMotor/contact_v2/contact_v2.py`、`.../shapes.py`、`Docs/tests/ball_contact_v2/test_contact_v2.py`、`.../test_shapes.py` | 低（不改运行期） | `python3 -m unittest discover -s Docs/tests` 全过 | 删文件 |
 | **S2** | C# 纯数学库 + EditMode | 落点：`Runtime/BallContact/` 的 `ContactTuning.cs`、`ContactCodes.cs`、`ObbContactMath.cs`、`ObbBakeMath.cs`、`ContactClassificationMath.cs`、`ClimbMath.cs`、`BallShapeMath.cs`、`ContactWindowMath.cs`、`ContactSolveMath.cs`、`CurveRampMath.cs`；`Tests/EditMode/BallContact/` 的 8 个测试类 | 中：数值与模型不一致 | 同一组 fixture 与 Python **逐位/1e-6 一致**；面/棱/角/内部、窗口、弯坡段几何 | 删文件（还没人调用） |
-| **S3** | 电机集成，**flag 默认 false** | `KatamariBallMotor.cs`：`contactModelV2Enabled`、`StepContactV2`/`FillNearWindow`/`WriteContactSupport`/`ApplyGrowthPushOut`/恢复状态机、`AddObb`/`ClearObbs`、新 getter；`StepPositionV1` 保留 v1 原语句；`RefreshStepMask`/`TrySweepSphere` 在 v2 分支跳过；`BallShapeMath.TryNeedleSegmentContact`（针尖段扫掠）+ `NeedleSegmentTests` + `ContactModelV2Tests`；接口与偏差见 §7.5 | **高**（最大的改动） | flag=false 时与今天**逐位相同**（同一场景同一 run 的 `[ptf]` 行对比；`StepPositionV1` 是原中段整体搬移）；flag=true 时 C 矩阵 + W 格通过；`recovery == 0` | **flag 置 false**（v1 路径原样保留）；必要时 revert 一个 commit |
-| **S4** | 数据/导入器 | `LevelArenaHost.cs`（8 角点 OBB 烘、`AddObb`、ramp→slab、`ramps` 数组语义）、`PlacementImporter.cs`（`curve_ramp` 展开）、`placement_core.py`（45° error→warning + 弯坡校验）、`SupportSurfaceMath.cs`（降级为诊断） | 中：旧场景重烘 | 9 个小格的烘焙 OBB 表与旧 AABB **数值相同**（轴对齐）；`levelbuild check` 全绿；弯坡段数/矢高合规 | `LevelArenaHost.useObbBake=false`（回 AABB，v1/v2 都能跑）；弯坡条目 `expanded:false` 不展开 |
+| **S3** | 电机集成：`StepContactV2` 是唯一位置权威 | `KatamariBallMotor.cs`：`StepContactV2`/`FillNearWindow`/`WriteContactSupport`/`ApplyGrowthPushOut`/恢复状态机、`AddObb`/`ClearObbs`、新 getter；`BallShapeMath.TryNeedleSegmentContact`（针尖段扫掠）+ `NeedleSegmentTests` + `ContactModelV2Tests`；接口与偏差见 §7.5 | **高**（最大的改动） | C 矩阵 + W 格通过；`recovery == 0` | revert 一个 commit |
+| **S4** | 数据/导入器 | `LevelArenaHost.cs`（8 角点 OBB 烘、`AddObb`、ramp→slab、`ramps` 数组语义）、`PlacementImporter.cs`（`curve_ramp` 展开）、`placement_core.py`（45° error→warning + 弯坡校验）、`SupportSurfaceMath.cs`（降级为诊断） | 中：旧场景重烘 | 9 个小格的烘焙 OBB 表与旧 AABB **数值相同**（轴对齐）；`levelbuild check` 全绿；弯坡段数/矢高合规 | 弯坡条目 `expanded:false` 不展开 |
 | **S4a** | 关卡数据：`curve_ramp` 角色、45° 改为 warning、静态 OBB 总数预算 | `Tools/levelbuild/placement_core.py`、`Editor/LevelBuild/PlacementImporter.cs`（弧展开成 `<id>_00…` slab 子物体并逐段进 `rampBoxes`） | 中 | `python3 -m unittest discover -s Docs/tests` 全绿；`levelbuild check` 的 256 条与弦高预算 | 弯坡条目 `expanded:false` 不展开 |
-| **S4b** | arena 与道具场接 v2：8 角点真 OBB 登记、§7.4 双烘自检、容量溢出原因码、道具 OBB 接通电机 `SetPropObbs` | `Runtime/Story/LevelArenaHost.cs`、`Runtime/Pickup/PickupFieldHost.cs`、新增 `Runtime/BallContact/PropObbBakeMath.cs`、`Tests/EditMode/Story/LevelArenaHostObbTests.cs`、`Tests/EditMode/BallLayers/PropObbBakeTests.cs`、`Tests/EditMode/BallLayers/PickupFieldPropObbTests.cs`、本文 §7.6 | 中 | 三种模式的静态 OBB 条数 = box + ramp/弯坡段；轴对齐双烘一致；剪切回退带原因码；容量满可复现；道具块 `GetPropObbsCount()` 随扫描变化 | `LevelArenaHost.useObbBake=false`（回 AABB，AABB 与 v1/v2 都能跑）；道具侧 flag 关即回 v1（宿主会清空道具块） |
+| **S4b** | arena 与道具场接 v2：8 角点真 OBB 登记、§7.4 双烘自检、容量溢出原因码、道具 OBB 接通电机 `SetPropObbs` | `Runtime/Story/LevelArenaHost.cs`、`Runtime/Pickup/PickupFieldHost.cs`、新增 `Runtime/BallContact/PropObbBakeMath.cs`、`Tests/EditMode/Story/LevelArenaHostObbTests.cs`、`Tests/EditMode/BallLayers/PropObbBakeTests.cs`、`Tests/EditMode/BallLayers/PickupFieldPropObbTests.cs`、本文 §7.6 | 中 | 静态 OBB 条数 = box + ramp/弯坡段；轴对齐双烘一致；剪切回退带原因码；容量满可复现；道具块 `GetPropObbsCount()` 随扫描变化 | revert 一个 commit |
 | **S5** | 新测试格 + 沙盒 + 证据 | `Labs/PhysicsTestField`（W/R/S/X 格）、沙盒场景（地图 0，尚未建）、`physics_test_field.json`、`Docs/Evidence/...` | 中：数据/场景工作量大 | v2 验收表全绿；沙盒能手动滚 | 删格；沙盒场景独立，不影响主场景 |
 
-**依赖**：S1 → S2 → S3；S4 可与 S3 并行（S3 的 flag=true 需要 S4 的 OBB 烘，或先用 `AddBox` 的轴对齐 OBB 做 Unit 测试）；S5 依赖 S3+S4。
-**“v1 仍然可用”的硬约束**：S3 的 flag=false 分支必须**一行不改**地保留 `RefreshStepMask → TrySweepSphere → TryResolveSupport → GroundContactMath` 的原顺序；任何“顺手重构”都会让回滚失效。
+**依赖**：S1 → S2 → S3；S4 可与 S3 并行（S3 需要 S4 的 OBB 烘，或先用 `AddBox` 的轴对齐 OBB 做 Unit 测试）；S5 依赖 S3+S4。
 
 ### 7.2 每步的验收命令
 
@@ -1301,30 +1281,24 @@ python3 Docs/tools/validate_plan.py                  # 计划数据
 
 S3 涉及 `Runtime/BallMotor/KatamariBallMotor.cs`（v2 区域）、`Runtime/BallContact/BallShapeMath.cs`（补 §4A.3 的针尖**段**扫掠）、`Tests/EditMode/BallContact/NeedleSegmentTests.cs`、`Tests/EditMode/BallMotor/ContactModelV2Tests.cs`、`Docs/Design/BallMotor/contact_v2/shapes.py` + `Docs/tests/ball_contact_v2/test_segment_sweep.py`（参考模型与 Python 金值）。S3 不涉及 `LevelArenaHost`、`PlacementImporter`、`placement_core`、测试场场景/数据。
 
-#### 7.5.1 开关、回滚与 v1 路径的改动清单
+#### 7.5.1 位置权威与电机改动清单
 
-`[SerializeField] private bool contactModelV2Enabled = false;`（另有 `SetContactModelV2Enabled(bool)` / `IsContactModelV2()` 供实验与 EditMode 用）。
-
-`StepBall(dt)` 现在只做一件事：阶段 1–2 与 5–9 共享，**位置权威**在两者之间二选一：
+`StepBall(dt)` 的顺序：阶段 1–2 与 5–9 围着唯一的位置权威：
 
 ```
-1 StepInput -> 2 BallMotionMath -> [ flag ? StepContactV2 : StepPositionV1 ] -> 5..9 (含 7.5 长大推挤)
+1 StepInput -> 2 BallMotionMath -> StepContactV2 -> 5..9 (含 7.5 长大推挤)
 ```
 
-`StepPositionV1` 是**原 StepBall 的中段整体搬移**（语句、注释、常量逐字不变，已用 diff 核对），因此 flag=false 时执行顺序仍是 `RefreshStepMask → TrySweepSphere → TryResolveSupport → GroundContactMath`。
-
-进入 v1 路径的改动**只有这 5 处**（其余全部是新增方法/字段）：
+电机上与接触求解相关的改动：
 
 | # | 位置 | 改动 |
 |---|---|---|
-| 1 | `StepBall` 尾部（阶段 7.5） | 新增 `if (contactModelV2Enabled) ApplyGrowthPushOut(...)`，flag 关时不执行 |
-| 2 | `StepPositionV1` 开头/中段 | 三个值从局部变量变成 `out` 参数：`groundedCenter`(`= sweptCenter`)、`followCenter`(`= sweptCenter`)、`supportNormal`(`= groundPlaneNormal`)；方法开头先初始化三者（CS0165） |
-| 3 | `AddBox` / `AddRamp` 末尾 | 各加一次 `RegisterBoxObb` / `RegisterRampSlab` 调用；v1 没有任何读者读这两张表 |
-| 4 | `ClearObstacles` / `TeleportTo` | `ClearObstacles` 加 `ClearObbs()`；`TeleportTo` 加 v2 状态复位（垂直速度、爬升、稳定点、针尖上一帧、roundStartCenter）；v1 不读这些字段 |
-| 5 | `GetSupportKind` 开头 | 加 `if (contactModelV2Enabled) { 针尖支撑→5; 爬升接触→4 }`；flag 关时不进 |
-| 6 | `Start` 末尾 | `AllocateContactV2Buffers()`（约 25 KB，**flag 关了也分配**，这样运行期翻转 flag 仍能看到场景已登记的几何） |
+| 1 | `StepBall` 尾部（阶段 7.5） | `ApplyGrowthPushOut(...)` |
+| 2 | `AddBox` / `AddRamp` 末尾 | 各调一次 `RegisterBoxObb` / `RegisterRampSlab` |
+| 3 | `ClearObstacles` / `TeleportTo` | `ClearObstacles` 调 `ClearObbs()`；`TeleportTo` 复位接触状态（垂直速度、爬升、稳定点、针尖上一帧、roundStartCenter） |
+| 4 | `GetSupportKind` 开头 | 针尖支撑→5；爬升接触→4 |
+| 5 | `Start` 末尾 | `AllocateContactV2Buffers()`（约 25 KB；表不存在时才分配，见 §7.5.5 第 13 条） |
 
-回滚 = flag 置 false；不需要 revert commit。
 
 #### 7.5.2 新增公开 API（S4 按这些签名写）
 
@@ -1373,46 +1347,40 @@ int   GetLastRecoveryReason();                            // 1 软 2 硬 3 初�
 bool  IsSizeApplyDeferred(); int   GetSizeApplyDeferredCount();
 int   GetContactSolveFailureCount();   int GetContactRejectedStepCount();
 float GetContactRadiusUsedWorldM();    Vector3 GetContactDriveDirection();
-float GetSupportSlopeDegrees();
 float GetNeedleProtrusionCapWorldM();  float GetNeedleProtrusionMaxWorldM();
 float GetPhysicalRadiusWorldM();       float GetVisualCoreRadiusWorldM();
 float GetRollReachWorldM();            float GetPickupReachWorldM();
-bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabled);
 ```
 
 #### 7.5.3 每个 v2 阶段落在哪个方法
 
 | 设计阶段 | 代码 | 说明 |
 |---|---|---|
-| 2.5 台阶掩码 | **无**（v2 分支不调用 `RefreshStepMask`） | 掩码字段/方法仍在，v1 用 |
 | 3 子步 + 窗口 + 接触 + 推挤 + 分类 + 速度响应 | `StepContactV2` → `FillNearWindow` + `ContactSolveMath.TryStep`（S2，内含 `MaxSubSteps`/`TryCollectContacts`/`TryPushOut`/`SelectSupportContact`/`SelectClimbContact`/`ClimbMath`） | 一次 Udon 调用做完全部障碍循环。**窗口把静态表与道具块混排**：两块放在同一组数组里（静态前缀 `[0, static)` + 道具块 `[static, static+prop)`），`FillNearWindow` 用 `static + prop` 作为条目数调**一次** `TrySelectWindow`，所以 R_in/R_out、24 上限、距离排序、滞回、溢出判据全部是同一份；求解器看到的是同一张 near 表，没有任何“道具分支” |
 | 3.5 爬升 | `ContactSolveMath.TryStep` 内的 TryStep 状态机；状态字段在电机（`climbActive/climbAnchorY/climbSurfaceId/climbCooldown/climbLocked/climbAlongSpeed`），`WriteContactSupport` 写回口径 | `GetClimbState` 的 2 = 冷却窗口 |
-| 4 支撑写回 | `WriteContactSupport`（v1 的 `supportSurface*` 字段全部继续写） | 支撑高度用 v1 同一公式 `C.y − dot(n,C−p)/n.y`，针尖支撑自然落到 §2.5 的针尖公式 |
-| 4.5 长大推挤 | `ApplyGrowthPushOut`（在共享尾部的 7.5，flag 关时不跑） | 独立接触 scratch，不覆盖当步 `GetContact*` 读数；≤2 次 × ≤5 cm；失败则**整段不应用** + `sizeApplyDeferred` |
+| 4 支撑写回 | `WriteContactSupport`（写 `supportSurface*` 字段） | 支撑高度 `C.y − dot(n,C−p)/n.y`，针尖支撑自然落到 §2.5 的针尖公式 |
+| 4.5 长大推挤 | `ApplyGrowthPushOut`（`StepBall` 的 7.5） | 独立接触 scratch，不覆盖当步 `GetContact*` 读数；≤2 次 × ≤5 cm；失败则**整段不应用** + `sizeApplyDeferred` |
 | 针尖（§4A.3） | `PrepareNeedleShape` / `EstimateNeedleProtrusion` / `CollectNeedleContacts` / `ResolveNeedleContacts` / `MergeNeedleContacts` / `ApplyNeedleVelocityResponse` + `BallShapeMath.TryNeedleSegmentContact` | 段扫掠在 S2 库里（纯数学 + EditMode + Python 金值） |
 | 2.8 卡死/恢复 | `UpdateContactRecovery` / `TryRecoverToStablePoint` / `EnterRecoveryHold` | 软 1.5 s 清速度；硬 3 s 回**最后稳定点**（没有则本回合起点）；10 s 内 3 次 → `recoveryState=3` + 一条 `[BallMotor] recovery hold …`，不再传送 |
 | §5.4 窗口溢出 | `FillNearWindow` + `LogWindowOverflowOnce` | 保留最近 24 条，`contactIncomplete` 锁存 + 每 1 s 最多一条 `[ContactV2] window overflow …` |
 
-**AddBox → OBB**：`center=(min+max)/2`、`halfExtents=(max−min)/2`、轴 = 世界轴、`surfaceId = 1 + boxIndex`（v1 支撑表 id）、`role = 0`。**AddRamp → slab OBB**：`axisY = rampNormal`、`axisX = right 在坡面内的投影归一化`、`axisZ = cross(axisY, axisX)`、`halfExtents = (halfWidth, thickness/2, halfRun / normal.y)`、`center = walkingCenter − normal·thickness/2`、`surfaceId = 10 + rampIndex`、`role = 1`；`thickness = rampSlabThicknessM`（序列化，默认 0.04）。坡的**走向面**就是原来的烘焙平面，所以旧场景开 flag 后球不会陷半个板厚。
+**AddBox → OBB**：`center=(min+max)/2`、`halfExtents=(max−min)/2`、轴 = 世界轴、`surfaceId = 1 + boxIndex`、`role = 0`。**AddRamp → slab OBB**：`axisY = rampNormal`、`axisX = right 在坡面内的投影归一化`、`axisZ = cross(axisY, axisX)`、`halfExtents = (halfWidth, thickness/2, halfRun / normal.y)`、`center = walkingCenter − normal·thickness/2`、`surfaceId = 10 + rampIndex`、`role = 1`；`thickness = rampSlabThicknessM`（序列化，默认 0.04）。坡的**走向面**就是原来的烘焙平面，所以球不会陷半个板厚。
 
-#### 7.5.4 getter 在 v2 的口径（旧读者不受影响）
+#### 7.5.4 getter 口径
 
-| getter | v1 | v2 |
-|---|---|---|
-| `GetSupportSurfaceId` | 0 / 1+i / 500+i / 100+i / 2000+ | 同上（地面 0、盒 1+i（1..64）、坡 500+i、道具 100+i、地形 2000+；`AddObb` 用调用方给的 id） |
-| `GetSupportKind` | 0/1/2/3/−1 | 同上 **+ 4 = 爬升接触**、**5 = 只有针尖撑着** |
-| `GetSupportSurfaceHeightWorldM` | 选中面在球心 XZ 的高度 | 同一公式；针尖支撑时给出针尖处的切平面高度（§2.5）；**爬升时没有地板可报**，返回球的底部（`center.y − r`），使 `support_gap` 读 0（把墙接触点的 y 当高度会读成 `−r`，见 §7.7.1） |
-| `GetSupportNormalWorld` | 选中面法线 | 支撑法线；爬升时为爬升接触法线；无支撑时保留上一次 |
-| `GetStepHeightLimitWorldM` | 0.25·D，参与物理 | 仍返回 0.25·D，**只作诊断**（每步刷新） |
-| `IsFalling` | 丢失支撑后进入重力 | = 无支撑接触且不在爬升 |
-| `GetSupportSurfaceCount` | 带内面数 | 当步接触条数 |
-| `GetContactSurfaceId` / `GetContactRole` | — | 同一条接触的两种标签，用来区分静态与道具（**没有**道具专用分支）：地面 0 / 静态盒 1..64 / 坡 500..503 / 道具 100..111 / 边界平面 1000+i / 地形 2000+；role 0 盒、1 坡、2 支撑道具、3 挡路。`GetDominantContactSurfaceId` 返回原样 id，读者按区间判类 |
-| `GetNearObbCount` | — | 静态 + 道具合并后的近集条数（≤24）；`GetNearObbDropped` 是**两块共享预算**下丢掉的条数 |
-| `GetCollisionRadiusWorldM` | 扫掠半径 | = `r_phys`，接触半径 |
-| `GetSemanticDiameterWorldM` | 视觉/相机/stepLimit/吸收门 | 不变（§4A.5 的三形状拆分不在 S3） |
-| `GetGroundProxyLiftWorldM` / `GetProxyProtrusionCapWorldM` | 径向代理抬升 | v2 不再抬升：前者仍返回最后值（诊断），后者仍按 `min(0.35r,0.30)` 返回（= 针尖 cap） |
-| `GetStepMaskRebuildCount` | 掩码重建次数 | v2 不再重建（值冻结） |
-| `IsTerrainSupportEnabled` / `SetTerrainSupportEnabled` | P1 支撑/台阶/下落开关 | v2 **不读**这个开关（没有掩码、没有高度场、没有 `fallSpeedMps` 下落状态）；flag 开时它无效 |
+| getter | 口径 |
+|---|---|
+| `GetSupportSurfaceId` | 地面 0、盒 1+i（1..64）、坡 500+i、道具 100+i、地形 2000+；`AddObb` 用调用方给的 id |
+| `GetSupportKind` | 0 地面 / 1 盒 / 2 坡 / 3 道具 / 6 地形 / −1 无，**+ 4 = 爬升接触**、**5 = 只有针尖撑着** |
+| `GetSupportSurfaceHeightWorldM` | 选中面在球心 XZ 的高度；针尖支撑时给出针尖处的切平面高度（§2.5）；**爬升时没有地板可报**，返回球的底部（`center.y − r`），使 `support_gap` 读 0（把墙接触点的 y 当高度会读成 `−r`，见 §7.7.1） |
+| `GetSupportNormalWorld` | 支撑法线；爬升时为爬升接触法线；无支撑时保留上一次 |
+| `GetStepHeightLimitWorldM` | 0.25·D，**只作诊断**（每步刷新）；吸收门之外，道具的挡路/可站判据（`PickupFieldHost`）读它 |
+| `IsFalling` | = 无支撑接触且不在爬升 |
+| `GetSupportSurfaceCount` | 当步接触条数 |
+| `GetContactSurfaceId` / `GetContactRole` | 同一条接触的两种标签，用来区分静态与道具（**没有**道具专用分支）：地面 0 / 静态盒 1..64 / 坡 500..503 / 道具 100..111 / 边界平面 1000+i / 地形 2000+；role 0 盒、1 坡、2 支撑道具、3 挡路。`GetDominantContactSurfaceId` 返回原样 id，读者按区间判类 |
+| `GetNearObbCount` | 静态 + 道具合并后的近集条数（≤24）；`GetNearObbDropped` 是**两块共享预算**下丢掉的条数 |
+| `GetCollisionRadiusWorldM` | = `r_phys`，接触半径 |
+| `GetSemanticDiameterWorldM` | 视觉/相机/stepLimit/吸收门（§4A.5 的三形状拆分不在 S3） |
 
 #### 7.5.5 与设计的偏差（已实现 vs 推迟）
 
@@ -1427,17 +1395,17 @@ bool  IsContactModelV2();              void  SetContactModelV2Enabled(bool enabl
 5. **`GetLastStepMicros` 是粗测**：Udon 没有高精度时钟（无 `Stopwatch`），`Time.time` 每帧才变；一帧跑多个固定步时只有第一个非零，读数只能当“整帧上界”。要真测请用 profiler。
 6. **`contactIncomplete` 是锁存 + 一条日志，不冻结球**：§5.4 的原文就是“仍用 24 条，标记不完整，判据失败”。
 7. **没有 dash**（§3.8）、**没有 `GetFixedStepCount`**（§6.4 列的是 P4 请求，S3 未加）。
-8. **AddBox 容量 64**：现有场景（≤64 盒 + ≤4 坡）可以直接开 flag；地图 0 的 118 条要等 S4 把宿主改成 `AddObb`。`AddRamp` 的 45° 作者门仍在（S4 改 warning），更陡的坡只能用 `AddObb` 直接登记。
-9. **挡路道具 / 支撑道具：经 S4b 宿主 + `SetPropObbs` 进 v2**。宿主在它的 20 Hz 扫描里把近邻道具作为真 OBB 交给 `SetPropObbs`（12 槽，surface id 100+i，role 2/3），它们与静态盒走**同一份**接触/分类/推挤，窗口里按距离与静态混排。**v1 的 `SetBlockingBoxes` / `SetSupportProps` 没有自动转换**（它们仍只喂 v1 的 sweep/支撑表，flag 关时行为逐字不变）；`TeleportTo`/`ClearObstacles` 清道具块，下一次宿主扫描重登记，与 v1 清挡路盒的策略一致。§7.6.5 记的宿主侧实现按这个签名接通。
+8. **AddBox 容量 64**：现有场景（≤64 盒 + ≤4 坡）可以直接登记；地图 0 的 118 条要等 S4 把宿主改成 `AddObb`。`AddRamp` 的 45° 作者门仍在（S4 改 warning），更陡的坡只能用 `AddObb` 直接登记。
+9. **挡路道具 / 支撑道具：经 S4b 宿主 + `SetPropObbs` 进 v2**。宿主在它的 20 Hz 扫描里把近邻道具作为真 OBB 交给 `SetPropObbs`（12 槽，surface id 100+i，role 2/3），它们与静态盒走**同一份**接触/分类/推挤，窗口里按距离与静态混排。`TeleportTo`/`ClearObstacles` 清道具块，下一次宿主扫描重登记。§7.6.5 记的宿主侧实现按这个签名接通。
 10. **三形状拆分（§4A.5）未落到尺寸层**：`r_phys = collisionRadiusWorldM`，`collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` 语义未变；只提供 `GetPhysicalRadiusWorldM` / `GetVisualCoreRadiusWorldM` / `GetRollReachWorldM` / `GetPickupReachWorldM` 四个读数。
-    **pickup 按 §4A.4 用等效球触发**：`EvaluatePendingCandidates` 无论 flag 都传 `collisionRadiusWorldM`；`GetPickupReachWorldM` 返回同一物理半径，contactRadius 另读。道具侧是自身有向盒，不是外接球；局部位姿在成功提交同一步写入事件环，宿主不重投影。
+    **pickup 按 §4A.4 用等效球触发**：`EvaluatePendingCandidates` 传 `collisionRadiusWorldM`；`GetPickupReachWorldM` 返回同一物理半径，contactRadius 另读。道具侧是自身有向盒，不是外接球；局部位姿在成功提交同一步写入事件环，宿主不重投影。
 11. **针尖可能漏掉亚毫米的擦角**（`BallShapeMath.TryNeedleSegmentContact` 的 5 采样 + 12 次二分）：面/棱命中精确，角上极浅的擦过可能漏。
 12. **爬升门的“持续条件”在电机里，而不是在 `TryStep`/参考模型里**：§3.2 的 `v_gate ≥ v_req(θ)` 被当作**持续**条件，`RefreshClimbGate` 在每步求解前检查；`p < p_min`、到达上限、以及“门已关闭”三者任一成立就离开爬升通道并给 0.35 s 冷却。`ContactSolveMath.TryStep` 与 `contact_v2.py` 只实现“到达上限 / `p < p_min`”两种退出，参考模型的夹具全是全推时间线，所以这一条留在电机层，`step()` 的两份实现仍然一致。
 13. **v2 表在需要时惰性分配**：`AddObb`/`SetPropObbs` 会先 `EnsureContactV2Buffers()`，`Start` 只在表不存在时分配。Unity 跨 GameObject 的 `Start` 顺序是任意的，宿主可能先登记；曾出现 `GetStaticObbCount == 0` 而 `[arena]` 报 `obbs=1/1` 就是这一类时序窗口（登记被拒/被 Start 覆盖），现在两条路径都不会丢几何。
 
 #### 7.5.6 测试
 
-两组 EditMode：`VRCKatamari.Tests.NeedleSegmentTests`（纯数学）与 `VRCKatamari.Tests.ContactModelV2Tests`（电机级，含道具 OBB 的挡球/混排/超容/清理/flag 关无效五例）；后者是设计期望值，若红，先看 `GetContactCount/GetSupportKind/GetRecoveryState` 三组读数再判是代码还是期望。参考模型金值：`Docs/tests/ball_contact_v2/test_segment_sweep.py`。
+两组 EditMode：`VRCKatamari.Tests.NeedleSegmentTests`（纯数学）与 `VRCKatamari.Tests.ContactModelV2Tests`（电机级，含道具 OBB 的挡球/混排/超容/清理四例）；后者是设计期望值，若红，先看 `GetContactCount/GetSupportKind/GetRecoveryState` 三组读数再判是代码还是期望。参考模型金值：`Docs/tests/ball_contact_v2/test_segment_sweep.py`。
 
 ### 7.6 S4b 实现与接口
 
@@ -1445,15 +1413,10 @@ S4b 涉及五处：`LevelArenaHost.cs`、`PickupFieldHost.cs`（只到「挡路/
 
 #### 7.6.1 一条几何只登记一次：三种模式
 
-`LevelArenaHost` 新增 `[SerializeField] private bool useObbBake = true;`，但**走哪条路**由电机的 flag 决定，按模式二选一（不是两条都跑）：
+`LevelArenaHost` 对每个 box/ramp/弯坡段走**同一条**路：8 世界角点 → `ObbBakeMath.TryBakeFromCorners` → `AddObb`（box `1+i`、slab `500+i`，role 0/1）；静态 OBB 条数 = box + ramp/段。
 
-| 模式 | arena 的登记 | 电机 v2 静态表里是谁 | 静态 OBB 条数 |
-|---|---|---|---|
-| v2（`IsContactModelV2()`）且 `useObbBake` | 每个 box/ramp/弯坡段：8 世界角点 → `ObbBakeMath.TryBakeFromCorners` → `AddObb`（box `1+i`、slab `500+i`，role 0/1） | arena 登记的真 OBB | box + ramp/段 |
-| v2 且 `!useObbBake` | 与 v1 相同：`AddBox`/`AddRamp`（§7.1 的回滚路径） | 电机镜像的轴对齐 OBB（S3 §7.5.3） | box + ramp/段 |
-| v1 | 与 v1 相同：`AddBox`/`AddRamp` | 电机镜像（v1 不读） | box + ramp/段 |
+**为什么不调 `AddBox`/`AddRamp`**：它们自己就会 `RegisterBoxObb`/`RegisterRampSlab`（§7.5.3），再调一次 `AddObb` 会把同一条几何登记两遍（球会看到两层壳）。EditMode 直接断言 `GetStaticObbCount() == 盒子数 + 坡/段数`。
 
-**为什么不两种都调**：`AddBox`/`AddRamp` 自己就会 `RegisterBoxObb`/`RegisterRampSlab`（§7.5.3 第 3 条），所以在 v2 里再调一次 `AddObb` 会把同一条几何登记两遍（球会看到两层壳）。上面的三条路每一条都只写一次，EditMode 直接断言 `GetStaticObbCount() == 盒子数 + 坡/段数`。`useObbBake` 单独为 true 但电机仍是 v1 时**不**走 `AddObb`（那会让 v1 的扫掠表空掉、球掉下去），报告行写 `obbBake=mirror`。
 
 #### 7.6.2 8 角点、§7.4 双烘自检、剪切
 
@@ -1466,7 +1429,7 @@ S4b 涉及五处：`LevelArenaHost.cs`、`PickupFieldHost.cs`（只到「挡路/
 导入器（S4a）把一条弧展开成 `<id>_00…` 的 slab 子物体，**逐段进 `rampBoxes`**；arena 对 `rampBoxes` 的每一段走**同一条** ramp→slab 路径，所以：
 
 - 表面 id 是 `SupportSurfaceMath.FirstRampSurfaceId + 已登记段序号`（500 起；一条 8 段弧 = 500..507）。`SupportSurfaceMath.IsRampSurfaceId` 的上界仍是 `MaxRampCount=4` 的 `500..503`，v2 的弯坡会超出——那是**诊断读者**的旧假设，不是登记约束，留给 S5 一起改。
-- v2 **不套 45° 门**：θ 是连续处理的，弧末段接近垂直也能登记（这也是 `AddRamp` 在 v2 不被调用的原因之一：`AddRamp` 的坡度门和 4 条上限都不适用）。v1 照旧拒绝 >45° 的段。
+- **不套 45° 门**：θ 是连续处理的，弧末段接近垂直也能登记（`AddRamp` 的坡度门和 4 条上限在这里都不适用，所以 arena 不调它）。
 - `[arena] … ramps=<成功>/<数组长度>` 统计的是**段数**（`rampBoxes` 的条目数），所以一条弧在报告里就是它的段数；`obbs=` 再给一次总数。
 
 #### 7.6.4 容量与溢出
@@ -1475,7 +1438,7 @@ S4b 涉及五处：`LevelArenaHost.cs`、`PickupFieldHost.cs`（只到「挡路/
 
 #### 7.6.5 道具：接通电机
 
-`PickupFieldHost` 在每次扫描后（同一批候选标记、同一个「太贵不能吸」判据、同一条 `SelectNearest` 选择规则）再选一份最多 12 条的道具集合（6 挡路 + 6 支撑合成一张表），用 `PropObbBakeMath.TryBakeProp` 把 `propLocalBounds` 按道具世界旋转**转一次**建成真 OBB（缺列时退回 `propBounds` 的轴对齐盒，与 v1 逐位相同，并计 `GetPropObbFallbackRows()`）。这就是「径向代理双重旋转」那个 bug 在道具挡路侧的对应修法。
+`PickupFieldHost` 在每次扫描后（同一批候选标记、同一个「太贵不能吸」判据、同一条 `SelectNearest` 选择规则）再选一份最多 12 条的道具集合（6 挡路 + 6 支撑合成一张表），用 `PropObbBakeMath.TryBakeProp` 把 `propLocalBounds` 按道具世界旋转**转一次**建成真 OBB（缺列时退回 `propBounds` 的轴对齐盒，并计 `GetPropObbFallbackRows()`）。这就是「径向代理双重旋转」那个 bug 在道具挡路侧的对应修法。
 
 **交接**：`ApplyPropObbSet` 直接调电机的整块替换接口：
 
@@ -1485,10 +1448,8 @@ motor.SetPropObbs(propObbCenter, propObbAxisX, propObbAxisY, propObbAxisZ,
 ```
 
 - **只整块替换**：吸收、走远、变可吸都只是「下一批里没有它」，宿主不维护增删；集合变空时调一次 `motor.ClearPropObbs()`（换集合由整批写覆盖，不需要先清）。
-- **只在 `IsContactModelV2()` 时登记**（`ApplyPropObbSet` 里判断，`RefreshPropObbs` 也在 v1 直接返回）：flag 关时电机本来就忽略道具 OBB，每扫描做一次 12 槽校验+拷贝是纯开销。**清空不判断 flag**——一次集合变化只发一次，而且不这样的话 flag 关掉再打开时会把旧块复活。
 - **约定**：surface id `100 + 槽位`（100..111），role 2 = 可站（`ContactCodes.RoleProp`）、3 = 挡路（`ContactCodes.RoleBlocking`）；于是 `GetSupportKind()` 的 3（道具支撑）与 `GetContactRole()` 都能认出道具接触。注意 dot 文档里「role 2=挡路」的说法与 `ContactCodes` 相反，以代码为准（2=支撑道具，3=挡路/边界）。
 - **拒绝**：`SetPropObbs` 返回 false 时电机保留上一块（它的契约），宿主按 `GetPropObbsRefusalReason()` 打**一条** warning（`BlockingLogLimit` 封顶），不逐扫描刷。容量溢出由电机计数（`GetPropObbsOverflowCount()`），宿主自己的 `GetPropObbOverflowCount()` 仍记「候选数 > 12 的扫描次数」。
-- 因此 v2 的道具挡路/支撑不需要「关 flag」这个前提。
 
 #### 7.6.6 测试
 
@@ -1555,7 +1516,7 @@ pass8 中 C14 的 `lift_bounded` 为红：+0.0189/+0.0721/+0.1346/+0.2133（≈0
 
 | # | 决定 | 选项 | 我的推荐 | 影响 |
 |---|---|---|---|---|
-| 1 | **坡要不要从侧面/下面挡** | ① 实体 slab（挡） ② 只挡顶面（v1） | **①**：用户看到的就是“穿过去”，且实体板让“坡 = 一个 OBB”成立 | 关卡数据：0.35 m 窄坡会变成障碍；薄板要加厚 |
+| 1 | **坡要不要从侧面/下面挡** | ① 实体 slab（挡） ② 只挡顶面 | **①**：用户看到的就是“穿过去”，且实体板让“坡 = 一个 OBB”成立 | 关卡数据：0.35 m 窄坡会变成障碍；薄板要加厚 |
 | 2 | **`k_h`（H_cap = k_h·2r）** | 1.45 / 1.5 / 1.6 | **1.5**（OUR PROVISIONAL，无原作锚） | 直接决定“多高的台阶/墙能上”；见 TERRAIN_CLIMB §7 |
 | 3 | **爬墙要不要按钮** | ① 只推入（官方） ② 额外按键 | **①**：官方手册就是“双摇杆前推”；② 会让 VR 输入更复杂 | 输入层 |
 | 4 | **dash** | ① 1.6×/0.45 s/冷却 1.2 s ② 不做 ③ 更强 | **①**；dash 只加速/提速爬升，不改 H_cap | 输入层 + 手感 |
@@ -1622,7 +1583,7 @@ required_speed_with_grip(theta_deg, protrusion, r_core) -> float
 
 ### 9.4 与其它文档的交叉引用
 
-- 测试场：`Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md`（§4.1.3 死锁、§4.1.5 跳变、§6.1 协议、§5.2 判据字典）
+- 测试场：`Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md`（§6.1 协议、§5.2 判据字典、§5.6 覆盖行与只记录行）
 - 地形支撑：`Docs/Design/BallMotor/TERRAIN_SUPPORT.md`（§4 台阶、§5 斜面——本文 §2.5/§1.5 取代其物理，作者校验保留）
 - 马达契约：`Docs/Design/BallMotor/README.md`（9 阶段顺序；§7.3 给 v2 的目标）
 - 尺寸/吸附：`Docs/Design/PickupAbsorb/README.md`、`Docs/Design/StoryMode/PROP_CATALOG.md`（沙盒道具尺寸）

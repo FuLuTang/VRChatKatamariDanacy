@@ -10,15 +10,13 @@ using UnityEngine;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins the criteria importer's v2 override encoding, the cell fields it writes into, and
-    /// the bake that must tag exactly the file's 11 v2 rows (never all 59).
+    /// Pins the criteria importer's override encoding, the cell fields it writes into, and
+    /// the bake that must tag exactly the file's one override row (C06 no_climb), never all 90.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The SAME 36-run matrix has to judge both motor models (design
-    /// <c>PHYSICS_TEST_FIELD.md</c> section 5.6): a criterion may carry an optional <c>v2</c>
-    /// block that the driver applies only when the motor reports <c>IsContactModelV2()</c>, and
-    /// the v1 row stays the criterion otherwise. The JSON side is checked in
+    /// A criterion may carry an optional <c>v2</c> override block that replaces its base row
+    /// (design <c>PHYSICS_TEST_FIELD.md</c> section 5.6); today only C06 no_climb has one. The JSON side is checked in
     /// <c>Docs/tests/levelbuild/test_physics_test_field_cells.py</c>; what only EditMode can
     /// check is the C# half - the cell really has the six arrays the importer writes through
     /// <c>SerializedObject</c>, and the encoder turns the JSON's v2 block into the masks the
@@ -34,7 +32,7 @@ namespace VRCKatamari.Tests
     /// <para>
     /// Mask arithmetic (the cell's encoding): two bits per preset diameter in preset order,
     /// 0 = n/a, 1 = pass, 2 = fail. So all-pass is 0b01010101 = 85, all-n/a is 0, and
-    /// <c>-1</c> means "inherit the v1 row".
+    /// <c>-1</c> means "inherit the base row".
     /// </para>
     /// </remarks>
     public class CriteriaModelOverrideTests
@@ -83,8 +81,11 @@ namespace VRCKatamari.Tests
             FieldInfo revision = cellType.GetField("CellRevision",
                 BindingFlags.Static | BindingFlags.NonPublic);
             Assert.IsNotNull(revision, CellTypeName + ".CellRevision is missing");
-            Assert.AreEqual("2026-11-15e", revision.GetRawConstantValue(),
-                "the cell's build stamp must match the driver's (both 2026-11-15e)");
+            Assert.AreEqual("2026-11-17a", revision.GetRawConstantValue(),
+                "the cell's build stamp must match the driver's (both 2026-11-17a)");
+            Assert.IsNotNull(cellType.GetField("skipDiameterMask",
+                    BindingFlags.Instance | BindingFlags.NonPublic),
+                CellTypeName + ".skipDiameterMask is missing (the per-diameter run mask)");
         }
 
         // ---- the real criteria file, encoded -----------------------------------
@@ -95,7 +96,7 @@ namespace VRCKatamari.Tests
             object doc = LoadFieldDocument();
             Type docType = doc.GetType();
             Array cells = (Array)Field(docType, doc, "cells");
-            Assert.AreEqual(9, cells.Length, "the field has 9 wired cells");
+            Assert.AreEqual(13, cells.Length, "the field has 13 wired cells");
 
             int rows = 0;
             for (int i = 0; i < cells.Length; i++)
@@ -128,7 +129,7 @@ namespace VRCKatamari.Tests
                     }
 
                     Assert.IsTrue(mask == AllPass || mask == -1,
-                        where + ": both models' answers are all-pass here, got mask " + mask);
+                        where + ": an override row is all-pass or inherits, got mask " + mask);
                     if (threshold == 1)
                     {
                         Assert.AreEqual(1, opCode,
@@ -139,15 +140,14 @@ namespace VRCKatamari.Tests
 
             // The file's own count is assertable now that the SAME predicate the importer bakes
             // with is what this test counts (see IsV2Override). It is the number the JSON guard
-            // pins too: Docs/tests/levelbuild/test_physics_test_field_cells.py counts the 11
-            // real "v2" keys in the file. If the importer ever regresses to `v2 != null` again,
-            // TheImporterBakesExactlyTheFilesElevenV2Rows fails before this one does.
-            const int DesignV2RowCount = 11;
-            Assert.AreEqual(DesignV2RowCount, rows,
-                "the criteria file lost a v2 row CONTACT_MODEL_V2 7.7.2/7.7.4 requires: four "
-                + "ramp_registered rows (C01/C03/C05/C13) + C06's three + C09/C10 on_step + "
-                + "C10 blocked_gap + C14 lift_bounded. The exact count is pinned by "
-                + "Docs/tests/levelbuild/test_physics_test_field_cells.py");
+            // pins too: Docs/tests/levelbuild/test_physics_test_field_cells.py counts the one
+            // real "v2" key in the file. If the importer ever regresses to `v2 != null` again,
+            // TheImporterBakesExactlyTheFilesOverrideRows fails before this one does.
+            const int DesignOverrideRowCount = 1;
+            Assert.AreEqual(DesignOverrideRowCount, rows,
+                "the criteria file's override rows changed: only C06 no_climb (the symbolic " +
+                "climb_cap_bound threshold) carries one. The exact count is pinned by " +
+                "Docs/tests/levelbuild/test_physics_test_field_cells.py");
         }
 
         /// <summary>
@@ -161,11 +161,11 @@ namespace VRCKatamari.Tests
         /// the host is destroyed again and nothing is saved.
         /// </remarks>
         [Test]
-        public void TheImporterBakesExactlyTheFilesElevenV2Rows()
+        public void TheImporterBakesExactlyTheFilesOverrideRows()
         {
             object doc = LoadFieldDocument();
             Array cells = (Array)Field(doc.GetType(), doc, "cells");
-            Assert.AreEqual(9, cells.Length, "the field has 9 wired cells");
+            Assert.AreEqual(13, cells.Length, "the field has 13 wired cells");
 
             var baked = new Dictionary<string, int>();
             int total = 0;
@@ -216,33 +216,31 @@ namespace VRCKatamari.Tests
                 UnityEngine.Object.DestroyImmediate(host);
             }
 
-            Assert.AreEqual(59, total,
+            Assert.AreEqual(90, total,
                 "the criteria file's wired check count moved; update this test");
-            Assert.AreEqual(11, v2Rows, "the importer must bake the file's 11 v2 rows; 59 means " +
-                "every default V2Entry was tagged (the pass10 regression)");
-            Assert.Less(v2Rows, total, "v2 rows sit on top of v1 rows: all rows tagged is the bug");
+            Assert.AreEqual(1, v2Rows, "the importer must bake the file's one override row; 90 " +
+                "means every default V2Entry was tagged (the pass10 regression)");
+            Assert.Less(v2Rows, total, "override rows sit on top of base rows: all rows tagged is the bug");
 
-            // The defect's nine victims: these rows have NO v2 block, so the driver must keep
-            // judging them with v1 and derive their step limit (deck_gap_m for the climbed rows,
-            // ramp_entry_progress_m for ramp_entered; design PHYSICS_TEST_FIELD section 5.6).
-            string[] v1Rows =
+            // Rows without an override block must stay base rows: the driver derives the
+            // ramp-entry threshold for the climb rows, and a wrongly tagged row would skip it.
+            string[] baseRows =
             {
-                "C08/on_step",
-                "C01/climbed", "C01/ramp_entered",
+                "C08/on_step", "C09/on_step", "C10/on_step", "C14/lift_bounded",
+                "C01/climbed", "C01/ramp_entered", "C01/ramp_registered",
                 "C03/climbed", "C03/ramp_entered",
                 "C05/climbed", "C05/ramp_entered",
                 "C13/climbed", "C13/ramp_entered",
+                "C25/climb_active_s", "C27/slides_after_rest",
             };
-            for (int i = 0; i < v1Rows.Length; i++)
+            for (int i = 0; i < baseRows.Length; i++)
             {
-                Assert.IsTrue(baked.ContainsKey(v1Rows[i]), v1Rows[i] + " is not in the file");
-                Assert.AreEqual(0, baked[v1Rows[i]], v1Rows[i] + " must stay a v1 row or the " +
-                    "driver skips its step-limit derivation (design section 5.6)");
+                Assert.IsTrue(baked.ContainsKey(baseRows[i]), baseRows[i] + " is not in the file");
+                Assert.AreEqual(0, baked[baseRows[i]], baseRows[i] + " must stay a base row");
             }
 
-            // The other side of the same bug: the on_step rows that DO carry an override stay v2.
-            Assert.AreEqual(1, baked["C09/on_step"], "C09/on_step has an explicit expect flip");
-            Assert.AreEqual(1, baked["C10/on_step"], "C10/on_step has an explicit expect flip");
+            Assert.AreEqual(1, baked["C06/no_climb"], "C06/no_climb carries the climb_cap_bound " +
+                "threshold override");
         }
 
         /// <summary>
@@ -252,8 +250,8 @@ namespace VRCKatamari.Tests
         /// <c>v2 != null</c> is NOT the test. JsonUtility deserializes a nested serializable
         /// class into an instance even when the JSON key is absent (Unity's serializer has no
         /// null for a class field without <c>[SerializeReference]</c>), so every check reads
-        /// back with a non-null all-default <c>V2Entry</c>: the round-M run counted 59 "rows"
-        /// where the file has 11 blocks. The importer's <c>HasV2Override</c> is the content
+        /// back with a non-null all-default <c>V2Entry</c>: the round-M run counted every "row"
+        /// where the file has few blocks. The importer's <c>HasV2Override</c> is the content
         /// test (expect / metric / op / threshold / not_applicable); this wrapper is only the
         /// reflection plumbing that keeps this file honest about calling it.
         /// </remarks>
@@ -263,42 +261,39 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void TheDesignRowsThatFlipAreEncodedAsWritten()
+        public void TheSymbolicClimbBoundIsEncodedAsWritten()
         {
-            // Every row CONTACT_MODEL_V2 7.7.2/6.1 flips or replaces, checked end to end:
-            // JSON -> encoder -> the mask/op/threshold the driver will read back.
-            AssertRow("C01", "ramp_registered", AllPass, 2, 0);      // >= over static_obb_count
-            AssertRow("C03", "ramp_registered", AllPass, 2, 0);
-            AssertRow("C05", "ramp_registered", AllPass, 2, 0);
-            AssertRow("C13", "ramp_registered", AllPass, 2, 0);
-            AssertRow("C06", "no_ramp_registered", 0, -1, 0);        // not_applicable
-            AssertRow("C06", "no_climb", AllPass, 1, 1);             // <= climb_cap_bound
-            AssertRow("C06", "stopped_by_wall", AllPass, 1, 0);      // <= 0
-            AssertRow("C09", "on_step", AllPass, -1, 0);             // expect flip only
-            AssertRow("C10", "on_step", AllPass, -1, 0);
-            AssertRow("C10", "blocked_gap", AllPass, 1, 0);          // <= 0
-            AssertRow("C14", "lift_bounded", AllPass, 1, 0);          // gated lift metric
+            // The one override row: JSON -> encoder -> the mask/op/threshold the driver reads.
+            // The block carries only the threshold and op, so the expectation is inherited (-1).
+            AssertRow("C06", "no_climb", -1, 1, 1);                  // <= climb_cap_bound
         }
 
         [Test]
-        public void TheC14LiftRowNamesTheGatedMetric()
+        public void TheFoldedRowsAreJudgedAsWritten()
         {
-            object check = FindCheck("C14", "lift_bounded");
-            object v2 = Field(check.GetType(), check, "v2");
-            Assert.AreEqual("lift_over_nominal_in_deck_m",
-                (string)Field(v2.GetType(), v2, "metric"),
-                "the v2 lift is only the plate's, so it must name the gated metric " +
-                "(CONTACT_MODEL_V2 7.7.4)");
+            // These rows used to be overrides; their values now live in the base row.
+            object lift = FindCheck("C14", "lift_bounded");
+            Assert.AreEqual("lift_over_nominal_in_deck_m", (string)Field(lift.GetType(), lift,
+                "metric"), "the plate lift is only the plate's, so it names the gated metric");
             object cell = FindCell("C14");
             float nominal = (float)Field(cell.GetType(), cell, "nominal_m");
             Assert.Less(Math.Abs(nominal - 0.028f), 1e-6f,
                 "nominal stays the plate top: the gate changes WHERE lift is sampled, not what");
+
+            foreach (string id in new[] { "C01", "C03", "C05", "C13" })
+            {
+                object row = FindCheck(id, "ramp_registered");
+                Assert.AreEqual("static_obb_count", (string)Field(row.GetType(), row, "metric"), id);
+            }
+
+            Assert.IsFalse(HasCheck("C06", "no_ramp_registered"),
+                "the dead v1 row is gone");
         }
 
         // ---- the encoder's own rules -------------------------------------------
 
         [Test]
-        public void AV2BlockWithoutExpectInheritsTheV1Row()
+        public void AnOverrideWithoutExpectInheritsTheBaseRow()
         {
             object check = NewCheck("only_metric");
             object v2 = NewV2();
@@ -306,7 +301,7 @@ namespace VRCKatamari.Tests
             Set(check, "v2", v2);
             object report = NewReport();
             Assert.AreEqual(-1, (int)Invoke("V2ExpectMask", NewCell("C01"), check, report),
-                "a v2 block that only replaces the metric must keep the v1 expectation");
+                "an override that only replaces the metric must keep the base expectation");
             Assert.AreEqual(0, Errors(report).Count);
         }
 
@@ -392,6 +387,22 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(thresholdCode, (int)Invoke("V2ThresholdCode", cell, check, report),
                 cellId + "/" + checkId + " threshold code");
             Assert.AreEqual(0, Errors(report).Count, cellId + "/" + checkId);
+        }
+
+        private static bool HasCheck(string cellId, string checkId)
+        {
+            object cell = FindCell(cellId);
+            Array checks = (Array)Field(cell.GetType(), cell, "checks");
+            for (int i = 0; i < checks.Length; i++)
+            {
+                object check = checks.GetValue(i);
+                if (check != null && (string)Field(check.GetType(), check, "id") == checkId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static object FindCell(string cellId)

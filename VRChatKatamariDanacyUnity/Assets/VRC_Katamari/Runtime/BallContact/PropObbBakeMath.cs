@@ -11,15 +11,15 @@ namespace VRCKatamari.BallContact
     /// <remarks>
     /// <para>
     /// Why two columns. <c>propBounds</c> is the prop's WORLD AABB, measured after the prop
-    /// was turned, and it is what the absorb gate and the v1 blocking boxes consume.
+    /// was turned, and it is what the absorb gate and the blocking classification consume.
     /// <c>propLocalBounds</c> is the same prop measured along its OWN axes, before the root
     /// rotation. Building an OBB by rotating the world AABB would apply the rotation a
     /// second time: the radial-proxy double-rotation bug that
     /// <c>RadialProxyShellMath.TryResolvePropExtents</c> and
     /// <c>Tests/EditMode/BallLayers/RadialProxyLocalBoundsTests</c> pin. So the local column
     /// is rotated exactly once (by the prop's world rotation) and the world column is used
-    /// as an axis-aligned box only when the local column is unusable - which is bit-for-bit
-    /// the box the v1 path builds from the same numbers.
+    /// as an axis-aligned box only when the local column is unusable - which is the box
+    /// <c>BlockingPropMath.TryBoxFromCentreAndExtents</c> builds from the same numbers.
     /// </para>
     /// <para>
     /// The fallback is not a silent one: <see cref="TryBakeProp"/> returns which column it
@@ -49,7 +49,7 @@ namespace VRCKatamari.BallContact
         /// <summary>True OBB on the prop's own axes (the local-bounds column).</summary>
         public const int SourceLocalAxes = 1;
 
-        /// <summary>Axis-aligned world box (the world-AABB column, the v1 shape).</summary>
+        /// <summary>Axis-aligned world box (the world-AABB column).</summary>
         public const int SourceWorldAabb = 2;
 
         /// <summary>
@@ -74,8 +74,8 @@ namespace VRCKatamari.BallContact
         /// used (non-finite or negative extents, non-finite position).
         /// </returns>
         /// <remarks>
-        /// A zero extent is legal on both columns: it is the point/plane box the v1 path
-        /// also accepts (<c>BlockingPropMath.TryBoxFromCentreAndExtents</c>). Only a
+        /// A zero extent is legal on both columns: it is the point/plane box
+        /// that (<c>BlockingPropMath.TryBoxFromCentreAndExtents</c>). Only a
         /// negative or non-finite number refuses a column.
         /// </remarks>
         public static int TryBakeProp(Vector3 position, Quaternion rotation, bool hasLocalRow,

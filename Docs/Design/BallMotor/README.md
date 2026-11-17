@@ -23,8 +23,7 @@
 |---|---|---|---|---|
 | 1 | `ControlIntentMath` | 原始输入 + 上帧边沿状态 | 意图序列 | 一切的下游来源；去抖/菜单抑制只在这里发生 |
 | 2 | `BallMotionMath` | 意图里的 `Move2D` + 当前速度 | 新速度、请求位移 | 位移决定后面所有几何 |
-| 3 | `SweepMath` | 请求位移 + 障碍数组（P1：扫掠**前**用 `SupportSurfaceMath.IsStepWithinLimit` 算出静态盒掩码，掩码为真的盒从数组里剔除；P3 起斜面从不进这个数组） | 实际位移、是否卡住、墙面接触法线（去速用） | **先扫掠再落地面**：被挡住时不能把球放进障碍里；只有实际位移可以用于视觉滚动。去速必须在扫掠之后，否则位移用的还是撞墙的请求。台阶掩码必须在扫掠**之前**刷新，因为「能上」的含义就是「允许球心进入扩张 AABB」；掩码是静态盒的**唯一**台阶结论，支撑表直接读它（P1 第二次 C09 修复） |
-| 4 | `GroundContactMath` | 扫掠后中心 + **本步选中的支撑面**（P1；关掉地形支撑时仍是原始地面平面）+ 径向代理外壳（16 根针的针尖：每件吸附物的 AABB 角点在各针方向取 max，再按突出上限夹紧） | 贴地后的中心、支持高度、法线修正 | 支持高度依赖最终位置，先移动再贴地。选面必须在扫掠之后（用扫掠后的 XZ），下落预算必须在调用之前算好（见「地形支撑接线」） |
+| 3 | `ContactSolveMath`（经 `StepContactV2`） | 请求位移 + 近集 OBB/平面/地形三角形 + 16 根针的针尖 + 上一步的爬升/恢复状态 | 最终球心、支撑法线/高度、跟随锚点、接触与爬升读数 | **唯一的位置权威**：子步、窗口、最近点推挤、三分类、速度响应、爬升、卡死恢复都在这一步里完成，没有独立的“先扫掠再贴地”。只有最终位置可以用于视觉滚动；吸收判定必须在它之后。设计与规则见 [CONTACT_MODEL_V2.md](CONTACT_MODEL_V2.md) |
 | 5 | `PickupAbsorbMath` | 碰撞半径 + 候选物件尺寸/位置 | 吸收/拒绝 + 每件体积 | 必须在位置上定稿之后判，否则会隔空吸到 |
 | 6 | `GrowthLedgerMath` | 已确认的吸收事件 | 已确认体积、交分事务 | 只有确认值能进分数；拾取结算在位置定稿后 |
 | 7 | `SizeModelMath` | 已确认体积 | 三个尺寸（核心半径/碰撞半径/语义直径） | 尺寸是账本的纯函数，不能累积增长 |
@@ -112,18 +111,11 @@ Update: 累积 deltaTime → 夹积压 → while(够一步且未到 maxSteps) St
 StepBall:
   1 StepInput()                 ControlIntentMath.TryProcess → Move2D 的 y/x + turn 轴
   2 BallMotionMath.TryStep      → heading、planarVelocity、requestedDisplacement（成功才赋值）
-  2.5 RefreshStepMask()         (P1，仅地形支撑开启) 台阶掩码 + 必要时重建扫掠数组
-  3 SweepMath.TrySweepSphere    → sweptCenter（成功才赋值；stuck 交给卡住计时）
-    SweepMath.TryCollectWallContactNormals + TryRemoveWallNormalVelocity
-                                → planarVelocity（只去墙面法向分量，切向保留）
-  3.5 ResolveTerrainSupport()   (P1) 选支撑面 + 判定「支撑面掉走」→ isFalling
-  4 重力（仅下落）              fallSpeed += g·dt；本步上限 = fallSpeed·dt
-    GroundContactMath.TrySolve  → groundedCenter（代理外壳，夹紧突出量；台阶跨级/下落预算换上限）
-    GroundContactMath.TrySolve  → followCenter（空代理数组，核心球心）
-    落地判定                    → isFalling = false，fallSpeed = 0
-  ★ 卡住计时/恢复（本层策略，扫掠层只报 `stuck`）
+  2.5–4 StepContactV2()         → groundedCenter、followCenter、supportNormal（近集窗口 → ContactSolveMath.TryStep
+                                  → 针尖 pass → 支撑/爬升写回 → 卡死恢复状态机；失败即保持上一位置并去速）
   5 PickupAbsorbMath.EvaluateAbsorb（对队列里每个候选，用最终位置）
   6 GrowthLedgerMath.TrySubmitClaim + TryResolveClaims（成功才读回体积）
+  6.5 ApplyGrowthPushOut        （长大后嵌入墙里的球推出去，≤2 次 × ≤5 cm，失败整段不应用）
   7 RecomputeConfirmedAndSize   → 体积恒等式（未交存 + 残余）→ SizeModelMath.TryDerive
                                 → 三个尺寸（成功才赋值；运动层的尺度由 `CurrentSizeScale()` 现算）
   8 VisualRollMath.TryAdvanceRotation（实际位移 + 本步 discontinuous）
@@ -162,65 +154,38 @@ StepBall:
 这两者都是**数据错误**（场景接错，或宿主每步塞了超过 4 个候选），不是玩法取舍。因此这里不设计“满了怎么办”的玩法规则，只留信号：
 
 - `AddPlane` / `AddBox` / `SubmitCandidate` 因容量被拒时调用 `SignalOverflow()`：`overflowCount` 自增、`firstOverflowReason` 只记第一次；`HasOverflowSignal()` / `GetOverflowCount()` / `GetFirstOverflowReason()` 供诊断读取。不写日志、不每帧输出。
-- `ContactCapacity` 的截断发生在 `SweepMath` 内部（它写到缓冲长度就停，不返回截断标志），本层只能记录“缓冲曾经满过”的 `WasContactBufferSaturated()`。**这是残留缺口**：真正的接触截断计数要在 `SweepMath` 补，本层修不了。
+- 接触求解没有会静默截断的固定缓冲：近集窗口溢出由 `contactIncomplete` 锁存并打一条日志（CONTACT_MODEL_V2 §5.4）。
 
 读取时机是检查点（场景装载后、调参后），不是每帧轮询。
 
-### 径向凹凸代理接线（B 阶段；PROVISIONAL）
+### 径向凹凸代理（16 根针）
 
-合同 §3.3 的 B：径向代理驱动**接地高度**，球芯随吸附物起伏（每件吸附物都登记进针），镜头不跟着颠。C（代理进入水平碰撞/PVP）**没做**：墙面、挡路盒和 PVP 仍只用球形碰撞半径。**方向数 16 已定**（采样摘要；此前 32 是 provisional 选择，理由与专利证据见 `Docs/Design/BallLayers/RadialProxy/README.md`“为什么是 16”）；三个上限（0.35·r、0.30 m、`minProxyProtrusionM`）仍是原型值。
+每件吸附物的 AABB 角点在 16 个固定方向上取 max，得到 16 根针的支持长度（原作滚动模型 `Mr` 的 16 根针）。**针尖是接触求解的一等输入**：`StepContactV2` 里 `PrepareNeedleShape` 把每根针夹到 `[r, r + cap]`（`cap = min(0.35·r, 0.30 m)`），按段扫掠与近集求交，推挤、去速、支撑（`supportKind = 5`）、爬升高度的突出项都读它；镜头锚点是球心本身，不被针尖抬高。水平碰撞的主体仍是球形碰撞半径，PVP 外形摘要同样只用它。
 
-**归属。** 外壳状态在 motor 里——它本来就持有球位姿，并且是唯一调用 `GroundContactMath` 的地方；16 方向、16 支持长度、256 件 × 8 角点的端点账本都在 `Start` 一次分配、复用；每次吸附只把新件的 8 个角点对 16 个方向点积并取 max（约 128 次点积），不重扫已有件。第 4 步（v1）每步只用 16 根针的针尖，成本与已吸附件数无关。吸附/删除/重建/角点/夹紧的**组合协议**放在新文件 `Runtime/BallLayers/RadialProxy/RadialProxyShellMath.cs`；方向生成、世界点转局部、受影响方向、支持求解、候选键和整账本重建仍然只调用 `RadialProxyMath`，没有第二份数学。`PickupFieldHost` 在视觉吸附成功后调 `motor.AttachRadialProxy(itemId, propBounds, localPosition, localRotation)`（作为参数的 `localPosition/localRotation` 就是刚写进 prop 的球局部位姿），整场 `ResetField` 调 `motor.ClearRadialProxies()`；宿主不持有任何代理状态。
+**归属。** 外壳状态在 motor 里——它持有球位姿；16 方向、16 支持长度、256 件 × 8 角点的端点账本都在 `Start` 一次分配、复用；每次吸附只把新件的 8 个角点对 16 个方向点积并取 max，只重算受影响方向；移除/重建走 `RadialProxyShellMath`。
 
-**数据流。** 吸收确认（账本 commit）→ 宿主 `AttachProp` 写球局部位姿 → `AttachRadialProxy` → 8 个角点进端点池、只重算受影响方向、登记候选键 → 每步 `RadialProxyShellMath.TryBuildContactPoints` 按突出上限夹紧 → `GroundContactMath.TrySolve` → `ballCenterWorld` 的高度随凹凸变化。**移除**：`DetachRadialProxy` 按幸存端点重算受影响方向（不是历史 max）；`ResetField` / `TryResetForNewRound` 清空外壳；`TryBank` 缩小时与 `TeleportTo` 走整账本 `RebuildRadialProxies`。本版**没有掉落路径**（吸附物是终态），所以没有"单件掉落"的调用点；接掉落时必须调 `DetachRadialProxy`，不能只从视觉上拿走。
+**数据流。** 吸收确认（账本 commit）→ 宿主 `AttachProp` 写球局部位姿 → `AttachRadialProxy` → 8 个角点进端点池、只重算受影响方向、登记候选键 → 每步 `StepContactV2` 读 16 个支持长度。
 
-**上限与准入（序列化字段，PROVISIONAL）**：
+**准入（序列化字段，PROVISIONAL）**：`minProxyProtrusionM = 0.01 m`：吸附时最远角点连 `core + 1 cm` 都不到就不登记（对支撑没有贡献）。突出上限不再是序列化字段，来自 `ContactTuning`。
 
-| 字段 | 默认 | 作用 |
-|---|---:|---|
-| `maxProxyProtrusionPerCoreRadius` | 0.35 | 允许的最大突出量 = 0.35 × 当前核心半径；相对量，球长大时绝对值跟着长，但 `support − core` 的原始突出仍会先自然收回 |
-| `maxProxyProtrusionWorldM` | 0.30 m | 绝对护栏，防止大球的 0.35·r 变成夸张的抬升 |
-| `maxProxyLiftPerStep` | 0.04 m | 代理起伏引起的单步抬升上限（只在外壳非空时传给 `GroundContactMath`）；非代理的普通贴地仍用 `maxLiftPerStep = 0.1` |
-| `maxProxyNormalSpeedPerturbation` | 0.15 m/s | 法向速度扰动上限。B 只有位置通道，requested 扰动传 0；这个上限留给以后真有法向速度时也不能超过 |
-| `minProxyProtrusionM` | 0.01 m | 吸附时最远角点连 `core + 1 cm` 都不到就不登记（对支撑没有贡献） |
+**验证。** 纯逻辑测试在 `Tests/EditMode/BallLayers/RadialProxyShellTests.cs`：单根长棍的支持长度与上限、移除后回落、两件共享方向去掉一件不误删另一件、核心长大后原始突出收回、增量与整账本重建等价、容量满时拒绝且不改旧壳。
 
-**镜头不跟着颠。** 第 4 步对同一个平面调用两次 `GroundContactMath.TrySolve`：一次喂夹紧后的代理点，结果决定球的位置；一次喂空数组（核心球心），只把中心交给 `FollowRigMath`。第二次调用的单步升降夹紧故意放到 10 m——它不是玩法移动，锚点必须正好是核心球心，而不是每步最多 0.1 m 追赶出来的近似，所以眼点不会随凹凸上下抖；表现层自己的 5 Hz 低通与传送吸附仍在，但低通不再独自承担防颠。跟随架的 `ballRadiusM` 仍是语义直径的一半（核心），突出量不会被当成球变大。
+### 支撑与台阶
 
-**每步成本（常数，与已吸附物件总数无关）**：夹紧 32 个端点（≤32 次 sqrt + 缩放）、代理接地 ≤32 次点积（两者都由端点池决定，方向数不影响）、核心球心一次空数组调用（约 10 次运算）。吸附一次：8 角点 + 受影响方向扫描（最坏 16×8 点积）+ 受影响支持重算（最坏 16 方向 × 32 端点），约 0.6k 次点积；删除同理。整账本重建（16×32 点积）只在交分、传送、重试时发生。
+球的惯性（松手滑行、起步、刹车、转向漂移）的现状读数与重做设计见 [BALL_INERTIA.md](BALL_INERTIA.md)；原作证据见 [ORIGINAL_BALL_INERTIA](../../Research/KatamariBallRules/ORIGINAL_BALL_INERTIA.md)。
 
-**验证。** 纯逻辑测试在 `Tests/EditMode/BallLayers/RadialProxyShellTests.cs`：单根长棍抬升且不超过突出/单步上限、移除后回落、两件共享方向去掉一件不误删另一件、核心长大后原始突出收回、增量与整账本重建等价、容量满时拒绝且不改旧壳、角点夹紧与未用槽清零。
-
-### 地形支撑接线（PROVISIONAL）
-
-支撑、台阶、重力下落的**数学**在 `Runtime/BallLayers/TerrainSupport/SupportSurfaceMath.cs`；装配层只搬运和排序。设计与取舍见 [TERRAIN_SUPPORT.md](TERRAIN_SUPPORT.md)（§8.1 是实现取舍与定型规则）。
-
-球的惯性（松手滑行、起步、刹车、转向漂移）的现状读数与重做设计见 [BALL_INERTIA.md](BALL_INERTIA.md)（PROVISIONAL，未实现）；原作证据见 [ORIGINAL_BALL_INERTIA](../../Research/KatamariBallRules/ORIGINAL_BALL_INERTIA.md)。
-
-**每步顺序（P1 新增的两处）**：`RefreshStepMask` 在扫掠**前**（台阶盒必须从扫掠里剔除，球才进得去）；`ResolveTerrainSupport` 在扫掠**后**（探针用扫掠后的 XZ）；重力预算在 `GroundContactMath` **前**算好。
-
-**序列化字段（默认值，全部 PROVISIONAL）**：
+支撑由接触求解选出（`WriteContactSupport`：最高的 RIDE 接触，针尖支撑 = 5，爬升接触 = 4，无支撑 = 下落）。台阶没有阈值字段：台阶高 `h < r` 天然滚过，`h < D` 由爬升通道处理（CONTACT_MODEL_V2 §2.7、§3）。`SupportSurfaceMath` 只留共享的 surface id、`stepHeightOverBallDiameter` 的步高上限（0.25 × 语义直径，宿主据此给道具分挡路/可站两种角色）、斜面校验/烘焙（`AddRamp` 的 45° 作者门）。设计与取舍见 [TERRAIN_SUPPORT.md](TERRAIN_SUPPORT.md)。
 
 | 字段 | 默认 | 作用 |
 |---|---:|---|
-| `terrainSupportEnabled` | **true** | 总开关。关掉时与 P1 之前逐位一致（四条见下） |
-| `stepHeightOverBallDiameter` | **0.25** | 比例，不是高度：`stepLimit = 0.25 × 语义直径`（数据/校验器/关卡门同一口径） |
-| `maxStepUpLiftWorldM` | 0.6 m | 单次跨级抬升护栏（> 0.25 × 2.2 = 0.55，正常碰不到） |
-| `minStepHeightM` | 0.005 m | 小于它的落差只是数值噪声，不给大抬升（**不是**地图的 0.05 m 分类门） |
-| `maxSupportSlopeDegrees` | **45°** | P3 斜面坡度护栏；超过则 `AddRamp` 带原因码拒绝。硬上限 51.3° 由单步钳位反推，45 是 30% 余量（PROVISIONAL） |
-| `rampTangentialGravityScale` | **0** | P3 可配置切向重力（0 = 不加，1 = g·sinθ）；只对 ramp 支撑、非下落生效。默认 0 逐位等于 P1 行为 |
-| `gravityMps2` | **9.81 m/s²** | 竖直重力（只有下落时作用；没有跳跃） |
-| `maxFallSpeedMps` | 40 m/s | 下落速度护栏（单步 ≤0.8 m），不是产品值 |
-| `supportDropTriggerM` | **0.01 m** | 「支撑面掉走」的容差；**仅当选中面 id 变化**时才算掉走（沿坡下滚不是）。更小的落差由 `maxDropPerStep` 一步吃掉 |
+| `stepHeightOverBallDiameter` | **0.25** | 比例，不是高度：`stepLimit = 0.25 × 语义直径`（数据/校验器/关卡门同一口径；诊断读数与道具角色分类读它） |
+| `maxSupportSlopeDegrees` | **45°** | `AddRamp` 的坡度护栏；超过则带原因码拒绝（arena 走 `AddObb`，不经过它） |
+| `terrainMeshContactEnabled` | false | 地形网格接触；`TerrainFieldHost` 装配地形后打开 |
 
-**公开方法（P1/P2/P3）**：`SetGroundPlane(n, o)`、`SetTerrainSupportEnabled(bool)` / `IsTerrainSupportEnabled()`、`GetStepHeightLimitWorldM()`、`GetSupportSurfaceHeightWorldM()`（**支撑面**高度，不是球心减支撑长度）、`GetSupportNormalWorld()`、`GetSupportSurfaceCount()`（本步 band 内面数；地图 0 的 `active_surface_max` 就是它）、`GetSupportSurfaceId()`（0 = 地面，1+i = 第 i 个静态盒（1..64），**500+i = 第 i 个静态斜面**，100+i = 第 i 个道具支撑槽，2000+ = 地形 chunk/zone）、`GetSupportKind()`（0 地面 / 1 静态盒 / **2 斜面** / 3 道具支撑 / 6 地形 / -1 未解出）、`GetStepMaskRebuildCount()`（掩码翻转引起的扫掠数组重建次数）、`IsFalling()`。`LevelArenaHost` 侧另有 `Reapply()`：清表后重注册，地图 0 的「一格一注册」靠它。P2 的 `SetSupportProps` / `ClearSupportProps`、`GetSupportPropCount()` / `GetSupportPropCapacity()`、`GetSupportPropRefusalCount()` / `GetSupportPropRefusalReason()`、`IsSupportingAProp()` 已实现（道具顶面进同一张支撑表）；P3 的 `AddRamp(center, normal, right, halfWidth, halfRun)` / `ClearRamps()` / `GetRampCount()` / `GetRampCapacity()` / `GetRampRefusalCount()` / `GetLastRampRefusalCode()` / `GetLastRampRefusalReason()` / `GetLastRampRefusalSlopeDegrees()` / `GetMaxSupportSlopeDegrees()` 已实现（斜面只支撑、不进扫掠；容量 4）。
+**公开方法**：`SetGroundPlane(n, o)`、`GetStepHeightLimitWorldM()`、`GetSupportSurfaceHeightWorldM()`（**支撑面**高度）、`GetSupportNormalWorld()`、`GetSupportSurfaceCount()`（当步接触条数）、`GetSupportSurfaceId()`、`GetSupportKind()`、`IsFalling()`、`AddRamp` / `GetRampCount` 及其拒绝读数。
 
-**关掉开关 = 逐位一致**：①掩码不刷新、`RebuildObstacles` 按注册顺序复制全部静态盒；②`GroundContactMath` 拿原始 `(groundPlaneNormal, groundPlaneOffset)`；③升降上限还是 `maxLiftPerStep` / `maxProxyLiftPerStep` / `maxDropPerStep`，`isFalling` 恒 false；④`VisualRollMath` 拿原始地面法线。运行期切换会清掩码并重建扫掠数组，`TeleportTo` 也会重置支撑参考与下落状态（传送进空气 → 真下落，不是 0.1/步 缓降）。
+**关卡登记**：`Runtime/Story/LevelArenaHost.cs` 引用场景里的 `BoxCollider`（台面/台阶/斜板）与墙的 `Transform`（局部 +Z 指向场内），`Setup` 时**烘焙一次**：墙为平面 `(n, offset)`，盒与斜板为 8 角点真 OBB（`AddObb`），之后不再读 Collider。
 
-**每步成本（常数，与已吸物件数无关）**：掩码门控 ≤64 次比较（直径变化 >2 mm / **参考高度**变化 >5 mm / 盒集合变化才重算）；选面 ≤64 盒（只读掩码）+ ≤4 斜面 ×（1 次归一化 + 高度 + 足迹）+ 6 道具，无分配；重力约 10 flops。掩码变化才重建扫掠数组（现有实现本来就会在条数变化时 `new Vector3[]`，P4 实测 GC）。
-
-**与小棍的接法**：小棍决定「球的哪个点最低」，支撑查询决定「那个点下面的面在哪」；本层喂 `GroundContactMath` 的是支撑面的 `(n, dot(n,P))`，代理点数组照旧。跨级那一步用 `min(stepLimit, maxStepUpLiftWorldM)` 覆盖 0.04 的代理上限，下一步立刻回到 0.04，所以长棍仍然弹不动球。**镜头仍读空代理数组解出的核心球心**，不跟台阶/下落起伏（低通照旧）。
-
-**关卡登记**：`Runtime/Story/LevelArenaHost.cs` 引用场景里的 `BoxCollider`（台面/台阶/墙）与墙的 `Transform`（局部 +Z 指向场内），`Setup` 时**烘焙一次** `bounds` / 平面 `(n, offset)` 后就不再读 Collider。
 
 ### 跟随架（PROVISIONAL 数值）
 
@@ -279,7 +244,7 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 - 网络、远端球代理、多客户端权威/抢单仲裁：本层只有**一个本地玩家行**的账本；远端提交应走 `GrowthLedgerMath.TryApplyCommit` 的快照/提交路径，由回合控制器拥有。
 - 回合状态机本体：`TryBeginPlaying` 只是把 Lobby→Ready→Preparing→Playing 三条合法边转发给账本，没有计时、轮换或结算。
 - HUD、尺寸读数、音效、粒子、道具生命周期、物品注册表、空间索引（候选由宿主/适配层收集后 `SubmitCandidate` 送入）。
-- C 阶段：径向代理在 v1 **只**参与第 4 步接地高度；水平扫掠（`SweepMath`）、挡路盒、PVP 外形摘要仍然只用球形碰撞半径（v2 另把针尖当扫掠段纳入接触，见 CONTACT_MODEL_V2 §4A.3）。代理不写 `RemoteProxyMath`，也不进任何分数/账本。
+- 径向代理：针尖进入接触求解（CONTACT_MODEL_V2 §4A.3）；挡路盒、PVP 外形摘要仍然只用球形碰撞半径。代理不写 `RemoteProxyMath`，也不进任何分数/账本。
 - 场景资产、prefab、新 asmdef：都没加；U# 程序集仍是 `VRCKatamari.Runtime`（`BankShrinkMath.cs` 与其 `.meta` 是运行时代码文件，不新增程序集）。
 
 ### Unity 操作者还要接线
@@ -303,63 +268,36 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 | `maxSpeedMps` / `accelerationMps2` / `brakingMps2`（D0 下，× D/D0） | 4 / 7.5 / 6 | `BALL_INERTIA.md`，PROVISIONAL |
 | `rollingResistanceMps2`（D0 下，× D/D0） / `maxLateralMps`（× D/D0） | 1.3 / 1.2 | 同上 |
 | `frictionPerSecond` / `lateralGripPerSecond` / `turnRateDegreesPerSecond`（时间型，不缩放） | 0.9 / 2.0 / 110 | 同上 |
-| `rampTangentialGravityScale` / `rampRestSpeedMps` / `rampRestSeconds` / `rampSlideMinSlopeDegrees` | 1 / 0.05 / 0.3 / 2 | 静止后下坡，同上 §4 |
 | `baselineVolumeUnits` / `cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` | 3.4390244 / 0.0041 / 1.1 | 与 `round_model.py` 对齐：起始体积 `3.4390244 × 0.0041 = 0.0141 m³`（0.29974 m），满径 2.20 m 需约 1356.4 确认单位；未测量 |
 | `eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeUpMinMeters` / `eyeUpMaxMeters` | 0.55 m / 2.4 / 0.1 m / 8 m | **PROVISIONAL**：眼点 = 球心 +（常量 + 半径×系数），上下限是离球心的护栏；见下「跟随架」 |
 | `eyeBaseBackMeters` / `eyeBackPerRadius` / `eyeMaxBackM` | 0.75 m / 2.2 / 8 m | 同上：球心后方（常量 + 半径×系数），上限是护栏 |
 | `contactRadiusWorldM` | 0 | 决定 (i)：接触半径为 0（体积门见文首） |
-| `maxLiftPerStep` / `maxDropPerStep` / `separationEpsilon` / `maxRollDisplacementM` | 0.1 / 0.1 / 0.001 / 0.5 | 本层临时，非实测容差 |
-| `maxProxyProtrusionPerCoreRadius` / `maxProxyProtrusionWorldM` | 0.35 / 0.30 m | 径向代理突出上限（相对核心半径 + 绝对护栏）；PROVISIONAL，cap 后剩余插地见 `ATTACH_PLACEMENT.md` §3.4 / §3.6 |
-| `maxProxyLiftPerStep` / `maxProxyNormalSpeedPerturbation` | 0.04 m / 0.15 m/s | 代理单步抬升与法向速度扰动上限；PROVISIONAL，保守值 |
+| `maxRollDisplacementM` | 0.5 | 本层临时，非实测容差 |
+| `rampTangentialGravityScale` / `rampRestSpeedMps` / `rampRestSeconds` / `rampSlideMinSlopeDegrees` / `gravityMps2` | 1 / 0.05 / 0.3 / 2 / 9.81 | 静止后下坡（`StepContactV2` 里的 `UpdateRampSlide`），见 `BALL_INERTIA.md` §4 |
 | `minProxyProtrusionM` | 0.01 m | 最小可贡献突出：最远角点没越过核心这么多的件不登记；PROVISIONAL。每件吸附物都登记 |
 | `stuckTimeoutSeconds` | 1.5 | 本层临时恢复策略 |
-| `terrainSupportEnabled` | true | P1 地形支撑总开关（`CpuSkirmish` 的 bootstrap 显式关） |
-| `stepHeightOverBallDiameter` / `maxStepUpLiftWorldM` | 0.25 / 0.6 m | 台阶比例（与 `layout.json` 同源）与单次跨级抬升护栏；PROVISIONAL |
-| `minStepHeightM` | 0.005 m | 数值去噪（小于它不算跨级）；**不是**地图的 0.05 m 分类门。台阶参考高度见 TERRAIN_SUPPORT §8.1 D4/D5 |
+| `stepHeightOverBallDiameter` | 0.25 | 台阶比例（与 `layout.json` 同源）；PROVISIONAL |
 | `maxSupportSlopeDegrees` | 45° | P3 斜面坡度护栏（PROVISIONAL；硬上限 51.3°） |
-| `rampTangentialGravityScale` | 0 | P3 切向重力比例（默认关闭；U3 试玩用） |
-| `gravityMps2` / `maxFallSpeedMps` / `supportDropTriggerM` | 9.81 m/s² / 40 m/s / 0.01 m | 下落重力、速度护栏、掉走容差；PROVISIONAL（原作无测量） |
 
 ### 缺口（数学层没提供、本层没有自己编）
 
 直径 → 体积的反函数由 `SizeModelMath.TryVolumeUnitsForSemanticDiameter` 提供，交分因此在直径空间做（见上一节）。下面是本层的已知缺口；编号被其它文档按“缺口 N”引用，故保持不变。
 
 1. **设备轴 → forward/turn/lateral 的映射没有归属层。** `ControlIntentMath` 只给设备轴对，`BallMotionMath` 只吃三个标量，中间这一步（含相机/rig yaw 基准）目前是适配层约定，本层用 y→forward、x→lateral 顶着。
-2. **墙面法向去速**：由 `SweepMath` 的公开函数提供，规则见下面「墙面法向去速」。
+2. **墙面速度响应**：由 `ContactSolveMath` 的三分类规则提供（RIDE 不去速、CLIMB 去水平法向、NONE 去三维法向），规则见 CONTACT_MODEL_V2 §2。
 3. **吸收的相对球径门槛**：由吸收尺寸体积门判定，配方不在本层；现行口径见 `Docs/Design/PickupAbsorb/README.md` 1.1 节与文首指向的 ABSORB_GATE_ORIGINAL。
 4. **`growthFraction` 没有 helper。** 设计文档把它指派给组合层（`BallMotion` README 的“唯一回灌量”），`BallMotionMath` 也明说不做半径映射，所以本层只有这一处 `(r-base)/(max-base)` 夹取；若要复用应下沉到 `SizeModelMath`。
 5. **账本提交存储是有容量的**（本地 256 条/回合）。满了以后 `TryResolveClaims` 拒绝、候选留在队列里不再增长；正式回合应由拥有账本的控制器扩容或换权威提交。
 6. **单球、单本地玩家行**：多球/多人要并行数组 + 多行账本，本版没有。
 
-### 墙面法向去速（PROVISIONAL）
+### 墙面速度响应
 
-**目的**：扫掠只把位置停在墙前，`planarVelocity` 若仍带着撞墙速度，球就不沿墙滑、斜撞会“黏”墙、转身后留着过期速度；所以撞墙后要去掉指向墙的速度分量。
-
-**规则**：第 3 步成功且本步记录到接触时，对每条墙面法线 `n`（指向障碍外侧）按接触顺序稳定地执行
-
-```
-v' = v - min(0, v·n) n
-```
-
-只去掉“指向墙里”的分量，切向分量原样保留——滑墙就是切向保留的直接结果。凹角的两条墙依次作用：第二条法线作用在已修正的速度上，所以两个法向分量都会被去掉；重复法线幂等。`planarVelocity` 是 XZ 平面速度，所以法线先归一化再投到水平面，结果的 y 恒 0；水平分量可忽略的法线（盒顶、天花板）不参与，非有限或零长法线整次拒绝。
-
-**实现（都在 `SweepMath`，纯静态、无分配、UdonSharp 安全）**：
-
-- `TryCollectWallContactNormals(contactCenters, contactNormals, contactObstacleIndices, contactCount, planeNormals, planeOffsets, boxMinima, boxMaxima, wallNormals, out int wallNormalCount)`：把本步记录的接触转成指向障碍外侧的法线。平面直接取校验后的单位法线；盒子按接触中心落在未扩张盒的哪一侧重定向——扫掠为对齐 `sweep.py` 保留了 slab 符号规则，负方向进入盒子时记录的是**内侧面**法线（见 [`../BallLayers/Sweep/README.md`](../BallLayers/Sweep/README.md)），拿它去速会把“离开墙”的速度删掉、把“撞进去”的速度留下，所以必须在这里翻正。写入受调用方缓冲区长度限制，返回写入条数。
-- `TryRemoveWallNormalVelocity(velocity, wallNormals, wallNormalCount, out Vector3 correctedVelocity)`：按上面的公式逐条去速。
-
-装配层只在第 3 步之后调用这两个函数（`KatamariBallMotor.StepBall`），不自己重算几何，仍符合“装配层只搬运和顺序”。
-
-**为什么只有侧面/盒子接触**：地面平面从来不是扫掠障碍，它由 `GroundContactMath` 的解析平面单独处理；所以地面接触既不会在这里刹车，也不会改方向。只有调用方把地面也注册成扫掠障碍时才会出现近似垂直的接触法线，而那种法线在水平投影里会被忽略。
-
-**刻意不做摩擦、不做反弹**：原作墙面响应没有可靠证据，只去掉法向分量是“不粘墙”的最小规则。**PROVISIONAL**，试玩或拿到原作证据后应重新决定是否加切向摩擦或回弹。
-
-**限制**：只有被记录下来的接触参与（`ContactCapacity = 4`，缓冲饱和时去速不完整，`contactBufferSaturated` 是信号）；一步内只做一次去速，不迭代二次响应。测试见 `Tests/EditMode/BallLayers/SweepTests.cs` 的 `HeadOnWallContactRemovesTheWholeNormalSpeed`、`GlancingHitKeepsTheTangentialSpeed`、`MovingAwayFromAWallLeavesVelocityUnchanged`、`CornerSweepRemovesBothNormalComponents`、`NonFiniteOrDegenerateNormalsAreRefused`、`BoxEnteredAlongItsNegativeFaceIsOrientedOutward`。
+撞墙后的速度只去掉指向墙里的分量、切向保留（滑墙），分类与规则由 `ContactSolveMath` 拥有，装配层只调用 `StepContactV2`，不重算几何。刻意不做摩擦、不做反弹：原作墙面响应没有可靠证据（PROVISIONAL）。
 
 ## 未定项（等 T06 与试玩）
 
 - 固定步长具体值、每帧最多多少个吸收事件、代理点数组容量、远端槽位容量。
-- 是否允许在一次固定步内多次扫掠（现在规定一次）。
+- 一次固定步内的子步数由接触求解决定（`MaxSubSteps`），装配层不重复扫掠。
 - 交分事务的触发方式（靠近/输入/自动）——由回合状态机决定，不在本层。
 - 舒适转向与移动权威（头/手/摇杆）如何合成 yaw——`FollowRigMath` 只吃一个标量 yaw，谁产它未定。
 
@@ -376,19 +314,19 @@ v' = v - min(0, v·n) n
 
 ## 跨 Behaviour 写入的集合缓冲：所有权
 
-**问题形态**：`PickupFieldHost` 在自己的 `Update` 里把 blocking / support 集合推给 motor，而 motor 的 `Start` 不是先跑的。Unity 不保证跨 GameObject 的 `Start` 顺序，UdonSharp 下更实际的情形是「motor 的自有步进已经算出了尺寸，但它的 `Start` 事件还没来」；那一刻 motor 的缓冲还是 `null`，写入抛 `Object reference not set`，该 UdonBehaviour 被 halt，球再没动过（参考关卡 `_ref_mas1` 首跑即属此列）。
+**问题形态**：`PickupFieldHost` 在自己的 `Update` 里把候选推给 motor，而 motor 的 `Start` 不是先跑的。Unity 不保证跨 GameObject 的 `Start` 顺序，UdonSharp 下更实际的情形是「motor 的自有步进已经算出了尺寸，但它的 `Start` 事件还没来」；那一刻 motor 的缓冲还是 `null`，写入抛 `Object reference not set`，该 UdonBehaviour 被 halt，球再没动过（参考关卡 `_ref_mas1` 首跑即属此列）。
 
 **规则**（与 v2 接触表的 `EnsureContactV2Buffers` 是同一条）：
 
 1. **谁写谁分配**。每个写入入口先调 `EnsureRegistrationBuffers()` / `EnsureCandidateBuffers()`，不依赖 `Start` 是否跑过。
 2. **`Start` 只 ensure，不重分配**。`Start` 调同一个函数，因此在它之前登记的集合**被保留**而不是被重新 new 掉（否则等于把球所在世界的墙静默清空）。
-3. **`null` / 长度不足 = 带原因码的拒绝**，绝不空引用。blocking/support 记 `"set buffers unavailable"`（`GetBlockingBoxRefusalReason` / `GetSupportPropRefusalReason`），ramp 记 refusal code 7（`GetLastRampRefusalReason` 返回 `"set buffers unavailable"`），候选队列打一条一次性错误并返回 false。
+3. **`null` / 长度不足 = 带原因码的拒绝**，绝不空引用。ramp 记 refusal code 7（`GetLastRampRefusalReason` 返回 `"set buffers unavailable"`），候选队列打一条一次性错误并返回 false。
 
-**覆盖的缓冲**：planes / boxes / blocking / support / ramps（`EnsureRegistrationBuffers`）与候选队列（`EnsureCandidateBuffers`）。v2 静态/道具 OBB 表早就是这条规则；径向代理壳只由本组件的吸收事件环写入（事件环存在就意味着已经走过一步），因此仍是 `Start` 分配。
+**覆盖的缓冲**：planes / boxes / ramps（`EnsureRegistrationBuffers`）与候选队列（`EnsureCandidateBuffers`）。v2 静态/道具 OBB 表早就是这条规则；径向代理壳只由本组件的吸收事件环写入（事件环存在就意味着已经走过一步），因此仍是 `Start` 分配。
 
 **宿主侧的一半**：`PickupFieldHost.Update` 在 `GetSemanticDiameterWorldM() <= 0` 时直接返回——尺寸还没推导出来时，任何集合描述的都是「世界原点上一个 0 直径的球」。这一条只是就绪约定，**不是** F1 的修复：F1 里 motor 已经有尺寸（它自己的步进算出来的），集合仍然必须能写进去。
 
-**诊断**：`GetBlockingBoxRefusalCount` / `GetSupportPropRefusalCount` 会把这类拒绝各记一次；它们不影响 `SignalOverflow`（「附近道具比槽位多」是正常的每帧答案，不是接线错误）。
+**诊断**：ramp 拒绝记在 `GetRampRefusalCount`；它不影响 `SignalOverflow`（容量满的 ramp 例外，是接线错误）。
 
 ## 验收
 

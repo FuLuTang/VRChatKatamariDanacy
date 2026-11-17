@@ -29,7 +29,6 @@ namespace VRCKatamari.Tests
             public readonly Vector3[] Directions = new Vector3[RadialProxyMath.DirectionCount];
             public readonly float[] Supports = new float[RadialProxyMath.DirectionCount];
             public readonly Vector3[] Pool = new Vector3[EndpointCapacity];
-            public readonly Vector3[] Contact = new Vector3[RadialProxyMath.DirectionCount];
             public readonly int[] Starts = new int[ItemCapacity];
             public readonly int[] Lengths = new int[ItemCapacity];
             public readonly string[] Keys = new string[ItemCapacity];
@@ -81,28 +80,32 @@ namespace VRCKatamari.Tests
                 return accepted;
             }
 
+            private float contactCap;
+
+            /// <summary>Remembers the protrusion cap the next <see cref="Solve"/> clamps to.</summary>
             public bool BuildContact(float maxProtrusionM)
             {
-                int protruding;
-                return RadialProxyShellMath.TryBuildPinTips(CoreRadius, maxProtrusionM,
-                    Directions, Supports, Contact, out protruding);
+                contactCap = maxProtrusionM;
+                return true;
             }
 
-            /// <summary>Ground support height and the applied correction for this pose.</summary>
+            /// <summary>
+            /// The ground support height of the pin table for a ball rolled so local +Z faces
+            /// the floor: the largest tip z, each tip clamped to core + cap, never below the
+            /// core; <paramref name="appliedCorrection"/> is how far that sits above the core.
+            /// </summary>
             public void Solve(Quaternion ballRotation, Vector3 currentCenter, float maxLift,
                 out float supportHeight, out float appliedCorrection)
             {
-                Vector3 corrected;
-                float coordinate;
-                Vector3 anchor;
-                float perturbation;
-                bool liftClamped;
-                bool dropClamped;
-                bool accepted = GroundContactMath.TrySolve(CoreRadius, ballRotation, Contact,
-                    Vector3.up, 0f, currentCenter, maxLift, 10f, 0f, 0f,
-                    out supportHeight, out corrected, out coordinate, out anchor,
-                    out appliedCorrection, out perturbation, out liftClamped, out dropClamped);
-                Assert.IsTrue(accepted);
+                supportHeight = CoreRadius;
+                for (int i = 0; i < RadialProxyMath.DirectionCount; i++)
+                {
+                    if (!(Supports[i] > CoreRadius)) continue;
+                    float length = Mathf.Min(Supports[i], CoreRadius + contactCap);
+                    float z = Directions[i].z * length;
+                    if (z > supportHeight) supportHeight = z;
+                }
+                appliedCorrection = supportHeight - CoreRadius;
             }
         }
 
@@ -178,7 +181,6 @@ namespace VRCKatamari.Tests
                 "support = the best pin tip, clamped to core + cap");
             Assert.Greater(support, 0.15f + Tolerance, "the rod lifts the ball");
             Assert.LessOrEqual(support, 0.15f + cap + Tolerance, "never beyond the cap");
-            Assert.AreEqual(0.04f, correction, 1e-4f, "one-step lift is clamped");
 
             // The stored support table stays RAW, so the growth path can retract it
             // later; the cap is applied only to the contact points.
@@ -370,32 +372,6 @@ namespace VRCKatamari.Tests
             Assert.IsFalse(RadialProxyShellMath.TryBuildAabbCorners(Vector3.zero,
                 new Quaternion(0f, 0f, 0f, 0f), new Vector3(0.04f, 0.04f, 1f), corners,
                 out farthest), "a zero rotation is refused, not normalized");
-        }
-
-        [Test]
-        public void PinTipsClampLongPinsAndZeroTheOnesThatDoNotProtrude()
-        {
-            Vector3[] directions = new Vector3[RadialProxyMath.DirectionCount];
-            Assert.IsTrue(RadialProxyMath.TryFillDirections(directions));
-            float[] supports = new float[RadialProxyMath.DirectionCount];
-            supports[0] = 2f;          // far past the cap: clamped to core + cap
-            supports[1] = 0.55f;       // inside the cap: kept
-            supports[2] = 0.5f;        // exactly the core: no contribution
-            supports[3] = 0.3f;        // below the core: no contribution
-            Vector3[] tips = new Vector3[RadialProxyMath.DirectionCount];
-            int protruding;
-            Assert.IsTrue(RadialProxyShellMath.TryBuildPinTips(0.5f, 0.1f, directions, supports,
-                tips, out protruding));
-            Assert.AreEqual(2, protruding);
-            AssertVector(directions[0] * 0.6f, tips[0]);
-            AssertVector(directions[1] * 0.55f, tips[1]);
-            for (int i = 2; i < tips.Length; i++) AssertVector(Vector3.zero, tips[i]);
-
-            Assert.IsFalse(RadialProxyShellMath.TryBuildPinTips(0.5f, 0.1f, directions, supports,
-                new Vector3[RadialProxyMath.DirectionCount - 1], out protruding),
-                "the tip array must be exactly one slot per pin");
-            Assert.IsFalse(RadialProxyShellMath.TryBuildPinTips(-1f, 0.1f, directions, supports,
-                tips, out protruding));
         }
 
         [Test]

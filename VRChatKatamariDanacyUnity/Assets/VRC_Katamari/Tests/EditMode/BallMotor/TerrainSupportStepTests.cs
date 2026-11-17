@@ -6,9 +6,9 @@ using UnityEngine;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// The motor-level half of the 2026-11-16 terrain support fix: the mesh really does take
-    /// the support away from the arena plane through <c>ResolveTerrainSupport</c>, and the
-    /// microsecond counter really measures the query.
+    /// The motor-level half of the terrain support checks: the grid really cuts the
+    /// triangles the support query walks, the contact solver reads the list collected last,
+    /// and the microsecond counter really measures the query.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -66,14 +66,6 @@ namespace VRCKatamari.Tests
             host.hideFlags = HideFlags.DontSave;
             motor = host.AddComponent(motorType);
             Invoke("Start");
-        }
-
-        private void RecreateMotor()
-        {
-            if (host != null) UnityEngine.Object.DestroyImmediate(host);
-            host = null;
-            motor = null;
-            CreateMotor();
         }
 
         private void SetField(string name, object value)
@@ -177,122 +169,6 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void TheMeshTakesTheSupportAwayFromAPlaneThatSitsAboveIt()
-        {
-            // The 2026-11-16 C22 configuration, at the unit level: the copied arena plane is
-            // at y=0 and the ball's floor (the mesh) is 1 m BELOW it. Before the fix the
-            // plane won because the mesh could only be adopted by being HIGHER.
-            Assert.IsTrue((bool)Invoke("SetGroundPlane", new Vector3(0f, 1f, 0f), 0f),
-                "the arena plane registers");
-            RegisterFlatMesh(-1f, 16);
-
-            Step(1);
-
-            Assert.AreEqual(6, (int)Invoke("GetSupportKind"),
-                "the selected support is a terrain triangle, not the ground plane");
-            Assert.AreEqual(2000, (int)Invoke("GetSupportSurfaceId"),
-                "first terrain surface id (0 zone)");
-            Assert.That((float)Invoke("GetSupportSurfaceHeightWorldM"),
-                Is.EqualTo(-1f).Within(1e-3f),
-                "the ball's support is the mesh 1 m down, so it starts to fall into it");
-        }
-
-        [Test]
-        public void TheSupportAndPenetrationCostsAreSeparateAndTheWorkCountersExplainThem()
-        {
-            // The support ring alone: the ball is 0.15 m above the mesh, so the sphere's AABB
-            // does not overlap any triangle and T1 has nothing to do.
-            RegisterFlatMesh(0f, 16);
-            Step(1);
-
-            float support = (float)Invoke("GetLastTerrainSupportMicros");
-            float penetration = (float)Invoke("GetLastTerrainPenetrationMicros");
-            float total = (float)Invoke("GetLastTerrainQueryMicros");
-            int tested = (int)Invoke("GetTerrainTrianglesTested");
-            int fullEvals = (int)Invoke("GetTerrainFullEvals");
-
-            Assert.That(support, Is.GreaterThan(0f), "the support ring is the timed half");
-            Assert.That(penetration, Is.GreaterThanOrEqualTo(0f));
-            Assert.That(total, Is.EqualTo(support + penetration).Within(1e-3f),
-                "the total is exactly the two halves, so a reader can attribute the cost");
-            Assert.That(support, Is.GreaterThan(penetration),
-                "the 17-probe ring dominates an empty push-out scan");
-
-            // Explainable work: all 17 probes walk the SAME candidate list, so
-            // trianglesTested == 17 x candidates is EXACT (it was 17 x 512 before the grid,
-            // when every probe walked the whole chunk).
-            int candidates = (int)Invoke("GetTerrainCandidates");
-            Assert.That(candidates, Is.GreaterThan(0), "the grid offered a candidate list");
-            Assert.AreEqual(17 * candidates, tested,
-                "17 probes x the support candidate list, no per-probe re-scan");
-            Assert.That(tested, Is.LessThan(17 * 512),
-                "and that is strictly less than the pre-grid full scan");
-            Assert.That(fullEvals, Is.GreaterThan(0), "at least the triangle under the ball");
-            Assert.That(fullEvals, Is.LessThan(tested),
-                "the per-triangle AABB rejects some of what the window kept");
-
-            // A penetration case: drop the ball's centre to 0.10 m so its sphere is 0.05 m
-            // INTO the floor from the front side (T1 is single-sided; a ball under a +Y face
-            // is never pushed, which is the roof rule). The scan now visits the whole chunk
-            // and the closest-point branch runs, so the penetration half has real work.
-            RecreateMotor();
-            RegisterFlatMesh(0f, 16);
-            SetField("ballCenterWorld", new Vector3(0f, 0.10f, 0f));
-            Step(1);
-            float buriedPenetration = (float)Invoke("GetLastTerrainPenetrationMicros");
-            Assert.That(buriedPenetration, Is.GreaterThan(0f),
-                "a sphere 0.05 m inside the floor pays for the T1 scan");
-            Assert.That(buriedPenetration, Is.GreaterThan(penetration),
-                "and strictly more than the empty scan above");
-            // The two candidate counts are separate readings, not one overwritten number:
-            // T1 collected at its own centre (which the push then moved), the support query
-            // recollected after it.
-            Assert.That((int)Invoke("GetTerrainPenetrationCandidates"), Is.GreaterThan(0),
-                "the penetration count is its own reading");
-            Assert.That((int)Invoke("GetTerrainCandidates"), Is.GreaterThan(0),
-                "and the support count is too, read from its own field");
-            Assert.That((float)Invoke("GetLastTerrainQueryMicros"),
-                Is.EqualTo((float)Invoke("GetLastTerrainSupportMicros") +
-                    (float)Invoke("GetLastTerrainPenetrationMicros")).Within(1e-3f));
-            Assert.That(GetCenterY(), Is.GreaterThan(0.14f),
-                "T1 pushed it back out and the ground solve put it on the surface");
-        }
-
-        private float GetCenterY()
-        {
-            Vector3 center = (Vector3)Invoke("GetCenterWorld");
-            return center.y;
-        }
-
-        [Test]
-        public void TheV2AuthorityDoesNotLeaveAStaleTerrainReading()
-        {
-            // The bug this pins: the counters were reset inside StepPositionV1, so a step that
-            // did not enter that method (the v2 authority) kept the previous v1 reading. Reset
-            // now lives in StepBall, which BOTH authorities pass through. The v2 step here has
-            // the terrain contact switched OFF, so "no terrain query happened" is guaranteed
-            // and the assertion is about the RESET, not about what v2 happens to query.
-            RegisterFlatMesh(0f, 16);
-            Step(1);
-            Assert.That((float)Invoke("GetLastTerrainQueryMicros"), Is.GreaterThan(1f),
-                "the v1 step measured something");
-            Assert.That((int)Invoke("GetTerrainTrianglesTested"), Is.GreaterThan(0));
-
-            Invoke("SetTerrainMeshContactEnabled", false);
-            Invoke("SetContactModelV2Enabled", true);
-            Assert.IsTrue((bool)Invoke("IsContactModelV2"));
-            Step(1);
-
-            Assert.AreEqual(0f, (float)Invoke("GetLastTerrainQueryMicros"), 1e-6f,
-                "the v2 authority does not query the mesh, so the reading must be ZERO, " +
-                "not the previous v1 step's value");
-            Assert.AreEqual(0f, (float)Invoke("GetLastTerrainSupportMicros"), 1e-6f);
-            Assert.AreEqual(0f, (float)Invoke("GetLastTerrainPenetrationMicros"), 1e-6f);
-            Assert.AreEqual(0, (int)Invoke("GetTerrainTrianglesTested"));
-            Assert.AreEqual(0, (int)Invoke("GetTerrainFullEvals"));
-        }
-
-        [Test]
         public void TheGridCutsTheTrianglesTheSupportQueryWalks()
         {
             // 4 x 4 m of 16 x 16 quads = 512 triangles in ONE chunk: before the grid every
@@ -340,8 +216,6 @@ namespace VRCKatamari.Tests
             int[] indices = { 0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7 };
             RegisterMesh(vertices, indices, new[] { 0 }, new[] { 4 }, new[] { 0 }, 1);
             Assert.IsTrue((bool)Invoke("IsTerrainGridReady"), "the 4-triangle mesh is grid-able");
-            Invoke("SetContactModelV2Enabled", true);
-            Assert.IsTrue((bool)Invoke("IsContactModelV2"));
 
             // Drive toward -X and -Z (heading 0 faces +Z; forward -1 and lateral -1 give the
             // negative quadrant).

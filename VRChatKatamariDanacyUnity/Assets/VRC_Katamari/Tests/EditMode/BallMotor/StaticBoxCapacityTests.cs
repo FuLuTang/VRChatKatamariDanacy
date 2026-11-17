@@ -20,17 +20,6 @@ namespace VRCKatamari.Tests
     /// motor refuses (never silently drops) an entry past the capacity.
     /// </para>
     /// <para>
-    /// Per-step cost of 64 boxes, from the code: SweepMath validates each box once
-    /// (<c>TryExpandBox</c>, ~10 ops) and then tests every obstacle inside the contact loop
-    /// (<c>maxContacts</c> = 4 passes) plus the 4 projection passes, i.e. at most
-    /// 8 x 64 = 512 box narrow tests per step. A box test is a slab test that rejects a far
-    /// box on the first axis (~10-20 ops), so 64 boxes are on the order of 10 k ops/step
-    /// (~0.5 Mops/s at 50 Hz) - the same order as ONE terrain chunk's support query
-    /// (17 probes x 512 triangles) and far below the 3,456-triangle worst case. Nothing
-    /// allocates per step: the sweep arrays are rebuilt only when the obstacle count
-    /// changes, which is a registration/scan event (RebuildObstacles' own remark).
-    /// </para>
-    /// <para>
     /// The host object is <see cref="HideFlags.DontSave"/> and destroyed in
     /// <see cref="TearDown"/>.
     /// </para>

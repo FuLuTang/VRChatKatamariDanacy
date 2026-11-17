@@ -55,7 +55,7 @@
 
 ## 4. 静止后下坡
 
-`RampSlideMath.TryStepRestLatch`：平面速度 < `rampRestSpeedMps·s` 且无推动（`|forward|+|lateral| ≤ 0.05`）时累计静止时间，否则清零；站在可走坡（`2° < 坡角 ≤ maxSupportSlopeDegrees`，非墙、非爬升、非坠落）上且静止满 0.3 s 时锁存「滑动」，之后只要仍在坡上且没有推动就保持（滑动本身是运动，不能靠静止计时维持），任何推动或离开坡面即关闭。滑动期间每步经 `SupportSurfaceMath.TryApplyRampTangentialGravity(重力 g·s，速度上限 maxSpeed·s)` 加沿水平下坡方向的加速度；**运动中（未锁存）不额外加下坡加速**，平地不滑。滑动速度由滚动阻力/阻力/抓地限制：10° 坡朝向垂直坡向时漂移终速约 0.59 m/s·s；坡太缓（`g·sinθ` 小于滚动阻力与阻力平衡）时会慢到几乎不滑。覆盖范围：任何给出支撑法线的表面（解析坡与地形网格）。
+`RampSlideMath.TryStepRestLatch`：平面速度 < `rampRestSpeedMps·s` 且无推动（`|forward|+|lateral| ≤ 0.05`）时累计静止时间，否则清零；站在可走坡（`2° < 坡角 ≤ maxSupportSlopeDegrees`，非墙、非爬升、非坠落）上且静止满 0.3 s 时锁存「滑动」，之后只要仍在坡上且没有推动就保持（滑动本身是运动，不能靠静止计时维持），任何推动或离开坡面即关闭。滑动期间每步经 `SupportSurfaceMath.TryApplyRampTangentialGravity(重力 g·s，速度上限 maxSpeed·s)` 加沿水平下坡方向的加速度；**运动中（未锁存）不额外加下坡加速**，平地不滑。滑动速度由滚动阻力/阻力/抓地限制：10° 坡朝向垂直坡向时漂移终速约 0.59 m/s·s；坡太缓（`g·sinθ` 小于滚动阻力与阻力平衡）时会慢到几乎不滑。实现位置：`StepContactV2` 里 `RefreshClimbGate` 之后、接触求解之前调 `UpdateRampSlide`；坡面取上一步 `WriteContactSupport` 写下的支撑法线，不在坡上的情形还包括针尖支撑、爬升接触和无支撑（下落）。加进 `planarVelocity` 的下坡速度随同一步的接触求解一起积分；有支撑的子步里求解器把下坡速度投影到支撑面的切平面（`ContactSolveMath.SupportTangentVerticalSpeed`），球顺坡走时贴着坡面、不丢支撑，所以闩锁不会因离开坡面而关；上一步被整步拒绝（残差 > 2 cm）时本步不加（拒绝步的速度本来就被清零），`TeleportTo` 清闩锁与静止计时。覆盖范围：任何给出支撑法线的表面（解析坡、OBB 斜板与地形网格）。
 
 ## 5. 契约更正（相对惯性改动前）
 

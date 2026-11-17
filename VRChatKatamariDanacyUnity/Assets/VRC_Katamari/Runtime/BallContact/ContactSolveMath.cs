@@ -927,7 +927,8 @@ namespace VRCKatamari.BallContact
                             }
                         }
                     }
-                    if (supportIndex >= 0) vY = 0f;
+                    if (supportIndex >= 0)
+                        vY = SupportTangentVerticalSpeed(contactNormals[supportIndex], vPlanar);
                     else if (wallIndex >= 0)
                         vY = Mathf.Max(vY - ContactTuning.Gravity * dt / substeps,
                             -ContactTuning.VSlideMax);
@@ -984,6 +985,30 @@ namespace VRCKatamari.BallContact
                 airborne = true;
             }
             return true;
+        }
+
+        /// <summary>
+        /// The vertical speed a ball rolling on a supporting surface keeps: the one that puts
+        /// its velocity in the surface's tangent plane when that is DOWNHILL, else 0.
+        /// </summary>
+        /// <remarks>
+        /// Zeroing the vertical speed on every supported substep let a ball that rolls
+        /// downhill walk off the plane (it moved horizontally, the plane fell away), lose its
+        /// support and hop. Projecting onto the tangent plane makes it follow the surface. A
+        /// flat normal gives 0 (the old behaviour); uphill motion stays 0 because the
+        /// push-out already lifts the ball along the surface, and a launch off a ramp top
+        /// would otherwise carry a positive vertical speed.
+        /// </remarks>
+        public static float SupportTangentVerticalSpeed(Vector3 supportNormal,
+            Vector3 planarVelocity)
+        {
+            if (!KatamariMath.IsFiniteVector(supportNormal) ||
+                !KatamariMath.IsFiniteVector(planarVelocity)) return 0f;
+            if (supportNormal.y <= 1e-3f) return 0f;
+            float tangent = -(supportNormal.x * planarVelocity.x
+                + supportNormal.z * planarVelocity.z) / supportNormal.y;
+            if (!KatamariMath.IsFiniteFloat(tangent) || tangent >= 0f) return 0f;
+            return tangent;
         }
 
         /// <summary>The drive's push into a normal's horizontal direction, 0..1.</summary>

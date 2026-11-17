@@ -118,6 +118,58 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void AThinTiltedPlateFarFromTheOriginBakesToAValidObb()
+        {
+            // The ramp plate of the physics test arena: 0.04 m thick, 5.5 m long, tilted 10
+            // degrees about X, centred at z = -32.25. World-coordinate rounding used to leave
+            // the baked axes about 8e-5 off orthogonal, past the solver's 1e-5 gate.
+            // The rotation is written out (not Quaternion.Euler) so the case runs off-engine.
+            float radians = 10f * Mathf.PI / 180f;
+            float sin = Mathf.Sin(radians);
+            float cos = Mathf.Cos(radians);
+            Vector3 axisX = Vector3.right;
+            Vector3 axisY = new Vector3(0f, cos, sin);
+            Vector3 axisZ = new Vector3(0f, -sin, cos);
+            Vector3 center = new Vector3(10.5f, 0.47f, -32.25f);
+            Vector3 half = new Vector3(1.5f, 0.02f, 2.75f);
+            Vector3[] corners = Corners(center, axisX, axisY, axisZ, half);
+            Vector3 bakedCenter;
+            Vector3 bakedX;
+            Vector3 bakedY;
+            Vector3 bakedZ;
+            Vector3 bakedHalf;
+            Assert.IsTrue(ObbBakeMath.TryBakeFromCorners(corners, out bakedCenter, out bakedX,
+                out bakedY, out bakedZ, out bakedHalf));
+            Assert.IsTrue(ObbContactMath.IsValidObb(bakedCenter, bakedX, bakedY, bakedZ,
+                bakedHalf));
+            Assert.AreEqual(0.02f, bakedHalf.y, 1e-4f);
+            Assert.AreEqual(2.75f, bakedHalf.z, 1e-4f);
+            Assert.AreEqual(axisY.y, bakedY.y, 1e-4f);
+            Assert.AreEqual(axisY.z, bakedY.z, 1e-4f);
+        }
+
+        [Test]
+        public void AShearJustPastTheBakeToleranceIsStillRefused()
+        {
+            // Axis Y leans 2e-3 toward X: past the 1e-3 shear gate, so the bake refuses
+            // instead of silently straightening a box the author did not draw.
+            Vector3 axisY = new Vector3(2e-3f, 1f, 0f).normalized;
+            Vector3[] corners = new Vector3[ObbBakeMath.CornerCount];
+            for (int i = 0; i < corners.Length; i++)
+            {
+                corners[i] = Corner(Vector3.zero, Vector3.right, axisY, Vector3.forward,
+                    new Vector3(1f, 1f, 1f), i);
+            }
+            Vector3 bakedCenter;
+            Vector3 bakedX;
+            Vector3 bakedY;
+            Vector3 bakedZ;
+            Vector3 bakedHalf;
+            Assert.IsFalse(ObbBakeMath.TryBakeFromCorners(corners, out bakedCenter, out bakedX,
+                out bakedY, out bakedZ, out bakedHalf));
+        }
+
+        [Test]
         public void ShortOrNonFiniteInputIsRefused()
         {
             Vector3[] shortCorners = new Vector3[4];

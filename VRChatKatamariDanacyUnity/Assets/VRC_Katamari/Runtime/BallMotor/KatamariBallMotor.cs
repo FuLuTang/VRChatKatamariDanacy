@@ -87,118 +87,54 @@ namespace VRCKatamari.BallMotor
         [SerializeField] private float turnRateDegreesPerSecond = 110f;
         [SerializeField] private float maxLateralMps = 1.2f;
 
-        // ---- GroundContactMath inputs: one analytic plane + the radial proxy shell ----
+        // ---- Ground plane: the always-present contact source where no terrain answers ----
         [SerializeField] private Vector3 groundPlaneNormal = new Vector3(0f, 1f, 0f);
         [SerializeField] private float groundPlaneOffset = 0f;
-        // PROVISIONAL one-step caps, metres. maxLiftPerStep also bounds a teleport-free
-        // rise onto a slope; maxProxyLiftPerStep additionally bounds the rise caused by a
-        // proxy bump, so a long rod cannot pop the ball up in one step.
-        [SerializeField] private float maxLiftPerStep = 0.1f;
-        [SerializeField] private float maxDropPerStep = 0.1f;
-        [SerializeField] private float maxProxyLiftPerStep = 0.04f;
 
-        // ---- Terrain support (P1: static box tops, the step rule, gravity fall) ----
+        // ---- Terrain support (static box tops, the step rule, gravity fall) ----
         // PROVISIONAL values, all from Docs/Design/BallMotor/TERRAIN_SUPPORT.md.
         //
-        // The switch: when false, every input this layer feeds to every other layer is
-        // exactly what it was before terrain support existed (the sweep keeps all
-        // static boxes, GroundContactMath gets the raw ground plane, no fall state
-        // exists and VisualRoll gets the raw ground normal), so an older lab can keep
-        // its frame behaviour bit for bit. It defaults to true because a level's floor
-        // and ledges are static boxes; a lab that predates the step rule must call
-        // SetTerrainSupportEnabled(false).
-        [SerializeField] private bool terrainSupportEnabled = true;
-
         // Cell size of the uniform XZ grid the motor builds over the terrain mesh at
         // SetTerrainMesh time (TerrainGridMath). 1 m matches the v2 document's terrain.grid
         // unit; a refused grid is reported and the query falls back to the full scan, so
         // this is a speed knob only.
         [SerializeField] private float terrainGridCellM = 1f;
 
-        // T0/T1 terrain mesh contact (LEVEL_FORMAT_V2 §13). Default FALSE: with it off
-        // no terrain array is queried and the v1 position path is exactly the pre-mesh
-        // one. The mesh is the extra 3D-ground source; it does not replace the ground
-        // plane, boxes or ramps.
+        // Terrain mesh contact (LEVEL_FORMAT_V2 §13). Default FALSE: with it off no terrain
+        // array is queried. The mesh is the extra 3D-ground source; it does not replace the
+        // ground plane, boxes or ramps.
         [SerializeField] private bool terrainMeshContactEnabled = false;
         // The RATIO, never a height: stepLimit = ratio * semantic diameter. 0.25 is the
         // value already in Docs/Design/Maps/PicnicLawn/layout.json and in the map
-        // validator's climb_step rule; runtime read it nowhere before P1. The radius
-        // form is deliberately absent (see SupportSurfaceMath.TryStepHeightLimit).
+        // validator's climb_step rule. The radius form is deliberately absent (see
+        // SupportSurfaceMath.TryStepHeightLimit).
         [SerializeField] private float stepHeightOverBallDiameter = 0.25f;
-        // Rail on one step-up lift, so a mis-set ratio cannot teleport the ball. 0.6 is
-        // above 0.25 * 2.20 = 0.55, so a correct configuration never touches it.
-        [SerializeField] private float maxStepUpLiftWorldM = 0.6f;
-        // There is deliberately NO step hysteresis / stick-margin field. The one-way latch
-        // that used to live here could only widen the sweep exclusion beyond the support
-        // rule, and a box removed from the sweep that cannot support is a ghost step: on
-        // 2026-11-15 the mask latched while the ball was airborne at spawn and the 0.30 m
-        // ball drove through C09's 0.075 m deck. The mask's refresh gate (2 mm of
-        // diameter, 5 mm of support movement) is the de-noise, and both sides now read
-        // SupportSurfaceMath.IsStepWithinLimit with the same reference.
-        // Below this rise a crossing grants no large lift: numeric de-noise, NOT the
-        // map's 0.05 m ground-decal/facade classification threshold.
-        [SerializeField] private float minStepHeightM = 0.005f;
-        // A fall is real gravity, not the old 0.1 m-per-step drop clamp (which would cap
-        // descent at 5 m/s and read as a slow float down). 9.81 is PROVISIONAL: no
-        // original-game measurement says the ball falls at Earth gravity.
-        [SerializeField] private float gravityMps2 = 9.81f;
-        // Safety rail on fall speed so a long drop cannot produce an absurd per-step
-        // move; it is tens of m/s, not a re-named 0.1 m clamp.
-        [SerializeField] private float maxFallSpeedMps = 40f;
-        // A surface drop smaller than this is the same surface, not a ledge. It is a
-        // tolerance, not a gameplay cap: 1 mm would make every step on a slightly tilted
-        // ground plane enter and leave the fall state (a 7 deg plane at 4 m/s drops 9.8 mm
-        // per 20 ms step), which is flicker, not physics. A centimetre is below anything
-        // the ball should visibly fall off, and such a drop is taken by the normal
-        // maxDropPerStep clamp in one step, i.e. reads as glued to the floor.
-        // It only applies when the SELECTED SURFACE changed: a ramp or tilted ground
-        // lowers the plane under the moving probe as the ball rolls along it (a 30 deg
-        // ramp at 4 m/s drops 46 mm per step) and that is not a lost surface.
-        [SerializeField] private float supportDropTriggerM = 0.01f;
 
-        // ---- Static ramps (P3: support only, never sweep obstacles) ----
-        // The guard-rail on a ramp's slope, degrees (PROVISIONAL). 45 is the design's
-        // 30%-margin value over the hard 51.3 degree ceiling that the one-step clamps
-        // imply: tan(theta) <= min(maxLiftPerStep, maxDropPerStep) / (maxSpeedMps *
-        // fixedStepSeconds) = 0.1 / (4 * 0.02) = 1.25. Changing maxLiftPerStep,
-        // maxDropPerStep, maxSpeedMps or fixedStepSeconds changes that ceiling, which is
-        // why this is serialized and NOT hard-coded in the math: SupportSurfaceMath takes
-        // it as a parameter. A steeper ramp is refused with a reason code, never
-        // registered (the ball would climb a wall) and never silently ignored (the ball
-        // would pass through).
+        // ---- Static ramps (support only; registered as slab OBBs) ----
+        // The guard-rail on a ramp's slope, degrees (PROVISIONAL), applied by AddRamp. A
+        // steeper ramp is refused with a reason code, never registered (the ball would
+        // climb a wall) and never silently ignored (the ball would pass through).
         [SerializeField] private float maxSupportSlopeDegrees = SupportSurfaceMath.DefaultMaxSupportSlopeDegrees;
-        // Optional downhill acceleration on a ramp, as a fraction of g * sin(slope).
-        // PROVISIONAL and OFF by default: the design's U3 recommendation is "a ramp is a
-        // channel, the ball does not slide down by itself", and the P1 motion contract is
-        // planar velocity only. A pilot can raise this without touching the motion layer;
-        // at 0 the step is bit-for-bit the P1 behaviour.
+
+        // ---- Rest, then slide (BALL_INERTIA.md section 4), PROVISIONAL ----
+        // The downhill component starts only after the ball has been below
+        // rampRestSpeedMps * s for rampRestSeconds with no push, and never applies to a moving
+        // ball. The slope must be steeper than rampSlideMinSlopeDegrees (flat ground never
+        // slides) and within maxSupportSlopeDegrees (a steeper face is a wall or a climb).
+        // The acceleration is g * sin(slope) * rampTangentialGravityScale * s (s = D / D0), the
+        // same in diameters per second squared at every size.
         [SerializeField] private float rampTangentialGravityScale = 1f;
-        // Rest-then-slide (BALL_INERTIA.md section 4), PROVISIONAL: the downhill component
-        // starts only after the ball has been below rampRestSpeedMps * s for
-        // rampRestSeconds with no push, and never applies to a moving ball. The slope must
-        // be steeper than rampSlideMinSlopeDegrees (flat ground never slides) and within
-        // maxSupportSlopeDegrees (a steeper face is a wall, not a slope).
         [SerializeField] private float rampRestSpeedMps = 0.05f;
         [SerializeField] private float rampRestSeconds = 0.3f;
         [SerializeField] private float rampSlideMinSlopeDegrees = 2f;
+        [SerializeField] private float gravityMps2 = 9.81f;
 
-        // ---- Radial proxy (pin) caps and admission (PROVISIONAL, unmeasured) ----
-        // The protrusion cap is relative to the core radius (the contract's rule) and also
-        // has an absolute rail for a large ball. Both are engineering limits against a rod
-        // catapult, not measured product values. EVERY attached prop registers into the 16
-        // pins (the original's rolling model); there is no long-object admission test.
-        [SerializeField] private float maxProxyProtrusionPerCoreRadius = 0.35f;
-        [SerializeField] private float maxProxyProtrusionWorldM = 0.3f;
-        // The vertical channel is position-only in this revision, so the requested normal
-        // speed perturbation is 0; the cap is still a serialized input so a later revision
-        // that does add a normal velocity cannot exceed it.
-        [SerializeField] private float maxProxyNormalSpeedPerturbation = 0.15f;
-        // A prop whose farthest corner does not clear the core by this much cannot
-        // contribute a support above the core, so it is not registered.
+        // ---- Radial proxy (pin) admission (PROVISIONAL, unmeasured) ----
+        // EVERY attached prop registers into the 16 pins (the original's rolling model);
+        // there is no long-object admission test. A prop whose farthest corner does not
+        // clear the core by this much cannot contribute a support above the core, so it is
+        // not registered.
         [SerializeField] private float minProxyProtrusionM = 0.01f;
-
-        // ---- SweepMath inputs ----
-        [SerializeField] private float separationEpsilon = 0.001f;
 
         // ---- SizeModelMath inputs: fixed-point mm^3 (Docs/OPEN_DECISIONS.md (r) C+D) ----
         // The ledger quantity is now the ball's GROWTH in cubic millimetres (1 LSB = 1 mm^3),
@@ -240,7 +176,7 @@ namespace VRCKatamari.BallMotor
         [SerializeField] private float contactRadiusWorldM = 0f;
         // The size gate's per-item factor and the ball's diameter are the ONLY gate inputs,
         // and neither is serialized here: k travels with the candidate
-        // (PickupFieldHost.propVolumeK -> SubmitCandidateWithVolumeK), and the diameter is
+        // (PickupFieldHost.propVolumeK -> SubmitCandidateWithVolumeKMm3), and the diameter is
         // this motor's own semanticDiameterWorldM. The gate itself lives in
         // PickupAbsorbMath.IsBeyondAbsorbLimit, in the original's quantities (k * bbox,
         // Req floored to whole mm, ball floor(1000*D) >= Req) - owner decision 2026-11-16.
@@ -319,8 +255,6 @@ namespace VRCKatamari.BallMotor
         // "motor not ready, draw nothing yet". Neither a round reset nor a bank changes it:
         // startVolumeMm3 is the level's, not the round's.
         private float startSemanticDiameterWorldM;
-        private float rampRestTimerSeconds;
-        private bool rampSliding;
         private float fixedStepAccumulator;
         private float localClockSeconds;
         private float stuckSeconds;
@@ -406,38 +340,21 @@ namespace VRCKatamari.BallMotor
         private float[] intentYBuffer;
         private bool[] intentValueBuffer;
 
-        // ---- Sweep buffers; obstacle order is planes first, then boxes ----
+        // ---- Static geometry capacities ----
         // 8 planes stay (activity walls + the cell's own pads, LEVEL_FORMAT_V2 §5.4).
-        // 64 static boxes: the v2 format's own budget for `structures[role=box]` is 64 and
-        // its `caps.staticSolids` is 256, and the reference (nostalgia) level imports 35
-        // scenery solids that must block the ball - 8 was the pre-v2 v1 contract, not a
-        // measurement. The static box SURFACE ids stay 1 + i, so the ramp base moved to
-        // FirstRampSurfaceId (1000) to keep the namespaces disjoint; props stay 100 + i.
+        // 64 static boxes through AddBox: the v2 format's own budget for
+        // `structures[role=box]` is 64 and its `caps.staticSolids` is 256 (the OBB table).
+        // The static box SURFACE ids are 1 + i, the ramp base is FirstRampSurfaceId (1000) to
+        // keep the namespaces disjoint; props are 100 + i.
         private const int MaxPlaneCount = 8;
         private const int MaxBoxCount = 64;
         private const int ContactCapacity = 4;
 
-        // Dynamic blocking boxes get their own capacity instead of borrowing the static
-        // box budget. A map's static boxes are an authoring contract the map validator
-        // mirrors (v2: budget.boxes 64), while "which nearby props are too big to absorb" is re-decided
-        // every scan; sharing one budget would make a lab's walls compete with props for
-        // slots and would change every map's data when the prop count needs a bigger
-        // window. Six is a provisional estimate of how many props a ball can touch at
-        // once (Docs/Design/PickupAbsorb/BLOCKING_PROPS_PLAN.md §9.2), not a measurement.
-        private const int MaxBlockingBoxCount = 6;
-
-        // Support props get their own six slots, symmetric to the blocking slice and
-        // owned by SupportSurfaceMath (one capacity constant, one predicate). They are
-        // a separate pool on purpose: a stage's step must not lose its slot because
-        // six walls happen to be closer.
-        private const int MaxSupportPropCount = SupportSurfaceMath.MaxSupportPropCount;
-
         // ---- Cross-behaviour set buffers: ownership (why Start is not the only allocator) ----
         // Every buffer below holds a SET that another behaviour writes through a public
-        // entry point: the pickup field pushes its blocking and support sets from its own
-        // Update (PickupFieldHost.UpdatePropObstacles) and queues candidates, and the arena
-        // host registers planes/boxes/ramps. Unity does not order Start across GameObjects,
-        // and this project has already met both orders (F1: a blocking set arrived before
+        // entry point: the pickup field queues candidates, and the arena host registers
+        // planes/boxes/ramps. Unity does not order Start across GameObjects,
+        // and this project has already met both orders (F1: a set arrived before
         // this component's Start, the destination was still null, the write threw a null
         // reference and Udon halted the motor for the rest of the session - the ball never
         // started). The rule is one rule, the same one the v2 contact tables follow:
@@ -448,14 +365,14 @@ namespace VRCKatamari.BallMotor
         //   2. Start calls the SAME ensure instead of allocating a second copy, so a set
         //      registered before Start is kept rather than wiped by a re-allocation.
         //   3. A null or undersized buffer after that is a refused call, never a null
-        //      reference and never a partial write: blocking/support record "set buffers
-        //      unavailable", a ramp records its refusal code, the candidate queue logs once
+        //      reference and never a partial write: a ramp records its refusal code, the
+        //      candidate queue logs once
         //      and answers false, and AddPlane/AddBox - which have no reason channel - answer
         //      false for the arena's existing report. It cannot be grown at that point: the
         //      accepted set and its readers hold these exact arrays, so replacing them would
         //      silently empty the ball's world. Nothing is written by a refused call.
-        // The sets covered here are the pickup field's two role sets (blocking, support),
-        // the scene geometry (planes, boxes, ramps) and the candidate queue. The v2 contact
+        // The sets covered here are the scene geometry (planes, boxes, ramps) and the
+        // candidate queue. The contact
         // tables have their own ensure for the same reason (EnsureContactV2Buffers); the
         // radial proxy shell is written only from this component's absorbed-event ring,
         // which cannot exist before a step, so it stays a Start allocation.
@@ -468,44 +385,10 @@ namespace VRCKatamari.BallMotor
         private Vector3[] planeNormalBuffer;
         private float[] planeOffsetBuffer;
         private int planeCount;
-        private Vector3[] boxMinimumBuffer;
-        private Vector3[] boxMaximumBuffer;
         private int boxCount;
-        // The blocking slice as last accepted by SetBlockingBoxes, in the host's order.
-        // The sweep reads the appended copy RebuildObstacles builds, never these buffers.
-        private Vector3[] blockingMinimumBuffer;
-        private Vector3[] blockingMaximumBuffer;
-        private int blockingBoxCount;
-
-        // ---- Support props (P2): absorb-proof props the ball may stand on ----
-        // A support prop is NOT a sweep obstacle: by construction its top is within
-        // one step of the ball, so the ball must be allowed to enter it (exactly the
-        // reason a steppable static box leaves the sweep). The host owns which props
-        // these are and re-sends the set every scan; the motor only carries it into
-        // the support table. Capacity and refusal semantics mirror the blocking
-        // slice, but the two are separate pools: a crowded blocking set must never
-        // evict the step the ball is climbing.
-        private Vector3[] supportPropMinimumBuffer;
-        private Vector3[] supportPropMaximumBuffer;
-        private int supportPropCount;
-        // Refusals are deliberately NOT part of the overflow signal, for the same
-        // reason the blocking refusals are not: "more nearby props than the ball can
-        // stand on" is a normal per-scan answer, not a mis-wired scene.
-        private int supportPropRefusalCount;
-        private string supportPropRefusalReason;
-
-        // ---- Static ramps (P3): support-only oriented planes ----
-        // These are NOT sweep obstacles and share no slots with the static boxes. A ramp
-        // registered as a box would put the radius-expanded AABB of the whole tilted board
-        // at the ramp foot: the invisible wall of design §5.5. The parallel arrays are the
-        // UdonSharp shape (no user structs); the support query reads exactly rampCount
-        // entries. The centre is a point on the WALKING PLANE (the box's +Y face), not the
-        // box centre, so the ball sits on the board rather than half a thickness inside it.
-        private Vector3[] rampCenterBuffer;
-        private Vector3[] rampNormalBuffer;
-        private Vector3[] rampRightBuffer;
-        private float[] rampHalfWidthBuffer;
-        private float[] rampHalfRunBuffer;
+        // ---- Static ramps: support-only oriented planes ----
+        // AddRamp validates the board (slope guard, capacity 4) and registers its slab OBB;
+        // only the count and the refusal state are kept here.
         private int rampCount;
         // Refusals are counted separately from SignalOverflow for the same reason prop
         // refusals are, except for capacity: a fifth ramp is a scene-wiring error and does
@@ -518,45 +401,13 @@ namespace VRCKatamari.BallMotor
         // in GetLastRampRefusalReason so the reason is still a literal and still code-visible.
         private const int RampRefusalNoBuffers = 7;
 
-        private Vector3[] planeNormals;
-        private float[] planeOffsets;
-        private Vector3[] boxMinima;
-        private Vector3[] boxMaxima;
-        private Vector3[] contactCenters;
-        private Vector3[] contactPoints;
-        private Vector3[] contactNormals;
-        private float[] contactTimes;
-        private int[] contactObstacleIndices;
-        private float[] contactPenetrationDepths;
-        // Outward wall normals for this step's contact response, a second view of
-        // the contact log (boxes may report an inner-face normal; see the stage 3
-        // remarks). Reused, never reallocated per step.
-        private Vector3[] wallContactNormals;
-
-        // ---- Terrain support state (P1) ----
-        // The support decision itself lives in SupportSurfaceMath; this layer only
-        // carries its result and the two memories the design asks for (which box is a
-        // step, and which surface the ball stood on last step).
-        //
-        // boxIsSteppable is indexed like the static box buffers, caches this step's
-        // answer for the sweep arrays, AND is the support table's candidacy answer for a
-        // static box (TryResolveSupport reads it). One conclusion, two readers: a true
-        // entry is excluded from the sweep and is a support candidate, a false entry stays
-        // a wall. Computing the comparison twice was the P1 C09 ghost step (the mask's
-        // reference and the query's reference could drift apart while the ball landed);
-        // see SupportSurfaceMath.StepMaskNeedsRefresh for the gate.
-        private bool[] boxIsSteppable;
-        private bool stepMaskValid;
-        private bool stepMaskBoxesDirty;
-        private int stepMaskRebuildCount;
-        private float stepMaskDiameterWorldM;
-        // The REFERENCE the mask was computed with, i.e. the predicate's own input - the
-        // ball's own bottom - and not the selected support height. Landing from a spawn
-        // clearance moves the bottom without moving the support, so a support-height gate
-        // could not see it.
-        private float stepMaskReferenceWorldM;
-        // Selected support of the current step, as the plane pair the ground solve
-        // consumes plus the diagnostics the host and the lab read.
+        // ---- Support state ----
+        // The contact solver writes the selected support (WriteContactSupport); the
+        // diagnostics, the pickup host and the lab read it. The previous step's selected
+        // support is the band reference and the rise base.
+        private float rampRestTimerSeconds;
+        private bool rampSliding;
+        private bool previousStepRejected;
         private int supportSurfaceId;
         private Vector3 supportSurfacePointWorld;
         private Vector3 supportSurfaceNormalWorld;
@@ -567,7 +418,6 @@ namespace VRCKatamari.BallMotor
         private int previousSupportSurfaceId;
         private float previousSupportHeightWorldM;
         private float lastSupportHeightWorldM;
-        private bool hasSupportFrame;
         // Gravity fall state. There is no jump and no upward velocity: the only way in
         // is losing support, and arriving at a surface is the only way out.
         private bool isFalling;
@@ -622,8 +472,7 @@ namespace VRCKatamari.BallMotor
         // Support and penetration collect separately (at different centres, and in v2 with
         // different windows), so one shared number would misreport whichever query ran last.
         private int terrainSupportCandidateCount;
-        private int terrainPenetrationCandidateCount;
-        // The v2 contact sweep window (r + half the step travel + skin); 0 in the v1 path.
+        // The v2 contact sweep window (r + half the step travel + skin).
         private int terrainContactCandidateCount;
         // ---- Terrain cost diagnostics (per LAST fixed step; see ResetTerrainCostCounters) ----
         // The total is kept for existing readers; the split says whether the support ring or
@@ -632,7 +481,6 @@ namespace VRCKatamari.BallMotor
         // (fullEvals / trianglesTested).
         private float lastTerrainQueryMicros;
         private float lastTerrainSupportMicros;
-        private float lastTerrainPenetrationMicros;
         private int terrainTrianglesTested;
         private int terrainFullEvals;
         // Steps the last Update ran. A frame's terrain cost is lastTerrainQueryMicros times
@@ -736,8 +584,6 @@ namespace VRCKatamari.BallMotor
         // enabled, capped by the same TraceLineLimit. This is the single-rod lab's data
         // source (support height / core radius / lift / endpoint count); it is off by
         // default and reads no gameplay state back.
-        [SerializeField] private bool debugTraceProxySupport = false;
-        private int proxyTraceLinesLogged;
         private const int TraceLineLimit = 400;
         private const int AbsorbGapLogLimit = 400;
         private int absorbGapLogged;
@@ -774,7 +620,6 @@ namespace VRCKatamari.BallMotor
         private int overflowCount;
         private bool overflowLatched;
         private string firstOverflowReason;
-        private bool contactBufferSaturated;
 
         // ---- Blocking-box refusals, deliberately NOT part of the overflow signal ----
         // "The box capacity was exceeded" and "a mis-wired scene dropped an obstacle" are
@@ -783,8 +628,6 @@ namespace VRCKatamari.BallMotor
         // Counting them together would make a crowded picnic table look like a broken
         // scene forever. Same shape as the overflow signal (a count and one reason string,
         // no per-frame logging); the previous box set stays registered on a refusal.
-        private int blockingRefusalCount;
-        private string blockingRefusalReason;
 
         // ---- Radial proxy shell: the ball's 16 pins (one owner; the layers stay stateless) ----
         // The shell lives on the motor because the motor already owns the ball pose and
@@ -815,16 +658,8 @@ namespace VRCKatamari.BallMotor
         private int proxyCandidateCount;
         private int[] proxyAffectedIndices;
         private float[] proxySolveScratch;
-        // The v1 ground solve's points: the protruding pin tips (direction * clamped support),
-        // rebuilt every step from the 16-entry table, unused slots zeroed. Length is the pin
-        // count, so the per-step solve cost is bounded by 16 however many props are attached.
-        private Vector3[] localProxyPoints;
-        private int proxyTipCount;
         private Vector3[] proxyCorners;
         private Vector3[] proxyRemovedCorners;
-        private Vector3[] proxyEmptyPoints;
-        private float proxyGroundSupportHeightM;
-        private float proxyProtrusionCapWorldM;
         private int proxySkipCount;
         private int proxySkipReason;
         private int proxyRefusalCount;
@@ -842,17 +677,14 @@ namespace VRCKatamari.BallMotor
 
         // ---- Ball contact v2 (Docs/Design/BallMotor/CONTACT_MODEL_V2.md; S3) ----
         //
-        // PROVISIONAL. The flag is the rollback switch: FALSE runs the v1 position
-        // authority (StepPositionV1, the pre-v2 statements verbatim); TRUE replaces the
-        // step mask, the inflated-AABB sweep, the ramp height-field support and the
-        // radial-proxy ground lift with ONE contact solver (StepContactV2). No number in
-        // this region is measured or play-tested; the values come from ContactTuning.
-        [SerializeField] private bool contactModelV2Enabled = false;
+        // PROVISIONAL. ONE contact solver (StepContactV2) owns the ball's position. No
+        // number in this region is measured or play-tested; the values come from
+        // ContactTuning.
 
         // Collider proxies (Docs/Design/PickupAbsorb/COLLIDER_PROXY.md §6): when true the
         // prop block is read from the proxy columns instead of the prop OBB columns. FALSE
-        // is the v1/v2-box path and must keep every byte-identical behaviour it had; the
-        // proxy buffers are allocated anyway so a runtime flip finds them.
+        // keeps the prop OBB columns; the proxy buffers are allocated anyway so a runtime
+        // flip finds them.
         [SerializeField] private bool propProxyContactEnabled = false;
 
         /// <summary>
@@ -1155,24 +987,9 @@ namespace VRCKatamari.BallMotor
             // runs, so Start only makes sure they exist. Re-allocating here would wipe a set
             // that is already registered and being read by this step loop.
             EnsureRegistrationBuffers();
-            contactCenters = new Vector3[ContactCapacity];
-            contactPoints = new Vector3[ContactCapacity];
-            contactNormals = new Vector3[ContactCapacity];
-            contactTimes = new float[ContactCapacity];
-            contactObstacleIndices = new int[ContactCapacity];
-            contactPenetrationDepths = new float[ContactCapacity];
-            wallContactNormals = new Vector3[ContactCapacity];
 
-            // Terrain support: the mask has one entry per static box slot and starts
-            // empty (nothing is a step until a step has been evaluated). The support
-            // pair starts on the configured ground plane; the first step resolves the
-            // real surface.
-            boxIsSteppable = new bool[MaxBoxCount];
-            stepMaskValid = false;
-            stepMaskBoxesDirty = true;
-            stepMaskRebuildCount = 0;
-            stepMaskDiameterWorldM = 0f;
-            stepMaskReferenceWorldM = 0f;
+            // The support pair starts on the configured ground plane; the first step
+            // writes the real surface.
             supportSurfaceId = SupportSurfaceMath.GroundSurfaceId;
             supportSurfacePointWorld = new Vector3(0f, groundPlaneOffset, 0f);
             supportSurfaceNormalWorld = new Vector3(0f, 1f, 0f);
@@ -1182,7 +999,6 @@ namespace VRCKatamari.BallMotor
             previousSupportSurfaceId = SupportSurfaceMath.NoSurfaceId;
             previousSupportHeightWorldM = 0f;
             lastSupportHeightWorldM = 0f;
-            hasSupportFrame = false;
             isFalling = false;
             fallSpeedMps = 0f;
 
@@ -1209,13 +1025,8 @@ namespace VRCKatamari.BallMotor
             proxyCandidateCount = 0;
             proxyAffectedIndices = new int[RadialProxyMath.DirectionCount];
             proxySolveScratch = new float[RadialProxyMath.DirectionCount];
-            localProxyPoints = new Vector3[RadialProxyMath.DirectionCount];
-            proxyTipCount = 0;
             proxyCorners = new Vector3[RadialProxyShellMath.AabbCornerCount];
             proxyRemovedCorners = new Vector3[RadialProxyShellMath.AabbCornerCount];
-            proxyEmptyPoints = new Vector3[0];
-            proxyGroundSupportHeightM = 0f;
-            proxyProtrusionCapWorldM = 0f;
             proxySkipCount = 0;
             proxySkipReason = ProxySkipNone;
             proxyRefusalCount = 0;
@@ -1224,11 +1035,10 @@ namespace VRCKatamari.BallMotor
                 ref proxyEndpointCount, ref proxyItemCount, proxyCandidateKeys,
                 ref proxyCandidateCount);
 
-            // Ball contact v2 (flag off by default): the tables are allocated here, not
-            // behind the flag, so a runtime flip finds the scene's registered geometry.
-            // Only when they do not exist yet: a host that registered before this Start
-            // ran (component order between GameObjects is arbitrary) has already forced
-            // the allocation, and re-allocating would wipe its scene geometry.
+            // The contact tables are allocated here only when they do not exist yet: a
+            // host that registered before this Start ran (component order between
+            // GameObjects is arbitrary) has already forced the allocation, and
+            // re-allocating would wipe its scene geometry.
             if (staticObbCenter == null) AllocateContactV2Buffers();
 
             allowedKinds = new string[0];
@@ -1293,14 +1103,12 @@ namespace VRCKatamari.BallMotor
             {
                 stepHeightLimitWorldM = initialStepLimit;
             }
-            ResolveTerrainSupport(ballCenterWorld);
 
             Debug.Log("[BallMotor] Start ready diameter=" + semanticDiameterWorldM
                 + " collisionRadius=" + collisionRadiusWorldM
                 + " startVolumeMm3=" + startVolumeMm3
                 + " startSize=" + (startDiameterWorldM > 0f ? "level" : "calibration")
-                + " hasLocalRow=" + hasLocalRow
-                + " terrainSupport=" + terrainSupportEnabled);
+                + " hasLocalRow=" + hasLocalRow);
         }
 
         /// <summary>
@@ -1364,8 +1172,7 @@ namespace VRCKatamari.BallMotor
         /// </para>
         /// <para>
         /// After that first allocation the set is never replaced: the registered entries and
-        /// every reader of them (the sweep copy RebuildObstacles builds, the support query)
-        /// hold these exact arrays, so re-allocating would silently empty the ball's world.
+        /// every reader of them hold these exact arrays, so re-allocating would silently empty the ball's world.
         /// A destination that is then null or shorter than its capacity therefore cannot be
         /// grown here; it is a refused call with a reason instead - "set buffers unavailable"
         /// for the blocking and support sets, the ramp's <see cref="RampRefusalNoBuffers"/>,
@@ -1387,13 +1194,11 @@ namespace VRCKatamari.BallMotor
         /// <para>
         /// Both halves of every pair are checked, not one representative: a full minima array
         /// next to a short maxima array is exactly the state that writes past the end of the
-        /// shorter one, and it is what the ownership test's undersized case exercises.
+        /// shorter one, and it is the undersized case.
         /// </para>
         /// <para>
         /// The capacities are this component's own constants
-        /// (<see cref="MaxPlaneCount"/>, <see cref="MaxBoxCount"/>,
-        /// <see cref="MaxBlockingBoxCount"/>, <see cref="MaxSupportPropCount"/>,
-        /// <see cref="SupportSurfaceMath.MaxRampCount"/>), so "a full set" is decided in one
+        /// (<see cref="MaxPlaneCount"/>, <see cref="MaxBoxCount"/>), so "a full set" is decided in one
         /// place. Lengths are compared with <c>&lt;</c> rather than equality, so a longer
         /// array stays usable; nothing writes past a capacity.
         /// </para>
@@ -1401,25 +1206,8 @@ namespace VRCKatamari.BallMotor
         private bool RegistrationBuffersAtCapacity()
         {
             if (planeNormalBuffer == null || planeOffsetBuffer == null) return false;
-            if (boxMinimumBuffer == null || boxMaximumBuffer == null) return false;
-            if (blockingMinimumBuffer == null || blockingMaximumBuffer == null) return false;
-            if (supportPropMinimumBuffer == null || supportPropMaximumBuffer == null) return false;
-            if (rampCenterBuffer == null || rampNormalBuffer == null ||
-                rampRightBuffer == null) return false;
-            if (rampHalfWidthBuffer == null || rampHalfRunBuffer == null) return false;
             if (planeNormalBuffer.Length < MaxPlaneCount) return false;
             if (planeOffsetBuffer.Length < MaxPlaneCount) return false;
-            if (boxMinimumBuffer.Length < MaxBoxCount) return false;
-            if (boxMaximumBuffer.Length < MaxBoxCount) return false;
-            if (blockingMinimumBuffer.Length < MaxBlockingBoxCount) return false;
-            if (blockingMaximumBuffer.Length < MaxBlockingBoxCount) return false;
-            if (supportPropMinimumBuffer.Length < MaxSupportPropCount) return false;
-            if (supportPropMaximumBuffer.Length < MaxSupportPropCount) return false;
-            if (rampCenterBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
-            if (rampNormalBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
-            if (rampRightBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
-            if (rampHalfWidthBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
-            if (rampHalfRunBuffer.Length < SupportSurfaceMath.MaxRampCount) return false;
             return true;
         }
 
@@ -1431,32 +1219,12 @@ namespace VRCKatamari.BallMotor
         {
             planeNormalBuffer = new Vector3[MaxPlaneCount];
             planeOffsetBuffer = new float[MaxPlaneCount];
-            boxMinimumBuffer = new Vector3[MaxBoxCount];
-            boxMaximumBuffer = new Vector3[MaxBoxCount];
-            blockingMinimumBuffer = new Vector3[MaxBlockingBoxCount];
-            blockingMaximumBuffer = new Vector3[MaxBlockingBoxCount];
-            supportPropMinimumBuffer = new Vector3[MaxSupportPropCount];
-            supportPropMaximumBuffer = new Vector3[MaxSupportPropCount];
-            rampCenterBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
-            rampNormalBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
-            rampRightBuffer = new Vector3[SupportSurfaceMath.MaxRampCount];
-            rampHalfWidthBuffer = new float[SupportSurfaceMath.MaxRampCount];
-            rampHalfRunBuffer = new float[SupportSurfaceMath.MaxRampCount];
             planeCount = 0;
             boxCount = 0;
-            blockingBoxCount = 0;
-            blockingRefusalCount = 0;
-            blockingRefusalReason = "";
-            supportPropCount = 0;
-            supportPropRefusalCount = 0;
-            supportPropRefusalReason = "";
             rampCount = 0;
             rampRefusalCount = 0;
             rampRefusalCode = SupportSurfaceMath.RampRefusalNone;
             rampRefusalSlopeDegrees = 0f;
-            // The sweep arrays are derived from the counts above (and are re-created by
-            // every rebuild), so the empty rebuild belongs to the same first-time step.
-            RebuildObstacles();
             registrationBuffersReady = true;
         }
 
@@ -1565,20 +1333,13 @@ namespace VRCKatamari.BallMotor
         /// </summary>
         /// <remarks>
         /// Stages 1-2 (intent, motion) and 5-9 (absorb, ledger, size, growth push-out,
-        /// visual roll, follow rig) are shared by both contact models. The position
-        /// authority between them is chosen by <c>contactModelV2Enabled</c>:
-        /// <see cref="StepPositionV1"/> is the pre-v2 order
-        /// (RefreshStepMask -> TrySweepSphere -> TryResolveSupport -> GroundContactMath),
-        /// <see cref="StepContactV2"/> is the one contact solver of
-        /// Docs/Design/BallMotor/CONTACT_MODEL_V2.md §7.3. Rollback = flag off.
+        /// visual roll, follow rig) surround the one position authority,
+        /// <see cref="StepContactV2"/> (Docs/Design/BallMotor/CONTACT_MODEL_V2.md §7.3).
         /// </remarks>
         private void StepBall(float dt)
         {
-            // ONE reset for both position authorities. It used to live in StepPositionV1, so
-            // with contact model v2 on (which never enters that method) every reading was a
-            // STALE value from the last v1 step. Reset here and the v2 authority honestly
-            // reports "this authority does not query the terrain mesh" as zeroes.
-            // The reading is the LAST step only: a frame's cost is the reading times the
+            // The contact solve does not query the terrain mesh through the old per-step
+            // counters, so they read zero. The reading is the LAST step only: a frame's cost is the reading times the
             // number of steps that frame ran (see GetStepsThisFrame).
             ResetTerrainCostCounters();
             stepsThisFrame = stepsThisFrame + 1;
@@ -1605,23 +1366,13 @@ namespace VRCKatamari.BallMotor
                 requestedDisplacement = stepDisplacement;
             }
 
-            // 2.5 - 4. The position authority for this step. Both write the same three
-            //     values, so the stages below are shared and neither path carries a
-            //     branch: with the flag off the v1 method runs the original statements in
-            //     the original order.
+            // 2.5 - 4. The position authority for this step: it writes the final centre,
+            //     the smooth camera anchor and the visual-roll axis the stages below read.
             Vector3 groundedCenter = Vector3.zero;
             Vector3 followCenter = Vector3.zero;
             Vector3 supportNormal = groundPlaneNormal;
-            if (contactModelV2Enabled)
-            {
-                StepContactV2(dt, requestedDisplacement, out groundedCenter, out followCenter,
-                    out supportNormal);
-            }
-            else
-            {
-                StepPositionV1(dt, requestedDisplacement, out groundedCenter, out followCenter,
-                    out supportNormal);
-            }
+            StepContactV2(dt, requestedDisplacement, out groundedCenter, out followCenter,
+                out supportNormal);
 
             // 5. PickupAbsorbMath: a decision per candidate, at the final position
             //    only, so nothing is absorbed through a wall or from the old centre.
@@ -1636,13 +1387,9 @@ namespace VRCKatamari.BallMotor
             //    per-step stage and a conversion cannot disagree about it.
             RecomputeConfirmedAndSize();
 
-            // 7.5 Growth push-out (design §4.2; v2 only). Absorbing grows the radius
-            //     inside one step, so the ball can end a step embedded in the wall it
-            //     just grew into. Guarded, so the v1 frame does not change.
-            if (contactModelV2Enabled)
-            {
-                ApplyGrowthPushOut(ref groundedCenter, ref followCenter, ref supportNormal);
-            }
+            // 7.5 Growth push-out (design §4.2). Absorbing grows the radius inside one
+            //     step, so the ball can end a step embedded in the wall it just grew into.
+            ApplyGrowthPushOut(ref groundedCenter, ref followCenter, ref supportNormal);
 
             // 8. VisualRollMath: the actual centre move, with the discontinuity flag
             //    supplied so a teleport frame holds the pose.
@@ -1667,336 +1414,10 @@ namespace VRCKatamari.BallMotor
             discontinuous = false;
         }
 
-        /// <summary>
-        /// The v1 position authority (design stages 2.5-4 plus the v1 stuck recovery):
-        /// step-mask refresh, inflated-AABB sweep, terrain support selection and the
-        /// analytic ground solve.
-        /// </summary>
-        /// <remarks>
-        /// This is the original body of <see cref="StepBall"/>, moved here unchanged so
-        /// the flag can choose between two position authorities without either one
-        /// carrying a branch. Statement order, comments and every constant are the
-        /// pre-v2 ones; the only textual difference is that the three values the shared
-        /// tail stages read are out parameters instead of locals, and they are
-        /// initialised first so every path assigns them (CS0165):
-        /// <c>groundedCenter</c> (the final centre), <c>followCenter</c> (the smooth
-        /// camera anchor) and <c>supportNormal</c> (the visual-roll axis). With
-        /// <c>contactModelV2Enabled</c> false this method is the only position path, so
-        /// rollback is the flag alone.
-        /// </remarks>
-        private void StepPositionV1(float dt, Vector3 requestedDisplacement,
-            out Vector3 groundedCenter, out Vector3 followCenter, out Vector3 supportNormal)
-        {
-            groundedCenter = Vector3.zero;
-            followCenter = Vector3.zero;
-            supportNormal = groundPlaneNormal;
-            lastTerrainQueryMicros = 0f;
-            // 2.5 Terrain support mask (P1): decide which static boxes are steps and
-            //     rebuild the sweep obstacle arrays without them. This runs BEFORE the
-            //     sweep because entering a step means being allowed inside the box's
-            //     expanded AABB; it uses the previous step's support height, which is
-            //     the design's accepted one-step lag. The mask and the support table call
-            //     the SAME SupportSurfaceMath predicate with the same reference, so a box
-            //     the sweep drops is always one the support table can select.
-            if (terrainSupportEnabled) RefreshStepMask();
-
-            // 3. SweepMath: actual displacement. Only this — never the requested
-            //    motion — may reach the visual roll later, so a blocked step does
-            //    not spin the ball into a wall.
-            Vector3 sweptCenter = ballCenterWorld;
-            bool sweepAccepted = false;
-            bool sweepStuck = false;
-            // The sweep also reports `blocked`, but this layer has no reader for it (a
-            // blocked step already shows up as an accepted sweep whose centre did not
-            // move, plus the stuck timer), so it is requested and dropped rather than
-            // stored in a field nothing reads.
-            bool sweepBlocked = false;
-            Vector3 finalPosition;
-            Vector3 remainingDisplacement;
-            Vector3 slideDirection;
-            int contactCount;
-            if (SweepMath.TrySweepSphere(ballCenterWorld, requestedDisplacement,
-                collisionRadiusWorldM, planeNormals, planeOffsets, boxMinima, boxMaxima,
-                ContactCapacity, separationEpsilon, contactCenters, contactPoints,
-                contactNormals, contactTimes, contactObstacleIndices,
-                contactPenetrationDepths, out contactCount, out finalPosition,
-                out remainingDisplacement, out slideDirection, out sweepStuck,
-                out sweepBlocked))
-            {
-                sweptCenter = finalPosition;
-                sweepAccepted = true;
-                // SweepMath stops writing contacts at ContactCapacity (4) and
-                // reports no truncation flag, so the motor can only record that
-                // the buffer filled at least once; any further contact in that
-                // step is dropped inside the sweep. See the capacity remarks on
-                // RebuildObstacles.
-                if (contactCount >= ContactCapacity) contactBufferSaturated = true;
-            }
-            // T1 terrain push-out runs after the sweep and before support selection, so
-            // the support solve sees the corrected centre. Off => no call.
-            if (terrainMeshContactEnabled)
-            {
-                ResolveTerrainPenetration(ref sweptCenter, ref planarVelocity);
-            }
-
-            // Wall response: the sweep only stops the POSITION at the wall. Without
-            // this the planar velocity keeps its full speed into the wall, so the
-            // ball sticks instead of sliding and carries a stale velocity after it
-            // turns away. The sweep reports the contacts, the sweep layer orients
-            // them outward, and the sweep layer removes the inward part; this layer
-            // only orders the calls. Tangential velocity is untouched by design.
-            //
-            // Only side walls and boxes are in the sweep: the ground plane is
-            // GroundContactMath's analytic plane, never a sweep obstacle, so ground
-            // contact can neither brake nor steer the ball here. A failed or empty
-            // contact list leaves the velocity alone. Only contacts recorded before
-            // the contact buffer filled are corrected, so a saturated buffer
-            // (contactBufferSaturated) removes less than it should.
-            if (sweepAccepted && contactCount > 0)
-            {
-                int wallNormalCount;
-                if (SweepMath.TryCollectWallContactNormals(contactCenters, contactNormals,
-                    contactObstacleIndices, contactCount, planeNormals, planeOffsets,
-                    boxMinima, boxMaxima, wallContactNormals, out wallNormalCount))
-                {
-                    Vector3 correctedVelocity;
-                    if (SweepMath.TryRemoveWallNormalVelocity(planarVelocity,
-                        wallContactNormals, wallNormalCount, out correctedVelocity))
-                    {
-                        planarVelocity = correctedVelocity;
-                    }
-                }
-            }
-
-            // 3.5 Terrain support selection (P1): which surface is under the ball
-            //     centre at the swept XZ, and does that surface drop away (a ledge)?
-            //     The selection is a pure call into SupportSurfaceMath; this layer only
-            //     carries the surface pair into stage 4 and the gravity state.
-            ResolveTerrainSupport(sweptCenter);
-
-            // 3.6 Rest-then-slide downhill component (PROVISIONAL, BALL_INERTIA.md section 4).
-            //     The motion layer produced this step's displacement already, so the
-            //     added speed takes effect from the next step (a 20 ms lag). The latch
-            //     (RampSlideMath) opens only after the ball has been still for a moment on
-            //     a walkable slope with no push, and shuts on any push or when the ball
-            //     leaves the slope; a moving ball gets no extra downhill acceleration. The
-            //     acceleration is g * sin(slope) * scale * s (s = D / D0), the same in
-            //     diameters per second squared at every size. The decision math lives in
-            //     SupportSurfaceMath; this layer only carries the velocity back.
-            UpdateRampSlide(dt);
-
-            // 4. GroundContactMath: support height and the normal-only correction.
-            //
-            // Two solves per step, both cheap. The first uses the radial proxy shell's
-            // clamped pin tips, so an attached prop pointing at the ground lifts the core by
-            // up to maxProxyProtrusion (and no more); the second uses an empty proxy array
-            // and is the same plane solved for the smooth core sphere. Only the first
-            // moves the ball; the second is where the follow rig reads the centre, so a
-            // bump cannot bob the camera (the height filter alone would only soften it).
-            groundedCenter = sweptCenter;
-            followCenter = sweptCenter;
-            // Every out local is initialised at its declaration: the first ground solve
-            // sits behind two conditions (a non-empty shell AND a successful proxy
-            // build), so the compiler cannot prove these are assigned before the reads
-            // below. This is an initialiser, not a change of logic.
-            float supportHeight = 0f;
-            Vector3 correctedCenter = Vector3.zero;
-            float centerNormalCoordinate = 0f;
-            Vector3 planeAnchor = Vector3.zero;
-            float appliedNormalCorrection = 0f;
-            float normalSpeedPerturbation = 0f;
-            bool liftClamped = false;
-            bool dropClamped = false;
-            float proxyProtrusionCap = maxProxyProtrusionPerCoreRadius * coreRadiusWorldM;
-            float absoluteProtrusionCap = maxProxyProtrusionWorldM;
-            if (!KatamariMath.IsFiniteFloat(absoluteProtrusionCap) || absoluteProtrusionCap < 0f)
-            {
-                absoluteProtrusionCap = 0f;
-            }
-            if (!KatamariMath.IsFiniteFloat(proxyProtrusionCap) || proxyProtrusionCap < 0f)
-            {
-                proxyProtrusionCap = 0f;
-            }
-            else if (proxyProtrusionCap > absoluteProtrusionCap)
-            {
-                proxyProtrusionCap = absoluteProtrusionCap;
-            }
-            proxyProtrusionCapWorldM = proxyProtrusionCap;
-            // The pin tips of this step: direction * support, clamped to core + cap, from the
-            // 16-entry table (bounded by 16 however many props are attached).
-            proxyTipCount = BuildProxyTipPoints(proxyProtrusionCap);
-            float proxyLiftCap = maxLiftPerStep;
-            if (proxyTipCount > 0 && maxProxyLiftPerStep < proxyLiftCap)
-            {
-                proxyLiftCap = maxProxyLiftPerStep;
-            }
-            float coreLiftCap = maxLiftPerStep;
-            float proxyDropCap = maxDropPerStep;
-            float coreDropCap = maxDropPerStep;
-
-            // P1 terrain: the plane this solve sees is the SELECTED support, not the raw
-            // ground, and a step crossing gets its own one-step lift allowance (§4.4)
-            // instead of the 0.04 m proxy cap. A fall uses this step's gravity budget as
-            // both clamps, so descent is gravity and not the old 0.1 m-per-step cap.
-            // With terrain support off the pair is the raw ground plane and the caps are
-            // exactly the pre-P1 ones, so the frame is bit-identical to before.
-            supportNormal = groundPlaneNormal;
-            float supportOffset = groundPlaneOffset;
-            if (terrainSupportEnabled)
-            {
-                supportNormal = supportSurfaceNormalWorld;
-                supportOffset = supportNormal.x * supportSurfacePointWorld.x
-                    + supportNormal.y * supportSurfacePointWorld.y
-                    + supportNormal.z * supportSurfacePointWorld.z;
-                if (isFalling)
-                {
-                    float nextFallSpeed;
-                    float fallBudget;
-                    if (SupportSurfaceMath.TryIntegrateFall(fallSpeedMps, gravityMps2, dt,
-                        maxFallSpeedMps, out nextFallSpeed, out fallBudget))
-                    {
-                        fallSpeedMps = nextFallSpeed;
-                        proxyDropCap = fallBudget;
-                        coreDropCap = fallBudget;
-                        proxyLiftCap = fallBudget;
-                        coreLiftCap = fallBudget;
-                    }
-                    else
-                    {
-                        // A corrupt gravity setting must not leave the ball falling
-                        // forever: drop the state and let the old clamp crawl it down.
-                        isFalling = false;
-                        fallSpeedMps = 0f;
-                    }
-                }
-                else if (supportSurfaceId != previousSupportSurfaceId &&
-                    SupportSurfaceMath.IsStepCrossing(
-                        supportSurfaceHeightWorldM - previousSupportHeightWorldM,
-                        minStepHeightM))
-                {
-                    // Only the step that crosses a step gets the large allowance; the next
-                    // step is back to 0.1 / 0.04, so a long rod still cannot pop the ball.
-                    float stepLift = stepHeightLimitWorldM;
-                    if (stepLift > maxStepUpLiftWorldM) stepLift = maxStepUpLiftWorldM;
-                    proxyLiftCap = stepLift;
-                    coreLiftCap = stepLift;
-                }
-            }
-            bool groundAccepted = false;
-            if (proxyTipCount > 0)
-            {
-                groundAccepted = GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation,
-                    localProxyPoints, supportNormal, supportOffset, sweptCenter,
-                    proxyLiftCap, proxyDropCap, 0f, maxProxyNormalSpeedPerturbation,
-                    out supportHeight, out correctedCenter, out centerNormalCoordinate,
-                    out planeAnchor, out appliedNormalCorrection, out normalSpeedPerturbation,
-                    out liftClamped, out dropClamped);
-            }
-            if (!groundAccepted)
-            {
-                // No protruding pin, or a rejected solve: keep the core-sphere behaviour
-                // rather than leaving the ball ungrounded.
-                groundAccepted = GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation,
-                    proxyEmptyPoints, supportNormal, supportOffset, sweptCenter,
-                    coreLiftCap, coreDropCap, 0f, maxProxyNormalSpeedPerturbation,
-                    out supportHeight, out correctedCenter, out centerNormalCoordinate,
-                    out planeAnchor, out appliedNormalCorrection, out normalSpeedPerturbation,
-                    out liftClamped, out dropClamped);
-            }
-            if (groundAccepted)
-            {
-                groundedCenter = correctedCenter;
-                proxyGroundSupportHeightM = supportHeight;
-                // Arriving ends the fall: the solve reached the surface without being
-                // drop-clamped by this step's fall budget. A failed solve keeps the state.
-                if (isFalling)
-                {
-                    isFalling = SupportSurfaceMath.ResolveFallState(true, false, true,
-                        dropClamped);
-                    if (!isFalling) fallSpeedMps = 0f;
-                }
-                if (debugTraceProxySupport && proxyTraceLinesLogged < TraceLineLimit)
-                {
-                    proxyTraceLinesLogged = proxyTraceLinesLogged + 1;
-                    Debug.Log("[ProxyTrace] t=" + localClockSeconds
-                        + " support=" + supportHeight
-                        + " core=" + coreRadiusWorldM
-                        + " lift=" + (supportHeight - coreRadiusWorldM)
-                        + " cap=" + proxyProtrusionCap
-                        + " tips=" + proxyTipCount
-                        + " props=" + proxyItemCount
-                        + " centerY=" + correctedCenter.y);
-                }
-            }
-
-            // Camera anchor: the same plane without the proxy points. The per-step lift/drop
-            // clamps are deliberately made huge for this call: it does not move the ball, and
-            // the anchor must be the EXACT core-sphere centre, not a lagging approximation of
-            // it. The follow rig's own height filter and teleport snap handle presentation.
-            float cameraAnchorUnclamped = 10f;
-            // While falling the anchor must follow the SAME descent as the ball; with the
-            // unclamped value above it would snap to the surface underneath and drag the
-            // camera down while the ball is still in the air. Grounded, the unclamped call
-            // is still the exact core centre (the correction is ~0 on a flat plane).
-            float cameraAnchorLift = cameraAnchorUnclamped;
-            float cameraAnchorDrop = cameraAnchorUnclamped;
-            if (terrainSupportEnabled && isFalling)
-            {
-                cameraAnchorLift = coreLiftCap;
-                cameraAnchorDrop = coreDropCap;
-            }
-            float smoothSupportHeight;
-            Vector3 smoothCenter;
-            float smoothNormalCoordinate;
-            Vector3 smoothAnchor;
-            float smoothCorrection;
-            float smoothPerturbation;
-            bool smoothLiftClamped;
-            bool smoothDropClamped;
-            if (GroundContactMath.TrySolve(coreRadiusWorldM, visualRollRotation, proxyEmptyPoints,
-                supportNormal, supportOffset, sweptCenter, cameraAnchorLift,
-                cameraAnchorDrop, 0f, maxProxyNormalSpeedPerturbation,
-                out smoothSupportHeight, out smoothCenter, out smoothNormalCoordinate,
-                out smoothAnchor, out smoothCorrection, out smoothPerturbation,
-                out smoothLiftClamped, out smoothDropClamped))
-            {
-                followCenter = smoothCenter;
-            }
-
-            // Stuck recovery sits between the position stages and the presentation
-            // stages: the sweep reports the condition, and the reset policy is the
-            // motor's (the motion layer explicitly leaves it to this layer). The
-            // discontinuity flag is what keeps the jump out of the visual roll.
-            // A rejected sweep tells us nothing about the contact state, so the
-            // timer keeps its previous value instead of being cleared.
-            if (sweepAccepted)
-            {
-                if (sweepStuck)
-                {
-                    stuckSeconds = stuckSeconds + dt;
-                }
-                else
-                {
-                    stuckSeconds = 0f;
-                }
-            }
-            if (stuckSeconds > stuckTimeoutSeconds)
-            {
-                groundedCenter = startCenterWorld;
-                followCenter = startCenterWorld;
-                planarVelocity = Vector3.zero;
-                stuckSeconds = 0f;
-                discontinuous = true;
-            }
-        }
-
-
 
         /// <summary>
-        /// Allocates the v2 tables once. They are allocated whatever the flag says, so a
-        /// runtime flag flip finds the geometry the scene already registered (an AddBox
-        /// that ran before the flip produced its OBB too). About 25 KB in total, which is
-        /// the design's budget (design §1.3).
+        /// Allocates the contact tables once, in <c>Start</c>. About 25 KB in total, which
+        /// is the design's budget (design §1.3).
         /// </summary>
         private void AllocateContactV2Buffers()
         {
@@ -2169,11 +1590,9 @@ namespace VRCKatamari.BallMotor
         /// All geometry work is a call into <see cref="ContactSolveMath"/> or
         /// <see cref="BallShapeMath"/>; this method only orders the calls, owns the state
         /// the solver cannot hold (UdonSharp has no structs or static fields) and writes
-        /// the readings the diagnostics report. The contact solve replaces four v1 stages
-        /// at once: the step mask is gone because a step is now a contact whose normal
-        /// points up, the inflated-AABB sweep is gone because the query is exact, the
-        /// ramp height field is gone because a ramp is a solid slab, and the radial-proxy
-        /// ground lift is gone because a protruding pin is a contact of its own.
+        /// the readings the diagnostics report. A step is a contact whose normal points up,
+        /// the query is exact, a ramp is a solid slab, and a protruding pin is a contact of
+        /// its own.
         /// </para>
         /// <para>
         /// Failure is closed. A refused solve keeps the previous position and drops the
@@ -2221,6 +1640,10 @@ namespace VRCKatamari.BallMotor
             // (design §3.2/§3.3; pass6 C09/C14).
             RefreshClimbGate(driveSpeed);
 
+            // Rest, then slide: the latch and the downhill component read last step's
+            // support and this step's push; the added speed takes effect in this solve.
+            UpdateRampSlide(dt);
+
             // The climb cap's protrusion term: how far a pin reaches towards the wall we
             // are pushing into (design §3.7, §4A.3).
             float protrusion = EstimateNeedleProtrusion(radius, contactDriveDirection);
@@ -2266,8 +1689,7 @@ namespace VRCKatamari.BallMotor
             // "There is no support plane where there is terrain" (LEVEL_FORMAT_V2 1.3): the
             // arena ground plane is a CONTACT SOURCE in v2, and a ball standing in a pit
             // below that plane would read the plane as a metre-deep penetration and be
-            // pushed up out of the terrain. So the same rule the v1 support selection
-            // applies is applied to the contact set: where the mesh answers under the
+            // pushed up out of the terrain. So where the mesh answers under the
             // ball's footprint for THIS step, the plane is not a source; where it does not
             // (a seam, the edge of the mesh, a level without terrain) it is the fallback.
             bool meshAnswersHere = false;
@@ -2309,7 +1731,7 @@ namespace VRCKatamari.BallMotor
                 terrainContactCandidates = terrainContactCandidateCount;
             }
             bool solved = ContactSolveMath.TryStep(!meshAnswersHere, groundPlaneNormal, groundPlaneOffset,
-                planeNormals, planeOffsets, planeCount, nearObbCenter, nearObbAxisX,
+                planeNormalBuffer, planeOffsetBuffer, planeCount, nearObbCenter, nearObbAxisX,
                 nearObbAxisY, nearObbAxisZ, nearObbHalfExtents, nearObbSurfaceId, nearObbRole,
                 nearObbCount, ref center, radius, ref planar, ref vertical, ref climbActive,
                 ref climbAnchorY, ref climbSurfaceId, ref climbCooldown, ref climbLocked,
@@ -2376,10 +1798,12 @@ namespace VRCKatamari.BallMotor
             // Keeping the solver's velocity while rolling the centre back banked thrust
             // every fixed step (E3 A2: no movement, |v|=5.015), then launched the ball
             // when the obstruction vanished. Accepted steps keep their tangential inertia.
+            previousStepRejected = false;
             if (ContactSolveMath.RejectUnresolvedMotion(ballCenterWorld, residual,
                 ContactResidualRejectM, ref center, ref planar, ref vertical))
             {
                 contactRejectedStepCount = contactRejectedStepCount + 1;
+                previousStepRejected = true;
                 climbAlongSpeed = 0f;
                 climbSpeedWorldMps = 0f;
             }
@@ -2436,6 +1860,56 @@ namespace VRCKatamari.BallMotor
             contactHasPreviousFrame = true;
 
             lastStepMicros = ElapsedMicros(stepStartSeconds);
+        }
+
+        /// <summary>
+        /// The "rest, then slide" downhill component on the current support. The latch is
+        /// <see cref="RampSlideMath"/>; this method only gathers its inputs and carries the
+        /// velocity back.
+        /// </summary>
+        /// <remarks>
+        /// The support is last step's (<c>WriteContactSupport</c>): only a surface the ball
+        /// is rolling on counts, so a falling ball, a climb contact or a pin-only support
+        /// is not a slope. A step the solver rejected adds nothing (and its velocity was
+        /// zeroed), so a blocked ball cannot bank slope speed.
+        /// </remarks>
+        private void UpdateRampSlide(float dt)
+        {
+            float scale = CurrentSizeScale();
+            bool onSlope = false;
+            bool supported = !isFalling && !climbActive && !supportFromClimb &&
+                !supportFromNeedle && supportSurfaceId != SupportSurfaceMath.NoSurfaceId;
+            if (supported)
+            {
+                float normalY = Mathf.Clamp(supportSurfaceNormalWorld.y, -1f, 1f);
+                float slopeDegrees = Mathf.Acos(normalY) * Mathf.Rad2Deg;
+                onSlope = slopeDegrees > rampSlideMinSlopeDegrees &&
+                    slopeDegrees <= maxSupportSlopeDegrees;
+            }
+            float planarSpeed = Mathf.Sqrt(planarVelocity.x * planarVelocity.x
+                + planarVelocity.z * planarVelocity.z);
+            float driveIntent = Mathf.Abs(inputForward) + Mathf.Abs(inputLateral);
+            float nextRest;
+            bool nextSliding;
+            if (!RampSlideMath.TryStepRestLatch(rampRestTimerSeconds, rampSliding,
+                planarSpeed, rampRestSpeedMps * scale, driveIntent, onSlope, dt,
+                rampRestSeconds, out nextRest, out nextSliding))
+            {
+                rampRestTimerSeconds = 0f;
+                rampSliding = false;
+                return;
+            }
+            rampRestTimerSeconds = nextRest;
+            rampSliding = nextSliding;
+            if (!rampSliding || previousStepRejected || rampTangentialGravityScale <= 0f) return;
+
+            Vector3 slopeVelocity;
+            if (SupportSurfaceMath.TryApplyRampTangentialGravity(planarVelocity,
+                supportSurfaceNormalWorld, gravityMps2 * scale, rampTangentialGravityScale, dt,
+                maxSpeedMps * scale, out slopeVelocity))
+            {
+                planarVelocity = slopeVelocity;
+            }
         }
 
         /// <summary>
@@ -2576,44 +2050,6 @@ namespace VRCKatamari.BallMotor
             if (!KatamariMath.IsFiniteFloat(semanticDiameterWorldM) ||
                 semanticDiameterWorldM <= 0f) return 1f;
             return semanticDiameterWorldM / startSemanticDiameterWorldM;
-        }
-
-        private void UpdateRampSlide(float dt)
-        {
-            float scale = CurrentSizeScale();
-            bool onSlope = false;
-            if (terrainSupportEnabled && !isFalling && !climbActive &&
-                supportSurfaceId != SupportSurfaceMath.NoSurfaceId)
-            {
-                float normalY = Mathf.Clamp(supportSurfaceNormalWorld.y, -1f, 1f);
-                float slopeDegrees = Mathf.Acos(normalY) * Mathf.Rad2Deg;
-                onSlope = slopeDegrees > rampSlideMinSlopeDegrees &&
-                    slopeDegrees <= maxSupportSlopeDegrees;
-            }
-            float planarSpeed = Mathf.Sqrt(planarVelocity.x * planarVelocity.x
-                + planarVelocity.z * planarVelocity.z);
-            float driveIntent = Mathf.Abs(inputForward) + Mathf.Abs(inputLateral);
-            float nextRest;
-            bool nextSliding;
-            if (!RampSlideMath.TryStepRestLatch(rampRestTimerSeconds, rampSliding,
-                planarSpeed, rampRestSpeedMps * scale, driveIntent, onSlope, dt,
-                rampRestSeconds, out nextRest, out nextSliding))
-            {
-                rampRestTimerSeconds = 0f;
-                rampSliding = false;
-                return;
-            }
-            rampRestTimerSeconds = nextRest;
-            rampSliding = nextSliding;
-            if (!rampSliding || rampTangentialGravityScale <= 0f) return;
-
-            Vector3 slopeVelocity;
-            if (SupportSurfaceMath.TryApplyRampTangentialGravity(planarVelocity,
-                supportSurfaceNormalWorld, gravityMps2 * scale, rampTangentialGravityScale, dt,
-                maxSpeedMps * scale, out slopeVelocity))
-            {
-                planarVelocity = slopeVelocity;
-            }
         }
 
         /// <summary>
@@ -2799,8 +2235,8 @@ namespace VRCKatamari.BallMotor
                     float planeDepth;
                     Vector3 planePoint;
                     float planeFraction;
-                    if (!BallShapeMath.TryNeedleSegmentPlaneContact(planeNormals[i],
-                        planeOffsets[i], tipPrevious, tipNow, tipRadius, out planeNormal,
+                    if (!BallShapeMath.TryNeedleSegmentPlaneContact(planeNormalBuffer[i],
+                        planeOffsetBuffer[i], tipPrevious, tipNow, tipRadius, out planeNormal,
                         out planeDepth, out planePoint, out planeFraction)) continue;
                     TryInsertNeedleContact(planeNormal, planePoint, planeDepth,
                         ContactCodes.PlaneSurfaceId(i), ContactCodes.RoleBlocking, 1 + k,
@@ -3077,7 +2513,7 @@ namespace VRCKatamari.BallMotor
                 supportSurfacePointWorld = point;
                 supportSurfaceNormalWorld = normal;
                 supportNormal = normal;
-                // The v1 getter's reading: the tangent plane's height under the centre.
+                // The tangent plane's height under the centre.
                 // The same expression is the tip formula of §2.5 when the point is a pin
                 // tip, which is why a needle support needs no second formula.
                 if (Mathf.Abs(normal.y) > 1e-4f)
@@ -3126,7 +2562,7 @@ namespace VRCKatamari.BallMotor
             }
 
             // No support at all: gravity owns the step. The pair keeps its previous
-            // point/normal (v1 behaves the same when the support query refuses).
+            // point/normal.
             supportSurfaceId = SupportSurfaceMath.NoSurfaceId;
             isFalling = contactAirborne;
             fallSpeedMps = contactVerticalVelocity < 0f ? -contactVerticalVelocity : 0f;
@@ -3199,9 +2635,7 @@ namespace VRCKatamari.BallMotor
             float progress = Mathf.Sqrt(moveX * moveX + moveY * moveY + moveZ * moveZ);
             float driveIntent = Mathf.Abs(inputForward) + Mathf.Abs(inputLateral);
 
-            // A wall the PLAYER pushes into is BLOCKED, not stuck: that is the same contract
-            // SweepMath already owns (its own case is FullSingleWallBlockIsBlockedNotStuck),
-            // and it is what v1 fed the timer (`sweepStuck`, not `sweepBlocked`). Counting a
+            // A wall the PLAYER pushes into is BLOCKED, not stuck. Counting a
             // wall press as stuck made the soft stage call ClearClimbState (killing the
             // climb) and three episodes entered the recovery hold - the 2026-11-16 RefCancer
             // pit: 18 s of forward into a building wall, recoveries=3, frozen.
@@ -3313,7 +2747,6 @@ namespace VRCKatamari.BallMotor
             contactVerticalVelocity = 0f;
             ClearClimbState();
             discontinuous = true;
-            hasSupportFrame = false;
             isFalling = false;
             fallSpeedMps = 0f;
             contactStableCenter = target;
@@ -3385,7 +2818,7 @@ namespace VRCKatamari.BallMotor
             {
                 int collected;
                 if (!ContactSolveMath.TryCollectContacts(true, groundPlaneNormal,
-                    groundPlaneOffset, planeNormals, planeOffsets, planeCount,
+                    groundPlaneOffset, planeNormalBuffer, planeOffsetBuffer, planeCount,
                     nearObbCenter, nearObbAxisX, nearObbAxisY, nearObbAxisZ,
                     nearObbHalfExtents, nearObbSurfaceId, nearObbRole, nearObbCount, center,
                     radius, growthContactNormals, growthContactPoints, growthContactDepths,
@@ -3423,7 +2856,7 @@ namespace VRCKatamari.BallMotor
 
             int finalCount;
             if (!ContactSolveMath.TryCollectContacts(true, groundPlaneNormal,
-                groundPlaneOffset, planeNormals, planeOffsets, planeCount, nearObbCenter,
+                groundPlaneOffset, planeNormalBuffer, planeOffsetBuffer, planeCount, nearObbCenter,
                 nearObbAxisX, nearObbAxisY, nearObbAxisZ, nearObbHalfExtents,
                 nearObbSurfaceId, nearObbRole, nearObbCount, center, radius,
                 growthContactNormals, growthContactPoints, growthContactDepths,
@@ -3487,247 +2920,6 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Refreshes which static boxes are steps this step, and rebuilds the sweep
-        /// array without the steppable ones.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// This is the sweep side of §4.3 of Docs/Design/BallMotor/TERRAIN_SUPPORT.md: a
-        /// box the ball may climb must be absent from the sweep, because the sweep is a
-        /// conservative radius-expanded AABB and a 2.8 cm lip would otherwise be a wall
-        /// for every ball. The decision is
-        /// <see cref="SupportSurfaceMath.IsStepWithinLimit"/> with the SAME reference the
-        /// support table uses (<see cref="SupportSurfaceMath.SupportReferenceHeight"/> of
-        /// the previous support and the ball's bottom). One function, one reference: a box
-        /// excluded here is always a box the support table can select, so the "removed from
-        /// the sweep but unsupportable" state cannot exist.
-        /// </para>
-        /// <para>
-        /// Frequency gate: recompute only when the box set changed, the semantic diameter
-        /// moved by more than 2 mm, or the REFERENCE moved by more than 5 mm. The gate is
-        /// <see cref="SupportSurfaceMath.StepMaskNeedsRefresh"/>, whose inputs are the
-        /// predicate's own inputs (reference height and the diameter that becomes the
-        /// limit) rather than the selected support height. That distinction is the second
-        /// half of the 2026-11-15 C09 fix: a ball spawning 20 mm above the floor has the
-        /// spawn clearance as its reference, lands within a few steps, and the support
-        /// height never moves off 0 - a support-height gate would never fire, while the
-        /// reference gate fires on the first landed step.
-        /// </para>
-        /// <para>
-        /// The mask result is ALSO the support table's answer for static boxes
-        /// (<see cref="SupportSurfaceMath.TryResolveSupport"/> takes this array), so a box
-        /// dropped from the sweep is always selectable and a wall is never selectable.
-        /// The rebuild of the sweep arrays only runs when the mask actually changed. The
-        /// gate is the ONLY anti-jitter device: the one-way hysteresis the mask used to
-        /// have was removed on 2026-11-15 because it could diverge from the support table.
-        /// </para>
-        /// </remarks>
-        private void RefreshStepMask()
-        {
-            if (boxIsSteppable == null) return;
-            float limit;
-            if (!SupportSurfaceMath.TryStepHeightLimit(semanticDiameterWorldM,
-                stepHeightOverBallDiameter, out limit))
-            {
-                limit = 0f;
-            }
-            stepHeightLimitWorldM = limit;
-
-            // The reference is the predicate's own input: the ball's own bottom, measured
-            // pre-sweep (the accepted one-step lag). It is the same number
-            // ResolveTerrainSupport hands the support table, so a box this mask drops from
-            // the sweep is always a box the support table can select. The previous support
-            // is deliberately NOT part of it: a stale, higher anchor widens the band upward
-            // and lets a surface the ball is already passing be adopted as a step
-            // (LEVEL_FORMAT_V2 §1.3 rule 3, §3.6).
-            float reference = ballCenterWorld.y - collisionRadiusWorldM;
-            if (!SupportSurfaceMath.StepMaskNeedsRefresh(stepMaskValid, stepMaskBoxesDirty,
-                semanticDiameterWorldM, stepMaskDiameterWorldM, reference,
-                stepMaskReferenceWorldM))
-            {
-                return;
-            }
-
-            stepMaskValid = true;
-            stepMaskBoxesDirty = false;
-            stepMaskDiameterWorldM = semanticDiameterWorldM;
-            stepMaskReferenceWorldM = reference;
-
-            bool changed = false;
-            for (int i = 0; i < boxCount; i++)
-            {
-                bool steppable = SupportSurfaceMath.IsStepWithinLimit(boxMaximumBuffer[i].y,
-                    reference, limit);
-                if (steppable != boxIsSteppable[i])
-                {
-                    boxIsSteppable[i] = steppable;
-                    changed = true;
-                }
-            }
-            for (int i = boxCount; i < MaxBoxCount; i++)
-            {
-                boxIsSteppable[i] = false;
-            }
-            if (changed)
-            {
-                // A step classification flipped, so the sweep arrays must be rebuilt. This
-                // is the allocation the design flags for a P4 profiler pass; the counter is
-                // how the physics test field reads it.
-                stepMaskRebuildCount = stepMaskRebuildCount + 1;
-                RebuildObstacles();
-            }
-        }
-
-        /// <summary>Forgets every step classification (box set change, feature off).</summary>
-        private void ClearStepMask()
-        {
-            if (boxIsSteppable == null) return;
-            for (int i = 0; i < MaxBoxCount; i++)
-            {
-                boxIsSteppable[i] = false;
-            }
-            stepMaskValid = false;
-            stepMaskBoxesDirty = true;
-        }
-
-        /// <summary>
-        /// Selects this step's support surface and updates the gravity fall state.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// The support decision itself is a single call into
-        /// <see cref="SupportSurfaceMath.TryResolveSupport"/>; this method only gathers the
-        /// terrain candidate, carries the result and keeps the two memories the layers need
-        /// (the previous support, for the step rise and the ledge decision). The BAND is the
-        /// ball's own bottom plus this step's limit - the previous support deliberately does
-        /// not enter it (LEVEL_FORMAT_V2 §1.3 rule 3).
-        /// </para>
-        /// <para>
-        /// The first call after Start (and after a teleport, which clears the flag) takes
-        /// the ball's own bottom as the previous surface. That is what makes a ball placed
-        /// above the floor fall under gravity instead of snapping down at 0.1 m per step,
-        /// without a separate "spawned in the air" rule.
-        /// </para>
-        /// <para>
-        /// With terrain support off this still resolves the ground-only surface for the
-        /// diagnostics, but the fall state is never entered, so nothing downstream moves.
-        /// </para>
-        /// </remarks>
-        private void ResolveTerrainSupport(Vector3 center)
-        {
-            if (boxMinimumBuffer == null || boxMaximumBuffer == null) return;
-            // The support query reads the step mask for the static boxes; before Start
-            // allocates it, there is nothing to resolve against.
-            if (boxIsSteppable == null) return;
-            if (!hasSupportFrame)
-            {
-                supportSurfaceId = SupportSurfaceMath.NoSurfaceId;
-                previousSupportSurfaceId = SupportSurfaceMath.NoSurfaceId;
-                previousSupportHeightWorldM = center.y - collisionRadiusWorldM;
-                lastSupportHeightWorldM = previousSupportHeightWorldM;
-                hasSupportFrame = true;
-                isFalling = false;
-                fallSpeedMps = 0f;
-            }
-            else
-            {
-                previousSupportSurfaceId = supportSurfaceId;
-                previousSupportHeightWorldM = lastSupportHeightWorldM;
-            }
-
-            float limit;
-            if (!SupportSurfaceMath.TryStepHeightLimit(semanticDiameterWorldM,
-                stepHeightOverBallDiameter, out limit))
-            {
-                limit = 0f;
-            }
-            stepHeightLimitWorldM = limit;
-
-            // THE BAND IS ANCHORED ON THE BALL'S BOTTOM. Not on the previous support (a stale
-            // anchor) and not on the arena ground plane: upward the limit is this step's step
-            // gate, downward there is NO limit, so a gully, a pit or a tunnel floor any
-            // distance below the ball stays a support and the level's kill plane - not a band
-            // - decides a real fall (LEVEL_FORMAT_V2 §1.3 rule 3, §3.6).
-            float ballBottom = center.y - collisionRadiusWorldM;
-
-            // T0 GEOMETRY: the mesh answers with at most one candidate surface for this
-            // footprint (the highest triangle under it inside the step band). It is one
-            // candidate, not a second selection: the selection below is the only place a
-            // support is chosen, which is what keeps the mesh from having to be "higher than
-            // the plane" to win.
-            int terrainId = SupportSurfaceMath.NoSurfaceId;
-            Vector3 terrainNormal = Vector3.zero;
-            float terrainHeight = 0f;
-            if (terrainSupportEnabled && terrainMeshContactEnabled && terrainMeshReady &&
-                terrainTriangleCount > 0)
-            {
-                terrainSupportCandidateCount = CollectTerrainCandidates(center,
-                    collisionRadiusWorldM);
-                TryQueryTerrainSupport(center, ballBottom, limit,
-                    terrainSupportCandidateCount, out terrainId, out terrainNormal,
-                    out terrainHeight);
-            }
-
-            int id;
-            Vector3 point;
-            Vector3 normal;
-            float height;
-            int candidates;
-            // With terrain support off the prop table is not consulted at all, so the
-            // query is bit-for-bit the P1 query (an empty prop list) and a diagnostic
-            // read can never claim a prop is supporting a ball the feature ignores.
-            int activePropCount = terrainSupportEnabled ? supportPropCount : 0;
-            // Ramps obey the same switch as the rest of terrain support: off means the
-            // query sees an empty ramp table, so the result is exactly the P1/P2 one.
-            int activeRampCount = terrainSupportEnabled ? rampCount : 0;
-            if (SupportSurfaceMath.TryResolveSupport(center, ballBottom, limit,
-                groundPlaneNormal, groundPlaneOffset, boxMinimumBuffer, boxMaximumBuffer,
-                boxIsSteppable, boxCount, rampCenterBuffer, rampNormalBuffer, rampRightBuffer,
-                rampHalfWidthBuffer, rampHalfRunBuffer, activeRampCount,
-                supportPropMinimumBuffer, supportPropMaximumBuffer,
-                activePropCount, terrainId, terrainHeight, terrainNormal,
-                out id, out point, out normal, out height, out candidates))
-            {
-                supportSurfaceId = id;
-                supportSurfacePointWorld = point;
-                supportSurfaceNormalWorld = normal;
-                supportSurfaceHeightWorldM = height;
-                supportCandidateCount = candidates;
-            }
-            else
-            {
-                // The ground plane itself was refused (a corrupt normal or offset). Keep
-                // the previous surface pair instead of inventing one; the ground solve
-                // rejects the same plane and the step keeps its previous position.
-                supportCandidateCount = 0;
-            }
-
-            bool dropped;
-            // A drop only counts when the SELECTED SURFACE changed. A continuous ramp (or
-            // a tilted ground plane) lowers the height under the moving probe as the ball
-            // rolls along it; treating that as a lost surface would put the ball into the
-            // gravity-fall state on every downhill step (a 30 degree ramp at 4 m/s drops
-            // 46 mm per 20 ms step). A ledge usually changes the surface id (a box top to
-            // the floor, one zone to the next). KNOWN, DELIBERATE LIMIT: the mesh's id is
-            // per chunk/zone, so a gully inside one zone keeps its id and the ball descends
-            // on the falls' 0.1 m-per-step clamp instead of ballistically; it still lands on
-            // the floor, and a real out-of-world fall is the level's kill plane's job.
-            bool sameSurface = previousSupportSurfaceId == supportSurfaceId;
-            if (terrainSupportEnabled &&
-                SupportSurfaceMath.SupportDroppedAway(supportSurfaceHeightWorldM,
-                    lastSupportHeightWorldM, supportDropTriggerM, sameSurface, out dropped))
-            {
-                isFalling = SupportSurfaceMath.ResolveFallState(isFalling, dropped, false, false);
-            }
-            if (!terrainSupportEnabled)
-            {
-                isFalling = false;
-                fallSpeedMps = 0f;
-            }
-            lastSupportHeightWorldM = supportSurfaceHeightWorldM;
-        }
-
-        /// <summary>
         /// Collects this step's candidate triangles for one centre: every mesh triangle whose
         /// grid cell the ball's footprint (± one collision radius, which covers both the
         /// 0.9 r support ring and T1's ± r sphere AABB) overlaps.
@@ -3765,8 +2957,7 @@ namespace VRCKatamari.BallMotor
         /// <summary>
         /// T0 support query: the highest mesh triangle under the ball's footprint ring that
         /// is inside the ball's step band, re-measured on its plane at the ball's XZ. The
-        /// returned height is a surface height, so <c>GroundContactMath</c> consumes it
-        /// exactly like a plane/box/ramp support.
+        /// returned height is a surface height, exactly like a plane/box/ramp support.
         /// </summary>
         /// <remarks>
         /// The geometry and the band live in <see cref="TerrainMeshMath.TrySelectSupport"/>
@@ -3827,47 +3018,6 @@ namespace VRCKatamari.BallMotor
             double elapsed = WallClockSeconds() - startSeconds;
             if (elapsed < 0.0) elapsed = 0.0;
             return (float)(elapsed * 1000000.0);
-        }
-
-        /// <summary>
-        /// T1: push the sphere out of the terrain along the closest triangle's normal, up
-        /// to two times. Single-sided (the triangle's winding side) so a roof pushes down
-        /// and a floor does not push a ball that is already below it. Planar inward speed
-        /// is removed; no classification/climb response (that is T2).
-        /// </summary>
-        private void ResolveTerrainPenetration(ref Vector3 center, ref Vector3 planarVelocity)
-        {
-            if (!terrainMeshReady || terrainTriangleCount <= 0) return;
-            // T1's own candidate set, collected at the pre-push centre: the support query runs
-            // after this and re-collects at the corrected centre, so neither query ever tests
-            // a footprint the other's list did not cover.
-            terrainPenetrationCandidateCount = CollectTerrainCandidates(center,
-                collisionRadiusWorldM);
-            int candidates = terrainPenetrationCandidateCount;
-            double start = WallClockSeconds();
-            for (int iteration = 0; iteration < 2; iteration++)
-            {
-                Vector3 point;
-                Vector3 normal;
-                float depth;
-                if (!TerrainMeshMath.TryDeepestPenetration(center, collisionRadiusWorldM,
-                    terrainVertices, terrainIndices, terrainTriangleCount, terrainChunkMin,
-                    terrainChunkMax, terrainChunkStarts, terrainChunkTriangleCounts,
-                    terrainChunkCount, terrainCandidates, candidates, terrainTriangleMinX,
-                    terrainTriangleMaxX, terrainTriangleMinZ, terrainTriangleMaxZ,
-                    out point, out normal, out depth)) break;
-                if (!KatamariMath.IsFiniteFloat(depth) || depth <= 0f) break;
-                center = center + normal * (depth + separationEpsilon);
-                float inward = planarVelocity.x * normal.x + planarVelocity.z * normal.z;
-                if (inward < 0f)
-                {
-                    planarVelocity = new Vector3(planarVelocity.x - normal.x * inward,
-                        0f, planarVelocity.z - normal.z * inward);
-                }
-            }
-            float micros = ElapsedMicros(start);
-            lastTerrainPenetrationMicros = lastTerrainPenetrationMicros + micros;
-            lastTerrainQueryMicros = lastTerrainQueryMicros + micros;
         }
 
         /// <summary>
@@ -4294,8 +3444,8 @@ namespace VRCKatamari.BallMotor
             // without re-importing the scene this round.
             long growthMm3 = LegacyUnitsToGrowthMm3(valueUnits);
             if (growthMm3 <= 0L) return false;
-            return SubmitCandidateWithVolumeK(absorbable, kind, size, worldPosition,
-                growthMm3, itemInstanceId, itemGeneration,
+            return SubmitCandidateWithVolumeKMm3(absorbable, kind, size, Quaternion.identity,
+                worldPosition, growthMm3, itemInstanceId, itemGeneration,
                 PickupAbsorbMath.DefaultVolumeK);
         }
 
@@ -4312,24 +3462,6 @@ namespace VRCKatamari.BallMotor
             if (!KatamariMath.IsFiniteFloat(mm3)) return -1L;
             long rounded = (long)Mathf.Round(mm3);
             return rounded > 0L ? rounded : -1L;
-        }
-
-        /// <summary>
-        /// LEGACY BRIDGE (Lab/tests): <see cref="SubmitCandidate"/> plus the item's k.
-        /// </summary>
-        /// <remarks>
-        /// Converts the retired integer unit to mm^3 through
-        /// <see cref="LegacyUnitsToGrowthMm3"/> and then uses the real entry point
-        /// <see cref="SubmitCandidateWithVolumeKMm3"/>. The shipped host no longer calls this.
-        /// </remarks>
-        public bool SubmitCandidateWithVolumeK(bool absorbable, string kind, Vector3 size,
-            Vector3 worldPosition, float valueUnits, string itemInstanceId, int itemGeneration,
-            float volumeK)
-        {
-            long growthMm3 = LegacyUnitsToGrowthMm3(valueUnits);
-            if (growthMm3 <= 0L) return false;
-            return SubmitCandidateWithVolumeKMm3(absorbable, kind, size, Quaternion.identity,
-                worldPosition, growthMm3, itemInstanceId, itemGeneration, volumeK);
         }
 
         /// <summary>
@@ -4510,13 +3642,11 @@ namespace VRCKatamari.BallMotor
         /// Sets the analytic ground plane (the always-present support fallback).
         /// </summary>
         /// <remarks>
-        /// The plane is the same <c>dot(normal, point) = offset</c> pair
-        /// GroundContactMath already consumed, so nothing downstream needs a new
-        /// convention. It is separate from <see cref="AddPlane"/> on purpose: a boundary
-        /// plane is a wall and never a support, and the ground is a support and never a
-        /// sweep obstacle (design §3.4). The raw pair is stored (GroundContactMath
-        /// rescales normal and offset together), and the surface pair is re-resolved so
-        /// the diagnostics do not keep the previous floor.
+        /// The plane is the <c>dot(normal, point) = offset</c> pair. It is separate from
+        /// <see cref="AddPlane"/> on purpose: a boundary plane is a wall and never a
+        /// support, and the ground is a contact source only where no terrain answers
+        /// (design §3.4). The previous support height is re-derived from the ball's own
+        /// bottom so the diagnostics do not keep the previous floor.
         /// </remarks>
         public bool SetGroundPlane(Vector3 normal, float offset)
         {
@@ -4526,17 +3656,12 @@ namespace VRCKatamari.BallMotor
             float rawLength;
             if (!KatamariMath.TryNormalize(normal, out unitNormal, out rawLength)) return false;
             // A wall-like ground plane cannot answer "what is the height under the probe",
-            // so it is refused here instead of failing every step inside the query. The
-            // same threshold is enforced by SupportSurfaceMath.TryResolveSupport.
+            // so it is refused here instead of failing every step inside the solve.
             if (unitNormal.y <= 1e-3f) return false;
             groundPlaneNormal = normal;
             groundPlaneOffset = offset;
-            // The floor moved: the previous support/step classification is about the old
-            // one. Re-derive from the ball's own bottom on the next step.
-            hasSupportFrame = false;
+            // The floor moved: the previous support height is about the old one.
             lastSupportHeightWorldM = ballCenterWorld.y - collisionRadiusWorldM;
-            stepMaskValid = false;
-            if (boxMinimumBuffer != null) ResolveTerrainSupport(ballCenterWorld);
             return true;
         }
 
@@ -4555,7 +3680,6 @@ namespace VRCKatamari.BallMotor
             planeNormalBuffer[planeCount] = normal;
             planeOffsetBuffer[planeCount] = offset;
             planeCount = planeCount + 1;
-            RebuildObstacles();
             return true;
         }
 
@@ -4575,22 +3699,15 @@ namespace VRCKatamari.BallMotor
             if (minimum.x > maximum.x || minimum.y > maximum.y ||
                 minimum.z > maximum.z) return false;
             int boxIndex = boxCount;
-            boxMinimumBuffer[boxCount] = minimum;
-            boxMaximumBuffer[boxCount] = maximum;
             boxCount = boxCount + 1;
-            // The new box has no step classification yet; the next step evaluates it.
-            stepMaskBoxesDirty = true;
-            RebuildObstacles();
-            // Ball contact v2: the same box as an axis-aligned OBB under the v1
-            // support-table id (1 + index), so an existing scene runs with the flag on
-            // without re-authoring. v1 never reads it (design §1.4).
+            // The box is registered as an axis-aligned OBB under surface id 1 + index.
             RegisterBoxObb(boxIndex, minimum, maximum);
             return true;
         }
 
         /// <summary>
         /// Registers one static ramp: an oriented walking plane plus a horizontal
-        /// footprint, a support surface ONLY (never a sweep obstacle).
+        /// footprint, registered as a slab OBB.
         /// </summary>
         /// <param name="center">
         /// A point on the walking plane (LevelArenaHost passes the box's +Y face centre
@@ -4615,16 +3732,12 @@ namespace VRCKatamari.BallMotor
         /// through) is correct: the author must replace that board with an AddBox wall.
         /// </para>
         /// <para>
-        /// A ramp must never also be registered through <see cref="AddBox"/>: the sweep is
-        /// a radius-expanded AABB, so the tilted board would stop the ball at the ramp
-        /// foot (design §5.5). LevelArenaHost keeps the two arrays separate and reports a
+        /// A ramp must never also be registered through <see cref="AddBox"/>: the same
+        /// board would be two solids at one place (design §5.5). LevelArenaHost keeps the two arrays separate and reports a
         /// collider that appears in both.
         /// </para>
         /// <para>
-        /// Registering a ramp does not rebuild the sweep arrays and does not touch the
-        /// step mask: ramps are read directly from these buffers by the support query every
-        /// step. With terrain support disabled the query receives a ramp count of 0, so the
-        /// feature switch stays bit-for-bit the pre-P3 behaviour.
+        /// Only the count and the refusal state are kept; the board itself is the slab OBB.
         /// </para>
         /// </remarks>
         public bool AddRamp(Vector3 center, Vector3 normal, Vector3 right,
@@ -4658,14 +3771,9 @@ namespace VRCKatamari.BallMotor
             }
 
             int rampIndex = rampCount;
-            rampCenterBuffer[rampCount] = center;
-            rampNormalBuffer[rampCount] = unitNormal;
-            rampRightBuffer[rampCount] = unitRight;
-            rampHalfWidthBuffer[rampCount] = halfWidth;
-            rampHalfRunBuffer[rampCount] = halfRun;
             rampCount = rampCount + 1;
             // Ball contact v2: the ramp as a solid slab whose walking face is the same
-            // plane (design §1.5). v1 never reads it.
+            // plane (design §1.5).
             RegisterRampSlab(rampIndex, center, unitNormal, unitRight, halfWidth, halfRun);
             return true;
         }
@@ -4732,384 +3840,17 @@ namespace VRCKatamari.BallMotor
             rampRefusalSlopeDegrees = slopeDegrees;
         }
 
-        /// <summary>
-        /// Replaces the whole dynamic blocking-box set in one call: the boxes of the nearby
-        /// props this ball cannot absorb yet.
-        /// </summary>
-        /// <returns>
-        /// True when the set is now the one passed (including when it was already exactly
-        /// that set); false when the call was refused, in which case the previous set stays
-        /// registered.
-        /// </returns>
-        /// <remarks>
-        /// <para>
-        /// Batch replace rather than add/remove (BLOCKING_PROPS_PLAN.md §2 A): the caller
-        /// re-selects the set from scratch on every scan, and the motor deliberately has no
-        /// per-box removal. A refused call is not applied, the same rule AddBox follows, so
-        /// one bad scan cannot open a hole in the world.
-        /// </para>
-        /// <para>
-        /// This is a SEAM, not a rule: the motor does not know what a prop is, which props
-        /// exist, or when one becomes absorbable. The pickup host owns that question and
-        /// answers it with the same volume limit the absorb gate uses, so a prop stops
-        /// being a wall on the same threshold that makes it absorbable.
-        /// </para>
-        /// <para>
-        /// Ordering. A blocking box is appended after every static box, so obstacle indices
-        /// remain planes, then static boxes, then blocking boxes. SweepMath separates planes
-        /// from boxes by array length alone and orients box contact normals the same way it
-        /// orients wall normals, so a blocking box is blocked and slid against by exactly
-        /// the wall path.
-        /// </para>
-        /// <para>
-        /// Refusals are counted separately from <see cref="SignalOverflow"/> (see the
-        /// blocking-refusal remarks on the fields): a neighbour count above this ball's
-        /// capacity is a normal gameplay answer, not a scene wiring error. Nothing logs per
-        /// call; diagnostics poll <see cref="GetBlockingBoxRefusalCount"/>. Re-sending the
-        /// set already registered returns true without rebuilding the sweep arrays, which
-        /// is what keeps a 20 Hz host scan allocation-free in the steady state.
-        /// </para>
-        /// </remarks>
-        public bool SetBlockingBoxes(Vector3[] minima, Vector3[] maxima, int count)
-        {
-            // First writer allocates (ownership note above the set buffers): the pickup
-            // field's Update can reach this before Start has run, and a set that arrives
-            // then must be kept, not thrown away.
-            if (!EnsureRegistrationBuffers())
-            {
-                RefuseBlockingBoxes("set buffers unavailable");
-                return false;
-            }
-            if (count < 0)
-            {
-                RefuseBlockingBoxes("negative count");
-                return false;
-            }
-            if (count > MaxBlockingBoxCount)
-            {
-                RefuseBlockingBoxes("capacity 6 exceeded");
-                return false;
-            }
-            if (count > 0)
-            {
-                if (minima == null || maxima == null)
-                {
-                    RefuseBlockingBoxes("null minima/maxima");
-                    return false;
-                }
-                if (count > minima.Length || count > maxima.Length)
-                {
-                    RefuseBlockingBoxes("count exceeds a buffer length");
-                    return false;
-                }
-            }
-
-            // Every box is validated before the first one is written, so a refused call
-            // cannot leave half a set behind.
-            for (int i = 0; i < count; i++)
-            {
-                if (!KatamariMath.IsFiniteVector(minima[i]))
-                {
-                    RefuseBlockingBoxes("non-finite minimum");
-                    return false;
-                }
-                if (!KatamariMath.IsFiniteVector(maxima[i]))
-                {
-                    RefuseBlockingBoxes("non-finite maximum");
-                    return false;
-                }
-                if (minima[i].x > maxima[i].x || minima[i].y > maxima[i].y ||
-                    minima[i].z > maxima[i].z)
-                {
-                    RefuseBlockingBoxes("inverted box");
-                    return false;
-                }
-            }
-
-            // The caller caches the boxes it built, so the steady state re-sends exactly
-            // the same floats. Only bit-for-bit equality skips the rebuild: anything else
-            // takes the ordinary path, which is the only way a moved prop stays correct.
-            if (count == blockingBoxCount)
-            {
-                bool unchanged = true;
-                for (int i = 0; i < count; i++)
-                {
-                    if (minima[i].x != blockingMinimumBuffer[i].x ||
-                        minima[i].y != blockingMinimumBuffer[i].y ||
-                        minima[i].z != blockingMinimumBuffer[i].z ||
-                        maxima[i].x != blockingMaximumBuffer[i].x ||
-                        maxima[i].y != blockingMaximumBuffer[i].y ||
-                        maxima[i].z != blockingMaximumBuffer[i].z)
-                    {
-                        unchanged = false;
-                        break;
-                    }
-                }
-                if (unchanged) return true;
-            }
-
-            for (int i = 0; i < count; i++)
-            {
-                blockingMinimumBuffer[i] = minima[i];
-                blockingMaximumBuffer[i] = maxima[i];
-            }
-            blockingBoxCount = count;
-            RebuildObstacles();
-            return true;
-        }
-
-        /// <summary>
-        /// Empties the dynamic blocking set, leaving planes and static boxes registered.
-        /// </summary>
-        /// <remarks>
-        /// The blocking set is a function of where the ball is, not of the scene, so it is
-        /// cleared wherever the ball's position is set outside a normal step (a round reset
-        /// teleports it) and wherever the whole obstacle set is cleared. Static geometry is
-        /// deliberately NOT reset by a retry: the map is the same map. The next host scan
-        /// re-registers whatever still blocks, within one scan interval.
-        /// </remarks>
-        public void ClearBlockingBoxes()
-        {
-            if (blockingBoxCount == 0) return;
-            blockingBoxCount = 0;
-            RebuildObstacles();
-        }
-
-        /// <summary>Blocking boxes currently registered with the sweep (0..6).</summary>
-        public int GetBlockingBoxCount()
-        {
-            return blockingBoxCount;
-        }
-
-        /// <summary>How many blocking boxes the sweep can take at once (6).</summary>
-        public int GetBlockingBoxCapacity()
-        {
-            return MaxBlockingBoxCount;
-        }
-
-        /// <summary>Refused <see cref="SetBlockingBoxes"/> calls so far (monotonic).</summary>
-        public int GetBlockingBoxRefusalCount()
-        {
-            return blockingRefusalCount;
-        }
-
-        /// <summary>Why the last <see cref="SetBlockingBoxes"/> was refused, or "".</summary>
-        public string GetBlockingBoxRefusalReason()
-        {
-            if (blockingRefusalReason == null) return "";
-            return blockingRefusalReason;
-        }
-
-        // One refusal: a counter plus the latest reason. Every reason is a literal, so a
-        // refusal costs no allocation and no console output even at the scan cadence.
-        private void RefuseBlockingBoxes(string reason)
-        {
-            blockingRefusalCount = blockingRefusalCount + 1;
-            blockingRefusalReason = reason;
-        }
-
-        /// <summary>
-        /// Replaces the whole support-prop set in one call: the tops of the absorb-proof
-        /// props the ball may stand on.
-        /// </summary>
-        /// <returns>
-        /// True when the set is now the one passed (including when it was already exactly
-        /// that set); false when the call was refused, in which case the previous set stays
-        /// registered.
-        /// </returns>
-        /// <remarks>
-        /// <para>
-        /// This is the P2 seam, and it is deliberately shaped exactly like
-        /// <see cref="SetBlockingBoxes"/>: batch replace, validate every box before writing
-        /// any, same float-for-float shortcut for an unchanged set, a refused call keeps the
-        /// previous set. The host owns which props are supports (it owns the prop table and
-        /// the absorb gate); the motor does not know what a prop is.
-        /// </para>
-        /// <para>
-        /// A support prop is never a sweep obstacle. It is registered because its top is
-        /// within one step of the ball, and a box the ball may climb must be enterable -
-        /// the same rule that removes a steppable static box from the sweep. The support
-        /// table reads these buffers directly every step, so a changed set needs no sweep
-        /// rebuild and costs no allocation; only the copy below is written.
-        /// </para>
-        /// <para>
-        /// Capacity is <see cref="SupportSurfaceMath.MaxSupportPropCount"/> and the check is
-        /// <see cref="SupportSurfaceMath.IsSupportPropCountAllowed"/> (one source, pinned by
-        /// a test). Refusals are counted separately from <see cref="SignalOverflow"/> for the
-        /// same reason blocking refusals are: more nearby props than six slots is a normal
-        /// per-scan answer, not a scene wiring error, so it must not latch the one-shot
-        /// overflow signal.
-        /// </para>
-        /// </remarks>
-        public bool SetSupportProps(Vector3[] minima, Vector3[] maxima, int count)
-        {
-            // Same ownership rule as SetBlockingBoxes: the writer ensures its destination.
-            if (!EnsureRegistrationBuffers())
-            {
-                RefuseSupportProps("set buffers unavailable");
-                return false;
-            }
-            if (count < 0)
-            {
-                RefuseSupportProps("negative count");
-                return false;
-            }
-            if (!SupportSurfaceMath.IsSupportPropCountAllowed(count))
-            {
-                RefuseSupportProps("capacity 6 exceeded");
-                return false;
-            }
-            if (count > 0)
-            {
-                if (minima == null || maxima == null)
-                {
-                    RefuseSupportProps("null minima/maxima");
-                    return false;
-                }
-                if (count > minima.Length || count > maxima.Length)
-                {
-                    RefuseSupportProps("count exceeds a buffer length");
-                    return false;
-                }
-            }
-
-            // Every box is validated before the first one is written, so a refused call
-            // cannot leave half a set behind.
-            for (int i = 0; i < count; i++)
-            {
-                if (!KatamariMath.IsFiniteVector(minima[i]))
-                {
-                    RefuseSupportProps("non-finite minimum");
-                    return false;
-                }
-                if (!KatamariMath.IsFiniteVector(maxima[i]))
-                {
-                    RefuseSupportProps("non-finite maximum");
-                    return false;
-                }
-                if (minima[i].x > maxima[i].x || minima[i].y > maxima[i].y ||
-                    minima[i].z > maxima[i].z)
-                {
-                    RefuseSupportProps("inverted box");
-                    return false;
-                }
-            }
-
-            if (count == supportPropCount)
-            {
-                bool unchanged = true;
-                for (int i = 0; i < count; i++)
-                {
-                    if (minima[i].x != supportPropMinimumBuffer[i].x ||
-                        minima[i].y != supportPropMinimumBuffer[i].y ||
-                        minima[i].z != supportPropMinimumBuffer[i].z ||
-                        maxima[i].x != supportPropMaximumBuffer[i].x ||
-                        maxima[i].y != supportPropMaximumBuffer[i].y ||
-                        maxima[i].z != supportPropMaximumBuffer[i].z)
-                    {
-                        unchanged = false;
-                        break;
-                    }
-                }
-                if (unchanged) return true;
-            }
-
-            for (int i = 0; i < count; i++)
-            {
-                supportPropMinimumBuffer[i] = minima[i];
-                supportPropMaximumBuffer[i] = maxima[i];
-            }
-            supportPropCount = count;
-            return true;
-        }
-
-        /// <summary>
-        /// Empties the support-prop set. Static boxes and planes stay registered.
-        /// </summary>
-        /// <remarks>
-        /// The set is a function of where the ball is, so it is cleared wherever the ball's
-        /// position is set outside a normal step (the host also clears it in its own field
-        /// reset). The next host scan re-registers whatever the ball can still stand on,
-        /// within one scan interval; a ball that was standing on a cleared prop simply
-        /// loses that support and falls under the P1 gravity rule.
-        /// </remarks>
-        public void ClearSupportProps()
-        {
-            if (supportPropCount == 0) return;
-            supportPropCount = 0;
-        }
-
-        /// <summary>Support props currently registered (0..6).</summary>
-        public int GetSupportPropCount()
-        {
-            return supportPropCount;
-        }
-
-        /// <summary>How many support props the ball can take at once (6).</summary>
-        public int GetSupportPropCapacity()
-        {
-            return MaxSupportPropCount;
-        }
-
-        /// <summary>Refused <see cref="SetSupportProps"/> calls so far (monotonic).</summary>
-        public int GetSupportPropRefusalCount()
-        {
-            return supportPropRefusalCount;
-        }
-
-        /// <summary>Why the last <see cref="SetSupportProps"/> was refused, or "".</summary>
-        public string GetSupportPropRefusalReason()
-        {
-            if (supportPropRefusalReason == null) return "";
-            return supportPropRefusalReason;
-        }
-
-        private void RefuseSupportProps(string reason)
-        {
-            supportPropRefusalCount = supportPropRefusalCount + 1;
-            supportPropRefusalReason = reason;
-        }
-
         public void ClearObstacles()
         {
             planeCount = 0;
             boxCount = 0;
-            blockingBoxCount = 0;
-            supportPropCount = 0;
             // Ramps are scene geometry like the static boxes: "all obstacles" clears them
             // too, and the arena's Reapply re-registers them after this call.
             rampCount = 0;
-            // The step mask is indexed by boxing slot, so it must not outlive the boxes.
-            ClearStepMask();
-            // The v2 tables are the same scene geometry, so they go with them. Props go
-            // first, so ClearObbs does not have to move a prop block down.
+            // The OBB tables are the scene geometry. Props go first, so ClearObbs does
+            // not have to move a prop block down.
             ClearPropObbs();
             ClearObbs();
-            RebuildObstacles();
-        }
-
-        /// <summary>True while the v2 contact solver owns this ball's position authority.</summary>
-        public bool IsContactModelV2()
-        {
-            return contactModelV2Enabled;
-        }
-
-        /// <summary>
-        /// Switches the position authority at runtime. The serialized default is false,
-        /// which is the v1 path; this setter exists so a lab (and the EditMode tests) can
-        /// turn the flag on without a second scene.
-        /// </summary>
-        /// <remarks>
-        /// Nothing is reset on the way across: the v1 state is re-derived from the ball's
-        /// position by the v1 path itself, and the v2 state is recomputed on the next v2
-        /// step. The only carried detail is the needle sweep's previous frame, which is
-        /// dropped so a switch cannot sweep a pin from a position it never had.
-        /// </remarks>
-        public void SetContactModelV2Enabled(bool enabled)
-        {
-            if (contactModelV2Enabled == enabled) return;
-            contactModelV2Enabled = enabled;
-            contactHasPreviousFrame = false;
         }
 
         // ------------------------------------------------------------------
@@ -5251,7 +3992,6 @@ namespace VRCKatamari.BallMotor
         {
             lastTerrainQueryMicros = 0f;
             lastTerrainSupportMicros = 0f;
-            lastTerrainPenetrationMicros = 0f;
             terrainTrianglesTested = 0;
             terrainFullEvals = 0;
         }
@@ -5280,7 +4020,7 @@ namespace VRCKatamari.BallMotor
             return terrainMeshContactEnabled;
         }
 
-        /// <summary>Runtime flag flip for the lab/EditMode; serialized default is false.</summary>
+        /// <summary>Turns terrain mesh contact on or off at runtime (lab / EditMode).</summary>
         public void SetTerrainMeshContactEnabled(bool enabled)
         {
             terrainMeshContactEnabled = enabled;
@@ -5309,11 +4049,8 @@ namespace VRCKatamari.BallMotor
         /// its own cost is two property reads per query.
         /// </para>
         /// <para>
-        /// Reset once per step in <see cref="StepBall"/>, the one place both position
-        /// authorities pass through, so with contact model v2 on (which never queries the
-        /// terrain mesh) this reads 0 instead of a stale v1 value. It is the sum of
-        /// <see cref="GetLastTerrainSupportMicros"/> and
-        /// <see cref="GetLastTerrainPenetrationMicros"/>.
+        /// Reset once per step in <see cref="StepBall"/>, so it reads the LAST step only.
+        /// It is the support query's time (<see cref="GetLastTerrainSupportMicros"/>).
         /// </para>
         /// </remarks>
         public float GetLastTerrainQueryMicros()
@@ -5336,17 +4073,6 @@ namespace VRCKatamari.BallMotor
         {
             // -1 = no candidate list (road the full scan), 0 = an empty window.
             return terrainSupportCandidateCount;
-        }
-
-        /// <summary>
-        /// Candidates the last T1 push-out walked. T1 collects at its own (pre-push) centre,
-        /// so this is NOT the support number; a test that needs the support count reads
-        /// <see cref="GetTerrainCandidates"/>.
-        /// </summary>
-        public int GetTerrainPenetrationCandidates()
-        {
-            // -1 = no candidate list (the push-out ran the full scan).
-            return terrainPenetrationCandidateCount;
         }
 
         /// <summary>
@@ -5402,12 +4128,6 @@ namespace VRCKatamari.BallMotor
         public string GetTerrainGridRefusalReason()
         {
             return TerrainGridMath.RefusalReason(terrainGridRefusalCode);
-        }
-
-        /// <summary>The last step's share of the terrain query spent on the T1 push-out.</summary>
-        public float GetLastTerrainPenetrationMicros()
-        {
-            return lastTerrainPenetrationMicros;
         }
 
         /// <summary>
@@ -5478,15 +4198,13 @@ namespace VRCKatamari.BallMotor
             terrainOversizedCount = 0;
             terrainCandidateCount = 0;
             terrainSupportCandidateCount = 0;
-            terrainPenetrationCandidateCount = 0;
             terrainContactCandidateCount = 0;
             lastTerrainQueryMicros = 0f;
         }
 
         // ------------------------------------------------------------------
-        // Static OBB registration (design §1.3/§1.4/§5.2). AddBox and AddRamp keep
-        // working for v1 and additionally register their v2 solid, so an existing
-        // scene runs with the flag on without a second authoring pass.
+        // Static OBB registration (design §1.3/§1.4/§5.2). AddBox and AddRamp register
+        // their solid as an OBB; AddObb registers a true OBB directly.
         // ------------------------------------------------------------------
 
         /// <summary>
@@ -5660,7 +4378,7 @@ namespace VRCKatamari.BallMotor
             }
 
             // Validate the whole block first, so a refused call cannot leave half a set
-            // behind (the same rule SetBlockingBoxes follows).
+            // behind.
             for (int i = 0; i < count; i++)
             {
                 if (surfaceIds[i] < 0)
@@ -5963,7 +4681,7 @@ namespace VRCKatamari.BallMotor
             return propProxyContactEnabled;
         }
 
-        /// <summary>Runtime flag flip for a lab / EditMode test (serialized default false).</summary>
+        /// <summary>Turns collider-proxy contact on or off at runtime (lab / EditMode test).</summary>
         public void SetPropProxyContactEnabled(bool enabled)
         {
             if (propProxyContactEnabled == enabled) return;
@@ -6099,8 +4817,8 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Registers a v1 static box as an axis-aligned OBB under the v1 support-table id
-        /// (1 + index), so an existing scene's boxes exist in v2 too (design §1.4).
+        /// Registers a static box as an axis-aligned OBB under surface id 1 + index
+        /// (design §1.4).
         /// </summary>
         private void RegisterBoxObb(int boxIndex, Vector3 minimum, Vector3 maximum)
         {
@@ -6114,7 +4832,7 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Registers a v1 ramp as a solid slab OBB (design §1.5): the walking face is the
+        /// Registers a ramp as a solid slab OBB (design §1.5): the walking face is the
         /// slab's +local-Y face, the body hangs one board thickness below it, and the
         /// in-plane half length is the horizontal half run divided by n.y.
         /// </summary>
@@ -6166,7 +4884,6 @@ namespace VRCKatamari.BallMotor
         /// <summary>Contacts recorded by the last v2 step (core first, then needle).</summary>
         public int GetContactCount()
         {
-            if (!contactModelV2Enabled) return 0;
             return v2ContactCount;
         }
 
@@ -6402,14 +5119,6 @@ namespace VRCKatamari.BallMotor
             return lastStepMicros;
         }
 
-        /// <summary>theta of the support (or climbing) contact in degrees, 0 when none.</summary>
-        public float GetSupportSlopeDegrees()
-        {
-            if (supportSurfaceId == SupportSurfaceMath.NoSurfaceId) return 0f;
-            Vector3 normal = supportSurfaceNormalWorld;
-            return ObbContactMath.ContactAngleDeg(normal);
-        }
-
         /// <summary>Physical clamp on a pin's protrusion, min(0.35 r, 0.30), metres.</summary>
         public float GetNeedleProtrusionCapWorldM()
         {
@@ -6430,7 +5139,7 @@ namespace VRCKatamari.BallMotor
             return best;
         }
 
-        /// <summary>r_phys: the contact radius (design §4A.5, the v1 collision radius).</summary>
+        /// <summary>r_phys: the contact radius (design §4A.5, the collision radius).</summary>
         public float GetPhysicalRadiusWorldM()
         {
             return collisionRadiusWorldM;
@@ -6535,79 +5244,6 @@ namespace VRCKatamari.BallMotor
             if (overflowLatched) return;
             overflowLatched = true;
             firstOverflowReason = reason;
-        }
-
-        /// <summary>
-        /// Resizes the arrays the sweep reads so their lengths match the counts.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// The sweep treats the array length as the obstacle set (a padded slot would be a
-        /// ghost box at the origin), so the arrays must hold exactly the registered
-        /// entries. The arrays are reused when the total box count is unchanged and only
-        /// reallocated when it moves: static registration is a scene-load event and the
-        /// blocking slice changes at the host's scan cadence, so "same length, overwrite in
-        /// place" is what keeps a 20 Hz scan from allocating a pair of arrays per tick.
-        /// </para>
-        /// <para>
-        /// Fixed capacities are MaxPlaneCount = 8, MaxBoxCount = 64,
-        /// MaxBlockingBoxCount = 6, PendingCandidateCapacity = 4 and ContactCapacity = 4.
-        /// An entry beyond a capacity is DROPPED, never queued, resized or degraded:
-        /// overflowing the obstacle set changes what the ball can collide with,
-        /// and overflowing the candidate queue silently loses an absorbable
-        /// item, so an overflow is a data error (a mis-wired scene, or a host
-        /// batching more than four candidates per step), not a gameplay choice.
-        /// AddPlane, AddBox and SubmitCandidate latch overflowCount and the
-        /// first reason string; a blocking set above its own capacity is counted
-        /// separately (see the blocking-refusal fields) because it is a per-scan answer
-        /// rather than a wiring error. The sweep's contact buffer is capped inside
-        /// SweepMath, which reports no truncation, so it only surfaces as
-        /// contactBufferSaturated. The signals are one-shot and read at a
-        /// checkpoint: nothing is logged per frame, and nothing here changes
-        /// gameplay.
-        /// </para>
-        /// </remarks>
-        private void RebuildObstacles()
-        {
-            planeNormals = new Vector3[planeCount];
-            planeOffsets = new float[planeCount];
-            for (int i = 0; i < planeCount; i++)
-            {
-                planeNormals[i] = planeNormalBuffer[i];
-                planeOffsets[i] = planeOffsetBuffer[i];
-            }
-
-            // Step boxes are excluded: a box the ball may climb must be enterable, and
-            // the sweep only reports where a sphere stops. The exclusion is OFF when
-            // terrain support is disabled, in which case this loop copies every static
-            // box in registration order, exactly as before P1.
-            int staticBoxSweepCount = 0;
-            for (int i = 0; i < boxCount; i++)
-            {
-                if (terrainSupportEnabled && boxIsSteppable != null && boxIsSteppable[i]) continue;
-                staticBoxSweepCount = staticBoxSweepCount + 1;
-            }
-            int totalBoxCount = staticBoxSweepCount + blockingBoxCount;
-            if (boxMinima == null || boxMaxima == null ||
-                boxMinima.Length != totalBoxCount || boxMaxima.Length != totalBoxCount)
-            {
-                boxMinima = new Vector3[totalBoxCount];
-                boxMaxima = new Vector3[totalBoxCount];
-            }
-            int writeIndex = 0;
-            for (int i = 0; i < boxCount; i++)
-            {
-                if (terrainSupportEnabled && boxIsSteppable != null && boxIsSteppable[i]) continue;
-                boxMinima[writeIndex] = boxMinimumBuffer[i];
-                boxMaxima[writeIndex] = boxMaximumBuffer[i];
-                writeIndex = writeIndex + 1;
-            }
-            for (int i = 0; i < blockingBoxCount; i++)
-            {
-                boxMinima[writeIndex] = blockingMinimumBuffer[i];
-                boxMaxima[writeIndex] = blockingMaximumBuffer[i];
-                writeIndex = writeIndex + 1;
-            }
         }
 
         /// <summary>
@@ -6779,56 +5415,28 @@ namespace VRCKatamari.BallMotor
             contactVerticalVelocity = 0f;
             ClearClimbState();
             hasContactStableCenter = false;
+            rampRestTimerSeconds = 0f;
+            rampSliding = false;
+            previousStepRejected = false;
             contactHasPreviousFrame = false;
             contactPreviousCenterWorld = center;
             roundStartCenter = center;
             hasRoundStartCenter = true;
             sizeApplyDeferred = false;
             contactRadiusUsedWorldM = collisionRadiusWorldM;
-            // The prop block was selected for the old position, exactly like the blocking
-            // box set the v1 path clears here; the next host scan re-registers it.
+            // The prop block was selected for the old position; the next host scan
+            // re-registers it within one scan interval.
             ClearPropObbs();
-            // A teleport can cross the whole map: the old support surface, the old fall
-            // state and the old step mask are all about where the ball used to be. The
-            // next step re-derives them from the new position and the ball's own bottom,
-            // so a teleport into the air becomes a real fall (not a 0.1 m/step crawl).
-            hasSupportFrame = false;
+            // A teleport can cross the whole map: the old support height and fall state are
+            // about where the ball used to be. The next step re-derives them from the new
+            // position, so a teleport into the air becomes a real fall.
             lastSupportHeightWorldM = center.y - collisionRadiusWorldM;
             isFalling = false;
             fallSpeedMps = 0f;
-            ClearStepMask();
-            ClearBlockingBoxes();
-            // The support set was chosen for the old position too; a stale prop top cannot
-            // support a ball whose XZ is elsewhere, but clearing keeps the "set is a
-            // function of where the ball is" rule true for both prop pools. The next host
-            // scan re-registers within one scan interval.
-            ClearSupportProps();
             // The endpoints are ball-local, so a teleport cannot change them; the rebuild
             // is the contract's discontinuity path and proves the support table still
             // matches the ledger instead of carrying a value across the jump.
             RebuildRadialProxies();
-        }
-
-        /// <summary>
-        /// Fills <see cref="localProxyPoints"/> with this step's pin tips for the v1 ground
-        /// solve and returns how many protrude (0 on a refused build).
-        /// </summary>
-        /// <remarks>
-        /// <see cref="RadialProxyShellMath.TryBuildPinTips"/> owns the rule. Always 16 slots,
-        /// whatever the number of attached props: the per-step cost does not scale with the
-        /// shell's ledger. Growth needs no table write: the supports are absolute lengths from
-        /// the ball centre, so a growing core simply leaves less protrusion, and the cap (a
-        /// fraction of the core radius) loosens with it.
-        /// </remarks>
-        private int BuildProxyTipPoints(float protrusionCap)
-        {
-            int count;
-            if (!RadialProxyShellMath.TryBuildPinTips(coreRadiusWorldM, protrusionCap,
-                proxyDirections, proxySupports, localProxyPoints, out count))
-            {
-                return 0;
-            }
-            return count;
         }
 
         // ------------------------------------------------------------------
@@ -6924,7 +5532,6 @@ namespace VRCKatamari.BallMotor
                 RecordProxySkip(ProxySkipShellRefused);
                 return;
             }
-            proxyGroundSupportHeightM = 0f;
         }
 
         /// <summary>
@@ -6986,8 +5593,8 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// Pins that protrude past the core right now (0..16): the tips the v1 ground solve
-        /// sees, the pins the v2 contact pass sweeps. Valid after a step.
+        /// Pins that protrude past the core right now (0..16): the pins the contact pass
+        /// sweeps. Valid after a step.
         /// </summary>
         public int GetProxyProtrudingPinCount()
         {
@@ -7021,53 +5628,6 @@ namespace VRCKatamari.BallMotor
             float support = proxySupports[directionIndex];
             if (support < coreRadiusWorldM) support = coreRadiusWorldM;
             return support;
-        }
-
-        /// <summary>
-        /// The support height the last accepted ground solve used, metres. This is the
-        /// target height (including the proxy bump and its protrusion cap), not the
-        /// clamped centre move; 0 before the first accepted solve.
-        /// </summary>
-        public float GetGroundSupportHeightWorldM()
-        {
-            return proxyGroundSupportHeightM;
-        }
-
-        /// <summary>
-        /// Turns the P1 terrain-support feature on or off at runtime.
-        /// </summary>
-        /// <remarks>
-        /// Off is the pre-P1 frame: the sweep keeps every static box, the ground solve
-        /// gets the raw ground plane, no fall state exists and VisualRoll gets the raw
-        /// ground normal. The switch exists so a lab whose geometry predates the step
-        /// rule can keep its old behaviour bit for bit (design §8.1 / S7).
-        /// </remarks>
-        public void SetTerrainSupportEnabled(bool enabled)
-        {
-            if (terrainSupportEnabled == enabled) return;
-            terrainSupportEnabled = enabled;
-            if (!enabled)
-            {
-                ClearStepMask();
-                RebuildObstacles();
-                isFalling = false;
-                fallSpeedMps = 0f;
-                // Re-resolve with an empty prop table so a diagnostic read never keeps
-                // reporting a prop surface the feature no longer honours. With buffers not
-                // allocated yet (before Start) the next step resolves it anyway.
-                if (boxMinimumBuffer != null) ResolveTerrainSupport(ballCenterWorld);
-            }
-            else
-            {
-                // Re-evaluate every box against the current size and support height.
-                stepMaskValid = false;
-            }
-        }
-
-        /// <summary>True while the P1 support/step/fall path is active.</summary>
-        public bool IsTerrainSupportEnabled()
-        {
-            return terrainSupportEnabled;
         }
 
         /// <summary>
@@ -7145,15 +5705,10 @@ namespace VRCKatamari.BallMotor
         /// </remarks>
         public int GetSupportKind()
         {
-            // v2 adds two kinds (design §2.5): 5 = only a pin is holding the ball up, and
-            // 4 = the ball is on a climbing contact (a wall with no floor). The id ranges
-            // 0/1..64/500..503/100..105 keep their v1 meaning, which is what lets the test
-            // field's existing reads keep working with the flag on.
-            if (contactModelV2Enabled)
-            {
-                if (supportFromNeedle) return 5;
-                if (supportFromClimb) return 4;
-            }
+            // 5 = only a pin is holding the ball up, and 4 = the ball is on a climbing
+            // contact (a wall with no floor) (design §2.5).
+            if (supportFromNeedle) return 5;
+            if (supportFromClimb) return 4;
             if (supportSurfaceId == SupportSurfaceMath.GroundSurfaceId) return 0;
             if (SupportSurfaceMath.IsRampSurfaceId(supportSurfaceId)) return 2;
             if (SupportSurfaceMath.IsPropSurfaceId(supportSurfaceId)) return 3;
@@ -7162,34 +5717,6 @@ namespace VRCKatamari.BallMotor
             // above, so the remainder is a box id.
             if (supportSurfaceId > 0) return 1;
             return -1;
-        }
-
-        /// <summary>Sweep-array rebuilds caused by a step classification flip (diagnostic).</summary>
-        public int GetStepMaskRebuildCount()
-        {
-            return stepMaskRebuildCount;
-        }
-
-        /// <summary>
-        /// The last accepted support height above the core sphere: max(0,
-        /// supportHeight - coreRadius). This is the bump the long term wants to see in
-        /// the single-rod lab; it is capped by maxProxyProtrusionPerCoreRadius.
-        /// </summary>
-        public float GetGroundProxyLiftWorldM()
-        {
-            float lift = proxyGroundSupportHeightM - coreRadiusWorldM;
-            if (lift < 0f) return 0f;
-            return lift;
-        }
-
-        /// <summary>
-        /// The protrusion cap the last ground solve used, metres: min(core *
-        /// maxProxyProtrusionPerCoreRadius, maxProxyProtrusionWorldM). Read-only, for the
-        /// single-rod lab and for a HUD that shows why the lift stopped growing.
-        /// </summary>
-        public float GetProxyProtrusionCapWorldM()
-        {
-            return proxyProtrusionCapWorldM;
         }
 
         /// <summary>Every attach that did not register an item (normal skips included).</summary>
@@ -7237,25 +5764,6 @@ namespace VRCKatamari.BallMotor
         public float GetSemanticDiameterWorldM()
         {
             return semanticDiameterWorldM;
-        }
-
-        /// <summary>
-        /// The confirmed volume the size model consumes: the ledger's unbanked volume plus
-        /// the already-scored carried residual, as a float.
-        /// </summary>
-        /// <remarks>
-        /// A SIZE quantity, not a ledger sum: it is recomputed from the 64-bit ledger
-        /// mirror on every step through <see cref="RecomputeConfirmedAndSize"/>, so it
-        /// never accumulates and cannot drift away from the ledger. The exact 64-bit
-        /// ledger quantity is <see cref="GetConfirmedLedgerVolumeUnits"/>.
-        /// </remarks>
-        public float GetConfirmedVolumeUnits()
-        {
-            // DEPRECATED name kept for one migration round. It used to be the confirmed
-            // growth in integer units; it is now the ball's TOTAL volume in CUBIC METRES
-            // (start + confirmed + carried), because that is the reading its callers wanted.
-            // New code uses GetConfirmedVolumeMm3 / GetTotalVolumeMm3 and never converts.
-            return GetTotalVolumeCubicMetres();
         }
 
         /// <summary>
@@ -7410,12 +5918,11 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// True once any fixed-capacity registration was refused, or once the
-        /// sweep's contact buffer filled at least once.
+        /// True once any fixed-capacity registration was refused.
         /// </summary>
         public bool HasOverflowSignal()
         {
-            return overflowLatched || contactBufferSaturated;
+            return overflowLatched;
         }
 
         /// <summary>
@@ -7429,26 +5936,14 @@ namespace VRCKatamari.BallMotor
 
         /// <summary>
         /// Reason of the first refused registration, or null before one happens
-        /// (and null when only the sweep contact buffer saturated).
         /// </summary>
         /// <remarks>
         /// Written once, so it names a capacity rather than growing into a
-        /// running log; the sweep's contact saturation has its own getter.
+        /// running log.
         /// </remarks>
         public string GetFirstOverflowReason()
         {
             return firstOverflowReason;
-        }
-
-        /// <summary>
-        /// True if the sweep's contact buffer (ContactCapacity = 4) was full at
-        /// least once. SweepMath caps contacts there without a truncation flag,
-        /// so contacts beyond the buffer in such a step are dropped by the
-        /// sweep, not by this motor.
-        /// </summary>
-        public bool WasContactBufferSaturated()
-        {
-            return contactBufferSaturated;
         }
 
         // ------------------------------------------------------------------

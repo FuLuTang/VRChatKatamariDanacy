@@ -28,8 +28,8 @@ namespace VRCKatamari.BallContact
     /// <para>
     /// <see cref="TrySelectSupport"/> is the whole T0 answer for one ball: the probe set is
     /// the motor's radial directions projected to XZ and scaled to the footprint, plus the
-    /// ball's own XZ, and the selected plane is handed to <c>GroundContactMath</c> as a
-    /// regular <c>(normal, offset)</c> pair, exactly like a plane/box/ramp support. The band
+    /// ball's own XZ, and the selected plane is a regular <c>(normal, offset)</c> pair,
+    /// exactly like a plane/box/ramp support. The band
     /// it applies is anchored on the BALL'S BOTTOM (upward only, <c>0.25 * D</c>); see that
     /// method for why there is no downward bound.
     /// </para>
@@ -477,7 +477,7 @@ namespace VRCKatamari.BallContact
                 }
                 if (!probeFound) continue;
                 // The triangle's plane at the BALL's XZ, not at the probe's: a slope tilts
-                // under the centre, and GroundContactMath solves for the centre.
+                // under the centre, and the contact solve works on the centre.
                 float centreHeight = (Dot(candidateNormal, candidatePoint) -
                     candidateNormal.x * center.x - candidateNormal.z * center.z) /
                     candidateNormal.y;

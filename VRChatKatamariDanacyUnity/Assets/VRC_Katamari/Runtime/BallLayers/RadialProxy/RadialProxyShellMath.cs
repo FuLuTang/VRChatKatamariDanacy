@@ -39,7 +39,7 @@ namespace VRCKatamari.BallLayers
     /// </para>
     /// <para>
     /// Stored supports are endpoint-only maxima: the core-radius floor is NOT
-    /// baked into the table. <see cref="GroundContactMath.TrySolve"/> applies the
+    /// baked into the table. the contact pass applies the
     /// floor of the current core radius every step and
     /// <see cref="RadialProxyMath.TryProtrusion"/> computes the relative
     /// protrusion, so a growing core needs no support-table write. A shrinking
@@ -508,68 +508,5 @@ namespace VRCKatamari.BallLayers
             return true;
         }
 
-        /// <summary>
-        /// Builds the pin tips handed to <see cref="GroundContactMath.TrySolve"/> each step:
-        /// slot <c>i</c> is <c>directions[i] * min(supports[i], coreRadius + maxProtrusionM)</c>
-        /// when that pin protrudes past the core, and zero otherwise.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// This is the original's rolling model: 16 fixed pins whose tips are the ground
-        /// points. The pin table is the max over EVERY registered prop's box corners, so the
-        /// per-step solve cost is bounded by 16 however many props are attached. The clamp is
-        /// the hard maximum-protrusion rule: a prop may not lift the ball more than the cap
-        /// above its core. It is applied here, not when the support is stored, because the
-        /// stored raw length is what lets a growing core retract the relative protrusion
-        /// naturally.
-        /// </para>
-        /// <para>
-        /// A pin that does not clear the core is zeroed, which the ground solve treats as no
-        /// contribution (its projection never exceeds the core floor). A pin-tip is a lower
-        /// bound of the box it came from: the tip sits on the supporting plane of the box
-        /// along its pin direction, so an off-axis corner is represented by the nearest pins'
-        /// cosine falloff, the original's behaviour. <paramref name="tips"/> must have exactly
-        /// <see cref="RadialProxyMath.DirectionCount"/> slots.
-        /// </para>
-        /// </remarks>
-        public static bool TryBuildPinTips(float coreRadius, float maxProtrusionM,
-            Vector3[] directions, float[] supports, Vector3[] tips, out int protrudingCount)
-        {
-            protrudingCount = 0;
-            if (!KatamariMath.IsFiniteFloat(coreRadius) || coreRadius < 0f) return false;
-            if (!KatamariMath.IsFiniteFloat(maxProtrusionM) || maxProtrusionM < 0f) return false;
-            if (directions == null || directions.Length != RadialProxyMath.DirectionCount) return false;
-            if (supports == null || supports.Length < RadialProxyMath.DirectionCount) return false;
-            if (tips == null || tips.Length != RadialProxyMath.DirectionCount) return false;
-
-            float maxLength = coreRadius + maxProtrusionM;
-            if (!KatamariMath.IsFiniteFloat(maxLength)) return false;
-            for (int i = 0; i < RadialProxyMath.DirectionCount; i++)
-            {
-                if (!KatamariMath.IsFiniteFloat(supports[i])) return false;
-                if (!KatamariMath.IsFiniteVector(directions[i])) return false;
-            }
-
-            int count = 0;
-            for (int i = 0; i < RadialProxyMath.DirectionCount; i++)
-            {
-                float support = supports[i];
-                if (!(support > coreRadius))
-                {
-                    tips[i] = Vector3.zero;
-                    continue;
-                }
-                float length = support < maxLength ? support : maxLength;
-                if (!(length > coreRadius))
-                {
-                    tips[i] = Vector3.zero;
-                    continue;
-                }
-                tips[i] = directions[i] * length;
-                count = count + 1;
-            }
-            protrudingCount = count;
-            return true;
-        }
     }
 }

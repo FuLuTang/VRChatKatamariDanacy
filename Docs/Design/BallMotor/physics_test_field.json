@@ -4,7 +4,7 @@
   "title_zh": "球体物理测试场（地图 0）· 判据与运行计划",
   "status": "PROVISIONAL_NOT_TESTED",
   "created": "2026-11-15",
-  "updated": "2026-11-16",
+  "updated": "2026-11-17",
   "design_doc": "Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md",
   "purpose": "纯自用的球体物理回归场：地形支撑 / 台阶 / 斜面 / 台面与边缘 / 吸附物凹凸 / 挡路 / 贴墙。不是玩家关卡，不进正式场景。",
   "generated_by": "hand-authored. Geometry is NOT in this file: each wired cell points at its own placement.json, which is the single source for what exists in the scene",
@@ -59,9 +59,6 @@
     "max_proxy_protrusion_world_m": 0.3,
     "step_height_over_ball_diameter": 0.25,
     "max_support_slope_degrees": 45.0,
-    "absorb_volume_ratio": 10.0,
-    "max_item_volume_m3": 512.0,
-    "max_core_radius_world_m": 1.1,
     "capacities": {
       "planes": 8,
       "static_boxes": 8,
@@ -70,7 +67,8 @@
       "support_props": 6,
       "contacts": 4
     },
-    "source": "Runtime/BallMotor/KatamariBallMotor.cs 的序列化字段与常量；ramps 为 TERRAIN_SUPPORT 的 P3 计划项，step 规则与 support_props（P1/P2）已实现"
+    "source": "Runtime/BallMotor/KatamariBallMotor.cs 的序列化字段与常量；ramps 为 TERRAIN_SUPPORT 的 P3 计划项，step 规则与 support_props（P1/P2）已实现",
+    "absorb_gate": "Req_mm = floor(1000*cbrt(60*V/pi)), V = k*a*b*c (k default 0.70); absorbable iff floor(1000*D) >= Req_mm (PickupAbsorbMath). absorb_max_abc_m3 = the strict upper bound on a*b*c at k=0.70 for the preset's whole-mm diameter; the 0.30 preset is quantized to 0.2997 m (299 mm), where it is 0.002020 m3."
   },
   "diameters": [
     {
@@ -79,8 +77,9 @@
       "radius_m": 0.15,
       "step_limit_m": 0.075,
       "protrusion_cap_m": 0.0525,
-      "absorb_volume_limit_m3": 0.001414,
-      "is_preset": true
+      "is_preset": true,
+      "absorb_ball_mm": 300,
+      "absorb_max_abc_m3": 0.00204
     },
     {
       "label": "0.60",
@@ -88,8 +87,9 @@
       "radius_m": 0.3,
       "step_limit_m": 0.15,
       "protrusion_cap_m": 0.105,
-      "absorb_volume_limit_m3": 0.01131,
-      "is_preset": true
+      "is_preset": true,
+      "absorb_ball_mm": 600,
+      "absorb_max_abc_m3": 0.016238
     },
     {
       "label": "1.10",
@@ -97,8 +97,9 @@
       "radius_m": 0.55,
       "step_limit_m": 0.275,
       "protrusion_cap_m": 0.1925,
-      "absorb_volume_limit_m3": 0.069691,
-      "is_preset": true
+      "is_preset": true,
+      "absorb_ball_mm": 1100,
+      "absorb_max_abc_m3": 0.09983
     },
     {
       "label": "2.20",
@@ -106,8 +107,9 @@
       "radius_m": 1.1,
       "step_limit_m": 0.55,
       "protrusion_cap_m": 0.3,
-      "absorb_volume_limit_m3": 0.557528,
-      "is_preset": true
+      "is_preset": true,
+      "absorb_ball_mm": 2200,
+      "absorb_max_abc_m3": 0.797555
     }
   ],
   "start": {
@@ -123,7 +125,7 @@
   "registration_model": {
     "mode": "one_cell_at_a_time",
     "why": "motor 的静态盒上限 8、斜面上限 4；一个 21 格的场同时注册必然超容量并 latch overflow。所以每格自带一组 BoxCollider，切格时 motor.ClearObstacles() → 目标格 LevelArenaHost.Reapply()",
-    "switch_rule": "active = 离球心最近的格足迹（外扩 activate_margin_m = r + 2.0）；换格需连续 0.25 s 稳定；球在无格区时保持上一格 1.0 s 后清到 base",
+    "switch_rule": "walk-around 模式（driver.walkAroundActivation=true、没有脚本 run 时）：球心落在哪一格的 pad（足迹矩形）里，哪一格注册，换格需连续 walkAroundDebounceSeconds（0.25 s）稳定；球不被挪动。脚本 run 由 driver 显式切格。球不在任何 pad 里时保持上一格。",
     "per_cell_arena": "every placement.json is a COMPLETE arena: ground + 4 boundary planes + that cell's boxes. motor.ClearObstacles() zeroes the global plane table, so the host that registers last owns every plane; a cell cannot borrow the field's walls from another host. The 4 wall objects are therefore duplicated per cell in the scene (they are markers, not colliders).",
     "base_registration": {
       "ground_plane": true,
@@ -131,7 +133,6 @@
       "boxes": 0,
       "ramps": 0
     },
-    "activate_margin_m": 2.0,
     "switch_debounce_s": 0.25,
     "cost_note": "每次切格一次 ClearObstacles + Reapply（分配一对 Vector3[]，见 TERRAIN_SUPPORT §3.5 的 GC 风险）"
   },
@@ -217,7 +218,7 @@
         },
         {
           "id": "lift_bounded",
-          "metric": "lift_over_nominal_m",
+          "metric": "lift_over_nominal_in_deck_m",
           "op": "<=",
           "limit": 0.01,
           "unit": "m",
@@ -230,19 +231,7 @@
             "pass",
             "pass"
           ],
-          "v2": {
-            "metric": "lift_over_nominal_in_deck_m",
-            "op": "<=",
-            "limit": 0.01,
-            "expect": [
-              "pass",
-              "pass",
-              "pass",
-              "pass"
-            ],
-            "note": "v2 §7.7.4：nominal 仍是板顶 0.028（不是 D 的函数），但 lift 只在球 XZ 落在板的足印 ±1r 内累计（门由导入器烘的板足印 + 碰撞半径给，无魔法数）。门内四档应 ≤0.01（参考模型 −0.0002…0；pass8 的 rest_gap +0.0021 就是门内抬升）。全程最大值 +0.0189…+0.2133 出现在远端边界平面的合法爬升，是 v1 判据的语义问题，不是电机缺陷"
-          },
-          "note": "整段里 (球心 − 碰撞半径) − 板厚 的最大值 <= 1 cm：抬升只能来自 2.8 cm 的板，爬到别的东西上（隐形台阶）就会超"
+          "note": "v2 §7.7.4：nominal 仍是板顶 0.028（不是 D 的函数），但 lift 只在球 XZ 落在板的足印 ±1r 内累计（门由导入器烘的板足印 + 碰撞半径给，无魔法数）。门内四档应 ≤0.01（参考模型 −0.0002…0；pass8 的 rest_gap +0.0021 就是门内抬升）。全程最大值 +0.0189…+0.2133 出现在远端边界平面的合法爬升，是「全程最大值」这种判法的语义问题，不是电机缺陷"
         },
         {
           "id": "not_blocking",
@@ -383,21 +372,12 @@
           "gate": "P1",
           "window": "整段最小值",
           "expect": [
-            "fail",
+            "pass",
             "pass",
             "pass",
             "pass"
           ],
-          "v2": {
-            "expect": [
-              "pass",
-              "pass",
-              "pass",
-              "pass"
-            ],
-            "note": "v2 §2.5：h < r 就滚过去，与 stepLimit 无关。0.075 < r(0.30)=0.1499，所以四档都该上；v1 的 expect 记的是 0.25·D 台阶规则下 0.30 档是墙。v2 行完全显式，驱动不再对 v2 行做 stepLimit 推导"
-          },
-          "note": "整段里 |(球心 − 碰撞半径) − 台阶高| 的最小值：0 = 真的站上过台阶顶；= 台阶高 = 从没上去（在台阶前的地面上）。名义上 0.075 == stepLimit(0.30)，但 0.30 预设被体积单位量化成 D = 0.2997369 m，实际 stepLimit = 0.074934 m < 0.075，所以 0.30 档应被挡（expect=fail），0.60 起可上。驱动按运行时实际 stepLimit 推导该期望（rise ≤ 实际 stepLimit → pass，否则 → fail），这一行只是 0.30 档的名义答案，见 PHYSICS_TEST_FIELD.md §8.3.1"
+          "note": "v2 §2.5：h < r 就滚过去，与 stepLimit 无关。0.075 < r(0.30)=0.1499，所以四档都该上；这不是 0.25·D 的台阶规则：驱动不再按 stepLimit 推导这条的期望"
         },
         {
           "id": "rest_gap",
@@ -684,21 +664,12 @@
           "gate": "P1",
           "window": "整段最小值",
           "expect": [
-            "fail",
+            "pass",
             "pass",
             "pass",
             "pass"
           ],
-          "v2": {
-            "expect": [
-              "pass",
-              "pass",
-              "pass",
-              "pass"
-            ],
-            "note": "v2 §2.5：h < r 就滚过去，与 stepLimit 无关。0.100 < r(0.30)=0.1499，所以四档都该上；v1 的 expect 记的是 0.25·D 台阶规则下 0.30 档是墙。v2 行完全显式，驱动不再对 v2 行做 stepLimit 推导"
-          },
-          "note": "整段里 |(球心 − 碰撞半径) − 台阶高| 的最小值：0 = 真的站上过台阶顶；= 台阶高 = 从没上去（在台阶前的地面上）。0.100 > stepLimit(0.30)，所以 0.30 应被挡住并停在立面上；0.60 起可上"
+          "note": "v2 §2.5：h < r 就滚过去，与 stepLimit 无关。0.100 < r(0.30)=0.1499，所以四档都该上；这不是 0.25·D 的台阶规则：驱动不再按 stepLimit 推导这条的期望"
         },
         {
           "id": "rest_gap",
@@ -720,30 +691,19 @@
         {
           "id": "blocked_gap",
           "metric": "blocked_gap_m",
-          "op": "abs<=",
-          "limit": 0.01,
+          "op": "<=",
+          "limit": 0.0,
           "unit": "m",
           "readout": "frame",
           "gate": "P1",
           "window": "末帧",
           "expect": [
             "pass",
-            "n/a",
-            "n/a",
-            "n/a"
+            "pass",
+            "pass",
+            "pass"
           ],
-          "v2": {
-            "op": "<=",
-            "limit": 0.0,
-            "expect": [
-              "pass",
-              "pass",
-              "pass",
-              "pass"
-            ],
-            "note": "v2 下 0.10 m 挡板不是墙（h < r），球应越过板面：blocked_gap_m <= 0 = 球心至少推进到板面（pass8 0.30 档 −4.3338）。v1 的 abs<=0.01 量的是「停在板前」，两回事"
-          },
-          "note": "被挡时球心到台阶立面的距离（由拖入器读 arena 的 staticBoxes 算出的 approach_m 推出）：0 = 停在立面上；大数是「提前停住」，也就是隐形墙"
+          "note": "v2 下 0.10 m 挡板不是墙（h < r），球应越过板面：blocked_gap_m <= 0 = 球心至少推进到板面（pass8 0.30 档 −4.3338）。量的是「球心至少推进到板面」，不是「停在板前」"
         },
         {
           "id": "no_saturation",
@@ -907,8 +867,8 @@
         },
         {
           "id": "ramp_registered",
-          "metric": "ramp_count",
-          "op": "==",
+          "metric": "static_obb_count",
+          "op": ">=",
           "limit": 1,
           "unit": "count",
           "readout": "frame",
@@ -920,19 +880,7 @@
             "pass",
             "pass"
           ],
-          "v2": {
-            "metric": "static_obb_count",
-            "op": ">=",
-            "limit": 1,
-            "expect": [
-              "pass",
-              "pass",
-              "pass",
-              "pass"
-            ],
-            "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0，ramp_count 只对 v1 有意义；v2 换成 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
-          },
-          "note": "arena 的 role=ramp 被 motor 接受：GetRampCount()==1（45 含等号）"
+          "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0；坡是否存在改读 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
         },
         {
           "id": "climbed",
@@ -1097,8 +1045,8 @@
         },
         {
           "id": "ramp_registered",
-          "metric": "ramp_count",
-          "op": "==",
+          "metric": "static_obb_count",
+          "op": ">=",
           "limit": 1,
           "unit": "count",
           "readout": "frame",
@@ -1110,19 +1058,7 @@
             "pass",
             "pass"
           ],
-          "v2": {
-            "metric": "static_obb_count",
-            "op": ">=",
-            "limit": 1,
-            "expect": [
-              "pass",
-              "pass",
-              "pass",
-              "pass"
-            ],
-            "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0，ramp_count 只对 v1 有意义；v2 换成 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
-          },
-          "note": "arena 的 role=ramp 被 motor 接受：GetRampCount()==1（45 含等号）"
+          "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0；坡是否存在改读 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
         },
         {
           "id": "climbed",
@@ -1142,21 +1078,21 @@
           "note": "坡顶台面 0.60（升程 0.6；25.0° 水平 1.29 m）：|(球心 − 半径) − 0.60| 的最小值 = 0 表示真的上到顶"
         },
         {
-          "id": "no_slip_back",
+          "id": "slip_back",
           "metric": "slip_back_m",
-          "op": "abs<=",
-          "limit": 0.02,
+          "op": "record",
+          "limit": 0.0,
           "unit": "m",
           "readout": "frame",
           "gate": "P3",
           "window": "停住后 5 s",
           "expect": [
-            "pass",
-            "pass",
-            "pass",
-            "pass"
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
           ],
-          "note": "松手停在坡上 5 s 后沿坡向下的位移 <= 0.02 m：切向重力默认 0，球不往回滑（S17）"
+          "note": "25 度坡上停 5 s：静止约 0.3 s 后坡滑规则开始下滑（rampTangentialGravityScale=1），所以这里只记录沿坡下滑的距离，不判。旧的『不往回滑 ≤ 0.02』判据对应切向重力为 0 的旧行为"
         },
         {
           "id": "no_overflow",
@@ -1303,8 +1239,8 @@
         },
         {
           "id": "ramp_registered",
-          "metric": "ramp_count",
-          "op": "==",
+          "metric": "static_obb_count",
+          "op": ">=",
           "limit": 1,
           "unit": "count",
           "readout": "frame",
@@ -1316,19 +1252,7 @@
             "pass",
             "pass"
           ],
-          "v2": {
-            "metric": "static_obb_count",
-            "op": ">=",
-            "limit": 1,
-            "expect": [
-              "pass",
-              "pass",
-              "pass",
-              "pass"
-            ],
-            "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0，ramp_count 只对 v1 有意义；v2 换成 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
-          },
-          "note": "arena 的 role=ramp 被 motor 接受：GetRampCount()==1（45 含等号）"
+          "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0；坡是否存在改读 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
         },
         {
           "id": "climbed",
@@ -1479,31 +1403,10 @@
           "note": "motor 报出的被拒斜面实测坡度 >= 49°：拒绝的是这块 50° 板，不是别的输入"
         },
         {
-          "id": "no_ramp_registered",
-          "metric": "ramp_count",
-          "op": "==",
-          "limit": 0,
-          "unit": "count",
-          "readout": "frame",
-          "gate": "P3",
-          "window": "切格后",
-          "expect": [
-            "pass",
-            "pass",
-            "pass",
-            "pass"
-          ],
-          "v2": {
-            "not_applicable": true,
-            "note": "v1 语义是「50° 板必须没有被注册成斜面」；v2 把坡烘成 OBB，ramp_count 恒为 0，这条不测任何东西（§7.7.2 标 n/a）"
-          },
-          "note": "被拒的斜面不能留下注册项：GetRampCount()==0（ramps=0/1 的 0）"
-        },
-        {
           "id": "no_climb",
           "metric": "max_bottom_rise_m",
           "op": "<=",
-          "limit": 0.05,
+          "limit": 0.0,
           "unit": "m",
           "readout": "frame",
           "gate": null,
@@ -1515,23 +1418,16 @@
             "pass"
           ],
           "v2": {
-            "op": "<=",
             "threshold": "climb_cap_bound",
-            "expect": [
-              "pass",
-              "pass",
-              "pass",
-              "pass"
-            ],
-            "note": "v2：50° 板没被登记成斜面（D5：AddRamp 的 45° 门不动），球爬的是它 0.60 m 高的世界 AABB 盒面，所以「50° 在爬升带」只是旁证。阈值不写常数：驱动算 1.02·H_cap + cap_margin，H_cap = ContactTuning.KHeight · D = 1.5·D（裸球无线尖，2026-11-16 owner 拍板 k_h=1.5）。四档：D0.30 到 cap 后滑回（+0.3068 是 pass8 在 k_h=1.0 时的实测），D0.60 爬完 0.60 板顶（+0.5999），D1.10 也爬完（+0.6000），D2.20 直接滚过去。上界成立；下界（真的爬了 ≥0.5·H_cap）仍由 W2 建好后补。"
+            "op": "<="
           },
-          "note": "球底最高只比地面高 5 cm：没有把被拒的坡当成支撑偷偷抬上去"
+          "note": "v2：50° 板没被登记成斜面（D5：AddRamp 的 45° 门不动），球爬的是它 0.60 m 高的世界 AABB 盒面，所以「50° 在爬升带」只是旁证。阈值不写常数：驱动算 1.02·H_cap + cap_margin，H_cap = ContactTuning.KHeight · D = 1.5·D（裸球无线尖，2026-11-16 owner 拍板 k_h=1.5）。四档：D0.30 到 cap 后滑回（+0.3068 是 pass8 在 k_h=1.0 时的实测），D0.60 爬完 0.60 板顶（+0.5999），D1.10 也爬完（+0.6000），D2.20 直接滚过去。上界成立；下界（真的爬了 ≥0.5·H_cap）仍由 W2 建好后补。"
         },
         {
           "id": "stopped_by_wall",
           "metric": "blocked_gap_m",
-          "op": "abs<=",
-          "limit": 0.03,
+          "op": "<=",
+          "limit": 0.0,
           "unit": "m",
           "readout": "frame",
           "gate": "P1",
@@ -1542,18 +1438,7 @@
             "pass",
             "pass"
           ],
-          "v2": {
-            "op": "<=",
-            "limit": 0.0,
-            "expect": [
-              "pass",
-              "pass",
-              "pass",
-              "pass"
-            ],
-            "note": "v2：这块板不再是墙，球越过板面继续走（pass8 −0.0817 / −0.9843 / −2.1042 / −2.9522）。blocked_gap_m <= 0 表示球心至少推进到板面；v1 的 abs<=0.03 量的是「停在板前 r 处」"
-          },
-          "note": "球停在 50° 板世界 AABB 的正面（z=−2.0）= 兜底墙生效；大数表示提前停住（隐形墙）"
+          "note": "v2：这块板不再是墙，球越过板面继续走（pass8 −0.0817 / −0.9843 / −2.1042 / −2.9522）。blocked_gap_m <= 0 表示球心至少推进到板面"
         },
         {
           "id": "no_overflow",
@@ -1603,7 +1488,7 @@
         "p2": "BLOCKED_UNTIL_P3",
         "p3": "PASS"
       },
-      "notes": "紧凑格：50° 板升 0.60、宽 4、厚 0.20，世界 AABB 顶 0.60（> 2.20 档 stepLimit 0.55，永远是墙）。作者门在 45° 之上拒绝 role=ramp（LEVEL_AUTHORING 4.3「改成 box」），所以板以 box 落库：AABB 进 staticBoxes 当兜底墙；判据导入器把同一块板的 +Y 面烘给驱动，驱动运行时调 motor.AddRamp 取证拒绝原因。arena 行是 ramps=0/0，被拒的 0/1 由驱动的 probe 行给出（PHYSICS_TEST_FIELD.md §4.1.2）"
+      "notes": "紧凑格：50° 板升 0.60、宽 4、厚 0.20，世界 AABB 顶 0.60。作者门在 45° 之上拒绝 role=ramp（LEVEL_AUTHORING 4.3「改成 box」），所以板以 box 落库：AABB 进 staticBoxes 当兜底墙；判据导入器把同一块板的 +Y 面烘给驱动，驱动运行时调 motor.AddRamp 取证拒绝原因。arena 行是 ramps=0/0，被拒的 0/1 由驱动的 probe 行给出（PHYSICS_TEST_FIELD.md §4.1.2）"
     },
     {
       "id": "C13",
@@ -1686,8 +1571,8 @@
         },
         {
           "id": "ramp_registered",
-          "metric": "ramp_count",
-          "op": "==",
+          "metric": "static_obb_count",
+          "op": ">=",
           "limit": 1,
           "unit": "count",
           "readout": "frame",
@@ -1699,19 +1584,7 @@
             "pass",
             "pass"
           ],
-          "v2": {
-            "metric": "static_obb_count",
-            "op": ">=",
-            "limit": 1,
-            "expect": [
-              "pass",
-              "pass",
-              "pass",
-              "pass"
-            ],
-            "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0，ramp_count 只对 v1 有意义；v2 换成 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
-          },
-          "note": "arena 的 11.31° 斜面被接受（GetRampCount()==1）"
+          "note": "v2 把 role=ramp 烘成静态 OBB（[arena] obbBake=obb），motor 的 ramp 表天然为 0；坡是否存在改读 motor.GetStaticObbCount() >= 1（该格 1 盒 + 1 坡，pass8 实测 2）。§7.7.2 的「替换」行"
         },
         {
           "id": "seam_no_step",
@@ -1863,6 +1736,850 @@
         "p3": "PASS"
       },
       "notes": "紧凑格：0.6 m 台面 5×4（z 10…14），南侧 11.31° 坡（水平 3.0），北缘直角边掉 0.60 m"
+    },
+    {
+      "id": "C25",
+      "slug": "wall_ceiling",
+      "name_zh": "墙 + 顶棚（爬坡卡死复现，只诊断）",
+      "kind": "climb_diagnostic",
+      "stage": "now",
+      "wired": true,
+      "placement": "physics_test_field/C25/placement.json",
+      "start_pose": {
+        "center": [
+          -10.5,
+          0.15,
+          -35.2
+        ],
+        "heading_deg": 0.0
+      },
+      "footprint": {
+        "center": [
+          -10.5,
+          -33.0
+        ],
+        "size": [
+          6.0,
+          9.0
+        ]
+      },
+      "nominal_m": 2.0,
+      "stop_seconds": 1.0,
+      "run_at_d": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "drive": [
+        {
+          "t": 0.0,
+          "forward": 1.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "满推 +Z：1.2 m 助跑进顶棚下，贴墙起爬，顶棚底 0.50 m 压住（D=0.30 的爬升上限 H_cap=0.45 之内）"
+        },
+        {
+          "t": 8.0,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "松手：观察能否沿墙滑下来"
+        },
+        {
+          "t": 11.0,
+          "forward": -1.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "反推 2.5 s：观察能否倒着退出顶棚"
+        },
+        {
+          "t": 13.5,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "松手"
+        }
+      ],
+      "checks": [
+        {
+          "id": "climb_active_at_release",
+          "metric": "climb_active_at_release",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "bool",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "松手那一帧 climbActive（1 = 仍在爬）"
+        },
+        {
+          "id": "cap_lock_at_release",
+          "metric": "cap_lock_at_release",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "bool",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "松手那一帧 capLock（是否已被高度上限锁住）"
+        },
+        {
+          "id": "climb_active_s",
+          "metric": "climb_active_s",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "s",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "整段 climbActive 为真的累计秒数"
+        },
+        {
+          "id": "climb_lock_s",
+          "metric": "climb_lock_s",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "s",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "整段 capLock 为真的累计秒数"
+        },
+        {
+          "id": "climb_height_max_m",
+          "metric": "climb_height_max_m",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "整段最大爬升高度 GetClimbHeightWorldM（被顶棚压住时远小于 H_cap=0.45）"
+        },
+        {
+          "id": "push_actual_speed_mps",
+          "metric": "push_actual_speed_mps",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "m/s",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "松手前 2 s 最终接受球心的实际速度（平面速度对竖墙爬升恒为 0，不能用它判进展；≈0 = 通道无进展）"
+        },
+        {
+          "id": "released_descent_m",
+          "metric": "released_descent_m",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "松手到反推开始球心下降的高度（>0 = 自己下来了；≈0 = 挂在墙上）"
+        },
+        {
+          "id": "reverse_retreat_m",
+          "metric": "reverse_retreat_m",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "反推后沿朝向向后退出的距离（>0 = 能退出）"
+        },
+        {
+          "id": "final_bottom_rise_m",
+          "metric": "final_bottom_rise_m",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "结束时球底离地高度（≈0 = 已落地）"
+        },
+        {
+          "id": "recovery_delta",
+          "metric": "recovery_delta",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": null,
+          "window": "整段",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "本 run 的卡死恢复次数（卡住恢复触发过没有）"
+        },
+        {
+          "id": "size_accuracy",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "setter 收敛后",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "球径误差 ≤ 1 mm：设定器收敛到预设直径"
+        },
+        {
+          "id": "no_overflow",
+          "metric": "overflow_delta",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "本格 2 盒 / 0 斜面等容量不得 latch（基线差必须为 0）"
+        }
+      ],
+      "cameras": [
+        "cam_top"
+      ],
+      "acceptance_refs": [],
+      "expectation": {
+        "p3": "DIAGNOSTIC"
+      },
+      "notes": "只诊断、不判 PASS/FAIL：复现 TERRAIN_CLIMB §6.7 的低进展爬升（球贴墙、顶棚把它压回去，climbActive 一直为真）。墙 2.0 m 高、顶棚底 0.50 m、2 m 深贴在墙前；离线夹具是球 r=0.15、墙前 z=0.25、顶棚底 0.50、h=0.20。D>0.30 的球直径比顶棚净高还大，所以只跑 0.30（run_at_d）。打开电机的 climbDiagnosticsEnabled 可以在 Console 同时看到每秒一行 [BallMotor] climb"
+    },
+    {
+      "id": "C26",
+      "slug": "slope_2deg",
+      "name_zh": "缓坡 2°（静止后下滑 / 平地不滑 / 推着不额外下滑）",
+      "kind": "slope_slide",
+      "stage": "now",
+      "wired": true,
+      "placement": "physics_test_field/C26/placement.json",
+      "start_pose": {
+        "center": [
+          -3.5,
+          0.15,
+          -37.0
+        ],
+        "heading_deg": 0.0
+      },
+      "footprint": {
+        "center": [
+          -3.5,
+          -33.0
+        ],
+        "size": [
+          6.0,
+          9.0
+        ]
+      },
+      "nominal_m": 0.192,
+      "stop_seconds": 5.7,
+      "run_at_d": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "drive": [
+        {
+          "t": 0.0,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "平地静止 1.5 s：读 flat_drift（平地上不滑）"
+        },
+        {
+          "t": 1.5,
+          "forward": 0.25,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "四分之一推力 +Z 推 3 s：平地 2 m 后上坡；推着时不应额外下滑"
+        },
+        {
+          "t": 4.5,
+          "forward": 0.0,
+          "turn": 1.0,
+          "lateral": 0.0,
+          "note": "松手并原地右转 0.82 s（朝向转 90°，使下坡成为侧向，不受前向滚动阻力吞掉）"
+        },
+        {
+          "t": 5.32,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "停转；球滑停后静止 0.3 s 开始下滑"
+        }
+      ],
+      "checks": [
+        {
+          "id": "flat_no_slide_rec",
+          "metric": "flat_drift_m",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "（记录）平地静止漂移"
+        },
+        {
+          "id": "slide_delay",
+          "metric": "slide_delay_s",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "s",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "静止（速度 < 0.05）到下坡速度 > 0.1 m/s 的时间；99 = 没滑"
+        },
+        {
+          "id": "slide_peak",
+          "metric": "slide_peak_speed_mps",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "m/s",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "下滑后沿坡向的最大速度"
+        },
+        {
+          "id": "push_ratio",
+          "metric": "push_speed_ratio",
+          "op": "record",
+          "limit": 0.0,
+          "unit": "ratio",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "n/a",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "推着时坡上最高速 / 平地最高速"
+        },
+        {
+          "id": "size_accuracy",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "setter 收敛后",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "球径误差 ≤ 1 mm：设定器收敛到预设直径"
+        },
+        {
+          "id": "no_overflow",
+          "metric": "overflow_delta",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "本格 2 盒 / 0 斜面等容量不得 latch（基线差必须为 0）"
+        }
+      ],
+      "cameras": [
+        "cam_top"
+      ],
+      "acceptance_refs": [],
+      "expectation": {
+        "p3": "PASS"
+      },
+      "notes": "2° 是坡滑规则的下限（rampSlideMinSlopeDegrees=2，要求坡角大于它）：只记录，不判。 坡升 0.192 m / 水平 5.5 m，平地助跑 2 m；只跑 D=0.30（9 m 深的 pad 装不下 s 倍速度的大球，规则本身与球径无关）。"
+    },
+    {
+      "id": "C27",
+      "slug": "slope_5deg",
+      "name_zh": "缓坡 5°（静止后下滑 / 平地不滑 / 推着不额外下滑）",
+      "kind": "slope_slide",
+      "stage": "now",
+      "wired": true,
+      "placement": "physics_test_field/C27/placement.json",
+      "start_pose": {
+        "center": [
+          3.5,
+          0.15,
+          -37.0
+        ],
+        "heading_deg": 0.0
+      },
+      "footprint": {
+        "center": [
+          3.5,
+          -33.0
+        ],
+        "size": [
+          6.0,
+          9.0
+        ]
+      },
+      "nominal_m": 0.4812,
+      "stop_seconds": 5.7,
+      "run_at_d": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "drive": [
+        {
+          "t": 0.0,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "平地静止 1.5 s：读 flat_drift（平地上不滑）"
+        },
+        {
+          "t": 1.5,
+          "forward": 0.25,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "四分之一推力 +Z 推 3 s：平地 2 m 后上坡；推着时不应额外下滑"
+        },
+        {
+          "t": 4.5,
+          "forward": 0.0,
+          "turn": 1.0,
+          "lateral": 0.0,
+          "note": "松手并原地右转 0.82 s（朝向转 90°，使下坡成为侧向，不受前向滚动阻力吞掉）"
+        },
+        {
+          "t": 5.32,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "停转；球滑停后静止 0.3 s 开始下滑"
+        }
+      ],
+      "checks": [
+        {
+          "id": "flat_no_slide",
+          "metric": "flat_drift_m",
+          "op": "<=",
+          "limit": 0.01,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "起步 1.5 s",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "平地静止 1.5 s 球的位移 ≤ 1 cm：平地不滑"
+        },
+        {
+          "id": "slides_after_rest",
+          "metric": "slide_delay_s",
+          "op": ">=",
+          "limit": 0.25,
+          "unit": "s",
+          "readout": "frame",
+          "gate": null,
+          "window": "松手后",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "静止后至少 0.25 s 才开始下滑（静止保持 0.3 s，容一帧）"
+        },
+        {
+          "id": "slides_promptly",
+          "metric": "slide_delay_s",
+          "op": "<=",
+          "limit": 0.6,
+          "unit": "s",
+          "readout": "frame",
+          "gate": null,
+          "window": "松手后",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "静止后 0.6 s 内必须开始下滑（99 = 根本没滑，判红）"
+        },
+        {
+          "id": "slide_speed",
+          "metric": "slide_peak_speed_mps",
+          "op": ">=",
+          "limit": 0.15,
+          "unit": "m/s",
+          "readout": "frame",
+          "gate": null,
+          "window": "松手后",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "下滑后沿坡向速度达到 g·sinθ/(摩擦 0.9 + 抓地 2.0)≈0.29 m/s 的一半以上"
+        },
+        {
+          "id": "push_not_slowed",
+          "metric": "push_speed_ratio",
+          "op": ">=",
+          "limit": 0.9,
+          "unit": "ratio",
+          "readout": "frame",
+          "gate": null,
+          "window": "推着的 3 s",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "推着时坡上最高速 ≥ 平地最高速的 90%：下坡重力只在静止后生效，推着时不额外下滑"
+        },
+        {
+          "id": "size_accuracy",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "setter 收敛后",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "球径误差 ≤ 1 mm：设定器收敛到预设直径"
+        },
+        {
+          "id": "no_overflow",
+          "metric": "overflow_delta",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "本格 2 盒 / 0 斜面等容量不得 latch（基线差必须为 0）"
+        }
+      ],
+      "cameras": [
+        "cam_top"
+      ],
+      "acceptance_refs": [],
+      "expectation": {
+        "p3": "PASS"
+      },
+      "notes": "5°：g·sin5°=0.855 m/s² 小于前向滚动阻力 1.3，所以朝向沿坡时滑不动，本格把朝向转到横向再看。 坡升 0.481 m / 水平 5.5 m，平地助跑 2 m；只跑 D=0.30（9 m 深的 pad 装不下 s 倍速度的大球，规则本身与球径无关）。"
+    },
+    {
+      "id": "C28",
+      "slug": "slope_10deg",
+      "name_zh": "缓坡 10°（静止后下滑 / 平地不滑 / 推着不额外下滑）",
+      "kind": "slope_slide",
+      "stage": "now",
+      "wired": true,
+      "placement": "physics_test_field/C28/placement.json",
+      "start_pose": {
+        "center": [
+          10.5,
+          0.15,
+          -37.0
+        ],
+        "heading_deg": 0.0
+      },
+      "footprint": {
+        "center": [
+          10.5,
+          -33.0
+        ],
+        "size": [
+          6.0,
+          9.0
+        ]
+      },
+      "nominal_m": 0.9698,
+      "stop_seconds": 5.7,
+      "run_at_d": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "drive": [
+        {
+          "t": 0.0,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "平地静止 1.5 s：读 flat_drift（平地上不滑）"
+        },
+        {
+          "t": 1.5,
+          "forward": 0.25,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "四分之一推力 +Z 推 3 s：平地 2 m 后上坡；推着时不应额外下滑"
+        },
+        {
+          "t": 4.5,
+          "forward": 0.0,
+          "turn": 1.0,
+          "lateral": 0.0,
+          "note": "松手并原地右转 0.82 s（朝向转 90°，使下坡成为侧向，不受前向滚动阻力吞掉）"
+        },
+        {
+          "t": 5.32,
+          "forward": 0.0,
+          "turn": 0.0,
+          "lateral": 0.0,
+          "note": "停转；球滑停后静止 0.3 s 开始下滑"
+        }
+      ],
+      "checks": [
+        {
+          "id": "flat_no_slide",
+          "metric": "flat_drift_m",
+          "op": "<=",
+          "limit": 0.01,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "起步 1.5 s",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "平地静止 1.5 s 球的位移 ≤ 1 cm：平地不滑"
+        },
+        {
+          "id": "slides_after_rest",
+          "metric": "slide_delay_s",
+          "op": ">=",
+          "limit": 0.25,
+          "unit": "s",
+          "readout": "frame",
+          "gate": null,
+          "window": "松手后",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "静止后至少 0.25 s 才开始下滑（静止保持 0.3 s，容一帧）"
+        },
+        {
+          "id": "slides_promptly",
+          "metric": "slide_delay_s",
+          "op": "<=",
+          "limit": 0.6,
+          "unit": "s",
+          "readout": "frame",
+          "gate": null,
+          "window": "松手后",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "静止后 0.6 s 内必须开始下滑（99 = 根本没滑，判红）"
+        },
+        {
+          "id": "slide_speed",
+          "metric": "slide_peak_speed_mps",
+          "op": ">=",
+          "limit": 0.3,
+          "unit": "m/s",
+          "readout": "frame",
+          "gate": null,
+          "window": "松手后",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "下滑后沿坡向速度达到 g·sinθ/(摩擦 0.9 + 抓地 2.0)≈0.59 m/s 的一半以上"
+        },
+        {
+          "id": "push_not_slowed",
+          "metric": "push_speed_ratio",
+          "op": ">=",
+          "limit": 0.9,
+          "unit": "ratio",
+          "readout": "frame",
+          "gate": null,
+          "window": "推着的 3 s",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "推着时坡上最高速 ≥ 平地最高速的 90%：下坡重力只在静止后生效，推着时不额外下滑"
+        },
+        {
+          "id": "size_accuracy",
+          "metric": "diameter_error_m",
+          "op": "abs<=",
+          "limit": 0.001,
+          "unit": "m",
+          "readout": "frame",
+          "gate": null,
+          "window": "setter 收敛后",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "球径误差 ≤ 1 mm：设定器收敛到预设直径"
+        },
+        {
+          "id": "no_overflow",
+          "metric": "overflow_delta",
+          "op": "==",
+          "limit": 0,
+          "unit": "count",
+          "readout": "frame",
+          "gate": null,
+          "window": "",
+          "expect": [
+            "pass",
+            "n/a",
+            "n/a",
+            "n/a"
+          ],
+          "note": "本格 2 盒 / 0 斜面等容量不得 latch（基线差必须为 0）"
+        }
+      ],
+      "cameras": [
+        "cam_top"
+      ],
+      "acceptance_refs": [],
+      "expectation": {
+        "p3": "PASS"
+      },
+      "notes": "10°：g·sin10°=1.70 m/s²，横向漂移终速约 0.59 m/s。 坡升 0.970 m / 水平 5.5 m，平地助跑 2 m；只跑 D=0.30（9 m 深的 pad 装不下 s 倍速度的大球，规则本身与球径无关）。"
     }
   ],
   "planned_cells": [
@@ -2573,7 +3290,7 @@
             "n/a",
             "pass"
           ],
-          "note": "2.20 球滚过 0.6 台面（v1 在这一档进不去，v2 的 h<r 让它直接滚上）"
+          "note": "2.20 球滚过 0.6 台面（h<r 让它直接滚上）"
         },
         {
           "id": "seam_no_step",
@@ -2587,7 +3304,7 @@
             "n/a",
             "pass"
           ],
-          "note": "v1 的 0.95 m 单帧跳变在这里应消失（pass8 已 +0.0184）"
+          "note": "旧的 0.95 m 单帧跳变在这里应不再出现（pass8 已 +0.0184）"
         },
         {
           "id": "landing_gap",
@@ -3470,7 +4187,7 @@
       "PhysicsTestCell: cellId, arena, startCenter, startHeadingDegrees, footprint, nominalM, approachM, rampClimb, rampFootM, rampProbe plane, check arrays, drive timeline",
       "PhysicsTestFieldDriver: cells[], presetDiametersM[], kindWhitelist",
       "LabBallSizeSetter: presetDiametersM[], presetLabels[] (same diameters[], same file), and sizeModelBaselineVolumeUnits read from the scene motor's serialized baselineVolumeUnits",
-      "PhysicsTestCell v2 rows: checkHasV2[], checkV2Metrics[], checkV2Ops[], checkV2Limits[], checkV2ExpectMasks[], checkV2Thresholds[] (one row per check; -1/\"\" = inherit the v1 row) and deckCenterXZ/deckHalfSizeM (the plate footprint the v2 lift gate uses)"
+      "PhysicsTestCell override rows: checkHasV2[], checkV2Metrics[], checkV2Ops[], checkV2Limits[], checkV2ExpectMasks[], checkV2Thresholds[] (one row per check; -1/\"\" = inherit the base row) and deckCenterXZ/deckHalfSizeM (the plate footprint the in-deck lift gate uses)"
     ],
     "rule": "the JSON is the only authoring copy; nothing here is typed twice"
   },
@@ -3486,43 +4203,30 @@
     ],
     "screenshot_rule": "每格每球径至少 2 张：cam_top + 该格主相机；起伏类再补 cam_chase 连拍"
   },
-  "criteria_models": {
-    "why": "同一张 36 跑矩阵必须对两个电机模型都有意义：v1（contactModelV2Enabled=false）就是 pass7 的基线，v2 是 CONTACT_MODEL_V2.md §6.1/§7.7.2/§7.7.4 的期望。搬一套判据（而不是复制一份矩阵），两种模型才不会各说各话；v1 的每一行必须与 pass7 逐字相同",
-    "flag": "KatamariBallMotor.IsContactModelV2()",
-    "rule": "每条 criterion 可带一个可选的 v2 覆盖块；驱动只在 IsContactModelV2() 为 true 时用它，否则用 v1 行。没有 v2 块 = 同一条判据对两个模型都成立（例如 rest_gap、crossed、size_accuracy、seam_no_step）",
+  "override_rows": {
+    "why": "A check may carry an optional v2 block that replaces its base row (metric, op+limit or threshold, per-diameter expect). The importer bakes it into the cell's override arrays and the driver judges the override instead of the base row. Rows without a block are judged as written.",
     "override_keys": {
-      "expect": "4 项 pass/fail/n/a，替换 v1 的 expect（按 diameters[] 顺序）",
+      "expect": "4 项 pass/fail/n/a，替换基础行的 expect（按 diameters[] 顺序）",
       "metric": "替换读取的指标名；必须是驱动 TryReadMetric 能回答的名字",
       "op": "替换比较符；op 一定连带 limit（数据里两者必须同时出现），或配 threshold",
       "limit": "替换 op 的常数限",
       "threshold": "符号阈值，驱动在运行期按电机常数算，此时不写 limit。目前只有一个值：climb_cap_bound = 1.02·H_cap + ContactTuning.ClimbCapMarginM，H_cap = ContactTuning.KHeight · D",
       "not_applicable": "true = 四档全 n/a（等价于 expect 全 n/a），驱动报 SKIPPED_N_A 并计入 skipped",
-      "note": "人读的说明，不参与编码；但它与 v1 的 note 分开，v1 的解释不会被 v2 的语义污染"
+      "note": "人读的说明，不参与编码；"
     },
     "driver_rules": [
-      "v2 行在数据上完全显式：deck_gap 的 stepLimit 推导和 ramp_entry 的 stepLimit 推导都只对 v1 行生效",
-      "v1 行与 v2 行各有自己的 expect 掩码、metric、op、limit，互不覆盖",
-      "build stamp 2026-11-15e；[ptf] build= / run= / summary= / field= 四行都带 model=v1|v2，判据行不带（它由同一 run 的 model 决定）"
+      "an override row is fully explicit: the deck_gap and ramp_entry stepLimit derivations apply only to base rows",
+      "a base row and its override carry their own expect mask, metric, op and limit; they never mix",
+      "op \"record\" is a diagnostic: the value is logged with verdict=DIAGNOSTIC and counts as neither pass nor unexpected nor skipped",
+      "a cell with run_at_d[i] = false is not driven at that diameter (logged as SKIPPED_NOT_RUN)",
+      "build stamp 2026-11-17a; the first [ptf] line prints build / cellRev / v2Rows"
     ],
-    "v1_baseline_pass7": {
-      "source": "Docs/Evidence/PhysicsTestField/2026-11-15_pass7_v1_regression/",
-      "per_run": {
-        "0.300": "58 pass / 0 skip / 1 unexpected",
-        "0.600": "57 / 1 / 1",
-        "1.100": "56 / 2 / 1",
-        "2.200": "52 / 5 / 2"
-      },
-      "known_reds": "C05 climbed ×4（45° 接缝死锁）+ C13 2.20 seam_no_step（0.95 m 单帧跳变）"
-    },
-    "v2_expected": {
-      "source": "CONTACT_MODEL_V2.md §6.1/§7.7.2/§7.7.4 + pass8 原样数值 （Docs/Evidence/PhysicsTestField/2026-11-15_pass8_contact_v2_fixes/）",
-      "per_run": {
-        "0.300": "58 pass / 1 skip / 0 unexpected",
-        "0.600": "58 / 1 / 0",
-        "1.100": "57 / 2 / 0",
-        "2.200": "54 / 5 / 0"
-      },
-      "caveat": "C10 blocked_gap 的 0.60/1.10/2.20 档和 C14 的门内 lift 在 pass8 里没有读数（前者被 n/a 跳过、后者是新增的门内指标），所以那两个 0 是模型预测：跑成红就是真发现，不是判据写错"
+    "expected_per_run": {
+      "source": "Docs/Evidence/PhysicsTestField/2026-11-15_pass8_contact_v2_fixes/ raw values for the nine original cells (C06 no_ramp_registered row since removed; C03 slip_back since a diagnostic); the four 2026-11-17 cells are new and unmeasured",
+      "0.300": "nine original cells 58 checks: 57 pass / 0 skip / 0 unexpected + 1 diagnostic (C03 slip_back); C25 12 checks: 2 pass + 10 diag; C26 6: 2 pass + 4 diag; C27 7 pass; C28 7 pass. Whole field 90 checks",
+      "0.600": "nine original cells 58 checks: 57 pass / 0 skip / 0 unexpected + 1 diag; C25-C28 not run (run_at_d)",
+      "1.100": "nine original cells 58 checks: 56 pass / 1 skip / 0 unexpected + 1 diag; C25-C28 not run",
+      "2.200": "nine original cells 58 checks: 53 pass / 4 skip / 0 unexpected + 1 diag; C25-C28 not run"
     }
   }
 }

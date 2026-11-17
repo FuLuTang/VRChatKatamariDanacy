@@ -85,6 +85,8 @@ namespace VRCKatamari.Editor.PhysicsTestField
             public bool wired;
             public float nominal_m;
             public float stop_seconds;
+            // Which preset diameters the cell is driven at, in diameters[] order; absent = all.
+            public bool[] run_at_d;
             public StartPoseEntry start_pose;
             public FootprintEntry footprint;
             public DriveEntry[] drive;
@@ -131,7 +133,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
 
         /// <summary>
         /// One criterion's v2 override (design PHYSICS_TEST_FIELD section 5.6). Absent means the
-        /// v1 row above is the criterion for BOTH motor models.
+        /// base row above is the criterion.
         /// </summary>
         /// <remarks>
         /// JsonUtility cannot represent absence for this field: a check whose JSON has no
@@ -349,12 +351,9 @@ namespace VRCKatamari.Editor.PhysicsTestField
 
             if (report.V2Rows > 0)
             {
-                report.Note("v2 rows: " + report.V2Rows + " criteria carry a v2 override; the driver "
-                    + "applies one only when the motor reports IsContactModelV2(), so this same scene "
-                    + "runs the v1 baseline with the flag off (design section 5.6)");
+                report.Note("override rows: " + report.V2Rows + " criteria carry an override block; "
+                    + "the driver judges the override instead of the base row (design section 5.6)");
             }
-
-            NoteContactModel(driver, report);
 
             LabBallSizeSetter setter = Object.FindObjectOfType<LabBallSizeSetter>();
             if (setter != null)
@@ -414,6 +413,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
                 SetFloat(serialized, "rampProbeHalfRun", geometry.ProbeHalfRun, report);
             }
             SetFloat(serialized, "stopSeconds", cell.stop_seconds > 0f ? cell.stop_seconds : 1.5f, report);
+            SetSkipDiameterMask(serialized, cell, report);
 
             int driveCount = cell.drive == null ? 0 : cell.drive.Length;
             SerializedProperty times = RequireProperty(serialized, "driveTimes", report);
@@ -692,28 +692,6 @@ namespace VRCKatamari.Editor.PhysicsTestField
             SerializedProperty property = new SerializedObject(component).FindProperty("motor");
             if (property == null) return null;
             return property.objectReferenceValue as KatamariBallMotor;
-        }
-
-        /// <summary>
-        /// Says which contact model the next Play will run. The flag is the motor's serialized
-        /// <c>contactModelV2Enabled</c>, and both models are legitimate - but a reviewer must not
-        /// have to infer it from the expected counts.
-        /// </summary>
-        private static void NoteContactModel(PhysicsTestFieldDriver driver, Report report)
-        {
-            KatamariBallMotor motor = ReadMotorLink(driver);
-            if (motor == null) return;
-            SerializedProperty flag = new SerializedObject(motor).FindProperty("contactModelV2Enabled");
-            if (flag == null)
-            {
-                report.Note("the scene motor has no serialized contactModelV2Enabled; the criteria " +
-                            "file's v2 rows would be inert");
-                return;
-            }
-
-            report.Note("contact model in the scene: " + (flag.boolValue ? "v2" : "v1") +
-                        " (contactModelV2Enabled=" + (flag.boolValue ? "true" : "false") + "); the " +
-                        "driver stamps model=v1|v2 on every [ptf] header line");
         }
 
         private static bool CopyProxies(List<PhysicsTestCell> cells, PhysicsTestFieldDriver driver,
@@ -1079,7 +1057,34 @@ namespace VRCKatamari.Editor.PhysicsTestField
             if (op == ">=") return 2;
             if (op == "==") return 3;
             if (op == "abs>=") return 4;
+            if (op == "record") return 5;
             return 0;
+        }
+
+        /// <summary>
+        /// One bit per preset diameter the cell is NOT driven at (<c>run_at_d</c> false). Absent
+        /// or empty = every diameter runs, so data without the key bakes to 0.
+        /// </summary>
+        private static void SetSkipDiameterMask(SerializedObject serialized, CellEntry cell,
+            Report report)
+        {
+            int mask = 0;
+            if (cell.run_at_d != null && cell.run_at_d.Length > 0)
+            {
+                if (cell.run_at_d.Length != 4)
+                {
+                    report.Note(cell.id + " has " + cell.run_at_d.Length + " run_at_d entries; the " +
+                                "field has 4 preset diameters");
+                }
+
+                for (int i = 0; i < cell.run_at_d.Length && i < 4; i++)
+                {
+                    if (!cell.run_at_d[i]) mask |= 1 << i;
+                }
+            }
+
+            SerializedProperty property = RequireProperty(serialized, "skipDiameterMask", report);
+            if (property != null) property.intValue = mask;
         }
 
         private static int ReadoutCode(string readout)
@@ -1173,7 +1178,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
         /// </para>
         /// <para>
         /// A block that carries only <c>note</c> (or only <c>limit</c> without <c>op</c>, which
-        /// the encoder would drop anyway) means "inherit the v1 row", exactly like no block, so
+        /// the encoder would drop anyway) means "inherit the base row", exactly like no block, so
         /// it is not an override and must not be counted. This is the ONE implementation of the
         /// test: <c>WriteChecks</c> bakes <c>checkHasV2[]</c> with it and
         /// <c>CriteriaModelOverrideTests</c> calls it for the real file. The JSON guard
@@ -1192,7 +1197,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
         }
 
         /// <summary>
-        /// The v2 expect mask, or -1 for "inherit the v1 row".
+        /// The override expect mask, or -1 for "inherit the base row".
         /// </summary>
         /// <remarks>
         /// A <c>not_applicable</c> override becomes 0 - every 2-bit field is 0, i.e. n/a at all
@@ -1247,7 +1252,7 @@ namespace VRCKatamari.Editor.PhysicsTestField
             return mask;
         }
 
-        /// <summary>The v2 op code, or -1 for "inherit the v1 op AND its limit".</summary>
+        /// <summary>The override op code, or -1 for "inherit the base op AND its limit".</summary>
         public static int V2OpCode(CellEntry cell, CheckEntry check, Report report)
         {
             if (check == null || check.v2 == null || string.IsNullOrEmpty(check.v2.op)) return -1;

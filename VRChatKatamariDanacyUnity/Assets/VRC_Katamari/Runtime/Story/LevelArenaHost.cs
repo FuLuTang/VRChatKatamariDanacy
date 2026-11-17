@@ -40,44 +40,27 @@ namespace VRCKatamari.Story
     /// ball should stop at.
     /// </para>
     /// <para>
-    /// Ramps (P3) are a separate array on purpose. A ramp is a support-only oriented
-    /// plane baked from its collider's centre/size/rotation, and it must NEVER also
-    /// appear in <see cref="staticBoxes"/>: the sweep is a radius-expanded AABB, so a
-    /// box registration of the tilted board would stop the ball at the ramp foot (the
-    /// invisible wall of design §5.5). Setup watches for the same collider in both
-    /// arrays and drops the box registration, keeping the ramp. The bake goes through
-    /// <see cref="SupportSurfaceMath.TryBakeRamp"/>, so the walking face is the box's
-    /// +Y face and the slope guard is the motor's own serialized limit.
+    /// Ramps (P3) are a separate array on purpose. A ramp is a solid slab whose collider's
+    /// local +Y is the walking face, and it must NEVER also appear in
+    /// <see cref="staticBoxes"/>: the same board registered twice would be two solids at
+    /// one place (design §5.5). Setup watches for the same collider in both
+    /// arrays and drops the box registration, keeping the ramp.
     /// </para>
     /// <para>
     /// Division of labour with the pickup host (design §7.4, a hard rule): a prop's
     /// support/blocking identity belongs to <c>PickupFieldHost</c>, which already owns
     /// the prop table and the absorb gate. This component never references a prop and
-    /// never calls <c>SetBlockingBoxes</c>; it only knows static scene geometry.
+    /// never writes the motor's prop solids; it only knows static scene geometry.
     /// </para>
     /// <para>
-    /// Contact model v2 (CONTACT_MODEL_V2 §1.4/§5.7/§7.4, stage S4b). When the motor
-    /// reports <c>IsContactModelV2()</c> and <see cref="useObbBake"/> is on, every static
-    /// box, straight ramp and curved-ramp slab segment is baked the same way: its eight
-    /// world corners are fitted into a true OBB (<see cref="ObbBakeMath.TryBakeFromCorners"/>)
-    /// and registered through <c>AddObb</c>. That is the ONLY registration that happens in
-    /// this mode - <c>AddBox</c>/<c>AddRamp</c> are not called for the same collider,
-    /// because the motor mirrors both of them into the same OBB table (S3 §7.5.3), and a
-    /// scene must never register one solid twice. In every other mode the pre-S4 calls are
-    /// used unchanged, and the motor's mirror is what puts the geometry in the v2 table.
-    /// </para>
-    /// <para>
-    /// Three modes, one path each (S4b decision):
-    /// <list type="bullet">
-    /// <item><description><b>v2 + useObbBake</b>: eight-corner OBB per collider, through
-    /// <c>AddObb</c>. Surface ids stay in the v1 space (box <c>1+i</c>, ramp
-    /// <c>SupportSurfaceMath.FirstRampSurfaceId + i</c>), so a diagnostic reading an id still knows what it points at.</description></item>
-    /// <item><description><b>v2 + !useObbBake</b>: the rollback path - <c>AddBox</c>/<c>AddRamp</c>
-    /// only, and the motor's mirror supplies axis-aligned OBBs (§7.1).</description></item>
-    /// <item><description><b>v1</b>: <c>AddBox</c>/<c>AddRamp</c> only, exactly as before
-    /// S4b. The corner bake still runs when <see cref="useObbBake"/> is on, but only as the
-    /// §7.4 self-check; nothing is registered through it.</description></item>
-    /// </list>
+    /// Static OBB bake (CONTACT_MODEL_V2 §1.4/§5.7/§7.4). Every static box, straight ramp
+    /// and curved-ramp slab segment is baked the same way: its eight world corners are
+    /// fitted into a true OBB (<see cref="ObbBakeMath.TryBakeFromCorners"/>) and
+    /// registered through <c>AddObb</c>. Surface ids stay in the original id space (box
+    /// <c>1+i</c>, ramp <c>SupportSurfaceMath.FirstRampSurfaceId + i</c>), so a diagnostic
+    /// reading an id still knows what it points at. <c>AddBox</c>/<c>AddRamp</c> are not
+    /// called: they mirror into the same OBB table, and a scene must never register one
+    /// solid twice.
     /// </para>
     /// <para>
     /// The bake is reached through the collider's transform (position, rotation, lossy
@@ -112,10 +95,10 @@ namespace VRCKatamari.Story
         // Local +Z must point into the play area; the origin must be on the collision face.
         [SerializeField] private Transform[] boundaryWalls;
 
-        [Header("Static boxes (sweep obstacle AND a support top; bounds baked at Setup)")]
+        [Header("Static boxes (solid and a support top; baked at Setup)")]
         [SerializeField] private BoxCollider[] staticBoxes;
 
-        [Header("Static ramps (support only, NEVER a sweep box; baked at Setup)")]
+        [Header("Static ramps (slab solids; baked at Setup)")]
         // Each entry's local +Y is the walking plane and its local +Z is the run; the
         // board's thickness extends downward from that face. An entry also listed in
         // staticBoxes is reported and its box registration is skipped.
@@ -126,15 +109,6 @@ namespace VRCKatamari.Story
         [SerializeField] private string[] allowedKinds;
         [SerializeField] private bool autoBeginPlaying = true;
         [SerializeField] private bool logSetupLine = true;
-
-        [Header("Contact model v2 (true OBB bake)")]
-        // On (default): each static box/ramp/slab is baked from its eight world corners and
-        // registered through AddObb, but ONLY while the motor reports IsContactModelV2().
-        // Off: the pre-S4 calls (AddBox/AddRamp) are the registration in every mode, and the
-        // motor mirrors them into its axis-aligned OBB table - the design's rollback (§7.1).
-        // Switching it off never changes what a v1 motor sees, so the flag is safe to keep
-        // on in every committed scene.
-        [SerializeField] private bool useObbBake = true;
 
         // ---- Arena refusal codes (reported as "refusal=<code>:<text>", one per setup) ----
         // 0 is "accepted", so a caller that never sees a refusal reads 0.
@@ -148,10 +122,6 @@ namespace VRCKatamari.Story
         private const int RefusalObbCapacity = 3;
         // The motor refused the box as not finite/unit/orthogonal.
         private const int RefusalObbInvalid = 4;
-        // SupportSurfaceMath refused the ramp (the v1 path's gate).
-        private const int RefusalRampBake = 5;
-        // The motor refused the ramp (capacity 4 or the slope guard) on the v1 path.
-        private const int RefusalRampRefused = 6;
         // The collider is listed in BOTH staticBoxes and rampBoxes: the box registration is
         // skipped so the ramp foot has no invisible wall (§5.5).
         private const int RefusalDoubleListed = 7;
@@ -177,7 +147,6 @@ namespace VRCKatamari.Story
         // ---- Contact v2 bake state (reset on every Setup, reported once) ----
         // Eight world corners of the collider being baked; allocated once, reused.
         private Vector3[] bakeCorners;
-        private bool obbPathActive;
         private int obbAttemptCount;
         private int registeredObbCount;
         private int obbRefusedCount;
@@ -236,12 +205,7 @@ namespace VRCKatamari.Story
             doubleBakeCheckedCount = 0;
             doubleBakeMismatchCount = 0;
             if (bakeCorners == null) bakeCorners = new Vector3[ObbBakeMath.CornerCount];
-            // One path per mode: the true-OBB bake is chosen only when the motor's v2 solver
-            // owns the position (the OBB table is the geometry it reads). With a v1 motor the
-            // v1 calls are the registration, because AddObb alone would leave the sweep empty
-            // and the ball would fall through the floor.
-            obbPathActive = useObbBake && motor.IsContactModelV2();
-            if (obbPathActive) CheckObbCapacity();
+            CheckObbCapacity();
 
             groundRegistered = motor.SetGroundPlane(groundNormal, groundOffset);
             if (!groundRegistered) refusedCount = refusedCount + 1;
@@ -270,7 +234,7 @@ namespace VRCKatamari.Story
                 {
                     BoxCollider box = rampBoxes[i];
                     if (box == null) continue;
-                    if (RegisterRamp(box)) registeredRampCount = registeredRampCount + 1;
+                    if (RegisterRampObb(box)) registeredRampCount = registeredRampCount + 1;
                     else refusedCount = refusedCount + 1;
                 }
             }
@@ -294,18 +258,7 @@ namespace VRCKatamari.Story
                         refusedCount = refusedCount + 1;
                         continue;
                     }
-                    if (obbPathActive)
-                    {
-                        if (RegisterBoxObb(box)) registeredBoxCount = registeredBoxCount + 1;
-                        else refusedCount = refusedCount + 1;
-                        continue;
-                    }
-                    // The only Collider read in this component's lifetime. A rotated box
-                    // bakes to its enclosing world AABB (a documented P1 limitation); the
-                    // motor only ever sees min/max. With the v2 flag on, the motor mirrors
-                    // this box into its OBB table, so the two paths never both register it.
-                    Bounds bounds = box.bounds;
-                    if (motor.AddBox(bounds.min, bounds.max)) registeredBoxCount = registeredBoxCount + 1;
+                    if (RegisterBoxObb(box)) registeredBoxCount = registeredBoxCount + 1;
                     else refusedCount = refusedCount + 1;
                 }
             }
@@ -336,7 +289,6 @@ namespace VRCKatamari.Story
                 + " obbs=" + registeredObbCount + "/" + obbAttemptCount
                 + " obbRefused=" + obbRefusedCount
                 + " obbOverflow=" + obbOverflowCount
-                + " obbBake=" + (obbPathActive ? "obb" : "mirror")
                 + " doubleBake=" + doubleBakeCheckedCount + "/" + doubleBakeMismatchCount;
             if (lastRefusalCode != RefusalNone)
             {
@@ -355,12 +307,11 @@ namespace VRCKatamari.Story
         /// Docs/Design/BallMotor/PHYSICS_TEST_FIELD.md §3.3).
         /// </summary>
         /// <remarks>
-        /// Clear-then-register is the only correct order: AddPlane/AddBox are additive, so a
+        /// Clear-then-register is the only correct order: AddPlane/AddObb are additive, so a
         /// second pass without the clear would overflow the fixed capacities. ClearObstacles
-        /// also drops the dynamic blocking set by its own documented semantics; the pickup
-        /// host re-registers that on its next scan, and the field resets its props right
-        /// after. This component still never calls SetBlockingBoxes. The round is not
-        /// re-opened, and the kind whitelist is re-sent (it is idempotent).
+        /// also drops the motor's prop solids; the pickup host re-registers them on its next
+        /// scan, and the field resets its props right after. The round is not re-opened, and
+        /// the kind whitelist is re-sent (it is idempotent).
         /// </remarks>
         public void Reapply()
         {
@@ -440,16 +391,6 @@ namespace VRCKatamari.Story
             return setupReport;
         }
 
-        /// <summary>
-        /// True when this setup registered true OBBs through <c>AddObb</c> (v2 motor + the
-        /// serialized <c>useObbBake</c>). False means the motor's own mirror of
-        /// <c>AddBox</c>/<c>AddRamp</c> is what populated its v2 table.
-        /// </summary>
-        public bool IsObbBakeActive()
-        {
-            return obbPathActive;
-        }
-
         /// <summary>Static OBBs the motor accepted this setup (0 outside the v2 OBB path).</summary>
         public int GetRegisteredObbCount()
         {
@@ -476,8 +417,7 @@ namespace VRCKatamari.Story
 
         /// <summary>
         /// The last refusal code of this setup (0 = none): 1 shear, 2 degenerate, 3 OBB
-        /// capacity, 4 OBB refused, 5 ramp bake, 6 ramp refused, 7 listed twice, 8 double-bake
-        /// mismatch.
+        /// capacity, 4 OBB refused, 7 listed twice, 8 double-bake mismatch.
         /// </summary>
         public int GetLastRefusalCode()
         {
@@ -503,72 +443,12 @@ namespace VRCKatamari.Story
             return doubleBakeMismatchCount;
         }
 
-        /// <summary>
-        /// Bakes one ramp collider through <see cref="SupportSurfaceMath.TryBakeRamp"/>
-        /// and registers it with the motor.
-        /// </summary>
-        /// <remarks>
-        /// This is the ONLY place the component reads a collider's centre, size and
-        /// rotation, and it does so once. The world size uses the transform's lossy scale
-        /// because the importer scales a unit cube: the collider's local size is one and
-        /// the authored size is the scale. The world centre is
-        /// <c>position + rotation * scale * collider.center</c> (the importer sets the
-        /// collider centre to zero, and this form avoids a TransformPoint extern).
-        /// The slope guard passed in is the motor's serialized value, so the host and the
-        /// motor cannot disagree about what is too steep.
-        /// </remarks>
-        private bool RegisterRamp(BoxCollider box)
-        {
-            // v2: the slab is the collider's own eight-corner OBB, registered with the ramp
-            // surface id. The v1 slope guard is NOT applied here (design §1.5: v2 classifies
-            // a normal continuously, and a curved ramp's last segment is nearly vertical).
-            if (obbPathActive) return RegisterRampObb(box);
-
-            Transform owner = box.transform;
-            Vector3 normal = owner.rotation * new Vector3(0f, 1f, 0f);
-            Vector3 right = owner.rotation * new Vector3(1f, 0f, 0f);
-            Vector3 scale = owner.lossyScale;
-            Vector3 localCenter = box.center;
-            Vector3 localSize = box.size;
-            Vector3 boxCenter = owner.position + owner.rotation * new Vector3(
-                localCenter.x * scale.x, localCenter.y * scale.y, localCenter.z * scale.z);
-            Vector3 worldSize = new Vector3(Mathf.Abs(scale.x) * localSize.x,
-                Mathf.Abs(scale.y) * localSize.y, Mathf.Abs(scale.z) * localSize.z);
-
-            Vector3 walkingCenter;
-            Vector3 rampNormal;
-            Vector3 rampRight;
-            float halfWidth;
-            float halfRun;
-            float slopeDegrees;
-            int refusalCode;
-            if (!SupportSurfaceMath.TryBakeRamp(boxCenter, normal, right, worldSize,
-                motor.GetMaxSupportSlopeDegrees(), out walkingCenter, out rampNormal,
-                out rampRight, out halfWidth, out halfRun, out slopeDegrees, out refusalCode))
-            {
-                lastRampRefusal = box.gameObject.name + ": "
-                    + SupportSurfaceMath.RampRefusalReason(refusalCode)
-                    + " (slope " + slopeDegrees + " deg)";
-                NoteRefusal(RefusalRampBake, box.gameObject.name + ": "
-                    + SupportSurfaceMath.RampRefusalReason(refusalCode));
-                return false;
-            }
-            if (!motor.AddRamp(walkingCenter, rampNormal, rampRight, halfWidth, halfRun))
-            {
-                lastRampRefusal = box.gameObject.name + ": " + motor.GetLastRampRefusalReason();
-                NoteRefusal(RefusalRampRefused, box.gameObject.name + ": "
-                    + motor.GetLastRampRefusalReason());
-                return false;
-            }
-            return true;
-        }
-
         // ------------------------------------------------------------------
-        // Contact v2 static OBB bake (design §1.4/§1.5/§5.7/§7.4).
+        // Static OBB bake (design §1.4/§1.5/§5.7/§7.4).
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Registers one static box as a true OBB under the v1 box surface id (<c>1 + i</c>).
+        /// Registers one static box as a true OBB under box surface id <c>1 + i</c>.
         /// </summary>
         private bool RegisterBoxObb(BoxCollider box)
         {
@@ -588,15 +468,15 @@ namespace VRCKatamari.Story
                 NoteRefusal(refusalCode, box.gameObject.name + " " + DescribeBake(refusalCode));
             }
             if (!usable) return false;
-            // The surface id is the v1 support-table id of the same box (boxCount order),
-            // so a diagnostic that prints an id still names the same geometry in both models.
+            // The surface id is 1 + the box's registration order, so a diagnostic that
+            // prints an id still names the same geometry.
             return AddSolidObb(center, axisX, axisY, axisZ, halfExtents,
                 1 + registeredBoxCount, ContactCodes.RoleBox, box.gameObject.name);
         }
 
         /// <summary>
-        /// Registers one ramp (or one curved-ramp slab segment) as a solid slab OBB under the
-        /// v1 ramp surface id (<c>SupportSurfaceMath.FirstRampSurfaceId + i</c>).
+        /// Registers one ramp (or one curved-ramp slab segment) as a solid slab OBB under
+        /// ramp surface id <c>SupportSurfaceMath.FirstRampSurfaceId + i</c>.
         /// </summary>
         /// <remarks>
         /// The collider IS the board: its local +Y is the walking-face normal and its top
@@ -687,8 +567,7 @@ namespace VRCKatamari.Story
                 bounds.extents, DoubleBakeTolerance(center, halfExtents))) return true;
 
             // §7.4: for axis-aligned geometry the two bakes must agree. A disagreement is a
-            // defect in one of them, so it is an error, logged once, and the AABB wins (it is
-            // the shape the v1 scenes were validated against).
+            // defect in one of them, so it is an error, logged once, and the AABB wins.
             doubleBakeMismatchCount = doubleBakeMismatchCount + 1;
             refusalCode = RefusalDoubleBake;
             if (!loggedDoubleBakeError)
@@ -823,9 +702,7 @@ namespace VRCKatamari.Story
         /// <summary>The §1.4 fallback: a world-axis box from the collider's bounds.</summary>
         /// <remarks>
         /// The centre and size travel as two Vector3s rather than a <c>Bounds</c>: the
-        /// fallback is also the bake that a v1 scene already validated, and every value it
-        /// reads is the plain <c>Collider.bounds</c> pair the old code passed to
-        /// <c>AddBox</c>, so the two cannot drift.
+        /// fallback reads only the plain <c>Collider.bounds</c> pair.
         /// </remarks>
         private bool TryBakeBoundsFallback(Vector3 boundsCenter, Vector3 boundsSize,
             out Vector3 center, out Vector3 axisX, out Vector3 axisY, out Vector3 axisZ,

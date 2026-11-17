@@ -238,6 +238,29 @@ class SeamTests(unittest.TestCase):
         self.assertAlmostEqual(state.v_planar[2], 4.0, delta=0.05)
 
 
+class DownhillSupportTests(unittest.TestCase):
+    def test_a_ball_rolling_downhill_follows_the_slope_instead_of_hopping(self):
+        angle = math.radians(10.0)
+        normal = (math.sin(angle), math.cos(angle), 0.0)
+        axis_x = (math.cos(angle), -math.sin(angle), 0.0)
+        origin = (0.0, 5.0, 0.0)
+        centre = (origin[0] - normal[0] * 0.2, origin[1] - normal[1] * 0.2,
+                  origin[2] - normal[2] * 0.2)
+        slab = Obb(centre, axis_x, normal, (0.0, 0.0, 1.0), (10.0, 0.2, 10.0), 1, ROLE_SLAB)
+        world = World(obbs=[slab], ground=Plane((0.0, 1.0, 0.0), 0.0))
+        radius = 0.15
+        state = State(center=(origin[0] + normal[0] * radius, origin[1] + normal[1] * radius,
+                              origin[2] + normal[2] * radius),
+                      radius=radius, v_planar=(1.0, 0.0, 0.0))
+        for _ in range(50):
+            step(world, state, (0.0, 0.0, 1.0), 0.0, 0.02)
+            offset = (state.center[0] - origin[0], state.center[1] - origin[1],
+                      state.center[2] - origin[2])
+            height = sum(offset[i] * normal[i] for i in range(3))
+            self.assertLessEqual(height, radius + 0.006)
+        self.assertGreater(state.center[0], 0.5)
+
+
 class ClimbTests(unittest.TestCase):
     def test_height_cap_is_fifteen_diameters_and_adds_protrusion(self):
         # k_h = 1.5 (OUR PROVISIONAL value; no original-game cap is published - see

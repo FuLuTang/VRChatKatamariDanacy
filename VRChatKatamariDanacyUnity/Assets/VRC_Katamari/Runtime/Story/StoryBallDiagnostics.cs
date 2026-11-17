@@ -143,7 +143,7 @@ namespace VRCKatamari.Story
                 + " d_vis=" + (Mathf.Floor(visualDiameter * 10000f) / 10000f)
                 + " bottom=" + (Mathf.Floor(bottom * 1000f) / 1000f)
                 // An unsupported frame keeps the PREVIOUS support pair (the motor's
-                // documented v1 behaviour), so its height and gap would describe another
+                // documented behaviour), so its height and gap would describe another
                 // frame: print na instead of a number nobody can act on.
                 + " gap=" + (gapMeaningful
                     ? (Mathf.Floor(gap * 1000f) / 1000f).ToString() : "na")
@@ -159,21 +159,18 @@ namespace VRCKatamari.Story
                 + " rejects=" + motor.GetRejectEventCount()
                 // Terrain cost, on ONE line so micros/full-eval can be computed by eye:
                 // tq is the LAST step, steps is how many steps the frame ran, so the frame's
-                // terrain cost is tq * steps. tqSup/tqPen split the ring from the T1
-                // push-out; triTests is every triangle the chunk filter let through and
+                // terrain cost is tq * steps. tqSup is the support ring; triTests is every triangle the chunk filter let through and
                 // fullEvals the ones that paid the cross/plane/barycentric work.
                 + " terrain=" + motor.GetTerrainMeshTriangleCount() + "/"
                 + motor.GetTerrainMeshChunkCount()
                 + " grid=" + motor.GetTerrainGridCellCount()
                 + " overs=" + motor.GetTerrainOversizedTriangles()
                 // Candidate counts are PER QUERY, PER LAST STEP (not frame-accumulated):
-                // cands = support, candsPen = T1 push-out, candsContact = v2 sweep window.
+                // cands = support, candsContact = the contact sweep window.
                 + " cands=" + motor.GetTerrainCandidates()
-                + " candsPen=" + motor.GetTerrainPenetrationCandidates()
                 + " candsContact=" + motor.GetTerrainContactCandidates()
                 + " tq=" + (Mathf.Floor(motor.GetLastTerrainQueryMicros() * 10f) / 10f)
                 + " tqSup=" + (Mathf.Floor(motor.GetLastTerrainSupportMicros() * 10f) / 10f)
-                + " tqPen=" + (Mathf.Floor(motor.GetLastTerrainPenetrationMicros() * 10f) / 10f)
                 + " triTests=" + motor.GetTerrainTrianglesTested()
                 + " fullEvals=" + motor.GetTerrainFullEvals()
                 + " steps=" + motor.GetStepsThisFrame());

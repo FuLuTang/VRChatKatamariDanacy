@@ -31,8 +31,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
     /// </para>
     /// <para>
     /// <b>Cells that cannot be measured are not failures.</b> A P2 check with no
-    /// <see cref="PickupFieldHost"/> wired or with the host's prop obstacles switched off (the
-    /// only caller of <c>SetSupportProps</c>), a check whose readout is a console trace a human
+    /// <see cref="PickupFieldHost"/> wired or with the host's prop obstacles switched off, a check whose readout is a console trace a human
     /// reads (<c>readout=trace</c>), and a check that needs the P4 step counters all report
     /// <c>BLOCKED_UNTIL_*</c> and are counted as skipped. P3 is in the tree, so a P3 check is
     /// measured, not skipped. Only a measured check can be <c>UNEXPECTED_*</c>.
@@ -78,6 +77,14 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private bool logTrajectory = true;
         [SerializeField] private float trajectoryIntervalSeconds = 0.5f;
 
+        [Header("Walk-around (a person drives the ball; no scripted run)")]
+        [Tooltip("When on and no scripted run is active, the cell whose pad the ball is on becomes " +
+                 "the registered arena (one at a time, because the motor's tables are global). The " +
+                 "ball is not moved. Off = only the first cell registers until a run starts.")]
+        [SerializeField] private bool walkAroundActivation = false;
+        [Tooltip("A pad must hold the ball this long before its arena registers, seconds.")]
+        [SerializeField] private float walkAroundDebounceSeconds = 0.25f;
+
         // A converged setter must also have actually resized the ball. A constant, not a serialized
         // field: a field added to an already-serialized UdonBehaviour reads 0 until the criteria are
         // re-imported, and a zero tolerance would block every run instead of guarding one.
@@ -86,9 +93,11 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // Stamped into the first log line so "which U# program is running" is checkable. The
         // 2026-11-15 matrix ran a pre-P3 driver against post-P3 data and nobody could tell from
         // the log; the build line and the reason= vocabulary make that impossible to repeat.
-        // 2026-11-15e: the criteria became model-aware (v2 override rows, design section 5.6) and
-        // every [ptf] header line now names the model the run actually used.
-        private const string DriverRevision = "2026-11-15e";
+        // 2026-11-17a: record-only criteria (op "record"), the climb / slope readings, the
+        // per-diameter run mask and the walk-around activation.
+        private const string DriverRevision = "2026-11-17a";
+        // Op code of a diagnostic: the value is logged, never judged (the cell's op array).
+        private const int OpRecord = 5;
 
         // Contact v2 thresholds (CONTACT_MODEL_V2 6.1/6.3/7.7.2). The slow-climb cap is
         // H_cap = ContactTuning.KHeight * (2r + lambda * L_eff); a cell of this field carries no
@@ -96,6 +105,14 @@ namespace VRCKatamari.Labs.PhysicsTestField
         // adds the design's 2% float-fade allowance and ContactTuning's cap_margin (the band below
         // H_cap where a climb counts as done), so no per-diameter threshold is typed into the data.
         private const float V2CapFloatMargin = 1.02f;
+
+        // The slope rule's own numbers, mirrored from the motor's serialized defaults
+        // (rampRestSpeedMps = 0.05 m/s at the start diameter). The slide mark is a threshold on
+        // the downhill speed, not a motor state: the motor exposes no "sliding" getter.
+        private const float RestSpeedMps = 0.05f;
+        private const float SlideSpeedMps = 0.1f;
+        // The window before the release over which the accepted centre speed is averaged.
+        private const float PushTailSeconds = 2f;
 
         // Symbolic threshold codes, shared with the criteria importer (checkV2Thresholds).
         private const int ThresholdLimit = 0;
@@ -119,9 +136,6 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private float runSeconds;
         private float driveEndSeconds;
         private float nextTrajectoryTime;
-        // The model this RUN is judged under, read once in Switch from the motor. Cached because
-        // EvaluateChecks asks per check and the flag is the motor's (it may be toggled in Play).
-        private bool modelIsV2;
 
         // Why a metric could not be read. 0 is "read it"; every other code names a REAL metric
         // this run cannot answer, and only MetricUnknown means the NAME is wrong. The driver
@@ -150,9 +164,9 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private Vector3 startCenterWorld;
         private float runHeadingDegrees;
         private float baseOverflow;
-        private bool baseSaturated;
         private int baseAbsorbed;
         private int baseAttached;
+        private int baseRecovery;
         private int maxBlocking;
         private float maxLiftOverNominal;
         private bool hasLiftSample;
@@ -185,11 +199,46 @@ namespace VRCKatamari.Labs.PhysicsTestField
         private int rampProbeReasonLength;
         private float rampProbeSlopeDegrees;
 
+        // Climb and slope readings (record-only criteria of the wall + ceiling cell and the
+        // gentle-slope cells). The drive plan names the marks: the release is the first row that
+        // lets go after a push, the reverse is the first row that pulls back.
+        private float releaseSeconds;
+        private float reverseSeconds;
+        private bool hasReleaseMark;
+        private float releaseCenterY;
+        private int climbActiveAtRelease;
+        private int capLockAtRelease;
+        private bool hasReverseMark;
+        private float reverseStartCenterY;
+        private float reverseStartProgress;
+        private float climbActiveSeconds;
+        private float climbLockSeconds;
+        private float maxClimbHeightM;
+        private float pushTailPath;
+        private float pushTailTime;
+        private Vector3 previousCenter;
+        private float lastLateralIntent;
+        private bool everPushed;
+        private float flatDriftMax;
+        private bool hasRestMark;
+        private float restMarkSeconds;
+        private bool hasSlideMark;
+        private float slideMarkSeconds;
+        private float peakDownhillSpeed;
+        private float pushSpeedOnSlope;
+        private float pushSpeedOnFlat;
+
+        // Walk-around activation state.
+        private int walkActiveIndex = -1;
+        private int walkCandidateIndex = -1;
+        private float walkCandidateSeconds;
+
         // ---- per-run result ----------------------------------------------------
 
         private int checkPass;
         private int checkUnexpected;
         private int checkSkipped;
+        private int checkDiagnostic;
         private string lastSummaryLine = "";
 
         // ---- public API --------------------------------------------------------
@@ -198,14 +247,10 @@ namespace VRCKatamari.Labs.PhysicsTestField
         {
             // Nothing here touches the motor's STATE: its Start may not have run yet, and its stores
             // are allocated there. The first Update waits for a positive diameter instead of racing.
-            // The only two reads below are safe before that: IsContactModelV2() returns a serialized
-            // bool (set at deserialization) and the cell's revision is a compile-time constant.
+            // The one read below is safe before that: the cell's revision is a compile-time constant.
             int cellCount = cells == null ? 0 : cells.Length;
-            // model= is the first thing a log reader needs from now on: the same 36-run matrix is
-            // meaningful for v1 and v2, and the two have different expected rows (design 5.6).
             Debug.Log("[ptf] build=" + DriverRevision + " cells=" + cellCount.ToString()
                 + " presets=" + (presetDiametersM == null ? 0 : presetDiametersM.Length).ToString()
-                + " model=" + ModelText()
                 + " cellRev=" + CellRevisionText()
                 + " v2Rows=" + V2RowsText());
             if (cells != null)
@@ -244,7 +289,12 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return;
             }
 
-            if (state == StateIdle) return;
+            if (state == StateIdle)
+            {
+                if (walkAroundActivation) TickWalkAround();
+                return;
+            }
+
             if (motor == null) return;
 
             switch (state)
@@ -467,6 +517,65 @@ namespace VRCKatamari.Labs.PhysicsTestField
             stateClock = 0f;
         }
 
+        /// <summary>
+        /// Walk-around mode: registers the arena of the pad the ball stands on, so a person can
+        /// roll from cell to cell. The motor's obstacle tables are global, so exactly one arena
+        /// registers; switching is debounced so a ball clipping a pad corner does not thrash the
+        /// tables, and the ball is never moved (the new arena appears under it).
+        /// </summary>
+        private void TickWalkAround()
+        {
+            if (motor == null || cells == null) return;
+            if (motor.GetSemanticDiameterWorldM() <= 0f) return;
+
+            Vector3 center = motor.GetCenterWorld();
+            int found = -1;
+            for (int i = 0; i < cells.Length; i++)
+            {
+                if (cells[i] == null) continue;
+                if (cells[i].ContainsPoint(center.x, center.z, 0f))
+                {
+                    found = i;
+                    break;
+                }
+            }
+
+            if (found < 0 || found == walkActiveIndex)
+            {
+                walkCandidateIndex = -1;
+                walkCandidateSeconds = 0f;
+                return;
+            }
+
+            if (found != walkCandidateIndex)
+            {
+                walkCandidateIndex = found;
+                walkCandidateSeconds = 0f;
+                return;
+            }
+
+            walkCandidateSeconds = walkCandidateSeconds + Time.deltaTime;
+            if (walkCandidateSeconds < walkAroundDebounceSeconds) return;
+
+            for (int i = 0; i < cells.Length; i++)
+            {
+                if (cells[i] == null) continue;
+                if (i == found) continue;
+                cells[i].ReleaseArena();
+            }
+
+            cells[found].ApplyRegistration();
+            if (kindWhitelist != null)
+            {
+                motor.SetAllowedKinds(kindWhitelist, kindWhitelist.Length);
+            }
+
+            walkActiveIndex = found;
+            walkCandidateIndex = -1;
+            walkCandidateSeconds = 0f;
+            Log("[ptf] walkAround cell=" + cells[found].GetCellId() + " registered");
+        }
+
         private void TickSwitch()
         {
             PhysicsTestCell cell = cells[cellIndex];
@@ -476,25 +585,32 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return;
             }
 
-            // The model this run is judged under. Read once per run: the flag belongs to the motor
-            // and can be toggled in Play, and every row of one run must describe one model.
-            modelIsV2 = motor.IsContactModelV2();
+            // A cell that declares it cannot host the ball at this diameter (a ceiling lower than
+            // the ball) is not driven: the ball would start inside the slab and every reading would
+            // describe the penetration push, not the cell.
+            if (!cell.RunsAtDiameter(diameterIndex))
+            {
+                Log("[ptf] skipped run=" + runIndex + " cell=" + cell.GetCellId()
+                    + " D=" + Fixed(presetDiametersM[diameterIndex], 3)
+                    + " reason=cell_does_not_run_at_this_diameter verdict=SKIPPED_NOT_RUN");
+                FinishRun();
+                return;
+            }
 
-            // A v2 verdict needs the cells' v2 override rows, and those are DATA the importer bakes
-            // into the scene (build 2026-11-15e), not a driver rule. A cell baked before that has no
-            // tables, so HasCheckV2() answers false for every check and the run silently judges all
-            // 11 override rows as their v1 rows - the 2026-11-16 O3a regression, where a working
-            // ball produced 31 "unexpected" verdicts (ramp_registered read ramp_count 0, which is
-            // the v2 model's CORRECT ramp count). Refuse to publish a matrix that was judged under
-            // rows the model does not use: this is a setup error, and it is loud.
-            if (modelIsV2 && cell.GetCheckCount() > 0 && cell.GetCheckV2RowCount() < 0)
+            // The override rows are DATA the importer bakes into the scene, not a driver rule. A
+            // cell baked before the tables existed has none, so HasCheckV2() answers false for
+            // every check and the run silently judges every override row as its base row - the
+            // 2026-11-16 O3a regression, where a working ball produced 31 "unexpected" verdicts.
+            // Refuse to publish a matrix that was judged under rows the field does not use: this
+            // is a setup error, and it is loud.
+            if (cell.GetCheckCount() > 0 && cell.GetCheckV2RowCount() < 0)
             {
                 Debug.LogError("[ptf] abort reason=staleCriteriaV2 cell=" + cell.GetCellId()
-                    + " model=v2 v2Rows=missing: this cell was baked before the criteria knew the "
-                    + "contact model, so every v2 override row would be judged as v1. Re-import the "
+                    + " v2Rows=missing: this cell was baked before the criteria carried override "
+                    + "rows, so every override row would be judged as its base row. Re-import the "
                     + "criteria (VRC Katamari/Physics Test Field/Import Criteria) and SAVE the "
-                    + "scene, then rerun; the import must print v2Rows=11 and this build line must "
-                    + "repeat it.");
+                    + "scene, then rerun; the import must print the override-row count and this "
+                    + "build line must repeat it.");
                 autoAdvance = false;
                 passActive = false;
                 state = StateIdle;
@@ -515,6 +631,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
             }
 
             cell.ApplyRegistration();
+            walkActiveIndex = cellIndex;
 
             if (kindWhitelist != null)
             {
@@ -548,8 +665,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
             // Baselines are read AFTER the switch and BEFORE anything else moves: the overflow
             // latch and the contact-saturation flag are permanent, so only a delta is meaningful.
             baseOverflow = motor.GetOverflowCount();
-            baseSaturated = motor.WasContactBufferSaturated();
             baseAbsorbed = motor.GetAbsorbedCount();
+            baseRecovery = motor.GetRecoveryCount();
             baseAttached = 0;
             if (pickupHost != null) baseAttached = pickupHost.GetAttachedCount();
 
@@ -590,12 +707,13 @@ namespace VRCKatamari.Labs.PhysicsTestField
             driveEndSeconds = cell.GetDriveEndSeconds();
             runSeconds = driveEndSeconds + cell.GetStopSeconds();
             if (runSeconds < 0.5f) runSeconds = 0.5f;
+            ComputeDriveMarks(cell);
+            previousCenter = startCenterWorld;
 
             Log(
                 "[ptf] run=" + runIndex
                 + " cell=" + cell.GetCellId()
                 + " D=" + Fixed(presetDiametersM[diameterIndex], 3)
-                + " model=" + ModelText()
                 + " start=(" + Fixed(startCenterWorld.x, 3) + "," + Fixed(startCenterWorld.y, 3)
                 + "," + Fixed(startCenterWorld.z, 3) + ")"
                 + " hdg=" + Fixed(heading, 1)
@@ -835,11 +953,14 @@ namespace VRCKatamari.Labs.PhysicsTestField
             if (!found)
             {
                 lastForwardIntent = 0f;
+                lastLateralIntent = 0f;
                 motor.SetMoveAxes(0f, 0f, 0f);
                 return;
             }
 
             lastForwardIntent = forward;
+            lastLateralIntent = lateral;
+            if (forward != 0f || lateral != 0f) everPushed = true;
             motor.SetMoveAxes(forward, turn, lateral);
         }
 
@@ -892,6 +1013,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 int blocking = pickupHost.GetBlockingPropCount();
                 if (blocking > maxBlocking) maxBlocking = blocking;
             }
+
+            SampleDiagnostics(cell, center, radius, speed, velocity);
 
             bool falling = motor.IsFalling();
             if (hasPrevCenter)
@@ -960,6 +1083,128 @@ namespace VRCKatamari.Labs.PhysicsTestField
             }
         }
 
+        /// <summary>
+        /// The drive plan's two marks: the first row that lets go after a push (the release) and
+        /// the first row that pulls back after it (the reverse). -1 = the plan has none.
+        /// </summary>
+        private void ComputeDriveMarks(PhysicsTestCell cell)
+        {
+            releaseSeconds = -1f;
+            reverseSeconds = -1f;
+            bool pushed = false;
+            int count = cell.GetDriveCount();
+            for (int i = 0; i < count; i++)
+            {
+                float forward = cell.GetDriveForward(i);
+                float lateral = cell.GetDriveLateral(i);
+                float t = cell.GetDriveTime(i);
+                if (forward != 0f || lateral != 0f)
+                {
+                    pushed = true;
+                    if (forward < 0f && releaseSeconds >= 0f && reverseSeconds < 0f)
+                    {
+                        reverseSeconds = t;
+                    }
+
+                    continue;
+                }
+
+                if (pushed && releaseSeconds < 0f) releaseSeconds = t;
+            }
+        }
+
+        /// <summary>
+        /// Readings that only the record-only criteria use: the climb channel (is it active, is
+        /// the cap lock set, how high did it get, how fast did the accepted centre actually move),
+        /// what happened after the release and the reverse, and the slope rule (flat drift, rest,
+        /// then slide, and the speed while pushing on a slope against the same push on the flat).
+        /// </summary>
+        private void SampleDiagnostics(PhysicsTestCell cell, Vector3 center, float radius,
+            float speed, Vector3 velocity)
+        {
+            float frameDt = Time.deltaTime;
+            bool pushing = lastForwardIntent != 0f || lastLateralIntent != 0f;
+
+            if (motor.IsClimbing()) climbActiveSeconds = climbActiveSeconds + frameDt;
+            if (motor.IsClimbLocked()) climbLockSeconds = climbLockSeconds + frameDt;
+            float climbHeight = motor.GetClimbHeightWorldM();
+            if (climbHeight > maxClimbHeightM) maxClimbHeightM = climbHeight;
+
+            // Accepted centre movement per frame: the planar velocity says what the ball WANTS,
+            // this says what the contact solver let it do (a wall climb has zero planar speed).
+            float moved = (center - previousCenter).magnitude;
+            previousCenter = center;
+            if (pushing && releaseSeconds >= 0f && driveClock < releaseSeconds
+                && driveClock >= releaseSeconds - PushTailSeconds)
+            {
+                pushTailPath = pushTailPath + moved;
+                pushTailTime = pushTailTime + frameDt;
+            }
+
+            if (releaseSeconds >= 0f && !hasReleaseMark && driveClock >= releaseSeconds)
+            {
+                hasReleaseMark = true;
+                releaseCenterY = center.y;
+                climbActiveAtRelease = motor.IsClimbing() ? 1 : 0;
+                capLockAtRelease = motor.IsClimbLocked() ? 1 : 0;
+            }
+
+            if (reverseSeconds >= 0f && !hasReverseMark && driveClock >= reverseSeconds)
+            {
+                hasReverseMark = true;
+                reverseStartCenterY = center.y;
+                reverseStartProgress = ProgressMeters();
+            }
+
+            // Slope rule. "On a slope" is the support normal's tilt; the downhill direction is
+            // its horizontal part (a tilted normal leans downhill).
+            Vector3 normal = motor.GetSupportNormalWorld();
+            float normalXZ = Mathf.Sqrt(normal.x * normal.x + normal.z * normal.z);
+            bool onSlope = normalXZ > 0.01f && normal.y > 0.5f;
+            float sizeScale = presetDiametersM[0] > 0f
+                ? motor.GetSemanticDiameterWorldM() / presetDiametersM[0] : 1f;
+
+            if (!everPushed)
+            {
+                float dx = center.x - startCenterWorld.x;
+                float dz = center.z - startCenterWorld.z;
+                float drift = Mathf.Sqrt(dx * dx + dz * dz);
+                if (drift > flatDriftMax) flatDriftMax = drift;
+            }
+
+            if (pushing)
+            {
+                if (onSlope)
+                {
+                    if (speed > pushSpeedOnSlope) pushSpeedOnSlope = speed;
+                }
+                else if (speed > pushSpeedOnFlat)
+                {
+                    pushSpeedOnFlat = speed;
+                }
+            }
+
+            if (hasReleaseMark && !pushing)
+            {
+                if (!hasRestMark && speed < RestSpeedMps * sizeScale)
+                {
+                    hasRestMark = true;
+                    restMarkSeconds = driveClock;
+                }
+
+                if (hasRestMark && onSlope)
+                {
+                    float downhill = (velocity.x * normal.x + velocity.z * normal.z) / normalXZ;
+                    if (downhill > peakDownhillSpeed) peakDownhillSpeed = downhill;
+                    if (!hasSlideMark && downhill > SlideSpeedMps * sizeScale)
+                    {
+                        hasSlideMark = true;
+                        slideMarkSeconds = driveClock;
+                    }
+                }
+            }
+        }
+
         private void FollowBall()
         {
             if (chaseCamera == null) return;
@@ -974,6 +1219,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
             checkPass = 0;
             checkUnexpected = 0;
             checkSkipped = 0;
+            checkDiagnostic = 0;
             string notApplicableList = "";
 
             int total = cell.GetCheckCount();
@@ -988,13 +1234,12 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 int expect = cell.GetCheckExpect(i, diameterIndex);
                 int threshold = ThresholdLimit;
 
-                // Model-aware rows (design section 5.6). When the motor runs the v2 contact solver
-                // and this criterion carries a v2 override, judge the override; otherwise the v1 row
-                // is the criterion, for BOTH models. The override is data, not a second rule: it may
-                // replace the metric, the op with its own limit, or name a threshold the driver
-                // derives, plus the per-diameter expectation. It is judged exactly as written - the
-                // two v1 derivations below never touch a v2 row.
-                bool v2Row = modelIsV2 && cell.HasCheckV2(i);
+                // Override rows (design section 5.6). When this criterion carries an override,
+                // judge the override; otherwise the base row is the criterion. The override is
+                // data, not a second rule: it may replace the metric, the op with its own limit, or
+                // name a threshold the driver derives, plus the per-diameter expectation. It is
+                // judged exactly as written - the two base-row derivations below never touch it.
+                bool v2Row = cell.HasCheckV2(i);
                 if (v2Row)
                 {
                     string v2Metric = cell.GetCheckV2Metric(i);
@@ -1010,27 +1255,6 @@ namespace VRCKatamari.Labs.PhysicsTestField
                     int v2Expect = cell.GetCheckV2Expect(i, diameterIndex);
                     if (v2Expect >= 0) expect = v2Expect;
                     threshold = cell.GetCheckV2Threshold(i);
-                }
-
-                // A deck check asks "did the ball get onto the deck"; whether it SHOULD is the
-                // runtime step limit, not the preset label. The presets are quantized (the
-                // 0.30 preset is 0.2997369 m, so its limit is 0.074934 m) and C09's deck is
-                // 0.075 m: a baked "pass" would demand a climb the step rule forbids (design
-                // section 8.3.1). Only the deck metric is derived here; every other check
-                // keeps its baked row, so no other criterion's meaning moves. A v2 row states its
-                // own answer (design 5.6), so this v1 rule does not apply to one.
-                if (!v2Row && Same(metric, "deck_gap_m") && !cell.IsRampClimb())
-                {
-                    float deckRise = cell.GetNominalM();
-                    float runStepLimit = motor.GetStepHeightLimitWorldM();
-                    if (deckRise > 0f && runStepLimit >= 0f)
-                    {
-                        expect = deckRise <= runStepLimit ? 1 : 2;
-                        Log("[ptf] derived cell=" + cell.GetCellId() + " check=" + checkId
-                            + " deck_rise=" + Fixed(deckRise, 4)
-                            + " step_limit=" + Fixed(runStepLimit, 6)
-                            + " expect=" + ExpectText(expect));
-                    }
                 }
 
                 // The ramp-entry threshold is one STEP-LIMIT of travel, not an absolute 0.30 m
@@ -1059,8 +1283,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
                     Log("[ptf] derived cell=" + cell.GetCellId() + " check=" + checkId
                         + " metric=" + metric
                         + " h_cap=" + Fixed(ClimbCapM(), 4)
-                        + " cap_bound=" + Fixed(limit, 4)
-                        + " model=v2");
+                        + " cap_bound=" + Fixed(limit, 4));
                 }
 
                 string expectText = ExpectText(expect);
@@ -1077,16 +1300,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
                     continue;
                 }
 
-                if (gateStage == 1 && !motor.IsTerrainSupportEnabled())
-                {
-                    LogSkipped(checkId, metric, op, limit, expectText, "BLOCKED_UNTIL_P1");
-                    checkSkipped = checkSkipped + 1;
-                    continue;
-                }
-
-                // P2 is in the motor, but prop tops only reach it through SetSupportProps, and
-                // PickupFieldHost is the only caller. Without a host - or with its prop
-                // obstacles switched off (it clears both sets) - the P2 readings (what supports
+                // Prop solids only reach the motor through PickupFieldHost. Without a host - or
+                // with its prop obstacles switched off (it clears the set) - the P2 readings (what supports
                 // the ball, how many prop tops are registered) can never leave their defaults,
                 // so a gate=P2 check is unmeasurable rather than failed.
                 if (gateStage == 2 && (pickupHost == null || !pickupHost.IsBlockingEnabled()))
@@ -1114,6 +1329,29 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 {
                     LogSkipped(checkId, metric, op, limit, expectText, "BLOCKED_UNTIL_P4");
                     checkSkipped = checkSkipped + 1;
+                    continue;
+                }
+
+                if (op == OpRecord)
+                {
+                    // A diagnostic: read it, print it, never judge it. It is neither a pass nor
+                    // an unexpected result, and it does not count as skipped either.
+                    float recorded = 0f;
+                    int recordStatus = TryReadMetric(metric, out recorded);
+                    if (recordStatus != MetricOk)
+                    {
+                        Debug.Log("[ptf] check=" + checkId + " metric=" + metric
+                            + " value=n/a op=record raw=NOT_READ verdict=DIAGNOSTIC reason="
+                            + MetricReason(recordStatus));
+                    }
+                    else
+                    {
+                        Debug.Log("[ptf] check=" + checkId + " metric=" + metric
+                            + " value=" + Signed(recorded, 4)
+                            + " op=record raw=RECORDED verdict=DIAGNOSTIC");
+                    }
+
+                    checkDiagnostic = checkDiagnostic + 1;
                     continue;
                 }
 
@@ -1183,7 +1421,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 + " pass=" + checkPass.ToString()
                 + " unexpected=" + checkUnexpected.ToString()
                 + " skipped=" + checkSkipped.ToString()
-                + " model=" + ModelText()
+                + " diag=" + checkDiagnostic.ToString()
                 + " verdict=" + verdictText
                 + " elapsed=" + Fixed(driveClock, 2) + "s";
             Debug.Log(lastSummaryLine);
@@ -1220,8 +1458,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
             if (Same(metric, "support_prop_count"))
             {
-                // Prop tops the motor actually holds (0..6), not the host's candidate count.
-                value = (float)motor.GetSupportPropCount();
+                // Support prop solids the host registered with the motor (0..12).
+                value = pickupHost == null ? 0f : (float)pickupHost.GetSupportPropCount();
                 return MetricOk;
             }
 
@@ -1304,13 +1542,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
             if (Same(metric, "saturated_delta"))
             {
-                bool now = motor.WasContactBufferSaturated();
-                if (now && !baseSaturated)
-                {
-                    value = 1f;
-                    return MetricOk;
-                }
-
+                // The contact solver has no fixed sweep buffer that could saturate.
                 value = 0f;
                 return MetricOk;
             }
@@ -1427,6 +1659,108 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 return MetricOk;
             }
 
+            // ---- climb readings (record-only criteria of the wall + ceiling cell) ----
+
+            if (Same(metric, "climb_active_at_release"))
+            {
+                value = (float)climbActiveAtRelease;
+                return hasReleaseMark ? MetricOk : MetricNoGateSample;
+            }
+
+            if (Same(metric, "cap_lock_at_release"))
+            {
+                value = (float)capLockAtRelease;
+                return hasReleaseMark ? MetricOk : MetricNoGateSample;
+            }
+
+            if (Same(metric, "climb_active_s"))
+            {
+                value = climbActiveSeconds;
+                return MetricOk;
+            }
+
+            if (Same(metric, "climb_lock_s"))
+            {
+                value = climbLockSeconds;
+                return MetricOk;
+            }
+
+            if (Same(metric, "climb_height_max_m"))
+            {
+                value = maxClimbHeightM;
+                return MetricOk;
+            }
+
+            if (Same(metric, "push_actual_speed_mps"))
+            {
+                if (pushTailTime <= 0f) return MetricNoGateSample;
+                value = pushTailPath / pushTailTime;
+                return MetricOk;
+            }
+
+            if (Same(metric, "released_descent_m"))
+            {
+                // Centre drop between the release and the start of the reverse pull (or the end of
+                // the run when the plan has no reverse): >0 = the ball came down by itself.
+                if (!hasReleaseMark) return MetricNoGateSample;
+                float after = hasReverseMark ? reverseStartCenterY : center.y;
+                value = releaseCenterY - after;
+                return MetricOk;
+            }
+
+            if (Same(metric, "reverse_retreat_m"))
+            {
+                // How far back along the heading the reverse pull took the ball: >0 = it left.
+                if (!hasReverseMark) return MetricNoGateSample;
+                value = reverseStartProgress - ProgressMeters();
+                return MetricOk;
+            }
+
+            if (Same(metric, "recovery_delta"))
+            {
+                // Soft or hard stuck recoveries since the run started (a latch, so a baseline
+                // difference): a climb that ends in a recovery was stuck, not merely slow.
+                value = (float)(motor.GetRecoveryCount() - baseRecovery);
+                return MetricOk;
+            }
+
+            if (Same(metric, "final_bottom_rise_m"))
+            {
+                value = center.y - radius;
+                return MetricOk;
+            }
+
+            // ---- slope readings ------------------------------------------------------
+
+            if (Same(metric, "flat_drift_m"))
+            {
+                value = flatDriftMax;
+                return MetricOk;
+            }
+
+            if (Same(metric, "slide_delay_s"))
+            {
+                // Rest start to the first downhill speed above SlideSpeedMps; 99 = it never slid.
+                if (!hasRestMark) return MetricNoGateSample;
+                value = hasSlideMark ? slideMarkSeconds - restMarkSeconds : 99f;
+                return MetricOk;
+            }
+
+            if (Same(metric, "slide_peak_speed_mps"))
+            {
+                value = peakDownhillSpeed;
+                return MetricOk;
+            }
+
+            if (Same(metric, "push_speed_ratio"))
+            {
+                // Speed while pushing on the slope over the same push on the flat: the downhill
+                // gravity must not act on a pushed ball, so the ratio stays near 1.
+                if (pushSpeedOnFlat <= 0.0001f || pushSpeedOnSlope <= 0f) return MetricNoGateSample;
+                value = pushSpeedOnSlope / pushSpeedOnFlat;
+                return MetricOk;
+            }
+
             // No branch matched: this is the NAME being wrong, not this run being unable to
             // answer. Every "cannot answer" branch above returned its own code.
             return MetricUnknown;
@@ -1476,6 +1810,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 case 2: return ">=";
                 case 3: return "==";
                 case 4: return "abs>=";
+                case 5: return "record";
                 default: return "?";
             }
         }
@@ -1531,8 +1866,6 @@ namespace VRCKatamari.Labs.PhysicsTestField
                 + " p=(" + Fixed(center.x, 2) + "," + Fixed(center.y, 2) + ","
                 + Fixed(center.z, 2) + ")"
                 + " sup=" + Fixed(motor.GetSupportSurfaceHeightWorldM(), 3)
-                + " lift=" + Fixed(motor.GetGroundProxyLiftWorldM(), 3)
-                + " cap=" + Fixed(motor.GetProxyProtrusionCapWorldM(), 4)
                 + " stuck=" + Fixed(motor.GetStuckSeconds(), 2));
         }
 
@@ -1542,7 +1875,6 @@ namespace VRCKatamari.Labs.PhysicsTestField
             float elapsed = Time.time - passStartTime;
             Debug.Log("[ptf] field cells=" + cells.Length.ToString()
                 + " runs=" + passRuns.ToString()
-                + " model=" + ModelText()
                 + " verdict=" + verdict
                 + " unexpected=" + passUnexpected.ToString()
                 + " skipped=" + passSkipped.ToString()
@@ -1559,8 +1891,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
             if (cell == null) return "none";
             LevelArenaHost arena = cell.GetArena();
             if (arena == null) return "none";
-            // obbs= is the v2 evidence the ramp cells now rest on (design 7.7.2): a v2 arena bakes
-            // its ramp into a static OBB, so the motor's ramp table is legitimately 0.
+            // obbs= is the evidence the ramp cells rest on (design 7.7.2): an arena bakes its ramp
+            // into a static OBB, so the motor's ramp table is legitimately 0.
             return "planes=" + arena.GetRegisteredPlaneCount().ToString()
                 + "/boxes=" + arena.GetRegisteredBoxCount().ToString()
                 + "/supports=" + arena.GetRegisteredSupportCount().ToString()
@@ -1570,18 +1902,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
         }
 
         /// <summary>
-        /// "v1" or "v2": the contact model this run is judged under, for every [ptf] header line.
-        /// </summary>
-        private string ModelText()
-        {
-            if (motor == null) return "none";
-            if (motor.IsContactModelV2()) return "v2";
-            return "v1";
-        }
-
-        /// <summary>
         /// The compiled test-field revision the scene's cells report, so a stale cell program is
-        /// visible in the first line ("" = a cell predates the v2 rows and would silently inherit
+        /// visible in the first line ("" = a cell predates the override rows and would silently inherit
         /// them as "no override").
         /// </summary>
         private string CellRevisionText()
@@ -1597,15 +1919,15 @@ namespace VRCKatamari.Labs.PhysicsTestField
         }
 
         /// <summary>
-        /// How many v2 override rows the SCENE's bake carries (sum over cells), or "missing" when a
-        /// cell has no v2 tables at all.
+        /// How many override rows the SCENE's bake carries (sum over cells), or "missing" when a
+        /// cell has no override tables at all.
         /// </summary>
         /// <remarks>
-        /// The criteria importer's report prints the same counter (<c>v2Rows=11</c>), so the first
+        /// The criteria importer's report prints the same counter (<c>v2Rows=N</c>), so the first
         /// [ptf] line and the import log are directly comparable. The bake is scene data, not code:
-        /// a build stamp alone cannot tell a cell baked before the v2 rows from one baked after, and
+        /// a build stamp alone cannot tell a cell baked before the override rows from one baked after, and
         /// that gap produced the 2026-11-16 O3a "31 unexpected" run where every override row was
-        /// silently judged as v1.
+        /// silently judged as its base row.
         /// </remarks>
         private string V2RowsText()
         {
@@ -1696,6 +2018,31 @@ namespace VRCKatamari.Labs.PhysicsTestField
             slipBack = 0f;
             rampProbeReasonLength = 0;
             rampProbeSlopeDegrees = 0f;
+            releaseSeconds = -1f;
+            reverseSeconds = -1f;
+            hasReleaseMark = false;
+            releaseCenterY = 0f;
+            climbActiveAtRelease = 0;
+            capLockAtRelease = 0;
+            hasReverseMark = false;
+            reverseStartCenterY = 0f;
+            reverseStartProgress = 0f;
+            climbActiveSeconds = 0f;
+            climbLockSeconds = 0f;
+            maxClimbHeightM = 0f;
+            pushTailPath = 0f;
+            pushTailTime = 0f;
+            previousCenter = Vector3.zero;
+            lastLateralIntent = 0f;
+            everPushed = false;
+            flatDriftMax = 0f;
+            hasRestMark = false;
+            restMarkSeconds = 0f;
+            hasSlideMark = false;
+            slideMarkSeconds = 0f;
+            peakDownhillSpeed = 0f;
+            pushSpeedOnSlope = 0f;
+            pushSpeedOnFlat = 0f;
             checkPass = 0;
             checkUnexpected = 0;
             checkSkipped = 0;

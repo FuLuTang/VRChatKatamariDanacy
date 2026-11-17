@@ -18,9 +18,8 @@ namespace VRCKatamari.BallContact
     /// <para>
     /// The closest point is the clamped local point, so faces, edges and corners all
     /// carry their true normal - the edge/corner normal is the rounded-box one, not a
-    /// face normal. That is what removes the v1 45 deg seam deadlock and the "a deck
-    /// is a wall for a big ball" failure: the old motor inflated the AABB by the
-    /// radius and treated every corner as square. A query point inside the box is
+    /// face normal. That is what removes the 45 deg seam deadlock and the "a deck
+    /// is a wall for a big ball" failure that an inflated AABB (every corner square) has. A query point inside the box is
     /// pushed out through the nearest face with normal = that face axis and
     /// distance = -(gap to that face) (negative, so the contact depth is r + gap).
     /// </para>

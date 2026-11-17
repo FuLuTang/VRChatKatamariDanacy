@@ -8,11 +8,11 @@
 ## 1. 开关与阶段边界
 
 - 新序列化开关 `terrainMeshContactEnabled`，**默认 false**。为 false 时 `SetTerrainMesh` 的数组不被查询，
-  `StepPositionV1` 不调用地形穿透/支撑覆盖；v1 的位置、速度、支撑与关闭前逐字节相同。
+  接触求解不查询地形。
 - 地形网格只是 **额外** 支撑/穿透源，不替代 `groundY` 兜底平面、盒子、ramp；也不占 8 平面 / 8 盒 /
   4 坡 / 256 OBB 的槽位。它的面 id 从 **2000** 起，避开 plane（1000+i）、box、ramp、prop。
-- T0/T1 接入 **v1 位置权威**。v2 接触求解器的地形接触是 §13 的 T2，不在本文范围；打开
-  `contactModelV2Enabled` 时地形网格不会被查询（`StepContactV2` 不调用本模块）。
+- 地形网格是 `StepContactV2` 的接触源之一（候选三角形经 `TerrainMeshMath` 进 `ContactSolveMath.TryStep`）；
+  装配（地形数组、`TerrainFieldHost` 接线）见 `TerrainFieldHost`。
 - 依赖现有 `terrainSupportEnabled`（默认 true）把选中的 `(normal, offset)` 送进
   `GroundContactMath`；只开 `terrainMeshContactEnabled` 而关 `terrainSupportEnabled` 时，几何被查询但
   下游仍用原始地面平面（文档化行为，不建议）。
@@ -109,7 +109,7 @@ float GetLastTerrainQueryMicros();
     跑 0 步的帧把计数一并清零，所以乘积不会被读成「免费」。
   计时取 `Time.realtimeSinceStartupAsDouble`（帧内会走的墙钟；帧时间戳在同一帧内差值恒为 0）；每步两次原生属性
   读数、零分配、不进任何判定路径，相对它测量的一轮 17 probe × 三角形测试可忽略。
-  **清零位置**：`StepBall`（v1/v2 两条权威都经过它）。写在 `StepBall`，不在 `StepPositionV1` 里：
+  **清零位置**：`StepBall`（每步经过它）：
   开了 contact v2 之后 v2 权威不查地形，读数如实报 0。
 - 容量 8192 tri / 16384 vert / 64 chunk；数组约 300 KB（运行时，不序列化）。
 

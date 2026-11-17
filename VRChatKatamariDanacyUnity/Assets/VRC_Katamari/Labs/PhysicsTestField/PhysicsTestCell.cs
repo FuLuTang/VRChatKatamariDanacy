@@ -37,9 +37,10 @@ namespace VRCKatamari.Labs.PhysicsTestField
     public class PhysicsTestCell : UdonSharpBehaviour
     {
         // Stamped into the driver's first log line so "which compiled test-field code is
-        // running" is checkable. This component gained the deck footprint and the six
-        // per-check v2 arrays, and a scene baked by an older program would not have them at all.
-        private const string CellRevision = "2026-11-15e";
+        // running" is checkable. This component gained the deck footprint, the six per-check
+        // override arrays and (2026-11-17a) the per-diameter run mask and the record-only op, and
+        // a scene baked by an older program would not have them at all.
+        private const string CellRevision = "2026-11-17a";
 
         // ---- identity and arena ------------------------------------------------
 
@@ -101,6 +102,12 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
         // ---- drive timeline (from cells[].drive) -------------------------------
 
+        [Header("Run mask")]
+        [Tooltip("One bit per preset diameter, in preset order: 1 = do NOT run this cell at that " +
+                 "diameter (the scene cannot host it, e.g. a ceiling lower than the ball). 0 = run " +
+                 "at every diameter, which is what an older scene without the field means.")]
+        [SerializeField] private int skipDiameterMask;
+
         [Header("Drive timeline: (t, forward, turn, lateral), applied in order")]
         [SerializeField] private float[] driveTimes;
         [SerializeField] private float[] driveForward;
@@ -114,7 +121,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [Header("Criteria: parallel arrays, one row per check")]
         [SerializeField] private string[] checkIds;
         [SerializeField] private string[] checkMetrics;
-        [Tooltip("0 = abs<=, 1 = <=, 2 = >=, 3 = ==, 4 = abs>=")]
+        [Tooltip("0 = abs<=, 1 = <=, 2 = >=, 3 = ==, 4 = abs>=, 5 = record (a diagnostic: the " +
+                 "value is logged, never judged)")]
         [SerializeField] private int[] checkOps;
         [SerializeField] private float[] checkLimits;
         [Tooltip("0 = frame sampler, 1 = trace log (manual), 2 = motor counter (P4)")]
@@ -128,26 +136,26 @@ namespace VRCKatamari.Labs.PhysicsTestField
                  "never a silent pass). Missing or short array = applicable everywhere.")]
         [SerializeField] private int[] checkAppliesMasks;
 
-        // ---- the v2 override rows (one row per check, empty = "same as v1") ----
+        // ---- the override rows (one row per check, empty = "same as the base row") ----
         //
-        // The SAME 36-run matrix must be meaningful for both motor models (design section 5.6).
-        // A check may carry a v2 override that the driver applies only when the motor reports
-        // IsContactModelV2(); without one the v1 row above is the criterion for both models.
+        // A check may carry an override block that replaces its metric, op/limit, threshold or
+        // per-diameter expectation (design section 5.6); without one the base row above is the
+        // criterion.
         // The arrays are as long as checkIds but hold a sentinel per row, so "no override" and
         // "an override that changes nothing" stay distinguishable: "" / -1 mean "inherit", and a
         // 0 expect mask is a real value (n/a at every diameter).
 
-        [Header("v2 rows: one row per check, sentinel = inherit the v1 row")]
-        [Tooltip("1 = this check has a v2 override; 0 = the v1 row is the criterion for both models.")]
+        [Header("override rows: one row per check, sentinel = inherit the base row")]
+        [Tooltip("1 = this check has an override; 0 = the base row is the criterion.")]
         [SerializeField] private int[] checkHasV2;
-        [Tooltip("Replacement metric name, or empty to keep the v1 metric.")]
+        [Tooltip("Replacement metric name, or empty to keep the base metric.")]
         [SerializeField] private string[] checkV2Metrics;
-        [Tooltip("Replacement op code (0..4), or -1 to keep the v1 op AND the v1 limit. An op " +
+        [Tooltip("Replacement op code (0..4), or -1 to keep the base op AND the base limit. An op " +
                  "override always carries its own limit.")]
         [SerializeField] private int[] checkV2Ops;
         [SerializeField] private float[] checkV2Limits;
         [Tooltip("Two bits per preset diameter, in preset order: 0 n/a, 1 pass, 2 fail. " +
-                 "-1 = inherit the v1 expect row.")]
+                 "-1 = inherit the base expect row.")]
         [SerializeField] private int[] checkV2ExpectMasks;
         [Tooltip("0 = use checkV2Limits, 1 = climb_cap_bound (the driver derives " +
                  "1.02 * H_cap + cap_margin from ContactTuning at run time).")]
@@ -488,13 +496,23 @@ namespace VRCKatamari.Labs.PhysicsTestField
             return ((mask >> diameterIndex) & 1) == 1;
         }
 
-        // ---- v2 override rows --------------------------------------------------
+        /// <summary>
+        /// Whether the driver runs this cell at one preset diameter. False when the cell declares
+        /// that its geometry cannot host the ball (the driver then logs a skipped run instead of
+        /// driving a ball that starts inside a slab).
+        /// </summary>
+        public bool RunsAtDiameter(int diameterIndex)
+        {
+            if (diameterIndex < 0 || diameterIndex > 30) return true;
+            return ((skipDiameterMask >> diameterIndex) & 1) == 0;
+        }
 
-        /// <summary>True when this criterion carries a v2 override (design section 5.6).</summary>
+        // ---- override rows -----------------------------------------------------
+
+        /// <summary>True when this criterion carries an override row (design section 5.6).</summary>
         /// <remarks>
-        /// A false answer means the v1 row above is the criterion for BOTH models - that is the
-        /// normal case. The driver reads the model once per run
-        /// (<c>KatamariBallMotor.IsContactModelV2()</c>) and only then consults these getters.
+        /// A false answer means the base row above is the criterion - that is the normal case.
+        /// The driver consults the other getters only when this is true.
         /// </remarks>
         public bool HasCheckV2(int index)
         {
@@ -503,14 +521,14 @@ namespace VRCKatamari.Labs.PhysicsTestField
             return checkHasV2[index] != 0;
         }
 
-        /// <summary>Replacement metric name, or "" to keep the v1 metric.</summary>
+        /// <summary>Replacement metric name, or "" to keep the base metric.</summary>
         public string GetCheckV2Metric(int index)
         {
             if (checkV2Metrics == null || index < 0 || index >= checkV2Metrics.Length) return "";
             return checkV2Metrics[index];
         }
 
-        /// <summary>Replacement op code (0..4), or -1 to keep the v1 op and limit.</summary>
+        /// <summary>Replacement op code (0..4), or -1 to keep the base op and limit.</summary>
         public int GetCheckV2Op(int index)
         {
             if (checkV2Ops == null || index < 0 || index >= checkV2Ops.Length) return -1;
@@ -548,16 +566,16 @@ namespace VRCKatamari.Labs.PhysicsTestField
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The six per-check v2 arrays are baked by
-        /// <c>PhysicsTestFieldCriteriaImporter</c> (build 2026-11-15e). A cell baked before
-        /// that has none of them, so <see cref="HasCheckV2"/> answers false for every check
-        /// and a v2 run silently judges every override row as its v1 row - the exact
+        /// The six per-check override arrays are baked by
+        /// <c>PhysicsTestFieldCriteriaImporter</c>. A cell baked before they existed has none of
+        /// them, so <see cref="HasCheckV2"/> answers false for every check
+        /// and a run silently judges every override row as its base row - the exact
         /// 2026-11-16 regression, where a working ball produced 31 "unexpected" verdicts.
         /// </para>
         /// <para>
         /// -1 (tables absent) is deliberately different from 0 (tables present, this cell has
         /// no overrides): the driver prints the count in its first line and refuses to judge a
-        /// v2 run against a bake that predates the tables. The importer prints the same
+        /// run against a bake that predates the tables. The importer prints the same
         /// counter in its own report (<c>v2Rows=11</c>), so the two lines are comparable.
         /// </para>
         /// </remarks>

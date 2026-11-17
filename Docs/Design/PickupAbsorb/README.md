@@ -114,7 +114,7 @@ absorb ⇔ boxDistance ≤ contactLimit
 
 **判定量是物件自身的包围盒体积，不是最长边、不是对角线、也不是包围球。** 与之相邻但**不同**的量是接触用的有向盒距离（第 1 节）：那个只决定「够不够近」，与「够不够大」无关，尺寸门读的是物件自身尺寸 `itemSize`，与朝向无关。把转过物件的世界 AABB 当 `a, b, c` 代入会把它算大（参考关卡里牙刷门槛 76 mm 会变成 189 mm）；接触同样不读世界 AABB，而是把自身尺寸的盒放进世界（见第 1 节）。细长物件是两者分离的典型——棒球棒 `0.02×0.02×0.85 m` 的 AABB 体积是 `0.00034 m³`，而它的包围球半径是 `0.425 m`。把最长边、对角线或包围球半径中的任何一个当体积代入，都是这里点名的算错。
 
-**为什么必须换量而不是调系数（用户给的例子）。** 测试场景里黄色小方块边长 **0.05 m**、红色方块 **0.30 m**：**边长只差 6 倍，体积差 `(0.30/0.05)³ = 216` 倍。** 球能吃多少是**体积**账（球体积 ÷ 10），而线性口径只拿「最长边 vs 球直径」比长短——它嗓门里只有那个「6」，说不出 216 倍，也就在结构上无法回答「这个球够不够大」。换成系数语言更清楚：等效线性系数 `k = 可吸物件最长边 / 所需球径` **不是常数**（研究文档 §4：立方体 0.37、3:1 的砖 0.78、5:1 的扫帚级 1.09、10:1 的铅笔级 1.74），所以任何单一 `absorbSizeRatio` 都只能在一个形状比上对：口径错，调系数就只是在两个方向的误差之间挪。真实道具建模后差别更大：方糖 1.6 cm vs 野餐桌 150 cm，边长差约 94 倍，体积差约 `8×10⁵` 倍。这就是决定 (l) 把「判定量」换掉、而不是把 1.0 调成 1.25 或 1.5 的原因（后者的后果清单见 [SIZE_GATE_AUDIT.md](SIZE_GATE_AUDIT.md) §4–§5）。
+**为什么必须换量而不是调系数（用户给的例子）。** 测试场景里黄色小方块边长 **0.05 m**、红色方块 **0.30 m**：**边长只差 6 倍，体积差 `(0.30/0.05)³ = 216` 倍。** 球能吃多少是**体积**账（球体积 ÷ 10），而线性口径只拿「最长边 vs 球直径」比长短——它嗓门里只有那个「6」，说不出 216 倍，也就在结构上无法回答「这个球够不够大」。换成系数语言更清楚：等效线性系数 `k = 可吸物件最长边 / 所需球径` **不是常数**（研究文档 §4：立方体 0.37、3:1 的砖 0.78、5:1 的扫帚级 1.09、10:1 的铅笔级 1.74），所以任何单一 `absorbSizeRatio` 都只能在一个形状比上对：口径错，调系数就只是在两个方向的误差之间挪。真实道具建模后差别更大：方糖 1.6 cm vs 野餐桌 150 cm，边长差约 94 倍，体积差约 `8×10⁵` 倍。这就是决定 (l) 把「判定量」换掉、而不是把 1.0 调成 1.25 或 1.5 的原因（后者的后果清单见 [SIZE_GATE_AUDIT.md](../../Archive/Reviews/SIZE_GATE_AUDIT.md) §4–§5）。
 
 **细长物件因此自动能吸，不需要按形状特判。** 棒球棒 `0.02×0.02×0.85` 的体积 `0.00034 m³`，0.50 m 球的限是 `0.006545 m³`，放行；旧线性口径要 `0.85 ≤ D × 1.0`，即 0.85 m 的球才吸得动——这正是「原作里最像『吃了比自己大的东西』」的那批道具（棒球棒、铅笔、扫帚）被关掉的原因。反方向的代价是**薄片几乎白送**：`0.1×0.07×0.002` 的落叶体积只有 14 cm³。这是原作的宽容方向（研究文档 §7.4），要收就收在作者侧（`bounds` 或 `@size=` 声明），不要为它加回一个最长边门。
 
@@ -133,11 +133,11 @@ absorb ⇔ boxDistance ≤ contactLimit
 
 ### 1.2 接触时刻的局部位姿与 gap 诊断（R33 修复）
 
-**球侧一律用 `collisionRadiusWorldM`（等效体积球），v1/v2 相同**；不读固定视觉核心，也不把立方体方向支撑函数/滚动针壳 `reach` 代入本层。原作专利 `Mh` 是盒、实际形状/朝向未测，本项目采用其内接等效球是有记录的取舍，见 [`PARITY_AUDIT.md`](../Parity/PARITY_AUDIT.md)“吸收触发的几何”行。
+**球侧一律用 `collisionRadiusWorldM`（等效体积球），v1/v2 相同**；不读视觉核心（核的等体积直径虽等于当前碰撞直径，判定量仍只认碰撞半径），也不把立方体方向支撑函数/滚动针壳 `reach` 代入本层。原作专利 `Mh` 是盒、实际形状/朝向未测，本项目采用其内接等效球是有记录的取舍，见 [`PARITY_AUDIT.md`](../Parity/PARITY_AUDIT.md)“吸收触发的几何”行。
 
 电机不是 Unity `FixedUpdate`：它在自身 `Update` 内用累加器跑若干定步。每步阶段 5 判门 → 6 成功提交 → 7 成长 → 7.5 成长推出 → 8 滚转；宿主另一个 `Update` 消费环，因此**不得到消费时再用当前球心/当前滚转换算**。现行纯值入口为 `PickupAbsorbStepMath.EvaluatePendingCandidates` → `CommitAcceptedAbsorbs` → 成功行的 `AttachmentStepMath.RecordAbsorbedEvent` → `PickupAbsorbStepMath.CompactPendingCandidates` → `RecomputeConfirmedAndSize`；事件 payload：`AttachmentStepMath.RecordAbsorbedEvent` 用门判断的球心和候选位置/旋转，调用 `AttachmentMath.TryCaptureContactPose`（用同一 `VisualRollMath` 算到本步接触位置的滚转、吸收前半径），当步转出 local position/rotation，与碰撞半径、contactRadius、球心、步号一起写固定 16 槽并行数组。只有账本提交成功才记事件。宿主 `TryGetAbsorbedEventAttachment` 经 `AttachmentStepMath.TryReadAbsorbedEventAttachment` 读取保留槽，直接把 local pose 写 `AttachmentRoot`，再经 `AttachmentStepMath.TryAttachRadialProxy` 给径向代理；缺失/过期 payload 不用当前姿态兜底。此后的 N 步运动或同一步成长推出，都携带已冻结局部位姿。原有 `GetAbsorbedEventPosition` 仍是门使用的道具世界位置，供其它事件读者使用。
 
-**唯一 gap 口径**：电机与宿主都调 `AttachmentMath.TryComputeBoxGap` → `PickupAbsorbMath.TryComputeContact`，`boxGapMm = 1000 × [boxDistance − (吸收时碰撞半径 + 吸收时contactRadius)]`。电机量接触世界位姿，宿主量将写入的局部位姿；球面在刚体变换下不变，两个值可按 `event` 配对。门不加 epsilon；验收允许浮点与打印误差 **0.2 mm**（两端 gap 差绝对值 ≤0.2 mm，宿主 gap ≤0.2 mm），不是 5 mm 手感窗口。日志另打 `ballR/contactMm`、`delaySteps`（接触后已走的定步数）、`centerDeltaMm`（含同一步推出），不要把时延位移混进 gap，也不要拿固定视觉核心边缘当当前物理球面。
+**唯一 gap 口径**：电机与宿主都调 `AttachmentMath.TryComputeBoxGap` → `PickupAbsorbMath.TryComputeContact`，`boxGapMm = 1000 × [boxDistance − (吸收时碰撞半径 + 吸收时contactRadius)]`。电机量接触世界位姿，宿主量将写入的局部位姿；球面在刚体变换下不变，两个值可按 `event` 配对。门不加 epsilon；验收允许浮点与打印误差 **0.2 mm**（两端 gap 差绝对值 ≤0.2 mm，宿主 gap ≤0.2 mm），不是 5 mm 手感窗口。日志另打 `ballR/contactMm`、`delaySteps`（接触后已走的定步数）、`centerDeltaMm`（含同一步推出），不要把时延位移混进 gap，也不要拿视觉核心网格边缘（非球形皮肤的实际轮廓）当当前物理球面。
 
 **R33 证据（修复前）**：亲读三份 play 日志共 70 对；motor 70/70 非正，host 69/70 正（−9.2～117.5 mm），两端差中位 77.2 mm。原因主要是电机日志减 v2 放大的方向 `reach`，宿主减物理半径；可用紧邻 story 直径直接分解的 36 对中，半径项解释总差的 97%，29 对几何残差 ≤0.2 mm，但两对有 +36.9/+42.8 mm 真几何漂移（旧日志不能区分后续步与同一步成长推出）。不是“触发已正确，全部差都是延迟”。完整例子、截图边界与复验表在 [`ATTACH_PLACEMENT.md`](../BallLayers/Attachment/ATTACH_PLACEMENT.md) §1、§6。
 

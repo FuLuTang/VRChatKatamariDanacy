@@ -21,20 +21,13 @@ namespace VRCKatamari.BallPresentation
     /// <para>
     /// <b>The three diameters, and who reads them.</b>
     /// <list type="bullet">
-    /// <item><c>d_motor</c> = <c>GetSemanticDiameterWorldM()</c>: the GAMEPLAY diameter.
-    /// The absorb gate (<c>PickupAbsorbMath</c>), the HUD's "current X m"
-    /// (<c>GetHudDiameterWorldM()</c>, the same value plus the original's +0.02 cm display
-    /// fudge) and <c>[story] diameter</c> all read it. The result board and the star targets
-    /// read the collision diameter <c>2 * GetCollisionRadiusWorldM()</c> instead; the two are
-    /// the same number today because the scene's <c>collisionToCoreRadiusRatio</c> and
-    /// <c>semanticDiameterPerCoreDiameter</c> are both 1, and they are separate getters on
-    /// purpose (CONTACT_MODEL_V2 4A.5). If either ratio ever stops being 1, those two would
-    /// disagree and this is where it would show.</item>
-    /// <item><c>d_vis</c> = <c>2 * GetVisualCoreRadiusWorldM()</c> = the level's start
-    /// diameter: the design's visual core (4A.2). It is a CONSTANT for the whole level (the
-    /// core never grows; absorbed props pile up outside it) and is the diameter BallView writes
-    /// once. It equals <c>d_motor</c> only before the first absorb; afterwards <c>d_motor</c>
-    /// grows and <c>d_vis</c> does not.</item>
+    /// <item><c>d_motor</c> = <c>2 * GetCollisionRadiusWorldM()</c>: the collision diameter,
+    /// also used by the result board and star targets. The absorb size threshold and
+    /// <c>[story] diameter</c> read the separate semantic getter. Both ratios are currently 1,
+    /// so these diameters agree. HUD adds 0.0002 m; it is not an exact mesh-size gauge.</item>
+    /// <item><c>d_vis</c> = <c>2 * GetCollisionRadiusWorldM()</c>: the current
+    /// collision sphere diameter, which BallView writes whenever it changes. The normalized
+    /// skin has the same equivalent-volume diameter; its bumpy AABB is not a diameter gauge.</item>
     /// <item><c>r_core</c> and <c>r_shell</c> are RADII. Mixing them with the diameters above
     /// reads as a false disagreement (a reported <c>core=0.6232</c> is a
     /// 1.312 m ball), so the keys carry their unit: <c>r_</c> for radii, <c>d_</c> for
@@ -51,20 +44,17 @@ namespace VRCKatamari.BallPresentation
     /// <list type="bullet">
     /// <item><c>[ballview] t= absorbed= mesh= d_vis= d_motor=</c> - <c>mesh</c> is measured
     /// through <c>lossyScale</c>, i.e. what the renderer gets, not what this script intended.
-    /// <c>mesh / d_vis</c> must be 1 on every line once the view has written (U3: the core
-    /// diameter reads the start diameter, e.g. 0.222 m on Cancer, at 0, 10, 20 and 30 absorbs);
-    /// a <c>mesh</c> that moves is a second writer of the core scale.</item>
+    /// <c>mesh</c> must match <c>d_vis</c> after BallView updates (within 0.1 mm).
+    /// Unity does not order these Updates, so sample after both have run.</item>
     /// <item><c>[shell] t= absorbed= r_core= r_shell= swallowed= attached= d_motor=</c> -
     /// props are frozen at their contact pose and never pushed outward, so this measures
     /// whether the visible outer layer still sticks out of the core. <c>r_shell</c> is the
     /// furthest attached prop CENTRE, not an outer surface: one long object absorbed at its
     /// end keeps its world pose and sits far out (e.g. 1.2211 m on a 0.656 m ball), so
     /// <c>r_core / r_shell</c> is a LOWER bound on the visible fraction, dominated by the
-    /// longest prop. <c>swallowed</c> counts prop centres inside the visual core, which counted most props
-    /// (33 of 45 in the audit) while the core still grew with the ball. The core is now the
-    /// fixed start diameter and absorbed props sit on the physical sphere outside it, so this
-    /// stays near 0 and is kept as a regression sentinel. A centre distance needs no renderer lookup, and this
-    /// project's runtime code never calls GetComponent.</item>
+    /// longest prop. <c>swallowed</c> counts prop centres inside the growing core, not
+    /// fully hidden meshes; frozen older attachments can be engulfed as it grows. A centre
+    /// distance needs no renderer lookup; the runtime never calls GetComponent.</item>
     /// <item><c>[eye] t= absorbed= app= d_core= dist=</c> - <c>app</c> is the core's apparent
     /// size (radians), <c>d_core</c> its diameter and <c>dist</c> the distance from the local
     /// player's head. It shrinks when the follow rig pulls the eye back with the radius, which
@@ -204,8 +194,8 @@ namespace VRCKatamari.BallPresentation
         private void Report()
         {
             int absorbedCount = motor.GetAbsorbedCount();
-            float physicalDiameterM = motor.GetSemanticDiameterWorldM();
-            float visualCoreRadiusM = motor.GetVisualCoreRadiusWorldM();
+            float visualCoreRadiusM = motor.GetCollisionRadiusWorldM();
+            float physicalDiameterM = 2f * visualCoreRadiusM;
             float visualDiameterM = 2f * visualCoreRadiusM;
             Vector3 center = motor.GetCenterWorld();
 

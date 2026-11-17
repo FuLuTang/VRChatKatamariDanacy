@@ -1,6 +1,6 @@
 # 主房间与关卡闭环（HUB_ROOM）：走进圈里开始，结算后回房看板，再开一局
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`（运行时与编辑器脚本、房间数据、文档；**没有 Unity 编译、没有 UdonSharp 编译、没有 Play Mode、没有 ClientSim、没有 Build & Test**）；数据侧 `Docs/Design/Levels/hub/placement.json` 已通过 `Tools/levelbuild/levelbuild.py check --level hub`（PASS，0 error / 0 warning）。
+> 状态：房间数据 `Docs/Design/Levels/hub/placement.json` 通过 `Tools/levelbuild/levelbuild.py check --level hub`（0 error / 0 warning）；Unity 侧 2026-11-16 ClientSim 走通“走圈 → 传送 → 开局 → 自动入座”（证据 [hub_wiring](<../../Evidence/StoryMode/2026-11-16_hub_wiring/README.md>)）；结算、回大厅、重试、再来一局、UdonSharp 编译、Build & Test 尚无 Play 证据。
 > 范围：把“进场景就在关卡里、找不到怎么开始、房间只存在计划里”改成“主房间 → 走进选关垫 → 关卡 → 结果卡上选「再试一次」或「回大厅」 → 再来一局”。单人、本地、单场景。
 > 非目标：第二关之后的内容、联机同步、国王美术/动画、存档、跨世界数据、房间美术精修。
 > 相关：[HUB_LOOP_PLAN](<HUB_LOOP_PLAN.md>)（平台约束与传送/回房设计的出处）、[StoryMode README](<README.md>)（回合、输入双闸门、结果卡）、[PICNIC_CORNER_LEVEL_ONE](<PICNIC_CORNER_LEVEL_ONE.md>)（关卡场地）、[LEVEL_AUTHORING](../Tools/LEVEL_AUTHORING.md)（`placement.json` 与导入器）。
@@ -9,17 +9,17 @@
 
 | # | 问题 | 结论 |
 |---|---|---|
-| 1 | 闭环长什么样 | 房间里每个关卡一块**选关垫**：走进去 0.35 s 自动开始 → 传送到关卡出生点并**自动入座** → 回合自己跑 → 到点结果卡出现在骑乘者眼前，**不自动回房** → 点「再试一次」原地重开，或点「回大厅」下车并传送回房 → 再走进垫子就是“再来一局”（§2、§3、§14）。 |
+| 1 | 闭环长什么样 | 房间里每个关卡一块**选关垫**：走进去 0.35 s 自动开始 → 传送到关卡出生点并**自动入座** → 回合自己跑 → 到点结果卡出现在骑乘者眼前，**不自动回房** → 点「再试一次」原地重开，或点「回大厅」下车并传送回房 → 再走进垫子就是“再来一局”（§2、§3、§12）。 |
 | 2 | 交互怎么选 | **走进圈里自动开始**，不是“按 E”。Udon 的 `InputUse` 是全局事件，不是“看着这个物体按 E”；圈只用 `GetPosition()`，ClientSim 和真机都答得上来。开始交互不依赖 Station 的 Interact/触发器；入座由 launcher 在到达后直接调 `VRCStation.UseStation`（§4、§8）。 |
 | 3 | 场景怎么切 | **方案 b：一张场景、两个岛、玩家传送**。房间在 `(1200, 0, 0)`，关卡仍在原点；不叠加加载、不换场景、没有加载屏。**不做**“整块 LevelContent 启用/禁用”，原因不是做不到，而是会破坏道具复位与没有收益（§7）。 |
-| 4 | 谁拥有什么 | 回合仍归 `StoryRoundController`，传送/退座仍归 `HubLevelLauncher`，星级/评语/卡面仍归 `StoryResultPresenter`；新代码只拥有**房间导航相位 + 圈 + 一行提示**。**`StoryRoundController.cs` 一行没改**：它已有的 `GetState()` / `BeginRound()` / `RequestRetry()` / 冻结值 getter 就是全部接缝（§6）。 |
-| 5 | 数据与导入 | `Docs/Design/Levels/hub/placement.json`，`level.id = hub`，8×8 m 房间、5 件现有道具、1 地面 + 4 面墙（选关垫不在文档里，由 §14 的装配器按选关列表生成）；用现有 `PlacementImporter` 以 **arena cell** 形式导入到 `LevelContent/hub`（不是第二套机制，理由见 §7.2）。 |
-| 6 | 验收状态 | 26 个 EditMode 规则测试已写（纯逻辑，不碰场景）；Unity 侧全部 `NOT_RUN`。仓库的 Python 门：`validate_plan.py` PASS；`Docs/tests` 744 条里 1 条**先前就存在**的失败（C14 v2 行比较），与本文文件无关（§12）。 |
+| 4 | 谁拥有什么 | 回合仍归 `StoryRoundController`，传送/退座仍归 `HubLevelLauncher`，星级/评语/卡面仍归 `StoryResultPresenter`；新代码只拥有**房间导航相位 + 圈 + 一行提示**。`StoryRoundController` 不为闭环增加接口：它已有的 `GetState()` / `BeginRound()` / `RequestRetry()` / 冻结值 getter 就是全部接缝（§6）。 |
+| 5 | 数据与导入 | `Docs/Design/Levels/hub/placement.json`，`level.id = hub`，8×8 m 房间、5 件现有道具、1 地面 + 4 面墙（选关垫不在文档里，由 §12 的装配器按选关列表生成）；用现有 `PlacementImporter` 以 **arena cell** 形式导入到 `LevelContent/hub`（不是第二套机制，理由见 §7.2）。 |
+| 6 | 验收状态 | 房间相位/圈选择/提示的纯逻辑规则由 `HubRoomMathTests`、`HubLoopMathTests`（EditMode，不碰场景）覆盖；Unity 侧验收清单见 §10，未验证项见 §11。 |
 
 ## 1. 为什么做这个
 
-- 2026-11-15 用户实玩：进关卡后**找不到怎么开始**（当时唯一入口是坐上球，而球上的 VRC_Station 在 ClientSim 里不可靠）；同时主房间只存在于 [HUB_LOOP_PLAN](<HUB_LOOP_PLAN.md>) 的计划里，从没建过。
-- 本次把闭环的**代码 + 房间数据 + 操作步骤**补齐；场景里的物件摆放与接线仍必须由 Unity 操作员做（分工见 §9）。另一位 agent 正在修“坐上球”的即时问题；本闭环**不依赖坐球就能开始/重试/回房**（§4、§8）。
+- 玩家进世界后必须能一眼找到“怎么开始”：开始入口不能只有“坐上球”（球上的 VRC_Station 在 ClientSim 里不可靠）。因此开始、重试、回房都做成房间里的导航动作，不依赖坐球（§4、§8）。
+- 闭环由运行时代码、房间数据和 Unity 操作员的场景装配（§9、§12）共同组成；场景里的物件摆放与接线由 Unity 操作员做。
 
 ## 2. 闭环
 
@@ -42,7 +42,7 @@ flowchart LR
 1. 进世界 → 出生在房间（`HubSpawn`，圈外 4 m）→ `StoryRoundController.Start()` 进 `Idle`：回合闸门关、收集关；`HubRoomHost.Start()` 打 `[hub-room] ready zones=1 …`；提示行空（离圈远）。
 2. 玩家在房间里就能看到提示“走进一块选关垫自动开始”；走进圈里 → 站 0.35 s → `HubRoomHost` 调 `HubLevelLauncher.TryStartLevel(0)`。**所有合法性仍由 launcher 判**（状态、在飞传送、冷却、索引）。
 3. launcher 把玩家 `TeleportTo` 到关卡入口 + 0.1 m，2 帧后测距；到了才调 `StoryRoundController.BeginRound()`（`Idle`）或 `RequestRetry()`（`Result`）。房间相位 `Hub → LevelLoading → Playing`。
-4. 玩家在关卡里走到球边，坐上去（Station 归另一位 agent；不坐也能计时，只是不能开球——见 §8）。
+4. 玩家在关卡里自动入座（见 §8）；没坐上也能计时，只是不能开球。
 5. 到点 `SettleRound()` 冻结事实 → `Presenting`；**不自动回房**，玩家仍坐在球上，结果卡出现在骑乘者眼前。玩家点卡上的「再试一次」（原地重开，`StoryRetryButton` → `RequestRetry()`），或点「回大厅」（launcher **先 `ExitStation`、等座位报空（或 10 帧超时）、再空一帧**，然后 `TeleportTo` 回 `HubSpawn`）。
 6. `StoryResultPresenter` 把结果卡显示在骑乘者眼前（`RideResultCard`，世界空间，归骑乘装配）：星级、直径/件数、评语。房间相位 `Playing → Result`。
 7. `Result` 持续 2.5 s（`resultHoldSeconds`）且玩家在房间半径内 → 相位回 `Hub`，提示“上一局已结算，走进圈里再来一局”。**结果卡仍在**（presenter 拥有，Result 才隐藏）。
@@ -56,7 +56,7 @@ flowchart LR
 |---|---|---|---|
 | 地面 `hub_floor` | 中心 `(1200,0,0)`，8 × 0.04 × 8 | 结构 `role=ground` | 顶面 `y=0`；导入器给 `Visual` + 玩家 BoxCollider |
 | 四面墙 `boundary_x0/x1/z0/z1` | `x=1196 / 1204`、`z=-4 / 4`，高 3 m、厚 0.04 | 结构 `role=boundary` | 只有平面给球（本房间没有球）；`Visual` 给玩家 |
-| 选关垫 `HubPad_<levelId>` | 每个提供的关卡一块，2.8 × 0.02 × 2.8，沿 X 居中成一排，z=+1.2 | 装配器生成（§14） | 无 Collider；`HubRoomHost.selectZones[i]` 指向第 i 块 |
+| 选关垫 `HubPad_<levelId>` | 每个提供的关卡一块，2.8 × 0.02 × 2.8，沿 X 居中成一排，z=+1.2 | 装配器生成（§12） | 无 Collider；`HubRoomHost.selectZones[i]` 指向第 i 块 |
 | 出生点 `HubSpawn`（场景里新建的空物体） | `(1200, 0.1, -2.8)`，朝 +Z | 操作员 | 面朝选关垫；**必须在所有圈外**，否则回房会被“重新武装”规则要求先出圈（§4） |
 | 5 件现有道具 | 长凳、野餐篮、收纳箱、洒水壶、书堆 | `placement.json` 的 `props[]` | 全是 `Art/Props/` 已有模型；纯装饰（房间没有 `PickupFieldHost`），数据里 `absorbable=false`、`ballDiameterMax=0.3` 只是让校验器的一组一致性规则成立 |
 
@@ -72,7 +72,7 @@ flowchart LR
 | 候选 | 为什么不用 |
 |---|---|
 | **按 E** | Udon 没有“看着这个物体按 E”的事件：`InputUse` 是**全局**的（桌面 E / VR Trigger），任何行为都能收到，和“准星指向”无关。要做成“靠近+按 E”就得自己做全局输入 + 距离门，等于**新造第三把输入闸门**，而且桌面/VR 文案不一致（VR 没有 E）。项目里“按 E 与物体交互”的先例也不存在；桌面交互是**准星对着 Collider 按鼠标左键**（`BallRideExitButton`、T04 实测）。 |
-| **VRC_Station 的 Interact/触发器** | 正是这次实玩失败的入口（ClientSim 里点不上）。开始/重试/回房**不经过 Station 的点击或触发器**；入座是 launcher 到达后直接调 `UseStation`（§8），不是玩家点球。坐不上只影响“能不能开球”，不影响“能不能开一局”。 |
+| **VRC_Station 的 Interact/触发器** | 是 ClientSim 里点不上的入口。开始/重试/回房**不经过 Station 的点击或触发器**；入座是 launcher 到达后直接调 `UseStation`（§8），不是玩家点球。坐不上只影响“能不能开球”，不影响“能不能开一局”。 |
 | **实体按钮 + Interact** | 可用、也有先例（`HubStartButton` 仍在场景里作为“再来一次”的备用入口），但它需要 Collider + 准星 + 左键，VR 里还要低头找按钮；一个 2.8 m 的圈更容易被发现。按钮路径作为**第二入口**保留，不写第二套规则：它同样只调 `launcher.PressStart(0)`。 |
 
 选**走进圈里自动开始**，并加三条防误触：
@@ -81,9 +81,9 @@ flowchart LR
 2. **re-arm**：一次开局后圈**解除武装**；只有被测量到“在所有圈外”才重新武装（`HubRoomMath.NextArmed`）。所以回房后即使人正好落在圈里也不会自动再开一局，提示会说“先走出圈外，再走进来”。
 3. **出生点在圈外**：`HubSpawn` 离圈心 4 m；这也让“回房 → 2.5 s 后提示”是干净的。
 
-提示的可发现性单独说一句：**Hub 相位里提示全程可见**（“走进一块选关垫自动开始”），不是只在圈边 2.7 m 内出现。用户这次的问题就是“找不到怎么开始”，再让提示只在近处出现等于没修；`PromptFor` 的远/近分支只保留给 Result（卡在墙上时，远处提示“上一局已结算”，近处提示“再来一局”）。
+**Hub 相位里提示全程可见**（“走进一块选关垫自动开始”），不是只在圈边 2.7 m 内出现。设计原则：开始入口只有一处，必须可被发现，所以提示不能只在近处出现；`PromptFor` 的远/近分支只保留给 Result（卡在墙上时，远处提示“上一局已结算”，近处提示“再来一局”）。
 
-**没有新增输入闸门**：`HubRoomHost` 不读任何移动轴、不调 `DesktopMoveInput`；生效输入仍然是“骑乘闸门 × 回合闸门”两把，所有者仍是 `BallRideStation` 与 `StoryRoundController`。圈是**导航触发器**，不是驾驶输入。
+**不引入新的输入闸门**：`HubRoomHost` 不读任何移动轴、不调 `DesktopMoveInput`；生效输入仍然是“骑乘闸门 × 回合闸门”两把，所有者仍是 `BallRideStation` 与 `StoryRoundController`。圈是**导航触发器**，不是驾驶输入。
 
 “再来一局”和“回房”也是同一套：
 
@@ -122,14 +122,14 @@ flowchart LR
 
 | 逻辑 | 所有者 | 本闭环怎么用它 |
 |---|---|---|
-| 回合状态、计时、到点冻结、重试复位、冻结事实 getter | `StoryRoundController`（**未改**） | 只调 `GetState()`、`BeginRound()`、`RequestRetry()`；只读 `GetLevelId()` / `GetAttemptNumber()` / `GetResultDiameterM()` / `GetResultCount()` |
-| 传送、到达校验、退座、回房、Running 中留在关卡 | `HubLevelLauncher`（**未改**） | `TryStartLevel(index, out reason)` / `TryReturnToRoom(out reason)`；不自己 `TeleportTo`，不自己碰 Station |
-| 星级、评语、结果卡显隐与文字 | `StoryResultPresenter`（**未改**） | 卡面在骑乘者眼前（骑乘装配拥有）；房间**不重复**打印直径/星级 |
+| 回合状态、计时、到点冻结、重试复位、冻结事实 getter | `StoryRoundController` | 只调 `GetState()`、`BeginRound()`、`RequestRetry()`；只读 `GetLevelId()` / `GetAttemptNumber()` / `GetResultDiameterM()` / `GetResultCount()` |
+| 传送、到达校验、退座、回房、Running 中留在关卡 | `HubLevelLauncher` | `TryStartLevel(index, out reason)` / `TryReturnToRoom(out reason)`；不自己 `TeleportTo`，不自己碰 Station |
+| 星级、评语、结果卡显隐与文字 | `StoryResultPresenter` | 卡面在骑乘者眼前（骑乘装配拥有）；房间**不重复**打印直径/星级 |
 | 房间相位、选关圈、提示行 | `HubRoomHost`（新） | 只写自己的 `promptText`，只调 launcher 的公开入口 |
-| 选关圈的位置与半径 | 场景数据（`selectZones[]`） + `HubRoomHost.selectRadiusMeters` | 圈心就是 `HubPad_<levelId>` 的 Transform（§14） |
+| 选关圈的位置与半径 | 场景数据（`selectZones[]`） + `HubRoomHost.selectRadiusMeters` | 圈心就是 `HubPad_<levelId>` 的 Transform（§12） |
 | 房间几何 / 道具 | `PlacementImporter` + `placement.json` | 与第一关同一套导入器，只换 level id |
 
-**`StoryRoundController.cs` 没有任何改动**：闭环需要的接缝（开始、重试、状态、冻结值）都已经是公开的；加一个“结束本局”反而会破坏“Running 时玩家必在关卡”的不变式，[HUB_LOOP_PLAN](<HUB_LOOP_PLAN.md>) §12.4 已把它列为“没有加、留给 Lead 协调”的接口，本文沿用。
+**`StoryRoundController` 不为闭环改动**：闭环需要的接缝（开始、重试、状态、冻结值）都已经是公开的；加一个“结束本局”反而会破坏“Running 时玩家必在关卡”的不变式，该接口未加，由 Lead 协调。
 
 唯一缺的接缝是**`StoryResultPresenter` 没有公开的星级 getter**：房间因此不显示星级，只让结果卡显示，避免同一事实的第二份显示（[HUB_LOOP_PLAN](<HUB_LOOP_PLAN.md>) §6）。
 
@@ -139,7 +139,7 @@ flowchart LR
 
 - **一张场景**（`StoryMode`）：房间岛 `(1200,0,0)`，关卡岛原点。切换 = `TeleportTo` + 状态，没有 additive 加载、没有加载屏、ClientSim 与真机同一条路径。
 - 不做“整块启用/禁用”的版本，原因逐条：
-  1. **导入器一个场景只有一个受管根 `LevelContent`**：第二个 whole-level 文档会用 `ApplyProps` / `ApplyStructures` 把第一个的 props/structures 当成 stale 删掉。这是 `PlacementImporter` 的硬约束（本次不改它）。
+  1. **导入器一个场景只有一个受管根 `LevelContent`**：第二个 whole-level 文档会用 `ApplyProps` / `ApplyStructures` 把第一个的 props/structures 当成 stale 删掉。这是 `PlacementImporter` 的硬约束。
   2. **`PickupFieldHost.RecordOriginalPoses()` 在 `Start` 里**：如果在场景加载时把 `LevelContent` 关掉，宿主的 `Start` 不会跑，`ResetField()` 就没有“原始位姿”可复位——重试会把道具留在地上。关掉再打开也拿不回那次记录。
   3. **`LevelArenaHost` 一次性注册障碍**（地面 1 + 平面 4 + 盒 4 + 斜面 2），没有“按岛切换”的接口；给房间再挂一个 arena host 会和关卡抢同一张 8 平面 / 8 盒的表。
   4. **关掉没有收益**：同一张场景已经全部加载，1200 m 外的东西不渲染（远裁剪），禁用只省一点 `Update`，却引入上面三条风险。
@@ -154,45 +154,47 @@ flowchart LR
 
 代价（必须知道）：
 
-1. **通用菜单会拒绝**：“Import Placement (LevelContent)”在发现同一场景既有 whole level 又有 arena cell 时会报错并要求按 id 调用。为此新增两个菜单项：`VRC Katamari/Level/Import StoryMode Hub Room (hub)` 与 `.../Import StoryMode Level 1 (story_01_bench_size)`（`Editor/Story/StoryModeImportMenus.cs`）。
+1. **通用菜单会拒绝**：“Import Placement (LevelContent)”在发现同一场景既有 whole level 又有 arena cell 时会报错并要求按 id 调用。为此提供两个菜单项：`VRC Katamari/Level/Import StoryMode Hub Room (hub)` 与 `.../Import StoryMode Level 1 (story_01_bench_size)`（`Editor/Story/StoryModeImportMenus.cs`）。
 2. 房间没有 `LevelArenaHost`，导入报告会有一行 note：“no LevelArenaHost on LevelContent/hub … arena arrays were not filled”。**这是预期的**：房间没有球，不需要把墙/地面注册进 motor。
 3. 房间的 5 件道具落在 `LevelContent/hub/Props`，没有玩法宿主读它们，纯装饰；但 cell 导入器要求“cell 有道具就必须有自己的 `PickupFieldHost`”，所以房间要挂一个**惰性**的 `PickupFieldHost`（§9 步骤 3）。它没有 `motor`，`Update` 在第一行就返回，不扫描、不吸附，只让导入与 5 行 collider 数据成立。
 4. 加了房间宿主之后，第一关的 whole-level 导入会在场景里找到两个 `PickupFieldHost`，按层级序同步 `LevelContent`（第一个）并打一行 note。第一关的宿主选择不变；这行 note 是预期的。
 
-## 8. 传送与座位：O4 实跑诊断 + 自动入座（2026-11-16）
+## 8. 传送与座位：落点与自动入座（依据 2026-11-16 ClientSim 实跑）
 
-### 8.1 O4 日志说明了什么
+### 8.1 实跑日志说明了什么
+
+ClientSim 日志见 `Docs/Evidence/StoryMode/2026-11-16_hub_wiring/{README.md,play1_lines.log,play2_lines.log}`。
 
 - `[hub] round started cause=arrived` 证明传送和到达校验都成功了，回合已经 Running；但 `[ride] seated entered` **从头到尾没有出现**。
 - 紧接着出现的 `[seat] seat restored to authored offset` 来自 `SeatEyeCompensation.EndSeated()`；`EndSeated` 只有两条调用路径：`OnStationExited` 和 `OnPlayerRespawn`。日志里**没有** `[ride] station exit reason=…`，所以是 **`OnPlayerRespawn`**：玩家掉了，ClientSim 把他重生到了 `HubSpawn`。
-- 根因一（坐标）：O4 场景里的 `LevelEntry` 在 **`(0, 0.15, -2.2)`**（场景根，世界坐标），而球在 **`(-12.5, 0.15, -12.5)`**；第一关玩家的地面 `Visual` 只覆盖 `[-19.4, -6]²`。`(0, -2.2)` 在关卡地板之外 → 传送过去后无处可站 → 下落 → ClientSim 在 `HubSpawn`（世界出生点）重生。之后 `[hub] teleport cause=hold-in-level attempt=1..3 distanceFromLevel=1200` 每次都把玩家拉回**同一个悬空入口**，再掉、再重生，3 次后放弃，人停在 HubSpawn。`distanceFromLevel=1200` 的读数就是 HubSpawn 到关卡入口的距离。
+- 根因一（坐标）：当时场景里的 `LevelEntry` 在 **`(0, 0.15, -2.2)`**（场景根，世界坐标），而球在 **`(-12.5, 0.15, -12.5)`**；第一关玩家的地面 `Visual` 只覆盖 `[-19.4, -6]²`。`(0, -2.2)` 在关卡地板之外 → 传送过去后无处可站 → 下落 → ClientSim 在 `HubSpawn`（世界出生点）重生。之后 `[hub] teleport cause=hold-in-level attempt=1..3 distanceFromLevel=1200` 每次都把玩家拉回**同一个悬空入口**，再掉、再重生，3 次后放弃，人停在 HubSpawn。`distanceFromLevel=1200` 的读数就是 HubSpawn 到关卡入口的距离。
 - 根因二（没有入座）：**hub 路径里没有任何代码调用 `UseStation`**。`VRCStation.UseStation` 原来只在 `BallRideStation.Interact()`（玩家点球）里；`HubLevelLauncher` 只负责传送和开回合。所以即使坐标正确，玩家也只会站在球旁边，`[ride] seated` 不会出现。
 - **不是** Station 配置的问题：`RideSeat` 是 active 的；脚本 `UseStation` 不需要准星、不需要距离；`disableStationExit=1` 只挡“手动离座”，回房用 `ExitStation` 是正规出口；`StandPoint`/`ExitPoint` 只在入座/离座时使用；`PlayerMobility=1` 不阻止脚本入座。`SeatEyeCompensation` 也不需要先 `Interact`——它只由 `OnStationEntered` → `BeginSeated` 驱动。
 - **不是** 探针的传送在抢人：探针的 `TeleportTo(1200, 0.1, 1.2)` 只是编辑器里“走进垫子”的替代；它触发 auto-start 后，launcher 把人送到关卡入口；之后的 1200 m 读数是重生回 HubSpawn 的结果，不是探针又把人传回去了。
 
-### 8.2 修复（最小，复用现有接缝）
+### 8.2 接缝（复用现有脚本）
 
 | 改动 | 文件 | 行为 |
 |---|---|---|
-| 入座接缝 | `Runtime/Riding/BallRideStation.cs` | 新增 `TrySeatLocalPlayer()`：与 `Interact` 同一个 `VRCStation.UseStation`，不要先点球；`OnStationEntered` 仍是唯一设置 seated、开骑乘闸门、调 `NotifyRiderSeated`、启动眼高补偿的地方。 |
+| 入座接缝 | `Runtime/Riding/BallRideStation.cs` | `TrySeatLocalPlayer()`：与 `Interact` 同一个 `VRCStation.UseStation`，不要先点球；`OnStationEntered` 仍是唯一设置 seated、开骑乘闸门、调 `NotifyRiderSeated`、启动眼高补偿的地方。 |
 | 落点与自动入座 | `Runtime/Hub/HubLevelLauncher.cs` | 有线 station+seat 时，入场落点改用 **`rideStation.transform`**（座位点，随球移动），不再依赖手摆的 `LevelEntry`；开局后调 `TrySeatLocalPlayer()`，30 帧窗口内最多 3 次（10 帧间隔），成功/失败各打一行。开局**不等**座位。 |
-| 纠偏规则 | `Runtime/Hub/HubLoopMath.cs` | 新增 `ShouldHoldInLevelNow(...)`：**seated 直接算在关卡内**（不读 `GetPosition`）；开局后 `holdGraceSeconds=2.5 s` 内不纠偏；纠偏后再次请求入座。 |
-| 接线自检 | `Editor/Story/HubRoomWiringCheck.cs` | 把 `levelEntries[0]` 与 `BallMotor.startCenterWorld` 比距离，>5 m 就警告——O4 的入口距球约 14.5 m，本来就能被这条抓住。 |
+| 纠偏规则 | `Runtime/Hub/HubLoopMath.cs` | `ShouldHoldInLevelNow(...)`：**seated 直接算在关卡内**（不读 `GetPosition`）；开局后 `holdGraceSeconds=2.5 s` 内不纠偏；纠偏后再次请求入座。 |
+| 接线自检 | `Editor/Story/HubRoomWiringCheck.cs` | 把 `levelEntries[0]` 与 `BallMotor.startCenterWorld` 比距离，>5 m 就警告；入口与球相距过远的接线由这条抓住。 |
 
-### 8.3 座位相关事实（回答 O4 的疑问）
+### 8.3 座位相关事实
 
 - **谁调 `UseStation`、对哪个对象**：`BallRideStation` 调；对象是 `RideSeat` 上的 `VRCStation`；两个入口 `TrySeatLocalPlayer()`（hub）与 `Interact()`（点击）共用同一个方法体。
 - **时序**：`TeleportTo` → 2 帧测距 → `BeginRound`/`RequestRetry` → `UseStation`（第 2 个 arrival 帧之后）。`UseStation` 是异步的，`OnStationEntered` 可能晚几帧；30 帧窗口内重试 3 次。回合不等座位，所以 ClientSim 里即使坐不上也能看到完整回合。
-- **`SeatEyeCompensation`**：不要求先 `Interact`；`OnStationEntered` 调 `BeginSeated()`。`[seat] seat restored` 是 `EndSeated()`；**开局后**出现它意味着重生/离座（O4 就是重生），**回房时**出现它是正常的。
+- **`SeatEyeCompensation`**：不要求先 `Interact`；`OnStationEntered` 调 `BeginSeated()`。`[seat] seat restored` 是 `EndSeated()`；**开局后**出现它意味着重生/离座（上述实跑即为重生），**回房时**出现它是正常的。
 - **坐着的 `GetPosition`**：客户端可能报座位、站点或两者之间的某个点，不能当作“在不在关卡”的可靠读数；所以纠偏先用 `IsLocalPlayerSeated()` 短路。
 - **`disableStationExit` / `StandPoint` / `ExitPoint` / `PlayerMobility`**：都不阻止 `UseStation`。`disableStationExit=1` 只禁止玩家用移动/跳跃离座，`ExitStation` 是正规出口；`StandPoint`/`ExitPoint` 只在入座/离座时把玩家放到对应位置；`PlayerMobility=1`（Immobilize）只禁移动，站仍然携带玩家。
 - **真机语义**：`VRCStation.UseStation(player)` 是脚本 API，不需要玩家看着球或站在交互距离内；要求是 station 对象 active、本地玩家、客户端支持站。ClientSim 如果不实现站，`[hub] seat result seated=false`，回合仍跑、球不可驱；真机应出现 `[ride] seated entered` 与 `[hub] seat result seated=true`。
 - **仍然依赖 Station 的只有“开球”**：站着的人不能驱球（骑乘闸门关）。开始/重试/回房不依赖点击/触发器；入座本身现在由 launcher 直接请求 Station。
 
-## 9. Unity 操作员步骤（以 §14 的一键装配为准）
+## 9. Unity 操作员步骤（以 §12 的一键装配为准）
 
-1. 编译（含新增的 `HubSelectMath`、`Editor/Hub/*`）；Console 无错；`Tests` 窗口能看到 `HubSelectMathTests`、`HubLoopMathTests`（含 `Arrival*` 8 条）。
-2. 打开要装大厅的场景（StoryMode 或 RefCancer），先导入该场景的关卡（最后一次导入之后再装大厅，见 §14）。
+1. 编译（含 `HubSelectMath`、`Editor/Hub/*`）；Console 无错；`Tests` 窗口能看到 `HubSelectMathTests`、`HubLoopMathTests`（含 `Arrival*` 8 条）。
+2. 打开要装大厅的场景（StoryMode 或 RefCancer），先导入该场景的关卡（最后一次导入之后再装大厅，见 §12）。
 3. 菜单 `VRC Katamari/Hub/Assemble Hub`，读 `[hub-assemble]` 报告；有 `PROBLEM` 先处理。若提示“lacks Udon variables”，保存场景、重开、再跑一次。
 3b. 菜单 `VRC Katamari/Ride/Assemble Ride UX`（与 3 的先后任意；两者共用结果卡按钮布局，第二次运行应 `+0 ~0`）。
 4. 菜单 `VRC Katamari/Hub/Check Room Wiring`（只读），应 `0 problem(s)`。
@@ -227,11 +229,11 @@ flowchart LR
 - 回到房间后，**结果卡仍在**（Result 相位），2.5 s 后提示才变“再来一局”。
 - 把 `resultHoldSeconds` 临时设为 0，行为应退化成“Result 当帧回 Hub 提示”，卡仍在。
 
-## 11. 未做 / 未验证（不要当成已验证）
+## 11. 未做 / 未验证
 
-1. **Unity 编译、UdonSharp 编译、Play Mode、ClientSim、Build & Test：全部 `NOT_RUN`。** 本 agent 不是 Unity 操作者（Linux）；本轮 O4 的 ClientSim 证据在 `Docs/Evidence/StoryMode/2026-11-16_hub_wiring/`，修的是它暴露的两条：入场落点在虚空 + 没有 `UseStation` 调用。
-2. **场景接线已由 O4 做，但 `LevelEntry` 坐标是错的**（`(0,0.15,-2.2)`，球在 `(-12.5,0.15,-12.5)`，地面 `[-19.4,-6]²`）。auto-seat 开启时落点改用座位、不再依赖它；仍建议按 §9 步骤 8 把入口挪回地板，作为“无 station/关闭 auto-seat”的兜底。
-3. **自动入座在 ClientSim 是否生效仍未验证**：`VRCStation.UseStation` 是脚本 API；O4 之前**从没调用过**，所以日志里没有 `[ride] seated`。本次调用后要重新跑；若 ClientSim 不实现站，`[hub] seat result seated=false`，回合仍完整、球不可驱；真机应 seated=true（§8.3）。
+1. **Unity 编译、UdonSharp 编译、Play Mode、Build & Test**：Hub 闭环的 Unity 侧尚无完整证据；已有的只有 2026-11-16 ClientSim 证据（`Docs/Evidence/StoryMode/2026-11-16_hub_wiring/`），它暴露的两条问题（入场落点在虚空、没有 `UseStation` 调用）对应 §8.2 的接缝。
+2. **`LevelEntry` 手摆坐标可能不在地板上**（实跑时为 `(0,0.15,-2.2)`，球在 `(-12.5,0.15,-12.5)`，地面 `[-19.4,-6]²`）。auto-seat 开启时落点改用座位、不依赖它；无 station 或关闭 auto-seat 时它是兜底，须把入口放回地板（§8.2 的接线自检会报警）。
+3. **自动入座在 ClientSim 是否生效仍未验证**：`VRCStation.UseStation` 是脚本 API，实跑之前没有任何调用；若 ClientSim 不实现站，`[hub] seat result seated=false`，回合仍完整、球不可驱；真机应 seated=true（§8.3）。
 4. **VR 舒适度**：进/出关卡各一次瞬移，没有淡入淡出；HUD/提示用 Screen Space Overlay（现有 HUD 的形态），VR 下是否清晰可读未验证。
 5. **`Running` 中途回房仍被拒绝**：控制器没有公开的“立即结束本局”；要做“放弃本局回房”需要那个接缝，且必须自己保证冻结与闸门顺序。
 6. **房间没有独立的星级显示**：星级只在结果卡上；要在房间显示需要 presenter 加只读 getter（§6）。
@@ -239,65 +241,9 @@ flowchart LR
 8. **音频/渲染串扰**：1200 m 只是“看不见”的暂定值，不是性能测量。
 9. **导入器 cell 形式是借用**：`level.arena` 本来是为物理测试场设计的；本文借它拿到 `LevelContent/hub` 子树。若 Lead 给 `PlacementImporter` 增加“per-level managed root”字段，房间数据应改回普通 whole-level 文档（一个字段 + 一处文档）。
 10. **`HubRoomWiringCheck` 只读检查**：它按序列化字段名读，字段改名会报 problem；它不验证 teleport、Station 或 Udon 资产。
+11. **EditMode 测不到、必须场景里验的**：`HubRoomHost` 的 Update 顺序、`Text` 实际显示、`GetPosition()`、`TeleportTo`、`UseStation`/`OnStationEntered` 时序、`ExitStation` 时序、结果卡显隐。
 
-## 12. 验证命令与本次结果
-
-O4 的 ClientSim 证据（操作员跑，不是本 agent）：`Docs/Evidence/StoryMode/2026-11-16_hub_wiring/{README.md,play1_lines.log,play2_lines.log}`。读数：`[hub] round started cause=arrived` 成功，但**没有** `[ride] seated entered`；随后 `[seat] seat restored` 与 `[hub] teleport cause=hold-in-level attempt=1..3 distanceFromLevel=1200`。诊断见 §8.1；修复后的期望日志见 §10。**本轮修复的 Unity 编译/Play 仍然是 `NOT_RUN`。**
-
-```bash
-python3 Tools/levelbuild/levelbuild.py check --level hub --report
-# PASS Docs/Design/Levels/hub/placement.json (0 error(s), 0 warning(s))
-# props=5 units=212 structures=7；budget planes 4/8、boxes 2/8、static OBB 2/256
-
-python3 Docs/tools/validate_plan.py
-# PASS: 61 tasks; both release DAGs acyclic; source hashes verified.
-# NOT_RUN: Unity/Udon compilation, VR comfort, multiplayer, performance, commerce.
-
-python3 -m unittest discover -s Docs/tests
-# Ran 899 tests ... OK
-# （2026-11-15 的 744 条里那条 C14 v1/v2 比较失败，已由另一条线修好；本轮当前是 OK。）
-```
-
-EditMode（NUnit）：`VRCKatamari.Tests.HubRoomMathTests` **26 条**（相位全链路 Hub→Loading→Playing→Result→重试→Playing→回 Hub、加载失败回 Hub、未知相位/状态 fail-closed、圈最多一个/最近优先/越界与非法值、re-arm、dwell、提示 gating），`VRCKatamari.Tests.HubLoopMathTests` **30 条**（本轮新增 5 条：seated 即算在关卡内、开局 grace 窗口、非法读数 fail-closed、seated 版仍受尝试上限约束、入座重试窗口），全部 **`NOT_RUN`**（要 Unity 跑）。**需要场景才能测的**：`HubRoomHost` 的 Update 顺序、`Text` 实际显示、`GetPosition()`、`TeleportTo`、`UseStation`/`OnStationEntered` 时序、`ExitStation` 时序、结果卡显隐。
-
-## 13. 文件清单（本次新增/修改）
-
-**新增运行时（U#，未编译）**
-
-- `Runtime/Story/Hub/HubRoomMath.cs` — 房间相位、圈选择、re-arm/dwell、提示 gating（纯静态规则）。
-- `Runtime/Story/Hub/HubRoomHost.cs` — 房间宿主：读玩家位置、调 launcher、写一行提示；不传送、不碰回合、不碰卡。
-
-**新增编辑器（未编译）**
-
-- `Editor/Story/StoryModeImportMenus.cs` — 两个按 id 导入的菜单（通用菜单在 mixed docs 下会拒绝）。
-- `Editor/Story/HubRoomWiringCheck.cs` — `[hub-check]` 只读接线报告。
-
-**新增测试（未跑）**
-
-- `Tests/EditMode/Story/HubRoomMathTests.cs` — 26 条纯规则测试。
-- `Tests/EditMode/Hub/HubLoopMathTests.cs`（改）— 新增 5 条 seated/grace/非法读数/上限/入座重试窗口测试，共 30 条。
-
-**新增数据**
-
-- `Docs/Design/Levels/hub/placement.json` — 房间（8×8 m、5 道具、7 结构、arena cell `hub`）。
-
-**新增文档**
-
-- `Docs/Design/StoryMode/HUB_ROOM.md`（本文）。
-
-**修改（O4 修复轮，2026-11-16）**
-
-- `Runtime/Hub/HubLevelLauncher.cs` — 座位点落点、开局后自动入座、30 帧窗口 3 次重试、seated/grace 纠偏、`[hub] seat …` 日志。
-- `Runtime/Hub/HubLoopMath.cs` — 新增 `ShouldHoldInLevelNow`（seated / grace / 非法读数）。
-- `Runtime/Riding/BallRideStation.cs` — 新增 `TrySeatLocalPlayer()`，`Interact` 复用同一实现。
-- `Editor/Story/HubRoomWiringCheck.cs` — `levelEntries[0]` 与 `BallMotor.startCenterWorld` 距离检查。
-- `Docs/Design/StoryMode/README.md` — 追加主房间闭环一节；本轮补自动入座说明。
-
-**未改**：`StoryRoundController.cs`、`KatamariBallMotor.cs`、`PickupFieldHost.cs`、`LevelArenaHost.cs`、`PlacementImporter.cs`、`Labs/**`、`Editor/PhysicsTestField/**`、`Tools/levelbuild/**`、`Tools/leveleditor/**`、`Docs/Art/**`、场景、prefab、`tasks.json`。
-- 没有写任何 `.meta`；新 `.cs` 的 `.meta`、UdonSharp `.asset` 由 Unity 在操作员打开工程时生成。
-
-
-## 14. 选关列表与装配（2026-11-17 现行口径）
+## 12. 选关列表与装配（2026-11-17 现行口径）
 
 **现状盘点。** 运行时（启动器、房间宿主、开始/回房按钮、关卡启动）在 StoryMode 场景装配过：2026-11-16 ClientSim 走通“走圈 → 传送 → 开局 → 自动入座”；结算、回大厅、重试、再来一局**没有 Play 证据**。参考关卡场景 RefCancer（只有蟹座小院一关，不入 git）是 2026-11-15 从当时的 StoryMode 复制的，没有大厅；玩家出生在关卡里。
 

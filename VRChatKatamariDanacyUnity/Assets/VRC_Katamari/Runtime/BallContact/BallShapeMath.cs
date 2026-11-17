@@ -15,8 +15,8 @@ namespace VRCKatamari.BallContact
     /// <c>r_roll = 1.00 * r_phys</c>,
     /// <c>rollReach(u) = max(r_roll, max_i support_i * dot(dir_i, u))</c>, so
     /// <c>pickupRadius = r_phys = r_roll &lt;= rollReach(u)</c> for every u. The visual
-    /// core is not computed here: it is the level's start radius, fixed
-    /// (<c>KatamariBallMotor.GetVisualCoreRadiusWorldM</c>), and never larger than r_roll.
+    /// core is not computed here: its radius equals the current collision radius
+    /// (<c>KatamariBallMotor.GetVisualCoreRadiusWorldM</c>), hence also equals r_roll.
     /// </para>
     /// <para>
     /// Consumers are separated on purpose. PickupAbsorbMath answers "can this be

@@ -28,7 +28,7 @@ python3 Tools/levelbuild/levelctl.py undo
 python3 Tools/levelbuild/levelctl.py export --to /tmp/handoff.json                    # 可选：交一份副本
 python3 Tools/levelbuild/levelserve.py stop                                           # 脏则先导出
 
-# B) 一次性（CI / 交接 / 没有服务时；和 A 共用同一批函数）
+# B) 一次性（CI / 没有服务时；和 A 共用同一批函数）
 python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_size/placement.json --report
 source ~/tools/blender-env.sh
 "$BLENDER" $BLENDER_FLAGS --python Tools/levelbuild/blender/render_views.py -- \
@@ -42,7 +42,7 @@ source ~/tools/blender-env.sh
 python3 Tools/levelbuild/levelbuild.py check Tools/levelbuild/examples/placement.json --report
 ```
 
-实测：`build_scene.py` → `export_placement.py --seat` → 与源文件**逐字节相同**（第一关 127 件；`defs[]`、相机、道具、结构全保留）。`--seat` 对已坐好的数据是 no-op，对抬高 5 cm 的地面件会修回去。
+`--seat` 对已坐好的数据是 no-op，对抬高 5 cm 的地面件会修回去。
 
 全部操作：`python3 Tools/levelbuild/levelctl.py ops`；服务本身：`levelserve.py status|logs|health`。
 
@@ -60,7 +60,7 @@ python3 Tools/levelbuild/levelbuild.py check Tools/levelbuild/examples/placement
 
 `check` 的硬规则（设计 §8 的 1–12、14 条）：schema/必填/未知 def/重复 `itemId`、`aabb` 与模型 manifest 一致、`absorbDiameterReq`/`absorbable` 不自相矛盾、越界、出生净空、**穿地**、**悬空**（`pinned` 的除外）、父指针（`parent`/`stackedOn`：不存在/自环/环/两字段矛盾是错，几何不接触只是 warning）、道具互穿、穿入实体、预算（`planes/boxes/ramps/ground/blocking`）、斜面几何（坡度/坡脚/顶边）、`box` 与 `ramp` 同 id、总量与 `level.expected` 一致、**弯坡**（`curve_ramp` 的半径/弧角/宽厚/段数/弦高/重叠）；另外“文件不是规范形”是 **warning**（不是错）。
 
-> **坡度 > 45° 现在只是 warning**（2026-11-15，S4）：v2 能慢爬陡坡（`CONTACT_MODEL_V2` 3.10）。硬错误只剩物理上不可能的值——板面朝下（inverted）、90°（侧立就是墙）、零厚度、NaN。`--strict` 仍可把 warning 当错。
+> **坡度 > 45° 现在只是 warning**：v2 能慢爬陡坡（`CONTACT_MODEL_V2` 3.10）。硬错误只剩物理上不可能的值——板面朝下（inverted）、90°（侧立就是墙）、零厚度、NaN。`--strict` 仍可把 warning 当错。
 
 ### 常用片段
 
@@ -129,7 +129,7 @@ python3 Tools/levelbuild/levelbuild.py seat level.json --write
 
 ---
 
-### 2.1 `parent`：谁压着谁，由几何推导（2026-11-16）
+### 2.1 `parent`：谁压着谁，由几何推导
 
 一件**最多一个**父件。运行期只读这一列（父件被吃掉 ⇒ 子件落，见
 `Docs/Design/PickupAbsorb/PROP_BEHAVIOURS.md` §10.9），编辑器/校验器把 `stackedOn` 当同一个关系的旧写法读（`placement_core.prop_parent()`，一处解析），两者同时出现且不一致 ⇒ `[parent_conflict]`。
@@ -153,7 +153,7 @@ python3 Tools/levelbuild/levelctl.py derive-supports --apply           # 只写�
 
 `pinned: true` 是显式的「这件自己站着，别让它掉」（装饰、挂着的招牌、云）：校验器不再报它悬空，运行期永不入队、永不下落，但**仍然是支撑面**，所以它是坠落传播的终点。`pinned` 与 `parent` 可以并存（挂在横梁上的招牌）。`false` 不写进文件；编辑器里 `set pinned=true` / `set pinned=null`。
 
-## 3. 价值单位：按 def 声明，导入器照写（Lead 2026-11-15 决定）
+## 3. 价值单位：按 def 声明，导入器照写
 
 `valueUnits` 现在**不是**由 `PickupFieldSync` 按最长边定价得出的，而是关卡数据：
 
@@ -182,7 +182,7 @@ source ~/tools/blender-env.sh
     [--engine WORKBENCH] [--res 1280x720] [--samples 32] [--out-dir /tmp/levelbuild]
 ```
 
-`--engine` 只是临时覆盖（给人快速看一张），不改文件。俯视图的 `coverage_m` 是**短边保证入画**的范围，渲染时按分辨率比例放大 `ortho_scale`（否则 16:9 会把方形场地上下裁掉——实测 13.4 m 场地只看到 7.9 m）。
+`--engine` 只是临时覆盖（给人快速看一张），不改文件。俯视图的 `coverage_m` 是**短边保证入画**的范围，渲染时按分辨率比例放大 `ortho_scale`（否则 16:9 会把方形场地上下裁掉）。
 
 ---
 
@@ -237,15 +237,14 @@ python3 Docs/tools/validate_plan.py
 
 ---
 
-## 8. 已知缺口 / 待对齐
+## 8. 已知限制
 
-1. **`PickupFieldSync` 值表缺 `container m`**：`container` 只有 `l=16`，而野餐篮 0.45 m 落在 `m` 档 → 那一行会被同步工具丢掉。导入器会报「sync dropped it」，需要给值表加一行（不在本工具写范围）。
-2. **道具模型的根必须有 Renderer**（现在是 FBX 直实例化）。根是空节点时同步工具会把子节点名当 `itemId`，导入器拒绝并指名该 def。P2 预制体库解决。
-3. **斜面只进 `rampBoxes`**：`LevelArenaHost.rampBoxes` 已接（P3，d31dc9b），斜面由此烘成支撑面；**不要**把它同时放进 `staticBoxes`（坡底会出隐形墙，`LevelArenaHost.Setup` 会报 `[arena] ... in both ...` 并跳过盒登记）。
-4. **旋转道具的 `propBounds` 是世界 AABB**（同步工具用 `Renderer.bounds`），不是模型 AABB：对 45° 摆的薄件会偏大。这是 `PickupFieldSync` 的既有行为，导入器不修，只在报告里保留依据。
-5. **`expected` 在 `from-layout` 里是「转出来多少」**，不是设计表的 127/1500（差额 = 缺模型的 def，见 §5）。补模型后重跑，数字会自动对上。
-6. **PNG 不进仓库**：本工具只往 `--out-dir` 写图，验收图由人决定是否放 `Docs/Evidence/`。
-7. **弯坡还不能从 `levelctl.py` 新建**：`add-structure` 只认 `center/size/rotationQuat`（带 `curve` 块的条目目前手写 JSON；改已有弯坡的 `center` 或参数走 `set`/`move` 是安全的，`curve` 块原样保留）。渲染侧把它画成每段一个 box 的 mesh，`curve` 参数存在物体的 `curve_json` 属性里，导出时原样带回。
+1. **道具模型的根必须有 Renderer**（现在是 FBX 直实例化）。根是空节点时同步工具会把子节点名当 `itemId`，导入器拒绝并指名该 def。
+2. **斜面只进 `rampBoxes`**：`LevelArenaHost.rampBoxes` 已接，斜面由此烘成支撑面；**不要**把它同时放进 `staticBoxes`（坡底会出隐形墙，`LevelArenaHost.Setup` 会报 `[arena] ... in both ...` 并跳过盒登记）。
+3. **旋转道具的 `propBounds` 是世界 AABB**（同步工具用 `Renderer.bounds`），不是模型 AABB：对 45° 摆的薄件会偏大。这是 `PickupFieldSync` 的既有行为，导入器不修，只在报告里保留依据。
+4. **`expected` 在 `from-layout` 里是「转出来多少」**，不是设计表的 127/1500（差额 = 缺模型的 def，见 §5）。补模型后重跑，数字会自动对上。
+5. **PNG 不进仓库**：本工具只往 `--out-dir` 写图，验收图由人决定是否放 `Docs/Evidence/`。
+6. **弯坡还不能从 `levelctl.py` 新建**：`add-structure` 只认 `center/size/rotationQuat`（带 `curve` 块的条目目前手写 JSON；改已有弯坡的 `center` 或参数走 `set`/`move` 是安全的，`curve` 块原样保留）。渲染侧把它画成每段一个 box 的 mesh，`curve` 参数存在物体的 `curve_json` 属性里，导出时原样带回。
 
 ---
 
@@ -327,7 +326,7 @@ python3 -m unittest Docs.tests.levelbuild.test_level_editor Docs.tests.levelbuil
 
 ---
 
-## 10. 外部资产包：`model` / `overlapBudget` / `groupId` / `spawnClearanceM`（2026-11-15）
+## 10. 外部资产包：`model` / `overlapBudget` / `groupId` / `spawnClearanceM`
 
 > 本节是**新增能力**。不写这些字段的关卡，`check` 的规则与输出**逐字节不变**（默认的
 > 5 % 互穿规则、1.0 m 出生净空、repo manifest 要求都没有放宽）。

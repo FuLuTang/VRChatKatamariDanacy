@@ -1,13 +1,12 @@
 # 关卡数据格式 v2（最终提案）
 
-> 状态：**`FINAL_PROPOSAL`，2026-11-16（第 4 版：性能口径 + 命名定稿）**（原 `DRAFT_BLOCKED_ON_RESEARCH` 已解除）。触发：owner 2026-11-16「整体升级地图数据结构 + 网页编辑器一起升」；研究先于设计，四份研究均已落地：
+> 状态：**`FINAL_PROPOSAL`**。触发：owner 2026-11-16「整体升级地图数据结构 + 网页编辑器一起升」；研究先于设计，四份研究均已落地：
 > [ORIGINAL_TERRAIN_AND_LAYOUT](../../Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md)（REROLL 导出表能推出什么）、
 > [NOCLIP_KATAMARI_FORMAT](../../Research/KatamariBallRules/NOCLIP_KATAMARI_FORMAT.md)（PS2 舞台包/任务包的字节布局）与
 > [ORIGINAL_ANIMATION_OBSERVATIONS](../../Research/KatamariBallRules/ORIGINAL_ANIMATION_OBSERVATIONS.md)（逐帧观察：多少东西在动、怎么动、预算多少）与
 > [ORIGINAL_MOTION_PROGRAM](../../Research/KatamariBallRules/ORIGINAL_MOTION_PROGRAM.md)（13 类运动：参数来源、周期、触发半径、幅度换算与每帧成本）。
 > **本文是设计定稿，不是 owner 决定清单**：字段名、代码与本项目的写入方式是提案；凡 owner 已拍板的，逐条标「已定」。
-> 本轮**只写 Docs**：没有改代码、场景、`placement.json`、`Tools/`、Unity，没有跑 git 写命令、没有开 Unity。
-> 引用约定：`Runtime/…`、`Editor/…`、`Labs/…`、`Tests/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；其余相对仓库根。**按符号名与节号引用，不写行号**（相关文件正被并行修改）。
+> 引用约定：`Runtime/…`、`Editor/…`、`Labs/…`、`Tests/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；其余相对仓库根。**按符号名与节号引用，不写行号**。
 >
 > 兄弟文档：[LEVEL_AUTHORING](../Tools/LEVEL_AUTHORING.md)（当前格式与工具）、[LEVEL_EDITOR_WEB](../Tools/LEVEL_EDITOR_WEB.md)（网页编辑器）、[TERRAIN_SUPPORT](../BallMotor/TERRAIN_SUPPORT.md)（v1 支撑模型）、[CONTACT_MODEL_V2](../BallMotor/CONTACT_MODEL_V2.md)（接触求解器）、[PHYSICS_TEST_FIELD](../BallMotor/PHYSICS_TEST_FIELD.md)、[COLLIDER_PROXY](../PickupAbsorb/COLLIDER_PROXY.md)、[PROP_BEHAVIOURS §10](../PickupAbsorb/PROP_BEHAVIOURS.md)、[PARITY_AUDIT](../Parity/PARITY_AUDIT.md)、[OPEN_DECISIONS](../../OPEN_DECISIONS.md)。
 
@@ -546,7 +545,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 
 #### 6.7.3 13 个运动类（数值是测得的；没测到的留空，不编）
 
-> 证据标签：**【实测】** = 本轮逐帧/数据观察；**【推断】** = 参考实现一致但未原机证实；未标 = 我们的实现参数/默认值（PROVISIONAL）。
+> 证据标签：**【实测】** = 逐帧/数据观察；**【推断】** = 参考实现一致但未原机证实；未标 = 我们的实现参数/默认值（PROVISIONAL）。
 
 | class | Cancer 实例 | 观测（强度） | `params`（键名/单位） | 速度来源 | 建议更新档 |
 |---|---:|---|---|---|---|
@@ -1431,7 +1430,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 | 阶段 | 内容 | 交付 | 门（不过不进下一阶段） |
 |---|---|---|---|
-| **P0 文档与 schema 冻结** | 本文、`*_KEYS` 草案、错误码表、owner 决策清单 | 本文 + 评审 | owner 对 §16 的 D-2/D-4/D-5/D-10–D-12 给方向；不再改字段名 |
+| **P0 文档与 schema 冻结** | 本文、`*_KEYS` 草案、错误码表、决定编号索引（§16） | 本文 + 评审 | 字段名不再改 |
 | **P1 校验器 + 转换器** | `placement_core` v2 读写、13 份转换、`check` 0 错、`gate_changes.csv` | 工具 + 测试 | 13 份转换；v2 再转 no-op；`python3 -m unittest discover -s Docs/tests` 全绿 |
 | **P2 Unity 导入（无地形）** | `PlacementImporter` v2：meta/structures/activity/props；地形字段读入但不建网格 | 导入器 + 场景 | 13 份重导入第二次 `+0 ~0 -0`；`volumeMm3`/`Req mm` 回读一致 |
 | **P3 地形数据与视觉** | 侧车读写、`TerrainFieldHost`/`TerrainChunkHost`、Mesh 资产生成、T0 支撑 | 数据 + 组件 | C21/C24 通过；地形上站得住；参考地形 3,456 三角形加载成功 |
@@ -1444,28 +1443,26 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 ---
 
-## 16. Owner 决策清单（2026-11-16 拍板记录）
+## 16. 决定编号（D-n）
 
-> 已定、不再问的输入：地形支持 3D 表面（三角网 + 空间加速，高度场只作优化）、解析器照规格重实现在仓库外、吸收门按原作 `k × bbox`、`volumeMm3` 定点、父件被吃子件坠落（单父指针）、每件四元数、碰撞代理按型、不做击飞/甩脱。下面只列**研究回答不了的产品/工程取舍**。
->
-> **状态（2026-11-16）**：owner 已拍板 **D-1 / D-4 / D-5 / D-6 / D-10 / D-11 / D-12 / D-13 / D-14**（行内的「建议」已改成决定，带日期）；**D-2 / D-3 / D-7 / D-8 / D-9 仍是我方建议**，等 owner 一句话确认。
+> 代码、测试与其他文档按 `D-n` 引用下列取舍；owner 的拍板记录在 [OPEN_DECISIONS](../../OPEN_DECISIONS.md)，本节只写现行口径。固定输入：地形支持 3D 表面（三角网 + 空间加速，高度场只作优化）、解析器照规格重实现在仓库外、吸收门按原作 `k × bbox`、`volumeMm3` 定点、父件被吃子件坠落（单父指针）、每件四元数、碰撞代理按型、不做击飞/甩脱。D-2 / D-3 / D-7 是设计取舍，尚未由 owner 单独确认。
 
-| # | 决定 | 选项 | 建议 | 影响面 |
-|---|---|---|---|---|
-| **D-1** | 全局球径上限的落点 | A 单一全局资产（已定方向）；B 每关可覆盖 | **A，20 m**（owner 2026-11-16 定；正常游玩很少摸到，护栏不是目标），`meta.ball.maxDiameterRef:"global"`；实验关才允许 `"level"` 并打 warning | `meta`、电机、编辑器 |
-| **D-2** | 地形存哪 | A 全内联；B >512 三角形走 `.katerrain` 侧车 + sha256 | **B**：内联保可读，大网格走二进制并钉哈希；参考关卡也用同一格式 | JSON/侧车、编辑器、导入器 |
-| **D-3** | 地形要不要水平阻挡 | A 只支撑；B 支撑 + 陡面挡（θ 分类） | **B**，但**分阶段**：T0/T1 只做支撑/推出/去法向速度，T2 才做滚/爬分类与爬升；在 T2 前用 `structures` slab 补关键阻挡 | 电机、测试场、关卡设计 |
-| **D-4** | 活动区越界后果 | A 硬墙；B 硬墙 + 软边距（减速/提示）；C 只提示 | **A + 每关 kill plane**（owner 2026-11-16）：硬墙 + 球径门，**玩法范围主要靠地图布局限制**（参考关就是这么限制的，不只靠墙）；掉出用逐关 Y 的重启阈值，不做软边距（HUD 是另一个模块） | `activityArea`、电机、关卡设计、HUD |
-| **D-5** | 逐件缩放策略 | A 视觉-only；B 全量参与几何/体积；C 只允许均匀 | **②+③+④**（§6.4 四层）：①运行时永不缩放（不变）；②作者态均匀全允许（含挂接件）；③非均匀 + 有代理只允许无父、static、box/sphere；④非均匀 + **无代理**（def 无 `collider`）允许无父、static、`absorbable:false`。原作 6 件非单位：4×0.9、1×0.1（**挂接件**）、1 非均匀 = ④ 的唯一实例 `sparrow_001` | props、导入器、吸收门 |
-| **D-6** | zone id 的用法 | A 不透明标签；B 现在映射成玩法区（8=void 等） | **A**：只做标签/统计（`killPlane.zoneId` 只记诊断）；kill plane 是独立字段、**取逐关 Y**，运行时由**回合状态机**当「重启阈值」执行（不是全局地板），没有回合状态机的世界退回 `ActivityAreaHost` 兜底 | 地形、活动区、回合状态机、统计 |
-| **D-7** | 现有 ramp/curve_ramp/box 是否迁进地形 | A 保留解析体；B 全烘进网格 | **A**：能解析体表达的就不进网格；只有曲面/悬垂才用地形 | 引擎、数据、编辑器 |
-| **D-8** | 参考关卡数据保留 | A 只留 `~/KatamariRef`；B 允许进仓库 | **A**（现行规则）：导入器只写 `_ref_*` 与 `_RefUnlicensed`；任何网格/贴图/BIN 永不入库 | 导入器、git 守卫 |
-| **D-9** | 仓库许可（与 noclip 的 MIT 无关，见 §19） | A 暂不决定；B 现在选 MIT/Apache；C 现在选 copyleft（GPL 兼容） | **A**（LICENSING 未定）：不 vendor 第三方代码；若将来移植 MIT 代码，保留版权与许可声明；首选「照规格重实现」 | 全仓库 |
-| **D-10** | 运动保真度：13 类全做，还是先做子集 | A 数据模型收全 13 类、运行时先实现位移类 + 表现类；B 只做 `static`/`attached`；C 13 类全部第一版实现 | **C（owner 2026-11-16：全加）**：13 类数据与运行时都进第一版；没测到参数的类（`wait_for_player`/`whack_a_mole`/`clouds`/`spin`）用 PROVISIONAL 默认并在诊断里标记（U9），不用「先做子集」拖到后面 | schema、`MotionHost`、编辑器、测试 |
-| **D-11** | 骨骼动画路线（**2026-11-16 重写**） | A 153 个实例各挂普通 Animator（不优化）；B 类型 × 相位桶 + 截断到 64；C 顶点动画纹理（VAT） | **A（owner 2026-11-16）**：153 个骨骼实例**直接挂普通 Animator/蒙皮**，不做 VAT、不按 64 砍；B/C 降级为「以后真测出瓶颈再看」（§16.2 保留评估数字，但不作为当前设计）。`caps.animators` 改作统计字段 | 导入器、`MotionHost`、美术 |
-| **D-12** | 逐实例相位从哪来 | A 确定性哈希 + 作者 `phase` 覆盖；B 运行时随机；C 等原作种子证据 | **A（owner 2026-11-16）**：相位 = 「这件从周期的哪一刻开始动」；不读原作种子，用 `itemId + level.id` 的确定性哈希，作者可用 `phase` 覆盖。白话解释与为什么不用随机见 §16.2 | 导入器、运行时 |
-| **D-13** | 舞台动画（水面/招牌/霓虹） | A v1 不做；B 以后用材质/Shader 做；C 现在查证据 | **A（owner 2026-11-16：现在不做）**：本轮只证明「noclip 没做」，不能证明原作没有；5 朵云是 `moveType 16` 的道具（不是舞台），参考实现的风车/转灯是手写补的、不是数据给的 | 美术、舞台 |
-| **D-14** | 移动件被吸后，带自己 motion 的子件怎么办 | A 挂起，`SETTLED` 后恢复；B 立即恢复；C 随父一起吸（carry） | **A（owner 2026-11-16 确认）**：下落期间挂起子件自己的运动，落定后恢复；C 与已定「子件坠落、不 carry」冲突 | `MotionHost`、行为宿主 |
+| # | 主题 | 现行口径 | 影响面 |
+|---|---|---|---|
+| **D-1** | 全局球径上限 | 单一全局资产，20 m（引擎护栏，不是玩法目标），`meta.ball.maxDiameterRef:"global"`；仅实验关允许 `"level"` 并打 warning | `meta`、电机、编辑器 |
+| **D-2** | 地形存储 | 内联保可读；>512 三角形走 `.katerrain` 侧车并钉 sha256；参考关卡用同一格式 | JSON/侧车、编辑器、导入器 |
+| **D-3** | 地形水平阻挡 | 支撑 + 陡面挡（θ 分类），分阶段：T0/T1 只做支撑/推出/去法向速度，T2 才做滚/爬分类与爬升；T2 前用 `structures` slab 补关键阻挡 | 电机、测试场、关卡设计 |
+| **D-4** | 活动区越界 | 硬墙 + 球径门 + 每关 kill plane；玩法范围主要靠地图布局限制；不做软边距 | `activityArea`、电机、关卡设计、HUD |
+| **D-5** | 逐件缩放 | 四层，见 §6.4：①运行时永不缩放；②作者态均匀缩放全允许（含挂接件）；③非均匀 + 有代理只允许无父、static、box/sphere；④非均匀 + 无代理（def 无 `collider`）允许无父、static、`absorbable:false`（原作唯一实例 `sparrow_001`） | props、导入器、吸收门 |
+| **D-6** | zone id | 不透明标签，只做标签/统计（`killPlane.zoneId` 只记诊断）；kill plane 是独立字段、逐关 Y，运行时由回合状态机当重启阈值执行，没有回合状态机的世界退回 `ActivityAreaHost` 兜底 | 地形、活动区、回合状态机、统计 |
+| **D-7** | ramp/curve_ramp/box | 保留解析体；能解析体表达的不进网格，只有曲面/悬垂才用地形 | 引擎、数据、编辑器 |
+| **D-8** | 参考关卡数据 | 只留 `~/KatamariRef`；导入器只写 `_ref_*` 与 `_RefUnlicensed`；任何网格/贴图/BIN 永不入库 | 导入器、git 守卫 |
+| **D-9** | 仓库许可 | 未定（见 §19 与 OPEN_DECISIONS）；不 vendor 第三方代码；移植 MIT 代码须保留版权与许可声明；首选照规格重实现 | 全仓库 |
+| **D-10** | 运动保真度 | 13 类运动数据与运行时都进第一版；没测到参数的类（`wait_for_player`/`whack_a_mole`/`clouds`/`spin`）用 PROVISIONAL 默认并在诊断里标记（U9） | schema、`MotionHost`、编辑器、测试 |
+| **D-11** | 骨骼动画 | 153 个骨骼实例直接挂普通 Animator/蒙皮，不做 VAT、不按 64 截断；`caps.animators` 是统计字段；真测出瓶颈再评估（§16.2） | 导入器、`MotionHost`、美术 |
+| **D-12** | 逐实例相位 | `itemId + level.id` 的确定性哈希，作者可用 `phase` 覆盖；说明见 §16.2 | 导入器、运行时 |
+| **D-13** | 舞台动画 | v1 不做；「noclip 没做」不能证明原作没有；5 朵云是 `moveType 16` 的道具（不是舞台），参考实现的风车/转灯是手写补的、不是数据给的 | 美术、舞台 |
+| **D-14** | 移动件被吸后子件的运动 | 下落期间挂起子件自己的运动，`SETTLED` 后恢复；不 carry | `MotionHost`、行为宿主 |
 
 ### 16.1 未验证项（不因本文定稿而变成已验证）
 
@@ -1491,7 +1488,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 - 作者觉得不好看，就写 `phase` 覆盖；
 - **不用 `Math.random()`**：每次进世界都不同，同一件道具两次加载动作不同步，回放与对拍都会飘。原作的种子来源仍是 U5（未验证）。
 
-**D-11（2026-11-16 重写）：不预先优化。** 参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求本身极低；现阶段完全不必担心 Animator 数量、顶点数、骨骼数。**153 个带骨骼动画的实例直接用普通 Animator + 骨骼蒙皮**，不做顶点动画纹理（VAT），也不按 64 个砍。
+**D-11：不预先优化。** 参考关卡是 2018 年的 REROLL 复刻（PS2 时代原作），性能要求本身极低；现阶段完全不必担心 Animator 数量、顶点数、骨骼数。**153 个带骨骼动画的实例直接用普通 Animator + 骨骼蒙皮**，不做顶点动画纹理（VAT），也不按 64 个砍。
 
 | 事实 | 数 |
 |---|---|
@@ -1578,7 +1575,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 2. **要省那点 `Update` 时才考虑按需启用**，前置三条缺一不可：① `LevelContent/<levelId>` 多根（导入器现在只有一个受管根）；② `PickupFieldHost.CaptureOriginalPoses()` 变成公开接缝，并在启用后立即调用（否则重试时道具留在地上）；③ 每岛一个 arena host，或一个显式的「当前岛」切换接口（现在 `LevelArenaHost` 一次性注册 8 平面/8 盒，两个岛会抢同一张表）。
 3. 启用前必须先复位再开（`ResetField()`），否则再进就是脏的。
 
-### 17.5 对格式与编辑器的要求（本轮只写要求，不改实现）
+### 17.5 对格式与编辑器的要求
 
 - `meta.scene` 已经是字段（这张关卡属于哪张 Unity 场景）；`meta.id` 已经是目录名 → 建议导入器用它当**场景内根物体名**（`LevelContent/<id>`），这样一张场景放多关不会互相覆盖。**今天导入器只认一个 `LevelContent`（`PlacementImporter.ManagedRootName`），多根尚未实现**——这是 A 方案的代码前置条件（不管启用/停用都需要）；若还要按需启用/停用，再加 §17.4 的另两条。
 - 每关自带世界偏移：`meta.ball.start`/`playerSpawn` 已是世界坐标，岛的偏移就是这些坐标的一部分，导入器**不重算、不归一化**。
@@ -1640,14 +1637,3 @@ PS2 的实例记录是 0x40 字节，`+0x30..+0x38` 三个 f32 就是缩放（[N
 | 仓库许可仍未定；解析器进仓库的前提是 owner 选定许可（MIT/Apache/GPL 兼容都可以，只要不搬 noclip 源码/逐行翻译） | [OPEN_DECISIONS](../../OPEN_DECISIONS.md) |
 
 **同步口径**：`AGENTS.md` 与 `OPEN_DECISIONS.md` 的 noclip 条都按上表写：派生自第三方代码的解析器在 owner 选定仓库许可前留在仓库外；移植/衍生必须保留原版权与许可声明（MIT 允许）；首选照规格重实现。其余许可判断（素材 CC-BY-SA/GPL 不混用等）不受影响。
-
-## 20. 变更记录
-
-| 日期 | 变更 | 说明 |
-|---|---|---|
-| 2026-11-16 | 建立骨架 | 需求/约束、研究问题、引擎事实、NOW/WAIT；schema 标 `DRAFT_BLOCKED_ON_RESEARCH` |
-| 2026-11-16 | **本版：最终提案** | 两份研究落地后按研究结论改写：五层 schema 定稿、terrain/structures/activityArea/props 字段、两个 JSON 例子、规范形与侧车、错误码、v1→v2 转换器、Unity 映射、容量预算、地形接触分阶段计划与 4 个新测试格、编辑器升级、迁移阶段、owner 决策；许可前提更正为 MIT（非 GPL-3） |
-| 2026-11-16 | **第 2 版：运动/动画** | 吸收 `ORIGINAL_ANIMATION_OBSERVATIONS`：`motions[]`/`paths[]` 逐关表、`props[].motion/inherit/phase/clipStart/shakeOff`、`defs[].speedIndex/clips`、13 类运动与速度档、10/15 Hz 更新预算、共享剪辑×8 相位桶、移动件吸收/父链规则、三个运动 JSON 例子、错误码、编辑器 E9/E10、D-10–D-14 与 U5–U9 |
-| 2026-11-16 | **第 3 版：owner 拍板 + 两个问答** | 记录 owner 2026-11-16 的裁定（球径 20 m、活动区靠布局、逐关 kill plane、D-10 全加、D-11 研究结论、D-12 相位、D-13 不做、D-14 挂起）；新增 §17「一个世界 = 一张场景」（多地图架构、我们今天的 StoryMode 两岛结构、A/B/C 建议、格式与编辑器要求）、§18「为什么允许逐件缩放」（新数据 6 件非单位 → 四层规则）；§6.4 改写为三层并收窄 `[prop_scale_attached]`；`caps.animators` 明确为「Animator 组件预算」而非「只播 64 件」；原许可/变更记录顺延为 §19/§20 |
-| 2026-11-16 | **第 4 版：性能口径 + 命名定稿** | owner 两条补充拍板：①**性能不预先优化**——D-11 重写为「153 个骨骼实例直接挂普通 Animator/蒙皮，不做 VAT」，`caps.animators` 退成统计字段（`[anim_budget]` 只对账、`[caps_motion]` 改 `animators ≤ props`），「64 不够」与 VAT 降级为「以后真测出瓶颈再看」，同时写明后续**真实测量**照旧要做；②怀旧关正式名 **「怀旧关：蟹座小院 / Cancer Courtyard」**（Nostalgia 作别名，内部 id 仍是 `_ref_cancer`） |
-| 2026-11-17 | **第 5 版：`terrain.visual`** | 研究确认参考关卡的视觉网格与碰撞网格是两套几何（碰撞含 15 m 不可见围墙）：新增 `terrain.visual`（§3.8：部件/子网格/材质/过滤）、`.katvisual` 侧车（§8.4）、7 个 `[terrain_visual*]` tag 与键白名单、Unity 拆分导入（§11.2：`TerrainVisual/<part>` 渲染 + `TerrainCollision` 只留碰撞体） |

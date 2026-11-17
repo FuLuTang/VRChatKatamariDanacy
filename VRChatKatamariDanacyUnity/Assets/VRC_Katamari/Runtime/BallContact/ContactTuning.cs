@@ -231,8 +231,8 @@ namespace VRCKatamari.BallContact
         public const float WindowCompleteMarginM = 0.02f;
 
         // ---- Shapes (section 4A, owner decisions 13, 14, 15) ----
-        // The visual core has no tuning constant: it is the level's start diameter, fixed
-        // (KatamariBallMotor.GetStartDiameterWorldM), not a fraction of the physical radius.
+        // The visual core has no tuning constant: its radius equals the current collision
+        // radius (KatamariBallMotor.GetVisualCoreRadiusWorldM).
 
         /// <summary>Maximum physical pin protrusion per core radius (matches the radial proxy cap).</summary>
         public const float NeedleProtrusionPerRadius = 0.35f;

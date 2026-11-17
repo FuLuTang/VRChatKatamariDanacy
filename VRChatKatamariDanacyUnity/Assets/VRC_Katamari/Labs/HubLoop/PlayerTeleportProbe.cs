@@ -105,8 +105,8 @@ namespace VRCKatamari.Labs.HubLoop
     /// centimetres onto the floor); (b) the destination must not be inside any collider volume -
     /// that is a scene-authoring rule, not something this script can detect, and it is why the
     /// probe logs two readings instead of one. Note the scene already levitates its own spawn:
-    /// <c>StoryLevel.unity</c>'s <c>Spawn</c> sits at y = 0.5 above the arena floor at y = 0, so
-    /// "a bit above the floor" is this scene's existing convention, not a new invention. The lift
+    /// the story arena's <c>Spawn</c> sits at y = 0.5 above the arena floor at y = 0, so
+    /// "a bit above the floor" is the scene's existing convention. The lift
     /// default here is 0.1 m: small enough that the landing is imperceptible, big enough that the
     /// capsule does not start inside the floor. Raise it toward 0.5 m if the settled reading shows
     /// the player being pushed.
@@ -237,8 +237,8 @@ namespace VRCKatamari.Labs.HubLoop
             }
 
             VRCPlayerApi player = Networking.LocalPlayer;
-            // String concatenation rather than Vector3.ToString(): the repo already logs positions
-            // that way (StoryLevelLabBootstrap.Report), and only float.ToString is a proven extern here.
+            // String concatenation rather than Vector3.ToString(): only float.ToString is a proven
+            // extern here.
             string startPosition = "unavailable";
             if (player != null) startPosition = "" + player.GetPosition();
             Debug.Log(LogPrefix + " ready targets=" + targets.Length

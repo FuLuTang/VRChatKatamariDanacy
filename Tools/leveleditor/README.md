@@ -377,11 +377,11 @@ Shift 加选、框选、右键飞行+W+滚轮、中键/空格平移、Alt+左键
 
 冒烟脚本会：加载 127 件真实模型 → 跑坐标审计 → 点选椅子 → 方向键推 0.05 m → `Ctrl+Z` 恢复**逐字节相同** → 在 D=0.50/1.25 检查阶梯计数 → 拖一个苹果进场景再撤销 → 行走模式前后走 → 截图按钮下载 PNG → 打开 `physics_test_field/C01` 再切回第一关（并校验文件 sha 未变）。
 
-截图默认写到 `/tmp/leveleditor-shots/`，可用 `LEVELEDITOR_SHOTS` 指定。本次交付的图在 `Docs/Evidence/LevelEditorWeb/`。
+截图默认写到 `/tmp/leveleditor-shots/`，可用 `LEVELEDITOR_SHOTS` 指定。
 
 ---
 
-## 6. 已知限制（phase 1）
+## 6. 已知限制
 
 - 只编辑一份关卡；同一时间一个写者（设计如此）。
 - 没有缩放（道具不应缩放；结构尺寸用左侧数值面板）。
@@ -393,8 +393,6 @@ Shift 加选、框选、右键飞行+W+滚轮、中键/空格平移、Alt+左键
 - 物理提示是只读预测（P2 规则），不写文件，也不是运行期碰撞。
 - `render` op 在 Web 端被拒绝（没有 Blender）；截图由浏览器完成。
 - 指针锁定在部分浏览器的非 localhost `http://` 下可能被拒绝；页面自动退化为「按住右键拖动看方向 + WASD」，功能不受影响。
-  实测：headless Chromium 在 `http://100.113.66.61:8777`（非安全上下文）上**授予了** pointer lock，
-  WASD 正常；Windows 实机 Chrome 还需主人按一次确认。
 - `physics_test_field` 目前只列已入库的 9 格（`C01` 等），不是 21 格。
 
 ---

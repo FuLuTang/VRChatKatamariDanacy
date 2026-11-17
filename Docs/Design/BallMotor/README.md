@@ -1,6 +1,6 @@
 # 球体每帧装配（BallMotor）接口契约
 
-> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+> **吸收尺寸门（现行）**：物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。口径与实现清单见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 
 
 **状态：`PROVISIONAL_NOT_TESTED`。** 本文定义各层之间的**数据边界与调用顺序**，并记录装配层唯一自带的交分换算规则与固定容量信号；不定义调参值，也不是对原作行为的声明。世界尺度与公共接口仍未冻结（T06）。
@@ -61,11 +61,11 @@
 
 ## 组合层实现说明
 
-**状态：源码已写，未编译、未在 Unity 运行、未做 U# 全量编译、未测。** 实现是一个 UdonSharp Behaviour：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/KatamariBallMotor.cs`（命名空间 `VRCKatamari.BallMotor`）。它只持有状态、按上表顺序调用、在失败时保持上一帧。唯一的规则算术是交分缩小：没有任何球层拥有“交分换算”这一策略，所以它被放在同目录的纯静态类 `BankShrinkMath.cs`（同一命名空间、无状态、可单测），行为类只调用它并据结果决定是否动账本；除此之外本层不实现玩法公式。
+实现是一个 UdonSharp Behaviour：`VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/KatamariBallMotor.cs`（命名空间 `VRCKatamari.BallMotor`）。它只持有状态、按上表顺序调用、在失败时保持上一帧。唯一的规则算术是交分缩小：没有任何球层拥有“交分换算”这一策略，所以它被放在同目录的纯静态类 `BankShrinkMath.cs`（同一命名空间、无状态、可单测），行为类只调用它并据结果决定是否动账本；除此之外本层不实现玩法公式。
 
 ### 它持有的状态
 
-单球标量（不是并行数组）。本版**只支持一个本地球**：多球需要把下列标量改成同长度并行数组，并在 `StepBall` 外面套一层下标，本次没做。
+单球标量（不是并行数组）。本版**只支持一个本地球**：多球需要把下列标量改成同长度并行数组，并在 `StepBall` 外面套一层下标，本版未做。
 
 | 字段 | 用途 | 只由谁写 |
 |---|---|---|
@@ -73,7 +73,7 @@
 | `planarVelocity` | XZ 速度（y 恒 0） | 第 2 步成功时 |
 | `ballCenterWorld` | 球心 | 每步末尾提交（各步只读） |
 | `coreRadiusWorldM` / `collisionRadiusWorldM` / `semanticDiameterWorldM` | 三个尺寸，分开存 | 第 7 步成功时 |
-| `sizeScale`（`CurrentSizeScale()`，不存字段） | 当前语义直径 / 起始语义直径（D/D0），喂运动层、爬升门与下坡重力；旧 `growthFraction` 已删除 | 第 7 步成功时 |
+| `sizeScale`（`CurrentSizeScale()`，不存字段） | 当前语义直径 / 起始语义直径（D/D0），喂运动层、爬升门与下坡重力 | 第 7 步成功时 |
 | `unbankedVolumeUnits` | 账本确认体积（可交分） | 账本提交/交分成功后的**读回值** |
 | `carriedVolumeUnits` | 交分后留下的、已计分的残余体积（只喂尺寸，永不再交分） | 只由交分成功时 |
 | `confirmedVolumeUnits` | 尺寸驱动量 = 未交存 + 残余；只由确认来源相加，不累积 | 只由 `RecomputeConfirmedAndSize()` 写（第 7 步与交分成功时） |
@@ -154,7 +154,7 @@ StepBall:
 
 ### 固定容量与溢出信号
 
-注册类缓冲区是固定容量：`MaxPlaneCount = 8`、`MaxBoxCount = 64`（2026-11-16 由 8 提到 64）、`PendingCandidateCapacity = 4`，加上扫掠每步最多 `ContactCapacity = 4` 个接触点。超出容量的条目**被拒绝并返回 false + latch 原因**（不是静默丢弃），不排队、不扩容、不降级，所以：
+注册类缓冲区是固定容量：`MaxPlaneCount = 8`、`MaxBoxCount = 64`、`PendingCandidateCapacity = 4`，加上扫掠每步最多 `ContactCapacity = 4` 个接触点。超出容量的条目**被拒绝并返回 false + latch 原因**（不是静默丢弃），不排队、不扩容、不降级，所以：
 
 - 障碍超出会改变球实际能撞到什么；
 - 候选队列超出会静默丢掉一个本可吸收的物件。
@@ -188,11 +188,11 @@ StepBall:
 
 **每步成本（常数，与已吸附物件总数无关）**：夹紧 32 个端点（≤32 次 sqrt + 缩放）、代理接地 ≤32 次点积（两者都由端点池决定，方向数不影响）、核心球心一次空数组调用（约 10 次运算）。吸附一次：8 角点 + 受影响方向扫描（最坏 16×8 点积）+ 受影响支持重算（最坏 16 方向 × 32 端点），约 0.6k 次点积；删除同理。整账本重建（16×32 点积）只在交分、传送、重试时发生。
 
-**验证。** 纯逻辑测试在 `Tests/EditMode/BallLayers/RadialProxyShellTests.cs`：单根长棍抬升且不超过突出/单步上限、移除后回落、两件共享方向去掉一件不误删另一件、核心长大后原始突出收回、增量与整账本重建等价、容量满时拒绝且不改旧壳、角点夹紧与未用槽清零。**Unity 编译与 `run_tests` 没有在本检出运行**（Linux 侧不碰 Unity）。
+**验证。** 纯逻辑测试在 `Tests/EditMode/BallLayers/RadialProxyShellTests.cs`：单根长棍抬升且不超过突出/单步上限、移除后回落、两件共享方向去掉一件不误删另一件、核心长大后原始突出收回、增量与整账本重建等价、容量满时拒绝且不改旧壳、角点夹紧与未用槽清零。
 
-### 地形支撑接线（P1，2026-11-15；PROVISIONAL）
+### 地形支撑接线（PROVISIONAL）
 
-支撑、台阶、重力下落的**数学**在 `Runtime/BallLayers/TerrainSupport/SupportSurfaceMath.cs`；装配层只搬运和排序。设计与取舍见 [TERRAIN_SUPPORT.md](TERRAIN_SUPPORT.md)（§8.1 是实现记录，含与设计的偏离）。
+支撑、台阶、重力下落的**数学**在 `Runtime/BallLayers/TerrainSupport/SupportSurfaceMath.cs`；装配层只搬运和排序。设计与取舍见 [TERRAIN_SUPPORT.md](TERRAIN_SUPPORT.md)（§8.1 是实现取舍与定型规则）。
 
 球的惯性（松手滑行、起步、刹车、转向漂移）的现状读数与重做设计见 [BALL_INERTIA.md](BALL_INERTIA.md)（PROVISIONAL，未实现）；原作证据见 [ORIGINAL_BALL_INERTIA](../../Research/KatamariBallRules/ORIGINAL_BALL_INERTIA.md)。
 
@@ -220,13 +220,13 @@ StepBall:
 
 **与小棍的接法**：小棍决定「球的哪个点最低」，支撑查询决定「那个点下面的面在哪」；本层喂 `GroundContactMath` 的是支撑面的 `(n, dot(n,P))`，代理点数组照旧。跨级那一步用 `min(stepLimit, maxStepUpLiftWorldM)` 覆盖 0.04 的代理上限，下一步立刻回到 0.04，所以长棍仍然弹不动球。**镜头仍读空代理数组解出的核心球心**，不跟台阶/下落起伏（低通照旧）。
 
-**关卡登记**：`Runtime/Story/LevelArenaHost.cs` 引用场景里的 `BoxCollider`（台面/台阶/墙）与墙的 `Transform`（局部 +Z 指向场内），`Setup` 时**烘焙一次** `bounds` / 平面 `(n, offset)` 后就不再读 Collider。`Labs/StoryLevel/StoryLevelLabBootstrap` 不再登记任何几何。
+**关卡登记**：`Runtime/Story/LevelArenaHost.cs` 引用场景里的 `BoxCollider`（台面/台阶/墙）与墙的 `Transform`（局部 +Z 指向场内），`Setup` 时**烘焙一次** `bounds` / 平面 `(n, offset)` 后就不再读 Collider。
 
-### 跟随架（2026-11-15 定稿语义，PROVISIONAL 数值）
+### 跟随架（PROVISIONAL 数值）
 
 跟随架是**表现层**，也是玩家坐姿的落点：`VRCStation` 挂在 `followRigRoot` 下面，它指向哪里，玩家就在哪里。它只读球的位置、朝向与半径，不写回任何玩法状态。
 
-**这是眼点，不是座位**（2026-11-15 补）：上面的式子给的是**眼睛**该在哪，不是**座位**该在哪。玩家由 `VRCStation` 承载，station 落的是 avatar 的**根**而不是眼睛；把座位直接摆在眼点上，真实相机（avatar 自己的头部相机，场景里没有 Camera 对象）就会再高出一个坐姿眼高（因 avatar 而异，通常 0.4–0.9 m）——试玩反馈的"坐下后头的位置偏高"就是这一条。所以座位由**骑乘层**按实测眼高反推：`Runtime/Riding/SeatEyeCompensation` 在本地玩家坐下后的稳定窗口里实测 `GetTrackingData(Head)` 相对入座点的偏移，再把入座点按 `−inverse(R)·d` 摆到"头正好落在眼点"的位置（R 是跟随架 yaw，d 是实测偏移）；motor 与 `FollowRigMath` 都不知道这件事，公式仍然只负责眼点。偏移测一次就冻结（VR 下头部会随真实头动，不能每帧拉回），离座、重生、换 avatar 时复位重测。补偿量落在两条护栏之内：① 合理性上限 `SeatEyeMath.MaxPlausibleHeadAboveSeatMeters = 1.35 m`，实测头距超过它就整条拒绝（`reason=6`）而不是减半补偿——它是防「读到明显错误的数据（站姿眼高而相机并不在那里）」的护栏，不是产品值：ClientSim 实测 **1.204159 m**（2026-11-15，那里的相机确实就在那个高度）、真机坐姿约 **0.85 m**，1.35 给最大值留了余量、又仍在站姿眼高 1.5–1.8 m 之下；② 竖向钳位 `verticalLimitMeters = 1.3 m`（2026-11-15 定），与 1.35 的合理性上限配套：它必须高于本仓实测到的最高的头（ClientSim **1.204159 m**），否则真实测出来的一米二会被削掉、相机照样偏高——1.3 让这条测量**完整补偿**（`uncompensatedMeters = 0`）；超出的部分不补偿并计入 `uncompensatedMeters`（例：1.40 m 的头剩 0.10 m）。代价只落在第三人称：avatar 下半身更深地没入地面，本地玩家自己的视角不受影响。
+**这是眼点，不是座位**：上面的式子给的是**眼睛**该在哪，不是**座位**该在哪。玩家由 `VRCStation` 承载，station 落的是 avatar 的**根**而不是眼睛；把座位直接摆在眼点上，真实相机（avatar 自己的头部相机，场景里没有 Camera 对象）就会再高出一个坐姿眼高（因 avatar 而异，通常 0.4–0.9 m）——试玩反馈的"坐下后头的位置偏高"就是这一条。所以座位由**骑乘层**按实测眼高反推：`Runtime/Riding/SeatEyeCompensation` 在本地玩家坐下后的稳定窗口里实测 `GetTrackingData(Head)` 相对入座点的偏移，再把入座点按 `−inverse(R)·d` 摆到"头正好落在眼点"的位置（R 是跟随架 yaw，d 是实测偏移）；motor 与 `FollowRigMath` 都不知道这件事，公式仍然只负责眼点。偏移测一次就冻结（VR 下头部会随真实头动，不能每帧拉回），离座、重生、换 avatar 时复位重测。补偿量落在两条护栏之内：① 合理性上限 `SeatEyeMath.MaxPlausibleHeadAboveSeatMeters = 1.35 m`，实测头距超过它就整条拒绝（`reason=6`）而不是减半补偿——它是防「读到明显错误的数据（站姿眼高而相机并不在那里）」的护栏，不是产品值：ClientSim 实测 **1.204159 m**（2026-11-15，那里的相机确实就在那个高度）、真机坐姿约 **0.85 m**，1.35 给最大值留了余量、又仍在站姿眼高 1.5–1.8 m 之下；② 竖向钳位 `verticalLimitMeters = 1.3 m`（2026-11-15 定），与 1.35 的合理性上限配套：它必须高于本仓实测到的最高的头（ClientSim **1.204159 m**），否则真实测出来的一米二会被削掉、相机照样偏高——1.3 让这条测量**完整补偿**（`uncompensatedMeters = 0`）；超出的部分不补偿并计入 `uncompensatedMeters`（例：1.40 m 的头剩 0.10 m）。代价只落在第三人称：avatar 下半身更深地没入地面，本地玩家自己的视角不受影响。
 
 **为什么是「球后方的 station」而不是摄像机**（这条必须留着，别让后来的人以为方案选错了）：VRChat **没有任何 API 能连续移动玩家 avatar**，唯一手段是 `VRCStation`（或传送）。所以「人推球」在这台引擎上只能实现成**摆在球后方的一个 station**：第一人称下玩家看到的正是「球在身前、视角在球后上方」，与推球一致；但第三人称会看到 avatar 是坐姿——这是引擎限制，不是设计取舍。球的**位置**仍然只由 motor 决定，座位只是它的观察点。
 
@@ -256,7 +256,7 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 
 滤波不变：x/z 与高度用 `heightFilterHz`（5 Hz）、yaw 用 `yawFilterHz`（8 Hz），alpha = `1 − exp(−2π·hz·dt)`；传送/卡住恢复靠 `discontinuous` 一次吸附。**喂进来的中心是第 4 步空代理数组解出的核心球心**（见上一节），代理凹凸不进入这条高度通道，所以低通只需要处理正常地面/转向，不再需要独自压住长棍的起伏。后退偏移沿**滤波后的 yaw**取，所以偏移方向和写进 transform 的朝向不会打架。代价照旧要说清：后退偏移也是转向时座位横移的半径——110°/s 满转在 2.3 m 后退下约 4.4 m/s；觉得像「侧滑」就降 `eyeBackPerRadius`。
 
-新增的序列化字段（改名/新增都要 Unity 侧重接，见 `Labs/README.md` 的实例变量表说明）：
+新增的序列化字段（改名/新增都要 Unity 侧重接，见 [Labs/README.md](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/README.md>) 的实例变量表说明）：
 
 | 字段 | 类型 | 默认 | 语义 |
 |---|---|---:|---|
@@ -268,9 +268,9 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 | `eyeBackPerRadius` | float | 2.2 | 每米半径再后退多少米 |
 | `eyeMaxBackM` | float | 8 m | 护栏：后退上限 |
 
-删除的字段：`eyeHeightMeters`、`eyeHeightMinMeters`、`eyeHeightMaxMeters`（旧「离球心常量眼高」语义）。**模型侧已于 2026-11-15 同步**：`Docs/Design/BallLayers/FollowRig/follow_rig.py` 的 `try_update(...)` 与 C# `TryUpdate` 同名同序（含调用方持有的上一帧状态），7 个眼点系数是每次调用的参数、模型里不再有 `eye_height_m` 默认值；`Docs/tests/ball_follow_rig/` 由 8 例改为 9 例（新增「球后上方、两项随半径增长」的四档直径检查），`Docs/tests/ball_visual_roll/test_presentation_cross_layer_simulation.py` 的 4 处旧调用一并改完。以后改这里的式子，C# 与 Python 必须同一提交。
+眼点由 7 个系数决定，没有离球心常量眼高的字段。模型 `Docs/Design/BallLayers/FollowRig/follow_rig.py` 的 `try_update(...)` 与 C# `TryUpdate` 同名同序（含调用方持有的上一帧状态），7 个眼点系数是每次调用的参数；测试在 `Docs/tests/ball_follow_rig/` 与 `Docs/tests/ball_visual_roll/test_presentation_cross_layer_simulation.py`。改这里的式子，C# 与 Python 必须同一提交。
 
-### 推球方向浮标（2026-11-15，纯视觉，PROVISIONAL）
+### 推球方向浮标（纯视觉，PROVISIONAL）
 
 `Runtime/BallLayers/PushCue/` 的 `PushDirectionCue` 在球前方浮一个方向小箭头，只读本层与 `BallRideStation` 的公开接口：位置 = 球心 + `forward(跟随架 yaw) × (半径 + 间距)`，高度 = 球心 + `半径 + 悬空量`（即贴着球顶上方浮着），朝向 = 跟随架 yaw，大小 = `基准长度 + 直径 × 系数`（夹在护栏内），再叠一个 0.25 Hz / 2.5 cm 的上下浮动；只在本地玩家坐在球上、且（接了控制器时）回合状态为 `StateRunning` 时显示。**方向取跟随架 yaw 而不是球速**：静止时球速为零，而 yaw 就是座位朝向，指示物与座位不会打架。间距/高度/缩放都随**语义直径**线性放大（直径 0.30 m → 球心前方 0.635 m、离地 0.38 m、长 0.22 m；2.00 m → 2.25 m、2.08 m、0.90 m），因此各尺寸下浮标都落在骑士视轴下方约 20°、球轮廓之外；贴地版本在球长大后会被球自己挡住，所以高度从球顶量起。纯表现：不进候选、不登记碰撞/遮挡数组、不参与任何玩法。公式在 `PushCueMath`，测试在 `Tests/EditMode/BallLayers/PushCueTests.cs`。
 
@@ -297,43 +297,43 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 
 | 字段 | 默认 | 来源 |
 |---|---:|---|
-| `fixedStepSeconds` / `maxStepsPerFrame` | 0.02 s / 5 | 本轮临时；上面“未定项”仍未决 |
+| `fixedStepSeconds` / `maxStepsPerFrame` | 0.02 s / 5 | 临时值；上面“未定项”未决 |
 | `bankResidualFraction` | 0.25 | `Docs/Design/Gameplay/README.md` 的反推暂定值；`OPEN_DECISIONS.md` (a) |
 | `minConversionDiameterWorldM` | 0.55 | `Docs/Design/Gameplay/README.md` 的 t1 档下限；`OPEN_DECISIONS.md` (b) |
-| `maxSpeedMps` / `accelerationMps2` / `brakingMps2`（D0 下，× D/D0） | 4 / 7.5 / 6 | `BallMotor/BALL_INERTIA.md`，PROVISIONAL |
+| `maxSpeedMps` / `accelerationMps2` / `brakingMps2`（D0 下，× D/D0） | 4 / 7.5 / 6 | `BALL_INERTIA.md`，PROVISIONAL |
 | `rollingResistanceMps2`（D0 下，× D/D0） / `maxLateralMps`（× D/D0） | 1.3 / 1.2 | 同上 |
 | `frictionPerSecond` / `lateralGripPerSecond` / `turnRateDegreesPerSecond`（时间型，不缩放） | 0.9 / 2.0 / 110 | 同上 |
 | `rampTangentialGravityScale` / `rampRestSpeedMps` / `rampRestSeconds` / `rampSlideMinSlopeDegrees` | 1 / 0.05 / 0.3 / 2 | 静止后下坡，同上 §4 |
-| `baselineVolumeUnits` / `cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` | 3.4390244 / 0.0041 / 1.1 | 2026-11-15 为对齐 `round_model.py` 重新标定过：起始体积 `3.4390244 × 0.0041 = 0.0141 m³`（0.29974 m），满径 2.20 m 需约 1356.4 确认单位；未测量 |
-| `eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeUpMinMeters` / `eyeUpMaxMeters` | 0.55 m / 2.4 / 0.1 m / 8 m | **PROVISIONAL，2026-11-15 定稿语义**：眼点 = 球心 +（常量 + 半径×系数），上下限是离球心的护栏；见下「跟随架」 |
+| `baselineVolumeUnits` / `cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` | 3.4390244 / 0.0041 / 1.1 | 与 `round_model.py` 对齐：起始体积 `3.4390244 × 0.0041 = 0.0141 m³`（0.29974 m），满径 2.20 m 需约 1356.4 确认单位；未测量 |
+| `eyeBaseUpMeters` / `eyeUpPerRadius` / `eyeUpMinMeters` / `eyeUpMaxMeters` | 0.55 m / 2.4 / 0.1 m / 8 m | **PROVISIONAL**：眼点 = 球心 +（常量 + 半径×系数），上下限是离球心的护栏；见下「跟随架」 |
 | `eyeBaseBackMeters` / `eyeBackPerRadius` / `eyeMaxBackM` | 0.75 m / 2.2 / 8 m | 同上：球心后方（常量 + 半径×系数），上限是护栏 |
-| `maxItemVolumeWorldM3` / `absorbVolumeRatio` / `contactRadiusWorldM` | 512 / 10 / 0 | 体积门（决定 (l)）：上限 = `min(512, 球体积/10)`；旧的 `maxItemSizeWorldM` / `absorbSizeRatio` 已删除。`contactRadiusWorldM = 0` 是决定 (i) |
+| `contactRadiusWorldM` | 0 | 决定 (i)：接触半径为 0（体积门见文首） |
 | `maxLiftPerStep` / `maxDropPerStep` / `separationEpsilon` / `maxRollDisplacementM` | 0.1 / 0.1 / 0.001 / 0.5 | 本层临时，非实测容差 |
 | `maxProxyProtrusionPerCoreRadius` / `maxProxyProtrusionWorldM` | 0.35 / 0.30 m | 径向代理突出上限（相对核心半径 + 绝对护栏）；PROVISIONAL，cap 后剩余插地见 `ATTACH_PLACEMENT.md` §3.4 / §3.6 |
 | `maxProxyLiftPerStep` / `maxProxyNormalSpeedPerturbation` | 0.04 m / 0.15 m/s | 代理单步抬升与法向速度扰动上限；PROVISIONAL，保守值 |
-| `minProxyProtrusionM` | 0.01 m | 最小可贡献突出：最远角点没越过核心这么多的件不登记；PROVISIONAL。长物件准入（`longObjectMin*`）已删除：每件吸附物都登记 |
+| `minProxyProtrusionM` | 0.01 m | 最小可贡献突出：最远角点没越过核心这么多的件不登记；PROVISIONAL。每件吸附物都登记 |
 | `stuckTimeoutSeconds` | 1.5 | 本层临时恢复策略 |
-| `terrainSupportEnabled` | true | P1 地形支撑总开关（2026-11-15 用户改定；旧 lab 显式关） |
+| `terrainSupportEnabled` | true | P1 地形支撑总开关（`CpuSkirmish` 的 bootstrap 显式关） |
 | `stepHeightOverBallDiameter` / `maxStepUpLiftWorldM` | 0.25 / 0.6 m | 台阶比例（与 `layout.json` 同源）与单次跨级抬升护栏；PROVISIONAL |
-| `minStepHeightM` | 0.005 m | 数值去噪（小于它不算跨级）；**不是**地图的 0.05 m 分类门。单向迟滞 `stepHysteresisM` 与「已在顶上」`stepStickMarginM` 已于 2026-11-15 删除（C09 回归，见 TERRAIN_SUPPORT §8.1 D4/D5） |
+| `minStepHeightM` | 0.005 m | 数值去噪（小于它不算跨级）；**不是**地图的 0.05 m 分类门。台阶参考高度见 TERRAIN_SUPPORT §8.1 D4/D5 |
 | `maxSupportSlopeDegrees` | 45° | P3 斜面坡度护栏（PROVISIONAL；硬上限 51.3°） |
 | `rampTangentialGravityScale` | 0 | P3 切向重力比例（默认关闭；U3 试玩用） |
 | `gravityMps2` / `maxFallSpeedMps` / `supportDropTriggerM` | 9.81 m/s² / 40 m/s / 0.01 m | 下落重力、速度护栏、掉走容差；PROVISIONAL（原作无测量） |
 
 ### 缺口（数学层没提供、本层没有自己编）
 
-旧缺口“直径 → 体积的反函数不存在”已由 `SizeModelMath.TryVolumeUnitsForSemanticDiameter` 补上，交分因此改在直径空间（见上一节）。下面是仍然存在的缺口；**第 2、3 条已于 2026-11-15 解决**，编号保留以便其它文档继续按“缺口 2”“缺口 3”引用它们，规则分别见本节之后的「墙面法向去速」与缺口 3 本身的说明。
+直径 → 体积的反函数由 `SizeModelMath.TryVolumeUnitsForSemanticDiameter` 提供，交分因此在直径空间做（见上一节）。下面是本层的已知缺口；编号被其它文档按“缺口 N”引用，故保持不变。
 
 1. **设备轴 → forward/turn/lateral 的映射没有归属层。** `ControlIntentMath` 只给设备轴对，`BallMotionMath` 只吃三个标量，中间这一步（含相机/rig yaw 基准）目前是适配层约定，本层用 y→forward、x→lateral 顶着。
-2. ~~**墙面法向去速没有公开函数。**~~ **已解决（2026-11-15）**：规则与实现见下面「墙面法向去速（已解决，PROVISIONAL）」。编号保留，`SPLIT_PROPOSAL.md` 等文档仍按“缺口 2”引用它。
-3. ~~**吸收的“相对球径门槛”没有 C# 层**~~ **已解决（2026-11-15，决定 (h)；下面这些函数名与字段已随决定 (l) 的 AABB 体积门删除，这里保留当时的写法）**：`PickupAbsorbMath.TryComputeAbsorbSizeLimit` 把上限算成 `min(maxItemSizeWorldM, 语义直径 × absorbSizeRatio)`，本层每步把 `semanticDiameterWorldM` 与当时的 `absorbSizeRatio` 一起传进 `EvaluateAbsorbWithValueAndBallSize`（判定调用在 `KatamariBallMotor.cs:747-751`），配方不在本层，所以这条不再算缺口。`maxItemSizeWorldM` 由 1 改成 `8f` 并降级为安全上界，`absorbSizeRatio = 1f` 是 PROVISIONAL；`GetAbsorbSizeLimitWorldM()`（`:1647`）供诊断读当步上限。口径与两个尺寸量的区别见 `Docs/Design/PickupAbsorb/README.md` 1.1 节。
+2. **墙面法向去速**：由 `SweepMath` 的公开函数提供，规则见下面「墙面法向去速」。
+3. **吸收的相对球径门槛**：由吸收尺寸体积门判定，配方不在本层；现行口径见 `Docs/Design/PickupAbsorb/README.md` 1.1 节与文首指向的 ABSORB_GATE_ORIGINAL。
 4. **`growthFraction` 没有 helper。** 设计文档把它指派给组合层（`BallMotion` README 的“唯一回灌量”），`BallMotionMath` 也明说不做半径映射，所以本层只有这一处 `(r-base)/(max-base)` 夹取；若要复用应下沉到 `SizeModelMath`。
 5. **账本提交存储是有容量的**（本地 256 条/回合）。满了以后 `TryResolveClaims` 拒绝、候选留在队列里不再增长；正式回合应由拥有账本的控制器扩容或换权威提交。
 6. **单球、单本地玩家行**：多球/多人要并行数组 + 多行账本，本版没有。
 
-### 墙面法向去速（已解决，2026-11-15；PROVISIONAL）
+### 墙面法向去速（PROVISIONAL）
 
-**症状**：球撞墙时扫掠只把位置停在墙前，`planarVelocity` 仍带着整份撞墙速度（实测日志里 3.95 m/s 持续数秒），于是不沿墙滑、斜撞会“黏”在墙上、转身后还留着过期速度，快速撞墙还有抖动风险。
+**目的**：扫掠只把位置停在墙前，`planarVelocity` 若仍带着撞墙速度，球就不沿墙滑、斜撞会“黏”墙、转身后留着过期速度；所以撞墙后要去掉指向墙的速度分量。
 
 **规则**：第 3 步成功且本步记录到接触时，对每条墙面法线 `n`（指向障碍外侧）按接触顺序稳定地执行
 
@@ -354,7 +354,7 @@ v' = v - min(0, v·n) n
 
 **刻意不做摩擦、不做反弹**：原作墙面响应没有可靠证据，只去掉法向分量是“不粘墙”的最小规则。**PROVISIONAL**，试玩或拿到原作证据后应重新决定是否加切向摩擦或回弹。
 
-**限制**：只有被记录下来的接触参与（`ContactCapacity = 4`，缓冲饱和时去速不完整，`contactBufferSaturated` 是信号）；一步内只做一次去速，不迭代二次响应；**未在 Unity 编译、未跑 EditMode/NUnit、未做 U# 全量编译**（本文件作者不是 Unity 操作者）。测试见 `Tests/EditMode/BallLayers/SweepTests.cs` 的 `HeadOnWallContactRemovesTheWholeNormalSpeed`、`GlancingHitKeepsTheTangentialSpeed`、`MovingAwayFromAWallLeavesVelocityUnchanged`、`CornerSweepRemovesBothNormalComponents`、`NonFiniteOrDegenerateNormalsAreRefused`、`BoxEnteredAlongItsNegativeFaceIsOrientedOutward`。
+**限制**：只有被记录下来的接触参与（`ContactCapacity = 4`，缓冲饱和时去速不完整，`contactBufferSaturated` 是信号）；一步内只做一次去速，不迭代二次响应。测试见 `Tests/EditMode/BallLayers/SweepTests.cs` 的 `HeadOnWallContactRemovesTheWholeNormalSpeed`、`GlancingHitKeepsTheTangentialSpeed`、`MovingAwayFromAWallLeavesVelocityUnchanged`、`CornerSweepRemovesBothNormalComponents`、`NonFiniteOrDegenerateNormalsAreRefused`、`BoxEnteredAlongItsNegativeFaceIsOrientedOutward`。
 
 ## 未定项（等 T06 与试玩）
 
@@ -363,7 +363,7 @@ v' = v - min(0, v·n) n
 - 交分事务的触发方式（靠近/输入/自动）——由回合状态机决定，不在本层。
 - 舒适转向与移动权威（头/手/摇杆）如何合成 yaw——`FollowRigMath` 只吃一个标量 yaw，谁产它未定。
 
-## 起始球径是每关参数（2026-11-15，F4）
+## 起始球径是每关参数
 
 | 字段 | 默认 | 含义 |
 |---|---:|---|
@@ -374,7 +374,7 @@ v' = v - min(0, v·n) n
 - **只有基线变，单位不变**：连续体积未批准（PARITY_AUDIT §5.3），账本仍是整数单位；成长、重试、兑换、体积门都读同一个基线，所以 0.05 m 关的整条「确认单位 → 直径」曲线整体缩放。`1356 单位到 2.20 m` 那条标定只对 0.2997 m 基线成立，换起始球径的关卡需要自己的目标/上限（同一份 `level{}` 数据）。
 - **接线**：关卡场景把该值设成 `placement.json level.ballDiameterStart`；导入器不写球，只在报告里提醒（`Docs/Design/Tools/LEVEL_AUTHORING.md` §7.9）。旧的 `Start ready` 日志行现在多两个读数：`baselineUnits=` 与 `startSize=level|calibration`。
 
-## 跨 Behaviour 写入的集合缓冲：所有权（2026-11-15，F1）
+## 跨 Behaviour 写入的集合缓冲：所有权
 
 **问题形态**：`PickupFieldHost` 在自己的 `Update` 里把 blocking / support 集合推给 motor，而 motor 的 `Start` 不是先跑的。Unity 不保证跨 GameObject 的 `Start` 顺序，UdonSharp 下更实际的情形是「motor 的自有步进已经算出了尺寸，但它的 `Start` 事件还没来」；那一刻 motor 的缓冲还是 `null`，写入抛 `Object reference not set`，该 UdonBehaviour 被 halt，球再没动过（参考关卡 `_ref_mas1` 首跑即属此列）。
 
@@ -408,16 +408,15 @@ v' = v - min(0, v·n) n
 
 判断与防复发：
 
-- **"组件在、什么都不跑"的真因是实例不对**：调用方持有的 motor 不是跑过 `Start()` 的那一个（场景里有重复根），那份实例的数组没分配，于是 `AddPlane` 抛错、`GetSemanticDiameterWorldM()` 读 0。lab 的自检注释记的就是这个（`BallPlaygroundBootstrap.cs` 66–93 行）。
+- **"组件在、什么都不跑"的真因是实例不对**：调用方持有的 motor 不是跑过 `Start()` 的那一个（场景里有重复根），那份实例的数组没分配，于是 `AddPlane` 抛错、`GetSemanticDiameterWorldM()` 读 0。实验场景驱动的自检检查的就是这个。
 - 另一种可能是编辑器脚本用朴素 `AddComponent<T>()` 添加 U# 行为，背后没有 `UdonBehaviour` 和 program asset——**推断，未验证**；应由 UdonSharp 编辑器 API（`UdonSharpEditorUtility.AddUdonSharpComponent<T>()`）添加。
 - U# 代理组件显示 disabled 是正常的："Proxies are always disabled and should remain disabled."（[Editor scripting](https://creators.vrchat.com/worlds/udon/editorscripting/#proxies-are-always-disabled-and-should-remain-disabled)），这不是"被禁用"的证据。
 - "同物体只有第一个脚本运行"是 ClientSim 的旧 bug，SDK 3.7.6 已修（[3.7.6 release](https://creators.vrchat.com/releases/release-3-7-6/)）；本项目 SDK 3.10.5，不受影响。
-- 直径持续为 0 = **该实例的 `Start()` 从未跑过，或你持有的是别的实例**，不是"球太小"。`BallPlaygroundBootstrap.Start()` 自检 `motor == null`；`Update()` 等 120 帧仍读 0 才 `Debug.LogError` 并停驱动（首个 Update 可能早于 motor 的 `Start`，第一帧读 0 不算错）。
-- 该 lab 里用 `motor.transform == transform` 反"同物体"的自检**现在比规则更严**：同物体本身合法。应由下次动这个 lab 的人放宽或改写（例如改成"持有的实例是否为本场景唯一的 motor"），本次不改。
+- 直径持续为 0 = **该实例的 `Start()` 从未跑过，或你持有的是别的实例**，不是"球太小"。驱动在 `Start()` 自检 `motor == null`；`Update()` 等 120 帧仍读 0 才 `Debug.LogError` 并停驱动（首个 Update 可能早于 motor 的 `Start`，第一帧读 0 不算错）。
 - Udon 没有 `FindObjectsOfType`，"场景里 motor 数量必须 = 1"仍由编辑器侧审计保证：跑实验前断言 `FindObjectsOfType<KatamariBallMotor>().Length == 1`。
 - 重建球层级时先删旧 motor 对象再新建 `MotorHost`，并同步重建 prefab（prefab 根上残留 motor 会让每次实例化都复活旧结构）。
 
-### 宿主提交契约：幂等 + 无闩锁（2026-11-14 起）
+### 宿主提交契约：幂等 + 无闩锁
 
 `SubmitCandidate` **按 item id 幂等**：同 id 重复提交返回 `true` 且不新增槽位。`WithdrawCandidate` 对不在队列里的 id 返回 `false`，是**无害 no-op**。
 
@@ -448,8 +447,6 @@ v' = v - min(0, v·n) n
 ## 重试（reset）：`TryResetForNewRound`
 
 来源：`Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md` §4「没有重试接缝」与 S6。第一关写 `retry: unlimited`（`story_01_bench_size.json:61`），而在此之前没有任何接缝能把球、账本和计时一起退回开局，只能重载场景。本节定义唯一的重试入口，**不改**场景、不碰道具生命周期。
-
-**状态：源码已写，未编译、未在 Unity 运行、未做 U# 全量编译、未测。** 与装配层其余部分同一状态。
 
 ### 接缝
 
@@ -507,7 +504,7 @@ bool TryResetForNewRound(string newRoundId, Vector3 startPosition,
 
 ### 为什么只允许单行（`sharedRoundNotSupported`）
 
-规则清空的是**共享**提交存储。多行时，其它行的确认体积正是由这些提交支撑的；清掉提交却留着别人的体积，就会留下「没有提交支撑的分数」，破坏「只有确认值进分数、分数总额不超过提交增益」的不变量。多人回合重开要整局复位（所有行一起），是另一条规则，本次不猜。本层本来就只有一行（`PlayerCapacity = 1`），所以不会遇到。
+规则清空的是**共享**提交存储。多行时，其它行的确认体积正是由这些提交支撑的；清掉提交却留着别人的体积，就会留下「没有提交支撑的分数」，破坏「只有确认值进分数、分数总额不超过提交增益」的不变量。多人回合重开要整局复位（所有行一起），是另一条规则，本层不定。本层本来就只有一行（`PlayerCapacity = 1`），所以不会遇到。
 
 ### 吸收事件环的绝对计数保持单调（刻意决定）
 
@@ -532,16 +529,3 @@ bool TryResetForNewRound(string newRoundId, Vector3 startPosition,
 - 调用方：结果面板按钮 → `TryResetForNewRound(下一个回合 id, 出生点, 出生朝向, out reason)` → 计时/HUD 自己归零（`StoryRoundController`，S4/S6，不在本节）。
 - Unity 编译、U# 全量编译、EditMode 的 NUnit 运行都 **NOT_RUN**（本节作者不是 Unity 操作者）。
 - host 侧若要从「球上已粘的物件」也恢复，需要它自己的复位接缝；本层只保证事件环不会把旧事件重放给宿主。
-
-## 代码整理（2026-11-15，`SPLIT_PROPOSAL.md` 的第一批）
-
-**状态：源码已改，未编译、未在 Unity 运行、未做 U# 全量编译、未跑 EditMode。** 只动了私有实现：44 个 `[SerializeField]` 的名字与顺序一个没变（改动前后都是 44 个），被测试/场景用到的 public 方法名也都没变（反射钉子 `Start`、`TryBeginPlaying`、`RecomputeConfirmedAndSize`、`TryBankWithReason`、`TryAwardScore`、`SubmitCandidate`/`WithdrawCandidate`/`GetPendingCandidate*` 与字段 `localRow`/`confirmedVolumes`/`bankedScores`/`unbankedVolumeUnits`/`semanticDiameterWorldM`/`cubicMetersPerVolumeUnit`/`baselineVolumeUnits` 全部仍在）。
-
-**这一批做了什么**（细节与证据在 `SPLIT_PROPOSAL.md` 的「落地状态」一节）：
-
-1. 删零读者代码：9 个取值器（`GetCoreRadiusWorldM`、`GetGrowthFraction`、`GetUnbankedVolumeUnits`、`LastSweepWasBlocked`、`LastSweepWasStuck`、`GetFollowRigWorldPosition`、`GetFollowRigYawDegrees`、`HasFollowRigFrame`、`GetAbsorbedEventDiameter`），以及它们的唯一读者一消失就变成只写状态的字段：`lastSweepBlocked`/`lastSweepStuck`（连同 `StepBall` 的两次赋值与 `TryResetForNewRound` 的两次清零）与 `absorbedEventDiameters`（连同分配与写入）。`GetAbsorbedEventPosition` **保留**：`Docs/Design/StoryMode/README.md` 按名字引用它（说明“不要用它，取道具当前位姿”），删它会留下悬空引用，故留给同时改那份文档的人。
-2. 修错位 XML 注释：`RecordReject` 的说明原本贴在 `GetTraceCount` 上方（隔约 170 行），已移回 `RecordReject`。
-3. 队列压缩只写一份：`CommitAcceptedAbsorbs` 与 `WithdrawCandidate` 里逐字相同的 9 字段复制收进私有 `CompactPending(int write, int read)`（同下标直接返回），顺序与内容不变。
-4. reach 公式只写一份：新增 `PickupAbsorbMath.TryComputeReach(itemBounds, collisionRadius, contactRadius, out itemRadius, out reach)`，判定本体与装配层的两处诊断（追踪快照、拒绝日志）改调它。装配层不再在**每个**候选的**每一步**都算一次半径与 reach——追踪关闭时（默认）根本不算，只在被追踪件或要打拒绝日志时算。非法 `bounds`（非有限、负分量、负半径）在判定里仍是 `RejectInvalidInput`，诊断里报 `-1`（本文件既有的“无效”记号），不再打印 NaN。
-
-**这一批刻意没做**（都还留在 `SPLIT_PROPOSAL.md`）：`SizeModelMath.TryGrowthFraction`（S2）、`RingBufferMath`（S4，风险最高的一步）、`StuckRecoveryMath`（S6）、`ControlIntentMath.TryReadMove2D`（S7）、`GrowthLedgerMath.TryProjectBankedScore`（S8）、`proxyRotation` 的处置（提案本身给了两个互斥选项，未定）、`PredictionCapacity = 0` 与四个零长预测数组（删它们要同步改账本调用签名，属高风险一步）、「回合所有者」边界（S3 的账本/交分/奖励/复位搬迁）。

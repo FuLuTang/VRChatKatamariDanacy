@@ -80,6 +80,14 @@
 | 卡死恢复 | v2 判据读意图（`|forward|+|lateral| > 0.05` 且不受阻）与 1 cm 圆盘；松手滑行或下坡滑动时 `driveIntent = 0`，`stuckStep` 为假、`stuckSeconds` 每步清零，**滑行不会累计卡死**（读代码的论证，`UpdateContactRecovery`）。软恢复清 `planarVelocity`、硬恢复传送都会清掉惯性 | 无改动；Unity 看 `recovery_delta == 0` |
 | 坡上松手 | 球停下 0.3 s 后开始顺坡滑；站在坡上不动会被带走 | 所有者要求；若影响摆放（坡上道具场景）调大 `rampSlideMinSlopeDegrees` 或把 `rampTangentialGravityScale` 设 0 |
 
+### 拒绝位移时不得积存速度（E3 A2，2026-11-17）
+
+E3 驱动脚本直接取 `motor.GetProgramVariable("planarVelocity")` 并打印 `v.magnitude`；`GetPlanarVelocity()` 也返回同一个电机持久字段（m/s），不是输入、目标速度，也不是球心差分速度。接触求解后若 `residual > 0.02 m`，电机拒绝本步位置，**同一笔 motion 的平面与竖直速度也必须清零**；`climbAlongSpeed` 同时归零，避免下一步从未实现的爬升速率恢复。此规则由 `ContactSolveMath.RejectUnresolvedMotion` 实现，电机在速度回写前调用。可接受的步（含恰好 0.02 m）不改速度，因此正常擦墙切向惯性不受影响；它不是把所有速度替换成 `Δ位置/dt`（推出本来可以造成无动量的修正）。
+
+修前只回滚球心，仍把求解后速度写回；下一步 `BallMotionMath` 继续对这份速度加推力。纯数学 EditMode 的缩小夹具：两不可吸 OBB 的内侧间距 0.20 m，球半径 0.135 m，沿缝持续推进，`dt=0.02 s`，设速度上限 5.015 m/s 以对照日志量级（不是重建 E3 的道具尺寸/成长快照）。求解残差恒 0.070 m、球心 x 恒 0；旧策略 t=0.02/0.50/1.00/1.50/2.00 s 的状态速度为 0.147324/2.992670/4.900882/5.015000/5.015000 m/s。移除挡板且松手，首步仍前移 0.097991 m、速度 4.899538 m/s；反推首步仍向旧方向移动 0.096154 m、速度 4.807678 m/s。**这是真实的状态动量缺陷，不只是显示口径**。修后每个拒绝步状态速度为 0，挡板移除且松手无平面位移，反推第一步即可倒退。
+
+回归：`ContactSolveTests.ARejectedObbStepCannotStoreSpeedOrLaunchWhenTheObstacleDisappears`（松手/反推两例）、`TheResidualGateDiscardsVelocityOnlyWhenItRejectsTheMove`（阈值下/等于/阈值上三例），以及真电机 `ContactModelV2Tests.ARejectedPropGapStepClearsTheMotorsStoredVelocity`（需 Unity）。这不解决夹缝本身的几何不可解；残差、拒绝计数与现行恢复策略保持可见。
+
 **风险**：横向漂移会让球在狭窄通道里蹭墙更久；若 W2/W7、Story 关卡出现新的 recovery，先调大 `lateralGripPerSecond`。大球速度 ∝ s（D=5 m 时 90 m/s）：扫掠层与关卡尺度是否承受须 Unity 验证；`brakingMps2`（6）小于 `accelerationMps2`（7.5），反推的「刹车」比前进推力弱，试玩觉得刹车不够狠就调大。
 
 ## 7. Unity 验收（PhysicsTestField 以 0.02 s 采样 `GetPlanarVelocity` 画速度-时间曲线）

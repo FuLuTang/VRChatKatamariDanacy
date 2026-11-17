@@ -42,8 +42,8 @@ namespace VRCKatamari.Editor.Pickup
     /// <item><description>a value supplied by the caller (the importer's declaration)
     /// wins;</description></item>
     /// <item><description>without a declaration, the value already serialized on the host
-    /// is preserved - that is what keeps un-migrated scenes (StoryLevel's 110 props,
-    /// CpuSkirmish) bit-identical;</description></item>
+    /// is preserved - that is what keeps scenes without a declaration (CpuSkirmish)
+    /// bit-identical;</description></item>
     /// <item><description>a row with neither is written as 0 and reported, never silently
     /// given a size-derived number.</description></item>
     /// </list>

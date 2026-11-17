@@ -1,28 +1,87 @@
+using System;
+using System.Reflection;
 using NUnit.Framework;
+using UnityEngine;
+using VRCKatamari.BallLayers;
 using VRCKatamari.BallPresentation;
 
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins the presentation math that is left: the apparent-size helper the <c>[eye]</c>
-    /// diagnostics line uses. The scene probe that reports it is pinned separately, in
-    /// BallGrowthDiagnosticsTests.
+    /// Pins BallView's collision-diameter scaling and the apparent-size helper used by
+    /// the eye diagnostics. BallGrowthDiagnosticsTests separately pins the scene probe.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The core mesh diameter itself is no longer computed here. The core does not grow: it
-    /// is the level's start diameter, reported by the motor (<c>GetStartDiameterWorldM</c>,
-    /// pinned in ContactModelV2Tests) and written once by <c>BallView</c>. The 0.95 factor,
-    /// the target-diameter helper and the catch-up spring that drew a growing core were
-    /// deleted with that decision (Docs/Design/BallLayers/Attachment/ATTACH_PLACEMENT.md 3.2).
-    /// </para>
-    /// <para>
-    /// The apparent-size case is pinned against a sample taken from a full round, so a
-    /// printed line can be checked against it by hand.
-    /// </para>
-    /// </remarks>
     public class BallPresentationTests
     {
+        private const BindingFlags Any = BindingFlags.Instance | BindingFlags.Public
+            | BindingFlags.NonPublic;
+
+        [TestCase(0.222f)]
+        [TestCase(0.3f)]
+        public void CoreDiameterFollowsCollisionAfterAbsorptionAndShrink(float startDiameterM)
+        {
+            GameObject host = new GameObject("BallViewTests");
+            GameObject core = new GameObject("CoreMesh");
+            GameObject attachments = new GameObject("AttachmentRoot");
+            try
+            {
+                Type motorType = typeof(BallPresentationMath).Assembly.GetType(
+                    "VRCKatamari.BallMotor.KatamariBallMotor", true);
+                Type viewType = typeof(BallPresentationMath).Assembly.GetType(
+                    "VRCKatamari.BallPresentation.BallView", true);
+                Component motor = host.AddComponent(motorType);
+                Component view = host.AddComponent(viewType);
+                viewType.GetField("motor", Any).SetValue(view, motor);
+                viewType.GetField("coreMesh", Any).SetValue(view, core.transform);
+                core.transform.SetParent(host.transform);
+                attachments.transform.SetParent(host.transform);
+                core.transform.localScale = Vector3.one * 0.7f;
+                Action tick = (Action)Delegate.CreateDelegate(typeof(Action), view,
+                    viewType.GetMethod("Update", Any));
+
+                // An unstarted motor reports zero; the existing mesh must stay visible.
+                tick();
+                Assert.AreEqual(0.7f, core.transform.localScale.x, 1e-6f);
+                long startVolume;
+                Assert.IsTrue(SizeModelMath.TrySphereVolumeMm3(startDiameterM, 1f,
+                    out startVolume));
+                motorType.GetField("startVolumeMm3", Any).SetValue(motor, startVolume);
+                MethodInfo derive = motorType.GetMethod("DeriveSize", Any);
+                MethodInfo collision = motorType.GetMethod("GetCollisionRadiusWorldM", Any);
+                float previous = 0f;
+                foreach (long confirmed in new long[] { 0L, 1000L, 2000L, 100000L, 200000L, 1L, 0L })
+                {
+                    motorType.GetField("confirmedVolumeMm3", Any).SetValue(motor, confirmed);
+                    derive.Invoke(motor, null);
+                    // Deliberately disagree with semantic/start: presentation uses the same
+                    // collision radius as the geometric pickup gate, never HUD bias or start.
+                    motorType.GetField("semanticDiameterWorldM", Any).SetValue(motor, 9f);
+                    tick();
+                    float expected = 2f * (float)collision.Invoke(motor, null);
+                    Assert.AreEqual(expected, core.transform.localScale.x, 1e-7f);
+                    Assert.AreEqual(expected, core.transform.localScale.y, 1e-7f);
+                    Assert.AreEqual(expected, core.transform.localScale.z, 1e-7f);
+                    if (confirmed == 100000L || confirmed == 200000L)
+                        Assert.Greater(expected, previous, "absorbed volume must grow the core");
+                    previous = expected;
+                    Assert.AreEqual(Vector3.one, host.transform.localScale);
+                    Assert.AreEqual(Vector3.one, attachments.transform.localScale);
+                    tick();
+                    Assert.AreEqual(expected, core.transform.localScale.x, 1e-7f);
+                }
+                Assert.AreEqual(startDiameterM, previous, 1e-6f);
+                motorType.GetField("collisionRadiusWorldM", Any).SetValue(motor, float.NaN);
+                tick();
+                Assert.AreEqual(previous, core.transform.localScale.x, 1e-7f);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(core);
+                UnityEngine.Object.DestroyImmediate(attachments);
+                UnityEngine.Object.DestroyImmediate(host);
+            }
+        }
+
         // ---------------------------------------------------------------- log quantities
         /// <summary>
         /// The apparent size the <c>[eye]</c> line prints is the core diameter over the eye

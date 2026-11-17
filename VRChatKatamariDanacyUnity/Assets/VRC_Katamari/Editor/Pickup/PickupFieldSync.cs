@@ -75,8 +75,8 @@ namespace VRCKatamari.Editor.Pickup
     /// <c>valueUnits</c> from the longest AABB edge through a (kind, tier) table; that made
     /// a level's declared content value unreachable and dropped any prop whose (kind, tier)
     /// had no row. Now the declaration is the only source, and a host that is re-synced
-    /// without one keeps its serialized values bit-for-bit - the path un-migrated scenes
-    /// (<c>StoryLevel</c>'s 110 props, <c>CpuSkirmish</c>) take.
+    /// without one keeps its serialized values bit-for-bit - the path scenes without a
+    /// declaration (<c>CpuSkirmish</c>) take.
     /// </para>
     /// <para>
     /// Ordering is deterministic: candidates are sorted by field-root-relative hierarchy
@@ -199,8 +199,8 @@ namespace VRCKatamari.Editor.Pickup
 
         /// <summary>
         /// Syncs with no declaration map: every value already serialized on the host is
-        /// preserved. This is the menu path and the un-migrated scene path (StoryLevel's 110
-        /// props, CpuSkirmish).
+        /// preserved. This is the menu path and the path for scenes without a declaration
+        /// (CpuSkirmish).
         /// </summary>
         public static PickupFieldSyncReport SyncFromChildren(PickupFieldHost host, Transform fieldRoot)
         {

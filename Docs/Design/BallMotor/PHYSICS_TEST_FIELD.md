@@ -1,36 +1,29 @@
 # 地图 0：球体物理测试场（Physics Test Field）
 
-> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+> **吸收尺寸门（原作口径）**：物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里凡出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按该公式算出的档位件数，都不是现行口径，需按上式重算；现行口径、实现清单与实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 
 
-> 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15（Asia/Shanghai）。**紧凑重排 + 9 格（C14/C09/C08/C10 + C01/C03/C05/C06/C13）实现**：判据数据、九份 `placement.json`（全场 27×30.5 m）、Labs 运行时组件、编辑器导入器与 `LevelArenaHost` 的注册挂起接缝都已落盘；**没有编译、没有 Play Mode、没有 Build & Test、没有跑 Unity/NUnit**（本 agent 不是 Unity 操作者），**没有改 `KatamariBallMotor` / `PickupFieldHost` / `PlacementImporter` / 场景、没有跑 git 写命令**。文中所有米数、角度、容量都是本项目暂定值（逐条标 `PROVISIONAL`），不是原作测量值。
+> 状态：`PROVISIONAL_NOT_TESTED`（文中所有米数、角度、容量都是本项目暂定值，逐条标 `PROVISIONAL`，不是原作测量值）。已入库：判据数据 [physics_test_field.json](physics_test_field.json)、九份 `placement.json`（全场 27×30.5 m）、`Labs/PhysicsTestField/` 三个运行时组件与场景、编辑器判据导入器、`LevelArenaHost` 的注册挂起接缝。九格 × 四档的 36 跑矩阵已在 Unity 里实跑，最新一次见 `Docs/Evidence/PhysicsTestField/2026-11-15_pass11_v2_corrected_criteria/`。
 > 定位：**给我们自己用的球体物理回归场，不是给玩家玩的关卡**。它只有两个用途：① 在 P1/P2/P3 每阶段落地后，5–10 分钟内把「地形支撑 / 台阶 / 斜面 / 台面与边缘 / 吸附物凹凸 / 挡路 / 贴墙」全部跑一遍并自动判 PASS/FAIL；② 给出可对比的数字（球心、支撑面高、法线、接触数、每步成本），让「手感变了」能落到「哪个读数变了」。
 > 上游：地形支撑模型与 P1/P2/P3 分期见 [TERRAIN_SUPPORT.md](TERRAIN_SUPPORT.md)；挡路见 [BLOCKING_PROPS_PLAN.md](../PickupAbsorb/BLOCKING_PROPS_PLAN.md)；原型格位的最初设想见 [BALL_PHYSICS_IMPLEMENTATIONS.md](../../Research/KatamariBallRules/BALL_PHYSICS_IMPLEMENTATIONS.md) §3.4；小棍三上限见 [02_TECHNICAL_CONTRACTS.md](../../02_TECHNICAL_CONTRACTS.md) §3。
 > 数据分两份，各管一件事：**几何**在 `Docs/Design/Levels/physics_test_field/<cell>/placement.json`（每格一份，`levelbuild check` 是门）；**判据 / 驱动时间线 / 球径 / 机位 / 起点 / 激活矩形**在 [physics_test_field.json](physics_test_field.json)（v2，schema_version=2）。两者不一致时以各自文件为准并修表；跨文件的一致性由 `Docs/tests/levelbuild/test_physics_test_field_cells.py` 守（几何必须在该格的激活矩形内、`nominal_m` 必须等于台面高、每个 metric 必须在驱动里能读到）。
-> 图：`/tmp/ptf/shots/physics_test_field_preview_plan_workbench.png`（俯视：九格紧凑网格，一次性产物，**不入库**）与 `/tmp/ptf/shots/physics_test_field_preview_overview_workbench.png`（3/4 斜视，同一合并文档）；需要时可用合并文档重渲。合成预览用的是一份 `/tmp/ptf/preview/placement.json`（九格合并、不入库），真源仍是九份格的 placement。
+> 图：俯视 / 3/4 斜视由 `Tools/levelbuild/blender/render_views.py` 从九格合并出的预览文档渲染（合并文档与图都不入库，需要时重渲）；真源是九份格的 placement。
 > 引用约定：`Runtime/…`、`Labs/…`、`Editor/…`、`Tests/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；`Docs/…`、`Tools/…` 相对仓库根。
-> **2026-11-15 第一轮 9 格实跑（commit 5835517，D=0.30）后的复查**：两处缺陷已查清。① `size_accuracy` 在所有格被跳过（`error=unknownMetric`）——根因是「实测斜率」在 0.30 档永远解不出来（复位后就在目标上，一次都不喂），已改成**解析量子** `D/(3·(baseline + confirmed))`，并把「名字错」与「现在读不到（带原因）」分开（§8.3 / §8.3.2）。② C05（45°）`climbed` 失败 0.0887 m——**不是时间线太短，是电机在 45° 接缝上的死锁**（膨胀 AABB + `stepLimit = 0.5r`，极限角 `asin(0.6) = 36.87°`），数据/判据未动，作为物理发现记录（§4.1.3）。本轮**仍未编译、未跑 Unity**；改的是 Labs 两个组件 + 判据导入器 + 本文件 + 一个 Python 守卫。
-> **2026-11-15 第二轮（4 档 × 9 格矩阵，证据 `Docs/Evidence/PhysicsTestField/2026-11-15_pass1/`）后的复查**：**这张矩阵整张无效**，但它暴露了一个真缺陷、澄清了两个假缺陷。
-> ① **无效的原因**：跑的是**旧 U# 程序**——日志里的 `error=unknownMetric`、`BLOCKED_UNTIL_P3`、`landing_gap_m`/`fall_frames`/`max_bottom_rise_m` 报 `unknownMetric`、`value=0.0000` 无 `+`，四条都只可能来自 5835517 之前的驱动；而场景数据是新的（`sizeModelBaselineVolumeUnits` 已烘）。所以「0.30 全跳过」「第一跑 unknownMetric」「坡道格 BLOCKED_UNTIL_P3」都是旧程序的症状（§8.3.3）。
-> ② **真缺陷（已修）**：`SetDiameterM` 的幂等短路 + 粘住的 `converged` + 缓存的 `lastQuantumM`，让**每档只有第一格真的长到目标径**，其余八格停在 0.30（同档除首格外 `size_accuracy` 是常数 +41.2674 / +371.6536 / +3523.0036）。修法：量子按需实时算（§8.3）+ 驱动收敛后校验收敛是否属实 + 两行 build 指纹（§8.3.3 / §8.3.4）。
-> ③ **没改**：C05 的 `climbed` 仍是已知极限（§4.1.3，仅这一条 UNEXPECTED_FAIL）；数据、几何、判据一处未动。
-> **2026-11-15 第三轮（pass-2，7f27ab3）后的复查**：上一轮的修法自己引入了死锁。规则被写成「收敛后再调用 `SetDiameterM` = 新请求」，但驱动 `TickSize` **每帧**都调 `SetDiameterM(target)`：`Feed` 刚把 `converged=true`，下一帧 `TickSize` 又把它清回 `false`，`IsConverged()` 永远读不到 `true` → `reason=timeout`（球本来就在 0.300）。**最终规则（只保留一种实现）**：`Switch` 里在复位之后调**一次** `SetDiameterM(target)`，`TickSize` 只观察 `IsConverged`/`HasFailed`，不再发请求、也不清任何状态；`BeginRequest` 删除（请求与清状态合并成 `SetDiameterM` 一件事）。状态机、字段写者表与四条路径见 §8.3.4，Python 用状态机模拟复现旧死锁并证明新设计收敛。
-> **2026-11-15 第四轮（pass2 矩阵 `2026-11-15_pass2` 之后）**：矩阵首次**有效**（`size_accuracy` 四档全中，C14/C08/C09/C10/C03/C06 全档通过）。偏离全部在坡道格，已按 A/B/C 分类并处理（§4.1.4）：**A**（场景在该档无物理意义）用 `applies_d` + 驱动 `SKIPPED_NOT_APPLICABLE` 显式跳过（C05@1.10 的 `ramp_entered`、C05@2.20 的 `ramp_support`+`ramp_entered`、C13@2.20 的两条落地）；**B**（阈值/时间线/度量定义）改 `ramp_entered` 为整段最大值 + 阈值取 `stepLimit`(=0.25·D)、C01@2.20 的窗口补到 8.75 s；**C**（疑似电机缺陷）C13@2.20 的 0.9499 m 单帧跳变写成缺陷单 §4.1.5，`seam_no_step` 保持红灯。另外 §4.1.6 判读「球穿过斜坡」：0.30–1.10 是法向支撑偏移（≤5 mm 与公式一致，相切），2.20 是尺度（球比坡/台面大，且 C05@2.20 从未上坡），**没有物理穿模**。指纹升到 `2026-11-15d`（需重编 U# + 重导判据）。
 
 ---
 
 ## 0. 结论速览（先看这七条）
 
-1. **21 个格位、84 次运行（21 格 × 4 个球径）、128 条可自动判定判据；本轮落地 9 格 / 59 条，全场压缩到 27×30.5 m。** 四带一中心：北=斜板（6）、东=台阶（6）、南=薄件/贴墙（4）、西=挡路+长杆+台面+组合（4），中央=起点与球径台（1）。
-2. **容量是这张图的硬约束，不是美学。** 电机上限「静态盒 64（2026-11-16 前是 8）/ 平面 8 / 斜面 4」装不下 21 格，因此本场采用 **一格一注册**：切格 = `motor.ClearObstacles()` → 目标格 `LevelArenaHost.Reapply()`。这条不是权宜，而是把 `LevelArenaHost.Reapply()` 变成**必须可用**的接口要求（TERRAIN_SUPPORT §7.3 已列，但没写消费方；本场是第一个）。
+1. **21 个格位、84 次运行（21 格 × 4 个球径）、128 条可自动判定判据；已落地 9 格 / 59 条，全场压缩到 27×30.5 m。** 四带一中心：北=斜板（6）、东=台阶（6）、南=薄件/贴墙（4）、西=挡路+长杆+台面+组合（4），中央=起点与球径台（1）。
+2. **容量是这张图的硬约束，不是美学。** 电机上限「静态盒 64 / 平面 8 / 斜面 4」装不下 21 格，因此本场采用 **一格一注册**：切格 = `motor.ClearObstacles()` → 目标格 `LevelArenaHost.Reapply()`。这条不是权宜，而是把 `LevelArenaHost.Reapply()` 变成**必须可用**的接口要求（TERRAIN_SUPPORT §7.3 已列，但没写消费方；本场是第一个）。
 3. **判据全部落在「已有的 getter」或「每固定步一行的 `[ProxyTrace]` 日志」上**。唯一现在拿不到的是每步成本计数器（`activeSurfaceCount` / 单步耗时），本场把它列成**待加 getter**（§6.4），拿到之前 `readout=counter` 的判据报 `BLOCKED_UNTIL_P4`，而不是假装能测。
 4. **球径设定不改运行时代码**：用现有接缝做闭环——`SubmitCandidate(体积单位)` 喂体积 → `GetSemanticDiameterWorldM()` 读回 → 迭代收敛；**斜率/量子是解析的**（`D/(3·(baseline + confirmed))`，2026-11-15 修，见 §8.3）；回 0.30 用 `TryResetForNewRound`（它会把球重置回 baseline 直径）。三条路线的权衡在 §8.3。
 5. **三处判据落在等号上**，必须写成「含等号」才自洽：0.075 m 台阶 vs `stepLimit(0.30 预设) = 0.075`（注意：0.30 预设被体积单位量化成 D = 0.2997369，实际 `stepLimit = 0.074934`，所以 C09 的 0.30 档落在等号**之上**、应被挡；见 §4.2 与 §8.3.1）；45.0° vs `maxSupportSlopeDegrees = 45`；`collapsed_bench` 的 0.55 m 高 vs `stepLimit(2.20) = 0.55`。比较本身一律按 `≤` 读；**混用会产出互相矛盾的 PASS**（§5.5）。
-6. **P1/P2/P3 已合入，所以「现在就该 PASS 的第一批」是 C14**：它的 0.028 m 板在 `stepLimit(0.30) = 0.075` 之内，P1 之前必 FAIL（隐形墙），P1 之后必 PASS；FAIL 那次也是有效证据。本轮另把 P3 的五格（C01/C03/C05/C06/C13）落成几何与判据；剩下只需「地面 + 挡路 + 扫掠 + 径向代理」的 C00/C02/C04/C07/C11/C12/C15/C16/C17/C18/C19/C20 还没有各自的 placement（它们在 `planned_cells`）。
+6. **P1/P2/P3 已合入，所以「现在就该 PASS 的第一批」是 C14**：它的 0.028 m 板在 `stepLimit(0.30) = 0.075` 之内，没有 P1 必 FAIL（隐形墙），有 P1 必 PASS；FAIL 那次也是有效证据。P3 的五格（C01/C03/C05/C06/C13）已落成几何与判据；只需「地面 + 挡路 + 扫掠 + 径向代理」的 C00/C02/C04/C07/C11/C12/C15/C16/C17/C18/C19/C20 还没有各自的 placement（它们在 `planned_cells`）。
 7. **`napkin` 的厚度有数据冲突**：文档写 2.8 cm，`napkin.manifest.json` 实际是 **1.4 cm**。本场用一块**静态 0.028 m 薄板**钉住文档口径（C14），同时把真 napkin 放进挡路行（C18 #1），两条路径分开走（§12 U3）。
 
-> **树状态（2026-11-15 13:55 复核，P3 落地后更新）**：P1/P2 的支撑链**已经进树**——`KatamariBallMotor` 里 `GetSupportSurfaceHeightWorldM` / `GetSupportNormalWorld` / `GetSupportSurfaceId` / `GetSupportSurfaceCount` / `GetStepHeightLimitWorldM` / `IsFalling()` / `GetSupportKind()` / `GetStepMaskRebuildCount` / `SetSupportProps` / `ClearSupportProps` / `GetSupportPropCount` / `GetSupportPropCapacity` / `IsSupportingAProp` 都在；P3 的 `AddRamp` / `ClearRamps` / `GetRampCount` / `GetLastRampRefusalReason` / `GetLastRampRefusalCode` / `GetLastRampRefusalSlopeDegrees` / `GetRampRefusalCount` / `GetMaxSupportSlopeDegrees` 也已在同一个文件里，`LevelArenaHost` 的 `rampBoxes` 与 `RegisterRamp`（经 `SupportSurfaceMath.TryBakeRamp`）已接。**仍然没有**的是每步成本计数器（P4）。所以本文的 gate 规则是：`gate=P1` 的判据**现在就该算**；`gate=P2` 的判据在场景接了 `PickupFieldHost` 且它的 `IsBlockingEnabled()` 为 true（`SetSupportProps` 的唯一调用方；关掉时宿主会清两个集合）后**也该算**，否则仍报 `BLOCKED_UNTIL_P2`；**`gate=P3` 从本轮起也直接算**（驱动不再报 `BLOCKED_UNTIL_P3`，见 §5.3）；`readout=trace` 的判据由人读 `[ProxyTrace]`，驱动报 `BLOCKED_UNTIL_manual`；`readout=counter` 报 `BLOCKED_UNTIL_P4`。这些都不算失败（§5.3）。
-> **本轮新增**（§9.5）：`Labs/PhysicsTestField/` 三个组件（`PhysicsTestCell` / `PhysicsTestFieldDriver` / `LabBallSizeSetter`）与 `Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs` 已写，**未编译**。
+> **支撑链现状**：`KatamariBallMotor` 里 P1/P2 的 `GetSupportSurfaceHeightWorldM` / `GetSupportNormalWorld` / `GetSupportSurfaceId` / `GetSupportSurfaceCount` / `GetStepHeightLimitWorldM` / `IsFalling()` / `GetSupportKind()` / `GetStepMaskRebuildCount` / `SetSupportProps` / `ClearSupportProps` / `GetSupportPropCount` / `GetSupportPropCapacity` / `IsSupportingAProp` 都在；P3 的 `AddRamp` / `ClearRamps` / `GetRampCount` / `GetLastRampRefusalReason` / `GetLastRampRefusalCode` / `GetLastRampRefusalSlopeDegrees` / `GetRampRefusalCount` / `GetMaxSupportSlopeDegrees` 也在同一个文件里，`LevelArenaHost` 的 `rampBoxes` 与 `RegisterRamp`（经 `SupportSurfaceMath.TryBakeRamp`）已接。**没有**的是每步成本计数器（P4）。gate 规则：`gate=P1` 的判据直接算；`gate=P2` 的判据在场景接了 `PickupFieldHost` 且它的 `IsBlockingEnabled()` 为 true（`SetSupportProps` 的唯一调用方；关掉时宿主会清两个集合）时算，否则报 `BLOCKED_UNTIL_P2`；`gate=P3` 直接算（驱动不报 `BLOCKED_UNTIL_P3`，见 §5.3）；`readout=trace` 的判据由人读 `[ProxyTrace]`，驱动报 `BLOCKED_UNTIL_manual`；`readout=counter` 报 `BLOCKED_UNTIL_P4`。这些都不算失败（§5.3）。
+> **组件**（§9.5）：`Labs/PhysicsTestField/` 三个组件（`PhysicsTestCell` / `PhysicsTestFieldDriver` / `LabBallSizeSetter`）与 `Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs`。
 
 ---
 
@@ -66,9 +59,7 @@
 
 ### 2.2 布局（俯视图）
 
-> 俯视图（本机临时产物，**不入库**）：`/tmp/ptf/shots/physics_test_field_preview_plan_workbench.png`（俯视）与
-> `..._preview_overview_workbench.png`（3/4）。它们由 `Tools/levelbuild/blender/render_views.py` 从**九份格的 placement
-> 合并出的预览文档**渲染（`/tmp/ptf/preview/placement.json`，一次性的合并脚本，不入库）；本机 Workbench 一张 3–6 s。
+> 俯视图（不入库）由 `Tools/levelbuild/blender/render_views.py` 从**九格 placement 合并出的预览文档**渲染，本机 Workbench 一张 3–6 s。
 > 图上能直接量出来的是：4 列 × 3 行的 pad（6×9 / 6×10 m），列中心 x = −10.5 / −3.5 / 3.5 / 10.5，行中心 z = −10 / 0 / 11；
 > 北排从西到东 C01（5°）、C03（25°）、C05（45°）、C13（0.6 m 台面 + 南坡）；中排 C08/C09/C10 三块台阶与 C06 的 50° 板；
 > 南排 C14 的 3×3 薄板。九格全部同时在画面里，格间 1–1.5 m 走道。placement 才是权威，按它重画即可。
@@ -86,17 +77,17 @@
 
 | 对象 | 作用 | 复用自 |
 |---|---|---|
-| `MotorHost` | 挂 `KatamariBallMotor`，球心/朝向的唯一所有者 | StoryLevel |
-| `PlayerBall/BallPhysicsRoot → BallVisualRollRoot → CoreMesh` | 位置宿主 + 旋转宿主 + 视觉球（三层固定层级） | StoryLevel |
-| `RideRoot/RideSeat` | 人玩时的骑乘 Station（可选，测试场不强依赖） | StoryLevel |
-| `Input` | `DesktopMoveInput`（人玩）；脚本运行时由驱动器直接 `SetMoveAxes` | StoryLevel |
-| `PickupField` | `PickupFieldHost`：**唯一**的挡路写入者，也是道具行宿主 | StoryLevel（`StoryLevel.unity` 里确实挂了实例） |
+| `MotorHost` | 挂 `KatamariBallMotor`，球心/朝向的唯一所有者 | `PhysicsTestField.unity` |
+| `PlayerBall/BallPhysicsRoot → BallVisualRollRoot → CoreMesh` | 位置宿主 + 旋转宿主 + 视觉球（三层固定层级） | `PhysicsTestField.unity` |
+| `RideRoot/RideSeat` | 人玩时的骑乘 Station（可选，测试场不强依赖） | `PhysicsTestField.unity` |
+| `Input` | `DesktopMoveInput`（人玩）；脚本运行时由驱动器直接 `SetMoveAxes` | `PhysicsTestField.unity` |
+| `PickupField` | `PickupFieldHost`：**唯一**的挡路写入者，也是道具行宿主（C18/C19 才需要；`PhysicsTestField.unity` 当前没有挂） | 待加 |
 | `LevelContent/<cellId>` | 受管根（由 `PlacementImporter` 建）：该格的 `Props/`、`Structures/`，**并挂该格唯一的 `LevelArenaHost`** | 新（工具建） |
 | `Cells/C14` … | 每格一个空物体，挂 `PhysicsTestCell`（引用上面那个 `LevelArenaHost`）。**它不放进 `LevelContent`**：受管子树每次导入都可能被删改，而组件不能跟着消失 | 新（手工加组件） |
 | `Driver` | `PhysicsTestFieldDriver`（§7） | 新（手工加组件） |
 | `SizeConsole` | `LabBallSizeSetter`（§8）+ 4 个 uGUI 按钮（可选） | 新 |
 | `Cameras/cam_*` | 8 个机位（§6.5） | 新 |
-| 根对象 | 必须挂 `VRC.Core.PipelineManager`；`VRCSceneDescriptor.ReferenceCamera` 指向主相机 | `Labs/README.md` 的硬要求 |
+| 根对象 | 必须挂 `VRC.Core.PipelineManager`；`VRCSceneDescriptor.ReferenceCamera` 指向主相机 | [Labs/README.md](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/README.md) 的硬要求 |
 
 ---
 
@@ -107,7 +98,7 @@
 | 容量 | 值 | 来源 |
 |---|---|---|
 | 平面 | 8 | `MaxPlaneCount`（现状） |
-| 静态盒 | 64 | `MaxBoxCount`（2026-11-16 由 8 提到 64，对齐 v2 的 `budget.boxes`；超出的第 65 个 `AddBox` 显式返回 false 并 latch 原因） |
+| 静态盒 | 64 | `MaxBoxCount`（对齐 v2 的 `budget.boxes`；超出的第 65 个 `AddBox` 显式返回 false 并 latch 原因） |
 | 斜面 | 4 | `MaxRampCount`（P3 已进树：`AddRamp` / `LevelArenaHost.rampBoxes`） |
 | 挡路盒 | 6 | `MaxBlockingBoxCount`（现状） |
 | 道具支撑 | 6 | `MaxSupportPropCount`（P2 已实现） |
@@ -151,8 +142,6 @@
 | `role=ramp` | 该格 0–4 | C01/C03/C05/C13 各 1 |
 
 代价写在明处：4 面墙的**标记对象**在场景里按格重复（9 格 36 个空物体），它们是 `Transform` 不是碰撞体，所以只为「每个 arena 自洽」付一点层级噪音。**不要**试图让某格引用 `base` 的地面/墙——那只在「最后注册的那个 host 拥有所有平面」的规则下看起来能用，一旦切格就自相矛盾。
-
-（历史：P1 之前没有 `LevelArenaHost`，只能一场景一注册，`C14+C15+C16+C17` 恰好用满 8 盒。那个 Stage A 已经被本节的做法取代；`placement.json` 的 `budget` 现在每格各自数一遍。）
 
 ---
 
@@ -216,31 +205,31 @@
 
 **C06 为什么要有兜底墙**：拒绝一条斜面之后，如果什么都不登记，球会直接穿过视觉上的坡（没有支撑、没有障碍）。TERRAIN_SUPPORT S16 的原话是「球被坡旁的墙挡住（作者必须补墙）」。本场的做法见 §4.1.2：50° 板以 `role=box` 落库，**同一个 Collider 的两种用途**变成「`staticBoxes` 里放它的世界 AABB 当兜底墙」+「判据导入器把这同一块板的 +Y 面烘成 probe，驱动拿去问 `motor.AddRamp`」。紧凑版 AABB 是 4.000 × 0.729 × 0.656（底在 y = −0.129，顶正好 0.60）；顶面 0.60 > 最大 `stepLimit` 0.55，所以这个 AABB 盒**永远不会变成支撑候选**，只当墙。
 
-**坡顶接缝**：坡顶与坡顶台面的高度差 δ = 0（都 0.60），所以**坡面**在接缝处高度连续；但「连续」不等于「能上去」——台面盒是否从扫掠里剔除由 step 规则决定，而球在台面南面会被**半径膨胀后的 AABB** 挡在 `z = 台面边 − r`，那一点的球底比台面低 `r(tanθ + 1 − secθ)`。45° 时这个差是 0.0878 m，大于 `stepLimit = 0.0749`，所以台面一直是墙：**C05 因此爬不上去，见 §4.1.3**（2026-11-15 实跑 + 推导，不是时间线问题）。
+**坡顶接缝**：坡顶与坡顶台面的高度差 δ = 0（都 0.60），所以**坡面**在接缝处高度连续；但「连续」不等于「能上去」——台面盒是否从扫掠里剔除由 step 规则决定，而球在台面南面会被**半径膨胀后的 AABB** 挡在 `z = 台面边 − r`，那一点的球底比台面低 `r(tanθ + 1 − secθ)`。45° 时这个差是 0.0878 m，大于 `stepLimit = 0.0749`，所以台面一直是墙：**C05 因此爬不上去，见 §4.1.3**（实跑 + 推导，不是时间线问题）。
 
-### 4.1.2 C06 的落库形态：作者门 > 45° 要求 box（本轮实现结论）
+### 4.1.2 C06 的落库形态：作者门 > 45° 要求 box
 
 设计最初写的是「同一个 Collider 进 `rampBoxes` 触发拒绝，同时把它的世界 AABB 放进 `staticBoxes`」。落到工具上撞到一条**更早的门**：
 
 1. `Tools/levelbuild/placement_core.py` 的 `_check_structure` 对 `role=ramp` 有硬门 `slope <= 45 + 0.01`，超过直接 **error**，并在 `LEVEL_AUTHORING` §4.3 写明「坡度 > 45° 时拒绝并要求改成 `box`」。所以 50° 不可能以 `role=ramp` 进库而不把 `levelbuild check` 弄红。
 2. 即使硬塞进 `rampBoxes`，`LevelArenaHost.RegisterRamp` 调的是 `SupportSurfaceMath.TryBakeRamp`，它在 **`AddRamp` 之前**就按同一个 45° 护栏拒了。motor 的 `GetLastRampRefusalReason()` / `GetLastRampRefusalSlopeDegrees()` / `GetRampCount()` 根本看不到这块板（拒绝发生在 arena 自己那层），所以「读 motor 的拒绝 getter」也拿不到东西。
 
-于是本批用**同一块板、两条读数**解决，且不改工具、不改 motor / `LevelArenaHost`：
+于是用**同一块板、两条读数**解决，不改工具、不改 motor / `LevelArenaHost`：
 
 | 用途 | 数据/代码 | 读数 |
 |---|---|---|
 | 几何 + 兜底墙 | placement：`role=box`、`kind=ramp_probe`、50°、4.0 宽 × 0.20 厚 × 0.783 沿坡 | 0.20 m 厚让 AABB 顶仍高于 2.20 档 `stepLimit`：世界 AABB = 4.000×0.729×0.656、底 −0.129、顶 0.60。AABB 进 `staticBoxes`，球被挡在脚外 r 处 |
 | 护栏取证 | 判据导入器读 `LevelArenaHost.staticBoxes` 里同名 Collider 的变换，用 `SupportSurfaceMath.TryBakeRamp(..., 89.5°)` **放行**烘出同一个 +Y 面，写进 `PhysicsTestCell.rampProbe*` | 驱动在切格后调 `motor.AddRamp(probe...)`；motor 用真实的 45° 护栏拒绝，`GetLastRampRefusalReason()` 非空、`GetLastRampRefusalSlopeDegrees()` ≈ 50、`GetRampCount()` 仍为 0。这就是 `ramp_refused` / `refusal_slope` / `no_ramp_registered` 三条判据的来源 |
 
-**偏差要读清楚**：arena 自己的 `[arena] ... ramps=0/0 ...` 行里没有 1（因为这块板不在 `rampBoxes`），所以设计原文的「ramps=0/1 + 原因」在本工具链下拆成了「`ramps=0/0`（arena 计数）+ `rampProbe refused=1 slope=50.00 reason=ramp slope exceeds the support limit`（驱动行）」。两者合起来证明同一件事：**50° 被拒绝，且拒绝携带原因**。想让 `ramps=0/1` 字面成立，只能改 `Tools/levelbuild` 的 45° 门（放行对抗性 ramp）并让 arena 的 refuse 路径把原因转发给 motor 的 getter——那需要 Lead 批工具与 `LevelArenaHost` 两处改动，本批不做。
+**偏差要读清楚**：arena 自己的 `[arena] ... ramps=0/0 ...` 行里没有 1（因为这块板不在 `rampBoxes`），所以设计原文的「ramps=0/1 + 原因」在本工具链下拆成了「`ramps=0/0`（arena 计数）+ `rampProbe refused=1 slope=50.00 reason=ramp slope exceeds the support limit`（驱动行）」。两者合起来证明同一件事：**50° 被拒绝，且拒绝携带原因**。想让 `ramps=0/1` 字面成立，只能改 `Tools/levelbuild` 的 45° 门（放行对抗性 ramp）并让 arena 的 refuse 路径把原因转发给 motor 的 getter——那需要同时改工具与 `LevelArenaHost` 两处，目前不做。
 
 
 
-### 4.1.3 45° 的实测极限：C05 在 0.60 m 台面前卡住（2026-11-15 实跑 + 推导）
+### 4.1.3 45° 的极限：C05 在 0.60 m 台面前卡住（v1 接触模型）
 
-实跑（commit 5835517，`C05`，D=0.30，时间线 t=0..2.5 s 全速 +Z 后松手，run 4.5 s 结束）：
+实跑（`C05`，D=0.30，时间线 t=0..2.5 s 全速 +Z 后松手，run 4.5 s 结束；证据 `Docs/Evidence/PhysicsTestField/2026-11-15_pass2/`）：
 `climbed deck_gap_m = +0.0887`（限 0.010），球只爬到 0.60 台面下 0.089 m 就停住。
-**结论：不是时间线太短，是电机在 45° 的这一格上真的上不去。**
+**结论：不是时间线太短，是 v1 电机在 45° 的这一格上上不去。**
 
 | 量 | 值 | 来源 |
 |---|---|---|
@@ -258,14 +247,14 @@
 
 **极限由角度决定，不由球径决定**：`gap/r = tanθ + 1 − secθ`，阈值 `= 0.5`（因为 `stepLimit = 0.5·r`）⇒ **θ_max = asin(0.6) = 36.87°**。也就是说：**只要台面与坡顶齐平、台面是直角盒，任何球径都爬不上 > 36.87° 的坡。** 对照：C01 5° → 0.0125 ≤ 0.0749 ✓；C13 11.31° → 0.0270 ✓；C03 25° → 0.0544 ✓；C05 45° → **0.0878 ✗**（实测 0.0887，差 0.9 mm 来自扫掠停止点的离散化）。这就是同一套时间线 C01/C03 过、C05 不过的原因。
 
-**本批没有改 C05 的任何数据/几何/判据**：球在 ~0.6 s 就被挡住、之后 3.9 s 不动，改 `drive` 没有意义；`climbed expect=pass` 是这条电机极限的**正确红灯**。**给 Lead 拍板的最小后续动作**：
+C05 的数据、几何、判据不动：球在 ~0.6 s 就被挡住、之后 3.9 s 不动，改 `drive` 没有意义；`climbed expect=pass` 是这条电机极限的**正确红灯**（v1 矩阵里仅这四条，v2 下 `climbed` 四档通过，见 §5.6.2）。可选的后续动作：
 
-- **(a) 数据**：把 C05 的 `climbed` 改成「记录 45° 极限」的判据（`expect` 全档 `fail`、`limit` 记 0.088 作基线），或给台面南缘加 0.05 m 过渡台阶/倒角，把 45° 拆成两段 ≤ 0.075 的上升。**改判据语义或几何，需 Lead 批。**
-- **(b) 运行时代码**：把 `SweepMath` 的盒子接触从「膨胀 AABB」改成真正的球-盒（圆角）测试。精确相切时球底 = 0.558、差 0.042 ≤ 0.0749，step mask 会剔掉台面、球能上去；顺带修掉所有陡坡接缝。改动在 `Runtime/BallLayers/Sweep`，**不在本批写范围，需 Lead 批。**
+- **(a) 数据**：把 C05 的 `climbed` 改成「记录 45° 极限」的判据（`expect` 全档 `fail`、`limit` 记 0.088 作基线），或给台面南缘加 0.05 m 过渡台阶/倒角，把 45° 拆成两段 ≤ 0.075 的上升。会改判据语义或几何。
+- **(b) 运行时代码**：把 `SweepMath` 的盒子接触从「膨胀 AABB」改成真正的球-盒（圆角）测试。精确相切时球底 = 0.558、差 0.042 ≤ 0.0749，step mask 会剔掉台面、球能上去；顺带修掉所有陡坡接缝。改动在 `Runtime/BallLayers/Sweep`。
 
-### 4.1.4 坡道格的分档适用性、阈值推导与实测偏离分类（2026-11-15 pass2 之后）
+### 4.1.4 坡道格的分档适用性、阈值推导与偏离分类
 
-pass2 的 36 次运行里，**所有非 C05 的格在 0.30–1.10 都按期望通过**；偏离全部落在坡道格。逐条分类（证据 = `Docs/Evidence/PhysicsTestField/2026-11-15_pass2/traj_ramps.md` 的逐点采样 + 几何算术）：
+v1 矩阵里，**所有非 C05 的格在 0.30–1.10 都按期望通过**；偏离全部落在坡道格。逐条分类（证据 = `Docs/Evidence/PhysicsTestField/2026-11-15_pass2/traj_ramps.md` 的逐点采样 + 几何算术）：
 
 | # | 偏离（格/档/判据） | 实测 | 分类 | 依据与确定性 |
 |---|---|---|---|---|
@@ -307,9 +296,9 @@ per-tier 结果（`r` = D/2，`stepLimit` = 0.25·D）：
 2. **`ramp_entered` 的阈值改为每次 run 推导**：`min_progress = motor.GetStepHeightLimitWorldM()`（= 0.25·D），日志打 `[ptf] derived ... step_limit=... min_progress=...`，与 `deck_gap` 的台阶推导同一套做法。数据里的 `limit: 0.3` 保留为**名义值**（记录表），实际判定用推导值。
 3. **C01 的 2.20 档时间线**：第二段前进窗口 8.0 → **8.75 s**（run 10 → 10.75 s），理由是 `growthSpeedFactor = 0.25` ⇒ 2.20 档上限 3.0 m/s，6.86 m 坡比 4 m/s 的假设多需 ~0.75 s；0.30–1.10 档球更早到台面，多出的 0.75 s 只让它多顶 0.7–0.95 s 墙（< `stuckTimeoutSeconds` 1.5，不会触发卡死瞬移）。
 
-### 4.1.5 缺陷单（给 Lead；电机只读、未修）：大球在矮盒旁触发卡死恢复，瞬移回起点并单帧抬升 ~0.95 m
+### 4.1.5 已知缺陷：大球在矮盒旁触发卡死恢复，瞬移回起点并单帧抬升 ~0.95 m
 
-**现象**（C13 @D=2.20，pass2 run 36）：
+**现象**（C13 @D=2.20，pass2 run 36，证据同上）：
 - `seam_no_step grounded_frame_dy_m = +0.9499`（阈值 0.05）：两个「不处于下落」的采样帧之间，球心竖直位移 0.95 m；
 - 随后 `landing_gap = +0.0419`、`landed_on_ground support_kind = 2`（支撑变成坡面而不是地面）；
 - 轨迹（`traj_ramps.md` §D=2.20 C13）：t=1.5–2.5 球在 0.60 台面上（球心 1.70）；t=3.0 球心 1.34（掉下北缘）；t=3.5–4.5 球心 1.10、`stuck` 0.42→1.42；t=5.0 球心 1.14、`sup=0.02`（回到坡脚附近）。
@@ -324,10 +313,10 @@ per-tier 结果（`r` = D/2，`stepLimit` = 0.25·D）：
 **涉及代码（只读）**：`Runtime/BallMotor/KatamariBallMotor.cs:258`（startCenterWorld 序列化）、`:1209-1216`（卡死瞬移）、`:1103-1106`（一步抬升允许）、`:91`/`:113`（maxLiftPerStep 0.1 / maxStepUpLiftWorldM 0.6）；`Runtime/BallLayers/Sweep/SweepMath.cs:623-644`（膨胀 AABB）、`:194-215`、`:262-275`（初始穿透、推不干净 → unresolved）。
 
 **猜测（明确标注）**：
-- 猜测 A：修法之一是卡死恢复目标改用「当前 run 的起点 + 当前半径」（或干脆不做位置瞬移，只清速度/接触），这样至少不会把球塞进地面；**这是设计决策，不是本批能定的**。
-- 猜测 B：另一个修法是盒子接触用真正的球-盒（圆角）测试，而不是膨胀 AABB；这与 §4.1.3 的 45° 接缝死锁是同一个根因（膨胀 AABB 把盒角当方角）。若 Lead 只批一处改动，这一处同时修两个现象。
+- 猜测 A：修法之一是卡死恢复目标改用「当前 run 的起点 + 当前半径」（或干脆不做位置瞬移，只清速度/接触），这样至少不会把球塞进地面；**这是设计决策，尚未定**。
+- 猜测 B：另一个修法是盒子接触用真正的球-盒（圆角）测试，而不是膨胀 AABB；这与 §4.1.3 的 45° 接缝死锁是同一个根因（膨胀 AABB 把盒角当方角）。若只做一处改动，这一处同时修两个现象。
 
-**判据状态**：`seam_no_step` 在 2.20 档**保持 applicable、保持红灯**（它是这张缺陷单的现成证据）；C13 的 `landing_gap` / `landed_on_ground` 在 2.20 档按 R3 记为不适用（场景退化），但这不改变上面这条红灯。
+**判据状态**：`seam_no_step` 在 2.20 档**保持 applicable、保持红灯**（它是这条缺陷的现成证据）；C13 的 `landing_gap` / `landed_on_ground` 在 2.20 档按 R3 记为不适用（场景退化），但这不改变上面这条红灯。
 
 ### 4.1.6 「球穿过斜坡」的判读：是法向支撑偏移与尺度，不是穿模
 
@@ -362,7 +351,7 @@ per-tier 结果（`r` = D/2，`stepLimit` = 0.25·D）：
 | 0.400 | 墙 | 墙 | 墙 | **可上** |
 
 - 这是**一张 6×4 的预测表**，不是 6 个孤立测试：任何一个格的结果都能被另外 23 个格交叉检验。实现若把 `k` 从 0.25 改成 0.30，这张表会有 4 个格子翻转（0.100@0.30、0.200@0.60、0.400@1.10…）——**表本身就是回归基线**。
-- **边界格 C09（0.075 @ D=0.30 预设）**：公式是 `rise ≤ stepLimit`（含等号），但 0.30 预设做不到恰好 0.300：体积单位量化后 D = 0.2997369 m，`stepLimit = 0.074934 m`，所以 0.075 的真实判据是 **rise ≥ stepLimit + 0.066 mm → 墙**（2026-11-15 实测也确实是墙）。判据因此**按运行时实际 `stepLimit` 推导**：`rise ≤ 实际 stepLimit → 应上台（expect pass）`，否则 `→ 应被挡（expect fail）`；C09 的 0.30 档就是后者。0.60 起 `stepLimit = 0.1499 > 0.075`，**可上**。等号语义本身仍由代码的 `≤` 与 `collapsed_bench` 的 0.55 == 0.55 记录。
+- **边界格 C09（0.075 @ D=0.30 预设）**：公式是 `rise ≤ stepLimit`（含等号），但 0.30 预设做不到恰好 0.300：体积单位量化后 D = 0.2997369 m，`stepLimit = 0.074934 m`，所以 0.075 的真实判据是 **rise ≥ stepLimit + 0.066 mm → 墙**（实测也是墙）。判据因此**按运行时实际 `stepLimit` 推导**：`rise ≤ 实际 stepLimit → 应上台（expect pass）`，否则 `→ 应被挡（expect fail）`；C09 的 0.30 档就是后者。0.60 起 `stepLimit = 0.1499 > 0.075`，**可上**。等号语义本身仍由代码的 `≤` 与 `collapsed_bench` 的 0.55 == 0.55 记录。
 - **紧凑版每格 1 个盒**（4 m 宽 × 1.5 m 进深），跑道 2.75 m（z −3.5 → −0.75，沿 +Z）。0.30 m 球在这段距离里能到约 3 m/s，足够区分「上 / 被挡」；2.20 球同样起步，读数更干净。
 - **为什么不做「台阶上下各一层」**：下来不需要台阶（走出足迹 → 支撑回落 → `maxDropPerStep` 钳住，TERRAIN_SUPPORT §4.7 明确不做特例）。加一层下台阶只会多一个盒、多一个判据，不多测任何东西。
 
@@ -378,7 +367,7 @@ per-tier 结果（`r` = D/2，`stepLimit` = 0.25·D）：
 - 两侧的落差读数用 `support_gap`：**它天然是「球心到当前支撑面的法向距离」**。球在台面上它 = r；球刚越过边缘、脚下换成地面时它 = r + 0.6，然后**按重力积分**下落（`SupportSurfaceMath.ResolveFallState` + `TryIntegrateFall`：半隐式欧拉，每步的 fall budget 同时当抬升与下降钳位，0.6 m 约 18 步 / 3.5 帧）。所以「掉下去」不需要新 getter，只要看 `support_gap` 的时序——但**不要把「每步 ≤ 0.1 m」写进判据**：那是旧的 `maxDropPerStep`，现在只用于地形过渡，不用于自由落体。
 - **P1 就能验「站上去稳」是这一格存在的理由**：斜面（P3）与台面稳定性（P1）绑在一格里，会让人误以为「等坡做完再测台面」。拆成两个入口就没有这个借口。
 
-> **本轮实现（C13 已入库，紧凑版）**：上面两个入口合成**一次 run**（`entry=ramp` 路线）：球从 z=6.5 起跑（0.5 m 助跑），上南侧 11.31° 坡（水平 3.0、升 0.60）→ 5×4 台面（z 10…14）→ 从北缘掉 0.60 m 落地。`ramp_support` / `seam_no_step` / `climbed` / `landing_gap` / `fall_frames` 在一段轨迹里同时可测；`entry=teleport` 可由操作员改 `start_pose` 临时跑。
+> **C13 的落库形态**：上面两个入口合成**一次 run**（`entry=ramp` 路线）：球从 z=6.5 起跑（0.5 m 助跑），上南侧 11.31° 坡（水平 3.0、升 0.60）→ 5×4 台面（z 10…14）→ 从北缘掉 0.60 m 落地。`ramp_support` / `seam_no_step` / `climbed` / `landing_gap` / `fall_frames` 在一段轨迹里同时可测；`entry=teleport` 可由操作员改 `start_pose` 临时跑。
 
 ### 4.4 薄件与贴墙 C14–C17
 
@@ -523,7 +512,7 @@ per-tier 结果（`r` = D/2，`stepLimit` = 0.25·D）：
 
 #### 5.2.1 读数口径：`gap` 沿支撑法线（R11）
 
-`StoryBallDiagnostics` 与 `StoryLevelLabBootstrap` 的 `gap` 原来是 `bottom − supportY`。在斜面上这不是「球心到支撑面」的距离：平面方程给出 `center.y = supportY + r / n.y`，所以竖直差恒为 `r(1/n.y − 1)`（45°、r=1.10 时 0.455 m），看起来像球一直浮着。R11 的修法是把间隙投到支撑法线上：
+`StoryBallDiagnostics` 的 `gap` 取沿支撑法线的间隙，而不是 `bottom − supportY`：在斜面上后者不是「球心到支撑面」的距离：平面方程给出 `center.y = supportY + r / n.y`，所以竖直差恒为 `r(1/n.y − 1)`（45°、r=1.10 时 0.455 m），看起来像球一直浮着。所以把间隙投到支撑法线上（R11）：
 
 ```
 gap = (center.y − GetSupportSurfaceHeightWorldM()) * GetSupportNormalWorld().y − 碰撞半径
@@ -549,7 +538,7 @@ gap = (center.y − GetSupportSurfaceHeightWorldM()) * GetSupportNormalWorld().y
 | token | 什么时候 | 谁能解开 |
 |---|---|---|
 | `BLOCKED_UNTIL_P2` | 判据声明 `gate=P2`，但场景里没有接 `PickupFieldHost`，或宿主关掉了道具障碍（`SetSupportProps` 的唯一调用方） | P2 的 getter 已进树；接上宿主且 `IsBlockingEnabled()` 为 true 后判据自动可测 |
-| `BLOCKED_UNTIL_P3` | **本版不再产生**：判据声明 `gate=P3`，但斜面接口（`AddRamp`）还没有的旧版本 | P3 已进树（d31dc9b），驱动把 `gate=P3` 当普通判据测；token 只留在数据的 gate 词汇里 |
+| `BLOCKED_UNTIL_P3` | **不产生**：P3 的斜面接口（`AddRamp`）已进树（d31dc9b） | 驱动把 `gate=P3` 当普通判据测；token 只留在数据的 gate 词汇里 |
 | `BLOCKED_UNTIL_manual` | `readout=trace`：读数只存在于 `[ProxyTrace]` 的逐行日志里，驱动读不到自己的 Console | 人（grep console） |
 | `BLOCKED_UNTIL_P4` | `readout=counter`：每步成本计数器还不存在 | §6.4 的接口请求 |
 | `BLOCKED_UNTIL_reset` / `_size` / `_setter` / `_setup` | 这一 run 根本没跑起来（复位失败 / 球径没收敛 / 没挂设定器 / 场景没接好） | 操作员；这是**场景问题**不是物理结论 |
@@ -577,7 +566,7 @@ gap = (center.y − GetSupportSurfaceHeightWorldM()) * GetSupportNormalWorld().y
 
 本设计**全部按含等号**写（`≤`）。TERRAIN_SUPPORT §4.1 与 `PickupAbsorbMath` 的现状也都是 `≤`（吸收门是「严格大于才拒绝」）。**若实现改成严格小于，这三处会同时翻**，请一次改完三处并更新 JSON 的 `expect`，不要只改一处。
 
-### 5.6 判据的模型维度：v2 覆盖块（2026-11-15e，pass7/pass8 之后）
+### 5.6 判据的模型维度：v2 覆盖块
 
 **问题**：同一张 36 跑矩阵要同时服务两个电机模型——v1（`contactModelV2Enabled=false`，矩阵必须**逐字**等于 pass7：58/0/1、57/1/1、56/2/1、52/5/2）与 v2（flag 开，期望见 CONTACT_MODEL_V2 §6.1/§7.7.2/§7.7.4）。**复制一份矩阵是最坏的做法**：两份 `expect` 会各自漂移，而且「v1 还是 v2」就再也不是一个可验证的问题。
 
@@ -634,7 +623,7 @@ CONTACT_MODEL_V2 §6.2 的十个格（W1–W6、R1/R2、S1、X1）已经以**设
 
 其中有几条**故意标了 `metric_available: false`**：§6.2 的读数（`contact_class_ride_frames`、`climb_time_s`、`recovery_delta`、`normal_jump_max_deg`、`slab_penetration_m`、`segment_index_monotonic` …）现在没有驱动 reader。这与 §5.1 的「C 通道：测不到就说测不到」是同一条纪律：**先写判据、再写 reader，不拿近似值假装测过**。另注意 §6.2 里的 `support_kind==4` 是 v2 的**接触类** `CLASS_RIDE`（`GetContactClass`），不是 `GetSupportKind` 的 0/1/2/3——设计行里已按 `contact_class_ride_frames` 写清。
 
-**操作员要做的三件事**（本批**没有**编译、没有跑 Unity）：① 重编 U#（驱动与格的指纹升到 **`2026-11-15e`**；设定器仍是 `2026-11-15d`——它这一批没改，按它自己的指纹判断新旧）；② **重导判据**（新字段 `checkHasV2[] / checkV2*[] / deckCenterXZ / deckHalfSizeM` 必须先被写入，否则驱动读到空数组会**静默退回 v1 行**——这也是 `[ptf] build=… cellRev=…` 两枚指纹存在的理由）；③ 跑同一套 36 跑**两次**：flag 关（对照 v1 表）与 flag 开（对照 v2 表），两次日志都必须出现 `model=v1` / `model=v2`。
+**操作员要做的三件事**：① 重编 U#（驱动与格的指纹是 **`2026-11-15e`**；设定器是 `2026-11-15d`——它没改，按它自己的指纹判断新旧）；② **重导判据**（新字段 `checkHasV2[] / checkV2*[] / deckCenterXZ / deckHalfSizeM` 必须先被写入，否则驱动读到空数组会**静默退回 v1 行**——这也是 `[ptf] build=… cellRev=…` 两枚指纹存在的理由）；③ 跑同一套 36 跑**两次**：flag 关（对照 v1 表）与 flag 开（对照 v2 表），两次日志都必须出现 `model=v1` / `model=v2`。
 
 ---
 
@@ -701,9 +690,9 @@ CONTACT_MODEL_V2 §6.2 的十个格（W1–W6、R1/R2、S1、X1）已经以**设
 
 ### 6.4 现在拿不到、需要加的读数（给实现者的接口请求）
 
-**已经在树里**（2026-11-15）：P1 的 `GetSupportSurfaceHeightWorldM()`、`GetSupportNormalWorld()`、`GetSupportSurfaceId()`、`GetSupportSurfaceCount()`、`GetSupportKind()`（0 地面 / 1 盒 / 2 斜面 / 3 道具 / -1 无面）、`GetStepHeightLimitWorldM()`、`IsFalling()`、`GetStepMaskRebuildCount()`；P2 的 `GetSupportPropCount()` 等；**P3 的斜面家族**全在同一个文件（行号见下）。驱动的 `support_gap_m` / `deck_gap_m` / `blocked_gap_m` / 斜面判据全部建立在它们之上。
+**已经在树里**：P1 的 `GetSupportSurfaceHeightWorldM()`、`GetSupportNormalWorld()`、`GetSupportSurfaceId()`、`GetSupportSurfaceCount()`、`GetSupportKind()`（0 地面 / 1 盒 / 2 斜面 / 3 道具 / -1 无面）、`GetStepHeightLimitWorldM()`、`IsFalling()`、`GetStepMaskRebuildCount()`；P2 的 `GetSupportPropCount()` 等；**P3 的斜面家族**全在同一个文件（行号见下）。驱动的 `support_gap_m` / `deck_gap_m` / `blocked_gap_m` / 斜面判据全部建立在它们之上。
 
-| P3 getter | 签名 | 文件:行 | 本轮怎么用 |
+| P3 getter | 签名 | 文件:行 | 用途 |
 |---|---|---|---|
 | `GetRampCount()` | `public int GetRampCount()` | `Runtime/BallMotor/KatamariBallMotor.cs:2228` | `ramp_count`（C01/C03/C05/C13 `==1`；C06 `==0`） |
 | `GetLastRampRefusalReason()` | `public string GetLastRampRefusalReason()` | `…/KatamariBallMotor.cs:2255` | `ramp_refusal_reason_len`（C06 `>=1`） |
@@ -750,7 +739,7 @@ Docs/Evidence/PhysicsTestField/
   traj/<cell>_D<0.300>.csv          可选：由 traj 行转出（t,x,y,z,sup,lift,cap,stuck）
 ```
 
-命名：`<cell>_D<3 位小数>_<camera>.png`，例如 `C10_D0.300_cam_steps.png`。日期目录：`Docs/Evidence/PhysicsTestField/2026-11-15_pass1/`（一次完整 pass 一个目录，不覆盖上一次）。
+命名：`<cell>_D<3 位小数>_<camera>.png`，例如 `C10_D0.300_cam_steps.png`。日期目录：`Docs/Evidence/PhysicsTestField/2026-11-15_pass11_v1/`（一次完整 pass 一个目录，不覆盖上一次）。
 
 ---
 
@@ -758,9 +747,9 @@ Docs/Evidence/PhysicsTestField/
 
 ### 7.1 定位
 
-`StoryLevelLabBootstrap` 是仓库里剩下的**唯一**脚本化驾驶 lab（`BallPlayground` 已退役），已经是「脚本化驾驶 + 每秒一行日志」的成熟形态：它用 `motor.SetMoveAxes(forward, turn, lateral)` 跑三段脚本，用 `Report()` 每秒打一行。**驱动器沿用同一条缝**，但把「一段硬编码时间线」升级成「按格 + 按球径 + 按判据表」的数据驱动。**不引入任何新的输入层、不引入第二份物理**。
+驱动器沿用 [StoryBallDiagnostics](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Story/StoryBallDiagnostics.cs) 那条「脚本化驾驶 + 每秒一行日志」的缝：用 `motor.SetMoveAxes(forward, turn, lateral)` 跑脚本，每秒打一行；但把「一段硬编码时间线」做成「按格 + 按球径 + 按判据表」的数据驱动。**不引入任何新的输入层、不引入第二份物理**。
 
-### 7.2 结构（已实现，未编译）
+### 7.2 结构（已实现）
 
 ```csharp
 namespace VRCKatamari.Labs.PhysicsTestField
@@ -851,8 +840,8 @@ namespace VRCKatamari.Labs.PhysicsTestField
 **和草案不一样的三处，都是实现逼出来的**：
 
 1. **`checkReadouts[]` 是新增的数组**。草案只有 `readout` 这个字符串字段在 JSON 里；运行时每次判据都做一次字符串比较是没必要的，所以导入器把它烘成整数，驱动只按整数分支。
-2. **`Start()` 只允许第 0 格注册，其余 `ReleaseArena()` = `SuspendRegistration()`**（2026-11-15 紧凑版修正）。`LevelArenaHost` 在自己 `Update` 里注册，而电机的平面表是全局的——九个 arena 同时注册会在第一帧登记 9 个地面 + 36 面墙（8 个平面槽）并且 latch overflow。紧凑版让**所有格常显**（4×3 网格、1–1.5 m 走道），所以注册开关必须与可见性分开：`ReleaseArena()` 不再 `SetActive(false)`，而是 `arena.SuspendRegistration()`；`LevelArenaHost.Update` 在 suspended 时直接返回，**显式 `Reapply()` 不受影响**。第 0 格（pass 顺序首格，目前 C14）不挂起，motor 就绪后由它自己的 `Update` 注册；切格时驱动先挂起其余格，再对目标格 `ResumeRegistration() + Reapply()`。`registrationSuspended` 默认 false，所以所有旧场景行为逐字节不变。
-3. **没有 `fixedCameras[]` / `hudText` / `SelectNextCell()`**。本批不做相机切换与 HUD；证据靠日志和操作员截图（§9.5 的接线清单）。加它们是纯增量，不影响判据。
+2. **`Start()` 只允许第 0 格注册，其余 `ReleaseArena()` = `SuspendRegistration()`**。`LevelArenaHost` 在自己 `Update` 里注册，而电机的平面表是全局的——九个 arena 同时注册会在第一帧登记 9 个地面 + 36 面墙（8 个平面槽）并且 latch overflow。紧凑版让**所有格常显**（4×3 网格、1–1.5 m 走道），所以注册开关必须与可见性分开：`ReleaseArena()` 不再 `SetActive(false)`，而是 `arena.SuspendRegistration()`；`LevelArenaHost.Update` 在 suspended 时直接返回，**显式 `Reapply()` 不受影响**。第 0 格（pass 顺序首格，C14）不挂起，motor 就绪后由它自己的 `Update` 注册；切格时驱动先挂起其余格，再对目标格 `ResumeRegistration() + Reapply()`。`registrationSuspended` 默认 false，所以所有旧场景行为逐字节不变。
+3. **没有 `fixedCameras[]` / `hudText` / `SelectNextCell()`**。不做相机切换与 HUD；证据靠日志和操作员截图（§9.5 的接线清单）。加它们是纯增量，不影响判据。
 
 ### 7.3 为什么判据是**并行数组**而不是「一个检查对象」
 
@@ -872,11 +861,11 @@ Idle → Switch(cell) → Size(D) → Settle → Drive → Report → (next D | 
 | `Drive` | 按 `drive[]` 的阶段推 axes，每帧采样，每 0.5 s 一条 `traj` | —— |
 | `Report` | 逐条判据 → 行日志 → `summary` → 决定下一 run | —— |
 
-**采样频率**：`Update()` 每帧一次（不是每步）。所以「每步」量（`step_dy_over_step_limit`、`active_surface_max`）必须来自 `[ProxyTrace]`（通道 B）或 P4 计数器——它们现在都报 `BLOCKED_UNTIL_manual` / `_P4`，**不会被逐帧采样冒充**。逐帧量只有 `frame_dy_m`（本轮数据里没有判据用它）。
+**采样频率**：`Update()` 每帧一次（不是每步）。所以「每步」量（`step_dy_over_step_limit`、`active_surface_max`）必须来自 `[ProxyTrace]`（通道 B）或 P4 计数器——它们现在都报 `BLOCKED_UNTIL_manual` / `_P4`，**不会被逐帧采样冒充**。逐帧量只有 `frame_dy_m`（当前判据里没有用它的）。
 
 **阶段之间的顺序不是自由组合**：见 §6.1 的三个「必须」。
 
-### 7.5 HUD（本批不做）
+### 7.5 HUD（不做）
 
 ```
 PTF C10 D0.30 [4/84] checks 5/5  exp 0  skip 0   v=EXPECTED
@@ -884,7 +873,7 @@ PTF C10 D0.30 [4/84] checks 5/5  exp 0  skip 0   v=EXPECTED
 
 上一行是**结论**，下面一行是**当步事实**：`gap=+0.0012 sup=0.100 lift=0.000 stuck=0.00 blk=0/6`。
 
-本批只打 Console（`GetLastSummaryLine()` 已经给出同一行的文本，HUD 接它即可）。4 个 uGUI 按钮的绑定方式见 §8.4。
+只打 Console（`GetLastSummaryLine()` 已经给出同一行的文本，HUD 接它即可）。4 个 uGUI 按钮的绑定方式见 §8.4。
 
 ---
 
@@ -894,7 +883,7 @@ PTF C10 D0.30 [4/84] checks 5/5  exp 0  skip 0   v=EXPECTED
 
 同一格要在 0.30 / 0.60 / 1.10 / 2.20 四个球径下各跑一遍。现状：直径**只是账本的纯函数**（`SizeModelMath.TryDerive(confirmedVolume)`），没有 setter；`startCenterWorld` 与 `startVolumeMm3` 都是序列化字段（改了要重开场景）。
 
-### 8.2 接口（已实现，未编译）
+### 8.2 接口（已实现）
 
 ```csharp
 namespace VRCKatamari.Labs.PhysicsTestField
@@ -907,7 +896,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         [SerializeField] private KatamariBallMotor motor;
         [SerializeField] private float[] presetDiametersM;   // 0.30/0.60/1.10/2.20
         [SerializeField] private string[] presetLabels;      // "0.30"…（按钮按字符串绑，不解析数字）
-        [SerializeField] private float sizeModelBaselineVolumeUnits;  // 判据导入器从场景 motor 镜像（§8.3）
+        [SerializeField] private long  sizeModelStartVolumeMm3;  // 判据导入器从场景 motor 镜像（§8.3）
         [SerializeField] private string feederKind = "lab-feeder";
         [SerializeField] private Vector3 feederBounds = new Vector3(0.02f, 0.02f, 0.02f);
         [SerializeField] private float toleranceM = 0.002f;
@@ -927,7 +916,7 @@ namespace VRCKatamari.Labs.PhysicsTestField
         public float GetLastErrorM();                        // 有符号：实测 − 目标
         public float GetQuantumM();                          // 一个体积单位的直径当量（解析），未烘尺寸模型时 0
         public float GetCubedSlope();                        // d(D³)/dV（解析 = D³ / (baseline + confirmed)）
-        public bool IsCalibrated();                          // sizeModelBaselineVolumeUnits > 0
+        public bool IsCalibrated();                          // sizeModelStartVolumeMm3 > 0
     }
 }
 ```
@@ -946,21 +935,21 @@ namespace VRCKatamari.Labs.PhysicsTestField
 
 ```
 每帧（一次只允许一个候选在飞）：
-  V = motor.GetConfirmedVolumeUnits()        // 只算「基线之外」的体积单位
+  V = motor.GetConfirmedVolumeMm3()          // 只算「起始体积之外」的 mm³
   D = motor.GetSemanticDiameterWorldM()
-  total = sizeModelBaselineVolumeUnits + V   // 基线是唯一的私有输入，由判据导入器镜像
+  total = sizeModelStartVolumeMm3 + V        // 起始体积是唯一的私有输入，由判据导入器镜像
   slope = D³ / total                         // 解析 d(D³)/dV；不需要任何样本
-  quantum = D / (3 · total)                  // 一个单位折算的直径当量
+  quantum = D / (3 · total)                  // 1 mm³ 折算的直径当量
   收敛: |D − target| ≤ max(toleranceM, quantum)
-  否则: units = round((target³ − D³) / slope)   // 立方域里比，不需要开方
+  否则: units = round((target³ − D³) / slope)   // 要喂的 mm³ 数；立方域里比，不需要开方
         若 units 会「越过目标更远」→ 这就是分辨率下限，收敛
         motor.SubmitCandidate(true, feederKind, feederBounds, center, units, "ptf-feeder-<n>", gen)
 ```
 
-- **斜率是解析的（2026-11-16，步骤 C+D 后的口径）**：`D³` 对**总体积**是线性的（`D = (6V/π)^(1/3)`，V 以 mm³ 计），所以 `d(D³)/dV = D³/total`，一次 feed 就能精确落在目标直径上。这里不再有「整体积单位」的量子：旧文档里的 29 mm / 7.25 mm / 2.16 mm / 0.54 mm 是 **0.0041 m³ 整数单位**的直径当量，随那个单位一起退役。
+- **斜率是解析的**：`D³` 对**总体积**是线性的（`D = (6V/π)^(1/3)`，V 以 mm³ 计），所以 `d(D³)/dV = D³/total`，一次 feed 就能精确落在目标直径上。这里不再有「整体积单位」的量子：旧文档里的 29 mm / 7.25 mm / 2.16 mm / 0.54 mm 是 **0.0041 m³ 整数单位**的直径当量，随那个单位一起退役。
 - **那一个数字怎么来**：电机的 `startVolumeMm3` 是 `[SerializeField] private`、**没有 getter**，所以判据导入器用 `SerializedObject` 读**场景里那台 motor** 的 `startDiameterWorldM`/`startVolumeMm3`，写进设定器的 `sizeModelStartVolumeMm3`（与 `approach_m` / `rampFootM` 同一套「编辑器读场景 → 烘进组件」的做法）。改电机起始尺寸后**重新导入判据**；没导（字段为 0）时 `IsCalibrated()` 为 false，设定器对超过当前尺寸的请求报 `noSizeModel`，该 run 在 Size 阶段被标 `BLOCKED_UNTIL_size`，**不会**用猜的数字换一个假 PASS。
-- **每一个 run 发一次请求，只有这一个地方发（2026-11-15 第二、三次修）**：复位 `TryResetForNewRound` 会把球重定价回 0.30，所以每 run 都必须重新发；但**只发一次**——`Switch` 里复位之后 `ballSize.SetDiameterM(D)`，`TickSize` 只读 `IsConverged()`/`HasFailed()`。两次失败都写在这里：① 旧实现「同目标就短路」保留了上一轮的 `converged`，每档只有第一格真的长到目标径（同档其余格 `size_accuracy` 是同一个常数 +41.2674 / +371.6536 / +3523.0036，因为 `lastQuantumM` 也是缓存值）；② 上一版把规则写成「收敛后再调 = 新请求」，而 `TickSize` 每帧都调，于是 `converged` 每帧被清一次、驱动永远读不到 `true` → `reason=timeout`。最终：`SetDiameterM` 是唯一请求入口（每次都清状态并重发），`BeginRequest` 已删除，轮询是**只读**的（状态机与四条路径见 §8.3.4）。量子也改为按需实时计算（`ReadSizeModel`），没有缓存字段。
-- **收敛不等于到位（2026-11-15 修）**：`Size` 状态在 `IsConverged()` 之后还要量一次 `abs(实测 D − 目标) ≤ 20 mm`，否则报 `reason=sizeNotApplied` 并把该 run 标成 `BLOCKED_UNTIL_size`。没有这道门，一个「说收敛了但球还在 0.30」的旧程序会安静地跑完一整张矩阵，把 41 个量子当成物理结果。
+- **每一个 run 发一次请求，只有这一个地方发**：复位 `TryResetForNewRound` 会把球重定价回 0.30，所以每 run 都必须重新发；但**只发一次**——`Switch` 里复位之后 `ballSize.SetDiameterM(D)`，`TickSize` 只读 `IsConverged()`/`HasFailed()`。两条反例：① 「同目标就短路」会保留上一个 run 的 `converged`，同档只有第一格真的长到目标径；② 「收敛后再调 = 新请求」配合每帧调用的 `TickSize`，`converged` 每帧被清一次、驱动永远读不到 `true` → `reason=timeout`。所以 `SetDiameterM` 是唯一请求入口（每次都清状态并重发），轮询是**只读**的（状态机与四条路径见 §8.3.4）；量子按需实时计算（`ReadSizeModel`），没有缓存字段。
+- **收敛不等于到位**：`Size` 状态在 `IsConverged()` 之后还要量一次 `abs(实测 D − 目标) ≤ 20 mm`，否则报 `reason=sizeNotApplied` 并把该 run 标成 `BLOCKED_UNTIL_size`。没有这道门，一个「说收敛了但球还在 0.30」的旧程序会安静地跑完一整张矩阵，把假读数当成物理结果。
 - **为什么 feed 必须是整数**：`PickupAbsorbMath.TryAbsorbValueToLedgerGain` 拒绝小数（账本增益是 int），喂 0.35 单位会被判 `RejectNoGain`、候选一直留在队列里。整数单位同时也是账本记的那个数。
 - **为什么一次只允许一个候选在飞**：候选队列只有 4 格，第 5 次提交会 `SignalOverflow("pending candidate capacity 4 exceeded")` **永久 latch** overflow 计数——而本场好几条判据断言它 Δ=0。所以 feed 前先看 `GetPendingCandidateCount() == 0`，宁可慢也不要污染。
 - **分辨率下限（解析，不是猜）**：`startVolumeMm3 = 14,094,798`（`D₀ = 0.2997`）、`stepLimit = 0.25·D₀ = 0.074925`。一个 mm³ 的直径当量 `= D/(3·total)` ≈ **7.1 nm**（0.30 m 球），所以分辨率**不是**限制：设定器可以落在任意预设直径上。判据因此是 `abs(diameter_error_m) ≤ 1 mm`（`size_accuracy`），收敛容差同样是 1 mm；1 mm 与 float32 的直径预算（~2e-8 相对，30 m 球上 ~1 µm）相比余量极大。
@@ -972,9 +961,9 @@ namespace VRCKatamari.Labs.PhysicsTestField
 - **球径量化会翻转边界格**：`stepLimit = 0.25·D`，而 D 来自整数体积单位（0.30 → 0.2997369，`stepLimit = 0.074934`）。所以 C09（0.075 m）在 0.30 档不是等号，而是**高出 0.066 mm 的墙**。任何拿预设标签（0.30 → 0.075）当实际球径写死的 expect 都会假红；驱动因此对 `deck_gap_m` 按运行时的 `GetStepHeightLimitWorldM()` 推导期望（`rise ≤ 实际 limit → pass`，否则 `→ fail`，并打一行 `[ptf] derived ...`）。JSON 里的 `expect` 行保留为「名义预设答案」：C09 的 0.30 档 = `fail`，0.60/1.10/2.20 = `pass`。
 - ±1 mm 现在就是判据本身（`abs(diameter_error_m) ≤ 0.001`），不需要再给电机加测试接缝。
 
-### 8.3.2 读数的失败语义：名字错 ≠ 现在读不到（2026-11-15 修）
+### 8.3.2 读数的失败语义：名字错 ≠ 现在读不到
 
-（历史：旧的 `diameter_error_quanta` 曾把两种不同的情况都印成 `error=unknownMetric`——`TryReadMetric` 返回 false 就一律当「这个名字驱动不认识」。0.30 档的量子为 0 时就是这样。该 metric 已随整单位量子退役；下面这套状态码机制保留。）`TryReadMetric` 返回**状态码**而不是 bool，ALERT 再把状态码映射成原因：
+`TryReadMetric` 返回**状态码**而不是 bool，ALERT 再把状态码映射成原因：
 
 | reason | 含义 | 谁的问题 |
 |---|---|---|
@@ -990,9 +979,9 @@ ALERT 行因此变成：
 - `[ptf] blocked ... stage=size reason=sizeNotApplied diameter=... target=...`：设定器说收敛、球却不在目标径（§7.4 的到位校验）。
 - `[ptf] rampCellMismatch cell=... ramps=N rampClimb=0/1`：坡道格的 `rampClimb` 与 motor 里的坡数不一致 = **判据没重导**；前者会让台面被当成台阶、整组坡道判据变形。
 
-### 8.3.3 程序指纹：先证明你跑的是这份代码（2026-11-15 修）
+### 8.3.3 程序指纹：先证明你跑的是这份代码
 
-2026-11-15 的 4×9 矩阵**整张无效**，因为场景跑的是**旧的 U# 程序**、数据却是新导入器写的：
+跑旧的 U# 程序而数据是新导入器写的，整张矩阵会无效。下面四种日志症状**只可能来自旧驱动**：
 
 | 日志里的证据 | 只可能来自 |
 |---|---|
@@ -1001,7 +990,7 @@ ALERT 行因此变成：
 | `landing_gap_m` / `fall_frames` / `max_bottom_rise_m` 报 `unknownMetric` | 5835517 之前的驱动（当时还没有这些 metric） |
 | `value=0.0000`（无 `+`） | 旧的格式化器（现在 `Signed()` 输出 `+0.0000`） |
 
-而场景数据是新的（`sizeModelBaselineVolumeUnits=3.4390244` 已烘进去）。为让这件事下次一眼可见，两个组件在 `Start` 各打一行指纹：
+而数据是新的（`sizeModelStartVolumeMm3` 已烘进去）时，这套组合就会出现。为让这件事一眼可见，两个组件在 `Start` 各打一行指纹：
 
 ```
 [ptf] build=2026-11-15d cells=9 presets=4
@@ -1010,7 +999,7 @@ ALERT 行因此变成：
 
 **看到第一行之后才可信**：没有 `build=` 行 = U# 程序没重编；`startVolumeMm3=0` = 判据没重导。两条都不满足时不要读矩阵。
 
-### 8.3.4 两个组件的状态机：谁发请求、谁清状态、谁只读（2026-11-15 定稿）
+### 8.3.4 两个组件的状态机：谁发请求、谁清状态、谁只读
 
 **一句话规则：`SetDiameterM` 每 run 只被调用一次（`Switch` 里、`TryResetForNewRound` 之后）；`Size` 状态只读。**
 
@@ -1034,7 +1023,6 @@ ALERT 行因此变成：
 |---|---|---|
 | `ballSize.SetDiameterM(D)` | `Switch`（复位之后） | **全驱动唯一一处**；清状态 + 重发 |
 | `ballSize.IsConverged()` / `HasFailed()` / `GetQuantumM()` / `GetLastErrorM()` | `Size` / `Report` | **只读** |
-| `ballSize.BeginRequest()` | —— | **已删除**，全仓不再存在 |
 
 **四条路径的逐步转移**（`D₀ = 0.2997369`，`q` = 当前量子 = `D/(3·(baseline+confirmed))`）：
 
@@ -1049,7 +1037,7 @@ ALERT 行因此变成：
 
 ### 8.4 HUD 控件
 
-4 个 uGUI 按钮（0.30 / 0.60 / 1.10 / 2.20）+ 1 个「回 0.30」。绑定方式按 `Labs/README.md` 的硬事实：`Button.onClick` 的 persistent listener 指向 `UdonBehaviour.SendCustomEvent`，参数字符串是方法名，用 `UnityEventTools.AddStringPersistentListener`（lambda 会被拒）。
+4 个 uGUI 按钮（0.30 / 0.60 / 1.10 / 2.20）+ 1 个「回 0.30」。绑定方式按 [Labs/README.md](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/README.md) 的硬事实：`Button.onClick` 的 persistent listener 指向 `UdonBehaviour.SendCustomEvent`，参数字符串是方法名，用 `UnityEventTools.AddStringPersistentListener`（lambda 会被拒）。
 
 ---
 
@@ -1059,17 +1047,17 @@ ALERT 行因此变成：
 
 | 项 | 值 |
 |---|---|
-| 场景 | `Labs/PhysicsTestField/PhysicsTestField.unity`（**未创建**） |
+| 场景 | `Labs/PhysicsTestField/PhysicsTestField.unity` |
 | 目录 | `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/PhysicsTestField/` |
-| 新建时的必做序列 | `Labs/README.md`「用编辑器脚本搭 UdonSharp 场景」的 7 步（program asset 先就位 → `CompileAllCsPrograms` → backing `UdonBehaviour` → `_udonSharpBackingUdonBehaviour` → `SetBehaviourVersion` → 填引用 → `CopyProxyToUdon` → 存盘重开场景再回写）。**不是** `AddComponent<T>()` 一句话能搞定的 |
+| 新建时的必做序列 | [Labs/README.md](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/README.md)「用编辑器脚本搭 UdonSharp 场景」的 7 步（program asset 先就位 → `CompileAllCsPrograms` → backing `UdonBehaviour` → `_udonSharpBackingUdonBehaviour` → `SetBehaviourVersion` → 填引用 → `CopyProxyToUdon` → 存盘重开场景再回写）。**不是** `AddComponent<T>()` 一句话能搞定的 |
 | 必备 SDK 组件 | 根对象 `VRC.Core.PipelineManager`；`VRCSceneDescriptor.ReferenceCamera` → 主相机 |
-| 材质 | 复用 `Art/Materials/Mat_Playground*`（BallPlayground 退役时搬过去的）或纯色；**不许**为了好看引入需要烘焙的材质（测试场不用阴影判断任何东西） |
+| 材质 | 复用 `Art/Materials/Mat_Playground*`或纯色；**不许**为了好看引入需要烘焙的材质（测试场不用阴影判断任何东西） |
 | 光照 | 一盏方向光，固定角度；截图不依赖实时阴影的精确定位 |
 | 可玩性 | 可玩（Station + `DesktopMoveInput`），但**默认以驱动器为准**；人玩只用于看手感 |
 
-### 9.2 数据：几何在 placement，判据在 JSON（**本轮的核心改动**）
+### 9.2 数据：几何在 placement，判据在 JSON
 
-原来 `physics_test_field.json` 自带一套几何格式（`cells[].registration`：盒的 center/size/euler、斜面的 angle/rise/run、`top_y_m`），与 `Docs/Design/Tools/LEVEL_AUTHORING.md` 的 `placement.json` 重复。现在分成两份，各管一件事，**没有第三份**：
+`physics_test_field.json` 不带几何格式；几何只在 `LEVEL_AUTHORING` 定义的 `placement.json` 里（见 [LEVEL_AUTHORING](../Tools/LEVEL_AUTHORING.md)）。两份数据各管一件事，**没有第三份**：
 
 | 文件 | 管什么 | 判据/门 |
 |---|---|---|
@@ -1080,7 +1068,7 @@ ALERT 行因此变成：
 
 1. **容量门就是按文件算的**。`levelbuild check` 的硬规则是 `planes ≤ 8 / boxes ≤ 8 / ramps ≤ 4`（`level.budget`）。一份文件装 21 格 = 24 盒，**天生红**；要让一份文件通过，就必须把预算改成「按 zone 数」，那等于把这条硬约束在第二个地方重新实现一遍——而它正是「一格一注册」存在的理由。
 2. **导入器是「一份文档 = 一个 arena host」**。`LevelArenaHost` 一次只能注册一组地面/墙/盒；每格一个 host 是需求（`Reapply()` 单格重注册）。一份文件 = 一份几何 = 一个 host，导入器不需要「按 zone 分组」这一层逻辑（分组一旦要按 `zone` 字段做，又得规定 zone 与 host 的命名规则、props 的归属……每一条都是新格式）。
-3. **schema 早就留好了位置**。`LEVEL_AUTHORING` §15.4 的原话就是「本 schema 是『一格一份 placement』（`level.id` + 目录），没有假设一场景一份」；本轮只是把 `physics_test_field` 接上去。
+3. **schema 早就留好了位置**。`LEVEL_AUTHORING` §15.4 的原话就是「本 schema 是『一格一份 placement』（`level.id` + 目录），没有假设一场景一份」；`physics_test_field` 直接用这个位置。
 
 **为此对工具做的最小改动**（`Tools/levelbuild/` + `Editor/LevelBuild/`，都不是新格式）：
 
@@ -1104,9 +1092,9 @@ ALERT 行因此变成：
 | `diameters[]` | 4 档：`diameter_m / radius_m / step_limit_m / protrusion_cap_m / absorb_volume_limit_m3` |
 | `start` | 全场默认起点与起始球径（每格自己的起点在 `cells[].start_pose`） |
 | `registration_model` | `mode = one_cell_at_a_time`、切换规则、去抖、**`per_cell_arena`**、成本说明 |
-| `cells[]` | **已接线**的格（本批 4 个），见下 |
+| `cells[]` | **已接线**的格（九个：C14/C09/C08/C10/C01/C03/C05/C06/C13），见下 |
 | `planned_cells[]` | 未迁移的 12 格：只有 `id/slug/name_zh/kind/stage/expectation/note`，**没有任何几何**，`wired=false` |
-| `cameras[]` | 8 个机位（数据，不是本轮实现） |
+| `cameras[]` | 8 个机位（数据） |
 | `driver` / `ball_size` / `criteria_importer` | 三个组件的路径、状态、运行参数、`kind_whitelist`、`blocked_notes` |
 | `evidence` | 根目录、文件布局、截图规则 |
 
@@ -1115,7 +1103,7 @@ ALERT 行因此变成：
 | 键 | 含义 |
 |---|---|
 | `id` / `slug` / `name_zh` / `kind` / `stage` | 身份与阶段（`now` / `P1` / `P2` / `P3`） |
-| `wired` | true = 本批已接进场景；false 的格不进 `cells[]` |
+| `wired` | true = 已接进场景；false 的格不进 `cells[]` |
 | `placement` | `physics_test_field/C14/placement.json`（相对 `Docs/Design/Levels/`）；**几何的唯一入口** |
 | `start_pose` | `{center:[x,y,z], heading_deg}`：**runner 数据**（驱动把球传送到这里）；`y` 是作者标注，运行时被 `碰撞半径+0.02` 覆盖 |
 | `footprint` | `{center:[x,z], size:[sx,sz]}`：**runner 的激活矩形**，含跑道（C14 是 6×12 给 6×6 的板）。它**不是**几何的包围盒，placement 里也没有这个矩形；两者的关系由测试守（几何必须落在自己的 footprint 内） |
@@ -1126,12 +1114,12 @@ ALERT 行因此变成：
 | `cameras[]` / `acceptance_refs[]` | 机位、对应 TERRAIN_SUPPORT 验收编号 |
 | `expectation` | `{pre_p1, p1, p2, p3}` 的人读结论（`PASS` / `EXPECTED_FAIL` / `BLOCKED_UNTIL_*`） |
 
-### 9.3 两个编辑器工具（都**未编译**）
+### 9.3 两个编辑器工具
 
 | 工具 | 位置 | 做什么 | 不做什么 |
 |---|---|---|---|
-| `PlacementImporter`（已有，本轮扩了 cell 模式） | `Editor/LevelBuild/PlacementImporter.cs` | 把 `Levels/<field>/<cell>/placement.json` 变成 `LevelContent/<cell>/{Props,Structures}`，并填该格 arena host 的 `groundNormal/groundOffset`、`boundaryWalls`、`staticBoxes`、`allowedKinds` | 不建 `LevelArenaHost` 组件（U# 组件要 program asset + backing UdonBehaviour + `CopyProxyToUdon` 的 7 步，脚本硬建只会得到一个「看着接好、其实不跑」的组件）；不 `SaveScene` |
-| `PhysicsTestFieldCriteriaImporter`（新） | `Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs`，菜单 `VRC Katamari/Level/Import Physics Test Field Criteria` | 读 `physics_test_field.json`，把 `start_pose / footprint / nominal_m / drive[] / checks[]` 烘进 `PhysicsTestCell` 的并行数组，把 `cells[] / presetDiametersM / kindWhitelist` 填进驱动；`approach_m` 由它**读 arena 的 `staticBoxes`** 算（起点沿 heading 第一个进入的盒），不是抄 JSON | 不建组件、不建场景、不 `SaveScene`；找不到组件时打印「该给哪个对象加什么」并跳过 |
+| `PlacementImporter`（含 cell 模式） | `Editor/LevelBuild/PlacementImporter.cs` | 把 `Levels/<field>/<cell>/placement.json` 变成 `LevelContent/<cell>/{Props,Structures}`，并填该格 arena host 的 `groundNormal/groundOffset`、`boundaryWalls`、`staticBoxes`、`allowedKinds` | 不建 `LevelArenaHost` 组件（U# 组件要 program asset + backing UdonBehaviour + `CopyProxyToUdon` 的 7 步，脚本硬建只会得到一个「看着接好、其实不跑」的组件）；不 `SaveScene` |
+| `PhysicsTestFieldCriteriaImporter` | `Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs`，菜单 `VRC Katamari/Level/Import Physics Test Field Criteria` | 读 `physics_test_field.json`，把 `start_pose / footprint / nominal_m / drive[] / checks[]` 烘进 `PhysicsTestCell` 的并行数组，把 `cells[] / presetDiametersM / kindWhitelist` 填进驱动；`approach_m` 由它**读 arena 的 `staticBoxes`** 算（起点沿 heading 第一个进入的盒），不是抄 JSON | 不建组件、不建场景、不 `SaveScene`；找不到组件时打印「该给哪个对象加什么」并跳过 |
 
 > 这一层是**工具**，不是运行时。作用是「改 JSON/placement 一个数字 → 重跑两个导入 → 场景与文档与数据三者一致」，而 Udon 运行时永远只读序列化数组（`02_TECHNICAL_CONTRACTS.md` §4）。
 
@@ -1139,18 +1127,18 @@ ALERT 行因此变成：
 
 本场的几何单元（静态盒 + 斜面 + 平面）与 `Docs/Design/Maps/*/layout.json` 的 `structures[]`/`collision` 是**同一组概念**（`Tools/mapbuild/validate_map.py` 已经在数 8 盒 / 8 平面）。**没有**把测试场塞进 `layout.json`：测试场不是地图、不参与 `map_snapshot` 哈希、不跑 `validate_map.py`。但**几何格式现在是同一个** `katamari.placement/0`，所以 `levelbuild.py check/format/seat` 与 Blender 出图对测试场直接可用。
 
-### 9.5 给 Unity 操作员的接线清单（本轮**不建场景**）
+### 9.5 给 Unity 操作员的接线清单
 
-> 下面每一步都是「操作员在 Windows 的 Unity 里做」。代理没有碰 Unity，也没有建 `.meta`；这一步的产物是场景与 U# 组件实例。
+> 下面每一步都是「操作员在 Windows 的 Unity 里做」；产物是场景与 U# 组件实例。`PhysicsTestField.unity` 已按这份清单建好，清单保留为重建/加格时的步骤。
 
 **0. 前置**
 
 | 项 | 值 |
 |---|---|
 | 场景路径（建议） | `Assets/VRC_Katamari/Labs/PhysicsTestField/PhysicsTestField.unity` |
-| 目录 | `VRC_Katamari/Labs/PhysicsTestField/`（已有 4 个 `.cs`，**没有** `.meta`，Unity 首次聚焦会用当前程序集补上） |
+| 目录 | `VRC_Katamari/Labs/PhysicsTestField/`（`.cs` 与 `.meta` 齐全） |
 | 必备 | 根对象 `VRC.Core.PipelineManager`；`VRCSceneDescriptor.ReferenceCamera` → 主相机 |
-| 球/输入/道具宿主 | 从 `StoryLevel.unity` 拷 `MotorHost`（`KatamariBallMotor`）、`PlayerBall/*` 三层、可选 `RideRoot/RideSeat`、`Input`（`DesktopMoveInput`）、`PickupField`（`PickupFieldHost`）——**这些组件的引用一个都不由工具写** |
+| 球/输入/道具宿主 | `MotorHost`（`KatamariBallMotor`）、`PlayerBall/*` 三层、可选 `RideRoot/RideSeat`、`Input`（`DesktopMoveInput`）、`PickupField`（`PickupFieldHost`，C18/C19 才需要）——**这些组件的引用一个都不由工具写** |
 
 **1. 导入九格几何（per cell）**
 
@@ -1192,7 +1180,7 @@ ALERT 行因此变成：
 | `Driver` | `PhysicsTestFieldDriver` | `motor`、`pickupHost`、`ballSize`、可选 `chaseCamera`；`cells` / `presetDiametersM` / `kindWhitelist` 由判据导入器写 |
 | `SizeConsole` | `LabBallSizeSetter` | `motor`；`presetDiametersM` / `presetLabels` 由判据导入器写（与驱动的 preset 同源，都来自 `diameters[]`） |
 
-> `PhysicsTestCell` / `PhysicsTestFieldDriver` / `LabBallSizeSetter` 都是 UdonSharpBehaviour：**必须按 `Labs/README.md` 的 7 步建**（program asset → `CompileAllCsPrograms` → backing `UdonBehaviour` → `_udonSharpBackingUdonBehaviour` → `SetBehaviourVersion` → 填引用 → `CopyProxyToUdon` → 存盘重开再回写）。直接 `AddComponent<T>()` 不会被接受。
+> `PhysicsTestCell` / `PhysicsTestFieldDriver` / `LabBallSizeSetter` 都是 UdonSharpBehaviour：**必须按 [Labs/README.md](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Labs/README.md) 的 7 步建**（program asset → `CompileAllCsPrograms` → backing `UdonBehaviour` → `_udonSharpBackingUdonBehaviour` → `SetBehaviourVersion` → 填引用 → `CopyProxyToUdon` → 存盘重开再回写）。直接 `AddComponent<T>()` 不会被接受。
 
 **4. 烘判据**
 
@@ -1200,11 +1188,11 @@ ALERT 行因此变成：
 菜单: VRC Katamari/Level/Import Physics Test Field Criteria
 认成功: [ptf] criteria: cells=9 checks=59 missingCells=0 missingArenas=0 driverFields=6 errors=0
         （59 = C14 7 + C09 5 + C08 5 + C10 6 + C01 6 + C03 7 + C05 6 + C06 7 + C13 10；
-          driverFields=6 = 驱动 3 个数组 + 设定器 2 个 + 设定器的 sizeModelBaselineVolumeUnits）
+          driverFields=6 = 驱动 3 个数组 + 设定器 2 个 + 设定器的 sizeModelStartVolumeMm3）
         报告里另应看到 `ramp probe 'C06_ramp' baked at 50.0 deg; the motor must refuse it at run time`
         （没有这条 = C06 的 probe 没接上，ramp_refused 会读到 0）
-        以及 `size model: startVolumeMm3=14094798 (read from the scene motor ...)`（2026-11-16 改：
-        没有这条 = 设定器没烘到 startVolumeMm3，Size 阶段会报 BLOCKED_UNTIL_size，不是判据坏了）
+        以及 `size model: startVolumeMm3=14094798 (read from the scene motor ...)`
+        （没有这条 = 设定器没烘到 startVolumeMm3，Size 阶段会报 BLOCKED_UNTIL_size，不是判据坏了）
 ```
 
 **5. 跑第一个 run**
@@ -1232,15 +1220,15 @@ ALERT 行因此变成：
 [ptf] summary cell=C14 D=0.300 checks=7 pass=7 unexpected=0 skipped=0 verdict=EXPECTED elapsed=4.51s
 ```
 
-（`progress` / `speed_ratio` 的数值随球径与帧率变；**结构与 `raw=PASS`/`verdict=EXPECTED` 才是判据**。上面的数字取自 2026-11-15 实测的 C14 D=0.30。）
+（`progress` / `speed_ratio` 的数值随球径与帧率变；**结构与 `raw=PASS`/`verdict=EXPECTED` 才是判据**。上面的数字取自 C14 D=0.30 的实跑。）
 
-**`size_accuracy` 在四个档的期望值**（解析量子，实测首格已对上后三档）：
+**`size_accuracy` 在四个档的期望值**（解析量子）：
 
 | D | 0.30 | 0.60 | 1.10 | 2.20 |
 |---|---|---|---|---|
 | `abs(diameter_error_m)` | **≤ 0.0010** | **≤ 0.0010** | **≤ 0.0010** | **≤ 0.0010** |
 
-**各格 summary 的期望（pass / skipped / unexpected，checks 固定）**——2026-11-15d 起（§4.1.4 的适用性与推导阈值、§4.1.5 的缺陷单）：
+**各格 summary 的期望（pass / skipped / unexpected，checks 固定）**（含 §4.1.4 的适用性与推导阈值、§4.1.5 的缺陷）：
 
 | 格 | checks | 0.30 | 0.60 | 1.10 | 2.20 | 说明 |
 |---|---|---|---|---|---|---|
@@ -1267,27 +1255,26 @@ ALERT 行因此变成：
 
 **6. 四个球径**
 
-对同一格再跑 0.60 / 1.10 / 2.20（`BeginCellAtDiameter`，或 `BeginCell("C14")` 一次四径）。切球径会复位球（回 0.30）再喂大，`size_accuracy` 的 `value` 就是这颗球的网格误差（单位是「一个体积单位」）。
+对同一格再跑 0.60 / 1.10 / 2.20（`BeginCellAtDiameter`，或 `BeginCell("C14")` 一次四径）。切球径会复位球（回 0.30）再喂大，`size_accuracy` 的 `value` 就是这颗球的直径误差（米）。
 
-**每一档的每一格都必须真的喂上去**（2026-11-15 的矩阵只有每档首格长到了目标径）：判据是每格 run 行里的 `D=`、`traj` 行的 `cap=`（∝ 球径：0.30→0.0525、0.60→0.1048、1.10→0.1927、2.20→0.3000），以及 `size_accuracy` 落在上表的四个值上——同一档里出现**同一个**大数（41 / 372 / 3523）就是球根本没长大。
+**每一档的每一格都必须真的喂上去**：判据是每格 run 行里的 `D=`、`traj` 行的 `cap=`（∝ 球径：0.30→0.0525、0.60→0.1048、1.10→0.1927、2.20→0.3000），以及 `size_accuracy` 落在 ±1 mm 内——同一档里 `size_accuracy` 出现同一个大数就是球根本没长大。
 
 **7. 出证据**
 
-`Docs/Evidence/PhysicsTestField/<date>_pass1/` 下：`console.log`（`[ptf]` + `[ProxyTrace]` 原文）、`summary.json`（自己从 summary 行抄/脚本转）、`shots/C14_D0.300_cam_top.png` 等。
+`Docs/Evidence/PhysicsTestField/<date>_pass<N>/` 下：`console.log`（`[ptf]` + `[ProxyTrace]` 原文）、`summary.json`（自己从 summary 行抄/脚本转）、`shots/C14_D0.300_cam_top.png` 等。
 
-### 9.6 本轮实现状态
+### 9.6 实现状态
 
 | 项 | 状态 |
 |---|---|
-| 几何（9 格 placement） | **紧凑重排已入库**；`levelbuild check` 9/9 PASS（8 格 0 error 0 warning；C06 0 error + 1 条预期的 tilted-box warning，见 §4.1.2） |
-| 判据 JSON v2 | **已入库**；9 格 59 条判据 + 12 格 planned |
-| Labs 三个组件 | **已写，未编译**（UdonSharp 编译、场景接线、Play Mode 全部 `NOT_RUN`） |
-| 判据导入器 | **已写，未编译**；`approach_m` / `rampFootM` / C06 probe 的几何读取只在编辑器跑 |
-| Story 读数口径（R11） | `StoryBallDiagnostics` / `StoryLevelLabBootstrap` 的 `gap` 已改为沿支撑法线（§5.2.1）；**未编译** |
-| 场景 | **未创建**（§9.5 是给操作员的清单） |
-| 俯视图 | 已出（`/tmp/ptf/shots/*.png`，不入库），本人已看图核对九格位置/尺寸 |
-| 跨文件一致性 | `Docs/tests/levelbuild/test_physics_test_field_cells.py`（36 用例，按紧凑口径：每格自己的 pad、地面=footprint、矮墙 0.4 m、全场 ≤28×31.5） |
-| 注册挂起接缝 | `LevelArenaHost.SuspendRegistration/ResumeRegistration/IsRegistrationSuspended` 已入库；EditMode 用例 2 条（默认自注册、suspended 不自注册 + Resume/Reapply 注册）**未编译/未跑** |
+| 几何（9 格 placement） | 已入库；`levelbuild check` 9/9 PASS（8 格 0 error 0 warning；C06 0 error + 1 条预期的 tilted-box warning，见 §4.1.2） |
+| 判据 JSON v2 | 已入库；9 格 59 条判据 + planned 格 |
+| Labs 三个组件 | 已入库并在 Unity 实跑（证据 `Docs/Evidence/PhysicsTestField/`，最新 `2026-11-15_pass11_v2_corrected_criteria`） |
+| 判据导入器 | 已入库；`approach_m` / `rampFootM` / C06 probe 的几何读取只在编辑器跑 |
+| Story 读数口径（R11） | `StoryBallDiagnostics` 的 `gap` 沿支撑法线（§5.2.1） |
+| 场景 | `Labs/PhysicsTestField/PhysicsTestField.unity` 已建（§9.5 是重建清单） |
+| 跨文件一致性 | `Docs/tests/levelbuild/test_physics_test_field_cells.py`（每格自己的 pad、地面=footprint、矮墙 0.4 m、全场 ≤28×31.5 等守卫） |
+| 注册挂起接缝 | `LevelArenaHost.SuspendRegistration/ResumeRegistration/IsRegistrationSuspended` 已入库；EditMode 用例 2 条（默认自注册、suspended 不自注册 + Resume/Reapply 注册） |
 
 ---
 
@@ -1300,11 +1287,11 @@ ALERT 行因此变成：
 | **A（现在）** | 无（今天的代码） | C00 起点/球径台、C15 薄墙、C16 内角、C17 夹缝、C18 挡路行、C19 长杆 + **C14 作为「预期失败」的反例** | 6 格 PASS、C14 EXPECTED_FAIL（隐形墙）、C18 的 crate 在 2.20 之前一律「挡」 | ~5 min |
 | **B（P1 合入后）** | `LevelArenaHost` + 盒顶支撑 + step-up + P1 的 14 条 NUnit 绿 | **第一批**：C14（PASS）、C07、C08、C09；然后 C10、C11、C12；最后 C13 的 `entry=teleport` | 台阶矩阵 6×4 全对；C14 从 FAIL 翻 PASS；C13 站得稳、掉得下去 | ~12 min |
 | **C（P2 已合入，2026-11-15 Linux 侧；C18 几何待迁移）** | 道具支撑/挡路拆分（`SetSupportProps` + `PickupFieldHost.UpdatePropObstacles`） | C18 的两个子项：crate 在 2.20 变支撑、`sets_disjoint` | 「同一件道具先挡路、后通路」成立；两个集合永不重叠 | ~4 min |
-| **D（P3 已合入，2026-11-15；本轮落了 5 格）** | 斜面（`AddRamp` 烘焙 + 护栏） | 已落：C01、C03、C05、C06、C13（`entry=ramp`）；待迁：C02、C04、C20 | 5°/25° 可上、**45° 因台面接缝死锁上不去（§4.1.3，实测 0.0887）**、50° 被拒且带原因、11.31° 坡上台面再落地；C02/C04/C20 仍只有设计数字 | ~10 min（5 格） |
+| **D（P3 已合入）** | 斜面（`AddRamp` 烘焙 + 护栏） | 已落：C01、C03、C05、C06、C13（`entry=ramp`）；待迁：C02、C04、C20 | 5°/25° 可上、**45° 因台面接缝死锁上不去（§4.1.3，实测 0.0887）**、50° 被拒且带原因、11.31° 坡上台面再落地；C02/C04/C20 仍只有设计数字 | ~10 min（5 格） |
 
 ### 10.2 第一批（P1 合入后 30 分钟内要能跑起来）的格
 
-**第一批只建这四格，按这个顺序**（已把数据与代码做完，剩下的是 §9.5 的接线；P3 批另建五格，见 §10.1 D）：
+**第一批只建这四格，按这个顺序**（数据与代码已完成，接线见 §9.5；P3 的五格见 §10.1 D）：
 
 | 顺序 | 格 | 为什么是它 | 建完立刻能判什么 |
 |---|---|---|---|
@@ -1313,9 +1300,9 @@ ALERT 行因此变成：
 | 3 | **C08** 台阶 0.050 | 明确可上（0.05 < 0.075，留 33% 余量） | 「可上」的正面基线：不抖动、单步抬升 ≤ stepLimit |
 | 4 | **C10** 台阶 0.100 | 明确是墙（0.10 > 0.075，0.60 球才可上） | 「墙」的正面基线：停住位置 = r、不穿模、不绕过去 |
 
-本批的判据与几何已经落盘（§9.6）：C14 7 条、C09/C08 各 5 条、C10 6 条，共 23 条；几何 4 份 placement 全过 `levelbuild check`。**没有任何一条跑过**——Unity/U# 未编译（§13）。
+这批的判据与几何已落盘（§9.6）：C14 7 条、C09/C08 各 5 条、C10 6 条，共 23 条；4 份 placement 全过 `levelbuild check`。
 
-**P3 批（2026-11-15，已落盘）**：C01 6 条、C03 7 条、C05 6 条、C06 7 条、C13 10 条，共 36 条新增，九格合计 59 条。C13 的两个入口按 §4.3 合并成一次 `entry=ramp` run（理由写在 §4.3 的「本轮实现」）。这 36 条同样**没有跑过**。
+**P3 的五格**：C01 6 条、C03 7 条、C05 6 条、C06 7 条、C13 10 条，共 36 条，九格合计 59 条。C13 的两个入口按 §4.3 合并成一次 `entry=ramp` run。
 
 **为什么不是先建 C01–C06 斜板**：斜面（P3）要新数学（平面足迹 + 坡度护栏 + 烘焙），而 P1 的判据只需要盒顶 + 一条 `rise` 规则。先把「盒顶支撑 + 台阶」这条链验穿，再上斜面；否则斜面出问题时无法区分是「斜面数学错」还是「支撑表错」。这也与 TERRAIN_SUPPORT §8 的顺序一致（它把 P2 提到 P3 前，但把 P1 放第一）。
 
@@ -1341,11 +1328,11 @@ C00（零点） → C14 → C09 → C08 → C10 → C07 → C11 → C12 → C13�
 |---|---|---|---|
 | S1（0.30 球被花圃挡住） | C10 / C11 / C12 | `step_outcome` @0.30 = fail | 用台阶代替花圃：同一套 `rise > stepLimit` |
 | S2（1.10 球上台，`center.y − h − r = 0`） | C11（0.20 @ 1.10） | `deck_gap_m abs ≤ 0.005` | `h = 0.20` 是变量，判据形状相同 |
-| S3（台顶来回 10 s，波动 < 1 mm） | **C13**（计划） | `deck_y_std ≤ 0.001` | **本轮未落**：C13 的一次 run 走「上坡→接缝→台面→掉落」，没有 10 s 台面静置；补齐需要 `entry=teleport` 的第二次 run |
+| S3（台顶来回 10 s，波动 < 1 mm） | **C13**（计划） | `deck_y_std ≤ 0.001` | **未落**：C13 的一次 run 走「上坡→接缝→台面→掉落」，没有 10 s 台面静置；补齐需要 `entry=teleport` 的第二次 run |
 | S4（从台顶开出→落地，不被推） | **C13** `edge_drop` + `drop_is_gradual` | `landing_gap ≤ 0.005`、`fall_frames ≥ 3` | 直接对应 |
-| S5（台顶不推 5 s 不动不下沉） | **C13**（计划） | `deck_gap ≤ 0.005`（10 s） | **本轮未落**，同上 |
+| S5（台顶不推 5 s 不动不下沉） | **C13**（计划） | `deck_gap ≤ 0.005`（10 s） | **未落**，同上 |
 | S6（第 9 个盒 → overflow） | **不在常规 pass 里**：一次会话的**最后一步**，由操作者手工给某格多加一个盒 | `overflow_delta == 1` + 前 8 个照旧 | 本场唯一**故意**触发 latch 的地方。`overflowCount` 只有 `Start` 能清，所以跑完必须重开场景/重启 Play Mode；**绝不要放在 pass 中间** |
-| S7（旧 lab 回归：`terrainSupportEnabled = false` 行为不变） | 不在本场（本场全程 true） | —— | 归 `CpuSkirmish` / `StoryLevel` 自己（`BallPlayground` 已于 2026-11-15 退役） |
+| S7（旧 lab 回归：`terrainSupportEnabled = false` 行为不变） | 不在本场（本场全程 true） | —— | 归 `CpuSkirmish` 等场景自己（`BallPlayground` 已于 2026-11-15 退役） |
 | S8（0.30 碾过餐巾） | **C14**（静态 0.028）+ C18 #1（真 napkin 0.014） | `crossed` / `no_speed_loss` | 两条路径：静态几何 vs 道具 |
 | S9（0.30 撞保温箱 → 停住；D ≥ 1.20 时能爬） | **C18 #6** cooler_box（挡的部分）+ **C18 #9** crate（爬的部分） | @0.30：`blocked_cooler_box`；@1.10：cooler_box 的 `D_abs = 1.033` → 被吃，不再是墙。**「吸不动但能爬」由 crate 在 2.20 承担**（`crate_support_at_220`） | 原验收的 1.20 m 档不在四个 preset 里；crate 用 2.20 档等价表达同一件事 |
 | S10（站上后长大，被吸走→球下落） | **C18 #9 crate** @2.20 + 直径设定器 | `absorbed` + 球心下落序列（`support_gap` 时序） | 需要「站上去再长大」的子脚本（本场列为可选子项） |
@@ -1366,119 +1353,27 @@ C00（零点） → C14 → C09 → C08 → C10 → C07 → C11 → C12 → C13�
 
 | # | 问题 | 现状/倾向 | 代价 |
 |---|---|---|---|
-| **U1** | **0.075 m 台阶 @ D=0.30 的等号**：`rise == stepLimit` 判「可上」还是「墙」？ | 规则含等号（`≤` 可上），但 0.30 预设量化成 0.2997369 m，实际 `stepLimit = 0.074934 < 0.075`，所以 C09 在 0.30 档**应被挡**（2026-11-15 已实测：修前穿模，修后应停在台阶前）。判据已改为按运行时实际 `stepLimit` 推导，不再硬写 | 等号本身只剩 `collapsed_bench` 的 0.55 == 0.55 记录；若将来给电机加精确球径接缝（§8.3 路线 B），C09 才可能真正落在等号上 |
+| **U1** | **0.075 m 台阶 @ D=0.30 的等号**：`rise == stepLimit` 判「可上」还是「墙」？ | 规则含等号（`≤` 可上），但 0.30 预设量化成 0.2997369 m，实际 `stepLimit = 0.074934 < 0.075`，所以 C09 在 0.30 档**应被挡**（实测停在台阶前）。判据已改为按运行时实际 `stepLimit` 推导，不再硬写 | 等号本身只剩 `collapsed_bench` 的 0.55 == 0.55 记录；若将来给电机加精确球径接缝（§8.3 路线 B），C09 才可能真正落在等号上 |
 | **U2** | **`collapsed_bench` @ D=2.20 的等号**（0.55 == 0.55） | 同 U1，含等号 → 「爬」。因为这条判据只为记录，建议**不设 PASS/FAIL**，只打 `value` | 若做成判据，一旦等号语义翻转就会假红 |
 | **U3** | **napkin 厚度 2.8 cm vs 1.4 cm**：`TERRAIN_SUPPORT` §4.6 写 2.8 cm（引自 `layout.json` 时代的口径），`napkin.manifest.json` 是 1.4 cm（`notes` 说折痕是平滑高度场、不是叠层） | 本场**两个都用**：C14 用静态 0.028 钉文档口径，C18 #1 用真模型（0.014）走 P2 路径 | 若 2.8 cm 是旧版模型，C14 就是一个「已不存在的尺寸」的测试。需要一次美术确认（`Docs/Art/OriginalModels/props/README.md`） |
 | **U4** | **球径设定走闭环喂体积（A）还是加测试接缝（B）** | **已定：A**（Lead 2026-11-15），并已实现。副作用：吸收计数/账本被污染（用「基线差」判据规避）、只能长大（复位负责回 0.30）、每次请求 ≤ 6 次吸收 | B 仍留着：只有它能让小球的球径精度好过「一个体积单位」 |
 | **U5** | **挡路容量 6 的正向夹取在本场构造不出来**：挡路件都是 0.45–1.6 m 的大件，2.5 m 间距下球周围最多 3–4 件进 `SelectNearest` 范围；要挤到 7 个候选就得让大件 AABB 互相重叠（那是另一个错误） | 场内只做**负向**判据（`blocking_max ≤ 6` 且不 latch），正向夹取交给 NUnit `OnlyTheNearestCapacityPropsBlock` | 若以后真要场内验夹取，只能缩小件的尺寸 —— 但那些件在 2.20 球面前就是食物，不再挡路，逻辑上凑不出 |
 | **U6** | **切格重建扫掠数组的 GC 是否可见** | 未测；本场 21 次切格 / 84 次重置正好是量它的最小场景 | 若 Profiler 显示明显尖峰，P4 要考虑「把 `maxStepHeight` 下沉进 `SweepMath`」（TERRAIN_SUPPORT §8 P4 已列，代价是同步改 `sweep.py`） |
-| **U8** | ~~球径分辨率 = 一个体积单位~~ **已结（2026-11-16，步骤 C+D）**：`0.0041 m³` 单位退役，成长量子 1 mm³（D=0.30 上约 7.1 nm 直径当量）。判据改为 `abs(diameter_error_m) ≤ 1 mm`，设定器容差同为 1 mm | 不再需要 U4 的路线 B；不存在「小球径做不到 ±2 mm」这回事 | 无 |
 | **U9** | **`allowedKinds` 的两份名单**：arena 的 `allowedKinds` 是「本格道具的 kind」，而球径设定器的 feeder 也必须过同一道吸收门 | 驱动在每次 `Reapply()` 之后重发一份 `kindWhitelist`（本批只有 `lab-feeder`），arena 那份是它的子集 | 多一处「谁最后写谁生效」的约定；已写进 §6.1 与 §9.5 |
-| **U7** | **`PickupFieldHost` 的成熟度**：`BLOCKING_PROPS_PLAN` 自述「已写、未编译」；`StoryLevel.unity` 里确实挂了 `PickupField` 实例 | 本场是它**第一次被系统性测量**（C18 的全部判据都依赖它） | 若它本身有 bug，C18 的 18 条逐件判据会一起红——先看 `[PickupFieldHost]` 的启动行，再看判据 |
-| **U10** | **C06 的「ramps=0/1」字面值与工具链冲突**：`levelbuild` 的 `role=ramp` 硬门是 45°（超过直接 error，要求写 box），所以 50° 板进不了 `rampBoxes`；而 `LevelArenaHost` 的 `TryBakeRamp` 也在 `AddRamp` 之前就拒了，motor 的拒绝 getter 看不到它 | 本批：板以 `role=box`+`kind=ramp_probe` 落库（AABB 当兜底墙），判据导入器把同一块板的 +Y 面烘成 probe，驱动运行时调 `motor.AddRamp` 取证。`ramp_count=0` + `ramp_refusal_reason_len>=1` + 日志里的 probe 行覆盖「拒绝 + 原因」；arena 行是 `ramps=0/0` | 若 Lead 要字面 `ramps=0/1`：放行 `Tools/levelbuild` 的对抗性 ramp（新字段/新豁免）并让 `LevelArenaHost` 把拒绝原因转给 motor（或新增一个 arena 拒绝 getter）。两处都不在本批写范围 |
+| **U7** | **`PickupFieldHost` 的成熟度**：`PhysicsTestField.unity` 当前没有挂 `PickupField` 实例 | 本场是它**第一次被系统性测量**（C18 的全部判据都依赖它） | 若它本身有 bug，C18 的 18 条逐件判据会一起红——先看 `[PickupFieldHost]` 的启动行，再看判据 |
+| **U10** | **C06 的「ramps=0/1」字面值与工具链冲突**：`levelbuild` 的 `role=ramp` 硬门是 45°（超过直接 error，要求写 box），所以 50° 板进不了 `rampBoxes`；而 `LevelArenaHost` 的 `TryBakeRamp` 也在 `AddRamp` 之前就拒了，motor 的拒绝 getter 看不到它 | 现状：板以 `role=box`+`kind=ramp_probe` 落库（AABB 当兜底墙），判据导入器把同一块板的 +Y 面烘成 probe，驱动运行时调 `motor.AddRamp` 取证。`ramp_count=0` + `ramp_refusal_reason_len>=1` + 日志里的 probe 行覆盖「拒绝 + 原因」；arena 行是 `ramps=0/0` | 要字面 `ramps=0/1` 的话：放行 `Tools/levelbuild` 的对抗性 ramp（新字段/新豁免）并让 `LevelArenaHost` 把拒绝原因转给 motor（或新增一个 arena 拒绝 getter） |
 | **U11** | **斜面的驱动时间线是估的**：8 m/s² 刹车、4 m/s 上限、切向重力 0 都来自代码常量，但 `SetMoveAxes` 在坡上的实际速度、坡顶接缝的支撑切换没有实跑过 | JSON 里的 `drive[]` 按「加速 1 s → 松手在坡上停 5 s → 再加速到台面」写；首次 Play 以 `traj` 行核对，必要时只改 JSON 的 `t`，不改几何 | 时间线错只影响「有没有走到坡顶」的判据，几何/容量/护栏判据不受影响 |
-| **U12** | **C13 的 `seam_no_step` 用 `grounded_frame_dy` 而不是设计原口径 `frame_dy`** | 0.6 m 自由落体单帧位移远大于接缝；全局 `frame_dy` 会把「正常掉落」判成「接缝跳变」。所以逐帧 dy 只在 `!IsFalling()` 时累计，阈值 0.05（11.31°、4 m/s、30 fps 下单帧约 0.026 m） | 若以后要更严格，需要「接缝窗口」而不是全段最大值；本批不做 |
-| **U14** | **45° 坡 + 齐平台面的接缝死锁（2026-11-15 实测）**：C05 `climbed = 0.0887`。`SweepMath` 用半径膨胀 AABB 判盒子接触，球心在台面边 − r 处就被挡；那点球底比台面低 `r(tanθ+1−secθ) = 0.0878`，大于 `stepLimit = 0.5r = 0.0749`，台面永远进不了 step band ⇒ 死锁。**阈值 θ = asin(0.6) = 36.87°，与球径无关**（两边都 ∝ r）。C01/C03/C13 的 0.0125/0.0544/0.0270 都在带内，所以同一时间线能过 | 本批：**数据/几何/判据一律不动**，`climbed` 的 FAIL 就是正确红灯；机制与对照写进 §4.1.3。**候选后续**：(a) 数据侧把 C05 改成「记录 45° 极限」或给台缘加 0.05 m 过渡台阶；(b) 运行时把盒子接触改成真正的球-盒（圆角）扫掠（`Runtime/BallLayers/Sweep`） | 两条都改语义/运行时代码，**需 Lead 拍板**；在那之前 C05 每次 pass 都会红一条 `climbed` |
-| **U15** | **解析量子要的那一个电机数字没有 getter**：`D³/total` 与 `D/(3·total)` 里 `cubicMetersPerVolumeUnit` 和 `semanticDiameterPerCoreDiameter` 都约掉了，只剩起始体积（步骤 C+D 后是 `startVolumeMm3`；`cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` 已删）；而它是 `[SerializeField] private`、**没有 getter** | 本批**没有给电机加成员**（遵守「不改 `KatamariBallMotor`」的写范围）：判据导入器用 `SerializedObject` 读**场景 motor** 的该字段，烘进设定器 `sizeModelStartVolumeMm3`，并在报告里打 `size model: startVolumeMm3=...`。没烘/没连 motor 时 Size 阶段报 `BLOCKED_UNTIL_size`（设定器 `noSizeModel`），不猜 | 若 Lead 认为「场景数据里镜像一个运行时输入」不可接受，最小替代是给 motor 加**一行只读** `GetBaselineVolumeUnits()`（不改任何行为、不改序列化），然后删掉导入器里的镜像与设定器的字段；**需 Lead 批**。在那之前，改电机的定价字段后必须**重新导入判据** |
-| **U16** | **「跑的到底是哪份 U# 程序」曾是盲区**：2026-11-15 的 4×9 矩阵整张无效，因为场景跑的是 5835517 之前的驱动（日志里的 `error=unknownMetric` / `BLOCKED_UNTIL_P3` / 缺 3 个 metric / `value=` 无 `+`），而数据是新导入器的 | 两个组件在 `Start` 打 `[ptf] build=…` / `[ptf] setter build=… startVolumeMm3=…`（§8.3.3）；判据读 `reason=` 词汇；`Size` 状态新增「收敛但球没到目标径 → `reason=sizeNotApplied`」；坡道格新增 `rampCellMismatch` 警告 | 仍需要操作员养成「先看 build 行」的习惯；若 U# 编译失败而编辑器不报，只能靠这两行发现。真正的根治是编译后的 UdonSharp 程序资产必须提交/同步（AGENTS.md 的「compile noise 成批提交或丢弃」在这里是风险点） |
-| **U17** | **「每帧都调的方法」是这条链上最危险的面**：pass-1 的短路和 pass-2 的每帧重发都发生在 `TickSize`/`Update` 这类每帧路径上 | 定稿：请求只在 `Switch` 发一次；`TickSize` 只读；`Feed` 是唯一在每个 `Update` 里写 setter 状态的函数（字段写者表见 §8.3.4）；Python 守卫用 §8.3.4 的方法体边界断言 + 状态机模拟复现旧死锁 | 以后给 setter/driver 加任何「每帧调用」的方法，先在这张写者表里登记它写哪个字段；没有登记就不要写状态 |
+| **U12** | **C13 的 `seam_no_step` 用 `grounded_frame_dy` 而不是设计原口径 `frame_dy`** | 0.6 m 自由落体单帧位移远大于接缝；全局 `frame_dy` 会把「正常掉落」判成「接缝跳变」。所以逐帧 dy 只在 `!IsFalling()` 时累计，阈值 0.05（11.31°、4 m/s、30 fps 下单帧约 0.026 m） | 若以后要更严格，需要「接缝窗口」而不是全段最大值；不做 |
+| **U14** | **45° 坡 + 齐平台面的接缝死锁（v1 实测）**：C05 `climbed = 0.0887`。`SweepMath` 用半径膨胀 AABB 判盒子接触，球心在台面边 − r 处就被挡；那点球底比台面低 `r(tanθ+1−secθ) = 0.0878`，大于 `stepLimit = 0.5r = 0.0749`，台面永远进不了 step band ⇒ 死锁。**阈值 θ = asin(0.6) = 36.87°，与球径无关**（两边都 ∝ r）。C01/C03/C13 的 0.0125/0.0544/0.0270 都在带内，所以同一时间线能过 | 现状：**数据/几何/判据不动**，`climbed` 的 FAIL 就是正确红灯；机制与对照写进 §4.1.3。**候选后续**：(a) 数据侧把 C05 改成「记录 45° 极限」或给台缘加 0.05 m 过渡台阶；(b) 运行时把盒子接触改成真正的球-盒（圆角）扫掠（`Runtime/BallLayers/Sweep`） | 两条都改语义/运行时代码，v1 下 C05 每次 pass 都红一条 `climbed`；v2 下通过 |
+| **U15** | **解析量子要的那一个电机数字没有 getter**：`D³/total` 与 `D/(3·total)` 里 `cubicMetersPerVolumeUnit` 和 `semanticDiameterPerCoreDiameter` 都约掉了，只剩起始体积（步骤 C+D 后是 `startVolumeMm3`；`cubicMetersPerVolumeUnit` / `maxCoreRadiusWorldM` 已删）；而它是 `[SerializeField] private`、**没有 getter** | **没有给电机加成员**：判据导入器用 `SerializedObject` 读**场景 motor** 的该字段，烘进设定器 `sizeModelStartVolumeMm3`，并在报告里打 `size model: startVolumeMm3=...`。没烘/没连 motor 时 Size 阶段报 `BLOCKED_UNTIL_size`（设定器 `noSizeModel`），不猜 | 若「场景数据里镜像一个运行时输入」不可接受，最小替代是给 motor 加**一行只读** `GetBaselineVolumeUnits()`（不改任何行为、不改序列化），然后删掉导入器里的镜像与设定器的字段。在那之前，改电机的定价字段后必须**重新导入判据** |
+| **U16** | **「跑的到底是哪份 U# 程序」是盲区**：场景跑旧驱动、数据是新导入器写的时，整张矩阵无效（症状见 §8.3.3） | 两个组件在 `Start` 打 `[ptf] build=…` / `[ptf] setter build=… startVolumeMm3=…`（§8.3.3）；判据读 `reason=` 词汇；`Size` 状态对「收敛但球没到目标径」报 `reason=sizeNotApplied`；坡道格对 `rampClimb` 与坡数不一致报 `rampCellMismatch` 警告 | 仍需要操作员养成「先看 build 行」的习惯；若 U# 编译失败而编辑器不报，只能靠这两行发现。编译后的 UdonSharp 程序资产必须提交/同步（AGENTS.md 的「compile noise 成批提交或丢弃」在这里是风险点） |
+| **U17** | **「每帧都调的方法」是这条链上最危险的面**：短路和每帧重发（§8.3）都出在 `TickSize`/`Update` 这类每帧路径上 | 规则：请求只在 `Switch` 发一次；`TickSize` 只读；`Feed` 是唯一在每个 `Update` 里写 setter 状态的函数（字段写者表见 §8.3.4）；Python 守卫用 §8.3.4 的方法体边界断言 + 状态机模拟复现旧死锁 | 以后给 setter/driver 加任何「每帧调用」的方法，先在这张写者表里登记它写哪个字段；没有登记就不要写状态 |
 
-
----
-
-## 13. 本轮写范围与校验
-
-| 项 | 状态 |
-|---|---|
-| 新建 | `Docs/Design/Levels/physics_test_field/{C01,C03,C05,C06,C13}/placement.json`（本轮 5 格；C14/C09/C08/C10 是上一批） |
-| 改写 | `PhysicsTestCell`（rampClimb / rampFootM / rampProbe 字段与 getter）、`PhysicsTestFieldDriver`（首格保留、P3 不再 skip、probe、斜面/落地/滑移读数）、`PhysicsTestFieldCriteriaImporter`（读 placement 的 role/kind、烘 rampFoot 与 C06 probe）、`PlacementImportReport`（去掉「P1 has no ramp slot」）、`StoryBallDiagnostics` / `StoryLevelLabBootstrap`（gap 沿法线）、`physics_test_field.json`（9 格 59 条）、本文件、目录 README、`test_physics_test_field_cells.py` |
-| 最小改动 | `Editor/LevelBuild/PlacementImportReport.cs` 只改摘要文案；**本批没有改 `Tools/levelbuild/`**（另一批在维护它，本批只调它的 CLI） |
-| 未改（按写范围） | `Runtime/BallMotor/KatamariBallMotor.cs`、`Runtime/BallLayers/…/SupportSurfaceMath.cs`、`Runtime/Story/LevelArenaHost.cs`、`Editor/LevelBuild/PlacementImporter.cs`、任何 `.unity` / `.prefab` / `.asset` / `.meta`、`tasks.json`、`Docs/Design/Tools/LEVEL_AUTHORING.md` |
-| 没有碰 Unity | 没有打开编辑器、没有 MCP 调用；场景**未创建**（§9.5 是给操作员的清单） |
-| Unity 编译 / U# 编译 / Play Mode / Build & Test | **NOT_RUN**（本 agent 不是 Unity 操作者） |
-| `levelbuild check` | **9/9 PASS**（8 格 0 error 0 warning；C06 0 error + 1 条预期 tilted-box warning） |
-| `python3 Docs/tools/validate_plan.py` | **PASS**（见下） |
-| `python3 -m unittest discover -s Docs/tests` | **OK**（见下） |
-| 图表 | 俯视图 `/tmp/ptf/shots/physics_test_field_preview_plan_workbench.png`（九格；+ 全场 / 3/4 两张），一次性产物，**不入库**；合并预览文档 `/tmp/ptf/preview/placement.json` 也不入库 |
-| 未做的文档同步 | `Docs/Design/Tools/LEVEL_AUTHORING.md` 的 `rampBoxes` 行已由另一批更新；本文件 §4.1.2 记录的 C06 偏差若 Lead 决定改工具/arena，需要回头把「probe」换成字面 `ramps=0/1` |
-
-```text
-$ for c in C14 C09 C08 C10 C01 C03 C05 C06 C13; do
-    python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/physics_test_field/$c/placement.json
-  done
-PASS Docs/Design/Levels/physics_test_field/C14/placement.json (0 error(s), 0 warning(s))
-PASS Docs/Design/Levels/physics_test_field/C09/placement.json (0 error(s), 0 warning(s))
-PASS Docs/Design/Levels/physics_test_field/C08/placement.json (0 error(s), 0 warning(s))
-PASS Docs/Design/Levels/physics_test_field/C10/placement.json (0 error(s), 0 warning(s))
-PASS Docs/Design/Levels/physics_test_field/C01/placement.json (0 error(s), 0 warning(s))
-PASS Docs/Design/Levels/physics_test_field/C03/placement.json (0 error(s), 0 warning(s))
-PASS Docs/Design/Levels/physics_test_field/C05/placement.json (0 error(s), 0 warning(s))
-PASS Docs/Design/Levels/physics_test_field/C06/placement.json (0 error(s), 1 warning(s))
-  - structures[0] 'C06_ramp' is a tilted box (50.0 deg); a tilted box degrades to its world AABB in the motor - author it as a ramp instead
-PASS Docs/Design/Levels/physics_test_field/C13/placement.json (0 error(s), 0 warning(s))
-
-$ python3 Docs/tools/validate_plan.py
-PASS: 61 tasks; both release DAGs acyclic; source hashes verified.
-Dependency roots (external requirements NOT checked): T00, T01, T02, T03
-NOT_RUN: Unity/Udon compilation, VR comfort, multiplayer, performance, commerce.
-
-$ python3 -m unittest discover -s Docs/tests
-Ran 487 tests in 6.775s
-OK
-
-$ python3 -m unittest Docs.tests.levelbuild.test_physics_test_field_cells
-Ran 36 tests in 0.151s
-OK
-```
-
-### 13.1 2026-11-15 复查轮（commit 5835517 实跑之后）
-
-| 项 | 状态 |
-|---|---|
-| 改 | `Labs/PhysicsTestField/LabBallSizeSetter.cs`（解析量子 + `sizeModelBaselineVolumeUnits` + `noSizeModel`，删掉实测斜率）、`Labs/PhysicsTestField/PhysicsTestFieldDriver.cs`（`TryReadMetric` 返回状态码 + `MetricReason()` + 带 `reason=`/`cell=`/`D=` 的 ALERT）、`Editor/PhysicsTestField/PhysicsTestFieldCriteriaImporter.cs`（`WriteSizeModel`：用 `SerializedObject` 读场景 motor 的 `baselineVolumeUnits`）、`Docs/Design/BallMotor/physics_test_field.json`（只加 `ball_size` 的说明字段与 importer 的 `writes`，**没动任何 cell/check/drive**）、本文件（§0/§4.1.1/§4.1.3/§5.2/§8.2/§8.3/§8.3.1/§8.3.2/§9.5/§12/§13）、`Labs/PhysicsTestField/README.md`、`Docs/tests/levelbuild/test_physics_test_field_cells.py`（+4 个守卫） |
-| 未改（按写范围） | `Runtime/` 全部（含 `KatamariBallMotor` / `SweepMath` / `SupportSurfaceMath`）、任何 `.unity` / `.prefab` / `.asset` / `.meta`、`tasks.json`、`Tools/levelbuild/`、C05 的任何数据/几何/判据 |
-| Unity 编译 / U# 编译 / Play Mode / Build & Test | **NOT_RUN**（本 agent 不是 Unity 操作者） |
-| `python3 Docs/tools/validate_plan.py` | **PASS**（61 tasks，两个 release DAG 无环，source hash 一致） |
-| `python3 -m unittest discover -s Docs/tests` | **OK（491 tests）**；`test_physics_test_field_cells` 40 tests OK |
-| `levelbuild check`（9 格） | **9/9 PASS**（C06 仍是 0 error + 1 条预期 warning） |
-| 操作员下一步 | 重新编译 U#、**重新导入判据**（期望 `driverFields=6` + `size model: baselineVolumeUnits=3.439 …`），再跑 C14 0.30 看 `size_accuracy metric=diameter_error_m value=+0.0000 op=abs<=0.0010 raw=PASS`；C05 的 `climbed` 仍会红（预期，见 §4.1.3） |
-
-### 13.2 2026-11-15 第二、三轮（4×9 矩阵与 pass-2 之后）
-
-| 项 | 状态 |
-|---|---|
-| 改 | `LabBallSizeSetter.cs`（**唯一请求入口 `SetDiameterM`：每 run 一次、每次清状态并重发**；`BeginRequest` 删除；量子 `ReadSizeModel` 实时算，无缓存字段；到位校验的配对常量在驱动侧；`Start` 打 setter 指纹）、`PhysicsTestFieldDriver.cs`（`Switch` 里复位之后调一次 `SetDiameterM`；`TickSize` **只读**；收敛后 `SizeAppliedToleranceM` 到位校验 → `sizeNotApplied`；`Start` 打 `[ptf] build=`；arena 行加 `ramps=`/`rampCell=`；坡道格 `rampCellMismatch` 警告）、本文件（顶部复查②③/§7.4/§8.2/§8.3/§8.3.2/§8.3.3/**§8.3.4 状态机 + 字段写者表 + 四条路径**/§9.5/§12 U16 U17/§13.2）、`physics_test_field.json`（只加说明字段）、`Labs/PhysicsTestField/README.md`、`Docs/tests/levelbuild/test_physics_test_field_cells.py`（守卫：请求只在 `Switch` 发一次 + `TickSize` 只读 + 到位校验 + 量子实时 + build 指纹 + 无 P3 skip + **Python 状态机模拟**） |
-| 未改（按写范围） | `Runtime/` 全部、任何 `.unity` / `.prefab` / `.asset` / `.meta`、`tasks.json`、`Tools/levelbuild/`、C05 的数据/几何/判据、`physics_test_field.json` 的 cell/check/drive |
-| Unity 编译 / U# 编译 / Play Mode | **NOT_RUN**（本 agent 不是 Unity 操作者） |
-| `levelbuild check`（9 格） | **9/9 PASS**（C06 仍 0 error + 1 条预期 warning） |
-| `python3 Docs/tools/validate_plan.py` | **PASS** |
-| `python3 -m unittest discover -s Docs/tests` | **OK（496 tests）**；`test_physics_test_field_cells` 45 tests OK |
-| 操作员下一步 | **先确认 U# 真的重编了**（`[ptf] build=2026-11-15d` / `[ptf] setter build=2026-11-15d` 两行），再按 §9.5 的四档期望表跑；`reason=timeout` 说明驱动还在每帧发请求（旧程序），`+41/+372/+3523` 说明球没长大（pass-1 缺陷） |
-
-### 13.3 2026-11-15 第四轮（pass2 矩阵之后：分类 + A/B 修复 + C 缺陷单）
-
-| 项 | 状态 |
-|---|---|
-| 改（数据） | `physics_test_field.json`：C05 `ramp_support` `applies_d=[T,T,T,F]`、C05 `ramp_entered` `[T,T,F,F]`、C13 `landing_gap`/`landed_on_ground` `[T,T,T,F]`（每处 note 写清 R 规则与数字）；C01 第二段前进窗口 8.0 → **8.75 s**；driver/ball_size 说明字段与 `build_stamp=2026-11-15d` |
-| 改（Labs） | `PhysicsTestCell.cs`：`checkAppliesMasks` + `CheckApplies(index, diameterIndex)`（缺省全适用）；`PhysicsTestFieldDriver.cs`：`Sample` 锁存 `maxRampEntryM`（`ramp_entry_progress_m` 改为整段最大值）、`ramp_entered` 阈值每次 run 取 `GetStepHeightLimitWorldM()` 并打 `derived ... min_progress=`、适用性先于所有其它 skip 并打 `notApplicable` 行、指纹 `2026-11-15d`；`LabBallSizeSetter.cs` 指纹 `2026-11-15d`；`Editor/.../PhysicsTestFieldCriteriaImporter.cs`：`applies_d` → `checkAppliesMasks`（四档之外或全 0 报错） |
-| 未改（按写范围） | `Runtime/` 全部（含 `KatamariBallMotor` / `SweepMath`；§4.1.5 只写缺陷单）、任何 `.unity` / `.prefab` / `.asset` / `.meta`、`tasks.json`、`Tools/levelbuild/`、C05 的 `climbed` 判据（保持红灯）、C13 的 `seam_no_step`（保持红灯） |
-| Unity 编译 / U# 编译 / Play Mode | **NOT_RUN**（本 agent 不是 Unity 操作者） |
-| `levelbuild check`（9 格） | **9/9 PASS**（C06 仍 0 error + 1 条预期 warning） |
-| `python3 Docs/tools/validate_plan.py` | **PASS** |
-| `python3 -m unittest discover -s Docs/tests` | **OK（502 tests）**；`test_physics_test_field_cells` 51 tests OK |
-| 操作员下一步 | 重编 U# + **重导判据**（`driverFields=6`；新字段 `checkAppliesMasks`），确认 `[ptf] build=2026-11-15d` / `setter build=2026-11-15d`；按 §9.5 的新表读 0.30/0.60/1.10/2.20（见 §9.5 的两张表） |
-
-**下一步（按顺序，都是操作员/下一批的事）**：
-1. §9.5 的接线清单：场景 → 导入九格几何 → 加 9 个 `LevelArenaHost` → 加 3 个组件的实例 → 烘判据 → Play Mode 跑 `BeginCellAtDiameter("C14", 0.30f)`；
-2. 看 `[ptf] summary` 与 §9.5 的期望表对不对；C14 必须 `pass=7`（它今天若 FAIL 就是 P1 的真实回归）；
-3. 先跑 C01/C03/C05/C06/C13 的 0.30 档：C05 的 `ramp_count=1` 是 45° 等号的证据（但 `climbed` 会红，是 §4.1.3 的接缝死锁，不是回归）；C06 先看 probe 行与 `ramp_count=0`；C13 看 `seam_no_step` / `landing_gap` / `fall_frames`；
-4. 补齐 C02 / C04 / C07 / C11 / C12 / C20（同一套 placement 形状），再按需补 C13 的 `entry=teleport`（台面 10 s 静置）；
-5. 每迁一格：`Docs/Design/Levels/physics_test_field/<id>/placement.json` + `cells[]` 里把 `wired` 打开 + 删掉 `planned_cells` 那一行 + 跑 §13 的两条命令。
 
 ---
 
 ## 14. 一句话总结
 
-**这张图不是「更漂亮的 greybox」，而是一台仪器**：21 个格位、84 次运行、128 条判据（本轮落地 9 格 / 59 条，其中 P3 五格 36 条），全部落在已有的 getter 与 `[ProxyTrace]` 上；它的第一条设计结论不是几何，而是「电机容量装不下一个测试场，所以测试场必须是**一格一注册**」——而这一条恰好把 `LevelArenaHost.Reapply()` 从「计划里的一个方法」变成「有人真的在调用的接口」，也顺手把「一格一份 placement」变成了数据格式。
+**这张图不是「更漂亮的 greybox」，而是一台仪器**：21 个格位、84 次运行、128 条判据（已落地 9 格 / 59 条，其中 P3 五格 36 条），全部落在已有的 getter 与 `[ProxyTrace]` 上；它的第一条设计结论不是几何，而是「电机容量装不下一个测试场，所以测试场必须是**一格一注册**」——而这一条恰好把 `LevelArenaHost.Reapply()` 从「计划里的一个方法」变成「有人真的在调用的接口」，也顺手把「一格一份 placement」变成了数据格式。
 
 第二条结论是**一份数据只写一次**：`physics_test_field.json` 里再没有一格盒子的坐标，几何只活在 `<cell>/placement.json` 里；判据只认本格的 `nominal_m`，所以一条 limit 对四个球径同时成立，不需要为每个球径抄一串阈值。

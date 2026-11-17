@@ -1,11 +1,11 @@
 # 关卡搭图工具（Level Authoring）：Blender 当编辑器，Unity 只做一次单向导入
 
 > 状态：`PROVISIONAL_MEASURED_ON_LINUX`，2026-11-15。
-> 本文是**设计 + 一次本机可行性实测**。**没有碰 Unity 编辑器、没有跑 git 写命令**；Unity 侧全部是设计，不是已验证的实现。
-> §15 与 §16 记录已经落地的实现：§15 是 P0 + P1 的 Linux 部分（一次性脚本 + 校验器），§16 是**常驻编辑器服务**（2026-11-15 追加，含「导出是一等操作」的口径）。
+> 本文是**设计 + 一次本机可行性实测**。Unity 侧是设计与未验证的源码，不是已验证的实现。
+> §15 与 §16 记录已经落地的实现：§15 是 P0 + P1 的 Linux 部分（一次性脚本 + 校验器），§16 是**常驻编辑器服务**（含「导出是一等操作」的口径）。
 > 实测只证明两件事：**本机（Linux aarch64、2 核、无 GPU）能跑 Blender 并出图**，以及**「Blender 摆位 → placement.json → 从 JSON 重建场景 → 出图」这条回路在无头环境下成立**。实测产物在 `~/tools/level_authoring_probe/`，不进仓库。
-> 触发：用户 2026-11-15 的要求原话「最主要是顺手，且最好能在你本机跑……方便搭场景，在不同位置出渲染图。最主要是能导入 vrchat sdk 的 unity」；以及 [PICNIC_CORNER_LEVEL_ONE](../StoryMode/PICNIC_CORNER_LEVEL_ONE.md) §2.4 查实的缺口——**第一关 110 件的摆放没有任何数据文件，只活在场景里**（最大回归风险）。
-> 引用约定：`Runtime/…`、`Editor/…`、`Labs/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；`Docs/…`、`Tools/…` 相对仓库根。**按符号名引用，不写行号**（这几个文件本轮都在被并行修改）。
+> 需求：摆位顺手、能在本机（Linux）跑、能从不同位置出渲染图、产物能导入带 VRChat SDK 的 Unity 工程；以及 [PICNIC_CORNER_LEVEL_ONE](../StoryMode/PICNIC_CORNER_LEVEL_ONE.md) §2.4 查实的缺口——摆放只活在场景里、没有数据文件是最大回归风险，所以 `placement.json` 是唯一真源。
+> 引用约定：`Runtime/…`、`Editor/…`、`Labs/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；`Docs/…`、`Tools/…` 相对仓库根。**按符号名引用，不写行号**。
 
 ---
 
@@ -141,7 +141,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 
 **为什么不是 D**：D 的「顺手」是真的，但它把三件事绑死了——① 数据只在场景里（正是当前 110 件无法 diff 的病根）；② 代理不能在你不用 Unity 的时候干活；③ 出图要开编辑器（一张图 = 一次 Unity 会话），而本机出图是 10–45 s 的纯 CPU 活儿。所以：**D 保留为「最终看画面」的入口，A 负责「产生可 diff 的数据 + 批量出图」**。两者不是竞争关系。
 
-**为什么不是 B/C**：这两条都在「重新发明编辑器」。用户要的是「顺手」，而顺手的来源是**已有的 3D 交互**，不是又一套 web UI。B 的唯一价值（无头、可脚本）A 已经有了。
+**为什么不是 B/C**：这两条都在「重新发明编辑器」。目标是「顺手」，而顺手的来源是**已有的 3D 交互**，不是又一套 web UI。B 的唯一价值（无头、可脚本）A 已经有了。
 
 ---
 
@@ -399,7 +399,7 @@ python3 Tools/levelbuild/levelbuild.py check Docs/Design/Levels/story_01_bench_s
 代理的典型动作（都是「改 JSON 的某一个子集」）：批量平移一个 zone、按 AABB 重新贴地、把某件从 `stackedOn` 改成地面、把 5 件聚成一个环、**出图给人看**。**代理不需要 GUI，也不占 Unity。**
 > 实现在 `blender/build_scene.py` / `blender/render_views.py`（本节早先写的 `level_author.py` / `level_render.py` 是计划名，没有按那个名字落地；§15.1 是实际文件名）。
 
-### 5.3 三个操作词（对应用户说的「叠放、斜搭、成组」）
+### 5.3 三个操作词（叠放、斜搭、成组）
 
 | 词 | 数据形态 | 谁来保证对 |
 |---|---|---|
@@ -772,17 +772,9 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 
 ---
 
-## 14. 本轮写范围与校验
-
-- 写：**只有本文件**（`Docs/Design/Tools/LEVEL_AUTHORING.md`，目录新建）。实测文件在 `~/tools/` 与 `/tmp/blender_test/`。
-- 不写：代码（`Tools/`、`Editor/`、`Runtime/`）、`.unity`/`.asset`/`.prefab`、其它文档、`tasks.json`。没有碰 Unity、没有跑 git 写命令。
-- `python3 Docs/tools/validate_plan.py` → `PASS: 61 tasks; both release DAGs acyclic; source hashes verified.`（Unity/Udon 编译、VR、多人、性能、commerce 仍 `NOT_RUN`；本文不改任务与配置，跑它是为了证明没弄坏规划数据）。
-
----
-
 ## 15. 实现状态（2026-11-15，P0 + P1 的 Linux 部分）
 
-> 本轮**没有碰 Unity 编辑器、没有跑 git 写命令**。Unity 侧只有源码，编译/导入/幂等**都没有验证**（`NOT_RUN`）。本节记的是「代码在哪、和上面的设计哪里不一样、还差什么」。
+> Unity 侧只有源码，编译/导入/幂等**都没有验证**（`NOT_RUN`）。本节记的是「代码在哪、和上面的设计哪里不一样、还差什么」。
 
 ### 15.1 落地了什么
 
@@ -808,7 +800,7 @@ rise >  stepLimit           → 挡路（进 SetBlockingBoxes）
 7. **俯视图的 `coverage_m` 是「短边保证入画」**，渲染时按分辨率比例放大 `ortho_scale`；否则 16:9 会把方形场地上下裁掉（实测 13.4 m 场地只看到 7.9 m）。
 8. **没有 `--stale`**（§8 第 16 条的一半）：它要 `.blend` 指纹，而 `.blend` 不进仓库；现在用「重新导出逐字节相同」代替，`export_placement.py` 自带往返自检。
 
-### 15.2.1 2026-11-15 追加：弯坡与 45° 门（S4，`CONTACT_MODEL_V2` 1.5 / 5.7）
+### 15.2.1 弯坡与 45° 门（S4，`CONTACT_MODEL_V2` 1.5 / 5.7）
 
 1. **`role=curve_ramp` 已落地**（§4.3.1）：`placement_core.py` 里是 schema + 校验 + 展开，展开**调用**设计参考 `Docs/Design/BallMotor/contact_v2/contact_v2.py` 的 `tessellate_vertical_curve` / `curve_chord_budget`（按文件路径 import，`sys.modules` 缓存），没有第二份 tessellator；C# 侧同一份数学在 `Runtime/BallContact/CurveRampMath.cs`，导入器调它。Python 与 C# 的自动段数用同一个判定循环，所以两侧算出同一个 `K`。
 2. **45° 从硬错误降为 warning**（§8 第 10 条）：v2 能慢爬陡坡（`CONTACT_MODEL_V2` 3.10），所以 50°–89° 的 `role=ramp` 只警告；硬错误只剩 inverted（板面朝下）、90°（侧立＝墙）、零厚度、NaN 这类物理上不可能的值。`physics_test_field/C06` 的 50° 板**仍然是 box**，因为它是 motor 的 over-45 拒绝探针，不是被校验器逼的（数据没改）。
@@ -830,17 +822,17 @@ python3 Tools/levelbuild/levelbuild.py check <该文件> --report     # 0 错
 
 | 项 | 为什么 |
 |---|---|
-| Unity 侧任何验证（编译、导入、`+0 ~0 -0`、`valueUnits` 回读、`[arena] planes=… boxes=…`） | 本轮不碰编辑器；需要 Unity 操作员按 §11.2 的六条验收 |
+| Unity 侧任何验证（编译、导入、`+0 ~0 -0`、`valueUnits` 回读、`[arena] planes=… boxes=…`） | 需要 Unity 操作员按 §11.2 的六条验收 |
 | `Art/Props/<def>/<def>.prefab` 预制体库（P2） | 导入器现在直接实例化 `.fbx` |
 | 值表的 `container m` 行 | 已随 U2 解除：值表删除后缺行不再丢件，价值由 `defs[].valueUnits` 声明 |
 | 9 个 def 的模型 | 第一关的 11 件 / 782 u |
-| `physics_test_field.json` 迁到本格式 | Lead 说之后再做；本 schema 是「一格一份 placement」（`level.id` + 目录），没有假设一场景一份 |
+| `physics_test_field.json` 迁到本格式 | 后续再做；本 schema 是「一格一份 placement」（`level.id` + 目录），没有假设一场景一份 |
 
 ---
 
-## 16. 常驻编辑器服务（2026-11-15 追加，P0 已实现）
+## 16. 常驻编辑器服务（P0 已实现）
 
-> 用户原话驱动本节：「关于编辑器，我认为不需要做成'每次都脚本重建'。完全可以是一个持续状态的软件，然后它通过接口一点点调整地图。」以及随后补充的口径：「只需要做一个不错的导出功能，不就可以重建了」。
+> 设计原则：编辑器是常驻状态的软件，通过接口一点点调整地图，而不是「每次脚本重建」；只要导出功能足够好，场景就可以随时从导出重建。
 > 因此下面把**常驻状态**当工作状态、把**导出**当一等操作；不是「每一步都去改 JSON」，而是「改完就导出，因为导出很便宜」。
 
 ### 16.1 形状
@@ -958,7 +950,7 @@ curl -s -X POST "http://$(python3 -c "import json;d=json.load(open('/tmp/levelbu
 | 3 | **导出前校验** | `export` 自己再跑一次 `placement_core.validate`；红则**不写**（`force=true` 例外，明确标注是半成品） |
 | 4 | **往返无损** | 导出 → 用 `open --path` 从导出重建场景 → 再导出：**逐字节相同**（实测 127 件 sha `601ab8034bc8b494…`）。单测 `test_level_editor.py::test_round_trip_export_open_export_is_lossless`，端到端见 §16.9 |
 
-**本轮顺手修掉的导出器缺陷**（都是实测出来的，四个都会让「导出不完整 / 不可复现」）：
+**导出器必须避免的四个缺陷**（都是实测出来的，每个都会让「导出不完整 / 不可复现」）：
 
 | 症状 | 原因 | 修法 |
 |---|---|---|
@@ -997,7 +989,7 @@ curl -s -X POST "http://$(python3 -c "import json;d=json.load(open('/tmp/levelbu
 | 常驻 `render --preset overview`（EEVEE 1280×720） | **45.02 s** | 一次性约 45.0 + 1.2 s |
 | `kill -9` 之后 | 改动**已在** `placement.json` 里 | 下一个请求报 `endpoint is stale`（退出码 2） |
 
-读出来的结论（和用户的原话不完全一致，写清楚）：
+读出来的结论：
 
 - **构建不是大头**。整场 127 件只要 1.17 s（其中 Blender 启动约 0.35 s，44 个 GLB 导入 + 摆位约 0.8 s）。EEVEE 的 45 s **就是渲染本身**；Workbench 的 3.5 s 也是渲染。
 - 常驻服务真正省的是：**每次编辑不再重启 + 重建**（1.2 s → 0.1 s），以及把「改一个数」的粒度从「起一个 Python/Blender 进程」降到「一条 JSON 请求」。
@@ -1091,8 +1083,8 @@ python3 Tools/levelbuild/levelbuild.py check --level <id> --manifests Docs/Desig
 
 ### 17.4 `level.spawnClearanceM`
 
-`placement_core._check_bounds_and_spawn` 一直按关卡读 `spawnClearanceM`（缺省 1.0 m），本轮只补了
-文档与测试：`"spawnClearanceM": 0.15` 只改变该文件的球起点净空；`playerSpawn` 的 1.0 m 不变。
+`placement_core._check_bounds_and_spawn` 一直按关卡读 `spawnClearanceM`（缺省 1.0 m）；该字段的行为如下：
+`"spawnClearanceM": 0.15` 只改变该文件的球起点净空；`playerSpawn` 的 1.0 m 不变。
 
 ### 17.5 验证
 

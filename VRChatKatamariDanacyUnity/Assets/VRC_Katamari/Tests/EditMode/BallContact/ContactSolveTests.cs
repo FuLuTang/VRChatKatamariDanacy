@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
 using VRCKatamari.BallContact;
+using VRCKatamari.Motion;
 
 namespace VRCKatamari.Tests
 {
@@ -275,6 +276,102 @@ namespace VRCKatamari.Tests
         public void TheFallDisplacementIsCostCapped()
         {
             Assert.AreEqual(8, ContactSolveMath.MaxSubSteps(new Vector3(0.8f, 0f, 0f), 0.15f));
+        }
+
+        [TestCase(0f)]
+        [TestCase(-1f)]
+        public void ARejectedObbStepCannotStoreSpeedOrLaunchWhenTheObstacleDisappears(
+            float nextForward)
+        {
+            // Two unabsorbable OBBs leave less than a diameter between them, as in
+            // E3 A2's opposing prop contacts. Push tangentially: the solver can retain
+            // speed, but its unresolved position is rejected by the motor's 2 cm gate.
+            ContactWorld world = new ContactWorld();
+            Vector3 x = new Vector3(1f, 0f, 0f);
+            Vector3 y = new Vector3(0f, 1f, 0f);
+            Vector3 z = new Vector3(0f, 0f, 1f);
+            world.Add(new Vector3(0f, 1f, -0.14f), x, y, z,
+                new Vector3(10f, 1f, 0.04f), 110, ContactCodes.RoleBlocking);
+            world.Add(new Vector3(0f, 1f, 0.14f), x, y, z,
+                new Vector3(10f, 1f, 0.04f), 111, ContactCodes.RoleBlocking);
+            ContactBall ball = new ContactBall();
+            ball.Center = new Vector3(0f, 0.135f, 0f);
+            ball.Radius = 0.135f;
+            Vector3 start = ball.Center;
+            float rest = 0f;
+            bool sliding = false;
+            float largestStoredSpeed = 0f;
+            for (int i = 0; i < 100; i++)
+            {
+                Vector3 previous = ball.Center;
+                StepRejectedObbMotion(ball, world, 1f, ref rest, ref sliding);
+                float solvedSpeed = ball.PlanarVelocity.magnitude;
+                Assert.Greater(ball.Residual, 0.02f);
+                Assert.IsTrue(ContactSolveMath.RejectUnresolvedMotion(previous,
+                    ball.Residual, 0.02f, ref ball.Center, ref ball.PlanarVelocity,
+                    ref ball.VerticalVelocity));
+                largestStoredSpeed = Mathf.Max(largestStoredSpeed, ball.PlanarVelocity.magnitude);
+                if (i == 0 || (i + 1) % 25 == 0)
+                    TestContext.WriteLine("t={0:F2} x={1:F6} solved={2:F6} stored={3:F6} residual={4:F6} climb={5}",
+                        (i + 1) * 0.02f, ball.Center.x, solvedSpeed,
+                        ball.PlanarVelocity.magnitude, ball.Residual, ball.ClimbActive);
+            }
+            Assert.AreEqual(start, ball.Center);
+            Assert.IsFalse(ball.ClimbActive);
+            Assert.IsFalse(sliding);
+
+            // Remove the obstruction, then coast or reverse. There must be no banked
+            // momentum: coasting stays still; reversing takes effect on the first step.
+            world.Count = 0;
+            StepRejectedObbMotion(ball, world, nextForward, ref rest, ref sliding);
+            TestContext.WriteLine("removed forward={0} dx={1:F6} vx={2:F6}",
+                nextForward, ball.Center.x - start.x, ball.PlanarVelocity.x);
+            Assert.LessOrEqual(largestStoredSpeed, 1e-6f, "rejected motion banked velocity");
+            if (nextForward == 0f)
+            {
+                Assert.AreEqual(0f, ball.PlanarVelocity.magnitude, 1e-6f);
+                Assert.AreEqual(start.x, ball.Center.x, 1e-6f);
+            }
+            else
+            {
+                Assert.Less(ball.PlanarVelocity.x, 0f, "reverse must not brake phantom momentum");
+                Assert.Less(ball.Center.x, start.x);
+            }
+        }
+
+        [TestCase(0.019f, false)]
+        [TestCase(0.02f, false)]
+        [TestCase(0.021f, true)]
+        public void TheResidualGateDiscardsVelocityOnlyWhenItRejectsTheMove(
+            float residual, bool rejected)
+        {
+            Vector3 previous = new Vector3(1f, 2f, 3f);
+            Vector3 candidate = new Vector3(1.02f, 2.01f, 3.03f);
+            Vector3 center = candidate;
+            Vector3 velocity = new Vector3(1f, 0f, 2f);
+            float vertical = 0.5f;
+            Assert.AreEqual(rejected, ContactSolveMath.RejectUnresolvedMotion(previous,
+                residual, 0.02f, ref center, ref velocity, ref vertical));
+            Assert.AreEqual(rejected ? previous : candidate, center);
+            Assert.AreEqual(rejected ? Vector3.zero : new Vector3(1f, 0f, 2f), velocity);
+            Assert.AreEqual(rejected ? 0f : 0.5f, vertical);
+        }
+
+        private static void StepRejectedObbMotion(ContactBall ball, ContactWorld world,
+            float forward, ref float rest, ref bool sliding)
+        {
+            float heading;
+            Vector3 velocity;
+            Vector3 displacement;
+            Assert.IsTrue(BallMotionMath.TryStep(forward, 0f, 0f, 90f,
+                ball.PlanarVelocity, 0.02f, 1f, 5.015f, 7.5f, 6f, 0.9f, 1.3f,
+                2f, 110f, 1.2f, out heading, out velocity, out displacement));
+            ball.PlanarVelocity = velocity;
+            Assert.IsTrue(RampSlideMath.TryStepRestLatch(rest, sliding, velocity.magnitude,
+                0.05f, Mathf.Abs(forward), false, 0.02f, 0.3f, out rest, out sliding));
+            Vector3 direction = velocity.magnitude > 1e-6f ? velocity.normalized
+                : new Vector3(1f, 0f, 0f);
+            Assert.IsTrue(ball.Step(world, direction, 5.015f * Mathf.Abs(forward), 0.02f));
         }
 
         [Test]

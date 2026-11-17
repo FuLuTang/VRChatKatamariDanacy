@@ -10,9 +10,9 @@ namespace VRCKatamari.Riding
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The rule (owner 2026-11-17): the ball small and the rider small, the ball large and the
-    /// rider large, and in the seated view the rider's waist is exactly as high as the top of the
-    /// ball. Body proportions differ between avatars, so no proportion is assumed: the seat
+    /// The rule: the rider scales with the ball (small ball, small rider; large ball, large
+    /// rider), and in the seated view the rider's waist is level with the top of the ball.
+    /// Body proportions differ between avatars, so no proportion is assumed: the seat
     /// measurement (<see cref="RideWaistMath"/>) reports <c>kappa</c>, this avatar's own
     /// vertical distance from the viewpoint down to the hips divided by its eye height. The eye
     /// point is <c>up</c> above the ball centre (<see cref="RideViewMath"/>) and the ball's top

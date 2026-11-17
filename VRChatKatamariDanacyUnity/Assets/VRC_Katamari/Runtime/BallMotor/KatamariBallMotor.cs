@@ -1004,6 +1004,8 @@ namespace VRCKatamari.BallMotor
 
         // Climb channel state (design §3.4). TryStep owns the transitions; these fields
         // carry them between steps and are what the getters report.
+        [SerializeField] private bool climbDiagnosticsEnabled;
+        private float nextClimbDiagnosticsSeconds;
         private bool climbActive;
         private float climbAnchorY;
         private int climbSurfaceId;
@@ -2370,13 +2372,16 @@ namespace VRCKatamari.BallMotor
                 contactShapesV2[i] = 0;
             }
 
-            // A residual beyond 2 cm means the push-out did not resolve the step: the
-            // position is rejected (the ball stays where it was) and counted, instead of
-            // being placed inside geometry (design §2.1).
-            if (residual > ContactResidualRejectM)
+            // A residual beyond 2 cm rejects the whole motion, not only its position.
+            // Keeping the solver's velocity while rolling the centre back banked thrust
+            // every fixed step (E3 A2: no movement, |v|=5.015), then launched the ball
+            // when the obstruction vanished. Accepted steps keep their tangential inertia.
+            if (ContactSolveMath.RejectUnresolvedMotion(ballCenterWorld, residual,
+                ContactResidualRejectM, ref center, ref planar, ref vertical))
             {
                 contactRejectedStepCount = contactRejectedStepCount + 1;
-                center = ballCenterWorld;
+                climbAlongSpeed = 0f;
+                climbSpeedWorldMps = 0f;
             }
 
             // The solver's velocity is the step's velocity from here on. Everything below
@@ -2406,6 +2411,20 @@ namespace VRCKatamari.BallMotor
             // Stick recovery, soft then hard, then the hold that never teleports again
             // (design §2.8). This is the ONLY place v2 moves the ball without physics.
             UpdateContactRecovery(dt, intentDirection, ref center);
+
+            // Opt-in, once per simulation second. Planar speed alone cannot diagnose a
+            // vertical climb: report accepted centre progress alongside the channel state.
+            if (climbDiagnosticsEnabled && contactV2ClockSeconds >= nextClimbDiagnosticsSeconds)
+            {
+                nextClimbDiagnosticsSeconds = contactV2ClockSeconds + 1f;
+                Vector3 acceptedMove = center - ballCenterWorld;
+                Debug.Log("[BallMotor] climb t=" + contactV2ClockSeconds
+                    + " climbActive=" + climbActive + " capLock=" + climbLocked
+                    + " id=" + climbSurfaceId + " height=" + climbHeightWorldM
+                    + " climbV=" + climbSpeedWorldMps + " planarV=" + planarVelocity.magnitude
+                    + " actualSpeed=" + (acceptedMove.magnitude / dt)
+                    + " resid=" + contactResidualMax);
+            }
 
             groundedCenter = center;
             // v2 has no proxy lift, so the camera anchor IS the ball centre: the design
@@ -6335,7 +6354,7 @@ namespace VRCKatamari.BallMotor
             return climbSurfacePointWorld;
         }
 
-        /// <summary>True when the last climb reached the cap and only a release clears it.</summary>
+        /// <summary>Cap lock: clears on release or after falling below half the height cap.</summary>
         public bool IsClimbLocked()
         {
             return climbLocked;
@@ -6429,13 +6448,12 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
-        /// r_visual = half the start diameter (design §4A.2): the drawn core's radius. It does
-        /// not grow with absorbs; the physical sphere does, and absorbed props form a shell
-        /// around the fixed core. 0 before Start has run.
+        /// The drawn core's current radius equals the collision sphere radius used by the
+        /// pickup contact gate. It follows size changes without smoothing; 0 before sizing.
         /// </summary>
         public float GetVisualCoreRadiusWorldM()
         {
-            return 0.5f * startSemanticDiameterWorldM;
+            return collisionRadiusWorldM;
         }
 
         /// <summary>How far the rolling shape reaches along the heading, metres.</summary>

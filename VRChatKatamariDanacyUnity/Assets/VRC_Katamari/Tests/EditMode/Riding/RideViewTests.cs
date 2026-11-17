@@ -82,9 +82,9 @@ namespace VRCKatamari.Tests
         [Test]
         public void ShippedLinearFrame_PutsTheSameBallsOutsideTheView()
         {
-            // The pre-fix coefficients, as literals: 0.55 + 2.4 r up, 0.75 + 2.2 r back.
-            // 0.111: up 0.8164, back 0.9942, atan2 = 39.4 deg, which is the 39 degrees the
-            // owner measured; the lower edge (39.4 + 4.95) is past the 30 degree half field.
+            // The linear frame's coefficients, as literals: 0.55 + 2.4 r up, 0.75 + 2.2 r back.
+            // At r = 0.111: up 0.8164, back 0.9942, atan2 = 39.4 deg; the lower edge
+            // (39.4 + 4.95) is past the 30 degree half field.
             float depression;
             float halfAngle;
             Assert.IsTrue(RideViewMath.TryBallView(0.111f, 0.55f + 2.4f * 0.111f,

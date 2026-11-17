@@ -32,7 +32,7 @@ namespace VRCKatamari.Input
     /// and opens only while the local player is seated. <c>SetRoundGate</c> belongs
     /// to StoryRoundController: it closes at the bell and opens again in BeginRound.
     /// Both default to open, so a scene with neither owner still drives - the
-    /// keyboard lab <c>Labs/StoryLevel</c> has no station and no round controller.
+    /// keyboard-only lab scene has no station and no round controller.
     /// One gate per owner is deliberate: with a single shared switch the ride host's
     /// open on the next sit-down undid the round controller's close at the bell, so
     /// leaving and re-entering the seat re-opened input after the round had ended,

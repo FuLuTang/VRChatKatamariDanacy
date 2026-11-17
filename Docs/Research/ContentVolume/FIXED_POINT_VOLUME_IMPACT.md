@@ -399,7 +399,7 @@ Python（`Docs/tests`、`Tools/mapbuild/tests`）：
 | `:241` | `units_to_max_diameter_effective: 1356.39` | 黄金值 |
 | `:568-572` | 「迁移必须烘当前标定，不能写回 1/0.0141」 | **迁移警告，正好适用** |
 | `Docs/Design/PickupAbsorb/README.md:39,181,192,212,231,262` | 「整数单位契约（有意为之）」 | 需重写：mm³ 不是「取消整数」，而是**把量子定得足够细**，整数契约仍成立 |
-| `Docs/Design/PickupAbsorb/SIZE_GATE_AUDIT.md`（§4 公式） | `V=(3.4390244+U)×0.0041`、`U(D)=(πD³/6)/0.0041−3.4390244` | 两个公式都要换成 mm³ 版 |
+| `Docs/Archive/Reviews/SIZE_GATE_AUDIT.md`（§4 公式） | `V=(3.4390244+U)×0.0041`、`U(D)=(πD³/6)/0.0041−3.4390244` | 两个公式都要换成 mm³ 版 |
 | `Docs/Design/Gameplay/README.md:56,92,173,192,206` | 1356 单位满径 / 1284 全图 / 「交分公式是本项目发明的」 | 黄金值与「本项目发明」的自认 |
 | `Docs/Design/BallMotor/README.md:144,301,368` | 标定三数、交分后 0.5973 m / 23.8 units | 黄金读数 |
 | `Docs/Design/BallLayers/SizeModel/README.md`（1 处）、`Docs/Archive/Handoffs/BallLayers/SizeModel/SIMULATION_REPORT.md`、`Docs/Archive/Handoffs/BallLayers/SizeModel/SuiteFoundation/HANDOFF.md` | 体积单位提及 | 注释级 |

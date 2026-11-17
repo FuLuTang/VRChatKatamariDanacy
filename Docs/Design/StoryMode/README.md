@@ -1,20 +1,20 @@
 # 剧情模式切片：输入、球视图、骑球、吸附宿主与剧情回合
 
-> **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+> **2026-11-16 门已改**：吸收尺寸门按原作数字：物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。「关卡球径上限与第一关星级带」一节的算式与档位件数按旧体积比门（`a·b·c ≤ (π/6)·D³/10`）算出，只作评分模块的参考输入，不是现行口径；现行口径与实现清单见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 
 
-> 状态：`PARTIALLY_COMPILED`，2026-11-14。五个模块的源码都已写；只有 `DesktopMoveInput` 与 `BallView` 的**旧版本**在 `Labs/StoryLevel` 里编译并实跑过（commit `e74ff8c`，对应 U# 编译产物 `Runtime/Input/DesktopMoveInput.asset`、`Runtime/BallPresentation/BallView.asset`，见 `Docs/Evidence/StoryLevel/windows_assets_manifest.txt`）。`DesktopMoveInput` 后来改成两把闸门（见“输入闸门”），**这一版未编译**；骑球/吸附/回合也从没有编译、没有 Play Mode、没有 Build & Test、没有真机。
+> 状态：五个模块的源码与 U# 程序资产都在仓库里；Unity 侧的 Play 证据只有 2026-11-16 的 Hub 闭环 ClientSim 实跑（见文末「主房间闭环」）和 StationPlatform 实验的 PC 实测（[Evidence/StationPlatform](<../../Evidence/StationPlatform/README.md>)），其余运行时行为见文末「已知限制」。
 > 计划与判据见 [第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §1–§4、§7 S1–S4。
 
 | 模块 | 文件 | 状态 |
 |---|---|---|
-| 输入 | `Runtime/Input/DesktopMoveInput.cs` | 源码已写；单个开关的旧版已在 `Labs/StoryLevel` 编译实跑（commit `e74ff8c`），两把闸门这版未编译 |
-| 球视图 | `Runtime/BallPresentation/BallView.cs` | 源码已写；已在 `Labs/StoryLevel` 编译并实跑（commit `e74ff8c`） |
-| 骑球 | `Runtime/Riding/BallRideStation.cs`、`BallSeatInteract.cs`、`BallRideExitButton.cs`、`RideViewMath.cs`、`RideExitMath.cs`；装配 `Editor/Story/RideUxAssembler.cs`（菜单 `VRC Katamari/Ride/Assemble Ride UX`，可重复执行） | 源码已写；纯函数本机已测，Unity 未跑 |
-| 吸附宿主 | `Runtime/Pickup/PickupFieldHost.cs` | 源码已写，未编译 |
-| 剧情回合 | `Runtime/Story/StoryRoundController.cs` | 源码已写，未编译 |
+| 输入 | `Runtime/Input/DesktopMoveInput.cs` | 两把闸门（骑乘 / 回合） |
+| 球视图 | `Runtime/BallPresentation/BallView.cs` | 按语义直径缩放 CoreMesh |
+| 骑球 | `Runtime/Riding/BallRideStation.cs`、`BallSeatInteract.cs`、`BallRideExitButton.cs`、`RideViewMath.cs`、`RideExitMath.cs`；装配 `Editor/Story/RideUxAssembler.cs`（菜单 `VRC Katamari/Ride/Assemble Ride UX`，可重复执行） | 纯函数有 EditMode 测试 |
+| 吸附宿主 | `Runtime/Pickup/PickupFieldHost.cs` | 一个字段区的吸附与复位宿主 |
+| 剧情回合 | `Runtime/Story/StoryRoundController.cs` | 回合状态机与 HUD |
 
-下文按模块分节；每节末尾列该节自己的未验证项，不要跨节当成已验证。
+下文按模块分节；未经 Play/真机验证的项集中在文末「已知限制」。
 
 ## 输入与球视图（S1：计划 §1、§2）
 
@@ -47,7 +47,7 @@
 | `SetRideGate(bool)` | `BallRideStation` | `Start()`（站着的人不能遥控球）、`OnStationExited`、`OnPlayerRespawn` | `OnStationEntered`（本地球员） | 开 |
 | `SetRoundGate(bool)` | `StoryRoundController` | 到点结算 `SettleRound()` | `BeginRound()` | 开 |
 
-两者默认都是开，所以既没有 Station、也没有回合控制器的场景照常能开——`Labs/StoryLevel` 的键盘实验就是这种场景。
+两者默认都是开，所以既没有 Station、也没有回合控制器的场景照常能开——无 Station、无回合控制器的无头键盘实验就是这种场景。
 
 **为什么是两把而不是一把**：以前只有一个共用开关，两个所有者都写它，互相覆盖（最后一笔写赢）。实际后果：到点关掉输入后，离座再入座会被骑球宿主重新打开，回合结束后又能开球；反过来 `BeginRound` 也会把骑球宿主关上的门打开。拆成两把后，谁都不能改别人的门，生效输入 = 两者都开。任一关上时适配器把两轴清零并再推一次零（球刹车），重新打开不推零。
 
@@ -62,28 +62,9 @@
 
 `CoreMesh` 的网格约定：**直径 1 m、pivot 在球心的球体**（例如 Unity 内置 Sphere），因为代码直接把它缩放到语义直径。换成直径不是 1 m 的网格时显示尺寸会差一个固定倍数，需要在美术侧改，而不是在这里加一个魔数。
 
-### 未验证（S1，不要把这些当已验证）
-
-1. **`BallView` 与 `DesktopMoveInput` 的旧版已编译并实跑**（`Labs/StoryLevel`，commit `e74ff8c`）。`DesktopMoveInput` 现在改成两把闸门，**这一版没有编译记录**；下面这些具体判据也没有逐条留下的记录。
-2. `InputMoveVertical` / `InputMoveHorizontal` / `OnDisable` 的签名已随 `Labs/StoryLevel` 编译通过（commit `e74ff8c`）。签名来源是已安装 SDK 的 `UdonSharpBehaviour.cs`；`OnDisable` 是 Unity 生命周期消息（官方 [Event Execution Order](https://creators.vrchat.com/worlds/udon/event-execution-order) 把 `OnEnable`/`OnDisable`/`OnDestroy` 列在 Unity 事件里），所以写的是普通私有方法而不是 `override`。`OnStationExited` / `OnPlayerRespawn` 的签名另在 `Labs/StationPlatform/StationLabDriver.cs` 里编译并通过 PC 实测（T04）。T04 那次轴日志改动本身从未编译，本文不拿它当证据。
-3. 桌面 WASD 的**符号**没有留下实测记录：官方文档只写 `InputMoveVertical` = W/S、`InputMoveHorizontal` = A/D、桌面上输出 −1/0/1 整数（[Input Events](https://creators.vrchat.com/worlds/udon/input-events)），没有写 A 是 −1 还是 +1。代码按计划“A 负、D 正”映射，下一位操作者要先确认 A 是左转。
-4. 坐姿时 VRChat 是否继续把轴发给 Udon：未验证，也就是计划 §8 的风险 1（S2 才有结论）。
-5. 菜单：官方文档说打开 VRChat 菜单时 Udon 会“释放所有按住的输入”，但只对按钮事件明确写了会补发 `InputJump(false)`；轴是否也补发 0 未说明。所以“按住 W 时开菜单”球会不会继续跑，未验证。motor 有 `SetMenuOpen` 接缝，本适配器没有用它（计划 S1 没要求）。
-6. `BallView` 的第一个写帧依赖 motor 的 `Start()` 已跑过（未跑时读数是 0，代码跳过而不是写 0），但“Start 顺序”只做了代码层面的防御，没有运行时观察。
-7. 1e-4 阈值、`Vector3.one * diameter` 的视觉结果、球底贴地判据（`center.y − d/2`）没有单独的量化记录；`Labs/StoryLevel` 的实跑只到“能开、能看”这一层。
-
-### 与计划的差异（S1，留给 Lead 决定）
-
-- 计划 §4 的输入关闭示例已改写成 `input.SetRoundGate(false)`，与实现的两把闸门（见“输入闸门”）一致。
-- 计划 §7 S1 列出的 `Labs/StoryLevel/StoryLevel.unity` 与 `StoryLevelLabBootstrap.cs` 后来已经建好（commit `e74ff8c`），不在本文的脚本范围内。
-
-### 没有改动的东西（S1）
-
-没有改 `KatamariBallMotor`、asmdef、场景或任何既有文件；两个脚本各带 `.meta`，新目录 `BallPresentation` 也带 `.meta`，GUID 均为新生成且全仓唯一。
-
 ## 骑球
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-14。本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §1、§7 S2 与 §8 的风险 1。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test、没有真机。
+> 本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §1、§7 S2 与 §8 的风险 1。
 
 ### 三个脚本
 
@@ -119,7 +100,7 @@
 
 `OnPlayerRespawn` 也清一次：复活可能把人留在座位里而不发 `OnStationExited`，那样交互会永久禁用、再也坐不上去。实验的 driver 同样这么做（`StationLabDriver.OnPlayerRespawn`），这里只是照抄这条保险。
 
-**与 S4 的分工（已解决）**：`StoryRoundController` 不再共用这把开关，它只关自己的 `SetRoundGate(bool)`（`Runtime/Story/StoryRoundController.cs` 到点时调 `false`）。两把闸门互不影响，所以到点后再入座也不会把输入重新打开；细节见 S1 的“输入闸门”。
+**与回合控制器的分工**：`StoryRoundController` 不再共用这把开关，它只关自己的 `SetRoundGate(bool)`（`Runtime/Story/StoryRoundController.cs` 到点时调 `false`）。两把闸门互不影响，所以到点后再入座也不会把输入重新打开；细节见 S1 的“输入闸门”。
 
 ### 5 分钟 Build & Test 探针（计划风险 1）
 
@@ -136,33 +117,9 @@
 
 探针的日志量有上限：值变化各打一行，另外每个轴在非零期间最多每 0.25 s 一行（桌面键盘只发 −1/0/1，实际等于每次按键一行），所以五分钟的测试不会把日志刷爆。
 
-### 未验证（不要当成已验证）
-
-1. **没有编译**：U# 全量编译、Console 无错都还没发生。
-2. **坐姿桌面轴是否到达 Udon**：这正是上面探针要回答的，现在未知（`Docs/Evidence/StationPlatform/axis_logging.md:3`、`:110-112` 也只到“改了源码没编译”）。
-3. **Station 回调必须与 VRCStation 同物体**：本仓的依据是实验场景布局 + T04 PC 实测，不是 VRChat 文档的原文；文档只写“一个 GameObject 挂 VRCStation + Collider + UdonBehaviour”。若实际允许跨物体，可以再把 Collider 拆到球上。
-4. **点击距离**：座位在 rig 根上，准星到球的 Collider 至少是 `back`（0.5 m 球 1.85 m 起、1.43 m 球 2.32 m）。超出桌面交互距离就点不到——首次测试第一件事就是确认能坐下；点不到就减小 `eyeBaseBackMeters`/`eyeBackPerRadius`，或把 Collider 加大。
-5. **坐姿下是否还有第二个提示**：T04 的 D1 只证明 `DisableInteractive = true` 让 Behaviour 的“坐下”提示消失；VRCStation 组件自带的提示是否也被压掉，没有分开观察过。
-6. **退出按钮在未入座时**：`ExitStation` 无对象可退出，预期是 no-op，未验证。
-7. **坐姿镜头**（计划风险 2）：rig 根已经给出「球后上方」，坐姿视点还要再叠 VRCStation 的人眼高度补偿，补偿量、会不会看天/被球挡只能 Build & Test 里调（rig 根已是取景眼点，不要再叠一层 Station 偏移）。
-8. **Player Mobility = 0 的含义**：实验文件里是 0，本仓没有核实它对应 Mobile 还是 Immobilize；探针的第 5 步排查依赖这一点。
-9. **多人/远端**：`BehaviourSyncMode.None`，`DisableInteractive` 是本地状态，远端客户端会看到自己的提示。切片是单人，不做。
-10. **`IsLocalPlayerSeated()` 的跨 Behaviour 调用**：签名与调用方式（类型化引用上直接调公开方法）与 `DesktopMoveInput` 调 `motor.SetMoveAxes` 同形（`DesktopMoveInput.cs:149`）。`DesktopMoveInput` 本身已编译（commit `e74ff8c`），但探针这个调用方自己没有编译过。
-
-### 与计划的差异
-
-- 计划 §1 只写“Station 作为 RideRoot 子物体”。本节把**点击目标在球上**和**退出路径不依赖座位位置**写成硬要求：否则“点球入座”点到的是空中，下车按钮在 7 m 外。
-- 计划 §7 S2 的文件清单里没有探针；本节按 S2 的风险 1 加了一个可删的 Labs 探针，让这条风险一次 Build & Test 就有答案。
-- `BallRideStation.Start()` 先把驱动门关上；计划没写这一条，但不写就挡不住站着的玩家用 WASD 遥控球。
-- 输入拆成 `SetRideGate` / `SetRoundGate` 两把闸门后，计划 §4 的输入关闭示例已同步改写为 `SetRoundGate(false)`（与 S1 那节的记录一致）。
-
-### 没有改动的东西
-
-本节只新增三个文件，各带 `.meta`，新目录 `Runtime/Riding/` 也带 `.meta`，GUID 全仓唯一（与既有 296 个 GUID 无冲突）。`DesktopMoveInput` 是后来拆两把闸门时才改的，不在本节，见 S1 的“输入闸门”。
-
 ## 吸附宿主
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-14。本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §3、§7 S3 与 §8 的风险 4。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test、没有真机。
+> 本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §3、§7 S3 与 §8 的风险 4。
 
 ### 一个脚本管全部道具
 
@@ -222,7 +179,7 @@ S4 的 `Runtime/Story/StoryRoundController.cs` 已经在按这些方法接线（
 5. **道具不要带动态 Rigidbody**：motor 不做物理，球只是运动学扫掠；被 `SetParent` 到球上的动态刚体会自己掉下去。切片里道具是静态物体。
 6. `valueUnits` 按整数填（`Docs/OPEN_DECISIONS.md` (j)、计划 §3 的“两个数据坑”）；`bounds` 是**全尺寸**，不是半尺寸。
 
-### 代码证据（本次调用的全部 API）
+### 代码证据（宿主调用的全部 API）
 
 | 调用 | 位置 |
 |---|---|
@@ -241,53 +198,15 @@ S4 的 `Runtime/Story/StoryRoundController.cs` 已经在按这些方法接线（
 
 lab 那对半径是**反的**（激活 1.6、释放 1.0，等于排队当帧就撤回）。本宿主没有释放半径：候选队列跟着每次扫描的选择走，离开激活半径、被更近的挤掉或过不了尺寸门的候选都在下一次扫描被撤回。
 
-### 未验证（不要当成已验证）
-
-1. **没有编译。** U# 全量编译、Console 无错都还没发生。
-2. **`Transform.SetParent(Transform)` 在 Udon 的可用性**：全仓此前没有任何 `SetParent` 调用（计划 §8 风险 4 已把“`SetParent`/局部写入未编译验证”记在案）。这是本脚本最需要第一轮编译确认的一行。
-3. **`Collider[]` 序列化**：单个 `Collider` 字段有先例（`PlaygroundProp.cs:39`，BallPlayground 实跑过），数组形式的抽象类型引用没有先例。
-4. **`Transform.lossyScale`**：Udon 是否暴露未验证；不暴露会在编译期报错，替代是给每件道具再序列化一个 scale。
-5. **`Vector3.Distance`**：本仓只在 motor 的日志里出现过（`KatamariBallMotor.cs:1615`），本脚本用它在第一次附着时检查附着根位置。
-6. **附着根的位置约定**：`BallVisualRollRoot` 的世界位置由场景层级决定（motor 只写 `ballPhysicsRoot.position` 与 `ballVisualRollRoot.rotation`，`:931-940`），所以“根 = 球刚体位姿”依赖场景把滚动根放在球心、且 `AttachmentRoot` 局部为 0。宿主只做一次 5 cm 容差的位置告警，旋转没有检查。
-7. **每帧成本**：一次扫描 = 每件道具一次平方距离（切片约 100 件、灰盒 448 件），每 0.05 s 一次；每次扫描最多再读 4 次队列计数。真实 Udon 开销没有量过。
-8. **两条后备路径都没有被执行过**：环溢出只打日志，隐藏只在数据/接线错误时发生；正常一局只走“附着成功”。
-9. **触发顺序**：宿主与 motor 的 `Update` 顺序没有保证，事件可能晚一帧被消费；附着写的是局部位姿，晚一帧不会造成漂移，但快滚时的视觉差没有观察过。
-10. **ClientSim / Play Mode / Build & Test 全部 NOT_RUN。** 计划 §7 S3 的验收（吃 5 件、5 件仍可见、随球滚动、不随球芯变大、没有隔空粘上）一条都还没有数据。
-
-### 与计划的差异（留给 Lead）
-
-- 计划 §7 S3 写“`absorbed` 与按 definition 的计数 +5”。本实现按 **kind** 计数（`GetAttachedCountForKind`），没有单独的 definition 计数列：`kinds[]` 现在就是定义类别的文本，接第二关时把过滤集合换成 `categories.json` 的 definition 集合即可（计划 §4 尾段同义）。要按 definition 精确计数就得再加一列 `definitionIds[]` 和一个按 definition 的计数——那属于第二关的数据，本次没加。
-- 计划 §3 写“每件道具 state 0/1”，本实现多了 `2 = 隐藏`（附着失败），并把这个数量单独暴露，不混进 `attached`。
-- 计划 §7 S3 的文件清单只有这一个脚本；`Labs/StoryLevel/StoryLevel.unity` 的道具数组接线仍是 Unity 操作者的活（那批道具现在还没有 `PickupFieldHost` 组件）。
-
-### 已处理的既有文件
-
-1. **本文件的 H1 与首行状态**以前只写“S1 的两个运行时脚本”；现在标题与状态表覆盖输入、球视图、骑球、吸附宿主、剧情回合五个模块。
-2. **`Docs/Design/StoryMode/FIRST_PLAYABLE_PLAN.md` §0 第 3 条与 §3「没接」**：吸附宿主源码落地后只剩“场景没接（`AttachmentRoot`、道具行）”成立，计划那两段已按此更新。
-3. **motor 不需要改**：`GetCenterWorld`、`GetVisualRollRotation`、事件环的四个读口、`SubmitCandidate` / `WithdrawCandidate`、两个队列计数口都已存在；附着根也不进 motor（符合 `Docs/Design/BallMotor/README.md:162` 的分工）。没有需要补的 getter。
-
-### 验证命令与本次结果
-
-```bash
-python3 Docs/tools/validate_plan.py
-python3 -m unittest discover -s Docs/tests
-```
-
-2026-11-14 本次：第一条 `PASS: 61 tasks; both release DAGs acyclic; source hashes verified.`；第二条 `Ran 270 tests ... OK`。Unity 侧编译、Play Mode、Build & Test 均 **NOT_RUN**（本 agent 不是 Unity 操作者）。
-
-### 没有改动的东西
-
-S3 只新增 `Runtime/Pickup/PickupFieldHost.cs` 与同名 `.meta`（GUID 新生成，全仓唯一），外加本节（追加在本文件末尾）。没有改 `KatamariBallMotor`、`AttachmentMath`、`PlaygroundProp`、asmdef、场景或任何既有代码文件。
-
 ## 剧情回合（S4）
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-14。本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §4、§7 S4。没有编译、没有 Play Mode、没有 Build & Test。
+> 本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §4、§7 S4。
 
 ### 一个脚本
 
 | 文件 | 职责 | 明确不做 |
 |---|---|---|
-| `Runtime/Story/StoryRoundController.cs` | 一局剧情的状态机与 HUD：`Idle → Running → Presenting → Result`；到点冻结输入/收集/候选，按结算瞬间的碰撞直径或确认件数查星，显示星数与一句评语 | 不交分、不写账本（`bank` / `score_channel` / `ledger_write` 都不碰）、不改球径、不评过程、不重试（S6） |
+| `Runtime/Story/StoryRoundController.cs` | 一局剧情的状态机与 HUD：`Idle → Running → Presenting → Result`；到点冻结输入/收集/候选，按结算瞬间的碰撞直径或确认件数查星，显示星数与一句评语 | 不交分、不写账本（`bank` / `score_channel` / `ledger_write` 都不碰）、不改球径、不评过程、不重试（重试走 `RequestRetry()`，见「再试一次」） |
 
 同一目录的 `StoryRoundMath.cs` 是纯规则（星级查表、倒计时、partial band 判据与 `StoryGoalType`），不读时钟/场景/motor，便于 EditMode 测试。
 
@@ -306,18 +225,9 @@ S3 只新增 `Runtime/Pickup/PickupFieldHost.cs` 与同名 `.meta`（GUID 新生
 3. 四个 uGUI `Text`：目标、当前、剩余、结果；不接的少一行 HUD。
 4. `presentingSeconds` 是“呈给国王”的停留时长，≤0 直接出结果卡。
 
-### 未验证（不要当成已验证）
-
-1. **没有编译。** U# 全量编译、Console 无错都还没发生；`Time.time`、`Text.text`、`Mathf.Floor` 这些调用在这个组合里没有编译记录（`Text` 有 BallPlayground 的 HUD 先例）。
-2. **五句评语是序列化字符串**：默认值是否随场景实例正确序列化、改值后是否只出现在结果卡，未观察。
-3. **冻结顺序的运行时效果**：宿主与控制器 `Update` 顺序没有保证，事件可能晚一帧；到点后“不再吸收”只在代码顺序上成立，没有实测。
-4. 计划 §7 S4 的验收（0/1/2/3 星各触发一次、到点后不再吸收、`GetBankedScoreUnits()==0`）一条都还没有数据。
-
 ## 再试一次（S6 剩余的一半：结果卡重试）
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-14。本节作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test。对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §4「没有重试接缝」与 §7 S6 的后半段；motor 的重置接缝（`TryResetForNewRound`）已在 [BallMotor README](../BallMotor/README.md) 的「重试（reset）」一节，本节只接调用方与道具复位。
-
-S4 表格里「不重试（S6）」一句已被本节取代：控制器现在只在结果卡上接受一次重试。
+> 本节对应[第一个可玩集成计划](<FIRST_PLAYABLE_PLAN.md>) §4「没有重试接缝」与 §7 S6 的后半段；motor 的重置接缝（`TryResetForNewRound`）见 [BallMotor README](<../BallMotor/README.md>) 的「重试（reset）」一节，本节只接调用方与道具复位。
 
 ### 三个文件
 
@@ -337,7 +247,7 @@ S4 表格里「不重试（S6）」一句已被本节取代：控制器现在只
 - `Idle` / `Running` 拒绝：没有结果可重试。
 - 拒绝不改状态、不写 HUD：`state` 保持 `StateResult`，`resultText` 保持原样，所以“按钮没反应”只会出现在控制台日志里，不会出现半张卡。
 
-按钮 GameObject 是否只在结果时显示，是场景自己的选择；本脚本不做显隐，`RequestRetry()` 的状态闸门已经能挡住误按。
+按钮的显隐由控制器按状态写（见「结果卡显隐」），规则本身仍是 `RequestRetry()` 的状态闸门，它挡住误按。
 
 ### 顺序与失败处理
 
@@ -398,37 +308,12 @@ S4 表格里「不重试（S6）」一句已被本节取代：控制器现在只
 1. 结果卡是 rig 根下的世界空间 Canvas（`RideUxAssembler` 建）；`StoryRetryButton` 挂在 `RetryButton` 下，带一个 trigger `BoxCollider`，点它即 `Interact`。uGUI `Button` 的路径保留但不用。
 2. `controller` 拖场景里的 `StoryRoundController`。
 3. uGUI 按上一节的四步接 `SendCustomEvent("OnRetryPressed")`；世界内按钮不用再接线。
-4. 不需要改 `StoryRoundController` 的既有字段：`motor`、`input`、`pickupHost`、四个 Text、关卡数据与评语全部保持原名（本次只加私有字段与方法，没有加序列化字段）。
+4. 不需要改 `StoryRoundController` 的既有字段：`motor`、`input`、`pickupHost`、四个 Text、关卡数据与评语全部保持原名（只有私有字段与方法，没有序列化字段）。
 5. 道具行照旧：`propTransforms` 等并行数组就是复位用的原始来源，宿主自己抓，不需要额外数组。
-
-### 未验证（不要当成已验证）
-
-1. **没有编译**：U# 全量编译、Console 无错都没发生；`Transform.parent`、`Transform.SetParent(null)`、`new Transform[n]` / `new Quaternion[n]` 的运行时分配、`GameObject.activeSelf` 在 Udon 的可用性只是按暴露表推断（`Transform.parent`/`SetParent` 在暴露表内，`SetParent(null)` 与这两种数组的运行时 `new` 没有先例）。
-2. **`SetParent(null)`**：道具如果 authoring 在世界根（`parent == null`），复位会 `SetParent(null)`。Unity 语义是“变成根物体”，但 Udon 的 extern 是否接受 null 没有验证。
-3. **uGUI 接线**：`Button OnClick → UdonBehaviour.SendCustomEvent("OnRetryPressed")` 的依据是官方文档白名单；本仓没有本地副本，也没有实机按过。`SendCustomEvent` 是否出现在 Button 函数下拉里、参数是否必须非空，都要第一次接线时确认。
-4. **Start 顺序与捕获时机**：`GetSemanticDiameterWorldM() > 0` 作为“motor 已 `Start`”的判据来自 BallMotor README 的观察，不是 Unity 的保证；延迟到第一帧捕获的路径没有运行时记录。
-5. **motor 拒绝时的日志**：`reason`/`ledgerFailure` 只在代码里组合，没有实际触发过（正常单机路径 `reason=0`）。
-6. **道具复位后的视觉**：collider 无条件开启、`localScale` 不写、隐藏道具重新激活，这三条都没有 Play Mode 观察；`SetParent` 回原父物体后局部位姿是否精确回到原位也没有数据。
-7. **计数从 0 开始**：`GetAttachedCountForKind` 归零后 HUD 应显示 0；但宿主与控制器 `Update` 顺序、以及重置当帧是否还会消费一条迟到事件，没有实测（按环形契约，旧事件已清成 `""`，应被跳过）。
-8. **多人/同步**：`BehaviourSyncMode.None`，整个切片是单机；重试不广播。
-9. **Build & Test**：计划 §7 S6 的验收（失败→重试→球回 0.30 m、计时归零、道具全回来、计数从 0）一条都还没有数据。
-
-### 验证命令与本次结果
-
-```bash
-python3 Docs/tools/validate_plan.py
-python3 -m unittest discover -s Docs/tests
-```
-
-2026-11-14 本次：第一条 `PASS: 61 tasks; both release DAGs acyclic; source hashes verified.`；第二条 `Ran 270 tests ... OK`。Unity 侧编译、Play Mode、Build & Test 均 **NOT_RUN**（本 agent 不是 Unity 操作者）。
-
-### 没有改动的东西
-
-只改 `Runtime/Pickup/PickupFieldHost.cs`、`Runtime/Story/StoryRoundController.cs`，新增 `Runtime/Story/StoryRetryButton.cs` 与同名 `.meta`（GUID `cbba12c7e27849be891c64aadf04ba3b`，新生成、与仓内既有 307 个 GUID 无冲突）。没有改 motor、账本、`DesktopMoveInput`、Riding、Labs、asmdef、场景、`tasks.json` 或任何其他文件；`PickupFieldHost`/`StoryRoundController` 的既有序列化字段名与公开签名一个没动，只做了追加。
 
 ## 开始流程：Idle → 入座 → Running
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-15。本节对应 ClientSim 实玩暴露的问题：场景一加载就开始计时，世界里没有“开始”，站着的玩家按 WASD 就在驱球。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test。
+> 本节说明回合如何由“坐上球”开始：加载后停在 Idle，世界里的开始动作是左键点球入座，站着的玩家按 WASD 不驱球。
 
 ### 问题与改法
 
@@ -452,7 +337,7 @@ python3 -m unittest discover -s Docs/tests
 
 所以：Idle 里谁都开不动球（回合闸门关，而且站着时骑乘闸门也关）；Running 里站着的人开不动球（只剩骑乘闸门把关）；到点后无论坐着还是站着都不会再吸收。
 
-上表补上了本文前面「输入闸门」小节里 `SetRoundGate` 的“关”只写了 `SettleRound()` 的遗漏：`Start()` 在 `startOnLoad=false` 时也会关它。那个小节的“每个闸门只有一个所有者、默认开、互不覆盖”不受影响。
+`SetRoundGate` 的“关”有两处：`SettleRound()` 与 `startOnLoad=false` 时的 `Start()`；“每个闸门只有一个所有者、默认开、互不覆盖”（见「输入闸门」）不受影响。
 
 ### 已决定的边界
 
@@ -467,20 +352,11 @@ python3 -m unittest discover -s Docs/tests
 1. `BallRideStation.roundController` 指向场景里的 `StoryRoundController`；不接 = 见上一条。
 2. 有 Station 的可玩场景：`StoryRoundController.startOnLoad` 保持默认 `false`。无头实验勾上。
 3. HUD 四行（目标/当前/剩余/结果）之外多一条**提示行** `startPromptText`，只在 Idle 显示（见下节「结果卡显隐」）；`startPrompt` 想换文案就在场景实例上改这个字符串，不用改代码。
-4. 既有序列化字段名与公开签名一个没变（本节只追加 `startOnLoad`、`startPrompt` 与 `NotifyRiderSeated()`，站上只追加 `roundController`；后面「结果卡显隐」一节又追加了 `retryButtonRoot` / `resultCardRoot` / `startPromptText`），旧场景实例里新字段取默认值（`false` / 默认文案 / `null`，`null` 一律跳过）。
-
-### 未验证（不要当成已验证）
-
-1. **没有编译**：U# 全量编译、Console 无错都没发生；跨命名空间类型引用（`Riding` 里的站引用 `Story` 里的控制器）与新增的站序列化字段在 U# 下的编译没有记录。
-2. **ClientSim / Play Mode / Build & Test 全部 NOT_RUN**：本节描述的“加载后停在 Idle、左键上球才开始计时、坐着 WASD 才驱球、到点出结果卡、重试/退出可用”一条都还没有运行时数据。
-3. **`Interact` → `UseStation` → `OnStationEntered` 的同帧顺序**：代码按“先开骑乘闸门再通知”写，但“通知当帧球就能动”没有观察（桌面按住 W 时 VRChat 只在值变化发轴，可能要先松再按）。
-4. **Idle 的提示行实际显示**：五行 Text 的排版、清空剩余行的效果、`startPrompt` 与 `startPromptText` 在场景实例上的序列化与接线，都没有 Play Mode 观察。
-5. **中途离座后的结果卡**：站着到点时结果卡是否仍可读、重试后是否必须先坐回去才动，未实测。
-6. **已经坐在站里进世界**（例如复活回座位）时没有人再按一次左键：站只在 `OnStationEntered` 通知，没有“加载时已在座”的路径，所以会停在 Idle 且骑乘闸门关着，要离座再坐一次才会开始。这是已知缺口，不是已实现的行为。
+4. 相关序列化字段与默认值：`StoryRoundController.startOnLoad`（默认 `false`）、`startPrompt`（默认文案）、`BallRideStation.roundController`，以及「结果卡显隐」一节的 `retryButtonRoot` / `resultCardRoot` / `startPromptText`（默认 `null`，`null` 一律跳过）。
 
 ## 结果卡显隐：按钮只在 Result，卡片从 Presenting 开始
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-15。本节对应实玩暴露的两个问题：场景一加载就看得见“再试一次”（那时还在 Idle，没有回合、没有结果卡），以及 Presenting 那一拍只有一行“呈给国王”、背后没有任何牌面。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test。
+> 本节说明结果卡与按钮的显隐规则：Idle 不显示“再试一次”，Presenting 起显示卡面，Result 起显示按钮。
 
 ### 三个新链接（卡面两个 + 提示行一个）
 
@@ -514,38 +390,14 @@ python3 -m unittest discover -s Docs/tests
 
 1. `retryButtonRoot` 拖 uGUI `Button` 所在的那个 GameObject（`OnClick` 仍按上一节四步接 `UdonBehaviour.SendCustomEvent("OnRetryPressed")`）；世界内按钮则拖挂 `StoryRetryButton` + Collider 的对象。
 2. `resultCardRoot` 拖结果卡底板。它从 Presenting 起就显示，所以“呈给国王”那一拍背后有牌面，Result 沿用同一块底板；控制器在这两个状态里只改 `resultText` 的文字，牌面本身由场景决定。
-3. **结果行 `resultText` 就放在 `resultCardRoot` 的子树里**：它从 Presenting 起才有内容，卡面也正好在这两个状态开着，两者同显同隐最省事。旧版这条写的是“不要放进去”，理由是当时 Idle 会把开始提示（`startPrompt`）写进同一条结果行、而 Idle 时卡面是关的——那个耦合已经拆开：开始提示有自己的一条 Text（`startPromptText`），由控制器在 Idle 打开、其余状态关掉。所以反过来，**`startPromptText` 必须放在卡片外面**：放进 `resultCardRoot` 的提示会在 Idle 跟着卡面一起消失，也就是这次修掉的 bug。
+3. **结果行 `resultText` 就放在 `resultCardRoot` 的子树里**：它从 Presenting 起才有内容，卡面也正好在这两个状态开着，两者同显同隐最省事。开始提示不占结果行：它有自己的一条 Text（`startPromptText`），由控制器在 Idle 打开、其余状态关掉。所以 **`startPromptText` 必须放在卡片外面**：放进 `resultCardRoot` 的提示会在 Idle 跟着卡面一起消失。
 4. **不要把这三个对象拖成本控制器自己的 GameObject**：卡面与按钮在 Idle 会被 `SetActive(false)`，提示行在非 Idle 被关；只要控制器自己的对象被关掉，它随后就不再运行，回合永远停在 Idle。三者都必须是独立对象（通常和卡面一起放在同一个 Canvas 下）；提示行还要是只有这一个 `Text` 的专属对象，别拖一个共用的父物体，否则关它会连带关掉别的 HUD 行。
-5. 既有字段与签名一个没变：`motor` / `input` / `pickupHost` / 五个 Text / 关卡数据 / 五句评语 / `startOnLoad` / `startPrompt` 全部原名；`RequestRetry()` 仍是 `public bool` 且行为不变。本次共追加三个序列化字段（`retryButtonRoot` / `resultCardRoot` / `startPromptText`）、一个私有方法，以及类注释里的一段说明。
+5. `RequestRetry()` 是 `public bool`；上面三个显隐字段默认 null，不接时行为与无显隐逻辑相同。
 6. U# 语言约束照旧：没有属性、重载、泛型、`??`、字符串插值、static 字段；`ApplyStateVisibility()` 是无参私有方法，三个 `SetActive` 里前两个是 `GameObject.SetActive(bool)`，第三个是 `Text.gameObject.SetActive(bool)`（`PickupFieldHost.cs` 有 `prop.gameObject.SetActive(...)` 先例）。
-
-### 与上文的关系（取代一句）
-
-上文「再试一次」一节写过「按钮 GameObject 是否只在结果时显示，是场景自己的选择；本脚本不做显隐」。这句已被本节取代：控制器现在按状态显隐 `retryButtonRoot`。它的后半句仍然成立——真正的规则是 `RequestRetry()` 的状态闸门，显隐只是表现。
-
-### 未验证（不要当成已验证）
-
-1. **没有编译**：U# 全量编译、Console 无错都没发生。`GameObject.SetActive(bool)` 有 `Labs/CpuSkirmish/PlaygroundProp.cs:167`（BallPlayground 实跑过）的先例，序列化 `GameObject` 字段有同文件 `:38` 的 `visualRoot` 先例，但本文件这个组合没有编译记录。
-2. **ClientSim / Play Mode / Build & Test 全部 NOT_RUN**：加载后按钮不可见、Presenting 时底板可见、Result 时底板+按钮都可见、重试后按钮消失，一条都没有运行时观察。
-3. **Idle 提示行的实际显示**：提示行现在是独立对象（`startPromptText`），由控制器在 Idle 打开、其余状态关掉；它在 Canvas 里与 `ResultCard` 的相对位置、以及 Play Mode 下是否真的可见，都没有观察。
-4. **`SetActive(false)` 期间按下按钮**：隐藏的对象上 uGUI 不会再派发 `OnClick`，这是本节依赖的机制，但“Result 之前按不到”没有实机记录。
-
-### 验证命令与本次结果
-
-```bash
-python3 Docs/tools/validate_plan.py
-python3 -m unittest discover -s Docs/tests
-```
-
-2026-11-15 本次：第一条 `PASS: 61 tasks; both release DAGs acyclic; source hashes verified.`；第二条 `Ran 270 tests ... OK`。Unity 侧编译、Play Mode、Build & Test 均 **NOT_RUN**（本 agent 不是 Unity 操作者）。
-
-### 没有改动的东西
-
-只改 `Runtime/Story/StoryRoundController.cs`（追加三个序列化字段、`ApplyStateVisibility()`、五个调用点与类注释一段）与本节（追加在本文件末尾）。没有改 `StoryRetryButton.cs`、`PickupFieldHost.cs`、motor、Riding、Labs、asmdef、场景、`tasks.json` 或任何其他文件。
 
 ## 道具字段的编辑器同步（PickupFieldSync）
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-15。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 Build & Test、没有 `run_tests`。本节只描述源码与约定。
+> 本节描述编辑器同步工具的约定与入口。
 
 ### 为什么从道具本身推导（方案 a）
 
@@ -581,13 +433,9 @@ python3 -m unittest discover -s Docs/tests
 - `Editor/Pickup/` **不在**现有 `VRCKatamari.Editor.asmdef` 的覆盖范围内（该 asmdef 在 `Editor/MapGreybox/`），按任务要求没有新建 asmdef：三个文件编进预定义的 `Assembly-CSharp-Editor`（仅编辑器；U# 的 `UdonSharp.Runtime` 与 `UdonSharp.Editor` 都是 `autoReferenced: true`，所以能直接用 `UdonSharpEditorUtility`）。若 Lead 要归入 `VRCKatamari.Editor`：把 asmdef 上移到 `Editor/`，references 加 `UdonSharp.Runtime`、`UdonSharp.Editor`；代码不用改。
 - 纯规则在 `Editor/Pickup/PickupFieldAuthoringRules.cs`（尺寸档、价值表、重复 id、ordinal 排序），测试 `Tests/EditMode/Pickup/PickupFieldAuthoringRulesTests.cs` 用反射调用，因为 `VRCKatamari.Tests.EditMode` 只引用 `VRCKatamari.Runtime`（与 `BankReasonTests` 的既有做法同因）；给测试 asmdef 加一行引用即可改成直接调用。
 
-### 未验证（不要当成已验证）
-
-没有 Unity 编译、没有 Play Mode、没有 Build & Test、没有 `run_tests`。`CompileAllCsPrograms` 与 `CopyProxyToUdon` 的时序只是按 `VRC_Katamari/Labs/README.md` 的“先编译再拷贝”排列：若拷贝仍报 `outdated behaviour version`，说明 U# 编译还没跑完，等它结束再运行一次同步（报告里就是这么写的）。`propBounds` 取 Renderer AABB、`propColliders` 只接一个，这两条都还没有运行时观察。
-
 ## 显式拾取尺寸：名字后缀 `@size=`（补 G13）
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`，2026-11-15。作者不是 Unity 操作者：没有编译、没有 Play Mode、没有 `run_tests`，也没有改任何场景。本节是 `@size=` 的唯一最新口径；上面的「作者要遵守的约定」表里 **itemId / propBounds 两行按本节扩展**（其余行不变）。
+> 本节是 `@size=` 的唯一最新口径；上面的「作者要遵守的约定」表里 **itemId / propBounds 两行按本节扩展**（其余行不变）。
 
 ### 为什么需要它
 
@@ -613,7 +461,7 @@ prop_bench_01@size=1.25
 - 声明尺寸按**立方体**写进 `propBounds`（`1.25` → `(1.25, 1.25, 1.25)`），尺寸档也按这个边长判；`valueUnits` 仍走 (kind, tier) 表。所以门件的 kind 必须有对应档位的行：长凳在 `furniture` 下、l 档 = 16（`Editor/Pickup/PickupFieldAuthoringRules.cs` 的价值表）。
 - **AABB 仍然必须先存在且可用**：没有 Renderer、AABB 的**最长边** < 0.0001 m、或任一边为负/非有限的道具，即便写了 `@size=` 也照拒。某一边正好是 0 **不算**退化（纸片、叶子、Unity 的 Plane 本来就是扁的），档位只按最长边判。声明的是拾取尺寸，不是「这个物体不用渲染」。
 - 报告：每个采用声明尺寸的行加一条 `note`（路径、原名、声明边长、原 AABB、档位变化，例如 `s -> l`）。被拒行照旧进 `rejected` 列表。
-- 纯函数在 `Editor/Pickup/PickupFieldAuthoringRules.cs`：`DeclaredSizeMarker`（`"@size="`）、`TryParseDeclaredSize(name, out itemId, out declaredEdgeM, out error)`、`IsUsableDeclaredSize(edgeM)`。同步侧只在 `Editor/Pickup/PickupFieldSync.cs` 里调用它们，没有第二套解析。既有公开名字一个没改。
+- 纯函数在 `Editor/Pickup/PickupFieldAuthoringRules.cs`：`DeclaredSizeMarker`（`"@size="`）、`TryParseDeclaredSize(name, out itemId, out declaredEdgeM, out error)`、`IsUsableDeclaredSize(edgeM)`。同步侧只在 `Editor/Pickup/PickupFieldSync.cs` 里调用它们，没有第二套解析。
 
 ### 为什么用名字后缀，而不是子物体或组件
 
@@ -621,20 +469,17 @@ prop_bench_01@size=1.25
 
 ### 关卡 2 的 `fruit` 价值行
 
-价值表新增两行：`fruit s = 1`、`fruit m = 4`（`Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md` §3.1 的水果表：草莓/葡萄 s、苹果/梨/橙/香蕉/西瓜 m）。不加这两行，所有水果都以「未声明的 (kind, tier)」被拒，关卡 2 的水果数就是 0。**故意不加 `fruit l`**：计划里最大的水果是 0.72 m 西瓜（m 档），>0.76 m 的水果必须自己加一行，而不是拿默认值。这些数字与表内其余行一样是 PROVISIONAL。
+价值表含两行：`fruit s = 1`、`fruit m = 4`（`Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md` §3.1 的水果表：草莓/葡萄 s、苹果/梨/橙/香蕉/西瓜 m）。不加这两行，所有水果都以「未声明的 (kind, tier)」被拒，关卡 2 的水果数就是 0。**故意不加 `fruit l`**：计划里最大的水果是 0.72 m 西瓜（m 档），>0.76 m 的水果必须自己加一行，而不是拿默认值。这些数字与表内其余行一样是 PROVISIONAL。
 
-### 测试与未验证
+### 测试
 
-- 测试新增在 `Tests/EditMode/Pickup/PickupFieldAuthoringRulesTests.cs`：解析并剥名、非法数字、多个标记、非正/过小、非有限与指数、locale 独立（在 `de-DE` 下 `1.25` 通过、`1,25` 被拒）、档位与值表联动（`1.25` 立方 → l，`furniture l = 16`；`0.72` → m，`fruit m = 4`），并把 `fruit s/m` 与 `fruit l` 缺失补进原有表测试。`DegenerateBoundsHaveNoTier` 原先断言「一边为 0、另两边 0.1」没有档位，那与「只按最长边分档」矛盾（Unity 全量跑出的唯一失败）：现在它只覆盖三边都不可用的 AABB（全 0、三边 0.00005、负数、NaN、±Infinity），另加 `FlatPropsKeepTheirLongestSideTier` 钉住「一边为 0、其余边正常 → 仍按最长边分档」。
-- **没有跑 Unity 编译、没有 `run_tests`**：`PickupFieldAuthoringRulesTests` 的结果是 NOT_RUN，不是 PASS。
-- 没有改场景：没有任何道具被改名，`PickupFieldHost` 的六个数组没有被写过一次，`propBounds` 的真实取值还没有运行时观察。
-- 文档侧的旧口径仍在（不在本 agent 写范围）：`Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md:174` 仍写「工具把 GameObject 名直接当 itemId」，`Docs/Design/Maps/REGION_MAP_PLAN.md:123` 仍把 G13 标成「挡」。整合时由 Lead 决定是改这两处，还是在它们上面加一句「见本节」。
+- 测试在 `Tests/EditMode/Pickup/PickupFieldAuthoringRulesTests.cs`：解析并剥名、非法数字、多个标记、非正/过小、非有限与指数、locale 独立（在 `de-DE` 下 `1.25` 通过、`1,25` 被拒）、档位与值表联动（`1.25` 立方 → l，`furniture l = 16`；`0.72` → m，`fruit m = 4`），并覆盖 `fruit s/m` 有行、`fruit l` 缺失的价值表。`DegenerateBoundsHaveNoTier` 只覆盖三边都不可用的 AABB（全 0、三边 0.00005、负数、NaN、±Infinity）；`FlatPropsKeepTheirLongestSideTier` 钉住「一边为 0、其余边正常 → 仍按最长边分档」。
 
 ## 关卡球径上限与第一关星级带（2026-11-15 追加）
 
 > **2026-11-15 用户决定：现阶段不调数值**（“现在数值上的问题倒不是主要矛盾点”）。本节的 1.25 / 1.40 / 1.42 只是**评分模块将来的参考输入**，不是待办；星级与评语本身属于可拆卸的结果卡模块，与回合核心解耦（见 `Docs/OPEN_DECISIONS.md` 的 (m)(p)）。数字与算式保持原样，等评分模块接线时再取用。
 
-> 状态：`PROVISIONAL_NOT_TESTED`。本节是静态数值设计；**没有 Unity 编译、没有 Play Mode、没有改场景/`.cs`/`.asset`/`tasks.json`**。唯一的"实测"是 `LEVEL_CONTENT_PLAN.md` §7.4 记录的 1 次 120 s Play Mode（370 u / 1.43 m），本节没有新跑。所有"场景值"来自 `StoryLevel.unity` 与 `KatamariBallMotor.cs` 的直接读取。
+> 状态：`PROVISIONAL_NOT_TESTED`。本节是静态数值设计；唯一的“实测”是 `LEVEL_CONTENT_PLAN.md` §7.4 记录的 1 次 120 s Play Mode（370 u / 1.43 m）。“场景值”来自 `KatamariBallMotor.cs` 的直接读取。
 
 ### 1. 球的最大直径是关卡属性，不是全局常量
 
@@ -703,9 +548,24 @@ AABB 取 **3.6 × 0.55 × 0.80 = 1.584 m³**（`Docs/Design/Maps/PicnicLawn/prop
 - **第二大风险：`@size=` 是按立方体写 `propBounds` 的**（本文件「显式拾取尺寸」节）。在体积门下，`@size=1.25` 的体积是 1.953 m³，比 3.6×0.55×0.80 的 1.584 m³ **更大**——它不能把长凳变"小"，反而更贵；`@size=1.25` 需要 `D=3.341`、`U=4,760`，比真实 AABB 的 `D=3.116`、`U=3,860` 还多，连 3.20 的上限都不够。长度门时代的 `@size` 口径必须按体积重设计，不能直接沿用。
 - **第三大风险：PicnicLawn 的 3.6 m 长凳在 1,284 u 下不可吸**；3.20 的上限只解决"直径够不够"，不解决"单位够不够"。要么把 PicnicLawn 的内容/价值提到 ~4,181 u，要么把长凳的拾取 AABB 压到 ≤0.526 m³（横截面 ~0.38×0.38），要么把它改成可绕过的装饰而不是门。
 
+## 已知限制
+
+以下行为没有 Play Mode / 真机记录（Hub 闭环自己的限制见 [HUB_ROOM](<HUB_ROOM.md>) §11）：
+
+1. **坐姿下桌面轴是否仍送达 Udon**：由「5 分钟 Build & Test 探针」回答；Player Mobility = Immobilize 下 `InputJump` 是否送达同样没有实测。桌面 WASD 的符号（A 是 −1 还是 +1）官方文档没写，代码按“A 负、D 正”映射。
+2. **Station 回调必须与 VRCStation 同物体**：依据是实验场景布局与 StationPlatform 的 PC 实测，不是 VRChat 文档原文。
+3. **点击距离**：座位在 rig 根上，准星到球的 Collider 至少是 `back`（0.5 m 球 1.85 m 起、1.43 m 球 2.32 m）；超出桌面交互距离就点不到，处理是减小 `eyeBaseBackMeters`/`eyeBackPerRadius` 或加大 Collider。
+4. **菜单与按住输入**：官方只写打开菜单会释放按住的按钮输入，轴是否补发 0 未说明；motor 有 `SetMenuOpen` 接缝，输入适配器没有用它。
+5. **已经坐在站里进世界**（例如复活回座位）时没有“加载时已在座”的路径：站只在 `OnStationEntered` 通知，会停在 Idle 且骑乘闸门关着，要离座再坐一次。
+6. **`Update` 顺序**：宿主与 motor、控制器之间没有顺序保证，事件可能晚一帧被消费；附着写的是局部位姿，晚一帧不会漂移，快滚时的视觉差没有观察。
+7. **后备路径**：事件环溢出只打日志，附着失败只隐藏；正常一局只走“附着成功”，这两条没有被执行过。
+8. **uGUI `Button` → `SendCustomEvent` 接线**：依据官方白名单，本仓没有实机按过；结果卡现用的是世界内 `Interact` 路径。
+9. **单人**：全部行为 `BehaviourSyncMode.None`，`DisableInteractive` 是本地状态；多人不在范围内。
+10. **每帧成本**：宿主每 0.05 s 一次全道具平方距离扫描（切片约 100 件、灰盒 448 件），真实 Udon 开销没有量过。
+
 ## 主房间闭环（HUB_ROOM）
 
-> 状态：`SOURCE_WRITTEN_NOT_COMPILED`（装配器与选关数据 2026-11-17）；StoryMode 场景里的第一版大厅 2026-11-16 在 ClientSim 走通“走圈 → 传送 → 开局 → 自动入座”，回房/结果卡/重试尚无证据。设计、装配步骤、验收清单见 [HUB_ROOM](<HUB_ROOM.md>)。
+> 状态：StoryMode 场景里的第一版大厅 2026-11-16 在 ClientSim 走通“走圈 → 传送 → 开局 → 自动入座”（证据 [hub_wiring](<../../Evidence/StoryMode/2026-11-16_hub_wiring/README.md>)）；回房/结果卡/重试尚无证据；装配器与选关数据（2026-11-17）未在 Unity 里跑过。设计、装配步骤、验收清单见 [HUB_ROOM](<HUB_ROOM.md>)。
 
 - **选关数据驱动**：[`hub_levels.json`](<hub_levels.json>) 列出大厅能提供的关卡（id、名称、所在场景、关卡内容与玩家出生点的层级路径）；菜单 `VRC Katamari/Hub/Assemble Hub`（`Editor/Hub/HubAssembler.cs`，可重复执行）把当前场景放得下的关卡变成选关垫、启动器入口与名字。加关卡 = 加一条数据 + 把关卡导入该场景。
 - **开始**：走进一块选关垫 0.35 s 自动开始（不选“按 E”：`InputUse` 是全局事件）。**进关落点 = 关卡自己的玩家出生点**（导入器的 `Markers/PlayerSpawn`，球后 2.5 m、贴地、面向球），离球太远（>12 m）才退回座位；传送后 `HubLevelLauncher` 直接 `UseStation` 自动入座。

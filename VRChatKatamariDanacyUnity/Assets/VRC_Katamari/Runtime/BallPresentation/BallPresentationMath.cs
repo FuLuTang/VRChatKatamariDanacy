@@ -7,13 +7,9 @@ namespace VRCKatamari.BallPresentation
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A pure function so the EditMode tests can pin it without a scene. What the core mesh
-    /// is drawn at is not computed here: it is the level's fixed start diameter, which the
-    /// motor reports (<c>GetStartDiameterWorldM()</c>) and <c>BallView</c> writes once. There
-    /// is no growth to smooth and no per-frame diameter to derive (the core never grows;
-    /// Docs/Design/BallLayers/Attachment/ATTACH_PLACEMENT.md 3.2). Nothing here feeds a size
-    /// back, so the absorb gate, the growth ledger, the follow-rig camera and every physics
-    /// query keep reading the motor's own numbers.
+    /// A pure function so EditMode tests can pin it without a scene. BallView draws the core
+    /// at twice the motor's current collision radius, with no smoothing. Nothing here feeds
+    /// a size back into the motor, the absorb gate, the ledger or the follow-rig camera.
     /// </para>
     /// </remarks>
     public static class BallPresentationMath

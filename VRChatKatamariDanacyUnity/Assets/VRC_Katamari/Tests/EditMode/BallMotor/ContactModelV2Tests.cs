@@ -194,6 +194,36 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void ARejectedPropGapStepClearsTheMotorsStoredVelocity()
+        {
+            EnableV2();
+            float radius = Radius();
+            float face = radius - 0.035f;
+            Assert.IsTrue(AddObb(new Vector3(0f, 1f, -face - 0.04f),
+                new Vector3(10f, 1f, 0.04f), 110));
+            Assert.IsTrue(AddObb(new Vector3(0f, 1f, face + 0.04f),
+                new Vector3(10f, 1f, 0.04f), 111));
+            Invoke("TeleportTo", new Vector3(0f, radius, 0f));
+            SetField("headingDegrees", 90f);
+            Invoke("SetMoveAxes", 1f, 0f, 0f);
+            Vector3 start = GetCenter();
+            for (int i = 0; i < 50; i++)
+            {
+                Step(1);
+                Assert.Greater((float)Invoke("GetSolverResidualMax"), 0.02f);
+                Assert.AreEqual(start, GetCenter());
+                Assert.LessOrEqual(((Vector3)Invoke("GetPlanarVelocity")).magnitude, 1e-6f);
+                Assert.AreEqual(0f, GetFloat("contactVerticalVelocity"));
+            }
+            Assert.Greater((int)Invoke("GetContactRejectedStepCount"), 0);
+            Invoke("ClearObbs");
+            Invoke("SetMoveAxes", 0f, 0f, 0f);
+            Step(1);
+            Assert.AreEqual(start.x, GetCenter().x, 1e-6f);
+            Assert.AreEqual(0f, ((Vector3)Invoke("GetPlanarVelocity")).magnitude, 1e-6f);
+        }
+
+        [Test]
         public void TheStaticObbTableTakesFarMoreThanTheV1BoxCapacity()
         {
             for (int i = 0; i < 40; i++)
@@ -615,11 +645,8 @@ namespace VRCKatamari.Tests
             float rolling = (float)Invoke("GetRollReachWorldM");
             float pickup = (float)Invoke("GetPickupReachWorldM");
             Assert.AreEqual(physical, Radius(), 1e-6f, "r_phys is the v1 collision radius");
-            // The visual core is the level's start radius, fixed; at the start the physical
-            // sphere IS the start ball, so the two are equal here and only here.
-            Assert.AreEqual(0.5f * (float)Invoke("GetStartDiameterWorldM"), visual, 1e-6f,
-                "r_visual = half the start diameter");
-            Assert.AreEqual(physical, visual, 1e-4f, "at the start the core fills the sphere");
+            Assert.AreEqual(physical, visual, 1e-6f,
+                "the visual core fills the current collision sphere");
             Assert.GreaterOrEqual(rolling, physical - 1e-4f);
             Assert.AreEqual(physical, pickup, 1e-6f,
                 "pickup uses the collision sphere, never a cube support radius or pins");
@@ -668,29 +695,30 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(0, (int)Invoke("GetProxyProtrudingPinCount"));
         }
 
-        [Test]
-        public void TheVisualCoreIsTheLevelStartDiameterAndNeverGrows()
+        [TestCase(0.222f)]
+        [TestCase(0.3f)]
+        public void TheVisualCoreFollowsCollisionWhileTheStartDiameterStaysFixed(float startDiameterM)
         {
             // A level that sets its start diameter (Cancer: 0.222 m).
             if (host != null) UnityEngine.Object.DestroyImmediate(host);
             host = new GameObject("ContactModelV2Tests");
             motor = host.AddComponent(motorType);
-            SetField("startDiameterWorldM", 0.222f);
+            SetField("startDiameterWorldM", startDiameterM);
             Invoke("Start");
 
             float start = (float)Invoke("GetStartDiameterWorldM");
             Assert.AreEqual((float)Invoke("GetSemanticDiameterWorldM"), start, 1e-6f,
                 "the start diameter is the size model's diameter at zero confirmed volume");
-            Assert.AreEqual(0.222f, start, 0.002f, "the level's start diameter, to its rounding");
-            Assert.AreEqual(0.5f * start, (float)Invoke("GetVisualCoreRadiusWorldM"), 1e-6f);
+            Assert.AreEqual(startDiameterM, start, 1e-6f);
+            Assert.AreEqual(Radius(), (float)Invoke("GetVisualCoreRadiusWorldM"), 1e-6f);
 
-            // The ball grows (a committed absorb re-derives these two); the drawn core does not.
-            SetField("collisionRadiusWorldM", 0.5f);
-            SetField("semanticDiameterWorldM", 1.0f);
+            // Successful absorption publishes confirmed volume, then re-derives size.
+            SetField("confirmedVolumeMm3", 1000000L);
+            Invoke("DeriveSize");
             Assert.AreEqual(start, (float)Invoke("GetStartDiameterWorldM"), 0f);
-            Assert.AreEqual(0.5f * start, (float)Invoke("GetVisualCoreRadiusWorldM"), 0f);
-            Assert.AreEqual(0.5f, (float)Invoke("GetPhysicalRadiusWorldM"), 0f,
-                "the physical sphere is the part that grows");
+            Assert.Greater(Radius(), 0.5f * start);
+            Assert.AreEqual(Radius(), (float)Invoke("GetVisualCoreRadiusWorldM"), 0f);
+            Assert.AreEqual(Radius(), (float)Invoke("GetPhysicalRadiusWorldM"), 0f);
         }
 
         [Test]

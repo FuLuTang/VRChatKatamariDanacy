@@ -1,7 +1,7 @@
 """``aabb`` is the un-rotated model size; ``rotationQuat`` turns it exactly once.
 
-This pins the data end of the K7 chain (``PICNIC_CORNER_LEVEL_ONE.md`` section 5.8,
-``PICNIC_CORNER_LAYOUT.md`` section 7):
+This pins the data end of the layout-to-collider chain (``PICNIC_CORNER_LAYOUT.md``
+section 7):
 
   ``picnic_corner_layout.json`` (world footprint + ``yaw``)
     -> ``placement.json`` ``props[].aabb`` from the model manifest (un-rotated,
@@ -14,10 +14,8 @@ The first level has one turned prop whose footprint moves, ``struct_lounge_chair
 (yaw 90); ``serving_tray_01`` is also turned, but only by a 180 deg flip that leaves
 its box unchanged.  The chair's stored ``aabb`` is 1.60 x 0.35 x 0.60 (the model's own
 axes) and its world footprint is 0.60 x 0.35 x 1.60.  Feeding the already-turned size
-back through the same quat - the double rotation the old section 7 note invited -
-would give 0.80 x 0.35 x 0.30, so each test below states one half of the rule
+back through the same quat (a double rotation) would give 0.80 x 0.35 x 0.30, so each test below states one half of the rule
 numerically.
-E7 in ``PICNIC_CORNER_LEVEL_ONE.md`` quotes the same footprint.
 """
 
 import json

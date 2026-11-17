@@ -1,8 +1,7 @@
 # 球体物理测试场 · 关卡数据（physics test field）
 
-> 状态：`PROVISIONAL_NOT_TESTED`。已入库的格见下面的布局；
-> 排在 **27 m × 30.5 m** 的网格（4 列 × 3 行，1–1.5 m 走道）；每格自带一块 6×9 或 6×10 的小地面 + 4 面 **0.4 m 矮边界**。
-> 尚无几何的格在 `Docs/Design/BallMotor/physics_test_field.json` 的 `planned_cells[]` 里只有名字。
+> 状态：`PROVISIONAL_NOT_TESTED`。九个已接线的格见下面的布局，排在 **27 m × 30.5 m** 的网格（4 列 × 3 行，1–1.5 m 走道）；每格自带一块 6×9 或 6×10 的小地面 + 4 面 **0.4 m 矮边界**。
+> 尚未接线的格（含 C21–C24 地形格）在 `Docs/Design/BallMotor/physics_test_field.json` 的 `planned_cells[]` 里。
 > 设计文档：[../../BallMotor/PHYSICS_TEST_FIELD.md](../../BallMotor/PHYSICS_TEST_FIELD.md)（§9 是本目录的规矩）。
 
 ## 这个目录是什么
@@ -34,6 +33,10 @@ Docs/Design/Levels/physics_test_field/
 ├── C05/placement.json       45° 斜板（等号边界，必须被接受）
 ├── C06/placement.json       50° 斜板（必须被拒绝；板以 box 落库，AABB 当兜底墙）
 └── C13/placement.json       0.6 m 台面（5×4）+ 南侧 11.31° 坡（接缝与直角边掉落同格）
+
+C21/ C22/ C23/ C24/            地形格（台阶 / 沟 / 隧道 / 路缘）：placement 里的地形几何由
+                               `Tools/levelbuild/physics_test_terrain.py` 生成；在判据文件里是
+                               `planned_cells[]`（`wired: false`），不在上面九格的 59 条判据之内
 ```
 
 一份文件的骨架（节选，完整见 `C09/placement.json`）：
@@ -60,7 +63,7 @@ Docs/Design/Levels/physics_test_field/
   要求它的 `id` 等于**所在目录名**（复制一份文件却忘了改 id 会红）。
 - **`level.bounds`** 现在是整场紧凑范围 `[[-14,-15],[14,16.5]]`，不是 88 m 场；跑道/激活矩形在判据文件里
   （`cells[].footprint`），因为它只属于运行器。盒子跑出 `bounds` 会被 `check` 拒（粗错拦截）。
-- **`level.expected`** 是 0 件道具：这批九格只测几何，道具在 C18/C19。
+- **`level.expected`** 是 0 件道具：这九格只测几何，道具在 C18/C19。
 
 ## 斜面的作者约定（P3）
 
@@ -92,7 +95,7 @@ source ~/tools/blender-env.sh
     --placement /tmp/ptf/preview/placement.json --preset plan --out-dir /tmp/ptf/shots
 ```
 
-## 加一格（下一批照这个做）
+## 加一格
 
 1. 复制最近的一格作模板，改三样：目录名、`level.id`、`level.arena.id`（三处必须一致）+ 本格的盒/坡；
 2. `python3 Tools/levelbuild/levelbuild.py check <新文件>`；红了就改数据，不要改预算；

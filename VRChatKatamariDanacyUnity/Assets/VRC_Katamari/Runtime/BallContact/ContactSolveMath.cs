@@ -52,6 +52,22 @@ namespace VRCKatamari.BallContact
         // The design's capacity is ContactTuning.ContactCapacity.
 
         /// <summary>
+        /// Reject an unresolved candidate as one motion transaction: keep the previous
+        /// centre and discard both velocities, never bank speed for a move not taken.
+        /// The caller supplies its residual acceptance limit (metres).
+        /// </summary>
+        public static bool RejectUnresolvedMotion(Vector3 previousCenter, float residual,
+            float rejectAboveM, ref Vector3 center, ref Vector3 planarVelocity,
+            ref float verticalVelocity)
+        {
+            if (KatamariMath.IsFiniteFloat(residual) && residual <= rejectAboveM) return false;
+            center = previousCenter;
+            planarVelocity = Vector3.zero;
+            verticalVelocity = 0f;
+            return true;
+        }
+
+        /// <summary>
         /// N = clamp(ceil(|d| / (kappa * r)), 1, cap): the substep count that cannot tunnel
         /// through a convex solid.
         /// </summary>

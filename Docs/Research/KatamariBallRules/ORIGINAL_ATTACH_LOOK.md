@@ -48,7 +48,7 @@
 | S2 | 《块魂》2004 英文说明书 “Viewing the screen”（OCR 本机 `/tmp/orig_physics/kd_manual.txt`） | `[官方]` | HUD 是直径；直径到档位画面变；太大物件被撞会抖 |
 | S3 | [Game Developer：Postmortem: The Singular Design of Namco's Katamari Damacy](https://www.gamedeveloper.com/design/postmortem-the-singular-design-of-namco-s-katamari-damacy-2004-) | `[开发者]` | d4 |
 | S4 | [KatamariMods `FramerateUncap/Plugin.cs`](https://github.com/The0x539/KatamariMods/blob/trunk/FramerateUncap/Plugin.cs)、[RerollPatcher `PropInterpolationPatch.cs`](https://github.com/squiddingme/RerollPatcher/blob/master/Patches/PropInterpolationPatch.cs) | `[解包/源码]` | `f32Scale`、`AttachableProp`（REROLL 的字段名；不解释球芯是否缩放） |
-| S5 | [The Models Resource：Katamari Damacy REROLL 资产清单](https://models.spriters-resource.com/pc_computer/katamaridamacyreroll/asset/317992/)（正文 403，靠搜索索引） | `[解包/源码]` | `core_01…core_21`：核心按尺寸分档换模型（与 b1 的“同一档内不长大”不矛盾；档位跃迁时核心换模型是否可见，录像未覆盖） |
+| S5 | [本机核心研究 E2/E3/E5](</tmp/core_radius_findings.md#L59-L62>)：`~/KatamariRef/models/KatamariCore/original/core_*.obj`、`~/KatamariRef/meta/pages/github_il_practice_mod_README.md` 第 87–89 行；[专利 US7402104B2](https://patents.google.com/patent/US7402104B2/en) | `[本机网格实测]` + `[文献]` | **core_XX 是按关卡命名的皮肤；核大小不变**。27 个 OBJ（01–29，无 26/27）包围盒约 4.8×4.9×5.4 cm、等体积径约 4.65 cm，几何相同或微变，非尺寸档；专利 Mp 是初始显示模型，S50–S58 无放大 Mp，仅放大 Mh、变形 Mr。原作关卡与核的对应关系未知；零售版全程固定仍受 b1 录像覆盖限制 |
 | S6 | [日文 wiki 物件页](https://wikiwiki.jp/yawaka802/%E3%83%A2%E3%83%8E/%E3%83%97%E3%83%A9%E3%82%B9%E3%83%89%E3%83%A9%E3%82%A4%E3%83%90%E3%83%BC)、[5ch 帖](https://itest.5ch.io/krsw/test/read.cgi/ghard/1575809255)、[Vita 攻略](https://w.atwiki.jp/touchmykatamari/pages/24.html) | `[社区]` | d5 |
 | S7 | [B 站 BV14A411K7os「块魂/Katamari Damacy p01 第1~11关」](https://www.bilibili.com/video/BV14A411K7os/)（UP 主 Barry・吴；初代 PS2 美版，PCSX2，480p） | `[录像实测]` | a1、a3–a5、b1–b2、b4、c1、d3、e1；A 段 4:12–6:02（5.0→10.2 cm）、B 段约 13:15–14:50（5.1→约 10 cm）、C 段约 14:54–19:30（11.0→33.8 cm，HUD 连续） |
 | S8 | 本项目归档的两帧原作截图（[证据目录](../../Evidence/BallPresentation/2026-11-15_attached_props_vs_original/README.md)；第三方录像截图，内部证据，不入公开发布物） | `[实测画面]` | 叠压、凸出、轮廓；14.0 / 14.9 cm；画面里的物件名标签与 HUD 样式像 REROLL，来源未核实 |
@@ -66,4 +66,4 @@
 2. 吸附瞬间接触帧被王子遮挡；同一件物件吸附前后朝向没有对比；嵌入深度只有弱证据。
 3. 小件消失的实际时点与阈值：需要镜头静止、同一件小物件随 HUD 数字变化而消失的录像（建议 REROLL 1080p）。
 4. 已吸附物件的显示层级是否与场内物件共用同一张表（专利文本不分）。
-5. 档位跃迁（`core_01…21` 换模型）时核心换模型是否可见、核心尺寸是否按档变化：b1 只量了 5.0→6.9 cm 一小段（之后核心被盖住，无法再量）；C 段 11.0→33.8 cm HUD 连续、未见换球，但核心不可见，所以核心在更大尺寸下是否仍不长大、是否换档，录像回答不了。
+5. 原作关卡与 `core_XX` 皮肤的逐关对应关系未知；固定核的录像量测只覆盖 5.0→6.9 cm，之后核心被盖住，全程固定是结合 S5 网格与专利的读法，不是全程实测。

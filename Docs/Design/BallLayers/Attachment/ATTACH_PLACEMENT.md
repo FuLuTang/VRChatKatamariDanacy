@@ -35,6 +35,10 @@
 
 ## 3. 现行设计
 
+### 3.0 可吸收性与挡路
+
+**owner 2026-11-17：还不能吸的道具挡住球。** 接触碰撞与吸收体积门分开：门尚未放行的实体仍是障碍，不能因它是道具就允许球穿过；碰撞代理按道具形状，视觉球芯不参与判定。本条记录现行决定，不声称新的运行时验收。
+
 ### 3.1 吸附位置：触发即接触，原地冻结
 
 - **触发 = 道具自身有向盒到球心的最短距离 ≤ 碰撞半径 + contactRadius（默认 0）**，v1/v2 完全同一口径；不读视觉核心，不把立方体方向支撑半径或滚动针壳传入吸收门。采用等效球而非推断的原作 `Mh` 盒，是明确的工程取舍（原作盒形状/朝向未知，见 [`PARITY_AUDIT.md`](../../Parity/PARITY_AUDIT.md) 的“吸收触发的几何”行）。
@@ -45,21 +49,13 @@
 
 ### 3.2 球芯显示尺寸：固定为起始球径
 
-- **视觉核心直径 = 本关起始球径，整局不变，不随吸收长大**（原作录像 b1；替代之前 `0.95·r_phys` 随体积长大的口径）。起始球径来自关卡（蟹座 0.222 m；`startDiameterWorldM`，未设时由 `startVolumeMm3` 推出），与 HUD 在回合开始时显示的数相同。
+- **视觉核心等体积直径 = 本关起始球径，整局不变，不随吸收长大**（原作录像 b1 与本机网格/专利，见 [CORE_SKIN](../../BallPresentation/CORE_SKIN.md)）。起始球径来自关卡（蟹座 0.222 m；`startDiameterWorldM`，未设时由 `startVolumeMm3` 推出），是未加 HUD 显示偏置的起始语义直径。
 - **碰撞、接地、吸收门所用的等效体积球照旧随体积长大**（`r_phys = cbrt(3V/4π)`）；吸附发生在这个球的接触面上，所以大球时物件在固定核心**之外**成一层外壳，中间留空洞（原作 30 cm 时同样如此）。
 - 这就是原作的观感机制：核心被盖住不是因为核心大，而是因为后吸的件一层层压在外面。
-- **核心外观**：原作核心是按尺寸分档换的低模“杂物团”（`core_01…21`），不是光滑红球；起始期（核心大面积可见）读成“一颗红球粘了几件东西”正是这个原因。核心材质/网格是美术项（`PARITY_AUDIT` 视觉核心行，undecided），与本规则无关；本规则只定它的**尺寸**。
+- **核心外观（owner 2026-11-17）**：用原作凹凸花纹球芯，当前 `core_01`；`core_XX` 是按关卡命名的皮肤，不是尺寸档，核大小不变。参考素材存在时由 [核皮肤装配器](../../BallPresentation/CORE_SKIN.md) 在 `CoreMesh` 下挂等体积径归一化子节点，`BallView` 仍只写一次起始球径；缺素材时保留纯色球。参考素材与装配后的场景不得进入 git 或上传。
+- **不做粘附嵌入（owner 2026-11-17）**：粘附件保持接触处、贴碰撞球面，不向里压；“浮”的观感主要靠件小量多和填满空腔解决。原作也存在固定小核与成长碰撞球之间的空腔；证据与限定见 [核与密度研究](../../BallPresentation/CORE_SKIN.md#研究依据与边界)。
 
-**BallView 改动点（给实现者）**
-
-| 位置 | 现状 | 改成 |
-|---|---|---|
-| `BallView.Update`（`BallView.cs:93-130`） | 每帧读 `GetSemanticDiameterWorldM` 与 `GetVisualCoreRadiusWorldM`，写 `coreMesh.localScale` | 核心直径是常量：在马达 `Start`/关卡起始球径确定之后写**一次**（`motor` 未就绪时 `GetSemanticDiameterWorldM()` 为 0，沿用现有“0 不写”的守卫）；之后不再逐帧写。需要马达暴露“起始球径”只读 getter（不是新计算：就是 `TryDerive(startVolumeMm3, 0)` 的语义直径） |
-| `useVisualCoreRadius`、`smoothCoreGrowth`、`smoothTimeSeconds`、弹簧状态（`BallView.cs:74-91`） | 0.95 开关与生长弹簧（owner 2026-11-16 已默认关） | 删除：核心不长，弹簧没有输入；保留一份实现 |
-| `BallPresentationMath.TryCoreTargetDiameter` / `TryStepCoreDiameter` 与其测试（`BallPresentationTests.cs`） | 供 BallView 的 0.95 与弹簧 | 随之删除或改成常量直径的断言 |
-| `KatamariBallMotor.GetVisualCoreRadiusWorldM`（`:6456`）、`BallShapeMath.TryVisualCoreRadius`、`ContactTuning.VisualCoreToPhysical = 0.95f`、Python `Docs/Design/BallMotor/contact_v2/shapes.py` 的 `VISUAL_CORE_TO_PHYSICAL` 与 `test_shapes.py` | `0.95 × r_phys` | `GetVisualCoreRadiusWorldM` 返回起始球径的一半（常量）；0.95 常量与 `TryVisualCoreRadius` 删除；`ContactModelV2Tests.cs:618`、`BallShapeTests.cs:40-45`、`BallPresentationTests.cs:209-241,324-334` 同步 |
-| 诊断：`BallGrowthDiagnostics`（`:209-244`，`swallowedCount = 距离 < 视觉核心半径`）、`StoryBallDiagnostics`（`:120` 的 `d_vis`） | 读 `0.95·r` | 读到常量即可；`swallowedCount` 在核心固定后恒近 0，保留作回归哨兵 |
-| 不要动 | `semanticDiameterPerCoreDiameter`（同时进吸收门、HUD、相机、台阶高）；不要把缩放写到 `ballVisualRollRoot`（会放大已吸附道具） | — |
+**现行实现**：`BallView.Update` 等待 `GetStartDiameterWorldM() > 0`，一次写 `coreMesh.localScale`；此后不写尺度或旋转。0.95 开关与核心生长弹簧路径已删除。`GetVisualCoreRadiusWorldM()` 为起始球径一半；`BallGrowthDiagnostics` / `StoryBallDiagnostics` 的核心读数为常量，不是碰撞球尺。`semanticDiameterPerCoreDiameter` 与滚动根/吸附根的缩放不动。可选核皮肤装配只在 `coreMesh` 下写归一化显示子节点，公式、菜单和幂等验收见 [CORE_SKIN](../../BallPresentation/CORE_SKIN.md)。
 
 `CONTACT_MODEL_V2.md` §4.1、§4.3、§4A.1、§4A.2、§4A.5、§4A.6 与参数拍板表第 13 行已同步为本口径。该文 §4A.4 的 `propBoundingRadius` 与 `pickupReach(û)` 随 D08 由实现者另行同步。
 
@@ -150,7 +146,7 @@
 | O8 | 接地视觉（§3.4）：cap 与抬升上限要不要放宽 | 针已覆盖全部吸附件（现行）；剩余插地见 §3.4 对策（0.30 m 中位约 3 cm，0.80 m 约 15 cm，p90 52 cm 来自极少数大件）。放宽 cap：插地更少，代价是手感更“颠”、门洞净宽 `2(r+cap)` 更宽；所有者决定，先看 U5 |
 | O9 | 星爆特效 | 美术/特效项，记为需求，后置 |
 | O10 | 交分缩小后已吸附件怎么处理 | 交分把球缩小到不低于起始球径（`OPEN_DECISIONS` (a)）；核心不受影响，但外壳件是否随之脱落/保留未定，不在本项 |
-| O11 | 吸附前后同一件的朝向、嵌入深度 | 录像被遮挡，只有弱证据；若 Unity 验收看出与原作差距明显再回补 |
+| O11 | 吸附前后同一件的朝向证据 | 录像被遮挡，需补同件接触前后对照；嵌入不是待定方案，owner 2026-11-17 已定不做 |
 
 ## 8. 实现与剩余验收
 

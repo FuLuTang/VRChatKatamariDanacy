@@ -139,7 +139,7 @@
 - **移除 80 ms 核心追赶弹簧** — 开着仍被读成「跳一下」，真因是价值定价（单件涨幅过大），不是缺平滑。见 [PARITY_AUDIT 的「球核心视觉」行](Design/Parity/PARITY_AUDIT.md)、[VISUAL_GROWTH_AUDIT](Design/BallPresentation/VISUAL_GROWTH_AUDIT.md)。
 - **骑手尺度：球小人小、球大人大，坐姿腰部（Hips）与球顶同高**（owner 2026-11-17，**不是**从原作学来的；原作的小王子不缩放）— 眼睛略高于球顶、能看见前路。身体比例因 avatar 而异，所以**不假定人体比例**：入座后在 `PostLateUpdate` 里实测本地玩家的视点与 Hips，κ = 视点到腰的竖直距离 ÷ 眼高，眼高按球径反解 E = 0.779558·r/κ（夹 0.1–100 m，低通 + 限频，被外部改掉时重新施加），座位竖直位置让 Hips 落在球顶、水平位置让视点落在眼点；读不到 Hips 或读数离谱时**只对齐眼睛**（用入座时实测的视点偏移，骑手大小不动）。眼点取景规则不变（球心恒在视轴下 18°），整套安排是球径的相似变换。平台事实与未核对项见 [RIDE_GEOMETRY §3.1](Design/BallLayers/FollowRig/RIDE_GEOMETRY.md)；Hips 在 Station 里的读数、均匀缩放假设、VR 全身追踪下的表现需要真实 avatar 亲测。
 - **吸附物冻结、不随球长大外移** — 与原作一致，外移会破坏「吸附瞬间定姿」的契约。见 [PARITY_AUDIT 的「吸附物位姿」行](Design/Parity/PARITY_AUDIT.md)。
-- **球芯外观以后用原作的「纸团」皮，皮肤可切换；原作游戏内模型只作占位** — 先把玩法跑通、外观后置，占位模型不锁定美术方向。见 [PARITY_AUDIT 的「视觉核心」行](Design/Parity/PARITY_AUDIT.md)、[OriginalModels](Art/OriginalModels/README.md)。
+- **球芯用原作球芯，固定为本关起始球径，不随成长缩放（owner 2026-11-17）** — `core_XX` 是按关卡命名的皮肤，不是尺寸档；本机网格实测与专利的显示/碰撞模型分离支持固定核，当前先用 `core_01`，原作关卡与核的对应关系未知。见 [核皮肤装配与证据](Design/BallPresentation/CORE_SKIN.md)、[视觉核心差异行](Design/Parity/PARITY_AUDIT.md)。
 - **道具行为按原作的分列结构：`kind` 与 `behaviour` 两列、纯重力坠落、落定不倾斜、v1 不做 `carry`、单父指针、父件被吃子件坠落** — 原作本来就是「内容分类」和「怎么动」两轴；「掉」比「带」少一轮体积门与重复计收益的工作量。见 [PROP_BEHAVIOURS §10.1–§10.3、§10.9](Design/PickupAbsorb/PROP_BEHAVIOURS.md)；其中坠落传播见上方 (s) 条，不在此重复。
 - **碰撞体必须跟视觉形状，按型给代理，不用 AABB** — AABB 的角部比西瓜/玩具球多出几厘米，玩家会看到「没碰到就被挡」。见 [COLLIDER_PROXY](Design/PickupAbsorb/COLLIDER_PROXY.md)、[COLLIDER_LAYER](Design/PickupAbsorb/COLLIDER_LAYER.md)。
 - **贴图：法线不得来自噪声，UV 必须有效** — fbm 噪声法线会把釉面/金属打成「湿报纸」；重叠或零面积 UV 不进 Unity。见 [TEXTURE_PBR_SPEC §10、§10.1](Art/OriginalModels/props/TEXTURE_PBR_SPEC.md)。
@@ -179,6 +179,11 @@
 - **运动更新率按「位移」分档：`hop` / `whack_a_mole` 必须 30 Hz**（owner = lead，2026-11-16） — 10 Hz 会把 Hop 只持续 8 帧的下陷整段漏掉、Whack 每 tick 错 35 cm；`sway` 15 Hz、其余 5–15 Hz，全量 1,810 次/秒只占 14.6%，我们的 50 Hz 定步直接够，**不需要为运动加速**（也别再拿「迁到 30 Hz 步长」去重算）。见 [LEVEL_FORMAT_V2 §6.7.3/§6.7.5](Design/Levels/LEVEL_FORMAT_V2.md)、[ORIGINAL_MOTION_PROGRAM §12.0/§6.3](Research/KatamariBallRules/ORIGINAL_MOTION_PROGRAM.md)。
 - **原作 12 条 `Dummy Hit` 命中判定体 + 1 条 `Lalala` 不是可收集道具，v1 不建**（owner = lead，2026-11-16） — 524 条 spawn = 511 道具 + 12 判定体 + 1 精灵；判定体的原作用途未测，等实机测量后再定是否需要。见 [ORIGINAL_MOTION_PROGRAM §11.3](Research/KatamariBallRules/ORIGINAL_MOTION_PROGRAM.md)、[PARITY_AUDIT](Design/Parity/PARITY_AUDIT.md)。
 - **`[caps_motion]` 的口径偏差 — 已修（文档侧，2026-11-16）** — 文档曾写 `caps.animators ≤ caps.movingProps`；D-11 下动画与运动是两回事（Cancer 153 个骨骼动画实例 > 129 个有运动的实例），正确判据是 `caps.animators ≤ caps.props` 与 `caps.movingProps ≤ caps.props`，两者都保留。`LEVEL_FORMAT_V2` §9.2 已改（提交 `c913657`），实现 `placement_v2.py` 的 `[caps_motion]` 早已按新口径；本条只剩存档意义，不再是待定项。
+
+### Owner decisions 2026-11-17（挡路与粘附观感）
+
+- **还不能吸的道具挡住球（owner 2026-11-17）** — 可吸收性决定能否穿过道具，球不应穿过当前卷不动的实体；见 [接触与挡路规则](Design/BallLayers/Attachment/ATTACH_PLACEMENT.md#30-可吸收性与挡路)。
+- **不做粘附嵌入：接触处冻结、贴碰撞球面（owner 2026-11-17）** — “浮”的主因是件大而少、空腔未填满，靠件小量多和填充密度解决，不靠沿径向往里压；见 [现行吸附位置](Design/BallLayers/Attachment/ATTACH_PLACEMENT.md#31-吸附位置触发即接触原地冻结)、[核与物件密度研究](Design/BallPresentation/CORE_SKIN.md#研究依据与边界)。
 
 ### Still open
 

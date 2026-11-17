@@ -436,7 +436,7 @@ v_gate   = max(|v_planar|, k_intent · v_drive)   # k_intent = 0.5, v_drive = �
 
 ### 3.3 爬墙速度与高度公式（θ>60°，全部 OUR design）
 
-45–60°坡爬不读这里的h/H_cap；只复用h=0、H=1.5D的初始速率，再乘时长阻力（TERRAIN_CLIMB §0.1）。
+45–60°坡爬不读这里的h/H_cap，也不乘m(θ)；只用墙通道的基础速率v_up0=0.917·D（h=0、H=1.5D，90°处求值），再乘时长阻力（TERRAIN_CLIMB §0.1）。
 
 **高度上限**
 

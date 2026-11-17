@@ -262,11 +262,14 @@ namespace VRCKatamari.Tests
                 if (lowWallBall.Center.y > lowWallHighest) lowWallHighest = lowWallBall.Center.y;
             }
             // Python (K_H = 1.5): highest y = 0.30 (r above the 0.15 m wall top), final
-            // z = -8.887189. Tops are OFF for this scenario because the Python model has no
+            // z = -8.606832 (was -8.887189 before the 2026-11-17 slow slope climb: the
+            // rounded top edge passes through the 45-60 deg slope channel, whose vertical
+            // rate is now the 0.917 D base rate, so the roll-over costs ~0.28 m; the C#
+            // and Python models still agree to < 1e-5). Tops are OFF for this scenario because the Python model has no
             // ledge exit yet; with them on the C# peaks 2.6 cm higher (C#-only mechanics,
             // bounded in ContactSolveTests.ALowWallIsRolledOver).
             Assert.AreEqual(0.30f, lowWallHighest, IntegratorTolerance);
-            Assert.AreEqual(-8.887189f, lowWallBall.Center.z, IntegratorTolerance);
+            Assert.AreEqual(-8.606832f, lowWallBall.Center.z, IntegratorTolerance);
         }
     }
 }

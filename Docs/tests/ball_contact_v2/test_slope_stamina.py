@@ -24,6 +24,50 @@ class SlopeStaminaTests(unittest.TestCase):
         self.assertLess(m.slope_drain_rate(50, 1.2, 0, 2), baseline)
         self.assertAlmostEqual(baseline * .625, m.slope_drain_rate(50, .3, 0, 3.2))
 
+    def test_slope_vertical_speed_is_the_slow_climb_rate(self):
+        v = m.slope_uphill_vertical_speed(1, 2, 50, .3, 0)
+        self.assertTrue(.2 <= v <= .3)
+        self.assertAlmostEqual(.27488, v, places=6)   # golden shared with C#: 0.917 * D
+        self.assertAlmostEqual(v / 1.6, m.slope_uphill_vertical_speed(1, 2, 50, .3, 4), places=6)
+        self.assertAlmostEqual(v * .35, m.slope_uphill_vertical_speed(1, 2, 50, .3, 30), places=6)
+
+    def test_slope_vertical_speed_does_not_grow_with_steepness(self):
+        ref = m.slope_uphill_vertical_speed(1, 2, 46, .3, 0)
+        for theta in range(46, 61, 2):
+            self.assertAlmostEqual(ref, m.slope_uphill_vertical_speed(1, 2, theta, .3, 0),
+                                   places=9, msg=theta)
+        # the wall formula keeps its angle factor
+        wall90 = m.climb_speed(1, 2, 90, 0, .45)
+        self.assertAlmostEqual(wall90, ref, places=9)
+        self.assertAlmostEqual(wall90 * m.climb_shape(50) / m.climb_shape(90),
+                               m.climb_speed(1, 2, 50, 0, .45), places=9)
+        self.assertGreater(m.climb_speed(1, 2, 50, 0, .45), 4 * wall90)
+
+    def test_slope_vertical_speed_scales_with_diameter_push_and_dash_cap(self):
+        base = m.slope_uphill_vertical_speed(1, 2, 50, .3, 0)
+        self.assertAlmostEqual(2 * base, m.slope_uphill_vertical_speed(1, 2, 50, .6, 0), places=9)
+        self.assertAlmostEqual(4 * base, m.slope_uphill_vertical_speed(1, 2, 50, 1.2, 0), places=9)
+        self.assertAlmostEqual(.5 * base, m.slope_uphill_vertical_speed(.5, 2, 50, .3, 0), places=9)
+        self.assertAlmostEqual(1.5 * base, m.slope_uphill_vertical_speed(1, 3.2, 50, .3, 0), places=9)
+        self.assertLessEqual(m.slope_uphill_vertical_speed(1, 50, 50, .3, 0), 1.5 * base + 1e-9)
+
+    def test_full_push_tops_the_c06_board_in_the_slow_climb_window(self):
+        # D=0.30, 1.5 m run-up (the C06 cell); C# twin: SlopeStaminaFullPushTopsTheFifty...
+        world = slope_world(50, .6, 4)
+        ball = m.State((0., .15, 5.5), .15)
+        top = None
+        min_stamina = 100.
+        for i in range(400):
+            m.step(world, ball, (0., 0., 1.), 4., .02, drive_accel=7.5)
+            min_stamina = min(min_stamina, ball.slope_stamina)
+            if ball.center[1] - .15 >= .58:
+                top = (i + 1) * .02
+                break
+        self.assertIsNotNone(top)
+        self.assertGreaterEqual(top, 2.5)   # slow climb, not the 0.77 s dash-speed bug
+        self.assertLessEqual(top, 4.0)
+        self.assertGreater(min_stamina, 30)
+
     def test_tunings_match_csharp(self):
         root = Path(__file__).resolve().parents[3]
         source = (root / 'VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallContact/ContactTuning.cs').read_text()

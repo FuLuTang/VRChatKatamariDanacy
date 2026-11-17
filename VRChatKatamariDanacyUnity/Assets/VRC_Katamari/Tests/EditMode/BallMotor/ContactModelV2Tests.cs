@@ -195,10 +195,21 @@ namespace VRCKatamari.Tests
             float radius = Radius();
             Invoke("TeleportTo", new Vector3(0f, radius, 6f));
             Invoke("SetMoveAxes", 1f, 0f, 0f);
-            float highest = 0f;
-            for (int i = 0; i < 200; i++) { Step(1); highest = Mathf.Max(highest, GetCenter().y - radius); }
+            float highest = 0f, topSeconds = -1f, minStamina = 100f;
+            for (int i = 0; i < 300; i++)
+            {
+                Step(1);
+                highest = Mathf.Max(highest, GetCenter().y - radius);
+                minStamina = Mathf.Min(minStamina, GetFloat("slopeStamina"));
+                if (topSeconds < 0f && highest >= 0.58f) topSeconds = (i + 1) * 0.02f;
+            }
             Assert.Greater(highest, 0.59f);
             Assert.AreEqual(0, (int)Invoke("GetRecoveryCount"));
+            // Slow climb (vertical ~0.25 m/s): ~3 s for 0.6 m, not the 0.77 s dash-speed bug.
+            // Python/CS models give 3.1 s with a 1.5 m run-up; this scene has a 1 m run-up.
+            Assert.GreaterOrEqual(topSeconds, 2.2f);
+            Assert.LessOrEqual(topSeconds, 4.5f);
+            Assert.Greater(minStamina, 30f, "stamina must carry D=0.30 over the 0.6 m board");
         }
 
         [Test]

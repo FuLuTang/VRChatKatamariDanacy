@@ -389,7 +389,10 @@ def slope_drain_rate(theta, diameter, uphill_seconds, gate_speed):
 def slope_uphill_vertical_speed(push_in, gate_speed, theta, diameter, uphill_seconds):
     fatigue = max(SLOPE_MINIMUM_SPEED_FACTOR,
                   1.0 / (1.0 + max(0.0, uphill_seconds) * SLOPE_FATIGUE_PER_SECOND))
-    return climb_speed(push_in, gate_speed, theta, 0.0, K_H * diameter) * fatigue
+    # Wall base rate v_up0 = 0.917 * D at 90 deg (m(90)/m(90) = 1): no angle factor, no
+    # height fade -- a steeper slope is not faster. theta only picks the along-slope
+    # projection in slope_motion.
+    return climb_speed(push_in, gate_speed, 90.0, 0.0, K_H * diameter) * fatigue
 
 
 def slope_motion(theta, diameter, push_in, gate_speed, dt, stamina, uphill_seconds,

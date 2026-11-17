@@ -35,8 +35,13 @@ namespace VRCKatamari.BallContact
         {
             float fatigue = Mathf.Max(ContactTuning.SlopeMinimumSpeedFactor,
                 1f / (1f + Mathf.Max(0f, uphillSeconds) * ContactTuning.SlopeFatiguePerSecond));
-            // Keep the accepted slow-climb speed family, but never apply height fade.
-            return ClimbMath.ClimbSpeed(pushIn, gateSpeed, thetaDeg, 0f,
+            // Vertical rate = the wall channel's base rate v_up0 = 0.917 * D (0.275 m/s at
+            // D = 0.30), times push-in and the dash rate factor (at most 1.5x), with NO height
+            // fade and NO angle factor m(theta): a steeper slope is not faster. Evaluating the
+            // wall formula at 90 deg is that exact base rate, because m(90)/m(90) = 1 and a
+            // single implementation stays the owner of the rate family. thetaDeg only picks the
+            // along-slope projection in Step; it does not scale the vertical rate here.
+            return ClimbMath.ClimbSpeed(pushIn, gateSpeed, 90f, 0f,
                 ContactTuning.KHeight * diameterM) * fatigue;
         }
 

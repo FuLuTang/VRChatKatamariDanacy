@@ -32,6 +32,65 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(22.834234f, SlopeClimbMath.DrainRate(58f, 0.3f, 1f, 2f), 1e-4f);
         }
 
+        [Test]
+        public void SlopeStaminaVerticalSpeedIsTheSlowClimbRateAtDiameterPointThree()
+        {
+            float v = SlopeClimbMath.UphillVerticalSpeed(1f, 2f, 50f, 0.3f, 0f);
+            Assert.GreaterOrEqual(v, 0.2f);
+            Assert.LessOrEqual(v, 0.3f);
+            // v_up0 = 0.917 * D, golden shared with Python.
+            Assert.AreEqual(0.27488f, v, 1e-5f);
+            // Fatigue only slows it: 1 / (1 + 0.15 t), floored at 0.35.
+            Assert.AreEqual(v / 1.6f, SlopeClimbMath.UphillVerticalSpeed(1f, 2f, 50f, 0.3f, 4f), 1e-5f);
+            Assert.AreEqual(v * 0.35f, SlopeClimbMath.UphillVerticalSpeed(1f, 2f, 50f, 0.3f, 30f), 1e-5f);
+        }
+
+        [Test]
+        public void SlopeStaminaVerticalSpeedDoesNotGrowWithSteepness()
+        {
+            float reference = SlopeClimbMath.UphillVerticalSpeed(1f, 2f, 46f, 0.3f, 0f);
+            for (float theta = 46f; theta <= 60f; theta += 2f)
+                Assert.AreEqual(reference, SlopeClimbMath.UphillVerticalSpeed(1f, 2f, theta, 0.3f, 0f),
+                    1e-6f, "theta=" + theta);
+            // The wall formula keeps its angle factor: 50 deg is still m(50)/m(90) of the 90 deg rate.
+            float wall90 = ClimbMath.ClimbSpeed(1f, 2f, 90f, 0f, 0.45f);
+            Assert.AreEqual(wall90, SlopeClimbMath.UphillVerticalSpeed(1f, 2f, 50f, 0.3f, 0f), 1e-6f);
+            Assert.AreEqual(wall90 * ClimbMath.ClimbShape(50f) / ClimbMath.ClimbShape(90f),
+                ClimbMath.ClimbSpeed(1f, 2f, 50f, 0f, 0.45f), 1e-6f);
+            Assert.Greater(ClimbMath.ClimbSpeed(1f, 2f, 50f, 0f, 0.45f), 4f * wall90);
+        }
+
+        [Test]
+        public void SlopeStaminaVerticalSpeedScalesWithDiameterAndPushAndDashIsCappedAtOnePointFive()
+        {
+            float d030 = SlopeClimbMath.UphillVerticalSpeed(1f, 2f, 50f, 0.3f, 0f);
+            Assert.AreEqual(2f * d030, SlopeClimbMath.UphillVerticalSpeed(1f, 2f, 50f, 0.6f, 0f), 1e-5f);
+            Assert.AreEqual(4f * d030, SlopeClimbMath.UphillVerticalSpeed(1f, 2f, 50f, 1.2f, 0f), 1e-5f);
+            Assert.AreEqual(0.5f * d030, SlopeClimbMath.UphillVerticalSpeed(0.5f, 2f, 50f, 0.3f, 0f), 1e-5f);
+            // Dash: gate 3.2 (1.6x target) saturates at 1.5x; nothing goes faster.
+            Assert.AreEqual(1.5f * d030, SlopeClimbMath.UphillVerticalSpeed(1f, 3.2f, 50f, 0.3f, 0f), 1e-5f);
+            Assert.LessOrEqual(SlopeClimbMath.UphillVerticalSpeed(1f, 50f, 50f, 0.3f, 0f), 1.5f * d030 + 1e-5f);
+        }
+
+        [Test]
+        public void SlopeStaminaFullPushTopsTheFiftyDegreeBoardInTheSlowClimbWindowWithStaminaToSpare()
+        {
+            // D=0.30, 1.5 m run-up, full push. Python model: top at 3.12 s, stamina floor 52.
+            ContactWorld world = ContactScenes.SlopeWorld(50f, 0.6f, 4f);
+            ClimbMotorLoop loop = new ClimbMotorLoop(world, new Vector3(0f, 0.15f, 5.5f), 0.15f, 0f);
+            float topSeconds = -1f, minStamina = 100f;
+            for (int i = 0; i < 400 && topSeconds < 0f; i++)
+            {
+                Assert.IsTrue(loop.Step());
+                minStamina = Mathf.Min(minStamina, loop.Ball.SlopeStamina);
+                if (loop.HighestCenterY - 0.15f >= 0.58f) topSeconds = (i + 1) * ClimbMotorLoop.Dt;
+            }
+            Assert.Greater(topSeconds, 0f, "must reach the board top");
+            Assert.GreaterOrEqual(topSeconds, 2.5f, "a slow climb, not the 0.77 s dash-speed bug");
+            Assert.LessOrEqual(topSeconds, 4f);
+            Assert.Greater(minStamina, 30f, "stamina must be enough for the 0.6 m board");
+        }
+
         [TestCase(50f)]
         [TestCase(58f)]
         public void SlopeStaminaExhaustionUsesTheExistingRestLatchBeforeSliding(float theta)
@@ -156,7 +215,11 @@ namespace VRCKatamari.Tests
                 }
                 energies[burst] = stamina;
             }
-            Assert.Greater(heights[1], heights[0] + 0.1f);
+            // 22 dash ticks (0.44 s) at up to 1.5x the 0.275 m/s base rate: about +0.05 m
+            // is the physical ceiling of this burst (+0.051 measured), so the bar is half of
+            // the 0.09 m the old, 5x-too-fast formula allowed, not a hidden relaxation.
+            Assert.Greater(heights[1], heights[0] + 0.04f);
+            Assert.Greater(heights[1], heights[0] * 1.08f);
             Assert.Greater(energies[1], energies[0]);
         }
 

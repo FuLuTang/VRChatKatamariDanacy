@@ -110,17 +110,18 @@
 1. 读清单、校验路径：源场景或底板在 `_RefUnlicensed/` 下则输出必须在其下；输出不得等于底板/任一源。
 2. 任何**已打开且有未保存修改**的场景 → 拒绝（输出场景自己的旧版本除外：它是产物，直接丢弃重建）。
 3. `NewScene` 关掉所有场景 → `File.Copy(底板, 输出)`（只拷 `.unity`，已有 `.meta` 保留）→ `Refresh/Import` → 打开输出。
-4. 在**还是底板原样**时先导入大厅房间（`HubAssembler.AssembleRoomGeometry`，导入器已知良好的上下文），之后关卡再搬走。
-5. 逐关 `IslandImport.Import`（`hubs[].levels` 顺序）：
+4. **球芯皮肤**：输出在 `_RefUnlicensed/` 下时，复用 `CoreSkinAssembler.AssembleOpenScene()` 给共用球装原作球芯 `core_01`（装配器要求场景未改动，所以紧跟在打开输出之后）。依据 [OPEN_DECISIONS](<../../OPEN_DECISIONS.md>) 2026-11-17 球芯条与 [CORE_SKIN](<../BallPresentation/CORE_SKIN.md>)：皮肤是球的、不是关的（原作关卡与 `core_XX` 的对应关系未知，皮肤随碰撞直径缩放），合集只有一个球，所以**四关都显示这张皮**，与 RefCancer 一致；“只在蟹座关显示”需要运行时按关切换渲染，没有决定要做。素材 `Assets/_RefUnlicensed/Models/KatamariCore/core_01.obj/.png` 不存在 → `[allmaps] warn: core skin skipped …`，不报 PROBLEM，球保持底板的样子；素材在但装配被拒（接线不符预检等）→ `warn: core skin not applied: <原因>`；装上后自检要求球芯下恰有一个 `OriginalCoreSkin`。
+5. 在**还是底板原样**时先导入大厅房间（`HubAssembler.AssembleRoomGeometry`，导入器已知良好的上下文），之后关卡再搬走。
+6. 逐关 `IslandImport.Import`（`hubs[].levels` 顺序）：
    - 源是底板 → 直接在输出场景里取；否则 Additive 打开源场景（已开着且 dirty → 拒绝）。
    - 分析：解析 takeRoots/leaveBehind（根名或子树路径）；搬运集合里出现基础设施单例（电机、输入、座位、视图、回合/结果/启动器/房间宿主、切关宿主、驱动、设定器、场景描述符、PipelineManager）或“世界坐标不搬”的类型 → PROBLEM；读源场景电机起点/地面、回合控制器设置、物理场驱动的竞技场顺序/白名单/出生点；列出所有指向搬运集合之外（同一源场景）的序列化引用。
    - 执行：建 `Island_<id>`（先在原点）；离开的子树先摘下；每个 takeRoot 在外壳下重建祖先占位对象，`MoveGameObjectToScene`（源≠输出时）+ `SetParent(worldPositionStays:true)`；`leaveBehind` 子树留在原处（底板情形下放回重建的 `LevelContent` 占位根下）；外壳移到偏移；**引用按源层级路径重映射到输出场景同路径同类型对象**（同类型多个按序号），找不到 → PROBLEM（属性路径 + 目标路径），不做“按类型猜”；补世界坐标数据（`TerrainFieldHost.vertices` 每个顶点、`MotionHost.pathPoints` 每 3 个数加偏移，偏移全 0 则跳过）；所有 `TerrainFieldHost.deferRegistration = true`；被改的代理 `CopyProxyToUdon`；复查没有引用仍指向源场景；关闭源场景（不保存）。
-6. 每关数据：竞技场顺序 = `arenaFirst`（缺省取驱动的 `sandboxFrame`）→ 驱动 `cells` 的竞技场顺序 → 其余按层级顺序；地面高度 = 第一个竞技场的 `groundOffset`（无竞技场取源电机的 `groundPlaneOffset`）；白名单 = 驱动的 `kindWhitelist`；地形宿主一关至多一个；道具宿主 = 源回合控制器的 `pickupHost`（否则岛下第一个）；起点 = `start.center`（缺省：驱动出生点，再缺省：源电机 `startCenterWorld`）+ 偏移；朝向 `start.headingDeg`；**起始体积 = `SizeModelMath.TrySphereVolumeMm3(diameterM, 底板电机的 semanticDiameterPerCoreDiameter)`**，`diameterM` 缺省取源电机的 `startDiameterWorldM`，仍无则用底板电机自己的起始体积；从不读源电机的 `startVolumeMm3`（有 `startDiameterWorldM` 时它在运行时被覆盖，存的值不是起点）。
-7. 回合计划：自由练习关 `goal=FreeRoam`；计时关先取源回合控制器的值，`roundFromPlacement` 再用 placement 文档覆盖，最后是清单 `round` 块覆盖。`allowAbort` 取清单；`stars` 取清单（自由练习关恒无星）；星级阈值数组全部填成结果卡自己的单关值。
-8. 写 `LevelSwitch`（`LevelSwitchHost`，根物体）的并行数组；跑 `HubAssembler.Run`（多关模式）：N 块垫（顺序 = `hubs[].levels`）、启动器（含 `levelSwitch`）、房间宿主、**每关一颗返回按钮 `HubReturnButton_<id>`**（站在入口标记旁，没有入口则站在该关起点旁；底板里原来的根 `HubReturnButton` 改名成第一关的）、结果卡返回按钮、控制器按关数组与结果卡按关数组。
-9. `CopyAllToUdon`，再读回每个新字段的 Udon 变量表（缺 → PROBLEM，“保存→重开→再跑”）。
-10. 自检（任何 PROBLEM 则**不保存**）：单例各恰好 1、驱动/设定器 0；所有 `LevelArenaHost` 都在某关的列表里；`itemIds` 跨宿主唯一；每关入口距起点 ≤ 启动器 `entryTrustMeters`（12 m）；岛包围盒两两（含大厅房间）≥ 1000 m、坐标绝对值 ≤ 1300 m；各关最低地面/kill plane 高于场景重生高度 + 1 m；房间宽度够垫子（`HubAssembler`）；起点下有无碰撞体（只是 `warn:` 行）。
-11. 通过则只保存输出场景。
+7. 每关数据：竞技场顺序 = `arenaFirst`（缺省取驱动的 `sandboxFrame`）→ 驱动 `cells` 的竞技场顺序 → 其余按层级顺序；地面高度 = 第一个竞技场的 `groundOffset`（无竞技场取源电机的 `groundPlaneOffset`）；白名单 = 驱动的 `kindWhitelist`；地形宿主一关至多一个；道具宿主 = 源回合控制器的 `pickupHost`（否则岛下第一个）；起点 = `start.center`（缺省：驱动出生点，再缺省：源电机 `startCenterWorld`）+ 偏移；朝向 `start.headingDeg`；**起始体积 = `SizeModelMath.TrySphereVolumeMm3(diameterM, 底板电机的 semanticDiameterPerCoreDiameter)`**，`diameterM` 缺省取源电机的 `startDiameterWorldM`，仍无则用底板电机自己的起始体积；从不读源电机的 `startVolumeMm3`（有 `startDiameterWorldM` 时它在运行时被覆盖，存的值不是起点）。
+8. 回合计划：自由练习关 `goal=FreeRoam`；计时关先取源回合控制器的值，`roundFromPlacement` 再用 placement 文档覆盖，最后是清单 `round` 块覆盖。`allowAbort` 取清单；`stars` 取清单（自由练习关恒无星）；星级阈值数组全部填成结果卡自己的单关值。
+9. 写 `LevelSwitch`（`LevelSwitchHost`，根物体）的并行数组；跑 `HubAssembler.Run`（多关模式）：N 块垫（顺序 = `hubs[].levels`）、启动器（含 `levelSwitch`）、房间宿主、**每关一颗返回按钮 `HubReturnButton_<id>`**（站在入口标记旁，没有入口则站在该关起点旁；底板里原来的根 `HubReturnButton` 改名成第一关的）、结果卡返回按钮、控制器按关数组与结果卡按关数组。
+10. `CopyAllToUdon`，再读回每个新字段的 Udon 变量表（缺 → PROBLEM，“保存→重开→再跑”）。
+11. 自检（任何 PROBLEM 则**不保存**）：单例各恰好 1、驱动/设定器 0；所有 `LevelArenaHost` 都在某关的列表里；`itemIds` 跨宿主唯一；每关入口距起点 ≤ 启动器 `entryTrustMeters`（12 m）；岛包围盒两两（含大厅房间）≥ 1000 m、坐标绝对值 ≤ 1300 m；各关最低地面/kill plane 高于场景重生高度 + 1 m；房间宽度够垫子（`HubAssembler`）；起点下有无碰撞体（只是 `warn:` 行）。
+12. 通过则只保存输出场景。
 
 报告：每行以 `[allmaps] ` 开头，不含时间、机器名、对象 id，数字用固定小数格式，所以单元不变的两次运行逐字相同。问题行是 `[allmaps] PROBLEM: …`，末行 `[allmaps] result: +N ~M problems=P saved <路径>|not saved`。
 

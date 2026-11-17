@@ -89,6 +89,7 @@ namespace VRCKatamari.Hub
         private int activeLevel = -1;
         private int switchCounter;
         private int lastFailure;
+        private Vector3 lastStartTop;
 
         private void Start()
         {
@@ -114,6 +115,17 @@ namespace VRCKatamari.Hub
         public int GetActiveLevel()
         {
             return activeLevel;
+        }
+
+        /// <summary>
+        /// Where a rider sits on the ball the last successful switch placed: the top of
+        /// the ball at its start. The ball's own transform (and the station on it) is
+        /// written by the motor on a later frame, so for the frames right after a switch
+        /// this is the only correct "where is the seat" answer.
+        /// </summary>
+        public Vector3 GetLastStartTop()
+        {
+            return lastStartTop;
         }
 
         /// <summary>The <c>Fail*</c> code of the last <see cref="TryActivate"/>.</summary>
@@ -269,6 +281,7 @@ namespace VRCKatamari.Hub
             float minCenterY = groundOffset + radius + groundLiftMeters;
             if (center.y < minCenterY) center.y = minCenterY;
             motor.TeleportTo(center);
+            lastStartTop = new Vector3(center.x, center.y + radius, center.z);
             motor.SetMoveAxes(0f, 0f, 0f);
 
             // 9. The new level's pickups start clean.

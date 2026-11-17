@@ -12,6 +12,8 @@ using VRC.Udon;
 using VRC.Udon.Common.Interfaces;
 using VRCKatamari.BallLayers;
 using VRCKatamari.BallMotor;
+using VRCKatamari.BallPresentation;
+using VRCKatamari.Editor.BallPresentation;
 using VRCKatamari.Editor.LevelBuild;
 using VRCKatamari.Hub;
 using VRCKatamari.Input;
@@ -164,6 +166,10 @@ namespace VRCKatamari.Editor.Hub
             if (!OpenFreshOutput(hub, out output, problems)) return Finish(lines, problems, hc, null);
             Line(lines, "opened '" + output.name + "' from the base scene");
 
+            // The shared ball's original core skin, while the scene is still the clean copy
+            // (the skin assembler refuses a dirty scene).
+            bool skinApplied = AssembleCoreSkin(hub, lines);
+
             // The hub room first, while the scene is exactly the base's (the importer's
             // known-good context); the levels then move around it.
             HubAssembler.AssembleRoomGeometry(hc);
@@ -245,8 +251,62 @@ namespace VRCKatamari.Editor.Hub
 
             // ---- self-check ----
             SelfCheck(output, hub, data, outcome, lines, problems);
+            if (skinApplied) CheckCoreSkin(output, problems);
 
             return Finish(lines, problems, hc, output);
+        }
+
+        // ------------------------------------------------------------ core skin ---
+
+        // The owner's decision (OPEN_DECISIONS 2026-11-17, CORE_SKIN.md) is that the ball wears
+        // the original core, core_01, and the skin follows the collision diameter; which core
+        // belongs to which original level is unknown, so there is no per-level skin. The hub has
+        // one shared ball, so every level shows the skin, exactly as RefCancer's ball does. The
+        // assets live under _RefUnlicensed, so the skin is only applied to an output that is
+        // itself under _RefUnlicensed (a committed output must not reference them), and missing
+        // assets are a warning: the red base ball stays and the hub still works.
+        private static bool AssembleCoreSkin(HubLevelCatalog.HubEntry hub, List<string> lines)
+        {
+            if (!HubLevelCatalog.IsUnderRefUnlicensed(hub.scene))
+            {
+                Line(lines, "note: core skin skipped; the output is not under Assets/_RefUnlicensed/");
+                return false;
+            }
+            string project = LevelPaths.ProjectRoot();
+            if (!File.Exists(Path.Combine(project, CoreSkinAssembler.ModelPath))
+                || !File.Exists(Path.Combine(project, CoreSkinAssembler.TexturePath)))
+            {
+                Line(lines, "warn: core skin skipped; '" + CoreSkinAssembler.ModelPath + "' and/or '"
+                    + CoreSkinAssembler.TexturePath + "' are missing, the ball keeps its base look");
+                return false;
+            }
+
+            string text = CoreSkinAssembler.AssembleOpenScene();
+            bool applied = text.Contains(" core(s); mesh equivalent diameter=");
+            Line(lines, (applied ? "skin: " : "warn: core skin not applied: ") + text);
+            return applied;
+        }
+
+        // The skin is one child named OriginalCoreSkin under the ball's core mesh.
+        private static void CheckCoreSkin(Scene output, List<string> problems)
+        {
+            int count = 0;
+            GameObject[] roots = output.GetRootGameObjects();
+            for (int r = 0; r < roots.Length; r++)
+            {
+                BallView[] views = roots[r].GetComponentsInChildren<BallView>(true);
+                for (int v = 0; v < views.Length; v++)
+                {
+                    SerializedProperty core = new SerializedObject(views[v]).FindProperty("coreMesh");
+                    Transform coreTransform = core == null ? null : core.objectReferenceValue as Transform;
+                    if (coreTransform != null && coreTransform.Find(CoreSkinAssembler.SkinName) != null) count++;
+                }
+            }
+            if (count != 1)
+            {
+                problems.Add("the core skin was applied but " + count + " ball(s) have an '"
+                    + CoreSkinAssembler.SkinName + "' under their core mesh (expected 1)");
+            }
         }
 
         // ------------------------------------------------------------ preconditions ---

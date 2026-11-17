@@ -505,6 +505,7 @@ namespace VRCKatamari.Hub
             // is measured, so the seat (which follows the ball) and the entry are in the
             // new level. Only when the level changes: a retry of the same level goes
             // through the round's own reset.
+            bool switchedThisPress = false;
             if (levelSwitch != null && levelSwitch.GetActiveLevel() != levelIndex)
             {
                 int switchFailure;
@@ -529,6 +530,7 @@ namespace VRCKatamari.Hub
                     return false;
                 }
                 state = controller.GetState();
+                switchedThisPress = true;
             }
 
             // Where the player is sent (HubLoopMath.ChooseArrival). The level's authored
@@ -540,17 +542,38 @@ namespace VRCKatamari.Hub
             // the player from either point once the seat is taken.
             Transform entry = LevelEntry(levelIndex);
             bool seatAvailable = !disableAutoSeat && rideStation != null && rideSeat != null;
+            // The seat's position, except right after a switch, when the station still
+            // shows the previous level (HubLoopMath.SeatReferencePoint).
+            Vector3 seatPoint = Vector3.zero;
+            if (seatAvailable)
+            {
+                seatPoint = HubLoopMath.SeatReferencePoint(switchedThisPress,
+                    rideStation.transform.position, levelSwitch != null
+                        ? levelSwitch.GetLastStartTop() : rideStation.transform.position);
+            }
             float entryToSeat = -1f;
             if (entry != null && seatAvailable)
             {
-                entryToSeat = Vector3.Distance(entry.position, rideStation.transform.position);
+                entryToSeat = Vector3.Distance(entry.position, seatPoint);
             }
             int arrivalSource = HubLoopMath.ChooseArrival(seatAvailable, entry != null,
                 entryToSeat, entryTrustMeters);
 
             Transform arrivalPoint = null;
-            if (arrivalSource == HubLoopMath.ArrivalEntry) arrivalPoint = entry;
-            if (arrivalSource == HubLoopMath.ArrivalSeat) arrivalPoint = rideStation.transform;
+            Vector3 arrivalWorld = Vector3.zero;
+            Quaternion arrivalRotation = Quaternion.identity;
+            if (arrivalSource == HubLoopMath.ArrivalEntry)
+            {
+                arrivalPoint = entry;
+                arrivalWorld = entry.position;
+                arrivalRotation = entry.rotation;
+            }
+            if (arrivalSource == HubLoopMath.ArrivalSeat)
+            {
+                arrivalPoint = rideStation.transform;
+                arrivalWorld = seatPoint;
+                arrivalRotation = rideStation.transform.rotation;
+            }
             if (arrivalPoint == null)
             {
                 reason = HubLoopMath.ReasonLevelEntryUnwired;
@@ -558,7 +581,7 @@ namespace VRCKatamari.Hub
             }
 
             Vector3 arrival;
-            if (!HubLoopMath.TryLiftedPoint(arrivalPoint.position, arrivalLiftMeters, out arrival))
+            if (!HubLoopMath.TryLiftedPoint(arrivalWorld, arrivalLiftMeters, out arrival))
             {
                 reason = HubLoopMath.ReasonPositionNotFinite;
                 return false;
@@ -586,7 +609,7 @@ namespace VRCKatamari.Hub
             startFramesWaited = 0;
             startArrival = arrival;
 
-            TeleportPlayer(arrival, arrivalPoint.rotation,
+            TeleportPlayer(arrival, arrivalRotation,
                 "enter-level levelIndex=" + levelIndex
                 + " name=" + LevelName(levelIndex)
                 + " mode=" + mode

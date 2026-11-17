@@ -507,6 +507,23 @@ namespace VRCKatamari.Hub
             return entryToSeatMeters <= trustMeters ? ArrivalEntry : ArrivalSeat;
         }
 
+        /// <summary>
+        /// The point the seat is at, for deciding where a start sends the player.
+        /// </summary>
+        /// <remarks>
+        /// Right after a level switch the ball has been moved by the motor but its
+        /// transform, and the station parented to it, still show the previous level's
+        /// position until a later frame (seen in Unity: the first entry into a level was
+        /// sent to the old ball and the player fell). So on a switching press the ball's
+        /// seat position comes from the switch, not from the station transform; otherwise
+        /// the transform is current and is used.
+        /// </remarks>
+        public static Vector3 SeatReferencePoint(bool switchedThisPress,
+            Vector3 stationTransformPosition, Vector3 switchedSeatPosition)
+        {
+            return switchedThisPress ? switchedSeatPosition : stationTransformPosition;
+        }
+
         /// <summary>One English phrase per reason code, for the launcher's log lines.</summary>
         public static string DescribeReason(int reason)
         {

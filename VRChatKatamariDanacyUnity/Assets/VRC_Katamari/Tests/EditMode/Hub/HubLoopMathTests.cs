@@ -467,6 +467,39 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(HubLoopMath.ShouldRetrySeat(false, 1, 3, 0, 0));
         }
 
+        // ------------------------------------------------------------------ first entry after a switch
+
+        [Test]
+        public void SeatReferenceIsTheSwitchedSeatOnlyOnASwitchingPress()
+        {
+            Vector3 stale = new Vector3(-12.5f, 1.2f, -13.6f);
+            Vector3 fresh = new Vector3(0f, 0.4f, 2f);
+
+            Assert.AreEqual(fresh, HubLoopMath.SeatReferencePoint(true, stale, fresh));
+            Assert.AreEqual(stale, HubLoopMath.SeatReferencePoint(false, stale, fresh));
+        }
+
+        [Test]
+        public void FirstEntryAcrossLevelsLandsAtTheNewLevelNotTheOldSeat()
+        {
+            // The 2026-11-17 run: the station still showed the old level's ball (~1200 m
+            // away) when the press was handled. Measured against it the entry looked
+            // untrusted, the seat was chosen and the player was sent to the old ball.
+            Vector3 entry = new Vector3(0f, 0f, -2f);
+            Vector3 staleSeat = new Vector3(0f, 1f, -1200f);
+            Vector3 freshSeat = new Vector3(0f, 0.5f, 0f);
+
+            float staleDistance = Vector3.Distance(entry,
+                HubLoopMath.SeatReferencePoint(false, staleSeat, freshSeat));
+            Assert.AreEqual(HubLoopMath.ArrivalSeat,
+                HubLoopMath.ChooseArrival(true, true, staleDistance, 12f));
+
+            float freshDistance = Vector3.Distance(entry,
+                HubLoopMath.SeatReferencePoint(true, staleSeat, freshSeat));
+            Assert.AreEqual(HubLoopMath.ArrivalEntry,
+                HubLoopMath.ChooseArrival(true, true, freshDistance, 12f));
+        }
+
         // ------------------------------------------------------------------ reason text
 
         [Test]

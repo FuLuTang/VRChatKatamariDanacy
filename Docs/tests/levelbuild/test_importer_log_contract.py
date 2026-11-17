@@ -1,10 +1,9 @@
 """The importer/sync console contract (source pins, no Unity).
 
-The C+D reimport promised two lines in the design note and the O8 run found one missing:
-the sync's own summary (which carries `growthMm3: written=..., read-back: verified`) was
-not logged from the importer path - only the menu path called `PickupFieldSyncReport.Log`.
-The operator saw `pickup sync wrote 130 row(s) into 8 columns` and had to decode the host
-array to check the total, even though the file and the host agreed to the millimetre.
+The design note promises two console lines. One of them is the sync's own summary (which
+carries `growthMm3: written=..., read-back: verified`): it must be logged from the importer
+path as well as the menu path (`PickupFieldSyncReport.Log`), so the operator can check the
+total without decoding the host array.
 
 These are STRING pins on the editor sources, the same kind the PTF tests use: a log line
 the operator is told to expect is a contract, and it must not disappear silently again.

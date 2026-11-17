@@ -1,6 +1,6 @@
 # 地形网格接触（TERRAIN MESH CONTACT，T0/T1）
 
-> 状态：`PROVISIONAL_NOT_TESTED`，2026-11-16。实现 `LEVEL_FORMAT_V2` §13 的 **T0 支撑 + T1 穿透**；
+> 状态：`PROVISIONAL_NOT_TESTED`。实现 `LEVEL_FORMAT_V2` §13 的 **T0 支撑 + T1 穿透**；
 > 运行期代码在 `Runtime/BallContact/TerrainMeshMath.cs` 与 `Runtime/BallMotor/KatamariBallMotor.cs`。
 > 本检出没有 Unity/Udon 编译、没有 EditMode 运行、没有 Play Mode/VR；所有运行时行为未验证。
 > 不实现导入、不碰场景。
@@ -11,7 +11,7 @@
   `StepPositionV1` 不调用地形穿透/支撑覆盖；v1 的位置、速度、支撑与关闭前逐字节相同。
 - 地形网格只是 **额外** 支撑/穿透源，不替代 `groundY` 兜底平面、盒子、ramp；也不占 8 平面 / 8 盒 /
   4 坡 / 256 OBB 的槽位。它的面 id 从 **2000** 起，避开 plane（1000+i）、box、ramp、prop。
-- T0/T1 接入 **v1 位置权威**。v2 接触求解器的地形接触是 §13 的 T2，本轮不做；打开
+- T0/T1 接入 **v1 位置权威**。v2 接触求解器的地形接触是 §13 的 T2，不在本文范围；打开
   `contactModelV2Enabled` 时地形网格不会被查询（`StepContactV2` 不调用本模块）。
 - 依赖现有 `terrainSupportEnabled`（默认 true）把选中的 `(normal, offset)` 送进
   `GroundContactMath`；只开 `terrainMeshContactEnabled` 而关 `terrainSupportEnabled` 时，几何被查询但
@@ -55,7 +55,7 @@ float GetLastTerrainQueryMicros();
 
 ### 3.1 支撑（T0，double-sided）
 
-> **2026-11-16 修正**：采纳判据不再是「比平面高才赢」。见 §8。下面的五条是修正后的语义，
+> 采纳判据不是「比平面高才赢」（见 §8）。下面的五条是现行语义，
 > 实现在 `TerrainMeshMath.TrySelectSupport`（几何 + 带）与
 > `SupportSurfaceMath.TryResolveSupport`（唯一的一次选面）。
 
@@ -107,14 +107,13 @@ float GetLastTerrainQueryMicros();
     的数目；`GetLastTerrainSupportMicros() / GetTerrainFullEvals()` 就是「µs / 次完整求值」；
   - `GetStepsThisFrame()` = 上一次 `Update` 跑了几步 ⇒ **帧成本 = 读数 × 步数**（`maxStepsPerFrame = 5`）。
     跑 0 步的帧把计数一并清零，所以乘积不会被读成「免费」。
-  **2026-11-16 修正**：原来两端都取 `Time.time`（帧时间戳），同一帧内差值恒为 0，四格采样
-  永远是 0。现在用 `Time.realtimeSinceStartupAsDouble`（帧内会走的墙钟）；每步两次原生属性
+  计时取 `Time.realtimeSinceStartupAsDouble`（帧内会走的墙钟；帧时间戳在同一帧内差值恒为 0）；每步两次原生属性
   读数、零分配、不进任何判定路径，相对它测量的一轮 17 probe × 三角形测试可忽略。
-  **清零位置**：`StepBall`（v1/v2 两条权威都经过它）。原来写在 `StepPositionV1` 里，开了
-  contact v2 之后读数会是**上一次 v1 步的陈旧值**——v2 权威不查地形，现在如实报 0。
+  **清零位置**：`StepBall`（v1/v2 两条权威都经过它）。写在 `StepBall`，不在 `StepPositionV1` 里：
+  开了 contact v2 之后 v2 权威不查地形，读数如实报 0。
 - 容量 8192 tri / 16384 vert / 64 chunk；数组约 300 KB（运行时，不序列化）。
 
-### 4.1 候选三角形：每步一次收集（2026-11-16 蟹座小院实测后加）
+### 4.1 候选三角形：每步一次收集
 
 真机实测（58 chunk、3,455 三角形、蟹座小院）：`triTests` 4,080–8,160/步、`tq` 12–24 ms，
 其中 96–98% 的三角形迭代只是被逐三角形 AABB 拒掉——**同一批三角形被 17 个 probe 各扫一遍**。
@@ -187,7 +186,7 @@ float GetLastTerrainQueryMicros();
 0.5/0.6 m 台阶的 `0.25·D` band；沟底 −1 m；悬垂不支撑但向下推；零面积三角形；两个 chunk 的
 接缝无空隙；无网格/坏 chunk 拒绝。
 
-`Tests/EditMode/BallContact/TerrainSupportModelTests.cs`（支撑模型，**2026-11-16 新增**，真实三角形）：
+`Tests/EditMode/BallContact/TerrainSupportModelTests.cs`（支撑模型，真实三角形）：
 `ThereIsNoSupportPlaneWhereTheMeshAnswers`（平地：地形答得出，平面不竞争）、
 `TheGullyFloorWinsEvenWhenThePlaneSitsAboveIt`（C22 的 1 m 沟 + 平面在 0，球底 −1）、
 `TheGullyRimSupportsUntilTheFootprintLeavesIt`（沟沿 0.05 m 内仍是 0，0.20 m 内变 −1）、
@@ -225,7 +224,7 @@ float GetLastTerrainQueryMicros();
 - v2 接触求解器里的地形（T2）、连续扫掠防隧穿（T2）、爬升/台阶分类（T2）。
 - 场景/预制体接线（只写 `SetTerrainMesh` 接口，不碰场景）。
 
-## 7. 导入与 PTF 地形单元（2026-11-16）
+## 7. 导入与 PTF 地形单元
 
 - **Editor**：`Editor/LevelBuild/TerrainMeshImporter.cs` 读 v2 的 `terrain`（内联 ≤512 tri，
   否则 `meshRef` + `.katerrain`），校验 sha256、索引/计数/chunk 连续性，然后写
@@ -241,7 +240,7 @@ float GetLastTerrainQueryMicros();
   C24 curb 12 / 24。四格都是 `terrain_pending` 的 `planned_cells`，`PhysicsTestField.unity`
   未编辑；操作员建好场景后再把它们 wired 并加 `penetration_max` driver 读数。
 
-## 8. 2026-11-16 支撑模型修正（操作员在真实编辑器的四格实测）
+## 8. 支撑模型判据（真实编辑器四格实测）
 
 | 实测 | 根因 | 修法 |
 |---|---|---|
@@ -250,7 +249,7 @@ float GetLastTerrainQueryMicros();
 | 平面压到 −1000：球直接掉穿（−13.5 → −26 → −38.7） | 采纳带以「上一个支撑 / 平面」为参照，且平面是初始赢家：球一旦落到平面或台阶内部，`ceiling = bandReference + stepLimit` 把 y=0 的网格判成「太高」全部拒绝，且越掉越拒绝 | 带**只以球底为参照**（`ballBottom + 0.25·D`），**向下无界**；向上仍是台阶门 |
 | `GetLastTerrainQueryMicros` 四格恒为 0 | 两端都取 `Time.time`（帧时间戳），同一帧差值恒 0，结构上只能是 0 | 换 `Time.realtimeSinceStartupAsDouble`，单位微秒 |
 
-> **2026-11-16 T2 分工**：本条的 `ceiling` 只服务 T0/T1 的支撑筛选（v1 口径、诊断）；T2 的「能不能上去」由
+> **T2 分工**：本条的 `ceiling` 只服务 T0/T1 的支撑筛选（v1 口径、诊断）；T2 的「能不能上去」由
 > [TERRAIN_CLIMB](TERRAIN_CLIMB.md) §6 的连续爬升决定（`H_cap = 1.5·D`、球底到达顶面才翻上），`0.25·D` 不再是
 > 任何路径的物理判据。v2 里地面平面是一个**接触源**，所以 LEVEL_FORMAT_V2 §1.3 的「地形答得出 ⇒ 平面
 > 不参与」由电机在 `StepContactV2` 里每步先问一次 T0（带只作诊断）后关掉 `hasGround` 实现——否则坑里/
@@ -263,10 +262,10 @@ float GetLastTerrainQueryMicros();
 副作用与边界：
 - 地形「答得出」按**每步、每个 XZ** 判定，不是一次性的 latch：接缝洞/出网格处仍由平面兜底，
   这样不会因为一次 probe 失败就让球永久失去地板（ORIGINAL_TERRAIN §6.5 的「平面作接缝兜底」）。
-  代价：如果平面被错放在地形之上（如本轮场景里从旧测试场拷来的 offset=0），
+  代价：如果平面被错放在地形之上（如从旧测试场拷来的 offset=0），
   球在**网格外**仍会站在那块平面上——这是关卡作者的 `groundY` 错误，不是支撑模型的错。
 - 同一 chunk/zone 内的落差（如 1 m 沟）面 id 不变，`SupportDroppedAway` 的 `sameSurface`
   抑制会让球按 0.1 m/步的下落钳位掉下去（落地正确，但不是弹道）；跨 zone 的落差才进 `isFalling`。
-  这是 id 粒度的已知取舍（§1「面 id 必须稳定」），不是本轮改的。
+  这是 id 粒度的已知取舍（§1「面 id 必须稳定」），不在本文范围。
 - `SupportReferenceHeight` 保留为「取两者较高」的工具函数，**不再**是带的参照；扫掠掩码与
   选面都直接传球底（否则掩码与选面会各用一个参照——那正是 C09 ghost step 的成因）。

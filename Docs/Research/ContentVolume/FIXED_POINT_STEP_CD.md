@@ -1,6 +1,6 @@
 # 定点体积步骤 C+D：换量子并恢复原作成长形式
 
-**日期：2026-11-16（项目时区 Asia/Shanghai）。** Owner 已批准（[OPEN_DECISIONS.md (r)](../../OPEN_DECISIONS.md)）。本文是**先写后做**的设计说明：先定表示、键位、字段与验收口径，再照它改代码。吸收门已由上一轮按原作数字落地（[ABSORB_GATE_ORIGINAL.md](ABSORB_GATE_ORIGINAL.md)）；本文接手的是**成长侧**，并把成长与门统一到同一个体积定义（`k·a·b·c`）与同一套回收规则（`penalty` 默认 0.8）。
+**日期：2026-11-16（项目时区 Asia/Shanghai）。** Owner 已批准（[OPEN_DECISIONS.md (r)](../../OPEN_DECISIONS.md)）。本文是**先写后做**的设计说明：先定表示、键位、字段与验收口径，再照它改代码。吸收门已由按原作数字落地（[ABSORB_GATE_ORIGINAL.md](ABSORB_GATE_ORIGINAL.md)）；本文接手的是**成长侧**，并把成长与门统一到同一个体积定义（`k·a·b·c`）与同一套回收规则（`penalty` 默认 0.8）。
 
 ---
 
@@ -32,13 +32,13 @@ D_m(V)             = (6·V/π)^(1/3)（m）；D_mm = floor(1000·D + ε)
 |---|---|---|
 | `defs[].valueUnits` / `props[].valueUnits` | **弃用（只读兼容）** | 旧文件仍然**合法输入**：读到就忽略它的数值（它可以继续和旧总量对账），**不再参与成长**。`canonical_doc` **不再写出**该键。理由：它是「按尺寸档定价再取整」的产物（[WHY_OUR_GROWTH_IS_BIG.md](WHY_OUR_GROWTH_IS_BIG.md) §2），留着它等于留着第二套成长货币。 |
 | `defs[].volumeK` / `props[].volumeK` | **保留**（已存在） | 缺省 0.70，不写默认值。门的唯一系数。 |
-| `defs[].volumePenalty` / `props[].volumePenalty` | **新增，可选** | 缺省 0.8，不写默认值；范围 `0 < p ≤ 1`。原作逐件 0.01–1.0 的值以后可以填进来，本轮只用缺省。 |
+| `defs[].volumePenalty` / `props[].volumePenalty` | **新增，可选** | 缺省 0.8，不写默认值；范围 `0 < p ≤ 1`。原作逐件 0.01–1.0 的值以后可以填进来，只用缺省。 |
 | `props[].growthMm3` | **新增，派生，作者永不手填** | 与 `absorbDiameterReq` / `absorbable` 同一个模式：`canonical_doc` 每次从 `aabb`+`k`+`penalty` 重算并写出。写它是因为它是**账本货币**，要能被 diff 审阅；不写它，成长就只能靠运行时隐式推导，审不出来。 |
 | `props[].absorbDiameterReq` / `absorbable` | 保留（已有） | 门侧派生列，不变。 |
 | `level.expected.valueUnits` | **弃用（只读兼容）** | 旧关卡文件仍可读；校验器不再要求它，也不再拿它当硬门。 |
 | `level.expected.growthMm3` | **新增，派生** | 该关全部道具 `growthMm3` 之和，`canonical_doc` 重算写出。校验器按它做硬门（有就必须相等）。 |
 
-**字节稳定性**：现有文件作为**输入**全部仍然合法（`valueUnits`/`expected.valueUnits` 读得进、校验不报错）。但 `canonical_doc` 的输出变了（去掉 `valueUnits`、加 `growthMm3`、`expected` 换键），所以**受版本管理的 placement.json 必须用写出器整体重生成**；重生成是确定性的（排序、舍入、派生列都由同一函数给出），同一份输入永远得到同一份字节。`_ref_*` 是本地只读参考，不进 git，本轮不重生成（它们的派生列从上一轮起就已经是旧门的，读时会被校验器告 stale，属已知状态）。
+**字节稳定性**：现有文件作为**输入**全部仍然合法（`valueUnits`/`expected.valueUnits` 读得进、校验不报错）。但 `canonical_doc` 的输出变了（去掉 `valueUnits`、加 `growthMm3`、`expected` 换键），所以**受版本管理的 placement.json 必须用写出器整体重生成**；重生成是确定性的（排序、舍入、派生列都由同一函数给出），同一份输入永远得到同一份字节。`_ref_*` 是本地只读参考，不进 git，不重生成（它们的派生列从起就已经是旧门的，读时会被校验器告 stale，属已知状态）。
 
 **total/expected 的后果**：`level.expected.valueUnits`（旧）被 `growthMm3`（新）取代；`propCount` 不变。**星级/目标不变**：关卡目标仍是**直径米**（`Docs/Design/GameModes/Levels/*.json` 的 target 是 m），不换算成 mm³。内容量对目标的兑换率变了，所以第一关 130 件全吃光只到 **1.398 m**（§7），不到原来的 2.20 m 上限——这是原作的成长速度，不是数据错误；星级带要等 T39 试玩重标（(p) 现阶段不调数值）。
 
@@ -77,8 +77,8 @@ D_m(V)             = (6·V/π)^(1/3)（m）；D_mm = floor(1000·D + ε)
 - **连带修 8 m / 512**：
   - `[FollowRigMath]` 的 `eyeUpMaxMeters` / `eyeMaxBackM` = 8 m 是为 2.2 m 球设的：`0.55+2.4·15 = 36.55 m`、`0.75+2.2·15 = 33.75 m`，8 m 会把 30 m 球的眼睛钉在球面上。两者缺省提到 **64 m**（仍是「防呆上限」，不是玩法上限），并在注释里写明推导。
   - 吸收门的 `MaxItemVolumeSanityWorldM3`（现 1000 m³）按全局上限重算：`V_cap/10 = 1,413.7 m³` 是 30 m 球能吸的最大件，1000 m³ 已经**小于**它。改为 **`π/6·30³/10` 的 10 倍 ≈ 14,137 m³**（与 `V_cap/10` 同量级，留 10× 余量），注释写清是护栏不是门。
-  - 场景里残留的 `maxItemVolumeWorldM3: 512` / `absorbVolumeRatio: 10` 是死键（上一轮已删字段），本轮不动场景；列出给操作者顺手清。
-  - 其它「按 2.2 m 球写死」的地方（`maxProxyProtrusionWorldM = 0.3`、`maxStepUpLiftWorldM = 0.6`、`minConversionDiameterWorldM = 0.55`、`bankResidualFraction`）本轮**不改语义**，只在注释/报告里标为「30 m 球下需要重标」——它们不在 C+D 的验收里，改了会掩盖本轮的成长曲线。
+  - 场景里残留的 `maxItemVolumeWorldM3: 512` / `absorbVolumeRatio: 10` 是死键（已删字段），不动场景；列出给操作者顺手清。
+  - 其它「按 2.2 m 球写死」的地方（`maxProxyProtrusionWorldM = 0.3`、`maxStepUpLiftWorldM = 0.6`、`minConversionDiameterWorldM = 0.55`、`bankResidualFraction`）本文**不改语义**，只在注释/报告里标为「30 m 球下需要重标」——它们不在 C+D 的验收里，改了会掩盖本文的成长曲线。
 
 ## 6. 迁移与验收
 
@@ -105,11 +105,11 @@ D_m(V)             = (6·V/π)^(1/3)（m）；D_mm = floor(1000·D + ε)
 | 1.0–1.5 m | 18 | 0.208 | 0.045 | 12.21 |
 
 （单桶最大 19.7% 来自最后那几件「大的结构件/大件」，它们本来就被设计成一口跳；中位数才是「手感」）。
-- 与 owner 的 HUD 参考 **1.4–1.5%/件（早期）** 对比：**按直径算我们低 3 倍**（第一桶中位 0.45%）——原因是我们的起始球是原作的 6 倍（0.30 m vs 5 cm，体积 216 倍），而我们的早期道具只有 2.5–7.5 cm。若那个参考是**体积百分比**，则第一桶中位 0.448% × ≈3.1 ≈ 1.4%（体积 % 与直径 % 的比值在 1.5–20% 区间约为 3），与 owner 的数吻合。**结论：曲线本身是原作的形状；是否要「早期每件 1.4–1.5%」取决于 owner 的参考是体积还是直径，以及要不要把起始球/早期内容改成原作尺度——那是内容与关卡参数（(p) 现阶段不调数值），不是本轮成长公式的事。** 这一条写进报告，请 owner 确认。
+- 与 owner 的 HUD 参考 **1.4–1.5%/件（早期）** 对比：**按直径算我们低 3 倍**（第一桶中位 0.45%）——原因是我们的起始球是原作的 6 倍（0.30 m vs 5 cm，体积 216 倍），而我们的早期道具只有 2.5–7.5 cm。若那个参考是**体积百分比**，则第一桶中位 0.448% × ≈3.1 ≈ 1.4%（体积 % 与直径 % 的比值在 1.5–20% 区间约为 3），与 owner 的数吻合。**结论：曲线本身是原作的形状；是否要「早期每件 1.4–1.5%」取决于 owner 的参考是体积还是直径，以及要不要把起始球/早期内容改成原作尺度——那是内容与关卡参数（(p) 现阶段不调数值），不是本文成长公式的事。** 这一条写进报告，请 owner 确认。
 
-## 8. 不在本轮范围（明确写出，避免被当成漏做）
+## 8. 不在本文范围（明确写出，避免被当成漏做）
 
-- 原作**按球径分段**的 penalty 曲线（5 cm .8 → 15 cm .4 → 20 cm .16）：本轮只落默认 0.8 + 逐件覆盖；分段函数需要「这一关的球径→penalty」表，owner 未给，属于后续。
-- HUD **+0.02 cm** 的最终显示格式（本轮给一个 `GetHudDiameterWorldM()` 读数，是否上屏由表现层决定）。
+- 原作**按球径分段**的 penalty 曲线（5 cm .8 → 15 cm .4 → 20 cm .16）：只落默认 0.8 + 逐件覆盖；分段函数需要「这一关的球径→penalty」表，owner 未给，属于后续。
+- HUD **+0.02 cm** 的最终显示格式（本文给一个 `GetHudDiameterWorldM()` 读数，是否上屏由表现层决定）。
 - 群组连带子件（(s) v2）、30 m 球下的代理/台阶/转换门槛重标（§5 末）。
 - `_ref_cancer` / `_ref_mas1` 的重生成（本地只读参考，不进 git）。

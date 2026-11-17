@@ -1,7 +1,7 @@
 # 吸收门：恢复原作的数字（k·bbox、10× 体积、向下取整整 mm）
 
-**日期：2026-11-16（项目时区 Asia/Shanghai）。** Owner decision：**吸收门完全按原作的数字**。本文记录改动、口径、实测的前后对比，以及仍然存在的差距（成长侧的 1.0 回收属于步骤 C/D，不在本轮）。
-**证据来源**：`PARITY_AUDIT.md` G07/G08/G13；`Docs/Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md` §5.5；`~/KatamariRef/meta/raw_growth_mechanism.txt` §2；`Docs/Research/ContentVolume/FIXED_POINT_VOLUME_IMPACT.md` §2（O2/O3/O5）。**本文的每个数字都是本轮用仓库内数据实算的**，不引用旧文档的二手值。
+**日期：2026-11-16（项目时区 Asia/Shanghai）。** Owner decision：**吸收门完全按原作的数字**。本文记录改动、口径、实测的前后对比，以及仍然存在的差距（成长侧的 1.0 回收属于步骤 C/D，不在本文）。
+**证据来源**：`PARITY_AUDIT.md` G07/G08/G13；`Docs/Research/KatamariBallRules/ORIGINAL_TERRAIN_AND_LAYOUT.md` §5.5；`~/KatamariRef/meta/raw_growth_mechanism.txt` §2；`Docs/Research/ContentVolume/FIXED_POINT_VOLUME_IMPACT.md` §2（O2/O3/O5）。**本文的每个数字都是本文用仓库内数据实算的**，不引用旧文档的二手值。
 
 ---
 
@@ -85,11 +85,11 @@ Req_mm      = floor(1000 · cbrt(60 · V_item / π))      # 球体积 ≥ 10 × 
 
 ## 4. 对其它既有结论的影响（要连带读的地方）
 
-1. **`placement.json` 的派生字段会变**：`absorbDiameterReq`/`absorbable` 是 `canonical_doc` 重算的，所以第一关的 JSON 里这些行按新门重写（本轮已重生成 `Docs/Design/Levels/story_01_bench_size/placement.json` 与 `Tools/levelbuild/examples/placement.json`）。`defs[].volumeK` **不会**被写进去——缺省就是 0.70，写了反而破坏「既有文件字节不变」的承诺。
-2. **`_ref_*` 是只读参考**：它们在本机、不进 git；其派生字段仍是旧门的，`levelbuild check` 会对它们报 stale。重建参考关时应重新 canonicalize；本轮**没有**改这些文件。
+1. **`placement.json` 的派生字段会变**：`absorbDiameterReq`/`absorbable` 是 `canonical_doc` 重算的，所以第一关的 JSON 里这些行按新门重写（已重生成 `Docs/Design/Levels/story_01_bench_size/placement.json` 与 `Tools/levelbuild/examples/placement.json`）。`defs[].volumeK` **不会**被写进去——缺省就是 0.70，写了反而破坏「既有文件字节不变」的承诺。
+2. **`_ref_*` 是只读参考**：它们在本机、不进 git；其派生字段仍是旧门的，`levelbuild check` 会对它们报 stale。重建参考关时应重新 canonicalize；本文**没有**改这些文件。
 3. **供给比（G11/G12）更紧了**：同样内容的 S 是 `k·bbox` 口径，`story_01` 的供给比从 0.455 掉到 **0.319**（`_ref_mas1` 2.41× 不变）。这不是回归，而是口径修正后的真实差距——「我们内容不够」这条 owner 底线**没有**被这次改动掩盖。
-4. **成长侧仍是 1.0**：门用 `k·bbox`，成长（`ΔV = V_box`）还没乘 k，也没采纳 0.8 的回收惩罚。**同一个物件在门与成长里得到同一个体积**是步骤 C/D 的验收项（`PARITY_AUDIT` §5 的迁移顺序），本轮**故意不动**。
-5. **离线 Python 模型（`Docs/Design/PickupAbsorb/pickup_absorb.py`、`round_model.py`）仍是旧口径**：它们是 DRAFT 参考，不在本轮范围；门的事实来源是运行时 + `placement_core`。
+4. **成长侧仍是 1.0**：门用 `k·bbox`，成长（`ΔV = V_box`）还没乘 k，也没采纳 0.8 的回收惩罚。**同一个物件在门与成长里得到同一个体积**是步骤 C/D 的验收项（`PARITY_AUDIT` §5 的迁移顺序），本文**故意不动**。
+5. **离线 Python 模型（`Docs/Design/PickupAbsorb/pickup_absorb.py`、`round_model.py`）仍是旧口径**：它们是 DRAFT 参考，不在本文范围；门的事实来源是运行时 + `placement_core`。
 
 ---
 
@@ -143,8 +143,8 @@ PY
 4. 若某 def 的 k 越界：导入器报 **error**（`defs[i] ... volumeK ... must be <= 32`），
    sync 报 **reject**（`declared volumeK ... is outside the legal range`），不写该行。
 
-## 7. 本轮没有验证的
+## 7. 没有验证的
 
 - **没有编译、没有跑 Unity/NUnit**：本文与全部 C#、场景序列化说明都基于源码与数据推演。`Unity 2022.3 / U#` 的实际编译与 EditMode 结果由操作者跑 `run_tests` 确认。
-- **没有改场景**：`StoryMode.unity` 的 `PickupFieldHost` 需要多一列 `propVolumeK`（见操作者检查单），这要由导入器/sync 写盘，本轮不碰 `.unity`。
+- **没有改场景**：`StoryMode.unity` 的 `PickupFieldHost` 需要多一列 `propVolumeK`（见操作者检查单），这要由导入器/sync 写盘，不碰 `.unity`。
 - **没有跑 `_ref_cancer` 的旧/新门在 Unity 里**：第 2、3 节是 Python 数据层实算（与运行时用同一公式、同一 ε），不是引擎读数。

@@ -5,8 +5,8 @@
 ## 项目要求对照
 
 - 项目技术契约 §3.2 给出 `h=max(r,max_i dot(-n,Q*p_i))`，T49只估计当前表面支持，不解完整动力学。
-- 原版源码未取得。US7402104B2是历史专利，不是游戏源码，不证明新版沿用；本套有限HTTP证据与第三方独立2D实验见 [`SuiteFoundation/SOURCE_EVIDENCE.md`](SuiteFoundation/SOURCE_EVIDENCE.md)。
-- Unity 2022.3 文档说明左手坐标与 Cross 左手规则；已移除旧 A 套“右手坐标”标签，方向/Quaternion API对拍仍待Unity箭头探针，详见 [`SuiteFoundation/INTERFACES.md`](SuiteFoundation/INTERFACES.md)。
+- 原版源码未取得。US7402104B2是历史专利，不是游戏源码，不证明新版沿用；有限HTTP证据与第三方独立2D实验见 [`Research/SOURCE_EVIDENCE.md`](Research/SOURCE_EVIDENCE.md)。
+- Unity 2022.3 文档说明左手坐标与 Cross 左手规则；方向/Quaternion API对拍仍待Unity箭头探针，详见 [`INTERFACES.md`](INTERFACES.md)。
 
 ## 当前实现
 

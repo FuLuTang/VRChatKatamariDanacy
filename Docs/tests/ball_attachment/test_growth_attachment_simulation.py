@@ -12,7 +12,7 @@ P = SizeParameters(2.0, 0.125, 2.0, 0.75, 1.25)
 
 
 def pickup(round_id, seq, item, gain, x):
-    # gain is deliberately external ledger data; T51 only consumes confirmed pose.
+    # gain is deliberately external ledger data; the attachment record only consumes confirmed pose.
     ev = ConfirmedAttachmentEvent(round_id, "ball-1", item, 1, seq, f"c-{seq}-{item}",
         Pose((0, 0, 0), (0, 0, 0, 1)), Pose((x, 0, 1), (0, 0, 0, 1)))
     return ev, gain
@@ -24,7 +24,7 @@ class GrowthAttachmentSequenceTests(unittest.TestCase):
         confirmed_volume = 0.0
         banked_score = 0.0
         # Confirmation arrives out of order; explicit item→gain mapping belongs to
-        # the external confirmed ledger, not T51 attachment ordering.
+        # the external confirmed ledger, not attachment ordering.
         gain_by_instance = {"mug": 3.0, "toy": 5.0}
         events = [pickup("match-A", 71, "mug", gain_by_instance["mug"], 1.0),
                   pickup("match-A", 13, "toy", gain_by_instance["toy"], -2.0)]

@@ -24,7 +24,7 @@
 
 ### 2.3 「大王委托」怎么接（提议，不改现有剧情文本）
 
-现有剧情模式只定义**大王房间**、结算**「呈给国王」**、按球径给**星**（[StoryMode README](../StoryMode/README.md)、[HUB_LOOP_PLAN](../StoryMode/HUB_LOOP_PLAN.md)）。本图的可选委托文案：
+现有剧情模式只定义**大王房间**、结算**「呈给国王」**、按球径给**星**（[StoryMode README](../../StoryMode/README.md)、[HUB_LOOP_PLAN](../../StoryMode/HUB_LOOP_PLAN.md)）。本图的可选委托文案：
 
 | 委托名（提议） | 一句话 | 星级口径（沿用现有：球径） |
 |---|---|---|
@@ -154,10 +154,10 @@
 `catalogue.csv` 共 **158 行**，tier 分布 t0 32 / t1 26 / t2 24 / t3 20 / t4 18 / t5 14 / t6 12 / t7 12：
 
 - `status=existing`：复用 `Docs/Art/OriginalModels/props` 的 12 件现有模型（纸屑 `paper_scrap`、易拉罐 `soda_can`、小皮球 `toy_ball`、碗 `bowl`、勺子 `spoon`、盘子 `plate`、书堆 `book_stack`、玻璃瓶 `glass_bottle`、折叠凳 `folding_stool`、收纳箱 `storage_bin`、木箱 `crate`、大木箱 `crate_large`）；
-- `status=pilot`：本轮 20 件（§9.2）；
+- `status=pilot`：20 件（§9.2）；
 - `status=planned`：后续批次。
 
-### 9.2 pilot 20（本轮生产契约）
+### 9.2 pilot 20（生产契约）
 
 ```
 sock_single      t_shirt          crumpled_paper   chip_bag        pizza_box

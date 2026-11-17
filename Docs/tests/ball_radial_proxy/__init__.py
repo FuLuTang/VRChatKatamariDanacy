@@ -1,1 +1,1 @@
-"""Tests for the T50 radial proxy reference model."""
+"""Tests for the radial proxy reference model."""

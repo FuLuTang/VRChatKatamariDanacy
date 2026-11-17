@@ -6,7 +6,7 @@
 
 - 本地检查可读的是项目自身 `Docs/02_TECHNICAL_CONTRACTS.md`、本套工作流文件与B套项目草稿；没有取得《塊魂》或《Once Upon A KATAMARI》的游戏源码。原版源码**未取得**。
 - GitHub REST仓库元数据查询（2026-10-14T00:37:59Z）对 `Katamari Damacy original source code` 和 `Once Upon A KATAMARI source code` 均返回HTTP 200、`total_count=0`：[GitHub repo search](https://api.github.com/search/repositories)。查询不是穷尽式证明，不能据此断言所有公共平台都没有源码。
-- US7402104B2为历史专利技术文本，不是游戏真实源码，也不证明新版继承；共同来源记录与实际专利页有限摘录见 [VisualRoll SuiteFoundation 来源证据](../../VisualRoll/SuiteFoundation/SOURCE_EVIDENCE.md)。该专利没有给出本项目远端代理去重/renderer池方案。
+- US7402104B2为历史专利技术文本，不是游戏真实源码，也不证明新版继承；共同来源记录与实际专利页有限摘录见 [VisualRoll 来源证据](../../VisualRoll/Research/SOURCE_EVIDENCE.md)。该专利没有给出本项目远端代理去重/renderer池方案。
 - 官方作品页、Q&A及制作人访谈已在上述共同来源记录中核对；没有说明T56网络摘要、世代/修订去重或Renderer预算算法。没有实机观察可补足内部实现。
 
 ## 本地依赖状态

@@ -9,7 +9,7 @@ from Docs.Design.BallLayers.RemoteProxy.remote_proxy import (
 
 
 def _digest(fields):
-    # Synthetic fixture digest only. It is not a T51 event, authentication, or wire format.
+    # Synthetic fixture digest only. It is not an attachment event, authentication, or wire format.
     return hashlib.sha256(repr(fields).encode("utf-8")).hexdigest()
 
 

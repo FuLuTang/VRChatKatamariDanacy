@@ -1,10 +1,10 @@
-# 原创占位小道具（第一批）
+# 原创占位小道具
 
-> 2026-11-15 更新：第 10 节新增第二批（`cookie`/`orange` 重做 + 8 件餐具/容器）；第 1–9 节仍描述第一批 8 件。第二批产物只在 Windows staging，未复制回本仓库 `exports/` / `previews/`。
+> 第 1–9 节描述最初的 8 件（seed … watering_can）；第 10 节起按主题记录其余道具（`cookie`/`orange`、餐具/容器、结构件、pilot 等）。
 
-本目录是 PicnicLawn 地图第一批"可卷"小道具的原创、中性、可替换低多边形占位模型。全部几何由本目录的 Python 脚本在 Blender 3.6 里从 bmesh 图元程序化生成：没有第三方网格、没有贴图、没有品牌/角色/音乐/IP 元素，也没有引用任何现有游戏素材。**这些是占位美术，不是最终美术；未指定授权许可（no licence assigned），不得据此推断正式美术方向。**
+本目录是 PicnicLawn 地图"可卷"小道具的原创、中性、可替换低多边形占位模型。全部几何由本目录的 Python 脚本在 Blender 3.6 里从 bmesh 图元程序化生成：没有第三方网格、没有贴图、没有品牌/角色/音乐/IP 元素，也没有引用任何现有游戏素材。**这些是占位美术，不是最终美术；未指定授权许可（no licence assigned），不得据此推断正式美术方向。**
 
-## 1. 本批道具与来源
+## 1. 道具与来源
 
 来源：`Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 中 sourcing hint 为 `model ourselves`（或并列可选自行建模）的小件。按"6–10 个最简单的小道具"取了 8 个；`napkin` 与 `watering_can` 在 CSV 里 priority 为 `later`，但形状简单、属于同一批占位目标，故一并纳入。
 
@@ -25,7 +25,7 @@
 
 ### 尺寸与实际比例
 
-CSV 的 `real_longest_dim_m` 是现实尺寸，`game_longest_dim_m` 是游戏内放大后的尺寸。本批一律以 `game_longest_dim_m` 为准，因此最大边与 CSV 游戏尺寸完全一致（误差 < 1e-6 m），相对现实尺寸放大：
+CSV 的 `real_longest_dim_m` 是现实尺寸，`game_longest_dim_m` 是游戏内放大后的尺寸。这组一律以 `game_longest_dim_m` 为准，因此最大边与 CSV 游戏尺寸完全一致（误差 < 1e-6 m），相对现实尺寸放大：
 
 | 道具 | 现实 (m) | 游戏 (m) | 放大倍数 |
 |---|---|---|---|
@@ -38,7 +38,7 @@ CSV 的 `real_longest_dim_m` 是现实尺寸，`game_longest_dim_m` 是游戏内
 | napkin | 0.15 | 0.30 | 2.00× |
 | watering_can | 0.25 | 0.58 | 2.32× |
 
-CSV 的这几项游戏尺寸（尤其 toy_ball 0.40 m、napkin 0.30 m 对应现实 0.15 m）属于"可卷物统一放大"的玩法比例，不是现实尺寸错误；本批按 CSV 执行，未改数值。
+CSV 的这几项游戏尺寸（尤其 toy_ball 0.40 m、napkin 0.30 m 对应现实 0.15 m）属于"可卷物统一放大"的玩法比例，不是现实尺寸错误；这组按 CSV 执行，未改数值。
 
 ## 2. 单位与轴约定
 
@@ -47,7 +47,7 @@ CSV 的这几项游戏尺寸（尤其 toy_ball 0.40 m、napkin 0.30 m 对应现�
 - FBX 导出：`axis_forward='-Z'`、`axis_up='Y'`、`bake_space_transform=True`、`apply_scale_options='FBX_SCALE_UNITS'`；即顶点已烘焙成 Y-up，Unity 预期 Rotation=(0,0,0)、Scale=(1,1,1)、正面 +Z、直立。
 - GLB 导出：`export_yup=True`，同样 Y-up。
 - 枢轴：2026-11-15 起所有道具统一在几何包围盒中心（`prop_lib.Builder.finish()` 在 `transform_apply` 后用 `origin_set` 取包围盒中心，再复位到原点，导出时烘焙进顶点）。场景与运行期接触判定都按 AABB 中心放置，回读误差 < 1 mm。
-- 该轴/尺度约定是暂定接口，正式尺度与 Unity 导入验证尚未冻结；本批只做了 Blender 端 FBX/GLB 回读验证，**没有在 Unity 中导入**。
+- 该轴/尺度约定是暂定接口，正式尺度与 Unity 导入验证尚未冻结；这组只做了 Blender 端 FBX/GLB 回读验证，**没有在 Unity 中导入**。
 
 ## 3. 拓扑与材质
 
@@ -142,12 +142,12 @@ set OUT_DIR=%TEMP%\PropsRebuild
 
 ## 7. 已知偏差与说明
 
-1. `seed`：CSV 提示是"Ø0.04 m 椭球 + 1 张 alpha 草卡"。本批不使用贴图，因此只做实体籽粒；若需要草卡，应另做一张 alpha 卡并在 Unity 里合成，而不是塞进这个 mesh。
+1. `seed`：CSV 提示是"Ø0.04 m 椭球 + 1 张 alpha 草卡"。这组不使用贴图，因此只做实体籽粒；若需要草卡，应另做一张 alpha 卡并在 Unity 里合成，而不是塞进这个 mesh。
 2. `paper_scrap`：CSV 提示"单面薄片，双面材质"。改成 1.4 mm 厚的闭合薄片（带卷边与撕裂轮廓），单面材质即可正确显示且保持水密；代价是三角面 164 而非约 2 面。
 3. `acorn`、`toy_ball` 各 2 个材质：壳斗/籽粒、球面/双色条纹是造型必需的纯色区分，仍满足"无贴图"。
 4. `bottle_cap`：按 CSV 游戏尺寸 Ø0.05 m；现实瓶盖约 0.03 m，故偏大（1.67×）。齿边用 20 段圆周上的交替半径表达（10 个齿），没有做真实压接结构。
-5. `napkin`、`watering_can` 在 CSV 中 priority 为 `later`；本批按"最简单小道具"提前做了占位。
-6. `pebble`：CSV 给的是 Kenney Nature Kit `rock_small*`（标注渲染不符、需人工复核）或自行建模；本批选自行建模，避免第三方素材。
+5. `napkin`、`watering_can` 在 CSV 中 priority 为 `later`；这组按"最简单小道具"提前做了占位。
+6. `pebble`：CSV 给的是 Kenney Nature Kit `rock_small*`（标注渲染不符、需人工复核）或自行建模；这组选自行建模，避免第三方素材。
 7. `watering_can` 的壶嘴沿 +Y（Blender 正面）伸出，最长边即壶嘴方向；壶身轴在原点，包围盒在 X/Y 上不对称是设计意图。
 8. 未做：UV、贴图、顶点色、LOD、碰撞体、动画、Unity 导入/材质重建。FBX 不保存 Principled base colour，Unity 会新建材质；需要按 `manifest.json` 的 `material_base_colors` 重建，或改用 GLB（内含 baseColorFactor）。
 
@@ -157,13 +157,13 @@ set OUT_DIR=%TEMP%\PropsRebuild
 
 Unity 端导入、材质赋值、碰撞与 prefab 组装由 Unity operator 复核；本目录只负责 Blender 端建模与导出。
 
-## 9. 美术档位决定（2026-11-14）
+## 9. 美术档位决定
 
 用户确认：**布局冻结前保持纯色、无贴图**。理由是这个阶段的判断对象是尺寸、轮廓和在球面上的可读性，贴图既帮不上忙又会掩盖比例问题；等 PicnicLawn 灰盒布局定稿后，再统一按材质族（纸/木/塑料/金属/织物）做一次贴图图集与 UV 的美术升级，避免按未定布局做两遍。
 
-## 10. 第二批：水果重做 + 餐具/容器（2026-11-15）
+## 10. 水果与餐具/容器
 
-> 第 1–9 节仍描述第一批 8 件（seed … watering_can）。本节是 2026-11-15 新增的第二批：重做 `cookie`、`orange`，并新增 8 件真实尺寸的餐具/容器。第二批的产物只写到 Windows staging `D:\VRChatKatamariPreview\PropModels\tableware-v1\`，**没有**复制回本仓库的 `exports/` / `previews/`；仓库里现有的水果 FBX/GLB/预览仍是旧版，等 Lead 统一合入时再替换。
+> 第 1–9 节描述最初的 8 件（seed … watering_can）。本节：`cookie`、`orange`，以及 8 件真实尺寸的餐具/容器。
 
 与第 1 批不同，这批使用 `SIZE_REFERENCE = 'real'`：最长边对齐 CSV 的 `real_longest_dim_m`（不是第 1 批的 `game_longest_dim_m` 放大比例）。8 件的目录 id 为 `cup`、`soda_can`、`juice_carton`、`glass_bottle`、`plate`、`bowl`、`thermos`、`croissant`；其中 `juice_box` 在目录里的真实 id 是 `juice_carton`，`baguette` 在 CSV 里没有行、也没有真实尺寸，故没有凭空造 0.65 m，改用同属烘焙类的 `croissant`（目录真实三轴 0.12 × 0.07 × 0.06 m）。
 
@@ -189,7 +189,7 @@ Unity 端导入、材质赋值、碰撞与 prefab 组装由 Unity operator 复�
 
 拓扑/材质：10 件全部 1 个闭合壳，0 非流形边、0 零面积面、0 n-gon；纯色 Principled Base Color + Roughness，无贴图、无 UV、无顶点色。`cookie` 是平直面片 + 5 个平滑小圆顶（布尔并集），`orange` 是平滑 lathe，`cup`/`soda_can` 平直着色以保住口沿，`glass_bottle`/`plate`/`bowl`/`thermos`/`croissant` 平滑着色。
 
-### 10.1 第二批复现
+### 10.1 复现
 
 脚本在 `scripts/` 下；Windows staging 需要把 `Docs/Art/OriginalModels/props/scripts` 和 `Docs/Design/Maps/PicnicLawn/prop_catalog.csv` 按仓库相对路径镜像到 `_stage/Docs/...`，因为 `build_all.py` 按 `prop_lib.ROOT` 找 CSV。构建 + 回读验证（cmd.exe 里 `--props` 的逗号列表必须整体加引号，否则只取到第一件）：
 
@@ -207,12 +207,12 @@ set STAGE=%ROOT%\_stage\Docs\Art\OriginalModels\props\scripts
 
 产物：`exports/<id>.fbx|.glb|.blend|.manifest.json`、`previews/<id>_preview.png`、`previews/contact_sheet.png`、根 `manifest.json`、`verification.json`。最终一次构建是 **10 件 / 3226 tris / 57 个文件**。
 
-### 10.2 `prop_lib.py` 的第二批改动
+### 10.2 `prop_lib.py` 的改动
 
 1. 新增 `prism(points, length, axis='z', start=0.0)`：把一组二维点沿指定轴挤出成闭合棱柱（两个环 + 侧面四边形 + 两端 n-gon，`recalc_face_normals`，`finish()` 里再三角化端面）。果汁盒的“房子 + 屋脊 + 封口鳍”十点截面就是用它挤出的；之前 `sheet`/`tube`/`lathe` 都做不了这种带尖顶的直棱柱。
 2. 预览相机的 `ortho_scale` 从 `span * 1.30` 放宽到 `span * 1.45`：第一版牛角包在 1.30 下右侧被画幅裁掉，放宽后四边都有余量，代价是所有预览里的模型略小一点。
 
-### 10.3 这批的已知偏差
+### 10.3 已知偏差
 
 1. `baguette` 被 `croissant` 替代：CSV 没有 baguette 行/尺寸；`bread_slice` 的 note 明确记录整条面包被砍掉。没有为了凑数编 0.65 m。`croissant` 的 0.12 × 0.07 × 0.06 有目录来源。
 2. `cookie`：旧版四个凹坑在 3/4 视角像切了四块的派；新版去掉凹坑，改成 5 个凸起小圆顶 + 保留原来的六瓣轻微波浪边。尺寸/枢轴/文件名不变，但三角面从 192 增至 326（预算 340）。
@@ -221,11 +221,11 @@ set STAGE=%ROOT%\_stage\Docs\Art\OriginalModels\props\scripts
 5. `soda_can` 没有做拉环：预算 320/340，再加一个拉环会超；平顶 + 凹盖 + 红标已经能读成易拉罐，但它也可能被读成小铁罐。`thermos` 的提手缝隙在这个固定相机角度被提手本身挡住，侧视/俯视才明显。`glass_bottle` 的深绿在暗背景下偏黑。`cup` 为了消掉内壁的平滑法线锯齿改成平直着色，外壁能看见 20 条竖棱。
 6. 未做：UV、贴图、LOD、碰撞体、动画、Unity 导入/材质重建。FBX 不保存 Principled base colour，Unity 侧仍要按 `manifest.json` 的 `material_base_colors` 重建，或改用 GLB（内含 baseColorFactor）。
 
-## 11. 第四批：第一关剩下的食物/餐具 + `thermos` 重做（2026-11-15）
+## 11. 第一关食物/餐具与 `thermos`
 
 这一批把 `PROP_CATALOG.md` 的 StoryMode 里**还没有真实模型**的道具补完，并重做读错的 `thermos`。
 
-### 11.1 本批道具
+### 11.1 道具
 
 | 道具 | 规格尺寸（设计） | 实测 X×Y×Z (m) | 面数/预算 | 壳 | AABB 中心 | 来源 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -235,7 +235,7 @@ set STAGE=%ROOT%\_stage\Docs\Art\OriginalModels\props\scripts
 | `sandwich` | 0.12 × 0.09 × 0.04 | 0.1200 × 0.0900 × 0.0400 | 140/400 | 1 | 0,0,0 | `PROP_CATALOG.md` 三轴 |
 | `spoon` | 0.18 长，头 3.5 × 5 cm，柄宽 1.2 | 0.0350 × 0.1800 × 0.0150 | 282/300 | 1 | 0,0,0 | `PROP_SET_PLAN.md` §3.4 + CSV `real_longest_dim_m` |
 | `small_potted_plant` | Ø0.14 × 高 0.22（盆 Ø14×12） | 0.1399 × 0.1364 × 0.2200 | 489/500 | 1 | 0,0,0 | `PROP_CATALOG.md` 三轴 |
-| `thermos`（重做） | 0.12 × 0.12 × 0.30 | 0.1087 × 0.1053 × 0.3000 | 388/400 | 1 | 0,0,0 | 同第二批 |
+| `thermos`（重做） | 0.12 × 0.12 × 0.30 | 0.1087 × 0.1053 × 0.3000 | 388/400 | 1 | 0,0,0 | 同上 |
 
 合计 **7 件 / 1793 tris / 38 个文件**，`verify_import.py` 的 14 次回读（7 件 × FBX/GLB）全部 `ok`，`VERIFY_ALL_OK`。
 
@@ -249,12 +249,12 @@ StoryMode 里出现过、但 `exports/` 里还没有模型的道具只有 6 个 
 2. **竖向提手**：19 × 7 mm 的扁带（椭圆截面扫掠，不是圆钢筋），直段 72 mm，离壶身 14.5 mm，**炭黑色**（第四种材质）跟不锈钢灰分开。提手放在偏离 +X 40° 的方向：正对 +X 时相机正对着提手圈口，圈口被后面的壶身填满，只能看见一条深色竖条（前两版都是这个毛病）；偏 40° 后圈面接近平行画面，14.5 mm 的指缝变成背景，缺口一眼可见。代价是 AABB 从第二批的 0.1212 × 0.1058 m 变成 0.1087 × 0.1053 m（壶身、杯径、0.30 m 高度都没变，仍在 0.12 m 的包络内）。
 3. **双色**：壶身不锈钢灰 `0.340,0.360,0.385` + 腰带深青 `0.020,0.115,0.105`（`z=0.1305..0.1795`）。
 
-### 11.3 `prop_lib.py` 的第四批改动
+### 11.3 `prop_lib.py` 的改动
 
 1. 新增 `Builder.boolean_difference(target, tools)`：和 `boolean_union` 共用 `_apply_boolean`（Exact solver、逐件 apply、删掉工具对象），奶酪的三个圆形凹坑用它挖出来。之前只有并集。
 2. 没有新增其它图元：`lathe` 做盆/杯/勺头，`tube` 做提手/叶/柄，`prism` 做奶酪楔和三明治棱柱，`disc_grid` 做面包片和落叶，都够用。
 
-### 11.4 这批的已知偏差
+### 11.4 已知偏差
 
 1. `bread_slice`：0.0996 × 0.1000 × 0.0143。`finish()` 按最长轴归一化，法线向外的平滑外缘让原始 Y 比 X 长一点点，归一化后 X 少 0.4 mm、Z 少 0.7 mm（1.5 cm 的 4.7%）。要严格 0.10/0.10/0.015 就得放弃面包边的轻微起伏。
 2. `fallen_leaf`：Z = 1.1 mm（设计 1 mm）。叶片有 3 段上翘，翘起量叠加在 0.9–1.1 mm 的厚度上；压到 1 mm 会丢掉弯曲。
@@ -264,9 +264,9 @@ StoryMode 里出现过、但 `exports/` 里还没有模型的道具只有 6 个 
 6. `sandwich` 仍然可能被读成“夹心蛋糕切块”：三角楔 + 分层是它的真实形态，没有贴图时无法再给出更多信息。这一批做了三件事把它推向三明治——侧面是“棕边 / 米白面包瓤 / 火腿 / 奶酪 / 米白面包瓤 / 棕边”的夹层剖面、顶面是米白瓤 + 一圈细棕边（跟 `bread_slice` 同色）、面包色与 `bread_slice` 完全一致。
 7. 未做：UV、贴图、LOD、碰撞体、动画、Unity 导入/材质重建（同前几批）。
 
-## 12. 第五批：野餐一角结构件（按 `LEVEL_CONSTRUCTION.md` §3.2 / §4 重选）
+## 12. 野餐一角结构件（依据 `LEVEL_CONSTRUCTION.md` §3.2 / §4）
 
-`Docs/Research/KatamariMaps/LEVEL_CONSTRUCTION.md` 的 11 件结构型可吸物入库后，本批按那份清单重选 6 件：**`wood_plank` / `serving_tray` / `folding_table`（三件"薄、长、有平面"的斜搭与台面主力）+ `picnic_basket` / `folding_stool` / `cooler_box`（原有三件，尺寸改为该文档的 AABB）**。第一批里已做完的 `picnic_blanket` / `flower_pot_large` / `collapsed_bench` 仍留在 `models/`（各自有 CSV 行），但不属于这份骨架清单，本节不表。
+`Docs/Research/KatamariMaps/LEVEL_CONSTRUCTION.md` 的 11 件结构型可吸物入库后，这组按那份清单重选 6 件：**`wood_plank` / `serving_tray` / `folding_table`（三件"薄、长、有平面"的斜搭与台面主力）+ `picnic_basket` / `folding_stool` / `cooler_box`（原有三件，尺寸改为该文档的 AABB）**。第一批里已做完的 `picnic_blanket` / `flower_pot_large` / `collapsed_bench` 仍留在 `models/`（各自有 CSV 行），但不属于这份骨架清单，本节不表。
 
 ### 12.1 尺寸、面数、可吸球径
 
@@ -281,11 +281,11 @@ StoryMode 里出现过、但 `exports/` 里还没有模型的道具只有 6 个 
 
 `D = (60·a·b·c/π)^(1/3)`；D ≤ 2.20 m，六件都进第一关可吸梯子（最晚 2.00 m 的折叠桌），没有 `D > 2.20` 的纯布景件。FBX + GLB 回读 12 次全 `ok`，`VERIFY_ALL_OK`。
 
-### 12.2 建模取舍（读图后改过的地方）
+### 12.2 建模取舍
 
 1. **`wood_plank` 尺寸源冲突**：同一文档 §3.2 写 1.20×0.25×0.02（D 0.486），§4 P0 写 1.40×0.35×0.025（D 0.616）。用 §4（带 id、面数预算的落地表）；交付里注明这一档从 0.49 变成 0.62。
 2. **`serving_tray` 是"有边的板"**：0.55×0.35×0.04 的外壳挖掉 0.50×0.30、深 28 mm 的内腔，留 12 mm 底板 + 25 mm 边。边顶（z=0.040）和底板（z=0.012）都是平面；没有边就只是第二块木板。
-3. **`folding_table` 平顶**：`PROP_SET_PLAN.md` 原话"桌面微拱"被否掉——本批合同是台面必须平（桌上一簇小物），顶面 z=0.700 整块平面。X 形交叉腿试过一版：4 根斜撑里 2 根并进腿、2 根仍单独成壳（3 shells），于是改成 4 条 40 mm 方腿（1 shell，236 tris）。"折叠"的机构细节在这个尺寸读不出来，平顶和 0.70 m 高度是它在这张图里的全部作用。
+3. **`folding_table` 平顶**：`PROP_SET_PLAN.md` 原话"桌面微拱"被否掉——这组合同是台面必须平（桌上一簇小物），顶面 z=0.700 整块平面。X 形交叉腿试过一版：4 根斜撑里 2 根并进腿、2 根仍单独成壳（3 shells），于是改成 4 条 40 mm 方腿（1 shell，236 tris）。"折叠"的机构细节在这个尺寸读不出来，平顶和 0.70 m 高度是它在这张图里的全部作用。
 4. **篮子压到 0.22 m**：body 137.5 mm + 提手拱 83 mm，实测 0.2213 m（提手 6 边形管外缘多 1.3 mm，允许）。提手加粗到 Ø20 mm、颜色提亮，第一版 Ø16 mm 读成铁丝。
 5. **冷藏箱 0.35 深 × 0.30 高**：握槽从长边改到两个短端（docstring 一直写的是"short sides"，第一版代码写错到 ±Y 长边），深 25 mm，槽内给一块深灰"橡胶"材质——10–20 mm 的同色浅槽在预览里完全看不见。
 6. **凳子改成 0.40×0.35×0.32**：座面 0.35×0.25 不变，脚口外撇到 ±0.1685（+管半径 = 0.175），座面顶 0.32；腿间净空 0.308 m，小球能钻过去，符合"有腿有缝的开口凳"。
@@ -294,9 +294,9 @@ StoryMode 里出现过、但 `exports/` 里还没有模型的道具只有 6 个 
 
 `LEVEL_CONSTRUCTION.md` 的 `wood_plank` / `serving_tray` / `folding_table` 在 `prop_catalog.csv` 里没有行。`build_one()` 现在允许模型模块自带 `DOC_ROW`（id / name_zh / category / real_longest_dim_m / game_longest_dim_m）来补这一行；CSV 有行的道具仍以 CSV 为准，CSV 没有又没 `DOC_ROW` 的 id 仍硬失败。**没有改 CSV**。
 
-### 12.4 第一批 8 件的真实尺寸重标（同一批顺手修）
+### 12.4 前 8 件小道具的真实尺寸标定
 
-第一批的 `seed/acorn/pebble/bottle_cap/paper_scrap/toy_ball/napkin/watering_can` 当初按 `game_longest_dim_m` 建的（`SIZE_REFERENCE` 未设 = `'game'`），违反"真实尺寸"约定。现在全部改成 `SIZE_REFERENCE='real'`、`TARGET_LONGEST_M = CSV real_longest_dim_m`，**只改尺寸约定、不改形状**（`finish()` 均匀缩放，文件名/枢轴规则不变），重新出到 `legacy-real/`：
+最初 8 件的 `seed/acorn/pebble/bottle_cap/paper_scrap/toy_ball/napkin/watering_can` 当初按 `game_longest_dim_m` 建的（`SIZE_REFERENCE` 未设 = `'game'`），违反"真实尺寸"约定。现在全部改成 `SIZE_REFERENCE='real'`、`TARGET_LONGEST_M = CSV real_longest_dim_m`，**只改尺寸约定、不改形状**（`finish()` 均匀缩放，文件名/枢轴规则不变），重新出到 `legacy-real/`：
 
 | 道具 | 旧（game） | 新（real，实测） | 缩放 |
 |---|---|---|---|
@@ -314,29 +314,29 @@ StoryMode 里出现过、但 `exports/` 里还没有模型的道具只有 6 个 
 ### 12.5 复现
 
 ```bat
-set S=D:\VRChatKatamariPreview\PropModels\batch5-v1\_stage\Docs\Art\OriginalModels\props\scripts
+set S=D:\VRChatKatamariPreview\PropModels\structures-v1\_stage\Docs\Art\OriginalModels\props\scripts
 set B=D:\SteamLibrary\steamapps\common\Blender\blender.exe
-"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\build_all.py -- --out D:\VRChatKatamariPreview\PropModels\batch5-v1 --props "wood_plank,serving_tray,picnic_basket,folding_stool,cooler_box,folding_table"
-"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\verify_import.py -- --out D:\VRChatKatamariPreview\PropModels\batch5-v1 --props "wood_plank,serving_tray,picnic_basket,folding_stool,cooler_box,folding_table"
-"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\build_all.py -- --out D:\VRChatKatamariPreview\PropModels\batch5-v1\legacy-real --props "seed,acorn,pebble,bottle_cap,paper_scrap,toy_ball,napkin,watering_can"
-"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\verify_import.py -- --out D:\VRChatKatamariPreview\PropModels\batch5-v1\legacy-real --props "seed,acorn,pebble,bottle_cap,paper_scrap,toy_ball,napkin,watering_can"
+"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\build_all.py -- --out D:\VRChatKatamariPreview\PropModels\structures-v1 --props "wood_plank,serving_tray,picnic_basket,folding_stool,cooler_box,folding_table"
+"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\verify_import.py -- --out D:\VRChatKatamariPreview\PropModels\structures-v1 --props "wood_plank,serving_tray,picnic_basket,folding_stool,cooler_box,folding_table"
+"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\build_all.py -- --out D:\VRChatKatamariPreview\PropModels\structures-v1\legacy-real --props "seed,acorn,pebble,bottle_cap,paper_scrap,toy_ball,napkin,watering_can"
+"%B%" --background --factory-startup --disable-autoexec --python-exit-code 2 --python %S%\verify_import.py -- --out D:\VRChatKatamariPreview\PropModels\structures-v1\legacy-real --props "seed,acorn,pebble,bottle_cap,paper_scrap,toy_ball,napkin,watering_can"
 ```
 
 ### 12.6 未做与边界
 
-- 本批 6 件**没有碰撞体**；建议的分箱见交付正文（`wood_plank` 1 box、`serving_tray` 1 box、`folding_table` 桌面 1 + 4 腿各 1、`picnic_basket` 1、`folding_stool` 座面 1 + 两框各 1、`cooler_box` 1）。
-- 骨架清单里本批未做的：`crate` / `book_stack` / `beer_crate` / `lounge_chair` / `stroller` / `picnic_table`（按 6 件配额截断，主次按 Lead 的三件"薄长平面"优先）。
+- 这组 6 件**没有碰撞体**；建议的分箱见交付正文（`wood_plank` 1 box、`serving_tray` 1 box、`folding_table` 桌面 1 + 4 腿各 1、`picnic_basket` 1、`folding_stool` 座面 1 + 两框各 1、`cooler_box` 1）。
+- 骨架清单里这组未做的：`crate` / `book_stack` / `beer_crate` / `lounge_chair` / `stroller` / `picnic_table`（按 6 件配额截断，主次按 Lead 的三件"薄长平面"优先）。
 - 当前 motor 只有一个解析地面、没有竖直支撑，所以这 6 件**实际上都不能爬**；平顶与 2.5 cm 板是给将来的坡面/支撑补丁留的形状，今天它们只是"挡路 ↔ 可吸"两态。
 
-## 13. 第六批：第一关剩下的 9 件可吸结构件（2026-11-15）
+## 13. 第一关可吸结构件（9 件）
 
 `Docs/Design/StoryMode/PICNIC_CORNER_LAYOUT.md` §4.1 的 17 件可吸结构件用的是 13 个 def。逐个对着本目录 `scripts/models/` + `exports/*.manifest.json` 核对后，**9 个 def 没有模型**：
 
-- 第五批按配额截断、没做的 5 件：`crate` / `book_stack` / `beer_crate` / `lounge_chair` / `stroller`（见 §12.6）；
+- 按配额截断、没做的 5 件：`crate` / `book_stack` / `beer_crate` / `lounge_chair` / `stroller`（见 §12.6）；
 - 布局文档 U3 为了填 1.10–1.60 空档新加的 4 件：`storage_bin` / `cooler_box_large` / `crate_large` / `picnic_bench`。
 
-`serving_tray` / `wood_plank` / `folding_table` / `folding_stool` 已有模型，未重做。110 件小道具的 31 个 def 全部已有模型（本批只补结构件）。
-`picnic_table`（`LEVEL_CONSTRUCTION.md` §4 P0，D_req 2.492 > 2.20）**不在第一关布局里**，`PROP_SET_PLAN` §2.8.5 已把它划给 PicnicLawn，本批**没有建**，不是漏项。
+`serving_tray` / `wood_plank` / `folding_table` / `folding_stool` 已有模型，未重做。110 件小道具的 31 个 def 全部已有模型（这组只补结构件）。
+`picnic_table`（`LEVEL_CONSTRUCTION.md` §4 P0，D_req 2.492 > 2.20）**不在第一关布局里**，`PROP_SET_PLAN` §2.8.5 已把它划给 PicnicLawn，这组**没有建**，不是漏项。
 
 ### 13.1 尺寸、面数、可吸球径
 
@@ -357,7 +357,7 @@ set B=D:\SteamLibrary\steamapps\common\Blender\blender.exe
 合计 **9 件 / 3038 tris**。三轴与布局文档的差都 < 1e-6 m；`D = (60·a·b·c/π)^(1/3)`，9 件全部 ≤ 2.20，没有纯布景件。
 面数预算取 `LEVEL_CONSTRUCTION.md` §4 的 P0/P1/P2 表（`crate` 600、`lounge_chair` 900、`stroller` 900、`book_stack` 300、`beer_crate` 400）；U3 的 4 个新 def 该文档没有给预算，按同尺寸档沿用 **600 / 600 / 700 / 700**。
 
-### 13.2 建模取舍（读图后改过的地方）
+### 13.2 建模取舍
 
 1. **`lounge_chair` 没有靠背**。布局把它当 0.35 m 的地形用（台顶 0.26 → 躺椅 0.35 → 桌面 0.70），所以躺面是**一整块 z = 0.350 的平面**，靠背/扶手/枕头一个都不能高过它。它读成躺椅靠的是：1.60 × 0.60 的赭色布面 + 两根 28 mm 边管 + 四条腿 + 两道横撑；头端 250 mm 是一块**与自己共面**的 1 mm 米色板（折叠毛巾），不是凸起。
 2. **`stroller` 的行驶方向在 +X，不在 +Y**。布局的 `size` 是 `[x, 高度, z]` 且 `yaw = 0`，所以车宽必须落在 X（1.00）、进深落在 Z（0.55）。模型就是按这个朝向建的（车架在 -X 端），AABB 才能同时对上 D_req 与挡路盒。这是**唯一**一件正面不是 +Y 的商品；已在 `NOTES` 里写明。
@@ -371,7 +371,7 @@ set B=D:\SteamLibrary\steamapps\common\Blender\blender.exe
 
 ### 13.3 复现
 
-本批在 Linux 无头 Blender **4.0.2** 上构建与回读（`source ~/tools/blender-env.sh`），命令与 §5 / §12.5 相同，只是把输出指到仓库外：
+这组在 Linux 无头 Blender **4.0.2** 上构建与回读（`source ~/tools/blender-env.sh`），命令与 §5 / §12.5 相同，只是把输出指到仓库外：
 
 ```bash
 PROPS="book_stack,beer_crate,crate,storage_bin,crate_large,cooler_box_large,picnic_bench,lounge_chair,stroller"
@@ -379,17 +379,17 @@ PROPS="book_stack,beer_crate,crate,storage_bin,crate_large,cooler_box_large,picn
 "$BLENDER" $BLENDER_FLAGS --python Docs/Art/OriginalModels/props/scripts/verify_import.py -- --out /tmp/props_b6_stage --props "$PROPS"
 ```
 
-产物：`exports/<id>.fbx|.glb|.blend|.manifest.json`、`previews/<id>_preview.png`（本批已复制回仓库），外加 `previews/contact_sheet_batch6.png`（9 件拼图）。回读 **18 次全 `ok`（`VERIFY_ALL_OK`）**：FBX 与 GLB 的三角面数与源网格逐一相同，世界尺寸与 manifest 差 < 5e-4 m，包围盒中心在原点。
+产物：`exports/<id>.fbx|.glb|.blend|.manifest.json`、`previews/<id>_preview.png`（这组已复制回仓库），外加 `previews/contact_sheet_structures_level_one.png`（9 件拼图）。回读 **18 次全 `ok`（`VERIFY_ALL_OK`）**：FBX 与 GLB 的三角面数与源网格逐一相同，世界尺寸与 manifest 差 < 5e-4 m，包围盒中心在原点。
 
 ### 13.4 未做与边界
 
-- **本批没有重新生成** `manifest.json`（总清单）与 `SHA256SUMS`：那两份是整个 `props/` 的产物，本批只追加了 9 个 def 的四件套。要合并时跑一次全量 `build_all.py`（不带 `--props`）即可；`sign.py` 也能只重算指纹。**2026-11-15 后续合并**：`manifest.json` 已由 48 个 `exports/<id>.manifest.json` 汇总（未重跑几何），`SHA256SUMS` 用 `sign.py` 重算。
+- **这组没有重新生成** `manifest.json`（总清单）与 `SHA256SUMS`：那两份是整个 `props/` 的产物，这组只追加了 9 个 def 的四件套。要合并时跑一次全量 `build_all.py`（不带 `--props`）即可；`sign.py` 也能只重算指纹。**2026-11-15 后续合并**：`manifest.json` 已由 48 个 `exports/<id>.manifest.json` 汇总（未重跑几何），`SHA256SUMS` 用 `sign.py` 重算。
 - **没有在 Unity 里导入验证**（本 agent 不是 Unity 操作员）：材质仍需按 `exports/<id>.manifest.json` 的 `material_base_colors` 重建，或改用 GLB。
 - 预览图的像素来自 **Blender 4.0.2 的 EEVEE**，和本目录里 3.6.21 / 5.3.0 生成的旧预览不是同一渲染器；几何、清单与拼图布局不受影响。
 - 9 件**没有碰撞体**。建议分箱：`book_stack` 1、`beer_crate` 1、`crate` 1、`storage_bin` 1、`crate_large` 1、`cooler_box_large` 1、`picnic_bench` 座面 1 + 两条腿框各 1、`lounge_chair` 躺面 1 + 四条腿各 1、`stroller` 车体 1 + 车架 1。
 - 当前 motor 没有竖直支撑（同 §12.6），所以这批的平顶现在仍然只是"挡路 ↔ 可吸"两态的形状准备。
 
-## 14. 进 Unity（2026-11-15）
+## 14. 进 Unity
 
 本节是 48 件道具从 `exports/` 进入 Unity 工程的交接说明：拷贝位置、材质工具、操作员验收。模型源仍以 `exports/` 为准；Unity 侧只保存一份拷贝、每件一个 `<def>.manifest.json` 和生成的 `.mat`。
 
@@ -443,19 +443,19 @@ PROPS="book_stack,beer_crate,crate,storage_bin,crate_large,cooler_box_large,picn
 - 48 个 manifest 已随 FBX 进入 Assets；如果以后改建模颜色，改 `exports/<def>.manifest.json` 后要同步覆盖 Unity 侧同名 manifest，再跑菜单。两份不一致时工具只读 Unity 侧那份。
 - 自动同步走 `EditorApplication.delayCall`（避免在 AssetDatabase 导入状态里建资产触发限制警告）；批处理/CI 或 domain reload 打断时可能不会自动跑，此时显式调用 `PropArtMaterials.SyncAll()` 或跑菜单即可。编辑器启动时还有一次"缺材质才同步"的兜底检查。
 
-## 15. 第五批：两个新主题的 pilot 40 件 + 第一关 40 件 + 材质/细节返工（2026-11-15）
+## 15. 两个新主题的 pilot 40 件 + 第一关 40 件
 
 ### 15.1 规模
 
 | 项 | 值 |
 |---|---|
-| 仓库里的原创道具 | **128 件**（第四批结束时 48 件） |
+| 仓库里的原创道具 | **128 件** |
 | 三角面合计 | 29307 |
 | 材质槽 | 1 槽 19 件 / 2 槽 29 件 / 3 槽 62 件 / ≥4 槽 18 件 |
 | 超出 `tri_budget` 的件 | 1（beetle_figurine） |
 | 档位分布 | t0 40 / t1 24 / t2 21 / t3 17 / t4 5 / t5 4 / t6 3 / t7 7 |
 
-### 15.2 本批新增（80 件）
+### 15.2 新增（80 件）
 
 | 组 | 数量 | id |
 |---|---|---|
@@ -466,11 +466,11 @@ PROPS="book_stack,beer_crate,crate,storage_bin,crate_large,cooler_box_large,picn
 | 牛粪草甸 A/B | 20 | grain_kernel, acorn_cap, snail_shell, farm_egg, sheep_bell, smooth_pebble, flint_stone, dandelion_puff, wool_tuft, beetle_figurine, hay_wisp, straw_tuft, feather, leather_strap, clover_sprig, dry_leaf_curl, wheat_stalk, fence_peg, dung_ball_small, dung_ball_medium |
 | 凌乱房间 A/B | 20 | toy_brick, battery_aa, crumpled_paper, earbuds_case, ceramic_mug, game_controller, cereal_bowl, tissue_box, slipper, hairbrush, sticky_note, keychain, phone_charger, sunglasses, book_paperback, remote_control, chip_bag, sock_single, t_shirt, pizza_box |
 
-### 15.3 材质与细节（owner 反馈后的返工）
+### 15.3 材质与细节
 
-owner 看过第一版 pilot 后指出「太简略、材质没用上」。诊断：第一版 80 件里 **32 件只有一个材质槽**、主体色普遍 >0.7 亮度，全部是「白/米白单色块」。返工按 [MATERIAL_AND_DETAIL_SPEC.md](MATERIAL_AND_DETAIL_SPEC.md) 执行（共享调色板、≥2 槽且必有暗色槽、主体亮度 0.30–0.65、槽间亮度差 ≥0.15 或色相 ≥60°、每类形状的加细节清单、面数上限 ×1.6）：
+材质与细节按 [MATERIAL_AND_DETAIL_SPEC.md](MATERIAL_AND_DETAIL_SPEC.md) 执行（共享调色板、多材质槽、真几何细节）。
 
-- 80 件全部重做材质分区，**没有一件还是单槽**；多数件 3–4 槽（如 `game_controller` 6 槽、`battery_aa` 4 槽、`ceramic_mug` 4 槽）。
+- 80 件全部做材质分区，**没有一件是单槽**；多数件 3–4 槽（如 `game_controller` 6 槽、`battery_aa` 4 槽、`ceramic_mug` 4 槽）。
 - 细节是**真几何**不是画色块：盲槽印块、压痕折线、卷边、凹刻浮雕、台阶环、导油槽、凸点、橡胶握垫、镀铬保险杠、螺层、羽轴、纽扣唇边等。
 - 颜色**只来自调色板**，每件的槽位 key 与线性 RGB 写在各自 manifest 的 `materials_declared`；`previews/<id>_preview.png` 是用同一套材质渲的。
 
@@ -486,9 +486,9 @@ owner 看过第一版 pilot 后指出「太简略、材质没用上」。诊断�
 - 调色板里 `wood`(0.224) 低于「主体 0.30–0.65」，`wood`↔`wood_dark` 亮度差 0.137 < 0.15：纯木件把主体放到 `straw`(0.367)、暗槽用 `wood_dark`；`cutting_board` 因此面用 `straw` 而非 `wood`（改一处常量即可回退）。
 - 深色主题件（皮革 0.045、土 0.137、深绿叶 0.115）主体亮度低于 0.30，是调色板只有这一档，不是漏改。
 - 少数「相邻色」槽对（`book_paperback` 蓝/墨、`sock_single` 灰/红、`remote_control` 黄/金属）亮度差 <0.15，靠色相或彩度区分，已在各自报告里逐件列出。
-- `straw_short` 的内壁是直筒穿过 12° 弯壳（升级前就有的形体缺陷，视觉不可见，未在本轮修）。
+- `straw_short` 的内壁是直筒穿过 12° 弯壳（升级前就有的形体缺陷，视觉不可见，未修）。
 - `beetle_figurine` 326 面超过目录原预算 300（`within_budget` 记 NO），按规范 ×1.6 = 480 仍在容许范围；`catalogue.csv` 的 `tri_budget` 已按实测提到 326，下次构建即达标。
-- **第四批的 19 件仍是单色**（`seed`、`pebble`、`bottle_cap`、`paper_scrap`、`napkin`、`watering_can`、`grapes`、`banana`、`cup`、`glass_bottle`、`plate`、`bowl`、`croissant`、`cheese_slice`、`fallen_leaf`、`spoon`、`flower_pot_large`、`wood_plank`、`serving_tray`）：本轮返工只覆盖第五批的 80 件（80/80 ≥2 槽），这 19 件留给下一轮。
+- **其中 19 件仍是单色**（`seed`、`pebble`、`bottle_cap`、`paper_scrap`、`napkin`、`watering_can`、`grapes`、`banana`、`cup`、`glass_bottle`、`plate`、`bowl`、`croissant`、`cheese_slice`、`fallen_leaf`、`spoon`、`flower_pot_large`、`wood_plank`、`serving_tray`）：本轮返工只覆盖第五批的 80 件（80/80 ≥2 槽），这 19 件留给下一轮。
 
 ### 15.6 复现
 

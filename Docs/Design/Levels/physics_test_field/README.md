@@ -1,9 +1,9 @@
 # 球体物理测试场 · 关卡数据（physics test field）
 
-> 状态：`PROVISIONAL_NOT_TESTED`，2026-11-15。**紧凑重排：9 格已入库**（C14 / C09 / C08 / C10 / C01 / C03 / C05 / C06 / C13），
-> 全部排进 **27 m × 30.5 m** 的网格（4 列 × 3 行，1–1.5 m 走道）；每格自带一块 6×9 或 6×10 的小地面 + 4 面 **0.4 m 矮边界**。
-> 其余 12 格在 `Docs/Design/BallMotor/physics_test_field.json` 的 `planned_cells[]` 里只是名字，没有几何。
-> 设计文档：[../../../BallMotor/PHYSICS_TEST_FIELD.md](../../../BallMotor/PHYSICS_TEST_FIELD.md)（§9 是本目录的规矩）。
+> 状态：`PROVISIONAL_NOT_TESTED`。已入库的格见下面的布局；
+> 排在 **27 m × 30.5 m** 的网格（4 列 × 3 行，1–1.5 m 走道）；每格自带一块 6×9 或 6×10 的小地面 + 4 面 **0.4 m 矮边界**。
+> 尚无几何的格在 `Docs/Design/BallMotor/physics_test_field.json` 的 `planned_cells[]` 里只有名字。
+> 设计文档：[../../BallMotor/PHYSICS_TEST_FIELD.md](../../BallMotor/PHYSICS_TEST_FIELD.md)（§9 是本目录的规矩）。
 
 ## 这个目录是什么
 
@@ -14,7 +14,7 @@
 - **一格 = 一个 arena = 一份 `placement.json`**；
 - 切格 = `motor.ClearObstacles()` → 目标格的 `LevelArenaHost.Reapply()`；
 - 因为 `ClearObstacles` 清的是**全局**平面表，**每一格必须自带地面 + 4 面边界墙**（不是偷
-  base 的，见设计 §3.4）。紧凑化后 9 份文件的 `ground` / `wall_*` **不再逐字节相同**：每格的地面
+  base 的，见设计 §3.4）。紧凑化后各格文件的 `ground` / `wall_*` **不再逐字节相同**：每格的地面
   正好是它 6×9 / 6×10 的 pad，4 面墙在 pad 边上、高 0.4 m（视觉与挡人；motor 里仍是无限半空间）。
 - **所有格常显，只有当前格注册**：`PhysicsTestCell.ReleaseArena()` = `arena.SuspendRegistration()`
   （**不** `SetActive(false)`），`ApplyRegistration()` = `ResumeRegistration() + Reapply()`。

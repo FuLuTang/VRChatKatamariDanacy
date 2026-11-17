@@ -48,7 +48,7 @@
     {
       "id": "PROJECT_SCOPE",
       "kind": "repository_current_decisions",
-      "paths": ["Docs/00_SCOPE_DECISIONS.md", "Docs/01_GAME_DESIGN.md", "Docs/02_TECHNICAL_CONTRACTS.md", "Docs/09_REPOSITORY_BASELINE.md", "tasks.json"],
+      "paths": ["Docs/00_SCOPE_DECISIONS.md", "Docs/01_GAME_DESIGN.md", "Docs/02_TECHNICAL_CONTRACTS.md", "tasks.json"],
       "limit": "Project direction/prototypes, not evidence of original-game rules or implementation."
     }
   ],

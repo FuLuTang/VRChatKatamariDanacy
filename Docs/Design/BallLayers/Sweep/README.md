@@ -4,7 +4,7 @@
 
 ## 项目/公开证据边界
 
-- 原版源码没有取得。US7402104B2只表示历史专利公开，不证明新版沿用；Bandai官方产品页/FAQ没有公开本套TOI/盒碰撞实现；Ruby/Gosu公开代码是独立2D实验。访问结果见 [`GroundContact/SuiteFoundation/SOURCE_EVIDENCE.md`](../GroundContact/SuiteFoundation/SOURCE_EVIDENCE.md)。
+- 原版源码没有取得。US7402104B2只表示历史专利公开，不证明新版沿用；Bandai官方产品页/FAQ没有公开本套TOI/盒碰撞实现；Ruby/Gosu公开代码是独立2D实验。访问结果见 [`GroundContact/Research/SOURCE_EVIDENCE.md`](../GroundContact/Research/SOURCE_EVIDENCE.md)。
 - 本项目 `Docs/02_TECHNICAL_CONTRACTS.md` §3.3 先用统一球形扫掠；本层的平面/扩张AABB只是项目离线近似，不是原作源码或完整PhysX。
 
 ## 行为和语义
@@ -16,7 +16,7 @@
 
 ## 运行 / 非目标
 
-仓库根执行 `python3 -m unittest discover -s Docs/tests/ball_sweep -v`；跨层综合序列在 [`GroundContact/SIMULATION_REPORT.md`](../GroundContact/SIMULATION_REPORT.md)。本层不积分运动、不做T49凹凸支持、不接T50代理、不算摩擦反弹、任意旋转凸体、动态网络碰撞、真实球-盒圆角距离或Unity Physics。
+仓库根执行 `python3 -m unittest discover -s Docs/tests/ball_sweep -v`。本层不积分运动、不做T49凹凸支持、不接T50代理、不算摩擦反弹、任意旋转凸体、动态网络碰撞、真实球-盒圆角距离或Unity Physics。
 
 未在Unity/Udon、VR、网络或真实物理场景验证。对称凹角/极薄通道/大量冲突约束、最大接触次数、尺度依赖epsilon都需后续测试。
 

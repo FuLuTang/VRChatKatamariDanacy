@@ -53,7 +53,7 @@ python3 -m unittest -v test_synth
 
 ## 3. 事件 → 声音映射（events.csv 全覆盖）
 
-图例：`P0/P1/P2/P3` 沿用 events.csv 的审阅标签，不是最终调度契约；"预留"表示设计已定但本轮没有渲染文件。**本轮 MVP** = 有文件名的 23 个 WAV；**later** = 表中所有"预留"条目，按 P0→P1 补。
+图例：`P0/P1/P2/P3` 沿用 events.csv 的审阅标签，不是最终调度契约；"预留"表示设计已定但尚无渲染文件。**MVP** = 有文件名的 23 个 WAV；**later** = 表中所有"预留"条目，按 P0→P1 补。
 
 | 事件 id | 优先级 | 声音 / 文件 | 处理与理由 |
 |---|---|---|---|
@@ -62,7 +62,7 @@ python3 -m unittest -v test_synth
 | `collect.rejected` | P0 | `bump.reject` → `sfx_bump_reject` | 中性闷响；**绝不**与成功音相似。也用于"太大、吸不动"的物理碰撞。 |
 | `growth.threshold` | P1 | `growth.step` → `sfx_growth_step` | 一次提交跨多档只播最终档位。 |
 | `growth.buried` | P3 | **无** | 纯视觉遮挡/回收，不额外奖励。 |
-| `powerup.spawn-warning` | P1 | **无**（预留 `powerup.available`） | 需要"可用/刷新"世界标记，音效优先级低于本轮范围。 |
+| `powerup.spawn-warning` | P1 | **无**（预留 `powerup.available`） | 需要"可用/刷新"世界标记，音效优先级低于 MVP 范围。 |
 | `powerup.acquired` | P1 | **无独立音**（暂借 `sfx_magnet_activate` 前 120 ms；预留 `powerup.acquire`） | 现有借用容易和"激活"混淆，列为待做。 |
 | `magnet.activated` | P0 | `magnet.activate` + `magnet.loop` → `sfx_magnet_activate` / `sfx_magnet_loop` | 启动音短、持续循环低；结束 150 ms 淡出；KO/交分立即停。 |
 | `magnet.pull-predicted` | P2 | 仅磁铁循环本体 | 不对每个候选播放拾取音；候选飞行是装饰。 |
@@ -314,4 +314,4 @@ v = clamp(|ball_velocity| / 8.0, 0, 1)    # 8 m/s 作为满速参考
 2. 材料分类：木/金属/塑料/玻璃/软物/有机物各 2–3 个拾取变体，替代现在"只有音高变体"的方案。
 3. 在 Unity 里做 A/B：滚动 bed 的 trim、变体交叉淡化时长、低通曲线；用真机 4 人重叠场景验证抢占与 ducking。
 4. 换掉最弱的三项（滚动质感、火箭、KO），优先用自制录音/拟音而不是外部包。
-5. 若引入外部素材，先在 `Docs/Research/AssetSources/credits.csv` 登记，再进世界内 Credits 板。
+5. 若引入外部素材，先在 `Docs/Research/AssetSources/intake_manifest.csv` 登记，再进世界内 Credits 板。

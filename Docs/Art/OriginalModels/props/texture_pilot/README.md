@@ -10,7 +10,7 @@ $BLENDER $BLENDER_FLAGS --background --python \
   --props button,seed,bottle_cap,coin,plate,ceramic_mug,dandelion_puff,beetle_figurine,crate,storage_bin,postcard,grass_blade
 ```
 
-- `compare3_old_bad_fixed.png` — 12 行 × 3 列：旧纯色 / **有问题的一版**（法线是 fbm 噪声）/ 修正后。
+- `compare3_flat_flawed_fixed.png` — 12 行 × 3 列：旧纯色 / **有问题的一版**（法线是 fbm 噪声）/ 修正后。
 - `normal_maps_sheet.png` — 12 件的法线图（8 件平坦 = 该类材质不生成法线）。
 - `uv_checker_sheet.png` — 12 件的 UV 棋盘格渲染（32 格，红带 = u 轴、绿带 = v 轴）。
 - `previews/` — 贴图化后的 512² 预览。

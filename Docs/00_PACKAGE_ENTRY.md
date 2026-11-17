@@ -10,8 +10,7 @@
 所有速度、距离、时间、数量、价格方案都是可调原型值，不是原作数值或性能实测。
 
 ## 给总控 Agent 的第一条指令
-先读 `docs/00_SCOPE_DECISIONS.md`、`docs/02_TECHNICAL_CONTRACTS.md`、
-`docs/07_AGENT_OPERATING_RULES.md` 和 `tasks.json`。
+先读 `docs/00_SCOPE_DECISIONS.md`、`docs/02_TECHNICAL_CONTRACTS.md` 和 `tasks.json`。
 只启动依赖满足的任务。先完成平台验证和接口冻结，再扩展模块。
 旧聊天仅作背景；遇到冲突以本包的明确决策为准，未定项不能自行伪装成既定结论。
 没有用户提供的Unity项目路径、账号授权或测试设备时，完成可独立的文件任务并标记外部阻塞，
@@ -25,7 +24,6 @@
 - `docs/04_EXECUTION_PLAN.md`：阶段、依赖和逐任务说明。
 - `docs/05_ACCEPTANCE_TESTS.md`：自动测试与真机门禁。
 - `docs/06_MONETIZATION_LAUNCH.md`：装扮、内购、宣传。
-- `docs/07_AGENT_OPERATING_RULES.md`：Sol/Luna调度和并行写入规则。
 - `docs/08_SOURCES_AND_OPEN_QUESTIONS.md`：研究来源及事实边界。
 - `tasks.json`：可供调度器读取的任务DAG。
 - `diagrams/`：纵向依赖图、阶段甘特图，均为Mermaid源码。

@@ -4,7 +4,7 @@
 每个等宽刻度代表一个抽象阶段；不能当作“某任务只需一天”的估算。
 
 ## 阶段总表
-| 阶段 | 主要结果 | Sol工作 | Luna可并行工作 | 人工门禁 |
+| 阶段 | 主要结果 | 关键工作 | 可并行工作 | 人工门禁 |
 |---|---|---|---|---|
 | P0 | 平台能工作、参考边界可证 | 最小Unity工程、Station/输入实验 | 原版规则核对、资源清单、宣传构图 | VR佩戴与安全退出 |
 | P1 | 统一契约 | 坐标、状态、Owner、ID、协议 | 按契约准备模板 | 商家资格可同时办理 |
@@ -22,68 +22,67 @@
 商城资格未通过时可免费发布；收费功能保持关闭，不让商家审批阻塞基本游戏。
 参考原作未知值必须写成项目暂定值，不能因此假装“已还原”。
 
-## 角色
-SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
-每个任务都有写入边界、依赖、验收、来源和外部条件。
-模型名称只是路由；实际调度应根据具体API/代理工具配置连接，不由本文件自动执行。
+## 执行方
+任务索引的“执行”列只区分 人工（用户/授权测试者）与 代理（其余）。
+每个任务都有写入边界、依赖、验收、来源和外部条件。代理的路由与调度规则见 [AGENTS.md](<../AGENTS.md>)。
 
 ## 任务索引
 
 
 | ID | 任务 | 阶段 | 执行 | 必须依赖 |
 |---|---|---|---|---|
-| T00 | 工程基线、版本锁定与最小测试场景 | P0 | SOL | 无 |
-| T01 | 新版PVP参考规则与差异表 | P0 | LUNA | 无 |
-| T02 | 资产候选、授权与风格清单 | P0 | LUNA | 无 |
-| T03 | 主题风格与宣传前期分镜 | P0 | LUNA | 无 |
-| T04 | Station、输入与缩放最小平台实验 | P0 | SOL | T00 |
-| T05 | 真人VR平台与安全退出门禁G1 | P0 | HUMAN | T04 |
-| T06 | 公共接口、世界尺度与数据版本冻结 | P1 | SOL | T01, T05 |
-| T07 | VR A双控制器与校准 | P2 | SOL | T06 |
-| T08 | VR B与Desktop输入适配 | P2 | LUNA | T06 |
-| T09 | 球形运动、扫掠与追尾 | P2 | SOL | T06 |
-| T10 | 成长与径向凹凸代理实验 | P2 | SOL | T09 |
-| T11 | 静态物件注册与近邻拾取 | P2 | LUNA | T06 |
-| T12 | 本地吸附与远端装饰重建 | P2 | LUNA | T09, T11 |
-| T13 | 物件争抢与比赛权威账本 | P2 | SOL | T06 |
-| T14 | 球核心状态同步与插值 | P2 | LUNA | T09, T13 |
-| T15 | 快照、迟到加入与裁决迁移 | P2 | SOL | T13 |
-| T16 | 磁铁与火箭单槽道具 | P2 | LUNA | T09, T11, T13 |
-| T17 | 大厅加入区与回合状态机 | P2 | LUNA | T06, T13 |
-| T18 | 交分、吞噬、KO及重生事务 | P2 | SOL | T09, T13 |
-| T19 | HUD、设置及多语言 | P2 | LUNA | T06 |
-| T20 | 资产导入与地图数据烘焙工具 | P2 | LUNA | T02, T06 |
-| T21 | 第一图野餐灰盒与资源布置 | P2 | LUNA | T06, T20 |
-| T22 | 支撑坠落、资源补货与掉落碎团 | P2 | LUNA | T11, T13, T21 |
-| T23 | 分层音效、特效和振动 | P2 | LUNA | T06, T02 |
-| T24 | 外观插槽、预览与免费切换 | P2 | LUNA | T06, T20 |
-| T25 | 偏好和免费进度持久化 | P2 | LUNA | T06, T19 |
-| T26 | 一图两人纵切片集成 | P3 | SOL | T07, T08, T09, T11, T12, T13, T14, T16, T17, T18, T19, T21 |
-| T27 | 真人两人核心玩法门禁G3 | P3 | HUMAN | T26 |
-| T28 | 断线/延迟/补货集成强化 | P3 | SOL | T15, T22, T27 |
-| T29 | 凹凸代理是否参与物理的门禁 | P3 | HUMAN | T10, T27 |
-| T30 | 野餐图美术完成 | P4 | LUNA | T20, T21, T27 |
-| T31 | 玩具房灰盒与差异化路线 | P4 | LUNA | T20, T27 |
-| T32 | 玩具房美术完成 | P4 | LUNA | T31, T20 |
-| T33 | 结果板、领奖台和大厅成品 | P4 | LUNA | T17, T18, T24 |
-| T34 | 商家准入与商品规划人工前置 | P1 | HUMAN | T00 |
-| T35 | 商城mock与官方权益适配 | P4 | LUNA | T24, T25 |
-| T36 | 正式权益绑定与安全审查 | P4 | SOL | T34, T35 |
-| T37 | 最终资源授权与主题审核 | P4 | HUMAN | T02, T30, T32, T23 |
-| T38 | 四人性能与回合耐久测试 | P5 | SOL | T28, T29, T30, T32, T33, T23, T25 |
-| T39 | 四人地图公平与体验终验 | P5 | HUMAN | T38 |
-| T40 | 真实宣传成品与多语言发布文案 | P5 | LUNA | T03, T30, T32, T39 |
-| T41 | 内购真实交易与恢复人工验收 | P5 | HUMAN | T36, T37 |
-| T42 | 发布候选集成、许可和回滚包 | P6 | SOL | T39, T40, T37；收费发布另需T41 |
-| T43 | 用户批准公开发布 | P6 | HUMAN | T42 |
-| T44 | 第三主题夜市（非首发阻塞） | P7-OPTIONAL | LUNA | T39, T20 |
+| T00 | 工程基线、版本锁定与最小测试场景 | P0 | 代理 | 无 |
+| T01 | 新版PVP参考规则与差异表 | P0 | 代理 | 无 |
+| T02 | 资产候选、授权与风格清单 | P0 | 代理 | 无 |
+| T03 | 主题风格与宣传前期分镜 | P0 | 代理 | 无 |
+| T04 | Station、输入与缩放最小平台实验 | P0 | 代理 | T00 |
+| T05 | 真人VR平台与安全退出门禁G1 | P0 | 人工 | T04 |
+| T06 | 公共接口、世界尺度与数据版本冻结 | P1 | 代理 | T01, T05 |
+| T07 | VR A双控制器与校准 | P2 | 代理 | T06 |
+| T08 | VR B与Desktop输入适配 | P2 | 代理 | T06 |
+| T09 | 球形运动、扫掠与追尾 | P2 | 代理 | T06 |
+| T10 | 成长与径向凹凸代理实验 | P2 | 代理 | T09 |
+| T11 | 静态物件注册与近邻拾取 | P2 | 代理 | T06 |
+| T12 | 本地吸附与远端装饰重建 | P2 | 代理 | T09, T11 |
+| T13 | 物件争抢与比赛权威账本 | P2 | 代理 | T06 |
+| T14 | 球核心状态同步与插值 | P2 | 代理 | T09, T13 |
+| T15 | 快照、迟到加入与裁决迁移 | P2 | 代理 | T13 |
+| T16 | 磁铁与火箭单槽道具 | P2 | 代理 | T09, T11, T13 |
+| T17 | 大厅加入区与回合状态机 | P2 | 代理 | T06, T13 |
+| T18 | 交分、吞噬、KO及重生事务 | P2 | 代理 | T09, T13 |
+| T19 | HUD、设置及多语言 | P2 | 代理 | T06 |
+| T20 | 资产导入与地图数据烘焙工具 | P2 | 代理 | T02, T06 |
+| T21 | 第一图野餐灰盒与资源布置 | P2 | 代理 | T06, T20 |
+| T22 | 支撑坠落、资源补货与掉落碎团 | P2 | 代理 | T11, T13, T21 |
+| T23 | 分层音效、特效和振动 | P2 | 代理 | T06, T02 |
+| T24 | 外观插槽、预览与免费切换 | P2 | 代理 | T06, T20 |
+| T25 | 偏好和免费进度持久化 | P2 | 代理 | T06, T19 |
+| T26 | 一图两人纵切片集成 | P3 | 代理 | T07, T08, T09, T11, T12, T13, T14, T16, T17, T18, T19, T21 |
+| T27 | 真人两人核心玩法门禁G3 | P3 | 人工 | T26 |
+| T28 | 断线/延迟/补货集成强化 | P3 | 代理 | T15, T22, T27 |
+| T29 | 凹凸代理是否参与物理的门禁 | P3 | 人工 | T10, T27 |
+| T30 | 野餐图美术完成 | P4 | 代理 | T20, T21, T27 |
+| T31 | 玩具房灰盒与差异化路线 | P4 | 代理 | T20, T27 |
+| T32 | 玩具房美术完成 | P4 | 代理 | T31, T20 |
+| T33 | 结果板、领奖台和大厅成品 | P4 | 代理 | T17, T18, T24 |
+| T34 | 商家准入与商品规划人工前置 | P1 | 人工 | T00 |
+| T35 | 商城mock与官方权益适配 | P4 | 代理 | T24, T25 |
+| T36 | 正式权益绑定与安全审查 | P4 | 代理 | T34, T35 |
+| T37 | 最终资源授权与主题审核 | P4 | 人工 | T02, T30, T32, T23 |
+| T38 | 四人性能与回合耐久测试 | P5 | 代理 | T28, T29, T30, T32, T33, T23, T25 |
+| T39 | 四人地图公平与体验终验 | P5 | 人工 | T38 |
+| T40 | 真实宣传成品与多语言发布文案 | P5 | 代理 | T03, T30, T32, T39 |
+| T41 | 内购真实交易与恢复人工验收 | P5 | 人工 | T36, T37 |
+| T42 | 发布候选集成、许可和回滚包 | P6 | 代理 | T39, T40, T37；收费发布另需T41 |
+| T43 | 用户批准公开发布 | P6 | 人工 | T42 |
+| T44 | 第三主题夜市（非首发阻塞） | P7-OPTIONAL | 代理 | T39, T20 |
 
 
 ## 逐任务执行卡
 
 
 ### T00 · 工程基线、版本锁定与最小测试场景
-阶段：P0；执行：SOL；评审：Sol；优先级：P0。
+阶段：P0；优先级：P0。
 依赖：无。
 允许写入：`ProjectSettings/`, `Packages/`, `Assets/VRC_Katamari/Labs/Bootstrap/`。
 步骤：
@@ -99,7 +98,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T01 · 新版PVP参考规则与差异表
-阶段：P0；执行：LUNA；评审：Sol；优先级：P0。
+阶段：P0；优先级：P0。
 依赖：无。
 允许写入：`Research/ReferenceRules/`。
 步骤：
@@ -115,7 +114,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T02 · 资产候选、授权与风格清单
-阶段：P0；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P0；优先级：P1。
 依赖：无。
 允许写入：`AssetIntake/`, `Research/AssetManifest/`。
 步骤：
@@ -132,7 +131,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T03 · 主题风格与宣传前期分镜
-阶段：P0；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P0；优先级：P1。
 依赖：无。
 允许写入：`Marketing/Preproduction/`。
 步骤：
@@ -148,7 +147,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T04 · Station、输入与缩放最小平台实验
-阶段：P0；执行：SOL；评审：Sol；优先级：P0。
+阶段：P0；优先级：P0。
 依赖：T00。
 允许写入：`Assets/VRC_Katamari/Labs/StationPlatform/`。
 步骤：
@@ -164,7 +163,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T05 · 真人VR平台与安全退出门禁G1
-阶段：P0；执行：HUMAN；评审：Human + Sol；优先级：P0。
+阶段：P0；执行：人工；优先级：P0。
 依赖：T04。
 允许写入：`Evidence/G1/`。
 步骤：
@@ -181,7 +180,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T06 · 公共接口、世界尺度与数据版本冻结
-阶段：P1；执行：SOL；评审：Sol；优先级：P0。
+阶段：P1；优先级：P0。
 依赖：T01, T05。
 允许写入：`Contracts/`, `Assets/VRC_Katamari/Core/Contracts/`。
 步骤：
@@ -197,7 +196,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T07 · VR A双控制器与校准
-阶段：P2；执行：SOL；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T06。
 允许写入：`Assets/VRC_Katamari/Input/DualHand/`。
 步骤：
@@ -214,7 +213,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T08 · VR B与Desktop输入适配
-阶段：P2；执行：LUNA；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T06。
 允许写入：`Assets/VRC_Katamari/Input/Standard/`。
 步骤：
@@ -230,7 +229,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T09 · 球形运动、扫掠与追尾
-阶段：P2；执行：SOL；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T06。
 允许写入：`Assets/VRC_Katamari/Motion/`。
 步骤：
@@ -247,7 +246,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T10 · 成长与径向凹凸代理实验
-阶段：P2；执行：SOL；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T09。
 允许写入：`Assets/VRC_Katamari/Shape/`, `Tests/Shape/`。
 步骤：
@@ -264,7 +263,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T11 · 静态物件注册与近邻拾取
-阶段：P2；执行：LUNA；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T06。
 允许写入：`Assets/VRC_Katamari/Collectibles/`。
 步骤：
@@ -281,7 +280,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T12 · 本地吸附与远端装饰重建
-阶段：P2；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P2；优先级：P1。
 依赖：T09, T11。
 允许写入：`Assets/VRC_Katamari/Presentation/Ball/`。
 步骤：
@@ -297,7 +296,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T13 · 物件争抢与比赛权威账本
-阶段：P2；执行：SOL；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T06。
 允许写入：`Assets/VRC_Katamari/Networking/Ledger/`。
 步骤：
@@ -314,7 +313,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T14 · 球核心状态同步与插值
-阶段：P2；执行：LUNA；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T09, T13。
 允许写入：`Assets/VRC_Katamari/Networking/BallState/`。
 步骤：
@@ -331,7 +330,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T15 · 快照、迟到加入与裁决迁移
-阶段：P2；执行：SOL；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T13。
 允许写入：`Assets/VRC_Katamari/Networking/Recovery/`。
 步骤：
@@ -348,7 +347,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T16 · 磁铁与火箭单槽道具
-阶段：P2；执行：LUNA；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T09, T11, T13。
 允许写入：`Assets/VRC_Katamari/Powerups/`。
 步骤：
@@ -365,7 +364,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T17 · 大厅加入区与回合状态机
-阶段：P2；执行：LUNA；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T06, T13。
 允许写入：`Assets/VRC_Katamari/MatchFlow/`。
 步骤：
@@ -382,7 +381,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T18 · 交分、吞噬、KO及重生事务
-阶段：P2；执行：SOL；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T09, T13。
 允许写入：`Assets/VRC_Katamari/PvP/`。
 步骤：
@@ -398,7 +397,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T19 · HUD、设置及多语言
-阶段：P2；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P2；优先级：P1。
 依赖：T06。
 允许写入：`Assets/VRC_Katamari/UI/`。
 步骤：
@@ -414,7 +413,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T20 · 资产导入与地图数据烘焙工具
-阶段：P2；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P2；优先级：P1。
 依赖：T02, T06。
 允许写入：`Assets/VRC_Katamari/Editor/`, `Art/Processed/`。
 步骤：
@@ -431,7 +430,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T21 · 第一图野餐灰盒与资源布置
-阶段：P2；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P2；优先级：P1。
 依赖：T06, T20。
 允许写入：`Assets/VRC_Katamari/Maps/Picnic/`。
 步骤：
@@ -447,7 +446,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T22 · 支撑坠落、资源补货与掉落碎团
-阶段：P2；执行：LUNA；评审：Sol；优先级：P0。
+阶段：P2；优先级：P0。
 依赖：T11, T13, T21。
 允许写入：`Assets/VRC_Katamari/WorldDynamics/`。
 步骤：
@@ -464,7 +463,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T23 · 分层音效、特效和振动
-阶段：P2；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P2；优先级：P1。
 依赖：T06, T02。
 允许写入：`Assets/VRC_Katamari/Feedback/`。
 步骤：
@@ -481,7 +480,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T24 · 外观插槽、预览与免费切换
-阶段：P2；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P2；优先级：P1。
 依赖：T06, T20。
 允许写入：`Assets/VRC_Katamari/Cosmetics/`。
 步骤：
@@ -497,7 +496,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T25 · 偏好和免费进度持久化
-阶段：P2；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P2；优先级：P1。
 依赖：T06, T19。
 允许写入：`Assets/VRC_Katamari/Persistence/`。
 步骤：
@@ -514,7 +513,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T26 · 一图两人纵切片集成
-阶段：P3；执行：SOL；评审：Sol；优先级：P0。
+阶段：P3；优先级：P0。
 依赖：T07, T08, T09, T11, T12, T13, T14, T16, T17, T18, T19, T21。
 允许写入：`Assets/VRC_Katamari/Scenes/PlayableSlice.unity`, `Integration/`。
 步骤：
@@ -529,7 +528,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T27 · 真人两人核心玩法门禁G3
-阶段：P3；执行：HUMAN；评审：Human + Sol；优先级：P0。
+阶段：P3；执行：人工；优先级：P0。
 依赖：T26。
 允许写入：`Evidence/G3-Core/`。
 步骤：
@@ -546,7 +545,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T28 · 断线/延迟/补货集成强化
-阶段：P3；执行：SOL；评审：Sol；优先级：P0。
+阶段：P3；优先级：P0。
 依赖：T15, T22, T27。
 允许写入：`Integration/NetworkFaults/`, `Tests/Network/`。
 步骤：
@@ -561,7 +560,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T29 · 凹凸代理是否参与物理的门禁
-阶段：P3；执行：HUMAN；评审：Human + Sol；优先级：P0。
+阶段：P3；执行：人工；优先级：P0。
 依赖：T10, T27。
 允许写入：`Evidence/ShapeDecision/`。
 步骤：
@@ -577,7 +576,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T30 · 野餐图美术完成
-阶段：P4；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P4；优先级：P1。
 依赖：T20, T21, T27。
 允许写入：`Art/Maps/Picnic/`, `Assets/VRC_Katamari/Maps/PicnicArt/`。
 步骤：
@@ -592,7 +591,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T31 · 玩具房灰盒与差异化路线
-阶段：P4；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P4；优先级：P1。
 依赖：T20, T27。
 允许写入：`Assets/VRC_Katamari/Maps/Toyroom/`。
 步骤：
@@ -607,7 +606,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T32 · 玩具房美术完成
-阶段：P4；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P4；优先级：P1。
 依赖：T31, T20。
 允许写入：`Art/Maps/Toyroom/`, `Assets/VRC_Katamari/Maps/ToyroomArt/`。
 步骤：
@@ -622,7 +621,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T33 · 结果板、领奖台和大厅成品
-阶段：P4；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P4；优先级：P1。
 依赖：T17, T18, T24。
 允许写入：`Assets/VRC_Katamari/LobbyPresentation/`。
 步骤：
@@ -637,7 +636,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T34 · 商家准入与商品规划人工前置
-阶段：P1；执行：HUMAN；评审：Human + Sol；优先级：P1。
+阶段：P1；执行：人工；优先级：P1。
 依赖：T00。
 允许写入：`Commerce/Approvals/`。
 步骤：
@@ -654,7 +653,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T35 · 商城mock与官方权益适配
-阶段：P4；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P4；优先级：P1。
 依赖：T24, T25。
 允许写入：`Assets/VRC_Katamari/Commerce/`。
 步骤：
@@ -671,7 +670,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T36 · 正式权益绑定与安全审查
-阶段：P4；执行：SOL；评审：Sol；优先级：P0。
+阶段：P4；优先级：P0。
 依赖：T34, T35。
 允许写入：`Commerce/LiveBindings/`。
 步骤：
@@ -687,7 +686,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T37 · 最终资源授权与主题审核
-阶段：P4；执行：HUMAN；评审：Human + Sol；优先级：P0。
+阶段：P4；执行：人工；优先级：P0。
 依赖：T02, T30, T32, T23。
 允许写入：`Evidence/LicenseApproval/`。
 步骤：
@@ -704,7 +703,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T38 · 四人性能与回合耐久测试
-阶段：P5；执行：SOL；评审：Sol；优先级：P0。
+阶段：P5；优先级：P0。
 依赖：T28, T29, T30, T32, T33, T23, T25。
 允许写入：`Evidence/Performance/`, `Integration/ReleaseCandidate/`。
 步骤：
@@ -721,7 +720,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T39 · 四人地图公平与体验终验
-阶段：P5；执行：HUMAN；评审：Human + Sol；优先级：P0。
+阶段：P5；执行：人工；优先级：P0。
 依赖：T38。
 允许写入：`Evidence/FinalPlaytest/`。
 步骤：
@@ -737,7 +736,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T40 · 真实宣传成品与多语言发布文案
-阶段：P5；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P5；优先级：P1。
 依赖：T03, T30, T32, T39。
 允许写入：`Marketing/Release/`。
 步骤：
@@ -755,7 +754,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T41 · 内购真实交易与恢复人工验收
-阶段：P5；执行：HUMAN；评审：Human + Sol；优先级：P0。
+阶段：P5；执行：人工；优先级：P0。
 依赖：T36, T37。
 允许写入：`Evidence/Commerce/`。
 步骤：
@@ -772,7 +771,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T42 · 发布候选集成、许可和回滚包
-阶段：P6；执行：SOL；评审：Sol；优先级：P0。
+阶段：P6；优先级：P0。
 依赖：T39, T40, T37。
 允许写入：`Release/`。
 步骤：
@@ -790,7 +789,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T43 · 用户批准公开发布
-阶段：P6；执行：HUMAN；评审：Human + Sol；优先级：P0。
+阶段：P6；执行：人工；优先级：P0。
 依赖：T42。
 允许写入：`Release/Approval/`。
 步骤：
@@ -807,7 +806,7 @@ SOL = GPT-6.1 Sol；LUNA = GPT-6 Luna；HUMAN = 用户/授权测试者。
 
 
 ### T44 · 第三主题夜市（非首发阻塞）
-阶段：P7-OPTIONAL；执行：LUNA；评审：Independent Luna; escalate to Sol；优先级：P1。
+阶段：P7-OPTIONAL；优先级：P1。
 依赖：T39, T20。
 允许写入：`Assets/VRC_Katamari/Maps/NightMarket/`。
 步骤：
@@ -828,9 +827,9 @@ flowchart TD
     A["P0 平台实验与参考核对<br/>Sol主导；真人验证"] --> B{"G1：输入、追尾、退出<br/>是否通过？"}
     B -->|否| A
     B -->|是| C["P1 冻结接口、坐标、Owner和ID"]
-    C --> D["运动、吸附、道具<br/>Sol + Luna"]
+    C --> D["运动、吸附、道具"]
     C --> E["网络账本、交分、KO、恢复<br/>Sol主导"]
-    C --> F["大厅、HUD、资产工具、第一图灰盒<br/>Luna并行"]
+    C --> F["大厅、HUD、资产工具、第一图灰盒"]
     D --> G["P3 一图两人完整纵切片"]
     E --> G
     F --> G

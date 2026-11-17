@@ -1,1 +1,1 @@
-"""Tests for the T47 offline pickup/absorb draft."""
+"""Tests for the pickup/absorb reference model."""

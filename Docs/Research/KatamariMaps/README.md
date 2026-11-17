@@ -1,7 +1,7 @@
 # 塊魂系列关卡地图：怎么做的、怎么摆的（公开来源核查）
 
 **调研日期：2026-11-15（Asia/Shanghai）。** 回答「2025《ワンス・アポン・ア・塊魂 / Once Upon a KATAMARI》的关卡是怎么制作与布局的，旧作（塊魂 2004・みんな大好き塊魂・塊魂アンコール・Reroll）提供了什么可参照的结构」，供本项目区域地图设计取用。
-**边界：本轮没有实机、没有录像、没有数据挖掘、没有下载任何图片。** 结论全部来自公开文字；推断标 `[推断]`，官方未明说标 `unconfirmed`；每条附 URL。
+**边界：没有实机、没有录像、没有数据挖掘、没有下载任何图片。** 结论全部来自公开文字；推断标 `[推断]`，官方未明说标 `unconfirmed`；每条附 URL。
 **版权：** 原作的美术、模型、音乐、关卡与物件数据均受版权保护，**不得**进入本项目仓库或世界；本目录只作风格与结构参考，不复制资产、不转存图片。
 
 ---
@@ -19,7 +19,7 @@
 | 7 | 物的分层用「House／Town／World」三个尺度舞台＋80 个收藏类目组织 | `strongly implied`（T3 wiki，与 T1 收藏系统一致） |
 | 8 | 「几乎全部都能吸」是有意的设计，但只限比球小的东西；撞到吸不动的会被弹开并掉体积 | `confirmed`（T3 wiki＋T2 先行体验，两源一致） |
 | 9 | 官方对 2025 作没有逐关介绍页；最接近官方逐关资料的是 2025-12-22 发售的官方ムック（96 页，含ステージ与素敵コレクション） | `confirmed`（T1） |
-| 10 | 公开的「每平方米物件数」「原始关卡文件格式」都不存在；能查到的最细粒度是「某关占该区物件总数的百分比」 | `confirmed`（本轮检索结论，见 §7） |
+| 10 | 公开的「每平方米物件数」「原始关卡文件格式」都不存在；能查到的最细粒度是「某关占该区物件总数的百分比」 | `confirmed`（检索结论，见 §7） |
 
 ---
 
@@ -73,7 +73,7 @@
 
 ### 1.6 官方逐关资料只有印刷品
 
-『ワンス・アポン・ア・塊魂 イマとムカシにくわしいガイドブック』（KADOKAWA Game Linkage，2025-12-22，A4 変形 96 页＋メイツ図鑑 72 页）明确写「ステージやメイツ、素敵コレクションの情報もバッチリ掲載予定」[S-M13](https://store.kadokawa.co.jp/shop/g/g322510000187?ref=official) [S-M14](https://group.kadokawa.co.jp/information/promotional_topics/article-13368.html)。**判定：`confirmed`（存在与内容范围），但正文未公开，本轮未读。**
+『ワンス・アポン・ア・塊魂 イマとムカシにくわしいガイドブック』（KADOKAWA Game Linkage，2025-12-22，A4 変形 96 页＋メイツ図鑑 72 页）明确写「ステージやメイツ、素敵コレクションの情報もバッチリ掲載予定」[S-M13](https://store.kadokawa.co.jp/shop/g/g322510000187?ref=official) [S-M14](https://group.kadokawa.co.jp/information/promotional_topics/article-13368.html)。**判定：`confirmed`（存在与内容范围），但正文未公开，未读。**
 
 ---
 
@@ -125,10 +125,10 @@ Reroll 相对 PS2 版的具体差异（RTA 玩家整理）：星をつくる 1�
 
 | 材料 | 说了什么 | 层级 |
 |---|---|---|
-| Game Developer 2004 事后剖析《Postmortem: The singular design of Namco's Katamari Damacy》 | 「What went wrong」两节直指尺寸感：**Tipping the scale**——「when you become big, you instantly forget about when you were small」，回访旧图也不觉得变大；**Falling apart**——曾想做「球会缩小崩解」的机制 [S-M21](https://www.gamedeveloper.com/design/postmortem-the-singular-design-of-namco-s-katamari-damacy-2004-) | 一次（开发者署名文章），但站点正文被 JS 外壳挡住，本轮只读到检索片段 |
+| Game Developer 2004 事后剖析《Postmortem: The singular design of Namco's Katamari Damacy》 | 「What went wrong」两节直指尺寸感：**Tipping the scale**——「when you become big, you instantly forget about when you were small」，回访旧图也不觉得变大；**Falling apart**——曾想做「球会缩小崩解」的机制 [S-M21](https://www.gamedeveloper.com/design/postmortem-the-singular-design-of-namco-s-katamari-damacy-2004-) | 一次（开发者署名文章），但站点正文被 JS 外壳挡住，只读到检索片段 |
 | 2025 制作人石田遼专访（4Gamer，2025-09-20） | 关卡做法是**先分析旧作**：「過去作のステージを分析しつつ制作を進めました。**何cm帯の大きさで巻き込めるのはこのルート**，このステージの形だとこんなルートも試せるんじゃないか」；并称与「『みんな大好き塊魂』を作った会社さん」合作，ステージの作り方のノウハウ有传承 [S-M10] | 一次（制作人口述） |
 | 同专访的「不做的事」 | 「入れるとケンカになる」类目被排除；选物标准是「時代や場所を聞いて誰もが思い浮かべられる」＋「作るのが難しすぎない」[S-M10] | 一次 |
-| GDC 2005 高橋慶太讲演（Game Watch 报道，2005-03-13） | 讲演存在，标题为「世界平和」相关；**正文本轮未抓到**，细节不引用 [S-M22](https://game.watch.impress.co.jp/docs/20050313/gdc_kd.htm) | 报道存在，内容未核 |
+| GDC 2005 高橋慶太讲演（Game Watch 报道，2005-03-13） | 讲演存在，标题为「世界平和」相关；**正文未抓到**，细节不引用 [S-M22](https://game.watch.impress.co.jp/docs/20050313/gdc_kd.htm) | 报道存在，内容未核 |
 | 高橋慶太访谈（2009，GameFAQs 转载） | 「The stages increased in size [as the game went on], something I didn't like.」——**原作者本人不喜欢「关卡越做越大」** [S-M23](https://gamefaqs.gamespot.com/boards/942166-noby-noby-boy/48798276?validate=1) | T3 转载，**原始出处未核**，只作旁证 |
 | CEDEC | 2024／2026 各有一场**音频**讲座（素敵ソング），2026 那场讲义 143 页 [S-M24](https://gamemakers.jp/article/2024_10_09_79085/) [S-M25](http://mp.weixin.qq.com/s?__biz=MzYyNDUyMTcxNA==&mid=2247487108&idx=1&sn=ab6ca4fe973fd2231f74feb19f2ce60a)。**未检索到 CEDEC／GDC 的塊魂关卡设计讲座** | 缺席结论 |
 
@@ -147,7 +147,7 @@ Reroll 相对 PS2 版的具体差异（RTA 玩家整理）：星をつくる 1�
 | h1g 攻略 wiki [S-M26](https://h1g.jp/onceupona_katamaridamacy/) | 2025 作逐关攻略页 | T3，页面结构在检索快照中可见，未逐页读 |
 | RTA 路线表（Google Sheets）[S-M27](https://docs.google.com/spreadsheets/d/1c8KWPhAsYNAzDNRmjUyj27HiBqIP9OWXVu8wCx4tVXA/edit) | 旧作 Any% 路线与尺寸节点 | T3，**粉丝自制，非官方地图** |
 
-**没有任何官方或高质量的「俯视关卡平面图」公开。** 检索到的「地图」只有：官方宣传截图、wiki 的落脚点照片、RTA 路线表。判定：`confirmed`（本轮检索结论）。
+**没有任何官方或高质量的「俯视关卡平面图」公开。** 检索到的「地图」只有：官方宣传截图、wiki 的落脚点照片、RTA 路线表。判定：`confirmed`（检索结论）。
 
 ---
 
@@ -162,7 +162,7 @@ Reroll 相对 PS2 版的具体差异（RTA 玩家整理）：星をつくる 1�
 | Reroll 练习 MOD（GitHub） | `misoelegant/rpm`：PMUpdater＋`il-practice-mod`＋`1438-rba-mod`，可装/卸回 Original | T3，**[S-M30](https://github.com/misoelegant/rpm)** |
 | Reroll 的 Unity 结构 | 游戏资源在 `WLKRR_Data/StreamingAssets/aa/StandaloneWindows64`（Addressables）；社区称内部有 `PS2KatamariSimulation` DLL，即**在 Unity 里跑 PS2 逻辑**，因此「换资产容易、加关卡难」；并称 OUAK／WLKR 比 KDR 更好 patch | T3，**[S-M31](https://steamcommunity.com/app/848350/discussions/0/750542551166048885/)** |
 | 公开化的程序集 | NuGet「The0x539」发布 Reroll 的 publicized UnityEngine＋游戏程序集，供编译 MOD | T3，**[S-M32](https://www.nuget.org/profiles/The0x539)** |
-| 未找到 | **没有任何公开文档描述「关卡文件格式」或「物件摆放表 schema」**；没有 2025 作的 datamine | `confirmed`（本轮检索结论） |
+| 未找到 | **没有任何公开文档描述「关卡文件格式」或「物件摆放表 schema」**；没有 2025 作的 datamine | `confirmed`（检索结论） |
 
 **结论：** 原作关卡的真实架构（至少 2007 年那一代）＝**关卡参数表（每关一条：类目、布局脚本、proc 类型）＋按尺寸带切分的多张地图＋物件摆放层**。这正好解释了为什么「同一地点大球小球都能玩」而不需要一张巨型无缝图 [S-M28]。
 
@@ -191,7 +191,7 @@ Reroll 相对 PS2 版的具体差异（RTA 玩家整理）：星をつくる 1�
 
 1. **2025 作每关的确切数量、每关区域数与面积**：`unconfirmed`。wiki 仍在补，官方只给时代。
 2. **2025 作的物件总数、每区物件数**：`unconfirmed`。官方未公布，收藏系统数据未被公开整理。
-3. **「50cm 路障」「25cm 才能进船长室」这类具体门槛**：本轮未在可读正文中核实，`unconfirmed`，不作为数值来源。
+3. **「50cm 路障」「25cm 才能进船长室」这类具体门槛**：未在可读正文中核实，`unconfirmed`，不作为数值来源。
 4. **原作关卡文件格式与物件摆放表 schema**：无公开文档；TCRF 只给字段名（`u8LocScript_1` 等），不给类型定义。
 5. **「球会缩小崩解」是否实现过**：事后剖析说「曾想加入」[S-M21]，最终版本未见，`unconfirmed`。
 6. **高橋 2009 那句「不喜欢关卡越来越大」的原始出处**：只有 GameFAQs 转载，`unconfirmed`。
@@ -236,4 +236,4 @@ Reroll 相对 PS2 版的具体差异（RTA 玩家整理）：星をつくる 1�
 | S-M31 | https://steamcommunity.com/app/848350/discussions/0/750542551166048885/ | 3 | Unity＋PS2 模拟层、OUAK 更易 patch（社区说法） |
 | S-M32 | https://www.nuget.org/profiles/The0x539 | 3 | Reroll publicized 程序集（MOD 编译用） |
 
-引用 URL 仅用于核查，不代表版权、品牌授权或对原作实现的背书。本轮未运行游戏、未录制实机、未测量任何数值、未下载任何图片或资产。下一轮若要把 §6 的 `[推断]` 升级为 `confirmed`，最小成本是：①用官方ムック补逐关数据；②对 2025 作录一段海盗船关全流程，量「从桌面到甲板的解锁时刻」；③在灰盒里实测本项目的物件密度并与 P3 的 145／30／63 量级对照。
+引用 URL 仅用于核查，不代表版权、品牌授权或对原作实现的背书。未运行游戏、未录制实机、未测量任何数值、未下载任何图片或资产。后续若要把 §6 的 `[推断]` 升级为 `confirmed`，最小成本是：①用官方ムック补逐关数据；②对 2025 作录一段海盗船关全流程，量「从桌面到甲板的解锁时刻」；③在灰盒里实测本项目的物件密度并与 P3 的 145／30／63 量级对照。

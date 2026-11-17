@@ -103,13 +103,7 @@ Tests；互不依赖的单元并行编译。Runtime 编译失败时，依赖它�
 耗时（本机 2 核，缓存已就绪）：local 约 15 s（4 个 assembly，并行）；windows 约 8 s。
 首次 bootstrap 约 25 秒（SDK 已装好；首次还要装 SDK，另需几分钟，取决于网速）。
 
-> 2026-11-16 实测：`git archive 7bb7bd3`（当时 HEAD）有 **7 条错误**，全在
-> `Tests/EditMode/Pickup/MotionMathTests.cs`，两个后端逐条一致：64/65 CS1503（Unity 自带
-> NUnit 1.0.6 没有 `AreNotEqual(double,double,double)` 重载）、321/947/964 CS0170、
-> 561/955 CS0165（`out` 参数在 `for` 循环里赋值、循环外读取，编译器不认为确定赋值）。
-> 也就是说这是提交代码里的真实错误，不是检查器的误报（检查时工作树里的未提交修复会让
-> 结果变 clean）。检查的是工作树；检查时若有别的实现者正在改代码，结果会包含他们未提交的
-> 状态（用 `git archive` 取出提交再查可避免）。
+检查的是工作树；检查时若有别的实现者正在改代码，结果会包含他们未提交的状态（用 `git archive` 取出提交再查可避免）。
 
 ## run_tests.py — 在本机直接跑不依赖引擎的 NUnit 测试
 
@@ -164,59 +158,26 @@ runner 崩溃或超时）。
 
 用例需要引擎对象时我们既不造对象也不写桩：对应用例一律停在“本地不可执行”，由 Unity 那一轮验证。
 
-### 实测结果（HEAD 35f4246 的快照；工作区当时有别人对 ContactModelV2 的未提交改动，所以用 `git archive` 快照）
+### 对照 Unity 基线
 
-```
-分母 = 本地发现 785
-  通过 613 | 失败 0 | 与 Unity 不一致（已知）3 | 本地不可执行 169（GameObject/场景 91，引擎原生 76，编辑器 API 0，其它 2）
-```
+要和 Unity 的基线对齐，取出提交快照再跑：`git archive HEAD VRChatKatamariDanacyUnity/Assets/VRC_Katamari | tar -x -C /tmp/snap`，然后 `--project /tmp/snap/VRChatKatamariDanacyUnity`。工作区里别人正在改的文件的中间状态会让发现数变化。
 
-对照基线是提交 `6ad6def` 之后的 HEAD（`35f4246`，之后只改了 `AGENTS.md`）。工作区里别人正在改的
-`KatamariBallMotor.cs` / `ContactModelV2Tests.cs` 的中间状态会让发现数变化（当时 787）。要和 Unity 的基线对齐，
-就像上面那样 `git archive HEAD VRChatKatamariDanacyUnity/Assets/VRC_Katamari | tar -x -C /tmp/snap`，
-然后 `--project /tmp/snap/VRChatKatamariDanacyUnity`。
+本地发现数 = 源码里的 `[Test]` + `[TestCase]` 之和。Unity Test Runner 的总数还包含 VRChat SDK 自带的 `UnityEditorTests` assembly（`Packages/com.vrchat.worlds/Editor/Udon/UnityEditorTests/`）；它不在 `check.py` 的 4 个 assembly 里，本工具不编译、不运行。Unity 的计数口径（参数化用例、`[Repeat]`）本工具读不到，需要 Unity 的结果 XML。
 
-**与 Unity 983 对账**：Unity 983 = 本地 785 + SDK 自带 191 + **未解释 7**。
-
-- 本地 785 与源码里的 `[Test]` 783 + `[TestCase]` 2 完全一致。
-- 缺的那一大块是 VRChat SDK 自带的 `UnityEditorTests` assembly
-  （`Packages/com.vrchat.worlds/Editor/Udon/UnityEditorTests/` 的 9 个文件，`Tests.GraphNodeTests`
-  就在其中）：它们不在 `check.py` 的 4 个 assembly 里，本工具不编译、不运行。一次性核实
-  （把那 9 个文件读下来在 `/tmp` 里编译、发现，之后已删）：**191 条**（VRCJsonTests 74、DataListTests 29、
-  DataTokenTests 28、JsonListTests 23、UdonGraphSettingsTests 15、DataDictionaryTests 10、
-  JsonDictionaryTests 10、GraphNodeTests 1、UICompilerTests 1）。
-- 还差 **7 条没有解释**：Windows 上 `UnityEditorTests.csproj` 只列了这 9 个文件，本地没有任何别的发现路径能
-  凑出这 7 条。可能是 Unity Test Runner 的计数口径（例如 `[Repeat(32)]` 的 `GenerateGarbage`、参数化用例）
-  或工程里别的测试 assembly；要查清需要 Unity 的结果 XML，本工具读不到。
-
-**Unity 最近一次红的两条在本地的状态**：`Tests.GraphNodeTests.CheckHelpURLsForSystemNodes` 是 SDK 的，本地没有；
-`ContactModelV2Tests.AShallowWedgeWithNoOpposingContactIsStillRecovered` 本地是“不可执行”
-（需要 `GameObject`），所以本地对这条红**没有任何发言权**。
+对需要 `GameObject` 的用例，本地没有任何发言权：它们停在“不可执行”，红绿以 Unity 为准。
 
 ### 已知差异（本地红而 Unity 绿）
 
 登记在 [`known_differences.json`](known_differences.json)，每条是“测试全名 + 那一处失败的消息片段”；
 同一条测试以别的方式失败不会被它盖住，会照常报成失败。输出里它们单独成一类，不混进失败，也不改测试或 Runtime。
-现在只剩一条，已查到原因：
+当前登记一条：
 
 1. **`CriteriaModelOverrideTests.TheCellSerializesTheV2RowAndTheDeckFootprint`：程序集没编译。**
    测试在已加载的 assembly 里按名字找实验场的 `PhysicsTestCell`，它在 `Assets/VRC_Katamari/Labs/`
    （Unity 的 `Assembly-CSharp`），`check.py` 不编译这个 assembly，所以类型不存在、用例在 `Assert.Fail`。
    这不是行为差异；这条用例即便补上类型也需要引擎（`JsonUtility`、`MonoBehaviour`）。
 
-**曾经登记、现已消除的一类：浮点表达式的中间精度。** Unity 的 Mono 把 `float` 表达式的中间结果留在 double 精度、
-只在存回变量时舍入一次，.NET 每步都舍入；两种结果在“恰好踩在边界上”的断言里会不一样。
-`SizeModelTests.TheCapSaturatesExactlyAndReportsTheCapVolume` 与 `RampSupportTests.TheRampFootMeetsTheFloorWithoutAStep`
-就是这样，已经分别改掉，不再登记：
-
-- 30 m 上限饱和：`SizeModelMath.TryDerive` 原先用 `total >= capVolume` 判饱和，而 `capVolume` 本身是 float 表达式
-  `PI/6f*d*d*d` 的结果（30 m 处 Mono 与 .NET 相差约 1e6 mm³）。运行时改为整数域、带 1 ppm 舍入预算的比较
-  （`total >= capVolume - capVolume/CapVolumeToleranceDivisor`），所以“恰好等于数学上限”在任何舍入下都是上限。
-  新增 `SaturationDoesNotDependOnHowTheCapVolumeWasRounded` 钉住预算边界。
-- 斜坡脚与地面并列：脚线上平面高度是 `0` 还是 `~1e-9` 取决于舍入，选择规则“严格更高者胜”下谁拿到 id 随之变化；
-  但高度处处连续（两者差 1e-9 m），所以这只是个标签。运行时不动，测试改为：脚线上只钉“高度≈地面”（id 可为地面或斜坡），
-  上移 1 mm（高于舍入噪声约 6 个数量级）处钉斜坡胜出。
-
+**浮点表达式的中间精度**：Unity 的 Mono 把 `float` 表达式的中间结果留在 double 精度、只在存回变量时舍入一次，.NET 每步都舍入；两种结果在“恰好踩在边界上”的断言里会不一样。
 写以后依赖“float 中间值落在边界上”的断言时，同样要么用容差，要么把被比较的量放到整数域。
 
 另外两个环境决定会影响结果，已固定：runner 把当前文化设为 `InvariantCulture`（主机的 `LANG` 不能决定测试怎么格式化/解析；

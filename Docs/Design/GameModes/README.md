@@ -365,7 +365,7 @@ spawn_nw(12u) ──6.5s──> fringe_west(33u) ──> tree_roots_nw(14u) ─�
 - 风格对齐现有作者数据（`layout.json`、`unity_greybox.json`）：snake_case、`schema_version`、`status`、id 引用而不是坐标。
 - **关卡数据里不写任何坐标、半径、净宽，也不写逐 definition 的件数明细**——几何与数量只有一个真源 `layout.json` / `prop_catalog.csv`，关卡只写 `zone_id` / `definition_id` / 阈值。**唯一例外**是 `map_expectations` 里的两个总量（452 件 / 1284 单位）：它们不是玩法数值，而是「作者当时依据的地图版本」的指纹，用来发现地图漂移。
 - 运行时**不读磁盘 JSON**（AGENTS「No disk JSON in Udon runtime」、02 §4「构建时烘焙为 Udon 可用数组/引用」）：编辑器导入器把 JSON 烘焙成 `StoryLevelDefinition` 资产，Udon 只读烘焙结果。
-- 校验器：`Docs/Design/GameModes/validate_levels.py`（标准库、`--json`）。地图侧**不再有**每图一份的专用校验器：旧的 `Docs/Design/Maps/PicnicLawn/validate_layout.py` 已于 2026-11-14 退役删除，由通用校验器 [`Tools/mapbuild/validate_map.py`](../../../Tools/mapbuild/validate_map.py) 承担（`python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn`）；两者同一形态：**只读作者数据**、纯标准库、结尾打印 `OK`/`FAIL`、`--json` 出机器可读摘要。
+- 校验器：`Docs/Design/GameModes/validate_levels.py`（标准库、`--json`）。地图侧由通用校验器 [`Tools/mapbuild/validate_map.py`](../../../Tools/mapbuild/validate_map.py) 承担（`python3 Tools/mapbuild/validate_map.py Docs/Design/Maps/PicnicLawn`）；两者同一形态：**只读作者数据**、纯标准库、结尾打印 `OK`/`FAIL`、`--json` 出机器可读摘要。
 
 目录：
 
@@ -518,7 +518,7 @@ Docs/Design/GameModes/
 
 ### 4.5 校验器规则（`validate_levels.py`，已实现）
 
-形态与通用地图校验器 [`Tools/mapbuild/validate_map.py`](../../../Tools/mapbuild/validate_map.py) 一致（每图一份的旧 `validate_layout.py` 已退役删除，别再找它）：**只读作者数据**——本目录 `Levels/*.json` + `categories.json`，加上作为参照的 `Docs/Design/Maps/PicnicLawn/layout.json` 与 `prop_catalog.csv`；不碰 Unity、不写任何文件、不生成载荷。纯标准库。最后一行打印结论 `OK`/`FAIL`（退出码 0 = 通过、1 = 有 ERROR），加 `--json` 额外输出机器可读摘要（`status` + `errors`/`warnings`/`notes`），`--no-model` 跳过时间估算。运行：`python3 Docs/Design/GameModes/validate_levels.py`。
+形态与通用地图校验器 [`Tools/mapbuild/validate_map.py`](../../../Tools/mapbuild/validate_map.py) 一致：**只读作者数据**——本目录 `Levels/*.json` + `categories.json`，加上作为参照的 `Docs/Design/Maps/PicnicLawn/layout.json` 与 `prop_catalog.csv`；不碰 Unity、不写任何文件、不生成载荷。纯标准库。最后一行打印结论 `OK`/`FAIL`（退出码 0 = 通过、1 = 有 ERROR），加 `--json` 额外输出机器可读摘要（`status` + `errors`/`warnings`/`notes`），`--no-model` 跳过时间估算。运行：`python3 Docs/Design/GameModes/validate_levels.py`。
 
 1. `schema_version == 1`；`level_id` 合法且 = 文件名；同目录内 `level_id` 唯一。
 2. `mode == "story"`；`player.min == player.max == 1`；`bank.enabled == false`；`evaluation.score_channel == "none"`；`evaluation.ledger_write == false`。
@@ -533,7 +533,7 @@ Docs/Design/GameModes/
 11. 所有 `*_id` 引用**只允许**来自 `layout.json` / `prop_catalog.csv` / `categories.json`，禁止自由文本 id。
 12. 文件里出现坐标、半径、净宽或逐 definition 的件数明细 → 直接 FAIL（防止绕过单一真源）；`map_expectations` 的两个总量是唯一豁免。
 
-**与 `validate_plan.py` 的关系（重要）**：`Docs/tools/validate_plan.py` **只校验 `tasks.json`**，不读任何关卡文件。所以 T58 验收里「可被 `validate_plan.py` 检查」只能落实为两件事：① T58 自己的任务条目通过 `validate_plan.py`；② 关卡数据由**新的** `validate_levels.py` 检查。后者属于实现阶段的新增文件，不在本次写作范围（`Docs/tools/` 不在我的写入范围）——已报给上级。
+**与 `validate_plan.py` 的关系（重要）**：`Docs/tools/validate_plan.py` **只校验 `tasks.json`**，不读任何关卡文件。所以 T58 验收里「可被 `validate_plan.py` 检查」只能落实为两件事：① T58 自己的任务条目通过 `validate_plan.py`；② 关卡数据由 `validate_levels.py` 检查。
 
 ### 4.6 两关的数据（按 §4 schema 的取值表）
 

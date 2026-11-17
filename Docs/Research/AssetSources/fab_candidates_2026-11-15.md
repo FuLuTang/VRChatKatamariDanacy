@@ -6,10 +6,10 @@
 
 ## 0. 结论
 
-- **Fab 值得用，但只当“补充件”**：本次 23 条候选里 9 条是 Fab Standard（Personal 档 $0）、14 条是 CC-BY，没有 NC/SA/ND。它的价值在于**补齐 Kenney/Poly Pizza 缺的品类**（稻草人、卡通昆虫、野餐套装、洗衣篮、文具、书堆），而不是当主底座——写实扫描件（Quixel、照片扫描）与我们的低模卡通风格冲突，且单件动辄几十 MB 到数 GB。
-- **优先看 Unity/FBX/GLB**：`unreal-engine` 单格式的 listing（哪怕标 CC-BY、$0）在 Unity 2022.3 里不能直接用，本次已剔除或降级标注。
+- **Fab 值得用，但只当“补充件”**： 23 条候选里 9 条是 Fab Standard（Personal 档 $0）、14 条是 CC-BY，没有 NC/SA/ND。它的价值在于**补齐 Kenney/Poly Pizza 缺的品类**（稻草人、卡通昆虫、野餐套装、洗衣篮、文具、书堆），而不是当主底座——写实扫描件（Quixel、照片扫描）与我们的低模卡通风格冲突，且单件动辄几十 MB 到数 GB。
+- **优先看 Unity/FBX/GLB**：`unreal-engine` 单格式的 listing（哪怕标 CC-BY、$0）在 Unity 2022.3 里不能直接用，已剔除或降级标注。
 - **两条路今天都不在我手里跑**：官方 Fab Agent API/MCP 仍是 Roadmap（无文档、无入口）；非官方 `fab-mcp` 不需要 API key、不需要登录，但需要宿主装 Node 20.19+ 与 Playwright Chromium，而我是子代理，不能装环境、不能用浏览器、不能改配置。能给 Lead 的只有“匿名读”这一条可执行结论（§3.5）。
-- **本次核验口径**：`已核验` = 公共 listing 页返回 200 且 `/i/listings/{uuid}` 公共 JSON 的标题/卖家/许可档位/价格/格式一致；`UNVERIFIED` = 上述任一取不到。**许可正文（Fab Standard vs legacy UE 许可）在匿名 JSON 里读不到**，全表统一标为“文本未核验”，见 §2.1。
+- **核验口径**：`已核验` = 公共 listing 页返回 200 且 `/i/listings/{uuid}` 公共 JSON 的标题/卖家/许可档位/价格/格式一致；`UNVERIFIED` = 上述任一取不到。**许可正文（Fab Standard vs legacy UE 许可）在匿名 JSON 里读不到**，全表统一标为“文本未核验”，见 §2.1。
 
 ## 1. 候选 listing
 
@@ -59,7 +59,7 @@
 
 - **Fab Standard**：商用、跨引擎、随 Project 分发、无需署名；禁止终端用户抽取、禁止单独再分发、禁止放进世界/关卡编辑工具或模板。详见 [README §2.1](README.md) 与 [Fab EULA](https://www.fab.com/eula)。
 - **CC-BY**：可商用、必须署名。世界内需要 credits 板，台账要写 `title / author / license / source_url / changes`。本文不替项目决定署名位置。
-- **本次全部条目无 NC/SA/ND**：`Personal/Professional` 是非 CC 的 Fab 许可，`CC-BY` 是 CC 4.0 家族里最宽松的署名型，均不在硬规则禁止的 NC/SA/GPL/ND 之列。
+- **全部条目无 NC/SA/ND**：`Personal/Professional` 是非 CC 的 Fab 许可，`CC-BY` 是 CC 4.0 家族里最宽松的署名型，均不在硬规则禁止的 NC/SA/GPL/ND 之列。
 - **许可文本本身未核验**：匿名 `/i/listings/{uuid}` 只返回 `Personal`、`Professional` 两个**档位名**与价格，**不返回适用哪一版 EULA**（Fab Standard 还是 legacy UE Marketplace License）。Fab 文档说迁移商品会在 listing 右侧 Details 标注，但那块需要页面 JS 渲染，本次取不到。**不要**把本文的“Fab Standard”当成对许可文本的核验结论，它是“档位名 + Fab 现行默认”的推断。
 
 ### 2.2 已发现的坑
@@ -68,7 +68,7 @@
 2. **UE 单格式 ≠ 能用**：[Modern Kitchen Clutter Pack（BarisSOYKOK）](https://www.fab.com/listings/3f12749a-81d3-4b16-a74a-51a747b2b701) 是 CC-BY、$0、17 个玻璃杯 + 12 件餐具，看着完美，但格式只有 `unreal-engine`，Unity 侧等于零。同类还有 [Kitchen Utensils Vol1](https://www.fab.com/listings/473a702d-8463-4604-8ff8-dee8fc466816)（$0/$0，仅 UE）。
 3. **附加条款**：Glowbox3D 的 Scarecrow / Ladybug 描述里带 **NoAI**（不得用于生成式 AI 数据集/训练）。它不限制游戏内使用，但会进我们的素材台账，别把它当“纯 CC-BY”。
 4. **写实扫描 vs 低模**：Quixel Megascans 现在全库 $0 且出现在每个搜索里，但单件 200 MB–16 GB、8K 贴图、写实风格。§1 只保留了少数“体积可控”的扫描件，并标注为低适用性。
-5. **仓库公开 vs Fab Standard**：`OPEN_DECISIONS` 2026-11-14 决定“开发阶段素材照常提交进 GitHub（目前公开）”。这与 [README §5 第 4 条](README.md) 的“Fab Standard 素材不能进公开仓库”直接冲突。本次不判定，只标注：**在用户决定前，Fab Standard 素材应只落在 `.gitignore` 忽略的 `Docs/AssetIntake/Downloads/`，不进 Git**。CC-BY 条目可进仓库但必须带署名与许可文本。
+5. **仓库公开 vs Fab Standard**：`OPEN_DECISIONS` 2026-11-14 决定“开发阶段素材照常提交进 GitHub（目前公开）”。这与 [README §5 第 4 条](README.md) 的“Fab Standard 素材不能进公开仓库”直接冲突。不判定，只标注：**在用户决定前，Fab Standard 素材应只落在 `.gitignore` 忽略的 `Docs/AssetIntake/Downloads/`，不进 Git**。CC-BY 条目可进仓库但必须带署名与许可文本。
 
 ## 3. FAB 连接器调查
 
@@ -123,8 +123,8 @@
 
 1. **许可正文（Fab Standard vs legacy UE Marketplace License）**：全部 9 条 Fab Standard 条目。匿名 JSON 只有档位名，listing 页 Details 需 JS。**这是本文最大的未核验项。**
 2. **[Food FREE - Low Poly 3D Models Pack（ithappy）](https://www.fab.com/listings/59d75767-8f99-4d0d-adc4-49461dc84057)**：`/i/listings/{uuid}` 连续两次 403，listing 页 200 但正文是 lorem ipsum 外壳（无格式、无许可）。搜索行显示 `Personal/Professional`、起价 $0、含 Unity。**UNVERIFIED，已从候选表剔除。**
-3. **Fab ToS / Epic AUP 原文**：`fab.com/terms-of-service` 是 JS 渲染（只有页脚），`dev.epicgames.com/en-US/services/terms/aup` 与 `agreements` 均 403。**本次无法引用“自动化访问是否违规”的原文条款**，只能引用非官方 README 的自述与 §3.2 的指纹伪装事实。
-4. **限时免费（limited-time free）面**：本次 23 条全部是“长期 $0”或 CC-BY（`discountedPrice` 均为 null），**没有核验任何限免条目**，也没有核验“领取后是否永久保留”。
+3. **Fab ToS / Epic AUP 原文**：`fab.com/terms-of-service` 是 JS 渲染（只有页脚），`dev.epicgames.com/en-US/services/terms/aup` 与 `agreements` 均 403。**无法引用“自动化访问是否违规”的原文条款**，只能引用非官方 README 的自述与 §3.2 的指纹伪装事实。
+4. **限时免费（limited-time free）面**： 23 条全部是“长期 $0”或 CC-BY（`discountedPrice` 均为 null），**没有核验任何限免条目**，也没有核验“领取后是否永久保留”。
 5. **三角面**：只有 Hay Bale（描述写 500–1k tris）与 Cooler Box（2,778 tris）有作者自述数字；其余按“低模”标注，实际面数需开包统计。
 6. **包内 LICENSE / 贴图与模型来源**：全部条目未开包。CC-BY 条目尤其要确认作者是否真的持有全部贴图权利（Poly Pizza/Sketchfab 的混合来源常见）。
 7. **贴图规格与 Unity 导入**：`glTF` 单格式条目（Pen/Stapler、Plates and Cups）在 Unity 2022.3 需转换；`Blender` 单格式条目要用 Blender 导出 FBX。均未实测。

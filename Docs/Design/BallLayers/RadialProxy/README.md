@@ -4,7 +4,7 @@
 
 ## 研究与项目规则边界
 
-- 未取得原版源码；US7402104B2 仅为历史专利公开，不能证明新版采用。官方产品资料不含径向支持算法；GitHub Ruby/Gosu 资源是独立 2D 实验而非原版源码。详见 A 套 [`SOURCE_EVIDENCE.md`](../GroundContact/SuiteFoundation/SOURCE_EVIDENCE.md)。
+- 未取得原版源码；US7402104B2 仅为历史专利公开，不能证明新版采用。官方产品资料不含径向支持算法；GitHub Ruby/Gosu 资源是独立 2D 实验而非原版源码。详见 [`GroundContact/Research/SOURCE_EVIDENCE.md`](../GroundContact/Research/SOURCE_EVIDENCE.md)。
 - 项目 `Docs/02_TECHNICAL_CONTRACTS.md` §3.2 写有方向采样、每对象端点、max 支持、移除重算/账本重建。本层实现这些是项目自定义近似，不代表反编译或还原原作。
 - Unity 左手坐标与 Cross 规则已对照官方资料；Python host Hamilton quaternion 不是 Unity 相等性主张。C# 测试里的方向箭头对拍（`AngleAxis(+90°, +Y)` 下 +Z 落轴、world/local 往返）是显式 adapter 的方向事实。
 
@@ -156,12 +156,12 @@
   - `LongObjectAdmissionUsesLengthAndSecondLongestEdge`：勺过、杯不过、短棍不过、扁板过、负尺寸拒绝。
   - `CornersFollowThePropsBallLocalRotation`：杆的角点随球局部旋转转向，零四元数拒绝。
   - `ContactPointsClampLongEndpointsAndZeroUnusedSlots`：夹紧到 core+cap、未用槽清零、长度不一致拒绝。
-- `Tests/EditMode/BallLayers/RadialProxyLocalBoundsTests.cs`（新增 5 例，覆盖本次 bounds 口径修复）：
+- `Tests/EditMode/BallLayers/RadialProxyLocalBoundsTests.cs`（5 例，覆盖 bounds 口径）：
   - `TurnedPropUsesLocalExtentsOnItsOwnLongAxis`：躺椅尺寸 `1.6×0.35×0.6`、yaw 90°，局部列仍是 `1.6×0.35×0.6`（世界 AABB 是 `0.6×0.35×1.6`），建壳后长轴沿球 Z（道具自身长轴），不是世界 X。
   - `MissingLocalColumnFallsBackToTheWorldAabbAndKeepsTheOldRotation`：缺列时返回世界 AABB（原因码 1），并复现旧的双转几何（长轴落到球 X）。
   - `ResolvePropExtentsReportsEveryFallbackReason`：0 局部 / 1 缺列 / 2 长度与 `itemIds` 不一致 / 3 行值非法；越界行与 null 世界列拒绝。
   - `LocalBoundsIgnoreTheRootRotation` / `ChildRotationIsBakedIntoTheLocalColumn`：根旋转不烘进局部列；子节点 45° 旋转被烘进去。
-- Python 模型只接收预烘焙的 `endpoints_world`，不读道具 bounds，所以本次没有 Python 逻辑改动；`Docs/tests/ball_radial_proxy` 不改。
+- Python 模型只接收预烘焙的 `endpoints_world`，不读道具 bounds。
 
 **没有跑 Unity 编译、EditMode/NUnit 或 Play Mode**。以上测试是源码级证据，不等于 Unity 证据。
 
@@ -171,14 +171,14 @@
 
 ### 准备
 
-1. 打开 `Labs/StoryLevel/StoryLevel.unity`，确认 `KatamariBallMotor` 的 `debugTraceProxySupport` 勾上（新增字段，默认关）。它每个固定步打一行 `[ProxyTrace] t=… support=… core=… lift=… cap=… points=… candidates=… centerY=…`，上限 400 行，足够 8 秒。`cap` 就是当步的 `min(0.35 × core, 0.30 m)`；也可以在 Play Mode 里用 `GetProxyProtrusionCapWorldM()` / `GetGroundSupportHeightWorldM()` / `GetGroundProxyLiftWorldM()` 读同一组值。
-2. 选一件**细长**的现有道具。本场景的 `propBounds` 实测（`StoryLevel.unity` 的 `propBounds` 行）：
+1. 打开 `Worlds/StoryMode/StoryMode.unity`，确认 `KatamariBallMotor` 的 `debugTraceProxySupport` 勾上（新增字段，默认关）。它每个固定步打一行 `[ProxyTrace] t=… support=… core=… lift=… cap=… points=… candidates=… centerY=…`，上限 400 行，足够 8 秒。`cap` 就是当步的 `min(0.35 × core, 0.30 m)`；也可以在 Play Mode 里用 `GetProxyProtrusionCapWorldM()` / `GetGroundSupportHeightWorldM()` / `GetGroundProxyLiftWorldM()` 读同一组值。
+2. 选一件**细长**的现有道具。本场景的 `propBounds` 实测（`StoryMode.unity` 的 `propBounds` 行）：
    - **`banana_01`–`banana_04` 是起始球上最合适的现有长物件**：bounds `(0.18, 0.032, 0.068)`，最长边 0.18 m、第二长边 0.068 m（2.65 ≥ 2.5），起始球（直径 0.30 m）的准入线是 0.15 m；体积 0.00039 m³ 也低于 0.00141 m³ 的吸收门。**首选它。**
    - `napkin_01`–`napkin_05`（bounds `(0.3, 0.028, 0.3)`）**不会**登记：最长边/第二长边 = 1，按“一个轴压过另外两个轴”的准入被排除。这正好验证规则不是只看“最薄的那一轴”。
    - `spoon_01` 的 `propBounds` 是 `0.34³` 的立方体（伸长比 1），**过不了伸长准入**；`thermos_01` 是 `0.9³` 立方体；`watering_can_01` 是 `(0.26, 0.42, 0.58)`（最长/第二长 = 1.38）——这三件都不会登记，正好可以拿来验证“非长物件不占候选”。
    - 如果香蕉的抬升太小（0.18 m 的道具在 0.30 m 球上，角点最多突出几厘米）：**临时**在草地上放一根测试杆——空 GameObject + Cylinder，`localScale` 设为 `(0.04, 0.5, 0.04)`（长 1.0 m），加 MeshRenderer；把它加进 `PickupFieldHost` 的平行数组一行：`itemId = prop_proxy_rod_01`、`kind = debris`、`propBounds = (0.04, 1.0, 0.04)`、`propLocalBounds = (0.04, 1.0, 0.04)`、`valueUnits = 1`，Transform 拖进去。**两列都要填**：只填 `propBounds` 会走回退并在 Console 留一条原因码 1 的 warning。**不要保存/提交这个场景改动**，它是实验件；测完删除该行和对象。
-   - 若要验证本次 `propLocalBounds` 轴向修复：用 **Cube**（不是上面那根 Cylinder；Cylinder 的长轴在局部 Y，绕 Y 转看不出来）做一根长轴在局部 Z 的杆——`localScale = (0.04, 0.04, 1.0)`，根节点 yaw 90°（世界长轴 X）。手动填 `propBounds = (1.0, 0.04, 0.04)`、`propLocalBounds = (0.04, 0.04, 1.0)`、`valueUnits = 1`。正确的壳应在杆的**局部 +Z** 转到朝下时 `support` 最大；把 `propBounds` 当局部尺寸的旧回退会把这个峰值偏到世界 Z 朝下（差 90°）。`[ProxyTrace]` 不打印端点轴，用 `support` 峰值出现的滚转角判断。
-3. 确保球的 `pickupFieldHost` / `attachmentRoot` / `motor` 与现有 StoryLevel 接线一致（`attachmentRoot` 在 `BallVisualRollRoot` 下、局部 0、scale 1；宿主已经在 `AttachProp` 里调 `AttachRadialProxy`）。
+   - 若要验证 `propLocalBounds` 轴向修复：用 **Cube**（不是上面那根 Cylinder；Cylinder 的长轴在局部 Y，绕 Y 转看不出来）做一根长轴在局部 Z 的杆——`localScale = (0.04, 0.04, 1.0)`，根节点 yaw 90°（世界长轴 X）。手动填 `propBounds = (1.0, 0.04, 0.04)`、`propLocalBounds = (0.04, 0.04, 1.0)`、`valueUnits = 1`。正确的壳应在杆的**局部 +Z** 转到朝下时 `support` 最大；把 `propBounds` 当局部尺寸的旧回退会把这个峰值偏到世界 Z 朝下（差 90°）。`[ProxyTrace]` 不打印端点轴，用 `support` 峰值出现的滚转角判断。
+3. 确保球的 `pickupFieldHost` / `attachmentRoot` / `motor` 与现有 StoryMode 接线一致（`attachmentRoot` 在 `BallVisualRollRoot` 下、局部 0、scale 1；宿主已经在 `AttachProp` 里调 `AttachRadialProxy`）。
 
 ### 步骤
 
@@ -197,7 +197,7 @@
 - **保留物理凹凸**：lift 峰值可见（≥ 1–2 cm）、球不弹跳、镜头不抖、帧率无明显下降。
 - **只当表现/调小**：如果球像被弹起、座位画面明显上下抖，先把 `maxProxyProtrusionPerCoreRadius` 降到 0.15–0.2、`maxProxyLiftPerStep` 降到 0.02 再测；仍不适则把 `maxProxyProtrusionPerCoreRadius = 0`（B 的接线保留，但接地退化回核心球）。
 - **准入**：每件吸附物都登记；若 `GetProxyItemCount()` 比已吸附件数少，差值是 2（最远角点没越过核心 + `minProxyProtrusionM`，`GetProxySkipCount()`）或 4（256 件账本满）；`GetLastProxySkipReason()`：2 没突出、4 账本满、5 输入非法、6 数学拒绝；Console 里 `[BallMotor] radial proxy refused` 只在 4–6 时打，最多 3 行。
-- 把 `[ProxyTrace]` 原始行、三张截图、球径/杆尺寸、帧率写进 `Docs/Evidence/`（按现有证据目录规则），并在 `Docs/08_SOURCES_AND_OPEN_QUESTIONS.md` Q3 上回填结论；本次 Linux 侧不改那份文档。
+- 把 `[ProxyTrace]` 原始行、三张截图、球径/杆尺寸、帧率写进 `Docs/Evidence/`（按现有证据目录规则），并在 `Docs/08_SOURCES_AND_OPEN_QUESTIONS.md` Q3 上回填结论。
 
 ## 未决/风险
 

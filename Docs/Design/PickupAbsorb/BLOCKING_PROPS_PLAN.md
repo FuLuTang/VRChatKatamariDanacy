@@ -3,9 +3,9 @@
 > **2026-11-16 门已改**：吸收尺寸门已按原作数字改写——物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。本文里若出现 `a·b·c ≤ (π/6)·D³/10`、`absorbVolumeRatio`、`maxItemVolumeWorldM3`、「浮点比较、不取整」或按旧门算出的档位件数，那是 2026-11-15 的口径（历史）；现行口径、实现清单与前后实测见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 
 
-> 状态：`IMPLEMENTED_NOT_COMPILED`，2026-11-15。运行期代码已按本方案写完（§5），**没有编译、没有 Play Mode、没有 Build & Test**：作者不是 Unity 操作者。能离线验的只有纯数学（NUnit 与 `Docs/tests`），手感与帧时间仍要 Unity（§6）。
-> 触发：2026-11-15 试玩——「太大吸不动的道具没有碰撞，球直接穿过去」。需求：**吸不动 = 挡（或弹），吸得动 = 不挡**。
-> 行号口径：**新增与修改的实现说明一律按符号名**，不写行号。§2 B、§4 里保留的少量旧行号是当时核查的记录（`SweepMath.cs` 本轮未改，`KatamariBallMotor.cs` / `PickupFieldHost.cs` / `PickupAbsorbMath.cs` 都已改过，其旧行号失效）。§0.6 是实现后的现状，其余章节保留决策理由，与现状不一致处以 §0.6 与 §5 为准。
+> 状态：运行期代码已按本方案实现（§5）。能离线验的是纯数学（NUnit 与 `Docs/tests`），手感与帧时间要 Unity（§6）。
+> 需求：**吸不动 = 挡（或弹），吸得动 = 不挡**。
+> 行号口径：实现说明按符号名引用，不写行号。§0.6 是现状，其余章节保留决策理由，与现状不一致处以 §0.6 与 §5 为准。
 > 引用约定：`Runtime/…`、`Labs/…` 相对 `VRChatKatamariDanacyUnity/Assets/VRC_Katamari/`；其余相对仓库根。
 
 ## 0. 结论
@@ -15,7 +15,7 @@
 3. **只有一条门槛**：`a·b·c > min(maxItemVolumeWorldM3, (π/6)·D³ / absorbVolumeRatio)` 就挡，与吸收门**同一个函数**。开关时刻与吸收门重合，不存在「既不挡、又吸不动」的空窗。（2026-11-15 决定 (l) 把判定量从最长边换成 AABB 体积，本条的函数边界不变、量变了：挡路谓词是 `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(bounds, limitVolumeM3)`。）
 4. **原作是弹开还是只停：证据不足（PROVISIONAL）。** 我们选「停 + 沿切面滑」，复用既有墙面响应（`Docs/Design/BallMotor/README.md:205-228`）。不做反弹，也**不做**「撞大件削球/缩小」——研究文档没有确认过这条。
 5. 只有「真的挡住、手感、低矮件变整面墙、帧时间、接触饱和」需要 Unity 才能验。
-6. **现状（2026-11-15 实现）**：
+6. **现状**：
    - 挡路盒的来源是**玩法体积 `propBounds`**，不是 `BoxCollider`，也不是视觉网格。§5.3 原定的「collider 优先 → 声明覆盖 → propBounds 回退」三级回退**不做**：三层分离是硬约束，而且场景里已有道具根本没有碰撞体，把 collider 变成一条运行期分支只会让同一件道具的挡路盒取决于它有没有挂 collider。
    - 归属：**`PickupFieldHost` 拥有选择**（它已经有道具表、已经有 O(N) 距离扫描），**`KatamariBallMotor` 只提供整批替换的接缝**（`SetBlockingBoxes` / `ClearBlockingBoxes`），**`BlockingPropMath` 只做纯数学**。数据流：`propBounds + 球心 + motor 的体积上限` → 宿主算候选/选最近 N 件 → `motor.SetBlockingBoxes` → `RebuildObstacles` 追加到「平面、静态盒、挡路盒」的切片 → `SweepMath` 当墙处理。
    - 每帧成本：挡路扫描按 `scanIntervalSeconds`（默认 0.05 s，20 Hz）跑，不是每帧。每次扫描 110 件道具各一次 Transform 读取 + 一次平方中心距离；只有落在剪枝界内的少数几件才算体积、建盒、算 AABB 距离；选择本身是 `BlockingPropMath.SelectNearest`，一次校验距离 + 至多 6 轮候选扫描。稳态下**零分配**（数组在 `Start` 一次分配，电机见到同一批盒不重建扫掠数组）。
@@ -34,7 +34,7 @@
 | F7 | 宿主每 0.05 s 全表扫一遍，按距离取最近若干件、且过得了尺寸门的提交 | `PickupFieldHost.ScanProps` / `PickupCandidateSelection.OfferProp` |
 | F8 | 宿主持有每件的 pickup 尺寸（`propBounds`）与可选的 collider 数组；**挡路只用 `propBounds`，collider 数组与挡路无关** | `PickupFieldHost` 的序列化平行数组 |
 | F9 | 球是**纯 kinematic**：全仓 C# 无 `Rigidbody`/`CharacterController`，位置只由扫掠写 | `KatamariBallMotor.StepBall` |
-| F10 | 现有 lab 的静态盒占用：StoryLevel 4 盒、CpuSkirmish 4 盒、BallPlayground **7 盒**（BallPlayground 已于 2026-11-15 退役、场景已删）。挡路盒有自己的 6 格，所以这些数字不受影响 | 三个 lab 的 `.unity` 里 `obstacleBoxes` |
+| F10 | 现有场景的静态盒占用：StoryMode 4 盒、CpuSkirmish 4 盒。挡路盒有自己的 6 格，所以这些数字不受影响 | 场景 `.unity` 里 `obstacleBoxes` |
 | F11 | 一件道具一行：两关共用场 110 件 / 412 单位；区域图 175 件 | `Docs/Design/StoryMode/LEVEL_CONTENT_PLAN.md`、`REGION_MAP_PLAN.md` |
 
 F9+F5 合起来就是原来的症状：吸收门拒了它，扫掠却从来不知道它存在。现在宿主把「体积门说吸不动」的那些件塞进挡路切片，症状消失。
@@ -52,7 +52,7 @@ F9+F5 合起来就是原来的症状：吸收门拒了它，扫掠却从来不�
 - 新增代码只有「选择」这一件事；碰撞响应、分离、面法线定向、去速全部复用现有的。
 - **粘性**（`blockingStickinessM = 0.25`）：上一批仍在 `半径 + 粘性` 内的件优先保留，避免球停在边缘时盒子每 0.05 s 增删一次。它只是选择上的迟滞，不是第二个门槛。
 - **剪枝界**（实现新增）：宿主先用「中心距 ≤ 半径 + 粘性 + 半对角线」跳过远处的件再建盒。这是保守的**剪枝**，不是判定：点到 AABB 的距离 ≥ 中心距 − 半对角线，所以被剪掉的件 `SelectNearest` 本来也不会保留，结果逐位相同。它的作用是让 110 件里每次只对近处几件做建盒和 AABB 距离。
-- **不用静态盒的「剩余槽」**（StoryLevel 余 4；BallPlayground 的「余 1」随该 lab 于 2026-11-15 退役删除，F10）：那条路必须靠 `ClearObstacles()` 再重注册才能换掉某几格，会连带把 lab 的墙一起清掉（F3），而且挡路容量会随地图的静态盒预算浮动。独立容量让地图数据完全不动。
+- **不用静态盒的「剩余槽」**（StoryMode 余 4，F10）：那条路必须靠 `ClearObstacles()` 再重注册才能换掉某几格，会连带把 lab 的墙一起清掉（F3），而且挡路容量会随地图的静态盒预算浮动。独立容量让地图数据完全不动。
 
 ### B. 抬高电机容量（只改常量）
 
@@ -137,7 +137,7 @@ public string GetBlockingBoxRefusalReason(); // 空串 = 从未拒绝
   2. 球心、半径 = `motor.GetCollisionRadiusWorldM()` + `blockingMarginM`。
   3. 逐件：`StateFree` && `blockingUsable` && 中心距在「半径 + 粘性 + 半对角线」内（剪枝）&& `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit(propBounds[i], limit)`；通过者用 `TryBoxFromCentreAndExtents(prop.position, propBounds[i])` 建盒。
   4. `BlockingPropMath.SelectNearest(...)`，容量 = `motor.GetBlockingBoxCapacity()`；结果拷进两个输出数组后 `motor.SetBlockingBoxes(...)`。
-  5. 成功后交换上一批索引数组（下一轮用它做粘性），并记 `blockingAppliedCount`。
+  5. 成功后交换上一批索引数组（下一次扫描用它做粘性），并记 `blockingAppliedCount`。
 - 失败语义：选择被拒或电机拒收 → **保留上一批**，只记一次警告；不清空（空集正是本方案要消灭的 bug）。
 - `ResetField()`：`motor.ClearBlockingBoxes()`，`blockingAppliedCount` / `previousBlockingCount` / `blockingCandidateCount` 归零，`nextBlockingScanTime = 0`（立刻重扫）。
 - `SetCollecting(false)`：只撤候选，**不动挡路**。
@@ -167,15 +167,15 @@ public string GetBlockingBoxRefusalReason(); // 空串 = 从未拒绝
 
 | 步 | 做什么 | 验收 |
 |---|---|---|
-| 步 | 做什么 | 验收 | 状态（2026-11-15） |
+| 步 | 做什么 | 验收 | 状态 |
 |---|---|---|---|
 | S1 | 本方案（决定：A、独立容量、单门槛、不反弹不削球） | `python3 Docs/tools/validate_plan.py`、`python3 -m unittest discover -s Docs/tests` | 设计已定 |
 | S2 | `Docs/Design/PickupAbsorb/blocking_props.py` 参考模型 + `Docs/tests/pickup_absorb/` 用例（§6 的 1–10） | 只跑 `python3 -m unittest discover -s Docs/tests`，不需要 Unity | 已存在 |
 | S3 | `PickupAbsorbMath.IsBeyondAbsorbVolumeLimit`，门改调它；NUnit 回归 | MCP `run_tests`：`AbsorbSizeGateTests` 等**一行不改**仍全绿 | 已存在（未在本检出跑过） |
-| S4 | `BlockingPropMath` C# 移植 + NUnit | `run_tests` 全绿；与 S2 同用例同结果 | 已存在，本轮补了 4 条接线契约用例 |
-| S5 | 电机：容量/缓冲/六个 API/合并重建/复位与传送清理 | EditMode：容量与拒绝计数、`count = 0` 时行为与今天**完全一致**（StoryLevel 仍是 1 平面 4 盒、无 overflow） | **本轮已写，未编译** |
-| S6 | 宿主：`propBounds` 建盒 + 第二遍选择 + 写入 + 与 collecting 解耦 | Play Mode：0.30 m 球撞 `bread_slice_01` 停住；D ≈ 0.80 m 后吞掉并能过 | **本轮已写，未编译、未试玩** |
-| S7 | 重试/重生：`TeleportTo` / `ClearObstacles` / `ResetField` 都清 | 日志：重试后挡路盒数回到「当前球径应有的数」；无残留盒 | **本轮已写，未编译** |
+| S4 | `BlockingPropMath` C# 移植 + NUnit | `run_tests` 全绿；与 S2 同用例同结果 | 已实现（含 4 条接线契约用例） |
+| S5 | 电机：容量/缓冲/六个 API/合并重建/复位与传送清理 | EditMode：容量与拒绝计数、`count = 0` 时行为与今天**完全一致**（StoryMode 是 1 平面 4 盒、无 overflow） | 已实现 |
+| S6 | 宿主：`propBounds` 建盒 + 第二遍选择 + 写入 + 与 collecting 解耦 | Play Mode：0.30 m 球撞 `bread_slice_01` 停住；D ≈ 0.80 m 后吞掉并能过 | 已实现 |
+| S7 | 重试/重生：`TeleportTo` / `ClearObstacles` / `ResetField` 都清 | 日志：重试后挡路盒数回到「当前球径应有的数」；无残留盒 | 已实现 |
 | S8 | 手感与帧时间实测（记录 `Docs/Evidence/`） | 记录：挡路盒 0 / 3 / 6 时帧时间、低矮件观感、墙角切向速度 | 待 Unity |
 
 顺序约束：S2→S4（同一组用例）、S3 与 S4 可并行、S5 只依赖 S3、S6 依赖 S4+S5。

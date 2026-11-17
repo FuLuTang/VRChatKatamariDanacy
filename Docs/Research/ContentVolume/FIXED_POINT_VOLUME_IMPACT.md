@@ -1,6 +1,6 @@
 # 定点体积单位（fixed-point volume）影响审计
 
-**审计日期：2026-11-15（项目时区 Asia/Shanghai）。** 只读审计：本轮**没有**改任何代码、场景、数据或测试，只写本文件；没有开 Unity，没有跑 Git，Unity 侧测试状态见 §9 末尾。
+**审计日期：2026-11-15（项目时区 Asia/Shanghai）。** 只读审计：结论按源码静态推出，Unity 侧测试状态见 §9 末尾。
 **问题：** 游戏现在用**整数 value unit** 记体积（`V = (3.4390244 + Σunits) × 0.0041 m³`）。要迁到细粒度定点（int64 / int32 的 micro / milli 单位）。本文件列出**所有**读写 / 同步 / 序列化 / 比较体积单位的位置，给出每种改法的溢出与精度后果、一个推荐表示、迁移顺序与测试影响。
 **口径：** 遵循 AGENTS.md 的 **Original-first principle** 与 `Docs/Design/Parity/PARITY_AUDIT.md` 的 divergence 流程；凡是「我们和原作不一样」的地方，一律指到表里那一行，**表里没有行的单独标出**（§10）。
 
@@ -399,10 +399,10 @@ Python（`Docs/tests`、`Tools/mapbuild/tests`）：
 | `:241` | `units_to_max_diameter_effective: 1356.39` | 黄金值 |
 | `:568-572` | 「迁移必须烘当前标定，不能写回 1/0.0141」 | **迁移警告，正好适用** |
 | `Docs/Design/PickupAbsorb/README.md:39,181,192,212,231,262` | 「整数单位契约（有意为之）」 | 需重写：mm³ 不是「取消整数」，而是**把量子定得足够细**，整数契约仍成立 |
-| `Docs/Design/PickupAbsorb/SIZE_GATE_AUDIT.md:118-122` | `V=(3.4390244+U)×0.0041`、`U(D)=(πD³/6)/0.0041−3.4390244` | 两个公式都要换成 mm³ 版 |
+| `Docs/Design/PickupAbsorb/SIZE_GATE_AUDIT.md`（§4 公式） | `V=(3.4390244+U)×0.0041`、`U(D)=(πD³/6)/0.0041−3.4390244` | 两个公式都要换成 mm³ 版 |
 | `Docs/Design/Gameplay/README.md:56,92,173,192,206` | 1356 单位满径 / 1284 全图 / 「交分公式是本项目发明的」 | 黄金值与「本项目发明」的自认 |
 | `Docs/Design/BallMotor/README.md:144,301,368` | 标定三数、交分后 0.5973 m / 23.8 units | 黄金读数 |
-| `Docs/Design/BallLayers/SizeModel/README.md`（1 处）、`SIMULATION_REPORT.md`、`SuiteFoundation/HANDOFF.md` | 体积单位提及 | 注释级 |
+| `Docs/Design/BallLayers/SizeModel/README.md`（1 处）、`Docs/Archive/Handoffs/BallLayers/SizeModel/SIMULATION_REPORT.md`、`Docs/Archive/Handoffs/BallLayers/SizeModel/SuiteFoundation/HANDOFF.md` | 体积单位提及 | 注释级 |
 | `Docs/Design/BallPresentation/VISUAL_GROWTH_AUDIT.md:28,79,189` | 参数来源、公式、CSV 列 | 视觉报告要重生成 |
 | `Docs/Design/Tools/LEVEL_AUTHORING.md:218,203,326,477,483,487,604,621,695,799,827` | 数据契约 + 验收 | 见 §6.4 |
 | `Docs/Design/Tools/LEVEL_EDITOR_WEB.md:196,214,287,321,364` | web 编辑器口径「个数 / 体积 m³ / valueUnits」 | 三口径并存的事实；迁移后 m³ 与新整数可以互证 |
@@ -546,15 +546,15 @@ Python（`Docs/tests`、`Tools/mapbuild/tests`）：
 - 坐标/接触/支撑/放射代理/附着（`BallContact/*`、`BallLayers/*` 除 SizeModel）。
 - `Docs/tests/parity` 的结构断言（只动比值）。
 
-### 9.4 本轮**没有**跑的验证（只读审计）
+### 9.4 验证状态
 
-Unity EditMode 与 Python 测试**都没有跑**（本轮禁止开 Unity；也不做 Git 操作）。上面所有「会变」是按源码静态推的。落地时按 AGENTS.md 的顺序：`python3 Docs/tools/validate_plan.py` + `python3 -m unittest discover -s Docs/tests`，再到 Editor 里 `refresh_unity` + `run_tests`。
+上面所有「会变」是按源码静态推的，Unity EditMode 与 Python 测试未跑。落地时按 AGENTS.md 的顺序：`python3 Docs/tools/validate_plan.py` + `python3 -m unittest discover -s Docs/tests`，再到 Editor 里 `refresh_unity` + `run_tests`。
 
 ---
 
 ## 10. 与原作的分歧清单（哪些有记录、哪些没有）
 
-`PARITY_AUDIT.md:22-37` 的 divergence 表已有 14 行。体积相关的行只有 **2 行**（`体积定义（k 系数）`、`体积口径`），它们都写着 `restore`。下表把「体积这条链上我们和原作不一样」的地方**逐条对齐到那 14 行**；**表里没有行的**单列出来（这是本轮审计要暴露的东西）。
+`PARITY_AUDIT.md:22-37` 的 divergence 表已有 14 行。体积相关的行只有 **2 行**（`体积定义（k 系数）`、`体积口径`），它们都写着 `restore`。下表把「体积这条链上我们和原作不一样」的地方**逐条对齐到那 14 行**；**表里没有行的**单列出来（这是本文审计要暴露的东西）。
 
 | # | 区域 | 原作 | 我方 | parity 表里有行？ | 有记录的理由？ | 状态 |
 |---|---|---|---|---|---|---|
@@ -579,13 +579,13 @@ Unity EditMode 与 Python 测试**都没有跑**（本轮禁止开 Unity；也�
 
 ## 11. 风险与未决
 
-1. **`long[]` 在 UdonSharp 里没有先例**（`long` 标量有，见 `AttachmentMath.cs`）。Phase B 第一步就该在 Editor 里用一个 `long[]` 序列化字段 + Udon 编译验证；失败则退回「`int[]` 拆高低位」或「`int[]` + milli-unit」（§4 的兼容档）。本轮只读，未验证。
+1. **`long[]` 在 UdonSharp 里没有先例**（`long` 标量有，见 `AttachmentMath.cs`）。Phase B 第一步就该在 Editor 里用一个 `long[]` 序列化字段 + Udon 编译验证；失败则退回「`int[]` 拆高低位」或「`int[]` + milli-unit」（§4 的兼容档）。只读，未验证。
 2. **场景 YAML 是手写十六进制**：`StoryMode.unity:17437` 的 130 个 int32 是 Unity 序列化的结果，**不能手改**，必须走重导入（`PickupFieldSync`）+ Editor 保存，否则 fileID/顺序会错。
 3. **`valueUnits` 改名 = 破坏性 schema 变更**：`PickupFieldHost` 的 `[SerializeField]` 名就是场景键，改名后旧场景会静默丢字段（`PickupFieldHost.cs:904-966` 已有「re-sync it」的 reason 码）。必须与重导入同批。
 4. **`u` 文案与 `level.expected.valueUnits` 是外部契约**：web 编辑器、CLI、导入报告、关卡 README 都在打印 `u`；改名后要么全改，要么保留 `u` 作为显示单位（推荐：保留 `u` 仅作显示，账本字段叫 `volumeMm3`）。
 5. **`OPEN_DECISIONS` (j) 是宪法级冲突**：它把「小数价值 = 作者错误」写成项目决定。定点方案下「小数」不存在，这条必须重写为「小于一个 mm³ 即拒绝」，否则实现会同时遵守两条互相矛盾的规则。
 6. **`c = 0.0041` 的删除会影响 parity 报告**：`run_parity.py:119` 把它抄成常数并标注了 `KatamariBallMotor.cs:193-197` 的行号；删字段后每次 parity 运行都会指向不存在的行。
-7. **本轮无法验证的事实**：Udon `long[]`、Unity `JsonUtility` 对 `long` 的处理、`SerializedProperty.longValue`、重导入后的场景 diff 大小、EditMode 是否会因 `SerializedUdonPrograms` 重编译而出现签名 diff。这五项都需要 Editor，应由 Unity 操作者单独验证。
+7. **无法验证的事实**：Udon `long[]`、Unity `JsonUtility` 对 `long` 的处理、`SerializedProperty.longValue`、重导入后的场景 diff 大小、EditMode 是否会因 `SerializedUdonPrograms` 重编译而出现签名 diff。这五项都需要 Editor，应由 Unity 操作者单独验证。
 
 ---
 

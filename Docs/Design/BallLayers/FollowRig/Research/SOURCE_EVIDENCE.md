@@ -6,7 +6,7 @@
 
 - 本仓库可读到的是项目自己的T46宿主草稿 `Docs/Design/BallMotion/ball_motion.py` 中内嵌`FollowRig`及 `Docs/tests/ball_motion/test_ball_motion.py`；不是《塊魂》或《Once Upon A KATAMARI》的真实源码。
 - 原版游戏源码**未取得**。本地GitHub REST仓库元数据检索在 `2026-10-14T00:37:59Z` 对查询 `Katamari Damacy original source code` 和 `Once Upon A KATAMARI source code` 均HTTP 200、`total_count=0`：[GitHub repo search](https://api.github.com/search/repositories)。这是有限查询，不证明互联网任何位置绝无源码，也不构成原版内部方法证据。
-- 历史专利US7402104B2只是一份技术披露，不等于游戏真实源码，亦不证明2025新版沿用。已保存的本套共同来源记录见 [VisualRoll SuiteFoundation 来源证据](../../VisualRoll/SuiteFoundation/SOURCE_EVIDENCE.md)。
+- 历史专利US7402104B2只是一份技术披露，不等于游戏真实源码，亦不证明2025新版沿用。共同来源记录见 [VisualRoll 来源证据](../../VisualRoll/Research/SOURCE_EVIDENCE.md)。
 
 ## 本项目可读依据
 

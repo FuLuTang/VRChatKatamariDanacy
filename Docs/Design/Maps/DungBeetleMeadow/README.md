@@ -26,7 +26,7 @@
 
 ### 2.3 「大王委托」怎么接（提议，不改现有剧情文本）
 
-现有剧情模式文本只定义了三件事：**大王房间**、结算时**「呈给国王」**、按球径给**星**（见 [StoryMode README](../StoryMode/README.md) §状态机、[HUB_LOOP_PLAN](../StoryMode/HUB_LOOP_PLAN.md)）。它没有给任何主题写委托文案。所以这里只给**可选文案**，不写成已定事实：
+现有剧情模式文本只定义了三件事：**大王房间**、结算时**「呈给国王」**、按球径给**星**（见 [StoryMode README](../../StoryMode/README.md) §状态机、[HUB_LOOP_PLAN](../../StoryMode/HUB_LOOP_PLAN.md)）。它没有给任何主题写委托文案。所以这里只给**可选文案**，不写成已定事实：
 
 | 委托名（提议） | 一句话 | 星级口径（沿用现有：球径） |
 |---|---|---|
@@ -157,10 +157,10 @@
 `catalogue.csv` 共 **158 行**，tier 分布 t0 32 / t1 27 / t2 24 / t3 20 / t4 17 / t5 14 / t6 12 / t7 12；其中：
 
 - `status=existing`：直接复用 `Docs/Art/OriginalModels/props` 里已有的 48 件（CSV 里 id 原样、尺寸用实测值），避免重复造；
-- `status=pilot`：本轮要真做出来的 20 件（§9.2）；
+- `status=pilot`：要真做出来的 20 件（§9.2）；
 - `status=planned`：目录里先占位、后续批次生产。
 
-### 9.2 pilot 20（本轮生产契约）
+### 9.2 pilot 20（生产契约）
 
 ```
 dung_ball_small  dung_ball_medium  beetle_figurine  straw_tuft      hay_wisp

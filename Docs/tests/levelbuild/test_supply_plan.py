@@ -312,8 +312,8 @@ class ProposedAdditionsTests(unittest.TestCase):
     def test_merged_level_has_no_new_early_trap(self):
         """Nothing new may sit in the first ring while needing a much bigger ball.
 
-        A box collider the ball cannot absorb is a physical obstacle; the O6-O8 runs
-        observed exactly that with watermelon / apple / gate_basket / toy_ball / stool.
+        A box collider the ball cannot absorb is a physical obstacle; play runs
+        showed exactly that with watermelon / apple / gate_basket / toy_ball / stool.
         The patch keeps every new prop's gate at or below the ball that reaches it, so no
         added prop may need more than 2x the start diameter within 3 m of the spawn.
         """

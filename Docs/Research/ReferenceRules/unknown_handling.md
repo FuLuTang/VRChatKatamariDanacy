@@ -30,7 +30,7 @@
 | U09 | 原作交存动画与耗时。 | 动画仅作确认后的表现，不能延后或提前伪造账本状态；时长是可调表现参数，试玩评估，不与交存成功语义耦合。 | `rules.score_and_exchange`；[事务契约](../../02_TECHNICAL_CONTRACTS.md#L128-L135) |
 | U10 | 已查：回合中可反复交存（C1，confirmed）；单次间隔/次数上限未公开。 | 项目每次已确认交存都是独立幂等事务；回合内可再次采集和交存，重复 bank ID 不重复计分。具体速率限制按地图/试玩确定。 | `rules.score_and_exchange`；[事务契约](../../02_TECHNICAL_CONTRACTS.md#L128-L135) |
 | U10a | 原作每次交存全部清空还是允许分段兑换。 | 项目每次确认结算当时已赚取资源；首版不提供玩家部分交存选择，除非主管批准规则变更。 | `rules.score_and_exchange`；[设计](../../01_GAME_DESIGN.md#L14-L18)；[决策表](../../Preparation/RuleDecisions/decisions.json) |
-| U11 | 已查：交分只让球「変小」，不是清空回初始体积（C2 confirmed 缩小；C20 把“清空回初始”判为 unconfirmed／与证据不符）；保留比例未公开。 | 项目交存时结算当次实际 earned value 并按比例缩小（residual 0.25，见 U12）；不允许初始免费球芯刷分。 | `rules.score_and_exchange`；[设计](../../01_GAME_DESIGN.md#L14-L18)；[基线](../../09_REPOSITORY_BASELINE.md#L9-L19) |
+| U11 | 已查：交分只让球「変小」，不是清空回初始体积（C2 confirmed 缩小；C20 把“清空回初始”判为 unconfirmed／与证据不符）；保留比例未公开。 | 项目交存时结算当次实际 earned value 并按比例缩小（residual 0.25，见 U12）；不允许初始免费球芯刷分。 | `rules.score_and_exchange`；[设计](../../01_GAME_DESIGN.md#L14-L18) |
 | U12 | 已查：不是重置，而是按比例缩小（具体比例、按直径还是按体积未公开；C2、C20）。 | **已定（用户 2026-11-14）**：交分按比例缩小、保留残余体积，`post = max(start, start + (pre − start) × 0.25)`、`residual = 0.25`，且球径小于 `0.55 m` 不能交分；公式与两个数值都是 `[项目自选]` PROVISIONAL，需试玩复核。具体半径/视觉、账本与动画须一致，接口等 T06 冻结。 | `rules.score_and_exchange`；[设计 §2「对局核心」](../../01_GAME_DESIGN.md)；[开放决策（a）(b)](../../OPEN_DECISIONS.md)；[技术契约](../../02_TECHNICAL_CONTRACTS.md#L128-L135) |
 | U13 | 原作交存是否给保护。 | 项目当前不额外承诺银行无敌或保护窗；首版按普通 PvP 状态继续裁决。若试玩显示交存点被锁死，T27/T39 提出受限方案再由主管评审，不能直接假定原作有保护。 | `rules.score_and_exchange`；[设计](../../01_GAME_DESIGN.md#L19-L20)；[T27](../../../tasks.json#L937-L967)；[T39](../../../tasks.json#L1342-L1371) |
 | U14 | 原作交存可否被中断。 | 项目账本事务原子提交：请求待确认时不改分；提交后不回滚已确认账本。动画是否可打断只影响表现，具体输入/UI待 T27 测试。 | `rules.score_and_exchange`；[技术契约](../../02_TECHNICAL_CONTRACTS.md#L128-L135) |
@@ -68,7 +68,7 @@
 | U38 | 原作地图资源刷新方式/周期。 | 项目按 zone/tier 预算补充；近球/视野内允许延迟并预告，延迟值配置化并纳入 T39。 | `project.fairness_thresholds`；[技术契约](../../02_TECHNICAL_CONTRACTS.md#L114-L126)；[决策表](../../Preparation/RuleDecisions/decisions.json) |
 | U38a | 原作 KO 后的重生资源补给量/时机。 | 项目提供低阶资源作为原型方案；最低资源与补给窗口未定，需用户/主管在 T39 正式试验前批准门槛。 | `rules.ko_respawn`、`project.fairness_thresholds`；[设计](../../01_GAME_DESIGN.md#L25-L28)；[决策表](../../Preparation/RuleDecisions/decisions.json) |
 | U39 | 已查：兑换区约每 60 秒换位、有导航图标（C3，`[强暗示]`）；换位路线与精确秒数未公开。 | 项目 4 个固定预制锚点轮换且提前提示，周期已定 60 s（PROVISIONAL，[开放决策（c）](../../OPEN_DECISIONS.md)）；换位路线、预告时长与交分时间差仍需地图数据+T39 实测。 | `rules.score_and_exchange`、`project.fairness_thresholds`；[设计 §2「对局核心」](../../01_GAME_DESIGN.md)；[T39](../../../tasks.json#L1359-L1368) |
-| U40 | 原作项目地图在发布版本的数量。 | 当前两图是目标，不是批准的发布承诺；T39 根据两图公平/质量证据，由用户和主管决定保留两图或明确降为一图并更新 DAG。 | `project.map_count`；[基线开放问题](../../09_REPOSITORY_BASELINE.md#L44-L50)；[T39](../../../tasks.json#L1361-L1368) |
+| U40 | 原作项目地图在发布版本的数量。 | 当前两图是目标，不是批准的发布承诺；T39 根据两图公平/质量证据，由用户和主管决定保留两图或明确降为一图并更新 DAG。 | `project.map_count`；[T39](../../../tasks.json#L1361-L1368) |
 | U41 | 可接受的出生资源方差。 | 当前无数值 PASS 门槛；用户/主管在 T39 正式多人试验前批准可接受区间。 | `project.fairness_thresholds`；[决策表](../../Preparation/RuleDecisions/decisions.json)；[T39](../../../tasks.json#L1359-L1368) |
 | U41a | 可接受的路线差异。 | 同上；测量项目地图路线/绕行，不借此声称原作公平阈值。 | `project.fairness_thresholds`；[决策表](../../Preparation/RuleDecisions/decisions.json)；[T39](../../../tasks.json#L1359-L1368) |
 | U41b | 可接受的交分耗时差。 | 同上；记录交分路线和银行窗口到达时间后设门槛。 | `project.fairness_thresholds`；[决策表](../../Preparation/RuleDecisions/decisions.json)；[T39](../../../tasks.json#L1359-L1368) |

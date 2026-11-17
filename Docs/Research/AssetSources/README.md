@@ -140,10 +140,10 @@
 本节只记录**已下载并落盘**的一批道具素材，用于野餐草坪地图的 v0.1 拼装；许可结论仍以 §1 的矩阵和包内 `LICENSE` 为准，逐文件验收（尺寸、拓扑、材质、碰撞代理）仍未做。机器可读清单见 [intake_manifest.csv](intake_manifest.csv)。
 
 - 落盘位置：Windows `D:\VRChatKatamariDanacy\Docs\AssetIntake\Downloads\<source>\<pack>\`（该路径已被 `.gitignore` 忽略，不进 Git）。每个包保留原始 zip 并就地解压，许可证据与解压内容放在同一目录（Kenney 为 `LICENCE-kenney-cc0.txt`，Poly Pizza 为 `LICENCE-EVIDENCE.txt`）。
-- 获取方式：Kenney Furniture Kit / Marble Kit 与 5 个 Poly Pizza 单模型通过用户真实 Chrome（Playwright MCP）点击页面下载按钮取得；Food Kit / Nature Kit 复用 2026-10-10 的既有入库（[DirectDownload](../../AssetIntake/DirectDownload/routes.md)），本次只做校验与落盘。全过程未登录新账号、未改账号设置、未付款；poly.pizza 只关闭了一次 cookie 同意弹窗。
+- 获取方式：Kenney Furniture Kit / Marble Kit 与 5 个 Poly Pizza 单模型通过用户真实 Chrome（Playwright MCP）点击页面下载按钮取得；Food Kit / Nature Kit 复用 2026-10-10 的既有入库（[DirectDownload](../../AssetIntake/DirectDownload/routes.md)），只做校验与落盘。全过程未登录新账号、未改账号设置、未付款；poly.pizza 只关闭了一次 cookie 同意弹窗。
 - 规模：9 个包/模型，压缩包合计 26.8 MiB，解压后约 100 MiB。
 - 覆盖：`prop_catalog.csv` 54 项中 34 项有可用文件（食物/餐具/饮料 19 项来自 Kenney Food Kit，花、蘑菇、落叶、石、花盆、小盆栽来自 Nature Kit，凳/长凳来自 Furniture Kit，浇水壶/野餐篮/保温箱/保温壶/球来自 Poly Pizza）；20 项仍缺（`seed`、`acorn`、`bottle_cap`、`paper_scrap`、`napkin`、`picnic_blanket`、`ground_terrain`、`path_mesh`、`boundary_hedge`、`invisible_wall`、`core_hedge`、`flower_bed_frame`、`tree_root_mound`、`bank_pad`、`bank_beacon`、`spawn_marker`、`powerup_pedestal`、`zone_signpost`、`giant_picnic_table`、`giant_oak`），全部本来就是 catalog 里“model ourselves”的自建项或纯地形/玩法件。
-- 待办风险：① Poly Pizza 里有 3 个模型是 **CC BY 3.0**（Picnic Basket“Poly by Google”、Thermos“Poly by Google”、beach ball“the_ normalgamer”），世界内必须有 credits 板；浇水壶（Isa Lousberg）与 Cooler Box（MilkAndBanana）是 CC0；② Kenney 包同时带 GLB，Unity 2022 不原生导入 glTF，导入请用 `Models/FBX format`；③ `Marble Kit` 只含轨道段、没有球体，未映射任何 catalog id，仅作备用；④ `pebble` 用的 `rock_smallA` 仍带 RENDER_MISMATCH 标记，需人工看图确认；⑤ Quaternius Ultimate Food Pack 页面仍标 CC0，但下载入口是 Google Drive 目录（非单一 zip），本次未取，留待下一批。
+- 待办风险：① Poly Pizza 里有 3 个模型是 **CC BY 3.0**（Picnic Basket“Poly by Google”、Thermos“Poly by Google”、beach ball“the_ normalgamer”），世界内必须有 credits 板；浇水壶（Isa Lousberg）与 Cooler Box（MilkAndBanana）是 CC0；② Kenney 包同时带 GLB，Unity 2022 不原生导入 glTF，导入请用 `Models/FBX format`；③ `Marble Kit` 只含轨道段、没有球体，未映射任何 catalog id，仅作备用；④ `pebble` 用的 `rock_smallA` 仍带 RENDER_MISMATCH 标记，需人工看图确认；⑤ Quaternius Ultimate Food Pack 页面仍标 CC0，但下载入口是 Google Drive 目录（非单一 zip），未取，留待下一批。
 
 ## 7. 三个新主题的来源方案（2026-11-15 追加）
 
@@ -201,7 +201,7 @@
 - 因此「Fab Standard 到底是哪一版」这个问题**在 listing 层面已能确认到 "Standard License"**；但 Standard 的具体限制（禁止终端用户抽取、分发物需 added value、禁止放进世界/关卡编辑工具）仍要读 [Fab EULA](https://www.fab.com/eula) 原文，§2.1 的二手摘录不能替代。
 - **标题与许可不一致的实例**：[CC0 - Kitchen Knife](https://www.fab.com/listings/b2ead203-d418-464f-b032-891550a03da3) 标题写 CC0，页面 "License terms" 写 **Creative Commons (CC-BY)**。结论：**只认页面/包内许可，不认标题**。
 - **价格不能从页面文字里猜**：listing 页同时渲染推荐位价格，¥ 金额会混进来。可靠的只有许可选择器里的 "From free to ¥X"（Personal 免费档）：Hay Bale、Rocks、Cardboard Box、Pen/Stapler 四条明确；`Cooler Box` 页面只见 ¥46.64、没有 "From free"，原调研表的 "$0/$0" **未成立**，降级为「价格未确认」。
-- 本轮**未登录、未领取、未下载、未加入购物车**；Fab 账号已登录这一事实来自页面头像与 "My Library"，没有改动任何设置。
+- 本文**未登录、未领取、未下载、未加入购物车**；Fab 账号已登录这一事实来自页面头像与 "My Library"，没有改动任何设置。
 
 ### 7.5 每件素材的许可记录：位置与模板
 

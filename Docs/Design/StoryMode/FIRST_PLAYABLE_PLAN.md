@@ -6,8 +6,8 @@
 
 ## 0. 先给结论
 
-1. **玩家球不动、点球没反应。** CpuSkirmish 的 4 个球里 0 号是玩家位，README 原话“未接输入，静止”（`Labs/CpuSkirmish/README.md:3`）；host 的注释也写明它只开回合、从不驱动（`Runtime/Ai/CpuSkirmishBootstrap.cs:16`）。全项目唯一的驱动接缝是 `SetMoveAxes`（`Runtime/BallMotor/KatamariBallMotor.cs:965-970`），除 CPU pilot（`Runtime/Ai/CpuBallPilot.cs:211-218`）、BallPlayground 的脚本时间线（`Labs/BallPlayground/BallPlaygroundBootstrap.cs:270`）和桌面适配器 `DesktopMoveInput`（S1，已在 `Labs/StoryLevel` 编译实跑，commit `e74ff8c`）外没有别的驱动来源。CpuSkirmish 里没有 `VRCStation`（全场景检索该 GUID 为 0 命中；作为对照 `Labs/StationPlatform/StationPlatformLab.unity` 有 1 个），也没有 `Interact` 处理，所以点球不可能入座。
-2. **半埋不是物理问题，是视觉没缩。** CpuSkirmish 的 `BallVisual` 用内置 1 m 球（mesh 10207，`Labs/CpuSkirmish/CpuSkirmish.unity:832`），`localScale` 恒为 1（`:778`）；motor 把球心放在 y≈0.15（`:449`），地面顶面在 y=0（Ground y=−0.2、scale y=0.4，`:579-580`）。于是 1 m 球有 0.35 m（半径的 70%）在地面以下。motor 从不写 scale（`KatamariBallMotor.cs:931-940` 只写 position/rotation），host 也“从不 resize 球”（`CpuSkirmishBootstrap.cs:16`）；BallPlayground 每帧把视觉球缩到语义直径（`Labs/BallPlayground/BallPlaygroundBootstrap.cs:148-152`），所以那边看着是对的。
+1. **玩家球不动、点球没反应。** CpuSkirmish 的 4 个球里 0 号是玩家位，README 原话“未接输入，静止”（`Labs/CpuSkirmish/README.md:3`）；host 的注释也写明它只开回合、从不驱动（`Runtime/Ai/CpuSkirmishBootstrap.cs:16`）。全项目唯一的驱动接缝是 `SetMoveAxes`（`Runtime/BallMotor/KatamariBallMotor.cs:965-970`），除 CPU pilot（`Runtime/Ai/CpuBallPilot.cs:211-218`）和桌面适配器 `DesktopMoveInput` 外没有别的驱动来源。CpuSkirmish 里没有 `VRCStation`（全场景检索该 GUID 为 0 命中；作为对照 `Labs/StationPlatform/StationPlatformLab.unity` 有 1 个），也没有 `Interact` 处理，所以点球不可能入座。
+2. **半埋不是物理问题，是视觉没缩。** CpuSkirmish 的 `BallVisual` 用内置 1 m 球（mesh 10207，`Labs/CpuSkirmish/CpuSkirmish.unity:832`），`localScale` 恒为 1（`:778`）；motor 把球心放在 y≈0.15（`:449`），地面顶面在 y=0（Ground y=−0.2、scale y=0.4，`:579-580`）。于是 1 m 球有 0.35 m（半径的 70%）在地面以下。motor 从不写 scale（`KatamariBallMotor.cs:931-940` 只写 position/rotation），host 也“从不 resize 球”（`CpuSkirmishBootstrap.cs:16`）；把视觉球缩到语义直径的场景看着是对的。
 3. **方块不粘是没接，不是坏了。** 吸附后方块被 `SetActive(false)` 直接藏掉（`Labs/CpuSkirmish/PlaygroundProp.cs:164-169`）；motor 只提供 absorbed-event ring（`KatamariBallMotor.cs:280`、`:1523-1531`）。宿主代码已经写了（`Runtime/Pickup/PickupFieldHost.cs`，用 `AttachmentMath` 把被吸物件挂到球的附着根），缺的只是场景接线：`AttachmentRoot` 与道具行还没有接（§3）。
 
 ## 1. 玩家控制与“骑球”
@@ -19,8 +19,8 @@
 - 输入接缝：`SetMoveAxes(forward, turn, lateral)` 落到 `debugForward/Turn/Lateral`（`KatamariBallMotor.cs:965-970`、`:140-144`），`StepInput` 用 `(lateral, forward)` 组 `Vector2` 走 ControlIntent（`:663-682`），turn 直接进 BallMotion，±1 = ±110°/s（`Runtime/Motion/BallMotionMath.cs:155-167`）。ControlIntent 层不读设备（`Docs/Design/ControlIntent/README.md:9`），设备读取属于适配器。
 
 **没接**
-- 桌面适配器 `DesktopMoveInput` 已写，并在 `Labs/StoryLevel` 里编译实跑（commit `e74ff8c`），但那是**站着**的键盘实验。坐姿下轴回调是否还到达 Udon 仍未验证——StationPlatform 那次只加过日志，而且那版源码**改了但从未编译/运行**（`Docs/Evidence/StationPlatform/axis_logging.md:3`、`:110-112`）。
-- FollowRig 在场景里全是空引用：CpuSkirmish 四个 motor 的 `followRigRoot` 都是 0（`CpuSkirmish.unity:448`、`:2455`、`:4156`、`:5332`），BallPlayground 也是 0（`Labs/BallPlayground/BallPlayground.unity:4329`）。motor 算出的平滑跟随帧没有落点。
+- 桌面适配器 `DesktopMoveInput` 已写，并在第一关场景里编译实跑，但那是**站着**的键盘实验。坐姿下轴回调是否还到达 Udon 仍未验证——StationPlatform 那次只加过日志，而且那版源码**改了但从未编译/运行**（`Docs/Evidence/StationPlatform/axis_logging.md:3`、`:110-112`）。
+- FollowRig 在场景里全是空引用：CpuSkirmish 四个 motor 的 `followRigRoot` 都是 0（`CpuSkirmish.unity:448`、`:2455`、`:4156`、`:5332`）。motor 算出的平滑跟随帧没有落点。
 - CpuSkirmish 没有 Station / Interact（见 §0 第 1 条），所以“点球跟上去”完全不存在。
 
 **最小正确接线**
@@ -35,7 +35,7 @@
 **已有**
 - 球心=中心：每步 Sweep → GroundContact；空代理时支撑高度=核心半径，球心被放到 `planeOffset + support`（`Runtime/BallLayers/GroundContact/GroundContactMath.cs:89-111`）。地面是一条解析平面（`KatamariBallMotor.cs:86-87`），host 用 `AddPlane` 注册（`:1087-1101`）。
 - 三个尺寸分开：核心半径 / 碰撞半径 / 语义直径（`KatamariBallMotor.cs:1363-1376`）。默认起始语义直径 0.29974 m、碰撞半径 0.14987 m（`Docs/Design/BallMotor/README.md:130`），所以球心 y≈0.15 本身是对的。
-- BallPlayground 已证明正确做法：`ballVisual.localScale = diameter`（`BallPlaygroundBootstrap.cs:148-152`），实跑球心 y 随半径 0.15→0.48（`tasks.json:2158`）。
+- 正确做法：`ballVisual.localScale = diameter`，球心 y 随半径变化。
 
 **没接 / 根因**
 - CpuSkirmish 没有任何“按语义直径缩放”的代码；它的 host 明说“never drives or resizes a ball”（`CpuSkirmishBootstrap.cs:16`）。内置 Sphere 的 pivot 在球心（`CpuSkirmish.unity:832`），所以不是 pivot 偏移，就是没缩。验证方法：`center.y − diameter/2` 应为 0；当前应是 −0.35。
@@ -54,7 +54,7 @@
 - 场景里目前的唯一消费者是 lab 的 `PlaygroundProp`：查到自己的 id 就 `SetActive(false)` + 关 collider（`PlaygroundProp.cs:144-169`）。这就是用户看到的“方块消失”。运行时的消费者是 `PickupFieldHost`（源码已写、未编译、未接线，见下）。
 
 **没接**
-- 吸附宿主源码已写（`Runtime/Pickup/PickupFieldHost.cs`），但**场景没接**：没有 `AttachmentRoot`、没有道具数组行，CpuSkirmish / BallPlayground 里放的仍是 lab 的 `PlaygroundProp`。宿主本身也**未编译**。
+- 吸附宿主源码已写（`Runtime/Pickup/PickupFieldHost.cs`），但**场景没接**：没有 `AttachmentRoot`、没有道具数组行，CpuSkirmish 里放的是 lab 的 `PlaygroundProp`。宿主本身也**未编译**。
 - 事件位置是**提交时**快照（`SubmitCandidate` 的 `pendingPositions`，`KatamariBallMotor.cs:1024`），不是吸附瞬间的位置；快滚时可能差几十厘米，不能直接当最终位姿。
 
 **最小正确接线**
@@ -77,7 +77,7 @@
 
 **最小正确接线**
 - 新 `Runtime/Story/StoryRoundController.cs`：状态 `Idle → Running → Presenting → Result`（int 即可）；`Time.time` 记起点；Running 每帧更新 HUD（目标/当前/剩余）；到点后 `input.SetRoundGate(false)`（输入是两个独立闸门，回合只关自己那个，见 [StoryMode README](<README.md>) 的“输入闸门”）、`propHost.SetCollecting(false)`、`motor.ClearCandidates()`（`KatamariBallMotor.cs:1082-1085`），按结算瞬间的**碰撞直径** `2 * motor.GetCollisionRadiusWorldM()` 查星（今天与语义直径相等，因为两个比例都是 1，`:108-109`），显示“呈给国王”+星数+直径+评语。**不调用** `TryBank`/`TryAwardScore`，不写 `bankedScore`。
-- HUD/结果用 uGUI `Text`（BallPlayground 已验证：`BallPlaygroundBootstrap.cs:33`）。King 的形象/动画没有美术，本阶段明确不做，只做结果面板；“呈球是纯表现事件”本身是设计允许的（`GameModes/README.md:131`）。
+- HUD/结果用 uGUI `Text`。King 的形象/动画没有美术，本阶段明确不做，只做结果面板；“呈球是纯表现事件”本身是设计允许的（`GameModes/README.md:131`）。
 - 第一关的 6 个数字（level_id、目标、两档星、限时、文本）先写成控制器的序列化字段，注释指向 JSON；**不要**为第一关造一次性导入器。第二关再做 `Editor/Story/` 烘焙器，且只烘规则字段，不烘地图坐标。
 - 第二关（类别计数）不在本计划：S3 的宿主已经按 definition 累计吸附件数，接第二关时只把过滤条件换成 `categories.json` 的显式 definition 集合（类别目标见 `Docs/Design/GameModes/Levels/story_02_fruit_ten.json:18-21`），不新增第二套计数实现。
 - 重试**不在本计划内**：它需要 motor/账本的重置接缝（清本地球行、commit/claim、尺寸、ring 后重新进 Playing），单独一步做，避免把第一关撑大。
@@ -104,7 +104,7 @@
 
 **S1 能控制一颗球（含正确大小）**
 - 目标：Play Mode 里 WASD 让球动、松手刹车、球底贴地、长大时球变大。
-- 文件：新 `Runtime/Input/DesktopMoveInput.cs`、新 `Runtime/BallPresentation/BallView.cs`、新 `Labs/StoryLevel/StoryLevel.unity`（1 球、20×20 地面、边墙、约 30 个临时道具、相机跟随），以及一个只做接线/相机/`TryBeginPlaying` 的 `Labs/StoryLevel/StoryLevelLabBootstrap.cs`。
+- 文件：新 `Runtime/Input/DesktopMoveInput.cs`、新 `Runtime/BallPresentation/BallView.cs`、新 `Worlds/StoryMode/StoryMode.unity`（1 球、地面、边墙、道具、相机跟随）。
 - 验证：Play Mode；W/S 前后、A/D 转向；日志 `center/heading/diameter`；`center.y − d/2 ≈ 0`；撞边墙停住。判据：30 s 手动运行能沿一条边走完再转回来。
 - 大小：S–M（两个小运行时文件 + 一张 lab 场景 + 接线）。
 
@@ -128,7 +128,7 @@
 
 **S5 切片内容够 1.25 m**
 - 目标：切片总单位 ≥400，1.25 m 在 120 s 内可达且有余量。
-- 文件：`Labs/StoryLevel/StoryLevel.unity` 布置、`Labs/StoryLevel/README.md`。
+- 文件：`Worlds/StoryMode/StoryMode.unity` 布置。
 - 验证：Play Mode 一次“尽量吃”的运行，记录达标时刻与总单位；要求达标 ≤ 总单位 65%、达标时刻 ≤ 80 s。不达标就加道具，不改目标。
 - 大小：L（MCP 批量摆放；不要写一次性 builder）。
 
@@ -150,13 +150,3 @@
 4. **吸附位姿**：事件位置是提交时快照，`AttachmentMath` 用视觉滚动四元数；快滚时可能看着偏。用道具当前 Transform 可缓解；`SetParent`/局部写入在 Udon 的可用性未编译验证。
 5. **运动层边界**：8 平面/8 盒、无台阶/坡道/多接触（`Docs/02_TECHNICAL_CONTRACTS.md:54`）；第一关必须平地且障碍 ≤8。
 6. **构建路线**：只能用户手点 Build & Test（`tasks.json:2158`）；任何“已验证 Build”都要等用户那一轮，本文不预支。
-
-## 9. 验证命令与本次结果
-
-```bash
-python3 Docs/tools/validate_plan.py
-python3 -m unittest discover -s Docs/tests
-python3 Docs/Design/GameModes/validate_levels.py
-```
-
-2026-11-14 基线：前两条 PASS（`61 tasks`；`270 tests OK`），第三条 `OK`（错误 0、警告 0）。Unity 侧编译、Play Mode、Build & Test 均 **NOT_RUN**（本 agent 不是 Unity 操作者）。

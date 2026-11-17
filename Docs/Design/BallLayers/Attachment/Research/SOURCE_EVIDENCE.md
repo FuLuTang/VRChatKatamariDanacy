@@ -9,7 +9,7 @@ The original Katamari game source was not obtained. The repository contains no o
 ## Relevant evidence
 
 - Project contract: [`Docs/02_TECHNICAL_CONTRACTS.md`](../../../../02_TECHNICAL_CONTRACTS.md) §§2–3. It specifies local attachment pose, object scale independent of core growth, and stable summary identity as project design. It is not original-game evidence.
-- Prior local draft and handoff: [`attachment.py`](../attachment.py) and [`SuiteFoundation/HANDOFF.md`](../../SizeModel/SuiteFoundation/HANDOFF.md). The older implementation assigned a local incrementing sequence and mixed renderer retention into the record store; the new code changes those responsibilities.
+- Local basis: [`attachment.py`](../attachment.py). The record store consumes upstream identities and keeps renderer retention outside the record store.
 - Historical patent: [US7402104B2](https://patents.google.com/patent/US7402104B2/en), filed 2004-09-20, granted 2008-07-22. It describes a technique involving radial displacement points in its claim/description. This is background only; it does not document actual game source, confirmed pickup identities, attachment pose lifecycle, or the 2025 game's internals.
 
 ## Actual access record

@@ -85,7 +85,7 @@ DEFAULT_STARS = (1.25, 1.45, 1.60)
 #: +1.53 %; the whole 42-item run averages **+1.71 % per item**.
 ORIGINAL_HUD_ANCHORS = ((0.222, 12, 0.293), (0.222, 24, 0.345), (0.222, 42, 0.454))
 
-#: Absorbs per second used for the time proxy.  0.3-0.4/s is the naive O6/O8 probe
+#: Absorbs per second used for the time proxy.  0.3-0.4/s is the naive probe
 #: (one item per ~2.5-3 s, the ball walks between props); a human rolling through a
 #: dense patch is faster.  The report prints all three so a recommendation can cite
 #: the assumption instead of hiding it.

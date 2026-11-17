@@ -292,6 +292,17 @@ namespace VRCKatamari.Editor.LevelBuild
                 };
             }
 
+            // A solid whose id is also a prop's id is that prop's collision: the prop carries
+            // the model, so the solid's cube is not drawn (StructureEntry.bodyIsProp).
+            var propIds = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < doc.Props.Length; i++)
+            {
+                if (doc.Props[i] != null && !string.IsNullOrEmpty(doc.Props[i].ItemId))
+                {
+                    propIds.Add(doc.Props[i].ItemId);
+                }
+            }
+
             view.structures = new StructureEntry[doc.Solids.Length];
             for (int i = 0; i < doc.Solids.Length; i++)
             {
@@ -323,6 +334,8 @@ namespace VRCKatamari.Editor.LevelBuild
                     contactIsProxy = hasContact,
                     contactCenter = hasContact ? contact.Center : null,
                     contactSize = hasContact ? contact.Size : null,
+                    bodyIsProp = hasContact && string.Equals(solid.Shape, "proxy", StringComparison.Ordinal) &&
+                                 propIds.Contains(solid.Id),
                     curve = solid.Curve == null
                         ? null
                         : new CurveEntry
@@ -572,7 +585,7 @@ namespace VRCKatamari.Editor.LevelBuild
             {
                 report.Note(V2Tag + summary.ParentCount + " parent edge(s), " +
                             summary.ParentRootCount + " root(s), max depth " +
-                            summary.ParentMaxDepth + ": built as Hierarchy/ folders (owner ruling A), " +
+                            summary.ParentMaxDepth + ": built as Hierarchy/<parent>_children folders (owner ruling A), " +
                             "not as GameObject parenting, so the pickup rows stay one-per-prop. " +
                             "The edges are also reported here for the future propParent column");
             }

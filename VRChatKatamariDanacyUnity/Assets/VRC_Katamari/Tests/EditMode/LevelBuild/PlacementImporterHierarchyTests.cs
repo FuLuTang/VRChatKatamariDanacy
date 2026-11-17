@@ -7,7 +7,8 @@ namespace VRCKatamari.Tests
 {
     /// <summary>
     /// Pins where a v2 prop with a <c>parent</c> lands: a reserved
-    /// <c>Hierarchy/&lt;parent&gt;/</c> FOLDER, never the parent prop's GameObject.
+    /// <c>Hierarchy/&lt;parent&gt;_children/</c> FOLDER, never the parent prop's GameObject, and
+    /// never a folder that shares the parent's name.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -74,14 +75,39 @@ namespace VRCKatamari.Tests
         public void ParentBecomesAReservedHierarchyFolder()
         {
             Transform folder = FolderFor("tableware", "porch", null, "table_01");
-            Assert.AreEqual("table_01", folder.name);
+            Assert.AreEqual("table_01_children", folder.name);
             Assert.AreEqual("Hierarchy", folder.parent.name,
-                "the parent id lives under the reserved Hierarchy container");
+                "the parent's children live under the reserved Hierarchy container");
             Assert.AreEqual("porch", folder.parent.parent.name);
             Assert.AreEqual("tableware", folder.parent.parent.parent.name);
             Assert.AreEqual(propsRoot, folder.parent.parent.parent.parent);
             Assert.IsNull(folder.GetComponent<Renderer>(),
                 "a container must never carry a Renderer: that is what hides a prop row");
+        }
+
+        [Test]
+        public void NoContainerSharesTheParentPropsName()
+        {
+            // The identity folder named exactly like its parent prop is what a by-name probe
+            // (Find / recursive name match) hits first: it reads (0,0,0) and no Renderer, so a
+            // parent crab with a rider looked frozen at the origin. No object in the props tree
+            // may carry the bare parent id.
+            Transform folder = FolderFor("tableware", "porch", null, "table_01");
+            Transform[] all = propsRoot.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                Assert.AreNotEqual("table_01", all[i].name,
+                    "a container must not be named like a prop (" + all[i].name + ")");
+            }
+
+            Assert.AreEqual("table_01_children", folder.name);
+        }
+
+        [Test]
+        public void ContainerNameIsTheIdPlusTheSuffix()
+        {
+            string name = (string)InvokeImporter("HierarchyContainerName", "coconut_crab_009");
+            Assert.AreEqual("coconut_crab_009_children", name);
         }
 
         [Test]
@@ -141,10 +167,10 @@ namespace VRCKatamari.Tests
             Transform second = FolderFor("tableware", "porch", null, "table_01");
             Assert.AreSame(first, second,
                 "a second import must reuse the container, not nest a new one");
-            // zone -> Hierarchy -> table_01: exactly one of each, however many runs.
+            // zone -> Hierarchy -> table_01_children: exactly one of each, however many runs.
             Assert.AreEqual(1, CountNamed(first.parent.parent, "Hierarchy"),
                 "no duplicate Hierarchy folder");
-            Assert.AreEqual(1, CountNamed(first.parent, "table_01"),
+            Assert.AreEqual(1, CountNamed(first.parent, "table_01_children"),
                 "no duplicate parent folder");
         }
 

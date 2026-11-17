@@ -264,6 +264,109 @@ namespace VRCKatamari.Tests
             }
         }
 
+        // ------------------------------------------------ solids whose model is a prop ---
+
+        [Test]
+        public void ASolidWithAPropOfTheSameIdIsCollisionOnly()
+        {
+            // The reference level's 35 solids are proxies whose ids are also props: the prop is
+            // the model, the solid only its collision. The importer drew every solid as an ochre
+            // cube (3.4 x 4.1 x 2.8 m around a tree); the cube's Renderer must be off, the
+            // BoxCollider kept, and a second run must write nothing.
+            string solids = Solid("tree", "proxy", "def", BoxProxy("[1,3,1]", "[0,0,0]"), "[2,4,2]");
+            object doc = ParseWithProp(solids, "tree");
+            object view = Invoke(importerType, "BuildV1View", new[] { doc });
+            Assert.IsTrue((bool)Field(StructureOf(view, "tree"), "bodyIsProp"),
+                "the solid shares its id with a prop");
+
+            var root = new GameObject("PlacementV2StructureProxyTests");
+            root.hideFlags = HideFlags.DontSave;
+            try
+            {
+                object first = Activator.CreateInstance(reportType);
+                Assert.IsTrue((bool)Invoke(importerType, "ApplyStructures",
+                    new[] { view, root.transform, first }), Errors(first));
+                Transform tree = root.transform.Find("tree");
+                Assert.IsNotNull(tree);
+                Assert.IsNotNull(tree.GetComponent<BoxCollider>(), "the collision stays");
+                Assert.IsFalse(tree.GetComponent<MeshRenderer>().enabled, "the cube is not drawn");
+
+                object second = Activator.CreateInstance(reportType);
+                Assert.IsTrue((bool)Invoke(importerType, "ApplyStructures",
+                    new[] { view, root.transform, second }), Errors(second));
+                Assert.AreEqual(0, Field(second, "StructuresCreated"));
+                Assert.AreEqual(0, Field(second, "StructuresUpdated"), "settled: nothing written");
+                Assert.AreEqual(0, Field(second, "StructuresDeleted"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void ASolidWithoutAPropKeepsItsVisibleBodyAndAnImportRepairsAHiddenOne()
+        {
+            string solids = Solid("crate", "proxy", "def", BoxProxy("[1,1,1]", "[0,0,0]"), "[1,1,1]");
+            object doc = ParseWithProp(solids, "something_else");
+            object view = Invoke(importerType, "BuildV1View", new[] { doc });
+            Assert.IsFalse((bool)Field(StructureOf(view, "crate"), "bodyIsProp"),
+                "no prop of that id: the placeholder body is the only thing to see");
+
+            var root = new GameObject("PlacementV2StructureProxyTests");
+            root.hideFlags = HideFlags.DontSave;
+            try
+            {
+                object first = Activator.CreateInstance(reportType);
+                Assert.IsTrue((bool)Invoke(importerType, "ApplyStructures",
+                    new[] { view, root.transform, first }), Errors(first));
+                MeshRenderer body = root.transform.Find("crate").GetComponent<MeshRenderer>();
+                Assert.IsTrue(body.enabled);
+
+                body.enabled = false;   // a stale hidden cube (data changed, or a hand edit)
+                object second = Activator.CreateInstance(reportType);
+                Assert.IsTrue((bool)Invoke(importerType, "ApplyStructures",
+                    new[] { view, root.transform, second }), Errors(second));
+                Assert.IsTrue(body.enabled, "the import turns the body back on");
+                Assert.AreEqual(1, Field(second, "StructuresUpdated"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        private object StructureOf(object view, string id)
+        {
+            foreach (object structure in (Array)Field(view, "structures"))
+            {
+                if ((string)Field(structure, "id") == id) return structure;
+            }
+
+            Assert.Fail("no structure '" + id + "' in the view");
+            return null;
+        }
+
+        // The reader is asked for the document only: a minimal prop is enough for the id match
+        // (the rest of its fields are the reader's own business, covered by its tests).
+        private object ParseWithProp(string solids, string propId)
+        {
+            string json = @"{""schema"":""katamari.placement/2""," +
+                          @"""meta"":{""id"":""probe"",""scene"":""S"",""units"":""m""," +
+                          @"""convention"":""unity-y-up-left-handed-quat-xyzw""," +
+                          @"""ball"":{""startDiameterM"":0.3,""maxDiameterRef"":""global""," +
+                          @"""start"":[0,0,0],""spawnSource"":""authored""}}," +
+                          @"""defs"":[{""id"":""d"",""kind"":""k"",""model"":""x.fbx""}]," +
+                          @"""props"":[{""itemId"":""" + propId + @""",""def"":""d"",""kind"":""k""," +
+                          @"""position"":[0,0,0],""rotationQuat"":[0,0,0,1],""aabb"":[1,1,1]}]," +
+                          @"""structures"":{""solids"":[" + solids + "]}}";
+            AssertFixtureIsJson(json);
+            object result = Invoke(readerType, "Read", new object[] { json });
+            object doc = Field(result, "Document");
+            Assert.IsNotNull(doc, "the reader must hand back the document");
+            return doc;
+        }
+
         // ----------------------------------------------------- the reference ---
 
         [Test]

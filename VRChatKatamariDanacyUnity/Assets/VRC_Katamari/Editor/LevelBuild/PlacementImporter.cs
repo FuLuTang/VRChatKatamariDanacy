@@ -138,6 +138,10 @@ namespace VRCKatamari.Editor.LevelBuild
         // top-level row for PickupFieldSync. Never a prop name, for the same reason Groups is
         // reserved.
         public const string HierarchyFolderName = "Hierarchy";
+        // The folder that holds one parent's children is NOT called the parent's id: a
+        // by-name lookup ("find coconut_crab_009") would hit the identity, Renderer-less folder
+        // before - or instead of - the prop, and read its (0,0,0) pose as the prop's.
+        public const string HierarchyChildrenSuffix = "_children";
 
         // Repo-relative, like the greybox builder's payload: the JSON lives next to the
         // Unity project, not inside Assets/, so it can be diffed and validated by the CLI.
@@ -316,7 +320,7 @@ namespace VRCKatamari.Editor.LevelBuild
             public string group;
             /// <summary>
             /// v2's single parent pointer (owner ruling A). The importer builds a
-            /// <c>Hierarchy/&lt;parent&gt;/</c> FOLDER and keeps the prop a top-level row:
+            /// <c>Hierarchy/&lt;parent&gt;_children/</c> FOLDER and keeps the prop a top-level row:
             /// parenting one prop's GameObject under another prop's GameObject would hide the
             /// child from the pickup sync's "topmost Renderer is one row" rule and lose its row.
             /// The edge itself is preserved for the future <c>propParent</c> column.
@@ -401,6 +405,14 @@ namespace VRCKatamari.Editor.LevelBuild
             public bool contactIsProxy;
             public float[] contactCenter;
             public float[] contactSize;
+            /// <summary>
+            /// True when a prop with this solid's own id carries the visible model, so the solid
+            /// is only collision: the cube's <see cref="Renderer"/> is switched off (the
+            /// <see cref="BoxCollider"/> stays). Set by the v2 view for a <c>shape:"proxy"</c>
+            /// solid whose id is also a <c>props[].itemId</c> (the reference level's 35 solids
+            /// are all such pairs); a solid without a prop keeps its placeholder body.
+            /// </summary>
+            public bool bodyIsProp;
         }
 
         /// <summary>
@@ -1911,6 +1923,16 @@ namespace VRCKatamari.Editor.LevelBuild
         }
 
         /// <summary>
+        /// The name of the folder that holds the children of the prop <paramref name="parentId"/>:
+        /// the id plus <see cref="HierarchyChildrenSuffix"/>, so no container ever shares a name
+        /// with a prop.
+        /// </summary>
+        public static string HierarchyContainerName(string parentId)
+        {
+            return parentId + HierarchyChildrenSuffix;
+        }
+
+        /// <summary>
         /// Returns the folder a prop with this kind/zone/group belongs in, creating the
         /// containers it needs, or null when a container name is already taken by a prop.
         /// </summary>
@@ -1933,17 +1955,19 @@ namespace VRCKatamari.Editor.LevelBuild
                 if (folder == null) return null;
             }
 
-            // v2's parent: a FOLDER named after the parent prop, not the prop itself (owner
+            // v2's parent: a FOLDER for the parent prop's children, not the prop itself (owner
             // ruling A). Parenting the child's GameObject under the parent's GameObject would
             // put it below a Renderer, and PickupFieldSync stops at the topmost Renderer, so
             // the child would never become a row (the F2/F3 defect class). The world pose is
             // untouched either way: the folder is at identity and the child keeps its authored
-            // world position, so no blend of two transforms can double it.
+            // world position, so no blend of two transforms can double it. The folder carries
+            // the parent's id plus a suffix, never the bare id: two objects with one name made
+            // a by-name probe read the folder's identity pose as the prop's.
             if (!string.IsNullOrEmpty(parentId))
             {
                 folder = EnsureFolder(folder, HierarchyFolderName, report);
                 if (folder == null) return null;
-                folder = EnsureFolder(folder, parentId, report);
+                folder = EnsureFolder(folder, HierarchyContainerName(parentId), report);
                 if (folder == null) return null;
             }
 
@@ -2495,9 +2519,21 @@ namespace VRCKatamari.Editor.LevelBuild
                   Vector3.Distance(collider.size, targetColliderSize) <= PositionToleranceM
                 : collider == null;
 
-            if (poseMatches && colliderMatches)
+            // A solid whose model is a prop is collision only: the cube must not be drawn over
+            // the model (an ochre box 3.4 x 4.1 x 2.8 m around a tree). A marker or curve parent
+            // has no Renderer, so there is nothing to compare.
+            Renderer body = instance.GetComponent<Renderer>();
+            bool bodyMatches = body == null || body.enabled == !structure.bodyIsProp;
+
+            if (poseMatches && colliderMatches && bodyMatches)
             {
                 return false;
+            }
+
+            if (!bodyMatches)
+            {
+                Undo.RecordObject(body, UndoLabel);
+                body.enabled = !structure.bodyIsProp;
             }
 
             if (!poseMatches)
@@ -2889,6 +2925,11 @@ namespace VRCKatamari.Editor.LevelBuild
                 }
                 else
                 {
+                    if (structure.bodyIsProp)
+                    {
+                        continue;   // collision only: the prop carries the model, the cube is hidden
+                    }
+
                     // A box/ramp body is the object itself, so only its material is this pass's
                     // business: the pose and the collider belong to the box/ramp path.
                     bool dressed = EnsureStructureMaterial(instance.GetComponent<Renderer>(),

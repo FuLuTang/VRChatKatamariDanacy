@@ -155,6 +155,19 @@ namespace VRCKatamari.Pickup
             return SpaceOf(motionClass) == SpaceAbsolute;
         }
 
+        /// <summary>
+        /// True for the classes whose Animator plays the walk clip for as long as the row runs:
+        /// the three path classes. The original starts every path crab in MOVING
+        /// (<c>playAnimNo = 1</c> on all eight Cancer path crabs) and a path program never
+        /// switches to IDLE (the only exception, BackAndForthNoYaw's endpoint turn, is a single
+        /// step). SporadicWalk is not in this set: it alternates walk and pause, and its state
+        /// machine decides.
+        /// </summary>
+        public static bool HoldsMovingAnimation(int motionClass)
+        {
+            return IsPathClass(motionClass);
+        }
+
         /// <summary>Clouds ignore yaw: they keep the spawn orientation.</summary>
         public static bool KeepsSpawnRotation(int motionClass)
         {

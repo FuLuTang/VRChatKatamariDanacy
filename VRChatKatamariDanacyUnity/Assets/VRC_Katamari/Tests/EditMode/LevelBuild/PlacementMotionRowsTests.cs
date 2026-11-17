@@ -102,6 +102,33 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void APathParentKeepsItsOwnProgramWhenItCarriesARider()
+        {
+            // Cancer's coconut_crab_011 / color_tv_001 shape: a path walker with a static rider.
+            // The parent row must keep its path, speed and half height and have no parent; the
+            // rider row has the parent's row and no program. (The rider is listed first on purpose.)
+            string props = @"""props"":[" +
+                Prop("tv", @"""behaviour"":""static"",""parent"":""crab"",""inherit"":""full""") + "," +
+                Prop("crab", @"""behaviour"":""motion"",""motion"":""lap""") + "]";
+            object table = Build(props + "," + Defs + "," + Motions, null);
+
+            string[] ids = (string[])Field(table, "ItemIds");
+            int crab = Array.IndexOf(ids, "crab");
+            int tv = Array.IndexOf(ids, "tv");
+            Assert.AreEqual(2, ids.Length);
+            Assert.Less(crab, tv, "the parent row precedes its rider");
+            Assert.AreEqual(-1, ((int[])Field(table, "ParentRow"))[crab]);
+            Assert.AreEqual(crab, ((int[])Field(table, "ParentRow"))[tv]);
+            Assert.AreEqual(MotionHostMath.ClassPathCollision, ((int[])Field(table, "MotionClass"))[crab]);
+            Assert.AreEqual(MotionHostMath.ClassNone, ((int[])Field(table, "MotionClass"))[tv]);
+            Assert.AreEqual(0, ((int[])Field(table, "PathIndex"))[crab]);
+            Assert.AreEqual(-1, ((int[])Field(table, "PathIndex"))[tv]);
+            Assert.AreEqual(0.244f, ((float[])Field(table, "SpeedMps"))[crab], 1e-5f);
+            Assert.AreEqual(0.2f, ((float[])Field(table, "HalfHeightM"))[crab], 1e-6f);
+            Assert.AreEqual(0, ((List<string>)Field(table, "Errors")).Count);
+        }
+
+        [Test]
         public void PhaseIsTheHashUnlessTheAuthorOverridesIt()
         {
             string props = @"""props"":[" +
@@ -195,6 +222,56 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(0, ((List<string>)Field(table, "Errors")).Count);
             int[] parent = (int[])Field(table, "ParentRow");
             for (int i = 0; i < parent.Length; i++) Assert.Less(parent[i], i, "parents first");
+        }
+
+        [Test]
+        public void ReferenceCrabsThatCarryARiderStayOwnProgramRows()
+        {
+            // The three path crabs with a rider (coconut_crab_009 -> fiddler_crab_037,
+            // coconut_crab_011 -> color_tv_001, fiddler_crab_034 -> fiddler_crab_035 and shoji_001)
+            // were read as "stuck at (0,0,0)" in Play; the cause was the same-named scene folder, not
+            // the rows. Pin the rows: each parent has its own path program and no parent, each rider
+            // points at that parent's row.
+            Type paths = FindType("VRCKatamari.Editor.LevelBuild.LevelPaths");
+            string repoRoot = (string)paths.GetMethod("RepoRoot").Invoke(null, new object[0]);
+            string file = string.IsNullOrEmpty(repoRoot) ? null : System.IO.Path.Combine(repoRoot,
+                "Docs/Design/Levels/_ref_cancer/placement.v2.json");
+            if (file == null || !System.IO.File.Exists(file))
+            {
+                Assert.Ignore("no _ref_cancer reference data on this machine; skipped");
+            }
+            Type reader = FindType("VRCKatamari.Editor.LevelBuild.PlacementV2Reader");
+            object result = reader.GetMethod("ReadFile").Invoke(null, new object[] { file });
+            object table = FindType("VRCKatamari.Editor.LevelBuild.PlacementMotionRows")
+                .GetMethod("Build").Invoke(null, new object[] { Field(result, "Document"), null });
+            string[] ids = (string[])Field(table, "ItemIds");
+            int[] parent = (int[])Field(table, "ParentRow");
+            int[] cls = (int[])Field(table, "MotionClass");
+            int[] pathIndex = (int[])Field(table, "PathIndex");
+            float[] speed = (float[])Field(table, "SpeedMps");
+            float[] half = (float[])Field(table, "HalfHeightM");
+
+            string[,] pairs =
+            {
+                { "coconut_crab_009", "fiddler_crab_037" },
+                { "coconut_crab_011", "color_tv_001" },
+                { "fiddler_crab_034", "fiddler_crab_035" },
+                { "fiddler_crab_034", "shoji_001" },
+            };
+            for (int k = 0; k < pairs.GetLength(0); k++)
+            {
+                int row = Array.IndexOf(ids, pairs[k, 0]);
+                int rider = Array.IndexOf(ids, pairs[k, 1]);
+                Assert.GreaterOrEqual(row, 0, pairs[k, 0] + " has a row");
+                Assert.GreaterOrEqual(rider, 0, pairs[k, 1] + " has a row");
+                Assert.AreEqual(-1, parent[row], pairs[k, 0] + " is a root");
+                Assert.AreEqual(row, parent[rider], pairs[k, 1] + " rides " + pairs[k, 0]);
+                Assert.AreEqual(MotionHostMath.ClassNone, cls[rider]);
+                Assert.IsTrue(MotionHostMath.IsPathClass(cls[row]), pairs[k, 0] + " runs a path program");
+                Assert.GreaterOrEqual(pathIndex[row], 0, pairs[k, 0] + " has a path");
+                Assert.Greater(speed[row], 0f, pairs[k, 0] + " has a speed");
+                Assert.Greater(half[row], 0f, pairs[k, 0] + " has a half height");
+            }
         }
 
         [Test]

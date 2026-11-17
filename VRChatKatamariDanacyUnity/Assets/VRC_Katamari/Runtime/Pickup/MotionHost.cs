@@ -753,6 +753,7 @@ namespace VRCKatamari.Pickup
                 animator.enabled = true;
                 animator.SetBool("Panic", false);
                 animator.SetBool("Moving", false);
+                HoldMovingForPathRow(i);
             }
             if (rowDrivesPose[i] && t.parent == homeParent[i])
             {
@@ -770,6 +771,18 @@ namespace VRCKatamari.Pickup
             Animator animator = rowAnimators[i];
             if (animator == null) return;
             animator.Play("idle", 0, MotionMath.Phase01(rowPhaseSeed[i]));
+            HoldMovingForPathRow(i);
+        }
+
+        // A path walker (PathCollision, SlopingPath, BackAndForthNoYaw) walks for as long as its
+        // row runs: the original starts it in MOVING and the path program never pauses it, so
+        // the walk clip plays from the first frame. Without this the crab slid along its path
+        // in the idle pose (SporadicWalk sets Moving from its own state machine instead).
+        private void HoldMovingForPathRow(int i)
+        {
+            if (!MotionHostMath.HoldsMovingAnimation(rowMotionClass[i])) return;
+            rowMoving[i] = true;
+            SetAnimatorBool(i, "Moving", true);
         }
 
         private void SetAnimatorBool(int i, string parameter, bool value)

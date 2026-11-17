@@ -165,6 +165,62 @@ namespace VRCKatamari.Tests
             }
         }
 
+        [Test]
+        public void OnlyThePathClassesHoldTheWalkAnimation()
+        {
+            // The original starts every path crab in MOVING and the path program never pauses
+            // it; SporadicWalk alternates walk and pause on its own state machine.
+            Assert.IsTrue(MotionHostMath.HoldsMovingAnimation(MotionHostMath.ClassPathCollision));
+            Assert.IsTrue(MotionHostMath.HoldsMovingAnimation(MotionHostMath.ClassSlopingPath));
+            Assert.IsTrue(MotionHostMath.HoldsMovingAnimation(MotionHostMath.ClassBackAndForth));
+            Assert.IsFalse(MotionHostMath.HoldsMovingAnimation(MotionHostMath.ClassSporadicWalk));
+            Assert.IsFalse(MotionHostMath.HoldsMovingAnimation(MotionHostMath.ClassHop));
+            Assert.IsFalse(MotionHostMath.HoldsMovingAnimation(MotionHostMath.ClassWaitForPlayer));
+            Assert.IsFalse(MotionHostMath.HoldsMovingAnimation(MotionHostMath.ClassNone));
+        }
+
+        [Test]
+        public void ARiderOfAPathParentFollowsTheParentAndNeverCollapsesToTheOrigin()
+        {
+            // Cancer's coconut_crab_011 (PathCollision, p23) carries color_tv_001: the parent spawns
+            // at (1.418, -0.558, -0.260), the rider 0.395 m above and 0.076 m beside it. After the
+            // parent's first step both are on the path ring and the rider keeps its offset from the
+            // parent (rotated by the parent's yaw change); neither is the zero vector.
+            float[] ring = new float[12 * 3];
+            for (int k = 0; k < 12; k++)
+            {
+                float a = k * Mathf.PI * 2f / 12f;
+                ring[k * 3] = 1.4f * Mathf.Cos(a);
+                ring[k * 3 + 1] = -0.6563f;
+                ring[k * 3 + 2] = 1.4f * Mathf.Sin(a);
+            }
+            Vector3 parentSpawn = new Vector3(1.4184f, -0.558f, -0.2596f);
+            Vector3 riderSpawn = new Vector3(1.3427f, -0.1631f, -0.2678f);
+            Quaternion spawnRotation = Quaternion.identity;
+
+            float[] state = new float[MotionMath.PathCollisionStateFloats];
+            MotionHostMath.ResetState(MotionHostMath.ClassPathCollision, state, 0);
+            Vector3 offsetOrPosition = Vector3.zero; Vector3 euler = Vector3.zero;
+            Assert.IsTrue(MotionHostMath.TryStep(MotionHostMath.ClassPathCollision, state, 2f, 0, 0.11f,
+                true, true, 0.244f, 4f, ring, 12, true, parentSpawn, out offsetOrPosition, out euler));
+
+            Vector3 parentPosition; Quaternion parentRotation;
+            MotionHostMath.StandalonePose(MotionHostMath.ClassPathCollision, parentSpawn, spawnRotation,
+                offsetOrPosition, euler, out parentPosition, out parentRotation);
+            Assert.Greater(new Vector3(parentPosition.x, 0f, parentPosition.z).magnitude, 1f,
+                "the parent is on the ring, not at the origin");
+            Assert.AreEqual(-0.6563f + 0.11f, parentPosition.y, 1e-3f, "centre one half height above the path");
+
+            Vector3 riderPosition; Quaternion riderRotation;
+            MotionHostMath.CarryByParent(MotionHostMath.InheritFull, parentPosition, parentRotation,
+                parentSpawn, MotionHostMath.Conjugate(spawnRotation), riderSpawn, Quaternion.identity,
+                out riderPosition, out riderRotation);
+            Assert.AreEqual((riderSpawn - parentSpawn).magnitude, (riderPosition - parentPosition).magnitude, 1e-3f,
+                "a full-inherit rider keeps its distance to the parent");
+            Assert.AreEqual(riderSpawn.y - parentSpawn.y, riderPosition.y - parentPosition.y, 1e-3f,
+                "a yaw-only parent turn does not tilt the rider");
+        }
+
         // --- trigger gate vs wake radius ----------------------------------------
 
         [Test]

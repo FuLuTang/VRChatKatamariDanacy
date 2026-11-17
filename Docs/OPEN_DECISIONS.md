@@ -182,7 +182,16 @@
 
 - **删除 v1 位置权威（owner 2026-11-17）** — 统一为一套位置逻辑，避免两份实现。
 
+### Owner decisions 2026-11-17（地图 0 沙盒亲测）
+
+- **缓坡松手不滑保持现状：方案 A，滚动阻力照常作用（owner 2026-11-17）** — C26 2°、C27 5° 顺坡朝向时不滑，主人接受「有点阻力也行」；见 [BALL_INERTIA §4](Design/BallMotor/BALL_INERTIA.md#4-静止后下坡)、[PHYSICS_TEST_FIELD §4.9](Design/BallMotor/PHYSICS_TEST_FIELD.md#49-2026-11-17-的新格c25-墙--顶棚c26--c27--c28-缓坡)。
+- **C25 受阻不算卡住，不做按进度释放（owner 2026-11-17）** — 墙与顶棚夹角里往前推不动正常，玩家靠后退脱出；见 [TERRAIN_CLIMB §6.7](Design/BallMotor/TERRAIN_CLIMB.md#67-墙与顶棚夹角受阻不等于卡住2026-11-17-拍板)。
+- **C08/C09/C10 的 5/7.5/10 cm 台阶都能上，符合预期（owner 2026-11-17）** — 主人确认靠爬墙通道上去没有问题；见 [PHYSICS_TEST_FIELD §4.2](Design/BallMotor/PHYSICS_TEST_FIELD.md#42-台阶组-c07c12高度与球半径的关系)。
+- **C06 50° 板当前慢爬正确（owner 2026-11-17）** — 主人认可当前速度；爬升高度上限与陡坡是否掉落按原版、待原版调研结果，现阶段不改数值；见 [TERRAIN_CLIMB §10](Design/BallMotor/TERRAIN_CLIMB.md#10-未验证--已拍板--记录在案)。
+
 ### Still open
+
+- **爬升高度上限与陡坡是否掉落：待原版调研结果（owner 2026-11-17）** — 主人要求按原版，另行调研中；C06 当前慢爬已认可，不据此调整 `k_h`、`T_climb` 或掉落参数；见 [TERRAIN_CLIMB §10](Design/BallMotor/TERRAIN_CLIMB.md#10-未验证--已拍板--记录在案)。
 
 - **参考关卡：道具嵌进 scenery 固体 —— AABB 代理假阳性，已改用拟合代理（2026-11-16）** — 根因既不是摆放、也不是该不该挡，而是 `structures.solids` 用了**原始 AABB** 当接触形状——一棵树的盒子把整个树冠包进去，螃蟹贴着树根站就必然「嵌进去」。这违反仓库既有口径「碰撞体必须跟视觉形状、按型给代理、不用 AABB」（同文件「拾取层」§(h)/(l) 的同一理由：AABB 角部多出几厘米，玩家会看到「没碰到就被挡」）。改法：`structures.solids[]` 的接触形状改为 **def 的拟合代理**（`collider_proxy.fit_proxy`；schema 加 `shape:"proxy"` + `collider` + `proxySource`，见 [LEVEL_FORMAT_V2 §4](Design/Levels/LEVEL_FORMAT_V2.md)），**`size` 仍写 AABB、只用于支撑面（盒顶面）**——代理是圆/凹/斜的形状，「球能站在上面」仍要水平顶面，两件事分开，理由写在 §4。实测（同一份 `_ref_cancer` 数据、同一判据：8 个 OBB 角点沉进固体 > 2 cm）：**AABB 判据 47 件 / 最深 1.094 m → 拟合代理判据 24 件 / 最深 0.614 m**，21 件是代理粗造成的假阳性、0 件是改用代理后新出现的（树 `medium_tree_002` 从 15 件降到 7 件）。剩下 24 件是真的贴着代理站（`doghouse_001` 9 件、`medium_tree_002` 7 件…），v2 校验器写成 note（§9.2 只把**道具×道具**互穿定为错误），等实机看「球撞上去是否合理」再决定要不要 `meets`/豁免。**影响：C# 侧现在只认盒**，导入器要读 `shape:"proxy"` 的 `collider` 才吃到这个修正；读到之前按 `size` 盒工作。
 - **静态固体的非 OBB 接触通道 — lead 2026-11-16 acknowledged，待新通道（不是 v1 阻塞）** — `structures.solids` 的接触形状已经是拟合代理（`shape:"proxy"`），但**电机的静态表只认 OBB**，所以参考关卡那 18 个凸包固体今天被「装箱成 OBB」（35 条 scenery 固体里 18 convex / 17 box）。要做真凸包/球/胶囊，需要一条新的静态非 OBB 接触通道，另需一条「只支撑不阻挡」的静态通道；导入器没有静默降级，逐件打 note + 汇总一行。见 [PARITY_AUDIT 的「静态固体的接触形状」行](Design/Parity/PARITY_AUDIT.md)、[LEVEL_FORMAT_V2 §12.1](Design/Levels/LEVEL_FORMAT_V2.md)。

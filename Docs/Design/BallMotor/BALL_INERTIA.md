@@ -55,6 +55,8 @@
 
 ## 4. 静止后下坡
 
+**当前决定（owner 2026-11-17，地图 0 沙盒亲测）：方案 A，滚动阻力照常作用。** C26 2°、C27 5° 顺坡朝向时松手不滑，保持现状；主人原话「26 27不滑动，不错，有点阻力也行」。静止闩锁开启不等于必然有可见下滑，缓坡无需绕过滚动阻力，也不为这两格调整参数。脚本把球转成横向后的坡滑读数是另一朝向的诊断，不是顺坡朝向必须滑动的要求。
+
 `RampSlideMath.TryStepRestLatch`：平面速度 < `rampRestSpeedMps·s` 且无推动（`|forward|+|lateral| ≤ 0.05`）时累计静止时间，否则清零；站在可走坡（`2° < 坡角 ≤ maxSupportSlopeDegrees`，非墙、非爬升、非坠落）上且静止满 0.3 s 时锁存「滑动」，之后只要仍在坡上且没有推动就保持（滑动本身是运动，不能靠静止计时维持），任何推动或离开坡面即关闭。滑动期间每步经 `SupportSurfaceMath.TryApplyRampTangentialGravity(重力 g·s，速度上限 maxSpeed·s)` 加沿水平下坡方向的加速度；**运动中（未锁存）不额外加下坡加速**，平地不滑。滑动速度由滚动阻力/阻力/抓地限制：10° 坡朝向垂直坡向时漂移终速约 0.59 m/s·s；坡太缓（`g·sinθ` 小于滚动阻力与阻力平衡）时会慢到几乎不滑。实现位置：`StepContactV2` 里 `RefreshClimbGate` 之后、接触求解之前调 `UpdateRampSlide`；坡面取上一步 `WriteContactSupport` 写下的支撑法线，不在坡上的情形还包括针尖支撑、爬升接触和无支撑（下落）。加进 `planarVelocity` 的下坡速度随同一步的接触求解一起积分；有支撑的子步里求解器把下坡速度投影到支撑面的切平面（`ContactSolveMath.SupportTangentVerticalSpeed`），球顺坡走时贴着坡面、不丢支撑，所以闩锁不会因离开坡面而关；上一步被整步拒绝（残差 > 2 cm）时本步不加（拒绝步的速度本来就被清零），`TeleportTo` 清闩锁与静止计时。覆盖范围：任何给出支撑法线的表面（解析坡、OBB 斜板与地形网格）。
 
 ## 5. 契约更正（相对惯性改动前）
@@ -78,7 +80,7 @@
 | 爬升门 | 读 `vGate/s`，大小球一致；起步变快（0.7 s）后推墙更早到门 | 只改阈值尺度 |
 | 爬升退出 | 松手 `vGate→0` 仍按现行退出并冷却 0.35 s | 无改动 |
 | 卡死恢复 | v2 判据读意图（`|forward|+|lateral| > 0.05` 且不受阻）与 1 cm 圆盘；松手滑行或下坡滑动时 `driveIntent = 0`，`stuckStep` 为假、`stuckSeconds` 每步清零，**滑行不会累计卡死**（读代码的论证，`UpdateContactRecovery`）。软恢复清 `planarVelocity`、硬恢复传送都会清掉惯性 | 无改动；Unity 看 `recovery_delta == 0` |
-| 坡上松手 | 球停下 0.3 s 后开始顺坡滑；站在坡上不动会被带走 | 所有者要求；若影响摆放（坡上道具场景）调大 `rampSlideMinSlopeDegrees` 或把 `rampTangentialGravityScale` 设 0 |
+| 坡上松手 | 满足坡角与静止门后施加下坡重力，仍受滚动阻力/阻力/抓地限制；C26 2°、C27 5° 顺坡朝向不滑 | owner 2026-11-17 认可缓坡不滑，保持现行参数与滚动阻力 |
 
 ### 拒绝位移时不得积存速度（E3 A2，2026-11-17）
 
@@ -109,4 +111,4 @@ E3 驱动脚本直接取 `motor.GetProgramVariable("planarVelocity")` 并打印 
 
 ## 8. 所有者已定 / 仍开放
 
-已定：预设 B 的松手/反推/转向手感；起步 95% ≈ 0.7 s；尺度不变（D0 基准）；转向漂移开；爬升门同尺度；静止后下坡（0.3 s、2° 起）；`growthSpeedFactor` 删除（PARITY M01 的「大球更慢」分歧随之消除）。仍开放：试玩后调 `acceleration` / `rolling` / `grip` / `braking`；是否要「动量爬升」（门读实际速度，需重做 v2 验收）。
+已定：预设 B 的松手/反推/转向手感；起步 95% ≈ 0.7 s；尺度不变（D0 基准）；转向漂移开；爬升门同尺度；静止后下坡（0.3 s、坡角 >2°，滚动阻力照常作用，C26/C27 顺坡朝向不滑保持现状，owner 2026-11-17）；`growthSpeedFactor` 删除（PARITY M01 的「大球更慢」分歧随之消除）。仍开放：试玩后调 `acceleration` / `rolling` / `grip` / `braking`；是否要「动量爬升」（门读实际速度，需重做 v2 验收）。

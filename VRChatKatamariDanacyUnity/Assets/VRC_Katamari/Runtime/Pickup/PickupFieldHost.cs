@@ -164,6 +164,8 @@ namespace VRCKatamari.Pickup
 
         [Header("Ball")]
         [SerializeField] private KatamariBallMotor motor;
+        [Tooltip("This field stores decorative props only and deliberately has no motor.")]
+        [SerializeField] private bool decorativeOnly;
 
         // The scene places this under BallVisualRollRoot: identity local position, scale 1.
         // The host never moves or scales it.
@@ -205,8 +207,8 @@ namespace VRCKatamari.Pickup
         // once at Start from the prop's own size + propVolumeK + the default 0.8 penalty, the
         // same formula, so an un-reimported lab stays playable.
         [SerializeField] private long[] propGrowthMm3;
-        // Optional: wired colliders are disabled on attach so an absorbed prop cannot block
-        // anything. Leave the array empty to skip that.
+        // Optional for props without Unity Colliders. A wired collider is disabled on attach;
+        // the motor's analytic pickup and contact proxies do not use this column.
         [SerializeField] private Collider[] propColliders;
         // ---- Optional per-prop collider proxy columns (COLLIDER_PROXY.md §6) ----
         // Index-aligned with propTransforms. kind: -1 = no block (the prop falls back to
@@ -526,7 +528,7 @@ namespace VRCKatamari.Pickup
         {
             if (motor == null)
             {
-                LogMotorMissingOnce();
+                if (!decorativeOnly) LogMotorMissingOnce();
                 return;
             }
             if (propCount <= 0) return;
@@ -1522,15 +1524,30 @@ namespace VRCKatamari.Pickup
                     + " means bad bounds/k/penalty data - see"
                     + " Docs/Research/ContentVolume/FIXED_POINT_STEP_CD.md)");
             }
-            if (propColliders == null || propColliders.Length < propCount)
+            CheckPropColliderWiring();
+        }
+
+        private void CheckPropColliderWiring()
+        {
+            if (loggedNoColliders || decorativeOnly) return;
+            int missing = 0;
+            int first = -1;
+            for (int i = 0; i < propCount; i++)
             {
-                if (!loggedNoColliders)
-                {
-                    loggedNoColliders = true;
-                    Debug.LogWarning("[PickupFieldHost] prop colliders not fully wired;"
-                        + " attached props stay collidable. props=" + propCount);
-                }
+                if (propColliders != null && i < propColliders.Length && propColliders[i] != null)
+                    continue;
+                Transform prop = propTransforms[i];
+                // Match the authoring search scope (the root and inactive descendants),
+                // only once at initialization and only for rows without a reference.
+                if (prop == null || prop.GetComponentInChildren<Collider>(true) == null) continue;
+                if (first < 0) first = i;
+                missing++;
             }
+            if (missing == 0) return;
+            loggedNoColliders = true;
+            Debug.LogWarning("[PickupFieldHost] propColliders is missing " + missing + "/" + propCount
+                + " reference(s) for props with Unity Colliders; their colliders will not be disabled"
+                + " on attach. First row=" + first + " id=" + itemIds[first]);
         }
 
         /// <summary>

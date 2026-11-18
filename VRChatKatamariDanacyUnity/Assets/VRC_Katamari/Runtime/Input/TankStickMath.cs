@@ -77,6 +77,33 @@ namespace VRCKatamari.Input
             return false;
         }
 
+        public const float DefaultTurnSensitivity = 1f;
+
+        /// <summary>
+        /// Maps physical stick readings, optionally exchanging both axes of the two sticks
+        /// before either scheme sees them. Scales and clamps only the mapped turn axis.
+        /// A negative or non-finite turn sensitivity refuses the frame with zero outputs.
+        /// </summary>
+        public static bool TryMapWithSettings(int mode, float leftX, float leftY, float rightX,
+            float rightY, bool swapHands, float deadzone, float turnSensitivity,
+            out float forward, out float turn, out float lateral)
+        {
+            if (!KatamariMath.IsFiniteFloat(turnSensitivity) || turnSensitivity < 0f)
+            {
+                forward = 0f;
+                turn = 0f;
+                lateral = 0f;
+                return false;
+            }
+
+            if (!TryMap(mode, swapHands ? rightX : leftX, swapHands ? rightY : leftY,
+                swapHands ? leftX : rightX, swapHands ? leftY : rightY, deadzone,
+                out forward, out turn, out lateral)) return false;
+
+            turn = Clamp1(turn * turnSensitivity);
+            return true;
+        }
+
         /// <summary>The original two-stick scheme; see the class remarks for the formulas.</summary>
         public static bool TryMapTank(float leftX, float leftY, float rightX, float rightY,
             float deadzone, out float forward, out float turn, out float lateral)

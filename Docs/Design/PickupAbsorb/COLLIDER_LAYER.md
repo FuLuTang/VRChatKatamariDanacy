@@ -63,7 +63,7 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 
 **【序列化实测】**30 cm 方块挡在 2.8 cm 餐巾上是空气墙，所以小件不挂碰撞体；但 0.58 m 的洒水壶、0.40 m 的小皮球没有碰撞体就会穿模。本文回答「哪些该留、留多大」。
 
-**宿主已经有一个现成的接缝**：`[SerializeField] private Collider[] propColliders`，唯一用途是**吸附/隐藏时 `enabled = false`、复位时 `enabled = true`**（`PickupFieldHost.TakeAttachment` / `ResetField`），并在数组**长度不足**时打一条 `"prop colliders not fully wired; attached props stay collidable"` 警告。注意那条警告只看长度（`propColliders.Length < propCount`）：场景里这个数组已经是 110 项，所以**槽位是 null 时它静默通过**——接完碰撞体必须逐件核对槽位，「没报警」不等于接对了。也就是说**碰撞体层必须接进这个数组**，否则吸到球上的物件会留下一个悬空实体（玩家会撞到浮在空中的盒子）。这条是硬约束，不是可选项。
+**宿主的接线**：`propColliders` 只控制 Unity Collider 的启停，吸附/隐藏时禁用，复位时启用；电机的吸附判定和道具接触代理不读它。宿主启动时按行检查：槽位缺失或为 `null`，且道具根或子物体（包括 inactive 子物体）确有 Unity Collider，才汇总警告；没挂 Collider 的道具允许留空，整列都空也合法。此诊断判定缺接，不验证已接引用的归属，也不检查同一行的多 Collider。
 
 **每件一件的局限**：`propColliders` 是 `Collider[propCount]`，一件一个。所以：
 
@@ -268,7 +268,7 @@ VRChat 里世界是实心的靠场景 collider，玩家的碰撞胶囊由 VRChat
 4. **`valueUnits` 的写入口径**见上表第三行：U2 落地后同步工具不再定价，声明值由调用方传入并一次写入、回读校验，未声明时保留既有值。因此扩展碰撞盒时**不需要**再加「拒绝变更」守卫，但必须保持「先写声明值、再回读」的顺序，且不能绕过 `SyncFromChildren` 直接改数组。
 
 - 挂在哪：道具物体本身（scale≈1、rotation=identity、原点=AABB 中心），`BoxCollider.center` = 盒中心、`size` = 盒尺寸，**不需要子物体**。
-- 接进 `propColliders[i]`。**不要**把 `"not fully wired"` 不出现当成验收：那条警告只在数组长度不足时生效，长度够而槽位是 `null` 时宿主静默通过。真实验收是**逐件核对槽位非空**（整关导入的报告 `propColliders: created=N` 与回读已验证这一点），再抽一件吸掉、看原来位置有没有留下悬空实体。
+- 有 Collider 的件接进 `propColliders[i]`；没挂的留空。验收时核对有 Collider 的槽位指向正确组件，再吸掉一件，确认玩家不会撞到本应禁用的 Collider。
 - 被吸附/隐藏时宿主自动关掉它；复位时自动开回来。**不要**自己写脚本管这件事。
 - **首次运行的现实预期**：24 个 `exports/*.manifest.json` 仍没有 `collision` 键，所以同步走 §5.4 的视觉 AABB 回退——整关导入给每件没有 Collider 的道具根建一个 `BoxCollider` 并接进 `propColliders`（第一次 `created=127`，第二次 `created=0`）。真正的 9 个盒（多盒细化）仍要等流水线写出 `collision.boxes`（§9）；在那之前保证的是「每件一个按视觉形状的盒子」，不是多盒精度。
 

@@ -152,6 +152,59 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void SwappingTankSticksReversesTurnButPreservesTranslation()
+        {
+            AssertSettingsMap(TankStickMath.ModeTank, true, 0f, 1f,
+                0.6f, 0.8f, -0.5f, 0f, 0.4f, -0.4f, 0.05f);
+        }
+
+        [Test]
+        public void SwappingSimpleSticksMakesPhysicalRightRollAndPhysicalLeftXTurn()
+        {
+            AssertSettingsMap(TankStickMath.ModeSimple, true, 0f, 1f,
+                -0.4f, 1f, 0.3f, 0.5f, 0.5f, -0.4f, 0.3f);
+        }
+
+        [TestCase(TankStickMath.ModeTank)]
+        [TestCase(TankStickMath.ModeSimple)]
+        public void ConfiguredDeadzoneReplacesTheDefault(int mode)
+        {
+            AssertSettingsMap(mode, false, 0.5f, 1f,
+                0f, 0.4f, 0.4f, 0f, 0f, 0f, 0f);
+            AssertSettingsMap(mode, false, 0.2f, 1f,
+                0f, 0.4f, 0.4f, 0f, mode == TankStickMath.ModeTank ? 0.125f : 0.25f,
+                mode == TankStickMath.ModeTank ? 0.125f : 0.25f,
+                mode == TankStickMath.ModeTank ? 0.125f : 0f);
+        }
+
+        [TestCase(TankStickMath.ModeTank, 0.5f, 0.375f)]
+        [TestCase(TankStickMath.ModeTank, 1.5f, 1f)]
+        [TestCase(TankStickMath.ModeSimple, 0.5f, 0.375f)]
+        [TestCase(TankStickMath.ModeSimple, 1.5f, 1f)]
+        public void TurnSensitivityScalesOnlyTurnAndClampsBothSigns(int mode, float scale, float turn)
+        {
+            bool tank = mode == TankStickMath.ModeTank;
+            for (int sign = -1; sign <= 1; sign += 2)
+            {
+                AssertSettingsMap(mode, false, 0f, scale,
+                    0.25f, tank ? 0.5f * sign : 0.5f,
+                    tank ? 0f : 0.75f * sign, tank ? -1f * sign : 0f,
+                    tank ? -0.25f * sign : 0.5f, turn * sign, tank ? 0.125f : 0.25f);
+            }
+        }
+
+        private static void AssertSettingsMap(int mode, bool swapHands, float deadzone,
+            float sensitivity, float lx, float ly, float rx, float ry,
+            float expectedForward, float expectedTurn, float expectedLateral)
+        {
+            Assert.IsTrue(TankStickMath.TryMapWithSettings(mode, lx, ly, rx, ry, swapHands,
+                deadzone, sensitivity, out float forward, out float turn, out float lateral));
+            Assert.AreEqual(expectedForward, forward, Tolerance, "forward");
+            Assert.AreEqual(expectedTurn, turn, Tolerance, "turn");
+            Assert.AreEqual(expectedLateral, lateral, Tolerance, "lateral");
+        }
+
+        [Test]
         public void OutOfRangeSticksAreClamped()
         {
             AssertTank(0f, 3f, 0f, 3f, 1f, 0f, 0f);

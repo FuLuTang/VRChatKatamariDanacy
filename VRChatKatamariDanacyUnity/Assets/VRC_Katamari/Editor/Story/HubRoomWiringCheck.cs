@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 using VRCKatamari.BallMotor;
+using VRCKatamari.Editor.Hub;
 using VRCKatamari.Hub;
 using VRCKatamari.Input;
 using VRCKatamari.Story;
@@ -186,7 +187,7 @@ namespace VRCKatamari.Editor.Story
                     ref problems);
             }
 
-            CheckVrStickInput(ref problems);
+            CheckVrStickInput(OptionalReference<HubSettingsHost>(host, "settings"), ref problems);
             int arrows = CheckPanels(host, entries, ref problems);
 
             int presenters = Object.FindObjectsOfType<StoryResultPresenter>().Length;
@@ -279,7 +280,7 @@ namespace VRCKatamari.Editor.Story
         // VR drive: one VrStickMoveInput, wired to the scene's motor, whose round gate the
         // round controller closes (Docs/Design/ControlIntent/README.md). The ride gate's owner,
         // BallRideStation, is checked by the ride wiring, not here.
-        private static void CheckVrStickInput(ref int problems)
+        private static void CheckVrStickInput(HubSettingsHost settings, ref int problems)
         {
             var adapters = Object.FindObjectsOfType<VrStickMoveInput>(true);
             if (adapters.Length != 1)
@@ -293,6 +294,9 @@ namespace VRCKatamari.Editor.Story
             var sceneMotor = Object.FindObjectOfType<KatamariBallMotor>();
             if (motor != null && sceneMotor != null && motor != sceneMotor)
                 Report("VrStickMoveInput.motor is not the scene's KatamariBallMotor", ref problems);
+            string settingsProblem = HubAssembler.ReadVrStickSettingsWiringProblem(adapters[0], settings);
+            if (settingsProblem != null) Report(settingsProblem, ref problems);
+
             var round = Object.FindObjectOfType<StoryRoundController>();
             if (round != null)
             {

@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace VRCKatamari.Tests
 {
@@ -93,6 +94,65 @@ namespace VRCKatamari.Tests
             ScanOnce();
             Assert.AreEqual(1, (int)Invoke(field, fieldType, "GetBlockingPropCount"),
                 "the old behaviour for an un-synced scene: priced by the world box");
+        }
+
+        [TestCase(false, false, false, 0)] // empty column is valid without a collider
+        [TestCase(true, false, false, 1)]  // empty column, inactive child collider
+        [TestCase(true, true, false, 1)]   // full-length column with a null slot
+        [TestCase(true, true, true, 0)]    // collider is wired
+        public void OnlyUnwiredPropsWithUnityCollidersWarn(bool hasCollider, bool hasColumn,
+            bool wired, int warnings)
+        {
+            SetField(field, fieldType, "propLocalBounds", new[] { Vector3.one });
+            Collider collider = null;
+            if (hasCollider)
+            {
+                var child = new GameObject("prop collider");
+                child.transform.SetParent(propObject.transform, false);
+                collider = child.AddComponent<BoxCollider>();
+                child.SetActive(false);
+            }
+            SetField(field, fieldType, "propColliders", hasColumn
+                ? new[] { wired ? collider : null } : new Collider[0]);
+            if (warnings > 0)
+            {
+                LogAssert.Expect(LogType.Warning, "[PickupFieldHost] propColliders is missing 1/1"
+                    + " reference(s) for props with Unity Colliders; their colliders will not be disabled"
+                    + " on attach. First row=0 id=turned_prop");
+            }
+            AssertWarningCount("[PickupFieldHost] propColliders", warnings, () =>
+            {
+                Invoke(field, fieldType, "Start");
+                Invoke(field, fieldType, "CheckPropColliderWiring");
+            });
+        }
+
+        [TestCase(true, 0)]
+        [TestCase(false, 1)]
+        public void OnlyAnUnmarkedHostWarnsAboutItsMissingMotor(bool decorative, int warnings)
+        {
+            SetField(field, fieldType, "motor", null);
+            SetField(field, fieldType, "decorativeOnly", decorative);
+            const string message = "[PickupFieldHost] motor reference is null; this field does nothing.";
+            if (warnings > 0) LogAssert.Expect(LogType.Warning, message);
+            AssertWarningCount(message, warnings, () =>
+            {
+                Invoke(field, fieldType, "Update");
+                Invoke(field, fieldType, "Update");
+            });
+        }
+
+        private static void AssertWarningCount(string prefix, int expected, Action act)
+        {
+            int seen = 0;
+            Application.LogCallback count = (message, stack, type) =>
+            {
+                if (type == LogType.Warning && message.StartsWith(prefix, StringComparison.Ordinal)) seen++;
+            };
+            Application.logMessageReceived += count;
+            try { act(); }
+            finally { Application.logMessageReceived -= count; }
+            Assert.AreEqual(expected, seen);
         }
 
         private void ScanOnce()

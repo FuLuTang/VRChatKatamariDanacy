@@ -366,15 +366,23 @@ namespace VRCKatamari.Editor.Hub
                 c.Created++;
             }
 
-            if (hub.GetComponentInChildren<PickupFieldHost>(true) == null)
+            PickupFieldHost decor = hub.GetComponentInChildren<PickupFieldHost>(true);
+            if (decor == null)
             {
                 var go = new GameObject("PickupField");
                 Undo.RegisterCreatedObjectUndo(go, "Create hub pickup host");
                 Undo.SetTransformParent(go.transform, hub, "Create hub pickup host");
-                AddUdon<PickupFieldHost>(go, c);
+                decor = AddUdon<PickupFieldHost>(go, c);
+                if (decor == null) return;
                 c.Notes.Add("added the room's inert PickupFieldHost (no motor: the five decor"
                     + " props only need the cell contract)");
             }
+
+            var so = new SerializedObject(decor);
+            bool changed = SetBool(so, "decorativeOnly", true, c);
+            changed |= SetObject(so, "motor", null, c);
+            if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+            c.Proxies.Add(decor);
 
             var report = new PlacementImportReport();
             bool ok = PlacementImporter.RunImport(HubLevelId, report);
@@ -1213,7 +1221,31 @@ namespace VRCKatamari.Editor.Hub
                 VerifyTable(starts[i], new[] { "launcher", "levelIndex" }, c);
             }
             VerifyVrStickInput(c);
+            VerifyRoomPickup(c);
             VerifyRoomTables(c);
+        }
+
+        private static void VerifyRoomPickup(Counters c)
+        {
+            Transform content = FindRoot(SceneManager.GetActiveScene(), PlacementImporter.ManagedRootName);
+            Transform hub = content == null ? null : content.Find(HubLevelId);
+            if (hub == null) return; // Assembly did not import a room.
+            PickupFieldHost decor = hub.GetComponentInChildren<PickupFieldHost>(true);
+            if (decor == null)
+            {
+                c.Problems.Add("the hub room has no decorative PickupFieldHost");
+                return;
+            }
+
+            SerializedProperty flag = new SerializedObject(decor).FindProperty("decorativeOnly");
+            object value;
+            if (flag == null || !flag.boolValue || ReadObject<KatamariBallMotor>(decor, "motor") != null
+                || !UdonVariableAccess.TryRead(decor, "decorativeOnly", out value)
+                || !(value is bool) || !(bool)value)
+            {
+                c.Problems.Add("the hub room PickupFieldHost must have no motor and decorativeOnly=true"
+                    + " in the proxy and Udon; compile, save, reopen and run the hub assembly again");
+            }
         }
 
         // Read-back of the hub's empty round prompt, on the proxy and in the Udon table. Only a
@@ -1244,7 +1276,7 @@ namespace VRCKatamari.Editor.Hub
         }
 
         // Read-back of the VR adapter wiring: both Udon tables carry the fields, and the
-        // references point at the scene's one motor and the adapter itself.
+        // references point at the scene's motor, settings store and adapter.
         internal static void VerifyVrStickInput(Counters c)
         {
             VrStickMoveInput[] all = UnityEngine.Object.FindObjectsOfType<VrStickMoveInput>(true);
@@ -1261,6 +1293,10 @@ namespace VRCKatamari.Editor.Hub
             {
                 c.Problems.Add("VrStickMoveInput.motor does not point at the scene's motor");
             }
+            HubSettingsHost settings = FindOptional<HubSettingsHost>();
+            string settingsProblem = ReadVrStickSettingsWiringProblem(vr, settings);
+            if (settingsProblem != null) c.Problems.Add(settingsProblem);
+
             StoryRoundController[] rounds = UnityEngine.Object.FindObjectsOfType<StoryRoundController>();
             for (int i = 0; i < rounds.Length; i++)
             {
@@ -1271,6 +1307,23 @@ namespace VRCKatamari.Editor.Hub
                         + " close the VR adapter's round gate (vrInput is not wired)");
                 }
             }
+        }
+
+        internal static string ReadVrStickSettingsWiringProblem(VrStickMoveInput input,
+            HubSettingsHost settings)
+        {
+            if (settings == null || ReadObject<HubSettingsHost>(input, "settings") != settings)
+                return "VrStickMoveInput.settings does not point at the room's HubSettingsHost";
+
+            UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(settings);
+            object value;
+            if (backing == null || !UdonVariableAccess.TryRead(input, "settings", out value)
+                || (value as UdonBehaviour) != backing)
+            {
+                return "VrStickMoveInput.settings in the Udon table does not point at the room's"
+                    + " settings behaviour; compile, save, reopen and run the hub assembly again";
+            }
+            return null;
         }
 
         // Reads the instance variable table back (UdonVariableAccess): a missing symbol means

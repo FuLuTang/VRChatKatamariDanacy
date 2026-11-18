@@ -656,7 +656,14 @@ namespace VRCKatamari.Editor.Hub
             }
             VrStickMoveInput[] vr = UnityEngine.Object.FindObjectsOfType<VrStickMoveInput>(true);
             var so = new SerializedObject(host);
-            if (vr.Length == 1) SetObject(so, "vrInput", vr[0], c);
+            if (vr.Length == 1)
+            {
+                SetObject(so, "vrInput", vr[0], c);
+                var inputSo = new SerializedObject(vr[0]);
+                if (SetObject(inputSo, "settings", host, c))
+                    inputSo.ApplyModifiedPropertiesWithoutUndo();
+                c.Proxies.Add(vr[0]);
+            }
             so.ApplyModifiedPropertiesWithoutUndo();
             c.Proxies.Add(host);
             return host;

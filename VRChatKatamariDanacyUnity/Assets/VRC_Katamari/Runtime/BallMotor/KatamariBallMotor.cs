@@ -915,6 +915,7 @@ namespace VRCKatamari.BallMotor
 
         private string[] allowedKinds;
         private int allowedKindCount;
+        private bool loggedEmptyAbsorbWhitelist;
         private float maxCollisionRadiusWorldM;
 
         private void Start()
@@ -3277,6 +3278,12 @@ namespace VRCKatamari.BallMotor
                 }
                 if (!pendingAccepted[i])
                 {
+                    if (!loggedEmptyAbsorbWhitelist && allowedKindCount == 0
+                        && outcome == AbsorbOutcome.RejectKindNotAllowed)
+                    {
+                        loggedEmptyAbsorbWhitelist = true;
+                        Debug.LogWarning("[BallMotor] absorb kind whitelist is empty; all pickup kinds are rejected.");
+                    }
                     RecordReject(pendingItemIds[i], (int)outcome, boxDistance);
                     LogRejectDiagnosticsOnce(i, outcome, center);
                 }

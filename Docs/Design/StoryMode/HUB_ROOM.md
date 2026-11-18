@@ -41,9 +41,9 @@
 | id | 设置 | 档位 / 默认 | 消费方 | 状态 |
 |---|---|---|---|---|
 | 0 | VR 操作方式：原作双摇杆 / 简单 | 0/1，默认 0 | `VrStickMoveInput.SetControlMode`，由 HubSettingsHost 直接调用 | 本轮 |
-| 1 | 左右手互换 | 关/开 | VR 输入（`Runtime/Input`）读 `IsSwapHands()` | 待接 |
-| 2 | 摇杆死区 | 0.05–0.50，步 0.05，默认 0.20（= `TankStickMath.DefaultDeadzone`） | VR 输入读 `GetDeadzone()` | 待接 |
-| 3 | 转向灵敏度 | ×0.5–×1.5，步 0.1，默认 ×1.0 | 球驱动/输入读 `GetTurnSensitivity()` | 待接 |
+| 1 | 左右手互换 | 关/开，默认关 | `VrStickMoveInput` 读 `IsSwapHands()`，映射前交换两根杆的 X/Y；不换扳机 | 本轮 |
+| 2 | 摇杆死区 | 0.05–0.50，步 0.05，默认 0.20（= `TankStickMath.DefaultDeadzone`） | `VrStickMoveInput` 读 `GetDeadzone()`，替换世界内的摇杆死区 | 本轮 |
+| 3 | 转向灵敏度 | ×0.5–×1.5，步 0.1，默认 ×1.0 | `VrStickMoveInput` 读 `GetTurnSensitivity()`，只缩放 `turn`，夹到 [-1,1] | 本轮 |
 | 4 | 音乐音量 | 0–100%，步 10%，默认 80% | 音频系统读 `GetMusicVolume01()` | 待接（尚无音频系统） |
 | 5 | 音效音量 | 同上 | `GetEffectsVolume01()` | 待接 |
 | 6 | 提示音音量 | 同上 | `GetVoiceVolume01()` | 待接 |
@@ -52,7 +52,7 @@
 | 9 | 减弱自动转向 | 关/开 | 跟随镜头/骑乘视角读 `IsReduceAutoRotate()` | 待接 |
 | 10 | 语言 简体中文 / English / 日本語 | 无存档时按客户端语言（`VRCPlayerApi.GetCurrentLanguage`：ja→日、zh→中、其他→英） | 三块板与提示行 | 本轮 |
 
-板上每一行都能调、能保存，不对玩家显示「待接」；哪些还没有消费方只记在本表和 `HubSettingsMath.HasConsumer`（接上一个就把对应 id 改成 true，两处同步）。消费方接法二选一：在 Inspector 里加进 `HubSettingsHost.listeners`（收到 `OnHubSettingsChanged` 自定义事件后读 getter），或每帧比较 `GetRevision()`。PlayerData 键 `vrck.set.*`、`vrck.rec.<levelId>.{bestD,bestN,lastD,lastN,plays}` 一经发布不再改名（平台不能删键）。
+板上每一行都能调、能保存，不对玩家显示「待接」；哪些还没有消费方只记在本表和 `HubSettingsMath.HasConsumer`（接上一个就把对应 id 改成 true，两处同步）。消费方接法二选一：在 Inspector 里加进 `HubSettingsHost.listeners`（收到 `OnHubSettingsChanged` 自定义事件后读 getter），或在需要用到设置时比较 `GetRevision()`。VR 摇杆用后者：`VrStickMoveInput.settings` 引用本大厅的设置宿主，第一帧有效 VR 输入与修订号变化时读三项，不注册 listener；因此在输入门关闭时调设置或恢复存档，也不会漏掉更新。PlayerData 键 `vrck.set.*`、`vrck.rec.<levelId>.{bestD,bestN,lastD,lastN,plays}` 一经发布不再改名（平台不能删键）。
 
 ## 外观与布局
 
@@ -84,7 +84,7 @@ Unity 侧（HubAssembler.Room）：
 2. 检查 FBX 导入设置：Scale Factor 1、Convert Units 开、Bake Axis Conversion 关（默认值）；Model 选项卡 Read/Write 不需要。
 3. 执行 `VRC Katamari/Hub/Assemble All-Maps Hub`（它在大厅装配后自动跑骑乘装配）。预期 `problems=0`；报告里应有 `hub art anchors: 44 of 44 within 2 cm`；缺 Udon variables 时按已有流程：编译 → 保存 → 重开 → 重建。
 4. 执行 `VRC Katamari/Hub/Check Room Wiring`。预期 `0 problem(s), 4 panel button(s), 4 level entry/entries, 22 setting arrow(s)`。层级：`HubRoomArt`、`HubBoard_Levels/Help/Settings`、`HubRoomLights`、`HubSettings`、`HubRecords`、`HubPanelDisplay`；没有 `HubPads`/`HubLevelPanel`/`HubPrompt`。
-5. Inspector 回读：`LevelButton_*` levelIndex=0/1/2/3 依次为蟹座、野餐、地图0、地形实验室；`SettingButton_NN_Less` delta=-1、`_More` delta=+1，settingId=NN；HubSettings.vrInput = 场景唯一 VrStickMoveInput；HubRecords.levelIds 与 launcher 同序；HubRoom.settings = HubSettings；其余见上一节。
+5. Inspector 回读：`LevelButton_*` levelIndex=0/1/2/3 依次为蟹座、野餐、地图0、地形实验室；`SettingButton_NN_Less` delta=-1、`_More` delta=+1，settingId=NN；HubSettings.vrInput = 场景唯一 VrStickMoveInput，VrStickMoveInput.settings = HubSettings（装配器同时回读 Udon 表）；HubRecords.levelIds 与 launcher 同序；HubRoom.settings = HubSettings；其余见上一节。
 6. EditMode：HubSettingsMathTests、HubRecordMathTests、HubPanelTextMathTests、HubRoomMathTests 及现有 Hub/Story 测试；报告发现/通过/失败数。
 7. Play（ClientSim）：面板文字为简中（ClientSim 语言若非 zh 则为英文，记下读数）；点设置板语言行 ▶ 两次，三块板与提示行依次变英文、日文，日志 `[hub-settings] vrck.set.language=1/2`；点 VR 操作方式 ▶，日志 `[input] stick mode=simple`，操作表 VR 栏的移动行变成简单模式文案。音量等待接项值能改、能保存（行上不显示待接标记）。
 8. 跑一局蟹座到 Result：日志 `[hub-record] level=_ref_cancer d=… n=… best=True plays=1`，回大厅后蟹座卡片显示「最好 / 上次 / 已玩 1」；在 Running 中 Respawn 放弃的一局不记录。重进世界（Build & Test 或上传后）记录与设置仍在。

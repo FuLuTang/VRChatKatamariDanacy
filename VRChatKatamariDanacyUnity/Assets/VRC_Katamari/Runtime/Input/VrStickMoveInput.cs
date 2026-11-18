@@ -3,6 +3,7 @@ using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon.Common;
 using VRCKatamari.BallMotor;
+using VRCKatamari.Hub;
 
 namespace VRCKatamari.Input
 {
@@ -64,8 +65,17 @@ namespace VRCKatamari.Input
         [Tooltip("0 = original two-stick tank scheme (default), 1 = simple (left stick rolls, right stick x turns).")]
         [SerializeField] private int controlMode = TankStickMath.ModeTank;
 
-        [Tooltip("Radial deadzone per stick, on top of the InputManager's own 0.19.")]
+        [Tooltip("Stick deadzone when no hub settings are wired, on top of the InputManager's own 0.19.")]
         [SerializeField] private float deadzone = TankStickMath.DefaultDeadzone;
+
+        [Tooltip("Optional hub settings for hand swap, stick deadzone and turn sensitivity.")]
+        [SerializeField] private HubSettingsHost settings;
+
+        private bool settingsRead;
+        private int settingsRevision;
+        private bool swapHands;
+        private float settingsDeadzone;
+        private float turnSensitivity;
 
         private bool rideGateOpen = true;
         private bool roundGateOpen = true;
@@ -105,10 +115,26 @@ namespace VRCKatamari.Input
             return controlMode;
         }
 
+        private void RefreshStickSettings()
+        {
+            // Read on the first open frame even at revision zero, then only on changes.
+            // This catches a restore or an edit made while the input gates were closed.
+            int revision = settings.GetRevision();
+            if (settingsRead && revision == settingsRevision) return;
+            swapHands = settings.IsSwapHands();
+            settingsDeadzone = settings.GetDeadzone();
+            turnSensitivity = settings.GetTurnSensitivity();
+            settingsRevision = revision;
+            settingsRead = true;
+        }
+
         private void Update()
         {
             if (!TryDetectVr()) return;
             if (!InputOpen()) return;
+
+            bool hasSettings = settings != null;
+            if (hasSettings) RefreshStickSettings();
 
             float lx = UnityEngine.Input.GetAxisRaw(LeftXAxis);
             float ly = UnityEngine.Input.GetAxisRaw(LeftYAxis);
@@ -119,7 +145,10 @@ namespace VRCKatamari.Input
             float t;
             float l;
             // A refused frame keeps the last axes, like the desktop path.
-            if (!TankStickMath.TryMap(controlMode, lx, ly, rx, ry, deadzone, out f, out t, out l)) return;
+            if (!TankStickMath.TryMapWithSettings(controlMode, lx, ly, rx, ry,
+                hasSettings && swapHands, hasSettings ? settingsDeadzone : deadzone,
+                hasSettings ? turnSensitivity : TankStickMath.DefaultTurnSensitivity,
+                out f, out t, out l)) return;
 
             if (f == forward && t == turn && l == lateral) return;
             forward = f;

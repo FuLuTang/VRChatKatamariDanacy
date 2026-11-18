@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using VRCKatamari.Pickup;
 
 namespace VRCKatamari.Tests
@@ -388,6 +389,39 @@ namespace VRCKatamari.Tests
         private bool IsQueued(string id)
         {
             return (bool)Call(motorType, motor, "IsCandidateQueued", id);
+        }
+
+        [Test]
+        public void TheMotorWarnsOnceOnlyWhenAnEmptyAllowlistRejectsACandidate()
+        {
+            BuildHost(new[] { 0f }, new[] { SmallProp });
+            Vector3 center = (Vector3)Call(motorType, motor, "GetCenterWorld");
+            const string warning = "[BallMotor] absorb kind whitelist is empty; all pickup kinds are rejected.";
+            int warnings = 0;
+            Application.LogCallback count = (message, stack, type) =>
+            {
+                if (type == LogType.Warning && message == warning) warnings++;
+            };
+            Application.logMessageReceived += count;
+            try
+            {
+                Call(motorType, motor, "SetAllowedKinds", new string[0], 0);
+                Call(motorType, motor, "EvaluatePendingCandidates", center);
+                Assert.AreEqual(0, warnings, "an empty list without a rejection stays quiet");
+                Call(motorType, motor, "SetAllowedKinds", new[] { "other" }, 1);
+                ScanOnce();
+                Assert.AreEqual(1, Pending());
+                Call(motorType, motor, "EvaluatePendingCandidates", center);
+                Assert.AreEqual(0, warnings, "a nonempty list denying this kind is not an empty-list warning");
+
+                LogAssert.Expect(LogType.Warning, warning);
+                Call(motorType, motor, "SetAllowedKinds", new string[0], 0);
+                Call(motorType, motor, "EvaluatePendingCandidates", center);
+                Assert.AreEqual(1, warnings);
+                Call(motorType, motor, "EvaluatePendingCandidates", center);
+                Assert.AreEqual(1, warnings, "a repeat refusal does not log again");
+            }
+            finally { Application.logMessageReceived -= count; }
         }
 
         [Test]

@@ -29,7 +29,8 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(TankStickMath.ModeTank, HubSettingsMath.Default(HubSettingsMath.ControlMode));
             Assert.AreEqual(TankStickMath.DefaultDeadzone,
                 HubSettingsMath.DeadzoneValue(HubSettingsMath.Default(HubSettingsMath.Deadzone)), 1e-6f);
-            Assert.AreEqual(1f, HubSettingsMath.TurnSensitivityValue(
+            Assert.AreEqual(0, HubSettingsMath.Default(HubSettingsMath.SwapHands));
+            Assert.AreEqual(TankStickMath.DefaultTurnSensitivity, HubSettingsMath.TurnSensitivityValue(
                 HubSettingsMath.Default(HubSettingsMath.TurnSensitivity)), 1e-6f);
         }
 
@@ -86,11 +87,13 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void OnlyControlModeAndLanguageHaveAConsumerInThisBuild()
+        public void OnlyVrStickSettingsAndLanguageHaveConsumers()
         {
             for (int id = 0; id < HubSettingsMath.Count; id++)
             {
-                bool expected = id == HubSettingsMath.ControlMode || id == HubSettingsMath.Language;
+                bool expected = id == HubSettingsMath.ControlMode || id == HubSettingsMath.SwapHands
+                    || id == HubSettingsMath.Deadzone || id == HubSettingsMath.TurnSensitivity
+                    || id == HubSettingsMath.Language;
                 Assert.AreEqual(expected, HubSettingsMath.HasConsumer(id), "id " + id);
             }
         }

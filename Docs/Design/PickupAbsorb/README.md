@@ -191,7 +191,7 @@ absorb ⇔ boxDistance ≤ contactLimit
 - **陷阱：`Start()` 会无条件把它重置成空**（`:399-400`）。所以在 `Awake`/`OnEnable` 或另一个脚本的 `Start` 里先设好，随后本层 `Start` 一跑就被抹掉——静默回到全拒。正确时机是“本层 `Start` 之后、第一个固定步之前”（实验室宿主在第一次 `Update` 里做，`BallPlaygroundBootstrap.cs:167-175`），并且**读回** `GetAllowedKindCount()` 确认（`:1577-1580`；实验室在 `:179-184` 读回并在 0 时 `LogError`）。
 - `SetAllowedKinds` 只挡 `null` 和越界 count（`KatamariBallMotor.cs:890-896`）；它保存的是调用方数组的**引用**，不是拷贝。宿主之后复用或改这个数组，白名单会跟着静默改变。实验室为此特意传序列化数组而不是运行时新建的 `string[]`（`BallPlaygroundBootstrap.cs:169-172`，注释说运行时新建数组在这个边界上会触发 `__SetProgramVariable__` 空引用）。
 - 匹配是**序数比较**（`string.CompareOrdinal`，`PickupAbsorbMath.cs:430`）：`"Stone"` 不等于 `"stone"`，首尾空格也算不同。数组里的 `null` 项被跳过（`:429`），不报错。
-- 忘设时的运行表现：**吸收数为 0，没有异常、没有报错**；控制台上最多只有 3 行拒绝诊断（`KatamariBallMotor.cs:294`、`:1464`），队列照样被候选填满，看上去就像“这一关没有可吸的东西”。唯一的客观线索是拒绝环形缓冲里每条都是 reason = 2（第 7 节）。
+- 忘设时的运行表现：**吸收数为 0**；同一个电机实例首次因空名单实际拒绝候选时会输出一条 `[BallMotor] absorb kind whitelist is empty` 警告。初始化时尚无候选、或非空名单只是不包含该种类时，不打这条警告。拒绝环仍记录 `RejectKindNotAllowed`（2，见第 7 节）。
 
 ### 5. 候选生命周期：进队即每步重判，只有三条出口
 

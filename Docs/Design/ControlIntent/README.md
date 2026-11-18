@@ -10,7 +10,7 @@ owner 2026-11-18 决定：VR 端用控制器的两根实体摇杆还原原作的
 | [VrStickMoveInput.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Input/VrStickMoveInput.cs) | VR 设备读取：每帧读四个摇杆轴，调用 TankStickMath，再调 `KatamariBallMotor.SetMoveAxes`；**左手扳机**（`InputUse`，只取 `handType == LEFT`）发蓄力的按下/松开。只在 `IsUserInVR()` 时工作 |
 | [DesktopMoveInput.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/Input/DesktopMoveInput.cs) | Desktop 的 WASD 路径（`InputMove*`，映射不受本设计影响）；Shift 长按蓄力、松开出射 |
 | [DashMath.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/DashMath.cs) | 纯算法：蓄力分档时间、原地旋转阈值、出射倍率/时长/冷却、能量与 huff；motor 每固定步推进一次 |
-| [TankStickTests.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/Input/TankStickTests.cs) | 摇杆映射的 EditMode 测试（10 条） |
+| [TankStickTests.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/Input/TankStickTests.cs) | 摇杆映射的 EditMode 测试（含换手、死区与转向倍率） |
 | [DashMathTests.cs](../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/BallMotor/DashMathTests.cs) | 冲刺的 EditMode 测试（14 条：分档、旋转阈值、未蓄满不出、出射时长、冷却、能量、回充、huff、重置、坏输入） |
 
 两个输入行为喂的是同一个入口 `SetMoveAxes(forward, turn, lateral)`。motor 的约定是：forward +1 向前，turn +1 右转（俯视顺时针），lateral +1 向右横移。两者共用同样的两道门：骑乘门归 `BallRideStation`，回合门归 `StoryRoundController`；蓄力的按下/松开也走这两道门（站着或回合结束后按扳机不会蓄力，关门前已蓄的会被取消）。
@@ -33,12 +33,17 @@ owner 2026-11-18 决定：VR 端用控制器的两根实体摇杆还原原作的
 
 这是连续差速的工程近似，没有复刻原作的斜向混合和转弯半径。
 
-**死区**：每根杆按径向处理，默认 0.2，边缘外的部分重新缩放回 [0,1]；InputManager 自己还有一层 0.19 的死区。超过 [-1,1] 的读数先夹到范围内；出现 NaN 或无穷时整帧拒绝，保留上一帧的轴值。
-
-
 ## 简单模式（`controlMode = 1`）
 
-左杆管二维滚球（y 前后，x 横移），右杆的 x 管转向，右杆的 y 不用（VR 里由头显负责看）。这对应 Once Upon a Katamari Simple 的「左杆往任意方向滚、右杆横向转」。冲刺与模式无关：左手扳机/Shift 在两种模式下都能用（简单模式里没有手柄交替手势，长按就是它的入口）。模式在什么地方切换还没有定；公开入口已留好：`SetControlMode(int)` / `GetControlMode()` 和序列化字段 `controlMode`。大厅墙面按钮原计划加在 2×2 关卡按钮旁，因大厅面板要整体重做而搁置。
+左杆管二维滚球（y 前后，x 横移），右杆的 x 管转向，右杆的 y 不用。这对应 Once Upon a Katamari Simple 的「左杆往任意方向滚、右杆横向转」。大厅设置板切换模式，由 `HubSettingsHost` 调用 `SetControlMode(int)`。冲刺在两种模式下都用左手扳机 / Shift。
+
+## 大厅摇杆设置（两种模式通用）
+
+- **左右手互换**：映射前交换两根物理摇杆的整组 X/Y。坦克式的前后和横移不变、转向反号；简单模式改为物理右杆滚球、物理左杆 X 转向。只交换摇杆，不换扳机或 VRChat 自己的键位。
+- **摇杆死区**：大厅数值替代 `VrStickMoveInput.deadzone`。坦克式两根杆、简单模式的滚球杆用径向死区，简单模式的转向轴用一维死区。边缘外的部分重新缩放回 [0,1]；不会改动 InputManager 原有的 0.19 死区。超过 [-1,1] 的读数先夹到范围内；出现 NaN 或无穷时整帧拒绝，保留上一帧的轴值。
+- **转向灵敏度**：映射后只对 `turn` 乘大厅倍率并夹到 [-1,1]，不缩放 `forward`、`lateral`，也不改 VRChat 自身的视角转向。
+
+`VrStickMoveInput` 只在 VR 且两道输入门都开时比较 `GetRevision()`；第一次和修订号变化时才读三项。这样首次采样不依赖事件先后，关门期间调设置或存档恢复也会在下次开门时生效，不用注册 listener。没接宿主时仍使用原序列化死区（默认 0.20）、不换手、转向乘 1。
 
 ## 来源
 
@@ -70,7 +75,7 @@ owner 2026-11-18 决定：VR 端用控制器的两根实体摇杆还原原作的
 已接好：
 - `DesktopMoveInput` 的两个 `InputMove*` 在 `IsUserInVR()` 时直接 return，所以 VR 下只有 `VrStickMoveInput` 写 motor 的轴，Desktop 和 ClientSim 不受影响。
 - `StoryRoundController` 新增 `vrInput` 字段。原先三处 `input.SetRoundGate(...)`（等待入座时关门、`BeginRound` 开门、结束铃关门）旁边各加了一行 `vrInput.SetRoundGate(...)`。
-- `HubAssembler.Run` 在配置回合之后调用 `AssembleVrStickInput`：若场景没有 `VrStickMoveInput`，就新建根物体 `VrStickMoveInput` 并挂上组件；然后把 `motor` 指向场景里唯一的 `KatamariBallMotor`，把 `round.vrInput` 指向这个组件。`VerifyTables` 里的 `VerifyVrStickInput` 会回读 Udon 变量表（`motor/controlMode/deadzone`、`vrInput`）和两个引用。`AllMapsHubAssembler` 的自检要求场景里恰好有 1 个 `VrStickMoveInput`；`HubRoomWiringCheck` 检查数量、`motor` 和 `round.vrInput`。
+- `HubAssembler.Run` 调用 `AssembleVrStickInput`：若场景没有 `VrStickMoveInput`，就新建同名根物体并挂上组件；把 `motor` 指向场景里唯一的 `KatamariBallMotor`，把 `round.vrInput` 指向适配器。随后大厅装配把 `VrStickMoveInput.settings` 接到 `HubSettingsHost`。装配回读和 `HubRoomWiringCheck` 都检查这条设置引用，要求 Inspector 引用与 Udon 变量表中的实际引用都指向大厅的设置宿主。
 - 骑乘门：`BallRideStation` 有 `vrInput` 字段，`SetRideGate` 对 `input` 与 `vrInput` 各自判空调用，所以没接 desktop 输入时 VR 的门照样跟着入座/离座开关。`RideUxAssembler` 把 `BallRideStation.vrInput` 写成场景里唯一的 `VrStickMoveInput`，并在 `VerifyUdonTables` 里回读；场景里还没有这个组件时只记 note、不写空值，有两个以上时报 PROBLEM。`AllMapsHubAssembler` 在 `HubAssembler.Run`（它创建 `VrStickMoveInput`）**之后**跑骑乘装配，再检查 `BallRideStation.vrInput` 就是那一个组件，不是就报 PROBLEM。
 
 Unity 操作员步骤：
@@ -103,7 +108,10 @@ Unity 操作员步骤：
 | 蓄力时准心指着结果卡重试（回合结束后不会出现蓄力，作参考） | 同上，重试不会在 dash 中触发 |
 | 右杆左右推（Comfort Turning 开） | 球转向；记录视角有没有额外 snap 一下 |
 | 右杆左右推（Comfort Turning 关） | 球转向；记录视角有没有跟着平滑转 |
-| 切到简单模式（操作员写 `controlMode=1` 或调 `SetControlMode(1)`） | 左杆往哪推球就往哪滚，右杆左右推转向，右杆上下推无反应 |
+| 在大厅切到简单模式，换手关 | 左杆往哪推球就往哪滚，右杆左右推转向，右杆上下推无反应 |
+| 在大厅开启换手，再分别用坦克式和简单模式开始回合 | 坦克式同向推杆照旧、差速转向反向；简单模式右杆滚球、左杆 X 转向；冲刺仍在左扳机 |
+| 死区调到 0.50，缓推到原始有效轴约 0.4 | 球不受推；改回 0.20 后同样输入应产生移动 |
+| 以同样幅度转向，分别测试 ×0.5 和 ×1.5 | 未到饱和时 ×1.5 的转向轴幅度为 ×0.5 的三倍；轴最大幅度仍为 1，前后与横移轴不变 |
 | 离座或 Respawn | 球立即停止受推 |
 | Desktop 玩家（坐着按住 Shift 约 2.5 s 再松开） | 日志先 `dash charge begin` 再 `dash fired`，球朝朝向加速；按住 1 s 松开只出现 `dash released, charge not full` |
 

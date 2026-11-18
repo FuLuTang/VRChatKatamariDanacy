@@ -47,6 +47,7 @@ namespace VRCKatamari.Hub
         public const int FailMotorNotReady = 2;
         public const int FailLevelIndex = 3;
         public const int FailBallReset = 4;
+        public const int FailIslandsNotReady = 5;
 
         [Header("Links")]
         [SerializeField] private KatamariBallMotor motor;
@@ -54,6 +55,16 @@ namespace VRCKatamari.Hub
         // One slot per level, each may be null.
         [SerializeField] private PickupFieldHost[] pickupHosts;
         [SerializeField] private TerrainFieldHost[] terrainHosts;
+
+        // The island shell of each level (null = that level is not switched on and off,
+        // which is how a scene without island management behaves). Only the active
+        // level's island is on; see IslandActivationMath.
+        [Header("Islands (optional; index = level index)")]
+        [SerializeField] private GameObject[] islandRoots;
+
+        // Default false: the active island is switched off when the player is back in the
+        // room, and switched on again by the next start. True keeps it on.
+        [SerializeField] private bool keepIslandOnReturn = false;
 
         [Header("Per level (index = level index)")]
         [SerializeField] private string[] levelIds;
@@ -90,19 +101,112 @@ namespace VRCKatamari.Hub
         private int switchCounter;
         private int lastFailure;
         private Vector3 lastStartTop;
+        private bool parked;
+        // False from Start until the first park pass: islands are left on for two frames
+        // so every behaviour inside runs its Start (an Udon behaviour on an object that was
+        // never active has not initialised, and calling it is not safe), then all are
+        // switched off.
+        private bool islandsReady = true;
 
         private void Start()
         {
             // Every arena host of every level: none may register on its own.
-            if (arenaHosts == null) return;
             int suspended = 0;
-            for (int i = 0; i < arenaHosts.Length; i++)
+            if (arenaHosts != null)
             {
-                if (arenaHosts[i] == null) continue;
-                arenaHosts[i].SuspendRegistration();
-                suspended = suspended + 1;
+                for (int i = 0; i < arenaHosts.Length; i++)
+                {
+                    if (arenaHosts[i] == null) continue;
+                    arenaHosts[i].SuspendRegistration();
+                    suspended = suspended + 1;
+                }
             }
-            Debug.Log("[switch] ready levels=" + LevelCount() + " arenaHosts=" + suspended);
+
+            // Islands: make sure each is on for its behaviours' Start, then park them all
+            // once those have run.
+            int islands = 0;
+            if (islandRoots != null)
+            {
+                for (int i = 0; i < islandRoots.Length; i++)
+                {
+                    if (islandRoots[i] == null) continue;
+                    islandRoots[i].SetActive(true);
+                    islands = islands + 1;
+                }
+            }
+            if (islands > 0)
+            {
+                islandsReady = false;
+                SendCustomEventDelayedFrames(nameof(ParkIdleIslands), 2);
+            }
+            Debug.Log("[switch] ready levels=" + LevelCount() + " arenaHosts=" + suspended
+                + " islands=" + islands);
+        }
+
+        /// <summary>
+        /// Switches every island to the state <see cref="IslandActivationMath"/> gives for
+        /// the current level. Public only because it is a delayed custom event.
+        /// </summary>
+        public void ParkIdleIslands()
+        {
+            islandsReady = true;
+            ApplyIslandStates();
+            Debug.Log("[switch] islands parked active=" + IslandActivationMath.ActiveCount(
+                IslandCount(), activeLevel, parked) + " of " + IslandCount());
+        }
+
+        /// <summary>True once the start-up island pass is done (always true with no islands).</summary>
+        public bool IsReady()
+        {
+            return islandsReady;
+        }
+
+        /// <summary>
+        /// The active level's island is off because the player is in the room. The ball
+        /// and the active level stay as they were; the next start of that level wakes it.
+        /// No-op when <c>keepIslandOnReturn</c> is set or there is no island.
+        /// </summary>
+        public void ParkActiveIsland()
+        {
+            if (keepIslandOnReturn || activeLevel < 0 || parked) return;
+            parked = true;
+            ApplyIslandStates();
+            Debug.Log("[switch] island parked level=" + activeLevel);
+        }
+
+        /// <summary>Switches the active level's island back on if it was parked.</summary>
+        public void WakeActiveIsland()
+        {
+            if (!parked) return;
+            parked = false;
+            ApplyIslandStates();
+            Debug.Log("[switch] island woken level=" + activeLevel);
+        }
+
+        public bool IsParked()
+        {
+            return parked;
+        }
+
+        private int IslandCount()
+        {
+            return islandRoots == null ? 0 : islandRoots.Length;
+        }
+
+        private void SetIsland(int levelIndex, bool active)
+        {
+            if (islandRoots == null || levelIndex < 0 || levelIndex >= islandRoots.Length) return;
+            GameObject root = islandRoots[levelIndex];
+            if (root == null) return;
+            if (root.activeSelf != active) root.SetActive(active);
+        }
+
+        private void ApplyIslandStates()
+        {
+            for (int i = 0; i < IslandCount(); i++)
+            {
+                SetIsland(i, IslandActivationMath.ShouldBeActive(i, activeLevel, parked));
+            }
         }
 
         /// <summary>Number of levels this host knows (length of the id list).</summary>
@@ -174,10 +278,27 @@ namespace VRCKatamari.Hub
                 lastFailure = failure;
                 return false;
             }
+            if (!islandsReady)
+            {
+                // The start-up pass has not finished: the islands' behaviours may not have
+                // run Start yet, and calling them is not safe.
+                failure = FailIslandsNotReady;
+                lastFailure = failure;
+                return false;
+            }
+
+            // Switch the target island on before anything is registered or asked of its
+            // hosts. They already ran Start (the start-up pass), so the calls below are
+            // valid; the previous island is switched off after its pickups are reset.
+            parked = false;
+            SetIsland(levelIndex, true);
 
             // 2. Leave the previous level's pickups clean.
             if (activeLevel >= 0)
             {
+                // A parked island is woken first: its hosts are asked to reset, and a
+                // behaviour on an inactive object is not guaranteed to run the call.
+                SetIsland(activeLevel, true);
                 PickupFieldHost leaving = PickupAt(activeLevel);
                 if (leaving != null)
                 {
@@ -185,6 +306,11 @@ namespace VRCKatamari.Hub
                     leaving.ResetField();
                 }
             }
+
+            // The leaving island goes off only now: ResetField has returned every absorbed
+            // prop to its place under the island (props riding the ball live under the
+            // ball, outside the island, and would otherwise stay visible).
+            if (activeLevel >= 0 && activeLevel != levelIndex) SetIsland(activeLevel, false);
 
             // 3. Everything the motor holds about the world.
             motor.ClearObstacles();

@@ -533,6 +533,10 @@ namespace VRCKatamari.Hub
                 switchedThisPress = true;
             }
 
+            // Same level again after a trip to the room: its island was switched off while
+            // the player was away; the round's own reset runs below.
+            if (levelSwitch != null && !switchedThisPress) levelSwitch.WakeActiveIsland();
+
             // Where the player is sent (HubLoopMath.ChooseArrival). The level's authored
             // entry is its player start: on the floor, behind the ball, facing it, and it
             // does not move when a retry puts the ball back. It is trusted only while it is
@@ -974,6 +978,7 @@ namespace VRCKatamari.Hub
                     Debug.Log("[hub] return skipped: the local player already is at the room"
                         + " point; no teleport. frames=" + returnFramesWaited);
                     returnPending = false;
+                    if (levelSwitch != null) levelSwitch.ParkActiveIsland();
                     return;
                 }
 
@@ -996,6 +1001,7 @@ namespace VRCKatamari.Hub
             {
                 Debug.Log("[hub] return arrived frames=" + returnFramesWaited
                     + " distance=" + distance);
+                if (levelSwitch != null) levelSwitch.ParkActiveIsland();
             }
             else
             {

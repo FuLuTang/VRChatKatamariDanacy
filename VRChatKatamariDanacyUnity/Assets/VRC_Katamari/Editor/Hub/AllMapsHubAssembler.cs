@@ -650,6 +650,7 @@ namespace VRCKatamari.Editor.Hub
             int n = data.Count;
             var pickups = new Object[n];
             var terrains = new Object[n];
+            var islands = new Object[n];
             var ids = new string[n];
             var grounds = new float[n];
             var arenaHosts = new List<Object>();
@@ -666,6 +667,7 @@ namespace VRCKatamari.Editor.Hub
                 LevelData d = data[i];
                 pickups[i] = d.Pickup;
                 terrains[i] = d.Terrain;
+                islands[i] = d.Shell != null ? d.Shell.gameObject : null;
                 ids[i] = d.Entry.id;
                 grounds[i] = d.GroundOffset;
                 arenaStarts[i] = arenaHosts.Count;
@@ -684,6 +686,12 @@ namespace VRCKatamari.Editor.Hub
             changed |= HubAssembler.SetObject(so, "motor", motor, hc);
             changed |= HubAssembler.SetObjectArray(so, "pickupHosts", pickups, hc);
             changed |= HubAssembler.SetObjectArray(so, "terrainHosts", terrains, hc);
+            if (!IslandActivationMath.RootsMatchLevels(islands.Length, ids.Length))
+            {
+                hc.Problems.Add("island roots (" + islands.Length + ") do not match levels ("
+                    + ids.Length + ")");
+            }
+            changed |= HubAssembler.SetObjectArray(so, "islandRoots", islands, hc);
             changed |= HubAssembler.SetStringArray(so, "levelIds", ids, hc);
             changed |= HubAssembler.SetFloatArray(so, "groundOffsets", grounds, hc);
             changed |= HubAssembler.SetObjectArray(so, "arenaHosts", arenaHosts.ToArray(), hc);
@@ -707,7 +715,7 @@ namespace VRCKatamari.Editor.Hub
 
         private static readonly string[] SwitchFields =
         {
-            "motor", "pickupHosts", "terrainHosts", "levelIds", "groundOffsets", "arenaHosts",
+            "motor", "pickupHosts", "terrainHosts", "islandRoots", "levelIds", "groundOffsets", "arenaHosts",
             "arenaStarts", "arenaCounts", "kindsFlat", "kindsStarts", "kindsCounts",
             "startCenters", "startHeadingDegrees", "startVolumesMm3",
         };
@@ -811,9 +819,51 @@ namespace VRCKatamari.Editor.Hub
 
             CheckItemIds(output, problems);
             CheckIslands(output, data, lines, problems);
+            CheckIslandRoots(data, lines, problems);
             CheckStarts(output, data, outcome, lines, problems);
             CheckRespawnHeight(output, data, problems);
             Line(lines, "check: arenaHosts=" + arenaTotal + " listed=" + listed.Count);
+        }
+
+        // The level switch turns islands off at run time, one root per level. Each root must
+        // be the level's own shell, be on when the scene is saved (an object that was never
+        // active has not run Start, and its behaviours cannot be called safely), and must not
+        // contain the ball, the seat, the round, the hub or the switch itself (they would
+        // vanish with it).
+        private static void CheckIslandRoots(List<LevelData> data, List<string> lines,
+            List<string> problems)
+        {
+            if (!IslandActivationMath.RootsMatchLevels(data.Count, data.Count)) return;
+            var seen = new HashSet<Transform>();
+            for (int i = 0; i < data.Count; i++)
+            {
+                Transform shell = data[i].Shell;
+                string id = data[i].Entry.id;
+                if (shell == null)
+                {
+                    problems.Add("level '" + id + "' has no island root; it would never be switched off");
+                    continue;
+                }
+                if (!seen.Add(shell)) problems.Add("island '" + shell.name + "' is used by two levels");
+                if (!shell.gameObject.activeSelf)
+                {
+                    problems.Add("island '" + shell.name + "' is inactive in the scene; it must be"
+                        + " on when saved so its behaviours run Start (the switch turns it off at run time)");
+                }
+                if (shell.GetComponentInChildren<KatamariBallMotor>(true) != null
+                    || shell.GetComponentInChildren<BallRideStation>(true) != null
+                    || shell.GetComponentInChildren<StoryRoundController>(true) != null
+                    || shell.GetComponentInChildren<HubLevelLauncher>(true) != null
+                    || shell.GetComponentInChildren<HubRoomHost>(true) != null
+                    || shell.GetComponentInChildren<HubReturnButton>(true) != null
+                    || shell.GetComponentInChildren<LevelSwitchHost>(true) != null)
+                {
+                    problems.Add("island '" + shell.name + "' contains infrastructure (ball, seat,"
+                        + " round, hub launcher, return button or level switch); it would be switched off with it");
+                }
+                Line(lines, "islandRoot[" + i + "] " + id + " -> " + shell.name
+                    + " activeSelf=" + shell.gameObject.activeSelf);
+            }
         }
 
         private static void ExpectCount<T>(Scene scene, int expected, List<string> problems)

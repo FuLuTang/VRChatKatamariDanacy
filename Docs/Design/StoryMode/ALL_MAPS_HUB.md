@@ -68,6 +68,16 @@
 
 选关垫触发 `HubLevelLauncher.TryStartLevel(i)` 时先**切关**再进既有流程：清电机障碍表**和地形网格**、清道具代理 → 设该关地面高度 → 逐宿主登记（外框先清表，其余追加并加 id 偏移）→ 注册该关地形 → 设白名单并集 → 设起始球径、`TryResetForNewRound`、放球到 `start` → 回合控制器 `SelectLevel(i)`。回大厅：计时关先 `AbortRound()`；自由练习没有结果卡，`HubReturnButton` 是唯一出口。结果卡对 `stars:false` 的关不画星，只显示球径与吸收件数。
 
+### 3.1 岛的开关（`LevelSwitchHost.islandRoots`）
+
+- 规则只有一条（`IslandActivationMath.ShouldBeActive`）：任一时刻至多一座岛开着，就是当前关的岛；回大厅后当前岛也关（`keepIslandOnReturn` 为 true 时保留）；尚无当前关时四岛全关。关掉的岛不渲染，岛内所有宿主（拾取场、运动、坠落、地形、竞技场）的 `Update` 都不跑。
+- `islandRoots[i]` 与 `levelIds[i]` 一一对应，由组装菜单写入 `Island_<id>`；为空 = 该关不参与开关（旧行为）。自检要求：根数 = 关数、不重复、保存时处于激活状态、岛内不含球/座位/回合/启动器/返回按钮/切关宿主。
+- 初始化：Udon 行为在所在物体首次激活之前没有跑过 `Start`，对它调方法不安全。所以 `LevelSwitchHost.Start` 先把所有岛打开，两帧之后（`ParkIdleIslands`）再按规则关掉，这样每个宿主都跑过一次 `Start`，之后的 `TryActivate` 是同步的。两帧内的 `TryActivate` 返回 `FailIslandsNotReady`。`TerrainFieldHost` 的 `deferRegistration` 路径在 `Start` 里不登记，所以首次激活不会覆盖当前关；`Start` 只跑一次，开关岛不会重复登记。
+- `TryActivate(i)` 顺序：先唤醒（若停放）并打开目标岛 → 离开关的 `ResetField`（吸附道具回到岛内原位）→ 关掉离开的岛 → 清表/登记/球就位。回大厅到达后 `ParkActiveIsland`；同一关再次开始时 `WakeActiveIsland`，随后走回合自己的重置。
+- 球、座位、`HubResultBoard`、`HubReturnButton_<id>`、`HubRoom` 都是场景根物体，不在岛内；岛关闭不影响它们。关闭期间球身上吸附的道具挂在球下，随球可见。
+- 关闭期间 `MotionHost`/`PropFallHost` 暂停：`MotionHost` 用绝对 `Time.time` 算相位，重新打开时相位会直接跳到当前时刻；`PropFallHost` 用 `deltaTime` 累加，无影响。重新打开后运动道具位置是上次关闭时的姿态，回合重置（`ResetField`）只还原被吸附的道具。
+- 多人：`SetActive` 只对本地客户端生效，各客户端各自开关自己的岛，别的玩家所在关的岛在本机是关着的，看不到对方的球和场景；本轮按单人测试，不解决。
+
 ## 4. 世界坐标型序列化字段要补偏移
 
 运行时读 `Transform` 的位置自动跟随外壳；**序列化在组件里的世界坐标**搬到偏移岛后必须由装配器补偏移：

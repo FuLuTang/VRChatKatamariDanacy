@@ -1,6 +1,6 @@
 using UdonSharp;
 using UnityEngine;
-using UnityEngine.UI;
+using TMPro;
 using VRC.SDKBase;
 using VRCKatamari.Core;
 using VRCKatamari.Hub;
@@ -8,7 +8,7 @@ using VRCKatamari.Story;
 
 namespace VRCKatamari.Story.Hub
 {
-    /// <summary>Read-only room navigation display. Starting is exclusively an Interact button.</summary>
+    /// <summary>Read-only room navigation display. Starting is exclusively a level card (uGUI Button) on the levels board.</summary>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class HubRoomHost : UdonSharpBehaviour
     {
@@ -16,9 +16,9 @@ namespace VRCKatamari.Story.Hub
         [SerializeField] private StoryRoundController controller;
         [SerializeField] private Transform hubCenter;
         [SerializeField] private float hubRadiusMeters = 12f;
-        [Tooltip("Panel button transforms in launcher level order; never proximity triggers.")]
+        [Tooltip("Level card Button transforms in launcher level order; never proximity triggers.")]
         [SerializeField] private Transform[] levelButtons;
-        [SerializeField] private Text promptText;
+        [SerializeField] private TextMeshProUGUI promptText;
         [Tooltip("Optional: the prompt follows this player's language setting (Chinese when unwired).")]
         [SerializeField] private HubSettingsHost settings;
         private int phase = -1;

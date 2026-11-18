@@ -118,13 +118,6 @@ namespace VRCKatamari.Editor.Hub
             public bool stars = true;
             public string arenaFirst;
 
-            /// <summary>
-            /// The level's max ball diameter, metres of SEMANTIC diameter; 0 = not given, and
-            /// the assembler then keeps the source motor's authored cap. Owner 2026-11-18:
-            /// the cap is a per-level value (Cancer 1.2 m, our own levels 30 m).
-            /// </summary>
-            public float maxDiameterM;
-
             public SourceBlock source;
             public IslandBlock island;
             public StartBlock start;
@@ -311,15 +304,8 @@ namespace VRCKatamari.Editor.Hub
             level.allowAbort = node.GetBool("allowAbort", false);
             level.stars = node.GetBool("stars", true);
             level.arenaFirst = node.GetString("arenaFirst");
-            level.maxDiameterM = node.GetFloat("maxDiameterM", 0f);
 
             string where = "levels[" + index + "] ('" + level.id + "')";
-
-            if (node.Has("maxDiameterM")
-                && (!(level.maxDiameterM > 0f) || float.IsInfinity(level.maxDiameterM)))
-            {
-                errors.Add(where + ".maxDiameterM must be a positive number of metres");
-            }
 
             if (!HubSelectMath.IsUsableId(level.id))
             {

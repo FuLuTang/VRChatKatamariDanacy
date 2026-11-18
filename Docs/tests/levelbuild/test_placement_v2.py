@@ -168,15 +168,17 @@ class MetaTags(Base):
         del self.doc["meta"]["ball"]["startDiameterM"]
         self.assert_tag("[meta_start_diameter]")
         self.doc = tiny_document()
-        self.doc["meta"]["ball"]["startDiameterM"] = 3.0
+        self.doc["meta"]["ball"]["startDiameterM"] = 400.0
         self.assert_tag("[meta_start_diameter]")
 
-    def test_cap_override_is_a_warning_for_a_story_level(self):
-        self.doc["meta"]["scene"] = "StoryMode"
-        self.doc["meta"]["timeLimitS"] = 60
+    def test_legacy_cap_fields_do_not_override_the_global_limit(self):
+        self.doc["meta"]["ball"].update(maxDiameterRef="level", maxDiameterM=2.2,
+                                        startDiameterM=3.0)
+        self.doc["meta"]["migration"] = {"from": "katamari.placement/0", "maxDiameterM": 1.2}
         report = self.run_validator()
-        self.assertIn("[meta_cap_override]", [w.split(" ", 1)[0] for w in report.warnings])
         self.assertEqual(report.errors, [])
+        self.doc["meta"]["ball"]["targetDiameterM"] = 401.0
+        self.assert_tag("[meta_target_diameter]")
 
     def test_time_limit_is_required_for_a_story_level(self):
         self.doc["meta"]["scene"] = "StoryMode"
@@ -603,6 +605,14 @@ class ReferenceLevelTests(unittest.TestCase):
         self.assertIn("raw-AABB criterion would count 47", notes)
         self.assertIn("sparrow_001", notes)            # D-5 declaration + non-uniform notice
         self.assertEqual(len(report.warnings), 1)      # the declared overlap budget
+        # Notes since the per-level cap was removed (OPEN_DECISIONS (n)): the absorbable
+        # note compares against the level's own reachable 1.65 m instead of the retired
+        # 1.2 m cap, so 28 scenery props are small enough for the gate there. They are
+        # summarised in ONE note; the other two are the sparrow D-5 declaration and the
+        # structure proxy.
+        self.assertIn("28 marked absorbable:false", notes, "\n".join(report.notes))
+        self.assertEqual(len([note for note in report.notes
+                              if "absorbable disagreements" in note]), 1)
         self.assertEqual(len(report.notes), 3)
 
     def test_the_budget_equals_the_measured_pairs(self):

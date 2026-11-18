@@ -227,7 +227,7 @@ absorb ⇔ max(bounds) ≤ min(maxItemSizeWorldM, 语义直径 × absorbSizeRati
 |---|---:|---:|---|---|---|
 | 野餐桌 `picnic_table` | 0.932 | 2.492 | 旧 §3.7 E（1.50 m 最长边） | **PicnicLawn（`D_cap = 3.20`）** | a_eq 0.932 > 0.823，2.20 上限吃不到 |
 | 公园长椅 `park_bench` | 0.925 | 2.473 | 旧 §3.7 F（1.80 m 最长边） | **PicnicLawn（`D_cap = 3.20`）** | 同上 |
-| 倒塌长凳 `collapsed_bench` | 1.166 | 3.116 | PicnicLawn 对角门 | **PicnicLawn 原图（`D_cap = 3.20`）** | 需要 3.116 m 球 + 3,860 u；1,284 u 还不够（见 `README.md` 的「关卡球径上限」节） |
+| 倒塌长凳 `collapsed_bench` | 1.166 | 3.116 | PicnicLawn 对角门 | **PicnicLawn 原图（`D_cap = 3.20`）** | 需要 3.116 m 球 + 3,860 u；1,284 u 还不够（见 `README.md` 的「全局球径上限」节） |
 
 它们在 A–F 里没有档位，归 **G「大球区专用」0.80–1.197**：G 顶 1.197 = `3.20×0.374`，正好是 3.20 上限的边缘；3.6 m 长凳的 1.166 在 G 顶下方 2.6%。**G 不是第一关的档，是 PicnicLawn/大球区的档。** 上表前两件按 §3.7 的估算，`collapsed_bench` 按 `prop_catalog.csv:38` 的 3.6×0.55×0.80；三件都还没有真实模型，落位要等 AABB 实测。
 

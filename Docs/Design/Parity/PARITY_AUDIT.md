@@ -35,10 +35,10 @@
 | 交分缩径 | 增长侧数据只见增不减（`meta/raw_growth_mechanism.txt` §3）；兑换区的缩径在原作研究里只确认「球会变小」、比例与最小兑换体积未公开（C2/C4/C20） | `post = max(start, start + (pre − start) × residual)`，`residual = 0.25`；交分后残量 `carried` 记入且不再计分（`BankShrinkMath`、`round_model.post_bank_diameter`） | §10 R10 判「缺行 + 缺理由」；这里的理由是 owner 2026-11-14 的刻意设计（**not** a parity restore），`0.25` 与 carried 语义都是 PROVISIONAL | keep（PROVISIONAL，待 T21/T39 复核） | owner 2026-11-14（(a)/(b)） |
 | 每玩家账本 | 原作**单机**，没有 per-player 账本（§10 R13） | 每玩家 `confirmed` / `banked` + `(spawnId, generation)` 幂等键（`GrowthLedgerMath`、[Ledger README](../Ledger/README.md)） | 多人是本项目范围（VRChat 世界必须多端可重建账本）；原作单机没有这个需求，属**范围差异**而非行为偏离（§10 R13 的「需补行」） | keep | —（既有技术契约：02_TECHNICAL_CONTRACTS / Ledger README） |
 | 每关起始/目标球径 | 逐关不同：MAS1 5 → 10 cm、Cancer 22.2 → 80 cm、第三星 10 cm（`missions` 表、`/tmp/orig_physics/dump.csv`、`DATAMODEL_NOTES.md` §1） | 一套 0.30 → 1.25 m（`placement.json` / `story_01_bench_size.json`），运行时尚未从关卡 JSON 读（§5.3.2 步骤 1） | `none -> restore` | restore | owner 2026-11-15（D6） |
-| 球径上限（全局 vs 每关） | 上限也是每关参数：MAS1 30 cm，Cancer 约 1.2 m（`missions` 表、`/tmp/orig_physics/dump.csv`、`DATAMODEL_NOTES.md` §1）；Cancer 有 11 件（石灯笼×4、拉门、圆桌、云×5）需 1.27–6.45 m 的球才吸得到，原作里吸不到 | 按关：`KatamariBallMotor.maxBallDiameterM` 由 `LevelSwitchHost` 在切关时按 `hub_levels.json` 每关的 `maxDiameterM` 写入（Cancer 1.2 m；我们自己的关 30 m 工程包线），增长到上限由 `SizeModelMath.TryDerive` 饱和，视觉核心跟随碰撞直径、不按上限换皮。代码侧已落；`AllMapsHubAssembler` 的表格装配与 Unity 场景重装配／真机验证未做 | 原作优先：恢复原作的逐关上限；其余关没有原作数据，保持现有有效值 | restore（Cancer 1.2 m 已定；场景侧装配待 Unity 轮） | owner 2026-11-18 |
+| 球径上限 | 原作 Cancer `MAX_DIAMETER = 1.2 m`（`missions` 表、`/tmp/orig_physics/dump.csv`、`DATAMODEL_NOTES.md` §1）；11 件需要 1.27–6.45 m，原作吸不到 | 我们不限 1.2 m；全局上限 400 m，球长到各自门槛且接触时，这 11 件可吸 | 所有地图共用同一上限 | 保留差异 | owner 2026-11-18 |
 | 视觉核心 | REROLL [玩家观察](https://steamcommunity.com/app/848350/discussions/0/3561682880003061934/)：“the 'core' grows and absorbs all the objects”；Takahashi 2004 postmortem 确认镜头随球变大自动拉远。证据强度：玩家观察 + 开发者镜头说法，非核/碰撞比例实测。专利 Mp/Mh/Mr 分离不证明核固定；core_XX 仍按关卡命名 | `BallView` 读当前碰撞半径 ×2，变化即写；`CoreSkinAssembler` 保留等体积径归一化子节点，先用 core_01；Unity 验证待做 | 消除粘附件与小核之间的空腔；参考资产仅本机占位，不进 git/上传 | restore（owner 2026-11-17）：核显示等体积直径 = 当前碰撞直径，不用弹簧；[装配与证据](../BallPresentation/CORE_SKIN.md) | owner 2026-11-17 |
 | 球核心视觉（生长弹簧） | 逻辑 30 Hz、画面另插值，没有公开的「生长弹簧」参数（`/tmp/orig_physics/reroll_datamodel.md` §0、`DATAMODEL_NOTES.md`）；核随碰撞直径更新（见「视觉核心」行） | 核心直径直接跟随碰撞直径；生长弹簧与 0.95 缩放路径已删除（`BallView`） | `none -> remove from play`（owner 2026-11-16：开了仍读作「跳一下」，真因是价值定价而非缺平滑；见 `VISUAL_GROWTH_AUDIT.md` 顶部记录与 [WHY_OUR_GROWTH_IS_BIG.md](../../Research/ContentVolume/WHY_OUR_GROWTH_IS_BIG.md)） | remove (owner 2026-11-16: still reads as a jump; real cause is value pricing) | owner 2026-11-16 |
-| 骑手/座位尺度 | 小型王子骑在球后滚球，第三人称相机（`meta/DATAMODEL_NOTES.md` 的 `missions.CAMERA_FOV` / `initPos`；[研究核查](../../Research/KatamariBallRules/README.md) C3 王子シップ） | 玩家 avatar 经站立式 `VRCStation` 站在球后、脚在地上，手从肩向前下 45° 按在球背（第一人称，眼点 = 球心上 1.6546·r、后 1.1768·r）；**avatar 眼高按球径线性跟随 E = 2.6546·r ÷ η**（η 为入座时实测的站立头高 ÷ 眼高），触地点—球顶—视点成相似三角形；面板随 E 缩放（[RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md) §1、§3） | VR 第一人称、没有第三人称追尾相机，手是玩家自己的控制器，所以用"手推着球"的站姿；骑手随球一起缩放（不是从原作学来的），代价是旁观者看到巨人推大球；η、手到球面的实测距离、面板可读性未在真机核对 | keep, owner decided 2026-11-18（VR 反馈后：站姿手推球、相似三角形） | owner 2026-11-18 |
+| 骑手/座位尺度 | 小型王子骑在球后滚球，第三人称相机（`meta/DATAMODEL_NOTES.md` 的 `missions.CAMERA_FOV` / `initPos`；[研究核查](../../Research/KatamariBallRules/README.md) C3 王子シップ） | 玩家 avatar 经站立式 `VRCStation` 站在球后、脚在地上，手从肩向前下 45° 按在球背（第一人称，眼点 = 球心上 1.6546·r、后 1.1768·r）；**avatar 眼高按球径线性跟随 E = 2.6546·r ÷ η**（η 为入座时实测的站立头高 ÷ 眼高，`RideScaleMath.TryEyeHeightForDiameter`），触地点—球顶—视点成相似三角形；**眼高夹在 `[0.1, 100] m`**（`RideScaleMath.MaxSupportedEyeHeightMeters`，VRChat 不支持 >100 m 的头像缩放），所以球径约 75 m·η 以上骑手不再变大（球本身仍可长到 400 m）；面板随 E 缩放（[RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md) §1、§3） | VR 第一人称、没有第三人称追尾相机，手是玩家自己的控制器，所以用"手推着球"的站姿；骑手随球一起缩放（不是从原作学来的），代价是旁观者看到巨人推大球；η、手到球面的实测距离、面板可读性未在真机核对 | keep, owner decided 2026-11-18（VR 反馈后：站姿手推球、相似三角形） | owner 2026-11-18 |
 | 吸附物位姿 | 接触位置原地粘住，保持碰撞瞬间姿态，不缩放、不外推、不拉入（`[专利原文]` US7402104B2 + `[录像实测]` PS2 美版，[`ORIGINAL_ATTACH_LOOK.md`](../../Research/KatamariBallRules/ORIGINAL_ATTACH_LOOK.md) a1–a5） | 自身盒触碰物理等效球；在成功提交那一步、成长推出之前转球局部位姿写入事件环；宿主只消费冻结位姿，不用延迟后的球心/滚转重算（`AttachmentMath` / `PickupFieldHost`）。R33 残留主因与修复见 [`ATTACH_PLACEMENT.md`](../BallLayers/Attachment/ATTACH_PLACEMENT.md) §1 | 接触时刻语义已还原；球侧 Mh 形状取舍见“吸收触发的几何”行，未用拉入补偿 | restore（触发即接触、原地冻结、不加嵌入偏移；待 Unity 复验） | Lead 2026-11-17 |
 | 区域化尺寸分布 | 每区一套分布：第二区起不再放新小件、小件集中中央（MAS4 60→12→5.5→0%、Cancer ρ=+0.354；`zone_stats`、`/tmp/orig_physics/sheets/`、`reroll_numbers.md` §2） | 只有一个尺寸带、没有区（`C08`/`C10`/`C11`） | `none -> restore` | restore | owner |
 | 移动件/行为字段 | 每型带 `pathSpeedIndex`（**11 个取值**，`2` 为缺省 80.2%，余下 0/1/3–10 共 338 型，另 1 个坏值 `t`）、vault 点（0/2/3/8 个：805/261/650/1 型）、逐实例 `playAnimNo`（4 个取值，9.7% 实例带动画）、`parentProp` 单父指针（**1,970 条子件 / 1,082 个父件** / 单父最多 30 子件 / 链最深 **13 层**，如 Make Cygnus 的 13 蛋塔）（`raw_reroll_dump__name_props_0x30.tsv`、`raw_reroll_dump__object_dump.tsv`、`DATAMODEL_NOTES.md`；实测计数见 `PROP_BEHAVIOURS.md` §10.1 表 1/表 2） | **数据已带**：`_ref_cancer/placement.v2.json` 511 行 `behaviour`（static 383 / motion 108 / attached 15 / ambient 5）、113 行 `motion`、83 行 `parent` + `inherit:"full"`、`motions[]` 14 条、`paths[]` 4 条；数学库 `Runtime/Pickup/MotionMath.cs` 已写，关卡编辑器与 `Tools/motion_sim` 能播放。**Unity 无运行时宿主**：`MotionHost` 不存在（`PlacementDocumentV2.cs`「no `MotionHost` yet (P4)」），运行时一件都不动 | 性能预算：行为件按 15 Hz 分摊 ≤800 movers（`PROP_BEHAVIOURS.md` §7） | restore（数据与库已落，宿主待 P4/P5） | owner |
@@ -159,8 +159,8 @@
 |---|---|---|---|---|---|
 | `G01` 起始球径 | 开局直径 | 5 cm（F2） | 0.2997 m（`placement.json level.ballDiameterStart`） | m | 我们开局就是原作的 6×，等价于原作中后期关 |
 | `G02` 通关目标 | 通关线 | 10 cm（MAS1） | 1.25 m（`story_01_bench_size.json`） | m | 差 12.5×；我们的目标在原作里约等于 MAS7 的 1/5 |
-| `G03` 上限直径 | 包线 | 30 cm | 2.20 m | m | 差 7.33× |
-| `G04` 目标/上限 | 余量比 | 0.333（10/30） | 0.568（1.25/2.20） | — | 原作用 3× 余量，我们 1.76×，"冲上限"更容易 |
+| `G03` 上限直径 | 包线 | 30 cm | 400 m | m | 全局引擎上限（owner 2026-11-18）；不等于地图内容可达值，也不是地图的设计梯子顶（关卡 JSON 的 `ballDiameterMax` 仍是 2.20 m，纯分析量） |
+| `G04` 目标/设计梯子顶 | 余量比 | 0.333（10/30） | 0.568（1.25/2.20） | — | 原作用 3× 余量，我们 1.76×，"冲设计梯子顶"更容易；分母是 `ballDiameterMax`（2.20 m 梯子顶），不是 `G03` 的 400 m 全局上限 |
 | `G05` 体积→直径 | D(V) 的形状 | `D=(6V/π)^(1/3)` + 0.02 cm | `SizeModelMath.TryDerive` 同形、无偏置 | — | **一致**；只差显示 fudge |
 | `G06` 单件回收比例 | 吸收一件给多少体积 | 0.8（MAS1 起始），随尺寸降到 0.16（F5） | ΔV = V_box（100%） | ×V_item | 同一次吸收我们多得 25%；末段差距更大（原作拖尾、我们加速） |
 | `G07` 10× 体积门 | 能不能吸的判据 | `πD³/6 ≥ 10V`（F4） | `PickupAbsorbMath.AbsorbVolumeRatio = 10`（`Req = cbrt(60·k·a·b·c/π)`） | ×V_item | **完全一致**；比率是常量，不再是逐场景序列化字段 |
@@ -282,7 +282,7 @@
 | **D3** | **不乘 6，全案用真实尺寸**；"缩放版"降为纯诊断，不再是推荐路径 | 5 cm 球暴露的每个米制常数都是审计发现 → §5.3 修复清单 + §5.4 新主题 |
 | **D4** | **不补我们的新物件**，还原阶段直接用解包出来的物件；原创美术线继续，但属于后面的"替换"阶段 | `C01`–`C03` 的口径改为"搬原作内容"；**600–900 件是供给下限，不是目标**——目标是 `G11 ≥ 2`（原作 1.65–2.4×，远多于所需）。`repricing_proposal.md` 的补件清单只作诊断 |
 | **D5** | 体积改**连续**（float/double，或足够细的整数定点，如 1 mm³ 级、Udon 可用 `long`）；评分/HUD 用显示单位 | 与"账本只收整数价值单位"冲突，受影响点见 §5.2 |
-| **D6** | **起始球径是每关参数**（第一星 5 cm、Cancer 22.2 cm、第三星 10 cm…），不是全局常数；目标/上限同理 | 引擎必须按关卡配置三者；列入 §5.3/§5.4 |
+| **D6** | **起始球径是每关参数**（第一星 5 cm、Cancer 22.2 cm、第三星 10 cm…），不是全局常数；目标也按关卡设定，全局球径上限 400 m | 引擎按关卡配置起始值和目标；列入 §5.3/§5.4 |
 | **D7** | 做双模式——就是正在进行的 `_ref_mas1` 重建关 | 本文 §4.3 步 1/6 即其验收路径 |
 
 ### 5.1 D1/D2 落地后哪几行会变
@@ -358,7 +358,7 @@
 
 **顺序（每步可独立验收，前 4 步不需要 Unity）**：
 
-1. **起始/目标/上限参数化**（D6）：`ballDiameterStart/Max` + `clearDiameter` 从关卡 JSON 读，三关（5 / 22.2 / 30 cm）配置各跑一次 `run_parity`，`G01`–`G03` 全 `一致`。
+1. **起始/目标参数化**（D6）：`ballDiameterStart` / `ballDiameterTarget` + `clearDiameter` 从关卡 JSON 读；上限不再是每关参数，`G03` 按全局 400 m 比。三关（5 / 22.2 / 30 cm）配置各跑一次 `run_parity`，`G01`–`G03` 全 `一致`。
 2. **米制常数比例化**（上表 1/2/4/6/7）：改 5 个常数 + 单测；验收 = 在 0.05 / 0.30 / 1.10 m 三档上"常数/球径"比例相同（±1%）。
 3. **容量可配**（上表 9）：`budget` 进运行时校验；验收 = 用 `placement.json` 声明的容量能跑通、超容量报错而不是静默丢。
 4. **叠放容差重写**（上表 3）：`placement_core` 一处；验收 = 5 cm 关里 2 mm 的顶底差算接触、3 mm 算悬空。
@@ -371,7 +371,7 @@
 
 | 子项 | 验收物 | 需要 Unity |
 |---|---|---|
-| A 每关起/止/上限 | 三关配置 + `run_parity` 的 `G01`–`G03` | 否 |
+| A 每关起始值/目标与全局上限 | 三关配置 + `run_parity` 的 `G01`–`G03` | 否 |
 | B 米制常数比例化 | 5 个常数 + 单测（比例一致） | 否 |
 | C 容量可配 | `budget` 校验 + 超容量报错 | 否 |
 | D 叠放/穿插容差按比例 | `placement_core` 用例 | 否 |

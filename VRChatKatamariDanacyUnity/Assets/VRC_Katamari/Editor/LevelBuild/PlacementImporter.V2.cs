@@ -172,7 +172,7 @@ namespace VRCKatamari.Editor.LevelBuild
             if (propsOk)
             {
                 TrySyncDeclaredFields(view, levelRoot, propsRoot, report,
-                    BuildNonFieldProps(doc, report));
+                    BuildNonFieldProps(doc, report), doc.IsReference ? path : null);
                 ApplyMotionHost(doc, levelRoot, propsRoot, report);
             }
 
@@ -207,9 +207,10 @@ namespace VRCKatamari.Editor.LevelBuild
                 id = meta.Id,
                 scene = meta.Scene,
                 ballDiameterStart = meta.Ball != null ? meta.Ball.StartDiameterM : 0f,
-                ballDiameterMax = meta.Ball != null && meta.Ball.HasMaxDiameter
-                    ? meta.Ball.MaxDiameterM
-                    : 0f,
+                // The v1 DTO still has this column, but nothing in the shared builder reads
+                // it: the one runtime size cap is the motor's global constant (owner
+                // 2026-11-18), and a curve ramp's chord budget reads ballDiameterStart above.
+                ballDiameterMax = KatamariBallMotor.GlobalMaxBallDiameterM,
                 arena = new ArenaBlock { id = meta.Id },
                 budget = new BudgetBlock
                 {
@@ -634,15 +635,6 @@ namespace VRCKatamari.Editor.LevelBuild
                 report.Note(V2Tag + "the document has " + doc.Motions.Length + " motion(s) and " +
                             doc.Paths.Length + " path(s); they are parsed and preserved but not " +
                             "executed (no MotionHost yet), so every prop imports as authored");
-            }
-
-            if (doc.Meta != null && doc.Meta.Ball != null &&
-                string.Equals(doc.Meta.Ball.MaxDiameterRef, "level", StringComparison.Ordinal))
-            {
-                report.Note(V2Tag + "[meta_cap_override] maxDiameterRef='level' (maxDiameterM=" +
-                            doc.Meta.Ball.MaxDiameterM.ToString("0.###", CultureInfo.InvariantCulture) +
-                            "): the motor keeps its own global cap; the per-level number is recorded " +
-                            "here only");
             }
 
             return true;

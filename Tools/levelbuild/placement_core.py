@@ -89,12 +89,18 @@ VOLUME_PENALTY_MAX = 1.0
 #: One cubic metre in the ledger's quantum (1 LSB = 1 mm^3, Docs/OPEN_DECISIONS.md (r)).
 MM3_PER_M3 = 1_000_000_000
 
-#: The one GLOBAL ball-size cap (Docs/OPEN_DECISIONS.md (r), step D; parity D6).  It is a
-#: motor serialized field at runtime (``KatamariBallMotor.maxBallDiameterM``); the data
-#: layer only uses it for the analysis ladders, never to gate the runtime.  A level's
-#: ``ballDiameterMax`` stays the LADDER TOP for analysis/supply ratios (2.20 m for story 1),
-#: not the runtime cap.
-MAX_BALL_DIAMETER_M = 30.0
+def _read_global_ball_diameter_m():
+    """Authoring consumes the runtime's policy; never fall back to a second value."""
+    motor = Path(__file__).resolve().parents[2] / (
+        "VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Runtime/BallMotor/KatamariBallMotor.cs")
+    declaration = re.search(r"^\s*public const float GlobalMaxBallDiameterM = ([0-9.]+)f;$",
+                            motor.read_text(encoding="utf-8"), re.MULTILINE)
+    if declaration is None:
+        raise RuntimeError(f"Missing GlobalMaxBallDiameterM declaration in {motor}")
+    return float(declaration.group(1))
+
+
+MAX_BALL_DIAMETER_M = _read_global_ball_diameter_m()
 
 #: The original's start ball for MAS1 is 5 cm; ours is 0.2997 m (calibration baseline).  The
 #: per-level value still travels as ``level.ballDiameterStart`` / the motor's
@@ -1078,6 +1084,43 @@ def diameter_for_volume_mm3(volume_mm3):
         raise ValueError("diameter_for_volume_mm3 needs a positive volume, got %r"
                          % (volume_mm3,))
     return (6.0 * volume / MM3_PER_M3 / math.pi) ** (1.0 / 3.0)
+
+
+def reachable_ball_diameter_m(document):
+    """The diameter a level's own content can grow the ball to in one round, in metres.
+
+    There is no per-level size cap (``Docs/OPEN_DECISIONS.md`` (n)): the one runtime limit is
+    the global cap on the motor, so a document cannot declare one.  Authoring and the editor
+    still need *the largest ball this level can produce*: a wall only blocks the ball up to the
+    size the content can reach, an item beyond that reach can never be eaten here, and a curve
+    ramp's chord budget depends on the ball that must roll it.  That number is a fact about the
+    content, so it is derived instead of configured:
+
+        V_total = V(start) + sum(item growth of the absorbable props)
+        D       = cbrt(6 * V_total / pi)
+
+    Only ``absorbable: true`` props count: everything else never enters the ledger.  Never
+    above :data:`MAX_BALL_DIAMETER_M`, because the runtime clamps there.  Returns ``None`` when
+    the document has no usable ``meta.ball.startDiameterM``, so a caller skips the analysis
+    instead of inventing a size.
+    """
+    meta = document.get("meta") or {}
+    ball = meta.get("ball") or {}
+    try:
+        start = float(ball.get("startDiameterM"))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(start) or start <= 0.0:
+        return None
+    catalog = def_catalog(document)
+    total = ball_volume_mm3(start)
+    for prop in document.get("props") or []:
+        if not isinstance(prop, dict) or prop.get("absorbable") is not True:
+            continue
+        gain = growth_mm3(prop, catalog)
+        if gain is not None and gain > 0:
+            total += gain
+    return min(diameter_for_volume_mm3(total), MAX_BALL_DIAMETER_M)
 
 
 def volume_m3(volume_mm3):

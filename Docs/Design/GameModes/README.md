@@ -45,7 +45,7 @@ sha256sum Docs/Design/Maps/PicnicLawn/layout.json Docs/Design/Maps/PicnicLawn/pr
 | 占位价值单位 | **1284**（s=1 / m=4 / l=16,20） | 逐件 `absorb_value_placeholder × count_in_map` |
 | 档位分布 | **s 276 / m 154 / l 22** | 同上，按 `size_tier` |
 | 区域 | 21（其中 20 个有散布） | `layout.json.zones` / `prop_scatter` |
-| 球径包线 | 起始 0.30 m / 上限 2.20 m | `layout.json.scale` |
+| 球径包线 | 起始 0.30 m / 设计梯子顶 2.20 m（离线分析用，不是运行时上限） | `layout.json.scale`；运行时上限是全局 400 m（`OPEN_DECISIONS` (n)） |
 
 **地图正在被另一位负责人编辑。** 表里的「采样时间」就是两文件当时的 mtime；写本文期间 `layout.json` 至少又改过两次（最近一次 2026-11-14 05:45，树根土丘 0.18 → 0.14 m），上一版快照就是这么过期的。本文的所有数字因此绑定 `Levels/*.json` 的 `map_snapshot` 两个 hash（上表是它们的缩写副本）：地图一改，§3 的算术与 §4 的 `map_snapshot` 校验会立刻失配——这是设计意图，不是缺陷。
 

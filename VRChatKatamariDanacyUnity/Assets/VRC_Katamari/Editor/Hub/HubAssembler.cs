@@ -254,7 +254,7 @@ namespace VRCKatamari.Editor.Hub
 
             HubLevelLauncher launcher = AssembleLauncher(round, offered, spawn, seat, station, hub, c);
             AssembleVrStickInput(round, c);
-            RoomParts room = AssembleRoom(offered, hub ? options.Plans : null, round, center, font,
+            RoomParts room = AssembleRoom(offered, hub ? options.Plans : null, round, center,
                 launcher, c);
             HubRoomHost host = AssembleRoomHost(launcher, round, center, room.LevelButtons,
                 catalog.room, room.Prompt, room.Settings, c);
@@ -542,7 +542,8 @@ namespace VRCKatamari.Editor.Hub
 
         internal static HubRoomHost AssembleRoomHost(HubLevelLauncher launcher,
             StoryRoundController round, Transform center, Transform[] buttons,
-            HubLevelCatalog.RoomBlock room, Text prompt, HubSettingsHost settings, Counters c)
+            HubLevelCatalog.RoomBlock room, TMPro.TextMeshProUGUI prompt, HubSettingsHost settings,
+            Counters c)
         {
             HubRoomHost host = FindOptional<HubRoomHost>();
             if (host == null)
@@ -1215,7 +1216,7 @@ namespace VRCKatamari.Editor.Hub
             StoryRetryButton[] retries = UnityEngine.Object.FindObjectsOfType<StoryRetryButton>(true);
             for (int i = 0; i < retries.Length; i++)
                 VerifyTable(retries[i], new[] { "controller", "launcher" }, c);
-            HubStartButton[] starts = UnityEngine.Object.FindObjectsOfType<HubStartButton>();
+            HubStartButton[] starts = UnityEngine.Object.FindObjectsOfType<HubStartButton>(true);
             for (int i = 0; i < starts.Length; i++)
             {
                 VerifyTable(starts[i], new[] { "launcher", "levelIndex" }, c);
@@ -1346,17 +1347,6 @@ namespace VRCKatamari.Editor.Hub
         }
 
         // ------------------------------------------------------------ ui plumbing ---
-
-        internal static GameObject CreateWorldCanvas(string name, Transform parent, Vector2 size)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Canvas));
-            Undo.RegisterCreatedObjectUndo(go, "Create " + name);
-            go.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
-            if (parent != null) go.transform.SetParent(parent, false);
-            var rect = (RectTransform)go.transform;
-            rect.sizeDelta = size;
-            return go;
-        }
 
         internal static Text CreateText(string name, Transform parent, Font font, int size,
             TextAnchor alignment)

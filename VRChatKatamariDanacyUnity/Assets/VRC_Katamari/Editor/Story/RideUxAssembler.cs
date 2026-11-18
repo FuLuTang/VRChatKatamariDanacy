@@ -49,6 +49,12 @@ namespace VRCKatamari.Editor.Story
     /// <see cref="RideScaleMath"/> (the push stance at every ball size),
     /// <c>SeatEyeCompensation.motor</c> is wired to the motor whose lowest point the seat puts
     /// the feet on, and its vertical limit is the standing head rail.</description></item>
+    /// <item><description>The seat's anchor: the VRCStation's own transform and its
+    /// <c>stationEnterPlayerLocation</c> are both set on the follow frame's pose and
+    /// <c>SeatEyeCompensation.seatAnchor</c> points at the station transform, the transform
+    /// VRChat carries a seated player with. An authored entry offset would be measured as
+    /// part of the head offset and then clipped by the horizontal limit (the "+0.45 m to the
+    /// right" rider bug), so the entry has none.</description></item>
     /// <item><description>The VRCStation's exit location (<c>stationExitPlayerLocation</c>),
     /// created as a child <c>RideExitPoint</c> when the station has none, placed by
     /// <see cref="RideExitMath"/> beside the ball on flat ground; the station moves it again on
@@ -112,6 +118,12 @@ namespace VRCKatamari.Editor.Story
 
         private const float InteractProximity = 5f;
         private const float BallInteractProximity = 4f;
+
+        // VRCStation.Mobility order: Mobile = 0, Immobilize = 1, ImmobilizeForVehicle = 2.
+        // The ride station moves with the follow frame every frame (and the seat compensation
+        // moves it again), so VRChat's documented mode for stations that move applies:
+        // "Immobilize For Vehicle: ... Use this for stations that move, such as vehicles."
+        private const int StationMobilityForVehicle = 2;
 
         private sealed class Counters
         {
@@ -199,7 +211,7 @@ namespace VRCKatamari.Editor.Story
                 GameObject panel = AssembleExitPanel(station, exit, font, rigRoot, panels, c,
                     out Text hint);
                 AssembleExitLocation(station, ballRoot, motor, c);
-                AssembleStationLinks(station, motor, ballInteract, panel, hint, panels, c);
+                AssembleStationLinks(station, motor, ballInteract, panel, hint, rigRoot, panels, c);
                 NormalizePanelLayers(panels, c);
             }
 
@@ -243,10 +255,13 @@ namespace VRCKatamari.Editor.Story
                 return;
             }
             var so = new SerializedObject(linked);
-            if (SetBool(so, "seated", false, c))
+            bool changed = SetBool(so, "seated", false, c);
+            changed |= SetInt(so, "PlayerMobility", StationMobilityForVehicle, c);
+            if (changed)
             {
                 so.ApplyModifiedPropertiesWithoutUndo();
-                c.Notes.Add("the VRCStation is a standing station (seated off)");
+                c.Notes.Add("the VRCStation is a standing, moving-station station"
+                    + " (seated off, PlayerMobility=ImmobilizeForVehicle)");
             }
         }
 
@@ -650,7 +665,7 @@ namespace VRCKatamari.Editor.Story
 
         private static void AssembleStationLinks(BallRideStation station,
             KatamariBallMotor motor, BallSeatInteract ballInteract, GameObject exitPanel,
-            Text hint, Transform panels, Counters c)
+            Text hint, Transform rigRoot, Transform panels, Counters c)
         {
             var so = new SerializedObject(station);
             bool changed = SetObject(so, "motor", motor, c);
@@ -659,7 +674,7 @@ namespace VRCKatamari.Editor.Story
             if (seatEye != null)
             {
                 changed |= SetObject(so, "seatEye", seatEye, c);
-                AssembleSeatLinks(seatEye, motor, c);
+                AssembleSeatLinks(seatEye, motor, station, rigRoot, c);
             }
             else c.Problems.Add("no SeatEyeCompensation in the scene: the seat stays on the eye point"
                 + " and the rider cannot be sized");
@@ -711,28 +726,78 @@ namespace VRCKatamari.Editor.Story
             return SetObject(stationSo, "vrInput", all[0], c);
         }
 
-        // The seat puts the rider's feet on the ball's lowest point, so it needs the ball; its
-        // vertical limit is the standing head rail, so an eye-only fallback compensates a
-        // standing head in full.
+        // The transform that receives the compensation must be the VRCStation's own transform:
+        // that is what VRChat carries a seated player with (the mechanism a vehicle station
+        // moves its riders by). The station's ENTER location only chooses the pose the player
+        // is put at when seating, so it must carry no authored offset relative to the station:
+        // such an offset is measured as part of the head offset and then clipped by the
+        // horizontal limit, which is the rider's "+0.45 m to the right" defect.
         private static void AssembleSeatLinks(SeatEyeCompensation seatEye, KatamariBallMotor motor,
-            Counters c)
+            BallRideStation station, Transform rigRoot, Counters c)
         {
+            Component linked = ReadLinkedStation(station) as Component;
+            if (linked == null)
+            {
+                c.Problems.Add("BallRideStation.station is not wired: the transform that carries"
+                    + " the seated player cannot be given to SeatEyeCompensation");
+                return;
+            }
+            Transform carrier = linked.transform;
+            Transform enter = ReadStationPoint(station, "stationEnterPlayerLocation");
+            Transform exit = ReadStationExitPoint(station);
+            if (carrier == rigRoot || !carrier.IsChildOf(rigRoot))
+            {
+                c.Problems.Add("the VRCStation must be a child of FollowRigRoot: the follow frame"
+                    + " carries the rider by moving that station transform");
+                return;
+            }
+            if (enter == null || enter == rigRoot || !enter.IsChildOf(rigRoot) || enter == exit)
+            {
+                c.Problems.Add("VRCStation needs a distinct entry transform under FollowRigRoot"
+                    + " for SeatEyeCompensation");
+                return;
+            }
+
+            // Both poses are the rig pose. The station carries the player and the entry puts
+            // the player at the station, so any remaining offset would be a fixed offset in
+            // every measurement and every sized ride.
+            AlignPose(carrier, rigRoot, "Align the ride station to the ride frame", c);
+            AlignPose(enter, carrier, "Align the station entry to the ride station", c);
+
             var so = new SerializedObject(seatEye);
-            bool changed = SetObject(so, "motor", motor, c);
+            bool changed = SetObject(so, "followRigRoot", rigRoot, c);
+            changed |= SetObject(so, "seatAnchor", carrier, c);
+            changed |= SetObject(so, "motor", motor, c);
             changed |= SetFloat(so, "verticalLimitMeters",
                 SeatEyeMath.MaxPlausibleHeadAboveSeatMeters, c);
             if (changed) so.ApplyModifiedPropertiesWithoutUndo();
             c.Proxies.Add(seatEye);
         }
 
+        private static void AlignPose(Transform target, Transform frame, string what, Counters c)
+        {
+            if (target.position == frame.position && target.rotation == frame.rotation) return;
+            Undo.RecordObject(target, what);
+            target.SetPositionAndRotation(frame.position, frame.rotation);
+            c.Changed++;
+        }
+
         private static Transform ReadStationExitPoint(BallRideStation station)
         {
+            return ReadStationPoint(station, "stationExitPlayerLocation");
+        }
+
+        private static Transform ReadStationPoint(BallRideStation station, string field)
+        {
             UnityEngine.Object linked = ReadLinkedStation(station);
-            if (linked == null) return null;
-            SerializedProperty exitProperty =
-                new SerializedObject(linked).FindProperty("stationExitPlayerLocation");
-            if (exitProperty == null) return null;
-            return exitProperty.objectReferenceValue as Transform;
+            return linked == null ? null : ReadTransform(linked, field);
+        }
+
+        private static bool SamePose(Transform a, Transform b)
+        {
+            return a != null && b != null
+                && Vector3.Distance(a.position, b.position) <= 1e-5f
+                && Quaternion.Angle(a.rotation, b.rotation) <= 1e-3f;
         }
 
         private static UnityEngine.Object ReadLinkedStation(BallRideStation station)
@@ -876,7 +941,57 @@ namespace VRCKatamari.Editor.Story
                 "eyeHeightFilterHz", "eyeHeightStepFraction", "eyeHeightMinIntervalSeconds",
                 "scaleWaitSeconds", "panelRoot", "vrInput" }, c);
             SeatEyeCompensation seatEye = FindOptional<SeatEyeCompensation>();
-            if (seatEye != null) VerifyTable(seatEye, new[] { "motor", "verticalLimitMeters" }, c);
+            if (seatEye != null)
+            {
+                VerifyTable(seatEye, new[] { "motor", "verticalLimitMeters", "followRigRoot",
+                    "seatAnchor" }, c);
+                Component linked = ReadLinkedStation(station) as Component;
+                Transform carrier = linked != null ? linked.transform : null;
+                Transform rig = ReadTransform(seatEye, "followRigRoot");
+                Transform anchor = ReadTransform(seatEye, "seatAnchor");
+                Transform enter = ReadStationPoint(station, "stationEnterPlayerLocation");
+                Transform exitPoint = ReadStationExitPoint(station);
+                object anchorValue;
+                object rigValue;
+                bool wired = carrier != null && rig != null && anchor != null && enter != null
+                    && anchor == carrier && carrier != rig && carrier.IsChildOf(rig)
+                    && enter != rig && enter != exitPoint && enter.IsChildOf(rig)
+                    && SamePose(carrier, rig) && SamePose(enter, carrier);
+                if (!wired
+                    || !VRCKatamari.Editor.Hub.UdonVariableAccess.TryRead(seatEye, "seatAnchor", out anchorValue)
+                    || (anchorValue as Transform) != anchor
+                    || !VRCKatamari.Editor.Hub.UdonVariableAccess.TryRead(seatEye, "followRigRoot", out rigValue)
+                    || (rigValue as Transform) != rig)
+                {
+                    c.Problems.Add("SeatEyeCompensation must be wired to the follow frame and to"
+                        + " the VRCStation's own transform (the player-carrying transform), with"
+                        + " the station and its entry location both on the rig pose, in both the"
+                        + " proxy and the Udon table");
+                }
+            }
+            Component stationComponent = ReadLinkedStation(station) as Component;
+            if (stationComponent == null)
+            {
+                c.Problems.Add("BallRideStation.station is not wired: the VRCStation settings"
+                    + " cannot be checked");
+            }
+            else
+            {
+                var vrcSo = new SerializedObject(stationComponent);
+                SerializedProperty seated = vrcSo.FindProperty("seated");
+                SerializedProperty mobility = vrcSo.FindProperty("PlayerMobility");
+                if (seated == null || mobility == null)
+                {
+                    c.Problems.Add("the VRCStation has no seated/PlayerMobility field");
+                }
+                else if (seated.boolValue || mobility.intValue != StationMobilityForVehicle)
+                {
+                    c.Problems.Add("the VRCStation must be a standing, moving-station station:"
+                        + " seated off and PlayerMobility = ImmobilizeForVehicle ("
+                        + StationMobilityForVehicle + "), found seated=" + seated.boolValue
+                        + " mobility=" + mobility.intValue);
+                }
+            }
             BallRideExitButton exit = FindOptional<BallRideExitButton>();
             if (exit != null) VerifyTable(exit, new[] { "ride", "label", "confirmSeconds" }, c);
         }
@@ -991,6 +1106,20 @@ namespace VRCKatamari.Editor.Story
             }
             if (property.boolValue == value) return false;
             property.boolValue = value;
+            c.Changed++;
+            return true;
+        }
+
+        private static bool SetInt(SerializedObject so, string field, int value, Counters c)
+        {
+            SerializedProperty property = so.FindProperty(field);
+            if (property == null)
+            {
+                c.Problems.Add(so.targetObject.GetType().Name + "." + field + " is not a serialized field");
+                return false;
+            }
+            if (property.intValue == value) return false;
+            property.intValue = value;
             c.Changed++;
             return true;
         }

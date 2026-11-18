@@ -164,6 +164,7 @@ namespace VRCKatamari.Pickup
 
         [Header("Ball")]
         [SerializeField] private KatamariBallMotor motor;
+        [SerializeField] private AbsorbFeedbackHost absorbFeedback;
         [Tooltip("This field stores decorative props only and deliberately has no motor.")]
         [SerializeField] private bool decorativeOnly;
 
@@ -175,6 +176,8 @@ namespace VRCKatamari.Pickup
         [SerializeField] private Transform[] propTransforms;
         [SerializeField] private string[] itemIds;
         [SerializeField] private string[] kinds;
+        // Optional presentation column, indexed exactly like itemIds; old fields use class 0.
+        [SerializeField] private int[] propAbsorbSoundClasses;
         // propBounds is the prop's WORLD AABB (full edge lengths, metres). The blocking
         // boxes and the support classification read it as an axis-aligned world box, so its
         // meaning must not change. A turned prop's world box is larger than the prop, so it
@@ -582,6 +585,7 @@ namespace VRCKatamari.Pickup
             collectingEnabled = collecting;
             collectingInitialised = true;
             if (collecting) return;
+            if (absorbFeedback != null) absorbFeedback.ClearFeedback();
             WithdrawSubmitted();
         }
 
@@ -624,6 +628,7 @@ namespace VRCKatamari.Pickup
         /// </remarks>
         public bool ResetField()
         {
+            if (absorbFeedback != null) absorbFeedback.ClearFeedback();
             if (propStates == null || propTransforms == null) return false;
 
             // Withdraw first: the attached/hidden rows no longer hold a submit time, so
@@ -798,6 +803,14 @@ namespace VRCKatamari.Pickup
             if (propOwnSizes == null || index < 0 || index >= propOwnSizes.Length)
                 return Vector3.zero;
             return propOwnSizes[index];
+        }
+
+        public int GetPropAbsorbSoundClass(int index)
+        {
+            if (propAbsorbSoundClasses == null || itemIds == null
+                || propAbsorbSoundClasses.Length != itemIds.Length || index < 0
+                || index >= propAbsorbSoundClasses.Length) return 0;
+            return propAbsorbSoundClasses[index];
         }
 
         public bool IsCollecting()
@@ -1622,6 +1635,7 @@ namespace VRCKatamari.Pickup
                 // A round reset took the ring backwards; resync instead of reading slots that
                 // now describe a different event.
                 seenEvents = total;
+                if (absorbFeedback != null) absorbFeedback.ClearFeedback();
                 return;
             }
 
@@ -1657,6 +1671,13 @@ namespace VRCKatamari.Pickup
                 if (index < 0) continue;
                 AttachProp(index, i);
                 if (fallHost != null) fallHost.OnPropAbsorbed(index);
+                if (absorbFeedback != null && Collecting())
+                {
+                    int soundClass = GetPropAbsorbSoundClass(index);
+                    Vector3 size = GetPropOwnSize(index);
+                    float edge = Mathf.Pow(size.x * size.y * size.z, 1f / 3f);
+                    absorbFeedback.RecordConfirmed(soundClass, edge / motor.GetSemanticDiameterWorldM());
+                }
             }
             seenEvents = total;
         }

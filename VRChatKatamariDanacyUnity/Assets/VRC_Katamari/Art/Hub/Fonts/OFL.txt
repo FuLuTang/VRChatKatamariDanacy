@@ -1,0 +1,5 @@
+HubPanelSans-Bold.otf is a subset of Noto Sans CJK SC Bold.
+Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.
+Modified (subset to the hub panels' characters, renamed HubPanelSans) for VRC Katamari.
+
+

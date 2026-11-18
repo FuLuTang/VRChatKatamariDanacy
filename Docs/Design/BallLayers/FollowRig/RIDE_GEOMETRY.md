@@ -40,7 +40,8 @@
 
 **相似三角形**：G (0,0)、T (0, 2r)、V (−1.1768r, 2.6546r) 三点只随 r 缩放，三角形 GTV 在任何球径下相似；手 H = 球心 + r·(−cos ψ, sin ψ) = (−0.7071r, 1.7071r)，
 肩 S = (−1.3228r, 2.3228r)，S→H→球心共线。motor 的四个眼点字段写成 `eyeBaseUpMeters = 0`、`eyeUpPerRadius = 1.654625`、`eyeBaseBackMeters = 0`、
-`eyeBackPerRadius = 1.176792`（`FollowRigMath` 不改）。
+`eyeBackPerRadius = 1.176792`。`FollowRigMath` 低通高度增量和 yaw；水平位置由当步球心与滤波 yaw 直接计算，不二次混合上一帧世界 X/Z。
+motor 的 `eyeUpMaxMeters` / `eyeMaxBackM` 是**加性底座**的上限，不是离球心距离的上限：球径上限 400 m（半径 200 m）时站姿眼点在球心上 330.9 m、后 235.4 m，任何固定米数天花板都会把眼点钉进球里；半径项本身由球径上限约束，不需要也不允许再钳一次。
 
 ### 1.1 ψ 的候选（每单位 r；pitch 0 时的视角）
 
@@ -81,7 +82,7 @@
 
 | # | 量 | 由什么控制 | 随 r 变？ |
 |---|---|---|---|
-| 1 | **玩家的身体在哪**（`VRCStation` 的 transform，站立 Station 的锚点 = 脚） | Station 是 rig 子物体；`SeatEyeCompensation` 写 `rigRoot.position + rigRoot.rotation * seatOffset` | 是 |
+| 1 | **玩家的身体在哪**（`VRCStation` 所在 Transform，站立 Station 的锚点 = 脚） | `SeatEyeCompensation` 把该 Transform 写为 `rigRoot.position + rigRoot.rotation * seatOffset`（`seatAnchor` 就是它）；`stationEnterPlayerLocation` 只决定入座瞬间把人放在哪，装配器把两者都归一到 rig 位姿（enter 相对 station 零偏移），朝向继承 rig | 是 |
 | 2 | **眼点在哪** | `FollowRigMath` + motor 的 4 个系数（来自 `RideViewMath`，装配器写入） | 是，线性、无底座 |
 | 3 | **玩家眼高** | `BallRideStation` 经 `SetAvatarEyeHeightByMeters` 按 `RideScaleMath` 设置，`GetAvatarEyeHeightAsMeters` 读回 | 是，正比于球径 |
 
@@ -89,7 +90,9 @@
 
 ## 3. η 与座位（`RideStanceMath`、`SeatEyeCompensation`）
 
-- Station 由装配器设为**站立**（VRCStation `seated` 关）：坐姿会把大腿塞进球里。
+- Station 由装配器设为**站立**（VRCStation `seated` 关）且是**移动站**（`PlayerMobility = ImmobilizeForVehicle`）：Station 是 rig 根的子物体，眼点每帧动、补偿又写它的位置，所以它是"会动的 station"；VRChat 对这类的文档配置就是 Immobilize For Vehicle。装配器把 VRCStation 所在 Transform 与 `stationEnterPlayerLocation` 都归一到 `FollowRigRoot` 的位姿（enter 相对 station 因而零偏移），并把 `SeatEyeCompensation.followRigRoot` / `seatAnchor` 分别写成 rig 根与 **VRCStation 本体**。装配完成后回读代理字段、Udon 变量表与 VRCStation 的 `seated`/`PlayerMobility`。
+- 为什么锚点是 Station 本体而不是子物体 enter：VRChat 用 `VRCStation` 所在 Transform 搬运坐着的玩家（车辆 Station 就是这么动的），`stationEnterPlayerLocation` 只在入座瞬间决定落点。把补偿写到 enter 子物体会在 ClientSim 里生效（它每帧 `SitPosition(EnterLocation())`），却不一定被真客户端搬运；写 Station 本体在两种实现下都搬运玩家，前提是 enter 相对 Station 零偏移（本装配保证）。
+- StoryMode 基底的实际 enter 是 `FollowRigRoot/RideRoot/RideSeat/StandPoint`，原值是 (+0.45, −0.15, 0) m；跳过装配会保留这个偏移。它会被当成头偏移的一部分，而水平护栏是 0.35 m × E/1.64（站姿 E = 2.6546·r，即 0.566·r）：0.3 m 球（r = 0.15）只补偿 0.085 m，残余 0.365 m 横向偏移——这就是"坐在球的右侧"；同时 −0.15 m 让有 η 时头比眼点低 0.15 m。装配后 enter 局部为 (0, 0, 0)、姿态与 Station 相同。HUD 直接跟随眼点和 yaw，所以 HUD 朝向正常不能证明头在正确位置。
 - 入座并稳定后，在 `PostLateUpdate` 里读本地玩家 `GetTrackingData(Head)`，换算到 rig 坐标系、相对锚点，取窗口平均，冻结。η = 头.y ÷ 测量时的眼高
   （`RideStanceMath.TryMeasureEta`），护栏 [0.75, 1.25]（不是产品值：坐姿头约 0.5 个眼高）。
 - **座位**：水平位置让视点落在眼点；有 η 时竖直位置让锚点（脚）落在球最低点（`FeetTargetInRig` = 球心.y − r − rig.y，每帧从 motor 读，球的滤波滞后不会让脚离地），
@@ -167,7 +170,7 @@ HUD 放在球的左边、视轴下 12°：直视前方和低头看手（接触�
    不调用 `RideUxAssembler`；而 base 本身也没装配过骑乘 UX。同一原因让 AllMapsHub 里的眼点系数、Station 姿态、骑手缩放全是旧默认值——
    **如果所有者是在 AllMapsHub 里测的，他测到的是默认机位 + 不缩放的骑手，不是任何一版骑乘几何**（1.6 m 眼高的人骑 0.3 m 的球，球确实在脚下）。
 3. 修复：`AllMapsHubAssembler` 在 `HubAssembler.Run` 之后调用 `RideUxAssembler.AssembleOpenScene(problems)`，报告里逐行带 `ride:` 前缀，骑乘装配的 PROBLEM 计入总问题数（有问题不存盘）。
-   放在大厅装配**之后**：大厅装配创建 `VrStickMoveInput`，骑乘装配要把它写进 `BallRideStation.vrInput`；骑乘装配不移动 `BallRideStation`/VRCStation（大厅的 launcher 引用它们），
+   放在大厅装配**之后**：大厅装配创建 `VrStickMoveInput`，骑乘装配要把它写进 `BallRideStation.vrInput`；骑乘装配不重建、不重挂 `BallRideStation`/VRCStation（大厅的 launcher 按组件引用它们），只把 Station 与它的 enter 位姿归一到 rig（装配后的场景里这已是零位移，重复运行 `~0`），
    把 `RetryButton` 连同大厅加的「回大厅」子物体整体移进结果卡（两者共用 `HubAssembler.LayoutRetryForReturn`），重试按钮有 launcher 时不改大厅写的「再来一次」文字。
    之后 `CheckRideVrInput` 确认 `BallRideStation.vrInput` 就是场景里唯一的 `VrStickMoveInput`，否则报 PROBLEM。
 
@@ -177,26 +180,29 @@ HUD 放在球的左边、视轴下 12°：直视前方和低头看手（接触�
 
 0. `refresh_unity`，`read_console` 0 错误（`BallRideStation` 新增 `vrInput` 字段，U# 程序要重编）。
 1. 执行 `VRC Katamari/Hub/Assemble All-Maps Hub`（会从 `StoryMode.unity` 重新生成 AllMapsHub 并自动跑骑乘装配）。预期：
-   - 报告里有 `ride: [ride-ux] done: +N ~M problems=0` 一段，note 里有 `push stance written to the motor (push angle 45 deg)`、`the VRCStation is a standing station (seated off)`、
+   - 报告里有 `ride: [ride-ux] done: +N ~M problems=0` 一段，note 里有 `push stance written to the motor (push angle 45 deg)`、`the VRCStation is a standing, moving-station station (seated off, PlayerMobility=ImmobilizeForVehicle)`、
      `panel root created under the follow frame`、`HUD canvas 'StoryHud' is world-space under RidePanels`；总报告 `problems=0` 且 `saved Assets/_RefUnlicensed/Scenes/AllMapsHub.unity`；
    - 若报告 `BallRideStation's Udon variable table lacks: … vrInput`（或 `panelRoot`）：按提示编译 → 存 base 与程序资产 → 重开 → 再生成一次，不可当通过；
    - 然后 `VRC Katamari/Hub/Check Room Wiring` 结尾 `0 problem(s)`。
    在单独的 `StoryMode.unity`（非大厅）上手动执行 `Assemble Ride UX` 时，场景里没有 `VrStickMoveInput` 是正常的，报告记 note `BallRideStation.vrInput left as it is`，不算 PROBLEM。
 2. 读场景（Inspector 或 MCP 读组件）：
-   - motor：`eyeBaseUpMeters = 0`、`eyeUpPerRadius = 1.654625`、`eyeBaseBackMeters = 0`、`eyeBackPerRadius = 1.176792`、`eyeUpMaxMeters = eyeMaxBackM = 128`；
-   - VRCStation `seated = false`；`BallRideStation.scaleRiderWithBall = true`、`panelRoot` 指向 `FollowRigRoot/RidePanels`、`vrInput` 指向根物体 `VrStickMoveInput`（与 `StoryRoundController.vrInput` 同一个）；`SeatEyeCompensation.motor` 已连、`verticalLimitMeters = 2.1`；
+   - motor：`eyeBaseUpMeters = 0`、`eyeUpPerRadius = 1.654625`、`eyeBaseBackMeters = 0`、`eyeBackPerRadius = 1.176792`、`eyeUpMaxMeters = eyeMaxBackM = 128`（这两个只钳加性底座，本装配的底座为 0，所以它们不限制眼点；半径项由球径上限约束）；
+   - VRCStation `seated = false`、`PlayerMobility = Immobilize For Vehicle`（2，不是 Immobilize）；`BallRideStation.scaleRiderWithBall = true`、`panelRoot` 指向 `FollowRigRoot/RidePanels`、`vrInput` 指向根物体 `VrStickMoveInput`（与 `StoryRoundController.vrInput` 同一个）；
+   - `SeatEyeCompensation.motor` 已连、`verticalLimitMeters = 2.1`、`followRigRoot = FollowRigRoot`、`seatAnchor = RideSeat`（VRCStation 本体，不是子物体 `StandPoint`）；VRCStation 的 `stationEnterPlayerLocation = RideSeat/StandPoint`，`stationExitPlayerLocation = RideSeat/RideExitPoint`；
+   - 场景位姿：`RideSeat`、`StandPoint` 与 `FollowRigRoot` 世界位置/朝向相同（`RideSeat` 经 `RideRoot` 两级 local 均为零；`StandPoint.localPosition = (0, 0, 0)`、`localRotation = identity`、`localScale = 1`）。若仍是 (0.45, −0.15, 0)，说明骑乘装配没跑或失败，按报告 PROBLEM 处理，不能当通过；
    - `StoryHud`：Canvas Render Mode = World Space，父物体 `RidePanels`，层 8，pivot (0.5, 0.5)，sizeDelta (1000, 260)，localScale 0.0014，
      localPosition ≈ (−0.964, −0.333, 1.233)（`HudLocalPosition(1.6, −38, −12)`）；`RideResultCard`、`RideExitPanel` 也在 `RidePanels` 下；场景里不再有 Render Mode = Screen Space Overlay 的 `StoryHud`。
    - AllMapsHub 文件只读复核（Linux 侧可用 `ssh pc114514` + `Select-String`）：`StoryHud` 的 `m_RenderMode: 2`，`eyeUpPerRadius: 1.654625`、`eyeBackPerRadius: 1.176792`，
-     `seated: 0`，`scaleRiderWithBall: 1`，`m_Name: RidePanels` 存在，`vrInput:` 不是 `{fileID: 0}`。
-3. `run_tests`：`VRCKatamari.Tests.EditMode` 中 `Riding` 全过（RideView / RideScale / RideStance / SeatEye）；U# 全量编译无新错误。
+     `seated: 0`、`PlayerMobility: 2`，`scaleRiderWithBall: 1`，`StandPoint` 的 `m_LocalPosition: {x: 0, y: 0, z: 0}`，`m_Name: RidePanels` 存在，`vrInput:` 不是 `{fileID: 0}`，`SeatEyeCompensation` 的 `seatAnchor` 指向 `RideSeat`。
+3. `run_tests`：`VRCKatamari.Tests.EditMode` 中 `Riding` 全过（RideView / RideScale / RideStance / SeatEye）；U# 全量编译无新错误。其中 `RideAssemblerAlignsTheStationAndEntryToTheRideFrame` 需要真编辑器（预览场景 + UdonSharpUndo），本地 Roslyn 运行器会报"不可执行"，以 Unity 里跑的结果为准；它断言装配后 `StandPoint`/`RideSeat` 都在 rig 位姿、`seatAnchor = RideSeat`、VRCStation 为站立移动站（`seated=false`、`PlayerMobility=2`）。
 4. Play（ClientSim），从大厅选关入座，读 Console：
-   - `[seat] locked`，`[ride] seat calibrated: eta ≈ 1 …`（或 `no usable stance (reason N)`，记下 N）；
+   - `[seat] locked` 行里的 `offset` 水平分量应接近测量到的人头小偏移（不再是固定 −0.34 左右）、`left` ≈ 0；若 `left` 很大说明 enter 仍有固定偏移；`[ride] seat calibrated: eta ≈ 1 …`（或 `no usable stance (reason N)`，记下 N）；
    - 球径约 0.3 / 1 / 2 m 时 `[ride] eye height …`：E ≈ 0.398 / 1.327 / 2.655 m（÷η），`eyeError` < 0.02·E；`handGap` 记下（ClientSim 的手是动画手，只作参考）；
    - `RidePanels.localScale` ≈ E/1.64（0.3 m 球约 0.243）。
-5. 截图（玩家视角，Game 视图 1920×1080；pitch 0 一张、低头看手一张；球径 0.3 m 和 ≥ 1 m 各一组）：要能同时看到 **手的位置、球、HUD**。
+5. 同一帧记录球心、FollowRigRoot 位置/yaw、实际 enter 位置/朝向、VRCStation 位置/朝向、HMD 追踪头的位置/朝向以及 `RidePanels` 位置/朝向。用 rig 的四元数逆旋转各位置差（不除缩放）；在静止、横移及左右转向各测一次。`Rig−球心` 坐标的 X 应接近 0，Z ≈ −1.176792·r，静止时 Y ≈ 1.654625·r；`RidePanels−Rig` 应为零；`Station−Rig` 与 `Enter−Rig` 应为零。居中站立、校准锁定并完成缩放后，`Head−Rig` 水平应接近零（侧向 |right| < 0.05 m 视为测量噪声）；入座静止时 `Head−Station` 与 `Head−Enter` 相同。如果不为零，记 `GetState()`、`GetLastRefusal()`、`GetSeatOffsetMeters()`、`GetUncompensatedMeters()`、请求/读回的眼高，再对比 `Head−Enter` 与 `Head−TrackingData(Origin)`；真实 VR 左右换站位后分别重新上球，区分房间追踪偏移与补偿限幅，保留探头自由。
+6. 截图（玩家视角，Game 视图 1920×1080；pitch 0 一张、低头看手一张；球径 0.3 m 和 ≥ 1 m 各一组）：要能同时看到 **手的位置、球、HUD**。
    预期：直视时球上沿在视轴下约 25°、HUD 在左下离球约 10°；低头时手在球背上（接触点在视轴下约 64°）。另截一张 Scene 视图侧视：脚在地面、眼在球心后上方。
-6. 下车：`[ride] station exit reason=station-exit wasSeated=True inputWired=True vrInputWired=True seatEyeWired=True`、`[ride] eye height restored to <原值>`，`RidePanels.localScale` 回 1；重复入座/下车 3 次结果一致。
+7. 下车：`[ride] station exit reason=station-exit wasSeated=True inputWired=True vrInputWired=True seatEyeWired=True`、`[ride] eye height restored to <原值>`，`RidePanels.localScale` 回 1；重复入座/下车 3 次结果一致。
 
 **给所有者亲测**（头显，桌面各一次）：
 1. 刚上球：低头时手是否刚好按在球背上（伸手就碰到、不用弯腰也不用伸直）？脚是否在地上？`handGap` 日志接近 0 即为对。

@@ -131,35 +131,9 @@ class HubLevelsTest(unittest.TestCase):
             self.assertGreaterEqual(len(hub["levels"]), 1)
         self.assertEqual(len(self.data["hubs"][0]["levels"]), 4)
 
-    def test_every_level_declares_a_max_ball_diameter(self):
-        # Owner 2026-11-18: the ball's size cap is a per-level parameter, as in the
-        # original (MAS1 30 cm, Cancer 1.2 m). The hub writes one cap per level to the
-        # motor before the round reset, so a level without an entry would silently
-        # inherit the previous level's cap.
-        for lv in self.data["levels"]:
-            lid = lv["id"]
-            self.assertIn("maxDiameterM", lv, lid)
-            cap = lv["maxDiameterM"]
-            self.assertIsInstance(cap, (int, float), lid)
-            self.assertGreater(cap, 0, lid)
-            start = lv.get("start", {}).get("diameterM", 0)
-            if start:
-                self.assertLess(start, cap, f"{lid}: the start ball must fit under its cap")
-
-    def test_the_cancer_level_keeps_the_original_1_2_m_cap(self):
-        # The original Cancer level's ball caps at about 1.2 m; eleven of its props need
-        # a 1.27-6.45 m ball, so under the original cap they are never absorbable. That is
-        # the owner's reason for restoring the cap (Docs/OPEN_DECISIONS.md (n)).
-        by_id = {lv["id"]: lv for lv in self.data["levels"]}
-        self.assertEqual(by_id["_ref_cancer"]["maxDiameterM"], 1.2)
-
-    def test_our_own_levels_keep_the_authored_engineering_cap(self):
-        # Our levels never had a gameplay cap of their own: they used the motor's single
-        # authored 30 m envelope. The per-level decision must not silently tighten them.
-        for lv in self.data["levels"]:
-            if lv["id"].startswith("_ref_"):
-                continue
-            self.assertEqual(lv["maxDiameterM"], 30.0, lv["id"])
+    def test_levels_do_not_override_the_global_ball_cap(self):
+        for level in self.data["levels"]:
+            self.assertNotIn("maxDiameterM", level, level["id"])
 
 
 if __name__ == "__main__":

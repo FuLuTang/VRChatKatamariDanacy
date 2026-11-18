@@ -37,7 +37,7 @@
 | 侧 | 公式 | 每确认单位的体积 | 到 2.20 m 需要的确认单位 |
 |---|---|---|---|
 | 离线模型 | `V = V(0.30) + units × ((V(2.20) − V(0.30)) / 1356)`（[`round_model.py`](../Gameplay/round_model.py) 的 `diameter_for_units()`，`units_to_max_diameter` 见 `RoundParams.units_to_max_diameter`） | 0.0041011 m³ | **1356** |
-| 运行时（重标定后） | `V = (baseline + units) × cubicMetersPerVolumeUnit`，`KatamariBallMotor.baselineVolumeUnits = 3.4390244`、`KatamariBallMotor.cubicMetersPerVolumeUnit = 0.0041`（旧标定口径：这些常数已在体积迁移 C 步删除；现行球径上限是每关 `maxDiameterM`：Cancer 1.2 m / 自有关 30 m） | 0.0041 m³ | **≈1356.4** |
+| 运行时（重标定后） | `V = (baseline + units) × cubicMetersPerVolumeUnit`，`KatamariBallMotor.baselineVolumeUnits = 3.4390244`、`KatamariBallMotor.cubicMetersPerVolumeUnit = 0.0041`（旧标定口径：这些常数已在体积迁移 C 步删除；全局球径上限 400 m） | 0.0041 m³ | **≈1356.4** |
 
 重算（用代码里的常数，不引用任何旧文档）：起始体积 `3.4390244 × 0.0041 = 0.0141 m³` → 起始直径 `0.29974 m`；满径体积 `(π/6) × 2.20³ = 5.57528 m³`；确认单位 `5.57528 / 0.0041 − 3.4390244 = 1356.39`（float32 下 1356.4 就饱和到 2.20 m）。于是：
 
@@ -499,7 +499,7 @@ RoundParams.from_ruleset(ruleset_id=None)   # 读 Docs/config/rulesets/<id>.json
 | # | 参数 | 机器可读副本（file:line） | 份数 | 应交真源 |
 |---|---|---|---|---|
 | 1 | 起始球径 0.30 m | `layout.json` `scale.ball_start_collision_diameter_m`、`round_model.py` `RoundParams.start_diameter_m`（运行时由 `KatamariBallMotor.baselineVolumeUnits` / `cubicMetersPerVolumeUnit` 派生为 0.29974） | 2 | layout |
-| 2 | 最大球径（每关） | `hub_levels.json` 每关 `maxDiameterM`（`_ref_cancer` 1.2 m；我们自己的关 30 m 工程护栏）→ `KatamariBallMotor.maxBallDiameterM`（语义直径，米，切关由 `LevelSwitchHost` 写入） | 2 | `hub_levels.json` / 电机 |
+| 2 | 全局最大球径 | `KatamariBallMotor.GlobalMaxBallDiameterM`（400 m，语义直径；所有地图一样） | 1 | 电机 |
 | 3 | 交分残差 `bank_residual_fraction` | `layout.json` `bank.rules.bank_residual_fraction`、`KatamariBallMotor.bankResidualFraction`、`round_model.py` `RoundParams.bank_residual_fraction` | 3 | layout |
 | 4 | 交分最小球径 0.55 m | `layout.json` `bank.rules.bank_min_conversion_diameter_m`、`KatamariBallMotor.minConversionDiameterWorldM`、`round_model.py` `RoundParams.min_bank_diameter_m` | 3 | layout |
 | 5 | 交分轮换周期 60 s | `layout.json` `scale.bank_anchor_period_s`、`layout.json` `bank.rotation.period_s`、`round_model.py` `RoundParams.bank_cycle_s` | 3 | layout |

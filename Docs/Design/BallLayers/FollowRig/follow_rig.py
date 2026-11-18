@@ -103,18 +103,22 @@ def try_update(height_filter_hz: float,
                eye_max_back_m: float,
                reset_to_teleport: bool,
                has_previous_frame: bool,
-               previous_rig_position: Vector3,
                previous_rig_yaw_deg: float,
                previous_height_m: float) -> Tuple[FollowFrame, float]:
     """Advance the filtered frame by one sample; returns (frame, height above centre).
 
     `ball_position` is the ball's CENTRE and `ball_radius_m` its drawn radius.
     `height_m` in the result is the committed height above that centre; pass it
-    back with the returned position and yaw on the next call. Yaw is in
+    back with the returned yaw on the next call. Yaw is in
     [0, 360). The frame is ``ballCentre - forward * back + up * height`` with
     ``back = eye_base_back_m + radius * eye_back_per_radius`` and
     ``height = eye_base_up_m + radius * eye_up_per_radius``, so the camera sits
     behind and above the ball and both terms grow with the radius.
+
+    The max rails bound the constant terms only (``eye_base_*_m``); the
+    radius-proportional terms are the stance and are left unclamped, because a
+    fixed metre ceiling would pin the eye inside a big ball. ``eye_up_min_m`` is
+    a floor on the total height above the centre.
     """
     # Validation order mirrors FollowRigMath.TryUpdate exactly.
     filter_hz = _scalar(height_filter_hz, "height_filter_hz", non_negative=True)
@@ -141,7 +145,6 @@ def try_update(height_filter_hz: float,
     # not force the caller to repair a stale frame first.
     use_previous = has_previous_frame and not reset_to_teleport
     if use_previous:
-        previous_position = _vector3(previous_rig_position, "previous_rig_position")
         previous_yaw = _scalar(previous_rig_yaw_deg, "previous_rig_yaw_deg")
         previous_height = _scalar(previous_height_m, "previous_height_m")
 
@@ -150,18 +153,21 @@ def try_update(height_filter_hz: float,
 
     # Behind and above the ball, both measured from its CENTRE and both growing
     # with its radius.
-    target_height = base_up + radius * up_per_radius
+    # The max rails cap only the constant terms; the radius terms are the stance and
+    # must not be pinned (a fixed metre ceiling puts the eye inside a 400 m ball).
+    base_height = min(base_up, up_max)
+    target_height = base_height + radius * up_per_radius
     if not math.isfinite(target_height):
         raise OverflowError("eye target height overflow")
-    target_height = _clamp(target_height, up_min, up_max)
+    if target_height < up_min:
+        target_height = up_min
 
-    back = base_back + radius * back_per_radius
+    constant_back = min(base_back, max_back)
+    back = constant_back + radius * back_per_radius
     if not math.isfinite(back):
         raise OverflowError("eye back offset overflow")
     if back < 0.0:
         back = 0.0
-    if back > max_back:
-        back = max_back
 
     target_yaw = _wrap360(yaw_input)
     if not use_previous:
@@ -173,20 +179,16 @@ def try_update(height_filter_hz: float,
     # Behind the ball along the frame's own (filtered) yaw, so the offset
     # direction and the facing written to the transform can never disagree.
     yaw_radians = math.radians(yaw)
-    target_x = position[0] - math.sin(yaw_radians) * back
-    target_z = position[2] - math.cos(yaw_radians) * back
+    x = position[0] - math.sin(yaw_radians) * back
+    z = position[2] - math.cos(yaw_radians) * back
 
     if not use_previous:
-        x = target_x
-        z = target_z
-        height = _clamp(target_height, up_min, up_max)
+        height = target_height
     else:
-        # A changed bound must not make the stored height illegal.
-        prior_height = _clamp(previous_height, up_min, up_max)
-        height = _clamp(prior_height + (target_height - prior_height) * alpha_height,
-                        up_min, up_max)
-        x = previous_position[0] + (target_x - previous_position[0]) * alpha_height
-        z = previous_position[2] + (target_z - previous_position[2]) * alpha_height
+        # A lowered rail must not make the stored height illegal; a shrunken ball is
+        # allowed to glide down, so the floor is the only clamp the filter needs.
+        prior_height = max(previous_height, up_min)
+        height = max(prior_height + (target_height - prior_height) * alpha_height, up_min)
 
     y = position[1] + height
     if not math.isfinite(x) or not math.isfinite(y):
@@ -237,7 +239,6 @@ class FollowRig:
         filters and shortest-arc yaw interpolation.
         """
         has_previous = self._frame is not None
-        previous_position = self._frame.position if self._frame else (0.0, 0.0, 0.0)
         previous_yaw = self._frame.yaw_deg if self._frame else 0.0
         previous_height = self._height_m if self._height_m is not None else 0.0
         frame, height = try_update(
@@ -245,7 +246,7 @@ class FollowRig:
             ball_position, ball_radius_m, horizontal_yaw_deg, dt_s,
             eye_base_up_m, eye_up_per_radius, eye_up_min_m, eye_up_max_m,
             eye_base_back_m, eye_back_per_radius, eye_max_back_m,
-            reset, has_previous, previous_position, previous_yaw, previous_height)
+            reset, has_previous, previous_yaw, previous_height)
         # Atomic commit after try_update returned a fully checked candidate.
         self._frame = frame
         self._height_m = height

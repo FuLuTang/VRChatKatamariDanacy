@@ -7,21 +7,23 @@ using VRCKatamari.Editor.LevelBuild;
 namespace VRCKatamari.Editor.Hub
 {
     /// <summary>
-    /// The hub room's art layout, <c>Tools/hubart/hub_layout.json</c>: the three wall boards,
-    /// every text box, level card and settings row, in hub-local metres. The Blender script
-    /// <c>Tools/hubart/build_hub_room.py</c> builds the model and one <c>Anchor_*</c> empty per
-    /// element from the same file; the hub assembler reads it for sizes, glyph heights and the
-    /// anchors' expected positions.
+    /// The hub room's layout, <c>Tools/hubart/hub_layout.json</c>: palette, lamps and the three
+    /// wall boards' places and sizes, in hub-local metres. The Blender script
+    /// <c>Tools/hubart/build_hub_room.py</c> builds the room model (with each board's coloured
+    /// frame and one <c>Anchor_Board_&lt;id&gt;</c> empty) from the same file; the hub assembler
+    /// places each board's panel prefab (HUB_PANEL_PREFAB.md) at <see cref="CanvasCenter"/> and
+    /// checks the board anchors.
     /// </summary>
     /// <remarks>
     /// Frames: hub-local Unity metres, origin <c>HubCenter</c>. A board's readable side faces
     /// its local -Z after a yaw of <c>yawDeg</c> about +Y (the same side a world-space Canvas
-    /// shows); on a board x is the reader's right, y up, depth towards the reader.
+    /// shows); on a board x is the reader's right, y up. The canvas plane is
+    /// <c>canvasDepthM</c> in front of the board plane (towards the reader).
     /// </remarks>
     internal sealed class HubRoomLayout
     {
         public const string RepoRelativePath = "Tools/hubart/hub_layout.json";
-        public const string Schema = "katamari.hub-layout/1";
+        public const string Schema = "katamari.hub-layout/2";
 
         public sealed class Board
         {
@@ -29,6 +31,8 @@ namespace VRCKatamari.Editor.Hub
             public Vector3 Center;
             public float YawDeg;
             public Vector2 Size;
+            /// <summary>Palette name of the board frame (the model; the prefab's title band matches).</summary>
+            public string Frame;
 
             public Quaternion Rotation { get { return Quaternion.Euler(0f, YawDeg, 0f); } }
 
@@ -39,46 +43,13 @@ namespace VRCKatamari.Editor.Hub
             }
         }
 
-        /// <summary>One text box or button face on a board, in board metres.</summary>
-        public sealed class Box
-        {
-            public string Board;
-            public float X;
-            public float Y;
-            public float W;
-            public float H;
-            public float Depth;
-            public float Em;
-            public TextAnchor Align = TextAnchor.MiddleCenter;
-            public bool White;
-        }
-
-        public sealed class Card
-        {
-            public int Index;
-            public Box Button;
-            public Box Preview;
-            public Box Name;
-            public Box Goal;
-            public Box Record;
-            public Box Start;
-        }
-
-        public sealed class Row
-        {
-            public int Id;
-            public Box Label;
-            public Box Value;
-            public Box Less;
-            public Box More;
-        }
-
         public string ModelPath;
+        /// <summary>Metres per canvas unit (0.001: one unit is a millimetre).</summary>
+        public float CanvasMetresPerUnit = 0.001f;
+        /// <summary>Canvas plane, metres in front of the board plane.</summary>
+        public float CanvasDepthM = 0.06f;
         public string ModelRootName;
         public readonly Dictionary<string, Board> Boards = new Dictionary<string, Board>();
-        public readonly Dictionary<string, Box> Texts = new Dictionary<string, Box>();
-        public readonly List<Card> Cards = new List<Card>();
-        public readonly List<Row> Rows = new List<Row>();
         public readonly Dictionary<string, Color> Palette = new Dictionary<string, Color>();
         public readonly List<Vector3> Lamps = new List<Vector3>();
 
@@ -124,6 +95,13 @@ namespace VRCKatamari.Editor.Hub
             LevelJsonNode model = root.Get("model");
             l.ModelPath = model != null ? model.GetString("fbx", "") : "";
             l.ModelRootName = model != null ? model.GetString("rootName", "") : "";
+            l.CanvasMetresPerUnit = root.GetFloat("canvasMetresPerUnit", 0.001f);
+            l.CanvasDepthM = root.GetFloat("canvasDepthM", 0.06f);
+            if (!(l.CanvasMetresPerUnit >= 0.001f && l.CanvasMetresPerUnit <= 0.01f))
+            {
+                errors.Add("hub layout canvasMetresPerUnit " + l.CanvasMetresPerUnit
+                    + " is outside 0.001-0.01 (VRChat's world UI scale range)");
+            }
 
             LevelJsonNode palette = root.Get("palette");
             for (int i = 0; palette != null && i < palette.Count; i++)
@@ -154,55 +132,9 @@ namespace VRCKatamari.Editor.Hub
                     Center = new Vector3(c[0], c[1], c[2]),
                     YawDeg = b.GetFloat("yawDeg", 0f),
                     Size = new Vector2(size[0], size[1]),
+                    Frame = b.GetString("frame", "Hub_Pink"),
                 };
                 l.Boards[board.Id] = board;
-            }
-
-            LevelJsonNode texts = root.Get("texts");
-            for (int i = 0; texts != null && i < texts.Count; i++)
-            {
-                LevelJsonNode t = texts.At(i);
-                Box box = ReadBox(t, t.GetString("board"), 0f, 0f, 0f);
-                box.White = t.GetString("color", "") == "Hub_White";
-                l.Texts[t.GetString("id")] = box;
-            }
-
-            LevelJsonNode cards = root.Get("levelCards");
-            for (int i = 0; cards != null && i < cards.Count; i++)
-            {
-                LevelJsonNode n = cards.At(i);
-                string board = n.GetString("board");
-                float x = n.GetFloat("x", 0f);
-                float y = n.GetFloat("y", 0f);
-                var card = new Card { Index = n.GetInt("index", i) };
-                card.Button = new Box
-                {
-                    Board = board, X = x, Y = y, W = n.GetFloat("w", 0f), H = n.GetFloat("h", 0f),
-                    Depth = n.GetFloat("depth", 0f) + 0.03f,
-                };
-                card.Preview = ReadBox(n.Get("preview"), board, x, y, 0f);
-                card.Name = ReadBox(n.Get("name"), board, x, y, 0f);
-                card.Goal = ReadBox(n.Get("goal"), board, x, y, 0f);
-                card.Record = ReadBox(n.Get("record"), board, x, y, 0f);
-                card.Start = ReadBox(n.Get("start"), board, x, y, 0f);
-                card.Start.White = true;
-                card.Preview.White = true;
-                l.Cards.Add(card);
-            }
-
-            LevelJsonNode rows = root.Get("settingRows");
-            for (int i = 0; rows != null && i < rows.Count; i++)
-            {
-                LevelJsonNode n = rows.At(i);
-                string board = n.GetString("board");
-                float y = n.GetFloat("y", 0f);
-                float h = n.GetFloat("h", 0.14f);
-                var row = new Row { Id = n.GetInt("id", i) };
-                row.Label = ReadBox(n.Get("label"), board, 0f, y, h);
-                row.Value = ReadBox(n.Get("value"), board, 0f, y, h);
-                row.Less = ReadBox(n.Get("less"), board, 0f, y, h);
-                row.More = ReadBox(n.Get("more"), board, 0f, y, h);
-                l.Rows.Add(row);
             }
 
             LevelJsonNode lamps = root.Get("lampsLocal");
@@ -217,65 +149,24 @@ namespace VRCKatamari.Editor.Hub
             {
                 errors.Add("the hub layout needs the boards Levels, Help and Settings");
             }
-            foreach (Box box in l.AllBoxes())
-            {
-                if (!l.Boards.ContainsKey(box.Board ?? ""))
-                {
-                    errors.Add("a hub layout element names the unknown board '" + box.Board + "'");
-                    break;
-                }
-            }
             layout = l;
             return errors.Count == 0;
         }
 
-        private static Box ReadBox(LevelJsonNode n, string board, float x0, float y0, float rowH)
+        /// <summary>Hub-local position of a board's canvas centre (the canvas plane, facing the reader).</summary>
+        public Vector3 CanvasCenter(Board board)
         {
-            var box = new Box { Board = board };
-            if (n == null) return box;
-            box.X = x0 + n.GetFloat("x", 0f);
-            box.Y = y0 + n.GetFloat("y", 0f);
-            box.W = n.GetFloat("w", 0f);
-            box.H = n.GetFloat("h", rowH);
-            box.Depth = n.GetFloat("depth", 0f);
-            box.Em = n.GetFloat("em", 0f);
-            string align = n.GetString("align", "center");
-            box.Align = align == "left" ? TextAnchor.MiddleLeft
-                : align == "right" ? TextAnchor.MiddleRight : TextAnchor.MiddleCenter;
-            return box;
-        }
-
-        public IEnumerable<Box> AllBoxes()
-        {
-            foreach (Box b in Texts.Values) yield return b;
-            foreach (Card c in Cards)
-            {
-                yield return c.Button; yield return c.Preview; yield return c.Name;
-                yield return c.Goal; yield return c.Record; yield return c.Start;
-            }
-            foreach (Row r in Rows)
-            {
-                yield return r.Label; yield return r.Value; yield return r.Less; yield return r.More;
-            }
-        }
-
-        /// <summary>Hub-local position and rotation of a box (its face centre, facing the reader).</summary>
-        public void Pose(Box box, out Vector3 position, out Quaternion rotation)
-        {
-            Board b = Boards[box.Board];
-            position = b.Point(box.X, box.Y, box.Depth);
-            rotation = b.Rotation;
+            return board.Point(0f, 0f, CanvasDepthM);
         }
 
         /// <summary>
-        /// The anchor name the Blender script gives an element; the assembler compares the
-        /// imported anchor with <see cref="Pose"/> to catch an axis or scale error in the FBX.
+        /// The empty the Blender script puts at a board's canvas centre; the assembler compares
+        /// the imported anchor with <see cref="CanvasCenter"/> to catch an axis or scale error in
+        /// the FBX (the board's frame would then not sit behind its canvas).
         /// </summary>
-        public static string AnchorName(string kind, int index, string part)
+        public static string BoardAnchorName(string boardId)
         {
-            if (kind == "Text") return "Anchor_Text_" + part;
-            if (kind == "Level") return "Anchor_Level" + index + "_" + part;
-            return "Anchor_Setting" + index.ToString("00") + "_" + part;
+            return "Anchor_Board_" + boardId;
         }
     }
 }

@@ -195,27 +195,29 @@ namespace VRCKatamari.Pickup
         public const float AbsorbVolumeRatio = 10f;
 
         /// <summary>
-        /// A numerical sanity ceiling for one item's ORIGINAL volume, 1000 m3. Not a gate.
+        /// Numerical sanity bound on one item's ORIGINAL volume (k * bbox), NOT a gate.
         /// </summary>
         /// <remarks>
+        /// <para>
         /// The retired field was `maxItemVolumeWorldM3 = 512` (an 8 m cube) used as
         /// `min(ceiling, ballVolume / ratio)` - a hard cap coupled to the ball's own size,
         /// which is exactly the coupling the original does not have. With the gate compared
         /// in whole millimetres the cap is unnecessary: an item bigger than the ball simply
-        /// has a larger Req. 1000 m3 is ~1,792x the largest item the 2.20 m ball cap can
-        /// absorb (`pi/6 * 2.2^3 / 10 = 0.558 m3`) and above any single prop in the content
-        /// (the biggest level totals ~3,022 m3 ACROSS all props), so only a corrupt bounds
-        /// triple can reach it; the constant keeps such a product from producing an
-        /// infinity or a nonsense Req that a reader would trust.
+        /// has a larger Req.
+        /// </para>
+        /// <para>
+        /// Derivation at the one global cap (<c>KatamariBallMotor.GlobalMaxBallDiameterM</c> =
+        /// 400 m, owner 2026-11-18). The biggest item a cap-sized ball may absorb is
+        /// <c>V_cap / AbsorbVolumeRatio = (pi/6 * 400^3) / 10 = 3,351,032.2 m^3</c>. This
+        /// bound is ten times that: <c>pi/6 * 400^3 = 33,510,321.6 m^3</c>, i.e. the cap
+        /// ball's own volume, rounded down to the float32 grid (33,510,320 m^3). For scale,
+        /// the whole reference level's 511 props total ~3,022 m^3, so only corrupt bounds can
+        /// reach it. The verdict for such a triple is "too large / blocking", never
+        /// "infinite": a product that overflows float already fails the finiteness check in
+        /// <see cref="TryComputeOriginalItemVolume"/>.
+        /// </para>
         /// </remarks>
-        /// <summary>
-        /// Numerical sanity bound on one item's AABB volume, NOT a gate. With the global
-        /// 30 m ball cap the largest legal item is <c>V_cap / 10 = 1,413.7 m^3</c>, so the
-        /// old 1,000 m^3 sat BELOW a legal item; this is that bound with a 10x margin
-        /// (14,137 m^3). A bounds triple that reaches it is broken data, and the verdict is
-        /// "too large / blocking", never "infinite".
-        /// </summary>
-        public const float MaxItemVolumeSanityWorldM3 = 14137f;
+        public const float MaxItemVolumeSanityWorldM3 = 33510320f;
 
         /// <summary>
         /// The boundary guard for the whole-millimetre floor: one micrometre, in mm.

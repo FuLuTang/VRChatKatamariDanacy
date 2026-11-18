@@ -758,7 +758,8 @@ namespace VRCKatamari.Editor.LevelBuild
             if (propsOk)
             {
                 // v1 has no declaration for "this prop is a decal", so nothing is exempt.
-                TrySyncDeclaredFields(doc, levelRoot, propsRoot, report, null);
+                bool reference = LevelPaths.IsReferenceLevelId(levelId) && LevelPaths.IsReferenceScene(out _);
+                TrySyncDeclaredFields(doc, levelRoot, propsRoot, report, null, reference ? path : null);
             }
 
             BindArenaHost(doc, levelRoot, structuresRoot, report, null, false, 0f);
@@ -3371,7 +3372,8 @@ namespace VRCKatamari.Editor.LevelBuild
         /// The sync is the only writer of the host arrays (OPEN_DECISIONS (q) U2).
         /// </remarks>
         private static void TrySyncDeclaredFields(PlacementDocument doc, Transform levelRoot,
-            Transform propsRoot, PlacementImportReport report, ISet<string> exemptFromField)
+            Transform propsRoot, PlacementImportReport report, ISet<string> exemptFromField,
+            string referencePlacementPath = null)
         {
             Dictionary<string, long> declaredGrowthMm3 = BuildDeclaredGrowthMm3(doc);
             Dictionary<string, float> declaredVolumeK = BuildDeclaredVolumeK(doc);
@@ -3382,7 +3384,7 @@ namespace VRCKatamari.Editor.LevelBuild
             Dictionary<string, string> declaredParents = BuildDeclaredParents(doc);
             TrySyncPickupField(levelRoot, report.ArenaId, propsRoot, declaredGrowthMm3,
                 declaredVolumeK, declaredVolumePenalty, declaredProxies, exemptFromField,
-                declaredParents, report);
+                declaredParents, report, doc, referencePlacementPath);
         }
 
         /// <summary>
@@ -3419,7 +3421,7 @@ namespace VRCKatamari.Editor.LevelBuild
             IDictionary<string, float> declaredVolumePenalty,
             IDictionary<string, PickupFieldAuthoringRules.PickupProxyDefinition> declaredProxies,
             ISet<string> exemptFromField, IDictionary<string, string> declaredParents,
-            PlacementImportReport report)
+            PlacementImportReport report, PlacementDocument doc, string referencePlacementPath)
         {
             PickupFieldHost[] hosts;
             if (!string.IsNullOrEmpty(arenaId))
@@ -3530,6 +3532,8 @@ namespace VRCKatamari.Editor.LevelBuild
                                  : "") + ": " + sync.Failure);
                 return false;
             }
+
+            SyncAbsorbAudio(host, doc, referencePlacementPath, report);
 
             report.Note("pickup sync wrote " + sync.PropCount + " row(s) into 8 base columns " +
                         "(+ the optional proxy columns), including propGrowthMm3 (the authored " +

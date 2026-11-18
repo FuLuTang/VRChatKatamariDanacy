@@ -26,7 +26,7 @@ Req_mm      = floor(1000 · cbrt(60 · V_item / π))      # 球体积 ≥ 10 × 
 | 层 | 位置 | 改动 |
 |---|---|---|
 | 门（唯一实现） | `Runtime/Pickup/PickupAbsorbMath.cs`：`TryComputeOriginalItemVolume`、`TryFloorMillimetres`、`TryComputePickupReqDiameterMm`、`IsBeyondAbsorbLimit`、`TryResolveAbsorbGate` | 用上面三段式替换 `TryComputeAbsorbVolumeLimit` / `IsVolumeBeyondLimit` / `IsBeyondAbsorbVolumeLimit`；`EvaluateAbsorb` 直接取 `k` 与语义直径 |
-| 常量 | 同上：`DefaultVolumeK=0.70`、`MaxVolumeK=32`、`AbsorbVolumeRatio=10`、`MaxItemVolumeSanityWorldM3=1000`、`MmFloorEpsilon=1e-3`(mm) | 比率与上限不再是序列化字段 |
+| 常量 | 同上：`DefaultVolumeK=0.70`、`MaxVolumeK=32`、`AbsorbVolumeRatio=10`、`MaxItemVolumeSanityWorldM3=33510320`、`MmFloorEpsilon=1e-3`(mm) | 比率与上限不再是序列化字段 |
 | 电机 | `Runtime/BallMotor/KatamariBallMotor.cs`：`pendingVolumeK`、`SubmitCandidateWithVolumeK`、`GetAbsorbGateDiameterMm` | 删 `maxItemVolumeWorldM3`(512) / `absorbVolumeRatio`(10) / `GetAbsorbVolumeLimitWorldM3`；候选提交携带逐件 k；`SubmitCandidate` 保留为「用 0.70」的薄委托 |
 | 场地宿主 | `Runtime/Pickup/PickupFieldHost.cs`：`propVolumeK`、`EffectiveVolumeK`、`UpdatePropObstacles`、`SubmitProp` | 逐件 k 列（可选，缺列回落 0.70）；挡路/支撑分类与提交走同一个谓词 |
 | 数据层 | `Tools/levelbuild/placement_core.py`：`DEFAULT_VOLUME_K`、`volume_k_error`、`effective_volume_k`、`absorb_diameter_req_mm`、`absorb_diameter_req`、`is_absorbable`、`DEF_KEYS`/`PROP_KEYS`、`canonical_doc`、`_check_defs`、`_check_props`、`population_tables` | `defs[].volumeK`/`props[].volumeK`（缺省 0.70，**不写默认值**）；派生的 `absorbDiameterReq`/`absorbable` 按 k 与整 mm 重算；档位表显示 Req mm |
@@ -35,7 +35,7 @@ Req_mm      = floor(1000 · cbrt(60 · V_item / π))      # 球体积 ≥ 10 × 
 | 对照 | `Docs/Design/Parity/parity_harness/run_parity.py`（G07/G08/G13、`OursLevel` 的 k 与整 mm、供给比用 k·bbox） | 三条指标从「缺机制/参数差」变「一致」 |
 | 测试 | `AbsorbSizeGateTests`（重写）、`AbsorbSizeLimitTests`（重写）、`BlockingPropMathTests`、`PickupAbsorbTests`、`RejectNoGainTests`、`PickupMotorSetOwnershipTests`、`PickupFieldAuthoringRulesTests`、`Docs/tests/levelbuild/*`、`Docs/tests/leveleditor/*`、`Docs/tests/parity/*` | 黄金值按公式重算并写出来源；新增 k 默认/覆盖、整 mm 边界、ε 守卫、挡路谓词一致性、字节不变测试 |
 
-**为什么上限从 512 m³ 变成 1000 m³ 常量**：512 是「8 m 立方体」，它和球一起被写进 `min(512, 球体积/10)`，等于给门加了一条与球耦合的硬顶——原作没有这条。改成整 mm 比较后，比球大的物件只是 `Req` 更大，天然不可吸，不需要顶。保留的 `MaxItemVolumeSanityWorldM3 = 1000` 只是**数值卫生**：2.20 m 上限球允许的最大物件是 `(π/6)·2.2³/10 = 0.558 m³`，1000 m³ 是它的约 **1,792 倍**，而整关内容（`_ref_cancer` 511 件）合计也才 3,022 m³，所以只有坏掉的 bounds 三元组能碰到它；碰到时结论是「不可吸 = 挡路」，不是「无限大」。
+**为什么上限从 512 m³ 变成球体积常量**：512 是「8 m 立方体」，它和球一起被写进 `min(512, 球体积/10)`，等于给门加了一条与球耦合的硬顶——原作没有这条。改成整 mm 比较后，比球大的物件只是 `Req` 更大，天然不可吸，不需要顶。保留的 `MaxItemVolumeSanityWorldM3 = 33,510,320` 只是**数值卫生**，按现行全局球径上限 400 m（owner 2026-11-18，`OPEN_DECISIONS` (n)）推导：`(π/6)·400³ = 33,510,321.6 m³` 就是这个球的体积，它允许的最大物件是它的 1/10 = 3,351,032 m³，常量取在球体积处，比最大合法物件高 10 倍；而整关内容（`_ref_cancer` 511 件）合计也才 3,022 m³，所以只有坏掉的 bounds 三元组能碰到它；碰到时结论是「不可吸 = 挡路」，不是「无限大」。
 
 **ε 守卫**：`floor(1000·x + 1e-3)`，单位 mm。1e-3 mm = 1 µm，约是 2.2 m 处 float32 ulp（2.4e-4 mm）的 4 倍，是 mm 量子的 1/1000，也远小于作者数据的 0.1 mm 分辨率。它只把「本来正好落在整 mm 上、被浮点压下去一点」的值抬回整数：算例会给出 299.99998 mm → 300。C# 与 Python（`MM_EPSILON`）用**同一个数**，两边不会在刀口上分歧。`AbsorbSizeGateTests.TheEpsilonRepairsAnExactMillimetreBoundary` 就是这条的钉子（299 mm 的球仍然拒绝）。
 

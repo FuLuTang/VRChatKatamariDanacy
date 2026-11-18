@@ -36,10 +36,6 @@ from Tools.levelbuild import placement_core as core
 SCHEMA = "katamari.placement/2"
 SCHEMA_V1 = core.SCHEMA
 
-#: The owner's global ball cap (2026-11-16).  Only used to resolve ``maxDiameterRef`` when
-#: nothing narrower is declared; a level's own design ceiling wins for wall/absorb checks.
-GLOBAL_MAX_DIAMETER_M = 20.0
-
 #: Triangles per terrain chunk and the Udon single-chunk vertex limit (§3.5).
 CHUNK_TRIANGLES = 512
 CHUNK_VERTICES = 1536
@@ -94,6 +90,8 @@ META_KEYS = ("id", "scene", "units", "convention", "ball", "timeLimitS", "player
              "playerStart", "groundY", "bounds", "spawnClearanceM", "zones", "arena", "caps", "budget",
              "expected", "source", "migration")
 PLAYER_START_KEYS = ("position", "facingDeg", "source")
+# Older files may contain both maxDiameter keys; preserve them on round-trip but
+# never interpret them as settings. meta.migration.maxDiameterM is provenance.
 BALL_KEYS = ("startDiameterM", "targetDiameterM", "maxDiameterRef", "maxDiameterM", "start",
              "spawnSource")
 CAPS_KEYS = ("props", "terrainTriangles", "terrainVertices", "staticSolids",
@@ -413,21 +411,6 @@ def _unknown(report, block, allowed, where):
                        % (tag, where, key, ", ".join(allowed)))
 
 
-def design_ceiling_m(document):
-    """The diameter the *level* was designed for (walls, absorbable, budget sanity).
-
-    ``meta.migration.maxDiameterM`` (a migrated per-level cap) wins, then an explicit
-    ``ball.maxDiameterM`` for a ``maxDiameterRef:"level"`` document, then the global cap.
-    """
-    meta = document.get("meta") or {}
-    migration = meta.get("migration") or {}
-    for candidate in (migration.get("maxDiameterM"),
-                      (meta.get("ball") or {}).get("maxDiameterM")):
-        if _num(candidate) and float(candidate) > 0:
-            return float(candidate)
-    return GLOBAL_MAX_DIAMETER_M
-
-
 def _def_catalog(document):
     catalog = {}
     for entry in document.get("defs") or []:
@@ -539,28 +522,13 @@ def _check_meta(document, meta, report, path):
     ball = meta.get("ball") if isinstance(meta.get("ball"), dict) else {}
     _unknown(report, ball, BALL_KEYS, "ball")
     start = ball.get("startDiameterM")
-    if not _num(start) or float(start) <= 0.0:
-        report.err("[meta_start_diameter] meta.ball.startDiameterM: expected a positive "
-                   "number, got %r" % (start,))
-    cap_ref = ball.get("maxDiameterRef")
-    if cap_ref not in ("global", "level"):
-        report.err("[meta_max_ref] meta.ball.maxDiameterRef: expected 'global' or 'level', "
-                   "got %r" % (cap_ref,))
-    if cap_ref == "level":
-        cap = ball.get("maxDiameterM")
-        if not _num(cap) or float(cap) <= 0.0:
-            report.err("[meta_max_ref] meta.ball.maxDiameterM: expected a positive number "
-                       "when maxDiameterRef is 'level', got %r" % (cap,))
-        elif _num(start) and float(start) > float(cap):
-            report.err("[meta_start_diameter] meta.ball.startDiameterM: expected <= "
-                       "maxDiameterM %r, got %r" % (cap, start))
-        if meta.get("scene") == "StoryMode":
-            report.warn("[meta_cap_override] meta.ball.maxDiameterRef: expected 'global' for "
-                        "a story level, got 'level' (cap %r)" % (cap,))
+    if not _num(start) or not 0.0 < float(start) < core.MAX_BALL_DIAMETER_M:
+        report.err("[meta_start_diameter] meta.ball.startDiameterM: expected 0 < start < %g m, "
+                   "got %r" % (core.MAX_BALL_DIAMETER_M, start))
     target = ball.get("targetDiameterM")
-    if target is not None and (not _num(target) or float(target) <= 0.0):
-        report.err("[meta_target_diameter] meta.ball.targetDiameterM: expected a positive "
-                   "number, got %r" % (target,))
+    if target is not None and (not _num(target) or not 0.0 < float(target) <= core.MAX_BALL_DIAMETER_M):
+        report.err("[meta_target_diameter] meta.ball.targetDiameterM: expected 0 < target <= %g m, "
+                   "got %r" % (core.MAX_BALL_DIAMETER_M, target))
     if not _vec(ball.get("start")):
         report.err("[meta_ball_start] meta.ball.start: expected 3 numbers, got %r"
                    % (ball.get("start"),))
@@ -1382,7 +1350,10 @@ def _check_activity(document, meta, report, lowest_y=None):
     segments = 0
     ball = meta.get("ball") or {}
     start_diameter = ball.get("startDiameterM")
-    ceiling = design_ceiling_m(document)
+    # The ball this level's content can grow to, not the global runtime cap: a 400 m cap is
+    # unreachable here, so comparing a 3 m wall against its 200 m radius would warn about
+    # every wall in every level. core.reachable_ball_diameter_m derives the level's own max.
+    ceiling = core.reachable_ball_diameter_m(document)
     for index, wall in enumerate(walls):
         where = "activityArea.walls[%d]" % index
         if not isinstance(wall, dict):
@@ -1405,9 +1376,10 @@ def _check_activity(document, meta, report, lowest_y=None):
         if not (_num(wall.get("heightM")) and float(wall["heightM"]) > 0):
             report.err("[activity_wall] %s.heightM: expected a positive number, got %r"
                        % (where, wall.get("heightM")))
-        elif float(wall["heightM"]) <= ceiling / 2.0:
+        elif ceiling is not None and float(wall["heightM"]) <= ceiling / 2.0:
             report.warn("[activity_wall_height] %s.heightM: expected > the largest ball radius "
-                        "%r, got %r" % (where, round(ceiling / 2.0, 4), wall["heightM"]))
+                        "this level's content can reach (%r from %.3f m), got %r"
+                        % (where, round(ceiling / 2.0, 4), ceiling, wall["heightM"]))
         if not (_num(wall.get("thicknessM")) and float(wall["thicknessM"]) > 0):
             report.err("[activity_wall] %s.thicknessM: expected a positive number, got %r"
                        % (where, wall.get("thicknessM")))
@@ -1732,10 +1704,14 @@ def _check_props(document, report, catalog, motion_ids):
     structures = {solid.get("id") for solid in
                   (document.get("structures") or {}).get("solids") or []
                   if isinstance(solid, dict)}
-    ceiling = design_ceiling_m(document)
+    ceiling = core.reachable_ball_diameter_m(document)
     zone_ids = {zone.get("id") for zone in (document.get("meta") or {}).get("zones") or []
                 if isinstance(zone, dict)}
     defs = catalog
+    # absorbable is authorial in v2, so a disagreement with the size gate is information,
+    # not an error - and one summary line, because a level with scenery marks dozens.
+    refused_but_gate_accepts = []
+    accepted_but_gate_refuses = []
     for item_id, prop in by_id.items():
         where = "props[%r]" % item_id
         name = prop.get("def")
@@ -1912,13 +1888,15 @@ def _check_props(document, report, catalog, motion_ids):
             if declared_gate is None and declared_growth is None and declared_volume is None:
                 report.err("[prop_derived_missing] %s: expected at least one derived column "
                            "(volumeMm3 / absorbDiameterReqMm / growthMm3), got none" % where)
-            # absorbable is an authorial declaration in v2: surface a disagreement, do not fail
-            if isinstance(prop.get("absorbable"), bool) and declared_gate is not None:
+            # absorbable is an authorial declaration in v2: collect a disagreement with
+            # the size gate, report it as one note after the loop, never fail it.
+            if (ceiling is not None and isinstance(prop.get("absorbable"), bool)
+                    and declared_gate is not None):
                 gate_says = gate <= core.floor_mm(ceiling)
-                if prop["absorbable"] != gate_says:
-                    report.note("%s: absorbable=%r but the gate at %.2f m says %r "
-                                "(authorial in v2; information only)"
-                                % (item_id, prop["absorbable"], ceiling, gate_says))
+                if prop["absorbable"] and not gate_says:
+                    accepted_but_gate_refuses.append(item_id)
+                elif not prop["absorbable"] and gate_says:
+                    refused_but_gate_accepts.append(item_id)
         if not isinstance(prop.get("absorbable"), bool):
             report.err("[prop_absorbable] %s.absorbable: expected a bool, got %r"
                        % (where, prop.get("absorbable")))
@@ -1926,6 +1904,20 @@ def _check_props(document, report, catalog, motion_ids):
             boxes[item_id] = core.world_aabb(tuple(float(v) for v in position),
                                              tuple(float(v) for v in aabb),
                                              tuple(float(v) for v in quat))
+    if ceiling is not None and (refused_but_gate_accepts or accepted_but_gate_refuses):
+        parts = []
+        if refused_but_gate_accepts:
+            parts.append("%d marked absorbable:false where the gate at the level's reachable "
+                         "%.2f m would accept them (%s)"
+                         % (len(refused_but_gate_accepts), ceiling,
+                            _id_examples(refused_but_gate_accepts)))
+        if accepted_but_gate_refuses:
+            parts.append("%d marked absorbable:true where the gate at %.2f m would refuse "
+                         "them (%s)"
+                         % (len(accepted_but_gate_refuses), ceiling,
+                            _id_examples(accepted_but_gate_refuses)))
+        report.note("absorbable disagreements (authorial in v2; information only): "
+                    + "; ".join(parts))
     # bounds
     bounds = (document.get("meta") or {}).get("bounds")
     if isinstance(bounds, list) and len(bounds) == 2 and all(_vec(point, 2) for point in bounds):
@@ -1994,10 +1986,13 @@ def _check_support_and_overlap(document, props, boxes, report):
                     (document.get("structures") or {}).get("solids") or []
                     if isinstance(solid, dict)}
     if solids_by_id:
-        ceiling = design_ceiling_m(document) / 2.0
-        proxied = core.structure_penetrations(props, boxes, solids_by_id, ceiling,
+        # The fitted proxy only changes for curve ramps, whose chord budget is sized by the
+        # ball that must roll them: use this level's reach, not the unreachable global cap.
+        reach = core.reachable_ball_diameter_m(document)
+        ball_radius = (reach if reach is not None else core.MAX_BALL_DIAMETER_M) / 2.0
+        proxied = core.structure_penetrations(props, boxes, solids_by_id, ball_radius,
                                               proxy="prefer")
-        boxed = core.structure_penetrations(props, boxes, solids_by_id, ceiling,
+        boxed = core.structure_penetrations(props, boxes, solids_by_id, ball_radius,
                                             proxy="ignore")
         if proxied or boxed:
             worst = max(hit[2] for hit in proxied) if proxied else 0.0
@@ -2034,6 +2029,12 @@ def _check_parents(document, props, report):
 
 
 # -- expected totals -------------------------------------------------------- #
+def _id_examples(ids, limit=8):
+    """``a, b, c, ... (+N more)`` for a validator note that must stay one line."""
+    shown = ", ".join(sorted(ids)[:limit])
+    return shown + (" (+%d more)" % (len(ids) - limit) if len(ids) > limit else "")
+
+
 def _check_expected(document, meta, props, boxes, report):
     expected = meta.get("expected")
     if not isinstance(expected, dict):
@@ -2125,12 +2126,14 @@ def summary_lines(document):
     absorbable = sum(1 for prop in props if isinstance(prop, dict) and prop.get("absorbable"))
     parents = sum(1 for prop in props if isinstance(prop, dict) and prop.get("parent"))
     zones = meta.get("zones") or []
+    reach = core.reachable_ball_diameter_m(document)
     lines = [
         "schema=%s  level=%s  scene=%s" % (document.get("schema"), meta.get("id"),
                                            meta.get("scene")),
-        "ball %.3f -> %s m  (%s)  timeLimit %ss  groundY %s"
+        "ball %.3f -> %s m  (global cap %g m, content reach %s m)  timeLimit %ss  groundY %s"
         % (float(ball.get("startDiameterM") or 0.0),
-           ball.get("targetDiameterM"), ball.get("maxDiameterRef"),
+           ball.get("targetDiameterM"), core.MAX_BALL_DIAMETER_M,
+           "%.3f" % reach if reach is not None else "-",
            meta.get("timeLimitS"), meta.get("groundY")),
         "props %d (%d absorbable, %d with a parent)  defs %d  zones %d"
         % (len(props), absorbable, parents, len(document.get("defs") or []), len(zones)),

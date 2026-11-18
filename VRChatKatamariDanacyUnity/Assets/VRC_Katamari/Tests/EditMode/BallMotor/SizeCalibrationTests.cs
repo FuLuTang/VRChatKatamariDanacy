@@ -1,6 +1,7 @@
 using System;
 using NUnit.Framework;
 using VRCKatamari.BallLayers;
+using VRCKatamari.BallMotor;
 
 namespace VRCKatamari.Tests
 {
@@ -20,7 +21,7 @@ namespace VRCKatamari.Tests
     /// <c>startVolumeMm3</c>);</item>
     /// <item>0.30 m -> 14,137,167 mm^3 and 2.20 m -> 5,575,279,763 mm^3 (the map's content
     /// ladder top, still the analysis ceiling);</item>
-    /// <item>30 m -> 14,137,166,941,154 mm^3 (the ONE global cap,
+    /// <item>400 m -> 33,510,321,638,291,128 mm^3 (the ONE global cap,
     /// <c>maxBallDiameterM</c>).</item>
     /// </list>
     /// <para>
@@ -33,7 +34,7 @@ namespace VRCKatamari.Tests
     public class SizeCalibrationTests
     {
         private const long StartMm3 = 14094798L;
-        private const float MaxBallDiameterM = 30f;
+        private const float MaxBallDiameterM = KatamariBallMotor.GlobalMaxBallDiameterM;
         private const float Ratio = 1f;
         private const float DiameterToleranceM = 0.001f;
 
@@ -85,13 +86,20 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void TheGlobalThirtyMetreCapIsOneVolumeConstant()
+        public void TheGlobalFourHundredMetreCapSaturatesExactly()
         {
             Assert.IsTrue(SizeModelMath.TrySphereVolumeMm3(MaxBallDiameterM, Ratio, out long cap));
-            AssertVolume(14137166941154L, cap);
+            AssertVolume(33510321638291128L, cap);
             // A confirmed total far past the cap still reads the cap diameter exactly.
-            Assert.AreEqual(30f, DiameterForConfirmed(cap), 0f);
-            Assert.AreEqual(30f, DiameterForConfirmed(cap * 3L), 0f);
+            Assert.AreEqual(400f, DiameterForConfirmed(cap), 0f);
+            Assert.AreEqual(400f, DiameterForConfirmed(cap * 3L), 0f);
+        }
+
+        [Test]
+        public void SphereVolumeRejectsFiniteInputsThatWouldOverflowLong()
+        {
+            Assert.IsFalse(SizeModelMath.TrySphereVolumeMm3(400f, 0.1f, out long volume));
+            Assert.AreEqual(0L, volume);
         }
 
         [Test]

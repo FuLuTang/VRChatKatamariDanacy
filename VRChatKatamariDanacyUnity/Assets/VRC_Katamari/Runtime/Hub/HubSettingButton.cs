@@ -4,12 +4,13 @@ using UnityEngine;
 namespace VRCKatamari.Hub
 {
     /// <summary>
-    /// One arrow of one setting row on the hub's settings panel: a press steps that setting
-    /// by <c>delta</c> in <see cref="HubSettingsHost"/>.
+    /// One arrow of one setting row on the hub's settings board: a click steps that setting by
+    /// <c>delta</c> in <see cref="HubSettingsHost"/>.
     /// </summary>
     /// <remarks>
-    /// Same pattern as <see cref="HubStartButton"/>: a collider plus this behaviour on one
-    /// object, Interact (desktop left click, VR trigger), no uGUI Button. It owns no state.
+    /// Same pattern as <see cref="HubStartButton"/>: the arrow is a uGUI <c>Button</c> whose
+    /// persistent <c>onClick</c> calls <c>UdonBehaviour.SendCustomEvent("Press")</c> on this
+    /// behaviour (set in the panel prefab, read back by the hub assembler). It owns no state.
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class HubSettingButton : UdonSharpBehaviour
@@ -22,11 +23,7 @@ namespace VRCKatamari.Hub
         [Tooltip("+1 for the right arrow, -1 for the left arrow.")]
         [SerializeField] private int delta = 1;
 
-        public override void Interact()
-        {
-            Press();
-        }
-
+        /// <summary>Button.onClick target: <c>SendCustomEvent("Press")</c>.</summary>
         public void Press()
         {
             if (settings == null)

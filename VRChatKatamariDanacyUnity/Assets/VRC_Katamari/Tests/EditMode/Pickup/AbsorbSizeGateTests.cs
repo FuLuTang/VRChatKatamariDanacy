@@ -160,11 +160,13 @@ namespace VRCKatamari.Tests
         public void TheSanityCeilingIsNotAGameplayGate()
         {
             // The retired 512 m^3 cap on the item's bbox refused anything larger, whatever
-            // the ball. The replacement is a 14,137 m^3 guard on the ORIGINAL volume
-            // (k * bbox): steps C+D raised it because the ONE global cap is 30 m, whose
-            // largest legal item is (pi/6*30^3)/10 = 1,413.7 m^3, and the guard keeps a 10x
-            // margin over that. It is a broken-data bound, not a gameplay gate.
-            Assert.AreEqual(14137f, PickupAbsorbMath.MaxItemVolumeSanityWorldM3);
+            // the ball. The replacement is a guard on the ORIGINAL volume (k * bbox) set at
+            // the 400 m global cap's own volume: (pi/6)*400^3 = 33,510,321.6 m^3, rounded down
+            // to the float32 grid. The largest item a cap-sized ball may absorb is that
+            // volume / 10 = 3,351,032.2 m^3 (the gate needs the ball ten times the item), so
+            // the guard keeps a 10x margin over a legal item. It is a broken-data bound, not
+            // a gameplay gate.
+            Assert.AreEqual(33510320f, PickupAbsorbMath.MaxItemVolumeSanityWorldM3);
             Assert.AreEqual(10f, PickupAbsorbMath.AbsorbVolumeRatio);
 
             // 640 m^3 of bbox at k=0.70 is 448 m^3 of item volume: under the guard, and a
@@ -176,14 +178,25 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(AbsorbOutcome.RejectItemTooLarge, EvaluateAtBall(20f, 0.70f, big));
 
             // Above the guard the answer is "not absorbable", never "absorbable" and never
-            // an infinity: 27,000 m^3 of bbox at k=0.70 is 18,900 m^3 of item volume, which
-            // is past 14,137.
-            Vector3 absurd = new Vector3(30f, 30f, 30f);
+            // an infinity: a 400 m cube is 64,000,000 m^3 of bbox, 44,800,000 m^3 of item
+            // volume at k=0.70, which is past 33,510,320. Its Req would be ~437 m even if the
+            // guard let it through, but the answer is the broken-data refusal, not a size.
+            Vector3 absurd = new Vector3(400f, 400f, 400f);
             float reqMm;
             Assert.IsFalse(PickupAbsorbMath.TryComputePickupReqDiameterMm(absurd, K, out reqMm));
             Assert.AreEqual(0f, reqMm, 1e-9f);
-            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(absurd, K, 100f));
-            Assert.AreEqual(AbsorbOutcome.RejectItemTooLarge, EvaluateAtBall(100f, K, absurd));
+            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(absurd, K, 400f));
+            Assert.AreEqual(AbsorbOutcome.RejectItemTooLarge, EvaluateAtBall(400f, K, absurd));
+
+            // The guard cannot refuse a legal absorb: the largest item a 400 m ball may take
+            // is (pi/6*400^3)/10 = 3,351,032 m^3 of original volume, ten times below the
+            // guard. A 160 m cube at k=0.70 is 2,867,200 m^3 (Req ~380 m), so it stays food.
+            Vector3 nearCap = new Vector3(160f, 160f, 160f);
+            float nearCapMm;
+            Assert.IsTrue(PickupAbsorbMath.TryComputePickupReqDiameterMm(nearCap, 0.70f,
+                out nearCapMm));
+            Assert.Less(nearCapMm, 400000f, "a 400 m ball's gate covers it");
+            Assert.AreEqual(AbsorbOutcome.Absorb, EvaluateAtBall(400f, 0.70f, nearCap));
         }
 
         [Test]

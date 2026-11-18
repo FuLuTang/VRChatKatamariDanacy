@@ -1,12 +1,20 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using TMPro;
 using UdonSharp;
+using UdonSharpEditor;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using VRC.SDK3.Components;
+using VRC.Udon;
 using VRCKatamari.BallMotor;
+using VRCKatamari.Editor.LevelBuild;
 using VRCKatamari.Hub;
 using VRCKatamari.Input;
 using VRCKatamari.Pickup;
@@ -16,55 +24,68 @@ using VRCKatamari.Story.Hub;
 namespace VRCKatamari.Editor.Hub
 {
     /// <summary>
-    /// The hub room's look and its three wall boards (levels, how to play + controls,
-    /// settings): the Blender-built model, world-space text on its anchors, the Interact
-    /// buttons, the settings store, the record book and the panel display.
+    /// The hub room's look and its three wall panels (levels, how to play + controls,
+    /// settings): the Blender-built room model, the three panel prefabs, the settings store,
+    /// the record book and the panel display.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Model. <c>Art/Hub/HubRoomArt.fbx</c> (built by <c>Tools/hubart/build_hub_room.py</c>
-    /// from <c>Tools/hubart/hub_layout.json</c>) is instantiated once under the root
-    /// <c>HubRoomArt</c> at <c>HubCenter</c>, colliders stripped (the room's walls and floor
-    /// collide through the placement import, not the art). Its materials are named
-    /// <c>Hub_&lt;colour&gt;</c>; the assembler makes one Standard material per name in
-    /// <c>Art/Hub/Materials/</c> with the layout's colour, and remaps the model to them.
-    /// Every <c>Anchor_*</c> empty is compared with the layout; one more than 2 cm off means the
-    /// FBX's axes or scale are not what the script meant and is a PROBLEM.
+    /// from <c>Tools/hubart/hub_layout.json</c>) is the room: floor, walls, decor and each
+    /// board's coloured frame, legs and bolts. Instantiated once under <c>HubRoomArt</c> at
+    /// <c>HubCenter</c>, colliders stripped (walls and floor collide through the placement
+    /// import); materials remapped to <c>Art/Hub/Materials/Hub_&lt;colour&gt;</c>. The three
+    /// <c>Anchor_Board_*</c> empties are compared with the layout (2 cm).
     /// </para>
     /// <para>
-    /// Text and buttons. One world-space Canvas per board (<c>HubBoard_&lt;id&gt;</c>, 1 mm per
-    /// canvas unit) holds every Text, placed from the layout (same numbers as the anchors).
-    /// Buttons are separate objects with a trigger BoxCollider and an Udon behaviour
-    /// (Interact: desktop left click, VR trigger); no uGUI Button, no raycast targets.
-    /// Without the model (not imported yet) the boards still get a flat coloured backing so
-    /// the panel works, and the run says the art is missing.
+    /// Panels. Each board is a prefab, <c>Prefabs/Hub/HubBoard_&lt;id&gt;.prefab</c>, built by
+    /// the Unity operator from Docs/Design/StoryMode/HUB_PANEL_PREFAB.md: a VRChat interactable
+    /// world-space canvas (World Space, VRCUiShape + BoxCollider + GraphicRaycaster on the canvas
+    /// object, Default layer, scale 0.001), TextMeshPro labels with Raycast Target off, and uGUI
+    /// Buttons whose persistent onClick is <c>UdonBehaviour.SendCustomEvent("Press")</c> on the
+    /// button's own HubStartButton / HubSettingButton. Everything inside a prefab is the
+    /// prefab's. This file only places one instance per board at the board's canvas centre,
+    /// writes the references a prefab cannot hold (launcher, settings store, level index, the
+    /// display's text table) and reads the prefab contract back; a missing or broken prefab is
+    /// a PROBLEM pointing at the spec, never rebuilt here.
     /// </para>
     /// </remarks>
     public static partial class HubAssembler
     {
         public const string RoomArtName = "HubRoomArt";
         public const string BoardPrefix = "HubBoard_";
-        public const string LevelButtonPrefix = "LevelButton_";
-        public const string SettingButtonPrefix = "SettingButton_";
+        public const string PanelPrefabFolder = "Assets/VRC_Katamari/Prefabs/Hub";
         public const string SettingsHostName = "HubSettings";
         public const string RecordBookName = "HubRecords";
         public const string PanelDisplayName = "HubPanelDisplay";
         public const string RoomLightsName = "HubRoomLights";
+        /// <summary>The event every panel Button sends (SendCustomEvent argument).</summary>
+        public const string PressEvent = "Press";
+        public const string CharsetRelativePath = "Tools/hubart/hub_panel_charset.txt";
         internal const string LegacyPanelName = "HubLevelPanel";
         internal const string ArtMaterialFolder = "Assets/VRC_Katamari/Art/Hub/Materials";
         internal const float AnchorToleranceM = 0.02f;
-        internal const float BoardMetresPerUnit = 0.001f;
-        private const float ButtonDepthM = 0.04f;
-        internal const float TextLiftM = 0.006f;
-        internal const int MaxFontSize = 200;
-        internal const float PreviewNumberLiftM = 0.015f;
+        internal static readonly string[] BoardIds = { "Levels", "Help", "Settings" };
+
+        // ---- the prefab naming contract (HUB_PANEL_PREFAB.md); paths are under the board root.
+        internal const string LevelCardPrefix = "LevelCard_";
+        internal const string SettingRowPrefix = "SettingRow_";
+
+        internal static string LevelCardPath(int index) { return LevelCardPrefix + index; }
+
+        internal static string SettingRowPath(int id) { return SettingRowPrefix + id.ToString("00"); }
+
+        internal static string PanelPrefabPath(string boardId)
+        {
+            return PanelPrefabFolder + "/" + BoardPrefix + boardId + ".prefab";
+        }
 
         internal sealed class RoomParts
         {
             public HubRoomLayout Layout;
             public readonly Dictionary<string, Transform> Boards = new Dictionary<string, Transform>();
             public Transform[] LevelButtons = new Transform[0];
-            public Text Prompt;
+            public TextMeshProUGUI Prompt;
             public HubSettingsHost Settings;
             public HubRecordBook Records;
             public HubPanelDisplay Display;
@@ -74,7 +95,7 @@ namespace VRCKatamari.Editor.Hub
 
         internal static RoomParts AssembleRoom(List<HubLevelCatalog.Resolved> offered,
             Dictionary<string, HubLevelPlan> plans, StoryRoundController round, Transform center,
-            Font font, HubLevelLauncher launcher, Counters c)
+            HubLevelLauncher launcher, Counters c)
         {
             var parts = new RoomParts();
             var errors = new List<string>();
@@ -85,92 +106,104 @@ namespace VRCKatamari.Editor.Hub
                 return parts;
             }
             parts.Layout = layout;
-            if (layout.Cards.Count < offered.Count)
-            {
-                c.Problems.Add(offered.Count + " levels are offered but the hub layout has "
-                    + layout.Cards.Count + " level cards (" + HubRoomLayout.RepoRelativePath + ")");
-            }
-            if (layout.Rows.Count != HubSettingsMath.Count)
-            {
-                c.Problems.Add("the hub layout has " + layout.Rows.Count + " settings rows; the"
-                    + " settings store has " + HubSettingsMath.Count);
-            }
 
             RemoveLegacyPanel(c);
             Dictionary<string, Material> materials = EnsureArtMaterials(layout, c);
-            Transform art = AssembleRoomArt(layout, center, materials, c);
+            AssembleRoomArt(layout, center, materials, c);
             AssembleRoomLights(layout, center, c);
+            EnsureEventSystem(c);
 
-            foreach (HubRoomLayout.Board board in layout.Boards.Values)
+            foreach (string id in BoardIds)
             {
-                parts.Boards[board.Id] = AssembleBoardCanvas(board, center, art == null
-                    ? FlatBacking(layout, board.Id) : Color.clear, c);
+                HubRoomLayout.Board board;
+                if (!layout.Boards.TryGetValue(id, out board)) continue;
+                Transform instance = PlacePanelPrefab(board, layout, center, c);
+                if (instance != null) parts.Boards[id] = instance;
             }
 
             parts.Settings = AssembleSettingsHost(c);
             parts.Records = AssembleRecordBook(round, offered, plans, c);
             parts.Display = AssemblePanelDisplay(c);
 
-            // Texts.
-            var texts = new Dictionary<string, Text>();
-            foreach (KeyValuePair<string, HubRoomLayout.Box> pair in layout.Texts)
-            {
-                texts[pair.Key] = PlaceText("Text_" + pair.Key, pair.Value, parts, layout, center,
-                    font, c);
-            }
-            texts.TryGetValue("Prompt", out parts.Prompt);
+            Transform levels = Board(parts, "Levels");
+            Transform help = Board(parts, "Help");
+            Transform settingsBoard = Board(parts, "Settings");
+            parts.Prompt = FindText(levels, "Text_Prompt", c);
 
-            // Level cards.
-            int n = Math.Min(offered.Count, layout.Cards.Count);
+            // Level cards: card i is launcher level i; cards beyond the offered levels are hidden.
+            int n = offered.Count;
             parts.LevelButtons = new Transform[n];
-            var nameTexts = new Text[n];
-            var goalTexts = new Text[n];
-            var recordTexts = new Text[n];
-            var startTexts = new Text[n];
-            var wanted = new HashSet<string>();
-            for (int i = 0; i < n; i++)
+            var nameTexts = new TextMeshProUGUI[n];
+            var goalTexts = new TextMeshProUGUI[n];
+            var recordTexts = new TextMeshProUGUI[n];
+            var startTexts = new TextMeshProUGUI[n];
+            int cardsInPrefab = 0;
+            if (levels != null)
             {
-                HubRoomLayout.Card card = layout.Cards[i];
-                string id = offered[i].Entry.id;
-                nameTexts[i] = PlaceText("Level" + i + "_Name", card.Name, parts, layout, center, font, c);
-                goalTexts[i] = PlaceText("Level" + i + "_Goal", card.Goal, parts, layout, center, font, c);
-                recordTexts[i] = PlaceText("Level" + i + "_Record", card.Record, parts, layout, center, font, c);
-                startTexts[i] = PlaceText("Level" + i + "_Start", card.Start, parts, layout, center, font, c);
-                // The preview swatch is a 5 mm slab built at the preview depth + 4 mm, so its
-                // front face is 6.5 mm in front of the anchor; the number goes in front of that.
-                Text number = PlaceText("Level" + i + "_Number", card.Preview, parts, layout, center,
-                    font, c, PreviewNumberLiftM);
-                if (number != null) number.text = (i + 1).ToString();
-
-                string buttonName = LevelButtonPrefix + id;
-                wanted.Add(buttonName);
-                Transform buttonRoot;
-                HubStartButton start = EnsureButton<HubStartButton>(parts.Boards[card.Button.Board],
-                    buttonName, card.Button, layout, center, c, out buttonRoot);
-                if (start == null) continue;
-                var so = new SerializedObject(start);
-                bool changed = SetObject(so, "launcher", launcher, c);
-                SerializedProperty index = so.FindProperty("levelIndex");
-                if (index.intValue != i) { index.intValue = i; changed = true; }
-                if (changed) so.ApplyModifiedPropertiesWithoutUndo();
-                c.Proxies.Add(start);
-                SetInteractText(start, "Start: " + offered[i].Entry.name, c);
-                parts.LevelButtons[i] = buttonRoot;
+                for (int i = 0; levels.Find(LevelCardPath(i)) != null; i++) cardsInPrefab++;
+                if (cardsInPrefab < n)
+                {
+                    c.Problems.Add(n + " levels are offered but " + PanelPrefabPath("Levels") + " has "
+                        + cardsInPrefab + " level cards (" + LevelCardPrefix + "0..); add cards per"
+                        + " HUB_PANEL_PREFAB.md");
+                }
+                for (int i = 0; i < cardsInPrefab; i++)
+                {
+                    Transform card = levels.Find(LevelCardPath(i));
+                    bool used = i < n;
+                    if (card.gameObject.activeSelf != used)
+                    {
+                        Undo.RecordObject(card.gameObject, "Show level card");
+                        card.gameObject.SetActive(used);
+                        c.Changed++;
+                    }
+                    if (!used) continue;
+                    HubStartButton start = card.GetComponent<HubStartButton>();
+                    if (start == null)
+                    {
+                        c.Problems.Add(card.name + " has no HubStartButton (HUB_PANEL_PREFAB.md)");
+                        continue;
+                    }
+                    var so = new SerializedObject(start);
+                    bool changed = SetObject(so, "launcher", launcher, c);
+                    SerializedProperty index = so.FindProperty("levelIndex");
+                    if (index.intValue != i) { index.intValue = i; changed = true; c.Changed++; }
+                    if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+                    c.Proxies.Add(start);
+                    parts.LevelButtons[i] = card;
+                    nameTexts[i] = FindText(card, "Name", c);
+                    goalTexts[i] = FindText(card, "Goal", c);
+                    recordTexts[i] = FindText(card, "Record", c);
+                    startTexts[i] = FindText(card, "Start", c);
+                    TextMeshProUGUI number = FindText(card, "Number", c);
+                    if (number != null && number.text != (i + 1).ToString())
+                    {
+                        Undo.RecordObject(number, "Number the level card");
+                        number.text = (i + 1).ToString();
+                        c.Changed++;
+                    }
+                }
             }
-            RemoveUnwanted(parts.Boards["Levels"], LevelButtonPrefix, wanted, c);
 
-            // Settings rows.
-            var labelTexts = new Text[HubSettingsMath.Count];
-            var valueTexts = new Text[HubSettingsMath.Count];
-            for (int r = 0; r < layout.Rows.Count && r < HubSettingsMath.Count; r++)
+            // Settings rows: the arrows' id/delta are the prefab's; the store is the scene's.
+            var labelTexts = new TextMeshProUGUI[HubSettingsMath.Count];
+            var valueTexts = new TextMeshProUGUI[HubSettingsMath.Count];
+            if (settingsBoard != null)
             {
-                HubRoomLayout.Row row = layout.Rows[r];
-                labelTexts[row.Id] = PlaceText("Setting" + row.Id.ToString("00") + "_Label", row.Label,
-                    parts, layout, center, font, c);
-                valueTexts[row.Id] = PlaceText("Setting" + row.Id.ToString("00") + "_Value", row.Value,
-                    parts, layout, center, font, c);
-                WireSettingButton(parts, row.Id, -1, row.Less, layout, center, c);
-                WireSettingButton(parts, row.Id, 1, row.More, layout, center, c);
+                for (int id = 0; id < HubSettingsMath.Count; id++)
+                {
+                    Transform row = settingsBoard.Find(SettingRowPath(id));
+                    if (row == null)
+                    {
+                        c.Problems.Add(PanelPrefabPath("Settings") + " has no " + SettingRowPath(id)
+                            + " (HUB_PANEL_PREFAB.md)");
+                        continue;
+                    }
+                    labelTexts[id] = FindText(row, "Label", c);
+                    valueTexts[id] = FindText(row, "Value", c);
+                    WireSettingArrow(row, "Less", parts.Settings, c);
+                    WireSettingArrow(row, "More", parts.Settings, c);
+                }
             }
 
             // Display wiring.
@@ -210,15 +243,15 @@ namespace VRCKatamari.Editor.Hub
                 SetObjectArray(so, "levelGoalTexts", goalTexts, c);
                 SetObjectArray(so, "levelRecordTexts", recordTexts, c);
                 SetObjectArray(so, "levelStartTexts", startTexts, c);
-                SetObject(so, "levelsTitle", Get(texts, "LevelsTitle"), c);
-                SetObject(so, "helpTitle", Get(texts, "HelpTitle"), c);
-                SetObject(so, "howToText", Get(texts, "HowTo"), c);
-                SetObject(so, "controlsTitle", Get(texts, "ControlsTitle"), c);
-                SetObject(so, "controlsVrText", Get(texts, "ControlsVr"), c);
-                SetObject(so, "controlsDesktopText", Get(texts, "ControlsDesktop"), c);
-                SetObject(so, "settingsTitle", Get(texts, "SettingsTitle"), c);
-                SetObject(so, "settingsHintText", Get(texts, "SettingsHint"), c);
-                SetObject(so, "creditsText", Get(texts, "Credits"), c);
+                SetObject(so, "levelsTitle", FindText(levels, "Text_LevelsTitle", c), c);
+                SetObject(so, "creditsText", FindText(levels, "Text_Credits", c), c);
+                SetObject(so, "helpTitle", FindText(help, "Text_HelpTitle", c), c);
+                SetObject(so, "howToText", FindText(help, "Text_HowTo", c), c);
+                SetObject(so, "controlsTitle", FindText(help, "Text_ControlsTitle", c), c);
+                SetObject(so, "controlsVrText", FindText(help, "Text_ControlsVr", c), c);
+                SetObject(so, "controlsDesktopText", FindText(help, "Text_ControlsDesktop", c), c);
+                SetObject(so, "settingsTitle", FindText(settingsBoard, "Text_SettingsTitle", c), c);
+                SetObject(so, "settingsHintText", FindText(settingsBoard, "Text_SettingsHint", c), c);
                 SetObjectArray(so, "settingLabelTexts", labelTexts, c);
                 SetObjectArray(so, "settingValueTexts", valueTexts, c);
                 so.ApplyModifiedPropertiesWithoutUndo();
@@ -240,10 +273,23 @@ namespace VRCKatamari.Editor.Hub
             return parts;
         }
 
-        private static Text Get(Dictionary<string, Text> texts, string id)
+        private static Transform Board(RoomParts parts, string id)
         {
-            Text t;
-            return texts.TryGetValue(id, out t) ? t : null;
+            Transform t;
+            return parts.Boards.TryGetValue(id, out t) ? t : null;
+        }
+
+        private static TextMeshProUGUI FindText(Transform parent, string path, Counters c)
+        {
+            if (parent == null) return null;
+            Transform t = parent.Find(path);
+            TextMeshProUGUI text = t == null ? null : t.GetComponent<TextMeshProUGUI>();
+            if (text == null)
+            {
+                c.Problems.Add(parent.name + "/" + path + " is not a TextMeshProUGUI in the panel"
+                    + " prefab (HUB_PANEL_PREFAB.md)");
+            }
+            return text;
         }
 
         private static void ReadSingleLevelGoal(StoryRoundController round, out int goal,
@@ -258,6 +304,71 @@ namespace VRCKatamari.Editor.Hub
             count = k != null ? k.intValue : 0;
             SerializedProperty t = so.FindProperty("timeLimitSeconds");
             limit = t != null ? t.floatValue : 0f;
+        }
+
+        // ------------------------------------------------------------ panels ---
+
+        // One instance of the board's prefab, a scene root named HubBoard_<id>, at the board's
+        // canvas centre facing the reader, scale = metres per canvas unit. A same-named root
+        // that is not an instance of that prefab (an older build of the board) is replaced.
+        internal static Transform PlacePanelPrefab(HubRoomLayout.Board board, HubRoomLayout layout,
+            Transform center, Counters c)
+        {
+            string name = BoardPrefix + board.Id;
+            string path = PanelPrefabPath(board.Id);
+            Scene scene = SceneManager.GetActiveScene();
+            Transform existing = FindRoot(scene, name);
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (prefab == null)
+            {
+                c.Problems.Add("no panel prefab at " + path + "; build it from"
+                    + " Docs/Design/StoryMode/HUB_PANEL_PREFAB.md, then assemble again");
+                return null;
+            }
+            if (existing != null
+                && PrefabUtility.GetCorrespondingObjectFromSource(existing.gameObject) != prefab)
+            {
+                Undo.DestroyObjectImmediate(existing.gameObject);
+                existing = null;
+                c.Changed++;
+                c.Notes.Add("replaced '" + name + "' with an instance of " + path);
+            }
+            if (existing == null)
+            {
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
+                go.name = name;
+                Undo.RegisterCreatedObjectUndo(go, "Place " + name);
+                existing = go.transform;
+                c.Created++;
+            }
+            Vector3 position = center.position + layout.CanvasCenter(board);
+            Vector3 scale = Vector3.one * layout.CanvasMetresPerUnit;
+            if (Vector3.Distance(existing.position, position) > 1e-4f
+                || Quaternion.Angle(existing.rotation, board.Rotation) > 0.01f
+                || existing.localScale != scale)
+            {
+                Undo.RecordObject(existing, "Place " + name);
+                existing.position = position;
+                existing.rotation = board.Rotation;
+                existing.localScale = scale;
+                c.Changed++;
+            }
+            return existing;
+        }
+
+        private static void WireSettingArrow(Transform row, string side, HubSettingsHost settings,
+            Counters c)
+        {
+            Transform t = row.Find(side);
+            HubSettingButton arrow = t == null ? null : t.GetComponent<HubSettingButton>();
+            if (arrow == null)
+            {
+                c.Problems.Add(row.name + "/" + side + " has no HubSettingButton (HUB_PANEL_PREFAB.md)");
+                return;
+            }
+            var so = new SerializedObject(arrow);
+            if (SetObject(so, "settings", settings, c)) so.ApplyModifiedPropertiesWithoutUndo();
+            c.Proxies.Add(arrow);
         }
 
         // ------------------------------------------------------------ art ---
@@ -331,8 +442,8 @@ namespace VRCKatamari.Editor.Hub
             if (model == null)
             {
                 c.Notes.Add("the hub art model " + layout.ModelPath + " is not imported yet; the"
-                    + " boards get flat coloured backings instead (run Tools/hubart/build_hub_room.py,"
-                    + " let Unity import it, then assemble again)");
+                    + " panels still work but the room has no walls' art or board frames (run"
+                    + " Tools/hubart/build_hub_room.py, let Unity import it, then assemble again)");
                 if (existing != null)
                 {
                     Undo.DestroyObjectImmediate(existing.gameObject);
@@ -396,8 +507,9 @@ namespace VRCKatamari.Editor.Hub
             return existing;
         }
 
-        // Every anchor of the model must sit where the layout says (hub-local), within 2 cm;
-        // this is the import-side half of build_hub_room.py's axis mapping.
+        // Each board anchor of the model must sit at its canvas centre (hub-local), within 2 cm;
+        // this is the import-side half of build_hub_room.py's axis mapping: a wrong axis or
+        // scale would leave the frames somewhere other than behind the panels.
         internal static void CheckAnchors(HubRoomLayout layout, Transform art, Counters c)
         {
             var anchors = new Dictionary<string, Transform>();
@@ -408,38 +520,24 @@ namespace VRCKatamari.Editor.Hub
             int total = 0;
             int bad = 0;
             string first = null;
-            Action<string, HubRoomLayout.Box> check = (name, box) =>
+            foreach (HubRoomLayout.Board board in layout.Boards.Values)
             {
                 total++;
+                string name = HubRoomLayout.BoardAnchorName(board.Id);
                 Transform a;
                 if (!anchors.TryGetValue(name, out a))
                 {
                     bad++;
                     if (first == null) first = name + " missing";
-                    return;
+                    continue;
                 }
-                Vector3 want;
-                Quaternion rot;
-                layout.Pose(box, out want, out rot);
+                Vector3 want = layout.CanvasCenter(board);
                 Vector3 got = art.InverseTransformPoint(a.position);
                 if (Vector3.Distance(got, want) > AnchorToleranceM)
                 {
                     bad++;
                     if (first == null) first = name + " at " + got.ToString("F3") + ", layout " + want.ToString("F3");
                 }
-            };
-            foreach (KeyValuePair<string, HubRoomLayout.Box> t in layout.Texts)
-                check(HubRoomLayout.AnchorName("Text", 0, t.Key), t.Value);
-            foreach (HubRoomLayout.Card card in layout.Cards)
-            {
-                check(HubRoomLayout.AnchorName("Level", card.Index, "Button"), card.Button);
-                check(HubRoomLayout.AnchorName("Level", card.Index, "Name"), card.Name);
-                check(HubRoomLayout.AnchorName("Level", card.Index, "Start"), card.Start);
-            }
-            foreach (HubRoomLayout.Row row in layout.Rows)
-            {
-                check(HubRoomLayout.AnchorName("Setting", row.Id, "Less"), row.Less);
-                check(HubRoomLayout.AnchorName("Setting", row.Id, "More"), row.More);
             }
             c.Notes.Add("hub art anchors: " + (total - bad) + " of " + total + " within "
                 + (AnchorToleranceM * 100f) + " cm of " + HubRoomLayout.RepoRelativePath);
@@ -447,15 +545,9 @@ namespace VRCKatamari.Editor.Hub
             {
                 c.Problems.Add(bad + " hub art anchor(s) disagree with " + HubRoomLayout.RepoRelativePath
                     + " (first: " + first + "); the FBX's axes/scale are not what build_hub_room.py"
-                    + " meant, so text and buttons would float off the boards. Re-export the model"
-                    + " (axis_forward -Z, up Y, FBX_SCALE_UNITS) and assemble again");
+                    + " meant, so the board frames would not sit behind the panels. Re-export the"
+                    + " model (axis_forward -Z, up Y, FBX_SCALE_UNITS) and assemble again");
             }
-        }
-
-        private static Color FlatBacking(HubRoomLayout layout, string boardId)
-        {
-            Color cream;
-            return layout.Palette.TryGetValue("Hub_Cream", out cream) ? cream : new Color(1f, 0.96f, 0.86f);
         }
 
         // Three warm point lights under the ceiling lamps plus a soft trilight ambient for the
@@ -488,160 +580,31 @@ namespace VRCKatamari.Editor.Hub
             }
         }
 
-        // ------------------------------------------------------------ boards ---
+        // ------------------------------------------------------------ event system ---
 
-        internal static Transform AssembleBoardCanvas(HubRoomLayout.Board board, Transform center,
-            Color backing, Counters c)
+        // uGUI needs one EventSystem in the scene for VRChat's pointer to click canvases
+        // (vrc_uishape "Common problems"). Keep an existing one; add one only when none exists.
+        internal static void EnsureEventSystem(Counters c)
         {
-            string name = BoardPrefix + board.Id;
-            Transform t = FindRoot(SceneManager.GetActiveScene(), name);
-            Vector2 sizeUnits = board.Size / BoardMetresPerUnit;
-            if (t == null)
+            EventSystem[] all = UnityEngine.Object.FindObjectsOfType<EventSystem>(true);
+            if (all.Length > 1)
             {
-                t = CreateWorldCanvas(name, null, sizeUnits).transform;
-                c.Created++;
+                c.Problems.Add(all.Length + " EventSystems in the scene; uGUI needs exactly one");
+                return;
             }
-            t.position = center.position + board.Center;
-            t.rotation = board.Rotation;
-            t.localScale = Vector3.one * BoardMetresPerUnit;
-            ((RectTransform)t).sizeDelta = sizeUnits;
-            t.gameObject.layer = 0;
-            Image image = t.GetComponent<Image>();
-            if (backing.a > 0f)
+            if (all.Length == 1)
             {
-                if (image == null) image = t.gameObject.AddComponent<Image>();
-                image.color = backing;
-                image.raycastTarget = false;
+                if (all[0].GetComponent<BaseInputModule>() == null)
+                {
+                    Undo.AddComponent<StandaloneInputModule>(all[0].gameObject);
+                    c.Changed++;
+                }
+                return;
             }
-            else if (image != null)
-            {
-                UnityEngine.Object.DestroyImmediate(image);
-            }
-            return t;
-        }
-
-        // Text Rect in its board's canvas: centre at the box, size of the box, glyph em =
-        // fontSize canvas units = em metres. Depth puts it just in front of the art surface.
-        internal static Text PlaceText(string name, HubRoomLayout.Box box, RoomParts parts,
-            HubRoomLayout layout, Transform center, Font font, Counters c)
-        {
-            return PlaceText(name, box, parts, layout, center, font, c, TextLiftM);
-        }
-
-        // Text is drawn depth-tested against the art, so it must sit in front of the surface it
-        // labels: lift = metres in front of the anchor.
-        internal static Text PlaceText(string name, HubRoomLayout.Box box, RoomParts parts,
-            HubRoomLayout layout, Transform center, Font font, Counters c, float lift)
-        {
-            if (box == null || string.IsNullOrEmpty(box.Board)) return null;
-            Transform board;
-            if (!parts.Boards.TryGetValue(box.Board, out board)) return null;
-            Transform t = board.Find(name);
-            Text text;
-            if (t == null)
-            {
-                text = CreateText(name, board, font, 10, box.Align);
-                c.Created++;
-                t = text.transform;
-            }
-            else text = t.GetComponent<Text>();
-            var rect = (RectTransform)t;
-            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            // uGUI Text is only safe up to fontSize 300 (larger requests can be clamped or drop
-            // glyphs from the dynamic atlas); a bigger glyph is drawn at a smaller fontSize on a
-            // scaled rect, so the world size stays em metres.
-            int wanted = Mathf.Max(1, Mathf.RoundToInt(box.Em / BoardMetresPerUnit));
-            int scale = Mathf.Max(1, Mathf.CeilToInt(wanted / (float)MaxFontSize));
-            rect.sizeDelta = new Vector2(box.W, Mathf.Max(box.H, box.Em * 1.4f))
-                / BoardMetresPerUnit / scale;
-            // Canvas local -Z is towards the reader, so depth is negative local z.
-            rect.localPosition = new Vector3(box.X, box.Y, -(box.Depth + lift)) / BoardMetresPerUnit;
-            rect.localRotation = Quaternion.identity;
-            rect.localScale = Vector3.one * scale;
-            text.font = font;
-            text.fontSize = Mathf.Max(1, Mathf.RoundToInt(wanted / (float)scale));
-            text.alignment = box.Align;
-            text.lineSpacing = 1.0f;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-            Color navy;
-            text.color = box.White ? Color.white
-                : layout.Palette.TryGetValue("Hub_Navy", out navy) ? navy : new Color(0.13f, 0.17f, 0.38f);
-            t.gameObject.layer = 0;
-            return text;
-        }
-
-        // A press box: its own object under the board canvas, sized to the box face, with a
-        // trigger collider and the Udon behaviour (Interact is delivered to the behaviour on
-        // the collider's object). Default layer, so the interact ray is not filtered out.
-        internal static T EnsureButton<T>(Transform board, string name, HubRoomLayout.Box box,
-            HubRoomLayout layout, Transform center, Counters c, out Transform root)
-            where T : UdonSharpBehaviour
-        {
-            root = board.Find(name);
-            T behaviour;
-            if (root == null)
-            {
-                var go = new GameObject(name, typeof(RectTransform), typeof(BoxCollider));
-                Undo.RegisterCreatedObjectUndo(go, "Create " + name);
-                go.transform.SetParent(board, false);
-                behaviour = AddUdon<T>(go, c);
-                root = go.transform;
-                c.Created++;
-            }
-            else behaviour = root.GetComponent<T>();
-            if (behaviour == null)
-            {
-                c.Problems.Add(name + " has no " + typeof(T).Name);
-                return null;
-            }
-            var rect = (RectTransform)root;
-            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(box.W, box.H) / BoardMetresPerUnit;
-            rect.localPosition = new Vector3(box.X, box.Y, -box.Depth) / BoardMetresPerUnit;
-            rect.localRotation = Quaternion.identity;
-            rect.localScale = Vector3.one;
-            root.gameObject.layer = 0;
-            var collider = root.GetComponent<BoxCollider>();
-            collider.isTrigger = true;
-            collider.center = Vector3.zero;
-            collider.size = new Vector3(box.W, box.H, ButtonDepthM) / BoardMetresPerUnit;
-            return behaviour;
-        }
-
-        private static void RemoveUnwanted(Transform board, string prefix, HashSet<string> wanted,
-            Counters c)
-        {
-            for (int i = board.childCount - 1; i >= 0; i--)
-            {
-                Transform child = board.GetChild(i);
-                if (!child.name.StartsWith(prefix, StringComparison.Ordinal) || wanted.Contains(child.name)) continue;
-                c.Notes.Add("removed '" + child.name + "': the scene no longer offers that level");
-                Undo.DestroyObjectImmediate(child.gameObject);
-                c.Changed++;
-            }
-        }
-
-        private static void WireSettingButton(RoomParts parts, int id, int delta,
-            HubRoomLayout.Box box, HubRoomLayout layout, Transform center, Counters c)
-        {
-            string name = SettingButtonPrefix + id.ToString("00") + (delta < 0 ? "_Less" : "_More");
-            Transform root;
-            HubSettingButton button = EnsureButton<HubSettingButton>(parts.Boards[box.Board], name,
-                box, layout, center, c, out root);
-            if (button == null) return;
-            var so = new SerializedObject(button);
-            bool changed = SetObject(so, "settings", parts.Settings, c);
-            SerializedProperty sid = so.FindProperty("settingId");
-            SerializedProperty sd = so.FindProperty("delta");
-            if (sid.intValue != id) { sid.intValue = id; changed = true; }
-            if (sd.intValue != delta) { sd.intValue = delta; changed = true; }
-            if (changed) so.ApplyModifiedPropertiesWithoutUndo();
-            c.Proxies.Add(button);
-            SetInteractText(button, (delta < 0 ? "< " : "> ")
-                + HubPanelTextMath.SettingLabel(id, HubSettingsMath.LangEn), c);
+            var go = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            Undo.RegisterCreatedObjectUndo(go, "Create EventSystem");
+            c.Created++;
+            c.Notes.Add("added an EventSystem (the scene had none; the wall panels need one)");
         }
 
         // ------------------------------------------------------------ stores ---
@@ -728,6 +691,7 @@ namespace VRCKatamari.Editor.Hub
             }
         }
 
+
         // ------------------------------------------------------------ read-back ---
 
         internal static void VerifyRoomTables(Counters c)
@@ -753,12 +717,105 @@ namespace VRCKatamari.Editor.Hub
                     + arrows.Length);
             }
             for (int i = 0; i < arrows.Length; i++)
+            {
                 VerifyTable(arrows[i], new[] { "settings", "settingId", "delta" }, c);
+                string problem = PanelButtonProblem(arrows[i]);
+                if (problem != null) c.Problems.Add(arrows[i].name + ": " + problem);
+            }
+            HubStartButton[] cards = UnityEngine.Object.FindObjectsOfType<HubStartButton>(false);
+            for (int i = 0; i < cards.Length; i++)
+            {
+                string problem = PanelButtonProblem(cards[i]);
+                if (problem != null) c.Problems.Add(cards[i].name + ": " + problem);
+            }
+            Scene scene = SceneManager.GetActiveScene();
+            foreach (string id in BoardIds)
+            {
+                Transform t = FindRoot(scene, BoardPrefix + id);
+                string problem = t == null ? "missing" : BoardCanvasProblem(t.gameObject);
+                if (problem != null) c.Problems.Add(BoardPrefix + id + ": " + problem);
+            }
+            EventSystem[] systems = UnityEngine.Object.FindObjectsOfType<EventSystem>(true);
+            if (systems.Length != 1)
+                c.Problems.Add("expected one EventSystem for the wall panels, found " + systems.Length);
             if (ReadObject<VrStickMoveInput>(settings, "vrInput") == null)
             {
                 c.Problems.Add("HubSettingsHost.vrInput is not wired: the VR controls setting"
                     + " would not switch the stick scheme");
             }
+        }
+
+        /// <summary>
+        /// A panel button's contract (HUB_PANEL_PREFAB.md): a uGUI Button with Navigation None
+        /// whose target graphic is a raycast-target Image, no Collider of its own, under a board
+        /// canvas with VRCUiShape, and exactly one persistent onClick call:
+        /// <c>SendCustomEvent("Press")</c> on this behaviour's backing UdonBehaviour. Null = ok.
+        /// </summary>
+        internal static string PanelButtonProblem(UdonSharpBehaviour proxy)
+        {
+            var button = proxy.GetComponent<Button>();
+            if (button == null) return "no uGUI Button on the object";
+            if (button.navigation.mode != Navigation.Mode.None) return "Button navigation is not None";
+            var image = button.targetGraphic as Image;
+            if (image == null || !image.raycastTarget) return "Button's target graphic is not a raycast-target Image";
+            if (proxy.GetComponent<Collider>() != null) return "has a Collider of its own (the canvas's collider is the hit box)";
+            Canvas canvas = proxy.GetComponentInParent<Canvas>(true);
+            if (canvas == null || canvas.rootCanvas.GetComponent<VRCUiShape>() == null)
+                return "not under a canvas with VRCUiShape";
+            UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(proxy);
+            if (backing == null) return "no backing UdonBehaviour";
+            string binding = PressBindingProblem(button, backing);
+            return binding == null ? null : "Button " + binding;
+        }
+
+        /// <summary>Null when the Button's onClick is exactly SendCustomEvent("Press") on backing.</summary>
+        internal static string PressBindingProblem(Button button, UdonBehaviour backing)
+        {
+            int n = button.onClick.GetPersistentEventCount();
+            if (n != 1) return "onClick has " + n + " persistent calls, wants 1";
+            if (button.onClick.GetPersistentTarget(0) != backing)
+                return "onClick targets '" + button.onClick.GetPersistentTarget(0)
+                    + "', not this object's UdonBehaviour";
+            if (button.onClick.GetPersistentMethodName(0) != "SendCustomEvent")
+                return "onClick calls " + button.onClick.GetPersistentMethodName(0) + ", not SendCustomEvent";
+            if (button.onClick.GetPersistentListenerState(0) == UnityEventCallState.Off)
+                return "onClick call is Off";
+            var so = new SerializedObject(button);
+            SerializedProperty arg = so.FindProperty(
+                "m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Arguments.m_StringArgument");
+            if (arg == null || arg.stringValue != PressEvent)
+                return "onClick argument is '" + (arg == null ? "?" : arg.stringValue) + "', not '"
+                    + PressEvent + "'";
+            return null;
+        }
+
+        /// <summary>
+        /// A board root's contract: VRChat's interactable canvas (vrc_uishape): World Space Canvas,
+        /// VRCUiShape and BoxCollider on the same object, GraphicRaycaster, not on the UI/UiMenu
+        /// layer, scale 0.001-0.01, TextMeshPro labels that are not raycast targets, no legacy
+        /// Text. Null = ok.
+        /// </summary>
+        internal static string BoardCanvasProblem(GameObject go)
+        {
+            var canvas = go.GetComponent<Canvas>();
+            if (canvas == null || canvas.renderMode != RenderMode.WorldSpace) return "not a World Space Canvas";
+            if (go.GetComponent<VRCUiShape>() == null) return "no VRCUiShape on the Canvas object";
+            if (go.GetComponent<GraphicRaycaster>() == null) return "no GraphicRaycaster";
+            if (go.GetComponent<BoxCollider>() == null) return "no BoxCollider on the Canvas object";
+            if (go.layer == LayerMask.NameToLayer("UI") || go.layer == LayerMask.NameToLayer("UiMenu"))
+                return "on layer " + LayerMask.LayerToName(go.layer) + " (must not be UI/UiMenu)";
+            float s = go.transform.lossyScale.x;
+            if (!(s >= 0.0009f && s <= 0.0101f)) return "scale " + s + " is outside 0.001-0.01";
+            foreach (TMP_Text text in go.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (text.raycastTarget) return text.name + " is a raycast target (it could cover a button)";
+                if (text.font == null) return text.name + " has no font asset";
+            }
+            foreach (Text legacy in go.GetComponentsInChildren<Text>(true))
+                return legacy.name + " is a legacy uGUI Text (use TextMeshPro)";
+            foreach (Selectable selectable in go.GetComponentsInChildren<Selectable>(true))
+                if (selectable.navigation.mode != Navigation.Mode.None) return selectable.name + " navigation is not None";
+            return null;
         }
     }
 }

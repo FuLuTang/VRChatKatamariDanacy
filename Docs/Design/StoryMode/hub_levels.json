@@ -57,8 +57,7 @@
           -12.5
         ],
         "headingDeg": 0
-      },
-      "maxDiameterM": 30.0
+      }
     },
     {
       "id": "_ref_cancer",
@@ -95,7 +94,6 @@
         "headingDeg": 0,
         "diameterM": 0.222
       },
-      "maxDiameterM": 1.2,
       "round": {
         "killPlaneY": -4,
         "timeLimitSeconds": 420,
@@ -133,8 +131,7 @@
           -39.5
         ],
         "headingDeg": 0
-      },
-      "maxDiameterM": 30.0
+      }
     },
     {
       "id": "terrain_contact_lab",
@@ -167,8 +164,7 @@
           0.0
         ],
         "headingDeg": 0
-      },
-      "maxDiameterM": 30.0
+      }
     }
   ]
 }

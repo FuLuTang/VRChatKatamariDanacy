@@ -25,7 +25,6 @@ namespace VRCKatamari.Editor.Hub
         public bool HasMotor;
         public Vector3 MotorStartCenter;
         public float MotorStartDiameterM;
-        public float MotorMaxBallDiameterM;
         public float MotorGroundOffset;
 
         // The source scene's round controller (paths are source-scene hierarchy paths).
@@ -489,8 +488,6 @@ namespace VRCKatamari.Editor.Hub
                 if (center != null) facts.MotorStartCenter = center.vector3Value;
                 SerializedProperty diameter = so.FindProperty("startDiameterWorldM");
                 if (diameter != null) facts.MotorStartDiameterM = diameter.floatValue;
-                SerializedProperty maxDiameter = so.FindProperty("maxBallDiameterM");
-                if (maxDiameter != null) facts.MotorMaxBallDiameterM = maxDiameter.floatValue;
                 SerializedProperty ground = so.FindProperty("groundPlaneOffset");
                 if (ground != null) facts.MotorGroundOffset = ground.floatValue;
             }

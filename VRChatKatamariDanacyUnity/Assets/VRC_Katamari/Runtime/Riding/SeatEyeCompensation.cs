@@ -48,6 +48,15 @@ namespace VRCKatamari.Riding
     /// station itself, so there is one owner of the seated state.
     /// </para>
     /// <para>
+    /// The anchor is the VRCStation's own transform, the one VRChat carries a seated player
+    /// with. Its <c>stationEnterPlayerLocation</c> must be moved with it and carry no authored
+    /// offset: the player is put at the enter location when seating, so any offset between the
+    /// two is measured as part of this rider's head offset and then clipped by the horizontal
+    /// limit (the "sitting to the right of the ball" defect). The scene assembly
+    /// (<c>RideUxAssembler.AssembleSeatLinks</c>) normalizes both poses onto the follow frame
+    /// and reads the wiring back.
+    /// </para>
+    /// <para>
     /// Resets restore the seat's authored local position, so a refused or unmeasured ride
     /// leaves the scene exactly as authored rather than at a half-applied offset.
     /// </para>

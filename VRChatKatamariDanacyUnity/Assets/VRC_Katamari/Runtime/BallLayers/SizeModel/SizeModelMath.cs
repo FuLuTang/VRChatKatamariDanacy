@@ -17,19 +17,15 @@ namespace VRCKatamari.BallLayers
     /// <see cref="HudDiameterWorldM"/> does and the gate never reads.
     /// </para>
     /// <para>
-    /// The cap is one GLOBAL parameter (<c>maxBallDiameterM</c>, default 30 m), not a
-    /// per-level core radius: the per-level 2.20 m cap was a coupling of the map's content
-    /// ladder to the engine's size limit, and the owner decision replaces it. A total volume
-    /// at or above the cap's volume saturates EXACTLY on the cap diameter (no float compare
-    /// of two huge volumes decides it), so two different over-cap totals cannot produce two
-    /// display sizes.
+    /// The project passes one global semantic diameter cap. A total volume at or above
+    /// the cap's volume saturates exactly on the cap diameter without truncating the ledger.
     /// </para>
     /// <para>
     /// FLOAT32 HAZARD, deliberate and documented: Udon has no first-class double, so the
     /// cube root runs in float. Converting a <c>long</c> volume to float rounds the low bits
     /// above 2^24 mm^3 (0.0168 m^3); the relative error is at most 2^-24, i.e. ~2e-8 on the
-    /// diameter (0.6 micrometres on a 30 m ball). That is far below the millimetre the gate
-    /// and the HUD floor to, so it cannot move a threshold. The rule that follows: NEVER
+    /// diameter (8 micrometres on a 400 m ball) from that conversion alone. This is
+    /// sub-millimetre but may cross a boundary in a narrow band around an exact millimetre. The rule that follows: NEVER
     /// accumulate volume in float - only the ledger's integer sum is authoritative, and this
     /// class is a stateless read of it. The editor and Python compute growth in double and
     /// store an exact <c>long</c> in the host column, so the runtime never re-prices.
@@ -99,7 +95,8 @@ namespace VRCKatamari.BallLayers
             float cubicMetres = Mathf.PI / 6f * coreDiameterM * coreDiameterM * coreDiameterM;
             if (!KatamariMath.IsFiniteFloat(cubicMetres) || cubicMetres <= 0f) return false;
             float mm3 = cubicMetres * (float)Mm3PerCubicMetre;
-            if (!KatamariMath.IsFiniteFloat(mm3)) return false;
+            // (float)long.MaxValue rounds UP to 2^63; equality is already out of range.
+            if (!KatamariMath.IsFiniteFloat(mm3) || mm3 >= (float)long.MaxValue) return false;
             volumeMm3 = (long)Mathf.Round(mm3);
             return volumeMm3 > 0L;
         }
@@ -172,11 +169,11 @@ namespace VRCKatamari.BallLayers
             // The cap volume itself comes out of a float expression (pi/6 * d * d * d), whose
             // rounding depends on whether the runtime keeps float intermediates in double
             // (Unity's Mono) or rounds every step (.NET; Udon is not guaranteed to match
-            // either): at 30 m the two answers differ by ~1e6 mm^3. A strict `>=` against it
+            // either). A strict `>=` against it
             // would make "exactly the cap" depend on that. The saturation threshold is
             // therefore the cap volume minus its own rounding budget (1 ppm, ~4x the worst
             // float chain error), in integer arithmetic. A total inside the budget is the
-            // cap; the diameter that this swallows is below 1e-5 m at 30 m.
+            // cap; the diameter that this swallows is about 0.13 mm at 400 m.
             long capRoundingBudgetMm3 = capVolumeMm3 / CapVolumeToleranceDivisor;
             bool atCap = totalMm3 >= capVolumeMm3 - capRoundingBudgetMm3;
             long effectiveTotalMm3 = atCap ? capVolumeMm3 : totalMm3;

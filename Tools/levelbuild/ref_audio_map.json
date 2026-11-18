@@ -1,0 +1,7 @@
+{
+  "schema": "katamari.ref-absorb-audio/1",
+  "groups": [
+    { "soundClass": 0, "wavs": ["example_pickup_a.wav", "example_pickup_b.wav", "example_pickup_c.wav"] },
+    { "soundClass": 1, "selectorHex": "01", "wavs": ["example_special.wav"] }
+  ]
+}

@@ -54,22 +54,17 @@ class FollowRigTests(unittest.TestCase):
         frame = _step(rig, (10.0, 2.0, -6.0), 0.15, 90.0, 0.1)
         self.assertGreater(frame.position[0], 0.0)
         self.assertLess(frame.position[0], 10.0)
-        self.assertGreater(frame.position[2], -6.0)
+        self.assertLess(frame.position[2], -6.0)
         self.assertLess(frame.position[2], 0.0)
         self.assertGreater(frame.yaw_deg, 0.0)
         self.assertLess(frame.yaw_deg, 90.0)
         self.assertGreaterEqual(frame.position[1] - 2.0, MOTOR_EYE[2])
         self.assertLessEqual(frame.position[1] - 2.0, MOTOR_EYE[3])
-        # Height target is constant here (same radius), so the height alpha cannot move
-        # it. The x/z step is the height alpha (1 - exp(-2*pi*2*0.1) = 0.71539) from the
-        # old frame to the behind-target, and that target is taken along the FILTERED
-        # yaw (90 * 0.84816 = 76.3348 deg), not along the raw 90: target_x = 10 -
-        # sin(76.3348) * 1.08 = 8.95057, target_z = -6 - cos(76.3348) * 1.08 = -6.25515,
-        # so x = 0.71539 * 8.95057 = 6.40315 and z = -1.08 + (-6.25515 + 1.08) * 0.71539
-        # = -4.78225.
+        # Height stays constant. X/Z use the current centre and the filtered yaw
+        # (76.3348°), without a second world-position filter.
         self.assertAlmostEqual(frame.yaw_deg, 76.3348, delta=1e-4)
-        self.assertAlmostEqual(frame.position[0], 6.40315, delta=1e-4)
-        self.assertAlmostEqual(frame.position[2], -4.78225, delta=1e-4)
+        self.assertAlmostEqual(frame.position[0], 8.95057, delta=1e-4)
+        self.assertAlmostEqual(frame.position[2], -6.25515, delta=1e-4)
 
         for _ in range(300):
             frame = _step(rig, (10.0, 2.0, -6.0), 0.15, 90.0, 1.0 / 60.0)
@@ -86,28 +81,29 @@ class FollowRigTests(unittest.TestCase):
         self.assertLess(lagged.position[0], 20.0)
         self.assertLess(abs(_wrap_shortest(30.0, lagged.yaw_deg)), 30.0)
 
-        # A 0.55 + 2.4 * 0.5 = 1.75 m height clamps to the caller's 1.4 m rail, and
-        # 0.75 + 2.2 * 0.5 = 1.85 m of back offset at yaw 270 (sin = -1, cos = 0) lands
-        # entirely on +x: x = -90 + 1.85, z = 120, y = -4 + 1.4.
+        # The 1.4 m rail bounds the CONSTANT part: base 2.0 -> 1.4, so the height is
+        # 1.4 + 2.4 * 0.5 = 2.6 m, and 0.75 + 2.2 * 0.5 = 1.85 m of back offset at yaw
+        # 270 (sin = -1, cos = 0) lands entirely on +x: x = -90 + 1.85, z = 120, y = -4 + 2.6.
         respawned = _step(rig, (-90.0, -4.0, 120.0), 0.5, 270.0, 0.0,
-                          reset=True, eye=(0.55, 2.4, 0.6, 1.4, 0.75, 2.2, 8.0))
+                          reset=True, eye=(2.0, 2.4, 0.6, 1.4, 0.75, 2.2, 8.0))
         self.assertAlmostEqual(respawned.position[0], -90.0 + 0.75 + 2.2 * 0.5, delta=1e-9)
-        self.assertAlmostEqual(respawned.position[1], -4.0 + 1.4, delta=1e-9)
+        self.assertAlmostEqual(respawned.position[1], -4.0 + 2.6, delta=1e-9)
         self.assertAlmostEqual(respawned.position[2], 120.0, delta=1e-9)
         self.assertAlmostEqual(respawned.yaw_deg, 270.0, delta=1e-12)
-        self.assertAlmostEqual(rig.height_m, 1.4, delta=1e-12)
+        self.assertAlmostEqual(rig.height_m, 2.6, delta=1e-12)
         self.assertEqual(rig.frame, respawned)
 
         # The returned frame is the new baseline: feeding it back with dt = 0 must
         # reproduce it and not fall back to the pre-teleport frame.
         again = _step(rig, (-90.0, -4.0, 120.0), 0.5, 270.0, 0.0,
-                      eye=(0.55, 2.4, 0.6, 1.4, 0.75, 2.2, 8.0))
+                      eye=(2.0, 2.4, 0.6, 1.4, 0.75, 2.2, 8.0))
         self.assertEqual(again, respawned)
-        self.assertAlmostEqual(rig.height_m, 1.4, delta=1e-12)
+        self.assertAlmostEqual(rig.height_m, 2.6, delta=1e-12)
 
-    def test_height_and_back_rails_are_rails_not_tuning(self):
-        # 100 Hz over 0.2 s gives a full-weight step, so the height lands on the clamped
-        # target immediately. The bounds bound the height above the ball's CENTRE.
+    def test_rails_bound_the_constant_terms_not_the_radius_terms(self):
+        # 100 Hz over 0.2 s gives a full-weight step, so the height lands on the target
+        # immediately. The max rails bound the author-supplied CONSTANT part; the
+        # min rail is a floor on the total height above the ball's CENTRE.
         rig = FollowRig(height_filter_hz=100.0, yaw_filter_hz=0.0)
         first = _step(rig, (0.0, 5.0, 0.0), 0.5, 0.0, 0.2,
                       eye=(100.0, 0.0, 0.5, 1.5, 0.75, 2.2, 8.0))
@@ -121,12 +117,12 @@ class FollowRigTests(unittest.TestCase):
                        eye=(1.0, 0.0, 0.5, 1.5, 0.75, 2.2, 8.0))
         self.assertAlmostEqual(inside.position[1] - 5.0, 1.0, delta=1e-12)
 
-        # The back offset has its own rail: 0.75 + 2.2 * 0.5 = 1.85 m of back offset
-        # clamps to 1.0, so at yaw 0 the frame is 1.0 m behind the centre on -z.
+        # The back rail bounds the constant too: base back 2.0 -> 1.0, so the offset is
+        # 1.0 + 2.2 * 0.5 = 2.1 m behind the centre on -z at yaw 0 (not 3.1 m).
         clamped_back = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
         frame = _step(clamped_back, (0.0, 0.0, 0.0), 0.5, 0.0, 0.0,
-                      reset=True, eye=(0.55, 2.4, 0.1, 8.0, 0.75, 2.2, 1.0))
-        self.assertAlmostEqual(frame.position[2], -1.0, delta=1e-12)
+                      reset=True, eye=(0.55, 2.4, 0.1, 8.0, 2.0, 2.2, 1.0))
+        self.assertAlmostEqual(frame.position[2], -(1.0 + 2.2 * 0.5), delta=1e-12)
 
         # A zero radius is allowed (a motor that has not derived a size yet reports it):
         # the same geometry with no ball, so 0.55 m up and 0.75 m back.
@@ -135,16 +131,36 @@ class FollowRigTests(unittest.TestCase):
         self.assertAlmostEqual(zero.height_m, 0.55, delta=1e-12)
         self.assertAlmostEqual(zero_frame.position[2], -0.75, delta=1e-12)
 
-        # The full size range ends at 2.2 m, i.e. radius 1.1: 0.55 + 2.4 * 1.1 = 3.19 m
-        # above the centre, well inside the 8 m rail. A rail at 2.5 must clamp it, which
-        # is the rail doing its job rather than the model failing.
+        # 0.55 + 2.4 * 1.1 = 3.19 m above the centre: the radius term is not capped by a
+        # 2.5 m max rail (base 0.55 <= 2.5), because that ceiling is not a view limit.
         large = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
-        _step(large, (0.0, 1.1, 0.0), 1.1, 0.0, 0.0, reset=True)
-        self.assertAlmostEqual(large.height_m, 3.19, delta=1e-12)
-        pinned = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
-        _step(pinned, (0.0, 1.1, 0.0), 1.1, 0.0, 0.0,
+        _step(large, (0.0, 1.1, 0.0), 1.1, 0.0, 0.0,
               reset=True, eye=(0.55, 2.4, 0.1, 2.5, 0.75, 2.2, 8.0))
-        self.assertAlmostEqual(pinned.height_m, 2.5, delta=1e-12)
+        self.assertAlmostEqual(large.height_m, 3.19, delta=1e-12)
+
+    def test_the_eye_stays_outside_the_ball_at_the_global_cap(self):
+        # The push stance: 1.654625 * r up and 1.176792 * r back, no constant. At the
+        # global 400 m diameter cap (r = 200 m) a fixed 128 m rail would pin the frame
+        # inside the ball; with the rails bounding only the constants it is at
+        # (0, 330.925, 235.3584) from the centre, well outside a 200 m ball.
+        stance = (0.0, 1.654625, 0.1, 128.0, 0.0, 1.176792, 128.0)
+        rig = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
+        frame = _step(rig, (0.0, 200.0, 0.0), 200.0, 0.0, 0.0, reset=True, eye=stance)
+        self.assertAlmostEqual(frame.position[1] - 200.0, 1.654625 * 200.0, delta=1e-6)
+        self.assertAlmostEqual(-frame.position[2], 1.176792 * 200.0, delta=1e-6)
+        offset = math.hypot(1.654625 * 200.0, 1.176792 * 200.0)
+        self.assertGreater(offset, 200.0)
+        self.assertGreater(frame.position[1] - 200.0, 200.0)
+
+        # The motor's own defaults (constant 0.55 up / 0.75 back, 2.4 / 2.2 per radius)
+        # are outside the ball at the same size as well.
+        motor = FollowRig(height_filter_hz=0.0, yaw_filter_hz=0.0)
+        motor_frame = _step(motor, (0.0, 200.0, 0.0), 200.0, 0.0, 0.0, reset=True)
+        up = motor_frame.position[1] - 200.0
+        back = -motor_frame.position[2]
+        self.assertAlmostEqual(up, 0.55 + 2.4 * 200.0, delta=1e-6)
+        self.assertAlmostEqual(back, 0.75 + 2.2 * 200.0, delta=1e-6)
+        self.assertGreater(math.hypot(up, back), 200.0)
 
     def test_camera_is_behind_and_above_and_both_grow_with_the_ball(self):
         # The four judged diameters: height = 0.55 + 2.4 * r, back = 0.75 + 2.2 * r, from
@@ -198,7 +214,7 @@ class FollowRigTests(unittest.TestCase):
              "horizontal_yaw_deg", "dt_s", "eye_base_up_m", "eye_up_per_radius",
              "eye_up_min_m", "eye_up_max_m", "eye_base_back_m", "eye_back_per_radius",
              "eye_max_back_m", "reset_to_teleport", "has_previous_frame",
-             "previous_rig_position", "previous_rig_yaw_deg", "previous_height_m"))
+             "previous_rig_yaw_deg", "previous_height_m"))
         self.assertEqual(
             tuple(inspect.signature(FollowRig.update).parameters),
             ("self", "ball_position", "ball_radius_m", "horizontal_yaw_deg", "dt_s",
@@ -292,6 +308,11 @@ class FollowRigTests(unittest.TestCase):
             self.assertGreaterEqual(rig.height_m, MOTOR_EYE[2] - 1e-12)
             self.assertLessEqual(rig.height_m, MOTOR_EYE[3] + 1e-12)
             self.assertAlmostEqual(frame.position[1], ball_y + rig.height_m, delta=1e-9)
+            dx, dz = frame.position[0] - x, frame.position[2] - z
+            yaw_rad = math.radians(frame.yaw_deg)
+            self.assertAlmostEqual(dx * math.cos(yaw_rad) - dz * math.sin(yaw_rad), 0.0, delta=1e-12)
+            self.assertAlmostEqual(dx * math.sin(yaw_rad) + dz * math.cos(yaw_rad),
+                                   -(MOTOR_EYE[4] + radius * MOTOR_EYE[5]), delta=1e-12)
 
             if had_frame:
                 # A filtered yaw approaches its target monotonically: the remaining

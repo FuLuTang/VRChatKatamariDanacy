@@ -1,6 +1,6 @@
 # 剧情模式切片：输入、球视图、骑球、吸附宿主与剧情回合
 
-> **2026-11-16 门已改**：吸收尺寸门按原作数字：物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。「关卡球径上限与第一关星级带」一节的算式与档位件数按旧体积比门（`a·b·c ≤ (π/6)·D³/10`）算出，只作评分模块的参考输入，不是现行口径；现行口径与实现清单见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
+> **2026-11-16 门已改**：吸收尺寸门按原作数字：物件体积 `V = k·a·b·c`（`k` 缺省 0.70），门槛 `Req_mm = floor(1000·cbrt(60·V/π))`，可吸 ⇔ `floor(1000·D) ≥ Req_mm`。「全局球径上限与第一关星级带」一节的星级档位件数按旧体积比门（`a·b·c ≤ (π/6)·D³/10`）算出，只作评分模块的参考输入，不是现行口径；现行口径与实现清单见 [ABSORB_GATE_ORIGINAL](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 
 
 > 状态：五个模块的源码与 U# 程序资产都在仓库里；Unity 侧的 Play 证据只有 2026-11-16 的 Hub 闭环 ClientSim 实跑（见文末「主房间闭环」）和 StationPlatform 实验的 PC 实测（[Evidence/StationPlatform](<../../Evidence/StationPlatform/README.md>)），其余运行时行为见文末「已知限制」。
@@ -475,36 +475,21 @@ prop_bench_01@size=1.25
 
 - 测试在 `Tests/EditMode/Pickup/PickupFieldAuthoringRulesTests.cs`：解析并剥名、非法数字、多个标记、非正/过小、非有限与指数、locale 独立（在 `de-DE` 下 `1.25` 通过、`1,25` 被拒）、档位与值表联动（`1.25` 立方 → l，`furniture l = 16`；`0.72` → m，`fruit m = 4`），并覆盖 `fruit s/m` 有行、`fruit l` 缺失的价值表。`DegenerateBoundsHaveNoTier` 只覆盖三边都不可用的 AABB（全 0、三边 0.00005、负数、NaN、±Infinity）；`FlatPropsKeepTheirLongestSideTier` 钉住「一边为 0、其余边正常 → 仍按最长边分档」。
 
-## 关卡球径上限（现行）与第一关星级带（2026-11-15 参考输入）
+## 全局球径上限（现行）与第一关星级带（2026-11-15 参考输入）
 
 > **2026-11-15 用户决定：现阶段不调数值**（“现在数值上的问题倒不是主要矛盾点”）。本节的 1.25 / 1.40 / 1.42 只是**评分模块将来的参考输入**，不是待办；星级与评语本身属于可拆卸的结果卡模块，与回合核心解耦（见 `Docs/OPEN_DECISIONS.md` 的 (m)(p)）。数字与算式保持原样，等评分模块接线时再取用。
 
 > 状态：`PROVISIONAL_NOT_TESTED`。本节是静态数值设计；唯一的“实测”是 `LEVEL_CONTENT_PLAN.md` §7.4 记录的 1 次 120 s Play Mode（370 u / 1.43 m）。“场景值”来自 `KatamariBallMotor.cs` 的直接读取。
 
-### 1. 球的最大直径是每关参数（owner 2026-11-18 现行）
+### 1. 全局球径上限 400 m（owner 2026-11-18）
 
-- 每关的最大球径 = `hub_levels.json` 里该关的 `maxDiameterM`（米，语义直径）；运行时由 `LevelSwitchHost` 在切关时写进 `KatamariBallMotor.SetMaxBallDiameterM`，增长由 `SizeModelMath.TryDerive` 在 cap 处饱和（没有第二道门）。
-- 现行值：`_ref_cancer` **1.2 m**——原作这关的球最大约 1.2 m，11 件东西（石灯笼×4、拉门、圆桌、云×5）要 1.27–6.45 m 的球才吸得到，原作里吸不到；恢复上限即恢复原作边界。我们自己的关（story_01_bench_size / physics_test_field / terrain_contact_lab）**30 m** 工程护栏（引擎安全上限，不是玩法目标、正常游玩摸不到）。
-- 约定：要收某一关的上限，先按“这一关真实最大件的 AABB 体积”算 `D_min`，再向上取整到 0.10 m；不要反过来先定球再找件。
+所有地图共用 `KatamariBallMotor.GlobalMaxBallDiameterM`。球长到 400 m（语义直径）时，由 `SizeModelMath.TryDerive` 饱和；切关只切换起始大小，不改变上限。它不是每张图的可达值，实际能长多大取决于可吸内容和成长量。
 
-| 关卡 | `maxDiameterM` | 来源 |
-|---|---:|---|
-| `_ref_cancer` | 1.2 | 原作上限（owner 2026-11-18） |
-| story_01_bench_size / physics_test_field / terrain_contact_lab | 30 | 工程护栏，沿用原全局值 |
+**骑手缩放到平台上限就停**：骑乘时 avatar 眼高 E = 2.6546·r ÷ η 由 `RideScaleMath.TryEyeHeightForDiameter` 夹到 `[0.1, 100] m`（`MaxSupportedEyeHeightMeters`；VRChat 不支持 >100 m 的头像缩放）。η ≈ 1 时球径约 75 m 起眼高就停在 100 m，球继续长到 400 m 而骑手不再变大——这是平台限制，不是待修项。
 
-### 2. PicnicLawn 3.6 m 长凳：3.20 是推荐值，且只解决"直径"
+### 2. 第一关星级带：1.25 / 1.40 / 1.42
 
-AABB 取 **3.6 × 0.55 × 0.80 = 1.584 m³**（`Docs/Design/Maps/PicnicLawn/prop_catalog.csv:38` 记 `real_longest_dim_m=1.6`、`game_longest_dim_m=3.6`；这里按任务给的 3.6 m 世界 AABB，横截面沿用公园长椅 0.55×0.80。按产品 1.6 m 算的灵敏度见下）。
-
-- 体积门：`1.584 ≤ (π/6)·D³/10` → `D³ ≥ 60×1.584/π = 30.251` → **`D_min = 3.1159 m`**。
-- 等价边长：`a_eq = 1.584^(1/3) = 1.1657 m`；`D_min = 2.673×1.1657 = 3.1159 m`（与上式一致）。
-- 取该图的 `maxDiameterM = 3.20`（设计值，数据待填）：直径余量 2.7%；`a_eq` 上限 1.197 比长凳 1.166 高 2.6%。**3.20 是"够用且不浪费"的值；3.12 只剩 0.1% 余量，不建议。**
-- **但单位预算才是真门槛**：`U ≥ 10×1.584/0.0041 − 3.439 = 3,859.98`。PicnicLawn 现在 **1,284 u**，球只到 2.160 m，门 0.528 m³ < 1.584，长凳**仍然吸不动**。要让 3.20 的上限真正生效，PicnicLawn 需要 **~4,181 u**（3.26×）或把 `c` 提高；只改 `maxDiameterM` 是一个空旋钮。
-- 灵敏度：按 `real_longest=1.6` 的 1.6×0.55×0.80 = 0.704 m³ → `D_min=2.378`、`U_min=1,713.6`，仍 >1,284；按收拢态 3.6×0.35×0.45 = 0.567 m³ → `D_min=2.212`、`U_min=1,379.5`，仍差 95 u；要让 1,284 u 能吸，`V ≤ 1,284×0.0041/10 = 0.5264 m³`（3.6 m 长时横截面 ≤0.1462 m²，约 0.38×0.38）。**长凳的"真实 AABB"直接决定它是门还是墙；按 0.55×0.80 它就是墙。**
-
-### 3. 第一关星级带：1.25 / 1.40 / 1.42
-
-**常数（已核对代码）**：`B = 3.4390244 u`，`c = 0.0041 m³/u`（`KatamariBallMotor.cs:193`–`194`）；`V(d) = πd³/6`；`total = V/c`；`confirmed = total − B`；`d(U) = (6(B+U)c/π)^(1/3)`。第一关现行的内容声明是 **127 件 / 1500 u**（`Docs/Design/Levels/story_01_bench_size/placement.json` 的 `level.expected`），所以 `d_max = (6×(3.4390244+1500)×0.0041/π)^(1/3) = 2.2746 m`，被 2.20 m 的上限夹住。**下面这张星级表仍按旧 110 件 / 412 u 的账算（决定 (p)：现阶段不调星级数），「占 412」那一列不是现行内容占比。**
+**星级参考模型的常数**：`B = 3.4390244 u`，`c = 0.0041 m³/u`；`V(d) = πd³/6`；`total = V/c`；`confirmed = total − B`；`d(U) = (6(B+U)c/π)^(1/3)`。该参考模型的内容声明是 **127 件 / 1500 u**（`Docs/Design/Levels/story_01_bench_size/placement.json` 的 `level.expected`），所以 `d_max = (6×(3.4390244+1500)×0.0041/π)^(1/3) = 2.2746 m`（模型估算，不是运行时球径上限）。**下面这张星级表仍按旧 110 件 / 412 u 的账算（决定 (p)：现阶段不调星级数），「占 412」那一列不是现行内容占比。**
 
 | 星 | 目标 `d` | `V = πd³/6` | `total = V/c` | `confirmed = total−B` | 占 412 | 余量 `412−confirmed` |
 |---|---:|---:|---:|---:|---:|---:|

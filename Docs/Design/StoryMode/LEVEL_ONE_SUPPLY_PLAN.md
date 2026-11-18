@@ -3,7 +3,7 @@
 > 状态：`MEASURED`（全部数字可由 `Tools/levelbuild/supply_plan.py` 复算）+ `PROPOSAL`（补件是 **dry-run 补丁**，没有并进 `placement.json`）。2026-11-16。
 > 范围：只做离线分析、一份 JSON 补丁、一个分析脚本与它的测试。**不改 `placement.json`，不改 Unity，不跑 Git，不碰美术资产。**
 > 口径：几何/门槛/成长只认 [`placement_core.py`](../../../Tools/levelbuild/placement_core.py) 一份实现——`absorb_diameter_req_mm`（门）、`item_growth_mm3`（`round(0.8·k·a·b·c·1e9)`）、`ball_volume_mm3`/`diameter_for_volume_mm3`（球体积与反解）。本文没有第二套公式。
-> **星级口径注**：本文用 **1.25 / 1.45 / 1.60**（`LEVEL_CONTENT_PLAN.md` §7 与关卡 JSON 的谱系）。`Docs/Design/StoryMode/README.md` §「关卡球径上限与第一关星级带」里那组 **1.25 / 1.40 / 1.42** 是按**已退役的 valueUnits 模型**（B=3.439 u、c=0.0041 m³/u）算的，该节自己也写明"现阶段不调数值、只作评分模块的参考输入"，且与关卡 JSON 不一致（`MAP_AUTHORING_DIGEST.md` C5 已记这条）。本文按下界 1.25/1.45/1.60 分析；如果评分模块最终取 1.40/1.42，本文的 2★/3★ 结论要重算（它们更近，件数更少）。
+> **星级口径注**：本文用 **1.25 / 1.45 / 1.60**（`LEVEL_CONTENT_PLAN.md` §7 与关卡 JSON 的谱系）。`Docs/Design/StoryMode/README.md` §「全局球径上限与第一关星级带」里那组 **1.25 / 1.40 / 1.42** 是按**已退役的 valueUnits 模型**（B=3.439 u、c=0.0041 m³/u）算的，该节自己也写明"现阶段不调数值、只作评分模块的参考输入"，且与关卡 JSON 不一致（`MAP_AUTHORING_DIGEST.md` C5 已记这条）。本文按下界 1.25/1.45/1.60 分析；如果评分模块最终取 1.40/1.42，本文的 2★/3★ 结论要重算（它们更近，件数更少）。
 > 复算命令（两条，都是只读）：
 > ```bash
 > python3 Tools/levelbuild/supply_plan.py Docs/Design/Levels/story_01_bench_size/placement.json --stop 2.2

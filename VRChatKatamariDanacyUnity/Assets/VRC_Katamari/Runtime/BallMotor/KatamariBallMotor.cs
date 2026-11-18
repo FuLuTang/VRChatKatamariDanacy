@@ -149,15 +149,10 @@ namespace VRCKatamari.BallMotor
         // calibration ball. A level that sets startDiameterWorldM has this recomputed in
         // Start (the one conversion), so the per-level start stays a diameter in the data.
         [SerializeField] private long startVolumeMm3 = 14094798L;
-        // The level's size cap, SEMANTIC diameter in metres (owner 2026-11-18: the cap is a
-        // per-level value, as in the original, where MAS1 caps at 30 cm and Cancer at 1.2 m).
-        // 30 m is the authored default: an engineering envelope for our own levels, far above
-        // anything their content needs, so they keep the behaviour they had under the former
-        // global cap. A multi-level scene (AllMapsHub) re-sets it per level through
-        // SetMaxBallDiameterM before resetting the round; the growth itself needs no second
-        // gate - SizeModelMath.TryDerive saturates the total volume at this cap. V_cap =
-        // pi/6 * 30^3 = 14,137 m^3 at the default.
-        [SerializeField] private float maxBallDiameterM = 30f;
+        // Global semantic diameter in metres (owner 2026-11-18). The serialized
+        // mirror is kept for scene migration/read-back, not as a level setting.
+        public const float GlobalMaxBallDiameterM = 400f;
+        [SerializeField, HideInInspector] private float maxBallDiameterM = GlobalMaxBallDiameterM;
         [SerializeField] private float collisionToCoreRadiusRatio = 1f;
         [SerializeField] private float semanticDiameterPerCoreDiameter = 1f;
 
@@ -1067,10 +1062,14 @@ namespace VRCKatamari.BallMotor
             if (ballVisualRollRoot != null) visualRollRotation = ballVisualRollRoot.rotation;
             discontinuous = true;
 
-            // The cap's collision radius, for the reach clamp: the cap is a SEMANTIC
-            // diameter, and the collision radius is derived through the same ratios as
-            // every other size, so the two cannot disagree at the top end.
-            RecomputeMaxCollisionRadius();
+            // The one global cap (owner 2026-11-18) is a SEMANTIC diameter; its collision
+            // radius is derived through the same ratios as every other size, so the reach
+            // clamp and the growth saturate cannot disagree at the top end. The serialized
+            // mirror is forced here because old scenes can still carry a per-level value
+            // (30 m, or Cancer's 1.2 m) from before this decision.
+            maxBallDiameterM = GlobalMaxBallDiameterM;
+            maxCollisionRadiusWorldM = (0.5f * maxBallDiameterM / semanticDiameterPerCoreDiameter)
+                * collisionToCoreRadiusRatio;
 
             if (GrowthLedgerMath.TryJoin(roundState, playerIds, confirmedVolumes, bankedScores,
                 lifeStates, respawnAtSet, respawnAt, playerGenerations, ref playerCount,
@@ -1196,7 +1195,7 @@ namespace VRCKatamari.BallMotor
         /// the authored diameter only decides the size before the first switch.
         /// </para>
         /// <para>
-        /// A start at or above the level's cap is refused, same as the authored
+        /// A start at or above the global cap is refused, same as the authored
         /// <c>startDiameterWorldM</c>: the derive would saturate and the level would start
         /// smaller than it asked for. Before Start has run the motor has no cap-ready
         /// state, so the call is refused.
@@ -1224,59 +1223,6 @@ namespace VRCKatamari.BallMotor
             baseCoreRadiusWorldM = coreRadius;
             startSemanticDiameterWorldM = semanticDiameter;
             return true;
-        }
-
-        /// <summary>
-        /// Replaces the level's max ball diameter at run time, so one motor can serve levels
-        /// whose caps differ (a hub that hosts several maps). Returns false and changes
-        /// nothing when the diameter is not usable or the motor has not run Start.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// Owner 2026-11-18: the cap is a per-level parameter, as in the original (MAS1
-        /// caps at 30 cm, Cancer at 1.2 m). The multi-level hub sets it from its per-level
-        /// table right before <see cref="SetStartVolumeMm3"/> and the round reset, because
-        /// the start volume is validated against the cap.
-        /// </para>
-        /// <para>
-        /// No second growth gate is added here: every size consumer is derived by
-        /// <see cref="SizeModelMath.TryDerive"/> from this one field, and that derive already
-        /// saturates the total volume at the cap. A cap below the ball's current confirmed
-        /// volume therefore clamps the ball to the cap immediately (a level switch never
-        /// carries an over-cap ball in), and a larger one frees the growth the old cap hid.
-        /// The live size is re-derived now, so a caller does not have to wait for the next
-        /// step; the round reset that usually follows re-derives it again from the new start.
-        /// </para>
-        /// </remarks>
-        public bool SetMaxBallDiameterM(float diameterM)
-        {
-            if (!KatamariMath.IsFiniteFloat(diameterM) || diameterM <= 0f) return false;
-            if (!hasLocalRow) return false;
-
-            maxBallDiameterM = diameterM;
-            RecomputeMaxCollisionRadius();
-            RecomputeConfirmedAndSize();
-            return true;
-        }
-
-        /// <summary>
-        /// The level's current max ball diameter, SEMANTIC metres: the cap the growth
-        /// saturates at (<see cref="SetMaxBallDiameterM"/>).
-        /// </summary>
-        public float GetMaxBallDiameterM()
-        {
-            return maxBallDiameterM;
-        }
-
-        /// <summary>
-        /// Writes the reach clamp's copy of the cap: the cap is a SEMANTIC diameter, and the
-        /// collision radius behind it is derived through the same ratios as every other size.
-        /// Called by Start and by <see cref="SetMaxBallDiameterM"/> so the two cannot disagree.
-        /// </summary>
-        private void RecomputeMaxCollisionRadius()
-        {
-            maxCollisionRadiusWorldM = (0.5f * maxBallDiameterM / semanticDiameterPerCoreDiameter)
-                * collisionToCoreRadiusRatio;
         }
 
         /// <summary>
@@ -3404,7 +3350,7 @@ namespace VRCKatamari.BallMotor
                 semanticDiameterWorldM * 0.5f, headingDegrees,
                 dt, eyeBaseUpMeters, eyeUpPerRadius, eyeUpMinMeters, eyeUpMaxMeters,
                 eyeBaseBackMeters, eyeBackPerRadius, eyeMaxBackM, discontinuous,
-                hasFollowRigFrame, followRigWorldPosition, followRigYawDegrees,
+                hasFollowRigFrame, followRigYawDegrees,
                 followRigHeightMeters, out rigPosition, out rigYaw, out height))
             {
                 return;

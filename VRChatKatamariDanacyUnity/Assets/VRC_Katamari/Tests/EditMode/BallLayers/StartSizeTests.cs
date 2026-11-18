@@ -99,7 +99,7 @@ namespace VRCKatamari.Tests
         [Test]
         public void AStartDiameterAboveTheGlobalCapIsRefusedAndTheStartKept()
         {
-            SetField("startDiameterWorldM", 100f);   // above the 30 m cap
+            SetField("startDiameterWorldM", 401f);   // above the global cap
             Invoke("Start");
 
             Assert.AreEqual(CalibrationStartMm3, (long)GetField("startVolumeMm3"),

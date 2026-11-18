@@ -337,7 +337,8 @@ MonoBehaviour:
       Data: 22|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: Panel button transforms in launcher level order; never proximity triggers.
+      Data: Level card Button transforms in launcher level order; never proximity
+        triggers.
     - Name: 
       Entry: 8
       Data: 
@@ -376,7 +377,7 @@ MonoBehaviour:
       Data: 25|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: UnityEngine.UI.Text, UnityEngine.UI
+      Data: TMPro.TextMeshProUGUI, Unity.TextMeshPro
     - Name: 
       Entry: 8
       Data: 

@@ -1,6 +1,6 @@
 using UdonSharp;
 using UnityEngine;
-using UnityEngine.UI;
+using TMPro;
 using VRCKatamari.Hub;
 
 namespace VRCKatamari.Story.Hub
@@ -17,7 +17,9 @@ namespace VRCKatamari.Story.Hub
     /// and <see cref="HubRecordBook"/>, which call <c>OnHubSettingsChanged</c> /
     /// <c>OnHubRecordsChanged</c> on this behaviour. The per-level goal arrays are written by
     /// the hub assembler from the same plan that fills the round controller's table, in
-    /// launcher order. Every Text reference is optional; a missing one is skipped.
+    /// launcher order. Every text reference is optional; a missing one is skipped. The texts are
+    /// TextMeshPro labels on the boards' world-space canvases (HUB_ROOM.md); writing a label
+    /// only when its string changed keeps TMP mesh rebuilds to real changes.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
@@ -32,28 +34,28 @@ namespace VRCKatamari.Story.Hub
         [SerializeField] private float[] levelTargetDiameters;
         [SerializeField] private int[] levelTargetCounts;
         [SerializeField] private float[] levelTimeLimits;
-        [SerializeField] private Text[] levelNameTexts;
-        [SerializeField] private Text[] levelGoalTexts;
-        [SerializeField] private Text[] levelRecordTexts;
-        [SerializeField] private Text[] levelStartTexts;
+        [SerializeField] private TextMeshProUGUI[] levelNameTexts;
+        [SerializeField] private TextMeshProUGUI[] levelGoalTexts;
+        [SerializeField] private TextMeshProUGUI[] levelRecordTexts;
+        [SerializeField] private TextMeshProUGUI[] levelStartTexts;
 
         [Header("Panel texts")]
-        [SerializeField] private Text levelsTitle;
-        [SerializeField] private Text helpTitle;
-        [SerializeField] private Text howToText;
-        [SerializeField] private Text controlsTitle;
-        [SerializeField] private Text controlsVrText;
-        [SerializeField] private Text controlsDesktopText;
-        [SerializeField] private Text settingsTitle;
-        [SerializeField] private Text settingsHintText;
-        [SerializeField] private Text creditsText;
+        [SerializeField] private TextMeshProUGUI levelsTitle;
+        [SerializeField] private TextMeshProUGUI helpTitle;
+        [SerializeField] private TextMeshProUGUI howToText;
+        [SerializeField] private TextMeshProUGUI controlsTitle;
+        [SerializeField] private TextMeshProUGUI controlsVrText;
+        [SerializeField] private TextMeshProUGUI controlsDesktopText;
+        [SerializeField] private TextMeshProUGUI settingsTitle;
+        [SerializeField] private TextMeshProUGUI settingsHintText;
+        [SerializeField] private TextMeshProUGUI creditsText;
 
         [Tooltip("Desktop dash key label (DesktopMoveInput reads Shift); empty prints a neutral 'dash key'.")]
         [SerializeField] private string desktopDashKey = "Shift";
 
         [Header("Settings rows (HubSettingsMath id order)")]
-        [SerializeField] private Text[] settingLabelTexts;
-        [SerializeField] private Text[] settingValueTexts;
+        [SerializeField] private TextMeshProUGUI[] settingLabelTexts;
+        [SerializeField] private TextMeshProUGUI[] settingValueTexts;
 
         private void Start()
         {
@@ -110,13 +112,13 @@ namespace VRCKatamari.Story.Hub
             }
         }
 
-        private static void Set(Text text, string value)
+        private static void Set(TextMeshProUGUI text, string value)
         {
             if (text == null) return;
             if (text.text != value) text.text = value;
         }
 
-        private static void SetAt(Text[] texts, int index, string value)
+        private static void SetAt(TextMeshProUGUI[] texts, int index, string value)
         {
             if (texts == null || index < 0 || index >= texts.Length) return;
             Set(texts[index], value);

@@ -40,6 +40,7 @@
 - 未移植：`SpatialRegistry` 均匀网格广播结构（宿主侧容器，Udon 无 List/Dictionary）与 `Ball` 自己的 confirmed/predicted 字典（那会成为第二份账本；确认账本归 `GrowthLedgerMath`）。Python 的 5 个测试中 4 个已移植，网格那个未移植。
 - 未验证：本环境没有 Unity/Udon 编译与 EditMode 运行，因此**不声称** Udon 编译、EditMode 测试、VR 或网络实测通过。
 - 宿主每帧开销（`PickupFieldHost` 的行选择：网格、运动行契约、估算与待 Unity 验证项）：[PICKUP_FIELD_PERF.md](PICKUP_FIELD_PERF.md)。
+- 吸附音效与手柄振动：本地表现宿主 `Runtime/Pickup/AbsorbFeedbackHost.cs`，窗口/增益/分档/选样的纯函数在 `Runtime/Pickup/AbsorbFeedbackMath.cs`（测试 `Tests/EditMode/Pickup/AbsorbFeedbackMathTests.cs`）；导入器写 `PickupFieldHost.propAbsorbSoundClasses`，合集装配器建 2D 音源池并加载本地参考片段。设计与操作员步骤见 [ABSORB_FEEDBACK.md](ABSORB_FEEDBACK.md)。
 
 ## 接触判定与候选生命周期
 
@@ -94,7 +95,7 @@ absorb ⇔ boxDistance ≤ contactLimit
 > - 整 mm：`PickupAbsorbMath.TryFloorMillimetres` 是**唯一**把长度变成整 mm 的地方，两侧都用它；ε = 1e-3 mm（1 µm，约 4× 2.2 m 处 float32 ulp）只修浮点边界，与 Python 的 `placement_core.MM_EPSILON` 同值。
 > - 「太大」只有一处定义：`PickupAbsorbMath.IsBeyondAbsorbLimit`（`reqMm > ballMm`），吸收门与挡路/支撑分类都调它。
 > - `k` 的合法范围是 `0 < k ≤ 32`（`MaxVolumeK`）：0 会把每件物体定价成 0 体积，70（0.70 的笔误）会让椅子被针尖吸走，所以越界是**拒绝**不是夹紧。
-> - 原来的 512 m³ 上限退役，换成一个**不属于玩法**的数值卫生常量 `MaxItemVolumeSanityWorldM3 = 1000`：2.20 m 上限球最多能吸 0.558 m³ 的物件，1000 m³ 是它的约 1,792 倍（整关 511 件合计也才 3,022 m³），只有坏掉的 bounds 能碰到；碰到时结论是「不可吸 = 挡路」。
+> - 原来的 512 m³ 上限退役，换成一个**不属于玩法**的数值卫生常量 `MaxItemVolumeSanityWorldM3 = 33,510,320`（m³，按原始体积 `k·bbox` 计）。推导：全局球径上限 400 m 的球自身体积 `(π/6)·400³ = 33,510,321.6 m³`，它能合法吸的最大物件是它的 1/10 = 3,351,032 m³；常量取在球体积处（float32 网格上 33,510,320），即比最大合法物件高 10 倍。整关 `_ref_cancer` 511 件合计也才 3,022 m³，所以只有坏掉的 bounds 能碰到；碰到时结论是「不可吸 = 挡路」，不是「无限大」。
 > - 实测：`_ref_cancer` 在 0.222 m 球上旧门 91 件 → 新门 **184** 件，原作 **184** 件；145 个类型的 Req 比值 145/145 = 1.0000。详见 [`ABSORB_GATE_ORIGINAL.md`](../../Research/ContentVolume/ABSORB_GATE_ORIGINAL.md)。
 >
 > **成长侧没有一起改**：`ΔV = V_box`（100%）仍是步骤 C/D 的事，所以现在「门」用 `k·bbox`、「成长」还是 bbox——这是**已知的未完成项**，不要当成两套门。

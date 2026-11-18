@@ -1,6 +1,7 @@
-"""Builds the hub room's art (floor, walls, the three wall boards, card plates, decor and the
-Anchor_* empties the Unity assembler hangs text and buttons on) from hub_layout.json, exports
-the FBX into the Unity project and renders review previews.
+"""Builds the hub room's art (floor, walls, decor, and the three wall boards' coloured frames
+with one Anchor_Board_<id> empty each, where the Unity assembler places the board's panel
+prefab) from hub_layout.json, exports the FBX into the Unity project and renders review
+previews. The panels themselves are uGUI prefabs (Docs/Design/StoryMode/HUB_PANEL_PREFAB.md).
 
 Run headless (Blender 4.0.2 on the Linux box; 3.6+ on Windows):
 
@@ -34,12 +35,6 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 LAYOUT_PATH = os.path.join(HERE, "hub_layout.json")
 DEFAULT_FBX = os.path.join(REPO, "VRChatKatamariDanacyUnity", "Assets", "VRC_Katamari", "Art",
                            "Hub", "HubRoomArt.fbx")
-PREVIEW_FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
-# Blender sets this collection's glyphs at about 0.344 x size per CJK character (measured:
-# "选择关卡" at size 1 is 1.376 wide), while Unity's fontSize x scale is the em, ~1 per CJK
-# character. Multiplying keeps the preview's glyphs the size Unity will draw.
-PREVIEW_EM_TO_SIZE = 1.0 / 0.344
-
 ROOM_W, ROOM_D, WALL_H = 16.0, 8.0, 3.0
 
 
@@ -97,19 +92,11 @@ def board_point(board, x, y, depth):
 
 def board_rotation_b(board):
     """Blender rotation of a flat board part: local X = reader's right, local Z = up and
-    local -Y = towards the reader (rounded_panel and triangle are built in that frame).
+    local -Y = towards the reader (rounded_panel is built in that frame).
     right x away = up in a right-handed frame, so this is a proper rotation."""
     c, r, u, t = board_matrix(board)
     rb, ub, tb = u2b(r), u2b(u), u2b(t)
     m = Matrix((rb, -tb, ub)).transposed()  # columns: local X, local Y, local Z
-    assert abs(m.determinant() - 1.0) < 1e-4, m.determinant()
-    return m.to_euler()
-
-
-def text_rotation_b(board):
-    """Rotation of a preview text curve (glyphs in local XY, read from local +Z)."""
-    c, r, u, t = board_matrix(board)
-    m = Matrix((u2b(r), u2b(u), u2b(t))).transposed()
     assert abs(m.determinant() - 1.0) < 1e-4, m.determinant()
     return m.to_euler()
 
@@ -309,23 +296,23 @@ def build(layout):
         d.rotation_euler = Euler((math.radians(90), 0, 0))
 
     # ---- boards ----
+    # The model carries only each board's coloured frame, legs and corner bolts. The panel
+    # itself (face, title band, cards, rows, text, buttons) is a world-space uGUI prefab
+    # (Docs/Design/StoryMode/HUB_PANEL_PREFAB.md) that the Unity assembler places at
+    # Anchor_Board_<id>: the board's centre, canvasDepthM in front of the board plane, just in
+    # front of the frame's front face (frame depth 0.10 -> front face at 0.05).
     # Anchors are direct children of the root, never grandchildren: with
     # bake_space_transform the 4.0 exporter converts a node's transform by its parent's
     # *converted* local matrix, so the axis change is applied once for a root child and lost
-    # one level deeper (R53: every anchor under an "Anchors" group came out as Blender
-    # (x, y, z) unconverted). verify_hub_fbx.py checks the exported file.
-    anchors = ROOT
+    # one level deeper (R53). verify_hub_fbx.py checks the exported file.
     boards = {b["id"]: b for b in layout["boards"]}
+    canvas_depth = layout["canvasDepthM"]
     for b in layout["boards"]:
         w, h = b["size"]
         frame = rounded_panel("Board%s_Frame" % b["id"], w + 0.24, h + 0.24, 0.10, 0.22,
                               M[b["frame"]], ROOT)
         place_on_board(frame, b, 0, 0, 0.0)
-        face = rounded_panel("Board%s_Face" % b["id"], w, h, 0.02, 0.16, M[b["face"]], ROOT)
-        place_on_board(face, b, 0, 0, 0.06)
-        band = rounded_panel("Board%s_TitleBand" % b["id"], w * 0.62, 0.36, 0.02, 0.15,
-                             M[b["frame"]], ROOT)
-        place_on_board(band, b, 0, h / 2 - 0.2, 0.08)
+        empty("Anchor_Board_%s" % b["id"], b, 0, 0, canvas_depth, w, h, ROOT)
         # Feet / brackets so the boards stand, not float.
         for side in (-1, 1):
             leg = box("Board%s_Leg%s" % (b["id"], "L" if side < 0 else "R"),
@@ -333,65 +320,10 @@ def build(layout):
                       [0, 0, 0], M["Hub_Wood"], bevel=0.02)
             p = board_point(b, side * (w / 2 - 0.4), 0, -0.02)
             leg.location = u2b([p.x, (b["center"][1] - h / 2) / 2, p.z])
-        # Sun-burst bolts in the frame corners.
+        # Sun-burst bolts in the frame corners, outside the panel.
         for i, (sx, sy) in enumerate([(-1, 1), (1, 1), (-1, -1), (1, -1)]):
             bolt = sphere("Board%s_Bolt%d" % (b["id"], i), 0.06, [0, 0, 0], M["Hub_Lemon"])
-            bolt.location = u2b(board_point(b, sx * (w / 2 + 0.04), sy * (h / 2 + 0.04), 0.07))
-
-    for t in layout["texts"]:
-        b = boards[t["board"]]
-        empty("Anchor_Text_%s" % t["id"], b, t["x"], t["y"], t["depth"], t["w"], t["h"], anchors)
-
-    for c in layout["levelCards"]:
-        b = boards[c["board"]]
-        i = c["index"]
-        plate = rounded_panel("LevelCard%d_Plate" % i, c["w"], c["h"], 0.05, 0.14, M[c["plate"]],
-                              ROOT)
-        place_on_board(plate, b, c["x"], c["y"], c["depth"] - 0.025)
-        inner = rounded_panel("LevelCard%d_Inner" % i, c["w"] - 0.08, c["h"] - 0.08, 0.01, 0.1,
-                              M["Hub_White"], ROOT)
-        place_on_board(inner, b, c["x"], c["y"], c["depth"] + 0.002)
-        pv = c["preview"]
-        frame = rounded_panel("LevelCard%d_PreviewFrame" % i, pv["w"] + 0.06, pv["h"] + 0.06, 0.02,
-                              0.06, M[c["plate"]], ROOT)
-        place_on_board(frame, b, c["x"] + pv["x"], c["y"] + pv["y"], pv["depth"] - 0.012)
-        swatch = pv["swatch"]  # dark enough for the white level number
-        sw = rounded_panel("LevelCard%d_Preview" % i, pv["w"], pv["h"], 0.005, 0.04, M[swatch],
-                           ROOT)
-        place_on_board(sw, b, c["x"] + pv["x"], c["y"] + pv["y"], pv["depth"] + 0.004)
-        st = c["start"]
-        pill = rounded_panel("LevelCard%d_StartPill" % i, st["w"], st["h"], 0.03, st["h"] / 2,
-                             M["Hub_Tomato"], ROOT)
-        place_on_board(pill, b, c["x"] + st["x"], c["y"] + st["y"], st["depth"] - 0.016)
-        empty("Anchor_Level%d_Button" % i, b, c["x"], c["y"], c["depth"] + 0.03, c["w"], c["h"],
-              anchors)
-        for key in ("preview", "name", "goal", "record", "start"):
-            e = c[key]
-            empty("Anchor_Level%d_%s" % (i, key.capitalize()), b, c["x"] + e["x"], c["y"] + e["y"],
-                  e["depth"], e["w"], e["h"] if "h" in e else 0.2, anchors)
-
-    for r in layout["settingRows"]:
-        b = boards[r["board"]]
-        i = r["id"]
-        y = r["y"]
-        if i % 2 == 0:
-            stripe = rounded_panel("SettingRow%02d_Stripe" % i, 2.95, r["h"], 0.005, 0.05,
-                                   M["Hub_Peach"], ROOT)
-            place_on_board(stripe, b, 0, y, 0.072)
-        for key, sign in (("less", -1), ("more", 1)):
-            e = r[key]
-            pad = rounded_panel("SettingRow%02d_%s" % (i, key.capitalize()), e["w"], e["h"], 0.03,
-                                e["h"] / 2, M["Hub_Grape"], ROOT)
-            place_on_board(pad, b, e["x"], y, e["depth"] - 0.015)
-            arrow = triangle("SettingRow%02d_%sArrow" % (i, key.capitalize()), e["h"] * 0.32,
-                             sign, M["Hub_White"])
-            place_on_board(arrow, b, e["x"], y, e["depth"] + 0.003)
-            empty("Anchor_Setting%02d_%s" % (i, key.capitalize()), b, e["x"], y, e["depth"],
-                  e["w"], e["h"], anchors)
-        for key in ("label", "value"):
-            e = r[key]
-            empty("Anchor_Setting%02d_%s" % (i, key.capitalize()), b, e["x"], y, e["depth"], e["w"],
-                  r["h"], anchors)
+            bolt.location = u2b(board_point(b, sx * (w / 2 + 0.06), sy * (h / 2 + 0.06), 0.07))
 
     # ---- decor: bunting along the side and back walls, a katamari, plants, lamps ----
     flag_cols = ["Hub_Tomato", "Hub_Orange", "Hub_Lemon", "Hub_Mint", "Hub_Sky", "Hub_Grape"]
@@ -453,23 +385,6 @@ def flat_triangle(name, p0_u, p1_u, p2_u, mat):
     return link(bpy.data.objects.new(name, me))
 
 
-def triangle(name, size, sign, mat):
-    me = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-    a = bm.verts.new((sign * size, 0, 0))
-    b = bm.verts.new((-sign * size * 0.6, 0, size * 0.9))
-    c = bm.verts.new((-sign * size * 0.6, 0, -size * 0.9))
-    f = bm.faces.new((a, b, c))
-    bmesh.ops.recalc_face_normals(bm, faces=[f])
-    if f.normal.y > 0:
-        f.normal_flip()
-    bm.to_mesh(me)
-    bm.free()
-    me.materials.append(mat)
-    ob = bpy.data.objects.new(name, me)
-    return link(ob)
-
-
 def star_mesh(name, r_out, r_in, mat):
     me = bpy.data.meshes.new(name)
     bm = bmesh.new()
@@ -494,66 +409,17 @@ def star_mesh(name, r_out, r_in, mat):
 
 # --------------------------------------------------------------------------- preview ---
 
-def preview_text(layout, boards):
-    """Sample text in the anchors' places, preview only (Unity draws the real text)."""
-    font = bpy.data.fonts.load(PREVIEW_FONT) if os.path.exists(PREVIEW_FONT) else None
+def preview_panels(layout, boards):
+    """Flat cream rectangles where the panel prefabs go, preview only (Unity draws the panels)."""
     pal = {e["name"]: srgb_to_linear(e["rgb"]) for e in layout["palette"]}
-    navy = material("Preview_Navy", pal["Hub_Navy"])
-    white = material("Preview_White", pal["Hub_White"])
-    sample = {
-        "LevelsTitle": "选择关卡", "Prompt": "点墙上的关卡卡片开始 · 桌面：对准后左键 · VR：指向后扳机",
-        "Credits": "VRC塊魂 · 粉丝制作的 VRChat 世界，与官方无关", "HelpTitle": "怎么玩",
-        "HowTo": "· 滚动块魂，碰到比球小的东西就会粘上来\n· 粘得越多球越大，能吸的东西也越大\n· 限时内把球滚到目标大小；时间到自动结算\n· 结果显示 8 秒后自动回大厅\n· 菜单里的 Respawn = 放弃本局并回大厅",
-        "ControlsTitle": "操作",
-        "ControlsVr": "VR\n移动：两根摇杆一起推＝前进\n冲刺：长按左扳机蓄力，松手冲出\n道具：Jump 键\n下车：按住 Jump 1.5 秒",
-        "ControlsDesktop": "桌面\n移动：W/S 前后，A/D 转向\n冲刺：冲刺键\n道具：空格（Jump）\n下车：按住空格 1.5 秒",
-        "SettingsTitle": "设置", "SettingsHint": "点左右箭头修改，自动保存"}
-    names = ["怀旧关：蟹座小院", "野餐一角", "地图 0：物理测试场", "地形实验室"]
-    goals = ["限时 7:00 · 目标 80 cm", "限时 2:00 · 目标 1.25 m", "自由练习 · 不计时", "自由练习 · 不计时"]
-    recs = ["最好 82 cm · 135 件\n上次 61 cm · 90 件  ·  已玩 3", "还没有记录", "", ""]
-    labels = ["VR 操作方式", "左右手互换", "摇杆死区", "转向灵敏度", "音乐", "音效", "提示音", "振动",
-              "低特效", "减弱自动转向", "语言 / Language / 言語"]
-    values = ["原作双摇杆", "关", "0.20", "×1.0", "80%", "80%", "80%", "标准", "关", "关", "简体中文"]
-
-    def put(text, board, x, y, depth, w, em, align, mat):
-        if not text:
-            return
-        cu = bpy.data.curves.new("txt", "FONT")
-        if font:
-            cu.font = font
-        cu.body = text
-        cu.size = em * PREVIEW_EM_TO_SIZE
-        cu.space_line = 0.42
-        cu.align_x = {"left": "LEFT", "center": "CENTER", "right": "RIGHT"}[align]
-        cu.align_y = "CENTER"
-        ob = bpy.data.objects.new("PreviewText", cu)
-        ob.data.materials.append(mat)
-        COLL.objects.link(ob)
-        ox = x - w / 2 if align == "left" else x
-        ob.location = u2b(board_point(board, ox, y, depth))
-        ob.rotation_euler = text_rotation_b(board)
-
-    for t in layout["texts"]:
-        mat = white if t["color"] == "Hub_White" else navy
-        put(sample.get(t["id"], ""), boards[t["board"]], t["x"], t["y"], t["depth"] + 0.02, t["w"],
-            t["em"], t["align"], mat)
-    for c in layout["levelCards"]:
-        b = boards[c["board"]]
-        i = c["index"]
-        for key, txt in (("name", names[i]), ("goal", goals[i]), ("record", recs[i]),
-                         ("start", "开始 →")):
-            e = c[key]
-            put(txt, b, c["x"] + e["x"], c["y"] + e["y"], e["depth"] + 0.02, e["w"], e["em"],
-                e["align"], white if key == "start" else navy)
-        pv = c["preview"]
-        put(str(i + 1), b, c["x"] + pv["x"], c["y"] + pv["y"], pv["depth"] + 0.02, pv["w"],
-            pv["em"], "center", white)
-    for r in layout["settingRows"]:
-        b = boards[r["board"]]
-        put(labels[r["id"]], b, r["label"]["x"], r["y"], r["label"]["depth"] + 0.02, r["label"]["w"],
-            r["label"]["em"], "left", navy)
-        put(values[r["id"]], b, r["value"]["x"], r["y"], r["value"]["depth"] + 0.02, r["value"]["w"],
-            r["value"]["em"], "center", navy)
+    cream = material("Preview_Panel", pal["Hub_Cream"])
+    for b in layout["boards"]:
+        w, h = b["size"]
+        face = rounded_panel("PreviewPanel_%s" % b["id"], w, h, 0.002, 0.16, cream, None)
+        COLL.objects.unlink(face)
+        bpy.context.scene.collection.objects.link(face)
+        face.parent = None
+        place_on_board(face, b, 0, 0, layout["canvasDepthM"])
 
 
 def render(path, cam_u, look_u, lens, samples, res=(1600, 900)):
@@ -604,8 +470,8 @@ def setup_render(samples):
 
 def check_handedness():
     """Pins the Unity -> Blender mapping documented on u2b. The import half (that Unity really
-    places Anchor_* where hub_layout.json says) is checked by HubAssembler on the imported
-    model, which reports any anchor more than 1 cm off."""
+    places Anchor_Board_* where hub_layout.json says) is checked by HubAssembler on the imported
+    model, which reports any anchor more than 2 cm off."""
     b = u2b((1.0, 2.0, 3.0))
     assert (b.x, b.y, b.z) == (-1.0, -3.0, 2.0), b
 
@@ -665,7 +531,7 @@ def main():
         export_fbx(a["fbx"])
     if a["preview_on"]:
         setup_render(a["samples"])
-        preview_text(layout, boards)
+        preview_panels(layout, boards)
         d = a["preview_dir"]
         sp = layout["spawnLocal"]
         render(os.path.join(d, "hub_art_overview.png"), [0, 13.5, -9.5], [0, 0.6, 0.6], 22,

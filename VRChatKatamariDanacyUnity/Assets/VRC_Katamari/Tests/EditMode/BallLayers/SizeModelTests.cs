@@ -7,7 +7,7 @@ namespace VRCKatamari.Tests
     /// <summary>
     /// Pins the fixed-point size model (Docs/OPEN_DECISIONS.md (r) steps C+D): total volume is
     /// start + confirmed in mm^3, the diameter is the equivalent sphere, and the ONE global cap
-    /// (default 30 m) saturates exactly.
+    /// supplied by the caller saturates exactly.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -93,7 +93,7 @@ namespace VRCKatamari.Tests
             AssertVolume(Cap30Mm3 - StartMm3, effectiveB);
             Assert.AreEqual(15f, coreA, Tolerance);
 
-            // A per-level cap still works through the same single parameter (2.20 m here).
+            // Exercise the same math with a synthetic cap as a second test input.
             Assert.IsTrue(Derive(StartMm3, 5575279763L, 2.2f, out _, out _, out float d22,
                 out long e22));
             Assert.AreEqual(2.2f, d22, Tolerance);

@@ -35,11 +35,6 @@ from Tools.motion_sim import motion_cli
 
 SCHEMA_V2 = ref_v2.SCHEMA_V2
 
-#: Default design ceiling when a v2 document does not carry one.  The reference Cancer
-#: document uses the original MAX_DIAMETER 1.20 m (its own notes say so); this fallback
-#: only keeps the v1-shaped ladder/statistics fields finite.
-FALLBACK_MAX_DIAMETER_M = 1.20
-
 #: The 13 motion classes of LEVEL_FORMAT_V2 section 6.7.3, in the order the legend lists
 #: them.  Display only: the *behaviour* of each class is MotionMath's, never this module's.
 MOTION_CLASS_ORDER = (
@@ -605,7 +600,6 @@ class V2Document:
         meta = self.document.get("meta") or {}
         ball = meta.get("ball") or {}
         expected = meta.get("expected") or {}
-        migration = meta.get("migration") or {}
         solids = [solid for solid in
                   (self.document.get("structures") or {}).get("solids") or []
                   if isinstance(solid, dict)]
@@ -620,8 +614,6 @@ class V2Document:
                 float(prop.get("absorbDiameterReqMm") or 0) / 1000.0, 4)
             entry["valueUnits"] = int(prop.get("valueUnits") or 0)
             props.append(entry)
-        max_diameter = (ball.get("maxDiameterM") or migration.get("maxDiameterM")
-                        or FALLBACK_MAX_DIAMETER_M)
         level = {
             "id": meta.get("id"),
             "scene": meta.get("scene"),
@@ -630,7 +622,11 @@ class V2Document:
             "ballStart": list(ball.get("start") or [0.0, 0.0, 0.0]),
             "playerSpawn": list(meta.get("playerSpawn") or [0.0, 0.0, 0.0]),
             "ballDiameterStart": ball.get("startDiameterM"),
-            "ballDiameterMax": max_diameter,
+            # The v1-shaped analysis view needs a per-level size yardstick for its
+            # absorbability colouring; with no per-level cap (OPEN_DECISIONS (n)) that is
+            # the level's own content reach, not the global runtime cap.
+            "ballDiameterMax": (core.reachable_ball_diameter_m(self.document)
+                                or core.MAX_BALL_DIAMETER_M),
             "groundY": meta.get("groundY"),
             "bounds": meta.get("bounds"),
             "spawnClearanceM": meta.get("spawnClearanceM"),
@@ -1128,6 +1124,6 @@ def sum_growth_mm3(document) -> int:
 
 
 __all__ = [
-    "SCHEMA_V2", "FALLBACK_MAX_DIAMETER_M", "V2LoadError", "V2Document",
+    "SCHEMA_V2", "V2LoadError", "V2Document",
     "detect_schema", "is_v2", "layer_map", "load", "schema_of", "sum_growth_mm3",
 ]

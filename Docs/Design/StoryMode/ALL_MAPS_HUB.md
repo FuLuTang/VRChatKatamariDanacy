@@ -66,7 +66,7 @@
 
 ## 3. 切关接口（运行时，批 A–C）
 
-墙面按钮 Interact 经 `HubStartButton` 调 `HubLevelLauncher.TryStartLevel(i)` 时先**切关**再进既有流程：清电机障碍表**和地形网格**、清道具代理 → 设该关地面高度 → 逐宿主登记（外框先清表，其余追加并加 id 偏移）→ 注册该关地形 → 设白名单并集 → 设起始球径、`TryResetForNewRound`、放球到 `start` → 回合控制器 `SelectLevel(i)`。回大厅：计时关先 `AbortRound()`；自由练习没有结果卡，`HubReturnButton` 是唯一出口。结果卡对 `stars:false` 的关不画星，只显示球径与吸收件数。
+墙面按钮 Interact 经 `HubStartButton` 调 `HubLevelLauncher.TryStartLevel(i)` 时先**切关**再进既有流程：清电机障碍表**和地形网格**、清道具代理 → 设该关地面高度 → 逐宿主登记（外框先清表，其余追加并加 id 偏移）→ 注册该关地形 → 设白名单并集 → 设起始球径、`TryResetForNewRound`、放球到 `start` → 回合控制器 `SelectLevel(i)`。球径上限**不再逐关写**：所有地图共用全局 400 m（`KatamariBallMotor.GlobalMaxBallDiameterM`），装配器把它写进共享电机并回读校验（owner 2026-11-18，`OPEN_DECISIONS` (n)）；切关只改起始球径。回大厅：计时关先 `AbortRound()`；自由练习没有结果卡，`HubReturnButton` 是唯一出口。结果卡对 `stars:false` 的关不画星，只显示球径与吸收件数。
 
 ### 3.1 岛的开关（`LevelSwitchHost.islandRoots`）
 

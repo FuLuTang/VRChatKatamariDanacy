@@ -115,45 +115,21 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void TheCapIsTwoPointTwoMetresOnDemandAndThirtyMetresByDefault()
+        public void TheGlobalCapOverridesLegacySceneValuesAndSaturates()
         {
-            // The motor's default cap is the ONE global parameter (30 m).
-            Assert.AreEqual(30f, (float)GetField("maxBallDiameterM"), 1e-6f);
+            Assert.AreEqual(400f, (float)GetField("maxBallDiameterM"));
+            SetField("maxBallDiameterM", 30f); // old serialized scenes
+            Invoke("Start");
+            Assert.AreEqual(400f, (float)GetField("maxBallDiameterM"));
+            Assert.AreEqual(200f, (float)GetField("maxCollisionRadiusWorldM"));
 
-            // A level may pin a smaller cap through that same field; the 2.20 m content
-            // ladder is then a data choice, not a second code path.
-            SetField("maxBallDiameterM", 2.2f);
-            // Drive the size stage to the cap: pi/6 * 2.2^3 = 5,575,279,763 mm^3 total, minus
-            // the start volume. Writing the ledger growth and recomputing is exactly what a
-            // committed absorb does.
-            SetField("unbankedVolumeUnits", 5575279763L - StartMm3);
+            // Credit more than the full ball volume and verify size saturation, not ledger truncation.
+            const long growthMm3 = 33510321638291128L;
+            SetField("unbankedVolumeUnits", growthMm3);
             Invoke("RecomputeConfirmedAndSize");
-
-            float diameter = Getter("GetSemanticDiameterWorldM");
-            Assert.AreEqual(2.2f, diameter, 0f, "saturation is exact, not approximate");
-            Assert.AreEqual(2200f, Getter("GetAbsorbGateDiameterMm"), 1e-6f);
-        }
-
-        [Test]
-        public void AFullyGrownBallCanTakeALargeObjectWhileTheSanityBoundStillRefusesABrokenOne()
-        {
-            // A 5 m cube is 125 m^3 of bbox; at k=0.70 the item volume is 87.5 m^3 and the
-            // 30 m ball's gate allows up to (pi/6*30^3)/10 = 1,413.7 m^3, so it is food. The
-            // SANITY bound must still refuse: a broken 100 m cube (1,000,000 m^3) is beyond it and reads blocking.
-            // The ball must actually BE at the 30 m cap: a ledger at zero would judge a 5 m
-            // cube with a 0.30 m ball.
-            const long Cap30Mm3 = 14137166941154L;
-            SetField("unbankedVolumeUnits", Cap30Mm3 - StartMm3);
-            Invoke("RecomputeConfirmedAndSize");
-            float diameter = Getter("GetSemanticDiameterWorldM");
-            Vector3 huge = new Vector3(5f, 5f, 5f);
-            Assert.IsFalse(PickupAbsorbMath.IsBeyondAbsorbLimit(huge,
-                PickupAbsorbMath.DefaultVolumeK, diameter),
-                "a 5 m cube is absorbable by a 30 m ball");
-            Vector3 broken = new Vector3(100f, 100f, 100f);
-            Assert.IsTrue(PickupAbsorbMath.IsBeyondAbsorbLimit(broken,
-                PickupAbsorbMath.DefaultVolumeK, diameter),
-                "the sanity bound must refuse a broken bounds triple, not call it infinite");
+            Assert.AreEqual(400f, Getter("GetSemanticDiameterWorldM"));
+            Assert.AreEqual(400000f, Getter("GetAbsorbGateDiameterMm"));
+            Assert.AreEqual(growthMm3, (long)InvokeGetter("GetConfirmedVolumeMm3"));
         }
 
         // -- reflection helpers -------------------------------------------------

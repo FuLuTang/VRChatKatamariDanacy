@@ -70,7 +70,7 @@ namespace VRCKatamari.Tests
                     ballCenter, radius, yawDegrees, dtSeconds,
                     baseUp, upPerRadius, upMin, upMax,
                     baseBack, backPerRadius, maxBack,
-                    reset, HasFrame, Position, Yaw, Height,
+                    reset, HasFrame, Yaw, Height,
                     out position, out yaw, out height);
                 if (!accepted) return false;
                 Position = position;
@@ -124,7 +124,7 @@ namespace VRCKatamari.Tests
             Assert.IsTrue(rig.Update(new Vector3(10f, 2f, -6f), 0.15f, 90f, 0.1f));
             Assert.Greater(rig.Position.x, 0f);
             Assert.Less(rig.Position.x, 10f);
-            Assert.Greater(rig.Position.z, -6f);
+            Assert.Less(rig.Position.z, -6f);
             Assert.Less(rig.Position.z, 0f);
             Assert.Greater(rig.Yaw, 0f);
             Assert.Less(rig.Yaw, 90f);
@@ -156,13 +156,14 @@ namespace VRCKatamari.Tests
             Assert.Less(rig.Position.x, 20f);
             Assert.Less(Mathf.Abs(ShortestDelta(30f, rig.Yaw)), 30f);
 
-            // A 0.55 + 2.4 * 0.5 = 1.75 m height clamps to the caller's 1.4 m rail, and
-            // 0.75 + 2.2 * 0.5 = 1.85 m of back offset at yaw 270 (sin = -1, cos = 0) lands
-            // entirely on +x: x = -90 + 1.85, z = 120, y = -4 + 1.4.
+            // The 1.4 m rail bounds the CONSTANT part: base 2.0 -> 1.4, so the height is
+            // 1.4 + 2.4 * 0.5 = 2.6 m, and 0.75 + 2.2 * 0.5 = 1.85 m of back offset at yaw
+            // 270 (sin = -1, cos = 0) lands entirely on +x: x = -90 + 1.85, z = 120,
+            // y = -4 + 2.6.
             Assert.IsTrue(rig.UpdateWith(new Vector3(-90f, -4f, 120f), 0.5f, 270f, 0f,
-                0.55f, 2.4f, 0.6f, 1.4f, 0.75f, 2.2f, 8f, true));
+                2f, 2.4f, 0.6f, 1.4f, 0.75f, 2.2f, 8f, true));
             Assert.AreEqual(-88.15f, rig.Position.x, Tolerance);
-            Assert.AreEqual(-2.6f, rig.Position.y, Tolerance);
+            Assert.AreEqual(-1.4f, rig.Position.y, Tolerance);
             Assert.AreEqual(120f, rig.Position.z, Tolerance);
             Assert.AreEqual(270f, rig.Yaw, Tolerance);
 
@@ -173,20 +174,21 @@ namespace VRCKatamari.Tests
             float height;
             Assert.IsTrue(FollowRigMath.TryUpdate(0.5f, 0.5f,
                 new Vector3(-90f, -4f, 120f), 0.5f, 270f, 0f,
-                0.55f, 2.4f, 0.6f, 1.4f, 0.75f, 2.2f, 8f,
-                false, true, rig.Position, rig.Yaw, rig.Height,
+                2f, 2.4f, 0.6f, 1.4f, 0.75f, 2.2f, 8f,
+                false, true, rig.Yaw, rig.Height,
                 out position, out yaw, out height));
             AssertVector(rig.Position, position);
             Assert.AreEqual(270f, yaw, 0f);
-            Assert.AreEqual(1.4f, height, 0f);
+            Assert.AreEqual(2.6f, height, 0f);
         }
 
         [Test]
         public void HeightBoundsAreRailsNotTuning()
         {
-            // 100 Hz over 0.2 s gives a full-weight step, so the height lands on the clamped
-            // target immediately. The bounds bound the height above the ball's CENTRE; they
-            // exist to catch a mis-authored factor, not to shape the normal range.
+            // 100 Hz over 0.2 s gives a full-weight step, so the height lands on the target
+            // immediately. The max rail bounds the author-supplied CONSTANT part (the min
+            // rail is a floor on the total height above the centre); the rails exist to
+            // catch a mis-authored number, not to shape the normal range.
             RigHarness rig = new RigHarness();
             rig.HeightFilterHz = 100f;
             rig.YawFilterHz = 0f;
@@ -263,21 +265,59 @@ namespace VRCKatamari.Tests
         [Test]
         public void LargeBallIsNotPinnedByTheHeightRails()
         {
-            // The full size range ends at 2.2 m, i.e. radius 1.1: 0.55 + 2.4 * 1.1 = 3.19 m
-            // above the centre, well inside the 8 m rail. A rail set at 2.5 must clamp it,
-            // which is the rail doing its job rather than the model failing.
+            // The max rails bound the CONSTANT term, not radius * factor: with the stance
+            // base 0.55 and per-radius 2.4, a 2.5 m rail cannot pin the radius term, so the
+            // same 3.19 m height comes out at radius 1.1. A too-large BASE is what a rail
+            // catches: base 3.0 with a 2.5 m rail becomes 2.5 + 2.4 * 1.1 = 5.14 m.
             RigHarness rig = new RigHarness();
             rig.HeightFilterHz = 0f;
             rig.YawFilterHz = 0f;
             Assert.IsTrue(rig.Update(new Vector3(0f, 1.1f, 0f), 1.1f, 0f, 0f, true));
             Assert.AreEqual(3.19f, rig.Height, Tolerance);
 
-            RigHarness clamped = new RigHarness();
-            clamped.HeightFilterHz = 0f;
-            clamped.YawFilterHz = 0f;
-            Assert.IsTrue(clamped.UpdateWith(new Vector3(0f, 1.1f, 0f), 1.1f, 0f, 0f,
+            RigHarness railAtProportional = new RigHarness();
+            railAtProportional.HeightFilterHz = 0f;
+            railAtProportional.YawFilterHz = 0f;
+            Assert.IsTrue(railAtProportional.UpdateWith(new Vector3(0f, 1.1f, 0f), 1.1f, 0f, 0f,
                 0.55f, 2.4f, 0.1f, 2.5f, 0.75f, 2.2f, 8f, true));
-            Assert.AreEqual(2.5f, clamped.Height, Tolerance);
+            Assert.AreEqual(3.19f, railAtProportional.Height, Tolerance);
+
+            RigHarness clampedBase = new RigHarness();
+            clampedBase.HeightFilterHz = 0f;
+            clampedBase.YawFilterHz = 0f;
+            Assert.IsTrue(clampedBase.UpdateWith(new Vector3(0f, 1.1f, 0f), 1.1f, 0f, 0f,
+                3f, 2.4f, 0.1f, 2.5f, 0.75f, 2.2f, 8f, true));
+            Assert.AreEqual(5.14f, clampedBase.Height, Tolerance);
+        }
+
+        [Test]
+        public void TheEyeStaysOutsideTheBallAtTheGlobalSizeCap()
+        {
+            // The push stance (1.654625 r up, 1.176792 r back, no constant) at the global
+            // 400 m diameter cap, r = 200 m, with the scene's 128 m rails: a fixed metre
+            // ceiling would pin the eye inside the ball, but the rails bound only the
+            // constants, so the frame is 330.925 m up and 235.3584 m back - outside.
+            RigHarness stance = new RigHarness();
+            stance.HeightFilterHz = 0f;
+            stance.YawFilterHz = 0f;
+            Assert.IsTrue(stance.UpdateWith(new Vector3(0f, 200f, 0f), 200f, 0f, 0f,
+                0f, 1.654625f, 0.1f, 128f, 0f, 1.176792f, 128f, true));
+            Assert.AreEqual(200f + 1.654625f * 200f, stance.Position.y, 1e-3f);
+            Assert.AreEqual(-(1.176792f * 200f), stance.Position.z, 1e-3f);
+            Assert.Greater(Mathf.Sqrt(
+                (stance.Position.y - 200f) * (stance.Position.y - 200f) +
+                stance.Position.z * stance.Position.z), 200f);
+
+            // The motor's own defaults (0.55 up / 2.4 per radius, 0.75 back / 2.2 per
+            // radius) are outside the ball at the same size.
+            RigHarness motor = new RigHarness();
+            motor.HeightFilterHz = 0f;
+            motor.YawFilterHz = 0f;
+            Assert.IsTrue(motor.Update(new Vector3(0f, 200f, 0f), 200f, 0f, 0f, true));
+            Assert.AreEqual(0.55f + 2.4f * 200f, motor.Position.y - 200f, 1e-3f);
+            Assert.AreEqual(-(0.75f + 2.2f * 200f), motor.Position.z, 1e-3f);
+            Assert.Greater(Mathf.Sqrt((motor.Position.y - 200f) * (motor.Position.y - 200f) +
+                motor.Position.z * motor.Position.z), 200f);
         }
 
         [Test]
@@ -468,11 +508,9 @@ namespace VRCKatamari.Tests
             AssertVector(new Vector3(501.85f, 21.75f, -300f), rig.Position);
             Assert.AreEqual(270f, rig.Yaw, Tolerance);
 
-            // The next normal sample starts from the new baseline and stays
-            // bounded between it and the target instead of restarting the lag.
+            // The next normal sample recomputes the back offset from the current centre.
             Assert.IsTrue(rig.Update(new Vector3(501f, 20f, -300f), 0.5f, 270f, 1f / 60f));
-            Assert.Greater(rig.Position.x, 501.85f);
-            Assert.Less(rig.Position.x, 502.85f);
+            Assert.AreEqual(502.85f, rig.Position.x, Tolerance);
             Assert.AreEqual(270f, rig.Yaw, Tolerance);
         }
 

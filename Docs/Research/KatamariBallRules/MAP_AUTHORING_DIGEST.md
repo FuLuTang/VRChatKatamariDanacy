@@ -140,7 +140,7 @@ validate 不报错、rewrite 静默丢弃——加字段必须同时改这一处
 | C2 | 第一关的金数 | `LEVEL_CONTENT_PLAN.md` §2.1、`PICNIC_CORNER_LEVEL_ONE.md` §3.4 写 **110 件 / 412 u**；`placement.json` 与导入器是 **127 件 / 1500 u** |
 | C3 | 上限 vs 内容 | 上限 2.20 m；本关内容 `D_reach = 2.2746 m`（被上限夹住）；但按物理体积重算，全关只有 2.517 m³，2.20 m 需要 5.575 m³ ⇒ 建议本关上限降到 **~1.70 m** |
 | C4 | 运行时没有「道门」这个概念 | 8 道门是设计意图；运行时只有「球体积 ÷ 10，再夹一个逐关卡序列化的绝对体积上限」（`PickupAbsorbMath.cs:145-153`、`KatamariBallMotor.cs:217` 的 `maxItemVolumeWorldM3`），没有按图摆放的 8 道门——`MessyRoom/README.md` §3.3 自己记了这一条 |
-| C5 | 星级带 | `StoryMode/README.md` §「关卡球径上限与第一关星级带」写 1.25 / 1.40 / 1.42；`LEVEL_CONTENT_PLAN.md` §7 与关卡 JSON 是 1.25 / 1.45 / 1.60 |
+| C5 | 星级带 | `StoryMode/README.md` §「全局球径上限与第一关星级带」写 1.25 / 1.40 / 1.42；`LEVEL_CONTENT_PLAN.md` §7 与关卡 JSON 是 1.25 / 1.45 / 1.60 |
 | C6 | 阶梯的轴 | 「球径 ≥ 最长边」已被 `PROP_SET_PLAN.md` §2.8 明确**取代**，但 §2.3–§2.5 的旧表还在文件里 |
 | C7 | 大件能不能吞 | `03_MAPS_ASSETS.md` §2 说超大桌子当地标不可卷；`DungBeetleMeadow` §3.4 / `MessyRoom` §3.4 说容器球大就能整件吞 |
 | C8 | 斜坡 | `03_MAPS_ASSETS.md` §3 建议玩具房用斜坡；`ToyRoom/README.md` §8 故意不做，改用 4 块 0.26 m 拼图垫 |

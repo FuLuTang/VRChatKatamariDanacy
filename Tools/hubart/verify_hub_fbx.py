@@ -80,25 +80,9 @@ def board_point(board, x, y, depth):
 
 
 def expected_anchors(layout):
-    boards = {b["id"]: b for b in layout["boards"]}
-    out = {}
-    for t in layout["texts"]:
-        out["Anchor_Text_" + t["id"]] = board_point(boards[t["board"]], t["x"], t["y"], t["depth"])
-    for c in layout["levelCards"]:
-        b = boards[c["board"]]
-        i = c["index"]
-        out["Anchor_Level%d_Button" % i] = board_point(b, c["x"], c["y"], c["depth"] + 0.03)
-        for key in ("preview", "name", "goal", "record", "start"):
-            e = c[key]
-            out["Anchor_Level%d_%s" % (i, key.capitalize())] = board_point(
-                b, c["x"] + e["x"], c["y"] + e["y"], e["depth"])
-    for r in layout["settingRows"]:
-        b = boards[r["board"]]
-        for key in ("label", "value", "less", "more"):
-            e = r[key]
-            out["Anchor_Setting%02d_%s" % (r["id"], key.capitalize())] = board_point(
-                b, e["x"], r["y"], e["depth"])
-    return out
+    """One Anchor_Board_<id> per board, at the board centre, canvasDepthM towards the reader."""
+    return {"Anchor_Board_" + b["id"]: board_point(b, 0.0, 0.0, layout["canvasDepthM"])
+            for b in layout["boards"]}
 
 
 def main():
@@ -199,7 +183,7 @@ def main():
     if extra:
         print("[hub-fbx] anchors not in the layout: %s" % ", ".join(extra))
     ok = ok and good == len(want) and not extra
-    sample = "Anchor_Text_LevelsTitle"
+    sample = "Anchor_Board_Levels"
     if sample in by_name:
         print("[hub-fbx] %s unity=(%.3f, %.3f, %.3f) layout=(%.3f, %.3f, %.3f)" % (
             sample, *to_unity(apply(world(by_name[sample]), [0, 0, 0])), *want[sample]))

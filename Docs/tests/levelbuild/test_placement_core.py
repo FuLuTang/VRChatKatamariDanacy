@@ -359,7 +359,7 @@ class GrowthMm3Tests(unittest.TestCase):
         self.assertEqual(core.ball_volume_mm3(2.20), 5575279763)
         self.assertAlmostEqual(core.diameter_for_volume_mm3(5575279763), 2.20, places=6)
         # The global 30 m cap from step D: 14,137.17 m^3.
-        self.assertEqual(core.ball_volume_mm3(core.MAX_BALL_DIAMETER_M), 14137166941154)
+        self.assertEqual(core.ball_volume_mm3(core.MAX_BALL_DIAMETER_M), 33510321638291124)
 
     def test_a_growth_total_stays_an_exact_integer_past_int32(self):
         doc = valid_doc()

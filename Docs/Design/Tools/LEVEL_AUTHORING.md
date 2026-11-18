@@ -216,7 +216,7 @@ EGL Error (0x3009): EGL_BAD_MATCH: ...
 | `rotationQuat` | ✓ | **Unity 顺序 `(x,y,z,w)`**，绕枢轴 | 导出器 |
 | `aabb` | ✓ | 世界轴对齐尺寸（未旋转的模型 AABB），**只作校验与预估**，真值仍在 manifest/预制体 | 导出器（读 manifest） |
 | `absorbDiameterReq` | ✓ | `D_req = 2.673 · (a·b·c)^(1/3)`，来自 aabb；**同一个函数只在校验器里实现**（§8） | 校验器回填 |
-| `absorbable` | ✓ | `D_req ≤ level.ballDiameterMax`；**派生**，写进文件只为「一眼看」 | 校验器回填 |
+| `absorbable` | ✓ | `D_req ≤ level.ballDiameterMax`；**派生**，写进文件只为「一眼看」。`ballDiameterMax` 在这份 v1 数据里是关卡的设计梯子顶/分析量；运行时球径上限是全局 400 m（`Docs/OPEN_DECISIONS.md` (n)），不由关卡数据给 | 校验器回填 |
 | `valueUnits` | ○ | 分数单位。**2026-11-15 Lead 拍板**：按 **def** 由关卡数据声明（`defs[].valueUnits`，`props[].valueUnits` 可逐件覆盖）；导入器把声明值传给 `PickupFieldSync` **一次写入并回读**（§7.4），不再由同步工具按最长边定价 | 关卡数据（`defs[]`）/ 逐件覆盖 |
 | `support` / `stackedOn` / `parent` | ○ | 「它跟谁有关」——`support` 是结构 id（站在它上面），`stackedOn` 是另一件道具的 `itemId`，`parent` 是同一个关系的现行拼写（运行时指针）。**导入器不读它们摆位置**，校验器用它判「悬空/穿模」并把责任指到具体那一件 | 导出器 |
 | `parentDerived` | ○ | `true` = 这条 `parent` 是 `supports.derive_supports` 按几何写的，不是人写的。只有带这个标记的链在 `--strict-parents` 下会被几何判红 | `levelctl.py derive-supports --apply` |

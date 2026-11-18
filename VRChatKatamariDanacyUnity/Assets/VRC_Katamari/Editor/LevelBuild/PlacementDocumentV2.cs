@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using VRCKatamari.BallMotor;
 
 namespace VRCKatamari.Editor.LevelBuild
 {
@@ -125,7 +126,6 @@ namespace VRCKatamari.Editor.LevelBuild
         public string Provenance;
         public string Licence;
         public string MigrationFrom;
-        public float MigrationMaxDiameterM;
         public bool HasMigration;
     }
 
@@ -146,10 +146,6 @@ namespace VRCKatamari.Editor.LevelBuild
         public float StartDiameterM;
         public float TargetDiameterM;
         public bool HasTargetDiameter;
-        /// <summary><c>"global"</c> or <c>"level"</c>.</summary>
-        public string MaxDiameterRef;
-        public float MaxDiameterM;
-        public bool HasMaxDiameter;
         public float[] Start;
         public string SpawnSource;
     }
@@ -519,6 +515,7 @@ namespace VRCKatamari.Editor.LevelBuild
 
         private static readonly string[] PlayerStartKeys = { "position", "facingDeg", "source" };
 
+        // The maxDiameter keys are only accepted for old documents; no settings are read.
         private static readonly string[] BallKeys =
         {
             "startDiameterM", "targetDiameterM", "maxDiameterRef", "maxDiameterM", "start",
@@ -744,7 +741,6 @@ namespace VRCKatamari.Editor.LevelBuild
                 ReportUnknown(migration, "meta.migration",
                     new[] { "from", "maxDiameterM", "volumePenalty" }, result, document);
                 meta.MigrationFrom = migration.GetString("from");
-                meta.MigrationMaxDiameterM = migration.GetFloat("maxDiameterM", 0f);
             }
 
             float[][] bounds;
@@ -814,9 +810,6 @@ namespace VRCKatamari.Editor.LevelBuild
             ball.StartDiameterM = node.GetFloat("startDiameterM", 0f);
             ball.HasTargetDiameter = node.Has("targetDiameterM");
             ball.TargetDiameterM = node.GetFloat("targetDiameterM", 0f);
-            ball.MaxDiameterRef = node.GetString("maxDiameterRef");
-            ball.HasMaxDiameter = node.Has("maxDiameterM");
-            ball.MaxDiameterM = node.GetFloat("maxDiameterM", 0f);
             ball.Start = ReadVector(node, "start", 3);
             ball.SpawnSource = node.GetString("spawnSource");
             return ball;
@@ -1480,22 +1473,16 @@ namespace VRCKatamari.Editor.LevelBuild
             }
 
             if (meta.Ball == null) return;
-            if (!(meta.Ball.StartDiameterM > 0f))
+            const float cap = KatamariBallMotor.GlobalMaxBallDiameterM;
+            if (!(meta.Ball.StartDiameterM > 0f && meta.Ball.StartDiameterM < cap))
             {
-                result.Errors.Add("[meta_start_diameter] ball.startDiameterM must be > 0 (got " +
-                                  meta.Ball.StartDiameterM + ")");
+                result.Errors.Add("[meta_start_diameter] ball.startDiameterM must be > 0 and < "
+                                  + cap + " m (got " + meta.Ball.StartDiameterM + ")");
             }
 
             if (meta.Ball.Start == null)
             {
                 result.Errors.Add("[meta_start_diameter] ball.start must be [x,y,z]");
-            }
-
-            if (string.Equals(meta.Ball.MaxDiameterRef, "level", StringComparison.Ordinal) &&
-                !(meta.Ball.MaxDiameterM > 0f))
-            {
-                result.Errors.Add("[meta_cap_override] maxDiameterRef is 'level' but " +
-                                  "maxDiameterM is not > 0");
             }
 
             var ids = new HashSet<string>(StringComparer.Ordinal);

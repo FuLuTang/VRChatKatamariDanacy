@@ -115,7 +115,6 @@ namespace VRCKatamari.Editor.Hub
             public float StartHeadingDeg;
             public float StartDiameterM;
             public long StartVolumeMm3;
-            public float MaxDiameterM;
             public HubAssembler.HubLevelPlan Plan;
         }
 
@@ -250,6 +249,8 @@ namespace VRCKatamari.Editor.Hub
             AssembleRide(lines, problems);
             CheckRideVrInput(output, problems);
             if (problems.Count > 0) return Finish(lines, problems, hc, output);
+            AssembleAbsorbFeedback(output, data, hc, lines, problems);
+            if (problems.Count > 0) return Finish(lines, problems, hc, output);
 
             // ---- GPU instancing on the repeated prop materials ----
             // After every island is in the scene (so the props are visible to the pass) and
@@ -271,6 +272,7 @@ namespace VRCKatamari.Editor.Hub
             var diagLines = new List<string>();
             HubAssembler.CopyAllToUdon(hc);
             VerifyAllTables(outcome, levelSwitch, data, hc, diagLines);
+            VerifyGlobalBallCap(IslandImport.FirstIn<KatamariBallMotor>(output), hc, diagLines);
 
             for (int i = 0; i < diagLines.Count; i++) Line(lines, diagLines[i]);
 
@@ -306,6 +308,165 @@ namespace VRCKatamari.Editor.Hub
                 problems.Add("BallRideStation.vrInput is not the scene's VrStickMoveInput: the VR"
                     + " sticks would push the ball while nobody rides it");
             }
+        }
+
+        // ------------------------------------------------------------ local pickup feedback ---
+
+        private static void AssembleAbsorbFeedback(Scene output, List<LevelData> levels,
+            HubAssembler.Counters hc, List<string> lines, List<string> problems)
+        {
+            var ball = IslandImport.FirstIn<KatamariBallMotor>(output);
+            var ride = IslandImport.FirstIn<BallRideStation>(output);
+            var settings = IslandImport.FirstIn<HubSettingsHost>(output);
+            if (ball == null || ride == null || settings == null)
+            {
+                problems.Add("absorb feedback needs the shared ball, ride station and Hub settings");
+                return;
+            }
+
+            const string objectName = "AbsorbFeedback";
+            Transform anchor = ball.transform.Find(objectName);
+            if (anchor == null)
+            {
+                var root = new GameObject(objectName);
+                Undo.RegisterCreatedObjectUndo(root, "Create " + objectName);
+                root.transform.SetParent(ball.transform, false);
+                anchor = root.transform;
+            }
+            var feedback = anchor.GetComponent<AbsorbFeedbackHost>();
+            if (feedback == null) feedback = HubAssembler.AddUdon<AbsorbFeedbackHost>(anchor.gameObject, hc);
+            if (feedback == null)
+            {
+                problems.Add("could not add AbsorbFeedbackHost to the shared ball");
+                return;
+            }
+
+            var voices = new AudioSource[AbsorbFeedbackMath.VoiceCount];
+            for (int i = 0; i < voices.Length; i++)
+            {
+                string slotName = "Voice" + (i + 1);
+                Transform slot = anchor.Find(slotName);
+                if (slot == null)
+                {
+                    var go = new GameObject(slotName);
+                    Undo.RegisterCreatedObjectUndo(go, "Create " + slotName);
+                    go.transform.SetParent(anchor, false);
+                    slot = go.transform;
+                }
+                var source = slot.GetComponent<AudioSource>();
+                if (source == null) source = Undo.AddComponent<AudioSource>(slot.gameObject);
+                Undo.RecordObject(source, "Configure local absorb voice");
+                source.playOnAwake = false;
+                source.loop = false;
+                source.spatialBlend = 0f;
+                source.clip = null;
+                EditorUtility.SetDirty(source);
+                voices[i] = source;
+            }
+
+            var clips = new List<AudioClip>();
+            var classes = new List<int>();
+            var missingClips = new List<string>();
+            int expectedClips = 0;
+            // Never serialize a reference clip into a tracked output, even if the local
+            // manifest and WAV files happen to be installed on this machine.
+            if (HubLevelCatalog.IsUnderRefUnlicensed(output.path))
+            {
+                var map = ReferenceAbsorbAudio.Load(out string note);
+                if (note != null) Line(lines, "note: absorb feedback: " + note);
+                if (map != null)
+                {
+                    foreach (var group in map.groups)
+                    foreach (string wav in group.wavs)
+                    {
+                        expectedClips++;
+                        AudioClip clip = AssetDatabase.LoadAssetAtPath<AudioClip>(
+                            ReferenceAbsorbAudio.ClipAssetFolder + wav);
+                        if (clip == null)
+                        {
+                            missingClips.Add(wav);
+                            continue;
+                        }
+                        clips.Add(clip);
+                        classes.Add(group.soundClass);
+                    }
+                }
+            }
+            else Line(lines, "note: absorb feedback: clips omitted from non-reference output");
+            // A missing local WAV is not a problem: the host stays silent for that class, and
+            // the note names the files so the operator can copy exactly them next time.
+            if (missingClips.Count > 0)
+                Line(lines, "note: absorb feedback: " + missingClips.Count + "/" + expectedClips
+                    + " local clip(s) not imported under " + ReferenceAbsorbAudio.ClipAssetFolder
+                    + ": " + string.Join(", ", missingClips.ToArray()));
+            else if (expectedClips > 0)
+                Line(lines, "note: absorb feedback: local clips loaded " + clips.Count + "/"
+                    + expectedClips);
+
+            var so = new SerializedObject(feedback);
+            HubAssembler.SetObject(so, "ride", ride, hc);
+            HubAssembler.SetObject(so, "settings", settings, hc);
+            HubAssembler.SetObjectArray(so, "voices", voices, hc);
+            HubAssembler.SetObjectArray(so, "clips", clips.ToArray(), hc);
+            HubAssembler.SetIntArray(so, "clipClasses", classes.ToArray(), hc);
+            so.ApplyModifiedProperties();
+            if (!CopyFeedbackProxy(feedback, problems)) return;
+
+            int linked = 0;
+            foreach (LevelData row in levels)
+            {
+                if (row.Pickup == null) continue;
+                var field = new SerializedObject(row.Pickup);
+                HubAssembler.SetObject(field, "absorbFeedback", feedback, hc);
+                field.ApplyModifiedProperties();
+                if (!CopyFeedbackProxy(row.Pickup, problems)) return;
+                if (FeedbackReferenceMatches(row.Pickup, "absorbFeedback", feedback)) linked++;
+                else problems.Add("absorb feedback link did not read back on level " + row.Entry.id);
+            }
+            bool readBack = FeedbackReferenceMatches(feedback, "ride", ride)
+                && FeedbackReferenceMatches(feedback, "settings", settings)
+                && FeedbackArrayMatches(feedback, "voices", voices)
+                && FeedbackArrayMatches(feedback, "clips", clips.ToArray())
+                && FeedbackArrayMatches(feedback, "clipClasses", classes.ToArray());
+            if (!readBack) problems.Add("AbsorbFeedbackHost backing Udon references or clip table did not read back");
+            Line(lines, "absorb feedback: voices=" + voices.Length + " clips=" + clips.Count
+                + " linked pickup fields=" + linked + "/" + levels.Count
+                + " Udon read-back=" + (readBack ? "verified" : "MISMATCH"));
+        }
+
+        private static bool CopyFeedbackProxy(UdonSharpBehaviour proxy, List<string> problems)
+        {
+            try
+            {
+                UdonSharpEditorUtility.CopyProxyToUdon(proxy);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                problems.Add("absorb feedback: CopyProxyToUdon threw for '" + proxy.name + "': "
+                    + exception.Message + ". Compile, save the scene, reopen it and run the"
+                    + " assembly again");
+                return false;
+            }
+        }
+
+        private static bool FeedbackReferenceMatches(UdonSharpBehaviour owner, string symbol,
+            UdonSharpBehaviour expected)
+        {
+            return UdonVariableAccess.TryRead(owner, symbol, out object value)
+                && Equals(value, UdonSharpEditorUtility.GetBackingUdonBehaviour(expected));
+        }
+
+        private static bool FeedbackArrayMatches(UdonSharpBehaviour owner, string symbol, Array expected)
+        {
+            if (!UdonVariableAccess.TryRead(owner, symbol, out object read)) return false;
+            // An empty serialized array may surface as a null variable value; either way it
+            // means "no entries", which is the state a scene without local clips must reach.
+            if (expected.Length == 0) return read == null || (read is Array none && none.Length == 0);
+            if (!(read is Array actual) || actual.Length != expected.Length) return false;
+            for (int i = 0; i < actual.Length; i++)
+                if (!Equals(actual.GetValue(i), expected.GetValue(i))) return false;
+            return true;
         }
 
         // ------------------------------------------------------------ GPU instancing ---
@@ -646,23 +807,12 @@ namespace VRCKatamari.Editor.Hub
             }
             d.StartVolumeMm3 = volume;
 
-            // ---- max ball diameter: the list entry, else the source motor's authored cap ----
-            // Owner 2026-11-18: the cap is a per-level value (the original's is too - Cancer
-            // 1.2 m; our own levels keep the motor's 30 m engineering envelope). A level with
-            // neither is refused instead of silently inheriting another level's cap.
-            d.MaxDiameterM = level.maxDiameterM > 0f
-                ? level.maxDiameterM : facts.MotorMaxBallDiameterM;
-            if (!(d.MaxDiameterM > 0f))
+            long capVolume;
+            if (!SizeModelMath.TrySphereVolumeMm3(KatamariBallMotor.GlobalMaxBallDiameterM,
+                ratio, out capVolume) || volume >= capVolume)
             {
-                problems.Add(label + ": no max ball diameter (give maxDiameterM, or keep the"
-                    + " source motor's maxBallDiameterM)");
-                return;
-            }
-            if (d.StartDiameterM > 0f && d.StartDiameterM >= d.MaxDiameterM)
-            {
-                problems.Add(label + ": the start ball " + IslandMath.Num(d.StartDiameterM)
-                    + " m does not fit under the max ball diameter "
-                    + IslandMath.Num(d.MaxDiameterM) + " m");
+                problems.Add(label + ": the start ball must fit under the global "
+                    + KatamariBallMotor.GlobalMaxBallDiameterM + " m cap");
                 return;
             }
 
@@ -769,6 +919,15 @@ namespace VRCKatamari.Editor.Hub
                 return null;
             }
 
+            var motorSo = new SerializedObject(motor);
+            if (HubAssembler.SetFloat(motorSo, "maxBallDiameterM",
+                KatamariBallMotor.GlobalMaxBallDiameterM, hc))
+            {
+                motorSo.ApplyModifiedPropertiesWithoutUndo();
+            }
+            // Copy even if the proxy was already correct: the backing table may be stale.
+            hc.Proxies.Add(motor);
+
             LevelSwitchHost host = IslandImport.FirstIn<LevelSwitchHost>(output);
             if (host == null)
             {
@@ -796,7 +955,6 @@ namespace VRCKatamari.Editor.Hub
             var centers = new Vector3[n];
             var headings = new float[n];
             var volumes = new long[n];
-            var maxDiameters = new float[n];
             for (int i = 0; i < n; i++)
             {
                 LevelData d = data[i];
@@ -814,7 +972,6 @@ namespace VRCKatamari.Editor.Hub
                 centers[i] = d.StartCenterWorld;
                 headings[i] = d.StartHeadingDeg;
                 volumes[i] = d.StartVolumeMm3;
-                maxDiameters[i] = d.MaxDiameterM;
             }
 
             var so = new SerializedObject(host);
@@ -839,7 +996,6 @@ namespace VRCKatamari.Editor.Hub
             changed |= HubAssembler.SetVector3Array(so, "startCenters", centers, hc);
             changed |= HubAssembler.SetFloatArray(so, "startHeadingDegrees", headings, hc);
             changed |= HubAssembler.SetLongArray(so, "startVolumesMm3", volumes, hc);
-            changed |= HubAssembler.SetFloatArray(so, "maxBallDiametersM", maxDiameters, hc);
             if (changed)
             {
                 so.ApplyModifiedPropertiesWithoutUndo();
@@ -854,7 +1010,7 @@ namespace VRCKatamari.Editor.Hub
         {
             "motor", "pickupHosts", "terrainHosts", "islandRoots", "levelIds", "groundOffsets", "arenaHosts",
             "arenaStarts", "arenaCounts", "kindsFlat", "kindsStarts", "kindsCounts",
-            "startCenters", "startHeadingDegrees", "startVolumesMm3", "maxBallDiametersM",
+            "startCenters", "startHeadingDegrees", "startVolumesMm3",
         };
 
         private static readonly string[] RoundFields =
@@ -902,6 +1058,29 @@ namespace VRCKatamari.Editor.Hub
                     }
                 }
             }
+        }
+
+        private static void VerifyGlobalBallCap(KatamariBallMotor motor,
+            HubAssembler.Counters hc, List<string> diag)
+        {
+            if (motor == null)
+            {
+                hc.Problems.Add("the shared motor is missing; its global ball diameter cap "
+                    + "could not be verified");
+                return;
+            }
+            const string field = "maxBallDiameterM";
+            const float expected = KatamariBallMotor.GlobalMaxBallDiameterM;
+            SerializedProperty property = new SerializedObject(motor).FindProperty(field);
+            bool proxyMatches = property != null && property.floatValue == expected;
+            bool tableMatches = UdonVariableAccess.TryRead(motor, field, out object value)
+                && value is float actual && actual == expected;
+            diag.Add("diag global ball diameter cap: expected=" + expected + " m, proxy="
+                + (property == null ? "missing" : IslandMath.Num(property.floatValue))
+                + ", Udon=" + (value == null ? "missing" : value.ToString()));
+            if (!proxyMatches || !tableMatches)
+                hc.Problems.Add("the shared motor's global ball diameter cap did not read back as "
+                    + expected + " m on both the proxy and backing Udon table");
         }
 
         // ------------------------------------------------------------ self-check ---
@@ -1175,7 +1354,6 @@ namespace VRCKatamari.Editor.Hub
                 + " heading=" + IslandMath.Num(d.StartHeadingDeg)
                 + " diameterM=" + IslandMath.Num(d.StartDiameterM)
                 + " volumeMm3=" + d.StartVolumeMm3
-                + " maxDiameterM=" + IslandMath.Num(d.MaxDiameterM)
                 + " ground=" + IslandMath.Num(d.GroundOffset)
                 + " arenas=" + d.Arenas.Count
                 + " kinds=" + d.Kinds.Length
@@ -1319,8 +1497,7 @@ namespace VRCKatamari.Editor.Hub
                     {
                         Line(lines, "  motor start=" + IslandMath.Format(new[] { f.MotorStartCenter.x,
                             f.MotorStartCenter.y, f.MotorStartCenter.z }) + " diameterM="
-                            + IslandMath.Num(f.MotorStartDiameterM) + " maxDiameterM="
-                            + IslandMath.Num(f.MotorMaxBallDiameterM) + " groundOffset="
+                            + IslandMath.Num(f.MotorStartDiameterM) + " groundOffset="
                             + IslandMath.Num(f.MotorGroundOffset));
                     }
                     if (f.HasRound)

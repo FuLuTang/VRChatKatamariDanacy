@@ -137,7 +137,7 @@ namespace VRCKatamari.Hub
         public static bool HasConsumer(int id)
         {
             return id == ControlMode || id == SwapHands || id == Deadzone
-                || id == TurnSensitivity || id == Language;
+                || id == TurnSensitivity || id == Language || id == EffectsVolume || id == Haptics;
         }
 
         /// <summary>The nearest deadzone step for a deadzone value (0.2 = step 4).</summary>

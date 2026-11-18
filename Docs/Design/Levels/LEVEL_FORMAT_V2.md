@@ -75,8 +75,6 @@
   "ball": {
     "startDiameterM": 0.2997,
     "targetDiameterM": 2.2,
-    "maxDiameterRef": "level",
-    "maxDiameterM": 30.0,
     "start": [-12.5, 0.15, -12.5],
     "spawnSource": "authored"
   },
@@ -105,8 +103,8 @@
 | `units` / `convention` | string | 是 | 固定 `"m"` / `"unity-y-up-left-handed-quat-xyzw"`；别的值直接报错 |
 | `ball.startDiameterM` | number | 是 | 起始**语义直径**（米，3 位小数） |
 | `ball.targetDiameterM` | number | 否 | 目标直径；剧情关必填，实验/测试关可省 |
-| `ball.maxDiameterRef` | `"level"` | 是 | **已定（owner 2026-11-18）**：球径上限是**每关参数**，不是全局常量；`"level"` 是现行唯一形态，旧的 `"global"`（全项目一个 20 m 上限）口径作废。每关必须同时给 `maxDiameterM`。校验器 `Tools/levelbuild/placement_v2.py` 仍按旧的 global/level 二分实现，迁移前会对剧情关的 `"level"` 记 `[meta_cap_override]`——已知实现滞后，不是现行规则 |
-| `ball.maxDiameterM` | number | 是 | 这一关的球径上限（语义直径，米）：`_ref_cancer` = **1.2 m**（原作上限），我们自己的关沿用 **30 m** 工程护栏。运行时由 `LevelSwitchHost` 在切关时写进电机，增长由 `SizeModelMath.TryDerive` 在 cap 处饱和 |
+| 球径上限 | 全局 400 m | 不写入关卡 | `KatamariBallMotor.GlobalMaxBallDiameterM` 是唯一来源，所有地图共用（`Docs/OPEN_DECISIONS.md` (n)，owner 2026-11-18）。现有 JSON 中的 `ball.maxDiameterRef`、`ball.maxDiameterM` 与 `migration.maxDiameterM` 可保留但不作为配置读取（`migration` 的只是溯源）。 |
+| 本关可达球径 | 派生 | 不写入 | 分析用的「本关最大球径」，不是上限、也从不配置：`placement_core.reachable_ball_diameter_m` 用 `ball.startDiameterM` 的体积加每个 `absorbable:true` 件的成长量算等效球径，再夹到全局上限。墙高、可吸性提示、弯坡弦预算按它判断——拿全局 400 m 当尺子只会让每面墙、每个道具都「够不着」。 |
 | `ball.start` | 3×number | 是 | 球心出生点（世界米） |
 | `ball.spawnSource` | `"authored"` \| `"fieldCentreGuess"` \| `"reference"` | 是 | **推定值必须标出来**。`authored` = 点是在本关真实地形/道具/结构上量出来的可玩点（可达性模型选点：起始吸不动的道具当障碍，按 3 m 路程内可吸件数排序；参考关卡 `_ref_cancer` 就是），依据写进 `arena.notes`；`fieldCentreGuess` = 没有测量、只能取场心。原作出生点本身不可知，见 ORIGINAL_TERRAIN §2.4 |
 | `timeLimitS` | number | 剧情关必填 | 时限（秒）；`0` 表示不限时（实验/测试关） |
@@ -121,9 +119,9 @@
 | `budget` | object | 是 | 电机 v1 注册预算（沿用今天五个键）。它约束 `structures`，**不约束 `terrain`**（地形有自己的表）；接触 v2 打开后 `boxes`/`ramps` 并入 256 OBB 表 |
 | `expected` | object | 是 | 设计门：件数、价值单位、三角数；`levelbuild check` 对实际值 |
 | `source` | object | 是 | `kind` ∈ `authored`/`reference`/`imported`；参考关卡的 `kind=reference` 会让导入器拒绝写进受管根（§11.3） |
-| `migration` | object | 否 | 只在 v1→v2 转换产物上出现，记录源 schema 与被弃用的每关上限；v2 新文件不得手写 |
+| `migration` | object | 否 | 只在 v1→v2 转换产物上出现，记录源 schema 与源数据；v2 新文件不得手写 |
 
-**与旧版的字段改名**：`ballStart`→`ball.start`、`ballDiameterStart`→`ball.startDiameterM`、`ballDiameterMax`→`ball.maxDiameterM`（每关上限）、`level`→`meta`。旧键在 v2 里是**未知键**，硬错误（未知键不得静默丢弃，见 OPEN_DECISIONS 的 `parent` 教训）。
+**与旧版的字段改名**：`ballStart`→`ball.start`、`ballDiameterStart`→`ball.startDiameterM`、`level`→`meta`。旧键在 v2 里是**未知键**，硬错误（未知键不得静默丢弃，见 OPEN_DECISIONS 的 `parent` 教训）。
 
 ---
 
@@ -350,7 +348,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 |---|---|
 | `walls[].points` | XZ 折线（≥2 点）；`closed:true` 时首尾自动相连。墙是有厚度的竖直 slab，**只挡不撑**（顶面不可站，避免窄条站立） |
 | `walls[].minBallDiameterM` | **球径门（开门）**：球径 < 该值时这面墙**注册为实体**（挡住）；球径 ≥ 该值时**打开**（不注册、可穿过）。省略 = 永久墙。原作的 20 cm / 1.5 m / 60 m barrier 就是这个形状：「随球长大扩区」= 在通往外圈的位置放一道门，球够大时它打开 |
-| `walls[].heightM` / `thicknessM` | 墙高/厚；高度必须 > 最大球半径才算墙（校验器警告 `[activity_wall_height]`） |
+| `walls[].heightM` / `thicknessM` | 墙高/厚；高度必须 > **本关可达球半径**（上表「本关可达球径」的一半）才算墙，校验器警告 `[activity_wall_height]`。全局 400 m 上限不是这个比较的尺子 |
 | `walls[].kind` | `visible`（有材质，玩家看得到）／`invisible`（只在编辑器显示） |
 | `killPlane.y` | 球心低于此高度 ⇒ 传送回 `ballStart`、清零速度、计一次 `killCount`。**默认 −6.0 m 是我们选的**，不是原作值（原作那个 −16.9 m 平面是候选证据但未证实） |
 | `killPlane.respawn` | `"ballStart"`（重生于 `meta.ball.start`）或 `[x,y,z]` 明确坐标；v1 只实现 `"ballStart"` |
@@ -409,7 +407,7 @@ TerrainFieldHost.BeginStep(ballCentre, radius)
 | `volumeK` | number | 否 | 逐件覆盖；缺省取 def 的 `volumeK`，再缺省 0.70（PARITY_AUDIT G13）。范围 `0 < k ≤ 32` |
 | `volumeMm3` | int | 是（派生） | `round(k · aabb.x · aabb.y · aabb.z · 1e9)`，定点 `long`（已定 (r)）。工具写、校验器复算；差 > 1 mm³ 报 `[prop_volume_stale]` |
 | `absorbDiameterReqMm` | int | 是（派生） | `floor_mm((60 · volumeMm3 / π)^(1/3))`；原作门的整毫米口径（已定：按原作算式，k × bbox） |
-| `absorbable` | bool | 是 | 作者声明；false 的件永远不可吸（结构件/装饰） |
+| `absorbable` | bool | 是 | 作者声明；false 的件永远不可吸（结构件/装饰）。校验器在本关可达球径处比较「声明 vs 可吸门」，不一致只记一条汇总 note、不报错（v2 里它是作者声明，不是派生） |
 | `valueUnits` | int | 是 | 账本整数（≥1；0/小数当场拒绝，已定 (j)）。与 `volumeMm3` 是两个轴：一个记账、一个几何门 |
 | `parent` | string \| null | 否 | **单父指针**：父件的 `itemId`；null = 无父件。子件在父件被吃后**坠落**、不随父进账（已定 (s)） |
 | `inherit` | `"full"` \| `"position"` \| `"none"` | 否 | 父件运动如何传给子件：`full` = 位置+朝向（`linkAction` 0/1/3）；`position` = 只跟位置、朝向不跟（`linkAction` 6/4）；`none` = 不跟（脱钩/坠落）。缺省：有 `parent` 时 `full`，否则 `none`。**43/90 条父子是「自己 `moveType=-1` 却随父跑」**，靠这个字段表达 |
@@ -659,7 +657,6 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
     "units": "m",
     "convention": "unity-y-up-left-handed-quat-xyzw",
     "ball": {"startDiameterM": 0.30, "targetDiameterM": 0.60,
-             "maxDiameterRef": "level", "maxDiameterM": 30.0,
              "start": [0.0, 0.15, 0.0], "spawnSource": "authored"},
     "timeLimitS": 0,
     "playerSpawn": [0.0, 0.5, -2.4],
@@ -738,7 +735,6 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
     "units": "m",
     "convention": "unity-y-up-left-handed-quat-xyzw",
     "ball": {"startDiameterM": 0.222, "targetDiameterM": 0.80,
-             "maxDiameterRef": "level", "maxDiameterM": 1.20,
              "start": [-5.0, -0.999, 2.5], "spawnSource": "authored"},
     "timeLimitS": 0,
     "playerSpawn": [-5.0, -0.599, 2.5],
@@ -1033,9 +1029,8 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 | tag | 级别 | 触发 |
 |---|---|---|
 | `[meta_units]` / `[meta_convention]` | error | 不是 `m` / `unity-y-up-left-handed-quat-xyzw` |
-| `[meta_start_diameter]` | error | 缺失、≤0、> `maxDiameterM` |
+| `[meta_start_diameter]` | error | 缺失、≤0、≥ 全局上限（400 m） |
 | `[meta_time_limit]` | error | 剧情关缺失或 ≤0 |
-| `[meta_cap_override]` | warning | 迁移期：校验器仍按旧的 global/level 二分，对剧情关的 `"level"` 报警；现行规则是每关都写 `maxDiameterM`，该校验器迁移后此 warning 删除 |
 | `[meta_zone_code]` | error | `code` 不在 0–255；除 code 0 外重复；code 0 被声明超过一次（0 是默认区，最多一条） |
 | `[meta_unknown_key]` | error | `meta`/`ball`/`caps` 出现未知键 |
 | `[meta_ground_y]` | error | 有 `terrain` 时 `groundY` 不低于地形最低点（兜底平面会顶穿地形） |
@@ -1059,7 +1054,7 @@ Make Cancer 的 524 个实例里 **129 个（24.6%）有运动程序**，只用�
 | `[activity_wall]` | error | 点数 <2、闭合多边形自交、`heightM ≤ 0`、`minBallDiameterM` 不是正数（若出现） |
 | `[activity_wall_gate]` | warning | 门的阈值 ≤ 起始球径（这扇门从第一帧就是开的，多半写错了；要永久墙请省略该键） |
 | `[activity_wall_capacity]` | error | 接触 v2 关闭且有效墙段 >8 |
-| `[activity_wall_height]` | warning | `heightM` ≤ 最大球半径（墙挡不住） |
+| `[activity_wall_height]` | warning | `heightM` ≤ 本关可达球半径（墙挡不住；可达球径是派生值，全局 400 m 上限不参与） |
 | `[activity_kill_plane]` | error | `y` 高于 `groundY`/地形最低点，或 `respawn` 不是 `ballStart`/坐标 |
 | `[prop_id]` | error | `itemId` 缺失/重复/前后空白 |
 | `[prop_parent]` | error | 父不存在、自指、成环、与 `rigidGroup` 同时出现 |
@@ -1168,7 +1163,7 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
 | C3 | **重导入 `+0 ~0 -0`**：转换只改 JSON 形状，不改世界位姿/尺寸/件数（吸收门按新口径重算，见 C5），Unity 导入器第二次导入零新建/零更新/零删除 | Unity 操作员跑两次导入，第二次日志 `[level] +0 ~0 -0` |
 | C4 | **不改语义的字段原样保留**：`itemId`、`def`、`kind`、`position`、`rotationQuat`、`aabb`、`valueUnits`、`notes`、`support`/`stackedOn` | 逐件 diff 报告 |
 | C5 | **会改语义的字段必须报告**：`absorbDiameterReq` 从 bbox 门改成 `k·bbox` 门（已定），新值可能不同；转换器输出 `gate_changes.csv`（itemId、旧 mm、新 mm、`absorbable` 变化），**先看报告再提交** | 报告条数与人工复核 |
-| C6 | **上限迁移**：旧 `ballDiameterMax` 写进 `meta.migration.maxDiameterM` 供审计；现行每关上限由 `meta.ball.maxDiameterM` 给出（Cancer 1.2 m，我们自己的关 30 m 护栏），不再有全局上限 | 转换后 `meta.ball.maxDiameterM > 0` |
+| C6 | **上限迁移**：源数据的 `ballDiameterMax` 可保留在 `meta.migration.maxDiameterM` 作溯源，不参与 V2 校验或运行时 | 不为新关填写 `ball.maxDiameterM` |
 | C7 | **边界迁移**：4 张矩形 `boundary` 平面 → `activityArea.walls` 的闭合矩形；非矩形/非轴对齐保留 `role:"boundary"` + warning | 9 个测试场 + hub + story_01 的边界逐份核对 |
 | C8 | **ground 迁移**：`role=ground` 的平面不再进 `structures`，`meta.groundY` 取其平面高度；没有 terrain 的关卡保持平地 | 13 份的 `meta.groundY` 逐份核对；平地关卡重导入后仍是平地 |
 | C11 | **运动数据不伪造**：v1 的 13 份文件没有 `motions`/`paths`，转换器写空表并把 `behaviour` 设为 `static`；参考关卡的 129 个动件由 §11.5 的参考导入器从 `instances.json` 的 `motion{id,action,speed,pathIndex}` 生成，**不能**用「看起来像」猜 class | 参考导入报告列出每个未映射的 `motionID` |
@@ -1210,7 +1205,7 @@ MOTION_CLASSES = ("sporadic_walk","hop","sway","dragged_along","wait_for_player"
 
 | JSON | Unity | 说明 |
 |---|---|---|
-| `meta` | `LevelMetaHost`（新，挂在 `LevelContent` 根）+ `LevelArenaHost` | `startDiameterM`、`timeLimitS`、`targetDiameterM`、`maxDiameterM`（每关上限；切关由 `LevelSwitchHost` 写进电机，没有全局 cap 资产）；`ball.start`/`playerSpawn`/`playerStart` 建 `Markers/*`；有 `playerStart` 时再写场景 `VRC_SceneDescriptor` 的 `spawns` 与 `RespawnHeightY` |
+| `meta` | `LevelMetaHost`（新，挂在 `LevelContent` 根）+ `LevelArenaHost` | `startDiameterM`、`timeLimitS`、`targetDiameterM`；`ball.start`/`playerSpawn`/`playerStart` 建 `Markers/*`；有 `playerStart` 时再写场景 `VRC_SceneDescriptor` 的 `spawns` 与 `RespawnHeightY` |
 | `terrain` | `TerrainRoot`（**新** `TerrainFieldHost`）+ `Chunks/<id>`（**新** `TerrainChunkHost` + `MeshFilter` + `MeshRenderer`） | 球的接触里地形**永远不是** `MeshCollider`，也不进 `LevelArenaHost.staticBoxes`（球不走 PhysX）；只有声明了 `meta.playerStart` 的关卡，才另有一个非 convex、Default 层的 `MeshCollider`，**只给玩家站立**——没有 `visual` 时它与渲染同在 `TerrainRoot/TerrainVisual`，有 `visual` 时在**不渲染**的 `TerrainRoot/TerrainCollision` 上，`TerrainVisual/<part id>` 各一个 `MeshFilter` + `MeshRenderer`（§11.2）；`TerrainFieldHost` 持数组与查询，`LevelArenaHost` 只拿一个引用 |
 | `structures.solids[role=box]` | `LevelContent/Structures/<id>` + `BoxCollider` → `staticBoxes` | 与今天逐位等价 |
 | `structures.solids[role=ramp/curve_ramp]` | 同上 → `rampBoxes`（弯坡展开成 `<id>_00…` 子物体） | 与今天逐位等价 |
@@ -1450,7 +1445,7 @@ Assets/_RefUnlicensed/Levels/_ref_cancer/…
 
 | # | 主题 | 现行口径 | 影响面 |
 |---|---|---|---|
-| **D-1** | 球径上限 | **每关参数**（owner 2026-11-18）：`_ref_cancer` 1.2 m（原作上限），我们自己的关 30 m 工程护栏；数据在 `hub_levels.json` 每关 `maxDiameterM`，切关由 `LevelSwitchHost` 写进电机，增长由 `SizeModelMath` 在 cap 处饱和 | `hub_levels.json`、`LevelSwitchHost`、电机 |
+| **D-1** | 球径上限 | **全局 400 m**（owner 2026-11-18）；所有地图适用，增长由 `SizeModelMath` 饱和 | `KatamariBallMotor.GlobalMaxBallDiameterM` |
 | **D-2** | 地形存储 | 内联保可读；>512 三角形走 `.katerrain` 侧车并钉 sha256；参考关卡用同一格式 | JSON/侧车、编辑器、导入器 |
 | **D-3** | 地形水平阻挡 | 支撑 + 陡面挡（θ 分类），分阶段：T0/T1 只做支撑/推出/去法向速度，T2 才做滚/爬分类与爬升；T2 前用 `structures` slab 补关键阻挡 | 电机、测试场、关卡设计 |
 | **D-4** | 活动区越界 | 硬墙 + 球径门 + 每关 kill plane；玩法范围主要靠地图布局限制；不做软边距 | `activityArea`、电机、关卡设计、HUD |

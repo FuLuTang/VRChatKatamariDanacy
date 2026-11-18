@@ -4,6 +4,8 @@ using VRCKatamari.BallMotor;
 using VRCKatamari.Editor.Hub;
 using VRCKatamari.Hub;
 using VRCKatamari.Input;
+using VRCKatamari.Pickup;
+using VRCKatamari.Riding;
 using VRCKatamari.Story;
 using VRCKatamari.Story.Hub;
 
@@ -58,7 +60,7 @@ namespace VRCKatamari.Editor.Story
                 "host.controller (the round the room follows)", ref problems);
             Transform hubCenter = ObjectReference<Transform>(host, "hubCenter",
                 "host.hubCenter (an empty at the room's centre)", ref problems);
-            if (OptionalReference<UnityEngine.UI.Text>(host, "promptText") == null)
+            if (OptionalReference<TMPro.TextMeshProUGUI>(host, "promptText") == null)
             {
                 Debug.Log("[hub-check] host.promptText is not wired: the room has no on-screen"
                     + " instruction line (use the wall panel buttons to start)");
@@ -68,7 +70,7 @@ namespace VRCKatamari.Editor.Story
             float hubRadius = FloatField(host, "hubRadiusMeters", 12f);
             if (buttons == 0)
             {
-                Report("host.levelButtons is empty: wall panel buttons are not wired", ref problems);
+                Report("host.levelButtons is empty: the level cards are not wired", ref problems);
             }
 
             if (hubCenter != null)
@@ -166,9 +168,14 @@ namespace VRCKatamari.Editor.Story
             for (int i = 0; i < buttons; i++)
             {
                 Transform button = Element<Transform>(host, "levelButtons", i);
-                if (button == null || button.GetComponent<HubStartButton>() == null
-                    || button.GetComponent<Collider>() == null)
-                    Report("wall panel button " + i + " needs Collider + HubStartButton", ref problems);
+                HubStartButton start = button == null ? null : button.GetComponent<HubStartButton>();
+                if (start == null)
+                {
+                    Report("level card " + i + " has no HubStartButton", ref problems);
+                    continue;
+                }
+                string cardProblem = HubAssembler.PanelButtonProblem(start);
+                if (cardProblem != null) Report(button.name + ": " + cardProblem, ref problems);
             }
             if (host.gameObject == launcher.gameObject)
             {
@@ -177,7 +184,7 @@ namespace VRCKatamari.Editor.Story
             }
 
             // The host owns the panel instruction line; avoid two competing status labels.
-            if (OptionalReference<UnityEngine.UI.Text>(launcher, "statusText") != null)
+            if (OptionalReference<Object>(launcher, "statusText") != null)
                 Warn("launcher.statusText duplicates host.promptText; use only one instruction line");
 
             int controllers = Object.FindObjectsOfType<StoryRoundController>().Length;
@@ -189,6 +196,7 @@ namespace VRCKatamari.Editor.Story
 
             CheckVrStickInput(OptionalReference<HubSettingsHost>(host, "settings"), ref problems);
             int arrows = CheckPanels(host, entries, ref problems);
+            CheckAbsorbFeedback(OptionalReference<HubSettingsHost>(host, "settings"), ref problems);
 
             int presenters = Object.FindObjectsOfType<StoryResultPresenter>().Length;
             if (presenters == 0)
@@ -198,7 +206,7 @@ namespace VRCKatamari.Editor.Story
                     + " the room does not duplicate them");
             }
 
-            Debug.Log("[hub-check] done: " + problems + " problem(s), " + buttons + " panel button(s), "
+            Debug.Log("[hub-check] done: " + problems + " problem(s), " + buttons + " level card(s), "
                 + entries + " level entry/entries, " + arrows + " setting arrow(s), room radius "
                 + hubRadius);
         }
@@ -308,8 +316,11 @@ namespace VRCKatamari.Editor.Story
         }
 
         // The settings store, the record book and the panel display (HUB_ROOM.md): one each,
-        // wired to each other; every setting row has two arrows with a collider and the right
-        // id/delta; the button colliders are on the Default layer and face the spawn.
+        // wired to each other; the three boards are instances of their panel prefabs and VRChat
+        // interactable canvases (World Space,
+        // VRCUiShape, BoxCollider, GraphicRaycaster, not on the UI layer, one EventSystem); every
+        // setting row has two arrow Buttons with the right id/delta and onClick ->
+        // SendCustomEvent("Press").
         private static int CheckPanels(HubRoomHost host, int entries, ref int problems)
         {
             var settings = Object.FindObjectsOfType<HubSettingsHost>(true);
@@ -353,13 +364,101 @@ namespace VRCKatamari.Editor.Story
                 if (!HubSettingsMath.IsValidId(id) || (delta != 1 && delta != -1)
                     || !seen.Add(id * 2 + (delta > 0 ? 1 : 0)))
                     Report(arrows[i].name + " has id " + id + " delta " + delta, ref problems);
-                if (arrows[i].GetComponent<Collider>() == null || arrows[i].gameObject.layer != 0)
-                    Report(arrows[i].name + " needs a Collider on the Default layer", ref problems);
+                string arrowProblem = HubAssembler.PanelButtonProblem(arrows[i]);
+                if (arrowProblem != null) Report(arrows[i].name + ": " + arrowProblem, ref problems);
             }
+            foreach (string id in HubAssembler.BoardIds)
+            {
+                GameObject board = GameObject.Find(HubAssembler.BoardPrefix + id);
+                string boardProblem = board == null ? "missing"
+                    : HubAssembler.BoardCanvasProblem(board);
+                if (boardProblem != null)
+                {
+                    Report(HubAssembler.BoardPrefix + id + ": " + boardProblem, ref problems);
+                    continue;
+                }
+                string prefabPath = HubAssembler.PanelPrefabPath(id);
+                var source = PrefabUtility.GetCorrespondingObjectFromSource(board) as GameObject;
+                if (source == null || AssetDatabase.GetAssetPath(source) != prefabPath)
+                    Report(board.name + " is not an instance of " + prefabPath, ref problems);
+            }
+            int eventSystems = Object.FindObjectsOfType<UnityEngine.EventSystems.EventSystem>(true).Length;
+            if (eventSystems != 1)
+                Report("expected one EventSystem (uGUI clicks), found " + eventSystems, ref problems);
             if (seen.Count != HubSettingsMath.Count * 2)
                 Report("setting arrows cover " + seen.Count + " of " + (HubSettingsMath.Count * 2)
                     + " (id, direction) pairs", ref problems);
             return arrows.Length;
+        }
+
+        // Absorb feedback (sound + haptics): one host, wired to the ride seat and the settings
+        // store in the proxy and the Udon table, a full voice pool, clip/class tables of equal
+        // length, and every level's PickupFieldHost pointing at it. No clip at all is a note
+        // (silent, not broken).
+        private static void CheckAbsorbFeedback(HubSettingsHost settings, ref int problems)
+        {
+            var hosts = Object.FindObjectsOfType<AbsorbFeedbackHost>(true);
+            if (hosts.Length != 1)
+            {
+                Report("expected exactly one AbsorbFeedbackHost, found " + hosts.Length, ref problems);
+                return;
+            }
+            AbsorbFeedbackHost feedback = hosts[0];
+            var seat = Object.FindObjectOfType<BallRideStation>(true);
+            if (ObjectReference<BallRideStation>(feedback, "ride", "absorbFeedback.ride", ref problems) != seat)
+                Report("AbsorbFeedbackHost.ride is not the scene's BallRideStation", ref problems);
+            if (!UdonReferenceIs(feedback, "ride", seat))
+                Report("AbsorbFeedbackHost.ride in the Udon table is not the seat's behaviour", ref problems);
+            if (ObjectReference<HubSettingsHost>(feedback, "settings", "absorbFeedback.settings",
+                ref problems) != settings || settings == null)
+                Report("AbsorbFeedbackHost.settings is not the room's HubSettingsHost", ref problems);
+            if (!UdonReferenceIs(feedback, "settings", settings))
+                Report("AbsorbFeedbackHost.settings in the Udon table is not the settings behaviour", ref problems);
+
+            SerializedProperty voices = Find(feedback, "voices");
+            if (voices == null || voices.arraySize != AbsorbFeedbackMath.VoiceCount)
+            {
+                Report("AbsorbFeedbackHost.voices has " + (voices == null ? 0 : voices.arraySize)
+                    + " sources, wants " + AbsorbFeedbackMath.VoiceCount, ref problems);
+            }
+            else
+            {
+                for (int i = 0; i < voices.arraySize; i++)
+                    if (voices.GetArrayElementAtIndex(i).objectReferenceValue == null)
+                        Report("AbsorbFeedbackHost.voices[" + i + "] is empty", ref problems);
+            }
+            SerializedProperty clips = Find(feedback, "clips");
+            SerializedProperty classes = Find(feedback, "clipClasses");
+            int clipCount = clips == null ? 0 : clips.arraySize;
+            int classCount = classes == null ? 0 : classes.arraySize;
+            if (clipCount != classCount)
+                Report("AbsorbFeedbackHost has " + clipCount + " clips but " + classCount
+                    + " clip classes", ref problems);
+            for (int i = 0; classes != null && i < classCount; i++)
+                if (classes.GetArrayElementAtIndex(i).intValue < 0)
+                    Report("AbsorbFeedbackHost.clipClasses[" + i + "] is negative", ref problems);
+            if (clipCount == 0)
+                Debug.Log("[hub-check] AbsorbFeedbackHost has no clips: pickups are silent (haptics only)");
+
+            foreach (PickupFieldHost field in Object.FindObjectsOfType<PickupFieldHost>(true))
+            {
+                SerializedProperty decor = Find(field, "decorativeOnly");
+                if (decor != null && decor.boolValue) continue;
+                if (OptionalReference<AbsorbFeedbackHost>(field, "absorbFeedback") != feedback)
+                    Report("PickupFieldHost on '" + field.name + "' does not point absorbFeedback at"
+                        + " the scene's AbsorbFeedbackHost", ref problems);
+            }
+        }
+
+        // The Udon table of owner holds field = target's backing UdonBehaviour.
+        private static bool UdonReferenceIs(UdonSharp.UdonSharpBehaviour owner, string field,
+            UdonSharp.UdonSharpBehaviour target)
+        {
+            if (target == null) return false;
+            var backing = UdonSharpEditor.UdonSharpEditorUtility.GetBackingUdonBehaviour(target);
+            object value;
+            return backing != null && UdonVariableAccess.TryRead(owner, field, out value)
+                && (value as VRC.Udon.UdonBehaviour) == backing;
         }
 
         private static void Report(string message, ref int problems)

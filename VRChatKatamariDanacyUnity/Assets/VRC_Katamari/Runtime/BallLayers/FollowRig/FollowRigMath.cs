@@ -36,11 +36,9 @@ namespace VRCKatamari.BallLayers
     /// </para>
     /// <para>
     /// The previous filtered state is caller-owned: hasPreviousFrame plus the last returned
-    /// position, yaw and height are passed back in. A missing previous frame or
-    /// resetToTeleport snaps to the new reference instead of interpolating across the map.
-    /// Only x and z of previousRigWorldPosition are read; its y is always recomputed from the
-    /// current ball Y and the current height. False means invalid input or a non-finite
-    /// candidate; no output is written and the caller keeps the state it passed in.
+    /// yaw and height are passed back in. A missing previous frame or resetToTeleport snaps
+    /// those filters to the new reference. False means invalid input or a non-finite
+    /// candidate; the caller keeps the state it passed in.
     /// </para>
     /// <para>
     /// Each filter alpha is 1 - exp(-2*pi*hz*dt), so 0 Hz or 0 dt holds the previous value.
@@ -48,6 +46,14 @@ namespace VRCKatamari.BallLayers
     /// filtered yaw - the same yaw written to the transform - so the frame's own facing and
     /// its offset direction cannot disagree. The frequencies, the base/lift factors and their
     /// bounds are caller tuning inputs, not measured product values or VR comfort limits.
+    /// </para>
+    /// <para>
+    /// The max rails bound the CONSTANT terms, never the radius-proportional ones. A rail in
+    /// metres on <c>radius * factor</c> would pin the eye inside a growing ball sooner or
+    /// later: with the push stance (1.6546 * radius up, 1.1768 * radius back) the 400 m
+    /// global ball cap puts the eye 331 m above the centre, so any fixed ceiling below that
+    /// buries the camera in the ball. The radius-proportional placement is the design and the
+    /// ball-size cap is what bounds it; the rails exist to catch a mis-authored constant.
     /// </para>
     /// </remarks>
     public static class FollowRigMath
@@ -60,15 +66,17 @@ namespace VRCKatamari.BallLayers
         /// ballWorldPosition is the ball's CENTRE and ballRadiusM its drawn radius, so the
         /// top of the ball is <c>ballWorldPosition.y + ballRadiusM</c>. heightMeters is the
         /// committed height above that centre; pass it back on the next call with the
-        /// returned position and yaw. On success rigYawDegrees is in [0, 360).
+        /// returned yaw. On success rigYawDegrees is in [0, 360).
         /// </para>
         /// <para>
-        /// The bounds bound the height above the CENTRE, and their defaults are rails rather
-        /// than tuning: they must not force a small ball up to a standing person's eye height
-        /// (a 0.10 m ball is played from about 0.7 m above the floor) and must not pin a large
-        /// one. A negative or non-finite radius, factor or bound is a data error, not a clamp
-        /// request. A zero radius is allowed: it is the same geometry with no ball, which is
-        /// what a motor that has not derived a size yet reports.
+        /// The bounds are rails rather than tuning: a floor on the height above the CENTRE
+        /// (so a tiny ball is not played from the floor) and a ceiling on the author-supplied
+        /// CONSTANT parts of the height and the back-off. The radius-proportional parts are
+        /// not clamped: they are the stance, and the ball-size cap already bounds them, so an
+        /// absolute metre ceiling would pin a large ball's eye inside the ball. A negative or
+        /// non-finite radius, factor or bound is a data error, not a clamp request. A zero
+        /// radius is allowed: it is the same geometry with no ball, which is what a motor that
+        /// has not derived a size yet reports.
         /// </para>
         /// </remarks>
         public static bool TryUpdate(
@@ -87,7 +95,6 @@ namespace VRCKatamari.BallLayers
             float eyeMaxBackM,
             bool resetToTeleport,
             bool hasPreviousFrame,
-            Vector3 previousRigWorldPosition,
             float previousRigYawDegrees,
             float previousHeightMeters,
             out Vector3 rigWorldPosition,
@@ -118,7 +125,6 @@ namespace VRCKatamari.BallLayers
             bool usePrevious = hasPreviousFrame && !resetToTeleport;
             if (usePrevious)
             {
-                if (!KatamariMath.IsFiniteVector(previousRigWorldPosition)) return false;
                 if (!KatamariMath.IsFiniteFloat(previousRigYawDegrees)) return false;
                 if (!KatamariMath.IsFiniteFloat(previousHeightMeters)) return false;
             }
@@ -130,15 +136,19 @@ namespace VRCKatamari.BallLayers
 
             // Behind and above the ball, both measured from its CENTRE and both growing with
             // its radius: the ball approaches the camera from below as it grows, instead of
-            // the camera being left behind at a fixed height.
-            float targetHeight = eyeBaseUpMeters + ballRadiusM * eyeUpPerRadius;
+            // the camera being left behind at a fixed height. The max rails cap only the
+            // constant terms; the radius terms are the stance and must not be pinned.
+            float baseHeight = eyeBaseUpMeters;
+            if (baseHeight > eyeUpMaxMeters) baseHeight = eyeUpMaxMeters;
+            float targetHeight = baseHeight + ballRadiusM * eyeUpPerRadius;
             if (!KatamariMath.IsFiniteFloat(targetHeight)) return false;
-            targetHeight = Mathf.Clamp(targetHeight, eyeUpMinMeters, eyeUpMaxMeters);
+            if (targetHeight < eyeUpMinMeters) targetHeight = eyeUpMinMeters;
 
-            float back = eyeBaseBackMeters + ballRadiusM * eyeBackPerRadius;
+            float baseBack = eyeBaseBackMeters;
+            if (baseBack > eyeMaxBackM) baseBack = eyeMaxBackM;
+            float back = baseBack + ballRadiusM * eyeBackPerRadius;
             if (!KatamariMath.IsFiniteFloat(back)) return false;
             if (back < 0f) back = 0f;
-            if (back > eyeMaxBackM) back = eyeMaxBackM;
 
             float targetYaw = Wrap360(horizontalYawDegrees);
             float yaw;
@@ -152,30 +162,22 @@ namespace VRCKatamari.BallLayers
                     ShortestDelta(targetYaw, previousRigYawDegrees) * alphaYaw);
             }
 
-            // Behind the ball along the frame's own yaw, so the offset direction and the
-            // facing written to the transform can never disagree.
+            // Rebuild X/Z from this centre and this yaw. Blending the world position again
+            // would put it off the rig's forward axis when the ball strafes or yaw changes.
             float yawRadians = yaw * Mathf.Deg2Rad;
-            float targetX = ballWorldPosition.x - Mathf.Sin(yawRadians) * back;
-            float targetZ = ballWorldPosition.z - Mathf.Cos(yawRadians) * back;
+            float x = ballWorldPosition.x - Mathf.Sin(yawRadians) * back;
+            float z = ballWorldPosition.z - Mathf.Cos(yawRadians) * back;
 
-            float x;
-            float z;
-            float height;
-            if (!usePrevious)
+            float height = targetHeight;
+            if (usePrevious)
             {
-                x = targetX;
-                z = targetZ;
-                height = Mathf.Clamp(targetHeight, eyeUpMinMeters, eyeUpMaxMeters);
-            }
-            else
-            {
-                // A changed bound must not make the stored height illegal.
-                float priorHeight = Mathf.Clamp(previousHeightMeters, eyeUpMinMeters, eyeUpMaxMeters);
-                height = Mathf.Clamp(
-                    priorHeight + (targetHeight - priorHeight) * alphaHeight,
-                    eyeUpMinMeters, eyeUpMaxMeters);
-                x = previousRigWorldPosition.x + (targetX - previousRigWorldPosition.x) * alphaHeight;
-                z = previousRigWorldPosition.z + (targetZ - previousRigWorldPosition.z) * alphaHeight;
+                // A rail the author lowered must not make the stored height illegal, but a
+                // ball that shrank is allowed to glide down: the floor is the only clamp the
+                // filter needs, because the target is already the legal height.
+                float priorHeight = previousHeightMeters;
+                if (priorHeight < eyeUpMinMeters) priorHeight = eyeUpMinMeters;
+                height = priorHeight + (targetHeight - priorHeight) * alphaHeight;
+                if (height < eyeUpMinMeters) height = eyeUpMinMeters;
             }
 
             float y = ballWorldPosition.y + height;

@@ -1,5 +1,10 @@
+using System;
+using System.Reflection;
 using NUnit.Framework;
+using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using VRCKatamari.BallLayers;
 using VRCKatamari.Riding;
 
@@ -32,10 +37,197 @@ namespace VRCKatamari.Tests
             bool ok = FollowRigMath.TryUpdate(5f, 8f, Vector3.zero, radius, 0f, 0.02f,
                 RideViewMath.EyeBaseUpMeters, RideViewMath.EyeUpPerRadius(), EyeUpMin, EyeUpMax,
                 RideViewMath.EyeBaseBackMeters, RideViewMath.EyeBackPerRadius(), EyeBackMax,
-                true, false, Vector3.zero, 0f, 0f, out rig, out yaw, out height);
+                true, false, 0f, 0f, out rig, out yaw, out height);
             Assert.IsTrue(ok);
             up = rig.y;
             back = -rig.z;
+        }
+
+        [Test]
+        public void RideAssemblerAlignsAPoseOntoAFrameWithoutAnOffset()
+        {
+            // The pose half of the same fix, without UdonSharp: the assembly's AlignPose must
+            // put the entry exactly on the station and the station exactly on the ride frame,
+            // so the seated player's root has no authored lateral or vertical offset.
+            Type assembler = Type.GetType(
+                "VRCKatamari.Editor.Story.RideUxAssembler, Assembly-CSharp-Editor", false);
+            if (assembler == null)
+            {
+                Assert.Ignore("the editor assembly is not loaded");
+            }
+            Type counters = assembler.GetNestedType("Counters", BindingFlags.NonPublic);
+            MethodInfo align = assembler.GetMethod("AlignPose",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(counters, "RideUxAssembler.Counters is missing");
+            Assert.IsNotNull(align, "RideUxAssembler.AlignPose is missing");
+
+            var scene = EditorSceneManager.NewPreviewScene();
+            try
+            {
+                var rig = new GameObject("FollowRigRoot").transform;
+                SceneManager.MoveGameObjectToScene(rig.gameObject, scene);
+                rig.SetPositionAndRotation(new Vector3(2f, 3f, 7f), Quaternion.Euler(0f, 47f, 0f));
+                var rideRoot = new GameObject("RideRoot").transform;
+                rideRoot.SetParent(rig, false);
+                var station = new GameObject("RideSeat").transform;
+                station.SetParent(rideRoot, false);
+                var enter = new GameObject("StandPoint").transform;
+                enter.SetParent(station, false);
+                enter.localPosition = new Vector3(0.45f, -0.15f, 0f);
+                enter.localRotation = Quaternion.Euler(0f, 90f, 0f);
+
+                object counterState = Activator.CreateInstance(counters, true);
+                align.Invoke(null, new object[] { station, rig, "Align the ride station", counterState });
+                align.Invoke(null, new object[] { enter, station, "Align the station entry", counterState });
+
+                Assert.Less(Vector3.Distance(rig.position, station.position), 1e-5f);
+                Assert.Less(Quaternion.Angle(rig.rotation, station.rotation), 1e-4f);
+                Assert.Less(Vector3.Distance(station.position, enter.position), 1e-5f);
+                Assert.Less(Quaternion.Angle(station.rotation, enter.rotation), 1e-4f);
+                Assert.Less(Vector3.Distance(Vector3.zero, enter.localPosition), 1e-5f);
+            }
+            finally
+            {
+                EditorSceneManager.ClosePreviewScene(scene);
+            }
+        }
+
+        [Test]
+        public void RideAssemblerAlignsTheStationAndEntryToTheRideFrame()
+        {
+            // Unity-only (engine + UdonSharp editor): the local Roslyn runner reports it as
+            // not runnable. It runs the real assembly step on a throwaway preview scene: an
+            // old wiring (station offset, entry +0.45/-0.15, anchor on the station) must come
+            // out as the station AND the entry on the rig pose, with the compensation anchor
+            // on the player-carrying station transform.
+            Type assembler = Type.GetType(
+                "VRCKatamari.Editor.Story.RideUxAssembler, Assembly-CSharp-Editor", false);
+            // VRCStation ships in the precompiled VRCSDK3.dll (assembly "VRCSDK3"), not in an
+            // asmdef named VRC.SDK3, so look it up by full name across the loaded assemblies.
+            Type vrcStationType = FindLoadedType("VRC.SDK3.Components.VRCStation");
+            Type udonSharpUndo = Type.GetType("UdonSharpEditor.UdonSharpUndo, UdonSharp.Editor", false);
+            if (assembler == null || vrcStationType == null || udonSharpUndo == null)
+            {
+                Assert.Ignore("the editor assembly, the VRC SDK or UdonSharp editor is not loaded");
+            }
+
+            var scene = EditorSceneManager.NewPreviewScene();
+            try
+            {
+                var rig = new GameObject("FollowRigRoot").transform;
+                SceneManager.MoveGameObjectToScene(rig.gameObject, scene);
+                rig.SetPositionAndRotation(new Vector3(2f, 3f, 7f), Quaternion.Euler(0f, 47f, 0f));
+                var rideRoot = new GameObject("RideRoot").transform;
+                rideRoot.SetParent(rig, false);
+                var station = new GameObject("RideSeat").transform;
+                station.SetParent(rideRoot, false);
+                var enter = new GameObject("StandPoint").transform;
+                enter.SetParent(station, false);
+                enter.localPosition = new Vector3(0.45f, -0.15f, 0f);
+                var exit = new GameObject("RideExitPoint").transform;
+                exit.SetParent(station, false);
+
+                Component vrcStation = station.gameObject.AddComponent(vrcStationType);
+                SetRideReference(vrcStation, "stationEnterPlayerLocation", enter);
+                SetRideReference(vrcStation, "stationExitPlayerLocation", exit);
+                Component ride = AddRideBehaviour(station.gameObject, "VRCKatamari.Riding.BallRideStation");
+                Component seatEye = AddRideBehaviour(station.gameObject,
+                    "VRCKatamari.Riding.SeatEyeCompensation");
+                SetRideReference(ride, "station", vrcStation);
+                SetRideReference(seatEye, "seatAnchor", station);
+
+                Type counters = assembler.GetNestedType("Counters", BindingFlags.NonPublic);
+                MethodInfo assemble = assembler.GetMethod("AssembleSeatLinks",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+                MethodInfo standing = assembler.GetMethod("AssembleStandingStation",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+                Assert.IsNotNull(counters, "RideUxAssembler.Counters is missing");
+                Assert.IsNotNull(assemble, "RideUxAssembler.AssembleSeatLinks is missing");
+                Assert.IsNotNull(standing, "RideUxAssembler.AssembleStandingStation is missing");
+                object counterState = Activator.CreateInstance(counters, true);
+                assemble.Invoke(null, new object[] { seatEye, null, ride, rig, counterState });
+                standing.Invoke(null, new object[] { ride, counterState });
+
+                // The station moves every frame, so it is a moving-station station, standing.
+                var stationSettings = new SerializedObject(vrcStation);
+                Assert.IsFalse(stationSettings.FindProperty("seated").boolValue);
+                Assert.AreEqual(2, stationSettings.FindProperty("PlayerMobility").intValue,
+                    "PlayerMobility must be ImmobilizeForVehicle");
+
+                var compensation = new SerializedObject(seatEye);
+                Assert.AreSame(station, compensation.FindProperty("seatAnchor").objectReferenceValue,
+                    "the compensation must drive the player-carrying station transform");
+                Assert.AreSame(rig, compensation.FindProperty("followRigRoot").objectReferenceValue);
+                Assert.Less(Vector3.Distance(rig.position, station.position), 1e-4f,
+                    "the station must sit on the ride frame");
+                Assert.Less(Quaternion.Angle(rig.rotation, station.rotation), 1e-3f);
+                Assert.Less(Vector3.Distance(station.position, enter.position), 1e-4f,
+                    "the entry must put the player at the station, with no authored offset");
+                Assert.Less(Vector3.Distance(Vector3.zero, enter.localPosition), 1e-4f);
+            }
+            finally
+            {
+                EditorSceneManager.ClosePreviewScene(scene);
+            }
+        }
+
+        private static Component AddRideBehaviour(GameObject owner, string name)
+        {
+            Type behaviour = typeof(RideViewMath).Assembly.GetType(name, true);
+            // The test asmdef intentionally does not reference the UdonSharp editor assembly.
+            Type undo = Type.GetType("UdonSharpEditor.UdonSharpUndo, UdonSharp.Editor", true);
+            foreach (MethodInfo method in undo.GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                ParameterInfo[] parameters = method.GetParameters();
+                if (method.Name == "AddComponent" && method.IsGenericMethodDefinition
+                    && parameters.Length == 1 && parameters[0].ParameterType == typeof(GameObject))
+                    return (Component)method.MakeGenericMethod(behaviour).Invoke(null, new object[] { owner });
+            }
+            Assert.Fail("UdonSharpUndo.AddComponent<T>(GameObject) is unavailable");
+            return null;
+        }
+
+        private static void SetRideReference(Component owner, string property, UnityEngine.Object value)
+        {
+            var serialized = new SerializedObject(owner);
+            serialized.FindProperty(property).objectReferenceValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        [TestCase(0f, 90f)]
+        [TestCase(359f, 12f)]
+        [TestCase(253f, 187f)]
+        [TestCase(90f, 90f)]
+        public void EyeAndCompensatedHeadStayBehindFilteredYaw(float previousYaw, float targetYaw)
+        {
+            const float radius = 0.15f;
+            Vector3 ball = new Vector3(31f, radius, -8f);
+            Assert.IsTrue(FollowRigMath.TryUpdate(5f, 8f, ball, radius, targetYaw, 0.02f,
+                0f, RideViewMath.EyeUpPerRadius(), EyeUpMin, EyeUpMax,
+                0f, RideViewMath.EyeBackPerRadius(), EyeBackMax,
+                false, true, previousYaw, 1.654625f * radius,
+                out Vector3 rig, out float yaw, out _));
+            if (previousYaw != targetYaw) Assert.AreNotEqual(targetYaw, yaw);
+            Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);
+            Quaternion toRig = Quaternion.Inverse(rotation);
+            Vector3 expected = new Vector3(0f, 1.654625f * radius, -1.176792f * radius);
+            Assert.Less((toRig * (rig - ball) - expected).magnitude, 1e-5f);
+
+            // The same anchor both carries the head and receives the compensation.
+            // Sample a head that is not centred over the entry, then place the entry.
+            float eyeHeight = 2.654625f * radius;
+            Vector3 headOffset = new Vector3(0.03f, eyeHeight, -0.02f);
+            Assert.IsTrue(SeatEyeMath.TrySampleHeadOffset(rig + rotation * headOffset, rig,
+                rotation, rotation, out Vector3 measured, out _, out _));
+            float feet = RideStanceMath.FeetTargetInRig(ball.y, radius, rig.y);
+            Vector3 solveFor = RideStanceMath.EffectiveHeadInRig(measured, true, feet);
+            Assert.IsTrue(SeatEyeMath.TryComputeSeatOffset(solveFor, Vector3.zero,
+                RideStanceMath.UnlimitedMeters, 0.35f * SeatEyeMath.LimitScaleForEyeHeight(eyeHeight),
+                false, 0f, 0f, true, out Vector3 seatOffset, out _, out _, out _));
+            Vector3 entry = rig + rotation * seatOffset;
+            Vector3 head = entry + rotation * headOffset;
+            Assert.AreEqual(0f, entry.y, 1e-5f);
+            Assert.Less((toRig * (head - ball) - expected).magnitude, 1e-5f);
         }
 
         [Test]
@@ -221,6 +413,16 @@ namespace VRCKatamari.Tests
         {
             Assert.AreEqual(0.25f, RideViewMath.SeatTriggerRadius(float.NaN), 1e-6f);
             Assert.AreEqual(0.25f, RideViewMath.SeatTriggerRadius(-1f), 1e-6f);
+        }
+
+        private static Type FindLoadedType(string fullName)
+        {
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type found = assembly.GetType(fullName, false);
+                if (found != null) return found;
+            }
+            return null;
         }
     }
 }

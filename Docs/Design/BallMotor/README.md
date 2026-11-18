@@ -211,7 +211,7 @@ eye = ballCenter − forward(yawFiltered) * (eyeBaseBackMeters + radius * eyeBac
 | 0.72 m | 0.360 | 1.414 m | 1.542 m | 2.09 m | 1.73 m | 1.77 m | 9.9° | 22.4° |
 | 1.43 m | 0.715 | 2.266 m | 2.323 m | 3.25 m | 2.53 m | 2.98 m | 12.7° | 20.4° |
 
-上表是 motor 字段的**默认值**（0.55/2.4/0.75/2.2）的几何。故事场景里这四个字段由 `RideUxAssembler` 按 `RideViewMath` 写成 0 / 1.779558 / 0 / 5.476916（上/后底座为 0，两项都正比于半径；球心恒在视轴下 18°，推导见 [RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md)），任何直径下球半角 10°、下沿 28°。
+上表是 motor 字段的**默认值**（0.55/2.4/0.75/2.2）的几何。故事场景里这四个字段由 `RideUxAssembler` 按 `RideViewMath` 写成 0 / 1.654625 / 0 / 1.176792（上/后底座为 0，两项都正比于半径：站姿手推球的眼点，推导见 [RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md)），任何直径下平视时球心在视轴下 54.6°、球半角 29.5°、球上沿在视轴下 25.1°。
 
 净空（上方 − 半径）随球**变大**：0.62 / 0.76 / 1.05 / 1.55 m。
 

@@ -16,7 +16,7 @@ namespace VRCKatamari.Hub
     /// </para>
     /// <para>
     /// The index that matters is the compact one. <c>HubLevelLauncher.levelEntries[i]</c>,
-    /// <c>HubRoomHost.selectZones[i]</c> and a <c>HubStartButton.levelIndex</c> all mean the
+    /// <c>HubRoomHost.levelButtons[i]</c> and a <c>HubStartButton.levelIndex</c> all mean the
     /// same level for the same <c>i</c>, so the list that is written into the scene must
     /// have no holes: a catalogue entry that the scene cannot play (its level was never
     /// imported into this scene) is skipped, and the entries after it close up.

@@ -272,6 +272,10 @@ namespace VRCKatamari.Pickup
         private int[] propStates;
         // The rows this host has queued in the motor (see QueuedCapacity): the withdraw list.
         private int[] queuedIndices;
+        // Last pose actually sent to the motor. Its idempotent submit deliberately does not
+        // replace a pending snapshot, so selected movers need the pose-only refresh API.
+        private Vector3[] submittedPositions;
+        private Quaternion[] submittedRotations;
         private int queuedCount;
         // Where each prop started, recorded once in Start before anything can attach:
         // parent, local pose and active flag. ResetField is the only reader.
@@ -911,6 +915,8 @@ namespace VRCKatamari.Pickup
         {
             propStates = new int[propCount];
             queuedIndices = new int[QueuedCapacity];
+            submittedPositions = new Vector3[propCount];
+            submittedRotations = new Quaternion[propCount];
             queuedCount = 0;
             propGateK = new float[propCount];
             lastScanInRange = 0;
@@ -1942,6 +1948,7 @@ namespace VRCKatamari.Pickup
                     if (PickupCandidateSelection.IsSelected(index, nearestIndices, selected))
                     {
                         keep = true;
+                        RefreshQueuedPose(index);
                     }
                     else if (!motor.WithdrawCandidateUnlessAccepted(itemIds[index])
                         && motor.IsCandidateQueued(itemIds[index]))
@@ -1954,6 +1961,23 @@ namespace VRCKatamari.Pickup
                 write = write + 1;
             }
             queuedCount = write;
+        }
+
+        // At most the four selected queued rows per scan. Use the same 1 mm physical drift
+        // tolerance as the spatial cache; sub-millimetre jitter must not cause cross calls.
+        // The pose-only API preserves acceptance, queue age and the contact window.
+        private void RefreshQueuedPose(int index)
+        {
+            Transform prop = propTransforms[index];
+            if (prop == null) return;
+            Vector3 position = prop.position;
+            Quaternion rotation = prop.rotation;
+            if (!PickupCandidateSelection.HasPoseMoved(submittedPositions[index],
+                submittedRotations[index], position, rotation, propOwnSizes[index],
+                DriftToleranceM)) return;
+            if (!motor.RefreshCandidatePoseUnlessAccepted(itemIds[index], position, rotation)) return;
+            submittedPositions[index] = position;
+            submittedRotations[index] = rotation;
         }
 
         /// <summary>
@@ -1974,7 +1998,18 @@ namespace VRCKatamari.Pickup
                 itemIds[index], 0, propGateK[index]);
             // Listed even when the motor answered "already queued": both cases leave this
             // host responsible for withdrawing the id once it is no longer selected.
-            if (queued) RememberQueued(index);
+            if (queued)
+            {
+                // A duplicate submit did not write a pose. Keep the old baseline so small
+                // moves accumulate until they exceed the physical refresh tolerance.
+                for (int q = 0; q < queuedCount; q++)
+                {
+                    if (queuedIndices[q] == index) return;
+                }
+                submittedPositions[index] = prop.position;
+                submittedRotations[index] = prop.rotation;
+                RememberQueued(index);
+            }
         }
 
         private void RememberQueued(int index)

@@ -149,10 +149,14 @@ namespace VRCKatamari.BallMotor
         // calibration ball. A level that sets startDiameterWorldM has this recomputed in
         // Start (the one conversion), so the per-level start stays a diameter in the data.
         [SerializeField] private long startVolumeMm3 = 14094798L;
-        // The ONE global size cap, replacing the per-level maxCoreRadiusWorldM (1.1 m, i.e.
-        // the 2.20 m ball). The original's cap is 30 cm for MAS1; ours is a 30 m engineering
-        // ceiling so the same code serves the reference levels (Cancer's 1.2 m cap, a 30 m
-        // sandbox) without a second per-level radius gate. V_cap = pi/6 * 30^3 = 14,137 m^3.
+        // The level's size cap, SEMANTIC diameter in metres (owner 2026-11-18: the cap is a
+        // per-level value, as in the original, where MAS1 caps at 30 cm and Cancer at 1.2 m).
+        // 30 m is the authored default: an engineering envelope for our own levels, far above
+        // anything their content needs, so they keep the behaviour they had under the former
+        // global cap. A multi-level scene (AllMapsHub) re-sets it per level through
+        // SetMaxBallDiameterM before resetting the round; the growth itself needs no second
+        // gate - SizeModelMath.TryDerive saturates the total volume at this cap. V_cap =
+        // pi/6 * 30^3 = 14,137 m^3 at the default.
         [SerializeField] private float maxBallDiameterM = 30f;
         [SerializeField] private float collisionToCoreRadiusRatio = 1f;
         [SerializeField] private float semanticDiameterPerCoreDiameter = 1f;
@@ -287,6 +291,12 @@ namespace VRCKatamari.BallMotor
         private float inputForward;
         private float inputTurn;
         private float inputLateral;
+
+        // ---- Dash state (CONTACT_MODEL_V2 §3.8, owner 2026-11-18: hold to charge, release) ----
+        // Allocated on first use like the candidate buffers: the input adapter's Update/event
+        // can run before this component's Start, and BeginDashCharge must work then instead of
+        // being dropped. The rules (tiers, spin, energy, huff) are DashMath's.
+        private float[] dashState;
 
         // ---- Ledger stores: one local player, one round, no authority layer ----
         private const int PlayerCapacity = 1;
@@ -913,6 +923,7 @@ namespace VRCKatamari.BallMotor
             if (fixedStepSeconds <= 0f) fixedStepSeconds = 0.02f;
             if (maxStepsPerFrame < 1) maxStepsPerFrame = 1;
             if (stuckTimeoutSeconds <= 0f) stuckTimeoutSeconds = 1.5f;
+            EnsureDashState();
 
             roundState = new int[GrowthLedgerMath.RoundStateCount];
             roundFlags = new bool[GrowthLedgerMath.RoundFlagCount];
@@ -1058,8 +1069,7 @@ namespace VRCKatamari.BallMotor
             // The cap's collision radius, for the reach clamp: the cap is a SEMANTIC
             // diameter, and the collision radius is derived through the same ratios as
             // every other size, so the two cannot disagree at the top end.
-            maxCollisionRadiusWorldM = (0.5f * maxBallDiameterM / semanticDiameterPerCoreDiameter)
-                * collisionToCoreRadiusRatio;
+            RecomputeMaxCollisionRadius();
 
             if (GrowthLedgerMath.TryJoin(roundState, playerIds, confirmedVolumes, bankedScores,
                 lifeStates, respawnAtSet, respawnAt, playerGenerations, ref playerCount,
@@ -1129,7 +1139,7 @@ namespace VRCKatamari.BallMotor
         /// serialized start volume (14,094,798 mm^3 = the 0.2997 m ball).
         /// </para>
         /// <para>
-        /// A start ball above the global cap is refused and the authored start volume kept:
+        /// A start ball above the cap is refused and the authored start volume kept:
         /// writing a start above the cap would make the derive saturate at the cap and the
         /// level would silently start smaller than it asked for.
         /// </para>
@@ -1156,7 +1166,7 @@ namespace VRCKatamari.BallMotor
             if (startDiameterWorldM > maxBallDiameterM)
             {
                 Debug.LogWarning("[BallMotor] startDiameterWorldM=" + startDiameterWorldM
-                    + " is above the global cap " + maxBallDiameterM
+                    + " is above the cap " + maxBallDiameterM
                     + "; keeping startVolumeMm3=" + startVolumeMm3);
                 return;
             }
@@ -1185,7 +1195,7 @@ namespace VRCKatamari.BallMotor
         /// the authored diameter only decides the size before the first switch.
         /// </para>
         /// <para>
-        /// A start at or above the global cap is refused, same as the authored
+        /// A start at or above the level's cap is refused, same as the authored
         /// <c>startDiameterWorldM</c>: the derive would saturate and the level would start
         /// smaller than it asked for. Before Start has run the motor has no cap-ready
         /// state, so the call is refused.
@@ -1213,6 +1223,59 @@ namespace VRCKatamari.BallMotor
             baseCoreRadiusWorldM = coreRadius;
             startSemanticDiameterWorldM = semanticDiameter;
             return true;
+        }
+
+        /// <summary>
+        /// Replaces the level's max ball diameter at run time, so one motor can serve levels
+        /// whose caps differ (a hub that hosts several maps). Returns false and changes
+        /// nothing when the diameter is not usable or the motor has not run Start.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Owner 2026-11-18: the cap is a per-level parameter, as in the original (MAS1
+        /// caps at 30 cm, Cancer at 1.2 m). The multi-level hub sets it from its per-level
+        /// table right before <see cref="SetStartVolumeMm3"/> and the round reset, because
+        /// the start volume is validated against the cap.
+        /// </para>
+        /// <para>
+        /// No second growth gate is added here: every size consumer is derived by
+        /// <see cref="SizeModelMath.TryDerive"/> from this one field, and that derive already
+        /// saturates the total volume at the cap. A cap below the ball's current confirmed
+        /// volume therefore clamps the ball to the cap immediately (a level switch never
+        /// carries an over-cap ball in), and a larger one frees the growth the old cap hid.
+        /// The live size is re-derived now, so a caller does not have to wait for the next
+        /// step; the round reset that usually follows re-derives it again from the new start.
+        /// </para>
+        /// </remarks>
+        public bool SetMaxBallDiameterM(float diameterM)
+        {
+            if (!KatamariMath.IsFiniteFloat(diameterM) || diameterM <= 0f) return false;
+            if (!hasLocalRow) return false;
+
+            maxBallDiameterM = diameterM;
+            RecomputeMaxCollisionRadius();
+            RecomputeConfirmedAndSize();
+            return true;
+        }
+
+        /// <summary>
+        /// The level's current max ball diameter, SEMANTIC metres: the cap the growth
+        /// saturates at (<see cref="SetMaxBallDiameterM"/>).
+        /// </summary>
+        public float GetMaxBallDiameterM()
+        {
+            return maxBallDiameterM;
+        }
+
+        /// <summary>
+        /// Writes the reach clamp's copy of the cap: the cap is a SEMANTIC diameter, and the
+        /// collision radius behind it is derived through the same ratios as every other size.
+        /// Called by Start and by <see cref="SetMaxBallDiameterM"/> so the two cannot disagree.
+        /// </summary>
+        private void RecomputeMaxCollisionRadius()
+        {
+            maxCollisionRadiusWorldM = (0.5f * maxBallDiameterM / semanticDiameterPerCoreDiameter)
+                * collisionToCoreRadiusRatio;
         }
 
         /// <summary>
@@ -1326,6 +1389,22 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// Allocates the dash state the first time it is read or charged.
+        /// </summary>
+        /// <remarks>
+        /// The input adapters' Update can run before this component's Start (Udon start order
+        /// between GameObjects is arbitrary), so <see cref="BeginDashCharge"/> cannot assume
+        /// Start ran. Start calls this too; whichever call runs first allocates and initialises
+        /// the state (full energy, no charge).
+        /// </remarks>
+        private void EnsureDashState()
+        {
+            if (dashState != null) return;
+            dashState = new float[DashMath.StateLength];
+            DashMath.TryReset(dashState);
+        }
+
+        /// <summary>
         /// True when every queue destination exists and can hold a full queue.
         /// </summary>
         /// <remarks>
@@ -1407,19 +1486,48 @@ namespace VRCKatamari.BallMotor
 
             // 2. BallMotionMath: planar velocity and the requested displacement.
             //    The request is handed on unclipped; stopping a fast ball is the
-            //    sweep's job, not this layer's.
+            //    sweep's job, not this layer's. A burst multiplies this step's target
+            //    speed through the one DashMath multiplier (owner 2026-11-18).
+            //
+            //    While a charge is held the ball does not roll at all: every axis is
+            //    handed on as 0 and the velocity is dropped, so the player cannot drive
+            //    or steer during the charge. From the spin threshold on, the ball turns in
+            //    place instead (stage 2.4), which is the original's spin at gacha count 3.
+            bool charging = DashMath.IsCharging(dashState);
+            float stepForward = charging ? 0f : inputForward;
+            float stepTurn = charging ? 0f : inputTurn;
+            float stepLateral = charging ? 0f : inputLateral;
+            if (charging) planarVelocity = Vector3.zero;
+
             Vector3 requestedDisplacement = Vector3.zero;
             float nextHeading;
             Vector3 nextVelocity;
             Vector3 stepDisplacement;
-            if (BallMotionMath.TryStep(inputForward, inputTurn, inputLateral,
-                headingDegrees, planarVelocity, dt, CurrentSizeScale(), maxSpeedMps,
+            if (BallMotionMath.TryStep(stepForward, stepTurn, stepLateral,
+                headingDegrees, planarVelocity, dt, CurrentSizeScale(),
+                maxSpeedMps * DashMath.SpeedScale(dashState),
                 accelerationMps2, brakingMps2, frictionPerSecond,
                 rollingResistanceMps2, lateralGripPerSecond, turnRateDegreesPerSecond, maxLateralMps, out nextHeading, out nextVelocity, out stepDisplacement))
             {
                 headingDegrees = nextHeading;
                 planarVelocity = nextVelocity;
                 requestedDisplacement = stepDisplacement;
+            }
+
+            // 2.4. The charge's spin: from the spin threshold on, the ball turns in place. It
+            //      is applied here, after the motion layer wrote the heading and before the
+            //      contact solve reads the drive direction, so the spinning ball's facing is
+            //      what the contact pass and the follow rig see. The visual rotation gets the
+            //      same yaw, because the attached props live on the rolling root: heading
+            //      alone would turn the camera while the props stood still. The rate is
+            //      DashMath's PROVISIONAL value; the original's spin speed is the player's
+            //      alternation speed and has no published number.
+            if (DashMath.IsSpinning(dashState))
+            {
+                float spinDegrees = DashMath.SpinRateDegreesPerSecond * dt;
+                headingDegrees = headingDegrees + spinDegrees;
+                if (headingDegrees >= 360f) headingDegrees = headingDegrees - 360f;
+                visualRollRotation = Quaternion.Euler(0f, spinDegrees, 0f) * visualRollRotation;
             }
 
             // 2.5 - 4. The position authority for this step: it writes the final centre,
@@ -1468,6 +1576,11 @@ namespace VRCKatamari.BallMotor
 
             ballCenterWorld = groundedCenter;
             discontinuous = false;
+
+            // The dash clock (charge, burst, cooldown, energy, recharge, huff) advances once
+            // per fixed step, after every stage that read it this step. The step counters
+            // (stepsThisFrame) are independent of it.
+            DashMath.TryStep(dashState, dt);
         }
 
 
@@ -1690,7 +1803,10 @@ namespace VRCKatamari.BallMotor
 
             // The drive the climb gate reads is the motion layer's TARGET speed, not the
             // acceleration-limited request: a ball standing against a wall has no actual
-            // speed and would otherwise never start a climb (design §3.2).
+            // speed and would otherwise never start a climb (design §3.2). A dash raises
+            // that target speed through the same DashMath multiplier, so the existing
+            // v_gate chain (GateSpeed -> ClimbMath/SlopeClimbMath) sees the dash without a
+            // second dash-aware path.
             float driveSpeed;
             Vector3 intentDirection;
             ComputeDrive(out contactDriveDirection, out intentDirection, out driveSpeed);
@@ -1950,7 +2066,7 @@ namespace VRCKatamari.BallMotor
             }
             float planarSpeed = Mathf.Sqrt(planarVelocity.x * planarVelocity.x
                 + planarVelocity.z * planarVelocity.z);
-            float driveIntent = Mathf.Abs(inputForward) + Mathf.Abs(inputLateral);
+            float driveIntent = DriveIntentMagnitude();
             float nextRest;
             bool nextSliding;
             if (!RampSlideMath.TryStepRestLatch(rampRestTimerSeconds, rampSliding,
@@ -2115,10 +2231,22 @@ namespace VRCKatamari.BallMotor
         }
 
         /// <summary>
+        /// The player's drive intent magnitude, for the ramp rest latch and the push-blocked
+        /// test: zero while a dash charge is held, because the charge pins the ball in place
+        /// and a held stick must not read as a push.
+        /// </summary>
+        private float DriveIntentMagnitude()
+        {
+            if (DashMath.IsCharging(dashState)) return 0f;
+            return Mathf.Abs(inputForward) + Mathf.Abs(inputLateral);
+        }
+
+        /// <summary>
         /// The motion layer's target speed and the direction the driver pushes in
         /// (design §3.2). The target speed is recomputed from the motion layer's own
         /// three inputs because BallMotionMath does not export it; the expression is its
-        /// speed cap times the forward intent.
+        /// speed cap times the forward intent, and the speed cap includes the dash
+        /// multiplier (so the climb gate sees a dashing ball's higher target speed).
         /// </summary>
         /// <remarks>
         /// <paramref name="direction"/> is the way the ball is MOVING (its planar velocity,
@@ -2132,9 +2260,12 @@ namespace VRCKatamari.BallMotor
         private void ComputeDrive(out Vector3 direction, out Vector3 intentDirection,
             out float speed)
         {
+            // A charge holds the ball in place: the climb gate and the protrusion estimate
+            // must not see a push the player is not actually making.
+            bool charging = DashMath.IsCharging(dashState);
             float headingRadians = headingDegrees * Mathf.Deg2Rad;
-            float forwardIntent = Mathf.Clamp(inputForward, -1f, 1f);
-            float lateralIntent = Mathf.Clamp(inputLateral, -1f, 1f);
+            float forwardIntent = charging ? 0f : Mathf.Clamp(inputForward, -1f, 1f);
+            float lateralIntent = charging ? 0f : Mathf.Clamp(inputLateral, -1f, 1f);
             Vector3 intentSum = new Vector3(
                 Mathf.Sin(headingRadians) * forwardIntent
                     + Mathf.Cos(headingRadians) * lateralIntent,
@@ -2147,8 +2278,8 @@ namespace VRCKatamari.BallMotor
                 intentDirection = Vector3.zero;
             }
 
-            float speedCap = maxSpeedMps * CurrentSizeScale();
-            float intent = Mathf.Abs(Mathf.Clamp(inputForward, -1f, 1f));
+            float speedCap = maxSpeedMps * CurrentSizeScale() * DashMath.SpeedScale(dashState);
+            float intent = charging ? 0f : Mathf.Abs(Mathf.Clamp(inputForward, -1f, 1f));
             speed = speedCap * intent;
             if (!KatamariMath.IsFiniteFloat(speed) || speed < 0f) speed = 0f;
 
@@ -2698,7 +2829,7 @@ namespace VRCKatamari.BallMotor
             float moveY = center.y - ballCenterWorld.y;
             float moveZ = center.z - ballCenterWorld.z;
             float progress = Mathf.Sqrt(moveX * moveX + moveY * moveY + moveZ * moveZ);
-            float driveIntent = Mathf.Abs(inputForward) + Mathf.Abs(inputLateral);
+            float driveIntent = DriveIntentMagnitude();
 
             // A wall the PLAYER pushes into is BLOCKED, not stuck. Counting a
             // wall press as stuck made the soft stage call ClearClimbState (killing the
@@ -3431,6 +3562,8 @@ namespace VRCKatamari.BallMotor
             inputTurn = 0f;
             inputLateral = 0f;
             ControlIntentMath.TryReset(previousDown, lastActionTime, comfortState);
+            // A new round starts with no dash and no cooldown carried over.
+            DashMath.TryReset(dashState);
 
             TeleportTo(startPosition);
             headingDegrees = startHeadingDegrees;
@@ -3477,6 +3610,98 @@ namespace VRCKatamari.BallMotor
         public void SetMenuOpen(bool open)
         {
             debugMenuOpen = open;
+        }
+
+        /// <summary>
+        /// Starts a dash charge (the button is held). False while a charge, a burst, the
+        /// cooldown or the huff is running, or with no boost energy left; the input adapter
+        /// logs the refusal and sends nothing else.
+        /// </summary>
+        /// <remarks>
+        /// The two input adapters call this when the button goes down - the VR adapter on the
+        /// left hand's <c>InputUse</c> (trigger), the desktop adapter on Shift. The rules
+        /// (tier time, spin, energy, huff) are <see cref="DashMath"/>'s and are identical on
+        /// both platforms. This method owns no device read and no gate: the caller applies the
+        /// ride and round gates, so a standing player or a finished round cannot charge.
+        /// </remarks>
+        public bool BeginDashCharge()
+        {
+            EnsureDashState();
+            return DashMath.TryBeginCharge(dashState);
+        }
+
+        /// <summary>
+        /// Ends a charge when the button is released: a full charge fires the burst, a short
+        /// one does nothing. Returns a <ce>DashMath.Release*</ce> code so the input adapter can
+        /// log what happened.
+        /// </summary>
+        public int ReleaseDashCharge()
+        {
+            EnsureDashState();
+            return DashMath.ReleaseCharge(dashState, semanticDiameterWorldM);
+        }
+
+        /// <summary>
+        /// Drops a charge without firing (gate closed, station exit, respawn, new round). Called
+        /// by the adapters' zero path and by <see cref="TryResetForNewRound"/>.
+        /// </summary>
+        public void CancelDashCharge()
+        {
+            DashMath.CancelCharge(dashState);
+        }
+
+        /// <summary>Whether the button is held and the charge is running.</summary>
+        public bool IsDashCharging()
+        {
+            return DashMath.IsCharging(dashState);
+        }
+
+        /// <summary>
+        /// Whether the charge has reached the spin threshold (gacha count 3 in the original):
+        /// the ball spins in place and stops rolling from here on.
+        /// </summary>
+        public bool IsDashSpinning()
+        {
+            return DashMath.IsSpinning(dashState);
+        }
+
+        /// <summary>Seconds the current charge has been held (0 when not charging).</summary>
+        public float GetDashChargeSeconds()
+        {
+            return DashMath.ChargeSeconds(dashState);
+        }
+
+        /// <summary>The hold time this ball's size needs for a full charge, seconds.</summary>
+        public float GetDashChargeRequiredSeconds()
+        {
+            return DashMath.ChargeSecondsFor(semanticDiameterWorldM);
+        }
+
+        /// <summary>Whether a burst is running this step.</summary>
+        public bool IsDashing()
+        {
+            return DashMath.IsDashing(dashState);
+        }
+
+        /// <summary>
+        /// The dash's speed multiplier on the motion layer's target speed: 1.6 while dashing,
+        /// 1 otherwise (<see cref="DashMath.SpeedScale"/>).
+        /// </summary>
+        public float GetDashSpeedScale()
+        {
+            return DashMath.SpeedScale(dashState);
+        }
+
+        /// <summary>Boost energy left, in seconds of boost activity (0..8 s).</summary>
+        public float GetDashEnergySeconds()
+        {
+            return DashMath.EnergySeconds(dashState);
+        }
+
+        /// <summary>Whether the huff is running (all charge input refused, 8 s).</summary>
+        public bool IsDashHuffed()
+        {
+            return DashMath.IsHuffed(dashState);
         }
 
         public void SetAllowedKinds(string[] kinds, int count)
@@ -3674,6 +3899,39 @@ namespace VRCKatamari.BallMotor
             for (int i = 0; i < pendingCandidateCount; i++)
             {
                 if (pendingItemIds[i] == itemInstanceId) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Updates the world pose of a queued candidate that the gate has not accepted yet.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// For a host whose item moves while it waits in the queue: the contact test reads
+        /// <c>pendingPositions</c>/<c>pendingRotations</c>, so a stale snapshot judges the
+        /// item where it was at submission. Only those two arrays are written. The submit
+        /// time, the accepted flag, the gate outcome, the ledger and the contact window are
+        /// left alone - a refresh is not a re-submission, and an accepted entry is a pending
+        /// claim whose verdict was reached at its old pose.
+        /// </para>
+        /// <para>
+        /// No threshold here: whether a pose change is worth a refresh is the caller's call.
+        /// True when the pose was written; false for an empty id, an id that is not queued,
+        /// or an accepted entry. Size never changes, so it is not a parameter.
+        /// </para>
+        /// </remarks>
+        public bool RefreshCandidatePoseUnlessAccepted(string itemInstanceId,
+            Vector3 worldPosition, Quaternion rotation)
+        {
+            if (itemInstanceId == null || itemInstanceId.Length == 0) return false;
+            for (int i = 0; i < pendingCandidateCount; i++)
+            {
+                if (pendingItemIds[i] != itemInstanceId) continue;
+                if (pendingAccepted[i]) return false;
+                pendingPositions[i] = worldPosition;
+                pendingRotations[i] = rotation;
+                return true;
             }
             return false;
         }

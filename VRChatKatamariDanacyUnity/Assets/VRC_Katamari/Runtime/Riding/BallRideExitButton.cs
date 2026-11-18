@@ -50,6 +50,9 @@ namespace VRCKatamari.Riding
                 Debug.LogWarning("[ride] exit press ignored: BallRideExitButton.ride is not wired");
                 return;
             }
+            // The trigger that charges the dash also raises Interact, so a charge aimed at
+            // this panel must not press it (owner 2026-11-18, RideDashInteractMath).
+            if (ride.ShouldIgnoreDashInteract()) return;
             if (!ride.IsLocalPlayerSeated()) return;
             if (armed && Time.time - armedAt <= confirmSeconds)
             {

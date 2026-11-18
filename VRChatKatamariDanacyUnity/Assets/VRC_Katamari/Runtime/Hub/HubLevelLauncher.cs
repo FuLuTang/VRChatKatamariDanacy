@@ -119,6 +119,7 @@ namespace VRCKatamari.Hub
         // BeginRound()/RequestRetry(); never a second copy of its state here.
         [Header("Round")]
         [SerializeField] private StoryRoundController controller;
+        [SerializeField] private StoryResultPresenter resultPresenter;
 
         // Optional. When wired, a start into a level that is not the active one first
         // switches the motor to that level (LevelSwitchHost.TryActivate) and the round
@@ -211,6 +212,19 @@ namespace VRCKatamari.Hub
 
         // -1 is "no state seen yet", so the first Update counts as a change and writes
         // the panel once (the presenter uses the same sentinel).
+        [Header("Result flow")]
+        [Tooltip("Seconds the complete result card remains before returning to the hub.")]
+        [SerializeField] private float resultReturnSeconds = 8f;
+        private bool returnRetryPending;
+        private bool returnRecovering;
+        private float nextReturnRetrySeconds;
+        private bool forceReturnExit;
+        private bool automaticReturnArmed;
+        private float resultEnteredSeconds;
+        private bool automaticReturnInFlight;
+        private bool retryQueued;
+        private bool retryWaitForExit;
+        private int retryReadyFrame;
         private int lastState = -1;
 
         // Negative means "no transfer has happened yet". Time.time itself starts near
@@ -347,8 +361,28 @@ namespace VRCKatamari.Hub
                 + " cooldown=" + transferCooldownSeconds);
         }
 
+        /// <summary>Respawn is an explicit abandonment, never an out-of-level correction.</summary>
+        public override void OnPlayerRespawn(VRCPlayerApi player)
+        {
+            if (player == null || !player.isLocal) return;
+            if (controller != null && HubLoopMath.ShouldAbortForRespawn(controller.GetState()))
+                controller.AbortRound();
+            if (resultPresenter != null) resultPresenter.DismissForReturn();
+            startPending = false;
+            seatCheckPending = false;
+            retryQueued = false;
+            automaticReturnArmed = false;
+            automaticReturnInFlight = false;
+            returnPending = false;
+            returnRetryPending = false;
+            forceReturnExit = true;
+            BeginReturn("respawn");
+        }
+
         public void Update()
         {
+            if (!KatamariMath.IsFiniteFloat(resultReturnSeconds) || resultReturnSeconds < 0f)
+                resultReturnSeconds = 8f;
             if (controller == null)
             {
                 if (!warnedMissingController)
@@ -415,6 +449,28 @@ namespace VRCKatamari.Hub
                 OnStateEntered(state);
             }
 
+            if (retryQueued)
+            {
+                if (state != StoryRoundController.StateResult) retryQueued = false;
+                else if (Time.frameCount >= retryReadyFrame
+                    && (!retryWaitForExit || rideSeat == null || !rideSeat.IsLocalPlayerSeated())
+                    && !HubLoopMath.IsCoolingDown(Time.time, lastTransferSeconds,
+                        transferCooldownSeconds))
+                {
+                    retryQueued = false;
+                    PressStart(activeLevelIndex);
+                }
+            }
+
+            if (HubLoopMath.ShouldAutoReturn(state, automaticReturnArmed, retryQueued,
+                startPending || returnPending, Time.time - resultEnteredSeconds,
+                resultReturnSeconds))
+            {
+                automaticReturnArmed = false;
+                automaticReturnInFlight = true;
+                BeginReturn("result-timeout");
+            }
+
             // One transfer at a time: a start and a return must never race for the player.
             if (startPending)
             {
@@ -441,6 +497,31 @@ namespace VRCKatamari.Hub
         /// (a second press while a transfer is in flight, a press during Running), so it
         /// is a warning with a reason code, not an error.
         /// </remarks>
+        /// <summary>Result-card retry, including cancellation of an automatic return.</summary>
+        public void PressRetryCurrentLevel()
+        {
+            if (controller == null || controller.GetState() != StoryRoundController.StateResult
+                || activeLevelIndex < 0 || startPending) return;
+            if (returnPending && !automaticReturnInFlight && !returnRecovering) return;
+            automaticReturnArmed = false;
+            retryWaitForExit = returnPending && (returnWaitingForExit || returnRecovering
+                || (rideSeat != null && rideSeat.IsExitPending()));
+            if (HubLoopMath.ShouldCancelReturnForRetry(controller.GetState(), true,
+                automaticReturnInFlight || returnRecovering))
+            {
+                returnPending = false;
+                returnWaitingForExit = false;
+                returnRetryPending = false;
+                returnRecovering = false;
+                forceReturnExit = false;
+                automaticReturnInFlight = false;
+                SetReturnHint("");
+                Debug.Log("[hub] automatic return cancelled by retry");
+            }
+            retryQueued = true;
+            retryReadyFrame = Time.frameCount + 2;
+        }
+
         public void PressStart(int levelIndex)
         {
             int reason;
@@ -591,6 +672,10 @@ namespace VRCKatamari.Hub
                 return false;
             }
 
+            automaticReturnArmed = false;
+            retryQueued = false;
+            SetReturnHint("");
+
             // Stamped on the request, not on the arrival: two presses in the same frame
             // are already refused by startPending, and this covers the frames after.
             lastTransferSeconds = nowSeconds;
@@ -689,6 +774,9 @@ namespace VRCKatamari.Hub
                 Debug.Log("[hub] round aborted by return press level=" + controller.GetLevelId());
             }
 
+            automaticReturnArmed = false;
+            automaticReturnInFlight = false;
+            retryQueued = false;
             BeginReturn("button");
             return true;
         }
@@ -698,6 +786,17 @@ namespace VRCKatamari.Hub
         private void OnStateEntered(int state)
         {
             WriteStatus(state);
+            if (state == StoryRoundController.StateResult)
+            {
+                resultEnteredSeconds = Time.time;
+                VRCPlayerApi local = Networking.LocalPlayer;
+                bool alreadyHome = local != null && roomSpawn != null
+                    && HubLoopMath.IsWithin(local.GetPosition(), roomSpawn.position, 2f);
+                automaticReturnArmed = !alreadyHome && !controller.WasAborted()
+                    && controller.GetGoalType() != StoryGoalType.FreeRoam;
+                Debug.Log("[hub] result return delay=" + resultReturnSeconds);
+            }
+            else automaticReturnArmed = false;
 
             Debug.Log("[hub] round state=" + state
                 + " level=" + controller.GetLevelId()
@@ -875,6 +974,8 @@ namespace VRCKatamari.Hub
             returnFramesWaited = 0;
             returnWaitingForExit = false;
             returnTeleportIssued = false;
+            returnRetryPending = false;
+            returnRecovering = false;
             returnFramesSinceTeleport = 0;
             returnArrival = arrival;
             lastTransferSeconds = Time.time;
@@ -883,30 +984,10 @@ namespace VRCKatamari.Hub
             bool seated = false;
             if (seatKnown) seated = rideSeat.IsLocalPlayerSeated();
 
-            if (seated || !seatKnown)
+            if (seated || !seatKnown || forceReturnExit)
             {
-                if (rideStation != null)
-                {
-                    VRCPlayerApi player = Networking.LocalPlayer;
-                    if (player != null)
-                    {
-                        // Exit before the move, never after: this is the plan's hard
-                        // ordering, and the reason is that a station can block a teleport.
-                        rideStation.ExitStation(player);
-                        returnWaitingForExit = true;
-                        Debug.Log("[hub] return exit-station cause=" + cause
-                            + " seated=" + seated
-                            + " seatKnown=" + seatKnown
-                            + " frame=" + Time.frameCount);
-                        return;
-                    }
-                }
-                else if (seated)
-                {
-                    Debug.LogWarning("[hub] return: the local player is seated and no ride"
-                        + " station is wired; the teleport may be blocked (unverified)."
-                        + " cause=" + cause);
-                }
+                RequestReturnExit(cause);
+                return;
             }
 
             Debug.Log("[hub] return queued cause=" + cause
@@ -915,8 +996,40 @@ namespace VRCKatamari.Hub
                 + " room=" + arrival);
         }
 
+        private void RequestReturnExit(string cause)
+        {
+            VRCPlayerApi player = Networking.LocalPlayer;
+            if (player == null) return;
+            // Riding owns its one-second resend loop. Do not issue duplicate ExitStation
+            // requests while that loop is already pending; only observe it here.
+            bool requested = rideSeat != null
+                && (rideSeat.IsExitPending() || rideSeat.RequestExit());
+            if (!requested && rideStation != null)
+            {
+                rideStation.ExitStation(player);
+                requested = true;
+            }
+            returnWaitingForExit = true;
+            returnFramesWaited = 0;
+            Debug.Log("[hub] return exit-station cause=" + cause + " requested=" + requested);
+        }
+
+        private void SetReturnHint(string hint)
+        {
+            if (resultPresenter != null) resultPresenter.SetNavigationHint(hint);
+        }
+
         private void UpdateReturn()
         {
+            if (returnRetryPending)
+            {
+                if (!HubLoopMath.ShouldRetryReturnExit(true, retryQueued, Time.time,
+                    nextReturnRetrySeconds)) return;
+                returnRetryPending = false;
+                returnTeleportIssued = false;
+                RequestReturnExit("exit-retry");
+                return;
+            }
             returnFramesWaited++;
 
             // Phase 1: leave the seat. The exit callback is what proves the seat is
@@ -942,9 +1055,14 @@ namespace VRCKatamari.Hub
                 }
                 else if (seated)
                 {
-                    Debug.LogWarning("[hub] return: still seated " + returnFramesWaited
-                        + " frames after ExitStation; moving anyway (unverified: a station"
-                        + " can block a teleport)");
+                    Debug.LogWarning("[hub] return waiting: still seated after "
+                        + returnFramesWaited + " frames; retrying exit in 1 second");
+                    SetReturnHint("请先下车，正在重试回大厅…");
+                    returnWaitingForExit = false;
+                    returnRetryPending = true;
+                    returnRecovering = true;
+                    nextReturnRetrySeconds = Time.time + 1f;
+                    return;
                 }
                 else
                 {
@@ -952,7 +1070,10 @@ namespace VRCKatamari.Hub
                         + returnFramesWaited + " frames");
                 }
 
+                // Even a respawn with a stale false cache gets two frames after ExitStation.
+                if (returnFramesWaited < 2) return;
                 returnWaitingForExit = false;
+                SetReturnHint("");
                 // One more frame, whichever branch ran: the move never shares a frame
                 // with the exit request. This is the cheap way to be right about an
                 // ordering nobody here has measured yet.
@@ -977,7 +1098,7 @@ namespace VRCKatamari.Hub
                 {
                     Debug.Log("[hub] return skipped: the local player already is at the room"
                         + " point; no teleport. frames=" + returnFramesWaited);
-                    returnPending = false;
+                    FinishReturn();
                     if (levelSwitch != null) levelSwitch.ParkActiveIsland();
                     return;
                 }
@@ -988,10 +1109,8 @@ namespace VRCKatamari.Hub
                 return;
             }
 
-            // Phase 3: measure the arrival and log it. A failed return is not retried
-            // here - the player presses the button again, or uses VRChat's respawn, which
-            // lands at the world spawn (the plan's own fallback). A hidden retry loop
-            // would hide the bug this measurement exists to find.
+            // Phase 3: measure arrival before parking the island. A failed arrival
+            // stays visibly pending and goes through the same one-second recovery check.
             returnFramesSinceTeleport++;
             if (returnFramesSinceTeleport < arrivalCheckFrames) return;
 
@@ -1001,16 +1120,41 @@ namespace VRCKatamari.Hub
             {
                 Debug.Log("[hub] return arrived frames=" + returnFramesWaited
                     + " distance=" + distance);
+                FinishReturn();
                 if (levelSwitch != null) levelSwitch.ParkActiveIsland();
             }
             else
             {
                 Debug.LogWarning("[hub] return teleport did not reach the room point"
-                    + " distance=" + distance + " arrived=false; the result card is in the"
-                    + " room, so press the return button again or respawn from the menu");
+                    + " distance=" + distance + "; retrying exit/return in 1 second");
+                SetReturnHint("请先下车，正在重试回大厅…");
+                returnRetryPending = true;
+                returnRecovering = true;
+                nextReturnRetrySeconds = Time.time + 1f;
+                forceReturnExit = true;
+                return;
             }
             returnPending = false;
         }
+
+        private void FinishReturn()
+        {
+            returnPending = false;
+            returnRetryPending = false;
+            returnRecovering = false;
+            forceReturnExit = false;
+            automaticReturnInFlight = false;
+            automaticReturnArmed = false;
+            retryQueued = false;
+            retryWaitForExit = false;
+            SetReturnHint("");
+            // Arrival is the end of the transfer, not a new input cooldown. The panel
+            // must accept the very first deliberate press after arrival.
+            lastTransferSeconds = -1f;
+        }
+
+        public bool IsStartPending() { return startPending; }
+        public bool IsReturnPending() { return returnPending; }
 
         // ------------------------------------------------------------------ hold in level
 

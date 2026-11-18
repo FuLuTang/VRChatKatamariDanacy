@@ -12,7 +12,7 @@ namespace VRCKatamari.Input
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This is the only place in the runtime that reads a device axis. It owns no
+    /// This is the desktop device adapter (VR is <see cref="VrStickMoveInput"/>). It owns no
     /// gameplay rule: no speed, growth, pickup or round state, and it never touches
     /// the motor's mode, ledger or transforms. Its whole output is the motor's
     /// documented input seam, <c>SetMoveAxes(forward, turn, lateral)</c>.
@@ -25,6 +25,12 @@ namespace VRCKatamari.Input
     /// values; the motor clamps to [-1, 1] itself, so this layer does not duplicate
     /// that clamp. Non-finite values are dropped: the motor keeps the axes of a
     /// rejected frame, so letting a NaN through would freeze that ball for good.
+    /// </para>
+    /// <para>
+    /// Desktop only. A VR player's left stick also raises <c>InputMoveVertical/Horizontal</c>,
+    /// but VR is driven by <see cref="VrStickMoveInput"/> (both thumbsticks, tank or simple
+    /// scheme), so both handlers return at once while the local player is in VR. Exactly one
+    /// adapter writes the motor's axes on each platform.
     /// </para>
     /// <para>
     /// Two gates, one owner each. <c>SetRideGate</c> belongs to BallRideStation: it
@@ -65,7 +71,10 @@ namespace VRCKatamari.Input
     /// the engine does not disable a second behaviour on the same object
     /// (Docs/Design/BallMotor/README.md, section on assembly constraints) - but the
     /// ball's station object is reserved for BallRideStation, which has to share it
-    /// with the VRCStation. Nothing here reads Unity's legacy Input class.
+    /// with the VRCStation. The move axes come from the Udon events, not from Unity's
+    /// legacy Input; the one legacy read is the dash charge's Shift key (owner
+    /// 2026-11-18: VR holds the left trigger, PC holds Shift), polled in Update because it
+    /// has no Udon event of its own.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
@@ -103,6 +112,13 @@ namespace VRCKatamari.Input
         private bool debugDriveActive;
         private float debugDriveStartTime;
 
+        // Dash charge: the previous Shift state, so only the press and the release edges are
+        // acted on (owner 2026-11-18: hold Shift to charge, release to fire; VR holds the left
+        // trigger). Held Shift is VRChat's desktop run key, but a seated player is immobilised,
+        // so the two never fight; the gate check below keeps a standing or finished-round
+        // player from charging.
+        private bool shiftWasDown;
+
         /// <summary>
         /// The ride gate, owned by BallRideStation: open only while the local player is
         /// seated in the ball's station.
@@ -130,6 +146,7 @@ namespace VRCKatamari.Input
             // The DEV-ONLY override owns the axes while it is on; a real key press must not
             // fight it. Off (the default) this is one bool test before the unchanged path.
             if (debugDriveEnabled) return;
+            if (IsVrPlayer()) return;
             if (!InputOpen()) return;
             if (!KatamariMath.IsFiniteFloat(value)) return;
             if (value == forward) return;
@@ -140,6 +157,7 @@ namespace VRCKatamari.Input
         public override void InputMoveHorizontal(float value, UdonInputEventArgs args)
         {
             if (debugDriveEnabled) return;
+            if (IsVrPlayer()) return;
             if (!InputOpen()) return;
             if (!KatamariMath.IsFiniteFloat(value)) return;
             if (value == turn) return;
@@ -166,6 +184,15 @@ namespace VRCKatamari.Input
             ZeroAxes();
         }
 
+        // VR players drive through VrStickMoveInput, which reads both thumbsticks; the left
+        // stick still raises InputMove* here, so without this check the two adapters would
+        // write the motor's axes in turns. Desktop (and ClientSim) is never in VR.
+        private bool IsVrPlayer()
+        {
+            VRCPlayerApi local = Networking.LocalPlayer;
+            return local != null && local.IsUserInVR();
+        }
+
         private bool InputOpen()
         {
             return rideGateOpen && roundGateOpen;
@@ -175,15 +202,19 @@ namespace VRCKatamari.Input
         {
             forward = 0f;
             turn = 0f;
+            // A charge must not survive the station exit, a respawn or a closing gate.
+            if (motor != null) motor.CancelDashCharge();
             PushAxes();
         }
 
         // Update is a Unity lifecycle message forward to Udon, not a member of
-        // UdonSharpBehaviour, so it is an ordinary method and must not be override. Its whole
-        // job is the DEV-ONLY override; with the flag off it returns after that one test, which
-        // is why the device handlers keep their own order and pushes.
+        // UdonSharpBehaviour, so it is an ordinary method and must not be override. Its
+        // device job is the dash trigger (Shift has no Udon event); the rest is the DEV-ONLY
+        // override, which returns after one test when the flag is off.
         private void Update()
         {
+            StepDashInput();
+
             if (!debugDriveEnabled)
             {
                 if (!debugDriveActive) return;
@@ -216,6 +247,50 @@ namespace VRCKatamari.Input
             }
 
             PushDebugAxes();
+        }
+
+        // The dash charge (owner 2026-11-18: PC holds Shift; VR holds the left trigger in
+        // VrStickMoveInput). Either Shift key, press starts the charge, release ends it, and
+        // both only while the gates are open. VR players are refused here so each platform has
+        // exactly one dash entry. The edge is tracked even while a gate is closed, so holding
+        // Shift through a gate opening does not charge a dash nobody pressed - and a release
+        // after a gate closed cancels instead of firing.
+        private void StepDashInput()
+        {
+            if (IsVrPlayer())
+            {
+                shiftWasDown = false;
+                return;
+            }
+
+            bool down = UnityEngine.Input.GetKey(KeyCode.LeftShift)
+                || UnityEngine.Input.GetKey(KeyCode.RightShift);
+            if (down == shiftWasDown) return;
+            shiftWasDown = down;
+
+            if (motor == null) return;
+
+            if (down)
+            {
+                if (!InputOpen()) return;
+                bool accepted = motor.BeginDashCharge();
+                Debug.Log(accepted
+                    ? "[input] dash charge begin"
+                    : "[input] dash charge refused (huff, cooldown or already charging)");
+                return;
+            }
+
+            if (!InputOpen())
+            {
+                motor.CancelDashCharge();
+                return;
+            }
+            int released = motor.ReleaseDashCharge();
+            Debug.Log(released == DashMath.ReleaseDash
+                ? "[input] dash fired"
+                : released == DashMath.ReleaseNotFull
+                    ? "[input] dash released, charge not full"
+                    : "[input] dash release ignored");
         }
 
         private void BeginDebugDrive()

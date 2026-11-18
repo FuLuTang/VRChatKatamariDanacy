@@ -80,17 +80,17 @@
 ### 必需的物体布局（少一条就不成立）
 
 1. **FollowRig** 必须是 motor 的 `followRigRoot`（`KatamariBallMotor.cs:160`；每帧只写它的 `position` 与 yaw，`:1026-1032`）。不接的话 rig 帧没有落点，载人整段不生效。
-2. **rig 根就是取景眼点**：`followRigRoot` 收到的是 `eye = 球心 − forward·back + up·height`，`height = 1.779558·r`、`back = 5.476916·r`（无加性底座）（`RideViewMath` 推出，`RideUxAssembler` 写进 motor 的四个眼点字段；取景推导见 [RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md)）：球心恒在视轴下 18°。**不要再把 rig 根调成贴球心。**
+2. **rig 根就是取景眼点**：`followRigRoot` 收到的是 `eye = 球心 − forward·back + up·height`，`height = 1.654625·r`、`back = 1.176792·r`（无加性底座）（`RideViewMath` 推出，`RideUxAssembler` 写进 motor 的四个眼点字段；站姿推导见 [RIDE_GEOMETRY](../BallLayers/FollowRig/RIDE_GEOMETRY.md)）：玩家站在球后、手按在球背上。**不要再把 rig 根调成贴球心。**
 3. **VRCStation + `BallRideStation` 同物体**：`OnStationEntered`/`OnStationExited` 送到 VRCStation 所在物体的 Behaviour。座位上**没有**点击 Collider（座位在眼点上，不在球上，点它等于点空中）；点击由球上的 `BallSeatInteract` 承担（第 6 条）。
 4. **Station 是 rig 根的子物体**，`localPosition` 起始 `(0, 0, 0)`。「球后上方」已经由 rig 根本身给出（0.5 m 球时后方 1.85 m、上方 1.75 m），**不要再叠进 Station 的局部偏移**；坐着的人由 Station 承载，跟随靠 motor 写 rig 根，不靠任何脚本搬人。坐姿视点补偿（VRCStation 把人的眼睛放在座位上方的某个高度，本仓未实测）在首次 Build & Test 里量，本文不编数。
 5. **VRCStation 保持 Disable Station Exit 开**：移动轴驱球，跳跃是物品/退出输入，若允许移动或一次跳跃就离座，一次误触就结束骑乘（T04 实测：关掉退出后 Jump 不退座，且 `InputJump` 仍送达）。下车改为有意识的两条路：按住跳跃键 1.5 s，或面板上的按钮点两次。场景里 Player Mobility 是 `1`（Immobilize）；实验场景是 `0`，**Immobilize 下 `InputJump` 是否仍送达没有实测**，是真实客户端验收项。
 6. **点击目标在球上**：`BallPhysicsRoot/BallSeatTrigger`（单位球 `SphereCollider`、trigger、`BallSeatInteract`），半径 = `1.25 ×` 碰撞半径、下限 0.25 m，由 `BallSeatInteract.Update` 写 scale，所以随球径变；交互提示「骑上去」，距离 4 m。
 7. **`DesktopInput` 物体**：独占 `DesktopMoveInput`，把 `BallRideStation.input` 指过去。项目惯例是分开挂：motor、Station、输入各占一个对象，职责和自检都清楚（同物体本身合法，见 [BallMotor README](../BallMotor/README.md) 的「装配约束」）。
-8. **骑乘者面板**（rig 根下的世界空间 Canvas，不用屏幕叠加：VRChat 客户端不绘制 Screen Space Overlay）：`StoryHud`（左上）、`RideResultCard`（正前，含「再试一次」，`StoryRetryButton` 的触发盒在按钮上）、`RideExitPanel`（右下，含 `BallRideExitButton` 与按住跳跃提示，仅入座时显示）。位置规则见 RIDE_GEOMETRY §6；坐姿下鼠标左键仍可交互。下车时 `RideExitMath` 现算落点（球旁 0.9 m 的可站立地面），因为座位本身在地下。
+8. **骑乘者面板**（`FollowRigRoot/RidePanels` 下的世界空间 Canvas，`RidePanels` 随骑手眼高按 E/1.64 缩放；不用屏幕叠加：头显里不画 Screen Space Overlay）：`StoryHud`（左下，球的左边）、`RideResultCard`（正前，含「再试一次」，`StoryRetryButton` 的触发盒在按钮上）、`RideExitPanel`（右下，含 `BallRideExitButton` 与按住跳跃提示，仅入座时显示）。位置规则见 RIDE_GEOMETRY §6；骑乘中鼠标左键仍可交互。下车时 `RideExitMath` 现算落点（球旁 0.9 m 的可站立地面）。
 
 ### 骑乘 UX 装配（可重复执行）
 
-菜单 `VRC Katamari/Ride/Assemble Ride UX`（`Editor/Story/RideUxAssembler.cs`）对打开的场景做：写 motor 的四个眼点系数与两个上限；建 `PlayerBall/BallPhysicsRoot/BallSeatTrigger`；删座位上的点击 Collider；把 `StoryHud` 改成世界空间并挂到 `FollowRigRoot` 下；建 `FollowRigRoot/RideResultCard`（结果文字、卡面、`RetryButton` 进来，`StoryRetryButton` 移到按钮下并加触发盒、`StoryResultPresenter.resultCardRoot` 指向它，初始隐藏）与 `FollowRigRoot/RideExitPanel`（`BallRideExitButton` 移进来）；写 `BallRideStation` 的 `motor`/`exitPoint`/`ballInteract`/`exitPanelRoot`/`exitHintText`。结果行以 `[ride-ux] done: +N ~M problems=K` 开头；第二次运行应为 `+0 ~0`。
+菜单 `VRC Katamari/Ride/Assemble Ride UX`（`Editor/Story/RideUxAssembler.cs`）对打开的场景做：写 motor 的四个眼点系数与两个上限；建 `PlayerBall/BallPhysicsRoot/BallSeatTrigger`；删座位上的点击 Collider；把 VRCStation 设为站立式；建 `FollowRigRoot/RidePanels`，把 `StoryHud` 改成世界空间并挂到它下面；建 `RidePanels/RideResultCard`（结果文字、卡面、`RetryButton` 进来，`StoryRetryButton` 移到按钮下并加触发盒、`StoryResultPresenter.resultCardRoot` 指向它，初始隐藏）与 `RidePanels/RideExitPanel`（`BallRideExitButton` 移进来）；写 `BallRideStation` 的 `motor`/`exitPoint`/`ballInteract`/`exitPanelRoot`/`exitHintText`/`panelRoot`/`vrInput` 与骑手缩放参数。`Assemble All-Maps Hub` 在大厅装配之后自动跑这一步。结果行以 `[ride-ux] done: +N ~M problems=K` 开头；第二次运行应为 `+0 ~0`。
 
 前置与已知坑：`BallSeatInteract` 是新行为，先让 Unity 为它生成 U# program asset（选中 `BallSeatInteract.cs`，Inspector 的 Create 按钮，或先用 `Assets/Create/U# Script` 同名流程；资产连 `.meta` 一起提交）；给**已存在**的行为（`BallRideStation`、`BallRideExitButton`）新增了字段，旧实例的变量表里没有，装配器读回会报「Udon variable table lacks …」，按 `Labs/README.md`：编译 → 存盘 → 重开场景 → 再跑一次装配。
 
@@ -475,24 +475,22 @@ prop_bench_01@size=1.25
 
 - 测试在 `Tests/EditMode/Pickup/PickupFieldAuthoringRulesTests.cs`：解析并剥名、非法数字、多个标记、非正/过小、非有限与指数、locale 独立（在 `de-DE` 下 `1.25` 通过、`1,25` 被拒）、档位与值表联动（`1.25` 立方 → l，`furniture l = 16`；`0.72` → m，`fruit m = 4`），并覆盖 `fruit s/m` 有行、`fruit l` 缺失的价值表。`DegenerateBoundsHaveNoTier` 只覆盖三边都不可用的 AABB（全 0、三边 0.00005、负数、NaN、±Infinity）；`FlatPropsKeepTheirLongestSideTier` 钉住「一边为 0、其余边正常 → 仍按最长边分档」。
 
-## 关卡球径上限与第一关星级带（2026-11-15 追加）
+## 关卡球径上限（现行）与第一关星级带（2026-11-15 参考输入）
 
 > **2026-11-15 用户决定：现阶段不调数值**（“现在数值上的问题倒不是主要矛盾点”）。本节的 1.25 / 1.40 / 1.42 只是**评分模块将来的参考输入**，不是待办；星级与评语本身属于可拆卸的结果卡模块，与回合核心解耦（见 `Docs/OPEN_DECISIONS.md` 的 (m)(p)）。数字与算式保持原样，等评分模块接线时再取用。
 
 > 状态：`PROVISIONAL_NOT_TESTED`。本节是静态数值设计；唯一的“实测”是 `LEVEL_CONTENT_PLAN.md` §7.4 记录的 1 次 120 s Play Mode（370 u / 1.43 m）。“场景值”来自 `KatamariBallMotor.cs` 的直接读取。
 
-### 1. 球的最大直径是关卡属性，不是全局常量
+### 1. 球的最大直径是每关参数（owner 2026-11-18 现行）
 
-- `maxCoreRadiusWorldM` 是 `KatamariBallMotor` 的序列化字段（`KatamariBallMotor.cs:107`），每个 motor 实例一份；语义直径 = 2 × 该值（`semanticDiameterPerCoreDiameter = 1`，`:109`）。**代码已经支持每关不同上限，不需要改代码**；缺的是"每关填多少"的设计约定。
-- `maxItemVolumeWorldM3 = 512`（`:129`）是绝对护栏，不是玩法旋钮：只有 `(π/6)·D³/10 ≥ 512`，即 `D ≥ 21.38 m` 时才先于相对门生效；2.20 / 3.20 都碰不到它。
-- 约定：**关卡上限 = 2 × `maxCoreRadiusWorldM`；先按"这一关真实最大件的 AABB 体积"算 `D_min`，再向上取整到 0.10 m；不要反过来先定球再找件。** 512 只在做超大地图时作为最后一道保险。
+- 每关的最大球径 = `hub_levels.json` 里该关的 `maxDiameterM`（米，语义直径）；运行时由 `LevelSwitchHost` 在切关时写进 `KatamariBallMotor.SetMaxBallDiameterM`，增长由 `SizeModelMath.TryDerive` 在 cap 处饱和（没有第二道门）。
+- 现行值：`_ref_cancer` **1.2 m**——原作这关的球最大约 1.2 m，11 件东西（石灯笼×4、拉门、圆桌、云×5）要 1.27–6.45 m 的球才吸得到，原作里吸不到；恢复上限即恢复原作边界。我们自己的关（story_01_bench_size / physics_test_field / terrain_contact_lab）**30 m** 工程护栏（引擎安全上限，不是玩法目标、正常游玩摸不到）。
+- 约定：要收某一关的上限，先按“这一关真实最大件的 AABB 体积”算 `D_min`，再向上取整到 0.10 m；不要反过来先定球再找件。
 
-| 关卡/区域 | `maxCoreRadiusWorldM` | `D_cap` | 上限能吸的最大 `a_eq = D_cap×0.374` | 到 `D_cap` 需要 `U` | 本区内容 `U` | 实际能到 `D` |
-|---|---:|---:|---:|---:|---:|---:|
-| Story 01（第一关） | 1.10 | 2.20 | 0.823 | 1,356.4 | 1,500 | **2.20（封顶）** |
-| PicnicLawn（3.6 m 对角长凳） | 1.60 | 3.20 | 1.197 | 4,181.3 | 1,284 | **2.160** |
-
-`D_cap` 是"允许"，`实际能到` 是"这一关的内容够不够长到那里"。第一关现行内容（1,500 u）的 `D_reach = 2.2746 m` 已经越过 2.20 的帽子，被夹到 2.20；PicnicLawn 3.20 的帽子没有碰到。**先看 `D_reach`，再看 `D_cap`。**
+| 关卡 | `maxDiameterM` | 来源 |
+|---|---:|---|
+| `_ref_cancer` | 1.2 | 原作上限（owner 2026-11-18） |
+| story_01_bench_size / physics_test_field / terrain_contact_lab | 30 | 工程护栏，沿用原全局值 |
 
 ### 2. PicnicLawn 3.6 m 长凳：3.20 是推荐值，且只解决"直径"
 
@@ -500,8 +498,8 @@ AABB 取 **3.6 × 0.55 × 0.80 = 1.584 m³**（`Docs/Design/Maps/PicnicLawn/prop
 
 - 体积门：`1.584 ≤ (π/6)·D³/10` → `D³ ≥ 60×1.584/π = 30.251` → **`D_min = 3.1159 m`**。
 - 等价边长：`a_eq = 1.584^(1/3) = 1.1657 m`；`D_min = 2.673×1.1657 = 3.1159 m`（与上式一致）。
-- 取 `D_cap = 3.20`（`maxCoreRadiusWorldM = 1.6`）：直径余量 2.7%；`a_eq` 上限 1.197 比长凳 1.166 高 2.6%。**3.20 是"够用且不浪费"的值；3.12 只剩 0.1% 余量，不建议。**
-- **但单位预算才是真门槛**：`U ≥ 10×1.584/0.0041 − 3.439 = 3,859.98`。PicnicLawn 现在 **1,284 u**，球只到 2.160 m，门 0.528 m³ < 1.584，长凳**仍然吸不动**。要让 3.20 的上限真正生效，PicnicLawn 需要 **~4,181 u**（3.26×）或把 `c` 提高；只改 `maxCoreRadiusWorldM` 是一个空旋钮。
+- 取该图的 `maxDiameterM = 3.20`（设计值，数据待填）：直径余量 2.7%；`a_eq` 上限 1.197 比长凳 1.166 高 2.6%。**3.20 是"够用且不浪费"的值；3.12 只剩 0.1% 余量，不建议。**
+- **但单位预算才是真门槛**：`U ≥ 10×1.584/0.0041 − 3.439 = 3,859.98`。PicnicLawn 现在 **1,284 u**，球只到 2.160 m，门 0.528 m³ < 1.584，长凳**仍然吸不动**。要让 3.20 的上限真正生效，PicnicLawn 需要 **~4,181 u**（3.26×）或把 `c` 提高；只改 `maxDiameterM` 是一个空旋钮。
 - 灵敏度：按 `real_longest=1.6` 的 1.6×0.55×0.80 = 0.704 m³ → `D_min=2.378`、`U_min=1,713.6`，仍 >1,284；按收拢态 3.6×0.35×0.45 = 0.567 m³ → `D_min=2.212`、`U_min=1,379.5`，仍差 95 u；要让 1,284 u 能吸，`V ≤ 1,284×0.0041/10 = 0.5264 m³`（3.6 m 长时横截面 ≤0.1462 m²，约 0.38×0.38）。**长凳的"真实 AABB"直接决定它是门还是墙；按 0.55×0.80 它就是墙。**
 
 ### 3. 第一关星级带：1.25 / 1.40 / 1.42
@@ -565,11 +563,10 @@ AABB 取 **3.6 × 0.55 × 0.80 = 1.584 m³**（`Docs/Design/Maps/PicnicLawn/prop
 
 ## 主房间闭环（HUB_ROOM）
 
-> 状态：StoryMode 场景里的第一版大厅 2026-11-16 在 ClientSim 走通“走圈 → 传送 → 开局 → 自动入座”（证据 [hub_wiring](<../../Evidence/StoryMode/2026-11-16_hub_wiring/README.md>)）；回房/结果卡/重试尚无证据；装配器与选关数据（2026-11-17）未在 Unity 里跑过。设计、装配步骤、验收清单见 [HUB_ROOM](<HUB_ROOM.md>)。
+> 现行决定：owner 2026-11-18 要求墙面选关与游戏结束回大厅。代码与装配器已更新；这轮 Unity/Udon/VR 尚待验收。完整操作步骤、截图与预期读数见 [HUB_ROOM](<HUB_ROOM.md>)，合集规则见 [ALL_MAPS_HUB](<ALL_MAPS_HUB.md>)。
 
-- **选关数据驱动**：[`hub_levels.json`](<hub_levels.json>) 列出大厅能提供的关卡（id、名称、所在场景、关卡内容与玩家出生点的层级路径）；菜单 `VRC Katamari/Hub/Assemble Hub`（`Editor/Hub/HubAssembler.cs`，可重复执行）把当前场景放得下的关卡变成选关垫、启动器入口与名字。加关卡 = 加一条数据 + 把关卡导入该场景。
-- **开始**：走进一块选关垫 0.35 s 自动开始（不选“按 E”：`InputUse` 是全局事件）。**进关落点 = 关卡自己的玩家出生点**（导入器的 `Markers/PlayerSpawn`，球后 2.5 m、贴地、面向球），离球太远（>12 m）才退回座位；传送后 `HubLevelLauncher` 直接 `UseStation` 自动入座。
-- **结算后不自动回房**：结果卡在骑乘者眼前（`RideResultCard`，归骑乘装配），两个按钮——「再试一次」（原地重开，`StoryRetryButton`）与「回大厅」（`HubReturnButton`，下车并传送到 `HubSpawn`，回合进行中被拒绝）；`HubAssembler` 只在「再试一次」下挂「回大厅」，不移动结果卡。
-- **没有第二套状态机**：`StoryRoundController` 只被调用 `BeginRound()`/`RequestRetry()`。一张场景一个球一个回合控制器，所以 v1 每个场景只提供一关。
-- **单场景**：房间岛 `(1200,0,0)` + 关卡岛，玩家传送，不换场景、不整块启用/停用（理由见 HUB_ROOM §7）。
-- 运行时代码 `Runtime/Hub/{HubLevelLauncher,HubLoopMath,HubSelectMath,HubStartButton,HubReturnButton}.cs`、`Runtime/Story/Hub/{HubRoomMath,HubRoomHost}.cs`；测试 `Tests/EditMode/Hub/{HubLoopMathTests,HubSelectMathTests}.cs`、`Tests/EditMode/Story/HubRoomMathTests.cs`、`Docs/tests/hub_levels/`。
+- **选关数据驱动**：[hub_levels.json](<hub_levels.json>) 定义关卡与索引。Assemble All-Maps Hub 通过 [HubAssembler](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Editor/Hub/HubAssembler.cs>) 重建北墙2×2实体按钮面板，host.levelButtons与入口数组同序；不依赖手摆。
+- **开始**：只有Collider + Interact按钮启动。桌面准星鼠标左键，VR指向扳机；走动/停留不选关。传送到关卡入口，入口离球座>12m才回退座位，量到到达后开回合并请求自动入座。
+- **结算**：完整Result卡默认显示8秒后自动回大厅，也可点「回大厅」提前回或「再来一次」取消自动返回。重试经同一个launcher处理传送/唤醒岛，不绕过导航。退座慢时卡上提示「请先下车」，每秒复查，Riding负责退出重发。
+- **Respawn**：本地菜单重生先AbortRound，取消旧开始与入座，再确认退座、返回HubSpawn、停用关卡岛；不出放弃结果卡，也不会被Running纠偏送回球上。回大厅首个明确点击即可再选关。
+- **单场景、多关**：共享一个球、一个回合控制器；按关登记物理与道具。空闲岛SetActive停用，基础设施不在岛内。规则测试包括 [HubResultFlowTests](<../../../VRChatKatamariDanacyUnity/Assets/VRC_Katamari/Tests/EditMode/Hub/HubResultFlowTests.cs>)、HubLoopMathTests、HubRoomMathTests；场景行为仍须Unity与owner头显复测。

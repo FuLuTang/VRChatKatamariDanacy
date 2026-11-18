@@ -113,6 +113,30 @@ namespace VRCKatamari.Pickup
             return OfferWithinLimit;
         }
 
+        /// <summary>
+        /// True when the centre or any own-box corner moved more than toleranceM since submit.
+        /// Rotation is measured in metres at the corners, not by an arbitrary angle threshold.
+        /// </summary>
+        public static bool HasPoseMoved(Vector3 previousPosition, Quaternion previousRotation,
+            Vector3 position, Quaternion rotation, Vector3 ownSize, float toleranceM)
+        {
+            float toleranceSq = toleranceM * toleranceM;
+            Vector3 translation = position - previousPosition;
+            if (translation.sqrMagnitude > toleranceSq) return true;
+            if (rotation.x == previousRotation.x && rotation.y == previousRotation.y
+                && rotation.z == previousRotation.z && rotation.w == previousRotation.w) return false;
+            Vector3 half = ownSize * 0.5f;
+            for (int corner = 0; corner < 8; corner++)
+            {
+                Vector3 local = new Vector3((corner & 1) == 0 ? -half.x : half.x,
+                    (corner & 2) == 0 ? -half.y : half.y,
+                    (corner & 4) == 0 ? -half.z : half.z);
+                Vector3 delta = translation + rotation * local - previousRotation * local;
+                if (delta.sqrMagnitude > toleranceSq) return true;
+            }
+            return false;
+        }
+
         /// <summary>True when <paramref name="index"/> is among the first <paramref name="selected"/> rows.</summary>
         public static bool IsSelected(int index, int[] indices, int selected)
         {

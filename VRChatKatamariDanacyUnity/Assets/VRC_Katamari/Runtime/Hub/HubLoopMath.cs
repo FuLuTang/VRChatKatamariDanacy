@@ -58,6 +58,34 @@ namespace VRCKatamari.Hub
     /// </remarks>
     public static class HubLoopMath
     {
+        public static bool ShouldAbortForRespawn(int roundState)
+        {
+            return roundState == StoryRoundController.StateRunning;
+        }
+
+        public static bool ShouldRetryReturnExit(bool pending, bool retryRequested,
+            float now, float nextAttempt)
+        {
+            return pending && !retryRequested && KatamariMath.IsFiniteFloat(now)
+                && KatamariMath.IsFiniteFloat(nextAttempt) && now >= nextAttempt;
+        }
+
+        /// <summary>Only a complete, still-unclaimed result may time out into a return.</summary>
+        public static bool ShouldAutoReturn(int state, bool armed, bool retryRequested,
+            bool transferPending, float elapsed, float delay)
+        {
+            return state == StoryRoundController.StateResult && armed && !retryRequested
+                && !transferPending && KatamariMath.IsFiniteFloat(elapsed) && elapsed >= 0f
+                && KatamariMath.IsFiniteFloat(delay) && delay >= 0f && elapsed >= delay;
+        }
+
+        public static bool ShouldCancelReturnForRetry(int state, bool retryRequested,
+            bool cancellableReturn)
+        {
+            return state == StoryRoundController.StateResult && retryRequested
+                && cancellableReturn;
+        }
+
         // ---- What starting a round from a given state costs ----
         /// <summary>No round can be started from this state.</summary>
         public const int StartModeNone = 0;

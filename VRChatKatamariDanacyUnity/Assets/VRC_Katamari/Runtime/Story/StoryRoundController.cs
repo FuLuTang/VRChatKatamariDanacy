@@ -91,7 +91,8 @@ namespace VRCKatamari.Story
     /// queued candidates are dropped, so the ball brakes, the host stops queuing and
     /// nothing already in flight can still be committed after the clock ran out
     /// (plan section 4). Everything after that reads frozen values only. The input
-    /// close is this controller's own gate, <c>DesktopMoveInput.SetRoundGate</c>; the
+    /// close is this controller's own gate, <c>DesktopMoveInput.SetRoundGate</c> (and the same
+    /// gate on <c>VrStickMoveInput</c>); the
     /// ride host owns a separate ride gate, so the two cannot overwrite each other and
     /// sitting down again cannot re-open input after the bell.
     /// </para>
@@ -134,6 +135,8 @@ namespace VRCKatamari.Story
         // ---- Scene links (the operator wires these; a null link is skipped) ----
         [SerializeField] private KatamariBallMotor motor;
         [SerializeField] private DesktopMoveInput input;
+        // The VR adapter carries the same round gate; desktop and VR each have one adapter.
+        [SerializeField] private VrStickMoveInput vrInput;
         [SerializeField] private PickupFieldHost pickupHost;
 
         [Header("HUD (uGUI Text)")]
@@ -325,6 +328,7 @@ namespace VRCKatamari.Story
             lastRemainingShown = -1;
 
             if (input != null) input.SetRoundGate(false);
+            if (vrInput != null) vrInput.SetRoundGate(false);
             if (pickupHost != null) pickupHost.SetCollecting(false);
 
             WriteTargetText();
@@ -417,6 +421,7 @@ namespace VRCKatamari.Story
             roundAborted = false;
 
             if (input != null) input.SetRoundGate(true);
+            if (vrInput != null) vrInput.SetRoundGate(true);
             if (pickupHost != null) pickupHost.SetCollecting(true);
 
             WriteTargetText();
@@ -603,6 +608,23 @@ namespace VRCKatamari.Story
         /// does not call <c>TryBank</c> or <c>TryAwardScore</c>.
         /// </para>
         /// </remarks>
+        /// <summary>
+        /// Whether an Interact press on the result card should be DROPPED because the local
+        /// ball's dash charge or burst is running (owner 2026-11-18).
+        /// </summary>
+        /// <remarks>
+        /// The result card is only shown for a ride round, and a dash can only start while the
+        /// ride gate is open (the local player is seated), so the dash state alone settles it;
+        /// see <see cref="VRCKatamari.Riding.RideDashInteractMath"/>. An unwired motor leaves
+        /// the retry button behaving as before.
+        /// </remarks>
+        public bool ShouldIgnoreDashInteract()
+        {
+            if (motor == null) return false;
+            return VRCKatamari.Riding.RideDashInteractMath.IsDashInputActive(
+                motor.IsDashCharging(), motor.IsDashing());
+        }
+
         public bool RequestRetry()
         {
             // Re-assert the HUD objects for the state this call arrives in, so a press
@@ -808,6 +830,7 @@ namespace VRCKatamari.Story
         private void FreezeRound()
         {
             if (input != null) input.SetRoundGate(false);
+            if (vrInput != null) vrInput.SetRoundGate(false);
             if (pickupHost != null) pickupHost.SetCollecting(false);
             if (motor != null) motor.ClearCandidates();
 
@@ -1007,7 +1030,9 @@ namespace VRCKatamari.Story
             // The prompt belongs to the one state where the player has not started yet and
             // has to be gone once the countdown takes over the HUD; the button belongs to
             // the one state where a press restarts the round.
-            bool showStartPrompt = state == StateIdle;
+            // An empty prompt means the scene starts rounds elsewhere (the hub's wall cards), so
+            // the line is not shown at all instead of showing an empty box.
+            bool showStartPrompt = state == StateIdle && startPrompt != null && startPrompt.Length > 0;
             if (retryButtonRoot != null) retryButtonRoot.SetActive(showRetry);
             if (startPromptText != null) startPromptText.gameObject.SetActive(showStartPrompt);
         }

@@ -637,6 +637,18 @@ namespace VRCKatamari.Editor.LevelBuild
                 counters.Updated++;
             }
 
+            // The blend's shader is the Legacy Shaders family (see VisualShaderName), which has
+            // no instancing variant, so this is off today; the terrain visual is batched
+            // statically instead (OccluderRule). One check, so a future blend mapping to an
+            // instancing-capable opaque shader inherits the flag.
+            if (!existing.enableInstancing && MaterialInstancing.IsEligible(existing))
+            {
+                Undo.RecordObject(existing, "Terrain visual material");
+                existing.enableInstancing = true;
+                EditorUtility.SetDirty(existing);
+                counters.Updated++;
+            }
+
             return existing;
         }
 
@@ -646,6 +658,7 @@ namespace VRCKatamari.Editor.LevelBuild
             target.mainTexture = texture;
             target.color = Color.white;
             if (material.Blend == "cutout") target.SetFloat("_Cutoff", 0.5f);
+            target.enableInstancing = MaterialInstancing.IsEligible(target);
         }
     }
 }

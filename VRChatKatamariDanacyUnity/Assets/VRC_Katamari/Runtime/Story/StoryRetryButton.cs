@@ -48,6 +48,7 @@ namespace VRCKatamari.Story
     public class StoryRetryButton : UdonSharpBehaviour
     {
         [SerializeField] private StoryRoundController controller;
+        [SerializeField] private VRCKatamari.Hub.HubLevelLauncher launcher;
 
         /// <summary>World-space press: the retry button's collider was interacted with.</summary>
         public override void Interact()
@@ -73,7 +74,11 @@ namespace VRCKatamari.Story
                     + " nothing.");
                 return;
             }
-            controller.RequestRetry();
+            // The dash's trigger also raises Interact; while it charges/bursts the same press
+            // must not retry (owner 2026-11-18, RideDashInteractMath).
+            if (controller.ShouldIgnoreDashInteract()) return;
+            if (launcher != null) launcher.PressRetryCurrentLevel();
+            else controller.RequestRetry();
         }
     }
 }

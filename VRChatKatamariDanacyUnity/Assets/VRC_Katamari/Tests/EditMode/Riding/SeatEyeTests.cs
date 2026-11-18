@@ -425,18 +425,20 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
-        public void APlausibleSeatedHeadIsAcceptedAndAStandingOneIsRefused()
+        public void AStandingHeadIsAcceptedAndADistantDatumIsRefused()
         {
-            // 1.25 m: past every seated head this project has measured - 1.204159 m in
-            // ClientSim (2026-11-15) and about 0.85 m on real hardware - and inside the guard.
+            // 1.25 m: past every seated head this project has measured (1.204159 m in ClientSim
+            // on 2026-11-15, about 0.85 m on real hardware), and 1.8 m, a tall standing head
+            // above the feet of the standing ride station: both inside the guard.
             Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistance(1.25f));
+            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistance(1.8f));
 
-            // 1.40 m: a standing eye height, i.e. the wrong datum. Refused, not clamped.
-            Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistance(1.40f));
+            // 2.5 m from the anchor is not this rider's head. Refused, not clamped.
+            Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistance(2.5f));
 
             // The rail itself, spelled out: the guard is a bound to stay under, so the value
             // is accepted and a hair past it is not. Changing the constant fails here.
-            Assert.AreEqual(1.35f, SeatEyeMath.MaxPlausibleHeadAboveSeatMeters, Tolerance);
+            Assert.AreEqual(2.1f, SeatEyeMath.MaxPlausibleHeadAboveSeatMeters, Tolerance);
             Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistance(
                 SeatEyeMath.MaxPlausibleHeadAboveSeatMeters));
             Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistance(
@@ -535,14 +537,14 @@ namespace VRCKatamari.Tests
         [Test]
         public void PlausibleHeadDistance_ScalesWithTheRider()
         {
-            // A 23 m rider's seated head 11.3 m above the seat is fine, and a small rider's
-            // standing-height datum (1.2 m for a 0.26 m rider) is still refused.
-            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(11.3f, 23.245f));
+            // A 26.5 m rider's standing head 26.5 m above the feet is fine (rail 2.1 * 26.5 /
+            // 1.64 = 33.9 m), and a 1.2 m datum for a 0.26 m rider (rail 0.33 m) is refused.
+            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(26.5f, 26.5f));
             Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(1.2f, 0.258f));
-            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(0.13f, 0.258f));
+            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(0.26f, 0.258f));
             // Unscaled (eye height unknown): the absolute rail.
-            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(1.25f, 0f));
-            Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(1.40f, 0f));
+            Assert.IsTrue(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(1.8f, 0f));
+            Assert.IsFalse(SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(2.2f, 0f));
         }
 
         [Test]

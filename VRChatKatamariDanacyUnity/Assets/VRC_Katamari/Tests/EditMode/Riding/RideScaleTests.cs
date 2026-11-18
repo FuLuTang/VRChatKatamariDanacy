@@ -4,60 +4,49 @@ using VRCKatamari.Riding;
 namespace VRCKatamari.Tests
 {
     /// <summary>
-    /// Pins the rider-size rules: the eye height that puts the measured hips on the top of the
-    /// ball is proportional to the diameter and inversely proportional to kappa, requests are
-    /// clamped to what VRChat supports, a size changed from outside is recovered, and the
-    /// smoothing and the rate limit behave. Hand values: with the eye <c>up = 1.779558 r</c>
-    /// above the centre (sin 18 / sin 10) the eye is <c>0.779558 r</c> above the ball's top, so
-    /// the eye height is <c>E = 0.779558 r / kappa</c>.
+    /// Pins the rider-size rules: the push stance's eye height is proportional to the diameter
+    /// and inversely proportional to the avatar's measured eta, requests are clamped to what
+    /// VRChat supports, a size changed from outside is recovered, and the smoothing and the rate
+    /// limit behave. Hand values: <c>E = e * r / eta</c> with <c>e = 2.654625</c>
+    /// (RideViewTests derives it).
     /// </summary>
     public class RideScaleTests
     {
-        // D, kappa, expected E = 0.779558 * D / 2 / kappa.
-        [TestCase(0.222f, 0.4f, 0.21633f)]
-        [TestCase(0.5f, 0.35f, 0.55683f)]
-        [TestCase(2f, 0.2f, 3.89779f)]
-        [TestCase(2f, 0.35f, 2.22731f)]
-        [TestCase(2f, 0.5f, 1.55912f)]
-        [TestCase(20f, 0.35f, 22.2731f)]
-        public void EyeHeight_IsTheEyeAboveTheBallTopOverKappa(float diameter, float kappa,
-            float expectedEye)
+        // D, eta, expected E = 2.654625 * D / 2 / eta.
+        [TestCase(0.222f, 1f, 0.294663f)]
+        [TestCase(0.3f, 1f, 0.398194f)]
+        [TestCase(0.5f, 1f, 0.663656f)]
+        [TestCase(2f, 1f, 2.654625f)]
+        [TestCase(2f, 0.9f, 2.949583f)]
+        [TestCase(20f, 1f, 26.54625f)]
+        public void EyeHeight_IsTheStanceOverEta(float diameter, float eta, float expectedEye)
         {
             float eye;
             bool clamped;
-            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(diameter, kappa, out eye,
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(diameter, eta, out eye,
                 out clamped));
             Assert.IsFalse(clamped);
             Assert.AreEqual(expectedEye, eye, expectedEye * 1e-3f);
 
-            // With the hips kappa * E below the eye, they are one diameter above the ball's lowest
-            // point: the ball's top.
+            // With the head eta * E above the feet and the eye on the eye point, the feet are on
+            // the ball's lowest point: up + r below the eye.
             float radius = diameter * 0.5f;
             float up;
             float back;
             Assert.IsTrue(RideViewMath.TryEyeOffset(radius, out up, out back));
-            float waist = RideScaleMath.WaistAboveBallBottom(radius, up, kappa * eye);
-            Assert.AreEqual(diameter, waist, diameter * 1e-3f);
+            Assert.AreEqual(up + radius, eta * eye, diameter * 1e-3f);
         }
 
         [Test]
-        public void EyeAboveWaist_HandValueAtUnitRadius()
-        {
-            Assert.AreEqual(0.779558f, RideScaleMath.EyeAboveWaistForRadius(1f), 1e-4f);
-            Assert.AreEqual(0f, RideScaleMath.EyeAboveWaistForRadius(float.NaN));
-            Assert.AreEqual(0f, RideScaleMath.EyeAboveWaistForRadius(-1f));
-        }
-
-        [Test]
-        public void EyeHeight_IsLinearInTheDiameterAtAnyKappa()
+        public void EyeHeight_IsLinearInTheDiameterAtAnyEta()
         {
             float unit;
             float other;
             bool clamped;
-            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(1f, 0.3f, out unit, out clamped));
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(1f, 0.95f, out unit, out clamped));
             foreach (float diameter in new[] { 0.222f, 0.5f, 0.8f, 2f, 20f })
             {
-                Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(diameter, 0.3f, out other,
+                Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(diameter, 0.95f, out other,
                     out clamped));
                 Assert.AreEqual(unit * diameter, other, unit * diameter * 1e-4f);
             }
@@ -68,32 +57,32 @@ namespace VRCKatamari.Tests
         {
             float eye;
             bool clamped;
-            // kappa 0.35: 0.779558 * 0.025 / 0.35 = 0.0557 m, under the 0.1 m floor.
-            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(0.05f, 0.35f, out eye,
+            // 2.654625 * 0.025 = 0.0664 m, under the 0.1 m floor.
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(0.05f, 1f, out eye,
                 out clamped));
             Assert.AreEqual(RideScaleMath.MinSupportedEyeHeightMeters, eye, 1e-6f);
             Assert.IsTrue(clamped);
-            // 0.779558 * 100 / 0.35 = 222.7 m, over the 100 m ceiling.
-            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(200f, 0.35f, out eye,
+            // 2.654625 * 100 = 265.5 m, over the 100 m ceiling.
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(200f, 1f, out eye,
                 out clamped));
             Assert.AreEqual(RideScaleMath.MaxSupportedEyeHeightMeters, eye, 1e-4f);
             Assert.IsTrue(clamped);
             // Inside the range nothing is clamped.
-            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(20f, 0.35f, out eye, out clamped));
+            Assert.IsTrue(RideScaleMath.TryEyeHeightForDiameter(20f, 1f, out eye, out clamped));
             Assert.IsFalse(clamped);
         }
 
-        [TestCase(0f, 0.35f)]
-        [TestCase(-1f, 0.35f)]
-        [TestCase(float.NaN, 0.35f)]
+        [TestCase(0f, 1f)]
+        [TestCase(-1f, 1f)]
+        [TestCase(float.NaN, 1f)]
         [TestCase(2f, 0f)]
         [TestCase(2f, -0.2f)]
         [TestCase(2f, float.NaN)]
-        public void EyeHeight_RefusesBadInputs(float diameter, float kappa)
+        public void EyeHeight_RefusesBadInputs(float diameter, float eta)
         {
             float eye;
             bool clamped;
-            Assert.IsFalse(RideScaleMath.TryEyeHeightForDiameter(diameter, kappa, out eye,
+            Assert.IsFalse(RideScaleMath.TryEyeHeightForDiameter(diameter, eta, out eye,
                 out clamped));
             Assert.AreEqual(0f, eye);
         }

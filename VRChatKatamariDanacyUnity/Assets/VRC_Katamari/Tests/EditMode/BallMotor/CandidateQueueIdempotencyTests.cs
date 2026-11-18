@@ -241,5 +241,74 @@ namespace VRCKatamari.Tests
             Assert.IsFalse((bool)Call("IsCandidateQueued", "absent"));
             Assert.AreEqual(1, Count());
         }
+
+        private T[] PendingArray<T>(string name)
+        {
+            FieldInfo field = motorType.GetField(name,
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            Assert.IsNotNull(field, name + " not found");
+            return (T[])field.GetValue(motor);
+        }
+
+        private bool RefreshPose(string id, Vector3 position, Quaternion rotation)
+        {
+            return (bool)Call("RefreshCandidatePoseUnlessAccepted", id, position, rotation);
+        }
+
+        [Test]
+        public void RefreshPoseWritesOnlyPositionAndRotationOfThatCandidate()
+        {
+            Assert.IsTrue(Submit("a"));
+            Assert.IsTrue(Submit("b"));
+            // A sentinel submit time: Time.time does not advance in EditMode, so only a
+            // distinct value can show that the refresh left the time alone.
+            float[] submitTimes = PendingArray<float>("pendingSubmitTimes");
+            submitTimes[0] = -123f;
+            submitTimes[1] = -456f;
+
+            Quaternion turned = new Quaternion(0f, Mathf.Sin(Mathf.PI / 4f), 0f,
+                Mathf.Cos(Mathf.PI / 4f));
+            Vector3 moved = new Vector3(2f, 0.05f, 3f);
+            Assert.IsTrue(RefreshPose("b", moved, turned));
+
+            Vector3[] positions = PendingArray<Vector3>("pendingPositions");
+            Quaternion[] rotations = PendingArray<Quaternion>("pendingRotations");
+            bool[] accepted = PendingArray<bool>("pendingAccepted");
+            Assert.AreEqual(moved, positions[1], "the refreshed pose is the new one");
+            Assert.AreEqual(turned.y, rotations[1].y, 1e-6f);
+            Assert.AreEqual(new Vector3(0f, 0.05f, 1f), positions[0], "other entries untouched");
+            Assert.AreEqual(-456f, submitTimes[1], "a refresh is not a re-submission");
+            Assert.AreEqual(-123f, submitTimes[0]);
+            Assert.IsFalse(accepted[1], "the accepted flag is not written");
+            Assert.AreEqual(2, Count());
+            Assert.AreEqual("b", ItemIdAt(1), "the order is untouched");
+        }
+
+        [Test]
+        public void RefreshPoseLeavesAnAcceptedCandidateAtItsJudgedPose()
+        {
+            Assert.IsTrue(Submit("a"));
+            MarkAccepted("a");
+            float[] submitTimes = PendingArray<float>("pendingSubmitTimes");
+            submitTimes[0] = -7f;
+
+            Assert.IsFalse(RefreshPose("a", new Vector3(5f, 0f, 5f), Quaternion.identity),
+                "an accepted entry is a pending claim and keeps its pose");
+            Assert.AreEqual(new Vector3(0f, 0.05f, 1f), PendingArray<Vector3>("pendingPositions")[0]);
+            Assert.IsTrue(PendingArray<bool>("pendingAccepted")[0], "still accepted");
+            Assert.AreEqual(-7f, submitTimes[0]);
+            Assert.AreEqual(1, Count());
+        }
+
+        [Test]
+        public void RefreshPoseOnAnUnknownOrEmptyIdReturnsFalseAndChangesNothing()
+        {
+            Assert.IsTrue(Submit("a"));
+            Assert.IsFalse(RefreshPose("absent", new Vector3(9f, 0f, 9f), Quaternion.identity));
+            Assert.IsFalse(RefreshPose("", new Vector3(9f, 0f, 9f), Quaternion.identity));
+            Assert.IsFalse(RefreshPose(null, new Vector3(9f, 0f, 9f), Quaternion.identity));
+            Assert.AreEqual(new Vector3(0f, 0.05f, 1f), PendingArray<Vector3>("pendingPositions")[0]);
+            Assert.AreEqual(1, Count());
+        }
     }
 }

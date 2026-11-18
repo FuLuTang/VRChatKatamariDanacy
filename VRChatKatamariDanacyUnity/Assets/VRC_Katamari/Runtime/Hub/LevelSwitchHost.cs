@@ -92,6 +92,16 @@ namespace VRCKatamari.Hub
         [SerializeField] private float[] startHeadingDegrees;
         [SerializeField] private long[] startVolumesMm3;
 
+        // The largest ball each level may reach, SEMANTIC diameter in metres (owner
+        // 2026-11-18: the original's cap is per level - Cancer 1.2 m; our own levels keep
+        // the motor's authored engineering envelope, 30 m). An entry that is missing, 0 or
+        // not finite falls back to that authored cap rather than to the previous level's,
+        // so the result never depends on the order the levels are visited
+        // (LevelBallCapMath.Resolve). The cap is written before the start volume, because
+        // the motor validates the start against it.
+        [Header("Ball cap (optional; index = level index)")]
+        [SerializeField] private float[] maxBallDiametersM;
+
         // Metres above the ground plane the ball is lifted to when an authored start
         // centre would be below it.
         [SerializeField] private float groundLiftMeters = 0.02f;
@@ -102,6 +112,9 @@ namespace VRCKatamari.Hub
         private int lastFailure;
         private Vector3 lastStartTop;
         private bool parked;
+        // The motor's authored cap, captured in Start before any switch. It is the fallback
+        // for a level whose per-level entry is missing (LevelBallCapMath.Resolve).
+        private float sceneMaxBallDiameterM;
         // False from Start until the first park pass: islands are left on for two frames
         // so every behaviour inside runs its Start (an Udon behaviour on an object that was
         // never active has not initialised, and calling it is not safe), then all are
@@ -139,6 +152,9 @@ namespace VRCKatamari.Hub
                 islandsReady = false;
                 SendCustomEventDelayedFrames(nameof(ParkIdleIslands), 2);
             }
+            // The motor's authored cap is the per-level fallback; capture it before the
+            // first switch writes a cap.
+            if (motor != null) sceneMaxBallDiameterM = motor.GetMaxBallDiameterM();
             Debug.Log("[switch] ready levels=" + LevelCount() + " arenaHosts=" + suspended
                 + " islands=" + islands);
         }
@@ -249,8 +265,8 @@ namespace VRCKatamari.Hub
         /// <c>ClearObstacles</c> alone leaves the terrain and prop proxies behind; the
         /// ground plane is set before the arenas (each arena sets it again with its own
         /// value); arenas register frame-first with growing surface-id offsets (the
-        /// physics test field's sandbox order); the terrain, whitelist and start size
-        /// follow; and the ball is reset and placed last, after the world it stands in
+        /// physics test field's sandbox order); the terrain, whitelist, size cap and start
+        /// size follow; and the ball is reset and placed last, after the world it stands in
         /// exists. A level that is already active is switched again (re-registered and
         /// reset), so a caller that does not want that checks <see cref="GetActiveLevel"/>.
         /// </remarks>
@@ -361,7 +377,16 @@ namespace VRCKatamari.Hub
                 motor.SetAllowedKinds(kinds, kindCount);
             }
 
-            // 8. The ball: start size, then a fresh round id, then the position.
+            // 8. The ball: the level's size cap first (the start volume is validated
+            //    against it), then start size, then a fresh round id, then the position.
+            float maxDiameter = LevelBallCapMath.Resolve(maxBallDiametersM, levelIndex,
+                sceneMaxBallDiameterM);
+            if (maxDiameter > 0f && !motor.SetMaxBallDiameterM(maxDiameter))
+            {
+                Debug.LogWarning("[switch] max ball diameter " + maxDiameter
+                    + " refused for level " + levelIndex + "; keeping "
+                    + motor.GetMaxBallDiameterM());
+            }
             if (startVolumesMm3 != null && levelIndex < startVolumesMm3.Length
                 && startVolumesMm3[levelIndex] > 0L)
             {
@@ -425,6 +450,7 @@ namespace VRCKatamari.Hub
                 + " terrainTris=" + motor.GetTerrainMeshTriangleCount()
                 + " terrainOk=" + terrainOk
                 + " ground=" + groundOffset
+                + " maxDiameter=" + motor.GetMaxBallDiameterM()
                 + " startDiameter=" + motor.GetStartDiameterWorldM()
                 + " start=" + center
                 + " heading=" + heading);

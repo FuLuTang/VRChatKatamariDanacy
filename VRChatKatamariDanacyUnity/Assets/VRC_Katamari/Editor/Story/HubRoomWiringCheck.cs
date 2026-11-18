@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEngine;
 using VRCKatamari.BallMotor;
 using VRCKatamari.Hub;
+using VRCKatamari.Input;
 using VRCKatamari.Story;
 using VRCKatamari.Story.Hub;
 
@@ -59,15 +60,14 @@ namespace VRCKatamari.Editor.Story
             if (OptionalReference<UnityEngine.UI.Text>(host, "promptText") == null)
             {
                 Debug.Log("[hub-check] host.promptText is not wired: the room has no on-screen"
-                    + " instruction line (walking into a circle still starts a level)");
+                    + " instruction line (use the wall panel buttons to start)");
             }
 
-            int zones = ArraySize(host, "selectZones");
-            float zoneRadius = FloatField(host, "selectRadiusMeters", 1.2f);
+            int buttons = ArraySize(host, "levelButtons");
             float hubRadius = FloatField(host, "hubRadiusMeters", 12f);
-            if (zones == 0)
+            if (buttons == 0)
             {
-                Report("host.selectZones is empty: walking cannot start a level", ref problems);
+                Report("host.levelButtons is empty: wall panel buttons are not wired", ref problems);
             }
 
             if (hubCenter != null)
@@ -102,10 +102,10 @@ namespace VRCKatamari.Editor.Story
                 Report("launcher.levelEntries is empty: a start has nowhere to send the player",
                     ref problems);
             }
-            if (entries != zones)
+            if (entries != buttons)
             {
-                Warn("launcher.levelEntries has " + entries + " entries but the room has " + zones
-                    + " circles; index i of both is the same level, so they must match");
+                Warn("launcher.levelEntries has " + entries + " entries but the room has " + buttons
+                    + " buttons; index i of both is the same level, so they must match");
             }
             Transform firstEntry = Element<Transform>(launcher, "levelEntries", 0);
             var levelSwitch = Object.FindObjectOfType<LevelSwitchHost>();
@@ -162,20 +162,12 @@ namespace VRCKatamari.Editor.Story
                         + " at the ball, near the origin");
                 }
             }
-            if (roomSpawn != null && zones > 0)
+            for (int i = 0; i < buttons; i++)
             {
-                Transform firstZone = Element<Transform>(host, "selectZones", 0);
-                if (firstZone != null)
-                {
-                    float toFirstCircle = Vector3.Distance(roomSpawn.position, firstZone.position);
-                    if (toFirstCircle <= zoneRadius + 0.5f)
-                    {
-                        Warn("launcher.roomSpawn is inside the first level circle ("
-                            + toFirstCircle.ToString("F1") + " m <= radius " + zoneRadius
-                            + "); the re-arm rule means the player would have to step out and"
-                            + " back in after every round. Move the spawn outside every circle");
-                    }
-                }
+                Transform button = Element<Transform>(host, "levelButtons", i);
+                if (button == null || button.GetComponent<HubStartButton>() == null
+                    || button.GetComponent<Collider>() == null)
+                    Report("wall panel button " + i + " needs Collider + HubStartButton", ref problems);
             }
             if (host.gameObject == launcher.gameObject)
             {
@@ -183,14 +175,9 @@ namespace VRCKatamari.Editor.Story
                     + " object is the project convention");
             }
 
-            // The launcher's own panel line says "按开始进入…", which is the wrong verb for a
-            // walk-in circle; the room's prompt is the host's Text instead.
+            // The host owns the panel instruction line; avoid two competing status labels.
             if (OptionalReference<UnityEngine.UI.Text>(launcher, "statusText") != null)
-            {
-                Warn("launcher.statusText is wired: it writes a press-to-start line that"
-                    + " disagrees with the walk-in circle. Leave it unwired so the host's"
-                    + " promptText is the room's only instruction line");
-            }
+                Warn("launcher.statusText duplicates host.promptText; use only one instruction line");
 
             int controllers = Object.FindObjectsOfType<StoryRoundController>().Length;
             if (controllers != 1)
@@ -198,6 +185,9 @@ namespace VRCKatamari.Editor.Story
                 Report("expected exactly one active StoryRoundController, found " + controllers,
                     ref problems);
             }
+
+            CheckVrStickInput(ref problems);
+            int arrows = CheckPanels(host, entries, ref problems);
 
             int presenters = Object.FindObjectsOfType<StoryResultPresenter>().Length;
             if (presenters == 0)
@@ -207,9 +197,9 @@ namespace VRCKatamari.Editor.Story
                     + " the room does not duplicate them");
             }
 
-            Debug.Log("[hub-check] done: " + problems + " problem(s), " + zones + " circle(s), "
-                + entries + " level entry/entries, zone radius " + zoneRadius
-                + ", room radius " + hubRadius);
+            Debug.Log("[hub-check] done: " + problems + " problem(s), " + buttons + " panel button(s), "
+                + entries + " level entry/entries, " + arrows + " setting arrow(s), room radius "
+                + hubRadius);
         }
 
         // ------------------------------------------------------------------ helpers
@@ -284,6 +274,88 @@ namespace VRCKatamari.Editor.Story
                         + " m from the room; the islands would overlap");
                 }
             }
+        }
+
+        // VR drive: one VrStickMoveInput, wired to the scene's motor, whose round gate the
+        // round controller closes (Docs/Design/ControlIntent/README.md). The ride gate's owner,
+        // BallRideStation, is checked by the ride wiring, not here.
+        private static void CheckVrStickInput(ref int problems)
+        {
+            var adapters = Object.FindObjectsOfType<VrStickMoveInput>(true);
+            if (adapters.Length != 1)
+            {
+                Report("expected exactly one VrStickMoveInput, found " + adapters.Length
+                    + " (VR players drive the ball through it; run the hub assembly)", ref problems);
+                return;
+            }
+            KatamariBallMotor motor = ObjectReference<KatamariBallMotor>(adapters[0], "motor",
+                "VrStickMoveInput.motor (the ball it drives)", ref problems);
+            var sceneMotor = Object.FindObjectOfType<KatamariBallMotor>();
+            if (motor != null && sceneMotor != null && motor != sceneMotor)
+                Report("VrStickMoveInput.motor is not the scene's KatamariBallMotor", ref problems);
+            var round = Object.FindObjectOfType<StoryRoundController>();
+            if (round != null)
+            {
+                VrStickMoveInput wired = ObjectReference<VrStickMoveInput>(round, "vrInput",
+                    "round.vrInput (closes the VR adapter's round gate at the bell)", ref problems);
+                if (wired != null && wired != adapters[0])
+                    Report("round.vrInput points at a different VrStickMoveInput", ref problems);
+            }
+        }
+
+        // The settings store, the record book and the panel display (HUB_ROOM.md): one each,
+        // wired to each other; every setting row has two arrows with a collider and the right
+        // id/delta; the button colliders are on the Default layer and face the spawn.
+        private static int CheckPanels(HubRoomHost host, int entries, ref int problems)
+        {
+            var settings = Object.FindObjectsOfType<HubSettingsHost>(true);
+            var records = Object.FindObjectsOfType<HubRecordBook>(true);
+            var displays = Object.FindObjectsOfType<HubPanelDisplay>(true);
+            if (settings.Length != 1 || records.Length != 1 || displays.Length != 1)
+            {
+                Report("expected one HubSettingsHost, HubRecordBook and HubPanelDisplay, found "
+                    + settings.Length + "/" + records.Length + "/" + displays.Length, ref problems);
+                return 0;
+            }
+            if (ObjectReference<HubSettingsHost>(host, "settings",
+                "host.settings (the prompt's language)", ref problems) != settings[0])
+                Report("host.settings is not the scene's HubSettingsHost", ref problems);
+            ObjectReference<VrStickMoveInput>(settings[0], "vrInput",
+                "settings.vrInput (VR controls setting -> stick scheme)", ref problems);
+            if (ObjectReference<HubSettingsHost>(displays[0], "settings", "display.settings",
+                ref problems) != settings[0]) Report("display.settings is another store", ref problems);
+            if (ObjectReference<HubRecordBook>(displays[0], "records", "display.records",
+                ref problems) != records[0]) Report("display.records is another book", ref problems);
+            ObjectReference<StoryRoundController>(records[0], "controller", "records.controller",
+                ref problems);
+            if (ArraySize(records[0], "levelIds") != entries)
+                Report("records.levelIds has " + ArraySize(records[0], "levelIds") + " ids, the"
+                    + " launcher " + entries + " entries", ref problems);
+            if (ArraySize(displays[0], "levelNameTexts") != entries)
+                Report("display.levelNameTexts has " + ArraySize(displays[0], "levelNameTexts")
+                    + " texts for " + entries + " levels", ref problems);
+            if (ArraySize(displays[0], "settingValueTexts") != HubSettingsMath.Count)
+                Report("display.settingValueTexts is not one per setting", ref problems);
+
+            var arrows = Object.FindObjectsOfType<HubSettingButton>(true);
+            var seen = new System.Collections.Generic.HashSet<int>();
+            for (int i = 0; i < arrows.Length; i++)
+            {
+                var so = new SerializedObject(arrows[i]);
+                int id = so.FindProperty("settingId").intValue;
+                int delta = so.FindProperty("delta").intValue;
+                if (so.FindProperty("settings").objectReferenceValue != settings[0])
+                    Report(arrows[i].name + ".settings is not the scene's store", ref problems);
+                if (!HubSettingsMath.IsValidId(id) || (delta != 1 && delta != -1)
+                    || !seen.Add(id * 2 + (delta > 0 ? 1 : 0)))
+                    Report(arrows[i].name + " has id " + id + " delta " + delta, ref problems);
+                if (arrows[i].GetComponent<Collider>() == null || arrows[i].gameObject.layer != 0)
+                    Report(arrows[i].name + " needs a Collider on the Default layer", ref problems);
+            }
+            if (seen.Count != HubSettingsMath.Count * 2)
+                Report("setting arrows cover " + seen.Count + " of " + (HubSettingsMath.Count * 2)
+                    + " (id, direction) pairs", ref problems);
+            return arrows.Length;
         }
 
         private static void Report(string message, ref int problems)

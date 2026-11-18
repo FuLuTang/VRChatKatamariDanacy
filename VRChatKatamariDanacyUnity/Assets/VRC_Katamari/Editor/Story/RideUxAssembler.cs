@@ -10,6 +10,7 @@ using UnityEngine.UI;
 using VRC.Udon;
 using VRC.Udon.Common.Interfaces;
 using VRCKatamari.BallMotor;
+using VRCKatamari.Input;
 using VRCKatamari.Riding;
 using VRCKatamari.Story;
 
@@ -25,15 +26,19 @@ namespace VRCKatamari.Editor.Story
     /// </para>
     /// <list type="number">
     /// <item><description>The follow frame's four eye coefficients on the motor, written
-    /// from <see cref="RideViewMath"/> (the one source; the bases are zero), so the ball sits
-    /// 18 degrees below the horizon at every size and fills a third of the view.</description></item>
+    /// from <see cref="RideViewMath"/> (the one source; the bases are zero): the push stance,
+    /// eye 1.655 r above and 1.177 r behind the ball centre, so a standing rider's hands meet
+    /// the ball's back surface at every size.</description></item>
+    /// <item><description>The VRCStation as a standing station (<c>seated</c> off): the
+    /// station carries the avatar by its feet, which the seat puts on the ground.</description></item>
     /// <item><description><c>BallSeatTrigger</c> under the ball's physics root: a trigger
     /// unit sphere with <see cref="BallSeatInteract"/>, sized by that behaviour at runtime.
     /// The seat's own 0.45 m click box (at the rider's eye, not on the ball) is removed.</description></item>
-    /// <item><description>The HUD canvas (<c>StoryHud</c>) turned into a world-space panel
-    /// under the follow frame. A screen-space overlay canvas is not drawn by the VRChat
-    /// client.</description></item>
-    /// <item><description><c>RideResultCard</c>: a world-space card under the follow frame
+    /// <item><description><c>RidePanels</c> under the follow frame: the parent of every rider
+    /// panel, scaled by <see cref="BallRideStation"/> with the rider's eye height. The HUD canvas
+    /// (<c>StoryHud</c>) is turned into a world-space panel under it: a screen-space overlay
+    /// canvas is drawn for screen users only, so a VR player never sees it.</description></item>
+    /// <item><description><c>RideResultCard</c>: a world-space card under <c>RidePanels</c>
     /// that takes the result text, the card panel and the retry button; the existing
     /// <see cref="StoryRetryButton"/> gets a collider inside the retry button so a click can
     /// reach it. Skipped (and reported) when those objects already live on another
@@ -41,18 +46,18 @@ namespace VRCKatamari.Editor.Story
     /// (HubAssembler), so it moves with it.</description></item>
     /// <item><description>The rider's size: <c>BallRideStation.scaleRiderWithBall</c> is
     /// switched on and its filter and rate-limit fields are written from
-    /// <see cref="RideScaleMath"/> (the avatar's measured hips level with the top of the ball,
-    /// at every ball size), and <c>SeatEyeCompensation.motor</c> is wired to the motor whose
-    /// ball top the seat places the hips on.</description></item>
+    /// <see cref="RideScaleMath"/> (the push stance at every ball size),
+    /// <c>SeatEyeCompensation.motor</c> is wired to the motor whose lowest point the seat puts
+    /// the feet on, and its vertical limit is the standing head rail.</description></item>
     /// <item><description>The VRCStation's exit location (<c>stationExitPlayerLocation</c>),
     /// created as a child <c>RideExitPoint</c> when the station has none, placed by
     /// <see cref="RideExitMath"/> beside the ball on flat ground; the station moves it again on
     /// every exit.</description></item>
-    /// <item><description><c>RideExitPanel</c>: the exit button (press twice) and the hold-jump
+    /// <item><description><c>RideExitPanel</c> (under <c>RidePanels</c>): the exit button (press twice) and the hold-jump
     /// hint, active only while seated, wired to the station.</description></item>
     /// </list>
     /// <para>
-    /// Panels hang on the follow frame, not on the seat or the ball: the frame is the eye
+    /// Panels hang on the follow frame (through <c>RidePanels</c>), not on the seat or the ball: the frame is the eye
     /// point, already smoothed and yawed with the ball's heading, so the panels stay in
     /// front of the rider whichever way the ball turns and never roll with the ball's
     /// spin. A standing player sees them near the ball, which doubles as the prompt.
@@ -75,17 +80,25 @@ namespace VRCKatamari.Editor.Story
         public const string ExitPointName = "RideExitPoint";
 
         public const string ResultCardName = "RideResultCard";
+        public const string PanelRootName = "RidePanels";
         public const string ExitPanelName = "RideExitPanel";
 
-        // Layout: distance from the eye, azimuth to the right, elevation above the horizon,
-        // canvas scale (metres per canvas unit) and the canvas size in units. 0.0014 puts a
-        // 30-unit glyph at 4.2 cm, about 1.5 degrees at 1.6 m, which is legible in a headset.
+        // Layout for a rider of RideViewMath.PanelReferenceEyeHeightMeters (the panel root
+        // scales it with the rider): distance from the eye, azimuth to the right, elevation
+        // above the horizon, canvas scale (metres per canvas unit) and the canvas size in units.
+        // 0.0014 puts a 30-unit glyph at 4.2 cm, about 1.5 degrees at 1.6 m, which is legible in
+        // a headset. Every panel stays at least 9 degrees off the ball's silhouette (the ball
+        // spans 25 to 84 degrees below the horizon straight ahead, 29.5 degrees half width);
+        // ride_geometry.py PANELS carries the same numbers and checks the clearance.
+        // The HUD hangs low on the left, beside the ball: a rider looking down at the hands on
+        // the ball sees it, and it no longer needs the head raised 26 degrees.
         private const float PanelDistance = 1.6f;
         private const float PanelScale = 0.0014f;
 
-        private const float HudAzimuth = -30f;
-        private const float HudElevation = 26f;
-        private static readonly Vector2 HudSize = new Vector2(640f, 280f);
+        private const float HudAzimuth = -38f;
+        private const float HudElevation = -12f;
+        private static readonly Vector2 HudPivot = new Vector2(0.5f, 0.5f);
+        private static readonly Vector2 HudSize = new Vector2(1000f, 260f);
 
         private const float CardAzimuth = 0f;
         private const float CardElevation = 6f;
@@ -122,7 +135,24 @@ namespace VRCKatamari.Editor.Story
         /// </summary>
         public static string AssembleOpenScene()
         {
+            return AssembleOpenScene(null);
+        }
+
+        /// <summary>
+        /// <see cref="AssembleOpenScene()"/> for a caller that folds the ride assembly into its
+        /// own report (the All-Maps hub): every PROBLEM is also appended to
+        /// <paramref name="problemsOut"/> when it is not null.
+        /// </summary>
+        public static string AssembleOpenScene(List<string> problemsOut)
+        {
             var c = new Counters();
+            string report = AssembleInto(c);
+            if (problemsOut != null) problemsOut.AddRange(c.Problems);
+            return report;
+        }
+
+        private static string AssembleInto(Counters c)
+        {
 
             KatamariBallMotor motor = Single<KatamariBallMotor>(c);
             BallRideStation station = Single<BallRideStation>(c);
@@ -151,6 +181,7 @@ namespace VRCKatamari.Editor.Story
             if (ballRoot == null) c.Problems.Add("motor.ballPhysicsRoot is not wired: no click sphere");
 
             AssembleEyeRule(motor, c);
+            AssembleStandingStation(station, c);
             BallSeatInteract ballInteract = ballRoot != null
                 ? AssembleSeatTrigger(ballRoot, station, motor, c) : null;
             RemoveSeatBox(station, c);
@@ -161,12 +192,15 @@ namespace VRCKatamari.Editor.Story
 
             if (rigRoot != null)
             {
-                AssembleHud(targetText, rigRoot, c);
-                GameObject card = AssembleResultCard(round, presenter, retry, font, rigRoot, c);
-                GameObject panel = AssembleExitPanel(station, exit, font, rigRoot, c,
+                Transform panels = AssemblePanelRoot(rigRoot, c);
+                AssembleHud(targetText, panels, c);
+                GameObject card = AssembleResultCard(round, presenter, retry, font, rigRoot,
+                    panels, c);
+                GameObject panel = AssembleExitPanel(station, exit, font, rigRoot, panels, c,
                     out Text hint);
                 AssembleExitLocation(station, ballRoot, motor, c);
-                AssembleStationLinks(station, motor, ballInteract, panel, hint, c);
+                AssembleStationLinks(station, motor, ballInteract, panel, hint, panels, c);
+                NormalizePanelLayers(panels, c);
             }
 
             CopyAllToUdon(c);
@@ -186,15 +220,33 @@ namespace VRCKatamari.Editor.Story
             changed |= SetFloat(so, "eyeUpPerRadius", RideViewMath.EyeUpPerRadius(), c);
             changed |= SetFloat(so, "eyeBaseBackMeters", RideViewMath.EyeBaseBackMeters, c);
             changed |= SetFloat(so, "eyeBackPerRadius", RideViewMath.EyeBackPerRadius(), c);
-            // The 20 m ball (r = 10 m) needs 17.8 m of lift and 54.8 m of back-off.
+            // The 20 m ball (r = 10 m) needs 16.6 m of lift and 11.8 m of back-off.
             changed |= SetFloat(so, "eyeUpMaxMeters", 128f, c);
             changed |= SetFloat(so, "eyeMaxBackM", 128f, c);
             if (changed)
             {
                 so.ApplyModifiedPropertiesWithoutUndo();
                 c.Proxies.Add(motor);
-                c.Notes.Add("eye rule written to the motor (depression "
-                    + RideViewMath.DepressionDegrees + " deg)");
+                c.Notes.Add("push stance written to the motor (push angle "
+                    + RideViewMath.PushAngleDegrees + " deg)");
+            }
+        }
+
+        // The push stance is a standing one: the station carries the avatar by its feet, and a
+        // seated pose would put the thighs into the ball. VRCStation's serialized "seated".
+        private static void AssembleStandingStation(BallRideStation station, Counters c)
+        {
+            UnityEngine.Object linked = ReadLinkedStation(station);
+            if (linked == null)
+            {
+                c.Problems.Add("BallRideStation.station is not wired: the station cannot be made standing");
+                return;
+            }
+            var so = new SerializedObject(linked);
+            if (SetBool(so, "seated", false, c))
+            {
+                so.ApplyModifiedPropertiesWithoutUndo();
+                c.Notes.Add("the VRCStation is a standing station (seated off)");
             }
         }
 
@@ -266,7 +318,63 @@ namespace VRCKatamari.Editor.Story
 
         // ----------------------------------------------------------------------- HUD ---
 
-        private static void AssembleHud(Text anyHudText, Transform rigRoot, Counters c)
+        // The one parent of the rider's panels, directly under the follow frame at the eye
+        // point with no offset, so scaling it scales the panels about the eyes.
+        private static Transform AssemblePanelRoot(Transform rigRoot, Counters c)
+        {
+            Transform root = rigRoot.Find(PanelRootName);
+            if (root == null)
+            {
+                var go = new GameObject(PanelRootName);
+                Undo.RegisterCreatedObjectUndo(go, "Create " + PanelRootName);
+                go.transform.SetParent(rigRoot, false);
+                root = go.transform;
+                c.Created++;
+                c.Notes.Add("panel root created under the follow frame");
+            }
+            if (root.localPosition != Vector3.zero || root.localRotation != Quaternion.identity
+                || root.localScale != Vector3.one)
+            {
+                root.localPosition = Vector3.zero;
+                root.localRotation = Quaternion.identity;
+                root.localScale = Vector3.one;
+                c.Changed++;
+            }
+            return root;
+        }
+
+        // A panel an earlier assembly put directly on the follow frame moves under the panel
+        // root, keeping its local pose (the root has none of its own).
+        private static Transform FindPanel(Transform rigRoot, Transform panels, string name,
+            Counters c)
+        {
+            Transform found = panels.Find(name);
+            if (found != null) return found;
+            found = rigRoot.Find(name);
+            if (found == null) return null;
+            Undo.SetTransformParent(found, panels, "Move the panel under the panel root");
+            c.Changed++;
+            c.Notes.Add("'" + name + "' moved under " + PanelRootName);
+            return found;
+        }
+
+        // VRChat's UI (5) and UiMenu (12) layers gate UI pointers on the menu; layer 8 is
+        // unused by the client and also keeps stickers off our Interact colliders. Repair the
+        // whole subtree, including migrated text and inactive result/exit panels.
+        private static void NormalizePanelLayers(Transform panels, Counters c)
+        {
+            Transform[] children = panels.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                GameObject go = children[i].gameObject;
+                if (go.layer == 8) continue;
+                Undo.RecordObject(go, "Set ride panel layer");
+                go.layer = 8;
+                c.Changed++;
+            }
+        }
+
+        private static void AssembleHud(Text anyHudText, Transform panels, Counters c)
         {
             if (anyHudText == null)
             {
@@ -279,30 +387,37 @@ namespace VRCKatamari.Editor.Story
                 c.Problems.Add("the HUD text is not under a Canvas");
                 return;
             }
+            var existingRect = (RectTransform)canvas.transform;
             bool alreadyOurs = canvas.renderMode == RenderMode.WorldSpace
-                && canvas.transform.parent == rigRoot;
+                && canvas.transform.parent == panels
+                && existingRect.localScale == Vector3.one * PanelScale
+                && existingRect.sizeDelta == HudSize
+                && existingRect.pivot == HudPivot
+                && existingRect.localPosition == RideViewMath.HudLocalPosition(
+                    PanelDistance, HudAzimuth, HudElevation)
+                && existingRect.localRotation == RideViewMath.HudLocalRotation(HudAzimuth, HudElevation);
             if (alreadyOurs) return;
 
             canvas.renderMode = RenderMode.WorldSpace;
             var rect = (RectTransform)canvas.transform;
-            Undo.SetTransformParent(rect, rigRoot, "Hang the HUD on the follow frame");
-            PlacePanel(rect, HudSize, new Vector2(0f, 1f), PanelScale, HudAzimuth, HudElevation);
+            Undo.SetTransformParent(rect, panels, "Hang the HUD on the rider's panel root");
+            PlacePanel(rect, HudSize, HudPivot, PanelScale, HudAzimuth, HudElevation);
             c.Changed++;
-            c.Notes.Add("HUD canvas '" + canvas.name + "' is world-space under the follow frame");
+            c.Notes.Add("HUD canvas '" + canvas.name + "' is world-space under " + PanelRootName);
         }
 
         // --------------------------------------------------------------- result card ---
 
         private static GameObject AssembleResultCard(StoryRoundController round,
             StoryResultPresenter presenter, StoryRetryButton retry, Font font,
-            Transform rigRoot, Counters c)
+            Transform rigRoot, Transform panels, Counters c)
         {
             Text resultText = presenter != null ? ReadObject<Text>(presenter, "resultText") : null;
             GameObject oldCard = presenter != null
                 ? ReadObject<GameObject>(presenter, "resultCardRoot") : null;
             GameObject retryRoot = ReadObject<GameObject>(round, "retryButtonRoot");
 
-            Transform existing = rigRoot.Find(ResultCardName);
+            Transform existing = FindPanel(rigRoot, panels, ResultCardName, c);
             GameObject card;
             if (existing != null)
             {
@@ -317,7 +432,7 @@ namespace VRCKatamari.Editor.Story
                     AssembleRetryCollider(retry, retryRoot, round, c);
                     return null;
                 }
-                card = CreateCanvas(ResultCardName, rigRoot, CardSize, new Vector2(0.5f, 0.5f),
+                card = CreateCanvas(ResultCardName, panels, CardSize, new Vector2(0.5f, 0.5f),
                     CardScale, CardAzimuth, CardElevation, c);
                 Reparent(oldCard, card.transform, c, true);
                 Reparent(resultText != null ? resultText.gameObject : null, card.transform, c,
@@ -437,16 +552,22 @@ namespace VRCKatamari.Editor.Story
             var so = new SerializedObject(retry);
             if (SetObject(so, "controller", round, c)) so.ApplyModifiedPropertiesWithoutUndo();
             c.Proxies.Add(retry);
-            SetInteractText(retry, "再试一次", InteractProximity, c);
+            // In a hub scene the hub assembly owns the button's words ("再来一次", next to its
+            // "回大厅"), whichever assembly runs last; the launcher link says the hub is there.
+            if (ReadObject<UnityEngine.Object>(retry, "launcher") == null)
+            {
+                SetInteractText(retry, "再试一次", InteractProximity, c);
+            }
         }
 
         // ---------------------------------------------------------------- exit panel ---
 
         private static GameObject AssembleExitPanel(BallRideStation station,
-            BallRideExitButton exit, Font font, Transform rigRoot, Counters c, out Text hint)
+            BallRideExitButton exit, Font font, Transform rigRoot, Transform panels, Counters c,
+            out Text hint)
         {
             hint = null;
-            Transform existing = rigRoot.Find(ExitPanelName);
+            Transform existing = FindPanel(rigRoot, panels, ExitPanelName, c);
             GameObject panel;
             Text label;
             if (existing != null)
@@ -459,7 +580,7 @@ namespace VRCKatamari.Editor.Story
             }
             else
             {
-                panel = CreateCanvas(ExitPanelName, rigRoot, ExitSize, new Vector2(0.5f, 0.5f),
+                panel = CreateCanvas(ExitPanelName, panels, ExitSize, new Vector2(0.5f, 0.5f),
                     PanelScale, ExitAzimuth, ExitElevation, c);
 
                 GameObject plate = CreateRect("ExitPlate", panel.transform);
@@ -529,7 +650,7 @@ namespace VRCKatamari.Editor.Story
 
         private static void AssembleStationLinks(BallRideStation station,
             KatamariBallMotor motor, BallSeatInteract ballInteract, GameObject exitPanel,
-            Text hint, Counters c)
+            Text hint, Transform panels, Counters c)
         {
             var so = new SerializedObject(station);
             bool changed = SetObject(so, "motor", motor, c);
@@ -549,7 +670,9 @@ namespace VRCKatamari.Editor.Story
             changed |= SetFloat(so, "eyeHeightMinIntervalSeconds",
                 RideScaleMath.DefaultMinIntervalSeconds, c);
             if (exitPanel != null) changed |= SetObject(so, "exitPanelRoot", exitPanel, c);
+            changed |= SetObject(so, "panelRoot", panels, c);
             if (hint != null) changed |= SetObject(so, "exitHintText", hint, c);
+            changed |= AssembleVrInputLink(so, c);
 
             Transform exitPoint = ReadStationExitPoint(station);
             if (exitPoint == null)
@@ -565,12 +688,40 @@ namespace VRCKatamari.Editor.Story
             c.Proxies.Add(station);
         }
 
-        // The seat places the rider's hips on the ball's top, so it needs the ball.
+        // The VR thumbstick adapter's ride gate follows the seat like the desktop adapter's. The
+        // adapter belongs to the hub assembly (HubAssembler.AssembleVrStickInput), which creates
+        // it; a scene without one (a lab, a base scene before the hub assembly) is left as it is
+        // and noted, never written to null. The All-Maps hub runs this assembly after the hub's,
+        // so there it always exists, and it checks the link itself.
+        private static bool AssembleVrInputLink(SerializedObject stationSo, Counters c)
+        {
+            VrStickMoveInput[] all = UnityEngine.Object.FindObjectsOfType<VrStickMoveInput>(true);
+            if (all.Length > 1)
+            {
+                c.Problems.Add("expected at most one VrStickMoveInput, found " + all.Length
+                    + "; BallRideStation.vrInput was not wired");
+                return false;
+            }
+            if (all.Length == 0)
+            {
+                c.Notes.Add("no VrStickMoveInput in the scene (the hub assembly creates it):"
+                    + " BallRideStation.vrInput left as it is");
+                return false;
+            }
+            return SetObject(stationSo, "vrInput", all[0], c);
+        }
+
+        // The seat puts the rider's feet on the ball's lowest point, so it needs the ball; its
+        // vertical limit is the standing head rail, so an eye-only fallback compensates a
+        // standing head in full.
         private static void AssembleSeatLinks(SeatEyeCompensation seatEye, KatamariBallMotor motor,
             Counters c)
         {
             var so = new SerializedObject(seatEye);
-            if (SetObject(so, "motor", motor, c)) so.ApplyModifiedPropertiesWithoutUndo();
+            bool changed = SetObject(so, "motor", motor, c);
+            changed |= SetFloat(so, "verticalLimitMeters",
+                SeatEyeMath.MaxPlausibleHeadAboveSeatMeters, c);
+            if (changed) so.ApplyModifiedPropertiesWithoutUndo();
             c.Proxies.Add(seatEye);
         }
 
@@ -723,9 +874,9 @@ namespace VRCKatamari.Editor.Story
             VerifyTable(station, new[] { "motor", "exitPoint", "exitHintText", "exitPanelRoot",
                 "ballInteract", "exitHoldSeconds", "exitProbeLayers", "scaleRiderWithBall",
                 "eyeHeightFilterHz", "eyeHeightStepFraction", "eyeHeightMinIntervalSeconds",
-                "scaleWaitSeconds" }, c);
+                "scaleWaitSeconds", "panelRoot", "vrInput" }, c);
             SeatEyeCompensation seatEye = FindOptional<SeatEyeCompensation>();
-            if (seatEye != null) VerifyTable(seatEye, new[] { "motor" }, c);
+            if (seatEye != null) VerifyTable(seatEye, new[] { "motor", "verticalLimitMeters" }, c);
             BallRideExitButton exit = FindOptional<BallRideExitButton>();
             if (exit != null) VerifyTable(exit, new[] { "ride", "label", "confirmSeconds" }, c);
         }

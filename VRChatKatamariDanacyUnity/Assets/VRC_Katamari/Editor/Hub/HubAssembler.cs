@@ -11,7 +11,9 @@ using UnityEngine.UI;
 using VRC.Udon;
 using VRC.Udon.Common.Interfaces;
 using VRCKatamari.Editor.LevelBuild;
+using VRCKatamari.BallMotor;
 using VRCKatamari.Hub;
+using VRCKatamari.Input;
 using VRCKatamari.Pickup;
 using VRCKatamari.Riding;
 using VRCKatamari.Story;
@@ -20,7 +22,7 @@ using VRCKatamari.Story.Hub;
 namespace VRCKatamari.Editor.Hub
 {
     /// <summary>
-    /// Puts the hub - room, level-select pads, start/return wiring and the result card's
+    /// Puts the hub - room, wall level panel, start/return wiring and the result card's
     /// return button - into the open scene from the level list, and can be run again without
     /// changing anything it already did.
     /// </summary>
@@ -47,8 +49,7 @@ namespace VRCKatamari.Editor.Hub
     /// <item><description>Anchors: <c>HubCenter</c> and <c>HubSpawn</c>; the scene
     /// descriptor's <c>spawns</c> is pointed at <c>HubSpawn</c>, so the player is born in
     /// the room and a level's own spawn is only where a start sends them.</description></item>
-    /// <item><description>One pad per offered level, in a centred row, each with a name
-    /// label; pads of levels the scene no longer offers are removed.</description></item>
+    /// <item><description>One Interact button per offered level on a wall panel; buttons no longer offered are removed.</description></item>
     /// <item><description><c>HubRoom</c> (<see cref="HubRoomHost"/>) with a world-space
     /// prompt line, and <c>HubLevel</c> (<see cref="HubLevelLauncher"/>) with the compact
     /// entry/name lists; a return button next to the first level's entry.</description></item>
@@ -72,7 +73,7 @@ namespace VRCKatamari.Editor.Hub
     /// that names any such field, and the remedy is compile, save, reopen, run again.
     /// </para>
     /// </remarks>
-    public static class HubAssembler
+    public static partial class HubAssembler
     {
         public const string MenuPath = "VRC Katamari/Hub/Assemble Hub";
 
@@ -81,31 +82,20 @@ namespace VRCKatamari.Editor.Hub
         public const string HubSpawnName = "HubSpawn";
         public const string HubRoomName = "HubRoom";
         public const string HubLevelName = "HubLevel";
-        public const string PadsRootName = "HubPads";
-        public const string PadPrefix = "HubPad_";
-        public const string PromptBoardName = "HubPrompt";
+        private const string LegacyPadsRootName = "HubPads";
+        internal const string PromptBoardName = "HubPrompt";
         public const string CardReturnName = "HubReturnCardButton";
         public const string ReturnButtonName = "HubReturnButton";
 
         // The room is built around this point (the hub document's coordinates).
         internal static readonly Vector3 HubCenterPosition = new Vector3(1200f, 0f, 0f);
-        internal static readonly Vector3 HubSpawnPosition = new Vector3(1200f, 0.1f, -2.8f);
-
-        // World-space text: metres per canvas unit, so 0.004 puts a 60-unit glyph at 24 cm.
-        private const float PromptScale = 0.004f;
-        internal static readonly Vector2 PromptSize = new Vector2(1200f, 120f);
-        internal static readonly Vector3 PromptOffset = new Vector3(0f, 2.55f, 3.85f);
+        internal static readonly Vector3 HubSpawnPosition = new Vector3(1200f, 0.1f, 0.8f);
 
         // The result card's two buttons (canvas units): retry on the left, return on the right.
         public static readonly Vector2 CardButtonSize = new Vector2(300f, 80f);
         public const float CardRetryX = -170f;
         public const float CardReturnOffsetX = 340f;
         public const float CardButtonY = 60f;
-
-        private const float PadThicknessM = 0.02f;
-        private const float PadLabelScale = 0.004f;
-        internal static readonly Vector2 PadLabelSize = new Vector2(640f, 120f);
-        private const float PadLabelHeightM = 1.6f;
 
         private const float InteractProximity = 5f;
 
@@ -173,7 +163,7 @@ namespace VRCKatamari.Editor.Hub
 
         /// <summary>
         /// Switches the run to a multi-level hub scene: the levels are the ones listed in
-        /// <see cref="LevelOrder"/> (the pad order), their round/result tables come from
+        /// <see cref="LevelOrder"/> (the button order), their round/result tables come from
         /// <see cref="Plans"/>, and the caller finishes the Udon sync (it owns more proxies
         /// than this assembler does). Null options = the single-level behaviour.
         /// </summary>
@@ -259,12 +249,15 @@ namespace VRCKatamari.Editor.Hub
             if (!hub || !options.SkipRoomGeometry) AssembleRoomGeometry(c);
             Transform center = EnsureAnchor(HubCenterName, HubCenterPosition, Quaternion.identity, c);
             Transform spawn = EnsureAnchor(HubSpawnName, HubSpawnPosition, Quaternion.identity, c);
+            PlaceHubSpawn(spawn, c);
             AssembleSceneSpawn(spawn, c);
 
-            Transform[] pads = AssemblePads(offered, catalog.room, center, font, c);
-            Text prompt = AssemblePrompt(center, font, c);
             HubLevelLauncher launcher = AssembleLauncher(round, offered, spawn, seat, station, hub, c);
-            HubRoomHost host = AssembleRoomHost(launcher, round, center, pads, catalog.room, prompt, c);
+            AssembleVrStickInput(round, c);
+            RoomParts room = AssembleRoom(offered, hub ? options.Plans : null, round, center, font,
+                launcher, c);
+            HubRoomHost host = AssembleRoomHost(launcher, round, center, room.LevelButtons,
+                catalog.room, room.Prompt, room.Settings, c);
             if (hub)
             {
                 AssembleReturnButtons(launcher, offered, options.StartCenters, c);
@@ -291,8 +284,8 @@ namespace VRCKatamari.Editor.Hub
         }
 
         // The offered levels in the order the hub lists them. A listed level the scene does not
-        // offer is a PROBLEM: the hub's level order is the pad order, so a hole would renumber
-        // every pad after it.
+        // offer is a PROBLEM: the hub's level order is the button order, so a hole would renumber
+        // every button after it.
         private static List<HubLevelCatalog.Resolved> OfferedInOrder(
             HubLevelCatalog.Resolved[] resolved, string[] order, Counters c)
         {
@@ -416,6 +409,24 @@ namespace VRCKatamari.Editor.Hub
             return go.transform;
         }
 
+        // The room's spawn is part of the room design (HUB_ROOM.md): 0.8 m north of the centre,
+        // facing +Z, so the level board is about 3 m ahead - readable without walking. A base
+        // scene built before the wall boards still has it at the old pad-era z=-2.8 (6.6 m from
+        // the board), so the assembler moves it instead of leaving it. Only the Transform moves;
+        // the scene descriptor's spawns keep pointing at the same object (AssembleSceneSpawn).
+        internal static void PlaceHubSpawn(Transform spawn, Counters c)
+        {
+            if (Vector3.Distance(spawn.position, HubSpawnPosition) <= 1e-3f
+                && Quaternion.Angle(spawn.rotation, Quaternion.identity) <= 0.01f) return;
+            c.Notes.Add(HubSpawnName + " moved from " + spawn.position + " to the room's "
+                + HubSpawnPosition + ", facing +Z (the level board)");
+            Undo.RecordObject(spawn, "Place " + HubSpawnName);
+            spawn.position = HubSpawnPosition;
+            spawn.rotation = Quaternion.identity;
+            c.Changed++;
+            MarkDirty();
+        }
+
         internal static void AssembleSceneSpawn(Transform spawn, Counters c)
         {
             VRC.SDKBase.VRC_SceneDescriptor[] descriptors =
@@ -444,6 +455,13 @@ namespace VRCKatamari.Editor.Hub
                     + " last import)");
             }
 
+            var descriptorSo = new SerializedObject(descriptor);
+            SetFloat(descriptorSo, "spawnRadius", 0f, c);
+            SerializedProperty orientation = descriptorSo.FindProperty("spawnOrientation");
+            if (orientation != null) orientation.enumValueIndex = 1; // AlignPlayerWithSpawnPoint
+            descriptorSo.ApplyModifiedPropertiesWithoutUndo();
+            MarkDirty();
+
             if (spawn.position.y < descriptor.RespawnHeightY + 1f)
             {
                 c.Problems.Add("the room floor (y=" + spawn.position.y + ") is not above the"
@@ -451,188 +469,6 @@ namespace VRCKatamari.Editor.Hub
                     + " born in the room would respawn at once. Lower RespawnHeightY below the"
                     + " room or raise the room");
             }
-        }
-
-        // ------------------------------------------------------------ pads ---
-
-        internal static Transform[] AssemblePads(List<HubLevelCatalog.Resolved> offered,
-            HubLevelCatalog.RoomBlock room, Transform center, Font font, Counters c)
-        {
-            var result = new Transform[offered.Count];
-
-            if (!HubSelectMath.PadsFit(offered.Count, room.padSizeM, room.padGapM, room.marginM,
-                RoomWidth(center)))
-            {
-                c.Problems.Add(offered.Count + " pad(s) need a room "
-                    + HubSelectMath.RoomWidthNeeded(offered.Count, room.padSizeM, room.padGapM,
-                        room.marginM).ToString("0.0#") + " m wide; the hub room is "
-                    + RoomWidth(center).ToString("0.0#") + " m. Widen the hub document's"
-                    + " floor and walls (Docs/Design/Levels/hub/placement.json)");
-            }
-
-            Transform root = EnsureChild(null, PadsRootName, c);
-            var wanted = new HashSet<string>();
-            for (int i = 0; i < offered.Count; i++)
-            {
-                string padName = PadPrefix + offered[i].Entry.id;
-                wanted.Add(padName);
-
-                Vector3 padCenter;
-                if (!HubSelectMath.TryPadCenter(center.position, room.padForwardM, i,
-                    offered.Count, room.padSizeM, room.padGapM, out padCenter))
-                {
-                    c.Problems.Add("pad " + i + " ('" + offered[i].Entry.id + "') has no valid"
-                        + " position: check the room block of the level list");
-                    continue;
-                }
-                padCenter.y = center.position.y + PadThicknessM * 0.5f;
-
-                Transform pad = root.Find(padName);
-                if (pad == null)
-                {
-                    GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    cube.name = padName;
-                    // A flat, collider-free tile: the player walks over it, the room host
-                    // only measures a distance to its centre.
-                    Collider collider = cube.GetComponent<Collider>();
-                    if (collider != null) UnityEngine.Object.DestroyImmediate(collider);
-                    Undo.RegisterCreatedObjectUndo(cube, "Create " + padName);
-                    Undo.SetTransformParent(cube.transform, root, "Create " + padName);
-                    pad = cube.transform;
-                    c.Created++;
-                }
-
-                Vector3 scale = new Vector3(room.padSizeM, PadThicknessM, room.padSizeM);
-                if (Vector3.Distance(pad.position, padCenter) > 1e-4f
-                    || Vector3.Distance(pad.localScale, scale) > 1e-4f)
-                {
-                    Undo.RecordObject(pad, "Place " + padName);
-                    pad.position = padCenter;
-                    pad.rotation = Quaternion.identity;
-                    pad.localScale = scale;
-                    c.Changed++;
-                    MarkDirty();
-                }
-                result[i] = pad;
-
-                AssemblePadLabel(pad, offered[i].Entry.name, room, font, c);
-            }
-
-            for (int i = root.childCount - 1; i >= 0; i--)
-            {
-                Transform child = root.GetChild(i);
-                if (!child.name.StartsWith(PadPrefix, StringComparison.Ordinal)) continue;
-                if (wanted.Contains(child.name)) continue;
-                c.Notes.Add("removed the pad '" + child.name + "': the scene no longer offers"
-                    + " that level");
-                Undo.DestroyObjectImmediate(child.gameObject);
-                c.Changed++;
-            }
-
-            return result;
-        }
-
-        internal static void AssemblePadLabel(Transform pad, string levelName,
-            HubLevelCatalog.RoomBlock room, Font font, Counters c)
-        {
-            Transform existing = pad.Find("Label");
-            Text text;
-            if (existing == null)
-            {
-                GameObject canvas = CreateWorldCanvas("Label", pad, PadLabelSize);
-                text = CreateText("Text", canvas.transform, font, 64, TextAnchor.MiddleCenter);
-                Stretch((RectTransform)text.transform);
-                c.Created++;
-                existing = canvas.transform;
-            }
-            else
-            {
-                text = existing.GetComponentInChildren<Text>(true);
-            }
-
-            // World placement, set on every run so a moved pad takes its label with it.
-            Vector3 padWorld = pad.position;
-            Vector3 labelPosition = new Vector3(padWorld.x, padWorld.y + PadLabelHeightM,
-                padWorld.z);
-            Vector3 labelScale = new Vector3(PadLabelScale, PadLabelScale, PadLabelScale);
-            Vector3 localScale = WorldToLocalScale(pad, labelScale);
-            if (Vector3.Distance(existing.position, labelPosition) > 1e-4f
-                || Vector3.Distance(existing.localScale, localScale) > 1e-6f)
-            {
-                Undo.RecordObject(existing, "Place pad label");
-                existing.position = labelPosition;
-                existing.rotation = Quaternion.identity;
-                existing.localScale = localScale;
-                c.Changed++;
-                MarkDirty();
-            }
-
-            if (text != null && !string.Equals(text.text, levelName))
-            {
-                Undo.RecordObject(text, "Name pad");
-                text.text = levelName;
-                EditorUtility.SetDirty(text);
-                c.Changed++;
-            }
-        }
-
-        // A child's local scale that gives it the wanted world scale under a scaled parent.
-        internal static Vector3 WorldToLocalScale(Transform parent, Vector3 world)
-        {
-            Vector3 p = parent.lossyScale;
-            return new Vector3(
-                Mathf.Abs(p.x) < 1e-6f ? world.x : world.x / p.x,
-                Mathf.Abs(p.y) < 1e-6f ? world.y : world.y / p.y,
-                Mathf.Abs(p.z) < 1e-6f ? world.z : world.z / p.z);
-        }
-
-        // The room's width along X, read from the imported floor's body. The structure marker
-        // (hub_floor) stays at scale 1; the authored size lives on its Visual child, whose
-        // lossy scale is the document's size x. A missing floor or body reads as a very wide
-        // room so the missing import is reported by the import, not twice.
-        internal static float RoomWidth(Transform center)
-        {
-            Scene scene = SceneManager.GetActiveScene();
-            Transform floor = HubLevelCatalog.FindPath(scene,
-                PlacementImporter.ManagedRootName + "/" + HubLevelId + "/Structures/hub_floor");
-            if (floor == null) return 1000f;
-            Transform body = floor.Find("Visual");
-            if (body == null) return 1000f;
-            return Mathf.Abs(body.lossyScale.x);
-        }
-
-        // ------------------------------------------------------------ prompt ---
-
-        // The room's instruction line. An overlay canvas is not drawn by the VRChat client,
-        // so an existing prompt on one is replaced by a world-space line on the room's wall.
-        internal static Text AssemblePrompt(Transform center, Font font, Counters c)
-        {
-            HubRoomHost existingHost = FindOptional<HubRoomHost>();
-            Text wired = existingHost != null ? ReadObject<Text>(existingHost, "promptText") : null;
-            if (wired != null)
-            {
-                Canvas canvas = wired.GetComponentInParent<Canvas>();
-                if (canvas != null && canvas.renderMode == RenderMode.WorldSpace) return wired;
-                c.Notes.Add("the room prompt '" + wired.name + "' is on a screen-space canvas,"
-                    + " which the VRChat client does not draw; a world-space line replaces it"
-                    + " (the old object is left in place)");
-            }
-
-            Scene scene = SceneManager.GetActiveScene();
-            Transform board = FindRoot(scene, PromptBoardName);
-            if (board == null)
-            {
-                GameObject canvas = CreateWorldCanvas(PromptBoardName, null, PromptSize);
-                canvas.transform.position = center.position + PromptOffset;
-                canvas.transform.rotation = Quaternion.identity;
-                canvas.transform.localScale = new Vector3(PromptScale, PromptScale, PromptScale);
-                Text text = CreateText("Text", canvas.transform, font, 56, TextAnchor.MiddleCenter);
-                Stretch((RectTransform)text.transform);
-                c.Created++;
-                board = canvas.transform;
-            }
-
-            return board.GetComponentInChildren<Text>(true);
         }
 
         // ------------------------------------------------------------ launcher / host ---
@@ -660,6 +496,7 @@ namespace VRCKatamari.Editor.Hub
             var so = new SerializedObject(launcher);
             bool changed = false;
             changed |= SetObject(so, "controller", round, c);
+            changed |= SetObject(so, "resultPresenter", FindOptional<StoryResultPresenter>(), c);
             changed |= SetObject(so, "roomSpawn", spawn, c);
             changed |= SetObjectArray(so, "levelEntries", entries, c);
             changed |= SetStringArray(so, "levelNames", names, c);
@@ -696,8 +533,8 @@ namespace VRCKatamari.Editor.Hub
         }
 
         internal static HubRoomHost AssembleRoomHost(HubLevelLauncher launcher,
-            StoryRoundController round, Transform center, Transform[] pads,
-            HubLevelCatalog.RoomBlock room, Text prompt, Counters c)
+            StoryRoundController round, Transform center, Transform[] buttons,
+            HubLevelCatalog.RoomBlock room, Text prompt, HubSettingsHost settings, Counters c)
         {
             HubRoomHost host = FindOptional<HubRoomHost>();
             if (host == null)
@@ -712,8 +549,9 @@ namespace VRCKatamari.Editor.Hub
             changed |= SetObject(so, "launcher", launcher, c);
             changed |= SetObject(so, "controller", round, c);
             changed |= SetObject(so, "hubCenter", center, c);
-            changed |= SetObjectArray(so, "selectZones", pads, c);
+            changed |= SetObjectArray(so, "levelButtons", buttons, c);
             if (prompt != null) changed |= SetObject(so, "promptText", prompt, c);
+            changed |= SetObject(so, "settings", settings, c);
             if (changed)
             {
                 so.ApplyModifiedPropertiesWithoutUndo();
@@ -870,6 +708,29 @@ namespace VRCKatamari.Editor.Hub
                 MarkDirty();
             }
             SyncRetryCollider(retryRoot, c);
+            // The retry behaviour may still sit outside the button: the ride assembly, which runs
+            // after this one, is what moves it under the retry root. Fall back to the scene's
+            // single StoryRetryButton so its launcher link is written on the first run too.
+            StoryRetryButton retry = retryRoot.GetComponentInChildren<StoryRetryButton>(true);
+            if (retry == null)
+            {
+                StoryRetryButton[] all = UnityEngine.Object.FindObjectsOfType<StoryRetryButton>(true);
+                if (all.Length == 1) retry = all[0];
+                else if (all.Length > 1)
+                    c.Problems.Add(all.Length + " StoryRetryButtons and none under the result card's"
+                        + " retry root; which one is the card's is ambiguous");
+            }
+            if (retry != null)
+            {
+                var retrySo = new SerializedObject(retry);
+                if (SetObject(retrySo, "launcher", launcher, c))
+                    retrySo.ApplyModifiedPropertiesWithoutUndo();
+                c.Proxies.Add(retry);
+                SetInteractText(retry, "再来一次", c);
+                Text retryLabel = retryRoot.GetComponentInChildren<Text>(true);
+                if (retryLabel != null) retryLabel.text = "再来一次";
+            }
+            else c.Problems.Add("the scene has no StoryRetryButton for the result card");
 
             Transform existing = retryRoot.transform.Find(CardReturnName);
             HubReturnButton button;
@@ -1016,6 +877,48 @@ namespace VRCKatamari.Editor.Hub
             }
         }
 
+        /// <summary>Name of the root object that carries the VR thumbstick adapter.</summary>
+        internal const string VrStickInputName = "VrStickMoveInput";
+
+        // The VR thumbstick adapter (Docs/Design/ControlIntent/README.md): one per scene, on its
+        // own root object like DesktopMoveInput, driving the scene's one motor; the round
+        // controller closes and opens its round gate next to the desktop adapter's. The ride
+        // gate belongs to BallRideStation and is wired by the ride assembly, not here.
+        internal static void AssembleVrStickInput(StoryRoundController round, Counters c)
+        {
+            KatamariBallMotor motor = Single<KatamariBallMotor>(c);
+            if (motor == null) return;
+
+            VrStickMoveInput[] existing = UnityEngine.Object.FindObjectsOfType<VrStickMoveInput>(true);
+            if (existing.Length > 1)
+            {
+                c.Problems.Add("expected at most one VrStickMoveInput, found " + existing.Length
+                    + "; it was not wired (two adapters would both write the motor's axes)");
+                return;
+            }
+            VrStickMoveInput vr = existing.Length == 1 ? existing[0] : null;
+            if (vr == null)
+            {
+                GameObject go = FindOrCreateRoot(VrStickInputName, c);
+                vr = AddUdon<VrStickMoveInput>(go, c);
+                if (vr == null) return;
+            }
+
+            var so = new SerializedObject(vr);
+            if (SetObject(so, "motor", motor, c))
+            {
+                so.ApplyModifiedPropertiesWithoutUndo();
+                c.Proxies.Add(vr);
+            }
+
+            var roundSo = new SerializedObject(round);
+            if (SetObject(roundSo, "vrInput", vr, c))
+            {
+                roundSo.ApplyModifiedPropertiesWithoutUndo();
+                c.Proxies.Add(round);
+            }
+        }
+
         /// <summary>A level's round settings as its placement document states them.</summary>
         internal sealed class PlacementRoundData
         {
@@ -1117,7 +1020,7 @@ namespace VRCKatamari.Editor.Hub
         }
 
         // A multi-level hub: the round controller's per-level table and the result card's
-        // per-level star table, one slot per offered level in pad order. The controller's own
+        // per-level star table, one slot per offered level in button order. The controller's own
         // single-level fields stay as the base scene has them (SelectLevel copies a slot over
         // them). The star thresholds are the presenter's own single-level values copied into
         // every slot (a level without stars ignores them), so the table is complete and the
@@ -1162,6 +1065,11 @@ namespace VRCKatamari.Editor.Hub
 
             var so = new SerializedObject(round);
             bool changed = SetBool(so, "startOnLoad", false, c);
+            // In the hub a round starts from the wall's level cards, not by clicking the ball,
+            // so the round's Idle prompt ("点击球坐上去开始") is out of date: empty hides the line
+            // (StoryRoundController.ApplyStateVisibility). Only the multi-level hub writes this;
+            // the base StoryMode scene keeps its own prompt.
+            changed |= SetString(so, "startPrompt", "", c);
             changed |= SetStringArray(so, "levelIds", ids, c);
             changed |= SetIntArray(so, "levelGoalTypes", goals, c);
             changed |= SetFloatArray(so, "levelTargetDiameters", diameters, c);
@@ -1288,17 +1196,80 @@ namespace VRCKatamari.Editor.Hub
             if (launcher != null)
             {
                 VerifyTable(launcher, new[] { "controller", "levelEntries", "levelNames",
-                    "roomSpawn", "rideStation", "rideSeat", "entryTrustMeters" }, c);
+                    "roomSpawn", "rideStation", "rideSeat", "entryTrustMeters", "resultReturnSeconds", "resultPresenter" }, c);
             }
             if (host != null)
             {
-                VerifyTable(host, new[] { "launcher", "controller", "hubCenter", "selectZones",
-                    "promptText" }, c);
+                VerifyTable(host, new[] { "launcher", "controller", "hubCenter", "levelButtons",
+                    "promptText", "settings" }, c);
             }
+            VerifyHubStartPrompt(c);
+            StoryRetryButton[] retries = UnityEngine.Object.FindObjectsOfType<StoryRetryButton>(true);
+            for (int i = 0; i < retries.Length; i++)
+                VerifyTable(retries[i], new[] { "controller", "launcher" }, c);
             HubStartButton[] starts = UnityEngine.Object.FindObjectsOfType<HubStartButton>();
             for (int i = 0; i < starts.Length; i++)
             {
                 VerifyTable(starts[i], new[] { "launcher", "levelIndex" }, c);
+            }
+            VerifyVrStickInput(c);
+            VerifyRoomTables(c);
+        }
+
+        // Read-back of the hub's empty round prompt, on the proxy and in the Udon table. Only a
+        // scene with a per-level round table (the multi-level hub) is checked.
+        internal static void VerifyHubStartPrompt(Counters c)
+        {
+            StoryRoundController[] rounds = UnityEngine.Object.FindObjectsOfType<StoryRoundController>();
+            for (int i = 0; i < rounds.Length; i++)
+            {
+                var so = new SerializedObject(rounds[i]);
+                SerializedProperty ids = so.FindProperty("levelIds");
+                if (ids == null || ids.arraySize == 0) continue;
+                VerifyTable(rounds[i], new[] { "startPrompt" }, c);
+                SerializedProperty prompt = so.FindProperty("startPrompt");
+                if (prompt != null && !string.IsNullOrEmpty(prompt.stringValue))
+                {
+                    c.Problems.Add("StoryRoundController.startPrompt is '" + prompt.stringValue
+                        + "' in the hub; it should be empty (rounds start from the wall cards)");
+                }
+                object udon;
+                if (UdonVariableAccess.TryRead(rounds[i], "startPrompt", out udon)
+                    && !string.IsNullOrEmpty(udon as string))
+                {
+                    c.Problems.Add("StoryRoundController's Udon startPrompt is still '" + udon
+                        + "'; copy the proxy to Udon (run the assembly again)");
+                }
+            }
+        }
+
+        // Read-back of the VR adapter wiring: both Udon tables carry the fields, and the
+        // references point at the scene's one motor and the adapter itself.
+        internal static void VerifyVrStickInput(Counters c)
+        {
+            VrStickMoveInput[] all = UnityEngine.Object.FindObjectsOfType<VrStickMoveInput>(true);
+            if (all.Length != 1)
+            {
+                c.Problems.Add("expected exactly one VrStickMoveInput after assembly, found "
+                    + all.Length + "; VR players would have no thumbstick drive");
+                return;
+            }
+            VrStickMoveInput vr = all[0];
+            VerifyTable(vr, new[] { "motor", "controlMode", "deadzone" }, c);
+            KatamariBallMotor motor = FindOptional<KatamariBallMotor>();
+            if (ReadObject<KatamariBallMotor>(vr, "motor") != motor || motor == null)
+            {
+                c.Problems.Add("VrStickMoveInput.motor does not point at the scene's motor");
+            }
+            StoryRoundController[] rounds = UnityEngine.Object.FindObjectsOfType<StoryRoundController>();
+            for (int i = 0; i < rounds.Length; i++)
+            {
+                VerifyTable(rounds[i], new[] { "vrInput" }, c);
+                if (ReadObject<VrStickMoveInput>(rounds[i], "vrInput") != vr)
+                {
+                    c.Problems.Add("StoryRoundController on '" + rounds[i].name + "' does not"
+                        + " close the VR adapter's round gate (vrInput is not wired)");
+                }
             }
         }
 

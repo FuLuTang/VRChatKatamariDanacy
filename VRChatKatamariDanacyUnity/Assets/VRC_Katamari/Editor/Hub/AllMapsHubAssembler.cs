@@ -115,6 +115,7 @@ namespace VRCKatamari.Editor.Hub
             public float StartHeadingDeg;
             public float StartDiameterM;
             public long StartVolumeMm3;
+            public float MaxDiameterM;
             public HubAssembler.HubLevelPlan Plan;
         }
 
@@ -239,6 +240,33 @@ namespace VRCKatamari.Editor.Hub
                 return Finish(lines, problems, hc, output);
             }
 
+            // ---- the rider's UX on top of the hub ----
+            // After the hub assembly, never before: the hub creates the VR thumbstick adapter the
+            // ride station's gate needs (vrInput), and the ride assembly only adds to what the hub
+            // links (it keeps the BallRideStation and its VRCStation where they are, moves the
+            // retry button root into the result card with its hub return child, and leaves the
+            // retry button's words to the hub). It also turns the screen-space HUD into a
+            // world-space panel a headset can see (RIDE_GEOMETRY.md section 6.1).
+            AssembleRide(lines, problems);
+            CheckRideVrInput(output, problems);
+            if (problems.Count > 0) return Finish(lines, problems, hc, output);
+
+            // ---- GPU instancing on the repeated prop materials ----
+            // After every island is in the scene (so the props are visible to the pass) and
+            // before the occlusion marks, which only read a material's shader and render
+            // queue (the instanced copy keeps both). A reference prop's material is a
+            // read-only sub-asset of its model, so the pass copies it to an asset under
+            // _RefUnlicensed and assigns the copy; that is only allowed when the output scene
+            // is reference material itself (MaterialInstancing).
+            EnableGpuInstancing(output, lines);
+
+            // ---- static occlusion ----
+            // Only the flags are set here; the operator bakes and saves the umbra data
+            // (ALL_MAPS_HUB.md section 6.1). The rule reads what the geometry is, never a
+            // hand-kept path list (OccluderRule).
+            MarkStaticOcclusion(output, lines, problems);
+            if (problems.Count > 0) return Finish(lines, problems, hc, output);
+
             // ---- Udon sync and read-back ----
             var diagLines = new List<string>();
             HubAssembler.CopyAllToUdon(hc);
@@ -254,6 +282,92 @@ namespace VRCKatamari.Editor.Hub
             if (skinApplied) CheckCoreSkin(output, problems);
 
             return Finish(lines, problems, hc, output);
+        }
+
+        // ------------------------------------------------------------ ride UX ---
+
+        private static void AssembleRide(List<string> lines, List<string> problems)
+        {
+            string report = VRCKatamari.Editor.Story.RideUxAssembler.AssembleOpenScene(problems);
+            string[] rows = report.Split('\n');
+            for (int i = 0; i < rows.Length; i++) Line(lines, "ride: " + rows[i].Trim());
+        }
+
+        // The ride station's VR gate must be the scene's one thumbstick adapter.
+        private static void CheckRideVrInput(Scene output, List<string> problems)
+        {
+            BallRideStation station = IslandImport.FirstIn<BallRideStation>(output);
+            VrStickMoveInput vr = IslandImport.FirstIn<VrStickMoveInput>(output);
+            if (station == null || vr == null) return; // the self-check counts both
+            var so = new SerializedObject(station);
+            SerializedProperty link = so.FindProperty("vrInput");
+            if (link == null || link.objectReferenceValue != vr)
+            {
+                problems.Add("BallRideStation.vrInput is not the scene's VrStickMoveInput: the VR"
+                    + " sticks would push the ball while nobody rides it");
+            }
+        }
+
+        // ------------------------------------------------------------ GPU instancing ---
+
+        // The repeated prop materials get GPU instancing: a material and mesh shared by n
+        // renderers becomes one draw instead of n. The Cancer island's props use read-only
+        // embedded model materials, so their copies are written under _RefUnlicensed; the
+        // output scene must be reference material itself for that (it is whenever a source is).
+        // Problems are warnings, not refused saves: instancing is an optimisation, and the
+        // pass leaves any material it cannot name unchanged.
+        private static void EnableGpuInstancing(Scene output, List<string> lines)
+        {
+            bool reference = HubLevelCatalog.IsUnderRefUnlicensed(output.path);
+            MaterialInstancing.Result instancing =
+                MaterialInstancing.EnableInScene(output, reference);
+            if (!reference)
+            {
+                Line(lines, "note: instancing skipped; the output is not under Assets/_RefUnlicensed/");
+                return;
+            }
+            Line(lines, "instancing: enabled=" + instancing.Enabled
+                + " duplicated=" + instancing.Duplicated
+                + " already=" + instancing.AlreadyEnabled
+                + " renderers=" + instancing.RenderersRewritten
+                + " skipped committed=" + instancing.SkippedCommitted
+                + " unsupported=" + instancing.SkippedUnsupported
+                + " non-opaque=" + instancing.SkippedNonOpaque);
+            for (int i = 0; i < instancing.Problems.Count; i++)
+            {
+                Line(lines, "warn: " + instancing.Problems[i]);
+            }
+        }
+
+        // ------------------------------------------------------------ static occlusion ---
+
+        // The hub's fixed geometry gets its static-occlusion flags, and the report says what
+        // the operator is about to bake: the occluder count and every marked occluder path,
+        // plus each fixed piece that stayed an occludee and why.
+        private static void MarkStaticOcclusion(Scene output, List<string> lines,
+            List<string> problems)
+        {
+            OccluderRule.MarkResult marks = OccluderRule.Mark(output);
+            for (int i = 0; i < marks.Problems.Count; i++) problems.Add(marks.Problems[i]);
+
+            Line(lines, "static: occluders=" + marks.Occluders + " occludees=" + marks.Occludees
+                + " batching=" + marks.BatchingStatic + " changed=" + marks.Changed);
+            if (marks.Occluders == 0)
+            {
+                // A hub with no occluder at all means the rule found no closed structure (a
+                // broken hierarchy or an unreadable primitive mesh); the operator would bake
+                // an empty umbra, so refuse to save and say so.
+                problems.Add("static occlusion: no occluder among the scene's fixed structure"
+                    + " geometry; the operator's bake would be empty (see OccluderRule)");
+            }
+            for (int i = 0; i < marks.OccluderPaths.Count; i++)
+            {
+                Line(lines, "static occluder " + marks.OccluderPaths[i]);
+            }
+            for (int i = 0; i < marks.Skips.Count; i++)
+            {
+                Line(lines, "static skip " + marks.Skips[i]);
+            }
         }
 
         // ------------------------------------------------------------ core skin ---
@@ -532,6 +646,26 @@ namespace VRCKatamari.Editor.Hub
             }
             d.StartVolumeMm3 = volume;
 
+            // ---- max ball diameter: the list entry, else the source motor's authored cap ----
+            // Owner 2026-11-18: the cap is a per-level value (the original's is too - Cancer
+            // 1.2 m; our own levels keep the motor's 30 m engineering envelope). A level with
+            // neither is refused instead of silently inheriting another level's cap.
+            d.MaxDiameterM = level.maxDiameterM > 0f
+                ? level.maxDiameterM : facts.MotorMaxBallDiameterM;
+            if (!(d.MaxDiameterM > 0f))
+            {
+                problems.Add(label + ": no max ball diameter (give maxDiameterM, or keep the"
+                    + " source motor's maxBallDiameterM)");
+                return;
+            }
+            if (d.StartDiameterM > 0f && d.StartDiameterM >= d.MaxDiameterM)
+            {
+                problems.Add(label + ": the start ball " + IslandMath.Num(d.StartDiameterM)
+                    + " m does not fit under the max ball diameter "
+                    + IslandMath.Num(d.MaxDiameterM) + " m");
+                return;
+            }
+
             d.Plan = BuildPlan(d, facts, hc);
         }
 
@@ -662,6 +796,7 @@ namespace VRCKatamari.Editor.Hub
             var centers = new Vector3[n];
             var headings = new float[n];
             var volumes = new long[n];
+            var maxDiameters = new float[n];
             for (int i = 0; i < n; i++)
             {
                 LevelData d = data[i];
@@ -679,6 +814,7 @@ namespace VRCKatamari.Editor.Hub
                 centers[i] = d.StartCenterWorld;
                 headings[i] = d.StartHeadingDeg;
                 volumes[i] = d.StartVolumeMm3;
+                maxDiameters[i] = d.MaxDiameterM;
             }
 
             var so = new SerializedObject(host);
@@ -703,6 +839,7 @@ namespace VRCKatamari.Editor.Hub
             changed |= HubAssembler.SetVector3Array(so, "startCenters", centers, hc);
             changed |= HubAssembler.SetFloatArray(so, "startHeadingDegrees", headings, hc);
             changed |= HubAssembler.SetLongArray(so, "startVolumesMm3", volumes, hc);
+            changed |= HubAssembler.SetFloatArray(so, "maxBallDiametersM", maxDiameters, hc);
             if (changed)
             {
                 so.ApplyModifiedPropertiesWithoutUndo();
@@ -717,7 +854,7 @@ namespace VRCKatamari.Editor.Hub
         {
             "motor", "pickupHosts", "terrainHosts", "islandRoots", "levelIds", "groundOffsets", "arenaHosts",
             "arenaStarts", "arenaCounts", "kindsFlat", "kindsStarts", "kindsCounts",
-            "startCenters", "startHeadingDegrees", "startVolumesMm3",
+            "startCenters", "startHeadingDegrees", "startVolumesMm3", "maxBallDiametersM",
         };
 
         private static readonly string[] RoundFields =
@@ -740,17 +877,9 @@ namespace VRCKatamari.Editor.Hub
             List<string> diag)
         {
             HubAssembler.VerifyTable(levelSwitch, SwitchFields, hc);
+            HubAssembler.VerifyTables(outcome.Launcher, outcome.Host, hc);
             if (outcome.Launcher != null)
-            {
-                HubAssembler.VerifyTable(outcome.Launcher, new[] { "controller", "levelEntries",
-                    "levelNames", "roomSpawn", "rideStation", "rideSeat", "entryTrustMeters",
-                    "levelSwitch" }, hc);
-            }
-            if (outcome.Host != null)
-            {
-                HubAssembler.VerifyTable(outcome.Host, new[] { "launcher", "controller", "hubCenter",
-                    "selectZones", "promptText" }, hc);
-            }
+                HubAssembler.VerifyTable(outcome.Launcher, new[] { "levelSwitch" }, hc);
             if (outcome.Round != null) HubAssembler.VerifyTable(outcome.Round, RoundFields, hc);
             StoryResultPresenter presenter = IslandImport.FirstIn<StoryResultPresenter>(
                 SceneManager.GetActiveScene());
@@ -784,6 +913,7 @@ namespace VRCKatamari.Editor.Hub
             // Single infrastructure: exactly one of each, none of the test field's scripts.
             ExpectCount<KatamariBallMotor>(output, 1, problems);
             ExpectCount<DesktopMoveInput>(output, 1, problems);
+            ExpectCount<VrStickMoveInput>(output, 1, problems);
             ExpectCount<BallRideStation>(output, 1, problems);
             ExpectCount<StoryRoundController>(output, 1, problems);
             ExpectCount<HubLevelLauncher>(output, 1, problems);
@@ -1045,6 +1175,7 @@ namespace VRCKatamari.Editor.Hub
                 + " heading=" + IslandMath.Num(d.StartHeadingDeg)
                 + " diameterM=" + IslandMath.Num(d.StartDiameterM)
                 + " volumeMm3=" + d.StartVolumeMm3
+                + " maxDiameterM=" + IslandMath.Num(d.MaxDiameterM)
                 + " ground=" + IslandMath.Num(d.GroundOffset)
                 + " arenas=" + d.Arenas.Count
                 + " kinds=" + d.Kinds.Length
@@ -1188,7 +1319,8 @@ namespace VRCKatamari.Editor.Hub
                     {
                         Line(lines, "  motor start=" + IslandMath.Format(new[] { f.MotorStartCenter.x,
                             f.MotorStartCenter.y, f.MotorStartCenter.z }) + " diameterM="
-                            + IslandMath.Num(f.MotorStartDiameterM) + " groundOffset="
+                            + IslandMath.Num(f.MotorStartDiameterM) + " maxDiameterM="
+                            + IslandMath.Num(f.MotorMaxBallDiameterM) + " groundOffset="
                             + IslandMath.Num(f.MotorGroundOffset));
                     }
                     if (f.HasRound)

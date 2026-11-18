@@ -89,20 +89,27 @@ namespace VRCKatamari.Riding
     /// </para>
     /// <para>
     /// Rider size. With <c>scaleRiderWithBall</c> the avatar's eye height follows the ball's
-    /// semantic diameter so that this avatar's own hips sit on the top of the ball at every size
-    /// (<see cref="RideScaleMath"/>, <see cref="RideWaistMath"/>). No body proportion is assumed.
-    /// Sequence: on sitting down the original eye height is read and kept, and the seat is
-    /// measured once at it; the measurement yields <c>kappa</c> (the head-to-hips height per metre
-    /// of eye height). Without a usable waist (<see cref="SeatEyeCompensation.HasWaist"/>) the
-    /// rider's size is left alone and the seat only aligns the eye. With one, each frame the
-    /// requested height <c>(up - r) / kappa</c> is low-passed and rate limited (a request only
-    /// when it moved by half a percent, at most ten times a second) and the seat is moved to match
-    /// without measuring again (<see cref="SeatEyeCompensation.ApplyEyeHeight"/>). VRChat says
-    /// Udon must apply a size again whenever the eye height changes, so an eye-height event whose
-    /// size is not the one sent is answered by sending it again (at most three times in a row,
-    /// then the seat is measured as it is). Requests the avatar does not follow for about three
-    /// seconds (avatar scaling off on the website) are abandoned and the seat is measured as it
-    /// is. The original eye height is restored on every exit path.
+    /// semantic diameter in the push stance (<see cref="RideViewMath"/>): standing behind the
+    /// ball, feet on the ground, the ball's back surface where the player's real hands rest when
+    /// pushing. Sequence: on taking the station the original eye height is read and kept, and the
+    /// seat is measured once at it; the measurement yields <c>eta</c> (the head's height above
+    /// the anchor per metre of eye height, <see cref="RideStanceMath"/>). Without a usable
+    /// stance (<see cref="SeatEyeCompensation.HasStance"/> false: a seated pose, an odd datum)
+    /// the size still follows the ball with <c>eta = 1</c>, so the hands keep their reach, and the
+    /// seat only aligns the eye. Each frame the requested height is low-passed and rate limited
+    /// (a request only when it moved by half a percent, at most ten times a second) and the seat
+    /// is moved to match without measuring again (<see cref="SeatEyeCompensation.ApplyEyeHeight"/>).
+    /// VRChat says Udon must apply a size again whenever the eye height changes, so an eye-height
+    /// event whose size is not the one sent is answered by sending it again (at most three times
+    /// in a row, then the seat is measured as it is). Requests the avatar does not follow for
+    /// about three seconds (avatar scaling off on the website) are abandoned and the seat is
+    /// measured as it is. The original eye height is restored on every exit path.
+    /// </para>
+    /// <para>
+    /// Panels. The rider's panels (HUD, result card, exit panel) hang under
+    /// <c>panelRoot</c> on the follow frame; every size sent scales that root by
+    /// <see cref="RideViewMath.PanelScaleForEyeHeight"/>, so the panels keep their angle and
+    /// distance relative to the rider's eyes, and leaving puts the scale back to one.
     /// </para>
     /// </remarks>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
@@ -114,6 +121,10 @@ namespace VRCKatamari.Riding
 
         // The local player's device-to-axis adapter, on its own object.
         [SerializeField] private DesktopMoveInput input;
+
+        // Optional. The VR twin-stick adapter (created by the hub assembly); its ride gate
+        // follows the seat exactly like the desktop adapter's.
+        [SerializeField] private VrStickMoveInput vrInput;
 
         // Optional. The story round this seat starts: the first local sit-down in Idle
         // calls NotifyRiderSeated, which begins the clock. Left empty the station still
@@ -145,9 +156,13 @@ namespace VRCKatamari.Riding
         // while the local player is seated, so a standing player is not offered a way out.
         [SerializeField] private GameObject exitPanelRoot;
 
+        // Optional. The parent of every rider panel, a child of the follow frame at the eye
+        // point; scaled with the rider so the panels stay in front of the rider's eyes.
+        [SerializeField] private Transform panelRoot;
+
         // Whether the rider's size follows the ball while seated (RideScaleMath, RIDE_GEOMETRY.md
-        // section 3): the avatar's eye height is set to the value that puts its measured hips on
-        // the top of the ball, kept there as the ball grows, and put back on leaving. False
+        // section 3): the avatar's eye height is set to the push stance's value for the ball,
+        // kept there as the ball grows, and put back on leaving. False
         // leaves the player's size alone (the one switch for a world that cannot scale avatars).
         [SerializeField] private bool scaleRiderWithBall = false;
 
@@ -174,6 +189,11 @@ namespace VRCKatamari.Riding
         [SerializeField] private int exitProbeLayers = -5;
 
         private bool seated;
+        private bool exitPending;
+        private float exitRequestedAt;
+
+        // An exit request whose OnStationExited has not arrived after this long is sent again.
+        private const float ExitRetrySeconds = 1f;
         private bool jumpHeld;
         private float jumpHeldSince;
         private int lastHintPercent = -1;
@@ -185,10 +205,9 @@ namespace VRCKatamari.Riding
         private float eyeHeightSent;
         private float eyeHeightSmooth;
         private float lastSendTime;
-        private float waistKappa;
+        private float stanceEta;
         private bool scaleCalibrated;
         private bool scaleGivenUp;
-        private bool scaleEyeOnly;
         private int scaleMismatchChecks;
         private float scaleNextCheck;
         private float lastLoggedEyeHeight;
@@ -271,6 +290,7 @@ namespace VRCKatamari.Riding
         {
             if (player == null || !player.isLocal) return;
             seated = true;
+            exitPending = false;
             DisableInteractive = true;
             if (ballInteract != null) ballInteract.SetInteractable(false);
             ClearJumpHold();
@@ -282,7 +302,7 @@ namespace VRCKatamari.Riding
             // In any state but Idle the controller ignores the call, so sitting down
             // after the round ended or mid-round cannot restart it.
             if (roundController != null) roundController.NotifyRiderSeated();
-            // Measure first, then size: the size comes from the measurement (kappa), taken at the
+            // Measure first, then size: the size comes from the measurement (eta), taken at the
             // eye height the avatar has.
             BeginRideScale(player);
             StartSeatMeasurement(player);
@@ -296,6 +316,7 @@ namespace VRCKatamari.Riding
             // cleanup below runs unconditionally and the log reports what it found.
             bool wasSeated = seated;
             seated = false;
+            exitPending = false;
             DisableInteractive = false;
             if (ballInteract != null) ballInteract.SetInteractable(true);
             ClearJumpHold();
@@ -310,31 +331,20 @@ namespace VRCKatamari.Riding
             // path had already cleared the flag". One line per exit, and it names the links
             // it just used, so an unwired field is visible in the same line as the exit.
             Debug.Log("[ride] station exit reason=station-exit wasSeated=" + wasSeated
-                + " inputWired=" + (input != null) + " seatEyeWired=" + (seatEye != null));
+                + " inputWired=" + (input != null) + " vrInputWired=" + (vrInput != null) + " seatEyeWired=" + (seatEye != null));
         }
 
+        // A respawn while riding only ASKS to leave: the seated state, the seat, the size and
+        // the panels are cleaned up in OnStationExited, the one place that knows the station
+        // really let go, so IsLocalPlayerSeated never says false while the avatar is still in the
+        // station. A respawn can arrive without the exit callback following at once, so
+        // IsExitPending stays true and Update asks again (ExitRetrySeconds) until it arrives.
         public override void OnPlayerRespawn(VRCPlayerApi player)
         {
             if (player == null || !player.isLocal) return;
-            bool wasSeated = seated;
-            seated = false;
-            DisableInteractive = false;
-            if (ballInteract != null) ballInteract.SetInteractable(true);
+            if (!seated || station == null) return;
             ClearJumpHold();
-            WriteExitHint("");
-            SetExitPanel(false);
-            SetRideGate(false);
-            // Before the station exit below: the exit can deliver OnStationExited (which does
-            // the same cleanup) but a path that keeps the avatar in the station still has to
-            // put the seat back, or the next ride would start from a moved seat.
-            if (seatEye != null) seatEye.EndSeated();
-            EndRideScale(player);
-            if (!wasSeated || station == null) return;
-            // A respawn can leave the avatar in the station without a station-exit
-            // callback, which would leave Interact disabled for good. The lab took
-            // the same precaution (StationLabDriver.OnPlayerRespawn).
-            Debug.Log("[ride] respawn while seated: leaving station");
-            station.ExitStation(player);
+            BeginExit(player, "respawn");
         }
 
         /// <summary>
@@ -345,7 +355,7 @@ namespace VRCKatamari.Riding
         {
             if (player == null || !player.isLocal) return;
             if (!seated) return;
-            // A new avatar is a new body: kappa is measured again, at whatever size it has.
+            // A new avatar is a new body: eta is measured again, at whatever size it has.
             scaleReapplyCount = 0;
             scalePending = false;
             StartSeatMeasurement(player);
@@ -360,7 +370,7 @@ namespace VRCKatamari.Riding
         {
             if (player == null || !player.isLocal) return;
             if (!seated) return;
-            if (scaleApplied && scaleCalibrated && !scaleGivenUp && !scaleEyeOnly)
+            if (scaleApplied && scaleCalibrated && !scaleGivenUp)
             {
                 // A size is being held. Within tolerance of what was last sent: our own change, or
                 // the one we were waiting for. Anything else (another avatar, the player's own dial)
@@ -397,6 +407,35 @@ namespace VRCKatamari.Riding
         }
 
         /// <summary>
+        /// Whether an Interact press aimed at the rider's panel should be DROPPED because the
+        /// local trigger is charging, or has just fired, the dash (owner 2026-11-18).
+        /// </summary>
+        /// <remarks>
+        /// The VR trigger raises <c>InputUse</c> (the dash charge) and <c>Interact</c> (the
+        /// pointed-at object) from the same press, so the rider's panel buttons would fire
+        /// while the player charges. The panel buttons call this before acting; the rule
+        /// itself is <see cref="RideDashInteractMath"/>, and an unwired motor leaves the
+        /// button behaving as before.
+        /// </remarks>
+        public bool ShouldIgnoreDashInteract()
+        {
+            if (motor == null) return false;
+            return RideDashInteractMath.ShouldIgnoreInteract(seated, motor.IsDashCharging(),
+                motor.IsDashing());
+        }
+
+        /// <summary>
+        /// True from an exit request (held jump, the panel button, a respawn) until
+        /// <c>OnStationExited</c> arrives for the local player. A caller that must act after
+        /// the player has really left the station (the hub's teleport) waits for
+        /// <see cref="IsLocalPlayerSeated"/> false; this says a departure is under way.
+        /// </summary>
+        public bool IsExitPending()
+        {
+            return exitPending;
+        }
+
+        /// <summary>
         /// Jump while seated: held long enough, it leaves the seat (see <see cref="Update"/>).
         /// Delivered with <c>seated</c> true because Disable Station Exit does not stop
         /// input events (Docs/Evidence/StationPlatform/README.md: Jump counted 7 times,
@@ -422,6 +461,12 @@ namespace VRCKatamari.Riding
 
         private void Update()
         {
+            if (exitPending && seated && station != null &&
+                Time.time - exitRequestedAt >= ExitRetrySeconds)
+            {
+                VRCPlayerApi local = Networking.LocalPlayer;
+                if (local != null) BeginExit(local, "retry");
+            }
             if (scalePending && Time.time - scalePendingSince >= scaleWaitSeconds)
             {
                 scalePending = false;
@@ -429,7 +474,7 @@ namespace VRCKatamari.Riding
                     + " s: measuring the seat as it is");
                 if (seated) StartSeatMeasurement(Networking.LocalPlayer);
             }
-            if (seated && scaleApplied && !scaleGivenUp && !scaleEyeOnly && !scalePending) UpdateRideScale();
+            if (seated && scaleApplied && !scaleGivenUp && !scalePending) UpdateRideScale();
             if (!seated || !jumpHeld) return;
             float held = Time.time - jumpHeldSince;
             if (exitHoldSeconds <= 0f || held >= exitHoldSeconds)
@@ -456,9 +501,18 @@ namespace VRCKatamari.Riding
             if (player == null || station == null) return false;
             if (!seated) return false;
             PlaceExitPoint();
-            station.ExitStation(player);
-            Debug.Log("[ride] exit requested");
+            BeginExit(player, "request");
             return true;
+        }
+
+        // Asks the station to let the local player go and remembers that it asked; the state
+        // is cleared only by OnStationExited.
+        private void BeginExit(VRCPlayerApi player, string reason)
+        {
+            exitPending = true;
+            exitRequestedAt = Time.time;
+            station.ExitStation(player);
+            Debug.Log("[ride] exit requested reason=" + reason);
         }
 
         // Moves the exit location to the first candidate spot beside the ball whose ground
@@ -504,10 +558,13 @@ namespace VRCKatamari.Riding
 
         // Starts the one seat measurement, at the eye height the avatar has right now (zero
         // when this behaviour is not scaling the rider: the seat then keeps absolute limits and
-        // has no waist).
+        // has no stance).
         private void StartSeatMeasurement(VRCPlayerApi player)
         {
             if (seatEye == null) return;
+            // A rejected scale request must not leave the panels at the requested (wrong)
+            // size. The eye-only fallback still lays panels out for the actual rider.
+            SetPanelScale(player != null ? player.GetAvatarEyeHeightAsMeters() : 0f);
             float eyeHeight = 0f;
             if (scaleApplied && !scaleGivenUp)
             {
@@ -517,18 +574,16 @@ namespace VRCKatamari.Riding
                 eyeHeightSmooth = eyeHeight;
             }
             scaleCalibrated = false;
-            scaleEyeOnly = false;
             seatEye.SetEyeHeight(eyeHeight);
             seatEye.BeginSeated();
         }
 
         // Prepares the size for the ride: the original eye height is read and kept, nothing is
-        // requested yet (the first request needs kappa, which the seat measurement gives).
+        // requested yet (the first request needs eta, which the seat measurement gives).
         private void BeginRideScale(VRCPlayerApi player)
         {
             scaleGivenUp = false;
             scaleCalibrated = false;
-            scaleEyeOnly = false;
             if (!scaleRiderWithBall) return;
             float current = player.GetAvatarEyeHeightAsMeters();
             if (!scaleApplied) savedEyeHeight = current;
@@ -540,6 +595,7 @@ namespace VRCKatamari.Riding
             eyeHeightSent = current;
             eyeHeightSmooth = current;
             lastLoggedEyeHeight = current;
+            SetPanelScale(current);
             Debug.Log("[ride] eye height " + current + " kept until the seat is measured");
         }
 
@@ -564,22 +620,25 @@ namespace VRCKatamari.Riding
             if (player == null) return;
             if (!scaleCalibrated)
             {
-                if (!seatEye.HasWaist())
+                if (seatEye.HasStance())
                 {
-                    // The hips cannot be read: the seat aligns the eye and the size is left alone.
-                    scaleEyeOnly = true;
-                    Debug.Log("[ride] no usable waist (reason " + seatEye.GetWaistReason()
-                        + "): the rider keeps its size, the seat aligns the eye only");
-                    return;
+                    stanceEta = seatEye.GetEta();
+                    Debug.Log("[ride] seat calibrated: eta " + stanceEta + " at eye height "
+                        + eyeHeightSent + " handGap " + seatEye.GetHandGapMeters());
                 }
-                waistKappa = seatEye.GetKappa();
+                else
+                {
+                    // Not a standing pose: size by the platform's definition of the eye height
+                    // (the hands still reach the ball) and let the seat align the eye only.
+                    stanceEta = RideStanceMath.DefaultEta;
+                    Debug.Log("[ride] no usable stance (reason " + seatEye.GetStanceReason()
+                        + "): eta " + stanceEta + ", the seat aligns the eye only");
+                }
                 scaleCalibrated = true;
                 scaleReapplyCount = 0;
                 scaleMismatchChecks = 0;
                 scaleNextCheck = Time.time + 1f;
                 eyeHeightSmooth = eyeHeightSent;
-                Debug.Log("[ride] seat calibrated: kappa " + waistKappa + " at eye height "
-                    + eyeHeightSent);
             }
             if (Time.time >= scaleNextCheck)
             {
@@ -588,7 +647,7 @@ namespace VRCKatamari.Riding
             }
             float target;
             bool clamped;
-            if (!RideScaleMath.TryEyeHeightForDiameter(CurrentDiameter(), waistKappa, out target,
+            if (!RideScaleMath.TryEyeHeightForDiameter(CurrentDiameter(), stanceEta, out target,
                 out clamped))
             {
                 return;
@@ -606,12 +665,14 @@ namespace VRCKatamari.Riding
             eyeHeightSent = send;
             lastSendTime = Time.time;
             seatEye.ApplyEyeHeight(send);
+            SetPanelScale(send);
             if (Mathf.Abs(send - lastLoggedEyeHeight) >= 0.25f * lastLoggedEyeHeight)
             {
                 lastLoggedEyeHeight = send;
                 Debug.Log("[ride] eye height " + send + " diameter " + CurrentDiameter()
                     + (clamped ? " (target clamped to the platform range)" : "") + " eyeError "
-                    + seatEye.GetCurrentEyeErrorMeters());
+                    + seatEye.GetCurrentEyeErrorMeters() + " handGap "
+                    + seatEye.GetHandGapMeters());
             }
         }
 
@@ -659,7 +720,7 @@ namespace VRCKatamari.Riding
         {
             scalePending = false;
             scaleCalibrated = false;
-            scaleEyeOnly = false;
+            SetPanelScale(0f);
             if (!scaleApplied) return;
             scaleApplied = false;
             scaleGivenUp = false;
@@ -674,6 +735,15 @@ namespace VRCKatamari.Riding
             lastHintPercent = -1;
         }
 
+        // The panel root's uniform scale for this eye height; zero (or any unknown height) puts
+        // it back to one, the authored layout.
+        private void SetPanelScale(float eyeHeightMeters)
+        {
+            if (panelRoot == null) return;
+            float scale = RideViewMath.PanelScaleForEyeHeight(eyeHeightMeters);
+            panelRoot.localScale = new Vector3(scale, scale, scale);
+        }
+
         private void SetExitPanel(bool active)
         {
             if (exitPanelRoot == null) return;
@@ -686,10 +756,11 @@ namespace VRCKatamari.Riding
             exitHintText.text = text;
         }
 
+        // Each adapter is gated on its own: a scene without the desktop adapter still gates VR.
         private void SetRideGate(bool open)
         {
-            if (input == null) return;
-            input.SetRideGate(open);
+            if (input != null) input.SetRideGate(open);
+            if (vrInput != null) vrInput.SetRideGate(open);
         }
     }
 }

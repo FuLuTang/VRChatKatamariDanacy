@@ -219,6 +219,68 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(0, selected);
         }
 
+        [Test]
+        public void PoseRefreshUsesOneMillimetreAtTheCentreOrBoxCorners()
+        {
+            Assert.IsFalse(PickupCandidateSelection.HasPoseMoved(Vector3.zero, Quaternion.identity,
+                new Vector3(0.0005f, 0f, 0f), Quaternion.identity, SmallProp, 0.001f));
+            Assert.IsTrue(PickupCandidateSelection.HasPoseMoved(Vector3.zero, Quaternion.identity,
+                new Vector3(0.0011f, 0f, 0f), Quaternion.identity, SmallProp, 0.001f));
+            // A long object can move a corner by >1 mm with a tiny rotation and no translation.
+            Assert.IsTrue(PickupCandidateSelection.HasPoseMoved(Vector3.zero, Quaternion.identity,
+                Vector3.zero, Quaternion.Euler(0f, 0.02f, 0f), new Vector3(10f, 0.01f, 0.01f), 0.001f));
+            Assert.IsFalse(PickupCandidateSelection.HasPoseMoved(Vector3.zero, Quaternion.identity,
+                Vector3.zero, new Quaternion(0f, 0f, 0f, -1f), SmallProp, 0.001f));
+        }
+
+        [Test]
+        public void TheContactGateJudgesTheSnapshotPoseButStillNeedsAnAllowedKind()
+        {
+            // The two facts the Unity mover test rests on, engine-free. (1) An empty kind
+            // allowlist refuses every candidate BEFORE the contact test, whatever its pose:
+            // the motor's Start initialises the allowlist empty and a level host is the one
+            // that calls SetAllowedKinds, so a bare motor fixture looks exactly like a stale
+            // pose without being one. (2) The contact verdict is a function of the snapshot's
+            // own position - the value RefreshCandidatePoseUnlessAccepted writes - so a
+            // refreshed candidate is judged where it is now, not where it was submitted.
+            bool[] accepted = new bool[1];
+            int[] outcomes = new int[1];
+            float[] boxDistances = new float[1];
+            float[] contactLimits = new float[1];
+            Vector3[] sizes = { SmallProp };
+            Quaternion[] rotations = { Quaternion.identity };
+            Vector3[] positions = { new Vector3(0.6f, 0f, 0f) }; // the submission pose
+            long[] growth = { 1000000L };
+            float[] volumeK = { K };
+            const float collisionRadius = 0.15f;  // the 0.2997 m start ball's half
+            const float semanticDiameter = 0.2997f;
+            const float maxCollisionRadius = 15f; // half the motor's default 30 m cap
+
+            PickupAbsorbStepMath.EvaluatePendingCandidates(new[] { true }, new[] { "stone" },
+                sizes, rotations, positions, growth, volumeK, 1, new string[0], 0,
+                Vector3.zero, collisionRadius, 0f, semanticDiameter, maxCollisionRadius,
+                accepted, outcomes, boxDistances, contactLimits);
+            Assert.AreEqual((int)AbsorbOutcome.RejectKindNotAllowed, outcomes[0],
+                "an empty allowlist refuses before the contact test, whatever the pose");
+
+            PickupAbsorbStepMath.EvaluatePendingCandidates(new[] { true }, new[] { "stone" },
+                sizes, rotations, positions, growth, volumeK, 1, new[] { "stone" }, 1,
+                Vector3.zero, collisionRadius, 0f, semanticDiameter, maxCollisionRadius,
+                accepted, outcomes, boxDistances, contactLimits);
+            Assert.AreEqual((int)AbsorbOutcome.RejectOutOfReach, outcomes[0],
+                "the stale submission pose is out of reach");
+            Assert.Greater(boxDistances[0], contactLimits[0]);
+
+            // What RefreshCandidatePoseUnlessAccepted writes: pendingPositions/pendingRotations.
+            positions[0] = Vector3.zero;
+            PickupAbsorbStepMath.EvaluatePendingCandidates(new[] { true }, new[] { "stone" },
+                sizes, rotations, positions, growth, volumeK, 1, new[] { "stone" }, 1,
+                Vector3.zero, collisionRadius, 0f, semanticDiameter, maxCollisionRadius,
+                accepted, outcomes, boxDistances, contactLimits);
+            Assert.IsTrue(accepted[0], "the refreshed pose is the pose the contact gate judges");
+            Assert.AreEqual((int)AbsorbOutcome.Absorb, outcomes[0]);
+        }
+
         // ---- host + motor (Unity only) -----------------------------------------------
 
         private const BindingFlags Any = BindingFlags.Instance | BindingFlags.NonPublic |
@@ -269,6 +331,13 @@ namespace VRCKatamari.Tests
             Call(motorType, motor, "Start");
             Assert.Greater((float)Call(motorType, motor, "GetAbsorbGateDiameterMm"), 0f,
                 "the motor must have derived a size");
+            // A level host (LevelArenaHost / LevelSwitchHost) wires the gate's kind allowlist.
+            // Start initialises it empty and an empty allowlist denies EVERY kind before the
+            // contact test, so a bare fixture would reject candidates as kind-not-allowed at
+            // any pose - which reads like a stale-pose failure but is not one.
+            Call(motorType, motor, "SetAllowedKinds", new[] { "stone" }, 1);
+            Assert.AreEqual(1, (int)Call(motorType, motor, "GetAllowedKindCount"),
+                "the fixture must allow the kinds it submits");
             Vector3 center = (Vector3)Call(motorType, motor, "GetCenterWorld");
 
             int count = distances.Length;
@@ -416,6 +485,56 @@ namespace VRCKatamari.Tests
             SetField(motorType, motor, "semanticDiameterWorldM", 0.3f);
             ScanOnce();
             Assert.IsFalse(IsQueued(ids[0]), "a candidate the gate would now refuse is released");
+        }
+
+        [Test]
+        public void AFullQueueRefreshesAMoverAndAbsorbsAtItsNewPosition()
+        {
+            BuildHost(new[] { 0.6f, 0.8f, 1.0f, 1.2f },
+                new[] { SmallProp, SmallProp, SmallProp, SmallProp });
+            ScanOnce();
+            Assert.AreEqual(4, Pending());
+            float[] times = (float[])GetField(motorType, motor, "pendingSubmitTimes");
+            times[0] = -123f;
+            Vector3 center = (Vector3)Call(motorType, motor, "GetCenterWorld");
+            propObjects[0].transform.position = center;
+            propObjects[0].transform.rotation = Quaternion.Euler(0f, 35f, 0f);
+            ScanOnce();
+            Vector3[] positions = (Vector3[])GetField(motorType, motor, "pendingPositions");
+            Quaternion[] rotations = (Quaternion[])GetField(motorType, motor, "pendingRotations");
+            Assert.AreEqual(center, positions[0], "a full queue must not prevent pose refresh");
+            Assert.AreEqual(propObjects[0].transform.rotation, rotations[0]);
+            Assert.AreEqual(-123f, times[0], "pose refresh preserves the submission age");
+            Call(motorType, motor, "EvaluatePendingCandidates", center);
+            bool[] accepted = (bool[])GetField(motorType, motor, "pendingAccepted");
+            Assert.IsTrue(accepted[0], "the ball contacts the moved box, not its stale position");
+            Call(motorType, motor, "CommitAcceptedAbsorbs", center, Vector3.up);
+            Assert.IsFalse(IsQueued(ids[0]), "the accepted moved prop committed and left the queue");
+            Assert.Greater((int)Call(motorType, motor, "GetAbsorbedEventCount"), 0);
+        }
+
+        [Test]
+        public void AnAcceptedMoverKeepsItsFrozenPoseAndSubmillimetreMovesAccumulate()
+        {
+            BuildHost(new[] { 0.6f }, new[] { SmallProp });
+            ScanOnce();
+            Vector3[] positions = (Vector3[])GetField(motorType, motor, "pendingPositions");
+            Vector3 initial = positions[0];
+            propObjects[0].transform.position = initial + new Vector3(0.0006f, 0f, 0f);
+            ScanOnce();
+            Assert.AreEqual(initial, positions[0]);
+            propObjects[0].transform.position = initial + new Vector3(0.0012f, 0f, 0f);
+            ScanOnce();
+            Assert.AreEqual(propObjects[0].transform.position, positions[0]);
+            Vector3 frozen = positions[0];
+            bool[] accepted = (bool[])GetField(motorType, motor, "pendingAccepted");
+            accepted[0] = true;
+            propObjects[0].transform.position = initial + new Vector3(0.2f, 0f, 0f);
+            ScanOnce();
+            Assert.AreEqual(frozen, positions[0], "accepted entries are not refreshed or withdrawn");
+            Assert.IsTrue(accepted[0]);
+            Assert.IsTrue(IsQueued(ids[0]));
+            Assert.AreEqual(1, Pending());
         }
 
         // ---- reflection helpers ----------------------------------------------------

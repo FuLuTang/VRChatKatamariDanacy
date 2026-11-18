@@ -30,7 +30,10 @@ namespace VRCKatamari.Editor.LevelBuild
     /// model by mesh-bounds centre, the static renderers switched off (kept in place; the pickup sync
     /// measures only them and skips the <c>Skin</c> subtree). <see cref="MotionHost"/> then starts each
     /// Animator at its phase, sets <c>Moving</c>/<c>Panic</c> and disables the component when the prop
-    /// is culled.
+    /// is culled. Each skin's Animator is set to <c>CullUpdateTransforms</c> and each
+    /// <c>SkinnedMeshRenderer</c>'s <c>skinnedMotionVectors</c> to false (see
+    /// <see cref="AssemblePropSkin"/>): an offscreen crab stops writing bone transforms, and
+    /// the renderer no longer keeps a motion-vector variant for a world with no post-processing.
     /// </para>
     /// <para>
     /// Source tracking: each type's stamp (SHA-256 of the FBX bytes and of <c>skinned_defs.json</c>) is
@@ -511,6 +514,32 @@ namespace VRCKatamari.Editor.LevelBuild
             else
             {
                 result.Skipped++;
+            }
+
+            // Offscreen, the skin stops driving its bones. Measured on the assembled hub, all
+            // 120 crab Animators were AlwaysAnimate: every frame, even 80 m away from the ball,
+            // they retargeted and wrote their 5 bone transforms; their SkinnedMeshRenderers
+            // also kept skinnedMotionVectors on, which makes each of them skin twice whenever a
+            // camera asks for motion vectors (this world has no post-processing that does, so
+            // the setting is simply not wanted here). CullUpdateTransforms still advances the
+            // state machine and the clip time, so the pose is correct the frame the skin comes
+            // back into view; CullCompletely would freeze the clip instead. Nothing at runtime
+            // reads a bone: MotionHost drives the prop's own transform and enables/disables the
+            // component, PickupFieldHost/PropFallHost read the prop root, and the editor-side
+            // pickup sync measures the static model, not the pose.
+            if (animator.cullingMode != AnimatorCullingMode.CullUpdateTransforms)
+            {
+                Undo.RecordObject(animator, "Assemble skeletal animation");
+                animator.cullingMode = AnimatorCullingMode.CullUpdateTransforms;
+                if (!created) result.Updated++;
+            }
+            SkinnedMeshRenderer[] skins = skin.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            for (int i = 0; i < skins.Length; i++)
+            {
+                if (!skins[i].skinnedMotionVectors) continue;
+                Undo.RecordObject(skins[i], "Assemble skeletal animation");
+                skins[i].skinnedMotionVectors = false;
+                if (!created) result.Updated++;
             }
 
             ReportFit(prop, skin, strays, result);

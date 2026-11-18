@@ -46,6 +46,9 @@ namespace VRCKatamari.Riding
                 Debug.LogWarning("[ride] ball click ignored: BallSeatInteract.ride is not wired");
                 return;
             }
+            // The dash's trigger also raises Interact; while it charges/bursts the same press
+            // must not re-board the ball (owner 2026-11-18, RideDashInteractMath).
+            if (ride.ShouldIgnoreDashInteract()) return;
             ride.TrySeatLocalPlayer();
         }
 

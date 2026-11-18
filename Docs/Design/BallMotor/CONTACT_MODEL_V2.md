@@ -606,17 +606,25 @@ capProxy = min(maxProxyProtrusionPerCoreRadius·r, maxProxyProtrusionWorldM)   #
 - 效果上限很小：D=0.60 时 `capProxy=0.105` ⇒ `H_cap` 从 0.60 变 0.705（+17.5%）。**这是专利口径的必然后果**（碰撞不随凸出物长大），不是 bug。如果试玩觉得“长杆应该明显更好爬”，要么抬 `maxProxyProtrusionWorldM`（会同时抬接地，风险大），要么给爬升一个独立的 `L_climb` 上限（**需拍板**，推荐先不动）。
 - **它不改变 `h<r` 的滚越阈值**：凸出物只延长“能爬多高”，不改变“棱在球心下方就能滚过去”。
 
-### 3.8 dash（新机制，全部 OUR design）
+### 3.8 dash（原作 Charge'n'Roll；长按触发是 OUR adaption，owner 2026-11-18）
 
 | 项 | 值 | 说明 |
 |---|---:|---|
-| 触发 | 输入层的一个动作（`ControlIntentMath` 的 action），桌面 = 按住左键 + 前进？ | **需拍板**：键盘/手柄映射由输入适配层定；本设计只要求“一个离散动作 + 一个持续时间” |
-| 速度倍率 | 1.6×（4.0 → 6.4 m/s；2.20 档 3.0 → 4.8） | 子步仍 N=2（0.128 m/步 = 0.854r） |
-| 时长 / 冷却 | 0.45 s / 1.2 s | |
-| 爬升 | `rate`从1.0至1.5；坡耗体力最少0.625×（同一v_gate导出） | 墙H_cap不变；坡本来就无高度cap，耗尽不被dash恢复 |
+| 触发 | 按住蓄力、松手出射：VR = **左手扳机**（`InputUse`，只取 `handType == LEFT`）；PC = **Shift 长按**（`Input.GetKey(KeyCode.LeftShift/RightShift)`）。只在骑乘门与回合门都开时开始蓄力；关门前已蓄的取消 | 原作是两根摇杆交替推拉，VR 手柄上照搬不了，owner 定为长按。输入层只发「按下 / 松开」，规则全在 `DashMath`，两个平台不会分叉 |
+| 蓄力分档 | 原作需要 5/6/7/8 次交替（<0.5 m / 0.5–5 m / 5–10 m / ≥10 m）。一次交替折算一个 **0.4 s gacha 窗口**，于是蓄满 = **2.0 / 2.4 / 2.8 / 3.2 s** | 换算依据：0.4 s（12 帧 @30 Hz）是原作「两次交替之间最长还计数」的间隔，一个窗口折算一次交替既还原所需输入时长、也不奖励猛按。容差 0.1 ms（float 逐步累加）。`DashMath.ChargeGachasFor` / `ChargeSecondsFor` |
+| 蓄力期间 | 球不前进、不转向（三轴按 0、平面速度清零）；蓄满 3 个 gacha 窗口（1.2 s）后**原地旋转**（原作 count=3 起旋转），转速 180°/s **PROVISIONAL**（原作转速由玩家的交替速度决定，没有公开值） | motor 在运动层写完之后旋转 `headingDegrees`，接触求解与跟随相机读到的是旋转后的朝向；`DashMath.IsSpinning` |
+| 出射 | 蓄满松手 = 朝当前朝向冲出：**1.6× 速度、0.45 s、冷却 1.2 s**（自松手起算） | **OUR design**：原作没有公开出射倍率与持续时间；1.2 s 冷却原作也没有（原作只靠能量）。冷却中与 huff 中都拒绝新蓄力 |
+| 未蓄满 | 松手不冲刺、也不进冷却 | |
+| 能量 | 240 帧 = 8 s；从第三个 gacha 窗口起、冲出段、以及松手后 0.4 s 的 gacha 尾巴里，按 1 s/s 消耗；100 帧（3.33 s）未使用后回充 18 帧（0.6 s） | 原作 30 Hz 帧数换算成秒，见 `DashMath` 常量；能量耗尽 → huff |
+| huff | 能量到 0 → huff 240 帧（8 s），期间拒绝一切蓄力，结束后能量回满 240 帧 | 已在跑的冲出段不截断（与原作一致：boost 继续） |
+| 爬升 | `rate`从1.0至1.5；坡耗体力最少0.625×（同一v_gate导出） | 走现有链：`ComputeDrive` 的 `driveSpeed` ×1.6 → `ClimbMath.GateSpeed` → `ClimbMath`/`SlopeClimbMath`，没有第二条 dash-aware 的爬升路径。墙H_cap不变；坡本来就无高度cap，耗尽不被dash恢复 |
 | 用途 | ① 冲过 0.5D–1.0D 的台阶（更快到顶）；② 短距离加速；③ 勉强过速度门 | |
 
 **dash 不改变几何**：它不能让球爬上 > `H_cap` 的墙，也不能让 `h>r` 的棱变成可滚。W5 因此测“更快”，不是“能/不能”（§6.2）。
+
+**与原作不同的三项，列出来交 Lead/owner（不擅改）**：① 出射倍率 1.6× 与时长 0.45 s——原作未公开，这是本项目的设计值；② 1.2 s 冷却——原作没有，原作只用能量限制；③ 蓄力转速 180°/s——原作未公开。触发方式（长按 vs 交替推拉）是 owner 2026-11-18 明定的适配，不算差异。
+
+**已知冲突与缓解**：`InputUse`（扳机）与 `Interact`（对象交互）同源，蓄力/出射时准心指着 Interact 按钮会顺带按下它；owner 2026-11-18 定的缓解是「骑乘时蓄力/出射段忽略面板与结果卡的 Interact」（`Runtime/Riding/RideDashInteractMath.cs` + 各按钮的只读判断），dash 之外行为不变。见 [ControlIntent README](../ControlIntent/README.md) 的平台事实与「冲刺」节。
 
 ### 3.9 坡面切向重力：静止后才有
 
@@ -1403,7 +1411,7 @@ float GetRollReachWorldM();            float GetPickupReachWorldM();
 4. **长大推挤是“原子”的**：失败时整段不应用并把 `sizeApplyDeferred` 置位（下一步重试）。设计写的“本步回退到 r_old”被实现成“这一步的推挤不生效”，因为进入本步时接触半径本来就是 r_old（尺寸更新发生在求解之后）。
 5. **`GetLastStepMicros` 是粗测**：Udon 没有高精度时钟（无 `Stopwatch`），`Time.time` 每帧才变；一帧跑多个固定步时只有第一个非零，读数只能当“整帧上界”。要真测请用 profiler。
 6. **`contactIncomplete` 是锁存 + 一条日志，不冻结球**：§5.4 的原文就是“仍用 24 条，标记不完整，判据失败”。
-7. **没有 dash**（§3.8）、**没有 `GetFixedStepCount`**（§6.4 列的是 P4 请求，S3 未加）。
+7. **有 dash**（§3.8；owner 2026-11-18：长按蓄力/松手出射——VR 左扳机、PC Shift，`BeginDashCharge`/`ReleaseDashCharge` + `DashMath`，含原地旋转、能量与 huff，走同一 v_gate 链）；**没有 `GetFixedStepCount`**（§6.4 列的是 P4 请求，S3 未加）。
 8. **AddBox 容量 64**：现有场景（≤64 盒 + ≤4 坡）可以直接登记；地图 0 的 118 条要等 S4 把宿主改成 `AddObb`。`AddRamp` 的 45° 作者门仍在（S4 改 warning），更陡的坡只能用 `AddObb` 直接登记。
 9. **挡路道具 / 支撑道具：经 S4b 宿主 + `SetPropObbs` 进 v2**。宿主在它的 20 Hz 扫描里把近邻道具作为真 OBB 交给 `SetPropObbs`（12 槽，surface id 100+i，role 2/3），它们与静态盒走**同一份**接触/分类/推挤，窗口里按距离与静态混排。`TeleportTo`/`ClearObstacles` 清道具块，下一次宿主扫描重登记。§7.6.5 记的宿主侧实现按这个签名接通。
 10. **三形状拆分（§4A.5）未落到尺寸层**：`r_phys = collisionRadiusWorldM`，`collisionToCoreRadiusRatio` / `semanticDiameterPerCoreDiameter` 语义未变；只提供 `GetPhysicalRadiusWorldM` / `GetVisualCoreRadiusWorldM` / `GetRollReachWorldM` / `GetPickupReachWorldM` 四个读数。

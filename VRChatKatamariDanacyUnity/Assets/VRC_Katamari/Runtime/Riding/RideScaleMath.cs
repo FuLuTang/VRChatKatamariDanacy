@@ -4,25 +4,24 @@ using VRCKatamari.Core;
 namespace VRCKatamari.Riding
 {
     /// <summary>
-    /// How big the rider is: the eye height to ask VRChat for so that the seated waist is level
-    /// with the top of the ball at every ball size, plus the clamp, the smoothing, the rate limit
-    /// and the "is that still our size" decision that keep the request from fighting the seat.
+    /// How big the rider is: the eye height to ask VRChat for so that the standing rider's feet
+    /// are on the ground and the hands reach the ball at every ball size, plus the clamp, the
+    /// smoothing, the rate limit and the "is that still our size" decision that keep the request
+    /// from fighting the seat.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The rule: the rider scales with the ball (small ball, small rider; large ball, large
-    /// rider), and in the seated view the rider's waist is level with the top of the ball.
-    /// Body proportions differ between avatars, so no proportion is assumed: the seat
-    /// measurement (<see cref="RideWaistMath"/>) reports <c>kappa</c>, this avatar's own
-    /// vertical distance from the viewpoint down to the hips divided by its eye height. The eye
-    /// point is <c>up</c> above the ball centre (<see cref="RideViewMath"/>) and the ball's top
-    /// is one radius above the centre, so a waist on the ball's top is
-    /// <c>up - r = (EyeUpPerRadius - 1) * r</c> below the eye, and the eye height that puts it
-    /// there is <c>E = (up - r) / kappa</c>. Every term is proportional to the radius, so
-    /// <c>E</c> is a constant (per avatar) times the ball diameter: one picture at every size.
+    /// rider) in the push stance of <see cref="RideViewMath"/>: the eye height is
+    /// <see cref="RideViewMath.EyeHeightPerRadius"/> times the radius, which is what puts the
+    /// real hands on the ball's back surface. The avatar's own standing pose is measured
+    /// (<see cref="RideStanceMath"/>: <c>eta</c>, the head's height above the station anchor per
+    /// metre of eye height), and the request is divided by it so the anchor, i.e. the feet,
+    /// lands on the ground. Every term is proportional to the radius, so <c>E</c> is a constant
+    /// (per avatar, through <c>eta</c>) times the ball diameter: one picture at every size.
     /// </para>
     /// <para>
-    /// Platform limits (RIDE_GEOMETRY.md section 3.1 gives the sources): Udon's target eye
+    /// Platform limits (RIDE_GEOMETRY.md section 4.1 gives the sources): Udon's target eye
     /// height is clamped to 0.1 to 100 m, and VRChat supports nothing outside that range. Where
     /// the world has avatar scaling switched off on the website the Set functions have no
     /// effect, so the real eye height is read back instead of assuming the request took effect,
@@ -109,47 +108,20 @@ namespace VRCKatamari.Riding
         }
 
         /// <summary>
-        /// The eye height above the ball's top, metres, that a waist on the ball's top needs:
-        /// the eye point's height over the ball centre minus one radius. Zero for a bad radius.
+        /// The eye height (as VRChat measures it) for the push stance on a ball of this semantic
+        /// diameter, for an avatar whose head stands <paramref name="eta"/> eye heights above the
+        /// station anchor, clamped to the platform range; <paramref name="clamped"/> says whether
+        /// the clamp changed it. False (and zero) for a bad diameter or eta.
         /// </summary>
-        public static float EyeAboveWaistForRadius(float radiusMeters)
-        {
-            float up;
-            float back;
-            if (!RideViewMath.TryEyeOffset(radiusMeters, out up, out back)) return 0f;
-            float above = up - radiusMeters;
-            return above > 0f ? above : 0f;
-        }
-
-        /// <summary>
-        /// The waist's height above the ball's lowest point, metres, for an eye
-        /// <paramref name="upMeters"/> above the ball centre and a waist
-        /// <paramref name="eyeAboveWaistMeters"/> below the eye: the check of the rule above.
-        /// </summary>
-        public static float WaistAboveBallBottom(float radiusMeters, float upMeters,
-            float eyeAboveWaistMeters)
-        {
-            return radiusMeters + upMeters - eyeAboveWaistMeters;
-        }
-
-        /// <summary>
-        /// The eye height (as VRChat measures it) that puts this avatar's hips on the top of a
-        /// ball of this semantic diameter, clamped to the platform range;
-        /// <paramref name="clamped"/> says whether the clamp changed it. False (and zero) for a
-        /// bad diameter or <paramref name="kappa"/> (the measured viewpoint-to-hips distance per
-        /// metre of eye height).
-        /// </summary>
-        public static bool TryEyeHeightForDiameter(float ballDiameterMeters, float kappa,
+        public static bool TryEyeHeightForDiameter(float ballDiameterMeters, float eta,
             out float eyeHeightMeters, out bool clamped)
         {
             eyeHeightMeters = 0f;
             clamped = false;
             if (!KatamariMath.IsFiniteFloat(ballDiameterMeters) || ballDiameterMeters <= 0f) return false;
-            if (!KatamariMath.IsFiniteFloat(kappa) || kappa <= 0f) return false;
-            float eyeAboveWaist = EyeAboveWaistForRadius(ballDiameterMeters * 0.5f);
-            if (eyeAboveWaist <= 0f) return false;
-            float wanted = eyeAboveWaist / kappa;
-            if (!KatamariMath.IsFiniteFloat(wanted)) return false;
+            if (!KatamariMath.IsFiniteFloat(eta) || eta <= 0f) return false;
+            float wanted = RideViewMath.EyeHeightPerRadius() * ballDiameterMeters * 0.5f / eta;
+            if (!KatamariMath.IsFiniteFloat(wanted) || wanted <= 0f) return false;
             eyeHeightMeters = Mathf.Clamp(wanted, MinSupportedEyeHeightMeters,
                 MaxSupportedEyeHeightMeters);
             clamped = !Mathf.Approximately(eyeHeightMeters, wanted);

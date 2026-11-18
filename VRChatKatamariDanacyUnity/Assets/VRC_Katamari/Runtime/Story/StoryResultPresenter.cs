@@ -131,6 +131,33 @@ namespace VRCKatamari.Story
         // A missing controller is the only wire this behaviour cannot work around, so it
         // is reported once instead of every frame.
         private bool warnedMissingController;
+        private string navigationHint = "";
+        private string resultBody = "";
+        private bool dismissedForReturn;
+
+        /// <summary>Hub recovery text, without changing any score or frozen fact.</summary>
+        public void SetNavigationHint(string hint)
+        {
+            navigationHint = hint == null ? "" : hint;
+            RenderResultBody();
+        }
+
+        /// <summary>Menu respawn abandons the run and must not open a result card.</summary>
+        public void DismissForReturn()
+        {
+            dismissedForReturn = true;
+            navigationHint = "";
+            SetCardVisible(false);
+        }
+
+        private void RenderResultBody()
+        {
+            if (resultText == null || dismissedForReturn || controller == null
+                || controller.GetState() != StoryRoundController.StateResult) return;
+            resultText.text = resultBody;
+            if (navigationHint.Length > 0) resultText.text = resultBody + "\n" + navigationHint;
+        }
+
 
         public void Update()
         {
@@ -147,6 +174,16 @@ namespace VRCKatamari.Story
             }
 
             int state = controller.GetState();
+            if (state == StoryRoundController.StateIdle || state == StoryRoundController.StateRunning)
+            {
+                dismissedForReturn = false;
+                navigationHint = "";
+            }
+            if (dismissedForReturn)
+            {
+                SetCardVisible(false);
+                return;
+            }
             // Written once per state, not once per frame: this early return is what keeps
             // the card (and its string building) out of every idle frame.
             if (state == lastObservedState) return;
@@ -267,11 +304,13 @@ namespace VRCKatamari.Story
             if (!usesStars)
             {
                 // No thresholds for this level: no stars and no grading comment, only what was measured.
-                resultText.text = presenterLine + "\n" + measuredLabel;
+                resultBody = presenterLine + "\n" + measuredLabel;
+                RenderResultBody();
                 return;
             }
-            resultText.text = presenterLine + "\n" + StarGlyphs(stars) + "  "
+            resultBody = presenterLine + "\n" + StarGlyphs(stars) + "  "
                 + measuredLabel + "\n" + CommentLine(stars, insidePartialBand);
+            RenderResultBody();
         }
 
         /// <summary>

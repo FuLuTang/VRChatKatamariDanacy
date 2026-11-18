@@ -72,17 +72,20 @@ namespace VRCKatamari.Riding
         public const int ReasonNoSamples = 5;
 
         /// <summary>
-        /// The furthest a seated head may plausibly be from the seat anchor, in metres.
+        /// The furthest the head may plausibly be from the station anchor, in metres, for a
+        /// rider of <see cref="ReferenceEyeHeightMeters"/>.
         /// </summary>
         /// <remarks>
-        /// A guard against reading obviously wrong data (a standing eye height while the camera
-        /// is not actually there), not a product value: past it the DATUM is wrong, and the
-        /// caller refuses the correction instead of half-applying it. Measured heads: 1.204159 m
-        /// in ClientSim (2026-11-15; the ClientSim camera really is that high above the seat), and
-        /// about 0.85 m for a seated pose on real hardware, so 1.35 m leaves headroom over the
-        /// largest measured value while staying below a standing eye height (1.5-1.8 m).
+        /// A guard against reading obviously wrong data, not a product value: past it the DATUM
+        /// is wrong, and the caller refuses the correction instead of half-applying it. The ride
+        /// station is a standing one (RIDE_GEOMETRY.md), so the head is about one eye height
+        /// above the anchor (the feet); 2.1 m is 1.28 reference eye heights, room for a tall
+        /// standing pose, and still refuses a datum metres away from the rider. Measured seated
+        /// heads (ClientSim 1.204159 m on 2026-11-15, about 0.85 m on real hardware) are inside
+        /// it as well. The seat's vertical limit uses the same number, so a measured standing
+        /// head is compensated in full.
         /// </remarks>
-        public const float MaxPlausibleHeadAboveSeatMeters = 1.35f;
+        public const float MaxPlausibleHeadAboveSeatMeters = 2.1f;
 
         /// <summary>
         /// The eye height, metres, at which the absolute limits in this layer are authored. A
@@ -105,8 +108,8 @@ namespace VRCKatamari.Riding
         /// <summary>
         /// <see cref="IsPlausibleHeadDistance"/> for an avatar of this eye height: the rail is
         /// <see cref="MaxPlausibleHeadAboveSeatMeters"/> times
-        /// <see cref="LimitScaleForEyeHeight"/>, so a 23 m rider is not refused for a seated head
-        /// 11 m above the seat, and a 0.26 m rider's standing-height datum is still refused.
+        /// <see cref="LimitScaleForEyeHeight"/>, so a 15 m rider is not refused for a standing head
+        /// 15 m above the anchor, and a 0.26 m rider's datum from a 1.6 m head is still refused.
         /// </summary>
         public static bool IsPlausibleHeadDistanceForEyeHeight(float distanceMeters,
             float eyeHeightMeters)
@@ -234,8 +237,7 @@ namespace VRCKatamari.Riding
         /// Limits are magnitudes in metres, not signed rails: <paramref name="verticalLimitMeters"/>
         /// bounds |y| and <paramref name="horizontalLimitMeters"/> bounds the horizontal
         /// length. A limit of zero is legal and means "compensate none of that axis". The
-        /// defaults are guards against a wrong head datum (a standing eye height instead of a
-        /// seated one is about twice the real value), not measured product values.
+        /// defaults are guards against a wrong head datum, not measured product values.
         /// </para>
         /// <para>
         /// The low pass is the project's usual alpha = 1 - exp(-2*pi*hz*dt) with

@@ -220,6 +220,28 @@ namespace VRCKatamari.Tests
         }
 
         [Test]
+        public void AMaxBallDiameterParsesAndAbsentMeansTheSourceMotorCap()
+        {
+            object catalog = ParseOk(MultiLevelJson());
+            Assert.AreEqual(1.2f, (float)Field(Level(catalog, 0), "maxDiameterM"), 1e-6f);
+
+            // 0 = not given: the assembler then keeps the source motor's authored cap.
+            object without = ParseOk(MultiLevelJson().Replace("'maxDiameterM':1.2,", ""));
+            Assert.AreEqual(0f, (float)Field(Level(without, 0), "maxDiameterM"), 1e-6f);
+        }
+
+        [Test]
+        public void AMaxBallDiameterMustBePositive()
+        {
+            AssertAnyContains(ParseFail(MultiLevelJson().Replace("'maxDiameterM':1.2", "'maxDiameterM':0")),
+                "maxDiameterM");
+            AssertAnyContains(ParseFail(MultiLevelJson().Replace("'maxDiameterM':1.2", "'maxDiameterM':-1")),
+                "maxDiameterM");
+            AssertAnyContains(ParseFail(MultiLevelJson().Replace("'maxDiameterM':1.2", "'maxDiameterM':'big'")),
+                "maxDiameterM");
+        }
+
+        [Test]
         public void ARoundBlockNumbersMustBePositive()
         {
             AssertAnyContains(ParseFail(MultiLevelJson().Replace("'timeLimitSeconds':420", "'timeLimitSeconds':0")),
@@ -291,6 +313,29 @@ namespace VRCKatamari.Tests
             Assert.AreEqual(4, ((Array)Field(catalog, "levels")).Length);
         }
 
+        [Test]
+        public void TheCommittedListGivesEveryLevelAMaxBallDiameter()
+        {
+            // Owner 2026-11-18: the cap is a per-level value. A missing entry would make the
+            // hub fall back to the motor's authored 30 m cap and silently lose the Cancer
+            // limit, so the committed list must carry one for every level.
+            string path = FindRepoFile("Docs/Design/StoryMode/hub_levels.json");
+            if (path == null) Assert.Ignore("Docs/Design/StoryMode/hub_levels.json is not reachable from here");
+
+            object catalog = ParseOk(File.ReadAllText(path), false);
+            Array levels = (Array)Field(catalog, "levels");
+            for (int i = 0; i < levels.Length; i++)
+            {
+                object level = levels.GetValue(i);
+                string id = (string)Field(level, "id");
+                Assert.Greater((float)Field(level, "maxDiameterM"), 0f, id);
+                if (id == "_ref_cancer")
+                {
+                    Assert.AreEqual(1.2f, (float)Field(level, "maxDiameterM"), 1e-6f);
+                }
+            }
+        }
+
         // ------------------------------------------------------------------ helpers
 
         private static string MultiLevelJson()
@@ -306,6 +351,7 @@ namespace VRCKatamari.Tests
                 + "'source':{'scene':'Assets/_RefUnlicensed/Scenes/RefCancer.unity','takeRoots':['LevelContent/_ref_cancer']},"
                 + "'island':{'offset':[0,0,0]},"
                 + "'start':{'center':[-5.0,-1.0,2.5],'headingDeg':0,'diameterM':0.222},"
+                + "'maxDiameterM':1.2,"
                 + "'round':{'killPlaneY':-4,'timeLimitSeconds':420,'targetDiameterM':0.8}},"
                 + "{'id':'physics_test_field','name':'Map 0','scenes':['AllMapsHub'],'content':'LevelContent',"
                 + "'kind':'freeRoam','allowAbort':true,"

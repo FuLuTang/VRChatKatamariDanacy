@@ -4,45 +4,75 @@ using VRCKatamari.Core;
 namespace VRCKatamari.Riding
 {
     /// <summary>
-    /// What the rider sees by default: where the eye point sits relative to the ball, how
-    /// big and how low the ball appears at pitch 0, where the head-locked HUD panels hang,
-    /// and how big the "click the ball to sit" target is.
+    /// Where the rider's eye is relative to the ball: the push stance. The rider stands
+    /// behind the ball with the feet on the ground, and a hand reaching forward and down
+    /// from the shoulder meets the ball's back surface with the arm along the ball's radius,
+    /// so the push goes through the centre. Also where the rider's panels hang, and how big
+    /// the "click the ball to sit" target is.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The eye rule. VRChat gives a seated rider no pitch of their own: the station carries
-    /// the avatar's root, the world cannot tilt the head (desktop pitch is the mouse, VR
-    /// pitch is the headset), so the only lever is WHERE the eye is. The rule keeps the ball
-    /// centre a fixed <see cref="DepressionDegrees"/> below the horizon and the ball's angular
-    /// radius at exactly <see cref="MaxBallHalfAngleDegrees"/>, so the ball fills the lower
-    /// third of a 60 degree vertical view at every size. Both follow from
-    /// <c>up = EyeUpPerRadius * r</c> and <c>back = up / tan(depression)</c> with NO additive
-    /// base: every length is proportional to the radius, so the view is the same picture at
-    /// any ball size (the motor's scale-invariant motion relies on the same property). The
-    /// four numbers the follow frame needs (<c>FollowRigMath</c>'s base/per-radius pairs) are
-    /// derived here, so the scene has one source for them: the editor assembly copies them
-    /// onto the motor (the bases are zero).
+    /// Why the stance comes from the HANDS. In VR the rider's hands are the player's own
+    /// controllers; Udon cannot place them. VRChat maps the player's real body onto the
+    /// avatar's eye height, so relative to the eye the real hands reach about as far as a
+    /// human arm does, scaled by the eye height E. The geometry therefore puts the ball's
+    /// back surface where a human hand rests when pushing: the contact point is reached from
+    /// the shoulder (<see cref="ShoulderBelowEyePerEyeHeight"/> below and
+    /// <see cref="ShoulderBehindEyePerEyeHeight"/> behind the eye) by a bent arm
+    /// (<see cref="PushReachFraction"/> of <see cref="ArmReachPerEyeHeight"/>), pointing
+    /// <see cref="PushAngleDegrees"/> below the horizontal, and the arm continues through
+    /// the ball's centre. These four body numbers describe the PLAYER's real body (human
+    /// anthropometry), never the avatar's: an avatar's arms only show where IK draws them.
     /// </para>
     /// <para>
-    /// What the proportionality implies for the rider: the eye is <c>up</c> above the ball
-    /// centre and a seated body hangs below it, so the rider's size is not free - it is
-    /// <see cref="RideScaleMath"/>'s job to size the avatar so that its measured hips are level
-    /// with the top of the ball (<see cref="RideWaistMath"/>). This class only gives the eye
-    /// point; the seat and the avatar size follow from it.
+    /// The feet. The station carries a standing avatar by its feet, and VRChat's eye height
+    /// is the viewpoint's height above the feet, so "feet on the ground beside the ball"
+    /// is <c>E = up + r</c> (the eye is <c>up</c> above the centre, the centre <c>r</c>
+    /// above the ground). With <c>E = e * r</c> the stance closes:
+    /// </para>
+    /// <code>
+    /// e    = (1 + sin psi) / (1 - shoulderBelow - reach * sin psi)   (reach = fraction * arm)
+    /// up   = (e - 1) * r
+    /// back = (-shoulderBehind * e + (1 + reach * e) * cos psi) * r
+    /// </code>
+    /// <para>
+    /// Every length is a constant times the radius (no additive base), so contact point,
+    /// ball top, eye, feet and hands form one triangle-shaped figure that only scales with
+    /// the ball: the same picture and the same reach at every size. The editor assembly
+    /// copies <see cref="EyeUpPerRadius"/> and <see cref="EyeBackPerRadius"/> onto the
+    /// motor's follow frame (bases zero); <see cref="RideScaleMath"/> asks VRChat for the
+    /// eye height <see cref="EyeHeightPerRadius"/> times r (divided by the avatar's measured
+    /// stance ratio, <see cref="RideStanceMath"/>).
     /// </para>
     /// <para>
-    /// The HUD and the cards are world-space panels parented to the follow frame, not screen
-    /// overlays: a screen-space overlay canvas is not drawn by the VRChat client. Their
-    /// placement is expressed as (distance, azimuth, elevation) from the eye point.
+    /// The panels are world-space canvases under a panel root on the follow frame (a
+    /// screen-space overlay canvas is drawn for screen users only, never in VR). Their
+    /// placement is (distance, azimuth, elevation) from the eye, authored for a rider of
+    /// <see cref="PanelReferenceEyeHeightMeters"/>; the panel root is scaled by
+    /// <see cref="PanelScaleForEyeHeight"/> so the panels keep their angular size and stay
+    /// in front of a rider of any size.
     /// </para>
     /// </remarks>
     public static class RideViewMath
     {
-        /// <summary>Ball centre below the horizon at pitch 0, degrees.</summary>
-        public const float DepressionDegrees = 18f;
+        /// <summary>
+        /// The arm's angle below the horizontal at the push, degrees; the hand meets the
+        /// ball where the radius points back up along the arm. The one tuning knob of the
+        /// stance (RIDE_GEOMETRY.md section 1.1 tabulates 35 to 55 degrees).
+        /// </summary>
+        public const float PushAngleDegrees = 45f;
 
-        /// <summary>The ball's angular radius, degrees (a third of a 60 degree view, diameter-wise).</summary>
-        public const float MaxBallHalfAngleDegrees = 10f;
+        /// <summary>Shoulder joint below the eyes, per metre of eye height (human body).</summary>
+        public const float ShoulderBelowEyePerEyeHeight = 0.125f;
+
+        /// <summary>Shoulder joint behind the eyes, per metre of eye height (human body, estimate).</summary>
+        public const float ShoulderBehindEyePerEyeHeight = 0.055f;
+
+        /// <summary>Shoulder joint to the middle of the palm, straight arm, per metre of eye height (human body).</summary>
+        public const float ArmReachPerEyeHeight = 0.41f;
+
+        /// <summary>The push uses this fraction of the straight reach: elbows slightly bent.</summary>
+        public const float PushReachFraction = 0.8f;
 
         /// <summary>Eye height above the ball centre at zero radius: none, the rule is proportional.</summary>
         public const float EyeBaseUpMeters = 0f;
@@ -50,11 +80,8 @@ namespace VRCKatamari.Riding
         /// <summary>Back-off from the ball centre at zero radius: none, the rule is proportional.</summary>
         public const float EyeBaseBackMeters = 0f;
 
-        /// <summary>Half of the 60 degree vertical field the project designs for.</summary>
-        public const float HalfFovDegrees = 30f;
-
-        /// <summary>The ball's lower edge must stay this far inside the view's lower edge.</summary>
-        public const float EdgeMarginDegrees = 2f;
+        /// <summary>The eye height the panel layout is authored for, metres.</summary>
+        public const float PanelReferenceEyeHeightMeters = 1.64f;
 
         /// <summary>The interact sphere is this much bigger than the ball.</summary>
         public const float SeatTriggerScale = 1.25f;
@@ -62,17 +89,34 @@ namespace VRCKatamari.Riding
         /// <summary>The interact sphere never shrinks below this radius, metres.</summary>
         public const float SeatTriggerMinimumRadiusMeters = 0.25f;
 
-        /// <summary>Metres of eye height per metre of ball radius.</summary>
-        public static float EyeUpPerRadius()
+        /// <summary>The bent-arm push reach, per metre of eye height.</summary>
+        public static float PushReachPerEyeHeight()
         {
-            return Mathf.Sin(DepressionDegrees * Mathf.Deg2Rad) /
-                Mathf.Sin(MaxBallHalfAngleDegrees * Mathf.Deg2Rad);
+            return PushReachFraction * ArmReachPerEyeHeight;
         }
 
-        /// <summary>Metres of back-off per metre of ball radius.</summary>
+        /// <summary>
+        /// The standing rider's eye height per metre of ball radius (feet on the ground, hands
+        /// on the ball): <c>e</c> in the class remarks.
+        /// </summary>
+        public static float EyeHeightPerRadius()
+        {
+            float s = Mathf.Sin(PushAngleDegrees * Mathf.Deg2Rad);
+            return (1f + s) / (1f - ShoulderBelowEyePerEyeHeight - PushReachPerEyeHeight() * s);
+        }
+
+        /// <summary>Metres of eye height above the ball centre per metre of ball radius.</summary>
+        public static float EyeUpPerRadius()
+        {
+            return EyeHeightPerRadius() - 1f;
+        }
+
+        /// <summary>Metres of back-off from the ball centre per metre of ball radius.</summary>
         public static float EyeBackPerRadius()
         {
-            return EyeUpPerRadius() / Mathf.Tan(DepressionDegrees * Mathf.Deg2Rad);
+            float e = EyeHeightPerRadius();
+            float c = Mathf.Cos(PushAngleDegrees * Mathf.Deg2Rad);
+            return -ShoulderBehindEyePerEyeHeight * e + (1f + PushReachPerEyeHeight() * e) * c;
         }
 
         /// <summary>
@@ -92,6 +136,42 @@ namespace VRCKatamari.Riding
             upMeters = up;
             backMeters = back;
             return true;
+        }
+
+        /// <summary>
+        /// Where the hands meet the ball, relative to the eye, for a ball of this radius:
+        /// <c>forward</c> along the rig's forward and <c>down</c> below the eye, metres. The
+        /// point on the ball's back surface whose radius points back along the push.
+        /// </summary>
+        public static bool TryHandContactFromEye(float radiusMeters, out float forwardMeters,
+            out float downMeters)
+        {
+            forwardMeters = 0f;
+            downMeters = 0f;
+            float up;
+            float back;
+            if (!TryEyeOffset(radiusMeters, out up, out back)) return false;
+            float angle = PushAngleDegrees * Mathf.Deg2Rad;
+            forwardMeters = back - radiusMeters * Mathf.Cos(angle);
+            downMeters = up - radiusMeters * Mathf.Sin(angle);
+            return true;
+        }
+
+        /// <summary>
+        /// How far a hand is from the ball's surface, metres: negative inside the ball,
+        /// zero on it. The live check that the stance works ("can I touch the ball").
+        /// Infinity for a non-finite input.
+        /// </summary>
+        public static float HandGapMeters(Vector3 handWorld, Vector3 ballCenterWorld,
+            float radiusMeters)
+        {
+            if (!KatamariMath.IsFiniteVector(handWorld) ||
+                !KatamariMath.IsFiniteVector(ballCenterWorld) ||
+                !KatamariMath.IsFiniteFloat(radiusMeters))
+            {
+                return Mathf.Infinity;
+            }
+            return Vector3.Distance(handWorld, ballCenterWorld) - radiusMeters;
         }
 
         /// <summary>
@@ -118,15 +198,6 @@ namespace VRCKatamari.Riding
         }
 
         /// <summary>
-        /// True when the whole ball, plus the margin, lies inside the view's half field.
-        /// </summary>
-        public static bool IsBallInView(float depressionDegrees, float halfAngleDegrees,
-            float halfFovDegrees, float marginDegrees)
-        {
-            return depressionDegrees + halfAngleDegrees + marginDegrees <= halfFovDegrees;
-        }
-
-        /// <summary>
         /// A point <paramref name="distanceMeters"/> from the eye, <paramref name="azimuthDegrees"/>
         /// to the right of the rig's forward and <paramref name="elevationDegrees"/> above
         /// the horizon, in the follow frame's local space (forward +Z, up +Y).
@@ -149,6 +220,17 @@ namespace VRCKatamari.Riding
         public static Quaternion HudLocalRotation(float azimuthDegrees, float elevationDegrees)
         {
             return Quaternion.Euler(-elevationDegrees, azimuthDegrees, 0f);
+        }
+
+        /// <summary>
+        /// The uniform scale of the panel root for a rider of this eye height: the panels'
+        /// distance and size grow with the rider, so their angular size never changes. One
+        /// for an unknown (zero, negative or non-finite) eye height.
+        /// </summary>
+        public static float PanelScaleForEyeHeight(float eyeHeightMeters)
+        {
+            if (!KatamariMath.IsFiniteFloat(eyeHeightMeters) || eyeHeightMeters <= 0f) return 1f;
+            return eyeHeightMeters / PanelReferenceEyeHeightMeters;
         }
 
         /// <summary>

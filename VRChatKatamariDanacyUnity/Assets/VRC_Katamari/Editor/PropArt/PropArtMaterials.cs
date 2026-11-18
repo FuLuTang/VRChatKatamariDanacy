@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
+using VRCKatamari.Editor.LevelBuild;
 
 namespace VRCKatamari.Editor.PropArt
 {
@@ -890,6 +891,11 @@ namespace VRCKatamari.Editor.PropArt
                     material.SetFloat("_Metallic", 0f);
                 }
 
+                // A flat Standard prop material: repeats of this prop share mesh and material,
+                // so GPU instancing turns n draws into one. The hub assembly never edits a
+                // committed asset; this sync is the material's owner (MaterialInstancing).
+                material.enableInstancing = MaterialInstancing.IsEligible(material);
+
                 AssetDatabase.CreateAsset(material, assetPath);
                 AssetDatabase.SaveAssetIfDirty(material);
                 created = true;
@@ -919,6 +925,16 @@ namespace VRCKatamari.Editor.PropArt
             if (!ColorsClose(current, desired))
             {
                 material.SetColor(property, desired);
+                EditorUtility.SetDirty(material);
+                AssetDatabase.SaveAssetIfDirty(material);
+                updated = true;
+            }
+
+            // Existing committed material: turn instancing on once. This rewrites the .mat on
+            // the machine that runs the sync (the same run already writes the colour).
+            if (!material.enableInstancing && MaterialInstancing.IsEligible(material))
+            {
+                material.enableInstancing = true;
                 EditorUtility.SetDirty(material);
                 AssetDatabase.SaveAssetIfDirty(material);
                 updated = true;

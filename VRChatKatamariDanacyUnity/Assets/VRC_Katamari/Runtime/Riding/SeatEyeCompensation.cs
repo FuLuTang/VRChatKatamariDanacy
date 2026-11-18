@@ -7,8 +7,9 @@ using VRCKatamari.Core;
 namespace VRCKatamari.Riding
 {
     /// <summary>
-    /// Puts the seated rider's EYE on the follow frame's eye point, and their WAIST on the top
-    /// of the ball, by measuring the seated head and hips against the seat once per ride.
+    /// Puts the rider's EYE on the follow frame's eye point, and their FEET (the station anchor
+    /// of a standing station) on the ground beside the ball, by measuring the head against the
+    /// anchor once per ride.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -51,14 +52,18 @@ namespace VRCKatamari.Riding
     /// leaves the scene exactly as authored rather than at a half-applied offset.
     /// </para>
     /// <para>
-    /// The waist (<see cref="RideWaistMath"/>). The same sampling window also reads the
-    /// Hips bone, which gives this avatar's <c>kappa</c> (head-to-hips height per metre of eye
-    /// height) for <see cref="BallRideStation"/> to size the rider by. With a usable waist the
-    /// seat's height is computed so that the hips sit on the top of the ball (the ball is read
-    /// from <c>motor</c> each frame; its top relative to the rig is the only moving input),
-    /// while its horizontal position still puts the head on the eye point. Without one - the
-    /// hips unreadable, implausible, or no eye height to scale by - the seat only aligns the
-    /// eye, from the head offset measured at sit-down.
+    /// The feet (<see cref="RideStanceMath"/>). The measured head height above the anchor, per
+    /// metre of eye height, is this avatar's <c>eta</c>, which <see cref="BallRideStation"/>
+    /// sizes the rider by. With a usable <c>eta</c> the seat's height is computed so that the
+    /// anchor sits on the ball's lowest point (the ball is read from <c>motor</c> each frame;
+    /// its bottom relative to the rig is the only moving input), while its horizontal position
+    /// still puts the head on the eye point. Without one (a seated pose, no eye height to scale
+    /// by) the seat only aligns the eye, from the head offset measured at the start.
+    /// </para>
+    /// <para>
+    /// The hands. <see cref="GetHandGapMeters"/> reads the local player's tracked hands (the
+    /// controllers in VR) against the ball's surface: the live check that the stance puts the
+    /// ball within reach. It is a reading, nothing is moved by it.
     /// </para>
     /// <para>
     /// A rider whose size follows the ball (RIDE_GEOMETRY.md section 3) is measured ONCE, at the
@@ -68,13 +73,13 @@ namespace VRCKatamari.Riding
     /// "measure once, then frozen" rule that makes VR comfortable (a seat that chased the head
     /// every frame would drag the world around) while the person grows; nothing the player's
     /// head does after the sampling window reaches the seat. The limits and the plausibility
-    /// rail are scaled by the same factor, because a 23 m rider's seated head is 11 m above the
-    /// seat. The proportionality is an inference to verify on a real client
+    /// rail are scaled by the same factor, because a 15 m rider's head is 15 m above the
+    /// anchor. The proportionality is an inference to verify on a real client
     /// (<see cref="GetCurrentEyeErrorMeters"/> reads the live error).
     /// </para>
     /// <para>
-    /// Timing: the head and the hips are read in <c>PostLateUpdate</c>, which VRChat runs after
-    /// the IK solve, so the bone positions are not a frame old; the seat is written there too.
+    /// Timing: the head and the hands are read in <c>PostLateUpdate</c>, which VRChat runs after
+    /// the IK solve, so the readings are not a frame old; the seat is written there too.
     /// Only the local player is read.
     /// </para>
     /// </remarks>
@@ -89,8 +94,8 @@ namespace VRCKatamari.Riding
         // Deliberately NOT optional: a wrong default here would move the eye point itself.
         [SerializeField] private Transform seatAnchor;
 
-        // The ball whose top the hips are placed on. Unwired, the waist cannot be placed and the
-        // seat only aligns the eye.
+        // The ball whose lowest point the feet are placed on. Unwired, the feet cannot be placed
+        // and the seat only aligns the eye.
         [SerializeField] private KatamariBallMotor motor;
 
         // Frames to wait after the sit before sampling, then frames to average. Sitting IK,
@@ -103,16 +108,14 @@ namespace VRCKatamari.Riding
         // comfort-level filtering the follow frame itself uses.
         [SerializeField] private float filterHz = 8f;
 
-        // Guards, not tuning: a seated eye height is roughly 0.4-0.9 m on real hardware, so this
-        // is a rail just past a tall seated avatar, not a value the product needs. 1.3 m is chosen
-        // to pair with the plausibility rail: the tallest head this project has measured is
-        // ClientSim's 1.204159 m (2026-11-15) and it must be compensated in FULL, because a clamp
-        // below a real measurement leaves the camera visibly high. The plausibility check in
-        // SampleOnce is what catches a datum near a standing eye height - clamping that one would
-        // land the camera on the wrong side of the eye point. What the extra headroom costs is
-        // third person only: the avatar's lower body sinks deeper into the ground. It never moves
-        // the local player's own viewpoint, which is the thing being corrected.
-        [SerializeField] private float verticalLimitMeters = 1.3f;
+        // Guards, not tuning, authored for a rider of SeatEyeMath.ReferenceEyeHeightMeters and
+        // scaled with the eye height. The station is a standing one, so the head is about one eye
+        // height above the anchor and must be compensated in full: the vertical limit is the same
+        // number as the plausibility rail (SeatEyeMath.MaxPlausibleHeadAboveSeatMeters), which is
+        // what catches a datum that is not the rider's head. With a measured stance the vertical
+        // is not limited at all (the feet go to the ground); the limit only bounds the eye-only
+        // fallback.
+        [SerializeField] private float verticalLimitMeters = 2.1f;
         [SerializeField] private float horizontalLimitMeters = 0.35f;
 
         // A scene that does not trust the measured horizontal offset can keep the authored
@@ -162,11 +165,7 @@ namespace VRCKatamari.Riding
         private int applyFrames;
 
         private Vector3 sampleSum;
-        private Vector3 hipsSampleSum;
-        private int hipsSampleCount;
-        private bool hipsBroken;
         private Vector3 measuredHeadInRigMeters;
-        private Vector3 measuredHipsInRigMeters;
         private Vector3 seatOffsetMeters;
         private Vector3 authoredLocalPosition;
 
@@ -184,24 +183,20 @@ namespace VRCKatamari.Riding
         private float measureEyeHeight;
         private bool hasMeasuredEyeHeight;
 
-        // The waist: kappa is the measured head-to-hips height per metre of eye height, and
-        // waistReason says why the hips are not used (RideWaistMath.ReasonOk when they are).
-        private bool hasWaist;
-        private float kappa;
-        private int waistReason;
+        // The stance: eta is the measured head height above the anchor per metre of eye height,
+        // and stanceReason says why it is not used (RideStanceMath.ReasonOk when it is).
+        private bool hasStance;
+        private float eta;
+        private int stanceReason;
 
         private VRCPlayerApi localPlayer;
 
         private void Start()
         {
             state = StateIdle;
-            hipsSampleSum = Vector3.zero;
-            hipsSampleCount = 0;
-            hipsBroken = false;
-            measuredHipsInRigMeters = Vector3.zero;
-            hasWaist = false;
-            kappa = 0f;
-            waistReason = RideWaistMath.ReasonOk;
+            hasStance = false;
+            eta = 0f;
+            stanceReason = RideStanceMath.ReasonOk;
             frameCounter = 0;
             sampleCount = 0;
             sampleFailures = 0;
@@ -276,18 +271,14 @@ namespace VRCKatamari.Riding
             sampleFailures = 0;
             applyFrames = 0;
             sampleSum = Vector3.zero;
-            hipsSampleSum = Vector3.zero;
-            hipsSampleCount = 0;
-            hipsBroken = false;
             measuredHeadInRigMeters = Vector3.zero;
-            measuredHipsInRigMeters = Vector3.zero;
             measuredEyeAboveSeatMeters = 0f;
             uncompensatedMeters = 0f;
             lastEyeErrorMeters = 0f;
             hasMeasuredEyeHeight = false;
-            hasWaist = false;
-            kappa = 0f;
-            waistReason = RideWaistMath.ReasonOk;
+            hasStance = false;
+            eta = 0f;
+            stanceReason = RideStanceMath.ReasonOk;
             state = StateSettling;
 
             if (logResults)
@@ -313,18 +304,14 @@ namespace VRCKatamari.Riding
             sampleFailures = 0;
             applyFrames = 0;
             sampleSum = Vector3.zero;
-            hipsSampleSum = Vector3.zero;
-            hipsSampleCount = 0;
-            hipsBroken = false;
             measuredHeadInRigMeters = Vector3.zero;
-            measuredHipsInRigMeters = Vector3.zero;
             seatOffsetMeters = Vector3.zero;
             currentEyeHeight = 0f;
             measureEyeHeight = 0f;
             hasMeasuredEyeHeight = false;
-            hasWaist = false;
-            kappa = 0f;
-            waistReason = RideWaistMath.ReasonOk;
+            hasStance = false;
+            eta = 0f;
+            stanceReason = RideStanceMath.ReasonOk;
             if (seatAnchor != null && startRefusal == RefusalNone)
             {
                 seatAnchor.localPosition = authoredLocalPosition;
@@ -408,31 +395,31 @@ namespace VRCKatamari.Riding
         }
 
         /// <summary>
-        /// True when the locked measurement has a usable waist: <see cref="GetKappa"/> is this
-        /// avatar's number and the seat puts its hips on the top of the ball. False means the
-        /// seat only aligns the eye and the rider's size is not to be changed.
+        /// True when the locked measurement has a usable standing pose: <see cref="GetEta"/> is
+        /// this avatar's number and the seat puts its feet on the ground. False means the seat
+        /// only aligns the eye.
         /// </summary>
-        public bool HasWaist()
+        public bool HasStance()
         {
-            return state == StateLocked && hasWaist;
+            return state == StateLocked && hasStance;
         }
 
         /// <summary>
-        /// The measured head-to-hips height per metre of eye height (<see cref="RideWaistMath"/>);
-        /// zero without a waist.
+        /// The measured head height above the anchor per metre of eye height
+        /// (<see cref="RideStanceMath"/>); zero without a stance.
         /// </summary>
-        public float GetKappa()
+        public float GetEta()
         {
-            return hasWaist ? kappa : 0f;
+            return hasStance ? eta : 0f;
         }
 
         /// <summary>
-        /// Why the hips are not used (a <c>RideWaistMath.Reason*</c> code); zero while they are
-        /// or before a measurement locked.
+        /// Why the stance is not used (a <c>RideStanceMath.Reason*</c> code); zero while it is or
+        /// before a measurement locked.
         /// </summary>
-        public int GetWaistReason()
+        public int GetStanceReason()
         {
-            return waistReason;
+            return stanceReason;
         }
 
         /// <summary>
@@ -462,8 +449,36 @@ namespace VRCKatamari.Riding
             return Vector3.Distance(headWorld, followRigRoot.position);
         }
 
+        /// <summary>
+        /// The nearer tracked hand's distance from the ball's surface right now, metres:
+        /// negative inside the ball, zero touching it, positive infinity when no hand or no
+        /// ball can be read. In VR the hands are the controllers, so this is
+        /// the number that says whether the player can push the ball; on desktop it is the
+        /// avatar's animated hands. Read it in or after <c>PostLateUpdate</c>.
+        /// </summary>
+        public float GetHandGapMeters()
+        {
+            if (localPlayer == null || motor == null) return Mathf.Infinity;
+            Vector3 center = motor.GetCenterWorld();
+            float radius = motor.GetSemanticDiameterWorldM() * 0.5f;
+            float best = Mathf.Infinity;
+            VRCPlayerApi.TrackingData left =
+                localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.LeftHand);
+            if (IsUsableDatum(left.position))
+            {
+                best = Mathf.Min(best, RideViewMath.HandGapMeters(left.position, center, radius));
+            }
+            VRCPlayerApi.TrackingData right =
+                localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.RightHand);
+            if (IsUsableDatum(right.position))
+            {
+                best = Mathf.Min(best, RideViewMath.HandGapMeters(right.position, center, radius));
+            }
+            return best;
+        }
+
         // PostLateUpdate, not Update or LateUpdate: VRChat runs it after the IK solve, so the
-        // head and the hips are read at this frame's pose; the motor writes the rig pose in
+        // head and the hands are read at this frame's pose; the motor writes the rig pose in
         // Update, so the rig is at this frame's eye point before the seat is placed from it.
         public override void PostLateUpdate()
         {
@@ -472,8 +487,8 @@ namespace VRCKatamari.Riding
 
             if (state == StateLocked)
             {
-                // The measurement is frozen; only the ball's top moves the seat.
-                if (!hasWaist) return;
+                // The measurement is frozen; only the ball's lowest point moves the seat.
+                if (!hasStance) return;
                 float residual;
                 SolveSeat(currentEyeHeight, 0f, 0f, true, out residual);
                 return;
@@ -535,7 +550,6 @@ namespace VRCKatamari.Riding
             sampleSum = sampleSum + headInRig;
             sampleCount = sampleCount + 1;
             measuredEyeAboveSeatMeters = headInSeat.y;
-            SampleHips();
             if (sampleCount < sampleFrames) return;
 
             Vector3 mean;
@@ -547,82 +561,41 @@ namespace VRCKatamari.Riding
             measuredHeadInRigMeters = mean;
             measureEyeHeight = currentEyeHeight;
             hasMeasuredEyeHeight = measureEyeHeight > 0f;
-            ResolveWaist();
+            ResolveStance();
             applyFrames = 0;
             state = StateApplying;
         }
 
-        // The hips are read in the same frame as the head, so both come from one IK pose. A
-        // frame whose hips are unusable spoils the whole waist (hipsBroken), not just the
-        // sample: the mean of a partly missing reading is not a measurement.
-        private void SampleHips()
+        // Decides, once per measurement, whether the standing pose can be used; the answer is
+        // final until the next BeginSeated.
+        private void ResolveStance()
         {
-            if (hipsBroken) return;
-            Vector3 hipsWorld = Vector3.zero;
-            if (localPlayer != null)
+            hasStance = false;
+            eta = 0f;
+            stanceReason = RideStanceMath.ReasonOk;
+            if (motor == null)
             {
-                hipsWorld = localPlayer.GetBonePosition(HumanBodyBones.Hips);
+                stanceReason = RideStanceMath.ReasonNoBall;
             }
-            if (localPlayer == null || !RideWaistMath.IsUsableBonePosition(hipsWorld))
+            else
             {
-                MarkHipsBroken(RideWaistMath.ReasonHipsMissing);
-                return;
-            }
-            Vector3 hipsInRig;
-            Vector3 hipsInSeat;
-            int reason;
-            if (!SeatEyeMath.TrySampleHeadOffset(hipsWorld, seatAnchor.position,
-                seatAnchor.rotation, followRigRoot.rotation, out hipsInRig, out hipsInSeat, out reason))
-            {
-                MarkHipsBroken(RideWaistMath.ReasonNotFinite);
-                return;
-            }
-            float distance = Mathf.Sqrt(hipsInRig.x * hipsInRig.x + hipsInRig.y * hipsInRig.y +
-                hipsInRig.z * hipsInRig.z);
-            if (!SeatEyeMath.IsPlausibleHeadDistanceForEyeHeight(distance, currentEyeHeight))
-            {
-                MarkHipsBroken(RideWaistMath.ReasonHipsImplausible);
-                return;
-            }
-            hipsSampleSum = hipsSampleSum + hipsInRig;
-            hipsSampleCount = hipsSampleCount + 1;
-        }
-
-        private void MarkHipsBroken(int reason)
-        {
-            hipsBroken = true;
-            waistReason = reason;
-        }
-
-        // Decides, once per measurement, whether the waist can be used; the answer is final
-        // until the next BeginSeated.
-        private void ResolveWaist()
-        {
-            hasWaist = false;
-            kappa = 0f;
-            if (!hipsBroken && hipsSampleCount < sampleCount) MarkHipsBroken(RideWaistMath.ReasonHipsMissing);
-            if (!hipsBroken && motor == null) MarkHipsBroken(RideWaistMath.ReasonNoBall);
-            if (!hipsBroken && !hasMeasuredEyeHeight) MarkHipsBroken(RideWaistMath.ReasonNoEyeHeight);
-            if (!hipsBroken)
-            {
-                measuredHipsInRigMeters = hipsSampleSum * (1f / hipsSampleCount);
                 float measured;
                 int reason;
-                if (RideWaistMath.TryMeasureKappa(measuredHeadInRigMeters, measuredHipsInRigMeters,
-                    measureEyeHeight, out measured, out reason))
+                if (RideStanceMath.TryMeasureEta(measuredHeadInRigMeters,
+                    hasMeasuredEyeHeight ? measureEyeHeight : 0f, out measured, out reason))
                 {
-                    kappa = measured;
-                    hasWaist = true;
-                    waistReason = RideWaistMath.ReasonOk;
+                    eta = measured;
+                    hasStance = true;
                 }
                 else
                 {
-                    MarkHipsBroken(reason);
+                    stanceReason = reason;
                 }
             }
-            if (!hasWaist && logResults)
+            if (!hasStance && logResults)
             {
-                Debug.Log("[seat] no waist (reason=" + waistReason + "): the seat only aligns the eye");
+                Debug.Log("[seat] no standing stance (reason=" + stanceReason
+                    + "): the seat only aligns the eye");
             }
         }
 
@@ -645,8 +618,8 @@ namespace VRCKatamari.Riding
         }
 
         // The one place that turns the frozen measurement into a seat offset: the measured head
-        // (and hips) scaled to the current eye height, the vertical placed on the ball's top when
-        // there is a waist, then SeatEyeMath's limited, low-passed solution, written to the seat.
+        // scaled to the current eye height, the vertical placed on the ball's lowest point when
+        // there is a stance, then SeatEyeMath's limited, low-passed solution, written to the seat.
         private bool SolveSeat(float eyeHeightMeters, float hertz, float dtSeconds, bool reset,
             out float residualMeters)
         {
@@ -661,14 +634,13 @@ namespace VRCKatamari.Riding
             Vector3 head = measuredHeadInRigMeters * factor;
             float verticalLimit = verticalLimitMeters * limitScale;
             Vector3 solveFor = head;
-            if (hasWaist)
+            if (hasStance)
             {
                 if (motor == null) return false;
-                float target = RideWaistMath.WaistTargetInRig(motor.GetCenterWorld().y,
+                float feet = RideStanceMath.FeetTargetInRig(motor.GetCenterWorld().y,
                     motor.GetSemanticDiameterWorldM() * 0.5f, followRigRoot.position.y);
-                solveFor = RideWaistMath.EffectiveHeadInRig(head, measuredHipsInRigMeters * factor,
-                    true, target);
-                verticalLimit = RideWaistMath.UnlimitedMeters;
+                solveFor = RideStanceMath.EffectiveHeadInRig(head, true, feet);
+                verticalLimit = RideStanceMath.UnlimitedMeters;
             }
 
             Vector3 applied;
@@ -741,13 +713,18 @@ namespace VRCKatamari.Riding
             VRCPlayerApi.TrackingData headData =
                 localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
             Vector3 position = headData.position;
-            if (!KatamariMath.IsFiniteVector(position)) return false;
-            // An unimplemented datum reports the default struct, i.e. exactly the origin.
-            // A real head is never at the origin in an ordinary world, and refusing is the
-            // safe side: a wrong offset is worse than no offset.
-            if (position.x == 0f && position.y == 0f && position.z == 0f) return false;
+            if (!IsUsableDatum(position)) return false;
             headWorldPosition = position;
             return true;
+        }
+
+        // An unimplemented datum reports the default struct, i.e. exactly the origin. A real
+        // head or hand is never at the origin in an ordinary world, and refusing is the safe
+        // side: a wrong offset is worse than no offset.
+        private bool IsUsableDatum(Vector3 position)
+        {
+            if (!KatamariMath.IsFiniteVector(position)) return false;
+            return position.x != 0f || position.y != 0f || position.z != 0f;
         }
 
         // The seat has to be carried by the rig (that is how the rider follows the ball at
